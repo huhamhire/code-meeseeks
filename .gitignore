@@ -1,0 +1,53 @@
+# Node
+node_modules/
+npm-debug.log*
+.npm
+
+# Build artifacts
+dist/
+build/
+out/
+out-tsc/
+*.tsbuildinfo
+.cache/
+
+# Electron / packaged binaries
+release/
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.snap
+
+# Nx
+.nx/cache
+.nx/workspace-data
+
+# Vite
+.vite/
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Test
+coverage/
+.nyc_output/
