@@ -12,6 +12,7 @@
 pr-pilot 是 Electron + Node + TypeScript 应用。两者技术栈不同，必须确定一个稳定的集成方式。
 
 约束：
+
 - 用户机器**不一定预装 Python**，但**大多数会装 Docker** 或愿意装 Python。
 - 升级 pr-agent 应当**对 pr-pilot 主体代码零影响**。
 - 输入和输出必须**可在 Node 侧结构化处理**（不止是把 Markdown 贴回去）。
@@ -79,8 +80,12 @@ interface PrAgentBridge {
   version(): Promise<string>;
 }
 
-class LocalCliStrategy implements PrAgentBridge { /* spawn pr-agent */ }
-class DockerStrategy   implements PrAgentBridge { /* spawn docker run codiumai/pr-agent */ }
+class LocalCliStrategy implements PrAgentBridge {
+  /* spawn pr-agent */
+}
+class DockerStrategy implements PrAgentBridge {
+  /* spawn docker run codiumai/pr-agent */
+}
 ```
 
 启动时探测顺序：

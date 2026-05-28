@@ -1,0 +1,29 @@
+{
+  "name": "pr-pilot",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local-first GUI for AI-assisted code review, built on pr-agent",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "build": "nx run-many -t build",
+    "lint": "nx run-many -t lint",
+    "test": "nx run-many -t test",
+    "typecheck": "nx run-many -t typecheck",
+    "graph": "nx graph",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,yaml,yml}\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "nx": "^20.3.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0"
+  }
+}

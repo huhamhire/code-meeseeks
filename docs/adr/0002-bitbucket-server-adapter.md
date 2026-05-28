@@ -11,11 +11,11 @@
 
 注意：Bitbucket 实际上有两个产品：
 
-| 产品 | API | 状态 |
-|---|---|---|
-| Bitbucket Cloud (bitbucket.org) | REST API 2.0 (`/2.0/`) | 在售 |
-| Bitbucket Server | REST API 1.0 (`/rest/api/1.0/`) | 已停售，企业大量自建 |
-| Bitbucket Data Center | REST API 1.0（与 Server 兼容） | 在售 |
+| 产品                            | API                             | 状态                 |
+| ------------------------------- | ------------------------------- | -------------------- |
+| Bitbucket Cloud (bitbucket.org) | REST API 2.0 (`/2.0/`)          | 在售                 |
+| Bitbucket Server                | REST API 1.0 (`/rest/api/1.0/`) | 已停售，企业大量自建 |
+| Bitbucket Data Center           | REST API 1.0（与 Server 兼容）  | 在售                 |
 
 **本 ADR 仅覆盖 Server / DC（REST API v1）**，不覆盖 Cloud。后续 Cloud 支持单独立 ADR。
 
@@ -61,17 +61,17 @@ interface PlatformAdapter {
 
 #### 2.1 关键端点（REST API v1）
 
-| 操作 | Method + Path |
-|---|---|
-| 当前用户 | `GET /rest/api/1.0/application-properties`（含版本） + `GET /rest/api/1.0/users/{slug}` |
-| 列 PR | `GET /rest/api/1.0/projects/{projectKey}/repos/{repoSlug}/pull-requests?state=OPEN` |
-| PR 详情 | `GET /rest/api/1.0/projects/{p}/repos/{r}/pull-requests/{prId}` |
-| PR diff（统一） | `GET /rest/api/1.0/projects/{p}/repos/{r}/pull-requests/{prId}/diff` |
-| 改动文件列表 | `GET .../pull-requests/{prId}/changes` |
-| 评论列表 | `GET .../pull-requests/{prId}/activities` （包含 comments） |
-| 发表 inline 评论 | `POST .../pull-requests/{prId}/comments` body 含 `anchor: { line, lineType, path }` |
-| 发表 summary 评论 | `POST .../pull-requests/{prId}/comments` body 不含 `anchor` |
-| 克隆 URL | PR 详情里的 `links.clone[].href` |
+| 操作              | Method + Path                                                                           |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| 当前用户          | `GET /rest/api/1.0/application-properties`（含版本） + `GET /rest/api/1.0/users/{slug}` |
+| 列 PR             | `GET /rest/api/1.0/projects/{projectKey}/repos/{repoSlug}/pull-requests?state=OPEN`     |
+| PR 详情           | `GET /rest/api/1.0/projects/{p}/repos/{r}/pull-requests/{prId}`                         |
+| PR diff（统一）   | `GET /rest/api/1.0/projects/{p}/repos/{r}/pull-requests/{prId}/diff`                    |
+| 改动文件列表      | `GET .../pull-requests/{prId}/changes`                                                  |
+| 评论列表          | `GET .../pull-requests/{prId}/activities` （包含 comments）                             |
+| 发表 inline 评论  | `POST .../pull-requests/{prId}/comments` body 含 `anchor: { line, lineType, path }`     |
+| 发表 summary 评论 | `POST .../pull-requests/{prId}/comments` body 不含 `anchor`                             |
+| 克隆 URL          | PR 详情里的 `links.clone[].href`                                                        |
 
 #### 2.2 认证
 
@@ -112,7 +112,7 @@ Bitbucket Server `/diff` 返回的是平台自定义 JSON（不是标准 unified
 interface UnifiedDiff {
   files: Array<{
     path: string;
-    oldPath?: string;        // rename / copy
+    oldPath?: string; // rename / copy
     status: 'added' | 'modified' | 'removed' | 'renamed';
     hunks: Hunk[];
     binary: boolean;
@@ -120,8 +120,10 @@ interface UnifiedDiff {
 }
 
 interface Hunk {
-  oldStart: number; oldLines: number;
-  newStart: number; newLines: number;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
   lines: Array<{ type: 'context' | 'add' | 'del'; content: string }>;
 }
 ```

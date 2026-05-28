@@ -78,7 +78,7 @@ interface StateStore {
 ```yaml
 # config.yaml 片段
 workspace:
-  repos_dir: D:\pr-pilot-repos   # 默认值是 ~/.pr-pilot/repos
+  repos_dir: D:\pr-pilot-repos # 默认值是 ~/.pr-pilot/repos
 ```
 
 ```
@@ -119,7 +119,7 @@ workspace:
 ```yaml
 # config.yaml 示意
 workspace:
-  repos_dir: ~/.pr-pilot/repos     # 唯一可改的存储位置
+  repos_dir: ~/.pr-pilot/repos # 唯一可改的存储位置
   rules_dir: ./rules
   logs_dir: ./logs
 
@@ -133,13 +133,13 @@ connections:
     display_name: 内部 Bitbucket
     auth:
       type: pat
-      token: <bitbucket PAT>          # ← 敏感
+      token: <bitbucket PAT> # ← 敏感
 
 llm:
   provider: openai-compatible
   base_url: https://api.openai.com/v1
   model: gpt-4o
-  api_key: <api key>                  # ← 敏感
+  api_key: <api key> # ← 敏感
 ```
 
 但代码层保持 `SecretStore` 抽象，所有 token / key 读写经过它，不直接 `fs.readFile`：
@@ -151,7 +151,9 @@ interface SecretStore {
   delete(key: string): Promise<void>;
 }
 
-class ConfigFileSecretStore implements SecretStore { /* 一期 */ }
+class ConfigFileSecretStore implements SecretStore {
+  /* 一期 */
+}
 // 未来：class KeytarSecretStore implements SecretStore { ... }
 ```
 

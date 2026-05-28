@@ -78,19 +78,19 @@ flowchart TB
 
 ## 3. 技术栈
 
-| 维度 | 选择 | 备注 |
-|---|---|---|
-| 包管理 / Monorepo | npm (workspaces) + Nx | 见 [ADR-0004](./adr/0004-package-manager-and-monorepo.md) |
-| 桌面壳 | Electron + Vite | `contextIsolation` on、preload 白名单、CSP |
-| 渲染层 | React + Vite + TS strict | 优先 shadcn/ui，避免重型组件库 |
-| IPC | tRPC over IPC | Renderer ↔ Main 全类型化 |
-| 编辑器 | Monaco | side-by-side diff、文件树虚拟化 |
-| pr-agent 集成 | 本地 CLI 子进程优先；Docker fallback | 见 [ADR-0001](./adr/0001-pr-agent-integration.md) |
-| Git 平台（M1） | Bitbucket Server / DC，REST API v1 | 见 [ADR-0002](./adr/0002-bitbucket-server-adapter.md) |
-| 状态存储 | JSON 文件（原子写）+ `StateStore` 抽象 | 一期规模小；未来可切 SQLite；见 [ADR-0003](./adr/0003-state-storage-and-workspace-layout.md) |
-| 凭据存储 | 合并在 `config.yaml`，权限收紧；模块级 `SecretStore` | 用户自负；未来可切 keytar |
-| 工作目录 | 应用数据固定在 `~/.pr-pilot/`；**仅 `repos_dir` 可配置** | `repos_dir` 默认 `~/.pr-pilot/repos/`；见 [ADR-0003](./adr/0003-state-storage-and-workspace-layout.md) |
-| Git 操作 | simple-git + 系统 `git` | partial clone + worktree per PR |
+| 维度              | 选择                                                     | 备注                                                                                                   |
+| ----------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 包管理 / Monorepo | npm (workspaces) + Nx                                    | 见 [ADR-0004](./adr/0004-package-manager-and-monorepo.md)                                              |
+| 桌面壳            | Electron + Vite                                          | `contextIsolation` on、preload 白名单、CSP                                                             |
+| 渲染层            | React + Vite + TS strict                                 | 优先 shadcn/ui，避免重型组件库                                                                         |
+| IPC               | tRPC over IPC                                            | Renderer ↔ Main 全类型化                                                                               |
+| 编辑器            | Monaco                                                   | side-by-side diff、文件树虚拟化                                                                        |
+| pr-agent 集成     | 本地 CLI 子进程优先；Docker fallback                     | 见 [ADR-0001](./adr/0001-pr-agent-integration.md)                                                      |
+| Git 平台（M1）    | Bitbucket Server / DC，REST API v1                       | 见 [ADR-0002](./adr/0002-bitbucket-server-adapter.md)                                                  |
+| 状态存储          | JSON 文件（原子写）+ `StateStore` 抽象                   | 一期规模小；未来可切 SQLite；见 [ADR-0003](./adr/0003-state-storage-and-workspace-layout.md)           |
+| 凭据存储          | 合并在 `config.yaml`，权限收紧；模块级 `SecretStore`     | 用户自负；未来可切 keytar                                                                              |
+| 工作目录          | 应用数据固定在 `~/.pr-pilot/`；**仅 `repos_dir` 可配置** | `repos_dir` 默认 `~/.pr-pilot/repos/`；见 [ADR-0003](./adr/0003-state-storage-and-workspace-layout.md) |
+| Git 操作          | simple-git + 系统 `git`                                  | partial clone + worktree per PR                                                                        |
 
 ### 3.1 目录布局
 
@@ -151,7 +151,7 @@ type ConnectionsFile = {
     kind: 'bitbucket-server' | 'github' | 'gitlab' | 'gitea';
     base_url: string;
     display_name: string;
-    created_at: string;  // ISO
+    created_at: string; // ISO
   }>;
 };
 
@@ -171,10 +171,10 @@ type WatchedReposFile = {
 type PullRequestsIndexFile = {
   schema_version: 1;
   pull_requests: Array<{
-    id: string;                    // 本地 id
+    id: string; // 本地 id
     connection_id: string;
     repo_id: string;
-    remote_id: string;             // 平台侧 PR id
+    remote_id: string; // 平台侧 PR id
     title: string;
     author: string;
     source_ref: string;
@@ -189,7 +189,9 @@ type PullRequestsIndexFile = {
 // state/pull-requests/<pr-id>.json (单 PR 详情)
 type PullRequestDetailFile = {
   schema_version: 1;
-  pr: { /* 完整字段，含 source_sha / target_sha / 描述等 */ };
+  pr: {
+    /* 完整字段，含 source_sha / target_sha / 描述等 */
+  };
   latest_run_id?: string;
 };
 
@@ -216,7 +218,7 @@ type ReviewRunFile = {
     suggestion: string;
     rationale: string;
     status: 'pending' | 'accepted' | 'edited' | 'rejected' | 'posted';
-    draft_body?: string;           // 用户编辑后的内容
+    draft_body?: string; // 用户编辑后的内容
     posted_remote_id?: string;
   }>;
 };
@@ -325,16 +327,16 @@ type PostedCommentsFile = {
 
 ## 6. 风险与未决项
 
-| 风险 / 议题 | 影响期 | 应对 |
-|---|---|---|
-| pr-agent 升级破坏输出格式 | M3+ | 输出解析层独立；CI 跑兼容测试 |
-| Bitbucket Server 不同小版本 API 差异 | M1 | M1 之前先做 API 探针，固化最小可用版本 |
-| 大型 PR 性能 / `/diff` 截断 | M2 | 检测 `truncated=true` 时按文件拉 per-file diff；Monaco 侧文件级懒加载 + 二进制 / 大文件跳过 |
-| 大型仓库挤爆磁盘 | M2+ | `repos_dir` 可配置；设置页显示 repo 体积；提供清理操作 |
-| 明文凭据（在 `config.yaml`） | 全周期 | 文档警示 + 文件权限收紧 + `SecretStore` 抽象预留 keytar |
-| JSON 状态文件随使用量膨胀 | M3+ | 监控单文件大小（> 5 MB 告警）；触发条件达成时切 SQLite（见 ADR-0003） |
-| LLM 调用成本不可控 | M3+ | M5 加 Token 统计；规则层支持 max_tokens / 模型分级 |
-| Windows / macOS / Linux 三平台打包 | M0+ | electron-builder + GH Actions 矩阵构建 |
+| 风险 / 议题                          | 影响期 | 应对                                                                                        |
+| ------------------------------------ | ------ | ------------------------------------------------------------------------------------------- |
+| pr-agent 升级破坏输出格式            | M3+    | 输出解析层独立；CI 跑兼容测试                                                               |
+| Bitbucket Server 不同小版本 API 差异 | M1     | M1 之前先做 API 探针，固化最小可用版本                                                      |
+| 大型 PR 性能 / `/diff` 截断          | M2     | 检测 `truncated=true` 时按文件拉 per-file diff；Monaco 侧文件级懒加载 + 二进制 / 大文件跳过 |
+| 大型仓库挤爆磁盘                     | M2+    | `repos_dir` 可配置；设置页显示 repo 体积；提供清理操作                                      |
+| 明文凭据（在 `config.yaml`）         | 全周期 | 文档警示 + 文件权限收紧 + `SecretStore` 抽象预留 keytar                                     |
+| JSON 状态文件随使用量膨胀            | M3+    | 监控单文件大小（> 5 MB 告警）；触发条件达成时切 SQLite（见 ADR-0003）                       |
+| LLM 调用成本不可控                   | M3+    | M5 加 Token 统计；规则层支持 max_tokens / 模型分级                                          |
+| Windows / macOS / Linux 三平台打包   | M0+    | electron-builder + GH Actions 矩阵构建                                                      |
 
 ---
 

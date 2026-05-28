@@ -51,3 +51,6 @@ logs/
 # Test
 coverage/
 .nyc_output/
+
+# Claude Code 本地状态
+.claude/

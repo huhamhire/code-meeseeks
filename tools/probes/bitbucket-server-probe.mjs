@@ -36,11 +36,20 @@ async function call(path, { accept = 'application/json' } = {}) {
     });
     text = await res.text();
   } catch (e) {
-    return { path, status: 0, elapsed: Math.round(performance.now() - t0), networkError: e.message };
+    return {
+      path,
+      status: 0,
+      elapsed: Math.round(performance.now() - t0),
+      networkError: e.message,
+    };
   }
   const elapsed = Math.round(performance.now() - t0);
   let body;
-  try { body = JSON.parse(text); } catch { body = text; }
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = text;
+  }
   return { path, status: res.status, elapsed, body, raw: text };
 }
 
@@ -51,7 +60,9 @@ function summarize(label, r, extract) {
   }
   const ok = r.status >= 200 && r.status < 300;
   const tag = ok ? 'OK ' : 'ERR';
-  console.log(`[${tag}] ${String(r.status).padStart(3)} ${String(r.elapsed).padStart(5)}ms  ${label}`);
+  console.log(
+    `[${tag}] ${String(r.status).padStart(3)} ${String(r.elapsed).padStart(5)}ms  ${label}`,
+  );
   if (!ok) {
     const preview = (typeof r.body === 'string' ? r.body : JSON.stringify(r.body)).slice(0, 400);
     console.log(`  body: ${preview}`);
@@ -80,7 +91,7 @@ async function main() {
   const ping = summarize(
     'GET /application-properties',
     await call('/rest/api/1.0/application-properties'),
-    b => `server: ${b.version} (${b.displayName}), build ${b.buildNumber}`,
+    (b) => `server: ${b.version} (${b.displayName}), build ${b.buildNumber}`,
   );
   if (!ping) process.exit(1);
 
@@ -88,7 +99,8 @@ async function main() {
   const dash = summarize(
     'GET /dashboard/pull-requests?role=REVIEWER&state=OPEN&limit=50',
     await call('/rest/api/1.0/dashboard/pull-requests?role=REVIEWER&state=OPEN&limit=50'),
-    b => `pending as reviewer: size=${b.size} returned=${b.values?.length ?? 0} isLastPage=${b.isLastPage}`,
+    (b) =>
+      `pending as reviewer: size=${b.size} returned=${b.values?.length ?? 0} isLastPage=${b.isLastPage}`,
   );
   if (!dash) process.exit(1);
 
@@ -117,52 +129,50 @@ async function main() {
   summarize(
     `GET ${base}`,
     await call(base),
-    b => `state=${b.state} draft=${b.draft ?? false} reviewers=${(b.reviewers ?? []).length} fromRef=${b.fromRef?.displayId} toRef=${b.toRef?.displayId} updated=${new Date(b.updatedDate).toISOString()}`,
+    (b) =>
+      `state=${b.state} draft=${b.draft ?? false} reviewers=${(b.reviewers ?? []).length} fromRef=${b.fromRef?.displayId} toRef=${b.toRef?.displayId} updated=${new Date(b.updatedDate).toISOString()}`,
   );
 
-  summarize(
-    `GET ${base}/diff (JSON)`,
-    await call(`${base}/diff`),
-    b => {
-      if (b && typeof b === 'object' && Array.isArray(b.diffs)) {
-        const fileCount = b.diffs.length;
-        const hunkCount = b.diffs.reduce((n, d) => n + (d.hunks?.length ?? 0), 0);
-        const lineCount = b.diffs.reduce(
-          (n, d) => n + (d.hunks?.reduce((m, h) => m + (h.segments?.reduce((k, s) => k + (s.lines?.length ?? 0), 0) ?? 0), 0) ?? 0),
-          0,
-        );
-        return `JSON diff: ${fileCount} files, ${hunkCount} hunks, ${lineCount} lines  truncated=${b.truncated ?? false}`;
-      }
-      if (typeof b === 'string') {
-        return `text diff (Accept fallback): ${b.length} bytes, ${b.split('\n').length} lines`;
-      }
-      return `unknown shape: ${typeof b}`;
-    },
-  );
+  summarize(`GET ${base}/diff (JSON)`, await call(`${base}/diff`), (b) => {
+    if (b && typeof b === 'object' && Array.isArray(b.diffs)) {
+      const fileCount = b.diffs.length;
+      const hunkCount = b.diffs.reduce((n, d) => n + (d.hunks?.length ?? 0), 0);
+      const lineCount = b.diffs.reduce(
+        (n, d) =>
+          n +
+          (d.hunks?.reduce(
+            (m, h) => m + (h.segments?.reduce((k, s) => k + (s.lines?.length ?? 0), 0) ?? 0),
+            0,
+          ) ?? 0),
+        0,
+      );
+      return `JSON diff: ${fileCount} files, ${hunkCount} hunks, ${lineCount} lines  truncated=${b.truncated ?? false}`;
+    }
+    if (typeof b === 'string') {
+      return `text diff (Accept fallback): ${b.length} bytes, ${b.split('\n').length} lines`;
+    }
+    return `unknown shape: ${typeof b}`;
+  });
 
   summarize(
     `GET ${base}/changes?limit=50`,
     await call(`${base}/changes?limit=50`),
-    b => `changes: size=${b.size} returned=${b.values?.length ?? 0} isLastPage=${b.isLastPage}`,
+    (b) => `changes: size=${b.size} returned=${b.values?.length ?? 0} isLastPage=${b.isLastPage}`,
   );
 
-  summarize(
-    `GET ${base}/activities?limit=50`,
-    await call(`${base}/activities?limit=50`),
-    b => {
-      const acts = b.values ?? [];
-      const commented = acts.filter(a => a.action === 'COMMENTED');
-      const inline = commented.filter(a => a.commentAnchor);
-      const summary = commented.length - inline.length;
-      const types = [...new Set(acts.map(a => a.action))].join(',');
-      return `activities: total=${b.size} commented=${commented.length} (inline=${inline.length}, summary=${summary})  actions=[${types}]`;
-    },
-  );
+  summarize(`GET ${base}/activities?limit=50`, await call(`${base}/activities?limit=50`), (b) => {
+    const acts = b.values ?? [];
+    const commented = acts.filter((a) => a.action === 'COMMENTED');
+    const inline = commented.filter((a) => a.commentAnchor);
+    const summary = commented.length - inline.length;
+    const types = [...new Set(acts.map((a) => a.action))].join(',');
+    return `activities: total=${b.size} commented=${commented.length} (inline=${inline.length}, summary=${summary})  actions=[${types}]`;
+  });
 
   console.log('\nDone.');
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error('FATAL:', e.stack || e.message);
   process.exit(1);
 });

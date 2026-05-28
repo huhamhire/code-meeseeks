@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+out
+.nx/cache
+.nx/workspace-data
+coverage
+*.min.js
+package-lock.json
