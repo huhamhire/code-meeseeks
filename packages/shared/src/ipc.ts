@@ -1,5 +1,6 @@
 import type { AppInfo, AppPaths } from './app-info.js';
 import type { Config } from './config.js';
+import type { LocalPrStatus, PollResult, StoredPullRequest } from './poller-contract.js';
 import type { PrAgentStatus } from './pr-agent-status.js';
 
 /**
@@ -14,6 +15,12 @@ export interface IpcChannels {
   'app:paths': { request: void; response: AppPaths };
   'app:prAgentStatus': { request: void; response: PrAgentStatus };
   'config:read': { request: void; response: Config };
+  'prs:list': { request: void; response: StoredPullRequest[] };
+  'prs:refresh': { request: void; response: PollResult };
+  'prs:setLocalStatus': {
+    request: { localId: string; status: LocalPrStatus };
+    response: StoredPullRequest | null;
+  };
 }
 
 export type IpcChannelName = keyof IpcChannels;

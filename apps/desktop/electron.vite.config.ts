@@ -9,6 +9,9 @@ const internalPackages = [
   '@pr-pilot/config',
   '@pr-pilot/logger',
   '@pr-pilot/pr-agent-bridge',
+  '@pr-pilot/state-store',
+  '@pr-pilot/platform-bitbucket-server',
+  '@pr-pilot/poller',
 ];
 
 export default defineConfig({

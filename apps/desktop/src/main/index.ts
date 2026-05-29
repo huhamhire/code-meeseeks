@@ -5,7 +5,10 @@ import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@pr-pilot/config';
 import { createLogger } from '@pr-pilot/logger';
 import { detectPrAgent } from '@pr-pilot/pr-agent-bridge';
+import { Poller } from '@pr-pilot/poller';
 import type { PrAgentStatus } from '@pr-pilot/shared';
+import { JsonFileStateStore } from '@pr-pilot/state-store';
+import { buildAdapters } from './adapters.js';
 import { registerIpcHandlers } from './ipc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -13,6 +16,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let bootstrap: BootstrapResult;
 let logger: Logger;
 let prAgentStatus: PrAgentStatus;
+let stateStore: JsonFileStateStore;
+let poller: Poller;
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
@@ -25,7 +30,24 @@ async function start(): Promise<void> {
   prAgentStatus = await detectPrAgent();
   logger.info({ prAgentStatus }, 'pr-agent probe complete');
 
-  registerIpcHandlers({ bootstrap, logger, prAgentStatus });
+  stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
+  const adapters = buildAdapters(bootstrap.config.connections);
+  poller = new Poller({
+    connections: adapters,
+    stateStore,
+    intervalSeconds: bootstrap.config.poller.interval_seconds,
+    logger: logger.child({ scope: 'poller' }),
+  });
+
+  registerIpcHandlers({ bootstrap, logger, prAgentStatus, stateStore, poller });
+
+  // 配置里有连接才启动轮询；空配置下 UI 会在 M1-D 引导用户加连接
+  if (adapters.length > 0) {
+    poller.start();
+    logger.info({ connections: adapters.length }, 'poller started');
+  } else {
+    logger.info('no connections configured; poller stays idle');
+  }
 
   await app.whenReady();
   createWindow();
@@ -34,6 +56,10 @@ async function start(): Promise<void> {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 }
+
+app.on('before-quit', () => {
+  if (poller) poller.stop();
+});
 
 function createWindow(): void {
   const win = new BrowserWindow({

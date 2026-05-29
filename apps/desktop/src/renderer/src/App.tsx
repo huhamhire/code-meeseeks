@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import type { AppInfo, AppPaths, Config, PrAgentStatus } from '@pr-pilot/shared';
+import type { AppInfo, AppPaths, Config, PrAgentStatus, StoredPullRequest } from '@pr-pilot/shared';
 import { invoke } from './api';
 
 interface BootstrapState {
@@ -8,6 +8,7 @@ interface BootstrapState {
   paths: AppPaths;
   config: Config;
   prAgent: PrAgentStatus;
+  prs: StoredPullRequest[];
 }
 
 export default function App() {
@@ -22,13 +23,14 @@ export default function App() {
             'preload bridge missing: window.api is undefined — preload script did not expose `api`',
           );
         }
-        const [info, paths, config, prAgent] = await Promise.all([
+        const [info, paths, config, prAgent, prs] = await Promise.all([
           invoke('app:info', undefined),
           invoke('app:paths', undefined),
           invoke('config:read', undefined),
           invoke('app:prAgentStatus', undefined),
+          invoke('prs:list', undefined),
         ]);
-        setBootstrap({ info, paths, config, prAgent });
+        setBootstrap({ info, paths, config, prAgent, prs });
       } catch (e) {
         const msg =
           e instanceof Error ? `${e.message}\n\nstack:\n${e.stack ?? '(none)'}` : String(e);
@@ -43,10 +45,11 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>pr-pilot</h1>
-        <span className="badge">M0-D</span>
+        <span className="badge">M1-C</span>
         {bootstrap && (
           <>
             <PrAgentBadge status={bootstrap.prAgent} />
+            <span className="badge badge-ok">PRs: {bootstrap.prs.length}</span>
             <span className="muted">first run: {String(bootstrap.info.firstRun)}</span>
             <span className="version">
               Electron {bootstrap.info.electronVersion} · Node {bootstrap.info.nodeVersion}
@@ -93,7 +96,11 @@ function renderContent(b: BootstrapState | null, err: string | null): string {
   if (!b) return '# 加载中...';
   return `# pr-pilot
 
-M0-D 已就绪。pr-agent 可用性探测 + GitHub Actions CI 接通。
+M1-C 已就绪：state-store + PlatformAdapter + Poller + IPC 全链路打通。
+
+## Pending PRs (本地状态库)
+
+${renderPrSection(b.prs, b.config.connections.length)}
 
 ## pr-agent 探测
 
@@ -117,8 +124,40 @@ ${renderPrAgentSection(b.prAgent)}
 
 ## 下一步
 
-M0 全部完成，准备进入 **M1**：Bitbucket Server 接入 + PR 发现。
+**M1-D**：设置页（新增 BBS 连接 + 改轮询间隔）+ 侧边 PR 列表 UI。
 `;
+}
+
+function renderPrSection(prs: StoredPullRequest[], connectionCount: number): string {
+  if (connectionCount === 0) {
+    return [
+      '_未配置任何连接。M1-D 会在设置页提供新增 Bitbucket Server 连接的入口。_',
+      '',
+      '当前可手动编辑 `~/.pr-pilot/config.yaml`，在 `connections:` 下加一条：',
+      '',
+      '```yaml',
+      'connections:',
+      '  - id: bb-internal',
+      '    kind: bitbucket-server',
+      '    base_url: https://code.fineres.com',
+      '    display_name: 内部 Bitbucket',
+      '    auth:',
+      '      type: pat',
+      '      token: <PAT>',
+      '```',
+    ].join('\n');
+  }
+  if (prs.length === 0) {
+    return `共 ${connectionCount} 个连接，本地状态库暂无 PR（poller 可能还未首轮完成；查看 \`logs/pr-pilot.log\` 确认）。`;
+  }
+  const lines = prs
+    .slice(0, 20)
+    .map(
+      (p) =>
+        `- **#${p.remoteId}** [${p.repo.projectKey}/${p.repo.repoSlug}] ${p.title}  \n  *${p.author.displayName}* · localStatus=\`${p.localStatus}\` · ${p.sourceRef.displayId} → ${p.targetRef.displayId}`,
+    );
+  const more = prs.length > 20 ? `\n\n_…共 ${prs.length} 条，仅显示前 20_` : '';
+  return lines.join('\n') + more;
 }
 
 function renderPrAgentSection(status: PrAgentStatus): string {
