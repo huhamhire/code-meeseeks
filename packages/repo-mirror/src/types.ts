@@ -36,3 +36,16 @@ export interface ChangedFile {
 }
 
 export type FileContent = { binary: false; content: string } | { binary: true };
+
+/** 单行 blame 信息。从 `git blame --porcelain <sha> -- <path>` 解析。 */
+export interface BlameLine {
+  /** 该行在 head 侧的行号（1-based） */
+  line: number;
+  /** 该行所属 commit 的完整 sha */
+  commit: string;
+  author: string;
+  authorEmail: string;
+  /** 作者时间 ISO */
+  authorDate: string;
+  summary: string;
+}

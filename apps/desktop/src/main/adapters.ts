@@ -23,6 +23,7 @@ function buildOne(conn: Connection): PlatformAdapter {
       return new BitbucketServerAdapter({
         baseUrl: conn.base_url,
         token: conn.auth.token,
+        cloneProtocol: conn.clone.protocol,
       });
     default: {
       const exhaustive: never = conn.kind;

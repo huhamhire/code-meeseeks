@@ -7,6 +7,8 @@ interface PrItemProps {
 }
 
 export function PrItem({ pr, selected, onClick }: PrItemProps) {
+  const approvedCount = pr.reviewers.filter((r) => r.status === 'approved').length;
+  const needsWorkCount = pr.reviewers.filter((r) => r.status === 'needsWork').length;
   return (
     <div
       className={`pr-item ${selected ? 'selected' : ''} pr-item-status-${pr.localStatus}`}
@@ -34,6 +36,26 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
         <span>
           {pr.sourceRef.displayId} → {pr.targetRef.displayId}
         </span>
+        {(approvedCount > 0 || needsWorkCount > 0) && (
+          <span className="pr-item-review-chips">
+            {approvedCount > 0 && (
+              <span
+                className="review-chip review-chip-approved"
+                title={`${String(approvedCount)} 位 reviewer 已 approve`}
+              >
+                ✓ {approvedCount}
+              </span>
+            )}
+            {needsWorkCount > 0 && (
+              <span
+                className="review-chip review-chip-needs-work"
+                title={`${String(needsWorkCount)} 位 reviewer 标记 needs work`}
+              >
+                ✗ {needsWorkCount}
+              </span>
+            )}
+          </span>
+        )}
       </div>
     </div>
   );

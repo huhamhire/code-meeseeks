@@ -1,4 +1,24 @@
+import { useEffect, useState } from 'react';
 import type { LocalPrStatus, StoredPullRequest } from '@pr-pilot/shared';
+import { DiffView } from './DiffView';
+import { PrInfoView } from './PrInfoView';
+
+function BlameIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="5" r="2.5" />
+      <path d="M3 13c0-2.5 2.2-4 5-4s5 1.5 5 4" />
+    </svg>
+  );
+}
 
 interface MainPaneProps {
   pr: StoredPullRequest | null;
@@ -6,7 +26,24 @@ interface MainPaneProps {
   onSetStatus: (status: LocalPrStatus) => void;
 }
 
+type Tab = 'diff' | 'info';
+
 export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
+  const [tab, setTab] = useState<Tab>('diff');
+  const [renderSideBySide, setRenderSideBySide] = useState<boolean>(() => {
+    const v = localStorage.getItem('pr-pilot.diffMode');
+    return v === null ? true : v === 'side-by-side';
+  });
+  const [showBlame, setShowBlame] = useState<boolean>(
+    () => localStorage.getItem('pr-pilot.showBlame') === '1',
+  );
+  useEffect(() => {
+    localStorage.setItem('pr-pilot.diffMode', renderSideBySide ? 'side-by-side' : 'unified');
+  }, [renderSideBySide]);
+  useEffect(() => {
+    localStorage.setItem('pr-pilot.showBlame', showBlame ? '1' : '0');
+  }, [showBlame]);
+
   if (!pr) {
     return (
       <main className="main">
@@ -15,14 +52,14 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
             <div>
               <p>← 从左侧选择一个 PR</p>
               <p className="muted" style={{ marginTop: 12 }}>
-                M2 起这里会替换成 Monaco diff viewer + Findings drawer
+                选中后会自动 sync 本地镜像并显示 side-by-side diff
               </p>
             </div>
           ) : (
             <div>
               <p>尚未配置任何连接</p>
               <p className="muted" style={{ marginTop: 12 }}>
-                点右上"设置"→"编辑 config.yaml"添加 Bitbucket Server 连接
+                右下"设置"→"编辑 config.yaml"添加 Bitbucket Server 连接
               </p>
             </div>
           )}
@@ -33,101 +70,131 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
 
   return (
     <main className="main">
-      <div className="pr-detail">
-        <div className="pr-detail-head">
-          <h2>
-            <span className="muted">#{pr.remoteId}</span> {pr.title}
-          </h2>
-          <div className="pr-detail-meta">
-            {pr.hasConflict && (
-              <>
-                <span className="conflict-tag" title="远端 BBS 报告存在合并冲突">
-                  ⚠️ 存在冲突
-                </span>
-                <span> · </span>
-              </>
-            )}
-            <strong>
-              {pr.repo.projectKey}/{pr.repo.repoSlug}
-            </strong>
-            <span> · 作者：{pr.author.displayName}</span>
-            <span>
-              {' '}
-              · {pr.sourceRef.displayId} → {pr.targetRef.displayId}
-            </span>
-            <span> · 本地状态：</span>
-            <span className={`status-tag status-${pr.localStatus}`}>{pr.localStatus}</span>
-          </div>
+      <header className="pr-header">
+        <h2 className="pr-header-title">
+          <span className="muted">#{pr.remoteId}</span> {pr.title}
+        </h2>
+        <div className="pr-header-meta">
+          {pr.hasConflict && (
+            <>
+              <span className="conflict-tag" title="远端 BBS 报告存在合并冲突">
+                ⚠️ 冲突
+              </span>
+              <span> · </span>
+            </>
+          )}
+          <strong>
+            {pr.repo.projectKey}/{pr.repo.repoSlug}
+          </strong>
+          <span> · {pr.author.displayName}</span>
+          <span>
+            {' '}
+            · {pr.sourceRef.displayId} → {pr.targetRef.displayId}
+          </span>
+          <span> · </span>
+          <span className={`status-tag status-${pr.localStatus}`}>{pr.localStatus}</span>
         </div>
-
-        <div className="pr-detail-actions">
-          <a className="btn btn-primary" href={pr.url} target="_blank" rel="noreferrer">
-            在浏览器打开
+        <div className="pr-header-actions">
+          <a className="btn btn-primary btn-sm" href={pr.url} target="_blank" rel="noreferrer">
+            浏览器打开
           </a>
           {pr.localStatus !== 'skipped' && (
-            <button className="btn" type="button" onClick={() => onSetStatus('skipped')}>
-              标记跳过
+            <button
+              className="btn btn-sm"
+              type="button"
+              onClick={() => onSetStatus('skipped')}
+            >
+              跳过
             </button>
           )}
           {pr.localStatus !== 'reviewed' && (
-            <button className="btn" type="button" onClick={() => onSetStatus('reviewed')}>
-              标记已评
+            <button
+              className="btn btn-sm"
+              type="button"
+              onClick={() => onSetStatus('reviewed')}
+            >
+              已评
             </button>
           )}
           {pr.localStatus !== 'ignored' && (
-            <button className="btn" type="button" onClick={() => onSetStatus('ignored')}>
-              标记忽略
+            <button
+              className="btn btn-sm"
+              type="button"
+              onClick={() => onSetStatus('ignored')}
+            >
+              忽略
             </button>
           )}
           {pr.localStatus !== 'pending' && (
-            <button className="btn" type="button" onClick={() => onSetStatus('pending')}>
-              重置为待处理
+            <button
+              className="btn btn-sm"
+              type="button"
+              onClick={() => onSetStatus('pending')}
+            >
+              重置
             </button>
           )}
         </div>
-
-        {pr.description && (
-          <section className="pr-detail-section">
-            <h3>描述</h3>
-            <p className="pr-detail-description">{pr.description}</p>
-          </section>
-        )}
-
-        <section className="pr-detail-section">
-          <h3>Reviewers ({pr.reviewers.length})</h3>
-          {pr.reviewers.length === 0 ? (
-            <p className="muted">无</p>
-          ) : (
-            <ul className="reviewer-list">
-              {pr.reviewers.map((r) => (
-                <li key={r.name}>
-                  {r.displayName}{' '}
-                  <span className={r.approved ? 'tag-approved' : 'muted'}>
-                    {r.approved ? '✓ approved' : 'pending'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="pr-detail-section">
-          <h3>时间线</h3>
-          <div className="pr-detail-kv">
-            <div className="modal-kv-key">远端创建</div>
-            <div className="modal-kv-val">{new Date(pr.createdAt).toLocaleString()}</div>
-            <div className="modal-kv-key">远端更新</div>
-            <div className="modal-kv-val">{new Date(pr.updatedAt).toLocaleString()}</div>
-            <div className="modal-kv-key">本地首次发现</div>
-            <div className="modal-kv-val">{new Date(pr.discoveredAt).toLocaleString()}</div>
-            <div className="modal-kv-key">最近一次 poll 看到</div>
-            <div className="modal-kv-val">{new Date(pr.lastSeenAt).toLocaleString()}</div>
+      </header>
+      <nav className="pr-tabs" role="tablist">
+        <button
+          type="button"
+          className={`pr-tab ${tab === 'diff' ? 'active' : ''}`}
+          onClick={() => setTab('diff')}
+          role="tab"
+          aria-selected={tab === 'diff'}
+        >
+          Diff
+        </button>
+        <button
+          type="button"
+          className={`pr-tab ${tab === 'info' ? 'active' : ''}`}
+          onClick={() => setTab('info')}
+          role="tab"
+          aria-selected={tab === 'info'}
+        >
+          详情
+        </button>
+        {tab === 'diff' && (
+          <div className="pr-tabs-right">
+            <button
+              type="button"
+              className={`blame-toggle ${showBlame ? 'active' : ''}`}
+              onClick={() => setShowBlame((b) => !b)}
+              title={showBlame ? '关闭 blame 显示' : '开启 blame 显示（仅 head 侧）'}
+              aria-pressed={showBlame}
+            >
+              <BlameIcon /> Blame
+            </button>
+            <div className="diff-mode-toggle" role="tablist" aria-label="diff 显示模式">
+              <button
+                type="button"
+                className={renderSideBySide ? 'active' : ''}
+                onClick={() => setRenderSideBySide(true)}
+                role="tab"
+                aria-selected={renderSideBySide}
+              >
+                并列
+              </button>
+              <button
+                type="button"
+                className={!renderSideBySide ? 'active' : ''}
+                onClick={() => setRenderSideBySide(false)}
+                role="tab"
+                aria-selected={!renderSideBySide}
+              >
+                合并
+              </button>
+            </div>
           </div>
-        </section>
-
-        <p className="muted pr-detail-footer">
-          M2 起会在这里嵌 Monaco diff + Findings drawer + pr-agent 评论编辑。
-        </p>
+        )}
+      </nav>
+      <div className="pr-tab-content">
+        {tab === 'diff' ? (
+          <DiffView pr={pr} renderSideBySide={renderSideBySide} showBlame={showBlame} />
+        ) : (
+          <PrInfoView pr={pr} />
+        )}
       </div>
     </main>
   );

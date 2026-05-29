@@ -3,10 +3,30 @@ import type {
   LocalPrStatus,
   PlatformAdapter,
   PollResult,
+  Reviewer,
   StoredPullRequest,
 } from '@pr-pilot/shared';
 import type { StateStore } from '@pr-pilot/state-store';
 import { PR_INDEX_KEY, type PullRequestsIndexFile } from './types.js';
+
+/**
+ * 兼容旧版 pull-requests.json：早期 reviewer 形状是
+ * `{ name, displayName, approved: boolean }`，新版改为 `{ name, displayName, status }`。
+ * 读到旧字段时翻译过来，避免渲染层把已 approved 误判成 pending。下一轮 poll 写回时
+ * 自动落到新形状，迁移是一次性的。
+ */
+function normalizeReviewer(r: Reviewer & { approved?: boolean }): Reviewer {
+  if (r.status) return r;
+  return {
+    name: r.name,
+    displayName: r.displayName,
+    status: r.approved ? 'approved' : 'unapproved',
+  };
+}
+
+function normalizeStoredPr(pr: StoredPullRequest): StoredPullRequest {
+  return { ...pr, reviewers: pr.reviewers.map(normalizeReviewer) };
+}
 
 export interface PollerConnection {
   connectionId: string;
@@ -20,6 +40,8 @@ export interface PollerOptions {
   logger: Logger;
   /** 用于测试注入；默认 Date.now() */
   now?: () => Date;
+  /** 每次 tick 完成（含 errors=N 但未抛出）后回调；用于 main → renderer 推送 */
+  onTick?: (info: { at: string; result: PollResult }) => void;
 }
 
 const EMPTY: PollResult = { fetched: 0, changed: 0, added: 0, removed: 0, errors: 0 };
@@ -35,8 +57,14 @@ const EMPTY: PollResult = { fetched: 0, changed: 0, added: 0, removed: 0, errors
 export class Poller {
   private interval?: ReturnType<typeof setInterval>;
   private inFlight = false;
+  private _lastPollAt: string | null = null;
 
   constructor(private readonly opts: PollerOptions) {}
+
+  /** 最近一次成功 pollOnce 完成的时间（ISO）；从未跑过返回 null */
+  getLastPollAt(): string | null {
+    return this._lastPollAt;
+  }
 
   start(): void {
     if (this.interval) return;
@@ -66,8 +94,9 @@ export class Poller {
 
   private async pollOnce(): Promise<PollResult> {
     const now = (this.opts.now?.() ?? new Date()).toISOString();
-    const existing =
-      (await this.opts.stateStore.read<PullRequestsIndexFile>(PR_INDEX_KEY))?.pull_requests ?? [];
+    const existing = (
+      (await this.opts.stateStore.read<PullRequestsIndexFile>(PR_INDEX_KEY))?.pull_requests ?? []
+    ).map(normalizeStoredPr);
     const byLocalId = new Map(existing.map((pr) => [pr.localId, pr]));
 
     let fetched = 0;
@@ -94,7 +123,7 @@ export class Poller {
           seen.add(localId);
           const prev = byLocalId.get(localId);
           const approvedByMe =
-            !!me && pr.reviewers.some((r) => r.name === me.name && r.approved);
+            !!me && pr.reviewers.some((r) => r.name === me.name && r.status === 'approved');
 
           let localStatus: LocalPrStatus;
           if (prev) {
@@ -152,7 +181,9 @@ export class Poller {
     await this.opts.stateStore.write(PR_INDEX_KEY, next);
 
     const result: PollResult = { fetched, changed, added, removed, errors };
+    this._lastPollAt = now;
     this.opts.logger.info(result, 'poll complete');
+    this.opts.onTick?.({ at: now, result });
     return result;
   }
 }
@@ -172,8 +203,8 @@ export async function setLocalStatus(
   return pr;
 }
 
-/** 读取 PR 列表（不存在时返回空数组）。 */
+/** 读取 PR 列表（不存在时返回空数组）。读时做一次 reviewer 形状迁移。 */
 export async function listStoredPullRequests(stateStore: StateStore): Promise<StoredPullRequest[]> {
   const file = await stateStore.read<PullRequestsIndexFile>(PR_INDEX_KEY);
-  return file?.pull_requests ?? [];
+  return (file?.pull_requests ?? []).map(normalizeStoredPr);
 }

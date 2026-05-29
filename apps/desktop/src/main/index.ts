@@ -59,16 +59,21 @@ async function start(): Promise<void> {
     stateStore,
     intervalSeconds: bootstrap.config.poller.interval_seconds,
     logger: logger.child({ scope: 'poller' }),
+    onTick: (info) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('poll:tick', info);
+      }
+    },
   });
 
-  // host → adapter 反向索引，repoMirror 拿 clone URL 时按 RepoIdentity.host 路由。
+  // hostname → adapter 反向索引（不带端口，与 RepoIdentity.host 对齐）。
   // 一期通常单连接，但接口预留多连接（同 host 多 PAT 暂不支持，最后写入胜出）。
   const adapterByHost = new Map<string, (typeof adapters)[number]['adapter']>();
   for (const { connectionId, adapter } of adapters) {
     const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
     if (!conn) continue;
     try {
-      adapterByHost.set(new URL(conn.base_url).host, adapter);
+      adapterByHost.set(new URL(conn.base_url).hostname, adapter);
     } catch (err) {
       logger.warn({ err, connectionId, base_url: conn.base_url }, 'invalid base_url');
     }
@@ -79,12 +84,17 @@ async function start(): Promise<void> {
     getCloneUrl: async (repo) => {
       const adapter = adapterByHost.get(repo.host);
       if (!adapter) throw new Error(`no adapter for host ${repo.host}`);
-      return adapter.getCloneUrl(
-        { projectKey: repo.projectKey, repoSlug: repo.repoSlug },
-        { withAuth: true },
-      );
+      return adapter.getCloneUrl({
+        projectKey: repo.projectKey,
+        repoSlug: repo.repoSlug,
+      });
     },
     logger: logger.child({ scope: 'repo-mirror' }),
+    onProgress: (event) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('sync:progress', event);
+      }
+    },
   });
 
   registerIpcHandlers({

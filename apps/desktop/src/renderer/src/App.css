@@ -21,6 +21,37 @@ body {
   font-size: 13px;
 }
 
+/* 全局滚动条：跟 VS Code Dark+ 一致的细暗色样式。Monaco 内部滚动条自己渲染，不受此影响 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4d4d4d;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5e5e5e;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #707070;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 button,
 input,
 select,
@@ -79,13 +110,15 @@ textarea {
 }
 
 .statusbar-chip-ok {
-  background: #16a34a;
-  color: white;
+  /* VS Code 远程指示器（statusBarItem.remoteBackground）配色：实色深绿 + 白字 */
+  background: #16825d;
+  color: #ffffff;
 }
 
 .statusbar-chip-err {
-  background: #b91c1c;
-  color: white;
+  /* VS Code statusBarItem.errorBackground */
+  background: #c72e0f;
+  color: #ffffff;
   cursor: help;
 }
 
@@ -230,13 +263,31 @@ textarea {
 
 /* Sidebar */
 .sidebar {
-  width: 360px;
+  /* width 通过 inline style 由 App 控制，min/max 由 React 端 clamp，CSS 端兜底 */
   flex-shrink: 0;
   border-right: 1px solid #3e3e42;
   background: #1f1f20;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 50;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: rgba(14, 99, 156, 0.5);
 }
 
 .sidebar-toolbar {
@@ -359,6 +410,42 @@ textarea {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+/* reviewer 统计胶囊：靠右贴边，把 author/branch meta 挤左 */
+.pr-item-review-chips {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.review-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.review-chip-approved {
+  /* VS Code git decoration 绿 */
+  background: rgba(115, 199, 145, 0.16);
+  color: #73c991;
+}
+
+.review-chip-needs-work {
+  /* VS Code git decoration 红 */
+  background: rgba(199, 78, 57, 0.18);
+  color: #f48771;
+}
+
+.tag-needs-work {
+  color: #f48771;
+  font-size: 12px;
 }
 
 .pr-item-status-skipped .pr-item-title {
@@ -384,8 +471,11 @@ textarea {
 /* Main */
 .main {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .main-empty {
@@ -398,25 +488,787 @@ textarea {
   padding: 24px;
 }
 
-.pr-detail {
-  padding: 24px 32px;
-  max-width: 960px;
+.pr-header {
+  padding: 12px 20px 10px;
+  border-bottom: 1px solid #3e3e42;
+  flex-shrink: 0;
 }
 
-.pr-detail-head {
-  margin-bottom: 16px;
-}
-
-.pr-detail h2 {
-  font-size: 20px;
+.pr-header-title {
+  font-size: 16px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   line-height: 1.3;
 }
 
-.pr-detail-meta {
+.pr-header-meta {
+  font-size: 12px;
+  color: #cccccc;
+  margin-bottom: 8px;
+}
+
+.pr-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pr-tabs {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #3e3e42;
+  background: #252526;
+  flex-shrink: 0;
+  padding: 0 12px;
+  gap: 0;
+}
+
+.pr-tabs .diff-mode-toggle {
+  margin-left: auto;
+}
+
+/* 右侧操作组：blame 开关 + 并列/合并 切换。整组顶到右边 */
+.pr-tabs-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding-right: 8px;
+}
+.pr-tabs-right .diff-mode-toggle {
+  margin-left: 0; /* 在 right 组内不需要再 margin-left:auto */
+}
+
+.blame-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid #3e3e42;
+  color: #858585;
+  cursor: pointer;
+  font-size: 11px;
+  border-radius: 3px;
+  line-height: 1;
+}
+.blame-toggle:hover {
+  background: #2a2d2e;
+  color: #cccccc;
+}
+.blame-toggle.active {
+  background: #0e639c;
+  border-color: #0e639c;
+  color: white;
+}
+
+/* Monaco 行首注入的 blame 文本：固定宽度 + 灰色斜体 + 截断，伪装成左侧 blame 列。
+   inlineClassNameAffectsLetterSpacing 默认 false 不会破坏 Monaco 等宽对齐。 */
+.monaco-blame-inline {
+  display: inline-block;
+  width: 160px;
+  margin-right: 12px;
+  color: #6e7681;
+  font-style: italic;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  border-right: 1px solid #3e3e42;
+  padding-right: 8px;
+}
+
+.pr-tab {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.pr-tab.active {
+  color: #d4d4d4;
+  border-bottom-color: #0e639c;
+}
+
+.pr-tab:hover:not(.active) {
+  color: #cccccc;
+}
+
+.pr-tab-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+}
+
+/* Diff view */
+.diff-view {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.diff-file-list {
+  width: 280px;
+  flex-shrink: 0;
+  border-right: 1px solid #3e3e42;
+  background: #1f1f20;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 文件树 (FileTree) */
+.diff-file-tree {
+  flex: 1;
+  overflow: auto; /* x + y 都可滚，文件名/层级超出时横向滚动 */
+  padding: 4px 0;
+}
+
+/* 内层容器：用 inline-block 让自身宽度 = 内容 max-content，再用 min-width:100%
+   兜底到容器视口宽。结果是：当某行很长时，整个 inner 都被撑宽 → 所有 row 都跟着
+   撑到同一宽度（因为 row 是 block 元素 width:auto），sticky dots 因此都贴在统一的
+   滚动右端，scroll 时同步漂移、视口内永远固定在最右。 */
+.diff-file-tree-inner {
+  display: inline-block;
+  min-width: 100%;
+  box-sizing: border-box;
+  vertical-align: top;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.tree-row:hover {
+  background: #2a2d2e;
+}
+
+.tree-row.selected {
+  background: #094771;
+}
+
+.tree-row:focus {
+  outline: 1px solid #0e639c;
+  outline-offset: -1px;
+}
+
+.tree-icon {
+  flex-shrink: 0;
+}
+
+.tree-name {
+  /* 不截断；长名直接撑出触发横向滚动 */
+  white-space: nowrap;
+  /* flex:1 让 name 占满剩余空间，把右侧状态点固定推到右边缘 */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tree-comment-count {
+  background: #0e639c;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.tree-status {
+  flex-shrink: 0;
+}
+
+/* 评论 chip + 状态点的右侧容器；横向滚动时固定在视口右边缘，左缘渐变淡出，
+   遮盖背后滚出来的长文件名 */
+.tree-row-right {
+  position: sticky;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 14px;
+  flex-shrink: 0;
+  /* 强制顶到行右端：即使 row 是 max-content 导致 flex:1 无可分配空间，
+     auto margin 仍能保证间距 */
+  margin-left: auto;
+  z-index: 2;
+  background: linear-gradient(to right, transparent 0, #1f1f20 14px);
+}
+
+.tree-row:hover .tree-row-right {
+  background: linear-gradient(to right, transparent 0, #2a2d2e 14px);
+}
+
+.tree-row.selected .tree-row-right {
+  background: linear-gradient(to right, transparent 0, #094771 14px);
+}
+
+.tree-folder .tree-name {
+  font-weight: 500;
+  color: #d4d4d4;
+}
+
+/* folder name 按聚合状态着色（跟 VS Code Git decoration 的折叠规则一致） */
+.folder-status-added .tree-name {
+  color: #73c991;
+}
+
+.folder-status-modified .tree-name,
+.folder-status-mixed .tree-name {
+  color: #e2c08d;
+}
+
+.folder-status-deleted .tree-name {
+  color: #c74e39;
+}
+
+/* VS Code Git decoration 配色：filename 整体按 status 着色 */
+.tree-file-added .tree-name,
+.tree-file-renamed .tree-name,
+.tree-file-copied .tree-name {
+  color: #73c991; /* gitDecoration.addedResourceForeground */
+}
+
+.tree-file-modified .tree-name,
+.tree-file-typechange .tree-name {
+  color: #e2c08d; /* gitDecoration.modifiedResourceForeground */
+}
+
+.tree-file-deleted .tree-name {
+  color: #c74e39; /* gitDecoration.deletedResourceForeground */
+  text-decoration: line-through;
+}
+
+/* 选中行：保留高亮蓝底，文字 fallback 白色以保持对比 */
+.tree-file.selected .tree-name {
+  color: #ffffff;
+}
+
+.tree-chevron {
+  flex-shrink: 0;
+  color: #858585;
+  transition: transform 0.12s ease;
+  margin-right: -2px;
+  width: 10px;
+  height: 10px;
+}
+
+.tree-folder.open .tree-chevron {
+  transform: rotate(90deg);
+}
+
+/* 文件行没 chevron，用相同宽度的不可见占位维持层级对齐 */
+.tree-chevron-spacer {
+  flex-shrink: 0;
+  width: 10px;
+  margin-right: -2px;
+}
+
+
+.diff-file-list-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #858585;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid #2d2d30;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diff-mode-toggle {
+  display: inline-flex;
+  gap: 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.diff-mode-toggle button {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid #3e3e42;
+  color: #858585;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.diff-mode-toggle button + button {
+  border-left: none;
+}
+
+.diff-mode-toggle button:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.diff-mode-toggle button:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+.diff-mode-toggle button:hover:not(.active) {
+  background: #2a2d2e;
+  color: #cccccc;
+}
+
+.diff-mode-toggle button.active {
+  background: #0e639c;
+  color: white;
+  border-color: #0e639c;
+}
+
+.diff-file-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  user-select: none;
+}
+
+.diff-file-item:hover {
+  background: #2a2d2e;
+}
+
+.diff-file-item.selected {
+  background: #094771;
+}
+
+.diff-file-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.diff-file-status-added {
+  background: #4caf50;
+}
+.diff-file-status-modified {
+  background: #f59e0b;
+}
+.diff-file-status-deleted {
+  background: #dc2626;
+}
+.diff-file-status-renamed {
+  background: #a78bfa;
+}
+.diff-file-status-copied {
+  background: #60a5fa;
+}
+.diff-file-status-typechange {
+  background: #858585;
+}
+
+.diff-file-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.diff-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-pane-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-pane-wrapper > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.diff-comments-panel {
+  height: 260px;
+  border-top: 1px solid #3e3e42;
+  background: #1f1f20;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.diff-comments-header {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: #858585;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid #2d2d30;
+  position: sticky;
+  top: 0;
+  background: #1f1f20;
+  z-index: 1;
+}
+
+.comment-thread {
+  padding: 10px 14px;
+  border-bottom: 1px solid #2d2d30;
+}
+
+.comment-thread-reply {
+  border-bottom: none;
+  border-left: 2px solid #3e3e42;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: #1a1a1b;
+}
+
+.comment-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.comment-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d4d4d4;
+}
+
+.comment-meta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+}
+
+.comment-jump {
+  background: #0e639c;
+  border: none;
+  color: white;
+  padding: 1px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+
+.comment-jump:hover {
+  background: #1177bb;
+}
+
+.comment-body {
   font-size: 13px;
   color: #cccccc;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.5;
+}
+
+.comment-replies {
+  margin-top: 4px;
+}
+
+/* Monaco 行内评论 view zone */
+.monaco-comment-zone {
+  background: #1a1a1b;
+  border-left: 3px solid #0e639c;
+  padding: 6px 12px 8px 16px;
+  font-size: 12px;
+  color: #cccccc;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
+  line-height: 1.5;
+  overflow-y: auto;
+}
+
+.comment-zone-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.comment-zone-item-divider {
+  border-top: 1px solid #2d2d30;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.comment-zone-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.comment-zone-head .muted {
+  color: #858585;
+  font-size: 11px;
+}
+
+.comment-zone-body {
+  word-wrap: break-word;
+  margin-top: 2px;
+}
+
+.comment-zone-reply {
+  margin-top: 4px;
+  padding-left: 10px;
+  border-left: 2px solid #3e3e42;
+  font-size: 11px;
+}
+
+/* Markdown 渲染（comment body / reply 内） */
+.markdown p {
+  margin: 0 0 6px;
+}
+
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown code {
+  background: #2d2d30;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.markdown pre {
+  background: #2d2d30;
+  padding: 8px 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.markdown pre code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+.markdown blockquote {
+  margin: 6px 0;
+  padding-left: 12px;
+  border-left: 3px solid #3e3e42;
+  color: #aaaaaa;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 4px 0 6px;
+  padding-left: 24px;
+}
+
+.markdown li {
+  margin-bottom: 2px;
+}
+
+.markdown a {
+  color: #3794ff;
+  text-decoration: none;
+}
+
+.markdown a:hover {
+  text-decoration: underline;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid #3e3e42;
+  padding: 4px 8px;
+}
+
+.markdown th {
+  background: #2d2d30;
+  font-weight: 600;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 8px 0 4px;
+  font-weight: 600;
+}
+
+.markdown h1 {
+  font-size: 16px;
+}
+.markdown h2 {
+  font-size: 14px;
+}
+.markdown h3 {
+  font-size: 13px;
+}
+.markdown h4 {
+  font-size: 12px;
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid #3e3e42;
+  margin: 6px 0;
+}
+
+.markdown input[type='checkbox'] {
+  margin-right: 4px;
+}
+
+/* Monaco 行内评论标记 (glyph margin 蓝点 + 行号左侧细条) */
+.monaco-comment-glyph {
+  position: relative;
+}
+
+.monaco-comment-glyph::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  background: #0e639c;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(14, 99, 156, 0.4);
+}
+
+.monaco-comment-line-deco {
+  background: #0e639c;
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+.diff-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  color: #858585;
+  font-size: 13px;
+  padding: 24px;
+  text-align: center;
+}
+
+.diff-error {
+  color: #f48771;
+  white-space: pre-wrap;
+}
+
+.sync-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 360px;
+  max-width: 60%;
+}
+
+.sync-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #cccccc;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+
+.sync-progress-bar {
+  height: 6px;
+  background: #2d2d30;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sync-progress-bar-fill {
+  height: 100%;
+  background: #0e639c;
+  transition: width 0.15s linear;
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #3e3e42;
+  border-top-color: #0e639c;
+  border-radius: 50%;
+  animation: spinner-rotate 0.7s linear infinite;
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.diff-empty code {
+  background: #2d2d30;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+}
+
+.diff-empty small {
+  display: inline-block;
+  margin-top: 8px;
+  color: #6e6e6e;
+  font-size: 11px;
+}
+
+.diff-binary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  color: #fbbf24;
+  font-size: 13px;
+}
+
+/* PR info view (旧 pr-detail 内容) */
+.pr-info-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  max-width: 960px;
 }
 
 .status-tag {
@@ -600,4 +1452,32 @@ textarea {
   color: #f48771;
   font-size: 12px;
   margin-top: 8px;
+}
+
+.settings-edit-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-input {
+  flex: 1;
+  background: #2d2d30;
+  border: 1px solid #3e3e42;
+  color: #d4d4d4;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: #0e639c;
 }

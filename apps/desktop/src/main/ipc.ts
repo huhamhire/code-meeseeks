@@ -1,6 +1,6 @@
 import { app, ipcMain, shell } from 'electron';
 import type { Logger } from 'pino';
-import type { BootstrapResult } from '@pr-pilot/config';
+import { writeConfig, type BootstrapResult } from '@pr-pilot/config';
 import { type Poller, listStoredPullRequests, setLocalStatus } from '@pr-pilot/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@pr-pilot/repo-mirror';
 import type {
@@ -47,7 +47,7 @@ export function registerIpcHandlers({
     const conn = bootstrap.config.connections.find((c) => c.id === pr.connectionId);
     if (!conn) throw new Error(`connection not found: ${pr.connectionId}`);
     return {
-      host: new URL(conn.base_url).host,
+      host: new URL(conn.base_url).hostname,
       projectKey: pr.repo.projectKey,
       repoSlug: pr.repo.repoSlug,
     };
@@ -68,6 +68,9 @@ export function registerIpcHandlers({
     const err = await shell.openPath(bootstrap.paths.configFile);
     if (err) throw new Error(`failed to open config.yaml: ${err}`);
   });
+  ipcMain.handle('app:openDevTools', (evt) => {
+    evt.sender.openDevTools({ mode: 'detach' });
+  });
 
   ipcMain.handle(
     'prs:list',
@@ -76,6 +79,10 @@ export function registerIpcHandlers({
   ipcMain.handle(
     'prs:refresh',
     async (): Promise<IpcChannels['prs:refresh']['response']> => poller.tick(),
+  );
+  ipcMain.handle(
+    'prs:lastSync',
+    (): IpcChannels['prs:lastSync']['response'] => ({ at: poller.getLastPollAt() }),
   );
   ipcMain.handle(
     'prs:setLocalStatus',
@@ -122,6 +129,70 @@ export function registerIpcHandlers({
       const id = repoIdentityFor(pr);
       const sha = req.side === 'base' ? pr.targetRef.sha : pr.sourceRef.sha;
       return repoMirror.getFileContent(id, sha, req.path);
+    },
+  );
+
+  ipcMain.handle(
+    'diff:listComments',
+    async (
+      _evt,
+      req: IpcChannels['diff:listComments']['request'],
+    ): Promise<IpcChannels['diff:listComments']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
+      return adapter.listPullRequestComments(
+        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+        pr.remoteId,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'diff:getBlame',
+    async (
+      _evt,
+      req: IpcChannels['diff:getBlame']['request'],
+    ): Promise<IpcChannels['diff:getBlame']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const id = repoIdentityFor(pr);
+      // blame 跑在 head sha 上；renderer 已确保 deleted 文件不会发起此请求
+      return repoMirror.getBlame(id, pr.sourceRef.sha, req.path);
+    },
+  );
+
+  ipcMain.handle('repo:getTotalSize', async (): Promise<{ totalBytes: number }> => {
+    const prs = await listStoredPullRequests(stateStore);
+    const seen = new Set<string>();
+    let total = 0;
+    for (const pr of prs) {
+      let id: RepoIdentity;
+      try {
+        id = repoIdentityFor(pr);
+      } catch {
+        continue;
+      }
+      const key = `${id.host}|${id.projectKey}|${id.repoSlug}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const r = await repoMirror.getSize(id);
+      total += r.totalBytes;
+    }
+    return { totalBytes: total };
+  });
+
+  ipcMain.handle(
+    'config:setReposDir',
+    async (_evt, req: IpcChannels['config:setReposDir']['request']): Promise<void> => {
+      const next = {
+        ...bootstrap.config,
+        workspace: {
+          ...bootstrap.config.workspace,
+          repos_dir: req.reposDir,
+        },
+      };
+      await writeConfig(bootstrap.paths.configFile, next);
+      logger.info({ reposDir: req.reposDir }, 'repos_dir updated; restart required');
     },
   );
 

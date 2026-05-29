@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { IpcBridge, IpcChannelName, IpcChannels } from '@pr-pilot/shared';
+import type {
+  IpcBridge,
+  IpcChannelName,
+  IpcChannels,
+  IpcEventName,
+  IpcEvents,
+} from '@pr-pilot/shared';
 
 console.log('[preload] script loaded');
 
@@ -9,6 +15,18 @@ const bridge: IpcBridge = {
     req: IpcChannels[K]['request'],
   ): Promise<IpcChannels[K]['response']> {
     return ipcRenderer.invoke(channel, req);
+  },
+  subscribe<E extends IpcEventName>(
+    event: E,
+    handler: (data: IpcEvents[E]) => void,
+  ): () => void {
+    const listener = (_evt: Electron.IpcRendererEvent, data: unknown): void => {
+      handler(data as IpcEvents[E]);
+    };
+    ipcRenderer.on(event, listener);
+    return () => {
+      ipcRenderer.removeListener(event, listener);
+    };
   },
 };
 

@@ -8,7 +8,12 @@ interface SidebarProps {
   prs: StoredPullRequest[];
   selectedId: string | null;
   onSelect: (pr: StoredPullRequest) => void;
+  width: number;
+  onResize: (next: number) => void;
 }
+
+export const SIDEBAR_MIN_WIDTH = 240;
+export const SIDEBAR_MAX_WIDTH = 720;
 
 const FILTERS: ReadonlyArray<{ value: FilterStatus; label: string }> = [
   { value: 'pending', label: '待处理' },
@@ -23,7 +28,28 @@ interface PrGroup {
   items: StoredPullRequest[];
 }
 
-export function Sidebar({ prs, selectedId, onSelect }: SidebarProps) {
+export function Sidebar({ prs, selectedId, onSelect, width, onResize }: SidebarProps) {
+  const startResize = (e: React.MouseEvent): void => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    const onMove = (ev: MouseEvent): void => {
+      const dx = ev.clientX - startX;
+      const next = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + dx));
+      onResize(next);
+    };
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterStatus>('pending');
   // 哪些组当前折叠了。默认空集合 = 全部展开。
@@ -90,7 +116,13 @@ export function Sidebar({ prs, selectedId, onSelect }: SidebarProps) {
   };
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ width: `${width}px` }}>
+      <div
+        className="sidebar-resize-handle"
+        onMouseDown={startResize}
+        title="拖动调整侧栏宽度"
+        aria-label="resize sidebar"
+      />
       <div className="sidebar-toolbar">
         <input
           type="text"

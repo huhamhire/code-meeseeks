@@ -42,6 +42,9 @@ class FakeAdapter implements PlatformAdapter {
   async getCloneUrl(): Promise<string> {
     return 'https://fake.example.com/repo.git';
   }
+  async listPullRequestComments(): Promise<never[]> {
+    return [];
+  }
 }
 
 const noop = (): void => undefined;
@@ -185,6 +188,9 @@ describe('Poller.tick', () => {
       getCurrentUser: () => null,
       async getCloneUrl() {
         return 'https://stub';
+      },
+      async listPullRequestComments() {
+        return [];
       },
       listPendingPullRequests: () => new Promise<PullRequest[]>((r) => (resolveList = r)),
     };
@@ -360,7 +366,7 @@ describe('Poller.tick', () => {
   it('new PR with conflict + approved: approved wins (reviewed)', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
     pr.hasConflict = true;
-    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', approved: true }];
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }];
     const adapter = new FakeAdapter([pr]);
     adapter.setCurrentUser('kyle');
     const poller = new Poller({
@@ -376,8 +382,8 @@ describe('Poller.tick', () => {
   it('auto-marks new PR as reviewed when current user is an approved reviewer', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
     pr.reviewers = [
-      { name: 'kyle', displayName: 'Kyle', approved: true },
-      { name: 'other', displayName: 'Other', approved: false },
+      { name: 'kyle', displayName: 'Kyle', status: 'approved' as const },
+      { name: 'other', displayName: 'Other', status: 'unapproved' as const },
     ];
     const adapter = new FakeAdapter([pr]);
     adapter.setCurrentUser('kyle', 'Kyle');
@@ -394,7 +400,7 @@ describe('Poller.tick', () => {
 
   it('upgrades existing pending PR to reviewed when current user just approved', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', approved: false }];
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }];
     const adapter = new FakeAdapter([pr]);
     adapter.setCurrentUser('kyle');
     const poller = new Poller({
@@ -410,7 +416,7 @@ describe('Poller.tick', () => {
     adapter.setPrs([
       {
         ...pr,
-        reviewers: [{ name: 'kyle', displayName: 'Kyle', approved: true }],
+        reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }],
       },
     ]);
     await poller.tick();
@@ -419,7 +425,7 @@ describe('Poller.tick', () => {
 
   it('upgrades skipped PR to reviewed when later approved on remote', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', approved: false }];
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }];
     const adapter = new FakeAdapter([pr]);
     adapter.setCurrentUser('kyle');
     const poller = new Poller({
@@ -432,7 +438,7 @@ describe('Poller.tick', () => {
     await setLocalStatus(store, 'bb1:1', 'skipped');
 
     adapter.setPrs([
-      { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', approved: true }] },
+      { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }] },
     ]);
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
@@ -440,7 +446,7 @@ describe('Poller.tick', () => {
 
   it('does not flip reviewed back to pending if remote approval is later revoked', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', approved: true }];
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }];
     const adapter = new FakeAdapter([pr]);
     adapter.setCurrentUser('kyle');
     const poller = new Poller({
@@ -453,7 +459,7 @@ describe('Poller.tick', () => {
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
 
     adapter.setPrs([
-      { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', approved: false }] },
+      { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }] },
     ]);
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');

@@ -80,20 +80,45 @@ describe('RepoMirrorManager.syncMirror', () => {
     expect(log.total).toBeGreaterThanOrEqual(2);
   });
 
-  it('serializes concurrent syncMirror calls for the same repo', async () => {
-    const mgr = makeManager();
-    // 并发 3 次 → 应当都成功，目录只 clone 一次（freshClone 仅首次 true）
+  it('dedups concurrent syncMirror calls for the same repo (shared in-flight)', async () => {
+    let urlCalls = 0;
+    const mgr = new RepoMirrorManager({
+      reposDir,
+      getCloneUrl: async () => {
+        urlCalls++;
+        return upstreamPath;
+      },
+    });
+    // 并发 3 次 → 三个调用复用同一 in-flight Promise，只触发 1 次实际 clone
     const results = await Promise.all([
       mgr.syncMirror(repo),
       mgr.syncMirror(repo),
       mgr.syncMirror(repo),
     ]);
-    const fresh = results.filter((r) => r.freshClone);
-    expect(fresh).toHaveLength(1);
-    expect(results.every((r) => r.mirrorPath === results[0]!.mirrorPath)).toBe(true);
+    expect(urlCalls).toBe(1);
+    // 三个调用拿到的应当是同一个 MirrorResult 引用（来自同一 Promise）
+    expect(results[0]).toBe(results[1]);
+    expect(results[0]).toBe(results[2]);
+    expect(results[0]!.freshClone).toBe(true);
   });
 
-  it('parallelizes syncMirror calls for different repos', async () => {
+  it('starts a fresh sync after the in-flight one completes (cleanup)', async () => {
+    let urlCalls = 0;
+    const mgr = new RepoMirrorManager({
+      reposDir,
+      getCloneUrl: async () => {
+        urlCalls++;
+        return upstreamPath;
+      },
+    });
+    await mgr.syncMirror(repo);
+    // 一次同步完成后再调一次，应触发新的 sync（这里是 fetch，因为镜像已存在）
+    await mgr.syncMirror(repo);
+    expect(urlCalls).toBe(1); // clone 仅 1 次；fetch 不走 getCloneUrl
+  });
+
+  it('serializes syncMirror across different repos via global queue', async () => {
+    // 全局单队列：不同 repo 也串行执行，但都能成功完成
     const otherRepo: RepoIdentity = { ...repo, repoSlug: 'fx-code' };
     const otherUpstream = path.join(tmpRoot, 'upstream-other');
     await makeUpstream(otherUpstream);
@@ -103,10 +128,26 @@ describe('RepoMirrorManager.syncMirror', () => {
       getCloneUrl: async (r) => (r.repoSlug === 'fx-help' ? upstreamPath : otherUpstream),
     });
 
+    // 跟踪 doSyncMirror 同时运行的最大并发数
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const origGetCloneUrl = mgr['opts'].getCloneUrl;
+    mgr['opts'].getCloneUrl = async (r) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      // 让 clone 步骤稍稍延后，给同时性留窗口
+      await new Promise((res) => setTimeout(res, 10));
+      const url = await origGetCloneUrl(r);
+      inFlight--;
+      return url;
+    };
+
     const [a, b] = await Promise.all([mgr.syncMirror(repo), mgr.syncMirror(otherRepo)]);
     expect(a.freshClone).toBe(true);
     expect(b.freshClone).toBe(true);
     expect(a.mirrorPath).not.toBe(b.mirrorPath);
+    // 关键：全局队列保证任何时刻最多 1 个 clone 在跑
+    expect(maxInFlight).toBe(1);
   });
 
   it('isolates failures: failed call does not poison subsequent calls', async () => {

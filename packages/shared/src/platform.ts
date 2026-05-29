@@ -13,6 +13,13 @@ export interface PlatformUser {
   displayName: string;
 }
 
+/** Reviewer 在 PR 上的当前判定。BBS: APPROVED / NEEDS_WORK / UNAPPROVED */
+export type ReviewerStatus = 'approved' | 'needsWork' | 'unapproved';
+
+export interface Reviewer extends PlatformUser {
+  status: ReviewerStatus;
+}
+
 export interface PullRequest {
   remoteId: string;
   title: string;
@@ -27,7 +34,7 @@ export interface PullRequest {
   /** ISO timestamps */
   createdAt: string;
   updatedAt: string;
-  reviewers: Array<PlatformUser & { approved: boolean }>;
+  reviewers: Reviewer[];
   /** 远端是否存在 merge conflict（BBS 走 /merge 端点 conflicted 字段） */
   hasConflict: boolean;
 }
@@ -38,6 +45,31 @@ export interface PingResult {
   user?: PlatformUser;
   /** 当 ok=false 时给出的人读原因（设置页显示） */
   reason?: string;
+}
+
+export interface PrCommentAnchor {
+  /** 当前路径（renamed 文件给 dst 端） */
+  path: string;
+  /** 锚定行号 */
+  line: number;
+  /** 'old' = 锚到 base / FROM；'new' = 锚到 head / TO */
+  side: 'old' | 'new';
+  /** 锚点对应行的 diff 角色 */
+  lineType: 'added' | 'removed' | 'context';
+}
+
+export interface PrComment {
+  remoteId: string;
+  author: PlatformUser;
+  body: string;
+  /** ISO */
+  createdAt: string;
+  /** ISO */
+  updatedAt: string;
+  /** null = PR 顶层 summary 评论；set = inline 评论锚到具体文件行 */
+  anchor: PrCommentAnchor | null;
+  /** 嵌套 replies (BBS 走 comment.comments[]) */
+  replies: PrComment[];
 }
 
 /**
@@ -62,8 +94,16 @@ export interface PlatformAdapter {
   listPendingPullRequests(): Promise<PullRequest[]>;
 
   /**
-   * 返回 git clone URL。`withAuth` 为 true 时把当前 PAT 嵌入 URL，可直接给
-   * `git clone` 用；否则返回纯净 URL（供日志 / 展示）。
+   * 返回 git clone URL。一期统一走 SSH（scp-like 形式），认证完全交给系统
+   * `~/.ssh/config` + 私钥。BBS 实例若 SSH 端口非 22，需要用户在 ssh config
+   * 里给 host 配 Port，否则 git 会用默认 22 失败。
    */
-  getCloneUrl(repo: RepoRef, opts?: { withAuth?: boolean }): Promise<string>;
+  getCloneUrl(repo: RepoRef): Promise<string>;
+
+  /**
+   * 列出 PR 上的全部已有评论（inline + summary）。inline 评论的 anchor 非空，
+   * summary 评论的 anchor=null。reply 通过 comment.replies 嵌套返回。
+   * 删除的评论会被过滤掉。
+   */
+  listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]>;
 }

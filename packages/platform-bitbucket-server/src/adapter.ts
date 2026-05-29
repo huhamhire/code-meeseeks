@@ -2,8 +2,12 @@ import type {
   PingResult,
   PlatformAdapter,
   PlatformUser,
+  PrComment,
+  PrCommentAnchor,
   PullRequest,
   RepoRef,
+  Reviewer,
+  ReviewerStatus,
 } from '@pr-pilot/shared';
 import { BBClient, type BBClientOptions } from './client.js';
 
@@ -65,34 +69,87 @@ interface BBMergeStatus {
   vetoes?: Array<{ summaryMessage: string; detailedMessage?: string }>;
 }
 
+interface BBComment {
+  id: number;
+  version: number;
+  text: string;
+  author: BBUser;
+  createdDate: number;
+  updatedDate: number;
+  comments?: BBComment[];
+  parent?: { id: number };
+}
+
+interface BBCommentAnchor {
+  diffType?: 'EFFECTIVE' | 'COMMIT' | 'RANGE';
+  line: number;
+  lineType: 'ADDED' | 'REMOVED' | 'CONTEXT';
+  fileType: 'FROM' | 'TO';
+  path: string;
+  srcPath?: string;
+}
+
+interface BBActivity {
+  id: number;
+  createdDate: number;
+  user: BBUser;
+  action: string;
+  commentAction?: 'ADDED' | 'UPDATED' | 'DELETED' | 'REPLIED';
+  comment?: BBComment;
+  commentAnchor?: BBCommentAnchor;
+}
+
 const MIN_VERSION: readonly [number, number, number] = [7, 0, 0];
+
+export interface BitbucketServerAdapterOptions extends BBClientOptions {
+  /** clone 协议：'pat'（默认）走 HTTPS+用户名:PAT；'ssh' 走系统 ssh 配置 */
+  cloneProtocol?: 'pat' | 'ssh';
+}
 
 export class BitbucketServerAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
   private readonly client: BBClient;
   private readonly baseUrl: string;
   private readonly token: string;
+  private readonly cloneProtocol: 'pat' | 'ssh';
   private cachedUser: PlatformUser | null = null;
 
-  constructor(opts: BBClientOptions) {
+  constructor(opts: BitbucketServerAdapterOptions) {
     this.client = new BBClient(opts);
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.token = opts.token;
+    this.cloneProtocol = opts.cloneProtocol ?? 'pat';
   }
 
   /**
-   * BBS HTTPS clone URL: <baseUrl>/scm/<projectKey>/<repoSlug>.git
-   * 带认证时塞 x-token-auth:<PAT>。projectKey 保留原大小写（BBS web 与 scm
-   * 都是大小写敏感的）。
+   * 返回 clone URL，行为按 cloneProtocol 切分：
+   *
+   * **pat（默认）**: `https://<当前用户名>:<PAT>@<host>/scm/<proj>/<repo>.git`
+   * - BBS Server 的 PAT 鉴权要求真实用户名 (X-AUSERNAME) 作为 username，
+   *   PAT 作为 password（不是 Bitbucket Cloud 的 x-token-auth）
+   * - 调用前必须先 ping() 让 cachedUser 落地，否则抛
+   * - 风险提示：PAT 在 URL 里会出现在 git reflog / 进程命令行，敏感场景请用 ssh
+   *
+   * **ssh**: `git@<host>:<proj>/<repo>.git` (scp-like)
+   * - 端口 / 私钥 / username 完全由系统 `~/.ssh/config` 负责
+   * - BBS Server 默认 SSH 端口 7999，需在 ssh config 里给 host 配 Port
    */
-  async getCloneUrl(repo: RepoRef, opts: { withAuth?: boolean } = {}): Promise<string> {
-    const url = new URL(this.baseUrl);
-    url.pathname = `/scm/${repo.projectKey}/${repo.repoSlug}.git`;
-    if (opts.withAuth) {
-      url.username = 'x-token-auth';
-      url.password = this.token;
+  async getCloneUrl(repo: RepoRef): Promise<string> {
+    const u = new URL(this.baseUrl);
+    if (this.cloneProtocol === 'ssh') {
+      return `git@${u.hostname}:${repo.projectKey}/${repo.repoSlug}.git`;
     }
-    return url.toString();
+    // pat 模式
+    const user = this.cachedUser?.name;
+    if (!user) {
+      throw new Error(
+        'cannot construct PAT clone URL: current user unknown — ping() not called or failed',
+      );
+    }
+    u.pathname = `/scm/${repo.projectKey}/${repo.repoSlug}.git`;
+    u.username = user;
+    u.password = this.token;
+    return u.toString();
   }
 
   async ping(): Promise<PingResult> {
@@ -159,10 +216,64 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       `/rest/api/1.0/projects/${project}/repos/${repo}/pull-requests/${String(pr.id)}/merge`,
     );
   }
+
+  async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
+    // BBS 走 /activities 拿全部活动，过滤 COMMENTED + ADDED（top-level + 回复）。
+    // - 跳过 DELETED / UPDATED 派生事件
+    // - 跳过 reply（有 parent 字段），它们会跟着父评论的 .comments 一起出来
+    // - 用 id 去重，防同一条评论多次出现
+    const seen = new Set<string>();
+    const out: PrComment[] = [];
+    for await (const activity of this.client.paginate<BBActivity>(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/activities`,
+    )) {
+      if (activity.action !== 'COMMENTED') continue;
+      if (activity.commentAction !== 'ADDED') continue;
+      const c = activity.comment;
+      if (!c) continue;
+      if (c.parent) continue;
+      const id = String(c.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(mapBBComment(c, activity.commentAnchor));
+    }
+    return out;
+  }
+}
+
+function mapBBComment(c: BBComment, anchor?: BBCommentAnchor): PrComment {
+  return {
+    remoteId: String(c.id),
+    author: mapUser(c.author),
+    body: c.text,
+    createdAt: new Date(c.createdDate).toISOString(),
+    updatedAt: new Date(c.updatedDate).toISOString(),
+    anchor: anchor ? mapBBAnchor(anchor) : null,
+    replies: (c.comments ?? []).map((r) => mapBBComment(r)),
+  };
+}
+
+function mapBBAnchor(a: BBCommentAnchor): PrCommentAnchor {
+  return {
+    path: a.path,
+    line: a.line,
+    side: a.fileType === 'FROM' ? 'old' : 'new',
+    lineType: a.lineType.toLowerCase() as PrCommentAnchor['lineType'],
+  };
 }
 
 function mapUser(u: BBUser): PlatformUser {
   return { name: u.name, displayName: u.displayName };
+}
+
+function mapReviewer(p: BBParticipant): Reviewer {
+  // status 是 BBS 7.x+ 才有的字段；缺失时退回 approved 布尔
+  let status: ReviewerStatus;
+  if (p.status === 'APPROVED') status = 'approved';
+  else if (p.status === 'NEEDS_WORK') status = 'needsWork';
+  else if (p.status === 'UNAPPROVED') status = 'unapproved';
+  else status = p.approved ? 'approved' : 'unapproved';
+  return { ...mapUser(p.user), status };
 }
 
 function mapPullRequest(bb: BBPullRequest, hasConflict: boolean): PullRequest {
@@ -181,7 +292,7 @@ function mapPullRequest(bb: BBPullRequest, hasConflict: boolean): PullRequest {
     url,
     createdAt: new Date(bb.createdDate).toISOString(),
     updatedAt: new Date(bb.updatedDate).toISOString(),
-    reviewers: bb.reviewers.map((r) => ({ ...mapUser(r.user), approved: r.approved })),
+    reviewers: bb.reviewers.map((r) => mapReviewer(r)),
     hasConflict,
   };
 }

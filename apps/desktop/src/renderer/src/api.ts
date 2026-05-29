@@ -1,8 +1,15 @@
-import type { IpcChannelName, IpcChannels } from '@pr-pilot/shared';
+import type { IpcChannelName, IpcChannels, IpcEventName, IpcEvents } from '@pr-pilot/shared';
 
 export function invoke<K extends IpcChannelName>(
   channel: K,
   req: IpcChannels[K]['request'],
 ): Promise<IpcChannels[K]['response']> {
   return window.api.invoke(channel, req);
+}
+
+export function subscribe<E extends IpcEventName>(
+  event: E,
+  handler: (data: IpcEvents[E]) => void,
+): () => void {
+  return window.api.subscribe(event, handler);
 }

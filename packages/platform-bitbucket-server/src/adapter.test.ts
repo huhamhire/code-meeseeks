@@ -137,20 +137,61 @@ describe('BitbucketServerAdapter.ping', () => {
   });
 });
 
-describe('BitbucketServerAdapter.getCloneUrl', () => {
-  it('builds bare URL without credentials by default', async () => {
-    const adapter = makeAdapter(mockFetch({}));
+describe('BitbucketServerAdapter.getCloneUrl (default PAT)', () => {
+  it('embeds <username>:<PAT> after ping caches current user', async () => {
+    const adapter = makeAdapter(
+      mockFetch(
+        {
+          '/rest/api/1.0/application-properties': () => ({
+            version: '7.17.10',
+            buildNumber: '7017010',
+            displayName: 'Bitbucket',
+          }),
+          '/rest/api/1.0/users/kyle': () => ({
+            name: 'kyle',
+            displayName: 'Kyle Smith',
+            active: true,
+            slug: 'kyle',
+          }),
+        },
+        200,
+        { 'x-ausername': 'kyle' },
+      ),
+    );
+    await adapter.ping();
     const url = await adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
-    expect(url).toBe('https://bb.example.com/scm/FX/fx-help.git');
+    expect(url).toBe('https://kyle:pat@bb.example.com/scm/FX/fx-help.git');
   });
 
-  it('embeds x-token-auth + token when withAuth=true', async () => {
+  it('throws when ping has not populated cachedUser', async () => {
     const adapter = makeAdapter(mockFetch({}));
-    const url = await adapter.getCloneUrl(
-      { projectKey: 'FX', repoSlug: 'fx-help' },
-      { withAuth: true },
-    );
-    expect(url).toBe('https://x-token-auth:pat@bb.example.com/scm/FX/fx-help.git');
+    await expect(
+      adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' }),
+    ).rejects.toThrow(/current user unknown/);
+  });
+});
+
+describe('BitbucketServerAdapter.getCloneUrl with cloneProtocol="ssh"', () => {
+  it('returns scp-like SSH URL using hostname (no credentials, no port)', async () => {
+    const adapter = new BitbucketServerAdapter({
+      baseUrl: 'https://bb.example.com',
+      token: 'pat',
+      fetch: mockFetch({}),
+      cloneProtocol: 'ssh',
+    });
+    const url = await adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
+    expect(url).toBe('git@bb.example.com:FX/fx-help.git');
+  });
+
+  it('drops baseUrl port from SSH URL (端口由 ssh config 负责)', async () => {
+    const adapter = new BitbucketServerAdapter({
+      baseUrl: 'https://bb.example.com:8443',
+      token: 'pat',
+      fetch: mockFetch({}),
+      cloneProtocol: 'ssh',
+    });
+    const url = await adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
+    expect(url).toBe('git@bb.example.com:FX/fx-help.git');
   });
 });
 
@@ -253,7 +294,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
       url: 'https://bb.example.com/projects/FX/repos/fx-help/pull-requests/1022',
       createdAt: new Date(Date.parse('2026-05-28T01:00:00Z')).toISOString(),
       updatedAt: new Date(Date.parse('2026-05-28T09:30:43Z')).toISOString(),
-      reviewers: [{ name: 'reviewer1', displayName: 'Reviewer One', approved: true }],
+      reviewers: [{ name: 'reviewer1', displayName: 'Reviewer One', status: 'approved' }],
       hasConflict: false,
     });
   });
