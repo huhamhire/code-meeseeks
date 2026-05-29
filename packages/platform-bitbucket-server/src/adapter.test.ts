@@ -137,6 +137,23 @@ describe('BitbucketServerAdapter.ping', () => {
   });
 });
 
+describe('BitbucketServerAdapter.getCloneUrl', () => {
+  it('builds bare URL without credentials by default', async () => {
+    const adapter = makeAdapter(mockFetch({}));
+    const url = await adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
+    expect(url).toBe('https://bb.example.com/scm/FX/fx-help.git');
+  });
+
+  it('embeds x-token-auth + token when withAuth=true', async () => {
+    const adapter = makeAdapter(mockFetch({}));
+    const url = await adapter.getCloneUrl(
+      { projectKey: 'FX', repoSlug: 'fx-help' },
+      { withAuth: true },
+    );
+    expect(url).toBe('https://x-token-auth:pat@bb.example.com/scm/FX/fx-help.git');
+  });
+});
+
 describe('BitbucketServerAdapter whoami / getCurrentUser', () => {
   it('returns null before ping is called', () => {
     const adapter = makeAdapter(mockFetch({}));

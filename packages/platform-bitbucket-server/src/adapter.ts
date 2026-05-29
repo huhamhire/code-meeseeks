@@ -1,4 +1,10 @@
-import type { PingResult, PlatformAdapter, PlatformUser, PullRequest } from '@pr-pilot/shared';
+import type {
+  PingResult,
+  PlatformAdapter,
+  PlatformUser,
+  PullRequest,
+  RepoRef,
+} from '@pr-pilot/shared';
 import { BBClient, type BBClientOptions } from './client.js';
 
 interface BBUser {
@@ -64,10 +70,29 @@ const MIN_VERSION: readonly [number, number, number] = [7, 0, 0];
 export class BitbucketServerAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
   private readonly client: BBClient;
+  private readonly baseUrl: string;
+  private readonly token: string;
   private cachedUser: PlatformUser | null = null;
 
   constructor(opts: BBClientOptions) {
     this.client = new BBClient(opts);
+    this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
+    this.token = opts.token;
+  }
+
+  /**
+   * BBS HTTPS clone URL: <baseUrl>/scm/<projectKey>/<repoSlug>.git
+   * 带认证时塞 x-token-auth:<PAT>。projectKey 保留原大小写（BBS web 与 scm
+   * 都是大小写敏感的）。
+   */
+  async getCloneUrl(repo: RepoRef, opts: { withAuth?: boolean } = {}): Promise<string> {
+    const url = new URL(this.baseUrl);
+    url.pathname = `/scm/${repo.projectKey}/${repo.repoSlug}.git`;
+    if (opts.withAuth) {
+      url.username = 'x-token-auth';
+      url.password = this.token;
+    }
+    return url.toString();
   }
 
   async ping(): Promise<PingResult> {

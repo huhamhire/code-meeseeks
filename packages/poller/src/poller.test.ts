@@ -39,6 +39,9 @@ class FakeAdapter implements PlatformAdapter {
     }
     return this.prs;
   }
+  async getCloneUrl(): Promise<string> {
+    return 'https://fake.example.com/repo.git';
+  }
 }
 
 const noop = (): void => undefined;
@@ -180,6 +183,9 @@ describe('Poller.tick', () => {
         return { ok: true };
       },
       getCurrentUser: () => null,
+      async getCloneUrl() {
+        return 'https://stub';
+      },
       listPendingPullRequests: () => new Promise<PullRequest[]>((r) => (resolveList = r)),
     };
     const poller = new Poller({

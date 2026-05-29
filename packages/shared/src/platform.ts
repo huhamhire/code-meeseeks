@@ -60,4 +60,10 @@ export interface PlatformAdapter {
 
   /** 列出当前 PAT 用户作为 reviewer 待处理的 PR，跨项目跨仓库。 */
   listPendingPullRequests(): Promise<PullRequest[]>;
+
+  /**
+   * 返回 git clone URL。`withAuth` 为 true 时把当前 PAT 嵌入 URL，可直接给
+   * `git clone` 用；否则返回纯净 URL（供日志 / 展示）。
+   */
+  getCloneUrl(repo: RepoRef, opts?: { withAuth?: boolean }): Promise<string>;
 }
