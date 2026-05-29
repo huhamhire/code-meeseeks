@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Menu, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
@@ -41,7 +41,10 @@ async function start(): Promise<void> {
 
   registerIpcHandlers({ bootstrap, logger, prAgentStatus, stateStore, poller });
 
-  // 配置里有连接才启动轮询；空配置下 UI 会在 M1-D 引导用户加连接
+  // 不要 Electron 默认菜单栏（File/Edit/View/...），pr-pilot 自己提供工具栏
+  Menu.setApplicationMenu(null);
+
+  // 配置里有连接才启动轮询；空配置下 UI 引导用户加连接
   if (adapters.length > 0) {
     poller.start();
     logger.info({ connections: adapters.length }, 'poller started');
@@ -75,6 +78,12 @@ function createWindow(): void {
   });
 
   win.once('ready-to-show', () => win.show());
+
+  // 把 <a target="_blank"> / window.open 都路由到 OS 默认浏览器，不在 Electron 内开新窗口
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL);

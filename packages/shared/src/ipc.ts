@@ -14,6 +14,8 @@ export interface IpcChannels {
   'app:info': { request: void; response: AppInfo };
   'app:paths': { request: void; response: AppPaths };
   'app:prAgentStatus': { request: void; response: PrAgentStatus };
+  /** 调 Electron shell.openPath 让 OS 默认编辑器打开 config.yaml */
+  'app:openConfigFile': { request: void; response: void };
   'config:read': { request: void; response: Config };
   'prs:list': { request: void; response: StoredPullRequest[] };
   'prs:refresh': { request: void; response: PollResult };

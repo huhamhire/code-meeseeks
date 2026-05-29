@@ -1,0 +1,39 @@
+import type { StoredPullRequest } from '@pr-pilot/shared';
+
+interface PrItemProps {
+  pr: StoredPullRequest;
+  selected: boolean;
+  onClick: () => void;
+}
+
+export function PrItem({ pr, selected, onClick }: PrItemProps) {
+  return (
+    <div
+      className={`pr-item ${selected ? 'selected' : ''} pr-item-status-${pr.localStatus}`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <div className="pr-item-title">
+        <span className="pr-item-id">#{pr.remoteId}</span> {pr.title}
+      </div>
+      <div className="pr-item-meta">
+        <span>
+          {pr.repo.projectKey}/{pr.repo.repoSlug}
+        </span>
+        <span>·</span>
+        <span>{pr.author.displayName}</span>
+        <span>·</span>
+        <span>
+          {pr.sourceRef.displayId} → {pr.targetRef.displayId}
+        </span>
+      </div>
+    </div>
+  );
+}

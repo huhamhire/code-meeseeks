@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, shell } from 'electron';
 import type { Logger } from 'pino';
 import type { BootstrapResult } from '@pr-pilot/config';
 import { Poller, listStoredPullRequests, setLocalStatus } from '@pr-pilot/poller';
@@ -31,6 +31,10 @@ export function registerIpcHandlers({
     (): IpcChannels['app:prAgentStatus']['response'] => prAgentStatus,
   );
   ipcMain.handle('config:read', (): IpcChannels['config:read']['response'] => bootstrap.config);
+  ipcMain.handle('app:openConfigFile', async (): Promise<void> => {
+    const err = await shell.openPath(bootstrap.paths.configFile);
+    if (err) throw new Error(`failed to open config.yaml: ${err}`);
+  });
 
   ipcMain.handle(
     'prs:list',
