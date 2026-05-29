@@ -149,3 +149,104 @@ describe('RepoMirrorManager.mirrorPath', () => {
     );
   });
 });
+
+describe('RepoMirrorManager diff/content', () => {
+  /** 在 upstream 准备 2 个 commit，返回 base / head sha。 */
+  async function prepareTwoCommits(): Promise<{ baseSha: string; headSha: string }> {
+    const upstream = simpleGit(upstreamPath);
+
+    // 重置：上层 beforeEach 已经 init + commit README，删了重来更可控
+    await fs.rm(upstreamPath, { recursive: true, force: true });
+    await fs.mkdir(upstreamPath, { recursive: true });
+    await upstream.init();
+    await upstream.addConfig('user.email', 'test@example.com', false, 'local');
+    await upstream.addConfig('user.name', 'Test', false, 'local');
+    await upstream.addConfig('commit.gpgsign', 'false', false, 'local');
+
+    await fs.writeFile(path.join(upstreamPath, 'a.txt'), 'line1\nline2\n');
+    await fs.writeFile(path.join(upstreamPath, 'b.txt'), 'old b\n');
+    await fs.writeFile(path.join(upstreamPath, 'rename-me.txt'), 'will be renamed\n');
+    await upstream.add('.');
+    await upstream.commit('base');
+    const baseSha = (await upstream.revparse(['HEAD'])).trim();
+
+    // commit 2:
+    //   modify a.txt
+    //   delete b.txt
+    //   add c.txt
+    //   rename rename-me.txt → renamed.txt
+    await fs.writeFile(path.join(upstreamPath, 'a.txt'), 'line1\nline2\nline3-new\n');
+    await fs.rm(path.join(upstreamPath, 'b.txt'));
+    await fs.writeFile(path.join(upstreamPath, 'c.txt'), 'brand new\n');
+    await fs.rename(
+      path.join(upstreamPath, 'rename-me.txt'),
+      path.join(upstreamPath, 'renamed.txt'),
+    );
+    await upstream.add('.');
+    await upstream.commit('changes');
+    const headSha = (await upstream.revparse(['HEAD'])).trim();
+
+    return { baseSha, headSha };
+  }
+
+  it('listChangedFiles maps A/M/D/R from `git diff --name-status`', async () => {
+    const { baseSha, headSha } = await prepareTwoCommits();
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+
+    const files = await mgr.listChangedFiles(repo, baseSha, headSha);
+    const byPath = new Map(files.map((f) => [f.path, f]));
+    expect(byPath.get('a.txt')?.status).toBe('modified');
+    expect(byPath.get('c.txt')?.status).toBe('added');
+    expect(byPath.get('b.txt')?.status).toBe('deleted');
+    const renamed = byPath.get('renamed.txt');
+    expect(renamed?.status).toBe('renamed');
+    expect(renamed?.oldPath).toBe('rename-me.txt');
+    expect(typeof renamed?.similarity).toBe('number');
+  });
+
+  it('getFileContent returns text content at a sha', async () => {
+    const { baseSha, headSha } = await prepareTwoCommits();
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+
+    const atBase = await mgr.getFileContent(repo, baseSha, 'a.txt');
+    expect(atBase).toEqual({ binary: false, content: 'line1\nline2\n' });
+
+    const atHead = await mgr.getFileContent(repo, headSha, 'a.txt');
+    expect(atHead).toEqual({ binary: false, content: 'line1\nline2\nline3-new\n' });
+  });
+
+  it('getFileContent returns empty content for files not present at that sha', async () => {
+    const { baseSha, headSha } = await prepareTwoCommits();
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+
+    // c.txt 在 base 不存在
+    expect(await mgr.getFileContent(repo, baseSha, 'c.txt')).toEqual({
+      binary: false,
+      content: '',
+    });
+    // b.txt 在 head 不存在
+    expect(await mgr.getFileContent(repo, headSha, 'b.txt')).toEqual({
+      binary: false,
+      content: '',
+    });
+  });
+
+  it('getFileContent flags binary on null-byte presence', async () => {
+    // 自定义 upstream with a binary file
+    const upstream = simpleGit(upstreamPath);
+    const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x03]); // PNG header含 NUL
+    await fs.writeFile(path.join(upstreamPath, 'icon.png'), buf);
+    await upstream.add('.');
+    await upstream.commit('add binary');
+    const sha = (await upstream.revparse(['HEAD'])).trim();
+
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+
+    const r = await mgr.getFileContent(repo, sha, 'icon.png');
+    expect(r.binary).toBe(true);
+  });
+});
