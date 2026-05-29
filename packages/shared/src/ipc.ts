@@ -4,6 +4,26 @@ import type { PlatformUser } from './platform.js';
 import type { LocalPrStatus, PollResult, StoredPullRequest } from './poller-contract.js';
 import type { PrAgentStatus } from './pr-agent-status.js';
 
+/** ChangedFile / FileContent 跨 IPC 边界用，与 @pr-pilot/repo-mirror 类型同形。 */
+export type DiffFileStatus =
+  | 'added'
+  | 'modified'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'typechange';
+
+export interface DiffChangedFile {
+  path: string;
+  oldPath?: string;
+  status: DiffFileStatus;
+  similarity?: number;
+}
+
+export type DiffFileContent = { binary: false; content: string } | { binary: true };
+
+export type DiffSide = 'base' | 'head';
+
 export interface ConnectionSummary {
   connectionId: string;
   /** 来自 config 的 display_name */
@@ -33,6 +53,21 @@ export interface IpcChannels {
   'prs:setLocalStatus': {
     request: { localId: string; status: LocalPrStatus };
     response: StoredPullRequest | null;
+  };
+  /** 同步 PR 所属 repo 的本地镜像（必要时 clone，否则 fetch），返回镜像绝对路径 */
+  'repo:sync': {
+    request: { localId: string };
+    response: { mirrorPath: string; freshClone: boolean };
+  };
+  /** 列出 PR baseSha → headSha 之间变更的文件（自动先 sync mirror） */
+  'diff:listChangedFiles': {
+    request: { localId: string };
+    response: DiffChangedFile[];
+  };
+  /** 读取 PR base 或 head 一侧某文件的内容（二进制返回 {binary:true}） */
+  'diff:getFileContent': {
+    request: { localId: string; side: DiffSide; path: string };
+    response: DiffFileContent;
   };
 }
 

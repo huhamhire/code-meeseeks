@@ -51,6 +51,7 @@
     "@pr-pilot/platform-bitbucket-server": "*",
     "@pr-pilot/poller": "*",
     "@pr-pilot/pr-agent-bridge": "*",
+    "@pr-pilot/repo-mirror": "*",
     "@pr-pilot/shared": "*",
     "@pr-pilot/state-store": "*",
     "monaco-editor": "^0.55.0",

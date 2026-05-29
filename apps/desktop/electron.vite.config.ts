@@ -12,6 +12,7 @@ const internalPackages = [
   '@pr-pilot/state-store',
   '@pr-pilot/platform-bitbucket-server',
   '@pr-pilot/poller',
+  '@pr-pilot/repo-mirror',
 ];
 
 export default defineConfig({

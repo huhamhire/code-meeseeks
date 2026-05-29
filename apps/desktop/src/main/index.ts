@@ -6,6 +6,7 @@ import { ensureWorkspace, type BootstrapResult } from '@pr-pilot/config';
 import { createLogger } from '@pr-pilot/logger';
 import { detectPrAgent } from '@pr-pilot/pr-agent-bridge';
 import { Poller } from '@pr-pilot/poller';
+import { RepoMirrorManager } from '@pr-pilot/repo-mirror';
 import type { PrAgentStatus } from '@pr-pilot/shared';
 import { JsonFileStateStore } from '@pr-pilot/state-store';
 import { buildAdapters } from './adapters.js';
@@ -18,6 +19,7 @@ let logger: Logger;
 let prAgentStatus: PrAgentStatus;
 let stateStore: JsonFileStateStore;
 let poller: Poller;
+let repoMirror: RepoMirrorManager;
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
@@ -59,6 +61,32 @@ async function start(): Promise<void> {
     logger: logger.child({ scope: 'poller' }),
   });
 
+  // host → adapter 反向索引，repoMirror 拿 clone URL 时按 RepoIdentity.host 路由。
+  // 一期通常单连接，但接口预留多连接（同 host 多 PAT 暂不支持，最后写入胜出）。
+  const adapterByHost = new Map<string, (typeof adapters)[number]['adapter']>();
+  for (const { connectionId, adapter } of adapters) {
+    const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
+    if (!conn) continue;
+    try {
+      adapterByHost.set(new URL(conn.base_url).host, adapter);
+    } catch (err) {
+      logger.warn({ err, connectionId, base_url: conn.base_url }, 'invalid base_url');
+    }
+  }
+
+  repoMirror = new RepoMirrorManager({
+    reposDir: bootstrap.paths.reposDir,
+    getCloneUrl: async (repo) => {
+      const adapter = adapterByHost.get(repo.host);
+      if (!adapter) throw new Error(`no adapter for host ${repo.host}`);
+      return adapter.getCloneUrl(
+        { projectKey: repo.projectKey, repoSlug: repo.repoSlug },
+        { withAuth: true },
+      );
+    },
+    logger: logger.child({ scope: 'repo-mirror' }),
+  });
+
   registerIpcHandlers({
     bootstrap,
     logger,
@@ -66,6 +94,7 @@ async function start(): Promise<void> {
     stateStore,
     poller,
     adapters,
+    repoMirror,
   });
 
   // 不要 Electron 默认菜单栏（File/Edit/View/...），pr-pilot 自己提供工具栏
