@@ -1,0 +1,26 @@
+{
+  "name": "@pr-pilot/logger",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Logging factory (pino + rolling files) for pr-pilot",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "nx": {
+    "targets": {
+      "typecheck": {
+        "cache": true
+      }
+    }
+  },
+  "dependencies": {
+    "pino": "^9.5.0",
+    "pino-roll": "^3.0.0"
+  }
+}

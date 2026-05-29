@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
 
-declare interface Window {
-  prPilot: {
-    version: string;
-  };
+import type { IpcBridge } from '@pr-pilot/shared';
+
+declare global {
+  interface Window {
+    api: IpcBridge;
+  }
 }

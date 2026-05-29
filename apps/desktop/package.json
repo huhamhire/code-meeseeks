@@ -27,9 +27,16 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@pr-pilot/config": "*",
+    "@pr-pilot/logger": "*",
+    "@pr-pilot/shared": "*",
     "monaco-editor": "^0.55.0",
+    "pino": "^9.5.0",
+    "pino-roll": "^3.0.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
