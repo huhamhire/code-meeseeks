@@ -1,0 +1,60 @@
+appId: com.huhamhire.pr-pilot
+productName: pr-pilot
+copyright: Copyright © 2026 huhamhire
+
+# npm workspaces hoist 下 electron-builder 无法从 apps/desktop/node_modules
+# 推算出 electron 实际版本，必须显式声明（保持与 devDependencies 一致）。
+electronVersion: 42.3.0
+
+directories:
+  output: release
+  buildResources: build
+
+# 入口 + 所有 bundle 产物。out/* 是 electron-vite build 的输出。
+files:
+  - out/**/*
+  - package.json
+  - '!node_modules/.bin'
+  - '!**/*.map'
+  - '!**/*.test.{ts,tsx,js}'
+  - '!**/*.{md,markdown}'
+
+# Workspace 模式下，第三方运行时依赖被 hoist 到根 node_modules。
+# 让 electron-builder 也从那里抽 prod deps（pino / yaml / zod 等）。
+nodeGypRebuild: false
+npmRebuild: false
+
+asar: true
+asarUnpack:
+  - '**/node_modules/pino/**'
+  - '**/node_modules/pino-roll/**'
+  - '**/node_modules/thread-stream/**'
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.developer-tools
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Development
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
