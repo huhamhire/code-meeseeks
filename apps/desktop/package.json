@@ -1,0 +1,42 @@
+{
+  "name": "@pr-pilot/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "pr-pilot Electron desktop app",
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "cache": true,
+        "outputs": [
+          "{projectRoot}/out"
+        ]
+      },
+      "typecheck": {
+        "cache": true
+      }
+    }
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "monaco-editor": "^0.55.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^42.3.0",
+    "electron-vite": "^5.0.0",
+    "vite": "^7.3.0"
+  }
+}
