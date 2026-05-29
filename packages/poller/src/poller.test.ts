@@ -68,6 +68,7 @@ function makePr(id: string, updatedAt: string, title = `PR ${id}`): PullRequest 
     createdAt: '2026-05-28T00:00:00.000Z',
     updatedAt,
     reviewers: [],
+    hasConflict: false,
   };
 }
 
@@ -265,6 +266,105 @@ describe('Poller.tick', () => {
     expect(r.errors).toBe(1);
     const stored = await listStoredPullRequests(store);
     expect(stored.map((p) => p.localId).sort()).toEqual(['broken:a']);
+  });
+
+  it('auto-marks new PR with hasConflict as ignored', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.hasConflict = true;
+    const adapter = new FakeAdapter([pr]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('ignored');
+  });
+
+  it('pending PR newly conflicted: upgrades to ignored on next poll', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    const adapter = new FakeAdapter([pr]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
+
+    adapter.setPrs([{ ...pr, hasConflict: true }]);
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('ignored');
+  });
+
+  it('ignored PR with conflict resolved: auto-reverts to pending', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.hasConflict = true;
+    const adapter = new FakeAdapter([pr]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('ignored');
+
+    adapter.setPrs([{ ...pr, hasConflict: false }]);
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
+  });
+
+  it('skipped PR newly conflicted: stays skipped (manual decision preserved)', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    const adapter = new FakeAdapter([pr]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    await setLocalStatus(store, 'bb1:1', 'skipped');
+
+    adapter.setPrs([{ ...pr, hasConflict: true }]);
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('skipped');
+  });
+
+  it('reviewed PR newly conflicted: stays reviewed', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    const adapter = new FakeAdapter([pr]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    await setLocalStatus(store, 'bb1:1', 'reviewed');
+
+    adapter.setPrs([{ ...pr, hasConflict: true }]);
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
+  });
+
+  it('new PR with conflict + approved: approved wins (reviewed)', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.hasConflict = true;
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', approved: true }];
+    const adapter = new FakeAdapter([pr]);
+    adapter.setCurrentUser('kyle');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
   });
 
   it('auto-marks new PR as reviewed when current user is an approved reviewer', async () => {

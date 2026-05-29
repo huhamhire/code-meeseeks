@@ -39,6 +39,14 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
             <span className="muted">#{pr.remoteId}</span> {pr.title}
           </h2>
           <div className="pr-detail-meta">
+            {pr.hasConflict && (
+              <>
+                <span className="conflict-tag" title="远端 BBS 报告存在合并冲突">
+                  ⚠️ 存在冲突
+                </span>
+                <span> · </span>
+              </>
+            )}
             <strong>
               {pr.repo.projectKey}/{pr.repo.repoSlug}
             </strong>
@@ -64,6 +72,11 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
           {pr.localStatus !== 'reviewed' && (
             <button className="btn" type="button" onClick={() => onSetStatus('reviewed')}>
               标记已评
+            </button>
+          )}
+          {pr.localStatus !== 'ignored' && (
+            <button className="btn" type="button" onClick={() => onSetStatus('ignored')}>
+              标记忽略
             </button>
           )}
           {pr.localStatus !== 'pending' && (

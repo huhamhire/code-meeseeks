@@ -222,6 +222,12 @@ async function main() {
     return `activities: total=${b.size} commented=${commented.length} (inline=${inline.length}, summary=${summary})  actions=[${types}]`;
   });
 
+  // 7. merge 状态 (用来判 conflict)
+  summarize(`GET ${base}/merge`, await call(`${base}/merge`), (b) => {
+    const fields = Object.keys(b ?? {}).join(',');
+    return `canMerge=${b?.canMerge} conflicted=${b?.conflicted} outcome=${b?.outcome} vetoes=${b?.vetoes?.length ?? 0}  fields=[${fields}]`;
+  });
+
   console.log('\nDone.');
 }
 

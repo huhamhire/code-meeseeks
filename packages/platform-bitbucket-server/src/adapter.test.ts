@@ -214,6 +214,11 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
           start: 0,
           values: [samplePR],
         }),
+        '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022/merge': () => ({
+          canMerge: true,
+          conflicted: false,
+          outcome: 'CLEAN',
+        }),
       }),
     );
     const prs = await adapter.listPendingPullRequests();
@@ -232,7 +237,46 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
       createdAt: new Date(Date.parse('2026-05-28T01:00:00Z')).toISOString(),
       updatedAt: new Date(Date.parse('2026-05-28T09:30:43Z')).toISOString(),
       reviewers: [{ name: 'reviewer1', displayName: 'Reviewer One', approved: true }],
+      hasConflict: false,
     });
+  });
+
+  it('maps conflicted PR with hasConflict=true', async () => {
+    const adapter = makeAdapter(
+      mockFetch({
+        '/rest/api/1.0/dashboard/pull-requests': () => ({
+          size: 1,
+          limit: 50,
+          isLastPage: true,
+          start: 0,
+          values: [samplePR],
+        }),
+        '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022/merge': () => ({
+          canMerge: false,
+          conflicted: true,
+          outcome: 'CONFLICTED',
+        }),
+      }),
+    );
+    const prs = await adapter.listPendingPullRequests();
+    expect(prs[0]!.hasConflict).toBe(true);
+  });
+
+  it('treats /merge fetch failure as no conflict (保守, 不误标 ignored)', async () => {
+    const adapter = makeAdapter(
+      mockFetch({
+        '/rest/api/1.0/dashboard/pull-requests': () => ({
+          size: 1,
+          limit: 50,
+          isLastPage: true,
+          start: 0,
+          values: [samplePR],
+        }),
+        // /merge 端点缺失 → mockFetch 默认 404
+      }),
+    );
+    const prs = await adapter.listPendingPullRequests();
+    expect(prs[0]!.hasConflict).toBe(false);
   });
 
   it('follows pagination across pages', async () => {

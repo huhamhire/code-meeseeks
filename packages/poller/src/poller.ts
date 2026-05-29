@@ -95,30 +95,38 @@ export class Poller {
           const prev = byLocalId.get(localId);
           const approvedByMe =
             !!me && pr.reviewers.some((r) => r.name === me.name && r.approved);
+
+          let localStatus: LocalPrStatus;
           if (prev) {
             if (prev.updatedAt !== pr.updatedAt) changed++;
-            // 已批准就升 reviewed（覆盖 pending / skipped）；已是 reviewed 不回退
-            const localStatus: LocalPrStatus =
-              approvedByMe && prev.localStatus !== 'reviewed' ? 'reviewed' : prev.localStatus;
-            byLocalId.set(localId, {
-              ...pr,
-              localId,
-              connectionId,
-              localStatus,
-              discoveredAt: prev.discoveredAt,
-              lastSeenAt: now,
-            });
+            localStatus = prev.localStatus;
+            // 冲突 ↔ ignored 双向自动迁移（只在 pending ↔ ignored 之间生效，
+            // 不影响用户手动 skipped / reviewed 决定）
+            if (pr.hasConflict && !prev.hasConflict && localStatus === 'pending') {
+              localStatus = 'ignored';
+            } else if (!pr.hasConflict && prev.hasConflict && localStatus === 'ignored') {
+              localStatus = 'pending';
+            }
+            // approved 单向升 reviewed，优先级最高（即使冲突已批准也算 reviewed）
+            if (approvedByMe && localStatus !== 'reviewed') {
+              localStatus = 'reviewed';
+            }
           } else {
             added++;
-            byLocalId.set(localId, {
-              ...pr,
-              localId,
-              connectionId,
-              localStatus: approvedByMe ? 'reviewed' : 'pending',
-              discoveredAt: now,
-              lastSeenAt: now,
-            });
+            // 优先级：approved > conflict > 默认 pending
+            if (approvedByMe) localStatus = 'reviewed';
+            else if (pr.hasConflict) localStatus = 'ignored';
+            else localStatus = 'pending';
           }
+
+          byLocalId.set(localId, {
+            ...pr,
+            localId,
+            connectionId,
+            localStatus,
+            discoveredAt: prev?.discoveredAt ?? now,
+            lastSeenAt: now,
+          });
         }
       } catch (err) {
         errors++;

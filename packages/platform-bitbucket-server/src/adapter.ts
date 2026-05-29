@@ -52,6 +52,13 @@ interface BBApplicationProperties {
   displayName: string;
 }
 
+interface BBMergeStatus {
+  canMerge: boolean;
+  conflicted: boolean;
+  outcome: 'CLEAN' | 'CONFLICTED' | 'CONFLICTED_AND_AHEAD' | string;
+  vetoes?: Array<{ summaryMessage: string; detailedMessage?: string }>;
+}
+
 const MIN_VERSION: readonly [number, number, number] = [7, 0, 0];
 
 export class BitbucketServerAdapter implements PlatformAdapter {
@@ -99,14 +106,33 @@ export class BitbucketServerAdapter implements PlatformAdapter {
   }
 
   async listPendingPullRequests(): Promise<PullRequest[]> {
-    const out: PullRequest[] = [];
+    const bbPrs: BBPullRequest[] = [];
     for await (const pr of this.client.paginate<BBPullRequest>(
       '/rest/api/1.0/dashboard/pull-requests',
       { role: 'REVIEWER', state: 'OPEN' },
     )) {
-      out.push(mapPullRequest(pr));
+      bbPrs.push(pr);
     }
-    return out;
+
+    // N+1：并行抓每个 PR 的 /merge 状态拿 conflicted 字段；单个失败降级到
+    // hasConflict=false（保守，不误标 ignored）
+    const mergeResults = await Promise.allSettled(
+      bbPrs.map((pr) => this.fetchMergeStatus(pr)),
+    );
+
+    return bbPrs.map((pr, i) => {
+      const result = mergeResults[i]!;
+      const hasConflict = result.status === 'fulfilled' ? result.value.conflicted : false;
+      return mapPullRequest(pr, hasConflict);
+    });
+  }
+
+  private async fetchMergeStatus(pr: BBPullRequest): Promise<BBMergeStatus> {
+    const project = pr.toRef.repository.project.key;
+    const repo = pr.toRef.repository.slug;
+    return this.client.get<BBMergeStatus>(
+      `/rest/api/1.0/projects/${project}/repos/${repo}/pull-requests/${String(pr.id)}/merge`,
+    );
   }
 }
 
@@ -114,7 +140,7 @@ function mapUser(u: BBUser): PlatformUser {
   return { name: u.name, displayName: u.displayName };
 }
 
-function mapPullRequest(bb: BBPullRequest): PullRequest {
+function mapPullRequest(bb: BBPullRequest, hasConflict: boolean): PullRequest {
   const url = bb.links.self[0]?.href ?? '';
   const targetRepo = bb.toRef.repository;
   return {
@@ -131,6 +157,7 @@ function mapPullRequest(bb: BBPullRequest): PullRequest {
     createdAt: new Date(bb.createdDate).toISOString(),
     updatedAt: new Date(bb.updatedDate).toISOString(),
     reviewers: bb.reviewers.map((r) => ({ ...mapUser(r.user), approved: r.approved })),
+    hasConflict,
   };
 }
 

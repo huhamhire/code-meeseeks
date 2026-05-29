@@ -28,6 +28,8 @@ export interface PullRequest {
   createdAt: string;
   updatedAt: string;
   reviewers: Array<PlatformUser & { approved: boolean }>;
+  /** 远端是否存在 merge conflict（BBS 走 /merge 端点 conflicted 字段） */
+  hasConflict: boolean;
 }
 
 export interface PingResult {

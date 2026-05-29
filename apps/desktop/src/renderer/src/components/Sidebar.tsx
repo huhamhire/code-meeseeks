@@ -15,6 +15,7 @@ const FILTERS: ReadonlyArray<{ value: FilterStatus; label: string }> = [
   { value: 'all', label: '全部' },
   { value: 'reviewed', label: '已评' },
   { value: 'skipped', label: '已跳过' },
+  { value: 'ignored', label: '已忽略' },
 ];
 
 interface PrGroup {
@@ -34,6 +35,7 @@ export function Sidebar({ prs, selectedId, onSelect }: SidebarProps) {
       pending: 0,
       reviewed: 0,
       skipped: 0,
+      ignored: 0,
     };
     for (const p of prs) out[p.localStatus]++;
     return out;

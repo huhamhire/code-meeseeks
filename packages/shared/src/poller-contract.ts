@@ -1,6 +1,6 @@
 import type { PullRequest } from './platform.js';
 
-export type LocalPrStatus = 'pending' | 'reviewed' | 'skipped';
+export type LocalPrStatus = 'pending' | 'reviewed' | 'skipped' | 'ignored';
 
 /**
  * 状态库里存的 PR：在远端字段之上叠加本地维度（归属连接、本地状态、发现/最后看到时间）。

@@ -21,6 +21,11 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
       }}
     >
       <div className="pr-item-title">
+        {pr.hasConflict && (
+          <span className="conflict-warn" title="存在合并冲突" aria-label="conflict">
+            ⚠️
+          </span>
+        )}
         <span className="pr-item-id">#{pr.remoteId}</span> {pr.title}
       </div>
       <div className="pr-item-meta">

@@ -371,6 +371,16 @@ textarea {
   color: #4caf50;
 }
 
+.pr-item-status-ignored .pr-item-title {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.conflict-warn {
+  margin-right: 4px;
+  font-size: 12px;
+}
+
 /* Main */
 .main {
   flex: 1;
@@ -432,6 +442,16 @@ textarea {
 .status-skipped {
   background: #4a4a4a;
   color: #858585;
+}
+
+.status-ignored {
+  background: #d97706;
+  color: white;
+}
+
+.conflict-tag {
+  color: #fbbf24;
+  font-weight: 600;
 }
 
 .pr-detail-actions {
