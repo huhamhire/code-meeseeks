@@ -76,19 +76,25 @@ export class Poller {
     let errors = 0;
 
     for (const { connectionId, adapter } of this.opts.connections) {
+      const me = adapter.getCurrentUser();
       try {
         const remote = await adapter.listPendingPullRequests();
         fetched += remote.length;
         for (const pr of remote) {
           const localId = `${connectionId}:${pr.remoteId}`;
           const prev = byLocalId.get(localId);
+          const approvedByMe =
+            !!me && pr.reviewers.some((r) => r.name === me.name && r.approved);
           if (prev) {
             if (prev.updatedAt !== pr.updatedAt) changed++;
+            // 已批准就升 reviewed（覆盖 pending / skipped）；已是 reviewed 不回退
+            const localStatus: LocalPrStatus =
+              approvedByMe && prev.localStatus !== 'reviewed' ? 'reviewed' : prev.localStatus;
             byLocalId.set(localId, {
               ...pr,
               localId,
               connectionId,
-              localStatus: prev.localStatus,
+              localStatus,
               discoveredAt: prev.discoveredAt,
               lastSeenAt: now,
             });
@@ -98,7 +104,7 @@ export class Poller {
               ...pr,
               localId,
               connectionId,
-              localStatus: 'pending',
+              localStatus: approvedByMe ? 'reviewed' : 'pending',
               discoveredAt: now,
               lastSeenAt: now,
             });

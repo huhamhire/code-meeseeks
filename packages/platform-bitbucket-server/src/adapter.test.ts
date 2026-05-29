@@ -5,7 +5,11 @@ import { BBClientError } from './client.js';
 
 type RouteHandler = (url: URL) => unknown;
 
-function mockFetch(routes: Record<string, RouteHandler>, status = 200): FetchLike {
+function mockFetch(
+  routes: Record<string, RouteHandler>,
+  status = 200,
+  extraHeaders: Record<string, string> = {},
+): FetchLike {
   return async (input) => {
     const url = new URL(input);
     const handler = routes[url.pathname];
@@ -20,7 +24,7 @@ function mockFetch(routes: Record<string, RouteHandler>, status = 200): FetchLik
     return new Response(JSON.stringify(body), {
       status,
       statusText: 'OK',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...extraHeaders },
     });
   };
 }
@@ -130,6 +134,72 @@ describe('BitbucketServerAdapter.ping', () => {
     );
     const r = await adapter.ping();
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('BitbucketServerAdapter whoami / getCurrentUser', () => {
+  it('returns null before ping is called', () => {
+    const adapter = makeAdapter(mockFetch({}));
+    expect(adapter.getCurrentUser()).toBeNull();
+  });
+
+  it('reads X-AUSERNAME from headers then fetches /users/{slug} for displayName', async () => {
+    const adapter = makeAdapter(
+      mockFetch(
+        {
+          '/rest/api/1.0/application-properties': () => ({
+            version: '7.17.10',
+            buildNumber: '7017010',
+            displayName: 'Bitbucket',
+          }),
+          '/rest/api/1.0/users/kyle': () => ({
+            name: 'kyle',
+            displayName: 'Kyle Smith',
+            active: true,
+            slug: 'kyle',
+          }),
+        },
+        200,
+        { 'x-ausername': 'kyle' },
+      ),
+    );
+    const r = await adapter.ping();
+    expect(r.user).toEqual({ name: 'kyle', displayName: 'Kyle Smith' });
+    expect(adapter.getCurrentUser()).toEqual({ name: 'kyle', displayName: 'Kyle Smith' });
+  });
+
+  it('falls back to slug as displayName when /users/{slug} 404s', async () => {
+    const adapter = makeAdapter(
+      mockFetch(
+        {
+          '/rest/api/1.0/application-properties': () => ({
+            version: '7.17.10',
+            buildNumber: '7017010',
+            displayName: 'Bitbucket',
+          }),
+          // no /users/kyle handler → 404 from mockFetch default
+        },
+        200,
+        { 'x-ausername': 'kyle' },
+      ),
+    );
+    const r = await adapter.ping();
+    expect(r.user).toEqual({ name: 'kyle', displayName: 'kyle' });
+  });
+
+  it('skips user fetch when X-AUSERNAME header is absent', async () => {
+    const adapter = makeAdapter(
+      mockFetch({
+        '/rest/api/1.0/application-properties': () => ({
+          version: '7.17.10',
+          buildNumber: '7017010',
+          displayName: 'Bitbucket',
+        }),
+      }),
+    );
+    const r = await adapter.ping();
+    expect(r.user).toBeUndefined();
+    expect(adapter.getCurrentUser()).toBeNull();
   });
 });
 

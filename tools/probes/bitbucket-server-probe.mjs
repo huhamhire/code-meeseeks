@@ -13,6 +13,7 @@
 //   GET .../pull-requests/{prId}/diff                            ← diff
 //   GET .../pull-requests/{prId}/changes                         ← 改动文件列表
 //   GET .../pull-requests/{prId}/activities                      ← 活动 (含 comments)
+//   "whoami" 嗅探：检查响应头 X-AUSERNAME / X-AUSERID 等推测当前用户
 //
 // 不做任何写入。token 仅从环境变量读取，绝不写入日志或文件。
 
@@ -50,7 +51,7 @@ async function call(path, { accept = 'application/json' } = {}) {
   } catch {
     body = text;
   }
-  return { path, status: res.status, elapsed, body, raw: text };
+  return { path, status: res.status, elapsed, body, raw: text, headers: res.headers };
 }
 
 function summarize(label, r, extract) {
@@ -87,13 +88,65 @@ function summarize(label, r, extract) {
 async function main() {
   console.log(`probe target: ${BB_URL}\n`);
 
-  // 1. ping
+  // 1. ping (with whoami header sniffing)
+  const pingRaw = await call('/rest/api/1.0/application-properties');
   const ping = summarize(
     'GET /application-properties',
-    await call('/rest/api/1.0/application-properties'),
+    pingRaw,
     (b) => `server: ${b.version} (${b.displayName}), build ${b.buildNumber}`,
   );
   if (!ping) process.exit(1);
+
+  // 1.5 whoami 嗅探：枚举常见 Atlassian header + 候选端点
+  console.log('\n--- whoami 嗅探 ---');
+  const headerCandidates = [
+    'x-ausername',
+    'x-auserid',
+    'x-userid',
+    'x-username',
+    'x-atlassian-user',
+  ];
+  const found = [];
+  for (const h of headerCandidates) {
+    const v = pingRaw.headers?.get(h);
+    if (v) found.push(`${h}: ${v}`);
+  }
+  if (found.length) {
+    console.log('  ping 响应头匹配:');
+    for (const f of found) console.log(`    ${f}`);
+  } else {
+    console.log('  ping 响应头无标准 whoami 信号');
+  }
+  // 打印所有响应头便于人眼审计
+  if (VERBOSE && pingRaw.headers) {
+    console.log('  全部响应头:');
+    for (const [k, v] of pingRaw.headers.entries()) {
+      console.log(`    ${k}: ${v}`);
+    }
+  }
+
+  // 候选 whoami 端点
+  const whoamiEndpoints = [
+    '/rest/api/1.0/users/me',
+    '/rest/api/1.0/users/-',
+    '/rest/api/latest/users/me',
+    '/rest/api/1.0/inbox/pull-requests/count',
+    '/rest/api/1.0/profile/recent/repos?limit=1',
+  ];
+  for (const ep of whoamiEndpoints) {
+    const r = await call(ep);
+    const tag = r.status >= 200 && r.status < 300 ? 'OK ' : 'ERR';
+    let extract = '';
+    if (r.status === 200 && r.body && typeof r.body === 'object') {
+      // 看看 body 里有没有用户字段
+      const userish = r.body.user ?? r.body.author ?? r.body;
+      const u = userish?.user ?? userish;
+      if (u?.name && u?.displayName) {
+        extract = `← name=${u.name} displayName=${u.displayName}`;
+      }
+    }
+    console.log(`  [${tag}] ${String(r.status).padStart(3)}  ${ep}  ${extract}`);
+  }
 
   // 2. dashboard PRs as REVIEWER
   const dash = summarize(

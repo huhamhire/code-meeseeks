@@ -2,8 +2,9 @@ import { app, ipcMain, shell } from 'electron';
 import type { Logger } from 'pino';
 import type { BootstrapResult } from '@pr-pilot/config';
 import { type Poller, listStoredPullRequests, setLocalStatus } from '@pr-pilot/poller';
-import type { AppInfo, IpcChannels, PrAgentStatus } from '@pr-pilot/shared';
+import type { AppInfo, ConnectionSummary, IpcChannels, PrAgentStatus } from '@pr-pilot/shared';
 import type { JsonFileStateStore } from '@pr-pilot/state-store';
+import type { BuiltAdapter } from './adapters.js';
 
 interface RegisterDeps {
   bootstrap: BootstrapResult;
@@ -11,6 +12,7 @@ interface RegisterDeps {
   prAgentStatus: PrAgentStatus;
   stateStore: JsonFileStateStore;
   poller: Poller;
+  adapters: readonly BuiltAdapter[];
 }
 
 /**
@@ -23,12 +25,17 @@ export function registerIpcHandlers({
   prAgentStatus,
   stateStore,
   poller,
+  adapters,
 }: RegisterDeps): void {
   ipcMain.handle('app:info', (): IpcChannels['app:info']['response'] => buildAppInfo(bootstrap));
   ipcMain.handle('app:paths', (): IpcChannels['app:paths']['response'] => bootstrap.paths);
   ipcMain.handle(
     'app:prAgentStatus',
     (): IpcChannels['app:prAgentStatus']['response'] => prAgentStatus,
+  );
+  ipcMain.handle(
+    'app:connections',
+    (): IpcChannels['app:connections']['response'] => buildConnectionSummaries(bootstrap, adapters),
   );
   ipcMain.handle('config:read', (): IpcChannels['config:read']['response'] => bootstrap.config);
   ipcMain.handle('app:openConfigFile', async (): Promise<void> => {
@@ -64,4 +71,18 @@ function buildAppInfo(bootstrap: BootstrapResult): AppInfo {
     platform: process.platform,
     firstRun: bootstrap.firstRun,
   };
+}
+
+function buildConnectionSummaries(
+  bootstrap: BootstrapResult,
+  adapters: readonly BuiltAdapter[],
+): ConnectionSummary[] {
+  return adapters.map(({ connectionId, adapter }) => {
+    const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
+    return {
+      connectionId,
+      displayName: conn?.display_name ?? connectionId,
+      user: adapter.getCurrentUser(),
+    };
+  });
 }

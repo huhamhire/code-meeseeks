@@ -3,21 +3,23 @@ import type {
   AppInfo,
   AppPaths,
   Config,
+  ConnectionSummary,
   LocalPrStatus,
   PrAgentStatus,
   StoredPullRequest,
 } from '@pr-pilot/shared';
 import { invoke } from './api';
-import { Header } from './components/Header';
 import { MainPane } from './components/MainPane';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
+import { StatusBar } from './components/StatusBar';
 
 interface BootstrapState {
   info: AppInfo;
   paths: AppPaths;
   config: Config;
   prAgent: PrAgentStatus;
+  connections: ConnectionSummary[];
 }
 
 export default function App() {
@@ -39,14 +41,15 @@ export default function App() {
         if (!window.api) {
           throw new Error('preload bridge missing: window.api is undefined');
         }
-        const [info, paths, config, prAgent, initialPrs] = await Promise.all([
+        const [info, paths, config, prAgent, initialPrs, connections] = await Promise.all([
           invoke('app:info', undefined),
           invoke('app:paths', undefined),
           invoke('config:read', undefined),
           invoke('app:prAgentStatus', undefined),
           invoke('prs:list', undefined),
+          invoke('app:connections', undefined),
         ]);
-        setBoot({ info, paths, config, prAgent });
+        setBoot({ info, paths, config, prAgent, connections });
         setPrs(initialPrs);
       } catch (e) {
         setFatalError(e instanceof Error ? e.message : String(e));
@@ -110,13 +113,6 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header
-        prsCount={prs.length}
-        prAgent={boot.prAgent}
-        refreshing={refreshing}
-        onRefresh={() => void triggerRefresh()}
-        onOpenSettings={() => setShowSettings(true)}
-      />
       <div className="app-body">
         <Sidebar prs={prs} selectedId={selectedId} onSelect={(pr) => setSelectedId(pr.localId)} />
         <MainPane
@@ -125,6 +121,14 @@ export default function App() {
           onSetStatus={(s) => void setSelectedPrStatus(s)}
         />
       </div>
+      <StatusBar
+        prsCount={prs.length}
+        prAgent={boot.prAgent}
+        connections={boot.connections}
+        refreshing={refreshing}
+        onRefresh={() => void triggerRefresh()}
+        onOpenSettings={() => setShowSettings(true)}
+      />
       {showSettings && (
         <SettingsModal
           info={boot.info}

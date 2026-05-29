@@ -49,6 +49,18 @@ export class BBClient {
   }
 
   async get<T>(path: string, params?: Record<string, string>): Promise<T> {
+    const { body } = await this.getWithHeaders<T>(path, params);
+    return body;
+  }
+
+  /**
+   * 同 get，但同时返回响应头。BBS 的 `X-AUSERNAME` / `X-AUSERID` 在每个鉴权
+   * 请求的响应头里，是 ping 时拿当前用户的可靠路径。
+   */
+  async getWithHeaders<T>(
+    path: string,
+    params?: Record<string, string>,
+  ): Promise<{ body: T; headers: Headers }> {
     const url = new URL(`${this.baseUrl}${path}`);
     if (params) for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
@@ -76,7 +88,8 @@ export class BBClient {
         body,
       );
     }
-    return (await res.json()) as T;
+    const body = (await res.json()) as T;
+    return { body, headers: res.headers };
   }
 
   /**

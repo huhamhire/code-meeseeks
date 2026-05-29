@@ -32,6 +32,26 @@ async function start(): Promise<void> {
 
   stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
   const adapters = buildAdapters(bootstrap.config.connections);
+
+  // 启动时 ping 一次每个连接，让 adapter 拿到当前用户缓存，poller 首轮就能
+  // 根据 currentUser 判 approved 状态。失败不阻塞应用启动。
+  for (const { connectionId, adapter } of adapters) {
+    try {
+      const r = await adapter.ping();
+      logger.info(
+        {
+          connectionId,
+          ok: r.ok,
+          serverVersion: r.serverVersion,
+          user: r.user?.name,
+        },
+        'adapter ping at startup',
+      );
+    } catch (err) {
+      logger.warn({ err, connectionId }, 'adapter startup ping failed');
+    }
+  }
+
   poller = new Poller({
     connections: adapters,
     stateStore,
@@ -39,7 +59,14 @@ async function start(): Promise<void> {
     logger: logger.child({ scope: 'poller' }),
   });
 
-  registerIpcHandlers({ bootstrap, logger, prAgentStatus, stateStore, poller });
+  registerIpcHandlers({
+    bootstrap,
+    logger,
+    prAgentStatus,
+    stateStore,
+    poller,
+    adapters,
+  });
 
   // 不要 Electron 默认菜单栏（File/Edit/View/...），pr-pilot 自己提供工具栏
   Menu.setApplicationMenu(null);

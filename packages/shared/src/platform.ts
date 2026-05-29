@@ -50,6 +50,12 @@ export interface PlatformAdapter {
   /** 连接探测：版本号 + 当前用户。版本低于硬下限时 ok=false 并给 reason。 */
   ping(): Promise<PingResult>;
 
+  /**
+   * 返回 ping 期间缓存的当前 PAT 所属用户；ping 未调用或拿不到时返回 null。
+   * 同步（仅读缓存），便于 Poller 在每个 PR 上判定 approved 状态时不走 IO。
+   */
+  getCurrentUser(): PlatformUser | null;
+
   /** 列出当前 PAT 用户作为 reviewer 待处理的 PR，跨项目跨仓库。 */
   listPendingPullRequests(): Promise<PullRequest[]>;
 }

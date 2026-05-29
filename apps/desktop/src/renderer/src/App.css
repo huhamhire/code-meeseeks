@@ -48,27 +48,101 @@ textarea {
   max-width: 800px;
 }
 
-/* Header */
-.app-header {
+/* StatusBar (底部状态栏) */
+.app-statusbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
+  gap: 8px;
+  padding: 4px 12px;
   background: #252526;
-  border-bottom: 1px solid #3e3e42;
+  border-top: 1px solid #3e3e42;
   flex-shrink: 0;
+  font-size: 12px;
+  min-height: 28px;
 }
 
-.app-header h1 {
-  font-size: 16px;
-  font-weight: 600;
+.app-title {
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.3px;
+  color: #d4d4d4;
+}
+
+.statusbar-chip {
+  background: #3e3e42;
+  color: #cccccc;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.statusbar-chip-ok {
+  background: #16a34a;
+  color: white;
+}
+
+.statusbar-chip-err {
+  background: #b91c1c;
+  color: white;
+  cursor: help;
+}
+
+.statusbar-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #cccccc;
+  font-size: 11px;
+  padding: 0 4px;
+}
+
+.statusbar-user svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #cccccc;
+  padding: 3px 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  line-height: 0;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.icon-btn-spinning svg {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spacer {
   flex: 1;
 }
 
+/* 旧 .badge / .badge-ok / .badge-err 仍被 PR detail meta / fatal-app / Settings 使用 */
 .badge {
   background: #007acc;
   color: white;

@@ -10,6 +10,7 @@ import { PR_INDEX_KEY, type PullRequestsIndexFile } from './types.js';
 
 class FakeAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
+  private currentUser: { name: string; displayName: string } | null = null;
   constructor(
     private prs: PullRequest[] = [],
     private failPing = false,
@@ -20,6 +21,12 @@ class FakeAdapter implements PlatformAdapter {
   }
   failNextList(): void {
     this.failList = true;
+  }
+  setCurrentUser(name: string, displayName = name): void {
+    this.currentUser = { name, displayName };
+  }
+  getCurrentUser() {
+    return this.currentUser;
   }
   async ping() {
     if (this.failPing) throw new Error('ping fail');
@@ -171,6 +178,7 @@ describe('Poller.tick', () => {
       async ping() {
         return { ok: true };
       },
+      getCurrentUser: () => null,
       listPendingPullRequests: () => new Promise<PullRequest[]>((r) => (resolveList = r)),
     };
     const poller = new Poller({
@@ -187,6 +195,92 @@ describe('Poller.tick', () => {
     resolveList!([makePr('1', '2026-05-28T01:00:00.000Z')]);
     await firstTick;
     expect(await listStoredPullRequests(store)).toHaveLength(1);
+  });
+
+  it('auto-marks new PR as reviewed when current user is an approved reviewer', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.reviewers = [
+      { name: 'kyle', displayName: 'Kyle', approved: true },
+      { name: 'other', displayName: 'Other', approved: false },
+    ];
+    const adapter = new FakeAdapter([pr]);
+    adapter.setCurrentUser('kyle', 'Kyle');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    const stored = (await listStoredPullRequests(store))[0]!;
+    expect(stored.localStatus).toBe('reviewed');
+  });
+
+  it('upgrades existing pending PR to reviewed when current user just approved', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', approved: false }];
+    const adapter = new FakeAdapter([pr]);
+    adapter.setCurrentUser('kyle');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
+
+    // Remote 端 kyle 在 BBS 上点了 approve
+    adapter.setPrs([
+      {
+        ...pr,
+        reviewers: [{ name: 'kyle', displayName: 'Kyle', approved: true }],
+      },
+    ]);
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
+  });
+
+  it('upgrades skipped PR to reviewed when later approved on remote', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', approved: false }];
+    const adapter = new FakeAdapter([pr]);
+    adapter.setCurrentUser('kyle');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    await setLocalStatus(store, 'bb1:1', 'skipped');
+
+    adapter.setPrs([
+      { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', approved: true }] },
+    ]);
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
+  });
+
+  it('does not flip reviewed back to pending if remote approval is later revoked', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', approved: true }];
+    const adapter = new FakeAdapter([pr]);
+    adapter.setCurrentUser('kyle');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
+
+    adapter.setPrs([
+      { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', approved: false }] },
+    ]);
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
   });
 
   it('writes a valid PullRequestsIndexFile with schema_version', async () => {

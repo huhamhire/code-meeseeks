@@ -57,24 +57,45 @@ const MIN_VERSION: readonly [number, number, number] = [7, 0, 0];
 export class BitbucketServerAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
   private readonly client: BBClient;
+  private cachedUser: PlatformUser | null = null;
 
   constructor(opts: BBClientOptions) {
     this.client = new BBClient(opts);
   }
 
   async ping(): Promise<PingResult> {
-    const props = await this.client.get<BBApplicationProperties>(
+    const { body: props, headers } = await this.client.getWithHeaders<BBApplicationProperties>(
       '/rest/api/1.0/application-properties',
     );
+
+    // 当前用户从响应头 X-AUSERNAME (slug) 拿，再查 /users/{slug} 拿 displayName
+    const slug = headers.get('x-ausername');
+    if (slug) {
+      try {
+        const u = await this.client.get<BBUser>(
+          `/rest/api/1.0/users/${encodeURIComponent(slug)}`,
+        );
+        this.cachedUser = { name: u.name, displayName: u.displayName };
+      } catch {
+        // /users/{slug} 失败时退而求其次，slug 当 displayName
+        this.cachedUser = { name: slug, displayName: slug };
+      }
+    }
+
     const cmp = compareVersion(props.version, MIN_VERSION);
     if (cmp >= 0) {
-      return { ok: true, serverVersion: props.version };
+      return { ok: true, serverVersion: props.version, user: this.cachedUser ?? undefined };
     }
     return {
       ok: false,
       serverVersion: props.version,
+      user: this.cachedUser ?? undefined,
       reason: `未支持的 Bitbucket Server 版本：${props.version}；最低要求 ${MIN_VERSION.join('.')}`,
     };
+  }
+
+  getCurrentUser(): PlatformUser | null {
+    return this.cachedUser;
   }
 
   async listPendingPullRequests(): Promise<PullRequest[]> {

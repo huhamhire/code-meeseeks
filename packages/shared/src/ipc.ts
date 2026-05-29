@@ -1,7 +1,16 @@
 import type { AppInfo, AppPaths } from './app-info.js';
 import type { Config } from './config.js';
+import type { PlatformUser } from './platform.js';
 import type { LocalPrStatus, PollResult, StoredPullRequest } from './poller-contract.js';
 import type { PrAgentStatus } from './pr-agent-status.js';
+
+export interface ConnectionSummary {
+  connectionId: string;
+  /** 来自 config 的 display_name */
+  displayName: string;
+  /** ping 后缓存的当前 PAT 所属用户；ping 未完成或失败时为 null */
+  user: PlatformUser | null;
+}
 
 /**
  * Typed IPC channel contract.
@@ -16,6 +25,8 @@ export interface IpcChannels {
   'app:prAgentStatus': { request: void; response: PrAgentStatus };
   /** 调 Electron shell.openPath 让 OS 默认编辑器打开 config.yaml */
   'app:openConfigFile': { request: void; response: void };
+  /** 各连接的 ping 后缓存：当前用户 + display_name，Header 用 */
+  'app:connections': { request: void; response: ConnectionSummary[] };
   'config:read': { request: void; response: Config };
   'prs:list': { request: void; response: StoredPullRequest[] };
   'prs:refresh': { request: void; response: PollResult };
