@@ -1,7 +1,7 @@
 # pr-pilot Roadmap
 
-> 最后更新：2026-05-28
-> 状态：草案（M0 之前）
+> 最后更新：2026-05-29
+> 状态：M0 + M1 已交付，下一步 M2
 
 ## 1. 项目定位
 
@@ -242,35 +242,57 @@ type PostedCommentsFile = {
 
 每一期都设计为**可独立交付**的里程碑，可以停在任意一期而仍有可用产品形态。
 
-### M0 · 工程基线 (~1 周)
+### M0 · 工程基线 ✅ 已完成
 
 **目标**：可双击启动的空壳应用，工程链路打通。
 
-- npm workspaces + Nx 单仓多包结构（`apps/desktop`, `packages/shared`, `packages/platform-bitbucket`, ...）
-- Electron + Vite + React + Monaco 脚手架，TS strict
-- tRPC IPC 通道
-- 安全基线：`contextIsolation`、preload 白名单、CSP
-- 日志（pino + 文件滚动）
-- 首次启动初始化：创建 `~/.pr-pilot/` + 默认 `config.yaml`（`repos_dir` 默认值 = `~/.pr-pilot/repos/`）
-- pr-agent 可用性探测：`pr-agent --version` 或 `docker --version` 二选一
-- CI（GitHub Actions）：lint + typecheck + unit test + electron-builder 构建产物
+**实际落地**：
 
-**Done when**：`pnpm dev` 启动 Electron，首次启动引导走通，状态栏正确显示 pr-agent 可用与否。
+- ✅ npm workspaces + Nx 20 单仓多包结构（`apps/desktop` + `packages/{shared, config, logger, pr-agent-bridge}`）
+- ✅ Electron 42 + Vite 7 + React 19 + Monaco 0.55 脚手架（electron-vite 5 三段式）
+- ✅ TS strict × 3 tsconfig（renderer / node / base）
+- ✅ 类型化 IPC bridge（自研 `IpcChannels` 契约 + preload contextBridge）
+- ✅ 安全基线：contextIsolation + sandbox:false + CSP（dev 含 `unsafe-eval`、Monaco worker 需 `blob:`）
+- ✅ pino 日志 + 文件滚动（`~/.pr-pilot/logs/`，按日切，保留 7 份）
+- ✅ 首次启动 `ensureWorkspace`：创建 `~/.pr-pilot/` 目录树 + 写默认 `config.yaml`
+- ✅ pr-agent 可用性探测策略模式（LocalCli 优先 → Docker fallback）
+- ✅ GitHub Actions CI：`npm ci` + Nx cache + typecheck + build（test 在 M1-A 起加入）
 
-### M1 · Bitbucket Server 接入 + PR 发现 (~2 周)
+**决策变更**：
+
+- **IPC**：原计划 tRPC over IPC，实际改为手写 `IpcChannels` 契约。避免引入 trpc + electron-trpc 复杂度，类型安全等价
+- **Monaco loader**：原计划 CDN loader，CSP 阻断后切到本地 `monaco-editor` + Vite `?worker` import，彻底去掉 CDN（顺手完成 ROADMAP M2 该做的事）
+
+**推迟事项**：
+
+- ESLint flat config + 全包 lint target（CI 已留占位注释，正补齐中）
+- electron-builder 多平台打包及 CI 矩阵（推迟到 M5 发布阶段，先在本地做 `--dir` 烟雾测试）
+
+**Done when** ✅：`npm run dev` 启动 Electron，自动创建 `~/.pr-pilot/`，状态栏显示 pr-agent 探测结果。
+
+### M1 · Bitbucket Server 接入 + PR 发现 ✅ 已完成
 
 **目标**：能在 UI 里看到 pending PR 列表。
 
-- `PlatformAdapter` 抽象 + `BitbucketServerAdapter` 实现（见 ADR-0002）
-- `SecretStore` 抽象 + `ConfigFileSecretStore` 实现（一期读 `config.yaml`；预留 keytar 实现）
-- Poller：可配置间隔（默认 5 min），增量发现 + 去重
-- `StateStore` 抽象 + `JsonFileStateStore` 实现（原子写）
-- 状态文件 schema 落地（见 §4）+ schema_version 校验
-- UI：
-  - 设置页：repos_dir 位置 / 连接配置 / 仓库勾选 / 轮询间隔
-  - Pending PR 列表（含搜索 / 过滤 / 标记跳过）
+**实际落地**：
 
-**Done when**：配置一个 Bitbucket Server 实例后，应用自动发现 PR 并展示。
+- ✅ `PlatformAdapter` 抽象（精简到 ping + listPendingPullRequests）
+- ✅ `@pr-pilot/platform-bitbucket-server`：BBClient (Bearer PAT + paginate + AbortController 超时) + BitbucketServerAdapter (走 `/dashboard/pull-requests?role=REVIEWER&state=OPEN`，硬下限 7.0)；7 个 mock-fetch 单测
+- ✅ `@pr-pilot/state-store`：StateStore 接口 + JsonFileStateStore (tmp→fsync→rename 原子写)；10 个单测覆盖 read/write/list/delete 全路径
+- ✅ `@pr-pilot/poller`：跨连接合并、增量发现、错误隔离、重入保护；9 个单测
+- ✅ 状态文件 schema：`state/pull-requests.json` schema_version:1
+- ✅ vitest 立起来 + CI 接入 `nx run-many -t test`（共 27 单测）
+- ✅ IPC channels：`prs:list` / `prs:refresh` / `prs:setLocalStatus` / `app:openConfigFile`；窗口外链通过 `setWindowOpenHandler` 走 `shell.openExternal`
+- ✅ React Layout UI：Header（标题 + pr-agent badge + PRs 计数 + 刷新 / 设置）+ Sidebar（按 `projectKey/repoSlug` 分组 + 手风琴折叠 + updatedAt 倒序 + 4 状态过滤 + 搜索强制展开）+ MainPane（PR detail + 三态切换 + 浏览器外链）+ SettingsModal（read-only 视图 + "编辑 config.yaml" 调 OS 默认编辑器）
+- ✅ `Menu.setApplicationMenu(null)` 干掉 Electron 默认顶栏菜单
+
+**范围收窄 / 推迟**：
+
+- **`SecretStore` 抽象**：推迟到 M5 keytar 真落地时再起。当前 Poller 直接读 `Config.connections`，避免引入未使用抽象
+- **设置页 UI 内编辑连接（CRUD + connection ping）**：推迟到 M5。M1 提供 read-only modal + "编辑 config.yaml" 调 OS 编辑器作过渡
+- **`repos_dir` 配置 UI**：推迟到 M2，配合仓库镜像功能一起做才有意义
+
+**Done when** ✅：在 `config.yaml` 加 BBS 连接后，应用自动发现 PR 并展示；可标记跳过 / 已评 / 重置；可一键开浏览器看远端。
 
 ### M2 · 仓库镜像 + 本地 Diff 展示 (~1.5 周)
 
@@ -320,8 +342,10 @@ type PostedCommentsFile = {
 - 本地模型支持：Ollama / vLLM
 - 离线模式
 - 可观测性：Token 用量统计、规则命中率、模型对比
-- 凭据存储升级到 keytar（替换 `SecretStore` 实现）
+- 凭据存储升级到 keytar（首次引入 `SecretStore` 抽象 + 替换实现）
 - 状态存储按需升级到 SQLite（替换 `StateStore` 实现，触发条件见 ADR-0003）
+- **(M1 残项)** 设置页 UI 内连接 CRUD + 保存前 `connection:ping` 验证
+- **(M0 残项)** electron-builder CI 矩阵（Windows / macOS / Linux 三平台自动出包）
 
 ---
 
@@ -340,8 +364,11 @@ type PostedCommentsFile = {
 
 ---
 
-## 7. 实施顺序建议
+## 7. 实施顺序与进度
 
 1. ✅ ROADMAP.md + ADR-0001 + ADR-0002 + ADR-0003 + ADR-0004
-2. ⏭️ Bitbucket Server API 探针（最小 Node 脚本，验证 token + 关键端点）
-3. ⏭️ M0 脚手架
+2. ✅ Bitbucket Server API 探针（`tools/probes/bitbucket-server-probe.mjs`，已验证 7.17.10 实例 6 个只读端点）
+3. ✅ M0 工程基线（A 工作区 → B Electron 壳 → C IPC/CSP/bootstrap → D pr-agent 探测 + CI）
+4. ✅ M1 BBS 接入 + PR 发现（A state-store + vitest → B BBS adapter → C Poller / IPC → D React Layout UI + sidebar 分组排序）
+5. ⏭️ ESLint flat config + electron-builder 本地 `--dir` 包验证（M0 残项补齐）
+6. ⏭️ M2: 仓库镜像 (`RepoMirrorManager` partial clone + worktree per PR) + Monaco diff side-by-side
