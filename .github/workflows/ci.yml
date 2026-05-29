@@ -39,6 +39,9 @@ jobs:
             nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
             nx-${{ runner.os }}-
 
+      - name: Lint (all projects)
+        run: npx nx run-many -t lint
+
       - name: Typecheck (all projects)
         run: npx nx run-many -t typecheck
 
@@ -47,7 +50,3 @@ jobs:
 
       - name: Build (all projects)
         run: npx nx run-many -t build
-
-      # lint 在 M1 中段引入 eslint flat config 后开启
-      # - name: Lint
-      #   run: npx nx run-many -t lint

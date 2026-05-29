@@ -10,13 +10,13 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings=0"
   },
   "nx": {
     "targets": {
-      "typecheck": {
-        "cache": true
-      }
+      "typecheck": { "cache": true },
+      "lint": { "cache": true }
     }
   },
   "dependencies": {

@@ -1,7 +1,7 @@
 import { app, ipcMain, shell } from 'electron';
 import type { Logger } from 'pino';
 import type { BootstrapResult } from '@pr-pilot/config';
-import { Poller, listStoredPullRequests, setLocalStatus } from '@pr-pilot/poller';
+import { type Poller, listStoredPullRequests, setLocalStatus } from '@pr-pilot/poller';
 import type { AppInfo, IpcChannels, PrAgentStatus } from '@pr-pilot/shared';
 import type { JsonFileStateStore } from '@pr-pilot/state-store';
 
