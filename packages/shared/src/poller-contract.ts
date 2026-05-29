@@ -24,6 +24,8 @@ export interface PollResult {
   changed: number;
   /** 本轮新增的 PR 数 */
   added: number;
+  /** 本轮被剪除的 PR 数（远端已 merge/decline，或当前用户不再是 reviewer） */
+  removed: number;
   /** poll 失败的连接数 */
   errors: number;
 }

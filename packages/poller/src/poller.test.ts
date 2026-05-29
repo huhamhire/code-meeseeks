@@ -96,7 +96,7 @@ describe('Poller.tick', () => {
     });
 
     const r = await poller.tick();
-    expect(r).toEqual({ fetched: 1, changed: 0, added: 1, errors: 0 });
+    expect(r).toEqual({ fetched: 1, changed: 0, added: 1, removed: 0, errors: 0 });
 
     const stored = await listStoredPullRequests(store);
     expect(stored).toHaveLength(1);
@@ -125,7 +125,7 @@ describe('Poller.tick', () => {
 
     now = new Date('2026-06-02T00:00:00.000Z');
     const r = await poller.tick();
-    expect(r).toEqual({ fetched: 1, changed: 0, added: 0, errors: 0 });
+    expect(r).toEqual({ fetched: 1, changed: 0, added: 0, removed: 0, errors: 0 });
 
     const stored = (await listStoredPullRequests(store))[0]!;
     expect(stored.localStatus).toBe('skipped');
@@ -191,10 +191,80 @@ describe('Poller.tick', () => {
     // 让 firstTick 推进到 adapter.listPendingPullRequests 调用（穿过 stateStore.read 的真实 fs 读）
     await new Promise<void>((r) => setTimeout(r, 50));
     const secondTick = await poller.tick(); // 立即返回 EMPTY
-    expect(secondTick).toEqual({ fetched: 0, changed: 0, added: 0, errors: 0 });
+    expect(secondTick).toEqual({ fetched: 0, changed: 0, added: 0, removed: 0, errors: 0 });
     resolveList!([makePr('1', '2026-05-28T01:00:00.000Z')]);
     await firstTick;
     expect(await listStoredPullRequests(store)).toHaveLength(1);
+  });
+
+  it('prunes PRs that disappear from a successful poll (merged / declined remotely)', async () => {
+    const adapter = new FakeAdapter([
+      makePr('1', '2026-05-28T01:00:00.000Z'),
+      makePr('2', '2026-05-28T02:00:00.000Z'),
+    ]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(2);
+
+    // PR #2 在远端 merged → 不再出现在 dashboard
+    adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const r = await poller.tick();
+    expect(r.removed).toBe(1);
+    const stored = await listStoredPullRequests(store);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.localId).toBe('bb1:1');
+  });
+
+  it('does NOT prune PRs from a connection whose poll failed', async () => {
+    const adapter = new FakeAdapter([
+      makePr('1', '2026-05-28T01:00:00.000Z'),
+      makePr('2', '2026-05-28T02:00:00.000Z'),
+    ]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(2);
+
+    // 下一次 poll 失败（网络抖动 / 远端 5xx）→ 本地状态库不动
+    adapter.failNextList();
+    const r = await poller.tick();
+    expect(r.errors).toBe(1);
+    expect(r.removed).toBe(0);
+    expect(await listStoredPullRequests(store)).toHaveLength(2);
+  });
+
+  it('prune is per-connection: a failed connection does not block prune for healthy ones', async () => {
+    const ok = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const broken = new FakeAdapter([makePr('a', '2026-05-28T01:00:00.000Z')]);
+    const poller = new Poller({
+      connections: [
+        { connectionId: 'ok', adapter: ok },
+        { connectionId: 'broken', adapter: broken },
+      ],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(2);
+
+    // ok 连接成功但其 PR 远端关单；broken 连接 fail
+    ok.setPrs([]);
+    broken.failNextList();
+    const r = await poller.tick();
+    expect(r.removed).toBe(1); // 只剪了 ok 的
+    expect(r.errors).toBe(1);
+    const stored = await listStoredPullRequests(store);
+    expect(stored.map((p) => p.localId).sort()).toEqual(['broken:a']);
   });
 
   it('auto-marks new PR as reviewed when current user is an approved reviewer', async () => {

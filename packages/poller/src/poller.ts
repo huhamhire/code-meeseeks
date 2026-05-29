@@ -22,7 +22,7 @@ export interface PollerOptions {
   now?: () => Date;
 }
 
-const EMPTY: PollResult = { fetched: 0, changed: 0, added: 0, errors: 0 };
+const EMPTY: PollResult = { fetched: 0, changed: 0, added: 0, removed: 0, errors: 0 };
 
 /**
  * 周期性 poll，把跨连接发现的 PR 汇入 `state/pull-requests.json`。
@@ -73,15 +73,25 @@ export class Poller {
     let fetched = 0;
     let changed = 0;
     let added = 0;
+    let removed = 0;
     let errors = 0;
+
+    // 每个连接成功 poll 后看到的 localId 集合。用于剪除"远端消失的"PR
+    // （merged / declined / 我不再是 reviewer）。失败的连接不进入此 map，
+    // 避免一次性网络故障误删本地状态。
+    const seenByConnection = new Map<string, Set<string>>();
 
     for (const { connectionId, adapter } of this.opts.connections) {
       const me = adapter.getCurrentUser();
       try {
         const remote = await adapter.listPendingPullRequests();
         fetched += remote.length;
+        const seen = new Set<string>();
+        seenByConnection.set(connectionId, seen);
+
         for (const pr of remote) {
           const localId = `${connectionId}:${pr.remoteId}`;
+          seen.add(localId);
           const prev = byLocalId.get(localId);
           const approvedByMe =
             !!me && pr.reviewers.some((r) => r.name === me.name && r.approved);
@@ -116,13 +126,24 @@ export class Poller {
       }
     }
 
+    // 剪除：每个成功 poll 的连接，把"本地有 + 本轮没看到"的 PR 移除。
+    // 该 PR 在远端要么已 merge/decline 关单，要么当前用户已不在 reviewer 列表。
+    for (const [connectionId, seen] of seenByConnection) {
+      for (const [localId, pr] of byLocalId) {
+        if (pr.connectionId === connectionId && !seen.has(localId)) {
+          byLocalId.delete(localId);
+          removed++;
+        }
+      }
+    }
+
     const next: PullRequestsIndexFile = {
       schema_version: 1,
       pull_requests: Array.from(byLocalId.values()),
     };
     await this.opts.stateStore.write(PR_INDEX_KEY, next);
 
-    const result: PollResult = { fetched, changed, added, errors };
+    const result: PollResult = { fetched, changed, added, removed, errors };
     this.opts.logger.info(result, 'poll complete');
     return result;
   }
