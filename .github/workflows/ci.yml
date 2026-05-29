@@ -42,11 +42,12 @@ jobs:
       - name: Typecheck (all projects)
         run: npx nx run-many -t typecheck
 
+      - name: Test (all projects with test target)
+        run: npx nx run-many -t test
+
       - name: Build (all projects)
         run: npx nx run-many -t build
 
-      # lint / test 在 M1 引入 eslint flat config + vitest 后开启
+      # lint 在 M1 中段引入 eslint flat config 后开启
       # - name: Lint
       #   run: npx nx run-many -t lint
-      # - name: Test
-      #   run: npx nx run-many -t test
