@@ -1,0 +1,29 @@
+{
+  "name": "@pr-pilot/platform-bitbucket-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PlatformAdapter implementation for Bitbucket Server / Data Center (REST API v1)",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "nx": {
+    "targets": {
+      "typecheck": {
+        "cache": true
+      },
+      "test": {
+        "cache": true
+      }
+    }
+  },
+  "dependencies": {
+    "@pr-pilot/shared": "*"
+  }
+}
