@@ -24,10 +24,6 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
         <span className="pr-item-id">#{pr.remoteId}</span> {pr.title}
       </div>
       <div className="pr-item-meta">
-        <span>
-          {pr.repo.projectKey}/{pr.repo.repoSlug}
-        </span>
-        <span>·</span>
         <span>{pr.author.displayName}</span>
         <span>·</span>
         <span>

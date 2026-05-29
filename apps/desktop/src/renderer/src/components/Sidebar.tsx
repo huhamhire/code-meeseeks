@@ -17,9 +17,16 @@ const FILTERS: ReadonlyArray<{ value: FilterStatus; label: string }> = [
   { value: 'skipped', label: '已跳过' },
 ];
 
+interface PrGroup {
+  key: string;
+  items: StoredPullRequest[];
+}
+
 export function Sidebar({ prs, selectedId, onSelect }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterStatus>('pending');
+  // 哪些组当前折叠了。默认空集合 = 全部展开。
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const counts = useMemo(() => {
     const out: Record<FilterStatus, number> = {
@@ -51,6 +58,35 @@ export function Sidebar({ prs, selectedId, onSelect }: SidebarProps) {
     });
   }, [prs, query, filter]);
 
+  const groups = useMemo<PrGroup[]>(() => {
+    const m = new Map<string, StoredPullRequest[]>();
+    for (const pr of filtered) {
+      const key = `${pr.repo.projectKey}/${pr.repo.repoSlug}`;
+      const list = m.get(key);
+      if (list) list.push(pr);
+      else m.set(key, [pr]);
+    }
+    // 组按 repo 路径字母序；组内 PR 按远端 updatedAt 倒序（最新修改在上）
+    return Array.from(m.entries())
+      .map(([key, items]) => ({
+        key,
+        items: items.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      }))
+      .sort((a, b) => a.key.localeCompare(b.key));
+  }, [filtered]);
+
+  // 搜索时强制展开（否则用户在折叠组里看不到匹配的 PR）
+  const searching = query.trim().length > 0;
+
+  const toggleGroup = (key: string): void => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-toolbar">
@@ -76,17 +112,40 @@ export function Sidebar({ prs, selectedId, onSelect }: SidebarProps) {
         ))}
       </div>
       <div className="sidebar-list">
-        {filtered.length === 0 ? (
+        {groups.length === 0 ? (
           <div className="sidebar-empty">没有匹配的 PR</div>
         ) : (
-          filtered.map((pr) => (
-            <PrItem
-              key={pr.localId}
-              pr={pr}
-              selected={selectedId === pr.localId}
-              onClick={() => onSelect(pr)}
-            />
-          ))
+          groups.map((g) => {
+            const expanded = searching || !collapsed.has(g.key);
+            return (
+              <div key={g.key} className="pr-group">
+                <button
+                  type="button"
+                  className={`pr-group-header ${expanded ? 'expanded' : 'collapsed'}`}
+                  onClick={() => toggleGroup(g.key)}
+                  aria-expanded={expanded}
+                >
+                  <span className="pr-group-chevron" aria-hidden="true">
+                    ▶
+                  </span>
+                  <span className="pr-group-key">{g.key}</span>
+                  <span className="count-pill">{g.items.length}</span>
+                </button>
+                {expanded && (
+                  <div className="pr-group-items">
+                    {g.items.map((pr) => (
+                      <PrItem
+                        key={pr.localId}
+                        pr={pr}
+                        selected={selectedId === pr.localId}
+                        onClick={() => onSelect(pr)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </aside>
