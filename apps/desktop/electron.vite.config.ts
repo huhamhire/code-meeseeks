@@ -4,7 +4,12 @@ import { resolve } from 'node:path';
 
 // Workspace 内部包源码是 .ts，Node 无法直接 import；让 Vite 把它们 bundle 进主进程/preload，
 // 外部第三方依赖（electron / pino / yaml / zod ...）继续 externalize 让 Node 在运行时解析。
-const internalPackages = ['@pr-pilot/shared', '@pr-pilot/config', '@pr-pilot/logger'];
+const internalPackages = [
+  '@pr-pilot/shared',
+  '@pr-pilot/config',
+  '@pr-pilot/logger',
+  '@pr-pilot/pr-agent-bridge',
+];
 
 export default defineConfig({
   main: {

@@ -4,12 +4,15 @@ import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@pr-pilot/config';
 import { createLogger } from '@pr-pilot/logger';
+import { detectPrAgent } from '@pr-pilot/pr-agent-bridge';
+import type { PrAgentStatus } from '@pr-pilot/shared';
 import { registerIpcHandlers } from './ipc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let bootstrap: BootstrapResult;
 let logger: Logger;
+let prAgentStatus: PrAgentStatus;
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
@@ -19,7 +22,10 @@ async function start(): Promise<void> {
     'pr-pilot main process started',
   );
 
-  registerIpcHandlers({ bootstrap, logger });
+  prAgentStatus = await detectPrAgent();
+  logger.info({ prAgentStatus }, 'pr-agent probe complete');
+
+  registerIpcHandlers({ bootstrap, logger, prAgentStatus });
 
   await app.whenReady();
   createWindow();

@@ -1,5 +1,6 @@
 import type { AppInfo, AppPaths } from './app-info.js';
 import type { Config } from './config.js';
+import type { PrAgentStatus } from './pr-agent-status.js';
 
 /**
  * Typed IPC channel contract.
@@ -11,6 +12,7 @@ import type { Config } from './config.js';
 export interface IpcChannels {
   'app:info': { request: void; response: AppInfo };
   'app:paths': { request: void; response: AppPaths };
+  'app:prAgentStatus': { request: void; response: PrAgentStatus };
   'config:read': { request: void; response: Config };
 }
 

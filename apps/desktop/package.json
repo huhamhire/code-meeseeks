@@ -29,6 +29,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@pr-pilot/config": "*",
     "@pr-pilot/logger": "*",
+    "@pr-pilot/pr-agent-bridge": "*",
     "@pr-pilot/shared": "*",
     "monaco-editor": "^0.55.0",
     "pino": "^9.5.0",

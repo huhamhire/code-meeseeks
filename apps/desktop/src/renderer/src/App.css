@@ -50,6 +50,20 @@ body {
   font-weight: 600;
 }
 
+.badge-ok {
+  background: #16a34a;
+}
+
+.badge-err {
+  background: #b91c1c;
+  cursor: help;
+}
+
+.muted {
+  font-size: 12px;
+  color: #858585;
+}
+
 .version {
   margin-left: auto;
   font-size: 12px;
