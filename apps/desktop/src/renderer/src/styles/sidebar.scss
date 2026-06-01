@@ -1,0 +1,245 @@
+@use './tokens' as *;
+
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  // width 通过 inline style 由 App 控制，min/max 由 React 端 clamp，CSS 端兜底
+  flex-shrink: 0;
+  border-right: 1px solid $border-default;
+  background: $bg-panel;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: $space-3;
+  cursor: col-resize;
+  z-index: $z-resize-handle;
+  background: transparent;
+  transition: background 0.12s;
+
+  &:hover,
+  &:active {
+    background: $color-accent-strong-fade;
+  }
+}
+
+.sidebar-toolbar {
+  padding: $space-4 $space-6;
+  border-bottom: 1px solid $border-muted;
+  display: flex;
+  gap: $space-3;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sidebar-filters {
+  flex-wrap: wrap;
+}
+
+.sidebar-search {
+  flex: 1;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  padding: 5px $space-4;
+  border-radius: $radius-md;
+
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-empty {
+  padding: 24px $space-8;
+  color: $text-dim;
+  text-align: center;
+}
+
+.pr-group-header {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  width: 100%;
+  padding: $space-3 $space-6;
+  background: #181818;
+  border: none;
+  border-bottom: 1px solid $border-muted;
+  color: $text-primary;
+  font-size: $fs-sm;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+
+  &:hover {
+    background: $bg-panel;
+  }
+  &.expanded .pr-group-chevron {
+    transform: rotate(90deg);
+  }
+}
+
+.pr-group-chevron {
+  display: inline-block;
+  font-size: 9px;
+  width: 10px;
+  transition: transform 0.12s ease;
+  color: $text-muted;
+}
+
+.pr-group-key {
+  flex: 1;
+}
+
+// PR item
+.pr-item {
+  padding: $space-5 $space-6;
+  border-bottom: 1px solid $border-muted;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  gap: $space-5;
+  // 头像 40px 视觉锚定整行：标题 + meta 大约 36-40px 高，center 对齐看起来最稳
+  align-items: center;
+
+  &:hover {
+    background: $bg-hover;
+  }
+  &.selected {
+    background: $bg-selected;
+  }
+  &:focus {
+    outline: 1px solid $color-accent;
+    outline-offset: -1px;
+  }
+}
+
+.pr-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+// 圆形头像：img 与 initials 共用尺寸 / 圆角；initials 走 hash 色 + 白字
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: $radius-full;
+  overflow: hidden;
+}
+
+.avatar-img {
+  object-fit: cover;
+}
+
+.avatar-initials {
+  color: $text-on-accent;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  font-family: var(
+    --vscode-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif
+  );
+}
+
+.pr-item-id {
+  color: $text-muted;
+  margin-right: $space-2;
+}
+
+.pr-item-title {
+  font-size: $fs-lg;
+  font-weight: 500;
+  margin-bottom: $space-2;
+  line-height: $lh-tight;
+  word-break: break-word;
+}
+
+.pr-item-meta {
+  font-size: $fs-sm;
+  color: $text-muted;
+  display: flex;
+  gap: $space-3;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+// reviewer 统计胶囊：靠右贴边，把 author/branch meta 挤左
+.pr-item-review-chips {
+  display: inline-flex;
+  gap: $space-2;
+  margin-left: auto;
+}
+
+.review-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px $space-3;
+  border-radius: $radius-pill;
+  font-size: $fs-xs;
+  font-weight: 600;
+  line-height: $lh-normal;
+
+  // VS Code git decoration 绿
+  &.review-chip-approved {
+    background: $git-added-bg-fade;
+    color: $git-added;
+  }
+  // VS Code git decoration 红
+  &.review-chip-needs-work {
+    background: $git-needs-work-fade;
+    color: $git-needs-work-fg;
+  }
+}
+
+.tag-needs-work {
+  color: $git-needs-work-fg;
+  font-size: $fs-md;
+}
+
+.pr-item-status-skipped .pr-item-title {
+  text-decoration: line-through;
+  color: $text-muted;
+}
+
+.pr-item-status-reviewed .pr-item-title::before {
+  content: '✓ ';
+  color: #4caf50;
+}
+
+.pr-item-status-ignored .pr-item-title {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.conflict-warn {
+  margin-right: $space-2;
+  font-size: $fs-md;
+}

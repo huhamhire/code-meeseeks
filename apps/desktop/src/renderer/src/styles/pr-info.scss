@@ -1,0 +1,79 @@
+@use './tokens' as *;
+
+.pr-info-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  max-width: 960px;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  font-size: $fs-sm;
+  font-weight: 600;
+  margin-left: $space-1;
+  text-transform: uppercase;
+}
+// pending 用 VS Code 主蓝；reviewed 取成功绿；skipped/ignored 借橙黄系警告色
+.status-pending {
+  background: $color-accent;
+  color: $text-on-accent;
+}
+.status-reviewed {
+  background: #16a34a;
+  color: $text-on-accent;
+}
+.status-skipped {
+  background: #4a4a4a;
+  color: $text-muted;
+}
+.status-ignored {
+  background: #d97706;
+  color: $text-on-accent;
+}
+
+.conflict-tag {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.pr-detail-section {
+  margin-top: 24px;
+
+  h3 {
+    font-size: $fs-xl;
+    font-weight: 600;
+    margin-bottom: $space-5;
+    color: $text-primary;
+  }
+}
+
+.pr-detail-description {
+  white-space: pre-wrap;
+  font-size: $fs-lg;
+  line-height: $lh-loose;
+  color: $text-primary;
+}
+
+.reviewer-list {
+  list-style: none;
+  padding: 0;
+
+  li {
+    padding: $space-2 0;
+  }
+}
+
+.tag-approved {
+  color: $git-added;
+  font-size: $fs-md;
+}
+
+.pr-detail-kv {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: $space-3 $space-6;
+  font-size: $fs-lg;
+}

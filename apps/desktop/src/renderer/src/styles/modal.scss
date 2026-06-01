@@ -1,0 +1,210 @@
+@use './tokens' as *;
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: $z-modal;
+}
+
+.modal {
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: 6px;
+  max-width: 640px;
+  width: 92%;
+  max-height: 84vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: $space-6 $space-8;
+  border-bottom: 1px solid $border-default;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+  }
+}
+
+.modal-body {
+  padding: $space-8;
+  overflow-y: auto;
+}
+
+.modal-section {
+  margin-bottom: $space-8;
+
+  h4 {
+    font-size: $fs-lg;
+    font-weight: 600;
+    margin-bottom: $space-4;
+    color: $text-primary;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+}
+
+.modal-kv {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: $space-2 $space-6;
+  font-size: $fs-lg;
+}
+.modal-kv-key {
+  color: $text-muted;
+}
+.modal-kv-val {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  word-break: break-all;
+  color: $text-body;
+}
+
+.connection-list {
+  list-style: none;
+  padding: 0;
+  font-size: $fs-lg;
+
+  li {
+    padding: $space-3 0;
+    border-bottom: 1px solid $border-muted;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+}
+
+.modal-footer {
+  margin-top: $space-4;
+}
+
+.error-text {
+  color: $color-danger;
+  font-size: $fs-md;
+  margin-top: $space-4;
+}
+
+.settings-edit-row {
+  display: flex;
+  gap: $space-4;
+  margin-top: $space-5;
+}
+
+.settings-actions {
+  display: flex;
+  gap: $space-4;
+  flex-wrap: wrap;
+}
+
+.settings-input {
+  flex: 1;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  padding: 5px $space-4;
+  border-radius: $radius-md;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: $fs-md;
+
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+
+.settings-secret-row {
+  display: flex;
+  gap: $space-3;
+  align-items: center;
+
+  .settings-input {
+    font-family: $font-mono;
+    letter-spacing: 0.04em;
+  }
+}
+
+// 必填项标识 + 校验错误样式
+.settings-required {
+  color: $color-danger;
+  margin-left: $space-1;
+}
+.settings-input-error {
+  border-color: $color-danger !important;
+
+  &:focus {
+    border-color: $color-danger !important;
+    box-shadow: 0 0 0 1px rgba(244, 135, 113, 0.3);
+  }
+}
+.settings-field-error {
+  color: $color-danger;
+  font-size: $fs-sm;
+  margin: $space-2 0 0;
+}
+
+// LLM 模型主面板紧凑列表：active radio + 名称/概要 + 操作按钮
+.llm-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+.llm-profile-row {
+  display: flex;
+  align-items: center;
+  gap: $space-5;
+  padding: $space-4 $space-6;
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+  background: $bg-panel;
+
+  &.active {
+    border-color: $color-accent;
+    box-shadow: inset 3px 0 0 $color-accent;
+  }
+}
+.llm-profile-active {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.llm-profile-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+}
+.llm-profile-title {
+  color: $text-primary;
+  font-size: $fs-md;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-profile-sub {
+  font-size: $fs-sm;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 嵌套子模态框 + 小模态体
+.modal-backdrop-nested {
+  background: rgba(0, 0, 0, 0.4);
+  z-index: $z-modal-nested;
+}
+.modal-sm {
+  max-width: 560px;
+  width: 100%;
+}

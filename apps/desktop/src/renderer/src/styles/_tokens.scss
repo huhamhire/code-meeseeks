@@ -1,0 +1,94 @@
+// 设计 token 中心：颜色 / 字号 / 圆角 / 间距 / 行高 / z-index 阶梯
+// 各 .scss 文件用 `@use './tokens' as *;` 拉到本地作用域。
+//
+// 规则：
+// - 颜色按语义分组 (bg / border / text / accent / git-decoration)，不按色值命名
+// - 字号 / 间距用 t-shirt 尺寸 (xs/sm/md/lg)
+// - 命名跟 VS Code Dark+ 主题对齐，方便日后增加 light 主题做映射
+
+// ===== 背景色 =====
+$bg-app:         #1e1e1e; // body / app shell
+$bg-white-fade:  rgba(255, 255, 255, 0.12); // icon-btn hover / count-pill 底
+$bg-panel:       #1f1f20; // 侧栏 / 文件列表 / blame 列底
+$bg-panel-alt:   #1a1a1b; // chat-pane 输入区等更深一档
+$bg-elev:        #252526; // 浮层 / 弹出菜单
+$bg-surface:     #2d2d30; // 输入框 / chip 默认底 / 代码块底
+$bg-hover:       #2a2d2e; // hover 高亮
+$bg-selected:    #094771; // 列表项选中（VS Code activeList）
+
+// ===== 边框 =====
+$border-default:      #3e3e42;
+$border-default-fade: rgba(62, 62, 66, 0.5); // blame row 内分隔线
+$border-muted:        #2d2d30;
+
+// ===== 文字 =====
+$text-primary:   #cccccc;
+$text-body:      #d4d4d4; // body 默认
+$text-muted:     #858585;
+$text-subtle:    #6e7681; // 更弱：blame / footer hint
+$text-dim:       #6e6e6e; // 几乎不可见的 placeholder 风
+$text-on-accent: #ffffff;
+
+// ===== 语义色 (动作 / 状态) =====
+$color-accent:        #0e639c; // VS Code 主蓝，active / primary
+$color-accent-bg-fade: rgba(14, 99, 156, 0.18);
+$color-accent-strong-fade: rgba(14, 99, 156, 0.5); // resize handle hover/active
+$color-info:          #6cb6ff; // 浅蓝，链接 / 提示
+$color-success:       #16825d; // 状态栏 remote 风格深绿
+$color-warning:       #cc7900;
+$color-danger:        #f48771; // 错误文案 / 红边框
+$color-danger-bg:     #c72e0f; // 错误 chip 实底
+
+// ===== Git decoration 配色 (跟 Monaco / VS Code 一致) =====
+$git-added:           #73c991;
+$git-added-bg-fade:   rgba(115, 199, 145, 0.16);
+$git-modified:        #e2c08d;
+$git-deleted:         #c74e39;
+$git-needs-work-fade: rgba(199, 78, 57, 0.18);
+$git-needs-work-fg:   #f48771;
+
+// ===== Avatar / Initials 等装饰 =====
+$avatar-bg-default:   #2a2d2e;
+
+// ===== 滚动条 (webkit) =====
+$scrollbar-thumb:        #4d4d4d;
+$scrollbar-thumb-hover:  #5e5e5e;
+$scrollbar-thumb-active: #707070;
+
+// ===== 字号 =====
+$fs-xs:  10px;
+$fs-sm:  11px;
+$fs-md:  12px;
+$fs-lg:  13px; // body 默认 / Monaco 编辑器字号
+$fs-xl:  14px;
+
+// ===== 行高 =====
+$lh-tight:  1.35;
+$lh-normal: 1.4;
+$lh-loose:  1.5;
+
+// ===== 圆角 =====
+$radius-sm:  3px; // chip / 小按钮
+$radius-md:  4px; // 输入框 / hover 区
+$radius-lg:  5px; // 卡片 / 弹出菜单
+$radius-pill: 9px; // 圆点 count-pill / review-chip
+$radius-full: 50%; // 圆形 (avatar 等)
+
+// ===== 间距 (4 倍数) =====
+$space-1: 2px;
+$space-2: 4px;
+$space-3: 6px;
+$space-4: 8px;
+$space-5: 10px;
+$space-6: 12px;
+$space-8: 16px;
+
+// ===== z-index 阶梯 =====
+$z-resize-handle: 50;
+$z-blame-overlay: 5;
+$z-statusbar-menu: 200;
+$z-modal:         1000;
+$z-modal-nested:  1100;
+
+// ===== 字体族 =====
+$font-mono: var(--vscode-editor-font-family, 'Consolas', monospace);

@@ -1,0 +1,168 @@
+// StatusBar (底部状态栏)
+
+@use './tokens' as *;
+
+.app-statusbar {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  padding: $space-2 $space-6;
+  background: $bg-elev;
+  border-top: 1px solid $border-default;
+  flex-shrink: 0;
+  font-size: $fs-md;
+  min-height: 28px;
+}
+
+.statusbar-chip {
+  background: $border-default;
+  color: $text-primary;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  font-size: $fs-xs;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+// VS Code 远程指示器 statusBarItem.remoteBackground 配色：实色深绿 + 白字
+.statusbar-chip-ok {
+  background: $color-success;
+  color: $text-on-accent;
+}
+
+// VS Code statusBarItem.errorBackground
+.statusbar-chip-err {
+  background: $color-danger-bg;
+  color: $text-on-accent;
+  cursor: help;
+}
+
+.statusbar-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: $text-primary;
+  font-size: $fs-sm;
+  padding: 0 $space-2;
+
+  svg {
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: $text-primary;
+  padding: 3px $space-3;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: $radius-sm;
+  line-height: 0;
+
+  &:hover:not(:disabled) {
+    background: $bg-white-fade;
+    color: white;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+}
+
+.icon-btn-spinning svg {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spacer {
+  flex: 1;
+}
+
+.statusbar-llm-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.statusbar-llm-chip {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+}
+// 启用模型时用 VS Code 蓝标签色，跟 pending status-tag / blame-toggle.active 同色
+.statusbar-llm-chip-active {
+  background: $color-accent;
+  color: $text-on-accent;
+}
+
+.llm-chip-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  min-width: 240px;
+  max-width: 360px;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  padding: $space-2 0;
+  z-index: $z-statusbar-menu;
+}
+.llm-chip-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  padding: $space-3 $space-5;
+  background: transparent;
+  border: none;
+  color: $text-primary;
+  font-size: $fs-md;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: $bg-hover;
+  }
+  &.active .llm-chip-menu-title {
+    color: $color-info;
+  }
+}
+.llm-chip-menu-tick {
+  width: 12px;
+  color: $color-info;
+  font-size: $fs-sm;
+  flex-shrink: 0;
+}
+.llm-chip-menu-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.llm-chip-menu-title {
+  font-size: $fs-md;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-chip-menu-sub {
+  font-size: $fs-sm;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-chip-menu-divider {
+  height: 1px;
+  background: $border-default;
+  margin: $space-2 0;
+}

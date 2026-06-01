@@ -1,0 +1,132 @@
+@use './tokens' as *;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root,
+.app {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: $bg-app;
+  color: $text-body;
+  overflow: hidden;
+  font-size: $fs-lg;
+}
+
+/* 全局滚动条：跟 VS Code Dark+ 一致的细暗色样式。Monaco 内部滚动条自己渲染，不受此影响。
+   用 background-color (而非 shorthand background) 保留 background-clip，状态切换时
+   只换颜色，不重复声明 clip。 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: $scrollbar-thumb;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: $radius-lg;
+
+  &:hover {
+    background-color: $scrollbar-thumb-hover;
+  }
+  &:active {
+    background-color: $scrollbar-thumb-active;
+  }
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+}
+
+.fatal-app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.fatal-msg {
+  white-space: pre-wrap;
+  color: $color-danger;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  max-width: 800px;
+}
+
+.muted {
+  font-size: $fs-md;
+  color: $text-muted;
+}
+
+/* Buttons */
+.btn {
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  padding: 5px $space-6;
+  border-radius: $radius-md;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    background: $border-default;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btn-sm {
+  padding: 3px $space-4;
+  font-size: $fs-md;
+}
+
+.btn-primary {
+  background: $color-accent;
+  border-color: $color-accent;
+  color: $text-on-accent;
+
+  &:hover:not(:disabled) {
+    background: #1177bb;
+  }
+}
+
+.count-pill {
+  background: $bg-white-fade;
+  padding: 0 $space-3;
+  border-radius: $radius-pill;
+  font-size: $fs-xs;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+

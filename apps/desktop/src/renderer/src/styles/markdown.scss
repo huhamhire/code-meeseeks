@@ -1,0 +1,107 @@
+// Markdown 渲染：用于评论 view zone (.comment-zone-body.markdown) 和 PR 描述
+// (.pr-detail-description.markdown)。react-markdown 输出的 h/p/li/code/pre/
+// blockquote/table 元素的 dark-theme 配色，跟 VS Code Dark+ 视觉对齐。
+
+@use './tokens' as *;
+
+.markdown {
+  p {
+    margin: 0 0 $space-3;
+  }
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  code {
+    background: $bg-surface;
+    padding: 1px 5px;
+    border-radius: $radius-sm;
+    font-family: $font-mono;
+    font-size: 0.92em;
+  }
+
+  pre {
+    background: $bg-surface;
+    padding: $space-4 $space-6;
+    border-radius: $radius-md;
+    overflow-x: auto;
+    margin: $space-3 0;
+    font-size: $fs-md;
+
+    code {
+      background: transparent;
+      padding: 0;
+      font-size: inherit;
+    }
+  }
+
+  blockquote {
+    margin: $space-3 0;
+    padding-left: $space-6;
+    border-left: 3px solid $border-default;
+    color: $text-subtle;
+  }
+
+  ul,
+  ol {
+    margin: $space-2 0 $space-3;
+    padding-left: 24px;
+  }
+  li {
+    margin-bottom: $space-1;
+  }
+
+  a {
+    color: $color-info;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  table {
+    border-collapse: collapse;
+    margin: $space-3 0;
+    font-size: $fs-md;
+  }
+  th,
+  td {
+    border: 1px solid $border-default;
+    padding: $space-2 $space-4;
+  }
+  th {
+    background: $bg-surface;
+    font-weight: 600;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: $space-4 0 $space-2;
+    font-weight: 600;
+  }
+  h1 {
+    font-size: 16px;
+  }
+  h2 {
+    font-size: $fs-xl;
+  }
+  h3 {
+    font-size: $fs-lg;
+  }
+  h4 {
+    font-size: $fs-md;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid $border-default;
+    margin: $space-3 0;
+  }
+
+  input[type='checkbox'] {
+    margin-right: $space-2;
+  }
+}

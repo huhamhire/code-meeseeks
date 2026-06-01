@@ -1,0 +1,172 @@
+// 右侧 pr-agent chat 面板 (M3 占位 + M3-D 真实交互)
+
+@use './tokens' as *;
+
+.chat-pane {
+  flex-shrink: 0;
+  border-left: 1px solid $border-default;
+  background: $bg-panel;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+// 拖拽柄：左缘，跟 sidebar 镜像
+.chat-pane-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  bottom: 0;
+  width: $space-3;
+  cursor: col-resize;
+  z-index: $z-resize-handle;
+  background: transparent;
+  transition: background 0.12s;
+
+  &:hover,
+  &:active {
+    background: $color-accent-strong-fade;
+  }
+}
+
+.chat-pane-header {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  padding: $space-4 $space-6;
+  border-bottom: 1px solid $border-muted;
+  font-size: $fs-md;
+  color: $text-primary;
+  flex-shrink: 0;
+}
+.chat-pane-title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.chat-pane-subtitle {
+  color: $text-muted;
+  font-size: $fs-sm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-pane-stage-tag {
+  margin-left: auto;
+  padding: 1px $space-3;
+  border-radius: $radius-pill;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-size: $fs-xs;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.chat-pane-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 14px;
+}
+
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: $space-3;
+  color: $text-primary;
+  font-size: $fs-md;
+  line-height: $lh-loose;
+}
+.chat-empty-icon {
+  align-self: center;
+  margin-bottom: $space-2;
+  padding: $space-6;
+  border-radius: $radius-full;
+  background: $avatar-bg-default;
+  color: $color-info;
+}
+.chat-empty-title {
+  font-size: $fs-lg;
+  font-weight: 600;
+  align-self: center;
+  margin: $space-1 0 0;
+}
+.chat-empty-sub {
+  color: $text-muted;
+  margin: $space-4 0 $space-2;
+}
+.chat-empty-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  align-self: stretch;
+
+  li {
+    display: flex;
+    gap: $space-4;
+    align-items: flex-start;
+  }
+
+  code {
+    background: $bg-surface;
+    border-radius: $radius-sm;
+    padding: 0 $space-2;
+    font-size: $fs-sm;
+    color: $text-body;
+  }
+}
+.chat-empty-bullet {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: $radius-full;
+  background: $color-info;
+}
+.chat-empty-foot {
+  margin-top: $space-6;
+  font-size: $fs-sm;
+  line-height: $lh-loose;
+}
+
+.chat-pane-input {
+  border-top: 1px solid $border-muted;
+  padding: $space-4 $space-6 $space-5;
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  flex-shrink: 0;
+  background: $bg-panel-alt;
+}
+.chat-pane-textarea {
+  resize: none;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  font-family: inherit;
+  font-size: $fs-md;
+  padding: $space-3 $space-4;
+  border-radius: $radius-md;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+.chat-pane-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+}
+.chat-pane-hint {
+  font-size: $fs-xs;
+  letter-spacing: 0.02em;
+}

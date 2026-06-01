@@ -1,0 +1,25 @@
+// pr-pilot renderer 样式总入口。各区域拆在 styles/ 下；
+// 设计 token 在 styles/_tokens.scss，每个 .scss 文件用 `@use './tokens' as *;` 拉取。
+//
+//   base         全局 reset / html-body / .app / .btn / .muted / .badge 等通用原子
+//   statusbar    底部 .app-statusbar + chips + LLM 切换菜单
+//   sidebar      左侧 PR 列表 (sidebar / pr-group / pr-item / avatar / review-chip)
+//   main-pane    .main / pr-header / pr-tabs / blame-toggle / blame-column
+//   file-tree    DiffView 左侧文件树 (.diff-file-list / .tree-* / status dot)
+//   diff         DiffView 主体 (.diff-pane-wrapper / sync-progress / error-boundary)
+//   comment-zone Monaco 行内评论 view zone + glyph margin 标记
+//   markdown     react-markdown 输出的 h/p/li/code/pre/table 等 dark-theme 配色
+//   pr-info      "详情" tab 内容 (.pr-info-view / pr-detail-*)
+//   chat-pane    右侧 pr-agent chat 面板
+//   modal        SettingsModal + LlmEditorModal 子模态 + LLM profile 列表
+@use './styles/base';
+@use './styles/statusbar';
+@use './styles/sidebar';
+@use './styles/main-pane';
+@use './styles/file-tree';
+@use './styles/diff';
+@use './styles/comment-zone';
+@use './styles/markdown';
+@use './styles/pr-info';
+@use './styles/chat-pane';
+@use './styles/modal';
