@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
 import type { PrAgentStatus, PrAgentStrategy } from '@pr-pilot/shared';
+import { DockerBridge, LocalCliBridge } from './bridge.js';
+import { defaultExec } from './exec.js';
+import type { ExecFn, PrAgentBridge } from './types.js';
 
 interface ProbeOk {
   ok: true;
@@ -109,4 +112,21 @@ export async function detectPrAgent(): Promise<PrAgentStatus> {
     failed.push({ strategy: name, error: r.error, probeMs: r.probeMs });
   }
   return { available: false, attempts: failed };
+}
+
+/**
+ * 探测并构造一个可调用的 PrAgentBridge。LocalCli 优先 Docker fallback；都不可用
+ * 时返回 null + status (UI 走 unavailable 占位)。可注入 ExecFn 便于单测 / mock。
+ */
+export async function createPrAgentBridge(opts?: {
+  exec?: ExecFn;
+}): Promise<{ bridge: PrAgentBridge | null; status: PrAgentStatus }> {
+  const status = await detectPrAgent();
+  if (!status.available) return { bridge: null, status };
+  const exec = opts?.exec ?? defaultExec;
+  const bridge: PrAgentBridge =
+    status.strategy === 'local-cli'
+      ? new LocalCliBridge(status.version, exec)
+      : new DockerBridge(status.version, exec);
+  return { bridge, status };
 }
