@@ -1,7 +1,13 @@
 import type { AppInfo, AppPaths } from './app-info.js';
 import type { Config } from './config.js';
 import type { PlatformUser, PrComment } from './platform.js';
-import type { LocalPrStatus, PollResult, StoredPullRequest } from './poller-contract.js';
+import type {
+  LocalPrStatus,
+  PollResult,
+  ReviewRun,
+  ReviewRunTool,
+  StoredPullRequest,
+} from './poller-contract.js';
 import type { PrAgentStatus } from './pr-agent-status.js';
 
 /** ChangedFile / FileContent 跨 IPC 边界用，与 @pr-pilot/repo-mirror 类型同形。 */
@@ -57,10 +63,21 @@ export interface PollTickEvent {
   result: PollResult;
 }
 
+/**
+ * pr-agent run 期间 stdout / stderr 整行流式推送。renderer 拿来在 ChatPane
+ * 或日志区域实时显示。一次 run 多条；run 结束后不再发。
+ */
+export interface PragentRunProgressEvent {
+  runId: string;
+  line: string;
+  stream: 'stdout' | 'stderr';
+}
+
 /** main → renderer 推送事件。renderer 用 window.api.subscribe 监听。 */
 export interface IpcEvents {
   'sync:progress': SyncProgressEvent;
   'poll:tick': PollTickEvent;
+  'pragent:runProgress': PragentRunProgressEvent;
 }
 
 export type IpcEventName = keyof IpcEvents;
@@ -136,6 +153,22 @@ export interface IpcChannels {
   'repo:getTotalSize': { request: void; response: { totalBytes: number } };
   /** 写入新的 repos_dir 到 config.yaml；重启生效 */
   'config:setReposDir': { request: { reposDir: string }; response: void };
+  /**
+   * 触发一次 pr-agent /describe 或 /review。同步等待执行结束（可能数十秒到数分钟），
+   * 期间通过 pragent:runProgress 事件推送 stdout / stderr 行。返回最终 ReviewRun
+   * 状态 (succeeded / failed)。pr-agent 不可用时 reject。
+   */
+  'pragent:run': {
+    request: { localId: string; tool: ReviewRunTool };
+    response: ReviewRun;
+  };
+  /** 列出某 PR 的全部历史 run，newest first */
+  'pragent:listRuns': { request: { localId: string }; response: ReviewRun[] };
+  /** 单条 run 查询（用于 renderer 在事件断流后兜底刷新） */
+  'pragent:getRun': {
+    request: { localId: string; runId: string };
+    response: ReviewRun | null;
+  };
 }
 
 export type IpcChannelName = keyof IpcChannels;

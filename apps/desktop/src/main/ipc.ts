@@ -1,13 +1,25 @@
-import { app, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import type { Logger } from 'pino';
 import { writeConfig, type BootstrapResult } from '@pr-pilot/config';
-import { type Poller, listStoredPullRequests, setLocalStatus } from '@pr-pilot/poller';
+import { PrAgentRunError, type PrAgentBridge } from '@pr-pilot/pr-agent-bridge';
+import {
+  type Poller,
+  finishReviewRun,
+  getReviewRun,
+  listReviewRunsForPr,
+  listStoredPullRequests,
+  parseReviewOutput,
+  setLocalStatus,
+  startReviewRun,
+} from '@pr-pilot/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@pr-pilot/repo-mirror';
 import type {
   AppInfo,
   ConnectionSummary,
   IpcChannels,
   PrAgentStatus,
+  ReviewRun,
+  ReviewRunStatus,
   StoredPullRequest,
 } from '@pr-pilot/shared';
 import type { JsonFileStateStore } from '@pr-pilot/state-store';
@@ -17,6 +29,8 @@ interface RegisterDeps {
   bootstrap: BootstrapResult;
   logger: Logger;
   prAgentStatus: PrAgentStatus;
+  /** 探测可用时的 bridge 实例；不可用 (CLI / Docker 都没有) 为 null */
+  prAgentBridge: PrAgentBridge | null;
   stateStore: JsonFileStateStore;
   poller: Poller;
   adapters: readonly BuiltAdapter[];
@@ -31,6 +45,7 @@ export function registerIpcHandlers({
   bootstrap,
   logger,
   prAgentStatus,
+  prAgentBridge,
   stateStore,
   poller,
   adapters,
@@ -219,6 +234,117 @@ export function registerIpcHandlers({
     }
     return { totalBytes: total };
   });
+
+  ipcMain.handle(
+    'pragent:run',
+    async (
+      _evt,
+      req: IpcChannels['pragent:run']['request'],
+    ): Promise<IpcChannels['pragent:run']['response']> => {
+      if (!prAgentBridge) {
+        throw new Error(
+          'pr-agent 未就绪：本机 CLI 与 Docker 都未探测到。Settings 页查看探测细节',
+        );
+      }
+      const pr = await findPrOrThrow(req.localId);
+      const run = await startReviewRun(stateStore, {
+        prLocalId: pr.localId,
+        tool: req.tool,
+        prAgentVersion: prAgentBridge.version,
+        strategy: prAgentBridge.strategy,
+      });
+      logger.info(
+        { runId: run.id, localId: pr.localId, tool: req.tool, strategy: prAgentBridge.strategy },
+        'pragent run start',
+      );
+      const t0 = Date.now();
+      const onLine = (line: string, stream: 'stdout' | 'stderr'): void => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('pragent:runProgress', { runId: run.id, line, stream });
+        }
+      };
+
+      const finishWith = async (
+        patch: Parameters<typeof finishReviewRun>[3],
+      ): Promise<ReviewRun> => {
+        const updated = await finishReviewRun(stateStore, pr.localId, run.id, patch);
+        // start 之后理论上一定能读到；保险起见 fallback 到内存对象，把 patch 合并上
+        return updated ?? { ...run, ...patch };
+      };
+
+      try {
+        const result = await prAgentBridge.run({
+          prUrl: pr.url,
+          tool: req.tool,
+          // M3-B1 暂不读 config.llm；pr-agent 自己从 process.env 取 OPENAI_API_KEY 等。
+          //   M3-C 接入完整 LLM Provider 配置 → buildPragentEnv(bootstrap.config) 注入
+          onLine,
+        });
+        const parsed = parseReviewOutput(result.stdout, req.tool);
+        return await finishWith({
+          status: 'succeeded',
+          finishedAt: new Date().toISOString(),
+          durationMs: Date.now() - t0,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          findings: parsed.findings,
+          summary: parsed.summary,
+        });
+      } catch (err) {
+        if (err instanceof PrAgentRunError) {
+          const status: ReviewRunStatus = 'failed';
+          logger.warn(
+            { runId: run.id, reason: err.reason, exitCode: err.result.exitCode },
+            'pragent run failed',
+          );
+          // 失败时也尽量解析已收集的 stdout：很多情况 pr-agent 已写了一部分输出
+          const partialStdout = err.result.stdout ?? '';
+          const parsed = partialStdout
+            ? parseReviewOutput(partialStdout, req.tool)
+            : { findings: [], summary: undefined };
+          return await finishWith({
+            status,
+            finishedAt: new Date().toISOString(),
+            durationMs: Date.now() - t0,
+            exitCode: err.result.exitCode,
+            errorReason: err.reason,
+            errorMessage: err.message,
+            stdout: err.result.stdout,
+            stderr: err.result.stderr,
+            findings: parsed.findings,
+            summary: parsed.summary,
+          });
+        }
+        // 非预期异常：仍记一笔 failed，避免 run 永远卡在 running，再把异常往上抛
+        await finishWith({
+          status: 'failed',
+          finishedAt: new Date().toISOString(),
+          durationMs: Date.now() - t0,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'pragent:listRuns',
+    async (
+      _evt,
+      req: IpcChannels['pragent:listRuns']['request'],
+    ): Promise<IpcChannels['pragent:listRuns']['response']> =>
+      listReviewRunsForPr(stateStore, req.localId),
+  );
+
+  ipcMain.handle(
+    'pragent:getRun',
+    async (
+      _evt,
+      req: IpcChannels['pragent:getRun']['request'],
+    ): Promise<IpcChannels['pragent:getRun']['response']> =>
+      getReviewRun(stateStore, req.localId, req.runId),
+  );
 
   ipcMain.handle(
     'config:setReposDir',

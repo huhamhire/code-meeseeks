@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@pr-pilot/config';
 import { createLogger } from '@pr-pilot/logger';
-import { detectPrAgent } from '@pr-pilot/pr-agent-bridge';
+import { createPrAgentBridge, type PrAgentBridge } from '@pr-pilot/pr-agent-bridge';
 import { Poller } from '@pr-pilot/poller';
 import { RepoMirrorManager } from '@pr-pilot/repo-mirror';
 import type { PrAgentStatus } from '@pr-pilot/shared';
@@ -17,6 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let bootstrap: BootstrapResult;
 let logger: Logger;
 let prAgentStatus: PrAgentStatus;
+let prAgentBridge: PrAgentBridge | null;
 let stateStore: JsonFileStateStore;
 let poller: Poller;
 let repoMirror: RepoMirrorManager;
@@ -29,8 +30,17 @@ async function start(): Promise<void> {
     'pr-pilot main process started',
   );
 
-  prAgentStatus = await detectPrAgent();
-  logger.info({ prAgentStatus }, 'pr-agent probe complete');
+  const probe = await createPrAgentBridge();
+  prAgentStatus = probe.status;
+  prAgentBridge = probe.bridge;
+  logger.info(
+    {
+      available: prAgentStatus.available,
+      strategy: prAgentStatus.available ? prAgentStatus.strategy : undefined,
+      version: prAgentStatus.available ? prAgentStatus.version : undefined,
+    },
+    'pr-agent probe complete',
+  );
 
   stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
   const adapters = buildAdapters(bootstrap.config.connections);
@@ -101,6 +111,7 @@ async function start(): Promise<void> {
     bootstrap,
     logger,
     prAgentStatus,
+    prAgentBridge,
     stateStore,
     poller,
     adapters,
