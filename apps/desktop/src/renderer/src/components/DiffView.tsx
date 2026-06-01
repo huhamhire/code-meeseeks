@@ -1,7 +1,7 @@
  import { useEffect, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { DiffEditor } from '@monaco-editor/react';
-import type { editor as MonacoEditor } from 'monaco-editor';
+import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type {
@@ -13,7 +13,9 @@ import type {
   SyncProgressEvent,
 } from '@pr-pilot/shared';
 import { invoke } from '../api';
+import { formatBackendError, type FormattedError } from '../errors';
 import { Avatar } from './Avatar';
+import { ErrorBoundary } from './ErrorBoundary';
 import { FileTree } from './FileTree';
 
 interface DiffViewProps {
@@ -31,15 +33,94 @@ const DIFF_FILE_LIST_MIN = 180;
 const DIFF_FILE_LIST_MAX = 560;
 const DIFF_FILE_LIST_DEFAULT = 280;
 
+/** BBS 风格 blame 列宽：头像(20) + name(80) + sha(75) + date(45) + padding */
+const BLAME_COLUMN_WIDTH = 240;
+
+interface BlameLayout {
+  /** Monaco modified editor 可视高度 (px) */
+  viewportHeight: number;
+  /** Monaco 当前行高 (px) */
+  lineHeight: number;
+  /** Monaco 当前垂直滚动 (px) */
+  scrollTop: number;
+}
+
+interface BlameBlock {
+  commit: string;
+  author: string;
+  authorEmail: string;
+  authorDate: string;
+  summary: string;
+  lineFrom: number;
+  lineTo: number;
+}
+
+/** 把行号列表合并为连续区段 [from, to]，便于画色带（减少 DOM 节点） */
+function mergeContiguousLines(lines: number[]): Array<[number, number]> {
+  if (lines.length === 0) return [];
+  const sorted = [...lines].sort((a, b) => a - b);
+  const out: Array<[number, number]> = [];
+  let from = sorted[0]!;
+  let to = sorted[0]!;
+  for (let i = 1; i < sorted.length; i++) {
+    const n = sorted[i]!;
+    if (n === to + 1) {
+      to = n;
+    } else {
+      out.push([from, to]);
+      from = n;
+      to = n;
+    }
+  }
+  out.push([from, to]);
+  return out;
+}
+
+/** 合并连续同 commit 的 blame 行为区块（BBS 风格：一个 commit 一格） */
+function groupBlameByCommit(blame: DiffBlameLine[]): BlameBlock[] {
+  const sorted = [...blame].sort((a, b) => a.line - b.line);
+  const blocks: BlameBlock[] = [];
+  let cur: BlameBlock | null = null;
+  for (const b of sorted) {
+    if (cur && cur.commit === b.commit && cur.lineTo === b.line - 1) {
+      cur.lineTo = b.line;
+    } else {
+      cur = {
+        commit: b.commit,
+        author: b.author,
+        authorEmail: b.authorEmail,
+        authorDate: b.authorDate,
+        summary: b.summary,
+        lineFrom: b.line,
+        lineTo: b.line,
+      };
+      blocks.push(cur);
+    }
+  }
+  return blocks;
+}
+
 export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
   const [files, setFiles] = useState<DiffChangedFile[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [filesError, setFilesError] = useState<FormattedError | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [content, setContent] = useState<LoadedContent | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
+  const [contentError, setContentError] = useState<FormattedError | null>(null);
   const [progress, setProgress] = useState<SyncProgressEvent | null>(null);
   const [comments, setComments] = useState<PrComment[]>([]);
-  const [blame, setBlame] = useState<DiffBlameLine[] | null>(null);
+  const [commentsError, setCommentsError] = useState<FormattedError | null>(null);
+  const [blame, setBlame] = useState<{
+    lines: DiffBlameLine[];
+    changedLines: number[];
+  } | null>(null);
+  const [blameError, setBlameError] = useState<FormattedError | null>(null);
+  // Monaco modified editor 的视图坐标 (用于 React overlay 渲染 blame 列)；
+  // null = blame 关 / blame 数据没好 / editor 未挂载
+  const [blameLayout, setBlameLayout] = useState<BlameLayout | null>(null);
+  // 重试 token：递增触发对应 effect 重新跑，避免 setState 后立刻 invoke 拿不到最新的
+  const [filesRetry, setFilesRetry] = useState(0);
+  const [commentsRetry, setCommentsRetry] = useState(0);
   const [fileListWidth, setFileListWidth] = useState<number>(() => {
     const raw = localStorage.getItem('pr-pilot.diffFileListWidth');
     const n = raw ? Number(raw) : DIFF_FILE_LIST_DEFAULT;
@@ -90,35 +171,61 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
     return unsubscribe;
   }, [repoKeySuffix]);
 
+  // 切 PR 时清掉旧状态（含两个错误 + 选中文件 + 内容）
   useEffect(() => {
-    let cancelled = false;
     setFiles(null);
-    setError(null);
+    setFilesError(null);
     setSelectedKey(null);
     setContent(null);
+    setContentError(null);
     setProgress(null);
     setComments([]);
+    setCommentsError(null);
+    setBlame(null);
+    setBlameError(null);
+  }, [pr.localId]);
+
+  // 拉变更文件列表 (fatal 失败 → 整个 diff 区域 fallback)
+  useEffect(() => {
+    let cancelled = false;
+    setFilesError(null);
     invoke('diff:listChangedFiles', { localId: pr.localId })
       .then((f) => {
         if (cancelled) return;
         setFiles(f);
-        if (f.length > 0) setSelectedKey(fileKey(f[0]!));
+        if (f.length > 0) setSelectedKey((prev) => prev ?? fileKey(f[0]!));
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          const fmt = formatBackendError(e);
+          console.warn('diff:listChangedFiles failed', e);
+          setFilesError(fmt);
+        }
       });
-    // 评论独立拉，失败不阻塞 diff 展示
+    return () => {
+      cancelled = true;
+    };
+  }, [pr.localId, filesRetry]);
+
+  // 拉评论 (非 fatal：失败时给可重试 banner，不阻塞 diff 展示)
+  useEffect(() => {
+    let cancelled = false;
+    setCommentsError(null);
     invoke('diff:listComments', { localId: pr.localId })
       .then((cs) => {
         if (!cancelled) setComments(cs);
       })
       .catch((e: unknown) => {
-        console.warn('failed to load comments', e);
+        if (!cancelled) {
+          const fmt = formatBackendError(e);
+          console.warn('diff:listComments failed', e);
+          setCommentsError(fmt);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [pr.localId]);
+  }, [pr.localId, commentsRetry]);
 
   const selected = files?.find((f) => fileKey(f) === selectedKey) ?? null;
 
@@ -145,6 +252,7 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
     let cancelled = false;
     setContentLoading(true);
     setContent(null);
+    setContentError(null);
     const basePath = selected.oldPath ?? selected.path;
     const headPath = selected.path;
     Promise.all([
@@ -155,7 +263,10 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
         if (!cancelled) setContent({ base, head });
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          console.warn('diff:getFileContent failed', e);
+          setContentError(formatBackendError(e));
+        }
       })
       .finally(() => {
         if (!cancelled) setContentLoading(false);
@@ -167,66 +278,90 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
 
   // 拉 blame：仅在开关开 + 文件有 head 内容时跑。deleted 文件 / 二进制不跑。
   useEffect(() => {
+    console.log('[blame:fetch] effect run', {
+      showBlame,
+      selectedPath: selected?.path,
+      hasContent: !!content,
+      contentHeadBinary: content?.head.binary === true,
+      selectedStatus: selected?.status,
+    });
     if (!showBlame || !selected || !content || content.head.binary) {
       setBlame(null);
+      setBlameError(null);
       return;
     }
     if (selected.status === 'deleted') {
       setBlame(null);
+      setBlameError(null);
       return;
     }
     let cancelled = false;
+    setBlameError(null);
+    console.log('[blame:fetch] invoking diff:getBlame', {
+      localId: pr.localId,
+      path: selected.path,
+    });
     invoke('diff:getBlame', { localId: pr.localId, path: selected.path })
       .then((b) => {
-        if (!cancelled) setBlame(b);
+        if (!cancelled) {
+          console.log(
+            '[blame:fetch] got',
+            b.lines.length,
+            'blame lines,',
+            b.changedLines.length,
+            'changed lines',
+          );
+          setBlame(b);
+        }
       })
-      .catch(() => {
-        if (!cancelled) setBlame(null);
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          console.warn('[blame:fetch] failed', e);
+          setBlame(null);
+          setBlameError(formatBackendError(e));
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [showBlame, selected, content, pr.localId]);
 
-  // 在 modified editor 行首注入 blame 文本，伪装成左侧固定列。同 commit
-  // 的连续行只在第一行显示文本，其余留空白占位（VS Code GitLens 同样做法）。
+  // Blame 走独立 React 列（BBS 风格），不在 Monaco DOM 里。只需要从 Monaco
+  // 同步 lineHeight / scrollTop / viewportHeight，BlameColumn 自己用 absolute
+  // 子项画 row 并按 scrollTop 平移。
   useEffect(() => {
-    if (!diffEditor) return;
-    const modifiedEditor = diffEditor.getModifiedEditor();
-    if (!blame || blame.length === 0) {
-      modifiedEditor.updateOptions({ lineDecorationsWidth: 10 });
+    if (!diffEditor || !showBlame || !blame || blame.lines.length === 0) {
+      setBlameLayout(null);
       return;
     }
-    modifiedEditor.updateOptions({ lineDecorationsWidth: 10 });
-    let prevSha = '';
-    const decos: MonacoEditor.IModelDeltaDecoration[] = blame.map((b) => {
-      const sameAsPrev = b.commit === prevSha;
-      prevSha = b.commit;
-      //   等宽空格保持占位列稳定
-      const text = sameAsPrev ? ' ' : formatBlame(b);
-      const hover = `**${b.author}** · ${formatBlameDate(b.authorDate, false)}  \n\`${b.commit.slice(0, 12)}\` ${b.summary}`;
-      return {
-        range: {
-          startLineNumber: b.line,
-          startColumn: 1,
-          endLineNumber: b.line,
-          endColumn: 1,
-        },
-        options: {
-          before: { content: text, inlineClassName: 'monaco-blame-inline' },
-          hoverMessage: { value: hover },
-        },
-      };
-    });
-    const coll = modifiedEditor.createDecorationsCollection(decos);
-    return () => {
-      try {
-        coll.clear();
-      } catch {
-        /* editor disposed */
-      }
+    const modifiedEditor = diffEditor.getModifiedEditor();
+    const update = (): void => {
+      const dom = modifiedEditor.getDomNode();
+      if (!dom) return;
+      const layout = modifiedEditor.getLayoutInfo();
+      const lh = modifiedEditor.getOption(MonacoEditorNs.EditorOption.lineHeight);
+      setBlameLayout({
+        viewportHeight: layout.height,
+        lineHeight: typeof lh === 'number' && lh > 0 ? lh : 19,
+        scrollTop: modifiedEditor.getScrollTop(),
+      });
     };
-  }, [diffEditor, blame]);
+    update();
+    // 初次 mount 时 layout 可能还在计算，下一 tick 再算一次
+    const t = setTimeout(update, 0);
+    const subs = [
+      modifiedEditor.onDidScrollChange(update),
+      modifiedEditor.onDidLayoutChange(update),
+    ];
+    const ro = new ResizeObserver(update);
+    const dom = modifiedEditor.getDomNode();
+    if (dom) ro.observe(dom);
+    return () => {
+      clearTimeout(t);
+      for (const s of subs) s.dispose();
+      ro.disconnect();
+    };
+  }, [diffEditor, showBlame, blame]);
 
   // 行内标记：评论锚定行 glyph margin 蓝点 + 行下方插 view zone 渲染评论内容
   useEffect(() => {
@@ -334,8 +469,14 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
     };
   }, [diffEditor, comments, content, selected, pr.connectionId]);
 
-  if (error) {
-    return <div className="diff-empty diff-error">{error}</div>;
+  if (filesError) {
+    return (
+      <BackendErrorView
+        err={filesError}
+        scope="拉取变更文件列表失败"
+        onRetry={() => setFilesRetry((n) => n + 1)}
+      />
+    );
   }
   if (!files) {
     return (
@@ -368,16 +509,62 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
         />
       </aside>
       <div className="diff-content">
+        {commentsError && (
+          <BackendErrorBanner
+            err={commentsError}
+            scope="拉取评论失败"
+            onRetry={() => setCommentsRetry((n) => n + 1)}
+            onDismiss={() => setCommentsError(null)}
+          />
+        )}
+        {contentError && (
+          <BackendErrorBanner
+            err={contentError}
+            scope={selected ? `读取 ${selected.path} 内容失败` : '读取文件内容失败'}
+            onDismiss={() => setContentError(null)}
+          />
+        )}
+        {showBlame && blameError && (
+          <BackendErrorBanner
+            err={blameError}
+            scope={selected ? `${selected.path} blame 失败` : 'blame 失败'}
+            onDismiss={() => setBlameError(null)}
+          />
+        )}
         {selected && (
           <div className="diff-pane-wrapper">
-            <DiffPane
-              file={selected}
-              content={content}
-              loading={contentLoading}
-              renderSideBySide={renderSideBySide}
-              showBlame={showBlame}
-              onMount={setDiffEditor}
-            />
+            {showBlame && blame && blameLayout && diffEditor && (
+              <BlameColumn
+                blame={blame}
+                layout={blameLayout}
+                connectionId={pr.connectionId}
+                diffEditor={diffEditor}
+              />
+            )}
+            <ErrorBoundary
+              label="DiffPane"
+              fallback={(err, reset) => (
+                <div className="diff-empty diff-error">
+                  <p>diff 渲染失败：{err.message}</p>
+                  <p className="muted" style={{ marginTop: 8 }}>
+                    切换文件 / 重试通常能恢复。底层异常已记录到 console。
+                  </p>
+                  <button type="button" className="btn btn-sm" onClick={reset}>
+                    重试
+                  </button>
+                </div>
+              )}
+            >
+              <DiffPane
+                key={`${selected.path}|${selected.oldPath ?? ''}`}
+                file={selected}
+                content={content}
+                loading={contentLoading}
+                renderSideBySide={renderSideBySide}
+                showBlame={showBlame}
+                onMount={setDiffEditor}
+              />
+            </ErrorBoundary>
           </div>
         )}
       </div>
@@ -481,8 +668,7 @@ function SyncProgress({ progress }: { progress: SyncProgressEvent | null }) {
   if (progress.phase === 'error') {
     return <span className="diff-error">同步失败：{progress.message ?? '未知错误'}</span>;
   }
-  // sync 完成后 IPC handler 还在跑 git diff 算变更文件列表（partial clone 下
-  // 可能触发 tree 元数据拉取），显示对应阶段提示
+  // sync 完成后 IPC handler 还在跑 git diff 算变更文件列表，显示对应阶段提示
   if (progress.phase === 'done') {
     return (
       <span className="muted">
@@ -516,34 +702,287 @@ function Spinner() {
   return <span className="spinner" aria-hidden="true" />;
 }
 
+/**
+ * BBS 风格 blame 列。独立于 Monaco DOM 之外，作为 diff-pane-wrapper 的左侧
+ * flex 子项；内部用 absolute 子项画各 commit 区块，按 Monaco scrollTop 平移。
+ *
+ * 设计权衡：
+ * - 不走 Monaco InjectedText (DiffEditor 里实测不渲染，详见 commit 提交记录)
+ * - 不走 Monaco overlay widget (没有"绝对行号"定位选项，只能贴角)
+ * - 独立 DOM 列：可控、稳定、跟 React 生命周期一致；唯一成本是要同步 scrollTop
+ */
+function BlameColumn({
+  blame,
+  layout,
+  connectionId,
+  diffEditor,
+}: {
+  blame: { lines: DiffBlameLine[]; changedLines: number[] };
+  layout: BlameLayout;
+  connectionId: string;
+  diffEditor: MonacoEditor.IStandaloneDiffEditor;
+}) {
+  const blocks = useMemo(() => groupBlameByCommit(blame.lines), [blame.lines]);
+  // 把 changedLines 合并成连续区段，渲染色带（减少 DOM 数量）
+  const changedRanges = useMemo(
+    () => mergeContiguousLines(blame.changedLines),
+    [blame.changedLines],
+  );
+  const modifiedEditor = diffEditor.getModifiedEditor();
+  // layout 只是触发器：scrollTop / viewportHeight 任一变就重渲，重渲时再走 Monaco
+  // 实时坐标 API，避免行数学手算和 Monaco 实际渲染的偏差（padding / view zones /
+  // hideUnchangedRegions 占位 / sticky scroll 全靠 Monaco 自己算）
+  // 注意：layout 也被上面 style 的 --blame-lh 引用
+
+  // 只渲染 Monaco 当前可见的行：hideUnchangedRegions 折叠掉的行返回的 range
+  // 里不会出现，自然不画 blame；评论 view zone 撑出的额外高度也由 Monaco 的
+  // getTopForLineNumber 反映
+  const visibleRanges = modifiedEditor.getVisibleRanges();
+  const scrollTop = modifiedEditor.getScrollTop();
+
+  type BlameItem = {
+    kind: 'blame';
+    block: BlameBlock;
+    top: number;
+    height: number;
+    segId: string;
+  };
+  type ChangeItem = {
+    kind: 'change';
+    top: number;
+    height: number;
+    segId: string;
+  };
+  type FoldItem = { kind: 'fold'; top: number; height: number; segId: string };
+  type Item = BlameItem | ChangeItem | FoldItem;
+  const items: Item[] = [];
+
+  // 1) Blame 区块：跟 visible range 求交集
+  for (const range of visibleRanges) {
+    for (const block of blocks) {
+      const from = Math.max(block.lineFrom, range.startLineNumber);
+      const to = Math.min(block.lineTo, range.endLineNumber);
+      if (from > to) continue;
+      const yTop = modifiedEditor.getTopForLineNumber(from) - scrollTop;
+      const yBottom = modifiedEditor.getTopForLineNumber(to + 1) - scrollTop;
+      items.push({
+        kind: 'blame',
+        block,
+        top: yTop,
+        height: Math.max(1, yBottom - yTop),
+        segId: `b-${block.commit}-${String(from)}-${String(to)}`,
+      });
+    }
+  }
+
+  // 2) PR 改动行色带：在可见 range 内的部分画绿色竖条占位（不带文字，跟 Monaco
+  //    diff 的"added"装饰呼应）
+  for (const range of visibleRanges) {
+    for (const [from0, to0] of changedRanges) {
+      const from = Math.max(from0, range.startLineNumber);
+      const to = Math.min(to0, range.endLineNumber);
+      if (from > to) continue;
+      const yTop = modifiedEditor.getTopForLineNumber(from) - scrollTop;
+      const yBottom = modifiedEditor.getTopForLineNumber(to + 1) - scrollTop;
+      items.push({
+        kind: 'change',
+        top: yTop,
+        height: Math.max(1, yBottom - yTop),
+        segId: `c-${String(from)}-${String(to)}`,
+      });
+    }
+  }
+
+  // 3) 折叠占位行（"X hidden lines"）：相邻两个 visibleRange 之间一行的位置，
+  //    用斜纹/灰底标识"无效行"——这一行不对应 head 文件里任何 line，blame
+  //    自然没有。
+  for (let i = 0; i < visibleRanges.length - 1; i++) {
+    const cur = visibleRanges[i]!;
+    const next = visibleRanges[i + 1]!;
+    if (next.startLineNumber - cur.endLineNumber <= 1) continue;
+    // 占位行在 cur 的最后一行底部与 next 第一行顶部之间
+    const yTop = modifiedEditor.getTopForLineNumber(cur.endLineNumber + 1) - scrollTop;
+    const yBottom = modifiedEditor.getTopForLineNumber(next.startLineNumber) - scrollTop;
+    if (yBottom <= yTop) continue;
+    items.push({
+      kind: 'fold',
+      top: yTop,
+      height: yBottom - yTop,
+      segId: `f-${String(cur.endLineNumber)}-${String(next.startLineNumber)}`,
+    });
+  }
+
+  return (
+    <aside
+      className="blame-column"
+      // --blame-lh = Monaco 的实际行高，让 blame-row 的 grid 行轨道 / line-height
+      // 都用同一个值，垂直跟 Monaco 第一行代码同高、同 baseline
+      style={
+        {
+          width: BLAME_COLUMN_WIDTH,
+          '--blame-lh': `${String(layout.lineHeight)}px`,
+        } as React.CSSProperties
+      }
+      aria-label="blame"
+    >
+      <div className="blame-column-inner">
+        {items.map((it) => {
+          if (it.kind === 'blame') {
+            return (
+              <BlameRow
+                key={it.segId}
+                block={it.block}
+                top={it.top}
+                height={it.height}
+                connectionId={connectionId}
+              />
+            );
+          }
+          if (it.kind === 'change') {
+            return (
+              <div
+                key={it.segId}
+                className="blame-row-change"
+                style={{ top: it.top, height: it.height }}
+                title="此区段为本 PR 引入的改动"
+                aria-hidden="true"
+              />
+            );
+          }
+          // fold placeholder
+          return (
+            <div
+              key={it.segId}
+              className="blame-row-fold"
+              style={{ top: it.top, height: it.height }}
+              aria-hidden="true"
+            />
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
+function BlameRow({
+  block,
+  top,
+  height,
+  connectionId,
+}: {
+  block: BlameBlock;
+  top: number;
+  height: number;
+  connectionId: string;
+}) {
+  const dateStr = block.authorDate
+    ? new Date(block.authorDate).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    : '';
+  const title = `${block.author}\n${block.commit.slice(0, 12)}\n${block.summary}\n${
+    block.authorDate ? new Date(block.authorDate).toLocaleString() : ''
+  }`;
+  return (
+    <div className="blame-row" style={{ top, height }} title={title}>
+      <Avatar
+        connectionId={connectionId}
+        slug={block.author}
+        displayName={block.author}
+        size={18}
+      />
+      <span className="blame-row-name" title={block.author}>
+        {block.author}
+      </span>
+      <span className="blame-row-sha">{block.commit.slice(0, 11)}</span>
+      <span className="blame-row-date">{dateStr}</span>
+    </div>
+  );
+}
+
+/** 整块替代 diff 区的硬错误展示（如变更文件列表本身拉不下来） */
+function BackendErrorView({
+  err,
+  scope,
+  onRetry,
+}: {
+  err: FormattedError;
+  scope: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="diff-empty diff-error backend-error-view">
+      <p className="backend-error-title">
+        <strong>{scope}：</strong>
+        {err.title}
+      </p>
+      <pre className="backend-error-detail">{err.detail}</pre>
+      {onRetry && (
+        <button type="button" className="btn btn-sm" onClick={onRetry}>
+          重试
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** 顶部细 banner，部分功能拉不下来但 diff 主体仍可用时显示 */
+function BackendErrorBanner({
+  err,
+  scope,
+  onRetry,
+  onDismiss,
+}: {
+  err: FormattedError;
+  scope: string;
+  onRetry?: () => void;
+  onDismiss?: () => void;
+}) {
+  return (
+    <div className={`backend-error-banner backend-error-banner-${err.kind}`} role="alert">
+      <span className="backend-error-banner-icon" aria-hidden="true">
+        ⚠
+      </span>
+      <span className="backend-error-banner-text">
+        <strong>{scope}：</strong>
+        <span className="muted">{err.title}</span>
+        <span className="backend-error-banner-detail" title={err.detail}>
+          {summarizeDetail(err.detail)}
+        </span>
+      </span>
+      <span className="backend-error-banner-actions">
+        {onRetry && (
+          <button type="button" className="btn btn-sm" onClick={onRetry}>
+            重试
+          </button>
+        )}
+        {onDismiss && (
+          <button
+            type="button"
+            className="btn btn-sm backend-error-banner-dismiss"
+            onClick={onDismiss}
+            title="收起此通知"
+            aria-label="dismiss"
+          >
+            ×
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function summarizeDetail(detail: string): string {
+  const firstLine = detail.split('\n')[0] ?? '';
+  return firstLine.length > 120 ? firstLine.slice(0, 117) + '…' : firstLine;
+}
+
 function fileKey(f: DiffChangedFile): string {
   return `${f.oldPath ?? ''}|${f.path}`;
 }
 
-/** "Kyle 3天前 · a1b2c3d" 风格，截断长名 */
-function formatBlame(b: DiffBlameLine): string {
-  const who = b.author.length > 12 ? b.author.slice(0, 11) + '…' : b.author;
-  const when = formatBlameDate(b.authorDate, true);
-  const sha = b.commit.slice(0, 7);
-  return `${who} ${when} · ${sha}`;
-}
-
-function formatBlameDate(iso: string, relative: boolean): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (!relative) return d.toLocaleString();
-  const diffSec = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
-  if (diffSec < 60) return `${diffSec}s`;
-  const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h`;
-  const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 30) return `${diffDay}d`;
-  const diffMo = Math.round(diffDay / 30);
-  if (diffMo < 12) return `${diffMo}mo`;
-  return `${Math.round(diffMo / 12)}y`;
-}
 
 function DiffPane({
   file,
@@ -566,9 +1005,7 @@ function DiffPane({
         <span className="muted">
           <Spinner /> 拉取 <code>{file.path}</code> 内容…
           <br />
-          <small>
-            partial clone 下首次访问该文件需要从远端按需拉取 blob，可能略慢
-          </small>
+          <small>从本地镜像读 git blob，大文件 / 二进制判定时可能略慢</small>
         </span>
       </div>
     );
@@ -600,6 +1037,15 @@ function DiffPane({
           minimumLineCount: 5,
           revealLineCount: 20,
         },
+        // 关掉依赖 ts.worker 的高级特性（diff review 不需要），同时消掉
+        // `Missing requestHandler` 噪音。hover 保留给 blame / 评论装饰用。
+        inlayHints: { enabled: 'off' },
+        quickSuggestions: false,
+        suggestOnTriggerCharacters: false,
+        parameterHints: { enabled: false },
+        codeLens: false,
+        stickyScroll: { enabled: false },
+        occurrencesHighlight: 'off',
       }}
       theme="vs-dark"
     />

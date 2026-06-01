@@ -34,15 +34,18 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
     const v = localStorage.getItem('pr-pilot.diffMode');
     return v === null ? true : v === 'side-by-side';
   });
-  const [showBlame, setShowBlame] = useState<boolean>(
-    () => localStorage.getItem('pr-pilot.showBlame') === '1',
-  );
+  // Blame 默认关：每次启动都得手动开（blame fetch 可能慢/失败，不希望
+  // 用户进来就被错误 banner 干扰）
+  const [showBlame, setShowBlame] = useState<boolean>(false);
   useEffect(() => {
     localStorage.setItem('pr-pilot.diffMode', renderSideBySide ? 'side-by-side' : 'unified');
   }, [renderSideBySide]);
+  // 清掉历史遗留的 showBlame 持久化值；新逻辑不再读写它
   useEffect(() => {
-    localStorage.setItem('pr-pilot.showBlame', showBlame ? '1' : '0');
-  }, [showBlame]);
+    if (localStorage.getItem('pr-pilot.showBlame') !== null) {
+      localStorage.removeItem('pr-pilot.showBlame');
+    }
+  }, []);
 
   if (!pr) {
     return (

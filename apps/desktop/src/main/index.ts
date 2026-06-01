@@ -24,7 +24,7 @@ let repoMirror: RepoMirrorManager;
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
-  logger = createLogger({ logsDir: bootstrap.paths.logsDir });
+  logger = await createLogger({ logsDir: bootstrap.paths.logsDir });
   logger.info(
     { firstRun: bootstrap.firstRun, appDir: bootstrap.paths.appDir },
     'pr-pilot main process started',

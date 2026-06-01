@@ -742,6 +742,8 @@ textarea {
   margin-left: 0; /* 在 right 组内不需要再 margin-left:auto */
 }
 
+/* 跟 .diff-mode-toggle button 保持同尺寸：padding / font-size / border 同步，
+   不写 line-height，让按钮高度由 font 默认行高决定，跟兄弟按钮齐 */
 .blame-toggle {
   display: inline-flex;
   align-items: center;
@@ -753,7 +755,6 @@ textarea {
   cursor: pointer;
   font-size: 11px;
   border-radius: 3px;
-  line-height: 1;
 }
 .blame-toggle:hover {
   background: #2a2d2e;
@@ -765,21 +766,111 @@ textarea {
   color: white;
 }
 
-/* Monaco 行首注入的 blame 文本：固定宽度 + 灰色斜体 + 截断，伪装成左侧 blame 列。
-   inlineClassNameAffectsLetterSpacing 默认 false 不会破坏 Monaco 等宽对齐。 */
-.monaco-blame-inline {
-  display: inline-block;
-  width: 160px;
-  margin-right: 12px;
-  color: #6e7681;
-  font-style: italic;
+/* BBS 风格 blame 列：独立 React 组件，做 diff-pane-wrapper 的左侧 flex 子项。
+   内部 row 用 absolute 子项画，按 Monaco scrollTop 实时同步位置。 */
+.blame-column {
+  flex-shrink: 0;
+  background: #1a1a1b;
+  border-right: 1px solid #3e3e42;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.blame-column-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* 4 列 grid 固定布局：头像 | 名 | sha | 日期。
+   - 区块跨多行时，内容贴顶部（align-content: start）；下方留空给该 commit 的后续行
+   - 顶部一行的 track 高度 = --blame-lh（Monaco 实际行高），跟第一行代码同 Y、同高
+   - 行内三个文本 + 头像 align-items: center 共享同一垂直中线，避免错位 */
+.blame-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 80px 70px;
+  grid-auto-rows: var(--blame-lh, 18px);
+  gap: 6px;
+  align-items: center;
+  align-content: start;
+  padding: 0 8px 0 10px;
   font-size: 11px;
+  line-height: var(--blame-lh, 18px);
+  color: #cccccc;
+  border-bottom: 1px solid rgba(62, 62, 66, 0.5);
+  overflow: hidden;
   white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.blame-row:hover {
+  background: #2a2d2e;
+}
+
+/* 三个文本元素共享 line-height + font-size，baseline 一致 */
+.blame-row-name,
+.blame-row-sha,
+.blame-row-date {
+  font-size: 11px;
+  line-height: var(--blame-lh, 18px);
   overflow: hidden;
   text-overflow: ellipsis;
-  vertical-align: middle;
-  border-right: 1px solid #3e3e42;
-  padding-right: 8px;
+  white-space: nowrap;
+}
+
+.blame-row-name {
+  color: #cccccc;
+}
+
+.blame-row-sha {
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+  color: #6cb6ff;
+  letter-spacing: 0.02em;
+}
+
+.blame-row-date {
+  color: #858585;
+  text-align: right;
+}
+
+/* 头像在 row 中也以 lineHeight 为基准居中：grid align-items: center 已经处理，
+   这里只统一尺寸 + 不收缩 */
+.blame-row .avatar {
+  width: 18px;
+  height: 18px;
+}
+
+/* PR 改动行色带：左侧 3px 绿条，对齐 Monaco diff 的 "added" 装饰色 */
+.blame-row-change {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding-left: 10px;
+  border-left: 3px solid #487e02;
+  background: rgba(72, 126, 2, 0.08);
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+/* 折叠占位行（"X hidden lines"）：斜纹背景 + 灰底，表示"非真实行 / 无 blame" */
+.blame-row-fold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(110, 118, 129, 0.08) 0,
+    rgba(110, 118, 129, 0.08) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-bottom: 1px solid rgba(62, 62, 66, 0.5);
+  border-top: 1px solid rgba(62, 62, 66, 0.5);
+  pointer-events: none;
 }
 
 .pr-tab {
@@ -823,6 +914,10 @@ textarea {
   flex-shrink: 0;
   border-right: 1px solid #3e3e42;
   background: #1f1f20;
+  /* 垂直方向自滚；水平方向显式 hidden 避免被规范自动提成 auto，否则
+     和内层 .diff-file-tree 各出一条横向滚动条 (CSS Overflow 规范：当一个轴是 auto
+     另一个是 visible 时，visible 会被强制提升为 auto) */
+  overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1120,11 +1215,17 @@ textarea {
   flex: 1;
   min-height: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  /* blame-column 是固定宽度的左侧子项；ErrorBoundary 或 DiffPane 走 flex:1 占剩余 */
 }
 
-.diff-pane-wrapper > * {
+.diff-pane-wrapper > .blame-column {
+  /* flex-shrink:0 已经在 .blame-column 上声明，这里不重复 */
+}
+
+.diff-pane-wrapper > *:not(.blame-column) {
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -1424,6 +1525,109 @@ textarea {
   text-align: center;
 }
 
+.error-boundary-fallback {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  background: #1f1f20;
+  color: #cccccc;
+  font-size: 12px;
+}
+.error-boundary-title {
+  color: #f48771;
+  font-weight: 600;
+  margin: 0;
+}
+.error-boundary-msg {
+  background: #2d2d30;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 0;
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+  font-size: 11px;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 整块 fallback：拉变更文件本身失败时占满 diff 区 */
+.backend-error-view {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 24px;
+  text-align: left;
+}
+.backend-error-title {
+  color: #f48771;
+  margin: 0;
+  font-size: 13px;
+}
+.backend-error-detail {
+  background: #2d2d30;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 0;
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+  font-size: 11px;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #cccccc;
+}
+
+/* 顶部 banner：评论 / 单文件内容这类非阻塞失败时，让 diff 继续显示 */
+.backend-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(244, 135, 113, 0.08);
+  border-bottom: 1px solid rgba(244, 135, 113, 0.35);
+  color: #cccccc;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.backend-error-banner-auth,
+.backend-error-banner-not-found {
+  background: rgba(226, 192, 141, 0.1);
+  border-bottom-color: rgba(226, 192, 141, 0.4);
+}
+.backend-error-banner-icon {
+  color: #f48771;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.backend-error-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  overflow: hidden;
+}
+.backend-error-banner-detail {
+  color: #858585;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.backend-error-banner-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.backend-error-banner-dismiss {
+  padding: 0 8px;
+  line-height: 1;
+}
+
 .diff-error {
   color: #f48771;
   white-space: pre-wrap;
@@ -1520,8 +1724,8 @@ textarea {
 }
 
 .status-pending {
-  background: #2d2d30;
-  color: #cccccc;
+  background: #0e639c;
+  color: #ffffff;
 }
 
 .status-reviewed {

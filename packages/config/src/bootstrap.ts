@@ -29,7 +29,13 @@ export async function ensureWorkspace(): Promise<BootstrapResult> {
 
   // 子目录创建放在配置加载之前，避免后续日志/state 写入时还需检查
   const stubPaths = buildAppPaths('~/.pr-pilot/repos');
-  for (const dir of [stubPaths.appDir, stubPaths.stateDir, stubPaths.logsDir, stubPaths.rulesDir]) {
+  for (const dir of [
+    stubPaths.appDir,
+    stubPaths.stateDir,
+    stubPaths.logsDir,
+    stubPaths.rulesDir,
+    stubPaths.cacheDir,
+  ]) {
     await fs.mkdir(dir, { recursive: true });
   }
 

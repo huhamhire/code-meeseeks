@@ -144,10 +144,18 @@ export interface IpcChannels {
     request: { localId: string };
     response: PrComment[];
   };
-  /** 给 head 侧文件跑 git blame，返回逐行归属 commit + 作者 + 时间 */
+  /**
+   * 给 head 侧文件跑 git blame；同时返回 PR 引入的 head 行号集合，
+   * renderer 能区分"未变更行（出 blame）"vs"PR 改动行（出色带占位）"。
+   */
   'diff:getBlame': {
     request: { localId: string; path: string };
-    response: DiffBlameLine[];
+    response: {
+      /** 仅未变更行的 blame（已过滤掉 PR 改动行） */
+      lines: DiffBlameLine[];
+      /** PR 引入的 head 行号 (added / modified)，用于 blame 列画色带占位 */
+      changedLines: number[];
+    };
   };
   /** 计算本地所有 repo 镜像的总占用字节数（设置页用） */
   'repo:getTotalSize': { request: void; response: { totalBytes: number } };

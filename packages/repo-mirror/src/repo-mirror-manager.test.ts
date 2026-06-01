@@ -3,7 +3,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import simpleGit from 'simple-git';
-import { RepoMirrorManager } from './repo-mirror-manager.js';
+import {
+  RepoMirrorManager,
+  parseBlamePorcelain,
+  parseHunkAddedLines,
+} from './repo-mirror-manager.js';
 import type { RepoIdentity } from './types.js';
 
 let tmpRoot: string;
@@ -273,6 +277,71 @@ describe('RepoMirrorManager diff/content', () => {
       binary: false,
       content: '',
     });
+  });
+
+  it('parseHunkAddedLines 收集 head 侧添加/修改行号集合', () => {
+    const diff = [
+      'diff --git a/x.ts b/x.ts',
+      'index aaaa..bbbb 100644',
+      '--- a/x.ts',
+      '+++ b/x.ts',
+      // 改 1 行 @ head:5
+      '@@ -5,1 +5,1 @@',
+      '-old',
+      '+new',
+      // 加 3 行 @ head:10..12 (count 省略形式 + 多行)
+      '@@ -10,0 +10,3 @@',
+      '+line a',
+      '+line b',
+      '+line c',
+      // 纯删除：head 侧 0 行
+      '@@ -20,2 +21,0 @@',
+      '-del a',
+      '-del b',
+      // 无 count 视为 1
+      '@@ -30 +31 @@',
+      '-zz',
+      '+yy',
+      '',
+    ].join('\n');
+    const set = parseHunkAddedLines(diff);
+    expect([...set].sort((a, b) => a - b)).toEqual([5, 10, 11, 12, 31]);
+  });
+
+  it('parseHunkAddedLines 兼容 CRLF', () => {
+    const lf = '@@ -1,1 +1,1 @@\n-a\n+b\n@@ -5,0 +5,2 @@\n+c\n+d\n';
+    const crlf = lf.replace(/\n/g, '\r\n');
+    expect([...parseHunkAddedLines(crlf)].sort((a, b) => a - b)).toEqual([1, 5, 6]);
+  });
+
+  it('parseBlamePorcelain 兼容 LF / CRLF 行尾', () => {
+    const sha = 'a'.repeat(40);
+    // Windows 上 git 输出经常带 \r\n，要保证仍能匹配 hunk 头
+    const lf = [
+      `${sha} 1 1 2`,
+      'author Kyle',
+      'author-mail <kyle@example.com>',
+      'author-time 1717000000',
+      'author-tz +0800',
+      'summary first',
+      'filename a.ts',
+      '\tline 1',
+      `${sha} 2 2`,
+      'filename a.ts',
+      '\tline 2',
+      '',
+    ].join('\n');
+    const crlf = lf.replace(/\n/g, '\r\n');
+    const fromLf = parseBlamePorcelain(lf);
+    const fromCrlf = parseBlamePorcelain(crlf);
+    expect(fromLf).toHaveLength(2);
+    expect(fromCrlf).toHaveLength(2);
+    expect(fromCrlf[0]!.author).toBe('Kyle');
+    expect(fromCrlf[0]!.authorEmail).toBe('kyle@example.com');
+    expect(fromCrlf[1]!.commit).toBe(sha);
+    expect(fromCrlf[1]!.line).toBe(2);
+    // 同 commit 的后续 hunk 元信息应继承自首次出现
+    expect(fromCrlf[1]!.author).toBe('Kyle');
   });
 
   it('getFileContent flags binary on null-byte presence', async () => {

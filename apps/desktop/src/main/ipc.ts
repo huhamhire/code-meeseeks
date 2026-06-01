@@ -1,4 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { Logger } from 'pino';
 import { writeConfig, type BootstrapResult } from '@pr-pilot/config';
 import { PrAgentRunError, type PrAgentBridge } from '@pr-pilot/pr-agent-bridge';
@@ -79,40 +82,96 @@ export function registerIpcHandlers({
     (): IpcChannels['app:connections']['response'] => buildConnectionSummaries(bootstrap, adapters),
   );
 
-  // (connectionId, slug) → dataUrl 或 null（拉失败 / 平台不支持）。
-  // 命中 cache 直接返回，null 也缓存避免重复打 BBS。
-  const avatarCache = new Map<string, { dataUrl: string } | null>();
+  // (connectionId, slug) → dataUrl 或 null。两级 cache：
+  //   1) avatarMem: 进程内 Map，本会话内瞬时返回（含 null 负缓存避免重试失败 slug）
+  //   2) 磁盘文件 <cacheDir>/avatars/<hash>.bin，TTL 7 天，按 mtime 判定过期
+  //      过期或不存在 → 重新打 BBS → 写回磁盘
+  // hash = sha256(connectionId|slug) 前 24 hex，纯字母数字文件名安全
+  const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+  const avatarDir = path.join(bootstrap.paths.cacheDir, 'avatars');
+  const avatarMem = new Map<string, { dataUrl: string } | null>();
+
   ipcMain.handle(
     'app:userAvatar',
     async (
       _evt,
       req: IpcChannels['app:userAvatar']['request'],
     ): Promise<IpcChannels['app:userAvatar']['response']> => {
-      const key = `${req.connectionId}|${req.slug}`;
-      if (avatarCache.has(key)) return avatarCache.get(key)!;
+      const memKey = `${req.connectionId}|${req.slug}`;
+      if (avatarMem.has(memKey)) return avatarMem.get(memKey)!;
+
+      const hash = crypto
+        .createHash('sha256')
+        .update(memKey)
+        .digest('hex')
+        .slice(0, 24);
+      const filePath = path.join(avatarDir, `${hash}.bin`);
+
+      // 1) 磁盘 cache 命中且未过期？
+      try {
+        const stat = await fs.stat(filePath);
+        const age = Date.now() - stat.mtimeMs;
+        if (age < AVATAR_TTL_MS) {
+          const bytes = await fs.readFile(filePath);
+          const contentType = sniffImageContentType(bytes);
+          const result = {
+            dataUrl: `data:${contentType};base64,${bytes.toString('base64')}`,
+          };
+          avatarMem.set(memKey, result);
+          logger.debug(
+            { hash, ageMs: age, slug: req.slug, bytes: bytes.length },
+            'avatar served from disk cache',
+          );
+          return result;
+        }
+        // 过期：删了重拉。删失败也没关系（writeFile 会覆盖）
+        await fs.unlink(filePath).catch(() => undefined);
+      } catch {
+        // 文件不存在 / 读失败 → 走 fetch
+      }
+
+      // 2) 没缓存 / 已过期：去 BBS 拉
       const adapter = adapters.find((a) => a.connectionId === req.connectionId)?.adapter;
       if (!adapter) {
-        avatarCache.set(key, null);
+        avatarMem.set(memKey, null);
         return null;
       }
       try {
         const img = await adapter.getUserAvatar(req.slug);
         if (!img) {
-          logger.debug({ connectionId: req.connectionId, slug: req.slug }, 'avatar fetch returned null');
-          avatarCache.set(key, null);
+          logger.debug(
+            { connectionId: req.connectionId, slug: req.slug },
+            'avatar fetch returned null',
+          );
+          avatarMem.set(memKey, null);
           return null;
+        }
+        // 落盘：best-effort，写失败不影响响应
+        try {
+          await fs.mkdir(avatarDir, { recursive: true });
+          await fs.writeFile(filePath, img.bytes);
+        } catch (writeErr) {
+          logger.warn({ err: writeErr, hash }, 'avatar disk write failed');
         }
         const base64 = Buffer.from(img.bytes).toString('base64');
         const result = { dataUrl: `data:${img.contentType};base64,${base64}` };
+        avatarMem.set(memKey, result);
         logger.debug(
-          { connectionId: req.connectionId, slug: req.slug, bytes: img.bytes.length, contentType: img.contentType },
-          'avatar fetched',
+          {
+            hash,
+            slug: req.slug,
+            bytes: img.bytes.length,
+            contentType: img.contentType,
+          },
+          'avatar fetched + cached to disk',
         );
-        avatarCache.set(key, result);
         return result;
       } catch (err) {
-        logger.warn({ err, connectionId: req.connectionId, slug: req.slug }, 'avatar fetch threw');
-        avatarCache.set(key, null);
+        logger.warn(
+          { err, connectionId: req.connectionId, slug: req.slug },
+          'avatar fetch threw',
+        );
+        avatarMem.set(memKey, null);
         return null;
       }
     },
@@ -210,8 +269,16 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['diff:getBlame']['response']> => {
       const pr = await findPrOrThrow(req.localId);
       const id = repoIdentityFor(pr);
-      // blame 跑在 head sha 上；renderer 已确保 deleted 文件不会发起此请求
-      return repoMirror.getBlame(id, pr.sourceRef.sha, req.path);
+      // 只对 base 已有部分展示 blame；PR 引入的行单独返给 renderer，
+      // 由 BlameColumn 画色带占位（对应 Monaco diff 添加/修改区的视觉）。
+      const [allBlame, changedSet] = await Promise.all([
+        repoMirror.getBlame(id, pr.sourceRef.sha, req.path),
+        repoMirror.listChangedHeadLines(id, pr.targetRef.sha, pr.sourceRef.sha, req.path),
+      ]);
+      return {
+        lines: allBlame.filter((b) => !changedSet.has(b.line)),
+        changedLines: Array.from(changedSet).sort((a, b) => a - b),
+      };
     },
   );
 
@@ -372,6 +439,43 @@ function buildAppInfo(bootstrap: BootstrapResult): AppInfo {
     platform: process.platform,
     firstRun: bootstrap.firstRun,
   };
+}
+
+/** 按文件头魔数嗅探常见图片格式；嗅不出退到 octet-stream（浏览器仍可能解码 PNG） */
+function sniffImageContentType(bytes: Uint8Array): string {
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    return 'image/gif';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  // SVG / XML 以 '<' 起；blame avatar 应该不会出 SVG 但兜底
+  if (bytes.length >= 1 && bytes[0] === 0x3c) {
+    return 'image/svg+xml';
+  }
+  return 'application/octet-stream';
 }
 
 function buildConnectionSummaries(

@@ -2,7 +2,7 @@
   "name": "@pr-pilot/repo-mirror",
   "version": "0.0.0",
   "private": true,
-  "description": "Local git mirror manager (partial bare clone + fetch + per-repo serialization)",
+  "description": "Local git mirror manager (full bare clone + fetch + global serialization)",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
