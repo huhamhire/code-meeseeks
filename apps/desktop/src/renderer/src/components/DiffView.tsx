@@ -13,6 +13,7 @@ import type {
   SyncProgressEvent,
 } from '@pr-pilot/shared';
 import { invoke } from '../api';
+import { Avatar } from './Avatar';
 import { FileTree } from './FileTree';
 
 interface DiffViewProps {
@@ -26,6 +27,10 @@ interface LoadedContent {
   head: DiffFileContent;
 }
 
+const DIFF_FILE_LIST_MIN = 180;
+const DIFF_FILE_LIST_MAX = 560;
+const DIFF_FILE_LIST_DEFAULT = 280;
+
 export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
   const [files, setFiles] = useState<DiffChangedFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +40,41 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
   const [progress, setProgress] = useState<SyncProgressEvent | null>(null);
   const [comments, setComments] = useState<PrComment[]>([]);
   const [blame, setBlame] = useState<DiffBlameLine[] | null>(null);
+  const [fileListWidth, setFileListWidth] = useState<number>(() => {
+    const raw = localStorage.getItem('pr-pilot.diffFileListWidth');
+    const n = raw ? Number(raw) : DIFF_FILE_LIST_DEFAULT;
+    return Math.min(
+      DIFF_FILE_LIST_MAX,
+      Math.max(DIFF_FILE_LIST_MIN, Number.isFinite(n) ? n : DIFF_FILE_LIST_DEFAULT),
+    );
+  });
+  useEffect(() => {
+    localStorage.setItem('pr-pilot.diffFileListWidth', String(fileListWidth));
+  }, [fileListWidth]);
+
+  const startFileListResize = (e: React.MouseEvent): void => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = fileListWidth;
+    const onMove = (ev: MouseEvent): void => {
+      const dx = ev.clientX - startX;
+      const next = Math.min(
+        DIFF_FILE_LIST_MAX,
+        Math.max(DIFF_FILE_LIST_MIN, startWidth + dx),
+      );
+      setFileListWidth(next);
+    };
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
   // 用 state 而非 ref：onMount 异步触发，必须靠 state 变更触发后续 useEffect
   // 重新运行 decorations 应用逻辑。
   const [diffEditor, setDiffEditor] = useState<MonacoEditor.IStandaloneDiffEditor | null>(
@@ -246,7 +286,7 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
           const dom = document.createElement('div');
           dom.className = 'monaco-comment-zone';
           const root = createRoot(dom);
-          root.render(<CommentZone comments={cs} />);
+          root.render(<CommentZone comments={cs} connectionId={pr.connectionId} />);
           const zoneId = accessor.addZone({
             afterLineNumber: line,
             heightInLines: estimateZoneHeight(cs),
@@ -292,7 +332,7 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
         }
       });
     };
-  }, [diffEditor, comments, content, selected]);
+  }, [diffEditor, comments, content, selected, pr.connectionId]);
 
   if (error) {
     return <div className="diff-empty diff-error">{error}</div>;
@@ -310,7 +350,7 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
 
   return (
     <div className="diff-view">
-      <aside className="diff-file-list">
+      <aside className="diff-file-list" style={{ width: `${String(fileListWidth)}px` }}>
         <div className="diff-file-list-header">
           <span>{files.length} 个文件</span>
         </div>
@@ -319,6 +359,12 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
           selectedKey={selectedKey}
           commentCountByPath={commentCountByPath}
           onSelect={(f) => setSelectedKey(fileKey(f))}
+        />
+        <div
+          className="diff-file-list-resize-handle"
+          onMouseDown={startFileListResize}
+          title="拖动调整文件树宽度"
+          aria-label="resize diff file list"
         />
       </aside>
       <div className="diff-content">
@@ -339,21 +385,31 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
   );
 }
 
-/** 估算 view zone 高度（行数）：每条评论 ~3 行 (header + body) + 每条 reply 1 行 */
+/**
+ * 估算 view zone 高度（行数）。每段评论 = header(avatar+name+date, 1.3 行) + body
+ * 字数 / 80 行向上取整；reply 同样 header + body，外加 reply 自己的 padding/border
+ * 各 0.2 行。同行多评论叠加，最后顶天 32 行避免独吞屏幕。
+ */
 function estimateZoneHeight(comments: PrComment[]): number {
-  let h = 1; // padding
+  let h = 1; // 上下 padding
   for (const c of comments) {
-    const bodyLines = Math.max(1, Math.ceil(c.body.length / 80));
-    h += 1 + bodyLines; // header + body
+    h += 1.3 + Math.max(1, Math.ceil(c.body.length / 80));
     for (const r of c.replies) {
-      const rLines = Math.max(1, Math.ceil(r.body.length / 80));
-      h += rLines;
+      // reply 自己有 margin + border，多 0.3 行
+      h += 1.3 + Math.max(1, Math.ceil(r.body.length / 80)) + 0.3;
     }
+    h += 0.3; // item 间分隔
   }
-  return Math.min(h, 20); // 顶天 20 行避免占满屏
+  return Math.min(Math.ceil(h), 32);
 }
 
-function CommentZone({ comments }: { comments: PrComment[] }) {
+function CommentZone({
+  comments,
+  connectionId,
+}: {
+  comments: PrComment[];
+  connectionId: string;
+}) {
   return (
     <div className="comment-zone-inner">
       {comments.map((c, i) => (
@@ -361,19 +417,23 @@ function CommentZone({ comments }: { comments: PrComment[] }) {
           key={c.remoteId}
           className={`comment-zone-item${i > 0 ? ' comment-zone-item-divider' : ''}`}
         >
-          <div className="comment-zone-head">
-            <strong>{c.author.displayName}</strong>
-            <span className="muted">{new Date(c.createdAt).toLocaleString()}</span>
-          </div>
+          <CommentAuthorRow
+            displayName={c.author.displayName}
+            slug={c.author.slug ?? c.author.name}
+            connectionId={connectionId}
+            at={c.createdAt}
+          />
           <div className="comment-zone-body markdown">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.body}</ReactMarkdown>
           </div>
           {c.replies.map((r) => (
             <div key={r.remoteId} className="comment-zone-reply">
-              <div className="comment-zone-head">
-                <strong>{r.author.displayName}</strong>
-                <span className="muted">{new Date(r.createdAt).toLocaleString()}</span>
-              </div>
+              <CommentAuthorRow
+                displayName={r.author.displayName}
+                slug={r.author.slug ?? r.author.name}
+                connectionId={connectionId}
+                at={r.createdAt}
+              />
               <div className="comment-zone-body markdown">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{r.body}</ReactMarkdown>
               </div>
@@ -381,6 +441,31 @@ function CommentZone({ comments }: { comments: PrComment[] }) {
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+function CommentAuthorRow({
+  displayName,
+  slug,
+  connectionId,
+  at,
+}: {
+  displayName: string;
+  slug: string;
+  connectionId: string;
+  at: string;
+}) {
+  return (
+    <div className="comment-zone-head">
+      <Avatar
+        connectionId={connectionId}
+        slug={slug}
+        displayName={displayName}
+        size={18}
+      />
+      <strong>{displayName}</strong>
+      <span className="muted">{new Date(at).toLocaleString()}</span>
     </div>
   );
 }

@@ -164,10 +164,10 @@ export class BitbucketServerAdapter implements PlatformAdapter {
         const u = await this.client.get<BBUser>(
           `/rest/api/1.0/users/${encodeURIComponent(slug)}`,
         );
-        this.cachedUser = { name: u.name, displayName: u.displayName };
+        this.cachedUser = { name: u.name, displayName: u.displayName, slug: u.slug };
       } catch {
         // /users/{slug} 失败时退而求其次，slug 当 displayName
-        this.cachedUser = { name: slug, displayName: slug };
+        this.cachedUser = { name: slug, displayName: slug, slug };
       }
     }
 
@@ -217,6 +217,26 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     );
   }
 
+  async getUserAvatar(
+    slug: string,
+  ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+    // BBS user slug 总是小写；comments / activities 端点的 author 经常带回大小写
+    // 混合的 name (如 "Avery.Lee") 而不附 slug 字段，调用方退回 name 时大小写
+    // 不一致会 404。先按原值试，失败再小写一次。
+    const candidates =
+      slug !== slug.toLowerCase() ? [slug, slug.toLowerCase()] : [slug];
+    for (const s of candidates) {
+      try {
+        return await this.client.getBinary(`/users/${encodeURIComponent(s)}/avatar.png`, {
+          s: '64',
+        });
+      } catch {
+        // 试下一个
+      }
+    }
+    return null;
+  }
+
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
     // BBS 走 /activities 拿全部活动，过滤 COMMENTED + ADDED（top-level + 回复）。
     // - 跳过 DELETED / UPDATED 派生事件
@@ -263,7 +283,7 @@ function mapBBAnchor(a: BBCommentAnchor): PrCommentAnchor {
 }
 
 function mapUser(u: BBUser): PlatformUser {
-  return { name: u.name, displayName: u.displayName };
+  return { name: u.name, displayName: u.displayName, slug: u.slug };
 }
 
 function mapReviewer(p: BBParticipant): Reviewer {

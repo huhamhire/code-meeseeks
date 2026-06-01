@@ -222,8 +222,8 @@ describe('BitbucketServerAdapter whoami / getCurrentUser', () => {
       ),
     );
     const r = await adapter.ping();
-    expect(r.user).toEqual({ name: 'kyle', displayName: 'Kyle Smith' });
-    expect(adapter.getCurrentUser()).toEqual({ name: 'kyle', displayName: 'Kyle Smith' });
+    expect(r.user).toEqual({ name: 'kyle', displayName: 'Kyle Smith', slug: 'kyle' });
+    expect(adapter.getCurrentUser()).toEqual({ name: 'kyle', displayName: 'Kyle Smith', slug: 'kyle' });
   });
 
   it('falls back to slug as displayName when /users/{slug} 404s', async () => {
@@ -242,7 +242,7 @@ describe('BitbucketServerAdapter whoami / getCurrentUser', () => {
       ),
     );
     const r = await adapter.ping();
-    expect(r.user).toEqual({ name: 'kyle', displayName: 'kyle' });
+    expect(r.user).toEqual({ name: 'kyle', displayName: 'kyle', slug: 'kyle' });
   });
 
   it('skips user fetch when X-AUSERNAME header is absent', async () => {
@@ -285,7 +285,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
       remoteId: '1022',
       title: 'feat 发布搜索和AI优化',
       description: '',
-      author: { name: 'musk.chen', displayName: 'Musk.Chen-高晨' },
+      author: { name: 'musk.chen', displayName: 'Musk.Chen-高晨', slug: 'musk.chen' },
       state: 'open',
       draft: false,
       sourceRef: { displayId: 'dev', sha: 'abc123' },
@@ -294,7 +294,9 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
       url: 'https://bb.example.com/projects/FX/repos/fx-help/pull-requests/1022',
       createdAt: new Date(Date.parse('2026-05-28T01:00:00Z')).toISOString(),
       updatedAt: new Date(Date.parse('2026-05-28T09:30:43Z')).toISOString(),
-      reviewers: [{ name: 'reviewer1', displayName: 'Reviewer One', status: 'approved' }],
+      reviewers: [
+        { name: 'reviewer1', displayName: 'Reviewer One', slug: 'reviewer1', status: 'approved' },
+      ],
       hasConflict: false,
     });
   });

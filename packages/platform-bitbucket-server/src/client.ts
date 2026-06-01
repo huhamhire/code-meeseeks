@@ -54,6 +54,53 @@ export class BBClient {
   }
 
   /**
+   * 拉二进制资源（avatar.png 等）。非 2xx 时抛 BBClientError 携带 status / 简短
+   * body，方便调用方区分 404（用户无头像）vs 401（鉴权失败）vs 其他。content-type
+   * 透传，方便 renderer 拼 data URL。
+   */
+  async getBinary(
+    path: string,
+    params?: Record<string, string>,
+  ): Promise<{ bytes: Uint8Array; contentType: string }> {
+    const url = new URL(`${this.baseUrl}${path}`);
+    if (params) for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
+    let res: Response;
+    try {
+      res = await this.fetchFn(url.toString(), {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: 'image/*,*/*;q=0.5',
+        },
+        signal: ctl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      // 错误响应通常很短（HTML / JSON），尽量带 100 字便于诊断
+      let body = '';
+      try {
+        body = (await res.text()).slice(0, 200);
+      } catch {
+        /* ignore */
+      }
+      throw new BBClientError(
+        `${String(res.status)} ${res.statusText} on GET ${url.pathname}`,
+        res.status,
+        body,
+      );
+    }
+    const buf = await res.arrayBuffer();
+    return {
+      bytes: new Uint8Array(buf),
+      contentType: res.headers.get('content-type') ?? 'image/png',
+    };
+  }
+
+  /**
    * 同 get，但同时返回响应头。BBS 的 `X-AUSERNAME` / `X-AUSERID` 在每个鉴权
    * 请求的响应头里，是 ping 时拿当前用户的可靠路径。
    */

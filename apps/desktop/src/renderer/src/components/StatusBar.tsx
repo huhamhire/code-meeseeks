@@ -7,9 +7,11 @@ interface StatusBarProps {
   connections: ConnectionSummary[];
   refreshing: boolean;
   sidebarCollapsed: boolean;
+  chatCollapsed: boolean;
   /** Poller 最近一次完成时间（ISO 字符串）；null 表示从未同步 */
   lastSyncAt: string | null;
   onToggleSidebar: () => void;
+  onToggleChat: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
 }
@@ -20,8 +22,10 @@ export function StatusBar({
   connections,
   refreshing,
   sidebarCollapsed,
+  chatCollapsed,
   lastSyncAt,
   onToggleSidebar,
+  onToggleChat,
   onRefresh,
   onOpenSettings,
 }: StatusBarProps) {
@@ -55,6 +59,16 @@ export function StatusBar({
       <button
         type="button"
         className="icon-btn"
+        onClick={onToggleChat}
+        title={chatCollapsed ? '展开 pr-agent chat' : '收起 pr-agent chat'}
+        aria-label={chatCollapsed ? '展开 chat' : '收起 chat'}
+        aria-pressed={!chatCollapsed}
+      >
+        <ChatPanelIcon collapsed={chatCollapsed} />
+      </button>
+      <button
+        type="button"
+        className="icon-btn"
         onClick={onOpenSettings}
         title="设置"
         aria-label="设置"
@@ -62,6 +76,25 @@ export function StatusBar({
         <SettingsIcon />
       </button>
     </footer>
+  );
+}
+
+/** 镜像版 SidebarIcon：细条在右侧表示 chat 面板 */
+function ChatPanelIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden="true"
+    >
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <line x1="9.5" y1="3" x2="9.5" y2="13" />
+      {collapsed && <rect x="9.5" y="3" width="4.5" height="10" fill="currentColor" />}
+    </svg>
   );
 }
 

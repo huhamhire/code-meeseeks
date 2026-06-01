@@ -11,6 +11,11 @@ export interface PlatformUser {
   name: string;
   /** 给人看的展示名 */
   displayName: string;
+  /**
+   * URL 友好的 slug，平台特定。BBS 里 user.slug 可能与 user.name 大小写不同，
+   * 走 avatar 等 URL 路径的接口必须用 slug；缺失时调用方走 name 兜底。
+   */
+  slug?: string;
 }
 
 /** Reviewer 在 PR 上的当前判定。BBS: APPROVED / NEEDS_WORK / UNAPPROVED */
@@ -106,4 +111,11 @@ export interface PlatformAdapter {
    * 删除的评论会被过滤掉。
    */
   listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]>;
+
+  /**
+   * 按用户 slug 拉头像图片。返回原始字节 + content-type，main 进程负责缓存与
+   * 转 data URL；renderer 不直接 fetch（无 token、无法跨 origin 取私有 BBS 资源）。
+   * 平台不支持或拉取失败时返回 null，调用方走 initials 回退。
+   */
+  getUserAvatar(slug: string): Promise<{ bytes: Uint8Array; contentType: string } | null>;
 }

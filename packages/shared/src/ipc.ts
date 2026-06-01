@@ -90,6 +90,14 @@ export interface IpcChannels {
   'app:openDevTools': { request: void; response: void };
   /** 各连接的 ping 后缓存：当前用户 + display_name，Header 用 */
   'app:connections': { request: void; response: ConnectionSummary[] };
+  /**
+   * 按 (connectionId, slug) 拉用户头像 data URL；主进程缓存命中直接返回。
+   * 平台不支持 / 网络失败 / 用户无头像时返回 null，renderer 走 initials 回退。
+   */
+  'app:userAvatar': {
+    request: { connectionId: string; slug: string };
+    response: { dataUrl: string } | null;
+  };
   'config:read': { request: void; response: Config };
   'prs:list': { request: void; response: StoredPullRequest[] };
   'prs:refresh': { request: void; response: PollResult };

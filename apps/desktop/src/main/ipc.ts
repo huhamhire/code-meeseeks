@@ -63,6 +63,45 @@ export function registerIpcHandlers({
     'app:connections',
     (): IpcChannels['app:connections']['response'] => buildConnectionSummaries(bootstrap, adapters),
   );
+
+  // (connectionId, slug) → dataUrl 或 null（拉失败 / 平台不支持）。
+  // 命中 cache 直接返回，null 也缓存避免重复打 BBS。
+  const avatarCache = new Map<string, { dataUrl: string } | null>();
+  ipcMain.handle(
+    'app:userAvatar',
+    async (
+      _evt,
+      req: IpcChannels['app:userAvatar']['request'],
+    ): Promise<IpcChannels['app:userAvatar']['response']> => {
+      const key = `${req.connectionId}|${req.slug}`;
+      if (avatarCache.has(key)) return avatarCache.get(key)!;
+      const adapter = adapters.find((a) => a.connectionId === req.connectionId)?.adapter;
+      if (!adapter) {
+        avatarCache.set(key, null);
+        return null;
+      }
+      try {
+        const img = await adapter.getUserAvatar(req.slug);
+        if (!img) {
+          logger.debug({ connectionId: req.connectionId, slug: req.slug }, 'avatar fetch returned null');
+          avatarCache.set(key, null);
+          return null;
+        }
+        const base64 = Buffer.from(img.bytes).toString('base64');
+        const result = { dataUrl: `data:${img.contentType};base64,${base64}` };
+        logger.debug(
+          { connectionId: req.connectionId, slug: req.slug, bytes: img.bytes.length, contentType: img.contentType },
+          'avatar fetched',
+        );
+        avatarCache.set(key, result);
+        return result;
+      } catch (err) {
+        logger.warn({ err, connectionId: req.connectionId, slug: req.slug }, 'avatar fetch threw');
+        avatarCache.set(key, null);
+        return null;
+      }
+    },
+  );
   ipcMain.handle('config:read', (): IpcChannels['config:read']['response'] => bootstrap.config);
   ipcMain.handle('app:openConfigFile', async (): Promise<void> => {
     const err = await shell.openPath(bootstrap.paths.configFile);

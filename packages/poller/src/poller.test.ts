@@ -45,6 +45,9 @@ class FakeAdapter implements PlatformAdapter {
   async listPullRequestComments(): Promise<never[]> {
     return [];
   }
+  async getUserAvatar(): Promise<null> {
+    return null;
+  }
 }
 
 const noop = (): void => undefined;
@@ -191,6 +194,9 @@ describe('Poller.tick', () => {
       },
       async listPullRequestComments() {
         return [];
+      },
+      async getUserAvatar() {
+        return null;
       },
       listPendingPullRequests: () => new Promise<PullRequest[]>((r) => (resolveList = r)),
     };

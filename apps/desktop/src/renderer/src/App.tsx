@@ -9,6 +9,7 @@ import type {
   StoredPullRequest,
 } from '@pr-pilot/shared';
 import { invoke, subscribe } from './api';
+import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/ChatPane';
 import { MainPane } from './components/MainPane';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/Sidebar';
@@ -39,12 +40,27 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
     () => localStorage.getItem('pr-pilot.sidebarCollapsed') === '1',
   );
+  const [chatWidth, setChatWidth] = useState<number>(() => {
+    const raw = localStorage.getItem('pr-pilot.chatWidth');
+    const n = raw ? Number(raw) : 360;
+    return Math.min(CHAT_MAX_WIDTH, Math.max(CHAT_MIN_WIDTH, Number.isFinite(n) ? n : 360));
+  });
+  const [chatCollapsed, setChatCollapsed] = useState<boolean>(
+    // 默认收起：M3 之前 chat 还是空壳，避免空占地方
+    () => (localStorage.getItem('pr-pilot.chatCollapsed') ?? '1') === '1',
+  );
   useEffect(() => {
     localStorage.setItem('pr-pilot.sidebarWidth', String(sidebarWidth));
   }, [sidebarWidth]);
   useEffect(() => {
     localStorage.setItem('pr-pilot.sidebarCollapsed', sidebarCollapsed ? '1' : '0');
   }, [sidebarCollapsed]);
+  useEffect(() => {
+    localStorage.setItem('pr-pilot.chatWidth', String(chatWidth));
+  }, [chatWidth]);
+  useEffect(() => {
+    localStorage.setItem('pr-pilot.chatCollapsed', chatCollapsed ? '1' : '0');
+  }, [chatCollapsed]);
 
   const reloadPrs = useCallback(async (): Promise<void> => {
     const fresh = await invoke('prs:list', undefined);
@@ -157,6 +173,9 @@ export default function App() {
           hasConnections={boot.config.connections.length > 0}
           onSetStatus={(s) => void setSelectedPrStatus(s)}
         />
+        {!chatCollapsed && (
+          <ChatPane pr={selected} width={chatWidth} onResize={setChatWidth} />
+        )}
       </div>
       <StatusBar
         prsCount={prs.length}
@@ -164,8 +183,10 @@ export default function App() {
         connections={boot.connections}
         refreshing={refreshing}
         sidebarCollapsed={sidebarCollapsed}
+        chatCollapsed={chatCollapsed}
         lastSyncAt={lastSyncAt}
         onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
+        onToggleChat={() => setChatCollapsed((c) => !c)}
         onRefresh={() => void triggerRefresh()}
         onOpenSettings={() => setShowSettings(true)}
       />
