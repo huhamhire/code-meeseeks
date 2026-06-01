@@ -2014,6 +2014,11 @@ textarea {
   cursor: pointer;
   border: none;
 }
+/* 启用模型时用 VS Code 蓝标签色，跟 pending status-tag / blame-toggle.active 同色 */
+.statusbar-llm-chip-active {
+  background: #0e639c;
+  color: #ffffff;
+}
 .llm-chip-menu {
   position: absolute;
   bottom: calc(100% + 4px);

@@ -132,7 +132,7 @@ function LlmChip({
     <span className="statusbar-llm-wrap">
       <button
         type="button"
-        className={`statusbar-chip statusbar-llm-chip${empty ? '' : ' statusbar-chip-ok'}`}
+        className={`statusbar-chip statusbar-llm-chip${empty ? '' : ' statusbar-llm-chip-active'}`}
         title={title}
         onClick={onClick}
       >
