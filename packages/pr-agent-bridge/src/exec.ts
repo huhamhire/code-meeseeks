@@ -45,6 +45,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
           shell: false,
           windowsHide: true,
           env: opts.env ? { ...process.env, ...opts.env } : process.env,
+          cwd: opts.cwd,
         });
       } catch (e) {
         reject(

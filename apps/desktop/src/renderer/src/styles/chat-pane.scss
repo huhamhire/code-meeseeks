@@ -1,4 +1,4 @@
-// 右侧 pr-agent chat 面板 (M3 占位 + M3-D 真实交互)
+// 右侧 pr-agent chat 面板 (M3-D 真实交互)
 
 @use './tokens' as *;
 
@@ -62,12 +62,36 @@
   letter-spacing: 0.04em;
 }
 
+// 头部下方的动作条：/describe + /review + 上下文提示。Sticky 在 body 之上
+.chat-pane-actions {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding: $space-3 $space-6;
+  border-bottom: 1px solid $border-muted;
+  background: $bg-panel-alt;
+  flex-shrink: 0;
+}
+.chat-pane-action {
+  font-family: $font-mono;
+  letter-spacing: 0.02em;
+}
+.chat-pane-action-hint {
+  margin-left: auto;
+  font-size: $fs-xs;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 .chat-pane-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 14px;
+  padding: $space-5 $space-6;
 }
 
+// === 空态 ===
 .chat-empty {
   display: flex;
   flex-direction: column;
@@ -132,6 +156,242 @@
   line-height: $lh-loose;
 }
 
+// === 失败 banner ===
+.chat-error {
+  background: rgba(244, 135, 113, 0.08);
+  border: 1px solid rgba(244, 135, 113, 0.35);
+  color: $text-body;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  margin-bottom: $space-4;
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+
+  strong {
+    color: $color-danger;
+    margin-right: $space-2;
+  }
+}
+.chat-error-detail {
+  margin-top: $space-2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: $font-mono;
+  font-size: $fs-xs;
+  color: $text-muted;
+}
+
+// 失败 run 内嵌的 stderr / stdout 折叠区：在 chat-error 红色 banner 里多一层缩进
+.chat-error-stderr,
+.chat-error-stdout {
+  margin-top: $space-3;
+  font-size: $fs-xs;
+
+  summary {
+    cursor: pointer;
+    color: $text-muted;
+    padding: $space-1 0;
+    user-select: none;
+  }
+  // 内嵌的 stdout panel 用更小的字号 + 限高，避免遮住下方 finding 列表
+  .chat-run-stdout {
+    max-height: 280px;
+    font-size: $fs-xs;
+    margin-top: $space-2;
+  }
+}
+
+// === 运行中：spinner + 实时 stdout ===
+.chat-run-running {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+.chat-run-running-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  font-size: $fs-md;
+  color: $text-primary;
+  flex-wrap: wrap;
+}
+
+// 计时器：等长 LLM 调用时让用户能看到秒数走动，不是卡死
+.chat-run-elapsed {
+  font-family: $font-mono;
+  font-size: $fs-sm;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+}
+
+// 软提示：超过 15s 提示用户 LLM 通常耗时区间
+.chat-run-hint {
+  font-size: $fs-sm;
+}
+
+.chat-run-stdout {
+  margin: 0;
+  background: $bg-app;
+  border: 1px solid $border-muted;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  font-family: $font-mono;
+  font-size: $fs-sm;
+  color: $text-body;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+// === Run 结果 ===
+.chat-run-result {
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+.chat-run-meta {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  font-size: $fs-sm;
+  padding-bottom: $space-3;
+  border-bottom: 1px solid $border-muted;
+}
+.chat-run-tool {
+  font-family: $font-mono;
+  font-weight: 600;
+  color: $color-info;
+}
+.chat-run-status {
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  font-size: $fs-xs;
+  font-weight: 600;
+  text-transform: uppercase;
+
+  &.chat-run-status-running {
+    background: $color-accent;
+    color: $text-on-accent;
+  }
+  &.chat-run-status-succeeded {
+    background: $color-approved;
+    color: $text-on-accent;
+  }
+  &.chat-run-status-failed {
+    background: $color-danger-bg;
+    color: $text-on-accent;
+  }
+  &.chat-run-status-cancelled {
+    background: $border-default;
+    color: $text-primary;
+  }
+}
+
+.chat-run-raw {
+  margin-top: $space-2;
+  font-size: $fs-sm;
+
+  summary {
+    cursor: pointer;
+    color: $text-muted;
+    padding: $space-2 0;
+  }
+}
+
+// === Findings ===
+.chat-finding-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+.chat-finding {
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-left: 3px solid $border-default;
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+
+  // 按 category 着不同的左条颜色：描述 = 中性蓝，general = 灰，code-feedback = 黄
+  &.chat-finding-description {
+    border-left-color: $color-info;
+  }
+  &.chat-finding-general {
+    border-left-color: $border-default;
+  }
+  &.chat-finding-code-feedback {
+    border-left-color: $color-warning;
+  }
+}
+.chat-finding-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  margin-bottom: $space-3;
+}
+.chat-finding-cat {
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  font-size: $fs-xs;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+
+  &.chat-finding-cat-description {
+    background: $color-accent-bg-fade;
+    color: $color-info;
+  }
+  &.chat-finding-cat-general {
+    background: $bg-surface;
+    color: $text-muted;
+  }
+  &.chat-finding-cat-code-feedback {
+    background: rgba(217, 119, 6, 0.18);
+    color: $color-warning-bright;
+  }
+}
+.chat-finding-title {
+  margin: 0;
+  font-size: $fs-md;
+  font-weight: 600;
+  color: $text-primary;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+.chat-finding-anchor {
+  font-size: $fs-xs;
+  margin-bottom: $space-3;
+  display: flex;
+  gap: $space-2;
+  align-items: baseline;
+
+  code {
+    background: $bg-surface;
+    padding: 0 $space-2;
+    border-radius: $radius-sm;
+    font-family: $font-mono;
+    color: $text-body;
+  }
+}
+.chat-finding-body {
+  font-size: $fs-md;
+}
+.chat-finding-empty {
+  font-size: $fs-sm;
+  line-height: $lh-loose;
+  padding: $space-4;
+  background: $bg-elev;
+  border-radius: $radius-md;
+}
+
+// === /ask 输入占位 (disabled，等 pr-agent 多轮交互稳定后启用) ===
 .chat-pane-input {
   border-top: 1px solid $border-muted;
   padding: $space-4 $space-6 $space-5;

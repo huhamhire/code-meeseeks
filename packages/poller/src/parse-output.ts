@@ -6,6 +6,20 @@ export interface ParsedReviewOutput {
   findings: Finding[];
 }
 
+/**
+ * 剥掉文本里的 ANSI 转义码。pr-agent 在容器里跑时 stdout 也带颜色 (logger 配置使然)，
+ * 解析 / 落到 finding body / 走 react-markdown 渲染都不该带 `\x1b[...m`。
+ * 实时流走 ChatPane 的 AnsiPre 解析，那条路径保留 ANSI；这里只处理"持久化 / 解析"。
+ *
+ * 同时剥 CSI (`ESC [ ... letter`) 和 OSC (`ESC ] ... BEL/ST`) 等常见控制序列。
+ */
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE_RE = /\x1b\[[\d;]*[a-zA-Z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+
+export function stripAnsi(s: string): string {
+  return s.replace(ANSI_ESCAPE_RE, '');
+}
+
 interface Section {
   /** Markdown header 级别 1-6 */
   level: number;
@@ -92,7 +106,7 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
  * stdout。不在这里抛错。
  */
 export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedReviewOutput {
-  const sections = splitMarkdownSections(stdout);
+  const sections = splitMarkdownSections(stripAnsi(stdout));
   if (sections.length === 0) return { findings: [] };
   const findings: Finding[] = sections.map((s, i) => sectionToFinding(s, i, tool));
   // summary：优先取首个有 title 的 section；都没有 title 取首个 body 首行

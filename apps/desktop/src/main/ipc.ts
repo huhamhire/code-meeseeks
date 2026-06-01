@@ -379,6 +379,17 @@ export function registerIpcHandlers({
         return updated ?? { ...run, ...patch };
       };
 
+      // 物化一个临时工作树：HEAD 在命名分支 pr-pilot/head 指向 PR head sha，
+      // pr-pilot/base 指向 PR base sha (pr-agent LocalGitProvider 强约束：HEAD 不能
+      // detached、LOCAL__TARGET_BRANCH 只能是分支名)。跑完无论成败都清掉。
+      // 这条路径 pr-agent 完全不出网到 BBS (除了 LLM API)，不需要 BBS token / VPN / CA
+      const repoId = repoIdentityFor(pr);
+      await repoMirror.syncMirror(repoId);
+      const wt = await repoMirror.materializeWorktree(
+        repoId,
+        pr.sourceRef.sha,
+        pr.targetRef.sha,
+      );
       try {
         const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
         const result = await prAgentBridge.run({
@@ -386,14 +397,34 @@ export function registerIpcHandlers({
           tool: req.tool,
           env: activeLlm ? buildPragentEnv(activeLlm) : undefined,
           onLine,
+          cwd: wt.path,
+          targetBranch: wt.targetBranchName,
         });
-        const parsed = parseReviewOutput(result.stdout, req.tool);
+        // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
+        //   /describe → <wt>/description.md
+        //   /review   → <wt>/review.md
+        // stdout 只有 INFO 级别日志，没有真正的 PR 描述 / review 输出。
+        // 走 worktree 路径，cleanup 前必须先把文件读出来。
+        const outFile = req.tool === 'describe' ? 'description.md' : 'review.md';
+        let fileContent = '';
+        try {
+          fileContent = await fs.readFile(path.join(wt.path, outFile), 'utf8');
+        } catch (readErr) {
+          logger.warn(
+            { err: readErr, wtPath: wt.path, outFile, runId: run.id },
+            'pr-agent local provider output file missing; fall back to stdout',
+          );
+        }
+        const parsed = parseReviewOutput(fileContent || result.stdout, req.tool);
         return await finishWith({
           status: 'succeeded',
           finishedAt: new Date().toISOString(),
           durationMs: Date.now() - t0,
           exitCode: result.exitCode,
-          stdout: result.stdout,
+          // 持久化「LLM 真实产出」(文件内容)；stdout 留作日志在折叠区供排障
+          stdout: fileContent
+            ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
+            : result.stdout,
           stderr: result.stderr,
           findings: parsed.findings,
           summary: parsed.summary,
@@ -431,6 +462,8 @@ export function registerIpcHandlers({
           errorMessage: err instanceof Error ? err.message : String(err),
         });
         throw err;
+      } finally {
+        await wt.cleanup();
       }
     },
   );

@@ -85,6 +85,31 @@ describe('LocalCliBridge', () => {
     expect(bridge.strategy).toBe('local-cli');
     expect(bridge.version).toBe('pr-agent 0.35.0');
   });
+
+  it('cwd 配置后切到 local-mode: --pr_url 的值是 target branch 名 (pr-agent local provider 约定)', async () => {
+    const { exec, calls } = makeRecordingExec();
+    const bridge = new LocalCliBridge('v', exec);
+    await bridge.review({
+      prUrl: 'https://x/pr/1', // 本地模式下 prUrl 不会被用到
+      cwd: '/tmp/wt/abc',
+      targetBranch: 'pr-pilot/base',
+      env: { OPENAI_KEY: 'sk' },
+    });
+    expect(calls[0]!.args).toEqual(['--pr_url', 'pr-pilot/base', 'review']);
+    expect(calls[0]!.opts.cwd).toBe('/tmp/wt/abc');
+    expect(calls[0]!.opts.env).toEqual({
+      OPENAI_KEY: 'sk',
+      CONFIG__GIT_PROVIDER: 'local',
+    });
+  });
+
+  it('local-mode 无 targetBranch: --pr_url 留空 (调用方应保证传)', async () => {
+    const { exec, calls } = makeRecordingExec();
+    const bridge = new LocalCliBridge('v', exec);
+    await bridge.review({ prUrl: 'unused', cwd: '/tmp/wt' });
+    expect(calls[0]!.args).toEqual(['--pr_url', '', 'review']);
+    expect(calls[0]!.opts.env).toEqual({ CONFIG__GIT_PROVIDER: 'local' });
+  });
 });
 
 describe('DockerBridge', () => {
@@ -144,5 +169,45 @@ describe('DockerBridge', () => {
     await bridge.review({ prUrl: 'https://x/pr/1', extraArgs: ['--my_flag'] });
     expect(calls[0]!.args[calls[0]!.args.length - 1]).toBe('--my_flag');
     expect(calls[0]!.args[calls[0]!.args.length - 2]).toBe('review');
+  });
+
+  it('cwd 配置后切到 local-mode: -v 挂 /workspace + -w /workspace + --pr_url = target branch 名', async () => {
+    // 几个反直觉点：
+    // - 挂载点是 /workspace 不是 /app —— pragent/pr-agent 容器 WORKDIR=/app 且代码
+    //   在 /app/pr_agent/，挂用户 worktree 到 /app 会盖掉容器代码
+    // - --entrypoint python + 绝对路径 cli.py：镜像默认 ENTRYPOINT 是相对路径，-w
+    //   改了之后会找错
+    // - --pr_url 的值是 TARGET BRANCH NAME，不是 URL —— local provider 把 --pr_url
+    //   当 LocalGitProvider 第一个位置参数 target_branch_name
+    const { exec, calls } = makeRecordingExec();
+    const bridge = new DockerBridge('v', exec);
+    await bridge.review({
+      prUrl: 'unused-when-cwd-set',
+      cwd: process.platform === 'win32' ? 'D:\\tmp\\wt\\abc' : '/tmp/wt/abc',
+      targetBranch: 'pr-pilot/base',
+      env: { OPENAI_KEY: 'sk' },
+    });
+    const expectedMount = process.platform === 'win32' ? '/d/tmp/wt/abc' : '/tmp/wt/abc';
+    expect(calls[0]!.args).toEqual([
+      'run',
+      '--rm',
+      '-e',
+      'OPENAI_KEY=sk',
+      '-e',
+      'CONFIG__GIT_PROVIDER=local',
+      '-v',
+      `${expectedMount}:/workspace`,
+      '-w',
+      '/workspace',
+      '--entrypoint',
+      'python',
+      'pragent/pr-agent:0.35.0',
+      '/app/pr_agent/cli.py',
+      '--pr_url',
+      'pr-pilot/base',
+      'review',
+    ]);
+    // docker spawn 自己仍然不带 env (token 只进容器)
+    expect(calls[0]!.opts.env).toBeUndefined();
   });
 });

@@ -4,7 +4,12 @@ import type { PrAgentStrategy } from '@pr-pilot/shared';
 export type PrAgentTool = 'describe' | 'review';
 
 export interface PrAgentRunOptions {
-  /** pr-agent 入口 --pr_url；BBS 走 https://host/projects/.../pull-requests/<id> */
+  /**
+   * pr-agent 入口 `--pr_url`。
+   * - 远端模式：BBS PR URL，如 https://host/projects/.../pull-requests/<id>
+   * - 本地模式 (cwd 已配置)：直接传 cwd 路径（容器里固定为 /repo），pr-agent 拿来
+   *   定位本地仓库目录，不会走任何远端 API
+   */
   prUrl: string;
   tool: PrAgentTool;
   /** 注入到子进程的环境变量（LLM key / platform token / config 覆盖） */
@@ -15,6 +20,20 @@ export interface PrAgentRunOptions {
   timeoutMs?: number;
   /** stdout / stderr 整行流式推送（M3-B UI 进度提示用） */
   onLine?: (line: string, stream: 'stdout' | 'stderr') => void;
+  /**
+   * 本地工作树绝对路径。配置后切到 `git_provider=local` 模式：
+   * - LocalCli: 把 cwd 作为子进程工作目录 + `--pr_url <cwd>` 传给 pr-agent
+   * - Docker: `-v <cwd>:/repo -w /repo` + `--pr_url /repo`
+   *
+   * 完全不出网到 BBS，pr-agent 自己跑 `git diff <targetBranch>...HEAD`。
+   * 不设置则走原远端 provider 模式（默认 prUrl 远端拉 PR）。
+   */
+  cwd?: string;
+  /**
+   * 本地 diff 起点。仅 `cwd` 设置时生效；典型值是 PR base sha 或 ref 名。
+   * 传给 pr-agent 的 `--target_branch`；缺省时 pr-agent 自己 fallback 到默认分支。
+   */
+  targetBranch?: string;
 }
 
 export interface PrAgentRunResult {
@@ -54,6 +73,8 @@ export interface ExecOptions {
   timeoutMs: number;
   env?: Record<string, string>;
   onLine?: (line: string, stream: 'stdout' | 'stderr') => void;
+  /** 子进程工作目录；LocalCli 本地模式用，Docker 不需要（容器 cwd 走 -w /repo） */
+  cwd?: string;
 }
 
 /**

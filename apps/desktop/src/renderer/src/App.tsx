@@ -174,7 +174,12 @@ export default function App() {
           onSetStatus={(s) => void setSelectedPrStatus(s)}
         />
         {!chatCollapsed && (
-          <ChatPane pr={selected} width={chatWidth} onResize={setChatWidth} />
+          <ChatPane
+            pr={selected}
+            prAgent={boot.prAgent}
+            width={chatWidth}
+            onResize={setChatWidth}
+          />
         )}
       </div>
       <StatusBar

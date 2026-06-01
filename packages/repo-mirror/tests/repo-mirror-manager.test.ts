@@ -360,3 +360,92 @@ describe('RepoMirrorManager diff/content', () => {
     expect(r.binary).toBe(true);
   });
 });
+
+describe('RepoMirrorManager.materializeWorktree', () => {
+  it('从 bare mirror 派生 self-contained worktree, HEAD 在 pr-pilot/head 命名分支上', async () => {
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+    const headSha = (await simpleGit(upstreamPath).revparse(['HEAD'])).trim();
+
+    const wt = await mgr.materializeWorktree(repo, headSha);
+    try {
+      // worktree 路径在 <reposDir>/<host>/<project>/<repo>/wt/ 下
+      expect(wt.path.startsWith(path.join(reposDir, 'bb.example.com', 'FX', 'fx-help', 'wt'))).toBe(
+        true,
+      );
+      // .git 必须是目录 (self-contained clone)，不是 file (worktree-style 链)
+      const gitStat = await fs.stat(path.join(wt.path, '.git'));
+      expect(gitStat.isDirectory()).toBe(true);
+      // README.md (upstream 初始 commit 的文件) 应该被 checkout 到工作树
+      const readme = await fs.readFile(path.join(wt.path, 'README.md'), 'utf8');
+      expect(readme).toBe('hello');
+      // HEAD 必须在命名分支 pr-pilot/head 上 (pr-agent 要求，不能 detached)
+      const headRef = (await simpleGit(wt.path).raw(['symbolic-ref', 'HEAD'])).trim();
+      expect(headRef).toBe('refs/heads/pr-pilot/head');
+      expect(wt.headBranchName).toBe('pr-pilot/head');
+      // 该分支应该指向 headSha
+      const branchSha = (
+        await simpleGit(wt.path).revparse(['refs/heads/pr-pilot/head'])
+      ).trim();
+      expect(branchSha).toBe(headSha);
+      // 没传 baseSha → 没有 target branch
+      expect(wt.targetBranchName).toBeUndefined();
+    } finally {
+      await wt.cleanup();
+    }
+  });
+
+  it('baseSha 传入后建 pr-pilot/base 分支，targetBranchName 返回该名字', async () => {
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+    // upstream 加一个新 commit；用初始 commit 当 base，新 commit 当 head
+    const baseSha = (await simpleGit(upstreamPath).revparse(['HEAD'])).trim();
+    const upstreamGit = simpleGit(upstreamPath);
+    await fs.writeFile(path.join(upstreamPath, 'NEW.md'), 'feature');
+    await upstreamGit.add('.');
+    await upstreamGit.commit('feature commit');
+    const headSha = (await upstreamGit.revparse(['HEAD'])).trim();
+    await mgr.syncMirror(repo); // fetch new ref into mirror
+
+    const wt = await mgr.materializeWorktree(repo, headSha, baseSha);
+    try {
+      expect(wt.targetBranchName).toBe('pr-pilot/base');
+      const baseBranchSha = (
+        await simpleGit(wt.path).revparse(['refs/heads/pr-pilot/base'])
+      ).trim();
+      expect(baseBranchSha).toBe(baseSha);
+      // head 仍在 pr-pilot/head
+      const headBranchSha = (
+        await simpleGit(wt.path).revparse(['refs/heads/pr-pilot/head'])
+      ).trim();
+      expect(headBranchSha).toBe(headSha);
+    } finally {
+      await wt.cleanup();
+    }
+  });
+
+  it('cleanup 后 worktree 目录消失', async () => {
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+    const headSha = (await simpleGit(upstreamPath).revparse(['HEAD'])).trim();
+    const wt = await mgr.materializeWorktree(repo, headSha);
+    await wt.cleanup();
+    await expect(fs.access(wt.path)).rejects.toThrow();
+  });
+
+  it('并发派生多个 worktree 不会撞名 (Date.now + 随机后缀)', async () => {
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+    const headSha = (await simpleGit(upstreamPath).revparse(['HEAD'])).trim();
+    const [w1, w2, w3] = await Promise.all([
+      mgr.materializeWorktree(repo, headSha),
+      mgr.materializeWorktree(repo, headSha),
+      mgr.materializeWorktree(repo, headSha),
+    ]);
+    try {
+      expect(new Set([w1.path, w2.path, w3.path]).size).toBe(3);
+    } finally {
+      await Promise.all([w1.cleanup(), w2.cleanup(), w3.cleanup()]);
+    }
+  });
+});
