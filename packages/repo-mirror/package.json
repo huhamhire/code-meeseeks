@@ -12,13 +12,19 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint src --max-warnings=0"
+    "lint": "eslint src tests --max-warnings=0"
   },
   "nx": {
     "targets": {
-      "typecheck": { "cache": true },
-      "test": { "cache": true },
-      "lint": { "cache": true }
+      "typecheck": {
+        "cache": true
+      },
+      "test": {
+        "cache": true
+      },
+      "lint": {
+        "cache": true
+      }
     }
   },
   "dependencies": {

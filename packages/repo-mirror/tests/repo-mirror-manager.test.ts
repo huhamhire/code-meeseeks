@@ -7,8 +7,8 @@ import {
   RepoMirrorManager,
   parseBlamePorcelain,
   parseHunkAddedLines,
-} from './repo-mirror-manager.js';
-import type { RepoIdentity } from './types.js';
+} from '../src/repo-mirror-manager.js';
+import type { RepoIdentity } from '../src/types.js';
 
 let tmpRoot: string;
 let upstreamPath: string;

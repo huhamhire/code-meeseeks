@@ -5,8 +5,8 @@ import path from 'node:path';
 import type { Logger } from 'pino';
 import { JsonFileStateStore } from '@pr-pilot/state-store';
 import type { PlatformAdapter, PullRequest } from '@pr-pilot/shared';
-import { Poller, listStoredPullRequests, setLocalStatus } from './poller.js';
-import { PR_INDEX_KEY, type PullRequestsIndexFile } from './types.js';
+import { Poller, listStoredPullRequests, setLocalStatus } from '../src/poller.js';
+import { PR_INDEX_KEY, type PullRequestsIndexFile } from '../src/types.js';
 
 class FakeAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;

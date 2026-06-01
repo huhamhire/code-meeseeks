@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { ConnectionSummary, PrAgentStatus } from '@pr-pilot/shared';
+import type { Config, ConnectionSummary, PrAgentStatus } from '@pr-pilot/shared';
 
 interface StatusBarProps {
   prsCount: number;
   prAgent: PrAgentStatus | null;
   connections: ConnectionSummary[];
+  llm: Config['llm'];
   refreshing: boolean;
   sidebarCollapsed: boolean;
   chatCollapsed: boolean;
@@ -14,12 +15,15 @@ interface StatusBarProps {
   onToggleChat: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
+  /** 切换 active LLM profile，由父组件做实际持久化 */
+  onSwitchActiveLlm: (profileId: string) => void;
 }
 
 export function StatusBar({
   prsCount,
   prAgent,
   connections,
+  llm,
   refreshing,
   sidebarCollapsed,
   chatCollapsed,
@@ -28,6 +32,7 @@ export function StatusBar({
   onToggleChat,
   onRefresh,
   onOpenSettings,
+  onSwitchActiveLlm,
 }: StatusBarProps) {
   return (
     <footer className="app-statusbar" role="contentinfo">
@@ -56,6 +61,7 @@ export function StatusBar({
       <span className="statusbar-chip statusbar-chip-ok">PRs: {prsCount}</span>
       <UserChip connections={connections} />
       <div className="spacer" />
+      <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />
       <button
         type="button"
         className="icon-btn"
@@ -76,6 +82,106 @@ export function StatusBar({
         <SettingsIcon />
       </button>
     </footer>
+  );
+}
+
+/**
+ * 当前 active LLM profile 概要。点击展开下拉，列出所有 profile 直接切换。
+ * 未配置时显示 "LLM: 未配置"，点击直接打开设置。
+ */
+function LlmChip({
+  llm,
+  onSwitch,
+  onOpenSettings,
+}: {
+  llm: Config['llm'];
+  onSwitch: (id: string) => void;
+  onOpenSettings: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  // 点外面关菜单
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent): void => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('.llm-chip-menu') || target?.closest('.statusbar-llm-chip')) return;
+      setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const active = llm.profiles.find((p) => p.id === llm.active_id);
+  const empty = !active;
+  const text = empty ? '未配置' : active.model || active.label || active.provider;
+  const title = empty
+    ? 'LLM 模型未配置；点击打开设置'
+    : `LLM: ${active.label || '(未命名)'}\nprovider: ${active.provider}${
+        active.model ? `\nmodel: ${active.model}` : ''
+      }${active.base_url ? `\nbase_url: ${active.base_url}` : ''}`;
+
+  const onClick = (): void => {
+    if (empty || llm.profiles.length === 0) {
+      onOpenSettings();
+      return;
+    }
+    setOpen((v) => !v);
+  };
+
+  return (
+    <span className="statusbar-llm-wrap">
+      <button
+        type="button"
+        className={`statusbar-chip statusbar-llm-chip${empty ? '' : ' statusbar-chip-ok'}`}
+        title={title}
+        onClick={onClick}
+      >
+        LLM: {text}
+      </button>
+      {open && (
+        <div className="llm-chip-menu" role="menu">
+          {llm.profiles.map((p) => {
+            const isActive = p.id === llm.active_id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={`llm-chip-menu-item${isActive ? ' active' : ''}`}
+                onClick={() => {
+                  onSwitch(p.id);
+                  setOpen(false);
+                }}
+              >
+                <span className="llm-chip-menu-tick" aria-hidden="true">
+                  {isActive ? '✓' : ''}
+                </span>
+                <span className="llm-chip-menu-meta">
+                  <span className="llm-chip-menu-title">
+                    {p.label || `配置 ${p.id.slice(0, 4)}`}
+                  </span>
+                  <span className="muted llm-chip-menu-sub">
+                    {p.provider}
+                    {p.model ? ` · ${p.model}` : ''}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+          <div className="llm-chip-menu-divider" />
+          <button
+            type="button"
+            className="llm-chip-menu-item"
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings();
+            }}
+          >
+            <span className="llm-chip-menu-tick" aria-hidden="true" />
+            <span className="muted">管理 LLM 模型…</span>
+          </button>
+        </div>
+      )}
+    </span>
   );
 }
 

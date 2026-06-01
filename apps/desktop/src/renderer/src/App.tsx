@@ -181,6 +181,7 @@ export default function App() {
         prsCount={prs.length}
         prAgent={boot.prAgent}
         connections={boot.connections}
+        llm={boot.config.llm}
         refreshing={refreshing}
         sidebarCollapsed={sidebarCollapsed}
         chatCollapsed={chatCollapsed}
@@ -189,12 +190,20 @@ export default function App() {
         onToggleChat={() => setChatCollapsed((c) => !c)}
         onRefresh={() => void triggerRefresh()}
         onOpenSettings={() => setShowSettings(true)}
+        onSwitchActiveLlm={(id) => {
+          const next = { ...boot.config.llm, active_id: id };
+          void invoke('config:setLlm', { llm: next });
+          setBoot((b) => (b ? { ...b, config: { ...b.config, llm: next } } : b));
+        }}
       />
       {showSettings && (
         <SettingsModal
           info={boot.info}
           paths={boot.paths}
           config={boot.config}
+          onLlmChange={(llm) =>
+            setBoot((b) => (b ? { ...b, config: { ...b.config, llm } } : b))
+          }
           onClose={() => setShowSettings(false)}
         />
       )}

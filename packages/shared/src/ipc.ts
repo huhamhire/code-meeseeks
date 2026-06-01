@@ -105,6 +105,14 @@ export interface IpcChannels {
   'app:openConfigFile': { request: void; response: void };
   /** 打开 Electron DevTools（分离窗口） */
   'app:openDevTools': { request: void; response: void };
+  /**
+   * 调起系统原生目录选择对话框；用户取消返回 path: null。
+   * defaultPath 可空，作为初始定位目录。
+   */
+  'dialog:pickDirectory': {
+    request: { defaultPath?: string; title?: string };
+    response: { path: string | null };
+  };
   /** 各连接的 ping 后缓存：当前用户 + display_name，Header 用 */
   'app:connections': { request: void; response: ConnectionSummary[] };
   /**
@@ -161,6 +169,8 @@ export interface IpcChannels {
   'repo:getTotalSize': { request: void; response: { totalBytes: number } };
   /** 写入新的 repos_dir 到 config.yaml；重启生效 */
   'config:setReposDir': { request: { reposDir: string }; response: void };
+  /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */
+  'config:setLlm': { request: { llm: Config['llm'] }; response: void };
   /**
    * 触发一次 pr-agent /describe 或 /review。同步等待执行结束（可能数十秒到数分钟），
    * 期间通过 pragent:runProgress 事件推送 stdout / stderr 行。返回最终 ReviewRun

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { JsonFileStateStore } from './json-file-state-store.js';
+import { JsonFileStateStore } from '../src/json-file-state-store.js';
 
 let tmpDir: string;
 let store: JsonFileStateStore;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseReviewOutput, sectionToFinding, splitMarkdownSections } from './parse-output.js';
+import { parseReviewOutput, sectionToFinding, splitMarkdownSections } from '../src/parse-output.js';
 
 describe('splitMarkdownSections', () => {
   it('按 H1-H6 切片，body 去前后空白', () => {

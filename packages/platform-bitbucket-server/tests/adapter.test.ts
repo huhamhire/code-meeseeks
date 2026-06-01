@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BitbucketServerAdapter } from './adapter.js';
-import type { FetchLike } from './client.js';
-import { BBClientError } from './client.js';
+import { BitbucketServerAdapter } from '../src/adapter.js';
+import type { FetchLike } from '../src/client.js';
+import { BBClientError } from '../src/client.js';
 
 type RouteHandler = (url: URL) => unknown;
 

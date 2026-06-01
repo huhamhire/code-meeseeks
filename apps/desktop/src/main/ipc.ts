@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -20,6 +20,7 @@ import type {
   AppInfo,
   ConnectionSummary,
   IpcChannels,
+  LlmProfile,
   PrAgentStatus,
   ReviewRun,
   ReviewRunStatus,
@@ -107,7 +108,7 @@ export function registerIpcHandlers({
         .slice(0, 24);
       const filePath = path.join(avatarDir, `${hash}.bin`);
 
-      // 1) 磁盘 cache 命中且未过期？
+      // 1) 磁盘 cache 命中且未过期？命中不打日志 (高频路径，避免日志噪音)
       try {
         const stat = await fs.stat(filePath);
         const age = Date.now() - stat.mtimeMs;
@@ -118,10 +119,6 @@ export function registerIpcHandlers({
             dataUrl: `data:${contentType};base64,${bytes.toString('base64')}`,
           };
           avatarMem.set(memKey, result);
-          logger.debug(
-            { hash, ageMs: age, slug: req.slug, bytes: bytes.length },
-            'avatar served from disk cache',
-          );
           return result;
         }
         // 过期：删了重拉。删失败也没关系（writeFile 会覆盖）
@@ -184,6 +181,31 @@ export function registerIpcHandlers({
   ipcMain.handle('app:openDevTools', (evt) => {
     evt.sender.openDevTools({ mode: 'detach' });
   });
+
+  ipcMain.handle(
+    'dialog:pickDirectory',
+    async (
+      evt,
+      req: IpcChannels['dialog:pickDirectory']['request'],
+    ): Promise<IpcChannels['dialog:pickDirectory']['response']> => {
+      const win = BrowserWindow.fromWebContents(evt.sender) ?? undefined;
+      const result = win
+        ? await dialog.showOpenDialog(win, {
+            title: req.title ?? '选择目录',
+            defaultPath: req.defaultPath,
+            properties: ['openDirectory', 'createDirectory'],
+          })
+        : await dialog.showOpenDialog({
+            title: req.title ?? '选择目录',
+            defaultPath: req.defaultPath,
+            properties: ['openDirectory', 'createDirectory'],
+          });
+      if (result.canceled || result.filePaths.length === 0) {
+        return { path: null };
+      }
+      return { path: result.filePaths[0]! };
+    },
+  );
 
   ipcMain.handle(
     'prs:list',
@@ -340,11 +362,11 @@ export function registerIpcHandlers({
       };
 
       try {
+        const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
         const result = await prAgentBridge.run({
           prUrl: pr.url,
           tool: req.tool,
-          // M3-B1 暂不读 config.llm；pr-agent 自己从 process.env 取 OPENAI_API_KEY 等。
-          //   M3-C 接入完整 LLM Provider 配置 → buildPragentEnv(bootstrap.config) 注入
+          env: activeLlm ? buildPragentEnv(activeLlm) : undefined,
           onLine,
         });
         const parsed = parseReviewOutput(result.stdout, req.tool);
@@ -428,6 +450,23 @@ export function registerIpcHandlers({
     },
   );
 
+  ipcMain.handle(
+    'config:setLlm',
+    async (_evt, req: IpcChannels['config:setLlm']['request']): Promise<void> => {
+      const next = { ...bootstrap.config, llm: req.llm };
+      await writeConfig(bootstrap.paths.configFile, next);
+      // 内存中 config 同步更新，下一次 pragent:run 立刻用新值（不等重启）
+      bootstrap.config.llm = req.llm;
+      logger.info(
+        {
+          profileCount: req.llm.profiles.length,
+          activeId: req.llm.active_id,
+        },
+        'llm config updated',
+      );
+    },
+  );
+
   logger.debug('IPC handlers registered');
 }
 
@@ -439,6 +478,48 @@ function buildAppInfo(bootstrap: BootstrapResult): AppInfo {
     platform: process.platform,
     firstRun: bootstrap.firstRun,
   };
+}
+
+/** 从 llm config 拿当前选中的 profile；active_id 空或找不到都返回 null */
+function resolveActiveLlmProfile(llm: {
+  profiles: LlmProfile[];
+  active_id: string;
+}): LlmProfile | null {
+  if (!llm.active_id) return null;
+  return llm.profiles.find((p) => p.id === llm.active_id) ?? null;
+}
+
+/**
+ * 把单条 LLM Profile 翻成 pr-agent 认的环境变量。pr-agent 内部 TOML 配置 +
+ * 双下划线 env var 覆盖：`[openai] key = ...` ↔ `OPENAI__KEY=...`。
+ *
+ * 走 env 而不是 `--openai.key=` CLI flag：避免密钥出现在 `ps` 进程列表 /
+ * git reflog；env 仅同用户在 /proc/<pid>/environ 可见，相对安全。
+ *
+ * 空字符串字段一律跳过——别覆盖 pr-agent 默认值或用户 shell 里已有的 env。
+ */
+function buildPragentEnv(profile: LlmProfile): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (profile.model) env['CONFIG__MODEL'] = profile.model;
+  switch (profile.provider) {
+    case 'openai':
+    case 'openai-compatible':
+      if (profile.api_key) env['OPENAI__KEY'] = profile.api_key;
+      if (profile.base_url) env['OPENAI__API_BASE'] = profile.base_url;
+      break;
+    case 'deepseek':
+      // litellm 走 deepseek/<model> 路径；env 用 DEEPSEEK__KEY。base_url 一般无需填
+      if (profile.api_key) env['DEEPSEEK__KEY'] = profile.api_key;
+      if (profile.base_url) env['DEEPSEEK__API_BASE'] = profile.base_url;
+      break;
+    case 'anthropic':
+      if (profile.api_key) env['ANTHROPIC__KEY'] = profile.api_key;
+      break;
+    case 'ollama':
+      if (profile.base_url) env['OLLAMA__API_BASE'] = profile.base_url;
+      break;
+  }
+  return env;
 }
 
 /** 按文件头魔数嗅探常见图片格式；嗅不出退到 octet-stream（浏览器仍可能解码 PNG） */

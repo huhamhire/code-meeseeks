@@ -10,7 +10,7 @@ import {
   makeRunId,
   sanitizePrLocalIdForPath,
   startReviewRun,
-} from './runs.js';
+} from '../src/runs.js';
 
 let tmpRoot: string;
 let store: JsonFileStateStore;

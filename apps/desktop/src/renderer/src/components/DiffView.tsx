@@ -55,6 +55,11 @@ interface BlameBlock {
   lineTo: number;
 }
 
+function formatIsoDate(d: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** 把行号列表合并为连续区段 [from, to]，便于画色带（减少 DOM 节点） */
 function mergeContiguousLines(lines: number[]): Array<[number, number]> {
   if (lines.length === 0) return [];
@@ -229,6 +234,19 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
 
   const selected = files?.find((f) => fileKey(f) === selectedKey) ?? null;
 
+  // BBS 评论附件 markdown 形如 `![alt](attachment:HASH)`；CommentNode 里把
+  // `attachment:` 协议改写成此基址 + `/HASH`，让 <a> 能打开（点击走 Electron
+  // setWindowOpenHandler 转 shell.openExternal，用户在系统浏览器看附件）。
+  // 从 pr.url 解出 protocol+host 即可，pr.repo 提供 project/repo。
+  const attachmentBase = useMemo(() => {
+    try {
+      const u = new URL(pr.url);
+      return `${u.protocol}//${u.host}/projects/${pr.repo.projectKey}/repos/${pr.repo.repoSlug}/attachments`;
+    } catch {
+      return null;
+    }
+  }, [pr.url, pr.repo.projectKey, pr.repo.repoSlug]);
+
   // 给文件树用：path → 锚到该文件的评论数（含双 path 别名 + renamed 的 oldPath）
   const commentCountByPath = useMemo(() => {
     const m = new Map<string, number>();
@@ -278,13 +296,6 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
 
   // 拉 blame：仅在开关开 + 文件有 head 内容时跑。deleted 文件 / 二进制不跑。
   useEffect(() => {
-    console.log('[blame:fetch] effect run', {
-      showBlame,
-      selectedPath: selected?.path,
-      hasContent: !!content,
-      contentHeadBinary: content?.head.binary === true,
-      selectedStatus: selected?.status,
-    });
     if (!showBlame || !selected || !content || content.head.binary) {
       setBlame(null);
       setBlameError(null);
@@ -297,22 +308,9 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
     }
     let cancelled = false;
     setBlameError(null);
-    console.log('[blame:fetch] invoking diff:getBlame', {
-      localId: pr.localId,
-      path: selected.path,
-    });
     invoke('diff:getBlame', { localId: pr.localId, path: selected.path })
       .then((b) => {
-        if (!cancelled) {
-          console.log(
-            '[blame:fetch] got',
-            b.lines.length,
-            'blame lines,',
-            b.changedLines.length,
-            'changed lines',
-          );
-          setBlame(b);
-        }
+        if (!cancelled) setBlame(b);
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -421,7 +419,13 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
           const dom = document.createElement('div');
           dom.className = 'monaco-comment-zone';
           const root = createRoot(dom);
-          root.render(<CommentZone comments={cs} connectionId={pr.connectionId} />);
+          root.render(
+            <CommentZone
+              comments={cs}
+              connectionId={pr.connectionId}
+              attachmentBase={attachmentBase}
+            />,
+          );
           const zoneId = accessor.addZone({
             afterLineNumber: line,
             heightInLines: estimateZoneHeight(cs),
@@ -467,7 +471,7 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
         }
       });
     };
-  }, [diffEditor, comments, content, selected, pr.connectionId]);
+  }, [diffEditor, comments, content, selected, pr.connectionId, attachmentBase]);
 
   if (filesError) {
     return (
@@ -574,28 +578,29 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
 
 /**
  * 估算 view zone 高度（行数）。每段评论 = header(avatar+name+date, 1.3 行) + body
- * 字数 / 80 行向上取整；reply 同样 header + body，外加 reply 自己的 padding/border
- * 各 0.2 行。同行多评论叠加，最后顶天 32 行避免独吞屏幕。
+ * 字数 / 80 行向上取整。回复递归计算，每条 reply 多 0.3 行 (margin/border)。
+ * 同行多评论叠加，最后顶天 32 行避免独吞屏幕。
  */
 function estimateZoneHeight(comments: PrComment[]): number {
   let h = 1; // 上下 padding
-  for (const c of comments) {
-    h += 1.3 + Math.max(1, Math.ceil(c.body.length / 80));
-    for (const r of c.replies) {
-      // reply 自己有 margin + border，多 0.3 行
-      h += 1.3 + Math.max(1, Math.ceil(r.body.length / 80)) + 0.3;
-    }
-    h += 0.3; // item 间分隔
-  }
+  for (const c of comments) h += commentHeight(c) + 0.3; // item 间分隔
   return Math.min(Math.ceil(h), 32);
+}
+
+function commentHeight(c: PrComment): number {
+  let h = 1.3 + Math.max(1, Math.ceil(c.body.length / 80));
+  for (const r of c.replies) h += commentHeight(r) + 0.3;
+  return h;
 }
 
 function CommentZone({
   comments,
   connectionId,
+  attachmentBase,
 }: {
   comments: PrComment[];
   connectionId: string;
+  attachmentBase: string | null;
 }) {
   return (
     <div className="comment-zone-inner">
@@ -604,30 +609,124 @@ function CommentZone({
           key={c.remoteId}
           className={`comment-zone-item${i > 0 ? ' comment-zone-item-divider' : ''}`}
         >
-          <CommentAuthorRow
-            displayName={c.author.displayName}
-            slug={c.author.slug ?? c.author.name}
+          <CommentNode
+            comment={c}
             connectionId={connectionId}
-            at={c.createdAt}
+            depth={0}
+            attachmentBase={attachmentBase}
           />
-          <div className="comment-zone-body markdown">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.body}</ReactMarkdown>
-          </div>
-          {c.replies.map((r) => (
-            <div key={r.remoteId} className="comment-zone-reply">
-              <CommentAuthorRow
-                displayName={r.author.displayName}
-                slug={r.author.slug ?? r.author.name}
-                connectionId={connectionId}
-                at={r.createdAt}
-              />
-              <div className="comment-zone-body markdown">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{r.body}</ReactMarkdown>
-              </div>
-            </div>
-          ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 把 BBS 评论 markdown 里 `attachment:HASH` 形态的 URL 改写为可点击的 BBS 链接。
+ * 返回 null = 不是附件 URL，调用方按原样处理。
+ */
+function resolveAttachmentUrl(href: string, base: string | null): string | null {
+  if (!base || !href.startsWith('attachment:')) return null;
+  const hash = href.slice('attachment:'.length).trim();
+  if (!hash) return null;
+  return `${base}/${encodeURIComponent(hash)}`;
+}
+
+/**
+ * react-markdown components 覆盖：a/img 检测 attachment: 协议，改写到 BBS URL。
+ * 图片附件因为 BBS 需要会话鉴权，渲染器 fetch 不到，统一退化为可点击链接
+ * （📎 alt 文本），点击走 setWindowOpenHandler → shell.openExternal 在系统
+ * 浏览器打开，用户的 BBS 登录 session 能正常加载。
+ */
+function makeCommentMarkdownComponents(
+  attachmentBase: string | null,
+): Parameters<typeof ReactMarkdown>[0]['components'] {
+  return {
+    a: ({ href, children, ...rest }) => {
+      const resolved = href ? resolveAttachmentUrl(href, attachmentBase) : null;
+      const finalHref = resolved ?? href;
+      return (
+        <a {...rest} href={finalHref} target="_blank" rel="noreferrer">
+          {resolved ? '📎 ' : null}
+          {children}
+        </a>
+      );
+    },
+    img: ({ src, alt }) => {
+      const resolved = typeof src === 'string' ? resolveAttachmentUrl(src, attachmentBase) : null;
+      if (resolved) {
+        return (
+          <a
+            href={resolved}
+            target="_blank"
+            rel="noreferrer"
+            className="comment-attachment-link"
+            title="在系统浏览器中打开附件"
+          >
+            📎 {alt || '附件'}
+          </a>
+        );
+      }
+      // 非附件类的外链图片就按原样渲染；可能因 CSP 或网络限制不显示，
+      // alt 文本会兜底
+      return <img src={typeof src === 'string' ? src : ''} alt={alt ?? ''} loading="lazy" />;
+    },
+  };
+}
+
+/**
+ * 递归渲染单条评论 + 它的回复子树。BBS 的 comment.comments[] 是任意层级的，
+ * 之前只画了第一层 → 第三层及以上不显示；这里递归到底。每往下一层左移 18px
+ * 并多一道左竖线（跟 BBS 原生 UI 视觉对齐）。
+ */
+/** 嵌套缩进最大 5 层；第 6 层起 ml=0，跟第 5 层左对齐（避免过深一直右滑） */
+const MAX_REPLY_INDENT_DEPTH = 5;
+
+function CommentNode({
+  comment,
+  connectionId,
+  depth,
+  attachmentBase,
+}: {
+  comment: PrComment;
+  connectionId: string;
+  depth: number;
+  attachmentBase: string | null;
+}) {
+  const components = useMemo(
+    () => makeCommentMarkdownComponents(attachmentBase),
+    [attachmentBase],
+  );
+  const inner = (
+    <>
+      <CommentAuthorRow
+        displayName={comment.author.displayName}
+        slug={comment.author.slug ?? comment.author.name}
+        connectionId={connectionId}
+        at={comment.createdAt}
+      />
+      <div className="comment-zone-body markdown">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {comment.body}
+        </ReactMarkdown>
+      </div>
+      {comment.replies.map((r) => (
+        <CommentNode
+          key={r.remoteId}
+          comment={r}
+          connectionId={connectionId}
+          depth={depth + 1}
+          attachmentBase={attachmentBase}
+        />
+      ))}
+    </>
+  );
+  if (depth === 0) return inner;
+  // 第 1~5 层每层缩进 18px (相对父)；第 6+ 层 ml=0 跟上一级平齐
+  const ml = depth <= MAX_REPLY_INDENT_DEPTH ? 18 : 0;
+  return (
+    <div className="comment-zone-reply" style={{ marginLeft: ml }}>
+      {inner}
     </div>
   );
 }
@@ -875,13 +974,9 @@ function BlameRow({
   height: number;
   connectionId: string;
 }) {
-  const dateStr = block.authorDate
-    ? new Date(block.authorDate).toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : '';
+  // 用 ISO 风格 YYYY-MM-DD：locale 无关、固定 10 字符，在 70px 列宽稳定显示。
+  // toLocaleDateString 的中文输出 "2023年3月29日" 太宽会被截断。
+  const dateStr = block.authorDate ? formatIsoDate(new Date(block.authorDate)) : '';
   const title = `${block.author}\n${block.commit.slice(0, 12)}\n${block.summary}\n${
     block.authorDate ? new Date(block.authorDate).toLocaleString() : ''
   }`;

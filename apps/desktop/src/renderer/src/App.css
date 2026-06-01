@@ -1365,9 +1365,10 @@ textarea {
   padding-left: 26px;
 }
 
+/* margin-left 由 DiffView 内 CommentNode 按 depth 计算后写到 style 里
+   (前 5 层每层 18px，第 6+ 层 0 跟第 5 层平齐) */
 .comment-zone-reply {
   margin-top: 8px;
-  margin-left: 18px;
   padding: 4px 0 4px 10px;
   border-left: 2px solid #3e3e42;
   font-size: 11px;
@@ -1917,6 +1918,162 @@ textarea {
   border-radius: 4px;
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   font-size: 12px;
+}
+
+.settings-secret-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.settings-secret-row .settings-input {
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+  letter-spacing: 0.04em;
+}
+
+/* 必填项标识 + 校验错误样式 */
+.settings-required {
+  color: #f48771;
+  margin-left: 2px;
+}
+.settings-input-error {
+  border-color: #f48771 !important;
+}
+.settings-input-error:focus {
+  border-color: #f48771 !important;
+  box-shadow: 0 0 0 1px rgba(244, 135, 113, 0.3);
+}
+.settings-field-error {
+  color: #f48771;
+  font-size: 11px;
+  margin: 4px 0 0;
+}
+
+/* LLM 模型 - 主面板紧凑列表：每行 active radio + 名称/概要 + 操作按钮 */
+.llm-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.llm-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #3e3e42;
+  border-radius: 5px;
+  background: #1f1f20;
+}
+.llm-profile-row.active {
+  border-color: #0e639c;
+  box-shadow: inset 3px 0 0 #0e639c;
+}
+.llm-profile-active {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.llm-profile-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.llm-profile-title {
+  color: #cccccc;
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-profile-sub {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 嵌套子模态框 + 小模态体 */
+.modal-backdrop-nested {
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1100;
+}
+.modal-sm {
+  max-width: 560px;
+  width: 100%;
+}
+
+/* StatusBar 中的 LLM chip 弹出菜单 */
+.statusbar-llm-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.statusbar-llm-chip {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+}
+.llm-chip-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  min-width: 240px;
+  max-width: 360px;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  padding: 4px 0;
+  z-index: 200;
+}
+.llm-chip-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: #cccccc;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.llm-chip-menu-item:hover {
+  background: #2a2d2e;
+}
+.llm-chip-menu-item.active .llm-chip-menu-title {
+  color: #6cb6ff;
+}
+.llm-chip-menu-tick {
+  width: 12px;
+  color: #6cb6ff;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.llm-chip-menu-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.llm-chip-menu-title {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-chip-menu-sub {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-chip-menu-divider {
+  height: 1px;
+  background: #3e3e42;
+  margin: 4px 0;
 }
 
 .settings-input:focus {

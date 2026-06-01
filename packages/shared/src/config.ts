@@ -25,6 +25,40 @@ export const BitbucketServerConnectionSchema = z.object({
 
 export const ConnectionSchema = z.discriminatedUnion('kind', [BitbucketServerConnectionSchema]);
 
+/**
+ * 单条 LLM 预设。多条 profile 共存，由 `llm.active_id` 切换当前生效。
+ * pr-agent 内部用 litellm；provider 决定走 OPENAI__* / ANTHROPIC__* / OLLAMA__*
+ * 哪族环境变量。`openai-compatible` 覆盖 vLLM / DeepSeek / 中转 / Ollama OpenAI
+ * mode 等所有 OpenAI API 协议兼容的方案。
+ */
+export const LlmProfileSchema = z.object({
+  /** 稳定 id，UI 选中 / 引用用；新建时 renderer 生成 (uuid 或 timestamp) */
+  id: z.string().min(1),
+  /** 给人看的名字，可空，UI 会拿 provider+model 做后备显示 */
+  label: z.string().default(''),
+  provider: z
+    .enum(['openai', 'openai-compatible', 'deepseek', 'anthropic', 'ollama'])
+    .default('openai-compatible'),
+  /** OpenAI 系: api_base；Ollama: api_base。非必填留空 */
+  base_url: z.string().default(''),
+  /**
+   * pr-agent 的 `config.model`，litellm 接受 `<provider>/<name>` 前缀
+   * （如 `ollama/qwen2.5`、`anthropic/claude-3-5-sonnet`），也接受裸名
+   * (`gpt-4o`) 走 OpenAI。
+   */
+  model: z.string().default(''),
+  /** 主密钥；Ollama 之类不需要鉴权的留空 */
+  api_key: z.string().default(''),
+});
+
+export type LlmProvider =
+  | 'openai'
+  | 'openai-compatible'
+  | 'deepseek'
+  | 'anthropic'
+  | 'ollama';
+export type LlmProfile = z.infer<typeof LlmProfileSchema>;
+
 export const ConfigSchema = z.object({
   workspace: z
     .object({
@@ -37,14 +71,57 @@ export const ConfigSchema = z.object({
     })
     .default({}),
   connections: z.array(ConnectionSchema).default([]),
-  llm: z
-    .object({
-      provider: z.string().default('openai-compatible'),
-      base_url: z.string().default(''),
-      model: z.string().default(''),
-      api_key: z.string().default(''),
-    })
-    .default({}),
+  llm: z.preprocess(
+    // 兼容旧 single-config 形态：M3-C 初版用过 { provider, base_url, model, api_key }
+    // 直接作为 llm 字段；现在改成 { profiles: [...], active_id }。检测旧 shape
+    // 自动塞成一个 id='default' 的 profile。
+    (val) => {
+      if (
+        val !== null &&
+        typeof val === 'object' &&
+        !Array.isArray(val) &&
+        !('profiles' in val) &&
+        ('provider' in val ||
+          'model' in val ||
+          'api_key' in val ||
+          'base_url' in val)
+      ) {
+        const o = val as Record<string, unknown>;
+        const oldProvider = typeof o.provider === 'string' ? o.provider : '';
+        // azure 已废，转成 openai-compatible (Azure 本质就是 OpenAI API + 自定义 base_url)
+        const provider = (
+          ['openai', 'openai-compatible', 'deepseek', 'anthropic', 'ollama'] as const
+        ).includes(oldProvider as LlmProvider)
+          ? (oldProvider as LlmProvider)
+          : 'openai-compatible';
+        return {
+          profiles: [
+            {
+              id: 'default',
+              label: '默认',
+              provider,
+              base_url: typeof o.base_url === 'string' ? o.base_url : '',
+              model: typeof o.model === 'string' ? o.model : '',
+              api_key: typeof o.api_key === 'string' ? o.api_key : '',
+            },
+          ],
+          active_id: 'default',
+        };
+      }
+      return val;
+    },
+    z
+      .object({
+        /** 用户保存的多套 LLM 预设（每条独立 provider/model/base_url/key） */
+        profiles: z.array(LlmProfileSchema).default([]),
+        /**
+         * 当前选中的 profile id。空字符串 或 找不到对应 profile 时 pragent:run
+         * 不注入任何 LLM env，pr-agent 退到读 shell 环境变量。
+         */
+        active_id: z.string().default(''),
+      })
+      .default({}),
+  ),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
