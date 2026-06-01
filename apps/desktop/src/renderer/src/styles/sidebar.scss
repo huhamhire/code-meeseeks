@@ -224,19 +224,15 @@
   font-size: $fs-md;
 }
 
-.pr-item-status-skipped .pr-item-title {
-  text-decoration: line-through;
-  color: $text-muted;
-}
-
-.pr-item-status-reviewed .pr-item-title::before {
+// 行级状态前缀：approved 绿勾、needs_work 红叹号；pending 不加
+.pr-item-status-approved .pr-item-title::before {
   content: '✓ ';
-  color: #4caf50;
+  color: $color-approved;
 }
-
-.pr-item-status-ignored .pr-item-title {
-  opacity: 0.55;
-  font-style: italic;
+.pr-item-status-needs_work .pr-item-title::before {
+  content: '! ';
+  color: $color-warning;
+  font-weight: 700;
 }
 
 .conflict-warn {

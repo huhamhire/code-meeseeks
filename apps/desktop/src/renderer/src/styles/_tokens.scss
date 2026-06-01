@@ -34,8 +34,10 @@ $color-accent:        #0e639c; // VS Code 主蓝，active / primary
 $color-accent-bg-fade: rgba(14, 99, 156, 0.18);
 $color-accent-strong-fade: rgba(14, 99, 156, 0.5); // resize handle hover/active
 $color-info:          #6cb6ff; // 浅蓝，链接 / 提示
-$color-success:       #16825d; // 状态栏 remote 风格深绿
-$color-warning:       #cc7900;
+$color-success:        #16825d; // 状态栏 remote 风格深绿 (system OK)
+$color-approved:       #16a34a; // PR review "approved/通过" 专用绿 (Tailwind green-600)
+$color-warning:        #d97706; // PR review "needs work / 需修改" 饱和琥珀 (Tailwind amber-600，对齐 $color-approved 重量)
+$color-warning-bright: #fbbf24; // 亮琥珀，只用于纯文字告警 (conflict-tag / diff-binary)，无背景
 $color-danger:        #f48771; // 错误文案 / 红边框
 $color-danger-bg:     #c72e0f; // 错误 chip 实底
 
@@ -56,11 +58,14 @@ $scrollbar-thumb-hover:  #5e5e5e;
 $scrollbar-thumb-active: #707070;
 
 // ===== 字号 =====
-$fs-xs:  10px;
-$fs-sm:  11px;
-$fs-md:  12px;
-$fs-lg:  13px; // body 默认 / Monaco 编辑器字号
-$fs-xl:  14px;
+// 整体设计基线在 14px：body 默认 / Monaco 编辑器都走 $fs-lg=14。
+// $fs-md=13 是次要文本（输入框 / 小按钮 / 评论正文）；更小的 12 / 11
+// 仅留给 chip 标签 / footer 注脚等单独信息密度高的场景。
+$fs-xs:  11px;
+$fs-sm:  12px;
+$fs-md:  13px;
+$fs-lg:  14px; // body 默认 / Monaco 编辑器字号
+$fs-xl:  16px; // 段落标题 / 主面板顶栏标题
 
 // ===== 行高 =====
 $lh-tight:  1.35;

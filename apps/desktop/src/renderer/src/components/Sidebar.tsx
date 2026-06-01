@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import type { LocalPrStatus, StoredPullRequest } from '@pr-pilot/shared';
 import { PrItem } from './PrItem';
 
-type FilterStatus = 'all' | LocalPrStatus;
+// 'conflict' 是按 hasConflict 跨 status 横切的筛选；'all' 不限定
+type FilterKey = 'all' | LocalPrStatus | 'conflict';
 
 interface SidebarProps {
   prs: StoredPullRequest[];
@@ -15,12 +16,12 @@ interface SidebarProps {
 export const SIDEBAR_MIN_WIDTH = 240;
 export const SIDEBAR_MAX_WIDTH = 720;
 
-const FILTERS: ReadonlyArray<{ value: FilterStatus; label: string }> = [
+const FILTERS: ReadonlyArray<{ value: FilterKey; label: string }> = [
   { value: 'pending', label: '待处理' },
   { value: 'all', label: '全部' },
-  { value: 'reviewed', label: '已评' },
-  { value: 'skipped', label: '已跳过' },
-  { value: 'ignored', label: '已忽略' },
+  { value: 'approved', label: '通过' },
+  { value: 'needs_work', label: '需修改' },
+  { value: 'conflict', label: '冲突' },
 ];
 
 interface PrGroup {
@@ -51,26 +52,33 @@ export function Sidebar({ prs, selectedId, onSelect, width, onResize }: SidebarP
   };
 
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<FilterStatus>('pending');
+  const [filter, setFilter] = useState<FilterKey>('pending');
   // 哪些组当前折叠了。默认空集合 = 全部展开。
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const counts = useMemo(() => {
-    const out: Record<FilterStatus, number> = {
+    const out: Record<FilterKey, number> = {
       all: prs.length,
       pending: 0,
-      reviewed: 0,
-      skipped: 0,
-      ignored: 0,
+      approved: 0,
+      needs_work: 0,
+      conflict: 0,
     };
-    for (const p of prs) out[p.localStatus]++;
+    for (const p of prs) {
+      out[p.localStatus]++;
+      if (p.hasConflict) out.conflict++;
+    }
     return out;
   }, [prs]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return prs.filter((p) => {
-      if (filter !== 'all' && p.localStatus !== filter) return false;
+      if (filter === 'conflict') {
+        if (!p.hasConflict) return false;
+      } else if (filter !== 'all' && p.localStatus !== filter) {
+        return false;
+      }
       if (!q) return true;
       const hay = [
         p.title,

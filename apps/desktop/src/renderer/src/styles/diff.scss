@@ -1,3 +1,5 @@
+@use './tokens' as *;
+
 .diff-view {
   display: flex;
   width: 100%;
@@ -5,43 +7,40 @@
   min-height: 0;
 }
 
+// Split / Unified 切换钮组：紧贴的两个按钮，第二个去掉左 border 避免重叠
 .diff-mode-toggle {
   display: inline-flex;
   gap: 0;
   text-transform: none;
   letter-spacing: 0;
-}
 
-.diff-mode-toggle button {
-  padding: 2px 8px;
-  background: transparent;
-  border: 1px solid #3e3e42;
-  color: #858585;
-  cursor: pointer;
-  font-size: 11px;
-}
+  button {
+    padding: 2px $space-4;
+    background: transparent;
+    border: 1px solid $border-default;
+    color: $text-muted;
+    cursor: pointer;
+    font-size: $fs-sm;
 
-.diff-mode-toggle button + button {
-  border-left: none;
-}
-
-.diff-mode-toggle button:first-child {
-  border-radius: 3px 0 0 3px;
-}
-
-.diff-mode-toggle button:last-child {
-  border-radius: 0 3px 3px 0;
-}
-
-.diff-mode-toggle button:hover:not(.active) {
-  background: #2a2d2e;
-  color: #cccccc;
-}
-
-.diff-mode-toggle button.active {
-  background: #0e639c;
-  color: white;
-  border-color: #0e639c;
+    & + button {
+      border-left: none;
+    }
+    &:first-child {
+      border-radius: $radius-sm 0 0 $radius-sm;
+    }
+    &:last-child {
+      border-radius: 0 $radius-sm $radius-sm 0;
+    }
+    &:hover:not(.active) {
+      background: $bg-hover;
+      color: $text-primary;
+    }
+    &.active {
+      background: $color-accent;
+      color: white;
+      border-color: $color-accent;
+    }
+  }
 }
 
 .diff-content {
@@ -52,22 +51,18 @@
   flex-direction: column;
 }
 
+// 主区 wrapper：左侧 blame-column 是固定宽度；ErrorBoundary 或 DiffPane 走 flex:1
 .diff-pane-wrapper {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: row;
-  /* blame-column 是固定宽度的左侧子项；ErrorBoundary 或 DiffPane 走 flex:1 占剩余 */
-}
 
-.diff-pane-wrapper > .blame-column {
-  /* flex-shrink:0 已经在 .blame-column 上声明，这里不重复 */
-}
-
-.diff-pane-wrapper > *:not(.blame-column) {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
+  > *:not(.blame-column) {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
 }
 
 .diff-empty {
@@ -76,100 +71,117 @@
   justify-content: center;
   height: 100%;
   width: 100%;
-  color: #858585;
-  font-size: 13px;
+  color: $text-muted;
+  font-size: $fs-lg;
   padding: 24px;
   text-align: center;
+
+  code {
+    background: $bg-surface;
+    padding: 1px $space-3;
+    border-radius: $radius-sm;
+    font-family: $font-mono;
+    font-size: $fs-md;
+  }
+  small {
+    display: inline-block;
+    margin-top: $space-4;
+    color: $text-dim;
+    font-size: $fs-sm;
+  }
 }
 
+// 单 pane 内部出错：ErrorBoundary 兜底
 .error-boundary-fallback {
   padding: 24px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
-  background: #1f1f20;
-  color: #cccccc;
-  font-size: 12px;
+  gap: $space-5;
+  background: $bg-panel;
+  color: $text-primary;
+  font-size: $fs-md;
 }
 .error-boundary-title {
-  color: #f48771;
+  color: $color-danger;
   font-weight: 600;
   margin: 0;
 }
 .error-boundary-msg {
-  background: #2d2d30;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
-  padding: 8px 10px;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
   margin: 0;
-  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
-  font-size: 11px;
+  font-family: $font-mono;
+  font-size: $fs-sm;
   max-width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-/* 整块 fallback：拉变更文件本身失败时占满 diff 区 */
+// 整块 fallback：拉变更文件本身失败时占满 diff 区
 .backend-error-view {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: $space-5;
   padding: 24px;
   text-align: left;
 }
 .backend-error-title {
-  color: #f48771;
+  color: $color-danger;
   margin: 0;
-  font-size: 13px;
+  font-size: $fs-lg;
 }
 .backend-error-detail {
-  background: #2d2d30;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
-  padding: 8px 10px;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
   margin: 0;
-  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
-  font-size: 11px;
+  font-family: $font-mono;
+  font-size: $fs-sm;
   max-width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #cccccc;
+  color: $text-primary;
 }
 
-/* 顶部 banner：评论 / 单文件内容这类非阻塞失败时，让 diff 继续显示 */
+// 顶部 banner：评论 / 单文件内容这类非阻塞失败时，让 diff 继续显示。
+// kind=auth / not-found 走更柔和的黄；其余 (network/unknown) 走红
 .backend-error-banner {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
+  gap: $space-5;
+  padding: $space-3 $space-6;
   background: rgba(244, 135, 113, 0.08);
   border-bottom: 1px solid rgba(244, 135, 113, 0.35);
-  color: #cccccc;
-  font-size: 11px;
+  color: $text-primary;
+  font-size: $fs-sm;
   flex-shrink: 0;
-}
-.backend-error-banner-auth,
-.backend-error-banner-not-found {
-  background: rgba(226, 192, 141, 0.1);
-  border-bottom-color: rgba(226, 192, 141, 0.4);
+
+  &.backend-error-banner-auth,
+  &.backend-error-banner-not-found {
+    background: rgba(226, 192, 141, 0.1);
+    border-bottom-color: rgba(226, 192, 141, 0.4);
+  }
 }
 .backend-error-banner-icon {
-  color: #f48771;
-  font-size: 14px;
+  color: $color-danger;
+  font-size: $fs-lg;
   flex-shrink: 0;
 }
 .backend-error-banner-text {
   flex: 1;
   min-width: 0;
   display: flex;
-  gap: 6px;
+  gap: $space-3;
   align-items: baseline;
   overflow: hidden;
 }
 .backend-error-banner-detail {
-  color: #858585;
+  color: $text-muted;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -177,45 +189,43 @@
 }
 .backend-error-banner-actions {
   display: inline-flex;
-  gap: 4px;
+  gap: $space-2;
   flex-shrink: 0;
 }
 .backend-error-banner-dismiss {
-  padding: 0 8px;
+  padding: 0 $space-4;
   line-height: 1;
 }
 
 .diff-error {
-  color: #f48771;
+  color: $color-danger;
   white-space: pre-wrap;
 }
 
+// Mirror sync 进度条 (clone / fetch 阶段占满 diff 区)
 .sync-progress {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: $space-4;
   min-width: 360px;
   max-width: 60%;
 }
-
 .sync-progress-label {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
-  color: #cccccc;
+  font-size: $fs-md;
+  color: $text-primary;
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
 }
-
 .sync-progress-bar {
-  height: 6px;
-  background: #2d2d30;
-  border-radius: 3px;
+  height: $space-3;
+  background: $bg-surface;
+  border-radius: $radius-sm;
   overflow: hidden;
 }
-
 .sync-progress-bar-fill {
   height: 100%;
-  background: #0e639c;
+  background: $color-accent;
   transition: width 0.15s linear;
 }
 
@@ -223,12 +233,12 @@
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid #3e3e42;
-  border-top-color: #0e639c;
-  border-radius: 50%;
+  border: 2px solid $border-default;
+  border-top-color: $color-accent;
+  border-radius: $radius-full;
   animation: spinner-rotate 0.7s linear infinite;
   vertical-align: -2px;
-  margin-right: 4px;
+  margin-right: $space-2;
 }
 
 @keyframes spinner-rotate {
@@ -237,27 +247,13 @@
   }
 }
 
-.diff-empty code {
-  background: #2d2d30;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
-  font-size: 12px;
-}
-
-.diff-empty small {
-  display: inline-block;
-  margin-top: 8px;
-  color: #6e6e6e;
-  font-size: 11px;
-}
-
+// 二进制文件 (image/binary) 占位
 .diff-binary {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
   width: 100%;
-  color: #fbbf24;
-  font-size: 13px;
+  color: $color-warning-bright;
+  font-size: $fs-lg;
 }

@@ -26,7 +26,7 @@
 }
 
 .pr-header-title {
-  font-size: 16px;
+  font-size: $fs-xl;
   font-weight: 600;
   margin-bottom: $space-3;
   line-height: $lh-tight;
@@ -42,6 +42,51 @@
   display: flex;
   gap: $space-3;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+// review 决断按钮组：用 auto margin 顶到右边；wrap 时整组下沉但仍保持右对齐
+.pr-header-actions-right {
+  margin-left: auto;
+  display: inline-flex;
+  gap: $space-3;
+}
+
+// PR review 操作按钮 (approve / needs work) —— 图标 + 文案。
+// 图标用动作语义色：approve = 绿，needs work = 黄 (amber)。
+// 文案在 inactive 状态仍是 $text-body，避免整行文字被绿/黄"染色"破坏对比；
+// active 状态整体填充语义色，icon 与文字一起翻到对比色
+.review-action {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+
+  svg {
+    flex-shrink: 0;
+  }
+  &.review-action-approve svg {
+    color: $color-approved;
+  }
+  &.review-action-needs-work svg {
+    color: $color-warning;
+  }
+
+  &.active.review-action-approve {
+    background: $color-approved;
+    border-color: $color-approved;
+    color: $text-on-accent;
+    svg {
+      color: inherit;
+    }
+  }
+  &.active.review-action-needs-work {
+    background: $color-warning;
+    border-color: $color-warning;
+    color: $text-on-accent;
+    svg {
+      color: inherit;
+    }
+  }
 }
 
 .pr-tabs {
@@ -123,13 +168,13 @@
   right: 0;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) 80px 70px;
-  grid-auto-rows: var(--blame-lh, 18px);
+  grid-auto-rows: var(--blame-lh, 21px);
   gap: $space-3;
   align-items: center;
   align-content: start;
   padding: 0 $space-4 0 $space-5;
   font-size: $fs-sm;
-  line-height: var(--blame-lh, 18px);
+  line-height: var(--blame-lh, 21px);
   color: $text-primary;
   border-bottom: 1px solid $border-default-fade;
   overflow: hidden;
@@ -153,7 +198,7 @@
 .blame-row-sha,
 .blame-row-date {
   font-size: $fs-sm;
-  line-height: var(--blame-lh, 18px);
+  line-height: var(--blame-lh, 21px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

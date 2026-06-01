@@ -20,7 +20,6 @@ import type {
   AppInfo,
   ConnectionSummary,
   IpcChannels,
-  LlmProfile,
   PrAgentStatus,
   ReviewRun,
   ReviewRunStatus,
@@ -28,6 +27,8 @@ import type {
 } from '@pr-pilot/shared';
 import type { JsonFileStateStore } from '@pr-pilot/state-store';
 import type { BuiltAdapter } from './adapters.js';
+import { sniffImageContentType } from './utils/image.js';
+import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 
 interface RegisterDeps {
   bootstrap: BootstrapResult;
@@ -224,8 +225,25 @@ export function registerIpcHandlers({
     async (
       _evt,
       req: IpcChannels['prs:setLocalStatus']['request'],
-    ): Promise<IpcChannels['prs:setLocalStatus']['response']> =>
-      setLocalStatus(stateStore, req.localId, req.status),
+    ): Promise<IpcChannels['prs:setLocalStatus']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
+      // 先写远端：本地 status → BBS reviewer.status；失败抛出，前端不会看到本地变更
+      const remoteStatus =
+        req.status === 'approved'
+          ? 'approved'
+          : req.status === 'needs_work'
+            ? 'needsWork'
+            : 'unapproved';
+      await adapter.setPullRequestReviewStatus(
+        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+        pr.remoteId,
+        remoteStatus,
+      );
+      // 远端 OK 后落本地，UI 立即反映；下一轮 poll 会取回相同值
+      return setLocalStatus(stateStore, req.localId, req.status);
+    },
   );
 
   ipcMain.handle(
@@ -478,85 +496,6 @@ function buildAppInfo(bootstrap: BootstrapResult): AppInfo {
     platform: process.platform,
     firstRun: bootstrap.firstRun,
   };
-}
-
-/** 从 llm config 拿当前选中的 profile；active_id 空或找不到都返回 null */
-function resolveActiveLlmProfile(llm: {
-  profiles: LlmProfile[];
-  active_id: string;
-}): LlmProfile | null {
-  if (!llm.active_id) return null;
-  return llm.profiles.find((p) => p.id === llm.active_id) ?? null;
-}
-
-/**
- * 把单条 LLM Profile 翻成 pr-agent 认的环境变量。pr-agent 内部 TOML 配置 +
- * 双下划线 env var 覆盖：`[openai] key = ...` ↔ `OPENAI__KEY=...`。
- *
- * 走 env 而不是 `--openai.key=` CLI flag：避免密钥出现在 `ps` 进程列表 /
- * git reflog；env 仅同用户在 /proc/<pid>/environ 可见，相对安全。
- *
- * 空字符串字段一律跳过——别覆盖 pr-agent 默认值或用户 shell 里已有的 env。
- */
-function buildPragentEnv(profile: LlmProfile): Record<string, string> {
-  const env: Record<string, string> = {};
-  if (profile.model) env['CONFIG__MODEL'] = profile.model;
-  switch (profile.provider) {
-    case 'openai':
-    case 'openai-compatible':
-      if (profile.api_key) env['OPENAI__KEY'] = profile.api_key;
-      if (profile.base_url) env['OPENAI__API_BASE'] = profile.base_url;
-      break;
-    case 'deepseek':
-      // litellm 走 deepseek/<model> 路径；env 用 DEEPSEEK__KEY。base_url 一般无需填
-      if (profile.api_key) env['DEEPSEEK__KEY'] = profile.api_key;
-      if (profile.base_url) env['DEEPSEEK__API_BASE'] = profile.base_url;
-      break;
-    case 'anthropic':
-      if (profile.api_key) env['ANTHROPIC__KEY'] = profile.api_key;
-      break;
-    case 'ollama':
-      if (profile.base_url) env['OLLAMA__API_BASE'] = profile.base_url;
-      break;
-  }
-  return env;
-}
-
-/** 按文件头魔数嗅探常见图片格式；嗅不出退到 octet-stream（浏览器仍可能解码 PNG） */
-function sniffImageContentType(bytes: Uint8Array): string {
-  if (
-    bytes.length >= 4 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47
-  ) {
-    return 'image/png';
-  }
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return 'image/jpeg';
-  }
-  if (bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
-    return 'image/gif';
-  }
-  if (
-    bytes.length >= 12 &&
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
-  ) {
-    return 'image/webp';
-  }
-  // SVG / XML 以 '<' 起；blame avatar 应该不会出 SVG 但兜底
-  if (bytes.length >= 1 && bytes[0] === 0x3c) {
-    return 'image/svg+xml';
-  }
-  return 'application/octet-stream';
 }
 
 function buildConnectionSummaries(

@@ -142,9 +142,13 @@ app.on('before-quit', () => {
 });
 
 function createWindow(): void {
+  // 最小尺寸保证核心三栏 (sidebar 240 + file-tree 180 + diff 内容)
+  // 在 chat-pane 折叠态下仍可用；高度兜住 pr-header + tabs + diff + statusbar
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    minWidth: 960,
+    minHeight: 600,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),

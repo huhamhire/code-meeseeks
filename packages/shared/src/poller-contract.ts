@@ -1,7 +1,15 @@
 import type { PullRequest } from './platform.js';
 import type { PrAgentStrategy } from './pr-agent-status.js';
 
-export type LocalPrStatus = 'pending' | 'reviewed' | 'skipped' | 'ignored';
+/**
+ * 本地 review 判定。和 BBS reviewer.status 一一对应，UI 由它驱动两个 toggle 按钮：
+ * - pending: 默认（UNAPPROVED），尚未给出 review 判定
+ * - approved: 已 approve
+ * - needs_work: 已标记 NEEDS_WORK
+ *
+ * 用户在 UI 上点击会同步到远端 BBS（参与者 status），下一轮 poll 再次取回保持一致。
+ */
+export type LocalPrStatus = 'pending' | 'approved' | 'needs_work';
 
 /** pr-agent 跑的工具枚举；后续 /ask /improve 来了再加 */
 export type ReviewRunTool = 'describe' | 'review';

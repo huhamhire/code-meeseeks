@@ -20,6 +20,45 @@ function BlameIcon() {
   );
 }
 
+function ApproveIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.5" />
+      <path d="M5 8.3l2.2 2.2L11 6.5" />
+    </svg>
+  );
+}
+
+function NeedsWorkIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.5" />
+      <path d="M8 4.5v4.2" />
+      <circle cx="8" cy="11.3" r="0.4" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 interface MainPaneProps {
   pr: StoredPullRequest | null;
   hasConnections: boolean;
@@ -101,42 +140,32 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
           <a className="btn btn-primary btn-sm" href={pr.url} target="_blank" rel="noreferrer">
             浏览器打开
           </a>
-          {pr.localStatus !== 'skipped' && (
+          {/* approve / needs work：当前状态 = 高亮；点已高亮的回退到 pending（撤销远端标记）。
+              这两个 review 决断按钮右对齐，跟"浏览器打开"在左侧拉开距离 */}
+          <div className="pr-header-actions-right">
             <button
-              className="btn btn-sm"
+              className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
               type="button"
-              onClick={() => onSetStatus('skipped')}
+              onClick={() =>
+                onSetStatus(pr.localStatus === 'approved' ? 'pending' : 'approved')
+              }
+              title={pr.localStatus === 'approved' ? '撤销通过' : '标记为通过'}
+              aria-pressed={pr.localStatus === 'approved'}
             >
-              跳过
+              <ApproveIcon /> 通过
             </button>
-          )}
-          {pr.localStatus !== 'reviewed' && (
             <button
-              className="btn btn-sm"
+              className={`btn btn-sm review-action review-action-needs-work ${pr.localStatus === 'needs_work' ? 'active' : ''}`}
               type="button"
-              onClick={() => onSetStatus('reviewed')}
+              onClick={() =>
+                onSetStatus(pr.localStatus === 'needs_work' ? 'pending' : 'needs_work')
+              }
+              title={pr.localStatus === 'needs_work' ? '撤销"需修改"' : '标记为需修改'}
+              aria-pressed={pr.localStatus === 'needs_work'}
             >
-              已评
+              <NeedsWorkIcon /> 需修改
             </button>
-          )}
-          {pr.localStatus !== 'ignored' && (
-            <button
-              className="btn btn-sm"
-              type="button"
-              onClick={() => onSetStatus('ignored')}
-            >
-              忽略
-            </button>
-          )}
-          {pr.localStatus !== 'pending' && (
-            <button
-              className="btn btn-sm"
-              type="button"
-              onClick={() => onSetStatus('pending')}
-            >
-              重置
-            </button>
-          )}
+          </div>
         </div>
       </header>
       <nav className="pr-tabs" role="tablist">
@@ -164,10 +193,10 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
               type="button"
               className={`blame-toggle ${showBlame ? 'active' : ''}`}
               onClick={() => setShowBlame((b) => !b)}
-              title={showBlame ? '关闭 blame 显示' : '开启 blame 显示（仅 head 侧）'}
+              title={showBlame ? '关闭追溯显示' : '开启追溯显示（仅 head 侧）'}
               aria-pressed={showBlame}
             >
-              <BlameIcon /> Blame
+              <BlameIcon /> 追溯
             </button>
             <div className="diff-mode-toggle" role="tablist" aria-label="diff 显示模式">
               <button
@@ -177,7 +206,7 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
                 role="tab"
                 aria-selected={renderSideBySide}
               >
-                并列
+                并排
               </button>
               <button
                 type="button"
@@ -186,7 +215,7 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
                 role="tab"
                 aria-selected={!renderSideBySide}
               >
-                合并
+                统一
               </button>
             </div>
           </div>

@@ -4,6 +4,7 @@ import type {
   PlatformAdapter,
   PollResult,
   Reviewer,
+  ReviewerStatus,
   StoredPullRequest,
 } from '@pr-pilot/shared';
 import type { StateStore } from '@pr-pilot/state-store';
@@ -24,8 +25,33 @@ function normalizeReviewer(r: Reviewer & { approved?: boolean }): Reviewer {
   };
 }
 
+/**
+ * 旧版 localStatus 取值是 'pending' | 'reviewed' | 'skipped' | 'ignored'。
+ * 新模型仅保留 pending / approved / needs_work，把 BBS reviewer status 当作真实来源。
+ *
+ * - reviewed → approved (旧"已评"语义最接近 approve)
+ * - skipped / ignored → pending (这两个仅是隐藏列表的本地操作，没有远端语义)
+ * - 其余未知值 → pending (兜底)
+ */
+function normalizeLocalStatus(s: unknown): LocalPrStatus {
+  if (s === 'approved' || s === 'needs_work' || s === 'pending') return s;
+  if (s === 'reviewed') return 'approved';
+  return 'pending';
+}
+
 function normalizeStoredPr(pr: StoredPullRequest): StoredPullRequest {
-  return { ...pr, reviewers: pr.reviewers.map(normalizeReviewer) };
+  return {
+    ...pr,
+    reviewers: pr.reviewers.map(normalizeReviewer),
+    localStatus: normalizeLocalStatus(pr.localStatus),
+  };
+}
+
+/** BBS reviewer.status → 本地 LocalPrStatus 单向映射（poll 时把远端权威态拉下来）。 */
+function statusFromReviewer(s: ReviewerStatus | undefined): LocalPrStatus {
+  if (s === 'approved') return 'approved';
+  if (s === 'needsWork') return 'needs_work';
+  return 'pending';
 }
 
 export interface PollerConnection {
@@ -122,31 +148,13 @@ export class Poller {
           const localId = `${connectionId}:${pr.remoteId}`;
           seen.add(localId);
           const prev = byLocalId.get(localId);
-          const approvedByMe =
-            !!me && pr.reviewers.some((r) => r.name === me.name && r.status === 'approved');
+          if (prev && prev.updatedAt !== pr.updatedAt) changed++;
+          if (!prev) added++;
 
-          let localStatus: LocalPrStatus;
-          if (prev) {
-            if (prev.updatedAt !== pr.updatedAt) changed++;
-            localStatus = prev.localStatus;
-            // 冲突 ↔ ignored 双向自动迁移（只在 pending ↔ ignored 之间生效，
-            // 不影响用户手动 skipped / reviewed 决定）
-            if (pr.hasConflict && !prev.hasConflict && localStatus === 'pending') {
-              localStatus = 'ignored';
-            } else if (!pr.hasConflict && prev.hasConflict && localStatus === 'ignored') {
-              localStatus = 'pending';
-            }
-            // approved 单向升 reviewed，优先级最高（即使冲突已批准也算 reviewed）
-            if (approvedByMe && localStatus !== 'reviewed') {
-              localStatus = 'reviewed';
-            }
-          } else {
-            added++;
-            // 优先级：approved > conflict > 默认 pending
-            if (approvedByMe) localStatus = 'reviewed';
-            else if (pr.hasConflict) localStatus = 'ignored';
-            else localStatus = 'pending';
-          }
+          // localStatus 直接镜像 BBS 上当前用户的 reviewer.status。
+          // UI 上点 approve / needs work 时会先 PUT 到 BBS，再下一轮 poll 时此处取回。
+          const mine = me ? pr.reviewers.find((r) => r.name === me.name) : undefined;
+          const localStatus = statusFromReviewer(mine?.status);
 
           byLocalId.set(localId, {
             ...pr,
@@ -188,7 +196,12 @@ export class Poller {
   }
 }
 
-/** 修改某 PR 的本地状态（skipped / reviewed），不影响远端字段。 */
+/**
+ * 在本地状态文件里覆写某 PR 的 localStatus。
+ *
+ * 调用方（IPC handler）通常先 PUT 到 BBS 成功后再调本函数，让本地立即反映新状态；
+ * 下一轮 poll 会从 BBS 拿到同样的值，不会产生抖动。BBS 写入失败时不应该调用本函数。
+ */
 export async function setLocalStatus(
   stateStore: StateStore,
   localId: string,

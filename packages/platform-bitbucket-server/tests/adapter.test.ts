@@ -401,3 +401,109 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
     await expect(adapter.listPendingPullRequests()).rejects.toBeInstanceOf(BBClientError);
   });
 });
+
+describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
+  // approve / needs work / unapproved (撤销) 三个状态映射到 BBS PUT participants 端点
+  function captureFetch(): {
+    fetchFn: FetchLike;
+    calls: { method: string; url: string; body: string | undefined }[];
+  } {
+    const calls: { method: string; url: string; body: string | undefined }[] = [];
+    const fetchFn: FetchLike = async (input, init) => {
+      const url = new URL(input);
+      calls.push({
+        method: init?.method ?? 'GET',
+        url: url.pathname,
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      // ping 第一阶段：application-properties
+      if (url.pathname === '/rest/api/1.0/application-properties') {
+        return new Response(
+          JSON.stringify({ version: '8.0.0', buildNumber: '8000', displayName: 'Bitbucket' }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json', 'x-ausername': 'kyle' },
+          },
+        );
+      }
+      if (url.pathname === '/rest/api/1.0/users/kyle') {
+        return new Response(
+          JSON.stringify({
+            name: 'kyle.smith',
+            displayName: 'Kyle Smith',
+            active: true,
+            slug: 'kyle',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // PUT participants：返回 200 + 模拟 BBS 响应体（实际不读，但需要解析成功）
+      if (url.pathname.includes('/participants/')) {
+        return new Response(JSON.stringify({ approved: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    };
+    return { fetchFn, calls };
+  }
+
+  it('PUT /participants/<slug> with APPROVED + user.name', async () => {
+    const { fetchFn, calls } = captureFetch();
+    const adapter = makeAdapter(fetchFn);
+    await adapter.ping();
+    await adapter.setPullRequestReviewStatus(
+      { projectKey: 'FX', repoSlug: 'fx-help' },
+      '1022',
+      'approved',
+    );
+    const put = calls.find((c) => c.method === 'PUT');
+    expect(put).toBeDefined();
+    expect(put!.url).toBe(
+      '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022/participants/kyle',
+    );
+    expect(JSON.parse(put!.body!)).toEqual({
+      status: 'APPROVED',
+      user: { name: 'kyle.smith' },
+    });
+  });
+
+  it('maps needsWork → NEEDS_WORK in body', async () => {
+    const { fetchFn, calls } = captureFetch();
+    const adapter = makeAdapter(fetchFn);
+    await adapter.ping();
+    await adapter.setPullRequestReviewStatus(
+      { projectKey: 'FX', repoSlug: 'fx-help' },
+      '1022',
+      'needsWork',
+    );
+    const put = calls.find((c) => c.method === 'PUT')!;
+    expect(JSON.parse(put.body!).status).toBe('NEEDS_WORK');
+  });
+
+  it('maps unapproved → UNAPPROVED (撤销之前的标记)', async () => {
+    const { fetchFn, calls } = captureFetch();
+    const adapter = makeAdapter(fetchFn);
+    await adapter.ping();
+    await adapter.setPullRequestReviewStatus(
+      { projectKey: 'FX', repoSlug: 'fx-help' },
+      '1022',
+      'unapproved',
+    );
+    const put = calls.find((c) => c.method === 'PUT')!;
+    expect(JSON.parse(put.body!).status).toBe('UNAPPROVED');
+  });
+
+  it('throws if ping() not called first (cachedUser unknown)', async () => {
+    const { fetchFn } = captureFetch();
+    const adapter = makeAdapter(fetchFn);
+    await expect(
+      adapter.setPullRequestReviewStatus(
+        { projectKey: 'FX', repoSlug: 'fx-help' },
+        '1022',
+        'approved',
+      ),
+    ).rejects.toThrow(/current user unknown/);
+  });
+});

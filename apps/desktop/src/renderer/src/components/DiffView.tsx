@@ -1120,7 +1120,7 @@ function DiffPane({
         readOnly: true,
         renderSideBySide,
         minimap: { enabled: false },
-        fontSize: 13,
+        fontSize: 14,
         scrollBeyondLastLine: false,
         renderOverviewRuler: false,
         // 显式开 glyph margin，给行内评论标记留位置

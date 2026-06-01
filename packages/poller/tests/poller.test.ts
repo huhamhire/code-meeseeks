@@ -48,6 +48,9 @@ class FakeAdapter implements PlatformAdapter {
   async getUserAvatar(): Promise<null> {
     return null;
   }
+  async setPullRequestReviewStatus(): Promise<void> {
+    // 测试只关心 poller 自身行为；setReviewStatus 在 IPC 层调用，poller 不触发
+  }
 }
 
 const noop = (): void => undefined;
@@ -119,8 +122,11 @@ describe('Poller.tick', () => {
     });
   });
 
-  it('second run with same PR: preserves localStatus + discoveredAt, updates lastSeenAt', async () => {
-    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+  it('second run with same PR: preserves discoveredAt, updates lastSeenAt, syncs status from remote', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }];
+    const adapter = new FakeAdapter([pr]);
+    adapter.setCurrentUser('kyle');
     let now = new Date('2026-06-01T00:00:00.000Z');
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
@@ -131,14 +137,13 @@ describe('Poller.tick', () => {
     });
 
     await poller.tick();
-    await setLocalStatus(store, 'bb1:1', 'skipped');
 
     now = new Date('2026-06-02T00:00:00.000Z');
     const r = await poller.tick();
     expect(r).toEqual({ fetched: 1, changed: 0, added: 0, removed: 0, errors: 0 });
 
     const stored = (await listStoredPullRequests(store))[0]!;
-    expect(stored.localStatus).toBe('skipped');
+    expect(stored.localStatus).toBe('pending');
     expect(stored.discoveredAt).toBe('2026-06-01T00:00:00.000Z');
     expect(stored.lastSeenAt).toBe('2026-06-02T00:00:00.000Z');
   });
@@ -197,6 +202,9 @@ describe('Poller.tick', () => {
       },
       async getUserAvatar() {
         return null;
+      },
+      async setPullRequestReviewStatus() {
+        // unused in this test
       },
       listPendingPullRequests: () => new Promise<PullRequest[]>((r) => (resolveList = r)),
     };
@@ -286,7 +294,10 @@ describe('Poller.tick', () => {
     expect(stored.map((p) => p.localId).sort()).toEqual(['broken:a']);
   });
 
-  it('auto-marks new PR with hasConflict as ignored', async () => {
+  // localStatus 直接镜像 BBS reviewer.status，是远端权威态的本地缓存。
+  // hasConflict 不影响 localStatus（仅作为独立维度，UI 通过 hasConflict 单独筛选）。
+
+  it('preserves hasConflict=true on new PR without changing localStatus', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
     pr.hasConflict = true;
     const adapter = new FakeAdapter([pr]);
@@ -297,95 +308,12 @@ describe('Poller.tick', () => {
       logger: noopLogger,
     });
     await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('ignored');
+    const stored = (await listStoredPullRequests(store))[0]!;
+    expect(stored.localStatus).toBe('pending');
+    expect(stored.hasConflict).toBe(true);
   });
 
-  it('pending PR newly conflicted: upgrades to ignored on next poll', async () => {
-    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    const adapter = new FakeAdapter([pr]);
-    const poller = new Poller({
-      connections: [{ connectionId: 'bb1', adapter }],
-      stateStore: store,
-      intervalSeconds: 60,
-      logger: noopLogger,
-    });
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
-
-    adapter.setPrs([{ ...pr, hasConflict: true }]);
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('ignored');
-  });
-
-  it('ignored PR with conflict resolved: auto-reverts to pending', async () => {
-    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    pr.hasConflict = true;
-    const adapter = new FakeAdapter([pr]);
-    const poller = new Poller({
-      connections: [{ connectionId: 'bb1', adapter }],
-      stateStore: store,
-      intervalSeconds: 60,
-      logger: noopLogger,
-    });
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('ignored');
-
-    adapter.setPrs([{ ...pr, hasConflict: false }]);
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
-  });
-
-  it('skipped PR newly conflicted: stays skipped (manual decision preserved)', async () => {
-    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    const adapter = new FakeAdapter([pr]);
-    const poller = new Poller({
-      connections: [{ connectionId: 'bb1', adapter }],
-      stateStore: store,
-      intervalSeconds: 60,
-      logger: noopLogger,
-    });
-    await poller.tick();
-    await setLocalStatus(store, 'bb1:1', 'skipped');
-
-    adapter.setPrs([{ ...pr, hasConflict: true }]);
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('skipped');
-  });
-
-  it('reviewed PR newly conflicted: stays reviewed', async () => {
-    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    const adapter = new FakeAdapter([pr]);
-    const poller = new Poller({
-      connections: [{ connectionId: 'bb1', adapter }],
-      stateStore: store,
-      intervalSeconds: 60,
-      logger: noopLogger,
-    });
-    await poller.tick();
-    await setLocalStatus(store, 'bb1:1', 'reviewed');
-
-    adapter.setPrs([{ ...pr, hasConflict: true }]);
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
-  });
-
-  it('new PR with conflict + approved: approved wins (reviewed)', async () => {
-    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    pr.hasConflict = true;
-    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }];
-    const adapter = new FakeAdapter([pr]);
-    adapter.setCurrentUser('kyle');
-    const poller = new Poller({
-      connections: [{ connectionId: 'bb1', adapter }],
-      stateStore: store,
-      intervalSeconds: 60,
-      logger: noopLogger,
-    });
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
-  });
-
-  it('auto-marks new PR as reviewed when current user is an approved reviewer', async () => {
+  it('maps reviewer.status=approved on current user to localStatus=approved', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
     pr.reviewers = [
       { name: 'kyle', displayName: 'Kyle', status: 'approved' as const },
@@ -400,11 +328,25 @@ describe('Poller.tick', () => {
       logger: noopLogger,
     });
     await poller.tick();
-    const stored = (await listStoredPullRequests(store))[0]!;
-    expect(stored.localStatus).toBe('reviewed');
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('approved');
   });
 
-  it('upgrades existing pending PR to reviewed when current user just approved', async () => {
+  it('maps reviewer.status=needsWork on current user to localStatus=needs_work', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'needsWork' as const }];
+    const adapter = new FakeAdapter([pr]);
+    adapter.setCurrentUser('kyle');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('needs_work');
+  });
+
+  it('reflects remote status changes on subsequent polls (approve → revoke)', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
     pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }];
     const adapter = new FakeAdapter([pr]);
@@ -418,57 +360,59 @@ describe('Poller.tick', () => {
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
 
-    // Remote 端 kyle 在 BBS 上点了 approve
-    adapter.setPrs([
-      {
-        ...pr,
-        reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }],
-      },
-    ]);
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
-  });
-
-  it('upgrades skipped PR to reviewed when later approved on remote', async () => {
-    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }];
-    const adapter = new FakeAdapter([pr]);
-    adapter.setCurrentUser('kyle');
-    const poller = new Poller({
-      connections: [{ connectionId: 'bb1', adapter }],
-      stateStore: store,
-      intervalSeconds: 60,
-      logger: noopLogger,
-    });
-    await poller.tick();
-    await setLocalStatus(store, 'bb1:1', 'skipped');
-
+    // BBS 上 kyle 点了 approve
     adapter.setPrs([
       { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }] },
     ]);
     await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
-  });
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('approved');
 
-  it('does not flip reviewed back to pending if remote approval is later revoked', async () => {
-    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
-    pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }];
-    const adapter = new FakeAdapter([pr]);
-    adapter.setCurrentUser('kyle');
-    const poller = new Poller({
-      connections: [{ connectionId: 'bb1', adapter }],
-      stateStore: store,
-      intervalSeconds: 60,
-      logger: noopLogger,
-    });
-    await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
-
+    // BBS 上 kyle 撤销，回到 pending
     adapter.setPrs([
       { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }] },
     ]);
     await poller.tick();
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
+  });
+
+  // 旧版 (M3-C 之前) pull-requests.json 可能落了 reviewed/skipped/ignored，
+  // 读时需要无声迁移；下次写回会落到新枚举
+  it('migrates legacy localStatus values on read', async () => {
+    const legacyFile: PullRequestsIndexFile = {
+      schema_version: 1,
+      pull_requests: [
+        {
+          ...makePr('1', '2026-05-28T01:00:00.000Z'),
+          localId: 'bb1:1',
+          connectionId: 'bb1',
+          // legacy 字面值，类型 cast 让旧值过 TS 校验
+          localStatus: 'reviewed' as unknown as 'approved',
+          discoveredAt: '2026-05-28T01:00:00.000Z',
+          lastSeenAt: '2026-05-28T01:00:00.000Z',
+        },
+        {
+          ...makePr('2', '2026-05-28T02:00:00.000Z'),
+          localId: 'bb1:2',
+          connectionId: 'bb1',
+          localStatus: 'skipped' as unknown as 'pending',
+          discoveredAt: '2026-05-28T02:00:00.000Z',
+          lastSeenAt: '2026-05-28T02:00:00.000Z',
+        },
+        {
+          ...makePr('3', '2026-05-28T03:00:00.000Z'),
+          localId: 'bb1:3',
+          connectionId: 'bb1',
+          localStatus: 'ignored' as unknown as 'pending',
+          discoveredAt: '2026-05-28T03:00:00.000Z',
+          lastSeenAt: '2026-05-28T03:00:00.000Z',
+        },
+      ],
+    };
+    await store.write(PR_INDEX_KEY, legacyFile);
+    const stored = await listStoredPullRequests(store);
+    expect(stored.find((p) => p.localId === 'bb1:1')!.localStatus).toBe('approved');
+    expect(stored.find((p) => p.localId === 'bb1:2')!.localStatus).toBe('pending');
+    expect(stored.find((p) => p.localId === 'bb1:3')!.localStatus).toBe('pending');
   });
 
   it('writes a valid PullRequestsIndexFile with schema_version', async () => {
@@ -496,9 +440,9 @@ describe('setLocalStatus', () => {
       logger: noopLogger,
     });
     await poller.tick();
-    const updated = await setLocalStatus(store, 'bb1:1', 'reviewed');
-    expect(updated?.localStatus).toBe('reviewed');
-    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('reviewed');
+    const updated = await setLocalStatus(store, 'bb1:1', 'approved');
+    expect(updated?.localStatus).toBe('approved');
+    expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('approved');
   });
 
   it('returns null for an unknown localId', async () => {
@@ -510,12 +454,12 @@ describe('setLocalStatus', () => {
       logger: noopLogger,
     });
     await poller.tick();
-    const updated = await setLocalStatus(store, 'bb1:nope', 'skipped');
+    const updated = await setLocalStatus(store, 'bb1:nope', 'needs_work');
     expect(updated).toBeNull();
   });
 
   it('returns null when the index file does not exist yet', async () => {
-    const updated = await setLocalStatus(store, 'bb1:1', 'skipped');
+    const updated = await setLocalStatus(store, 'bb1:1', 'needs_work');
     expect(updated).toBeNull();
   });
 });

@@ -237,6 +237,34 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     return null;
   }
 
+  /**
+   * 把当前 PAT 用户在 PR 上的 review 状态写到 BBS。底层走
+   * `PUT /pull-requests/{id}/participants/{userSlug}`，body 携带 status + user.name。
+   *
+   * - status: 'approved' → BBS 'APPROVED'；'needsWork' → 'NEEDS_WORK'；
+   *   'unapproved' → 'UNAPPROVED'（撤销之前的标记，回到 pending）
+   * - 必须 ping() 已经跑过且 cachedUser 落地；否则抛
+   */
+  async setPullRequestReviewStatus(
+    repo: RepoRef,
+    prId: string,
+    status: ReviewerStatus,
+  ): Promise<void> {
+    const me = this.cachedUser;
+    if (!me) {
+      throw new Error(
+        'setPullRequestReviewStatus: current user unknown — ping() not called or failed',
+      );
+    }
+    const slug = me.slug ?? me.name;
+    const bbStatus =
+      status === 'approved' ? 'APPROVED' : status === 'needsWork' ? 'NEEDS_WORK' : 'UNAPPROVED';
+    await this.client.put(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/participants/${encodeURIComponent(slug)}`,
+      { status: bbStatus, user: { name: me.name } },
+    );
+  }
+
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
     // BBS 走 /activities 拿全部活动，过滤 COMMENTED + ADDED（top-level + 回复）。
     // - 跳过 DELETED / UPDATED 派生事件

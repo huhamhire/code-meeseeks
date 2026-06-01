@@ -140,6 +140,46 @@ export class BBClient {
   }
 
   /**
+   * 带 JSON body 的 PUT。BBS 的 PR 参与者 status 用 PUT participants/{slug} 写入，
+   * 404 / 401 / 409 等错误抛 BBClientError 并附 status + body，调用方决定降级或抛出。
+   * 响应体 JSON 解析失败时返回 unknown（部分端点返回 204 No Content）。
+   */
+  async put<T>(path: string, body: unknown): Promise<T | null> {
+    const url = `${this.baseUrl}${path}`;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
+    let res: Response;
+    try {
+      res = await this.fetchFn(url, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: ctl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new BBClientError(
+        `${String(res.status)} ${res.statusText} on PUT ${path}`,
+        res.status,
+        txt,
+      );
+    }
+    if (res.status === 204) return null;
+    try {
+      return (await res.json()) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Bitbucket Server 标准分页：start / limit / isLastPage / nextPageStart。
    * 默认 limit=50；遍历直至 isLastPage。
    */

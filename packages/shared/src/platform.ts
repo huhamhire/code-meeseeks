@@ -118,4 +118,18 @@ export interface PlatformAdapter {
    * 平台不支持或拉取失败时返回 null，调用方走 initials 回退。
    */
   getUserAvatar(slug: string): Promise<{ bytes: Uint8Array; contentType: string } | null>;
+
+  /**
+   * 把当前用户在该 PR 上的 review 状态写到远端。
+   * - approved / needsWork: 标记
+   * - unapproved: 撤销之前的标记，回到默认
+   *
+   * 需要 ping() 已经跑过、cachedUser 已经落地，否则无法构造端点 (BBS 需要 userSlug)。
+   * 失败抛 PlatformError 子类；调用方决定是否回滚本地状态。
+   */
+  setPullRequestReviewStatus(
+    repo: RepoRef,
+    prId: string,
+    status: ReviewerStatus,
+  ): Promise<void>;
 }

@@ -16,26 +16,22 @@
   margin-left: $space-1;
   text-transform: uppercase;
 }
-// pending 用 VS Code 主蓝；reviewed 取成功绿；skipped/ignored 借橙黄系警告色
+// pending 用 VS Code 主蓝；approved 走成功绿；needs_work 走 git-decoration 红
 .status-pending {
   background: $color-accent;
   color: $text-on-accent;
 }
-.status-reviewed {
-  background: #16a34a;
+.status-approved {
+  background: $color-approved;
   color: $text-on-accent;
 }
-.status-skipped {
-  background: #4a4a4a;
-  color: $text-muted;
-}
-.status-ignored {
-  background: #d97706;
+.status-needs_work {
+  background: $color-warning;
   color: $text-on-accent;
 }
 
 .conflict-tag {
-  color: #fbbf24;
+  color: $color-warning-bright;
   font-weight: 600;
 }
 
