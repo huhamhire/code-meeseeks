@@ -410,10 +410,10 @@ export function SettingsModal({
           <section className="modal-section">
             <h4>LLM 模型</h4>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              选择活跃配置决定 pr-agent 调用哪个模型；修改即时生效，不需要重启。
+              选择活跃配置决定 PR Agent 调用哪个模型；修改即时生效，不需要重启。
             </p>
             {llm.profiles.length === 0 ? (
-              <p className="muted">尚未配置；添加一条以启用 pr-agent。</p>
+              <p className="muted">尚未配置；添加一条以启用 PR Agent。</p>
             ) : (
               <div className="llm-profile-list">
                 {llm.profiles.map((p) => {

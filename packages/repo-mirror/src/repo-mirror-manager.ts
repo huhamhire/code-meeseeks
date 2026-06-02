@@ -56,6 +56,62 @@ export class RepoMirrorManager {
   }
 
   /**
+   * 检查指定 commit sha 在本地 bare 镜像里是否可达。用于"打开 PR 时若本地已经
+   * 包含 head + base sha 就跳过 fetch"的预检 (省一趟网络往返)。
+   *
+   * 实现：`git cat-file -e <sha>^{commit}` —— 只验证存在性且确实是 commit
+   * 类型 (不是 tree/blob)，命中 exit 0、缺失 exit 非 0。比 `rev-parse` 更轻
+   * (不解析 reflog / refs)，比 `log -1` 更精确 (后者部分远端不全的对象也能"看见")。
+   *
+   * 镜像目录不存在 → 直接 false (尚未 clone)。git 错误 → 视为 false (保守)。
+   */
+  async hasCommit(repo: RepoIdentity, sha: string): Promise<boolean> {
+    if (!sha) return false;
+    const mp = this.mirrorPath(repo);
+    try {
+      await fs.access(mp);
+    } catch {
+      return false;
+    }
+    try {
+      await simpleGit(mp).raw(['cat-file', '-e', `${sha}^{commit}`]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 计算 base..head 之间的 commit 数 (PR 引入的提交数)。完全走本地 bare 镜像
+   * `git rev-list --count <base>..<head>` —— 不打远端，毫秒级返回。
+   *
+   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。
+   *
+   * 任一 sha 不在本地镜像 (尚未 sync 到本 PR 范围) → 返回 null，调用方把它
+   * 当 "暂时未知" 处理 (不显示角标 / 显示加载占位)。
+   */
+  async countCommits(
+    repo: RepoIdentity,
+    baseSha: string,
+    headSha: string,
+  ): Promise<number | null> {
+    if (!baseSha || !headSha) return null;
+    const [hasBase, hasHead] = await Promise.all([
+      this.hasCommit(repo, baseSha),
+      this.hasCommit(repo, headSha),
+    ]);
+    if (!hasBase || !hasHead) return null;
+    const mp = this.mirrorPath(repo);
+    try {
+      const out = await simpleGit(mp).raw(['rev-list', '--count', `${baseSha}..${headSha}`]);
+      const n = Number.parseInt(out.trim(), 10);
+      return Number.isNaN(n) ? null : n;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * 同步镜像：首次 clone bare partial，后续 fetch。
    *
    * 调度规则：

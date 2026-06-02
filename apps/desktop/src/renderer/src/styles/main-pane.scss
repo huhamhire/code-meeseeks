@@ -98,6 +98,24 @@
   padding: 0 $space-6;
   gap: 0;
 
+  // tab 内嵌的数字角标 (评论数 / 待办数等)。圆角胶囊紧贴文字右侧
+  .pr-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    margin-left: $space-2;
+    padding: 0 $space-2;
+    border-radius: $radius-pill;
+    background: $color-accent-bg-fade;
+    color: $color-info;
+    font-size: $fs-xs;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
   .diff-mode-toggle {
     margin-left: auto;
   }
@@ -272,5 +290,242 @@
   overflow: hidden;
   min-height: 0;
   display: flex;
+}
+
+// === 评论标签页 ===
+// 区别于 DiffView 内嵌 inline 评论：这里是 PR 全量评论 (含 summary + inline)，
+// 卡片式排版，自带滚动
+.pr-comments-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: $space-6 20px;
+  background: $bg-app;
+}
+.pr-comments-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-5;
+}
+.pr-comments-replies {
+  margin-top: $space-4;
+  padding-left: $space-6;
+  border-left: 2px solid $border-muted;
+}
+.pr-comment {
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+}
+.pr-comment-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  margin-bottom: $space-3;
+  flex-wrap: wrap;
+}
+.pr-comment-author {
+  font-weight: 600;
+  color: $text-primary;
+}
+.pr-comment-anchor {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-size: $fs-xs;
+
+  // base 侧 (old) 用红调，head 侧 (new) 用绿调，跟 diff 视觉一致
+  &.pr-comment-anchor-old {
+    background: rgba(244, 135, 113, 0.15);
+    color: $color-danger;
+  }
+  &.pr-comment-anchor-new {
+    background: rgba(22, 163, 74, 0.18);
+    color: $color-approved;
+  }
+
+  code {
+    font-family: $font-mono;
+    background: transparent;
+    padding: 0;
+  }
+}
+.pr-comment-time {
+  margin-left: auto;
+  font-size: $fs-xs;
+}
+.pr-comment-body {
+  font-size: $fs-md;
+  line-height: $lh-normal;
+}
+.pr-comments-error {
+  background: rgba(244, 135, 113, 0.08);
+  border: 1px solid rgba(244, 135, 113, 0.35);
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+
+  strong {
+    color: $color-danger;
+  }
+  pre {
+    margin-top: $space-3;
+    font-family: $font-mono;
+    font-size: $fs-xs;
+    color: $text-muted;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
+// inline 评论上方嵌的代码上下文：Monaco read-only，锚定行整行底色
+.comment-code-context {
+  margin: $space-3 0;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  overflow: hidden;
+  background: $bg-app;
+}
+.comment-code-context-loading,
+.comment-code-context-error {
+  margin: $space-3 0;
+  padding: $space-3 $space-4;
+  border: 1px dashed $border-muted;
+  border-radius: $radius-md;
+  font-size: $fs-sm;
+}
+// 懒加载占位按钮：CAP 之外的 inline 评论用，点击才挂 Monaco
+.comment-code-context-toggle {
+  margin: $space-3 0;
+  padding: $space-3 $space-4;
+  border: 1px dashed $border-default;
+  border-radius: $radius-md;
+  background: $bg-surface;
+  color: $text-muted;
+  font-size: $fs-sm;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+  &:hover {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+// Monaco decoration：锚定行整行底色 + 左侧色带 (margin gutter)，跟 inline 锚点
+// chip 颜色保持一组语义 (warning amber 区分于 added 绿 / removed 红)
+.comment-code-context-anchor-line {
+  background: rgba(217, 119, 6, 0.18);
+}
+.comment-code-context-anchor-gutter {
+  background: $color-warning;
+  width: 2px !important;
+}
+
+// === Commits 标签页 ===
+.pr-commits-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: $space-6 20px;
+  background: $bg-app;
+}
+.pr-commits-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: $fs-md;
+
+  thead {
+    position: sticky;
+    top: 0;
+    background: $bg-elev;
+    z-index: 1;
+  }
+  th {
+    text-align: left;
+    padding: $space-3 $space-4;
+    font-weight: 600;
+    color: $text-muted;
+    font-size: $fs-sm;
+    border-bottom: 1px solid $border-default;
+    white-space: nowrap;
+  }
+  td {
+    padding: $space-3 $space-4;
+    border-bottom: 1px solid $border-muted;
+    vertical-align: middle;
+  }
+}
+.pr-commits-row-clickable {
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: $bg-hover;
+  }
+}
+.pr-commits-col-sha {
+  width: 120px;
+  white-space: nowrap;
+
+  code {
+    font-family: $font-mono;
+    font-size: $fs-sm;
+    color: $color-info;
+  }
+}
+.pr-commits-merge-tag {
+  margin-left: $space-2;
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-size: $fs-xs;
+  font-weight: 600;
+}
+.pr-commits-col-subject {
+  // 主题列允许折行；但 cap 高度避免极长 message 把表格撑炸
+  max-width: 0; // trick: 配合 width:100% 让 table-layout 算可用宽，剩余给主题列
+  width: 100%;
+  word-break: break-word;
+}
+.pr-commits-col-author {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding-right: $space-5;
+}
+.pr-commits-col-time {
+  white-space: nowrap;
+  color: $text-muted;
+  font-size: $fs-sm;
+  font-variant-numeric: tabular-nums;
+}
+.pr-commits-error {
+  background: rgba(244, 135, 113, 0.08);
+  border: 1px solid rgba(244, 135, 113, 0.35);
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+
+  strong {
+    color: $color-danger;
+  }
+  pre {
+    margin-top: $space-3;
+    font-family: $font-mono;
+    font-size: $fs-xs;
+    color: $text-muted;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
 }
 

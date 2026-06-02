@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Config, ConnectionSummary, PrAgentStatus } from '@pr-pilot/shared';
 import { useChatRunStore } from '../stores/chat-run-store';
+import { useRepoSyncStore } from '../stores/repo-sync-store';
 
 interface StatusBarProps {
   prsCount: number;
@@ -64,6 +65,9 @@ export function StatusBar({
         <RefreshIcon />
       </button>
       <LastSyncChip at={lastSyncAt} />
+      {/* 当前正在 sync 的 repo (clone/fetch 中)。idle 不渲染，活动时实时显示阶段 +
+          百分比，让用户感知"agent 正在更新仓库镜像"而不是 hang */}
+      <RepoSyncChip />
       {prAgent && <PrAgentChip status={prAgent} />}
       <span
         className="statusbar-chip statusbar-chip-ok statusbar-chip-prs"
@@ -84,7 +88,7 @@ export function StatusBar({
         type="button"
         className="icon-btn"
         onClick={onToggleChat}
-        title={chatCollapsed ? '展开 pr-agent chat' : '收起 pr-agent chat'}
+        title={chatCollapsed ? '展开 PR Agent chat' : '收起 PR Agent chat'}
         aria-label={chatCollapsed ? '展开 chat' : '收起 chat'}
         aria-pressed={!chatCollapsed}
       >
@@ -100,6 +104,39 @@ export function StatusBar({
         <SettingsIcon />
       </button>
     </footer>
+  );
+}
+
+/**
+ * Repo sync 活动 chip：显示当前正在 clone/fetch 的 repo + 阶段 + 百分比。
+ * 队列里只有一条在跑 (RepoMirrorManager 全局单队列)；store 收着多条时只展示首条。
+ * idle 不渲染，避免占状态栏宽度。
+ */
+function RepoSyncChip() {
+  const { active } = useRepoSyncStore();
+  if (active.size === 0) return null;
+  // Map 没保证迭代序，但 sync 同时只跑一个，多于一个时按 startedAt 升序选最早的
+  const snapshots = Array.from(active.values()).sort((a, b) => a.startedAt - b.startedAt);
+  const cur = snapshots[0]!;
+  const more = snapshots.length - 1;
+  // repo = "host/projectKey/repoSlug"，UI 紧凑只展示最后一段
+  const shortRepo = cur.repo.split('/').slice(-1)[0] ?? cur.repo;
+  const stageLabel = cur.stage ? `${cur.stage}` : '同步中';
+  const pct = typeof cur.percent === 'number' ? ` ${String(Math.round(cur.percent))}%` : '';
+  const queueSuffix = more > 0 ? ` (+${String(more)})` : '';
+  return (
+    <span
+      className="statusbar-chip statusbar-repo-sync-chip"
+      title={`${cur.repo} · ${stageLabel}${pct}${cur.message ? `\n${cur.message}` : ''}`}
+    >
+      <span className="statusbar-pragent-dot" aria-hidden="true" />
+      <span className="statusbar-repo-sync-name">{shortRepo}</span>
+      <span className="statusbar-repo-sync-progress muted">
+        {stageLabel}
+        {pct}
+        {queueSuffix}
+      </span>
+    </span>
   );
 }
 
@@ -127,7 +164,7 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
     return (
       <span
         className="statusbar-chip statusbar-pragent-chip statusbar-pragent-chip-idle"
-        title="pr-agent 当前空闲"
+        title="PR Agent 当前空闲"
       >
         <span className="statusbar-pragent-dot statusbar-pragent-dot-idle" aria-hidden="true" />
         <span>空闲</span>
@@ -139,7 +176,7 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
   const handleClick = (): void => {
     onJumpToPr?.(active.prLocalId);
   };
-  const title = `pr-agent 运行中 · PR ${active.prLocalId} · /${active.tool}${
+  const title = `PR Agent 运行中 · PR ${active.prLocalId} · /${active.tool}${
     clickable ? ' · 点击跳转到该 PR' : ''
   }`;
   // 点击态用 button，否则 span (避免无效 cursor:pointer 误导用户)
@@ -166,13 +203,18 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
   );
 }
 
-/** 状态栏 elapsed 紧凑格式：< 60s "Ns"，否则 "M:SS" */
+/**
+ * 状态栏 elapsed 格式：跟 ChatPane.RunResultView 的 `formatElapsed` 对齐 ——
+ *   < 60s   → "Ns"     (例 "42s")
+ *   >= 60s  → "Mm SSs" (例 "1m 30s")，秒数两位补零定宽
+ * 用 `m` / `s` 单位字面而不是 colon，避免跟时间戳 (HH:MM) 视觉混淆
+ */
 function formatStatusbarElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   if (totalSec < 60) return `${String(totalSec)}s`;
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
-  return `${String(m)}:${String(s).padStart(2, '0')}`;
+  return `${String(m)}m ${String(s).padStart(2, '0')}s`;
 }
 
 /**
@@ -360,7 +402,7 @@ function PrAgentChip({ status }: { status: PrAgentStatus }) {
   if (status.available) {
     return (
       <span className="statusbar-chip statusbar-chip-ok" title={status.version}>
-        pr-agent: {status.strategy}
+        PR Agent: {status.strategy}
       </span>
     );
   }
@@ -369,7 +411,7 @@ function PrAgentChip({ status }: { status: PrAgentStatus }) {
       className="statusbar-chip statusbar-chip-err"
       title={status.attempts.map((a) => a.error).join('\n')}
     >
-      pr-agent: unavailable
+      PR Agent: unavailable
     </span>
   );
 }

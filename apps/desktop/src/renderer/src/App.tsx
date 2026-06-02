@@ -11,6 +11,7 @@ import type {
 import { invoke, subscribe } from './api';
 import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/ChatPane';
 import { wireChatRunStore } from './stores/chat-run-store';
+import { wireRepoSyncStore } from './stores/repo-sync-store';
 import { MainPane } from './components/MainPane';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/Sidebar';
@@ -96,6 +97,8 @@ export default function App() {
   // 启动时把 pr-agent 活动 run + 实时 stdout 流接到全局 store；ChatPane 跨 PR
   // 切换时可读 store 拿回运行中的状态 (本组件挂载到树根，效果等价于"应用级 hook")
   useEffect(() => wireChatRunStore(), []);
+  // 同样思路：把 repo sync 事件流接到 store，StatusBar 任意时刻可读当前活动同步任务
+  useEffect(() => wireRepoSyncStore(), []);
 
   // 窗口重新获得焦点时自动拉一次新鲜列表（不重新触发 poll，避免远端压力）
   useEffect(() => {

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { LocalPrStatus, StoredPullRequest } from '@pr-pilot/shared';
+import { invoke } from '../api';
+import { CommentsPanel } from './CommentsPanel';
+import { CommitsPanel } from './CommitsPanel';
 import { DiffView } from './DiffView';
 import { PrInfoView } from './PrInfoView';
 
@@ -65,7 +68,7 @@ interface MainPaneProps {
   onSetStatus: (status: LocalPrStatus) => void;
 }
 
-type Tab = 'diff' | 'info';
+type Tab = 'diff' | 'comments' | 'commits' | 'info';
 
 export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
   const [tab, setTab] = useState<Tab>('diff');
@@ -76,6 +79,35 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
   // Blame 默认关：每次启动都得手动开（blame fetch 可能慢/失败，不希望
   // 用户进来就被错误 banner 干扰）
   const [showBlame, setShowBlame] = useState<boolean>(false);
+  // 评论 / commits 数 chip：
+  //   - 评论：从评论缓存读 (cache-only)，缓存没有 → 不显示数字
+  //   - commits：走本地 git rev-list base..head，镜像没拉齐 → 不显示数字
+  // 都是 cheap query，PR 切换时各拉一次，cancelled token 防 race
+  const [commentCount, setCommentCount] = useState<number | null>(null);
+  const [commitCount, setCommitCount] = useState<number | null>(null);
+  const prLocalId = pr?.localId;
+  useEffect(() => {
+    setCommentCount(null);
+    setCommitCount(null);
+    if (!prLocalId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [cm, cc] = await Promise.all([
+          invoke('diff:commentCountCached', { localId: prLocalId }),
+          invoke('diff:commitCount', { localId: prLocalId }),
+        ]);
+        if (cancelled) return;
+        setCommentCount(cm?.count ?? null);
+        setCommitCount(cc?.count ?? null);
+      } catch {
+        // 静默：角标不显示数字，不该挡用户视线
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [prLocalId]);
   useEffect(() => {
     localStorage.setItem('pr-pilot.diffMode', renderSideBySide ? 'side-by-side' : 'unified');
   }, [renderSideBySide]);
@@ -178,6 +210,35 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
         >
           Diff
         </button>
+        {/* comments 在 commits 前：评审决断时评论的权重大于 commit 时间线 */}
+        <button
+          type="button"
+          className={`pr-tab ${tab === 'comments' ? 'active' : ''}`}
+          onClick={() => setTab('comments')}
+          role="tab"
+          aria-selected={tab === 'comments'}
+        >
+          评论
+          {commentCount !== null && commentCount > 0 && (
+            <span className="pr-tab-badge" aria-label={`${String(commentCount)} 条评论`}>
+              {commentCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`pr-tab ${tab === 'commits' ? 'active' : ''}`}
+          onClick={() => setTab('commits')}
+          role="tab"
+          aria-selected={tab === 'commits'}
+        >
+          Commits
+          {commitCount !== null && commitCount > 0 && (
+            <span className="pr-tab-badge" aria-label={`${String(commitCount)} 条 commits`}>
+              {commitCount}
+            </span>
+          )}
+        </button>
         <button
           type="button"
           className={`pr-tab ${tab === 'info' ? 'active' : ''}`}
@@ -222,11 +283,14 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
         )}
       </nav>
       <div className="pr-tab-content">
-        {tab === 'diff' ? (
+        {tab === 'diff' && (
           <DiffView pr={pr} renderSideBySide={renderSideBySide} showBlame={showBlame} />
-        ) : (
-          <PrInfoView pr={pr} />
         )}
+        {tab === 'comments' && (
+          <CommentsPanel pr={pr} onCommentsLoaded={(n) => setCommentCount(n)} />
+        )}
+        {tab === 'commits' && <CommitsPanel pr={pr} />}
+        {tab === 'info' && <PrInfoView pr={pr} />}
       </div>
     </main>
   );

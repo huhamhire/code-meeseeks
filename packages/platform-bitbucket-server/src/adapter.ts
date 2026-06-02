@@ -4,6 +4,7 @@ import type {
   PlatformUser,
   PrComment,
   PrCommentAnchor,
+  PrCommit,
   PullRequest,
   RepoRef,
   Reviewer,
@@ -87,6 +88,17 @@ interface BBCommentAnchor {
   fileType: 'FROM' | 'TO';
   path: string;
   srcPath?: string;
+}
+
+interface BBCommit {
+  id: string;            // 40-char SHA
+  displayId: string;     // 短 SHA (BBS 默认 7-12 chars)
+  message: string;       // 完整 commit message
+  author: { name: string; emailAddress?: string };
+  authorTimestamp: number;          // epoch ms
+  committer: { name: string; emailAddress?: string };
+  committerTimestamp: number;       // epoch ms
+  parents: Array<{ id: string; displayId: string }>;
 }
 
 interface BBActivity {
@@ -265,6 +277,23 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     );
   }
 
+  /**
+   * 列出 PR commits。BBS endpoint：
+   *   GET /rest/api/1.0/projects/{p}/repos/{r}/pull-requests/{id}/commits
+   *
+   * 默认 newest first (跟 git log 一致)；BBS 分页接口我们已有 paginate iterator，
+   * 一次性收集全部。规模考虑：PR 通常几十个 commit，不分页问题不大。
+   */
+  async listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]> {
+    const out: PrCommit[] = [];
+    for await (const c of this.client.paginate<BBCommit>(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/commits`,
+    )) {
+      out.push(mapBBCommit(c, this.baseUrl, repo));
+    }
+    return out;
+  }
+
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
     // BBS 走 /activities 拿全部活动，过滤 COMMENTED + ADDED（top-level + 回复）。
     // - 跳过 DELETED / UPDATED 派生事件
@@ -287,6 +316,31 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     }
     return out;
   }
+}
+
+function mapBBCommit(c: BBCommit, baseUrl: string, repo: RepoRef): PrCommit {
+  // BBS commit URL：/projects/<p>/repos/<r>/commits/<sha>
+  const url = `${baseUrl}/projects/${repo.projectKey}/repos/${repo.repoSlug}/commits/${c.id}`;
+  return {
+    sha: c.id,
+    abbreviatedSha: c.displayId,
+    message: c.message,
+    author: bbCommitterToUser(c.author),
+    authoredAt: new Date(c.authorTimestamp).toISOString(),
+    committer: bbCommitterToUser(c.committer),
+    committedAt: new Date(c.committerTimestamp).toISOString(),
+    parents: c.parents.map((p) => p.id),
+    url,
+  };
+}
+
+/**
+ * BBS commit 的 author/committer 只给 name (含 email)，没有 slug / displayName，
+ * 跟 PlatformUser 字段对不齐。这里把 name 同时当 name + displayName 用，slug 留空。
+ * UI 头像会 fallback 到 initials；email 字段我们当前 PlatformUser 没存，先丢弃。
+ */
+function bbCommitterToUser(c: { name: string; emailAddress?: string }): PlatformUser {
+  return { name: c.name, displayName: c.name };
 }
 
 function mapBBComment(c: BBComment, anchor?: BBCommentAnchor): PrComment {

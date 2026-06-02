@@ -1,6 +1,6 @@
 import type { AppInfo, AppPaths } from './app-info.js';
 import type { Config } from './config.js';
-import type { PlatformUser, PrComment } from './platform.js';
+import type { PlatformUser, PrComment, PrCommit } from './platform.js';
 import type {
   LocalPrStatus,
   PollResult,
@@ -166,6 +166,30 @@ export interface IpcChannels {
   'diff:listComments': {
     request: { localId: string };
     response: PrComment[];
+  };
+  /**
+   * 仅读评论缓存里的总条数 (inline + summary 顶层条目数；不展开 replies)，**不**
+   * 打远端。UI 用于 tab 角标 "评论 (N)" 的懒展示：缓存有就直接显示，缓存空就不显示。
+   * 用户切到 Comments 标签时触发 `diff:listComments` 拉远端 + 写缓存，下次进 PR
+   * 角标就有数字了。
+   */
+  'diff:commentCountCached': {
+    request: { localId: string };
+    response: { count: number } | null;
+  };
+  /** 拉取 PR 包含的 commits，newest first */
+  'diff:listCommits': {
+    request: { localId: string };
+    response: PrCommit[];
+  };
+  /**
+   * 本地 git rev-list 算 PR 引入的 commit 数 (base..head)。完全走本地 bare 镜像，
+   * 不打远端；任一 sha 不在镜像 (尚未 sync 到本 PR 范围) → null。
+   * UI 用于 Commits 标签页角标的懒展示，跟 diff:commentCountCached 同模式
+   */
+  'diff:commitCount': {
+    request: { localId: string };
+    response: { count: number } | null;
   };
   /**
    * 给 head 侧文件跑 git blame；同时返回 PR 引入的 head 行号集合，

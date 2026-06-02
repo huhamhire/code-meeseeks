@@ -74,6 +74,27 @@ async function start(): Promise<void> {
         win.webContents.send('poll:tick', info);
       }
     },
+    // PR 新增 / 内容变更时，顺手 syncMirror 把本地镜像跟上，让用户随后点开 PR
+    // 时省一趟 fetch。失败不阻断 poll 流程 (mirror 也有自己的全局队列 + 错误隔离)
+    onPrsChanged: (repos) => {
+      for (const r of repos) {
+        const conn = bootstrap.config.connections.find((c) => c.id === r.connectionId);
+        if (!conn) continue;
+        let host: string;
+        try {
+          host = new URL(conn.base_url).hostname;
+        } catch {
+          continue;
+        }
+        // identity 字段映射：poller 用 group/repo 中性命名，repo-mirror 仍保留
+        // BBS-shaped projectKey/repoSlug (跟 git 路径布局一致，沿用便于排障)
+        void repoMirror
+          .syncMirror({ host, projectKey: r.group, repoSlug: r.repo })
+          .catch((err) => {
+            logger.warn({ err, repo: r }, 'auto syncMirror after poll failed');
+          });
+      }
+    },
   });
 
   // hostname → adapter 反向索引（不带端口，与 RepoIdentity.host 对齐）。

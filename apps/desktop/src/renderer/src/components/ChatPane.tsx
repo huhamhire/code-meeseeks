@@ -238,7 +238,7 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     <aside
       className={`chat-pane${collapsed ? ' chat-pane-collapsed' : ''}`}
       style={{ width: `${String(width)}px` }}
-      aria-label="pr-agent chat"
+      aria-label="PR Agent chat"
       aria-hidden={collapsed ? true : undefined}
     >
       <div
@@ -249,14 +249,14 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
       />
       <header className="chat-pane-header">
         <ChatIcon />
-        <span className="chat-pane-title">pr-agent</span>
+        <span className="chat-pane-title">PR Agent</span>
         {pr && (
           <span className="chat-pane-subtitle" title={pr.title}>
             #{pr.remoteId}
           </span>
         )}
         {prAgent.available && (
-          <span className="chat-pane-stage-tag" title={`pr-agent ${prAgent.strategy}`}>
+          <span className="chat-pane-stage-tag" title={`PR Agent ${prAgent.strategy}`}>
             {prAgent.strategy === 'docker' ? 'Docker' : 'CLI'}
           </span>
         )}
@@ -311,7 +311,7 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
           <div className="chat-busy" role="status">
             另一个 PR 正在 review (
             <code>{otherActiveRun.prLocalId}</code> /{otherActiveRun.tool})。同时只允许一个
-            pr-agent 在跑，等其完成 / 取消后再试
+            PR Agent 在跑，等其完成 / 取消后再试
           </div>
         )}
         {error && (
@@ -655,7 +655,7 @@ function ChatInputBar({
   };
 
   const placeholder = !prAgent.available
-    ? 'pr-agent 未就绪'
+    ? 'PR Agent 未就绪'
     : !pr
       ? '选中一个 PR 后可发起对话'
       : runningTool
@@ -762,7 +762,7 @@ function ChatInputBar({
               onCancel?.();
             }}
             disabled={stopRequested}
-            title="终止当前 pr-agent 调用 (SIGKILL)"
+            title="终止当前 PR Agent 调用 (SIGKILL)"
             aria-label="停止"
           >
             <StopIcon />
@@ -879,7 +879,7 @@ function inferPhase(lines: ReadonlyArray<string>): string {
     if (/pr main language/i.test(line)) return '解析 diff…';
     if (/response language/i.test(line)) return '初始化配置…';
   }
-  return '启动 pr-agent…';
+  return '启动 PR Agent…';
 }
 
 function RunningView({
@@ -924,7 +924,7 @@ function RunningView({
         className="chat-run-stdout"
         preRef={ref}
         text={lines.join('\n')}
-        placeholder="(等待 pr-agent 输出…)"
+        placeholder="(等待 PR Agent 输出…)"
       />
     </div>
   );
@@ -1057,7 +1057,7 @@ function RunResultView({
         </ul>
       ) : run.status === 'succeeded' ? (
         <div className="chat-finding-empty muted">
-          pr-agent 跑完没有解析出 finding（可能 /describe 仅返回摘要、或解析器跳过了未识别段）。
+          PR Agent 跑完没有解析出 finding（可能 /describe 仅返回摘要、或解析器跳过了未识别段）。
           可以展开上方原始输出核对。
         </div>
       ) : null}
@@ -1334,7 +1334,7 @@ function ChatEmpty({ pr, prAgent }: { pr: StoredPullRequest | null; prAgent: PrA
         <div className="chat-empty-icon" aria-hidden="true">
           <ChatIcon large />
         </div>
-        <p className="chat-empty-title">pr-agent 未就绪</p>
+        <p className="chat-empty-title">PR Agent 未就绪</p>
         <p className="chat-empty-sub">
           本机 CLI 与 Docker 都未探测到。打开 Settings 看探测详情，或安装其中一种后重启应用。
         </p>

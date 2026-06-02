@@ -54,6 +54,31 @@
   }
 }
 
+// 当前 repo sync (clone/fetch) chip：跟 pr-agent 活动 chip 同蓝调，但 dot 用
+// pragent-dot 的脉冲动画语义即"在跑"。idle 时整条不渲染
+.statusbar-repo-sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-variant-numeric: tabular-nums;
+  max-width: 240px;
+}
+.statusbar-repo-sync-name {
+  font-family: $font-mono;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.statusbar-repo-sync-progress {
+  font-family: $font-mono;
+  font-size: $fs-xs;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
 // pr-agent 运行中指示。蓝色调跟 .chat-pane-stage-tag / chat-run-phase 一致；
 // button 形态时给 hover 边框反馈，span 形态不可点不出 hover
 .statusbar-pragent-chip {

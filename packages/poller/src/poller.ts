@@ -38,6 +38,26 @@ export interface PollerOptions {
   now?: () => Date;
   /** 每次 tick 完成（含 errors=N 但未抛出）后回调；用于 main → renderer 推送 */
   onTick?: (info: { at: string; result: PollResult }) => void;
+  /**
+   * 本轮 poll 发现"有新增 / 内容变更的 PR"的 repo 集合（去重）。main 拿到后可以
+   * 顺手 `repoMirror.syncMirror(...)` 把本地镜像跟上，让用户随后点开 PR 时省一
+   * 趟 fetch。失败 / 无 PR 变化的连接不会出现在集合中。
+   *
+   * 仅触发条件：该 repo 至少有一个 PR 在本轮被识别为 added 或 changed
+   * (updatedAt 跳变)。removed 不算 (PR 关单一般不影响 commit 范围)。
+   */
+  onPrsChanged?: (repos: ReadonlyArray<ChangedRepo>) => void;
+}
+
+/**
+ * Poll 时通知 main 哪些 repo 有 PR 变更。字段是 PrIdentity 的 repo 投影 (去掉
+ * remoteId / url)，足够 main 拼 RepoIdentity 并触发 syncMirror。
+ */
+export interface ChangedRepo {
+  platform: import('@pr-pilot/shared').PlatformKind;
+  connectionId: string;
+  group: string;
+  repo: string;
 }
 
 const EMPTY: PollResult = { fetched: 0, changed: 0, added: 0, removed: 0, errors: 0 };
@@ -122,6 +142,9 @@ export class Poller {
     // dirty 跟踪本轮是否有任何状态变化 (meta 写入 / 软删 / 硬清)。全无变化时
     // 跳过索引文件 rewrite，磁盘 mtime 不动 (invariant #2)
     let dirty = false;
+    // 本轮发现"有新增 / 内容变更 PR"的 repo 集合 (去重)；用于 onPrsChanged
+    // 通知 main 触发 syncMirror。key = `${connectionId}|${group}|${repo}`
+    const changedReposByKey = new Map<string, ChangedRepo>();
 
     // 每个**成功** poll 的连接看到的 localId 集合。失败的连接不进入此 map (invariant #1)
     const seenByConnection = new Map<string, Set<string>>();
@@ -149,8 +172,21 @@ export class Poller {
           const localId = prHashId(identity);
           seen.add(localId);
           const prev = indexByLocalId.get(localId);
-          if (prev && prev.updatedAt !== pr.updatedAt) changed++;
-          if (!prev) added++;
+          const isAdded = !prev;
+          const isChanged = Boolean(prev && prev.updatedAt !== pr.updatedAt);
+          if (isChanged) changed++;
+          if (isAdded) added++;
+          if (isAdded || isChanged) {
+            const repoKey = `${connectionId}|${identity.group}|${identity.repo}`;
+            if (!changedReposByKey.has(repoKey)) {
+              changedReposByKey.set(repoKey, {
+                platform: identity.platform,
+                connectionId,
+                group: identity.group,
+                repo: identity.repo,
+              });
+            }
+          }
 
           // localStatus 直接镜像 BBS 上当前用户的 reviewer.status。
           // UI 上点 approve / needs work 时会先 PUT 到 BBS，再下一轮 poll 时此处取回。
@@ -225,6 +261,10 @@ export class Poller {
     const result: PollResult = { fetched, changed, added, removed, errors };
     this._lastPollAt = now;
     this.opts.logger.info({ ...result, purged, dirty }, 'poll complete');
+    // 通知调用方有哪些 repo 需要 sync mirror。空集合不调，避免无谓 noop
+    if (changedReposByKey.size > 0) {
+      this.opts.onPrsChanged?.(Array.from(changedReposByKey.values()));
+    }
     this.opts.onTick?.({ at: now, result });
     return result;
   }

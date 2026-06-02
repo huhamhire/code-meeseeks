@@ -1,0 +1,154 @@
+import { Editor } from '@monaco-editor/react';
+import type { editor } from 'monaco-editor';
+import { useEffect, useState } from 'react';
+import type { PrCommentAnchor, StoredPullRequest } from '@pr-pilot/shared';
+import { invoke } from '../api';
+import { languageFor } from '../utils/language';
+
+interface InlineCodeContextProps {
+  pr: StoredPullRequest;
+  anchor: PrCommentAnchor;
+  /** 锚定行前后展示的上下文行数；默认 5 */
+  contextLines?: number;
+  /**
+   * 进入页面时是否自动挂 Monaco 编辑器。CommentsPanel 默认对最新前 N 条 inline
+   * 评论 (AUTO_EXPAND_CAP) 传 true，超额条目传 false → 渲染"展开代码"按钮，
+   * 用户点击才挂 editor (懒加载)，避免 PR 评论很多时一次性把页面拖慢
+   */
+  autoExpand?: boolean;
+}
+
+/**
+ * 评论里 inline 引用的代码上下文：Monaco read-only 编辑器，展示锚定行前后若干行，
+ * 锚定行用整行底色高亮 (跟 BBS 内嵌评论的视觉惯例一致)。
+ *
+ * 取数走 `diff:getFileContent` —— 跟 DiffView 同一份本地 git blob，无远端往返；
+ * mirror 还没拉齐 base/head sha 时 (rare，poll 已经先 sync 过) 走 syncMirror 兜底。
+ *
+ * 性能：每个 inline 评论都会挂一个 Monaco 实例 (读 + tokenize)。CommentsPanel 控
+ * 默认只 auto-expand 前 N 条 (按时间线)，超额走 click-to-expand 懒加载。
+ */
+export function InlineCodeContext({
+  pr,
+  anchor,
+  contextLines = 5,
+  autoExpand = true,
+}: InlineCodeContextProps) {
+  const [expanded, setExpanded] = useState(autoExpand);
+  const [snippet, setSnippet] = useState<{
+    text: string;
+    startLine: number;
+    anchorInSnippet: number;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 未展开时不拉文件 — 给用户主动控制懒加载的语义
+    if (!expanded) return;
+    let cancelled = false;
+    setSnippet(null);
+    setError(null);
+    void (async () => {
+      try {
+        const c = await invoke('diff:getFileContent', {
+          localId: pr.localId,
+          // anchor.side 'old' 锚到 base 侧，'new' 锚到 head 侧
+          side: anchor.side === 'old' ? 'base' : 'head',
+          path: anchor.path,
+        });
+        if (cancelled) return;
+        if (c.binary) {
+          setError('(二进制文件，无法显示上下文)');
+          return;
+        }
+        const allLines = c.content.split('\n');
+        const startLine = Math.max(1, anchor.line - contextLines);
+        const endLine = Math.min(allLines.length, anchor.line + contextLines);
+        const text = allLines.slice(startLine - 1, endLine).join('\n');
+        setSnippet({ text, startLine, anchorInSnippet: anchor.line - startLine + 1 });
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, pr.localId, anchor.path, anchor.side, anchor.line, contextLines]);
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        className="comment-code-context-toggle"
+        onClick={() => setExpanded(true)}
+        title="展开锚定行前后代码"
+      >
+        ⊕ 展开代码上下文 ({anchor.path}:{anchor.line})
+      </button>
+    );
+  }
+  if (error) {
+    return <div className="comment-code-context-error muted">{error}</div>;
+  }
+  if (!snippet) {
+    return <div className="comment-code-context-loading muted">加载代码上下文…</div>;
+  }
+
+  // 高度按片段行数算；19px 行高 (Monaco fs=12 时近似) + 8px 上下 padding
+  const lineHeight = 19;
+  const lineCount = snippet.text.split('\n').length;
+  const height = lineCount * lineHeight + 12;
+
+  const handleMount = (
+    ed: editor.IStandaloneCodeEditor,
+    monaco: typeof import('monaco-editor'),
+  ): void => {
+    // 真实文件行号 = snippet 内部行号 + startLine - 1。Monaco lineNumbers 函数式
+    // 完全可控，把内部 1..N 映射回去
+    ed.updateOptions({
+      readOnly: true,
+      domReadOnly: true,
+      lineNumbers: (lineNo) => String(lineNo + snippet.startLine - 1),
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      scrollbar: { vertical: 'hidden', horizontal: 'hidden', handleMouseWheel: false },
+      overviewRulerLanes: 0,
+      hideCursorInOverviewRuler: true,
+      renderLineHighlight: 'none',
+      contextmenu: false,
+      folding: false,
+      glyphMargin: false,
+      fontSize: 12,
+      lineHeight,
+      padding: { top: 6, bottom: 6 },
+      // 行宽自适应，长行用 word wrap 而不是横向滚动条 (滚动条已禁)
+      wordWrap: 'on',
+    });
+    // 锚定行整行底色：用 Monaco decorations。线条 className 走 CSS 决定颜色
+    ed.createDecorationsCollection([
+      {
+        range: new monaco.Range(snippet.anchorInSnippet, 1, snippet.anchorInSnippet, 1),
+        options: {
+          isWholeLine: true,
+          className: 'comment-code-context-anchor-line',
+          marginClassName: 'comment-code-context-anchor-gutter',
+        },
+      },
+    ]);
+  };
+
+  return (
+    <div className="comment-code-context" style={{ height: `${String(height)}px` }}>
+      <Editor
+        height={`${String(height)}px`}
+        language={languageFor(anchor.path)}
+        value={snippet.text}
+        theme="vs-dark"
+        onMount={handleMount}
+        options={{ readOnly: true }}
+      />
+    </div>
+  );
+}

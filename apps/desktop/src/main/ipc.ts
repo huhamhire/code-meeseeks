@@ -300,6 +300,32 @@ export function registerIpcHandlers({
     },
   );
 
+  /**
+   * 打开 PR 时镜像就位的保障。优先快速路径：本地 bare 已含 head+base 两个 sha
+   * → 直接回 mirrorPath，不打远端。两 sha 都齐意味着上次 sync 已经覆盖了本 PR
+   * 的 commit 范围（PR sha 是 immutable 的），renderer 可以直接走本地 diff 计算。
+   *
+   * 缺 sha (任一) → 走 syncMirror 兜底走 git fetch。
+   *
+   * 后台 poll 在拿到 PR 状态更新后会主动 syncMirror，所以正常打开 PR 时
+   * 快速路径命中率应该很高。
+   */
+  const ensureMirrorReadyForPr = async (
+    pr: StoredPullRequest,
+  ): Promise<{ mirrorPath: string; freshClone: boolean }> => {
+    const id = repoIdentityFor(pr);
+    const [hasHead, hasBase] = await Promise.all([
+      repoMirror.hasCommit(id, pr.sourceRef.sha),
+      repoMirror.hasCommit(id, pr.targetRef.sha),
+    ]);
+    if (hasHead && hasBase) {
+      // 快速路径：mirror 已含 head + base，直接回不打远端。命中频繁，不打 log
+      return { mirrorPath: repoMirror.mirrorPath(id), freshClone: false };
+    }
+    const r = await repoMirror.syncMirror(id);
+    return { mirrorPath: r.mirrorPath, freshClone: r.freshClone };
+  };
+
   ipcMain.handle(
     'repo:sync',
     async (
@@ -307,8 +333,7 @@ export function registerIpcHandlers({
       req: IpcChannels['repo:sync']['request'],
     ): Promise<IpcChannels['repo:sync']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const r = await repoMirror.syncMirror(repoIdentityFor(pr));
-      return { mirrorPath: r.mirrorPath, freshClone: r.freshClone };
+      return ensureMirrorReadyForPr(pr);
     },
   );
 
@@ -320,8 +345,8 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['diff:listChangedFiles']['response']> => {
       const pr = await findPrOrThrow(req.localId);
       const id = repoIdentityFor(pr);
-      // 自动先 sync，再算 diff。renderer 不需要额外协调。
-      await repoMirror.syncMirror(id);
+      // 自动确保 mirror 含 head + base sha (快速路径命中即 noop)；再算 diff
+      await ensureMirrorReadyForPr(pr);
       return repoMirror.listChangedFiles(id, pr.targetRef.sha, pr.sourceRef.sha);
     },
   );
@@ -336,6 +361,18 @@ export function registerIpcHandlers({
       const id = repoIdentityFor(pr);
       const sha = req.side === 'base' ? pr.targetRef.sha : pr.sourceRef.sha;
       return repoMirror.getFileContent(id, sha, req.path);
+    },
+  );
+
+  ipcMain.handle(
+    'diff:commentCountCached',
+    async (
+      _evt,
+      req: IpcChannels['diff:commentCountCached']['request'],
+    ): Promise<IpcChannels['diff:commentCountCached']['response']> => {
+      const cache = await readCommentsCache(stateStore, req.localId);
+      if (!cache) return null;
+      return { count: cache.comments.length };
     },
   );
 
@@ -364,6 +401,39 @@ export function registerIpcHandlers({
         fetched_at: new Date().toISOString(),
       });
       return fresh;
+    },
+  );
+
+  ipcMain.handle(
+    'diff:listCommits',
+    async (
+      _evt,
+      req: IpcChannels['diff:listCommits']['request'],
+    ): Promise<IpcChannels['diff:listCommits']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
+      // commits 不缓存（量少 + UI 进 commits 标签页才拉，频率低）；后续如发现频繁拉
+      // 再补 prs/<hash>/commits.json 缓存层 (走 pr_updated_at 失效，跟 comments 同模式)
+      return adapter.listPullRequestCommits(
+        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+        pr.remoteId,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'diff:commitCount',
+    async (
+      _evt,
+      req: IpcChannels['diff:commitCount']['request'],
+    ): Promise<IpcChannels['diff:commitCount']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const id = repoIdentityFor(pr);
+      // 本地 git 算 base..head；不打远端、不主动触发 sync。镜像还没拉齐就返回 null，
+      // UI 角标暂不显示，等下次 poll 触发 syncMirror 完成后自然命中
+      const n = await repoMirror.countCommits(id, pr.targetRef.sha, pr.sourceRef.sha);
+      return n === null ? null : { count: n };
     },
   );
 

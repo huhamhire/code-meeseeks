@@ -63,6 +63,31 @@ export interface PrCommentAnchor {
   lineType: 'added' | 'removed' | 'context';
 }
 
+/**
+ * PR 上的单条提交。跨平台中性形状；BBS / GitHub / GitLab 都映射到这一份。
+ *
+ * `parents` 长度可判定是否 merge commit (>1 = merge)。`url` 给 UI 跳转用。
+ */
+export interface PrCommit {
+  /** 完整 40-char SHA-1 */
+  sha: string;
+  /** 短 SHA (BBS displayId / GitHub sha[:7])，UI 默认展示 */
+  abbreviatedSha: string;
+  /** 完整 commit message (含正文)。UI 展示首行作为 subject，hover/展开看 body */
+  message: string;
+  author: PlatformUser;
+  /** ISO；author = 写代码的人 */
+  authoredAt: string;
+  /** 通常 = author 但 rebase / amend 等场景会变；可选 */
+  committer?: PlatformUser;
+  /** ISO；committer = 实际落库的人 */
+  committedAt: string;
+  /** 父提交 SHA 列表；长度 >1 表示 merge commit */
+  parents: string[];
+  /** 平台侧 commit 详情页 URL，可选 */
+  url?: string;
+}
+
 export interface PrComment {
   remoteId: string;
   author: PlatformUser;
@@ -111,6 +136,13 @@ export interface PlatformAdapter {
    * 删除的评论会被过滤掉。
    */
   listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]>;
+
+  /**
+   * 列出 PR 包含的全部提交，**newest first** (最新一条在数组开头)。
+   * 跨平台契约：BBS 走 /pull-requests/{id}/commits，GitHub /pulls/{id}/commits，
+   * GitLab /merge_requests/{iid}/commits。返回前已剥掉平台特定字段，UI 直接渲染。
+   */
+  listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]>;
 
   /**
    * 按用户 slug 拉头像图片。返回原始字节 + content-type，main 进程负责缓存与
