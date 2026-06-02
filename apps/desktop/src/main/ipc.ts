@@ -392,10 +392,16 @@ export function registerIpcHandlers({
       );
       try {
         const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
+        // LLM env + 全局 pr-agent 配置 (响应语言)。语言配置一期写死在 config 里，
+        // UI 还不暴露切换；后续多语言时改成 Settings 入口
+        const env: Record<string, string> = {
+          ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
+          CONFIG__RESPONSE_LANGUAGE: bootstrap.config.language,
+        };
         const result = await prAgentBridge.run({
           prUrl: pr.url,
           tool: req.tool,
-          env: activeLlm ? buildPragentEnv(activeLlm) : undefined,
+          env,
           onLine,
           cwd: wt.path,
           targetBranch: wt.targetBranchName,

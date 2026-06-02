@@ -58,11 +58,11 @@ describe('LocalCliBridge', () => {
     expect(calls[0]!.opts.env).toEqual({ OPENAI_KEY: 'sk-test' });
   });
 
-  it('未给 timeoutMs 时落到默认 5 min', async () => {
+  it('未给 timeoutMs 时落到默认 10 min', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('v', exec);
     await bridge.describe({ prUrl: 'https://x/pr/1' });
-    expect(calls[0]!.opts.timeoutMs).toBe(5 * 60 * 1000);
+    expect(calls[0]!.opts.timeoutMs).toBe(10 * 60 * 1000);
   });
 
   it('显式 timeoutMs 覆盖默认值', async () => {

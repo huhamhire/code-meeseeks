@@ -27,6 +27,24 @@ export type ReviewRunFailureReason = 'timeout' | 'spawn-failed' | 'non-zero-exit
  */
 export type FindingCategory = 'description' | 'general' | 'code-feedback';
 
+/**
+ * 标准化的 pr-agent 输出段落键名。把不同版本 pr-agent 的 section title (可能带
+ * **bold** / 大小写不同 / 中英变体) 归一到稳定标识，UI 按 key 决定排序 / 着色 /
+ * 是否隐藏 / 后续做特化卡片。
+ */
+export type PrDocSectionKey =
+  | 'title'           // 建议的 PR 标题
+  | 'pr-type'         // 类型标签 (Bug fix / Enhancement / Tests / ...)
+  | 'summary'         // /review 顶部总结
+  | 'description'     // 主描述段
+  | 'walkthrough'     // 文件级走查
+  | 'relevant-tests'  // 相关测试
+  | 'security'        // 安全发现
+  | 'code-feedback'   // /review 单条 finding (带 file:line anchor)
+  | 'effort'          // 评估工作量 1-5
+  | 'score'           // 质量分
+  | 'general';        // 兜底，未识别
+
 export interface FindingAnchor {
   path: string;
   startLine?: number;
@@ -37,7 +55,12 @@ export interface Finding {
   /** 同一 run 内稳定的 id，便于 UI list-key + 后续 "改为评论草稿" 引用 */
   id: string;
   category: FindingCategory;
-  /** 来自 markdown header；可能为空（无明确 section 标题） */
+  /**
+   * 段落归一键。新解析的 finding 都会带；旧持久化的 run 没有此字段 (回退到 category)。
+   * UI 按 sectionKey 决定排序 + 视觉分层
+   */
+  sectionKey?: PrDocSectionKey;
+  /** 来自 markdown header (已剥除 **__ 强调符号)；可能为空 */
   title?: string;
   /** 原始 markdown body（含格式），UI 用 react-markdown 渲染 */
   body: string;

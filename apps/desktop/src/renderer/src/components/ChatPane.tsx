@@ -12,6 +12,7 @@ import remarkGfm from 'remark-gfm';
 import type {
   Finding,
   PrAgentStatus,
+  PrDocSectionKey,
   ReviewRun,
   ReviewRunTool,
   StoredPullRequest,
@@ -27,6 +28,9 @@ interface ChatPaneProps {
   prAgent: PrAgentStatus;
   width: number;
   onResize: (next: number) => void;
+  /** 折叠时仍然挂载组件 (保住进行中的 run 计时器 / runProgress 订阅)，
+      只用 CSS 隐藏。展开后用户看到的就是当前实时状态 */
+  collapsed?: boolean;
 }
 
 /**
@@ -39,7 +43,7 @@ interface ChatPaneProps {
  * /ask 自然语言追问留到后续：当前 pr-agent 在多轮交互上没有稳定的本地协议，
  * 先把"开始 review → 结果可见"链路打通，覆盖 M3 done-when。
  */
-export function ChatPane({ pr, prAgent, width, onResize }: ChatPaneProps) {
+export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPaneProps) {
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
@@ -70,7 +74,11 @@ export function ChatPane({ pr, prAgent, width, onResize }: ChatPaneProps) {
   const [error, setError] = useState<string | null>(null);
   const [showRawStdout, setShowRawStdout] = useState(false);
 
-  // PR 切换：重置面板状态 + 拉该 PR 的 run 历史。run 列表按时间倒序，默认选最新一条
+  // PR 切换：重置面板状态 + 拉该 PR 的 run 历史。
+  // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
+  // reloadPrs → 新 prs 数组 → selected 是新对象引用 → 如果依赖 pr，此 effect 重跑，
+  // run 进行中的计时器 / 订阅状态被清空。localId 是稳定字符串，同 PR 刷新不触发。
+  const prLocalId = pr?.localId;
   useEffect(() => {
     setRuns([]);
     setCurrentRunId(null);
@@ -79,11 +87,11 @@ export function ChatPane({ pr, prAgent, width, onResize }: ChatPaneProps) {
     setLiveLines([]);
     setError(null);
     setShowRawStdout(false);
-    if (!pr) return;
+    if (!prLocalId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const list = await invoke('pragent:listRuns', { localId: pr.localId });
+        const list = await invoke('pragent:listRuns', { localId: prLocalId });
         if (cancelled) return;
         setRuns(list);
         setCurrentRunId(list[0]?.id ?? null);
@@ -94,7 +102,7 @@ export function ChatPane({ pr, prAgent, width, onResize }: ChatPaneProps) {
     return () => {
       cancelled = true;
     };
-  }, [pr]);
+  }, [prLocalId]);
 
   // pragent stdout 流：main 进程广播给所有 window。我们没法在 run 启动前拿到 runId
   // (那是 main 内部分配的)，但同时只允许一个 in-flight，所以"runningTool != null"
@@ -131,7 +139,12 @@ export function ChatPane({ pr, prAgent, width, onResize }: ChatPaneProps) {
   );
 
   return (
-    <aside className="chat-pane" style={{ width: `${String(width)}px` }} aria-label="pr-agent chat">
+    <aside
+      className={`chat-pane${collapsed ? ' chat-pane-collapsed' : ''}`}
+      style={{ width: `${String(width)}px` }}
+      aria-label="pr-agent chat"
+      aria-hidden={collapsed ? true : undefined}
+    >
       <div
         className="chat-pane-resize-handle"
         onMouseDown={startResize}
@@ -286,7 +299,7 @@ function RunningView({
         <span className="chat-run-elapsed">{formatElapsed(elapsedMs)}</span>
         {/* LLM 调用阶段 stdout 没新行，给个软提示让用户知道不是卡死 */}
         {elapsedMs > 15_000 && (
-          <span className="chat-run-hint muted">等待 LLM 响应（常 30-120s）</span>
+          <span className="chat-run-hint muted">等待 LLM 响应</span>
         )}
       </div>
       <AnsiPre
@@ -382,7 +395,7 @@ function RunResultView({ run, showRawStdout, onToggleRawStdout }: RunResultViewP
 
       {findings.length > 0 ? (
         <ul className="chat-finding-list">
-          {findings.map((f) => (
+          {orderFindings(findings).map((f) => (
             <FindingCard key={f.id} finding={f} />
           ))}
         </ul>
@@ -423,13 +436,61 @@ function RunMeta({ run }: { run: ReviewRun }) {
   );
 }
 
+/**
+ * sectionKey → 中文标签 + 渲染顺序。把 pr-agent 输出按已知段落排成标准文档骨架：
+ *   建议标题 → 类型 → 总结 → 描述 → 走查 → 测试 → 安全 → 代码反馈 → 工作量 → 评分 → 其他
+ * 未识别 (sectionKey === undefined 或 'general') 走兜底，按解析顺序放到末尾。
+ */
+const SECTION_ORDER: Record<PrDocSectionKey, number> = {
+  title: 0,
+  'pr-type': 1,
+  summary: 2,
+  description: 3,
+  walkthrough: 4,
+  'relevant-tests': 5,
+  security: 6,
+  'code-feedback': 7,
+  effort: 8,
+  score: 9,
+  general: 10,
+};
+const SECTION_LABEL: Record<PrDocSectionKey, string> = {
+  title: '建议标题',
+  'pr-type': '类型',
+  summary: '总结',
+  description: '描述',
+  walkthrough: '走查',
+  'relevant-tests': '相关测试',
+  security: '安全',
+  'code-feedback': '代码反馈',
+  effort: '工作量',
+  score: '评分',
+  general: '',
+};
+
+/** Stable sort by sectionKey 排序 + 同 key 保留原顺序 (兼容 Array.sort 非 stable JS 引擎) */
+function orderFindings(findings: Finding[]): Finding[] {
+  return findings
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => {
+      const ka = SECTION_ORDER[a.f.sectionKey ?? 'general'] ?? 99;
+      const kb = SECTION_ORDER[b.f.sectionKey ?? 'general'] ?? 99;
+      return ka === kb ? a.i - b.i : ka - kb;
+    })
+    .map((x) => x.f);
+}
+
 function FindingCard({ finding }: { finding: Finding }) {
+  // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
+  const key: PrDocSectionKey = finding.sectionKey ?? 'general';
+  const label = SECTION_LABEL[key];
   return (
-    <li className={`chat-finding chat-finding-${finding.category}`}>
+    <li className={`chat-finding chat-finding-${key}`}>
       <header className="chat-finding-head">
-        <span className={`chat-finding-cat chat-finding-cat-${finding.category}`}>
-          {finding.category}
-        </span>
+        {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
+        {label && (
+          <span className={`chat-finding-cat chat-finding-cat-${key}`}>{label}</span>
+        )}
         {finding.title && <h4 className="chat-finding-title">{finding.title}</h4>}
       </header>
       {finding.anchor && (

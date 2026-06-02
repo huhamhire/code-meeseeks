@@ -7,7 +7,10 @@ import type {
   PrAgentRunResult,
 } from './types.js';
 
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5 min — pr-agent /review 较慢的复杂 PR
+// 10 min — /review 在长 PR + 推理型模型 (DeepSeek-v4 / Claude thinking) 下常跑
+// 3-8 min；5 min 经常打 timeout。设到 10 min 让绝大多数真实 PR 能跑完，仍能兜住
+// 卡死的子进程不让它无限挂着。需要更长的话调用方可在 opts.timeoutMs 显式覆盖
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * pr-agent 官方 Docker 镜像名 + 锁定版本。Pinned tag 而非 latest，避免上游打新

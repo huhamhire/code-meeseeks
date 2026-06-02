@@ -12,6 +12,17 @@
   position: relative;
 }
 
+// 折叠态：组件仍挂载 (保住 run 计时器 + runProgress 订阅) 但视觉上消失。
+// width:0 + overflow:hidden 替代 display:none，避免 width inline style 反复变化
+// 触发 layout thrash；inline style 上的 width 仍按用户上次设的值保留，下次展开
+// 直接生效
+.chat-pane-collapsed {
+  width: 0 !important;
+  overflow: hidden;
+  border-left: none;
+  pointer-events: none;
+}
+
 // 拖拽柄：左缘，跟 sidebar 镜像
 .chat-pane-resize-handle {
   position: absolute;
@@ -317,15 +328,32 @@
   font-size: $fs-md;
   line-height: $lh-normal;
 
-  // 按 category 着不同的左条颜色：描述 = 中性蓝，general = 灰，code-feedback = 黄
-  &.chat-finding-description {
+  // 按 sectionKey 着不同的左条颜色，呈现"标准文档"骨架的视觉分组：
+  //   - 元信息 (建议标题 / 类型) 走主蓝
+  //   - 描述 / 走查 / 总结 走绿 (内容主体，跟 git-added 视觉系)
+  //   - 测试 / 评分 / 工作量 走中性灰
+  //   - 安全 / 代码反馈走警示色 (黄/橙)
+  // general (兜底) 不着色，保留默认灰
+  &.chat-finding-title,
+  &.chat-finding-pr-type {
     border-left-color: $color-info;
+  }
+  &.chat-finding-summary,
+  &.chat-finding-description,
+  &.chat-finding-walkthrough {
+    border-left-color: $color-approved;
+  }
+  &.chat-finding-relevant-tests,
+  &.chat-finding-effort,
+  &.chat-finding-score {
+    border-left-color: $text-muted;
+  }
+  &.chat-finding-security,
+  &.chat-finding-code-feedback {
+    border-left-color: $color-warning;
   }
   &.chat-finding-general {
     border-left-color: $border-default;
-  }
-  &.chat-finding-code-feedback {
-    border-left-color: $color-warning;
   }
 }
 .chat-finding-head {
@@ -339,21 +367,39 @@
   border-radius: $radius-sm;
   font-size: $fs-xs;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   flex-shrink: 0;
 
-  &.chat-finding-cat-description {
+  // 元信息组：主蓝
+  &.chat-finding-cat-title,
+  &.chat-finding-cat-pr-type {
     background: $color-accent-bg-fade;
     color: $color-info;
   }
-  &.chat-finding-cat-general {
+  // 内容主体组：绿
+  &.chat-finding-cat-summary,
+  &.chat-finding-cat-description,
+  &.chat-finding-cat-walkthrough {
+    background: rgba(22, 163, 74, 0.18); // $color-approved fade
+    color: $color-approved;
+  }
+  // 评估指标组：中性灰
+  &.chat-finding-cat-relevant-tests,
+  &.chat-finding-cat-effort,
+  &.chat-finding-cat-score {
     background: $bg-surface;
     color: $text-muted;
   }
+  // 警示组：琥珀
+  &.chat-finding-cat-security,
   &.chat-finding-cat-code-feedback {
-    background: rgba(217, 119, 6, 0.18);
+    background: rgba(217, 119, 6, 0.18); // $color-warning fade
     color: $color-warning-bright;
+  }
+  // general 兜底
+  &.chat-finding-cat-general {
+    background: $bg-surface;
+    color: $text-muted;
   }
 }
 .chat-finding-title {

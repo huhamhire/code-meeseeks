@@ -150,6 +150,22 @@ export class RepoMirrorManager {
     // --no-checkout：先不落文件，等分支建好再 checkout
     await simpleGit(wtRoot).clone(mirrorPath, wtPath, ['--local', '--no-checkout']);
 
+    // 禁用 LFS smudge filter：bare mirror 默认不拉 LFS 对象 (--mirror 仅拉 git refs)，
+    // 容器也通常打不到企业内网的 LFS server。让 LFS pointer 保持原样 (几百字节的
+    // pointer 文本)，否则 `git checkout` 会调 git-lfs 去远端拉真实 blob，smudge 失败
+    // → exit。pr-agent review 二进制文件无意义，看到 pointer 文本只是小段元数据。
+    //   - filter.lfs.smudge=cat：smudge 时直接 cat 文件 (不调 git-lfs)
+    //   - filter.lfs.process=空：清空 long-lived filter process (默认 git-lfs filter-process)
+    //   - filter.lfs.required=false：filter 不存在 / 失败不当致命错误
+    // 配置在 .git/config 持久化，pr-agent 容器内继承同一 config，自然也不触发 LFS。
+    //
+    // simple-git 默认禁止设 filter.* (担心被注入任意命令)；显式 allowUnsafeFilter
+    // 仅在这个 simpleGit 实例上 opt-in，其他读操作走默认严格模式
+    const lfsCfg = simpleGit({ baseDir: wtPath, unsafe: { allowUnsafeFilter: true } });
+    await lfsCfg.raw(['config', '--local', 'filter.lfs.smudge', 'cat']);
+    await lfsCfg.raw(['config', '--local', 'filter.lfs.process', '']);
+    await lfsCfg.raw(['config', '--local', 'filter.lfs.required', 'false']);
+
     // 补 BBS 的 PR 源 sha：`git clone` 默认只拉 refs/heads/*。失败不阻断
     // (heads 里能找到 headSha 也行，例如 GitHub fork)
     try {
