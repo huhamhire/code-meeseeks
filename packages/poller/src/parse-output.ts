@@ -145,6 +145,133 @@ function shouldSkipSection(sec: Section, tool: ReviewRunTool): boolean {
 }
 
 /**
+ * 判断一个 section 是否是 pr-agent `/review` 的 key_issues_to_review 段。
+ *
+ * pr-agent v0.35+ LocalGitProvider 跑 /review 时该段渲染为：
+ *   ### ⚡ Recommended focus areas for review
+ *   ####                       <- 单独空 H4 行作为 issue 间分隔符
+ *   **潜在空引用**             <- issue_header (bold)
+ *
+ *   <issue_content 多行文本>
+ *   ####
+ *   **<下一条 header>**
+ *   ...
+ *
+ * 这里只识别 section title。展开成多条 finding 走 expandKeyIssuesSection。
+ */
+function isKeyIssuesSection(title: string): boolean {
+  return /key\s+issues\s+to\s+review|recommended\s+focus\s+areas\s+for\s+review|关键问题|关注焦点/i.test(
+    title,
+  );
+}
+
+/**
+ * 把 "Recommended focus areas for review" 段 body 按 issue 拆成多条 finding。
+ *
+ * 切分锚点：**单独一行 + bold 包裹的 issue header**（如 `**潜在空引用**`）。每条
+ * issue 的 content 是从它的 bold header 行下一行到下一条 bold header 行之间。
+ * `####` 空标题分隔符跳过（splitMarkdownSections 不会切空标题）；首条 header
+ * 之前的内容（一般只有 `####`）丢弃。
+ *
+ * anchor 抽取：pr-agent LocalGitProvider 渲染时丢弃了 file/start_line/end_line
+ * 字段（get_line_link='' + gfm_supported=False 走"无 link + 非 GFM" 分支），所以
+ * 渲染后的 markdown 不可能反推 anchor。这里只做 best-effort：从 issue 文本里找
+ * 类似 `path/to/file.ext` 的 token + `第 N 行 / lines N-M / 行 N` 关键词。抽不到
+ * 就 anchor 留空，UI 端把"跳转编辑"按钮 disable，提示 AI 未给出位置。
+ */
+function expandKeyIssuesSection(
+  sec: Section,
+  baseIndex: number,
+  tool: ReviewRunTool,
+): Finding[] {
+  const body = trimNoise(sec.body);
+  const lines = body.split('\n');
+  // bold header 行：整行就是 `**xxx**`（允许首尾空白；不含其它字符）
+  const HEADER_LINE_RE = /^\s*\*\*\s*([^*\n][^*\n]*?)\s*\*\*\s*$/;
+  interface IssueBlock {
+    title: string;
+    body: string;
+  }
+  const blocks: IssueBlock[] = [];
+  let cur: IssueBlock | null = null;
+  for (const line of lines) {
+    const m = HEADER_LINE_RE.exec(line);
+    if (m) {
+      if (cur) blocks.push(cur);
+      cur = { title: m[1]!.trim(), body: '' };
+      continue;
+    }
+    if (cur) {
+      // 跳过 issue 块之间的空 H4 分隔符（splitMarkdownSections 不会切 `#### ` 空标题，
+      // 整行就是 `#`+ 空白时直接丢；正文里残留 `#` 不影响）
+      if (/^#{2,}\s*$/.test(line.trim())) continue;
+      cur.body += `${line}\n`;
+    }
+  }
+  if (cur) blocks.push(cur);
+
+  if (blocks.length === 0) {
+    // body 完全找不到 bold header（旧版 / prompt 漂移） → 退回整段当一条 finding
+    return [sectionToFinding(sec, baseIndex, tool)];
+  }
+
+  return blocks.map((b, i) => {
+    const issueBody = b.body.trim();
+    const anchor = inferAnchorFromIssueText(issueBody);
+    const id = `${tool}-${String(baseIndex + i).padStart(3, '0')}`;
+    return {
+      id,
+      category: 'code-feedback' as const,
+      sectionKey: 'code-feedback' as const,
+      title: b.title,
+      body: issueBody,
+      ...(anchor ? { anchor } : {}),
+    };
+  });
+}
+
+/**
+ * 从 issue 文本里 best-effort 抽 file path + 行号。pr-agent 渲染丢字段后这是唯一
+ * 兜底途径：扫一遍 content，找 (1) 含 `/` 或 `\` 或 `.<ext>` 的路径 token，
+ * (2) `第 N 行 / 行 N-M / line(s) N-M / Lines N-M` 形式的行号。抽不到返回 undefined。
+ *
+ * 我们也认 prompt extra-instructions 里我们自己请求 model 显式输出的 marker：
+ *   [file: <path>, lines: <start>-<end>]
+ * 用作 anchor 强信号 (优先采用)
+ */
+function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
+  // 显式 marker (我们 prompt 注入的)
+  const markerRe =
+    /\[\s*file\s*:\s*([^,\]\s][^,\]]*?)\s*(?:,\s*lines?\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?\s*\]/i;
+  const mm = markerRe.exec(text);
+  if (mm) {
+    const path = stripBackticks(mm[1]!.trim());
+    const anchor: FindingAnchor = { path };
+    if (mm[2]) anchor.startLine = Number.parseInt(mm[2], 10);
+    if (mm[3]) anchor.endLine = Number.parseInt(mm[3], 10);
+    return anchor;
+  }
+  // 兜底 1：含 `/` 的路径 token (优先匹配 `path/to/file.ext`)
+  const pathRe = /(?:^|[\s\(`'"])([A-Za-z0-9_./\\-]+\/[A-Za-z0-9_./\\-]*\.[A-Za-z0-9]{1,8})(?=[\s\)`'":.,!?]|$)/m;
+  const pm = pathRe.exec(text);
+  if (pm) {
+    const path = pm[1]!;
+    const anchor: FindingAnchor = { path };
+    const lineRe =
+      /(?:第\s*(\d+)(?:\s*[-–—]\s*(\d+))?\s*行|行号?\s*[:：]?\s*(\d+)(?:\s*[-–—]\s*(\d+))?|lines?\s*[:：]?\s*(\d+)(?:\s*[-–—]\s*(\d+))?)/i;
+    const lm = lineRe.exec(text);
+    if (lm) {
+      const start = lm[1] ?? lm[3] ?? lm[5];
+      const end = lm[2] ?? lm[4] ?? lm[6];
+      if (start) anchor.startLine = Number.parseInt(start, 10);
+      if (end) anchor.endLine = Number.parseInt(end, 10);
+    }
+    return anchor;
+  }
+  return undefined;
+}
+
+/**
  * 解析单段 markdown 为 Finding。识别 pr-agent 常见的
  * `**File:** path` + `**Lines:** N-M` 模式 → code-feedback；其它返回 general / description。
  */
@@ -211,7 +338,20 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
   const allSections = splitMarkdownSections(stripAnsi(stdout));
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) return { findings: [] };
-  const findings: Finding[] = sections.map((s, i) => sectionToFinding(s, i, tool));
+  // 单 section 可能展开成多个 findings (key_issues_to_review 段)。用游标 idx 维持
+  // 全局 finding 编号稳定，UI list-key 不冲突
+  const findings: Finding[] = [];
+  let idx = 0;
+  for (const sec of sections) {
+    if (tool === 'review' && isKeyIssuesSection(normalizeTitle(sec.title))) {
+      const expanded = expandKeyIssuesSection(sec, idx, tool);
+      findings.push(...expanded);
+      idx += expanded.length;
+    } else {
+      findings.push(sectionToFinding(sec, idx, tool));
+      idx += 1;
+    }
+  }
   // summary：优先取首个有 title 的 section；都没有 title 取首个 body 首行
   let summary: string | undefined;
   const titled = sections.find((s) => s.title);

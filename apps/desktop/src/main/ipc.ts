@@ -603,9 +603,40 @@ export function registerIpcHandlers({
           }
         }
 
-        const extraParts = [langDirective, prContext, matchedRuleInstructions].filter((s) =>
-          s.trim(),
-        );
+        // /review 专属：注入 anchor marker 指令。pr-agent LocalGitProvider 渲染
+        // key_issues_to_review 时 (get_line_link='' + gfm_supported=False) 会把
+        // relevant_file / start_line / end_line 字段全部丢掉，渲染后的 review.md 只剩
+        // **header** + content 两行 (见 ADR-0007 §诊断)。我们让 model 在每条 issue
+        // 末尾**显式**追加 `[file: <path>, lines: <start>-<end>]` marker，
+        // parse-output.ts 的 inferAnchorFromIssueText 优先认这个 marker 抽 anchor。
+        //
+        // 仅作用于 /review；/describe / /ask / /improve 不需要 (前两个不出 issue，
+        // /improve 走 marker 行 `[file [start-end]](url)` 自己有 anchor)
+        const reviewAnchorDirective =
+          req.tool === 'review'
+            ? [
+                'When writing each item under `key_issues_to_review`, append on its OWN LAST LINE',
+                'a machine-readable anchor marker in this EXACT format:',
+                '',
+                '    [file: <relevant_file>, lines: <start_line>-<end_line>]',
+                '',
+                'Examples:',
+                '  [file: src/auth/login.ts, lines: 42-50]',
+                '  [file: pkg/cache.go, lines: 17]',
+                '',
+                'Use the exact relevant_file path and start_line/end_line you already',
+                'identified in the YAML output. Do NOT wrap the path in backticks. If you',
+                'truly cannot identify a file/line for an issue, omit the marker for that',
+                'item only.',
+              ].join('\n')
+            : '';
+
+        const extraParts = [
+          langDirective,
+          reviewAnchorDirective,
+          prContext,
+          matchedRuleInstructions,
+        ].filter((s) => s.trim());
         if (extraParts.length > 0) {
           const envKey =
             req.tool === 'describe'

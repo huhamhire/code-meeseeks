@@ -142,4 +142,81 @@ describe('parseReviewOutput', () => {
     const { findings } = parseReviewOutput(md, 'describe');
     expect(findings.every((f) => f.category === 'description')).toBe(true);
   });
+
+  // pr-agent v0.35+ LocalGitProvider /review 真实输出：每条 issue 渲染成
+  // `**header**\n\ncontent`，没有 File/Lines 字段（pr-agent 渲染时丢字段）。
+  // 我们要把这种段拆成多条独立 finding，UI 端按 code-feedback 卡片渲染
+  it('展开 "Recommended focus areas for review" 段为多条 code-feedback finding', () => {
+    const md = [
+      '## PR Reviewer Guide',
+      '',
+      '### ⚡ Recommended focus areas for review',
+      '',
+      '#### ',
+      '**潜在空引用**',
+      '',
+      'goTenantLoginView 方法中通过 getTenantById 获取租户后直接调用 getId()，',
+      '但未判断 tenant 是否为 null/undefined。',
+      '',
+      '#### ',
+      '**异常处理缺失**',
+      '',
+      '在 src/foo.ts 文件第 42-50 行，try-catch 没有捕获 NetworkError。',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const codeFb = findings.filter((f) => f.category === 'code-feedback');
+    expect(codeFb).toHaveLength(2);
+    expect(codeFb[0]!.title).toBe('潜在空引用');
+    expect(codeFb[0]!.body).toMatch(/goTenantLoginView/);
+    expect(codeFb[0]!.anchor).toBeUndefined(); // 内容没提到 path → 抽不到
+    expect(codeFb[1]!.title).toBe('异常处理缺失');
+    // 第二条 content 里提到了路径 + 行号 → best-effort 抽到
+    expect(codeFb[1]!.anchor?.path).toBe('src/foo.ts');
+    expect(codeFb[1]!.anchor?.startLine).toBe(42);
+    expect(codeFb[1]!.anchor?.endLine).toBe(50);
+  });
+
+  it('英文 "Key Issues to Review" 标题也走展开路径', () => {
+    const md = [
+      '### 🔍 Key Issues to Review',
+      '',
+      '**Off-by-one**',
+      '',
+      'In utils/parse.ts at line 17, the slice index is one too high.',
+      '',
+      '**Missing null check**',
+      '',
+      'The handler does not check req.user.',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const code = findings.filter((f) => f.category === 'code-feedback');
+    expect(code.map((f) => f.title)).toEqual(['Off-by-one', 'Missing null check']);
+    expect(code[0]!.anchor?.path).toBe('utils/parse.ts');
+    expect(code[0]!.anchor?.startLine).toBe(17);
+  });
+
+  it('显式 [file: ..., lines: ..] marker 是 anchor 强信号', () => {
+    const md = [
+      '### Recommended focus areas for review',
+      '',
+      '**Stale cache**',
+      '',
+      'Cache key is reused across sessions.',
+      '[file: src/cache.ts, lines: 88-93]',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const c = findings.find((f) => f.category === 'code-feedback')!;
+    expect(c.anchor).toEqual({ path: 'src/cache.ts', startLine: 88, endLine: 93 });
+  });
+
+  it('key-issues 段无 bold header → 退回单 finding（不丢内容）', () => {
+    const md = [
+      '### Recommended focus areas for review',
+      '',
+      '说明文字，model 没按 bold header 格式输出。',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.body).toMatch(/说明文字/);
+  });
 });
