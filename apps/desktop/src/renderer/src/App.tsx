@@ -11,6 +11,7 @@ import type {
 import { invoke, subscribe } from './api';
 import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/ChatPane';
 import { wireChatRunStore } from './stores/chat-run-store';
+import { wireDraftsStore } from './stores/drafts-store';
 import { wireRepoSyncStore } from './stores/repo-sync-store';
 import { MainPane } from './components/MainPane';
 import { SettingsModal } from './components/SettingsModal';
@@ -33,6 +34,16 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
+  /**
+   * M4 跨组件跳转 (ADR-0007)：ChatPane finding card 点"编辑" → 这里 set →
+   * MainPane 切 tab='diff' + 透传给 DiffView → DiffView 消费完调 onConsumed 清空。
+   * 一次性 token；非 null 时 DiffView 应该 scroll + highlight + open edit zone
+   */
+  const [pendingDiffNav, setPendingDiffNav] = useState<{
+    runId: string;
+    findingId: string;
+    anchor: { path: string; startLine: number; endLine: number };
+  } | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const raw = localStorage.getItem('pr-pilot.sidebarWidth');
@@ -99,6 +110,8 @@ export default function App() {
   useEffect(() => wireChatRunStore(), []);
   // 同样思路：把 repo sync 事件流接到 store，StatusBar 任意时刻可读当前活动同步任务
   useEffect(() => wireRepoSyncStore(), []);
+  // M4 草稿事件 → store；写盘后 drafts:changed 触发指定 PR 的草稿列表自动刷新
+  useEffect(() => wireDraftsStore(), []);
 
   // 窗口重新获得焦点时自动拉一次新鲜列表（不重新触发 poll，避免远端压力）
   useEffect(() => {
@@ -180,6 +193,8 @@ export default function App() {
           pr={selected}
           hasConnections={boot.config.connections.length > 0}
           onSetStatus={(s) => void setSelectedPrStatus(s)}
+          pendingDiffNav={pendingDiffNav}
+          onDiffNavConsumed={() => setPendingDiffNav(null)}
         />
         {/* ChatPane 始终挂载，折叠只是 CSS 隐藏：保住运行中的 run 生命周期。
             如果走条件渲染，折叠 = 卸载组件，进行中的计时器 / runProgress 订阅
@@ -190,6 +205,7 @@ export default function App() {
           width={chatWidth}
           onResize={setChatWidth}
           collapsed={chatCollapsed}
+          onJumpToDraftEditor={(t) => setPendingDiffNav(t)}
         />
       </div>
       <StatusBar

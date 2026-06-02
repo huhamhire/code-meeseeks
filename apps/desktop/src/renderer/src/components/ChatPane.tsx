@@ -13,8 +13,10 @@ import type {
 } from '@pr-pilot/shared';
 
 type MatchedRule = IpcChannels['rules:matchForPr']['response'];
+import type { ReviewDraft } from '@pr-pilot/shared';
 import { invoke } from '../api';
 import { chatRunStore, useChatRunStore } from '../stores/chat-run-store';
+import { useDraftsForPr } from '../stores/drafts-store';
 import { parseAnsi, segmentStyle } from '../utils/ansi';
 import { translatePrAgentLabels } from '../utils/translate-pr-agent';
 
@@ -31,6 +33,16 @@ interface ChatPaneProps {
   /** 折叠时仍然挂载组件 (保住进行中的 run 计时器 / runProgress 订阅)，
       只用 CSS 隐藏。展开后用户看到的就是当前实时状态 */
   collapsed?: boolean;
+  /**
+   * 跳到 Diff 视图编辑某条 finding 对应的草稿 (M4 ADR-0007)。父组件 (MainPane)
+   * 实现：切 tab='diff' + DiffView scroll/highlight/open edit zone + 懒创建 draft
+   * 如果还没有。anchor 已由 finding.anchor 直接给到。
+   */
+  onJumpToDraftEditor?: (target: {
+    runId: string;
+    findingId: string;
+    anchor: { path: string; startLine: number; endLine: number };
+  }) => void;
 }
 
 /**
@@ -43,7 +55,14 @@ interface ChatPaneProps {
  * /ask 自然语言追问留到后续：当前 pr-agent 在多轮交互上没有稳定的本地协议，
  * 先把"开始 review → 结果可见"链路打通，覆盖 M3 done-when。
  */
-export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPaneProps) {
+export function ChatPane({
+  pr,
+  prAgent,
+  width,
+  onResize,
+  collapsed,
+  onJumpToDraftEditor,
+}: ChatPaneProps) {
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
@@ -205,6 +224,94 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     void handleRun(run.tool, run.question);
   };
 
+  // M4 草稿池：从 main 进程拉本 PR 的草稿，跟 finding 通过 source 字段反查关联
+  const drafts = useDraftsForPr(prLocalId);
+
+  /**
+   * ChatPane finding card 上点"编辑"按钮的处理：
+   * - 已有关联草稿 → 直接 onJumpToDraftEditor，DiffView 打开它
+   * - 没有关联草稿 → 懒创建一条 pending + onJumpToDraftEditor
+   * - 关联草稿是 rejected → update 回 pending (撤销拒绝) + 跳转
+   */
+  const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
+    if (!pr) return;
+    if (
+      !finding.anchor ||
+      typeof finding.anchor.startLine !== 'number'
+    ) {
+      return; // 没 anchor 行号 → 没法变 inline，按钮本不该出现，兜底
+    }
+    const startLine = finding.anchor.startLine;
+    const endLine = finding.anchor.endLine ?? startLine;
+    const existing = (drafts ?? []).find(
+      (d) =>
+        d.source !== undefined && d.source.runId === run.id && d.source.findingId === finding.id,
+    );
+    try {
+      if (!existing) {
+        // 懒创建：从 finding 拷贝 body 作初始内容；side 默认 'new' (head 侧 inline 评论惯例)
+        await invoke('drafts:create', {
+          localId: pr.localId,
+          draft: {
+            anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
+            body: finding.body,
+            origin: 'finding',
+            source: { runId: run.id, findingId: finding.id },
+            status: 'pending',
+          },
+        });
+      } else if (existing.status === 'rejected') {
+        // 撤销 reject 决断 → 回到 pending，让用户重新编辑
+        await invoke('drafts:update', {
+          localId: pr.localId,
+          draftId: existing.id,
+          patch: { status: 'pending' },
+        });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    onJumpToDraftEditor?.({
+      runId: run.id,
+      findingId: finding.id,
+      anchor: { path: finding.anchor.path, startLine, endLine },
+    });
+  };
+
+  const handleRejectFinding = async (finding: Finding, run: ReviewRun): Promise<void> => {
+    if (!pr) return;
+    if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
+    const startLine = finding.anchor.startLine;
+    const endLine = finding.anchor.endLine ?? startLine;
+    const existing = (drafts ?? []).find(
+      (d) =>
+        d.source !== undefined && d.source.runId === run.id && d.source.findingId === finding.id,
+    );
+    try {
+      if (existing) {
+        await invoke('drafts:update', {
+          localId: pr.localId,
+          draftId: existing.id,
+          patch: { status: 'rejected' },
+        });
+      } else {
+        await invoke('drafts:create', {
+          localId: pr.localId,
+          draft: {
+            anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
+            body: finding.body,
+            origin: 'finding',
+            source: { runId: run.id, findingId: finding.id },
+            status: 'rejected',
+          },
+        });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   // 新 run 完成 / 活动 run 切换时自动滚到底，让最新消息浮上来
   useEffect(() => {
     const el = bodyRef.current;
@@ -296,6 +403,9 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
             // 可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
             // 避免回头再点重新插队、打乱对话顺序
             canRetry={i === runs.length - 1 && !myActiveRun}
+            drafts={drafts ?? []}
+            onJumpToDraft={handleJumpToDraft}
+            onRejectFinding={handleRejectFinding}
           />
         ))}
         {/* 正在跑：进度条 + 实时 stdout 流，贴在历史末尾。startedAt 入队时为 null，
@@ -980,11 +1090,20 @@ function RunResultView({
   run,
   onRetry,
   canRetry,
+  drafts,
+  onJumpToDraft,
+  onRejectFinding,
 }: {
   run: ReviewRun;
   onRetry: (run: ReviewRun) => void;
   /** 由父组件按"最后一条 + 无活动 run"判定；false 时失败 / 取消 run 也不显示重试键 */
   canRetry: boolean;
+  /** 本 PR 当前草稿池快照；FindingCard 据此显示 status chip + 决定 reject 行为 */
+  drafts: ReadonlyArray<ReviewDraft>;
+  /** 点击 finding card 上"→ 跳到代码编辑"时触发。父组件做懒创建 + 跳转 */
+  onJumpToDraft: (finding: Finding, run: ReviewRun) => void;
+  /** 拒绝某条 finding：创建 / 更新草稿到 status='rejected' */
+  onRejectFinding: (finding: Finding, run: ReviewRun) => void;
 }) {
   const findings = run.findings ?? [];
   // 失败 + 取消都用红 banner 提示。取消是用户主动行为，UI 用更轻文案区分
@@ -1057,9 +1176,25 @@ function RunResultView({
 
       {findings.length > 0 ? (
         <ul className="chat-finding-list">
-          {orderFindings(findings).map((f) => (
-            <FindingCard key={f.id} finding={f} />
-          ))}
+          {orderFindings(findings).map((f) => {
+            // 同 run 内 finding 跟草稿一对一：source.runId+findingId 反查。命中后
+            // FindingCard 据此显示状态 chip + 跳转/拒绝按钮行为分支
+            const relatedDraft = drafts.find(
+              (d) =>
+                d.source !== undefined &&
+                d.source.runId === run.id &&
+                d.source.findingId === f.id,
+            );
+            return (
+              <FindingCard
+                key={f.id}
+                finding={f}
+                relatedDraft={relatedDraft}
+                onJump={() => onJumpToDraft(f, run)}
+                onReject={() => onRejectFinding(f, run)}
+              />
+            );
+          })}
         </ul>
       ) : run.status === 'succeeded' ? (
         <div className="chat-finding-empty muted">
@@ -1067,6 +1202,71 @@ function RunResultView({
           可以展开上方原始输出核对。
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Finding card 上的草稿状态 chip + 操作按钮。仅 code-feedback + anchor 完整时出现。
+ *
+ * 状态可视化：
+ * - 无 relatedDraft（用户从未交互）→ 不显示 status chip，只展示"→ 编辑 / ✗ 拒绝"按钮
+ * - pending → 蓝 chip "待处理" + 跳转 + 拒绝
+ * - edited → 蓝 chip "已编辑" + 跳转 + 拒绝
+ * - posted → 绿 chip "已发布" + 跳转 (查看)，无拒绝 (远端已存，本地不该撤销)
+ * - rejected → 灰 chip "已拒绝" + 撤销 (即重新跳转编辑)
+ */
+function FindingDraftActions({
+  relatedDraft,
+  onJump,
+  onReject,
+}: {
+  relatedDraft?: ReviewDraft;
+  onJump?: () => void;
+  onReject?: () => void;
+}) {
+  const status = relatedDraft?.status;
+  const chipText: Record<NonNullable<typeof status>, string> = {
+    pending: '待处理',
+    edited: '已编辑',
+    posted: '已发布',
+    rejected: '已拒绝',
+  };
+  return (
+    <div className="chat-finding-draft-actions">
+      {status && (
+        <span className={`chat-finding-draft-chip chat-finding-draft-chip-${status}`}>
+          {chipText[status]}
+        </span>
+      )}
+      {/* posted 后跳转只是"查看"语义，不再有编辑动作；rejected 跳转即"撤销并继续编辑" */}
+      {onJump && (
+        <button
+          type="button"
+          className="chat-finding-draft-btn"
+          onClick={onJump}
+          title={
+            status === 'posted'
+              ? '查看远端评论'
+              : status === 'rejected'
+                ? '恢复并编辑'
+                : '在代码中编辑'
+          }
+        >
+          {status === 'posted' ? '查看' : status === 'rejected' ? '恢复' : '编辑'}
+        </button>
+      )}
+      {/* posted 不允许 reject (远端已存)；rejected 也不允许 reject (已经是了) */}
+      {onReject && status !== 'posted' && status !== 'rejected' && (
+        <button
+          type="button"
+          className="chat-finding-draft-btn chat-finding-draft-btn-reject"
+          onClick={onReject}
+          title="拒绝此条建议（不会发布到远端）"
+        >
+          拒绝
+        </button>
+      )}
     </div>
   );
 }
@@ -1277,7 +1477,20 @@ function splitTypeLabels(body: string): string[] {
     .filter((s) => s.length > 1 && !/^[\s\-*_·•.]+$/.test(s));
 }
 
-function FindingCard({ finding }: { finding: Finding }) {
+function FindingCard({
+  finding,
+  relatedDraft,
+  onJump,
+  onReject,
+}: {
+  finding: Finding;
+  /** 该 finding 关联的草稿；undefined = 尚未交互过；不为空 = 已 pending / edited / rejected / posted */
+  relatedDraft?: ReviewDraft;
+  /** 「→ 跳到代码编辑」按钮回调 */
+  onJump?: () => void;
+  /** 「✗ 拒绝」按钮回调 */
+  onReject?: () => void;
+}) {
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
   const label = SECTION_LABEL[key];
@@ -1319,6 +1532,17 @@ function FindingCard({ finding }: { finding: Finding }) {
               {finding.score}/10
             </span>
           )}
+          {/* M4 草稿状态 chip + 操作按钮：仅锚到具体行的 code-feedback 才展示
+              (其它如 summary / description / score 没法变 inline 评论) */}
+          {finding.anchor.startLine !== undefined &&
+            (onJump || onReject) &&
+            key === 'code-feedback' && (
+              <FindingDraftActions
+                relatedDraft={relatedDraft}
+                onJump={onJump}
+                onReject={onReject}
+              />
+            )}
         </div>
       )}
       {key === 'pr-type' ? (

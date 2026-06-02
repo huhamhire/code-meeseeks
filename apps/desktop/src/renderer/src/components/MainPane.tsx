@@ -87,12 +87,33 @@ interface MainPaneProps {
   pr: StoredPullRequest | null;
   hasConnections: boolean;
   onSetStatus: (status: LocalPrStatus) => void;
+  /**
+   * M4 跨组件跳转：ChatPane finding card 点"编辑"时由 App 设置，MainPane 据此
+   * 切到 Diff tab + 把 nav 透传给 DiffView 做 scroll/highlight/open zone。
+   * DiffView 消费完应调用 onDiffNavConsumed 清掉。
+   */
+  pendingDiffNav?: {
+    runId: string;
+    findingId: string;
+    anchor: { path: string; startLine: number; endLine: number };
+  } | null;
+  onDiffNavConsumed?: () => void;
 }
 
 type Tab = 'diff' | 'comments' | 'commits' | 'info';
 
-export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
+export function MainPane({
+  pr,
+  hasConnections,
+  onSetStatus,
+  pendingDiffNav,
+  onDiffNavConsumed,
+}: MainPaneProps) {
   const [tab, setTab] = useState<Tab>('diff');
+  // 收到跳转请求 → 强制切到 Diff tab，DiffView 自己负责消费 anchor
+  useEffect(() => {
+    if (pendingDiffNav) setTab('diff');
+  }, [pendingDiffNav]);
   const [renderSideBySide, setRenderSideBySide] = useState<boolean>(() => {
     const v = localStorage.getItem('pr-pilot.diffMode');
     return v === null ? true : v === 'side-by-side';
@@ -311,7 +332,13 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
       </nav>
       <div className="pr-tab-content">
         {tab === 'diff' && (
-          <DiffView pr={pr} renderSideBySide={renderSideBySide} showBlame={showBlame} />
+          <DiffView
+            pr={pr}
+            renderSideBySide={renderSideBySide}
+            showBlame={showBlame}
+            pendingNav={pendingDiffNav ?? null}
+            onNavConsumed={onDiffNavConsumed}
+          />
         )}
         {tab === 'comments' && (
           <CommentsPanel pr={pr} onCommentsLoaded={(n) => setCommentCount(n)} />

@@ -22,6 +22,17 @@ interface DiffViewProps {
   pr: StoredPullRequest;
   renderSideBySide: boolean;
   showBlame: boolean;
+  /**
+   * M4 跳转目标 (ADR-0007)：来自 ChatPane finding card → App pendingDiffNav。
+   * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + 打开 inline 草稿
+   * 编辑 zone (草稿已由 ChatPane 端懒创建)。消费完调 onNavConsumed 清空 token
+   */
+  pendingNav?: {
+    runId: string;
+    findingId: string;
+    anchor: { path: string; startLine: number; endLine: number };
+  } | null;
+  onNavConsumed?: () => void;
 }
 
 interface LoadedContent {
@@ -105,7 +116,13 @@ function groupBlameByCommit(blame: DiffBlameLine[]): BlameBlock[] {
   return blocks;
 }
 
-export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
+export function DiffView({
+  pr,
+  renderSideBySide,
+  showBlame,
+  pendingNav,
+  onNavConsumed,
+}: DiffViewProps) {
   const [files, setFiles] = useState<DiffChangedFile[] | null>(null);
   const [filesError, setFilesError] = useState<FormattedError | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -233,6 +250,22 @@ export function DiffView({ pr, renderSideBySide, showBlame }: DiffViewProps) {
   }, [pr.localId, commentsRetry]);
 
   const selected = files?.find((f) => fileKey(f) === selectedKey) ?? null;
+
+  // M4 跳转消费 (sub-phase 1b 基础版)：来自 ChatPane → App.pendingDiffNav。
+  // 当前只做：找匹配 changed file → setSelectedKey 切到该文件 → ack 清掉 token。
+  // **scroll 到 anchor 行 + 短暂高亮 + 打开 inline 草稿编辑 zone** 留给 sub-phase 1c
+  // 跟 inline draft zones 一起实现 (需要 diffEditor 就绪 + content 加载完才能 revealLine)。
+  useEffect(() => {
+    if (!pendingNav || !files) return;
+    const target = files.find(
+      (f) => f.path === pendingNav.anchor.path || f.oldPath === pendingNav.anchor.path,
+    );
+    if (target) {
+      setSelectedKey(fileKey(target));
+    }
+    // 不在 changed files 里 (anchor 文件没改动 / 已 deleted) → 也直接 ack 不挂着
+    onNavConsumed?.();
+  }, [pendingNav, files, onNavConsumed]);
 
   // BBS 评论附件 markdown 形如 `![alt](attachment:HASH)`；CommentNode 里把
   // `attachment:` 协议改写成此基址 + `/HASH`，让 <a> 能打开（点击走 Electron

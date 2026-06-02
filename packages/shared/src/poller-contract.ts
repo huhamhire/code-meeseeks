@@ -140,6 +140,66 @@ export interface Finding {
 }
 
 /**
+ * M4 评审 → 发布闭环的"草稿"。详见 ADR-0007。
+ *
+ * 草稿的生命周期跟 Finding 解耦：
+ * - Finding 是 /review 的不可变快照 (跑过什么 AI 说了什么)
+ * - Draft 是用户工作中的可变态 (用户编辑 / 拒绝 / 发布的对象)
+ *
+ * 落盘到 `state/prs/<localId>/drafts.json`，per-PR 目录 (ADR-0006 一致)；PR 退场
+ * 时 deleteDir 整树清掉。
+ *
+ * 状态机：
+ *   pending  ──(用户编辑 body)──► edited
+ *   pending  ──(用户拒绝)──────► rejected
+ *   edited   ──(用户拒绝)──────► rejected
+ *   pending / edited  ──(批量发布成功)──► posted
+ *   posted   ──► (终态，本地不变；要改远端走 BBS API)
+ */
+export interface ReviewDraft {
+  /** 唯一稳定 id (uuid 或 runId+findingId 派生)，UI list-key + 持久化引用 */
+  id: string;
+  /** PR hash localId，跟父目录一致 */
+  prLocalId: string;
+  /** 锚点：跟 FindingAnchor 一致但 startLine/endLine 必填 (草稿必须 anchor 到具体行) */
+  anchor: ReviewDraftAnchor;
+  /** 当前评论正文。pending 时 = AI 建议原文；edited 时 = 用户编辑后 */
+  body: string;
+  /**
+   * 来源：AI 建议 (`finding`) vs 用户手动添加 (`manual`)。
+   * 用户从 DiffView 行 hover '+' 创建的草稿是 manual；从 ChatPane 跳转的是 finding。
+   */
+  origin: 'finding' | 'manual';
+  /**
+   * 仅 origin='finding' 时填，指回源 finding。UI 用它在 ChatPane finding card
+   * 上反查关联 Draft 的 status chip 显示
+   */
+  source?: { runId: string; findingId: string };
+  status: 'pending' | 'edited' | 'posted' | 'rejected';
+  /** 发布成功后远端 comment id，幂等 key + 跳转链接 */
+  posted_remote_id?: string;
+  /** ISO */
+  createdAt: string;
+  /** ISO，每次 update 都刷新 */
+  updatedAt: string;
+}
+
+export interface ReviewDraftAnchor {
+  path: string;
+  /** 锚点起始行 (从 1 开始) */
+  startLine: number;
+  /** 锚点结束行；单行评论 = startLine */
+  endLine: number;
+  /** 锚到 base (old) 还是 head (new) 侧 */
+  side: 'old' | 'new';
+}
+
+export interface DraftsFile {
+  schema_version: 1;
+  drafts: ReviewDraft[];
+}
+
+/**
  * PR identity 快照：嵌进 ReviewRun (可选) 让 run 文件自描述，不依赖 `prs/index.json`
  * 也能反查所属 PR。M5 归档场景 (PR 已硬清但 run 单独导出) 会需要。
  *

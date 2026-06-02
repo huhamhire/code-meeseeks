@@ -4,6 +4,7 @@ import type { PlatformUser, PrComment, PrCommit } from './platform.js';
 import type {
   LocalPrStatus,
   PollResult,
+  ReviewDraft,
   ReviewRun,
   ReviewRunTool,
   StoredPullRequest,
@@ -102,6 +103,11 @@ export interface IpcEvents {
   'sync:progress': SyncProgressEvent;
   'poll:tick': PollTickEvent;
   'pragent:runProgress': PragentRunProgressEvent;
+  /**
+   * 草稿变更广播：某 PR 的 drafts.json 发生增/删/改 / /review 完成时的"再摄入"
+   * 清理都触发。renderer 据此重拉 drafts 列表 (per localId 过滤)。
+   */
+  'drafts:changed': { localId: string };
   /**
    * 队列变化广播：active 切换 / waiting 增删都触发。renderer 据此同步 chat-pane
    * 运行中 UI + StatusBar 队列 chip。
@@ -256,6 +262,45 @@ export interface IpcChannels {
      */
     request: { localId: string; tool: ReviewRunTool; question?: string };
     response: ReviewRun;
+  };
+  /**
+   * 列出指定 PR 的全部草稿 (pending / edited / posted / rejected 都返回，UI 端按
+   * status 过滤显示 / 折叠)。
+   */
+  'drafts:list': {
+    request: { localId: string };
+    response: ReviewDraft[];
+  };
+  /**
+   * 创建一条草稿。id / createdAt / updatedAt 由 main 端生成，调用方传业务字段即可。
+   * 调用约定：origin='finding' 时必须传 source；origin='manual' 时不要传 source。
+   * 成功后 main 端广播 `drafts:changed` 事件。
+   */
+  'drafts:create': {
+    request: {
+      localId: string;
+      draft: Omit<ReviewDraft, 'id' | 'createdAt' | 'updatedAt' | 'prLocalId'>;
+    };
+    response: ReviewDraft;
+  };
+  /**
+   * 部分更新一条草稿。规则：
+   * - 编辑 body 且 status='pending' → 自动转 'edited'
+   * - 显式传 status (e.g., 'rejected') → 按传入值覆盖
+   * - 找不到 draftId 返回 null (不抛错，UI 静默兜底)
+   */
+  'drafts:update': {
+    request: {
+      localId: string;
+      draftId: string;
+      patch: Partial<Pick<ReviewDraft, 'body' | 'status' | 'posted_remote_id'>>;
+    };
+    response: ReviewDraft | null;
+  };
+  /** 删除一条草稿。删 posted 草稿是允许的 (只清本地，远端 comment 不动) */
+  'drafts:delete': {
+    request: { localId: string; draftId: string };
+    response: void;
   };
   /**
    * 列出某 PR 的历史 run，newest first。支持时间戳游标分页：

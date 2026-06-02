@@ -528,6 +528,60 @@
   min-width: 0;
   word-break: break-word;
 }
+// M4 草稿状态 chip + 操作按钮：anchor 行右侧，跟 score chip 共用 margin-left:auto 推到末尾
+.chat-finding-draft-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+}
+.chat-finding-draft-chip {
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  font-size: $fs-xs;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+
+  &.chat-finding-draft-chip-pending,
+  &.chat-finding-draft-chip-edited {
+    background: $color-accent-bg-fade;
+    color: $color-info;
+  }
+  &.chat-finding-draft-chip-posted {
+    background: rgba(22, 163, 74, 0.18);
+    color: $color-approved;
+  }
+  &.chat-finding-draft-chip-rejected {
+    background: $bg-surface;
+    color: $text-muted;
+    text-decoration: line-through;
+  }
+}
+.chat-finding-draft-btn {
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  font-size: $fs-xs;
+  background: $bg-surface;
+  color: $text-body;
+  border: 1px solid $border-default;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: $lh-normal;
+
+  &:hover {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+.chat-finding-draft-btn-reject {
+  &:hover {
+    border-color: $color-danger;
+    color: $color-danger;
+    background: rgba(244, 135, 113, 0.08);
+  }
+}
+
 // /improve 的重要度评分 chip：右浮在 anchor 行末尾，高分 (>=8) 加 warning 调色
 .chat-finding-score {
   margin-left: auto;

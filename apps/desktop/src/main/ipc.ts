@@ -7,9 +7,13 @@ import { writeConfig, type BootstrapResult } from '@pr-pilot/config';
 import { PrAgentRunError, type PrAgentBridge } from '@pr-pilot/pr-agent-bridge';
 import {
   type Poller,
+  createDraft,
+  deleteDraft,
+  dropPendingFindingDrafts,
   finishReviewRun,
   getReviewRun,
   isCommentsCacheStale,
+  listDrafts,
   listReviewRunsForPr,
   listStoredPullRequests,
   makeRunId,
@@ -17,6 +21,7 @@ import {
   readCommentsCache,
   setLocalStatus,
   startReviewRun,
+  updateDraft,
   writeCommentsCache,
 } from '@pr-pilot/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@pr-pilot/repo-mirror';
@@ -94,6 +99,13 @@ export function registerIpcHandlers({
     };
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('pragent:queueChanged', payload);
+    }
+  };
+
+  /** 草稿变更广播：drafts:* IPC 写盘后调用，告诉 renderer 重拉某 PR 的草稿列表 */
+  const broadcastDraftsChanged = (localId: string): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('drafts:changed', { localId });
     }
   };
 
@@ -673,6 +685,23 @@ export function registerIpcHandlers({
             ? stripAskQuestionEcho(fileContent, req.question)
             : fileContent;
         const parsed = parseReviewOutput(cleanedContent || result.stdout, req.tool);
+        // M4 草稿再摄入 (ADR-0007 §2)：/review 成功完成时丢掉 pending+finding 旧草稿，
+        // 让本轮 ChatPane 上的 finding 列表成为新的候选源。edited/posted/rejected/
+        // manual 保留不动。失败的 /review 不触发清理 (没建设性数据)。
+        if (req.tool === 'review') {
+          try {
+            const dropped = await dropPendingFindingDrafts(stateStore, pr.localId);
+            if (dropped > 0) {
+              logger.info(
+                { runId: run.id, localId: pr.localId, dropped },
+                'pragent /review: dropped stale pending drafts',
+              );
+              broadcastDraftsChanged(pr.localId);
+            }
+          } catch (err) {
+            logger.warn({ err, runId: run.id }, 'dropPendingFindingDrafts failed');
+          }
+        }
         return await finishWith({
           status: 'succeeded',
           finishedAt: new Date().toISOString(),
@@ -848,6 +877,63 @@ export function registerIpcHandlers({
       req: IpcChannels['pragent:getRun']['request'],
     ): Promise<IpcChannels['pragent:getRun']['response']> =>
       getReviewRun(stateStore, req.localId, req.runId),
+  );
+
+  // === M4 草稿 IPC ===
+  // 所有 mutator (create / update / delete) 写盘成功后立刻广播 drafts:changed，
+  // renderer drafts-store 据此重拉刷新
+
+  ipcMain.handle(
+    'drafts:list',
+    async (
+      _evt,
+      req: IpcChannels['drafts:list']['request'],
+    ): Promise<IpcChannels['drafts:list']['response']> =>
+      listDrafts(stateStore, req.localId),
+  );
+
+  ipcMain.handle(
+    'drafts:create',
+    async (
+      _evt,
+      req: IpcChannels['drafts:create']['request'],
+    ): Promise<IpcChannels['drafts:create']['response']> => {
+      // 防御：origin='finding' 必须带 source；origin='manual' 不要 source。
+      // 上层 UI 已校验，但 IPC 边界再挡一道避免脏数据进盘
+      const { draft, localId } = req;
+      if (draft.origin === 'finding' && !draft.source) {
+        throw new Error('drafts:create: origin=finding 必须传 source { runId, findingId }');
+      }
+      if (draft.origin === 'manual' && draft.source) {
+        throw new Error('drafts:create: origin=manual 不应该传 source');
+      }
+      const created = await createDraft(stateStore, localId, draft);
+      broadcastDraftsChanged(localId);
+      return created;
+    },
+  );
+
+  ipcMain.handle(
+    'drafts:update',
+    async (
+      _evt,
+      req: IpcChannels['drafts:update']['request'],
+    ): Promise<IpcChannels['drafts:update']['response']> => {
+      const updated = await updateDraft(stateStore, req.localId, req.draftId, req.patch);
+      if (updated) broadcastDraftsChanged(req.localId);
+      return updated;
+    },
+  );
+
+  ipcMain.handle(
+    'drafts:delete',
+    async (
+      _evt,
+      req: IpcChannels['drafts:delete']['request'],
+    ): Promise<IpcChannels['drafts:delete']['response']> => {
+      await deleteDraft(stateStore, req.localId, req.draftId);
+      broadcastDraftsChanged(req.localId);
+    },
   );
 
   ipcMain.handle(
