@@ -74,6 +74,7 @@ flowchart TB
 - [ADR-0003](./adr/0003-state-storage-and-workspace-layout.md) · 状态存储与工作目录布局
 - [ADR-0004](./adr/0004-package-manager-and-monorepo.md) · 包管理器与 Monorepo 工具
 - [ADR-0006](./adr/0006-pr-state-storage-redesign.md) · PR 状态存储重新设计（per-PR 目录 + hash localId + 软删 + 安全 invariants）
+- [ADR-0007](./adr/0007-m4-draft-workflow.md) · M4 评审 → 发布闭环的草稿工作流（/review code-feedback → 草稿池 → 内联编辑 → 批量发布）
 
 ---
 

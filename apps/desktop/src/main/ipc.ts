@@ -600,7 +600,9 @@ export function registerIpcHandlers({
               ? 'PR_DESCRIPTION__EXTRA_INSTRUCTIONS'
               : req.tool === 'review'
                 ? 'PR_REVIEWER__EXTRA_INSTRUCTIONS'
-                : 'PR_QUESTIONS__EXTRA_INSTRUCTIONS';
+                : req.tool === 'improve'
+                  ? 'PR_CODE_SUGGESTIONS__EXTRA_INSTRUCTIONS'
+                  : 'PR_QUESTIONS__EXTRA_INSTRUCTIONS';
           env[envKey] = extraParts.join('\n\n---\n\n');
         }
         if (matchedRuleId) {
@@ -648,9 +650,11 @@ export function registerIpcHandlers({
           signal: ac.signal,
         });
         // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
-        //   /describe → <wt>/description.md          (走 publish_description)
-        //   /review   → <wt>/review.md                (走 publish_comment)
-        //   /ask     → <wt>/review.md  ← 共用同一文件 (走 publish_comment，会覆盖)
+        //   /describe → <wt>/description.md  (走 publish_description)
+        //   /review   → <wt>/review.md       (走 publish_comment)
+        //   /ask      → <wt>/review.md       ← 共用同一文件 (publish_comment 会覆盖)
+        //   /improve  → <wt>/review.md       ← 同上：local provider 不实现
+        //                                      publish_code_suggestions，汇总走 publish_comment
         // 走 worktree 路径，cleanup 前必须先把文件读出来。
         const outFile = req.tool === 'describe' ? 'description.md' : 'review.md';
         let fileContent = '';

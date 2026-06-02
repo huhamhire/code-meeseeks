@@ -357,6 +357,11 @@ interface CommandSpec {
 const COMMANDS: ReadonlyArray<CommandSpec> = [
   { name: 'describe', label: '/describe', desc: '生成 PR 描述', insertAs: '/describe' },
   { name: 'review', label: '/review', desc: '代码评审', insertAs: '/review' },
+  // /improve 暂屏蔽：实测 pr-agent 的 improve 工具依赖在线平台 (GitHub / GitLab /
+  // Bitbucket Cloud) 的 inline code suggestion / best practices 集成，跟 pr-pilot
+  // 本地 PR 管理路径不兼容。后端类型 / parser / IPC 仍保留，等策略变化或上游
+  // 支持 local provider 时直接放开
+  // { name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
   { name: 'ask', label: '/ask', desc: '自然语言追问', insertAs: '/ask ' },
 ];
 
@@ -751,32 +756,35 @@ function ChatInputBar({
             </ul>
           )}
         </div>
-        {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时左侧额外挂 stop */}
-        {running && onCancel && (
+        {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时 stop 紧贴 send 左侧。
+            包到一个 group 里避免 input-row 的 space-between 把 stop 推到中央 */}
+        <div className="chat-pane-send-group">
+          {running && onCancel && (
+            <button
+              type="button"
+              className="chat-pane-send chat-pane-send-stop"
+              onClick={() => {
+                if (stopRequested) return;
+                setStopRequested(true);
+                onCancel();
+              }}
+              disabled={stopRequested}
+              title="终止当前 PR Agent 调用 (SIGKILL)"
+              aria-label="停止"
+            >
+              <StopIcon />
+            </button>
+          )}
           <button
-            type="button"
-            className="chat-pane-send chat-pane-send-stop"
-            onClick={() => {
-              if (stopRequested) return;
-              setStopRequested(true);
-              onCancel();
-            }}
-            disabled={stopRequested}
-            title="终止当前 PR Agent 调用 (SIGKILL)"
-            aria-label="停止"
+            type="submit"
+            className="chat-pane-send"
+            disabled={disabled || !trimmed}
+            title={running ? '发送 (新任务会进队列)' : '发送 (Enter)'}
+            aria-label="发送"
           >
-            <StopIcon />
+            <SendIcon />
           </button>
-        )}
-        <button
-          type="submit"
-          className="chat-pane-send"
-          disabled={disabled || !trimmed}
-          title={running ? '发送 (新任务会进队列)' : '发送 (Enter)'}
-          aria-label="发送"
-        >
-          <SendIcon />
-        </button>
+        </div>
       </div>
     </form>
   );
@@ -1207,6 +1215,7 @@ const SECTION_ORDER: Record<PrDocSectionKey, number> = {
   'relevant-tests': 5,
   security: 6,
   'code-feedback': 7,
+  'code-suggestion': 7, // 跟 code-feedback 一组，UI 顺序无优先关系
   effort: 8,
   score: 9,
   general: 10,
@@ -1220,6 +1229,7 @@ const SECTION_LABEL: Record<PrDocSectionKey, string> = {
   'relevant-tests': '相关测试',
   security: '安全',
   'code-feedback': '代码反馈',
+  'code-suggestion': '改进建议',
   effort: '工作量',
   score: '评分',
   general: '',
@@ -1300,6 +1310,15 @@ function FindingCard({ finding }: { finding: Finding }) {
                 : ''}
             </span>
           )}
+          {/* /improve 建议带的 1-10 重要度评分；高分加 warning 着色提示 reviewer */}
+          {typeof finding.score === 'number' && (
+            <span
+              className={`chat-finding-score${finding.score >= 8 ? ' chat-finding-score-high' : ''}`}
+              title="pr-agent 给出的重要度评分 1-10"
+            >
+              {finding.score}/10
+            </span>
+          )}
         </div>
       )}
       {key === 'pr-type' ? (
@@ -1319,6 +1338,28 @@ function FindingCard({ finding }: { finding: Finding }) {
           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
             {translatedBody}
           </ReactMarkdown>
+        </div>
+      )}
+      {/* /improve 给的 existing → improved 代码对比。两段都是片段，独立 <pre> 块
+          + 红/绿背景 模拟 diff 视觉 (不用 Monaco DiffEditor 节省开销) */}
+      {finding.codeChange && (
+        <div className="chat-finding-code-change">
+          {finding.codeChange.existing && (
+            <pre
+              className="chat-finding-code-change-block chat-finding-code-change-existing"
+              aria-label="原代码"
+            >
+              {finding.codeChange.existing}
+            </pre>
+          )}
+          {finding.codeChange.improved && (
+            <pre
+              className="chat-finding-code-change-block chat-finding-code-change-improved"
+              aria-label="改进代码"
+            >
+              {finding.codeChange.improved}
+            </pre>
+          )}
         </div>
       )}
     </li>

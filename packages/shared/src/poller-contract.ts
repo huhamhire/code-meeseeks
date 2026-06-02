@@ -15,10 +15,16 @@ export type LocalPrStatus = 'pending' | 'approved' | 'needs_work';
  * pr-agent 跑的工具枚举：
  * - describe / review：生成 PR 描述 / 代码评审，输出落到工作树的 markdown 文件
  * - ask：自然语言追问，输出走 stdout (没有专属 output 文件)，request 必带 question
+ * - improve：逐行代码改进建议；pr-agent local provider 不实现
+ *   `publish_code_suggestions`，所以走 `publish_comment` 把汇总 markdown 写到
+ *   `review.md` (跟 review / ask 共用)。每条建议形态：
+ *     <details><summary>file<br>[start-end]:</summary>...```diff\nold\nnew\n```...</details>
+ *   parseReviewOutput 对 tool='improve' 走专门解析路径，把每条 details 拆成
+ *   带 anchor (path / startLine / endLine) 的 code-feedback finding。
  *
- * 后续 /improve / /reflect 接进来时往这里加值
+ * 后续 /reflect 等接进来时往这里加值
  */
-export type ReviewRunTool = 'describe' | 'review' | 'ask';
+export type ReviewRunTool = 'describe' | 'review' | 'ask' | 'improve';
 
 export type ReviewRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -44,17 +50,18 @@ export type FindingCategory = 'description' | 'general' | 'code-feedback';
  * 是否隐藏 / 后续做特化卡片。
  */
 export type PrDocSectionKey =
-  | 'title'           // 建议的 PR 标题
-  | 'pr-type'         // 类型标签 (Bug fix / Enhancement / Tests / ...)
-  | 'summary'         // /review 顶部总结
-  | 'description'     // 主描述段
-  | 'walkthrough'     // 文件级走查
-  | 'relevant-tests'  // 相关测试
-  | 'security'        // 安全发现
-  | 'code-feedback'   // /review 单条 finding (带 file:line anchor)
-  | 'effort'          // 评估工作量 1-5
-  | 'score'           // 质量分
-  | 'general';        // 兜底，未识别
+  | 'title'             // 建议的 PR 标题
+  | 'pr-type'           // 类型标签 (Bug fix / Enhancement / Tests / ...)
+  | 'summary'           // /review 顶部总结
+  | 'description'       // 主描述段
+  | 'walkthrough'       // 文件级走查
+  | 'relevant-tests'    // 相关测试
+  | 'security'          // 安全发现
+  | 'code-feedback'     // /review 单条 finding (带 file:line anchor)
+  | 'code-suggestion'   // /improve 单条改进建议 (带 file:line anchor + existing/improved diff)
+  | 'effort'            // 评估工作量 1-5
+  | 'score'             // 质量分
+  | 'general';          // 兜底，未识别
 
 export interface FindingAnchor {
   path: string;
@@ -75,6 +82,16 @@ export type FindingSeverity = 'info' | 'warning' | 'error';
  */
 export type FindingStatus = 'pending' | 'accepted' | 'edited' | 'rejected' | 'posted';
 
+/**
+ * /improve 单条建议的"前后代码"对比。pr-agent 在 markdown 里用 `diff` 代码块同时
+ * 给出 existing + improved 两段内容；解析后我们拆成两份字符串，UI 用单语言 syntax
+ * highlight 渲染 (anchor.path 给文件类型)。两边都是片段，不一定能独立运行/编译。
+ */
+export interface FindingCodeChange {
+  existing: string;
+  improved: string;
+}
+
 export interface Finding {
   /** 同一 run 内稳定的 id，便于 UI list-key + 后续 "改为评论草稿" 引用 */
   id: string;
@@ -88,8 +105,18 @@ export interface Finding {
   title?: string;
   /** 原始 markdown body（含格式），UI 用 react-markdown 渲染 */
   body: string;
-  /** 仅 category='code-feedback' 时有值 */
+  /** category='code-feedback' / 'code-suggestion' 时有值 */
   anchor?: FindingAnchor;
+  /**
+   * /improve 建议带的"原代码 → 改进代码"对比。仅 sectionKey='code-suggestion' 时填。
+   * UI 用单语言 syntax highlight 渲染前后两个片段
+   */
+  codeChange?: FindingCodeChange;
+  /**
+   * /improve 给的重要度评分 1-10。仅 sectionKey='code-suggestion' 时填。
+   * 配合 severity (M4 评审决断) 做排序 / 着色：分数 ≥ 8 默认 'warning'，< 5 默认 'info'
+   */
+  score?: number;
   /**
    * 严重度 (M4)；当前 parser 不填，M4 接 /improve 时按 pr-agent 输出 / rules 补
    * 推断逻辑。UI 默认按 'info' 渲染

@@ -1,4 +1,10 @@
-import type { Finding, FindingAnchor, PrDocSectionKey, ReviewRunTool } from '@pr-pilot/shared';
+import type {
+  Finding,
+  FindingAnchor,
+  FindingCodeChange,
+  PrDocSectionKey,
+  ReviewRunTool,
+} from '@pr-pilot/shared';
 
 export interface ParsedReviewOutput {
   /** 取首个非空 section 标题 / 描述首行作为 PR 摘要 */
@@ -194,10 +200,14 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
  * - 识别 file + lines 模式标 code-feedback
  * - 已知 section title 映射到 sectionKey，UI 用于排序 / 着色
  *
+ * /improve 走专门解析路径：pr-agent local provider 输出是 HTML <details> 嵌套结构
+ * 而非纯 markdown sections，splitMarkdownSections 切不出来。
+ *
  * 失败 / 空输出 / 完全不规则的格式 → findings 为空数组，调用方可以回退到展示原始
  * stdout。不在这里抛错。
  */
 export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedReviewOutput {
+  if (tool === 'improve') return parseImproveOutput(stdout);
   const allSections = splitMarkdownSections(stripAnsi(stdout));
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) return { findings: [] };
@@ -211,6 +221,144 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
     if (firstNonEmpty) summary = firstNonEmpty;
   }
   return { findings, summary };
+}
+
+/**
+ * 解析 pr-agent `/improve` 工具的输出。
+ *
+ * pr-agent local provider 不实现 `publish_code_suggestions`，所以 `/improve` 走
+ * `publish_comment` 把汇总 markdown 写到 `review.md` (跟 /review、/ask 共用)。
+ *
+ * 每条建议的模板 (摘自 pr-agent `pr_code_suggestions.py` 的 generate_summarized_suggestions)：
+ * ```
+ * <details><summary>{one_sentence_summary}</summary>
+ *
+ * ___
+ *
+ * **{suggestion_content}**
+ *
+ * [{relevant_file} [{start}-{end}]]({code_snippet_link})
+ *
+ * ```diff
+ * {patch}
+ * ```
+ *
+ * <details><summary>Suggestion importance[1-10]: {score}</summary>
+ *
+ * __
+ *
+ * Why: {score_why}
+ *
+ * </details>
+ *
+ * </details>
+ * ```
+ *
+ * 反解策略：以**file marker 行** `[<file> [<start>-<end>]](<url>)` 为切分点。
+ * 每两个相邻 marker 之间是一条建议的范围，向前找 `<summary>`，向后找
+ * ` ```diff ` 块 + `importance[1-10]:` 评分。pr-agent 版本间细节会变，按 marker
+ * 切片比硬解 HTML 嵌套更稳。
+ *
+ * 没有 marker → 输出形态不识别（旧版 / 配置变化），返回空 findings + summary 提示。
+ */
+export function parseImproveOutput(stdout: string): ParsedReviewOutput {
+  const cleaned = stripAnsi(stdout).replace(/\r\n/g, '\n');
+  const lines = cleaned.split('\n');
+  // file marker 行：`[<path> [<start>-<end>]](<url>)`，path 内不含 `]` / 空白；
+  // range 可能 `[42-45]` 或 `[42]` (单行)
+  const markerRe =
+    /^\[([^\]\s]+)\s+\[(\d+)(?:-(\d+))?\]\]\(/;
+  interface Marker {
+    idx: number;
+    file: string;
+    startLine: number;
+    endLine: number;
+  }
+  const markers: Marker[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = markerRe.exec(lines[i]!.trim());
+    if (m) {
+      const startLine = Number.parseInt(m[2]!, 10);
+      const endLine = m[3] ? Number.parseInt(m[3], 10) : startLine;
+      markers.push({ idx: i, file: m[1]!, startLine, endLine });
+    }
+  }
+  if (markers.length === 0) {
+    return {
+      findings: [],
+      summary: '未识别到改进建议（pr-agent 输出格式可能变化）',
+    };
+  }
+  const findings: Finding[] = [];
+  for (let i = 0; i < markers.length; i++) {
+    const m = markers[i]!;
+    const nextIdx = i + 1 < markers.length ? markers[i + 1]!.idx : lines.length;
+    const prevIdx = i > 0 ? markers[i - 1]!.idx : 0;
+    const blockText = lines.slice(m.idx, nextIdx).join('\n');
+
+    // suggestion_content: marker 上面最近的非空非 HTML 行 (通常 **...** 加粗)
+    let content = '';
+    for (let j = m.idx - 1; j > prevIdx; j--) {
+      const l = lines[j]!.trim();
+      if (!l) continue;
+      if (l.startsWith('<') || l === '___' || l === '__') continue;
+      content = l.replace(/^\*\*\s*|\s*\*\*$/g, '').trim();
+      break;
+    }
+
+    // one_sentence_summary: marker 上面最近的 <summary>...</summary> (不含 importance 那个)
+    let summaryText = '';
+    for (let j = m.idx - 1; j > prevIdx; j--) {
+      const sm = /<summary[^>]*>([\s\S]*?)<\/summary>/i.exec(lines[j]!);
+      if (sm && !/importance/i.test(sm[1]!)) {
+        summaryText = sm[1]!.replace(/<[^>]+>/g, ' ').trim();
+        break;
+      }
+    }
+
+    // diff block + 拆 -/+ 行
+    let codeChange: FindingCodeChange | undefined;
+    const diffStart = blockText.indexOf('```diff');
+    if (diffStart >= 0) {
+      const after = blockText.slice(diffStart + '```diff'.length);
+      const diffEnd = after.indexOf('```');
+      if (diffEnd >= 0) {
+        const patch = after.slice(0, diffEnd).replace(/^\n+|\n+$/g, '');
+        const existingLines: string[] = [];
+        const improvedLines: string[] = [];
+        for (const dl of patch.split('\n')) {
+          if (dl.startsWith('-')) existingLines.push(dl.slice(1).replace(/^ /, ''));
+          else if (dl.startsWith('+')) improvedLines.push(dl.slice(1).replace(/^ /, ''));
+          // 普通 context 行 (空格起手) 在 pr-agent improve diff 里少见，忽略
+        }
+        if (existingLines.length > 0 || improvedLines.length > 0) {
+          codeChange = {
+            existing: existingLines.join('\n'),
+            improved: improvedLines.join('\n'),
+          };
+        }
+      }
+    }
+
+    // score
+    const scoreM = /importance\[1-10\]:\s*(\d+)/i.exec(blockText);
+    const score = scoreM ? Number.parseInt(scoreM[1]!, 10) : undefined;
+
+    findings.push({
+      id: `improve-${String(i).padStart(3, '0')}`,
+      category: 'code-feedback',
+      sectionKey: 'code-suggestion',
+      title: summaryText || content || '改进建议',
+      body: content,
+      anchor: { path: m.file, startLine: m.startLine, endLine: m.endLine },
+      codeChange,
+      score,
+    });
+  }
+  return {
+    findings,
+    summary: `${String(findings.length)} 条改进建议`,
+  };
 }
 
 function stripBackticks(s: string): string {

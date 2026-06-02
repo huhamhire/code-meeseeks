@@ -464,7 +464,8 @@
     border-left-color: $text-muted;
   }
   &.chat-finding-security,
-  &.chat-finding-code-feedback {
+  &.chat-finding-code-feedback,
+  &.chat-finding-code-suggestion {
     border-left-color: $color-warning;
   }
   &.chat-finding-general {
@@ -507,7 +508,8 @@
   }
   // 警示组：琥珀
   &.chat-finding-cat-security,
-  &.chat-finding-cat-code-feedback {
+  &.chat-finding-cat-code-feedback,
+  &.chat-finding-cat-code-suggestion {
     background: rgba(217, 119, 6, 0.18); // $color-warning fade
     color: $color-warning-bright;
   }
@@ -526,6 +528,51 @@
   min-width: 0;
   word-break: break-word;
 }
+// /improve 的重要度评分 chip：右浮在 anchor 行末尾，高分 (>=8) 加 warning 调色
+.chat-finding-score {
+  margin-left: auto;
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+  font-family: $font-mono;
+
+  &.chat-finding-score-high {
+    background: rgba(217, 119, 6, 0.18);
+    color: $color-warning-bright;
+    font-weight: 600;
+  }
+}
+
+// /improve 建议的 existing → improved 代码片段对比块。两个独立 <pre>，红绿背景模拟 diff
+.chat-finding-code-change {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+  margin-top: $space-3;
+}
+.chat-finding-code-change-block {
+  margin: 0;
+  padding: $space-3 $space-4;
+  font-family: $font-mono;
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: $radius-sm;
+  border: 1px solid $border-default;
+  overflow-x: auto;
+}
+.chat-finding-code-change-existing {
+  background: rgba(244, 135, 113, 0.08);
+  border-left: 3px solid $color-danger;
+}
+.chat-finding-code-change-improved {
+  background: rgba(22, 163, 74, 0.1);
+  border-left: 3px solid $color-approved;
+}
+
 .chat-finding-anchor {
   font-size: $fs-xs;
   margin-bottom: $space-3;
@@ -636,6 +683,13 @@
   align-items: center;
   justify-content: space-between;
   gap: $space-4;
+}
+// stop + send 包在一个 group 里，让 space-between 只对"/ 按钮 vs 这一组"生效，
+// stop 跟 send 之间用 group 自己的 gap 控制贴近距离
+.chat-pane-send-group {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
 }
 
 // 命令触发器：单 `/` 按钮 + 弹出菜单 (替代之前 3 个并列按钮)

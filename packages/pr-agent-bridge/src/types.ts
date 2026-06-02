@@ -1,7 +1,7 @@
 import type { PrAgentStrategy } from '@pr-pilot/shared';
 
 /** pr-agent 子命令枚举；跟 @pr-pilot/shared 的 ReviewRunTool 同集合 */
-export type PrAgentTool = 'describe' | 'review' | 'ask';
+export type PrAgentTool = 'describe' | 'review' | 'ask' | 'improve';
 
 export interface PrAgentRunOptions {
   /**

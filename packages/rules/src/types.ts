@@ -10,7 +10,7 @@
  * - 同一次 pragent:run 可能有多条规则命中；调用方按 priority desc + filePath asc
  *   排序后**只取第一条**（pickMatchingRule）。多规则拼接的复杂语义留到后续按需扩展。
  */
-export type RuleTool = 'describe' | 'review';
+export type RuleTool = 'describe' | 'review' | 'improve';
 
 export interface RuleApplies {
   /** BBS projectKey 正则，例如 "^FX$" 或 "^FX-.*" */
