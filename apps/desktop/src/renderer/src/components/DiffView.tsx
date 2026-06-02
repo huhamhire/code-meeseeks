@@ -9,12 +9,15 @@ import type {
   DiffChangedFile,
   DiffFileContent,
   PrComment,
+  ReviewDraft,
   StoredPullRequest,
   SyncProgressEvent,
 } from '@pr-pilot/shared';
 import { invoke } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
+import { useDraftsForPr } from '../stores/drafts-store';
 import { Avatar } from './Avatar';
+import { DraftZone } from './DraftZone';
 import { ErrorBoundary } from './ErrorBoundary';
 import { FileTree } from './FileTree';
 
@@ -250,11 +253,36 @@ export function DiffView({
   }, [pr.localId, commentsRetry]);
 
   const selected = files?.find((f) => fileKey(f) === selectedKey) ?? null;
+  // M4 草稿池：跨 ChatPane / DiffView 共享 store；本组件需要它来渲染 inline zones
+  const drafts = useDraftsForPr(pr.localId);
 
-  // M4 跳转消费 (sub-phase 1b 基础版)：来自 ChatPane → App.pendingDiffNav。
-  // 当前只做：找匹配 changed file → setSelectedKey 切到该文件 → ack 清掉 token。
-  // **scroll 到 anchor 行 + 短暂高亮 + 打开 inline 草稿编辑 zone** 留给 sub-phase 1c
-  // 跟 inline draft zones 一起实现 (需要 diffEditor 就绪 + content 加载完才能 revealLine)。
+  // M4 autoEdit token 表：draft.id → 递增 token；token 变化时对应 DraftZone 自动
+  // 进入编辑模式。供两个来源用：
+  //   1. ChatPane → App.pendingDiffNav 跳转完后，目标 draft 自动 enter edit
+  //   2. 行 hover '+' 创建 manual draft 后立即 enter edit (新草稿空 body 必须能输入)
+  const [autoEditTokens, setAutoEditTokens] = useState<Record<string, number>>({});
+  const triggerAutoEdit = (draftId: string): void => {
+    setAutoEditTokens((prev) => ({ ...prev, [draftId]: (prev[draftId] ?? 0) + 1 }));
+  };
+
+  // PR 切换重置 nav 状态 + autoEdit token (旧 draft 不存在了，留着没用)
+  useEffect(() => {
+    setAutoEditTokens({});
+  }, [pr.localId]);
+
+  // M4 跳转消费：来自 ChatPane → App.pendingDiffNav。
+  //   1. 找匹配 changed file → setSelectedKey 切到该文件
+  //   2. 找对应草稿 (按 source.runId+findingId)，trigger autoEdit
+  //   3. (后续 effect 处理) revealLine + 高亮
+  //   4. ack 清掉 nav token
+  //
+  // 跨多个 effect 协调：本 effect 设 selectedKey + 找 targetDraftId；
+  // 下游 effect 等 selected/diffEditor/drafts 就绪后 reveal + auto edit
+  const [pendingScroll, setPendingScroll] = useState<{
+    line: number;
+    side: 'old' | 'new';
+    draftId?: string;
+  } | null>(null);
   useEffect(() => {
     if (!pendingNav || !files) return;
     const target = files.find(
@@ -263,8 +291,21 @@ export function DiffView({
     if (target) {
       setSelectedKey(fileKey(target));
     }
-    // 不在 changed files 里 (anchor 文件没改动 / 已 deleted) → 也直接 ack 不挂着
+    // 查现有草稿；ChatPane 端已经懒创建过了，正常情况能找到
+    const matchingDraft = (drafts ?? []).find(
+      (d) =>
+        d.source !== undefined &&
+        d.source.runId === pendingNav.runId &&
+        d.source.findingId === pendingNav.findingId,
+    );
+    setPendingScroll({
+      line: pendingNav.anchor.startLine,
+      side: 'new',
+      draftId: matchingDraft?.id,
+    });
     onNavConsumed?.();
+    // drafts 不放 dep —— nav 进来时已 ack；后续 drafts 变化不该重复触发本逻辑
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingNav, files, onNavConsumed]);
 
   // BBS 评论附件 markdown 形如 `![alt](attachment:HASH)`；CommentNode 里把
@@ -506,6 +547,242 @@ export function DiffView({
     };
   }, [diffEditor, comments, content, selected, pr.connectionId, attachmentBase]);
 
+  // M4: 内联草稿 view zones (蓝底，editable)。跟 comments 同套机制：
+  // - filter drafts by selected.path / oldPath
+  // - 按 anchor.side (old / new) 分桶
+  // - addZone + createRoot 渲染 DraftZone 组件
+  // - DraftZone 内 isEditing state 由组件自管；onSave / onDelete 调 IPC mutators
+  //
+  // 不渲染 rejected 草稿 (UI 默认隐藏)，但 posted 渲染 (含远端 id 链接，绿底)
+  useEffect(() => {
+    if (!diffEditor || !content || !selected) return;
+    const fileDrafts = (drafts ?? []).filter((d) => {
+      if (d.status === 'rejected') return false;
+      return d.anchor.path === selected.path || selected.oldPath === d.anchor.path;
+    });
+    if (fileDrafts.length === 0) return;
+
+    const oldByLine = new Map<number, ReviewDraft[]>();
+    const newByLine = new Map<number, ReviewDraft[]>();
+    for (const d of fileDrafts) {
+      const target = d.anchor.side === 'old' ? oldByLine : newByLine;
+      const arr = target.get(d.anchor.endLine) ?? [];
+      arr.push(d);
+      target.set(d.anchor.endLine, arr);
+    }
+
+    const originalEditor = diffEditor.getOriginalEditor();
+    const modifiedEditor = diffEditor.getModifiedEditor();
+    const zoneRefs: Array<{
+      editor: MonacoEditor.ICodeEditor;
+      zoneId: string;
+      dom: HTMLElement;
+      root: Root;
+    }> = [];
+
+    const addZonesFor = (
+      editorInst: MonacoEditor.ICodeEditor,
+      byLine: Map<number, ReviewDraft[]>,
+    ): void => {
+      editorInst.changeViewZones((accessor) => {
+        for (const [line, ds] of byLine) {
+          // 同一行多条草稿叠加挂一个 zone (height 累加；每条 DraftZone 自渲染)
+          const dom = document.createElement('div');
+          dom.className = 'monaco-draft-zone';
+          const root = createRoot(dom);
+          root.render(
+            <DraftZoneList
+              drafts={ds}
+              prLocalId={pr.localId}
+              autoEditTokens={autoEditTokens}
+            />,
+          );
+          const zoneId = accessor.addZone({
+            afterLineNumber: line,
+            // 每条草稿大致 6 行 (含按钮 + textarea / 内容) + 0.5 间隔；cap 32 防屏占
+            heightInLines: Math.min(Math.ceil(ds.length * 6 + ds.length * 0.5), 32),
+            domNode: dom,
+          });
+          zoneRefs.push({ editor: editorInst, zoneId, dom, root });
+        }
+      });
+    };
+
+    addZonesFor(originalEditor, oldByLine);
+    addZonesFor(modifiedEditor, newByLine);
+
+    return () => {
+      try {
+        originalEditor.changeViewZones((accessor) => {
+          for (const z of zoneRefs) {
+            if (z.editor === originalEditor) accessor.removeZone(z.zoneId);
+          }
+        });
+        modifiedEditor.changeViewZones((accessor) => {
+          for (const z of zoneRefs) {
+            if (z.editor === modifiedEditor) accessor.removeZone(z.zoneId);
+          }
+        });
+      } catch {
+        /* editor disposed */
+      }
+      queueMicrotask(() => {
+        for (const z of zoneRefs) {
+          try {
+            z.root.unmount();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+    };
+  }, [diffEditor, drafts, content, selected, pr.localId, autoEditTokens]);
+
+  // M4 行 hover '+' 新建 manual 草稿：modifiedEditor (head 侧) 上加 mousemove +
+  // mousedown 监听。已有评论 / 草稿的行不重复出 + glyph，避免误触。
+  //
+  // 视觉：hover 行的 line decoration 显示淡蓝 '+'，鼠标 hover glyph 时浓蓝。
+  // 点击 → drafts:create + autoEdit 触发立即进入编辑。
+  useEffect(() => {
+    if (!diffEditor || !content || !selected) return;
+    const modifiedEditor = diffEditor.getModifiedEditor();
+    // 已有评论 / 草稿的 head 侧行号集合 (避免在这些行额外显示 +)
+    const occupied = new Set<number>();
+    for (const c of comments) {
+      if (c.anchor && c.anchor.side === 'new') occupied.add(c.anchor.line);
+    }
+    for (const d of drafts ?? []) {
+      if (d.status === 'rejected') continue;
+      if (d.anchor.side === 'new') occupied.add(d.anchor.endLine);
+    }
+
+    let hoverLine: number | null = null;
+    const collection = modifiedEditor.createDecorationsCollection([]);
+
+    const setHover = (line: number | null): void => {
+      hoverLine = line;
+      collection.set(
+        line === null || occupied.has(line)
+          ? []
+          : [
+              {
+                range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
+                options: {
+                  isWholeLine: false,
+                  glyphMarginClassName: 'monaco-draft-add-glyph',
+                  glyphMarginHoverMessage: { value: '点击在此行新增评论草稿' },
+                },
+              },
+            ],
+      );
+    };
+
+    const onMove = modifiedEditor.onMouseMove((e) => {
+      const t = e.target;
+      if (
+        (t.type === MonacoEditorNs.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+          t.type === MonacoEditorNs.MouseTargetType.GUTTER_LINE_NUMBERS) &&
+        t.position
+      ) {
+        const ln = t.position.lineNumber;
+        if (hoverLine !== ln) setHover(ln);
+      } else if (hoverLine !== null) {
+        setHover(null);
+      }
+    });
+
+    const onLeave = modifiedEditor.onMouseLeave(() => {
+      if (hoverLine !== null) setHover(null);
+    });
+
+    const onDown = modifiedEditor.onMouseDown((e) => {
+      const t = e.target;
+      if (
+        t.type === MonacoEditorNs.MouseTargetType.GUTTER_GLYPH_MARGIN &&
+        t.position &&
+        !occupied.has(t.position.lineNumber)
+      ) {
+        const line = t.position.lineNumber;
+        void (async () => {
+          try {
+            const created = await invoke('drafts:create', {
+              localId: pr.localId,
+              draft: {
+                anchor: {
+                  path: selected.path,
+                  startLine: line,
+                  endLine: line,
+                  side: 'new',
+                },
+                body: '',
+                origin: 'manual',
+                status: 'pending',
+              },
+            });
+            // 新建后立即触发 auto edit，让用户能马上输入
+            triggerAutoEdit(created.id);
+          } catch {
+            // 静默；UI 上没出 zone 就视为没创建成功
+          }
+        })();
+      }
+    });
+
+    return () => {
+      onMove.dispose();
+      onLeave.dispose();
+      onDown.dispose();
+      try {
+        collection.clear();
+      } catch {
+        /* editor disposed */
+      }
+    };
+  }, [diffEditor, content, selected, drafts, comments, pr.localId]);
+
+  // M4 nav 完成消费：scroll + highlight + autoEdit 关联草稿。等 selected 文件
+  // 切换 + content 加载 + diffEditor 就绪 + drafts hydrated 完，再 revealLine。
+  // pendingScroll 来自 nav effect (setSelectedKey 同时设的)；reveal 后清空
+  useEffect(() => {
+    if (!pendingScroll || !diffEditor || !content || !selected) return;
+    if (selected.path !== pendingScroll.draftId) {
+      // 这条 effect 在 selected 切换瞬间会先跑一次还没加载到目标文件 → 等 content 来
+      // 用 selected.path 跟 pendingScroll 的 anchor.path 关联间接判断
+    }
+    const editor =
+      pendingScroll.side === 'old' ? diffEditor.getOriginalEditor() : diffEditor.getModifiedEditor();
+    // 居中滚到目标行
+    editor.revealLineInCenter(pendingScroll.line);
+    // 短暂高亮：300ms 黄底脉冲
+    const collection = editor.createDecorationsCollection([
+      {
+        range: {
+          startLineNumber: pendingScroll.line,
+          startColumn: 1,
+          endLineNumber: pendingScroll.line,
+          endColumn: 1,
+        },
+        options: {
+          isWholeLine: true,
+          className: 'monaco-draft-highlight-flash',
+        },
+      },
+    ]);
+    const t = setTimeout(() => {
+      try {
+        collection.clear();
+      } catch {
+        /* editor disposed */
+      }
+    }, 800);
+    // 同时触发关联草稿的 autoEdit (DraftZone 自动 enter edit mode)
+    if (pendingScroll.draftId) {
+      triggerAutoEdit(pendingScroll.draftId);
+    }
+    setPendingScroll(null);
+    return () => clearTimeout(t);
+  }, [pendingScroll, diffEditor, content, selected]);
+
   if (filesError) {
     return (
       <BackendErrorView
@@ -624,6 +901,50 @@ function commentHeight(c: PrComment): number {
   let h = 1.3 + Math.max(1, Math.ceil(c.body.length / 80));
   for (const r of c.replies) h += commentHeight(r) + 0.3;
   return h;
+}
+
+/**
+ * 同行多条草稿的容器；每条独立 DraftZone (read/edit 各自维护)，组件间用 hr 分隔。
+ * onSave / onDelete 在这里调 IPC drafts:update / drafts:delete；写盘后 main 端
+ * 广播 drafts:changed 事件 → drafts-store 重拉 → DiffView 顶层 useEffect 重建
+ * zones (此组件随之 unmount/remount)。
+ */
+function DraftZoneList({
+  drafts,
+  prLocalId,
+  autoEditTokens,
+}: {
+  drafts: ReviewDraft[];
+  prLocalId: string;
+  autoEditTokens: Record<string, number>;
+}) {
+  const onSave = async (draftId: string, body: string): Promise<void> => {
+    await invoke('drafts:update', {
+      localId: prLocalId,
+      draftId,
+      patch: { body },
+    });
+  };
+  const onDelete = async (draftId: string): Promise<void> => {
+    await invoke('drafts:delete', { localId: prLocalId, draftId });
+  };
+  return (
+    <div className="draft-zone-list">
+      {drafts.map((d, i) => (
+        <div
+          key={d.id}
+          className={`draft-zone-item${i > 0 ? ' draft-zone-item-divider' : ''}`}
+        >
+          <DraftZone
+            draft={d}
+            autoEditToken={autoEditTokens[d.id]}
+            onSave={(body) => onSave(d.id, body)}
+            onDelete={() => onDelete(d.id)}
+          />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function CommentZone({
