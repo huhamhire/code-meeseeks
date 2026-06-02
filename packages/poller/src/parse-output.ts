@@ -34,7 +34,7 @@ interface Section {
 }
 
 /**
- * 把 pr-agent 0.35.0 的 markdown 输出按 H1-H6 切片为 sections。
+ * 把 pr-agent 0.36.0 的 markdown 输出按 H1-H6 切片为 sections。
  * 每个 section 含 level / title / body（body 去掉前后空白）。
  * 顶部无 header 的前导内容也合成一个 level=0 / title='' 的 section，便于 /describe
  * 整段拿出来。
@@ -281,7 +281,7 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
   const displayTitle = normalizeTitle(sec.title) || undefined;
   const mappedKey = displayTitle ? mapSectionKey(displayTitle) : undefined;
 
-  // pr-agent 0.35.0 review 输出形如：
+  // pr-agent 0.36.0 review 输出形如 (pr-agent 自定义 prompt 或非 LocalGitProvider 时)：
   //   **File:** src/foo.ts
   //   **Lines:** 42-50
   //   **Issue:** ...

@@ -63,8 +63,8 @@ Docker Desktop on Windows) 经验值。
 App 启动后台执行：
 
 ```
-docker pull pragent/pr-agent:0.35.0
-docker run --rm pragent/pr-agent:0.35.0 python -c "pass"
+docker pull pragent/pr-agent:0.36.0
+docker run --rm pragent/pr-agent:0.36.0 python -c "pass"
 ```
 
 确保镜像层 + Docker 内部缓存都已就位。

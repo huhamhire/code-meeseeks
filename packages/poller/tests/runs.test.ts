@@ -44,7 +44,7 @@ describe('startReviewRun', () => {
       {
         prLocalId: 'abc123def456',
         tool: 'review',
-        prAgentVersion: 'pr-agent 0.35.0',
+        prAgentVersion: 'pr-agent 0.36.0',
         strategy: 'local-cli',
       },
       () => now,
@@ -52,7 +52,7 @@ describe('startReviewRun', () => {
     expect(run.status).toBe('running');
     expect(run.startedAt).toBe(now.toISOString());
     expect(run.tool).toBe('review');
-    expect(run.prAgentVersion).toBe('pr-agent 0.35.0');
+    expect(run.prAgentVersion).toBe('pr-agent 0.36.0');
     expect(run.strategy).toBe('local-cli');
     expect(run.finishedAt).toBeUndefined();
 

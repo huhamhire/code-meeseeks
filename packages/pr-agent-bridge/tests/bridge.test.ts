@@ -24,7 +24,7 @@ function makeRecordingExec(returnValue?: Partial<PrAgentRunResult>): {
 describe('LocalCliBridge', () => {
   it('describe 走 pr-agent --pr_url <url> describe', async () => {
     const { exec, calls } = makeRecordingExec();
-    const bridge = new LocalCliBridge('pr-agent 0.35.0', exec);
+    const bridge = new LocalCliBridge('pr-agent 0.36.0', exec);
     await bridge.describe({ prUrl: 'https://bb/projects/X/repos/y/pull-requests/1' });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.cmd).toBe('pr-agent');
@@ -81,9 +81,9 @@ describe('LocalCliBridge', () => {
   });
 
   it('strategy + version 暴露', () => {
-    const bridge = new LocalCliBridge('pr-agent 0.35.0', makeRecordingExec().exec);
+    const bridge = new LocalCliBridge('pr-agent 0.36.0', makeRecordingExec().exec);
     expect(bridge.strategy).toBe('local-cli');
-    expect(bridge.version).toBe('pr-agent 0.35.0');
+    expect(bridge.version).toBe('pr-agent 0.36.0');
   });
 
   it('cwd 配置后切到 local-mode: --pr_url 的值是 target branch 名 (pr-agent local provider 约定)', async () => {
@@ -113,7 +113,7 @@ describe('LocalCliBridge', () => {
 });
 
 describe('DockerBridge', () => {
-  it('默认镜像 pinned 到 pragent/pr-agent:0.35.0', async () => {
+  it('默认镜像 pinned 到 pragent/pr-agent:0.36.0', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new DockerBridge('docker v25', exec);
     await bridge.describe({ prUrl: 'https://x/pr/1' });
@@ -121,7 +121,7 @@ describe('DockerBridge', () => {
     expect(calls[0]!.args).toEqual([
       'run',
       '--rm',
-      'pragent/pr-agent:0.35.0',
+      'pragent/pr-agent:0.36.0',
       '--pr_url',
       'https://x/pr/1',
       'describe',
@@ -142,7 +142,7 @@ describe('DockerBridge', () => {
       'OPENAI_KEY=sk-test',
       '-e',
       'PR_PILOT_MODEL=gpt-4o',
-      'pragent/pr-agent:0.35.0',
+      'pragent/pr-agent:0.36.0',
       '--pr_url',
       'https://x/pr/1',
       'review',
@@ -201,7 +201,7 @@ describe('DockerBridge', () => {
       '/workspace',
       '--entrypoint',
       'python',
-      'pragent/pr-agent:0.35.0',
+      'pragent/pr-agent:0.36.0',
       '/app/pr_agent/cli.py',
       '--pr_url',
       'pr-pilot/base',
