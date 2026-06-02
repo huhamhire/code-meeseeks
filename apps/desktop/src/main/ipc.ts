@@ -16,6 +16,7 @@ import {
   startReviewRun,
 } from '@pr-pilot/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@pr-pilot/repo-mirror';
+import { loadRules, pickMatchingRule } from '@pr-pilot/rules';
 import type {
   AppInfo,
   ConnectionSummary,
@@ -398,6 +399,35 @@ export function registerIpcHandlers({
           ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
           CONFIG__RESPONSE_LANGUAGE: bootstrap.config.language,
         };
+
+        // 加载并匹配规则：每次 pragent:run 现读 rules.dir (避免长任务期间用户改了规则
+        // 不生效)。同一 PR 多条命中按 priority desc + 文件名 asc 取首条。命中后正文
+        // 作为 PR_DESCRIPTION__EXTRA_INSTRUCTIONS / PR_REVIEWER__EXTRA_INSTRUCTIONS
+        // 注入。custom_labels 字段 P0 阶段先解析存储，pr-agent env 接入留 P1
+        const rulesCfg = bootstrap.config.rules;
+        if (rulesCfg.enabled && rulesCfg.dir) {
+          const rules = await loadRules(rulesCfg.dir, {
+            onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
+          });
+          const matched = pickMatchingRule(rules, {
+            projectKey: pr.repo.projectKey,
+            repoSlug: pr.repo.repoSlug,
+            targetBranch: pr.targetRef.displayId,
+            tool: req.tool,
+          });
+          if (matched) {
+            const envKey =
+              req.tool === 'describe'
+                ? 'PR_DESCRIPTION__EXTRA_INSTRUCTIONS'
+                : 'PR_REVIEWER__EXTRA_INSTRUCTIONS';
+            env[envKey] = matched.instructions;
+            logger.info(
+              { runId: run.id, ruleId: matched.id, tool: req.tool },
+              'pragent run: matched rule',
+            );
+          }
+        }
+
         const result = await prAgentBridge.run({
           prUrl: pr.url,
           tool: req.tool,
@@ -504,6 +534,45 @@ export function registerIpcHandlers({
       };
       await writeConfig(bootstrap.paths.configFile, next);
       logger.info({ reposDir: req.reposDir }, 'repos_dir updated; restart required');
+    },
+  );
+
+  ipcMain.handle(
+    'config:setRules',
+    async (_evt, req: IpcChannels['config:setRules']['request']): Promise<void> => {
+      const next = { ...bootstrap.config, rules: req.rules };
+      await writeConfig(bootstrap.paths.configFile, next);
+      bootstrap.config.rules = req.rules;
+      logger.info({ rules: req.rules }, 'rules config updated');
+    },
+  );
+
+  ipcMain.handle(
+    'rules:matchForPr',
+    async (
+      _evt,
+      req: IpcChannels['rules:matchForPr']['request'],
+    ): Promise<IpcChannels['rules:matchForPr']['response']> => {
+      const cfg = bootstrap.config.rules;
+      if (!cfg.enabled || !cfg.dir) return null;
+      const pr = await findPrOrThrow(req.localId);
+      const rules = await loadRules(cfg.dir, {
+        onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
+      });
+      const matched = pickMatchingRule(rules, {
+        projectKey: pr.repo.projectKey,
+        repoSlug: pr.repo.repoSlug,
+        targetBranch: pr.targetRef.displayId,
+        tool: req.tool,
+      });
+      if (!matched) return null;
+      return {
+        id: matched.id,
+        filePath: matched.filePath,
+        priority: matched.priority,
+        tools: [...matched.tools],
+        instructions: matched.instructions,
+      };
     },
   );
 

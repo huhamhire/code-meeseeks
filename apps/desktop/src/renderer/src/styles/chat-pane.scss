@@ -102,6 +102,39 @@
   padding: $space-5 $space-6;
 }
 
+// 当前 PR 命中的规则 chip：actions bar 下方一行，点击弹出正文预览
+.chat-rule-chip {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding: $space-2 $space-6;
+  background: $color-accent-bg-fade;
+  border: none;
+  border-bottom: 1px solid $border-muted;
+  color: $color-info;
+  font-size: $fs-sm;
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(14, 99, 156, 0.28);
+  }
+}
+.chat-rule-chip-label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.chat-rule-chip-id {
+  font-family: $font-mono;
+  color: $text-body;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
 // === 空态 ===
 .chat-empty {
   display: flex;

@@ -11,12 +11,15 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type {
   Finding,
+  IpcChannels,
   PrAgentStatus,
   PrDocSectionKey,
   ReviewRun,
   ReviewRunTool,
   StoredPullRequest,
 } from '@pr-pilot/shared';
+
+type MatchedRule = IpcChannels['rules:matchForPr']['response'];
 import { invoke, subscribe } from '../api';
 import { parseAnsi, segmentStyle } from '../utils/ansi';
 
@@ -73,6 +76,9 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
   const [liveLines, setLiveLines] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showRawStdout, setShowRawStdout] = useState(false);
+  // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
+  const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
+  const [showRulePreview, setShowRulePreview] = useState(false);
 
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
@@ -87,14 +93,20 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     setLiveLines([]);
     setError(null);
     setShowRawStdout(false);
+    setMatchedRule(null);
     if (!prLocalId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const list = await invoke('pragent:listRuns', { localId: prLocalId });
+        const [list, rule] = await Promise.all([
+          invoke('pragent:listRuns', { localId: prLocalId }),
+          // 默认按 /review 算命中：rules.tools 缺省就是 [review]；/describe 通常没规则
+          invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
+        ]);
         if (cancelled) return;
         setRuns(list);
         setCurrentRunId(list[0]?.id ?? null);
+        setMatchedRule(rule);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -173,6 +185,20 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
         onRun={(t) => void handleRun(t)}
       />
 
+      {/* 当前 PR 命中的规则 chip：rules.dir 未配置 / 整体禁用 / 无命中 → 不显示。
+          点击展开正文预览，让用户能确认本次 review 会被哪条规则约束 */}
+      {matchedRule && (
+        <button
+          type="button"
+          className="chat-rule-chip"
+          onClick={() => setShowRulePreview(true)}
+          title="点击查看规则正文"
+        >
+          <span className="chat-rule-chip-label">规则</span>
+          <span className="chat-rule-chip-id">{matchedRule.id}</span>
+        </button>
+      )}
+
       <div className="chat-pane-body">
         {error && (
           <div className="chat-error" role="alert">
@@ -197,7 +223,52 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
       {/* /ask 自然语言追问占位：pr-agent 多轮交互协议未稳定前保持 disabled，
           先把面板尺寸 / 焦点流锁定下来，将来启用时不会让用户感到 UI 跳动 */}
       <AskInputStub />
+
+      {showRulePreview && matchedRule && (
+        <RulePreviewModal rule={matchedRule} onClose={() => setShowRulePreview(false)} />
+      )}
     </aside>
+  );
+}
+
+function RulePreviewModal({
+  rule,
+  onClose,
+}: {
+  rule: NonNullable<MatchedRule>;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal modal-sm"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="规则预览"
+      >
+        <div className="modal-header">
+          <h3>规则: {rule.id}</h3>
+          <button className="btn" type="button" onClick={onClose}>
+            关闭
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="modal-kv">
+            <div className="modal-kv-key">文件路径</div>
+            <div className="modal-kv-val">{rule.filePath}</div>
+            <div className="modal-kv-key">priority</div>
+            <div className="modal-kv-val">{rule.priority}</div>
+            <div className="modal-kv-key">tools</div>
+            <div className="modal-kv-val">{rule.tools.join(', ')}</div>
+          </div>
+          <div className="markdown" style={{ marginTop: 12 }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+              {rule.instructions}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

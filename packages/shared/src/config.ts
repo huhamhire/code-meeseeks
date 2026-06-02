@@ -71,6 +71,21 @@ export const ConfigSchema = z.object({
       repos_dir: z.string().default('~/.pr-pilot/repos'),
     })
     .default({}),
+  /**
+   * 个性化规则：rules.dir 下的每个 .md 文件 = 一条规则，frontmatter (YAML) 声明
+   * applies_to (project / repo / target_branch 正则) / tools / priority，body
+   * 是注入给 pr-agent 的 extra_instructions。
+   *
+   * dir 留空 = 不启用（默认）。建议指向一个 git repo，让团队共享规约。
+   * enabled 是全局开关，应急关闭用，跟 dir 互斥不一样：dir 配了但 enabled=false
+   * 时跳过加载
+   */
+  rules: z
+    .object({
+      dir: z.string().default(''),
+      enabled: z.boolean().default(true),
+    })
+    .default({}),
   poller: z
     .object({
       interval_seconds: z.number().int().min(30).default(300),

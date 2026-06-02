@@ -171,6 +171,23 @@ export interface IpcChannels {
   'config:setReposDir': { request: { reposDir: string }; response: void };
   /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
+  /** 写入 rules.dir + enabled 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
+  'config:setRules': { request: { rules: Config['rules'] }; response: void };
+  /**
+   * 给指定 PR 查 rules.dir 当前命中的规则 (按 priority desc + path asc 取首条)。
+   * 调用方传 tool 区分 /describe / /review (规则可能只对其中一个 tool 生效)。
+   * rules.dir 未配置 / 整体禁用 / 无命中 → 返回 null。
+   */
+  'rules:matchForPr': {
+    request: { localId: string; tool: ReviewRunTool };
+    response: {
+      id: string;
+      filePath: string;
+      priority: number;
+      tools: ReviewRunTool[];
+      instructions: string;
+    } | null;
+  };
   /**
    * 触发一次 pr-agent /describe 或 /review。同步等待执行结束（可能数十秒到数分钟），
    * 期间通过 pragent:runProgress 事件推送 stdout / stderr 行。返回最终 ReviewRun

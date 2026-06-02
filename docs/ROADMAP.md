@@ -99,8 +99,7 @@ flowchart TB
 ```
 ~/.pr-pilot/
 ├── config.yaml          # 所有配置（含 token / API key + repos_dir 设置），权限 600 / Windows ACL
-├── rules/               # 用户自定义规则集
-│   └── *.yaml
+│                        # (rules 默认不放这里，见下方 `rules.dir`)
 ├── state/               # JSON 状态文件（详见 §4）
 │   ├── connections.json
 │   ├── watched-repos.json
@@ -127,6 +126,22 @@ flowchart TB
 - 不需要 locator 文件，启动逻辑直接读固定路径
 
 首次启动无需用户介入：自动创建 `~/.pr-pilot/` + 默认 `config.yaml`（`repos_dir` 默认值生效）；用户后续可在设置页修改 `repos_dir`。
+
+**规则目录** `rules.dir`（可选；用于个性化 PR review 规约，详见 [ADR-0005](adr/0005-rules-directory.md)）：
+
+```
+<rules.dir>/                # 路径任意，建议指向一个 git repo 让团队共享
+├── global/
+│   └── coding-style.md
+└── projects/
+    └── FX/
+        ├── common.md
+        └── fx-help-api.md
+```
+
+- 每个 `.md` 文件 = 一条规则，YAML frontmatter 声明 `applies_to` (project/repo/target_branch 正则) + `tools` + `priority`，markdown 正文是给 pr-agent 的 `extra_instructions`
+- `rules.dir` 为空 = 不启用规则；指向一个独立路径让规则跟 `~/.pr-pilot/` 解耦，可以单独提交 git 跟团队共享
+- pragent run 时同一 PR 多条命中按 `priority desc + 文件路径 asc` 取**首条**，避免 prompt 膨胀和规则互相矛盾
 
 ---
 
@@ -337,7 +352,7 @@ type PostedCommentsFile = {
 - `PrAgentBridge`（策略模式：`LocalCli` / `Docker`，详见 ADR-0001）
 - 工具调用最小集：`/describe`（摘要）、`/review`（发现问题）
 - 输出解析：把 pr-agent 文本输出 → `findings`
-- 个性化规则：`rules/*.yaml` → 注入 pr-agent `extra_instructions` / `custom_labels`
+- 个性化规则：`rules.dir/**/*.md` → 注入 pr-agent `extra_instructions` / `custom_labels` (详见 [ADR-0005](adr/0005-rules-directory.md))
 - LLM Provider 配置：模型、key、base_url（兼容 OpenAI 协议）
 - 中断恢复：review run 失败 / 中断可重试
 
@@ -361,7 +376,7 @@ type PostedCommentsFile = {
 ### M5 · 打磨与多平台扩展（持续）
 
 - GitHub / GitLab / Gitea Adapter（按用户实际需求排序）
-- 规则市场：导入 / 导出 rules.yaml 片段
+- 规则市场：导入 / 导出 rules.dir 片段
 - 本地模型支持：Ollama / vLLM
 - 离线模式
 - 可观测性：Token 用量统计、规则命中率、模型对比
@@ -395,5 +410,5 @@ type PostedCommentsFile = {
 4. ✅ M1 BBS 接入 + PR 发现（A state-store + vitest → B BBS adapter → C Poller / IPC → D React Layout UI + sidebar 分组排序）
 5. ✅ ESLint flat config + 全包 lint target（M0 残项补齐；electron-builder 本地 `--dir` 烟雾测试推到 M4 发布前）
 6. ✅ M2 仓库镜像 + Monaco diff（A repo-mirror + clone url → B listChangedFiles / getFileContent → C 主进程接线 + diff IPC → D MainPane diff 视图 + 文件树 + 评论 inline + blame + reviewer 胶囊 + statusbar 增强）
-7. ⏭️ M3: pr-agent 集成 (`PrAgentBridge` LocalCli / Docker + `/describe` + `/review` + findings 结构化 + rules.yaml 注入)
+7. ⏭️ M3: pr-agent 集成 (`PrAgentBridge` LocalCli / Docker + `/describe` + `/review` + findings 结构化 + rules.dir markdown 注入)
 8. ⏭️ 大 PR 性能验证（找到真实案例后跑一次）+ worktree-per-PR（如果 M3 pr-agent 需要文件系统路径）

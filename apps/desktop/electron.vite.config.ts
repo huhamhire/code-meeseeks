@@ -13,6 +13,7 @@ const internalPackages = [
   '@pr-pilot/platform-bitbucket-server',
   '@pr-pilot/poller',
   '@pr-pilot/repo-mirror',
+  '@pr-pilot/rules',
 ];
 
 export default defineConfig({

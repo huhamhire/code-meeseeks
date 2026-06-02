@@ -139,6 +139,12 @@ export function SettingsModal({
   const [reposDirSaved, setReposDirSaved] = useState(false);
   const [reposDirError, setReposDirError] = useState<string | null>(null);
 
+  const [rules, setRules] = useState<Config['rules']>(config.rules);
+  const [rulesDirInput, setRulesDirInput] = useState(config.rules.dir);
+  const [savingRules, setSavingRules] = useState(false);
+  const [rulesSaved, setRulesSaved] = useState(false);
+  const [rulesError, setRulesError] = useState<string | null>(null);
+
   // LLM Provider：主面板只渲染已保存列表 + 切换/删除 = 自动持久化。
   // 新增 / 修改单条走子模态框，模态框内"保存"才会写回 config.yaml。
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
@@ -185,6 +191,27 @@ export function SettingsModal({
   };
 
   const reposDirChanged = reposDirInput.trim() !== config.workspace.repos_dir;
+
+  const rulesChanged =
+    rulesDirInput.trim() !== rules.dir || rules.enabled !== config.rules.enabled;
+  const saveRules = async (): Promise<void> => {
+    if (savingRules) return;
+    setSavingRules(true);
+    setRulesError(null);
+    try {
+      const next: Config['rules'] = {
+        dir: rulesDirInput.trim(),
+        enabled: rules.enabled,
+      };
+      await invoke('config:setRules', { rules: next });
+      setRules(next);
+      setRulesSaved(true);
+    } catch (e) {
+      setRulesError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingRules(false);
+    }
+  };
 
   const persistLlm = async (next: Config['llm']): Promise<void> => {
     setLlmError(null);
@@ -247,6 +274,16 @@ export function SettingsModal({
         </div>
         <div className="modal-body">
           <section className="modal-section">
+            <h4>工作目录</h4>
+            <div className="modal-kv">
+              <div className="modal-kv-key">应用根</div>
+              <div className="modal-kv-val">{paths.appDir}</div>
+              <div className="modal-kv-key">配置</div>
+              <div className="modal-kv-val">{paths.configFile}</div>
+            </div>
+          </section>
+
+          <section className="modal-section">
             <h4>仓库镜像</h4>
             <div className="modal-kv">
               <div className="modal-kv-key">当前 repos_dir</div>
@@ -307,13 +344,67 @@ export function SettingsModal({
           </section>
 
           <section className="modal-section">
-            <h4>工作目录</h4>
-            <div className="modal-kv">
-              <div className="modal-kv-key">应用根</div>
-              <div className="modal-kv-val">{paths.appDir}</div>
-              <div className="modal-kv-key">配置</div>
-              <div className="modal-kv-val">{paths.configFile}</div>
+            <h4>规则目录</h4>
+            <p className="muted" style={{ margin: '0 0 8px' }}>
+              目录下每个 <code>.md</code> 是一条个性化 review 规则。
+            </p>
+            <div className="settings-edit-row">
+              <input
+                type="text"
+                className="settings-input"
+                value={rulesDirInput}
+                onChange={(e) => {
+                  setRulesDirInput(e.target.value);
+                  setRulesSaved(false);
+                  setRulesError(null);
+                }}
+                placeholder="可选；如 ~/code/team-pr-rules"
+              />
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  void (async () => {
+                    const r = await invoke('dialog:pickDirectory', {
+                      defaultPath: rulesDirInput.trim() || paths.appDir,
+                      title: '选择规则目录',
+                    });
+                    if (r.path) {
+                      setRulesDirInput(r.path);
+                      setRulesSaved(false);
+                      setRulesError(null);
+                    }
+                  })();
+                }}
+                title="打开系统目录选择器"
+              >
+                选择…
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void saveRules()}
+                disabled={!rulesChanged || savingRules}
+              >
+                {savingRules ? '保存中…' : '保存'}
+              </button>
             </div>
+            <label className="settings-secret-row" style={{ marginTop: 8 }}>
+              <input
+                type="checkbox"
+                checked={rules.enabled}
+                onChange={(e) => {
+                  setRules((r) => ({ ...r, enabled: e.target.checked }));
+                  setRulesSaved(false);
+                }}
+                aria-label="启用规则"
+              />
+              <span className="muted">启用规则</span>
+            </label>
+            {rulesSaved && (
+              <p className="muted modal-footer">已写入 config.yaml；下次 pragent:run 立即生效。</p>
+            )}
+            {rulesError && <p className="error-text">{rulesError}</p>}
           </section>
 
           <section className="modal-section">
