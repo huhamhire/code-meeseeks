@@ -39,6 +39,8 @@ export interface StartReviewRunInput {
   tool: ReviewRunTool;
   prAgentVersion: string;
   strategy: PrAgentStrategy;
+  /** /ask 工具的问题；其他 tool 留空 */
+  question?: string;
 }
 
 /** 写入初始 running 状态；调用方在 pr-agent 调用前必须先 start。 */
@@ -52,6 +54,7 @@ export async function startReviewRun(
     id: makeRunId(at),
     prLocalId: input.prLocalId,
     tool: input.tool,
+    question: input.question,
     prAgentVersion: input.prAgentVersion,
     strategy: input.strategy,
     status: 'running',

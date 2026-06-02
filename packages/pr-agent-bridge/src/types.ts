@@ -1,7 +1,7 @@
 import type { PrAgentStrategy } from '@pr-pilot/shared';
 
-/** M3 一期接 pr-agent 的两个核心 tool；后续 /ask /improve 等可加 */
-export type PrAgentTool = 'describe' | 'review';
+/** pr-agent 子命令枚举；跟 @pr-pilot/shared 的 ReviewRunTool 同集合 */
+export type PrAgentTool = 'describe' | 'review' | 'ask';
 
 export interface PrAgentRunOptions {
   /**

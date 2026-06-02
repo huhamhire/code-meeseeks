@@ -61,6 +61,30 @@ function normalizeTitle(t: string): string {
   return t.replace(/[*_]+/g, '').trim();
 }
 
+/** 我们 materializeWorktree 临时建的内部分支名，pr-agent 把它当 PR 标识漏出来 */
+const INTERNAL_BRANCH_RE = /pr-pilot\/(head|base)/i;
+
+/**
+ * 剥 body 首尾的"噪音行"：连续 markdown HR (`---` / `***` / `___`)、空行、
+ * 整行就是 `pr-pilot/head|base` 的内部分支名 leak。pr-agent 在段落间用 `---`
+ * 分隔，splitMarkdownSections 切完后这条 HR 会黏在上一个 section 的 body 末尾；
+ * 类似地 pr-pilot/head 这种 PR identifier leak 也可能停在 body 首或尾。
+ * 全部在 parser 层清掉，下游 / 渲染 / 胶囊拆分都不用关心。
+ */
+function trimNoise(body: string): string {
+  const isNoise = (l: string): boolean => {
+    const trimmed = l.trim();
+    if (trimmed === '') return true;
+    if (/^(?:[-*_]\s*){3,}$/.test(trimmed)) return true; // markdown HR
+    if (INTERNAL_BRANCH_RE.test(trimmed) && trimmed.length < 40) return true; // 短行 + 含分支名
+    return false;
+  };
+  const lines = body.split('\n');
+  while (lines.length > 0 && isNoise(lines[0]!)) lines.shift();
+  while (lines.length > 0 && isNoise(lines[lines.length - 1]!)) lines.pop();
+  return lines.join('\n');
+}
+
 /**
  * 把规整化后的 title 映射到稳定 sectionKey。匹配采用 lower-case + 正则，覆盖
  * pr-agent 不同版本 / /describe vs /review / 中英变体的常见拼写。
@@ -81,29 +105,32 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
 ];
 
 function mapSectionKey(displayTitle: string): PrDocSectionKey | undefined {
+  // 剥首尾的 emoji / 标点 / 空白，让 `⏱️ Estimated effort to review: 3 🔵🔵`
+  // 这种带装饰的标题也能命中 SECTION_KEY_PATTERNS 里的英文锚词
+  const cleaned = displayTitle.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').trim();
   for (const [re, key] of SECTION_KEY_PATTERNS) {
-    if (re.test(displayTitle)) return key;
+    if (re.test(cleaned)) return key;
   }
   return undefined;
 }
 
 /**
  * 噪音段落，直接从 findings 里剔除：
- * - `pr-pilot/head` / `pr-pilot/base`：我们 materializeWorktree 临时建的分支名，
- *   pr-agent 以为是 PR 标识，常作为顶层 h1 leak 出来
  * - `user description`：纯粹回显用户已写的 PR 描述，UI 上已有 PrInfoView 显示
- * - 空 title + 空 body
+ * - title 含 `pr-pilot/head|base`：我们临时建的分支名，pr-agent 把它当 PR 标识
+ *   作为各级 heading leak 出来（含 emoji / 修饰也照样匹配，子串就行）
+ * - 空 title + 经 trimNoise 后空 body：纯分支名 leak 的独立 section
  */
-const SKIP_TITLES = new Set([
-  'pr-pilot/head',
-  'pr-pilot/base',
-  'user description',
-]);
+const SKIP_TITLES = new Set(['user description']);
 
 function shouldSkipSection(sec: Section): boolean {
   const t = normalizeTitle(sec.title).toLowerCase();
   if (SKIP_TITLES.has(t)) return true;
-  if (!t && !sec.body.trim()) return true;
+  // title 含内部分支名 (e.g., "pr-pilot/head" / "pr-pilot/head 🔍" / "## pr-pilot/head")
+  if (INTERNAL_BRANCH_RE.test(t)) return true;
+  // trimNoise 把首尾的 HR / 分支名 leak 剥掉后，body 空 = 整段都是噪音
+  const cleanedBody = trimNoise(sec.body).trim();
+  if (!t && !cleanedBody) return true;
   return false;
 }
 
@@ -113,7 +140,7 @@ function shouldSkipSection(sec: Section): boolean {
  */
 export function sectionToFinding(sec: Section, index: number, tool: ReviewRunTool): Finding {
   const id = `${tool}-${String(index).padStart(3, '0')}`;
-  const body = sec.body;
+  const body = trimNoise(sec.body);
   const displayTitle = normalizeTitle(sec.title) || undefined;
   const mappedKey = displayTitle ? mapSectionKey(displayTitle) : undefined;
 

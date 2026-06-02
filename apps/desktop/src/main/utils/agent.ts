@@ -48,10 +48,13 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
  *
  * 空字符串字段一律跳过——别覆盖 pr-agent 默认值或用户 shell 里已有的 env。
  *
- * 此外两条防御性默认：
- * - `CONFIG__CUSTOM_MODEL_MAX_TOKENS`：pr-agent 的 MAX_TOKENS 内置表只覆盖少数主流
- *   模型，DeepSeek / 新 Claude / 自部署 / openai-compatible 都不在表里，跑起来报
- *   "model not defined in MAX_TOKENS"。设个 128K 兜底，跟主流大模型上下文容量对齐
+ * 此外三条防御性默认：
+ * - `CONFIG__MAX_MODEL_TOKENS=128000`：pr-agent **全局 input 上限**，默认 32000；
+ *   日志里 "tokens under limit: 32000" 来自这条。DeepSeek-v4 / 现代 Claude / GPT-4
+ *   都是 128k 上下文，没必要被 pr-agent 强行截到 32k。设到 128k 让长 PR 能完整入 prompt
+ * - `CONFIG__CUSTOM_MODEL_MAX_TOKENS=128000`：pr-agent 的 MAX_TOKENS 内置表只覆盖少
+ *   数主流模型，DeepSeek / 新 Claude / 自部署 / openai-compatible 都不在表里，跑起来
+ *   报 "model not defined in MAX_TOKENS"。这条是 unknown 模型的兜底
  * - `CONFIG__FALLBACK_MODELS=[]`：pr-agent 默认配了 fallback (一般指向 OpenAI 系列)，
  *   主模型失败后会自动用 dummy key 试 OpenAI，污染日志且容易被误读成"配错了 OpenAI"。
  *   我们已经显式指定 provider，没有 fallback 的必要
@@ -59,6 +62,7 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
 export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
   const env: Record<string, string> = {};
   if (profile.model) env['CONFIG__MODEL'] = normalizeModel(profile.provider, profile.model);
+  env['CONFIG__MAX_MODEL_TOKENS'] = '128000';
   env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = '128000';
   env['CONFIG__FALLBACK_MODELS'] = '[]';
   switch (profile.provider) {

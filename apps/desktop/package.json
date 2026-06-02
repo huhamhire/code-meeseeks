@@ -57,6 +57,7 @@
     "@pr-pilot/rules": "*",
     "@pr-pilot/shared": "*",
     "@pr-pilot/state-store": "*",
+    "anser": "^2.3.5",
     "monaco-editor": "^0.55.0",
     "pino": "^9.5.0",
     "pino-roll": "^3.0.0",

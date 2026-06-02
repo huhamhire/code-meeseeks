@@ -64,15 +64,31 @@
     border-collapse: collapse;
     margin: $space-3 0;
     font-size: $fs-md;
+    // pr-agent 的 walkthrough / 路径列经常塞长 monospace 字符串 (file paths)，
+    // 默认布局会让单元格溢出甚至撑爆面板宽度。table-layout:fixed + width:100% 强制
+    // 按容器宽度分列，单元格内强制 break-word，长路径在 code 字符间断行
+    width: 100%;
+    table-layout: fixed;
   }
   th,
   td {
     border: 1px solid $border-default;
     padding: $space-2 $space-4;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    vertical-align: top;
   }
   th {
     background: $bg-surface;
     font-weight: 600;
+  }
+  // 单元格里的 inline code：长 path 没空格也得断；overflow-wrap:anywhere 让浏览器
+  // 在任意字符位置断行 (比 break-all 更宽容，会优先在 - / _ 等位置断)
+  td code,
+  th code {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
   }
 
   h1,

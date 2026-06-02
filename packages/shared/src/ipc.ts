@@ -194,7 +194,11 @@ export interface IpcChannels {
    * 状态 (succeeded / failed)。pr-agent 不可用时 reject。
    */
   'pragent:run': {
-    request: { localId: string; tool: ReviewRunTool };
+    /**
+     * tool='ask' 时 question 必填，作为 pr-agent CLI 的位置参数传给 ask 子命令。
+     * tool='describe'/'review' 时 question 字段被忽略。
+     */
+    request: { localId: string; tool: ReviewRunTool; question?: string };
     response: ReviewRun;
   };
   /** 列出某 PR 的全部历史 run，newest first */

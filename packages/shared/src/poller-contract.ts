@@ -11,8 +11,14 @@ import type { PrAgentStrategy } from './pr-agent-status.js';
  */
 export type LocalPrStatus = 'pending' | 'approved' | 'needs_work';
 
-/** pr-agent 跑的工具枚举；后续 /ask /improve 来了再加 */
-export type ReviewRunTool = 'describe' | 'review';
+/**
+ * pr-agent 跑的工具枚举：
+ * - describe / review：生成 PR 描述 / 代码评审，输出落到工作树的 markdown 文件
+ * - ask：自然语言追问，输出走 stdout (没有专属 output 文件)，request 必带 question
+ *
+ * 后续 /improve / /reflect 接进来时往这里加值
+ */
+export type ReviewRunTool = 'describe' | 'review' | 'ask';
 
 export type ReviewRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -79,6 +85,8 @@ export interface ReviewRun {
   /** "<connectionId>:<remoteId>"，与 StoredPullRequest.localId 对齐 */
   prLocalId: string;
   tool: ReviewRunTool;
+  /** /ask 工具的问题内容；其他 tool 不填。UI 把它当用户发言渲染在 run 卡片之上 */
+  question?: string;
   /** 探测时拿到的 pr-agent 版本（CLI 首行 / docker version 字符串） */
   prAgentVersion: string;
   strategy: PrAgentStrategy;

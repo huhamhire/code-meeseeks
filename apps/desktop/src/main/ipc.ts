@@ -30,6 +30,7 @@ import type { JsonFileStateStore } from '@pr-pilot/state-store';
 import type { BuiltAdapter } from './adapters.js';
 import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
+import { buildPrContext } from './utils/pr-context.js';
 
 interface RegisterDeps {
   bootstrap: BootstrapResult;
@@ -358,6 +359,7 @@ export function registerIpcHandlers({
       const run = await startReviewRun(stateStore, {
         prLocalId: pr.localId,
         tool: req.tool,
+        question: req.tool === 'ask' ? req.question : undefined,
         prAgentVersion: prAgentBridge.version,
         strategy: prAgentBridge.strategy,
       });
@@ -391,6 +393,12 @@ export function registerIpcHandlers({
         pr.sourceRef.sha,
         pr.targetRef.sha,
       );
+      // tool='ask' 的请求必须带 question，否则 pr-agent 启动就会因缺位置参数报错。
+      // 早一点 reject，让前端能立即给反馈
+      if (req.tool === 'ask' && !req.question?.trim()) {
+        throw new Error('/ask 需要提供 question');
+      }
+
       try {
         const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
         // LLM env + 全局 pr-agent 配置 (响应语言)。语言配置一期写死在 config 里，
@@ -400,33 +408,75 @@ export function registerIpcHandlers({
           CONFIG__RESPONSE_LANGUAGE: bootstrap.config.language,
         };
 
-        // 加载并匹配规则：每次 pragent:run 现读 rules.dir (避免长任务期间用户改了规则
-        // 不生效)。同一 PR 多条命中按 priority desc + 文件名 asc 取首条。命中后正文
-        // 作为 PR_DESCRIPTION__EXTRA_INSTRUCTIONS / PR_REVIEWER__EXTRA_INSTRUCTIONS
-        // 注入。custom_labels 字段 P0 阶段先解析存储，pr-agent env 接入留 P1
-        const rulesCfg = bootstrap.config.rules;
-        if (rulesCfg.enabled && rulesCfg.dir) {
-          const rules = await loadRules(rulesCfg.dir, {
-            onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
-          });
-          const matched = pickMatchingRule(rules, {
-            projectKey: pr.repo.projectKey,
-            repoSlug: pr.repo.repoSlug,
-            targetBranch: pr.targetRef.displayId,
-            tool: req.tool,
-          });
-          if (matched) {
-            const envKey =
-              req.tool === 'describe'
-                ? 'PR_DESCRIPTION__EXTRA_INSTRUCTIONS'
-                : 'PR_REVIEWER__EXTRA_INSTRUCTIONS';
-            env[envKey] = matched.instructions;
-            logger.info(
-              { runId: run.id, ruleId: matched.id, tool: req.tool },
-              'pragent run: matched rule',
-            );
+        // 注给 pr-agent 的 EXTRA_INSTRUCTIONS 由三部分按顺序拼接：
+        //   1. 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但
+        //      /ask 走 [pr_questions] 配置段不那么严格遵守，必须显式 prompt 强化
+        //   2. PR 上下文 (title / description / 已有评论)：local provider 自己不会
+        //      去 BBS 拉这些，必须我们这边喂；让 /describe /review 不只是看 diff
+        //   3. 规则正文 (rules.dir 命中)：项目编码规约
+        // /ask 只取 1 (语言)，跳 2/3 (用户问题往往跟历史评论 / 规约无关)
+        const langDirective = languageDirectiveFor(bootstrap.config.language);
+        let prContext = '';
+        let matchedRuleInstructions = '';
+        let matchedRuleId: string | undefined;
+        if (req.tool !== 'ask') {
+          const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+          if (adapter) {
+            try {
+              prContext = await buildPrContext({ pr, adapter, logger });
+            } catch (err) {
+              logger.warn(
+                { err, runId: run.id, localId: pr.localId },
+                'buildPrContext threw; proceeding without PR context',
+              );
+            }
+          }
+
+          const rulesCfg = bootstrap.config.rules;
+          if (rulesCfg.enabled && rulesCfg.dir) {
+            const rules = await loadRules(rulesCfg.dir, {
+              onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
+            });
+            const matched = pickMatchingRule(rules, {
+              projectKey: pr.repo.projectKey,
+              repoSlug: pr.repo.repoSlug,
+              targetBranch: pr.targetRef.displayId,
+              tool: req.tool,
+            });
+            if (matched) {
+              matchedRuleInstructions = matched.instructions;
+              matchedRuleId = matched.id;
+            }
           }
         }
+
+        const extraParts = [langDirective, prContext, matchedRuleInstructions].filter((s) =>
+          s.trim(),
+        );
+        if (extraParts.length > 0) {
+          const envKey =
+            req.tool === 'describe'
+              ? 'PR_DESCRIPTION__EXTRA_INSTRUCTIONS'
+              : req.tool === 'review'
+                ? 'PR_REVIEWER__EXTRA_INSTRUCTIONS'
+                : 'PR_QUESTIONS__EXTRA_INSTRUCTIONS';
+          env[envKey] = extraParts.join('\n\n---\n\n');
+        }
+        if (matchedRuleId) {
+          logger.info(
+            { runId: run.id, ruleId: matchedRuleId, tool: req.tool },
+            'pragent run: matched rule',
+          );
+        }
+        if (prContext) {
+          logger.debug(
+            { runId: run.id, tool: req.tool, contextChars: prContext.length },
+            'pragent run: pr context injected',
+          );
+        }
+
+        // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
+        const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
 
         const result = await prAgentBridge.run({
           prUrl: pr.url,
@@ -435,11 +485,12 @@ export function registerIpcHandlers({
           onLine,
           cwd: wt.path,
           targetBranch: wt.targetBranchName,
+          extraArgs,
         });
         // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
-        //   /describe → <wt>/description.md
-        //   /review   → <wt>/review.md
-        // stdout 只有 INFO 级别日志，没有真正的 PR 描述 / review 输出。
+        //   /describe → <wt>/description.md          (走 publish_description)
+        //   /review   → <wt>/review.md                (走 publish_comment)
+        //   /ask     → <wt>/review.md  ← 共用同一文件 (走 publish_comment，会覆盖)
         // 走 worktree 路径，cleanup 前必须先把文件读出来。
         const outFile = req.tool === 'describe' ? 'description.md' : 'review.md';
         let fileContent = '';
@@ -555,6 +606,8 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['rules:matchForPr']['response']> => {
       const cfg = bootstrap.config.rules;
       if (!cfg.enabled || !cfg.dir) return null;
+      // ask 工具不接规则 (问答自由形式，没什么"规约"可应用)
+      if (req.tool === 'ask') return null;
       const pr = await findPrOrThrow(req.localId);
       const rules = await loadRules(cfg.dir, {
         onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
@@ -594,6 +647,28 @@ export function registerIpcHandlers({
   );
 
   logger.debug('IPC handlers registered');
+}
+
+/**
+ * 把 config.language (ISO locale) 翻成自然语言 prompt directive，注入到 pr-agent
+ * 各 tool 的 EXTRA_INSTRUCTIONS。
+ *
+ * CONFIG__RESPONSE_LANGUAGE 对 /describe /review 已经够用 (内嵌在它们的 prompt
+ * template)，但 /ask 不严格遵守；显式 prompt 强化所有 tool，尤其覆盖 /ask + 表格
+ * 类输出的标题 / 列名 / 段落标记。
+ *
+ * 英文 (en-US) 返回空串，避免给 LLM 加不必要的提示。其他未知 locale 返回空保留
+ * pr-agent 原行为。
+ */
+function languageDirectiveFor(lang: string): string {
+  const norm = lang.toLowerCase();
+  if (norm.startsWith('zh-cn') || norm === 'zh') {
+    return 'Respond in Simplified Chinese (简体中文). All section labels, table headers, column names, headings, and content MUST be in Chinese — do not leave any English template strings untranslated.';
+  }
+  if (norm.startsWith('zh-tw') || norm.startsWith('zh-hk')) {
+    return 'Respond in Traditional Chinese (繁體中文). All section labels, table headers, column names, headings, and content MUST be in Chinese.';
+  }
+  return '';
 }
 
 function buildAppInfo(bootstrap: BootstrapResult): AppInfo {

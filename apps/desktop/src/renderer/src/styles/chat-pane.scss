@@ -73,29 +73,6 @@
   letter-spacing: 0.04em;
 }
 
-// 头部下方的动作条：/describe + /review + 上下文提示。Sticky 在 body 之上
-.chat-pane-actions {
-  display: flex;
-  align-items: center;
-  gap: $space-3;
-  padding: $space-3 $space-6;
-  border-bottom: 1px solid $border-muted;
-  background: $bg-panel-alt;
-  flex-shrink: 0;
-}
-.chat-pane-action {
-  font-family: $font-mono;
-  letter-spacing: 0.02em;
-}
-.chat-pane-action-hint {
-  margin-left: auto;
-  font-size: $fs-xs;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
 .chat-pane-body {
   flex: 1;
   overflow-y: auto;
@@ -294,6 +271,32 @@
   flex-direction: column;
   gap: $space-4;
 }
+
+// /ask 工具的用户提问气泡：在 run 卡片顶上，区别于下方的 pr-agent 回答
+.chat-user-msg {
+  display: flex;
+  gap: $space-3;
+  align-items: flex-start;
+  padding: $space-3 $space-4;
+  background: $color-accent-bg-fade;
+  border-left: 3px solid $color-accent;
+  border-radius: $radius-md;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  color: $text-body;
+}
+.chat-user-msg-label {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: $color-info;
+  letter-spacing: 0.04em;
+}
+.chat-user-msg-body {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .chat-run-meta {
   display: flex;
   align-items: center;
@@ -398,7 +401,7 @@
 .chat-finding-cat {
   padding: 1px $space-3;
   border-radius: $radius-sm;
-  font-size: $fs-xs;
+  font-size: $fs-sm;
   font-weight: 600;
   letter-spacing: 0.02em;
   flex-shrink: 0;
@@ -462,6 +465,24 @@
 .chat-finding-body {
   font-size: $fs-md;
 }
+
+// PR Type 段：拆成胶囊横排。背景色 / 描边色 / 文字色 inline 由 pillStyle() 计算
+// (按标签内容 hash 出色相)，这里只管布局 + 共通排版
+.chat-finding-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-2;
+}
+.pr-type-pill {
+  display: inline-block;
+  padding: 2px $space-4;
+  border-radius: $radius-pill;
+  border: 1px solid transparent; // inline style 覆盖
+  font-size: $fs-sm;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: $lh-normal;
+}
 .chat-finding-empty {
   font-size: $fs-sm;
   line-height: $lh-loose;
@@ -470,7 +491,7 @@
   border-radius: $radius-md;
 }
 
-// === /ask 输入占位 (disabled，等 pr-agent 多轮交互稳定后启用) ===
+// === 底部交互输入区 (ChatInputBar) ===
 .chat-pane-input {
   border-top: 1px solid $border-muted;
   padding: $space-4 $space-6 $space-5;
@@ -479,6 +500,7 @@
   gap: $space-3;
   flex-shrink: 0;
   background: $bg-panel-alt;
+  position: relative; // 给 .chat-cmd-suggest 浮层做定位基
 }
 .chat-pane-textarea {
   resize: none;
@@ -487,8 +509,11 @@
   color: $text-body;
   font-family: inherit;
   font-size: $fs-md;
+  line-height: $lh-normal;
   padding: $space-3 $space-4;
   border-radius: $radius-md;
+  overflow-y: auto; // 超过 5 行 (JS 计算) 后内部滚动
+  min-height: calc(#{$fs-md} * #{$lh-normal} + #{$space-3} * 2);
 
   &:disabled {
     cursor: not-allowed;
@@ -505,7 +530,97 @@
   justify-content: space-between;
   gap: $space-4;
 }
-.chat-pane-hint {
+
+// 命令触发器：单 `/` 按钮 + 弹出菜单 (替代之前 3 个并列按钮)
+.chat-cmd-bar {
+  position: relative;
+  display: inline-flex;
+}
+.chat-cmd-trigger {
+  font-family: $font-mono;
+  font-size: $fs-lg;
+  font-weight: 600;
+  line-height: 1;
+  padding: $space-2 $space-4;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  cursor: pointer;
+
+  &:hover:not(:disabled),
+  &.active {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+// `/` 按钮弹出的菜单：在按钮正上方展开
+.chat-cmd-menu {
+  position: absolute;
+  bottom: calc(100% + #{$space-2});
+  left: 0;
+  min-width: 200px;
+  list-style: none;
+  padding: $space-2 0;
+  margin: 0;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: $z-statusbar-menu;
+}
+
+// `/` 自动补全浮层：positioned 在 textarea 正上方 (input 容器是 relative)
+.chat-cmd-suggest {
+  position: absolute;
+  bottom: 100%;
+  left: $space-6;
+  right: $space-6;
+  margin-bottom: $space-2;
+  list-style: none;
+  padding: $space-2 0;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: $z-statusbar-menu;
+}
+.chat-cmd-suggest-item {
+  display: flex;
+  align-items: baseline;
+  gap: $space-4;
+  width: 100%;
+  padding: $space-2 $space-5;
+  background: transparent;
+  border: none;
+  color: $text-primary;
+  font-size: $fs-md;
+  text-align: left;
+  cursor: pointer;
+
+  code {
+    font-family: $font-mono;
+    color: $color-info;
+    font-weight: 600;
+  }
+  // hover + 键盘选中态共用 .active；hover 通过 onMouseEnter 同步 selectedIdx 触发
+  &.active,
+  &:hover {
+    background: $bg-hover;
+  }
+}
+
+// 解析错误 (未知命令 / ask 缺 question)
+.chat-input-error {
+  color: $color-danger;
   font-size: $fs-xs;
-  letter-spacing: 0.02em;
+  margin-top: -$space-2;
 }
