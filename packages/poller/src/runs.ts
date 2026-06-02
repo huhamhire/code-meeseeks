@@ -10,15 +10,14 @@ import type { PrAgentStrategy } from '@pr-pilot/shared';
 import type { StateStore } from '@pr-pilot/state-store';
 
 /**
- * `<connectionId>:<remoteId>` 形态的 PR localId 在 Windows 文件名里不合法（冒号
- * 是保留符）。文件路径用此函数清洗；查询 PR 本体仍走原 localId，互不冲突。
+ * runs 落在 `prs/<localId>/runs/<runId>.json`：跟 meta.json / comments.json 一起
+ * 在同一个 PR 目录下，PR 退场时 deleteDir 整棵清掉。
+ *
+ * localId 现是 prHashId 出来的 12 位 hex (`pr-hash-id.ts`)，无路径不安全字符，
+ * 不需要再 sanitize。
  */
-export function sanitizePrLocalIdForPath(localId: string): string {
-  return localId.replace(/[:/\\]/g, '--');
-}
-
 function runKey(prLocalId: string, runId: string): string {
-  return `runs/${sanitizePrLocalIdForPath(prLocalId)}/${runId}`;
+  return `prs/${prLocalId}/runs/${runId}`;
 }
 
 /**
@@ -112,19 +111,38 @@ export async function getReviewRun(
 }
 
 /**
- * 列出一个 PR 的所有 run，按 startedAt 倒序（newest first）。
- * 借助文件名是时序 id 这一点，列名后按字典序倒排即可，无需读文件内容做排序。
+ * 列出一个 PR 的 run 历史。按 startedAt **倒序** (newest first) 返回。
+ *
+ * runId 本身是时序字典序 (`yyyymmdd-HHmmss-mmm`)，所以文件名升序排 = 时间升序排，
+ * 不必读 file body 拿 startedAt 字段。
+ *
+ * 分页（用于 ChatPane 向上滚动懒加载）：
+ * - `opts.beforeId` 仅返回**更早**于此 runId 的条目（严格小于）；省略 = 不限上界
+ * - `opts.limit` 截到 N 条；省略 = 不限
+ * - 不读文件就能定位 page：先按 key 字典序排序 + 过滤 + 切片，再批量读，避免大库
+ *   全表扫描
  */
 export async function listReviewRunsForPr(
   stateStore: StateStore,
   prLocalId: string,
+  opts: { limit?: number; beforeId?: string } = {},
 ): Promise<ReviewRun[]> {
-  const prefix = `runs/${sanitizePrLocalIdForPath(prLocalId)}`;
+  const prefix = `prs/${prLocalId}/runs`;
   const keys: string[] = [];
   for await (const k of stateStore.list(prefix)) keys.push(k);
-  keys.sort().reverse();
+  keys.sort().reverse(); // newest first by runId
+  let filtered = keys;
+  if (opts.beforeId) {
+    // key 形如 `prs/<localId>/runs/<runId>`，取末段比较
+    const before = opts.beforeId;
+    filtered = keys.filter((k) => {
+      const last = k.slice(k.lastIndexOf('/') + 1);
+      return last < before;
+    });
+  }
+  const page = opts.limit !== undefined ? filtered.slice(0, opts.limit) : filtered;
   const out: ReviewRun[] = [];
-  for (const k of keys) {
+  for (const k of page) {
     const file = await stateStore.read<ReviewRunFile>(k);
     if (file) out.push(file.run);
   }

@@ -9,11 +9,14 @@ import {
   type Poller,
   finishReviewRun,
   getReviewRun,
+  isCommentsCacheStale,
   listReviewRunsForPr,
   listStoredPullRequests,
   parseReviewOutput,
+  readCommentsCache,
   setLocalStatus,
   startReviewRun,
+  writeCommentsCache,
 } from '@pr-pilot/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@pr-pilot/repo-mirror';
 import { loadRules, pickMatchingRule } from '@pr-pilot/rules';
@@ -343,12 +346,24 @@ export function registerIpcHandlers({
       req: IpcChannels['diff:listComments']['request'],
     ): Promise<IpcChannels['diff:listComments']['response']> => {
       const pr = await findPrOrThrow(req.localId);
+      // 缓存命中条件：pr_updated_at 跟当前 PR meta updatedAt 一致 → 直接回缓存，
+      // 不打远端。PR 任何变更 (新评论 / 状态等) BBS 都会更新 updatedAt，跳变即重拉
+      const cache = await readCommentsCache(stateStore, pr.localId);
+      if (cache && !isCommentsCacheStale(cache, pr.updatedAt)) {
+        return cache.comments;
+      }
       const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
-      return adapter.listPullRequestComments(
+      const fresh = await adapter.listPullRequestComments(
         { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
         pr.remoteId,
       );
+      await writeCommentsCache(stateStore, pr.localId, {
+        comments: fresh,
+        pr_updated_at: pr.updatedAt,
+        fetched_at: new Date().toISOString(),
+      });
+      return fresh;
     },
   );
 
@@ -682,7 +697,10 @@ export function registerIpcHandlers({
       _evt,
       req: IpcChannels['pragent:listRuns']['request'],
     ): Promise<IpcChannels['pragent:listRuns']['response']> =>
-      listReviewRunsForPr(stateStore, req.localId),
+      listReviewRunsForPr(stateStore, req.localId, {
+        limit: req.limit,
+        beforeId: req.beforeId,
+      }),
   );
 
   ipcMain.handle(

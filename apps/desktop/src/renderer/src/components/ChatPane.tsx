@@ -20,6 +20,8 @@ import { translatePrAgentLabels } from '../utils/translate-pr-agent';
 
 export const CHAT_MIN_WIDTH = 280;
 export const CHAT_MAX_WIDTH = 720;
+/** 历史 run 的分页大小：进入 PR 默认展示最新 N 条，向上滚动到顶端再追加一批 */
+const RUNS_PAGE_SIZE = 10;
 
 interface ChatPaneProps {
   pr: StoredPullRequest | null;
@@ -64,7 +66,11 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     document.body.style.userSelect = 'none';
   };
 
+  // runs 按 startedAt 升序保存 (chat 习惯：旧在上 / 新在下)。分页：进入 PR 默认拉
+  // 最新 RUNS_PAGE_SIZE 条，向上滚到顶端用 runs[0].id 当游标向 main 要更早一批
   const [runs, setRuns] = useState<ReviewRun[]>([]);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
@@ -85,19 +91,23 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
   const prLocalId = pr?.localId;
   useEffect(() => {
     setRuns([]);
+    setHasMoreOlder(false);
+    setLoadingOlder(false);
     setError(null);
     setMatchedRule(null);
     if (!prLocalId) return;
     let cancelled = false;
     void (async () => {
       try {
+        // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)
         const [list, rule] = await Promise.all([
-          invoke('pragent:listRuns', { localId: prLocalId }),
-          // 默认按 /review 算命中：rules.tools 缺省就是 [review]；/describe 通常没规则
+          invoke('pragent:listRuns', { localId: prLocalId, limit: RUNS_PAGE_SIZE }),
           invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
         ]);
         if (cancelled) return;
-        setRuns(list);
+        // 反转为升序 (chat 习惯)，UI 直接读 runs 即可
+        setRuns([...list].reverse());
+        setHasMoreOlder(list.length === RUNS_PAGE_SIZE);
         setMatchedRule(rule);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -108,26 +118,67 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     };
   }, [prLocalId]);
 
-  // 活动 run 切到我这个 PR 之外 → store.active 变 null / 别 PR 时，本地 run 历史
-  // 需要刷一下，把刚刚 (这个 PR 的) 跑完的 run 拉进列表。靠监听 active.runId 变化
-  // 而不是直接读 store 里的"上次完成 run"，避免引入额外字段
+  // 活动 run 跑完 → 单独 fetch 这条 run + 插到 runs 末尾 (最新位置)。
+  // 不重拉整页，避免毁掉用户已经向上加载的更早历史
   const lastActiveRunIdRef = useRef<string | null>(null);
   useEffect(() => {
     const prevId = lastActiveRunIdRef.current;
     lastActiveRunIdRef.current = active?.runId ?? null;
-    // 活动 run 从"我这 PR 的某个 runId" → 别的 / null → 这条 runId 刚完成。刷历史
     if (!prLocalId) return;
     if (!prevId) return;
     if (active?.runId === prevId) return;
     void (async () => {
       try {
-        const list = await invoke('pragent:listRuns', { localId: prLocalId });
-        setRuns(list);
+        const finished = await invoke('pragent:getRun', {
+          localId: prLocalId,
+          runId: prevId,
+        });
+        if (!finished) return;
+        setRuns((prev) => {
+          // 已在 list 里 (重复事件 / 重连) → 就地更新；否则 append 到末尾 (新)
+          const idx = prev.findIndex((r) => r.id === finished.id);
+          if (idx >= 0) {
+            const next = prev.slice();
+            next[idx] = finished;
+            return next;
+          }
+          return [...prev, finished];
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
     })();
   }, [active?.runId, prLocalId]);
+
+  // 向上滚到顶端 → 用 runs[0].id 当游标，向 main 要更早一批，prepend 到 runs。
+  // 保留视觉滚动位置：插入新内容后把 scrollTop 推到 (newHeight - prevHeight)
+  // 抵消，用户看上去像"接着原来位置"
+  const loadOlderRuns = async (): Promise<void> => {
+    if (loadingOlder || !hasMoreOlder || !prLocalId || runs.length === 0) return;
+    setLoadingOlder(true);
+    const el = bodyRef.current;
+    const prevHeight = el?.scrollHeight ?? 0;
+    const prevTop = el?.scrollTop ?? 0;
+    try {
+      const older = await invoke('pragent:listRuns', {
+        localId: prLocalId,
+        limit: RUNS_PAGE_SIZE,
+        beforeId: runs[0]!.id,
+      });
+      // older 是 newest-first，反转后整段塞到 runs 前面
+      setRuns((prev) => [...[...older].reverse(), ...prev]);
+      setHasMoreOlder(older.length === RUNS_PAGE_SIZE);
+      // 下一帧补齐滚动位置
+      requestAnimationFrame(() => {
+        if (!bodyRef.current) return;
+        bodyRef.current.scrollTop = prevTop + (bodyRef.current.scrollHeight - prevHeight);
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   // 触发 /describe / /review / /ask。失败抛 banner；成功不需要手动 setRuns，
   // 上面的 effect 会在 active 变 null 时自动 refresh
@@ -153,18 +204,25 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     void handleRun(run.tool, run.question);
   };
 
-  // 按 startedAt 升序：聊天界面约定旧消息在上、新消息在下。listReviewRunsForPr 返回的
-  // 顺序不保证，我们这里统一一次排序
-  const chronoRuns = useMemo(
-    () => runs.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt)),
-    [runs],
-  );
-
   // 新 run 完成 / 活动 run 切换时自动滚到底，让最新消息浮上来
   useEffect(() => {
     const el = bodyRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chronoRuns.length, myActiveRun?.runId]);
+  }, [runs.length, myActiveRun?.runId]);
+
+  // 向上滚到顶端 → 触发 loadOlderRuns 拉更早一批 (cursor = runs[0].id)
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const onScroll = (): void => {
+      if (el.scrollTop > 8) return;
+      void loadOlderRuns();
+    };
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+    // loadOlderRuns 是稳定的语义包装，依赖项放足够即可
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMoreOlder, loadingOlder, prLocalId, runs.length]);
 
   // active 变 null 时清掉 myActiveRun 对应的 lines 缓存 (run 已结束，历史走 run.stdout)
   useEffect(() => {
@@ -219,10 +277,16 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
-        {chronoRuns.length === 0 && !myActiveRun && <ChatEmpty pr={pr} prAgent={prAgent} />}
+        {runs.length === 0 && !myActiveRun && <ChatEmpty pr={pr} prAgent={prAgent} />}
+        {/* 还有更早的 run 未拉到本地 → 顶部出加载提示。继续向上滚自动游标拉一页 */}
+        {(hasMoreOlder || loadingOlder) && (
+          <div className="chat-run-more-hint muted" role="status">
+            {loadingOlder ? '加载中…' : '向上滚动加载更早历史…'}
+          </div>
+        )}
         {/* 历史 run 按时间升序堆叠，每条独立卡片 (内部维护自己的 raw stdout 折叠状态)。
-            新 run 完成后会自动追加到末尾 + 滚到底 */}
-        {chronoRuns.map((r, i) => (
+            初始只拉最新 RUNS_PAGE_SIZE 条；向上滚到顶后再用游标拉更早一批 */}
+        {runs.map((r, i) => (
           <RunResultView
             key={r.id}
             run={r}
@@ -230,7 +294,7 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
             // 只有"列表里最后一条 + 没有正在跑的"这一种情形下，失败 / 取消的 run 才
             // 可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
             // 避免回头再点重新插队、打乱对话顺序
-            canRetry={i === chronoRuns.length - 1 && !myActiveRun}
+            canRetry={i === runs.length - 1 && !myActiveRun}
           />
         ))}
         {/* 正在跑：进度条 + 实时 stdout 流，贴在历史末尾 */}

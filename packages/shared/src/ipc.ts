@@ -216,8 +216,17 @@ export interface IpcChannels {
     request: { localId: string; tool: ReviewRunTool; question?: string };
     response: ReviewRun;
   };
-  /** 列出某 PR 的全部历史 run，newest first */
-  'pragent:listRuns': { request: { localId: string }; response: ReviewRun[] };
+  /**
+   * 列出某 PR 的历史 run，newest first。支持时间戳游标分页：
+   * - limit：截到 N 条；省略 = 不限（renderer 端慎用，规模大时可能慢）
+   * - beforeId：游标，返回 runId **严格小于** 此值的条目；省略 = 不限上界
+   *
+   * runId 是时序字典序 (`yyyymmdd-HHmmss-mmm`)，"取游标后 N 条" 即"取此时刻之前的 N 条"
+   */
+  'pragent:listRuns': {
+    request: { localId: string; limit?: number; beforeId?: string };
+    response: ReviewRun[];
+  };
   /** 单条 run 查询（用于 renderer 在事件断流后兜底刷新） */
   'pragent:getRun': {
     request: { localId: string; runId: string };

@@ -63,8 +63,8 @@ rules:
 ---
 # 适用范围：各字段可省，省 = 匹配任意；值是**正则源串**
 applies_to:
-  project: "^FX$"              # BBS projectKey 正则
-  repo: "^fx-.*"               # BBS repoSlug 正则
+  project: "^FX$"              # Bitbucket Server projectKey 正则
+  repo: "^fx-.*"               # Bitbucket Server repoSlug 正则
   target_branch: "^(master|main)$"  # PR base 分支显示名
 # 哪些 pr-agent 工具生效，缺省 [review]。规则语义是代码评审规约，给 /describe
 # (PR 描述生成) 注入约束会让描述偏题；想同时影响 /describe 写 [describe, review]

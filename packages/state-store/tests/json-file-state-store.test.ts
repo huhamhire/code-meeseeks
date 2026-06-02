@@ -79,4 +79,46 @@ describe('JsonFileStateStore', () => {
     expect(text.endsWith('\n')).toBe(true);
     expect(JSON.parse(text)).toEqual({ hello: 'world' });
   });
+
+  it('deleteDir removes the whole subtree (含子目录 + 非 .json 文件)', async () => {
+    await store.write('prs/abc/meta', { v: 1 });
+    await store.write('prs/abc/runs/run-1', { v: 1 });
+    // 模拟非 .json 文件，确保也被一并清掉
+    await fs.writeFile(path.join(tmpDir, 'prs', 'abc', 'extra.txt'), 'hi');
+    await store.deleteDir('prs/abc');
+    await expect(fs.access(path.join(tmpDir, 'prs', 'abc'))).rejects.toThrow();
+    // 兄弟目录不受影响
+    await store.write('prs/xyz/meta', { v: 1 });
+    expect(await store.read('prs/xyz/meta')).toEqual({ v: 1 });
+  });
+
+  it('deleteDir 是 no-op 当目标不存在', async () => {
+    await expect(store.deleteDir('prs/nowhere')).resolves.toBeUndefined();
+  });
+
+  it('deleteDir 拒绝清空 stateDir 自身 (空串 / "." 都视作 root)', async () => {
+    await store.write('keep', { v: 1 });
+    await expect(store.deleteDir('')).rejects.toThrow(/stateDir root/);
+    await expect(store.deleteDir('.')).rejects.toThrow(/stateDir root/);
+    // root 没被毁，原文件还在
+    expect(await store.read('keep')).toEqual({ v: 1 });
+  });
+
+  // 路径越界保护：所有 fs 操作必须落在 stateDir 内部，
+  // `..` 跳出 / 绝对路径都得被挡，以防 key 拼接里混入未净化的用户输入
+  it('read / write / delete / deleteDir / list 全都挡 ".." path traversal', async () => {
+    await expect(store.read('../escape')).rejects.toThrow(/path traversal/);
+    await expect(store.write('../escape', { v: 1 })).rejects.toThrow(/path traversal/);
+    await expect(store.delete('../escape')).rejects.toThrow(/path traversal/);
+    await expect(store.deleteDir('../escape')).rejects.toThrow(/path traversal/);
+    await expect(async () => {
+      for await (const _ of store.list('../escape')) void _;
+    }).rejects.toThrow(/path traversal/);
+  });
+
+  it('挡绝对路径 key（即使指向 stateDir 之外）', async () => {
+    const outside = path.join(os.tmpdir(), 'pr-pilot-outside');
+    await expect(store.read(outside)).rejects.toThrow(/path traversal/);
+    await expect(store.write(outside, { v: 1 })).rejects.toThrow(/path traversal/);
+  });
 });

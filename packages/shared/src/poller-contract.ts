@@ -1,4 +1,4 @@
-import type { PullRequest } from './platform.js';
+import type { PlatformKind, PullRequest } from './platform.js';
 import type { PrAgentStrategy } from './pr-agent-status.js';
 
 /**
@@ -62,6 +62,19 @@ export interface FindingAnchor {
   endLine?: number;
 }
 
+/** Finding 严重度：M4 评审发布闭环用，UI 决定 chip 着色 / 排序优先级 */
+export type FindingSeverity = 'info' | 'warning' | 'error';
+
+/**
+ * Finding 在评审 → 发布闭环中的状态机:
+ *   pending  : 默认值，待用户决断
+ *   accepted : 用户勾选采纳 (将作为 inline / summary 评论发布)
+ *   edited   : 用户改写了内容 (draft_body 含编辑后版本)
+ *   rejected : 用户拒绝；不发布
+ *   posted   : 已发布到远端 (posted_remote_id 含远端评论 id 用作幂等)
+ */
+export type FindingStatus = 'pending' | 'accepted' | 'edited' | 'rejected' | 'posted';
+
 export interface Finding {
   /** 同一 run 内稳定的 id，便于 UI list-key + 后续 "改为评论草稿" 引用 */
   id: string;
@@ -77,18 +90,59 @@ export interface Finding {
   body: string;
   /** 仅 category='code-feedback' 时有值 */
   anchor?: FindingAnchor;
+  /**
+   * 严重度 (M4)；当前 parser 不填，M4 接 /improve 时按 pr-agent 输出 / rules 补
+   * 推断逻辑。UI 默认按 'info' 渲染
+   */
+  severity?: FindingSeverity;
+  /**
+   * 发布闭环状态 (M4)；缺省视为 'pending'。所有 finding 默认是 pending，用户在
+   * Findings Drawer 上勾选后转 accepted / edited / rejected；发布成功转 posted
+   */
+  status?: FindingStatus;
+  /**
+   * 用户编辑后的评论正文。仅 status='edited' 时填；其他状态 UI 直接读 body
+   */
+  draft_body?: string;
+  /**
+   * 发布成功后远端评论 id (e.g., BBS comment id)。用作幂等 key，防止同一 finding
+   * 被重复发布；跟 state/posted-comments.json 互为冗余但前者按 finding 维度，
+   * 后者按 (finding_id, remote_id) 维度全局索引，用途互补
+   */
+  posted_remote_id?: string;
 }
 
 /**
- * 一次 pr-agent 调用的完整记录。落地为
- * `state/runs/<sanitized-localId>/<runId>.json`。M3-B1 阶段 stdout / stderr
- * 直接落整段，findings 解析留到 M3-B2 填 `findings` 字段。
+ * PR identity 快照：嵌进 ReviewRun (可选) 让 run 文件自描述，不依赖 `prs/index.json`
+ * 也能反查所属 PR。M5 归档场景 (PR 已硬清但 run 单独导出) 会需要。
+ *
+ * 这里复制 `@pr-pilot/poller` 的 PrIdentity 形状到 shared，避免 shared 反向依赖
+ * poller (循环依赖)。两边字段一一对应。
+ */
+export interface PrIdentitySnapshot {
+  platform: PlatformKind;
+  connectionId: string;
+  group: string;
+  repo: string;
+  remoteId: string;
+  url?: string;
+}
+
+/**
+ * 一次 pr-agent 调用的完整记录。落地为 `state/prs/<localId>/runs/<runId>.json`，
+ * 与 PR 的 meta.json / comments.json 同目录，PR 退场时一并清理。
  */
 export interface ReviewRun {
   /** yyyymmdd-HHmmss-ms 时序 id，便于按文件名倒序列出 */
   id: string;
-  /** "<connectionId>:<remoteId>"，与 StoredPullRequest.localId 对齐 */
+  /** PR hash localId (12 hex chars)，跟 StoredPullRequest.localId 对齐 */
   prLocalId: string;
+  /**
+   * PR identity 快照 (可选)；目前 M3 默认不填，UI 始终从 meta.json 读 PR 信息。
+   * 留 schema 位给 M5 归档：导出单个 run 文件时能凭此快照反查远端 PR / 跳转 URL，
+   * 即使本地 `prs/<hash>/` 已经被硬清
+   */
+  prIdentitySnapshot?: PrIdentitySnapshot;
   tool: ReviewRunTool;
   /** /ask 工具的问题内容；其他 tool 不填。UI 把它当用户发言渲染在 run 卡片之上 */
   question?: string;
@@ -126,8 +180,22 @@ export interface ReviewRunFile {
  * 既在主进程持久化用，也是 renderer 经由 IPC 拿到的形状。
  */
 export interface StoredPullRequest extends PullRequest {
-  /** "<connectionId>:<remoteId>"，跨连接唯一 */
+  /**
+   * PR 在本地状态体系的唯一标识：sha1(platform|connectionId|group|repo|remoteId)
+   * 取前 12 hex chars。详见 `@pr-pilot/poller` 的 `prHashId`。
+   *
+   * 用 hash 而不是拼字符串：
+   * - 路径友好 (无 `:` `/` 需要转义，跨平台一致)
+   * - 定长 (12 chars)
+   * - 不同 platform / repo 同 PR id 不会撞 (platform + group + repo + remote 都纳入哈希源)
+   */
   localId: string;
+  /**
+   * 远端平台类型。让单个 meta.json 自描述，不依赖 prs/index.json 也能知道这条 PR
+   * 来自什么平台 —— 跨存储迁移 / 备份 / 离线分析时友好。M3 起 BBS only；M5 接入
+   * GitHub / GitLab / Gitea 时无需改 schema
+   */
+  platform: PlatformKind;
   connectionId: string;
   localStatus: LocalPrStatus;
   /** 首次被 poll 发现的时间，ISO */

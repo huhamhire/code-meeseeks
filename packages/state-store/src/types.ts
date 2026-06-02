@@ -13,4 +13,10 @@ export interface StateStore {
   delete(key: string): Promise<void>;
   /** 列出指定前缀下的所有 key（不含值）。 */
   list(prefix: string): AsyncIterable<string>;
+  /**
+   * 递归删除某个前缀下的整个目录树（含子目录 / 非 .json 文件 / 整个 prefix dir 自身）。
+   * 用于 PR 退场时一次清掉 `prs/<hash>/` 下的 meta / comments / runs 等所有子文件。
+   * 不存在 / 不是目录都 no-op。
+   */
+  deleteDir(prefix: string): Promise<void>;
 }

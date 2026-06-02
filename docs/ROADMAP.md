@@ -73,6 +73,7 @@ flowchart TB
 - [ADR-0002](./adr/0002-bitbucket-server-adapter.md) · Bitbucket Server 平台适配
 - [ADR-0003](./adr/0003-state-storage-and-workspace-layout.md) · 状态存储与工作目录布局
 - [ADR-0004](./adr/0004-package-manager-and-monorepo.md) · 包管理器与 Monorepo 工具
+- [ADR-0006](./adr/0006-pr-state-storage-redesign.md) · PR 状态存储重新设计（per-PR 目录 + hash localId + 软删 + 安全 invariants）
 
 ---
 
@@ -100,13 +101,16 @@ flowchart TB
 ~/.pr-pilot/
 ├── config.yaml          # 所有配置（含 token / API key + repos_dir 设置），权限 600 / Windows ACL
 │                        # (rules 默认不放这里，见下方 `rules.dir`)
-├── state/               # JSON 状态文件（详见 §4）
+├── state/               # JSON 状态文件（per-PR 目录，详见 ADR-0006）
 │   ├── connections.json
 │   ├── watched-repos.json
-│   ├── pull-requests.json
-│   ├── pull-requests/<pr-id>.json
-│   ├── runs/<pr-id>/<run-id>.json
-│   └── posted-comments.json
+│   ├── posted-comments.json
+│   └── prs/
+│       ├── index.json                   # hash localId → PrIndexEntry (含 archivedAt)
+│       └── <localId-hash>/
+│           ├── meta.json                # PR 完整元数据 (StoredPullRequest)
+│           ├── comments.json            # 评论缓存 + cache key (pr_updated_at)
+│           └── runs/<run-id>.json       # agent 会话
 └── logs/                # 滚动日志
 ```
 
@@ -156,6 +160,8 @@ flowchart TB
 
 ### 4.2 文件清单与 schema 草图
 
+> M3 起 PR 状态布局按 ADR-0006 重新组织：hash localId + per-PR 目录 + 软删 + 安全 invariants。下面 schema 是当前形态。
+
 ```ts
 // state/connections.json
 type ConnectionsFile = {
@@ -182,63 +188,91 @@ type WatchedReposFile = {
   }>;
 };
 
-// state/pull-requests.json (索引，轻量字段；用于快速渲染列表)
-type PullRequestsIndexFile = {
-  schema_version: 1;
-  pull_requests: Array<{
-    id: string; // 本地 id
-    connection_id: string;
-    repo_id: string;
-    remote_id: string; // 平台侧 PR id
-    title: string;
-    author: string;
-    source_ref: string;
-    target_ref: string;
-    state: 'open' | 'merged' | 'declined';
-    local_status: 'pending' | 'reviewed' | 'skipped';
-    discovered_at: string;
-    updated_at: string;
-  }>;
+// PR identity 多平台抽象 (Bitbucket Server=projectKey/repoSlug / GH=owner/name / GL=namespace/name / Gitea=owner/name 都对齐到 group/repo)
+type PrIdentity = {
+  platform: 'bitbucket-server' | 'github' | 'gitlab' | 'gitea';
+  connectionId: string;   // 本地分账户标识
+  group: string;          // Bitbucket Server=projectKey / GH=owner / GL=namespace
+  repo: string;           // 仓库 slug
+  remoteId: string;       // PR id 字符串
+  url?: string;           // 远端 URL 快照，不进 hash
 };
 
-// state/pull-requests/<pr-id>.json (单 PR 详情)
-type PullRequestDetailFile = {
+// state/prs/index.json (PR 全局索引，仅 lookup / 退场判定字段)
+type PrIndexFile = {
+  schema_version: 1;
+  prs: Record<
+    string, // hash localId = sha1(platform|conn|group|repo|remoteId).slice(0,12)
+    {
+      identity: PrIdentity;
+      updatedAt: string;        // 远端 PR.updatedAt 镜像，cache 失效用
+      discoveredAt: string;
+      lastSeenAt: string;
+      archivedAt: string | null; // 软删时间戳，距 now > 1 周才硬清
+    }
+  >;
+};
+
+// state/prs/<localId>/meta.json (单 PR 完整元数据)
+type PrMetaFile = {
   schema_version: 1;
   pr: {
-    /* 完整字段，含 source_sha / target_sha / 描述等 */
+    /* StoredPullRequest 完整字段：title / description / refs / reviewers /
+       localStatus / discoveredAt / lastSeenAt，外加 platform: PlatformKind 字段
+       让 meta 自描述 (不依赖 index.json 也能知道来自哪个平台) */
   };
-  latest_run_id?: string;
 };
 
-// state/runs/<pr-id>/<run-id>.json (单次 review run)
+// state/prs/<localId>/comments.json (评论缓存)
+type CommentsCacheFile = {
+  schema_version: 1;
+  pr_updated_at: string;  // 写入时 PR meta updatedAt 快照，cache 失效判定
+  fetched_at: string;
+  comments: PrComment[];
+};
+
+// state/prs/<localId>/runs/<runId>.json (单次 agent 调用)
 type ReviewRunFile = {
   schema_version: 1;
   run: {
-    id: string;
-    pr_id: string;
-    started_at: string;
-    finished_at?: string;
-    pr_agent_version: string;
-    model: string;
-    ruleset_hash: string;
-    status: 'running' | 'succeeded' | 'failed';
+    id: string;             // yyyymmdd-HHmmss-mmm 时序 id
+    prLocalId: string;      // 跟父目录 <localId> 一致
+    prIdentitySnapshot?: PrIdentity;  // M5 归档单 run 时反查 PR 用，M3 默认不填
+    tool: 'describe' | 'review' | 'ask';
+    question?: string;
+    prAgentVersion: string;
+    strategy: 'local-cli' | 'docker';
+    status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+    startedAt: string;
+    finishedAt?: string;
+    durationMs?: number;
+    exitCode?: number;
+    errorReason?: 'timeout' | 'spawn-failed' | 'non-zero-exit' | 'killed' | 'cancelled';
+    errorMessage?: string;
+    stdout?: string;
+    stderr?: string;
+    findings?: Finding[];    // M3-B2 解析得到；schema 同 §3.1
+    summary?: string;
   };
-  findings: Array<{
-    id: string;
-    file_path: string;
-    start_line: number;
-    end_line: number;
-    severity: 'info' | 'warning' | 'error';
-    category: string;
-    suggestion: string;
-    rationale: string;
-    status: 'pending' | 'accepted' | 'edited' | 'rejected' | 'posted';
-    draft_body?: string; // 用户编辑后的内容
-    posted_remote_id?: string;
-  }>;
 };
 
-// state/posted-comments.json (幂等记录，防重复发送)
+// Finding 在 M3 只填 body / anchor / sectionKey；severity / status / draft_body /
+// posted_remote_id 是 M4 评审发布闭环字段，schema 提前预留
+type Finding = {
+  id: string;
+  category: 'description' | 'general' | 'code-feedback';
+  sectionKey?: PrDocSectionKey;
+  title?: string;
+  body: string;
+  anchor?: { path: string; startLine?: number; endLine?: number };
+  // ── M4 评审发布闭环字段 (M3 不填) ──
+  severity?: 'info' | 'warning' | 'error';
+  status?: 'pending' | 'accepted' | 'edited' | 'rejected' | 'posted';
+  draft_body?: string;       // 用户改写正文，仅 status='edited' 时填
+  posted_remote_id?: string; // 发布成功后远端 comment id，幂等 key
+};
+
+// state/posted-comments.json (横向幂等记录，防重复发送；跟 prs/ 目录解耦)
 type PostedCommentsFile = {
   schema_version: 1;
   posted: Array<{
@@ -248,6 +282,29 @@ type PostedCommentsFile = {
   }>;
 };
 ```
+
+### 4.3 容错与最终一致
+
+state 目录可能被外部操作 (用户手动 / 清理工具 / 同步软件) 改变。设计保证最终一致：
+
+| 外部操作 | 当前行为 | 恢复机制 |
+|---|---|---|
+| `prs/index.json` 被删 | 下一次 `read` 返回 null；list 返回空数组 | 下一轮 poll 拿到远端列表 → 重建索引 |
+| 某个 `prs/<localId>/meta.json` 被删 | `listStoredPullRequests` 跳过该条目 (索引有 entry 但 meta null) | 下一轮 poll：若 PR 仍在远端 → 重写 meta；若已不在 → 软删进 grace |
+| `prs/<localId>/comments.json` 被删 | `readCommentsCache` 返回 null | 下一次 `diff:listComments` 调用 → 从远端拉 + 重写缓存 |
+| `prs/<localId>/runs/<runId>.json` 被删 | `listReviewRunsForPr` 跳过该 run | 不可恢复 (历史事件)，但不会崩；新 run 不受影响 |
+| 整个 `prs/<localId>/` 目录被删 | UI 该 PR 历史 / 评论缓存全清；索引 entry 暂时孤立 | PR 仍在远端 → 下一轮 poll 重建 meta；评论按需重拉；runs 历史永久丢 |
+| `prs/index.json` 损坏（无效 JSON） | `read` 抛错；poll 当轮 fail，不动磁盘 | 用户介入 (删坏文件 / 修复) 后下一轮自动重建 |
+| `prs/<hash>/` 目录在索引中没条目 (孤儿) | 占磁盘但不影响功能 | 暂不主动清理；下次主动 reconcile 时处理 (待 M5) |
+
+设计原则：**读操作宽容 (null/skip)，写操作幂等 (覆盖)，poll 是唯一权威，远端是最终 truth**。
+
+### 4.4 安全 invariants
+
+详见 ADR-0006 §5。关键：
+
+- 上游 PR list 失败 → 不写 meta / 不软删 / 不剔除条目 / 不重写 index（保证 mtime 不变）
+- `StateStore` 所有 fs 操作必须在 `stateDir` 内：`..` 跳出 / 绝对路径 / `deleteDir('')` 都被屏障拦截，避免 key 拼接漏过未净化输入时越界
 
 `schema_version` 字段保证后续做格式迁移时有版本号可判断。
 
@@ -307,7 +364,7 @@ type PostedCommentsFile = {
 - **设置页 UI 内编辑连接（CRUD + connection ping）**：推迟到 M5。M1 提供 read-only modal + "编辑 config.yaml" 调 OS 编辑器作过渡
 - **`repos_dir` 配置 UI**：推迟到 M2，配合仓库镜像功能一起做才有意义
 
-**Done when** ✅：在 `config.yaml` 加 BBS 连接后，应用自动发现 PR 并展示；可标记跳过 / 已评 / 重置；可一键开浏览器看远端。
+**Done when** ✅：在 `config.yaml` 加 Bitbucket Server 连接后，应用自动发现 PR 并展示；可标记跳过 / 已评 / 重置；可一键开浏览器看远端。
 
 ### M2 · 仓库镜像 + 本地 Diff 展示 ✅ 已完成
 
@@ -320,9 +377,9 @@ type PostedCommentsFile = {
 - ✅ Sync 进度实时推送：simple-git progress → main `onProgress` → `sync:progress` IPC 事件 → renderer 按 repo 过滤显示阶段 + 百分比 + 进度条
 - ✅ Diff 计算：`listChangedFiles` 走 `git diff -z --name-status base...head`（三点 diff，自分叉后引入的变化）；`getFileContent` 走 `git show <sha>:<path>`（按需拉 blob）+ null-byte 启发判断二进制
 - ✅ Monaco DiffEditor 接入 (`@monaco-editor/react`)：side-by-side / unified 切换 + localStorage 持久化 + `hideUnchangedRegions` 前后保留 10 行（GitHub 风格折叠）
-- ✅ Clone 协议双轨：**PAT** (`https://<user>:<pat>@host/scm/proj/repo.git`，BBS 7+ 用户名+PAT 风格) + **SSH** (走系统 `~/.ssh/config`)；`cloneProtocol` 配置项控制，默认 PAT
+- ✅ Clone 协议双轨：**PAT** (`https://<user>:<pat>@host/scm/proj/repo.git`，Bitbucket Server 7+ 用户名+PAT 风格) + **SSH** (走系统 `~/.ssh/config`)；`cloneProtocol` 配置项控制，默认 PAT
 - ✅ 文件树 (`FileTree`)：嵌套虚拟树 + Material Icon Theme (`material-icon-theme:folder-base[-open]` + 30+ 扩展名 fileIconFor map) + VS Code Git decoration 配色 (added 绿 / modified 橙 / deleted 红，folder 按聚合状态着色，mixed > added > deleted 优先级) + 状态点右侧 sticky 锁定 + inline-block 内层让所有 row 统一最宽行宽度
-- ✅ 行内评论 (Monaco view zones)：BBS `/activities` 拉 inline + summary，按文件锚定行号；glyph margin 蓝点 + 行下方 view zone (createRoot + React) 渲染评论 markdown (react-markdown + remark-gfm)；多条同行合并 hover；commentCountByPath → 文件树右侧蓝色数字 chip
+- ✅ 行内评论 (Monaco view zones)：Bitbucket Server `/activities` 拉 inline + summary，按文件锚定行号；glyph margin 蓝点 + 行下方 view zone (createRoot + React) 渲染评论 markdown (react-markdown + remark-gfm)；多条同行合并 hover；commentCountByPath → 文件树右侧蓝色数字 chip
 - ✅ Blame：`git blame --porcelain` + porcelain 解析，行首 `before.content` 注入「作者 + 相对时间 · 短 sha」，同 commit 连续行只首行展示，hover 完整 commit message；toggle 按钮 + localStorage 持久化
 - ✅ Settings：可视化编辑 `repos_dir`（写回 config.yaml，重启生效）+ 本地镜像总占用展示（去重 repoKey 聚合 dirSize）+ 调试工具入口（detached DevTools）
 - ✅ Sidebar 增强：宽度可拖拽 (240-720px) + 整体收起 + 两者 localStorage 持久化；reviewer 状态胶囊 (✓N approved 绿 / ✗N needsWork 红)；`Reviewer.status` 类型重构 (approved | needsWork | unapproved)
@@ -408,7 +465,7 @@ type PostedCommentsFile = {
 1. ✅ ROADMAP.md + ADR-0001 + ADR-0002 + ADR-0003 + ADR-0004
 2. ✅ Bitbucket Server API 探针（`tools/probes/bitbucket-server-probe.mjs`，已验证 7.17.10 实例 6 个只读端点）
 3. ✅ M0 工程基线（A 工作区 → B Electron 壳 → C IPC/CSP/bootstrap → D pr-agent 探测 + CI）
-4. ✅ M1 BBS 接入 + PR 发现（A state-store + vitest → B BBS adapter → C Poller / IPC → D React Layout UI + sidebar 分组排序）
+4. ✅ M1 Bitbucket Server 接入 + PR 发现（A state-store + vitest → B Bitbucket Server adapter → C Poller / IPC → D React Layout UI + sidebar 分组排序）
 5. ✅ ESLint flat config + 全包 lint target（M0 残项补齐；electron-builder 本地 `--dir` 烟雾测试推到 M4 发布前）
 6. ✅ M2 仓库镜像 + Monaco diff（A repo-mirror + clone url → B listChangedFiles / getFileContent → C 主进程接线 + diff IPC → D MainPane diff 视图 + 文件树 + 评论 inline + blame + reviewer 胶囊 + statusbar 增强）
 7. ⏭️ M3: pr-agent 集成 (`PrAgentBridge` LocalCli / Docker + `/describe` + `/review` + findings 结构化 + rules.dir markdown 注入)

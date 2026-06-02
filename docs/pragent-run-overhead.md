@@ -45,7 +45,7 @@ Docker Desktop on Windows) 经验值。
 - 模块级 `Map`，应用内存生命周期
 - 不持久化（PR updatedAt 一旦变就该重拉，缓存能 hit 的窗口足够短）
 
-**节省**：第二次 run 起省 BBS API 0.3-3s（D 段的一小块）。
+**节省**：第二次 run 起省 Bitbucket Server API 0.3-3s（D 段的一小块）。
 
 ### 3. pr-agent 内部预处理裁剪（实测后定，~1-2h）
 

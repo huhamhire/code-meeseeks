@@ -85,6 +85,14 @@
   gap: $space-8;
 }
 
+// "向上滚动加载更早" 提示行：顶端显眼但不抢眼，居中虚化
+.chat-run-more-hint {
+  text-align: center;
+  font-size: $fs-xs;
+  padding: $space-2 0;
+  border-bottom: 1px dashed $border-muted;
+}
+
 // 当前 PR 命中的规则 chip：actions bar 下方一行，点击弹出正文预览
 .chat-rule-chip {
   display: flex;

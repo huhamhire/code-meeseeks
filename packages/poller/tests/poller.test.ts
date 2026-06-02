@@ -5,8 +5,14 @@ import path from 'node:path';
 import type { Logger } from 'pino';
 import { JsonFileStateStore } from '@pr-pilot/state-store';
 import type { PlatformAdapter, PullRequest } from '@pr-pilot/shared';
-import { Poller, listStoredPullRequests, setLocalStatus } from '../src/poller.js';
-import { PR_INDEX_KEY, type PullRequestsIndexFile } from '../src/types.js';
+import { Poller } from '../src/poller.js';
+import { prHashId } from '../src/pr-hash-id.js';
+import {
+  PR_INDEX_KEY,
+  listStoredPullRequests,
+  setLocalStatus,
+  type PrIndexFile,
+} from '../src/pr-state.js';
 
 class FakeAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
@@ -113,8 +119,15 @@ describe('Poller.tick', () => {
 
     const stored = await listStoredPullRequests(store);
     expect(stored).toHaveLength(1);
+    const expectedId = prHashId({
+      platform: 'bitbucket-server',
+      connectionId: 'bb1',
+      group: 'P',
+      repo: 'r',
+      remoteId: '1',
+    });
     expect(stored[0]).toMatchObject({
-      localId: 'bb1:1',
+      localId: expectedId,
       connectionId: 'bb1',
       localStatus: 'pending',
       discoveredAt: fixedNow.toISOString(),
@@ -183,7 +196,7 @@ describe('Poller.tick', () => {
     expect(r.fetched).toBe(1);
     const stored = await listStoredPullRequests(store);
     expect(stored).toHaveLength(1);
-    expect(stored[0]!.localId).toBe('good:1');
+    expect(stored[0]!.connectionId).toBe('good');
   });
 
   it('tick re-entrancy: a second tick while one is in flight returns immediately', async () => {
@@ -244,7 +257,37 @@ describe('Poller.tick', () => {
     expect(r.removed).toBe(1);
     const stored = await listStoredPullRequests(store);
     expect(stored).toHaveLength(1);
-    expect(stored[0]!.localId).toBe('bb1:1');
+    expect(stored[0]!.remoteId).toBe('1');
+  });
+
+  it('all connections fail in one tick: index file mtime untouched + state intact', async () => {
+    // 先一次成功 poll，落地基线
+    const ok1 = makePr('1', '2026-05-28T01:00:00.000Z');
+    const ok2 = makePr('2', '2026-05-28T02:00:00.000Z');
+    const adapter = new FakeAdapter([ok1, ok2]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    const indexPath = path.join(tmpDir, 'prs', 'index.json');
+    const mtimeBefore = (await fs.stat(indexPath)).mtimeMs;
+    const storedBefore = await listStoredPullRequests(store);
+
+    // 下一轮：远端整体失败 (网络断 / 5xx) → 本地一行不动 (invariant #1+#2)
+    adapter.failNextList();
+    // 至少加 5ms 时间窗，避免 mtime 分辨率 (Windows NTFS 100ns 都行，保险起见)
+    await new Promise<void>((r) => setTimeout(r, 5));
+    const r = await poller.tick();
+    expect(r.errors).toBe(1);
+    expect(r.removed).toBe(0);
+    expect(r.changed).toBe(0);
+    expect(r.added).toBe(0);
+    const mtimeAfter = (await fs.stat(indexPath)).mtimeMs;
+    expect(mtimeAfter).toBe(mtimeBefore); // 文件没被重写
+    expect(await listStoredPullRequests(store)).toEqual(storedBefore);
   });
 
   it('does NOT prune PRs from a connection whose poll failed', async () => {
@@ -291,7 +334,8 @@ describe('Poller.tick', () => {
     expect(r.removed).toBe(1); // 只剪了 ok 的
     expect(r.errors).toBe(1);
     const stored = await listStoredPullRequests(store);
-    expect(stored.map((p) => p.localId).sort()).toEqual(['broken:a']);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.connectionId).toBe('broken');
   });
 
   // localStatus 直接镜像 BBS reviewer.status，是远端权威态的本地缓存。
@@ -375,47 +419,7 @@ describe('Poller.tick', () => {
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
   });
 
-  // 旧版 (M3-C 之前) pull-requests.json 可能落了 reviewed/skipped/ignored，
-  // 读时需要无声迁移；下次写回会落到新枚举
-  it('migrates legacy localStatus values on read', async () => {
-    const legacyFile: PullRequestsIndexFile = {
-      schema_version: 1,
-      pull_requests: [
-        {
-          ...makePr('1', '2026-05-28T01:00:00.000Z'),
-          localId: 'bb1:1',
-          connectionId: 'bb1',
-          // legacy 字面值，类型 cast 让旧值过 TS 校验
-          localStatus: 'reviewed' as unknown as 'approved',
-          discoveredAt: '2026-05-28T01:00:00.000Z',
-          lastSeenAt: '2026-05-28T01:00:00.000Z',
-        },
-        {
-          ...makePr('2', '2026-05-28T02:00:00.000Z'),
-          localId: 'bb1:2',
-          connectionId: 'bb1',
-          localStatus: 'skipped' as unknown as 'pending',
-          discoveredAt: '2026-05-28T02:00:00.000Z',
-          lastSeenAt: '2026-05-28T02:00:00.000Z',
-        },
-        {
-          ...makePr('3', '2026-05-28T03:00:00.000Z'),
-          localId: 'bb1:3',
-          connectionId: 'bb1',
-          localStatus: 'ignored' as unknown as 'pending',
-          discoveredAt: '2026-05-28T03:00:00.000Z',
-          lastSeenAt: '2026-05-28T03:00:00.000Z',
-        },
-      ],
-    };
-    await store.write(PR_INDEX_KEY, legacyFile);
-    const stored = await listStoredPullRequests(store);
-    expect(stored.find((p) => p.localId === 'bb1:1')!.localStatus).toBe('approved');
-    expect(stored.find((p) => p.localId === 'bb1:2')!.localStatus).toBe('pending');
-    expect(stored.find((p) => p.localId === 'bb1:3')!.localStatus).toBe('pending');
-  });
-
-  it('writes a valid PullRequestsIndexFile with schema_version', async () => {
+  it('writes a valid prs/index.json with schema_version + per-PR meta', async () => {
     const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
@@ -424,9 +428,149 @@ describe('Poller.tick', () => {
       logger: noopLogger,
     });
     await poller.tick();
-    const file = await store.read<PullRequestsIndexFile>(PR_INDEX_KEY);
+    const file = await store.read<PrIndexFile>(PR_INDEX_KEY);
     expect(file?.schema_version).toBe(1);
-    expect(file?.pull_requests).toHaveLength(1);
+    expect(Object.keys(file!.prs)).toHaveLength(1);
+    // 每个 PR 的 meta.json 落在 prs/<hash>/meta.json
+    const hash = Object.keys(file!.prs)[0]!;
+    const meta = await store.read<{ schema_version: 1; pr: { localId: string } }>(
+      `prs/${hash}/meta`,
+    );
+    expect(meta?.pr.localId).toBe(hash);
+  });
+
+  it('different repos with same remoteId get distinct localIds (hash includes proj/repo)', async () => {
+    const prRepoX = makePr('42', '2026-05-28T01:00:00.000Z');
+    prRepoX.repo = { projectKey: 'A', repoSlug: 'x' };
+    const prRepoY = makePr('42', '2026-05-28T02:00:00.000Z');
+    prRepoY.repo = { projectKey: 'A', repoSlug: 'y' };
+    const adapter = new FakeAdapter([prRepoX, prRepoY]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    const stored = await listStoredPullRequests(store);
+    expect(stored).toHaveLength(2);
+    expect(stored[0]!.localId).not.toBe(stored[1]!.localId);
+  });
+
+  it('PR gone from remote becomes soft-archived (filtered out of listStoredPullRequests)', async () => {
+    const adapter = new FakeAdapter([
+      makePr('1', '2026-05-28T01:00:00.000Z'),
+      makePr('2', '2026-05-28T02:00:00.000Z'),
+    ]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(2);
+
+    // PR #2 关单 → soft archive (archivedAt set in index)，list 自动过滤掉
+    adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    await poller.tick();
+    const visible = await listStoredPullRequests(store);
+    expect(visible).toHaveLength(1);
+    expect(visible[0]!.remoteId).toBe('1');
+
+    // 但 meta.json + 索引条目仍在 (待 grace 期满才硬删)
+    const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    const archivedEntries = Object.values(index!.prs).filter((e) => e.archivedAt);
+    expect(archivedEntries).toHaveLength(1);
+  });
+
+  it('archived PR re-appearing on remote becomes active again', async () => {
+    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+
+    // 远端关单 → soft archive
+    adapter.setPrs([]);
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(0);
+
+    // 复活：远端又出现 (例如 reviewer 被重新加回) → archivedAt 清零
+    adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(1);
+  });
+
+  it('外部删除 prs/index.json: 下一轮 poll 自动重建', async () => {
+    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(1);
+
+    // 模拟外部 (用户 / 清理工具) 直接 rm 掉索引文件
+    await fs.rm(path.join(tmpDir, 'prs', 'index.json'));
+    expect(await listStoredPullRequests(store)).toHaveLength(0);
+
+    // 下一轮 poll 重建索引
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(1);
+  });
+
+  it('外部删除 meta.json 但索引尚存：list 跳过；下一轮 poll 重写 meta', async () => {
+    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    const hash = (await listStoredPullRequests(store))[0]!.localId;
+    const metaPath = path.join(tmpDir, 'prs', hash, 'meta.json');
+
+    // 外部清掉 meta；索引 entry 仍在
+    await fs.rm(metaPath);
+    expect(await listStoredPullRequests(store)).toHaveLength(0); // list 跳过
+
+    // 下一轮 poll：PR 还在远端 → 写回 meta
+    await poller.tick();
+    expect(await listStoredPullRequests(store)).toHaveLength(1);
+    await expect(fs.access(metaPath)).resolves.toBeUndefined();
+  });
+
+  it('hard-purges archived PR after grace period expires', async () => {
+    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+    });
+    await poller.tick();
+    const hash = (await listStoredPullRequests(store))[0]!.localId;
+
+    // T+0: 关单 → soft archive
+    adapter.setPrs([]);
+    await poller.tick();
+    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull();
+
+    // T+8 天: 超过 1 周 grace → 硬清掉整目录
+    now = new Date('2026-06-09T00:00:00.000Z');
+    await poller.tick();
+    expect(await store.read(`prs/${hash}/meta`)).toBeNull();
+    const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    expect(Object.keys(index!.prs)).toHaveLength(0);
   });
 });
 
@@ -440,7 +584,8 @@ describe('setLocalStatus', () => {
       logger: noopLogger,
     });
     await poller.tick();
-    const updated = await setLocalStatus(store, 'bb1:1', 'approved');
+    const hash = (await listStoredPullRequests(store))[0]!.localId;
+    const updated = await setLocalStatus(store, hash, 'approved');
     expect(updated?.localStatus).toBe('approved');
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('approved');
   });
@@ -454,12 +599,12 @@ describe('setLocalStatus', () => {
       logger: noopLogger,
     });
     await poller.tick();
-    const updated = await setLocalStatus(store, 'bb1:nope', 'needs_work');
+    const updated = await setLocalStatus(store, 'nonexistenthash', 'needs_work');
     expect(updated).toBeNull();
   });
 
-  it('returns null when the index file does not exist yet', async () => {
-    const updated = await setLocalStatus(store, 'bb1:1', 'needs_work');
+  it('returns null when no meta file exists yet', async () => {
+    const updated = await setLocalStatus(store, 'somehash12ab', 'needs_work');
     expect(updated).toBeNull();
   });
 });
