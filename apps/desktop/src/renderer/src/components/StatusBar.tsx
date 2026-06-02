@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Config, ConnectionSummary, PrAgentStatus } from '@pr-pilot/shared';
+import { useChatRunStore } from '../stores/chat-run-store';
 
 interface StatusBarProps {
   prsCount: number;
@@ -17,6 +18,11 @@ interface StatusBarProps {
   onOpenSettings: () => void;
   /** 切换 active LLM profile，由父组件做实际持久化 */
   onSwitchActiveLlm: (profileId: string) => void;
+  /**
+   * 跳到指定 PR (供"pr-agent 运行中"chip 点击使用)。可空 —— 不传时 chip 仍展示但
+   * 不可点击。父组件传 `setSelectedId` 即可
+   */
+  onJumpToPr?: (localId: string) => void;
 }
 
 export function StatusBar({
@@ -33,6 +39,7 @@ export function StatusBar({
   onRefresh,
   onOpenSettings,
   onSwitchActiveLlm,
+  onJumpToPr,
 }: StatusBarProps) {
   return (
     <footer className="app-statusbar" role="contentinfo">
@@ -58,9 +65,20 @@ export function StatusBar({
       </button>
       <LastSyncChip at={lastSyncAt} />
       {prAgent && <PrAgentChip status={prAgent} />}
-      <span className="statusbar-chip statusbar-chip-ok">PRs: {prsCount}</span>
+      <span
+        className="statusbar-chip statusbar-chip-ok statusbar-chip-prs"
+        title={`待审 PR 数：${String(prsCount)}`}
+        aria-label={`PRs ${String(prsCount)}`}
+      >
+        <PullRequestIcon />
+        {prsCount}
+      </span>
       <UserChip connections={connections} />
       <div className="spacer" />
+      {/* pr-agent 活动 / 空闲指示。PR 切换后这条仍然在，让用户随时看到"agent 在哪个 PR
+          上跑 / 当前空闲"。放右侧贴近 LLM chip：一组都是"当前 run 用什么 / 跑得如何"的实时
+          信息。pr-agent 不可用时不显示 (上方 PrAgentChip 已经红色提示) */}
+      {prAgent?.available && <PrAgentActiveChip onJumpToPr={onJumpToPr} />}
       <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />
       <button
         type="button"
@@ -83,6 +101,78 @@ export function StatusBar({
       </button>
     </footer>
   );
+}
+
+/**
+ * pr-agent 活动状态 chip：active 时显示运行中工具 + elapsed (可点跳 PR)；idle 时
+ * 显示"空闲"占位。PR 切换不会丢运行中状态，由 chatRunStore 跨实例维护。
+ *
+ * 调用方应在 pr-agent 实际可用 (PrAgentStatus.available) 时才挂这条；不可用 (本机
+ * CLI / Docker 都没探到) 时由 PrAgentChip 显示错误态，这里不重复"空闲"语义
+ */
+function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => void }) {
+  const { active } = useChatRunStore();
+  // 计时器：1s 粒度，跟 ChatPane 的 elapsed 同步。仅 active 时启
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startMs = active ? new Date(active.startedAt).getTime() : 0;
+  useEffect(() => {
+    if (!active) return;
+    setElapsedMs(Date.now() - startMs);
+    const id = setInterval(() => setElapsedMs(Date.now() - startMs), 1000);
+    return () => clearInterval(id);
+  }, [active?.runId, startMs]);
+
+  if (!active) {
+    // Idle：静态灰点 + "空闲" 文案。让用户一眼看到"agent 可用 + 当前没活儿"
+    return (
+      <span
+        className="statusbar-chip statusbar-pragent-chip statusbar-pragent-chip-idle"
+        title="pr-agent 当前空闲"
+      >
+        <span className="statusbar-pragent-dot statusbar-pragent-dot-idle" aria-hidden="true" />
+        <span>空闲</span>
+      </span>
+    );
+  }
+
+  const clickable = Boolean(onJumpToPr);
+  const handleClick = (): void => {
+    onJumpToPr?.(active.prLocalId);
+  };
+  const title = `pr-agent 运行中 · PR ${active.prLocalId} · /${active.tool}${
+    clickable ? ' · 点击跳转到该 PR' : ''
+  }`;
+  // 点击态用 button，否则 span (避免无效 cursor:pointer 误导用户)
+  const inner = (
+    <>
+      <span className="statusbar-pragent-dot" aria-hidden="true" />
+      <span>/{active.tool}</span>
+      <span className="statusbar-pragent-elapsed">{formatStatusbarElapsed(elapsedMs)}</span>
+    </>
+  );
+  return clickable ? (
+    <button
+      type="button"
+      className="statusbar-chip statusbar-pragent-chip"
+      onClick={handleClick}
+      title={title}
+    >
+      {inner}
+    </button>
+  ) : (
+    <span className="statusbar-chip statusbar-pragent-chip" title={title}>
+      {inner}
+    </span>
+  );
+}
+
+/** 状态栏 elapsed 紧凑格式：< 60s "Ns"，否则 "M:SS" */
+function formatStatusbarElapsed(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  if (totalSec < 60) return `${String(totalSec)}s`;
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${String(m)}:${String(s).padStart(2, '0')}`;
 }
 
 /**
@@ -213,17 +303,44 @@ function LastSyncChip({ at }: { at: string | null }) {
   }, []);
   if (!at) {
     return (
-      <span className="statusbar-chip" title="尚未完成首次同步">
-        同步：—
+      <span className="statusbar-chip statusbar-chip-sync" title="尚未完成首次同步">
+        <SyncIcon />—
       </span>
     );
   }
   const date = new Date(at);
   const title = `最近一次 PR 列表同步：${date.toLocaleString()}`;
   return (
-    <span className="statusbar-chip" title={title}>
-      同步：{formatRelative(date)}
+    <span className="statusbar-chip statusbar-chip-sync" title={title}>
+      <SyncIcon />
+      {formatRelative(date)}
     </span>
+  );
+}
+
+// 同步图标 (Lucide refresh-cw-2 风格)：两段相反方向的曲线箭头形成"循环"语义。
+// 跟刷新按钮的 RefreshIcon (单根近似闭环箭头) 视觉区分 —— 一个表"状态/已同步"，
+// 一个表"重新触发同步动作"
+function SyncIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {/* 上半圈：左下→右上的箭头 */}
+      <path d="M3 6.5a5 5 0 0 1 9-1.5" />
+      <polyline points="12 2 12 5 9 5" />
+      {/* 下半圈：右上→左下的箭头 */}
+      <path d="M13 9.5a5 5 0 0 1-9 1.5" />
+      <polyline points="4 14 4 11 7 11" />
+    </svg>
   );
 }
 
@@ -311,6 +428,36 @@ function SidebarIcon({ collapsed }: { collapsed: boolean }) {
       <rect x="2" y="3" width="12" height="10" rx="1.5" />
       <line x1="6.5" y1="3" x2="6.5" y2="13" />
       {collapsed && <rect x="2" y="3" width="4.5" height="10" fill="currentColor" />}
+    </svg>
+  );
+}
+
+// Octicon git-pull-request 风格：源分支圆点 → 弯到右侧 → 目标分支带箭头。
+// 两节点 + 弧形连接，跟 GitHub 状态徽章对齐，用户一眼能识别"PR"
+function PullRequestIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {/* 左侧分支竖线 */}
+      <line x1="4" y1="4.5" x2="4" y2="11.5" />
+      {/* 源分支圆点 (顶) */}
+      <circle cx="4" cy="3" r="1.5" />
+      {/* 源分支圆点 (底) */}
+      <circle cx="4" cy="13" r="1.5" />
+      {/* 右侧目标分支圆点 + 短线 */}
+      <circle cx="12" cy="13" r="1.5" />
+      <line x1="12" y1="4.5" x2="12" y2="11.5" />
+      {/* 顶部弧线：从 4,1 经过 12,1 落到 12,4 (合并目标分支的"头") */}
+      <path d="M5.5 3 H10.5 A1.5 1.5 0 0 1 12 4.5" />
     </svg>
   );
 }

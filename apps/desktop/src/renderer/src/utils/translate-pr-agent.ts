@@ -46,6 +46,12 @@ export const PR_AGENT_TRANSLATIONS_ZH: ReadonlyMap<string, string> = new Map([
   ['Title', '标题'],
   ['User description', '用户描述'],
   ['Auto-generated', '自动生成'],
+  // /ask 结构化标签
+  ['Question', '问题'],
+  ['Questions', '问题'],
+  ['Answer', '回答'],
+  ['Answers', '回答'],
+  ['Analysis', '分析'],
   // PR Type 取值
   ['Bug fix', '缺陷修复'],
   ['Enhancement', '功能增强'],

@@ -21,6 +21,11 @@ export interface PrAgentRunOptions {
   /** stdout / stderr 整行流式推送（M3-B UI 进度提示用） */
   onLine?: (line: string, stream: 'stdout' | 'stderr') => void;
   /**
+   * 用户主动取消信号。abort 后 SIGKILL 子进程，reject 为 PrAgentRunError reason='cancelled'。
+   * 不传则永不取消，仅 timeoutMs 兜底。
+   */
+  signal?: AbortSignal;
+  /**
    * 本地工作树绝对路径。配置后切到 `git_provider=local` 模式：
    * - LocalCli: 把 cwd 作为子进程工作目录 + `--pr_url <cwd>` 传给 pr-agent
    * - Docker: `-v <cwd>:/repo -w /repo` + `--pr_url /repo`
@@ -65,7 +70,9 @@ export type PrAgentRunFailureReason =
   /** 正常退出但 exit code != 0 */
   | 'non-zero-exit'
   /** 被外部信号杀死（非超时） */
-  | 'killed';
+  | 'killed'
+  /** 用户主动取消 (AbortSignal abort) */
+  | 'cancelled';
 
 /** pr-agent 跑失败时抛出；携带原因 + 已收集的 stdout / stderr / exitCode 供 UI 展示 */
 export class PrAgentRunError extends Error {
@@ -85,6 +92,8 @@ export interface ExecOptions {
   onLine?: (line: string, stream: 'stdout' | 'stderr') => void;
   /** 子进程工作目录；LocalCli 本地模式用，Docker 不需要（容器 cwd 走 -w /repo） */
   cwd?: string;
+  /** 用户主动取消信号；abort 后 SIGKILL 子进程并 reject reason='cancelled' */
+  signal?: AbortSignal;
 }
 
 /**

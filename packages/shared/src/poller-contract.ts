@@ -23,7 +23,12 @@ export type ReviewRunTool = 'describe' | 'review' | 'ask';
 export type ReviewRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /** pr-agent 单次调用失败时的归类，对应 PrAgentRunError.reason */
-export type ReviewRunFailureReason = 'timeout' | 'spawn-failed' | 'non-zero-exit' | 'killed';
+export type ReviewRunFailureReason =
+  | 'timeout'
+  | 'spawn-failed'
+  | 'non-zero-exit'
+  | 'killed'
+  | 'cancelled';
 
 /**
  * 解析 pr-agent stdout 后得到的单条 finding。category 反映来源：

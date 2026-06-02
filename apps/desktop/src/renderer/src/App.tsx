@@ -10,6 +10,7 @@ import type {
 } from '@pr-pilot/shared';
 import { invoke, subscribe } from './api';
 import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/ChatPane';
+import { wireChatRunStore } from './stores/chat-run-store';
 import { MainPane } from './components/MainPane';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/Sidebar';
@@ -91,6 +92,10 @@ export default function App() {
       }
     })();
   }, []);
+
+  // 启动时把 pr-agent 活动 run + 实时 stdout 流接到全局 store；ChatPane 跨 PR
+  // 切换时可读 store 拿回运行中的状态 (本组件挂载到树根，效果等价于"应用级 hook")
+  useEffect(() => wireChatRunStore(), []);
 
   // 窗口重新获得焦点时自动拉一次新鲜列表（不重新触发 poll，避免远端压力）
   useEffect(() => {
@@ -202,6 +207,7 @@ export default function App() {
           void invoke('config:setLlm', { llm: next });
           setBoot((b) => (b ? { ...b, config: { ...b.config, llm: next } } : b));
         }}
+        onJumpToPr={setSelectedId}
       />
       {showSettings && (
         <SettingsModal

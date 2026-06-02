@@ -380,6 +380,7 @@ type PostedCommentsFile = {
 - 本地模型支持：Ollama / vLLM
 - 离线模式
 - 可观测性：Token 用量统计、规则命中率、模型对比
+- pr-agent run 启动开销优化（worktree 缓存 / PR 上下文缓存 / 镜像预热 / 容器长驻；详见 [pragent-run-overhead](pragent-run-overhead.md)）
 - 凭据存储升级到 keytar（首次引入 `SecretStore` 抽象 + 替换实现）
 - 状态存储按需升级到 SQLite（替换 `StateStore` 实现，触发条件见 ADR-0003）
 - **(M1 残项)** 设置页 UI 内连接 CRUD + 保存前 `connection:ping` 验证

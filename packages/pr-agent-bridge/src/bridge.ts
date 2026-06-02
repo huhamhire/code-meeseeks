@@ -44,6 +44,7 @@ abstract class BaseBridge implements PrAgentBridge {
       env,
       onLine: opts.onLine,
       cwd,
+      signal: opts.signal,
     });
   }
 

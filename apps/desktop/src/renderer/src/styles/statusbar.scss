@@ -30,6 +30,84 @@
   color: $text-on-accent;
 }
 
+// PR 数 chip：图标 + 数字横排，svg 跟数字基线对齐
+.statusbar-chip-prs {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  font-variant-numeric: tabular-nums;
+
+  svg {
+    display: block; // 干掉 inline svg 自带的 baseline 间隙
+  }
+}
+
+// 同步时间 chip：时钟图标 + 相对时间文本
+.statusbar-chip-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  font-variant-numeric: tabular-nums;
+
+  svg {
+    display: block;
+  }
+}
+
+// pr-agent 运行中指示。蓝色调跟 .chat-pane-stage-tag / chat-run-phase 一致；
+// button 形态时给 hover 边框反馈，span 形态不可点不出 hover
+.statusbar-pragent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  border: 1px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+button.statusbar-pragent-chip {
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+
+  &:hover {
+    border-color: $color-accent;
+  }
+}
+// Idle 形态：去掉主蓝色调，换成中性灰底白字，区分"在跑"和"空闲"两种语义
+.statusbar-pragent-chip-idle {
+  background: $border-default;
+  color: $text-muted;
+}
+.statusbar-pragent-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $color-info;
+  flex-shrink: 0;
+  animation: statusbar-pragent-pulse 1.4s infinite ease-in-out;
+}
+// Idle 圆点：静态灰，不脉冲。配合 chip 整体灰调，"无动作"语义明确
+.statusbar-pragent-dot-idle {
+  background: $text-muted;
+  animation: none;
+}
+.statusbar-pragent-elapsed {
+  font-family: $font-mono;
+  opacity: 0.75;
+}
+@keyframes statusbar-pragent-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+}
+
 // VS Code statusBarItem.errorBackground
 .statusbar-chip-err {
   background: $color-danger-bg;

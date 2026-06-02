@@ -120,12 +120,16 @@ function mapSectionKey(displayTitle: string): PrDocSectionKey | undefined {
  * - title 含 `pr-pilot/head|base`：我们临时建的分支名，pr-agent 把它当 PR 标识
  *   作为各级 heading leak 出来（含 emoji / 修饰也照样匹配，子串就行）
  * - 空 title + 经 trimNoise 后空 body：纯分支名 leak 的独立 section
+ * - /ask 工具下的 `question` / `questions` 段：UI 上方 chat-user-msg 已展示用户提问，
+ *   pr-agent 把问题回显在答案文本里是冗余的
  */
 const SKIP_TITLES = new Set(['user description']);
+const SKIP_TITLES_ASK = new Set(['question', 'questions', '问题']);
 
-function shouldSkipSection(sec: Section): boolean {
+function shouldSkipSection(sec: Section, tool: ReviewRunTool): boolean {
   const t = normalizeTitle(sec.title).toLowerCase();
   if (SKIP_TITLES.has(t)) return true;
+  if (tool === 'ask' && SKIP_TITLES_ASK.has(t)) return true;
   // title 含内部分支名 (e.g., "pr-pilot/head" / "pr-pilot/head 🔍" / "## pr-pilot/head")
   if (INTERNAL_BRANCH_RE.test(t)) return true;
   // trimNoise 把首尾的 HR / 分支名 leak 剥掉后，body 空 = 整段都是噪音
@@ -195,7 +199,7 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
  */
 export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedReviewOutput {
   const allSections = splitMarkdownSections(stripAnsi(stdout));
-  const sections = allSections.filter((s) => !shouldSkipSection(s));
+  const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) return { findings: [] };
   const findings: Finding[] = sections.map((s, i) => sectionToFinding(s, i, tool));
   // summary：优先取首个有 title 的 section；都没有 title 取首个 body 首行

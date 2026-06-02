@@ -77,6 +77,12 @@
   flex: 1;
   overflow-y: auto;
   padding: $space-5 $space-6;
+  display: flex;
+  flex-direction: column;
+  // 顶层每个 chunk (run 卡片 / 运行中视图 / busy / error) 之间留较大间距 ——
+  // 比 .chat-run-result 内部 gap ($space-4) 更宽，让"运行边界"在视觉上清晰可辨，
+  // 避免上一条 finding 列表跟下一条 meta 行黏成一块
+  gap: $space-8;
 }
 
 // 当前 PR 命中的规则 chip：actions bar 下方一行，点击弹出正文预览
@@ -184,13 +190,53 @@
   color: $text-body;
   border-radius: $radius-md;
   padding: $space-3 $space-4;
-  margin-bottom: $space-4;
   font-size: $fs-sm;
   line-height: $lh-normal;
 
   strong {
     color: $color-danger;
     margin-right: $space-2;
+  }
+}
+
+// 重试按钮：图标按钮，跟 .chat-pane-send 共用同套外框 (浅底 + 1px 边框 + radius-sm)
+// 浮到 banner 顶行右侧，hover 主蓝着色提示"可点击"
+.chat-run-retry {
+  float: right;
+  margin-left: $space-3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: $space-2;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  cursor: pointer;
+  line-height: 1;
+
+  &:hover:not(:disabled) {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+
+// 全局单并发占用提示：另一 PR 正在 review 时显示。跟 .chat-error 同视觉权重但
+// 用中性蓝调，告诉用户这不是错误 (只是要等)
+.chat-busy {
+  background: $color-accent-bg-fade;
+  border: 1px solid $border-default;
+  border-left: 3px solid $color-accent;
+  color: $text-body;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+
+  code {
+    font-family: $font-mono;
+    color: $color-info;
   }
 }
 .chat-error-detail {
@@ -277,7 +323,8 @@
   gap: $space-4;
 }
 
-// /ask 工具的用户提问气泡：在 run 卡片顶上，区别于下方的 pr-agent 回答
+// /ask 用户提问行：贴在 RunMeta 下方，左侧 `?` 图标 + 提问内容，
+// 视觉上让人立即识别"这是用户输入而不是答案"
 .chat-user-msg {
   display: flex;
   gap: $space-3;
@@ -289,12 +336,12 @@
   font-size: $fs-md;
   line-height: $lh-normal;
   color: $text-body;
-}
-.chat-user-msg-label {
-  flex-shrink: 0;
-  font-weight: 700;
-  color: $color-info;
-  letter-spacing: 0.04em;
+
+  svg {
+    flex-shrink: 0;
+    color: $color-info;
+    margin-top: 2px; // 跟首行文字基线对齐
+  }
 }
 .chat-user-msg-body {
   flex: 1;
@@ -526,8 +573,33 @@
   background: $bg-panel-alt;
   position: relative; // 给 .chat-cmd-suggest 浮层做定位基
 }
+// textarea + 顶边拖动 handle 的容器
+.chat-pane-textarea-wrap {
+  position: relative;
+}
+// 顶边自绘 handle：向上拖让 textarea 长高 (input 区在底部, 视觉是向上扩展，
+// 跟操作方向一致)。CSS native `resize: vertical` 的右下角 handle 跟视觉方向反，
+// 不用。
+.chat-pane-textarea-resize-handle {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: $z-resize-handle;
+  background: transparent;
+  transition: background 0.12s;
+
+  &:hover,
+  &:active {
+    background: $color-accent-strong-fade;
+  }
+}
 .chat-pane-textarea {
-  resize: none;
+  resize: none; // 用自绘 handle 代替 CSS resize
+  width: 100%;
+  display: block;
   background: $bg-surface;
   border: 1px solid $border-default;
   color: $text-body;
@@ -536,8 +608,11 @@
   line-height: $lh-normal;
   padding: $space-3 $space-4;
   border-radius: $radius-md;
-  overflow-y: auto; // 超过 5 行 (JS 计算) 后内部滚动
-  min-height: calc(#{$fs-md} * #{$lh-normal} + #{$space-3} * 2);
+  overflow-y: auto; // 内容超过当前高度时内部滚动
+  // 默认 2 行；JS 端 handle 拖动可调到 5 行；继续输入超过当前高度走内部滚动
+  min-height: calc(#{$fs-md} * #{$lh-normal} * 2 + #{$space-3} * 2);
+  max-height: calc(#{$fs-md} * #{$lh-normal} * 5 + #{$space-3} * 2);
+  box-sizing: border-box;
 
   &:disabled {
     cursor: not-allowed;
@@ -647,4 +722,41 @@
   color: $color-danger;
   font-size: $fs-xs;
   margin-top: -$space-2;
+}
+
+// 输入栏右侧的发送 / 停止按钮。跟左侧 `/` 命令按钮 (.chat-cmd-trigger) 共用一套
+// 外框设计：浅底 + 1px 边框 + radius-sm，hover 时主色描边 + 主色文字。
+// 同槽位形态切换：idle 纸飞机 / running stop 方块
+.chat-pane-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: $space-2 $space-4;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
+  flex-shrink: 0;
+  line-height: 1; // 让 svg 在中线对齐 / 命令按钮高度一致
+
+  &:hover:not(:disabled) {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+// Stop 形态：保留同样的边框结构但用 danger 着色，hover 仍变深，明确表达"危险动作"
+.chat-pane-send-stop {
+  color: $color-danger;
+  &:hover:not(:disabled) {
+    background: rgba(244, 135, 113, 0.12);
+    border-color: $color-danger;
+    color: $color-danger;
+  }
 }

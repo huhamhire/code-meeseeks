@@ -37,6 +37,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
       let stdoutBuf = '';
       let stderrBuf = '';
       let killedByTimeout = false;
+      let cancelled = false;
       let settled = false;
 
       let child: SpawnedChild;
@@ -67,6 +68,25 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         }
       }, opts.timeoutMs);
 
+      // 用户取消：监听 AbortSignal，触发 SIGKILL；signal 在我们入参前就 aborted 也兜住
+      const onAbort = (): void => {
+        if (settled) return;
+        cancelled = true;
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          /* already exited */
+        }
+      };
+      if (opts.signal) {
+        if (opts.signal.aborted) {
+          // 防御：调用方传进来已经 abort 的 signal → 立即杀
+          queueMicrotask(onAbort);
+        } else {
+          opts.signal.addEventListener('abort', onAbort, { once: true });
+        }
+      }
+
       const onData = (stream: 'stdout' | 'stderr') => (chunk: Buffer | string) => {
         const s = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
         if (stream === 'stdout') stdout += s;
@@ -92,6 +112,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        opts.signal?.removeEventListener('abort', onAbort);
         reject(
           new PrAgentRunError(err.message, 'spawn-failed', {
             stdout,
@@ -105,6 +126,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        opts.signal?.removeEventListener('abort', onAbort);
         // 把残留的 partial line 也吐出来
         if (opts.onLine) {
           if (stdoutBuf) opts.onLine(stdoutBuf, 'stdout');
@@ -116,6 +138,11 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
           exitCode: code ?? -1,
           durationMs: elapsed(),
         };
+        // 取消优先级最高：取消导致的信号杀掉，不算 timeout / killed / non-zero-exit
+        if (cancelled) {
+          reject(new PrAgentRunError('pr-agent cancelled by user', 'cancelled', result));
+          return;
+        }
         if (killedByTimeout) {
           reject(
             new PrAgentRunError(

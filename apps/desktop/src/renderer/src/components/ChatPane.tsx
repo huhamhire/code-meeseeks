@@ -13,7 +13,8 @@ import type {
 } from '@pr-pilot/shared';
 
 type MatchedRule = IpcChannels['rules:matchForPr']['response'];
-import { invoke, subscribe } from '../api';
+import { invoke } from '../api';
+import { chatRunStore, useChatRunStore } from '../stores/chat-run-store';
 import { parseAnsi, segmentStyle } from '../utils/ansi';
 import { translatePrAgentLabels } from '../utils/translate-pr-agent';
 
@@ -64,25 +65,26 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
   };
 
   const [runs, setRuns] = useState<ReviewRun[]>([]);
-  const [runningTool, setRunningTool] = useState<ReviewRunTool | null>(null);
-  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
-  const [liveLines, setLiveLines] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
   const [showRulePreview, setShowRulePreview] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
-  // PR 切换：重置面板状态 + 拉该 PR 的 run 历史。
+  // 全局活动 run + 实时 stdout 缓存。store 来源于 main 的 'pragent:activeChanged'
+  // / 'pragent:runProgress' 事件，PR 切换不丢，所以这里只读，不在本组件维护
+  const { active, linesByRunId } = useChatRunStore();
+  const myActiveRun = active?.prLocalId === pr?.localId ? active : null;
+  const otherActiveRun = active && active.prLocalId !== pr?.localId ? active : null;
+  const liveLines = myActiveRun ? (linesByRunId.get(myActiveRun.runId) ?? []) : [];
+
+  // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
   // reloadPrs → 新 prs 数组 → selected 是新对象引用 → 如果依赖 pr，此 effect 重跑，
-  // run 进行中的计时器 / 订阅状态被清空。localId 是稳定字符串，同 PR 刷新不触发。
+  // 用户输入 / 规则提示等组件状态被清空。localId 是稳定字符串，同 PR 刷新不触发。
   const prLocalId = pr?.localId;
   useEffect(() => {
     setRuns([]);
-    setRunningTool(null);
-    setRunStartedAt(null);
-    setLiveLines([]);
     setError(null);
     setMatchedRule(null);
     if (!prLocalId) return;
@@ -106,37 +108,49 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     };
   }, [prLocalId]);
 
-  // pragent stdout 流：main 进程广播给所有 window。我们没法在 run 启动前拿到 runId
-  // (那是 main 内部分配的)，但同时只允许一个 in-flight，所以"runningTool != null"
-  // 时把全部事件都接进 liveLines 即可。PR 切换会清空 runningTool，自然断流
+  // 活动 run 切到我这个 PR 之外 → store.active 变 null / 别 PR 时，本地 run 历史
+  // 需要刷一下，把刚刚 (这个 PR 的) 跑完的 run 拉进列表。靠监听 active.runId 变化
+  // 而不是直接读 store 里的"上次完成 run"，避免引入额外字段
+  const lastActiveRunIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!runningTool) return;
-    return subscribe('pragent:runProgress', (ev) => {
-      setLiveLines((prev) => [...prev, ev.line]);
-    });
-  }, [runningTool]);
+    const prevId = lastActiveRunIdRef.current;
+    lastActiveRunIdRef.current = active?.runId ?? null;
+    // 活动 run 从"我这 PR 的某个 runId" → 别的 / null → 这条 runId 刚完成。刷历史
+    if (!prLocalId) return;
+    if (!prevId) return;
+    if (active?.runId === prevId) return;
+    void (async () => {
+      try {
+        const list = await invoke('pragent:listRuns', { localId: prLocalId });
+        setRuns(list);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  }, [active?.runId, prLocalId]);
 
-  // 触发 /describe / /review / /ask。失败抛回 banner；成功后把新 run 追加到列表
+  // 触发 /describe / /review / /ask。失败抛 banner；成功不需要手动 setRuns，
+  // 上面的 effect 会在 active 变 null 时自动 refresh
   const handleRun = async (tool: ReviewRunTool, question?: string): Promise<void> => {
-    if (!pr || runningTool || !prAgent.available) return;
-    setRunningTool(tool);
-    setRunStartedAt(Date.now());
-    setLiveLines([]);
+    if (!pr || active || !prAgent.available) return;
     setError(null);
     try {
-      const finished = await invoke('pragent:run', {
-        localId: pr.localId,
-        tool,
-        question,
-      });
-      // 追加到 runs 末尾，保留所有历史；列表用 startedAt 升序展示，最新 run 自然在底部
-      setRuns((prev) => [...prev.filter((r) => r.id !== finished.id), finished]);
+      await invoke('pragent:run', { localId: pr.localId, tool, question });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRunningTool(null);
-      setRunStartedAt(null);
     }
+  };
+
+  // 取消 / 重试 在 store 模型里就是简单两步：cancel 走 IPC，retry 调 handleRun
+  const handleCancel = async (runId: string): Promise<void> => {
+    try {
+      await invoke('pragent:cancel', { runId });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const handleRetry = (run: ReviewRun): void => {
+    void handleRun(run.tool, run.question);
   };
 
   // 按 startedAt 升序：聊天界面约定旧消息在上、新消息在下。listReviewRunsForPr 返回的
@@ -146,11 +160,21 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     [runs],
   );
 
-  // 新 run 完成 / runningTool 切换时自动滚到底，让最新消息浮上来
+  // 新 run 完成 / 活动 run 切换时自动滚到底，让最新消息浮上来
   useEffect(() => {
     const el = bodyRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chronoRuns.length, runningTool]);
+  }, [chronoRuns.length, myActiveRun?.runId]);
+
+  // active 变 null 时清掉 myActiveRun 对应的 lines 缓存 (run 已结束，历史走 run.stdout)
+  useEffect(() => {
+    if (!active) return;
+    const runId = active.runId;
+    return () => {
+      // 只有当 active 离开这个 runId 时才清；同 active 的多次 re-render 不清
+      chatRunStore.clearLines(runId);
+    };
+  }, [active?.runId]);
 
   return (
     <aside
@@ -195,19 +219,36 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
-        {chronoRuns.length === 0 && !runningTool && <ChatEmpty pr={pr} prAgent={prAgent} />}
+        {chronoRuns.length === 0 && !myActiveRun && <ChatEmpty pr={pr} prAgent={prAgent} />}
         {/* 历史 run 按时间升序堆叠，每条独立卡片 (内部维护自己的 raw stdout 折叠状态)。
             新 run 完成后会自动追加到末尾 + 滚到底 */}
-        {chronoRuns.map((r) => (
-          <RunResultView key={r.id} run={r} />
+        {chronoRuns.map((r, i) => (
+          <RunResultView
+            key={r.id}
+            run={r}
+            onRetry={handleRetry}
+            // 只有"列表里最后一条 + 没有正在跑的"这一种情形下，失败 / 取消的 run 才
+            // 可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
+            // 避免回头再点重新插队、打乱对话顺序
+            canRetry={i === chronoRuns.length - 1 && !myActiveRun}
+          />
         ))}
         {/* 正在跑：进度条 + 实时 stdout 流，贴在历史末尾 */}
-        {runningTool && (
+        {myActiveRun && (
           <RunningView
-            tool={runningTool}
+            tool={myActiveRun.tool}
+            runId={myActiveRun.runId}
             lines={liveLines}
-            startedAt={runStartedAt ?? Date.now()}
+            startedAt={new Date(myActiveRun.startedAt).getTime()}
           />
+        )}
+        {/* 别 PR 正在 review：全局单并发提示，告诉用户去那个 PR 等结果或回头 */}
+        {otherActiveRun && (
+          <div className="chat-busy" role="status">
+            另一个 PR 正在 review (
+            <code>{otherActiveRun.prLocalId}</code> /{otherActiveRun.tool})。同时只允许一个
+            pr-agent 在跑，等其完成 / 取消后再试
+          </div>
         )}
         {error && (
           <div className="chat-error" role="alert">
@@ -220,8 +261,13 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
       <ChatInputBar
         pr={pr}
         prAgent={prAgent}
-        runningTool={runningTool}
+        // 自家 PR 在跑：textarea 禁用，发送按钮变 stop。别 PR 在跑：整体禁用 (全局单并发)
+        runningTool={myActiveRun?.tool ?? null}
+        busyOnOtherPr={Boolean(otherActiveRun)}
         onRun={(t, q) => void handleRun(t, q)}
+        onCancel={
+          myActiveRun ? () => void handleCancel(myActiveRun.runId) : undefined
+        }
       />
 
       {showRulePreview && matchedRule && (
@@ -250,8 +296,50 @@ const COMMANDS: ReadonlyArray<CommandSpec> = [
 interface ChatInputBarProps {
   pr: StoredPullRequest | null;
   prAgent: PrAgentStatus;
+  /** 本 PR 上的活动 run 工具；非空时 textarea 禁用 + 发送键变 stop 形态 */
   runningTool: ReviewRunTool | null;
+  /** 另一 PR 占用全局 pr-agent 单并发槽位时为 true；本 PR 也得禁用输入 */
+  busyOnOtherPr?: boolean;
   onRun: (tool: ReviewRunTool, question?: string) => void;
+  /**
+   * 终止当前活动 run。仅 runningTool 非空时有意义；ChatPane 已绑好对应 runId。
+   * stop 按钮跟 send 共用槽位：runningTool 时点击触发此回调而非 onRun
+   */
+  onCancel?: () => void;
+}
+
+// 输入历史：最近 5 次成功提交，localStorage 持久化。Up/Down 按键在 textarea 末尾
+// 输入位置时回放。命中 / dismissed 后焦点保持在 textarea 上
+const CHAT_HISTORY_KEY = 'pr-pilot.chatHistory';
+const CHAT_HISTORY_MAX = 5;
+
+function loadChatHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(CHAT_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // 防御性筛掉非 string 项，并截到上限 (历史 schema 改过也不爆)
+    return parsed.filter((v): v is string => typeof v === 'string').slice(0, CHAT_HISTORY_MAX);
+  } catch {
+    return [];
+  }
+}
+
+function pushChatHistory(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return loadChatHistory();
+  const prev = loadChatHistory();
+  // 去重：跟最近一条一样不重复入栈 (用户连续打同样命令很常见)。也清掉历史里
+  // 重复的旧条目，让最新的那条上移到顶
+  const deduped = prev.filter((v) => v !== trimmed);
+  const next = [trimmed, ...deduped].slice(0, CHAT_HISTORY_MAX);
+  try {
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(next));
+  } catch {
+    /* quota / private mode → 内存里历史能继续工作就行 */
+  }
+  return next;
 }
 
 /**
@@ -266,7 +354,14 @@ interface ChatInputBarProps {
  *
  * Shift+Enter 换行，Enter 提交。textarea 高度 1→5 行自适应，超过 5 行内部滚动。
  */
-function ChatInputBar({ pr, prAgent, runningTool, onRun }: ChatInputBarProps) {
+function ChatInputBar({
+  pr,
+  prAgent,
+  runningTool,
+  busyOnOtherPr,
+  onRun,
+  onCancel,
+}: ChatInputBarProps) {
   const [input, setInput] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
   const [cmdMenuOpen, setCmdMenuOpen] = useState(false);
@@ -275,10 +370,24 @@ function ChatInputBar({ pr, prAgent, runningTool, onRun }: ChatInputBarProps) {
   // 已经为某个特定输入值关闭过菜单 (Esc / 选中后插入)。input 一变就失效
   // → 用户继续打字时菜单会自然重新出现，但选中 / Esc 后不会立刻重弹
   const [dismissedFor, setDismissedFor] = useState<string | null>(null);
+  // 历史回放：从最新到最老的栈；historyIdx 表示当前正在浏览的位置 (-1 = 不在浏览态)
+  const [history, setHistory] = useState<string[]>(() => loadChatHistory());
+  const [historyIdx, setHistoryIdx] = useState(-1);
+  // 进入历史浏览前用户正在编辑的内容；按 Down 回到底端时还原回去，模仿 shell 行为
+  const draftBeforeHistoryRef = useRef<string>('');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const cmdMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const disabled = !pr || runningTool !== null || !prAgent.available;
+  // running 时 textarea / 命令菜单 / 自动补全 都禁用；但发送键槽位保留 stop 形态可点
+  const running = runningTool !== null;
+  const disabled = !pr || running || busyOnOtherPr || !prAgent.available;
+  // stop 按钮点过后等 main 回 activeChanged=null 才会改变状态；中间这段时间二次点击
+  // 应失效，避免反复 spam abort
+  const [stopRequested, setStopRequested] = useState(false);
+  // running → false 时 (run 结束了) 重置 stopRequested，下次起 run 又能取消
+  useEffect(() => {
+    if (!running) setStopRequested(false);
+  }, [running]);
   const trimmed = input.trim();
   // `/` 开头 + 命令名还没敲完整 (没空格) → 显示候选；已为当前 input dismiss 过则隐藏
   const showAutocomplete =
@@ -314,15 +423,42 @@ function ChatInputBar({ pr, prAgent, runningTool, onRun }: ChatInputBarProps) {
     };
   }, [cmdMenuOpen]);
 
-  // textarea 自适应高度：每次 input 变化重新算，capped at 5 行 (跟 css line-height 对齐)
-  const adjustHeight = (): void => {
+  // textarea 高度：用户拖顶边 handle 调整。
+  //
+  // 不用 CSS `resize: vertical` 因为它的 handle 在右下角、向下拖才放大 ——
+  // 但 input 整体被钉在 chat 面板底部，视觉上 textarea 是"向上扩展"，跟操作方向
+  // 反直觉。改成顶边自绘 handle (类似 chat-pane-resize-handle 模式)，向上拖 = 放大，
+  // 视觉操作直觉一致。
+  //
+  // 边界跟 css 里 min-height (2 行) / max-height (5 行) 一致；state null 时不写
+  // inline style，由 css 默认值起手
+  const [textareaHeightPx, setTextareaHeightPx] = useState<number | null>(null);
+  const handleTextareaResizeStart = (e: React.MouseEvent): void => {
+    e.preventDefault();
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = 'auto';
-    const max = 18 * 5 + 16; // 18 = line-height@13px*1.4，16 = padding 上下
-    el.style.height = `${String(Math.min(el.scrollHeight, max))}px`;
+    const startY = e.clientY;
+    const startHeight = el.getBoundingClientRect().height;
+    // 跟 css token: $fs-md=13 * $lh-normal=1.4 = 18.2 px/line；$space-3=6 px padding 上下 = 12 px
+    const MIN = Math.round(13 * 1.4 * 2 + 12);
+    const MAX = Math.round(13 * 1.4 * 5 + 12);
+    const onMove = (ev: MouseEvent): void => {
+      // 上拖 dy < 0 → 高度增加；下拖反之
+      const dy = ev.clientY - startY;
+      const next = Math.min(MAX, Math.max(MIN, startHeight - dy));
+      setTextareaHeightPx(next);
+    };
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
   };
-  useEffect(adjustHeight, [input]);
 
   const handleInsertCommand = (cmd: CommandSpec): void => {
     setInput(cmd.insertAs);
@@ -367,8 +503,40 @@ function ChatInputBar({ pr, prAgent, runningTool, onRun }: ChatInputBarProps) {
       tool = 'ask';
       question = trimmed;
     }
+    // 入历史栈 + 持久化；浏览状态重置
+    setHistory(pushChatHistory(input));
+    setHistoryIdx(-1);
+    draftBeforeHistoryRef.current = '';
     setInput('');
     onRun(tool, question);
+  };
+
+  // 历史回放工具：根据 idx 设 textarea 内容；idx = -1 表示退出浏览态，恢复 draft
+  const applyHistoryIdx = (nextIdx: number): void => {
+    setHistoryIdx(nextIdx);
+    setInput(nextIdx < 0 ? draftBeforeHistoryRef.current : (history[nextIdx] ?? ''));
+    // 光标移到末尾，下一次 Up/Down 行为可预期
+    const el = textareaRef.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.focus();
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+      });
+    }
+  };
+
+  // 判断是否应让 Up/Down 触发历史回放：textarea 光标必须在首行 / 末行边缘，
+  // 否则让 Up/Down 走原生光标移动 (多行编辑时还在行内导航不能被劫持)
+  const atFirstLine = (): boolean => {
+    const el = textareaRef.current;
+    if (!el) return false;
+    return el.value.slice(0, el.selectionStart).indexOf('\n') < 0;
+  };
+  const atLastLine = (): boolean => {
+    const el = textareaRef.current;
+    if (!el) return false;
+    return el.value.slice(el.selectionEnd).indexOf('\n') < 0;
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -400,6 +568,22 @@ function ChatInputBar({ pr, prAgent, runningTool, onRun }: ChatInputBarProps) {
       }
     }
 
+    // 历史回放：菜单未打开时，Up/Down 在边缘行 → 翻历史。中间行让原生光标移动接管
+    if (e.key === 'ArrowUp' && history.length > 0 && atFirstLine()) {
+      e.preventDefault();
+      if (historyIdx < 0) {
+        // 首次进浏览态：把当前编辑内容存为 draft，方便 Down 回到底端时复原
+        draftBeforeHistoryRef.current = input;
+      }
+      applyHistoryIdx(Math.min(historyIdx + 1, history.length - 1));
+      return;
+    }
+    if (e.key === 'ArrowDown' && historyIdx >= 0 && atLastLine()) {
+      e.preventDefault();
+      applyHistoryIdx(historyIdx - 1);
+      return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -412,7 +596,9 @@ function ChatInputBar({ pr, prAgent, runningTool, onRun }: ChatInputBarProps) {
       ? '选中一个 PR 后可发起对话'
       : runningTool
         ? `运行 /${runningTool} 中…`
-        : '输入问题，或用 / 选择命令';
+        : busyOnOtherPr
+          ? '另一 PR 正在 review，等其完成后再试'
+          : '输入问题，或用 / 选择命令 (↑↓ 翻历史)';
 
   return (
     <form
@@ -448,17 +634,27 @@ function ChatInputBar({ pr, prAgent, runningTool, onRun }: ChatInputBarProps) {
           })}
         </ul>
       )}
-      <textarea
-        ref={textareaRef}
-        className="chat-pane-textarea"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        disabled={disabled}
-        rows={1}
-        aria-label="chat input"
-      />
+      <div className="chat-pane-textarea-wrap">
+        {/* 顶边拖动 handle：向上拖 → textarea 高度增加，跟视觉扩展方向一致 */}
+        <div
+          className="chat-pane-textarea-resize-handle"
+          onMouseDown={handleTextareaResizeStart}
+          title="拖动调整输入框高度 (2-5 行)"
+          aria-label="resize chat input"
+        />
+        <textarea
+          ref={textareaRef}
+          className="chat-pane-textarea"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          disabled={disabled}
+          rows={2}
+          aria-label="chat input"
+          style={textareaHeightPx !== null ? { height: `${String(textareaHeightPx)}px` } : undefined}
+        />
+      </div>
       {parseError && <div className="chat-input-error">{parseError}</div>}
       <div className="chat-pane-input-row">
         <div className="chat-cmd-bar" ref={cmdMenuRef}>
@@ -491,15 +687,72 @@ function ChatInputBar({ pr, prAgent, runningTool, onRun }: ChatInputBarProps) {
             </ul>
           )}
         </div>
-        <button
-          type="submit"
-          className="btn btn-sm btn-primary"
-          disabled={disabled || !trimmed}
-        >
-          发送
-        </button>
+        {running ? (
+          // Stop 形态：runningTool 时占用 send 槽位。形状方块 + 红边强调"中断危险动作"
+          <button
+            type="button"
+            className="chat-pane-send chat-pane-send-stop"
+            onClick={() => {
+              if (stopRequested) return;
+              setStopRequested(true);
+              onCancel?.();
+            }}
+            disabled={stopRequested}
+            title="终止当前 pr-agent 调用 (SIGKILL)"
+            aria-label="停止"
+          >
+            <StopIcon />
+          </button>
+        ) : (
+          // Send 形态：纸飞机图标，跟主流 chat agent (ChatGPT / Claude / Cursor) 一致
+          <button
+            type="submit"
+            className="chat-pane-send"
+            disabled={disabled || !trimmed}
+            title="发送 (Enter)"
+            aria-label="发送"
+          >
+            <SendIcon />
+          </button>
+        )}
       </div>
     </form>
+  );
+}
+
+// 纸飞机：横向飞行版 (Lucide send-horizontal 风格)。机头朝右，机身左侧带中心折痕，
+// stroke 跟 button color 一致便于 hover 联动配色
+function SendIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2 2 L14 8 L2 14 L5 8 Z" />
+      <path d="M5 8 L14 8" />
+    </svg>
+  );
+}
+
+// Stop 方块：圆角矩形 fill，跟 录音 / 媒体播放停止键的视觉惯例
+function StopIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
+    </svg>
   );
 }
 
@@ -567,11 +820,13 @@ function inferPhase(lines: ReadonlyArray<string>): string {
 
 function RunningView({
   tool,
+  runId,
   lines,
   startedAt,
 }: {
   tool: ReviewRunTool;
-  lines: string[];
+  runId: string;
+  lines: ReadonlyArray<string>;
   startedAt: number;
 }) {
   // 末行追加时自动滚到底
@@ -591,8 +846,10 @@ function RunningView({
 
   const phase = useMemo(() => inferPhase(lines), [lines]);
 
+  // 取消按钮不放这里：按 Claude / Cursor 等 agent 惯例，stop 跟 send 共用输入栏
+  // 同一槽位 (running 时 send 形态变 stop)。这里只负责进度展示
   return (
-    <div className="chat-run-running">
+    <div className="chat-run-running" data-run-id={runId}>
       <div className="chat-run-running-head">
         <Spinner />
         <span>正在执行 /{tool}…</span>
@@ -649,47 +906,80 @@ function AnsiPre({
   );
 }
 
-function RunResultView({ run }: { run: ReviewRun }) {
+function RunResultView({
+  run,
+  onRetry,
+  canRetry,
+}: {
+  run: ReviewRun;
+  onRetry: (run: ReviewRun) => void;
+  /** 由父组件按"最后一条 + 无活动 run"判定；false 时失败 / 取消 run 也不显示重试键 */
+  canRetry: boolean;
+}) {
   const findings = run.findings ?? [];
+  // 失败 + 取消都用红 banner 提示。取消是用户主动行为，UI 用更轻文案区分
   const isFailed = run.status === 'failed';
+  const isCancelled = run.status === 'cancelled';
+  const isFailedOrCancelled = isFailed || isCancelled;
   const stderr = run.stderr ?? '';
   const stdout = run.stdout ?? '';
-  // 每条 run 独立维护 raw stdout 折叠态，不再由父组件 lift —— 历史列表里多个 run
-  // 互不干扰，用户展开某一条不会影响其他
-  const [showRawStdout, setShowRawStdout] = useState(false);
-  // /ask 工具：在 run 上方渲染用户发言气泡，让对话上下文可见
+  // "原始输出" 折叠区独立 per-run 维护状态，互不影响。失败 / 取消默认展开方便排障，
+  // 成功默认关闭只是诊断兜底
+  const [showRawStdout, setShowRawStdout] = useState(isFailedOrCancelled);
+  // /ask 工具：把用户提问展示在 meta 行**下方**，跟 /ask 这个动作绑成一组；
+  // 上方再放用户气泡会跟 meta 行重复信息源，移到动作下方更符合"动作 → 输入"语序
   const userMessage = run.tool === 'ask' ? run.question?.trim() : undefined;
   return (
     <div className="chat-run-result">
+      <RunMeta run={run} />
       {userMessage && (
         <div className="chat-user-msg" aria-label="用户提问">
-          <span className="chat-user-msg-label">问</span>
+          <QuestionIcon />
           <div className="chat-user-msg-body">{userMessage}</div>
         </div>
       )}
-      <RunMeta run={run} />
-      {isFailed && (
+      {/* 原始输出：始终紧跟 meta 行，让用户在任何状态下都能在固定位置找到日志。
+          失败 / 取消默认展开，成功默认收起 */}
+      {stdout.length > 0 && (
+        <details
+          className="chat-run-raw"
+          open={showRawStdout}
+          onToggle={(e) => {
+            if (e.currentTarget.open !== showRawStdout) setShowRawStdout(e.currentTarget.open);
+          }}
+        >
+          <summary>原始输出 ({stdout.length} chars)</summary>
+          <AnsiPre className="chat-run-stdout" text={stdout} />
+        </details>
+      )}
+      {isFailedOrCancelled && (
         <div className="chat-error" role="alert">
           <strong>
-            run 失败{run.errorReason ? ` (${run.errorReason})` : ''}
-            {run.exitCode != null && ` · exit ${String(run.exitCode)}`}
+            {isCancelled
+              ? '已取消'
+              : `run 失败${run.errorReason ? ` (${run.errorReason})` : ''}`}
+            {run.exitCode != null && !isCancelled && ` · exit ${String(run.exitCode)}`}
           </strong>
-          {run.errorMessage && (
+          {canRetry && (
+            <button
+              type="button"
+              className="chat-run-retry"
+              onClick={() => onRetry(run)}
+              title={`重试 /${run.tool}${run.question ? ` ${run.question}` : ''}`}
+              aria-label="重试"
+            >
+              <RetryIcon />
+            </button>
+          )}
+          {run.errorMessage && !isCancelled && (
             <pre className="chat-error-detail">{run.errorMessage}</pre>
           )}
-          {/* 失败时 stderr 是排障的关键，默认展开；非失败时不显示。
-              stderr 经常带 ANSI 着色 (尤其 docker / pip / pr-agent 的报错 trace) */}
+          {/* 失败时 stderr 是排障的关键，默认展开。stdout 不再在这里重复展示 ——
+              已经放到上方"原始输出"统一位置了 */}
           {stderr.length > 0 && (
             <details className="chat-error-stderr" open>
               <summary>stderr ({stderr.length} chars)</summary>
               <AnsiPre className="chat-run-stdout" text={stderr} />
-            </details>
-          )}
-          {/* 失败 + stdout 有内容时 (pr-agent 可能写了一半再崩)，也直接展开方便对照 */}
-          {stdout.length > 0 && (
-            <details className="chat-error-stdout" open>
-              <summary>stdout ({stdout.length} chars)</summary>
-              <AnsiPre className="chat-run-stdout" text={stdout} />
             </details>
           )}
         </div>
@@ -704,25 +994,53 @@ function RunResultView({ run }: { run: ReviewRun }) {
       ) : run.status === 'succeeded' ? (
         <div className="chat-finding-empty muted">
           pr-agent 跑完没有解析出 finding（可能 /describe 仅返回摘要、或解析器跳过了未识别段）。
-          可以打开下方 stdout 原文核对。
+          可以展开上方原始输出核对。
         </div>
       ) : null}
-
-      {/* 成功 run 也保留 stdout 原文折叠区供"看原文"调试；失败 run 上面已经展开过了，
-          这里不重复 */}
-      {!isFailed && stdout.length > 0 && (
-        <details
-          className="chat-run-raw"
-          open={showRawStdout}
-          onToggle={(e) => {
-            if (e.currentTarget.open !== showRawStdout) setShowRawStdout(e.currentTarget.open);
-          }}
-        >
-          <summary>stdout 原文 ({stdout.length} chars)</summary>
-          <AnsiPre className="chat-run-stdout" text={stdout} />
-        </details>
-      )}
     </div>
+  );
+}
+
+// /ask 用户提问 chip 前缀：圆圈内 `?`，跟答案区分。位于 RunMeta 下方说明"对这个 /ask
+// 动作提了这个问题"
+function QuestionIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.5" />
+      <path d="M6 6.2a2 2 0 1 1 2.7 1.9c-.6.2-.7.7-.7 1.2v.4" />
+      <line x1="8" y1="12" x2="8" y2="12.2" />
+    </svg>
+  );
+}
+
+// Retry 图标：循环箭头 + 箭头头部 (refresh-cw 风格)，跟状态栏的 RefreshIcon 同语义但
+// 体积更小匹配 chip 内嵌使用
+function RetryIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M13.5 3.5v3.5h-3.5" />
+      <path d="M13 7.5A5 5 0 1 0 11.5 11.5" />
+    </svg>
   );
 }
 
@@ -803,9 +1121,9 @@ function RunMeta({ run }: { run: ReviewRun }) {
       ) : usage.prompt !== undefined ? (
         <span
           className="chat-run-chip chat-run-tokens"
-          title={`prompt ${String(usage.prompt)} tokens (pr-agent 预估，未拿到 completion)`}
+          title={`prompt ${String(usage.prompt)} tokens`}
         >
-          {formatTokens(usage.prompt)} tokens
+          ↑ {formatTokens(usage.prompt)} tokens
         </span>
       ) : null}
       <span className="chat-run-chip chat-run-duration">{duration}</span>

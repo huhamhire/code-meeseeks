@@ -73,11 +73,26 @@ export interface PragentRunProgressEvent {
   stream: 'stdout' | 'stderr';
 }
 
+/**
+ * 全局唯一活动 run 元信息；活动 run 切换时 main 主动广播 (start / finish / cancel)，
+ * renderer 据此切换 chat-pane "运行中" 视图，无需 polling。
+ */
+export interface ActiveRunInfo {
+  runId: string;
+  prLocalId: string;
+  tool: ReviewRunTool;
+  question?: string;
+  /** ISO 时间，UI 计时器起点 */
+  startedAt: string;
+}
+
 /** main → renderer 推送事件。renderer 用 window.api.subscribe 监听。 */
 export interface IpcEvents {
   'sync:progress': SyncProgressEvent;
   'poll:tick': PollTickEvent;
   'pragent:runProgress': PragentRunProgressEvent;
+  /** 活动 run 变化广播：null 表示当前空闲。renderer 据此切换运行中 UI */
+  'pragent:activeChanged': { active: ActiveRunInfo | null };
 }
 
 export type IpcEventName = keyof IpcEvents;
@@ -207,6 +222,19 @@ export interface IpcChannels {
   'pragent:getRun': {
     request: { localId: string; runId: string };
     response: ReviewRun | null;
+  };
+  /**
+   * 取消当前活动 run。runId 不匹配活动 run / 已结束 → 静默 no-op (返回 ok:false)，
+   * 不抛错避免 renderer 处理多余 reject。
+   */
+  'pragent:cancel': {
+    request: { runId: string };
+    response: { ok: boolean };
+  };
+  /** 查询当前活动 run；renderer 启动 / 切窗时拉一下，跟 activeChanged 事件配套兜底 */
+  'pragent:active': {
+    request: void;
+    response: ActiveRunInfo | null;
   };
 }
 

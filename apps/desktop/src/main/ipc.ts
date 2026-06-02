@@ -18,6 +18,7 @@ import {
 import type { RepoIdentity, RepoMirrorManager } from '@pr-pilot/repo-mirror';
 import { loadRules, pickMatchingRule } from '@pr-pilot/rules';
 import type {
+  ActiveRunInfo,
   AppInfo,
   ConnectionSummary,
   IpcChannels,
@@ -58,11 +59,42 @@ export function registerIpcHandlers({
   adapters,
   repoMirror,
 }: RegisterDeps): void {
+  // === 全局唯一活动 run 跟踪 ===
+  //
+  // 同时只允许一个 pr-agent 在跑，避免：
+  //   - 撞 LLM API rate limit
+  //   - 多个 docker run 抢同一 PR 的 worktree (我们 materializeWorktree 是 per-run
+  //     创临时目录，所以理论上不会撞；但还是限制为 1，节省 CPU / 显存)
+  //   - UI 多个 PR 同时显示 "运行中" 状态难追踪
+  //
+  // 新 run 进来时 activeRun 非空 → reject。activeRun 启动后写 info，结束 (succeeded
+  // / failed / cancelled) 后清空。每次变化都广播 'pragent:activeChanged'，renderer
+  // 据此切 UI。AbortController 留给 cancel handler 用。
+  let activeRun: { info: ActiveRunInfo; ac: AbortController } | null = null;
+
+  const broadcastActiveChanged = (): void => {
+    const payload = { active: activeRun?.info ?? null };
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('pragent:activeChanged', payload);
+    }
+  };
+
   const findPrOrThrow = async (localId: string): Promise<StoredPullRequest> => {
     const prs = await listStoredPullRequests(stateStore);
     const pr = prs.find((p) => p.localId === localId);
     if (!pr) throw new Error(`PR not found in local state: ${localId}`);
     return pr;
+  };
+
+  // /ask 输出去重：pr-agent answer markdown 里会回显完整问题，跟 UI chat-user-msg
+  // 气泡重复。逐行精确匹配 question (含 trim 后) 的行整行删掉，保留其余正文
+  const stripAskQuestionEcho = (md: string, question: string): string => {
+    const q = question.trim();
+    if (!q || !md) return md;
+    return md
+      .split('\n')
+      .filter((line) => line.trim() !== q)
+      .join('\n');
   };
 
   // pr-agent docker 镜像启动时会去找 `/app/pr_agent/settings/.secrets.toml` 和
@@ -372,6 +404,13 @@ export function registerIpcHandlers({
           'pr-agent 未就绪：本机 CLI 与 Docker 都未探测到。Settings 页查看探测细节',
         );
       }
+      // 全局单并发：activeRun 非空时 reject。renderer 应该靠 'pragent:activeChanged'
+      // 事件预先禁用 UI，正常用户行为下到不了这里；这条是兜防御
+      if (activeRun) {
+        throw new Error(
+          `已有 pr-agent 运行中 (PR ${activeRun.info.prLocalId} /${activeRun.info.tool})，请等待其结束或主动取消`,
+        );
+      }
       const pr = await findPrOrThrow(req.localId);
       const run = await startReviewRun(stateStore, {
         prLocalId: pr.localId,
@@ -380,6 +419,19 @@ export function registerIpcHandlers({
         prAgentVersion: prAgentBridge.version,
         strategy: prAgentBridge.strategy,
       });
+      // 立即占住活动槽位 + 广播。失败 / 完成 / 取消都在最后 finally 清空再广播
+      const ac = new AbortController();
+      activeRun = {
+        info: {
+          runId: run.id,
+          prLocalId: pr.localId,
+          tool: req.tool,
+          question: req.tool === 'ask' ? req.question : undefined,
+          startedAt: run.startedAt,
+        },
+        ac,
+      };
+      broadcastActiveChanged();
       logger.info(
         { runId: run.id, localId: pr.localId, tool: req.tool, strategy: prAgentBridge.strategy },
         'pragent run start',
@@ -521,6 +573,7 @@ export function registerIpcHandlers({
           targetBranch: wt.targetBranchName,
           extraArgs,
           dockerExtraVolumes,
+          signal: ac.signal,
         });
         // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
         //   /describe → <wt>/description.md          (走 publish_description)
@@ -537,7 +590,13 @@ export function registerIpcHandlers({
             'pr-agent local provider output file missing; fall back to stdout',
           );
         }
-        const parsed = parseReviewOutput(fileContent || result.stdout, req.tool);
+        // /ask 输出里 pr-agent 把问题原样回显在 answer body 顶部 (跟 chat 输入气泡完全
+         // 重复)。在解析前把跟用户问题逐字匹配的整行删掉，避免渲染时出现两次问题
+        const cleanedContent =
+          req.tool === 'ask' && req.question?.trim()
+            ? stripAskQuestionEcho(fileContent, req.question)
+            : fileContent;
+        const parsed = parseReviewOutput(cleanedContent || result.stdout, req.tool);
         return await finishWith({
           status: 'succeeded',
           finishedAt: new Date().toISOString(),
@@ -553,12 +612,14 @@ export function registerIpcHandlers({
         });
       } catch (err) {
         if (err instanceof PrAgentRunError) {
-          const status: ReviewRunStatus = 'failed';
+          // 用户主动取消 → status='cancelled'，其它 reason → 'failed'。
+          // 二者都仍走 finishReviewRun 落盘，让 UI 能从历史 run 里看到这次取消事件
+          const status: ReviewRunStatus = err.reason === 'cancelled' ? 'cancelled' : 'failed';
           logger.warn(
             { runId: run.id, reason: err.reason, exitCode: err.result.exitCode },
-            'pragent run failed',
+            `pragent run ${status}`,
           );
-          // 失败时也尽量解析已收集的 stdout：很多情况 pr-agent 已写了一部分输出
+          // 失败 / 取消时也尽量解析已收集的 stdout：很多情况 pr-agent 已写了一部分输出
           const partialStdout = err.result.stdout ?? '';
           const parsed = partialStdout
             ? parseReviewOutput(partialStdout, req.tool)
@@ -586,8 +647,33 @@ export function registerIpcHandlers({
         throw err;
       } finally {
         await wt.cleanup();
+        // 释放活动槽位 + 广播；放最后保证 finishReviewRun 已写盘，renderer 收到
+        // activeChanged=null 后再 listRuns 能拿到这次 run 的最终状态
+        activeRun = null;
+        broadcastActiveChanged();
       }
     },
+  );
+
+  ipcMain.handle(
+    'pragent:cancel',
+    async (
+      _evt,
+      req: IpcChannels['pragent:cancel']['request'],
+    ): Promise<IpcChannels['pragent:cancel']['response']> => {
+      // runId 不匹配 / 没有活动 run → no-op，让 renderer 不必处理多余 reject
+      if (!activeRun || activeRun.info.runId !== req.runId) {
+        return { ok: false };
+      }
+      logger.info({ runId: req.runId }, 'pragent run cancel requested');
+      activeRun.ac.abort();
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    'pragent:active',
+    (): IpcChannels['pragent:active']['response'] => activeRun?.info ?? null,
   );
 
   ipcMain.handle(

@@ -1,0 +1,99 @@
+import { useSyncExternalStore } from 'react';
+import type { ActiveRunInfo } from '@pr-pilot/shared';
+import { invoke, subscribe } from '../api';
+
+/**
+ * 跨 ChatPane 实例的活动 run + 实时 stdout 缓存。放模块级 store 而不是 React 状态，
+ * 原因：用户切 PR 时 ChatPane 会被卸载重建，但 pr-agent 在主进程仍在跑、还在
+ * 持续发 `pragent:runProgress` 事件 —— 把 (活动 run, 已收到的 lines) 提到 React
+ * 树之上，新挂载的 ChatPane 能立刻读到正确状态，不会"丢运行中"。
+ *
+ * 数据 immutable 替换 (linesByRunId 用全新 Map / 数组)，配合 useSyncExternalStore
+ * 的 identity 检查触发 re-render。
+ */
+export interface ChatRunStoreState {
+  /** 全局唯一活动 run；为 null 表示空闲。源头是 main 进程 `pragent:activeChanged` 事件 */
+  active: ActiveRunInfo | null;
+  /** 各 run 的实时 stdout 行缓存。键 = runId；run 完成后保留直到 clearLines 调用 */
+  linesByRunId: ReadonlyMap<string, ReadonlyArray<string>>;
+}
+
+let state: ChatRunStoreState = { active: null, linesByRunId: new Map() };
+const subscribers = new Set<() => void>();
+
+function notify(): void {
+  for (const cb of subscribers) cb();
+}
+
+function setActive(next: ActiveRunInfo | null): void {
+  // 同一 runId 重复事件 → 不通知，避免无谓 re-render
+  if (state.active?.runId === next?.runId && state.active?.startedAt === next?.startedAt) {
+    return;
+  }
+  state = { ...state, active: next };
+  notify();
+}
+
+function appendLine(runId: string, line: string): void {
+  const cur = state.linesByRunId.get(runId) ?? [];
+  const nextMap = new Map(state.linesByRunId);
+  nextMap.set(runId, [...cur, line]);
+  state = { ...state, linesByRunId: nextMap };
+  notify();
+}
+
+function clearLines(runId: string): void {
+  if (!state.linesByRunId.has(runId)) return;
+  const nextMap = new Map(state.linesByRunId);
+  nextMap.delete(runId);
+  state = { ...state, linesByRunId: nextMap };
+  notify();
+}
+
+export const chatRunStore = {
+  getSnapshot: (): ChatRunStoreState => state,
+  subscribe: (cb: () => void): (() => void) => {
+    subscribers.add(cb);
+    return () => {
+      subscribers.delete(cb);
+    };
+  },
+  setActive,
+  appendLine,
+  clearLines,
+};
+
+export function useChatRunStore(): ChatRunStoreState {
+  return useSyncExternalStore(chatRunStore.subscribe, chatRunStore.getSnapshot);
+}
+
+/**
+ * 把 IPC → store 的数据流接起来。在 App 顶层 useEffect 调用一次。
+ * - 启动时拉一次活动 run 兜底 (window reload / preload 重连后仍能恢复 UI)
+ * - 订阅 activeChanged 事件，更新 store.active
+ * - 订阅 runProgress 事件，把 line 追加到对应 runId 的 lines 缓存
+ *
+ * 返回 cleanup 函数，App unmount 时一并取消订阅。
+ */
+export function wireChatRunStore(): () => void {
+  let cancelled = false;
+  void (async () => {
+    try {
+      const active = await invoke('pragent:active', undefined);
+      if (!cancelled) chatRunStore.setActive(active);
+    } catch {
+      // 启动阶段拿不到 active 也不致命，等事件兜
+    }
+  })();
+  const unsubActive = subscribe('pragent:activeChanged', (ev) => {
+    chatRunStore.setActive(ev.active);
+  });
+  const unsubProgress = subscribe('pragent:runProgress', (ev) => {
+    chatRunStore.appendLine(ev.runId, ev.line);
+  });
+  return () => {
+    cancelled = true;
+    unsubActive();
+    unsubProgress();
+  };
+}
