@@ -41,7 +41,7 @@ export function CommitsPanel({ pr }: CommitsPanelProps) {
     return (
       <div className="pr-commits-panel">
         <div className="pr-commits-error" role="alert">
-          <strong>commits 加载失败 · {error.title}</strong>
+          <strong>提交记录加载失败 · {error.title}</strong>
           <pre>{error.detail}</pre>
         </div>
       </div>
@@ -50,14 +50,14 @@ export function CommitsPanel({ pr }: CommitsPanelProps) {
   if (commits === null) {
     return (
       <div className="pr-commits-panel">
-        <p className="muted">加载 commits 中…</p>
+        <p className="muted">加载提交记录中…</p>
       </div>
     );
   }
   if (commits.length === 0) {
     return (
       <div className="pr-commits-panel">
-        <p className="muted">这条 PR 没有 commits</p>
+        <p className="muted">这条 PR 没有提交记录</p>
       </div>
     );
   }
@@ -67,7 +67,7 @@ export function CommitsPanel({ pr }: CommitsPanelProps) {
       <table className="pr-commits-table">
         <thead>
           <tr>
-            <th className="pr-commits-col-sha">SHA</th>
+            <th className="pr-commits-col-sha">提交</th>
             <th className="pr-commits-col-subject">提交主题</th>
             <th className="pr-commits-col-author">作者</th>
             <th className="pr-commits-col-time">时间</th>

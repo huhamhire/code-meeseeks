@@ -79,6 +79,12 @@
   white-space: nowrap;
 }
 
+// 队列弹出框定位基：active chip 外面套一层 relative 让 popover 绝对定位
+.statusbar-pragent-chip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
 // pr-agent 运行中指示。蓝色调跟 .chat-pane-stage-tag / chat-run-phase 一致；
 // button 形态时给 hover 边框反馈，span 形态不可点不出 hover
 .statusbar-pragent-chip {
@@ -120,6 +126,123 @@ button.statusbar-pragent-chip {
 .statusbar-pragent-elapsed {
   font-family: $font-mono;
   opacity: 0.75;
+}
+// 队列数尾缀 (+N)：跟 elapsed 视觉一致但显得是 "另外排队" 不是 "时间"
+.statusbar-pragent-queue-count {
+  font-family: $font-mono;
+  font-weight: 600;
+  padding: 0 $space-2;
+  border-radius: $radius-sm;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+// === 队列 popover ===
+// chip 上方弹出。最多 6 行高 + 内部滚动，避免遮住其他状态栏元素
+.statusbar-queue-popover {
+  position: absolute;
+  bottom: calc(100% + #{$space-2});
+  right: 0;
+  min-width: 280px;
+  max-width: 420px;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: $z-statusbar-menu;
+  padding: $space-3 0;
+  display: flex;
+  flex-direction: column;
+}
+.statusbar-queue-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 $space-4 $space-3;
+  border-bottom: 1px solid $border-muted;
+  font-size: $fs-xs;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.statusbar-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  // 最多 6 条 (active 1 + 排队 5)；超出滚动。每行约 32px (padding+content)
+  max-height: calc(32px * 6);
+  overflow-y: auto;
+}
+.statusbar-queue-item {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding: $space-2 $space-4;
+  font-size: $fs-sm;
+
+  &.statusbar-queue-item-active {
+    background: $color-accent-bg-fade;
+  }
+
+  &:hover:not(.statusbar-queue-item-active) {
+    background: $bg-hover;
+  }
+}
+.statusbar-queue-meta {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+  background: transparent;
+  border: none;
+  color: $text-body;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+
+  &:hover {
+    color: $color-info;
+  }
+}
+.statusbar-queue-tool {
+  font-family: $font-mono;
+  font-weight: 600;
+  color: $color-info;
+  flex-shrink: 0;
+}
+.statusbar-queue-pr {
+  font-family: $font-mono;
+  font-size: $fs-xs;
+  color: $text-muted;
+  background: transparent;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.statusbar-queue-state {
+  font-size: $fs-xs;
+  flex-shrink: 0;
+}
+.statusbar-queue-cancel {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: $text-muted;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(244, 135, 113, 0.15);
+    color: $color-danger;
+  }
 }
 @keyframes statusbar-pragent-pulse {
   0%,

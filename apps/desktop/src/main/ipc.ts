@@ -12,6 +12,7 @@ import {
   isCommentsCacheStale,
   listReviewRunsForPr,
   listStoredPullRequests,
+  makeRunId,
   parseReviewOutput,
   readCommentsCache,
   setLocalStatus,
@@ -21,13 +22,14 @@ import {
 import type { RepoIdentity, RepoMirrorManager } from '@pr-pilot/repo-mirror';
 import { loadRules, pickMatchingRule } from '@pr-pilot/rules';
 import type {
-  ActiveRunInfo,
   AppInfo,
   ConnectionSummary,
   IpcChannels,
   PrAgentStatus,
+  PragentRunInfo,
   ReviewRun,
   ReviewRunStatus,
+  ReviewRunTool,
   StoredPullRequest,
 } from '@pr-pilot/shared';
 import type { JsonFileStateStore } from '@pr-pilot/state-store';
@@ -62,23 +64,36 @@ export function registerIpcHandlers({
   adapters,
   repoMirror,
 }: RegisterDeps): void {
-  // === 全局唯一活动 run 跟踪 ===
+  // === pr-agent run 队列 ===
   //
-  // 同时只允许一个 pr-agent 在跑，避免：
-  //   - 撞 LLM API rate limit
-  //   - 多个 docker run 抢同一 PR 的 worktree (我们 materializeWorktree 是 per-run
-  //     创临时目录，所以理论上不会撞；但还是限制为 1，节省 CPU / 显存)
-  //   - UI 多个 PR 同时显示 "运行中" 状态难追踪
+  // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 docker / 抢 worktree)，
+  // 其余在 waiting 排队。每次 active 完成 / 取消 → 自动开下一条。
   //
-  // 新 run 进来时 activeRun 非空 → reject。activeRun 启动后写 info，结束 (succeeded
-  // / failed / cancelled) 后清空。每次变化都广播 'pragent:activeChanged'，renderer
-  // 据此切 UI。AbortController 留给 cancel handler 用。
-  let activeRun: { info: ActiveRunInfo; ac: AbortController } | null = null;
+  // 设计要点：
+  //   - runId 在入队时就分配 (跟最终落盘 ReviewRun.id 一致)，cancel(runId) 在
+  //     active / waiting 两种状态都能精确定位
+  //   - queued 状态不落盘；被取消时直接 reject 原 Promise，不留 disk artifact
+  //   - 真正 dequeue 才 startReviewRun 写 disk + 跑 pr-agent
+  //   - 每次队列变化广播 'pragent:queueChanged'，renderer store 同步
+  interface QueueItem {
+    info: PragentRunInfo;
+    req: { localId: string; tool: ReviewRunTool; question?: string };
+    pr: StoredPullRequest;
+    resolve: (run: ReviewRun) => void;
+    reject: (err: Error) => void;
+    /** 仅 active 状态填；用于 cancel SIGKILL */
+    ac?: AbortController;
+  }
+  const waiting: QueueItem[] = [];
+  let active: QueueItem | null = null;
 
-  const broadcastActiveChanged = (): void => {
-    const payload = { active: activeRun?.info ?? null };
+  const broadcastQueueChanged = (): void => {
+    const payload = {
+      active: active?.info ?? null,
+      waiting: waiting.map((q) => q.info),
+    };
     for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send('pragent:activeChanged', payload);
+      win.webContents.send('pragent:queueChanged', payload);
     }
   };
 
@@ -478,82 +493,54 @@ export function registerIpcHandlers({
     return { totalBytes: total };
   });
 
-  ipcMain.handle(
-    'pragent:run',
-    async (
-      _evt,
-      req: IpcChannels['pragent:run']['request'],
-    ): Promise<IpcChannels['pragent:run']['response']> => {
-      if (!prAgentBridge) {
-        throw new Error(
-          'pr-agent 未就绪：本机 CLI 与 Docker 都未探测到。Settings 页查看探测细节',
-        );
+  /**
+   * 真正执行一个 queue item：startReviewRun → worktree → bridge.run → finishWith。
+   * 由 runNext() 调用，签名稳定后跟 queue 主体解耦；任何抛错都被 runNext 兜成
+   * Promise reject，外层 pragent:run 调用方收到。
+   */
+  const executeRun = async (item: QueueItem): Promise<ReviewRun> => {
+    if (!prAgentBridge) throw new Error('pr-agent 未就绪');
+    const { req, pr } = item;
+    // 用入队预分配的 runId 覆盖 startReviewRun 的自生 id，让 cancel(runId) 在 active
+    // 状态也能精确定位 (跟入队时给的 runId 一致)
+    const run = await startReviewRun(stateStore, {
+      id: item.info.runId,
+      prLocalId: pr.localId,
+      tool: req.tool,
+      question: req.tool === 'ask' ? req.question : undefined,
+      prAgentVersion: prAgentBridge.version,
+      strategy: prAgentBridge.strategy,
+    });
+    // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播
+    item.info = { ...item.info, startedAt: run.startedAt };
+    broadcastQueueChanged();
+    logger.info(
+      { runId: run.id, localId: pr.localId, tool: req.tool, strategy: prAgentBridge.strategy },
+      'pragent run start',
+    );
+    const t0 = Date.now();
+    const onLine = (line: string, stream: 'stdout' | 'stderr'): void => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('pragent:runProgress', { runId: run.id, line, stream });
       }
-      // 全局单并发：activeRun 非空时 reject。renderer 应该靠 'pragent:activeChanged'
-      // 事件预先禁用 UI，正常用户行为下到不了这里；这条是兜防御
-      if (activeRun) {
-        throw new Error(
-          `已有 pr-agent 运行中 (PR ${activeRun.info.prLocalId} /${activeRun.info.tool})，请等待其结束或主动取消`,
-        );
-      }
-      const pr = await findPrOrThrow(req.localId);
-      const run = await startReviewRun(stateStore, {
-        prLocalId: pr.localId,
-        tool: req.tool,
-        question: req.tool === 'ask' ? req.question : undefined,
-        prAgentVersion: prAgentBridge.version,
-        strategy: prAgentBridge.strategy,
-      });
-      // 立即占住活动槽位 + 广播。失败 / 完成 / 取消都在最后 finally 清空再广播
-      const ac = new AbortController();
-      activeRun = {
-        info: {
-          runId: run.id,
-          prLocalId: pr.localId,
-          tool: req.tool,
-          question: req.tool === 'ask' ? req.question : undefined,
-          startedAt: run.startedAt,
-        },
-        ac,
-      };
-      broadcastActiveChanged();
-      logger.info(
-        { runId: run.id, localId: pr.localId, tool: req.tool, strategy: prAgentBridge.strategy },
-        'pragent run start',
-      );
-      const t0 = Date.now();
-      const onLine = (line: string, stream: 'stdout' | 'stderr'): void => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send('pragent:runProgress', { runId: run.id, line, stream });
-        }
-      };
+    };
 
-      const finishWith = async (
-        patch: Parameters<typeof finishReviewRun>[3],
-      ): Promise<ReviewRun> => {
-        const updated = await finishReviewRun(stateStore, pr.localId, run.id, patch);
-        // start 之后理论上一定能读到；保险起见 fallback 到内存对象，把 patch 合并上
-        return updated ?? { ...run, ...patch };
-      };
+    const finishWith = async (
+      patch: Parameters<typeof finishReviewRun>[3],
+    ): Promise<ReviewRun> => {
+      const updated = await finishReviewRun(stateStore, pr.localId, run.id, patch);
+      return updated ?? { ...run, ...patch };
+    };
 
-      // 物化一个临时工作树：HEAD 在命名分支 pr-pilot/head 指向 PR head sha，
-      // pr-pilot/base 指向 PR base sha (pr-agent LocalGitProvider 强约束：HEAD 不能
-      // detached、LOCAL__TARGET_BRANCH 只能是分支名)。跑完无论成败都清掉。
-      // 这条路径 pr-agent 完全不出网到 BBS (除了 LLM API)，不需要 BBS token / VPN / CA
-      const repoId = repoIdentityFor(pr);
-      await repoMirror.syncMirror(repoId);
-      const wt = await repoMirror.materializeWorktree(
-        repoId,
-        pr.sourceRef.sha,
-        pr.targetRef.sha,
-      );
-      // tool='ask' 的请求必须带 question，否则 pr-agent 启动就会因缺位置参数报错。
-      // 早一点 reject，让前端能立即给反馈
-      if (req.tool === 'ask' && !req.question?.trim()) {
-        throw new Error('/ask 需要提供 question');
-      }
-
-      try {
+    const repoId = repoIdentityFor(pr);
+    await repoMirror.syncMirror(repoId);
+    const wt = await repoMirror.materializeWorktree(
+      repoId,
+      pr.sourceRef.sha,
+      pr.targetRef.sha,
+    );
+    const ac = item.ac!;
+    try {
         const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
         // LLM env + 全局 pr-agent 配置 (响应语言)。语言配置一期写死在 config 里，
         // UI 还不暴露切换；后续多语言时改成 Settings 入口
@@ -729,14 +716,76 @@ export function registerIpcHandlers({
           durationMs: Date.now() - t0,
           errorMessage: err instanceof Error ? err.message : String(err),
         });
-        throw err;
-      } finally {
-        await wt.cleanup();
-        // 释放活动槽位 + 广播；放最后保证 finishReviewRun 已写盘，renderer 收到
-        // activeChanged=null 后再 listRuns 能拿到这次 run 的最终状态
-        activeRun = null;
-        broadcastActiveChanged();
+      throw err;
+    } finally {
+      await wt.cleanup();
+    }
+  };
+
+  /** 队列消费循环：active 空时从 waiting 取一条来跑；自身不并发 (active 占位) */
+  const runNext = (): void => {
+    if (active) return;
+    const item = waiting.shift();
+    if (!item) {
+      broadcastQueueChanged();
+      return;
+    }
+    active = item;
+    item.ac = new AbortController();
+    void executeRun(item)
+      .then((finished) => item.resolve(finished))
+      .catch((err: unknown) => {
+        item.reject(err instanceof Error ? err : new Error(String(err)));
+      })
+      .finally(() => {
+        active = null;
+        broadcastQueueChanged();
+        // 链式开下一条；放微任务里避免栈累积
+        queueMicrotask(runNext);
+      });
+  };
+
+  ipcMain.handle(
+    'pragent:run',
+    async (
+      _evt,
+      req: IpcChannels['pragent:run']['request'],
+    ): Promise<IpcChannels['pragent:run']['response']> => {
+      if (!prAgentBridge) {
+        throw new Error(
+          'pr-agent 未就绪：本机 CLI 与 Docker 都未探测到。Settings 页查看探测细节',
+        );
       }
+      // 早期校验：/ask 必须带 question，避免排队后才报错
+      if (req.tool === 'ask' && !req.question?.trim()) {
+        throw new Error('/ask 需要提供 question');
+      }
+      const pr = await findPrOrThrow(req.localId);
+      // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
+      const runId = makeRunId(new Date());
+      return new Promise<ReviewRun>((resolve, reject) => {
+        const item: QueueItem = {
+          info: {
+            runId,
+            prLocalId: pr.localId,
+            tool: req.tool,
+            question: req.tool === 'ask' ? req.question : undefined,
+            enqueuedAt: new Date().toISOString(),
+            startedAt: null,
+          },
+          req,
+          pr,
+          resolve,
+          reject,
+        };
+        waiting.push(item);
+        logger.info(
+          { runId, localId: pr.localId, tool: req.tool, queueLen: waiting.length },
+          'pragent run enqueued',
+        );
+        broadcastQueueChanged();
+        runNext();
+      });
     },
   );
 
@@ -746,19 +795,34 @@ export function registerIpcHandlers({
       _evt,
       req: IpcChannels['pragent:cancel']['request'],
     ): Promise<IpcChannels['pragent:cancel']['response']> => {
-      // runId 不匹配 / 没有活动 run → no-op，让 renderer 不必处理多余 reject
-      if (!activeRun || activeRun.info.runId !== req.runId) {
-        return { ok: false };
+      // active 命中 → SIGKILL (finally 会写 cancelled 到 disk)
+      if (active?.info.runId === req.runId) {
+        logger.info({ runId: req.runId }, 'pragent run cancel: active');
+        active.ac?.abort();
+        return { ok: true };
       }
-      logger.info({ runId: req.runId }, 'pragent run cancel requested');
-      activeRun.ac.abort();
-      return { ok: true };
+      // waiting 命中 → 从队列删除 + reject 原 Promise，不写盘 (从未真正跑过)
+      const idx = waiting.findIndex((q) => q.info.runId === req.runId);
+      if (idx >= 0) {
+        const [removed] = waiting.splice(idx, 1);
+        logger.info(
+          { runId: req.runId, queueLen: waiting.length },
+          'pragent run cancel: queued',
+        );
+        removed!.reject(new Error('queued run cancelled'));
+        broadcastQueueChanged();
+        return { ok: true };
+      }
+      return { ok: false };
     },
   );
 
   ipcMain.handle(
-    'pragent:active',
-    (): IpcChannels['pragent:active']['response'] => activeRun?.info ?? null,
+    'pragent:queue',
+    (): IpcChannels['pragent:queue']['response'] => ({
+      active: active?.info ?? null,
+      waiting: waiting.map((q) => q.info),
+    }),
   );
 
   ipcMain.handle(

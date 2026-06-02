@@ -180,10 +180,11 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
     }
   };
 
-  // 触发 /describe / /review / /ask。失败抛 banner；成功不需要手动 setRuns，
-  // 上面的 effect 会在 active 变 null 时自动 refresh
+  // 触发 /describe / /review / /ask。队列模型下 active 非空也允许提交，新 run 进
+  // 队列，main 端先后串行执行。失败抛 banner；成功不需要手动 setRuns，下面 effect
+  // 会在 active 切换时自动 refresh
   const handleRun = async (tool: ReviewRunTool, question?: string): Promise<void> => {
-    if (!pr || active || !prAgent.available) return;
+    if (!pr || !prAgent.available) return;
     setError(null);
     try {
       await invoke('pragent:run', { localId: pr.localId, tool, question });
@@ -297,21 +298,23 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
             canRetry={i === runs.length - 1 && !myActiveRun}
           />
         ))}
-        {/* 正在跑：进度条 + 实时 stdout 流，贴在历史末尾 */}
+        {/* 正在跑：进度条 + 实时 stdout 流，贴在历史末尾。startedAt 入队时为 null，
+            executeRun 真正起跑时设值；窗口非常短一般看不到 — fallback 到 enqueuedAt */}
         {myActiveRun && (
           <RunningView
             tool={myActiveRun.tool}
             runId={myActiveRun.runId}
             lines={liveLines}
-            startedAt={new Date(myActiveRun.startedAt).getTime()}
+            startedAt={new Date(myActiveRun.startedAt ?? myActiveRun.enqueuedAt).getTime()}
           />
         )}
-        {/* 别 PR 正在 review：全局单并发提示，告诉用户去那个 PR 等结果或回头 */}
+        {/* 别 PR 在跑：提示用户新提交会排队，不阻塞输入。状态栏的队列 chip 可点开
+            查看 / 取消队列任务 */}
         {otherActiveRun && (
           <div className="chat-busy" role="status">
-            另一个 PR 正在 review (
-            <code>{otherActiveRun.prLocalId}</code> /{otherActiveRun.tool})。同时只允许一个
-            PR Agent 在跑，等其完成 / 取消后再试
+            另一 PR 正在 review (
+            <code>{otherActiveRun.prLocalId}</code> /{otherActiveRun.tool})。本 PR 提交的新任务会
+            进入排队
           </div>
         )}
         {error && (
@@ -325,9 +328,9 @@ export function ChatPane({ pr, prAgent, width, onResize, collapsed }: ChatPanePr
       <ChatInputBar
         pr={pr}
         prAgent={prAgent}
-        // 自家 PR 在跑：textarea 禁用，发送按钮变 stop。别 PR 在跑：整体禁用 (全局单并发)
+        // 队列模型下输入永远开启 (新提交进队列)；runningTool 仅决定是否额外渲染 stop
+        // 按钮 (本 PR 有 active run 时可点终止)。busyOnOtherPr 不再阻断
         runningTool={myActiveRun?.tool ?? null}
-        busyOnOtherPr={Boolean(otherActiveRun)}
         onRun={(t, q) => void handleRun(t, q)}
         onCancel={
           myActiveRun ? () => void handleCancel(myActiveRun.runId) : undefined
@@ -360,10 +363,11 @@ const COMMANDS: ReadonlyArray<CommandSpec> = [
 interface ChatInputBarProps {
   pr: StoredPullRequest | null;
   prAgent: PrAgentStatus;
-  /** 本 PR 上的活动 run 工具；非空时 textarea 禁用 + 发送键变 stop 形态 */
+  /**
+   * 本 PR 上的活动 run 工具；非空时在 send 按钮旁额外渲染 stop 按钮。
+   * 队列模型下输入永不因此禁用 (新提交进队列)。
+   */
   runningTool: ReviewRunTool | null;
-  /** 另一 PR 占用全局 pr-agent 单并发槽位时为 true；本 PR 也得禁用输入 */
-  busyOnOtherPr?: boolean;
   onRun: (tool: ReviewRunTool, question?: string) => void;
   /**
    * 终止当前活动 run。仅 runningTool 非空时有意义；ChatPane 已绑好对应 runId。
@@ -422,7 +426,6 @@ function ChatInputBar({
   pr,
   prAgent,
   runningTool,
-  busyOnOtherPr,
   onRun,
   onCancel,
 }: ChatInputBarProps) {
@@ -442,10 +445,11 @@ function ChatInputBar({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const cmdMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // running 时 textarea / 命令菜单 / 自动补全 都禁用；但发送键槽位保留 stop 形态可点
+  // 队列模型：仅 !pr / pr-agent 未就绪 时禁用 input。activeRun / busyOnOtherPr
+  // 不再阻塞新提交 (会排队 by main)
   const running = runningTool !== null;
-  const disabled = !pr || running || busyOnOtherPr || !prAgent.available;
-  // stop 按钮点过后等 main 回 activeChanged=null 才会改变状态；中间这段时间二次点击
+  const disabled = !pr || !prAgent.available;
+  // stop 按钮点过后等 main 回 queueChanged 才会改变状态；中间这段时间二次点击
   // 应失效，避免反复 spam abort
   const [stopRequested, setStopRequested] = useState(false);
   // running → false 时 (run 结束了) 重置 stopRequested，下次起 run 又能取消
@@ -658,11 +662,7 @@ function ChatInputBar({
     ? 'PR Agent 未就绪'
     : !pr
       ? '选中一个 PR 后可发起对话'
-      : runningTool
-        ? `运行 /${runningTool} 中…`
-        : busyOnOtherPr
-          ? '另一 PR 正在 review，等其完成后再试'
-          : '输入问题，或用 / 选择命令 (↑↓ 翻历史)';
+      : '输入问题，或用 / 选择命令 (↑↓ 翻历史)';
 
   return (
     <form
@@ -751,15 +751,15 @@ function ChatInputBar({
             </ul>
           )}
         </div>
-        {running ? (
-          // Stop 形态：runningTool 时占用 send 槽位。形状方块 + 红边强调"中断危险动作"
+        {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时左侧额外挂 stop */}
+        {running && onCancel && (
           <button
             type="button"
             className="chat-pane-send chat-pane-send-stop"
             onClick={() => {
               if (stopRequested) return;
               setStopRequested(true);
-              onCancel?.();
+              onCancel();
             }}
             disabled={stopRequested}
             title="终止当前 PR Agent 调用 (SIGKILL)"
@@ -767,18 +767,16 @@ function ChatInputBar({
           >
             <StopIcon />
           </button>
-        ) : (
-          // Send 形态：纸飞机图标，跟主流 chat agent (ChatGPT / Claude / Cursor) 一致
-          <button
-            type="submit"
-            className="chat-pane-send"
-            disabled={disabled || !trimmed}
-            title="发送 (Enter)"
-            aria-label="发送"
-          >
-            <SendIcon />
-          </button>
         )}
+        <button
+          type="submit"
+          className="chat-pane-send"
+          disabled={disabled || !trimmed}
+          title={running ? '发送 (新任务会进队列)' : '发送 (Enter)'}
+          aria-label="发送"
+        >
+          <SendIcon />
+        </button>
       </div>
     </form>
   );

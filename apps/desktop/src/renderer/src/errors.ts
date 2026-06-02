@@ -45,7 +45,7 @@ const MATCHERS: Array<{ re: RegExp; title: string; kind: FormattedError['kind'];
       re: /(?:^|\D)40[13]\b|Unauthorized|Forbidden/i,
       title: '鉴权失败',
       kind: 'auth',
-      hint: 'PAT 可能已过期或权限不足，去 Settings 检查',
+      hint: 'Personal Access Token (PAT) 可能已过期或权限不足，去 Settings 检查',
     },
     {
       re: /(?:^|\D)404\b|Not Found/i,

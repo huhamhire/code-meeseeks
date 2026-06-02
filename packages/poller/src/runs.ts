@@ -40,6 +40,12 @@ export interface StartReviewRunInput {
   strategy: PrAgentStrategy;
   /** /ask 工具的问题；其他 tool 留空 */
   question?: string;
+  /**
+   * 外部预分配的 runId (可选)。pr-agent run queue 在入队时就分配 id (用于
+   * cancel(runId) 引用)，到真正 start 时把同一 id 沿用下来，避免入队 id 跟
+   * 落盘 id 不一致。
+   */
+  id?: string;
 }
 
 /** 写入初始 running 状态；调用方在 pr-agent 调用前必须先 start。 */
@@ -50,7 +56,7 @@ export async function startReviewRun(
 ): Promise<ReviewRun> {
   const at = now();
   const run: ReviewRun = {
-    id: makeRunId(at),
+    id: input.id ?? makeRunId(at),
     prLocalId: input.prLocalId,
     tool: input.tool,
     question: input.question,

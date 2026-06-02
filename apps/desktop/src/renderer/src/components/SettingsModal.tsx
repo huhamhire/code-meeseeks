@@ -488,7 +488,12 @@ export function SettingsModal({
                     <span className="muted">({c.id})</span>
                     <br />
                     <span className="muted">
-                      {c.kind} · {c.base_url} · clone via {c.clone.protocol}
+                      {c.kind} · {c.base_url} · clone via{' '}
+                      {c.clone.protocol === 'pat'
+                        ? 'Personal Access Token (PAT)'
+                        : c.clone.protocol === 'ssh'
+                          ? 'SSH'
+                          : c.clone.protocol}
                     </span>
                   </li>
                 ))}

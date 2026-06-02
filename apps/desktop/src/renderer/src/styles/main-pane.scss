@@ -44,6 +44,12 @@
   flex-wrap: wrap;
   align-items: center;
 }
+// "浏览器打开" 按钮：图标 + 文案 横排
+.pr-header-open-browser {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+}
 
 // review 决断按钮组：用 auto margin 顶到右边；wrap 时整组下沉但仍保持右对齐
 .pr-header-actions-right {

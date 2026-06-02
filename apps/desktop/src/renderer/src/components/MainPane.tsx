@@ -6,6 +6,27 @@ import { CommitsPanel } from './CommitsPanel';
 import { DiffView } from './DiffView';
 import { PrInfoView } from './PrInfoView';
 
+// Globe 网格图标：地球经纬度示意，跟"在远端浏览器打开"语义匹配
+function GlobeIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.5" />
+      <ellipse cx="8" cy="8" rx="3" ry="6.5" />
+      <line x1="1.5" y1="8" x2="14.5" y2="8" />
+    </svg>
+  );
+}
+
 function BlameIcon() {
   return (
     <svg
@@ -169,8 +190,14 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
           <span className={`status-tag status-${pr.localStatus}`}>{pr.localStatus}</span>
         </div>
         <div className="pr-header-actions">
-          <a className="btn btn-primary btn-sm" href={pr.url} target="_blank" rel="noreferrer">
-            浏览器打开
+          <a
+            className="btn btn-primary btn-sm pr-header-open-browser"
+            href={pr.url}
+            target="_blank"
+            rel="noreferrer"
+            title="在系统默认浏览器打开 PR 远端页面"
+          >
+            <GlobeIcon /> 浏览器打开
           </a>
           {/* approve / needs work：当前状态 = 高亮；点已高亮的回退到 pending（撤销远端标记）。
               这两个 review 决断按钮右对齐，跟"浏览器打开"在左侧拉开距离 */}
@@ -208,7 +235,7 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
           role="tab"
           aria-selected={tab === 'diff'}
         >
-          Diff
+          变更
         </button>
         {/* comments 在 commits 前：评审决断时评论的权重大于 commit 时间线 */}
         <button
@@ -232,9 +259,9 @@ export function MainPane({ pr, hasConnections, onSetStatus }: MainPaneProps) {
           role="tab"
           aria-selected={tab === 'commits'}
         >
-          Commits
+          提交
           {commitCount !== null && commitCount > 0 && (
-            <span className="pr-tab-badge" aria-label={`${String(commitCount)} 条 commits`}>
+            <span className="pr-tab-badge" aria-label={`${String(commitCount)} 个提交`}>
               {commitCount}
             </span>
           )}

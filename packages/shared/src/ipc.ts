@@ -74,25 +74,42 @@ export interface PragentRunProgressEvent {
 }
 
 /**
- * 全局唯一活动 run 元信息；活动 run 切换时 main 主动广播 (start / finish / cancel)，
- * renderer 据此切换 chat-pane "运行中" 视图，无需 polling。
+ * 一个 pr-agent run 的元信息，覆盖"正在跑 (active)"和"排队中 (waiting)"两种状态。
+ *
+ * - active：`startedAt` 是 ISO 启动时间，UI 计时器起点
+ * - waiting：`startedAt` 为 null，UI 显示"排队中"+ enqueuedAt
+ *
+ * 入队即生成 runId (跟最终落盘的 ReviewRun.id 一致；queued 状态不写盘，等真正
+ * 开始时 startReviewRun 才落 disk)。这让 `pragent:cancel(runId)` 在 queued/active
+ * 两种状态下都能用同一个 id 引用。
  */
-export interface ActiveRunInfo {
+export interface PragentRunInfo {
   runId: string;
   prLocalId: string;
   tool: ReviewRunTool;
   question?: string;
-  /** ISO 时间，UI 计时器起点 */
-  startedAt: string;
+  /** 入队时间，ISO */
+  enqueuedAt: string;
+  /** 开始执行时间，ISO；waiting 状态为 null */
+  startedAt: string | null;
 }
+
+/** 兼容旧引用：active 状态本质就是 startedAt 非空的 PragentRunInfo */
+export type ActiveRunInfo = PragentRunInfo;
 
 /** main → renderer 推送事件。renderer 用 window.api.subscribe 监听。 */
 export interface IpcEvents {
   'sync:progress': SyncProgressEvent;
   'poll:tick': PollTickEvent;
   'pragent:runProgress': PragentRunProgressEvent;
-  /** 活动 run 变化广播：null 表示当前空闲。renderer 据此切换运行中 UI */
-  'pragent:activeChanged': { active: ActiveRunInfo | null };
+  /**
+   * 队列变化广播：active 切换 / waiting 增删都触发。renderer 据此同步 chat-pane
+   * 运行中 UI + StatusBar 队列 chip。
+   */
+  'pragent:queueChanged': {
+    active: PragentRunInfo | null;
+    waiting: PragentRunInfo[];
+  };
 }
 
 export type IpcEventName = keyof IpcEvents;
@@ -257,17 +274,23 @@ export interface IpcChannels {
     response: ReviewRun | null;
   };
   /**
-   * 取消当前活动 run。runId 不匹配活动 run / 已结束 → 静默 no-op (返回 ok:false)，
-   * 不抛错避免 renderer 处理多余 reject。
+   * 取消一个 run。语义跟 run 当前状态相关：
+   * - 跟 active 匹配 → SIGKILL 子进程，落盘 status='cancelled'
+   * - 在 waiting 队列里 → 从队列删除，**不**写盘 (从未真正跑过)；触发 pragent:run
+   *   原调用方的 Promise reject 让 ChatPane handleRun 走 error 分支
+   * - 都不匹配 (已结束 / 不存在) → 静默 no-op (返回 ok:false)
    */
   'pragent:cancel': {
     request: { runId: string };
     response: { ok: boolean };
   };
-  /** 查询当前活动 run；renderer 启动 / 切窗时拉一下，跟 activeChanged 事件配套兜底 */
-  'pragent:active': {
+  /**
+   * 查询当前队列快照 (active + waiting)；renderer 启动 / 重连时拉一下，
+   * 跟 queueChanged 事件配套兜底。
+   */
+  'pragent:queue': {
     request: void;
-    response: ActiveRunInfo | null;
+    response: { active: PragentRunInfo | null; waiting: PragentRunInfo[] };
   };
 }
 
