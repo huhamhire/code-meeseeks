@@ -245,8 +245,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-// 软提示：超过 15s 提示用户 LLM 通常耗时区间
-.chat-run-hint {
+// 阶段推断 chip：从 stdout 命中关键字得到的当前阶段文案 (启动 / 解析 diff /
+// 组装 prompt / 等待 LLM 响应)，跟 elapsed 并列让用户知道不是卡死
+.chat-run-phase {
+  padding: 1px $space-3;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  border-radius: $radius-sm;
   font-size: $fs-sm;
 }
 
@@ -308,7 +313,25 @@
 .chat-run-tool {
   font-family: $font-mono;
   font-weight: 600;
+  font-size: $fs-xs; // 跟 chip 一档；align-items:center 下基线就齐了
   color: $color-info;
+}
+// 中性胶囊：策略 (Docker/CLI) / token 用量 / 耗时共用。跟 status 胶囊同尺寸，
+// 整行视觉成一条胶囊队列
+.chat-run-chip {
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  color: $text-muted;
+  font-size: $fs-xs;
+  letter-spacing: 0.02em;
+  line-height: $lh-normal;
+  white-space: nowrap;
+}
+.chat-run-tokens,
+.chat-run-duration {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
 }
 .chat-run-status {
   padding: 1px $space-3;
@@ -316,6 +339,7 @@
   font-size: $fs-xs;
   font-weight: 600;
   text-transform: uppercase;
+  line-height: $lh-normal; // 跟 chat-run-chip 对齐避免基线漂移
 
   &.chat-run-status-running {
     background: $color-accent;

@@ -34,6 +34,16 @@ export interface PrAgentRunOptions {
    * 传给 pr-agent 的 `--target_branch`；缺省时 pr-agent 自己 fallback 到默认分支。
    */
   targetBranch?: string;
+  /**
+   * 仅 Docker 策略生效，给 docker 调用追加额外的 `-v host:container[:ro]` 挂载。
+   * 当前主要用于把宿主端的空 `.secrets.toml` 挂到容器内 pr-agent 期望但实际没用
+   * 的 secrets 路径上，抑制启动告警。LocalCli 策略下忽略此字段。
+   */
+  dockerExtraVolumes?: ReadonlyArray<{
+    host: string;
+    container: string;
+    readonly?: boolean;
+  }>;
 }
 
 export interface PrAgentRunResult {

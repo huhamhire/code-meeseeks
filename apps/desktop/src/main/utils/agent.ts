@@ -65,6 +65,10 @@ export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
   env['CONFIG__MAX_MODEL_TOKENS'] = '128000';
   env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = '128000';
   env['CONFIG__FALLBACK_MODELS'] = '[]';
+  // 注：没接 LITELLM_LOG / CONFIG__VERBOSITY_LEVEL 因为 pr-agent 0.35 社区版上
+  // 都不让 completion tokens 落到 stdout —— pr-agent 把它扔进 logger.debug 的
+  // 'artifact' 字段，loguru 默认 INFO 级别滤掉。要拿到 completion tokens 需要走
+  // sitecustomize / launcher monkey-patch litellm，独立于 env 实现 (留到后续)
   switch (profile.provider) {
     case 'openai':
     case 'openai-compatible':

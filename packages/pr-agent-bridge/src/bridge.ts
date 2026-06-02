@@ -162,6 +162,12 @@ export class DockerBridge extends BaseBridge {
         envArgs.push('-e', `${k}=${v}`);
       }
       const mountSrc = toDockerVolumePath(opts.cwd);
+      // 额外挂载 (如空 .secrets.toml 抑制告警)。每条加一对 -v 参数
+      const extraMountArgs: string[] = [];
+      for (const v of opts.dockerExtraVolumes ?? []) {
+        const src = toDockerVolumePath(v.host);
+        extraMountArgs.push('-v', `${src}:${v.container}${v.readonly ? ':ro' : ''}`);
+      }
       return {
         cmd: 'docker',
         args: [
@@ -170,6 +176,7 @@ export class DockerBridge extends BaseBridge {
           ...envArgs,
           '-v',
           `${mountSrc}:/workspace`,
+          ...extraMountArgs,
           '-w',
           '/workspace',
           '--entrypoint',

@@ -65,6 +65,23 @@ export function registerIpcHandlers({
     return pr;
   };
 
+  // pr-agent docker 镜像启动时会去找 `/app/pr_agent/settings/.secrets.toml` 和
+  // `/app/pr_agent/settings_prod/.secrets.toml`，没有就 WARNING。我们走 env 传密钥
+  // 不用 secrets.toml，但每次 run 都打两条 WARNING 很烦。挂个空文件压掉
+  const ensureEmptySecretsFile = async (): Promise<string> => {
+    const p = path.join(bootstrap.paths.cacheDir, 'pr-agent-empty-secrets.toml');
+    try {
+      await fs.access(p);
+    } catch {
+      await fs.mkdir(path.dirname(p), { recursive: true });
+      await fs.writeFile(
+        p,
+        '# pr-pilot 提供的空 secrets 文件，抑制 pr-agent 启动 "settings file not found" 告警\n',
+      );
+    }
+    return p;
+  };
+
   const repoIdentityFor = (pr: StoredPullRequest): RepoIdentity => {
     const conn = bootstrap.config.connections.find((c) => c.id === pr.connectionId);
     if (!conn) throw new Error(`connection not found: ${pr.connectionId}`);
@@ -478,6 +495,23 @@ export function registerIpcHandlers({
         // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
         const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
 
+        // Docker 策略：挂个空 secrets.toml 压掉 pr-agent 的 "settings file not found"
+        // 启动告警；LocalCli 不需要 (pipx 装的 pr-agent 路径不同，告警也不出)
+        const dockerExtraVolumes =
+          prAgentBridge.strategy === 'docker'
+            ? await (async () => {
+                const empty = await ensureEmptySecretsFile();
+                return [
+                  { host: empty, container: '/app/pr_agent/settings/.secrets.toml', readonly: true },
+                  {
+                    host: empty,
+                    container: '/app/pr_agent/settings_prod/.secrets.toml',
+                    readonly: true,
+                  },
+                ];
+              })()
+            : undefined;
+
         const result = await prAgentBridge.run({
           prUrl: pr.url,
           tool: req.tool,
@@ -486,6 +520,7 @@ export function registerIpcHandlers({
           cwd: wt.path,
           targetBranch: wt.targetBranchName,
           extraArgs,
+          dockerExtraVolumes,
         });
         // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
         //   /describe → <wt>/description.md          (走 publish_description)

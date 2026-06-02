@@ -544,6 +544,27 @@ function RulePreviewModal({
   );
 }
 
+/**
+ * 从 stdout 已收到的行里推断 pr-agent 当前在哪个阶段。pr-agent 在 LLM 调用前会
+ * 打几条 INFO 标志位 ("Reviewing PR..." / "Tokens: ... returning full diff"
+ * / ...)，LLM 调用本身是几分钟静默；从最近行命中已知模式来给用户更准的状态提示。
+ *
+ * 大仓库 /review 总时长可能 5min+，没有这个推断只看到 spinner + elapsed 容易
+ * 误以为卡住。
+ */
+function inferPhase(lines: ReadonlyArray<string>): string {
+  // 从后往前找最近的命中标志，越靠后的标志代表更"晚"的阶段
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!;
+    if (/returning full diff|tokens?\s*[:：]\s*\d+/i.test(line)) return '等待 LLM 响应…';
+    if (/answering a pr question|reviewing pr|generating a pr description/i.test(line))
+      return '组装 prompt…';
+    if (/pr main language/i.test(line)) return '解析 diff…';
+    if (/response language/i.test(line)) return '初始化配置…';
+  }
+  return '启动 pr-agent…';
+}
+
 function RunningView({
   tool,
   lines,
@@ -568,16 +589,15 @@ function RunningView({
     return () => clearInterval(id);
   }, [startedAt]);
 
+  const phase = useMemo(() => inferPhase(lines), [lines]);
+
   return (
     <div className="chat-run-running">
       <div className="chat-run-running-head">
         <Spinner />
         <span>正在执行 /{tool}…</span>
         <span className="chat-run-elapsed">{formatElapsed(elapsedMs)}</span>
-        {/* LLM 调用阶段 stdout 没新行，给个软提示让用户知道不是卡死 */}
-        {elapsedMs > 15_000 && (
-          <span className="chat-run-hint muted">等待 LLM 响应</span>
-        )}
+        <span className="chat-run-phase">{phase}</span>
       </div>
       <AnsiPre
         className="chat-run-stdout"
@@ -706,14 +726,89 @@ function RunResultView({ run }: { run: ReviewRun }) {
   );
 }
 
+interface TokenUsage {
+  /** 输入侧 (prompt) token 数。LITELLM_LOG=INFO 时来自 litellm；fallback 用 pr-agent
+      自己打的 "Tokens: N" (tiktoken 预估) */
+  prompt?: number;
+  /** 输出侧 (completion) token 数。仅 LITELLM_LOG=INFO 时可拿到 */
+  completion?: number;
+  /** 总 token；优先用 litellm 给的，缺时算 prompt+completion */
+  total?: number;
+}
+
+/**
+ * 从 pr-agent stdout 解析 token 用量。多源累加：
+ *
+ * 1. litellm INFO 模式 (我们默认开)：每次 LLM 调用后会打类似
+ *    `usage={'prompt_tokens': 8423, 'completion_tokens': 1234, 'total_tokens': 9657}`
+ *    多轮调用 → 各项累加；这条最准
+ *
+ * 2. pr-agent 自己的 prompt 预估：`Tokens: 8423, total tokens under limit: ...`
+ *    没 litellm 日志兜底；只反映输入侧，按最大值取代表
+ *
+ * 优先用 (1)；(1) 没命中再退到 (2)。
+ */
+function extractTokenUsage(stdout: string): TokenUsage {
+  let prompt = 0;
+  let completion = 0;
+  let total = 0;
+  let hasLitellm = false;
+  // litellm 的 usage dict 在 stdout 里以 Python repr 形式出现，单引号字符串
+  // (兼容 JSON 双引号也匹配)。一次 run 多轮 LLM 调用全部累加
+  const usageRe =
+    /['"]prompt_tokens['"]\s*:\s*(\d+)[\s,]*['"]completion_tokens['"]\s*:\s*(\d+)[\s,]*['"]total_tokens['"]\s*:\s*(\d+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = usageRe.exec(stdout)) !== null) {
+    hasLitellm = true;
+    prompt += Number.parseInt(m[1]!, 10) || 0;
+    completion += Number.parseInt(m[2]!, 10) || 0;
+    total += Number.parseInt(m[3]!, 10) || 0;
+  }
+  if (hasLitellm) {
+    return { prompt, completion, total: total || prompt + completion };
+  }
+  // Fallback: pr-agent 的 prompt 预估
+  const fallbackRe = /Tokens:\s*(\d+)/gi;
+  let maxPrompt: number | undefined;
+  while ((m = fallbackRe.exec(stdout)) !== null) {
+    const n = Number.parseInt(m[1]!, 10);
+    if (!Number.isNaN(n) && (maxPrompt === undefined || n > maxPrompt)) maxPrompt = n;
+  }
+  return maxPrompt !== undefined ? { prompt: maxPrompt } : {};
+}
+
+/** 1234 → "1.2k"；保留 1 位小数；< 1000 直接返回数字 */
+function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  return `${(n / 1000).toFixed(1)}k`;
+}
+
 function RunMeta({ run }: { run: ReviewRun }) {
   const duration = run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—';
+  const usage = run.stdout ? extractTokenUsage(run.stdout) : ({} as TokenUsage);
   return (
     <header className="chat-run-meta">
       <span className={`chat-run-tool chat-run-tool-${run.tool}`}>/{run.tool}</span>
       <span className={`chat-run-status chat-run-status-${run.status}`}>{run.status}</span>
-      <span className="muted">{run.strategy === 'docker' ? 'Docker' : 'CLI'}</span>
-      <span className="muted">{duration}</span>
+      <span className="chat-run-chip">{run.strategy === 'docker' ? 'Docker' : 'CLI'}</span>
+      {usage.total !== undefined ? (
+        // litellm 给齐了 prompt + completion + total → 完整展示
+        <span
+          className="chat-run-chip chat-run-tokens"
+          title={`prompt ${String(usage.prompt ?? 0)} + completion ${String(usage.completion ?? 0)} = total ${String(usage.total)} tokens (litellm 报告)`}
+        >
+          {formatTokens(usage.total)} tokens (
+          {formatTokens(usage.prompt ?? 0)}↑ + {formatTokens(usage.completion ?? 0)}↓)
+        </span>
+      ) : usage.prompt !== undefined ? (
+        <span
+          className="chat-run-chip chat-run-tokens"
+          title={`prompt ${String(usage.prompt)} tokens (pr-agent 预估，未拿到 completion)`}
+        >
+          {formatTokens(usage.prompt)} tokens
+        </span>
+      ) : null}
+      <span className="chat-run-chip chat-run-duration">{duration}</span>
     </header>
   );
 }
