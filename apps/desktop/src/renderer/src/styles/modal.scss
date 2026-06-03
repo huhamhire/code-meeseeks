@@ -41,6 +41,26 @@
   overflow-y: auto;
 }
 
+// ConfirmModal: 跟 SettingsModal 共用 .modal-backdrop/.modal/.modal-header，加几条
+// 小尺寸 + 底部操作行特化
+.modal-confirm {
+  max-width: 380px;
+}
+.modal-confirm-body {
+  padding: $space-6 $space-8;
+  font-size: $fs-md;
+  line-height: $lh-loose;
+  color: $text-body;
+}
+.modal-actions {
+  padding: $space-4 $space-8;
+  border-top: 1px solid $border-default;
+  display: flex;
+  justify-content: flex-end;
+  gap: $space-3;
+  flex-shrink: 0;
+}
+
 .modal-section {
   margin-bottom: $space-8;
 

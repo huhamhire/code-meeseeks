@@ -1494,9 +1494,12 @@ function FindingCard({
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
   const label = SECTION_LABEL[key];
-  // 标题在已知 sectionKey 上跟 chip label 内容重复 (h4 显示 "PR Type" + chip 显示
-  // "类型")。只有 general / 未知段落 chip 是空的，才需要 h4 给上下文
-  const showTitle = !!finding.title && key === 'general';
+  // 标题在已知 sectionKey 上**通常**跟 chip label 内容重复 (h4 显示 "PR Type" + chip
+  // 显示 "类型")，所以默认只有 general 段才出 title。但 pr-agent 把若干段的"值"放在
+  // 标题里 (e.g., `Estimated effort to review: 3 🔵🔵🔵⚪⚪` / `Score: 85 🟢🟢...`)，
+  // body 是空的；这种情况强制把 title 渲染出来，否则卡片只剩 chip 一片空白。
+  const bodyEmpty = !finding.body.trim();
+  const showTitle = !!finding.title && (key === 'general' || bodyEmpty);
   // pr-agent 把若干 section 标题 / 固定模板字符串硬编码成英文 (CONFIG__RESPONSE_LANGUAGE
   // 只翻译 LLM 内容值)，渲染前替换成中文
   const translatedBody = translatePrAgentLabels(finding.body);

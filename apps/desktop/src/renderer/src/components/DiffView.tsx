@@ -8,11 +8,13 @@ import type {
   DiffBlameLine,
   DiffChangedFile,
   DiffFileContent,
+  DiffHunkRange,
   PrComment,
   ReviewDraft,
   StoredPullRequest,
   SyncProgressEvent,
 } from '@pr-pilot/shared';
+import { policyForPlatform } from '@pr-pilot/shared';
 import { invoke } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
 import { useDraftsForPr } from '../stores/drafts-store';
@@ -589,21 +591,179 @@ export function DiffView({
           // 同一行多条草稿叠加挂一个 zone (height 累加；每条 DraftZone 自渲染)
           const dom = document.createElement('div');
           dom.className = 'monaco-draft-zone';
-          const root = createRoot(dom);
-          root.render(
+
+          // 经典 Monaco view zone 坑：editor 自带 mousedown listener 把整个 zone
+          // 区域当作 "editor mouse target"，吞掉冒泡到 DOM 的事件 → zone 内 textarea
+          // 收不到 focus、button 点不响应。在 dom 容器上 stopPropagation 一组关键事件，
+          // 让 monaco 不再接管 zone 内的 user input。
+          //
+          // **必须是 bubble 阶段** (第三参数省略 / false)。capture 阶段拦截会在事件
+          // 到达 button/textarea **之前**就阻断，React onClick / onKeyDown 根本不
+          // 触发 (取消按钮点了没反应正是这个 bug)。bubble 阶段让 target 上的 React
+          // handler 先 fire，再阻止冒泡到 editor
+          const stopAll = (e: Event): void => e.stopPropagation();
+          for (const evt of [
+            'mousedown',
+            'mouseup',
+            'click',
+            'dblclick',
+            'keydown',
+            'keyup',
+            'wheel',
+            'contextmenu',
+          ]) {
+            dom.addEventListener(evt, stopAll);
+          }
+
+          // 高度策略：保留 zone 对象引用，ResizeObserver 回调里改 zone.heightInPx
+          // 后 layoutZone。Monaco 的 layoutZone(zoneId) 重新读 zone.heightInPx；
+          // 必须自己写回新值。
+          //
+          // **关键坑**：Monaco 直接把 `style.height = <heightInPx>px` 写到 dom 元素
+          // 上 (dom 就是 zone wrapper，monaco 不另套一层)，覆盖我们设的 height:auto。
+          // 所以 dom.offsetHeight 永远 = zoneObj.heightInPx → 用 offsetHeight 测会
+          // 产生 next === zoneObj.heightInPx 自循环，永远不更新。
+          //
+          // 我们插一层内部容器 inner，inner 不受 monaco 控制 → inner.offsetHeight
+          // 才是真实内容高度。dom 自己保持 monaco 写的尺寸，但 overflow:visible，
+          // inner 内容自然撑开；measure inner 同步回 zoneObj.heightInPx
+          const inner = document.createElement('div');
+          inner.className = 'monaco-draft-zone-inner';
+          // 宽度 + 位置策略（跟 BBS / GitHub inline 评论对齐）：
+          //   inner.marginLeft = contentLeft  (跨过 line number / glyph margin，
+          //                                   评论框起点对齐代码区起点)
+          //   inner.width      = contentWidth (代码区宽度；contentWidth 已减掉
+          //                                   monaco scrollbar / minimap 占用)
+          //
+          // 横向滚动行为：代码区 viewport 在 editor DOM 内的位置不随 scrollLeft 变
+          // (.view-lines 内部滚，外部 viewport 边界不动)，所以静态对齐就够，不需要
+          // 跟 scrollLeft 联动。
+          //
+          // 防御：editorDomNode.clientWidth 当兜底上限，防 layoutInfo 异常时
+          // contentWidth 算出超界 (之前用户报"跨到 ChatPane"症状)。clientWidth
+          // 含 monaco overlay scrollbar 那段区域，要再减 verticalScrollbarWidth
+          //
+          // 双触发：editor.onDidLayoutChange (几何变化) + ResizeObserver 观察 editor
+          // DOM (窗口 / 分隔条 resize)，覆盖率不重叠
+          const editorDomNode = editorInst.getDomNode();
+          const applyInnerLayout = (): void => {
+            if (!editorDomNode) return;
+            const editorRect = editorDomNode.getBoundingClientRect();
+            if (editorRect.width <= 0) return; // editor 还没 layout，等下次 trigger
+            const domRect = dom.getBoundingClientRect();
+            const sbW = editorInst.getLayoutInfo().verticalScrollbarWidth ?? 0;
+            // 用 BoundingClientRect 拿浏览器实际渲染坐标 — clientWidth / layoutInfo.width
+            // 在 monaco inline (unified) view 下偶发给出超出 editor 视觉边界的值，
+            // 用户实测评论框跨到 ChatPane 区域。Rect 是 layout 后的真实像素坐标，
+            // 永远不超 editor 视觉边界。
+            //
+            // 算法：inner 从 dom 起点 (左 0) 开始，最远延伸到 editor 视觉右边界
+            // - verticalScrollbar。dom 还没挂到 DOM 树时 rect.width=0，用 editor
+            // 左边界兜底
+            const innerLeft = domRect.width > 0 ? domRect.left : editorRect.left;
+            const innerRight = editorRect.right - sbW;
+            const w = Math.max(0, innerRight - innerLeft);
+            if (w > 0) {
+              inner.style.marginLeft = '0';
+              inner.style.width = `${w}px`;
+              inner.style.maxWidth = `${w}px`;
+            }
+          };
+          applyInnerLayout();
+          // 多个时间点兜底：zone 添加瞬间 dom 还没挂到 DOM 树，getBoundingClientRect
+          // 返回 0；等下一帧 + 50ms 后再测，确保 monaco 完成 layout
+          requestAnimationFrame(applyInnerLayout);
+          setTimeout(applyInnerLayout, 50);
+          const layoutDisp = editorInst.onDidLayoutChange(applyInnerLayout);
+          const editorRO = editorDomNode
+            ? new ResizeObserver(() => requestAnimationFrame(applyInnerLayout))
+            : null;
+          if (editorDomNode && editorRO) editorRO.observe(editorDomNode);
+
+          // 横向滚动同步：monaco view zone dom 在 .lines-content 内会跟 scrollLeft
+          // 一起左移 (用户实测：横滚后评论框 chip 被裁出 viewport)。给 inner 加
+          // transform translateX(scrollLeft) 反向抵消，评论框就 stick 在 viewport
+          // 内的相对位置不动 (跟 BBS / GitHub inline 评论行为一致)
+          const applyScroll = (): void => {
+            inner.style.transform = `translateX(${editorInst.getScrollLeft()}px)`;
+          };
+          applyScroll();
+          const scrollDisp = editorInst.onDidScrollChange(applyScroll);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__draftLayoutDisp = layoutDisp;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__draftEditorRO = editorRO;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__draftScrollDisp = scrollDisp;
+          // inner 也 stopPropagation 一份 (双层防御)，确保即便 dom 的 listener 被
+          // monaco 某种方式绕过，inner 仍能吞掉事件不让 editor 自动接管
+          for (const evt of [
+            'mousedown',
+            'mouseup',
+            'click',
+            'dblclick',
+            'keydown',
+            'keyup',
+            'wheel',
+            'contextmenu',
+          ]) {
+            inner.addEventListener(evt, stopAll);
+          }
+          dom.appendChild(inner);
+
+          const reactRoot = createRoot(inner);
+          reactRoot.render(
             <DraftZoneList
               drafts={ds}
               prLocalId={pr.localId}
               autoEditTokens={autoEditTokens}
             />,
           );
-          const zoneId = accessor.addZone({
+
+          const initialPx = Math.max(ds.length * 60, 80);
+          const zoneObj: MonacoEditor.IViewZone = {
             afterLineNumber: line,
-            // 每条草稿大致 6 行 (含按钮 + textarea / 内容) + 0.5 间隔；cap 32 防屏占
-            heightInLines: Math.min(Math.ceil(ds.length * 6 + ds.length * 0.5), 32),
+            heightInPx: initialPx,
             domNode: dom,
+          };
+          const zoneId = accessor.addZone(zoneObj);
+          zoneRefs.push({ editor: editorInst, zoneId, dom, root: reactRoot });
+
+          // 高度同步：每次 RO 触发 / 多个时间点都用 removeZone+addZone 强制刷新。
+          // 不依赖 layoutZone(id) ——后者在某些 Monaco 版本对已添加 zone 的 height
+          // 改动不重新计算 viewModel.whitespace，导致蓝框尺寸卡住 (用户实测出现过)。
+          // 重建 zone 时 dom 元素引用复用 → React tree 不 unmount，body 内 state 保留
+          const currentZoneIdRef = { id: zoneId };
+          const syncHeight = (): void => {
+            const next = inner.offsetHeight;
+            if (next <= 0) return;
+            if (Math.abs(next - (zoneObj.heightInPx ?? 0)) < 1) return;
+            zoneObj.heightInPx = next;
+            try {
+              editorInst.changeViewZones((acc) => {
+                acc.removeZone(currentZoneIdRef.id);
+                currentZoneIdRef.id = acc.addZone(zoneObj);
+              });
+              // 同步更新 zoneRefs 里这一条的 zoneId 让 cleanup remove 用得对
+              const ref = zoneRefs[zoneRefs.length - 1];
+              if (ref) ref.zoneId = currentZoneIdRef.id;
+            } catch {
+              /* editor disposed */
+            }
+          };
+
+          // ResizeObserver 跟踪 inner 高度变化 (DraftZone read↔edit 切换、textarea
+          // resize)。requestAnimationFrame 避开"回调里同步 layout 又触发 RO"循环
+          const ro = new ResizeObserver(() => {
+            requestAnimationFrame(syncHeight);
           });
-          zoneRefs.push({ editor: editorInst, zoneId, dom, root });
+          ro.observe(inner);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__draftRO = ro;
+          // 多个时间点 sync 兜底覆盖布局抖动 / React 多阶段 render
+          requestAnimationFrame(syncHeight);
+          setTimeout(syncHeight, 50);
+          setTimeout(syncHeight, 200);
         }
       });
     };
@@ -626,6 +786,26 @@ export function DiffView({
       } catch {
         /* editor disposed */
       }
+      // 先 disconnect ResizeObserver + dispose layout listener，再 unmount root，
+      // 避免 unmount 引起的 DOM 高度回落触发观察回调 + layoutZone(disposed editor) 报错
+      for (const z of zoneRefs) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ro = (z.dom as any).__draftRO as ResizeObserver | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ld = (z.dom as any).__draftLayoutDisp as { dispose(): void } | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ero = (z.dom as any).__draftEditorRO as ResizeObserver | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sd = (z.dom as any).__draftScrollDisp as { dispose(): void } | undefined;
+        try {
+          ro?.disconnect();
+          ld?.dispose();
+          ero?.disconnect();
+          sd?.dispose();
+        } catch {
+          /* ignore */
+        }
+      }
       queueMicrotask(() => {
         for (const z of zoneRefs) {
           try {
@@ -643,6 +823,10 @@ export function DiffView({
   //
   // 视觉：hover 行的 line decoration 显示淡蓝 '+'，鼠标 hover glyph 时浓蓝。
   // 点击 → drafts:create + autoEdit 触发立即进入编辑。
+  //
+  // **Platform policy 过滤**：BBS 只允许 hunk 内的行加 inline comment；GitHub/GitLab/
+  // Gitea 宽松。从 diffEditor.getLineChanges() 拿 hunks，policy 判断每行是否 allowed。
+  // 不允许的行不画 glyph、点击也不创建草稿（避免后续 publishInline 时被 BBS 400）
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
     const modifiedEditor = diffEditor.getModifiedEditor();
@@ -656,21 +840,58 @@ export function DiffView({
       if (d.anchor.side === 'new') occupied.add(d.anchor.endLine);
     }
 
+    // 把 monaco ILineChange[] 翻成 DiffHunkRange[]。LineChange 的 EndLineNumber=0
+    // 表示该侧无对应（纯增/纯删），翻成 null range。
+    //
+    // **关键**：useEffect 首次执行时 monaco diff 还在异步计算，getLineChanges() 可能
+    // 返回 null/[] → 用 BBS policy 严格判会让"所有行都不允许" → 用户看不到任何 +。
+    // 监听 onDidUpdateDiff 在 diff 算完后刷新 hunks (mutable let，闭包引用最新值)。
+    // 同时：hunks 为空时**兜底允许**（视为 policy 暂不可用），等 update 事件来再收紧
+    const policy = policyForPlatform(pr.platform);
+    const computeHunks = (): DiffHunkRange[] => {
+      const lineChanges = diffEditor.getLineChanges() ?? [];
+      return lineChanges.map((c) => ({
+        original:
+          c.originalEndLineNumber >= c.originalStartLineNumber &&
+          c.originalEndLineNumber > 0
+            ? { start: c.originalStartLineNumber, end: c.originalEndLineNumber }
+            : null,
+        modified:
+          c.modifiedEndLineNumber >= c.modifiedStartLineNumber &&
+          c.modifiedEndLineNumber > 0
+            ? { start: c.modifiedStartLineNumber, end: c.modifiedEndLineNumber }
+            : null,
+      }));
+    };
+    let hunks = computeHunks();
+    const diffUpdateDisp = diffEditor.onDidUpdateDiff(() => {
+      hunks = computeHunks();
+    });
+
+    /** 兜底允许：hunks 还没算完（空数组）就一律允许，避免初始"什么都点不出来"。
+     *  正常加载完 hunks 非空后才走 policy 严格判 */
+    const isAllowed = (line: number): boolean =>
+      hunks.length === 0 || policy.isLineAllowed(hunks, 'new', line);
+
     let hoverLine: number | null = null;
     const collection = modifiedEditor.createDecorationsCollection([]);
 
     const setHover = (line: number | null): void => {
       hoverLine = line;
       collection.set(
-        line === null || occupied.has(line)
+        line === null || occupied.has(line) || !isAllowed(line)
           ? []
           : [
               {
                 range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
                 options: {
                   isWholeLine: false,
+                  // 用 glyphMarginClassName 跟 commentZone (远端评论) 一致 —— 渲染在
+                  // editor 最左 glyph margin 列 (跟 GitHub 评论 "+" 位置惯例一致)。
+                  // 之前试过 linesDecorationsClassName 但挤压 line number 列体验更差，
+                  // 撤回到这里。DiffEditor 已开启 glyphMargin:true 让那一列宽到足够装 +
                   glyphMarginClassName: 'monaco-draft-add-glyph',
-                  glyphMarginHoverMessage: { value: '点击在此行新增评论草稿' },
+                  glyphMarginHoverMessage: { value: '点击新增评论' },
                 },
               },
             ],
@@ -700,7 +921,8 @@ export function DiffView({
       if (
         t.type === MonacoEditorNs.MouseTargetType.GUTTER_GLYPH_MARGIN &&
         t.position &&
-        !occupied.has(t.position.lineNumber)
+        !occupied.has(t.position.lineNumber) &&
+        isAllowed(t.position.lineNumber)
       ) {
         const line = t.position.lineNumber;
         void (async () => {
@@ -732,13 +954,14 @@ export function DiffView({
       onMove.dispose();
       onLeave.dispose();
       onDown.dispose();
+      diffUpdateDisp.dispose();
       try {
         collection.clear();
       } catch {
         /* editor disposed */
       }
     };
-  }, [diffEditor, content, selected, drafts, comments, pr.localId]);
+  }, [diffEditor, content, selected, drafts, comments, pr.localId, pr.platform]);
 
   // M4 nav 完成消费：scroll + highlight + autoEdit 关联草稿。等 selected 文件
   // 切换 + content 加载 + diffEditor 就绪 + drafts hydrated 完，再 revealLine。

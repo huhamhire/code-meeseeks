@@ -110,6 +110,17 @@ textarea {
   font-size: $fs-sm;
 }
 
+.btn-danger {
+  background: $color-danger;
+  border-color: $color-danger;
+  color: $text-on-accent;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.1);
+    background: $color-danger;
+  }
+}
+
 .btn-primary {
   background: $color-accent;
   border-color: $color-accent;

@@ -1,11 +1,29 @@
 // Monaco 行内草稿 view zone (M4 ADR-0007)：跟 comment-zone 视觉区分 ——
-// remote 评论是黄底，草稿用蓝底 + DRAFT 标识；posted 状态切回绿底跟远端评论形态一致
+// remote 评论是黄底，草稿用蓝底 + "草稿" 标识；posted 状态切回绿底跟远端评论形态一致
 
 @use './tokens' as *;
 
-// view zone 容器：蓝色调跟 remote (yellow) 区分。posted 状态走 .draft-zone-status-posted
-// 覆写背景为绿色 (跟远端 BBS 评论惯例一致)
+// **结构**：
+//   .monaco-draft-zone (= dom，monaco 控制 style.height, 不能放视觉样式)
+//     .monaco-draft-zone-inner (= 内容容器，蓝色背景 / padding / border-left 全在这)
+//
+// monaco 直接给 dom 写 inline style.height = <heightInPx>px，覆盖任何 CSS。如果把
+// 视觉样式（背景、border）放 dom 上，蓝框尺寸 = monaco wrapper 高度 ≠ 内容高度
+// → 出现"蓝框停在 textarea，按钮溢出到下方代码上"。所以 dom 只是 monaco 占位容器，
+// 视觉容器是 inner，用 ResizeObserver 测 inner.offsetHeight 同步回 zoneObj.heightInPx
 .monaco-draft-zone {
+  overflow: visible;
+  box-sizing: border-box;
+  // 防御性 z-index：万一 syncHeight 没把 monaco wrapper 撑到内容高度、按钮区溢出 dom
+  // 边界，溢出部分（按钮）在层叠上压过 monaco .view-lines 仍可点击。
+  // monaco 自己给 dom 设 position:absolute，z-index 在 absolute 上直接生效
+  z-index: 50;
+}
+
+.monaco-draft-zone-inner {
+  // 同样防御 z-index：inner 内部按钮永远在最顶层
+  position: relative;
+  z-index: 51;
   background: rgba(14, 99, 156, 0.12); // $color-accent fade
   border-left: 3px solid $color-accent;
   padding: $space-3 $space-6 $space-4 $space-6;
@@ -19,7 +37,13 @@
   font-size: $fs-md;
   color: $text-primary;
   line-height: $lh-loose;
-  overflow-y: auto;
+  box-sizing: border-box;
+
+  // CSS 兜底：inline style.width 由 DiffView applyInnerLayout 监听 editor 的
+  // onDidLayoutChange 动态设 (= contentLeft + contentWidth，对应代码区右边界)。
+  // CSS max-width:100% 防止 width 没设 / 设错值时仍不超 dom 视口宽。
+  // 注：DiffEditor 关闭了 minimap，所以不留 minimap buffer
+  max-width: 100%;
 }
 
 .draft-zone-list {
@@ -52,7 +76,7 @@
   flex-wrap: wrap;
 }
 
-// "DRAFT" 标识：常驻 chip，让用户一眼区分本地草稿 vs 远端评论
+// "草稿" 标识：常驻 chip，让用户一眼区分本地草稿 vs 远端评论
 .draft-zone-tag {
   padding: 1px $space-3;
   border-radius: $radius-sm;
@@ -60,7 +84,6 @@
   color: $text-on-accent;
   font-size: $fs-xs;
   font-weight: 700;
-  letter-spacing: 0.08em;
 }
 
 .draft-zone-status {
@@ -136,6 +159,25 @@
   background: rgba(244, 135, 113, 0.08);
 }
 
+// 图标按钮 (垃圾桶等)：方形紧凑，跟文字按钮高度对齐
+.draft-zone-btn-icon {
+  padding: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  svg {
+    display: block;
+  }
+}
+
+// edit 模式下的删除按钮：靠右远离保存/取消，视觉上"独立操作"
+.draft-zone-edit-delete {
+  margin-left: auto;
+}
+
 .draft-zone-edit {
   display: flex;
   flex-direction: column;
@@ -164,7 +206,8 @@
 }
 
 .draft-zone-edit-actions {
-  display: inline-flex;
+  display: flex; // 必须 block-level flex 才能让 margin-left:auto 推 [🗑] 到右端
+  align-items: center;
   gap: $space-3;
 }
 
@@ -178,28 +221,26 @@
   margin-top: $space-2;
 }
 
-// 行 hover 出现的 '+' 草稿创建按钮，Monaco glyph margin decoration
+// 行 hover 出现的 '+' 草稿创建按钮 — Monaco glyph margin 区 (editor 最左、
+// line number 左侧外列；DiffEditor options 启用了 glyphMargin:true 让那一列宽到
+// ~24px 装下 +)。decoration 元素本身 width/height 由 monaco 控制 (glyphMarginWidth
+// × lineHeight)，子 ::before 用 flex 占满 parent + 居中 '+' 字符
 .monaco-draft-add-glyph {
-  position: relative;
   cursor: pointer;
 
   &::before {
     content: '+';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: $color-accent;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1;
-    width: 14px;
-    height: 14px;
-    border-radius: $radius-sm;
-    background: rgba(14, 99, 156, 0.18);
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: $color-accent;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    background: rgba(14, 99, 156, 0.18);
+    border-radius: $radius-sm;
   }
 
   &:hover::before {
