@@ -371,6 +371,82 @@
   font-size: $fs-md;
   line-height: $lh-normal;
 }
+.pr-comment-foot {
+  margin-top: $space-3;
+}
+.pr-comment-reply-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover {
+    border-color: $color-accent;
+    color: $color-info;
+    background: $bg-hover;
+  }
+}
+.comment-reply-editor {
+  margin-top: $space-3;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+.comment-reply-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: $space-3 $space-4;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-body;
+  font-family: inherit;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  resize: vertical;
+  min-height: calc(#{$fs-md} * #{$lh-normal} * 3 + #{$space-3} * 2);
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+.comment-reply-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+}
+.comment-reply-btn {
+  padding: 1px $space-4;
+  font-size: $fs-sm;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-accent;
+    color: $color-info;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+.comment-reply-btn-primary {
+  background: $color-accent;
+  border-color: $color-accent;
+  color: $text-on-accent;
+  &:hover:not(:disabled) {
+    filter: brightness(1.15);
+    color: $text-on-accent;
+  }
+}
+.comment-reply-error {
+  color: $color-danger;
+  font-size: $fs-sm;
+}
 .pr-comments-error {
   background: rgba(244, 135, 113, 0.08);
   border: 1px solid rgba(244, 135, 113, 0.35);

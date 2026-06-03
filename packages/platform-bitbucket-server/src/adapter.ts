@@ -238,6 +238,22 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     return this.client.getAttachmentBinary(url, repo);
   }
 
+  async replyToComment(
+    repo: RepoRef,
+    prId: string,
+    parentCommentId: string,
+    body: string,
+  ): Promise<PrComment> {
+    // BBS REST: POST /pull-requests/{id}/comments
+    //   body 内 text + parent.id → 作为已有评论的 reply
+    //   不带 anchor — reply 继承父评论的 anchor (inline 跟 summary 行为一致)
+    const created = await this.client.post<BBComment>(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments`,
+      { text: body, parent: { id: Number(parentCommentId) } },
+    );
+    return mapBBComment(created);
+  }
+
   async getUserAvatar(
     slug: string,
   ): Promise<{ bytes: Uint8Array; contentType: string } | null> {

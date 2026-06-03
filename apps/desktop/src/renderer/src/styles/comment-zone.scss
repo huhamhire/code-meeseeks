@@ -44,6 +44,33 @@
 .monaco-comment-zone-inner .bitbucket-image {
   cursor: zoom-in !important;
 }
+
+// 回复按钮：默认 hidden，hover 父评论时显示，避免常驻占视觉
+.comment-zone-foot {
+  margin-top: $space-2;
+  min-height: 22px; // 占位防 hover 抖动
+}
+.comment-zone-reply-btn {
+  padding: 2px $space-3;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer !important;
+  opacity: 0;
+  transition: opacity 0.12s, border-color 0.12s, color 0.12s;
+  &:hover {
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+// hover comment body 区时显示 reply 按钮
+.comment-zone-item-body:hover > .comment-zone-foot .comment-zone-reply-btn,
+.comment-zone-foot:focus-within .comment-zone-reply-btn,
+.comment-zone-reply-btn:focus {
+  opacity: 1;
+}
 .monaco-comment-zone-inner {
   background: $bg-panel-alt;
   border-left: 3px solid $color-accent;

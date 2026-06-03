@@ -176,4 +176,16 @@ export interface PlatformAdapter {
     prId: string,
     status: ReviewerStatus,
   ): Promise<void>;
+
+  /**
+   * 在已有评论下回复。BBS: POST /comments with parent.id；其他平台 (GitHub
+   * review comment / GitLab note 等) 各自映射。返回新创建的评论；调用方刷新
+   * comments cache 让 UI 立刻看到 reply
+   */
+  replyToComment(
+    repo: RepoRef,
+    prId: string,
+    parentCommentId: string,
+    body: string,
+  ): Promise<PrComment>;
 }

@@ -32,7 +32,10 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
       return m.startsWith('ollama/') ? m : `ollama/${m}`;
     case 'openai':
     case 'openai-compatible':
-      // 这两类走 OpenAI 兼容协议，model 名直接用 (litellm 默认 OpenAI 路由)
+    case 'dashscope':
+    case 'volcengine-ark':
+      // OpenAI 兼容协议 (含阿里百炼 / 字节火山方舟)，model 名直接用 — 用户填的是
+      // 平台的具体模型 ID (qwen-max / doubao-pro-32k / ep-xxx endpoint id 等)
       return m;
     default:
       return m;
@@ -72,6 +75,11 @@ export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
   switch (profile.provider) {
     case 'openai':
     case 'openai-compatible':
+    case 'dashscope':
+    case 'volcengine-ark':
+      // 阿里百炼 / 火山方舟 都暴露 OpenAI 兼容 endpoint，复用 OPENAI__ 这套
+      // env：base_url 用平台 endpoint，api_key 走 OpenAI 路径。pr-agent litellm
+      // 路由器看到 base_url 非默认就用 custom OpenAI client 调
       if (profile.api_key) env['OPENAI__KEY'] = profile.api_key;
       if (profile.base_url) env['OPENAI__API_BASE'] = profile.base_url;
       break;

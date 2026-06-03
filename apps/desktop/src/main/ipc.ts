@@ -176,6 +176,36 @@ export function registerIpcHandlers({
   const avatarMem = new Map<string, { dataUrl: string } | null>();
 
   ipcMain.handle(
+    'comments:reply',
+    async (
+      _evt,
+      req: IpcChannels['comments:reply']['request'],
+    ): Promise<IpcChannels['comments:reply']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
+      const reply = await adapter.replyToComment(
+        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+        pr.remoteId,
+        req.parentCommentId,
+        req.body,
+      );
+      // 清掉 comments cache，下次 listComments 会 force 拉远端拿到最新评论树
+      // (包括刚 post 的 reply 嵌入到正确父评论 .replies 数组)。同时广播事件让
+      // CommentsPanel / DiffView 自动重拉
+      try {
+        await stateStore.delete(`prs/${pr.localId}/comments`);
+      } catch {
+        /* cache miss 也无所谓 */
+      }
+      for (const w of BrowserWindow.getAllWindows()) {
+        w.webContents.send('comments:changed', { localId: pr.localId });
+      }
+      return reply;
+    },
+  );
+
+  ipcMain.handle(
     'comments:fetchAttachment',
     async (
       _evt,

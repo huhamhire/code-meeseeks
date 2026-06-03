@@ -37,7 +37,15 @@ export const LlmProfileSchema = z.object({
   /** 给人看的名字，可空，UI 会拿 provider+model 做后备显示 */
   label: z.string().default(''),
   provider: z
-    .enum(['openai', 'openai-compatible', 'deepseek', 'anthropic', 'ollama'])
+    .enum([
+      'openai',
+      'openai-compatible',
+      'deepseek',
+      'anthropic',
+      'ollama',
+      'dashscope',
+      'volcengine-ark',
+    ])
     .default('openai-compatible'),
   /** OpenAI 系: api_base；Ollama: api_base。非必填留空 */
   base_url: z.string().default(''),
@@ -56,7 +64,9 @@ export type LlmProvider =
   | 'openai-compatible'
   | 'deepseek'
   | 'anthropic'
-  | 'ollama';
+  | 'ollama'
+  | 'dashscope' // 阿里百炼（DashScope，OpenAI 兼容入口，含千问 / Qwen / DeepSeek-on-DashScope）
+  | 'volcengine-ark'; // 火山方舟（Volcengine Ark，OpenAI 兼容入口，含豆包 / Doubao 等）
 export type LlmProfile = z.infer<typeof LlmProfileSchema>;
 
 export const ConfigSchema = z.object({
@@ -111,7 +121,15 @@ export const ConfigSchema = z.object({
         const oldProvider = typeof o.provider === 'string' ? o.provider : '';
         // azure 已废，转成 openai-compatible (Azure 本质就是 OpenAI API + 自定义 base_url)
         const provider = (
-          ['openai', 'openai-compatible', 'deepseek', 'anthropic', 'ollama'] as const
+          [
+            'openai',
+            'openai-compatible',
+            'deepseek',
+            'anthropic',
+            'ollama',
+            'dashscope',
+            'volcengine-ark',
+          ] as const
         ).includes(oldProvider as LlmProvider)
           ? (oldProvider as LlmProvider)
           : 'openai-compatible';

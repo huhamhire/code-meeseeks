@@ -3,10 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { PrComment, StoredPullRequest } from '@pr-pilot/shared';
-import { invoke } from '../api';
+import { invoke, subscribe } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
 import { Avatar } from './Avatar';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
+import { CommentReplyEditor } from './CommentReplyEditor';
 import { InlineCodeContext } from './InlineCodeContext';
 
 interface CommentsPanelProps {
@@ -32,19 +33,25 @@ export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
     let cancelled = false;
     setComments(null);
     setError(null);
-    void (async () => {
+    const fetchList = async (force: boolean): Promise<void> => {
       try {
-        const list = await invoke('diff:listComments', { localId: pr.localId, force: true });
-        if (!cancelled) {
-          setComments(list);
-          onCommentsLoaded?.(list.length);
-        }
+        const list = await invoke('diff:listComments', { localId: pr.localId, force });
+        if (cancelled) return;
+        setComments(list);
+        onCommentsLoaded?.(list.length);
       } catch (e) {
         if (!cancelled) setError(formatBackendError(e));
       }
-    })();
+    };
+    void fetchList(true);
+    // 监听 main 端 comments:changed 事件 — 用户回复评论 / 其他 PR 操作触发评论
+    // 树变化时重拉远端最新 (force=true 跳过 cache 比对)
+    const unsub = subscribe('comments:changed', (e) => {
+      if (e.localId === pr.localId) void fetchList(true);
+    });
     return () => {
       cancelled = true;
+      unsub();
     };
     // onCommentsLoaded 故意不放依赖：父组件每次 render 都会重传新 ref，会触发误重拉
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,6 +143,7 @@ function CommentItem({
     () => ({ img: makeBitbucketImageFor(pr.localId) }),
     [pr.localId],
   );
+  const [replyOpen, setReplyOpen] = useState(false);
   return (
     <li className={`pr-comment pr-comment-depth-${String(depth)}`}>
       <div className="pr-comment-head">
@@ -175,6 +183,25 @@ function CommentItem({
           {comment.body}
         </ReactMarkdown>
       </div>
+      <div className="pr-comment-foot">
+        {replyOpen ? null : (
+          <button
+            type="button"
+            className="pr-comment-reply-btn"
+            onClick={() => setReplyOpen(true)}
+          >
+            回复
+          </button>
+        )}
+      </div>
+      {replyOpen && (
+        <CommentReplyEditor
+          prLocalId={pr.localId}
+          parentCommentId={comment.remoteId}
+          onCancel={() => setReplyOpen(false)}
+          onPosted={() => setReplyOpen(false)}
+        />
+      )}
       {comment.replies.length > 0 && (
         <ul className="pr-comments-list pr-comments-replies">
           {comment.replies.map((r) => (

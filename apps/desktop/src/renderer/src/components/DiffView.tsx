@@ -15,13 +15,14 @@ import type {
   SyncProgressEvent,
 } from '@pr-pilot/shared';
 import { policyForPlatform } from '@pr-pilot/shared';
-import { invoke } from '../api';
+import { invoke, subscribe } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { Avatar } from './Avatar';
 import { DraftZone } from './DraftZone';
 import { ErrorBoundary } from './ErrorBoundary';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
+import { CommentReplyEditor } from './CommentReplyEditor';
 import { FileTree } from './FileTree';
 
 interface DiffViewProps {
@@ -241,19 +242,28 @@ export function DiffView({
   useEffect(() => {
     let cancelled = false;
     setCommentsError(null);
-    invoke('diff:listComments', { localId: pr.localId, force: true })
-      .then((cs) => {
-        if (!cancelled) setComments(cs);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          const fmt = formatBackendError(e);
-          console.warn('diff:listComments failed', e);
-          setCommentsError(fmt);
-        }
-      });
+    const fetchList = (force: boolean): void => {
+      invoke('diff:listComments', { localId: pr.localId, force })
+        .then((cs) => {
+          if (!cancelled) setComments(cs);
+        })
+        .catch((e: unknown) => {
+          if (!cancelled) {
+            const fmt = formatBackendError(e);
+            console.warn('diff:listComments failed', e);
+            setCommentsError(fmt);
+          }
+        });
+    };
+    fetchList(true);
+    // 评论 reply / 状态变更后 main 端 broadcast comments:changed，inline view zone
+    // 需要重拉刷新评论树 (含新 reply 嵌到父评论 .replies)
+    const unsub = subscribe('comments:changed', (e) => {
+      if (e.localId === pr.localId) fetchList(true);
+    });
     return () => {
       cancelled = true;
+      unsub();
     };
   }, [pr.localId, commentsRetry]);
 
@@ -1434,22 +1444,47 @@ function CommentNode({
     () => makeCommentMarkdownComponents(attachmentBase, prLocalId),
     [attachmentBase, prLocalId],
   );
+  const [replyOpen, setReplyOpen] = useState(false);
+  // body 只包 author + 正文 + 回复按钮 / 编辑器；replies 作为 sibling 放外面 —
+  // 不让 hover 内层 replies 冒泡触发外层 :hover 导致所有祖先 reply 按钮一齐显示
   const inner = (
     <>
-      <CommentAuthorRow
-        displayName={comment.author.displayName}
-        slug={comment.author.slug ?? comment.author.name}
-        connectionId={connectionId}
-        at={comment.createdAt}
-      />
-      <div className="comment-zone-body markdown">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={components}
-          urlTransform={transformBitbucketUrl}
-        >
-          {comment.body}
-        </ReactMarkdown>
+      <div className="comment-zone-item-body">
+        <CommentAuthorRow
+          displayName={comment.author.displayName}
+          slug={comment.author.slug ?? comment.author.name}
+          connectionId={connectionId}
+          at={comment.createdAt}
+        />
+        <div className="comment-zone-body markdown">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={components}
+            urlTransform={transformBitbucketUrl}
+          >
+            {comment.body}
+          </ReactMarkdown>
+        </div>
+        {/* 回复按钮：默认 hidden，hover comment-zone-item-body 时显示 (CSS 控制) */}
+        {!replyOpen && (
+          <div className="comment-zone-foot">
+            <button
+              type="button"
+              className="comment-zone-reply-btn"
+              onClick={() => setReplyOpen(true)}
+            >
+              回复
+            </button>
+          </div>
+        )}
+        {replyOpen && (
+          <CommentReplyEditor
+            prLocalId={prLocalId}
+            parentCommentId={comment.remoteId}
+            onCancel={() => setReplyOpen(false)}
+            onPosted={() => setReplyOpen(false)}
+          />
+        )}
       </div>
       {comment.replies.map((r) => (
         <CommentNode

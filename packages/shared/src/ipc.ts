@@ -108,6 +108,8 @@ export interface IpcEvents {
    * 清理都触发。renderer 据此重拉 drafts 列表 (per localId 过滤)。
    */
   'drafts:changed': { localId: string };
+  /** 评论 reply / 状态变更后广播，renderer 各组件 (CommentsPanel / DiffView inline) 重拉 */
+  'comments:changed': { localId: string };
   /**
    * 队列变化广播：active 切换 / waiting 增删都触发。renderer 据此同步 chat-pane
    * 运行中 UI + StatusBar 队列 chip。
@@ -174,6 +176,14 @@ export interface IpcChannels {
   'comments:fetchAttachment': {
     request: { localId: string; url: string };
     response: { dataUrl: string } | null;
+  };
+  /**
+   * 对已有评论发回复。提交成功后 main 端会刷新 comments cache + broadcast
+   * comments:changed 事件，renderer 各组件重新拉取列表自动展示新 reply
+   */
+  'comments:reply': {
+    request: { localId: string; parentCommentId: string; body: string };
+    response: PrComment;
   };
   'config:read': { request: void; response: Config };
   'prs:list': { request: void; response: StoredPullRequest[] };

@@ -23,6 +23,8 @@ interface ProviderMeta {
   needsKey: boolean;
 }
 
+// 顺序：海外通用 (OpenAI / OpenAI 兼容 / Anthropic) → 国内三家 (DeepSeek / 阿里
+// 百炼 / 火山方舟) → 本地 (Ollama)，方便用户按主流程扫读
 const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
   {
     value: 'openai',
@@ -41,6 +43,14 @@ const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     needsKey: true,
   },
   {
+    value: 'anthropic',
+    label: 'Anthropic',
+    hint: '模型用 anthropic/claude-3-5-sonnet 等带前缀的写法',
+    modelExample: 'anthropic/claude-3-5-sonnet / anthropic/claude-3-haiku',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    needsKey: true,
+  },
+  {
     value: 'deepseek',
     label: 'DeepSeek',
     hint: '模型用 deepseek/<name> 这样带前缀的写法',
@@ -49,11 +59,19 @@ const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     needsKey: true,
   },
   {
-    value: 'anthropic',
-    label: 'Anthropic',
-    hint: '模型用 anthropic/claude-3-5-sonnet 等带前缀的写法',
-    modelExample: 'anthropic/claude-3-5-sonnet / anthropic/claude-3-haiku',
-    defaultBaseUrl: 'https://api.anthropic.com',
+    value: 'dashscope',
+    label: '阿里百炼 (DashScope)',
+    hint: '阿里云 DashScope OpenAI 兼容接入；含千问 (Qwen)、DeepSeek-on-DashScope 等。API Key 在 DashScope 控制台生成',
+    modelExample: 'qwen-max / qwen-plus / qwen-turbo / qwen3-235b-a22b',
+    defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    needsKey: true,
+  },
+  {
+    value: 'volcengine-ark',
+    label: '火山方舟 (Volcengine Ark)',
+    hint: '火山方舟 OpenAI 兼容接入；含豆包 (Doubao)、DeepSeek-on-Ark 等。模型用方舟 endpoint id (ep-...) 或预设模型名',
+    modelExample: 'ep-20240xxxxxx-xxxxx / doubao-pro-32k / doubao-1-5-pro-256k',
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     needsKey: true,
   },
   {

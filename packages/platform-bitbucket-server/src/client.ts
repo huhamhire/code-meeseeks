@@ -204,6 +204,40 @@ export class BBClient {
   }
 
   /**
+   * 带 JSON body 的 POST。BBS 评论 reply / 新建评论用 POST /comments。错误同 PUT
+   * 抛 BBClientError 附 status + body
+   */
+  async post<T>(path: string, body: unknown): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
+    let res: Response;
+    try {
+      res = await this.fetchFn(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: ctl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new BBClientError(
+        `${String(res.status)} ${res.statusText} on POST ${path}`,
+        res.status,
+        txt,
+      );
+    }
+    return (await res.json()) as T;
+  }
+
+  /**
    * 带 JSON body 的 PUT。BBS 的 PR 参与者 status 用 PUT participants/{slug} 写入，
    * 404 / 401 / 409 等错误抛 BBClientError 并附 status + body，调用方决定降级或抛出。
    * 响应体 JSON 解析失败时返回 unknown（部分端点返回 204 No Content）。
