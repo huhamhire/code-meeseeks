@@ -575,10 +575,59 @@ export function DiffView({
           };
           const ro = new ResizeObserver(() => requestAnimationFrame(syncHeight));
           ro.observe(inner);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (dom as any).__commentRO = ro;
           requestAnimationFrame(syncHeight);
           setTimeout(syncHeight, 200);
+
+          // 宽度策略 (跟 DraftZone 同套): BoundingClientRect 算 inner 视口宽度
+          // 让评论框不超 editor 边界；多点 sync + 监听 layout/diff/RO 覆盖各时机
+          const editorDomNode = editorInst.getDomNode();
+          const applyInnerLayout = (): void => {
+            if (!editorDomNode) return;
+            const editorRect = editorDomNode.getBoundingClientRect();
+            if (editorRect.width <= 0) return;
+            const domRect = dom.getBoundingClientRect();
+            const sbW = editorInst.getLayoutInfo().verticalScrollbarWidth ?? 0;
+            const innerLeft = domRect.width > 0 ? domRect.left : editorRect.left;
+            const innerRight = editorRect.right - sbW;
+            const w = Math.max(0, innerRight - innerLeft);
+            if (w > 0) {
+              inner.style.marginLeft = '0';
+              inner.style.width = `${w}px`;
+              inner.style.maxWidth = `${w}px`;
+            }
+          };
+          applyInnerLayout();
+          requestAnimationFrame(applyInnerLayout);
+          setTimeout(applyInnerLayout, 50);
+          setTimeout(applyInnerLayout, 200);
+          setTimeout(applyInnerLayout, 500);
+          const layoutDisp = editorInst.onDidLayoutChange(applyInnerLayout);
+          const diffDisp = diffEditor.onDidUpdateDiff(() =>
+            requestAnimationFrame(applyInnerLayout),
+          );
+          const editorRO = editorDomNode
+            ? new ResizeObserver(() => requestAnimationFrame(applyInnerLayout))
+            : null;
+          if (editorDomNode && editorRO) editorRO.observe(editorDomNode);
+
+          // 横向滚动同步 (跟 DraftZone 同套): translateX(scrollLeft) 反向抵消 monaco
+          // view zone 跟随 .lines-content 左移，评论 stick 视口位置
+          const applyScroll = (): void => {
+            inner.style.transform = `translateX(${editorInst.getScrollLeft()}px)`;
+          };
+          applyScroll();
+          const scrollDisp = editorInst.onDidScrollChange(applyScroll);
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__commentRO = ro;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__commentLayoutDisp = layoutDisp;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__commentDiffDisp = diffDisp;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__commentEditorRO = editorRO;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__commentScrollDisp = scrollDisp;
 
           // inner 上的 stopPropagation 必须晚于 createRoot 注册（双层防御 + 兼容
           // React 18 在 inner 上的 event delegation 初始化顺序）
@@ -616,8 +665,20 @@ export function DiffView({
       for (const z of zoneRefs) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ro = (z.dom as any).__commentRO as ResizeObserver | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ld = (z.dom as any).__commentLayoutDisp as { dispose(): void } | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dd = (z.dom as any).__commentDiffDisp as { dispose(): void } | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ero = (z.dom as any).__commentEditorRO as ResizeObserver | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sd = (z.dom as any).__commentScrollDisp as { dispose(): void } | undefined;
         try {
           ro?.disconnect();
+          ld?.dispose();
+          dd?.dispose();
+          ero?.disconnect();
+          sd?.dispose();
         } catch {
           /* ignore */
         }

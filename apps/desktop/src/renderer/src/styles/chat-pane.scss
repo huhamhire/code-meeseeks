@@ -341,7 +341,7 @@
   background: $color-accent-bg-fade;
   border-left: 3px solid $color-accent;
   border-radius: $radius-md;
-  font-size: $fs-md;
+  font-size: $fs-lg;
   line-height: $lh-normal;
   color: $text-body;
 
@@ -440,7 +440,7 @@
   border-left: 3px solid $border-default;
   border-radius: $radius-md;
   padding: $space-4 $space-5;
-  font-size: $fs-md;
+  font-size: $fs-lg;
   line-height: $lh-normal;
 
   // 按 sectionKey 着不同的左条颜色，呈现"标准文档"骨架的视觉分组：
@@ -521,7 +521,7 @@
 }
 .chat-finding-title {
   margin: 0;
-  font-size: $fs-md;
+  font-size: $fs-lg;
   font-weight: 600;
   color: $text-primary;
   flex: 1;
@@ -653,7 +653,7 @@
   }
 }
 .chat-finding-body {
-  font-size: $fs-md;
+  font-size: $fs-lg;
 }
 
 // PR Type 段：拆成胶囊横排。背景色 / 描边色 / 文字色 inline 由 pillStyle() 计算
@@ -723,14 +723,14 @@
   border: 1px solid $border-default;
   color: $text-body;
   font-family: inherit;
-  font-size: $fs-md;
+  font-size: $fs-lg;
   line-height: $lh-normal;
   padding: $space-3 $space-4;
   border-radius: $radius-md;
   overflow-y: auto; // 内容超过当前高度时内部滚动
   // 默认 2 行；JS 端 handle 拖动可调到 5 行；继续输入超过当前高度走内部滚动
-  min-height: calc(#{$fs-md} * #{$lh-normal} * 2 + #{$space-3} * 2);
-  max-height: calc(#{$fs-md} * #{$lh-normal} * 5 + #{$space-3} * 2);
+  min-height: calc(#{$fs-lg} * #{$lh-normal} * 2 + #{$space-3} * 2);
+  max-height: calc(#{$fs-lg} * #{$lh-normal} * 5 + #{$space-3} * 2);
   box-sizing: border-box;
 
   &:disabled {
