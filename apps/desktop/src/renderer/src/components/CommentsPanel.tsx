@@ -33,7 +33,7 @@ export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
     setError(null);
     void (async () => {
       try {
-        const list = await invoke('diff:listComments', { localId: pr.localId });
+        const list = await invoke('diff:listComments', { localId: pr.localId, force: true });
         if (!cancelled) {
           setComments(list);
           onCommentsLoaded?.(list.length);

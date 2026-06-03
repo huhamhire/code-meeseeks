@@ -185,9 +185,17 @@ export interface IpcChannels {
     request: { localId: string; side: DiffSide; path: string };
     response: DiffFileContent;
   };
-  /** 拉取 PR 上的已有评论（inline + summary 都拉，renderer 自己分） */
+  /**
+   * 拉取 PR 上的已有评论（inline + summary 都拉，renderer 自己分）。
+   *
+   * 默认走 cache + pr_updated_at stale 比对：命中回缓存，stale/miss 拉远端。
+   * 但本地 PR.updatedAt 来自 poller 周期性拉，可能滞后 — 远端新增评论后，
+   * 本地 updatedAt 不变 → cache 误判命中 → 不刷新。打开 PR 时 renderer 应该
+   * 传 force=true 跳过 stale 比对强制远端拉一次，确保 badge 计数 / inline
+   * 评论是最新的
+   */
   'diff:listComments': {
-    request: { localId: string };
+    request: { localId: string; force?: boolean };
     response: PrComment[];
   };
   /**

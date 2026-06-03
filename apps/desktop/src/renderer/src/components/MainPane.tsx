@@ -148,9 +148,11 @@ export function MainPane({
     localStorage.setItem('pr-pilot.showWhitespace', showWhitespace ? '1' : '0');
   }, [showWhitespace]);
   // 评论 / commits 数 chip：
-  //   - 评论：从评论缓存读 (cache-only)，缓存没有 → 不显示数字
+  //   - 评论：调 diff:listComments — cache 命中 (pr.updatedAt 跟缓存一致) 时
+  //     cheap 回缓存；stale / cache miss 时主动拉远端写回缓存。打开 PR 时
+  //     按需异步刷新最新评论计数，不依赖用户去点 Comments tab 触发
   //   - commits：走本地 git rev-list base..head，镜像没拉齐 → 不显示数字
-  // 都是 cheap query，PR 切换时各拉一次，cancelled token 防 race
+  // 都是 PR 切换时各拉一次，cancelled token 防 race
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [commitCount, setCommitCount] = useState<number | null>(null);
   const prLocalId = pr?.localId;
@@ -162,11 +164,14 @@ export function MainPane({
     void (async () => {
       try {
         const [cm, cc] = await Promise.all([
-          invoke('diff:commentCountCached', { localId: prLocalId }),
+          // force:true 跳过 cache stale 比对 — 本地 PR.updatedAt 可能滞后于远端
+          // (poller 周期性拉)，stale 比对会误判命中。打开 PR 时强制刷一次拿到
+          // 最新评论 + 计数
+          invoke('diff:listComments', { localId: prLocalId, force: true }),
           invoke('diff:commitCount', { localId: prLocalId }),
         ]);
         if (cancelled) return;
-        setCommentCount(cm?.count ?? null);
+        setCommentCount(cm.length);
         setCommitCount(cc?.count ?? null);
       } catch {
         // 静默：角标不显示数字，不该挡用户视线

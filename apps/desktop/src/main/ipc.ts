@@ -31,6 +31,7 @@ import type {
   ConnectionSummary,
   IpcChannels,
   PrAgentStatus,
+  PrComment,
   PragentRunInfo,
   ReviewRun,
   ReviewRunStatus,
@@ -403,6 +404,10 @@ export function registerIpcHandlers({
     },
   );
 
+  // In-flight dedup: 打开 PR 时 MainPane / DiffView / CommentsPanel 三个组件
+  // 并行调 listComments(force:true)，没去重的话会打 3 次 BBS API。同一 localId
+  // 的 concurrent 调用合并到同一个 Promise，远端只打一次
+  const listCommentsInFlight = new Map<string, Promise<PrComment[]>>();
   ipcMain.handle(
     'diff:listComments',
     async (
@@ -411,23 +416,38 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['diff:listComments']['response']> => {
       const pr = await findPrOrThrow(req.localId);
       // 缓存命中条件：pr_updated_at 跟当前 PR meta updatedAt 一致 → 直接回缓存，
-      // 不打远端。PR 任何变更 (新评论 / 状态等) BBS 都会更新 updatedAt，跳变即重拉
+      // 不打远端。PR 任何变更 (新评论 / 状态等) BBS 都会更新 updatedAt，跳变即重拉。
+      //
+      // **req.force=true** 跳过 cache 直接打远端 — 本地 PR.updatedAt 来自 poller
+      // 周期拉，可能滞后，stale 比对会误判命中。打开 PR 时 renderer 传 force=true
+      // 强制刷新，确保拿到最新评论
       const cache = await readCommentsCache(stateStore, pr.localId);
-      if (cache && !isCommentsCacheStale(cache, pr.updatedAt)) {
+      if (!req.force && cache && !isCommentsCacheStale(cache, pr.updatedAt)) {
         return cache.comments;
       }
+      // dedup：同 localId 的 in-flight Promise 直接复用
+      const existing = listCommentsInFlight.get(pr.localId);
+      if (existing) return existing;
       const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
-      const fresh = await adapter.listPullRequestComments(
-        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
-        pr.remoteId,
-      );
-      await writeCommentsCache(stateStore, pr.localId, {
-        comments: fresh,
-        pr_updated_at: pr.updatedAt,
-        fetched_at: new Date().toISOString(),
-      });
-      return fresh;
+      const fetchPromise = adapter
+        .listPullRequestComments(
+          { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+          pr.remoteId,
+        )
+        .then(async (fresh) => {
+          await writeCommentsCache(stateStore, pr.localId, {
+            comments: fresh,
+            pr_updated_at: pr.updatedAt,
+            fetched_at: new Date().toISOString(),
+          });
+          return fresh;
+        })
+        .finally(() => {
+          listCommentsInFlight.delete(pr.localId);
+        });
+      listCommentsInFlight.set(pr.localId, fetchPromise);
+      return fetchPromise;
     },
   );
 

@@ -240,7 +240,7 @@ export function DiffView({
   useEffect(() => {
     let cancelled = false;
     setCommentsError(null);
-    invoke('diff:listComments', { localId: pr.localId })
+    invoke('diff:listComments', { localId: pr.localId, force: true })
       .then((cs) => {
         if (!cancelled) setComments(cs);
       })
@@ -700,11 +700,19 @@ export function DiffView({
             }
           };
           applyInnerLayout();
-          // 多个时间点兜底：zone 添加瞬间 dom 还没挂到 DOM 树，getBoundingClientRect
-          // 返回 0；等下一帧 + 50ms 后再测，确保 monaco 完成 layout
+          // 多个时间点兜底：切换文件 + autoEdit 跳转时 monaco 在算 diff / 文件 mount
+          // 还没完，editor 的 getBoundingClientRect 给的不是稳定 layout (用户实测
+          // 跳转新文件评论框宽度撑爆，resize 后恢复)。多次 sync 覆盖 layout 过程
           requestAnimationFrame(applyInnerLayout);
           setTimeout(applyInnerLayout, 50);
+          setTimeout(applyInnerLayout, 200);
+          setTimeout(applyInnerLayout, 500);
           const layoutDisp = editorInst.onDidLayoutChange(applyInnerLayout);
+          // diff 计算完成事件 — 切换文件后 monaco 算 diff 时 layout 可能还在变，
+          // 算完才是稳定状态。挂这个监听让评论框宽度跟最终 layout 同步
+          const diffDisp = diffEditor.onDidUpdateDiff(() =>
+            requestAnimationFrame(applyInnerLayout),
+          );
           const editorRO = editorDomNode
             ? new ResizeObserver(() => requestAnimationFrame(applyInnerLayout))
             : null;
@@ -721,6 +729,8 @@ export function DiffView({
           const scrollDisp = editorInst.onDidScrollChange(applyScroll);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (dom as any).__draftLayoutDisp = layoutDisp;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__draftDiffDisp = diffDisp;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (dom as any).__draftEditorRO = editorRO;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -820,12 +830,15 @@ export function DiffView({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ld = (z.dom as any).__draftLayoutDisp as { dispose(): void } | undefined;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dd = (z.dom as any).__draftDiffDisp as { dispose(): void } | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ero = (z.dom as any).__draftEditorRO as ResizeObserver | undefined;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sd = (z.dom as any).__draftScrollDisp as { dispose(): void } | undefined;
         try {
           ro?.disconnect();
           ld?.dispose();
+          dd?.dispose();
           ero?.disconnect();
           sd?.dispose();
         } catch {

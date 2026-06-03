@@ -534,6 +534,9 @@
   display: inline-flex;
   align-items: center;
   gap: $space-2;
+  // 不可压缩 — anchor 行 path 太长时整段 chip+按钮要么完整显示要么换行，
+  // 不允许被压扁让按钮文字 wrap (用户实测"编辑"被换成两行)
+  flex-shrink: 0;
 }
 .chat-finding-draft-chip {
   padding: 1px $space-2;
@@ -567,6 +570,7 @@
   cursor: pointer;
   font-family: inherit;
   line-height: $lh-normal;
+  white-space: nowrap;
 
   &:hover {
     background: $bg-hover;
@@ -633,6 +637,9 @@
   display: flex;
   gap: $space-2;
   align-items: baseline;
+  // path 长 + actions 不可缩 (flex-shrink:0) 时，整段会被推到容器外。
+  // 允许 wrap：path code 太长时 actions 换到下一行，永远在可见区内
+  flex-wrap: wrap;
 
   code {
     background: $bg-surface;
@@ -640,6 +647,9 @@
     border-radius: $radius-sm;
     font-family: $font-mono;
     color: $text-body;
+    // path 单段太长 (含 / 路径) 时允许在任意字符断行，不让单 code 块撑爆容器
+    word-break: break-all;
+    min-width: 0;
   }
 }
 .chat-finding-body {
