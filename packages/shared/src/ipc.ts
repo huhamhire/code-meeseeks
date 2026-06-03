@@ -144,6 +144,11 @@ export interface IpcChannels {
   /** 打开 Electron DevTools（分离窗口） */
   'app:openDevTools': { request: void; response: void };
   /**
+   * 用系统默认浏览器打开 URL (shell.openExternal)。评论 markdown 内链点击 → 强制
+   * 外部打开，避免 Electron 在 app window 内跳转覆盖整个界面
+   */
+  'app:openExternal': { request: { url: string }; response: void };
+  /**
    * 调起系统原生目录选择对话框；用户取消返回 path: null。
    * defaultPath 可空，作为初始定位目录。
    */
@@ -159,6 +164,15 @@ export interface IpcChannels {
    */
   'app:userAvatar': {
     request: { connectionId: string; slug: string };
+    response: { dataUrl: string } | null;
+  };
+  /**
+   * 拉评论 body 内嵌图片 (`![alt](url)`)。url 可能是 BBS attachment 绝对/相对地址，
+   * 私有实例需要带 PAT 才能取 → renderer `<img>` 标签无法直接 fetch，必须走 main 代理。
+   * 返回 data URL 给 renderer 拼到 `<img src>`；获取失败 (404 / 跨 host / 非图片) 返回 null
+   */
+  'comments:fetchAttachment': {
+    request: { localId: string; url: string };
     response: { dataUrl: string } | null;
   };
   'config:read': { request: void; response: Config };

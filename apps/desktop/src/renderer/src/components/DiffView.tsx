@@ -21,6 +21,7 @@ import { useDraftsForPr } from '../stores/drafts-store';
 import { Avatar } from './Avatar';
 import { DraftZone } from './DraftZone';
 import { ErrorBoundary } from './ErrorBoundary';
+import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { FileTree } from './FileTree';
 
 interface DiffViewProps {
@@ -520,24 +521,70 @@ export function DiffView({
       editorInst: MonacoEditor.ICodeEditor,
       byLine: Map<number, PrComment[]>,
     ): void => {
+      const lineHeight = editorInst.getOption(MonacoEditorNs.EditorOption.lineHeight);
       editorInst.changeViewZones((accessor) => {
         for (const [line, cs] of byLine) {
+          // 跟 DraftZone 一样的双层结构：dom 是 monaco wrapper (设 height inline)，
+          // inner 是真实视觉容器；RO observe(inner) → 内嵌图片异步加载 / 嵌套评论
+          // 展开后内容变高时同步 zoneObj.heightInPx + layoutZone，zone 跟着撑开
           const dom = document.createElement('div');
           dom.className = 'monaco-comment-zone';
-          const root = createRoot(dom);
+
+          // stopPropagation 必须先于 createRoot 注册到 dom（外层），但 inner 上
+          // 的 stopPropagation 必须**晚于** createRoot — 跟 DraftZone 同顺序，
+          // 否则 React 18 在 inner 上的 event delegation 受影响导致 onClick 不 fire。
+          // bubble 阶段 stop 让 target 上的 React handler 先 fire 再阻断冒泡到 editor
+          const stopAll = (e: Event): void => e.stopPropagation();
+          for (const evt of ['mousedown', 'mouseup', 'click', 'dblclick', 'wheel']) {
+            dom.addEventListener(evt, stopAll);
+          }
+
+          const inner = document.createElement('div');
+          inner.className = 'monaco-comment-zone-inner';
+          dom.appendChild(inner);
+
+          const root = createRoot(inner);
           root.render(
             <CommentZone
               comments={cs}
               connectionId={pr.connectionId}
               attachmentBase={attachmentBase}
+              prLocalId={pr.localId}
             />,
           );
-          const zoneId = accessor.addZone({
+
+          const initialPx = Math.max(estimateZoneHeight(cs) * lineHeight, lineHeight * 3);
+          const zoneObj: MonacoEditor.IViewZone = {
             afterLineNumber: line,
-            heightInLines: estimateZoneHeight(cs),
+            heightInPx: initialPx,
             domNode: dom,
-          });
+          };
+          const zoneId = accessor.addZone(zoneObj);
           zoneRefs.push({ editor: editorInst, zoneId, dom, root });
+
+          const syncHeight = (): void => {
+            const next = inner.offsetHeight;
+            if (next <= 0) return;
+            if (Math.abs(next - (zoneObj.heightInPx ?? 0)) < 1) return;
+            zoneObj.heightInPx = next;
+            try {
+              editorInst.changeViewZones((acc) => acc.layoutZone(zoneId));
+            } catch {
+              /* editor disposed */
+            }
+          };
+          const ro = new ResizeObserver(() => requestAnimationFrame(syncHeight));
+          ro.observe(inner);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (dom as any).__commentRO = ro;
+          requestAnimationFrame(syncHeight);
+          setTimeout(syncHeight, 200);
+
+          // inner 上的 stopPropagation 必须晚于 createRoot 注册（双层防御 + 兼容
+          // React 18 在 inner 上的 event delegation 初始化顺序）
+          for (const evt of ['mousedown', 'mouseup', 'click', 'dblclick', 'wheel']) {
+            inner.addEventListener(evt, stopAll);
+          }
         }
       });
     };
@@ -565,6 +612,15 @@ export function DiffView({
         });
       } catch {
         /* editor disposed */
+      }
+      for (const z of zoneRefs) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ro = (z.dom as any).__commentRO as ResizeObserver | undefined;
+        try {
+          ro?.disconnect();
+        } catch {
+          /* ignore */
+        }
       }
       // React 18+: unmount 不能在 render 阶段同步调，放微任务里
       queueMicrotask(() => {
@@ -1222,10 +1278,12 @@ function CommentZone({
   comments,
   connectionId,
   attachmentBase,
+  prLocalId,
 }: {
   comments: PrComment[];
   connectionId: string;
   attachmentBase: string | null;
+  prLocalId: string;
 }) {
   return (
     <div className="comment-zone-inner">
@@ -1239,6 +1297,7 @@ function CommentZone({
             connectionId={connectionId}
             depth={0}
             attachmentBase={attachmentBase}
+            prLocalId={prLocalId}
           />
         </div>
       ))}
@@ -1265,7 +1324,9 @@ function resolveAttachmentUrl(href: string, base: string | null): string | null 
  */
 function makeCommentMarkdownComponents(
   attachmentBase: string | null,
+  prLocalId: string,
 ): Parameters<typeof ReactMarkdown>[0]['components'] {
+  const BitbucketImage = makeBitbucketImageFor(prLocalId);
   return {
     a: ({ href, children, ...rest }) => {
       const resolved = href ? resolveAttachmentUrl(href, attachmentBase) : null;
@@ -1278,23 +1339,11 @@ function makeCommentMarkdownComponents(
       );
     },
     img: ({ src, alt }) => {
-      const resolved = typeof src === 'string' ? resolveAttachmentUrl(src, attachmentBase) : null;
-      if (resolved) {
-        return (
-          <a
-            href={resolved}
-            target="_blank"
-            rel="noreferrer"
-            className="comment-attachment-link"
-            title="在系统浏览器中打开附件"
-          >
-            📎 {alt || '附件'}
-          </a>
-        );
-      }
-      // 非附件类的外链图片就按原样渲染；可能因 CSP 或网络限制不显示，
-      // alt 文本会兜底
-      return <img src={typeof src === 'string' ? src : ''} alt={alt ?? ''} loading="lazy" />;
+      if (typeof src !== 'string' || !src) return null;
+      // 把 src 原样传 IPC — main 端 adapter 懂 BBS `attachment:HASH` 协议 + 绝对/
+      // 相对 URL，renderer 不需要前置 resolve。外部公网 URL 在 main 端会被认为
+      // 跨 host 返回 null，BitbucketImage 内部 fallback 到原生 <img>
+      return <BitbucketImage src={src} alt={alt} />;
     },
   };
 }
@@ -1312,15 +1361,17 @@ function CommentNode({
   connectionId,
   depth,
   attachmentBase,
+  prLocalId,
 }: {
   comment: PrComment;
   connectionId: string;
   depth: number;
   attachmentBase: string | null;
+  prLocalId: string;
 }) {
   const components = useMemo(
-    () => makeCommentMarkdownComponents(attachmentBase),
-    [attachmentBase],
+    () => makeCommentMarkdownComponents(attachmentBase, prLocalId),
+    [attachmentBase, prLocalId],
   );
   const inner = (
     <>
@@ -1331,7 +1382,11 @@ function CommentNode({
         at={comment.createdAt}
       />
       <div className="comment-zone-body markdown">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={components}
+          urlTransform={transformBitbucketUrl}
+        >
           {comment.body}
         </ReactMarkdown>
       </div>
@@ -1342,6 +1397,7 @@ function CommentNode({
           connectionId={connectionId}
           depth={depth + 1}
           attachmentBase={attachmentBase}
+          prLocalId={prLocalId}
         />
       ))}
     </>

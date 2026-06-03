@@ -101,6 +101,70 @@ export class BBClient {
   }
 
   /**
+   * 拉评论 attachment 图片：处理三种 url 形态
+   *  - `attachment:HASH` (BBS markdown 内部协议) → 用 repo 拼成
+   *    `<baseUrl>/projects/<key>/repos/<slug>/attachments/<HASH>`
+   *  - 绝对 url (http/https) → 校验 host 跟 baseUrl 一致才走代理
+   *  - 相对 url → 拼 baseUrl
+   * 跨 host 公网图 / 协议无法解析 / 失败 / 非 2xx → 返回 null 让上层 fallback。
+   * 所有 BBS-specific 解析逻辑都在 client 内部完成，adapter 不暴露细节
+   */
+  async getAttachmentBinary(
+    url: string,
+    repo?: { projectKey: string; repoSlug: string },
+  ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+    let absoluteUrl: string;
+    try {
+      const myHost = new URL(this.baseUrl).host;
+      if (url.startsWith('attachment:')) {
+        // BBS markdown 附件协议 `attachment:<repoId>/<attachmentId>` (e.g.,
+        // `attachment:9/16854`)。BBS 实际 attachment endpoint:
+        //   /rest/api/1.0/projects/<key>/repos/<slug>/attachments/<attachmentId>
+        // (从 BBS Web UI <img src> 反推；用 1.0 而非 latest，无 /contents 后缀)
+        // 末段才是 attachmentId，前缀 repoId 用 repo ref 取代
+        if (!repo) return null;
+        const hash = url.slice('attachment:'.length).trim();
+        if (!hash) return null;
+        const attachmentId = hash.split('/').pop() ?? hash;
+        absoluteUrl = `${this.baseUrl}/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/attachments/${attachmentId}`;
+      } else if (url.startsWith('http://') || url.startsWith('https://')) {
+        const parsed = new URL(url);
+        if (parsed.host !== myHost) return null;
+        absoluteUrl = url;
+      } else {
+        // 相对路径 (e.g., /projects/.../attachments/xxx) 拼当前 baseUrl
+        absoluteUrl = new URL(url, `https://${myHost}`).toString();
+      }
+    } catch {
+      return null;
+    }
+
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
+    let res: Response;
+    try {
+      res = await this.fetchFn(absoluteUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: 'image/*,*/*;q=0.5',
+        },
+        signal: ctl.signal,
+      });
+    } catch {
+      clearTimeout(timer);
+      return null;
+    }
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    return {
+      bytes: new Uint8Array(buf),
+      contentType: res.headers.get('content-type') ?? 'application/octet-stream',
+    };
+  }
+
+  /**
    * 同 get，但同时返回响应头。BBS 的 `X-AUSERNAME` / `X-AUSERID` 在每个鉴权
    * 请求的响应头里，是 ping 时拿当前用户的可靠路径。
    */

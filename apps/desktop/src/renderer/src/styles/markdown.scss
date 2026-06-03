@@ -4,6 +4,70 @@
 
 @use './tokens' as *;
 
+// BBS 评论 attachment 图片走 IPC 代理拉回 data URL。BBS 原图通常很大 (截图等)，
+// 评论里要做缩略展示。max-width/height 限制 + cursor zoom-in 视觉提示
+.bitbucket-image {
+  max-width: 280px;
+  max-height: 200px;
+  height: auto;
+  width: auto;
+  object-fit: contain;
+  // !important 覆盖 monaco view zone 内的 cursor:text 继承
+  cursor: zoom-in !important;
+  border-radius: $radius-sm;
+  border: 1px solid $border-default;
+  display: block;
+  margin: $space-2 0;
+}
+.bitbucket-image-loading,
+.bitbucket-image-failed {
+  display: inline-block;
+  padding: 2px $space-3;
+  font-size: $fs-sm;
+  border: 1px dashed $border-default;
+  border-radius: $radius-sm;
+}
+
+// 大图预览 overlay (portal 到 document.body) — 点击缩略图打开
+.bitbucket-image-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: $z-modal;
+  cursor: zoom-out;
+}
+.bitbucket-image-zoom {
+  max-width: 92vw;
+  max-height: 92vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  cursor: default;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  border-radius: $radius-md;
+}
+.bitbucket-image-zoom-close {
+  position: absolute;
+  top: 16px;
+  right: 24px;
+  width: 36px;
+  height: 36px;
+  font-size: 24px;
+  line-height: 32px;
+  text-align: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  &:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+}
+
 .markdown {
   p {
     margin: 0 0 $space-3;

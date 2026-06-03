@@ -6,6 +6,7 @@ import type { PrComment, StoredPullRequest } from '@pr-pilot/shared';
 import { invoke } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
 import { Avatar } from './Avatar';
+import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { InlineCodeContext } from './InlineCodeContext';
 
 interface CommentsPanelProps {
@@ -130,6 +131,11 @@ function CommentItem({
   /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
   autoExpandCode?: boolean;
 }) {
+  // 评论 body 内嵌图片走 IPC 代理 (BBS 私有资源需 PAT 鉴权)
+  const mdComponents = useMemo(
+    () => ({ img: makeBitbucketImageFor(pr.localId) }),
+    [pr.localId],
+  );
   return (
     <li className={`pr-comment pr-comment-depth-${String(depth)}`}>
       <div className="pr-comment-head">
@@ -161,7 +167,13 @@ function CommentItem({
         <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
       )}
       <div className="pr-comment-body markdown">
-        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{comment.body}</ReactMarkdown>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkBreaks]}
+          components={mdComponents}
+          urlTransform={transformBitbucketUrl}
+        >
+          {comment.body}
+        </ReactMarkdown>
       </div>
       {comment.replies.length > 0 && (
         <ul className="pr-comments-list pr-comments-replies">

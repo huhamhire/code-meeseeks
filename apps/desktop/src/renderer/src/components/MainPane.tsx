@@ -152,10 +152,14 @@ export function MainPane({
   //     cheap 回缓存；stale / cache miss 时主动拉远端写回缓存。打开 PR 时
   //     按需异步刷新最新评论计数，不依赖用户去点 Comments tab 触发
   //   - commits：走本地 git rev-list base..head，镜像没拉齐 → 不显示数字
-  // 都是 PR 切换时各拉一次，cancelled token 防 race
+  // 都是 PR 切换时各拉一次，cancelled token 防 race。deps 含 pr?.updatedAt：
+  // BBS 上加评论 / 状态变更后远端 updatedAt 跳变 → poller 拉到 → store 更新 →
+  // 这里 useEffect 重跑 → force 刷新评论 + 计数。用户 app 一直开着不切走 PR 时
+  // 也能跟上远端变动
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [commitCount, setCommitCount] = useState<number | null>(null);
   const prLocalId = pr?.localId;
+  const prUpdatedAt = pr?.updatedAt;
   useEffect(() => {
     setCommentCount(null);
     setCommitCount(null);
@@ -180,7 +184,7 @@ export function MainPane({
     return () => {
       cancelled = true;
     };
-  }, [prLocalId]);
+  }, [prLocalId, prUpdatedAt]);
   useEffect(() => {
     localStorage.setItem('pr-pilot.diffMode', renderSideBySide ? 'side-by-side' : 'unified');
   }, [renderSideBySide]);

@@ -229,6 +229,15 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     );
   }
 
+  async getAttachment(
+    url: string,
+    repo?: RepoRef,
+  ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+    // host 解析 + BBS attachment: 协议处理 + PAT 鉴权拉取都在 BBClient 里完成，
+    // adapter 只是 thin wrapper
+    return this.client.getAttachmentBinary(url, repo);
+  }
+
   async getUserAvatar(
     slug: string,
   ): Promise<{ bytes: Uint8Array; contentType: string } | null> {

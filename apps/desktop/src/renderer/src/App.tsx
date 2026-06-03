@@ -113,10 +113,38 @@ export default function App() {
   // M4 草稿事件 → store；写盘后 drafts:changed 触发指定 PR 的草稿列表自动刷新
   useEffect(() => wireDraftsStore(), []);
 
-  // 窗口重新获得焦点时自动拉一次新鲜列表（不重新触发 poll，避免远端压力）
+  // 全局外链跳转防护 — 所有 UGC 场景 (评论 / PR 描述 / finding / chat 等) 内
+  // 的 <a href="http(s)://"> 点击都走系统默认浏览器，不允许 Electron 在 app
+  // window 内直接跳转覆盖整个界面。capture 阶段 listener 先于 React onClick 跑
+  useEffect(() => {
+    const onClick = (e: MouseEvent): void => {
+      const target = (e.target as HTMLElement | null)?.closest?.('a[href]');
+      if (!(target instanceof HTMLAnchorElement)) return;
+      const href = target.getAttribute('href');
+      if (!href || !/^https?:\/\//.test(href)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void invoke('app:openExternal', { url: href });
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, []);
+
+  // 窗口重新获得焦点时主动 refresh 远端：调 prs:refresh 拉 PR meta，BBS 上
+  // 加 comment / 改状态后 PR.updatedAt 跳变 → MainPane useEffect 的 prUpdatedAt
+  // dep 触发 → force listComments 拉到新评论。比纯 reloadPrs (只读 cache) 多
+  // 一次远端调用但能跟上"用户切到 BBS 评论再切回应用"的常见场景
   useEffect(() => {
     const onFocus = (): void => {
-      if (boot) void reloadPrs();
+      if (!boot) return;
+      void (async () => {
+        try {
+          await invoke('prs:refresh', undefined);
+          await reloadPrs();
+        } catch {
+          // 静默：focus 触发的刷新失败不该弹错给用户
+        }
+      })();
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);

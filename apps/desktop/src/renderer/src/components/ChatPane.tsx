@@ -472,9 +472,10 @@ interface CommandSpec {
   /** 点击命令按钮时在 textarea 中放入的内容；ask 留空格让用户接着写 */
   insertAs: string;
 }
+// 顺序：review 最高频在最前；describe 次之；ask 兜底放最后
 const COMMANDS: ReadonlyArray<CommandSpec> = [
-  { name: 'describe', label: '/describe', desc: '生成 PR 描述', insertAs: '/describe' },
   { name: 'review', label: '/review', desc: '代码评审', insertAs: '/review' },
+  { name: 'describe', label: '/describe', desc: '生成 PR 描述', insertAs: '/describe' },
   // /improve 暂屏蔽：实测 pr-agent 的 improve 工具依赖在线平台 (GitHub / GitLab /
   // Bitbucket Cloud) 的 inline code suggestion / best practices 集成，跟 pr-pilot
   // 本地 PR 管理路径不兼容。后端类型 / parser / IPC 仍保留，等策略变化或上游

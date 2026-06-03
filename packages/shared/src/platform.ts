@@ -152,6 +152,18 @@ export interface PlatformAdapter {
   getUserAvatar(slug: string): Promise<{ bytes: Uint8Array; contentType: string } | null>;
 
   /**
+   * 评论 body 内嵌图片代理：`<img src>` 无法发 Authorization 头取私有 BBS 资源，
+   * 必须经 main 端用 PAT 拉。url 可以是绝对 / 相对，也可以是 platform-specific
+   * 内部协议 (BBS 的 `attachment:HASH`)；repo 给协议解析提供上下文。
+   * host 不属于当前 platform / 协议无法解析 → 返回 null 让 renderer 退回原生
+   * `<img>`。失败 (404 / 网络) 返回 null
+   */
+  getAttachment(
+    url: string,
+    repo?: RepoRef,
+  ): Promise<{ bytes: Uint8Array; contentType: string } | null>;
+
+  /**
    * 把当前用户在该 PR 上的 review 状态写到远端。
    * - approved / needsWork: 标记
    * - unapproved: 撤销之前的标记，回到默认

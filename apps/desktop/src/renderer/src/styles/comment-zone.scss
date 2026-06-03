@@ -4,12 +4,52 @@
 
 @use './tokens' as *;
 
-// View zone 容器：左侧 3px 蓝条 + 弱反差深底
+// 结构 (跟 DraftZone 同):
+//   .monaco-comment-zone (= dom，monaco 控制 style.height inline，不能放视觉样式)
+//     .monaco-comment-zone-inner (= 内容容器，背景 / padding / 边框全在这)
+//       .comment-zone-inner (= CommentZone React 根，flex column 列表)
+//
+// dom 自身设了视觉样式时蓝框尺寸 = monaco wrapper 高度 ≠ 内容高度，图片异步
+// 加载 / 嵌套评论展开后会出现内容溢出。挪到 inner + RO 监听 inner.offsetHeight
+// 同步 zoneObj.heightInPx 让 zone 自动撑高
 .monaco-comment-zone {
+  overflow: visible;
+  // monaco view zone 内部某层 z-index 较高会遮挡 view zone DOM 的鼠标命中
+  // (跟 DraftZone z-index:50 同套防御)，不然 click 完全到不了 inner 内 img/a
+  z-index: 50;
+}
+.monaco-comment-zone-inner {
+  position: relative;
+  z-index: 51;
+}
+// monaco editor 全局会给 view zone 内 element 加 user-select: none / cursor:text，
+// 让评论变得既不能选文字也不能点链接。这里 reset 让评论变成"普通可交互内容"：
+//  - user-select: text 让浏览器允许 selection
+//  - cursor: text 让 hover 评论体看起来"像可选文本"
+//  - a / .bitbucket-image 覆盖各自语义 cursor
+.monaco-comment-zone,
+.monaco-comment-zone-inner {
+  // monaco view zone 默认可能给子元素设 pointer-events: none 让代码命中区干净
+  // (DraftZone 工作是因为 button/textarea 浏览器特殊处理)。显式 auto 让 BBS
+  // 评论里 img / a 也能接收 click
+  pointer-events: auto !important;
+}
+.monaco-comment-zone-inner {
+  user-select: text;
+  cursor: text;
+}
+.monaco-comment-zone-inner a {
+  cursor: pointer !important;
+}
+.monaco-comment-zone-inner .bitbucket-image {
+  cursor: zoom-in !important;
+}
+.monaco-comment-zone-inner {
   background: $bg-panel-alt;
   border-left: 3px solid $color-accent;
   padding: $space-3 $space-6 $space-4 $space-8;
-  font-size: $fs-md;
+  // 跟代码字号同等 (14px) — 评论不该比代码小
+  font-size: $fs-lg;
   color: $text-primary;
   font-family:
     -apple-system,
@@ -19,7 +59,7 @@
     'Microsoft YaHei',
     sans-serif;
   line-height: $lh-loose;
-  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .comment-zone-inner {

@@ -176,6 +176,29 @@ export function registerIpcHandlers({
   const avatarMem = new Map<string, { dataUrl: string } | null>();
 
   ipcMain.handle(
+    'comments:fetchAttachment',
+    async (
+      _evt,
+      req: IpcChannels['comments:fetchAttachment']['request'],
+    ): Promise<IpcChannels['comments:fetchAttachment']['response']> => {
+      // 找 PR 对应的 connection adapter 拉 attachment。不缓存 — 评论图片重复
+      // 加载概率低 (用户决策)，每次进入 PR 走 IPC 跟头像走 cache 不同
+      try {
+        const pr = await findPrOrThrow(req.localId);
+        const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+        if (!adapter) return null;
+        // 传 pr.repo 给 adapter — BBS 的 attachment: 协议需要 repo 上下文拼 URL
+        const res = await adapter.getAttachment(req.url, pr.repo);
+        if (!res) return null;
+        const base64 = Buffer.from(res.bytes).toString('base64');
+        return { dataUrl: `data:${res.contentType};base64,${base64}` };
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  ipcMain.handle(
     'app:userAvatar',
     async (
       _evt,
@@ -264,6 +287,14 @@ export function registerIpcHandlers({
   ipcMain.handle('app:openDevTools', (evt) => {
     evt.sender.openDevTools({ mode: 'detach' });
   });
+  ipcMain.handle(
+    'app:openExternal',
+    async (_evt, req: IpcChannels['app:openExternal']['request']): Promise<void> => {
+      // 白名单：仅放行 http(s)，防止 file:// / javascript: 等被恶意 markdown 注入触发
+      if (!/^https?:\/\//.test(req.url)) return;
+      await shell.openExternal(req.url);
+    },
+  );
 
   ipcMain.handle(
     'dialog:pickDirectory',
