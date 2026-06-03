@@ -598,9 +598,12 @@ export function DiffView({
     const newByLine = new Map<number, ReviewDraft[]>();
     for (const d of fileDrafts) {
       const target = d.anchor.side === 'old' ? oldByLine : newByLine;
-      const arr = target.get(d.anchor.endLine) ?? [];
+      // 用 startLine 作为 zone 行号 — finding 跨多行 (startLine=403, endLine=425)
+      // 时 zone 紧贴 startLine 下方，跟 nav reveal 的高亮行视觉一致；之前用 endLine
+      // 让 zone 出现在 finding 段末尾 (425 后)，高亮行在起始 (403)，跨 23 行错位
+      const arr = target.get(d.anchor.startLine) ?? [];
       arr.push(d);
-      target.set(d.anchor.endLine, arr);
+      target.set(d.anchor.startLine, arr);
     }
 
     const originalEditor = diffEditor.getOriginalEditor();
@@ -879,7 +882,9 @@ export function DiffView({
     }
     for (const d of drafts ?? []) {
       if (d.status === 'rejected') continue;
-      if (d.anchor.side === 'new') occupied.add(d.anchor.endLine);
+      // 跟 zone 创建时一致用 startLine — 之前用 endLine 会让 hover '+' 把行 403
+      // (finding 起始) 当未占用错画 +；finding 跨多行场景下两个 + 同时出现
+      if (d.anchor.side === 'new') occupied.add(d.anchor.startLine);
     }
 
     // 把 monaco ILineChange[] 翻成 DiffHunkRange[]。LineChange 的 EndLineNumber=0

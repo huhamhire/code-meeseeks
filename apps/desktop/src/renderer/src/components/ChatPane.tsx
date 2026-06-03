@@ -233,6 +233,14 @@ export function ChatPane({
    * - 没有关联草稿 → 懒创建一条 pending + onJumpToDraftEditor
    * - 关联草稿是 rejected → update 回 pending (撤销拒绝) + 跳转
    */
+  /**
+   * 把 AI finding body 转成草稿初始 body：先 stripFindingMarker 去掉 [file:...]
+   * 末尾 marker，再加 `[AI 建议]` 前缀 — 让远端 reviewer 看到时知道这条评论
+   * 来自 pr-agent
+   */
+  const buildDraftBodyFromFinding = (body: string): string =>
+    `[AI 建议] ${stripFindingMarker(body)}`;
+
   const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
     if (!pr) return;
     if (
@@ -254,7 +262,7 @@ export function ChatPane({
           localId: pr.localId,
           draft: {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
-            body: finding.body,
+            body: buildDraftBodyFromFinding(finding.body),
             origin: 'finding',
             source: { runId: run.id, findingId: finding.id },
             status: 'pending',
@@ -300,7 +308,7 @@ export function ChatPane({
           localId: pr.localId,
           draft: {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
-            body: finding.body,
+            body: buildDraftBodyFromFinding(finding.body),
             origin: 'finding',
             source: { runId: run.id, findingId: finding.id },
             status: 'rejected',
@@ -495,6 +503,15 @@ interface ChatInputBarProps {
 // 输入位置时回放。命中 / dismissed 后焦点保持在 textarea 上
 const CHAT_HISTORY_KEY = 'pr-pilot.chatHistory';
 const CHAT_HISTORY_MAX = 5;
+
+/**
+ * pr-agent /review 输出的 issue body 尾部含 `[file: <path>, lines: <s>-<e>]`
+ * marker — 是我们注入的 prompt directive 让 parser 抽 anchor 的，对用户无意义。
+ * FindingCard 渲染前 / 转 draft 时统一清洗
+ */
+function stripFindingMarker(body: string): string {
+  return body.replace(/\s*\[\s*file\s*:\s*[^\]]*?\]\s*$/i, '').trimEnd();
+}
 
 function loadChatHistory(): string[] {
   try {
@@ -1512,11 +1529,14 @@ function FindingCard({
   // 显示 "类型")，所以默认只有 general 段才出 title。但 pr-agent 把若干段的"值"放在
   // 标题里 (e.g., `Estimated effort to review: 3 🔵🔵🔵⚪⚪` / `Score: 85 🟢🟢...`)，
   // body 是空的；这种情况强制把 title 渲染出来，否则卡片只剩 chip 一片空白。
-  const bodyEmpty = !finding.body.trim();
+  // 先剥 [file:...] 末尾 marker (pr-agent /review 的 anchor 注入用，用户不可见)
+  // 再走 pr-agent 模板翻译。bodyEmpty 也按 stripped 后判断
+  const strippedBody = stripFindingMarker(finding.body);
+  const bodyEmpty = !strippedBody.trim();
   const showTitle = !!finding.title && (key === 'general' || bodyEmpty);
   // pr-agent 把若干 section 标题 / 固定模板字符串硬编码成英文 (CONFIG__RESPONSE_LANGUAGE
   // 只翻译 LLM 内容值)，渲染前替换成中文
-  const translatedBody = translatePrAgentLabels(finding.body);
+  const translatedBody = translatePrAgentLabels(strippedBody);
   const translatedTitle = finding.title ? translatePrAgentLabels(finding.title) : undefined;
   return (
     <li className={`chat-finding chat-finding-${key}`}>
