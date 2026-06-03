@@ -7,6 +7,20 @@
   min-height: 0;
 }
 
+// 显示换行符 ↵：monaco renderWhitespace 只渲染 space/tab，不显示 EOL；
+// 给每行最后一个 token span 加 ::after 标记。
+// 注意：.view-line 容器宽度 = viewport 全宽，所以 ::after 加在 .view-line 上
+// 会跑到 viewport 最右；必须挂到 .view-line > span:last-child 紧贴代码字符末尾
+.diff-editor-show-eol {
+  .view-line > span:last-child::after {
+    content: '↵';
+    color: rgba(255, 255, 255, 0.22);
+    margin-left: 2px;
+    font-size: 0.95em;
+    pointer-events: none;
+  }
+}
+
 // Split / Unified 切换钮组：紧贴的两个按钮，第二个去掉左 border 避免重叠
 .diff-mode-toggle {
   display: inline-flex;

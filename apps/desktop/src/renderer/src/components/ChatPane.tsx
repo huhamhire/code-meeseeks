@@ -546,6 +546,11 @@ function ChatInputBar({
 }: ChatInputBarProps) {
   const [input, setInput] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
+  // PR 切换时清掉异常提示 + 输入框残留 (避免跨 PR 显示陈旧的错误"未知命令" 等)
+  useEffect(() => {
+    setParseError(null);
+    setInput('');
+  }, [pr?.localId]);
   const [cmdMenuOpen, setCmdMenuOpen] = useState(false);
   // 自动补全菜单选中项索引 (textarea 输入 / 时显示的浮层)
   const [autocompleteIdx, setAutocompleteIdx] = useState(0);

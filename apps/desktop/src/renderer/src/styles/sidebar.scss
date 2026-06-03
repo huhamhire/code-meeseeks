@@ -179,6 +179,11 @@
   margin-bottom: $space-2;
   line-height: $lh-tight;
   word-break: break-word;
+  // 超长 PR 标题截到 2 行 + 省略号，避免单条 PR 撑爆整列高度
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .pr-item-meta {

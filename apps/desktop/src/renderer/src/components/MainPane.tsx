@@ -44,6 +44,25 @@ function BlameIcon() {
   );
 }
 
+/** 空白字符显示图标：·→· 暗示 space + tab 可视化 */
+function WhitespaceIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="3" cy="8" r="0.8" fill="currentColor" />
+      <path d="M6 8 h6 m-2 -2 l2 2 l-2 2" />
+    </svg>
+  );
+}
+
 function ApproveIcon() {
   return (
     <svg
@@ -121,6 +140,13 @@ export function MainPane({
   // Blame 默认关：每次启动都得手动开（blame fetch 可能慢/失败，不希望
   // 用户进来就被错误 banner 干扰）
   const [showBlame, setShowBlame] = useState<boolean>(false);
+  // 空白字符可视化：默认关 (大多数代码 review 不关心空格 / tab；强调时再开)
+  const [showWhitespace, setShowWhitespace] = useState<boolean>(
+    () => localStorage.getItem('pr-pilot.showWhitespace') === '1',
+  );
+  useEffect(() => {
+    localStorage.setItem('pr-pilot.showWhitespace', showWhitespace ? '1' : '0');
+  }, [showWhitespace]);
   // 评论 / commits 数 chip：
   //   - 评论：从评论缓存读 (cache-only)，缓存没有 → 不显示数字
   //   - commits：走本地 git rev-list base..head，镜像没拉齐 → 不显示数字
@@ -300,6 +326,15 @@ export function MainPane({
           <div className="pr-tabs-right">
             <button
               type="button"
+              className={`blame-toggle ${showWhitespace ? 'active' : ''}`}
+              onClick={() => setShowWhitespace((b) => !b)}
+              title={showWhitespace ? '隐藏空白字符' : '显示空白字符（空格 / Tab）'}
+              aria-pressed={showWhitespace}
+            >
+              <WhitespaceIcon /> 空白
+            </button>
+            <button
+              type="button"
               className={`blame-toggle ${showBlame ? 'active' : ''}`}
               onClick={() => setShowBlame((b) => !b)}
               title={showBlame ? '关闭追溯显示' : '开启追溯显示（仅 head 侧）'}
@@ -336,6 +371,7 @@ export function MainPane({
             pr={pr}
             renderSideBySide={renderSideBySide}
             showBlame={showBlame}
+            showWhitespace={showWhitespace}
             pendingNav={pendingDiffNav ?? null}
             onNavConsumed={onDiffNavConsumed}
           />
