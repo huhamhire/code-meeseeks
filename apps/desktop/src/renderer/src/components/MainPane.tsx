@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { LocalPrStatus, StoredPullRequest } from '@pr-pilot/shared';
 import { invoke } from '../api';
+import { useDraftsForPr } from '../stores/drafts-store';
 import { CommentsPanel } from './CommentsPanel';
 import { CommitsPanel } from './CommitsPanel';
 import { DiffView } from './DiffView';
 import { PrInfoView } from './PrInfoView';
+import { PublishReviewModal } from './PublishReviewModal';
 
 // Globe 网格图标：地球经纬度示意，跟"在远端浏览器打开"语义匹配
 function GlobeIcon() {
@@ -195,6 +197,19 @@ export function MainPane({
     }
   }, []);
 
+  // M4 草稿池 → "提交评审 (N)" 按钮的 N。pending + edited 才算 publishable；
+  // rejected (用户决断不发) / posted (远端已发) 都排除
+  const drafts = useDraftsForPr(prLocalId);
+  const publishableCount = useMemo(
+    () =>
+      (drafts ?? []).reduce(
+        (n, d) => (d.status === 'pending' || d.status === 'edited' ? n + 1 : n),
+        0,
+      ),
+    [drafts],
+  );
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+
   if (!pr) {
     return (
       <main className="main">
@@ -256,8 +271,25 @@ export function MainPane({
             <GlobeIcon /> 浏览器打开
           </a>
           {/* approve / needs work：当前状态 = 高亮；点已高亮的回退到 pending（撤销远端标记）。
-              这两个 review 决断按钮右对齐，跟"浏览器打开"在左侧拉开距离 */}
+              这两个 review 决断按钮右对齐，跟"浏览器打开"在左侧拉开距离。
+              "提交评论 (N)" 放在决断按钮左边 — 评审动作分两步：先发评论 (左)，
+              再下决断 (右)，从左到右符合阅读顺序。
+              文案用"评论"不用"评审"：跟右侧"通过/需修改"两个评审决断按钮区分，
+              本按钮只发评论，不下决断 (那是 /approve /needswork 的事) */}
           <div className="pr-header-actions-right">
+            <button
+              type="button"
+              className="btn btn-sm pr-header-publish"
+              disabled={publishableCount === 0}
+              onClick={() => setPublishModalOpen(true)}
+              title={
+                publishableCount === 0
+                  ? '当前 PR 无待发布草稿'
+                  : `批量发布 ${String(publishableCount)} 条草稿到 BBS`
+              }
+            >
+              提交评论{publishableCount > 0 ? ` (${String(publishableCount)})` : ''}
+            </button>
             <button
               className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
               type="button"
@@ -391,6 +423,13 @@ export function MainPane({
         {tab === 'commits' && <CommitsPanel pr={pr} />}
         {tab === 'info' && <PrInfoView pr={pr} />}
       </div>
+      {publishModalOpen && (
+        <PublishReviewModal
+          localId={pr.localId}
+          drafts={drafts ?? []}
+          onClose={() => setPublishModalOpen(false)}
+        />
+      )}
     </main>
   );
 }

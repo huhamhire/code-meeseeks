@@ -335,6 +335,32 @@ export interface IpcChannels {
     response: void;
   };
   /**
+   * 批量发布草稿到远端：每条 draft 经 adapter.publishInlineComment 发到 BBS，
+   * 成功 → 本地 draft status='posted' + 写 posted_remote_id；失败 → 保持原 status
+   * 不变并把错误收集到 results 里。**单条失败不中断后续条目** —— 跟 BBS web UI
+   * "Start review" 行为对齐 (那边也是逐条 POST，某条 400 不影响其它)。
+   *
+   * 一次性发完后 main 会：
+   * 1. 广播 `drafts:changed` —— DiffView / FindingCard 重拉草稿换 status chip
+   * 2. force-refresh BBS PR 评论 (跳缓存) + 广播 `comments:changed`，让 CommentsPanel
+   *    立即看到自己刚发布的评论，不用等下一轮 poller
+   *
+   * 调用方 (renderer modal) 据 results 显示 "成功 N 失败 M" + 错误明细
+   */
+  'drafts:publishBatch': {
+    request: { localId: string; draftIds: string[] };
+    response: {
+      results: Array<{
+        draftId: string;
+        ok: boolean;
+        /** 成功时填，跟落库的 draft.posted_remote_id 同值 */
+        postedRemoteId?: string;
+        /** 失败时填，人读错因 (BBS REST 4xx body 经过 PlatformError 包装) */
+        error?: string;
+      }>;
+    };
+  };
+  /**
    * 列出某 PR 的历史 run，newest first。支持时间戳游标分页：
    * - limit：截到 N 条；省略 = 不限（renderer 端慎用，规模大时可能慢）
    * - beforeId：游标，返回 runId **严格小于** 此值的条目；省略 = 不限上界

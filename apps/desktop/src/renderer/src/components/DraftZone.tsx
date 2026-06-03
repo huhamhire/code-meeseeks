@@ -26,6 +26,14 @@ interface DraftZoneProps {
   onSave: (newBody: string) => void | Promise<void>;
   /** 删除本草稿。调用方走 IPC drafts:delete */
   onDelete: () => void | Promise<void>;
+  /**
+   * 单条直接发布到远端。调用方走 drafts:publishBatch 传单元素 draftIds (跟批量
+   * 路径共用 handler — main 端串行 POST + 失败收集 + 发完 force-refresh 评论)。
+   * 返回单条的发布结果：ok=false 时 error 填人读错因 (BBS 4xx)，本组件渲染 inline
+   * 错误提示但不卸载 zone (用户可改完 body 再点发布重试)。
+   * 不传 = read 模式不渲染"发布"按钮 (e.g., 未来某些只读场景)
+   */
+  onPublish?: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 /**
@@ -38,15 +46,22 @@ interface DraftZoneProps {
  * - rejected 状态默认 css 隐藏 (DiffView 端 .monaco-draft-zone-rejected 上设)
  *
  * 状态机：内部 isEditing 控 read / edit 模式
- *   read → 显示 markdown body + chips + [编辑] [🗑] 按钮
- *   edit → textarea + [保存] [取消] [🗑] 按钮；Cmd/Ctrl+Enter = 保存，Esc = 取消
+ *   read → 显示 markdown body + chips + [发布] [编辑] [🗑] 按钮
+ *   edit → textarea + [发布] [取消] [🗑] 按钮；Cmd/Ctrl+Enter = 发布，Esc = 取消
  *
  * 关键交互约定：
  * - 取消 = 1) editing+persisted 都空 → 删除真空草稿避免占位；
  *         2) editing 空 + persisted 非空 → revert 退出 (用户清空 textarea 可能误操作)；
  *         3) editing 跟 persisted 一样 → 直接退出 edit；
  *         4) editing 跟 persisted 不同 → **自动保存** (不弹 confirm)，最贴近用户直觉
+ * - 发布 (edit 模式) = 先 auto-save 当前 editingBody，再走 onPublish。设计动机：
+ *   取消既然已经 auto-save dirty，独立的"保存"按钮就冗余了 —— 用户在 edit 编辑完
+ *   最自然的下一步是发布，合并成一次点击。失败 (BBS 4xx) 不退 edit，让用户改后重试
+ * - 发布 (read 模式) = 直接 onPublish，body 取盘上 persisted 值
  * - 删除 = 独立 [🗑] 按钮，body 非空时弹 ConfirmModal 二次确认；空草稿直接删
+ *
+ * 没传 onPublish 时 (only happens in hypothetical read-only context) edit 按钮组
+ * 退回老的"保存"按钮
  *
  * onSave 触发后等 drafts-store 事件流推回新 draft prop，useEffect 把 isEditing
  * 收回 read 模式。乐观更新 UI：onSave 调用后立即把本地 editingBody 同步到下次
@@ -57,10 +72,13 @@ export function DraftZone({
   registerEditTrigger,
   onSave,
   onDelete,
+  onPublish,
 }: DraftZoneProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingBody, setEditingBody] = useState(draft.body);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -201,6 +219,66 @@ export function DraftZone({
     }
   };
 
+  // 单条直接发布。仅 pending/edited 可发；body 空也不发 (BBS 拒绝空评论)。
+  // 不弹 confirm — 单条评论的"发布"心智跟"批量评审"不同，是即时操作；要二次
+  // 确认放在批量入口的 PublishReviewModal 那一层做就够了
+  const handlePublish = async (): Promise<void> => {
+    if (!onPublish || publishing) return;
+    if (status === 'posted' || status === 'rejected') return;
+    if (!draft.body.trim()) return;
+    isMutatingRef.current = true;
+    setPublishError(null);
+    setPublishing(true);
+    try {
+      const res = await onPublish();
+      if (!res.ok) {
+        setPublishError(res.error ?? '发布失败');
+      }
+      // 成功 → drafts-store 广播让 status 切到 'posted'，组件自动 re-render 显示
+      // posted chip + 远端 id。无需手动 setIsEditing 之类，draft prop 流推回
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  // edit 模式的"发布" — 先 save 当前 textarea 内容到本地，再调 publish。
+  // 设计动机：取消按钮已经有 dirty auto-save 语义，独立的"保存"按钮反而冗余；
+  // 用户在 edit 改完最自然的下一步是发布，合并一次点击。
+  // - 保存失败 (本地写盘几乎不会) → 仍尝试发布；publish 端读盘拿到的是 main 上
+  //   一次成功的 body，对用户没有静默错误风险
+  // - 发布失败 (BBS 4xx) → 留在 edit 让用户改 body 重试，inline error 提示
+  const handlePublishFromEdit = async (): Promise<void> => {
+    if (!onPublish || publishing) return;
+    if (!canSave) return;
+    isMutatingRef.current = true;
+    setPublishError(null);
+    // 先持久化本次 editing 内容 — onPublish 通过 main store 读盘拿 body，必须
+    // 保证盘上是用户刚改的最新版本
+    if (editingBody !== draft.body) {
+      setSaving(true);
+      try {
+        await onSave(editingBody);
+      } finally {
+        setSaving(false);
+      }
+    }
+    setPublishing(true);
+    try {
+      const res = await onPublish();
+      if (res.ok) {
+        setIsEditing(false);
+      } else {
+        setPublishError(res.error ?? '发布失败');
+      }
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const handleCancel = async (): Promise<void> => {
     // 取消复用 runCancelLogic (跟 unmount cleanup 共用)。区别：handleCancel 主动
     // 设 isMutatingRef=true (用户显式操作)，让 cleanup 知道意图已被接管
@@ -251,13 +329,25 @@ export function DraftZone({
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.nativeEvent.isComposing) return;
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      // Cmd/Ctrl+Enter 优先走"发布" (跟新的主按钮一致)；onPublish 缺失场景退回保存
       e.preventDefault();
-      void handleSave();
+      if (onPublish) {
+        void handlePublishFromEdit();
+      } else {
+        void handleSave();
+      }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       void handleCancel();
     }
   };
+
+  // 取消按钮动态文案：textarea 有内容 → "暂存"，明示点击不丢内容；textarea
+  // 完全空 → "取消"，对应"退出 edit 不留草稿"的语义 (runCancelLogic 此时会删
+  // 真空草稿 / revert)。
+  // 不再用"dirty (editing != persisted)"作判据 — 用户进 edit 看到已存的旧内容
+  // 没改也"有文字"，按用户心智应该是暂存 (即使内部走 no-op 直接退出 edit)
+  const cancelLabel = trimmedEditing ? '暂存' : '取消';
 
   const statusLabel: Record<typeof status, string> = {
     pending: '待处理',
@@ -278,6 +368,25 @@ export function DraftZone({
         </span>
         {!isEditing && canEdit && (
           <div className="draft-zone-actions">
+            {/* 单条"发布"：仅 pending/edited 显示 (posted 已发完不再渲染按钮；
+                rejected 状态在 DiffView 端 CSS 隐藏整个 zone 不会走到这里)。
+                publishing 中按钮禁用，文案改"发布中…"；其它按钮也 disable 避免
+                同条草稿同时 save / delete / publish 多路并发 */}
+            {onPublish && (
+              <button
+                type="button"
+                className="draft-zone-btn draft-zone-btn-primary"
+                onClick={() => void handlePublish()}
+                disabled={publishing || !draft.body.trim()}
+                title={
+                  !draft.body.trim()
+                    ? '空草稿不能发布；先点编辑写入内容'
+                    : '发布到 BBS (这一条)'
+                }
+              >
+                {publishing ? '发布中…' : '发布'}
+              </button>
+            )}
             <button
               type="button"
               className="draft-zone-btn"
@@ -285,6 +394,7 @@ export function DraftZone({
                 setEditingBody(draft.body);
                 setIsEditing(true);
               }}
+              disabled={publishing}
               title="编辑评论"
             >
               编辑
@@ -293,6 +403,7 @@ export function DraftZone({
               type="button"
               className="draft-zone-btn draft-zone-btn-icon draft-zone-btn-danger"
               onClick={() => void handleDelete()}
+              disabled={publishing}
               title="删除草稿（本地，不影响远端）"
               aria-label="删除草稿"
             >
@@ -311,38 +422,56 @@ export function DraftZone({
             onKeyDown={onKeyDown}
             placeholder="写一条评论..."
             rows={4}
-            disabled={saving}
+            disabled={saving || publishing}
             aria-label="草稿评论编辑器"
           />
           <div className="draft-zone-edit-actions">
-            <button
-              type="button"
-              className="draft-zone-btn draft-zone-btn-primary"
-              onClick={() => void handleSave()}
-              disabled={saving || !canSave}
-              title={
-                !canSave
-                  ? '评论不能为空'
-                  : '保存'
-              }
-            >
-              {saving ? '保存中…' : '保存'}
-            </button>
+            {/* 主按钮：有 onPublish 时是"发布" (先 auto-save 再 POST，跟取消的
+                auto-save 行为对齐避免双按钮冗余)；缺 onPublish 时退回"保存" */}
+            {onPublish ? (
+              <button
+                type="button"
+                className="draft-zone-btn draft-zone-btn-primary"
+                onClick={() => void handlePublishFromEdit()}
+                disabled={saving || publishing || !canSave}
+                title={
+                  !canSave
+                    ? '评论不能为空'
+                    : '发布到 BBS (Cmd/Ctrl+Enter，会先自动保存当前内容)'
+                }
+              >
+                {publishing ? '发布中…' : saving ? '保存中…' : '发布'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="draft-zone-btn draft-zone-btn-primary"
+                onClick={() => void handleSave()}
+                disabled={saving || !canSave}
+                title={!canSave ? '评论不能为空' : '保存 (Cmd/Ctrl+Enter)'}
+              >
+                {saving ? '保存中…' : '保存'}
+              </button>
+            )}
             <button
               type="button"
               className="draft-zone-btn"
               onClick={() => void handleCancel()}
-              disabled={saving}
-              title="取消 (Esc)"
+              disabled={saving || publishing}
+              title={
+                cancelLabel === '暂存'
+                  ? '暂存改动 (本地保留，未发布；Esc 同效)'
+                  : '取消 (Esc)'
+              }
             >
-              取消
+              {cancelLabel}
             </button>
             {canEdit && (
               <button
                 type="button"
                 className="draft-zone-btn draft-zone-btn-icon draft-zone-btn-danger draft-zone-edit-delete"
                 onClick={() => void handleDelete()}
-                disabled={saving}
+                disabled={saving || publishing}
                 title="删除草稿（有内容时二次确认）"
                 aria-label="删除草稿"
               >
@@ -362,6 +491,20 @@ export function DraftZone({
       )}
       {draft.posted_remote_id && (
         <div className="draft-zone-foot muted">已发布 · 远端 id: {draft.posted_remote_id}</div>
+      )}
+      {publishError && (
+        <div className="draft-zone-publish-error" role="alert">
+          发布失败：{publishError}
+          <button
+            type="button"
+            className="draft-zone-publish-error-dismiss"
+            onClick={() => setPublishError(null)}
+            aria-label="关闭错误提示"
+            title="知道了"
+          >
+            ✕
+          </button>
+        </div>
       )}
       {confirmDelete && (
         <ConfirmModal

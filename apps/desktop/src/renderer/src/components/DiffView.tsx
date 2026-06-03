@@ -379,6 +379,26 @@ export function DiffView({
     return m;
   }, [files, comments]);
 
+  // 给文件树用：path → 该文件下的待发布草稿数 (pending + edited)。
+  // 跟 PR header "提交评审 (N)" 同口径：rejected (用户决断不发) / posted (已发，
+  // 已经在 comments chip 里算了) 都排除。让用户在文件树扫一眼就知道哪些文件还
+  // 攒了未发的草稿。oldPath 别名兜底跟 commentCountByPath 一致 (renamed 文件)
+  const draftCountByPath = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!files || !drafts) return m;
+    const publishable = drafts.filter(
+      (d) => d.status === 'pending' || d.status === 'edited',
+    );
+    for (const f of files) {
+      const n = publishable.filter(
+        (d) =>
+          d.anchor.path === f.path || (f.oldPath && d.anchor.path === f.oldPath),
+      ).length;
+      if (n > 0) m.set(f.path, n);
+    }
+    return m;
+  }, [files, drafts]);
+
   useEffect(() => {
     if (!selected) {
       setContent(null);
@@ -1210,6 +1230,7 @@ export function DiffView({
           files={files}
           selectedKey={selectedKey}
           commentCountByPath={commentCountByPath}
+          draftCountByPath={draftCountByPath}
           onSelect={(f) => setSelectedKey(fileKey(f))}
         />
         <div
@@ -1326,6 +1347,21 @@ function DraftZoneList({
   const onDelete = async (draftId: string): Promise<void> => {
     await invoke('drafts:delete', { localId: prLocalId, draftId });
   };
+  // 单条发布：复用 drafts:publishBatch handler，传 [draftId] 单元素。这样跟
+  // PublishReviewModal 的批量路径共用同一份 main 端逻辑 (anchor 映射 / posted
+  // 回写 / force-refresh 评论 / 失败收集都一致)，行为可预测，未来改任一处不会
+  // 让两条路径分叉
+  const onPublish = async (
+    draftId: string,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const resp = await invoke('drafts:publishBatch', {
+      localId: prLocalId,
+      draftIds: [draftId],
+    });
+    const r = resp.results[0];
+    if (!r) return { ok: false, error: 'main 端未返回结果' };
+    return { ok: r.ok, error: r.error };
+  };
   return (
     <div className="draft-zone-list">
       {drafts.map((d, i) => (
@@ -1338,6 +1374,7 @@ function DraftZoneList({
             registerEditTrigger={registerEditTrigger}
             onSave={(body) => onSave(d.id, body)}
             onDelete={() => onDelete(d.id)}
+            onPublish={() => onPublish(d.id)}
           />
         </div>
       ))}

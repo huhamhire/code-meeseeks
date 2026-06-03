@@ -254,6 +254,26 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     return mapBBComment(created);
   }
 
+  async publishInlineComment(
+    repo: RepoRef,
+    prId: string,
+    anchor: PrCommentAnchor,
+    body: string,
+  ): Promise<PrComment> {
+    // BBS REST: POST /pull-requests/{id}/comments
+    //   {text, anchor:{path, line, lineType, fileType, srcPath?, diffType?}}
+    // - line + lineType + fileType 三元组必须跟该行在 diff 里的真实角色一致
+    //   (added 行只能 lineType=ADDED + fileType=TO；removed 行只能 REMOVED+FROM；
+    //   context 行可 CONTEXT+TO/FROM 任一)。对不上 BBS 回 400 'invalid anchor'
+    // - diffType=EFFECTIVE 是 BBS web UI 默认值，等价 'against effective diff'，
+    //   不带 BBS 会按 RANGE 兜底 (against latest commit)，PR 接 force-push 后会失锚
+    const created = await this.client.post<BBComment>(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments`,
+      { text: body, anchor: toBBAnchor(anchor) },
+    );
+    return mapBBComment(created);
+  }
+
   async getUserAvatar(
     slug: string,
   ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
@@ -386,6 +406,21 @@ function mapBBAnchor(a: BBCommentAnchor): PrCommentAnchor {
     line: a.line,
     side: a.fileType === 'FROM' ? 'old' : 'new',
     lineType: a.lineType.toLowerCase() as PrCommentAnchor['lineType'],
+  };
+}
+
+/**
+ * 跨平台中性 anchor → BBS REST 字段。mapBBAnchor 的反方向，发布 inline 评论时
+ * 用。diffType 显式给 'EFFECTIVE' 让评论锚到"当前生效 diff"而不是某次具体 commit
+ * —— PR 后续 push 新 commit 时评论仍跟着行走。
+ */
+function toBBAnchor(a: PrCommentAnchor): BBCommentAnchor {
+  return {
+    diffType: 'EFFECTIVE',
+    path: a.path,
+    line: a.line,
+    lineType: a.lineType.toUpperCase() as BBCommentAnchor['lineType'],
+    fileType: a.side === 'old' ? 'FROM' : 'TO',
   };
 }
 

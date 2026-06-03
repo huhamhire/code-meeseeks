@@ -116,6 +116,19 @@
   flex-shrink: 0;
 }
 
+// 待发布草稿 chip：跟 comment chip 同尺寸 / radius，仅配色区分。用 warning
+// 色 (amber) 强调"待办"语义 —— 跟 PR header "提交评审 (N)" 按钮的视觉权重
+// 呼应，让用户在文件树扫一眼就能定位到还有未发草稿的文件
+.tree-draft-count {
+  background: $color-warning;
+  color: $text-on-accent;
+  font-size: $fs-xs;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: $radius-pill;
+  flex-shrink: 0;
+}
+
 .tree-status {
   flex-shrink: 0;
 }

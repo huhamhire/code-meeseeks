@@ -1077,6 +1077,97 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
+    'drafts:publishBatch',
+    async (
+      _evt,
+      req: IpcChannels['drafts:publishBatch']['request'],
+    ): Promise<IpcChannels['drafts:publishBatch']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
+
+      // 拉一次当前草稿池：localId → id → draft，下面遍历 draftIds 时按 id 查。
+      // 不在循环里反复 listDrafts，避免 PR 草稿量大时 O(N²) IO
+      const allDrafts = await listDrafts(stateStore, req.localId);
+      const draftById = new Map(allDrafts.map((d) => [d.id, d]));
+
+      const results: IpcChannels['drafts:publishBatch']['response']['results'] = [];
+      let anyPublished = false;
+      for (const draftId of req.draftIds) {
+        const draft = draftById.get(draftId);
+        if (!draft) {
+          results.push({ draftId, ok: false, error: '草稿不存在 (可能已被删除)' });
+          continue;
+        }
+        // 状态守卫：posted 不重发 (远端已经有了)；rejected 不发 (用户决断不发)
+        if (draft.status === 'posted') {
+          results.push({
+            draftId,
+            ok: true,
+            postedRemoteId: draft.posted_remote_id,
+          });
+          continue;
+        }
+        if (draft.status === 'rejected') {
+          results.push({ draftId, ok: false, error: '草稿已被拒绝，跳过' });
+          continue;
+        }
+        try {
+          // ReviewDraftAnchor → PrCommentAnchor 转换：
+          // - draft.anchor 没有 lineType (草稿创建时不知道这一行的 diff 角色)，
+          //   按 side 做保守映射：new→added / old→removed。pr-pilot 的草稿大多锚到
+          //   变更行 (finding 来自 /review 的 issue + DraftZone hover '+' 也只对
+          //   变更行可见)，context 行评论场景极少。命中 context 时 BBS 回 400，
+          //   错误会被 catch 收到 results 里给用户看
+          // - 多行 (endLine > startLine) 在 BBS REST 里无法表达 — anchor.line 是单
+          //   行，发布时落到 startLine。renderer 端 UI 仍按 [startLine,endLine] 高亮
+          const posted = await adapter.publishInlineComment(
+            { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+            pr.remoteId,
+            {
+              path: draft.anchor.path,
+              line: draft.anchor.startLine,
+              side: draft.anchor.side,
+              lineType: draft.anchor.side === 'old' ? 'removed' : 'added',
+            },
+            draft.body,
+          );
+          await updateDraft(stateStore, req.localId, draftId, {
+            status: 'posted',
+            posted_remote_id: posted.remoteId,
+          });
+          anyPublished = true;
+          results.push({ draftId, ok: true, postedRemoteId: posted.remoteId });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          logger.warn(
+            { localId: req.localId, draftId, err: msg },
+            'drafts:publishBatch: single draft failed',
+          );
+          results.push({ draftId, ok: false, error: msg });
+        }
+      }
+
+      // 整批跑完统一广播 — drafts 列表更新刷 DraftZone status chip + FindingCard
+      broadcastDraftsChanged(req.localId);
+
+      // 至少有一条发成功 → force-refresh BBS 评论：清缓存 + 广播 comments:changed
+      // 让 CommentsPanel / DiffView 内嵌评论立即看到自己刚发的，不用等下一轮 poller
+      if (anyPublished) {
+        try {
+          await stateStore.delete(`prs/${pr.localId}/comments`);
+        } catch {
+          /* cache miss 无所谓 */
+        }
+        for (const w of BrowserWindow.getAllWindows()) {
+          w.webContents.send('comments:changed', { localId: pr.localId });
+        }
+      }
+      return { results };
+    },
+  );
+
+  ipcMain.handle(
     'config:setReposDir',
     async (_evt, req: IpcChannels['config:setReposDir']['request']): Promise<void> => {
       const next = {

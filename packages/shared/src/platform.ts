@@ -188,4 +188,27 @@ export interface PlatformAdapter {
     parentCommentId: string,
     body: string,
   ): Promise<PrComment>;
+
+  /**
+   * 在 PR diff 上发一条 inline 评论 (锚到具体文件 + 行号)。这是 M4 草稿发布闭环
+   * 的 sink —— 本地 ReviewDraft 经此方法落到远端，成功后返回新评论 (含 remoteId
+   * 让本地 draft 回写 posted_remote_id 做幂等)。
+   *
+   * BBS: POST /pull-requests/{id}/comments，payload `{text, anchor:{path, line,
+   * lineType, fileType, srcPath?}}`。anchor.line + lineType + fileType 三元组必须
+   * 跟该行在 diff 里的真实角色一致 —— BBS 会校验，对不上回 400。
+   *
+   * 调用方传 `PrCommentAnchor` (跨平台中性形状)，adapter 内部翻成平台特定 anchor。
+   * `lineType` 不知道时调用方传 'context' 作为最稳保守值，但 BBS 上 added 行评论
+   * 必须传 'added'，否则也会 400 —— 这是调用方的责任 (DraftZone 创建时已经知道
+   * 这一行在 diff 里的角色)。
+   *
+   * 失败抛 PlatformError 子类；批量调用方决定是否整批回滚或继续下一条
+   */
+  publishInlineComment(
+    repo: RepoRef,
+    prId: string,
+    anchor: PrCommentAnchor,
+    body: string,
+  ): Promise<PrComment>;
 }

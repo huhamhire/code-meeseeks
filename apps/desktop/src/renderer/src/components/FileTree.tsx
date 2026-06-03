@@ -5,7 +5,10 @@ import type { DiffChangedFile } from '@pr-pilot/shared';
 interface FileTreeProps {
   files: DiffChangedFile[];
   selectedKey: string | null;
+  /** path → 远端已发布的 inline 评论数 (含 renamed 文件的 oldPath 兼容) */
   commentCountByPath: Map<string, number>;
+  /** path → 本地待发布草稿数 (pending + edited)。跟 PR header "提交评审 (N)" 同口径 */
+  draftCountByPath: Map<string, number>;
   onSelect: (file: DiffChangedFile) => void;
 }
 
@@ -33,7 +36,13 @@ function fileKey(f: DiffChangedFile): string {
   return `${f.oldPath ?? ''}|${f.path}`;
 }
 
-export function FileTree({ files, selectedKey, commentCountByPath, onSelect }: FileTreeProps) {
+export function FileTree({
+  files,
+  selectedKey,
+  commentCountByPath,
+  draftCountByPath,
+  onSelect,
+}: FileTreeProps) {
   const tree = useMemo(() => buildTree(files), [files]);
   // 默认全部展开。collapsed 记的是被折叠的 path 集合（默认空 = 全展开）
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -56,6 +65,7 @@ export function FileTree({ files, selectedKey, commentCountByPath, onSelect }: F
         {renderChildren(tree.children, 0, {
           selectedKey,
           commentCountByPath,
+          draftCountByPath,
           onSelect,
           collapsed,
           toggle,
@@ -68,6 +78,7 @@ export function FileTree({ files, selectedKey, commentCountByPath, onSelect }: F
 interface RenderCtx {
   selectedKey: string | null;
   commentCountByPath: Map<string, number>;
+  draftCountByPath: Map<string, number>;
   onSelect: (file: DiffChangedFile) => void;
   collapsed: Set<string>;
   toggle: (path: string) => void;
@@ -113,6 +124,7 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
       const f = n.file;
       const selected = ctx.selectedKey === fileKey(f);
       const count = ctx.commentCountByPath.get(f.path) ?? 0;
+      const draftCount = ctx.draftCountByPath.get(f.path) ?? 0;
       out.push(
         <div
           key={`f:${n.path}`}
@@ -133,7 +145,21 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
           <Icon icon={fileIconFor(f.path)} width="16" height="16" className="tree-icon" />
           <span className="tree-name">{n.name}</span>
           <span className="tree-row-right" aria-hidden="false">
-            {count > 0 && <span className="tree-comment-count">{count}</span>}
+            {/* draft chip 在前 / comment chip 在后：阅读顺序 "未发的 → 已发的"，
+                跟 PR header "提交评审 → 通过/需修改" 的左右顺序对齐 */}
+            {draftCount > 0 && (
+              <span
+                className="tree-draft-count"
+                title={`${String(draftCount)} 条待发布草稿`}
+              >
+                {draftCount}
+              </span>
+            )}
+            {count > 0 && (
+              <span className="tree-comment-count" title={`${String(count)} 条远端评论`}>
+                {count}
+              </span>
+            )}
             <span
               className={`tree-status diff-file-status diff-file-status-${f.status}`}
               aria-label={f.status}

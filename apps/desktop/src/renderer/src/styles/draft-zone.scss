@@ -221,6 +221,37 @@
   margin-top: $space-2;
 }
 
+// 单条发布失败的 inline 错误条。视觉权重比"已发布" foot 高一档 — danger 色
+// 描边 + 浅红底，user 一眼能看到；右侧 ✕ 让用户主动 dismiss (不带超时自动消失
+// 避免错过)。比弹 modal 干扰更小 — zone 仍在原位，可改 body 再次"发布"重试
+.draft-zone-publish-error {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  margin-top: $space-3;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba(244, 135, 113, 0.10);
+  border-left: 3px solid $color-danger;
+  border-radius: $radius-sm;
+  word-break: break-word;
+}
+.draft-zone-publish-error-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: $color-danger;
+  cursor: pointer;
+  padding: 0 $space-2;
+  font-size: $fs-md;
+  line-height: 1;
+  flex-shrink: 0;
+  &:hover {
+    opacity: 0.7;
+  }
+}
+
 // 行 hover 出现的 '+' 草稿创建按钮 — Monaco glyph margin 区 (editor 最左、
 // line number 左侧外列；DiffEditor options 启用了 glyphMargin:true 让那一列宽到
 // ~24px 装下 +)。decoration 元素本身 width/height 由 monaco 控制 (glyphMarginWidth

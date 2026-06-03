@@ -58,6 +58,22 @@
   gap: $space-3;
 }
 
+// "提交评审 (N)" 入口：N > 0 时主色描边 + 主色文字，跟"通过 / 需修改"
+// inactive 态视觉权重一致 (它俩也是默认描边、靠 icon 颜色做语义)；不做整块
+// 填充避免在 header 里盖过"浏览器打开"主色按钮。hover 时浅填一层主色提示
+// 可点。0 条时走默认 :disabled 灰显
+.pr-header-publish {
+  &:not(:disabled) {
+    border-color: $color-info;
+    color: $color-info;
+
+    &:hover {
+      // 用极浅的主色填充 (~10% 透明)；border 同时加深一档强化可点感
+      background: rgba(14, 99, 156, 0.12);
+    }
+  }
+}
+
 // PR review 操作按钮 (approve / needs work) —— 图标 + 文案。
 // 图标用动作语义色：approve = 绿，needs work = 黄 (amber)。
 // 文案在 inactive 状态仍是 $text-body，避免整行文字被绿/黄"染色"破坏对比；
