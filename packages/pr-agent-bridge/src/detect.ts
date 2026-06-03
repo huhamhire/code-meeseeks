@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { PrAgentStatus, PrAgentStrategy } from '@pr-pilot/shared';
-import { DockerBridge, LocalCliBridge } from './bridge.js';
+import { DEFAULT_DOCKER_IMAGE_TAG, DockerBridge, LocalCliBridge } from './bridge.js';
 import { defaultExec } from './exec.js';
 import type { ExecFn, PrAgentBridge } from './types.js';
 
@@ -102,10 +102,20 @@ export async function detectPrAgent(): Promise<PrAgentStatus> {
   for (const { name, probe } of STRATEGIES) {
     const r = await probe();
     if (r.ok) {
+      // version 字段语义：用户在 UI 看到的"pr-agent 版本"。
+      // - docker 策略：probe 拿到的是 docker daemon 版本 (`Docker version 25.x`)，
+      //   跟 pr-agent 镜像本身无关；这里改成我们 pin 的 image tag (`pragent/pr-agent:0.36.0`)，
+      //   StatusBar 显示更有意义
+      // - local-cli 策略：probe 拿到的是 `pr-agent --help` 首行 (通常是 usage 提示)，
+      //   不是版本号但也是用户能识别的信息，保持原值。
+      const version =
+        name === 'docker'
+          ? `pragent/pr-agent:${DEFAULT_DOCKER_IMAGE_TAG}`
+          : r.version;
       return {
         available: true,
         strategy: name,
-        version: r.version,
+        version,
         probeMs: r.probeMs,
       };
     }

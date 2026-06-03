@@ -60,6 +60,13 @@ export const PR_AGENT_TRANSLATIONS_ZH: ReadonlyMap<string, string> = new Map([
   ['Performance', '性能'],
   ['Error handling', '错误处理'],
   ['Possible bug', '潜在 bug'],
+  // pr-agent v0.36 utils.py 硬编码把 issue_header "Possible bug" rewrite 成
+  // "Possible Issue" (大写 I)，绕过 LLM 翻译路径 → CONFIG__RESPONSE_LANGUAGE 救
+  // 不了它，必须在 translate 字典里手动加大写 I 版本
+  ['Possible Issue', '潜在问题'],
+  ['Possible Issues', '潜在问题'],
+  ['General Suggestion', '一般建议'],
+  ['Critical Issue', '严重问题'],
   ['Typo', '拼写'],
   ['Style', '风格'],
   ['Documentation', '文档'],

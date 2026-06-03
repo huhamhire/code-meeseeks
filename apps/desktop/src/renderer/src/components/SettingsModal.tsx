@@ -535,7 +535,7 @@ export function SettingsModal({
               </button>
             </div>
             <p className="muted modal-footer">
-              连接 / 轮询间隔等需在 config.yaml 里改。M5 计划在 UI 内直接管理。
+              其他完整配置可在 config.yaml 中修改。
             </p>
             {openError && <p className="error-text">{openError}</p>}
           </section>

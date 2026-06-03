@@ -17,8 +17,8 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
  * 镜像后行为漂移（输出格式变 → findings 解析爆掉）；升级需走 PR + 单测验证。
  */
 const DEFAULT_DOCKER_IMAGE_NAME = 'pragent/pr-agent';
-const DEFAULT_DOCKER_IMAGE_TAG = '0.36.0';
-const DEFAULT_DOCKER_IMAGE = `${DEFAULT_DOCKER_IMAGE_NAME}:${DEFAULT_DOCKER_IMAGE_TAG}`;
+export const DEFAULT_DOCKER_IMAGE_TAG = '0.36.0';
+export const DEFAULT_DOCKER_IMAGE = `${DEFAULT_DOCKER_IMAGE_NAME}:${DEFAULT_DOCKER_IMAGE_TAG}`;
 
 /** LocalCli + Docker 共享的骨架：把 RunOptions 翻成 (cmd, args, env) 后委派给 ExecFn */
 abstract class BaseBridge implements PrAgentBridge {
