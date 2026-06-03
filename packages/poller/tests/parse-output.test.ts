@@ -97,6 +97,50 @@ describe('sectionToFinding', () => {
     const f = sectionToFinding({ level: 2, title: 't', body: 'x' }, 5, 'review');
     expect(f.id).toBe('review-005');
   });
+
+  it('/ask 命中 [file:..., lines:...] marker → 升格 code-feedback + anchor', () => {
+    const f = sectionToFinding(
+      {
+        level: 2,
+        title: 'Answer',
+        body: '这里有空引用风险。\n[file: src/auth/login.ts, lines: 42-50]',
+      },
+      0,
+      'ask',
+    );
+    expect(f.category).toBe('code-feedback');
+    expect(f.anchor).toEqual({ path: 'src/auth/login.ts', startLine: 42, endLine: 50 });
+  });
+
+  it('/ask 单行 marker (无 endLine) 也能升格', () => {
+    const f = sectionToFinding(
+      { level: 2, title: 'Answer', body: '说明。\n[file: pkg/cache.go, lines: 17]' },
+      0,
+      'ask',
+    );
+    expect(f.category).toBe('code-feedback');
+    expect(f.anchor).toEqual({ path: 'pkg/cache.go', startLine: 17 });
+  });
+
+  it('/ask 答案不涉及具体位置 (无 marker) → 留 general，不强行兜底路径 token', () => {
+    const f = sectionToFinding(
+      // 故意含 src/foo.ts 路径 token，但没显式 marker 也没行号 → 应保持 general
+      { level: 2, title: 'Answer', body: '这个 PR 整体重构了 src/foo.ts 的导出口。' },
+      0,
+      'ask',
+    );
+    expect(f.category).toBe('general');
+    expect(f.anchor).toBeUndefined();
+  });
+
+  it('/describe 即使内容含 marker 也不升格 (兜底仅 ask 启用)', () => {
+    const f = sectionToFinding(
+      { level: 2, title: 'Description', body: 'something\n[file: a.ts, lines: 1-3]' },
+      0,
+      'describe',
+    );
+    expect(f.category).toBe('description');
+  });
 });
 
 describe('parseReviewOutput', () => {

@@ -311,6 +311,27 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
     };
   }
 
+  // /ask 兜底：pr-agent /ask 自由回答不会按 `**File:** xxx` 这种结构化格式输出，
+  // 但我们 prompt 注入了 `[file: <path>, lines: <s>-<e>]` marker 要求 model 在
+  // 答案涉及代码位置时显式标注。命中 marker 则升格成 code-feedback —— UI 会显示
+  // "→ 编辑" 按钮直跳 DiffView 行内评论草稿，让 /ask 的提问回答也能转化为可发布
+  // 的 inline comment (跟 /review 路径一致)。
+  // 仅 /ask 启用：/describe 的 description 段如果偶然提到一个路径不应被识别成
+  // code-feedback；/review 的常规段也不该被这条兜底覆盖
+  if (tool === 'ask') {
+    const anchor = inferAnchorFromIssueText(body);
+    if (anchor && typeof anchor.startLine === 'number') {
+      return {
+        id,
+        category: 'code-feedback',
+        sectionKey: 'code-feedback',
+        title: displayTitle,
+        body,
+        anchor,
+      };
+    }
+  }
+
   return {
     id,
     category: tool === 'describe' ? 'description' : 'general',

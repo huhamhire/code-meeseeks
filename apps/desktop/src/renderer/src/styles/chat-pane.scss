@@ -790,7 +790,10 @@
   position: absolute;
   bottom: calc(100% + #{$space-2});
   left: 0;
-  min-width: 200px;
+  // 宽到能让最长一条 (label + desc) 单行展示，避免说明被挤换行
+  min-width: 240px;
+  width: max-content;
+  max-width: 360px;
   list-style: none;
   padding: $space-2 0;
   margin: 0;
@@ -801,13 +804,25 @@
   z-index: $z-statusbar-menu;
 }
 
-// `/` 自动补全浮层：positioned 在 textarea 正上方 (input 容器是 relative)
+// 分组分隔：pragent 工具 (/review /describe /ask) ↔ review 决断 (/approve /needswork)
+// 之间画一条横线，让两类操作在视觉上分开
+.chat-cmd-menu-group {
+  border-top: 1px solid $border-muted;
+  margin-top: $space-2;
+  padding-top: $space-2;
+}
+
+// `/` 自动补全浮层：positioned 在 textarea 正上方 (input 容器是 relative)。
+// 宽度跟 .chat-cmd-menu 对齐 —— 紧凑自适应，避免 space-between 把 label 和
+// desc 推到 textarea 两端 (700px+) 导致说明文字离指令太远不易读
 .chat-cmd-suggest {
   position: absolute;
   bottom: 100%;
   left: $space-6;
-  right: $space-6;
   margin-bottom: $space-2;
+  min-width: 240px;
+  width: max-content;
+  max-width: 360px;
   list-style: none;
   padding: $space-2 0;
   background: $bg-elev;
@@ -821,7 +836,9 @@
 .chat-cmd-suggest-item {
   display: flex;
   align-items: baseline;
-  gap: $space-4;
+  // label 左 / desc 右，两端对齐 — 横向空间不够时不让 desc 换到下一行
+  justify-content: space-between;
+  gap: $space-6;
   width: 100%;
   padding: $space-2 $space-5;
   background: transparent;
@@ -835,6 +852,12 @@
     font-family: $font-mono;
     color: $color-info;
     font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  // desc 走 muted；不要换行，避免 "标记 PR 为需修改" 被拆成两行
+  .muted {
+    white-space: nowrap;
   }
   // hover + 键盘选中态共用 .active；hover 通过 onMouseEnter 同步 selectedIdx 触发
   &.active,

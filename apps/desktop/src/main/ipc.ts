@@ -684,15 +684,23 @@ export function registerIpcHandlers({
           }
         }
 
-        // /review 专属：注入 anchor marker 指令。pr-agent LocalGitProvider 渲染
-        // key_issues_to_review 时 (get_line_link='' + gfm_supported=False) 会把
-        // relevant_file / start_line / end_line 字段全部丢掉，渲染后的 review.md 只剩
-        // **header** + content 两行 (见 ADR-0007 §诊断)。我们让 model 在每条 issue
-        // 末尾**显式**追加 `[file: <path>, lines: <start>-<end>]` marker，
-        // parse-output.ts 的 inferAnchorFromIssueText 优先认这个 marker 抽 anchor。
+        // anchor marker 指令：让 model 在涉及代码位置的内容末尾显式追加
+        //   [file: <path>, lines: <start_line>-<end_line>]
+        // parse-output.ts 的 inferAnchorFromIssueText 优先认这个 marker 抽 anchor，
+        // UI 据此渲染"→ 编辑"按钮一键跳转 DiffView 行内评论草稿。
         //
-        // 仅作用于 /review；/describe / /ask / /improve 不需要 (前两个不出 issue，
-        // /improve 走 marker 行 `[file [start-end]](url)` 自己有 anchor)
+        // pr-agent LocalGitProvider 渲染 key_issues_to_review 时
+        // (get_line_link='' + gfm_supported=False) 会把 relevant_file / start_line /
+        // end_line 字段全部丢掉，渲染后的 review.md 只剩 **header** + content 两行
+        // (见 ADR-0007 §诊断)，所以 /review 必须靠这条 marker 才能拿到 anchor。
+        //
+        // 两种工具措辞不同：
+        // - /review: 每条 key_issue 末尾 **必加** marker
+        // - /ask: 仅当回答涉及具体文件 / 代码位置时 **才加** (自由问答可能完全跟代码
+        //   无关 e.g. "PR 概述")，强制会产出假阳性
+        //
+        // /describe / /improve 不注入：前者不出 issue，后者走 marker 行
+        // `[file [start-end]](url)` 自己有 anchor
         const reviewAnchorDirective =
           req.tool === 'review'
             ? [
@@ -710,7 +718,27 @@ export function registerIpcHandlers({
                 'truly cannot identify a file/line for an issue, omit the marker for that',
                 'item only.',
               ].join('\n')
-            : '';
+            : req.tool === 'ask'
+              ? [
+                  'When your answer references a specific code location (a file path with',
+                  'concrete line numbers), append on its OWN LAST LINE a machine-readable',
+                  'anchor marker in this EXACT format:',
+                  '',
+                  '    [file: <path>, lines: <start_line>-<end_line>]',
+                  '',
+                  'Examples:',
+                  '  [file: src/auth/login.ts, lines: 42-50]',
+                  '  [file: pkg/cache.go, lines: 17]',
+                  '',
+                  'Rules:',
+                  '- Use the actual file path from the diff. Do NOT wrap the path in backticks.',
+                  '- Only add the marker when you can name a real file AND real line numbers',
+                  '  from this PR. If your answer is general / conceptual / not tied to a',
+                  '  specific location, OMIT the marker entirely — do NOT guess.',
+                  '- If the answer covers multiple locations, append ONE marker per discrete',
+                  '  point as its own line; the client uses the first marker per paragraph.',
+                ].join('\n')
+              : '';
 
         const extraParts = [
           langDirective,

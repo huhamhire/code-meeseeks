@@ -234,6 +234,7 @@ export default function App() {
           onResize={setChatWidth}
           collapsed={chatCollapsed}
           onJumpToDraftEditor={(t) => setPendingDiffNav(t)}
+          onSetReviewStatus={(s) => void setSelectedPrStatus(s)}
         />
       </div>
       <StatusBar

@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import type {
   Finding,
   IpcChannels,
+  LocalPrStatus,
   PrAgentStatus,
   PrDocSectionKey,
   ReviewRun,
@@ -43,6 +44,8 @@ interface ChatPaneProps {
     findingId: string;
     anchor: { path: string; startLine: number; endLine: number };
   }) => void;
+  /** /approve /needswork 命令触发的 PR review 决断；由 MainPane 接到 prs:setLocalStatus */
+  onSetReviewStatus?: (status: LocalPrStatus) => void;
 }
 
 /**
@@ -62,6 +65,7 @@ export function ChatPane({
   onResize,
   collapsed,
   onJumpToDraftEditor,
+  onSetReviewStatus,
 }: ChatPaneProps) {
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
@@ -453,6 +457,7 @@ export function ChatPane({
         onCancel={
           myActiveRun ? () => void handleCancel(myActiveRun.runId) : undefined
         }
+        onSetReviewStatus={onSetReviewStatus}
       />
 
       {showRulePreview && matchedRule && (
@@ -463,25 +468,57 @@ export function ChatPane({
 }
 
 /** 槽位定义：键盘操作 / 命令按钮 / 自动补全菜单都从这里取 */
-interface CommandSpec {
-  name: ReviewRunTool;
-  /** 显示在按钮上的标签，含 / 前缀 */
-  label: string;
-  /** 短提示 */
-  desc: string;
-  /** 点击命令按钮时在 textarea 中放入的内容；ask 留空格让用户接着写 */
-  insertAs: string;
-}
-// 顺序：review 最高频在最前；describe 次之；ask 兜底放最后
+/**
+ * Chat 命令分两类：
+ *  - 'pragent': pr-agent 工具 (review / describe / ask)，触发 pragent:run
+ *  - 'review-action': PR review 决断 (approve / needswork)，写 BBS reviewer status
+ *    通过 prs:setLocalStatus 触发，跟 PR header 按钮共用同一路径
+ */
+type CommandSpec =
+  | {
+      kind: 'pragent';
+      name: ReviewRunTool;
+      label: string;
+      desc: string;
+      insertAs: string;
+    }
+  | {
+      kind: 'review-action';
+      name: 'approve' | 'needswork';
+      label: string;
+      desc: string;
+      insertAs: string;
+      reviewStatus: LocalPrStatus;
+    };
+
+// 分组顺序：pr-agent 工具 → 分隔线 → review 决断
 const COMMANDS: ReadonlyArray<CommandSpec> = [
-  { name: 'review', label: '/review', desc: '代码评审', insertAs: '/review' },
-  { name: 'describe', label: '/describe', desc: '生成 PR 描述', insertAs: '/describe' },
+  // pr-agent
+  { kind: 'pragent', name: 'review', label: '/review', desc: '代码评审', insertAs: '/review' },
+  { kind: 'pragent', name: 'describe', label: '/describe', desc: '生成 PR 描述', insertAs: '/describe' },
   // /improve 暂屏蔽：实测 pr-agent 的 improve 工具依赖在线平台 (GitHub / GitLab /
   // Bitbucket Cloud) 的 inline code suggestion / best practices 集成，跟 pr-pilot
   // 本地 PR 管理路径不兼容。后端类型 / parser / IPC 仍保留，等策略变化或上游
   // 支持 local provider 时直接放开
-  // { name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
-  { name: 'ask', label: '/ask', desc: '自然语言追问', insertAs: '/ask ' },
+  // { kind: 'pragent', name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
+  { kind: 'pragent', name: 'ask', label: '/ask', desc: '自然语言追问', insertAs: '/ask ' },
+  // review 决断 (跟 PR header 按钮共用 prs:setLocalStatus，写 BBS reviewer status)
+  {
+    kind: 'review-action',
+    name: 'approve',
+    label: '/approve',
+    desc: '标记 PR 为通过',
+    insertAs: '/approve',
+    reviewStatus: 'approved',
+  },
+  {
+    kind: 'review-action',
+    name: 'needswork',
+    label: '/needswork',
+    desc: '标记 PR 为需修改',
+    insertAs: '/needswork',
+    reviewStatus: 'needs_work',
+  },
 ];
 
 interface ChatInputBarProps {
@@ -498,6 +535,8 @@ interface ChatInputBarProps {
    * stop 按钮跟 send 共用槽位：runningTool 时点击触发此回调而非 onRun
    */
   onCancel?: () => void;
+  /** /approve /needswork 命令触发的 review 决断，跟 PR header 按钮共用 prs:setLocalStatus */
+  onSetReviewStatus?: (status: LocalPrStatus) => void;
 }
 
 // 输入历史：最近 5 次成功提交，localStorage 持久化。Up/Down 按键在 textarea 末尾
@@ -561,6 +600,7 @@ function ChatInputBar({
   runningTool,
   onRun,
   onCancel,
+  onSetReviewStatus,
 }: ChatInputBarProps) {
   const [input, setInput] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
@@ -685,36 +725,52 @@ function ChatInputBar({
   const submit = (): void => {
     if (disabled || !trimmed) return;
     setParseError(null);
-    let tool: ReviewRunTool;
-    let question: string | undefined;
+    // 解析命令头：'/' 起手 → COMMANDS 表里找；无 '/' → 等价 /ask <整段>
+    let cmd: CommandSpec;
+    let rest = '';
     if (trimmed.startsWith('/')) {
       const spaceIdx = trimmed.indexOf(' ');
       const head = spaceIdx < 0 ? trimmed : trimmed.slice(0, spaceIdx);
-      const rest = spaceIdx < 0 ? '' : trimmed.slice(spaceIdx + 1).trim();
-      const cmd = COMMANDS.find((c) => c.label === head);
-      if (!cmd) {
+      rest = spaceIdx < 0 ? '' : trimmed.slice(spaceIdx + 1).trim();
+      const found = COMMANDS.find((c) => c.label === head);
+      if (!found) {
         setParseError(`未知命令 ${head}；支持：${COMMANDS.map((c) => c.label).join(' / ')}`);
         return;
       }
-      tool = cmd.name;
-      if (tool === 'ask') {
-        if (!rest) {
-          setParseError('/ask 需要输入问题内容');
-          return;
-        }
-        question = rest;
-      }
+      cmd = found;
     } else {
-      // 不以 / 起手 → 等价于 /ask <整段>
-      tool = 'ask';
-      question = trimmed;
+      // COMMANDS 里固定有 /ask，find 不会为 undefined — 用 ! 让 TS 收窄即可
+      cmd = COMMANDS.find((c) => c.kind === 'pragent' && c.name === 'ask')!;
+      rest = trimmed;
     }
-    // 入历史栈 + 持久化；浏览状态重置
+    // review-action：/approve /needswork 没有参数，多余文本拒绝以免误用
+    if (cmd.kind === 'review-action') {
+      if (rest) {
+        setParseError(`${cmd.label} 不接受参数`);
+        return;
+      }
+      if (!onSetReviewStatus) return; // 没装回调直接忽略 (保护性)
+      setHistory(pushChatHistory(input));
+      setHistoryIdx(-1);
+      draftBeforeHistoryRef.current = '';
+      setInput('');
+      onSetReviewStatus(cmd.reviewStatus);
+      return;
+    }
+    // pragent：/ask 必须带问题，其他工具空 question
+    let question: string | undefined;
+    if (cmd.name === 'ask') {
+      if (!rest) {
+        setParseError('/ask 需要输入问题内容');
+        return;
+      }
+      question = rest;
+    }
     setHistory(pushChatHistory(input));
     setHistoryIdx(-1);
     draftBeforeHistoryRef.current = '';
     setInput('');
-    onRun(tool, question);
+    onRun(cmd.name, question);
   };
 
   // 历史回放工具：根据 idx 设 textarea 内容；idx = -1 表示退出浏览态，恢复 draft
@@ -814,8 +870,10 @@ function ChatInputBar({
         <ul className="chat-cmd-suggest" role="listbox" aria-label="命令补全">
           {filtered.map((c, i) => {
             const active = i === Math.min(autocompleteIdx, filtered.length - 1);
+            const prev = filtered[i - 1];
+            const needDivider = prev !== undefined && prev.kind !== c.kind;
             return (
-              <li key={c.name}>
+              <li key={c.name} className={needDivider ? 'chat-cmd-menu-group' : undefined}>
                 <button
                   type="button"
                   className={`chat-cmd-suggest-item${active ? ' active' : ''}`}
@@ -873,19 +931,24 @@ function ChatInputBar({
           </button>
           {cmdMenuOpen && (
             <ul className="chat-cmd-menu" role="menu">
-              {COMMANDS.map((c) => (
-                <li key={c.name}>
-                  <button
-                    type="button"
-                    className="chat-cmd-suggest-item"
-                    onClick={() => handleInsertCommand(c)}
-                    role="menuitem"
-                  >
-                    <code>{c.label}</code>
-                    <span className="muted">{c.desc}</span>
-                  </button>
-                </li>
-              ))}
+              {COMMANDS.map((c, i) => {
+                const prev = COMMANDS[i - 1];
+                // pragent → review-action 边界插一道分隔线
+                const needDivider = prev !== undefined && prev.kind !== c.kind;
+                return (
+                  <li key={c.name} className={needDivider ? 'chat-cmd-menu-group' : undefined}>
+                    <button
+                      type="button"
+                      className="chat-cmd-suggest-item"
+                      onClick={() => handleInsertCommand(c)}
+                      role="menuitem"
+                    >
+                      <code>{c.label}</code>
+                      <span className="muted">{c.desc}</span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
