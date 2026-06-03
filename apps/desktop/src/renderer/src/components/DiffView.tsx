@@ -1,4 +1,4 @@
- import { useEffect, useMemo, useState } from 'react';
+ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { DiffEditor } from '@monaco-editor/react';
 import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
@@ -27,6 +27,7 @@ interface DiffViewProps {
   pr: StoredPullRequest;
   renderSideBySide: boolean;
   showBlame: boolean;
+  showWhitespace: boolean;
   /**
    * M4 跳转目标 (ADR-0007)：来自 ChatPane finding card → App pendingDiffNav。
    * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + 打开 inline 草稿
@@ -125,6 +126,7 @@ export function DiffView({
   pr,
   renderSideBySide,
   showBlame,
+  showWhitespace,
   pendingNav,
   onNavConsumed,
 }: DiffViewProps) {
@@ -258,18 +260,46 @@ export function DiffView({
   // M4 草稿池：跨 ChatPane / DiffView 共享 store；本组件需要它来渲染 inline zones
   const drafts = useDraftsForPr(pr.localId);
 
-  // M4 autoEdit token 表：draft.id → 递增 token；token 变化时对应 DraftZone 自动
-  // 进入编辑模式。供两个来源用：
+  // M4 autoEdit 触发器表：draft.id → "进入编辑模式" fn。供两个来源用：
   //   1. ChatPane → App.pendingDiffNav 跳转完后，目标 draft 自动 enter edit
   //   2. 行 hover '+' 创建 manual draft 后立即 enter edit (新草稿空 body 必须能输入)
-  const [autoEditTokens, setAutoEditTokens] = useState<Record<string, number>>({});
+  //
+  // 用 ref-based fn 而不是 state token。token 方案曾导致 bug：用户取消 → auto save
+  // → drafts store 变 → DiffView re-render → DraftZone unmount/mount → 新 instance
+  // 看到 props token 仍非 undefined 又 setIsEditing(true) → 用户看似"取消没生效"。
+  // ref-fn 调用纯副作用，不引发 re-render，不会循环触发
+  const editTriggerFnsRef = useRef<Map<string, () => void>>(new Map());
+  // pending trigger 兜底：triggerAutoEdit 调用时 DraftZone 还没 mount + register
+  // (典型场景：hover '+' 创建后立即 trigger，drafts store 异步更新)。fn 不在 map
+  // 时把 id 加 pending；registerEditTrigger 时如果发现自己 pending 立即 fire
+  const pendingTriggersRef = useRef<Set<string>>(new Set());
+  const registerEditTrigger = useCallback(
+    (draftId: string, fn: (() => void) | null): void => {
+      if (fn) {
+        editTriggerFnsRef.current.set(draftId, fn);
+        if (pendingTriggersRef.current.has(draftId)) {
+          pendingTriggersRef.current.delete(draftId);
+          fn();
+        }
+      } else {
+        editTriggerFnsRef.current.delete(draftId);
+      }
+    },
+    [],
+  );
   const triggerAutoEdit = (draftId: string): void => {
-    setAutoEditTokens((prev) => ({ ...prev, [draftId]: (prev[draftId] ?? 0) + 1 }));
+    const fn = editTriggerFnsRef.current.get(draftId);
+    if (fn) {
+      fn();
+    } else {
+      pendingTriggersRef.current.add(draftId);
+    }
   };
 
-  // PR 切换重置 nav 状态 + autoEdit token (旧 draft 不存在了，留着没用)
+  // PR 切换清掉所有 trigger fn 引用 + pending (新 PR 的 DraftZone 会重新注册)
   useEffect(() => {
-    setAutoEditTokens({});
+    editTriggerFnsRef.current.clear();
+    pendingTriggersRef.current.clear();
   }, [pr.localId]);
 
   // M4 跳转消费：来自 ChatPane → App.pendingDiffNav。
@@ -716,7 +746,7 @@ export function DiffView({
             <DraftZoneList
               drafts={ds}
               prLocalId={pr.localId}
-              autoEditTokens={autoEditTokens}
+              registerEditTrigger={registerEditTrigger}
             />,
           );
 
@@ -729,11 +759,11 @@ export function DiffView({
           const zoneId = accessor.addZone(zoneObj);
           zoneRefs.push({ editor: editorInst, zoneId, dom, root: reactRoot });
 
-          // 高度同步：每次 RO 触发 / 多个时间点都用 removeZone+addZone 强制刷新。
-          // 不依赖 layoutZone(id) ——后者在某些 Monaco 版本对已添加 zone 的 height
-          // 改动不重新计算 viewModel.whitespace，导致蓝框尺寸卡住 (用户实测出现过)。
-          // 重建 zone 时 dom 元素引用复用 → React tree 不 unmount，body 内 state 保留
-          const currentZoneIdRef = { id: zoneId };
+          // 高度同步：直接 mutate zoneObj.heightInPx + layoutZone(id)。
+          // removeZone+addZone 在 textarea 拖拽 resize 时每帧调用会引起 zone 重建
+          // 抖动，鼠标跟不上手 (用户实测)。layoutZone 是轻量操作，先 mutate
+          // delegate.heightInPx 再 layoutZone 即可让 monaco 重新计算 viewModel
+          // whitespace，原"layoutZone 不响应"的判断不成立——之前是因为没改 heightInPx
           const syncHeight = (): void => {
             const next = inner.offsetHeight;
             if (next <= 0) return;
@@ -741,12 +771,8 @@ export function DiffView({
             zoneObj.heightInPx = next;
             try {
               editorInst.changeViewZones((acc) => {
-                acc.removeZone(currentZoneIdRef.id);
-                currentZoneIdRef.id = acc.addZone(zoneObj);
+                acc.layoutZone(zoneId);
               });
-              // 同步更新 zoneRefs 里这一条的 zoneId 让 cleanup remove 用得对
-              const ref = zoneRefs[zoneRefs.length - 1];
-              if (ref) ref.zoneId = currentZoneIdRef.id;
             } catch {
               /* editor disposed */
             }
@@ -816,7 +842,10 @@ export function DiffView({
         }
       });
     };
-  }, [diffEditor, drafts, content, selected, pr.localId, autoEditTokens]);
+    // 不依赖 autoEditTokens (已移除 state) / registerEditTrigger (稳定的 useCallback)
+    // — 避免 trigger 引发 zone 重建带来的 DraftZone unmount/mount，根除取消后重入
+    // edit 模式的 race
+  }, [diffEditor, drafts, content, selected, pr.localId, registerEditTrigger]);
 
   // M4 行 hover '+' 新建 manual 草稿：modifiedEditor (head 侧) 上加 mousemove +
   // mousedown 监听。已有评论 / 草稿的行不重复出 + glyph，避免误触。
@@ -1099,6 +1128,7 @@ export function DiffView({
                 loading={contentLoading}
                 renderSideBySide={renderSideBySide}
                 showBlame={showBlame}
+                showWhitespace={showWhitespace}
                 onMount={setDiffEditor}
               />
             </ErrorBoundary>
@@ -1135,11 +1165,11 @@ function commentHeight(c: PrComment): number {
 function DraftZoneList({
   drafts,
   prLocalId,
-  autoEditTokens,
+  registerEditTrigger,
 }: {
   drafts: ReviewDraft[];
   prLocalId: string;
-  autoEditTokens: Record<string, number>;
+  registerEditTrigger: (draftId: string, fn: (() => void) | null) => void;
 }) {
   const onSave = async (draftId: string, body: string): Promise<void> => {
     await invoke('drafts:update', {
@@ -1160,7 +1190,7 @@ function DraftZoneList({
         >
           <DraftZone
             draft={d}
-            autoEditToken={autoEditTokens[d.id]}
+            registerEditTrigger={registerEditTrigger}
             onSave={(body) => onSave(d.id, body)}
             onDelete={() => onDelete(d.id)}
           />
@@ -1662,6 +1692,7 @@ function DiffPane({
   loading,
   renderSideBySide,
   showBlame,
+  showWhitespace,
   onMount,
 }: {
   file: DiffChangedFile;
@@ -1669,6 +1700,7 @@ function DiffPane({
   loading: boolean;
   renderSideBySide: boolean;
   showBlame: boolean;
+  showWhitespace: boolean;
   onMount: (editor: MonacoEditor.IStandaloneDiffEditor) => void;
 }) {
   if (loading || !content) {
@@ -1692,7 +1724,14 @@ function DiffPane({
       original={content.base.content}
       modified={content.head.content}
       onMount={onMount}
-      className={showBlame ? 'diff-editor-with-blame' : undefined}
+      className={
+        [
+          showBlame ? 'diff-editor-with-blame' : '',
+          showWhitespace ? 'diff-editor-show-eol' : '',
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined
+      }
       options={{
         readOnly: true,
         renderSideBySide,
@@ -1702,6 +1741,8 @@ function DiffPane({
         renderOverviewRuler: false,
         // 显式开 glyph margin，给行内评论标记留位置
         glyphMargin: true,
+        // 空白字符可视化：toolbar 按钮控制；'all' 时空格显示 · / Tab 显示 →
+        renderWhitespace: showWhitespace ? 'all' : 'none',
         // GitHub 风格折叠：未变更段缩成可展开占位行
         hideUnchangedRegions: {
           enabled: true,

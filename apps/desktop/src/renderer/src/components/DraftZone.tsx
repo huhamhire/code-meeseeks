@@ -8,13 +8,17 @@ import { ConfirmModal } from './ConfirmModal';
 interface DraftZoneProps {
   draft: ReviewDraft;
   /**
-   * 自外部触发"进入编辑模式"的 token；每次值变化都强制 enter edit mode。
-   * 用于：ChatPane "→ 跳到代码编辑" / 行 hover '+' 新建后；用 number 单调递增
-   * 让 useEffect dep 比较能识别"再次请求"。
+   * 注册 "进入编辑模式" 触发函数到外部 ref map。DiffView 调用注册的 fn 时本组件
+   * setIsEditing(true)。
    *
-   * 也接 'create' 字面值作为初次挂载就自动 edit 的提示 (manual 新建草稿场景)
+   * 用 ref-based fn 而不是 props token，避免之前的 bug：trigger token 变化 →
+   * DiffView re-render → useEffect 重跑 → DraftZone unmount/mount → 新 instance
+   * 看到 token 非 undefined 又触发 setIsEditing(true)。结果：用户点取消走 auto
+   * save → re-mount → 自动又进 edit，看起来"没退出"。
+   *
+   * ref-fn 调用不引发任何 React state change，零副作用，调一次只 enter edit 一次
    */
-  autoEditToken?: number;
+  registerEditTrigger?: (draftId: string, fn: (() => void) | null) => void;
   /**
    * 保存编辑后的 body。调用方走 IPC drafts:update。成功后由 drafts-store 事件流
    * 重渲染本组件 (draft prop 更新)
@@ -48,22 +52,91 @@ interface DraftZoneProps {
  * 收回 read 模式。乐观更新 UI：onSave 调用后立即把本地 editingBody 同步到下次
  * draft.body 比较，保证 UI 不闪烁
  */
-export function DraftZone({ draft, autoEditToken, onSave, onDelete }: DraftZoneProps) {
+export function DraftZone({
+  draft,
+  registerEditTrigger,
+  onSave,
+  onDelete,
+}: DraftZoneProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingBody, setEditingBody] = useState(draft.body);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // autoEditToken 变化 → 强制 enter edit (来自 ChatPane 跳转 or hover+ 新建)
+  // Ref 跟踪最新 state / props，供 unmount cleanup 闭包同步读
+  const editingBodyRef = useRef(editingBody);
+  const isEditingRef = useRef(isEditing);
+  const draftBodyRef = useRef(draft.body);
   useEffect(() => {
-    if (autoEditToken !== undefined) {
-      setIsEditing(true);
-      setEditingBody(draft.body);
+    editingBodyRef.current = editingBody;
+  }, [editingBody]);
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
+  useEffect(() => {
+    draftBodyRef.current = draft.body;
+  }, [draft.body]);
+
+  // 显式 mutate 标记 — 区分 "用户主动操作触发 unmount" vs "切换文件触发 unmount"。
+  // 设计：mutate 入口设 true (handleSave/Cancel/Delete 各种路径)；进 edit 时重置
+  // false (new editing session 没显式意图)。**不在 finally 清** — 因为 mutate IPC
+  // 完成跟 drafts:changed 引发的 unmount 时序不可控，清得太早会让 cleanup 误判。
+  // 锁的生命周期跟随 component instance：mutate 后保留 true 直到 unmount 或下次进
+  // edit 时被重置
+  const isMutatingRef = useRef(false);
+  useEffect(() => {
+    if (isEditing) isMutatingRef.current = false;
+  }, [isEditing]);
+
+  // 统一的 cancel 四档逻辑 — handleCancel / unmount cleanup / Esc 共用
+  // (避免三个地方分别实现引起行为漂移)。读 ref 拿最新值，支持 fire-and-forget
+  const runCancelLogic = (): void => {
+    const editing = editingBodyRef.current.trim();
+    const persisted = draftBodyRef.current.trim();
+    if (!editing && !persisted) {
+      void onDelete();
+      return;
     }
-    // 故意不依赖 draft.body —— 不想用户编辑过程中 draft 变化覆盖输入
+    if (!editing) {
+      // 空 + 有 → revert (unmount 时 no-op，state 已销毁；handleCancel 时设 state)
+      setEditingBody(draftBodyRef.current);
+      setIsEditing(false);
+      return;
+    }
+    if (editingBodyRef.current === draftBodyRef.current) {
+      setIsEditing(false);
+      return;
+    }
+    // dirty → auto save
+    void onSave(editingBodyRef.current);
+    setIsEditing(false);
+  };
+
+  // unmount cleanup — 切换文件 / PR / tab 触发。跟取消按钮共用 runCancelLogic 让
+  // 行为完全一致。isMutating=true 时跳过 (用户已经显式 mutate 接管，不需要 cleanup
+  // 兜底，避免跟 IPC 形成 race)
+  useEffect(() => {
+    return () => {
+      if (isMutatingRef.current) return;
+      if (!isEditingRef.current) return;
+      runCancelLogic();
+    };
+    // 空 deps：mount/unmount 跑；runCancelLogic 内部全 ref 读，无 closure 失效问题
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoEditToken]);
+  }, []);
+
+  // 把 "进入编辑模式" 触发器注册到 DiffView 的 ref map。register 是稳定函数引用
+  // (DiffView 用 useCallback 包)，draft.id 不变 → effect 只在 mount/unmount 跑。
+  // 调用 fn 不引发 React state change in DiffView side → 没有 re-render → 没有
+  // unmount/mount 循环，进 edit 一次只一次
+  useEffect(() => {
+    registerEditTrigger?.(draft.id, () => {
+      setIsEditing(true);
+      setEditingBody(draftBodyRef.current);
+    });
+    return () => registerEditTrigger?.(draft.id, null);
+  }, [draft.id, registerEditTrigger]);
 
   // draft.body 外部变化 (e.g., 队列写回) + 当前非 editing → 同步 editingBody
   useEffect(() => {
@@ -80,15 +153,10 @@ export function DraftZone({ draft, autoEditToken, onSave, onDelete }: DraftZoneP
   }, [isEditing]);
 
   // textarea 的 React onKeyDown 在 React 18 root delegation 下走 bubble 阶段，
-  // monaco 在 editor container 上的 capture-stage keydown listener 可能在事件冒
-  // 泡前就 stopPropagation 吞掉 Esc，导致 textarea 的 onKeyDown 永远不触发。
-  // 兜底：window 顶层 capture listener，textarea focus 时按 Esc 直接调 handleCancel。
-  // 用 ref 跟踪 editingBody 让 handleCancel 闭包总是读最新 textarea 值，避免重复
-  // 注册 listener 的 deps 抖动
-  const editingBodyRef = useRef(editingBody);
-  useEffect(() => {
-    editingBodyRef.current = editingBody;
-  }, [editingBody]);
+  // monaco 在 editor container 上的 capture-stage keydown listener 可能在事件
+  // 冒泡前就 stopPropagation 吞掉 Esc，导致 textarea 的 onKeyDown 永远不触发。
+  // 兜底：window 顶层 capture listener，textarea focus 时按 Esc 走 runCancelLogic
+  // (跟取消按钮 / unmount cleanup 共用) + 设 isMutatingRef=true 让 cleanup 跳过
   useEffect(() => {
     if (!isEditing) return;
     const onKey = (e: KeyboardEvent): void => {
@@ -96,32 +164,14 @@ export function DraftZone({ draft, autoEditToken, onSave, onDelete }: DraftZoneP
       if (document.activeElement !== textareaRef.current) return;
       e.preventDefault();
       e.stopPropagation();
-      // 同 handleCancel 四档判断，直接读 ref 拿最新 editingBody
-      const editing = editingBodyRef.current.trim();
-      const persisted = draft.body.trim();
-      if (!editing && !persisted) {
-        void onDelete();
-        return;
-      }
-      if (!editing) {
-        setEditingBody(draft.body);
-        setIsEditing(false);
-        return;
-      }
-      if (editingBodyRef.current === draft.body) {
-        setIsEditing(false);
-        return;
-      }
-      // dirty → auto save
-      setSaving(true);
-      void Promise.resolve(onSave(editingBodyRef.current)).finally(() => {
-        setIsEditing(false);
-        setSaving(false);
-      });
+      isMutatingRef.current = true;
+      runCancelLogic();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [isEditing, draft.body, onDelete, onSave]);
+    // runCancelLogic 是局部 fn，不放 deps；isEditing 切回时移除 listener
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing]);
 
   const status = draft.status;
   // posted 不应该再被编辑；UI 上隐藏编辑/删除按钮，整体灰显
@@ -140,6 +190,7 @@ export function DraftZone({ draft, autoEditToken, onSave, onDelete }: DraftZoneP
       setIsEditing(false);
       return;
     }
+    isMutatingRef.current = true;
     setSaving(true);
     try {
       await onSave(editingBody);
@@ -151,11 +202,10 @@ export function DraftZone({ draft, autoEditToken, onSave, onDelete }: DraftZoneP
   };
 
   const handleCancel = async (): Promise<void> => {
-    // 取消四档（用户决策：有内容时一律走保存而不是删除/丢弃）：
-    //  1. editing + persisted 都空 → 删除真空草稿避免占位
-    //  2. editing 空 + persisted 非空 → 用户清空 textarea (可能误操作)，revert 不删
-    //  3. editing 跟 persisted 一样 → 没改动，直接退出 edit
-    //  4. editing 非空 + 跟 persisted 不同 → **自动保存退出**（不弹 confirm 也不删除）
+    // 取消复用 runCancelLogic (跟 unmount cleanup 共用)。区别：handleCancel 主动
+    // 设 isMutatingRef=true (用户显式操作)，让 cleanup 知道意图已被接管
+    isMutatingRef.current = true;
+    // 内部 dirty 分支需要 await save 才退 edit，单独走一遍含 await 的版本：
     const editingTrim = editingBody.trim();
     const persistedTrim = draft.body.trim();
     if (!editingTrim && !persistedTrim) {
@@ -171,7 +221,6 @@ export function DraftZone({ draft, autoEditToken, onSave, onDelete }: DraftZoneP
       setIsEditing(false);
       return;
     }
-    // editing 跟 persisted 不同 → 走 save 持久化
     setSaving(true);
     try {
       await onSave(editingBody);
@@ -189,11 +238,13 @@ export function DraftZone({ draft, autoEditToken, onSave, onDelete }: DraftZoneP
       setConfirmDelete(true);
       return;
     }
+    isMutatingRef.current = true;
     void onDelete();
   };
 
   const handleConfirmDelete = async (): Promise<void> => {
     setConfirmDelete(false);
+    isMutatingRef.current = true;
     await onDelete();
   };
 
