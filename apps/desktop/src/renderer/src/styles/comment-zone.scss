@@ -102,7 +102,8 @@
   margin-top: $space-4;
   padding: $space-2 0 $space-2 $space-5;
   border-left: 2px solid $border-default;
-  font-size: $fs-sm;
+  // 字号继承父级 (.monaco-comment-zone-inner 14px)，不再缩减 — 嵌套 reply 跟
+  // 父评论同等可读性，视觉层级靠左侧 border + indent 区分就够
 
   & + & {
     margin-top: $space-3;
