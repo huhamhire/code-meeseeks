@@ -333,7 +333,7 @@ function formatStatusbarElapsed(ms: number): string {
   if (totalSec < 60) return `${String(totalSec)}s`;
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
-  return `${String(m)}m ${String(s).padStart(2, '0')}s`;
+  return `${String(m)}m${String(s).padStart(2, '0')}s`;
 }
 
 /**

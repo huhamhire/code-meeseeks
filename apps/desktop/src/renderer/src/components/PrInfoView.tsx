@@ -19,7 +19,11 @@ export function PrInfoView({ pr }: PrInfoViewProps) {
         <section className="pr-detail-section">
           <h3>描述</h3>
           <div className="pr-detail-description markdown">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{pr.description}</ReactMarkdown>
+            {/* BBS 远端用 \r\n 行尾，remark 解析时 CR 跟 LF 各算一次换行 → 单换行
+                被当成段落分隔，每个 list item 之间多一段空白。归一化成 \n */}
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {pr.description.replace(/\r\n?/g, '\n')}
+            </ReactMarkdown>
           </div>
         </section>
       )}

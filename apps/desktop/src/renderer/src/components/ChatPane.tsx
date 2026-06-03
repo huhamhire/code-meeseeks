@@ -1376,13 +1376,22 @@ function formatTokens(n: number): string {
   return `${(n / 1000).toFixed(1)}k`;
 }
 
+const RUN_STATUS_LABEL: Record<ReviewRun['status'], string> = {
+  running: '运行中',
+  succeeded: '完成',
+  failed: '失败',
+  cancelled: '已取消',
+};
+
 function RunMeta({ run }: { run: ReviewRun }) {
   const duration = run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—';
   const usage = run.stdout ? extractTokenUsage(run.stdout) : ({} as TokenUsage);
   return (
     <header className="chat-run-meta">
       <span className={`chat-run-tool chat-run-tool-${run.tool}`}>/{run.tool}</span>
-      <span className={`chat-run-status chat-run-status-${run.status}`}>{run.status}</span>
+      <span className={`chat-run-status chat-run-status-${run.status}`}>
+        {RUN_STATUS_LABEL[run.status]}
+      </span>
       <span className="chat-run-chip">{run.strategy === 'docker' ? 'Docker' : 'CLI'}</span>
       {usage.total !== undefined ? (
         // litellm 给齐了 prompt + completion + total → 完整展示

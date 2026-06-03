@@ -124,7 +124,8 @@ button.statusbar-pragent-chip {
   animation: none;
 }
 .statusbar-pragent-elapsed {
-  font-family: $font-mono;
+  // 不用 mono 字体 — sans 和 mono 的 x-height 差异让 flex center 后视觉基线不齐。
+  // 数字等宽靠父级 .statusbar-pragent-chip 的 font-variant-numeric: tabular-nums
   opacity: 0.75;
 }
 // 队列数尾缀 (+N)：跟 elapsed 视觉一致但显得是 "另外排队" 不是 "时间"

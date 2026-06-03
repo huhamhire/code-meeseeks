@@ -54,8 +54,10 @@
 }
 
 .reviewer-list {
-  list-style: none;
-  padding: 0;
+  // 显式无序列表样式：disc bullet + 适度左 padding 给 marker 留位置。
+  // 12 个 reviewer 的视觉区分靠 bullet 更直观，纯堆叠看起来像段落
+  list-style: disc;
+  padding-left: $space-8;
 
   li {
     padding: $space-2 0;

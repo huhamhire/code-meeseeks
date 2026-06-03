@@ -39,31 +39,34 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
           <span className="pr-item-id">#{pr.remoteId}</span> {pr.title}
         </div>
         <div className="pr-item-meta">
-          <span>{pr.author.displayName}</span>
-          <span>·</span>
-          <span>
-            {pr.sourceRef.displayId} → {pr.targetRef.displayId}
-          </span>
-          {(approvedCount > 0 || needsWorkCount > 0) && (
-            <span className="pr-item-review-chips">
-              {approvedCount > 0 && (
-                <span
-                  className="review-chip review-chip-approved"
-                  title={`${String(approvedCount)} 位 reviewer 已 approve`}
-                >
-                  ✓ {approvedCount}
-                </span>
-              )}
-              {needsWorkCount > 0 && (
-                <span
-                  className="review-chip review-chip-needs-work"
-                  title={`${String(needsWorkCount)} 位 reviewer 标记 needs work`}
-                >
-                  ✗ {needsWorkCount}
-                </span>
-              )}
+          <div className="pr-item-meta-row">
+            <span className="pr-item-meta-author">{pr.author.displayName}</span>
+            {(approvedCount > 0 || needsWorkCount > 0) && (
+              <span className="pr-item-review-chips">
+                {approvedCount > 0 && (
+                  <span
+                    className="review-chip review-chip-approved"
+                    title={`${String(approvedCount)} 位 reviewer 已 approve`}
+                  >
+                    ✓ {approvedCount}
+                  </span>
+                )}
+                {needsWorkCount > 0 && (
+                  <span
+                    className="review-chip review-chip-needs-work"
+                    title={`${String(needsWorkCount)} 位 reviewer 标记 needs work`}
+                  >
+                    ✗ {needsWorkCount}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+          <div className="pr-item-meta-row">
+            <span className="pr-item-meta-branch">
+              {pr.sourceRef.displayId} → {pr.targetRef.displayId}
             </span>
-          )}
+          </div>
         </div>
       </div>
     </div>

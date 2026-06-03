@@ -190,9 +190,32 @@
   font-size: $fs-sm;
   color: $text-muted;
   display: flex;
-  gap: $space-3;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: $space-1;
+}
+
+// meta 两行：row 1 = author + 状态 chip；row 2 = branch (源→目标)
+// flex-direction:row + align-items:center 让 chip 跟 author 基线居中
+.pr-item-meta-row {
+  display: flex;
   align-items: center;
+  gap: $space-3;
+  min-width: 0;
+}
+
+.pr-item-meta-author,
+.pr-item-meta-branch {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// chip 推右贴边 + 不可缩 — 长 author 时 chip 仍可见
+.pr-item-review-chips {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 // reviewer 统计胶囊：靠右贴边，把 author/branch meta 挤左
@@ -212,15 +235,15 @@
   font-weight: 600;
   line-height: $lh-normal;
 
-  // VS Code git decoration 绿
+  // 饱和背景 + 白字 — 跟 ChatPane .chat-run-status 风格对齐，hover sidebar
+  // 时一眼能扫到 reviewer 状态 (之前 git-decoration-fade 淡色背景视觉太弱)
   &.review-chip-approved {
-    background: $git-added-bg-fade;
-    color: $git-added;
+    background: $color-approved;
+    color: $text-on-accent;
   }
-  // VS Code git decoration 红
   &.review-chip-needs-work {
-    background: $git-needs-work-fade;
-    color: $git-needs-work-fg;
+    background: $color-danger-bg;
+    color: $text-on-accent;
   }
 }
 
@@ -229,15 +252,34 @@
   font-size: $fs-md;
 }
 
-// 行级状态前缀：approved 绿勾、needs_work 红叹号；pending 不加
+// 行级状态前缀：approved 绿勾、needs_work 红叹号；pending 不加。
+// 字符 + bold + 大号 + accent 描边底色让符号在标题文本里"跳出来"，
+// 不用 emoji 是因为不同 OS 字体渲染差异大、不可控
+.pr-item-status-approved .pr-item-title::before,
+.pr-item-status-needs_work .pr-item-title::before {
+  display: inline-block;
+  margin-right: $space-2;
+  // 固定方形尺寸 + 内容居中 — 否则 ✓ 跟 ! 字符天然宽度不同 chip 看起来一宽一扁
+  width: 18px;
+  height: 18px;
+  text-align: center;
+  border-radius: $radius-sm;
+  font-weight: 800;
+  // 字符比标题文字小一号，留出 chip 内边距视觉更精致；标题 $fs-lg ≈ 13px → 11px
+  font-size: 0.85em;
+  line-height: 18px;
+  vertical-align: 0.05em;
+}
+// 暗色 fade 背景 + 高饱和度字：底色淡而不突兀，符号本身仍醒目
 .pr-item-status-approved .pr-item-title::before {
-  content: '✓ ';
+  content: '✓';
+  background: $git-added-bg-fade;
   color: $color-approved;
 }
 .pr-item-status-needs_work .pr-item-title::before {
-  content: '! ';
-  color: $color-warning;
-  font-weight: 700;
+  content: '!';
+  background: $git-needs-work-fade;
+  color: $color-danger;
 }
 
 .conflict-warn {
