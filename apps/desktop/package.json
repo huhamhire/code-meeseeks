@@ -17,8 +17,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint src --max-warnings=0",
     "prepare:pragent": "node scripts/assemble-pragent-runtime.mjs",
-    "pack": "electron-vite build && electron-builder --dir",
-    "dist": "electron-vite build && electron-builder"
+    "pack": "npm run prepare:pragent && electron-vite build && electron-builder --dir",
+    "dist": "npm run prepare:pragent && electron-vite build && electron-builder"
   },
   "nx": {
     "targets": {
@@ -42,20 +42,12 @@
       },
       "pack": {
         "cache": false,
-        "dependsOn": [
-          "build",
-          "prepare:pragent"
-        ],
         "outputs": [
           "{projectRoot}/release"
         ]
       },
       "dist": {
         "cache": false,
-        "dependsOn": [
-          "build",
-          "prepare:pragent"
-        ],
         "outputs": [
           "{projectRoot}/release"
         ]

@@ -30,6 +30,18 @@ asarUnpack:
   - '**/node_modules/pino-roll/**'
   - '**/node_modules/thread-stream/**'
 
+# 嵌入式 pr-agent 运行时（见 ADR-0008）：vendor/pragent → <resources>/pragent，
+# main 的 resolveEmbeddedPython 打包态走 process.resourcesPath/pragent。extraResources
+# 天然落在 asar 外（原生解释器 + .pyd/.dll 必须是真实文件，不能进 asar）。
+# 由构建机宿主平台 prepare:pragent 组装，与所构建的目标平台一致（初版 Windows x64）。
+# __pycache__ 排除以瘦身（首次启动会重新生成 .pyc）。
+extraResources:
+  - from: vendor/pragent
+    to: pragent
+    filter:
+      - '**/*'
+      - '!**/__pycache__/**'
+
 win:
   target:
     - target: nsis
