@@ -676,6 +676,10 @@ export function registerIpcHandlers({
   const executeRun = async (item: QueueItem): Promise<ReviewRun> => {
     if (!prAgentBridge) throw new Error('pr-agent 未就绪');
     const { req, pr } = item;
+    // 提前 resolve active LLM profile — model 字段要随 startReviewRun 一起落
+    // 盘，让 UI 在 meta 行展示"这次 run 用的什么模型"。后面 buildPragentEnv
+    // 同样会用到，这里 resolve 一次复用
+    const activeLlmForRecord = resolveActiveLlmProfile(bootstrap.config.llm);
     // 用入队预分配的 runId 覆盖 startReviewRun 的自生 id，让 cancel(runId) 在 active
     // 状态也能精确定位 (跟入队时给的 runId 一致)
     const run = await startReviewRun(stateStore, {
@@ -685,6 +689,9 @@ export function registerIpcHandlers({
       question: req.tool === 'ask' ? req.question : undefined,
       prAgentVersion: prAgentBridge.version,
       strategy: prAgentBridge.strategy,
+      // 持久化用 profile.model 原文，不做 normalizeModel 前缀处理 — 跟用户
+      // Settings 里看到的名字一致更直观
+      model: activeLlmForRecord?.model || undefined,
     });
     // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播
     item.info = { ...item.info, startedAt: run.startedAt };

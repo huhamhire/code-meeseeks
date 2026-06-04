@@ -257,6 +257,11 @@ export default function App() {
           collapsed={chatCollapsed}
           onJumpToDraftEditor={(t) => setPendingDiffNav(t)}
           onSetReviewStatus={(s) => void setSelectedPrStatus(s)}
+          // 当前 active LLM profile.model — RunningView 显示成 chip 让用户知道
+          // 这次 review 用的什么模型 (不同 profile 出的结果差异大)
+          currentLlmModel={
+            boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
+          }
         />
       </div>
       <StatusBar

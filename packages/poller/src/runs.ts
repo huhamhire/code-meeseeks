@@ -46,6 +46,11 @@ export interface StartReviewRunInput {
    * 落盘 id 不一致。
    */
   id?: string;
+  /**
+   * 本次 run 使用的 LLM model id (含 provider 前缀，如 `openai/qwen-plus`)。
+   * 未指定时 run.model 留空，UI 自然不展示模型 chip
+   */
+  model?: string;
 }
 
 /** 写入初始 running 状态；调用方在 pr-agent 调用前必须先 start。 */
@@ -62,6 +67,7 @@ export async function startReviewRun(
     question: input.question,
     prAgentVersion: input.prAgentVersion,
     strategy: input.strategy,
+    model: input.model,
     status: 'running',
     startedAt: at.toISOString(),
   };

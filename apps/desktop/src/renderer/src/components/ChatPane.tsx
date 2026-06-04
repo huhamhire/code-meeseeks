@@ -7,7 +7,6 @@ import type {
   IpcChannels,
   LocalPrStatus,
   PrAgentStatus,
-  PrAgentStrategy,
   PrDocSectionKey,
   ReviewRun,
   ReviewRunTool,
@@ -47,6 +46,11 @@ interface ChatPaneProps {
   }) => void;
   /** /approve /needswork 命令触发的 PR review 决断；由 MainPane 接到 prs:setLocalStatus */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
+  /**
+   * 当前 active LLM profile 的 model 名 — RunningView meta chip 显示。
+   * null = 无 active profile / 还在加载，UI 不展示 model chip
+   */
+  currentLlmModel?: string | null;
 }
 
 /**
@@ -67,6 +71,7 @@ export function ChatPane({
   collapsed,
   onJumpToDraftEditor,
   onSetReviewStatus,
+  currentLlmModel,
 }: ChatPaneProps) {
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
@@ -429,7 +434,7 @@ export function ChatPane({
             runId={myActiveRun.runId}
             lines={liveLines}
             startedAt={new Date(myActiveRun.startedAt ?? myActiveRun.enqueuedAt).getTime()}
-            strategy={prAgent.strategy}
+            model={currentLlmModel ?? null}
           />
         )}
         {/* 别 PR 在跑：提示用户新提交会排队，不阻塞输入。状态栏的队列 chip 可点开
@@ -1091,14 +1096,15 @@ function RunningView({
   runId,
   lines,
   startedAt,
-  strategy,
+  model,
 }: {
   tool: ReviewRunTool;
   runId: string;
   lines: ReadonlyArray<string>;
   startedAt: number;
-  /** 跟 RunMeta 同源 — 拼"Docker / CLI" chip，让运行中跟完成态视觉一致 */
-  strategy: PrAgentStrategy;
+  /** 当前 active LLM profile.model — 跟 RunMeta 同源放在 chip 行，让 running
+      跟 succeeded 视觉一致；可选 (无 active profile 时不显示) */
+  model: string | null;
 }) {
   // 末行追加时自动滚到底
   const ref = useRef<HTMLPreElement | null>(null);
@@ -1117,11 +1123,9 @@ function RunningView({
 
   const phase = useMemo(() => inferPhase(lines), [lines]);
 
-  // 跟 RunMeta 完全同结构的 chip 行 (header.chat-run-meta + 4 个 chip)。
-  // running 跟 succeeded/failed 共享一套视觉骨架，用户从列表扫一眼能在固定位置
-  // 看到 tool / status / strategy / 时长，不用因为状态切换重新定位视线。
-  // 唯一差异：status chip 内嵌 Spinner；phase 副信息独立放在 chip 行后单独一行
-  // (跟 raw stdout 之上的间隔保持，不挤进 chip 行避免横向溢出)
+  // 跟 RunMeta 完全同结构的 chip 行。running 跟 succeeded/failed 共享一套视觉
+  // 骨架，用户从列表扫一眼能在固定位置看到 tool / 状态 / 模型 / 时长。strategy
+  // (Docker/CLI) 是部署细节用户不关心，撤掉；model 是真正影响 review 质量的变量
   return (
     <div className="chat-run-running" data-run-id={runId}>
       <header className="chat-run-meta">
@@ -1130,7 +1134,11 @@ function RunningView({
           <Spinner />
           {RUN_STATUS_LABEL.running}
         </span>
-        <span className="chat-run-chip">{strategy === 'docker' ? 'Docker' : 'CLI'}</span>
+        {model && (
+          <span className="chat-run-chip chat-run-model" title={`使用模型 ${model}`}>
+            {model}
+          </span>
+        )}
         <span className="chat-run-chip chat-run-duration">{formatElapsed(elapsedMs)}</span>
         {/* 开始时间：跟 RunMeta 同模 — 纯文本右对齐，让 running 跟 succeeded
             两态最右侧元素位置稳定 */}
@@ -1498,7 +1506,13 @@ function RunMeta({ run }: { run: ReviewRun }) {
       <span className={`chat-run-status chat-run-status-${run.status}`}>
         {RUN_STATUS_LABEL[run.status]}
       </span>
-      <span className="chat-run-chip">{run.strategy === 'docker' ? 'Docker' : 'CLI'}</span>
+      {/* 模型 chip 取代 Docker/CLI strategy chip — strategy 是部署细节用户不
+          关心，model 是真正影响 review 质量的变量 */}
+      {run.model && (
+        <span className="chat-run-chip chat-run-model" title={`使用模型 ${run.model}`}>
+          {run.model}
+        </span>
+      )}
       {usage.total !== undefined ? (
         // litellm 给齐了 prompt + completion + total → 完整展示
         <span

@@ -245,6 +245,16 @@ export interface ReviewRun {
   /** 探测时拿到的 pr-agent 版本（CLI 首行 / docker version 字符串） */
   prAgentVersion: string;
   strategy: PrAgentStrategy;
+  /**
+   * 本次 run 使用的 LLM 模型 ID — 取自启动时 active LlmProfile.model (经过
+   * normalizeModel 加 provider 前缀的形态，e.g., `openai/qwen-plus` /
+   * `deepseek/deepseek-chat`)。
+   *
+   * 历史 run 没存这字段 (undefined)，UI 应能 graceful 处理。新 run 在 startReviewRun
+   * 入口填上，让 ChatPane 在 meta 行展示"哪一次 review 用的哪个模型"，方便回看
+   * 不同 profile 出的结果差异
+   */
+  model?: string;
   status: ReviewRunStatus;
   /** ISO 启动时间 */
   startedAt: string;
