@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { AppInfo, AppPaths, Config, LlmProfile, LlmProvider } from '@pr-pilot/shared';
+import type { AppInfo, AppPaths, Config, LlmProfile, LlmProvider } from '@meebox/shared';
 import { invoke } from '../api';
 import { ConfirmModal } from './ConfirmModal';
 import { CloseIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
@@ -667,7 +667,7 @@ export function SettingsModal({
                   setReposDirInput(e.target.value);
                   setSaved(false);
                 }}
-                placeholder="~/.pr-pilot/repos"
+                placeholder="~/.code-meeseeks/repos"
               />
               <button
                 type="button"

@@ -1,4 +1,4 @@
-import type { PrAgentStrategy } from '@pr-pilot/shared';
+import type { PrAgentStrategy } from '@meebox/shared';
 import { defaultExec } from './exec.js';
 import type {
   ExecFn,
@@ -91,7 +91,7 @@ export class LocalCliBridge extends BaseBridge {
       // LocalGitProvider(target_branch_name)，**--pr_url 在 local 模式下就是
       // target branch 的名字**，不是 PR URL 或路径。仓库根靠容器 cwd 自己走 .git
       // 父目录查找定位，跟 --pr_url 无关。
-      // 所以这里把 opts.targetBranch (= materializeWorktree 建好的 pr-pilot/base)
+      // 所以这里把 opts.targetBranch (= materializeWorktree 建好的 meebox/base)
       // 直接填到 --pr_url 槽位。
       return {
         cmd: 'pr-agent',

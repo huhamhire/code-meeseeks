@@ -8,7 +8,7 @@ import type { Rule } from '../src/types.js';
 let tmp: string;
 
 beforeEach(async () => {
-  tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'pr-pilot-rules-test-'));
+  tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-rules-test-'));
 });
 afterEach(async () => {
   await fs.rm(tmp, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ReviewDraft } from '@pr-pilot/shared';
+import type { ReviewDraft } from '@meebox/shared';
 import { invoke } from '../api';
 
 /**

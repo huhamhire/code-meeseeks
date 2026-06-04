@@ -34,7 +34,7 @@ export async function createLogger(opts: LoggerOptions): Promise<Logger> {
   // 不再用 transport.targets（transport 在 worker 进程跑，控制台转码 patch
   // 不到 worker 的 stdout）。
   const fileStream = await pinoRoll({
-    file: path.join(logsDir, 'pr-pilot.log'),
+    file: path.join(logsDir, 'meebox.log'),
     frequency: 'daily',
     mkdir: true,
     limit: { count: retentionFiles },

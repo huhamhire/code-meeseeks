@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import type { PrAgentStatus, PrAgentStrategy } from '@pr-pilot/shared';
+import type { PrAgentStatus, PrAgentStrategy } from '@meebox/shared';
 import {
   DEFAULT_DOCKER_IMAGE_TAG,
   DockerBridge,

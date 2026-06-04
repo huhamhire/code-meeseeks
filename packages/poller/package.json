@@ -1,5 +1,5 @@
 {
-  "name": "@pr-pilot/poller",
+  "name": "@meebox/poller",
   "version": "0.0.0",
   "private": true,
   "description": "PR discovery poller: 周期性调用 PlatformAdapter 并把发现入 StateStore",
@@ -28,7 +28,7 @@
     }
   },
   "dependencies": {
-    "@pr-pilot/shared": "*",
-    "@pr-pilot/state-store": "*"
+    "@meebox/shared": "*",
+    "@meebox/state-store": "*"
   }
 }

@@ -11,7 +11,7 @@ npm run prepare:pragent          # 幂等：已就绪则跳过
 npm run prepare:pragent -- --force   # 强制重建
 ```
 
-或经 Nx：`npx nx run @pr-pilot/desktop:"prepare:pragent"`。
+或经 Nx：`npx nx run @meebox/desktop:"prepare:pragent"`。
 
 打包（`pack` / `dist`）已通过 Nx `dependsOn` 自动先跑它。
 

@@ -94,7 +94,7 @@ export class JsonFileStateStore implements StateStore {
    *
    * 为什么必须：StateStore key 由调用方拼接 (含 PR localId / runId / 评论缓存等)，
    * 一旦 key 在某个分支拼了未净化的用户输入 (比如远端 PR slug 含 `../`)，没有这层
-   * 屏障就能在用户工作目录之外读写文件。pr-pilot 写过 user-controlled 字段进 key
+   * 屏障就能在用户工作目录之外读写文件。meebox 写过 user-controlled 字段进 key
    * 的路径 (rules.dir id / repo slug / 远端 url 派生的 connectionId) 必须挡住。
    */
   private subpathInside(rel: string): string {

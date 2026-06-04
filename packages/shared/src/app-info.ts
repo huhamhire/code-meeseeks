@@ -1,5 +1,5 @@
 export interface AppPaths {
-  /** ~/.pr-pilot/ — fixed application root */
+  /** ~/.code-meeseeks/ — fixed application root */
   appDir: string;
   /** config.yaml absolute path */
   configFile: string;
@@ -35,6 +35,6 @@ export interface AppInfo {
   electronVersion: string;
   nodeVersion: string;
   platform: Platform;
-  /** ~/.pr-pilot was newly created on this run */
+  /** ~/.code-meeseeks was newly created on this run */
   firstRun: boolean;
 }

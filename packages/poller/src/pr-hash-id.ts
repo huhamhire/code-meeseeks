@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
-import type { PlatformKind } from '@pr-pilot/shared';
+import type { PlatformKind } from '@meebox/shared';
 
 /**
- * PR 在 pr-pilot 状态体系里的稳定身份。多平台中性化字段，方便 M5 接入 GitHub /
+ * PR 在 meebox 状态体系里的稳定身份。多平台中性化字段，方便 M5 接入 GitHub /
  * GitLab / Gitea 时直接复用同一份 schema，不必各家自己造名:
  *
  *   platform × connection × group × repo × remoteId
@@ -15,7 +15,7 @@ import type { PlatformKind } from '@pr-pilot/shared';
  * | repo      | repoSlug         | name               | name            | name           |
  * | remoteId  | PR id (数字)     | PR number          | MR iid          | PR id          |
  *
- * `connectionId` 是 pr-pilot 本地标识，跟用户在 config.yaml 里给某个连接起的 id
+ * `connectionId` 是 meebox 本地标识，跟用户在 config.yaml 里给某个连接起的 id
  * 一致；它的角色是"分账户/分凭据" (用户可能有两个 BBS 内网账号)，跟 platform 维度
  * 互补 (BBS 跨账户的同 host 不撞 id 也是靠 connectionId 区分)。
  *

@@ -62,7 +62,7 @@ const MATCHERS: Array<{ re: RegExp; title: string; kind: FormattedError['kind'];
       re: /Invalid symmetric difference expression/i,
       title: '本地镜像没找到 PR 引用的 commit',
       kind: 'platform',
-      hint: '远端 PR 的 head / base sha 在本地 bare 镜像里不可达。通常发生在：刚从 partial clone 升到完整 clone 但旧镜像没重建，或 PR 源分支已删/强推。删除该 repo 的 bare 镜像目录 (`~/.pr-pilot/repos/<host>/<proj>/<repo>/bare`) 后重选此 PR 会自动重 clone',
+      hint: '远端 PR 的 head / base sha 在本地 bare 镜像里不可达。通常发生在：刚从 partial clone 升到完整 clone 但旧镜像没重建，或 PR 源分支已删/强推。删除该 repo 的 bare 镜像目录 (`~/.code-meeseeks/repos/<host>/<proj>/<repo>/bare`) 后重选此 PR 会自动重 clone',
     },
     {
       re: /unknown revision or path not in the working tree/i,

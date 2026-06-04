@@ -1,4 +1,4 @@
-// pr-pilot renderer 样式总入口。各区域拆在 styles/ 下；
+// meebox renderer 样式总入口。各区域拆在 styles/ 下；
 // 设计 token 在 styles/_tokens.scss，每个 .scss 文件用 `@use './tokens' as *;` 拉取。
 //
 //   base         全局 reset / html-body / .app / .btn / .muted / .badge 等通用原子

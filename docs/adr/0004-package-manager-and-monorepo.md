@@ -6,7 +6,7 @@
 
 ## 背景
 
-pr-pilot 采用 monorepo 结构（`apps/desktop` + 多个 `packages/*`），需要确定两个工具选择：
+meebox 采用 monorepo 结构（`apps/desktop` + 多个 `packages/*`），需要确定两个工具选择：
 
 1. JS 包管理器：npm / yarn / pnpm
 2. Monorepo 任务编排：Turborepo / Nx / 自研脚本 / 无

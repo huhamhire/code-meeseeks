@@ -3,8 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { Logger } from 'pino';
-import { JsonFileStateStore } from '@pr-pilot/state-store';
-import type { PlatformAdapter, PullRequest } from '@pr-pilot/shared';
+import { JsonFileStateStore } from '@meebox/state-store';
+import type { PlatformAdapter, PullRequest } from '@meebox/shared';
 import { Poller } from '../src/poller.js';
 import { prHashId } from '../src/pr-hash-id.js';
 import {
@@ -98,7 +98,7 @@ let tmpDir: string;
 let store: JsonFileStateStore;
 
 beforeEach(async () => {
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pr-pilot-poller-test-'));
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-poller-test-'));
   store = new JsonFileStateStore(tmpDir);
 });
 

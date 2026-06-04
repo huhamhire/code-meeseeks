@@ -2,13 +2,13 @@ import { app, BrowserWindow, Menu, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
-import { ensureWorkspace, type BootstrapResult } from '@pr-pilot/config';
-import { createLogger } from '@pr-pilot/logger';
-import { createPrAgentBridge, type PrAgentBridge } from '@pr-pilot/pr-agent-bridge';
-import { Poller } from '@pr-pilot/poller';
-import { RepoMirrorManager } from '@pr-pilot/repo-mirror';
-import type { PlatformAdapter, PrAgentStatus } from '@pr-pilot/shared';
-import { JsonFileStateStore } from '@pr-pilot/state-store';
+import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
+import { createLogger } from '@meebox/logger';
+import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
+import { Poller } from '@meebox/poller';
+import { RepoMirrorManager } from '@meebox/repo-mirror';
+import type { PlatformAdapter, PrAgentStatus } from '@meebox/shared';
+import { JsonFileStateStore } from '@meebox/state-store';
 import { buildAdapters, type ConnectionRuntime } from './adapters.js';
 import { registerIpcHandlers } from './ipc.js';
 
@@ -18,11 +18,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * 嵌入式 pr-agent 运行时的解释器绝对路径（见 ADR-0008）。
  * - dev：`apps/desktop/vendor/pragent/...`（app.getAppPath() = apps/desktop）
  * - 打包：`<resources>/pragent/...`（electron-builder extraResources）
- * - `PRPILOT_PRAGENT_PYTHON` env 覆盖兜底
+ * - `MEEBOX_PRAGENT_PYTHON` env 覆盖兜底
  * 探测层据此判断 embedded 是否可用（文件不存在则回退 local-cli/docker）。
  */
 function resolveEmbeddedPython(): string {
-  const override = process.env.PRPILOT_PRAGENT_PYTHON;
+  const override = process.env.MEEBOX_PRAGENT_PYTHON;
   if (override) return override;
   const rel =
     process.platform === 'win32'
@@ -47,7 +47,7 @@ async function start(): Promise<void> {
   logger = await createLogger({ logsDir: bootstrap.paths.logsDir });
   logger.info(
     { firstRun: bootstrap.firstRun, appDir: bootstrap.paths.appDir },
-    'pr-pilot main process started',
+    'meebox main process started',
   );
 
   const embeddedPythonPath = resolveEmbeddedPython();
@@ -185,7 +185,7 @@ async function start(): Promise<void> {
     repoMirror,
   });
 
-  // 不要 Electron 默认菜单栏（File/Edit/View/...），pr-pilot 自己提供工具栏
+  // 不要 Electron 默认菜单栏（File/Edit/View/...），meebox 自己提供工具栏
   Menu.setApplicationMenu(null);
 
   // poller 常驻：当前启用连接为空时 tick 是空操作；用户在设置页启用 / 切换连接后
@@ -249,6 +249,6 @@ app.on('window-all-closed', () => {
 
 start().catch((e: unknown) => {
   if (logger) logger.fatal({ err: e }, 'startup failed');
-  else console.error('pr-pilot startup failed:', e);
+  else console.error('meebox startup failed:', e);
   app.quit();
 });

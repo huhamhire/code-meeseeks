@@ -7,7 +7,7 @@
 
 ## 背景
 
-一期 pr-pilot 仅支持 **Bitbucket Server / Data Center**（Atlassian 自托管版，对内网企业用户为主要场景）。
+一期 meebox 仅支持 **Bitbucket Server / Data Center**（Atlassian 自托管版，对内网企业用户为主要场景）。
 
 注意：Bitbucket 实际上有两个产品：
 
@@ -134,7 +134,7 @@ Monaco 侧用 `UnifiedDiff`，与平台解耦。
 
 Bitbucket Server inline comment 的锚点用 `(path, line, lineType: 'ADDED' | 'REMOVED' | 'CONTEXT', fileType: 'TO' | 'FROM')`。
 
-pr-pilot 内部 finding 用 `(file, startLine, endLine)`（基于 PR 目标分支视角）。需要一个映射函数把内部锚点 → Bitbucket 锚点。
+meebox 内部 finding 用 `(file, startLine, endLine)`（基于 PR 目标分支视角）。需要一个映射函数把内部锚点 → Bitbucket 锚点。
 
 - 默认锚到目标分支视角的新行（`fileType=TO`, `lineType=ADDED`）
 - 删除区评论需要特别处理（`fileType=FROM`, `lineType=REMOVED`）

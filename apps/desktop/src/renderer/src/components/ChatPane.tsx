@@ -11,10 +11,10 @@ import type {
   ReviewRun,
   ReviewRunTool,
   StoredPullRequest,
-} from '@pr-pilot/shared';
+} from '@meebox/shared';
 
 type MatchedRule = IpcChannels['rules:matchForPr']['response'];
-import type { ReviewDraft } from '@pr-pilot/shared';
+import type { ReviewDraft } from '@meebox/shared';
 import { invoke } from '../api';
 import { chatRunStore, useChatRunStore } from '../stores/chat-run-store';
 import { useDraftsForPr } from '../stores/drafts-store';
@@ -505,7 +505,7 @@ const COMMANDS: ReadonlyArray<CommandSpec> = [
   { kind: 'pragent', name: 'review', label: '/review', desc: '代码评审', insertAs: '/review' },
   { kind: 'pragent', name: 'describe', label: '/describe', desc: '生成 PR 描述', insertAs: '/describe' },
   // /improve 暂屏蔽：实测 pr-agent 的 improve 工具依赖在线平台 (GitHub / GitLab /
-  // Bitbucket Cloud) 的 inline code suggestion / best practices 集成，跟 pr-pilot
+  // Bitbucket Cloud) 的 inline code suggestion / best practices 集成，跟 meebox
   // 本地 PR 管理路径不兼容。后端类型 / parser / IPC 仍保留，等策略变化或上游
   // 支持 local provider 时直接放开
   // { kind: 'pragent', name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
@@ -549,7 +549,7 @@ interface ChatInputBarProps {
 
 // 输入历史：最近 5 次成功提交，localStorage 持久化。Up/Down 按键在 textarea 末尾
 // 输入位置时回放。命中 / dismissed 后焦点保持在 textarea 上
-const CHAT_HISTORY_KEY = 'pr-pilot.chatHistory';
+const CHAT_HISTORY_KEY = 'meebox.chatHistory';
 const CHAT_HISTORY_MAX = 5;
 
 /**

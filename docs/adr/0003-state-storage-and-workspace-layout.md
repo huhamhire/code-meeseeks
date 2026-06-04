@@ -3,14 +3,14 @@
 - **状态**：Accepted
 - **日期**：2026-05-28
 - **决策者**：项目主导
-- **取代**：ROADMAP 早期草案中 SQLite + 固定 `~/.pr-pilot/` 假设；2026-05-28 进一步收窄："仅 `repos_dir` 可配置"
+- **取代**：ROADMAP 早期草案中 SQLite + 固定 `~/.code-meeseeks/` 假设；2026-05-28 进一步收窄："仅 `repos_dir` 可配置"
 
 ## 背景
 
 ROADMAP 初稿使用：
 
 - **状态存储**：SQLite（better-sqlite3），含 `pull_requests` / `review_runs` / `findings` / `comment_drafts` 等表
-- **目录布局**：所有数据固定在 `~/.pr-pilot/`，含独立的 `secrets.yaml` 存 token
+- **目录布局**：所有数据固定在 `~/.code-meeseeks/`，含独立的 `secrets.yaml` 存 token
 
 Review 反馈四点：
 
@@ -61,24 +61,24 @@ interface StateStore {
 
 ### 2. 工作目录布局：固定应用目录 + 可配置 repos 位置
 
-**核心原则**：应用数据（config、state、logs、rules）固定在 `~/.pr-pilot/`，跨 OS 一致；仅仓库镜像存储位置 `repos_dir` 允许用户配置。
+**核心原则**：应用数据（config、state、logs、rules）固定在 `~/.code-meeseeks/`，跨 OS 一致；仅仓库镜像存储位置 `repos_dir` 允许用户配置。
 
-**固定位置**：`~/.pr-pilot/`
+**固定位置**：`~/.code-meeseeks/`
 
 ```
-~/.pr-pilot/
+~/.code-meeseeks/
 ├── config.yaml      # 全部配置（含 token + repos_dir 设置），权限 600 / Windows ACL
 ├── rules/
 ├── state/           # JSON 状态文件
 └── logs/
 ```
 
-**可配置位置**：`repos_dir`（默认 `~/.pr-pilot/repos/`，通过 `config.yaml` 设置）
+**可配置位置**：`repos_dir`（默认 `~/.code-meeseeks/repos/`，通过 `config.yaml` 设置）
 
 ```yaml
 # config.yaml 片段
 workspace:
-  repos_dir: D:\pr-pilot-repos # 默认值是 ~/.pr-pilot/repos
+  repos_dir: D:\meebox-repos # 默认值是 ~/.code-meeseeks/repos
 ```
 
 ```
@@ -97,7 +97,7 @@ workspace:
 
 **首次启动**：
 
-1. `~/.pr-pilot/` 不存在 → 创建目录 + 写入默认 `config.yaml`（`repos_dir` 留默认值 `~/.pr-pilot/repos/`）
+1. `~/.code-meeseeks/` 不存在 → 创建目录 + 写入默认 `config.yaml`（`repos_dir` 留默认值 `~/.code-meeseeks/repos/`）
 2. 无需用户介入，应用直接进入主界面
 
 **修改 `repos_dir`**（设置页操作）：
@@ -119,7 +119,7 @@ workspace:
 ```yaml
 # config.yaml 示意
 workspace:
-  repos_dir: ~/.pr-pilot/repos # 唯一可改的存储位置
+  repos_dir: ~/.code-meeseeks/repos # 唯一可改的存储位置
   rules_dir: ./rules
   logs_dir: ./logs
 
@@ -176,11 +176,11 @@ class ConfigFileSecretStore implements SecretStore {
 - JSON 文件大到一定程度后读写延迟会暴露（监控 + 提前升级 SQLite）
 - 用户改 `repos_dir` 后需要重启或挂起 poller（接受：低频操作）
 - 凭据混在 `config.yaml` 里：文档必须明示风险，文件权限设置必须可靠（Windows ACL 写起来比 Unix chmod 复杂）
-- `~/.pr-pilot/` 不可迁移：用户家目录所在盘空间紧张时只能手工腾挪（接受：config/state/logs 总量小）
+- `~/.code-meeseeks/` 不可迁移：用户家目录所在盘空间紧张时只能手工腾挪（接受：config/state/logs 总量小）
 
 ### 监控指标（M3 之后埋点）
 
 - 各 JSON 文件大小，超 5 MB 警告
 - `repos_dir` 总占用，每个 repo 占用 Top N
 - atomic rename 失败率
-- 启动时 `~/.pr-pilot/` 读取/创建失败率
+- 启动时 `~/.code-meeseeks/` 读取/创建失败率

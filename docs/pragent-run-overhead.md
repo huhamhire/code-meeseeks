@@ -17,7 +17,7 @@ Docker Desktop on Windows) 经验值。
 | --- | --- | --- |
 | A · Docker 冷启动 | 3-15s | 镜像加载 → 容器创建 → WORKDIR / entrypoint。Windows Docker Desktop 偏慢 |
 | B · Python 导入 + pr-agent 启动 | 5-15s | `import pr_agent / litellm / tiktoken / langchain` 等大依赖每次重跑 |
-| C · worktree 准备（pr-pilot 自己做的） | 1-10s | `materializeWorktree`: bare → `git clone --local --no-checkout` + LFS bypass + 双命名分支 |
+| C · worktree 准备（meebox 自己做的） | 1-10s | `materializeWorktree`: bare → `git clone --local --no-checkout` + LFS bypass + 双命名分支 |
 | D · pr-agent 内部预处理 | 5-30s | `get_user_description` / `get_pr_diff` (含 tiktoken 算整条 diff token) / 语言检测 |
 
 主要矛盾在 **B + D**，但 B 极硬：每次 `docker run --entrypoint python /app/pr_agent/cli.py`
@@ -79,8 +79,8 @@ docker run --rm pragent/pr-agent:0.36.0 python -c "pass"
 
 实施要点：
 
-- App 启动时 `docker run -d --name pr-pilot-pragent -v <repos_dir>:/workspaces ... sleep infinity`
-- 每次 run 用 `docker exec pr-pilot-pragent python /app/pr_agent/cli.py ...`
+- App 启动时 `docker run -d --name meebox-pragent -v <repos_dir>:/workspaces ... sleep infinity`
+- 每次 run 用 `docker exec meebox-pragent python /app/pr_agent/cli.py ...`
 - worktree 必须放在预挂载根目录 `<repos_dir>` 下面（路径相对固定）
   —— 因为 `-v` 只在 `docker run` 时生效，`exec` 没法新增挂载
 - worktree 管理逻辑要改：从"每次创个临时挂载点"变成"在共享挂载根下分子目录"

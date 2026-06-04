@@ -1,4 +1,4 @@
-import type { LlmProfile } from '@pr-pilot/shared';
+import type { LlmProfile } from '@meebox/shared';
 
 /** 从 llm config 拿当前选中的 profile；active_id 空或找不到都返回 null。 */
 export function resolveActiveLlmProfile(llm: {

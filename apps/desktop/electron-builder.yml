@@ -1,5 +1,5 @@
-appId: com.huhamhire.pr-pilot
-productName: pr-pilot
+appId: com.huhamhire.code-meeseeks
+productName: Code Meeseeks
 copyright: Copyright © 2026 huhamhire
 
 # npm workspaces hoist 下 electron-builder 无法从 apps/desktop/node_modules
@@ -47,7 +47,7 @@ win:
     - target: nsis
       arch:
         - x64
-  artifactName: ${productName}-${version}-win-${arch}.${ext}
+  artifactName: code-meeseeks-${version}-win-${arch}.${ext}
 
 mac:
   target:
@@ -56,7 +56,7 @@ mac:
         - arm64
         - x64
   category: public.app-category.developer-tools
-  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+  artifactName: code-meeseeks-${version}-mac-${arch}.${ext}
 
 linux:
   target:
@@ -64,7 +64,7 @@ linux:
       arch:
         - x64
   category: Development
-  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+  artifactName: code-meeseeks-${version}-linux-${arch}.${ext}
 
 nsis:
   oneClick: false

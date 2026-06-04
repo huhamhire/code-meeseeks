@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ReviewerStatus, StoredPullRequest } from '@pr-pilot/shared';
+import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
 
 interface PrInfoViewProps {
   pr: StoredPullRequest;

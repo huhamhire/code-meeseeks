@@ -212,7 +212,7 @@ export interface DraftsFile {
  * PR identity 快照：嵌进 ReviewRun (可选) 让 run 文件自描述，不依赖 `prs/index.json`
  * 也能反查所属 PR。M5 归档场景 (PR 已硬清但 run 单独导出) 会需要。
  *
- * 这里复制 `@pr-pilot/poller` 的 PrIdentity 形状到 shared，避免 shared 反向依赖
+ * 这里复制 `@meebox/poller` 的 PrIdentity 形状到 shared，避免 shared 反向依赖
  * poller (循环依赖)。两边字段一一对应。
  */
 export interface PrIdentitySnapshot {
@@ -288,7 +288,7 @@ export interface ReviewRunFile {
 export interface StoredPullRequest extends PullRequest {
   /**
    * PR 在本地状态体系的唯一标识：sha1(platform|connectionId|group|repo|remoteId)
-   * 取前 12 hex chars。详见 `@pr-pilot/poller` 的 `prHashId`。
+   * 取前 12 hex chars。详见 `@meebox/poller` 的 `prHashId`。
    *
    * 用 hash 而不是拼字符串：
    * - 路径友好 (无 `:` `/` 需要转义，跨平台一致)

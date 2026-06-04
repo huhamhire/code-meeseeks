@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Config, ConnectionSummary, PrAgentStatus } from '@pr-pilot/shared';
+import type { Config, ConnectionSummary, PrAgentStatus } from '@meebox/shared';
 import { invoke } from '../api';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { useRepoSyncStore } from '../stores/repo-sync-store';

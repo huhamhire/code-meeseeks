@@ -10,7 +10,7 @@ import type {
   RepoRef,
   Reviewer,
   ReviewerStatus,
-} from '@pr-pilot/shared';
+} from '@meebox/shared';
 import { BBClient, type BBClientOptions } from './client.js';
 
 interface BBUser {

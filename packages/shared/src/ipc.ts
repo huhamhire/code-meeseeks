@@ -11,7 +11,7 @@ import type {
 } from './poller-contract.js';
 import type { PrAgentStatus } from './pr-agent-status.js';
 
-/** ChangedFile / FileContent 跨 IPC 边界用，与 @pr-pilot/repo-mirror 类型同形。 */
+/** ChangedFile / FileContent 跨 IPC 边界用，与 @meebox/repo-mirror 类型同形。 */
 export type DiffFileStatus =
   | 'added'
   | 'modified'

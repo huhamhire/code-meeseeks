@@ -32,7 +32,7 @@ localId = sha1("<platform>|<connectionId>|<group>|<repo>|<remoteId>").slice(0, 1
 - **12 hex chars (≈ 48 bit)**：单用户使用规模碰撞概率可忽略
 - **路径友好**：无 `:` / `/`，跨平台无需 sanitize
 - **多平台中性 identity**：Bitbucket Server / GitHub / GitLab / Gitea 用同一份 schema (`platform / group / repo`)，参见 `PrIdentity` doc
-- 实现在 `@pr-pilot/poller` 的 `pr-hash-id.ts`，纯函数
+- 实现在 `@meebox/poller` 的 `pr-hash-id.ts`，纯函数
 
 ### 1.1 PrIdentity 多平台抽象
 
@@ -194,12 +194,12 @@ state 目录可能被外部清理 / 同步工具操作；设计保证：
 
 ### 跨包修改
 
-- `@pr-pilot/state-store`：`StateStore.deleteDir(prefix)` 接口 + `JsonFileStateStore` 路径屏障实现
-- `@pr-pilot/poller`：
+- `@meebox/state-store`：`StateStore.deleteDir(prefix)` 接口 + `JsonFileStateStore` 路径屏障实现
+- `@meebox/poller`：
   - 新增 `pr-hash-id.ts` (`prHashId(identity)`) / `pr-state.ts` (PR index + meta + 软删 + 硬清) / `comments-cache.ts`
   - 重构 `poller.ts`：用 hash localId / 写 per-PR meta / 软删 + 硬清
   - 重构 `runs.ts`：`prs/<hash>/runs/<runId>` 路径，去掉 `sanitizePrLocalIdForPath`
-- `@pr-pilot/shared`：`StoredPullRequest.localId` / `ReviewRun.prLocalId` 注释更新（hash 形态）
+- `@meebox/shared`：`StoredPullRequest.localId` / `ReviewRun.prLocalId` 注释更新（hash 形态）
 - `apps/desktop` (`main/ipc.ts`)：`diff:listComments` 接 comments cache（cache key 命中走缓存，miss 拉远端 + 写缓存）
 
 ### 测试

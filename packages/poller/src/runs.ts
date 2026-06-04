@@ -5,9 +5,9 @@ import type {
   ReviewRunFile,
   ReviewRunStatus,
   ReviewRunTool,
-} from '@pr-pilot/shared';
-import type { PrAgentStrategy } from '@pr-pilot/shared';
-import type { StateStore } from '@pr-pilot/state-store';
+} from '@meebox/shared';
+import type { PrAgentStrategy } from '@meebox/shared';
+import type { StateStore } from '@meebox/state-store';
 
 /**
  * runs 落在 `prs/<localId>/runs/<runId>.json`：跟 meta.json / comments.json 一起

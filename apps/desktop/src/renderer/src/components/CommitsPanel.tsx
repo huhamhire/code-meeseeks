@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { PrCommit, StoredPullRequest } from '@pr-pilot/shared';
+import type { PrCommit, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
 import { Avatar } from './Avatar';

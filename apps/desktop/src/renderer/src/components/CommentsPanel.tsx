@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { PrComment, StoredPullRequest } from '@pr-pilot/shared';
+import type { PrComment, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
 import { Avatar } from './Avatar';

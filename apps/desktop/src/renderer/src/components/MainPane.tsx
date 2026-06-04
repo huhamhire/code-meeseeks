@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { LocalPrStatus, StoredPullRequest } from '@pr-pilot/shared';
+import type { LocalPrStatus, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { CommentsPanel } from './CommentsPanel';
@@ -152,7 +152,7 @@ export function MainPane({
     if (pendingDiffNav) setTab('diff');
   }, [pendingDiffNav]);
   const [renderSideBySide, setRenderSideBySide] = useState<boolean>(() => {
-    const v = localStorage.getItem('pr-pilot.diffMode');
+    const v = localStorage.getItem('meebox.diffMode');
     return v === null ? true : v === 'side-by-side';
   });
   // Blame 默认关：每次启动都得手动开（blame fetch 可能慢/失败，不希望
@@ -160,10 +160,10 @@ export function MainPane({
   const [showBlame, setShowBlame] = useState<boolean>(false);
   // 空白字符可视化：默认关 (大多数代码 review 不关心空格 / tab；强调时再开)
   const [showWhitespace, setShowWhitespace] = useState<boolean>(
-    () => localStorage.getItem('pr-pilot.showWhitespace') === '1',
+    () => localStorage.getItem('meebox.showWhitespace') === '1',
   );
   useEffect(() => {
-    localStorage.setItem('pr-pilot.showWhitespace', showWhitespace ? '1' : '0');
+    localStorage.setItem('meebox.showWhitespace', showWhitespace ? '1' : '0');
   }, [showWhitespace]);
   // 评论 / commits 数 chip：
   //   - 评论：调 diff:listComments — cache 命中 (pr.updatedAt 跟缓存一致) 时
@@ -204,12 +204,12 @@ export function MainPane({
     };
   }, [prLocalId, prUpdatedAt]);
   useEffect(() => {
-    localStorage.setItem('pr-pilot.diffMode', renderSideBySide ? 'side-by-side' : 'unified');
+    localStorage.setItem('meebox.diffMode', renderSideBySide ? 'side-by-side' : 'unified');
   }, [renderSideBySide]);
   // 清掉历史遗留的 showBlame 持久化值；新逻辑不再读写它
   useEffect(() => {
-    if (localStorage.getItem('pr-pilot.showBlame') !== null) {
-      localStorage.removeItem('pr-pilot.showBlame');
+    if (localStorage.getItem('meebox.showBlame') !== null) {
+      localStorage.removeItem('meebox.showBlame');
     }
   }, []);
 

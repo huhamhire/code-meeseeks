@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import { Icon } from '@iconify/react';
-import type { DiffChangedFile } from '@pr-pilot/shared';
+import type { DiffChangedFile } from '@meebox/shared';
 
 interface FileTreeProps {
   files: DiffChangedFile[];

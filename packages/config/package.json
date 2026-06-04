@@ -1,8 +1,8 @@
 {
-  "name": "@pr-pilot/config",
+  "name": "@meebox/config",
   "version": "0.0.0",
   "private": true,
-  "description": "Config + workspace paths + first-run bootstrap for pr-pilot",
+  "description": "Config + workspace paths + first-run bootstrap for meebox",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -20,7 +20,7 @@
     }
   },
   "dependencies": {
-    "@pr-pilot/shared": "*",
+    "@meebox/shared": "*",
     "yaml": "^2.6.0",
     "zod": "^3.23.0"
   }

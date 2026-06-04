@@ -1,6 +1,6 @@
-import type { PrAgentStrategy } from '@pr-pilot/shared';
+import type { PrAgentStrategy } from '@meebox/shared';
 
-/** pr-agent 子命令枚举；跟 @pr-pilot/shared 的 ReviewRunTool 同集合 */
+/** pr-agent 子命令枚举；跟 @meebox/shared 的 ReviewRunTool 同集合 */
 export type PrAgentTool = 'describe' | 'review' | 'ask' | 'improve';
 
 export interface PrAgentRunOptions {

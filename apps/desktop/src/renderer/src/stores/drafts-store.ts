@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { ReviewDraft } from '@pr-pilot/shared';
+import type { ReviewDraft } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 
 /**

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { JsonFileStateStore } from '@pr-pilot/state-store';
+import { JsonFileStateStore } from '@meebox/state-store';
 import {
   finishReviewRun,
   getReviewRun,
@@ -15,7 +15,7 @@ let tmpRoot: string;
 let store: JsonFileStateStore;
 
 beforeEach(async () => {
-  tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pr-pilot-runs-'));
+  tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-runs-'));
   store = new JsonFileStateStore(tmpRoot);
 });
 

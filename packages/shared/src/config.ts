@@ -78,7 +78,7 @@ export const ConfigSchema = z.object({
   language: z.string().default('zh-CN'),
   workspace: z
     .object({
-      repos_dir: z.string().default('~/.pr-pilot/repos'),
+      repos_dir: z.string().default('~/.code-meeseeks/repos'),
     })
     .default({}),
   /**

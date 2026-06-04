@@ -5,7 +5,7 @@ import type {
   IpcChannels,
   IpcEventName,
   IpcEvents,
-} from '@pr-pilot/shared';
+} from '@meebox/shared';
 
 console.log('[preload] script loaded');
 

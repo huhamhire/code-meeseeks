@@ -92,10 +92,10 @@ describe('LocalCliBridge', () => {
     await bridge.review({
       prUrl: 'https://x/pr/1', // 本地模式下 prUrl 不会被用到
       cwd: '/tmp/wt/abc',
-      targetBranch: 'pr-pilot/base',
+      targetBranch: 'meebox/base',
       env: { OPENAI_KEY: 'sk' },
     });
-    expect(calls[0]!.args).toEqual(['--pr_url', 'pr-pilot/base', 'review']);
+    expect(calls[0]!.args).toEqual(['--pr_url', 'meebox/base', 'review']);
     expect(calls[0]!.opts.cwd).toBe('/tmp/wt/abc');
     expect(calls[0]!.opts.env).toEqual({
       OPENAI_KEY: 'sk',
@@ -121,7 +121,7 @@ describe('EmbeddedRuntimeBridge', () => {
     await bridge.review({
       prUrl: 'unused',
       cwd: '/tmp/wt/abc',
-      targetBranch: 'pr-pilot/base',
+      targetBranch: 'meebox/base',
       env: { OPENAI__KEY: 'sk' },
     });
     expect(calls[0]!.cmd).toBe(PY);
@@ -129,7 +129,7 @@ describe('EmbeddedRuntimeBridge', () => {
       '-m',
       'pr_agent.cli',
       '--pr_url',
-      'pr-pilot/base',
+      'meebox/base',
       'review',
     ]);
     expect(calls[0]!.opts.cwd).toBe('/tmp/wt/abc');
@@ -240,7 +240,7 @@ describe('DockerBridge', () => {
     await bridge.review({
       prUrl: 'unused-when-cwd-set',
       cwd: process.platform === 'win32' ? 'D:\\tmp\\wt\\abc' : '/tmp/wt/abc',
-      targetBranch: 'pr-pilot/base',
+      targetBranch: 'meebox/base',
       env: { OPENAI_KEY: 'sk' },
     });
     const expectedMount = process.platform === 'win32' ? '/d/tmp/wt/abc' : '/tmp/wt/abc';
@@ -260,7 +260,7 @@ describe('DockerBridge', () => {
       'pragent/pr-agent:0.36.0',
       '/app/pr_agent/cli.py',
       '--pr_url',
-      'pr-pilot/base',
+      'meebox/base',
       'review',
     ]);
     // docker spawn 自己仍然不带 env (token 只进容器)

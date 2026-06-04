@@ -13,8 +13,8 @@ import type {
   ReviewDraft,
   StoredPullRequest,
   SyncProgressEvent,
-} from '@pr-pilot/shared';
-import { policyForPlatform } from '@pr-pilot/shared';
+} from '@meebox/shared';
+import { policyForPlatform } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
 import { useDraftsForPr } from '../stores/drafts-store';
@@ -165,7 +165,7 @@ export function DiffView({
   const [filesRetry, setFilesRetry] = useState(0);
   const [commentsRetry, setCommentsRetry] = useState(0);
   const [fileListWidth, setFileListWidth] = useState<number>(() => {
-    const raw = localStorage.getItem('pr-pilot.diffFileListWidth');
+    const raw = localStorage.getItem('meebox.diffFileListWidth');
     const n = raw ? Number(raw) : DIFF_FILE_LIST_DEFAULT;
     return Math.min(
       DIFF_FILE_LIST_MAX,
@@ -173,7 +173,7 @@ export function DiffView({
     );
   });
   useEffect(() => {
-    localStorage.setItem('pr-pilot.diffFileListWidth', String(fileListWidth));
+    localStorage.setItem('meebox.diffFileListWidth', String(fileListWidth));
   }, [fileListWidth]);
 
   const startFileListResize = (e: React.MouseEvent): void => {

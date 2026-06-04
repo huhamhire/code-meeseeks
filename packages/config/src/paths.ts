@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import type { AppPaths } from '@pr-pilot/shared';
+import type { AppPaths } from '@meebox/shared';
 
 /**
  * 展开路径里的 `~` 为用户 home 目录。仅支持开头 `~/...` 或 `~`，不处理 `~user/...`。
@@ -13,9 +13,9 @@ export function expandHome(p: string): string {
   return p;
 }
 
-/** 应用数据根目录（固定）：`~/.pr-pilot/`。 */
+/** 应用数据根目录（固定）：`~/.code-meeseeks/`。 */
 export function getAppDir(): string {
-  return path.join(os.homedir(), '.pr-pilot');
+  return path.join(os.homedir(), '.code-meeseeks');
 }
 
 /**

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { ReviewDraft, StoredPullRequest } from '@pr-pilot/shared';
+import type { ReviewDraft, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { ConfirmModal } from './ConfirmModal';

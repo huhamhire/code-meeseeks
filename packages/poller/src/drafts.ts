@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import type { DraftsFile, ReviewDraft } from '@pr-pilot/shared';
-import type { StateStore } from '@pr-pilot/state-store';
+import type { DraftsFile, ReviewDraft } from '@meebox/shared';
+import type { StateStore } from '@meebox/state-store';
 
 /**
  * `state/prs/<localId>/drafts.json` 的 KV key。跟 ADR-0006 per-PR 目录布局一致，

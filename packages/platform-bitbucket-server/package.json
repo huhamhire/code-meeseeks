@@ -1,5 +1,5 @@
 {
-  "name": "@pr-pilot/platform-bitbucket-server",
+  "name": "@meebox/platform-bitbucket-server",
   "version": "0.0.0",
   "private": true,
   "description": "PlatformAdapter implementation for Bitbucket Server / Data Center (REST API v1)",
@@ -28,6 +28,6 @@
     }
   },
   "dependencies": {
-    "@pr-pilot/shared": "*"
+    "@meebox/shared": "*"
   }
 }

@@ -16,7 +16,7 @@
 // 幂等：VERSION 与期望一致则跳过（除非 --force）。需要 Node 22+。
 //
 // 可选 env：GITHUB_TOKEN / GH_TOKEN（避开 API 限流，CI 推荐）；HTTP(S)_PROXY / ALL_PROXY
-//   （自动用于所有请求）；PRPILOT_PRAGENT_FORCE=1 等价 --force。
+//   （自动用于所有请求）；MEEBOX_PRAGENT_FORCE=1 等价 --force。
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -35,9 +35,9 @@ const APP_DIR = resolve(__dirname, '..'); // apps/desktop
 const VENDOR_DIR = join(APP_DIR, 'vendor', 'pragent');
 const MANIFEST_PATH = join(__dirname, 'pragent-runtime.json');
 const SHIM_PATH = join(__dirname, 'sitecustomize.py');
-const UA = 'pr-pilot-runtime-assembler';
+const UA = 'meebox-runtime-assembler';
 
-const FORCE = process.argv.includes('--force') || process.env.PRPILOT_PRAGENT_FORCE === '1';
+const FORCE = process.argv.includes('--force') || process.env.MEEBOX_PRAGENT_FORCE === '1';
 
 function log(msg) {
   console.log(`[pragent-runtime] ${msg}`);
@@ -191,7 +191,7 @@ async function main() {
   log(`命中资产 ${asset.name}`);
 
   // 3. 下载到临时文件 + 校验
-  const tarPath = join(tmpdir(), `prpilot-${asset.name}`);
+  const tarPath = join(tmpdir(), `meebox-${asset.name}`);
   log('下载归档…');
   await downloadToFile(asset.browser_download_url, tarPath);
   const actualSha = await sha256File(tarPath);

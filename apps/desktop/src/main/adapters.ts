@@ -1,5 +1,5 @@
-import { BitbucketServerAdapter } from '@pr-pilot/platform-bitbucket-server';
-import type { Connection, PlatformAdapter } from '@pr-pilot/shared';
+import { BitbucketServerAdapter } from '@meebox/platform-bitbucket-server';
+import type { Connection, PlatformAdapter } from '@meebox/shared';
 
 export interface BuiltAdapter {
   connectionId: string;

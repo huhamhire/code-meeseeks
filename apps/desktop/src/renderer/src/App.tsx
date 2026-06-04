@@ -7,7 +7,7 @@ import type {
   LocalPrStatus,
   PrAgentStatus,
   StoredPullRequest,
-} from '@pr-pilot/shared';
+} from '@meebox/shared';
 import { invoke, subscribe } from './api';
 import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/ChatPane';
 import { wireChatRunStore } from './stores/chat-run-store';
@@ -52,33 +52,33 @@ export default function App() {
   } | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const raw = localStorage.getItem('pr-pilot.sidebarWidth');
+    const raw = localStorage.getItem('meebox.sidebarWidth');
     const n = raw ? Number(raw) : 360;
     return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Number.isFinite(n) ? n : 360));
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
-    () => localStorage.getItem('pr-pilot.sidebarCollapsed') === '1',
+    () => localStorage.getItem('meebox.sidebarCollapsed') === '1',
   );
   const [chatWidth, setChatWidth] = useState<number>(() => {
-    const raw = localStorage.getItem('pr-pilot.chatWidth');
+    const raw = localStorage.getItem('meebox.chatWidth');
     const n = raw ? Number(raw) : 360;
     return Math.min(CHAT_MAX_WIDTH, Math.max(CHAT_MIN_WIDTH, Number.isFinite(n) ? n : 360));
   });
   const [chatCollapsed, setChatCollapsed] = useState<boolean>(
     // 默认收起：M3 之前 chat 还是空壳，避免空占地方
-    () => (localStorage.getItem('pr-pilot.chatCollapsed') ?? '1') === '1',
+    () => (localStorage.getItem('meebox.chatCollapsed') ?? '1') === '1',
   );
   useEffect(() => {
-    localStorage.setItem('pr-pilot.sidebarWidth', String(sidebarWidth));
+    localStorage.setItem('meebox.sidebarWidth', String(sidebarWidth));
   }, [sidebarWidth]);
   useEffect(() => {
-    localStorage.setItem('pr-pilot.sidebarCollapsed', sidebarCollapsed ? '1' : '0');
+    localStorage.setItem('meebox.sidebarCollapsed', sidebarCollapsed ? '1' : '0');
   }, [sidebarCollapsed]);
   useEffect(() => {
-    localStorage.setItem('pr-pilot.chatWidth', String(chatWidth));
+    localStorage.setItem('meebox.chatWidth', String(chatWidth));
   }, [chatWidth]);
   useEffect(() => {
-    localStorage.setItem('pr-pilot.chatCollapsed', chatCollapsed ? '1' : '0');
+    localStorage.setItem('meebox.chatCollapsed', chatCollapsed ? '1' : '0');
   }, [chatCollapsed]);
 
   const reloadPrs = useCallback(async (): Promise<void> => {

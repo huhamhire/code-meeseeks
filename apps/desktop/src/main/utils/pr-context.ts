@@ -1,4 +1,4 @@
-import type { PlatformAdapter, PrComment, StoredPullRequest } from '@pr-pilot/shared';
+import type { PlatformAdapter, PrComment, StoredPullRequest } from '@meebox/shared';
 import type { Logger } from 'pino';
 
 interface BuildPrContextOpts {

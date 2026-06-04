@@ -1,5 +1,5 @@
-import type { PrComment } from '@pr-pilot/shared';
-import type { StateStore } from '@pr-pilot/state-store';
+import type { PrComment } from '@meebox/shared';
+import type { StateStore } from '@meebox/state-store';
 
 /**
  * PR 评论快照文件。落在 `prs/<localId>/comments.json`。

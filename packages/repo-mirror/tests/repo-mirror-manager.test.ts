@@ -35,7 +35,7 @@ async function makeUpstream(dir: string): Promise<void> {
 }
 
 beforeEach(async () => {
-  tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pr-pilot-mirror-test-'));
+  tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-mirror-test-'));
   upstreamPath = path.join(tmpRoot, 'upstream');
   reposDir = path.join(tmpRoot, 'repos');
   await makeUpstream(upstreamPath);
@@ -362,7 +362,7 @@ describe('RepoMirrorManager diff/content', () => {
 });
 
 describe('RepoMirrorManager.materializeWorktree', () => {
-  it('从 bare mirror 派生 self-contained worktree, HEAD 在 pr-pilot/head 命名分支上', async () => {
+  it('从 bare mirror 派生 self-contained worktree, HEAD 在 meebox/head 命名分支上', async () => {
     const mgr = makeManager();
     await mgr.syncMirror(repo);
     const headSha = (await simpleGit(upstreamPath).revparse(['HEAD'])).trim();
@@ -379,13 +379,13 @@ describe('RepoMirrorManager.materializeWorktree', () => {
       // README.md (upstream 初始 commit 的文件) 应该被 checkout 到工作树
       const readme = await fs.readFile(path.join(wt.path, 'README.md'), 'utf8');
       expect(readme).toBe('hello');
-      // HEAD 必须在命名分支 pr-pilot/head 上 (pr-agent 要求，不能 detached)
+      // HEAD 必须在命名分支 meebox/head 上 (pr-agent 要求，不能 detached)
       const headRef = (await simpleGit(wt.path).raw(['symbolic-ref', 'HEAD'])).trim();
-      expect(headRef).toBe('refs/heads/pr-pilot/head');
-      expect(wt.headBranchName).toBe('pr-pilot/head');
+      expect(headRef).toBe('refs/heads/meebox/head');
+      expect(wt.headBranchName).toBe('meebox/head');
       // 该分支应该指向 headSha
       const branchSha = (
-        await simpleGit(wt.path).revparse(['refs/heads/pr-pilot/head'])
+        await simpleGit(wt.path).revparse(['refs/heads/meebox/head'])
       ).trim();
       expect(branchSha).toBe(headSha);
       // 没传 baseSha → 没有 target branch
@@ -395,7 +395,7 @@ describe('RepoMirrorManager.materializeWorktree', () => {
     }
   });
 
-  it('baseSha 传入后建 pr-pilot/base 分支，targetBranchName 返回该名字', async () => {
+  it('baseSha 传入后建 meebox/base 分支，targetBranchName 返回该名字', async () => {
     const mgr = makeManager();
     await mgr.syncMirror(repo);
     // upstream 加一个新 commit；用初始 commit 当 base，新 commit 当 head
@@ -409,14 +409,14 @@ describe('RepoMirrorManager.materializeWorktree', () => {
 
     const wt = await mgr.materializeWorktree(repo, headSha, baseSha);
     try {
-      expect(wt.targetBranchName).toBe('pr-pilot/base');
+      expect(wt.targetBranchName).toBe('meebox/base');
       const baseBranchSha = (
-        await simpleGit(wt.path).revparse(['refs/heads/pr-pilot/base'])
+        await simpleGit(wt.path).revparse(['refs/heads/meebox/base'])
       ).trim();
       expect(baseBranchSha).toBe(baseSha);
-      // head 仍在 pr-pilot/head
+      // head 仍在 meebox/head
       const headBranchSha = (
-        await simpleGit(wt.path).revparse(['refs/heads/pr-pilot/head'])
+        await simpleGit(wt.path).revparse(['refs/heads/meebox/head'])
       ).trim();
       expect(headBranchSha).toBe(headSha);
     } finally {

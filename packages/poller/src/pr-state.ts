@@ -1,5 +1,5 @@
-import type { LocalPrStatus, StoredPullRequest } from '@pr-pilot/shared';
-import type { StateStore } from '@pr-pilot/state-store';
+import type { LocalPrStatus, StoredPullRequest } from '@meebox/shared';
+import type { StateStore } from '@meebox/state-store';
 import type { PrIdentity } from './pr-hash-id.js';
 
 /**

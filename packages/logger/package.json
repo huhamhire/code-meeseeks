@@ -1,8 +1,8 @@
 {
-  "name": "@pr-pilot/logger",
+  "name": "@meebox/logger",
   "version": "0.0.0",
   "private": true,
-  "description": "Logging factory (pino + rolling files) for pr-pilot",
+  "description": "Logging factory (pino + rolling files) for meebox",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

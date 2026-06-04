@@ -1,4 +1,4 @@
-# pr-pilot 嵌入式运行时 monkeypatch shim。
+# meebox 嵌入式运行时 monkeypatch shim。
 #
 # 本文件由 assemble-pragent-runtime.mjs 拷进嵌入式 Python 的 site-packages，
 # CPython 启动时经 `site` 自动 import（无需 PYTHONPATH/挂载）。见 ADR-0008 §4。
@@ -17,8 +17,8 @@ import sys
 
 
 def _debug(msg: str) -> None:
-    if os.environ.get("PRPILOT_SHIM_DEBUG"):
-        print(f"[pr-pilot] {msg}", file=sys.stderr)
+    if os.environ.get("MEEBOX_SHIM_DEBUG"):
+        print(f"[meebox] {msg}", file=sys.stderr)
 
 
 def _register_post_import(module_name, patch_fn) -> None:

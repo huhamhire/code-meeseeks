@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { editor as MonacoEditorNs } from 'monaco-editor';
-import type { DiffChangedFile } from '@pr-pilot/shared';
+import type { DiffChangedFile } from '@meebox/shared';
 import { invoke } from '../api';
 import { languageFor } from './DiffView';
 
@@ -31,7 +31,7 @@ interface DiffSearchPanelProps {
   onExit?: () => void;
 }
 
-const CASE_SENSITIVE_LS_KEY = 'pr-pilot.diffSearch.caseSensitive';
+const CASE_SENSITIVE_LS_KEY = 'meebox.diffSearch.caseSensitive';
 
 interface LineMatch {
   /** 1-based 行号 (在 srcSide 端的行号) */

@@ -5,8 +5,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
-import { writeConfig, type BootstrapResult } from '@pr-pilot/config';
-import { PrAgentRunError, type PrAgentBridge } from '@pr-pilot/pr-agent-bridge';
+import { writeConfig, type BootstrapResult } from '@meebox/config';
+import { PrAgentRunError, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import {
   type Poller,
   createDraft,
@@ -25,9 +25,9 @@ import {
   startReviewRun,
   updateDraft,
   writeCommentsCache,
-} from '@pr-pilot/poller';
-import type { RepoIdentity, RepoMirrorManager } from '@pr-pilot/repo-mirror';
-import { loadRules, pickMatchingRule } from '@pr-pilot/rules';
+} from '@meebox/poller';
+import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
+import { loadRules, pickMatchingRule } from '@meebox/rules';
 import type {
   AppInfo,
   ConnectionSummary,
@@ -40,8 +40,8 @@ import type {
   ReviewRunStatus,
   ReviewRunTool,
   StoredPullRequest,
-} from '@pr-pilot/shared';
-import type { JsonFileStateStore } from '@pr-pilot/state-store';
+} from '@meebox/shared';
+import type { JsonFileStateStore } from '@meebox/state-store';
 import { buildDraftAdapter, type BuiltAdapter, type ConnectionRuntime } from './adapters.js';
 import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
@@ -149,7 +149,7 @@ export function registerIpcHandlers({
       await fs.mkdir(path.dirname(p), { recursive: true });
       await fs.writeFile(
         p,
-        '# pr-pilot 提供的空 secrets 文件，抑制 pr-agent 启动 "settings file not found" 告警\n',
+        '# meebox 提供的空 secrets 文件，抑制 pr-agent 启动 "settings file not found" 告警\n',
       );
     }
     return p;
@@ -177,7 +177,7 @@ export function registerIpcHandlers({
         } catch {
           await fs.writeFile(
             f,
-            '# pr-pilot 占位空文件：抑制 pr-agent 缺失 .secrets.toml 的启动告警\n',
+            '# meebox 占位空文件：抑制 pr-agent 缺失 .secrets.toml 的启动告警\n',
           );
         }
       }
@@ -1292,7 +1292,7 @@ export function registerIpcHandlers({
         try {
           // ReviewDraftAnchor → PrCommentAnchor 转换：
           // - draft.anchor 没有 lineType (草稿创建时不知道这一行的 diff 角色)，
-          //   按 side 做保守映射：new→added / old→removed。pr-pilot 的草稿大多锚到
+          //   按 side 做保守映射：new→added / old→removed。meebox 的草稿大多锚到
           //   变更行 (finding 来自 /review 的 issue + DraftZone hover '+' 也只对
           //   变更行可见)，context 行评论场景极少。命中 context 时 BBS 回 400，
           //   错误会被 catch 收到 results 里给用户看

@@ -234,9 +234,9 @@ adapter.publishInlineComment(
 
 ### 跨包修改
 
-- `@pr-pilot/shared`：新增 `ReviewDraft` / `DraftsFile` / IPC 契约（drafts:* + drafts:changed 事件）
-- `@pr-pilot/poller`：新增 `drafts.ts` 模块（list / add / update / delete / publish）+ `/review` 完成时的"再摄入"钩子
-- `@pr-pilot/platform-bitbucket-server`：实现 `publishInlineComment`（适配器接口扩展）
+- `@meebox/shared`：新增 `ReviewDraft` / `DraftsFile` / IPC 契约（drafts:* + drafts:changed 事件）
+- `@meebox/poller`：新增 `drafts.ts` 模块（list / add / update / delete / publish）+ `/review` 完成时的"再摄入"钩子
+- `@meebox/platform-bitbucket-server`：实现 `publishInlineComment`（适配器接口扩展）
 - `apps/desktop/src/main`：IPC handler + 自动入池触发
 - `apps/desktop/src/renderer`：DiffView 内联草稿渲染 + 草稿编辑 UX + 批量发布按钮
 

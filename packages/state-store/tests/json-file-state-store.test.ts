@@ -8,7 +8,7 @@ let tmpDir: string;
 let store: JsonFileStateStore;
 
 beforeEach(async () => {
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pr-pilot-state-test-'));
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-state-test-'));
   store = new JsonFileStateStore(tmpDir);
 });
 
@@ -117,7 +117,7 @@ describe('JsonFileStateStore', () => {
   });
 
   it('挡绝对路径 key（即使指向 stateDir 之外）', async () => {
-    const outside = path.join(os.tmpdir(), 'pr-pilot-outside');
+    const outside = path.join(os.tmpdir(), 'meebox-outside');
     await expect(store.read(outside)).rejects.toThrow(/path traversal/);
     await expect(store.write(outside, { v: 1 })).rejects.toThrow(/path traversal/);
   });

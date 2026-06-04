@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { LocalPrStatus, StoredPullRequest } from '@pr-pilot/shared';
+import type { LocalPrStatus, StoredPullRequest } from '@meebox/shared';
 import { PrItem } from './PrItem';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定

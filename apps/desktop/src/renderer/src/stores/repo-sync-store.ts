@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { SyncProgressEvent } from '@pr-pilot/shared';
+import type { SyncProgressEvent } from '@meebox/shared';
 import { subscribe } from '../api';
 
 /**

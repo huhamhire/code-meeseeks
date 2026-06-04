@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { ConfigSchema, type Config } from '@pr-pilot/shared';
+import { ConfigSchema, type Config } from '@meebox/shared';
 
 /**
  * 读取 config.yaml 并校验。文件不存在时返回 null（由 bootstrap 决定是否创建）。

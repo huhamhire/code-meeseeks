@@ -1,4 +1,4 @@
-import type { StoredPullRequest } from '@pr-pilot/shared';
+import type { StoredPullRequest } from '@meebox/shared';
 import { Avatar } from './Avatar';
 import { PullRequestIcon } from './icons';
 

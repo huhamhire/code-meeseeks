@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { ReviewDraft } from '@pr-pilot/shared';
+import type { ReviewDraft } from '@meebox/shared';
 import { ConfirmModal } from './ConfirmModal';
 
 interface DraftZoneProps {

@@ -4,8 +4,8 @@ import type {
   PlatformAdapter,
   PollResult,
   ReviewerStatus,
-} from '@pr-pilot/shared';
-import type { StateStore } from '@pr-pilot/state-store';
+} from '@meebox/shared';
+import type { StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
 import {
   PURGE_GRACE_MS,
@@ -54,7 +54,7 @@ export interface PollerOptions {
  * remoteId / url)，足够 main 拼 RepoIdentity 并触发 syncMirror。
  */
 export interface ChangedRepo {
-  platform: import('@pr-pilot/shared').PlatformKind;
+  platform: import('@meebox/shared').PlatformKind;
   connectionId: string;
   group: string;
   repo: string;

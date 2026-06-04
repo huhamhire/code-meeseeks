@@ -1,7 +1,7 @@
 import { Editor } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { useEffect, useState } from 'react';
-import type { PrCommentAnchor, StoredPullRequest } from '@pr-pilot/shared';
+import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
 import { languageFor } from '../utils/language';
 
