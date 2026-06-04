@@ -52,6 +52,37 @@
   gap: $space-4;
 }
 
+// header 右侧搜索按钮 — 默认看着轻，hover/active 切到主色让用户知道当前模式。
+// 单按钮，跟"X 个文件" / "搜索变更内容"标签合占同一行 toolbar
+.diff-file-list-search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+    border-color: $border-default;
+  }
+  &.active {
+    background: $color-accent;
+    border-color: $color-accent;
+    color: $text-on-accent;
+
+    &:hover {
+      filter: brightness(1.1);
+    }
+  }
+}
+
 // 文件树容器
 .diff-file-tree {
   flex: 1;

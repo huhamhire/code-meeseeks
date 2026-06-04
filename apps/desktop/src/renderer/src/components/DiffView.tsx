@@ -25,6 +25,7 @@ import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from './ConfirmModal';
+import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
 
 interface DiffViewProps {
@@ -139,6 +140,13 @@ export function DiffView({
   const [files, setFiles] = useState<DiffChangedFile[] | null>(null);
   const [filesError, setFilesError] = useState<FormattedError | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // sidebar 模式：'tree' (文件树) / 'search' (跨文件搜索)，默认进文件树。
+  // PR 切换 / tab 切走 + 重进 (条件渲染 unmount/remount) 时自然回到 'tree' —
+  // 搜索状态不跨 PR / tab 保留，每次进 Diff 都是文件树视图
+  const [sidebarMode, setSidebarMode] = useState<'tree' | 'search'>('tree');
+  useEffect(() => {
+    setSidebarMode('tree');
+  }, [pr.localId]);
   const [content, setContent] = useState<LoadedContent | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState<FormattedError | null>(null);
@@ -1236,16 +1244,44 @@ export function DiffView({
   return (
     <div className="diff-view">
       <aside className="diff-file-list" style={{ width: `${String(fileListWidth)}px` }}>
+        {/* header 一直显示。tree 模式右侧是"搜索"图标 (进搜索)；search 模式
+            换"文件树"图标 (明示这是回到文件树的入口)，比"再点一次同图标切回"
+            语义清晰 */}
         <div className="diff-file-list-header">
-          <span>{files.length} 个文件</span>
+          <span>
+            {sidebarMode === 'search' ? '搜索变更内容' : `${String(files.length)} 个文件`}
+          </span>
+          <button
+            type="button"
+            className="diff-file-list-search-btn"
+            onClick={() => setSidebarMode((m) => (m === 'search' ? 'tree' : 'search'))}
+            title={sidebarMode === 'search' ? '返回文件树' : '搜索变更内容 (head + base)'}
+            aria-label={sidebarMode === 'search' ? '返回文件树' : '搜索'}
+          >
+            {sidebarMode === 'search' ? <FileTreeIcon /> : <SearchIcon />}
+          </button>
         </div>
-        <FileTree
-          files={files}
-          selectedKey={selectedKey}
-          commentCountByPath={commentCountByPath}
-          draftCountByPath={draftCountByPath}
-          onSelect={(f) => setSelectedKey(fileKey(f))}
-        />
+        {sidebarMode === 'tree' && (
+          <FileTree
+            files={files}
+            selectedKey={selectedKey}
+            commentCountByPath={commentCountByPath}
+            draftCountByPath={draftCountByPath}
+            onSelect={(f) => setSelectedKey(fileKey(f))}
+          />
+        )}
+        {sidebarMode === 'search' && (
+          <DiffSearchPanel
+            files={files}
+            prLocalId={pr.localId}
+            onJumpToMatch={(f, line, side) => {
+              setSelectedKey(fileKey(f));
+              // 复用现有 pendingScroll 机制定位行 — 不带 draftId 仅 navigate
+              setPendingScroll({ line, side });
+            }}
+            onExit={() => setSidebarMode('tree')}
+          />
+        )}
         <div
           className="diff-file-list-resize-handle"
           onMouseDown={startFileListResize}
@@ -2087,7 +2123,7 @@ function renderHoverMd(comments: PrComment[]): string {
     .join('\n\n---\n\n');
 }
 
-function languageFor(filePath: string): string {
+export function languageFor(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
   const map: Record<string, string> = {
     ts: 'typescript',
@@ -2133,4 +2169,46 @@ function languageFor(filePath: string): string {
     if (base === 'makefile') return 'makefile';
   }
   return map[ext] ?? 'plaintext';
+}
+
+/** sidebar header 右侧按钮图标：tree 模式显示放大镜 (进搜索)，search 模式
+    显示文件树小图 (退出搜索)。明示模式切换语义，比"同图标 toggle"更清晰 */
+function FileTreeIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="3" y1="4" x2="13" y2="4" />
+      <line x1="6" y1="8" x2="13" y2="8" />
+      <line x1="6" y1="12" x2="13" y2="12" />
+      <circle cx="3" cy="8" r="0.5" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="12" r="0.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function SearchIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="7" cy="7" r="4.5" />
+      <line x1="10.5" y1="10.5" x2="13.5" y2="13.5" />
+    </svg>
+  );
 }

@@ -7,6 +7,7 @@
 //   main-pane    .main / pr-header / pr-tabs / blame-toggle / blame-column
 //   file-tree    DiffView 左侧文件树 (.diff-file-list / .tree-* / status dot)
 //   diff         DiffView 主体 (.diff-pane-wrapper / sync-progress / error-boundary)
+//   diff-search  DiffView sidebar 搜索模式 (.diff-search-panel / -input / -results)
 //   comment-zone Monaco 行内评论 view zone + glyph margin 标记
 //   markdown     react-markdown 输出的 h/p/li/code/pre/table 等 dark-theme 配色
 //   pr-info      "详情" tab 内容 (.pr-info-view / pr-detail-*)
@@ -19,6 +20,7 @@
 @use './styles/main-pane';
 @use './styles/file-tree';
 @use './styles/diff';
+@use './styles/diff-search';
 @use './styles/comment-zone';
 @use './styles/draft-zone';
 @use './styles/markdown';
