@@ -37,11 +37,17 @@ export default function App() {
   /**
    * M4 跨组件跳转 (ADR-0007)：ChatPane finding card 点"编辑" → 这里 set →
    * MainPane 切 tab='diff' + 透传给 DiffView → DiffView 消费完调 onConsumed 清空。
-   * 一次性 token；非 null 时 DiffView 应该 scroll + highlight + open edit zone
+   * 一次性 token；非 null 时 DiffView 应该 scroll + highlight (+ open edit zone
+   * 如果带 runId/findingId 能反查到 finding-source 草稿)。
+   *
+   * runId/findingId 可选：
+   * - ChatPane finding card 跳转 → 必带，DiffView 据此找草稿自动 enter edit
+   * - PublishReviewModal anchor 点击 → 只带 anchor，DiffView 仅 navigate 不进 edit
+   *   (用户在 modal 里看到某条想确认上下文，跳过去看一眼，不一定要改)
    */
   const [pendingDiffNav, setPendingDiffNav] = useState<{
-    runId: string;
-    findingId: string;
+    runId?: string;
+    findingId?: string;
     anchor: { path: string; startLine: number; endLine: number };
   } | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -223,6 +229,15 @@ export default function App() {
           onSetStatus={(s) => void setSelectedPrStatus(s)}
           pendingDiffNav={pendingDiffNav}
           onDiffNavConsumed={() => setPendingDiffNav(null)}
+          onRequestDiffNav={(target) => setPendingDiffNav(target)}
+          // 当前 PR 所属 connection 的 PAT 用户名 — 用于 "评论作者 == 当前用户"
+          // 判定，决定是否在评论上显示 "删除" 按钮。ping 未完成 / 失败时 null
+          currentUserName={
+            selected
+              ? (boot.connections.find((c) => c.connectionId === selected.connectionId)?.user
+                  ?.name ?? null)
+              : null
+          }
         />
         {/* ChatPane 始终挂载，折叠只是 CSS 隐藏：保住运行中的 run 生命周期。
             如果走条件渲染，折叠 = 卸载组件，进行中的计时器 / runProgress 订阅

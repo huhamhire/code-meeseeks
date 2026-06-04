@@ -282,26 +282,12 @@
   flex-direction: column;
   gap: $space-3;
 }
-.chat-run-running-head {
-  display: flex;
-  align-items: center;
-  gap: $space-3;
-  font-size: $fs-md;
-  color: $text-primary;
-  flex-wrap: wrap;
-}
-
-// 计时器：等长 LLM 调用时让用户能看到秒数走动，不是卡死
-.chat-run-elapsed {
-  font-family: $font-mono;
-  font-size: $fs-sm;
-  color: $text-muted;
-  font-variant-numeric: tabular-nums;
-}
 
 // 阶段推断 chip：从 stdout 命中关键字得到的当前阶段文案 (启动 / 解析 diff /
-// 组装 prompt / 等待 LLM 响应)，跟 elapsed 并列让用户知道不是卡死
+// 组装 prompt / 等待 LLM 响应)。放在 RunMeta 行下方独立一行，跟 stdout 之间
+// 用 gap 隔开 — 不挤进 chip 行避免横向溢出，单独一行也让"当前在做什么"更醒目
 .chat-run-phase {
+  align-self: flex-start;
   padding: 1px $space-3;
   background: $color-accent-bg-fade;
   color: $color-info;
@@ -389,6 +375,9 @@
   font-variant-numeric: tabular-nums;
 }
 .chat-run-status {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
   padding: 1px $space-3;
   border-radius: $radius-sm;
   font-size: $fs-xs;
@@ -399,6 +388,19 @@
   &.chat-run-status-running {
     background: $color-accent;
     color: $text-on-accent;
+
+    // status 内嵌 Spinner 跟"运行中"文字 inline 排。.spinner 默认 12×12，
+    // border-top-color: $color-accent 在蓝底上看不见 — 这里 override 用半透明
+    // 白 + 实白顶部，跟 chip 文字色对比明显
+    .spinner {
+      width: 10px;
+      height: 10px;
+      border-width: 1.5px;
+      border-color: rgba(255, 255, 255, 0.35);
+      border-top-color: $text-on-accent;
+      margin-right: 0;
+      vertical-align: 0;
+    }
   }
   &.chat-run-status-succeeded {
     background: $color-approved;

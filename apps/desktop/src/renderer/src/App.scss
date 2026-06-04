@@ -11,6 +11,7 @@
 //   markdown     react-markdown 输出的 h/p/li/code/pre/table 等 dark-theme 配色
 //   pr-info      "详情" tab 内容 (.pr-info-view / pr-detail-*)
 //   chat-pane    右侧 pr-agent chat 面板
+//   drafts-panel "草稿" tab 列表页 (.drafts-panel / -filter / -item / -anchor)
 //   modal        SettingsModal + LlmEditorModal 子模态 + LLM profile 列表
 @use './styles/base';
 @use './styles/statusbar';
@@ -23,4 +24,5 @@
 @use './styles/markdown';
 @use './styles/pr-info';
 @use './styles/chat-pane';
+@use './styles/drafts-panel';
 @use './styles/modal';

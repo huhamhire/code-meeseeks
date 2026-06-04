@@ -185,6 +185,15 @@ export interface IpcChannels {
     request: { localId: string; parentCommentId: string; body: string };
     response: PrComment;
   };
+  /**
+   * 删除自己作者的远端评论。BBS 要求带 version (乐观锁)，调用方从已有 PrComment
+   * 拿；不一致 / 评论已有回复 / 自己不是作者都会失败 (BBS 409/403)。成功后 main
+   * 端清空评论缓存 + broadcast comments:changed，UI 自动重拉刷新
+   */
+  'comments:delete': {
+    request: { localId: string; commentId: string; version: number };
+    response: void;
+  };
   'config:read': { request: void; response: Config };
   'prs:list': { request: void; response: StoredPullRequest[] };
   'prs:refresh': { request: void; response: PollResult };

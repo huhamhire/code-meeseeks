@@ -28,13 +28,22 @@ export type ReviewRunTool = 'describe' | 'review' | 'ask' | 'improve';
 
 export type ReviewRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
-/** pr-agent 单次调用失败时的归类，对应 PrAgentRunError.reason */
+/**
+ * pr-agent 单次调用失败时的归类。
+ *
+ * 'llm-error' 跟其他 reason 不同 —— pr-agent CLI 本身可能 exit 0 (它内部 catch
+ * 了 LLM 错误只 logger.warning 一下)，但 stdout 里能看到 "Failed to generate
+ * prediction with any model" / "Error during LLM inference" 之类 marker。
+ * parseReviewOutput 检测到这种 marker 时把 status 升格为 'failed' +
+ * reason='llm-error'，避免 UI 把 LLM 调用全失败的 run 当"成功完成"展示
+ */
 export type ReviewRunFailureReason =
   | 'timeout'
   | 'spawn-failed'
   | 'non-zero-exit'
   | 'killed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'llm-error';
 
 /**
  * 解析 pr-agent stdout 后得到的单条 finding。category 反映来源：

@@ -206,6 +206,38 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
+    'comments:delete',
+    async (
+      _evt,
+      req: IpcChannels['comments:delete']['request'],
+    ): Promise<IpcChannels['comments:delete']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
+      // BBS 在以下情形 409/403：
+      //   - version 跟远端不一致 (用户在别处已编辑)
+      //   - 评论已有回复 (跟 web UI 同步规则)
+      //   - 当前 PAT 不是作者本人
+      // 错误体已经在 BBClientError.message 里带，直接抛给 renderer 显示原文
+      await adapter.deleteComment(
+        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+        pr.remoteId,
+        req.commentId,
+        req.version,
+      );
+      // 跟 reply 同套：清 cache + 广播让 UI 立刻看到评论消失
+      try {
+        await stateStore.delete(`prs/${pr.localId}/comments`);
+      } catch {
+        /* cache miss 也无所谓 */
+      }
+      for (const w of BrowserWindow.getAllWindows()) {
+        w.webContents.send('comments:changed', { localId: pr.localId });
+      }
+    },
+  );
+
+  ipcMain.handle(
     'comments:fetchAttachment',
     async (
       _evt,
@@ -720,23 +752,43 @@ export function registerIpcHandlers({
               ].join('\n')
             : req.tool === 'ask'
               ? [
-                  'When your answer references a specific code location (a file path with',
-                  'concrete line numbers), append on its OWN LAST LINE a machine-readable',
-                  'anchor marker in this EXACT format:',
+                  'CRITICAL: This answer is consumed by a code review GUI that converts your',
+                  'per-paragraph recommendations into INLINE COMMENTS pinned to specific code',
+                  'lines. For that to work, EVERY paragraph that names a code symbol (function,',
+                  'method, class, variable, identifier) from this PR MUST end with a',
+                  'machine-readable anchor marker on its OWN LAST LINE:',
                   '',
                   '    [file: <path>, lines: <start_line>-<end_line>]',
                   '',
                   'Examples:',
                   '  [file: src/auth/login.ts, lines: 42-50]',
                   '  [file: pkg/cache.go, lines: 17]',
+                  '  [file: pkg/store.ts]              (path-only fallback; only when you',
+                  '                                     truly cannot infer any line number)',
                   '',
-                  'Rules:',
-                  '- Use the actual file path from the diff. Do NOT wrap the path in backticks.',
-                  '- Only add the marker when you can name a real file AND real line numbers',
-                  '  from this PR. If your answer is general / conceptual / not tied to a',
-                  '  specific location, OMIT the marker entirely — do NOT guess.',
-                  '- If the answer covers multiple locations, append ONE marker per discrete',
-                  '  point as its own line; the client uses the first marker per paragraph.',
+                  'How to derive line numbers from the diff:',
+                  '- Every hunk in the diff begins with a header:',
+                  '    @@ -<base_start>,<base_count> +<head_start>,<head_count> @@',
+                  '  The number after `+` is the FIRST head-side line of that hunk. Count down',
+                  '  through `+` (added) and ` ` (context) lines — DO NOT count `-` (removed)',
+                  '  lines — to locate the line where the symbol appears. Prefer head-side',
+                  '  line numbers. For code that ONLY exists on the base side (purely removed),',
+                  '  use the base-side `-` line number instead.',
+                  '',
+                  'Rules — read carefully:',
+                  '- The marker is REQUIRED. Do not skip it when your paragraph references a',
+                  '  real code symbol from the diff. A paragraph without a marker becomes',
+                  '  un-pinnable feedback the user cannot turn into a comment.',
+                  '- Append exactly ONE marker per paragraph, at the very end of that paragraph,',
+                  '  on its own line (blank line above it optional but recommended).',
+                  '- If a paragraph discusses multiple locations, pick the most important one',
+                  '  (the line where the recommended change should be made).',
+                  '- Paragraphs that are purely general / conceptual / meta (e.g., overall',
+                  '  praise, no specific symbol named) MAY omit the marker.',
+                  '- Use the exact file path from the diff. Do NOT wrap the path in backticks',
+                  '  or quotes inside the marker.',
+                  '- If you really cannot pin a line, fall back to path-only `[file: <path>]`',
+                  '  rather than omitting the marker entirely.',
                 ].join('\n')
               : '';
 
@@ -769,6 +821,7 @@ export function registerIpcHandlers({
             'pragent run: pr context injected',
           );
         }
+
 
         // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
         const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
@@ -841,6 +894,31 @@ export function registerIpcHandlers({
           } catch (err) {
             logger.warn({ err, runId: run.id }, 'dropPendingFindingDrafts failed');
           }
+        }
+        // pr-agent CLI 可能 exit 0 但 stdout 里其实是 LLM 调用全失败 (litellm
+        // AuthenticationError / "Failed to generate prediction with any model" 等
+        // marker)。parseReviewOutput 会在 ParsedReviewOutput.llmFailure 标出 —
+        // 此时不算 succeeded，落盘为 failed + reason='llm-error'，UI 用红色失败
+        // chip 渲染而不是"完成"
+        if (parsed.llmFailure) {
+          logger.warn(
+            { runId: run.id, reason: parsed.llmFailure.message },
+            'pragent exit 0 but LLM call failed; marking run as failed',
+          );
+          return await finishWith({
+            status: 'failed',
+            finishedAt: new Date().toISOString(),
+            durationMs: Date.now() - t0,
+            exitCode: result.exitCode,
+            errorReason: 'llm-error',
+            errorMessage: parsed.llmFailure.message,
+            stdout: fileContent
+              ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
+              : result.stdout,
+            stderr: result.stderr,
+            findings: parsed.findings,
+            summary: parsed.summary,
+          });
         }
         return await finishWith({
           status: 'succeeded',
@@ -1099,15 +1177,9 @@ export function registerIpcHandlers({
           results.push({ draftId, ok: false, error: '草稿不存在 (可能已被删除)' });
           continue;
         }
-        // 状态守卫：posted 不重发 (远端已经有了)；rejected 不发 (用户决断不发)
-        if (draft.status === 'posted') {
-          results.push({
-            draftId,
-            ok: true,
-            postedRemoteId: draft.posted_remote_id,
-          });
-          continue;
-        }
+        // 状态守卫：rejected 不发 (用户决断不发)。
+        // posted 不再守卫 — 发布成功后本地草稿直接删除，不存 'posted' 历史状态，
+        // 调用方传过来的 draftId 在 listDrafts 找不到时已经被前面 `if (!draft)` 兜住
         if (draft.status === 'rejected') {
           results.push({ draftId, ok: false, error: '草稿已被拒绝，跳过' });
           continue;
@@ -1119,23 +1191,26 @@ export function registerIpcHandlers({
           //   变更行 (finding 来自 /review 的 issue + DraftZone hover '+' 也只对
           //   变更行可见)，context 行评论场景极少。命中 context 时 BBS 回 400，
           //   错误会被 catch 收到 results 里给用户看
-          // - 多行 (endLine > startLine) 在 BBS REST 里无法表达 — anchor.line 是单
-          //   行，发布时落到 startLine。renderer 端 UI 仍按 [startLine,endLine] 高亮
+          // - 多行 (endLine > startLine) 在 BBS REST 里无法表达 (anchor.line 是单
+          //   行)。落到 endLine 而不是 startLine：评论会出现在标注范围**下方**，
+          //   不打断用户从上往下阅读时已经看过的代码上下文。renderer 端 DraftZone
+          //   仍按 startLine 渲染 (跟 finding/AI 建议触发位置一致)，发布完远端
+          //   评论会自然显示在 endLine —— 这两种位置都不影响"阅读上下文" 的初衷
           const posted = await adapter.publishInlineComment(
             { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
             pr.remoteId,
             {
               path: draft.anchor.path,
-              line: draft.anchor.startLine,
+              line: draft.anchor.endLine,
               side: draft.anchor.side,
               lineType: draft.anchor.side === 'old' ? 'removed' : 'added',
             },
             draft.body,
           );
-          await updateDraft(stateStore, req.localId, draftId, {
-            status: 'posted',
-            posted_remote_id: posted.remoteId,
-          });
+          // 发布成功 = 本地草稿使命完成，直接删掉保持草稿池干净。远端 BBS 评论
+          // 会通过下面的 force-refresh comments 拉回，UI 上由 CommentZone 承接显示，
+          // 不需要本地再留一份 'posted' 副本造成重复 (跟远端评论 zone 视觉打架)
+          await deleteDraft(stateStore, req.localId, draftId);
           anyPublished = true;
           results.push({ draftId, ok: true, postedRemoteId: posted.remoteId });
         } catch (e) {

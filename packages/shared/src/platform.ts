@@ -100,6 +100,12 @@ export interface PrComment {
   anchor: PrCommentAnchor | null;
   /** 嵌套 replies (BBS 走 comment.comments[]) */
   replies: PrComment[];
+  /**
+   * 远端版本号 (乐观锁)。BBS 走 0/1/2... 单调递增；DELETE / PUT 时必须在 query
+   * 里带当前 version，否则 409 conflict。其他平台没这语义可以留 undefined，
+   * adapter 实现时按需带上 / 兜底 0
+   */
+  version?: number;
 }
 
 /**
@@ -211,4 +217,23 @@ export interface PlatformAdapter {
     anchor: PrCommentAnchor,
     body: string,
   ): Promise<PrComment>;
+
+  /**
+   * 删除 PR 上的一条评论。
+   *
+   * - 只允许删除自己作者的评论。调用方在 UI 层先做"作者==当前用户"判定再触发，
+   *   adapter 这一层假设上层已校验；远端层面 BBS 也会再次校验，无权时回 403
+   * - BBS 强制要求带 `version` 防并发 — 拉评论树时已经记到 PrComment.version，
+   *   调用方透传过来；version 跟远端不一致回 409 (用户在别处先改过)，让上层
+   *   提示"远端已更新，请刷新后重试"
+   * - 已有 reply 的评论 BBS 默认拒绝删 (回 409 + 描述)，跟 web UI 行为一致
+   *
+   * 跨平台契约：返回 void，调用方在删除成功后应清空缓存 + 广播 comments:changed
+   */
+  deleteComment(
+    repo: RepoRef,
+    prId: string,
+    commentId: string,
+    version: number,
+  ): Promise<void>;
 }

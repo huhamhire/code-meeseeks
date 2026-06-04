@@ -14,6 +14,8 @@ interface CommentsPanelProps {
   pr: StoredPullRequest;
   /** 拉取成功后回调，把顶层评论数 (不含 replies) 报给父组件用于 tab 角标 */
   onCommentsLoaded?: (count: number) => void;
+  /** 当前 PAT 用户名 — 评论作者匹配时显示 "删除" 按钮。null 时不显示删除 UI */
+  currentUserName?: string | null;
 }
 
 /**

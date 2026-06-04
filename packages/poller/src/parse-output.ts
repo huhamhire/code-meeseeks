@@ -10,6 +10,47 @@ export interface ParsedReviewOutput {
   /** 取首个非空 section 标题 / 描述首行作为 PR 摘要 */
   summary?: string;
   findings: Finding[];
+  /**
+   * pr-agent CLI 看起来"完成"了 (exit 0) 但 stdout 里有 LLM 调用失败的 marker
+   * (litellm AuthenticationError / "Failed to generate prediction" 等)。命中时
+   * 调用方应把 run.status 升级为 'failed' + errorReason='llm-error'，UI 显示
+   * 红色失败 chip 而非"完成"
+   */
+  llmFailure?: { message: string };
+}
+
+/**
+ * 扫 stdout 找 LLM 调用全失败的 marker。pr-agent 的 fallback retry 跑完所有备选
+ * 模型仍失败时只 logger.error 一行 "Failed to <tool> PR: Failed to generate
+ * prediction with any model of [...]"，CLI 自身 exit 0 不会主动失败。
+ *
+ * 抽取的 message 尽量精炼可读：
+ * - 优先取 "Error during LLM inference: <一行错因>" 最后一次出现 (一般是真错因)
+ * - 否则取 "Failed to <tool> PR: <reason>" 那行
+ * - 都没有但有 "Failed to generate prediction with any model" → 通用兜底
+ *
+ * 调用方拿到 message 后跟 `[详见原始输出]` 提示一起渲染，让用户能展开 raw stdout
+ * 自行排查
+ */
+export function detectLlmFailure(stdout: string): { message: string } | null {
+  const text = stripAnsi(stdout);
+  const hasFailMarker =
+    /Failed to generate prediction with any model/i.test(text) ||
+    /Failed to (review|describe|ask|improve) PR/i.test(text) ||
+    /Error during LLM inference/i.test(text);
+  if (!hasFailMarker) return null;
+
+  // 优先抽 "Error during LLM inference: <一行内容>" 中最实质的错因
+  const inferenceMatches = [...text.matchAll(/Error during LLM inference:\s*([^\n]+)/gi)];
+  if (inferenceMatches.length > 0) {
+    const last = inferenceMatches[inferenceMatches.length - 1]![1]!.trim();
+    return { message: last };
+  }
+  // 退到 "Failed to <tool> PR: ..." 那行
+  const toolMatch = /Failed to (?:review|describe|ask|improve) PR:\s*([^\n]+)/i.exec(text);
+  if (toolMatch) return { message: toolMatch[1]!.trim() };
+  // 兜底通用
+  return { message: '所有备选模型均调用失败 (Failed to generate prediction with any model)' };
 }
 
 /**
@@ -355,10 +396,19 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
  * stdout。不在这里抛错。
  */
 export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedReviewOutput {
-  if (tool === 'improve') return parseImproveOutput(stdout);
+  // LLM 失败检测先做：失败时仍可能有部分 sections (e.g., 之前轮次的 logger marker)，
+  // 让 findings 解析继续走完，但 llmFailure 字段标记让上层判定 status='failed'
+  const llmFailure = detectLlmFailure(stdout) ?? undefined;
+
+  if (tool === 'improve') {
+    const out = parseImproveOutput(stdout);
+    return llmFailure ? { ...out, llmFailure } : out;
+  }
   const allSections = splitMarkdownSections(stripAnsi(stdout));
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
-  if (sections.length === 0) return { findings: [] };
+  if (sections.length === 0) {
+    return llmFailure ? { findings: [], llmFailure } : { findings: [] };
+  }
   // 单 section 可能展开成多个 findings (key_issues_to_review 段)。用游标 idx 维持
   // 全局 finding 编号稳定，UI list-key 不冲突
   const findings: Finding[] = [];
@@ -381,7 +431,7 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
     const firstNonEmpty = sections.find((s) => s.body)?.body.split('\n')[0]?.trim();
     if (firstNonEmpty) summary = firstNonEmpty;
   }
-  return { findings, summary };
+  return llmFailure ? { findings, summary, llmFailure } : { findings, summary };
 }
 
 /**

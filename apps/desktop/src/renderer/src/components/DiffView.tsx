@@ -32,15 +32,19 @@ interface DiffViewProps {
   showWhitespace: boolean;
   /**
    * M4 跳转目标 (ADR-0007)：来自 ChatPane finding card → App pendingDiffNav。
-   * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + 打开 inline 草稿
-   * 编辑 zone (草稿已由 ChatPane 端懒创建)。消费完调 onNavConsumed 清空 token
+   * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + (带 runId/findingId
+   * 时) 打开 inline 草稿编辑 zone (草稿已由 ChatPane 端懒创建)。
+   * runId/findingId 缺省 (PublishReviewModal anchor 点击) → 仅 navigate 不 enter edit。
+   * 消费完调 onNavConsumed 清空 token
    */
   pendingNav?: {
-    runId: string;
-    findingId: string;
+    runId?: string;
+    findingId?: string;
     anchor: { path: string; startLine: number; endLine: number };
   } | null;
   onNavConsumed?: () => void;
+  /** 当前 PAT 用户名，inline CommentZone 里用作"作者==自己" 判定显示删除按钮 */
+  currentUserName?: string | null;
 }
 
 interface LoadedContent {
@@ -334,13 +338,18 @@ export function DiffView({
     if (target) {
       setSelectedKey(fileKey(target));
     }
-    // 查现有草稿；ChatPane 端已经懒创建过了，正常情况能找到
-    const matchingDraft = (drafts ?? []).find(
-      (d) =>
-        d.source !== undefined &&
-        d.source.runId === pendingNav.runId &&
-        d.source.findingId === pendingNav.findingId,
-    );
+    // 查现有草稿；ChatPane 端已经懒创建过了，正常情况能找到。
+    // 没传 runId/findingId (PublishReviewModal anchor 点击场景) → 直接跳过查找，
+    // draftId 留 undefined → 下游 effect 不会触发 autoEdit，纯 navigate
+    const matchingDraft =
+      pendingNav.runId && pendingNav.findingId
+        ? (drafts ?? []).find(
+            (d) =>
+              d.source !== undefined &&
+              d.source.runId === pendingNav.runId &&
+              d.source.findingId === pendingNav.findingId,
+          )
+        : undefined;
     setPendingScroll({
       line: pendingNav.anchor.startLine,
       side: 'new',
@@ -732,11 +741,15 @@ export function DiffView({
   // - addZone + createRoot 渲染 DraftZone 组件
   // - DraftZone 内 isEditing state 由组件自管；onSave / onDelete 调 IPC mutators
   //
-  // 不渲染 rejected 草稿 (UI 默认隐藏)，但 posted 渲染 (含远端 id 链接，绿底)
+  // 不渲染 rejected (用户决断不发，默认隐藏)、posted (远端评论已由 CommentZone
+  // 接管，本地草稿再渲染就跟远端评论视觉重复)。
+  // 现版本发布路径不再产生 posted (drafts:publishBatch 成功直接删本地)，但旧
+  // 测试可能在本地状态文件里留下 posted 数据 — 这里过滤是双保险，让历史 posted
+  // 草稿不再出现在 DiffView 里
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
     const fileDrafts = (drafts ?? []).filter((d) => {
-      if (d.status === 'rejected') return false;
+      if (d.status === 'rejected' || d.status === 'posted') return false;
       return d.anchor.path === selected.path || selected.oldPath === d.anchor.path;
     });
     if (fileDrafts.length === 0) return;

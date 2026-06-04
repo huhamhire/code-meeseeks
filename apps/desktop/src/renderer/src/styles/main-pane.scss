@@ -136,6 +136,13 @@
     font-weight: 600;
     line-height: 1;
     font-variant-numeric: tabular-nums;
+
+    // warning 变体：草稿待发布 chip 用 amber，跟文件树 .tree-draft-count 同色
+    // 让用户对"待办"语义在不同位置的识别保持一致
+    &.pr-tab-badge-warning {
+      background: rgba(229, 158, 30, 0.15);
+      color: $color-warning;
+    }
   }
 
   .diff-mode-toggle {

@@ -28,11 +28,17 @@ export function PublishReviewModal({
   localId,
   drafts,
   onClose,
+  onJumpToAnchor,
 }: {
   localId: string;
   /** 本 PR 全部草稿；modal 自己过滤出 publishable (pending + edited) */
   drafts: ReadonlyArray<ReviewDraft>;
   onClose: () => void;
+  /**
+   * 用户点 anchor (path:line) 时调用。父端通常实现为：关闭 modal + 触发 Diff
+   * 跳转到该草稿位置 (复用 pendingDiffNav 链路)。不传则 anchor 不可点
+   */
+  onJumpToAnchor?: (draftId: string) => void;
 }) {
   // 列表用快照：进入 modal 时定下，避免 drafts 变动 (其它窗口编辑) 把当前选择洗掉
   const candidates = useMemo<ReviewDraft[]>(
@@ -137,30 +143,52 @@ export function PublishReviewModal({
                 </span>
               </div>
               <ul className="publish-review-list">
-                {candidates.map((d) => (
-                  <li key={d.id} className="publish-review-item">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(d.id)}
-                        onChange={() => toggle(d.id)}
-                      />
-                      <div className="publish-review-item-meta">
-                        <code className="publish-review-item-anchor">
-                          {d.anchor.path}:{d.anchor.startLine}
-                          {d.anchor.endLine !== d.anchor.startLine
-                            ? `-${d.anchor.endLine}`
-                            : ''}
-                          <span className="muted"> · {d.anchor.side === 'old' ? '基线' : '新版'}</span>
-                        </code>
-                        <span className={`publish-review-item-status status-${d.status}`}>
-                          {d.status === 'pending' ? '待处理' : '已编辑'}
-                        </span>
-                      </div>
-                    </label>
-                    <pre className="publish-review-item-body">{d.body}</pre>
-                  </li>
-                ))}
+                {candidates.map((d) => {
+                  const lineLabel =
+                    d.anchor.endLine !== d.anchor.startLine
+                      ? `${String(d.anchor.startLine)}-${String(d.anchor.endLine)}`
+                      : String(d.anchor.startLine);
+                  const sideLabel = d.anchor.side === 'old' ? '基线' : '新版';
+                  return (
+                    <li key={d.id} className="publish-review-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(d.id)}
+                          onChange={() => toggle(d.id)}
+                        />
+                        <div className="publish-review-item-meta">
+                          {/* anchor 可点 → 关 modal + 跳 Diff；checkbox label 是 outer，
+                              这里 stopPropagation 防 click 触发勾选切换 */}
+                          {onJumpToAnchor ? (
+                            <button
+                              type="button"
+                              className="publish-review-item-anchor publish-review-item-anchor-link"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onJumpToAnchor(d.id);
+                              }}
+                              title="跳到 Diff 查看代码上下文"
+                            >
+                              {d.anchor.path}:{lineLabel}
+                              <span className="muted"> · {sideLabel}</span>
+                            </button>
+                          ) : (
+                            <code className="publish-review-item-anchor">
+                              {d.anchor.path}:{lineLabel}
+                              <span className="muted"> · {sideLabel}</span>
+                            </code>
+                          )}
+                          <span className={`publish-review-item-status status-${d.status}`}>
+                            {d.status === 'pending' ? '待处理' : '已编辑'}
+                          </span>
+                        </div>
+                      </label>
+                      <pre className="publish-review-item-body">{d.body}</pre>
+                    </li>
+                  );
+                })}
               </ul>
               {error && <div className="publish-review-error">{error}</div>}
             </div>

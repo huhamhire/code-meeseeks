@@ -5,6 +5,7 @@ import { useDraftsForPr } from '../stores/drafts-store';
 import { CommentsPanel } from './CommentsPanel';
 import { CommitsPanel } from './CommitsPanel';
 import { DiffView } from './DiffView';
+import { DraftsPanel } from './DraftsPanel';
 import { PrInfoView } from './PrInfoView';
 import { PublishReviewModal } from './PublishReviewModal';
 
@@ -114,14 +115,29 @@ interface MainPaneProps {
    * DiffView 消费完应调用 onDiffNavConsumed 清掉。
    */
   pendingDiffNav?: {
-    runId: string;
-    findingId: string;
+    runId?: string;
+    findingId?: string;
     anchor: { path: string; startLine: number; endLine: number };
   } | null;
   onDiffNavConsumed?: () => void;
+  /**
+   * 反向通道：MainPane 内部组件 (e.g., PublishReviewModal) 也能触发 Diff 跳转。
+   * App 端实际跑 setPendingDiffNav；MainPane 自己 useEffect 切 tab='diff' 并把
+   * nav 透传给 DiffView，复用同一条消费链路
+   */
+  onRequestDiffNav?: (target: {
+    runId?: string;
+    findingId?: string;
+    anchor: { path: string; startLine: number; endLine: number };
+  }) => void;
+  /**
+   * 当前 PR 所属 connection 的 PAT 用户名 — CommentsPanel / DiffView 据此判定
+   * "评论作者 == 当前用户" 显示"删除"按钮。null = 未知 (ping 失败 / 还在加载)
+   */
+  currentUserName?: string | null;
 }
 
-type Tab = 'diff' | 'comments' | 'commits' | 'info';
+type Tab = 'diff' | 'comments' | 'drafts' | 'commits' | 'info';
 
 export function MainPane({
   pr,
@@ -129,6 +145,8 @@ export function MainPane({
   onSetStatus,
   pendingDiffNav,
   onDiffNavConsumed,
+  onRequestDiffNav,
+  currentUserName,
 }: MainPaneProps) {
   const [tab, setTab] = useState<Tab>('diff');
   // 收到跳转请求 → 强制切到 Diff tab，DiffView 自己负责消费 anchor
@@ -197,7 +215,7 @@ export function MainPane({
     }
   }, []);
 
-  // M4 草稿池 → "提交评审 (N)" 按钮的 N。pending + edited 才算 publishable；
+  // M4 草稿池 → "提交评论 (N)" 按钮的 N。pending + edited 才算 publishable；
   // rejected (用户决断不发) / posted (远端已发) 都排除
   const drafts = useDraftsForPr(prLocalId);
   const publishableCount = useMemo(
@@ -208,7 +226,15 @@ export function MainPane({
       ),
     [drafts],
   );
+  // 草稿 tab 显示条件用总数 (任何 status 都算) —— 用户发完所有 pending 后仍可
+  // 进 tab 看 posted/rejected 历史；只有从来没创建过草稿的 PR 才完全隐藏 tab
+  const totalDraftCount = (drafts ?? []).length;
   const [publishModalOpen, setPublishModalOpen] = useState(false);
+  // 兜底：当前停在 'drafts' tab 但草稿全清空 (e.g., 用户手动删了最后一条) → 切回
+  // 'diff' 避免显示孤儿空白内容区
+  useEffect(() => {
+    if (tab === 'drafts' && totalDraftCount === 0) setTab('diff');
+  }, [tab, totalDraftCount]);
 
   if (!pr) {
     return (
@@ -277,19 +303,19 @@ export function MainPane({
               文案用"评论"不用"评审"：跟右侧"通过/需修改"两个评审决断按钮区分，
               本按钮只发评论，不下决断 (那是 /approve /needswork 的事) */}
           <div className="pr-header-actions-right">
-            <button
-              type="button"
-              className="btn btn-sm pr-header-publish"
-              disabled={publishableCount === 0}
-              onClick={() => setPublishModalOpen(true)}
-              title={
-                publishableCount === 0
-                  ? '当前 PR 无待发布草稿'
-                  : `批量发布 ${String(publishableCount)} 条草稿到 BBS`
-              }
-            >
-              提交评论{publishableCount > 0 ? ` (${String(publishableCount)})` : ''}
-            </button>
+            {/* "提交评论" 仅在有待发布草稿时渲染：N=0 时整按钮隐藏 (而非 disabled
+                灰显)，减少 header 的视觉噪音。用户感知"还有 N 没发"的入口由文件树
+                amber chip + 草稿 tab badge 共同承担 */}
+            {publishableCount > 0 && (
+              <button
+                type="button"
+                className="btn btn-sm pr-header-publish"
+                onClick={() => setPublishModalOpen(true)}
+                title={`批量发布 ${String(publishableCount)} 条草稿到 BBS`}
+              >
+                提交评论 ({String(publishableCount)})
+              </button>
+            )}
             <button
               className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
               type="button"
@@ -340,6 +366,29 @@ export function MainPane({
             </span>
           )}
         </button>
+        {/* 草稿 tab：紧贴评论 — 本地未发 vs 远端已发是互补对照。
+            tab 显示条件用总数 — 全发完 (publishable=0 但有 posted 历史) 仍能进
+            tab 看自己发过什么；从未创建草稿的 PR 才完全隐藏 tab，避免冗余入口 */}
+        {totalDraftCount > 0 && (
+          <button
+            type="button"
+            className={`pr-tab ${tab === 'drafts' ? 'active' : ''}`}
+            onClick={() => setTab('drafts')}
+            role="tab"
+            aria-selected={tab === 'drafts'}
+          >
+            草稿
+            {publishableCount > 0 && (
+              <span
+                className="pr-tab-badge pr-tab-badge-warning"
+                aria-label={`${String(publishableCount)} 条待发布草稿`}
+                title="待发布 (pending + edited)"
+              >
+                {publishableCount}
+              </span>
+            )}
+          </button>
+        )}
         <button
           type="button"
           className={`pr-tab ${tab === 'commits' ? 'active' : ''}`}
@@ -415,10 +464,33 @@ export function MainPane({
             showWhitespace={showWhitespace}
             pendingNav={pendingDiffNav ?? null}
             onNavConsumed={onDiffNavConsumed}
+            currentUserName={currentUserName ?? null}
           />
         )}
         {tab === 'comments' && (
-          <CommentsPanel pr={pr} onCommentsLoaded={(n) => setCommentCount(n)} />
+          <CommentsPanel
+            pr={pr}
+            onCommentsLoaded={(n) => setCommentCount(n)}
+            currentUserName={currentUserName ?? null}
+          />
+        )}
+        {tab === 'drafts' && (
+          <DraftsPanel
+            pr={pr}
+            onJumpToAnchor={(draftId) => {
+              // 跟 PublishReviewModal 同套：查 draft 拿 anchor → 上抛 pendingDiffNav
+              // → App 切到 Diff tab。不带 runId/findingId 仅 navigate 不进 edit
+              const d = (drafts ?? []).find((x) => x.id === draftId);
+              if (!d) return;
+              onRequestDiffNav?.({
+                anchor: {
+                  path: d.anchor.path,
+                  startLine: d.anchor.startLine,
+                  endLine: d.anchor.endLine,
+                },
+              });
+            }}
+          />
         )}
         {tab === 'commits' && <CommitsPanel pr={pr} />}
         {tab === 'info' && <PrInfoView pr={pr} />}
@@ -428,6 +500,21 @@ export function MainPane({
           localId={pr.localId}
           drafts={drafts ?? []}
           onClose={() => setPublishModalOpen(false)}
+          onJumpToAnchor={(draftId) => {
+            // 点 anchor → 关 modal + 转 pendingDiffNav 上抛给 App。从本 PR 草稿池
+            // 反查 draft 拿 anchor；runId/findingId 不带 → DiffView 仅 navigate
+            // 不进 edit (用户想看代码上下文，不一定是要改草稿)
+            const d = (drafts ?? []).find((x) => x.id === draftId);
+            if (!d) return;
+            setPublishModalOpen(false);
+            onRequestDiffNav?.({
+              anchor: {
+                path: d.anchor.path,
+                startLine: d.anchor.startLine,
+                endLine: d.anchor.endLine,
+              },
+            });
+          }}
         />
       )}
     </main>

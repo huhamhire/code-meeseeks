@@ -31,12 +31,19 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
     case 'ollama':
       return m.startsWith('ollama/') ? m : `ollama/${m}`;
     case 'openai':
+      // 真 OpenAI：litellm 认 gpt-* / o1-* 等内置模型名；带 openai/ 前缀也直认。
+      // 用户写的就是 litellm 内置表里的名字，不主动加前缀避免重复 (`openai/openai/...`)
+      return m;
     case 'openai-compatible':
     case 'dashscope':
     case 'volcengine-ark':
-      // OpenAI 兼容协议 (含阿里百炼 / 字节火山方舟)，model 名直接用 — 用户填的是
-      // 平台的具体模型 ID (qwen-max / doubao-pro-32k / ep-xxx endpoint id 等)
-      return m;
+      // OpenAI 兼容协议（DashScope / 火山方舟 / 自部署 vLLM / 中转）— 模型 ID
+      // 是平台特定 (qwen-plus / doubao-pro-32k / ep-xxx endpoint id 等)，**不在
+      // litellm 内置 MAX_TOKENS 表里**，裸名传过去 litellm 第一道 provider 路由
+      // 就报 "LLM Provider NOT provided"。
+      // 必须显式 `openai/` 前缀让 litellm 走 "custom OpenAI client + 用 OPENAI_API_BASE
+      // 作为 endpoint" 分支，model 字段去前缀后透传给平台
+      return m.startsWith('openai/') ? m : `openai/${m}`;
     default:
       return m;
   }
@@ -76,13 +83,40 @@ export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
     case 'openai':
     case 'openai-compatible':
     case 'dashscope':
-    case 'volcengine-ark':
-      // 阿里百炼 / 火山方舟 都暴露 OpenAI 兼容 endpoint，复用 OPENAI__ 这套
-      // env：base_url 用平台 endpoint，api_key 走 OpenAI 路径。pr-agent litellm
-      // 路由器看到 base_url 非默认就用 custom OpenAI client 调
+    case 'volcengine-ark': {
+      // 阿里百炼 / 火山方舟 / 自部署 vLLM 都暴露 OpenAI 兼容 endpoint。
+      //
+      // 严格按 pr-agent 官方推荐 (docs/usage-guide/changing_a_model)，只设双下划
+      // 线 env: `OPENAI__KEY` / `OPENAI__API_BASE`。pr-agent 内部
+      // (litellm_ai_handler.py) 会:
+      //   litellm.openai_key = settings.openai.key
+      //   litellm.api_base   = settings.openai.api_base
+      //   self.api_base      = settings.openai.api_base
+      // 并在 `await acompletion(...)` 调用时无条件传 `api_base=self.api_base`。
+      //
+      // 不要同时设单下划线 `OPENAI_API_KEY` / `OPENAI_BASE_URL` — OpenAI SDK 实例
+      // 化时优先读这些环境变量，会把 pr-agent 注入的 `litellm.api_base` 覆盖掉，
+      // OpenAI client 改走 SDK 默认 endpoint，请求被打到 https://api.openai.com，
+      // DashScope key 必 401 (实测路径)。
+      //
+      // model 仍需 `openai/<...>` 前缀 (normalizeModel 已加) — litellm 第一道
+      // provider 路由按前缀认作 OpenAI-compatible client。裸 model 名 (qwen-plus)
+      // 不在 litellm.model_cost 表里，会抛 "LLM Provider NOT provided"。
+      //
+      // dashscope / volcengine-ark 用 LLM_PROVIDERS 预设兜底 (跟 SettingsModal
+      // placeholder 同一份默认 endpoint)，让历史 profile 留空时也能 work。
+      // openai-compatible 不兜底 — 它是"自部署/中转代理"语义，endpoint 因人而异
+      const baseUrlFallback: Record<string, string> = {
+        dashscope: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        'volcengine-ark': 'https://ark.cn-beijing.volces.com/api/v3',
+      };
+      const effectiveBaseUrl =
+        profile.base_url || baseUrlFallback[profile.provider] || '';
+
       if (profile.api_key) env['OPENAI__KEY'] = profile.api_key;
-      if (profile.base_url) env['OPENAI__API_BASE'] = profile.base_url;
+      if (effectiveBaseUrl) env['OPENAI__API_BASE'] = effectiveBaseUrl;
       break;
+    }
     case 'deepseek':
       // litellm 走 deepseek/<model> 路径；env 用 DEEPSEEK__KEY。base_url 一般无需填
       if (profile.api_key) env['DEEPSEEK__KEY'] = profile.api_key;

@@ -278,6 +278,38 @@ export class BBClient {
   }
 
   /**
+   * 无 body 的 DELETE。BBS 删评论 / 删 reviewer 等 mutations 用。query 通过 path
+   * 直接拼 (e.g., `?version=3`)，跟 GET 一致。错误抛 BBClientError；成功 (204)
+   * 直接 return，不需要响应体
+   */
+  async del(path: string): Promise<void> {
+    const url = `${this.baseUrl}${path}`;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
+    let res: Response;
+    try {
+      res = await this.fetchFn(url, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: 'application/json',
+        },
+        signal: ctl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new BBClientError(
+        `${String(res.status)} ${res.statusText} on DELETE ${path}`,
+        res.status,
+        txt,
+      );
+    }
+  }
+
+  /**
    * Bitbucket Server 标准分页：start / limit / isLastPage / nextPageStart。
    * 默认 limit=50；遍历直至 isLastPage。
    */

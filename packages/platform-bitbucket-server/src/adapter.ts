@@ -254,6 +254,21 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     return mapBBComment(created);
   }
 
+  async deleteComment(
+    repo: RepoRef,
+    prId: string,
+    commentId: string,
+    version: number,
+  ): Promise<void> {
+    // BBS REST: DELETE /pull-requests/{id}/comments/{cid}?version={v}
+    // - version 必填 (乐观锁)，不一致回 409 + 描述 "expected version X"
+    // - 已有 reply / 自己不是作者 / 评论已删 都回 409 或 403，错误体 client 已带回
+    // - 成功 204 No Content
+    await this.client.del(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments/${commentId}?version=${String(version)}`,
+    );
+  }
+
   async publishInlineComment(
     repo: RepoRef,
     prId: string,
@@ -397,6 +412,8 @@ function mapBBComment(c: BBComment, anchor?: BBCommentAnchor): PrComment {
     updatedAt: new Date(c.updatedDate).toISOString(),
     anchor: anchor ? mapBBAnchor(anchor) : null,
     replies: (c.comments ?? []).map((r) => mapBBComment(r)),
+    // 透传 BBS 乐观锁版本号 — DELETE / PUT 时调用方必须带回来，否则 409
+    version: c.version,
   };
 }
 

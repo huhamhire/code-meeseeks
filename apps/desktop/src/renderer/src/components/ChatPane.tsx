@@ -7,6 +7,7 @@ import type {
   IpcChannels,
   LocalPrStatus,
   PrAgentStatus,
+  PrAgentStrategy,
   PrDocSectionKey,
   ReviewRun,
   ReviewRunTool,
@@ -422,12 +423,13 @@ export function ChatPane({
         ))}
         {/* 正在跑：进度条 + 实时 stdout 流，贴在历史末尾。startedAt 入队时为 null，
             executeRun 真正起跑时设值；窗口非常短一般看不到 — fallback 到 enqueuedAt */}
-        {myActiveRun && (
+        {myActiveRun && prAgent.available && (
           <RunningView
             tool={myActiveRun.tool}
             runId={myActiveRun.runId}
             lines={liveLines}
             startedAt={new Date(myActiveRun.startedAt ?? myActiveRun.enqueuedAt).getTime()}
+            strategy={prAgent.strategy}
           />
         )}
         {/* 别 PR 在跑：提示用户新提交会排队，不阻塞输入。状态栏的队列 chip 可点开
@@ -1089,11 +1091,14 @@ function RunningView({
   runId,
   lines,
   startedAt,
+  strategy,
 }: {
   tool: ReviewRunTool;
   runId: string;
   lines: ReadonlyArray<string>;
   startedAt: number;
+  /** 跟 RunMeta 同源 — 拼"Docker / CLI" chip，让运行中跟完成态视觉一致 */
+  strategy: PrAgentStrategy;
 }) {
   // 末行追加时自动滚到底
   const ref = useRef<HTMLPreElement | null>(null);
@@ -1112,16 +1117,23 @@ function RunningView({
 
   const phase = useMemo(() => inferPhase(lines), [lines]);
 
-  // 取消按钮不放这里：按 Claude / Cursor 等 agent 惯例，stop 跟 send 共用输入栏
-  // 同一槽位 (running 时 send 形态变 stop)。这里只负责进度展示
+  // 跟 RunMeta 完全同结构的 chip 行 (header.chat-run-meta + 4 个 chip)。
+  // running 跟 succeeded/failed 共享一套视觉骨架，用户从列表扫一眼能在固定位置
+  // 看到 tool / status / strategy / 时长，不用因为状态切换重新定位视线。
+  // 唯一差异：status chip 内嵌 Spinner；phase 副信息独立放在 chip 行后单独一行
+  // (跟 raw stdout 之上的间隔保持，不挤进 chip 行避免横向溢出)
   return (
     <div className="chat-run-running" data-run-id={runId}>
-      <div className="chat-run-running-head">
-        <Spinner />
-        <span>正在执行 /{tool}…</span>
-        <span className="chat-run-elapsed">{formatElapsed(elapsedMs)}</span>
-        <span className="chat-run-phase">{phase}</span>
-      </div>
+      <header className="chat-run-meta">
+        <span className={`chat-run-tool chat-run-tool-${tool}`}>/{tool}</span>
+        <span className="chat-run-status chat-run-status-running">
+          <Spinner />
+          {RUN_STATUS_LABEL.running}
+        </span>
+        <span className="chat-run-chip">{strategy === 'docker' ? 'Docker' : 'CLI'}</span>
+        <span className="chat-run-chip chat-run-duration">{formatElapsed(elapsedMs)}</span>
+      </header>
+      {phase && <div className="chat-run-phase">{phase}</div>}
       <AnsiPre
         className="chat-run-stdout"
         preRef={ref}
@@ -1232,8 +1244,13 @@ function RunResultView({
           <strong>
             {isCancelled
               ? '已取消'
-              : `run 失败${run.errorReason ? ` (${run.errorReason})` : ''}`}
-            {run.exitCode != null && !isCancelled && ` · exit ${String(run.exitCode)}`}
+              : run.errorReason === 'llm-error'
+                ? 'LLM 调用失败'
+                : `run 失败${run.errorReason ? ` (${run.errorReason})` : ''}`}
+            {/* llm-error 时 exitCode 是 0 (pr-agent 自己 catch 了)，显示出来反而
+                让用户误以为没出错，所以跳过 */}
+            {run.exitCode != null && !isCancelled && run.errorReason !== 'llm-error' &&
+              ` · exit ${String(run.exitCode)}`}
           </strong>
           {canRetry && (
             <button
@@ -1492,8 +1509,39 @@ function RunMeta({ run }: { run: ReviewRun }) {
         </span>
       ) : null}
       <span className="chat-run-chip chat-run-duration">{duration}</span>
+      {/* 开始时间顶到最右：跟左侧 tool/status/strategy 拉开距离。
+          finishedAt - duration ≈ startedAt 但直接读 run.startedAt 更准 */}
+      <span
+        className="chat-run-chip chat-run-time"
+        title={`开始于 ${new Date(run.startedAt).toLocaleString()}`}
+      >
+        {formatStartTime(run.startedAt)}
+      </span>
     </header>
   );
+}
+
+/**
+ * 把 ISO 时间戳格式化为 "HH:MM:SS" (当天) 或 "MM-DD HH:MM" (跨日)，跟 chip
+ * 空间预算匹配。用户主要看"哪一次跑的"，秒粒度足够区分相邻 run；隔天的 run
+ * 加日期标识让历史 run 列表里能立刻分组
+ */
+function formatStartTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  if (sameDay) {
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${mo}-${da} ${hh}:${mm}`;
 }
 
 /**

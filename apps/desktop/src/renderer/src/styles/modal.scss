@@ -87,6 +87,15 @@
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   word-break: break-all;
   color: $text-body;
+  min-width: 0; // 让 input width:100% 不被 grid cell 自然撑出去
+
+  // input 默认 size=20 (~200px)，在 grid cell 内 flex:1 失效；显式 width:100%
+  // 让所有文本 input 撑满 val 列宽度。Base URL / 模型 ID / 自部署 endpoint
+  // 都是长字符串，给足空间
+  .settings-input {
+    width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 .connection-list {
@@ -225,7 +234,10 @@
   z-index: $z-modal-nested;
 }
 .modal-sm {
-  max-width: 560px;
+  // LlmEditorModal 用：URL / 模型 ID / 自部署 endpoint 这类字段很长
+  // (dashscope 默认 endpoint 已经 ~50 chars，自定义 base URL 更长)，
+  // 拓到 720px 让输入框横向空间充裕
+  max-width: 720px;
   width: 100%;
 }
 
@@ -325,6 +337,24 @@
   font-size: $fs-md;
   color: $text-primary;
   word-break: break-all;
+}
+// anchor 可点版本：button reset + hover 主色，让用户知道是个 link
+.publish-review-item-anchor-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: $color-info;
+
+  &:hover {
+    text-decoration: underline;
+  }
+  &:focus-visible {
+    outline: 1px solid $color-info;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
 }
 .publish-review-item-status {
   font-size: $fs-sm;
