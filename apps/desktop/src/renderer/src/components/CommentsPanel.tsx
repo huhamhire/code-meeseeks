@@ -7,6 +7,7 @@ import { invoke, subscribe } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
 import { Avatar } from './Avatar';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
+import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from './ConfirmModal';
 import { InlineCodeContext } from './InlineCodeContext';
@@ -145,13 +146,15 @@ function CommentItem({
     [pr.localId],
   );
   const [replyOpen, setReplyOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // 删除条件 main 端预判好了 (annotateCanDelete)：作者匹配 + 无 reply + 有
-  // version 三条都过才标 true。renderer 直读 flag，不再自己比对 currentUserName
+  // 删除/编辑条件 main 端预判好了 (annotateOwnership)。renderer 直读 flag，
+  // 不再自己比对 author / version / replies
   const canDelete = comment.canDelete === true;
+  const canEdit = comment.canEdit === true;
 
   const handleDelete = async (): Promise<void> => {
     if (!canDelete || comment.version === undefined) return;
@@ -202,39 +205,64 @@ function CommentItem({
       {comment.anchor && depth === 0 && (
         <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
       )}
-      <div className="pr-comment-body markdown">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkBreaks]}
-          components={mdComponents}
-          urlTransform={transformBitbucketUrl}
-        >
-          {comment.body}
-        </ReactMarkdown>
-      </div>
-      <div className="pr-comment-foot">
-        {replyOpen ? null : (
-          <button
-            type="button"
-            className="pr-comment-reply-btn"
-            onClick={() => setReplyOpen(true)}
+      {/* 编辑态：textarea 占位替换 markdown 正文；非编辑态：渲染 markdown */}
+      {editOpen && typeof comment.version === 'number' ? (
+        <CommentEditEditor
+          prLocalId={pr.localId}
+          commentId={comment.remoteId}
+          version={comment.version}
+          initialBody={comment.body}
+          onCancel={() => setEditOpen(false)}
+          onSaved={() => setEditOpen(false)}
+        />
+      ) : (
+        <div className="pr-comment-body markdown">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            components={mdComponents}
+            urlTransform={transformBitbucketUrl}
           >
-            回复
-          </button>
-        )}
-        {/* 删除按钮在 reply 按钮右侧，跟"回复"风格对齐 — 都是 hover 显，避免常驻
-            占视觉。disable 期间文案变"删除中…" */}
-        {canDelete && !replyOpen && (
-          <button
-            type="button"
-            className="pr-comment-delete-btn"
-            onClick={() => setConfirmDelete(true)}
-            disabled={deleting}
-            title="删除自己发布的评论 (远端同步)"
-          >
-            {deleting ? '删除中…' : '删除'}
-          </button>
-        )}
-      </div>
+            {comment.body}
+          </ReactMarkdown>
+        </div>
+      )}
+      {/* 操作行：编辑态隐藏所有按钮 (避免跟编辑器底部按钮组重复)；非编辑态展示
+          回复 / 编辑 / 删除三个按钮 */}
+      {!editOpen && (
+        <div className="pr-comment-foot">
+          {!replyOpen && (
+            <button
+              type="button"
+              className="pr-comment-reply-btn"
+              onClick={() => setReplyOpen(true)}
+            >
+              回复
+            </button>
+          )}
+          {canEdit && !replyOpen && (
+            <button
+              type="button"
+              className="pr-comment-edit-btn"
+              onClick={() => setEditOpen(true)}
+              title="编辑自己发布的评论 (远端同步)"
+            >
+              编辑
+            </button>
+          )}
+          {/* 删除按钮在最后，跟其它按钮风格对齐 — disable 期间文案变"删除中…" */}
+          {canDelete && !replyOpen && (
+            <button
+              type="button"
+              className="pr-comment-delete-btn"
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+              title="删除自己发布的评论 (远端同步)"
+            >
+              {deleting ? '删除中…' : '删除'}
+            </button>
+          )}
+        </div>
+      )}
       {deleteError && (
         <div className="pr-comment-delete-error" role="alert">
           删除失败：{deleteError}

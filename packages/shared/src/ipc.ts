@@ -194,6 +194,21 @@ export interface IpcChannels {
     request: { localId: string; commentId: string; version: number };
     response: void;
   };
+  /**
+   * 编辑自己作者评论的 body。BBS PUT 同样要 version (乐观锁) — 不一致回 409，
+   * 上层应提示"远端已更新，请刷新后重试"并拒绝静默覆盖。BBS 允许编辑带 reply
+   * 的评论 (跟 delete 区别)。成功后 main 端清评论缓存 + 广播
+   * comments:changed，UI 自动重拉显示新文本
+   */
+  'comments:edit': {
+    request: {
+      localId: string;
+      commentId: string;
+      version: number;
+      body: string;
+    };
+    response: PrComment;
+  };
   'config:read': { request: void; response: Config };
   'prs:list': { request: void; response: StoredPullRequest[] };
   'prs:refresh': { request: void; response: PollResult };

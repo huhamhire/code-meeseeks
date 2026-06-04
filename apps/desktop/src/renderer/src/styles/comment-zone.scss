@@ -54,6 +54,7 @@
   align-items: center;
 }
 .comment-zone-reply-btn,
+.comment-zone-edit-btn,
 .comment-zone-delete-btn {
   padding: 2px $space-3;
   font-size: $fs-sm;
@@ -69,7 +70,13 @@
   border-color: $color-accent;
   color: $color-info;
 }
-// 删除按钮主色用 danger，跟回复按钮拉开语义；disabled 时半透明
+// 编辑按钮：中性操作走主色描边，跟"回复"风格相似但有微差让人区分
+.comment-zone-edit-btn:hover {
+  border-color: $color-info;
+  color: $color-info;
+  background: rgba(14, 99, 156, 0.08);
+}
+// 删除按钮主色用 danger，跟其它按钮拉开语义；disabled 时半透明
 .comment-zone-delete-btn:hover:not(:disabled) {
   border-color: $color-danger;
   color: $color-danger;
@@ -81,10 +88,13 @@
 }
 // hover comment body 区时显示 foot 里的所有按钮
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-reply-btn,
+.comment-zone-item-body:hover > .comment-zone-foot .comment-zone-edit-btn,
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-delete-btn,
 .comment-zone-foot:focus-within .comment-zone-reply-btn,
+.comment-zone-foot:focus-within .comment-zone-edit-btn,
 .comment-zone-foot:focus-within .comment-zone-delete-btn,
 .comment-zone-reply-btn:focus,
+.comment-zone-edit-btn:focus,
 .comment-zone-delete-btn:focus {
   opacity: 1;
 }

@@ -239,6 +239,38 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
+    'comments:edit',
+    async (
+      _evt,
+      req: IpcChannels['comments:edit']['request'],
+    ): Promise<IpcChannels['comments:edit']['response']> => {
+      const pr = await findPrOrThrow(req.localId);
+      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
+      // BBS 409 (version 不一致) 时 BBClientError.message 会带 "expected version X"
+      // 这种细节，原样抛给 renderer 显示让用户知道"远端有新版本"
+      const updated = await adapter.editComment(
+        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+        pr.remoteId,
+        req.commentId,
+        req.version,
+        req.body,
+      );
+      // 清 cache + 广播，UI 重拉刷新 (跟 delete 同套链路)。返回 updated 仅作
+      // 调用方乐观参考 — 实际页面渲染走 cache→force-refresh 路径
+      try {
+        await stateStore.delete(`prs/${pr.localId}/comments`);
+      } catch {
+        /* cache miss 也无所谓 */
+      }
+      for (const w of BrowserWindow.getAllWindows()) {
+        w.webContents.send('comments:changed', { localId: pr.localId });
+      }
+      return updated;
+    },
+  );
+
+  ipcMain.handle(
     'comments:fetchAttachment',
     async (
       _evt,
@@ -529,7 +561,7 @@ export function registerIpcHandlers({
           { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
           pr.remoteId,
         )
-        .then((raw) => annotateCanDelete(raw, adapter))
+        .then((raw) => annotateOwnership(raw, adapter))
         .then(async (fresh) => {
           await writeCommentsCache(stateStore, pr.localId, {
             comments: fresh,
@@ -1343,40 +1375,47 @@ function languageDirectiveFor(lang: string): string {
 }
 
 /**
- * 给每条评论 (含 replies 子树) 打 canDelete 标志：
- *   - author.name === 当前 PAT 用户 (adapter.getCurrentUser())
- *   - 无 reply (BBS 拒删带 reply 的)
- *   - version 字段存在 (DELETE 必备乐观锁)
+ * 给每条评论 (含 replies 子树) 打 canDelete / canEdit 标志。
  *
- * 当前用户拿不到 (ping 未完成) → 全部 canDelete=false。renderer 直接读
- * comment.canDelete 不再自己比对 author / version / replies，链路最短最稳。
+ * - canDelete: author.name === 当前 PAT 用户 && 无 reply && 有 version
+ *   (BBS 拒删带 reply 的；DELETE 必带 version 乐观锁)
+ * - canEdit:   author.name === 当前 PAT 用户 && 有 version
+ *   (BBS 允许编辑带 reply 的评论；PUT 也带 version)
+ *
+ * 当前用户拿不到 (ping 未完成 / 失败) → 全部 false。renderer 直读 flag 不再
+ * 自己比对 author / version / replies，链路最短最稳。
  */
-function annotateCanDelete(
+function annotateOwnership(
   comments: PrComment[],
   adapter: PlatformAdapter,
 ): PrComment[] {
   const me = adapter.getCurrentUser();
   if (!me) {
-    return setCanDeleteRecursive(comments, () => false);
+    return setOwnershipRecursive(comments, () => ({ canDelete: false, canEdit: false }));
   }
-  return setCanDeleteRecursive(comments, (c) => {
-    return (
-      c.author.name === me.name &&
-      c.replies.length === 0 &&
-      typeof c.version === 'number'
-    );
+  return setOwnershipRecursive(comments, (c) => {
+    const isMine = c.author.name === me.name;
+    const hasVersion = typeof c.version === 'number';
+    return {
+      canDelete: isMine && c.replies.length === 0 && hasVersion,
+      canEdit: isMine && hasVersion,
+    };
   });
 }
 
-function setCanDeleteRecursive(
+function setOwnershipRecursive(
   comments: PrComment[],
-  judge: (c: PrComment) => boolean,
+  judge: (c: PrComment) => { canDelete: boolean; canEdit: boolean },
 ): PrComment[] {
-  return comments.map((c) => ({
-    ...c,
-    canDelete: judge(c),
-    replies: setCanDeleteRecursive(c.replies, judge),
-  }));
+  return comments.map((c) => {
+    const flags = judge(c);
+    return {
+      ...c,
+      canDelete: flags.canDelete,
+      canEdit: flags.canEdit,
+      replies: setOwnershipRecursive(c.replies, judge),
+    };
+  });
 }
 
 function buildAppInfo(bootstrap: BootstrapResult): AppInfo {

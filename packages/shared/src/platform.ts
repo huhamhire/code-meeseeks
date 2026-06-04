@@ -25,6 +25,37 @@ export interface Reviewer extends PlatformUser {
   status: ReviewerStatus;
 }
 
+/**
+ * 一条阻止合并的原因（merge check 否决项）。跨平台中性形状：
+ * - BBS: `/merge` 端点 vetoes[]，summary=summaryMessage，detail=detailedMessage
+ * - GitHub: required status / required reviews 未满足项
+ * - GitLab: detailed_merge_status 的具体阻塞原因
+ */
+export interface MergeVeto {
+  /** 简短原因，UI 一行展示（BBS summaryMessage） */
+  summary: string;
+  /** 详细原因，hover / 展开展示，可能缺省（BBS detailedMessage） */
+  detail?: string;
+}
+
+/**
+ * 远端对 PR 的"可合并状态"判定。冲突在这里收敛成一种维度，PR.hasConflict
+ * 只是 `conflicted` 的派生镜像（保留兼容现有冲突角标）。
+ *
+ * BBS 一次 `/merge` 请求即可拿全：canMerge / conflicted / vetoes 同源，无额外开销。
+ */
+export interface MergeStatus {
+  /** 远端判定当前是否可直接合并（BBS canMerge）。false 时 vetoes 给出逐条原因 */
+  canMerge: boolean;
+  /** 是否存在 merge conflict（BBS conflicted / outcome=CONFLICTED*） */
+  conflicted: boolean;
+  /**
+   * 阻止合并的逐条原因（BBS vetoes）。canMerge=true 时通常为空。
+   * 例：必填 reviewer 未全部 approve、未通过的 build、分支保护规则等。
+   */
+  vetoes: MergeVeto[];
+}
+
 export interface PullRequest {
   remoteId: string;
   title: string;
@@ -40,7 +71,16 @@ export interface PullRequest {
   createdAt: string;
   updatedAt: string;
   reviewers: Reviewer[];
-  /** 远端是否存在 merge conflict（BBS 走 /merge 端点 conflicted 字段） */
+  /**
+   * 远端可合并状态：能否合并 + 逐条阻塞原因（含冲突）。
+   * BBS 走 `/merge` 端点，canMerge / conflicted / vetoes 同源一次拉全。
+   */
+  mergeStatus: MergeStatus;
+  /**
+   * 远端是否存在 merge conflict。**派生镜像** = `mergeStatus.conflicted`，
+   * 保留独立字段是为了兼容现有冲突角标 (PrItem) 的直接读取；新代码优先读
+   * `mergeStatus`。adapter 写入时两者必须保持一致。
+   */
   hasConflict: boolean;
 }
 
@@ -117,6 +157,11 @@ export interface PrComment {
    * renderer 不需要透传 currentUserName
    */
   canDelete?: boolean;
+  /**
+   * main 端预判的"是否可编辑"。BBS 跟 canDelete 区别在不要求 reply.length===0
+   * (带 reply 的评论也允许改 body)；其它同源：作者匹配 + 有 version
+   */
+  canEdit?: boolean;
 }
 
 /**
@@ -247,4 +292,22 @@ export interface PlatformAdapter {
     commentId: string,
     version: number,
   ): Promise<void>;
+
+  /**
+   * 编辑 PR 上的一条评论 (改 body 文本)。
+   *
+   * BBS: PUT /pull-requests/{id}/comments/{cid}，payload `{text, version}`，
+   * 跟删除一样用 version 做乐观锁；不一致回 409。返回更新后的 PrComment (含
+   * 新 version + 新 updatedAt)，UI 据此乐观替换或直接 force-refresh 评论树。
+   *
+   * 跟 deleteComment 同语义守卫：只允许编辑自己作者的评论，上层做"作者==当前
+   * 用户"判定。带 reply 的评论 BBS **允许编辑** (只删才禁，区别于 delete)
+   */
+  editComment(
+    repo: RepoRef,
+    prId: string,
+    commentId: string,
+    version: number,
+    body: string,
+  ): Promise<PrComment>;
 }

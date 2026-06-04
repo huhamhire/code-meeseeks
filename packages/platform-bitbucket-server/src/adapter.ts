@@ -1,4 +1,5 @@
 import type {
+  MergeStatus,
   PingResult,
   PlatformAdapter,
   PlatformUser,
@@ -208,16 +209,20 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       bbPrs.push(pr);
     }
 
-    // N+1：并行抓每个 PR 的 /merge 状态拿 conflicted 字段；单个失败降级到
-    // hasConflict=false（保守，不误标 ignored）
+    // N+1：并行抓每个 PR 的 /merge 状态拿 canMerge / conflicted / vetoes（同源一次拉全）。
+    // 单个失败降级到"无已知阻塞"（canMerge=true / 无冲突 / 无 vetoes）—— 跟原 hasConflict
+    // 失败降级语义一致，保守不误标。
     const mergeResults = await Promise.allSettled(
       bbPrs.map((pr) => this.fetchMergeStatus(pr)),
     );
 
     return bbPrs.map((pr, i) => {
       const result = mergeResults[i]!;
-      const hasConflict = result.status === 'fulfilled' ? result.value.conflicted : false;
-      return mapPullRequest(pr, hasConflict);
+      const mergeStatus =
+        result.status === 'fulfilled'
+          ? mapMergeStatus(result.value)
+          : { canMerge: true, conflicted: false, vetoes: [] };
+      return mapPullRequest(pr, mergeStatus);
     });
   }
 
@@ -267,6 +272,28 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     await this.client.del(
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments/${commentId}?version=${String(version)}`,
     );
+  }
+
+  async editComment(
+    repo: RepoRef,
+    prId: string,
+    commentId: string,
+    version: number,
+    body: string,
+  ): Promise<PrComment> {
+    // BBS REST: PUT /pull-requests/{id}/comments/{cid}
+    //   payload {text, version}
+    // - version 不一致回 409；自己不是作者回 403；空 body 回 400
+    // - 成功 200 返回更新后的 BBComment (含 version+1 + 新 updatedDate)
+    const updated = await this.client.put<BBComment>(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments/${commentId}`,
+      { text: body, version },
+    );
+    if (!updated) {
+      // PUT 接口正常返回 JSON；走到这里只可能是上游 BBS 配错回了 204
+      throw new Error('editComment: BBS 返回空响应，无法确认更新结果');
+    }
+    return mapBBComment(updated);
   }
 
   async publishInlineComment(
@@ -455,7 +482,19 @@ function mapReviewer(p: BBParticipant): Reviewer {
   return { ...mapUser(p.user), status };
 }
 
-function mapPullRequest(bb: BBPullRequest, hasConflict: boolean): PullRequest {
+/** BBS `/merge` 响应 → 中性 MergeStatus。vetoes 缺省时归一成空数组。 */
+function mapMergeStatus(bb: BBMergeStatus): MergeStatus {
+  return {
+    canMerge: bb.canMerge,
+    conflicted: bb.conflicted,
+    vetoes: (bb.vetoes ?? []).map((v) => ({
+      summary: v.summaryMessage,
+      detail: v.detailedMessage,
+    })),
+  };
+}
+
+function mapPullRequest(bb: BBPullRequest, mergeStatus: MergeStatus): PullRequest {
   const url = bb.links.self[0]?.href ?? '';
   const targetRepo = bb.toRef.repository;
   return {
@@ -472,7 +511,9 @@ function mapPullRequest(bb: BBPullRequest, hasConflict: boolean): PullRequest {
     createdAt: new Date(bb.createdDate).toISOString(),
     updatedAt: new Date(bb.updatedDate).toISOString(),
     reviewers: bb.reviewers.map((r) => mapReviewer(r)),
-    hasConflict,
+    mergeStatus,
+    // 派生镜像，跟 mergeStatus.conflicted 保持一致供现有冲突角标直接读
+    hasConflict: mergeStatus.conflicted,
   };
 }
 

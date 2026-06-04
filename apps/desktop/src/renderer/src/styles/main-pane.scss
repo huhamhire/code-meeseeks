@@ -167,14 +167,33 @@
   gap: $space-4;
   margin-left: auto;
   padding-right: $space-4;
+  // 整组不被 flex 压缩 — diff 区窄时靠 .pr-tabs overflow-x 横向滑动，
+  // 而不是把按钮挤窄触发文字 wrap
+  flex-shrink: 0;
 
   .diff-mode-toggle {
     margin-left: 0; /* 在 right 组内不需要再 margin-left:auto */
   }
+
+  /* 操作按钮高度钉死：带图标的"空白/追溯"行盒比纯文字略高，不固定就会顶出
+     tab 栏、跟"并排/统一"参差。统一 height + box-sizing 让四个按钮严丝合缝；
+     nowrap + 不收缩 防止窄宽度下中文竖排换行撑破固定高度。 */
+  .blame-toggle,
+  .diff-mode-toggle button {
+    height: 22px;
+    box-sizing: border-box;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 }
 
-/* 跟 .diff-mode-toggle button 保持同尺寸：padding / font-size / border 同步，
-   不写 line-height，让按钮高度由 font 默认行高决定，跟兄弟按钮齐 */
+/* 跟 .diff-mode-toggle button 保持同尺寸：padding / font-size / border 同步。
+   高度由 .pr-tabs-right 内统一 height 钉死（见上），不靠字体行高，避免带图标的
+   按钮被行盒撑高。 */
 .blame-toggle {
   display: inline-flex;
   align-items: center;
@@ -426,6 +445,21 @@
     border-color: $color-accent;
     color: $color-info;
     background: $bg-hover;
+  }
+}
+// 编辑按钮：跟回复按钮同尺寸，hover 主色描边 — 是中性操作，不需要 danger 配色
+.pr-comment-edit-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-info;
+    color: $color-info;
+    background: rgba(14, 99, 156, 0.08);
   }
 }
 // 删除按钮：跟回复按钮同尺寸，主色用 danger 让用户一眼识别为破坏性操作。

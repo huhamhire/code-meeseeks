@@ -22,6 +22,7 @@ import { Avatar } from './Avatar';
 import { DraftZone } from './DraftZone';
 import { ErrorBoundary } from './ErrorBoundary';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
+import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from './ConfirmModal';
 import { FileTree } from './FileTree';
@@ -1494,12 +1495,14 @@ function CommentNode({
     [attachmentBase, prLocalId],
   );
   const [replyOpen, setReplyOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // canDelete main 端已经预判好 (作者匹配 + 无 reply + 有 version 三条全过)
+  // canDelete / canEdit main 端已经预判好 (annotateOwnership)
   const canDelete = comment.canDelete === true;
+  const canEdit = comment.canEdit === true;
 
   const handleDelete = async (): Promise<void> => {
     if (!canDelete || comment.version === undefined) return;
@@ -1530,18 +1533,29 @@ function CommentNode({
           connectionId={connectionId}
           at={comment.createdAt}
         />
-        <div className="comment-zone-body markdown">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={components}
-            urlTransform={transformBitbucketUrl}
-          >
-            {comment.body}
-          </ReactMarkdown>
-        </div>
-        {/* 回复 / 删除按钮：默认 hidden，hover comment-zone-item-body 时显示 (CSS 控制)。
-            删除按钮只在评论作者==当前用户、无 reply、有 version 时显示 */}
-        {!replyOpen && (
+        {editOpen && typeof comment.version === 'number' ? (
+          <CommentEditEditor
+            prLocalId={prLocalId}
+            commentId={comment.remoteId}
+            version={comment.version}
+            initialBody={comment.body}
+            onCancel={() => setEditOpen(false)}
+            onSaved={() => setEditOpen(false)}
+          />
+        ) : (
+          <div className="comment-zone-body markdown">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={components}
+              urlTransform={transformBitbucketUrl}
+            >
+              {comment.body}
+            </ReactMarkdown>
+          </div>
+        )}
+        {/* 回复 / 编辑 / 删除按钮：默认 hidden，hover comment-zone-item-body 显示 (CSS)。
+            编辑态隐藏全部按钮 (避免跟编辑器底部按钮组重复) */}
+        {!replyOpen && !editOpen && (
           <div className="comment-zone-foot">
             <button
               type="button"
@@ -1550,6 +1564,16 @@ function CommentNode({
             >
               回复
             </button>
+            {canEdit && (
+              <button
+                type="button"
+                className="comment-zone-edit-btn"
+                onClick={() => setEditOpen(true)}
+                title="编辑自己发布的评论 (远端同步)"
+              >
+                编辑
+              </button>
+            )}
             {canDelete && (
               <button
                 type="button"
