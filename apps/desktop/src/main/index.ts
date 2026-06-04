@@ -220,6 +220,11 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     show: false,
+    // dev 下显式给窗口图标（assets/icons/icon.ico）；打包态窗口/任务栏图标走 exe
+    // 内嵌（electron-builder），且 assets 不进 asar，故仅 dev 设置
+    icon: app.isPackaged
+      ? undefined
+      : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,

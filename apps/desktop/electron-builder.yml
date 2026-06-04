@@ -43,6 +43,8 @@ extraResources:
       - '!**/__pycache__/**'
 
 win:
+  # 图标源放在资源目录 assets/icons/（build/ 被 gitignore，不用它）。含 16/32/48/256。
+  icon: ../../assets/icons/icon.ico
   target:
     - target: nsis
       arch:
