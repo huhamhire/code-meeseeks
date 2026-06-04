@@ -74,8 +74,35 @@ export class Poller {
   private interval?: ReturnType<typeof setInterval>;
   private inFlight = false;
   private _lastPollAt: string | null = null;
+  /** 可热替换的连接集合（设置页改连接 / 切换启用时换）。初值取自构造 opts */
+  private connections: ReadonlyArray<PollerConnection>;
+  /** 可热替换的轮询间隔（秒）。初值取自构造 opts */
+  private intervalSeconds: number;
 
-  constructor(private readonly opts: PollerOptions) {}
+  constructor(private readonly opts: PollerOptions) {
+    this.connections = opts.connections;
+    this.intervalSeconds = opts.intervalSeconds;
+  }
+
+  /**
+   * 热替换轮询的连接集合（设置页改连接 / 切换启用后调用）。下一轮 poll 生效；
+   * 不在此处主动 tick，调用方决定是否立即触发一次。
+   */
+  setConnections(connections: ReadonlyArray<PollerConnection>): void {
+    this.connections = connections;
+  }
+
+  /**
+   * 热替换轮询间隔（秒）。运行中则按新周期重建定时器（不立即 tick）；下一次触发
+   * 起用新间隔。设置页改轮询间隔后调用，无需重启。
+   */
+  setIntervalSeconds(seconds: number): void {
+    this.intervalSeconds = seconds;
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = setInterval(() => void this.tick(), this.intervalSeconds * 1000);
+    }
+  }
 
   /** 最近一次成功 pollOnce 完成的时间（ISO）；从未跑过返回 null */
   getLastPollAt(): string | null {
@@ -85,7 +112,7 @@ export class Poller {
   start(): void {
     if (this.interval) return;
     void this.tick();
-    this.interval = setInterval(() => void this.tick(), this.opts.intervalSeconds * 1000);
+    this.interval = setInterval(() => void this.tick(), this.intervalSeconds * 1000);
   }
 
   stop(): void {
@@ -149,7 +176,7 @@ export class Poller {
     // 每个**成功** poll 的连接看到的 localId 集合。失败的连接不进入此 map (invariant #1)
     const seenByConnection = new Map<string, Set<string>>();
 
-    for (const { connectionId, adapter } of this.opts.connections) {
+    for (const { connectionId, adapter } of this.connections) {
       const me = adapter.getCurrentUser();
       try {
         const remote = await adapter.listPendingPullRequests();

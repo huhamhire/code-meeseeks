@@ -110,6 +110,28 @@ textarea {
   font-size: $fs-sm;
 }
 
+// 仅图标按钮（编辑/删除/选择目录）：收窄水平 padding，svg 居中
+.btn-icon {
+  padding-left: $space-4;
+  padding-right: $space-4;
+
+  svg {
+    display: block;
+  }
+}
+
+// 危险图标按钮（删除）：hover 变红
+.btn-icon-danger:hover:not(:disabled) {
+  border-color: $color-danger;
+  color: $color-danger;
+}
+
+// 主操作图标按钮（编辑）：hover 变蓝
+.btn-icon-primary:hover:not(:disabled) {
+  border-color: $color-accent;
+  color: $color-accent;
+}
+
 .btn-danger {
   background: $color-danger;
   border-color: $color-danger;

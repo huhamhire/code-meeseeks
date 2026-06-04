@@ -7,9 +7,9 @@ import { createLogger } from '@pr-pilot/logger';
 import { createPrAgentBridge, type PrAgentBridge } from '@pr-pilot/pr-agent-bridge';
 import { Poller } from '@pr-pilot/poller';
 import { RepoMirrorManager } from '@pr-pilot/repo-mirror';
-import type { PrAgentStatus } from '@pr-pilot/shared';
+import type { PlatformAdapter, PrAgentStatus } from '@pr-pilot/shared';
 import { JsonFileStateStore } from '@pr-pilot/state-store';
-import { buildAdapters } from './adapters.js';
+import { buildAdapters, type ConnectionRuntime } from './adapters.js';
 import { registerIpcHandlers } from './ipc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -67,29 +67,59 @@ async function start(): Promise<void> {
   );
 
   stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
-  const adapters = buildAdapters(bootstrap.config.connections);
 
-  // 启动时 ping 一次每个连接，让 adapter 拿到当前用户缓存，poller 首轮就能
-  // 根据 currentUser 判 approved 状态。失败不阻塞应用启动。
-  for (const { connectionId, adapter } of adapters) {
-    try {
-      const r = await adapter.ping();
-      logger.info(
-        {
-          connectionId,
-          ok: r.ok,
-          serverVersion: r.serverVersion,
-          user: r.user?.name,
-        },
-        'adapter ping at startup',
-      );
-    } catch (err) {
-      logger.warn({ err, connectionId }, 'adapter startup ping failed');
+  // 连接运行时（可变持有）：adapters 全量（IPC 按 id 查任意连接，历史 PR 都能操作）
+  // + adapterByHost（repo-mirror 取 clone url）。reconfigureConnections 原地替换内容，
+  // IPC handler / repoMirror 经引用读到新值 → 设置页改连接热生效，无需重启。
+  const connectionRuntime: ConnectionRuntime = { adapters: [], adapterByHost: new Map() };
+
+  // 重建 adapters + ping（缓存 currentUser）+ 重算 adapterByHost + 把"当前启用"的那条
+  // 喂给 poller。启动时跑一次；设置页 config:setConnections 后再跑实现热生效。不在此 tick。
+  const reconfigureConnections = async (): Promise<void> => {
+    const adapters = buildAdapters(bootstrap.config.connections);
+    // ping 全部连接（失败不阻塞），让 poller 首轮就能按 currentUser 判 approved
+    await Promise.all(
+      adapters.map(async ({ connectionId, adapter }) => {
+        try {
+          const r = await adapter.ping();
+          logger.info(
+            { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
+            'adapter ping',
+          );
+        } catch (err) {
+          logger.warn({ err, connectionId }, 'adapter ping failed');
+        }
+      }),
+    );
+    const byHost = new Map<string, PlatformAdapter>();
+    for (const { connectionId, adapter } of adapters) {
+      const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
+      if (!conn) continue;
+      try {
+        byHost.set(new URL(conn.base_url).hostname, adapter);
+      } catch (err) {
+        logger.warn({ err, connectionId, base_url: conn.base_url }, 'invalid base_url');
+      }
     }
-  }
+    connectionRuntime.adapters = adapters;
+    connectionRuntime.adapterByHost = byHost;
+    // 只轮询当前启用的连接（同时仅一条）；其余仅保留配置不轮询
+    const active = adapters.filter(
+      (a) => a.connectionId === bootstrap.config.active_connection_id,
+    );
+    poller.setConnections(active);
+    logger.info(
+      {
+        total: adapters.length,
+        active: active.length,
+        activeId: bootstrap.config.active_connection_id,
+      },
+      'connections reconfigured',
+    );
+  };
 
   poller = new Poller({
-    connections: adapters,
+    connections: [],
     stateStore,
     intervalSeconds: bootstrap.config.poller.interval_seconds,
     logger: logger.child({ scope: 'poller' }),
@@ -121,23 +151,10 @@ async function start(): Promise<void> {
     },
   });
 
-  // hostname → adapter 反向索引（不带端口，与 RepoIdentity.host 对齐）。
-  // 一期通常单连接，但接口预留多连接（同 host 多 PAT 暂不支持，最后写入胜出）。
-  const adapterByHost = new Map<string, (typeof adapters)[number]['adapter']>();
-  for (const { connectionId, adapter } of adapters) {
-    const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
-    if (!conn) continue;
-    try {
-      adapterByHost.set(new URL(conn.base_url).hostname, adapter);
-    } catch (err) {
-      logger.warn({ err, connectionId, base_url: conn.base_url }, 'invalid base_url');
-    }
-  }
-
   repoMirror = new RepoMirrorManager({
     reposDir: bootstrap.paths.reposDir,
     getCloneUrl: async (repo) => {
-      const adapter = adapterByHost.get(repo.host);
+      const adapter = connectionRuntime.adapterByHost.get(repo.host);
       if (!adapter) throw new Error(`no adapter for host ${repo.host}`);
       return adapter.getCloneUrl({
         projectKey: repo.projectKey,
@@ -152,6 +169,9 @@ async function start(): Promise<void> {
     },
   });
 
+  // 初次构建连接（含 ping + 把 active 连接喂给 poller）
+  await reconfigureConnections();
+
   registerIpcHandlers({
     bootstrap,
     logger,
@@ -160,20 +180,24 @@ async function start(): Promise<void> {
     embeddedPythonPath,
     stateStore,
     poller,
-    adapters,
+    connectionRuntime,
+    reconfigureConnections,
     repoMirror,
   });
 
   // 不要 Electron 默认菜单栏（File/Edit/View/...），pr-pilot 自己提供工具栏
   Menu.setApplicationMenu(null);
 
-  // 配置里有连接才启动轮询；空配置下 UI 引导用户加连接
-  if (adapters.length > 0) {
-    poller.start();
-    logger.info({ connections: adapters.length }, 'poller started');
-  } else {
-    logger.info('no connections configured; poller stays idle');
-  }
+  // poller 常驻：当前启用连接为空时 tick 是空操作；用户在设置页启用 / 切换连接后
+  // reconfigureConnections 热生效，无需重启
+  poller.start();
+  logger.info(
+    {
+      connections: bootstrap.config.connections.length,
+      activeId: bootstrap.config.active_connection_id,
+    },
+    'poller started',
+  );
 
   await app.whenReady();
   createWindow();

@@ -42,7 +42,7 @@ import type {
   StoredPullRequest,
 } from '@pr-pilot/shared';
 import type { JsonFileStateStore } from '@pr-pilot/state-store';
-import type { BuiltAdapter } from './adapters.js';
+import { buildDraftAdapter, type BuiltAdapter, type ConnectionRuntime } from './adapters.js';
 import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildPrContext } from './utils/pr-context.js';
@@ -57,7 +57,10 @@ interface RegisterDeps {
   embeddedPythonPath?: string;
   stateStore: JsonFileStateStore;
   poller: Poller;
-  adapters: readonly BuiltAdapter[];
+  /** 可变连接运行时（全量 adapters + adapterByHost）；设置页改连接后被 reconfigure 原地替换 */
+  connectionRuntime: ConnectionRuntime;
+  /** 重建 adapters/poller 使连接变更热生效（config:setConnections 写盘后调用） */
+  reconfigureConnections: () => Promise<void>;
   repoMirror: RepoMirrorManager;
 }
 
@@ -73,7 +76,8 @@ export function registerIpcHandlers({
   embeddedPythonPath,
   stateStore,
   poller,
-  adapters,
+  connectionRuntime,
+  reconfigureConnections,
   repoMirror,
 }: RegisterDeps): void {
   // === pr-agent run 队列 ===
@@ -201,7 +205,8 @@ export function registerIpcHandlers({
   );
   ipcMain.handle(
     'app:connections',
-    (): IpcChannels['app:connections']['response'] => buildConnectionSummaries(bootstrap, adapters),
+    (): IpcChannels['app:connections']['response'] =>
+      buildConnectionSummaries(bootstrap, connectionRuntime.adapters),
   );
 
   // (connectionId, slug) → dataUrl 或 null。两级 cache：
@@ -220,7 +225,7 @@ export function registerIpcHandlers({
       req: IpcChannels['comments:reply']['request'],
     ): Promise<IpcChannels['comments:reply']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       const reply = await adapter.replyToComment(
         { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
@@ -250,7 +255,7 @@ export function registerIpcHandlers({
       req: IpcChannels['comments:delete']['request'],
     ): Promise<IpcChannels['comments:delete']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // BBS 在以下情形 409/403：
       //   - version 跟远端不一致 (用户在别处已编辑)
@@ -282,7 +287,7 @@ export function registerIpcHandlers({
       req: IpcChannels['comments:edit']['request'],
     ): Promise<IpcChannels['comments:edit']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // BBS 409 (version 不一致) 时 BBClientError.message 会带 "expected version X"
       // 这种细节，原样抛给 renderer 显示让用户知道"远端有新版本"
@@ -317,7 +322,7 @@ export function registerIpcHandlers({
       // 加载概率低 (用户决策)，每次进入 PR 走 IPC 跟头像走 cache 不同
       try {
         const pr = await findPrOrThrow(req.localId);
-        const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+        const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
         if (!adapter) return null;
         // 传 pr.repo 给 adapter — BBS 的 attachment: 协议需要 repo 上下文拼 URL
         const res = await adapter.getAttachment(req.url, pr.repo);
@@ -366,7 +371,7 @@ export function registerIpcHandlers({
       }
 
       // 2) 没缓存 / 已过期：去 BBS 拉
-      const adapter = adapters.find((a) => a.connectionId === req.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === req.connectionId)?.adapter;
       if (!adapter) {
         avatarMem.set(memKey, null);
         return null;
@@ -472,7 +477,7 @@ export function registerIpcHandlers({
       req: IpcChannels['prs:setLocalStatus']['request'],
     ): Promise<IpcChannels['prs:setLocalStatus']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // 先写远端：本地 status → BBS reviewer.status；失败抛出，前端不会看到本地变更
       const remoteStatus =
@@ -495,7 +500,7 @@ export function registerIpcHandlers({
     'prs:merge',
     async (_evt, req: IpcChannels['prs:merge']['request']): Promise<void> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // 合并远端；失败 (冲突 / veto / 权限) 抛出，renderer 提示，本地不变。
       // 成功后不在此落本地：PR 转 MERGED 会从 pending 消失，靠 renderer 触发的
@@ -607,7 +612,7 @@ export function registerIpcHandlers({
       // dedup：同 localId 的 in-flight Promise 直接复用
       const existing = listCommentsInFlight.get(pr.localId);
       if (existing) return existing;
-      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       const fetchPromise = adapter
         .listPullRequestComments(
@@ -638,7 +643,7 @@ export function registerIpcHandlers({
       req: IpcChannels['diff:listCommits']['request'],
     ): Promise<IpcChannels['diff:listCommits']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // commits 不缓存（量少 + UI 进 commits 标签页才拉，频率低）；后续如发现频繁拉
       // 再补 prs/<hash>/commits.json 缓存层 (走 pr_updated_at 失效，跟 comments 同模式)
@@ -780,7 +785,7 @@ export function registerIpcHandlers({
         let matchedRuleInstructions = '';
         let matchedRuleId: string | undefined;
         if (req.tool !== 'ask') {
-          const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+          const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
           if (adapter) {
             try {
               prContext = await buildPrContext({ pr, adapter, logger });
@@ -1261,7 +1266,7 @@ export function registerIpcHandlers({
       req: IpcChannels['drafts:publishBatch']['request'],
     ): Promise<IpcChannels['drafts:publishBatch']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
 
       // 拉一次当前草稿池：localId → id → draft，下面遍历 draftIds 时按 id 查。
@@ -1412,6 +1417,78 @@ export function registerIpcHandlers({
         },
         'llm config updated',
       );
+    },
+  );
+
+  ipcMain.handle(
+    'config:setConnections',
+    async (_evt, req: IpcChannels['config:setConnections']['request']): Promise<void> => {
+      const next = {
+        ...bootstrap.config,
+        connections: req.connections,
+        active_connection_id: req.active_connection_id,
+      };
+      await writeConfig(bootstrap.paths.configFile, next);
+      // 内存 config 同步 + 热重建 adapter/poller，连接变更即时生效（不等重启）
+      bootstrap.config.connections = req.connections;
+      bootstrap.config.active_connection_id = req.active_connection_id;
+      await reconfigureConnections();
+      // 立刻 poll 一轮，让启用 / 切换的连接 PR 马上出现（active 为空则空操作）
+      void poller.tick();
+      logger.info(
+        { count: req.connections.length, activeId: req.active_connection_id },
+        'connections config updated (hot-reloaded)',
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'config:testConnection',
+    async (
+      _evt,
+      req: IpcChannels['config:testConnection']['request'],
+    ): Promise<IpcChannels['config:testConnection']['response']> => {
+      // 用草稿 url/token 临时起 adapter ping，不落配置；失败归一成 ok:false + reason
+      try {
+        return await buildDraftAdapter(req.base_url, req.token).ping();
+      } catch (e) {
+        return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'config:autosaveDraft',
+    async (_evt, req: IpcChannels['config:autosaveDraft']['request']): Promise<void> => {
+      // 只写 config.yaml（含 base 非编辑字段），**不更新内存 config、不 reconfigure**：
+      // 持久化防丢失但不生效。重启读文件 或 点底栏「保存」走 config:setConnections/setLlm 才应用。
+      const next = {
+        ...bootstrap.config,
+        connections: req.connections,
+        active_connection_id: req.active_connection_id,
+        llm: req.llm,
+      };
+      await writeConfig(bootstrap.paths.configFile, next);
+      logger.info(
+        { connections: req.connections.length, profiles: req.llm.profiles.length },
+        'connections/llm draft autosaved to config.yaml (not applied)',
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'config:setPoller',
+    async (_evt, req: IpcChannels['config:setPoller']['request']): Promise<void> => {
+      // 防御性 clamp 到 60~900 整数（UI 已限制，这里兜底）
+      const seconds = Math.min(900, Math.max(60, Math.round(req.interval_seconds)));
+      const next = {
+        ...bootstrap.config,
+        poller: { ...bootstrap.config.poller, interval_seconds: seconds },
+      };
+      await writeConfig(bootstrap.paths.configFile, next);
+      bootstrap.config.poller.interval_seconds = seconds;
+      poller.setIntervalSeconds(seconds); // 热替换定时器，无需重启
+      logger.info({ intervalSeconds: seconds }, 'poller interval updated (hot-reloaded)');
     },
   );
 

@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { AppInfo, AppPaths, Config, LlmProfile, LlmProvider } from '@pr-pilot/shared';
 import { invoke } from '../api';
+import { ConfirmModal } from './ConfirmModal';
+import { CloseIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
 
 interface SettingsModalProps {
   info: AppInfo;
@@ -142,6 +144,47 @@ function newProfileId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// 轮询间隔档位（秒）：低值细（30s 一档）、高值粗（分钟级），梯度放大。滑块拖的是
+// 档位索引而非秒数，从而实现非线性步长 + 离散刻度。
+const POLLER_TIERS = [60, 90, 120, 180, 300, 600, 900];
+/** 取最接近给定秒数的档位索引（配置值不在档位上时就近吸附） */
+function nearestPollerIdx(seconds: number): number {
+  let best = 0;
+  for (let i = 1; i < POLLER_TIERS.length; i++) {
+    if (Math.abs(POLLER_TIERS[i]! - seconds) < Math.abs(POLLER_TIERS[best]! - seconds)) best = i;
+  }
+  return best;
+}
+
+// 连接编辑用的扁平草稿（Connection 是嵌套的 auth/clone，拍平后表单好写），存盘前还原。
+type ConnEntry = Config['connections'][number];
+type ConnDraft = {
+  id: string;
+  display_name: string;
+  base_url: string;
+  token: string;
+  protocol: 'pat' | 'ssh';
+};
+function toConnDraft(c: ConnEntry): ConnDraft {
+  return {
+    id: c.id,
+    display_name: c.display_name,
+    base_url: c.base_url,
+    token: c.auth.token,
+    protocol: c.clone.protocol,
+  };
+}
+function fromConnDraft(d: ConnDraft): ConnEntry {
+  return {
+    id: d.id,
+    kind: 'bitbucket-server',
+    base_url: d.base_url.trim(),
+    display_name: d.display_name.trim() || d.base_url.trim(),
+    auth: { type: 'pat', token: d.token },
+    clone: { protocol: d.protocol },
+  };
+}
+
 export function SettingsModal({
   info,
   paths,
@@ -152,25 +195,29 @@ export function SettingsModal({
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
 
+  // 草稿 → 整体保存：所有编辑只改本地 state，点底栏"保存"才整体写盘 + 生效
   const [reposDirInput, setReposDirInput] = useState(config.workspace.repos_dir);
-  const [savingReposDir, setSavingReposDir] = useState(false);
-  const [reposDirSaved, setReposDirSaved] = useState(false);
-  const [reposDirError, setReposDirError] = useState<string | null>(null);
-
   const [rules, setRules] = useState<Config['rules']>(config.rules);
   const [rulesDirInput, setRulesDirInput] = useState(config.rules.dir);
-  const [savingRules, setSavingRules] = useState(false);
-  const [rulesSaved, setRulesSaved] = useState(false);
-  const [rulesError, setRulesError] = useState<string | null>(null);
-
-  // LLM Provider：主面板只渲染已保存列表 + 切换/删除 = 自动持久化。
-  // 新增 / 修改单条走子模态框，模态框内"保存"才会写回 config.yaml。
+  const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
-  const [llmEditor, setLlmEditor] = useState<
-    | { mode: 'add' | 'edit'; draft: LlmProfile }
-    | null
-  >(null);
-  const [llmError, setLlmError] = useState<string | null>(null);
+  const [llmEditor, setLlmEditor] = useState<{ mode: 'add' | 'edit'; draft: LlmProfile } | null>(
+    null,
+  );
+
+  // 保存基线：保存成功后更新，用于 changed 判定（禁用保存按钮）
+  const [base, setBase] = useState(() => ({
+    reposDir: config.workspace.repos_dir,
+    rulesDir: config.rules.dir,
+    rulesEnabled: config.rules.enabled,
+    poller: config.poller.interval_seconds,
+    llm: config.llm,
+    connections: config.connections,
+    activeConnId: config.active_connection_id,
+  }));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
 
@@ -192,54 +239,24 @@ export function SettingsModal({
     }
   };
 
-  const saveReposDir = async (): Promise<void> => {
-    if (savingReposDir) return;
-    const next = reposDirInput.trim();
-    if (!next) return;
-    setSavingReposDir(true);
-    setReposDirError(null);
-    try {
-      await invoke('config:setReposDir', { reposDir: next });
-      setReposDirSaved(true);
-    } catch (e) {
-      setReposDirError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSavingReposDir(false);
-    }
+  const pollerIdx = nearestPollerIdx(Number.parseInt(pollerInput, 10) || 300);
+  const pollerFillPct = (pollerIdx / (POLLER_TIERS.length - 1)) * 100;
+
+  // 连接 / LLM 编辑：改本地 state + 自动写入 config.yaml（防丢失），但不应用到运行时
+  //（不 reconfigure；重启或点底栏「保存」才生效）。其余配置（规则/轮询/缓存）仍纯草稿。
+  const autosaveDraft = (nextConnections: Config['connections'], activeId: string, nextLlm: Config['llm']): void => {
+    void invoke('config:autosaveDraft', {
+      connections: nextConnections,
+      active_connection_id: activeId,
+      llm: nextLlm,
+    }).catch(() => {
+      /* 自动保存失败不打断编辑；点底栏保存时会再写一次 */
+    });
   };
-
-  const reposDirChanged = reposDirInput.trim() !== config.workspace.repos_dir;
-
-  const rulesChanged =
-    rulesDirInput.trim() !== rules.dir || rules.enabled !== config.rules.enabled;
-  const saveRules = async (): Promise<void> => {
-    if (savingRules) return;
-    setSavingRules(true);
-    setRulesError(null);
-    try {
-      const next: Config['rules'] = {
-        dir: rulesDirInput.trim(),
-        enabled: rules.enabled,
-      };
-      await invoke('config:setRules', { rules: next });
-      setRules(next);
-      setRulesSaved(true);
-    } catch (e) {
-      setRulesError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSavingRules(false);
-    }
-  };
-
-  const persistLlm = async (next: Config['llm']): Promise<void> => {
-    setLlmError(null);
-    try {
-      await invoke('config:setLlm', { llm: next });
-      setLlm(next);
-      onLlmChange?.(next);
-    } catch (e) {
-      setLlmError(e instanceof Error ? e.message : String(e));
-    }
+  const persistLlm = (next: Config['llm']): void => {
+    setLlm(next);
+    setSaved(false);
+    autosaveDraft(connections, activeConnId, next);
   };
   const openAddProfile = (): void => {
     setLlmEditor({
@@ -281,154 +298,238 @@ export function SettingsModal({
     await persistLlm({ ...llm, active_id: id });
   };
 
+  // ── 连接：多条可配置 + 单选启用；编辑只改本地 state，整体保存才写盘 + 热重建 ──
+  const [connections, setConnections] = useState<Config['connections']>(config.connections);
+  const [activeConnId, setActiveConnId] = useState<string>(config.active_connection_id);
+  const [connEditor, setConnEditor] = useState<{ mode: 'add' | 'edit'; draft: ConnDraft } | null>(
+    null,
+  );
+  const [connDeleteId, setConnDeleteId] = useState<string | null>(null);
+
+  const persistConnections = (next: Config['connections'], activeId: string): void => {
+    setConnections(next);
+    setActiveConnId(activeId);
+    setSaved(false);
+    autosaveDraft(next, activeId, llm);
+  };
+  const openAddConn = (): void => {
+    setConnEditor({
+      mode: 'add',
+      draft: { id: newProfileId(), display_name: '', base_url: '', token: '', protocol: 'pat' },
+    });
+  };
+  const openEditConn = (id: string): void => {
+    const c = connections.find((x) => x.id === id);
+    if (c) setConnEditor({ mode: 'edit', draft: toConnDraft(c) });
+  };
+  const saveConnEditor = async (): Promise<void> => {
+    if (!connEditor) return;
+    const { mode, draft } = connEditor;
+    const conn = fromConnDraft(draft);
+    const next =
+      mode === 'add' ? [...connections, conn] : connections.map((c) => (c.id === conn.id ? conn : c));
+    // 新增首条自动设为启用
+    const activeId = mode === 'add' && !activeConnId ? conn.id : activeConnId;
+    await persistConnections(next, activeId);
+    setConnEditor(null);
+  };
+  const deleteConn = async (id: string): Promise<void> => {
+    const next = connections.filter((c) => c.id !== id);
+    // 删的是当前启用 → 启用回退到剩下第一条（无则空串，不轮询任何连接）
+    const activeId = activeConnId === id ? (next[0]?.id ?? '') : activeConnId;
+    await persistConnections(next, activeId);
+  };
+  const setActiveConn = (id: string): void => {
+    if (activeConnId === id) return;
+    persistConnections(connections, id);
+  };
+
+  // ── 变更检测（对比基线）+ 整体保存（仅写有变更的部分，全成功后更新基线）──
+  const reposDirChanged = reposDirInput.trim() !== base.reposDir;
+  const rulesChanged =
+    rulesDirInput.trim() !== base.rulesDir || rules.enabled !== base.rulesEnabled;
+  const pollerChanged = pollerInput.trim() !== String(base.poller);
+  const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
+  const connectionsChanged =
+    activeConnId !== base.activeConnId ||
+    JSON.stringify(connections) !== JSON.stringify(base.connections);
+  const anyChanged =
+    reposDirChanged || rulesChanged || pollerChanged || llmChanged || connectionsChanged;
+
+  const saveAll = async (): Promise<void> => {
+    if (saving || !anyChanged) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      if (pollerChanged) {
+        const n = Number.parseInt(pollerInput, 10);
+        if (!Number.isFinite(n) || n < 60 || n > 900) throw new Error('轮询间隔需 60~900 秒整数');
+        await invoke('config:setPoller', { interval_seconds: n });
+      }
+      if (rulesChanged) {
+        await invoke('config:setRules', {
+          rules: { dir: rulesDirInput.trim(), enabled: rules.enabled },
+        });
+      }
+      if (llmChanged) {
+        await invoke('config:setLlm', { llm });
+        onLlmChange?.(llm);
+      }
+      if (connectionsChanged) {
+        await invoke('config:setConnections', { connections, active_connection_id: activeConnId });
+      }
+      if (reposDirChanged && reposDirInput.trim()) {
+        await invoke('config:setReposDir', { reposDir: reposDirInput.trim() });
+      }
+      setBase({
+        reposDir: reposDirInput.trim(),
+        rulesDir: rulesDirInput.trim(),
+        rulesEnabled: rules.enabled,
+        poller: Number.parseInt(pollerInput, 10),
+        llm,
+        connections,
+        activeConnId,
+      });
+      setSaved(true);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="modal-header">
           <h3>设置</h3>
-          <button className="btn" type="button" onClick={onClose}>
-            关闭
+          <button
+            className="icon-btn modal-close"
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            title="关闭"
+          >
+            <CloseIcon />
           </button>
         </div>
         <div className="modal-body">
           <section className="modal-section">
-            <h4>工作目录</h4>
-            <div className="modal-kv">
-              <div className="modal-kv-key">应用根</div>
-              <div className="modal-kv-val">{paths.appDir}</div>
-              <div className="modal-kv-key">配置</div>
-              <div className="modal-kv-val">{paths.configFile}</div>
-            </div>
-          </section>
-
-          <section className="modal-section">
-            <h4>仓库镜像</h4>
-            <div className="modal-kv">
-              <div className="modal-kv-key">当前 repos_dir</div>
-              <div className="modal-kv-val">{paths.reposDir}</div>
-              <div className="modal-kv-key">镜像总占用</div>
-              <div className="modal-kv-val">
-                {totalBytes === null ? '计算中…' : formatBytes(totalBytes)}
-              </div>
-            </div>
-            <div className="settings-edit-row">
-              <input
-                type="text"
-                className="settings-input"
-                value={reposDirInput}
-                onChange={(e) => {
-                  setReposDirInput(e.target.value);
-                  setReposDirSaved(false);
-                  setReposDirError(null);
-                }}
-                placeholder="~/.pr-pilot/repos"
-              />
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  void (async () => {
-                    const r = await invoke('dialog:pickDirectory', {
-                      defaultPath: reposDirInput.trim() || paths.reposDir,
-                      title: '选择仓库镜像目录',
-                    });
-                    if (r.path) {
-                      setReposDirInput(r.path);
-                      setReposDirSaved(false);
-                      setReposDirError(null);
-                    }
-                  })();
-                }}
-                title="打开系统目录选择器"
-              >
-                选择…
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void saveReposDir()}
-                disabled={!reposDirChanged || savingReposDir}
-              >
-                {savingReposDir ? '保存中…' : '保存'}
+            <div className="modal-section-head">
+              <h4>连接</h4>
+              <button type="button" className="btn btn-primary btn-sm" onClick={openAddConn}>
+                + 添加连接
               </button>
             </div>
-            {reposDirSaved && (
-              <p className="muted modal-footer">
-                已写入 config.yaml。重启应用生效。原 repos_dir
-                下的镜像不会自动迁移，请手动移动或下次访问时重新 clone。
-              </p>
-            )}
-            {reposDirError && <p className="error-text">{reposDirError}</p>}
-          </section>
-
-          <section className="modal-section">
-            <h4>规则目录</h4>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              目录下每个 <code>.md</code> 是一条个性化 review 规则。
+              同时只启用一个连接。
             </p>
-            <div className="settings-edit-row">
-              <input
-                type="text"
-                className="settings-input"
-                value={rulesDirInput}
-                onChange={(e) => {
-                  setRulesDirInput(e.target.value);
-                  setRulesSaved(false);
-                  setRulesError(null);
-                }}
-                placeholder="可选；如 ~/code/team-pr-rules"
-              />
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  void (async () => {
-                    const r = await invoke('dialog:pickDirectory', {
-                      defaultPath: rulesDirInput.trim() || paths.appDir,
-                      title: '选择规则目录',
-                    });
-                    if (r.path) {
-                      setRulesDirInput(r.path);
-                      setRulesSaved(false);
-                      setRulesError(null);
-                    }
-                  })();
-                }}
-                title="打开系统目录选择器"
-              >
-                选择…
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void saveRules()}
-                disabled={!rulesChanged || savingRules}
-              >
-                {savingRules ? '保存中…' : '保存'}
-              </button>
-            </div>
-            <label className="settings-secret-row" style={{ marginTop: 8 }}>
-              <input
-                type="checkbox"
-                checked={rules.enabled}
-                onChange={(e) => {
-                  setRules((r) => ({ ...r, enabled: e.target.checked }));
-                  setRulesSaved(false);
-                }}
-                aria-label="启用规则"
-              />
-              <span className="muted">启用规则</span>
-            </label>
-            {rulesSaved && (
-              <p className="muted modal-footer">已写入 config.yaml；下次 pragent:run 立即生效。</p>
+            {connections.length === 0 ? (
+              <p className="muted">尚未配置；添加一条 Bitbucket Server 连接以开始。</p>
+            ) : (
+              <div className="llm-profile-list">
+                {connections.map((c) => {
+                  const isActive = c.id === activeConnId;
+                  return (
+                    <div key={c.id} className={`llm-profile-row${isActive ? ' active' : ''}`}>
+                      <label className="llm-profile-active">
+                        <input
+                          type="radio"
+                          name="conn-active"
+                          checked={isActive}
+                          onChange={() => void setActiveConn(c.id)}
+                          aria-label="启用该连接"
+                        />
+                      </label>
+                      <div className="llm-profile-meta">
+                        <div className="llm-profile-title">{c.display_name || c.id}</div>
+                        <div className="muted llm-profile-sub">
+                          {c.base_url} · clone via {c.clone.protocol === 'ssh' ? 'SSH' : 'PAT'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-icon btn-icon-primary"
+                        onClick={() => openEditConn(c.id)}
+                        title="编辑"
+                        aria-label="编辑"
+                      >
+                        <PencilIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-icon btn-icon-danger"
+                        onClick={() => setConnDeleteId(c.id)}
+                        title="删除该连接"
+                        aria-label="删除"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-            {rulesError && <p className="error-text">{rulesError}</p>}
           </section>
 
           <section className="modal-section">
-            <h4>LLM 模型</h4>
+            <h4>轮询</h4>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              选择活跃配置决定 PR Agent 调用哪个模型；修改即时生效，不需要重启。
+              自动检查 PR 的间隔，60~900 秒整数。
+            </p>
+            <div className="settings-edit-row" style={{ alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  type="range"
+                  className="settings-range"
+                  style={{ width: '100%', '--range-fill': `${pollerFillPct}%` } as CSSProperties}
+                  min={0}
+                  max={POLLER_TIERS.length - 1}
+                  step={1}
+                  value={pollerIdx}
+                  onChange={(e) => {
+                    const idx = Number.parseInt(e.target.value, 10);
+                    setPollerInput(String(POLLER_TIERS[idx]));
+                    setSaved(false);
+                  }}
+                  aria-label="轮询间隔档位"
+                />
+                {/* 档位刻度：按 thumb 实际停靠位置绝对定位（thumb 宽 12px，两端内缩 6px），
+                    translateX(-50%) 居中对齐；当前档位高亮 */}
+                <div className="settings-range-ticks">
+                  {POLLER_TIERS.map((t, i) => {
+                    const frac = i / (POLLER_TIERS.length - 1);
+                    return (
+                      <span
+                        key={t}
+                        className={i === pollerIdx ? 'active' : undefined}
+                        style={{ left: `calc(${frac * 100}% + ${6 - frac * 12}px)` }}
+                      >
+                        {t}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              <span
+                className="muted"
+                style={{ minWidth: 56, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+              >
+                {pollerInput} 秒
+              </span>
+            </div>
+          </section>
+
+          <section className="modal-section">
+            <div className="modal-section-head">
+              <h4>LLM 模型</h4>
+              <button type="button" className="btn btn-primary btn-sm" onClick={openAddProfile}>
+                + 添加配置
+              </button>
+            </div>
+            <p className="muted" style={{ margin: '0 0 8px' }}>
+              选择活跃配置决定 PR Agent 调用哪个模型。
             </p>
             {llm.profiles.length === 0 ? (
               <p className="muted">尚未配置；添加一条以启用 PR Agent。</p>
@@ -460,68 +561,143 @@ export function SettingsModal({
                       </div>
                       <button
                         type="button"
-                        className="btn btn-sm"
+                        className="btn btn-sm btn-icon btn-icon-primary"
                         onClick={() => openEditProfile(p.id)}
+                        title="编辑"
+                        aria-label="编辑"
                       >
-                        编辑
+                        <PencilIcon />
                       </button>
                       <button
                         type="button"
-                        className="btn btn-sm"
+                        className="btn btn-sm btn-icon btn-icon-danger"
                         onClick={() => void deleteProfile(p.id)}
                         title="删除该配置"
+                        aria-label="删除"
                       >
-                        删除
+                        <TrashIcon />
                       </button>
                     </div>
                   );
                 })}
               </div>
             )}
-            <div className="settings-actions" style={{ marginTop: 10 }}>
-              <button type="button" className="btn btn-primary" onClick={openAddProfile}>
-                + 添加配置
+          </section>
+
+          <section className="modal-section">
+            <h4>规则目录</h4>
+            <p className="muted" style={{ margin: '0 0 8px' }}>
+              目录下每个 <code>.md</code> 是一条个性化 review 规则。
+            </p>
+            <div className="settings-edit-row">
+              <input
+                type="text"
+                className="settings-input"
+                value={rulesDirInput}
+                onChange={(e) => {
+                  setRulesDirInput(e.target.value);
+                  setSaved(false);
+                }}
+                placeholder="可选；如 ~/code/team-pr-rules"
+              />
+              <button
+                type="button"
+                className="btn btn-icon"
+                onClick={() => {
+                  void (async () => {
+                    const r = await invoke('dialog:pickDirectory', {
+                      defaultPath: rulesDirInput.trim() || paths.appDir,
+                      title: '选择规则目录',
+                    });
+                    if (r.path) {
+                      setRulesDirInput(r.path);
+                      setSaved(false);
+                    }
+                  })();
+                }}
+                title="选择目录"
+                aria-label="选择目录"
+              >
+                <FolderIcon />
               </button>
             </div>
-            {llmError && <p className="error-text">{llmError}</p>}
+            <label className="settings-secret-row" style={{ marginTop: 8 }}>
+              <input
+                type="checkbox"
+                checked={rules.enabled}
+                onChange={(e) => {
+                  setRules((r) => ({ ...r, enabled: e.target.checked }));
+                  setSaved(false);
+                }}
+                aria-label="启用规则"
+              />
+              <span className="muted">启用规则</span>
+            </label>
           </section>
 
           <section className="modal-section">
-            <h4>轮询</h4>
+            <h4>工作目录</h4>
             <div className="modal-kv">
-              <div className="modal-kv-key">间隔</div>
-              <div className="modal-kv-val">{config.poller.interval_seconds} 秒</div>
+              <div className="modal-kv-key">应用根</div>
+              <div className="modal-kv-val">{paths.appDir}</div>
+              <div className="modal-kv-key">配置</div>
+              <div className="modal-kv-val">{paths.configFile}</div>
             </div>
           </section>
 
           <section className="modal-section">
-            <h4>连接 ({config.connections.length})</h4>
-            {config.connections.length === 0 ? (
-              <p className="muted">未配置任何连接。编辑 config.yaml 添加一条。</p>
-            ) : (
-              <ul className="connection-list">
-                {config.connections.map((c) => (
-                  <li key={c.id}>
-                    <strong>{c.display_name}</strong>{' '}
-                    <span className="muted">({c.id})</span>
-                    <br />
-                    <span className="muted">
-                      {c.kind} · {c.base_url} · clone via{' '}
-                      {c.clone.protocol === 'pat'
-                        ? 'Personal Access Token (PAT)'
-                        : c.clone.protocol === 'ssh'
-                          ? 'SSH'
-                          : c.clone.protocol}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h4>缓存目录</h4>
+            <p className="muted" style={{ margin: '0 0 8px' }}>
+              本地仓库镜像 + worktree 的存放位置，可重建的缓存。
+            </p>
+            <div className="modal-kv">
+              <div className="modal-kv-key">当前目录</div>
+              <div className="modal-kv-val">{paths.reposDir}</div>
+              <div className="modal-kv-key">缓存占用</div>
+              <div className="modal-kv-val">
+                {totalBytes === null ? '计算中…' : formatBytes(totalBytes)}
+              </div>
+            </div>
+            <div className="settings-edit-row">
+              <input
+                type="text"
+                className="settings-input"
+                value={reposDirInput}
+                onChange={(e) => {
+                  setReposDirInput(e.target.value);
+                  setSaved(false);
+                }}
+                placeholder="~/.pr-pilot/repos"
+              />
+              <button
+                type="button"
+                className="btn btn-icon"
+                onClick={() => {
+                  void (async () => {
+                    const r = await invoke('dialog:pickDirectory', {
+                      defaultPath: reposDirInput.trim() || paths.reposDir,
+                      title: '选择缓存目录',
+                    });
+                    if (r.path) {
+                      setReposDirInput(r.path);
+                      setSaved(false);
+                    }
+                  })();
+                }}
+                title="选择目录"
+                aria-label="选择目录"
+              >
+                <FolderIcon />
+              </button>
+            </div>
+            <p className="muted modal-footer">改缓存目录需重启应用生效；原目录内容不会自动迁移。</p>
           </section>
 
           <section className="modal-section">
             <h4>运行环境</h4>
             <div className="modal-kv">
+              <div className="modal-kv-key">应用版本</div>
+              <div className="modal-kv-val">{info.appVersion}</div>
               <div className="modal-kv-key">Electron</div>
               <div className="modal-kv-val">{info.electronVersion}</div>
               <div className="modal-kv-key">Node</div>
@@ -529,34 +705,44 @@ export function SettingsModal({
               <div className="modal-kv-key">平台</div>
               <div className="modal-kv-val">{info.platform}</div>
             </div>
-          </section>
-
-          <section className="modal-section">
-            <div className="settings-actions">
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={openConfigFile}
-                disabled={opening}
-              >
-                {opening ? '打开中…' : '编辑 config.yaml (其它项)'}
-              </button>
+            <div className="settings-actions" style={{ marginTop: 10 }}>
               <button
                 className="btn"
                 type="button"
-                onClick={() => {
-                  void invoke('app:openDevTools', undefined);
-                }}
+                onClick={() => void invoke('app:openDevTools', undefined)}
                 title="打开 Electron 开发者工具（分离窗口）"
               >
                 打开 DevTools
               </button>
             </div>
-            <p className="muted modal-footer">
-              其他完整配置可在 config.yaml 中修改。
-            </p>
-            {openError && <p className="error-text">{openError}</p>}
           </section>
+
+        </div>
+        <div className="modal-footer-bar">
+          <div className="modal-footer-left">
+            <button
+              className="btn"
+              type="button"
+              onClick={() => void openConfigFile()}
+              disabled={opening}
+            >
+              {opening ? '打开中…' : '编辑 config.yaml'}
+            </button>
+          </div>
+          <div className="modal-footer-right">
+            {(saveError ?? openError) && (
+              <span className="error-text">{saveError ?? openError}</span>
+            )}
+            {saved && !anyChanged && <span className="muted">已保存</span>}
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => void saveAll()}
+              disabled={!anyChanged || saving}
+            >
+              {saving ? '保存中…' : '保存'}
+            </button>
+          </div>
         </div>
       </div>
       {llmEditor && (
@@ -568,6 +754,190 @@ export function SettingsModal({
           onCancel={closeEditor}
         />
       )}
+      {connEditor && (
+        <ConnectionEditorModal
+          state={connEditor}
+          onChange={(draft) => setConnEditor({ ...connEditor, draft })}
+          onSave={() => void saveConnEditor()}
+          onCancel={() => setConnEditor(null)}
+        />
+      )}
+      {connDeleteId && (
+        <ConfirmModal
+          title="删除连接"
+          message={`确定删除连接「${
+            connections.find((c) => c.id === connDeleteId)?.display_name || connDeleteId
+          }」？点底栏「保存」后生效。`}
+          confirmLabel="删除"
+          danger
+          onConfirm={() => {
+            deleteConn(connDeleteId);
+            setConnDeleteId(null);
+          }}
+          onCancel={() => setConnDeleteId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConnectionEditorModal({
+  state,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  state: { mode: 'add' | 'edit'; draft: ConnDraft };
+  onChange: (draft: ConnDraft) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const { mode, draft } = state;
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const update = <K extends keyof ConnDraft>(field: K, value: ConnDraft[K]): void => {
+    onChange({ ...draft, [field]: value });
+    setTestResult(null); // 改字段清掉旧测试结果，避免误导
+  };
+  const urlValid = /^https?:\/\/.+/i.test(draft.base_url.trim());
+  const canTest = urlValid && draft.token.trim() !== '';
+  const canSave = draft.display_name.trim() !== '' && canTest;
+  const runTest = async (): Promise<void> => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await invoke('config:testConnection', {
+        base_url: draft.base_url.trim(),
+        token: draft.token,
+      });
+      setTestResult(
+        r.ok
+          ? {
+              ok: true,
+              text: `连接成功${r.user ? ` · ${r.user.displayName}` : ''}${
+                r.serverVersion ? ` · v${r.serverVersion}` : ''
+              }`,
+            }
+          : { ok: false, text: r.reason ?? '连接失败' },
+      );
+    } catch (e) {
+      setTestResult({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setTesting(false);
+    }
+  };
+  return (
+    <div className="modal-backdrop modal-backdrop-nested" onClick={onCancel}>
+      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} role="dialog">
+        <div className="modal-header">
+          <h3>{mode === 'add' ? '新增连接' : '编辑连接'}</h3>
+        </div>
+        <div className="modal-body">
+          <div className="modal-kv">
+            <div className="modal-kv-key">
+              名称 <span className="settings-required">*</span>
+            </div>
+            <div className="modal-kv-val">
+              <input
+                type="text"
+                className="settings-input"
+                value={draft.display_name}
+                onChange={(e) => update('display_name', e.target.value)}
+                placeholder="如 公司 Bitbucket"
+                autoFocus
+                maxLength={48}
+              />
+            </div>
+            <div className="modal-kv-key">
+              Base URL <span className="settings-required">*</span>
+            </div>
+            <div className="modal-kv-val">
+              <input
+                type="text"
+                className={`settings-input${draft.base_url && !urlValid ? ' settings-input-error' : ''}`}
+                value={draft.base_url}
+                onChange={(e) => update('base_url', e.target.value)}
+                placeholder="https://bitbucket.example.com"
+              />
+            </div>
+            <div className="modal-kv-key">
+              访问令牌 (PAT) <span className="settings-required">*</span>
+            </div>
+            <div className="modal-kv-val">
+              <div className="settings-secret-row">
+                <input
+                  type={tokenVisible ? 'text' : 'password'}
+                  className="settings-input"
+                  value={draft.token}
+                  onChange={(e) => update('token', e.target.value)}
+                  placeholder="BBS HTTP access token"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => setTokenVisible((v) => !v)}
+                >
+                  {tokenVisible ? '隐藏' : '显示'}
+                </button>
+              </div>
+            </div>
+            <div className="modal-kv-key">Clone 协议</div>
+            <div className="modal-kv-val">
+              <select
+                className="settings-input"
+                value={draft.protocol}
+                onChange={(e) => update('protocol', e.target.value as 'pat' | 'ssh')}
+              >
+                <option value="pat">HTTPS (PAT)</option>
+                <option value="ssh">SSH (走系统 ssh config)</option>
+              </select>
+            </div>
+          </div>
+          {/* 测试连接 + 取消/保存 同一行：测试在左、决断按钮在右；全用 .btn 同高，
+              align-items:center 对齐，.btn 自带 inline-flex 居中文字 */}
+          <div
+            className="settings-actions"
+            style={{ marginTop: 12, justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            <div
+              style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}
+            >
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void runTest()}
+                disabled={!canTest || testing}
+              >
+                {testing ? '测试中…' : '测试连接'}
+              </button>
+              {testResult && (
+                <span
+                  className={testResult.ok ? undefined : 'error-text'}
+                  style={testResult.ok ? { color: '#3fb950' } : undefined}
+                >
+                  {testResult.text}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn" onClick={onCancel}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={onSave}
+                disabled={!canSave}
+                title={!canSave ? '请填完名称 / Base URL / Token' : undefined}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -622,9 +992,6 @@ function LlmEditorModal({
       <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="modal-header">
           <h3>{mode === 'add' ? '新增 LLM 模型' : '编辑 LLM 模型'}</h3>
-          <button className="btn" type="button" onClick={onCancel}>
-            取消
-          </button>
         </div>
         <div className="modal-body">
           <div className="modal-kv">
@@ -720,7 +1087,7 @@ function LlmEditorModal({
             </div>
           </div>
           <p className="muted modal-footer">{providerMeta.hint}</p>
-          <div className="settings-actions" style={{ marginTop: 12 }}>
+          <div className="settings-actions" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
             <button type="button" className="btn" onClick={onCancel}>
               取消
             </button>

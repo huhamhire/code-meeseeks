@@ -114,6 +114,12 @@ export const ConfigSchema = z.object({
     })
     .default({}),
   connections: z.array(ConnectionSchema).default([]),
+  /**
+   * 当前**启用**的唯一连接 id（同时只启用一条，见设置页）。空串 / 找不到对应连接时
+   * 不轮询任何连接（UI 引导用户启用一条）。connections 数组保留全部配置，仅 active
+   * 这条被建 adapter 轮询；按 id 查连接的地方仍读全量，历史 PR 不受影响。
+   */
+  active_connection_id: z.string().default(''),
   llm: z.preprocess(
     // 兼容旧 single-config 形态：M3-C 初版用过 { provider, base_url, model, api_key }
     // 直接作为 llm 字段；现在改成 { profiles: [...], active_id }。检测旧 shape

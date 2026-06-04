@@ -36,6 +36,19 @@
   }
 }
 
+// 右上角关闭按钮：方形 X 图标（免国际化），复用 .icon-btn 的透明无边框，
+// 这里只调方形 padding + hover 浅底
+.modal-close {
+  padding: 4px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+}
+
 .modal-body {
   padding: $space-8;
   overflow-y: auto;
@@ -71,6 +84,19 @@
     color: $text-primary;
     text-transform: uppercase;
     letter-spacing: 0.4px;
+  }
+}
+
+// 区块标题行：标题左、操作按钮（如"+ 添加连接"）右，省纵向空间。h4 去掉自身
+// 下边距改由本行统一控制
+.modal-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $space-4;
+
+  h4 {
+    margin-bottom: 0;
   }
 }
 
@@ -117,6 +143,29 @@
   margin-top: $space-4;
 }
 
+// 模态框底栏：左侧工具（编辑 config.yaml / DevTools），右侧全局保存。固定不滚动
+.modal-footer-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+  padding: $space-5 $space-8;
+  border-top: 1px solid $border-default;
+  background: $bg-elev;
+}
+
+.modal-footer-left,
+.modal-footer-right {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+}
+
+.modal-footer-right .error-text {
+  margin-top: 0;
+}
+
 .error-text {
   color: $color-danger;
   font-size: $fs-md;
@@ -127,6 +176,58 @@
   display: flex;
   gap: $space-4;
   margin-top: $space-5;
+}
+
+// 拖拽滑块（轮询间隔等）：自定义细 track（3px）+ 蓝色填充（--range-fill 控制）+ 圆点 thumb
+.settings-range {
+  align-self: center;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px; // 给 thumb 垂直居中留空间
+  background: transparent;
+
+  &::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(
+      to right,
+      $color-accent var(--range-fill, 0%),
+      $border-default var(--range-fill, 0%)
+    );
+  }
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4.5px; // (track 3 - thumb 12)/2，使圆点垂直居中于细线
+    border-radius: 50%;
+    background: $color-accent;
+  }
+}
+
+// 档位刻度参考行：每个刻度按 thumb 停靠位置绝对定位（见组件内 left 计算），
+// translateX(-50%) 居中对齐；当前档位高亮
+.settings-range-ticks {
+  position: relative;
+  height: 16px;
+  margin-top: 4px;
+  font-size: $fs-xs;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+
+  span {
+    position: absolute;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  .active {
+    color: $color-accent;
+    font-weight: 600;
+  }
 }
 
 .settings-actions {
@@ -186,6 +287,9 @@
   display: flex;
   flex-direction: column;
   gap: $space-3;
+  // 最多展示约 4 行，超出滚动
+  max-height: 236px;
+  overflow-y: auto;
 }
 .llm-profile-row {
   display: flex;

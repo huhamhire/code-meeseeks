@@ -49,6 +49,23 @@
 }
 
 // 同步时间 chip：时钟图标 + 相对时间文本
+// 合并刷新按钮 + 同步状态：chip 外观的可点击按钮（重置 button 默认样式）
+.statusbar-sync-btn {
+  border: none;
+  color: inherit;
+  // 只继承字体族；字号沿用 .statusbar-chip，但同步状态文案不加粗
+  font-family: inherit;
+  font-weight: 400;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: $bg-white-fade;
+  }
+  &:disabled {
+    cursor: default;
+  }
+}
+
 .statusbar-chip-sync {
   display: inline-flex;
   align-items: center;

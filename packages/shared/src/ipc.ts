@@ -1,6 +1,6 @@
 import type { AppInfo, AppPaths } from './app-info.js';
 import type { Config } from './config.js';
-import type { PlatformUser, PrComment, PrCommit } from './platform.js';
+import type { PingResult, PlatformUser, PrComment, PrCommit } from './platform.js';
 import type {
   LocalPrStatus,
   PollResult,
@@ -299,6 +299,33 @@ export interface IpcChannels {
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
   /** 写入 rules.dir + enabled 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
   'config:setRules': { request: { rules: Config['rules'] }; response: void };
+  /** 写入轮询间隔 (秒，60~900 整数) 到 config.yaml，并热替换 poller 定时器，无需重启 */
+  'config:setPoller': { request: { interval_seconds: number }; response: void };
+  /**
+   * 写入连接列表 + 当前启用连接到 config.yaml，并**热重建** adapter/poller 即时生效
+   * （无需重启）。active 那条被轮询，其余仅保留配置。
+   */
+  'config:setConnections': {
+    request: { connections: Config['connections']; active_connection_id: string };
+    response: void;
+  };
+  /** 用草稿 url/token 临时起 adapter ping，保存前测试连接是否可达；不写配置。 */
+  'config:testConnection': {
+    request: { base_url: string; token: string };
+    response: PingResult;
+  };
+  /**
+   * 配置过程中自动把连接 + LLM 草稿写入 config.yaml（防丢失），但**不应用到运行时**
+   * （不 reconfigure adapter/poller、不更新内存 config）——重启或点底栏「保存」才生效。
+   */
+  'config:autosaveDraft': {
+    request: {
+      connections: Config['connections'];
+      active_connection_id: string;
+      llm: Config['llm'];
+    };
+    response: void;
+  };
   /**
    * 给指定 PR 查 rules.dir 当前命中的规则 (按 priority desc + path asc 取首条)。
    * 调用方传 tool 区分 /describe / /review (规则可能只对其中一个 tool 生效)。

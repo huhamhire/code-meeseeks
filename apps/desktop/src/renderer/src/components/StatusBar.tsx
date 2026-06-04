@@ -55,17 +55,7 @@ export function StatusBar({
       >
         <SidebarIcon collapsed={sidebarCollapsed} />
       </button>
-      <button
-        type="button"
-        className={`icon-btn ${refreshing ? 'icon-btn-spinning' : ''}`}
-        onClick={onRefresh}
-        disabled={refreshing}
-        title={refreshing ? '刷新中…' : '刷新（触发一次轮询）'}
-        aria-label="刷新"
-      >
-        <RefreshIcon />
-      </button>
-      <LastSyncChip at={lastSyncAt} />
+      <LastSyncChip at={lastSyncAt} refreshing={refreshing} onRefresh={onRefresh} />
       {/* 当前正在 sync 的 repo (clone/fetch 中)。idle 不渲染，活动时实时显示阶段 +
           百分比，让用户感知"agent 正在更新仓库镜像"而不是 hang */}
       <RepoSyncChip />
@@ -455,27 +445,44 @@ function ChatPanelIcon({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function LastSyncChip({ at }: { at: string | null }) {
+// 刷新按钮 + 同步状态合并：一个可点击 chip，显示最近同步相对时间 + 同步图标
+// （刷新中旋转），点击触发一次轮询。
+function LastSyncChip({
+  at,
+  refreshing,
+  onRefresh,
+}: {
+  at: string | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
   // 每 30s 重渲染一次，让 "刚刚 / N 分钟前" 文案随时间向前推进
   const [, tick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => tick((n) => n + 1), 30_000);
     return () => clearInterval(id);
   }, []);
-  if (!at) {
-    return (
-      <span className="statusbar-chip statusbar-chip-sync" title="尚未完成首次同步">
-        <SyncIcon />—
-      </span>
-    );
-  }
-  const date = new Date(at);
-  const title = `最近一次 PR 列表同步：${date.toLocaleString()}`;
+  const date = at ? new Date(at) : null;
+  const label = refreshing ? '刷新中…' : date ? formatRelative(date) : '—';
+  const title = refreshing
+    ? '刷新中…'
+    : date
+      ? `最近同步：${date.toLocaleString()} · 点击刷新`
+      : '尚未同步 · 点击刷新';
   return (
-    <span className="statusbar-chip statusbar-chip-sync" title={title}>
+    <button
+      type="button"
+      className={`statusbar-chip statusbar-chip-sync statusbar-sync-btn${
+        refreshing ? ' icon-btn-spinning' : ''
+      }`}
+      onClick={onRefresh}
+      disabled={refreshing}
+      title={title}
+      aria-label="刷新（触发一次轮询）"
+    >
       <SyncIcon />
-      {formatRelative(date)}
-    </span>
+      {label}
+    </button>
   );
 }
 
@@ -636,25 +643,6 @@ function PullRequestIcon() {
       <line x1="12" y1="4.5" x2="12" y2="11.5" />
       {/* 顶部弧线：从 4,1 经过 12,1 落到 12,4 (合并目标分支的"头") */}
       <path d="M5.5 3 H10.5 A1.5 1.5 0 0 1 12 4.5" />
-    </svg>
-  );
-}
-
-function RefreshIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M21 12a9 9 0 1 1-3.51-7.13" />
-      <polyline points="21 4 21 10 15 10" />
     </svg>
   );
 }
