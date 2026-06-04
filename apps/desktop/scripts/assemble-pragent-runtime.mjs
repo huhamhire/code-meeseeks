@@ -233,6 +233,8 @@ async function main() {
   );
   await writeFile(join(sitePackages, 'sitecustomize.py'), await readFile(SHIM_PATH));
   log(`已注入 sitecustomize.py → ${sitePackages}`);
+  // 注：.secrets.toml 占位不在组装期补，改由 main 在执行期按需补（同 Docker 策略
+  // 挂空文件的思路，单一机制、自愈），见 ipc.ts ensureEmbeddedSecrets
 
   // 7. 冒烟 + 写 VERSION
   const prAgentFile = pythonStdout(pythonExe, 'import pr_agent;print(pr_agent.__file__)');

@@ -30,6 +30,12 @@
   color: $text-on-accent;
 }
 
+// docker 策略蓝色，跟 embedded/local-cli 的绿区分（一眼看出当前运行时来源）
+.statusbar-chip-docker {
+  background: $color-info;
+  color: $text-on-accent;
+}
+
 // PR 数 chip：图标 + 数字横排，svg 跟数字基线对齐
 .statusbar-chip-prs {
   display: inline-flex;

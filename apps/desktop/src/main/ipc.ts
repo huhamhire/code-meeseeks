@@ -1,7 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import type { Logger } from 'pino';
 import { writeConfig, type BootstrapResult } from '@pr-pilot/config';
 import { PrAgentRunError, type PrAgentBridge } from '@pr-pilot/pr-agent-bridge';
@@ -49,8 +51,10 @@ interface RegisterDeps {
   bootstrap: BootstrapResult;
   logger: Logger;
   prAgentStatus: PrAgentStatus;
-  /** 探测可用时的 bridge 实例；不可用 (CLI / Docker 都没有) 为 null */
+  /** 探测可用时的 bridge 实例；不可用 (embedded / CLI / Docker 都没有) 为 null */
   prAgentBridge: PrAgentBridge | null;
+  /** 嵌入式运行时解释器路径（embedded 策略下执行期补 .secrets.toml 用），非 embedded 可空 */
+  embeddedPythonPath?: string;
   stateStore: JsonFileStateStore;
   poller: Poller;
   adapters: readonly BuiltAdapter[];
@@ -66,6 +70,7 @@ export function registerIpcHandlers({
   logger,
   prAgentStatus,
   prAgentBridge,
+  embeddedPythonPath,
   stateStore,
   poller,
   adapters,
@@ -144,6 +149,38 @@ export function registerIpcHandlers({
       );
     }
     return p;
+  };
+
+  // embedded 策略：执行期在嵌入式安装目录的 settings/ 与 settings_prod/ 补空
+  // .secrets.toml（同 Docker 挂空文件的意图，只是没有容器、直接写安装目录）。
+  // memo 化：只在首个 embedded run 解析一次 pr_agent 目录 + 写文件，后续直接复用。
+  // importlib.util.find_spec 仅定位不 import pr_agent，快；失败仅 warn 不阻断 run。
+  const execFileP = promisify(execFile);
+  let embeddedSecretsEnsured: Promise<void> | null = null;
+  const ensureEmbeddedSecrets = (pythonPath: string): Promise<void> => {
+    embeddedSecretsEnsured ??= (async () => {
+      const { stdout } = await execFileP(pythonPath, [
+        '-c',
+        "import importlib.util,os;print(os.path.dirname(importlib.util.find_spec('pr_agent').origin))",
+      ]);
+      const prAgentDir = stdout.trim();
+      for (const sub of ['settings', 'settings_prod']) {
+        const dir = path.join(prAgentDir, sub);
+        await fs.mkdir(dir, { recursive: true });
+        const f = path.join(dir, '.secrets.toml');
+        try {
+          await fs.access(f);
+        } catch {
+          await fs.writeFile(
+            f,
+            '# pr-pilot 占位空文件：抑制 pr-agent 缺失 .secrets.toml 的启动告警\n',
+          );
+        }
+      }
+    })().catch((err: unknown) => {
+      logger.warn({ err }, 'ensure embedded .secrets.toml failed (ignored)');
+    });
+    return embeddedSecretsEnsured;
   };
 
   const repoIdentityFor = (pr: StoredPullRequest): RepoIdentity => {
@@ -882,6 +919,12 @@ export function registerIpcHandlers({
 
         // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
         const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
+
+        // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉同样的告警
+        // （没有容器可挂载，直接写安装目录；memo 化只首次做）
+        if (prAgentBridge.strategy === 'embedded' && embeddedPythonPath) {
+          await ensureEmbeddedSecrets(embeddedPythonPath);
+        }
 
         // Docker 策略：挂个空 secrets.toml 压掉 pr-agent 的 "settings file not found"
         // 启动告警；LocalCli 不需要 (pipx 装的 pr-agent 路径不同，告警也不出)

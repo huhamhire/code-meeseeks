@@ -50,8 +50,9 @@ async function start(): Promise<void> {
     'pr-pilot main process started',
   );
 
+  const embeddedPythonPath = resolveEmbeddedPython();
   const probe = await createPrAgentBridge({
-    embeddedPythonPath: resolveEmbeddedPython(),
+    embeddedPythonPath,
     forceStrategy: bootstrap.config.pr_agent.strategy,
   });
   prAgentStatus = probe.status;
@@ -156,6 +157,7 @@ async function start(): Promise<void> {
     logger,
     prAgentStatus,
     prAgentBridge,
+    embeddedPythonPath,
     stateStore,
     poller,
     adapters,

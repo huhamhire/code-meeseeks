@@ -530,9 +530,12 @@ function PrAgentChip({ status }: { status: PrAgentStatus }) {
         : status.strategy === 'embedded'
           ? status.version.replace(/^pr-agent\s+/, '')
           : status.version.split(/\s+/)[0] || status.version;
+    // 按 strategy 上色：embedded / local-cli 绿（statusbar-chip-ok），docker 蓝
+    const colorClass =
+      status.strategy === 'docker' ? 'statusbar-chip-docker' : 'statusbar-chip-ok';
     return (
       <span
-        className="statusbar-chip statusbar-chip-ok"
+        className={`statusbar-chip ${colorClass}`}
         title={`${status.strategy} · ${status.version}`}
       >
         PR Agent: {ver}

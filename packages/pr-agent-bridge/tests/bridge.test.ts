@@ -133,7 +133,12 @@ describe('EmbeddedRuntimeBridge', () => {
       'review',
     ]);
     expect(calls[0]!.opts.cwd).toBe('/tmp/wt/abc');
-    expect(calls[0]!.opts.env).toEqual({ OPENAI__KEY: 'sk', CONFIG__GIT_PROVIDER: 'local' });
+    expect(calls[0]!.opts.env).toEqual({
+      OPENAI__KEY: 'sk',
+      PYTHONUTF8: '1',
+      PYTHONIOENCODING: 'utf-8',
+      CONFIG__GIT_PROVIDER: 'local',
+    });
   });
 
   it('extraArgs 追加在末尾', async () => {

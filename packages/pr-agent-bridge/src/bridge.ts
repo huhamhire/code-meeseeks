@@ -140,18 +140,22 @@ export class EmbeddedRuntimeBridge extends BaseBridge {
     cwd?: string;
   } {
     const cli = ['-m', 'pr_agent.cli'];
+    // 强制 UTF-8 模式：嵌入式 Python 在中文 Windows 上默认用系统码页 (GBK/cp936) 做
+    // stdio / 文件编码，pr-agent 输出含 emoji (如 🔍 section 标题) 时会 'gbk' codec
+    // can't encode 崩掉。PYTHONUTF8=1 覆盖 stdio+fs+默认 open() 编码，IOENCODING 兜底。
+    const utf8 = { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
     if (opts.cwd) {
       return {
         cmd: this.pythonPath,
         args: [...cli, '--pr_url', opts.targetBranch ?? '', opts.tool, ...(opts.extraArgs ?? [])],
-        env: { ...(opts.env ?? {}), CONFIG__GIT_PROVIDER: 'local' },
+        env: { ...(opts.env ?? {}), ...utf8, CONFIG__GIT_PROVIDER: 'local' },
         cwd: opts.cwd,
       };
     }
     return {
       cmd: this.pythonPath,
       args: [...cli, '--pr_url', opts.prUrl, opts.tool, ...(opts.extraArgs ?? [])],
-      env: opts.env,
+      env: { ...(opts.env ?? {}), ...utf8 },
     };
   }
 }

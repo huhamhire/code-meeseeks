@@ -381,11 +381,7 @@ export function ChatPane({
             #{pr.remoteId}
           </span>
         )}
-        {prAgent.available && (
-          <span className="chat-pane-stage-tag" title={`PR Agent ${prAgent.strategy}`}>
-            {prAgent.strategy === 'docker' ? 'Docker' : 'CLI'}
-          </span>
-        )}
+        {/* strategy chip (Docker/CLI) 撤掉：部署细节用户不关心，状态栏已有 PR Agent 版本 chip */}
       </header>
 
       {/* 当前 PR 命中的规则 chip：rules.dir 未配置 / 整体禁用 / 无命中 → 不显示。
