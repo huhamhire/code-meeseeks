@@ -113,6 +113,11 @@ export function ChatPane({
   const otherActiveRun = active && active.prLocalId !== pr?.localId ? active : null;
   const liveLines = myActiveRun ? (linesByRunId.get(myActiveRun.runId) ?? []) : [];
 
+  // 切走再回来时，正在跑的 run 已落盘 (status=running) → listRuns 把它读进 runs，
+  // 同时它又是实时 myActiveRun，会重复渲染 (历史卡片 + RunningView 各一条)。这里把
+  // active run 从历史列表剔除，运行中的展示统一交给下方 RunningView 一处负责。
+  const visibleRuns = myActiveRun ? runs.filter((r) => r.id !== myActiveRun.runId) : runs;
+
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
   // reloadPrs → 新 prs 数组 → selected 是新对象引用 → 如果依赖 pr，此 effect 重跑，
@@ -399,7 +404,7 @@ export function ChatPane({
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
-        {runs.length === 0 && !myActiveRun && <ChatEmpty pr={pr} prAgent={prAgent} />}
+        {visibleRuns.length === 0 && !myActiveRun && <ChatEmpty pr={pr} prAgent={prAgent} />}
         {/* 还有更早的 run 未拉到本地 → 顶部出加载提示。继续向上滚自动游标拉一页 */}
         {(hasMoreOlder || loadingOlder) && (
           <div className="chat-run-more-hint muted" role="status">
@@ -408,7 +413,7 @@ export function ChatPane({
         )}
         {/* 历史 run 按时间升序堆叠，每条独立卡片 (内部维护自己的 raw stdout 折叠状态)。
             初始只拉最新 RUNS_PAGE_SIZE 条；向上滚到顶后再用游标拉更早一批 */}
-        {runs.map((r, i) => (
+        {visibleRuns.map((r, i) => (
           <RunResultView
             key={r.id}
             run={r}
@@ -416,7 +421,7 @@ export function ChatPane({
             // 只有"列表里最后一条 + 没有正在跑的"这一种情形下，失败 / 取消的 run 才
             // 可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
             // 避免回头再点重新插队、打乱对话顺序
-            canRetry={i === runs.length - 1 && !myActiveRun}
+            canRetry={i === visibleRuns.length - 1 && !myActiveRun}
             drafts={drafts ?? []}
             onJumpToDraft={handleJumpToDraft}
             onRejectFinding={handleRejectFinding}

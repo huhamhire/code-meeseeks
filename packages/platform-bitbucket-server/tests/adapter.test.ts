@@ -443,6 +443,82 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
   });
 });
 
+describe('BitbucketServerAdapter.listPullRequestComments anchor 映射', () => {
+  const user = { name: 'u1', displayName: 'User One', slug: 'u1', active: true };
+  const mkComment = (id: number, text: string) => ({
+    id,
+    version: 0,
+    text,
+    author: user,
+    createdDate: Date.parse('2026-05-28T01:00:00Z'),
+    updatedDate: Date.parse('2026-05-28T01:00:00Z'),
+  });
+  const activities = (values: unknown[]) => ({
+    '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022/activities': () => ({
+      size: values.length,
+      limit: 25,
+      isLastPage: true,
+      start: 0,
+      values,
+    }),
+  });
+
+  it('行级 anchor → 映射 path/line/side/lineType', async () => {
+    const adapter = makeAdapter(
+      mockFetch(
+        activities([
+          {
+            id: 1,
+            action: 'COMMENTED',
+            commentAction: 'ADDED',
+            comment: mkComment(10, '行评论'),
+            commentAnchor: { path: 'src/a.ts', line: 42, lineType: 'ADDED', fileType: 'TO' },
+          },
+        ]),
+      ),
+    );
+    const cs = await adapter.listPullRequestComments({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
+    expect(cs[0]!.anchor).toEqual({ path: 'src/a.ts', line: 42, side: 'new', lineType: 'added' });
+  });
+
+  it('二进制 / 文件级评论 anchor 无 line/lineType → 降级 anchor=null（不崩）', async () => {
+    const adapter = makeAdapter(
+      mockFetch(
+        activities([
+          {
+            id: 2,
+            action: 'COMMENTED',
+            commentAction: 'ADDED',
+            comment: mkComment(20, '二进制文件上的评论'),
+            commentAnchor: { path: 'assets/logo.png', fileType: 'TO' },
+          },
+        ]),
+      ),
+    );
+    const cs = await adapter.listPullRequestComments({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
+    expect(cs).toHaveLength(1);
+    expect(cs[0]!.anchor).toBeNull();
+  });
+
+  it('有 line 缺 lineType → lineType 兜底 context', async () => {
+    const adapter = makeAdapter(
+      mockFetch(
+        activities([
+          {
+            id: 3,
+            action: 'COMMENTED',
+            commentAction: 'ADDED',
+            comment: mkComment(30, '缺 lineType'),
+            commentAnchor: { path: 'src/b.ts', line: 10, fileType: 'FROM' },
+          },
+        ]),
+      ),
+    );
+    const cs = await adapter.listPullRequestComments({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
+    expect(cs[0]!.anchor).toEqual({ path: 'src/b.ts', line: 10, side: 'old', lineType: 'context' });
+  });
+});
+
 describe('BitbucketServerAdapter.mergePullRequest', () => {
   it('fetches current version then POSTs /merge?version=N', async () => {
     let mergeVersion: string | null = 'unset';

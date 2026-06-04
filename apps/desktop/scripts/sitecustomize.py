@@ -3,29 +3,120 @@
 # 本文件由 assemble-pragent-runtime.mjs 拷进嵌入式 Python 的 site-packages，
 # CPython 启动时经 `site` 自动 import（无需 PYTHONPATH/挂载）。见 ADR-0008 §4。
 #
-# 设计原则：所有对 pr-agent 行为的改造都集中在这里，上游源码保持原封；每个补丁
-# 必须用 try/except 包裹，打不上则静默降级，绝不让 shim 异常阻断 pr-agent 主流程。
-#
-# 阶段 1：故意留空（仅打通基础设施）。后续补丁（如 LocalGitProvider.get_line_link
-# 注入结构化 anchor、litellm token 捕获）加进 _apply_patches，并配套 parser /
-# CI smoke test 一起上（见 ROADMAP M5「/review finding anchor 根因修复」）。
+# 设计原则：
+#   - 所有对 pr-agent 行为的改造集中在这里，上游源码保持原封。
+#   - 每个补丁用 try/except 包裹，打不上则静默降级，绝不让 shim 异常阻断流程。
+#   - **绝不在 sitecustomize 阶段 eager import pr_agent**：本文件在每次 python 启动
+#     都会跑（探测 --version / find_spec / pip 装包等），eager import 会拖慢每次调用、
+#     甚至在 pr-agent 尚未装好时报错。改用惰性 post-import hook：仅当目标模块真正
+#     被 import（= 真实 pr-agent run）时才打补丁。
+import importlib.abc
+import importlib.util
 import os
 import sys
 
 
+def _debug(msg: str) -> None:
+    if os.environ.get("PRPILOT_SHIM_DEBUG"):
+        print(f"[pr-pilot] {msg}", file=sys.stderr)
+
+
+def _register_post_import(module_name, patch_fn) -> None:
+    """注册一个 meta_path finder：当 module_name 被 import 后立即执行 patch_fn(module)。
+    不在此处 import 该模块，保持 python 启动/探测/pip 轻量。"""
+
+    class _Finder(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname != module_name:
+                return None
+            # 临时摘掉自己，借默认机制拿到真实 spec，再包一层 loader 在 exec 后 patch
+            sys.meta_path.remove(self)
+            try:
+                spec = importlib.util.find_spec(fullname)
+            finally:
+                sys.meta_path.insert(0, self)
+            if spec is None or spec.loader is None:
+                return None
+            orig_exec = spec.loader.exec_module
+
+            def exec_module(module):
+                orig_exec(module)
+                try:
+                    patch_fn(module)
+                    _debug(f"patched {module_name}")
+                except Exception as exc:  # noqa: BLE001
+                    _debug(f"patch {module_name} failed (ignored): {exc}")
+
+            spec.loader.exec_module = exec_module
+            return spec
+
+    sys.meta_path.insert(0, _Finder())
+
+
+def _patch_local_git_provider_binary_safe(module) -> None:
+    """LocalGitProvider.get_diff_files 对每个 diff 文件无脑 .decode('utf-8')，遇到二进制
+    文件（图片 / 编译产物 / UTF-16 等，如 0xff 开头）抛 UnicodeDecodeError 崩掉整个 review。
+    换成二进制安全版：解码失败的文件跳过（review 不处理二进制），其余逻辑与上游一致。"""
+    from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
+
+    def get_diff_files(self):
+        diffs = self.repo.head.commit.diff(
+            self.repo.merge_base(self.repo.head, self.repo.branches[self.target_branch_name]),
+            create_patch=True,
+            R=True,
+        )
+        diff_files = []
+        for diff_item in diffs:
+            try:
+                original_file_content_str = (
+                    diff_item.a_blob.data_stream.read().decode("utf-8")
+                    if diff_item.a_blob is not None
+                    else ""
+                )
+                new_file_content_str = (
+                    diff_item.b_blob.data_stream.read().decode("utf-8")
+                    if diff_item.b_blob is not None
+                    else ""
+                )
+                patch_str = diff_item.diff.decode("utf-8")
+            except (UnicodeDecodeError, ValueError):
+                # 二进制文件无法 utf-8 解码 → 跳过该文件
+                continue
+            edit_type = EDIT_TYPE.MODIFIED
+            if diff_item.new_file:
+                edit_type = EDIT_TYPE.ADDED
+            elif diff_item.deleted_file:
+                edit_type = EDIT_TYPE.DELETED
+            elif diff_item.renamed_file:
+                edit_type = EDIT_TYPE.RENAMED
+            diff_files.append(
+                FilePatchInfo(
+                    original_file_content_str,
+                    new_file_content_str,
+                    patch_str,
+                    diff_item.b_path,
+                    edit_type=edit_type,
+                    old_filename=None
+                    if diff_item.a_path == diff_item.b_path
+                    else diff_item.a_path,
+                )
+            )
+        self.diff_files = diff_files
+        return diff_files
+
+    module.LocalGitProvider.get_diff_files = get_diff_files
+
+
 def _apply_patches() -> None:
-    # 占位：阶段 1 不启用任何补丁。
-    #
-    # 注意：get_line_link 补丁会把 /review 的 issue 行变成 `[**header**](prpilot://…)`，
-    # 必须与 parse-output.ts 的 header 解析改动同批上线，否则会打破现有 finding 解析。
-    # 因此这里暂不启用，留到对应任务统一开。
-    return
+    # 二进制文件安全：见 _patch_local_git_provider_binary_safe
+    _register_post_import(
+        "pr_agent.git_providers.local_git_provider",
+        _patch_local_git_provider_binary_safe,
+    )
 
 
 try:
     _apply_patches()
-    if os.environ.get("PRPILOT_SHIM_DEBUG"):
-        print("[pr-pilot] sitecustomize shim loaded", file=sys.stderr)
+    _debug("sitecustomize shim loaded")
 except Exception as exc:  # noqa: BLE001 - shim 绝不能让解释器/agent 崩
-    if os.environ.get("PRPILOT_SHIM_DEBUG"):
-        print(f"[pr-pilot] sitecustomize shim error (ignored): {exc}", file=sys.stderr)
+    _debug(f"sitecustomize shim error (ignored): {exc}")

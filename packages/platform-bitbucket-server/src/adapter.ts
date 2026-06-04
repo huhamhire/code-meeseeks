@@ -84,9 +84,11 @@ interface BBComment {
 
 interface BBCommentAnchor {
   diffType?: 'EFFECTIVE' | 'COMMIT' | 'RANGE';
-  line: number;
-  lineType: 'ADDED' | 'REMOVED' | 'CONTEXT';
-  fileType: 'FROM' | 'TO';
+  // line / lineType 对文件级评论（挂在文件而非具体行）或孤儿 anchor（锚定行已不存在）
+  // 可能缺省 —— 标可选，mapBBAnchor 据此降级，避免读 undefined.toLowerCase 崩
+  line?: number;
+  lineType?: 'ADDED' | 'REMOVED' | 'CONTEXT';
+  fileType?: 'FROM' | 'TO';
   path: string;
   srcPath?: string;
 }
@@ -453,12 +455,15 @@ function mapBBComment(c: BBComment, anchor?: BBCommentAnchor): PrComment {
   };
 }
 
-function mapBBAnchor(a: BBCommentAnchor): PrCommentAnchor {
+function mapBBAnchor(a: BBCommentAnchor): PrCommentAnchor | null {
+  // 无行号 = 文件级 / 孤儿 anchor，无法锚到具体行 → 返回 null，调用方退化成 summary 评论
+  if (a.line == null) return null;
   return {
     path: a.path,
     line: a.line,
     side: a.fileType === 'FROM' ? 'old' : 'new',
-    lineType: a.lineType.toLowerCase() as PrCommentAnchor['lineType'],
+    // lineType 偶有缺省 → 兜底 'context'（最保守值，跟发布 anchor 的兜底一致）
+    lineType: (a.lineType?.toLowerCase() ?? 'context') as PrCommentAnchor['lineType'],
   };
 }
 
