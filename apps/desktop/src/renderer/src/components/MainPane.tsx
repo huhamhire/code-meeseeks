@@ -8,6 +8,7 @@ import { DiffView } from './DiffView';
 import { DraftsPanel } from './DraftsPanel';
 import { PrInfoView } from './PrInfoView';
 import { PublishReviewModal } from './PublishReviewModal';
+import { PullRequestIcon } from './icons';
 
 // Globe 网格图标：地球经纬度示意，跟"在远端浏览器打开"语义匹配
 function GlobeIcon() {
@@ -109,6 +110,8 @@ interface MainPaneProps {
   pr: StoredPullRequest | null;
   hasConnections: boolean;
   onSetStatus: (status: LocalPrStatus) => void;
+  /** 合并当前 PR（仅在 mergeStatus.canMerge 时由 header 按钮触发） */
+  onMerge: () => void;
   /**
    * M4 跨组件跳转：ChatPane finding card 点"编辑"时由 App 设置，MainPane 据此
    * 切到 Diff tab + 把 nav 透传给 DiffView 做 scroll/highlight/open zone。
@@ -138,6 +141,7 @@ export function MainPane({
   pr,
   hasConnections,
   onSetStatus,
+  onMerge,
   pendingDiffNav,
   onDiffNavConsumed,
   onRequestDiffNav,
@@ -290,6 +294,19 @@ export function MainPane({
           >
             <GlobeIcon /> 浏览器打开
           </a>
+          {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现，复用分支合并图标。
+              点击直接合并 (无二次确认)；成功后 App 刷新列表，PR 转 MERGED 退场。
+              可选链兜底升级前无 mergeStatus 的旧 meta.json */}
+          {pr.mergeStatus?.canMerge && (
+            <button
+              type="button"
+              className="btn btn-sm pr-header-merge"
+              onClick={onMerge}
+              title="合并此 PR 到目标分支"
+            >
+              <PullRequestIcon size={14} /> 合并
+            </button>
+          )}
           {/* approve / needs work：当前状态 = 高亮；点已高亮的回退到 pending（撤销远端标记）。
               这两个 review 决断按钮右对齐，跟"浏览器打开"在左侧拉开距离。
               "提交评论 (N)" 放在决断按钮左边 — 评审动作分两步：先发评论 (左)，

@@ -1,5 +1,6 @@
 import type { StoredPullRequest } from '@pr-pilot/shared';
 import { Avatar } from './Avatar';
+import { PullRequestIcon } from './icons';
 
 /** 作者行前缀：头肩剪影，跟 meta gutter 左对齐 */
 function PersonIcon() {
@@ -21,30 +22,6 @@ function PersonIcon() {
   );
 }
 
-/** 分支行前缀：git pull-request 字形，暗示源→目标 */
-function PullRequestIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="4" cy="4" r="1.6" />
-      <circle cx="4" cy="12" r="1.6" />
-      <line x1="4" y1="5.6" x2="4" y2="10.4" />
-      <circle cx="12" cy="12" r="1.6" />
-      <path d="M12 10.4 V7 a3 3 0 0 0 -3 -3 H6.5" />
-      <path d="M8 2 L6 4 L8 6" />
-    </svg>
-  );
-}
-
 interface PrItemProps {
   pr: StoredPullRequest;
   selected: boolean;
@@ -54,6 +31,9 @@ interface PrItemProps {
 export function PrItem({ pr, selected, onClick }: PrItemProps) {
   const approvedCount = pr.reviewers.filter((r) => r.status === 'approved').length;
   const needsWorkCount = pr.reviewers.filter((r) => r.status === 'needsWork').length;
+  // 服务端判定可直接合并：列表里用分支合并图标 chip 标注（纯状态，无数值）。
+  // 可选链兜底：升级前持久化的 meta.json 可能尚无 mergeStatus，下一轮 poll 会补齐
+  const canMerge = pr.mergeStatus?.canMerge ?? false;
   return (
     <div
       className={`pr-item ${selected ? 'selected' : ''} pr-item-status-${pr.localStatus}`}
@@ -88,8 +68,17 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
               <PersonIcon />
               {pr.author.displayName}
             </span>
-            {(approvedCount > 0 || needsWorkCount > 0) && (
+            {(approvedCount > 0 || needsWorkCount > 0 || canMerge) && (
               <span className="pr-item-review-chips">
+                {canMerge && (
+                  <span
+                    className="review-chip review-chip-mergeable"
+                    title="可合并：已满足所有合并条件"
+                    aria-label="mergeable"
+                  >
+                    <PullRequestIcon />
+                  </span>
+                )}
                 {approvedCount > 0 && (
                   <span
                     className="review-chip review-chip-approved"

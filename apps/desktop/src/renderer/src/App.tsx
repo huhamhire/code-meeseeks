@@ -195,6 +195,20 @@ export default function App() {
     [selected],
   );
 
+  const mergeSelectedPr = useCallback(async (): Promise<void> => {
+    if (!selected) return;
+    const mergedId = selected.localId;
+    try {
+      await invoke('prs:merge', { localId: mergedId });
+    } catch (e) {
+      console.error('merge failed', e);
+      return;
+    }
+    // 合并成功：PR 已转 MERGED，会从 pending 列表退场。取消选中 + 刷新让其消失
+    if (selectedId === mergedId) setSelectedId(null);
+    await triggerRefresh();
+  }, [selected, selectedId, triggerRefresh]);
+
   if (fatalError) {
     return (
       <div className="app fatal-app">
@@ -227,6 +241,7 @@ export default function App() {
           pr={selected}
           hasConnections={boot.config.connections.length > 0}
           onSetStatus={(s) => void setSelectedPrStatus(s)}
+          onMerge={() => void mergeSelectedPr()}
           pendingDiffNav={pendingDiffNav}
           onDiffNavConsumed={() => setPendingDiffNav(null)}
           onRequestDiffNav={(target) => setPendingDiffNav(target)}

@@ -443,6 +443,26 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
   });
 });
 
+describe('BitbucketServerAdapter.mergePullRequest', () => {
+  it('fetches current version then POSTs /merge?version=N', async () => {
+    let mergeVersion: string | null = 'unset';
+    const adapter = makeAdapter(
+      mockFetch({
+        // GET 单个 PR 拿 version
+        '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022': () => samplePR,
+        // POST 合并：捕获 version query
+        '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022/merge': (url) => {
+          mergeVersion = url.searchParams.get('version');
+          return { ...samplePR, state: 'MERGED' };
+        },
+      }),
+    );
+    await adapter.mergePullRequest({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
+    // 用的是 GET 回来的最新 version (samplePR.version=5)，不是任何缓存值
+    expect(mergeVersion).toBe('5');
+  });
+});
+
 describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
   // approve / needs work / unapproved (撤销) 三个状态映射到 BBS PUT participants 端点
   function captureFetch(): {

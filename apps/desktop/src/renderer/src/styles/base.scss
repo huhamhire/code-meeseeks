@@ -141,3 +141,10 @@ textarea {
   text-align: center;
 }
 
+// 可合并分类计数 >0 时染绿，提示"有可直接合并的 PR"。绿底白字在过滤按钮的
+// 默认底 / btn-primary 选中蓝底上都够对比
+.count-pill-mergeable {
+  background: $color-approved;
+  color: $text-on-accent;
+}
+

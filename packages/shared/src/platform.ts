@@ -240,6 +240,19 @@ export interface PlatformAdapter {
   ): Promise<void>;
 
   /**
+   * 合并 PR 到目标分支。仅应在 mergeStatus.canMerge=true 时调用（上层据此控制
+   * 入口可见性）；远端仍会再次校验，未通过 (冲突 / veto / 权限) 抛 PlatformError。
+   *
+   * BBS: POST /pull-requests/{id}/merge?version={prVersion}。version 是乐观锁，
+   * 必须是当前最新值——adapter 内部先拉一次 PR 拿 version 再提交，避免用缓存旧值
+   * 触发 409。合并成功后远端 PR 转 MERGED，会从 reviewer pending 列表消失，
+   * 调用方应触发一轮 poll 让本地软删收尾。
+   *
+   * 不可逆操作；merge 策略 (ff / no-ff / squash) 由远端仓库设置决定，本方法不指定。
+   */
+  mergePullRequest(repo: RepoRef, prId: string): Promise<void>;
+
+  /**
    * 在已有评论下回复。BBS: POST /comments with parent.id；其他平台 (GitHub
    * review comment / GitLab note 等) 各自映射。返回新创建的评论；调用方刷新
    * comments cache 让 UI 立刻看到 reply

@@ -364,6 +364,15 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     );
   }
 
+  async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {
+    const base = `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}`;
+    // 合并需要当前 PR version (乐观锁)；先拉最新 PR 拿 version，避免缓存旧值触发 409
+    const pr = await this.client.get<BBPullRequest>(base);
+    // POST .../merge?version=N；body 留空。冲突 / veto 未通过 / 无权限 → BBS 回 409/403，
+    // client 抛错冒泡给上层
+    await this.client.post(`${base}/merge?version=${String(pr.version)}`, {});
+  }
+
   /**
    * 列出 PR commits。BBS endpoint：
    *   GET /rest/api/1.0/projects/{p}/repos/{r}/pull-requests/{id}/commits

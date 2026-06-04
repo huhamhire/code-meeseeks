@@ -253,6 +253,18 @@
     background: $color-danger-bg;
     color: $text-on-accent;
   }
+
+  // 可合并 chip：纯分支合并图标无数值。绿底跟 approved 同色系，表"正向放行"；
+  // icon-only 收紧水平 padding 让胶囊不至于过宽
+  &.review-chip-mergeable {
+    background: $color-approved;
+    color: $text-on-accent;
+    padding: 1px $space-2;
+
+    svg {
+      display: block;
+    }
+  }
 }
 
 .tag-needs-work {

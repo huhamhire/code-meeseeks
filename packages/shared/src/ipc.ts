@@ -218,6 +218,14 @@ export interface IpcChannels {
     request: { localId: string; status: LocalPrStatus };
     response: StoredPullRequest | null;
   };
+  /**
+   * 合并 PR 到目标分支（仅对 canMerge=true 的 PR 暴露入口）。成功后远端 PR 转
+   * MERGED，调用方应自行刷新列表（下一轮 poll 会软删该 PR）。失败抛错冒泡到 renderer。
+   */
+  'prs:merge': {
+    request: { localId: string };
+    response: void;
+  };
   /** 同步 PR 所属 repo 的本地镜像（必要时 clone，否则 fetch），返回镜像绝对路径 */
   'repo:sync': {
     request: { localId: string };

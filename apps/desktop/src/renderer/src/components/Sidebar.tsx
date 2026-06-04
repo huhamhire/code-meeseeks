@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import type { LocalPrStatus, StoredPullRequest } from '@pr-pilot/shared';
 import { PrItem } from './PrItem';
 
-// 'conflict' 是按 hasConflict 跨 status 横切的筛选；'all' 不限定
-type FilterKey = 'all' | LocalPrStatus | 'conflict';
+// 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
+type FilterKey = 'all' | LocalPrStatus | 'conflict' | 'mergeable';
 
 interface SidebarProps {
   prs: StoredPullRequest[];
@@ -22,6 +22,7 @@ const FILTERS: ReadonlyArray<{ value: FilterKey; label: string }> = [
   { value: 'approved', label: '通过' },
   { value: 'needs_work', label: '需修改' },
   { value: 'conflict', label: '冲突' },
+  { value: 'mergeable', label: '可合并' },
 ];
 
 interface PrGroup {
@@ -63,10 +64,12 @@ export function Sidebar({ prs, selectedId, onSelect, width, onResize }: SidebarP
       approved: 0,
       needs_work: 0,
       conflict: 0,
+      mergeable: 0,
     };
     for (const p of prs) {
-      out[p.localStatus]++;
-      if (p.hasConflict) out.conflict++;
+      out[p.localStatus] += 1;
+      if (p.hasConflict) out.conflict += 1;
+      if (p.mergeStatus?.canMerge) out.mergeable += 1;
     }
     return out;
   }, [prs]);
@@ -76,6 +79,8 @@ export function Sidebar({ prs, selectedId, onSelect, width, onResize }: SidebarP
     return prs.filter((p) => {
       if (filter === 'conflict') {
         if (!p.hasConflict) return false;
+      } else if (filter === 'mergeable') {
+        if (!p.mergeStatus?.canMerge) return false;
       } else if (filter !== 'all' && p.localStatus !== filter) {
         return false;
       }
@@ -149,7 +154,13 @@ export function Sidebar({ prs, selectedId, onSelect, width, onResize }: SidebarP
             type="button"
           >
             {f.label}
-            <span className="count-pill">{counts[f.value]}</span>
+            <span
+              className={`count-pill ${
+                f.value === 'mergeable' && counts.mergeable > 0 ? 'count-pill-mergeable' : ''
+              }`}
+            >
+              {counts[f.value]}
+            </span>
           </button>
         ))}
       </div>

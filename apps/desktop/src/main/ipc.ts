@@ -454,6 +454,22 @@ export function registerIpcHandlers({
     },
   );
 
+  ipcMain.handle(
+    'prs:merge',
+    async (_evt, req: IpcChannels['prs:merge']['request']): Promise<void> => {
+      const pr = await findPrOrThrow(req.localId);
+      const adapter = adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
+      // 合并远端；失败 (冲突 / veto / 权限) 抛出，renderer 提示，本地不变。
+      // 成功后不在此落本地：PR 转 MERGED 会从 pending 消失，靠 renderer 触发的
+      // refresh → poll 软删收尾，避免本地状态与远端各执一词
+      await adapter.mergePullRequest(
+        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+        pr.remoteId,
+      );
+    },
+  );
+
   /**
    * 打开 PR 时镜像就位的保障。优先快速路径：本地 bare 已含 head+base 两个 sha
    * → 直接回 mirrorPath，不打远端。两 sha 都齐意味着上次 sync 已经覆盖了本 PR

@@ -51,6 +51,25 @@
   gap: $space-2;
 }
 
+// "合并" 按钮：分支合并图标 + 文案。绿底实心强调"放行 / 合并"终态动作，跟 review
+// approve 同绿色系但用填充 (区别于 approve 的描边态)；仅在 canMerge 时渲染
+.pr-header-merge {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  background: $color-approved;
+  border-color: $color-approved;
+  color: $text-on-accent;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    filter: brightness(0.93);
+  }
+}
+
 // review 决断按钮组：用 auto margin 顶到右边；wrap 时整组下沉但仍保持右对齐
 .pr-header-actions-right {
   margin-left: auto;
