@@ -13,6 +13,10 @@ out-tsc/
 
 # Electron / packaged binaries
 release/
+
+# 嵌入式 pr-agent 运行时（scripts/assemble-pragent-runtime.mjs 生成；几百 MB、
+# 平台特定的下载+pip 产物，不入库；见 ADR-0008）
+apps/desktop/vendor/
 *.exe
 *.dmg
 *.AppImage

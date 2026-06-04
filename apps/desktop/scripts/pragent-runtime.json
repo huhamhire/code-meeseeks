@@ -1,0 +1,13 @@
+{
+  "_comment": "pr-agent 嵌入式运行时组装清单。被 scripts/assemble-pragent-runtime.mjs 读取，按 tag + pythonMajorMinor 从 GitHub release 解析当前宿主平台的 install_only 资产并装入 vendor/pragent/。见 ADR-0008。",
+  "pythonBuildStandalone": {
+    "repo": "astral-sh/python-build-standalone",
+    "tag": "20260602",
+    "pythonMajorMinor": "3.12",
+    "variant": "install_only"
+  },
+  "prAgent": {
+    "_comment": "与 packages/pr-agent-bridge 的 DEFAULT_DOCKER_IMAGE_TAG 对齐；升级时两处同步",
+    "version": "0.36.0"
+  }
+}

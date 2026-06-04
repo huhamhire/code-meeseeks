@@ -16,6 +16,7 @@
     "start": "electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint src --max-warnings=0",
+    "prepare:pragent": "node scripts/assemble-pragent-runtime.mjs",
     "pack": "electron-vite build && electron-builder --dir",
     "dist": "electron-vite build && electron-builder"
   },
@@ -33,10 +34,27 @@
       "lint": {
         "cache": true
       },
+      "prepare:pragent": {
+        "cache": false,
+        "outputs": [
+          "{projectRoot}/vendor"
+        ]
+      },
       "pack": {
         "cache": false,
         "dependsOn": [
-          "build"
+          "build",
+          "prepare:pragent"
+        ],
+        "outputs": [
+          "{projectRoot}/release"
+        ]
+      },
+      "dist": {
+        "cache": false,
+        "dependsOn": [
+          "build",
+          "prepare:pragent"
         ],
         "outputs": [
           "{projectRoot}/release"
@@ -77,6 +95,8 @@
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "sass": "^1.100.0",
+    "tar": "^7.4.3",
+    "undici": "^6.21.1",
     "vite": "^7.3.0"
   }
 }
