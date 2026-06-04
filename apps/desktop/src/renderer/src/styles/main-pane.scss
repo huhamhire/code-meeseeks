@@ -119,6 +119,16 @@
   flex-shrink: 0;
   padding: 0 $space-6;
   gap: 0;
+  // 容器宽度不够时整组横向滑动，不让单个 tab 被挤压触发文字换行 (会让 tab 栏
+  // 高度从 1 行变 2 行，破坏 main-pane 上半区固定高度的预期)。
+  // overflow-y: hidden 防止纵向出现 scrollbar 影响视觉
+  overflow-x: auto;
+  overflow-y: hidden;
+  // 隐藏横向滚动条但保留滚动能力 — 用户拖也能滑，但视觉上跟原 tab 栏一致
+  scrollbar-width: none; // Firefox
+  &::-webkit-scrollbar {
+    display: none;
+  }
 
   // tab 内嵌的数字角标 (评论数 / 待办数等)。圆角胶囊紧贴文字右侧
   .pr-tab-badge {
@@ -304,6 +314,10 @@
   font-size: $fs-lg;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  // 文字单行 + 不被 flex 容器挤压 — 窄宽度下保持单 tab 完整尺寸，整组靠
+  // .pr-tabs overflow-x 横向滑动而不是文字 wrap (避免 tab 栏高度变化)
+  white-space: nowrap;
+  flex-shrink: 0;
 
   &.active {
     color: $text-body;
@@ -396,6 +410,9 @@
 }
 .pr-comment-foot {
   margin-top: $space-3;
+  display: flex;
+  gap: $space-3;
+  align-items: center;
 }
 .pr-comment-reply-btn {
   padding: 2px $space-4;
@@ -409,6 +426,54 @@
     border-color: $color-accent;
     color: $color-info;
     background: $bg-hover;
+  }
+}
+// 删除按钮：跟回复按钮同尺寸，主色用 danger 让用户一眼识别为破坏性操作。
+// 二次确认走 ConfirmModal，按钮上不再加 hover-only 隐藏 (避免误以为没这功能)
+.pr-comment-delete-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-danger;
+    color: $color-danger;
+    background: rgba(244, 135, 113, 0.08);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+// 删除失败 inline 红条
+.pr-comment-delete-error {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  margin-top: $space-3;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba(244, 135, 113, 0.10);
+  border-left: 3px solid $color-danger;
+  border-radius: $radius-sm;
+  word-break: break-word;
+}
+.pr-comment-delete-error-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: $color-danger;
+  cursor: pointer;
+  padding: 0 $space-2;
+  font-size: $fs-md;
+  line-height: 1;
+  flex-shrink: 0;
+  &:hover {
+    opacity: 0.7;
   }
 }
 .comment-reply-editor {

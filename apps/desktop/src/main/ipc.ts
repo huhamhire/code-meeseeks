@@ -30,6 +30,7 @@ import type {
   AppInfo,
   ConnectionSummary,
   IpcChannels,
+  PlatformAdapter,
   PrAgentStatus,
   PrComment,
   PragentRunInfo,
@@ -528,6 +529,7 @@ export function registerIpcHandlers({
           { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
           pr.remoteId,
         )
+        .then((raw) => annotateCanDelete(raw, adapter))
         .then(async (fresh) => {
           await writeCommentsCache(stateStore, pr.localId, {
             comments: fresh,
@@ -1338,6 +1340,43 @@ function languageDirectiveFor(lang: string): string {
     return 'Respond in Traditional Chinese (繁體中文). All section labels, table headers, column names, headings, and content MUST be in Chinese.';
   }
   return '';
+}
+
+/**
+ * 给每条评论 (含 replies 子树) 打 canDelete 标志：
+ *   - author.name === 当前 PAT 用户 (adapter.getCurrentUser())
+ *   - 无 reply (BBS 拒删带 reply 的)
+ *   - version 字段存在 (DELETE 必备乐观锁)
+ *
+ * 当前用户拿不到 (ping 未完成) → 全部 canDelete=false。renderer 直接读
+ * comment.canDelete 不再自己比对 author / version / replies，链路最短最稳。
+ */
+function annotateCanDelete(
+  comments: PrComment[],
+  adapter: PlatformAdapter,
+): PrComment[] {
+  const me = adapter.getCurrentUser();
+  if (!me) {
+    return setCanDeleteRecursive(comments, () => false);
+  }
+  return setCanDeleteRecursive(comments, (c) => {
+    return (
+      c.author.name === me.name &&
+      c.replies.length === 0 &&
+      typeof c.version === 'number'
+    );
+  });
+}
+
+function setCanDeleteRecursive(
+  comments: PrComment[],
+  judge: (c: PrComment) => boolean,
+): PrComment[] {
+  return comments.map((c) => ({
+    ...c,
+    canDelete: judge(c),
+    replies: setCanDeleteRecursive(c.replies, judge),
+  }));
 }
 
 function buildAppInfo(bootstrap: BootstrapResult): AppInfo {

@@ -23,6 +23,7 @@ import { DraftZone } from './DraftZone';
 import { ErrorBoundary } from './ErrorBoundary';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { CommentReplyEditor } from './CommentReplyEditor';
+import { ConfirmModal } from './ConfirmModal';
 import { FileTree } from './FileTree';
 
 interface DiffViewProps {
@@ -43,8 +44,6 @@ interface DiffViewProps {
     anchor: { path: string; startLine: number; endLine: number };
   } | null;
   onNavConsumed?: () => void;
-  /** 当前 PAT 用户名，inline CommentZone 里用作"作者==自己" 判定显示删除按钮 */
-  currentUserName?: string | null;
 }
 
 interface LoadedContent {
@@ -733,7 +732,7 @@ export function DiffView({
         }
       });
     };
-  }, [diffEditor, comments, content, selected, pr.connectionId, attachmentBase]);
+  }, [diffEditor, comments, content, selected, pr.connectionId, attachmentBase, pr.localId]);
 
   // M4: 内联草稿 view zones (蓝底，editable)。跟 comments 同套机制：
   // - filter drafts by selected.path / oldPath
@@ -1495,6 +1494,31 @@ function CommentNode({
     [attachmentBase, prLocalId],
   );
   const [replyOpen, setReplyOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // canDelete main 端已经预判好 (作者匹配 + 无 reply + 有 version 三条全过)
+  const canDelete = comment.canDelete === true;
+
+  const handleDelete = async (): Promise<void> => {
+    if (!canDelete || comment.version === undefined) return;
+    setConfirmDelete(false);
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await invoke('comments:delete', {
+        localId: prLocalId,
+        commentId: comment.remoteId,
+        version: comment.version,
+      });
+      // 成功 → main 端清 cache + 广播 comments:changed → DiffView 重拉评论树 →
+      // 顶层 useEffect 重建 zones → 本 zone 被销毁，没必要本地清状态
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : String(e));
+      setDeleting(false);
+    }
+  };
   // body 只包 author + 正文 + 回复按钮 / 编辑器；replies 作为 sibling 放外面 —
   // 不让 hover 内层 replies 冒泡触发外层 :hover 导致所有祖先 reply 按钮一齐显示
   const inner = (
@@ -1515,7 +1539,8 @@ function CommentNode({
             {comment.body}
           </ReactMarkdown>
         </div>
-        {/* 回复按钮：默认 hidden，hover comment-zone-item-body 时显示 (CSS 控制) */}
+        {/* 回复 / 删除按钮：默认 hidden，hover comment-zone-item-body 时显示 (CSS 控制)。
+            删除按钮只在评论作者==当前用户、无 reply、有 version 时显示 */}
         {!replyOpen && (
           <div className="comment-zone-foot">
             <button
@@ -1525,6 +1550,17 @@ function CommentNode({
             >
               回复
             </button>
+            {canDelete && (
+              <button
+                type="button"
+                className="comment-zone-delete-btn"
+                onClick={() => setConfirmDelete(true)}
+                disabled={deleting}
+                title="删除自己发布的评论 (远端同步)"
+              >
+                {deleting ? '删除中…' : '删除'}
+              </button>
+            )}
           </div>
         )}
         {replyOpen && (
@@ -1534,6 +1570,20 @@ function CommentNode({
             onCancel={() => setReplyOpen(false)}
             onPosted={() => setReplyOpen(false)}
           />
+        )}
+        {deleteError && (
+          <div className="comment-zone-delete-error" role="alert">
+            删除失败：{deleteError}
+            <button
+              type="button"
+              className="comment-zone-delete-error-dismiss"
+              onClick={() => setDeleteError(null)}
+              aria-label="关闭错误"
+              title="知道了"
+            >
+              ✕
+            </button>
+          </div>
         )}
       </div>
       {comment.replies.map((r) => (
@@ -1546,6 +1596,17 @@ function CommentNode({
           prLocalId={prLocalId}
         />
       ))}
+      {confirmDelete && (
+        <ConfirmModal
+          title="删除评论"
+          message="此操作会删除远端 BBS 上的这条评论，且无法恢复。确定继续吗？"
+          confirmLabel="删除"
+          cancelLabel="取消"
+          danger
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </>
   );
   if (depth === 0) return inner;

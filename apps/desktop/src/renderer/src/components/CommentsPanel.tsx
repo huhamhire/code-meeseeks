@@ -8,14 +8,13 @@ import { formatBackendError, type FormattedError } from '../errors';
 import { Avatar } from './Avatar';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { CommentReplyEditor } from './CommentReplyEditor';
+import { ConfirmModal } from './ConfirmModal';
 import { InlineCodeContext } from './InlineCodeContext';
 
 interface CommentsPanelProps {
   pr: StoredPullRequest;
   /** 拉取成功后回调，把顶层评论数 (不含 replies) 报给父组件用于 tab 角标 */
   onCommentsLoaded?: (count: number) => void;
-  /** 当前 PAT 用户名 — 评论作者匹配时显示 "删除" 按钮。null 时不显示删除 UI */
-  currentUserName?: string | null;
 }
 
 /**
@@ -146,6 +145,33 @@ function CommentItem({
     [pr.localId],
   );
   const [replyOpen, setReplyOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // 删除条件 main 端预判好了 (annotateCanDelete)：作者匹配 + 无 reply + 有
+  // version 三条都过才标 true。renderer 直读 flag，不再自己比对 currentUserName
+  const canDelete = comment.canDelete === true;
+
+  const handleDelete = async (): Promise<void> => {
+    if (!canDelete || comment.version === undefined) return;
+    setConfirmDelete(false);
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await invoke('comments:delete', {
+        localId: pr.localId,
+        commentId: comment.remoteId,
+        version: comment.version,
+      });
+      // 成功 → main 端清 cache + 广播 comments:changed → 本面板 useEffect 重拉，
+      // 这条评论自然从列表里消失，不用手动维护本地 state
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : String(e));
+      setDeleting(false);
+    }
+  };
+
   return (
     <li className={`pr-comment pr-comment-depth-${String(depth)}`}>
       <div className="pr-comment-head">
@@ -195,7 +221,34 @@ function CommentItem({
             回复
           </button>
         )}
+        {/* 删除按钮在 reply 按钮右侧，跟"回复"风格对齐 — 都是 hover 显，避免常驻
+            占视觉。disable 期间文案变"删除中…" */}
+        {canDelete && !replyOpen && (
+          <button
+            type="button"
+            className="pr-comment-delete-btn"
+            onClick={() => setConfirmDelete(true)}
+            disabled={deleting}
+            title="删除自己发布的评论 (远端同步)"
+          >
+            {deleting ? '删除中…' : '删除'}
+          </button>
+        )}
       </div>
+      {deleteError && (
+        <div className="pr-comment-delete-error" role="alert">
+          删除失败：{deleteError}
+          <button
+            type="button"
+            className="pr-comment-delete-error-dismiss"
+            onClick={() => setDeleteError(null)}
+            aria-label="关闭错误"
+            title="知道了"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {replyOpen && (
         <CommentReplyEditor
           prLocalId={pr.localId}
@@ -210,6 +263,17 @@ function CommentItem({
             <CommentItem key={r.remoteId} comment={r} pr={pr} depth={depth + 1} />
           ))}
         </ul>
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          title="删除评论"
+          message="此操作会删除远端 BBS 上的这条评论，且无法恢复。确定继续吗？"
+          confirmLabel="删除"
+          cancelLabel="取消"
+          danger
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setConfirmDelete(false)}
+        />
       )}
     </li>
   );

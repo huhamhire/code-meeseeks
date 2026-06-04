@@ -1,6 +1,50 @@
 import type { StoredPullRequest } from '@pr-pilot/shared';
 import { Avatar } from './Avatar';
 
+/** 作者行前缀：头肩剪影，跟 meta gutter 左对齐 */
+function PersonIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="5" r="2.5" />
+      <path d="M3 13c0-2.5 2.2-4 5-4s5 1.5 5 4" />
+    </svg>
+  );
+}
+
+/** 分支行前缀：git pull-request 字形，暗示源→目标 */
+function PullRequestIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="4" cy="4" r="1.6" />
+      <circle cx="4" cy="12" r="1.6" />
+      <line x1="4" y1="5.6" x2="4" y2="10.4" />
+      <circle cx="12" cy="12" r="1.6" />
+      <path d="M12 10.4 V7 a3 3 0 0 0 -3 -3 H6.5" />
+      <path d="M8 2 L6 4 L8 6" />
+    </svg>
+  );
+}
+
 interface PrItemProps {
   pr: StoredPullRequest;
   selected: boolean;
@@ -40,7 +84,10 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
         </div>
         <div className="pr-item-meta">
           <div className="pr-item-meta-row">
-            <span className="pr-item-meta-author">{pr.author.displayName}</span>
+            <span className="pr-item-meta-author">
+              <PersonIcon />
+              {pr.author.displayName}
+            </span>
             {(approvedCount > 0 || needsWorkCount > 0) && (
               <span className="pr-item-review-chips">
                 {approvedCount > 0 && (
@@ -64,6 +111,7 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
           </div>
           <div className="pr-item-meta-row">
             <span className="pr-item-meta-branch">
+              <PullRequestIcon />
               {pr.sourceRef.displayId} → {pr.targetRef.displayId}
             </span>
           </div>

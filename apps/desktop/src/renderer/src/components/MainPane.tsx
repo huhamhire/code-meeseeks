@@ -130,11 +130,6 @@ interface MainPaneProps {
     findingId?: string;
     anchor: { path: string; startLine: number; endLine: number };
   }) => void;
-  /**
-   * 当前 PR 所属 connection 的 PAT 用户名 — CommentsPanel / DiffView 据此判定
-   * "评论作者 == 当前用户" 显示"删除"按钮。null = 未知 (ping 失败 / 还在加载)
-   */
-  currentUserName?: string | null;
 }
 
 type Tab = 'diff' | 'comments' | 'drafts' | 'commits' | 'info';
@@ -146,7 +141,6 @@ export function MainPane({
   pendingDiffNav,
   onDiffNavConsumed,
   onRequestDiffNav,
-  currentUserName,
 }: MainPaneProps) {
   const [tab, setTab] = useState<Tab>('diff');
   // 收到跳转请求 → 强制切到 Diff tab，DiffView 自己负责消费 anchor
@@ -464,15 +458,10 @@ export function MainPane({
             showWhitespace={showWhitespace}
             pendingNav={pendingDiffNav ?? null}
             onNavConsumed={onDiffNavConsumed}
-            currentUserName={currentUserName ?? null}
           />
         )}
         {tab === 'comments' && (
-          <CommentsPanel
-            pr={pr}
-            onCommentsLoaded={(n) => setCommentCount(n)}
-            currentUserName={currentUserName ?? null}
-          />
+          <CommentsPanel pr={pr} onCommentsLoaded={(n) => setCommentCount(n)} />
         )}
         {tab === 'drafts' && (
           <DraftsPanel

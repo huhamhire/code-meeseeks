@@ -210,6 +210,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+
+  // 图标前缀：固定列宽对齐 author/branch 两行，不随文字省略号缩没
+  svg {
+    flex: 0 0 auto;
+    margin-right: $space-2;
+    vertical-align: -2px;
+    opacity: 0.75;
+  }
 }
 
 // chip 推右贴边 + 不可缩 — 长 author 时 chip 仍可见

@@ -230,14 +230,6 @@ export default function App() {
           pendingDiffNav={pendingDiffNav}
           onDiffNavConsumed={() => setPendingDiffNav(null)}
           onRequestDiffNav={(target) => setPendingDiffNav(target)}
-          // 当前 PR 所属 connection 的 PAT 用户名 — 用于 "评论作者 == 当前用户"
-          // 判定，决定是否在评论上显示 "删除" 按钮。ping 未完成 / 失败时 null
-          currentUserName={
-            selected
-              ? (boot.connections.find((c) => c.connectionId === selected.connectionId)?.user
-                  ?.name ?? null)
-              : null
-          }
         />
         {/* ChatPane 始终挂载，折叠只是 CSS 隐藏：保住运行中的 run 生命周期。
             如果走条件渲染，折叠 = 卸载组件，进行中的计时器 / runProgress 订阅

@@ -45,12 +45,16 @@
   cursor: zoom-in !important;
 }
 
-// 回复按钮：默认 hidden，hover 父评论时显示，避免常驻占视觉
+// 回复 / 删除按钮：默认 hidden，hover 父评论时显示，避免常驻占视觉
 .comment-zone-foot {
   margin-top: $space-2;
   min-height: 22px; // 占位防 hover 抖动
+  display: flex;
+  gap: $space-3;
+  align-items: center;
 }
-.comment-zone-reply-btn {
+.comment-zone-reply-btn,
+.comment-zone-delete-btn {
   padding: 2px $space-3;
   font-size: $fs-sm;
   background: transparent;
@@ -60,16 +64,58 @@
   cursor: pointer !important;
   opacity: 0;
   transition: opacity 0.12s, border-color 0.12s, color 0.12s;
-  &:hover {
-    border-color: $color-accent;
-    color: $color-info;
-  }
 }
-// hover comment body 区时显示 reply 按钮
+.comment-zone-reply-btn:hover {
+  border-color: $color-accent;
+  color: $color-info;
+}
+// 删除按钮主色用 danger，跟回复按钮拉开语义；disabled 时半透明
+.comment-zone-delete-btn:hover:not(:disabled) {
+  border-color: $color-danger;
+  color: $color-danger;
+  background: rgba(244, 135, 113, 0.08);
+}
+.comment-zone-delete-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed !important;
+}
+// hover comment body 区时显示 foot 里的所有按钮
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-reply-btn,
+.comment-zone-item-body:hover > .comment-zone-foot .comment-zone-delete-btn,
 .comment-zone-foot:focus-within .comment-zone-reply-btn,
-.comment-zone-reply-btn:focus {
+.comment-zone-foot:focus-within .comment-zone-delete-btn,
+.comment-zone-reply-btn:focus,
+.comment-zone-delete-btn:focus {
   opacity: 1;
+}
+
+// 删除失败 inline 红条 (跟 .pr-comment-delete-error 同模)
+.comment-zone-delete-error {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  margin-top: $space-3;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba(244, 135, 113, 0.10);
+  border-left: 3px solid $color-danger;
+  border-radius: $radius-sm;
+  word-break: break-word;
+}
+.comment-zone-delete-error-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: $color-danger;
+  cursor: pointer !important;
+  padding: 0 $space-2;
+  font-size: $fs-md;
+  line-height: 1;
+  flex-shrink: 0;
+  &:hover {
+    opacity: 0.7;
+  }
 }
 .monaco-comment-zone-inner {
   background: $bg-panel-alt;

@@ -374,6 +374,16 @@
   font-family: $font-mono;
   font-variant-numeric: tabular-nums;
 }
+// 开始时间：纯文本不带胶囊背景；margin-left:auto 顶到 chip 队列最右，把视觉
+// 权重让给左侧主信息 (tool/状态/strategy/时长)，自己只作为 "什么时候跑的" 标注
+.chat-run-time {
+  margin-left: auto;
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  font-size: $fs-xs;
+  color: $text-muted;
+  white-space: nowrap;
+}
 .chat-run-status {
   display: inline-flex;
   align-items: center;

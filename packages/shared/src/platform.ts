@@ -106,6 +106,17 @@ export interface PrComment {
    * adapter 实现时按需带上 / 兜底 0
    */
   version?: number;
+  /**
+   * main 端预判的"是否可由当前 PAT 用户删除"。综合：
+   *   - author.name === currentUser.name (PAT 缓存)
+   *   - replies.length === 0 (BBS 拒删有 reply 的)
+   *   - version 字段存在 (DELETE 必备乐观锁)
+   *
+   * renderer 端不再自己比对作者名 / 检查 reply / 检查 version — 直接读这个 flag。
+   * 跨 PR / 跨 connection 时，main 端用 PR 所属 adapter 的 cachedUser 判断，
+   * renderer 不需要透传 currentUserName
+   */
+  canDelete?: boolean;
 }
 
 /**

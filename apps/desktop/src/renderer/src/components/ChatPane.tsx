@@ -1132,6 +1132,14 @@ function RunningView({
         </span>
         <span className="chat-run-chip">{strategy === 'docker' ? 'Docker' : 'CLI'}</span>
         <span className="chat-run-chip chat-run-duration">{formatElapsed(elapsedMs)}</span>
+        {/* 开始时间：跟 RunMeta 同模 — 纯文本右对齐，让 running 跟 succeeded
+            两态最右侧元素位置稳定 */}
+        <span
+          className="chat-run-time"
+          title={`开始于 ${new Date(startedAt).toLocaleString()}`}
+        >
+          {formatStartTime(startedAt)}
+        </span>
       </header>
       {phase && <div className="chat-run-phase">{phase}</div>}
       <AnsiPre
@@ -1509,10 +1517,10 @@ function RunMeta({ run }: { run: ReviewRun }) {
         </span>
       ) : null}
       <span className="chat-run-chip chat-run-duration">{duration}</span>
-      {/* 开始时间顶到最右：跟左侧 tool/status/strategy 拉开距离。
-          finishedAt - duration ≈ startedAt 但直接读 run.startedAt 更准 */}
+      {/* 开始时间：纯文本不带胶囊背景，margin-left:auto 顶到最右 — 跟左侧
+          tool/status/strategy chip 拉开距离，视觉权重比 chip 轻一档 */}
       <span
-        className="chat-run-chip chat-run-time"
+        className="chat-run-time"
         title={`开始于 ${new Date(run.startedAt).toLocaleString()}`}
       >
         {formatStartTime(run.startedAt)}
@@ -1522,12 +1530,13 @@ function RunMeta({ run }: { run: ReviewRun }) {
 }
 
 /**
- * 把 ISO 时间戳格式化为 "HH:MM:SS" (当天) 或 "MM-DD HH:MM" (跨日)，跟 chip
- * 空间预算匹配。用户主要看"哪一次跑的"，秒粒度足够区分相邻 run；隔天的 run
- * 加日期标识让历史 run 列表里能立刻分组
+ * 把时间戳格式化为 "HH:MM:SS" (当天) 或 "MM-DD HH:MM" (跨日)。用户主要看"哪一次
+ * 跑的"，秒粒度足够区分相邻 run；隔天的 run 加日期标识让历史 run 列表里能立刻
+ * 分组。接受 ISO 字符串 (持久化 ReviewRun.startedAt) 或毫秒时间戳 (RunningView
+ * 端把 ISO 转过的 Date.getTime())
  */
-function formatStartTime(iso: string): string {
-  const d = new Date(iso);
+function formatStartTime(input: string | number): string {
+  const d = new Date(input);
   const now = new Date();
   const sameDay =
     d.getFullYear() === now.getFullYear() &&
