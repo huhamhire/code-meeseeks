@@ -14,6 +14,26 @@ import { registerIpcHandlers } from './ipc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * 嵌入式 pr-agent 运行时的解释器绝对路径（见 ADR-0008）。
+ * - dev：`apps/desktop/vendor/pragent/...`（app.getAppPath() = apps/desktop）
+ * - 打包：`<resources>/pragent/...`（electron-builder extraResources）
+ * - `PRPILOT_PRAGENT_PYTHON` env 覆盖兜底
+ * 探测层据此判断 embedded 是否可用（文件不存在则回退 local-cli/docker）。
+ */
+function resolveEmbeddedPython(): string {
+  const override = process.env.PRPILOT_PRAGENT_PYTHON;
+  if (override) return override;
+  const rel =
+    process.platform === 'win32'
+      ? ['python', 'python.exe']
+      : ['python', 'bin', 'python3'];
+  const base = app.isPackaged
+    ? path.join(process.resourcesPath, 'pragent')
+    : path.join(app.getAppPath(), 'vendor', 'pragent');
+  return path.join(base, ...rel);
+}
+
 let bootstrap: BootstrapResult;
 let logger: Logger;
 let prAgentStatus: PrAgentStatus;
@@ -30,7 +50,10 @@ async function start(): Promise<void> {
     'pr-pilot main process started',
   );
 
-  const probe = await createPrAgentBridge();
+  const probe = await createPrAgentBridge({
+    embeddedPythonPath: resolveEmbeddedPython(),
+    forceStrategy: bootstrap.config.pr_agent.strategy,
+  });
   prAgentStatus = probe.status;
   prAgentBridge = probe.bridge;
   logger.info(

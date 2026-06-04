@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DockerBridge, LocalCliBridge } from '../src/bridge.js';
+import { DockerBridge, EmbeddedRuntimeBridge, LocalCliBridge } from '../src/bridge.js';
 import type { ExecFn, ExecOptions, PrAgentRunResult } from '../src/types.js';
 
 /** 收集所有 exec 调用便于断言 cmd / args / env / timeoutMs */
@@ -109,6 +109,57 @@ describe('LocalCliBridge', () => {
     await bridge.review({ prUrl: 'unused', cwd: '/tmp/wt' });
     expect(calls[0]!.args).toEqual(['--pr_url', '', 'review']);
     expect(calls[0]!.opts.env).toEqual({ CONFIG__GIT_PROVIDER: 'local' });
+  });
+});
+
+describe('EmbeddedRuntimeBridge', () => {
+  const PY = '/app/vendor/pragent/python/bin/python3';
+
+  it('local-mode: 用嵌入式解释器 -m pr_agent.cli + target branch + local provider', async () => {
+    const { exec, calls } = makeRecordingExec();
+    const bridge = new EmbeddedRuntimeBridge('embedded Python 3.12.13', PY, exec);
+    await bridge.review({
+      prUrl: 'unused',
+      cwd: '/tmp/wt/abc',
+      targetBranch: 'pr-pilot/base',
+      env: { OPENAI__KEY: 'sk' },
+    });
+    expect(calls[0]!.cmd).toBe(PY);
+    expect(calls[0]!.args).toEqual([
+      '-m',
+      'pr_agent.cli',
+      '--pr_url',
+      'pr-pilot/base',
+      'review',
+    ]);
+    expect(calls[0]!.opts.cwd).toBe('/tmp/wt/abc');
+    expect(calls[0]!.opts.env).toEqual({ OPENAI__KEY: 'sk', CONFIG__GIT_PROVIDER: 'local' });
+  });
+
+  it('extraArgs 追加在末尾', async () => {
+    const { exec, calls } = makeRecordingExec();
+    const bridge = new EmbeddedRuntimeBridge('v', PY, exec);
+    await bridge.review({
+      prUrl: 'unused',
+      cwd: '/tmp/wt',
+      targetBranch: 'base',
+      extraArgs: ['--config_file', '/tmp/c.toml'],
+    });
+    expect(calls[0]!.args).toEqual([
+      '-m',
+      'pr_agent.cli',
+      '--pr_url',
+      'base',
+      'review',
+      '--config_file',
+      '/tmp/c.toml',
+    ]);
+  });
+
+  it('strategy + version 暴露', () => {
+    const bridge = new EmbeddedRuntimeBridge('embedded Python 3.12.13', PY, makeRecordingExec().exec);
+    expect(bridge.strategy).toBe('embedded');
+    expect(bridge.version).toBe('embedded Python 3.12.13');
   });
 });
 

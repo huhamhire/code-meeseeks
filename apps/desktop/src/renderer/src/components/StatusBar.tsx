@@ -519,17 +519,23 @@ function formatRelative(date: Date): string {
 
 function PrAgentChip({ status }: { status: PrAgentStatus }) {
   if (status.available) {
-    // version 来自 detect: docker 策略是 pinned image tag (e.g., pragent/pr-agent:0.36.0)，
-    // local-cli 是 `pr-agent --help` 首行 (通常 usage 提示)。chip 上紧凑显示：
-    // - docker → 提取 tag 数字 (`pragent/pr-agent:0.36.0` → `0.36.0`)
-    // - local-cli → 截短到首个空白前 (避免长 usage 文本撑爆 chip)
+    // chip 只显示 pr-agent 版本，不显示 strategy（embedded/docker/local-cli 对用户无意义；
+    // 完整 strategy + version 放 hover title）。version 来自 detect：
+    // - docker → pinned image tag `pragent/pr-agent:0.36.0` → 取 `0.36.0`
+    // - embedded → `pr-agent 0.36.0` → 取 `0.36.0`
+    // - local-cli → `pr-agent --help` 首行，截到首个空白前（避免长 usage 撑爆 chip）
     const ver =
       status.strategy === 'docker'
         ? (status.version.split(':').pop() ?? status.version)
-        : status.version.split(/\s+/)[0] || status.version;
+        : status.strategy === 'embedded'
+          ? status.version.replace(/^pr-agent\s+/, '')
+          : status.version.split(/\s+/)[0] || status.version;
     return (
-      <span className="statusbar-chip statusbar-chip-ok" title={status.version}>
-        PR Agent: {status.strategy} · {ver}
+      <span
+        className="statusbar-chip statusbar-chip-ok"
+        title={`${status.strategy} · ${status.version}`}
+      >
+        PR Agent: {ver}
       </span>
     );
   }

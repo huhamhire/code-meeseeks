@@ -114,6 +114,49 @@ export class LocalCliBridge extends BaseBridge {
 }
 
 /**
+ * 走随 app 打包的嵌入式 Python 运行时（见 ADR-0008）：用 `<vendor>/python -m
+ * pr_agent.cli` 跑 pr-agent，免除用户预装 Python / Docker。
+ *
+ * 形态与 LocalCli 的 local 模式一致（local provider，cwd=worktree，
+ * CONFIG__GIT_PROVIDER=local），区别仅在 cmd 指向嵌入式解释器绝对路径 +
+ * `-m pr_agent.cli`。嵌入式运行时只用于本地 worktree，所以 cwd 恒被设置；
+ * 万一未设也兜底走远端 `--pr_url <prUrl>`（与 LocalCli 对齐）。
+ */
+export class EmbeddedRuntimeBridge extends BaseBridge {
+  readonly strategy = 'embedded' as const;
+
+  constructor(
+    version: string,
+    private readonly pythonPath: string,
+    exec: ExecFn = defaultExec,
+  ) {
+    super(version, exec);
+  }
+
+  protected buildInvocation(opts: PrAgentRunOptions): {
+    cmd: string;
+    args: string[];
+    env?: Record<string, string>;
+    cwd?: string;
+  } {
+    const cli = ['-m', 'pr_agent.cli'];
+    if (opts.cwd) {
+      return {
+        cmd: this.pythonPath,
+        args: [...cli, '--pr_url', opts.targetBranch ?? '', opts.tool, ...(opts.extraArgs ?? [])],
+        env: { ...(opts.env ?? {}), CONFIG__GIT_PROVIDER: 'local' },
+        cwd: opts.cwd,
+      };
+    }
+    return {
+      cmd: this.pythonPath,
+      args: [...cli, '--pr_url', opts.prUrl, opts.tool, ...(opts.extraArgs ?? [])],
+      env: opts.env,
+    };
+  }
+}
+
+/**
  * 走 docker run，把 pr-agent 装在容器里跑。
  * 命令形态：`docker run --rm [-e KEY=VAL ...] <image> --pr_url <url> <tool> [extra...]`
  * env 必须以 `-e` 注入容器；spawn 自己的 env 留空（容器看不到宿主 env）。

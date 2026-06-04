@@ -101,6 +101,18 @@ export const ConfigSchema = z.object({
       interval_seconds: z.number().int().min(30).default(300),
     })
     .default({}),
+  /**
+   * pr-agent 运行时策略选择（见 ADR-0008）。
+   * - 'auto'（默认）：优先嵌入式运行时（随 app 打包，正常安装恒可用），缺失则
+   *   回退探测 local-cli → docker；
+   * - 显式 'embedded' / 'local-cli' / 'docker'：强制该策略，便于高级用户切到
+   *   自有 Docker / 系统 CLI。
+   */
+  pr_agent: z
+    .object({
+      strategy: z.enum(['auto', 'embedded', 'local-cli', 'docker']).default('auto'),
+    })
+    .default({}),
   connections: z.array(ConnectionSchema).default([]),
   llm: z.preprocess(
     // 兼容旧 single-config 形态：M3-C 初版用过 { provider, base_url, model, api_key }
