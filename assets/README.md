@@ -10,9 +10,17 @@
 
 ## 图标接入
 
-产品图标源放 `icons/`，导出 Windows `.ico`（含 16/32/48/256）到
-`apps/desktop/build/icon.ico`，electron-builder 会自动用作应用 / 安装包图标
-（macOS 用 `.icns`）。
+产品图标源 `icons/icon.png`（1024×1024），导出的 Windows `icons/icon.ico`（含 16/32/48/256）
+由 electron-builder 显式引用（`win.icon: ../../assets/icons/icon.ico`）；macOS / Linux
+直接用 `icon.png`（mac 构建时转 `.icns`）。
+
+> 不放 `apps/desktop/build/`：该目录被 `.gitignore` 忽略，故图标统一放本资源目录、显式引用。
+
+重新生成 `.ico`（PNG 改动后）：
+
+```bash
+npx --yes png-to-ico assets/icons/icon.png > assets/icons/icon.ico
+```
 
 ## LFS 提示
 

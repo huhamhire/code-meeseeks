@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- 嵌入式 Python 会加载未由 Apple 签名的第三方 .dylib/.so（litellm /
+       pydantic-core / tiktoken 等原生扩展）。hardened runtime 下必须放开库校验，
+       否则 Gatekeeper 杀掉 spawn 出来的 python 子进程。见 docs/mac-build.md -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- Electron / V8 需要可执行内存（JIT） -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+  <!-- 子进程继承父进程 entitlements（spawn python 时需要） -->
+  <key>com.apple.security.inherit</key>
+  <true/>
+</dict>
+</plist>

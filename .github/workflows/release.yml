@@ -1,0 +1,73 @@
+# 发布 workflow —— tag 触发，自动出 Windows + macOS(arm64) 安装包并挂到 GitHub Release。
+#
+# 免费路线（当前）：仓库无 Apple 签名 secrets → mac 包由 afterPack 做 ad-hoc 签名
+# （arm64 能跑，含嵌入式 python），但不公证，用户首次需"仍要打开"。见 docs/mac-build.md。
+#
+# 升级到公证（将来有 Apple Developer ID）：把下列 secrets 配进仓库即可，workflow 不用改——
+# afterPack 检测到凭据会自动让位给 electron-builder 的正式签名 + 公证：
+#   MAC_CSC_LINK            Developer ID 证书 .p12 的 base64
+#   MAC_CSC_KEY_PASSWORD    .p12 密码
+#   APPLE_API_KEY           App Store Connect API key .p8 的 base64（或路径）
+#   APPLE_API_KEY_ID / APPLE_API_ISSUER
+# 并在 electron-builder.yml mac 段加 hardenedRuntime / entitlements / notarize。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # 创建 Release + 上传产物
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifacts: apps/desktop/release/*.exe
+          - os: macos-14 # arm64 runner，原生构建 mac arm64
+            artifacts: apps/desktop/release/*.dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true # 拉 LFS 图标（assets/icons/icon.ico 等），否则只是指针 → 构建失败
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建 + 出包
+        shell: bash # win/mac 统一用 bash，保证多行命令 fail-fast
+        working-directory: apps/desktop
+        run: |
+          npm run prepare:pragent   # 组装当前平台的嵌入式 pr-agent 运行时
+          npm run build             # electron-vite build
+          npx electron-builder --publish never
+        env:
+          # 有则走正式签名 + 公证，无则 afterPack ad-hoc（见文件头注释）
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      - name: 上传到 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifacts }}
+          fail_on_unmatched_files: true

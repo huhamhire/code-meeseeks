@@ -6,6 +6,10 @@ copyright: Copyright © 2026 huhamhire
 # 推算出 electron 实际版本，必须显式声明（保持与 devDependencies 一致）。
 electronVersion: 42.3.0
 
+# macOS 免费路线：对打出的 .app 做 ad-hoc 递归签名（arm64 必需，含嵌入式 python）。
+# 有 Apple 签名凭据 env 时自动跳过，交回正式签名 + 公证。win/linux 无动作。
+afterPack: build-resources/after-pack.cjs
+
 directories:
   output: release
   buildResources: build
@@ -52,15 +56,23 @@ win:
   artifactName: code-meeseeks-${version}-win-${arch}.${ext}
 
 mac:
+  # 给 ≥512 的 PNG，mac 构建时 electron-builder 自动转 .icns（无需在 Windows 上造 icns）
+  icon: ../../assets/icons/icon.png
+  gatekeeperAssess: false
+  # 免费路线（无 Apple Developer ID，不公证）：ad-hoc 递归签名由 afterPack 完成
+  # （arm64 上 Mach-O 必须签名才能跑，含嵌入式 python）。有真证书 env 时 afterPack
+  # 自动跳过、交回 electron-builder 走正式签名 + 公证（届时再加 hardenedRuntime /
+  # entitlements / notarize，见 docs/mac-build.md + build-resources/entitlements.mac.plist）
   target:
     - target: dmg
+      # 初版仅 arm64（见 ADR-0008）；需要 Intel 时再加 x64
       arch:
         - arm64
-        - x64
   category: public.app-category.developer-tools
   artifactName: code-meeseeks-${version}-mac-${arch}.${ext}
 
 linux:
+  icon: ../../assets/icons/icon.png
   target:
     - target: AppImage
       arch:
