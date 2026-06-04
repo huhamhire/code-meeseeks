@@ -297,8 +297,49 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
       reviewers: [
         { name: 'reviewer1', displayName: 'Reviewer One', slug: 'reviewer1', status: 'approved' },
       ],
+      mergeStatus: { canMerge: true, conflicted: false, vetoes: [] },
       hasConflict: false,
     });
+  });
+
+  it('maps /merge vetoes into mergeStatus (canMerge=false + 逐条原因)', async () => {
+    const adapter = makeAdapter(
+      mockFetch({
+        '/rest/api/1.0/dashboard/pull-requests': () => ({
+          size: 1,
+          limit: 50,
+          isLastPage: true,
+          start: 0,
+          values: [samplePR],
+        }),
+        '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022/merge': () => ({
+          canMerge: false,
+          conflicted: false,
+          outcome: 'CLEAN',
+          vetoes: [
+            {
+              summaryMessage: 'Not all required reviewers have approved',
+              detailedMessage: 'Missing mandatory approvals from [vista]',
+            },
+            { summaryMessage: 'Requires successful build' },
+          ],
+        }),
+      }),
+    );
+    const prs = await adapter.listPendingPullRequests();
+    expect(prs[0]!.mergeStatus).toEqual({
+      canMerge: false,
+      conflicted: false,
+      vetoes: [
+        {
+          summary: 'Not all required reviewers have approved',
+          detail: 'Missing mandatory approvals from [vista]',
+        },
+        { summary: 'Requires successful build', detail: undefined },
+      ],
+    });
+    // 无冲突但有 veto：hasConflict 仍为 false，阻塞原因只在 mergeStatus 里
+    expect(prs[0]!.hasConflict).toBe(false);
   });
 
   it('maps conflicted PR with hasConflict=true', async () => {

@@ -89,6 +89,7 @@ function makePr(id: string, updatedAt: string, title = `PR ${id}`): PullRequest 
     createdAt: '2026-05-28T00:00:00.000Z',
     updatedAt,
     reviewers: [],
+    mergeStatus: { canMerge: true, conflicted: false, vetoes: [] },
     hasConflict: false,
   };
 }
