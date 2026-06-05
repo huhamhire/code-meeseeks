@@ -35,6 +35,18 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
+  // 操作级 toast（审批 / 合并等远端动作失败时提示，区别于 fatalError 整屏报错）。
+  // key 用随机数：同样文案连续触发也能重置自动消失计时器。
+  const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
+  const notifyError = useCallback((text: string): void => {
+    setToast({ text, key: Math.random() });
+  }, []);
+  // toast 自动消失（6s）；key 变化即重置计时
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(id);
+  }, [toast?.key]);
   // 仅调试用：localStorage 里 meebox.forceOnboarding='1' 时强制进首启向导，
   // 不必动 config.yaml。DevTools 设值后刷新进入；走完向导会自动清掉该 flag。
   // 详见 docs/development.md。
@@ -191,15 +203,23 @@ export default function App() {
   const setSelectedPrStatus = useCallback(
     async (status: LocalPrStatus): Promise<void> => {
       if (!selected) return;
-      const updated = await invoke('prs:setLocalStatus', {
-        localId: selected.localId,
-        status,
-      });
-      if (updated) {
-        setPrs((prev) => prev.map((p) => (p.localId === updated.localId ? updated : p)));
+      try {
+        const updated = await invoke('prs:setLocalStatus', {
+          localId: selected.localId,
+          status,
+        });
+        if (updated) {
+          setPrs((prev) => prev.map((p) => (p.localId === updated.localId ? updated : p)));
+        }
+      } catch (e) {
+        // 远端拒绝（如 PR 已关闭 / 合并 / 权限不足）→ 本地状态不变，弹 toast 提示。
+        // 顺手刷新一次：PR 若已关闭，下一轮 poll 会把它软删，列表自洽
+        const msg = e instanceof Error ? e.message : String(e);
+        notifyError(`审批操作失败：${msg}`);
+        void triggerRefresh();
       }
     },
-    [selected],
+    [selected, notifyError, triggerRefresh],
   );
 
   const mergeSelectedPr = useCallback(async (): Promise<void> => {
@@ -208,13 +228,16 @@ export default function App() {
     try {
       await invoke('prs:merge', { localId: mergedId });
     } catch (e) {
-      console.error('merge failed', e);
+      // 合并失败（冲突 / veto / 权限 / PR 已关闭）→ 弹 toast，本地不变
+      const msg = e instanceof Error ? e.message : String(e);
+      notifyError(`合并失败：${msg}`);
+      void triggerRefresh();
       return;
     }
     // 合并成功：PR 已转 MERGED，会从 pending 列表退场。取消选中 + 刷新让其消失
     if (selectedId === mergedId) setSelectedId(null);
     await triggerRefresh();
-  }, [selected, selectedId, triggerRefresh]);
+  }, [selected, selectedId, triggerRefresh, notifyError]);
 
   // 首启向导完成：落盘连接（必）+ LLM / 缓存目录（按需），再重拉配置/连接/PR 更新
   // boot。boot.config 拿到有效 active 连接后，下方 needsOnboarding 派生为 false，
@@ -358,6 +381,16 @@ export default function App() {
           }
           onClose={() => setShowSettings(false)}
         />
+      )}
+      {toast && (
+        <div
+          className="app-toast app-toast-error"
+          role="alert"
+          onClick={() => setToast(null)}
+          title="点击关闭"
+        >
+          {toast.text}
+        </div>
       )}
     </div>
   );

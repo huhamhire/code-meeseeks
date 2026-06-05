@@ -170,3 +170,35 @@ textarea {
   color: $text-on-accent;
 }
 
+// 操作级 toast：底部居中浮层，自动消失 / 点击关闭。用于审批 / 合并等远端动作失败提示
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  max-width: 70%;
+  padding: $space-4 $space-6;
+  border-radius: $radius-md;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  z-index: $z-modal-nested + 1;
+  word-break: break-word;
+  animation: app-toast-in 0.18s ease-out;
+}
+.app-toast-error {
+  background: $color-danger-bg;
+  color: $text-on-accent;
+}
+@keyframes app-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
