@@ -88,6 +88,22 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 ---
 
+## 模型支持
+
+评审能力经 pr-agent（底层 litellm）接入，**理论上兼容任意 OpenAI 兼容 / litellm 支持的模型供应商**（在设置页选模型供应商，填 API Key、base_url、模型名即可）。下表为设置页内置的厂商选项及实测状态：
+
+| 模型供应商（厂商） | 说明 | 状态 |
+| --- | --- | --- |
+| `openai` | OpenAI（GPT 系） | 🚧 理论可行，未验证 |
+| `anthropic` | Anthropic（Claude 系） | 🚧 理论可行，未验证 |
+| `deepseek` | DeepSeek | ✅ 已验证 |
+| `dashscope` | 阿里百炼（DashScope，通义千问） | ✅ 已验证 |
+| `volcengine-ark` | 火山方舟（Volcengine Ark，豆包） | 🚧 理论可行，未验证 |
+| `ollama` | Ollama（本地模型） | 🚧 理论可行，未验证 |
+| `openai-compatible` | OpenAI API 协议兼容（vLLM / 中转 / 自建等） | 🚧 理论可行，未验证 |
+
+---
+
 ## 路线图
 
 围绕「让本地化、半自动评审更省心」展开的几个核心方向（排序不代表优先级，欢迎在 issue 中讨论）：

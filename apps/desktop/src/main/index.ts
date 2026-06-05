@@ -210,6 +210,13 @@ async function start(): Promise<void> {
   );
 
   await app.whenReady();
+
+  // dev 下 Dock 图标走通用 Electron.app（未经 electron-builder 烤 icns）→ 手动设成 mac 专用图标。
+  // 打包态 Dock 图标由 bundle 的 icns 决定，无需且不应在此覆盖。仅 mac 有 app.dock。
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
+  }
+
   createWindow();
 
   app.on('activate', () => {
