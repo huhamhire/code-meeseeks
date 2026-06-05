@@ -60,7 +60,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 | 平台 | 产物 | 状态 |
 | --- | --- | --- |
 | Windows x64 | `code-meeseeks-<version>-win-x64.exe`（NSIS 安装包） | ✅ 可用 |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg` | 🚧 规划中（ad-hoc 签名、未公证，首次需手动"仍要打开"，见 [macOS 构建与发布](docs/mac-build.md)） |
+| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg` | ✅ 可用（ad-hoc 签名、未公证，首次需手动"仍要打开"，见 [macOS 构建与发布](docs/mac-build.md)） |
 
 安装包已内嵌 Python 运行时 + pr-agent，安装后即可使用，无需额外环境。
 
@@ -68,13 +68,13 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 ## 快速上手
 
-1. **配置连接** —— 设置页填入 Bitbucket Server 地址 + 个人访问令牌（PAT）。
+1. **配置连接** —— 设置页填入代码平台地址 + 个人访问令牌（PAT）（当前支持 Bitbucket Server，GitHub / GitLab 规划中）。
 2. **配置 LLM** —— 选择 Provider，填 API Key / base_url / 模型名。
 3. **发现 PR** —— 应用自动轮询拉取你待评审的 PR，左侧列表按仓库分组。
 4. **阅读 + 评审** —— 选中 PR 看 diff，在对话框输入 `/review` 让 AI 生成 findings。
 5. **确认 + 发布** —— 把 finding 转成草稿、编辑措辞，单条或批量发布到远端。
 
-配置存放在 `~/.code-meeseeks/config.yaml`；仓库镜像默认在 `~/.code-meeseeks/repos/`，可在设置页改到大盘。
+配置存放在 `~/.code-meeseeks/config.yaml`；仓库镜像默认在 `~/.code-meeseeks/repos/`，可在设置页改到其他目录（如空间更充裕的磁盘）。
 
 ---
 
