@@ -16,6 +16,7 @@ import type {
 type MatchedRule = IpcChannels['rules:matchForPr']['response'];
 import type { ReviewDraft } from '@meebox/shared';
 import { invoke } from '../api';
+import { CloseIcon } from './icons';
 import { chatRunStore, useChatRunStore } from '../stores/chat-run-store';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { parseAnsi, segmentStyle } from '../utils/ansi';
@@ -46,6 +47,11 @@ interface ChatPaneProps {
   }) => void;
   /** /approve /needswork 命令触发的 PR review 决断；由 MainPane 接到 prs:setLocalStatus */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
+  /**
+   * 点击 finding 的文件行锚点 → 仅跳转到 Diff 对应行（scroll+highlight，不进编辑态）。
+   * 跟 onJumpToDraftEditor 的区别：不带 runId/findingId，不创建 / 打开草稿。
+   */
+  onNavigateToAnchor?: (anchor: { path: string; startLine: number; endLine: number }) => void;
   /**
    * 当前 active LLM profile 的 model 名 — RunningView meta chip 显示。
    * null = 无 active profile / 还在加载，UI 不展示 model chip
@@ -78,6 +84,7 @@ export function ChatPane({
   collapsed,
   onJumpToDraftEditor,
   onSetReviewStatus,
+  onNavigateToAnchor,
   currentLlmModel,
   llmConfigured = true,
   onOpenSettings,
@@ -117,9 +124,11 @@ export function ChatPane({
 
   // 全局活动 run + 实时 stdout 缓存。store 来源于 main 的 'pragent:activeChanged'
   // / 'pragent:runProgress' 事件，PR 切换不丢，所以这里只读，不在本组件维护
-  const { active, linesByRunId } = useChatRunStore();
+  const { active, waiting, linesByRunId } = useChatRunStore();
   const myActiveRun = active?.prLocalId === pr?.localId ? active : null;
   const otherActiveRun = active && active.prLocalId !== pr?.localId ? active : null;
+  // 本 PR 排队中的任务（FIFO，前面的先跑），在 chat 末尾以「排队中」卡片展示
+  const myWaiting = waiting.filter((w) => w.prLocalId === pr?.localId);
   const liveLines = myActiveRun ? (linesByRunId.get(myActiveRun.runId) ?? []) : [];
 
   // 切走再回来时，正在跑的 run 已落盘 (status=running) → listRuns 把它读进 runs，
@@ -311,6 +320,17 @@ export function ChatPane({
     });
   };
 
+  // 点击 finding 锚点：仅导航到 Diff 对应行（不创建/打开草稿），便于快速核对上下文
+  const handleNavigateToFinding = (finding: Finding): void => {
+    if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
+    const startLine = finding.anchor.startLine;
+    onNavigateToAnchor?.({
+      path: finding.anchor.path,
+      startLine,
+      endLine: finding.anchor.endLine ?? startLine,
+    });
+  };
+
   const handleRejectFinding = async (finding: Finding, run: ReviewRun): Promise<void> => {
     if (!pr) return;
     if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
@@ -413,7 +433,7 @@ export function ChatPane({
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
-        {visibleRuns.length === 0 && !myActiveRun && (
+        {visibleRuns.length === 0 && !myActiveRun && myWaiting.length === 0 && (
           <ChatEmpty
             pr={pr}
             prAgent={prAgent}
@@ -441,6 +461,7 @@ export function ChatPane({
             drafts={drafts ?? []}
             onJumpToDraft={handleJumpToDraft}
             onRejectFinding={handleRejectFinding}
+            onNavigateToFinding={handleNavigateToFinding}
           />
         ))}
         {/* 正在跑：进度条 + 实时 stdout 流，贴在历史末尾。startedAt 入队时为 null，
@@ -454,6 +475,16 @@ export function ChatPane({
             model={currentLlmModel ?? null}
           />
         )}
+        {/* 本 PR 排队中的任务：贴在运行中之后，按队列顺序展示，可单条取消 */}
+        {myWaiting.map((w, i) => (
+          <QueuedView
+            key={w.runId}
+            tool={w.tool}
+            question={w.question}
+            position={i + 1}
+            onCancel={() => void handleCancel(w.runId)}
+          />
+        ))}
         {/* 别 PR 在跑：提示用户新提交会排队，不阻塞输入。状态栏的队列 chip 可点开
             查看 / 取消队列任务 */}
         {otherActiveRun && (
@@ -1184,6 +1215,53 @@ function RunningView({
   );
 }
 
+/**
+ * 排队中的任务卡片：贴在运行中之后，按队列顺序展示 tool / 位置 / (ask 的提问)，
+ * 提供单条取消。跟 RunningView / RunMeta 共用 chat-run-meta 骨架，视觉一致。
+ */
+function QueuedView({
+  tool,
+  question,
+  position,
+  onCancel,
+}: {
+  tool: ReviewRunTool;
+  question?: string;
+  position: number;
+  onCancel: () => void;
+}) {
+  const [cancelling, setCancelling] = useState(false);
+  const userMessage = tool === 'ask' ? question?.trim() : undefined;
+  return (
+    <div className="chat-run-queued">
+      <header className="chat-run-meta">
+        <span className={`chat-run-tool chat-run-tool-${tool}`}>/{tool}</span>
+        <span className="chat-run-status chat-run-status-queued">排队中 · 第 {position} 位</span>
+        <button
+          type="button"
+          className="chat-run-queued-cancel"
+          onClick={() => {
+            if (cancelling) return;
+            setCancelling(true);
+            onCancel();
+          }}
+          disabled={cancelling}
+          title="取消排队任务"
+          aria-label="取消排队任务"
+        >
+          <CloseIcon size={14} />
+        </button>
+      </header>
+      {userMessage && (
+        <div className="chat-user-msg" aria-label="用户提问">
+          <QuestionIcon />
+          <div className="chat-user-msg-body">{userMessage}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** 把 ms 翻成 "12s" / "1m 23s" 形式；超过分钟阈值后只保留秒粒度 */
 function formatElapsed(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
@@ -1231,6 +1309,7 @@ function RunResultView({
   drafts,
   onJumpToDraft,
   onRejectFinding,
+  onNavigateToFinding,
 }: {
   run: ReviewRun;
   onRetry: (run: ReviewRun) => void;
@@ -1242,6 +1321,8 @@ function RunResultView({
   onJumpToDraft: (finding: Finding, run: ReviewRun) => void;
   /** 拒绝某条 finding：创建 / 更新草稿到 status='rejected' */
   onRejectFinding: (finding: Finding, run: ReviewRun) => void;
+  /** 点击 finding 锚点：仅导航到 Diff 对应行（不进编辑态） */
+  onNavigateToFinding: (finding: Finding) => void;
 }) {
   const findings = run.findings ?? [];
   // 失败 + 取消都用红 banner 提示。取消是用户主动行为，UI 用更轻文案区分
@@ -1335,6 +1416,7 @@ function RunResultView({
                 relatedDraft={relatedDraft}
                 onJump={() => onJumpToDraft(f, run)}
                 onReject={() => onRejectFinding(f, run)}
+                onNavigate={() => onNavigateToFinding(f)}
               />
             );
           })}
@@ -1672,6 +1754,7 @@ function FindingCard({
   relatedDraft,
   onJump,
   onReject,
+  onNavigate,
 }: {
   finding: Finding;
   /** 该 finding 关联的草稿；undefined = 尚未交互过；不为空 = 已 pending / edited / rejected / posted */
@@ -1680,6 +1763,8 @@ function FindingCard({
   onJump?: () => void;
   /** 「✗ 拒绝」按钮回调 */
   onReject?: () => void;
+  /** 点击锚点：仅导航到 Diff 对应行（不进编辑态） */
+  onNavigate?: () => void;
 }) {
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
@@ -1710,14 +1795,34 @@ function FindingCard({
       </header>
       {finding.anchor && (
         <div className="chat-finding-anchor muted">
-          <code>{finding.anchor.path}</code>
-          {finding.anchor.startLine && (
-            <span>
-              :{finding.anchor.startLine}
-              {finding.anchor.endLine && finding.anchor.endLine !== finding.anchor.startLine
-                ? `-${String(finding.anchor.endLine)}`
-                : ''}
-            </span>
+          {finding.anchor.startLine !== undefined && onNavigate ? (
+            // 可点击：跳转到 Diff 对应行（scroll+highlight，不进编辑态）
+            <button
+              type="button"
+              className="chat-finding-anchor-link"
+              onClick={onNavigate}
+              title="跳转到代码对应行"
+            >
+              <code>{finding.anchor.path}</code>
+              <span>
+                :{finding.anchor.startLine}
+                {finding.anchor.endLine && finding.anchor.endLine !== finding.anchor.startLine
+                  ? `-${String(finding.anchor.endLine)}`
+                  : ''}
+              </span>
+            </button>
+          ) : (
+            <>
+              <code>{finding.anchor.path}</code>
+              {finding.anchor.startLine && (
+                <span>
+                  :{finding.anchor.startLine}
+                  {finding.anchor.endLine && finding.anchor.endLine !== finding.anchor.startLine
+                    ? `-${String(finding.anchor.endLine)}`
+                    : ''}
+                </span>
+              )}
+            </>
           )}
           {/* /improve 建议带的 1-10 重要度评分；高分加 warning 着色提示 reviewer */}
           {typeof finding.score === 'number' && (

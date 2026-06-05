@@ -319,6 +319,7 @@ export default function App() {
           llmConfigured={llmConfigured}
           onOpenSettings={() => setShowSettings(true)}
           onJumpToDraftEditor={(t) => setPendingDiffNav(t)}
+          onNavigateToAnchor={(anchor) => setPendingDiffNav({ anchor })}
           onSetReviewStatus={(s) => void setSelectedPrStatus(s)}
           // 当前 active LLM profile.model — RunningView 显示成 chip 让用户知道
           // 这次 review 用的什么模型 (不同 profile 出的结果差异大)

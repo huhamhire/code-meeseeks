@@ -345,11 +345,17 @@
 }
 .chat-run-meta {
   display: flex;
+  flex-wrap: wrap; // 空间不够时整块 chip 换行，而非互相挤压重叠
   align-items: center;
   gap: $space-3;
   font-size: $fs-sm;
   padding-bottom: $space-3;
   border-bottom: 1px solid $border-muted;
+
+  // chip 不收缩：保持各自完整宽度，宁可换行也不压缩文字造成重叠
+  > * {
+    flex-shrink: 0;
+  }
 }
 .chat-run-tool {
   font-family: $font-mono;
@@ -373,6 +379,12 @@
 .chat-run-duration {
   font-family: $font-mono;
   font-variant-numeric: tabular-nums;
+}
+// 模型名可能很长：单行截断 + 省略号，避免一个 chip 撑爆整行
+.chat-run-model {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 // 开始时间：纯文本不带胶囊背景；margin-left:auto 顶到 chip 队列最右，把视觉
 // 权重让给左侧主信息 (tool/状态/strategy/时长)，自己只作为 "什么时候跑的" 标注
@@ -423,6 +435,38 @@
   &.chat-run-status-cancelled {
     background: $border-default;
     color: $text-primary;
+  }
+  // 排队中：弱化的中性胶囊，区别于运行中的高亮蓝
+  &.chat-run-status-queued {
+    background: $bg-surface;
+    color: $text-muted;
+  }
+}
+
+// 排队中卡片：比运行中更轻，留点上下间距跟历史/运行中区隔
+.chat-run-queued {
+  padding: $space-3 0;
+  opacity: 0.85;
+}
+// 取消排队按钮：跟在 meta 行最右，纯图标
+.chat-run-queued-cancel {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+  border-radius: $radius-sm;
+
+  &:hover:not(:disabled) {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 
@@ -662,6 +706,33 @@
     // path 单段太长 (含 / 路径) 时允许在任意字符断行，不让单 code 块撑爆容器
     word-break: break-all;
     min-width: 0;
+  }
+}
+// 可点击锚点：path + 行号整体作为「跳转到代码对应行」的链接按钮
+.chat-finding-anchor-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: $space-2;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+
+  &:hover {
+    color: $color-info;
+
+    code {
+      color: $color-info;
+    }
+  }
+  &:focus-visible {
+    outline: 1px solid $color-info;
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 }
 .chat-finding-body {

@@ -294,19 +294,6 @@ export function MainPane({
           >
             <GlobeIcon /> 浏览器打开
           </a>
-          {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现，复用分支合并图标。
-              点击直接合并 (无二次确认)；成功后 App 刷新列表，PR 转 MERGED 退场。
-              可选链兜底升级前无 mergeStatus 的旧 meta.json */}
-          {pr.mergeStatus?.canMerge && (
-            <button
-              type="button"
-              className="btn btn-sm pr-header-merge"
-              onClick={onMerge}
-              title="合并此 PR 到目标分支"
-            >
-              <PullRequestIcon size={14} /> 合并
-            </button>
-          )}
           {/* approve / needs work：当前状态 = 高亮；点已高亮的回退到 pending（撤销远端标记）。
               这两个 review 决断按钮右对齐，跟"浏览器打开"在左侧拉开距离。
               "提交评论 (N)" 放在决断按钮左边 — 评审动作分两步：先发评论 (左)，
@@ -325,6 +312,19 @@ export function MainPane({
                 title={`批量发布 ${String(publishableCount)} 条草稿到 Bitbucket`}
               >
                 提交评论 ({String(publishableCount)})
+              </button>
+            )}
+            {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现。放在「通过」左侧、
+                review 决断区内，避免与左侧「浏览器打开」相邻造成误触。点击直接合并
+                (无二次确认)；成功后 App 刷新列表，PR 转 MERGED 退场。 */}
+            {pr.mergeStatus?.canMerge && (
+              <button
+                type="button"
+                className="btn btn-sm pr-header-merge"
+                onClick={onMerge}
+                title="合并此 PR 到目标分支"
+              >
+                <PullRequestIcon size={14} /> 合并
               </button>
             )}
             <button
