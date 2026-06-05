@@ -12,6 +12,16 @@ import { JsonFileStateStore } from '@meebox/state-store';
 import { buildAdapters, type ConnectionRuntime } from './adapters.js';
 import { registerIpcHandlers } from './ipc.js';
 
+// macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
+// 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
+// 用 mock keychain 让它走内存、不碰真钥匙串、不再弹。代价：cookie 加密退化为静态 key，
+// 但本应用密钥本就明文落盘(config-store)，cookie 加密非依赖项，无实质损失。
+// 仅 mac：本开关只控 macOS Keychain 后端；win(DPAPI)/linux(libsecret) 不受影响，故守卫掉。
+// 必须在 app.whenReady() 之前；模块加载期即最早时机。有正式 Developer ID 签名后可移除。
+if (process.platform === 'darwin') {
+  app.commandLine.appendSwitch('use-mock-keychain');
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**

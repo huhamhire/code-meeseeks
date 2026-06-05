@@ -56,8 +56,9 @@ win:
   artifactName: code-meeseeks-${version}-win-${arch}.${ext}
 
 mac:
-  # 给 ≥512 的 PNG，mac 构建时 electron-builder 自动转 .icns（无需在 Windows 上造 icns）
-  icon: ../../assets/icons/icon.png
+  # mac 专用图标：深色圆角底板 + 留边 glyph（透明异形图标在 macOS 会被系统垫白底）。
+  # 由 tools/icons/gen-mac-icon.py 从 icon.png 合成；给 ≥512 PNG，electron-builder 自动转 .icns。
+  icon: ../../assets/icons/icon-mac.png
   gatekeeperAssess: false
   # 免费路线（无 Apple Developer ID，不公证）：ad-hoc 递归签名由 afterPack 完成
   # （arm64 上 Mach-O 必须签名才能跑，含嵌入式 python）。有真证书 env 时 afterPack
