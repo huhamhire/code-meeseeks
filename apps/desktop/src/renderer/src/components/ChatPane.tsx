@@ -1944,7 +1944,7 @@ function ChatEmpty({
       <div className="chat-empty-icon" aria-hidden="true">
         <ChatIcon large />
       </div>
-      <p className="chat-empty-title">{pr ? '可以开始对话' : '选中一个 PR 后启用'}</p>
+      <p className="chat-empty-title">{pr ? '可以开始对话' : '选中一个 PR 后开始'}</p>
       <p className="chat-empty-sub">下方输入框接受命令或自然语言：</p>
       <ul className="chat-empty-list">
         <Bullet>
