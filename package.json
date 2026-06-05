@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Local-first GUI for AI-assisted code review, built on pr-agent",
+  "license": "Apache-2.0",
   "workspaces": [
     "apps/*",
     "packages/*"

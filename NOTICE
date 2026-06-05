@@ -1,0 +1,16 @@
+Code Meeseeks
+Copyright 2026 huhamhire
+
+This product includes software developed as part of the Code Meeseeks
+project (internal codename "meebox").
+
+This product bundles and depends on third-party components, each
+distributed under its own license, including but not limited to:
+
+- PR-Agent (community edition, https://github.com/The-PR-Agent/pr-agent)
+  — Apache License 2.0
+- Electron, and various Node.js / Python packages — see their respective
+  licenses.
+
+Third-party license texts and attributions are collected in
+THIRD-PARTY-NOTICES (to be generated for distributed binaries).

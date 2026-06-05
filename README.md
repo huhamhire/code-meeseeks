@@ -1,0 +1,137 @@
+<div align="center">
+
+<img src="assets/icons/icon.png" alt="Code Meeseeks" width="96" />
+
+# Code Meeseeks
+
+**面向 Reviewer 个人的本地化、半自动 AI 代码评审桌面客户端**
+
+基于社区版 [PR-Agent](https://docs.pr-agent.ai/) · Electron 桌面应用 · 数据全部留在本地
+
+</div>
+
+---
+
+> ⚠️ **早期预览版（0.x）**：项目仍在快速迭代，功能、配置与数据格式可能发生不兼容变更，稳定性未经充分验证。请勿用于关键的生产评审流程，使用前请自行评估风险并做好数据备份。
+
+Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进一个**桌面客户端**：拉取你作为 Reviewer 待评审的 PR，本地跑 pr-agent 生成评审意见，由你**逐条确认 / 编辑后**再发布到代码托管平台。
+
+核心设计立场：
+
+- **决策权在人** —— 所有评论必须经你二次确认 / 编辑才会发到远端，AI 只做草稿。
+- **规则在本地** —— 你配置自己的检查规则、风格偏好、LLM Provider。
+- **数据在本地** —— 仓库副本、PR 元数据、评论草稿都存在本机工作目录，企业内网友好。
+
+> 灵感来自 *Rick and Morty* 里的 Mr. Meeseeks：召之即来、专做一件事、做完即走。
+
+## 适合谁
+
+- 需要承担 code review 的工程师 / Tech Lead
+- 想用 AI 加速评审，但**不愿把决策权完全交给 bot**
+- 多在企业内网，使用自建 Bitbucket / GitLab / Gitea
+
+## 不是什么
+
+- ❌ 不是 CI 上自动跑的 review bot（那是 pr-agent 本身的定位）
+- ❌ 不是团队协同评审平台（无服务端、不做多用户同步）
+- ❌ 不替代托管平台原生的评审 UI
+
+---
+
+## 核心特性
+
+- 🔌 **开箱即用，零外部依赖** —— 安装包内嵌可重定位的 Python 运行时 + 固定版本 pr-agent，**无需自行安装 Python 或 Docker**（Docker 模式仍可通过配置切换）。
+- 📥 **PR 自动发现** —— 轮询拉取你待评审的 Open PR，按仓库分组、状态过滤、搜索。
+- 🔍 **本地 Diff 阅读** —— Monaco 并排 / 内联 diff、文件树、行内评论、blame、跨文件代码搜索。
+- 🤖 **AI 评审** —— `/describe`、`/review`、`/ask` 对话式驱动 pr-agent，结果结构化成可操作的 findings。
+- 📐 **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter），按项目 / 仓库 / 目标分支命中后注入评审。
+- ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
+- 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
+- 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等。
+
+> 界面预览待补（截图将放 `assets/images/`）。
+
+---
+
+## 安装
+
+到 [Releases](../../releases) 下载对应平台安装包：
+
+| 平台 | 产物 | 状态 |
+| --- | --- | --- |
+| Windows x64 | `code-meeseeks-<version>-win-x64.exe`（NSIS 安装包） | ✅ 可用 |
+| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg` | 🚧 规划中（ad-hoc 签名、未公证，首次需手动"仍要打开"，见 [macOS 构建与发布](docs/mac-build.md)） |
+
+安装包已内嵌 Python 运行时 + pr-agent，安装后即可使用，无需额外环境。
+
+---
+
+## 快速上手
+
+1. **配置连接** —— 设置页填入 Bitbucket Server 地址 + 个人访问令牌（PAT）。
+2. **配置 LLM** —— 选择 Provider，填 API Key / base_url / 模型名。
+3. **发现 PR** —— 应用自动轮询拉取你待评审的 PR，左侧列表按仓库分组。
+4. **阅读 + 评审** —— 选中 PR 看 diff，在对话框输入 `/review` 让 AI 生成 findings。
+5. **确认 + 发布** —— 把 finding 转成草稿、编辑措辞，单条或批量发布到远端。
+
+配置存放在 `~/.code-meeseeks/config.yaml`；仓库镜像默认在 `~/.code-meeseeks/repos/`，可在设置页改到大盘。
+
+---
+
+## 平台支持
+
+| 平台 | 状态 |
+| --- | --- |
+| Bitbucket Server / Data Center | ✅ 已支持（REST API v1，>= 7.0） |
+| GitHub | 🚧 规划中 |
+| GitLab | 🚧 规划中 |
+
+---
+
+## 技术栈
+
+- **桌面壳**：Electron + Vite（electron-vite）
+- **渲染层**：React + TypeScript（strict）
+- **编辑器**：Monaco（并排 / 内联 diff）
+- **工程**：npm workspaces + Nx 单仓多包
+- **pr-agent 集成**：默认内嵌 Python 运行时子进程（Docker 模式可选）
+
+详细架构、数据模型、分期里程碑见 **[Roadmap](docs/ROADMAP.md)**；关键技术决策见 **[ADR 目录](docs/adr/)**。
+
+---
+
+## 开发
+
+环境准备、启动调试、构建打包步骤见 **[开发指南](docs/development.md)**。
+
+---
+
+## 隐私与数据
+
+- **本地优先**：除调用 LLM API 与访问你配置的 Git 平台外，不向任何第三方上报数据。
+- **工作目录**：应用数据固定在 `~/.code-meeseeks/`（config / state / logs），仓库镜像目录可配置。
+- pr-agent 评审时仅把 PR diff + 你的规则发给你自己配置的 LLM。
+
+---
+
+## 致谢
+
+构建于 [PR-Agent](https://github.com/The-PR-Agent/pr-agent) 之上 —— Qodo 贡献给社区的开源版本（官网 [docs.pr-agent.ai](https://docs.pr-agent.ai/)）。作为第三方依赖打包，按其自身许可证分发，**不在本项目重命名 / 改动范围内**。
+
+## 许可证
+
+本项目采用 [Apache License 2.0](LICENSE)。
+
+打包分发的安装包内含第三方组件（PR-Agent、Electron 等），各按其自身许可证分发，归集见 [NOTICE](NOTICE)（发行包的完整第三方声明 `THIRD-PARTY-NOTICES` 待生成）。
+
+## 商标与免责声明
+
+本项目为非官方、独立的开源工具，**与 *Rick and Morty* 及其权利方无任何关联，亦未获其授权或认可**。「Rick and Morty」「Mr. Meeseeks」等名称、角色及相关元素的版权与商标归其各自权利人所有（Adult Swim / Warner Bros. Discovery 等）。本项目名称与图标仅出于致敬目的进行借用，不主张任何相关权利；如权利方有异议，将配合调整。
+
+---
+
+<div align="center">
+
+Made on 🌏 with ♥️.
+
+</div>
