@@ -51,6 +51,13 @@ interface ChatPaneProps {
    * null = 无 active profile / 还在加载，UI 不展示 model chip
    */
   currentLlmModel?: string | null;
+  /**
+   * 是否已配置可用的 LLM（存在与 active_id 匹配的 profile）。false 时即便 pr-agent
+   * 运行时就绪，也无法发起调用 —— 空态 / 输入栏给出「需配置」提示并禁用。
+   */
+  llmConfigured?: boolean;
+  /** 打开设置面板（LLM 未配置提示里的「去设置」按钮用） */
+  onOpenSettings?: () => void;
 }
 
 /**
@@ -72,6 +79,8 @@ export function ChatPane({
   onJumpToDraftEditor,
   onSetReviewStatus,
   currentLlmModel,
+  llmConfigured = true,
+  onOpenSettings,
 }: ChatPaneProps) {
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
@@ -218,7 +227,7 @@ export function ChatPane({
   // 队列，main 端先后串行执行。失败抛 banner；成功不需要手动 setRuns，下面 effect
   // 会在 active 切换时自动 refresh
   const handleRun = async (tool: ReviewRunTool, question?: string): Promise<void> => {
-    if (!pr || !prAgent.available) return;
+    if (!pr || !prAgent.available || !llmConfigured) return;
     setError(null);
     try {
       await invoke('pragent:run', { localId: pr.localId, tool, question });
@@ -404,7 +413,14 @@ export function ChatPane({
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
-        {visibleRuns.length === 0 && !myActiveRun && <ChatEmpty pr={pr} prAgent={prAgent} />}
+        {visibleRuns.length === 0 && !myActiveRun && (
+          <ChatEmpty
+            pr={pr}
+            prAgent={prAgent}
+            llmConfigured={llmConfigured}
+            onOpenSettings={onOpenSettings}
+          />
+        )}
         {/* 还有更早的 run 未拉到本地 → 顶部出加载提示。继续向上滚自动游标拉一页 */}
         {(hasMoreOlder || loadingOlder) && (
           <div className="chat-run-more-hint muted" role="status">
@@ -458,6 +474,7 @@ export function ChatPane({
       <ChatInputBar
         pr={pr}
         prAgent={prAgent}
+        llmConfigured={llmConfigured}
         // 队列模型下输入永远开启 (新提交进队列)；runningTool 仅决定是否额外渲染 stop
         // 按钮 (本 PR 有 active run 时可点终止)。busyOnOtherPr 不再阻断
         runningTool={myActiveRun?.tool ?? null}
@@ -532,6 +549,8 @@ const COMMANDS: ReadonlyArray<CommandSpec> = [
 interface ChatInputBarProps {
   pr: StoredPullRequest | null;
   prAgent: PrAgentStatus;
+  /** LLM 是否已配置；未配置时禁用输入（即便 pr-agent 运行时就绪也无法调用） */
+  llmConfigured: boolean;
   /**
    * 本 PR 上的活动 run 工具；非空时在 send 按钮旁额外渲染 stop 按钮。
    * 队列模型下输入永不因此禁用 (新提交进队列)。
@@ -605,6 +624,7 @@ function pushChatHistory(value: string): string[] {
 function ChatInputBar({
   pr,
   prAgent,
+  llmConfigured,
   runningTool,
   onRun,
   onCancel,
@@ -634,7 +654,8 @@ function ChatInputBar({
   // 队列模型：仅 !pr / pr-agent 未就绪 时禁用 input。activeRun / busyOnOtherPr
   // 不再阻塞新提交 (会排队 by main)
   const running = runningTool !== null;
-  const disabled = !pr || !prAgent.available;
+  // LLM 未配置时一并禁用：即便 pr-agent 运行时就绪，没有模型也无法发起调用
+  const disabled = !pr || !prAgent.available || !llmConfigured;
   // stop 按钮点过后等 main 回 queueChanged 才会改变状态；中间这段时间二次点击
   // 应失效，避免反复 spam abort
   const [stopRequested, setStopRequested] = useState(false);
@@ -862,9 +883,11 @@ function ChatInputBar({
 
   const placeholder = !prAgent.available
     ? 'PR Agent 未就绪'
-    : !pr
-      ? '选中一个 PR 后可发起对话'
-      : '输入问题，或用 / 选择命令 (↑↓ 翻历史)';
+    : !llmConfigured
+      ? '需先配置 LLM 模型才能启用'
+      : !pr
+        ? '选中一个 PR 后可发起对话'
+        : '输入问题，或用 / 选择命令 (↑↓ 翻历史)';
 
   return (
     <form
@@ -1763,7 +1786,17 @@ function FindingCard({
   );
 }
 
-function ChatEmpty({ pr, prAgent }: { pr: StoredPullRequest | null; prAgent: PrAgentStatus }) {
+function ChatEmpty({
+  pr,
+  prAgent,
+  llmConfigured,
+  onOpenSettings,
+}: {
+  pr: StoredPullRequest | null;
+  prAgent: PrAgentStatus;
+  llmConfigured: boolean;
+  onOpenSettings?: () => void;
+}) {
   if (!prAgent.available) {
     return (
       <div className="chat-empty">
@@ -1774,6 +1807,30 @@ function ChatEmpty({ pr, prAgent }: { pr: StoredPullRequest | null; prAgent: PrA
         <p className="chat-empty-sub">
           本机 CLI 与 Docker 都未探测到。打开 Settings 看探测详情，或安装其中一种后重启应用。
         </p>
+      </div>
+    );
+  }
+  // pr-agent 运行时就绪但没有可用 LLM → 引导去设置配置一条模型
+  if (!llmConfigured) {
+    return (
+      <div className="chat-empty">
+        <div className="chat-empty-icon" aria-hidden="true">
+          <ChatIcon large />
+        </div>
+        <p className="chat-empty-title">需要配置 AI 模型</p>
+        <p className="chat-empty-sub">
+          配置一个 LLM 模型后即可使用 /review、/describe 等能力。PR 同步等基础功能不受影响。
+        </p>
+        {onOpenSettings && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ marginTop: 12 }}
+            onClick={onOpenSettings}
+          >
+            去设置
+          </button>
+        )}
       </div>
     );
   }

@@ -131,3 +131,21 @@ tools/                     # 探针等辅助脚本
 
 - 新建包的测试放包内 `tests/` 目录，从 `'../src/...'` 引入（旧包遗留在 `src/` 的不强制迁移）。
 - 提交前跑 `npm run typecheck && npm run test`。
+
+## 10. 调试技巧
+
+### 强制进入首启配置向导
+
+首启向导只在「没有有效的 active 连接」时出现。已经配好连接后想反复调试向导，用 localStorage 开关（不动配置、可反复切换）：
+
+应用运行中打开 DevTools（设置页「打开 DevTools」或主进程菜单），在 Console 执行：
+
+```js
+localStorage.setItem('meebox.forceOnboarding', '1'); location.reload();
+```
+
+刷新后即进入向导。走完向导（点「进入应用」）会自动清掉该 flag 回到主界面；也可手动关闭：
+
+```js
+localStorage.removeItem('meebox.forceOnboarding'); location.reload();
+```

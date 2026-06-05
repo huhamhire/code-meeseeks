@@ -238,6 +238,7 @@
 
 .settings-input {
   flex: 1;
+  box-sizing: border-box;
   background: $bg-surface;
   border: 1px solid $border-default;
   color: $text-body;
@@ -252,6 +253,18 @@
   }
 }
 
+// 原生 <select> 默认比文本输入高：去掉原生外观、补自绘下拉箭头，盒模型与
+// .settings-input 完全一致从而等高。
+select.settings-input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23858585' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right $space-4 center;
+  background-size: 12px;
+}
+
 .settings-secret-row {
   display: flex;
   gap: $space-3;
@@ -260,6 +273,11 @@
   .settings-input {
     font-family: $font-mono;
     letter-spacing: 0.04em;
+  }
+
+  // 显隐（眼睛）按钮跟随输入框高度，不因图标小而矮一截，行视觉对齐其它单输入行
+  .btn {
+    align-self: stretch;
   }
 }
 

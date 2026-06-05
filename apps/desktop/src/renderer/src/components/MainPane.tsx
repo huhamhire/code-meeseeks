@@ -267,7 +267,7 @@ export function MainPane({
         <div className="pr-header-meta">
           {pr.hasConflict && (
             <>
-              <span className="conflict-tag" title="远端 BBS 报告存在合并冲突">
+              <span className="conflict-tag" title="远端 Bitbucket 报告存在合并冲突">
                 ⚠️ 冲突
               </span>
               <span> · </span>
@@ -322,7 +322,7 @@ export function MainPane({
                 type="button"
                 className="btn btn-sm pr-header-publish"
                 onClick={() => setPublishModalOpen(true)}
-                title={`批量发布 ${String(publishableCount)} 条草稿到 BBS`}
+                title={`批量发布 ${String(publishableCount)} 条草稿到 Bitbucket`}
               >
                 提交评论 ({String(publishableCount)})
               </button>

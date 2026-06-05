@@ -1,0 +1,429 @@
+@use './tokens' as *;
+
+// 首启配置向导：整屏覆盖，居中卡片 + 步骤圆点 + 轮播 slide
+.onboarding {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $bg-app;
+  padding: $space-8;
+  overflow-y: auto;
+}
+
+.onboarding-card {
+  width: 100%;
+  max-width: 760px;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  overflow: hidden;
+}
+
+// ===== 顶部步骤圆点 =====
+.onboarding-dots {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  list-style: none;
+  margin: 0;
+  padding: $space-6 $space-8;
+  border-bottom: 1px solid $border-default;
+  flex-shrink: 0;
+}
+.onboarding-dot {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  color: $text-muted;
+  font-size: $fs-md;
+
+  // 圆点之间的连接线
+  &:not(:last-child)::after {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: $border-default;
+    margin-left: $space-4;
+  }
+}
+.onboarding-dot-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: $radius-full;
+  border: 1px solid $border-default;
+  font-size: $fs-sm;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.onboarding-dot-label {
+  white-space: nowrap;
+}
+.onboarding-dot.current {
+  color: $text-primary;
+
+  .onboarding-dot-mark {
+    border-color: $color-accent;
+    background: $color-accent;
+    color: $text-on-accent;
+  }
+}
+.onboarding-dot.done {
+  color: $text-body;
+
+  .onboarding-dot-mark {
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+
+// ===== slide 主体 =====
+.onboarding-slide {
+  padding: $space-8;
+  overflow-y: auto;
+  flex: 1;
+  animation: onboarding-fade 0.18s ease-out;
+}
+@keyframes onboarding-fade {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.onboarding-step-title {
+  font-size: $fs-xl;
+  font-weight: 600;
+  margin: 0 0 $space-3;
+  color: $text-primary;
+}
+.onboarding-step-sub {
+  margin: 0 0 $space-6;
+  line-height: $lh-loose;
+}
+
+// ===== 欢迎页 =====
+.onboarding-welcome {
+  text-align: center;
+  padding: $space-6 $space-4;
+}
+.onboarding-logo {
+  color: $color-info;
+  margin-bottom: $space-5;
+}
+.onboarding-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 $space-4;
+  color: $text-primary;
+}
+.onboarding-lead {
+  max-width: 520px;
+  margin: 0 auto $space-6;
+  line-height: $lh-loose;
+  color: $text-body;
+}
+.onboarding-points {
+  list-style: none;
+  padding: 0;
+  // width:fit-content + margin auto：整组按最宽一条收窄后水平居中，
+  // 条目内部仍左对齐（圆点对齐），视觉上跟标题/介绍一条中轴
+  width: fit-content;
+  max-width: 480px;
+  margin: 0 auto $space-8;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+
+  li {
+    position: relative;
+    padding-left: $space-6;
+    color: $text-body;
+    line-height: $lh-loose;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 8px;
+      width: 6px;
+      height: 6px;
+      border-radius: $radius-full;
+      background: $color-accent;
+    }
+  }
+}
+.onboarding-start {
+  min-width: 160px;
+  justify-content: center;
+}
+
+// ===== 平台步：左右布局 =====
+.onboarding-platform-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: $space-8;
+  align-items: start;
+}
+.onboarding-platform-list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+.onboarding-platform-item {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  padding: $space-4 $space-5;
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+  background: $bg-panel;
+
+  &.selected {
+    border-color: $color-accent;
+    box-shadow: inset 3px 0 0 $color-accent;
+  }
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+.onboarding-platform-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+
+  &.muted-icon {
+    color: $text-muted;
+    filter: grayscale(1);
+  }
+}
+.onboarding-platform-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.onboarding-platform-name {
+  color: $text-primary;
+  font-size: $fs-md;
+  font-weight: 500;
+}
+.onboarding-platform-meta {
+  color: $text-muted;
+  font-size: $fs-sm;
+}
+
+.onboarding-platform-form {
+  min-width: 0;
+}
+
+// ===== 折叠的「缓存目录」高级入口 =====
+.onboarding-advanced {
+  margin-top: $space-6;
+  border-top: 1px solid $border-muted;
+  padding-top: $space-5;
+}
+.onboarding-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+  background: transparent;
+  border: none;
+  color: $text-body;
+  font-size: $fs-md;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    color: $text-primary;
+  }
+}
+.onboarding-caret {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  color: $text-muted;
+
+  &.open {
+    transform: rotate(90deg);
+  }
+}
+.onboarding-advanced-body {
+  margin-top: $space-4;
+}
+
+// ===== LLM 步：provider 选择 + 配置 =====
+// provider 品牌图标容器（SVG glyph）
+.llm-provider-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  svg {
+    display: block;
+  }
+}
+
+// provider 行（两阶段共用）：图标 + 名称 (+ 箭头/选中)
+.onboarding-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.onboarding-provider-item {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  width: 100%;
+  text-align: left;
+  padding: $space-4 $space-5;
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+  background: $bg-panel;
+  color: $text-body;
+  cursor: pointer;
+
+  &:hover {
+    background: $bg-hover;
+    border-color: $color-accent;
+  }
+  &.selected {
+    border-color: $color-accent;
+    box-shadow: inset 3px 0 0 $color-accent;
+    color: $text-primary;
+  }
+}
+.onboarding-provider-name {
+  flex: 1;
+  min-width: 0;
+  font-size: $fs-md;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.onboarding-provider-arrow {
+  color: $text-muted;
+  font-size: $fs-lg;
+  flex-shrink: 0;
+}
+
+// 阶段一：居中的选择列表
+.onboarding-provider-pick {
+  max-width: 360px;
+  margin: 0 auto;
+}
+.onboarding-provider-pick-hint {
+  margin: 0 0 $space-4;
+  text-align: center;
+}
+
+// 阶段二：左列表 + 右配置
+.onboarding-llm-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: $space-8;
+  align-items: start;
+
+  // 左侧列表：从右侧滑入到位（视觉上「收到左边」）
+  .onboarding-provider-list {
+    animation: onboarding-slide-left 0.28s ease both;
+  }
+}
+// 右侧配置：略微延迟后渐隐进入
+.onboarding-llm-form {
+  min-width: 0;
+  animation: onboarding-form-fade 0.3s ease 0.08s both;
+}
+
+@keyframes onboarding-slide-left {
+  from {
+    opacity: 0.3;
+    transform: translateX(36px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes onboarding-form-fade {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+// ===== 完成页：成功图案 + 友好文案 =====
+.onboarding-done {
+  text-align: center;
+  padding: $space-6 $space-4;
+}
+.onboarding-done-badge {
+  color: $color-approved;
+  margin-bottom: $space-5;
+  animation: onboarding-pop 0.36s ease both;
+}
+// 对勾描边按路径长度做「书写」动画
+.onboarding-check-path {
+  stroke-dasharray: 34;
+  stroke-dashoffset: 34;
+  animation: onboarding-check 0.4s ease 0.18s forwards;
+}
+@keyframes onboarding-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes onboarding-check {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+// ===== 底部导航 =====
+.onboarding-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-5 $space-8;
+  border-top: 1px solid $border-default;
+  background: $bg-elev;
+  flex-shrink: 0;
+}
+.onboarding-nav-right {
+  display: flex;
+  gap: $space-4;
+}
+
+@media (max-width: 640px) {
+  .onboarding-platform-grid,
+  .onboarding-llm-grid {
+    grid-template-columns: 1fr;
+  }
+}

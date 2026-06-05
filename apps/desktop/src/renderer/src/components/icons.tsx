@@ -89,6 +89,47 @@ export function PencilIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 睁眼：密钥/令牌「显示」状态用 */
+export function EyeIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M1.8 8C3.2 4.9 12.8 4.9 14.2 8 12.8 11.1 3.2 11.1 1.8 8Z" />
+      <circle cx="8" cy="8" r="1.9" />
+    </svg>
+  );
+}
+
+/** 闭眼（带斜杠）：密钥/令牌「隐藏」状态用 */
+export function EyeOffIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M1.8 8C3.2 4.9 12.8 4.9 14.2 8 12.8 11.1 3.2 11.1 1.8 8Z" />
+      <circle cx="8" cy="8" r="1.9" />
+      <line x1="3" y1="13" x2="13" y2="3" />
+    </svg>
+  );
+}
+
 /** 垃圾桶：删除按钮用 */
 export function TrashIcon({ size = 14 }: IconProps) {
   return (

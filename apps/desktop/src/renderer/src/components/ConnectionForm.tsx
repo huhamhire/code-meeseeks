@@ -1,0 +1,180 @@
+import { useState } from 'react';
+import type { Config } from '@meebox/shared';
+import { invoke } from '../api';
+import { EyeIcon, EyeOffIcon } from './icons';
+
+// 连接编辑用的扁平草稿（Connection 是嵌套的 auth/clone，拍平后表单好写），存盘前还原。
+// 设置页 ConnectionEditorModal 与首启向导 PlatformStep 共用同一份草稿形状 + 表单。
+export type ConnEntry = Config['connections'][number];
+export type ConnDraft = {
+  id: string;
+  display_name: string;
+  base_url: string;
+  token: string;
+  protocol: 'pat' | 'ssh';
+};
+
+export function toConnDraft(c: ConnEntry): ConnDraft {
+  return {
+    id: c.id,
+    display_name: c.display_name,
+    base_url: c.base_url,
+    token: c.auth.token,
+    protocol: c.clone.protocol,
+  };
+}
+
+export function fromConnDraft(d: ConnDraft): ConnEntry {
+  return {
+    id: d.id,
+    kind: 'bitbucket-server',
+    base_url: d.base_url.trim(),
+    display_name: d.display_name.trim() || d.base_url.trim(),
+    auth: { type: 'pat', token: d.token },
+    clone: { protocol: d.protocol },
+  };
+}
+
+/** Base URL 形如 http(s)://… 才算合法 */
+export function connUrlValid(d: ConnDraft): boolean {
+  return /^https?:\/\/.+/i.test(d.base_url.trim());
+}
+/** 名称 + 合法 URL + token 三者齐全才允许保存 */
+export function connDraftCanSave(d: ConnDraft): boolean {
+  return d.display_name.trim() !== '' && connUrlValid(d) && d.token.trim() !== '';
+}
+
+/**
+ * 连接配置受控表单（名称 / Base URL / PAT / Clone 协议 + 「测试连接」）。
+ * 只负责字段渲染与即时连通性测试；保存 / 取消等动作由外层（模态框 / 向导）提供。
+ *
+ * autoFocus 默认开（模态打开聚焦名称）；嵌在向导里时按需关闭避免抢焦点。
+ */
+export function ConnectionForm({
+  draft,
+  onChange,
+  autoFocus = true,
+}: {
+  draft: ConnDraft;
+  onChange: (draft: ConnDraft) => void;
+  autoFocus?: boolean;
+}) {
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const update = <K extends keyof ConnDraft>(field: K, value: ConnDraft[K]): void => {
+    onChange({ ...draft, [field]: value });
+    setTestResult(null); // 改字段清掉旧测试结果，避免误导
+  };
+
+  const urlValid = connUrlValid(draft);
+  const canTest = urlValid && draft.token.trim() !== '';
+
+  const runTest = async (): Promise<void> => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await invoke('config:testConnection', {
+        base_url: draft.base_url.trim(),
+        token: draft.token,
+      });
+      setTestResult(
+        r.ok
+          ? {
+              ok: true,
+              text: `连接成功${r.user ? ` · ${r.user.displayName}` : ''}${
+                r.serverVersion ? ` · v${r.serverVersion}` : ''
+              }`,
+            }
+          : { ok: false, text: r.reason ?? '连接失败' },
+      );
+    } catch (e) {
+      setTestResult({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="modal-kv">
+        <div className="modal-kv-key">
+          名称 <span className="settings-required">*</span>
+        </div>
+        <div className="modal-kv-val">
+          <input
+            type="text"
+            className="settings-input"
+            value={draft.display_name}
+            onChange={(e) => update('display_name', e.target.value)}
+            placeholder="如 公司 Bitbucket"
+            autoFocus={autoFocus}
+            maxLength={48}
+          />
+        </div>
+        <div className="modal-kv-key">
+          Base URL <span className="settings-required">*</span>
+        </div>
+        <div className="modal-kv-val">
+          <input
+            type="text"
+            className={`settings-input${draft.base_url && !urlValid ? ' settings-input-error' : ''}`}
+            value={draft.base_url}
+            onChange={(e) => update('base_url', e.target.value)}
+            placeholder="https://bitbucket.example.com"
+          />
+        </div>
+        <div className="modal-kv-key">
+          访问令牌 (PAT) <span className="settings-required">*</span>
+        </div>
+        <div className="modal-kv-val">
+          <div className="settings-secret-row">
+            <input
+              type={tokenVisible ? 'text' : 'password'}
+              className="settings-input"
+              value={draft.token}
+              onChange={(e) => update('token', e.target.value)}
+              placeholder="Bitbucket HTTP 访问令牌"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="btn btn-sm btn-icon"
+              onClick={() => setTokenVisible((v) => !v)}
+              title={tokenVisible ? '隐藏' : '显示'}
+              aria-label={tokenVisible ? '隐藏' : '显示'}
+            >
+              {tokenVisible ? <EyeIcon /> : <EyeOffIcon />}
+            </button>
+          </div>
+        </div>
+        <div className="modal-kv-key">Clone 协议</div>
+        <div className="modal-kv-val">
+          <select
+            className="settings-input"
+            value={draft.protocol}
+            onChange={(e) => update('protocol', e.target.value as 'pat' | 'ssh')}
+          >
+            <option value="pat">HTTPS</option>
+            <option value="ssh">SSH（本地 ssh config）</option>
+          </select>
+        </div>
+      </div>
+      {/* 测试连接：独立一行，左按钮右结果。保存 / 取消 由外层决定布局 */}
+      <div className="settings-actions" style={{ marginTop: 12, alignItems: 'center' }}>
+        <button type="button" className="btn" onClick={() => void runTest()} disabled={!canTest || testing}>
+          {testing ? '测试中…' : '测试连接'}
+        </button>
+        {testResult && (
+          <span
+            className={testResult.ok ? undefined : 'error-text'}
+            style={testResult.ok ? { color: '#3fb950' } : undefined}
+          >
+            {testResult.text}
+          </span>
+        )}
+      </div>
+    </>
+  );
+}

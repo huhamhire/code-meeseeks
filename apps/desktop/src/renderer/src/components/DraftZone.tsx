@@ -381,7 +381,7 @@ export function DraftZone({
                 title={
                   !draft.body.trim()
                     ? '空草稿不能发布；先点编辑写入内容'
-                    : '发布到 BBS (这一条)'
+                    : '发布到 Bitbucket (这一条)'
                 }
               >
                 {publishing ? '发布中…' : '发布'}
@@ -437,7 +437,7 @@ export function DraftZone({
                 title={
                   !canSave
                     ? '评论不能为空'
-                    : '发布到 BBS (Cmd/Ctrl+Enter，会先自动保存当前内容)'
+                    : '发布到 Bitbucket (Cmd/Ctrl+Enter，会先自动保存当前内容)'
                 }
               >
                 {publishing ? '发布中…' : saving ? '保存中…' : '发布'}

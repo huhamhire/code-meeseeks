@@ -1659,7 +1659,7 @@ function CommentNode({
       {confirmDelete && (
         <ConfirmModal
           title="删除评论"
-          message="此操作会删除远端 BBS 上的这条评论，且无法恢复。确定继续吗？"
+          message="此操作会删除远端 Bitbucket 上的这条评论，且无法恢复。确定继续吗？"
           confirmLabel="删除"
           cancelLabel="取消"
           danger

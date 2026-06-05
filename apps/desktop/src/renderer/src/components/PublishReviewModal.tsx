@@ -201,7 +201,7 @@ export function PublishReviewModal({
                 className="btn btn-sm btn-primary"
                 disabled={selected.size === 0}
                 onClick={() => void handlePublish()}
-                title={selected.size === 0 ? '至少选择一条' : '发布到 BBS'}
+                title={selected.size === 0 ? '至少选择一条' : '发布到 Bitbucket'}
               >
                 发布 {selected.size} 条
               </button>
@@ -212,7 +212,7 @@ export function PublishReviewModal({
         {phase === 'publishing' && (
           <div className="publish-review-body publish-review-publishing">
             <div className="publish-review-spinner" aria-hidden="true" />
-            <p>正在串行发布 {selected.size} 条评论到 BBS…</p>
+            <p>正在串行发布 {selected.size} 条评论到 Bitbucket…</p>
             <p className="muted">请勿关闭窗口</p>
           </div>
         )}

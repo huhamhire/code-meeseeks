@@ -14,6 +14,7 @@ import { wireChatRunStore } from './stores/chat-run-store';
 import { wireDraftsStore } from './stores/drafts-store';
 import { wireRepoSyncStore } from './stores/repo-sync-store';
 import { MainPane } from './components/MainPane';
+import { OnboardingWizard, type OnboardingResult } from './components/onboarding/OnboardingWizard';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
@@ -34,6 +35,12 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
+  // 仅调试用：localStorage 里 meebox.forceOnboarding='1' 时强制进首启向导，
+  // 不必动 config.yaml。DevTools 设值后刷新进入；走完向导会自动清掉该 flag。
+  // 详见 docs/development.md。
+  const [forceOnboarding, setForceOnboarding] = useState(
+    () => localStorage.getItem('meebox.forceOnboarding') === '1',
+  );
   /**
    * M4 跨组件跳转 (ADR-0007)：ChatPane finding card 点"编辑" → 这里 set →
    * MainPane 切 tab='diff' + 透传给 DiffView → DiffView 消费完调 onConsumed 清空。
@@ -209,6 +216,42 @@ export default function App() {
     await triggerRefresh();
   }, [selected, selectedId, triggerRefresh]);
 
+  // 首启向导完成：落盘连接（必）+ LLM / 缓存目录（按需），再重拉配置/连接/PR 更新
+  // boot。boot.config 拿到有效 active 连接后，下方 needsOnboarding 派生为 false，
+  // 向导自然卸载、切入主界面；主界面挂载后 poll:tick 订阅 + focus 刷新自然生效。
+  const completeOnboarding = useCallback(
+    async (result: OnboardingResult): Promise<void> => {
+      await invoke('config:setConnections', {
+        connections: [result.connection],
+        active_connection_id: result.connection.id,
+      });
+      if (result.llm) {
+        await invoke('config:setLlm', {
+          llm: { profiles: [result.llm], active_id: result.llm.id },
+        });
+      }
+      const trimmedRepos = result.reposDir.trim();
+      if (trimmedRepos && trimmedRepos !== (boot?.config.workspace.repos_dir ?? '')) {
+        await invoke('config:setReposDir', { reposDir: trimmedRepos });
+      }
+      const [config, connections, freshPrs, lastSync] = await Promise.all([
+        invoke('config:read', undefined),
+        invoke('app:connections', undefined),
+        invoke('prs:list', undefined),
+        invoke('prs:lastSync', undefined),
+      ]);
+      setBoot((b) => (b ? { ...b, config, connections, lastSyncAt: lastSync.at } : b));
+      setPrs(freshPrs);
+      setLastSyncAt(lastSync.at);
+      // 走完向导清掉调试 flag，避免强制模式下完成后仍被困在向导
+      if (forceOnboarding) {
+        localStorage.removeItem('meebox.forceOnboarding');
+        setForceOnboarding(false);
+      }
+    },
+    [boot, forceOnboarding],
+  );
+
   if (fatalError) {
     return (
       <div className="app fatal-app">
@@ -224,6 +267,24 @@ export default function App() {
       </div>
     );
   }
+
+  // gate 条件 = 有无「有效的 active 连接」：连接为空 / active 悬空都触发首启向导。
+  // 不依赖一次性 firstRun 标记 —— 用户清空连接后下次进入仍会回到向导。
+  const needsOnboarding =
+    forceOnboarding ||
+    !boot.config.connections.some((c) => c.id === boot.config.active_connection_id);
+  if (needsOnboarding) {
+    return (
+      <OnboardingWizard
+        existingLlmProfiles={boot.config.llm.profiles}
+        initialReposDir={boot.config.workspace.repos_dir}
+        onComplete={completeOnboarding}
+      />
+    );
+  }
+
+  // 有 active 连接但 LLM 未配置 → ChatPane 给出「需配置才能启用」提示并禁用输入
+  const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
 
   return (
     <div className="app">
@@ -255,6 +316,8 @@ export default function App() {
           width={chatWidth}
           onResize={setChatWidth}
           collapsed={chatCollapsed}
+          llmConfigured={llmConfigured}
+          onOpenSettings={() => setShowSettings(true)}
           onJumpToDraftEditor={(t) => setPendingDiffNav(t)}
           onSetReviewStatus={(s) => void setSelectedPrStatus(s)}
           // 当前 active LLM profile.model — RunningView 显示成 chip 让用户知道
