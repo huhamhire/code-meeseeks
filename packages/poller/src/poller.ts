@@ -2,6 +2,7 @@ import type { Logger } from 'pino';
 import type {
   LocalPrStatus,
   PlatformAdapter,
+  PlatformKind,
   PollResult,
   ReviewerStatus,
 } from '@meebox/shared';
@@ -54,7 +55,7 @@ export interface PollerOptions {
  * remoteId / url)，足够 main 拼 RepoIdentity 并触发 syncMirror。
  */
 export interface ChangedRepo {
-  platform: import('@meebox/shared').PlatformKind;
+  platform: PlatformKind;
   connectionId: string;
   group: string;
   repo: string;

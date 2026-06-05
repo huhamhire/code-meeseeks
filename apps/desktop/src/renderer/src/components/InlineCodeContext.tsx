@@ -1,4 +1,4 @@
-import { Editor } from '@monaco-editor/react';
+import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { useEffect, useState } from 'react';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
@@ -103,7 +103,7 @@ export function InlineCodeContext({
 
   const handleMount = (
     ed: editor.IStandaloneCodeEditor,
-    monaco: typeof import('monaco-editor'),
+    monaco: Monaco,
   ): void => {
     // 真实文件行号 = snippet 内部行号 + startLine - 1。Monaco lineNumbers 函数式
     // 完全可控，把内部 1..N 映射回去

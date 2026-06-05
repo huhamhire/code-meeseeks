@@ -392,6 +392,8 @@ export function ChatPane({
       // 只有当 active 离开这个 runId 时才清；同 active 的多次 re-render 不清
       chatRunStore.clearLines(runId);
     };
+    // 仅依赖 runId：active 对象同 runId 的重渲不应触发清理
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.runId]);
 
   return (

@@ -293,7 +293,7 @@ function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
     return anchor;
   }
   // 兜底 1：含 `/` 的路径 token (优先匹配 `path/to/file.ext`)
-  const pathRe = /(?:^|[\s\(`'"])([A-Za-z0-9_./\\-]+\/[A-Za-z0-9_./\\-]*\.[A-Za-z0-9]{1,8})(?=[\s\)`'":.,!?]|$)/m;
+  const pathRe = /(?:^|[\s(`'"])([A-Za-z0-9_./\\-]+\/[A-Za-z0-9_./\\-]*\.[A-Za-z0-9]{1,8})(?=[\s)`'":.,!?]|$)/m;
   const pm = pathRe.exec(text);
   if (pm) {
     const path = pm[1]!;

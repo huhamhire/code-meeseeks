@@ -149,6 +149,8 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
     setElapsedMs(Date.now() - startMs);
     const id = setInterval(() => setElapsedMs(Date.now() - startMs), 1000);
     return () => clearInterval(id);
+    // 仅依赖 runId + startMs：active 对象其它字段变化不影响计时
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.runId, startMs]);
 
   // 队列弹出菜单：点开 (active chip + 队列 ≥1) 显示 waiting 列表 + × 取消

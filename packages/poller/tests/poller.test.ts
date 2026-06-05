@@ -60,6 +60,25 @@ class FakeAdapter implements PlatformAdapter {
   async setPullRequestReviewStatus(): Promise<void> {
     // 测试只关心 poller 自身行为；setReviewStatus 在 IPC 层调用，poller 不触发
   }
+  // 以下方法仅在 IPC 层被调用，poller 不触发；补桩满足 PlatformAdapter 契约。
+  async getAttachment(): Promise<never> {
+    throw new Error('FakeAdapter.getAttachment 未实现（poller 测试不使用）');
+  }
+  async mergePullRequest(): Promise<never> {
+    throw new Error('FakeAdapter.mergePullRequest 未实现（poller 测试不使用）');
+  }
+  async replyToComment(): Promise<never> {
+    throw new Error('FakeAdapter.replyToComment 未实现（poller 测试不使用）');
+  }
+  async publishInlineComment(): Promise<never> {
+    throw new Error('FakeAdapter.publishInlineComment 未实现（poller 测试不使用）');
+  }
+  async deleteComment(): Promise<never> {
+    throw new Error('FakeAdapter.deleteComment 未实现（poller 测试不使用）');
+  }
+  async editComment(): Promise<never> {
+    throw new Error('FakeAdapter.editComment 未实现（poller 测试不使用）');
+  }
 }
 
 const noop = (): void => undefined;
@@ -226,6 +245,13 @@ describe('Poller.tick', () => {
       async setPullRequestReviewStatus() {
         // unused in this test
       },
+      // 以下方法本测试不触发；补桩满足 PlatformAdapter 契约。
+      getAttachment: () => Promise.reject(new Error('unused')),
+      mergePullRequest: () => Promise.reject(new Error('unused')),
+      replyToComment: () => Promise.reject(new Error('unused')),
+      publishInlineComment: () => Promise.reject(new Error('unused')),
+      deleteComment: () => Promise.reject(new Error('unused')),
+      editComment: () => Promise.reject(new Error('unused')),
       listPendingPullRequests: () => new Promise<PullRequest[]>((r) => (resolveList = r)),
     };
     const poller = new Poller({

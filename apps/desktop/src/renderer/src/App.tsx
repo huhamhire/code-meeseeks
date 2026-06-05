@@ -46,6 +46,8 @@ export default function App() {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 6000);
     return () => clearTimeout(id);
+    // 仅依赖 key：同一 toast 重渲不重置计时，新 toast (key 变) 才重置
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast?.key]);
   // 仅调试用：localStorage 里 meebox.forceOnboarding='1' 时强制进首启向导，
   // 不必动 config.yaml。DevTools 设值后刷新进入；走完向导会自动清掉该 flag。
