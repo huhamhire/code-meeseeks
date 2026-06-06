@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import simpleGit from 'simple-git';
+import simpleGit, { type SimpleGit } from 'simple-git';
 import type { Logger } from 'pino';
 import type { SyncProgressEvent } from '@meebox/shared';
 import type {
@@ -21,6 +21,12 @@ export interface RepoMirrorOptions {
   logger?: Logger;
   /** 可选 sync 进度回调；clone/fetch 期间分阶段发出 start/progress/done/error */
   onProgress?: (event: SyncProgressEvent) => void;
+  /**
+   * 可选出站代理 env（见 ADR-0009）。getter 形式，每次远端 clone/fetch 前求值，
+   * 让设置页改代理后下次操作即生效。返回 HTTP(S)_PROXY/NO_PROXY 等；关闭时返回 {}。
+   * 仅作用于打远端的 clone/fetch；本地只读 git 操作不注入。
+   */
+  proxyEnv?: () => Record<string, string>;
 }
 
 /**
@@ -49,6 +55,17 @@ export class RepoMirrorManager {
   private readonly inFlight = new Map<string, Promise<MirrorResult>>();
 
   constructor(private readonly opts: RepoMirrorOptions) {}
+
+  /**
+   * 给打远端的 simple-git 实例挂代理 env（见 ADR-0009）。代理关闭 / 未配置时原样返回
+   * （git 子进程继承 process.env）。注意 simple-git 的 .env() 整体替换子进程 env，
+   * 故必须 merge process.env，否则 PATH / HOME 等全丢。
+   */
+  private withProxyEnv(git: SimpleGit): SimpleGit {
+    const px = this.opts.proxyEnv?.() ?? {};
+    if (Object.keys(px).length === 0) return git;
+    return git.env({ ...process.env, ...px } as Record<string, string>);
+  }
 
   /** 计算 bare 镜像应当落在哪里（不保证存在）。 */
   mirrorPath(repo: RepoIdentity): string {
@@ -432,7 +449,7 @@ export class RepoMirrorManager {
         //     当源分支已被删除 / 强推后，refs/heads 看不到，但 from ref 仍指向
         //     PR 开启时的 sha；没有它 `git diff base...head` 会 "Invalid
         //     symmetric difference" 因为 head 不可达。
-        await simpleGit({ baseDir: mirrorPath, ...gitProgressOpt }).raw([
+        await this.withProxyEnv(simpleGit({ baseDir: mirrorPath, ...gitProgressOpt })).raw([
           'fetch',
           '--progress',
           'origin',
@@ -458,7 +475,7 @@ export class RepoMirrorManager {
       // 不用 --filter=blob:none：blame / pr-agent 等需要历史 blob 的工具会触发
       //   按需拉取，远端不全或 partial clone 协议未支持时直接 fatal。完整 clone
       //   一次性付清磁盘代价，运行期稳定。
-      await simpleGit(gitProgressOpt).clone(url, mirrorPath, [
+      await this.withProxyEnv(simpleGit(gitProgressOpt)).clone(url, mirrorPath, [
         '--mirror',
         '--no-hardlinks',
         '--progress',

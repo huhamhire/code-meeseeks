@@ -76,6 +76,7 @@
     "react-markdown": "^9.1.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
+    "undici": "^6.21.1",
     "yaml": "^2.6.0",
     "zod": "^3.23.0"
   },
@@ -88,7 +89,6 @@
     "electron-vite": "^5.0.0",
     "sass": "^1.100.0",
     "tar": "^7.4.3",
-    "undici": "^6.21.1",
     "vite": "^7.3.0"
   }
 }

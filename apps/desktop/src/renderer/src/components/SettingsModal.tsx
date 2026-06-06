@@ -15,7 +15,7 @@ import {
   providerLabel,
   validateProfile,
 } from './LlmProfileForm';
-import { CloseIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
+import { CloseIcon, EyeIcon, EyeOffIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
 
 interface SettingsModalProps {
   info: AppInfo;
@@ -57,6 +57,9 @@ export function SettingsModal({
   const [llmEditor, setLlmEditor] = useState<{ mode: 'add' | 'edit'; draft: LlmProfile } | null>(
     null,
   );
+  const [proxy, setProxy] = useState<Config['proxy']>(config.proxy);
+  // 代理在独立模态框里编辑：null=关闭，非 null=正在编辑的草稿；保存回 proxy，底栏「保存」才写盘。
+  const [proxyEditor, setProxyEditor] = useState<Config['proxy'] | null>(null);
 
   // 保存基线：保存成功后更新，用于 changed 判定（禁用保存按钮）
   const [base, setBase] = useState(() => ({
@@ -65,6 +68,7 @@ export function SettingsModal({
     rulesEnabled: config.rules.enabled,
     poller: config.poller.interval_seconds,
     llm: config.llm,
+    proxy: config.proxy,
     connections: config.connections,
     activeConnId: config.active_connection_id,
   }));
@@ -203,11 +207,17 @@ export function SettingsModal({
     rulesDirInput.trim() !== base.rulesDir || rules.enabled !== base.rulesEnabled;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
+  const proxyChanged = JSON.stringify(proxy) !== JSON.stringify(base.proxy);
   const connectionsChanged =
     activeConnId !== base.activeConnId ||
     JSON.stringify(connections) !== JSON.stringify(base.connections);
   const anyChanged =
-    reposDirChanged || rulesChanged || pollerChanged || llmChanged || connectionsChanged;
+    reposDirChanged ||
+    rulesChanged ||
+    pollerChanged ||
+    llmChanged ||
+    proxyChanged ||
+    connectionsChanged;
 
   const saveAll = async (): Promise<void> => {
     if (saving || !anyChanged) return;
@@ -229,6 +239,9 @@ export function SettingsModal({
         await invoke('config:setLlm', { llm });
         onLlmChange?.(llm);
       }
+      if (proxyChanged) {
+        await invoke('config:setProxy', { proxy });
+      }
       if (connectionsChanged) {
         await invoke('config:setConnections', { connections, active_connection_id: activeConnId });
       }
@@ -241,6 +254,7 @@ export function SettingsModal({
         rulesEnabled: rules.enabled,
         poller: Number.parseInt(pollerInput, 10),
         llm,
+        proxy,
         connections,
         activeConnId,
       });
@@ -438,6 +452,23 @@ export function SettingsModal({
           </section>
 
           <section className="modal-section">
+            <div className="modal-section-head">
+              <h4>网络代理</h4>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setProxyEditor(proxy)}
+              >
+                配置
+              </button>
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              {proxy.enabled && proxy.host ? `已启用 · ${proxy.host}:${proxy.port}` : '未启用'}
+              。开启后 LLM / 代码平台 / git(HTTPS) 经 HTTP 代理，本地地址直连。
+            </p>
+          </section>
+
+          <section className="modal-section">
             <h4>规则目录</h4>
             <p className="muted" style={{ margin: '0 0 8px' }}>
               目录下每个 <code>.md</code> 是一条个性化 review 规则。
@@ -615,6 +646,18 @@ export function SettingsModal({
           onCancel={() => setConnEditor(null)}
         />
       )}
+      {proxyEditor && (
+        <ProxyEditorModal
+          draft={proxyEditor}
+          onChange={setProxyEditor}
+          onSave={() => {
+            setProxy(proxyEditor);
+            setProxyEditor(null);
+            setSaved(false);
+          }}
+          onCancel={() => setProxyEditor(null)}
+        />
+      )}
       {connDeleteId && (
         <ConfirmModal
           title="删除连接"
@@ -670,6 +713,180 @@ function ConnectionEditorModal({
               title={!canSave ? '请填完名称 / Base URL / Token' : undefined}
             >
               保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProxyEditorModal({
+  draft,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  draft: Config['proxy'];
+  onChange: (next: Config['proxy']) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const [test, setTest] = useState<{
+    testing: boolean;
+    result: { ok: boolean; reason?: string } | null;
+  }>({ testing: false, result: null });
+  const [pwVisible, setPwVisible] = useState(false);
+  // 改任意字段都清掉上次测试结果（避免误导）
+  const patch = (p: Partial<Config['proxy']>): void => {
+    onChange({ ...draft, ...p });
+    setTest({ testing: false, result: null });
+  };
+  return (
+    // 二层模态：背景点击只关本层，stopPropagation 防冒泡到设置主模态的 onClose（否则会连设置一起关）
+    <div
+      className="modal-backdrop modal-backdrop-nested"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCancel();
+      }}
+    >
+      <div
+        className="modal"
+        style={{ maxWidth: 420 }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+      >
+        <div className="modal-header">
+          <h3>网络代理</h3>
+        </div>
+        <div className="modal-body">
+          <p className="muted" style={{ margin: '0 0 10px' }}>
+            HTTP 代理（出站）。开启后 LLM 调用、代码平台、git(HTTPS) 统一经代理，本地地址直连。
+          </p>
+          <label className="settings-secret-row">
+            <input
+              type="checkbox"
+              checked={draft.enabled}
+              onChange={(e) => patch({ enabled: e.target.checked })}
+              aria-label="启用代理"
+            />
+            <span className="muted">启用代理</span>
+          </label>
+          {draft.enabled && (
+            <>
+              {/* 字段名放输入框前（modal-kv 网格）；用户名 / 密码分上下两行，均可选 */}
+              <div className="modal-kv" style={{ marginTop: 10, alignItems: 'center' }}>
+                <div className="modal-kv-key">地址</div>
+                <div className="modal-kv-val">
+                  <input
+                    type="text"
+                    className="settings-input"
+                    value={draft.host}
+                    onChange={(e) => patch({ host: e.target.value.trim() })}
+                    placeholder="如 127.0.0.1"
+                    aria-label="代理地址"
+                  />
+                </div>
+                <div className="modal-kv-key">端口</div>
+                <div className="modal-kv-val">
+                  <input
+                    type="number"
+                    className="settings-input"
+                    value={draft.port}
+                    min={1}
+                    max={65535}
+                    onChange={(e) => patch({ port: Number.parseInt(e.target.value, 10) || 0 })}
+                    aria-label="代理端口"
+                  />
+                </div>
+                <div className="modal-kv-key">用户名</div>
+                <div className="modal-kv-val">
+                  <input
+                    type="text"
+                    className="settings-input"
+                    value={draft.username}
+                    onChange={(e) => patch({ username: e.target.value })}
+                    placeholder="可选（Basic Auth）"
+                    aria-label="代理用户名"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="modal-kv-key">密码</div>
+                <div className="modal-kv-val">
+                  <div className="settings-secret-row">
+                    <input
+                      type={pwVisible ? 'text' : 'password'}
+                      className="settings-input"
+                      value={draft.password}
+                      onChange={(e) => patch({ password: e.target.value })}
+                      placeholder="可选"
+                      aria-label="代理密码"
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-icon"
+                      onClick={() => setPwVisible((v) => !v)}
+                      title={pwVisible ? '隐藏' : '显示'}
+                      aria-label={pwVisible ? '隐藏' : '显示'}
+                    >
+                      {pwVisible ? <EyeIcon /> : <EyeOffIcon />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div
+                className="settings-edit-row"
+                style={{ marginTop: 10, alignItems: 'center', gap: 10 }}
+              >
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={test.testing || !draft.host}
+                  onClick={() => {
+                    void (async () => {
+                      setTest({ testing: true, result: null });
+                      try {
+                        const r = await invoke('config:testProxy', { proxy: draft });
+                        setTest({ testing: false, result: r });
+                      } catch (e) {
+                        setTest({
+                          testing: false,
+                          result: { ok: false, reason: e instanceof Error ? e.message : String(e) },
+                        });
+                      }
+                    })();
+                  }}
+                >
+                  {test.testing ? '测试中…' : '测试连通'}
+                </button>
+                {test.result &&
+                  (test.result.ok ? (
+                    <span className="muted" style={{ color: '#16825d' }}>
+                      ✓ 代理可用
+                    </span>
+                  ) : (
+                    <span className="error-text">✗ {test.result.reason ?? '失败'}</span>
+                  ))}
+              </div>
+            </>
+          )}
+          <div
+            className="settings-actions"
+            style={{ marginTop: 12, justifyContent: 'flex-end', alignItems: 'center' }}
+          >
+            <button type="button" className="btn" onClick={onCancel}>
+              取消
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onSave}
+              disabled={draft.enabled && !draft.host}
+              title={draft.enabled && !draft.host ? '请填代理地址' : undefined}
+            >
+              确定
             </button>
           </div>
         </div>

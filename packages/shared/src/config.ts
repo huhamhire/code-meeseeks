@@ -69,6 +69,22 @@ export type LlmProvider =
   | 'volcengine-ark'; // 火山方舟（Volcengine Ark，OpenAI 兼容入口，含豆包 / Doubao 等）
 export type LlmProfile = z.infer<typeof LlmProfileSchema>;
 
+/**
+ * 出站网络代理（见 ADR-0009）。一期仅 HTTP 代理：开关打开后 LLM / Bitbucket Server
+ * REST / git HTTPS 统一走代理，仅 loopback/本地（含本地 Ollama）自动直连；SSH 走用户
+ * 自配 ~/.ssh/config。配置面只暴露 地址/端口/Basic Auth。
+ * `protocol` 为枚举预留扩展位（一期仅 'http'；追加 socks5 等对存量配置非破坏性）。
+ */
+export const ProxySchema = z.object({
+  enabled: z.boolean().default(false),
+  protocol: z.enum(['http']).default('http'),
+  host: z.string().default(''),
+  port: z.number().int().min(1).max(65535).default(8080),
+  username: z.string().default(''),
+  password: z.string().default(''),
+});
+export type ProxyConfig = z.infer<typeof ProxySchema>;
+
 export const ConfigSchema = z.object({
   /**
    * pr-agent 生成内容时使用的自然语言 (ISO locale，如 'zh-CN' / 'en-US')。
@@ -101,6 +117,8 @@ export const ConfigSchema = z.object({
       interval_seconds: z.number().int().min(30).default(300),
     })
     .default({}),
+  /** 出站网络代理（见 ADR-0009）。默认关闭 = 全部直连，等同历史行为。 */
+  proxy: ProxySchema.default({}),
   /**
    * pr-agent 运行时策略选择（见 ADR-0008）。
    * - 'auto'（默认）：优先嵌入式运行时（随 app 打包，正常安装恒可用），缺失则

@@ -45,6 +45,7 @@ import type { JsonFileStateStore } from '@meebox/state-store';
 import { buildDraftAdapter, type BuiltAdapter, type ConnectionRuntime } from './adapters.js';
 import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
+import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
 import { buildPrContext } from './utils/pr-context.js';
 
 interface RegisterDeps {
@@ -769,6 +770,9 @@ export function registerIpcHandlers({
         // LLM env + 全局 pr-agent 配置 (响应语言)。语言配置一期写死在 config 里，
         // UI 还不暴露切换；后续多语言时改成 Settings 入口
         const env: Record<string, string> = {
+          // 代理 env 先铺底，LLM/语言配置在后（互不冲突，仅 HTTP(S)_PROXY 类）。
+          // 见 ADR-0009：开关开时让嵌入式 python(litellm/httpx) 经代理出网调 LLM。
+          ...buildProxyEnv(bootstrap.config.proxy),
           ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
           CONFIG__RESPONSE_LANGUAGE: bootstrap.config.language,
         };
@@ -1443,6 +1447,31 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
+    'config:setProxy',
+    async (_evt, req: IpcChannels['config:setProxy']['request']): Promise<void> => {
+      const next = { ...bootstrap.config, proxy: req.proxy };
+      await writeConfig(bootstrap.paths.configFile, next);
+      // 内存同步 + 热重建 adapter（REST fetch 用上新代理）；git/pr-agent 出口读最新配置无需重建
+      bootstrap.config.proxy = req.proxy;
+      await reconfigureConnections();
+      logger.info(
+        { enabled: req.proxy.enabled, host: req.proxy.host, port: req.proxy.port },
+        'proxy config updated (hot-reloaded)',
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'config:testProxy',
+    async (
+      _evt,
+      req: IpcChannels['config:testProxy']['request'],
+    ): Promise<IpcChannels['config:testProxy']['response']> => {
+      return testProxyConnectivity(req.proxy);
+    },
+  );
+
+  ipcMain.handle(
     'config:testConnection',
     async (
       _evt,
@@ -1450,7 +1479,7 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['config:testConnection']['response']> => {
       // 用草稿 url/token 临时起 adapter ping，不落配置；失败归一成 ok:false + reason
       try {
-        return await buildDraftAdapter(req.base_url, req.token).ping();
+        return await buildDraftAdapter(req.base_url, req.token, bootstrap.config.proxy).ping();
       } catch (e) {
         return { ok: false, reason: e instanceof Error ? e.message : String(e) };
       }

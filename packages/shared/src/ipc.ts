@@ -302,6 +302,16 @@ export interface IpcChannels {
   /** 写入轮询间隔 (秒，60~900 整数) 到 config.yaml，并热替换 poller 定时器，无需重启 */
   'config:setPoller': { request: { interval_seconds: number }; response: void };
   /**
+   * 写入网络代理配置到 config.yaml，并**热重建** adapter（REST 经代理即时生效，见 ADR-0009）。
+   * pr-agent / git 出口下次操作读最新配置，无需重启。
+   */
+  'config:setProxy': { request: { proxy: Config['proxy'] }; response: void };
+  /** 用给定代理配置试连一个外部地址，验证代理是否可用；不写配置。 */
+  'config:testProxy': {
+    request: { proxy: Config['proxy'] };
+    response: { ok: boolean; reason?: string };
+  };
+  /**
    * 写入连接列表 + 当前启用连接到 config.yaml，并**热重建** adapter/poller 即时生效
    * （无需重启）。active 那条被轮询，其余仅保留配置。
    */

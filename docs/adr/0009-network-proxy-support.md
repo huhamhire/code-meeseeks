@@ -1,6 +1,6 @@
 # ADR-0009: 出站网络代理支持（HTTP 代理，统一配置）
 
-- **状态**：Proposed
+- **状态**：Accepted（已实现 ①②③ + 设置页 + IPC；④ 文档引导）
 - **日期**：2026-06-06
 - **决策者**：项目主导
 - **相关**：[ADR-0001](./0001-pr-agent-integration.md)（pr-agent 集成）、[ADR-0002](./0002-bitbucket-server-adapter.md)（Bitbucket Server adapter）、[ADR-0008](./0008-pragent-packaging-and-runtime.md)（嵌入式运行时 / 子进程 env）、[ROADMAP](../ROADMAP.md)
@@ -139,11 +139,11 @@ SettingsModal 增「网络代理」分区：开关 + 地址 + 端口 + 用户名
 
 ## 落地清单（建议顺序）
 
-1. [ ] `ProxySchema`（enabled/host/port/username/password）进 [ConfigSchema](../../packages/shared/src/config.ts) + 默认值 + 迁移兼容。
-2. [ ] `apps/desktop/src/main/utils/proxy.ts`：`proxyUrl` / `shouldBypass`（loopback/本地） / `buildProxyEnv` / `buildProxyDispatcher` + 单测。
-3. [ ] **① pr-agent**：ipc.ts 组 env 处合并 `buildProxyEnv`。
-4. [ ] **③ git HTTPS**：repo-mirror-manager 接 proxy，`simple-git .env()` 注入（merge process.env）。
-5. [ ] **② Bitbucket Server REST**：BBClientOptions 加 `dispatcher`，adapters/adapter 透传 `buildProxyDispatcher`。
-6. [ ] 设置页「网络代理」分区（地址/端口/用户名/密码）+ 「测试连通」。
-7. [ ] 文档：README / 本 ADR 链接；**④ SSH 用户 `~/.ssh/config` ProxyCommand 指引**。
-8. [ ] 验证矩阵：LLM 经代理可调 / Bitbucket Server REST 经代理 / git HTTPS 经代理 / 本地(loopback/Ollama)直连 / Basic Auth 生效 / 关闭开关回到现状。
+1. [x] `ProxySchema`（enabled/protocol/host/port/username/password）进 [ConfigSchema](../../packages/shared/src/config.ts) + 默认值（全 `.default`，老配置自动兼容）。
+2. [x] [`apps/desktop/src/main/utils/proxy.ts`](../../apps/desktop/src/main/utils/proxy.ts)：`proxyUrl` / `shouldBypass`（loopback/本地） / `buildProxyEnv` / `buildProxyDispatcher` / `proxyFetchForHost` / `testProxyConnectivity`。
+3. [x] **① pr-agent**：[ipc.ts](../../apps/desktop/src/main/ipc.ts) 组 env 处合并 `buildProxyEnv(config.proxy)`。
+4. [x] **③ git HTTPS**：[repo-mirror-manager](../../packages/repo-mirror/src/repo-mirror-manager.ts) 加 `proxyEnv` getter，clone/fetch `.env({ ...process.env, ...proxyEnv })`。
+5. [x] **② Bitbucket Server REST**：经 [adapters.ts](../../apps/desktop/src/main/adapters.ts) 的 `fetch` 注入口挂 `proxyFetchForHost`（零改动平台包）；新增 IPC `config:setProxy`（热重建 adapter）/ `config:testProxy`。
+6. [x] 设置页「网络代理」分区（开关/地址/端口/用户名/密码）+ 「测试连通」（[SettingsModal](../../apps/desktop/src/renderer/src/components/SettingsModal.tsx)）。
+7. [x] 文档：[README](../../README.md) 网络代理段 + 本 ADR 链接；**④ SSH 用户 `~/.ssh/config` ProxyCommand 指引**。
+8. [ ] 验证矩阵（待真实代理端到端）：LLM 经代理可调 / Bitbucket Server REST 经代理 / git HTTPS 经代理 / 本地(loopback/Ollama)直连 / Basic Auth 生效 / 关闭开关回到现状。（CI lint/typecheck/test/build 已全绿）

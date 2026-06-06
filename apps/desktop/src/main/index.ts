@@ -11,6 +11,7 @@ import type { PlatformAdapter, PrAgentStatus } from '@meebox/shared';
 import { JsonFileStateStore } from '@meebox/state-store';
 import { buildAdapters, type ConnectionRuntime } from './adapters.js';
 import { registerIpcHandlers } from './ipc.js';
+import { buildProxyEnv } from './utils/proxy.js';
 
 // macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
 // 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
@@ -86,7 +87,7 @@ async function start(): Promise<void> {
   // 重建 adapters + ping（缓存 currentUser）+ 重算 adapterByHost + 把"当前启用"的那条
   // 喂给 poller。启动时跑一次；设置页 config:setConnections 后再跑实现热生效。不在此 tick。
   const reconfigureConnections = async (): Promise<void> => {
-    const adapters = buildAdapters(bootstrap.config.connections);
+    const adapters = buildAdapters(bootstrap.config.connections, bootstrap.config.proxy);
     // ping 全部连接（失败不阻塞），让 poller 首轮就能按 currentUser 判 approved
     await Promise.all(
       adapters.map(async ({ connectionId, adapter }) => {
@@ -177,6 +178,8 @@ async function start(): Promise<void> {
         win.webContents.send('sync:progress', event);
       }
     },
+    // 出站代理（见 ADR-0009）：getter 每次远端 clone/fetch 求值，设置页改代理后即生效。
+    proxyEnv: () => buildProxyEnv(bootstrap.config.proxy),
   });
 
   // 初次构建连接（含 ping + 把 active 连接喂给 poller）

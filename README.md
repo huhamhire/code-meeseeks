@@ -76,6 +76,10 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 配置存放在 `~/.code-meeseeks/config.yaml`；仓库镜像默认在 `~/.code-meeseeks/repos/`，可在设置页改到其他目录（如空间更充裕的磁盘）。
 
+> **网络代理**（可选，内网用户）：设置页「网络代理」填 HTTP 代理地址 / 端口 / Basic Auth，开启后 LLM 调用、Bitbucket Server、git 拉取统一经代理，本地地址自动直连（含「测试连通」按钮）。
+>
+> **SSH 方式的 git 拉取**不走此配置，请在 `~/.ssh/config` 为对应 host 自配 `ProxyCommand`。
+
 ---
 
 ## 平台支持
