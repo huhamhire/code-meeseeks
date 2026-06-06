@@ -23,6 +23,14 @@ if (process.platform === 'darwin') {
   app.commandLine.appendSwitch('use-mock-keychain');
 }
 
+// 单例锁：同一时刻只允许一个实例运行。多实例会共享同一份 config.yaml / repos 镜像 /
+// state store，导致写竞争、poller 重复轮询、git 镜像并发写冲突，必须互斥。拿不到锁的
+// 第二个实例直接退出，并由已有实例的 second-instance 回调把窗口聚焦到前台。
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -272,8 +280,20 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-start().catch((e: unknown) => {
-  if (logger) logger.fatal({ err: e }, 'startup failed');
-  else console.error('meebox startup failed:', e);
-  app.quit();
-});
+// 仅在拿到单例锁时才真正启动；否则上面已 app.quit()，不跑业务初始化。
+if (gotSingleInstanceLock) {
+  // 二次启动（用户再点图标 / 命令行再拉起）→ 聚焦已有窗口，最小化则先还原。
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+
+  start().catch((e: unknown) => {
+    if (logger) logger.fatal({ err: e }, 'startup failed');
+    else console.error('meebox startup failed:', e);
+    app.quit();
+  });
+}
