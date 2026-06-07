@@ -60,15 +60,19 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 | 平台 | 产物 | 状态 |
 | --- | --- | --- |
 | Windows x64 | `code-meeseeks-<version>-win-x64.exe`（NSIS 安装包） | ✅ 可用 |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg` | ✅ 可用（ad-hoc 签名、未公证，首次需手动"仍要打开"，见 [macOS 构建与发布](docs/mac-build.md)） |
+| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg` | ✅ 可用 |
 
-安装包已内嵌 Python 运行时 + pr-agent，安装后即可使用，无需额外环境。
+安装包已内嵌 pr-agent，安装后即可使用，无需额外环境。
+
+> **macOS 首次打开**：安装包为 ad-hoc 签名、未做 Apple 公证（notarization），Gatekeeper 会拦下未知开发者的 App。首次使用请右键点击 App 选「打开」，或到「系统设置 → 隐私与安全性」点「仍要打开」，确认一次后即可正常启动。
+>
+> 之所以未公证：本项目是**免费开源软件**，未购置 Apple Developer 付费账号（公证依赖该账号）。源码完全公开、可自行审计与构建，ad-hoc 签名不影响功能与安全。
 
 ---
 
 ## 快速上手
 
-1. **配置连接** —— 设置页填入代码平台地址 + 个人访问令牌（PAT）（当前支持 Bitbucket Server，GitHub / GitLab 规划中）。
+1. **配置连接** —— 设置页填入代码平台地址 + 鉴权信息。
 2. **配置 LLM** —— 选择 Provider，填 API Key / base_url / 模型名。
 3. **发现 PR** —— 应用自动轮询拉取你待评审的 PR，左侧列表按仓库分组。
 4. **阅读 + 评审** —— 选中 PR 看 diff，在对话框输入 `/review` 让 AI 生成 findings。
