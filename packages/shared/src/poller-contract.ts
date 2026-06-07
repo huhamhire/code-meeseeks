@@ -228,6 +228,19 @@ export interface PrIdentitySnapshot {
  * 一次 pr-agent 调用的完整记录。落地为 `state/prs/<localId>/runs/<runId>.json`，
  * 与 PR 的 meta.json / comments.json 同目录，PR 退场时一并清理。
  */
+/**
+ * 本次 run 的 LLM token 用量（真实值，来自 API response.usage，经 litellm callback
+ * 捕获，见 sitecustomize.py）。一次 run 可能多次调用 LLM（retry / 多 tool），这里是
+ * **累加**值，calls 记录调用次数。历史 run / 非 embedded / 流式模型可能缺失 → 全可选。
+ */
+export interface TokenUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  /** 本次 run 捕获到的 LLM 调用次数（累加来源） */
+  calls?: number;
+}
+
 export interface ReviewRun {
   /** yyyymmdd-HHmmss-ms 时序 id，便于按文件名倒序列出 */
   id: string;
@@ -274,6 +287,8 @@ export interface ReviewRun {
   findings?: Finding[];
   /** 概要 (取首个 ## section 标题 / 描述首行)，UI list 上显示 */
   summary?: string;
+  /** 本次 run 的真实 LLM token 用量（累加）；缺失 = 未捕获到（见 TokenUsage） */
+  tokenUsage?: TokenUsage;
 }
 
 export interface ReviewRunFile {

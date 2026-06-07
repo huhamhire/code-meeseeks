@@ -5,6 +5,7 @@ import type {
   ReviewRunFile,
   ReviewRunStatus,
   ReviewRunTool,
+  TokenUsage,
 } from '@meebox/shared';
 import type { PrAgentStrategy } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
@@ -91,6 +92,8 @@ export interface FinishReviewRunPatch {
   findings?: Finding[];
   /** UI 列表展示用的概要 */
   summary?: string;
+  /** 本次 run 的真实 LLM token 用量（累加，来自 litellm callback） */
+  tokenUsage?: TokenUsage;
 }
 
 /**

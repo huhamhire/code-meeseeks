@@ -79,6 +79,10 @@ export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
   env['CONFIG__MAX_MODEL_TOKENS'] = '128000';
   env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = '128000';
   env['CONFIG__FALLBACK_MODELS'] = '[]';
+  // litellm import 时会联网拉远端模型价格表（raw.githubusercontent.com），内网/弱网
+  // 下 SSL 超时拖慢启动且刷警告。我们只取真实 token 数（来自 API response.usage），
+  // 不需要价格表 → 强制只用包内本地备份、彻底不联网。见 sitecustomize 的 usage callback。
+  env['LITELLM_LOCAL_MODEL_COST_MAP'] = 'True';
   // 注：没接 LITELLM_LOG / CONFIG__VERBOSITY_LEVEL 因为 pr-agent 0.35 社区版上
   // 都不让 completion tokens 落到 stdout —— pr-agent 把它扔进 logger.debug 的
   // 'artifact' 字段，loguru 默认 INFO 级别滤掉。要拿到 completion tokens 需要走

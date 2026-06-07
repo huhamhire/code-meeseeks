@@ -1607,7 +1607,17 @@ const RUN_STATUS_LABEL: Record<ReviewRun['status'], string> = {
 
 function RunMeta({ run }: { run: ReviewRun }) {
   const duration = run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—';
-  const usage = run.stdout ? extractTokenUsage(run.stdout) : ({} as TokenUsage);
+  // 优先用 run.tokenUsage（litellm callback 捕获的 API 真实 usage，见 sitecustomize）；
+  // 历史 run 没这字段时回退到从 stdout 抓取的旧估算，保持向后兼容。
+  const usage: TokenUsage = run.tokenUsage
+    ? {
+        prompt: run.tokenUsage.promptTokens,
+        completion: run.tokenUsage.completionTokens,
+        total: run.tokenUsage.totalTokens,
+      }
+    : run.stdout
+      ? extractTokenUsage(run.stdout)
+      : {};
   return (
     <header className="chat-run-meta">
       <span className={`chat-run-tool chat-run-tool-${run.tool}`}>/{run.tool}</span>
@@ -1621,21 +1631,25 @@ function RunMeta({ run }: { run: ReviewRun }) {
           {run.model}
         </span>
       )}
-      {usage.total !== undefined ? (
-        // litellm 给齐了 prompt + completion + total → 完整展示
+      {/* 只分别展示输入(↑prompt,绿) / 输出(↓completion,红)，不显示总数。旧 run 可能只有 prompt */}
+      {usage.prompt !== undefined || usage.completion !== undefined ? (
         <span
           className="chat-run-chip chat-run-tokens"
-          title={`prompt ${String(usage.prompt ?? 0)} + completion ${String(usage.completion ?? 0)} = total ${String(usage.total)} tokens (litellm 报告)`}
+          title={`输入(prompt) ${usage.prompt ?? '—'} · 输出(completion) ${usage.completion ?? '—'} tokens`}
         >
-          {formatTokens(usage.total)} tokens (
-          {formatTokens(usage.prompt ?? 0)}↑ + {formatTokens(usage.completion ?? 0)}↓)
-        </span>
-      ) : usage.prompt !== undefined ? (
-        <span
-          className="chat-run-chip chat-run-tokens"
-          title={`prompt ${String(usage.prompt)} tokens`}
-        >
-          ↑ {formatTokens(usage.prompt)} tokens
+          {usage.prompt !== undefined && (
+            <>
+              <span style={{ color: '#22c55e' }}>↑</span>
+              {formatTokens(usage.prompt)}
+            </>
+          )}
+          {usage.prompt !== undefined && usage.completion !== undefined ? ' / ' : ''}
+          {usage.completion !== undefined && (
+            <>
+              <span style={{ color: '#ef4444' }}>↓</span>
+              {formatTokens(usage.completion)}
+            </>
+          )}
         </span>
       ) : null}
       <span className="chat-run-chip chat-run-duration">{duration}</span>

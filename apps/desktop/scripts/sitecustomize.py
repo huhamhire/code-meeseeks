@@ -159,8 +159,38 @@ def _patch_local_git_provider_binary_safe(module) -> None:
     module.LocalGitProvider.get_line_link = get_line_link
 
 
-def _patch_litellm_no_temperature(module) -> None:
-    """新版 Anthropic 原厂模型（claude-opus-4-8 等）弃用 temperature 参数，但 pr-agent 默认
+def _emit_usage(response) -> None:
+    """从 litellm response 读**真实 usage**（API 返回，非预估），以哨兵行 `@@MEEBOX_USAGE@@ {json}`
+    打到 stderr。主进程 onLine 据此累加（见 ipc.ts）。只取 token、不取 cost。全程容错。"""
+    try:
+        usage = getattr(response, "usage", None)
+        if usage is None and isinstance(response, dict):
+            usage = response.get("usage")
+        if usage is None:
+            return
+
+        def _g(key):
+            return usage.get(key) if isinstance(usage, dict) else getattr(usage, key, None)
+
+        import json
+
+        rec = {
+            "prompt_tokens": _g("prompt_tokens"),
+            "completion_tokens": _g("completion_tokens"),
+            "total_tokens": _g("total_tokens"),
+        }
+        if rec["prompt_tokens"] is None and rec["completion_tokens"] is None:
+            return  # 没有任何可用数字（如流式 MockResponse）→ 不打
+        print(f"@@MEEBOX_USAGE@@ {json.dumps(rec)}", file=sys.stderr, flush=True)
+    except Exception as exc:  # noqa: BLE001
+        _debug(f"emit usage failed (ignored): {exc}")
+
+
+def _patch_litellm_handler(module) -> None:
+    """对 pr-agent 的 litellm handler 模块打两个补丁（合并在一个 patch_fn，同模块注册多 finder 会
+    互相遮蔽）：(1) Anthropic 新型号去 temperature；(2) 包 _get_completion inline 采集真实 token usage。
+
+    (1) 新版 Anthropic 原厂模型（claude-opus-4-8 等）弃用 temperature 参数，但 pr-agent 默认
     仍发 temperature=0.2 → Anthropic API 直接报 "temperature is deprecated for this model"，
     review/describe 全失败。
 
@@ -191,6 +221,25 @@ def _patch_litellm_no_temperature(module) -> None:
             return (model or "").lower().startswith("anthropic/")
 
     module.NO_SUPPORT_TEMPERATURE_MODELS = _NoTempModels(orig)
+
+    # (2) 真实 token usage 采集：包 LiteLLMAIHandler._get_completion，从其返回的
+    # (content, finish_reason, response) 里取 response.usage，inline 打哨兵到 stderr。
+    # 不用 litellm 的 callback —— 那是后台 logging worker 异步触发，CLI 退出过快会丢；
+    # 这里 inline 在 pr-agent 的 await 链里，必在进程退出前执行，可靠。
+    handler_cls = getattr(module, "LiteLLMAIHandler", None)
+    if handler_cls is not None and hasattr(handler_cls, "_get_completion"):
+        _orig_get_completion = handler_cls._get_completion
+
+        async def _get_completion_with_usage(self, **kwargs):
+            result = await _orig_get_completion(self, **kwargs)
+            try:
+                if isinstance(result, tuple) and len(result) >= 3:
+                    _emit_usage(result[2])
+            except Exception as exc:  # noqa: BLE001
+                _debug(f"usage wrap failed (ignored): {exc}")
+            return result
+
+        handler_cls._get_completion = _get_completion_with_usage
 
 
 def _patch_load_yaml_strip_anchor_markers(module) -> None:
@@ -238,10 +287,10 @@ def _apply_patches() -> None:
         "pr_agent.git_providers.local_git_provider",
         _patch_local_git_provider_binary_safe,
     )
-    # Anthropic 新型号弃用 temperature：把全 anthropic/* 纳入"不发 temperature"集合。
+    # litellm handler 两个补丁：Anthropic 新型号去 temperature + 包 _get_completion inline 采集 token usage。
     _register_post_import(
         "pr_agent.algo.ai_handlers.litellm_ai_handler",
-        _patch_litellm_no_temperature,
+        _patch_litellm_handler,
     )
     # anchor marker 独占一行会破 YAML：load_yaml 解析失败时剥掉 marker 重试，避免 review 崩。
     _register_post_import(

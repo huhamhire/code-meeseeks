@@ -40,6 +40,7 @@ import type {
   ReviewRunStatus,
   ReviewRunTool,
   StoredPullRequest,
+  TokenUsage,
 } from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import { buildDraftAdapter, type BuiltAdapter, type ConnectionRuntime } from './adapters.js';
@@ -744,7 +745,12 @@ export function registerIpcHandlers({
       'pragent run start',
     );
     const t0 = Date.now();
+    // 真实 token 用量累加器：sitecustomize 的 litellm callback 把每次调用的 usage 以
+    // `@@MEEBOX_USAGE@@ {json}` 哨兵行打到 stderr，下面 onLine 拦截累加（无需临时文件 / env）。
+    const usageAcc = { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
     const onLine = (line: string, stream: 'stdout' | 'stderr'): void => {
+      // 拦截 usage 哨兵行：累加后不转发给 renderer（避免污染实时日志）。
+      if (stream === 'stderr' && accumulateUsageSentinel(line, usageAcc)) return;
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('pragent:runProgress', { runId: run.id, line, stream });
       }
@@ -963,6 +969,8 @@ export function registerIpcHandlers({
           dockerExtraVolumes,
           signal: ac.signal,
         });
+        // 真实 token 用量（onLine 累加的 stderr 哨兵行），落到 succeeded / llm-failed 收尾。
+        const tokenUsage = finalizeUsage(usageAcc);
         // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
         //   /describe → <wt>/description.md  (走 publish_description)
         //   /review   → <wt>/review.md       (走 publish_comment)
@@ -1024,9 +1032,10 @@ export function registerIpcHandlers({
             stdout: fileContent
               ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
               : result.stdout,
-            stderr: result.stderr,
+            stderr: stripUsageSentinels(result.stderr),
             findings: parsed.findings,
             summary: parsed.summary,
+            tokenUsage,
           });
         }
         return await finishWith({
@@ -1038,9 +1047,10 @@ export function registerIpcHandlers({
           stdout: fileContent
             ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
             : result.stdout,
-          stderr: result.stderr,
+          stderr: stripUsageSentinels(result.stderr),
           findings: parsed.findings,
           summary: parsed.summary,
+          tokenUsage,
         });
       } catch (err) {
         if (err instanceof PrAgentRunError) {
@@ -1056,6 +1066,8 @@ export function registerIpcHandlers({
           const parsed = partialStdout
             ? parseReviewOutput(partialStdout, req.tool)
             : { findings: [], summary: undefined };
+          // 失败 / 取消前可能已有若干次 LLM 调用，尽量把已产生的 token 用量也记上
+          const tokenUsage = finalizeUsage(usageAcc);
           return await finishWith({
             status,
             finishedAt: new Date().toISOString(),
@@ -1064,9 +1076,10 @@ export function registerIpcHandlers({
             errorReason: err.reason,
             errorMessage: err.message,
             stdout: err.result.stdout,
-            stderr: err.result.stderr,
+            stderr: stripUsageSentinels(err.result.stderr),
             findings: parsed.findings,
             summary: parsed.summary,
+            tokenUsage,
           });
         }
         // 非预期异常：仍记一笔 failed，避免 run 永远卡在 running，再把异常往上抛
@@ -1535,6 +1548,74 @@ export function registerIpcHandlers({
  * 英文 (en-US) 返回空串，避免给 LLM 加不必要的提示。其他未知 locale 返回空保留
  * pr-agent 原行为。
  */
+// litellm usage 哨兵行前缀（与 sitecustomize.py 的 _emit 保持一致）。
+const USAGE_SENTINEL = '@@MEEBOX_USAGE@@';
+
+interface UsageAcc {
+  prompt: number;
+  completion: number;
+  total: number;
+  calls: number;
+  any: boolean;
+}
+
+/**
+ * 解析一行 stderr：若含 usage 哨兵（`@@MEEBOX_USAGE@@ {json}`，sitecustomize 注入）则累加到
+ * acc 并返回 true（调用方据此吞掉该行、不转发给 renderer / 不入日志）。普通行返回 false。
+ * 坏 JSON 也返回 true（仍吞掉，避免漏进实时日志），只是不计数。容错优先。
+ */
+function accumulateUsageSentinel(line: string, acc: UsageAcc): boolean {
+  const i = line.indexOf(USAGE_SENTINEL);
+  if (i < 0) return false;
+  try {
+    const r = JSON.parse(line.slice(i + USAGE_SENTINEL.length).trim()) as {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+    };
+    acc.calls += 1;
+    if (typeof r.prompt_tokens === 'number') {
+      acc.prompt += r.prompt_tokens;
+      acc.any = true;
+    }
+    if (typeof r.completion_tokens === 'number') {
+      acc.completion += r.completion_tokens;
+      acc.any = true;
+    }
+    if (typeof r.total_tokens === 'number') {
+      acc.total += r.total_tokens;
+      acc.any = true;
+    }
+  } catch {
+    // 坏哨兵行：仍吞掉，不计数
+  }
+  return true;
+}
+
+/** 累加器 → TokenUsage；无任何有效数据返回 undefined（未捕获到，如非 embedded / 流式 / 未调 LLM）。 */
+function finalizeUsage(acc: UsageAcc): TokenUsage | undefined {
+  if (!acc.any) return undefined;
+  return {
+    promptTokens: acc.prompt,
+    completionTokens: acc.completion,
+    // 优先各次 total 累加；个别次缺 total 时用 prompt+completion 兜底
+    totalTokens: acc.total || acc.prompt + acc.completion,
+    calls: acc.calls,
+  };
+}
+
+/**
+ * 持久化前从 stderr 去掉 usage 哨兵行：onLine 实时已拦截不转发，但 exec 内部把全量 stderr
+ * 累加进 result.stderr（含哨兵），落盘前清掉这些噪声行。
+ */
+function stripUsageSentinels(stderr: string | undefined): string | undefined {
+  if (!stderr) return stderr;
+  return stderr
+    .split('\n')
+    .filter((l) => !l.includes(USAGE_SENTINEL))
+    .join('\n');
+}
+
 function languageDirectiveFor(lang: string): string {
   const norm = lang.toLowerCase();
   if (norm.startsWith('zh-cn') || norm === 'zh') {
