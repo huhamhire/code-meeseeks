@@ -159,6 +159,20 @@ function pythonStdout(pythonExe, code) {
   return r.stdout.trim();
 }
 
+/**
+ * 把 sitecustomize.py shim 拷进嵌入式解释器的 site-packages（CPython 启动经 site 自动
+ * import）。很轻量，故即便幂等跳过整体重建也会重跑一次——本地改了 shim 跑一次
+ * prepare:pragent 就生效，无需 --force 全量重建。返回 site-packages 路径。
+ */
+async function syncShim(pythonExe) {
+  const sitePackages = pythonStdout(
+    pythonExe,
+    'import sysconfig;print(sysconfig.get_paths()["purelib"])',
+  );
+  await writeFile(join(sitePackages, 'sitecustomize.py'), await readFile(SHIM_PATH));
+  return sitePackages;
+}
+
 async function main() {
   configureProxy();
   const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
@@ -167,6 +181,18 @@ async function main() {
   const { triple, pythonRel } = hostTarget();
   const pythonExe = join(VENDOR_DIR, ...pythonRel);
 
+  // 守卫：sitecustomize.py 的 monkeypatch 依赖 pr-agent 特定版本的内部实现，shim 里用
+  // _EXPECTED_PRAGENT_VERSION 做运行期版本守卫。这里在构建期强制它与 manifest pin 的版本
+  // 一致——升级 pr-agent 时必须同步两处 + 重新验证 patch，否则直接 fail 不让出包。
+  const shimSrc = await readFile(SHIM_PATH, 'utf8');
+  const shimVer = /_EXPECTED_PRAGENT_VERSION\s*=\s*["']([^"']+)["']/.exec(shimSrc)?.[1];
+  if (!shimVer) fail(`sitecustomize.py 未找到 _EXPECTED_PRAGENT_VERSION 常量`);
+  if (shimVer !== prAgentVersion)
+    fail(
+      `shim 版本(${shimVer}) ≠ manifest pr-agent(${prAgentVersion})；升级 pr-agent 时同步 ` +
+        `sitecustomize.py 的 _EXPECTED_PRAGENT_VERSION 并重新验证 monkeypatch`,
+    );
+
   const versionKey = `pbs:${tag} py:${mm} triple:${triple} pr-agent:${prAgentVersion}`;
   const versionFile = join(VENDOR_DIR, 'VERSION');
 
@@ -174,7 +200,10 @@ async function main() {
   if (!FORCE && existsSync(versionFile) && existsSync(pythonExe)) {
     const prev = JSON.parse(await readFile(versionFile, 'utf8'));
     if (prev.key === versionKey) {
-      log(`已就绪，跳过（${versionKey}）。--force 可强制重建。`);
+      // 整体跳过，但始终重新同步 shim：本地改了 sitecustomize.py 后跑一次 prepare:pragent
+      // 即生效，无需 --force 全量重建（重下 CPython + 重装 pr-agent）。
+      const sp = await syncShim(pythonExe);
+      log(`已就绪，跳过重建（${versionKey}）；已重新同步 shim → ${sp}。--force 可强制全量重建。`);
       return;
     }
     log(`VERSION 不匹配（旧: ${prev.key}），重建。`);
@@ -227,11 +256,7 @@ async function main() {
   ]);
 
   // 6. 注入 sitecustomize shim
-  const sitePackages = pythonStdout(
-    pythonExe,
-    'import sysconfig;print(sysconfig.get_paths()["purelib"])',
-  );
-  await writeFile(join(sitePackages, 'sitecustomize.py'), await readFile(SHIM_PATH));
+  const sitePackages = await syncShim(pythonExe);
   log(`已注入 sitecustomize.py → ${sitePackages}`);
   // 注：.secrets.toml 占位不在组装期补，改由 main 在执行期按需补（同 Docker 策略
   // 挂空文件的思路，单一机制、自愈），见 ipc.ts ensureEmbeddedSecrets

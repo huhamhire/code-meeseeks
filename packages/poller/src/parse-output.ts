@@ -214,11 +214,12 @@ function isKeyIssuesSection(title: string): boolean {
  * `####` 空标题分隔符跳过（splitMarkdownSections 不会切空标题）；首条 header
  * 之前的内容（一般只有 `####`）丢弃。
  *
- * anchor 抽取：pr-agent LocalGitProvider 渲染时丢弃了 file/start_line/end_line
- * 字段（get_line_link='' + gfm_supported=False 走"无 link + 非 GFM" 分支），所以
- * 渲染后的 markdown 不可能反推 anchor。这里只做 best-effort：从 issue 文本里找
- * 类似 `path/to/file.ext` 的 token + `第 N 行 / lines N-M / 行 N` 关键词。抽不到
- * 就 anchor 留空，UI 端把"跳转编辑"按钮 disable，提示 AI 未给出位置。
+ * anchor 抽取：嵌入式运行时的 sitecustomize 已补 LocalGitProvider.get_line_link
+ * （返回 `meebox:///<file>#L<s>-L<e>`），所以 header 渲染成 `[**header**](meebox://…)`，
+ * 可直接取出结构化 anchor（与真实 provider 同源，逐条基本全覆盖）。链接缺失时（旧运行时
+ * / 真无 anchor）退回从 issue 文本 best-effort 推断：旧 marker `[file:…, lines:…]`，
+ * 或 `path/to/file.ext` + `第 N 行 / lines N-M` 关键词。都抽不到则 anchor 留空，
+ * UI 端把"跳转编辑"按钮 disable。
  */
 function expandKeyIssuesSection(
   sec: Section,
@@ -227,19 +228,27 @@ function expandKeyIssuesSection(
 ): Finding[] {
   const body = trimNoise(sec.body);
   const lines = body.split('\n');
-  // bold header 行：整行就是 `**xxx**`（允许首尾空白；不含其它字符）
+  // issue header 行两种形态：
+  //   - 无 link（旧版 / 真无 anchor）：整行 `**header**`
+  //   - 有 link（sitecustomize 补的 get_line_link）：`[**header**](meebox:///file#Ls-Le)`
   const HEADER_LINE_RE = /^\s*\*\*\s*([^*\n][^*\n]*?)\s*\*\*\s*$/;
+  const LINKED_HEADER_RE = /^\s*\[\s*\*\*\s*([^*\n][^*\n]*?)\s*\*\*\s*\]\(\s*([^)\s]+)\s*\)\s*$/;
   interface IssueBlock {
     title: string;
     body: string;
+    /** header 行带的链接（如 meebox://…）；用于取结构化 anchor */
+    link?: string;
   }
   const blocks: IssueBlock[] = [];
   let cur: IssueBlock | null = null;
   for (const line of lines) {
-    const m = HEADER_LINE_RE.exec(line);
-    if (m) {
+    const lm = LINKED_HEADER_RE.exec(line);
+    const m = lm ? null : HEADER_LINE_RE.exec(line);
+    if (lm || m) {
       if (cur) blocks.push(cur);
-      cur = { title: m[1]!.trim(), body: '' };
+      cur = lm
+        ? { title: lm[1]!.trim(), body: '', link: lm[2] }
+        : { title: m![1]!.trim(), body: '' };
       continue;
     }
     if (cur) {
@@ -258,7 +267,10 @@ function expandKeyIssuesSection(
 
   return blocks.map((b, i) => {
     const issueBody = b.body.trim();
-    const anchor = inferAnchorFromIssueText(issueBody);
+    // meebox:// 链接（结构化 anchor，与真实 provider 同源的强信号）优先；
+    // 拿不到再从文本 best-effort 推断（旧 marker / 路径+行号兜底）。
+    const anchor =
+      (b.link ? parseMeeboxAnchor(b.link) : undefined) ?? inferAnchorFromIssueText(issueBody);
     const id = `${tool}-${String(baseIndex + i).padStart(3, '0')}`;
     return {
       id,
@@ -280,6 +292,27 @@ function expandKeyIssuesSection(
  *   [file: <path>, lines: <start>-<end>]
  * 用作 anchor 强信号 (优先采用)
  */
+/**
+ * 解析 sitecustomize 注入的 anchor 链接 `meebox:///<url-encoded-file>#L<s>-L<e>`
+ * （行号段可选；end 可省）。非 meebox 链接（真实 provider 的 http 链接）返回 undefined，
+ * 交回文本推断。path 做 URL 解码还原空格 / 非 ASCII。
+ */
+function parseMeeboxAnchor(url: string): FindingAnchor | undefined {
+  const m = /^meebox:\/{0,3}([^#?]+)(?:#L(\d+)(?:-L(\d+))?)?\s*$/i.exec(url.trim());
+  if (!m) return undefined;
+  let path: string;
+  try {
+    path = decodeURIComponent(m[1]!).replace(/^\/+/, '').trim();
+  } catch {
+    path = m[1]!.replace(/^\/+/, '').trim();
+  }
+  if (!path) return undefined;
+  const anchor: FindingAnchor = { path };
+  if (m[2]) anchor.startLine = Number.parseInt(m[2], 10);
+  if (m[3]) anchor.endLine = Number.parseInt(m[3], 10);
+  return anchor;
+}
+
 function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
   // 显式 marker (我们 prompt 注入的)
   const markerRe =

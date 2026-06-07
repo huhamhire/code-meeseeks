@@ -21,6 +21,30 @@ def _debug(msg: str) -> None:
         print(f"[meebox] {msg}", file=sys.stderr)
 
 
+def _warn(msg: str) -> None:
+    """始终输出到 stderr（不受 MEEBOX_SHIM_DEBUG 控制）。用于版本不符等"补丁静默失效"
+    的降级场景，必须让用户/日志看见。stderr 不影响 parse-output（它只解析 stdout）。"""
+    print(f"[meebox] WARNING: {msg}", file=sys.stderr)
+
+
+# 本 shim 的 monkeypatch 依赖 pr-agent **特定版本**的内部实现（get_line_link 渲染分支、
+# get_diff_files 解码逻辑）。升级 pr-agent 可能让 patch 失配甚至误伤，故只对下面 pin 的
+# 版本生效；版本不符即跳过全部 patch（安全降级，宁可少打补丁也不乱打）。
+# 升级 pr-agent 时：同步此常量 + scripts/pragent-runtime.json 的 prAgent.version
+# （assemble 脚本会校验两者一致），并重新验证 patch 行为。
+_EXPECTED_PRAGENT_VERSION = "0.36.0"
+
+
+def _pragent_version():
+    """读已安装 pr-agent 版本（仅读 dist 元数据，不 import pr_agent）。拿不到返回 None。"""
+    try:
+        from importlib.metadata import version
+
+        return version("pr-agent")
+    except Exception:  # noqa: BLE001 - 未安装 / 元数据缺失（pip 装包途中等）
+        return None
+
+
 def _register_post_import(module_name, patch_fn) -> None:
     """注册一个 meta_path finder：当 module_name 被 import 后立即执行 patch_fn(module)。
     不在此处 import 该模块，保持 python 启动/探测/pip 轻量。"""
@@ -57,6 +81,15 @@ def _patch_local_git_provider_binary_safe(module) -> None:
     """LocalGitProvider.get_diff_files 对每个 diff 文件无脑 .decode('utf-8')，遇到二进制
     文件（图片 / 编译产物 / UTF-16 等，如 0xff 开头）抛 UnicodeDecodeError 崩掉整个 review。
     换成二进制安全版：解码失败的文件跳过（review 不处理二进制），其余逻辑与上游一致。"""
+    # 版本守卫：只对 pin 的 pr-agent 版本打补丁；不符则整组跳过（含 get_line_link）。
+    installed = _pragent_version()
+    if installed != _EXPECTED_PRAGENT_VERSION:
+        _warn(
+            f"pr-agent {installed} 与 meebox 补丁适配的 {_EXPECTED_PRAGENT_VERSION} 不符，"
+            "已跳过补丁（/review 行号定位、二进制安全 diff 失效）。如为有意升级，请同步 "
+            "sitecustomize.py 的 _EXPECTED_PRAGENT_VERSION + pragent-runtime.json 并重新验证。"
+        )
+        return
     from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 
     def get_diff_files(self):
@@ -106,9 +139,29 @@ def _patch_local_git_provider_binary_safe(module) -> None:
 
     module.LocalGitProvider.get_diff_files = get_diff_files
 
+    # get_line_link: 基类默认 `return ''`，LocalGitProvider 未实现 → /review 的
+    # key_issues 渲染（convert_to_markdown_v2）走"无 link + 非 GFM"分支，把
+    # relevant_file/start_line/end_line 抹掉（见 ROADMAP M5 anchor 根因）。补成
+    # meebox:///<url-encoded-file>#L<s>-L<e>，使其走 [**header**](link) 分支，
+    # parse-output 据链接取结构化 anchor（与真实 provider 同源，不依赖模型自报 marker）。
+    from urllib.parse import quote
+
+    def get_line_link(self, relevant_file, relevant_line_start, relevant_line_end=None):
+        f = quote((relevant_file or "").lstrip("/"), safe="/")
+        if not f:
+            return ""
+        if not relevant_line_start:
+            return f"meebox:///{f}"
+        if relevant_line_end and relevant_line_end != relevant_line_start:
+            return f"meebox:///{f}#L{relevant_line_start}-L{relevant_line_end}"
+        return f"meebox:///{f}#L{relevant_line_start}"
+
+    module.LocalGitProvider.get_line_link = get_line_link
+
 
 def _apply_patches() -> None:
-    # 二进制文件安全：见 _patch_local_git_provider_binary_safe
+    # local_git_provider 两个补丁合并在一个 patch_fn 里（同模块注册多个 finder 会互相
+    # 遮蔽，只有 meta_path[0] 那个生效）：二进制安全 get_diff_files + get_line_link anchor。
     _register_post_import(
         "pr_agent.git_providers.local_git_provider",
         _patch_local_git_provider_binary_safe,

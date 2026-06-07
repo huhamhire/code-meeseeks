@@ -220,6 +220,42 @@ describe('parseReviewOutput', () => {
     expect(codeFb[1]!.anchor?.endLine).toBe(50);
   });
 
+  it('header 带 meebox:// 链接（get_line_link 注入）→ 取结构化 anchor', () => {
+    const md = [
+      '### ⚡ Recommended focus areas for review',
+      '',
+      '#### ',
+      '[**潜在空引用**](meebox:///src/auth/login.ts#L42-L50)',
+      '',
+      'tenant 可能为 null，未判空直接 getId()。', // 正文不含 path，仍能从链接拿 anchor
+      '',
+      '#### ',
+      '[**单行定位**](meebox:///pkg/cache.go#L17)',
+      '',
+      '缓存键复用。',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const code = findings.filter((f) => f.category === 'code-feedback');
+    expect(code).toHaveLength(2);
+    expect(code[0]!.title).toBe('潜在空引用');
+    expect(code[0]!.anchor).toEqual({ path: 'src/auth/login.ts', startLine: 42, endLine: 50 });
+    expect(code[1]!.title).toBe('单行定位');
+    expect(code[1]!.anchor).toEqual({ path: 'pkg/cache.go', startLine: 17 });
+  });
+
+  it('meebox:// 链接 URL 解码（路径含空格）', () => {
+    const md = [
+      '### Key Issues to Review',
+      '',
+      '[**命名空间**](meebox:///src/my%20dir/a.ts#L3-L4)',
+      '',
+      '内容。',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const c = findings.find((f) => f.category === 'code-feedback')!;
+    expect(c.anchor).toEqual({ path: 'src/my dir/a.ts', startLine: 3, endLine: 4 });
+  });
+
   it('英文 "Key Issues to Review" 标题也走展开路径', () => {
     const md = [
       '### 🔍 Key Issues to Review',
