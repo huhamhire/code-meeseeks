@@ -821,13 +821,13 @@ export function registerIpcHandlers({
 
         // anchor marker 指令：让 model 在涉及代码位置的内容末尾显式追加
         //   [file: <path>, lines: <start_line>-<end_line>]
-        // parse-output.ts 的 inferAnchorFromIssueText 优先认这个 marker 抽 anchor，
-        // UI 据此渲染"→ 编辑"按钮一键跳转 DiffView 行内评论草稿。
         //
-        // pr-agent LocalGitProvider 渲染 key_issues_to_review 时
-        // (get_line_link='' + gfm_supported=False) 会把 relevant_file / start_line /
-        // end_line 字段全部丢掉，渲染后的 review.md 只剩 **header** + content 两行
-        // (见 ADR-0007 §诊断)，所以 /review 必须靠这条 marker 才能拿到 anchor。
+        // 主路径已改为 sitecustomize 注入 LocalGitProvider.get_line_link → key_issues 渲染成
+        // `[**header**](meebox:///<file>#L<s>-L<e>)`，parse-output 取结构化 anchor（path 来自
+        // provider 同源、最可靠）。但 #L 行号仍依赖 model 填了 pr-agent 原生 start_line/
+        // end_line YAML 字段；实测部分模型只填这条 marker、留空结构化字段 → 链接只有 path。
+        // 故这条 marker 作为**行号兜底**保留：parse-output 合并时链接给 path、缺行号则用 marker
+        // 的行号补（resolveIssueAnchor）。两路信号都用上，最大化 anchor 覆盖。
         //
         // 两种工具措辞不同：
         // - /review: 每条 key_issue 末尾 **必加** marker

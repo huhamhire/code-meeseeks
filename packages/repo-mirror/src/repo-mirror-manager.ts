@@ -13,6 +13,45 @@ import type {
   RepoSize,
 } from './types.js';
 
+/**
+ * simple-git 的 blockUnsafeOperationsPlugin 会扫描传给 `.env()` 的 env 对象，命中这批
+ * "危险" key（小写匹配）就抛 `Use of "X" is not permitted without enabling allowUnsafeXxx`。
+ * 列表对齐 simple-git v3 env policy。宿主常见的 EDITOR / PAGER / SSH_ASKPASS / PREFIX 都在内。
+ *
+ * 我们给远端 git 挂代理时必须 merge process.env（否则 PATH/HOME 全丢），但 merge 会把这些
+ * 宿主变量带进 .env() 触发校验。对无人值守的 clone/fetch 这些（编辑器/pager/askpass/外部
+ * config 路径等）一律用不到，merge 时统一剔除，比逐个开 allowUnsafe 标志更稳更全。
+ */
+const GIT_UNSAFE_ENV_KEYS = new Set([
+  'editor',
+  'git_editor',
+  'git_sequence_editor',
+  'pager',
+  'git_pager',
+  'git_askpass',
+  'ssh_askpass',
+  'git_ssh',
+  'git_ssh_command',
+  'git_proxy_command',
+  'git_external_diff',
+  'git_template_dir',
+  'git_exec_path',
+  'git_config',
+  'git_config_global',
+  'git_config_system',
+  'git_config_count',
+  'prefix',
+]);
+
+/** 从 env 里剔除 simple-git 会拦的危险 key（大小写不敏感）。 */
+function stripGitUnsafeEnv(env: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (!GIT_UNSAFE_ENV_KEYS.has(k.toLowerCase())) out[k] = v;
+  }
+  return out;
+}
+
 export interface RepoMirrorOptions {
   /** repos_dir 根（来自 config.workspace.repos_dir，已展开 ~） */
   reposDir: string;
@@ -64,7 +103,10 @@ export class RepoMirrorManager {
   private withProxyEnv(git: SimpleGit): SimpleGit {
     const px = this.opts.proxyEnv?.() ?? {};
     if (Object.keys(px).length === 0) return git;
-    return git.env({ ...process.env, ...px } as Record<string, string>);
+    // 剔除宿主 EDITOR/PAGER/SSH_ASKPASS 等：simple-git 的安全插件会拦截传给 .env() 的
+    // 这些 key 并抛 allowUnsafeEditor 等错误（见 GIT_UNSAFE_ENV_KEYS 注释）。
+    const merged = stripGitUnsafeEnv({ ...process.env, ...px } as Record<string, string>);
+    return git.env(merged);
   }
 
   /** 计算 bare 镜像应当落在哪里（不保证存在）。 */

@@ -23,6 +23,7 @@ interface SettingsModalProps {
   config: Config;
   /** LLM 配置改动后通知父级同步状态（StatusBar chip 等） */
   onLlmChange?: (llm: Config['llm']) => void;
+  onProxyChange?: (proxy: Config['proxy']) => void;
   onClose: () => void;
 }
 
@@ -43,6 +44,7 @@ export function SettingsModal({
   paths,
   config,
   onLlmChange,
+  onProxyChange,
   onClose,
 }: SettingsModalProps) {
   const [opening, setOpening] = useState(false);
@@ -113,6 +115,11 @@ export function SettingsModal({
   const persistLlm = (next: Config['llm']): void => {
     setLlm(next);
     setSaved(false);
+    // 提升到 App 的 boot.config.llm：重开模态框时 SettingsModal 用最新 prop 重建本地
+    // state，新增/编辑的渠道不丢。onLlmChange 只改渲染层 state、不调 config:setLlm，
+    // 所以是"写入(磁盘+渲染层)但不启用"——运行时仍用旧 active 模型，直到底栏「保存」
+    // 走 config:setLlm 或显式切换启用渠道才真正应用。
+    onLlmChange?.(next);
     autosaveDraft(connections, activeConnId, next);
   };
   const openAddProfile = (): void => {
@@ -241,6 +248,9 @@ export function SettingsModal({
       }
       if (proxyChanged) {
         await invoke('config:setProxy', { proxy });
+        // 同步到 App 的 boot.config.proxy：重开设置面板时 SettingsModal 用最新 prop
+        // 重建本地 state，才能正确回显已保存的代理配置（否则读到启动时的旧值）。
+        onProxyChange?.(proxy);
       }
       if (connectionsChanged) {
         await invoke('config:setConnections', { connections, active_connection_id: activeConnId });
@@ -259,6 +269,8 @@ export function SettingsModal({
         activeConnId,
       });
       setSaved(true);
+      // 保存成功后自动关闭设置面板（失败则保持打开并展示 saveError）
+      onClose();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e));
     } finally {

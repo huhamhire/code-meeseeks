@@ -26,8 +26,12 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
     case 'deepseek':
       return m.startsWith('deepseek/') ? m : `deepseek/${m}`;
     case 'anthropic':
-      // claude-* 名字 litellm 直接认；anthropic/ 前缀也直认
-      return m.startsWith('anthropic/') || m.startsWith('claude-') ? m : `anthropic/${m}`;
+      // 一律补 `anthropic/` 前缀让 litellm 按前缀直接路由到 Anthropic。
+      // 不能靠裸 `claude-*` 名字——litellm 只对**内置 model_cost 表里**的 claude
+      // 型号才能从名字反推 provider；新型号 (如 claude-opus-4-8) 不在表里，裸名传
+      // 过去第一道 provider 路由就抛 "LLM Provider NOT provided"。带前缀则无需查表，
+      // 厂商原厂模型只填型号名即可直接用。用户手写带前缀的不重复加。
+      return m.startsWith('anthropic/') ? m : `anthropic/${m}`;
     case 'ollama':
       return m.startsWith('ollama/') ? m : `ollama/${m}`;
     case 'openai':

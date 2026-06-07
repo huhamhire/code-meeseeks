@@ -381,6 +381,9 @@ export default function App() {
           onLlmChange={(llm) =>
             setBoot((b) => (b ? { ...b, config: { ...b.config, llm } } : b))
           }
+          onProxyChange={(proxy) =>
+            setBoot((b) => (b ? { ...b, config: { ...b.config, proxy } } : b))
+          }
           onClose={() => setShowSettings(false)}
         />
       )}

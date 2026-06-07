@@ -1189,36 +1189,59 @@ export function DiffView({
     }
     const editor =
       pendingScroll.side === 'old' ? diffEditor.getOriginalEditor() : diffEditor.getModifiedEditor();
-    // 居中滚到目标行
-    editor.revealLineInCenter(pendingScroll.line);
-    // 短暂高亮：300ms 黄底脉冲
-    const collection = editor.createDecorationsCollection([
-      {
-        range: {
-          startLineNumber: pendingScroll.line,
-          startColumn: 1,
-          endLineNumber: pendingScroll.line,
-          endColumn: 1,
+
+    let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+    let revealed = false;
+    const reveal = () => {
+      // onDidUpdateDiff 可能多次触发，只跳一次
+      if (revealed) return;
+      revealed = true;
+      // 居中滚到目标行
+      editor.revealLineInCenter(pendingScroll.line);
+      // 短暂高亮：300ms 黄底脉冲
+      const collection = editor.createDecorationsCollection([
+        {
+          range: {
+            startLineNumber: pendingScroll.line,
+            startColumn: 1,
+            endLineNumber: pendingScroll.line,
+            endColumn: 1,
+          },
+          options: {
+            isWholeLine: true,
+            className: 'monaco-draft-highlight-flash',
+          },
         },
-        options: {
-          isWholeLine: true,
-          className: 'monaco-draft-highlight-flash',
-        },
-      },
-    ]);
-    const t = setTimeout(() => {
-      try {
-        collection.clear();
-      } catch {
-        /* editor disposed */
+      ]);
+      highlightTimer = setTimeout(() => {
+        try {
+          collection.clear();
+        } catch {
+          /* editor disposed */
+        }
+      }, 800);
+      // 同时触发关联草稿的 autoEdit (DraftZone 自动 enter edit mode)
+      if (pendingScroll.draftId) {
+        triggerAutoEdit(pendingScroll.draftId);
       }
-    }, 800);
-    // 同时触发关联草稿的 autoEdit (DraftZone 自动 enter edit mode)
-    if (pendingScroll.draftId) {
-      triggerAutoEdit(pendingScroll.draftId);
+      setPendingScroll(null);
+    };
+
+    // Monaco diff 是异步算的：models 挂上(onMount)后还要等 diff 计算 +
+    // hideUnchangedRegions 折叠布局完成，行号到视口位置的映射才稳定。此时
+    // 直接 revealLine 会定位到旧布局/错误位置。getLineChanges() 在算完前
+    // 返回 null、算完返回数组 → 已就绪直接跳，否则等 onDidUpdateDiff 首次触发。
+    if (diffEditor.getLineChanges() != null) {
+      reveal();
+      return () => {
+        if (highlightTimer) clearTimeout(highlightTimer);
+      };
     }
-    setPendingScroll(null);
-    return () => clearTimeout(t);
+    const disposable = diffEditor.onDidUpdateDiff(reveal);
+    return () => {
+      disposable.dispose();
+      if (highlightTimer) clearTimeout(highlightTimer);
+    };
   }, [pendingScroll, diffEditor, content, selected]);
 
   if (filesError) {

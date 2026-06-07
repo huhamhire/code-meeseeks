@@ -243,6 +243,41 @@ describe('parseReviewOutput', () => {
     expect(code[1]!.anchor).toEqual({ path: 'pkg/cache.go', startLine: 17 });
   });
 
+  it('链接只有 path（模型没填结构化行号）→ 用正文 marker 的行号补全', () => {
+    // 真实样本：get_line_link 拿到 start_line=0 → 链接无 #L，但模型按我们的指令
+    // 在正文 marker 里写了 lines: 244-255。合并后应拿到完整 anchor。
+    const md = [
+      '### ⚡ Recommended focus areas for review',
+      '',
+      '#### ',
+      '[**潜在未定义字段**](meebox:///src/controllers/v3/SuiteTenantControllerV3.ts)',
+      '',
+      'doCoinBalanceGet 中 sms 可能为 undefined。',
+      '[file: src/controllers/v3/SuiteTenantControllerV3.ts, lines: 244-255]',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const c = findings.find((f) => f.category === 'code-feedback')!;
+    expect(c.anchor).toEqual({
+      path: 'src/controllers/v3/SuiteTenantControllerV3.ts',
+      startLine: 244,
+      endLine: 255,
+    });
+  });
+
+  it('链接 path 与正文 marker 指向不同文件 → 不借行号（避免错配）', () => {
+    const md = [
+      '### Key Issues to Review',
+      '',
+      '[**X**](meebox:///src/a.ts)',
+      '',
+      '顺带提一句 other/b.ts 的问题 [file: other/b.ts, lines: 9-10]',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const c = findings.find((f) => f.category === 'code-feedback')!;
+    // path 取链接的 a.ts；行号不借 b.ts 的 → 只有 path
+    expect(c.anchor).toEqual({ path: 'src/a.ts' });
+  });
+
   it('meebox:// 链接 URL 解码（路径含空格）', () => {
     const md = [
       '### Key Issues to Review',

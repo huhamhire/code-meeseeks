@@ -98,8 +98,8 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 | 模型供应商（厂商） | 说明 | 状态 |
 | --- | --- | --- |
-| `openai` | OpenAI（GPT 系） | 🚧 理论可行，未验证 |
-| `anthropic` | Anthropic（Claude 系） | 🚧 理论可行，未验证 |
+| `openai` | OpenAI（GPT 系） | ✅ 已验证 |
+| `anthropic` | Anthropic（Claude 系） | ✅ 已验证 |
 | `deepseek` | DeepSeek | ✅ 已验证 |
 | `dashscope` | 阿里百炼（DashScope，通义千问） | ✅ 已验证 |
 | `volcengine-ark` | 火山方舟（Volcengine Ark，豆包） | 🚧 理论可行，未验证 |

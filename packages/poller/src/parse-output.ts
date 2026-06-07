@@ -267,10 +267,7 @@ function expandKeyIssuesSection(
 
   return blocks.map((b, i) => {
     const issueBody = b.body.trim();
-    // meebox:// 链接（结构化 anchor，与真实 provider 同源的强信号）优先；
-    // 拿不到再从文本 best-effort 推断（旧 marker / 路径+行号兜底）。
-    const anchor =
-      (b.link ? parseMeeboxAnchor(b.link) : undefined) ?? inferAnchorFromIssueText(issueBody);
+    const anchor = resolveIssueAnchor(b.link, issueBody);
     const id = `${tool}-${String(baseIndex + i).padStart(3, '0')}`;
     return {
       id,
@@ -311,6 +308,30 @@ function parseMeeboxAnchor(url: string): FindingAnchor | undefined {
   if (m[2]) anchor.startLine = Number.parseInt(m[2], 10);
   if (m[3]) anchor.endLine = Number.parseInt(m[3], 10);
   return anchor;
+}
+
+/**
+ * 合并两路 anchor 信号，得到最完整的定位：
+ *   - meebox 链接（sitecustomize 注入，path 来自 provider 同源、最可靠）
+ *   - 文本推断（原始 `[file:…, lines:…]` marker 协议 / 路径+行号兜底）
+ *
+ * 规则：链接的 path 权威；行号链接优先（模型填了结构化 start/end → 链接自带 #L），
+ * 链接缺行号时回退用文本协议的行号补全——但仅当文本指向同一文件，避免跨文件错配。
+ * 这样既拿到可靠 path，又不丢模型只写进 marker、没填结构化字段时的行号。
+ */
+function resolveIssueAnchor(link: string | undefined, body: string): FindingAnchor | undefined {
+  const linkAnchor = link ? parseMeeboxAnchor(link) : undefined;
+  const textAnchor = inferAnchorFromIssueText(body);
+  if (!linkAnchor) return textAnchor;
+  if (linkAnchor.startLine != null) return linkAnchor;
+  if (textAnchor?.startLine != null && (!textAnchor.path || textAnchor.path === linkAnchor.path)) {
+    return {
+      path: linkAnchor.path,
+      startLine: textAnchor.startLine,
+      ...(textAnchor.endLine != null ? { endLine: textAnchor.endLine } : {}),
+    };
+  }
+  return linkAnchor;
 }
 
 function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
