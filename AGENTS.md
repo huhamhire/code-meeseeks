@@ -45,7 +45,7 @@ npm run format      # prettier 写入
 ```bash
 npm --prefix apps/desktop run prepare:pragent   # 组装嵌入式 Python + pr-agent 运行时（首次必跑）
 npm --prefix apps/desktop run dev               # electron-vite dev
-npm --prefix apps/desktop run dist              # 出安装包（见 docs/mac-build.md）
+npm --prefix apps/desktop run dist              # 出安装包（见 docs/development/mac-build.md）
 ```
 
 环境：Node ≥ 20（实测 22）、npm ≥ 10。**包管理器统一用 npm**（workspaces，lockfile `package-lock.json`）——勿用 yarn / pnpm。

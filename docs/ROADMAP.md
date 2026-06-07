@@ -78,7 +78,7 @@
 - **国际化（i18n）**：多语言界面，优先简体中文 / English。
 - **规则市场**：导入 / 导出 rules.dir 片段。
 - **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
-- **pr-agent run 启动开销优化**：worktree / 上下文缓存、镜像预热、容器长驻（见 [pragent-run-overhead](pragent-run-overhead.md)）。
+- **移除 Docker 运行策略**：启动效率低、与「零依赖」定位不符；嵌入式本地进程已是默认（启动开销当前无瓶颈）。
 - **大 PR 性能验证**：等真实大样本实测。
 - **ollama / openai-compatible 验证**：本地模型 / 自部署链路实测。
 - **凭据存储升级 keytar** / **状态存储按需升级 SQLite**（替换抽象实现，业务不变）。
@@ -102,6 +102,6 @@
 ## 5. 相关文档
 
 - **[模块设计文档](modules/README.md)** —— 各模块的当前设计与实现（首选入口）
-- [开发指南](development.md) —— 环境、启动、构建
-- [macOS 构建与发布](mac-build.md) —— ad-hoc 签名路线
-- [pr-agent 启动开销](pragent-run-overhead.md) —— 优化备忘
+- [开发指南](development/README.md) —— 环境、启动、构建（开发专题入口）
+- [打包与发布](development/packaging-release.md) —— 构建 / 签名 / CI
+- [macOS 构建与发布](development/mac-build.md) —— ad-hoc 签名路线

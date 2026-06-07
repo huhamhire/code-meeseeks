@@ -139,7 +139,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 ## 开发
 
-环境准备、启动调试、构建打包步骤见 **[开发指南](docs/development.md)**。
+环境准备、启动调试、构建打包步骤见 **[开发指南](docs/development/README.md)**。
 
 ---
 

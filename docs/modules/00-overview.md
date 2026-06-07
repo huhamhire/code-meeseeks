@@ -56,8 +56,9 @@ flowchart TB
 | 规则系统 | `rules` | [06](06-rules.md) |
 | 配置与凭据 | `config` + 设置页 | [07](07-config-and-secrets.md) |
 | 出站网络与代理 | 主进程 proxy plumbing | [08](08-networking-proxy.md) |
-| 打包与发布 | electron-builder + 嵌入式运行时打包 | [09](09-packaging-release.md) |
-| GUI 与交互 | 渲染层 React（布局 / 面板 / 跨 PR 保活） | [10](10-ui-interaction.md) |
+| GUI 与交互 | 渲染层 React（布局 / 面板 / 跨 PR 保活） | [09](09-ui-interaction.md) |
+
+> 打包 / 构建 / 签名 / CI 见开发专题 [`../development/packaging-release.md`](../development/packaging-release.md)（非产品子系统）。
 
 `shared` 是跨包共享类型（含 `IpcChannels` 契约、PR/Finding/Run 等领域类型）；`logger` 是统一日志。
 
@@ -75,7 +76,7 @@ flowchart TB
 - **发给 LLM 的内容**：pr-agent 评审时只把 **PR diff + 命中的规则**（extra_instructions）发给 LLM，不发其它本地数据。
 - **凭据**：平台 token / LLM API key / 代理密码**明文**存 `config.yaml`（文件权限收紧），属已知风险；
   抽象层预留 keytar 升级（见 [07](07-config-and-secrets.md)）。
-- **安全基线**：渲染层 `contextIsolation` 开、无 `nodeIntegration`、CSP；preload 仅暴露白名单能力（见 [10](10-ui-interaction.md)）。
+- **安全基线**：渲染层 `contextIsolation` 开、无 `nodeIntegration`、CSP；preload 仅暴露白名单能力（见 [09](09-ui-interaction.md)）。
 
 ## 数据 / 接口契约
 

@@ -1,6 +1,8 @@
 # 开发指南
 
-面向贡献者 / 自行构建的开发者。产品介绍见根 [README](../README.md)，架构与里程碑见 [ROADMAP](./ROADMAP.md)。
+面向贡献者 / 自行构建的开发者。产品介绍见根 [README](../../README.md)，架构与里程碑见 [ROADMAP](../ROADMAP.md)。
+
+> 本目录（`docs/development/`）是**开发专题**：本指南为入口，另含 [打包与发布](./packaging-release.md)（含 CI）与 [macOS 构建与发布](./mac-build.md)。模块/子系统设计见 [`../modules/`](../modules/)。
 
 > 代码内部统一用中性代号 **meebox**（npm 作用域 `@meebox/*`），对外品牌为 Code Meeseeks。
 > 数据目录 `~/.code-meeseeks/`。上游 pr-agent 为第三方依赖，不在重命名范围内。
@@ -41,7 +43,7 @@ npm --prefix apps/desktop run prepare:pragent
 
 - 产物落在 `apps/desktop/vendor/pragent/`（已 gitignore，约 600+ MB）。
 - 幂等：已组装则跳过；`--force` 强制重建。
-- 平台自动识别：Windows x64 / macOS arm64（详见 [modules/09 打包与发布](./modules/09-packaging-release.md)）。
+- 平台自动识别：Windows x64 / macOS arm64（详见 [打包与发布](./packaging-release.md)）。
 - 此脚本需 **Node 22+**（用到较新内置能力）；其余开发命令 Node 20 即可。
 
 ## 4. 启动开发态
@@ -86,9 +88,9 @@ npm --prefix apps/desktop run pack
 
 `dist` = `prepare:pragent` + `electron-vite build` + `electron-builder`。
 
-- **图标**：源在 `assets/icons/`，electron-builder 显式引用（`win.icon` 指向 `icon.ico`）。重新生成 `.ico` 见 [assets/README](../assets/README.md)。
+- **图标**：源在 `assets/icons/`，electron-builder 显式引用（`win.icon` 指向 `icon.ico`）。重新生成 `.ico` 见 [assets/README](../../assets/README.md)。
 - **macOS**：签名 / 公证 / 免费 ad-hoc 路线见 [macOS 构建与发布](./mac-build.md)。
-- **CI 发布**：推 `v*` tag 触发 [.github/workflows/release.yml](../.github/workflows/release.yml)，自动出 Windows + macOS(arm64) 包并挂 Release。
+- **CI 发布**：推 `v*` tag 触发自动出 Windows + macOS(arm64) 包并挂 Release。统一的构建/签名/CI 设计见 [打包与发布](./packaging-release.md)（workflow: [.github/workflows/release.yml](../../.github/workflows/release.yml)）。
 
 ## 7. 仓库结构
 
@@ -109,7 +111,7 @@ npm --prefix apps/desktop run pack
 │   ├── repo-mirror/                # 仓库镜像（partial clone + diff/blame）
 │   ├── rules/                      # 规则目录加载与匹配
 │   └── state-store/                # JSON 状态存储（原子写）
-├── docs/                           # ROADMAP + ADR + 本指南
+├── docs/                           # ROADMAP / modules 设计 / development 开发专题
 ├── assets/                         # 品牌 / 图标资源（LFS）
 └── tools/                          # 探针等辅助脚本
 ```
@@ -126,7 +128,7 @@ npm --prefix apps/desktop run pack
 └── repos/           # 仓库镜像（默认位置，repos_dir 可改到其它盘）
 ```
 
-数据模型与容错设计见 [modules/03 状态存储与数据模型](./modules/03-state-storage.md)。
+数据模型与容错设计见 [modules/03 状态存储与数据模型](../modules/03-state-storage.md)。
 
 ## 9. 测试约定
 

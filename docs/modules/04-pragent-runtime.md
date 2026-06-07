@@ -16,7 +16,7 @@ token 用量采集、注入 env。不负责：输出解析与草稿（见 [05](0
 
 - **embedded（默认）**：用随 app 打包的嵌入式解释器跑 `python -m pr_agent.cli`，免用户装任何东西。
 - **local-cli**：用系统 `pr-agent` CLI（高级用户自管 Python）。
-- **docker**：用官方镜像（pin tag）。
+- **docker**：用官方镜像（pin tag）。**计划废弃**——启动效率低、与「零依赖」定位不符。
 
 统一以 **LocalGitProvider 模式**在物化好的 worktree 上跑（`CONFIG__GIT_PROVIDER=local`，cwd=worktree）。
 注意 pr-agent 社区版 LocalGitProvider 的反直觉点：`--pr_url` 槽位填的是 **target 分支名**（不是 URL），
@@ -78,5 +78,5 @@ inline 在 await 链里必在退出前执行，可靠。只取 token、不取 co
   两处一致，漏同步直接 fail；运行期不符则降级 + WARNING）。
 - **改了 shim**：跑一次 `prepare:pragent` 即重新同步进 vendor（幂等跳过分支也会同步 shim），无需 `--force` 全量重建。
 - **流式模型丢 usage**：个别需强制流式的模型用 MockResponse、无 usage，token 采集对它们缺失（非流式不受影响）。
-- **启动开销**：单次 run 有固定 diff 预处理等开销（~分钟级），已有优化备忘（worktree/上下文缓存、镜像预热、容器长驻），按需做。
-- **平台范围**：嵌入式运行时初版只出 Windows x64 + macOS arm64（见 [09](09-packaging-release.md)）。
+- **启动开销**：嵌入式本地进程下当前无明显瓶颈（容器启动开销随 docker 废弃一并消失）。若大 PR 再现问题，可裁剪 pr-agent 内部预处理（env 开关）。
+- **平台范围**：嵌入式运行时初版只出 Windows x64 + macOS arm64（见 [打包与发布](../development/packaging-release.md)）。
