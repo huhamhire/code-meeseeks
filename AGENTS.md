@@ -1,0 +1,74 @@
+# AGENTS.md
+
+面向自动化编码 agent 的工程维护速览。背景/业务见 [docs/ROADMAP.md](docs/ROADMAP.md) 与 [docs/adr/](docs/adr/)。
+
+## 仓库结构
+
+Electron 桌面应用 + npm workspaces + Nx 单仓多包。关键路径（`apps/desktop` 是主战场）：
+
+```
+apps/desktop/
+├── src/
+│   ├── main/              # 主进程：index.ts(启动/单例锁) · ipc.ts(IPC handlers) · adapters.ts · utils/
+│   ├── preload/           # contextBridge 暴露泛型 invoke()
+│   └── renderer/src/      # React 渲染层（components/ 等）
+├── scripts/               # assemble-pragent-runtime.mjs · sitecustomize.py(shim) · pragent-runtime.json
+├── build-resources/       # after-pack.cjs(ad-hoc 签名) · entitlements.mac.plist
+├── electron-builder.yml
+└── vendor/pragent/        # 嵌入式运行时（gitignored，由 prepare:pragent 生成）
+
+packages/<name>/src/index.ts  # 各库入口；shared 还含 ipc.ts(IPC 契约) · config.ts · poller-contract.ts
+```
+
+- `apps/desktop` —— Electron 应用（main + preload + renderer/React）。唯一有 `build`/`dist` 的项目。
+- `packages/*` —— 内部库（`@meebox/*`），按职责拆分；其中 `shared` 含共享类型与 IPC 契约。
+- `docs/adr/` ADR 决策记录；`docs/ROADMAP.md` 路线图；`tools/` 杂项脚本。
+
+**命名约定**：代码内部统一用中性代号 `meebox`（npm 作用域 `@meebox/*`）；对外品牌名 `Code Meeseeks`；用户数据目录 `~/.code-meeseeks/`。`pr-agent` 为第三方依赖，不在重命名范围内。
+
+## 常用命令
+
+根目录脚本（底层都是 `nx run-many`）：
+
+```bash
+npm run lint        # eslint，--max-warnings=0（warning 也算失败）
+npm run typecheck   # tsc --noEmit
+npm run test        # vitest（仅 packages 里带 test target 的，desktop/shared 无测试）
+npm run build       # 构建（实际只 @meebox/desktop 有 build）
+npm run format      # prettier 写入
+```
+
+单项目：`npx nx <target> <project>`，如 `npx nx test poller`、`npx nx typecheck desktop`。
+
+桌面应用（在 `apps/desktop`）：
+
+```bash
+npm --prefix apps/desktop run prepare:pragent   # 组装嵌入式 Python + pr-agent 运行时（首次必跑）
+npm --prefix apps/desktop run dev               # electron-vite dev
+npm --prefix apps/desktop run dist              # 出安装包（见 docs/mac-build.md）
+```
+
+环境：Node ≥ 20（实测 22）、npm ≥ 10。**包管理器统一用 npm**（workspaces，lockfile `package-lock.json`）——勿用 yarn / pnpm。
+
+## 提交前必做
+
+改完代码务必本地跑通这四步再收尾（CI 就是这套）：`lint` → `typecheck` → `test` → `build`。lint 零容忍（`--max-warnings=0`），warning 也会让 CI 红。
+
+## 约定
+
+- **TypeScript strict**；React 19 + electron-vite + Monaco。优先复用现有工具/类型，匹配周边代码风格与注释密度。
+- **IPC**：main 用 `ipcMain.handle(channel, ...)`，renderer/preload 用泛型 `invoke<K>(channel, req)`，全部由 `packages/shared/src/ipc.ts` 的 `IpcChannels` 类型映射约束。新增通道先在那里加类型。
+- **提交信息**：约定式提交、**中文**，带 scope，例：`feat(desktop): …` / `fix(review): …` / `docs(readme): …` / `build(mac): …`。结尾带 `Co-Authored-By` trailer。**改完不要自动提交**，等明确指示。
+- **不提交无关改动**：工作区可能混有他人未提交编辑，按文件归属拆成内聚 commit，别混进同一条。
+
+## 工程维护坑
+
+- **嵌入式 pr-agent 运行时**（[ADR-0008](docs/adr/0008-pragent-packaging-and-runtime.md)）：`apps/desktop/scripts/assemble-pragent-runtime.mjs` 按 `pragent-runtime.json` 把可重定位 CPython + pinned pr-agent 装到 `apps/desktop/vendor/pragent/`（gitignored）。
+- **monkeypatch shim** `apps/desktop/scripts/sitecustomize.py`（对 pr-agent 的无侵入补丁）：
+  - 改了它，跑一次 `npm --prefix apps/desktop run prepare:pragent` 即重新同步进 vendor（幂等跳过分支也会同步 shim），**无需 `--force` 全量重建**。
+  - 受版本守卫：`_EXPECTED_PRAGENT_VERSION` 必须等于 `pragent-runtime.json` 的 `prAgent.version`（assemble 构建期强校验，运行期不符则跳过补丁 + stderr WARNING）。升级 pr-agent 要同步两处并重新验证。
+  - 调试：`MEEBOX_SHIM_DEBUG=1` 让 shim 打 stderr 调试。
+- **二进制资源走 Git LFS**（`*.png/.ico/.icns` 等）：本地没装 git-lfs 时拿到的是指针文件，electron-builder 转图标会崩 → `brew install git-lfs && git lfs pull`。
+- **dev 起不来**：若 `npm run dev` 报 `electron does not provide an export named …`，是环境里有 `ELECTRON_RUN_AS_NODE=1`（VSCode 扩展宿主会注入）→ `unset ELECTRON_RUN_AS_NODE` 再跑。
+- **grep 个别文件无输出**：如 `repo-mirror-manager.ts` 被 `file` 判为 `data`（含非 UTF-8 字节），普通 grep 静默 → 用 `grep -a`。
+- **prepare:pragent 网络**：pip 默认 15s 超时，弱网下加 `PIP_DEFAULT_TIMEOUT=120` 或配国内镜像（`~/.config/pip/pip.conf`）。
