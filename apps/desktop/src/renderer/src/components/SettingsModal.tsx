@@ -703,7 +703,14 @@ function ConnectionEditorModal({
   const { mode, draft } = state;
   const canSave = connDraftCanSave(draft);
   return (
-    <div className="modal-backdrop modal-backdrop-nested" onClick={onCancel}>
+    // 二层模态：背景点击只关本层，stopPropagation 防冒泡到设置主模态的 onClose（否则会连设置一起关）
+    <div
+      className="modal-backdrop modal-backdrop-nested"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCancel();
+      }}
+    >
       <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="modal-header">
           <h3>{mode === 'add' ? '新增连接' : '编辑连接'}</h3>
@@ -932,7 +939,14 @@ function LlmEditorModal({
     onSave();
   };
   return (
-    <div className="modal-backdrop modal-backdrop-nested" onClick={onCancel}>
+    // 二层模态：背景点击只关本层，stopPropagation 防冒泡到设置主模态的 onClose（否则会连设置一起关）
+    <div
+      className="modal-backdrop modal-backdrop-nested"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCancel();
+      }}
+    >
       <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="modal-header">
           <h3>{mode === 'add' ? '新增 LLM 模型' : '编辑 LLM 模型'}</h3>

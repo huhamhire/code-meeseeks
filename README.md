@@ -106,7 +106,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 | `anthropic` | Anthropic（Claude 系） | ✅ 已验证 |
 | `deepseek` | DeepSeek | ✅ 已验证 |
 | `dashscope` | 阿里百炼（DashScope，通义千问） | ✅ 已验证 |
-| `volcengine-ark` | 火山方舟（Volcengine Ark，豆包） | 🚧 理论可行，未验证 |
+| `volcengine-ark` | 火山方舟（Volcengine Ark，豆包） | ✅ 已验证 |
 | `ollama` | Ollama（本地模型） | 🚧 理论可行，未验证 |
 | `openai-compatible` | OpenAI API 协议兼容（vLLM / 中转 / 自建等） | 🚧 理论可行，未验证 |
 

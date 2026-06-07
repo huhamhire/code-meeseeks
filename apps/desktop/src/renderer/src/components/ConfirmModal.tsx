@@ -45,7 +45,13 @@ export function ConfirmModal({
   return createPortal(
     <div
       className="modal-backdrop"
-      onClick={onCancel}
+      // 背景点击只关本层。stopPropagation 防冒泡到外层模态的 onClose —— 即便经
+      // createPortal 渲染到 body，React 合成事件仍按 React 树冒泡到父模态 backdrop，
+      // 嵌套在 SettingsModal 里时不拦会连设置一起关。顶层用法下 stopPropagation 无副作用。
+      onClick={(e) => {
+        e.stopPropagation();
+        onCancel();
+      }}
       role="presentation"
     >
       <div
