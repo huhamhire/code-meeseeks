@@ -36,7 +36,7 @@ interface ChatPaneProps {
       只用 CSS 隐藏。展开后用户看到的就是当前实时状态 */
   collapsed?: boolean;
   /**
-   * 跳到 Diff 视图编辑某条 finding 对应的草稿 (M4 ADR-0007)。父组件 (MainPane)
+   * 跳到 Diff 视图编辑某条 finding 对应的草稿 (M4)。父组件 (MainPane)
    * 实现：切 tab='diff' + DiffView scroll/highlight/open edit zone + 懒创建 draft
    * 如果还没有。anchor 已由 finding.anchor 直接给到。
    */

@@ -56,7 +56,7 @@ export default function App() {
     () => localStorage.getItem('meebox.forceOnboarding') === '1',
   );
   /**
-   * M4 跨组件跳转 (ADR-0007)：ChatPane finding card 点"编辑" → 这里 set →
+   * M4 跨组件跳转：ChatPane finding card 点"编辑" → 这里 set →
    * MainPane 切 tab='diff' + 透传给 DiffView → DiffView 消费完调 onConsumed 清空。
    * 一次性 token；非 null 时 DiffView 应该 scroll + highlight (+ open edit zone
    * 如果带 runId/findingId 能反查到 finding-source 草稿)。

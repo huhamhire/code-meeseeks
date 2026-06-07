@@ -28,7 +28,7 @@ function hostOf(baseUrl: string): string {
 
 /**
  * 用草稿 base_url + token 临时起一个 bitbucket-server adapter，仅供设置页 ping 测试用。
- * proxy 透传：开关开且目标非 loopback 时，REST 经代理（见 ADR-0009）。
+ * proxy 透传：开关开且目标非 loopback 时，REST 经代理。
  */
 export function buildDraftAdapter(
   baseUrl: string,

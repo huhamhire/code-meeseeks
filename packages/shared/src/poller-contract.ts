@@ -149,13 +149,13 @@ export interface Finding {
 }
 
 /**
- * M4 评审 → 发布闭环的"草稿"。详见 ADR-0007。
+ * M4 评审 → 发布闭环的"草稿"。
  *
  * 草稿的生命周期跟 Finding 解耦：
  * - Finding 是 /review 的不可变快照 (跑过什么 AI 说了什么)
  * - Draft 是用户工作中的可变态 (用户编辑 / 拒绝 / 发布的对象)
  *
- * 落盘到 `state/prs/<localId>/drafts.json`，per-PR 目录 (ADR-0006 一致)；PR 退场
+ * 落盘到 `state/prs/<localId>/drafts.json`，per-PR 目录；PR 退场
  * 时 deleteDir 整树清掉。
  *
  * 状态机：

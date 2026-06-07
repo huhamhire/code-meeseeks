@@ -41,7 +41,7 @@ npm --prefix apps/desktop run prepare:pragent
 
 - 产物落在 `apps/desktop/vendor/pragent/`（已 gitignore，约 600+ MB）。
 - 幂等：已组装则跳过；`--force` 强制重建。
-- 平台自动识别：Windows x64 / macOS arm64（详见 [ADR-0008](./adr/0008-pragent-packaging-and-runtime.md)）。
+- 平台自动识别：Windows x64 / macOS arm64（详见 [modules/09 打包与发布](./modules/09-packaging-release.md)）。
 - 此脚本需 **Node 22+**（用到较新内置能力）；其余开发命令 Node 20 即可。
 
 ## 4. 启动开发态
@@ -93,24 +93,25 @@ npm --prefix apps/desktop run pack
 ## 7. 仓库结构
 
 ```
-apps/
-  desktop/                 # Electron 应用（main / preload / renderer）
-    scripts/               # 内嵌运行时组装脚本 + sitecustomize shim
-    build-resources/       # 打包资源（entitlements / afterPack 钩子）
-    vendor/pragent/        # 内嵌运行时（gitignore，prepare:pragent 生成）
-packages/
-  shared/                  # 跨进程共享类型 / IPC 契约 / config schema
-  config/                  # 配置加载与校验
-  logger/                  # pino 日志
-  platform-bitbucket-server/  # Bitbucket Server 平台适配
-  poller/                  # PR 轮询发现 + 草稿池
-  pr-agent-bridge/         # pr-agent 调用（embedded / local-cli / docker 策略）
-  repo-mirror/             # 仓库镜像（partial clone + diff/blame）
-  rules/                   # 规则目录加载与匹配
-  state-store/             # JSON 状态存储（原子写）
-docs/                      # ROADMAP + ADR + 本指南
-assets/                    # 品牌 / 图标资源（LFS）
-tools/                     # 探针等辅助脚本
+.
+├── apps/
+│   └── desktop/                    # Electron 应用（main / preload / renderer）
+│       ├── scripts/                # 内嵌运行时组装脚本 + sitecustomize shim
+│       ├── build-resources/        # 打包资源（entitlements / afterPack 钩子）
+│       └── vendor/pragent/         # 内嵌运行时（gitignore，prepare:pragent 生成）
+├── packages/
+│   ├── shared/                     # 跨进程共享类型 / IPC 契约 / config schema
+│   ├── config/                     # 配置加载与校验
+│   ├── logger/                     # pino 日志
+│   ├── platform-bitbucket-server/  # Bitbucket Server 平台适配
+│   ├── poller/                     # PR 轮询发现 + 草稿池
+│   ├── pr-agent-bridge/            # pr-agent 调用（embedded / local-cli / docker 策略）
+│   ├── repo-mirror/                # 仓库镜像（partial clone + diff/blame）
+│   ├── rules/                      # 规则目录加载与匹配
+│   └── state-store/                # JSON 状态存储（原子写）
+├── docs/                           # ROADMAP + ADR + 本指南
+├── assets/                         # 品牌 / 图标资源（LFS）
+└── tools/                          # 探针等辅助脚本
 ```
 
 ## 8. 数据目录
@@ -125,7 +126,7 @@ tools/                     # 探针等辅助脚本
 └── repos/           # 仓库镜像（默认位置，repos_dir 可改到其它盘）
 ```
 
-数据模型与容错设计见 [ROADMAP §4](./ROADMAP.md) 与 [ADR-0006](./adr/0006-pr-state-storage-redesign.md)。
+数据模型与容错设计见 [modules/03 状态存储与数据模型](./modules/03-state-storage.md)。
 
 ## 9. 测试约定
 

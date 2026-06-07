@@ -61,7 +61,7 @@ export interface RepoMirrorOptions {
   /** 可选 sync 进度回调；clone/fetch 期间分阶段发出 start/progress/done/error */
   onProgress?: (event: SyncProgressEvent) => void;
   /**
-   * 可选出站代理 env（见 ADR-0009）。getter 形式，每次远端 clone/fetch 前求值，
+   * 可选出站代理 env。getter 形式，每次远端 clone/fetch 前求值，
    * 让设置页改代理后下次操作即生效。返回 HTTP(S)_PROXY/NO_PROXY 等；关闭时返回 {}。
    * 仅作用于打远端的 clone/fetch；本地只读 git 操作不注入。
    */
@@ -96,7 +96,7 @@ export class RepoMirrorManager {
   constructor(private readonly opts: RepoMirrorOptions) {}
 
   /**
-   * 给打远端的 simple-git 实例挂代理 env（见 ADR-0009）。代理关闭 / 未配置时原样返回
+   * 给打远端的 simple-git 实例挂代理 env。代理关闭 / 未配置时原样返回
    * （git 子进程继承 process.env）。注意 simple-git 的 .env() 整体替换子进程 env，
    * 故必须 merge process.env，否则 PATH / HOME 等全丢。
    */

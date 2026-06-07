@@ -302,7 +302,7 @@ export interface IpcChannels {
   /** 写入轮询间隔 (秒，60~900 整数) 到 config.yaml，并热替换 poller 定时器，无需重启 */
   'config:setPoller': { request: { interval_seconds: number }; response: void };
   /**
-   * 写入网络代理配置到 config.yaml，并**热重建** adapter（REST 经代理即时生效，见 ADR-0009）。
+   * 写入网络代理配置到 config.yaml，并**热重建** adapter（REST 经代理即时生效）。
    * pr-agent / git 出口下次操作读最新配置，无需重启。
    */
   'config:setProxy': { request: { proxy: Config['proxy'] }; response: void };

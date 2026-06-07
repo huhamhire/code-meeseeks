@@ -34,7 +34,7 @@ interface DiffViewProps {
   showBlame: boolean;
   showWhitespace: boolean;
   /**
-   * M4 跳转目标 (ADR-0007)：来自 ChatPane finding card → App pendingDiffNav。
+   * M4 跳转目标：来自 ChatPane finding card → App pendingDiffNav。
    * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + (带 runId/findingId
    * 时) 打开 inline 草稿编辑 zone (草稿已由 ChatPane 端懒创建)。
    * runId/findingId 缺省 (PublishReviewModal anchor 点击) → 仅 navigate 不 enter edit。

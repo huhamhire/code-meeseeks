@@ -1,4 +1,4 @@
-// 出站网络代理 plumbing（见 ADR-0009）。读 config.proxy，产出三种形态：
+// 出站网络代理 plumbing。读 config.proxy，产出三种形态：
 //   - buildProxyEnv：子进程 env（给 ① pr-agent、③ git HTTPS，litellm/git 认 HTTP(S)_PROXY）
 //   - buildProxyDispatcher：undici ProxyAgent（给 ② Bitbucket Server REST 的 fetch）
 //   - shouldBypass：loopback/本地是否直连（② 在调用点据此决定要不要挂 dispatcher）

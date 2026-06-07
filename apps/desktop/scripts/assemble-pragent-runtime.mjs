@@ -1,4 +1,4 @@
-// 组装 pr-agent 嵌入式运行时到 apps/desktop/vendor/pragent/（见 ADR-0008）。
+// 组装 pr-agent 嵌入式运行时到 apps/desktop/vendor/pragent/。
 //
 // 流程：
 //   1. 读 pragent-runtime.json（pin 的 PBS tag + python 主次版本 + pr-agent 版本）

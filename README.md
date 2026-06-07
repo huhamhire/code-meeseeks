@@ -133,7 +133,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 - **工程**：npm workspaces + Nx 单仓多包
 - **pr-agent 集成**：默认内嵌 Python 运行时子进程（Docker 模式可选）
 
-详细架构、数据模型、分期里程碑见 **[Roadmap](docs/ROADMAP.md)**；关键技术决策见 **[ADR 目录](docs/adr/)**。
+详细架构、数据模型、分期里程碑见 **[Roadmap](docs/ROADMAP.md)**；各模块设计见 **[模块文档](docs/modules/README.md)**。
 
 ---
 

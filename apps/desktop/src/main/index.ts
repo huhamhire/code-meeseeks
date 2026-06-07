@@ -34,7 +34,7 @@ if (!gotSingleInstanceLock) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * 嵌入式 pr-agent 运行时的解释器绝对路径（见 ADR-0008）。
+ * 嵌入式 pr-agent 运行时的解释器绝对路径。
  * - dev：`apps/desktop/vendor/pragent/...`（app.getAppPath() = apps/desktop）
  * - 打包：`<resources>/pragent/...`（electron-builder extraResources）
  * - `MEEBOX_PRAGENT_PYTHON` env 覆盖兜底
@@ -186,7 +186,7 @@ async function start(): Promise<void> {
         win.webContents.send('sync:progress', event);
       }
     },
-    // 出站代理（见 ADR-0009）：getter 每次远端 clone/fetch 求值，设置页改代理后即生效。
+    // 出站代理：getter 每次远端 clone/fetch 求值，设置页改代理后即生效。
     proxyEnv: () => buildProxyEnv(bootstrap.config.proxy),
   });
 

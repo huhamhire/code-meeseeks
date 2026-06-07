@@ -1,0 +1,82 @@
+# 04 · pr-agent 集成与运行时
+
+## 职责与边界
+
+把第三方的 pr-agent（Python）接进来跑 `/describe` `/review` `/ask`，并解决「运行时从哪来、怎么无侵入
+改它的行为、怎么拿真实 token 用量」。
+
+负责：调用桥（多策略）、随 app 打包的嵌入式 Python 运行时、对 pr-agent 的 monkeypatch 补丁体系、
+token 用量采集、注入 env。不负责：输出解析与草稿（见 [05](05-review-workflow.md)）、git/worktree（见 [02](02-repo-mirror.md)）。
+
+## 核心设计
+
+### 调用桥（策略模式）
+
+`PrAgentBridge` 三种策略，启动探测自动选、设置页可强制：
+
+- **embedded（默认）**：用随 app 打包的嵌入式解释器跑 `python -m pr_agent.cli`，免用户装任何东西。
+- **local-cli**：用系统 `pr-agent` CLI（高级用户自管 Python）。
+- **docker**：用官方镜像（pin tag）。
+
+统一以 **LocalGitProvider 模式**在物化好的 worktree 上跑（`CONFIG__GIT_PROVIDER=local`，cwd=worktree）。
+注意 pr-agent 社区版 LocalGitProvider 的反直觉点：`--pr_url` 槽位填的是 **target 分支名**（不是 URL），
+仓库根靠 cwd 的 `.git` 父目录定位。输出不走 stdout——pr-agent 把结果**写到 worktree 根的 markdown 文件**
+（`/describe`→`description.md`、`/review` `/ask`→`review.md`），收尾从文件读，stdout 仅留作日志。
+
+升级 pr-agent ≈ 改版本号，对主体代码零影响（这是选「外挂进程」而非「TS 重写」的根本原因）。
+
+### 嵌入式运行时
+
+随 app 打包**可重定位的 CPython**（python-build-standalone 的 install_only 构建）+ 构建期隔离安装
+**pinned 版本的 pr-agent**。组装脚本按一份 manifest（pin 的 python 版本 + pr-agent 版本）下载解释器、
+`pip install pr-agent==<ver>`、注入 shim、做 `import pr_agent` 冒烟。运行时作为 `extraResources` 落在
+asar 之外（原生解释器 + `.so/.pyd` 必须是真实文件）。由构建机宿主平台组装，与目标平台一致。
+
+### monkeypatch shim（无侵入改 pr-agent）
+
+一个 `sitecustomize.py` 集中**所有**对 pr-agent 的行为改造，上游源码保持原封。CPython 启动经 `site`
+自动 import，无需挂载 / `PYTHONPATH`。设计原则：
+
+- **惰性 post-import hook**：注册 meta_path finder，仅当目标模块**真正被 import**（= 真实 run）时才打补丁；
+  绝不在 sitecustomize 阶段 eager import pr_agent（否则拖慢每次启动/探测/pip）。
+- **同模块的多个补丁合进一个 patch_fn**：同模块注册多个 finder 会互相遮蔽，只有最前一个生效。
+- **版本守卫**：补丁依赖 pr-agent 特定版本内部实现 → 运行期 `_EXPECTED_PRAGENT_VERSION` ≠ 实际安装版本即
+  **跳过全部补丁并打 stderr WARNING**（安全降级）；构建期强校验 shim 常量 == manifest 版本，不一致直接 fail。
+
+当前补丁：
+- **二进制安全 diff**：原 `get_diff_files` 对每个文件无脑 utf-8 decode，遇二进制崩 → 改为解码失败跳过。
+- **anchor 行号**（详见 [05](05-review-workflow.md)）：补 `get_line_link` 返回 `meebox:///<file>#L<s>-L<e>`，
+  让 `/review` 的 key_issues 渲染带上结构化 file:line。
+- **Anthropic 去 temperature**：新 Claude 型号弃用 temperature，把全 `anthropic/*` 纳入「不发 temperature」集合。
+- **load_yaml 容错**：anchor marker 独占一行会破 YAML → 解析失败时剥掉 marker 重试，避免整个 review 崩。
+- **token usage 采集**：见下。
+
+### 真实 token 用量
+
+inline 包 pr-agent 的 `_get_completion`，从返回的 `response.usage` 取 `prompt/completion/total_tokens`，
+以哨兵行 `@@MEEBOX_USAGE@@ {json}` 打到 **stderr**；主进程逐行捕获、按前缀累加、落到 run（见 [05](05-review-workflow.md)）。
+**为什么 inline 而非 litellm callback**：litellm 的 async 回调走后台 logging worker，短命 CLI 退出过快会被丢；
+inline 在 await 链里必在退出前执行，可靠。只取 token、不取 cost → 统一设 `LITELLM_LOCAL_MODEL_COST_MAP=True`
+关掉 litellm 的远端价格表联网（弱网会 SSL 超时）。
+
+### 注入 env
+
+每次 run 给子进程注入：LLM provider 凭据（`OPENAI__KEY` / `DEEPSEEK__KEY` / `ANTHROPIC__KEY` 等，按 provider 分族）+
+模型名 + 响应语言 + 命中规则的 `EXTRA_INSTRUCTIONS`（见 [06](06-rules.md)）+ 出站代理（见 [08](08-networking-proxy.md)）。
+
+## 数据 / 接口契约
+
+- **策略**：`'auto' | 'embedded' | 'local-cli' | 'docker'`（配置 `pr_agent.strategy`）。
+- **run 选项**：`prUrl` / `tool('describe'|'review'|'ask')` / `cwd`(worktree) / `targetBranch` / `env` / `extraArgs` /
+  `onLine`(stdout/stderr 实时回调) / `signal`(取消)。
+- **运行时 manifest**：pin 的 python 主次版本 + pr-agent 版本（升级时与 shim 的 `_EXPECTED_PRAGENT_VERSION` 同步）。
+- **shim 调试**：`MEEBOX_SHIM_DEBUG=1` → shim 打 stderr 诊断。
+
+## 扩展与注意事项
+
+- **升级 pr-agent**：改 manifest 版本 → 同步 shim 的 `_EXPECTED_PRAGENT_VERSION` → 重新验证各补丁（构建期会强校验
+  两处一致，漏同步直接 fail；运行期不符则降级 + WARNING）。
+- **改了 shim**：跑一次 `prepare:pragent` 即重新同步进 vendor（幂等跳过分支也会同步 shim），无需 `--force` 全量重建。
+- **流式模型丢 usage**：个别需强制流式的模型用 MockResponse、无 usage，token 采集对它们缺失（非流式不受影响）。
+- **启动开销**：单次 run 有固定 diff 预处理等开销（~分钟级），已有优化备忘（worktree/上下文缓存、镜像预热、容器长驻），按需做。
+- **平台范围**：嵌入式运行时初版只出 Windows x64 + macOS arm64（见 [09](09-packaging-release.md)）。

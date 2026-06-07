@@ -3,7 +3,7 @@ import type { DraftsFile, ReviewDraft } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
 
 /**
- * `state/prs/<localId>/drafts.json` 的 KV key。跟 ADR-0006 per-PR 目录布局一致，
+ * `state/prs/<localId>/drafts.json` 的 KV key。跟 per-PR 目录布局一致，
  * PR 退场时 `deleteDir` 整树清掉，不需要单独 evict 草稿。
  */
 function draftsKey(prLocalId: string): string {
@@ -121,7 +121,7 @@ export async function deleteDraft(
 }
 
 /**
- * /review 完成时的"再摄入"规则 (ADR-0007 §2)：丢弃所有 `pending+finding` 草稿。
+ * /review 完成时的"再摄入"规则：丢弃所有 `pending+finding` 草稿。
  *
  * 保留：status ∈ {edited, posted, rejected} 或 origin='manual' —— 用户已投入的
  * 决断永不被覆盖。

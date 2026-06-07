@@ -1,5 +1,5 @@
 /**
- * 持久化 KV 抽象。一期 JSON 文件实现；ADR-0003 标注触发条件后可换 SQLite。
+ * 持久化 KV 抽象。一期 JSON 文件实现；满足触发条件后可换 SQLite。
  *
  * key 形如 `connections` / `runs/pr-42/run-xyz`，由调用者保证结构。
  * 实现负责把 key 映射到具体存储位置，并保证写入原子性。

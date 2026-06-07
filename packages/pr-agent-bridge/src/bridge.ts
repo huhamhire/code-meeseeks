@@ -114,7 +114,7 @@ export class LocalCliBridge extends BaseBridge {
 }
 
 /**
- * 走随 app 打包的嵌入式 Python 运行时（见 ADR-0008）：用 `<vendor>/python -m
+ * 走随 app 打包的嵌入式 Python 运行时：用 `<vendor>/python -m
  * pr_agent.cli` 跑 pr-agent，免除用户预装 Python / Docker。
  *
  * 形态与 LocalCli 的 local 模式一致（local provider，cwd=worktree，

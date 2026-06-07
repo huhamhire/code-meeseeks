@@ -777,7 +777,7 @@ export function registerIpcHandlers({
         // UI 还不暴露切换；后续多语言时改成 Settings 入口
         const env: Record<string, string> = {
           // 代理 env 先铺底，LLM/语言配置在后（互不冲突，仅 HTTP(S)_PROXY 类）。
-          // 见 ADR-0009：开关开时让嵌入式 python(litellm/httpx) 经代理出网调 LLM。
+          // 开关开时让嵌入式 python(litellm/httpx) 经代理出网调 LLM。
           ...buildProxyEnv(bootstrap.config.proxy),
           ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
           CONFIG__RESPONSE_LANGUAGE: bootstrap.config.language,
@@ -995,7 +995,7 @@ export function registerIpcHandlers({
             ? stripAskQuestionEcho(fileContent, req.question)
             : fileContent;
         const parsed = parseReviewOutput(cleanedContent || result.stdout, req.tool);
-        // M4 草稿再摄入 (ADR-0007 §2)：/review 成功完成时丢掉 pending+finding 旧草稿，
+        // M4 草稿再摄入：/review 成功完成时丢掉 pending+finding 旧草稿，
         // 让本轮 ChatPane 上的 finding 列表成为新的候选源。edited/posted/rejected/
         // manual 保留不动。失败的 /review 不触发清理 (没建设性数据)。
         if (req.tool === 'review') {
