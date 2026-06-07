@@ -24,14 +24,24 @@ Renderer ↔ Main 全部走 `ipcMain.handle(channel, …)` + 渲染侧泛型 `in
 
 ### 数据流（一次评审的主链路）
 
-```
-轮询(Poller) ──按连接拉「我作为 reviewer 待处理的 PR」──▶ 状态存储(per-PR 目录)
-                                                            │
-用户选中 PR ──▶ 仓库镜像(RepoMirror) 同步 bare + 物化 worktree
-                                                            │
-对话框 /review ──▶ pr-agent 桥(PrAgentBridge) 在 worktree 上跑嵌入式 pr-agent
-                                            │
-                         输出解析为 findings ──▶ 草稿池 ──▶ 用户确认/编辑 ──▶ 批量发布(平台 Adapter)
+```mermaid
+flowchart TB
+  subgraph discover[发现]
+    poller[轮询 Poller] -->|按连接拉「待评审 PR」| state[(状态存储<br/>per-PR 目录)]
+  end
+
+  subgraph review[评审一条 PR]
+    direction TB
+    pick([用户选中 PR]) --> mirror[仓库镜像<br/>同步 bare + 物化 worktree]
+    cmd(["/review · /describe · /ask"]) --> bridge[pr-agent 桥<br/>worktree 上跑嵌入式 pr-agent]
+    mirror --> bridge
+    bridge --> parse[输出解析 → findings]
+    parse --> drafts[草稿池]
+    drafts --> confirm([用户确认 / 编辑])
+    confirm --> publish[批量发布 → 平台 Adapter]
+  end
+
+  state -.选中.-> pick
 ```
 
 ### 模块地图（packages / 主进程子系统）
@@ -47,6 +57,7 @@ Renderer ↔ Main 全部走 `ipcMain.handle(channel, …)` + 渲染侧泛型 `in
 | 配置与凭据 | `config` + 设置页 | [07](07-config-and-secrets.md) |
 | 出站网络与代理 | 主进程 proxy plumbing | [08](08-networking-proxy.md) |
 | 打包与发布 | electron-builder + 嵌入式运行时打包 | [09](09-packaging-release.md) |
+| GUI 与交互 | 渲染层 React（布局 / 面板 / 跨 PR 保活） | [10](10-ui-interaction.md) |
 
 `shared` 是跨包共享类型（含 `IpcChannels` 契约、PR/Finding/Run 等领域类型）；`logger` 是统一日志。
 
@@ -54,6 +65,17 @@ Renderer ↔ Main 全部走 `ipcMain.handle(channel, …)` + 渲染侧泛型 `in
 
 - npm workspaces + Nx 单仓多包；统一 `lint`/`typecheck`/`test`/`build` 任务（详见根 `AGENTS.md`）。
 - 桌面壳 Electron + electron-vite；渲染 React + Monaco（并排/内联 diff）。
+
+### 数据与隐私边界
+
+- **本地优先**：仓库副本、PR 元数据、评论缓存、草稿、配置全部留在本地工作目录 `~/.code-meeseeks/`
+  （仓库镜像可改到 `repos_dir`）。无服务端、不做多用户同步。
+- **出站只有两类**：① 评审者自配的 **LLM API**（经 pr-agent / litellm）；② 所配置的**代码平台**
+  （PR / 评论 REST + git 拉取）。除此不向任何第三方上报数据。两类出站都可经统一 HTTP 代理管控（见 [08](08-networking-proxy.md)）。
+- **发给 LLM 的内容**：pr-agent 评审时只把 **PR diff + 命中的规则**（extra_instructions）发给 LLM，不发其它本地数据。
+- **凭据**：平台 token / LLM API key / 代理密码**明文**存 `config.yaml`（文件权限收紧），属已知风险；
+  抽象层预留 keytar 升级（见 [07](07-config-and-secrets.md)）。
+- **安全基线**：渲染层 `contextIsolation` 开、无 `nodeIntegration`、CSP；preload 仅暴露白名单能力（见 [10](10-ui-interaction.md)）。
 
 ## 数据 / 接口契约
 

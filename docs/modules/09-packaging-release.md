@@ -14,8 +14,8 @@
 - **嵌入式运行时随包**：`vendor/pragent`（CPython + pinned pr-agent）经 electron-builder 的 `extraResources`
   落在 **asar 之外**（原生解释器 + `.so/.pyd` 必须是真实文件，不能进 asar）；`__pycache__` 排除瘦身。
   打包平台与目标平台一致（由构建机宿主组装）。
-- **目标产物**：Windows → NSIS x64；macOS → dmg arm64；Linux → AppImage x64。初版发布聚焦
-  **Windows x64 + macOS arm64**（Intel / win arm64 / linux 后续）。
+- **目标产物**：Windows → NSIS x64；macOS → dmg arm64。发布只聚焦 **Windows x64 + macOS arm64**；
+  **Linux 暂不计划**，Intel / win arm64 视需求后续。（electron-builder 配置里即便保留 linux 段也不在发布范围。）
 - **macOS 免费签名路线（ad-hoc）**：不申请 Apple Developer ID（$99/年）。afterPack 钩子对 `.app` 做
   **ad-hoc 递归签名**（`codesign --deep --sign -`）——Apple Silicon 上任何 Mach-O 必须有签名才能运行
   （含嵌入式 python 的上千个 `.so/.dylib`，实测 `--deep` 已完整覆盖，无需逐个补签）。**代价**：不公证，
@@ -29,7 +29,7 @@
 ## 数据 / 接口契约
 
 - **触发**：push tag `v*`（或手动 workflow_dispatch）。
-- **产物命名**：`code-meeseeks-<version>-{win-x64.exe | mac-arm64.dmg | linux-x64.AppImage}`。
+- **产物命名**：`code-meeseeks-<version>-{win-x64.exe | mac-arm64.dmg}`。
 - **可选签名凭据**（配齐则自动转正式签名+公证）：证书 .p12（base64）+ 密码、App Store Connect API key 等
   以仓库 secrets 注入；缺失则走 ad-hoc。
 

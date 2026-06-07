@@ -37,6 +37,7 @@
 | [`07-config-and-secrets`](07-config-and-secrets.md) | 配置与凭据（config.yaml / SecretStore / 设置页 / 首启向导） |
 | [`08-networking-proxy`](08-networking-proxy.md) | 出站网络与代理（HTTP 代理统一 / loopback 直连 / SSH） |
 | [`09-packaging-release`](09-packaging-release.md) | 打包与发布（electron-builder / 嵌入式打包 / 签名 / CI） |
+| [`10-ui-interaction`](10-ui-interaction.md) | GUI 与交互（渲染层布局 / 面板 / 跨 PR 保活 / 交互约定） |
 
 ## 编号规则
 
