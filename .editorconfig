@@ -14,15 +14,15 @@ trim_trailing_whitespace = false
 [*.{yaml,yml}]
 indent_size = 2
 
-# JS / TS（与 prettier 对齐：2 空格）
 [*.{js,jsx,ts,tsx,cjs,mjs}]
 indent_size = 2
 
-# 样式表（CSS / SCSS / Sass）：2 空格
 [*.{css,scss,sass}]
 indent_size = 2
 
-# Python（嵌入式 shim / 构建脚本）：PEP 8 用 4 空格，行宽 88（对齐 black）
+[*.{json,jsonc}]
+indent_size = 2
+
 [*.py]
+indent_style = space
 indent_size = 4
-max_line_length = 88
