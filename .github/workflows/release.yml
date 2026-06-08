@@ -89,6 +89,9 @@ jobs:
           # 无 CSC_LINK 时禁止 electron-builder 去钥匙串自动找签名身份（afterPack 已 ad-hoc）；
           # 有真证书时走 CSC_LINK 导入签名，不受此项影响。
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          # prepare:pragent 调 GitHub API 列 python-build-standalone release 资产；匿名 60 次/h/IP
+          # 易被限流（HTTP 403）。带上 Actions 自带 token 提到认证额度（脚本已支持 GITHUB_TOKEN）。
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 生成 SHA256 校验和
         if: startsWith(github.ref, 'refs/tags/')
