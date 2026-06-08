@@ -111,30 +111,18 @@ export default function App() {
   }, []);
 
   // 连接改动（尤其切换活动连接）后整体刷新 boot：活动连接变化后 main 端 app:connections /
-  // prs:list / discoveryFilter 都随之变，必须重拉，否则 boot.connections、PR 列表会过期。
+  // prs:list 都随之变，必须重拉，否则 boot.connections、PR 列表会过期。
   const refreshBootAndPrs = useCallback(async (): Promise<void> => {
-    const [config, connections, freshPrs, lastSync, discovery] = await Promise.all([
+    const [config, connections, freshPrs, lastSync] = await Promise.all([
       invoke('config:read', undefined),
       invoke('app:connections', undefined),
       invoke('prs:list', undefined),
       invoke('prs:lastSync', undefined),
-      invoke('prs:discoveryFilter', undefined),
     ]);
     setBoot((b) => (b ? { ...b, config, connections, lastSyncAt: lastSync.at } : b));
     setPrs(freshPrs);
     setLastSyncAt(lastSync.at);
-    setDiscoveryFilter(discovery.filter);
   }, []);
-
-  // 切换 GitHub 发现分类：先乐观更新高亮，再触发主进程重轮询，回来后刷新列表。
-  const changeDiscoveryFilter = useCallback(
-    async (filter: PrDiscoveryFilter): Promise<void> => {
-      setDiscoveryFilter(filter);
-      await invoke('prs:setDiscoveryFilter', { filter });
-      await reloadPrs();
-    },
-    [reloadPrs],
-  );
 
   useEffect(() => {
     void (async () => {
@@ -142,7 +130,7 @@ export default function App() {
         if (!window.api) {
           throw new Error('preload bridge missing: window.api is undefined');
         }
-        const [info, paths, config, prAgent, initialPrs, connections, lastSync, discovery] =
+        const [info, paths, config, prAgent, initialPrs, connections, lastSync] =
           await Promise.all([
             invoke('app:info', undefined),
             invoke('app:paths', undefined),
@@ -151,12 +139,10 @@ export default function App() {
             invoke('prs:list', undefined),
             invoke('app:connections', undefined),
             invoke('prs:lastSync', undefined),
-            invoke('prs:discoveryFilter', undefined),
           ]);
         setBoot({ info, paths, config, prAgent, connections, lastSyncAt: lastSync.at });
         setPrs(initialPrs);
         setLastSyncAt(lastSync.at);
-        setDiscoveryFilter(discovery.filter);
       } catch (e) {
         setFatalError(e instanceof Error ? e.message : String(e));
       }
@@ -346,11 +332,16 @@ export default function App() {
   // 有 active 连接但 LLM 未配置 → ChatPane 给出「需配置才能启用」提示并禁用输入
   const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
 
-  // 发现分类控件仅对 GitHub 活动连接展示（四类 search 限定词为 GitHub 专有）。
-  const activeConnKind = boot.config.connections.find(
-    (c) => c.id === boot.config.active_connection_id,
-  )?.kind;
-  const showDiscoveryFilter = activeConnKind === 'github';
+  // 发现分类标签由活动连接的能力决定（GitHub 四类、Bitbucket 两类、其余无）。
+  const activeConnSummary = boot.connections.find(
+    (c) => c.connectionId === boot.config.active_connection_id,
+  );
+  const availableDiscoveryFilters = activeConnSummary?.capabilities.discoveryFilters ?? [];
+  const showDiscoveryFilter = availableDiscoveryFilters.length > 0;
+  // 选中的分类可能因切换连接而对当前平台无效（如 github 的 mentioned 切到 bitbucket）→ 回落首个可用。
+  const effectiveDiscoveryFilter = availableDiscoveryFilters.includes(discoveryFilter)
+    ? discoveryFilter
+    : availableDiscoveryFilters[0];
 
   return (
     <div className="app">
@@ -362,8 +353,9 @@ export default function App() {
             onSelect={(pr) => setSelectedId(pr.localId)}
             width={sidebarWidth}
             onResize={setSidebarWidth}
-            discoveryFilter={showDiscoveryFilter ? discoveryFilter : undefined}
-            onDiscoveryFilterChange={showDiscoveryFilter ? changeDiscoveryFilter : undefined}
+            availableFilters={showDiscoveryFilter ? availableDiscoveryFilters : undefined}
+            discoveryFilter={showDiscoveryFilter ? effectiveDiscoveryFilter : undefined}
+            onDiscoveryFilterChange={showDiscoveryFilter ? setDiscoveryFilter : undefined}
           />
         )}
         <MainPane

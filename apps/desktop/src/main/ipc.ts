@@ -479,21 +479,6 @@ export function registerIpcHandlers({
     (): IpcChannels['prs:lastSync']['response'] => ({ at: poller.getLastPollAt() }),
   );
   ipcMain.handle(
-    'prs:discoveryFilter',
-    (): IpcChannels['prs:discoveryFilter']['response'] => ({ filter: poller.getDiscoveryFilter() }),
-  );
-  ipcMain.handle(
-    'prs:setDiscoveryFilter',
-    async (
-      _e,
-      req: IpcChannels['prs:setDiscoveryFilter']['request'],
-    ): Promise<IpcChannels['prs:setDiscoveryFilter']['response']> => {
-      // 切换发现分类（GitHub 四类）→ 立即重轮询；renderer 收到 poll:tick 后重取 prs:list
-      poller.setDiscoveryFilter(req.filter);
-      return poller.tick();
-    },
-  );
-  ipcMain.handle(
     'prs:setLocalStatus',
     async (
       _evt,

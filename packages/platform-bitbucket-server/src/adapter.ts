@@ -1,4 +1,5 @@
 import type {
+  ListPendingOptions,
   MergeStatus,
   PingResult,
   PlatformAdapter,
@@ -149,6 +150,8 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       commentOptimisticLock: true,
       mergeVetoFidelity: 'full',
       discoveryRateLimited: false,
+      // Bitbucket dashboard 支持 role=REVIEWER/AUTHOR → 提供「待我评审 / 我创建的」两类
+      discoveryFilters: ['review-requested', 'created'],
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,
@@ -221,11 +224,13 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     return this.cachedUser;
   }
 
-  async listPendingPullRequests(): Promise<PullRequest[]> {
+  async listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]> {
+    // 发现分类 → dashboard role：created=我创建(AUTHOR)，其余(待我评审)=REVIEWER。
+    const role = opts?.filter === 'created' ? 'AUTHOR' : 'REVIEWER';
     const bitbucketPrs: BitbucketPullRequest[] = [];
     for await (const pr of this.client.paginate<BitbucketPullRequest>(
       '/rest/api/1.0/dashboard/pull-requests',
-      { role: 'REVIEWER', state: 'OPEN' },
+      { role, state: 'OPEN' },
     )) {
       bitbucketPrs.push(pr);
     }

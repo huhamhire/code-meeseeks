@@ -5,6 +5,7 @@ import type {
   PlatformKind,
   PollResult,
   PrDiscoveryFilter,
+  PullRequest,
   ReviewerStatus,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
@@ -80,8 +81,6 @@ export class Poller {
   private connections: ReadonlyArray<PollerConnection>;
   /** 可热替换的轮询间隔（秒）。初值取自构造 opts */
   private intervalSeconds: number;
-  /** PR 发现筛选分类（运行时，不持久化）。GitHub 据此切换发现范围，其他平台忽略。 */
-  private discoveryFilter: PrDiscoveryFilter = 'review-requested';
 
   constructor(private readonly opts: PollerOptions) {
     this.connections = opts.connections;
@@ -94,19 +93,6 @@ export class Poller {
    */
   setConnections(connections: ReadonlyArray<PollerConnection>): void {
     this.connections = connections;
-  }
-
-  /**
-   * 热替换 PR 发现筛选分类（PR 列表上切换分类时调用）。下一轮 poll 生效；调用方决定是否
-   * 立即 tick。切到更窄的分类后，上轮可见、本轮不再命中的 PR 会被软删退场（与已有逻辑一致）。
-   */
-  setDiscoveryFilter(filter: PrDiscoveryFilter): void {
-    this.discoveryFilter = filter;
-  }
-
-  /** 当前 PR 发现筛选分类。 */
-  getDiscoveryFilter(): PrDiscoveryFilter {
-    return this.discoveryFilter;
   }
 
   /**
@@ -196,12 +182,30 @@ export class Poller {
     for (const { connectionId, adapter } of this.connections) {
       const me = adapter.getCurrentUser();
       try {
-        const remote = await adapter.listPendingPullRequests({ filter: this.discoveryFilter });
-        fetched += remote.length;
+        // 发现分类：平台提供多类（GitHub 四类）→ 逐类轮询并 union 打标，让 renderer 切标签
+        // 走本地缓存而非每次拉远端；无分类的平台（Bitbucket）单轮询、标记为空数组。
+        const filters = adapter.capabilities().discoveryFilters ?? [];
+        const merged = new Map<string, { pr: PullRequest; matched: PrDiscoveryFilter[] }>();
+        const collect = async (filter?: PrDiscoveryFilter): Promise<void> => {
+          const remote = await adapter.listPendingPullRequests(filter ? { filter } : undefined);
+          for (const pr of remote) {
+            const k = `${pr.repo.projectKey}|${pr.repo.repoSlug}|${pr.remoteId}`;
+            const e = merged.get(k);
+            if (e) {
+              if (filter && !e.matched.includes(filter)) e.matched.push(filter);
+            } else {
+              merged.set(k, { pr, matched: filter ? [filter] : [] });
+            }
+          }
+        };
+        if (filters.length === 0) await collect();
+        else for (const f of filters) await collect(f);
+
+        fetched += merged.size;
         const seen = new Set<string>();
         seenByConnection.set(connectionId, seen);
 
-        for (const pr of remote) {
+        for (const { pr, matched } of merged.values()) {
           // hash localId：platform + 连接 + group + repo + remoteId 一锅哈希。
           // 同一 connection 下不同 repo 同 PR id 也能区分开 (Bitbucket 的 PR id 是 per-repo
           // 递增的)；platform 字段让多平台扩展时 schema 不必改
@@ -244,6 +248,7 @@ export class Poller {
             platform: adapter.kind,
             connectionId,
             localStatus,
+            discoveryFilters: matched,
             discoveredAt: prev?.discoveredAt ?? now,
             lastSeenAt: now,
           });

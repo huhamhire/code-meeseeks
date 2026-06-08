@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { LocalPrStatus, PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
 import { PrItem } from './PrItem';
 
@@ -11,7 +11,9 @@ interface SidebarProps {
   onSelect: (pr: StoredPullRequest) => void;
   width: number;
   onResize: (next: number) => void;
-  /** GitHub 模式下展示的发现分类控件；非 GitHub 连接时为 undefined（不渲染该行）。 */
+  /** 活动连接支持的发现分类（来自 capabilities）；为空 / undefined 时不渲染分类标签行。 */
+  availableFilters?: readonly PrDiscoveryFilter[];
+  /** 当前选中的发现分类。 */
   discoveryFilter?: PrDiscoveryFilter;
   onDiscoveryFilterChange?: (filter: PrDiscoveryFilter) => void;
 }
@@ -19,13 +21,13 @@ interface SidebarProps {
 export const SIDEBAR_MIN_WIDTH = 240;
 export const SIDEBAR_MAX_WIDTH = 720;
 
-/** GitHub 发现分类（对齐 GitHub 仪表盘四类）；仅 GitHub 连接展示。 */
-const DISCOVERY_FILTERS: ReadonlyArray<{ value: PrDiscoveryFilter; label: string }> = [
-  { value: 'review-requested', label: '待我评审' },
-  { value: 'created', label: '我创建的' },
-  { value: 'assigned', label: '指派给我' },
-  { value: 'mentioned', label: '提及我' },
-];
+/** 发现分类标签文案；实际展示哪几类由活动连接的 capabilities.discoveryFilters 决定。 */
+const DISCOVERY_LABELS: Record<PrDiscoveryFilter, string> = {
+  'review-requested': '待我评审',
+  created: '我创建的',
+  assigned: '指派给我',
+  mentioned: '提及我',
+};
 
 const FILTERS: ReadonlyArray<{ value: FilterKey; label: string }> = [
   { value: 'pending', label: '待处理' },
@@ -35,6 +37,10 @@ const FILTERS: ReadonlyArray<{ value: FilterKey; label: string }> = [
   { value: 'conflict', label: '冲突' },
   { value: 'mergeable', label: '可合并' },
 ];
+
+// reviewer 决断类（通过/需修改）：有发现分类标签时只对「待我评审」有意义，其余标签下恒空，
+// 故隐藏；无发现分类的场景仍展示全部六项状态筛选。
+const DECISION_STATUS_FILTERS: ReadonlySet<FilterKey> = new Set(['approved', 'needs_work']);
 
 interface PrGroup {
   key: string;
@@ -47,6 +53,7 @@ export function Sidebar({
   onSelect,
   width,
   onResize,
+  availableFilters,
   discoveryFilter,
   onDiscoveryFilterChange,
 }: SidebarProps) {
@@ -76,26 +83,46 @@ export function Sidebar({
   // 哪些组当前折叠了。默认空集合 = 全部展开。
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
+  // 有发现分类标签时（GitHub / Bitbucket 均含「我创建的」），reviewer 决断类（通过/需修改）
+  // 只对「待我评审」有意义、其余标签下恒空，故精简隐藏；无分类的场景保持全部六项。
+  const hasDiscoveryTabs = Boolean(availableFilters && availableFilters.length > 0);
+  const visibleFilters = useMemo(
+    () => (hasDiscoveryTabs ? FILTERS.filter((f) => !DECISION_STATUS_FILTERS.has(f.value)) : FILTERS),
+    [hasDiscoveryTabs],
+  );
+  // 进入精简模式时若当前选中的是被隐藏的决断类，回落到「待处理」，避免按不可见筛选过滤。
+  useEffect(() => {
+    if (hasDiscoveryTabs && DECISION_STATUS_FILTERS.has(filter)) setFilter('pending');
+  }, [hasDiscoveryTabs, filter]);
+
+  // GitHub 发现分类：按 PR 上的 discoveryFilters 标记本地过滤（poller 已把四类都抓回来缓存），
+  // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。
+  const scopedPrs = useMemo(
+    () =>
+      discoveryFilter ? prs.filter((p) => p.discoveryFilters?.includes(discoveryFilter)) : prs,
+    [prs, discoveryFilter],
+  );
+
   const counts = useMemo(() => {
     const out: Record<FilterKey, number> = {
-      all: prs.length,
+      all: scopedPrs.length,
       pending: 0,
       approved: 0,
       needs_work: 0,
       conflict: 0,
       mergeable: 0,
     };
-    for (const p of prs) {
+    for (const p of scopedPrs) {
       out[p.localStatus] += 1;
       if (p.hasConflict) out.conflict += 1;
       if (p.mergeStatus?.canMerge) out.mergeable += 1;
     }
     return out;
-  }, [prs]);
+  }, [scopedPrs]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return prs.filter((p) => {
+    return scopedPrs.filter((p) => {
       if (filter === 'conflict') {
         if (!p.hasConflict) return false;
       } else if (filter === 'mergeable') {
@@ -116,7 +143,7 @@ export function Sidebar({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [prs, query, filter]);
+  }, [scopedPrs, query, filter]);
 
   const groups = useMemo<PrGroup[]>(() => {
     const m = new Map<string, StoredPullRequest[]>();
@@ -155,18 +182,18 @@ export function Sidebar({
         title="拖动调整侧栏宽度"
         aria-label="resize sidebar"
       />
-      {discoveryFilter && onDiscoveryFilterChange && (
+      {hasDiscoveryTabs && availableFilters && onDiscoveryFilterChange && (
         <div className="sidebar-toolbar sidebar-discovery" role="tablist" aria-label="PR 发现范围">
-          {DISCOVERY_FILTERS.map((d) => (
+          {availableFilters.map((f) => (
             <button
-              key={d.value}
+              key={f}
               role="tab"
-              aria-selected={discoveryFilter === d.value}
-              className={`sidebar-discovery-tab ${discoveryFilter === d.value ? 'is-active' : ''}`}
-              onClick={() => onDiscoveryFilterChange(d.value)}
+              aria-selected={discoveryFilter === f}
+              className={`sidebar-discovery-tab ${discoveryFilter === f ? 'is-active' : ''}`}
+              onClick={() => onDiscoveryFilterChange(f)}
               type="button"
             >
-              {d.label}
+              {DISCOVERY_LABELS[f]}
             </button>
           ))}
         </div>
@@ -181,7 +208,7 @@ export function Sidebar({
         />
       </div>
       <div className="sidebar-toolbar sidebar-filters">
-        {FILTERS.map((f) => (
+        {visibleFilters.map((f) => (
           <button
             key={f.value}
             className={`btn btn-sm ${filter === f.value ? 'btn-primary' : ''}`}

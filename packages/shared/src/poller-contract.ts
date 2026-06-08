@@ -1,4 +1,4 @@
-import type { PlatformKind, PullRequest } from './platform.js';
+import type { PlatformKind, PrDiscoveryFilter, PullRequest } from './platform.js';
 import type { PrAgentStrategy } from './pr-agent-status.js';
 
 /**
@@ -319,6 +319,12 @@ export interface StoredPullRequest extends PullRequest {
   platform: PlatformKind;
   connectionId: string;
   localStatus: LocalPrStatus;
+  /**
+   * 该 PR 命中的发现分类（GitHub：review-requested/created/assigned/mentioned 的子集）。
+   * poller 一轮把各分类都抓回来并 union 打标；renderer 据此本地过滤标签页，切换不再拉远端。
+   * 不支持分类的平台（Bitbucket）为空数组。
+   */
+  discoveryFilters: PrDiscoveryFilter[];
   /** 首次被 poll 发现的时间，ISO */
   discoveredAt: string;
   /** 最近一次 poll 仍能看到的时间，ISO */

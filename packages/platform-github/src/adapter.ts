@@ -153,6 +153,7 @@ export class GitHubAdapter implements PlatformAdapter {
       commentOptimisticLock: false,
       mergeVetoFidelity: 'partial',
       discoveryRateLimited: true,
+      discoveryFilters: ['review-requested', 'created', 'assigned', 'mentioned'],
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,

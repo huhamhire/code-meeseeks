@@ -7,7 +7,6 @@ import type {
   PlatformUser,
   PrComment,
   PrCommit,
-  PrDiscoveryFilter,
 } from './platform.js';
 import type {
   LocalPrStatus,
@@ -225,10 +224,6 @@ export interface IpcChannels {
   'prs:refresh': { request: void; response: PollResult };
   /** Poller 最近一次完成时间（ISO 或 null）；启动时初始化用 */
   'prs:lastSync': { request: void; response: { at: string | null } };
-  /** 当前 PR 发现筛选分类（运行时，不持久化）；启动 / 渲染列表分类时初始化用 */
-  'prs:discoveryFilter': { request: void; response: { filter: PrDiscoveryFilter } };
-  /** 切换 PR 发现筛选分类（GitHub 四类）；立即重轮询并返回结果，renderer 据 poll:tick 刷新 */
-  'prs:setDiscoveryFilter': { request: { filter: PrDiscoveryFilter }; response: PollResult };
   'prs:setLocalStatus': {
     request: { localId: string; status: LocalPrStatus };
     response: StoredPullRequest | null;

@@ -313,6 +313,22 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
     });
   });
 
+  it('按发现分类映射 dashboard role：默认 REVIEWER，created → AUTHOR', async () => {
+    const roles: string[] = [];
+    const adapter = makeAdapter(
+      mockFetch({
+        '/rest/api/1.0/dashboard/pull-requests': (url: URL) => {
+          roles.push(url.searchParams.get('role') ?? '');
+          return { size: 0, limit: 50, isLastPage: true, start: 0, values: [] };
+        },
+      }),
+    );
+    await adapter.listPendingPullRequests();
+    await adapter.listPendingPullRequests({ filter: 'review-requested' });
+    await adapter.listPendingPullRequests({ filter: 'created' });
+    expect(roles).toEqual(['REVIEWER', 'REVIEWER', 'AUTHOR']);
+  });
+
   it('maps /merge vetoes into mergeStatus (canMerge=false + 逐条原因)', async () => {
     const adapter = makeAdapter(
       mockFetch({

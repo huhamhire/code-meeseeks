@@ -214,6 +214,11 @@ export interface PlatformCapabilities {
   mergeVetoFidelity: 'full' | 'partial';
   /** 发现端点是否强限流（GitHub search 30/分）→ 该平台轮询间隔单独拉长 */
   discoveryRateLimited: boolean;
+  /**
+   * 平台提供的 PR 发现分类（GitHub 仪表盘四类）。poller 一轮把这些分类都抓回来、给 PR 打标，
+   * renderer 据此本地过滤标签页。为空 / 省略 = 平台只有单一「待我评审」发现，无分类标签。
+   */
+  discoveryFilters?: ReadonlyArray<PrDiscoveryFilter>;
   /** 评论线程是否可「解决 / Resolve」+ 折叠（GitHub/GitLab 有，Bitbucket 无） */
   resolvableThreads: boolean;
   /** 是否支持行内代码 suggestion「一键应用」（GitHub/GitLab 有，Bitbucket 无） */
