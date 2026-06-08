@@ -242,18 +242,66 @@ def _patch_litellm_handler(module) -> None:
         handler_cls._get_completion = _get_completion_with_usage
 
 
-def _patch_load_yaml_strip_anchor_markers(module) -> None:
-    """模型按我们的 anchor 指令把 `[file: <path>, lines: <s>-<e>]` marker 放到自成一行的位置。
-    若该行落在 YAML mapping 上下文（没嵌在 block scalar 里），`[` 被 YAML 当作 flow 序列起始 →
-    safe_load 报 "could not find expected ':'"，pr-agent 自带 fallback 也救不回，load_yaml 返回
-    None → pr_reviewer 迭代 None 崩（argument of type 'NoneType' is not iterable），整个 review 失败。
+def _reflow_unindented_multiline(text):
+    """修复模型最常见的破 YAML 写法：把多行自由文本值（中文 issue_content / issue_header 等）
+    写成「key: 内联首行」+ 续行**顶格（第 1 列）**，没有用块标量 `|`。YAML 把续行当成新 key →
+    `could not find expected ':'`，pr-agent 自带 fallback 也救不回（其首个 fallback 只对固定 key
+    列表补 `|`，且不重排续行缩进）。
 
-    包一层 load_yaml：先按原逻辑解析（marker 安全嵌在 block scalar 里时正常返回，行号兜底不丢）；
-    仅当原始解析失败（返回空）时，剥掉这些**独占一行**的 marker 再试一次——宁可丢这条行号兜底
-    （meebox 链接仍给可靠 path），也不让整个 review 崩。inline 的 marker 不动（不会破 YAML）。
+    这里把「key: 内联值 + 紧随其后的非 key / 非 list-item 行」整体重排成 `key: |-` 块标量并统一
+    缩进，使值完整保留为多行字符串。仅在原始解析失败后调用；任何不匹配都原样保留（无回归）。"""
+    import re
 
-    pr_reviewer 用 `from pr_agent.algo.utils import load_yaml`，而 utils 先于 tools 被 import，
-    本 patch 在 utils exec 完后替换 module.load_yaml，故 tools 后续 import 拿到的是包装版。"""
+    key_re = re.compile(r"^(\s*)(-\s+)?([A-Za-z_][A-Za-z0-9_ ]*):(.*)$")
+    lines = text.split("\n")
+    out = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        m = key_re.match(lines[i])
+        if not m:
+            out.append(lines[i])
+            i += 1
+            continue
+        indent, dash, key, rest = m.group(1), (m.group(2) or ""), m.group(3), m.group(4)
+        rest_s = rest.strip()
+        # 收集续行：直到遇到下一个 key 行 / list-item / 文件结束
+        j = i + 1
+        cont = []
+        while j < n:
+            nxt = lines[j]
+            if key_re.match(nxt) or nxt.lstrip().startswith("- "):
+                break
+            cont.append(nxt)
+            j += 1
+        is_block = rest_s in ("|", "|-", "|2", ">", ">-") or rest_s.endswith(("|", "|-"))
+        if any(c.strip() for c in cont) and not is_block:
+            ci = " " * (len(indent) + len(dash) + 2)  # 块标量内容须比 key 列更深
+            out.append(f"{indent}{dash}{key}: |-")
+            if rest_s:
+                out.append(ci + rest_s)
+            for c in cont:
+                out.append(ci + c.strip() if c.strip() else "")
+            i = j
+            continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out)
+
+
+def _patch_load_yaml_robust(module) -> None:
+    """pr-agent 把 LLM 输出按 YAML 解析（pr_agent.algo.utils.load_yaml）。模型偶发产出破格 YAML →
+    safe_load + pr-agent 自带 fallback 全失败 → load_yaml 返回 None → pr_reviewer 迭代 None 崩
+    （argument of type 'NoneType' is not iterable），整个 review 失败。两类高频破格：
+      1. 我们注入的 anchor `[file: ...]` marker 独占一行落在 mapping 上下文，`[` 被当 flow 序列起始；
+      2. 多行自由文本值（中文 issue_content 等）续行顶格、未用块标量 `|`（见 _reflow_unindented_multiline）。
+
+    包一层 load_yaml：原逻辑成功就原样返回（不影响正常路径 + 行号兜底）；失败时依次尝试
+    「剥 marker」「重排多行块标量」「两者叠加」，每个候选都交回原 load_yaml（含其自身 try_fix_yaml）。
+    全部失败才返回 None。inline marker / 合法 YAML 不受影响。
+
+    pr_reviewer 用 `from pr_agent.algo.utils import load_yaml`，utils 先于 tools 被 import，本 patch
+    在 utils exec 完后替换 module.load_yaml，故 tools 后续 import 拿到的是包装版。"""
     installed = _pragent_version()
     if installed != _EXPECTED_PRAGENT_VERSION:
         _debug(f"skip load_yaml patch: pr-agent {installed} != {_EXPECTED_PRAGENT_VERSION}")
@@ -271,10 +319,26 @@ def _patch_load_yaml_strip_anchor_markers(module) -> None:
             return data
         if not isinstance(response_text, str):
             return data
-        cleaned = marker_line_re.sub("", response_text)
-        if cleaned != response_text:
-            _debug("retry load_yaml after stripping standalone [file:...] markers")
-            return orig_load_yaml(cleaned, *args, **kwargs)
+        # 候选修复，按代价从小到大；每个交回原 load_yaml（其内部还会再跑 try_fix_yaml）
+        stripped = marker_line_re.sub("", response_text)
+        attempts = []
+        if stripped != response_text:
+            attempts.append(stripped)
+        reflowed = _reflow_unindented_multiline(response_text)
+        if reflowed != response_text:
+            attempts.append(reflowed)
+        if stripped != response_text:
+            r2 = _reflow_unindented_multiline(stripped)
+            if r2 != stripped and r2 != response_text:
+                attempts.append(r2)
+        for cand in attempts:
+            try:
+                d = orig_load_yaml(cand, *args, **kwargs)
+            except Exception:  # noqa: BLE001 - 修复尝试失败不致命，继续下一个
+                d = None
+            if d:
+                _debug("load_yaml recovered via meebox repair")
+                return d
         return data
 
     module.load_yaml = load_yaml
@@ -292,10 +356,10 @@ def _apply_patches() -> None:
         "pr_agent.algo.ai_handlers.litellm_ai_handler",
         _patch_litellm_handler,
     )
-    # anchor marker 独占一行会破 YAML：load_yaml 解析失败时剥掉 marker 重试，避免 review 崩。
+    # load_yaml 健壮化：解析失败时剥 anchor marker / 重排多行块标量后重试，避免 review 崩。
     _register_post_import(
         "pr_agent.algo.utils",
-        _patch_load_yaml_strip_anchor_markers,
+        _patch_load_yaml_robust,
     )
 
 

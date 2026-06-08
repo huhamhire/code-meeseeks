@@ -5,7 +5,10 @@
 
 ## [Unreleased]
 
-（暂无）
+### Fixed
+- 修复模型返回多行自由文本值（如中文 `issue_content`）未用块标量、续行顶格导致 pr-agent
+  `load_yaml` 解析失败、整个 `/review` 崩溃（`NoneType is not iterable`）：`sitecustomize`
+  在解析失败时重排为块标量后重试。
 
 ## [0.1.0] - 2026-06-08
 
