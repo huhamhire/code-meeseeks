@@ -173,6 +173,24 @@ async function syncShim(pythonExe) {
   return sitePackages;
 }
 
+/**
+ * 在组装期就把空 `.secrets.toml` 占位写进 pr_agent/settings(_prod)/，烤进 vendor。
+ * pr-agent 启动时找不到该文件会每次打两条 WARNING；我们走 env 传密钥不用 secrets.toml。
+ *
+ * 为何不靠执行期补（原 ipc.ts ensureEmbeddedSecrets）：装到 `C:\Program Files\…`
+ * 这类只读目录时，运行期写 site-packages 会因权限失败 → 占位建不出来 → 告警照旧。
+ * 组装期写入则随包分发、运行期只读也无所谓。跟 shim 一样在「跳过重建」快路径也补，
+ * 重跑 prepare:pragent 即可修好旧 vendor，无需 --force 全量重建。
+ */
+async function ensureSecretsPlaceholders(sitePackages) {
+  const body = '# meebox 占位空文件：抑制 pr-agent 缺失 .secrets.toml 的启动告警\n';
+  for (const sub of ['settings', 'settings_prod']) {
+    const dir = join(sitePackages, 'pr_agent', sub);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, '.secrets.toml'), body);
+  }
+}
+
 async function main() {
   configureProxy();
   const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
@@ -200,9 +218,11 @@ async function main() {
   if (!FORCE && existsSync(versionFile) && existsSync(pythonExe)) {
     const prev = JSON.parse(await readFile(versionFile, 'utf8'));
     if (prev.key === versionKey) {
-      // 整体跳过，但始终重新同步 shim：本地改了 sitecustomize.py 后跑一次 prepare:pragent
-      // 即生效，无需 --force 全量重建（重下 CPython + 重装 pr-agent）。
+      // 整体跳过，但始终重新同步 shim + 补 .secrets.toml 占位：本地改了 sitecustomize.py
+      // 或修了占位逻辑后跑一次 prepare:pragent 即生效，无需 --force 全量重建（重下
+      // CPython + 重装 pr-agent）。
       const sp = await syncShim(pythonExe);
+      await ensureSecretsPlaceholders(sp);
       log(`已就绪，跳过重建（${versionKey}）；已重新同步 shim → ${sp}。--force 可强制全量重建。`);
       return;
     }
@@ -258,8 +278,9 @@ async function main() {
   // 6. 注入 sitecustomize shim
   const sitePackages = await syncShim(pythonExe);
   log(`已注入 sitecustomize.py → ${sitePackages}`);
-  // 注：.secrets.toml 占位不在组装期补，改由 main 在执行期按需补（同 Docker 策略
-  // 挂空文件的思路，单一机制、自愈），见 ipc.ts ensureEmbeddedSecrets
+  // 7. 组装期补空 .secrets.toml 占位，烤进 vendor（只读安装目录运行期也无需再写）
+  await ensureSecretsPlaceholders(sitePackages);
+  log('已写入 pr_agent/settings(_prod)/.secrets.toml 空占位');
 
   // 7. 冒烟 + 写 VERSION
   const prAgentFile = pythonStdout(pythonExe, 'import pr_agent;print(pr_agent.__file__)');
