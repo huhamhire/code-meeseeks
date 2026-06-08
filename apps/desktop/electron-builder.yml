@@ -10,6 +10,14 @@ electronVersion: 42.3.0
 # 有 Apple 签名凭据 env 时自动跳过，交回正式签名 + 公证。win/linux 无动作。
 afterPack: build-resources/after-pack.cjs
 
+# 不使用 electron 自动更新；声明 GitHub provider 仅为让 electron-builder 能算出更新通道
+# (computeChannelNames)，消除 CI 上「无法从 .git/config 探测仓库」导致的 null 崩溃。
+# 实际发布由 workflow 的 softprops 上传，构建步骤用 --publish never 只生成本地元数据、不上传。
+publish:
+  provider: github
+  owner: huhamhire
+  repo: code-meeseeks
+
 directories:
   output: release
   buildResources: build

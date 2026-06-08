@@ -7,6 +7,10 @@
     "name": "huhamhire",
     "email": "me@huhamhire.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/huhamhire/code-meeseeks.git"
+  },
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
