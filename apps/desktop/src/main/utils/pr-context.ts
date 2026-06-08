@@ -19,7 +19,7 @@ interface BuildPrContextOpts {
  * - 描述（PR.description，作者写的；为空时跳过 —— 这正是 /describe 要生成的内容）
  * - 已有评论（按 top-level 时间倒序取最多 N 条 + 嵌套 replies）
  *
- * pr-agent local provider 自己不会去 BBS 拉这些信息（local provider 只看 worktree
+ * pr-agent local provider 自己不会去 Bitbucket 拉这些信息（local provider 只看 worktree
  * 的 git diff），所以必须我们这边主动提供。这段会跟 rules.instructions 拼接，让
  * /describe / /review 都能感知背景。
  *

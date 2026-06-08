@@ -83,7 +83,7 @@ export async function testProxyConnectivity(
 }
 
 /**
- * 给某目标 host 造一个「代理感知」的 fetch，注入 BBClient 的 opts.fetch。
+ * 给某目标 host 造一个「代理感知」的 fetch，注入 BitbucketClient 的 opts.fetch。
  * host 命中 loopback/本地 → 返回 undefined（调用点用默认全局 fetch 直连）。
  * 否则返回带 dispatcher 的 fetch 包装。代理关闭也返回 undefined。
  */

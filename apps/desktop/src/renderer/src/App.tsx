@@ -157,10 +157,10 @@ export default function App() {
     return () => document.removeEventListener('click', onClick, true);
   }, []);
 
-  // 窗口重新获得焦点时主动 refresh 远端：调 prs:refresh 拉 PR meta，BBS 上
+  // 窗口重新获得焦点时主动 refresh 远端：调 prs:refresh 拉 PR meta，Bitbucket 上
   // 加 comment / 改状态后 PR.updatedAt 跳变 → MainPane useEffect 的 prUpdatedAt
   // dep 触发 → force listComments 拉到新评论。比纯 reloadPrs (只读 cache) 多
-  // 一次远端调用但能跟上"用户切到 BBS 评论再切回应用"的常见场景
+  // 一次远端调用但能跟上"用户切到 Bitbucket 评论再切回应用"的常见场景
   useEffect(() => {
     const onFocus = (): void => {
       if (!boot) return;

@@ -3,7 +3,7 @@ import { invoke } from '../api';
 
 interface AvatarProps {
   connectionId: string;
-  /** 平台用户 slug（BBS 的 user.name 即 slug） */
+  /** 平台用户 slug（Bitbucket 的 user.name 即 slug） */
   slug: string;
   /** 给 initials 兜底用；也用作 title / alt */
   displayName: string;
@@ -11,7 +11,7 @@ interface AvatarProps {
 }
 
 /**
- * 圆形用户头像。优先用 main 进程拉的 BBS avatar（in-memory cache 命中即同步返回），
+ * 圆形用户头像。优先用 main 进程拉的 Bitbucket avatar（in-memory cache 命中即同步返回），
  * 拉失败 / 加载中 / null 时回退到 initials + hash 色块。
  */
 export function Avatar({ connectionId, slug, displayName, size = 22 }: AvatarProps) {

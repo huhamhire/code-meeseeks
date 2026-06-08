@@ -4,7 +4,7 @@ import { invoke } from '../api';
 interface CommentEditEditorProps {
   prLocalId: string;
   commentId: string;
-  /** 当前评论 version (乐观锁，BBS PUT 必带)；版本不一致 BBS 回 409 */
+  /** 当前评论 version (乐观锁，Bitbucket PUT 必带)；版本不一致 Bitbucket 回 409 */
   version: number;
   /** 初始 body — 进编辑态时 textarea 预填，避免用户从空白重写 */
   initialBody: string;
@@ -21,7 +21,7 @@ interface CommentEditEditorProps {
  * - 初始 body = 现有评论文本，进编辑后用户改的是已存内容而非新建
  * - 走 comments:edit IPC (PUT)，必须带 version
  * - body 没变时禁用保存按钮 (no-op 不调远端)
- * - 失败常见情形：BBS 409 (用户在别处先改过 → version 错位) — 错误原文直接
+ * - 失败常见情形：Bitbucket 409 (用户在别处先改过 → version 错位) — 错误原文直接
  *   显示在编辑器底部，用户看到提示后可以关闭编辑器、等评论树刷新后再次编辑
  */
 export function CommentEditEditor({

@@ -30,7 +30,7 @@
 .monaco-comment-zone,
 .monaco-comment-zone-inner {
   // monaco view zone 默认可能给子元素设 pointer-events: none 让代码命中区干净
-  // (DraftZone 工作是因为 button/textarea 浏览器特殊处理)。显式 auto 让 BBS
+  // (DraftZone 工作是因为 button/textarea 浏览器特殊处理)。显式 auto 让 Bitbucket
   // 评论里 img / a 也能接收 click
   pointer-events: auto !important;
 }

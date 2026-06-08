@@ -4,7 +4,7 @@ export const CloneSettingsSchema = z
   .object({
     /**
      * git clone 协议。
-     * - pat (默认): HTTPS，URL 里嵌 `<当前用户名>:<PAT>` (BBS Server 约定)
+     * - pat (默认): HTTPS，URL 里嵌 `<当前用户名>:<PAT>` (Bitbucket Server 约定)
      * - ssh: scp-like `git@<host>:<project>/<repo>.git`，端口/密钥走系统 ssh config
      */
     protocol: z.enum(['pat', 'ssh']).default('pat'),

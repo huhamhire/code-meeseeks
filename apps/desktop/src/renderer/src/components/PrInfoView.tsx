@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
+import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 
 interface PrInfoViewProps {
   pr: StoredPullRequest;
@@ -13,15 +15,25 @@ function ReviewerStatusTag({ status }: { status: ReviewerStatus }) {
 }
 
 export function PrInfoView({ pr }: PrInfoViewProps) {
+  // 描述 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)，与评论/diff 一致
+  const mdComponents = useMemo(
+    () => ({ img: makeBitbucketImageFor(pr.localId) }),
+    [pr.localId],
+  );
+
   return (
     <div className="pr-info-view">
       {pr.description && (
         <section className="pr-detail-section">
           <h3>描述</h3>
           <div className="pr-detail-description markdown">
-            {/* BBS 远端用 \r\n 行尾，remark 解析时 CR 跟 LF 各算一次换行 → 单换行
+            {/* Bitbucket 远端用 \r\n 行尾，remark 解析时 CR 跟 LF 各算一次换行 → 单换行
                 被当成段落分隔，每个 list item 之间多一段空白。归一化成 \n */}
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={mdComponents}
+              urlTransform={transformBitbucketUrl}
+            >
               {pr.description.replace(/\r\n?/g, '\n')}
             </ReactMarkdown>
           </div>

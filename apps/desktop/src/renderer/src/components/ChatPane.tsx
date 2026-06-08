@@ -529,7 +529,7 @@ export function ChatPane({
 /**
  * Chat 命令分两类：
  *  - 'pragent': pr-agent 工具 (review / describe / ask)，触发 pragent:run
- *  - 'review-action': PR review 决断 (approve / needswork)，写 BBS reviewer status
+ *  - 'review-action': PR review 决断 (approve / needswork)，写 Bitbucket reviewer status
  *    通过 prs:setLocalStatus 触发，跟 PR header 按钮共用同一路径
  */
 type CommandSpec =
@@ -560,7 +560,7 @@ const COMMANDS: ReadonlyArray<CommandSpec> = [
   // 支持 local provider 时直接放开
   // { kind: 'pragent', name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
   { kind: 'pragent', name: 'ask', label: '/ask', desc: '自然语言追问', insertAs: '/ask ' },
-  // review 决断 (跟 PR header 按钮共用 prs:setLocalStatus，写 BBS reviewer status)
+  // review 决断 (跟 PR header 按钮共用 prs:setLocalStatus，写 Bitbucket reviewer status)
   {
     kind: 'review-action',
     name: 'approve',

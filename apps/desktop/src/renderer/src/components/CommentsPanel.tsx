@@ -125,7 +125,7 @@ export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
 
 /**
  * 单条评论 + 嵌套 replies。inline 评论顶部显示 `path:line side` chip 区分锚点位置；
- * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进 (BBS 实际只一层 reply
+ * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进 (Bitbucket 实际只一层 reply
  * 但 schema 允许深嵌套，递归更稳)。
  */
 function CommentItem({
@@ -140,7 +140,7 @@ function CommentItem({
   /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
   autoExpandCode?: boolean;
 }) {
-  // 评论 body 内嵌图片走 IPC 代理 (BBS 私有资源需 PAT 鉴权)
+  // 评论 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)
   const mdComponents = useMemo(
     () => ({ img: makeBitbucketImageFor(pr.localId) }),
     [pr.localId],

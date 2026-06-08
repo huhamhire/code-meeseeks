@@ -13,9 +13,9 @@
 export type RuleTool = 'describe' | 'review' | 'improve';
 
 export interface RuleApplies {
-  /** BBS projectKey 正则，例如 "^FX$" 或 "^FX-.*" */
+  /** Bitbucket projectKey 正则，例如 "^FX$" 或 "^FX-.*" */
   project?: RegExp;
-  /** BBS repoSlug 正则，例如 "^fx-.*" */
+  /** Bitbucket repoSlug 正则，例如 "^fx-.*" */
   repo?: RegExp;
   /** PR base 分支显示名正则，例如 "^(master|main)$" */
   target_branch?: RegExp;

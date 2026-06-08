@@ -29,7 +29,7 @@ interface DraftZoneProps {
   /**
    * 单条直接发布到远端。调用方走 drafts:publishBatch 传单元素 draftIds (跟批量
    * 路径共用 handler — main 端串行 POST + 失败收集 + 发完 force-refresh 评论)。
-   * 返回单条的发布结果：ok=false 时 error 填人读错因 (BBS 4xx)，本组件渲染 inline
+   * 返回单条的发布结果：ok=false 时 error 填人读错因 (Bitbucket 4xx)，本组件渲染 inline
    * 错误提示但不卸载 zone (用户可改完 body 再点发布重试)。
    * 不传 = read 模式不渲染"发布"按钮 (e.g., 未来某些只读场景)
    */
@@ -41,7 +41,7 @@ interface DraftZoneProps {
  * `createRoot.render(<DraftZone ... />)` 渲染。
  *
  * 视觉跟现有 CommentZone (远端评论 read-only) 区分：
- * - CommentZone 黄底 (BBS 远端) → 这里**蓝底 + DRAFT chip**
+ * - CommentZone 黄底 (Bitbucket 远端) → 这里**蓝底 + DRAFT chip**
  * - posted 状态切回绿底跟远端评论形态对齐 (含远端 comment id 链接)
  * - rejected 状态默认 css 隐藏 (DiffView 端 .monaco-draft-zone-rejected 上设)
  *
@@ -56,7 +56,7 @@ interface DraftZoneProps {
  *         4) editing 跟 persisted 不同 → **自动保存** (不弹 confirm)，最贴近用户直觉
  * - 发布 (edit 模式) = 先 auto-save 当前 editingBody，再走 onPublish。设计动机：
  *   取消既然已经 auto-save dirty，独立的"保存"按钮就冗余了 —— 用户在 edit 编辑完
- *   最自然的下一步是发布，合并成一次点击。失败 (BBS 4xx) 不退 edit，让用户改后重试
+ *   最自然的下一步是发布，合并成一次点击。失败 (Bitbucket 4xx) 不退 edit，让用户改后重试
  * - 发布 (read 模式) = 直接 onPublish，body 取盘上 persisted 值
  * - 删除 = 独立 [🗑] 按钮，body 非空时弹 ConfirmModal 二次确认；空草稿直接删
  *
@@ -219,7 +219,7 @@ export function DraftZone({
     }
   };
 
-  // 单条直接发布。仅 pending/edited 可发；body 空也不发 (BBS 拒绝空评论)。
+  // 单条直接发布。仅 pending/edited 可发；body 空也不发 (Bitbucket 拒绝空评论)。
   // 不弹 confirm — 单条评论的"发布"心智跟"批量评审"不同，是即时操作；要二次
   // 确认放在批量入口的 PublishReviewModal 那一层做就够了
   const handlePublish = async (): Promise<void> => {
@@ -248,7 +248,7 @@ export function DraftZone({
   // 用户在 edit 改完最自然的下一步是发布，合并一次点击。
   // - 保存失败 (本地写盘几乎不会) → 仍尝试发布；publish 端读盘拿到的是 main 上
   //   一次成功的 body，对用户没有静默错误风险
-  // - 发布失败 (BBS 4xx) → 留在 edit 让用户改 body 重试，inline error 提示
+  // - 发布失败 (Bitbucket 4xx) → 留在 edit 让用户改 body 重试，inline error 提示
   const handlePublishFromEdit = async (): Promise<void> => {
     if (!onPublish || publishing) return;
     if (!canSave) return;

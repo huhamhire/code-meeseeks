@@ -70,7 +70,7 @@ export interface RepoMirrorOptions {
 
 /**
  * 本地 git 镜像管理。**全局** sync 队列：任意时刻只有 1 个 repo 在 clone/fetch。
- * 多个调用方 (UI 切 PR / 主进程 schedule) 都共用此队列，不并发打 BBS、不抢
+ * 多个调用方 (UI 切 PR / 主进程 schedule) 都共用此队列，不并发打 Bitbucket、不抢
  * git 进程带宽，用户感知到的进度更稳。
  *
  * 读操作 (listChangedFiles / getFileContent / getSize) 不走队列，对本地 bare
@@ -225,7 +225,7 @@ export class RepoMirrorManager {
    *
    * 实现：`git clone --local --no-checkout` 从 bare 派生独立 repo —— 同盘时
    * objects 走 hardlinks，磁盘 ~0；.git 自含，跨 docker mount 边界也成立。再 fetch
-   * 一道 BBS 专有的 refspec `refs/pull-requests/<id>/from` 把 PR 源 sha 拉齐 (默认
+   * 一道 Bitbucket 专有的 refspec `refs/pull-requests/<id>/from` 把 PR 源 sha 拉齐 (默认
    * refspec 不拉它，否则 PR 源分支被删 / 强推后 checkout 会失败)。
    *
    * 返回 `{ path, headBranchName, targetBranchName?, cleanup }`：
@@ -281,7 +281,7 @@ export class RepoMirrorManager {
     await lfsCfg.raw(['config', '--local', 'filter.lfs.process', '']);
     await lfsCfg.raw(['config', '--local', 'filter.lfs.required', 'false']);
 
-    // 补 BBS 的 PR 源 sha：`git clone` 默认只拉 refs/heads/*。失败不阻断
+    // 补 Bitbucket 的 PR 源 sha：`git clone` 默认只拉 refs/heads/*。失败不阻断
     // (heads 里能找到 headSha 也行，例如 GitHub fork)
     try {
       await simpleGit(wtPath).raw([
@@ -331,7 +331,7 @@ export class RepoMirrorManager {
   }
 
   /**
-   * 列出 PR 范围内变更文件（baseSha 与 headSha 的三点 diff，与 BBS/GitHub
+   * 列出 PR 范围内变更文件（baseSha 与 headSha 的三点 diff，与 Bitbucket/GitHub
    * 的 PR diff 一致：head 自分叉后引入的变化）。
    *
    * 用 -z 把状态 + path NUL 分隔，路径含空格/中文 / 引号都不会破。
@@ -487,7 +487,7 @@ export class RepoMirrorManager {
         this.opts.logger?.debug({ repo: key }, 'mirror exists, fetching');
         // 显式 refspec，覆盖式拉：
         //   - refs/heads/*：所有分支（含 PR target 与 source 分支）
-        //   - refs/pull-requests/*/from：BBS 把 PR 源头 sha 单独保存在这里。
+        //   - refs/pull-requests/*/from：Bitbucket 把 PR 源头 sha 单独保存在这里。
         //     当源分支已被删除 / 强推后，refs/heads 看不到，但 from ref 仍指向
         //     PR 开启时的 sha；没有它 `git diff base...head` 会 "Invalid
         //     symmetric difference" 因为 head 不可达。
@@ -506,7 +506,7 @@ export class RepoMirrorManager {
       const url = await this.opts.getCloneUrl(repo);
       await fs.mkdir(path.dirname(mirrorPath), { recursive: true });
       // --mirror 而不是 --bare：默认 --bare 只拉 refs/heads + refs/tags，
-      //   BBS 的 PR source sha 落在 refs/pull-requests/<id>/from 命名空间，
+      //   Bitbucket 的 PR source sha 落在 refs/pull-requests/<id>/from 命名空间，
       //   没被拉下来就 `git diff base...head` 找不到 head sha → "Invalid
       //   symmetric difference"。--mirror 隐含 --bare 并把所有 refs 都拉下来
       //   (heads/tags/pull-requests/notes/...)，后续 fetch 也自动同步全部。

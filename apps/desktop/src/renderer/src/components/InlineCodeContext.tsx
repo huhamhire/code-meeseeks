@@ -20,7 +20,7 @@ interface InlineCodeContextProps {
 
 /**
  * 评论里 inline 引用的代码上下文：Monaco read-only 编辑器，展示锚定行前后若干行，
- * 锚定行用整行底色高亮 (跟 BBS 内嵌评论的视觉惯例一致)。
+ * 锚定行用整行底色高亮 (跟 Bitbucket 内嵌评论的视觉惯例一致)。
  *
  * 取数走 `diff:getFileContent` —— 跟 DiffView 同一份本地 git blob，无远端往返；
  * mirror 还没拉齐 base/head sha 时 (rare，poll 已经先 sync 过) 走 syncMirror 兜底。

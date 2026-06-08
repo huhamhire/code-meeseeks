@@ -4,7 +4,7 @@
 
 @use './tokens' as *;
 
-// BBS 评论 attachment 图片走 IPC 代理拉回 data URL。BBS 原图通常很大 (截图等)，
+// Bitbucket 评论 attachment 图片走 IPC 代理拉回 data URL。Bitbucket 原图通常很大 (截图等)，
 // 评论里要做缩略展示。max-width/height 限制 + cursor zoom-in 视觉提示
 .bitbucket-image {
   max-width: 280px;

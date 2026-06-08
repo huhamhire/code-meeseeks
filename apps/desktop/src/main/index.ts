@@ -160,7 +160,7 @@ async function start(): Promise<void> {
           continue;
         }
         // identity 字段映射：poller 用 group/repo 中性命名，repo-mirror 仍保留
-        // BBS-shaped projectKey/repoSlug (跟 git 路径布局一致，沿用便于排障)
+        // Bitbucket-shaped projectKey/repoSlug (跟 git 路径布局一致，沿用便于排障)
         void repoMirror
           .syncMirror({ host, projectKey: r.group, repoSlug: r.repo })
           .catch((err) => {

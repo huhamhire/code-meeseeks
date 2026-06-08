@@ -18,7 +18,7 @@ import {
   type PrIndexFile,
 } from './pr-state.js';
 
-/** BBS reviewer.status → 本地 LocalPrStatus 单向映射（poll 时把远端权威态拉下来）。 */
+/** Bitbucket reviewer.status → 本地 LocalPrStatus 单向映射（poll 时把远端权威态拉下来）。 */
 function statusFromReviewer(s: ReviewerStatus | undefined): LocalPrStatus {
   if (s === 'approved') return 'approved';
   if (s === 'needsWork') return 'needs_work';
@@ -187,7 +187,7 @@ export class Poller {
 
         for (const pr of remote) {
           // hash localId：platform + 连接 + group + repo + remoteId 一锅哈希。
-          // 同一 connection 下不同 repo 同 PR id 也能区分开 (BBS 的 PR id 是 per-repo
+          // 同一 connection 下不同 repo 同 PR id 也能区分开 (Bitbucket 的 PR id 是 per-repo
           // 递增的)；platform 字段让多平台扩展时 schema 不必改
           const identity = {
             platform: adapter.kind,
@@ -216,8 +216,8 @@ export class Poller {
             }
           }
 
-          // localStatus 直接镜像 BBS 上当前用户的 reviewer.status。
-          // UI 上点 approve / needs work 时会先 PUT 到 BBS，再下一轮 poll 时此处取回。
+          // localStatus 直接镜像 Bitbucket 上当前用户的 reviewer.status。
+          // UI 上点 approve / needs work 时会先 PUT 到 Bitbucket，再下一轮 poll 时此处取回。
           const mine = me ? pr.reviewers.find((r) => r.name === me.name) : undefined;
           const localStatus = statusFromReviewer(mine?.status);
 

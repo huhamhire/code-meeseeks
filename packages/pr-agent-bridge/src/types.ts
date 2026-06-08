@@ -6,7 +6,7 @@ export type PrAgentTool = 'describe' | 'review' | 'ask' | 'improve';
 export interface PrAgentRunOptions {
   /**
    * pr-agent 入口 `--pr_url`。
-   * - 远端模式：BBS PR URL，如 https://host/projects/.../pull-requests/<id>
+   * - 远端模式：Bitbucket PR URL，如 https://host/projects/.../pull-requests/<id>
    * - 本地模式 (cwd 已配置)：直接传 cwd 路径（容器里固定为 /repo），pr-agent 拿来
    *   定位本地仓库目录，不会走任何远端 API
    */
@@ -30,7 +30,7 @@ export interface PrAgentRunOptions {
    * - LocalCli: 把 cwd 作为子进程工作目录 + `--pr_url <cwd>` 传给 pr-agent
    * - Docker: `-v <cwd>:/repo -w /repo` + `--pr_url /repo`
    *
-   * 完全不出网到 BBS，pr-agent 自己跑 `git diff <targetBranch>...HEAD`。
+   * 完全不出网到 Bitbucket，pr-agent 自己跑 `git diff <targetBranch>...HEAD`。
    * 不设置则走原远端 provider 模式（默认 prUrl 远端拉 PR）。
    */
   cwd?: string;

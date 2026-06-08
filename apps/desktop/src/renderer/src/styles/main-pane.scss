@@ -236,7 +236,7 @@
   }
 }
 
-/* BBS 风格 blame 列：独立 React 组件，做 diff-pane-wrapper 的左侧 flex 子项。
+/* Bitbucket 风格 blame 列：独立 React 组件，做 diff-pane-wrapper 的左侧 flex 子项。
    内部 row 用 absolute 子项画，按 Monaco scrollTop 实时同步位置。 */
 .blame-column {
   flex-shrink: 0;

@@ -57,7 +57,7 @@ const DIFF_FILE_LIST_MIN = 180;
 const DIFF_FILE_LIST_MAX = 560;
 const DIFF_FILE_LIST_DEFAULT = 280;
 
-/** BBS 风格 blame 列宽：头像(20) + name(80) + sha(75) + date(45) + padding */
+/** Bitbucket 风格 blame 列宽：头像(20) + name(80) + sha(75) + date(45) + padding */
 const BLAME_COLUMN_WIDTH = 240;
 
 interface BlameLayout {
@@ -105,7 +105,7 @@ function mergeContiguousLines(lines: number[]): Array<[number, number]> {
   return out;
 }
 
-/** 合并连续同 commit 的 blame 行为区块（BBS 风格：一个 commit 一格） */
+/** 合并连续同 commit 的 blame 行为区块（Bitbucket 风格：一个 commit 一格） */
 function groupBlameByCommit(blame: DiffBlameLine[]): BlameBlock[] {
   const sorted = [...blame].sort((a, b) => a.line - b.line);
   const blocks: BlameBlock[] = [];
@@ -368,7 +368,7 @@ export function DiffView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingNav, files, onNavConsumed]);
 
-  // BBS 评论附件 markdown 形如 `![alt](attachment:HASH)`；CommentNode 里把
+  // Bitbucket 评论附件 markdown 形如 `![alt](attachment:HASH)`；CommentNode 里把
   // `attachment:` 协议改写成此基址 + `/HASH`，让 <a> 能打开（点击走 Electron
   // setWindowOpenHandler 转 shell.openExternal，用户在系统浏览器看附件）。
   // 从 pr.url 解出 protocol+host 即可，pr.repo 提供 project/repo。
@@ -478,7 +478,7 @@ export function DiffView({
     };
   }, [showBlame, selected, content, pr.localId]);
 
-  // Blame 走独立 React 列（BBS 风格），不在 Monaco DOM 里。只需要从 Monaco
+  // Blame 走独立 React 列（Bitbucket 风格），不在 Monaco DOM 里。只需要从 Monaco
   // 同步 lineHeight / scrollTop / viewportHeight，BlameColumn 自己用 absolute
   // 子项画 row 并按 scrollTop 平移。
   useEffect(() => {
@@ -830,7 +830,7 @@ export function DiffView({
           // inner 内容自然撑开；measure inner 同步回 zoneObj.heightInPx
           const inner = document.createElement('div');
           inner.className = 'monaco-draft-zone-inner';
-          // 宽度 + 位置策略（跟 BBS / GitHub inline 评论对齐）：
+          // 宽度 + 位置策略（跟 Bitbucket / GitHub inline 评论对齐）：
           //   inner.marginLeft = contentLeft  (跨过 line number / glyph margin，
           //                                   评论框起点对齐代码区起点)
           //   inner.width      = contentWidth (代码区宽度；contentWidth 已减掉
@@ -892,7 +892,7 @@ export function DiffView({
           // 横向滚动同步：monaco view zone dom 在 .lines-content 内会跟 scrollLeft
           // 一起左移 (用户实测：横滚后评论框 chip 被裁出 viewport)。给 inner 加
           // transform translateX(scrollLeft) 反向抵消，评论框就 stick 在 viewport
-          // 内的相对位置不动 (跟 BBS / GitHub inline 评论行为一致)
+          // 内的相对位置不动 (跟 Bitbucket / GitHub inline 评论行为一致)
           const applyScroll = (): void => {
             inner.style.transform = `translateX(${editorInst.getScrollLeft()}px)`;
           };
@@ -1037,9 +1037,9 @@ export function DiffView({
   // 视觉：hover 行的 line decoration 显示淡蓝 '+'，鼠标 hover glyph 时浓蓝。
   // 点击 → drafts:create + autoEdit 触发立即进入编辑。
   //
-  // **Platform policy 过滤**：BBS 只允许 hunk 内的行加 inline comment；GitHub/GitLab
+  // **Platform policy 过滤**：Bitbucket 只允许 hunk 内的行加 inline comment；GitHub/GitLab
   // 宽松。从 diffEditor.getLineChanges() 拿 hunks，policy 判断每行是否 allowed。
-  // 不允许的行不画 glyph、点击也不创建草稿（避免后续 publishInline 时被 BBS 400）
+  // 不允许的行不画 glyph、点击也不创建草稿（避免后续 publishInline 时被 Bitbucket 400）
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
     const modifiedEditor = diffEditor.getModifiedEditor();
@@ -1059,7 +1059,7 @@ export function DiffView({
     // 表示该侧无对应（纯增/纯删），翻成 null range。
     //
     // **关键**：useEffect 首次执行时 monaco diff 还在异步计算，getLineChanges() 可能
-    // 返回 null/[] → 用 BBS policy 严格判会让"所有行都不允许" → 用户看不到任何 +。
+    // 返回 null/[] → 用 Bitbucket policy 严格判会让"所有行都不允许" → 用户看不到任何 +。
     // 监听 onDidUpdateDiff 在 diff 算完后刷新 hunks (mutable let，闭包引用最新值)。
     // 同时：hunks 为空时**兜底允许**（视为 policy 暂不可用），等 update 事件来再收紧
     const policy = policyForPlatform(pr.platform);
@@ -1486,7 +1486,7 @@ function CommentZone({
 }
 
 /**
- * 把 BBS 评论 markdown 里 `attachment:HASH` 形态的 URL 改写为可点击的 BBS 链接。
+ * 把 Bitbucket 评论 markdown 里 `attachment:HASH` 形态的 URL 改写为可点击的 Bitbucket 链接。
  * 返回 null = 不是附件 URL，调用方按原样处理。
  */
 function resolveAttachmentUrl(href: string, base: string | null): string | null {
@@ -1497,10 +1497,10 @@ function resolveAttachmentUrl(href: string, base: string | null): string | null 
 }
 
 /**
- * react-markdown components 覆盖：a/img 检测 attachment: 协议，改写到 BBS URL。
- * 图片附件因为 BBS 需要会话鉴权，渲染器 fetch 不到，统一退化为可点击链接
+ * react-markdown components 覆盖：a/img 检测 attachment: 协议，改写到 Bitbucket URL。
+ * 图片附件因为 Bitbucket 需要会话鉴权，渲染器 fetch 不到，统一退化为可点击链接
  * （📎 alt 文本），点击走 setWindowOpenHandler → shell.openExternal 在系统
- * 浏览器打开，用户的 BBS 登录 session 能正常加载。
+ * 浏览器打开，用户的 Bitbucket 登录 session 能正常加载。
  */
 function makeCommentMarkdownComponents(
   attachmentBase: string | null,
@@ -1520,7 +1520,7 @@ function makeCommentMarkdownComponents(
     },
     img: ({ src, alt }) => {
       if (typeof src !== 'string' || !src) return null;
-      // 把 src 原样传 IPC — main 端 adapter 懂 BBS `attachment:HASH` 协议 + 绝对/
+      // 把 src 原样传 IPC — main 端 adapter 懂 Bitbucket `attachment:HASH` 协议 + 绝对/
       // 相对 URL，renderer 不需要前置 resolve。外部公网 URL 在 main 端会被认为
       // 跨 host 返回 null，BitbucketImage 内部 fallback 到原生 <img>
       return <BitbucketImage src={src} alt={alt} />;
@@ -1529,9 +1529,9 @@ function makeCommentMarkdownComponents(
 }
 
 /**
- * 递归渲染单条评论 + 它的回复子树。BBS 的 comment.comments[] 是任意层级的，
+ * 递归渲染单条评论 + 它的回复子树。Bitbucket 的 comment.comments[] 是任意层级的，
  * 之前只画了第一层 → 第三层及以上不显示；这里递归到底。每往下一层左移 18px
- * 并多一道左竖线（跟 BBS 原生 UI 视觉对齐）。
+ * 并多一道左竖线（跟 Bitbucket 原生 UI 视觉对齐）。
  */
 /** 嵌套缩进最大 5 层；第 6 层起 ml=0，跟第 5 层左对齐（避免过深一直右滑） */
 const MAX_REPLY_INDENT_DEPTH = 5;
@@ -1773,7 +1773,7 @@ function Spinner() {
 }
 
 /**
- * BBS 风格 blame 列。独立于 Monaco DOM 之外，作为 diff-pane-wrapper 的左侧
+ * Bitbucket 风格 blame 列。独立于 Monaco DOM 之外，作为 diff-pane-wrapper 的左侧
  * flex 子项；内部用 absolute 子项画各 commit 区块，按 Monaco scrollTop 平移。
  *
  * 设计权衡：

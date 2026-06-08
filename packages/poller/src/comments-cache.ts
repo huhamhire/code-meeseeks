@@ -5,7 +5,7 @@ import type { StateStore } from '@meebox/state-store';
  * PR 评论快照文件。落在 `prs/<localId>/comments.json`。
  *
  * 失效判定：`pr_updated_at` 跟当前 PR meta 的 updatedAt 不一致即视为 stale，
- * 需要重新从远端拉 + 覆写本文件。pr.updatedAt 在 BBS 任何变更 (新评论 / 状态 /
+ * 需要重新从远端拉 + 覆写本文件。pr.updatedAt 在 Bitbucket 任何变更 (新评论 / 状态 /
  * 描述等) 都会跳，所以这是一条够保险的 cache key。
  */
 export interface CommentsCacheFile {

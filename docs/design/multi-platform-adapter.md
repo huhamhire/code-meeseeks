@@ -60,28 +60,28 @@ interface PlatformCapabilities {
   reviewStatuses: ReadonlyArray<'approved' | 'needsWork' | 'unapproved'>;
   inlineComments: boolean;          // 是否支持行内评论
   inlineMultiline: boolean;         // 多行行内评论
-  commentOptimisticLock: boolean;   // 删改是否需要 version（仅 BBS）
-  mergeVetoFidelity: 'full' | 'partial'; // 否决项是否逐条可得（BBS/GitLab full，GitHub partial）
+  commentOptimisticLock: boolean;   // 删改是否需要 version（仅 Bitbucket）
+  mergeVetoFidelity: 'full' | 'partial'; // 否决项是否逐条可得（Bitbucket/GitLab full，GitHub partial）
   discoveryRateLimited: boolean;    // 发现端点是否强限流（GitHub search）→ 拉长轮询
 }
 ```
 
 ### 3.2 数据模型调整（platform.ts）
 
-- `PrComment.version?` → 保持**可选**，明确为 BBS 专属乐观锁；GH/GL 忽略。
+- `PrComment.version?` → 保持**可选**，明确为 Bitbucket 专属乐观锁；GH/GL 忽略。
 - `PrComment` 增补：`kind?: 'summary' | 'inline'`、`threadId?: string`（GH review-comment 的 `in_reply_to`/GL discussion id），
   `nativeId`（回写幂等）。GH/GL 的「评论树」由 adapter **合并多个端点**后组装成现有嵌套结构，业务层无感。
 - 行内发布需要 diff 基准 sha：新增中性 `PrDiffRefs { headSha: string; baseSha: string; startSha?: string }`。
   - 来源：我们本地镜像算 diff，PR meta 已有 head/base sha（见 [模块 02](../modules/02-repo-mirror.md)）。
   - `publishInlineComment` 签名增补一个 `refs: PrDiffRefs`（或在 adapter 内按 prId 拉 PR 取 `diff_refs`）。
-    - GitHub 用 `headSha` 作 `commit_id`；GitLab 用三 sha 拼 `position`；BBS 不需要（忽略）。
+    - GitHub 用 `headSha` 作 `commit_id`；GitLab 用三 sha 拼 `position`；Bitbucket 不需要（忽略）。
 - `MergeStatus.vetoes` 语义不变，但**保真度分级**（见 capabilities.mergeVetoFidelity）：GitHub 只能给近似项。
 - `PrIdentity` 不变；GitLab adapter 内部另存 project 数字 id（iid 是项目内编号，API 调用要项目 id + iid）。
 
 ### 3.3 客户端层
 
-- 认证头按平台注入（BBS/GitHub Bearer；GitLab PRIVATE-TOKEN 或 Bearer），沿用现有「可注入 fetch」挂代理。
-- **分页适配器**：BBS `start/limit` 与 GitHub/GitLab `Link` 头两种风格，封装成统一异步迭代器（不进 `PlatformAdapter` 接口）。
+- 认证头按平台注入（Bitbucket/GitHub Bearer；GitLab PRIVATE-TOKEN 或 Bearer），沿用现有「可注入 fetch」挂代理。
+- **分页适配器**：Bitbucket `start/limit` 与 GitHub/GitLab `Link` 头两种风格，封装成统一异步迭代器（不进 `PlatformAdapter` 接口）。
 - 限流：GitHub search 30/分 → 发现轮询间隔对该平台单独抬高（capabilities.discoveryRateLimited 驱动）。
 
 ### 3.4 Diff 仍走本地 git
@@ -95,20 +95,20 @@ interface PlatformCapabilities {
 
 - **GitHub**：无 dashboard，靠 Search `GET /search/issues?q=is:open+is:pr+review-requested:@me+archived:false`。
   代价：搜索限流 30/分、结果最终一致（刚请求评审可能短暂查不到）、返回是 issue 形态需再取 PR 详情。
-- **GitLab**：`GET /merge_requests?scope=all&state=opened&reviewer_username=<me>` 全局跨项目，干净直接（最接近 BBS dashboard）。
+- **GitLab**：`GET /merge_requests?scope=all&state=opened&reviewer_username=<me>` 全局跨项目，干净直接（最接近 Bitbucket dashboard）。
 - 抽象：`listPendingPullRequests()` 保持；但**「待我评审」的定义各平台不同**（GitHub review-requested vs GitLab reviewer
   vs 旧 assignee 模型），需在各 adapter 内固定语义并在文档写清。
 
 ### 4.2 评论体系（最大分歧）
 
-- **BBS**：一棵评论树，inline（带 anchor）与 summary（anchor=null）同源，reply 嵌套，删改带 `version`。
+- **Bitbucket**：一棵评论树，inline（带 anchor）与 summary（anchor=null）同源，reply 嵌套，删改带 `version`。
 - **GitHub**：三套概念 ——
   - issue 评论 `/issues/{n}/comments` = PR 级讨论（≈ summary，无线程）；
   - review 评论 `/pulls/{n}/comments` = 行内（含 `path/line/side/start_line/in_reply_to_id/commit_id/diff_hunk`）；
   - reviews `/pulls/{n}/reviews` = 决断 + 可带成组行内评论。
   - 组装：adapter 把 issue 评论作 summary、review 评论按 `in_reply_to_id` 还原成线程，统一成现有 `PrComment[]`。
 - **GitLab**：notes + discussions。inline = 带 `position` 的 discussion；reply = 往 discussion 追加 note；需**过滤 system note**。
-- 影响：`version` 仅 BBS；GH/GL 的 `canEdit/canDelete` 用「作者==当前用户」判定即可（无锁）。回复目标：BBS 用父评论 id、
+- 影响：`version` 仅 Bitbucket；GH/GL 的 `canEdit/canDelete` 用「作者==当前用户」判定即可（无锁）。回复目标：Bitbucket 用父评论 id、
   GitHub 用 review-comment id（`/replies`）、GitLab 用 discussion id —— 用 `threadId` 抽象。
 
 ### 4.3 行内评论锚点（最难对齐）
@@ -119,25 +119,25 @@ interface PlatformCapabilities {
   行号必须落在该 commit 的 diff 内，否则 422。
 - **GitLab**：`POST .../discussions` { body, position:{ position_type:'text', base_sha,start_sha,head_sha, old_path,new_path,
   new_line（加/上下文行）| old_line（删除行）, line_range（多行） } }。三 sha 取自 MR `diff_refs`。
-- **BBS**：`anchor{path,line,lineType(added/removed/context),fileType,srcPath}` + multilineMarker（现状）。
+- **Bitbucket**：`anchor{path,line,lineType(added/removed/context),fileType,srcPath}` + multilineMarker（现状）。
 - 抽象：把 `side`（old/new）+ 行角色 + `PrDiffRefs` 喂给 adapter，由各自拼平台锚点。**我们本地算 diff 时已知每行的
   added/removed/context 角色与新旧行号**，正是三家都需要的输入 —— 这是抽象能成立的基础。
 
 ### 4.4 审批决断（能力缺口最明显）
 
-- **BBS**：reviewer status 三态（APPROVED/NEEDS_WORK/UNAPPROVED），幂等、可来回切，完美匹配现有 `setPullRequestReviewStatus`。
+- **Bitbucket**：reviewer status 三态（APPROVED/NEEDS_WORK/UNAPPROVED），幂等、可来回切，完美匹配现有 `setPullRequestReviewStatus`。
 - **GitHub**：review 是**追加事件**。approved→`POST /reviews{event:APPROVE}`；needsWork→`{event:REQUEST_CHANGES}`；
   撤销→`PUT /reviews/{id}/dismissals`。注意：**不能审批自己的 PR**（422）；「当前状态」取该用户最近一条 review。
 - **GitLab**：`approve`/`unapprove` 端点 **13.9 起为 Premium**（Free/CE 自建用不了 API 审批）；**needsWork 无干净对应**
   （reviewer「requested_changes」状态 API 支持弱）。
 - 结论：用 `capabilities.reviewStatuses` 暴露真实能力 ——
-  - BBS：`['approved','needsWork','unapproved']`
+  - Bitbucket：`['approved','needsWork','unapproved']`
   - GitHub：`['approved','needsWork','unapproved']`（needsWork=REQUEST_CHANGES）
   - GitLab Premium：`['approved','unapproved']`；GitLab CE：`[]`（按需降级为「只发评论 + 不解决 discussion」的弱替代，并在 UI 灰显「通过/需修改」）。
 
 ### 4.5 合并与可合并判定
 
-- **BBS**：`/merge` 一次给 `canMerge/conflicted/vetoes`，最省事。
+- **Bitbucket**：`/merge` 一次给 `canMerge/conflicted/vetoes`，最省事。
 - **GitHub**：PR 的 `mergeable`（bool|null，**异步计算**，初次可能 null 需轮询）+ `mergeable_state`
   （clean/dirty/blocked/behind/unstable/draft）。逐条否决项要再查分支保护 + check-runs/status + 必评 → 只能给**近似 vetoes**
   （fidelity=partial）。合并 `PUT .../merge{merge_method}`。
@@ -147,17 +147,17 @@ interface PlatformCapabilities {
 
 ### 4.6 其它
 
-- **提交排序**：GitHub oldest-first → adapter 反转成 newest-first（契约要求）；GitLab/BBS 本就 newest-first。
+- **提交排序**：GitHub oldest-first → adapter 反转成 newest-first（契约要求）；GitLab/Bitbucket 本就 newest-first。
 - **头像 / 附件**：GH/GL 头像多为可直取 URL（私有实例可能需鉴权）；内嵌附件协议三家不同
-  （BBS `attachment:HASH`、GitHub `user-attachments`、GitLab `/uploads/`），私有资源都要经 main 端带凭据代理（沿用 `getAttachment`）。
+  （Bitbucket `attachment:HASH`、GitHub `user-attachments`、GitLab `/uploads/`），私有资源都要经 main 端带凭据代理（沿用 `getAttachment`）。
 - **草稿**：GitHub `draft`、GitLab 标题 `Draft:`/字段；映射到现有 `PullRequest.draft`。
 
 ## 5. 抽象需要的改动清单（落地项）
 
 1. `PlatformAdapter` 增 `capabilities(): PlatformCapabilities`；UI 据此灰显不支持的决断/行内能力。
-2. `platform.ts` 类型：`PrComment` 增 `kind?/threadId?/nativeId?`；`version?` 明确 BBS 专属；新增 `PrDiffRefs`；
+2. `platform.ts` 类型：`PrComment` 增 `kind?/threadId?/nativeId?`；`version?` 明确 Bitbucket 专属；新增 `PrDiffRefs`；
    `publishInlineComment` 接 `refs`（或 adapter 内拉取）。
-3. `replyToComment` 的 `parentCommentId` 语义放宽为 `threadId`（BBS 父评论 / GitHub review-comment / GitLab discussion）。
+3. `replyToComment` 的 `parentCommentId` 语义放宽为 `threadId`（Bitbucket 父评论 / GitHub review-comment / GitLab discussion）。
 4. 客户端：认证头按平台、`Link` 头分页迭代器、按平台调发现轮询间隔（GitHub search 限流）。
 5. `setPullRequestReviewStatus`：各平台按 capabilities 实现；不支持的态返回明确「unsupported」而非静默失败
    （配合已加的操作失败 toast）。
@@ -169,7 +169,7 @@ interface PlatformCapabilities {
 
 - **GitLab CE 无 API 审批**（approve/unapprove Premium-only）、needsWork 无对应 → 这是产品级缺口，只能 UI 降级 + 文档说明，
   不能在抽象层假装支持。
-- **GitHub Search 限流 + 最终一致** → 发现不能像 BBS 那样高频；需独立轮询节流 + 「刚被请求评审可能延迟出现」的预期管理。
+- **GitHub Search 限流 + 最终一致** → 发现不能像 Bitbucket 那样高频；需独立轮询节流 + 「刚被请求评审可能延迟出现」的预期管理。
 - **GitHub mergeable 异步 null** → 首次打开 PR 可能拿不到可合并判定，需轮询或延迟展示，不能当 false。
 - **行内锚点 422/400 风险**：三家都要求锚点行真实落在 diff 内；我们本地 diff 与平台 diff 若有差异（如平台对超大 diff 截断、
   rename 处理）可能发布失败 —— 需要发布失败的逐条回退（现已有）+ 锚点角色严格取自本地 diff。
@@ -177,7 +177,7 @@ interface PlatformCapabilities {
 
 ## 7. 实施建议（分期）
 
-1. **抽象先行**：落 §5 的类型 + `capabilities` + contract 测试套件（用 BBS 现有实现跑通，确立基线）。
+1. **抽象先行**：落 §5 的类型 + `capabilities` + contract 测试套件（用 Bitbucket 现有实现跑通，确立基线）。
 2. **GitHub 优先**。综合「实现代价 + 功能完整度」对本产品（reviewer 决策权在人）更划算：
    - **审批闭环既便宜又完整**：`APPROVE / REQUEST_CHANGES / dismiss` 干净映射 approved/needsWork/unapproved；
      GitLab 反而是硬伤（approve API 为 Premium、needsWork 无对应，CE 实例审批走不通，还要做 edition 探测 + 降级）。
@@ -198,7 +198,7 @@ interface PlatformCapabilities {
 ### 8.1 统一模型
 
 - 渲染层只消费**中性 `PrComment` 树** + `capabilities()`；核心动作（读 / 回复 / 编辑 / 删除 / 草稿→确认发布）三家一致。
-- 各平台评论概念由 **adapter 归一**成同一棵嵌套结构（BBS 单树；GitHub issue 评论 + review 评论 + reviews；
+- 各平台评论概念由 **adapter 归一**成同一棵嵌套结构（Bitbucket 单树；GitHub issue 评论 + review 评论 + reviews；
   GitLab notes + discussions）——见 §4.2。**归一可行 = 不该分叉**；只有当某平台模型无法被 `PrComment` 无损表达时，
   才是重新评估「专门组件」的真实信号（当前三家都能归一）。
 
@@ -206,10 +206,10 @@ interface PlatformCapabilities {
 
 | 能力位 | 含义 | 谁有 |
 | --- | --- | --- |
-| `resolvableThreads` | 线程可「解决 / Resolve」+ 折叠已解决 | GitHub conversation / GitLab discussion；**BBS 无** |
-| `suggestions` | 行内代码建议可「一键应用」 | GitHub / GitLab；**BBS 无** |
+| `resolvableThreads` | 线程可「解决 / Resolve」+ 折叠已解决 | GitHub conversation / GitLab discussion；**Bitbucket 无** |
+| `suggestions` | 行内代码建议可「一键应用」 | GitHub / GitLab；**Bitbucket 无** |
 | `reviewGrouping` | 决断 + 行内评论**成组提交**（pending review） | GitHub reviews / GitLab 批量 |
-| `commentOptimisticLock` | 删改需带 `version` | **仅 BBS**（adapter 内部消化，UI 无感） |
+| `commentOptimisticLock` | 删改需带 `version` | **仅 Bitbucket**（adapter 内部消化，UI 无感） |
 
 > `reviewGrouping` 不引入新范式：直接复用产品现有的**「本地草稿池 → 批量发布」**闭环（见 [模块 05](../modules/05-review-workflow.md)），
 > 三平台共用同一「先攒草稿、再一次性提交」的心智。
@@ -238,7 +238,7 @@ API 能力受限、某功能在某平台/版本/权限下无法实现时，**不
 | 方式 | 用在何时 | 例 |
 | --- | --- | --- |
 | **置灰 + 原因 tooltip**（disabled） | 用户**预期存在**、但因平台版本 / 权限暂不可用 → 保留可发现性并说明原因 | GitLab CE 的「通过」（需 Premium）；无合并权限 |
-| **隐藏不渲染** | 平台**概念上根本没有**该能力 → 常驻置灰只是噪音 | BBS 无「解决线程」概念；不支持 suggestion 的平台不出「应用」入口 |
+| **隐藏不渲染** | 平台**概念上根本没有**该能力 → 常驻置灰只是噪音 | Bitbucket 无「解决线程」概念；不支持 suggestion 的平台不出「应用」入口 |
 | **降级替代（fallback）** | 有可用的弱替代动作 | GitLab CE「需修改」无 API → 退化为「发评论 + 不解决讨论」并提示 |
 
 一句话判据：**「本可有但此实例没有」→ 置灰说明；「平台无此概念」→ 隐藏；「有弱替代」→ 替代 + 提示。**
@@ -262,8 +262,8 @@ API 能力受限、某功能在某平台/版本/权限下无法实现时，**不
 | --- | --- | --- |
 | 审批：通过 | GitLab CE（approve API 为 Premium） | 置灰 + 「需 Premium / 网页端」 |
 | 审批：需修改 | GitLab（无干净对应） | 隐藏该按钮（或 fallback 为评论） |
-| 行内 suggestion「应用」 | BBS / 不支持的平台 | 隐藏「应用」入口；suggestion 仍按普通评论展示文本 |
-| 线程「解决 / Resolve」 | BBS（无此概念） | 隐藏 resolve 按钮与「已解决」折叠态 |
+| 行内 suggestion「应用」 | Bitbucket / 不支持的平台 | 隐藏「应用」入口；suggestion 仍按普通评论展示文本 |
+| 线程「解决 / Resolve」 | Bitbucket（无此概念） | 隐藏 resolve 按钮与「已解决」折叠态 |
 | 合并否决项逐条 | GitHub（partial 保真度） | 展示已知项 + 「可能还有其它检查未通过」泛化提示，不假装完整 |
 | 合并 | 不满足 / 无权限 | 不满足：只读判定 + 否决原因；无权限：置灰 + 原因 |
 
