@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+### Added
+- 多平台适配抽象基线：`PlatformAdapter` 能力描述符（`capabilities()`）、`PrDiffRefs`、`PrComment`
+  线程字段（kind / threadId），为接入新平台铺底。
+- **GitHub 适配**（github.com + GitHub Enterprise Server）：PR 发现（review-requested）、diff 评论读写、
+  行内评论、审批（通过 / 需修改 / 撤销）、合并；设置页与首启向导可新增 GitHub 连接。
+  审批按平台能力降级：不支持的决断隐藏，自己作者的 PR 审批按钮灰显（不能审批自己）。
+
+### Changed
+- 全仓内部命名统一为 **Bitbucket**，去除 `BBS` / `BB` 等歧义缩写（纯改名，无行为变化）。
+
 ### Fixed
 - 修复模型返回多行自由文本值（如中文 `issue_content`）未用块标量、续行顶格导致 pr-agent
   `load_yaml` 解析失败、整个 `/review` 崩溃（`NoneType is not iterable`）：`sitecustomize`

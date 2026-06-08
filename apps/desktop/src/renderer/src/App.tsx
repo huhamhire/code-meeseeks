@@ -201,6 +201,10 @@ export default function App() {
   }, [refreshing, reloadPrs]);
 
   const selected = prs.find((p) => p.localId === selectedId) ?? null;
+  // 选中 PR 所属连接的能力位 + 当前 PAT 用户（多平台降级：审批按钮显隐 / 自己 PR 灰显）
+  const selectedConn = selected
+    ? boot?.connections.find((c) => c.connectionId === selected.connectionId)
+    : undefined;
 
   const setSelectedPrStatus = useCallback(
     async (status: LocalPrStatus): Promise<void> => {
@@ -328,6 +332,8 @@ export default function App() {
           hasConnections={boot.config.connections.length > 0}
           onSetStatus={(s) => void setSelectedPrStatus(s)}
           onMerge={() => void mergeSelectedPr()}
+          capabilities={selectedConn?.capabilities}
+          currentUserName={selectedConn?.user?.name ?? null}
           pendingDiffNav={pendingDiffNav}
           onDiffNavConsumed={() => setPendingDiffNav(null)}
           onRequestDiffNav={(target) => setPendingDiffNav(target)}

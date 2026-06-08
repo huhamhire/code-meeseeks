@@ -76,17 +76,17 @@
 
 ### Phase 4 · UI 能力位接线 + 降级（按 §8/§9）
 
-- [ ] App 把 active 连接的 `capabilities` 传到 [MainPane](../../apps/desktop/src/renderer/src/components/MainPane.tsx)
+- [x] App 把 active 连接的 `capabilities` 传到 [MainPane](../../apps/desktop/src/renderer/src/components/MainPane.tsx)
       （审批/合并按钮）、评论组件、[ChatPane](../../apps/desktop/src/renderer/src/components/ChatPane.tsx)。
-- [ ] 审批：GitHub 三态可用；**自己作者的 PR** 审批位灰显 + 原因（不能审批自己）。
-- [ ] 评论：`resolvableThreads`（GitHub conversation 解决/折叠）、`suggestions`（应用入口）按能力位 显/隐。
-- [ ] 严守划线：UI 只读 `capabilities` + PR 状态分支，**不出现 `if (platform==='github')`**。
+- [x] 审批：GitHub 三态可用；**自己作者的 PR** 审批位灰显 + 原因（不能审批自己）。
+- [ ] 评论：`resolvableThreads`（GitHub conversation 解决/折叠）、`suggestions`（应用入口）按能力位 显/隐。 （未实现：当前两端能力均 false，无 UI 渲染）
+- [x] 严守划线：UI 只读 `capabilities` + PR 状态分支，**不出现 `if (platform==='github')`**。
 
 ### Phase 5 · 测试 + 联调 + 收尾
 
-- [ ] `@meebox/platform-github` 过 Phase 0 的 contract 套件。
-- [ ] 真实 GHE/github.com 联调：发现 → 评论往返 → inline 发布 → 审批 → 合并 全链路。
-- [ ] `typecheck` / `lint` / `test` 全绿；CHANGELOG 记一条；按需 cut 版本。
+- [x] `@meebox/platform-github` 过 Phase 0 的 contract 套件。
+- [ ] 真实 GHE/github.com 联调：发现 → 评论往返 → inline 发布 → 审批 → 合并 全链路。 （需真实凭据，手动验证）
+- [x] `typecheck` / `lint` / `test` 全绿；CHANGELOG 记一条；按需 cut 版本。
 
 ## 端点映射速查（GitHub REST）
 

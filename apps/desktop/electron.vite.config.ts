@@ -11,6 +11,7 @@ const internalPackages = [
   '@meebox/pr-agent-bridge',
   '@meebox/state-store',
   '@meebox/platform-bitbucket-server',
+  '@meebox/platform-github',
   '@meebox/poller',
   '@meebox/repo-mirror',
   '@meebox/rules',

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { LocalPrStatus, StoredPullRequest } from '@meebox/shared';
+import type {
+  LocalPrStatus,
+  PlatformCapabilities,
+  ReviewerStatus,
+  StoredPullRequest,
+} from '@meebox/shared';
 import { invoke } from '../api';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { CommentsPanel } from './CommentsPanel';
@@ -113,6 +118,13 @@ interface MainPaneProps {
   /** 合并当前 PR（仅在 mergeStatus.canMerge 时由 header 按钮触发） */
   onMerge: () => void;
   /**
+   * 当前 PR 所属连接的平台能力（多平台降级用）。undefined = 未知（无连接/旧数据）→ 不降级。
+   * 据此决定审批按钮 显/隐（reviewStatuses）等。
+   */
+  capabilities?: PlatformCapabilities;
+  /** 当前 PR 所属连接的 PAT 用户登录名；用于判定「是否自己的 PR」（不能审批自己）。 */
+  currentUserName?: string | null;
+  /**
    * M4 跨组件跳转：ChatPane finding card 点"编辑"时由 App 设置，MainPane 据此
    * 切到 Diff tab + 把 nav 透传给 DiffView 做 scroll/highlight/open zone。
    * DiffView 消费完应调用 onDiffNavConsumed 清掉。
@@ -142,6 +154,8 @@ export function MainPane({
   hasConnections,
   onSetStatus,
   onMerge,
+  capabilities,
+  currentUserName,
   pendingDiffNav,
   onDiffNavConsumed,
   onRequestDiffNav,
@@ -258,6 +272,13 @@ export function MainPane({
     );
   }
 
+  // 能力位降级：reviewStatuses 决定审批按钮显隐；自己作者的 PR 不能审批（GitHub 422，
+  // 其它平台也无意义）→ 灰显 + 原因。capabilities undefined（旧数据/无连接）时不降级。
+  const reviewAllowed = (s: ReviewerStatus): boolean =>
+    !capabilities || capabilities.reviewStatuses.includes(s);
+  const isOwnPr = !!currentUserName && pr.author.name === currentUserName;
+  const ownPrReason = isOwnPr ? '不能审批自己的 PR' : undefined;
+
   return (
     <main className="main">
       <header className="pr-header">
@@ -327,28 +348,34 @@ export function MainPane({
                 <PullRequestIcon size={14} /> 合并
               </button>
             )}
-            <button
-              className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
-              type="button"
-              onClick={() =>
-                onSetStatus(pr.localStatus === 'approved' ? 'pending' : 'approved')
-              }
-              title={pr.localStatus === 'approved' ? '撤销通过' : '标记为通过'}
-              aria-pressed={pr.localStatus === 'approved'}
-            >
-              <ApproveIcon /> 通过
-            </button>
-            <button
-              className={`btn btn-sm review-action review-action-needs-work ${pr.localStatus === 'needs_work' ? 'active' : ''}`}
-              type="button"
-              onClick={() =>
-                onSetStatus(pr.localStatus === 'needs_work' ? 'pending' : 'needs_work')
-              }
-              title={pr.localStatus === 'needs_work' ? '撤销"需修改"' : '标记为需修改'}
-              aria-pressed={pr.localStatus === 'needs_work'}
-            >
-              <NeedsWorkIcon /> 需修改
-            </button>
+            {reviewAllowed('approved') && (
+              <button
+                className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
+                type="button"
+                disabled={isOwnPr}
+                onClick={() =>
+                  onSetStatus(pr.localStatus === 'approved' ? 'pending' : 'approved')
+                }
+                title={ownPrReason ?? (pr.localStatus === 'approved' ? '撤销通过' : '标记为通过')}
+                aria-pressed={pr.localStatus === 'approved'}
+              >
+                <ApproveIcon /> 通过
+              </button>
+            )}
+            {reviewAllowed('needsWork') && (
+              <button
+                className={`btn btn-sm review-action review-action-needs-work ${pr.localStatus === 'needs_work' ? 'active' : ''}`}
+                type="button"
+                disabled={isOwnPr}
+                onClick={() =>
+                  onSetStatus(pr.localStatus === 'needs_work' ? 'pending' : 'needs_work')
+                }
+                title={ownPrReason ?? (pr.localStatus === 'needs_work' ? '撤销"需修改"' : '标记为需修改')}
+                aria-pressed={pr.localStatus === 'needs_work'}
+              >
+                <NeedsWorkIcon /> 需修改
+              </button>
+            )}
           </div>
         </div>
       </header>

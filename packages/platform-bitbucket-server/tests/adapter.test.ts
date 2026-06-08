@@ -37,6 +37,17 @@ function makeAdapter(fetchFn: FetchLike): BitbucketServerAdapter {
   });
 }
 
+describe('BitbucketServerAdapter capabilities contract', () => {
+  it('declares full Bitbucket capabilities (3 状态审批 / 乐观锁 / full veto)', () => {
+    const caps = makeAdapter(mockFetch({})).capabilities();
+    expect(caps.reviewStatuses).toEqual(['approved', 'needsWork', 'unapproved']);
+    expect(caps.commentOptimisticLock).toBe(true);
+    expect(caps.inlineMultiline).toBe(true);
+    expect(caps.mergeVetoFidelity).toBe('full');
+    expect(caps.discoveryRateLimited).toBe(false);
+  });
+});
+
 const samplePR = {
   id: 1022,
   version: 5,
