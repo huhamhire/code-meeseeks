@@ -56,6 +56,7 @@ jobs:
         run: |
           npm run prepare:pragent   # 组装当前平台的嵌入式 pr-agent 运行时
           npm run build             # electron-vite build
+          npm run notices           # 生成第三方声明，供 electron-builder 打入包
           npx electron-builder --publish never
         env:
           # 有则走正式签名 + 公证，无则 afterPack ad-hoc（见文件头注释）
@@ -65,9 +66,30 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
+      - name: 生成 SHA256 校验和
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        working-directory: apps/desktop/release
+        run: |
+          shopt -s nullglob
+          for f in *.exe *.dmg; do
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$f" > "$f.sha256"
+            else
+              shasum -a 256 "$f" > "$f.sha256"
+            fi
+          done
+
       - name: 上传到 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifacts }}
+          files: |
+            ${{ matrix.artifacts }}
+            ${{ matrix.artifacts }}.sha256
           fail_on_unmatched_files: true
+          # alpha / 任何带 - 的预发布 tag（如 v0.1.0-alpha.1）→ 标为 prerelease，且不抢占 Latest
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
+          # 安装 / 首次打开（Gatekeeper/SmartScreen）/ 校验和说明；完整变更指向 CHANGELOG
+          body_path: .github/RELEASE_NOTES.md

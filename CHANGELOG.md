@@ -7,7 +7,7 @@
 
 （暂无）
 
-## [0.1.0] - 待发布
+## [0.1.0-alpha.1] - 2026-06-07
 
 > 首个公开预览版（0.x · 早期预览）。面向 **Reviewer 个人** 的本地化、半自动 AI 代码评审桌面客户端，
 > 基于社区版 [pr-agent](https://docs.pr-agent.ai/) 构建：拉取待评审 PR、本地跑 AI 生成评审意见，
@@ -60,5 +60,5 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/huhamhire/code-meeseeks/releases/tag/v0.1.0
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0-alpha.1...HEAD
+[0.1.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/releases/tag/v0.1.0-alpha.1

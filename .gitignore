@@ -15,8 +15,12 @@ out-tsc/
 release/
 
 # 嵌入式 pr-agent 运行时（scripts/assemble-pragent-runtime.mjs 生成；几百 MB、
-# 平台特定的下载+pip 产物，不入库；见 ADR-0008）
+# 平台特定的下载+pip 产物，不入库；见 docs/modules/04-pragent-runtime.md）
 apps/desktop/vendor/
+
+# 第三方声明全文（tools/gen-third-party-notices.mjs 生成；近万行许可证全文，不入库——
+# 出包前生成，由 electron-builder 打入安装包 <resources>/THIRD-PARTY-NOTICES.md）
+THIRD-PARTY-NOTICES.md
 *.exe
 *.dmg
 *.AppImage

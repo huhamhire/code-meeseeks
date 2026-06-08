@@ -1,6 +1,6 @@
 {
   "name": "@meebox/desktop",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "description": "meebox Electron desktop app",
   "author": {
@@ -17,8 +17,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint src --max-warnings=0",
     "prepare:pragent": "node scripts/assemble-pragent-runtime.mjs",
-    "pack": "npm run prepare:pragent && electron-vite build && electron-builder --dir",
-    "dist": "npm run prepare:pragent && electron-vite build && electron-builder"
+    "notices": "node ../../tools/gen-third-party-notices.mjs",
+    "pack": "npm run prepare:pragent && electron-vite build && npm run notices && electron-builder --dir",
+    "dist": "npm run prepare:pragent && electron-vite build && npm run notices && electron-builder"
   },
   "nx": {
     "targets": {

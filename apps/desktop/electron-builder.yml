@@ -45,6 +45,10 @@ extraResources:
     filter:
       - '**/*'
       - '!**/__pycache__/**'
+  # 第三方声明随包内置（落到 <resources>/THIRD-PARTY-NOTICES.md）；由 tools/gen-third-party-notices.mjs
+  # 在 electron-builder 之前生成（见 dist/pack 脚本与 release workflow）。仓库不入库该文件。
+  - from: ../../THIRD-PARTY-NOTICES.md
+    to: THIRD-PARTY-NOTICES.md
 
 win:
   # 图标源放在资源目录 assets/icons/（build/ 被 gitignore，不用它）。含 16/32/48/256。

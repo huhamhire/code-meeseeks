@@ -159,7 +159,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 本项目采用 [Apache License 2.0](LICENSE)。
 
-打包分发的安装包内含第三方组件（PR-Agent、Electron 等），各按其自身许可证分发，归集见 [NOTICE](NOTICE)（发行包的完整第三方声明 `THIRD-PARTY-NOTICES` 待生成）。
+打包分发的安装包内含第三方组件（PR-Agent、Electron 等），各按其自身许可证分发，归集见 [NOTICE](NOTICE)；完整第三方许可（THIRD-PARTY-NOTICES）出包时自动生成并随安装包内置（位于 App 资源目录）。
 
 ## 商标与免责声明
 

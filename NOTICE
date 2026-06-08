@@ -12,5 +12,6 @@ distributed under its own license, including but not limited to:
 - Electron, and various Node.js / Python packages — see their respective
   licenses.
 
-Third-party license texts and attributions are collected in
-THIRD-PARTY-NOTICES (to be generated for distributed binaries).
+Third-party license texts and attributions are compiled into THIRD-PARTY-NOTICES.md by
+tools/gen-third-party-notices.mjs and bundled inside each installer (under the app's
+resources directory); the generated file is not committed to the source tree to avoid bloat.
