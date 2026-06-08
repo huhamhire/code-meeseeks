@@ -14,6 +14,7 @@ interface Captured {
   method: string;
   url: string;
   body: unknown;
+  headers: Record<string, string>;
 }
 
 function makeFetch(routes: Route[], captured: Captured[]) {
@@ -23,6 +24,7 @@ function makeFetch(routes: Route[], captured: Captured[]) {
       method,
       url: input,
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      headers: (init?.headers as Record<string, string>) ?? {},
     });
     const route = routes.find(
       (r) => (r.method ?? 'GET').toUpperCase() === method && input.includes(r.match),
@@ -240,5 +242,23 @@ describe('GitHubAdapter mergeStatus mapping', () => {
     expect(pr.mergeStatus.conflicted).toBe(true);
     expect(pr.mergeStatus.canMerge).toBe(false);
     expect(pr.hasConflict).toBe(true);
+  });
+});
+
+describe('GitHubAdapter getAttachment（PAT 仅发可信域）', () => {
+  it('外部 host 直接 null 且不发起请求；githubusercontent 资产带 PAT 代理', async () => {
+    const { adapter, captured } = makeAdapter([
+      { match: 'evil.example.com', body: '' },
+      { match: 'githubusercontent.com', body: '' },
+    ]);
+    const external = await adapter.getAttachment('https://evil.example.com/leak.png');
+    const asset = await adapter.getAttachment('https://avatars.githubusercontent.com/u/1?v=4');
+    // 外部 host：不代理、不请求（无 captured）、返回 null → 渲染层退回原生 <img>
+    expect(external).toBeNull();
+    expect(captured.some((c) => c.url.includes('evil.example.com'))).toBe(false);
+    // 可信资产域：代理并带 PAT
+    expect(asset).not.toBeNull();
+    const gh = captured.find((c) => c.url.includes('githubusercontent.com'))!;
+    expect(gh.headers.Authorization).toMatch(/^Bearer /);
   });
 });

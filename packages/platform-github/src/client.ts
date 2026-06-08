@@ -81,12 +81,22 @@ export class GitHubClient {
 
   private async err(res: Response, method: string, urlOrPath: string): Promise<GitHubClientError> {
     const txt = await res.text().catch(() => '');
+    // GitHub 错误体是 JSON，message 才是真因（如合并 405「Merge commits are not allowed on
+    // this repository」/「Pull Request is not mergeable」）。带进错误信息，否则只剩状态码看不出原因。
+    let apiMsg = '';
+    try {
+      const parsed = JSON.parse(txt) as { message?: unknown };
+      if (typeof parsed.message === 'string') apiMsg = parsed.message;
+    } catch {
+      /* 非 JSON 响应体，忽略 */
+    }
+    const detail = apiMsg ? `：${apiMsg}` : '';
     // 限流（403/429 + X-RateLimit-Remaining: 0）给更可读的提示，便于上层节流
     const remaining = res.headers.get('x-ratelimit-remaining');
     const rateLimited = (res.status === 403 || res.status === 429) && remaining === '0';
     const hint = rateLimited ? '（GitHub API 限流，请稍后重试）' : '';
     return new GitHubClientError(
-      `${String(res.status)} ${res.statusText} on ${method} ${urlOrPath}${hint}`,
+      `${String(res.status)} ${res.statusText} on ${method} ${urlOrPath}${detail}${hint}`,
       res.status,
       txt,
     );
@@ -173,18 +183,47 @@ export class GitHubClient {
   }
 
   /**
-   * 拉二进制资源（头像 / 评论内嵌图片）。url 为完整 http(s)。带上鉴权头（私有 GHE
-   * 资源需要；公共 CDN 也无害）。非 2xx / 异常 → 返回 null 让上层 fallback。
+   * 判断目标 host 是否为本连接可信的 GitHub/GHE 资产域 —— 只有可信域才会带 PAT。
+   * github.com：api.github.com + github.com + *.githubusercontent.com（头像 / user-attachments
+   * 等都在此）。GHE：实例 host 及其子域（媒体资产常在同实例下）。其余（评论里攻击者放的外部
+   * 图片 URL）一律不带凭据，避免 PAT 被外发泄露。
+   */
+  private isTrustedAssetHost(host: string): boolean {
+    const apiHost = new URL(this.baseUrl).host;
+    if (host === apiHost) return true;
+    if (apiHost === 'api.github.com') {
+      return host === 'github.com' || host === 'githubusercontent.com' || host.endsWith('.githubusercontent.com');
+    }
+    // GHE：实例同 host 或其子域
+    return host === apiHost || host.endsWith(`.${apiHost}`);
+  }
+
+  /**
+   * 拉二进制资源（头像 / 评论内嵌图片）。url 为完整 http(s)。**只代理可信 GitHub/GHE 资产域**
+   * （带 PAT 取私有资源）；非可信 host（如评论里攻击者放的外部图片 URL）直接返回 null —— 既不
+   * 外发 PAT（防泄露），也不让主进程去代拉任意外部 URL（防 SSRF），交渲染层退回原生 <img> 加载。
+   * 非 2xx / 异常 → 同样返回 null 让上层 fallback。
    */
   async getBinary(url: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
     if (!/^https?:\/\//.test(url)) return null;
+    let host: string;
+    try {
+      host = new URL(url).host;
+    } catch {
+      return null;
+    }
+    if (!this.isTrustedAssetHost(host)) return null;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.token}`,
+      Accept: 'image/*,*/*;q=0.5',
+    };
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
     let res: Response;
     try {
       res = await this.fetchFn(url, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${this.token}`, Accept: 'image/*,*/*;q=0.5' },
+        headers,
         signal: ctl.signal,
       });
     } catch {

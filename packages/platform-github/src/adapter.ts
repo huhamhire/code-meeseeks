@@ -402,7 +402,9 @@ export class GitHubAdapter implements PlatformAdapter {
   }
 
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {
-    // 合并失败（冲突 / 必评未过 / 无权限）→ client 抛 GitHubClientError 冒泡给上层
+    // 仅用 merge commit（空 body = 默认 merge_method=merge），不回退 squash/rebase。
+    // 失败（仓库禁用 merge commit / 冲突 / 必评未过 / 必检未过 / 分支落后 / 无权限）→ GitHub 返回
+    // 405「not mergeable」或 403，client 把响应体 message 带进 GitHubClientError 冒泡给上层。
     await this.client.put(`/repos/${repo.projectKey}/${repo.repoSlug}/pulls/${prId}/merge`, {});
   }
 }
