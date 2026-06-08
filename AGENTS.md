@@ -58,6 +58,7 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 
 - **TypeScript strict**；React 19 + electron-vite + Monaco。优先复用现有工具/类型，匹配周边代码风格与注释密度。
 - **IPC**：main 用 `ipcMain.handle(channel, ...)`，renderer/preload 用泛型 `invoke<K>(channel, req)`，全部由 `packages/shared/src/ipc.ts` 的 `IpcChannels` 类型映射约束。新增通道先在那里加类型。
+- **分支策略**：`master` 为发布分支，**禁止直接提交/修改**；所有特性与修复从 `dev` 拉分支开发，汇入 `dev` 验证后再合并到 `master`，发版在 `master` 打 `v*` tag 触发 release。
 - **提交信息**：约定式提交、**中文**，带 scope，例：`feat(desktop): …` / `fix(review): …` / `docs(readme): …` / `build(mac): …`。结尾带 `Co-Authored-By` trailer。**改完不要自动提交**，等明确指示。
 - **不提交无关改动**：工作区可能混有他人未提交编辑，按文件归属拆成内聚 commit，别混进同一条。
 
