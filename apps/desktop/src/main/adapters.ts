@@ -1,6 +1,12 @@
 import { BitbucketServerAdapter } from '@meebox/platform-bitbucket-server';
 import { GitHubAdapter } from '@meebox/platform-github';
-import type { Connection, PlatformAdapter, PlatformKind, ProxyConfig } from '@meebox/shared';
+import {
+  GITHUB_DOTCOM_API_BASE,
+  type Connection,
+  type PlatformAdapter,
+  type PlatformKind,
+  type ProxyConfig,
+} from '@meebox/shared';
 import { proxyFetchForHost } from './utils/proxy.js';
 
 export interface BuiltAdapter {
@@ -37,10 +43,13 @@ export function buildDraftAdapter(
   proxy: ProxyConfig,
   kind: PlatformKind = 'bitbucket-server',
 ): PlatformAdapter {
-  const fetchFn = proxyFetchForHost(proxy, hostOf(baseUrl));
   if (kind === 'github') {
-    return new GitHubAdapter({ baseUrl, token, cloneProtocol: 'pat', fetch: fetchFn });
+    // GitHub 草稿 base_url 可留空 → 默认官方 api.github.com
+    const ghBase = baseUrl.trim() || GITHUB_DOTCOM_API_BASE;
+    const fetchFn = proxyFetchForHost(proxy, hostOf(ghBase));
+    return new GitHubAdapter({ baseUrl: ghBase, token, cloneProtocol: 'pat', fetch: fetchFn });
   }
+  const fetchFn = proxyFetchForHost(proxy, hostOf(baseUrl));
   return new BitbucketServerAdapter({ baseUrl, token, cloneProtocol: 'pat', fetch: fetchFn });
 }
 
