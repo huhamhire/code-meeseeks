@@ -214,7 +214,7 @@ export function registerIpcHandlers({
   // (connectionId, slug) → dataUrl 或 null。两级 cache：
   //   1) avatarMem: 进程内 Map，本会话内瞬时返回（含 null 负缓存避免重试失败 slug）
   //   2) 磁盘文件 <cacheDir>/avatars/<hash>.bin，TTL 7 天，按 mtime 判定过期
-  //      过期或不存在 → 重新打 BBS → 写回磁盘
+  //      过期或不存在 → 重新打 Bitbucket → 写回磁盘
   // hash = sha256(connectionId|slug) 前 24 hex，纯字母数字文件名安全
   const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   const avatarDir = path.join(bootstrap.paths.cacheDir, 'avatars');
@@ -259,11 +259,11 @@ export function registerIpcHandlers({
       const pr = await findPrOrThrow(req.localId);
       const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
-      // BBS 在以下情形 409/403：
+      // Bitbucket 在以下情形 409/403：
       //   - version 跟远端不一致 (用户在别处已编辑)
       //   - 评论已有回复 (跟 web UI 同步规则)
       //   - 当前 PAT 不是作者本人
-      // 错误体已经在 BBClientError.message 里带，直接抛给 renderer 显示原文
+      // 错误体已经在 BitbucketClientError.message 里带，直接抛给 renderer 显示原文
       await adapter.deleteComment(
         { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
         pr.remoteId,
@@ -291,7 +291,7 @@ export function registerIpcHandlers({
       const pr = await findPrOrThrow(req.localId);
       const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
-      // BBS 409 (version 不一致) 时 BBClientError.message 会带 "expected version X"
+      // Bitbucket 409 (version 不一致) 时 BitbucketClientError.message 会带 "expected version X"
       // 这种细节，原样抛给 renderer 显示让用户知道"远端有新版本"
       const updated = await adapter.editComment(
         { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
@@ -326,7 +326,7 @@ export function registerIpcHandlers({
         const pr = await findPrOrThrow(req.localId);
         const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
         if (!adapter) return null;
-        // 传 pr.repo 给 adapter — BBS 的 attachment: 协议需要 repo 上下文拼 URL
+        // 传 pr.repo 给 adapter — Bitbucket 的 attachment: 协议需要 repo 上下文拼 URL
         const res = await adapter.getAttachment(req.url, pr.repo);
         if (!res) return null;
         const base64 = Buffer.from(res.bytes).toString('base64');
@@ -372,7 +372,7 @@ export function registerIpcHandlers({
         // 文件不存在 / 读失败 → 走 fetch
       }
 
-      // 2) 没缓存 / 已过期：去 BBS 拉
+      // 2) 没缓存 / 已过期：去 Bitbucket 拉
       const adapter = connectionRuntime.adapters.find((a) => a.connectionId === req.connectionId)?.adapter;
       if (!adapter) {
         avatarMem.set(memKey, null);
@@ -481,7 +481,7 @@ export function registerIpcHandlers({
       const pr = await findPrOrThrow(req.localId);
       const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
-      // 先写远端：本地 status → BBS reviewer.status；失败抛出，前端不会看到本地变更
+      // 先写远端：本地 status → Bitbucket reviewer.status；失败抛出，前端不会看到本地变更
       const remoteStatus =
         req.status === 'approved'
           ? 'approved'
@@ -591,7 +591,7 @@ export function registerIpcHandlers({
   );
 
   // In-flight dedup: 打开 PR 时 MainPane / DiffView / CommentsPanel 三个组件
-  // 并行调 listComments(force:true)，没去重的话会打 3 次 BBS API。同一 localId
+  // 并行调 listComments(force:true)，没去重的话会打 3 次 Bitbucket API。同一 localId
   // 的 concurrent 调用合并到同一个 Promise，远端只打一次
   const listCommentsInFlight = new Map<string, Promise<PrComment[]>>();
   ipcMain.handle(
@@ -602,7 +602,7 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['diff:listComments']['response']> => {
       const pr = await findPrOrThrow(req.localId);
       // 缓存命中条件：pr_updated_at 跟当前 PR meta updatedAt 一致 → 直接回缓存，
-      // 不打远端。PR 任何变更 (新评论 / 状态等) BBS 都会更新 updatedAt，跳变即重拉。
+      // 不打远端。PR 任何变更 (新评论 / 状态等) Bitbucket 都会更新 updatedAt，跳变即重拉。
       //
       // **req.force=true** 跳过 cache 直接打远端 — 本地 PR.updatedAt 来自 poller
       // 周期拉，可能滞后，stale 比对会误判命中。打开 PR 时 renderer 传 force=true
@@ -787,7 +787,7 @@ export function registerIpcHandlers({
         //   1. 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但
         //      /ask 走 [pr_questions] 配置段不那么严格遵守，必须显式 prompt 强化
         //   2. PR 上下文 (title / description / 已有评论)：local provider 自己不会
-        //      去 BBS 拉这些，必须我们这边喂；让 /describe /review 不只是看 diff
+        //      去 Bitbucket 拉这些，必须我们这边喂；让 /describe /review 不只是看 diff
         //   3. 规则正文 (rules.dir 命中)：项目编码规约
         // /ask 只取 1 (语言)，跳 2/3 (用户问题往往跟历史评论 / 规约无关)
         const langDirective = languageDirectiveFor(bootstrap.config.language);
@@ -1311,9 +1311,9 @@ export function registerIpcHandlers({
           // - draft.anchor 没有 lineType (草稿创建时不知道这一行的 diff 角色)，
           //   按 side 做保守映射：new→added / old→removed。meebox 的草稿大多锚到
           //   变更行 (finding 来自 /review 的 issue + DraftZone hover '+' 也只对
-          //   变更行可见)，context 行评论场景极少。命中 context 时 BBS 回 400，
+          //   变更行可见)，context 行评论场景极少。命中 context 时 Bitbucket 回 400，
           //   错误会被 catch 收到 results 里给用户看
-          // - 多行 (endLine > startLine) 在 BBS REST 里无法表达 (anchor.line 是单
+          // - 多行 (endLine > startLine) 在 Bitbucket REST 里无法表达 (anchor.line 是单
           //   行)。落到 endLine 而不是 startLine：评论会出现在标注范围**下方**，
           //   不打断用户从上往下阅读时已经看过的代码上下文。renderer 端 DraftZone
           //   仍按 startLine 渲染 (跟 finding/AI 建议触发位置一致)，发布完远端
@@ -1329,7 +1329,7 @@ export function registerIpcHandlers({
             },
             draft.body,
           );
-          // 发布成功 = 本地草稿使命完成，直接删掉保持草稿池干净。远端 BBS 评论
+          // 发布成功 = 本地草稿使命完成，直接删掉保持草稿池干净。远端 Bitbucket 评论
           // 会通过下面的 force-refresh comments 拉回，UI 上由 CommentZone 承接显示，
           // 不需要本地再留一份 'posted' 副本造成重复 (跟远端评论 zone 视觉打架)
           await deleteDraft(stateStore, req.localId, draftId);
@@ -1348,7 +1348,7 @@ export function registerIpcHandlers({
       // 整批跑完统一广播 — drafts 列表更新刷 DraftZone status chip + FindingCard
       broadcastDraftsChanged(req.localId);
 
-      // 至少有一条发成功 → force-refresh BBS 评论：清缓存 + 广播 comments:changed
+      // 至少有一条发成功 → force-refresh Bitbucket 评论：清缓存 + 广播 comments:changed
       // 让 CommentsPanel / DiffView 内嵌评论立即看到自己刚发的，不用等下一轮 poller
       if (anyPublished) {
         try {
@@ -1631,9 +1631,9 @@ function languageDirectiveFor(lang: string): string {
  * 给每条评论 (含 replies 子树) 打 canDelete / canEdit 标志。
  *
  * - canDelete: author.name === 当前 PAT 用户 && 无 reply && 有 version
- *   (BBS 拒删带 reply 的；DELETE 必带 version 乐观锁)
+ *   (Bitbucket 拒删带 reply 的；DELETE 必带 version 乐观锁)
  * - canEdit:   author.name === 当前 PAT 用户 && 有 version
- *   (BBS 允许编辑带 reply 的评论；PUT 也带 version)
+ *   (Bitbucket 允许编辑带 reply 的评论；PUT 也带 version)
  *
  * 当前用户拿不到 (ping 未完成 / 失败) → 全部 false。renderer 直读 flag 不再
  * 自己比对 author / version / replies，链路最短最稳。
@@ -1691,6 +1691,7 @@ function buildConnectionSummaries(
       connectionId,
       displayName: conn?.display_name ?? connectionId,
       user: adapter.getCurrentUser(),
+      capabilities: adapter.capabilities(),
     };
   });
 }

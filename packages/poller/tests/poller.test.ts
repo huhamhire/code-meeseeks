@@ -34,6 +34,19 @@ class FakeAdapter implements PlatformAdapter {
   getCurrentUser() {
     return this.currentUser;
   }
+  capabilities() {
+    return {
+      reviewStatuses: ['approved', 'needsWork', 'unapproved'] as const,
+      inlineComments: true,
+      inlineMultiline: true,
+      commentOptimisticLock: true,
+      mergeVetoFidelity: 'full' as const,
+      discoveryRateLimited: false,
+      resolvableThreads: false,
+      suggestions: false,
+      reviewGrouping: false,
+    };
+  }
   async ping() {
     if (this.failPing) throw new Error('ping fail');
     return { ok: true, serverVersion: 'fake' };
@@ -226,6 +239,17 @@ describe('Poller.tick', () => {
     let resolveList: ((v: PullRequest[]) => void) | undefined;
     const slow: PlatformAdapter = {
       kind: 'bitbucket-server',
+      capabilities: () => ({
+        reviewStatuses: ['approved', 'needsWork', 'unapproved'],
+        inlineComments: true,
+        inlineMultiline: true,
+        commentOptimisticLock: true,
+        mergeVetoFidelity: 'full',
+        discoveryRateLimited: false,
+        resolvableThreads: false,
+        suggestions: false,
+        reviewGrouping: false,
+      }),
       async ping() {
         return { ok: true };
       },
@@ -371,7 +395,7 @@ describe('Poller.tick', () => {
     expect(stored[0]!.connectionId).toBe('broken');
   });
 
-  // localStatus 直接镜像 BBS reviewer.status，是远端权威态的本地缓存。
+  // localStatus 直接镜像 Bitbucket reviewer.status，是远端权威态的本地缓存。
   // hasConflict 不影响 localStatus（仅作为独立维度，UI 通过 hasConflict 单独筛选）。
 
   it('preserves hasConflict=true on new PR without changing localStatus', async () => {
@@ -437,14 +461,14 @@ describe('Poller.tick', () => {
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
 
-    // BBS 上 kyle 点了 approve
+    // Bitbucket 上 kyle 点了 approve
     adapter.setPrs([
       { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }] },
     ]);
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('approved');
 
-    // BBS 上 kyle 撤销，回到 pending
+    // Bitbucket 上 kyle 撤销，回到 pending
     adapter.setPrs([
       { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }] },
     ]);

@@ -16,27 +16,32 @@
 
 ## 阶段拆分
 
-### Phase 0 · 抽象基线（不接平台，先补接缝 + 用 BBS 验证）
+### Phase 0 · 抽象基线（不接平台，先补接缝 + 用 Bitbucket 验证）
 
-- [ ] `platform.ts`：新增 `PlatformCapabilities`（`reviewStatuses / inlineComments / inlineMultiline /
+- [x] `platform.ts`：新增 `PlatformCapabilities`（`reviewStatuses / inlineComments / inlineMultiline /
       commentOptimisticLock / mergeVetoFidelity / discoveryRateLimited / resolvableThreads / suggestions /
       reviewGrouping`）；`PlatformAdapter` 增 `capabilities(): PlatformCapabilities`。
-- [ ] `platform.ts`：新增 `PrDiffRefs { headSha; baseSha; startSha? }`；`PrComment` 增 `kind? / threadId? / nativeId?`
-      （`version?` 维持可选，标注 BBS 专属）。
+- [x] `platform.ts`：新增 `PrDiffRefs { headSha; baseSha; startSha? }`；`PrComment` 增 `kind? / threadId? / nativeId?`
+      （`version?` 维持可选，标注 Bitbucket 专属）。
 - [ ] `publishInlineComment`：定为「adapter 内部按 prId 拉 PR 取 diff refs」（GitHub head sha / GitLab diff_refs），
-      避免改所有调用方；BBS 实现忽略。（备选：调用方传 `PrDiffRefs`，churn 更大，不选。）
-- [ ] BBS adapter 实现 `capabilities()`（全能力：三态审批、inline 多行、乐观锁、veto full、resolvable/suggestions=false、
+      避免改所有调用方；Bitbucket 实现忽略。（备选：调用方传 `PrDiffRefs`，churn 更大，不选。）
+      —— 方案已定（`PrDiffRefs` 类型就位）；具体取数留到建 GitHub adapter 时落地。
+- [x] Bitbucket adapter 实现 `capabilities()`（全能力：三态审批、inline 多行、乐观锁、veto full、resolvable/suggestions=false、
       reviewGrouping=false），**行为零变化**。
-- [ ] 能力下发渲染层：`ConnectionSummary`（`app:connections`）增 `capabilities`，App 已把它读进 `boot.connections`，
-      UI 按 `pr.connectionId → capabilities` 做门控。
+- [x] 能力下发渲染层：`ConnectionSummary`（`app:connections`）增 `capabilities`（main 端从 adapter 取）。
+      UI 按 `pr.connectionId → capabilities` 的门控放到 Phase 4。
 - [ ] **contract 测试套件**：抽一组「接口契约」用例（评论往返 / inline 锚点 / 合并判定 / 审批 / 提交 newest-first），
-      先用 BBS（fixtures / 录制）跑通，作为后续 GitHub 的验收基线。
+      先用 Bitbucket（fixtures / 录制）跑通，作为后续 GitHub 的验收基线。
+
+> Phase 0 进度（截至当前）：抽象类型 + `capabilities()` + Bitbucket 实现 + 能力下发已落地，
+> typecheck / test / lint 全绿；附带把全仓 `BBS / BB*` 缩写统一为 `Bitbucket`。剩 `publishInlineComment`
+> 取数（随 GitHub adapter）与 contract 测试套件。
 
 ### Phase 1 · 配置 + 接线（让 `'github'` kind 可配、可建 adapter）
 
 - [ ] `config.ts`：新增 `GitHubConnectionSchema`（`kind:'github'`、`base_url`（github.com 默认 `https://api.github.com`，
       GHE 填实例 API base）、`auth.pat`、`clone.protocol`）；`ConnectionSchema` discriminatedUnion 加入它。
-- [ ] 新建包 `@meebox/platform-github`（镜像 BBS 包结构 `src/{adapter,client,index}.ts` + `tests/`）。
+- [ ] 新建包 `@meebox/platform-github`（镜像 Bitbucket 包结构 `src/{adapter,client,index}.ts` + `tests/`）。
 - [ ] `adapters.ts`：`buildAdapters` / `buildDraftAdapter` 加 `case 'github'`（穷尽 switch 的 `never` 守卫保留）。
 - [ ] 配置 UI：[PlatformIcon.tsx](../../apps/desktop/src/renderer/src/components/PlatformIcon.tsx) GitHub `available:true`；
       [ConnectionForm.tsx](../../apps/desktop/src/renderer/src/components/ConnectionForm.tsx) 按 kind 调整字段提示
@@ -114,4 +119,4 @@
 - 配 GitHub 连接（github.com 与 GHE 各一）→ 待我评审 PR 自动出现在列表。
 - 选中 PR：diff/评论正常；`/review` 生成 findings；草稿确认后 inline 评论成功发布并回刷。
 - 审批「通过 / 需修改」写到远端并回读；可合并时一键合并；不可用动作按 §9 灰显/隐藏 + 原因。
-- BBS 路径回归无变化；`@meebox/platform-github` 过 contract 套件。
+- Bitbucket 路径回归无变化；`@meebox/platform-github` 过 contract 套件。

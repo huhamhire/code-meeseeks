@@ -2,6 +2,7 @@ import type {
   MergeStatus,
   PingResult,
   PlatformAdapter,
+  PlatformCapabilities,
   PlatformUser,
   PrComment,
   PrCommentAnchor,
@@ -11,9 +12,9 @@ import type {
   Reviewer,
   ReviewerStatus,
 } from '@meebox/shared';
-import { BBClient, type BBClientOptions } from './client.js';
+import { BitbucketClient, type BitbucketClientOptions } from './client.js';
 
-interface BBUser {
+interface BitbucketUser {
   name: string;
   displayName: string;
   emailAddress?: string;
@@ -21,7 +22,7 @@ interface BBUser {
   slug: string;
 }
 
-interface BBRef {
+interface BitbucketRef {
   id: string;
   displayId: string;
   latestCommit: string;
@@ -33,14 +34,14 @@ interface BBRef {
   };
 }
 
-interface BBParticipant {
-  user: BBUser;
+interface BitbucketParticipant {
+  user: BitbucketUser;
   role: 'AUTHOR' | 'REVIEWER' | 'PARTICIPANT';
   approved: boolean;
   status?: 'UNAPPROVED' | 'APPROVED' | 'NEEDS_WORK';
 }
 
-interface BBPullRequest {
+interface BitbucketPullRequest {
   id: number;
   version: number;
   title: string;
@@ -51,38 +52,38 @@ interface BBPullRequest {
   draft?: boolean;
   createdDate: number;
   updatedDate: number;
-  fromRef: BBRef;
-  toRef: BBRef;
-  author: BBParticipant;
-  reviewers: BBParticipant[];
+  fromRef: BitbucketRef;
+  toRef: BitbucketRef;
+  author: BitbucketParticipant;
+  reviewers: BitbucketParticipant[];
   links: { self: Array<{ href: string }> };
 }
 
-interface BBApplicationProperties {
+interface BitbucketApplicationProperties {
   version: string;
   buildNumber: string;
   displayName: string;
 }
 
-interface BBMergeStatus {
+interface BitbucketMergeStatus {
   canMerge: boolean;
   conflicted: boolean;
   outcome: 'CLEAN' | 'CONFLICTED' | 'CONFLICTED_AND_AHEAD' | string;
   vetoes?: Array<{ summaryMessage: string; detailedMessage?: string }>;
 }
 
-interface BBComment {
+interface BitbucketComment {
   id: number;
   version: number;
   text: string;
-  author: BBUser;
+  author: BitbucketUser;
   createdDate: number;
   updatedDate: number;
-  comments?: BBComment[];
+  comments?: BitbucketComment[];
   parent?: { id: number };
 }
 
-interface BBCommentAnchor {
+interface BitbucketCommentAnchor {
   diffType?: 'EFFECTIVE' | 'COMMIT' | 'RANGE';
   // line / lineType 对文件级评论（挂在文件而非具体行）或孤儿 anchor（锚定行已不存在）
   // 可能缺省 —— 标可选，mapBBAnchor 据此降级，避免读 undefined.toLowerCase 崩
@@ -93,9 +94,9 @@ interface BBCommentAnchor {
   srcPath?: string;
 }
 
-interface BBCommit {
+interface BitbucketCommit {
   id: string;            // 40-char SHA
-  displayId: string;     // 短 SHA (BBS 默认 7-12 chars)
+  displayId: string;     // 短 SHA (Bitbucket 默认 7-12 chars)
   message: string;       // 完整 commit message
   author: { name: string; emailAddress?: string };
   authorTimestamp: number;          // epoch ms
@@ -104,50 +105,68 @@ interface BBCommit {
   parents: Array<{ id: string; displayId: string }>;
 }
 
-interface BBActivity {
+interface BitbucketActivity {
   id: number;
   createdDate: number;
-  user: BBUser;
+  user: BitbucketUser;
   action: string;
   commentAction?: 'ADDED' | 'UPDATED' | 'DELETED' | 'REPLIED';
-  comment?: BBComment;
-  commentAnchor?: BBCommentAnchor;
+  comment?: BitbucketComment;
+  commentAnchor?: BitbucketCommentAnchor;
 }
 
 const MIN_VERSION: readonly [number, number, number] = [7, 0, 0];
 
-export interface BitbucketServerAdapterOptions extends BBClientOptions {
+export interface BitbucketServerAdapterOptions extends BitbucketClientOptions {
   /** clone 协议：'pat'（默认）走 HTTPS+用户名:PAT；'ssh' 走系统 ssh 配置 */
   cloneProtocol?: 'pat' | 'ssh';
 }
 
 export class BitbucketServerAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
-  private readonly client: BBClient;
+  private readonly client: BitbucketClient;
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly cloneProtocol: 'pat' | 'ssh';
   private cachedUser: PlatformUser | null = null;
 
   constructor(opts: BitbucketServerAdapterOptions) {
-    this.client = new BBClient(opts);
+    this.client = new BitbucketClient(opts);
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.token = opts.token;
     this.cloneProtocol = opts.cloneProtocol ?? 'pat';
   }
 
   /**
+   * Bitbucket Server 能力：三态审批、行内多行评论、删改乐观锁、否决项逐条（/merge vetoes）。
+   * 无「解决线程 / 代码 suggestion / pending-review 成组」概念；dashboard 发现不强限流。
+   */
+  capabilities(): PlatformCapabilities {
+    return {
+      reviewStatuses: ['approved', 'needsWork', 'unapproved'],
+      inlineComments: true,
+      inlineMultiline: true,
+      commentOptimisticLock: true,
+      mergeVetoFidelity: 'full',
+      discoveryRateLimited: false,
+      resolvableThreads: false,
+      suggestions: false,
+      reviewGrouping: false,
+    };
+  }
+
+  /**
    * 返回 clone URL，行为按 cloneProtocol 切分：
    *
    * **pat（默认）**: `https://<当前用户名>:<PAT>@<host>/scm/<proj>/<repo>.git`
-   * - BBS Server 的 PAT 鉴权要求真实用户名 (X-AUSERNAME) 作为 username，
+   * - Bitbucket Server 的 PAT 鉴权要求真实用户名 (X-AUSERNAME) 作为 username，
    *   PAT 作为 password（不是 Bitbucket Cloud 的 x-token-auth）
    * - 调用前必须先 ping() 让 cachedUser 落地，否则抛
    * - 风险提示：PAT 在 URL 里会出现在 git reflog / 进程命令行，敏感场景请用 ssh
    *
    * **ssh**: `git@<host>:<proj>/<repo>.git` (scp-like)
    * - 端口 / 私钥 / username 完全由系统 `~/.ssh/config` 负责
-   * - BBS Server 默认 SSH 端口 7999，需在 ssh config 里给 host 配 Port
+   * - Bitbucket Server 默认 SSH 端口 7999，需在 ssh config 里给 host 配 Port
    */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     const u = new URL(this.baseUrl);
@@ -168,7 +187,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
   }
 
   async ping(): Promise<PingResult> {
-    const { body: props, headers } = await this.client.getWithHeaders<BBApplicationProperties>(
+    const { body: props, headers } = await this.client.getWithHeaders<BitbucketApplicationProperties>(
       '/rest/api/1.0/application-properties',
     );
 
@@ -176,7 +195,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     const slug = headers.get('x-ausername');
     if (slug) {
       try {
-        const u = await this.client.get<BBUser>(
+        const u = await this.client.get<BitbucketUser>(
           `/rest/api/1.0/users/${encodeURIComponent(slug)}`,
         );
         this.cachedUser = { name: u.name, displayName: u.displayName, slug: u.slug };
@@ -203,22 +222,22 @@ export class BitbucketServerAdapter implements PlatformAdapter {
   }
 
   async listPendingPullRequests(): Promise<PullRequest[]> {
-    const bbPrs: BBPullRequest[] = [];
-    for await (const pr of this.client.paginate<BBPullRequest>(
+    const bitbucketPrs: BitbucketPullRequest[] = [];
+    for await (const pr of this.client.paginate<BitbucketPullRequest>(
       '/rest/api/1.0/dashboard/pull-requests',
       { role: 'REVIEWER', state: 'OPEN' },
     )) {
-      bbPrs.push(pr);
+      bitbucketPrs.push(pr);
     }
 
     // N+1：并行抓每个 PR 的 /merge 状态拿 canMerge / conflicted / vetoes（同源一次拉全）。
     // 单个失败降级到"无已知阻塞"（canMerge=true / 无冲突 / 无 vetoes）—— 跟原 hasConflict
     // 失败降级语义一致，保守不误标。
     const mergeResults = await Promise.allSettled(
-      bbPrs.map((pr) => this.fetchMergeStatus(pr)),
+      bitbucketPrs.map((pr) => this.fetchMergeStatus(pr)),
     );
 
-    return bbPrs.map((pr, i) => {
+    return bitbucketPrs.map((pr, i) => {
       const result = mergeResults[i]!;
       const mergeStatus =
         result.status === 'fulfilled'
@@ -228,10 +247,10 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     });
   }
 
-  private async fetchMergeStatus(pr: BBPullRequest): Promise<BBMergeStatus> {
+  private async fetchMergeStatus(pr: BitbucketPullRequest): Promise<BitbucketMergeStatus> {
     const project = pr.toRef.repository.project.key;
     const repo = pr.toRef.repository.slug;
-    return this.client.get<BBMergeStatus>(
+    return this.client.get<BitbucketMergeStatus>(
       `/rest/api/1.0/projects/${project}/repos/${repo}/pull-requests/${String(pr.id)}/merge`,
     );
   }
@@ -240,7 +259,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     url: string,
     repo?: RepoRef,
   ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
-    // host 解析 + BBS attachment: 协议处理 + PAT 鉴权拉取都在 BBClient 里完成，
+    // host 解析 + Bitbucket attachment: 协议处理 + PAT 鉴权拉取都在 BitbucketClient 里完成，
     // adapter 只是 thin wrapper
     return this.client.getAttachmentBinary(url, repo);
   }
@@ -251,10 +270,10 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     parentCommentId: string,
     body: string,
   ): Promise<PrComment> {
-    // BBS REST: POST /pull-requests/{id}/comments
+    // Bitbucket REST: POST /pull-requests/{id}/comments
     //   body 内 text + parent.id → 作为已有评论的 reply
     //   不带 anchor — reply 继承父评论的 anchor (inline 跟 summary 行为一致)
-    const created = await this.client.post<BBComment>(
+    const created = await this.client.post<BitbucketComment>(
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments`,
       { text: body, parent: { id: Number(parentCommentId) } },
     );
@@ -267,7 +286,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     commentId: string,
     version: number,
   ): Promise<void> {
-    // BBS REST: DELETE /pull-requests/{id}/comments/{cid}?version={v}
+    // Bitbucket REST: DELETE /pull-requests/{id}/comments/{cid}?version={v}
     // - version 必填 (乐观锁)，不一致回 409 + 描述 "expected version X"
     // - 已有 reply / 自己不是作者 / 评论已删 都回 409 或 403，错误体 client 已带回
     // - 成功 204 No Content
@@ -283,17 +302,17 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     version: number,
     body: string,
   ): Promise<PrComment> {
-    // BBS REST: PUT /pull-requests/{id}/comments/{cid}
+    // Bitbucket REST: PUT /pull-requests/{id}/comments/{cid}
     //   payload {text, version}
     // - version 不一致回 409；自己不是作者回 403；空 body 回 400
-    // - 成功 200 返回更新后的 BBComment (含 version+1 + 新 updatedDate)
-    const updated = await this.client.put<BBComment>(
+    // - 成功 200 返回更新后的 BitbucketComment (含 version+1 + 新 updatedDate)
+    const updated = await this.client.put<BitbucketComment>(
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments/${commentId}`,
       { text: body, version },
     );
     if (!updated) {
-      // PUT 接口正常返回 JSON；走到这里只可能是上游 BBS 配错回了 204
-      throw new Error('editComment: BBS 返回空响应，无法确认更新结果');
+      // PUT 接口正常返回 JSON；走到这里只可能是上游 Bitbucket 配错回了 204
+      throw new Error('editComment: Bitbucket 返回空响应，无法确认更新结果');
     }
     return mapBBComment(updated);
   }
@@ -304,14 +323,14 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     anchor: PrCommentAnchor,
     body: string,
   ): Promise<PrComment> {
-    // BBS REST: POST /pull-requests/{id}/comments
+    // Bitbucket REST: POST /pull-requests/{id}/comments
     //   {text, anchor:{path, line, lineType, fileType, srcPath?, diffType?}}
     // - line + lineType + fileType 三元组必须跟该行在 diff 里的真实角色一致
     //   (added 行只能 lineType=ADDED + fileType=TO；removed 行只能 REMOVED+FROM；
-    //   context 行可 CONTEXT+TO/FROM 任一)。对不上 BBS 回 400 'invalid anchor'
-    // - diffType=EFFECTIVE 是 BBS web UI 默认值，等价 'against effective diff'，
-    //   不带 BBS 会按 RANGE 兜底 (against latest commit)，PR 接 force-push 后会失锚
-    const created = await this.client.post<BBComment>(
+    //   context 行可 CONTEXT+TO/FROM 任一)。对不上 Bitbucket 回 400 'invalid anchor'
+    // - diffType=EFFECTIVE 是 Bitbucket web UI 默认值，等价 'against effective diff'，
+    //   不带 Bitbucket 会按 RANGE 兜底 (against latest commit)，PR 接 force-push 后会失锚
+    const created = await this.client.post<BitbucketComment>(
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments`,
       { text: body, anchor: toBBAnchor(anchor) },
     );
@@ -321,7 +340,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
   async getUserAvatar(
     slug: string,
   ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
-    // BBS user slug 总是小写；comments / activities 端点的 author 经常带回大小写
+    // Bitbucket user slug 总是小写；comments / activities 端点的 author 经常带回大小写
     // 混合的 name (如 "Avery.Lee") 而不附 slug 字段，调用方退回 name 时大小写
     // 不一致会 404。先按原值试，失败再小写一次。
     const candidates =
@@ -339,10 +358,10 @@ export class BitbucketServerAdapter implements PlatformAdapter {
   }
 
   /**
-   * 把当前 PAT 用户在 PR 上的 review 状态写到 BBS。底层走
+   * 把当前 PAT 用户在 PR 上的 review 状态写到 Bitbucket。底层走
    * `PUT /pull-requests/{id}/participants/{userSlug}`，body 携带 status + user.name。
    *
-   * - status: 'approved' → BBS 'APPROVED'；'needsWork' → 'NEEDS_WORK'；
+   * - status: 'approved' → Bitbucket 'APPROVED'；'needsWork' → 'NEEDS_WORK'；
    *   'unapproved' → 'UNAPPROVED'（撤销之前的标记，回到 pending）
    * - 必须 ping() 已经跑过且 cachedUser 落地；否则抛
    */
@@ -358,33 +377,33 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       );
     }
     const slug = me.slug ?? me.name;
-    const bbStatus =
+    const bitbucketStatus =
       status === 'approved' ? 'APPROVED' : status === 'needsWork' ? 'NEEDS_WORK' : 'UNAPPROVED';
     await this.client.put(
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/participants/${encodeURIComponent(slug)}`,
-      { status: bbStatus, user: { name: me.name } },
+      { status: bitbucketStatus, user: { name: me.name } },
     );
   }
 
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {
     const base = `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}`;
     // 合并需要当前 PR version (乐观锁)；先拉最新 PR 拿 version，避免缓存旧值触发 409
-    const pr = await this.client.get<BBPullRequest>(base);
-    // POST .../merge?version=N；body 留空。冲突 / veto 未通过 / 无权限 → BBS 回 409/403，
+    const pr = await this.client.get<BitbucketPullRequest>(base);
+    // POST .../merge?version=N；body 留空。冲突 / veto 未通过 / 无权限 → Bitbucket 回 409/403，
     // client 抛错冒泡给上层
     await this.client.post(`${base}/merge?version=${String(pr.version)}`, {});
   }
 
   /**
-   * 列出 PR commits。BBS endpoint：
+   * 列出 PR commits。Bitbucket endpoint：
    *   GET /rest/api/1.0/projects/{p}/repos/{r}/pull-requests/{id}/commits
    *
-   * 默认 newest first (跟 git log 一致)；BBS 分页接口我们已有 paginate iterator，
+   * 默认 newest first (跟 git log 一致)；Bitbucket 分页接口我们已有 paginate iterator，
    * 一次性收集全部。规模考虑：PR 通常几十个 commit，不分页问题不大。
    */
   async listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]> {
     const out: PrCommit[] = [];
-    for await (const c of this.client.paginate<BBCommit>(
+    for await (const c of this.client.paginate<BitbucketCommit>(
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/commits`,
     )) {
       out.push(mapBBCommit(c, this.baseUrl, repo));
@@ -393,13 +412,13 @@ export class BitbucketServerAdapter implements PlatformAdapter {
   }
 
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
-    // BBS 走 /activities 拿全部活动，过滤 COMMENTED + ADDED（top-level + 回复）。
+    // Bitbucket 走 /activities 拿全部活动，过滤 COMMENTED + ADDED（top-level + 回复）。
     // - 跳过 DELETED / UPDATED 派生事件
     // - 跳过 reply（有 parent 字段），它们会跟着父评论的 .comments 一起出来
     // - 用 id 去重，防同一条评论多次出现
     const seen = new Set<string>();
     const out: PrComment[] = [];
-    for await (const activity of this.client.paginate<BBActivity>(
+    for await (const activity of this.client.paginate<BitbucketActivity>(
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/activities`,
     )) {
       if (activity.action !== 'COMMENTED') continue;
@@ -416,16 +435,16 @@ export class BitbucketServerAdapter implements PlatformAdapter {
   }
 }
 
-function mapBBCommit(c: BBCommit, baseUrl: string, repo: RepoRef): PrCommit {
-  // BBS commit URL：/projects/<p>/repos/<r>/commits/<sha>
+function mapBBCommit(c: BitbucketCommit, baseUrl: string, repo: RepoRef): PrCommit {
+  // Bitbucket commit URL：/projects/<p>/repos/<r>/commits/<sha>
   const url = `${baseUrl}/projects/${repo.projectKey}/repos/${repo.repoSlug}/commits/${c.id}`;
   return {
     sha: c.id,
     abbreviatedSha: c.displayId,
     message: c.message,
-    author: bbCommitterToUser(c.author),
+    author: bitbucketCommitterToUser(c.author),
     authoredAt: new Date(c.authorTimestamp).toISOString(),
-    committer: bbCommitterToUser(c.committer),
+    committer: bitbucketCommitterToUser(c.committer),
     committedAt: new Date(c.committerTimestamp).toISOString(),
     parents: c.parents.map((p) => p.id),
     url,
@@ -433,15 +452,15 @@ function mapBBCommit(c: BBCommit, baseUrl: string, repo: RepoRef): PrCommit {
 }
 
 /**
- * BBS commit 的 author/committer 只给 name (含 email)，没有 slug / displayName，
+ * Bitbucket commit 的 author/committer 只给 name (含 email)，没有 slug / displayName，
  * 跟 PlatformUser 字段对不齐。这里把 name 同时当 name + displayName 用，slug 留空。
  * UI 头像会 fallback 到 initials；email 字段我们当前 PlatformUser 没存，先丢弃。
  */
-function bbCommitterToUser(c: { name: string; emailAddress?: string }): PlatformUser {
+function bitbucketCommitterToUser(c: { name: string; emailAddress?: string }): PlatformUser {
   return { name: c.name, displayName: c.name };
 }
 
-function mapBBComment(c: BBComment, anchor?: BBCommentAnchor): PrComment {
+function mapBBComment(c: BitbucketComment, anchor?: BitbucketCommentAnchor): PrComment {
   return {
     remoteId: String(c.id),
     author: mapUser(c.author),
@@ -450,12 +469,12 @@ function mapBBComment(c: BBComment, anchor?: BBCommentAnchor): PrComment {
     updatedAt: new Date(c.updatedDate).toISOString(),
     anchor: anchor ? mapBBAnchor(anchor) : null,
     replies: (c.comments ?? []).map((r) => mapBBComment(r)),
-    // 透传 BBS 乐观锁版本号 — DELETE / PUT 时调用方必须带回来，否则 409
+    // 透传 Bitbucket 乐观锁版本号 — DELETE / PUT 时调用方必须带回来，否则 409
     version: c.version,
   };
 }
 
-function mapBBAnchor(a: BBCommentAnchor): PrCommentAnchor | null {
+function mapBBAnchor(a: BitbucketCommentAnchor): PrCommentAnchor | null {
   // 无行号 = 文件级 / 孤儿 anchor，无法锚到具体行 → 返回 null，调用方退化成 summary 评论
   if (a.line == null) return null;
   return {
@@ -468,26 +487,26 @@ function mapBBAnchor(a: BBCommentAnchor): PrCommentAnchor | null {
 }
 
 /**
- * 跨平台中性 anchor → BBS REST 字段。mapBBAnchor 的反方向，发布 inline 评论时
+ * 跨平台中性 anchor → Bitbucket REST 字段。mapBBAnchor 的反方向，发布 inline 评论时
  * 用。diffType 显式给 'EFFECTIVE' 让评论锚到"当前生效 diff"而不是某次具体 commit
  * —— PR 后续 push 新 commit 时评论仍跟着行走。
  */
-function toBBAnchor(a: PrCommentAnchor): BBCommentAnchor {
+function toBBAnchor(a: PrCommentAnchor): BitbucketCommentAnchor {
   return {
     diffType: 'EFFECTIVE',
     path: a.path,
     line: a.line,
-    lineType: a.lineType.toUpperCase() as BBCommentAnchor['lineType'],
+    lineType: a.lineType.toUpperCase() as BitbucketCommentAnchor['lineType'],
     fileType: a.side === 'old' ? 'FROM' : 'TO',
   };
 }
 
-function mapUser(u: BBUser): PlatformUser {
+function mapUser(u: BitbucketUser): PlatformUser {
   return { name: u.name, displayName: u.displayName, slug: u.slug };
 }
 
-function mapReviewer(p: BBParticipant): Reviewer {
-  // status 是 BBS 7.x+ 才有的字段；缺失时退回 approved 布尔
+function mapReviewer(p: BitbucketParticipant): Reviewer {
+  // status 是 Bitbucket 7.x+ 才有的字段；缺失时退回 approved 布尔
   let status: ReviewerStatus;
   if (p.status === 'APPROVED') status = 'approved';
   else if (p.status === 'NEEDS_WORK') status = 'needsWork';
@@ -496,8 +515,8 @@ function mapReviewer(p: BBParticipant): Reviewer {
   return { ...mapUser(p.user), status };
 }
 
-/** BBS `/merge` 响应 → 中性 MergeStatus。vetoes 缺省时归一成空数组。 */
-function mapMergeStatus(bb: BBMergeStatus): MergeStatus {
+/** Bitbucket `/merge` 响应 → 中性 MergeStatus。vetoes 缺省时归一成空数组。 */
+function mapMergeStatus(bb: BitbucketMergeStatus): MergeStatus {
   return {
     canMerge: bb.canMerge,
     conflicted: bb.conflicted,
@@ -508,7 +527,7 @@ function mapMergeStatus(bb: BBMergeStatus): MergeStatus {
   };
 }
 
-function mapPullRequest(bb: BBPullRequest, mergeStatus: MergeStatus): PullRequest {
+function mapPullRequest(bb: BitbucketPullRequest, mergeStatus: MergeStatus): PullRequest {
   const url = bb.links.self[0]?.href ?? '';
   const targetRepo = bb.toRef.repository;
   return {
