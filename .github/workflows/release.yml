@@ -50,6 +50,33 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
+      # 有 Apple 凭据时才提升为签名 env（走正式签名 + 公证）；没有则一个都不设。
+      # 关键：不能把缺失的 secret 直接挂到 env —— 那样 CSC_LINK 会变成空串 ""，
+      # electron-builder 会把它当证书路径解析成 projectDir(apps/desktop) → "not a file" 报错。
+      # 无凭据时交给 afterPack 做 ad-hoc 签名（见文件头注释 + after-pack.cjs）。
+      - name: 准备 mac 签名凭据
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -n "$MAC_CSC_LINK" ]; then
+            {
+              echo "CSC_LINK=$MAC_CSC_LINK"
+              echo "CSC_KEY_PASSWORD=$MAC_CSC_KEY_PASSWORD"
+              echo "APPLE_API_KEY=$APPLE_API_KEY"
+              echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID"
+              echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
+            } >> "$GITHUB_ENV"
+            echo "检测到 Apple 凭据 → 正式签名 + 公证"
+          else
+            echo "无 Apple 凭据 → afterPack ad-hoc 签名（免费路线）"
+          fi
+
       - name: 构建 + 出包
         shell: bash # win/mac 统一用 bash，保证多行命令 fail-fast
         working-directory: apps/desktop
@@ -59,12 +86,9 @@ jobs:
           npm run notices           # 生成第三方声明，供 electron-builder 打入包
           npx electron-builder --publish never
         env:
-          # 有则走正式签名 + 公证，无则 afterPack ad-hoc（见文件头注释）
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # 无 CSC_LINK 时禁止 electron-builder 去钥匙串自动找签名身份（afterPack 已 ad-hoc）；
+          # 有真证书时走 CSC_LINK 导入签名，不受此项影响。
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: 生成 SHA256 校验和
         if: startsWith(github.ref, 'refs/tags/')
