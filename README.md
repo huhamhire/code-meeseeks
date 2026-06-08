@@ -28,7 +28,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 - 需要承担 code review 的工程师 / Tech Lead
 - 想用 AI 加速评审，但**不愿把决策权完全交给 bot**
-- 多在企业内网，使用自建 Bitbucket / GitLab / Gitea
+- 多在企业内网，使用自建 Bitbucket / GitLab
 
 ## 不是什么
 

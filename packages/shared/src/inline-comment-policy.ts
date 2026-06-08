@@ -3,7 +3,7 @@
  *
  * - Bitbucket Server / Data Center: 严格 — `/comments` 接口要求 anchor.line
  *   落在 diff hunk 范围内（含 context 行）。锚到 hunk 之外的行 BBS 直接 400。
- * - GitHub / GitLab / Gitea: 宽松 — diff 视图内任意行都能起评论
+ * - GitHub / GitLab: 宽松 — diff 视图内任意行都能起评论
  *   （GitHub 多文件 review comment 也是按 file:line 锚定但范围更宽松）。
  *
  * 把"哪一行能新增内联评论"抽象成 platform-specific policy，让 DiffView 渲染行
@@ -71,7 +71,7 @@ const bbsPolicy = makeContextRangePolicy(
   10,
 );
 
-/** 宽松 profile：任意行允许（GitHub / GitLab / Gitea） */
+/** 宽松 profile：任意行允许（GitHub / GitLab） */
 const permissivePolicy: InlineCommentPolicy = {
   label: '任意行可加评论',
   isLineAllowed: () => true,

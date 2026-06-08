@@ -314,7 +314,7 @@ export interface StoredPullRequest extends PullRequest {
   /**
    * 远端平台类型。让单个 meta.json 自描述，不依赖 prs/index.json 也能知道这条 PR
    * 来自什么平台 —— 跨存储迁移 / 备份 / 离线分析时友好。M3 起 BBS only；M5 接入
-   * GitHub / GitLab / Gitea 时无需改 schema
+   * GitHub / GitLab 时无需改 schema
    */
   platform: PlatformKind;
   connectionId: string;

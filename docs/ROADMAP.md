@@ -23,7 +23,7 @@
 
 - 需要承担 code review 的工程师 / Tech Lead
 - 希望用 AI 加速评审，但不愿把决策权完全交给 bot
-- 多在企业内网，使用自建 Bitbucket / GitLab / Gitea
+- 多在企业内网，使用自建 Bitbucket / GitLab
 
 ### 1.2 非目标
 
@@ -72,7 +72,7 @@
 ### 进行中 / 待办 ⏭️
 
 - **GitHub Adapter（下一步主线）**：先抽 `PlatformAdapter` 一致性测试套件锁定契约，再实现 GitHub
-  （公有云 + Enterprise Server）；GitLab / Gitea 按需。数据层多平台身份字段已预留。
+  （公有云 + Enterprise Server）；GitLab 按需。数据层多平台身份字段已预留。
 - **高阶 Agent 能力**：复杂任务分步规划 + 长期 Memory。
 - **AutoPilot 预评审**：轮询发现新 PR 后按规则自动预跑，进应用即见待确认草稿（决策权仍在评审者）。
 - **国际化（i18n）**：多语言界面，优先简体中文 / English。

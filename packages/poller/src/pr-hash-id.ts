@@ -3,17 +3,17 @@ import type { PlatformKind } from '@meebox/shared';
 
 /**
  * PR 在 meebox 状态体系里的稳定身份。多平台中性化字段，方便 M5 接入 GitHub /
- * GitLab / Gitea 时直接复用同一份 schema，不必各家自己造名:
+ * GitLab 时直接复用同一份 schema，不必各家自己造名:
  *
  *   platform × connection × group × repo × remoteId
  *
  * 字段语义映射 (各平台对齐到同一抽象):
- * | 抽象      | Bitbucket Server | GitHub             | GitLab          | Gitea          |
- * |-----------|------------------|--------------------|-----------------|----------------|
- * | platform  | bitbucket-server | github             | gitlab          | gitea          |
- * | group     | projectKey       | owner (org/user)   | namespace       | owner          |
- * | repo      | repoSlug         | name               | name            | name           |
- * | remoteId  | PR id (数字)     | PR number          | MR iid          | PR id          |
+ * | 抽象      | Bitbucket Server | GitHub             | GitLab          |
+ * |-----------|------------------|--------------------|-----------------|
+ * | platform  | bitbucket-server | github             | gitlab          |
+ * | group     | projectKey       | owner (org/user)   | namespace       |
+ * | repo      | repoSlug         | name               | name            |
+ * | remoteId  | PR id (数字)     | PR number          | MR iid          |
  *
  * `connectionId` 是 meebox 本地标识，跟用户在 config.yaml 里给某个连接起的 id
  * 一致；它的角色是"分账户/分凭据" (用户可能有两个 BBS 内网账号)，跟 platform 维度

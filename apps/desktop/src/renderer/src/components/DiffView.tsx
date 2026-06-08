@@ -1037,8 +1037,8 @@ export function DiffView({
   // 视觉：hover 行的 line decoration 显示淡蓝 '+'，鼠标 hover glyph 时浓蓝。
   // 点击 → drafts:create + autoEdit 触发立即进入编辑。
   //
-  // **Platform policy 过滤**：BBS 只允许 hunk 内的行加 inline comment；GitHub/GitLab/
-  // Gitea 宽松。从 diffEditor.getLineChanges() 拿 hunks，policy 判断每行是否 allowed。
+  // **Platform policy 过滤**：BBS 只允许 hunk 内的行加 inline comment；GitHub/GitLab
+  // 宽松。从 diffEditor.getLineChanges() 拿 hunks，policy 判断每行是否 allowed。
   // 不允许的行不画 glyph、点击也不创建草稿（避免后续 publishInline 时被 BBS 400）
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;

@@ -165,7 +165,7 @@ export interface PrComment {
 }
 
 /**
- * 跨平台代码托管适配器。一期只实现 Bitbucket Server；M5 扩 GitHub/GitLab/Gitea
+ * 跨平台代码托管适配器。一期只实现 Bitbucket Server；M5 扩 GitHub/GitLab
  * 时再补 diff / changes / comment / cloneUrl 等更多方法。
  *
  * 业务层（Poller / Publisher / Orchestrator）只依赖此接口，不导入具体 Adapter。

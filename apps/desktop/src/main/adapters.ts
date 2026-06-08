@@ -45,7 +45,7 @@ export function buildDraftAdapter(
 
 /**
  * 把 config.connections 映射成可用的 Adapter 列表。M1 只支持 bitbucket-server kind；
- * 未来扩 GitHub / GitLab / Gitea 时在 switch 里加 case 即可。
+ * 未来扩 GitHub / GitLab 时在 switch 里加 case 即可。
  * proxy 透传到每个 adapter 的 REST fetch。
  */
 export function buildAdapters(

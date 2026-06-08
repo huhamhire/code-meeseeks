@@ -4,7 +4,7 @@
 
 把「代码托管平台」的差异收口到一个统一抽象 `PlatformAdapter`，业务层（轮询、镜像、发布）
 只依赖该接口、不感知具体平台。当前仅实现 **Bitbucket Server / Data Center**（REST API v1，≥ 7.0）；
-GitHub / GitLab / Gitea 为后续扩展点。
+GitHub / GitLab 为后续扩展点。
 
 不负责：git 本地操作（见 [02](02-repo-mirror.md)）、pr-agent 调用（见 [04](04-pragent-runtime.md)）。
 
@@ -44,7 +44,7 @@ GitHub / GitLab / Gitea 为后续扩展点。
 
 ## 扩展与注意事项
 
-- **加 GitHub/GitLab/Gitea**：实现 `PlatformAdapter` + 在 `PrIdentity` 映射里落 `platform`/`group`/`repo`；
+- **加 GitHub/GitLab**：实现 `PlatformAdapter` + 在 `PrIdentity` 映射里落 `platform`/`group`/`repo`；
   发现/评论/合并端点各自实现，其余层不变。建议先补一套 adapter 一致性测试套件再开新平台。
 - **写路径有副作用**：合并不可逆、评论发布要幂等（发布成功落远端 id 防重发，见 [05](05-review-workflow.md)）。
 - **作者字段双名**：展示名（中文/真名）与登录名（英文 id）要分清——展示用前者，匹配「当前用户」用后者。
