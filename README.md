@@ -47,9 +47,13 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 - 📐 **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter），按项目 / 仓库 / 目标分支命中后注入评审。
 - ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
 - 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
-- 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等。
+- 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等；也可通过本机已授权的本地 CLI 工具调用第三方模型。
 
-> 界面预览待补（截图将放 `assets/images/`）。
+<div align="center">
+
+<img src="assets/images/screenshot.zh-CN.png" alt="Code Meeseeks 界面预览" width="900" />
+
+</div>
 
 ---
 
@@ -90,8 +94,8 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 | 平台 | 状态 |
 | --- | --- |
+| GitHub | ✅ 已验证（github.com + GitHub Enterprise Server，REST API v3） |
 | Bitbucket Server / Data Center | ✅ 已支持（REST API v1，>= 7.0） |
-| GitHub | 🚧 规划中 |
 | GitLab | 🚧 规划中 |
 
 ---
@@ -109,6 +113,9 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 | `volcengine-ark` | 火山方舟（Volcengine Ark，豆包） | ✅ 已验证 |
 | `ollama` | Ollama（本地模型） | 🚧 理论可行，未验证 |
 | `openai-compatible` | OpenAI API 协议兼容（vLLM / 中转 / 自建等） | 🚧 理论可行，未验证 |
+| `cli` | 通过本地 CLI 工具调用第三方模型 | ✅ 已验证 |
+
+> **本地 CLI 模式说明**：该模式不直连模型 API，而是把评审请求转交给使用者**自行安装并授权**的本地命令行工具，由其代为调用背后的第三方模型。需先在本机完成对应 CLI 工具的安装与登录授权，应用本身不负责其凭据管理与计费。
 
 ---
 
@@ -116,7 +123,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 围绕「让本地化、半自动评审更省心」展开的几个核心方向（排序不代表优先级，欢迎在 issue 中讨论）：
 
-- [ ] **多代码平台适配** —— 在统一适配层上扩展 GitHub、GitLab，自建与公有云托管一并接入。
+- [ ] **多代码平台适配** —— 在统一适配层上继续扩展 GitLab，自建与公有云托管一并接入（GitHub 已支持）。
 - [ ] **高阶 Agent 能力** —— 复杂任务的分步规划 + 长期 Memory，让评审从单轮问答走向可累积上下文、多步工具调用的协作。
 - [ ] **AutoPilot 预评审** —— 轮询发现新 PR 后按评审者配置的规则自动跑一遍预评审，进应用即见待确认草稿，省去逐个手动触发（决策权仍在评审者，发布前仍需确认）。
 - [ ] **国际化（i18n）** —— 多语言界面，优先覆盖简体中文 / English。

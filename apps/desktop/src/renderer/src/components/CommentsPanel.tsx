@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import type { PrComment, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
+import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { Avatar } from './Avatar';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { CommentEditEditor } from './CommentEditEditor';
@@ -182,6 +183,7 @@ function CommentItem({
           connectionId={pr.connectionId}
           slug={comment.author.slug ?? comment.author.name}
           displayName={comment.author.displayName}
+          avatarUrl={comment.author.avatarUrl}
           size={22}
         />
         <span className="pr-comment-author">{comment.author.displayName}</span>
@@ -219,6 +221,7 @@ function CommentItem({
         <div className="pr-comment-body markdown">
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
+            rehypePlugins={REMOTE_REHYPE_PLUGINS}
             components={mdComponents}
             urlTransform={transformBitbucketUrl}
           >

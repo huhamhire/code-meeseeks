@@ -7,7 +7,7 @@ import { EyeIcon, EyeOffIcon } from './icons';
 // 设置页 ConnectionEditorModal 与首启向导 PlatformStep 共用同一份草稿形状 + 表单。
 export type ConnEntry = Config['connections'][number];
 /** 当前支持配置的平台 kind（gitlab/gitea 尚未实现，不在草稿可选范围） */
-export type ConnKind = 'bitbucket-server' | 'github';
+export type ConnKind = 'github' | 'bitbucket-server';
 export type ConnDraft = {
   id: string;
   kind: ConnKind;
@@ -46,15 +46,15 @@ export function fromConnDraft(d: ConnDraft): ConnEntry {
 
 /** 各平台的字段文案（名称 / Base URL / 令牌 占位） */
 const KIND_HINTS: Record<ConnKind, { name: string; baseUrl: string; token: string }> = {
-  'bitbucket-server': {
-    name: '如 公司 Bitbucket',
-    baseUrl: 'https://bitbucket.example.com',
-    token: 'Bitbucket HTTP 访问令牌',
-  },
   github: {
     name: '如 公司 GitHub',
     baseUrl: '留空默认 https://api.github.com；GHE 填 https://<host>/api/v3',
     token: 'GitHub Personal Access Token',
+  },
+  'bitbucket-server': {
+    name: '如 公司 Bitbucket',
+    baseUrl: 'https://bitbucket.example.com',
+    token: 'Bitbucket HTTP 访问令牌',
   },
 };
 

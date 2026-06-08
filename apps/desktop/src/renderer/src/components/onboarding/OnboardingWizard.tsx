@@ -43,7 +43,7 @@ export function OnboardingWizard({
 
   const [connDraft, setConnDraft] = useState<ConnDraft>(() => ({
     id: newProfileId(),
-    kind: 'bitbucket-server',
+    kind: 'github',
     display_name: '',
     base_url: '',
     token: '',

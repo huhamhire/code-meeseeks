@@ -127,6 +127,9 @@ async function start(): Promise<void> {
       (a) => a.connectionId === bootstrap.config.active_connection_id,
     );
     poller.setConnections(active);
+    // 归档非活动连接的 PR：它们已不再被轮询，否则软删段永远碰不到 → 永不 purge。
+    // 这是用户显式切换/禁用连接的结果（非网络故障），交给 purge 段在 grace 期满后清理。
+    await poller.archiveConnectionsExcept(active.map((a) => a.connectionId));
     logger.info(
       {
         total: adapters.length,

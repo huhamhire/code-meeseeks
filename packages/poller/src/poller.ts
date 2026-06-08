@@ -4,6 +4,8 @@ import type {
   PlatformAdapter,
   PlatformKind,
   PollResult,
+  PrDiscoveryFilter,
+  PullRequest,
   ReviewerStatus,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
@@ -94,6 +96,34 @@ export class Poller {
   }
 
   /**
+   * 归档所有「不属于 activeIds」连接的 PR，使其进入 purge 路径。
+   *
+   * 背景：单活动连接模型下 poller 只喂活动连接，软删只处理本轮 poll 到的连接
+   * （seenByConnection）。切换/禁用连接后，旧连接的 PR 永远不会被 poll 到 → 永不
+   * archived → 永不 purge，磁盘上累积陈旧状态。本方法在**用户显式切换/禁用连接**时由
+   * main 调用，把这些 PR 标 archivedAt；后续任意一轮 poll 的 purge 段（grace 期满）会清掉。
+   *
+   * 仅由显式动作触发（非网络故障），故不违反「一次网络抖动不误删整库」的不变式。
+   */
+  async archiveConnectionsExcept(activeIds: readonly string[]): Promise<void> {
+    const active = new Set(activeIds);
+    const indexFile = await readPrIndex(this.opts.stateStore);
+    if (!indexFile) return;
+    const now = (this.opts.now?.() ?? new Date()).toISOString();
+    const prs = { ...indexFile.prs };
+    let dirty = false;
+    for (const [localId, entry] of Object.entries(prs)) {
+      if (!active.has(entry.identity.connectionId) && !entry.archivedAt) {
+        prs[localId] = { ...entry, archivedAt: now };
+        dirty = true;
+      }
+    }
+    if (dirty) {
+      await writePrIndex(this.opts.stateStore, { schema_version: 1, prs });
+    }
+  }
+
+  /**
    * 热替换轮询间隔（秒）。运行中则按新周期重建定时器（不立即 tick）；下一次触发
    * 起用新间隔。设置页改轮询间隔后调用，无需重启。
    */
@@ -180,12 +210,30 @@ export class Poller {
     for (const { connectionId, adapter } of this.connections) {
       const me = adapter.getCurrentUser();
       try {
-        const remote = await adapter.listPendingPullRequests();
-        fetched += remote.length;
+        // 发现分类：平台提供多类（GitHub 四类）→ 逐类轮询并 union 打标，让 renderer 切标签
+        // 走本地缓存而非每次拉远端；无分类的平台（Bitbucket）单轮询、标记为空数组。
+        const filters = adapter.capabilities().discoveryFilters ?? [];
+        const merged = new Map<string, { pr: PullRequest; matched: PrDiscoveryFilter[] }>();
+        const collect = async (filter?: PrDiscoveryFilter): Promise<void> => {
+          const remote = await adapter.listPendingPullRequests(filter ? { filter } : undefined);
+          for (const pr of remote) {
+            const k = `${pr.repo.projectKey}|${pr.repo.repoSlug}|${pr.remoteId}`;
+            const e = merged.get(k);
+            if (e) {
+              if (filter && !e.matched.includes(filter)) e.matched.push(filter);
+            } else {
+              merged.set(k, { pr, matched: filter ? [filter] : [] });
+            }
+          }
+        };
+        if (filters.length === 0) await collect();
+        else for (const f of filters) await collect(f);
+
+        fetched += merged.size;
         const seen = new Set<string>();
         seenByConnection.set(connectionId, seen);
 
-        for (const pr of remote) {
+        for (const { pr, matched } of merged.values()) {
           // hash localId：platform + 连接 + group + repo + remoteId 一锅哈希。
           // 同一 connection 下不同 repo 同 PR id 也能区分开 (Bitbucket 的 PR id 是 per-repo
           // 递增的)；platform 字段让多平台扩展时 schema 不必改
@@ -228,6 +276,7 @@ export class Poller {
             platform: adapter.kind,
             connectionId,
             localStatus,
+            discoveryFilters: matched,
             discoveredAt: prev?.discoveredAt ?? now,
             lastSeenAt: now,
           });

@@ -379,7 +379,7 @@ export function registerIpcHandlers({
         return null;
       }
       try {
-        const img = await adapter.getUserAvatar(req.slug);
+        const img = await adapter.getUserAvatar(req.slug, req.avatarUrl);
         if (!img) {
           logger.debug(
             { connectionId: req.connectionId, slug: req.slug },

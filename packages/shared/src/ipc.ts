@@ -174,7 +174,8 @@ export interface IpcChannels {
    * 平台不支持 / 网络失败 / 用户无头像时返回 null，renderer 走 initials 回退。
    */
   'app:userAvatar': {
-    request: { connectionId: string; slug: string };
+    // avatarUrl 可选：平台返回的头像直链（GitHub 机器人必须靠它）；缺省时 main 按 slug 推导
+    request: { connectionId: string; slug: string; avatarUrl?: string };
     response: { dataUrl: string } | null;
   };
   /**

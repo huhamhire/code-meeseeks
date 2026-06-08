@@ -7,27 +7,29 @@ interface AvatarProps {
   slug: string;
   /** 给 initials 兜底用；也用作 title / alt */
   displayName: string;
+  /** 头像直链（平台 avatar_url）；有则优先按它拉——GitHub 机器人靠它才取得到。 */
+  avatarUrl?: string;
   size?: number;
 }
 
 /**
- * 圆形用户头像。优先用 main 进程拉的 Bitbucket avatar（in-memory cache 命中即同步返回），
+ * 圆形用户头像。优先用 main 进程拉的平台 avatar（in-memory cache 命中即同步返回），
  * 拉失败 / 加载中 / null 时回退到 initials + hash 色块。
  */
-export function Avatar({ connectionId, slug, displayName, size = 22 }: AvatarProps) {
+export function Avatar({ connectionId, slug, displayName, avatarUrl, size = 22 }: AvatarProps) {
   const [dataUrl, setDataUrl] = useState<string | null>(() => readCached(connectionId, slug));
 
   useEffect(() => {
     if (dataUrl !== null) return; // 已有缓存或本组件已加载
     let cancelled = false;
-    fetchAvatar(connectionId, slug).then((url) => {
+    fetchAvatar(connectionId, slug, avatarUrl).then((url) => {
       if (!cancelled && url) setDataUrl(url);
     });
     return () => {
       cancelled = true;
     };
     //   仅在 (connectionId, slug) 变化时重拉
-  }, [connectionId, slug, dataUrl]);
+  }, [connectionId, slug, avatarUrl, dataUrl]);
 
   const style = { width: size, height: size, fontSize: Math.round(size * 0.42) };
   if (dataUrl) {
@@ -92,13 +94,17 @@ function readCached(connectionId: string, slug: string): string | null {
   return cache.get(cacheKey(connectionId, slug)) ?? null;
 }
 
-async function fetchAvatar(connectionId: string, slug: string): Promise<string | null> {
+async function fetchAvatar(
+  connectionId: string,
+  slug: string,
+  avatarUrl?: string,
+): Promise<string | null> {
   const key = cacheKey(connectionId, slug);
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
   const existing = inflight.get(key);
   if (existing) return existing;
-  const promise = invoke('app:userAvatar', { connectionId, slug })
+  const promise = invoke('app:userAvatar', { connectionId, slug, avatarUrl })
     .then((r) => {
       const url = r?.dataUrl ?? null;
       cache.set(key, url);

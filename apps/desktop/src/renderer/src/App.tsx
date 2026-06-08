@@ -6,6 +6,7 @@ import type {
   ConnectionSummary,
   LocalPrStatus,
   PrAgentStatus,
+  PrDiscoveryFilter,
   StoredPullRequest,
 } from '@meebox/shared';
 import { invoke, subscribe } from './api';
@@ -33,6 +34,8 @@ export default function App() {
   const [prs, setPrs] = useState<StoredPullRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // 合并进行中：GitHub 合并可能较慢（异步算 mergeable），按钮置等待态并防重复点击。
+  const [merging, setMerging] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
   // 操作级 toast（审批 / 合并等远端动作失败时提示，区别于 fatalError 整屏报错）。
@@ -72,6 +75,8 @@ export default function App() {
     anchor: { path: string; startLine: number; endLine: number };
   } | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  // GitHub 发现分类（运行时筛选，不持久化）；仅 GitHub 活动连接时在 PR 列表展示。
+  const [discoveryFilter, setDiscoveryFilter] = useState<PrDiscoveryFilter>('review-requested');
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const raw = localStorage.getItem('meebox.sidebarWidth');
     const n = raw ? Number(raw) : 360;
@@ -105,6 +110,20 @@ export default function App() {
   const reloadPrs = useCallback(async (): Promise<void> => {
     const fresh = await invoke('prs:list', undefined);
     setPrs(fresh);
+  }, []);
+
+  // 连接改动（尤其切换活动连接）后整体刷新 boot：活动连接变化后 main 端 app:connections /
+  // prs:list 都随之变，必须重拉，否则 boot.connections、PR 列表会过期。
+  const refreshBootAndPrs = useCallback(async (): Promise<void> => {
+    const [config, connections, freshPrs, lastSync] = await Promise.all([
+      invoke('config:read', undefined),
+      invoke('app:connections', undefined),
+      invoke('prs:list', undefined),
+      invoke('prs:lastSync', undefined),
+    ]);
+    setBoot((b) => (b ? { ...b, config, connections, lastSyncAt: lastSync.at } : b));
+    setPrs(freshPrs);
+    setLastSyncAt(lastSync.at);
   }, []);
 
   useEffect(() => {
@@ -229,8 +248,9 @@ export default function App() {
   );
 
   const mergeSelectedPr = useCallback(async (): Promise<void> => {
-    if (!selected) return;
+    if (!selected || merging) return;
     const mergedId = selected.localId;
+    setMerging(true);
     try {
       await invoke('prs:merge', { localId: mergedId });
     } catch (e) {
@@ -239,11 +259,13 @@ export default function App() {
       notifyError(`合并失败：${msg}`);
       void triggerRefresh();
       return;
+    } finally {
+      setMerging(false);
     }
     // 合并成功：PR 已转 MERGED，会从 pending 列表退场。取消选中 + 刷新让其消失
     if (selectedId === mergedId) setSelectedId(null);
     await triggerRefresh();
-  }, [selected, selectedId, triggerRefresh, notifyError]);
+  }, [selected, selectedId, triggerRefresh, notifyError, merging]);
 
   // 首启向导完成：落盘连接（必）+ LLM / 缓存目录（按需），再重拉配置/连接/PR 更新
   // boot。boot.config 拿到有效 active 连接后，下方 needsOnboarding 派生为 false，
@@ -315,6 +337,17 @@ export default function App() {
   // 有 active 连接但 LLM 未配置 → ChatPane 给出「需配置才能启用」提示并禁用输入
   const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
 
+  // 发现分类标签由活动连接的能力决定（GitHub 四类、Bitbucket 两类、其余无）。
+  const activeConnSummary = boot.connections.find(
+    (c) => c.connectionId === boot.config.active_connection_id,
+  );
+  const availableDiscoveryFilters = activeConnSummary?.capabilities.discoveryFilters ?? [];
+  const showDiscoveryFilter = availableDiscoveryFilters.length > 0;
+  // 选中的分类可能因切换连接而对当前平台无效（如 github 的 mentioned 切到 bitbucket）→ 回落首个可用。
+  const effectiveDiscoveryFilter = availableDiscoveryFilters.includes(discoveryFilter)
+    ? discoveryFilter
+    : availableDiscoveryFilters[0];
+
   return (
     <div className="app">
       <div className="app-body">
@@ -325,6 +358,9 @@ export default function App() {
             onSelect={(pr) => setSelectedId(pr.localId)}
             width={sidebarWidth}
             onResize={setSidebarWidth}
+            availableFilters={showDiscoveryFilter ? availableDiscoveryFilters : undefined}
+            discoveryFilter={showDiscoveryFilter ? effectiveDiscoveryFilter : undefined}
+            onDiscoveryFilterChange={showDiscoveryFilter ? setDiscoveryFilter : undefined}
           />
         )}
         <MainPane
@@ -332,6 +368,7 @@ export default function App() {
           hasConnections={boot.config.connections.length > 0}
           onSetStatus={(s) => void setSelectedPrStatus(s)}
           onMerge={() => void mergeSelectedPr()}
+          merging={merging}
           capabilities={selectedConn?.capabilities}
           currentUserName={selectedConn?.user?.name ?? null}
           pendingDiffNav={pendingDiffNav}
@@ -390,6 +427,7 @@ export default function App() {
           onProxyChange={(proxy) =>
             setBoot((b) => (b ? { ...b, config: { ...b.config, proxy } } : b))
           }
+          onConnectionsChange={refreshBootAndPrs}
           onClose={() => setShowSettings(false)}
         />
       )}
