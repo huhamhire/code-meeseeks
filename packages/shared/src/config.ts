@@ -23,15 +23,21 @@ export const BitbucketServerConnectionSchema = z.object({
   clone: CloneSettingsSchema,
 });
 
+/** github.com 官方 REST API base。GitHub 连接的 base_url 留空时默认走这里。 */
+export const GITHUB_DOTCOM_API_BASE = 'https://api.github.com';
+
 export const GitHubConnectionSchema = z.object({
   id: z.string().min(1),
   kind: z.literal('github'),
   /**
-   * GitHub REST API base。github.com 用 `https://api.github.com`；GitHub Enterprise
-   * Server 用 `https://<ghe-host>/api/v3`。clone / web host 由 adapter 推导
-   * （api.github.com → github.com；GHE → 同 host）。
+   * GitHub REST API base。**可选**：留空 / 缺省时默认 `https://api.github.com`（github.com）；
+   * GitHub Enterprise Server 填 `https://<ghe-host>/api/v3`。clone / web host 由 adapter
+   * 推导（api.github.com → github.com；GHE → 同 host）。
    */
-  base_url: z.string().url(),
+  base_url: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().url().default(GITHUB_DOTCOM_API_BASE),
+  ),
   display_name: z.string(),
   auth: z.object({
     type: z.literal('pat'),

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Config } from '@meebox/shared';
+import { GITHUB_DOTCOM_API_BASE, type Config } from '@meebox/shared';
 import { invoke } from '../api';
 import { EyeIcon, EyeOffIcon } from './icons';
 
@@ -29,10 +29,13 @@ export function toConnDraft(c: ConnEntry): ConnDraft {
 }
 
 export function fromConnDraft(d: ConnDraft): ConnEntry {
+  // GitHub 的 Base URL 可留空 → 默认官方 api.github.com（GHE 才需手填 /api/v3）。
+  const trimmed = d.base_url.trim();
+  const base_url = d.kind === 'github' && trimmed === '' ? GITHUB_DOTCOM_API_BASE : trimmed;
   const common = {
     id: d.id,
-    base_url: d.base_url.trim(),
-    display_name: d.display_name.trim() || d.base_url.trim(),
+    base_url,
+    display_name: d.display_name.trim() || base_url,
     auth: { type: 'pat' as const, token: d.token },
     clone: { protocol: d.protocol },
   };
@@ -50,14 +53,16 @@ const KIND_HINTS: Record<ConnKind, { name: string; baseUrl: string; token: strin
   },
   github: {
     name: '如 公司 GitHub',
-    baseUrl: 'https://api.github.com 或 https://<ghe-host>/api/v3',
+    baseUrl: '留空默认 https://api.github.com；GHE 填 https://<host>/api/v3',
     token: 'GitHub Personal Access Token',
   },
 };
 
-/** Base URL 形如 http(s)://… 才算合法 */
+/** Base URL 形如 http(s)://… 才算合法；GitHub 允许留空（默认官方 api.github.com）。 */
 export function connUrlValid(d: ConnDraft): boolean {
-  return /^https?:\/\/.+/i.test(d.base_url.trim());
+  const u = d.base_url.trim();
+  if (d.kind === 'github' && u === '') return true;
+  return /^https?:\/\/.+/i.test(u);
 }
 /** 名称 + 合法 URL + token 三者齐全才允许保存 */
 export function connDraftCanSave(d: ConnDraft): boolean {
@@ -136,7 +141,12 @@ export function ConnectionForm({
           />
         </div>
         <div className="modal-kv-key">
-          Base URL <span className="settings-required">*</span>
+          Base URL{' '}
+          {draft.kind === 'github' ? (
+            <span className="settings-optional">(可选)</span>
+          ) : (
+            <span className="settings-required">*</span>
+          )}
         </div>
         <div className="modal-kv-val">
           <input
