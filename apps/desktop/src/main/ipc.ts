@@ -462,7 +462,13 @@ export function registerIpcHandlers({
 
   ipcMain.handle(
     'prs:list',
-    async (): Promise<IpcChannels['prs:list']['response']> => listStoredPullRequests(stateStore),
+    async (): Promise<IpcChannels['prs:list']['response']> => {
+      // 单活动连接模型：只展示当前活动连接的 PR。状态库可能仍存着切换前其他连接的
+      // 历史 PR（poller 只轮询活动连接，不会清理旧的），故在出口按 connectionId 过滤。
+      const activeId = bootstrap.config.active_connection_id;
+      const all = await listStoredPullRequests(stateStore);
+      return activeId ? all.filter((pr) => pr.connectionId === activeId) : all;
+    },
   );
   ipcMain.handle(
     'prs:refresh',
@@ -1690,7 +1696,11 @@ function buildConnectionSummaries(
   bootstrap: BootstrapResult,
   adapters: readonly BuiltAdapter[],
 ): ConnectionSummary[] {
-  return adapters.map(({ connectionId, adapter }) => {
+  // 单活动连接模型：状态栏只展示当前活动连接的启用状态（与 poller 只轮询活动连接一致）。
+  const activeId = bootstrap.config.active_connection_id;
+  return adapters
+    .filter(({ connectionId }) => connectionId === activeId)
+    .map(({ connectionId, adapter }) => {
     const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
     return {
       connectionId,
