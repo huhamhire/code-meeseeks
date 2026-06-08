@@ -96,6 +96,34 @@ export class Poller {
   }
 
   /**
+   * 归档所有「不属于 activeIds」连接的 PR，使其进入 purge 路径。
+   *
+   * 背景：单活动连接模型下 poller 只喂活动连接，软删只处理本轮 poll 到的连接
+   * （seenByConnection）。切换/禁用连接后，旧连接的 PR 永远不会被 poll 到 → 永不
+   * archived → 永不 purge，磁盘上累积陈旧状态。本方法在**用户显式切换/禁用连接**时由
+   * main 调用，把这些 PR 标 archivedAt；后续任意一轮 poll 的 purge 段（grace 期满）会清掉。
+   *
+   * 仅由显式动作触发（非网络故障），故不违反「一次网络抖动不误删整库」的不变式。
+   */
+  async archiveConnectionsExcept(activeIds: readonly string[]): Promise<void> {
+    const active = new Set(activeIds);
+    const indexFile = await readPrIndex(this.opts.stateStore);
+    if (!indexFile) return;
+    const now = (this.opts.now?.() ?? new Date()).toISOString();
+    const prs = { ...indexFile.prs };
+    let dirty = false;
+    for (const [localId, entry] of Object.entries(prs)) {
+      if (!active.has(entry.identity.connectionId) && !entry.archivedAt) {
+        prs[localId] = { ...entry, archivedAt: now };
+        dirty = true;
+      }
+    }
+    if (dirty) {
+      await writePrIndex(this.opts.stateStore, { schema_version: 1, prs });
+    }
+  }
+
+  /**
    * 热替换轮询间隔（秒）。运行中则按新周期重建定时器（不立即 tick）；下一次触发
    * 起用新间隔。设置页改轮询间隔后调用，无需重启。
    */

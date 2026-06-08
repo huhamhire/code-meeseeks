@@ -665,3 +665,48 @@ describe('setLocalStatus', () => {
     expect(updated).toBeNull();
   });
 });
+
+describe('Poller.archiveConnectionsExcept', () => {
+  it('归档非活动连接的 PR、保留活动连接（进入 purge 路径）', async () => {
+    const a1 = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const a2 = new FakeAdapter([makePr('2', '2026-05-28T01:00:00.000Z')]);
+    const now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [
+        { connectionId: 'bb1', adapter: a1 },
+        { connectionId: 'bb2', adapter: a2 },
+      ],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+    });
+    await poller.tick(); // 两个连接的 PR 都入库，archivedAt=null
+
+    // 用户切换：只剩 bb1 活动
+    await poller.archiveConnectionsExcept(['bb1']);
+
+    const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    const entries = Object.values(index!.prs);
+    const bb1 = entries.find((e) => e.identity.connectionId === 'bb1')!;
+    const bb2 = entries.find((e) => e.identity.connectionId === 'bb2')!;
+    expect(bb1.archivedAt).toBeNull(); // 活动连接不动
+    expect(bb2.archivedAt).toBe(now.toISOString()); // 非活动连接被归档
+
+    // 幂等：再调一次不改已归档的时间戳
+    const later = new Date('2026-06-02T00:00:00.000Z');
+    const poller2 = new Poller({
+      connections: [{ connectionId: 'bb1', adapter: a1 }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => later,
+    });
+    await poller2.archiveConnectionsExcept(['bb1']);
+    const index2 = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    const bb2After = Object.values(index2!.prs).find(
+      (e) => e.identity.connectionId === 'bb2',
+    )!;
+    expect(bb2After.archivedAt).toBe(now.toISOString()); // 仍是首次归档时间
+  });
+});
