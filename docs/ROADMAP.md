@@ -1,7 +1,7 @@
 # Code Meeseeks Roadmap
 
-> 最后更新：2026-06-07
-> 状态：**M0–M4 已交付**；**M5（打磨 + 多平台扩展）持续中**。下一步主线：**GitHub Adapter**。
+> 最后更新：2026-06-08
+> 状态：**M0–M4 已交付**；**M5（打磨 + 多平台扩展）持续中**。GitHub Adapter 已交付，下一步主线：**GitLab Adapter**。
 >
 > **命名约定**：对外品牌 **Code Meeseeks**（灵感来自 Rick and Morty 的 Mr. Meeseeks）；代码内部
 > 统一用中性代号 **meebox**（npm 作用域 `@meebox/*`，数据目录 `~/.code-meeseeks`）。pr-agent 为
@@ -56,8 +56,11 @@
 
 开放的持续阶段，不设单一 Done when。
 
-### 已交付 ✅（截至 2026-06-07）
+### 已交付 ✅（截至 2026-06-08）
 
+- **GitHub Adapter**：github.com + GitHub Enterprise Server（REST API v3）；统一 `PlatformAdapter`
+  契约 + 一致性测试套件；PR 发现分类（待我评审 / 我创建 / 指派 / 提及，本地缓存按标记过滤）。
+  Bitbucket 同步提供「待我评审 / 我创建」两类。
 - 嵌入式 pr-agent 运行时打包（内嵌 Python，免装 Python/Docker）
 - 首发桌面安装包：Windows x64（NSIS）+ macOS arm64（dmg，ad-hoc 签名）
 - 出站 HTTP 代理（LLM / 代码平台 / git HTTPS 统一，loopback 直连）
@@ -71,8 +74,8 @@
 
 ### 进行中 / 待办 ⏭️
 
-- **GitHub Adapter（下一步主线）**：先抽 `PlatformAdapter` 一致性测试套件锁定契约，再实现 GitHub
-  （公有云 + Enterprise Server）；GitLab 按需。数据层多平台身份字段已预留。
+- **GitLab Adapter（下一步主线）**：复用已锁定的 `PlatformAdapter` 契约 + 一致性测试套件实现 GitLab
+  （SaaS + 自建）。数据层多平台身份字段已预留。
 - **高阶 Agent 能力**：复杂任务分步规划 + 长期 Memory。
 - **AutoPilot 预评审**：轮询发现新 PR 后按规则自动预跑，进应用即见待确认草稿（决策权仍在评审者）。
 - **国际化（i18n）**：多语言界面，优先简体中文 / English。

@@ -90,8 +90,8 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 | 平台 | 状态 |
 | --- | --- |
+| GitHub | ✅ 已验证（github.com + GitHub Enterprise Server，REST API v3） |
 | Bitbucket Server / Data Center | ✅ 已支持（REST API v1，>= 7.0） |
-| GitHub | 🚧 规划中 |
 | GitLab | 🚧 规划中 |
 
 ---
@@ -116,7 +116,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 围绕「让本地化、半自动评审更省心」展开的几个核心方向（排序不代表优先级，欢迎在 issue 中讨论）：
 
-- [ ] **多代码平台适配** —— 在统一适配层上扩展 GitHub、GitLab，自建与公有云托管一并接入。
+- [ ] **多代码平台适配** —— 在统一适配层上继续扩展 GitLab，自建与公有云托管一并接入（GitHub 已支持）。
 - [ ] **高阶 Agent 能力** —— 复杂任务的分步规划 + 长期 Memory，让评审从单轮问答走向可累积上下文、多步工具调用的协作。
 - [ ] **AutoPilot 预评审** —— 轮询发现新 PR 后按评审者配置的规则自动跑一遍预评审，进应用即见待确认草稿，省去逐个手动触发（决策权仍在评审者，发布前仍需确认）。
 - [ ] **国际化（i18n）** —— 多语言界面，优先覆盖简体中文 / English。

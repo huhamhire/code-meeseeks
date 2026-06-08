@@ -56,18 +56,18 @@ export const PLATFORM_META: ReadonlyArray<{
   Icon: (p: PlatformIconProps) => JSX.Element;
 }> = [
   {
-    kind: 'bitbucket-server',
-    label: 'Bitbucket',
-    sub: 'Server / Data Center',
-    available: true,
-    Icon: BitbucketIcon,
-  },
-  {
     kind: 'github',
     label: 'GitHub',
     sub: 'github.com / Enterprise Server',
     available: true,
     Icon: GitHubIcon,
+  },
+  {
+    kind: 'bitbucket-server',
+    label: 'Bitbucket',
+    sub: 'Server / Data Center',
+    available: true,
+    Icon: BitbucketIcon,
   },
   { kind: 'gitlab', label: 'GitLab', sub: '即将支持', available: false, Icon: GitLabIcon },
 ];

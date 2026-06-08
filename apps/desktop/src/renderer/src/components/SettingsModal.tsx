@@ -188,7 +188,7 @@ export function SettingsModal({
       mode: 'add',
       draft: {
         id: newProfileId(),
-        kind: 'bitbucket-server',
+        kind: 'github',
         display_name: '',
         base_url: '',
         token: '',
@@ -743,8 +743,8 @@ function ConnectionEditorModal({
                     onChange({ ...draft, kind: e.target.value as ConnDraft['kind'] })
                   }
                 >
-                  <option value="bitbucket-server">Bitbucket Server / Data Center</option>
                   <option value="github">GitHub（github.com / Enterprise Server）</option>
+                  <option value="bitbucket-server">Bitbucket Server / Data Center</option>
                 </select>
               </div>
             </div>
