@@ -3,6 +3,7 @@ import type { Config } from './config.js';
 import type {
   PingResult,
   PlatformCapabilities,
+  PlatformKind,
   PlatformUser,
   PrComment,
   PrCommit,
@@ -329,7 +330,7 @@ export interface IpcChannels {
   };
   /** 用草稿 url/token 临时起 adapter ping，保存前测试连接是否可达；不写配置。 */
   'config:testConnection': {
-    request: { base_url: string; token: string };
+    request: { base_url: string; token: string; kind?: PlatformKind };
     response: PingResult;
   };
   /**

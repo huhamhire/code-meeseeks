@@ -23,7 +23,7 @@
       reviewGrouping`）；`PlatformAdapter` 增 `capabilities(): PlatformCapabilities`。
 - [x] `platform.ts`：新增 `PrDiffRefs { headSha; baseSha; startSha? }`；`PrComment` 增 `kind? / threadId? / nativeId?`
       （`version?` 维持可选，标注 Bitbucket 专属）。
-- [ ] `publishInlineComment`：定为「adapter 内部按 prId 拉 PR 取 diff refs」（GitHub head sha / GitLab diff_refs），
+- [x] `publishInlineComment`：定为「adapter 内部按 prId 拉 PR 取 diff refs」（GitHub head sha / GitLab diff_refs），
       避免改所有调用方；Bitbucket 实现忽略。（备选：调用方传 `PrDiffRefs`，churn 更大，不选。）
       —— 方案已定（`PrDiffRefs` 类型就位）；具体取数留到建 GitHub adapter 时落地。
 - [x] Bitbucket adapter 实现 `capabilities()`（全能力：三态审批、inline 多行、乐观锁、veto full、resolvable/suggestions=false、
@@ -39,40 +39,40 @@
 
 ### Phase 1 · 配置 + 接线（让 `'github'` kind 可配、可建 adapter）
 
-- [ ] `config.ts`：新增 `GitHubConnectionSchema`（`kind:'github'`、`base_url`（github.com 默认 `https://api.github.com`，
+- [x] `config.ts`：新增 `GitHubConnectionSchema`（`kind:'github'`、`base_url`（github.com 默认 `https://api.github.com`，
       GHE 填实例 API base）、`auth.pat`、`clone.protocol`）；`ConnectionSchema` discriminatedUnion 加入它。
-- [ ] 新建包 `@meebox/platform-github`（镜像 Bitbucket 包结构 `src/{adapter,client,index}.ts` + `tests/`）。
-- [ ] `adapters.ts`：`buildAdapters` / `buildDraftAdapter` 加 `case 'github'`（穷尽 switch 的 `never` 守卫保留）。
-- [ ] 配置 UI：[PlatformIcon.tsx](../../apps/desktop/src/renderer/src/components/PlatformIcon.tsx) GitHub `available:true`；
+- [x] 新建包 `@meebox/platform-github`（镜像 Bitbucket 包结构 `src/{adapter,client,index}.ts` + `tests/`）。
+- [x] `adapters.ts`：`buildAdapters` / `buildDraftAdapter` 加 `case 'github'`（穷尽 switch 的 `never` 守卫保留）。
+- [x] 配置 UI：[PlatformIcon.tsx](../../apps/desktop/src/renderer/src/components/PlatformIcon.tsx) GitHub `available:true`；
       [ConnectionForm.tsx](../../apps/desktop/src/renderer/src/components/ConnectionForm.tsx) 按 kind 调整字段提示
       （GHE 的 base_url 提示、PAT scope 说明）；onboarding `PlatformStep` / `SettingsModal` 放开 GitHub 选项。
-- [ ] `config:testConnection` 走 kind-aware `buildDraftAdapter`（带 base_url + token）。
+- [x] `config:testConnection` 走 kind-aware `buildDraftAdapter`（带 base_url + token）。
 
 ### Phase 2 · GitHub adapter 读路径
 
-- [ ] `client.ts`：GitHub REST 客户端 —— 可注入 fetch（挂代理，沿用 §08）、`Authorization: Bearer`、
+- [x] `client.ts`：GitHub REST 客户端 —— 可注入 fetch（挂代理，沿用 §08）、`Authorization: Bearer`、
       `Accept: application/vnd.github+json` + `X-GitHub-Api-Version`、`Link` 头分页迭代器、限流处理
       （403 + `X-RateLimit-Remaining=0` / `Retry-After`，search 二级限流退避）。
-- [ ] `ping()`：`GET /user`（GHE 版本可读响应头 `X-GitHub-Enterprise-Version`）；缓存 currentUser 供 `getCurrentUser()`。
-- [ ] `listPendingPullRequests()`：`GET /search/issues?q=is:open is:pr review-requested:@me archived:false`
+- [x] `ping()`：`GET /user`（GHE 版本可读响应头 `X-GitHub-Enterprise-Version`）；缓存 currentUser 供 `getCurrentUser()`。
+- [x] `listPendingPullRequests()`：`GET /search/issues?q=is:open is:pr review-requested:@me archived:false`
       → 映射为 `PullRequest`（按需补 `GET /repos/{o}/{r}/pulls/{n}`）。**单独抬高该平台轮询间隔**（discoveryRateLimited）。
-- [ ] `listPullRequestComments()`：合并 `GET /issues/{n}/comments`（summary）+ `GET /pulls/{n}/comments`
+- [x] `listPullRequestComments()`：合并 `GET /issues/{n}/comments`（summary）+ `GET /pulls/{n}/comments`
       （inline，按 `in_reply_to_id` 还原线程）→ 归一成现有 `PrComment` 树（`kind/threadId`）。
-- [ ] `listPullRequestCommits()`：`GET /pulls/{n}/commits` 反转为 newest-first。
-- [ ] `getUserAvatar()` / `getAttachment()`：头像直取 `avatar_url`；私有 `user-attachments` 经 PAT 代理。
+- [x] `listPullRequestCommits()`：`GET /pulls/{n}/commits` 反转为 newest-first。
+- [x] `getUserAvatar()` / `getAttachment()`：头像直取 `avatar_url`；私有 `user-attachments` 经 PAT 代理。
 
 ### Phase 3 · GitHub adapter 写路径
 
-- [ ] `publishInlineComment()`：`POST /pulls/{n}/comments` { body, `commit_id`=head sha, path, line, side(LEFT/RIGHT),
+- [x] `publishInlineComment()`：`POST /pulls/{n}/comments` { body, `commit_id`=head sha, path, line, side(LEFT/RIGHT),
       start_line?/start_side? }（refs 内部拉 PR 取 head sha）。
-- [ ] `replyToComment()`：inline → `POST /pulls/{n}/comments/{id}/replies`；summary → `POST /issues/{n}/comments`。
-- [ ] `editComment()` / `deleteComment()`：`PATCH/DELETE /pulls/comments/{id}` 或 `/issues/comments/{id}`（无 version）。
-- [ ] `setPullRequestReviewStatus()`：`POST /pulls/{n}/reviews` { event: APPROVE | REQUEST_CHANGES }；
+- [x] `replyToComment()`：inline → `POST /pulls/{n}/comments/{id}/replies`；summary → `POST /issues/{n}/comments`。
+- [x] `editComment()` / `deleteComment()`：`PATCH/DELETE /pulls/comments/{id}` 或 `/issues/comments/{id}`（无 version）。
+- [x] `setPullRequestReviewStatus()`：`POST /pulls/{n}/reviews` { event: APPROVE | REQUEST_CHANGES }；
       撤销 → `PUT /pulls/{n}/reviews/{id}/dismissals`。注意**不能审批自己的 PR**（422，UI 需对自己作者的 PR 灰显）。
-- [ ] `mergePullRequest()`：`PUT /pulls/{n}/merge` { merge_method }。
-- [ ] `mergeStatus`（拼装，fidelity=partial）：PR 的 `mergeable`/`mergeable_state`（容忍异步 `null`：轮询/兜底）
+- [x] `mergePullRequest()`：`PUT /pulls/{n}/merge` { merge_method }。
+- [x] `mergeStatus`（拼装，fidelity=partial）：PR 的 `mergeable`/`mergeable_state`（容忍异步 `null`：轮询/兜底）
       + check-runs/status + 必评（分支保护）→ 已知否决项 + 「可能还有其它检查」泛化提示。
-- [ ] `getCloneUrl()`：`pat` → `https://<user>:<PAT>@host/owner/repo.git`；`ssh` → `git@host:owner/repo.git`。
+- [x] `getCloneUrl()`：`pat` → `https://<user>:<PAT>@host/owner/repo.git`；`ssh` → `git@host:owner/repo.git`。
 
 ### Phase 4 · UI 能力位接线 + 降级（按 §8/§9）
 

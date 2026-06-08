@@ -179,7 +179,14 @@ export function SettingsModal({
   const openAddConn = (): void => {
     setConnEditor({
       mode: 'add',
-      draft: { id: newProfileId(), display_name: '', base_url: '', token: '', protocol: 'pat' },
+      draft: {
+        id: newProfileId(),
+        kind: 'bitbucket-server',
+        display_name: '',
+        base_url: '',
+        token: '',
+        protocol: 'pat',
+      },
     });
   };
   const openEditConn = (id: string): void => {
@@ -716,6 +723,24 @@ function ConnectionEditorModal({
           <h3>{mode === 'add' ? '新增连接' : '编辑连接'}</h3>
         </div>
         <div className="modal-body">
+          {/* 平台选择仅新增时可改；编辑既有连接不允许切平台（base_url/token 语义不同） */}
+          {mode === 'add' && (
+            <div className="modal-kv" style={{ marginBottom: 8 }}>
+              <div className="modal-kv-key">平台</div>
+              <div className="modal-kv-val">
+                <select
+                  className="settings-input"
+                  value={draft.kind}
+                  onChange={(e) =>
+                    onChange({ ...draft, kind: e.target.value as ConnDraft['kind'] })
+                  }
+                >
+                  <option value="bitbucket-server">Bitbucket Server / Data Center</option>
+                  <option value="github">GitHub（github.com / Enterprise Server）</option>
+                </select>
+              </div>
+            </div>
+          )}
           <ConnectionForm draft={draft} onChange={onChange} />
           <div
             className="settings-actions"

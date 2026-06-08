@@ -1492,7 +1492,12 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['config:testConnection']['response']> => {
       // 用草稿 url/token 临时起 adapter ping，不落配置；失败归一成 ok:false + reason
       try {
-        return await buildDraftAdapter(req.base_url, req.token, bootstrap.config.proxy).ping();
+        return await buildDraftAdapter(
+          req.base_url,
+          req.token,
+          bootstrap.config.proxy,
+          req.kind,
+        ).ping();
       } catch (e) {
         return { ok: false, reason: e instanceof Error ? e.message : String(e) };
       }

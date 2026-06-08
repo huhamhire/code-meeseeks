@@ -43,6 +43,7 @@ export function OnboardingWizard({
 
   const [connDraft, setConnDraft] = useState<ConnDraft>(() => ({
     id: newProfileId(),
+    kind: 'bitbucket-server',
     display_name: '',
     base_url: '',
     token: '',
@@ -238,10 +239,11 @@ function PlatformStep({
         {/* 左：平台方案选择 */}
         <div className="onboarding-platform-list" role="radiogroup" aria-label="代码平台">
           {PLATFORM_META.map((p) => {
-            // 一期只有 Bitbucket 可选并恒选中；GitHub/GitLab 置灰
-            const selected = p.kind === 'bitbucket-server';
+            // 可用平台（Bitbucket / GitHub）可点选并设 kind；GitLab 等未实现的置灰
+            const selected = p.kind === connDraft.kind;
             return (
-              <div
+              <button
+                type="button"
                 key={p.kind}
                 className={`onboarding-platform-item${selected ? ' selected' : ''}${
                   p.available ? '' : ' disabled'
@@ -249,6 +251,10 @@ function PlatformStep({
                 role="radio"
                 aria-checked={selected}
                 aria-disabled={!p.available}
+                disabled={!p.available}
+                onClick={() => {
+                  if (p.available) onConnChange({ ...connDraft, kind: p.kind as ConnDraft['kind'] });
+                }}
               >
                 <span className={`onboarding-platform-icon${p.available ? '' : ' muted-icon'}`}>
                   <p.Icon size={24} />
@@ -257,7 +263,7 @@ function PlatformStep({
                   <span className="onboarding-platform-name">{p.label}</span>
                   <span className="onboarding-platform-meta">{p.sub}</span>
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>

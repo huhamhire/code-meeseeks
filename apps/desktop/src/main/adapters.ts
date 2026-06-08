@@ -1,5 +1,6 @@
 import { BitbucketServerAdapter } from '@meebox/platform-bitbucket-server';
-import type { Connection, PlatformAdapter, ProxyConfig } from '@meebox/shared';
+import { GitHubAdapter } from '@meebox/platform-github';
+import type { Connection, PlatformAdapter, PlatformKind, ProxyConfig } from '@meebox/shared';
 import { proxyFetchForHost } from './utils/proxy.js';
 
 export interface BuiltAdapter {
@@ -27,20 +28,20 @@ function hostOf(baseUrl: string): string {
 }
 
 /**
- * 用草稿 base_url + token 临时起一个 bitbucket-server adapter，仅供设置页 ping 测试用。
- * proxy 透传：开关开且目标非 loopback 时，REST 经代理。
+ * 用草稿 base_url + token 临时起一个 adapter，仅供设置页 ping 测试用。kind 默认
+ * bitbucket-server（向后兼容旧调用）。proxy 透传：开关开且目标非 loopback 时，REST 经代理。
  */
 export function buildDraftAdapter(
   baseUrl: string,
   token: string,
   proxy: ProxyConfig,
+  kind: PlatformKind = 'bitbucket-server',
 ): PlatformAdapter {
-  return new BitbucketServerAdapter({
-    baseUrl,
-    token,
-    cloneProtocol: 'pat',
-    fetch: proxyFetchForHost(proxy, hostOf(baseUrl)),
-  });
+  const fetchFn = proxyFetchForHost(proxy, hostOf(baseUrl));
+  if (kind === 'github') {
+    return new GitHubAdapter({ baseUrl, token, cloneProtocol: 'pat', fetch: fetchFn });
+  }
+  return new BitbucketServerAdapter({ baseUrl, token, cloneProtocol: 'pat', fetch: fetchFn });
 }
 
 /**
@@ -59,18 +60,26 @@ export function buildAdapters(
 }
 
 function buildOne(conn: Connection, proxy: ProxyConfig): PlatformAdapter {
+  // 开关开 + 目标非 loopback → 带 ProxyAgent 的 fetch；否则 undefined（默认直连）。
+  const fetchFn = proxyFetchForHost(proxy, hostOf(conn.base_url));
   switch (conn.kind) {
     case 'bitbucket-server':
       return new BitbucketServerAdapter({
         baseUrl: conn.base_url,
         token: conn.auth.token,
         cloneProtocol: conn.clone.protocol,
-        // 开关开 + 目标非 loopback → 带 ProxyAgent 的 fetch；否则 undefined（默认直连）。
-        fetch: proxyFetchForHost(proxy, hostOf(conn.base_url)),
+        fetch: fetchFn,
+      });
+    case 'github':
+      return new GitHubAdapter({
+        baseUrl: conn.base_url,
+        token: conn.auth.token,
+        cloneProtocol: conn.clone.protocol,
+        fetch: fetchFn,
       });
     default: {
-      const exhaustive: never = conn.kind;
-      throw new Error(`unsupported connection kind: ${String(exhaustive)}`);
+      const exhaustive: never = conn;
+      throw new Error(`unsupported connection kind: ${JSON.stringify(exhaustive)}`);
     }
   }
 }

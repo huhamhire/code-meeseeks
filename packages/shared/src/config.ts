@@ -23,7 +23,27 @@ export const BitbucketServerConnectionSchema = z.object({
   clone: CloneSettingsSchema,
 });
 
-export const ConnectionSchema = z.discriminatedUnion('kind', [BitbucketServerConnectionSchema]);
+export const GitHubConnectionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('github'),
+  /**
+   * GitHub REST API base。github.com 用 `https://api.github.com`；GitHub Enterprise
+   * Server 用 `https://<ghe-host>/api/v3`。clone / web host 由 adapter 推导
+   * （api.github.com → github.com；GHE → 同 host）。
+   */
+  base_url: z.string().url(),
+  display_name: z.string(),
+  auth: z.object({
+    type: z.literal('pat'),
+    token: z.string(),
+  }),
+  clone: CloneSettingsSchema,
+});
+
+export const ConnectionSchema = z.discriminatedUnion('kind', [
+  BitbucketServerConnectionSchema,
+  GitHubConnectionSchema,
+]);
 
 /**
  * 单条 LLM 预设。多条 profile 共存，由 `llm.active_id` 切换当前生效。
@@ -205,3 +225,4 @@ export const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type BitbucketServerConnection = z.infer<typeof BitbucketServerConnectionSchema>;
+export type GitHubConnection = z.infer<typeof GitHubConnectionSchema>;
