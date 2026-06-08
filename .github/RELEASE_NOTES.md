@@ -25,9 +25,11 @@
 - macOS：`shasum -a 256 -c code-meeseeks-<version>-mac-arm64.dmg.sha256`
 - Windows（PowerShell）：`Get-FileHash code-meeseeks-<version>-win-x64.exe -Algorithm SHA256`
 
-## 变更内容
+## 本版更新
 
-完整变更见 [CHANGELOG](https://github.com/huhamhire/code-meeseeks/blob/master/CHANGELOG.md)。
+%%CHANGELOG_SECTION%%
+
+> 完整历史见 [CHANGELOG](https://github.com/huhamhire/code-meeseeks/blob/master/CHANGELOG.md)。
 
 ## 许可
 

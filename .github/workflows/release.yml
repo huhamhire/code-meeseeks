@@ -107,6 +107,23 @@ jobs:
             fi
           done
 
+      # 组装 Release 正文：把 CHANGELOG 里对应版本的段落注入 RELEASE_NOTES 的占位，
+      # 让 Release 页直接看到本版变更，而不是只给一个链接。找不到对应段落则回退用原说明。
+      - name: 组装 Release 说明
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # 抽取 `## [VERSION] ...` 到下一个 `## [` 之间的正文（index==1 做字面前缀匹配，避开正则元字符）
+          awk -v ver="## [$VERSION]" 'index($0,ver)==1{f=1;next} f&&/^## \[/{exit} f{print}' CHANGELOG.md > changelog-section.md
+          if [ -s changelog-section.md ]; then
+            awk 'FNR==NR{a[++n]=$0;next} /%%CHANGELOG_SECTION%%/{for(i=1;i<=n;i++)print a[i];next} {print}' \
+              changelog-section.md .github/RELEASE_NOTES.md > RELEASE_BODY.md
+          else
+            echo "::warning::CHANGELOG 未找到 [$VERSION] 段，Release 正文回退用 RELEASE_NOTES.md 原文"
+            sed 's/%%CHANGELOG_SECTION%%//' .github/RELEASE_NOTES.md > RELEASE_BODY.md
+          fi
+
       - name: 上传到 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -118,5 +135,5 @@ jobs:
           # alpha / 任何带 - 的预发布 tag（如 v0.1.0-alpha.1）→ 标为 prerelease，且不抢占 Latest
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ !contains(github.ref_name, '-') }}
-          # 安装 / 首次打开（Gatekeeper/SmartScreen）/ 校验和说明；完整变更指向 CHANGELOG
-          body_path: .github/RELEASE_NOTES.md
+          # 正文 = RELEASE_NOTES（安装 / 首次打开 / 校验和）+ 注入的本版 CHANGELOG 段
+          body_path: RELEASE_BODY.md
