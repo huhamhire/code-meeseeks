@@ -16,6 +16,11 @@ export interface PlatformUser {
    * 走 avatar 等 URL 路径的接口必须用 slug；缺失时调用方走 name 兜底。
    */
   slug?: string;
+  /**
+   * 头像直链（平台返回的 avatar_url）。有则优先按此 URL 拉头像——GitHub 机器人
+   * （login 形如 `foo[bot]`）没有 `github.com/<login>.png`，必须用 avatar_url 才取得到。
+   */
+  avatarUrl?: string;
 }
 
 /** Reviewer 在 PR 上的当前判定。Bitbucket: APPROVED / NEEDS_WORK / UNAPPROVED */
@@ -218,6 +223,21 @@ export interface PlatformCapabilities {
 }
 
 /**
+ * PR 发现筛选分类（运行时筛选，不持久化）。目前仅 GitHub 适配器据此切换 search 限定词，
+ * 对齐 GitHub 仪表盘的四类；其他平台忽略此参数、维持各自的「待我评审」语义。
+ * - `review-requested`（默认）：请求当前用户评审的 PR。
+ * - `created`：当前用户创建的 PR。
+ * - `assigned`：指派给当前用户的 PR。
+ * - `mentioned`：提及当前用户的 PR。
+ */
+export type PrDiscoveryFilter = 'review-requested' | 'created' | 'assigned' | 'mentioned';
+
+/** 发现 PR 时的可选项；filter 缺省按 review-requested。 */
+export interface ListPendingOptions {
+  filter?: PrDiscoveryFilter;
+}
+
+/**
  * 跨平台代码托管适配器。一期只实现 Bitbucket Server；M5 扩 GitHub/GitLab
  * 时再补 diff / changes / comment / cloneUrl 等更多方法。
  *
@@ -241,8 +261,11 @@ export interface PlatformAdapter {
    */
   getCurrentUser(): PlatformUser | null;
 
-  /** 列出当前 PAT 用户作为 reviewer 待处理的 PR，跨项目跨仓库。 */
-  listPendingPullRequests(): Promise<PullRequest[]>;
+  /**
+   * 列出待处理 PR，跨项目跨仓库。默认（review-requested）= 当前 PAT 用户作为 reviewer 待评审；
+   * GitHub 适配器按 opts.filter 切换发现范围（created/assigned/mentioned），其他平台忽略。
+   */
+  listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]>;
 
   /**
    * 返回 git clone URL。一期统一走 SSH（scp-like 形式），认证完全交给系统
@@ -266,11 +289,15 @@ export interface PlatformAdapter {
   listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]>;
 
   /**
-   * 按用户 slug 拉头像图片。返回原始字节 + content-type，main 进程负责缓存与
-   * 转 data URL；renderer 不直接 fetch（无 token、无法跨 origin 取私有 Bitbucket 资源）。
-   * 平台不支持或拉取失败时返回 null，调用方走 initials 回退。
+   * 拉用户头像图片。返回原始字节 + content-type，main 进程负责缓存与转 data URL；
+   * renderer 不直接 fetch（无 token、无法跨 origin 取私有 Bitbucket 资源）。
+   * 有 avatarUrl（平台返回的直链）时优先按它拉——GitHub 机器人靠它才取得到头像；
+   * 否则按 slug 推导。平台不支持或拉取失败返回 null，调用方走 initials 回退。
    */
-  getUserAvatar(slug: string): Promise<{ bytes: Uint8Array; contentType: string } | null>;
+  getUserAvatar(
+    slug: string,
+    avatarUrl?: string,
+  ): Promise<{ bytes: Uint8Array; contentType: string } | null>;
 
   /**
    * 评论 body 内嵌图片代理：`<img src>` 无法发 Authorization 头取私有 Bitbucket 资源，

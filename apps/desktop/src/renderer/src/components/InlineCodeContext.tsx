@@ -3,6 +3,7 @@ import type { editor } from 'monaco-editor';
 import { useEffect, useState } from 'react';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
+import { editorFontSize } from '../editor-font';
 import { languageFor } from '../utils/language';
 
 interface InlineCodeContextProps {
@@ -120,7 +121,7 @@ export function InlineCodeContext({
       contextmenu: false,
       folding: false,
       glyphMargin: false,
-      fontSize: 12,
+      fontSize: editorFontSize(12),
       lineHeight,
       padding: { top: 6, bottom: 6 },
       // 行宽自适应，长行用 word wrap 而不是横向滚动条 (滚动条已禁)

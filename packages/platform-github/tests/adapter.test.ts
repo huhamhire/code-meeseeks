@@ -1,3 +1,4 @@
+import type { PrDiscoveryFilter } from '@meebox/shared';
 import { describe, expect, it } from 'vitest';
 import { GitHubAdapter } from '../src/adapter.js';
 
@@ -119,6 +120,33 @@ describe('GitHubAdapter listPendingPullRequests', () => {
     const byName = Object.fromEntries(pr.reviewers.map((r) => [r.name, r.status]));
     expect(byName.rev).toBe('approved');
     expect(byName.pending).toBe('unapproved');
+  });
+
+  it('默认 filter = review-requested，查询带 is:open（排除已合并/已关闭）', async () => {
+    const { adapter, captured } = makeAdapter([{ match: '/search/issues', body: { items: [] } }]);
+    await adapter.listPendingPullRequests();
+    const q = new URL(captured[0]!.url).searchParams.get('q') ?? '';
+    expect(q).toContain('is:open');
+    expect(q).toContain('is:pr');
+    expect(q).toContain('review-requested:@me');
+  });
+
+  it('四类发现分类映射到对应 search 限定词，均含 is:open', async () => {
+    const cases: Array<[PrDiscoveryFilter, string]> = [
+      ['review-requested', 'review-requested:@me'],
+      ['created', 'author:@me'],
+      ['assigned', 'assignee:@me'],
+      ['mentioned', 'mentions:@me'],
+    ];
+    for (const [filter, qualifier] of cases) {
+      const { adapter, captured } = makeAdapter([
+        { match: '/search/issues', body: { items: [] } },
+      ]);
+      await adapter.listPendingPullRequests({ filter });
+      const q = new URL(captured[0]!.url).searchParams.get('q') ?? '';
+      expect(q).toContain(qualifier);
+      expect(q).toContain('is:open'); // 已合并/已关闭 PR 不应出现在任一分类
+    }
   });
 });
 

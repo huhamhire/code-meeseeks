@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
+import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 
 interface PrInfoViewProps {
@@ -31,6 +32,7 @@ export function PrInfoView({ pr }: PrInfoViewProps) {
                 被当成段落分隔，每个 list item 之间多一段空白。归一化成 \n */}
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={REMOTE_REHYPE_PLUGINS}
               components={mdComponents}
               urlTransform={transformBitbucketUrl}
             >

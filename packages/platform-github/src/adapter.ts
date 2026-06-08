@@ -1,4 +1,5 @@
 import type {
+  ListPendingOptions,
   MergeStatus,
   MergeVeto,
   PingResult,
@@ -8,6 +9,7 @@ import type {
   PrComment,
   PrCommentAnchor,
   PrCommit,
+  PrDiscoveryFilter,
   PullRequest,
   RepoRef,
   Reviewer,
@@ -100,7 +102,17 @@ interface GhSearchItem {
   pull_request?: unknown;
 }
 
-const REVIEW_REQUESTED_QUERY = 'is:open is:pr review-requested:@me archived:false';
+/** 发现筛选分类 → GitHub search 主体限定词（对齐仪表盘四类）。 */
+const FILTER_QUALIFIER: Record<PrDiscoveryFilter, string> = {
+  'review-requested': 'review-requested:@me',
+  created: 'author:@me',
+  assigned: 'assignee:@me',
+  mentioned: 'mentions:@me',
+};
+
+function discoveryQuery(filter: PrDiscoveryFilter): string {
+  return `is:open is:pr ${FILTER_QUALIFIER[filter]} archived:false`;
+}
 
 export interface GitHubAdapterOptions extends GitHubClientOptions {
   /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
@@ -179,10 +191,10 @@ export class GitHubAdapter implements PlatformAdapter {
     return u.toString();
   }
 
-  async listPendingPullRequests(): Promise<PullRequest[]> {
+  async listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]> {
     const items: GhSearchItem[] = [];
     for await (const it of this.client.searchItems<GhSearchItem>('/search/issues', {
-      q: REVIEW_REQUESTED_QUERY,
+      q: discoveryQuery(opts?.filter ?? 'review-requested'),
     })) {
       if (it.pull_request) items.push(it);
     }
@@ -245,8 +257,14 @@ export class GitHubAdapter implements PlatformAdapter {
     return [...summary, ...inline];
   }
 
-  async getUserAvatar(slug: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
-    // GitHub / GHE 头像直链：<webBase>/<login>.png?size=64（公共无需鉴权，私有 GHE 带 token 也行）
+  async getUserAvatar(
+    slug: string,
+    avatarUrl?: string,
+  ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+    // 有 avatar_url 直链优先用它：普通用户走 avatars.githubusercontent.com/u/<id>，
+    // 机器人走 .../in/<app_id>——后者没有 <webBase>/<login>.png（login 含 [bot]）。
+    if (avatarUrl) return this.client.getBinary(avatarUrl);
+    // 兜底（仅有 slug 时，如 ping 缓存的当前用户）：<webBase>/<login>.png?size=64
     return this.client.getBinary(`${this.webBase}/${encodeURIComponent(slug)}.png?size=64`);
   }
 
@@ -404,7 +422,7 @@ async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {
 }
 
 function mapUser(u: GhUser): PlatformUser {
-  return { name: u.login, displayName: u.name ?? u.login, slug: u.login };
+  return { name: u.login, displayName: u.name ?? u.login, slug: u.login, avatarUrl: u.avatar_url };
 }
 
 function mapMergeStatus(p: GhPull): MergeStatus {

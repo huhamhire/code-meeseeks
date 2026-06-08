@@ -109,6 +109,7 @@ function CommitRow({ commit, pr }: { commit: PrCommit; pr: StoredPullRequest }) 
           connectionId={pr.connectionId}
           slug={commit.author.slug ?? commit.author.name}
           displayName={commit.author.displayName}
+          avatarUrl={commit.author.avatarUrl}
           size={20}
         />
         <span>{commit.author.displayName}</span>

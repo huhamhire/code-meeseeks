@@ -4,6 +4,7 @@ import type {
   PlatformAdapter,
   PlatformKind,
   PollResult,
+  PrDiscoveryFilter,
   ReviewerStatus,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
@@ -79,6 +80,8 @@ export class Poller {
   private connections: ReadonlyArray<PollerConnection>;
   /** 可热替换的轮询间隔（秒）。初值取自构造 opts */
   private intervalSeconds: number;
+  /** PR 发现筛选分类（运行时，不持久化）。GitHub 据此切换发现范围，其他平台忽略。 */
+  private discoveryFilter: PrDiscoveryFilter = 'review-requested';
 
   constructor(private readonly opts: PollerOptions) {
     this.connections = opts.connections;
@@ -91,6 +94,19 @@ export class Poller {
    */
   setConnections(connections: ReadonlyArray<PollerConnection>): void {
     this.connections = connections;
+  }
+
+  /**
+   * 热替换 PR 发现筛选分类（PR 列表上切换分类时调用）。下一轮 poll 生效；调用方决定是否
+   * 立即 tick。切到更窄的分类后，上轮可见、本轮不再命中的 PR 会被软删退场（与已有逻辑一致）。
+   */
+  setDiscoveryFilter(filter: PrDiscoveryFilter): void {
+    this.discoveryFilter = filter;
+  }
+
+  /** 当前 PR 发现筛选分类。 */
+  getDiscoveryFilter(): PrDiscoveryFilter {
+    return this.discoveryFilter;
   }
 
   /**
@@ -180,7 +196,7 @@ export class Poller {
     for (const { connectionId, adapter } of this.connections) {
       const me = adapter.getCurrentUser();
       try {
-        const remote = await adapter.listPendingPullRequests();
+        const remote = await adapter.listPendingPullRequests({ filter: this.discoveryFilter });
         fetched += remote.length;
         const seen = new Set<string>();
         seenByConnection.set(connectionId, seen);

@@ -16,7 +16,9 @@ import type {
 } from '@meebox/shared';
 import { policyForPlatform } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
+import { editorFontSize } from '../editor-font';
 import { formatBackendError, type FormattedError } from '../errors';
+import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { Avatar } from './Avatar';
 import { DraftZone } from './DraftZone';
@@ -582,7 +584,9 @@ export function DiffView({
           // 否则 React 18 在 inner 上的 event delegation 受影响导致 onClick 不 fire。
           // bubble 阶段 stop 让 target 上的 React handler 先 fire 再阻断冒泡到 editor
           const stopAll = (e: Event): void => e.stopPropagation();
-          for (const evt of ['mousedown', 'mouseup', 'click', 'dblclick', 'wheel']) {
+          // 注意：不拦 wheel —— 评论区 auto-size 无内部滚动，滚轮要冒泡给 Monaco 滚编辑器，
+          // 否则鼠标停在评论上时整个 diff 无法滚动（stopPropagation 会吃掉滚动）。
+          for (const evt of ['mousedown', 'mouseup', 'click', 'dblclick']) {
             dom.addEventListener(evt, stopAll);
           }
 
@@ -678,7 +682,9 @@ export function DiffView({
 
           // inner 上的 stopPropagation 必须晚于 createRoot 注册（双层防御 + 兼容
           // React 18 在 inner 上的 event delegation 初始化顺序）
-          for (const evt of ['mousedown', 'mouseup', 'click', 'dblclick', 'wheel']) {
+          // 注意：不拦 wheel —— 评论区 auto-size 无内部滚动，滚轮要冒泡给 Monaco 滚编辑器，
+          // 否则鼠标停在评论上时整个 diff 无法滚动（stopPropagation 会吃掉滚动）。
+          for (const evt of ['mousedown', 'mouseup', 'click', 'dblclick']) {
             inner.addEventListener(evt, stopAll);
           }
         }
@@ -1589,6 +1595,7 @@ function CommentNode({
         <CommentAuthorRow
           displayName={comment.author.displayName}
           slug={comment.author.slug ?? comment.author.name}
+          avatarUrl={comment.author.avatarUrl}
           connectionId={connectionId}
           at={comment.createdAt}
         />
@@ -1605,6 +1612,7 @@ function CommentNode({
           <div className="comment-zone-body markdown">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={REMOTE_REHYPE_PLUGINS}
               components={components}
               urlTransform={transformBitbucketUrl}
             >
@@ -1705,11 +1713,13 @@ function CommentNode({
 function CommentAuthorRow({
   displayName,
   slug,
+  avatarUrl,
   connectionId,
   at,
 }: {
   displayName: string;
   slug: string;
+  avatarUrl?: string;
   connectionId: string;
   at: string;
 }) {
@@ -1719,6 +1729,7 @@ function CommentAuthorRow({
         connectionId={connectionId}
         slug={slug}
         displayName={displayName}
+        avatarUrl={avatarUrl}
         size={18}
       />
       <strong>{displayName}</strong>
@@ -2100,7 +2111,7 @@ function DiffPane({
         readOnly: true,
         renderSideBySide,
         minimap: { enabled: false },
-        fontSize: 14,
+        fontSize: editorFontSize(14),
         scrollBeyondLastLine: false,
         renderOverviewRuler: false,
         // 显式开 glyph margin，给行内评论标记留位置

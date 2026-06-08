@@ -155,6 +155,25 @@
     white-space: pre-wrap;
   }
 
+  // <details>/<summary> 折叠块：Qodo / pr-agent 机器人评论大量使用。
+  details {
+    margin: $space-3 0;
+    border: 1px solid $border-default;
+    border-radius: $radius-md;
+    padding: 0 $space-4;
+    background: $bg-surface;
+
+    &[open] {
+      padding-bottom: $space-3;
+    }
+  }
+  summary {
+    cursor: pointer;
+    padding: $space-3 0;
+    font-weight: 600;
+    user-select: none;
+  }
+
   h1,
   h2,
   h3,

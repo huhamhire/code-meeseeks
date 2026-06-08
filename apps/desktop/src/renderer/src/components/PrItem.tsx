@@ -51,6 +51,7 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
         connectionId={pr.connectionId}
         slug={pr.author.slug ?? pr.author.name}
         displayName={pr.author.displayName}
+        avatarUrl={pr.author.avatarUrl}
         size={40}
       />
       <div className="pr-item-body">

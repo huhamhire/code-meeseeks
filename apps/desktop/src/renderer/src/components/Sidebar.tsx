@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { LocalPrStatus, StoredPullRequest } from '@meebox/shared';
+import type { LocalPrStatus, PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
 import { PrItem } from './PrItem';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
@@ -11,10 +11,21 @@ interface SidebarProps {
   onSelect: (pr: StoredPullRequest) => void;
   width: number;
   onResize: (next: number) => void;
+  /** GitHub 模式下展示的发现分类控件；非 GitHub 连接时为 undefined（不渲染该行）。 */
+  discoveryFilter?: PrDiscoveryFilter;
+  onDiscoveryFilterChange?: (filter: PrDiscoveryFilter) => void;
 }
 
 export const SIDEBAR_MIN_WIDTH = 240;
 export const SIDEBAR_MAX_WIDTH = 720;
+
+/** GitHub 发现分类（对齐 GitHub 仪表盘四类）；仅 GitHub 连接展示。 */
+const DISCOVERY_FILTERS: ReadonlyArray<{ value: PrDiscoveryFilter; label: string }> = [
+  { value: 'review-requested', label: '待我评审' },
+  { value: 'created', label: '我创建的' },
+  { value: 'assigned', label: '指派给我' },
+  { value: 'mentioned', label: '提及我' },
+];
 
 const FILTERS: ReadonlyArray<{ value: FilterKey; label: string }> = [
   { value: 'pending', label: '待处理' },
@@ -30,7 +41,15 @@ interface PrGroup {
   items: StoredPullRequest[];
 }
 
-export function Sidebar({ prs, selectedId, onSelect, width, onResize }: SidebarProps) {
+export function Sidebar({
+  prs,
+  selectedId,
+  onSelect,
+  width,
+  onResize,
+  discoveryFilter,
+  onDiscoveryFilterChange,
+}: SidebarProps) {
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
@@ -136,6 +155,22 @@ export function Sidebar({ prs, selectedId, onSelect, width, onResize }: SidebarP
         title="拖动调整侧栏宽度"
         aria-label="resize sidebar"
       />
+      {discoveryFilter && onDiscoveryFilterChange && (
+        <div className="sidebar-toolbar sidebar-discovery" role="tablist" aria-label="PR 发现范围">
+          {DISCOVERY_FILTERS.map((d) => (
+            <button
+              key={d.value}
+              role="tab"
+              aria-selected={discoveryFilter === d.value}
+              className={`sidebar-discovery-tab ${discoveryFilter === d.value ? 'is-active' : ''}`}
+              onClick={() => onDiscoveryFilterChange(d.value)}
+              type="button"
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="sidebar-toolbar">
         <input
           type="text"

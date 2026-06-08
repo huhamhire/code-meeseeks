@@ -6,6 +6,7 @@ import type {
   ConnectionSummary,
   LocalPrStatus,
   PrAgentStatus,
+  PrDiscoveryFilter,
   StoredPullRequest,
 } from '@meebox/shared';
 import { invoke, subscribe } from './api';
@@ -72,6 +73,8 @@ export default function App() {
     anchor: { path: string; startLine: number; endLine: number };
   } | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  // GitHub 发现分类（运行时筛选，不持久化）；仅 GitHub 活动连接时在 PR 列表展示。
+  const [discoveryFilter, setDiscoveryFilter] = useState<PrDiscoveryFilter>('review-requested');
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const raw = localStorage.getItem('meebox.sidebarWidth');
     const n = raw ? Number(raw) : 360;
@@ -107,13 +110,39 @@ export default function App() {
     setPrs(fresh);
   }, []);
 
+  // 连接改动（尤其切换活动连接）后整体刷新 boot：活动连接变化后 main 端 app:connections /
+  // prs:list / discoveryFilter 都随之变，必须重拉，否则 boot.connections、PR 列表会过期。
+  const refreshBootAndPrs = useCallback(async (): Promise<void> => {
+    const [config, connections, freshPrs, lastSync, discovery] = await Promise.all([
+      invoke('config:read', undefined),
+      invoke('app:connections', undefined),
+      invoke('prs:list', undefined),
+      invoke('prs:lastSync', undefined),
+      invoke('prs:discoveryFilter', undefined),
+    ]);
+    setBoot((b) => (b ? { ...b, config, connections, lastSyncAt: lastSync.at } : b));
+    setPrs(freshPrs);
+    setLastSyncAt(lastSync.at);
+    setDiscoveryFilter(discovery.filter);
+  }, []);
+
+  // 切换 GitHub 发现分类：先乐观更新高亮，再触发主进程重轮询，回来后刷新列表。
+  const changeDiscoveryFilter = useCallback(
+    async (filter: PrDiscoveryFilter): Promise<void> => {
+      setDiscoveryFilter(filter);
+      await invoke('prs:setDiscoveryFilter', { filter });
+      await reloadPrs();
+    },
+    [reloadPrs],
+  );
+
   useEffect(() => {
     void (async () => {
       try {
         if (!window.api) {
           throw new Error('preload bridge missing: window.api is undefined');
         }
-        const [info, paths, config, prAgent, initialPrs, connections, lastSync] =
+        const [info, paths, config, prAgent, initialPrs, connections, lastSync, discovery] =
           await Promise.all([
             invoke('app:info', undefined),
             invoke('app:paths', undefined),
@@ -122,10 +151,12 @@ export default function App() {
             invoke('prs:list', undefined),
             invoke('app:connections', undefined),
             invoke('prs:lastSync', undefined),
+            invoke('prs:discoveryFilter', undefined),
           ]);
         setBoot({ info, paths, config, prAgent, connections, lastSyncAt: lastSync.at });
         setPrs(initialPrs);
         setLastSyncAt(lastSync.at);
+        setDiscoveryFilter(discovery.filter);
       } catch (e) {
         setFatalError(e instanceof Error ? e.message : String(e));
       }
@@ -315,6 +346,12 @@ export default function App() {
   // 有 active 连接但 LLM 未配置 → ChatPane 给出「需配置才能启用」提示并禁用输入
   const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
 
+  // 发现分类控件仅对 GitHub 活动连接展示（四类 search 限定词为 GitHub 专有）。
+  const activeConnKind = boot.config.connections.find(
+    (c) => c.id === boot.config.active_connection_id,
+  )?.kind;
+  const showDiscoveryFilter = activeConnKind === 'github';
+
   return (
     <div className="app">
       <div className="app-body">
@@ -325,6 +362,8 @@ export default function App() {
             onSelect={(pr) => setSelectedId(pr.localId)}
             width={sidebarWidth}
             onResize={setSidebarWidth}
+            discoveryFilter={showDiscoveryFilter ? discoveryFilter : undefined}
+            onDiscoveryFilterChange={showDiscoveryFilter ? changeDiscoveryFilter : undefined}
           />
         )}
         <MainPane
@@ -390,6 +429,7 @@ export default function App() {
           onProxyChange={(proxy) =>
             setBoot((b) => (b ? { ...b, config: { ...b.config, proxy } } : b))
           }
+          onConnectionsChange={refreshBootAndPrs}
           onClose={() => setShowSettings(false)}
         />
       )}

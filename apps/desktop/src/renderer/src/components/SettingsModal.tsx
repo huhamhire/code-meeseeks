@@ -24,6 +24,12 @@ interface SettingsModalProps {
   /** LLM 配置改动后通知父级同步状态（StatusBar chip 等） */
   onLlmChange?: (llm: Config['llm']) => void;
   onProxyChange?: (proxy: Config['proxy']) => void;
+  /**
+   * 连接改动（含切换活动连接）保存成功后通知父级。父级需重拉 config + 连接摘要 + PR 列表：
+   * 活动连接变化后，main 端 app:connections 只返回新活动连接的摘要、prs:list 只返回其 PR，
+   * 不刷新的话 App 的 boot.connections / 列表会过期（丢 capabilities/user、PR 对不上）。
+   */
+  onConnectionsChange?: () => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -45,6 +51,7 @@ export function SettingsModal({
   config,
   onLlmChange,
   onProxyChange,
+  onConnectionsChange,
   onClose,
 }: SettingsModalProps) {
   const [opening, setOpening] = useState(false);
@@ -261,6 +268,7 @@ export function SettingsModal({
       }
       if (connectionsChanged) {
         await invoke('config:setConnections', { connections, active_connection_id: activeConnId });
+        await onConnectionsChange?.();
       }
       if (reposDirChanged && reposDirInput.trim()) {
         await invoke('config:setReposDir', { reposDir: reposDirInput.trim() });
