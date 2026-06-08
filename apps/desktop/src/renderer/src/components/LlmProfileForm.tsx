@@ -65,6 +65,14 @@ export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     defaultBaseUrl: 'http://localhost:11434',
     needsKey: false,
   },
+  {
+    value: 'cli',
+    label: '本地 CLI（Claude Code）',
+    hint: '由本机已安装并登录的 Claude Code 命令行执行评审，不直连 API、不填密钥；使用的模型与额度取决于你本地 claude 的登录态。一期仅支持 claude（codex 待后续版本）。',
+    modelExample: 'claude',
+    defaultBaseUrl: '',
+    needsKey: false,
+  },
   // 「OpenAI 兼容」放最后：它是兜底通用项，主流程让用户先扫读具名 provider
   {
     value: 'openai-compatible',
@@ -120,6 +128,15 @@ export function validateProfile(p: LlmProfile, existing: LlmProfile[]): ProfileE
     if (dup) errors.label = '名称已存在';
   }
 
+  // cli：model 字段填的是本机命令名（claude），无 base_url / api_key 概念。
+  // 一期只放行 claude；codex 等先在 UI 可输入但校验拦下，等后续版本接通。
+  if (p.provider === 'cli') {
+    const cmd = p.model.trim().toLowerCase();
+    if (!cmd) errors.model = '必填';
+    else if (cmd !== 'claude') errors.model = '一期仅支持 claude（codex 待后续版本）';
+    return errors;
+  }
+
   const meta = getProviderMeta(p.provider);
   if (!p.model.trim()) errors.model = '必填';
   if (meta.needsKey && !p.api_key.trim()) errors.api_key = '必填';
@@ -168,6 +185,7 @@ export function LlmProfileForm({
     setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
   };
   const providerMeta = getProviderMeta(draft.provider);
+  const isCli = draft.provider === 'cli';
   const errors = validateProfile(draft, existing);
   const showError = (k: keyof ProfileErrors): boolean => (forceShowErrors || touched[k]) && !!errors[k];
   const update = <K extends keyof LlmProfile>(field: K, value: LlmProfile[K]): void => {
@@ -216,7 +234,7 @@ export function LlmProfileForm({
           </>
         )}
         <div className="modal-kv-key">
-          Model <span className="settings-required">*</span>
+          {isCli ? 'CLI 命令' : 'Model'} <span className="settings-required">*</span>
         </div>
         <div className="modal-kv-val">
           <input
@@ -225,51 +243,62 @@ export function LlmProfileForm({
             value={draft.model}
             onChange={(e) => update('model', e.target.value)}
             onBlur={() => markTouched('model')}
-            placeholder={providerMeta.modelExample}
+            placeholder={isCli ? 'claude（一期仅支持 claude）' : providerMeta.modelExample}
           />
           {showError('model') && <p className="settings-field-error">{errors.model}</p>}
         </div>
-        <div className="modal-kv-key">
-          Base URL{!providerMeta.defaultBaseUrl && <span className="settings-required"> *</span>}
-        </div>
-        <div className="modal-kv-val">
-          <input
-            type="text"
-            className={`settings-input${showError('base_url') ? ' settings-input-error' : ''}`}
-            value={draft.base_url}
-            onChange={(e) => update('base_url', e.target.value)}
-            onBlur={() => markTouched('base_url')}
-            placeholder={baseUrlPlaceholder}
-          />
-          {showError('base_url') && <p className="settings-field-error">{errors.base_url}</p>}
-        </div>
-        <div className="modal-kv-key">
-          API Key{providerMeta.needsKey && <span className="settings-required"> *</span>}
-        </div>
-        <div className="modal-kv-val">
-          <div className="settings-secret-row">
-            <input
-              type={keyVisible ? 'text' : 'password'}
-              className={`settings-input${showError('api_key') ? ' settings-input-error' : ''}`}
-              value={draft.api_key}
-              onChange={(e) => update('api_key', e.target.value)}
-              onBlur={() => markTouched('api_key')}
-              placeholder={providerMeta.needsKey ? 'sk-...' : '该 provider 无需密钥（留空）'}
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              className="btn btn-sm btn-icon"
-              onClick={() => setKeyVisible((v) => !v)}
-              title={keyVisible ? '隐藏' : '显示'}
-              aria-label={keyVisible ? '隐藏' : '显示'}
-            >
-              {keyVisible ? <EyeIcon /> : <EyeOffIcon />}
-            </button>
-          </div>
-          {showError('api_key') && <p className="settings-field-error">{errors.api_key}</p>}
-        </div>
+        {/* cli 模式不直连 API：没有 Base URL / API Key 概念，整组隐藏 */}
+        {!isCli && (
+          <>
+            <div className="modal-kv-key">
+              Base URL{!providerMeta.defaultBaseUrl && <span className="settings-required"> *</span>}
+            </div>
+            <div className="modal-kv-val">
+              <input
+                type="text"
+                className={`settings-input${showError('base_url') ? ' settings-input-error' : ''}`}
+                value={draft.base_url}
+                onChange={(e) => update('base_url', e.target.value)}
+                onBlur={() => markTouched('base_url')}
+                placeholder={baseUrlPlaceholder}
+              />
+              {showError('base_url') && <p className="settings-field-error">{errors.base_url}</p>}
+            </div>
+            <div className="modal-kv-key">
+              API Key{providerMeta.needsKey && <span className="settings-required"> *</span>}
+            </div>
+            <div className="modal-kv-val">
+              <div className="settings-secret-row">
+                <input
+                  type={keyVisible ? 'text' : 'password'}
+                  className={`settings-input${showError('api_key') ? ' settings-input-error' : ''}`}
+                  value={draft.api_key}
+                  onChange={(e) => update('api_key', e.target.value)}
+                  onBlur={() => markTouched('api_key')}
+                  placeholder={providerMeta.needsKey ? 'sk-...' : '该 provider 无需密钥（留空）'}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-icon"
+                  onClick={() => setKeyVisible((v) => !v)}
+                  title={keyVisible ? '隐藏' : '显示'}
+                  aria-label={keyVisible ? '隐藏' : '显示'}
+                >
+                  {keyVisible ? <EyeIcon /> : <EyeOffIcon />}
+                </button>
+              </div>
+              {showError('api_key') && <p className="settings-field-error">{errors.api_key}</p>}
+            </div>
+          </>
+        )}
       </div>
+      {isCli && (
+        <p className="muted modal-footer">
+          ⚠️ 填写并启用此预设，即代表你授权 Code Meeseeks 调用本机的 <code>{draft.model.trim() || 'claude'}</code>{' '}
+          命令行工具执行评审操作（在子进程中以你的本地登录态运行）。请确认已安装 Claude Code 并完成登录。
+        </p>
+      )}
       <p className="muted modal-footer">{providerMeta.hint}</p>
     </>
   );

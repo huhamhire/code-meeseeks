@@ -45,6 +45,7 @@ export const LlmProfileSchema = z.object({
       'ollama',
       'dashscope',
       'volcengine-ark',
+      'cli',
     ])
     .default('openai-compatible'),
   /** OpenAI 系: api_base；Ollama: api_base。非必填留空 */
@@ -66,7 +67,8 @@ export type LlmProvider =
   | 'anthropic'
   | 'ollama'
   | 'dashscope' // 阿里百炼（DashScope，OpenAI 兼容入口，含千问 / Qwen / DeepSeek-on-DashScope）
-  | 'volcengine-ark'; // 火山方舟（Volcengine Ark，OpenAI 兼容入口，含豆包 / Doubao 等）
+  | 'volcengine-ark' // 火山方舟（Volcengine Ark，OpenAI 兼容入口，含豆包 / Doubao 等）
+  | 'cli'; // 本地命令行：由本机已安装的 agentic CLI（一期 claude code）执行评审，不直连 API
 export type LlmProfile = z.infer<typeof LlmProfileSchema>;
 
 /**
@@ -165,6 +167,7 @@ export const ConfigSchema = z.object({
             'ollama',
             'dashscope',
             'volcengine-ark',
+            'cli',
           ] as const
         ).includes(oldProvider as LlmProvider)
           ? (oldProvider as LlmProvider)

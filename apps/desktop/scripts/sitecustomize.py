@@ -186,9 +186,143 @@ def _emit_usage(response) -> None:
         _debug(f"emit usage failed (ignored): {exc}")
 
 
+def _emit_usage_tokens(prompt_tokens, completion_tokens) -> None:
+    """CLI 模式下从 CLI 返回的 JSON usage 直接构造 `@@MEEBOX_USAGE@@` 哨兵（与 _emit_usage 同
+    格式，主进程 onLine 同一套累加逻辑）。两个数都为 None 则不打。"""
+    try:
+        if prompt_tokens is None and completion_tokens is None:
+            return
+        import json
+
+        rec = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
+        }
+        print(f"@@MEEBOX_USAGE@@ {json.dumps(rec)}", file=sys.stderr, flush=True)
+    except Exception as exc:  # noqa: BLE001
+        _debug(f"emit cli usage failed (ignored): {exc}")
+
+
+def _cli_argv(bin_name):
+    """把用户填的 CLI 命令名（一期 claude）解析成可执行 argv 前缀（不含 prompt——prompt 走 stdin）。
+    用 shutil.which 解析真实路径：Windows 上据 PATHEXT 命中 `claude.cmd`，而 .cmd/.bat 不能被
+    CreateProcess 直接拉起，须经 `cmd /c`；类 Unix 直接用解析到的可执行。找不到返回 None。
+
+    固定 flags：`-p`（print 单轮非交互）+ `--output-format json`（一段 JSON 同时含结果文本与
+    token usage）。刻意不传 `--model`：用用户本地 claude 的默认模型与登录态，不在这里假设可用型号。"""
+    import shutil
+
+    exe = shutil.which(bin_name)
+    if not exe:
+        return None
+    flags = ["-p", "--output-format", "json"]
+    if sys.platform == "win32" and exe.lower().endswith((".cmd", ".bat")):
+        return ["cmd", "/c", exe] + flags
+    return [exe] + flags
+
+
+def _parse_cli_output(stdout):
+    """解析 `claude --output-format json` 的 stdout，返回 (text, usage_dict_or_None)。
+    成功形如 {"result": "...", "usage": {"input_tokens":..,"output_tokens":..}, "is_error": false}。
+    非 JSON / 缺字段一律退化为「整段 stdout 当文本、usage=None」，保证 review 仍拿得到内容；
+    仅 is_error=True 时抛错让上层报错。"""
+    import json
+
+    s = (stdout or "").strip()
+    if not s:
+        return "", None
+    try:
+        obj = json.loads(s)
+    except Exception:  # noqa: BLE001 - 非 JSON（纯文本/旧版本输出）→ 原样当文本
+        return s, None
+    if not isinstance(obj, dict):
+        return s, None
+    if obj.get("is_error"):
+        raise RuntimeError(f"claude CLI 返回错误: {str(obj.get('result') or obj)[:500]}")
+    text = obj.get("result")
+    if not isinstance(text, str):
+        text = s
+    usage = obj.get("usage")
+    return text, (usage if isinstance(usage, dict) else None)
+
+
+def _install_cli_chat_completion(handler_cls, bin_name) -> None:
+    """**方案 B 核心**：CLI 模式把 LiteLLMAIHandler.chat_completion 整体替换成「调本机 CLI 子进程」
+    版本，完全绕过 litellm / 直连 API。pr-agent 只依赖 chat_completion 返回 (text, finish_reason)
+    这个稳定契约（base_ai_handler 定义），故本替换与 pr-agent 具体版本无关，**不受版本守卫限制**
+    （区别于本模块其它两个依赖内部实现的补丁）。
+
+    要点：
+      - prompt 经 **stdin** 喂入：pr-agent 的 review prompt 含完整 diff，动辄数十 KB，走 argv 会撞
+        OS 命令行长度上限（Windows ~32KB）。
+      - system / user 拼成一段：CLI 单轮没有独立 system 槽，按 pr-agent 对 user_message_only_models
+        的同款处理 `f"{system}\\n\\n\\n{user}"` 合并。
+      - cwd 落到中性临时目录：避免 claude 吃到被评审仓库的 CLAUDE.md / .claude 上下文，污染输出。
+      - 子进程继承父 env（PATH / HOME），故能找到 claude 二进制并复用 ~/.claude 登录态；其中
+        HTTP(S)_PROXY / NO_PROXY（来自 buildProxyEnv，已在父进程 env 里）原样继承 → claude 出站
+        自动走用户配置的代理，无需在此另设。
+      - **强制订阅额度**：从子进程 env 剥掉 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN。claude 一旦
+        见到 API key 会改走按量计费而非订阅 OAuth；用户机器上常有全局 ANTHROPIC_API_KEY，会经
+        os.environ 串味，故显式抹掉，确保 cli 模式 = 订阅。要用 API key 计费的走 anthropic provider。"""
+    import asyncio
+    import tempfile
+
+    argv_prefix = _cli_argv(bin_name)
+    # claude 见到这些 env 就会优先按量计费，cli 模式语义是「吃订阅」→ 一律从子进程 env 剥掉。
+    _STRIP_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+
+    async def chat_completion(self, model, system, user, temperature=0.2, img_path=None):
+        if argv_prefix is None:
+            raise RuntimeError(
+                f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装 Claude Code、完成登录，"
+                f"且 '{bin_name}' 在 PATH 中。"
+            )
+        prompt = f"{system}\n\n\n{user}" if system else user
+        # 基于 os.environ 拷贝再剔除计费 key——其余（PATH/HOME/代理变量等）原样保留。
+        child_env = {k: v for k, v in os.environ.items() if k not in _STRIP_ENV}
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv_prefix,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=tempfile.gettempdir(),
+                env=child_env,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"启动 CLI '{bin_name}' 失败: {exc}") from exc
+        out, err = await proc.communicate(prompt.encode("utf-8"))
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"CLI '{bin_name}' 退出码 {proc.returncode}: "
+                f"{(err or b'').decode('utf-8', 'replace')[:500]}"
+            )
+        text, usage = _parse_cli_output((out or b"").decode("utf-8", "replace"))
+        if usage:
+            # claude usage：input_tokens(+cache_*) ≈ prompt，output_tokens ≈ completion
+            prompt_tokens = usage.get("input_tokens")
+            for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
+                v = usage.get(k)
+                if isinstance(v, int):
+                    prompt_tokens = (prompt_tokens or 0) + v
+            _emit_usage_tokens(prompt_tokens, usage.get("output_tokens"))
+        return text, "stop"
+
+    handler_cls.chat_completion = chat_completion
+    _debug(f"installed CLI chat_completion via '{bin_name}'")
+
+
 def _patch_litellm_handler(module) -> None:
-    """对 pr-agent 的 litellm handler 模块打两个补丁（合并在一个 patch_fn，同模块注册多 finder 会
-    互相遮蔽）：(1) Anthropic 新型号去 temperature；(2) 包 _get_completion inline 采集真实 token usage。
+    """对 pr-agent 的 litellm handler 模块打补丁（合并在一个 patch_fn，同模块注册多 finder 会
+    互相遮蔽）。
+
+    (0) **CLI 模式**（MEEBOX_CLI_MODE 置位）：直接把 chat_completion 换成调本机 CLI 的版本，绕过
+        litellm，随后 return —— 去 temperature / usage-wrap 两个 litellm 补丁此时无意义。该分支
+        在版本守卫之前，不受 pr-agent 版本限制。
+
+    其余两个补丁（仅在 pin 版本生效）：(1) Anthropic 新型号去 temperature；(2) 包 _get_completion
+    inline 采集真实 token usage。
 
     (1) 新版 Anthropic 原厂模型（claude-opus-4-8 等）弃用 temperature 参数，但 pr-agent 默认
     仍发 temperature=0.2 → Anthropic API 直接报 "temperature is deprecated for this model"，
@@ -203,6 +337,15 @@ def _patch_litellm_handler(module) -> None:
     追新维护），既修当下报错也兼容未来新型号。LiteLLMAIHandler.__init__ 里
     `self.no_support_temperature_models = NO_SUPPORT_TEMPERATURE_MODELS` 取的是模块全局名，故重绑
     全局即对之后创建的 handler 生效；只动成员判定、不碰 system/user 合并。"""
+    # (0) CLI 模式：换 chat_completion 直接调本机 CLI，绕过 litellm。放在版本守卫之前，
+    # 因为它只依赖 base_ai_handler 的稳定契约，跟 pr-agent 内部实现无关。装好即 return。
+    if os.environ.get("MEEBOX_CLI_MODE"):
+        handler_cls = getattr(module, "LiteLLMAIHandler", None)
+        if handler_cls is not None:
+            bin_name = (os.environ.get("MEEBOX_CLI_BIN") or "claude").strip() or "claude"
+            _install_cli_chat_completion(handler_cls, bin_name)
+        return
+
     installed = _pragent_version()
     if installed != _EXPECTED_PRAGENT_VERSION:
         # 版本不符：local_git_provider 补丁已 _warn 过总体降级，这里静默跳过避免重复噪音
