@@ -34,6 +34,8 @@ export default function App() {
   const [prs, setPrs] = useState<StoredPullRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // 合并进行中：GitHub 合并可能较慢（异步算 mergeable），按钮置等待态并防重复点击。
+  const [merging, setMerging] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
   // 操作级 toast（审批 / 合并等远端动作失败时提示，区别于 fatalError 整屏报错）。
@@ -246,8 +248,9 @@ export default function App() {
   );
 
   const mergeSelectedPr = useCallback(async (): Promise<void> => {
-    if (!selected) return;
+    if (!selected || merging) return;
     const mergedId = selected.localId;
+    setMerging(true);
     try {
       await invoke('prs:merge', { localId: mergedId });
     } catch (e) {
@@ -256,11 +259,13 @@ export default function App() {
       notifyError(`合并失败：${msg}`);
       void triggerRefresh();
       return;
+    } finally {
+      setMerging(false);
     }
     // 合并成功：PR 已转 MERGED，会从 pending 列表退场。取消选中 + 刷新让其消失
     if (selectedId === mergedId) setSelectedId(null);
     await triggerRefresh();
-  }, [selected, selectedId, triggerRefresh, notifyError]);
+  }, [selected, selectedId, triggerRefresh, notifyError, merging]);
 
   // 首启向导完成：落盘连接（必）+ LLM / 缓存目录（按需），再重拉配置/连接/PR 更新
   // boot。boot.config 拿到有效 active 连接后，下方 needsOnboarding 派生为 false，
@@ -363,6 +368,7 @@ export default function App() {
           hasConnections={boot.config.connections.length > 0}
           onSetStatus={(s) => void setSelectedPrStatus(s)}
           onMerge={() => void mergeSelectedPr()}
+          merging={merging}
           capabilities={selectedConn?.capabilities}
           currentUserName={selectedConn?.user?.name ?? null}
           pendingDiffNav={pendingDiffNav}

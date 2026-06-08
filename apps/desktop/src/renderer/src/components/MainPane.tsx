@@ -117,6 +117,8 @@ interface MainPaneProps {
   onSetStatus: (status: LocalPrStatus) => void;
   /** 合并当前 PR（仅在 mergeStatus.canMerge 时由 header 按钮触发） */
   onMerge: () => void;
+  /** 合并请求进行中：按钮置等待态并禁用，防重复点击（远端合并可能较慢）。 */
+  merging?: boolean;
   /**
    * 当前 PR 所属连接的平台能力（多平台降级用）。undefined = 未知（无连接/旧数据）→ 不降级。
    * 据此决定审批按钮 显/隐（reviewStatuses）等。
@@ -154,6 +156,7 @@ export function MainPane({
   hasConnections,
   onSetStatus,
   onMerge,
+  merging = false,
   capabilities,
   currentUserName,
   pendingDiffNav,
@@ -343,9 +346,11 @@ export function MainPane({
                 type="button"
                 className="btn btn-sm pr-header-merge"
                 onClick={onMerge}
+                disabled={merging}
+                aria-busy={merging}
                 title="合并此 PR 到目标分支"
               >
-                <PullRequestIcon size={14} /> 合并
+                <PullRequestIcon size={14} /> {merging ? '合并中…' : '合并'}
               </button>
             )}
             {reviewAllowed('approved') && (
