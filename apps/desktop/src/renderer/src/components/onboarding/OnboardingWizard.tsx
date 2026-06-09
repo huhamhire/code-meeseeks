@@ -11,7 +11,7 @@ import {
 import { LLM_PROVIDERS, LlmProfileForm, newProfileId } from '../LlmProfileForm';
 import { LlmProviderIcon } from '../LlmProviderIcon';
 import { PLATFORM_META } from '../PlatformIcon';
-import { FolderIcon } from '../icons';
+import { FolderIcon, PullRequestIcon, SuccessBadgeIcon } from '../icons';
 
 /** 向导收集到的配置，交由 App 落盘（config:setConnections 等）后切入主界面 */
 export interface OnboardingResult {
@@ -43,6 +43,7 @@ export function OnboardingWizard({
 
   const [connDraft, setConnDraft] = useState<ConnDraft>(() => ({
     id: newProfileId(),
+    kind: 'github',
     display_name: '',
     base_url: '',
     token: '',
@@ -193,14 +194,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
   return (
     <div className="onboarding-welcome">
       <div className="onboarding-logo" aria-hidden="true">
-        <svg width="56" height="56" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="4" cy="4" r="1.6" />
-          <circle cx="4" cy="12" r="1.6" />
-          <line x1="4" y1="5.6" x2="4" y2="10.4" />
-          <circle cx="12" cy="12" r="1.6" />
-          <path d="M12 10.4 V7 a3 3 0 0 0 -3 -3 H6.5" />
-          <path d="M8 2 L6 4 L8 6" />
-        </svg>
+        <PullRequestIcon size={56} />
       </div>
       <h2 className="onboarding-title">欢迎使用 Code Meeseeks</h2>
       <p className="onboarding-lead">只需几步配置即可连接你的代码平台。</p>
@@ -238,10 +232,11 @@ function PlatformStep({
         {/* 左：平台方案选择 */}
         <div className="onboarding-platform-list" role="radiogroup" aria-label="代码平台">
           {PLATFORM_META.map((p) => {
-            // 一期只有 Bitbucket 可选并恒选中；GitHub/GitLab 置灰
-            const selected = p.kind === 'bitbucket-server';
+            // 可用平台（Bitbucket / GitHub）可点选并设 kind；GitLab 等未实现的置灰
+            const selected = p.kind === connDraft.kind;
             return (
-              <div
+              <button
+                type="button"
                 key={p.kind}
                 className={`onboarding-platform-item${selected ? ' selected' : ''}${
                   p.available ? '' : ' disabled'
@@ -249,6 +244,10 @@ function PlatformStep({
                 role="radio"
                 aria-checked={selected}
                 aria-disabled={!p.available}
+                disabled={!p.available}
+                onClick={() => {
+                  if (p.available) onConnChange({ ...connDraft, kind: p.kind as ConnDraft['kind'] });
+                }}
               >
                 <span className={`onboarding-platform-icon${p.available ? '' : ' muted-icon'}`}>
                   <p.Icon size={24} />
@@ -257,7 +256,7 @@ function PlatformStep({
                   <span className="onboarding-platform-name">{p.label}</span>
                   <span className="onboarding-platform-meta">{p.sub}</span>
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -404,17 +403,7 @@ function DoneStep({ submitting, error }: { submitting: boolean; error: string | 
   return (
     <div className="onboarding-done">
       <div className="onboarding-done-badge" aria-hidden="true">
-        <svg width="76" height="76" viewBox="0 0 52 52" fill="none">
-          <circle cx="26" cy="26" r="24" stroke="currentColor" strokeWidth="3" opacity="0.35" />
-          <path
-            className="onboarding-check-path"
-            d="M15 27l7.5 7.5L38 18.5"
-            stroke="currentColor"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <SuccessBadgeIcon size={76} />
       </div>
       <h2 className="onboarding-title">一切就绪 🎉</h2>
       <p className="onboarding-lead">

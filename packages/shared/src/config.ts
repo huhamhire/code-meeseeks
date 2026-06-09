@@ -4,7 +4,7 @@ export const CloneSettingsSchema = z
   .object({
     /**
      * git clone 协议。
-     * - pat (默认): HTTPS，URL 里嵌 `<当前用户名>:<PAT>` (BBS Server 约定)
+     * - pat (默认): HTTPS，URL 里嵌 `<当前用户名>:<PAT>` (Bitbucket Server 约定)
      * - ssh: scp-like `git@<host>:<project>/<repo>.git`，端口/密钥走系统 ssh config
      */
     protocol: z.enum(['pat', 'ssh']).default('pat'),
@@ -23,7 +23,33 @@ export const BitbucketServerConnectionSchema = z.object({
   clone: CloneSettingsSchema,
 });
 
-export const ConnectionSchema = z.discriminatedUnion('kind', [BitbucketServerConnectionSchema]);
+/** github.com 官方 REST API base。GitHub 连接的 base_url 留空时默认走这里。 */
+export const GITHUB_DOTCOM_API_BASE = 'https://api.github.com';
+
+export const GitHubConnectionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('github'),
+  /**
+   * GitHub REST API base。**可选**：留空 / 缺省时默认 `https://api.github.com`（github.com）；
+   * GitHub Enterprise Server 填 `https://<ghe-host>/api/v3`。clone / web host 由 adapter
+   * 推导（api.github.com → github.com；GHE → 同 host）。
+   */
+  base_url: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().url().default(GITHUB_DOTCOM_API_BASE),
+  ),
+  display_name: z.string(),
+  auth: z.object({
+    type: z.literal('pat'),
+    token: z.string(),
+  }),
+  clone: CloneSettingsSchema,
+});
+
+export const ConnectionSchema = z.discriminatedUnion('kind', [
+  BitbucketServerConnectionSchema,
+  GitHubConnectionSchema,
+]);
 
 /**
  * 单条 LLM 预设。多条 profile 共存，由 `llm.active_id` 切换当前生效。
@@ -45,6 +71,7 @@ export const LlmProfileSchema = z.object({
       'ollama',
       'dashscope',
       'volcengine-ark',
+      'cli',
     ])
     .default('openai-compatible'),
   /** OpenAI 系: api_base；Ollama: api_base。非必填留空 */
@@ -66,7 +93,8 @@ export type LlmProvider =
   | 'anthropic'
   | 'ollama'
   | 'dashscope' // 阿里百炼（DashScope，OpenAI 兼容入口，含千问 / Qwen / DeepSeek-on-DashScope）
-  | 'volcengine-ark'; // 火山方舟（Volcengine Ark，OpenAI 兼容入口，含豆包 / Doubao 等）
+  | 'volcengine-ark' // 火山方舟（Volcengine Ark，OpenAI 兼容入口，含豆包 / Doubao 等）
+  | 'cli'; // 本地命令行：由本机已安装的 agentic CLI（一期 claude code）执行评审，不直连 API
 export type LlmProfile = z.infer<typeof LlmProfileSchema>;
 
 /**
@@ -122,13 +150,12 @@ export const ConfigSchema = z.object({
   /**
    * pr-agent 运行时策略选择。
    * - 'auto'（默认）：优先嵌入式运行时（随 app 打包，正常安装恒可用），缺失则
-   *   回退探测 local-cli → docker；
-   * - 显式 'embedded' / 'local-cli' / 'docker'：强制该策略，便于高级用户切到
-   *   自有 Docker / 系统 CLI。
+   *   回退探测系统 local-cli；
+   * - 显式 'embedded' / 'local-cli'：强制该策略，便于高级用户切到自有系统 CLI。
    */
   pr_agent: z
     .object({
-      strategy: z.enum(['auto', 'embedded', 'local-cli', 'docker']).default('auto'),
+      strategy: z.enum(['auto', 'embedded', 'local-cli']).default('auto'),
     })
     .default({}),
   connections: z.array(ConnectionSchema).default([]),
@@ -165,6 +192,7 @@ export const ConfigSchema = z.object({
             'ollama',
             'dashscope',
             'volcengine-ark',
+            'cli',
           ] as const
         ).includes(oldProvider as LlmProvider)
           ? (oldProvider as LlmProvider)
@@ -202,3 +230,4 @@ export const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type BitbucketServerConnection = z.infer<typeof BitbucketServerConnectionSchema>;
+export type GitHubConnection = z.infer<typeof GitHubConnectionSchema>;

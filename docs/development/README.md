@@ -107,7 +107,7 @@ npm --prefix apps/desktop run pack
 │   ├── logger/                     # pino 日志
 │   ├── platform-bitbucket-server/  # Bitbucket Server 平台适配
 │   ├── poller/                     # PR 轮询发现 + 草稿池
-│   ├── pr-agent-bridge/            # pr-agent 调用（embedded / local-cli / docker 策略）
+│   ├── pr-agent-bridge/            # pr-agent 调用（embedded / local-cli 策略）
 │   ├── repo-mirror/                # 仓库镜像（partial clone + diff/blame）
 │   ├── rules/                      # 规则目录加载与匹配
 │   └── state-store/                # JSON 状态存储（原子写）
@@ -128,7 +128,7 @@ npm --prefix apps/desktop run pack
 └── repos/           # 仓库镜像（默认位置，repos_dir 可改到其它盘）
 ```
 
-数据模型与容错设计见 [modules/03 状态存储与数据模型](../modules/03-state-storage.md)。
+数据模型与容错设计见 [arch/03 状态存储与数据模型](../arch/03-state-storage.md)。
 
 ## 9. 测试约定
 

@@ -286,6 +286,11 @@ select.settings-input {
   color: $color-danger;
   margin-left: $space-1;
 }
+.settings-optional {
+  color: $text-muted;
+  margin-left: $space-1;
+  font-size: 0.85em;
+}
 .settings-input-error {
   border-color: $color-danger !important;
 

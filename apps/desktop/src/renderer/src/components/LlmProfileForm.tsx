@@ -65,7 +65,7 @@ export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     defaultBaseUrl: 'http://localhost:11434',
     needsKey: false,
   },
-  // 「OpenAI 兼容」放最后：它是兜底通用项，主流程让用户先扫读具名 provider
+  // 「OpenAI 兼容」：兜底通用项，主流程让用户先扫读具名 provider
   {
     value: 'openai-compatible',
     label: 'OpenAI 兼容',
@@ -73,6 +73,15 @@ export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     modelExample: 'gpt-4o-mini / qwen2.5-72b-instruct',
     defaultBaseUrl: '',
     needsKey: true,
+  },
+  // 「本地 CLI」放最后：进阶项，转交本机命令行工具代调模型，不直连 API
+  {
+    value: 'cli',
+    label: '本地 CLI',
+    hint: '将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。',
+    modelExample: '命令名',
+    defaultBaseUrl: '',
+    needsKey: false,
   },
 ];
 
@@ -118,6 +127,16 @@ export function validateProfile(p: LlmProfile, existing: LlmProfile[]): ProfileE
       (x) => x.id !== p.id && x.label.trim().toLowerCase() === label.toLowerCase(),
     );
     if (dup) errors.label = '名称已存在';
+  }
+
+  // cli：model 字段填的是本机命令名，无 base_url / api_key 概念。隐藏校验——只放行已适配的
+  // 命令（claude / codex，与 sitecustomize 的 _CLI_SPECS 同步），其余命令运行时无对应规格、跑不通。
+  // 提示不点名受支持的命令（保持隐晦），仅给通用的「不受支持」反馈。
+  if (p.provider === 'cli') {
+    const cmd = p.model.trim().toLowerCase();
+    if (!cmd) errors.model = '必填';
+    else if (cmd !== 'claude' && cmd !== 'codex') errors.model = '不受支持的 CLI 工具';
+    return errors;
   }
 
   const meta = getProviderMeta(p.provider);
@@ -168,6 +187,7 @@ export function LlmProfileForm({
     setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
   };
   const providerMeta = getProviderMeta(draft.provider);
+  const isCli = draft.provider === 'cli';
   const errors = validateProfile(draft, existing);
   const showError = (k: keyof ProfileErrors): boolean => (forceShowErrors || touched[k]) && !!errors[k];
   const update = <K extends keyof LlmProfile>(field: K, value: LlmProfile[K]): void => {
@@ -216,7 +236,7 @@ export function LlmProfileForm({
           </>
         )}
         <div className="modal-kv-key">
-          Model <span className="settings-required">*</span>
+          {isCli ? 'CLI 命令' : 'Model'} <span className="settings-required">*</span>
         </div>
         <div className="modal-kv-val">
           <input
@@ -225,51 +245,62 @@ export function LlmProfileForm({
             value={draft.model}
             onChange={(e) => update('model', e.target.value)}
             onBlur={() => markTouched('model')}
-            placeholder={providerMeta.modelExample}
+            placeholder={isCli ? '命令名' : providerMeta.modelExample}
           />
           {showError('model') && <p className="settings-field-error">{errors.model}</p>}
         </div>
-        <div className="modal-kv-key">
-          Base URL{!providerMeta.defaultBaseUrl && <span className="settings-required"> *</span>}
-        </div>
-        <div className="modal-kv-val">
-          <input
-            type="text"
-            className={`settings-input${showError('base_url') ? ' settings-input-error' : ''}`}
-            value={draft.base_url}
-            onChange={(e) => update('base_url', e.target.value)}
-            onBlur={() => markTouched('base_url')}
-            placeholder={baseUrlPlaceholder}
-          />
-          {showError('base_url') && <p className="settings-field-error">{errors.base_url}</p>}
-        </div>
-        <div className="modal-kv-key">
-          API Key{providerMeta.needsKey && <span className="settings-required"> *</span>}
-        </div>
-        <div className="modal-kv-val">
-          <div className="settings-secret-row">
-            <input
-              type={keyVisible ? 'text' : 'password'}
-              className={`settings-input${showError('api_key') ? ' settings-input-error' : ''}`}
-              value={draft.api_key}
-              onChange={(e) => update('api_key', e.target.value)}
-              onBlur={() => markTouched('api_key')}
-              placeholder={providerMeta.needsKey ? 'sk-...' : '该 provider 无需密钥（留空）'}
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              className="btn btn-sm btn-icon"
-              onClick={() => setKeyVisible((v) => !v)}
-              title={keyVisible ? '隐藏' : '显示'}
-              aria-label={keyVisible ? '隐藏' : '显示'}
-            >
-              {keyVisible ? <EyeIcon /> : <EyeOffIcon />}
-            </button>
-          </div>
-          {showError('api_key') && <p className="settings-field-error">{errors.api_key}</p>}
-        </div>
+        {/* cli 模式不直连 API：没有 Base URL / API Key 概念，整组隐藏 */}
+        {!isCli && (
+          <>
+            <div className="modal-kv-key">
+              Base URL{!providerMeta.defaultBaseUrl && <span className="settings-required"> *</span>}
+            </div>
+            <div className="modal-kv-val">
+              <input
+                type="text"
+                className={`settings-input${showError('base_url') ? ' settings-input-error' : ''}`}
+                value={draft.base_url}
+                onChange={(e) => update('base_url', e.target.value)}
+                onBlur={() => markTouched('base_url')}
+                placeholder={baseUrlPlaceholder}
+              />
+              {showError('base_url') && <p className="settings-field-error">{errors.base_url}</p>}
+            </div>
+            <div className="modal-kv-key">
+              API Key{providerMeta.needsKey && <span className="settings-required"> *</span>}
+            </div>
+            <div className="modal-kv-val">
+              <div className="settings-secret-row">
+                <input
+                  type={keyVisible ? 'text' : 'password'}
+                  className={`settings-input${showError('api_key') ? ' settings-input-error' : ''}`}
+                  value={draft.api_key}
+                  onChange={(e) => update('api_key', e.target.value)}
+                  onBlur={() => markTouched('api_key')}
+                  placeholder={providerMeta.needsKey ? 'sk-...' : '该 provider 无需密钥（留空）'}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-icon"
+                  onClick={() => setKeyVisible((v) => !v)}
+                  title={keyVisible ? '隐藏' : '显示'}
+                  aria-label={keyVisible ? '隐藏' : '显示'}
+                >
+                  {keyVisible ? <EyeIcon /> : <EyeOffIcon />}
+                </button>
+              </div>
+              {showError('api_key') && <p className="settings-field-error">{errors.api_key}</p>}
+            </div>
+          </>
+        )}
       </div>
+      {isCli && (
+        <p className="muted modal-footer">
+          ⚠️ 填写并启用此预设，即代表你授权 Code Meeseeks 调用本机的 <code>{draft.model.trim() || '命令行'}</code>{' '}
+          工具执行评审操作（在子进程中以你的本地登录态运行）。请确认对应命令已安装并完成登录。
+        </p>
+      )}
       <p className="muted modal-footer">{providerMeta.hint}</p>
     </>
   );

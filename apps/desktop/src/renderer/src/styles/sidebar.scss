@@ -61,6 +61,35 @@
   }
 }
 
+// GitHub 发现分类标签行（仅 GitHub 活动连接展示）
+.sidebar-discovery {
+  gap: 0;
+  padding: $space-3 $space-6 0;
+}
+
+.sidebar-discovery-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: $text-dim;
+  padding: $space-2 0;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.12s,
+    border-color 0.12s;
+
+  &:hover {
+    color: $text-body;
+  }
+
+  &.is-active {
+    color: $color-accent;
+    border-bottom-color: $color-accent;
+  }
+}
+
 .sidebar-list {
   flex: 1;
   overflow-y: auto;

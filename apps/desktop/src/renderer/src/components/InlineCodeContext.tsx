@@ -1,8 +1,12 @@
+// 必须在用到 @monaco-editor/react 之前执行（见 DiffView 同款说明）。本文件经
+// React.lazy 动态加载 → Monaco 随本 chunk 按需拉取，不进入口包。
+import '../monaco-setup';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { useEffect, useState } from 'react';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
+import { editorFontSize } from '../editor-font';
 import { languageFor } from '../utils/language';
 
 interface InlineCodeContextProps {
@@ -20,7 +24,7 @@ interface InlineCodeContextProps {
 
 /**
  * 评论里 inline 引用的代码上下文：Monaco read-only 编辑器，展示锚定行前后若干行，
- * 锚定行用整行底色高亮 (跟 BBS 内嵌评论的视觉惯例一致)。
+ * 锚定行用整行底色高亮 (跟 Bitbucket 内嵌评论的视觉惯例一致)。
  *
  * 取数走 `diff:getFileContent` —— 跟 DiffView 同一份本地 git blob，无远端往返；
  * mirror 还没拉齐 base/head sha 时 (rare，poll 已经先 sync 过) 走 syncMirror 兜底。
@@ -120,7 +124,7 @@ export function InlineCodeContext({
       contextmenu: false,
       folding: false,
       glyphMargin: false,
-      fontSize: 12,
+      fontSize: editorFontSize(12),
       lineHeight,
       padding: { top: 6, bottom: 6 },
       // 行宽自适应，长行用 word wrap 而不是横向滚动条 (滚动条已禁)

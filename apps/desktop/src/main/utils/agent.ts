@@ -48,6 +48,11 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
       // 必须显式 `openai/` 前缀让 litellm 走 "custom OpenAI client + 用 OPENAI_API_BASE
       // 作为 endpoint" 分支，model 字段去前缀后透传给平台
       return m.startsWith('openai/') ? m : `openai/${m}`;
+    case 'cli':
+      // cli 模式完全绕过 litellm（shim 替换 chat_completion 直接调本机 CLI），model
+      // 字段是命令名 (claude) 不是 litellm 模型名，原样透传。CONFIG__MODEL 仅供
+      // pr-agent 内部 token 估算用（未知名 → 走 custom_model_max_tokens 兜底）。
+      return m;
     default:
       return m;
   }
@@ -136,6 +141,19 @@ export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
     case 'ollama':
       if (profile.base_url) env['OLLAMA__API_BASE'] = profile.base_url;
       break;
+    case 'cli': {
+      // 本地 CLI 模式：不直连任何 API，也不下发任何密钥。仅打两个哨兵 env 让
+      // sitecustomize shim 在 pr-agent 进程内把 LiteLLMAIHandler.chat_completion
+      // 整体换成「调本机 CLI 子进程」版本（见 scripts/pragent-shim/meebox_pragent_shim/cli/）。
+      //   MEEBOX_CLI_MODE=1   —— 开关；非空即启用 CLI 接管
+      //   MEEBOX_CLI_BIN=claude —— 要调用的命令名（一期仅 claude；shim 用 which 解析真实路径）
+      // CLI 进程经子进程继承父 env（含 PATH / HOME），故能找到 claude 二进制并读到
+      // ~/.claude 登录态。CONFIG__MODEL 已在上面置为命令名 (claude)，仅用于 token 估算。
+      const bin = (profile.model || 'claude').trim() || 'claude';
+      env['MEEBOX_CLI_MODE'] = '1';
+      env['MEEBOX_CLI_BIN'] = bin;
+      break;
+    }
   }
   return env;
 }

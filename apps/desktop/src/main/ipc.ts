@@ -52,9 +52,10 @@ import { buildPrContext } from './utils/pr-context.js';
 interface RegisterDeps {
   bootstrap: BootstrapResult;
   logger: Logger;
-  prAgentStatus: PrAgentStatus;
-  /** 探测可用时的 bridge 实例；不可用 (embedded / CLI / Docker 都没有) 为 null */
-  prAgentBridge: PrAgentBridge | null;
+  /** 惰性取 pr-agent 探测状态：探测异步进行（不阻塞建窗），await 拿最终结果 */
+  getPrAgentStatus: () => Promise<PrAgentStatus>;
+  /** 惰性取 bridge 实例；探测未完成 / 不可用 (embedded / CLI 都没有) 时为 null */
+  getPrAgentBridge: () => PrAgentBridge | null;
   /** 嵌入式运行时解释器路径（embedded 策略下执行期补 .secrets.toml 用），非 embedded 可空 */
   embeddedPythonPath?: string;
   stateStore: JsonFileStateStore;
@@ -73,8 +74,8 @@ interface RegisterDeps {
 export function registerIpcHandlers({
   bootstrap,
   logger,
-  prAgentStatus,
-  prAgentBridge,
+  getPrAgentStatus,
+  getPrAgentBridge,
   embeddedPythonPath,
   stateStore,
   poller,
@@ -84,7 +85,7 @@ export function registerIpcHandlers({
 }: RegisterDeps): void {
   // === pr-agent run 队列 ===
   //
-  // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 docker / 抢 worktree)，
+  // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 worktree)，
   // 其余在 waiting 排队。每次 active 完成 / 取消 → 自动开下一条。
   //
   // 设计要点：
@@ -140,25 +141,9 @@ export function registerIpcHandlers({
       .join('\n');
   };
 
-  // pr-agent docker 镜像启动时会去找 `/app/pr_agent/settings/.secrets.toml` 和
-  // `/app/pr_agent/settings_prod/.secrets.toml`，没有就 WARNING。我们走 env 传密钥
-  // 不用 secrets.toml，但每次 run 都打两条 WARNING 很烦。挂个空文件压掉
-  const ensureEmptySecretsFile = async (): Promise<string> => {
-    const p = path.join(bootstrap.paths.cacheDir, 'pr-agent-empty-secrets.toml');
-    try {
-      await fs.access(p);
-    } catch {
-      await fs.mkdir(path.dirname(p), { recursive: true });
-      await fs.writeFile(
-        p,
-        '# meebox 提供的空 secrets 文件，抑制 pr-agent 启动 "settings file not found" 告警\n',
-      );
-    }
-    return p;
-  };
-
   // embedded 策略：执行期在嵌入式安装目录的 settings/ 与 settings_prod/ 补空
-  // .secrets.toml（同 Docker 挂空文件的意图，只是没有容器、直接写安装目录）。
+  // .secrets.toml（pr-agent 启动会去找该文件，缺失就打 WARNING；我们走 env 传密钥
+  // 不用 secrets.toml，写个空文件压掉告警）。
   // memo 化：只在首个 embedded run 解析一次 pr_agent 目录 + 写文件，后续直接复用。
   // importlib.util.find_spec 仅定位不 import pr_agent，快；失败仅 warn 不阻断 run。
   const execFileP = promisify(execFile);
@@ -203,7 +188,7 @@ export function registerIpcHandlers({
   ipcMain.handle('app:paths', (): IpcChannels['app:paths']['response'] => bootstrap.paths);
   ipcMain.handle(
     'app:prAgentStatus',
-    (): IpcChannels['app:prAgentStatus']['response'] => prAgentStatus,
+    (): Promise<IpcChannels['app:prAgentStatus']['response']> => getPrAgentStatus(),
   );
   ipcMain.handle(
     'app:connections',
@@ -214,7 +199,7 @@ export function registerIpcHandlers({
   // (connectionId, slug) → dataUrl 或 null。两级 cache：
   //   1) avatarMem: 进程内 Map，本会话内瞬时返回（含 null 负缓存避免重试失败 slug）
   //   2) 磁盘文件 <cacheDir>/avatars/<hash>.bin，TTL 7 天，按 mtime 判定过期
-  //      过期或不存在 → 重新打 BBS → 写回磁盘
+  //      过期或不存在 → 重新打 Bitbucket → 写回磁盘
   // hash = sha256(connectionId|slug) 前 24 hex，纯字母数字文件名安全
   const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   const avatarDir = path.join(bootstrap.paths.cacheDir, 'avatars');
@@ -259,11 +244,11 @@ export function registerIpcHandlers({
       const pr = await findPrOrThrow(req.localId);
       const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
-      // BBS 在以下情形 409/403：
+      // Bitbucket 在以下情形 409/403：
       //   - version 跟远端不一致 (用户在别处已编辑)
       //   - 评论已有回复 (跟 web UI 同步规则)
       //   - 当前 PAT 不是作者本人
-      // 错误体已经在 BBClientError.message 里带，直接抛给 renderer 显示原文
+      // 错误体已经在 BitbucketClientError.message 里带，直接抛给 renderer 显示原文
       await adapter.deleteComment(
         { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
         pr.remoteId,
@@ -291,7 +276,7 @@ export function registerIpcHandlers({
       const pr = await findPrOrThrow(req.localId);
       const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
-      // BBS 409 (version 不一致) 时 BBClientError.message 会带 "expected version X"
+      // Bitbucket 409 (version 不一致) 时 BitbucketClientError.message 会带 "expected version X"
       // 这种细节，原样抛给 renderer 显示让用户知道"远端有新版本"
       const updated = await adapter.editComment(
         { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
@@ -326,7 +311,7 @@ export function registerIpcHandlers({
         const pr = await findPrOrThrow(req.localId);
         const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
         if (!adapter) return null;
-        // 传 pr.repo 给 adapter — BBS 的 attachment: 协议需要 repo 上下文拼 URL
+        // 传 pr.repo 给 adapter — Bitbucket 的 attachment: 协议需要 repo 上下文拼 URL
         const res = await adapter.getAttachment(req.url, pr.repo);
         if (!res) return null;
         const base64 = Buffer.from(res.bytes).toString('base64');
@@ -372,14 +357,14 @@ export function registerIpcHandlers({
         // 文件不存在 / 读失败 → 走 fetch
       }
 
-      // 2) 没缓存 / 已过期：去 BBS 拉
+      // 2) 没缓存 / 已过期：去 Bitbucket 拉
       const adapter = connectionRuntime.adapters.find((a) => a.connectionId === req.connectionId)?.adapter;
       if (!adapter) {
         avatarMem.set(memKey, null);
         return null;
       }
       try {
-        const img = await adapter.getUserAvatar(req.slug);
+        const img = await adapter.getUserAvatar(req.slug, req.avatarUrl);
         if (!img) {
           logger.debug(
             { connectionId: req.connectionId, slug: req.slug },
@@ -462,7 +447,13 @@ export function registerIpcHandlers({
 
   ipcMain.handle(
     'prs:list',
-    async (): Promise<IpcChannels['prs:list']['response']> => listStoredPullRequests(stateStore),
+    async (): Promise<IpcChannels['prs:list']['response']> => {
+      // 单活动连接模型：只展示当前活动连接的 PR。状态库可能仍存着切换前其他连接的
+      // 历史 PR（poller 只轮询活动连接，不会清理旧的），故在出口按 connectionId 过滤。
+      const activeId = bootstrap.config.active_connection_id;
+      const all = await listStoredPullRequests(stateStore);
+      return activeId ? all.filter((pr) => pr.connectionId === activeId) : all;
+    },
   );
   ipcMain.handle(
     'prs:refresh',
@@ -481,7 +472,7 @@ export function registerIpcHandlers({
       const pr = await findPrOrThrow(req.localId);
       const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
-      // 先写远端：本地 status → BBS reviewer.status；失败抛出，前端不会看到本地变更
+      // 先写远端：本地 status → Bitbucket reviewer.status；失败抛出，前端不会看到本地变更
       const remoteStatus =
         req.status === 'approved'
           ? 'approved'
@@ -591,7 +582,7 @@ export function registerIpcHandlers({
   );
 
   // In-flight dedup: 打开 PR 时 MainPane / DiffView / CommentsPanel 三个组件
-  // 并行调 listComments(force:true)，没去重的话会打 3 次 BBS API。同一 localId
+  // 并行调 listComments(force:true)，没去重的话会打 3 次 Bitbucket API。同一 localId
   // 的 concurrent 调用合并到同一个 Promise，远端只打一次
   const listCommentsInFlight = new Map<string, Promise<PrComment[]>>();
   ipcMain.handle(
@@ -602,7 +593,7 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['diff:listComments']['response']> => {
       const pr = await findPrOrThrow(req.localId);
       // 缓存命中条件：pr_updated_at 跟当前 PR meta updatedAt 一致 → 直接回缓存，
-      // 不打远端。PR 任何变更 (新评论 / 状态等) BBS 都会更新 updatedAt，跳变即重拉。
+      // 不打远端。PR 任何变更 (新评论 / 状态等) Bitbucket 都会更新 updatedAt，跳变即重拉。
       //
       // **req.force=true** 跳过 cache 直接打远端 — 本地 PR.updatedAt 来自 poller
       // 周期拉，可能滞后，stale 比对会误判命中。打开 PR 时 renderer 传 force=true
@@ -718,6 +709,7 @@ export function registerIpcHandlers({
    * Promise reject，外层 pragent:run 调用方收到。
    */
   const executeRun = async (item: QueueItem): Promise<ReviewRun> => {
+    const prAgentBridge = getPrAgentBridge();
     if (!prAgentBridge) throw new Error('pr-agent 未就绪');
     const { req, pr } = item;
     // 提前 resolve active LLM profile — model 字段要随 startReviewRun 一起落
@@ -787,7 +779,7 @@ export function registerIpcHandlers({
         //   1. 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但
         //      /ask 走 [pr_questions] 配置段不那么严格遵守，必须显式 prompt 强化
         //   2. PR 上下文 (title / description / 已有评论)：local provider 自己不会
-        //      去 BBS 拉这些，必须我们这边喂；让 /describe /review 不只是看 diff
+        //      去 Bitbucket 拉这些，必须我们这边喂；让 /describe /review 不只是看 diff
         //   3. 规则正文 (rules.dir 命中)：项目编码规约
         // /ask 只取 1 (语言)，跳 2/3 (用户问题往往跟历史评论 / 规约无关)
         const langDirective = languageDirectiveFor(bootstrap.config.language);
@@ -935,28 +927,12 @@ export function registerIpcHandlers({
         // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
         const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
 
-        // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉同样的告警
-        // （没有容器可挂载，直接写安装目录；memo 化只首次做）
+        // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉启动告警
+        // （直接写安装目录；memo 化只首次做）。local-cli 不需要 (pipx 装的 pr-agent
+        // 路径不同，告警也不出)
         if (prAgentBridge.strategy === 'embedded' && embeddedPythonPath) {
           await ensureEmbeddedSecrets(embeddedPythonPath);
         }
-
-        // Docker 策略：挂个空 secrets.toml 压掉 pr-agent 的 "settings file not found"
-        // 启动告警；LocalCli 不需要 (pipx 装的 pr-agent 路径不同，告警也不出)
-        const dockerExtraVolumes =
-          prAgentBridge.strategy === 'docker'
-            ? await (async () => {
-                const empty = await ensureEmptySecretsFile();
-                return [
-                  { host: empty, container: '/app/pr_agent/settings/.secrets.toml', readonly: true },
-                  {
-                    host: empty,
-                    container: '/app/pr_agent/settings_prod/.secrets.toml',
-                    readonly: true,
-                  },
-                ];
-              })()
-            : undefined;
 
         const result = await prAgentBridge.run({
           prUrl: pr.url,
@@ -966,7 +942,6 @@ export function registerIpcHandlers({
           cwd: wt.path,
           targetBranch: wt.targetBranchName,
           extraArgs,
-          dockerExtraVolumes,
           signal: ac.signal,
         });
         // 真实 token 用量（onLine 累加的 stderr 哨兵行），落到 succeeded / llm-failed 收尾。
@@ -1124,9 +1099,9 @@ export function registerIpcHandlers({
       _evt,
       req: IpcChannels['pragent:run']['request'],
     ): Promise<IpcChannels['pragent:run']['response']> => {
-      if (!prAgentBridge) {
+      if (!getPrAgentBridge()) {
         throw new Error(
-          'pr-agent 未就绪：本机 CLI 与 Docker 都未探测到。Settings 页查看探测细节',
+          'pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节',
         );
       }
       // 早期校验：/ask 必须带 question，避免排队后才报错
@@ -1311,9 +1286,9 @@ export function registerIpcHandlers({
           // - draft.anchor 没有 lineType (草稿创建时不知道这一行的 diff 角色)，
           //   按 side 做保守映射：new→added / old→removed。meebox 的草稿大多锚到
           //   变更行 (finding 来自 /review 的 issue + DraftZone hover '+' 也只对
-          //   变更行可见)，context 行评论场景极少。命中 context 时 BBS 回 400，
+          //   变更行可见)，context 行评论场景极少。命中 context 时 Bitbucket 回 400，
           //   错误会被 catch 收到 results 里给用户看
-          // - 多行 (endLine > startLine) 在 BBS REST 里无法表达 (anchor.line 是单
+          // - 多行 (endLine > startLine) 在 Bitbucket REST 里无法表达 (anchor.line 是单
           //   行)。落到 endLine 而不是 startLine：评论会出现在标注范围**下方**，
           //   不打断用户从上往下阅读时已经看过的代码上下文。renderer 端 DraftZone
           //   仍按 startLine 渲染 (跟 finding/AI 建议触发位置一致)，发布完远端
@@ -1329,7 +1304,7 @@ export function registerIpcHandlers({
             },
             draft.body,
           );
-          // 发布成功 = 本地草稿使命完成，直接删掉保持草稿池干净。远端 BBS 评论
+          // 发布成功 = 本地草稿使命完成，直接删掉保持草稿池干净。远端 Bitbucket 评论
           // 会通过下面的 force-refresh comments 拉回，UI 上由 CommentZone 承接显示，
           // 不需要本地再留一份 'posted' 副本造成重复 (跟远端评论 zone 视觉打架)
           await deleteDraft(stateStore, req.localId, draftId);
@@ -1348,7 +1323,7 @@ export function registerIpcHandlers({
       // 整批跑完统一广播 — drafts 列表更新刷 DraftZone status chip + FindingCard
       broadcastDraftsChanged(req.localId);
 
-      // 至少有一条发成功 → force-refresh BBS 评论：清缓存 + 广播 comments:changed
+      // 至少有一条发成功 → force-refresh Bitbucket 评论：清缓存 + 广播 comments:changed
       // 让 CommentsPanel / DiffView 内嵌评论立即看到自己刚发的，不用等下一轮 poller
       if (anyPublished) {
         try {
@@ -1492,7 +1467,12 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['config:testConnection']['response']> => {
       // 用草稿 url/token 临时起 adapter ping，不落配置；失败归一成 ok:false + reason
       try {
-        return await buildDraftAdapter(req.base_url, req.token, bootstrap.config.proxy).ping();
+        return await buildDraftAdapter(
+          req.base_url,
+          req.token,
+          bootstrap.config.proxy,
+          req.kind,
+        ).ping();
       } catch (e) {
         return { ok: false, reason: e instanceof Error ? e.message : String(e) };
       }
@@ -1631,9 +1611,9 @@ function languageDirectiveFor(lang: string): string {
  * 给每条评论 (含 replies 子树) 打 canDelete / canEdit 标志。
  *
  * - canDelete: author.name === 当前 PAT 用户 && 无 reply && 有 version
- *   (BBS 拒删带 reply 的；DELETE 必带 version 乐观锁)
+ *   (Bitbucket 拒删带 reply 的；DELETE 必带 version 乐观锁)
  * - canEdit:   author.name === 当前 PAT 用户 && 有 version
- *   (BBS 允许编辑带 reply 的评论；PUT 也带 version)
+ *   (Bitbucket 允许编辑带 reply 的评论；PUT 也带 version)
  *
  * 当前用户拿不到 (ping 未完成 / 失败) → 全部 false。renderer 直读 flag 不再
  * 自己比对 author / version / replies，链路最短最稳。
@@ -1685,12 +1665,17 @@ function buildConnectionSummaries(
   bootstrap: BootstrapResult,
   adapters: readonly BuiltAdapter[],
 ): ConnectionSummary[] {
-  return adapters.map(({ connectionId, adapter }) => {
+  // 单活动连接模型：状态栏只展示当前活动连接的启用状态（与 poller 只轮询活动连接一致）。
+  const activeId = bootstrap.config.active_connection_id;
+  return adapters
+    .filter(({ connectionId }) => connectionId === activeId)
+    .map(({ connectionId, adapter }) => {
     const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
     return {
       connectionId,
       displayName: conn?.display_name ?? connectionId,
       user: adapter.getCurrentUser(),
+      capabilities: adapter.capabilities(),
     };
   });
 }

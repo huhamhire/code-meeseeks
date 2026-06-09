@@ -1,8 +1,8 @@
 /**
  * 按文件头魔数嗅探常见图片格式；嗅不出退到 octet-stream（浏览器仍可能解码 PNG）。
  *
- * 用于 BBS 头像本地落盘后回读时还原 content-type —— 落盘时只存裸字节，回读后
- * 还要拼 data URL，content-type 缺失会导致 <img src> 不渲染。BBS 实际只可能
+ * 用于 Bitbucket 头像本地落盘后回读时还原 content-type —— 落盘时只存裸字节，回读后
+ * 还要拼 data URL，content-type 缺失会导致 <img src> 不渲染。Bitbucket 实际只可能
  * 返回 PNG / JPEG / GIF / WebP / SVG 其中之一，但作为防御性嗅探留全。
  */
 export function sniffImageContentType(bytes: Uint8Array): string {

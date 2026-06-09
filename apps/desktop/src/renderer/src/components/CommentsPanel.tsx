@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { PrComment, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import { formatBackendError, type FormattedError } from '../errors';
+import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { Avatar } from './Avatar';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from './ConfirmModal';
-import { InlineCodeContext } from './InlineCodeContext';
+// 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
+const InlineCodeContext = lazy(() =>
+  import('./InlineCodeContext').then((m) => ({ default: m.InlineCodeContext })),
+);
 
 interface CommentsPanelProps {
   pr: StoredPullRequest;
@@ -125,7 +129,7 @@ export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
 
 /**
  * 单条评论 + 嵌套 replies。inline 评论顶部显示 `path:line side` chip 区分锚点位置；
- * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进 (BBS 实际只一层 reply
+ * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进 (Bitbucket 实际只一层 reply
  * 但 schema 允许深嵌套，递归更稳)。
  */
 function CommentItem({
@@ -140,7 +144,7 @@ function CommentItem({
   /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
   autoExpandCode?: boolean;
 }) {
-  // 评论 body 内嵌图片走 IPC 代理 (BBS 私有资源需 PAT 鉴权)
+  // 评论 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)
   const mdComponents = useMemo(
     () => ({ img: makeBitbucketImageFor(pr.localId) }),
     [pr.localId],
@@ -182,6 +186,7 @@ function CommentItem({
           connectionId={pr.connectionId}
           slug={comment.author.slug ?? comment.author.name}
           displayName={comment.author.displayName}
+          avatarUrl={comment.author.avatarUrl}
           size={22}
         />
         <span className="pr-comment-author">{comment.author.displayName}</span>
@@ -203,7 +208,9 @@ function CommentItem({
           replies (depth > 0) 不重复展示，避免冗余 —— 父评论已经给了上下文。
           autoExpandCode 由父组件按"最新 N 条"决定，超额条目用户点开才挂 editor */}
       {comment.anchor && depth === 0 && (
-        <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
+        <Suspense fallback={<div className="pane-loading muted">加载代码上下文…</div>}>
+          <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
+        </Suspense>
       )}
       {/* 编辑态：textarea 占位替换 markdown 正文；非编辑态：渲染 markdown */}
       {editOpen && typeof comment.version === 'number' ? (
@@ -219,6 +226,7 @@ function CommentItem({
         <div className="pr-comment-body markdown">
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
+            rehypePlugins={REMOTE_REHYPE_PLUGINS}
             components={mdComponents}
             urlTransform={transformBitbucketUrl}
           >

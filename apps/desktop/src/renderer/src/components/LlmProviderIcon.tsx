@@ -119,6 +119,27 @@ function VolcengineGlyph({ size }: { size: number }) {
   );
 }
 
+// 本地 CLI：终端窗口 + 提示符（>_），代表「调本机命令行工具」
+function CliGlyph({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#10B981"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 9l3 3-3 3" />
+      <path d="M13 15h4" />
+    </svg>
+  );
+}
+
 const GLYPHS: Record<LlmProvider, (p: { size: number }) => JSX.Element> = {
   openai: OpenAiGlyph,
   'openai-compatible': CompatibleGlyph,
@@ -127,6 +148,7 @@ const GLYPHS: Record<LlmProvider, (p: { size: number }) => JSX.Element> = {
   dashscope: QwenGlyph,
   'volcengine-ark': VolcengineGlyph,
   ollama: OllamaGlyph,
+  cli: CliGlyph,
 };
 
 export function LlmProviderIcon({

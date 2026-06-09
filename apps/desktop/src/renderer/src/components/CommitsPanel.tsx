@@ -12,7 +12,7 @@ interface CommitsPanelProps {
  * PR commits 列表，表格布局。来源 `diff:listCommits` (无缓存，进入面板时拉一次)。
  *
  * 列：短 SHA / 提交主题 (commit message 首行) / 作者 / 时间。merge commit 用
- * 标记 chip 区分。点击行打开远端 commit 详情页 (BBS commit URL)。
+ * 标记 chip 区分。点击行打开远端 commit 详情页 (Bitbucket commit URL)。
  *
  * 列表默认按平台返回顺序 (newest first)，跟 git log 习惯一致。
  */
@@ -109,6 +109,7 @@ function CommitRow({ commit, pr }: { commit: PrCommit; pr: StoredPullRequest }) 
           connectionId={pr.connectionId}
           slug={commit.author.slug ?? commit.author.name}
           displayName={commit.author.displayName}
+          avatarUrl={commit.author.avatarUrl}
           size={20}
         />
         <span>{commit.author.displayName}</span>

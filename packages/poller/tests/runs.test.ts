@@ -72,7 +72,7 @@ describe('finishReviewRun', () => {
         prLocalId: 'abc123def456',
         tool: 'review',
         prAgentVersion: 'v',
-        strategy: 'docker',
+        strategy: 'embedded',
       },
       () => start,
     );
@@ -103,7 +103,7 @@ describe('finishReviewRun', () => {
       prLocalId: 'abc123def456',
       tool: 'review',
       prAgentVersion: 'v',
-      strategy: 'docker',
+      strategy: 'embedded',
     });
     const finished = await finishReviewRun(store, 'abc123def456', run.id, {
       status: 'failed',
@@ -130,18 +130,18 @@ describe('listReviewRunsForPr', () => {
   it('newest first，跨 PR 不串扰', async () => {
     const oldA = await startReviewRun(
       store,
-      { prLocalId: 'abc123def456', tool: 'review', prAgentVersion: 'v', strategy: 'docker' },
+      { prLocalId: 'abc123def456', tool: 'review', prAgentVersion: 'v', strategy: 'embedded' },
       () => new Date('2026-05-29T09:00:00.000Z'),
     );
     const newA = await startReviewRun(
       store,
-      { prLocalId: 'abc123def456', tool: 'describe', prAgentVersion: 'v', strategy: 'docker' },
+      { prLocalId: 'abc123def456', tool: 'describe', prAgentVersion: 'v', strategy: 'embedded' },
       () => new Date('2026-05-29T11:00:00.000Z'),
     );
     // 另一个 PR 的 run 不应出现在 42 的列表里
     await startReviewRun(
       store,
-      { prLocalId: 'def789abc012', tool: 'review', prAgentVersion: 'v', strategy: 'docker' },
+      { prLocalId: 'def789abc012', tool: 'review', prAgentVersion: 'v', strategy: 'embedded' },
       () => new Date('2026-05-29T10:30:00.000Z'),
     );
     const list = await listReviewRunsForPr(store, 'abc123def456');

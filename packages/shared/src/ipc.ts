@@ -1,6 +1,13 @@
 import type { AppInfo, AppPaths } from './app-info.js';
 import type { Config } from './config.js';
-import type { PingResult, PlatformUser, PrComment, PrCommit } from './platform.js';
+import type {
+  PingResult,
+  PlatformCapabilities,
+  PlatformKind,
+  PlatformUser,
+  PrComment,
+  PrCommit,
+} from './platform.js';
 import type {
   LocalPrStatus,
   PollResult,
@@ -128,6 +135,8 @@ export interface ConnectionSummary {
   displayName: string;
   /** ping 后缓存的当前 PAT 所属用户；ping 未完成或失败时为 null */
   user: PlatformUser | null;
+  /** 该连接所属平台的能力描述符；渲染层据此 显/隐/灰（多平台降级，见 platform.ts） */
+  capabilities: PlatformCapabilities;
 }
 
 /**
@@ -165,11 +174,12 @@ export interface IpcChannels {
    * 平台不支持 / 网络失败 / 用户无头像时返回 null，renderer 走 initials 回退。
    */
   'app:userAvatar': {
-    request: { connectionId: string; slug: string };
+    // avatarUrl 可选：平台返回的头像直链（GitHub 机器人必须靠它）；缺省时 main 按 slug 推导
+    request: { connectionId: string; slug: string; avatarUrl?: string };
     response: { dataUrl: string } | null;
   };
   /**
-   * 拉评论 body 内嵌图片 (`![alt](url)`)。url 可能是 BBS attachment 绝对/相对地址，
+   * 拉评论 body 内嵌图片 (`![alt](url)`)。url 可能是 Bitbucket attachment 绝对/相对地址，
    * 私有实例需要带 PAT 才能取 → renderer `<img>` 标签无法直接 fetch，必须走 main 代理。
    * 返回 data URL 给 renderer 拼到 `<img src>`；获取失败 (404 / 跨 host / 非图片) 返回 null
    */
@@ -186,8 +196,8 @@ export interface IpcChannels {
     response: PrComment;
   };
   /**
-   * 删除自己作者的远端评论。BBS 要求带 version (乐观锁)，调用方从已有 PrComment
-   * 拿；不一致 / 评论已有回复 / 自己不是作者都会失败 (BBS 409/403)。成功后 main
+   * 删除自己作者的远端评论。Bitbucket 要求带 version (乐观锁)，调用方从已有 PrComment
+   * 拿；不一致 / 评论已有回复 / 自己不是作者都会失败 (Bitbucket 409/403)。成功后 main
    * 端清空评论缓存 + broadcast comments:changed，UI 自动重拉刷新
    */
   'comments:delete': {
@@ -195,8 +205,8 @@ export interface IpcChannels {
     response: void;
   };
   /**
-   * 编辑自己作者评论的 body。BBS PUT 同样要 version (乐观锁) — 不一致回 409，
-   * 上层应提示"远端已更新，请刷新后重试"并拒绝静默覆盖。BBS 允许编辑带 reply
+   * 编辑自己作者评论的 body。Bitbucket PUT 同样要 version (乐观锁) — 不一致回 409，
+   * 上层应提示"远端已更新，请刷新后重试"并拒绝静默覆盖。Bitbucket 允许编辑带 reply
    * 的评论 (跟 delete 区别)。成功后 main 端清评论缓存 + 广播
    * comments:changed，UI 自动重拉显示新文本
    */
@@ -321,7 +331,7 @@ export interface IpcChannels {
   };
   /** 用草稿 url/token 临时起 adapter ping，保存前测试连接是否可达；不写配置。 */
   'config:testConnection': {
-    request: { base_url: string; token: string };
+    request: { base_url: string; token: string; kind?: PlatformKind };
     response: PingResult;
   };
   /**
@@ -404,14 +414,14 @@ export interface IpcChannels {
     response: void;
   };
   /**
-   * 批量发布草稿到远端：每条 draft 经 adapter.publishInlineComment 发到 BBS，
+   * 批量发布草稿到远端：每条 draft 经 adapter.publishInlineComment 发到 Bitbucket，
    * 成功 → 本地 draft status='posted' + 写 posted_remote_id；失败 → 保持原 status
-   * 不变并把错误收集到 results 里。**单条失败不中断后续条目** —— 跟 BBS web UI
+   * 不变并把错误收集到 results 里。**单条失败不中断后续条目** —— 跟 Bitbucket web UI
    * "Start review" 行为对齐 (那边也是逐条 POST，某条 400 不影响其它)。
    *
    * 一次性发完后 main 会：
    * 1. 广播 `drafts:changed` —— DiffView / FindingCard 重拉草稿换 status chip
-   * 2. force-refresh BBS PR 评论 (跳缓存) + 广播 `comments:changed`，让 CommentsPanel
+   * 2. force-refresh Bitbucket PR 评论 (跳缓存) + 广播 `comments:changed`，让 CommentsPanel
    *    立即看到自己刚发布的评论，不用等下一轮 poller
    *
    * 调用方 (renderer modal) 据 results 显示 "成功 N 失败 M" + 错误明细
@@ -424,7 +434,7 @@ export interface IpcChannels {
         ok: boolean;
         /** 成功时填，跟落库的 draft.posted_remote_id 同值 */
         postedRemoteId?: string;
-        /** 失败时填，人读错因 (BBS REST 4xx body 经过 PlatformError 包装) */
+        /** 失败时填，人读错因 (Bitbucket REST 4xx body 经过 PlatformError 包装) */
         error?: string;
       }>;
     };

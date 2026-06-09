@@ -1,7 +1,7 @@
 # 嵌入式 pr-agent 运行时（开发环境准备）
 
 把一份**可重定位的 CPython + 预装好的 pr-agent** 组装到 `apps/desktop/vendor/pragent/`，
-让应用无需用户预装 Python / Docker 即可跑 pr-agent（见 [docs/modules/04](../../../docs/modules/04-pragent-runtime.md)）。
+让应用无需用户预装 Python / Docker 即可跑 pr-agent（见 [docs/arch/04](../../../docs/arch/04-pragent-runtime.md)）。
 
 ## 用法
 
@@ -22,14 +22,15 @@ apps/desktop/vendor/pragent/         # gitignore，不入库
 ├── python/                          # python-build-standalone（含 pip/stdlib/ssl）
 │   └── .../site-packages/
 │       ├── pr_agent/ ...            # pip install pr-agent==<manifest 版本>
-│       └── sitecustomize.py         # monkeypatch shim（无侵入补丁，见 docs/modules/04-pragent-runtime.md）
+│       ├── sitecustomize.py         # 薄加载器（CPython 启动经 site 自动 import）
+│       └── meebox_pragent_shim/     # monkeypatch shim 包（无侵入补丁，见 docs/arch/04-pragent-runtime.md）
 └── VERSION                          # 组装指纹（幂等判定 + 记录 sha256）
 ```
 
 ## 版本来源
 
 - Python / pr-agent 版本 pin 在 [`pragent-runtime.json`](./pragent-runtime.json)。
-- pr-agent 版本须与 `packages/pr-agent-bridge` 的 `DEFAULT_DOCKER_IMAGE_TAG` 对齐。
+- pr-agent 版本须与 `sitecustomize.py` 的 `_EXPECTED_PRAGENT_VERSION` 对齐（assemble 期强校验）。
 - 脚本按 pin 的 `tag` + `pythonMajorMinor` + 宿主平台三元组，从 GitHub release 解析
   `install_only` 资产，下载后用官方 `.sha256` sidecar 校验完整性。
 

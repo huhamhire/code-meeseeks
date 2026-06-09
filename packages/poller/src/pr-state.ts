@@ -94,8 +94,8 @@ export async function listStoredPullRequests(
 }
 
 /**
- * 覆写指定 PR 的 localStatus。调用方 (IPC) 通常先 PUT 到 BBS 成功后再调本函数，
- * 让本地立即反映新状态；下一轮 poll 会从 BBS 拿到同样的值，不会产生抖动。
+ * 覆写指定 PR 的 localStatus。调用方 (IPC) 通常先 PUT 到 Bitbucket 成功后再调本函数，
+ * 让本地立即反映新状态；下一轮 poll 会从 Bitbucket 拿到同样的值，不会产生抖动。
  *
  * 找不到 meta 返回 null (PR 已退场 / 从未存在)。
  */

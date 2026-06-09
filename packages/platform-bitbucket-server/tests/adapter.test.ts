@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BitbucketServerAdapter } from '../src/adapter.js';
 import type { FetchLike } from '../src/client.js';
-import { BBClientError } from '../src/client.js';
+import { BitbucketClientError } from '../src/client.js';
 
 type RouteHandler = (url: URL) => unknown;
 
@@ -36,6 +36,17 @@ function makeAdapter(fetchFn: FetchLike): BitbucketServerAdapter {
     fetch: fetchFn,
   });
 }
+
+describe('BitbucketServerAdapter capabilities contract', () => {
+  it('declares full Bitbucket capabilities (3 状态审批 / 乐观锁 / full veto)', () => {
+    const caps = makeAdapter(mockFetch({})).capabilities();
+    expect(caps.reviewStatuses).toEqual(['approved', 'needsWork', 'unapproved']);
+    expect(caps.commentOptimisticLock).toBe(true);
+    expect(caps.inlineMultiline).toBe(true);
+    expect(caps.mergeVetoFidelity).toBe('full');
+    expect(caps.discoveryRateLimited).toBe(false);
+  });
+});
 
 const samplePR = {
   id: 1022,
@@ -302,6 +313,22 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
     });
   });
 
+  it('按发现分类映射 dashboard role：默认 REVIEWER，created → AUTHOR', async () => {
+    const roles: string[] = [];
+    const adapter = makeAdapter(
+      mockFetch({
+        '/rest/api/1.0/dashboard/pull-requests': (url: URL) => {
+          roles.push(url.searchParams.get('role') ?? '');
+          return { size: 0, limit: 50, isLastPage: true, start: 0, values: [] };
+        },
+      }),
+    );
+    await adapter.listPendingPullRequests();
+    await adapter.listPendingPullRequests({ filter: 'review-requested' });
+    await adapter.listPendingPullRequests({ filter: 'created' });
+    expect(roles).toEqual(['REVIEWER', 'REVIEWER', 'AUTHOR']);
+  });
+
   it('maps /merge vetoes into mergeStatus (canMerge=false + 逐条原因)', async () => {
     const adapter = makeAdapter(
       mockFetch({
@@ -428,7 +455,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
     expect(seen[0]!.searchParams.get('state')).toBe('OPEN');
   });
 
-  it('throws BBClientError on 401', async () => {
+  it('throws BitbucketClientError on 401', async () => {
     const adapter = makeAdapter(
       mockFetch(
         {
@@ -439,7 +466,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         401,
       ),
     );
-    await expect(adapter.listPendingPullRequests()).rejects.toBeInstanceOf(BBClientError);
+    await expect(adapter.listPendingPullRequests()).rejects.toBeInstanceOf(BitbucketClientError);
   });
 });
 
@@ -540,7 +567,7 @@ describe('BitbucketServerAdapter.mergePullRequest', () => {
 });
 
 describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
-  // approve / needs work / unapproved (撤销) 三个状态映射到 BBS PUT participants 端点
+  // approve / needs work / unapproved (撤销) 三个状态映射到 Bitbucket PUT participants 端点
   function captureFetch(): {
     fetchFn: FetchLike;
     calls: { method: string; url: string; body: string | undefined }[];
@@ -574,7 +601,7 @@ describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      // PUT participants：返回 200 + 模拟 BBS 响应体（实际不读，但需要解析成功）
+      // PUT participants：返回 200 + 模拟 Bitbucket 响应体（实际不读，但需要解析成功）
       if (url.pathname.includes('/participants/')) {
         return new Response(JSON.stringify({ approved: true }), {
           status: 200,

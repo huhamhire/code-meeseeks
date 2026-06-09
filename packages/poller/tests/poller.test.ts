@@ -34,6 +34,19 @@ class FakeAdapter implements PlatformAdapter {
   getCurrentUser() {
     return this.currentUser;
   }
+  capabilities() {
+    return {
+      reviewStatuses: ['approved', 'needsWork', 'unapproved'] as const,
+      inlineComments: true,
+      inlineMultiline: true,
+      commentOptimisticLock: true,
+      mergeVetoFidelity: 'full' as const,
+      discoveryRateLimited: false,
+      resolvableThreads: false,
+      suggestions: false,
+      reviewGrouping: false,
+    };
+  }
   async ping() {
     if (this.failPing) throw new Error('ping fail');
     return { ok: true, serverVersion: 'fake' };
@@ -226,6 +239,17 @@ describe('Poller.tick', () => {
     let resolveList: ((v: PullRequest[]) => void) | undefined;
     const slow: PlatformAdapter = {
       kind: 'bitbucket-server',
+      capabilities: () => ({
+        reviewStatuses: ['approved', 'needsWork', 'unapproved'],
+        inlineComments: true,
+        inlineMultiline: true,
+        commentOptimisticLock: true,
+        mergeVetoFidelity: 'full',
+        discoveryRateLimited: false,
+        resolvableThreads: false,
+        suggestions: false,
+        reviewGrouping: false,
+      }),
       async ping() {
         return { ok: true };
       },
@@ -371,7 +395,7 @@ describe('Poller.tick', () => {
     expect(stored[0]!.connectionId).toBe('broken');
   });
 
-  // localStatus 直接镜像 BBS reviewer.status，是远端权威态的本地缓存。
+  // localStatus 直接镜像 Bitbucket reviewer.status，是远端权威态的本地缓存。
   // hasConflict 不影响 localStatus（仅作为独立维度，UI 通过 hasConflict 单独筛选）。
 
   it('preserves hasConflict=true on new PR without changing localStatus', async () => {
@@ -437,14 +461,14 @@ describe('Poller.tick', () => {
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
 
-    // BBS 上 kyle 点了 approve
+    // Bitbucket 上 kyle 点了 approve
     adapter.setPrs([
       { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }] },
     ]);
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('approved');
 
-    // BBS 上 kyle 撤销，回到 pending
+    // Bitbucket 上 kyle 撤销，回到 pending
     adapter.setPrs([
       { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }] },
     ]);
@@ -639,5 +663,50 @@ describe('setLocalStatus', () => {
   it('returns null when no meta file exists yet', async () => {
     const updated = await setLocalStatus(store, 'somehash12ab', 'needs_work');
     expect(updated).toBeNull();
+  });
+});
+
+describe('Poller.archiveConnectionsExcept', () => {
+  it('归档非活动连接的 PR、保留活动连接（进入 purge 路径）', async () => {
+    const a1 = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const a2 = new FakeAdapter([makePr('2', '2026-05-28T01:00:00.000Z')]);
+    const now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [
+        { connectionId: 'bb1', adapter: a1 },
+        { connectionId: 'bb2', adapter: a2 },
+      ],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+    });
+    await poller.tick(); // 两个连接的 PR 都入库，archivedAt=null
+
+    // 用户切换：只剩 bb1 活动
+    await poller.archiveConnectionsExcept(['bb1']);
+
+    const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    const entries = Object.values(index!.prs);
+    const bb1 = entries.find((e) => e.identity.connectionId === 'bb1')!;
+    const bb2 = entries.find((e) => e.identity.connectionId === 'bb2')!;
+    expect(bb1.archivedAt).toBeNull(); // 活动连接不动
+    expect(bb2.archivedAt).toBe(now.toISOString()); // 非活动连接被归档
+
+    // 幂等：再调一次不改已归档的时间戳
+    const later = new Date('2026-06-02T00:00:00.000Z');
+    const poller2 = new Poller({
+      connections: [{ connectionId: 'bb1', adapter: a1 }],
+      stateStore: store,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => later,
+    });
+    await poller2.archiveConnectionsExcept(['bb1']);
+    const index2 = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    const bb2After = Object.values(index2!.prs).find(
+      (e) => e.identity.connectionId === 'bb2',
+    )!;
+    expect(bb2After.archivedAt).toBe(now.toISOString()); // 仍是首次归档时间
   });
 });

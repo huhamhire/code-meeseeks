@@ -1,11 +1,11 @@
-# 模块设计文档（Modules）
+# 架构设计文档（Architecture）
 
 按**模块领域**沉淀**当前的设计与实现结论**——「现在是怎样、为什么这样、怎么扩展」。
 理解和维护某个模块时，这里是**首选入口**。
 
 ## 与其它文档的关系
 
-- **本目录（modules/）= 当前结论**：随实现演进持续更新，是某模块的「事实来源」。
+- **本目录（arch/）= 当前结论**：随实现演进持续更新，是某模块的「事实来源」。
 - **ROADMAP = 高层视角**：项目定位、里程碑进度、风险与下一步；不放实现细节（细节在这里）。
 - **ADR（已废弃）**：早期的设计思考曾以过程性方式留在 `docs/adr/`，与最终实现也多有出入。其结论
   已按领域沉淀进本目录、`docs/adr/` 已移除。决策的「取舍」若有长期价值，直接写进各篇的「核心设计」。
@@ -28,7 +28,7 @@
 | 编号 | 模块 |
 | --- | --- |
 | [`00-overview`](00-overview.md) | 架构总览：进程模型 / IPC / 数据流 / 模块关系 |
-| [`01-platform-adapter`](01-platform-adapter.md) | 代码平台适配（PlatformAdapter / Bitbucket Server / clone 协议） |
+| [`01-platform-adapter`](01-platform-adapter.md) | 代码平台适配（PlatformAdapter / 能力位与降级 / Bitbucket / GitHub 差异化适配 / clone 协议） |
 | [`02-repo-mirror`](02-repo-mirror.md) | 仓库镜像与 Diff（bare clone / worktree / blame） |
 | [`03-state-storage`](03-state-storage.md) | 状态存储与数据模型（StateStore / per-PR 目录 / schema） |
 | [`04-pragent-runtime`](04-pragent-runtime.md) | pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage） |

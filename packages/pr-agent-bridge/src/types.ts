@@ -6,7 +6,7 @@ export type PrAgentTool = 'describe' | 'review' | 'ask' | 'improve';
 export interface PrAgentRunOptions {
   /**
    * pr-agent 入口 `--pr_url`。
-   * - 远端模式：BBS PR URL，如 https://host/projects/.../pull-requests/<id>
+   * - 远端模式：Bitbucket PR URL，如 https://host/projects/.../pull-requests/<id>
    * - 本地模式 (cwd 已配置)：直接传 cwd 路径（容器里固定为 /repo），pr-agent 拿来
    *   定位本地仓库目录，不会走任何远端 API
    */
@@ -26,11 +26,8 @@ export interface PrAgentRunOptions {
    */
   signal?: AbortSignal;
   /**
-   * 本地工作树绝对路径。配置后切到 `git_provider=local` 模式：
-   * - LocalCli: 把 cwd 作为子进程工作目录 + `--pr_url <cwd>` 传给 pr-agent
-   * - Docker: `-v <cwd>:/repo -w /repo` + `--pr_url /repo`
-   *
-   * 完全不出网到 BBS，pr-agent 自己跑 `git diff <targetBranch>...HEAD`。
+   * 本地工作树绝对路径。配置后切到 `git_provider=local` 模式：把 cwd 作为子进程
+   * 工作目录，pr-agent 自己跑 `git diff <targetBranch>...HEAD`，完全不出网到代码托管。
    * 不设置则走原远端 provider 模式（默认 prUrl 远端拉 PR）。
    */
   cwd?: string;
@@ -39,16 +36,6 @@ export interface PrAgentRunOptions {
    * 传给 pr-agent 的 `--target_branch`；缺省时 pr-agent 自己 fallback 到默认分支。
    */
   targetBranch?: string;
-  /**
-   * 仅 Docker 策略生效，给 docker 调用追加额外的 `-v host:container[:ro]` 挂载。
-   * 当前主要用于把宿主端的空 `.secrets.toml` 挂到容器内 pr-agent 期望但实际没用
-   * 的 secrets 路径上，抑制启动告警。LocalCli 策略下忽略此字段。
-   */
-  dockerExtraVolumes?: ReadonlyArray<{
-    host: string;
-    container: string;
-    readonly?: boolean;
-  }>;
 }
 
 export interface PrAgentRunResult {
@@ -90,7 +77,7 @@ export interface ExecOptions {
   timeoutMs: number;
   env?: Record<string, string>;
   onLine?: (line: string, stream: 'stdout' | 'stderr') => void;
-  /** 子进程工作目录；LocalCli 本地模式用，Docker 不需要（容器 cwd 走 -w /repo） */
+  /** 子进程工作目录；local 模式用 */
   cwd?: string;
   /** 用户主动取消信号；abort 后 SIGKILL 子进程并 reject reason='cancelled' */
   signal?: AbortSignal;
@@ -105,7 +92,7 @@ export type ExecFn = (cmd: string, args: string[], opts: ExecOptions) => Promise
 export interface PrAgentBridge {
   /** 解析后选中的策略名 */
   readonly strategy: PrAgentStrategy;
-  /** 探测时拿到的版本字符串（CLI --version 首行或 docker --version） */
+  /** 探测时拿到的版本字符串（CLI --help / --version 首行，或嵌入式查出的 pr-agent 版本） */
   readonly version: string;
   /** 跑 /describe；等价 run({ ...opts, tool: 'describe' }) */
   describe(opts: Omit<PrAgentRunOptions, 'tool'>): Promise<PrAgentRunResult>;

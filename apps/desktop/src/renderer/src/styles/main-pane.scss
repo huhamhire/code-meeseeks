@@ -19,6 +19,17 @@
   padding: 24px;
 }
 
+// Monaco 懒加载 chunk 拉取期间的占位（DiffView / InlineCodeContext 的 Suspense fallback）
+.pane-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  height: 100%;
+  padding: 24px;
+  font-size: 13px;
+}
+
 .pr-header {
   padding: $space-6 20px $space-5;
   border-bottom: 1px solid $border-default;
@@ -236,7 +247,7 @@
   }
 }
 
-/* BBS 风格 blame 列：独立 React 组件，做 diff-pane-wrapper 的左侧 flex 子项。
+/* Bitbucket 风格 blame 列：独立 React 组件，做 diff-pane-wrapper 的左侧 flex 子项。
    内部 row 用 absolute 子项画，按 Monaco scrollTop 实时同步位置。 */
 .blame-column {
   flex-shrink: 0;

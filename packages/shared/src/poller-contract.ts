@@ -1,13 +1,13 @@
-import type { PlatformKind, PullRequest } from './platform.js';
+import type { PlatformKind, PrDiscoveryFilter, PullRequest } from './platform.js';
 import type { PrAgentStrategy } from './pr-agent-status.js';
 
 /**
- * 本地 review 判定。和 BBS reviewer.status 一一对应，UI 由它驱动两个 toggle 按钮：
+ * 本地 review 判定。和 Bitbucket reviewer.status 一一对应，UI 由它驱动两个 toggle 按钮：
  * - pending: 默认（UNAPPROVED），尚未给出 review 判定
  * - approved: 已 approve
  * - needs_work: 已标记 NEEDS_WORK
  *
- * 用户在 UI 上点击会同步到远端 BBS（参与者 status），下一轮 poll 再次取回保持一致。
+ * 用户在 UI 上点击会同步到远端 Bitbucket（参与者 status），下一轮 poll 再次取回保持一致。
  */
 export type LocalPrStatus = 'pending' | 'approved' | 'needs_work';
 
@@ -141,7 +141,7 @@ export interface Finding {
    */
   draft_body?: string;
   /**
-   * 发布成功后远端评论 id (e.g., BBS comment id)。用作幂等 key，防止同一 finding
+   * 发布成功后远端评论 id (e.g., Bitbucket comment id)。用作幂等 key，防止同一 finding
    * 被重复发布；跟 state/posted-comments.json 互为冗余但前者按 finding 维度，
    * 后者按 (finding_id, remote_id) 维度全局索引，用途互补
    */
@@ -163,7 +163,7 @@ export interface Finding {
  *   pending  ──(用户拒绝)──────► rejected
  *   edited   ──(用户拒绝)──────► rejected
  *   pending / edited  ──(批量发布成功)──► posted
- *   posted   ──► (终态，本地不变；要改远端走 BBS API)
+ *   posted   ──► (终态，本地不变；要改远端走 Bitbucket API)
  */
 export interface ReviewDraft {
   /** 唯一稳定 id (uuid 或 runId+findingId 派生)，UI list-key + 持久化引用 */
@@ -255,7 +255,7 @@ export interface ReviewRun {
   tool: ReviewRunTool;
   /** /ask 工具的问题内容；其他 tool 不填。UI 把它当用户发言渲染在 run 卡片之上 */
   question?: string;
-  /** 探测时拿到的 pr-agent 版本（CLI 首行 / docker version 字符串） */
+  /** 探测时拿到的 pr-agent 版本（CLI 首行 / 嵌入式查出的 pr-agent 版本） */
   prAgentVersion: string;
   strategy: PrAgentStrategy;
   /**
@@ -313,12 +313,18 @@ export interface StoredPullRequest extends PullRequest {
   localId: string;
   /**
    * 远端平台类型。让单个 meta.json 自描述，不依赖 prs/index.json 也能知道这条 PR
-   * 来自什么平台 —— 跨存储迁移 / 备份 / 离线分析时友好。M3 起 BBS only；M5 接入
+   * 来自什么平台 —— 跨存储迁移 / 备份 / 离线分析时友好。M3 起 Bitbucket only；M5 接入
    * GitHub / GitLab 时无需改 schema
    */
   platform: PlatformKind;
   connectionId: string;
   localStatus: LocalPrStatus;
+  /**
+   * 该 PR 命中的发现分类（GitHub：review-requested/created/assigned/mentioned 的子集）。
+   * poller 一轮把各分类都抓回来并 union 打标；renderer 据此本地过滤标签页，切换不再拉远端。
+   * 不支持分类的平台（Bitbucket）为空数组。
+   */
+  discoveryFilters: PrDiscoveryFilter[];
   /** 首次被 poll 发现的时间，ISO */
   discoveredAt: string;
   /** 最近一次 poll 仍能看到的时间，ISO */

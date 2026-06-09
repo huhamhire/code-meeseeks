@@ -24,6 +24,12 @@ interface SettingsModalProps {
   /** LLM 配置改动后通知父级同步状态（StatusBar chip 等） */
   onLlmChange?: (llm: Config['llm']) => void;
   onProxyChange?: (proxy: Config['proxy']) => void;
+  /**
+   * 连接改动（含切换活动连接）保存成功后通知父级。父级需重拉 config + 连接摘要 + PR 列表：
+   * 活动连接变化后，main 端 app:connections 只返回新活动连接的摘要、prs:list 只返回其 PR，
+   * 不刷新的话 App 的 boot.connections / 列表会过期（丢 capabilities/user、PR 对不上）。
+   */
+  onConnectionsChange?: () => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -45,6 +51,7 @@ export function SettingsModal({
   config,
   onLlmChange,
   onProxyChange,
+  onConnectionsChange,
   onClose,
 }: SettingsModalProps) {
   const [opening, setOpening] = useState(false);
@@ -179,7 +186,14 @@ export function SettingsModal({
   const openAddConn = (): void => {
     setConnEditor({
       mode: 'add',
-      draft: { id: newProfileId(), display_name: '', base_url: '', token: '', protocol: 'pat' },
+      draft: {
+        id: newProfileId(),
+        kind: 'github',
+        display_name: '',
+        base_url: '',
+        token: '',
+        protocol: 'pat',
+      },
     });
   };
   const openEditConn = (id: string): void => {
@@ -254,6 +268,7 @@ export function SettingsModal({
       }
       if (connectionsChanged) {
         await invoke('config:setConnections', { connections, active_connection_id: activeConnId });
+        await onConnectionsChange?.();
       }
       if (reposDirChanged && reposDirInput.trim()) {
         await invoke('config:setReposDir', { reposDir: reposDirInput.trim() });
@@ -716,6 +731,24 @@ function ConnectionEditorModal({
           <h3>{mode === 'add' ? '新增连接' : '编辑连接'}</h3>
         </div>
         <div className="modal-body">
+          {/* 平台选择仅新增时可改；编辑既有连接不允许切平台（base_url/token 语义不同） */}
+          {mode === 'add' && (
+            <div className="modal-kv" style={{ marginBottom: 8 }}>
+              <div className="modal-kv-key">平台</div>
+              <div className="modal-kv-val">
+                <select
+                  className="settings-input"
+                  value={draft.kind}
+                  onChange={(e) =>
+                    onChange({ ...draft, kind: e.target.value as ConnDraft['kind'] })
+                  }
+                >
+                  <option value="github">GitHub（github.com / Enterprise Server）</option>
+                  <option value="bitbucket-server">Bitbucket Server / Data Center</option>
+                </select>
+              </div>
+            </div>
+          )}
           <ConnectionForm draft={draft} onChange={onChange} />
           <div
             className="settings-actions"

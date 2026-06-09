@@ -4,7 +4,7 @@ import { invoke } from '../api';
 
 /**
  * react-markdown 默认 url sanitize 只允许 http/https/mailto/tel 协议，
- * 非白名单协议 → src 被吞成空。BBS 评论 markdown 用 `attachment:9/16854` 引用
+ * 非白名单协议 → src 被吞成空。Bitbucket 评论 markdown 用 `attachment:9/16854` 引用
  * 内嵌附件，必须直通让 BitbucketImage 收到原始 src 走 IPC 代理拉
  */
 export function transformBitbucketUrl(url: string): string {

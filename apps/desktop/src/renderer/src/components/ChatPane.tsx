@@ -16,7 +16,14 @@ import type {
 type MatchedRule = IpcChannels['rules:matchForPr']['response'];
 import type { ReviewDraft } from '@meebox/shared';
 import { invoke } from '../api';
-import { CloseIcon } from './icons';
+import {
+  ChatIcon,
+  CloseIcon,
+  QuestionIcon,
+  RetryIcon,
+  SendIcon,
+  StopIcon,
+} from './icons';
 import { chatRunStore, useChatRunStore } from '../stores/chat-run-store';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { parseAnsi, segmentStyle } from '../utils/ansi';
@@ -417,7 +424,7 @@ export function ChatPane({
             #{pr.remoteId}
           </span>
         )}
-        {/* strategy chip (Docker/CLI) 撤掉：部署细节用户不关心，状态栏已有 PR Agent 版本 chip */}
+        {/* 运行时策略 chip 撤掉：部署细节用户不关心，状态栏已有 PR Agent 版本 chip */}
       </header>
 
       {/* 当前 PR 命中的规则 chip：rules.dir 未配置 / 整体禁用 / 无命中 → 不显示。
@@ -529,7 +536,7 @@ export function ChatPane({
 /**
  * Chat 命令分两类：
  *  - 'pragent': pr-agent 工具 (review / describe / ask)，触发 pragent:run
- *  - 'review-action': PR review 决断 (approve / needswork)，写 BBS reviewer status
+ *  - 'review-action': PR review 决断 (approve / needswork)，写 Bitbucket reviewer status
  *    通过 prs:setLocalStatus 触发，跟 PR header 按钮共用同一路径
  */
 type CommandSpec =
@@ -560,7 +567,7 @@ const COMMANDS: ReadonlyArray<CommandSpec> = [
   // 支持 local provider 时直接放开
   // { kind: 'pragent', name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
   { kind: 'pragent', name: 'ask', label: '/ask', desc: '自然语言追问', insertAs: '/ask ' },
-  // review 决断 (跟 PR header 按钮共用 prs:setLocalStatus，写 BBS reviewer status)
+  // review 决断 (跟 PR header 按钮共用 prs:setLocalStatus，写 Bitbucket reviewer status)
   {
     kind: 'review-action',
     name: 'approve',
@@ -1050,42 +1057,6 @@ function ChatInputBar({
   );
 }
 
-// 纸飞机：横向飞行版 (Lucide send-horizontal 风格)。机头朝右，机身左侧带中心折痕，
-// stroke 跟 button color 一致便于 hover 联动配色
-function SendIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2 2 L14 8 L2 14 L5 8 Z" />
-      <path d="M5 8 L14 8" />
-    </svg>
-  );
-}
-
-// Stop 方块：圆角矩形 fill，跟 录音 / 媒体播放停止键的视觉惯例
-function StopIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
-    </svg>
-  );
-}
-
 function RulePreviewModal({
   rule,
   onClose,
@@ -1182,7 +1153,7 @@ function RunningView({
 
   // 跟 RunMeta 完全同结构的 chip 行。running 跟 succeeded/failed 共享一套视觉
   // 骨架，用户从列表扫一眼能在固定位置看到 tool / 状态 / 模型 / 时长。strategy
-  // (Docker/CLI) 是部署细节用户不关心，撤掉；model 是真正影响 review 质量的变量
+  // 运行时策略是部署细节用户不关心，撤掉；model 是真正影响 review 质量的变量
   return (
     <div className="chat-run-running" data-run-id={runId}>
       <header className="chat-run-meta">
@@ -1498,49 +1469,6 @@ function FindingDraftActions({
   );
 }
 
-// /ask 用户提问 chip 前缀：圆圈内 `?`，跟答案区分。位于 RunMeta 下方说明"对这个 /ask
-// 动作提了这个问题"
-function QuestionIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.5" />
-      <path d="M6 6.2a2 2 0 1 1 2.7 1.9c-.6.2-.7.7-.7 1.2v.4" />
-      <line x1="8" y1="12" x2="8" y2="12.2" />
-    </svg>
-  );
-}
-
-// Retry 图标：循环箭头 + 箭头头部 (refresh-cw 风格)，跟状态栏的 RefreshIcon 同语义但
-// 体积更小匹配 chip 内嵌使用
-function RetryIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M13.5 3.5v3.5h-3.5" />
-      <path d="M13 7.5A5 5 0 1 0 11.5 11.5" />
-    </svg>
-  );
-}
-
 interface TokenUsage {
   /** 输入侧 (prompt) token 数。LITELLM_LOG=INFO 时来自 litellm；fallback 用 pr-agent
       自己打的 "Tokens: N" (tiktoken 预估) */
@@ -1624,7 +1552,7 @@ function RunMeta({ run }: { run: ReviewRun }) {
       <span className={`chat-run-status chat-run-status-${run.status}`}>
         {RUN_STATUS_LABEL[run.status]}
       </span>
-      {/* 模型 chip 取代 Docker/CLI strategy chip — strategy 是部署细节用户不
+      {/* 模型 chip 取代运行时策略 chip — strategy 是部署细节用户不
           关心，model 是真正影响 review 质量的变量 */}
       {run.model && (
         <span className="chat-run-chip chat-run-model" title={`使用模型 ${run.model}`}>
@@ -1922,11 +1850,11 @@ function ChatEmpty({
     return (
       <div className="chat-empty">
         <div className="chat-empty-icon" aria-hidden="true">
-          <ChatIcon large />
+          <ChatIcon size={28} />
         </div>
         <p className="chat-empty-title">PR Agent 未就绪</p>
         <p className="chat-empty-sub">
-          本机 CLI 与 Docker 都未探测到。打开 Settings 看探测详情，或安装其中一种后重启应用。
+          嵌入式运行时与本机 CLI 都未探测到。打开 Settings 看探测详情后重启应用。
         </p>
       </div>
     );
@@ -1936,7 +1864,7 @@ function ChatEmpty({
     return (
       <div className="chat-empty">
         <div className="chat-empty-icon" aria-hidden="true">
-          <ChatIcon large />
+          <ChatIcon size={28} />
         </div>
         <p className="chat-empty-title">需要配置 AI 模型</p>
         <p className="chat-empty-sub">
@@ -1958,7 +1886,7 @@ function ChatEmpty({
   return (
     <div className="chat-empty">
       <div className="chat-empty-icon" aria-hidden="true">
-        <ChatIcon large />
+        <ChatIcon size={28} />
       </div>
       <p className="chat-empty-title">{pr ? '可以开始对话' : '选中一个 PR 后开始'}</p>
       <p className="chat-empty-sub">下方输入框接受命令或自然语言：</p>
@@ -1993,21 +1921,3 @@ function Spinner() {
   return <span className="spinner" aria-hidden="true" />;
 }
 
-function ChatIcon({ large }: { large?: boolean } = {}) {
-  const size = large ? 28 : 14;
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2.5 3.5h11A1 1 0 0 1 14.5 4.5v6A1 1 0 0 1 13.5 11.5H6L3 13.5V11.5H2.5A1 1 0 0 1 1.5 10.5v-6A1 1 0 0 1 2.5 3.5z" />
-    </svg>
-  );
-}

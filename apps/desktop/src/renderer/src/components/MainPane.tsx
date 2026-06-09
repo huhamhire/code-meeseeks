@@ -1,110 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { LocalPrStatus, StoredPullRequest } from '@meebox/shared';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import type {
+  LocalPrStatus,
+  PlatformCapabilities,
+  ReviewerStatus,
+  StoredPullRequest,
+} from '@meebox/shared';
 import { invoke } from '../api';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { CommentsPanel } from './CommentsPanel';
 import { CommitsPanel } from './CommitsPanel';
-import { DiffView } from './DiffView';
+// Monaco 编辑器（~10MB）懒加载：只有真正切到 Diff tab 才拉取 DiffView chunk，
+// 不阻塞窗口首帧 / PR 列表 / 首启向导。
+const DiffView = lazy(() => import('./DiffView').then((m) => ({ default: m.DiffView })));
 import { DraftsPanel } from './DraftsPanel';
 import { PrInfoView } from './PrInfoView';
 import { PublishReviewModal } from './PublishReviewModal';
-import { PullRequestIcon } from './icons';
-
-// Globe 网格图标：地球经纬度示意，跟"在远端浏览器打开"语义匹配
-function GlobeIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.5" />
-      <ellipse cx="8" cy="8" rx="3" ry="6.5" />
-      <line x1="1.5" y1="8" x2="14.5" y2="8" />
-    </svg>
-  );
-}
-
-function BlameIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="5" r="2.5" />
-      <path d="M3 13c0-2.5 2.2-4 5-4s5 1.5 5 4" />
-    </svg>
-  );
-}
-
-/** 空白字符显示图标：·→· 暗示 space + tab 可视化 */
-function WhitespaceIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <circle cx="3" cy="8" r="0.8" fill="currentColor" />
-      <path d="M6 8 h6 m-2 -2 l2 2 l-2 2" />
-    </svg>
-  );
-}
-
-function ApproveIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.5" />
-      <path d="M5 8.3l2.2 2.2L11 6.5" />
-    </svg>
-  );
-}
-
-function NeedsWorkIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.5" />
-      <path d="M8 4.5v4.2" />
-      <circle cx="8" cy="11.3" r="0.4" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
+import {
+  ApproveIcon,
+  GlobeIcon,
+  NeedsWorkIcon,
+  PersonIcon,
+  PullRequestIcon,
+  WhitespaceIcon,
+} from './icons';
 
 interface MainPaneProps {
   pr: StoredPullRequest | null;
@@ -112,6 +30,15 @@ interface MainPaneProps {
   onSetStatus: (status: LocalPrStatus) => void;
   /** 合并当前 PR（仅在 mergeStatus.canMerge 时由 header 按钮触发） */
   onMerge: () => void;
+  /** 合并请求进行中：按钮置等待态并禁用，防重复点击（远端合并可能较慢）。 */
+  merging?: boolean;
+  /**
+   * 当前 PR 所属连接的平台能力（多平台降级用）。undefined = 未知（无连接/旧数据）→ 不降级。
+   * 据此决定审批按钮 显/隐（reviewStatuses）等。
+   */
+  capabilities?: PlatformCapabilities;
+  /** 当前 PR 所属连接的 PAT 用户登录名；用于判定「是否自己的 PR」（不能审批自己）。 */
+  currentUserName?: string | null;
   /**
    * M4 跨组件跳转：ChatPane finding card 点"编辑"时由 App 设置，MainPane 据此
    * 切到 Diff tab + 把 nav 透传给 DiffView 做 scroll/highlight/open zone。
@@ -142,6 +69,9 @@ export function MainPane({
   hasConnections,
   onSetStatus,
   onMerge,
+  merging = false,
+  capabilities,
+  currentUserName,
   pendingDiffNav,
   onDiffNavConsumed,
   onRequestDiffNav,
@@ -171,7 +101,7 @@ export function MainPane({
   //     按需异步刷新最新评论计数，不依赖用户去点 Comments tab 触发
   //   - commits：走本地 git rev-list base..head，镜像没拉齐 → 不显示数字
   // 都是 PR 切换时各拉一次，cancelled token 防 race。deps 含 pr?.updatedAt：
-  // BBS 上加评论 / 状态变更后远端 updatedAt 跳变 → poller 拉到 → store 更新 →
+  // Bitbucket 上加评论 / 状态变更后远端 updatedAt 跳变 → poller 拉到 → store 更新 →
   // 这里 useEffect 重跑 → force 刷新评论 + 计数。用户 app 一直开着不切走 PR 时
   // 也能跟上远端变动
   const [commentCount, setCommentCount] = useState<number | null>(null);
@@ -258,6 +188,13 @@ export function MainPane({
     );
   }
 
+  // 能力位降级：reviewStatuses 决定审批按钮显隐；自己作者的 PR 不能审批（GitHub 422，
+  // 其它平台也无意义）→ 灰显 + 原因。capabilities undefined（旧数据/无连接）时不降级。
+  const reviewAllowed = (s: ReviewerStatus): boolean =>
+    !capabilities || capabilities.reviewStatuses.includes(s);
+  const isOwnPr = !!currentUserName && pr.author.name === currentUserName;
+  const ownPrReason = isOwnPr ? '不能审批自己的 PR' : undefined;
+
   return (
     <main className="main">
       <header className="pr-header">
@@ -322,33 +259,41 @@ export function MainPane({
                 type="button"
                 className="btn btn-sm pr-header-merge"
                 onClick={onMerge}
+                disabled={merging}
+                aria-busy={merging}
                 title="合并此 PR 到目标分支"
               >
-                <PullRequestIcon size={14} /> 合并
+                <PullRequestIcon size={14} /> {merging ? '合并中…' : '合并'}
               </button>
             )}
-            <button
-              className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
-              type="button"
-              onClick={() =>
-                onSetStatus(pr.localStatus === 'approved' ? 'pending' : 'approved')
-              }
-              title={pr.localStatus === 'approved' ? '撤销通过' : '标记为通过'}
-              aria-pressed={pr.localStatus === 'approved'}
-            >
-              <ApproveIcon /> 通过
-            </button>
-            <button
-              className={`btn btn-sm review-action review-action-needs-work ${pr.localStatus === 'needs_work' ? 'active' : ''}`}
-              type="button"
-              onClick={() =>
-                onSetStatus(pr.localStatus === 'needs_work' ? 'pending' : 'needs_work')
-              }
-              title={pr.localStatus === 'needs_work' ? '撤销"需修改"' : '标记为需修改'}
-              aria-pressed={pr.localStatus === 'needs_work'}
-            >
-              <NeedsWorkIcon /> 需修改
-            </button>
+            {reviewAllowed('approved') && (
+              <button
+                className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
+                type="button"
+                disabled={isOwnPr}
+                onClick={() =>
+                  onSetStatus(pr.localStatus === 'approved' ? 'pending' : 'approved')
+                }
+                title={ownPrReason ?? (pr.localStatus === 'approved' ? '撤销通过' : '标记为通过')}
+                aria-pressed={pr.localStatus === 'approved'}
+              >
+                <ApproveIcon /> 通过
+              </button>
+            )}
+            {reviewAllowed('needsWork') && (
+              <button
+                className={`btn btn-sm review-action review-action-needs-work ${pr.localStatus === 'needs_work' ? 'active' : ''}`}
+                type="button"
+                disabled={isOwnPr}
+                onClick={() =>
+                  onSetStatus(pr.localStatus === 'needs_work' ? 'pending' : 'needs_work')
+                }
+                title={ownPrReason ?? (pr.localStatus === 'needs_work' ? '撤销"需修改"' : '标记为需修改')}
+                aria-pressed={pr.localStatus === 'needs_work'}
+              >
+                <NeedsWorkIcon /> 需修改
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -441,7 +386,7 @@ export function MainPane({
               title={showBlame ? '关闭追溯显示' : '开启追溯显示（仅 head 侧）'}
               aria-pressed={showBlame}
             >
-              <BlameIcon /> 追溯
+              <PersonIcon /> 追溯
             </button>
             <div className="diff-mode-toggle" role="tablist" aria-label="diff 显示模式">
               <button
@@ -468,14 +413,16 @@ export function MainPane({
       </nav>
       <div className="pr-tab-content">
         {tab === 'diff' && (
-          <DiffView
-            pr={pr}
-            renderSideBySide={renderSideBySide}
-            showBlame={showBlame}
-            showWhitespace={showWhitespace}
-            pendingNav={pendingDiffNav ?? null}
-            onNavConsumed={onDiffNavConsumed}
-          />
+          <Suspense fallback={<div className="pane-loading muted">加载编辑器…</div>}>
+            <DiffView
+              pr={pr}
+              renderSideBySide={renderSideBySide}
+              showBlame={showBlame}
+              showWhitespace={showWhitespace}
+              pendingNav={pendingDiffNav ?? null}
+              onNavConsumed={onDiffNavConsumed}
+            />
+          </Suspense>
         )}
         {tab === 'comments' && (
           <CommentsPanel pr={pr} onCommentsLoaded={(n) => setCommentCount(n)} />

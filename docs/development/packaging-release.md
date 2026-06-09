@@ -5,7 +5,7 @@
 把应用 + 嵌入式运行时打成各平台安装包并发布。覆盖 electron-builder 配置、嵌入式运行时随包、
 代码签名策略、图标、CI 发布流程。
 
-负责：构建/打包/签名/出包/CI。不负责：嵌入式运行时怎么组装（见 [pr-agent 集成与运行时](../modules/04-pragent-runtime.md)）。macOS 签名细节另见 [macOS 构建与发布](./mac-build.md)。
+负责：构建/打包/签名/出包/CI。不负责：嵌入式运行时怎么组装（见 [pr-agent 集成与运行时](../arch/04-pragent-runtime.md)）。macOS 签名细节另见 [macOS 构建与发布](./mac-build.md)。
 
 ## 核心设计
 

@@ -2,12 +2,12 @@
  * 不同代码托管平台对 inline comment 允许的"锚定行范围"差异较大：
  *
  * - Bitbucket Server / Data Center: 严格 — `/comments` 接口要求 anchor.line
- *   落在 diff hunk 范围内（含 context 行）。锚到 hunk 之外的行 BBS 直接 400。
+ *   落在 diff hunk 范围内（含 context 行）。锚到 hunk 之外的行 Bitbucket 直接 400。
  * - GitHub / GitLab: 宽松 — diff 视图内任意行都能起评论
  *   （GitHub 多文件 review comment 也是按 file:line 锚定但范围更宽松）。
  *
  * 把"哪一行能新增内联评论"抽象成 platform-specific policy，让 DiffView 渲染行
- * hover '+' glyph 时按当前 PR 的 platform 选 profile 过滤；后续 BBS publishInline
+ * hover '+' glyph 时按当前 PR 的 platform 选 profile 过滤；后续 Bitbucket publishInline
  * 提交时也复用同一份规则做前置校验，避免 400。
  *
  * Hunk 信息来自 monaco DiffEditor 的 getLineChanges()，不依赖额外 IPC：
@@ -43,7 +43,7 @@ export interface InlineCommentPolicy {
 
 /**
  * 工厂：以"hunk 范围 ± context 行"为允许行的 policy。context=0 时严格 hunk 内；
- * BBS 实测允许变更上下 10 行（含 context 行）可加评论
+ * Bitbucket 实测允许变更上下 10 行（含 context 行）可加评论
  */
 function makeContextRangePolicy(label: string, context: number): InlineCommentPolicy {
   return {
@@ -61,12 +61,12 @@ function makeContextRangePolicy(label: string, context: number): InlineCommentPo
 }
 
 /**
- * BBS profile：允许变更区域**上下 10 行**内的行 (跟 BBS Web UI 行为对齐 — 离 hunk
+ * Bitbucket profile：允许变更区域**上下 10 行**内的行 (跟 Bitbucket Web UI 行为对齐 — 离 hunk
  * 太远的行 /comments 接口直接 400)。新增行 (modified 侧) 锚到 modified range，
- * 删除行 (original 侧) 锚到 original range。BBS 的 fileType=FROM/TO 字段后续在
+ * 删除行 (original 侧) 锚到 original range。Bitbucket 的 fileType=FROM/TO 字段后续在
  * publishInline 时根据 side 翻译
  */
-const bbsPolicy = makeContextRangePolicy(
+const bitbucketPolicy = makeContextRangePolicy(
   'Bitbucket Server: 变更上下 10 行内可加评论',
   10,
 );
@@ -78,7 +78,7 @@ const permissivePolicy: InlineCommentPolicy = {
 };
 
 export const INLINE_COMMENT_POLICIES: Readonly<Record<PlatformKind, InlineCommentPolicy>> = {
-  'bitbucket-server': bbsPolicy,
+  'bitbucket-server': bitbucketPolicy,
   github: permissivePolicy,
   gitlab: permissivePolicy,
   gitea: permissivePolicy,

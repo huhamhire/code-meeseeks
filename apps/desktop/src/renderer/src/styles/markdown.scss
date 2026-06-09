@@ -4,7 +4,7 @@
 
 @use './tokens' as *;
 
-// BBS 评论 attachment 图片走 IPC 代理拉回 data URL。BBS 原图通常很大 (截图等)，
+// Bitbucket 评论 attachment 图片走 IPC 代理拉回 data URL。Bitbucket 原图通常很大 (截图等)，
 // 评论里要做缩略展示。max-width/height 限制 + cursor zoom-in 视觉提示
 .bitbucket-image {
   max-width: 280px;
@@ -153,6 +153,25 @@
     word-break: break-all;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
+  }
+
+  // <details>/<summary> 折叠块：Qodo / pr-agent 机器人评论大量使用。
+  details {
+    margin: $space-3 0;
+    border: 1px solid $border-default;
+    border-radius: $radius-md;
+    padding: 0 $space-4;
+    background: $bg-surface;
+
+    &[open] {
+      padding-bottom: $space-3;
+    }
+  }
+  summary {
+    cursor: pointer;
+    padding: $space-3 0;
+    font-weight: 600;
+    user-select: none;
   }
 
   h1,

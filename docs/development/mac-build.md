@@ -3,7 +3,7 @@
 > 状态：**已在 macOS arm64 验证通过**（2026-06，macOS 26.5 / Apple Silicon）——
 > 本机走完 `prepare:pragent` → `electron-vite build` → `electron-builder` 全链路，出 dmg、
 > ad-hoc 签名、装 dmg 后 GUI 正常启动，嵌入式 python 实际 exec + `import pr_agent` 通过。
-> 关联 [pr-agent 集成与运行时](../modules/04-pragent-runtime.md)。
+> 关联 [pr-agent 集成与运行时](../arch/04-pragent-runtime.md)。
 
 作为开源项目，**不申请 Apple Developer ID（$99/年）**，走**免费 ad-hoc 路线**：
 

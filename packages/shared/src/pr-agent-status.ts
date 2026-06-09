@@ -1,4 +1,4 @@
-export type PrAgentStrategy = 'embedded' | 'local-cli' | 'docker';
+export type PrAgentStrategy = 'embedded' | 'local-cli';
 
 export interface PrAgentAvailable {
   available: true;

@@ -3,11 +3,11 @@ import type { ReviewDraft } from '@meebox/shared';
 import { invoke } from '../api';
 
 /**
- * 批量发布草稿到 BBS 的确认 modal。M4 发布闭环最后一公里。
+ * 批量发布草稿到 Bitbucket 的确认 modal。M4 发布闭环最后一公里。
  *
  * 流程：
  *   1. confirm: 列出本 PR 所有可发布草稿 (pending + edited)，用户可勾选 / 取消
- *   2. publishing: 调 drafts:publishBatch，main 端串行 POST 到 BBS
+ *   2. publishing: 调 drafts:publishBatch，main 端串行 POST 到 Bitbucket
  *   3. done: 显示成功 N 条 / 失败 M 条 + 每条失败明细
  *
  * - rejected 草稿不在列表里 (用户决断不发)

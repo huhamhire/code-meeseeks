@@ -1,26 +1,6 @@
 import type { StoredPullRequest } from '@meebox/shared';
 import { Avatar } from './Avatar';
-import { PullRequestIcon } from './icons';
-
-/** 作者行前缀：头肩剪影，跟 meta gutter 左对齐 */
-function PersonIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="5" r="2.5" />
-      <path d="M3 13c0-2.5 2.2-4 5-4s5 1.5 5 4" />
-    </svg>
-  );
-}
+import { PersonIcon, PullRequestIcon } from './icons';
 
 interface PrItemProps {
   pr: StoredPullRequest;
@@ -51,6 +31,7 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
         connectionId={pr.connectionId}
         slug={pr.author.slug ?? pr.author.name}
         displayName={pr.author.displayName}
+        avatarUrl={pr.author.avatarUrl}
         size={40}
       />
       <div className="pr-item-body">

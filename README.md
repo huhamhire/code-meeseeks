@@ -4,9 +4,11 @@
 
 # Code Meeseeks
 
-**面向 Reviewer 个人的本地化、半自动 AI 代码评审桌面客户端**
+**PR Agent 的桌面 GUI · 面向 Reviewer 个人的本地化、半自动 AI 代码评审客户端**
 
-基于社区版 [PR-Agent](https://docs.pr-agent.ai/) · Electron 桌面应用 · 数据全部留在本地
+社区版 [PR-Agent](https://docs.pr-agent.ai/) 的图形界面 (GUI) · Electron 桌面应用 · 数据全部留在本地
+
+<sub>关键词 / Keywords：PR-Agent GUI · pr-agent desktop client · AI 代码评审 / AI code review · Pull Request &amp; Merge Request review · Bitbucket / GitHub reviewer 工具 · 本地化 / 私有部署 / self-hosted</sub>
 
 </div>
 
@@ -14,7 +16,7 @@
 
 > ⚠️ **早期预览版（0.x）**：项目仍在快速迭代，功能、配置与数据格式可能发生不兼容变更，稳定性未经充分验证。请勿用于关键的生产评审流程，使用前请自行评估风险并做好数据备份。
 
-Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进一个**桌面客户端**：拉取评审者待评审的 PR，本地跑 pr-agent 生成评审意见，由评审者**逐条确认 / 编辑后**再发布到代码托管平台。
+Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](https://docs.pr-agent.ai/) 的**桌面图形界面 (GUI)**：把 AI 辅助的代码评审装进一个桌面客户端 —— 拉取评审者待评审的 PR（Pull Request / Merge Request），本地跑 pr-agent 生成评审意见，由评审者**逐条确认 / 编辑后**再发布到代码托管平台（Bitbucket / GitHub）。
 
 核心设计立场：
 
@@ -24,32 +26,36 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 > 灵感来自 *Rick and Morty* 里的 Mr. Meeseeks：召之即来、专做一件事、做完即走。
 
-## 适合谁
+## 适用场景
 
-- 需要承担 code review 的工程师 / Tech Lead
-- 想用 AI 加速评审，但**不愿把决策权完全交给 bot**
-- 多在企业内网，使用自建 Bitbucket / GitLab
+- ✅ 承担 code review 职责的工程师 / Tech Lead
+- ✅ 希望借助 AI 提升评审效率，同时保留最终决策权、不将判断完全交由 bot
+- ✅ 在企业内网环境中使用自建 Bitbucket / GitLab 的团队
 
-## 不是什么
+## 不适用场景
 
-- ❌ 不是 CI 上自动跑的 review bot（那是 pr-agent 本身的定位）
-- ❌ 不是团队协同评审平台（无服务端、不做多用户同步）
-- ❌ 不替代托管平台原生的评审 UI
+- ❌ 不是在 CI 中自动运行的 review bot（该定位属于 pr-agent 本身）
+- ❌ 不是团队协同评审平台（无服务端，不提供多用户同步）
+- ❌ 不替代代码托管平台原生的评审界面
 
 ---
 
 ## 核心特性
 
-- 🔌 **开箱即用，零外部依赖** —— 安装包内嵌可重定位的 Python 运行时 + 固定版本 pr-agent，**无需自行安装 Python 或 Docker**（Docker 模式仍可通过配置切换）。
+- 🔌 **开箱即用，零外部依赖** —— 安装包内嵌可重定位的 Python 运行时 + 固定版本 pr-agent，**无需自行安装 Python 或 Docker**。
 - 📥 **PR 自动发现** —— 轮询拉取评审者待评审的 Open PR，按仓库分组、状态过滤、搜索。
 - 🔍 **本地 Diff 阅读** —— Monaco 并排 / 内联 diff、文件树、行内评论、blame、跨文件代码搜索。
 - 🤖 **AI 评审** —— `/describe`、`/review`、`/ask` 对话式驱动 pr-agent，结果结构化成可操作的 findings。
 - 📐 **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter），按项目 / 仓库 / 目标分支命中后注入评审。
 - ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
 - 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
-- 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等。
+- 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等；也可通过本机已授权的本地 CLI 工具调用第三方模型。
 
-> 界面预览待补（截图将放 `assets/images/`）。
+<div align="center">
+
+<img src="assets/images/screenshot.zh-CN.png" alt="Code Meeseeks 界面预览" width="900" />
+
+</div>
 
 ---
 
@@ -84,14 +90,16 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 >
 > **SSH 方式的 git 拉取**不走此配置，请在 `~/.ssh/config` 为对应 host 自配 `ProxyCommand`。
 
+各步的详细说明（安装与首次使用、PAT 权限与 Clone 协议、LLM 模型选择、网络代理）见 **[使用说明](docs/guide/README.md)**。
+
 ---
 
 ## 平台支持
 
 | 平台 | 状态 |
 | --- | --- |
+| GitHub | ✅ 已验证（github.com + GitHub Enterprise Server，REST API v3） |
 | Bitbucket Server / Data Center | ✅ 已支持（REST API v1，>= 7.0） |
-| GitHub | 🚧 规划中 |
 | GitLab | 🚧 规划中 |
 
 ---
@@ -109,6 +117,9 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 | `volcengine-ark` | 火山方舟（Volcengine Ark，豆包） | ✅ 已验证 |
 | `ollama` | Ollama（本地模型） | 🚧 理论可行，未验证 |
 | `openai-compatible` | OpenAI API 协议兼容（vLLM / 中转 / 自建等） | 🚧 理论可行，未验证 |
+| `cli` | 通过本地 CLI 工具调用第三方模型 | ✅ 已验证 |
+
+> **本地 CLI 模式说明**：该模式不直连模型 API，而是把评审请求转交给使用者**自行安装并授权**的本地命令行工具，由其代为调用背后的第三方模型。需先在本机完成对应 CLI 工具的安装与登录授权，应用本身不负责其凭据管理与计费。
 
 ---
 
@@ -116,7 +127,7 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 
 围绕「让本地化、半自动评审更省心」展开的几个核心方向（排序不代表优先级，欢迎在 issue 中讨论）：
 
-- [ ] **多代码平台适配** —— 在统一适配层上扩展 GitHub、GitLab，自建与公有云托管一并接入。
+- [ ] **多代码平台适配** —— 在统一适配层上继续扩展 GitLab，自建与公有云托管一并接入。
 - [ ] **高阶 Agent 能力** —— 复杂任务的分步规划 + 长期 Memory，让评审从单轮问答走向可累积上下文、多步工具调用的协作。
 - [ ] **AutoPilot 预评审** —— 轮询发现新 PR 后按评审者配置的规则自动跑一遍预评审，进应用即见待确认草稿，省去逐个手动触发（决策权仍在评审者，发布前仍需确认）。
 - [ ] **国际化（i18n）** —— 多语言界面，优先覆盖简体中文 / English。
@@ -131,9 +142,9 @@ Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进
 - **渲染层**：React + TypeScript（strict）
 - **编辑器**：Monaco（并排 / 内联 diff）
 - **工程**：npm workspaces + Nx 单仓多包
-- **pr-agent 集成**：默认内嵌 Python 运行时子进程（Docker 模式可选）
+- **pr-agent 集成**：内嵌 Python 运行时子进程（缺失时回退系统 pr-agent CLI）
 
-详细架构、数据模型、分期里程碑见 **[Roadmap](docs/ROADMAP.md)**；各模块设计见 **[模块文档](docs/modules/README.md)**。
+详细架构、数据模型、分期里程碑见 **[Roadmap](docs/ROADMAP.md)**；各模块设计见 **[模块文档](docs/arch/README.md)**。
 
 ---
 
