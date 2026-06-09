@@ -55,8 +55,10 @@ function resolveEmbeddedPython(): string {
 
 let bootstrap: BootstrapResult;
 let logger: Logger;
-let prAgentStatus: PrAgentStatus;
-let prAgentBridge: PrAgentBridge | null;
+// 探测结果异步回填（见下方 kick-off）：probe 完成前 bridge=null。
+let prAgentBridge: PrAgentBridge | null = null;
+// 探测 promise：app:prAgentStatus 据此 await 拿最终状态；构造逻辑保证恒 resolve、不 reject。
+let prAgentProbe: Promise<PrAgentStatus>;
 let stateStore: JsonFileStateStore;
 let poller: Poller;
 let repoMirror: RepoMirrorManager;
@@ -70,20 +72,27 @@ async function start(): Promise<void> {
   );
 
   const embeddedPythonPath = resolveEmbeddedPython();
-  const probe = await createPrAgentBridge({
-    embeddedPythonPath,
-    forceStrategy: bootstrap.config.pr_agent.strategy,
-  });
-  prAgentStatus = probe.status;
-  prAgentBridge = probe.bridge;
-  logger.info(
-    {
-      available: prAgentStatus.available,
-      strategy: prAgentStatus.available ? prAgentStatus.strategy : undefined,
-      version: prAgentStatus.available ? prAgentStatus.version : undefined,
-    },
-    'pr-agent probe complete',
-  );
+  // pr-agent 探测**不放在建窗关键路径上**：它走 spawn 探测（auto 模式回退 local-cli
+  // 时最坏 5s 超时），过去 await 在此会把窗口首帧整体推迟数秒。改为 kick-off 不 await，
+  // 与 app.whenReady() + 渲染层加载并发跑；结果异步回填模块变量。
+  // - app:prAgentStatus 会 await prAgentProbe 拿最终状态（boot 时序通常已完成）
+  // - pragent run 入口读 getPrAgentBridge()，未就绪时为 null → 走"未就绪"提示
+  prAgentProbe = (async (): Promise<PrAgentStatus> => {
+    const probe = await createPrAgentBridge({
+      embeddedPythonPath,
+      forceStrategy: bootstrap.config.pr_agent.strategy,
+    });
+    prAgentBridge = probe.bridge;
+    logger.info(
+      {
+        available: probe.status.available,
+        strategy: probe.status.available ? probe.status.strategy : undefined,
+        version: probe.status.available ? probe.status.version : undefined,
+      },
+      'pr-agent probe complete',
+    );
+    return probe.status;
+  })();
 
   stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
 
@@ -199,8 +208,9 @@ async function start(): Promise<void> {
   registerIpcHandlers({
     bootstrap,
     logger,
-    prAgentStatus,
-    prAgentBridge,
+    // 惰性读取：探测异步回填后，handler 调用时才取到最新值（注册时探测可能尚未完成）
+    getPrAgentStatus: () => prAgentProbe,
+    getPrAgentBridge: () => prAgentBridge,
     embeddedPythonPath,
     stateStore,
     poller,

@@ -52,9 +52,10 @@ import { buildPrContext } from './utils/pr-context.js';
 interface RegisterDeps {
   bootstrap: BootstrapResult;
   logger: Logger;
-  prAgentStatus: PrAgentStatus;
-  /** 探测可用时的 bridge 实例；不可用 (embedded / CLI 都没有) 为 null */
-  prAgentBridge: PrAgentBridge | null;
+  /** 惰性取 pr-agent 探测状态：探测异步进行（不阻塞建窗），await 拿最终结果 */
+  getPrAgentStatus: () => Promise<PrAgentStatus>;
+  /** 惰性取 bridge 实例；探测未完成 / 不可用 (embedded / CLI 都没有) 时为 null */
+  getPrAgentBridge: () => PrAgentBridge | null;
   /** 嵌入式运行时解释器路径（embedded 策略下执行期补 .secrets.toml 用），非 embedded 可空 */
   embeddedPythonPath?: string;
   stateStore: JsonFileStateStore;
@@ -73,8 +74,8 @@ interface RegisterDeps {
 export function registerIpcHandlers({
   bootstrap,
   logger,
-  prAgentStatus,
-  prAgentBridge,
+  getPrAgentStatus,
+  getPrAgentBridge,
   embeddedPythonPath,
   stateStore,
   poller,
@@ -187,7 +188,7 @@ export function registerIpcHandlers({
   ipcMain.handle('app:paths', (): IpcChannels['app:paths']['response'] => bootstrap.paths);
   ipcMain.handle(
     'app:prAgentStatus',
-    (): IpcChannels['app:prAgentStatus']['response'] => prAgentStatus,
+    (): Promise<IpcChannels['app:prAgentStatus']['response']> => getPrAgentStatus(),
   );
   ipcMain.handle(
     'app:connections',
@@ -708,6 +709,7 @@ export function registerIpcHandlers({
    * Promise reject，外层 pragent:run 调用方收到。
    */
   const executeRun = async (item: QueueItem): Promise<ReviewRun> => {
+    const prAgentBridge = getPrAgentBridge();
     if (!prAgentBridge) throw new Error('pr-agent 未就绪');
     const { req, pr } = item;
     // 提前 resolve active LLM profile — model 字段要随 startReviewRun 一起落
@@ -1097,7 +1099,7 @@ export function registerIpcHandlers({
       _evt,
       req: IpcChannels['pragent:run']['request'],
     ): Promise<IpcChannels['pragent:run']['response']> => {
-      if (!prAgentBridge) {
+      if (!getPrAgentBridge()) {
         throw new Error(
           'pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节',
         );
