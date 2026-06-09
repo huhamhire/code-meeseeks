@@ -4,9 +4,11 @@
 
 # Code Meeseeks
 
-**面向 Reviewer 个人的本地化、半自动 AI 代码评审桌面客户端**
+**PR Agent 的桌面 GUI · 面向 Reviewer 个人的本地化、半自动 AI 代码评审客户端**
 
-基于社区版 [PR-Agent](https://docs.pr-agent.ai/) · Electron 桌面应用 · 数据全部留在本地
+社区版 [PR-Agent](https://docs.pr-agent.ai/) 的图形界面 (GUI) · Electron 桌面应用 · 数据全部留在本地
+
+<sub>关键词 / Keywords：PR-Agent GUI · pr-agent desktop client · AI 代码评审 / AI code review · Pull Request &amp; Merge Request review · Bitbucket / GitHub reviewer 工具 · 本地化 / 私有部署 / self-hosted</sub>
 
 </div>
 
@@ -14,7 +16,7 @@
 
 > ⚠️ **早期预览版（0.x）**：项目仍在快速迭代，功能、配置与数据格式可能发生不兼容变更，稳定性未经充分验证。请勿用于关键的生产评审流程，使用前请自行评估风险并做好数据备份。
 
-Code Meeseeks（内部开发代号 `meebox`）把 AI 辅助的代码评审装进一个**桌面客户端**：拉取评审者待评审的 PR，本地跑 pr-agent 生成评审意见，由评审者**逐条确认 / 编辑后**再发布到代码托管平台。
+Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](https://docs.pr-agent.ai/) 的**桌面图形界面 (GUI)**：把 AI 辅助的代码评审装进一个桌面客户端 —— 拉取评审者待评审的 PR（Pull Request / Merge Request），本地跑 pr-agent 生成评审意见，由评审者**逐条确认 / 编辑后**再发布到代码托管平台（Bitbucket / GitHub）。
 
 核心设计立场：
 
