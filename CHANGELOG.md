@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1] - 2026-06-09
+
 ### Added
 - **多平台适配抽象基线**：`PlatformAdapter` 能力描述符（`capabilities()`）、`PrDiffRefs`、
   `PrComment` 线程字段（kind / threadId / nativeId），为接入新平台铺底；UI 据能力位 显 / 隐 / 灰，
@@ -105,6 +107,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0-alpha.1...HEAD
+[0.2.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0...v0.2.0-alpha.1
 [0.1.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0-alpha.1...v0.1.0
 [0.1.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/releases/tag/v0.1.0-alpha.1
