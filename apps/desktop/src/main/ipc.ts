@@ -47,6 +47,7 @@ import { buildDraftAdapter, type BuiltAdapter, type ConnectionRuntime } from './
 import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
+import { checkForUpdate } from './utils/update-check.js';
 import { buildPrContext } from './utils/pr-context.js';
 
 interface RegisterDeps {
@@ -433,6 +434,11 @@ export function registerIpcHandlers({
   ipcMain.handle('app:openDevTools', (evt) => {
     evt.sender.openDevTools({ mode: 'detach' });
   });
+  ipcMain.handle(
+    'app:checkUpdate',
+    (): Promise<IpcChannels['app:checkUpdate']['response']> =>
+      checkForUpdate(app.getVersion(), bootstrap.config.proxy),
+  );
   ipcMain.handle(
     'app:openExternal',
     async (_evt, req: IpcChannels['app:openExternal']['request']): Promise<void> => {

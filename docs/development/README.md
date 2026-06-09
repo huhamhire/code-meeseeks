@@ -156,3 +156,13 @@ localStorage.removeItem('meebox.forceOnboarding'); location.reload();
 ### 首启向导里打开 DevTools
 
 首启向导没有菜单 / 状态栏入口。欢迎页（第 1 步）**连续点击 logo 7 次**（每次间隔 < 800ms）即可打开 DevTools，用于在向导阶段排障。
+
+### 模拟「发现新版本」状态栏 chip
+
+dev 版本通常高于线上 latest，自然不会触发更新提示。在 DevTools Console 模拟以验证状态栏 chip：
+
+```js
+window.dispatchEvent(new CustomEvent('meebox:debug-update')); // 显示 v9.9.9
+window.dispatchEvent(new CustomEvent('meebox:debug-update', { detail: { latestVersion: '1.2.3' } })); // 自定义版本号
+window.dispatchEvent(new CustomEvent('meebox:debug-update', { detail: null })); // 清除
+```

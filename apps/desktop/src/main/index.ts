@@ -13,6 +13,7 @@ import { JsonFileStateStore } from '@meebox/state-store';
 import { buildAdapters, type ConnectionRuntime } from './adapters.js';
 import { registerIpcHandlers } from './ipc.js';
 import { buildProxyEnv } from './utils/proxy.js';
+import { checkForUpdate } from './utils/update-check.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
 const PROCESS_START_MS = Date.now();
@@ -294,6 +295,26 @@ function resolveSplashLogo(): string | null {
 }
 
 /**
+ * 启动后异步检测版本更新（config.update.check_enabled 开启时）。仅检测 + 提示：
+ * 有新版才把结果推给渲染层（StatusBar 提示 + 跳转下载），不下载 / 不安装。失败静默。
+ */
+async function maybeCheckUpdate(win: BrowserWindow): Promise<void> {
+  if (!bootstrap.config.update.check_enabled) return;
+  try {
+    const result = await checkForUpdate(app.getVersion(), bootstrap.config.proxy);
+    if (result.ok && result.hasUpdate && !win.isDestroyed()) {
+      win.webContents.send('app:updateAvailable', result);
+      logger.info(
+        { current: result.currentVersion, latest: result.latestVersion },
+        'update available',
+      );
+    }
+  } catch {
+    /* 检测失败不影响使用，静默 */
+  }
+}
+
+/**
  * 启动闪屏：独立的无边框轻量窗口，加载内联 data URL（品牌 logo + 纯 CSS spinner），
  * 几十 ms 即可呈现，遮住主窗口首帧前的渲染层加载空窗。主窗口 ready-to-show 时关闭。
  * logo 经 base64 内联（见 resolveSplashLogo），data URL 自包含、dev/打包行为一致。
@@ -368,6 +389,8 @@ function createWindow(splash?: BrowserWindow): void {
       { elapsedMs: Date.now() - PROCESS_START_MS },
       'main window first paint (ready-to-show)',
     );
+    // 启动后异步检测版本更新（不阻塞、不打断）；有新版才推给渲染层提示。
+    void maybeCheckUpdate(win);
   });
 
   // 把 <a target="_blank"> / window.open 都路由到 OS 默认浏览器，不在 Electron 内开新窗口

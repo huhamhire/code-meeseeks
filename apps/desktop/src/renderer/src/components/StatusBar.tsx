@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Config, ConnectionSummary, PrAgentStatus } from '@meebox/shared';
+import type { Config, ConnectionSummary, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
 import { invoke } from '../api';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { useRepoSyncStore } from '../stores/repo-sync-store';
@@ -32,6 +32,8 @@ interface StatusBarProps {
    * 不可点击。父组件传 `setSelectedId` 即可
    */
   onJumpToPr?: (localId: string) => void;
+  /** 启动检测到的新版本；非空且 hasUpdate 时展示「新版本」chip，点击跳转下载页。 */
+  updateInfo?: UpdateCheckResult | null;
 }
 
 export function StatusBar({
@@ -49,6 +51,7 @@ export function StatusBar({
   onOpenSettings,
   onSwitchActiveLlm,
   onJumpToPr,
+  updateInfo,
 }: StatusBarProps) {
   return (
     <footer className="app-statusbar" role="contentinfo">
@@ -82,6 +85,16 @@ export function StatusBar({
           信息。pr-agent 不可用时不显示 (上方 PrAgentChip 已经红色提示) */}
       {prAgent?.available && <PrAgentActiveChip onJumpToPr={onJumpToPr} />}
       <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />
+      {updateInfo?.hasUpdate && updateInfo.url && (
+        <button
+          type="button"
+          className="statusbar-chip statusbar-chip-update"
+          title={`发现新版本 v${updateInfo.latestVersion ?? ''}（当前 v${updateInfo.currentVersion}）· 点击前往下载`}
+          onClick={() => void invoke('app:openExternal', { url: updateInfo.url! })}
+        >
+          ↑ 新版本 v{updateInfo.latestVersion}
+        </button>
+      )}
       <button
         type="button"
         className="icon-btn"
