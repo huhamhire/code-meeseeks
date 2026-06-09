@@ -13,7 +13,14 @@ const MERMAID_LANG = /\blanguage-mermaid\b/;
 export const mermaidComponents: Components = {
   code({ node: _node, className, children, ...rest }) {
     if (className && MERMAID_LANG.test(className)) {
-      return <MermaidDiagram source={String(children ?? '').replace(/\n+$/, '')} />;
+      // children 可能是数组（react-markdown 常见形态）：String(array) 会用逗号拼接破坏
+      // mermaid DSL，需先拼接其中字符串项（非字符串忽略）再传入。
+      const text = Array.isArray(children)
+        ? children.map((c) => (typeof c === 'string' ? c : '')).join('')
+        : typeof children === 'string'
+          ? children
+          : String(children ?? '');
+      return <MermaidDiagram source={text.replace(/\n+$/, '')} />;
     }
     return (
       <code className={className} {...rest}>

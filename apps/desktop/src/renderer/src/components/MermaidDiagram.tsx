@@ -19,11 +19,18 @@ interface MermaidApi {
 
 let mermaidLoader: Promise<MermaidApi> | null = null;
 function loadMermaid(): Promise<MermaidApi> {
-  mermaidLoader ??= import('mermaid').then((m) => {
-    const mermaid = m.default as unknown as MermaidApi;
-    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
-    return mermaid;
-  });
+  // 失败时重置缓存：否则 rejected promise 被永久缓存，后续调用永远拿到同一个失败结果、
+  // 无法重试（典型「缓存 Promise」陷阱）。
+  mermaidLoader ??= import('mermaid')
+    .then((m) => {
+      const mermaid = m.default as unknown as MermaidApi;
+      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+      return mermaid;
+    })
+    .catch((e: unknown) => {
+      mermaidLoader = null;
+      throw e;
+    });
   return mermaidLoader;
 }
 
@@ -43,7 +50,9 @@ export function MermaidDiagram({ source }: { source: string }) {
         const mermaid = await loadMermaid();
         const out = await mermaid.render(renderId, source);
         if (!cancelled) setSvg(out.svg);
-      } catch {
+      } catch (e) {
+        // 记一次日志便于排查（语法错 / 加载失败）；UI 回退到原始代码块
+        console.error('[mermaid] render failed', e);
         if (!cancelled) setFailed(true);
       }
     })();
