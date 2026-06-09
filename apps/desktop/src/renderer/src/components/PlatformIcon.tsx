@@ -58,7 +58,7 @@ export const PLATFORM_META: ReadonlyArray<{
   {
     kind: 'github',
     label: 'GitHub',
-    sub: 'github.com / Enterprise Server',
+    sub: 'github.com / Enterprise',
     available: true,
     Icon: GitHubIcon,
   },
