@@ -152,3 +152,7 @@ localStorage.setItem('meebox.forceOnboarding', '1'); location.reload();
 ```js
 localStorage.removeItem('meebox.forceOnboarding'); location.reload();
 ```
+
+### 首启向导里打开 DevTools
+
+首启向导没有菜单 / 状态栏入口。欢迎页（第 1 步）**连续点击 logo 7 次**（每次间隔 < 800ms）即可打开 DevTools，用于在向导阶段排障。
