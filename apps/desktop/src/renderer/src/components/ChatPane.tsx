@@ -69,6 +69,8 @@ interface ChatPaneProps {
    * 运行时就绪，也无法发起调用 —— 空态 / 输入栏给出「需配置」提示并禁用。
    */
   llmConfigured?: boolean;
+  /** 评审任务并发上限（pr_agent.max_concurrency）。达到后新提交进排队，据此显示提示 */
+  maxConcurrency?: number;
   /** 打开设置面板（LLM 未配置提示里的「去设置」按钮用） */
   onOpenSettings?: () => void;
 }
@@ -94,6 +96,7 @@ export function ChatPane({
   onNavigateToAnchor,
   currentLlmModel,
   llmConfigured = true,
+  maxConcurrency = 2,
   onOpenSettings,
 }: ChatPaneProps) {
   const startResize = (e: React.MouseEvent): void => {
@@ -132,16 +135,20 @@ export function ChatPane({
   // 全局活动 run + 实时 stdout 缓存。store 来源于 main 的 'pragent:activeChanged'
   // / 'pragent:runProgress' 事件，PR 切换不丢，所以这里只读，不在本组件维护
   const { active, waiting, linesByRunId } = useChatRunStore();
-  const myActiveRun = active?.prLocalId === pr?.localId ? active : null;
-  const otherActiveRun = active && active.prLocalId !== pr?.localId ? active : null;
+  // 并发模型：active 是多条并发运行中的 run。本 PR 的运行中 run 可能 >1（用户对同一
+  // PR 连发多个工具）；其它 PR 的并发数用于「别处在跑」提示。
+  const myActiveRuns = active.filter((a) => a.prLocalId === pr?.localId);
+  const hasMyActive = myActiveRuns.length > 0;
+  // 仅在「触达并发上限」时提示：此时新提交才会真正排队；未达上限即时并发执行，无需提示。
+  const concurrencyReached = active.length >= maxConcurrency;
   // 本 PR 排队中的任务（FIFO，前面的先跑），在 chat 末尾以「排队中」卡片展示
   const myWaiting = waiting.filter((w) => w.prLocalId === pr?.localId);
-  const liveLines = myActiveRun ? (linesByRunId.get(myActiveRun.runId) ?? []) : [];
 
   // 切走再回来时，正在跑的 run 已落盘 (status=running) → listRuns 把它读进 runs，
-  // 同时它又是实时 myActiveRun，会重复渲染 (历史卡片 + RunningView 各一条)。这里把
-  // active run 从历史列表剔除，运行中的展示统一交给下方 RunningView 一处负责。
-  const visibleRuns = myActiveRun ? runs.filter((r) => r.id !== myActiveRun.runId) : runs;
+  // 同时它又是实时运行中 run，会重复渲染 (历史卡片 + RunningView 各一条)。这里把
+  // 所有运行中 run 从历史列表剔除，运行中的展示统一交给下方 RunningView 负责。
+  const myActiveIdSet = new Set(myActiveRuns.map((a) => a.runId));
+  const visibleRuns = hasMyActive ? runs.filter((r) => !myActiveIdSet.has(r.id)) : runs;
 
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
@@ -177,37 +184,46 @@ export function ChatPane({
     };
   }, [prLocalId]);
 
-  // 活动 run 跑完 → 单独 fetch 这条 run + 插到 runs 末尾 (最新位置)。
-  // 不重拉整页，避免毁掉用户已经向上加载的更早历史
-  const lastActiveRunIdRef = useRef<string | null>(null);
+  // 本 PR 的运行中 run 集合发生「移除」→ 那条跑完了：单独 fetch 它 + 插到 runs
+  // 末尾（最新位置），并清掉它的实时 lines 缓存（历史走 run.stdout）。不重拉整页，
+  // 避免毁掉用户已向上加载的更早历史。多并发下逐条 diff 处理。
+  const myActiveIds = myActiveRuns.map((a) => a.runId);
+  const myActiveIdsKey = myActiveIds.join(',');
+  const prevMyActiveRef = useRef<string[]>(myActiveIds);
+  const prevPrRef = useRef<string | undefined>(prLocalId);
   useEffect(() => {
-    const prevId = lastActiveRunIdRef.current;
-    lastActiveRunIdRef.current = active?.runId ?? null;
-    if (!prLocalId) return;
-    if (!prevId) return;
-    if (active?.runId === prevId) return;
-    void (async () => {
-      try {
-        const finished = await invoke('pragent:getRun', {
-          localId: prLocalId,
-          runId: prevId,
-        });
-        if (!finished) return;
-        setRuns((prev) => {
-          // 已在 list 里 (重复事件 / 重连) → 就地更新；否则 append 到末尾 (新)
-          const idx = prev.findIndex((r) => r.id === finished.id);
-          if (idx >= 0) {
-            const next = prev.slice();
-            next[idx] = finished;
-            return next;
+    const prevPr = prevPrRef.current;
+    prevPrRef.current = prLocalId;
+    const prev = prevMyActiveRef.current;
+    prevMyActiveRef.current = myActiveIds;
+    // PR 切换：prev 属于旧 PR，不能当本 PR 的「跑完」处理，仅同步 ref
+    if (prevPr !== prLocalId || !prLocalId) return;
+    const current = new Set(myActiveIds);
+    for (const runId of prev) {
+      if (current.has(runId)) continue;
+      void (async () => {
+        try {
+          const finished = await invoke('pragent:getRun', { localId: prLocalId, runId });
+          if (finished) {
+            setRuns((prevRuns) => {
+              const idx = prevRuns.findIndex((r) => r.id === finished.id);
+              if (idx >= 0) {
+                const next = prevRuns.slice();
+                next[idx] = finished;
+                return next;
+              }
+              return [...prevRuns, finished];
+            });
           }
-          return [...prev, finished];
-        });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-  }, [active?.runId, prLocalId]);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
+        } finally {
+          chatRunStore.clearLines(runId);
+        }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myActiveIdsKey, prLocalId]);
 
   // 向上滚到顶端 → 用 runs[0].id 当游标，向 main 要更早一批，prepend 到 runs。
   // 保留视觉滚动位置：插入新内容后把 scrollTop 推到 (newHeight - prevHeight)
@@ -371,11 +387,11 @@ export function ChatPane({
     }
   };
 
-  // 新 run 完成 / 活动 run 切换时自动滚到底，让最新消息浮上来
+  // 新 run 完成 / 运行中 run 集合变化时自动滚到底，让最新消息浮上来
   useEffect(() => {
     const el = bodyRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [runs.length, myActiveRun?.runId]);
+  }, [runs.length, myActiveIdsKey]);
 
   // 向上滚到顶端 → 触发 loadOlderRuns 拉更早一批 (cursor = runs[0].id)
   useEffect(() => {
@@ -390,18 +406,6 @@ export function ChatPane({
     // loadOlderRuns 是稳定的语义包装，依赖项放足够即可
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMoreOlder, loadingOlder, prLocalId, runs.length]);
-
-  // active 变 null 时清掉 myActiveRun 对应的 lines 缓存 (run 已结束，历史走 run.stdout)
-  useEffect(() => {
-    if (!active) return;
-    const runId = active.runId;
-    return () => {
-      // 只有当 active 离开这个 runId 时才清；同 active 的多次 re-render 不清
-      chatRunStore.clearLines(runId);
-    };
-    // 仅依赖 runId：active 对象同 runId 的重渲不应触发清理
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.runId]);
 
   return (
     <aside
@@ -442,7 +446,7 @@ export function ChatPane({
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
-        {visibleRuns.length === 0 && !myActiveRun && myWaiting.length === 0 && (
+        {visibleRuns.length === 0 && !hasMyActive && myWaiting.length === 0 && (
           <ChatEmpty
             pr={pr}
             prAgent={prAgent}
@@ -466,24 +470,27 @@ export function ChatPane({
             // 只有"列表里最后一条 + 没有正在跑的"这一种情形下，失败 / 取消的 run 才
             // 可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
             // 避免回头再点重新插队、打乱对话顺序
-            canRetry={i === visibleRuns.length - 1 && !myActiveRun}
+            canRetry={i === visibleRuns.length - 1 && !hasMyActive}
             drafts={drafts ?? []}
             onJumpToDraft={handleJumpToDraft}
             onRejectFinding={handleRejectFinding}
             onNavigateToFinding={handleNavigateToFinding}
           />
         ))}
-        {/* 正在跑：进度条 + 实时 stdout 流，贴在历史末尾。startedAt 入队时为 null，
-            executeRun 真正起跑时设值；窗口非常短一般看不到 — fallback 到 enqueuedAt */}
-        {myActiveRun && prAgent.available && (
-          <RunningView
-            tool={myActiveRun.tool}
-            runId={myActiveRun.runId}
-            lines={liveLines}
-            startedAt={new Date(myActiveRun.startedAt ?? myActiveRun.enqueuedAt).getTime()}
-            model={currentLlmModel ?? null}
-          />
-        )}
+        {/* 正在跑（可并发多条）：每条一个进度条 + 实时 stdout 流，贴在历史末尾。
+            startedAt 入队时为 null，executeRun 真正起跑时设值；窗口非常短一般看不到
+            — fallback 到 enqueuedAt */}
+        {prAgent.available &&
+          myActiveRuns.map((r) => (
+            <RunningView
+              key={r.runId}
+              tool={r.tool}
+              runId={r.runId}
+              lines={linesByRunId.get(r.runId) ?? []}
+              startedAt={new Date(r.startedAt ?? r.enqueuedAt).getTime()}
+              model={currentLlmModel ?? null}
+            />
+          ))}
         {/* 本 PR 排队中的任务：贴在运行中之后，按队列顺序展示，可单条取消 */}
         {myWaiting.map((w, i) => (
           <QueuedView
@@ -494,13 +501,12 @@ export function ChatPane({
             onCancel={() => void handleCancel(w.runId)}
           />
         ))}
-        {/* 别 PR 在跑：提示用户新提交会排队，不阻塞输入。状态栏的队列 chip 可点开
-            查看 / 取消队列任务 */}
-        {otherActiveRun && (
+        {/* 仅在触达并发上限时提示：此时新提交会排队（未达上限即时并发执行，无需提示）。
+            状态栏的队列 chip 可点开查看 / 取消任务 */}
+        {concurrencyReached && (
           <div className="chat-busy" role="status">
-            另一 PR 正在 review (
-            <code>{otherActiveRun.prLocalId}</code> /{otherActiveRun.tool})。本 PR 提交的新任务会
-            进入排队
+            已达并发上限（{maxConcurrency} 个同时执行）。本 PR 新提交的任务会进入排队，
+            等空出名额后自动执行
           </div>
         )}
         {error && (
@@ -515,12 +521,14 @@ export function ChatPane({
         pr={pr}
         prAgent={prAgent}
         llmConfigured={llmConfigured}
-        // 队列模型下输入永远开启 (新提交进队列)；runningTool 仅决定是否额外渲染 stop
-        // 按钮 (本 PR 有 active run 时可点终止)。busyOnOtherPr 不再阻断
-        runningTool={myActiveRun?.tool ?? null}
+        // 队列模型下输入永远开启 (新提交进队列 / 并发执行)；runningTool 仅决定是否额外
+        // 渲染 stop 按钮 (本 PR 有运行中 run 时可点终止)。多并发时 stop 终止最近一条。
+        runningTool={myActiveRuns[myActiveRuns.length - 1]?.tool ?? null}
         onRun={(t, q) => void handleRun(t, q)}
         onCancel={
-          myActiveRun ? () => void handleCancel(myActiveRun.runId) : undefined
+          hasMyActive
+            ? () => void handleCancel(myActiveRuns[myActiveRuns.length - 1]!.runId)
+            : undefined
         }
         onSetReviewStatus={onSetReviewStatus}
       />
