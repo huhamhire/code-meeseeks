@@ -190,6 +190,25 @@ export function registerIpcHandlers({
     'app:prAgentStatus',
     (): Promise<IpcChannels['app:prAgentStatus']['response']> => getPrAgentStatus(),
   );
+  // 渲染层日志回传：落进同一份 meebox.log（scope=renderer），与 main 日志合流便于排查。
+  const rendererLogger = logger.child({ scope: 'renderer' });
+  ipcMain.handle('log:write', (_evt, req: IpcChannels['log:write']['request']): void => {
+    const obj = req.meta ?? {};
+    switch (req.level) {
+      case 'error':
+        rendererLogger.error(obj, req.msg);
+        break;
+      case 'warn':
+        rendererLogger.warn(obj, req.msg);
+        break;
+      case 'info':
+        rendererLogger.info(obj, req.msg);
+        break;
+      case 'debug':
+        rendererLogger.debug(obj, req.msg);
+        break;
+    }
+  });
   ipcMain.handle(
     'app:connections',
     (): IpcChannels['app:connections']['response'] =>

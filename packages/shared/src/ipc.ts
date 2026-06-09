@@ -155,6 +155,19 @@ export interface IpcChannels {
   /** 打开 Electron DevTools（分离窗口） */
   'app:openDevTools': { request: void; response: void };
   /**
+   * 渲染层日志回传：把渲染进程的错误 / 未捕获异常转发到 main，落进同一份 meebox.log
+   * （renderer 自己的 console 不进文件）。preload 装 window.onerror / unhandledrejection
+   * 调用。`scope` 固定 'renderer'，`meta` 任意结构化上下文（如 stack / url）。
+   */
+  'log:write': {
+    request: {
+      level: 'error' | 'warn' | 'info' | 'debug';
+      msg: string;
+      meta?: Record<string, unknown>;
+    };
+    response: void;
+  };
+  /**
    * 用系统默认浏览器打开 URL (shell.openExternal)。评论 markdown 内链点击 → 强制
    * 外部打开，避免 Electron 在 app window 内跳转覆盖整个界面
    */

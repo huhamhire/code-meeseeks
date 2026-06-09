@@ -27,6 +27,9 @@
 ### Changed
 - 全仓内部命名统一为 **Bitbucket**，去除 `BBS` / `BB` 等歧义缩写（纯改名，无行为变化）。
 - 架构设计文档目录 `docs/modules/` → `docs/arch/`，统一定位为「架构设计文档」。
+- **日志增强**：dev 控制台改 logfmt 单行（`<ISO8601> LEVEL msg="…" k=v`，含 msg 在内全部字段
+  统一 kv、按级别上色，文件仍为 JSON）；渲染层未捕获错误 / rejection 经 IPC 回传 main，
+  与主进程崩溃兜底一并落进 `meebox.log`。
 - **启动提速**：
   - 新增启动闪屏（splash）：独立轻量窗口几十 ms 即呈现品牌 logo + 名称 + spinner，
     遮住主窗口首帧前的渲染层加载空窗；主窗口首帧就绪即关闭、无缝切入。
