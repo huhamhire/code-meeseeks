@@ -248,10 +248,10 @@ def _parse_cli_output(stdout):
 
 
 def _install_cli_chat_completion(handler_cls, bin_name) -> None:
-    """**方案 B 核心**：CLI 模式把 LiteLLMAIHandler.chat_completion 整体替换成「调本机 CLI 子进程」
-    版本，完全绕过 litellm / 直连 API。pr-agent 只依赖 chat_completion 返回 (text, finish_reason)
-    这个稳定契约（base_ai_handler 定义），故本替换与 pr-agent 具体版本无关，**不受版本守卫限制**
-    （区别于本模块其它两个依赖内部实现的补丁）。
+    """CLI 模式把 LiteLLMAIHandler.chat_completion 整体替换成「调本机 CLI 子进程」版本，完全绕过
+    litellm / 直连 API。pr-agent 只依赖 chat_completion 返回 (text, finish_reason) 这个稳定契约
+    （base_ai_handler 定义），故本替换与 pr-agent 具体版本无关，**不受版本守卫限制**（区别于本模块
+    其它两个依赖内部实现的补丁）。
 
     要点：
       - prompt 经 **stdin** 喂入：pr-agent 的 review prompt 含完整 diff，动辄数十 KB，走 argv 会撞
@@ -262,14 +262,14 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
       - 子进程继承父 env（PATH / HOME），故能找到 claude 二进制并复用 ~/.claude 登录态；其中
         HTTP(S)_PROXY / NO_PROXY（来自 buildProxyEnv，已在父进程 env 里）原样继承 → claude 出站
         自动走用户配置的代理，无需在此另设。
-      - **强制订阅额度**：从子进程 env 剥掉 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN。claude 一旦
-        见到 API key 会改走按量计费而非订阅 OAuth；用户机器上常有全局 ANTHROPIC_API_KEY，会经
-        os.environ 串味，故显式抹掉，确保 cli 模式 = 订阅。要用 API key 计费的走 anthropic provider。"""
+      - **凭据隔离**：从子进程 env 剥掉 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN，让 CLI 使用其自身的
+        登录会话，而非本机环境里残留的 API key（否则会覆盖 CLI 的登录方式）。模型与额度由该 CLI 的账户
+        与用户授权决定。"""
     import asyncio
     import tempfile
 
     argv_prefix = _cli_argv(bin_name)
-    # claude 见到这些 env 就会优先按量计费，cli 模式语义是「吃订阅」→ 一律从子进程 env 剥掉。
+    # 剥掉这些 env，让 CLI 使用其自身登录会话，而非环境里残留的 API key（避免覆盖其登录方式）。
     _STRIP_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
 
     async def chat_completion(self, model, system, user, temperature=0.2, img_path=None):

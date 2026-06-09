@@ -60,7 +60,7 @@ inline 包 pr-agent 的 `_get_completion`，从返回的 `response.usage` 取 `p
 inline 在 await 链里必在退出前执行，可靠。只取 token、不取 cost → 统一设 `LITELLM_LOCAL_MODEL_COST_MAP=True`
 关掉 litellm 的远端价格表联网（弱网会 SSL 超时）。
 
-### 本地 CLI provider（方案 B）
+### 本地 CLI provider
 
 让用户**不填 API key、改用本机已装且已登录的 agentic CLI**（一期仅 **Claude Code**）跑评审。LLM Profile 里
 新增 `provider='cli'`，`model` 字段填命令名（`claude`）。其余 provider 走 litellm 直连 API，cli 模式则**完全绕过
@@ -72,10 +72,10 @@ litellm**。
   不受版本守卫限制**（区别于其它依赖内部实现的补丁，放在版本守卫之前）。
 - **prompt 走 stdin**：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；system/user 合并成
   一段喂入（CLI 无独立 system 槽）。cwd 落到临时目录，避免吃到被评审仓库的 `CLAUDE.md`。
-- **吃订阅额度**：只要本机 `claude` 是订阅（Pro/Max）OAuth 登录，子进程继承 `HOME`/`USERPROFILE` 读到
-  `~/.claude` 登录态即走**订阅额度、不按 token 计费**。为防串味，shim 显式从子进程 env **剥掉
-  `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`**（否则 claude 见到 key 会改走按量计费）。要按量计费走 anthropic provider。
-- **代理自动透传**：子进程 env 由 `os.environ` 拷贝而来（仅剔除上面两个计费 key），`HTTP(S)_PROXY` / `NO_PROXY`
+- **沿用 CLI 自身登录态**：子进程继承 `HOME`/`USERPROFILE`，CLI 读自己的登录凭据（如 `~/.claude`）运行。
+  为避免本机环境里残留的 API key 串入、覆盖 CLI 自身的登录方式，shim 显式从子进程 env **剥掉
+  `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`**。使用的模型、额度与合规均由该 CLI 的账户与用户授权决定。
+- **代理自动透传**：子进程 env 由 `os.environ` 拷贝而来（仅剔除上面两个 API key），`HTTP(S)_PROXY` / `NO_PROXY`
   原样保留 → `claude` 出站自动走用户配置的代理（见 [08](08-networking-proxy.md)），无需另设。
 - **token usage**：从 claude JSON 的 `usage`（`input_tokens`(+cache_*) ≈ prompt，`output_tokens` ≈ completion）
   构造同款 `@@MEEBOX_USAGE@@` 哨兵，主进程同一套累加。
