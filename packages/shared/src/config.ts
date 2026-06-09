@@ -148,6 +148,15 @@ export const ConfigSchema = z.object({
   /** 出站网络代理。默认关闭 = 全部直连，等同历史行为。 */
   proxy: ProxySchema.default({}),
   /**
+   * 版本更新检测。启动时（及设置页手动）查 GitHub Releases 最新稳定版与当前版本比对，
+   * 有新版仅**提示**用户去下载（不自动下载 / 安装）。check_enabled=false 关闭检测。
+   */
+  update: z
+    .object({
+      check_enabled: z.boolean().default(true),
+    })
+    .default({}),
+  /**
    * pr-agent 运行时策略选择。
    * - 'auto'（默认）：优先嵌入式运行时（随 app 打包，正常安装恒可用），缺失则
    *   回退探测系统 local-cli；

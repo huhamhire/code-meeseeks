@@ -9,6 +9,9 @@
 - **Mermaid 图渲染**：markdown 里的 ```mermaid``` 代码块（Qodo `/describe` 常生成的架构图）渲染为图形，
   覆盖 PR 描述 / 评论 / chat 评审输出。mermaid 懒加载（独立 chunk，仅出现图表时才拉取，不进入口包）；
   深色主题、`securityLevel: strict`，渲染失败回退原始代码块。
+- **版本更新检测**：启动时（及设置页「检查更新」）查 GitHub Releases 最新稳定版与当前版本比对，
+  有新版在状态栏提示并可点击前往下载（仅检测 + 提示，不自动下载 / 安装）。检测走配置的出站代理
+  （内网友好），可经 `update.check_enabled` 关闭。
 
 ## [0.2.0] - 2026-06-09
 

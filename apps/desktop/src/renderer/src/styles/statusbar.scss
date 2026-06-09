@@ -17,10 +17,21 @@
 .statusbar-chip {
   background: $border-default;
   color: $text-primary;
-  padding: 1px $space-3;
-  border-radius: $radius-sm;
+  // 按钮型 chip（LLM / 更新 / pragent 等）默认不继承字体、且带 UA 边框，会比 span 型
+  // chip 略高。在基类统一继承字体 + 去边框，保证所有 chip 同字体同高；各 chip 仅在此
+  // 基础上叠加配色 / cursor。
+  font: inherit;
   font-size: $fs-xs;
   font-weight: 600;
+  border: none;
+  // 固定高度 + flex 居中：CJK / 箭头等高字形不再撑高行盒，所有 chip 等高且紧凑
+  // （16px ≈ 原 latin chip 高度，11px 字号居中不裁切 CJK）。
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 0 $space-3;
+  border-radius: $radius-sm;
   white-space: nowrap;
 }
 
@@ -28,6 +39,18 @@
 .statusbar-chip-ok {
   background: $color-success;
   color: $text-on-accent;
+}
+
+// 新版本提示 chip：强调蓝底，点击跳转下载页
+.statusbar-chip-update {
+  background: $color-accent;
+  color: $text-on-accent;
+  cursor: pointer;
+  border: none;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
 }
 
 // PR 数 chip：图标 + 数字横排，svg 跟数字基线对齐

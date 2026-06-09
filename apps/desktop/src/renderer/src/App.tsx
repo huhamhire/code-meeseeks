@@ -8,6 +8,7 @@ import type {
   PrAgentStatus,
   PrDiscoveryFilter,
   StoredPullRequest,
+  UpdateCheckResult,
 } from '@meebox/shared';
 import { invoke, subscribe } from './api';
 import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/ChatPane';
@@ -38,6 +39,8 @@ export default function App() {
   const [merging, setMerging] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
+  // 启动检测到的新版本（main 推 app:updateAvailable）；StatusBar 据此提示跳转下载。
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   // 操作级 toast（审批 / 合并等远端动作失败时提示，区别于 fatalError 整屏报错）。
   // key 用随机数：同样文案连续触发也能重置自动消失计时器。
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
@@ -158,6 +161,32 @@ export default function App() {
   useEffect(() => wireRepoSyncStore(), []);
   // M4 草稿事件 → store；写盘后 drafts:changed 触发指定 PR 的草稿列表自动刷新
   useEffect(() => wireDraftsStore(), []);
+  // 启动版本更新检测：main 仅在有新版时推 app:updateAvailable
+  useEffect(() => subscribe('app:updateAvailable', (info) => setUpdateInfo(info)), []);
+  // dev 调试钩子：控制台 dispatch CustomEvent 模拟「发现新版」以验证状态栏 chip
+  // （dev 版本通常高于 latest，自然不会触发）。detail=null 清除。
+  //   window.dispatchEvent(new CustomEvent('meebox:debug-update'))
+  //   window.dispatchEvent(new CustomEvent('meebox:debug-update', { detail: { latestVersion: '1.2.3' } }))
+  //   window.dispatchEvent(new CustomEvent('meebox:debug-update', { detail: null }))
+  useEffect(() => {
+    const onDebug = (e: Event): void => {
+      const d = (e as CustomEvent<Partial<UpdateCheckResult> | null>).detail;
+      setUpdateInfo(
+        d === null
+          ? null
+          : {
+              ok: true,
+              hasUpdate: true,
+              currentVersion: '0.0.0',
+              latestVersion: '9.9.9',
+              url: 'https://github.com/huhamhire/code-meeseeks/releases/latest',
+              ...d,
+            },
+      );
+    };
+    window.addEventListener('meebox:debug-update', onDebug);
+    return () => window.removeEventListener('meebox:debug-update', onDebug);
+  }, []);
 
   // 全局外链跳转防护 — 所有 UGC 场景 (评论 / PR 描述 / finding / chat 等) 内
   // 的 <a href="http(s)://"> 点击都走系统默认浏览器，不允许 Electron 在 app
@@ -416,6 +445,7 @@ export default function App() {
           setBoot((b) => (b ? { ...b, config: { ...b.config, llm: next } } : b));
         }}
         onJumpToPr={setSelectedId}
+        updateInfo={updateInfo}
       />
       {showSettings && (
         <SettingsModal

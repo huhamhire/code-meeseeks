@@ -38,3 +38,22 @@ export interface AppInfo {
   /** ~/.code-meeseeks was newly created on this run */
   firstRun: boolean;
 }
+
+/**
+ * 版本更新检测结果。仅检测 + 提示，不自动下载 / 安装。
+ * - ok=false：检测未完成（网络 / 解析失败），error 给原因；hasUpdate 恒 false。
+ * - ok=true：检测完成；hasUpdate 表示是否有更新版本。
+ */
+export interface UpdateCheckResult {
+  ok: boolean;
+  hasUpdate: boolean;
+  currentVersion: string;
+  /** 最新稳定版版本号（ok=true 时给出） */
+  latestVersion?: string;
+  /** 最新版 Release 页 URL（hasUpdate=true 时给出，供用户手动下载） */
+  url?: string;
+  /** 最新版发布时间 ISO（可选） */
+  publishedAt?: string;
+  /** ok=false 时的失败原因 */
+  error?: string;
+}

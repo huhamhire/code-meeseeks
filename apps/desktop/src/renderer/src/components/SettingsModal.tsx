@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { AppInfo, AppPaths, Config, LlmProfile } from '@meebox/shared';
+import type { AppInfo, AppPaths, Config, LlmProfile, UpdateCheckResult } from '@meebox/shared';
 import { invoke } from '../api';
 import { ConfirmModal } from './ConfirmModal';
 import {
@@ -616,10 +616,12 @@ export function SettingsModal({
               <div className="modal-kv-key">平台</div>
               <div className="modal-kv-val">{info.platform}</div>
             </div>
-            <div className="settings-actions" style={{ marginTop: 10 }}>
+            <div className="settings-actions" style={{ marginTop: 10, alignItems: 'center' }}>
+              <UpdateCheckButton enabled={config.update.check_enabled} />
               <button
                 className="btn"
                 type="button"
+                style={{ marginLeft: 'auto' }}
                 onClick={() => void invoke('app:openDevTools', undefined)}
                 title="打开 Electron 开发者工具（分离窗口）"
               >
@@ -701,6 +703,68 @@ export function SettingsModal({
         />
       )}
     </div>
+  );
+}
+
+/** 「检查更新」按钮（运行环境段）：手动查 GitHub 最新版，自管 loading + 结果展示。
+ *  enabled=false（config.update.check_enabled 关闭）时禁用按钮并提示，不发起检测。 */
+function UpdateCheckButton({ enabled }: { enabled: boolean }) {
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<UpdateCheckResult | null>(null);
+  if (!enabled) {
+    return (
+      <>
+        <button className="btn" type="button" disabled title="更新检测已在配置中关闭">
+          检查更新
+        </button>
+        <span className="muted">更新检测已在配置中关闭（config.yaml `update.check_enabled`）</span>
+      </>
+    );
+  }
+  const run = async (): Promise<void> => {
+    setChecking(true);
+    try {
+      setResult(await invoke('app:checkUpdate', undefined));
+    } catch (e) {
+      setResult({
+        ok: false,
+        hasUpdate: false,
+        currentVersion: '',
+        error: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setChecking(false);
+    }
+  };
+  return (
+    <>
+      <button
+        className="btn"
+        type="button"
+        onClick={() => void run()}
+        disabled={checking}
+        title="查 GitHub 最新版本（仅检测，不自动安装）"
+      >
+        {checking ? '检查中…' : '检查更新'}
+      </button>
+      {result &&
+        !checking &&
+        (result.ok ? (
+          result.hasUpdate ? (
+            <button
+              className="btn btn-sm"
+              type="button"
+              onClick={() => result.url && void invoke('app:openExternal', { url: result.url })}
+            >
+              ↑ 新版本 v{result.latestVersion} · 前往下载
+            </button>
+          ) : (
+            <span className="muted">已是最新版</span>
+          )
+        ) : (
+          <span className="error-text">检查失败：{result.error}</span>
+        ))}
+    </>
   );
 }
 

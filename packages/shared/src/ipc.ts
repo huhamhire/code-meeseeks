@@ -1,4 +1,4 @@
-import type { AppInfo, AppPaths } from './app-info.js';
+import type { AppInfo, AppPaths, UpdateCheckResult } from './app-info.js';
 import type { Config } from './config.js';
 import type {
   PingResult,
@@ -126,6 +126,8 @@ export interface IpcEvents {
     active: PragentRunInfo[];
     waiting: PragentRunInfo[];
   };
+  /** 启动检测到新版本时推送（仅 hasUpdate=true 时发），renderer 据此提示。 */
+  'app:updateAvailable': UpdateCheckResult;
 }
 
 export type IpcEventName = keyof IpcEvents;
@@ -155,6 +157,8 @@ export interface IpcChannels {
   'app:openConfigFile': { request: void; response: void };
   /** 打开 Electron DevTools（分离窗口） */
   'app:openDevTools': { request: void; response: void };
+  /** 手动检测版本更新（设置页「检查更新」）。仅检测 + 返回结果，不下载 / 安装。 */
+  'app:checkUpdate': { request: void; response: UpdateCheckResult };
   /**
    * 渲染层日志回传：把渲染进程的错误 / 未捕获异常转发到 main，落进同一份 meebox.log
    * （renderer 自己的 console 不进文件）。preload 装 window.onerror / unhandledrejection
