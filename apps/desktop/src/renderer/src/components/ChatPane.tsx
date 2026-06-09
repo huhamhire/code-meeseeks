@@ -24,6 +24,7 @@ import {
   SendIcon,
   StopIcon,
 } from './icons';
+import { mermaidComponents } from './markdownMermaid';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { parseAnsi, segmentStyle } from '../utils/ansi';
@@ -1108,7 +1109,7 @@ function RulePreviewModal({
             <div className="modal-kv-val">{rule.tools.join(', ')}</div>
           </div>
           <div className="markdown" style={{ marginTop: 12 }}>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={mermaidComponents}>
               {rule.instructions}
             </ReactMarkdown>
           </div>
@@ -1824,7 +1825,7 @@ function FindingCard({
           {/* remarkBreaks 把 finding body 里的单换行也当成 <br>。pr-agent 的 trace、
               或一般段落里 reviewer 习惯按软换行折行，不加 remarkBreaks 会被 markdown
               合并成长一行。Findings 主要是富文本说明，不存在"故意软换行连接"的场景 */}
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={mermaidComponents}>
             {translatedBody}
           </ReactMarkdown>
         </div>

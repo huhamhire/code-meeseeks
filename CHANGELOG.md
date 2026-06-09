@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+### Added
+- **Mermaid 图渲染**：markdown 里的 ```mermaid``` 代码块（Qodo `/describe` 常生成的架构图）渲染为图形，
+  覆盖 PR 描述 / 评论 / chat 评审输出。mermaid 懒加载（独立 chunk，仅出现图表时才拉取，不进入口包）；
+  深色主题、`securityLevel: strict`，渲染失败回退原始代码块。
+
 ## [0.2.0] - 2026-06-09
 
 > 第二个正式版（仍属 0.x · 早期预览）。本版重点：**接入 GitHub**（github.com + GitHub Enterprise Server）
