@@ -328,7 +328,7 @@ export function GlobeIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 头肩剪影：作者行前缀 / blame 视图（同一图形，原 PersonIcon 与 BlameIcon 合并） */
+/** 头肩剪影：作者行前缀 / blame 视图 / 账户指示（统一的「人」图标，合并原 PersonIcon、BlameIcon、UserIcon） */
 export function PersonIcon({ size = 12 }: IconProps) {
   return (
     <svg
@@ -426,26 +426,6 @@ export function SyncIcon({ size = 12 }: IconProps) {
       <polyline points="12 2 12 5 9 5" />
       <path d="M13 9.5a5 5 0 0 1-9 1.5" />
       <polyline points="4 14 4 11 7 11" />
-    </svg>
-  );
-}
-
-/** 用户（头 + 肩，Lucide 风格 viewBox 24）：账户 / 登录用户指示 */
-export function UserIcon({ size = 12 }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
     </svg>
   );
 }

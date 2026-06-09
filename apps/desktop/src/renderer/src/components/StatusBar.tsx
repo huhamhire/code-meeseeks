@@ -5,10 +5,10 @@ import { useChatRunStore } from '../stores/chat-run-store';
 import { useRepoSyncStore } from '../stores/repo-sync-store';
 import {
   PanelToggleIcon,
+  PersonIcon,
   PullRequestIcon,
   SettingsIcon,
   SyncIcon,
-  UserIcon,
 } from './icons';
 
 interface StatusBarProps {
@@ -531,7 +531,7 @@ function UserChip({ connections }: { connections: ConnectionSummary[] }) {
     .join('\n');
   return (
     <span className="statusbar-user" title={title}>
-      <UserIcon />
+      <PersonIcon />
       {labels.join(' · ')}
     </span>
   );
