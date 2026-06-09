@@ -3,6 +3,7 @@
 // 走配置的出站代理（企业内网友好）；匿名 GitHub API（低频，启动 + 手动），无需 token。
 
 import type { ProxyConfig, UpdateCheckResult } from '@meebox/shared';
+import { gt as semverGt, valid as semverValid } from 'semver';
 import { proxyFetchForHost } from './proxy.js';
 
 const OWNER = 'huhamhire';
@@ -10,55 +11,6 @@ const REPO = 'code-meeseeks';
 const API_HOST = 'api.github.com';
 const LATEST_URL = `https://${API_HOST}/repos/${OWNER}/${REPO}/releases/latest`;
 const TIMEOUT_MS = 8000;
-
-interface ParsedVersion {
-  core: [number, number, number];
-  /** 预发布标识（`-` 之后），稳定版为空数组 */
-  pre: string[];
-}
-
-/**
- * 解析 `v1.2.3` / `1.2.3-alpha.2` → 结构；解析不出返回 null。
- * 整体锚定匹配（`$` 结尾）+ 先剥离 build metadata（`+...`），避免 `1.2.3beta` / `1.2.3.4`
- * 这类「前缀像 semver」的串被当成 1.2.3 误判。
- */
-function parseVersion(raw: string): ParsedVersion | null {
-  const trimmed = raw.trim().split('+', 1)[0]!;
-  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(trimmed);
-  if (!m) return null;
-  return {
-    core: [Number(m[1]), Number(m[2]), Number(m[3])],
-    pre: m[4] ? m[4].split('.') : [],
-  };
-}
-
-/** semver 比较：返回 a-b 的符号（1 / 0 / -1）。预发布优先级低于同核心的正式版。 */
-function compareVersion(a: ParsedVersion, b: ParsedVersion): number {
-  for (let i = 0; i < 3; i++) {
-    if (a.core[i]! !== b.core[i]!) return a.core[i]! > b.core[i]! ? 1 : -1;
-  }
-  // 核心相同：有 pre < 无 pre
-  if (a.pre.length === 0 && b.pre.length === 0) return 0;
-  if (a.pre.length === 0) return 1;
-  if (b.pre.length === 0) return -1;
-  // 都有 pre：逐段比较（数字段按数值，否则按字典序）
-  const n = Math.max(a.pre.length, b.pre.length);
-  for (let i = 0; i < n; i++) {
-    const x = a.pre[i];
-    const y = b.pre[i];
-    if (x === undefined) return -1;
-    if (y === undefined) return 1;
-    const xn = /^\d+$/.test(x);
-    const yn = /^\d+$/.test(y);
-    if (xn && yn) {
-      const d = Number(x) - Number(y);
-      if (d !== 0) return d > 0 ? 1 : -1;
-    } else if (x !== y) {
-      return x > y ? 1 : -1;
-    }
-  }
-  return 0;
-}
 
 interface GithubRelease {
   tag_name?: string;
@@ -82,7 +34,8 @@ export async function checkForUpdate(
     error,
   });
 
-  const current = parseVersion(currentVersion);
+  // semver.valid 容忍前缀 v、拒绝尾部垃圾（1.2.3beta / 1.2.3.4 → null）
+  const current = semverValid(currentVersion);
   if (!current) return fail(`无法解析当前版本号：${currentVersion}`);
 
   // 代理感知 fetch（命中本地/代理关闭则用全局 fetch 直连）
@@ -107,14 +60,13 @@ export async function checkForUpdate(
     }
     const tag = data.tag_name;
     if (!tag) return fail('Release 缺少 tag_name');
-    const latest = parseVersion(tag);
+    const latest = semverValid(tag);
     if (!latest) return fail(`无法解析最新版本号：${tag}`);
-    const hasUpdate = compareVersion(latest, current) > 0;
     return {
       ok: true,
-      hasUpdate,
+      hasUpdate: semverGt(latest, current),
       currentVersion,
-      latestVersion: tag.replace(/^v/, ''),
+      latestVersion: latest,
       url: data.html_url,
       publishedAt: data.published_at,
     };
