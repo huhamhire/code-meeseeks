@@ -617,7 +617,7 @@ export function SettingsModal({
               <div className="modal-kv-val">{info.platform}</div>
             </div>
             <div className="settings-actions" style={{ marginTop: 10, alignItems: 'center' }}>
-              <UpdateCheckButton />
+              <UpdateCheckButton enabled={config.update.check_enabled} />
               <button
                 className="btn"
                 type="button"
@@ -705,10 +705,21 @@ export function SettingsModal({
   );
 }
 
-/** 「检查更新」按钮（运行环境段）：手动查 GitHub 最新版，自管 loading + 结果展示。 */
-function UpdateCheckButton() {
+/** 「检查更新」按钮（运行环境段）：手动查 GitHub 最新版，自管 loading + 结果展示。
+ *  enabled=false（config.update.check_enabled 关闭）时禁用按钮并提示，不发起检测。 */
+function UpdateCheckButton({ enabled }: { enabled: boolean }) {
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
+  if (!enabled) {
+    return (
+      <>
+        <button className="btn" type="button" disabled title="更新检测已在配置中关闭">
+          检查更新
+        </button>
+        <span className="muted">更新检测已在配置中关闭（config.yaml `update.check_enabled`）</span>
+      </>
+    );
+  }
   const run = async (): Promise<void> => {
     setChecking(true);
     try {

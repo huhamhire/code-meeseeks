@@ -436,8 +436,18 @@ export function registerIpcHandlers({
   });
   ipcMain.handle(
     'app:checkUpdate',
-    (): Promise<IpcChannels['app:checkUpdate']['response']> =>
-      checkForUpdate(app.getVersion(), bootstrap.config.proxy),
+    (): Promise<IpcChannels['app:checkUpdate']['response']> => {
+      // 与启动检测一致受 check_enabled 控制：关闭时不发起请求，直接返回禁用结果。
+      if (!bootstrap.config.update.check_enabled) {
+        return Promise.resolve({
+          ok: false,
+          hasUpdate: false,
+          currentVersion: app.getVersion(),
+          error: 'update check disabled by config',
+        });
+      }
+      return checkForUpdate(app.getVersion(), bootstrap.config.proxy);
+    },
   );
   ipcMain.handle(
     'app:openExternal',

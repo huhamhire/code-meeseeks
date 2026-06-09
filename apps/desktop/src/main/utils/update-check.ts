@@ -17,9 +17,14 @@ interface ParsedVersion {
   pre: string[];
 }
 
-/** 解析 `v1.2.3` / `1.2.3-alpha.2` → 结构；解析不出返回 null。 */
+/**
+ * 解析 `v1.2.3` / `1.2.3-alpha.2` → 结构；解析不出返回 null。
+ * 整体锚定匹配（`$` 结尾）+ 先剥离 build metadata（`+...`），避免 `1.2.3beta` / `1.2.3.4`
+ * 这类「前缀像 semver」的串被当成 1.2.3 误判。
+ */
 function parseVersion(raw: string): ParsedVersion | null {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(raw.trim());
+  const trimmed = raw.trim().split('+', 1)[0]!;
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(trimmed);
   if (!m) return null;
   return {
     core: [Number(m[1]), Number(m[2]), Number(m[3])],
@@ -59,6 +64,8 @@ interface GithubRelease {
   tag_name?: string;
   html_url?: string;
   published_at?: string;
+  prerelease?: boolean;
+  draft?: boolean;
 }
 
 /**
@@ -87,12 +94,17 @@ export async function checkForUpdate(
       signal: ctrl.signal,
       headers: {
         Accept: 'application/vnd.github+json',
-        // GitHub API 要求 UA；用产品标识
-        'User-Agent': `${REPO}-updater`,
+        // GitHub API 要求 UA；用内部代号（OWNER/REPO 是真实仓库路径，属对外内容，保留）
+        'User-Agent': 'meebox-updater',
       },
     });
     if (!res.ok) return fail(`GitHub API ${String(res.status)}`);
     const data = (await res.json()) as GithubRelease;
+    // 只提示正式版：/releases/latest 本就排除 prerelease/draft；此处再防御一道，
+    // 万一拿到 prerelease/draft 一律视为「无更新」，不引导用户升到预发布。
+    if (data.prerelease || data.draft) {
+      return { ok: true, hasUpdate: false, currentVersion };
+    }
     const tag = data.tag_name;
     if (!tag) return fail('Release 缺少 tag_name');
     const latest = parseVersion(tag);
