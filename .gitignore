@@ -62,3 +62,6 @@ coverage/
 
 # Claude Code 本地状态
 .claude/
+
+.nx/polygraph
+.nx/self-healing

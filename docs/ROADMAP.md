@@ -1,35 +1,21 @@
 # Code Meeseeks Roadmap
 
-> 最后更新：2026-06-08
+> 最后更新：2026-06-09
 > 状态：**M0–M4 已交付**；**M5（打磨 + 多平台扩展）持续中**。GitHub Adapter 已交付，下一步主线：**GitLab Adapter**。
 >
 > **命名约定**：对外品牌 **Code Meeseeks**（灵感来自 Rick and Morty 的 Mr. Meeseeks）；代码内部
 > 统一用中性代号 **meebox**（npm 作用域 `@meebox/*`，数据目录 `~/.code-meeseeks`）。pr-agent 为
 > 第三方依赖，不在重命名范围内。
 
-本文件只保留**高层视角**：定位、里程碑状态、风险、下一步。各模块的**设计与实现细节**见
-**[模块设计文档 docs/arch/](modules/README.md)**。
+本文件只保留**高层视角**：里程碑状态、风险、下一步。各模块的**设计与实现细节**见
+**[模块设计文档 docs/arch/](arch/README.md)**。
 
 ## 1. 项目定位
 
-**Code Meeseeks**（代号 meebox）是面向 Reviewer **个人**的本地化、半自动化代码评审 GUI 客户端，
-基于社区版 [pr-agent](https://docs.pr-agent.ai/) 构建。
+面向 Reviewer **个人**的本地化、半自动化代码评审 GUI 客户端，基于社区版
+[pr-agent](https://docs.pr-agent.ai/) 构建，核心立场是**决策权在人、规则在本地、数据在本地**。
 
-- **决策权在人**：所有评论必须经评审者二次确认 / 编辑后才发布到远端。
-- **规则在本地**：每位评审者配置自己的检查规则、风格偏好、LLM Provider。
-- **数据在本地**：仓库副本、PR 元数据、评论草稿都保存在本地工作目录，企业内网友好。
-
-### 1.1 目标用户
-
-- 需要承担 code review 的工程师 / Tech Lead
-- 希望用 AI 加速评审，但不愿把决策权完全交给 bot
-- 多在企业内网，使用自建 Bitbucket / GitLab
-
-### 1.2 非目标
-
-- ❌ 不是 CI 上跑的自动化 review bot（那是 pr-agent 本身的定位）
-- ❌ 不是团队协同评审平台，不做服务端、不做多用户同步
-- ❌ 不替代代码托管平台原生的评审 UI
+> 完整定位、适用 / 不适用场景、核心特性见 **[README](../README.md)**，此处不再重复。
 
 ---
 

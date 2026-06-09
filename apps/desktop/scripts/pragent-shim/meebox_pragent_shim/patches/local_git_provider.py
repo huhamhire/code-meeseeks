@@ -52,7 +52,11 @@ def patch(module) -> None:
                     original_file_content_str,
                     new_file_content_str,
                     patch_str,
-                    diff_item.b_path,
+                    # 被删除文件 b_path 为 None → FilePatchInfo.filename=None，下游
+                    # set_file_languages / extract_relevant_lines_str 的 filename.rsplit/strip
+                    # 会崩，且一崩会中断整次 review 的行号片段抽取（连未删文件的 finding 也丢
+                    # 代码片段）。回退用 a_path 保证 filename 永不为 None。
+                    diff_item.b_path or diff_item.a_path,
                     edit_type=edit_type,
                     old_filename=None
                     if diff_item.a_path == diff_item.b_path

@@ -156,6 +156,12 @@ export const ConfigSchema = z.object({
   pr_agent: z
     .object({
       strategy: z.enum(['auto', 'embedded', 'local-cli']).default('auto'),
+      /**
+       * 评审任务并发数（1~8，默认 2）。嵌入式 / local-cli 下每个 run 独立 worktree +
+       * 独立子进程，并发安全；上限节流 LLM 限流 / 本机资源。**高级参数，不在设置页暴露**，
+       * 仅 config.yaml 手改。
+       */
+      max_concurrency: z.number().int().min(1).max(8).default(2),
     })
     .default({}),
   connections: z.array(ConnectionSchema).default([]),

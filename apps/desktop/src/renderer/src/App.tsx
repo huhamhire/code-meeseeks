@@ -385,6 +385,7 @@ export default function App() {
           onResize={setChatWidth}
           collapsed={chatCollapsed}
           llmConfigured={llmConfigured}
+          maxConcurrency={boot.config.pr_agent.max_concurrency}
           onOpenSettings={() => setShowSettings(true)}
           onJumpToDraftEditor={(t) => setPendingDiffNav(t)}
           onNavigateToAnchor={(anchor) => setPendingDiffNav({ anchor })}

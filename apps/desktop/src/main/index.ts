@@ -69,11 +69,20 @@ let repoMirror: RepoMirrorManager;
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
-  logger = await createLogger({ logsDir: bootstrap.paths.logsDir });
+  // pretty 仅非打包态开：dev 控制台单行 + ISO8601 + 上色；打包态保持原始 JSON。
+  logger = await createLogger({ logsDir: bootstrap.paths.logsDir, pretty: !app.isPackaged });
   logger.info(
     { firstRun: bootstrap.firstRun, appDir: bootstrap.paths.appDir },
     'meebox main process started',
   );
+
+  // main 进程全局兜底：未捕获异常 / 未处理 rejection 至少留一条日志，不静默崩溃。
+  process.on('uncaughtException', (err) => {
+    logger.fatal({ err }, 'uncaughtException');
+  });
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ err: reason }, 'unhandledRejection');
+  });
 
   const embeddedPythonPath = resolveEmbeddedPython();
   // pr-agent 探测**不放在建窗关键路径上**：它走 spawn 探测（auto 模式回退 local-cli

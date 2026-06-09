@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+## [0.2.0-alpha.2] - 2026-06-09
+
+### Added
+- **评审任务并发执行**：队列从单并发改为可配置并发（每个 run 独立 worktree + 独立子进程，
+  并发安全），多个 PR 的 review 可并行跑、互不阻塞。并发数由 `pr_agent.max_concurrency`
+  控制（1~8，默认 2，高级参数仅 config.yaml 手改、不在设置页暴露）。chat 与状态栏支持多条
+  运行中展示。同一 PR 同一工具（`/review` `/describe`）已在执行 / 排队时禁止重复触发（`/ask` 不限）。
+
+### Changed
+- **日志增强**：dev 控制台改 logfmt 单行（`<ISO8601> LEVEL msg="…" k=v`，含 msg 在内全部字段
+  统一 kv、按级别上色，文件仍为 JSON）；渲染层未捕获错误 / rejection 经 IPC 回传 main，
+  与主进程崩溃兜底一并落进 `meebox.log`。
+
+### Fixed
+- 修复 pr-agent `get_diff_files` 对**删除文件** filename 取空导致行号片段渲染崩溃（回退取 `a_path`）。
+
+### Security
+- 升级 `nx` 至 22.7.5 并在范围内修复 `minimatch`，消除 `minimatch` ReDoS（high）依赖告警。
+
 ## [0.2.0-alpha.1] - 2026-06-09
 
 ### Added
@@ -107,7 +126,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0-alpha.1...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0-alpha.2...HEAD
+[0.2.0-alpha.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0-alpha.1...v0.2.0-alpha.2
 [0.2.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0...v0.2.0-alpha.1
 [0.1.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0-alpha.1...v0.1.0
 [0.1.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/releases/tag/v0.1.0-alpha.1

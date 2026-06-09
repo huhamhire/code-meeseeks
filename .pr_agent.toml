@@ -1,0 +1,2 @@
+[config]
+ignore_pr_target_branches = ["^master$"]
