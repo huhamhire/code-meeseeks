@@ -621,6 +621,7 @@ export function SettingsModal({
               <button
                 className="btn"
                 type="button"
+                style={{ marginLeft: 'auto' }}
                 onClick={() => void invoke('app:openDevTools', undefined)}
                 title="打开 Electron 开发者工具（分离窗口）"
               >
