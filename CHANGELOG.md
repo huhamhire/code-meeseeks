@@ -11,6 +11,8 @@
 - **GitHub 适配**（github.com + GitHub Enterprise Server）：PR 发现（review-requested）、diff 评论读写、
   行内评论、审批（通过 / 需修改 / 撤销）、合并；设置页与首启向导可新增 GitHub 连接。
   审批按平台能力降级：不支持的决断隐藏，自己作者的 PR 审批按钮灰显（不能审批自己）。
+- 新增面向用户的**使用说明**文档（`docs/guide/`，序号命名 + 索引）：安装与首次使用、代码平台配置、
+  LLM 配置（含本地 CLI 模式）、网络代理配置。
 
 ### Changed
 - 全仓内部命名统一为 **Bitbucket**，去除 `BBS` / `BB` 等歧义缩写（纯改名，无行为变化）。

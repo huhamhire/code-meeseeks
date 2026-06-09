@@ -62,6 +62,13 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 - **提交信息**：约定式提交、**中文**，带 scope，例：`feat(desktop): …` / `fix(review): …` / `docs(readme): …` / `build(mac): …`。结尾带 `Co-Authored-By` trailer。**改完不要自动提交**，等明确指示。
 - **不提交无关改动**：工作区可能混有他人未提交编辑，按文件归属拆成内聚 commit，别混进同一条。
 
+## 文档约定
+
+- **两类文档分目录**：面向使用者的「使用说明」放 [docs/guide/](docs/guide/README.md)（**序号命名**，如 `01-code-platform.md`，README.md 作索引）；面向开发/agent 的模块设计文档放 [docs/modules/](docs/modules/README.md)。同一主题用户向与设计向各写一份，互相链接、不混写。
+- **书面化表达**：正式、简洁的书面语，避免口语化措辞（如「怎么配」→「配置方法」、「搞定」→「完成」）。
+- **不用总结性套话**：避免「一句话」「总之」「简言之」「综上」这类收尾/概括套话，直接陈述结论。
+- **示例力求通用**：能力性描述用通用表述 + 多个示例（如「本机 agentic CLI（claude / codex）」），不绑定单一品牌，便于扩展。
+
 ## 工程维护坑
 
 - **嵌入式 pr-agent 运行时**（[modules/04](docs/modules/04-pragent-runtime.md)）：`apps/desktop/scripts/assemble-pragent-runtime.mjs` 按 `pragent-runtime.json` 把可重定位 CPython + pinned pr-agent 装到 `apps/desktop/vendor/pragent/`（gitignored）。
