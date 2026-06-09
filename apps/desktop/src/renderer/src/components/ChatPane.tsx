@@ -266,6 +266,12 @@ export function ChatPane({
   // 会在 active 切换时自动 refresh
   const handleRun = async (tool: ReviewRunTool, question?: string): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured) return;
+    // 去重（即时反馈）：同一 PR 同一工具已在执行 / 排队 → 阻止重复触发（main 端亦有
+    // 权威校验兜底）。/ask 每次问题不同，不限制。
+    if (tool !== 'ask' && (myActiveRuns.some((r) => r.tool === tool) || myWaiting.some((w) => w.tool === tool))) {
+      setError(`该 PR 的 /${tool} 正在执行或排队中，请勿重复触发`);
+      return;
+    }
     setError(null);
     try {
       await invoke('pragent:run', { localId: pr.localId, tool, question });

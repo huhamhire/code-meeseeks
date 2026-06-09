@@ -1132,6 +1132,15 @@ export function registerIpcHandlers({
         throw new Error('/ask 需要提供 question');
       }
       const pr = await findPrOrThrow(req.localId);
+      // 去重（权威）：同一 PR 同一工具已在执行 / 排队 → 拒绝重复触发，避免并发模式下
+      // 对同一 PR 跑多份相同评审。/ask 每次问题不同，不在限制范围。
+      if (req.tool !== 'ask') {
+        const sameTask = (q: QueueItem): boolean =>
+          q.info.prLocalId === pr.localId && q.info.tool === req.tool;
+        if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
+          throw new Error(`该 PR 的 /${req.tool} 任务已在执行或排队中，请勿重复触发`);
+        }
+      }
       // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
       const runId = makeRunId(new Date());
       return new Promise<ReviewRun>((resolve, reject) => {
