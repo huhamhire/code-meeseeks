@@ -11,7 +11,8 @@
 ## 核心设计
 
 - **三个命令**：`/describe`（生成 PR 描述）、`/review`（生成评审 findings）、`/ask`（自由问答）。对话式
-  交互 + **队列模型**：同一时刻只跑一个 run（active 占位），其余排队；支持中断/重试；run 状态与实时 stdout
+  交互 + **队列模型**：并发执行 ≤ `pr_agent.max_concurrency`（默认 2）条 run，其余 FIFO 排队；每个 run
+  独立 worktree（路径带 nonce）+ 独立子进程，并发安全；支持中断/重试；run 状态与实时 stdout
   跨 PR 切换存活（模块级 store，不随组件卸载丢）。
 - **输出解析为 findings**：pr-agent 把结果写进 worktree 的 markdown，解析层按 section 切分，把 `/review` 的
   「key_issues / Recommended focus areas」段展开成多条 `code-feedback` finding（每条 title + body + anchor）。

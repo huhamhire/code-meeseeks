@@ -118,11 +118,12 @@ export interface IpcEvents {
   /** 评论 reply / 状态变更后广播，renderer 各组件 (CommentsPanel / DiffView inline) 重拉 */
   'comments:changed': { localId: string };
   /**
-   * 队列变化广播：active 切换 / waiting 增删都触发。renderer 据此同步 chat-pane
-   * 运行中 UI + StatusBar 队列 chip。
+   * 队列变化广播：active 增删 / waiting 增删都触发。renderer 据此同步 chat-pane
+   * 运行中 UI + StatusBar 队列 chip。`active` 是当前并发运行中的 run 列表
+   * （长度 ≤ max_concurrency）。
    */
   'pragent:queueChanged': {
-    active: PragentRunInfo | null;
+    active: PragentRunInfo[];
     waiting: PragentRunInfo[];
   };
 }
@@ -485,7 +486,7 @@ export interface IpcChannels {
    */
   'pragent:queue': {
     request: void;
-    response: { active: PragentRunInfo | null; waiting: PragentRunInfo[] };
+    response: { active: PragentRunInfo[]; waiting: PragentRunInfo[] };
   };
 }
 

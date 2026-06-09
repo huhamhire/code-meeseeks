@@ -104,11 +104,14 @@ export function registerIpcHandlers({
     ac?: AbortController;
   }
   const waiting: QueueItem[] = [];
-  let active: QueueItem | null = null;
+  // 并发运行中的 run（runId → item）；上限 maxConcurrency。post-Docker 下每个 run
+  // 独立 worktree（路径带 nonce）+ 独立子进程，并发安全；串行不再是正确性要求。
+  const active = new Map<string, QueueItem>();
+  const maxConcurrency = bootstrap.config.pr_agent.max_concurrency;
 
   const broadcastQueueChanged = (): void => {
     const payload = {
-      active: active?.info ?? null,
+      active: [...active.values()].map((q) => q.info),
       waiting: waiting.map((q) => q.info),
     };
     for (const win of BrowserWindow.getAllWindows()) {
@@ -1089,27 +1092,28 @@ export function registerIpcHandlers({
     }
   };
 
-  /** 队列消费循环：active 空时从 waiting 取一条来跑；自身不并发 (active 占位) */
-  const runNext = (): void => {
-    if (active) return;
-    const item = waiting.shift();
-    if (!item) {
-      broadcastQueueChanged();
-      return;
+  /**
+   * 队列泵：在并发未达上限且 waiting 非空时，连续 dequeue 起跑，直到填满 maxConcurrency。
+   * 每条 run 结束（成功/失败/取消）后从 active 移除并再泵一次，自然续上后续任务。
+   */
+  const pump = (): void => {
+    while (active.size < maxConcurrency && waiting.length > 0) {
+      const item = waiting.shift()!;
+      active.set(item.info.runId, item);
+      item.ac = new AbortController();
+      void executeRun(item)
+        .then((finished) => item.resolve(finished))
+        .catch((err: unknown) => {
+          item.reject(err instanceof Error ? err : new Error(String(err)));
+        })
+        .finally(() => {
+          active.delete(item.info.runId);
+          broadcastQueueChanged();
+          // 放微任务里再泵，避免递归栈累积
+          queueMicrotask(pump);
+        });
     }
-    active = item;
-    item.ac = new AbortController();
-    void executeRun(item)
-      .then((finished) => item.resolve(finished))
-      .catch((err: unknown) => {
-        item.reject(err instanceof Error ? err : new Error(String(err)));
-      })
-      .finally(() => {
-        active = null;
-        broadcastQueueChanged();
-        // 链式开下一条；放微任务里避免栈累积
-        queueMicrotask(runNext);
-      });
+    broadcastQueueChanged();
   };
 
   ipcMain.handle(
@@ -1128,6 +1132,15 @@ export function registerIpcHandlers({
         throw new Error('/ask 需要提供 question');
       }
       const pr = await findPrOrThrow(req.localId);
+      // 去重（权威）：同一 PR 同一工具已在执行 / 排队 → 拒绝重复触发，避免并发模式下
+      // 对同一 PR 跑多份相同评审。/ask 每次问题不同，不在限制范围。
+      if (req.tool !== 'ask') {
+        const sameTask = (q: QueueItem): boolean =>
+          q.info.prLocalId === pr.localId && q.info.tool === req.tool;
+        if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
+          throw new Error(`该 PR 的 /${req.tool} 任务已在执行或排队中，请勿重复触发`);
+        }
+      }
       // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
       const runId = makeRunId(new Date());
       return new Promise<ReviewRun>((resolve, reject) => {
@@ -1150,8 +1163,7 @@ export function registerIpcHandlers({
           { runId, localId: pr.localId, tool: req.tool, queueLen: waiting.length },
           'pragent run enqueued',
         );
-        broadcastQueueChanged();
-        runNext();
+        pump();
       });
     },
   );
@@ -1163,9 +1175,10 @@ export function registerIpcHandlers({
       req: IpcChannels['pragent:cancel']['request'],
     ): Promise<IpcChannels['pragent:cancel']['response']> => {
       // active 命中 → SIGKILL (finally 会写 cancelled 到 disk)
-      if (active?.info.runId === req.runId) {
+      const running = active.get(req.runId);
+      if (running) {
         logger.info({ runId: req.runId }, 'pragent run cancel: active');
-        active.ac?.abort();
+        running.ac?.abort();
         return { ok: true };
       }
       // waiting 命中 → 从队列删除 + reject 原 Promise，不写盘 (从未真正跑过)
@@ -1187,7 +1200,7 @@ export function registerIpcHandlers({
   ipcMain.handle(
     'pragent:queue',
     (): IpcChannels['pragent:queue']['response'] => ({
-      active: active?.info ?? null,
+      active: [...active.values()].map((q) => q.info),
       waiting: waiting.map((q) => q.info),
     }),
   );

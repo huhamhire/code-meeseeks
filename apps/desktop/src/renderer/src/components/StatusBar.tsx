@@ -147,18 +147,22 @@ function RepoSyncChip() {
  */
 function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => void }) {
   const { active, waiting } = useChatRunStore();
-  // 计时器：1s 粒度，跟 ChatPane 的 elapsed 同步。仅 active 时启
+  // 并发模型：active 是运行中 run 列表。chip 主体展示第一条（primary）的 tool + elapsed，
+  // 多于一条时用徽标显示并发总数；点开 popover 列出全部运行中 + 排队中。
+  const primary = active[0] ?? null;
+  const runningCount = active.length;
+  // 计时器：1s 粒度，跟 ChatPane 的 elapsed 同步。仅有 primary 时启
   const [elapsedMs, setElapsedMs] = useState(0);
   // startedAt 入队时为 null，executeRun 起跑时设值；fallback 到 enqueuedAt 即可
-  const startMs = active ? new Date(active.startedAt ?? active.enqueuedAt).getTime() : 0;
+  const startMs = primary ? new Date(primary.startedAt ?? primary.enqueuedAt).getTime() : 0;
   useEffect(() => {
-    if (!active) return;
+    if (!primary) return;
     setElapsedMs(Date.now() - startMs);
     const id = setInterval(() => setElapsedMs(Date.now() - startMs), 1000);
     return () => clearInterval(id);
-    // 仅依赖 runId + startMs：active 对象其它字段变化不影响计时
+    // 仅依赖 primary runId + startMs：其它字段变化不影响计时
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.runId, startMs]);
+  }, [primary?.runId, startMs]);
 
   // 队列弹出菜单：点开 (active chip + 队列 ≥1) 显示 waiting 列表 + × 取消
   const [queueOpen, setQueueOpen] = useState(false);
@@ -178,16 +182,16 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
       document.removeEventListener('keydown', onKey);
     };
   }, [queueOpen]);
-  // active 没了 / 队列空了 → 自动收起菜单
+  // 无可展开内容（无排队 且 运行中 ≤1）→ 自动收起菜单
   useEffect(() => {
-    if (queueOpen && waiting.length === 0 && !active) setQueueOpen(false);
-  }, [queueOpen, waiting.length, active]);
+    if (queueOpen && waiting.length === 0 && active.length <= 1) setQueueOpen(false);
+  }, [queueOpen, waiting.length, active.length]);
 
   const handleCancelQueued = (runId: string): void => {
     void invoke('pragent:cancel', { runId });
   };
 
-  if (!active) {
+  if (!primary) {
     // Idle：静态灰点 + "空闲" 文案。让用户一眼看到"agent 可用 + 当前没活儿"
     return (
       <span
@@ -200,27 +204,32 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
     );
   }
 
-  // 队列 ≥1 → chip 变 button (点开弹队列菜单)；否则按 onJumpToPr 走原 chip 行为
-  const hasQueue = waiting.length > 0;
-  const clickable = hasQueue || Boolean(onJumpToPr);
+  // 可展开（运行中 >1 或有排队）→ chip 变 button 点开 popover；否则按 onJumpToPr 跳 PR。
+  const expandable = waiting.length > 0 || runningCount > 1;
+  const clickable = expandable || Boolean(onJumpToPr);
   const handleClick = (): void => {
-    if (hasQueue) {
+    if (expandable) {
       setQueueOpen((v) => !v);
     } else {
-      onJumpToPr?.(active.prLocalId);
+      onJumpToPr?.(primary.prLocalId);
     }
   };
-  const title = hasQueue
-    ? `PR Agent 运行中 · ${String(waiting.length)} 个排队中 · 点击查看队列`
-    : `PR Agent 运行中 · PR ${active.prLocalId} · /${active.tool}${clickable ? ' · 点击跳转到该 PR' : ''}`;
+  // 徽标数 = 其它并发运行中(runningCount-1) + 排队中(waiting)
+  const extraCount = runningCount - 1 + waiting.length;
+  const title = expandable
+    ? `PR Agent · ${String(runningCount)} 个运行中 · ${String(waiting.length)} 个排队中 · 点击查看`
+    : `PR Agent 运行中 · PR ${primary.prLocalId} · /${primary.tool}${clickable ? ' · 点击跳转到该 PR' : ''}`;
   const inner = (
     <>
       <span className="statusbar-pragent-dot" aria-hidden="true" />
-      <span>/{active.tool}</span>
+      <span>/{primary.tool}</span>
       <span className="statusbar-pragent-elapsed">{formatStatusbarElapsed(elapsedMs)}</span>
-      {hasQueue && (
-        <span className="statusbar-pragent-queue-count" aria-label={`${String(waiting.length)} 个排队`}>
-          +{waiting.length}
+      {extraCount > 0 && (
+        <span
+          className="statusbar-pragent-queue-count"
+          aria-label={`另有 ${String(extraCount)} 个运行中 / 排队`}
+        >
+          +{extraCount}
         </span>
       )}
     </>
@@ -242,7 +251,7 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
           {inner}
         </span>
       )}
-      {queueOpen && hasQueue && (
+      {queueOpen && expandable && (
         <QueuePopover
           active={active}
           waiting={waiting}
@@ -258,7 +267,7 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
 }
 
 /**
- * 队列弹出菜单：状态栏 chip 上方弹出。第 1 条 active 行 + 余下 waiting 行。
+ * 队列弹出菜单：状态栏 chip 上方弹出。先列全部运行中（active）行，再列 waiting 行。
  * waiting 行右侧 × 按钮取消。最多 6 个 item 高度，超出内部滚动。
  */
 function QueuePopover({
@@ -267,7 +276,7 @@ function QueuePopover({
   onCancel,
   onJumpToPr,
 }: {
-  active: NonNullable<ReturnType<typeof useChatRunStore>['active']>;
+  active: ReturnType<typeof useChatRunStore>['active'];
   waiting: ReturnType<typeof useChatRunStore>['waiting'];
   onCancel: (runId: string) => void;
   onJumpToPr: (localId: string) => void;
@@ -276,22 +285,26 @@ function QueuePopover({
     <div className="statusbar-queue-popover" role="menu" aria-label="PR Agent 任务队列">
       <div className="statusbar-queue-header">
         <span className="muted">PR Agent 队列</span>
-        <span className="muted">{waiting.length} 个排队</span>
+        <span className="muted">
+          {active.length} 运行 · {waiting.length} 排队
+        </span>
       </div>
       <ul className="statusbar-queue-list">
-        <li className="statusbar-queue-item statusbar-queue-item-active">
-          <span className="statusbar-pragent-dot" aria-hidden="true" />
-          <button
-            type="button"
-            className="statusbar-queue-meta"
-            onClick={() => onJumpToPr(active.prLocalId)}
-            title="点击跳转到该 PR"
-          >
-            <span className="statusbar-queue-tool">/{active.tool}</span>
-            <code className="statusbar-queue-pr">{active.prLocalId}</code>
-          </button>
-          <span className="muted statusbar-queue-state">运行中</span>
-        </li>
+        {active.map((a) => (
+          <li className="statusbar-queue-item statusbar-queue-item-active" key={a.runId}>
+            <span className="statusbar-pragent-dot" aria-hidden="true" />
+            <button
+              type="button"
+              className="statusbar-queue-meta"
+              onClick={() => onJumpToPr(a.prLocalId)}
+              title="点击跳转到该 PR"
+            >
+              <span className="statusbar-queue-tool">/{a.tool}</span>
+              <code className="statusbar-queue-pr">{a.prLocalId}</code>
+            </button>
+            <span className="muted statusbar-queue-state">运行中</span>
+          </li>
+        ))}
         {waiting.map((q) => (
           <li className="statusbar-queue-item" key={q.runId}>
             <span className="statusbar-pragent-dot statusbar-pragent-dot-idle" aria-hidden="true" />
