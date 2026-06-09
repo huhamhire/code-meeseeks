@@ -28,7 +28,7 @@
 | 编号 | 模块 |
 | --- | --- |
 | [`00-overview`](00-overview.md) | 架构总览：进程模型 / IPC / 数据流 / 模块关系 |
-| [`01-platform-adapter`](01-platform-adapter.md) | 代码平台适配（PlatformAdapter / Bitbucket Server / clone 协议） |
+| [`01-platform-adapter`](01-platform-adapter.md) | 代码平台适配（PlatformAdapter / 能力位与降级 / Bitbucket / GitHub 差异化适配 / clone 协议） |
 | [`02-repo-mirror`](02-repo-mirror.md) | 仓库镜像与 Diff（bare clone / worktree / blame） |
 | [`03-state-storage`](03-state-storage.md) | 状态存储与数据模型（StateStore / per-PR 目录 / schema） |
 | [`04-pragent-runtime`](04-pragent-runtime.md) | pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage） |
