@@ -24,7 +24,7 @@ import {
   SendIcon,
   StopIcon,
 } from './icons';
-import { chatRunStore, useChatRunStore } from '../stores/chat-run-store';
+import { useChatRunStore } from '../stores/chat-run-store';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { parseAnsi, segmentStyle } from '../utils/ansi';
 import { translatePrAgentLabels } from '../utils/translate-pr-agent';
@@ -184,9 +184,9 @@ export function ChatPane({
     };
   }, [prLocalId]);
 
-  // 本 PR 的运行中 run 集合发生「移除」→ 那条跑完了：单独 fetch 它 + 插到 runs
-  // 末尾（最新位置），并清掉它的实时 lines 缓存（历史走 run.stdout）。不重拉整页，
-  // 避免毁掉用户已向上加载的更早历史。多并发下逐条 diff 处理。
+  // 本 PR 的运行中 run 集合发生「移除」→ 那条跑完了：单独 fetch 它 + 按 runId 升序
+  // 插入 runs（不重拉整页，避免毁掉用户已向上加载的更早历史）。lines 缓存的回收已
+  // 上移到 store 层（setQueue 全局处理），这里不再负责。多并发下逐条 diff 处理。
   const myActiveIds = myActiveRuns.map((a) => a.runId);
   const myActiveIdsKey = myActiveIds.join(',');
   const prevMyActiveRef = useRef<string[]>(myActiveIds);
@@ -208,17 +208,23 @@ export function ChatPane({
             setRuns((prevRuns) => {
               const idx = prevRuns.findIndex((r) => r.id === finished.id);
               if (idx >= 0) {
+                // 已在列表（重复事件 / 重连）→ 就地更新
                 const next = prevRuns.slice();
                 next[idx] = finished;
                 return next;
               }
-              return [...prevRuns, finished];
+              // 并发完成顺序 ≠ runId 顺序：按 runId 升序插入而非无条件 append，
+              // 维持 runs 始终有序（loadOlderRuns 以 runs[0].id 作游标拉更早历史，
+              // 依赖此不变量）。runId 字典序即时序，可直接字符串比较。
+              const insertAt = prevRuns.findIndex((r) => r.id > finished.id);
+              if (insertAt < 0) return [...prevRuns, finished];
+              const next = prevRuns.slice();
+              next.splice(insertAt, 0, finished);
+              return next;
             });
           }
         } catch (e) {
           setError(e instanceof Error ? e.message : String(e));
-        } finally {
-          chatRunStore.clearLines(runId);
         }
       })();
     }

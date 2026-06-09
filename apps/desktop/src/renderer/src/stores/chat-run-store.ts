@@ -41,9 +41,24 @@ function setQueue(
   active: ReadonlyArray<PragentRunInfo>,
   waiting: ReadonlyArray<PragentRunInfo>,
 ): void {
+  const sameActive = sameRunList(state.active, active);
   // 浅相等优化：active / waiting 的 runId(+startedAt) 序列都没变 → 不通知，避免无谓 re-render
-  if (sameRunList(state.active, active) && sameRunList(state.waiting, waiting)) return;
-  state = { ...state, active, waiting };
+  if (sameActive && sameRunList(state.waiting, waiting)) return;
+  // 全局回收 stdout 缓存：离开 active 的 run（成功/失败/取消完成）清掉其 lines。
+  // 放在 store 层而非 ChatPane —— 不依赖用户当前打开哪个 PR，避免非当前 PR 上完成的
+  // run 的 lines 长期驻留。删除合并进同一次 state 更新，只 notify 一次。
+  let linesByRunId = state.linesByRunId;
+  if (!sameActive) {
+    const nextActiveIds = new Set(active.map((r) => r.runId));
+    let nextMap: Map<string, ReadonlyArray<string>> | null = null;
+    for (const prev of state.active) {
+      if (nextActiveIds.has(prev.runId) || !linesByRunId.has(prev.runId)) continue;
+      nextMap ??= new Map(linesByRunId);
+      nextMap.delete(prev.runId);
+    }
+    if (nextMap) linesByRunId = nextMap;
+  }
+  state = { ...state, active, waiting, linesByRunId };
   notify();
 }
 
