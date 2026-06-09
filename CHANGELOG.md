@@ -12,6 +12,10 @@
 - **版本更新检测**：启动时（及设置页「检查更新」）查 GitHub Releases 最新稳定版与当前版本比对，
   有新版在状态栏提示并可点击前往下载（仅检测 + 提示，不自动下载 / 安装）。检测走配置的出站代理
   （内网友好），可经 `update.check_enabled` 关闭。
+- **/describe 架构图**：嵌入式 pr-agent 统一启用 GFM（shim 让本地 provider 支持 gfm_markdown），
+  使社区版 `/describe` 的 `enable_pr_diagram`（默认开）按实际改动**选择性输出 mermaid 架构图**，
+  配合 Mermaid 渲染直接成图；`/review` 等同步走 GFM 富 markdown，输出解析（parse-output）相应
+  兼容 GFM 的 `<table>` / `<details>` / `<a href>` finding 形态。
 
 ## [0.2.0] - 2026-06-09
 

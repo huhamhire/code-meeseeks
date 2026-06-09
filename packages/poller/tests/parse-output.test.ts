@@ -334,4 +334,48 @@ describe('parseReviewOutput', () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]!.body).toMatch(/说明文字/);
   });
+
+  it('GFM 表格输出：key_issues 的 <details>/<a href> finding 抽取 + anchor', () => {
+    const md = [
+      '<table>',
+      '<tr><td>⏱️&nbsp;<strong>Estimated effort to review</strong>: 3 🔵🔵🔵⚪⚪</td></tr>',
+      "<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>",
+      '',
+      "<details><summary><a href='meebox:///src/auth/login.ts#L42-L50'><strong>潜在空引用</strong></a>",
+      '',
+      'user 可能为 null，访问 user.id 前未判空。',
+      '</summary>',
+      '',
+      '```ts',
+      '42  const id = user.id;',
+      '```',
+      '',
+      '</details>',
+      '',
+      "<a href='meebox:///pkg/cache.go#L17'><strong>缓存未加锁</strong></a><br>并发写 map 可能 panic。",
+      '',
+      '</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const code = findings.filter((f) => f.category === 'code-feedback');
+    expect(code.map((f) => f.title)).toEqual(['潜在空引用', '缓存未加锁']);
+    expect(code[0]!.anchor).toEqual({ path: 'src/auth/login.ts', startLine: 42, endLine: 50 });
+    expect(code[0]!.body).toMatch(/未判空/);
+    expect(code[1]!.anchor).toEqual({ path: 'pkg/cache.go', startLine: 17 });
+    // effort 行也切成 section finding（标题映射到 effort）
+    expect(findings.some((f) => f.sectionKey === 'effort')).toBe(true);
+  });
+
+  it('GFM key_issues 抽不到 finding → 退回单条（不丢内容）', () => {
+    const md = [
+      '<table>',
+      '<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>',
+      '格式漂移，没有 a/strong 锚。',
+      '</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    expect(findings.some((f) => /格式漂移/.test(f.body))).toBe(true);
+  });
 });

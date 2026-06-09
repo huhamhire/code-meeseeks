@@ -266,14 +266,97 @@ function expandKeyIssuesSection(
   }
 
   return blocks.map((b, i) => {
-    const issueBody = b.body.trim();
-    const anchor = resolveIssueAnchor(b.link, issueBody);
+    const raw = b.body.trim();
+    // 先用含 marker 的原文解析 anchor（marker 是行号兜底），再 strip 用于展示
+    const anchor = resolveIssueAnchor(b.link, raw);
+    const issueBody = stripAnchorMarker(raw);
     const id = `${tool}-${String(baseIndex + i).padStart(3, '0')}`;
     return {
       id,
       category: 'code-feedback' as const,
       sectionKey: 'code-feedback' as const,
       title: b.title,
+      body: issueBody,
+      ...(anchor ? { anchor } : {}),
+    };
+  });
+}
+
+// ===== GFM 输出解析（gfm_markdown=True：shim 让 LocalGitProvider 支持 GFM，使 /describe
+// 出 mermaid 图、/review 走 GFM 富 markdown）。GFM 下 /review 整体是 <table>，每段一个
+// <tr><td>…<strong>标题</strong>…</td></tr>；key_issues 段内 finding 是
+//   <details><summary><a href='meebox://…'><strong>标题</strong></a>\n\n内容\n</summary>\n\n代码片段\n\n</details>
+// 或 <a href='meebox://…'><strong>标题</strong></a><br>内容。markdown H1-H6 切片对其失配，
+// 故另走这条 HTML 解析路径（仅 review + 检测到 GFM 时）。
+
+/** 是否是 GFM 表格形态的 /review 输出（决定走 HTML 还是 markdown 解析路径）。 */
+function isGfmReviewOutput(text: string): boolean {
+  return /<table>/i.test(text) && /<tr\b/i.test(text);
+}
+
+/** GFM finding 片段 → 可渲染文本：<br>/<summary>/<details> → 换行，其余标签剥掉，
+ *  常见实体解码；代码围栏(```)是字面文本，原样保留。 */
+function gfmInlineToText(s: string): string {
+  return s
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(?:summary|details)[^>]*>/gi, '\n')
+    .replace(/<\/?[a-z][^>]*>/gi, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** 把 GFM <table> 拆成行 section：每个 <tr> 的 <td> 内容，行首 <strong> 作 title，
+ *  其余作 body（key_issues 行的 body 保留原始 HTML 供 expandGfmKeyIssues 抽 finding）。 */
+function splitGfmTableSections(html: string): Section[] {
+  const sections: Section[] = [];
+  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let rm: RegExpExecArray | null;
+  while ((rm = rowRe.exec(html)) !== null) {
+    const row = rm[1]!;
+    const tdMatch = /<td\b[^>]*>([\s\S]*?)<\/td>/i.exec(row);
+    const td = tdMatch ? tdMatch[1]! : row;
+    const titleMatch = /<strong>([\s\S]*?)<\/strong>/i.exec(td);
+    const title = titleMatch
+      ? gfmInlineToText(titleMatch[1]!).replace(/[:：]\s*$/, '').trim()
+      : '';
+    // `<strong>标题</strong>: 值` 形态：去掉标题后残留的前导分隔符（: ：&nbsp; 空白）
+    const body = (titleMatch ? td.slice(titleMatch.index + titleMatch[0].length) : td)
+      .replace(/^(?:&nbsp;|\s|[:：])+/gi, '')
+      .trim();
+    sections.push({ level: 3, title, body });
+  }
+  return sections;
+}
+
+/** 从 GFM key_issues 段 body（原始 HTML）抽多条 finding：以 <a href><strong>标题</strong></a>
+ *  为锚，相邻两条之间为该条正文。link 取结构化 anchor，与 markdown 路径同源。 */
+function expandGfmKeyIssues(html: string, baseIndex: number, tool: ReviewRunTool): Finding[] {
+  const FIND_RE =
+    /<a\s+href=['"]([^'"]+)['"]\s*>\s*<strong>([\s\S]*?)<\/strong>\s*<\/a>/gi;
+  const matches = [...html.matchAll(FIND_RE)];
+  return matches.map((m, i) => {
+    const link = m[1]!;
+    const title = gfmInlineToText(m[2]!).trim();
+    const start = m.index + m[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1]!.index : html.length;
+    let chunk = html.slice(start, end);
+    // <details> 形态：issue_content 在 </summary> 前；其后是 relevant_lines 代码片段，
+    // 不塞进 body（代码由 anchor → DiffView 展示，body 重复贴大段代码很吵）。
+    const sumIdx = chunk.search(/<\/summary>/i);
+    if (sumIdx >= 0) chunk = chunk.slice(0, sumIdx);
+    const raw = gfmInlineToText(chunk);
+    // 先用含 marker 的原文解析 anchor（行号兜底），再 strip 用于展示
+    const anchor = resolveIssueAnchor(link, raw);
+    const issueBody = stripAnchorMarker(raw);
+    return {
+      id: `${tool}-${String(baseIndex + i).padStart(3, '0')}`,
+      category: 'code-feedback' as const,
+      sectionKey: 'code-feedback' as const,
+      title,
       body: issueBody,
       ...(anchor ? { anchor } : {}),
     };
@@ -332,6 +415,20 @@ function resolveIssueAnchor(link: string | undefined, body: string): FindingAnch
     };
   }
   return linkAnchor;
+}
+
+/** 锚点 marker `[file: <path>, lines: <s>-<e>]`（我们 prompt 注入的）。抽成 anchor 后
+ *  应从展示 body 删除，否则会作为多余文字泄漏到 finding 正文。 */
+const ANCHOR_MARKER_RE =
+  /\[\s*file\s*:\s*[^,\]\n]+?(?:\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?)?\s*\]/gi;
+
+/** 从 finding body 删掉锚点 marker，并收敛多余空白。 */
+function stripAnchorMarker(body: string): string {
+  return body
+    .replace(ANCHOR_MARKER_RE, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
@@ -458,7 +555,13 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
     const out = parseImproveOutput(stdout);
     return llmFailure ? { ...out, llmFailure } : out;
   }
-  const allSections = splitMarkdownSections(stripAnsi(stdout));
+  const cleanStdout = stripAnsi(stdout);
+  // GFM 路径仅用于 /review（gfm_markdown 下整体是 <table>）；describe/ask 仍走 markdown
+  // 切片（其 HTML/表格/mermaid 由下游 react-markdown 渲染，section 结构不受影响）。
+  const gfm = tool === 'review' && isGfmReviewOutput(cleanStdout);
+  const allSections = gfm
+    ? splitGfmTableSections(cleanStdout)
+    : splitMarkdownSections(cleanStdout);
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) {
     return llmFailure ? { findings: [], llmFailure } : { findings: [] };
@@ -469,11 +572,23 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
   let idx = 0;
   for (const sec of sections) {
     if (tool === 'review' && isKeyIssuesSection(normalizeTitle(sec.title))) {
-      const expanded = expandKeyIssuesSection(sec, idx, tool);
-      findings.push(...expanded);
-      idx += expanded.length;
+      // GFM：sec.body 是原始 HTML，按 <a href><strong> 抽 finding；非 GFM 走 markdown 展开
+      const expanded = gfm
+        ? expandGfmKeyIssues(sec.body, idx, tool)
+        : expandKeyIssuesSection(sec, idx, tool);
+      if (expanded.length === 0) {
+        // 抽不到（格式漂移）→ 退回整段一条 finding，body 清成可读文本
+        findings.push(sectionToFinding(gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec, idx, tool));
+        idx += 1;
+      } else {
+        findings.push(...expanded);
+        idx += expanded.length;
+      }
     } else {
-      findings.push(sectionToFinding(sec, idx, tool));
+      // GFM 非 key-issues 段：body 是 HTML，清成文本再交 sectionToFinding（其 **File:** 等
+      // 锚点匹配按 markdown 文本设计；这些段一般无行级 anchor，清理后展示即可）
+      const s = gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec;
+      findings.push(sectionToFinding(s, idx, tool));
       idx += 1;
     }
   }

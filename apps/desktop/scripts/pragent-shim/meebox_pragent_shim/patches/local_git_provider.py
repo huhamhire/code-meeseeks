@@ -86,3 +86,17 @@ def patch(module) -> None:
         return f"meebox:///{f}#L{relevant_line_start}"
 
     module.LocalGitProvider.get_line_link = get_line_link
+
+    # 统一启用 GFM：LocalGitProvider 默认对 'gfm_markdown' 报 False，导致 /describe 的
+    # enable_pr_diagram（configuration.toml 默认开）被 `enable and is_supported(gfm_markdown)`
+    # 门控关掉、不产出 mermaid 架构图；/review 等也走非 GFM 简化分支。这里让 gfm_markdown
+    # 返回 True，使 describe 按需输出 mermaid 图、各工具走 GFM 富 markdown（details / 表格 /
+    # mermaid）。格式兼容由应用端 markdown 解析（rehype + mermaid 渲染）处理。其余能力保持原状。
+    _orig_is_supported = module.LocalGitProvider.is_supported
+
+    def is_supported(self, capability):
+        if capability == "gfm_markdown":
+            return True
+        return _orig_is_supported(self, capability)
+
+    module.LocalGitProvider.is_supported = is_supported
