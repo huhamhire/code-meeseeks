@@ -128,7 +128,7 @@ npm --prefix apps/desktop run pack
 └── repos/           # 仓库镜像（默认位置，repos_dir 可改到其它盘）
 ```
 
-数据模型与容错设计见 [modules/03 状态存储与数据模型](../modules/03-state-storage.md)。
+数据模型与容错设计见 [arch/03 状态存储与数据模型](../arch/03-state-storage.md)。
 
 ## 9. 测试约定
 

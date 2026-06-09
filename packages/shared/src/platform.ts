@@ -197,7 +197,7 @@ export interface PrDiffRefs {
 }
 
 /**
- * 平台能力描述符（多平台适配，见 docs/modules/01-platform-adapter.md §2 / §3）。
+ * 平台能力描述符（多平台适配，见 docs/arch/01-platform-adapter.md §2 / §3）。
  * 把无法在所有平台等价实现的能力显式声明，UI 据此 显/隐/灰（降级规则见 §2），业务层据此调策略，
  * 避免在调用处 try/catch 猜或写 `if (platform === ...)`。
  */

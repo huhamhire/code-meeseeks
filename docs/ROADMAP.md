@@ -8,7 +8,7 @@
 > 第三方依赖，不在重命名范围内。
 
 本文件只保留**高层视角**：定位、里程碑状态、风险、下一步。各模块的**设计与实现细节**见
-**[模块设计文档 docs/modules/](modules/README.md)**。
+**[模块设计文档 docs/arch/](modules/README.md)**。
 
 ## 1. 项目定位
 
@@ -46,9 +46,9 @@
 | **M4** 评审 → 发布闭环 | ✅ | findings → 草稿池 → 内联编辑 → 批量发布 + 评论 reply/edit/delete + 合并 |
 | **M5** 打磨 + 多平台 | 🔄 | 持续，见 §3 |
 
-> 详细设计：平台适配见 [01](modules/01-platform-adapter.md)、仓库镜像见 [02](modules/02-repo-mirror.md)、
-> 状态存储见 [03](modules/03-state-storage.md)、pr-agent 运行时见 [04](modules/04-pragent-runtime.md)、
-> 评审闭环见 [05](modules/05-review-workflow.md)、规则见 [06](modules/06-rules.md)、配置见 [07](modules/07-config-and-secrets.md)。
+> 详细设计：平台适配见 [01](arch/01-platform-adapter.md)、仓库镜像见 [02](arch/02-repo-mirror.md)、
+> 状态存储见 [03](arch/03-state-storage.md)、pr-agent 运行时见 [04](arch/04-pragent-runtime.md)、
+> 评审闭环见 [05](arch/05-review-workflow.md)、规则见 [06](arch/06-rules.md)、配置见 [07](arch/07-config-and-secrets.md)。
 
 ---
 
@@ -93,11 +93,11 @@
 
 | 风险 / 议题 | 应对 |
 | --- | --- |
-| pr-agent 升级破坏输出格式 | 输出解析层独立 + shim 版本守卫（见 [04](modules/04-pragent-runtime.md)）；CI 跑兼容测试 |
-| 大型 PR 性能 / diff 截断 | Diff 走本地 git（不用平台截断端点）+ Monaco 懒加载 + 大文件跳过（见 [02](modules/02-repo-mirror.md)） |
+| pr-agent 升级破坏输出格式 | 输出解析层独立 + shim 版本守卫（见 [04](arch/04-pragent-runtime.md)）；CI 跑兼容测试 |
+| 大型 PR 性能 / diff 截断 | Diff 走本地 git（不用平台截断端点）+ Monaco 懒加载 + 大文件跳过（见 [02](arch/02-repo-mirror.md)） |
 | 大型仓库挤爆磁盘 | `repos_dir` 可配置 + 设置页显示体积 + 清理 |
-| 明文凭据（config.yaml） | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留 keytar（见 [07](modules/07-config-and-secrets.md)） |
-| JSON 状态文件膨胀 | 监控单文件大小；触发条件达成切 SQLite（见 [03](modules/03-state-storage.md)） |
+| 明文凭据（config.yaml） | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留 keytar（见 [07](arch/07-config-and-secrets.md)） |
+| JSON 状态文件膨胀 | 监控单文件大小；触发条件达成切 SQLite（见 [03](arch/03-state-storage.md)） |
 | LLM 调用成本 | token 用量统计已做；规则层可控 max_tokens / 模型分级 |
 
 ---
