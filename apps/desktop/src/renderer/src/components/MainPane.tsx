@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import type {
   LocalPrStatus,
   PlatformCapabilities,
@@ -9,7 +9,9 @@ import { invoke } from '../api';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { CommentsPanel } from './CommentsPanel';
 import { CommitsPanel } from './CommitsPanel';
-import { DiffView } from './DiffView';
+// Monaco 编辑器（~10MB）懒加载：只有真正切到 Diff tab 才拉取 DiffView chunk，
+// 不阻塞窗口首帧 / PR 列表 / 首启向导。
+const DiffView = lazy(() => import('./DiffView').then((m) => ({ default: m.DiffView })));
 import { DraftsPanel } from './DraftsPanel';
 import { PrInfoView } from './PrInfoView';
 import { PublishReviewModal } from './PublishReviewModal';
@@ -500,14 +502,16 @@ export function MainPane({
       </nav>
       <div className="pr-tab-content">
         {tab === 'diff' && (
-          <DiffView
-            pr={pr}
-            renderSideBySide={renderSideBySide}
-            showBlame={showBlame}
-            showWhitespace={showWhitespace}
-            pendingNav={pendingDiffNav ?? null}
-            onNavConsumed={onDiffNavConsumed}
-          />
+          <Suspense fallback={<div className="pane-loading muted">加载编辑器…</div>}>
+            <DiffView
+              pr={pr}
+              renderSideBySide={renderSideBySide}
+              showBlame={showBlame}
+              showWhitespace={showWhitespace}
+              pendingNav={pendingDiffNav ?? null}
+              onNavConsumed={onDiffNavConsumed}
+            />
+          </Suspense>
         )}
         {tab === 'comments' && (
           <CommentsPanel pr={pr} onCommentsLoaded={(n) => setCommentCount(n)} />

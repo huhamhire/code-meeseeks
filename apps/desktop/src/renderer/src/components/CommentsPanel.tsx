@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -11,7 +11,10 @@ import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from './ConfirmModal';
-import { InlineCodeContext } from './InlineCodeContext';
+// 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
+const InlineCodeContext = lazy(() =>
+  import('./InlineCodeContext').then((m) => ({ default: m.InlineCodeContext })),
+);
 
 interface CommentsPanelProps {
   pr: StoredPullRequest;
@@ -205,7 +208,9 @@ function CommentItem({
           replies (depth > 0) 不重复展示，避免冗余 —— 父评论已经给了上下文。
           autoExpandCode 由父组件按"最新 N 条"决定，超额条目用户点开才挂 editor */}
       {comment.anchor && depth === 0 && (
-        <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
+        <Suspense fallback={<div className="pane-loading muted">加载代码上下文…</div>}>
+          <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
+        </Suspense>
       )}
       {/* 编辑态：textarea 占位替换 markdown 正文；非编辑态：渲染 markdown */}
       {editOpen && typeof comment.version === 'number' ? (

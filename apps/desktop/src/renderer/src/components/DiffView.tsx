@@ -1,4 +1,7 @@
- import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// 必须在用到 @monaco-editor/react 之前执行（loader.config 指向本地 monaco）。
+// 本文件经 React.lazy 动态加载，故 Monaco 随本 chunk 按需拉取，不进入口包。
+import '../monaco-setup';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { DiffEditor } from '@monaco-editor/react';
 import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';

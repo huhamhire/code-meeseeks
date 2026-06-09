@@ -19,6 +19,17 @@
   padding: 24px;
 }
 
+// Monaco 懒加载 chunk 拉取期间的占位（DiffView / InlineCodeContext 的 Suspense fallback）
+.pane-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  height: 100%;
+  padding: 24px;
+  font-size: 13px;
+}
+
 .pr-header {
   padding: $space-6 20px $space-5;
   border-bottom: 1px solid $border-default;

@@ -2,7 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { addCollection } from '@iconify/react';
 import materialIconTheme from '@iconify-json/material-icon-theme/icons.json';
-import './monaco-setup';
+// 注意：Monaco（~10MB）不在入口加载。monaco-setup 已移进 DiffView / InlineCodeContext
+// 两个懒模块，仅在首次看 diff / 行内代码上下文时才拉取，避免阻塞窗口首帧。
 import App from './App';
 import './App.scss';
 
