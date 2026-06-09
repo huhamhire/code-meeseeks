@@ -12,7 +12,7 @@ apps/desktop/
 │   ├── main/              # 主进程：index.ts(启动/单例锁) · ipc.ts(IPC handlers) · adapters.ts · utils/
 │   ├── preload/           # contextBridge 暴露泛型 invoke()
 │   └── renderer/src/      # React 渲染层（components/ 等）
-├── scripts/               # assemble-pragent-runtime.mjs · sitecustomize.py(shim) · pragent-runtime.json
+├── scripts/               # assemble-pragent-runtime.mjs · pragent-shim/(shim) · pragent-runtime.json
 ├── build-resources/       # after-pack.cjs(ad-hoc 签名) · entitlements.mac.plist
 ├── electron-builder.yml
 └── vendor/pragent/        # 嵌入式运行时（gitignored，由 prepare:pragent 生成）
@@ -72,9 +72,10 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 ## 工程维护坑
 
 - **嵌入式 pr-agent 运行时**（[modules/04](docs/arch/04-pragent-runtime.md)）：`apps/desktop/scripts/assemble-pragent-runtime.mjs` 按 `pragent-runtime.json` 把可重定位 CPython + pinned pr-agent 装到 `apps/desktop/vendor/pragent/`（gitignored）。
-- **monkeypatch shim** `apps/desktop/scripts/sitecustomize.py`（对 pr-agent 的无侵入补丁）：
+- **monkeypatch shim** `apps/desktop/scripts/pragent-shim/`（薄加载器 `sitecustomize.py` + 领域拆分包 `meebox_pragent_shim/`：`patches/` 各 patch + `cli/` 本地 CLI provider + `runtime.py`/`usage.py`。对 pr-agent 的无侵入补丁）：
   - 改了它，跑一次 `npm --prefix apps/desktop run prepare:pragent` 即重新同步进 vendor（幂等跳过分支也会同步 shim），**无需 `--force` 全量重建**。
-  - 受版本守卫：`_EXPECTED_PRAGENT_VERSION` 必须等于 `pragent-runtime.json` 的 `prAgent.version`（assemble 构建期强校验，运行期不符则跳过补丁 + stderr WARNING）。升级 pr-agent 要同步两处并重新验证。
+  - 受版本守卫：`meebox_pragent_shim/runtime.py` 的 `_EXPECTED_PRAGENT_VERSION` 必须等于 `pragent-runtime.json` 的 `prAgent.version`（assemble 构建期强校验，运行期不符则跳过补丁 + stderr WARNING）。升级 pr-agent 要同步两处并重新验证。
+  - **拆分铁律**：各 patch 对 `pr_agent` 的 import 一律放在 patch 函数体内（惰性）；模块顶层只 import 同包内的 runtime/usage 等，**绝不在顶层 import pr_agent**（否则 sitecustomize 阶段即 eager 加载，拖慢每次 python 启动）。
   - 调试：`MEEBOX_SHIM_DEBUG=1` 让 shim 打 stderr 调试。
 - **二进制资源走 Git LFS**（`*.png/.ico/.icns` 等）：本地没装 git-lfs 时拿到的是指针文件，electron-builder 转图标会崩 → `brew install git-lfs && git lfs pull`。
 - **dev 起不来**：若 `npm run dev` 报 `electron does not provide an export named …`，是环境里有 `ELECTRON_RUN_AS_NODE=1`（VSCode 扩展宿主会注入）→ `unset ELECTRON_RUN_AS_NODE` 再跑。

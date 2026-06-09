@@ -144,7 +144,7 @@ export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
     case 'cli': {
       // 本地 CLI 模式：不直连任何 API，也不下发任何密钥。仅打两个哨兵 env 让
       // sitecustomize shim 在 pr-agent 进程内把 LiteLLMAIHandler.chat_completion
-      // 整体换成「调本机 CLI 子进程」版本（见 scripts/sitecustomize.py）。
+      // 整体换成「调本机 CLI 子进程」版本（见 scripts/pragent-shim/meebox_pragent_shim/cli/）。
       //   MEEBOX_CLI_MODE=1   —— 开关；非空即启用 CLI 接管
       //   MEEBOX_CLI_BIN=claude —— 要调用的命令名（一期仅 claude；shim 用 which 解析真实路径）
       // CLI 进程经子进程继承父 env（含 PATH / HOME），故能找到 claude 二进制并读到

@@ -6,7 +6,7 @@
 //   3. 下载 tar.gz + 其 .sha256 sidecar，校验完整性
 //   4. 清空 vendor/pragent → 解压（得到 vendor/pragent/python/...）
 //   5. 用嵌入式解释器 pip install pr-agent==<ver>（装进它自己隔离的 site-packages）
-//   6. 把 sitecustomize.py shim 拷进 site-packages
+//   6. 把 shim（sitecustomize.py 薄加载器 + meebox_pragent_shim 包）拷进 site-packages
 //   7. 写 VERSION，做 `import pr_agent` 冒烟
 //
 // 设计：零系统二进制依赖（不依赖 curl / 系统 tar）。
@@ -21,7 +21,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
@@ -34,7 +34,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_DIR = resolve(__dirname, '..'); // apps/desktop
 const VENDOR_DIR = join(APP_DIR, 'vendor', 'pragent');
 const MANIFEST_PATH = join(__dirname, 'pragent-runtime.json');
-const SHIM_PATH = join(__dirname, 'sitecustomize.py');
+// shim 源在 pragent-shim/：薄加载器 sitecustomize.py + 领域拆分包 meebox_pragent_shim/。
+const SHIM_DIR = join(__dirname, 'pragent-shim');
+const SHIM_PKG_NAME = 'meebox_pragent_shim';
+const SHIM_LOADER = join(SHIM_DIR, 'sitecustomize.py');
+const SHIM_RUNTIME = join(SHIM_DIR, SHIM_PKG_NAME, 'runtime.py'); // _EXPECTED_PRAGENT_VERSION 所在
 const UA = 'meebox-runtime-assembler';
 
 const FORCE = process.argv.includes('--force') || process.env.MEEBOX_PRAGENT_FORCE === '1';
@@ -160,16 +164,23 @@ function pythonStdout(pythonExe, code) {
 }
 
 /**
- * 把 sitecustomize.py shim 拷进嵌入式解释器的 site-packages（CPython 启动经 site 自动
- * import）。很轻量，故即便幂等跳过整体重建也会重跑一次——本地改了 shim 跑一次
- * prepare:pragent 就生效，无需 --force 全量重建。返回 site-packages 路径。
+ * 把 shim 拷进嵌入式解释器的 site-packages（CPython 启动经 site 自动 import sitecustomize）：
+ * 薄加载器 sitecustomize.py + 领域拆分包 meebox_pragent_shim/。很轻量，故即便幂等跳过整体
+ * 重建也会重跑一次——本地改了 shim 跑一次 prepare:pragent 就生效，无需 --force 全量重建。
+ * 先清旧包目录再整体拷，避免改名/删文件后残留陈旧模块。返回 site-packages 路径。
  */
 async function syncShim(pythonExe) {
   const sitePackages = pythonStdout(
     pythonExe,
     'import sysconfig;print(sysconfig.get_paths()["purelib"])',
   );
-  await writeFile(join(sitePackages, 'sitecustomize.py'), await readFile(SHIM_PATH));
+  await writeFile(join(sitePackages, 'sitecustomize.py'), await readFile(SHIM_LOADER));
+  const pkgDst = join(sitePackages, SHIM_PKG_NAME);
+  await rm(pkgDst, { recursive: true, force: true });
+  await cp(join(SHIM_DIR, SHIM_PKG_NAME), pkgDst, {
+    recursive: true,
+    filter: (src) => !src.includes('__pycache__') && !src.endsWith('.pyc'),
+  });
   return sitePackages;
 }
 
@@ -199,16 +210,16 @@ async function main() {
   const { triple, pythonRel } = hostTarget();
   const pythonExe = join(VENDOR_DIR, ...pythonRel);
 
-  // 守卫：sitecustomize.py 的 monkeypatch 依赖 pr-agent 特定版本的内部实现，shim 里用
+  // 守卫：shim 的 monkeypatch 依赖 pr-agent 特定版本的内部实现，runtime.py 里用
   // _EXPECTED_PRAGENT_VERSION 做运行期版本守卫。这里在构建期强制它与 manifest pin 的版本
   // 一致——升级 pr-agent 时必须同步两处 + 重新验证 patch，否则直接 fail 不让出包。
-  const shimSrc = await readFile(SHIM_PATH, 'utf8');
+  const shimSrc = await readFile(SHIM_RUNTIME, 'utf8');
   const shimVer = /_EXPECTED_PRAGENT_VERSION\s*=\s*["']([^"']+)["']/.exec(shimSrc)?.[1];
-  if (!shimVer) fail(`sitecustomize.py 未找到 _EXPECTED_PRAGENT_VERSION 常量`);
+  if (!shimVer) fail(`meebox_pragent_shim/runtime.py 未找到 _EXPECTED_PRAGENT_VERSION 常量`);
   if (shimVer !== prAgentVersion)
     fail(
       `shim 版本(${shimVer}) ≠ manifest pr-agent(${prAgentVersion})；升级 pr-agent 时同步 ` +
-        `sitecustomize.py 的 _EXPECTED_PRAGENT_VERSION 并重新验证 monkeypatch`,
+        `runtime.py 的 _EXPECTED_PRAGENT_VERSION 并重新验证 monkeypatch`,
     );
 
   const versionKey = `pbs:${tag} py:${mm} triple:${triple} pr-agent:${prAgentVersion}`;
@@ -275,9 +286,9 @@ async function main() {
     `pr-agent==${prAgentVersion}`,
   ]);
 
-  // 6. 注入 sitecustomize shim
+  // 6. 注入 shim（薄加载器 sitecustomize.py + meebox_pragent_shim 包）
   const sitePackages = await syncShim(pythonExe);
-  log(`已注入 sitecustomize.py → ${sitePackages}`);
+  log(`已注入 shim（sitecustomize.py + meebox_pragent_shim/）→ ${sitePackages}`);
   // 7. 组装期补空 .secrets.toml 占位，烤进 vendor（只读安装目录运行期也无需再写）
   await ensureSecretsPlaceholders(sitePackages);
   log('已写入 pr_agent/settings(_prod)/.secrets.toml 空占位');
@@ -285,6 +296,9 @@ async function main() {
   // 7. 冒烟 + 写 VERSION
   const prAgentFile = pythonStdout(pythonExe, 'import pr_agent;print(pr_agent.__file__)');
   log(`冒烟 OK：import pr_agent → ${prAgentFile}`);
+  // shim 包冒烟：import 不应触发 pr_agent eager 加载，import 报错则不让出包
+  pythonStdout(pythonExe, 'import meebox_pragent_shim');
+  log('冒烟 OK：import meebox_pragent_shim');
   await writeFile(
     versionFile,
     `${JSON.stringify({ key: versionKey, asset: asset.name, sha256: actualSha, builtOn: `${process.platform}/${process.arch}` }, null, 2)}\n`,

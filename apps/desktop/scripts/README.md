@@ -22,7 +22,8 @@ apps/desktop/vendor/pragent/         # gitignore，不入库
 ├── python/                          # python-build-standalone（含 pip/stdlib/ssl）
 │   └── .../site-packages/
 │       ├── pr_agent/ ...            # pip install pr-agent==<manifest 版本>
-│       └── sitecustomize.py         # monkeypatch shim（无侵入补丁，见 docs/arch/04-pragent-runtime.md）
+│       ├── sitecustomize.py         # 薄加载器（CPython 启动经 site 自动 import）
+│       └── meebox_pragent_shim/     # monkeypatch shim 包（无侵入补丁，见 docs/arch/04-pragent-runtime.md）
 └── VERSION                          # 组装指纹（幂等判定 + 记录 sha256）
 ```
 
