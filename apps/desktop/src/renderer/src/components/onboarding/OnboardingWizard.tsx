@@ -11,7 +11,7 @@ import {
 import { LLM_PROVIDERS, LlmProfileForm, newProfileId } from '../LlmProfileForm';
 import { LlmProviderIcon } from '../LlmProviderIcon';
 import { PLATFORM_META } from '../PlatformIcon';
-import { FolderIcon } from '../icons';
+import { FolderIcon, PullRequestIcon, SuccessBadgeIcon } from '../icons';
 
 /** 向导收集到的配置，交由 App 落盘（config:setConnections 等）后切入主界面 */
 export interface OnboardingResult {
@@ -194,14 +194,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
   return (
     <div className="onboarding-welcome">
       <div className="onboarding-logo" aria-hidden="true">
-        <svg width="56" height="56" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="4" cy="4" r="1.6" />
-          <circle cx="4" cy="12" r="1.6" />
-          <line x1="4" y1="5.6" x2="4" y2="10.4" />
-          <circle cx="12" cy="12" r="1.6" />
-          <path d="M12 10.4 V7 a3 3 0 0 0 -3 -3 H6.5" />
-          <path d="M8 2 L6 4 L8 6" />
-        </svg>
+        <PullRequestIcon size={56} />
       </div>
       <h2 className="onboarding-title">欢迎使用 Code Meeseeks</h2>
       <p className="onboarding-lead">只需几步配置即可连接你的代码平台。</p>
@@ -410,17 +403,7 @@ function DoneStep({ submitting, error }: { submitting: boolean; error: string | 
   return (
     <div className="onboarding-done">
       <div className="onboarding-done-badge" aria-hidden="true">
-        <svg width="76" height="76" viewBox="0 0 52 52" fill="none">
-          <circle cx="26" cy="26" r="24" stroke="currentColor" strokeWidth="3" opacity="0.35" />
-          <path
-            className="onboarding-check-path"
-            d="M15 27l7.5 7.5L38 18.5"
-            stroke="currentColor"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <SuccessBadgeIcon size={76} />
       </div>
       <h2 className="onboarding-title">一切就绪 🎉</h2>
       <p className="onboarding-lead">

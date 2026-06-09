@@ -15,103 +15,14 @@ const DiffView = lazy(() => import('./DiffView').then((m) => ({ default: m.DiffV
 import { DraftsPanel } from './DraftsPanel';
 import { PrInfoView } from './PrInfoView';
 import { PublishReviewModal } from './PublishReviewModal';
-import { PullRequestIcon } from './icons';
-
-// Globe 网格图标：地球经纬度示意，跟"在远端浏览器打开"语义匹配
-function GlobeIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.5" />
-      <ellipse cx="8" cy="8" rx="3" ry="6.5" />
-      <line x1="1.5" y1="8" x2="14.5" y2="8" />
-    </svg>
-  );
-}
-
-function BlameIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="5" r="2.5" />
-      <path d="M3 13c0-2.5 2.2-4 5-4s5 1.5 5 4" />
-    </svg>
-  );
-}
-
-/** 空白字符显示图标：·→· 暗示 space + tab 可视化 */
-function WhitespaceIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <circle cx="3" cy="8" r="0.8" fill="currentColor" />
-      <path d="M6 8 h6 m-2 -2 l2 2 l-2 2" />
-    </svg>
-  );
-}
-
-function ApproveIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.5" />
-      <path d="M5 8.3l2.2 2.2L11 6.5" />
-    </svg>
-  );
-}
-
-function NeedsWorkIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.5" />
-      <path d="M8 4.5v4.2" />
-      <circle cx="8" cy="11.3" r="0.4" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
+import {
+  ApproveIcon,
+  GlobeIcon,
+  NeedsWorkIcon,
+  PersonIcon,
+  PullRequestIcon,
+  WhitespaceIcon,
+} from './icons';
 
 interface MainPaneProps {
   pr: StoredPullRequest | null;
@@ -475,7 +386,7 @@ export function MainPane({
               title={showBlame ? '关闭追溯显示' : '开启追溯显示（仅 head 侧）'}
               aria-pressed={showBlame}
             >
-              <BlameIcon /> 追溯
+              <PersonIcon /> 追溯
             </button>
             <div className="diff-mode-toggle" role="tablist" aria-label="diff 显示模式">
               <button

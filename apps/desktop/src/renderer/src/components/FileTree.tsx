@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import { Icon } from '@iconify/react';
 import type { DiffChangedFile } from '@meebox/shared';
+import { ChevronIcon } from './icons';
 
 interface FileTreeProps {
   files: DiffChangedFile[];
@@ -105,7 +106,7 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
             }
           }}
         >
-          <ChevronIcon />
+          <ChevronIcon className="tree-chevron" />
           <Icon
             icon={
               isOpen ? 'material-icon-theme:folder-base-open' : 'material-icon-theme:folder-base'
@@ -250,25 +251,6 @@ function computeAggregateStatus(node: TreeFolder): FolderAggregateStatus {
   else if (hasDeleted) node.aggregateStatus = 'deleted';
   else node.aggregateStatus = 'modified';
   return node.aggregateStatus;
-}
-
-function ChevronIcon() {
-  return (
-    <svg
-      className="tree-chevron"
-      width="10"
-      height="10"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="5 3 11 8 5 13" />
-    </svg>
-  );
 }
 
 function fileIconFor(filePath: string): string {

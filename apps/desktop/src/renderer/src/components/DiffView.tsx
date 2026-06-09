@@ -32,6 +32,7 @@ import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from './ConfirmModal';
 import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
+import { FileTreeIcon, SearchIcon } from './icons';
 
 interface DiffViewProps {
   pr: StoredPullRequest;
@@ -2208,44 +2209,3 @@ export function languageFor(filePath: string): string {
   return map[ext] ?? 'plaintext';
 }
 
-/** sidebar header 右侧按钮图标：tree 模式显示放大镜 (进搜索)，search 模式
-    显示文件树小图 (退出搜索)。明示模式切换语义，比"同图标 toggle"更清晰 */
-function FileTreeIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <line x1="3" y1="4" x2="13" y2="4" />
-      <line x1="6" y1="8" x2="13" y2="8" />
-      <line x1="6" y1="12" x2="13" y2="12" />
-      <circle cx="3" cy="8" r="0.5" fill="currentColor" stroke="none" />
-      <circle cx="3" cy="12" r="0.5" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-function SearchIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="7" cy="7" r="4.5" />
-      <line x1="10.5" y1="10.5" x2="13.5" y2="13.5" />
-    </svg>
-  );
-}

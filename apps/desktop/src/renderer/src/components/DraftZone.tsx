@@ -4,6 +4,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { ReviewDraft } from '@meebox/shared';
 import { ConfirmModal } from './ConfirmModal';
+import { TrashIcon } from './icons';
 
 interface DraftZoneProps {
   draft: ReviewDraft;
@@ -521,27 +522,3 @@ export function DraftZone({
   );
 }
 
-/**
- * 14×14 垃圾桶图标，stroke 用 currentColor 跟按钮文字色继承。aria-hidden
- * 由调用方在 button 上加 aria-label
- */
-function TrashIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <path
-        d="M2.5 4h11M6.5 7v5M9.5 7v5M3.5 4l.7 8.5a1 1 0 0 0 1 .9h5.6a1 1 0 0 0 1-.9L12.5 4M6 4V2.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V4"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}

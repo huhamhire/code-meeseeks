@@ -3,6 +3,13 @@ import type { Config, ConnectionSummary, PrAgentStatus } from '@meebox/shared';
 import { invoke } from '../api';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { useRepoSyncStore } from '../stores/repo-sync-store';
+import {
+  PanelToggleIcon,
+  PullRequestIcon,
+  SettingsIcon,
+  SyncIcon,
+  UserIcon,
+} from './icons';
 
 interface StatusBarProps {
   prsCount: number;
@@ -53,7 +60,7 @@ export function StatusBar({
         aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
         aria-pressed={!sidebarCollapsed}
       >
-        <SidebarIcon collapsed={sidebarCollapsed} />
+        <PanelToggleIcon side="left" collapsed={sidebarCollapsed} />
       </button>
       <LastSyncChip at={lastSyncAt} refreshing={refreshing} onRefresh={onRefresh} />
       {/* 当前正在 sync 的 repo (clone/fetch 中)。idle 不渲染，活动时实时显示阶段 +
@@ -83,7 +90,7 @@ export function StatusBar({
         aria-label={chatCollapsed ? '展开 chat' : '收起 chat'}
         aria-pressed={!chatCollapsed}
       >
-        <ChatPanelIcon collapsed={chatCollapsed} />
+        <PanelToggleIcon side="right" collapsed={chatCollapsed} />
       </button>
       <button
         type="button"
@@ -428,25 +435,6 @@ function LlmChip({
   );
 }
 
-/** 镜像版 SidebarIcon：细条在右侧表示 chat 面板 */
-function ChatPanelIcon({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
-    >
-      <rect x="2" y="3" width="12" height="10" rx="1.5" />
-      <line x1="9.5" y1="3" x2="9.5" y2="13" />
-      {collapsed && <rect x="9.5" y="3" width="4.5" height="10" fill="currentColor" />}
-    </svg>
-  );
-}
-
 // 刷新按钮 + 同步状态合并：一个可点击 chip，显示最近同步相对时间 + 同步图标
 // （刷新中旋转），点击触发一次轮询。
 function LastSyncChip({
@@ -485,32 +473,6 @@ function LastSyncChip({
       <SyncIcon />
       {label}
     </button>
-  );
-}
-
-// 同步图标 (Lucide refresh-cw-2 风格)：两段相反方向的曲线箭头形成"循环"语义。
-// 跟刷新按钮的 RefreshIcon (单根近似闭环箭头) 视觉区分 —— 一个表"状态/已同步"，
-// 一个表"重新触发同步动作"
-function SyncIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {/* 上半圈：左下→右上的箭头 */}
-      <path d="M3 6.5a5 5 0 0 1 9-1.5" />
-      <polyline points="12 2 12 5 9 5" />
-      {/* 下半圈：右上→左下的箭头 */}
-      <path d="M13 9.5a5 5 0 0 1-9 1.5" />
-      <polyline points="4 14 4 11 7 11" />
-    </svg>
   );
 }
 
@@ -575,89 +537,3 @@ function UserChip({ connections }: { connections: ConnectionSummary[] }) {
   );
 }
 
-function UserIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
-}
-
-function SidebarIcon({ collapsed }: { collapsed: boolean }) {
-  // 矩形 + 左侧细条标识"侧栏"；collapsed 时细条变实心、矩形变阴影感
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
-    >
-      <rect x="2" y="3" width="12" height="10" rx="1.5" />
-      <line x1="6.5" y1="3" x2="6.5" y2="13" />
-      {collapsed && <rect x="2" y="3" width="4.5" height="10" fill="currentColor" />}
-    </svg>
-  );
-}
-
-// Octicon git-pull-request 风格：源分支圆点 → 弯到右侧 → 目标分支带箭头。
-// 两节点 + 弧形连接，跟 GitHub 状态徽章对齐，用户一眼能识别"PR"
-function PullRequestIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {/* 左侧分支竖线 */}
-      <line x1="4" y1="4.5" x2="4" y2="11.5" />
-      {/* 源分支圆点 (顶) */}
-      <circle cx="4" cy="3" r="1.5" />
-      {/* 源分支圆点 (底) */}
-      <circle cx="4" cy="13" r="1.5" />
-      {/* 右侧目标分支圆点 + 短线 */}
-      <circle cx="12" cy="13" r="1.5" />
-      <line x1="12" y1="4.5" x2="12" y2="11.5" />
-      {/* 顶部弧线：从 4,1 经过 12,1 落到 12,4 (合并目标分支的"头") */}
-      <path d="M5.5 3 H10.5 A1.5 1.5 0 0 1 12 4.5" />
-    </svg>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
