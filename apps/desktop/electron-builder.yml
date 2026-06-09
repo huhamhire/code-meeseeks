@@ -57,6 +57,10 @@ extraResources:
   # 在 electron-builder 之前生成（见 dist/pack 脚本与 release workflow）。仓库不入库该文件。
   - from: ../../THIRD-PARTY-NOTICES.md
     to: THIRD-PARTY-NOTICES.md
+  # 启动闪屏 logo：assets 不进 asar / 不随 out 打包，单独 copy 到 <resources>/icon.png，
+  # 供 main 进程 createSplash 运行时读取并 base64 内联到 splash data URL。
+  - from: ../../assets/icons/icon.png
+    to: icon.png
 
 win:
   # 图标源放在资源目录 assets/icons/（build/ 被 gitignore，不用它）。含 16/32/48/256。

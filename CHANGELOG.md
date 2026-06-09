@@ -26,6 +26,8 @@
 - 全仓内部命名统一为 **Bitbucket**，去除 `BBS` / `BB` 等歧义缩写（纯改名，无行为变化）。
 - 架构设计文档目录 `docs/modules/` → `docs/arch/`，统一定位为「架构设计文档」。
 - **启动提速**：
+  - 新增启动闪屏（splash）：独立轻量窗口几十 ms 即呈现品牌 logo + 名称 + spinner，
+    遮住主窗口首帧前的渲染层加载空窗；主窗口首帧就绪即关闭、无缝切入。
   - Monaco 编辑器（~7.3MB）改为懒加载——DiffView / InlineCodeContext 经 `React.lazy`
     按需拉取，渲染入口包从 ~10MB 降到 ~2.6MB，窗口外壳（加载页 / 首启向导 / PR 列表）
     不再等 Monaco 解析即可呈现；首次看 diff 时才加载，首启无连接时完全不加载。
