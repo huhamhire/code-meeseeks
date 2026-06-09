@@ -204,29 +204,22 @@ def _emit_usage_tokens(prompt_tokens, completion_tokens) -> None:
         _debug(f"emit cli usage failed (ignored): {exc}")
 
 
-def _cli_argv(bin_name):
-    """把用户填的 CLI 命令名（一期 claude）解析成可执行 argv 前缀（不含 prompt——prompt 走 stdin）。
-    用 shutil.which 解析真实路径：Windows 上据 PATHEXT 命中 `claude.cmd`，而 .cmd/.bat 不能被
-    CreateProcess 直接拉起，须经 `cmd /c`；类 Unix 直接用解析到的可执行。找不到返回 None。
-
-    固定 flags：`-p`（print 单轮非交互）+ `--output-format json`（一段 JSON 同时含结果文本与
-    token usage）。刻意不传 `--model`：用用户本地 claude 的默认模型与登录态，不在这里假设可用型号。"""
+def _resolve_cli_exe(bin_name):
+    """用 shutil.which 解析命令真实路径。Windows 据 PATHEXT 命中 .cmd/.bat（不能被 CreateProcess
+    直接拉起，须经 cmd /c）。返回 (exe_path_or_None, needs_cmd_wrapper)。"""
     import shutil
 
     exe = shutil.which(bin_name)
     if not exe:
-        return None
-    flags = ["-p", "--output-format", "json"]
-    if sys.platform == "win32" and exe.lower().endswith((".cmd", ".bat")):
-        return ["cmd", "/c", exe] + flags
-    return [exe] + flags
+        return None, False
+    needs_cmd = sys.platform == "win32" and exe.lower().endswith((".cmd", ".bat"))
+    return exe, needs_cmd
 
 
-def _parse_cli_output(stdout):
-    """解析 `claude --output-format json` 的 stdout，返回 (text, usage_dict_or_None)。
+def _parse_claude_output(stdout):
+    """解析 `claude -p --output-format json` 的 stdout，返回 (text, usage_dict_or_None)。
     成功形如 {"result": "...", "usage": {"input_tokens":..,"output_tokens":..}, "is_error": false}。
-    非 JSON / 缺字段一律退化为「整段 stdout 当文本、usage=None」，保证 review 仍拿得到内容；
-    仅 is_error=True 时抛错让上层报错。"""
+    非 JSON / 缺字段退化为「整段 stdout 当文本、usage=None」；仅 is_error=True 时抛错。"""
     import json
 
     s = (stdout or "").strip()
@@ -234,7 +227,7 @@ def _parse_cli_output(stdout):
         return "", None
     try:
         obj = json.loads(s)
-    except Exception:  # noqa: BLE001 - 非 JSON（纯文本/旧版本输出）→ 原样当文本
+    except Exception:  # noqa: BLE001 - 非 JSON → 原样当文本
         return s, None
     if not isinstance(obj, dict):
         return s, None
@@ -247,43 +240,93 @@ def _parse_cli_output(stdout):
     return text, (usage if isinstance(usage, dict) else None)
 
 
+def _parse_codex_output(stdout):
+    """解析 `codex exec --json` 的 JSONL 事件流，返回 (text, usage_dict_or_None)：
+      - type==item.completed 且 item.type==agent_message → item.text 为模型回复，取最后一条；
+      - type==turn.completed → usage {input_tokens, output_tokens} 为 token。
+    逐行容错：非 JSON 行跳过、事件缺字段不致命；text 缺失退到空串（让上层 load_yaml 兜底）。"""
+    import json
+
+    text = None
+    usage = None
+    for line in (stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except Exception:  # noqa: BLE001 - 非 JSON 行（日志等）跳过
+            continue
+        if not isinstance(ev, dict):
+            continue
+        etype = ev.get("type")
+        if etype == "item.completed":
+            item = ev.get("item")
+            if isinstance(item, dict) and item.get("type") == "agent_message":
+                txt = item.get("text")
+                if isinstance(txt, str):
+                    text = txt  # 取最后一条 agent_message 作最终回复
+        elif etype == "turn.completed":
+            u = ev.get("usage")
+            if isinstance(u, dict):
+                usage = u
+    return (text if isinstance(text, str) else ""), usage
+
+
+# 已适配的本机 CLI 命令规格：argv flags（prompt 一律走 stdin）+ 输出解析器 + 需剥离的计费 env。
+# 新增命令在此登记一套即可；renderer 侧白名单校验须同步（见 LlmProfileForm.validateProfile）。
+_CLI_SPECS = {
+    # claude：-p 单轮非交互 + JSON（一段含结果与 usage）；不传 --model，用本机默认模型/登录态。
+    "claude": {
+        "flags": ["-p", "--output-format", "json"],
+        "parser": _parse_claude_output,
+        "strip_env": ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
+    },
+    # codex：exec 非交互 + --json（JSONL 事件流）；末位 `-` 让 stdin 作完整 prompt；
+    # --skip-git-repo-check 容许临时目录运行，--sandbox read-only 只读不改文件。
+    "codex": {
+        "flags": ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only", "-"],
+        "parser": _parse_codex_output,
+        "strip_env": ("OPENAI_API_KEY", "CODEX_API_KEY"),
+    },
+}
+
+
 def _install_cli_chat_completion(handler_cls, bin_name) -> None:
     """CLI 模式把 LiteLLMAIHandler.chat_completion 整体替换成「调本机 CLI 子进程」版本，完全绕过
     litellm / 直连 API。pr-agent 只依赖 chat_completion 返回 (text, finish_reason) 这个稳定契约
-    （base_ai_handler 定义），故本替换与 pr-agent 具体版本无关，**不受版本守卫限制**（区别于本模块
-    其它两个依赖内部实现的补丁）。
+    （base_ai_handler 定义），故本替换与 pr-agent 具体版本无关，**不受版本守卫限制**。
 
-    要点：
-      - prompt 经 **stdin** 喂入：pr-agent 的 review prompt 含完整 diff，动辄数十 KB，走 argv 会撞
-        OS 命令行长度上限（Windows ~32KB）。
-      - system / user 拼成一段：CLI 单轮没有独立 system 槽，按 pr-agent 对 user_message_only_models
-        的同款处理 `f"{system}\\n\\n\\n{user}"` 合并。
-      - cwd 落到中性临时目录：避免 claude 吃到被评审仓库的 CLAUDE.md / .claude 上下文，污染输出。
-      - 子进程继承父 env（PATH / HOME），故能找到 claude 二进制并复用 ~/.claude 登录态；其中
-        HTTP(S)_PROXY / NO_PROXY（来自 buildProxyEnv，已在父进程 env 里）原样继承 → claude 出站
-        自动走用户配置的代理，无需在此另设。
-      - **凭据隔离**：从子进程 env 剥掉 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN，让 CLI 使用其自身的
-        登录会话，而非本机环境里残留的 API key（否则会覆盖 CLI 的登录方式）。模型与额度由该 CLI 的账户
-        与用户授权决定。"""
+    各命令差异（argv flags / 输出解析 / 需剥离的计费 env）集中在 _CLI_SPECS，按命令名取用：
+      - prompt 经 **stdin** 喂入：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；
+        system / user 拼成一段（CLI 单轮无独立 system 槽）。
+      - cwd 落到中性临时目录：避免吃到被评审仓库的上下文（CLAUDE.md / AGENTS.md 等）污染输出。
+      - 子进程继承父 env（PATH / HOME / 代理变量），故能找到命令、复用其登录态、出站自动走代理。
+      - **凭据隔离**：剥掉对应计费 key（claude: ANTHROPIC_*；codex: OPENAI_API_KEY / CODEX_API_KEY），
+        让 CLI 使用其自身登录会话，而非环境里残留的 API key。模型与额度由该 CLI 账户与用户授权决定。"""
     import asyncio
     import tempfile
 
-    argv_prefix = _cli_argv(bin_name)
-    # 剥掉这些 env，让 CLI 使用其自身登录会话，而非环境里残留的 API key（避免覆盖其登录方式）。
-    _STRIP_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+    name = (bin_name or "").strip().lower()
+    spec = _CLI_SPECS.get(name)
+    exe, needs_cmd = _resolve_cli_exe(bin_name) if spec else (None, False)
+    argv = ((["cmd", "/c", exe] if needs_cmd else [exe]) + spec["flags"]) if (spec and exe) else None
 
     async def chat_completion(self, model, system, user, temperature=0.2, img_path=None):
-        if argv_prefix is None:
+        if spec is None:
             raise RuntimeError(
-                f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装 Claude Code、完成登录，"
-                f"且 '{bin_name}' 在 PATH 中。"
+                f"不支持的本地 CLI 命令 '{bin_name}'（当前已适配 claude / codex）。"
+            )
+        if argv is None:
+            raise RuntimeError(
+                f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装、已登录，且 '{bin_name}' 在 PATH 中。"
             )
         prompt = f"{system}\n\n\n{user}" if system else user
         # 基于 os.environ 拷贝再剔除计费 key——其余（PATH/HOME/代理变量等）原样保留。
-        child_env = {k: v for k, v in os.environ.items() if k not in _STRIP_ENV}
+        child_env = {k: v for k, v in os.environ.items() if k not in spec["strip_env"]}
         try:
             proc = await asyncio.create_subprocess_exec(
-                *argv_prefix,
+                *argv,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -298,9 +341,9 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
                 f"CLI '{bin_name}' 退出码 {proc.returncode}: "
                 f"{(err or b'').decode('utf-8', 'replace')[:500]}"
             )
-        text, usage = _parse_cli_output((out or b"").decode("utf-8", "replace"))
+        text, usage = spec["parser"]((out or b"").decode("utf-8", "replace"))
         if usage:
-            # claude usage：input_tokens(+cache_*) ≈ prompt，output_tokens ≈ completion
+            # input_tokens(+cache_*) ≈ prompt，output_tokens ≈ completion（两家 usage 同字段名）
             prompt_tokens = usage.get("input_tokens")
             for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
                 v = usage.get(k)

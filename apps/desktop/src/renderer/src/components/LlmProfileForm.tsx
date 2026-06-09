@@ -65,15 +65,7 @@ export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     defaultBaseUrl: 'http://localhost:11434',
     needsKey: false,
   },
-  {
-    value: 'cli',
-    label: '本地 CLI（Claude Code）',
-    hint: '由本机已安装并登录的 Claude Code 命令行执行评审，不直连 API、不填密钥；使用的模型与额度取决于你本地 claude 的登录态。一期仅支持 claude（codex 待后续版本）。',
-    modelExample: 'claude',
-    defaultBaseUrl: '',
-    needsKey: false,
-  },
-  // 「OpenAI 兼容」放最后：它是兜底通用项，主流程让用户先扫读具名 provider
+  // 「OpenAI 兼容」：兜底通用项，主流程让用户先扫读具名 provider
   {
     value: 'openai-compatible',
     label: 'OpenAI 兼容',
@@ -81,6 +73,15 @@ export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     modelExample: 'gpt-4o-mini / qwen2.5-72b-instruct',
     defaultBaseUrl: '',
     needsKey: true,
+  },
+  // 「本地 CLI」放最后：进阶项，转交本机命令行工具代调模型，不直连 API
+  {
+    value: 'cli',
+    label: '本地 CLI',
+    hint: '将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。',
+    modelExample: '命令名',
+    defaultBaseUrl: '',
+    needsKey: false,
   },
 ];
 
@@ -128,12 +129,13 @@ export function validateProfile(p: LlmProfile, existing: LlmProfile[]): ProfileE
     if (dup) errors.label = '名称已存在';
   }
 
-  // cli：model 字段填的是本机命令名（claude），无 base_url / api_key 概念。
-  // 一期只放行 claude；codex 等先在 UI 可输入但校验拦下，等后续版本接通。
+  // cli：model 字段填的是本机命令名，无 base_url / api_key 概念。隐藏校验——只放行已适配的
+  // 命令（claude / codex，与 sitecustomize 的 _CLI_SPECS 同步），其余命令运行时无对应规格、跑不通。
+  // 提示不点名受支持的命令（保持隐晦），仅给通用的「不受支持」反馈。
   if (p.provider === 'cli') {
     const cmd = p.model.trim().toLowerCase();
     if (!cmd) errors.model = '必填';
-    else if (cmd !== 'claude') errors.model = '一期仅支持 claude（codex 待后续版本）';
+    else if (cmd !== 'claude' && cmd !== 'codex') errors.model = '不受支持的 CLI 工具';
     return errors;
   }
 
@@ -243,7 +245,7 @@ export function LlmProfileForm({
             value={draft.model}
             onChange={(e) => update('model', e.target.value)}
             onBlur={() => markTouched('model')}
-            placeholder={isCli ? 'claude（一期仅支持 claude）' : providerMeta.modelExample}
+            placeholder={isCli ? '命令名' : providerMeta.modelExample}
           />
           {showError('model') && <p className="settings-field-error">{errors.model}</p>}
         </div>
@@ -295,8 +297,8 @@ export function LlmProfileForm({
       </div>
       {isCli && (
         <p className="muted modal-footer">
-          ⚠️ 填写并启用此预设，即代表你授权 Code Meeseeks 调用本机的 <code>{draft.model.trim() || 'claude'}</code>{' '}
-          命令行工具执行评审操作（在子进程中以你的本地登录态运行）。请确认已安装 Claude Code 并完成登录。
+          ⚠️ 填写并启用此预设，即代表你授权 Code Meeseeks 调用本机的 <code>{draft.model.trim() || '命令行'}</code>{' '}
+          工具执行评审操作（在子进程中以你的本地登录态运行）。请确认对应命令已安装并完成登录。
         </p>
       )}
       <p className="muted modal-footer">{providerMeta.hint}</p>
