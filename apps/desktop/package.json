@@ -1,6 +1,6 @@
 {
   "name": "@meebox/desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "meebox Electron desktop app",
   "author": {
@@ -74,6 +74,7 @@
     "@meebox/state-store": "*",
     "@monaco-editor/react": "^4.7.0",
     "anser": "^2.3.5",
+    "mermaid": "^11.4.0",
     "monaco-editor": "^0.55.0",
     "pino": "^9.5.0",
     "pino-roll": "^3.0.0",

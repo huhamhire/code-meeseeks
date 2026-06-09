@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
 import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
+import { mermaidComponents } from './markdownMermaid';
 
 interface PrInfoViewProps {
   pr: StoredPullRequest;
@@ -18,7 +19,7 @@ function ReviewerStatusTag({ status }: { status: ReviewerStatus }) {
 export function PrInfoView({ pr }: PrInfoViewProps) {
   // 描述 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)，与评论/diff 一致
   const mdComponents = useMemo(
-    () => ({ img: makeBitbucketImageFor(pr.localId) }),
+    () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId) }),
     [pr.localId],
   );
 

@@ -11,6 +11,7 @@ import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from './ConfirmModal';
+import { mermaidComponents } from './markdownMermaid';
 // 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
 const InlineCodeContext = lazy(() =>
   import('./InlineCodeContext').then((m) => ({ default: m.InlineCodeContext })),
@@ -146,7 +147,7 @@ function CommentItem({
 }) {
   // 评论 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)
   const mdComponents = useMemo(
-    () => ({ img: makeBitbucketImageFor(pr.localId) }),
+    () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId) }),
     [pr.localId],
   );
   const [replyOpen, setReplyOpen] = useState(false);
