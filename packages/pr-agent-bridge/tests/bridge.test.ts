@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DockerBridge, EmbeddedRuntimeBridge, LocalCliBridge } from '../src/bridge.js';
+import { EmbeddedRuntimeBridge, LocalCliBridge } from '../src/bridge.js';
 import type { ExecFn, ExecOptions, PrAgentRunResult } from '../src/types.js';
 
 /** 收集所有 exec 调用便于断言 cmd / args / env / timeoutMs */
@@ -165,105 +165,5 @@ describe('EmbeddedRuntimeBridge', () => {
     const bridge = new EmbeddedRuntimeBridge('embedded Python 3.12.13', PY, makeRecordingExec().exec);
     expect(bridge.strategy).toBe('embedded');
     expect(bridge.version).toBe('embedded Python 3.12.13');
-  });
-});
-
-describe('DockerBridge', () => {
-  it('默认镜像 pinned 到 pragent/pr-agent:0.36.0', async () => {
-    const { exec, calls } = makeRecordingExec();
-    const bridge = new DockerBridge('docker v25', exec);
-    await bridge.describe({ prUrl: 'https://x/pr/1' });
-    expect(calls[0]!.cmd).toBe('docker');
-    expect(calls[0]!.args).toEqual([
-      'run',
-      '--rm',
-      'pragent/pr-agent:0.36.0',
-      '--pr_url',
-      'https://x/pr/1',
-      'describe',
-    ]);
-  });
-
-  it('env 翻成 -e KEY=VAL（多条按 entry 顺序展开）', async () => {
-    const { exec, calls } = makeRecordingExec();
-    const bridge = new DockerBridge('v', exec);
-    await bridge.review({
-      prUrl: 'https://x/pr/1',
-      env: { OPENAI_KEY: 'sk-test', PR_PILOT_MODEL: 'gpt-4o' },
-    });
-    expect(calls[0]!.args).toEqual([
-      'run',
-      '--rm',
-      '-e',
-      'OPENAI_KEY=sk-test',
-      '-e',
-      'PR_PILOT_MODEL=gpt-4o',
-      'pragent/pr-agent:0.36.0',
-      '--pr_url',
-      'https://x/pr/1',
-      'review',
-    ]);
-  });
-
-  it('docker spawn 自己不带 env（token 只进容器）', async () => {
-    const { exec, calls } = makeRecordingExec();
-    const bridge = new DockerBridge('v', exec);
-    await bridge.review({ prUrl: 'https://x/pr/1', env: { OPENAI_KEY: 'sk' } });
-    expect(calls[0]!.opts.env).toBeUndefined();
-  });
-
-  it('支持自定义镜像（pinning 升级 / 自建镜像）', async () => {
-    const { exec, calls } = makeRecordingExec();
-    const bridge = new DockerBridge('v', exec, 'internal/pr-agent:0.40.0');
-    await bridge.describe({ prUrl: 'https://x/pr/1' });
-    expect(calls[0]!.args[2]).toBe('internal/pr-agent:0.40.0');
-  });
-
-  it('extraArgs 追加到 tool 之后', async () => {
-    const { exec, calls } = makeRecordingExec();
-    const bridge = new DockerBridge('v', exec);
-    await bridge.review({ prUrl: 'https://x/pr/1', extraArgs: ['--my_flag'] });
-    expect(calls[0]!.args[calls[0]!.args.length - 1]).toBe('--my_flag');
-    expect(calls[0]!.args[calls[0]!.args.length - 2]).toBe('review');
-  });
-
-  it('cwd 配置后切到 local-mode: -v 挂 /workspace + -w /workspace + --pr_url = target branch 名', async () => {
-    // 几个反直觉点：
-    // - 挂载点是 /workspace 不是 /app —— pragent/pr-agent 容器 WORKDIR=/app 且代码
-    //   在 /app/pr_agent/，挂用户 worktree 到 /app 会盖掉容器代码
-    // - --entrypoint python + 绝对路径 cli.py：镜像默认 ENTRYPOINT 是相对路径，-w
-    //   改了之后会找错
-    // - --pr_url 的值是 TARGET BRANCH NAME，不是 URL —— local provider 把 --pr_url
-    //   当 LocalGitProvider 第一个位置参数 target_branch_name
-    const { exec, calls } = makeRecordingExec();
-    const bridge = new DockerBridge('v', exec);
-    await bridge.review({
-      prUrl: 'unused-when-cwd-set',
-      cwd: process.platform === 'win32' ? 'D:\\tmp\\wt\\abc' : '/tmp/wt/abc',
-      targetBranch: 'meebox/base',
-      env: { OPENAI_KEY: 'sk' },
-    });
-    const expectedMount = process.platform === 'win32' ? '/d/tmp/wt/abc' : '/tmp/wt/abc';
-    expect(calls[0]!.args).toEqual([
-      'run',
-      '--rm',
-      '-e',
-      'OPENAI_KEY=sk',
-      '-e',
-      'CONFIG__GIT_PROVIDER=local',
-      '-v',
-      `${expectedMount}:/workspace`,
-      '-w',
-      '/workspace',
-      '--entrypoint',
-      'python',
-      'pragent/pr-agent:0.36.0',
-      '/app/pr_agent/cli.py',
-      '--pr_url',
-      'meebox/base',
-      'review',
-    ]);
-    // docker spawn 自己仍然不带 env (token 只进容器)
-    expect(calls[0]!.opts.env).toBeUndefined();
   });
 });

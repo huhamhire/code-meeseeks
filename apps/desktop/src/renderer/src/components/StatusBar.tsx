@@ -135,8 +135,8 @@ function RepoSyncChip() {
  * pr-agent 活动状态 chip：active 时显示运行中工具 + elapsed (可点跳 PR)；idle 时
  * 显示"空闲"占位。PR 切换不会丢运行中状态，由 chatRunStore 跨实例维护。
  *
- * 调用方应在 pr-agent 实际可用 (PrAgentStatus.available) 时才挂这条；不可用 (本机
- * CLI / Docker 都没探到) 时由 PrAgentChip 显示错误态，这里不重复"空闲"语义
+ * 调用方应在 pr-agent 实际可用 (PrAgentStatus.available) 时才挂这条；不可用 (嵌入式
+ * 运行时 / 本机 CLI 都没探到) 时由 PrAgentChip 显示错误态，这里不重复"空闲"语义
  */
 function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => void }) {
   const { active, waiting } = useChatRunStore();
@@ -528,23 +528,17 @@ function formatRelative(date: Date): string {
 
 function PrAgentChip({ status }: { status: PrAgentStatus }) {
   if (status.available) {
-    // chip 只显示 pr-agent 版本，不显示 strategy（embedded/docker/local-cli 对用户无意义；
+    // chip 只显示 pr-agent 版本，不显示 strategy（embedded/local-cli 对用户无意义；
     // 完整 strategy + version 放 hover title）。version 来自 detect：
-    // - docker → pinned image tag `pragent/pr-agent:0.36.0` → 取 `0.36.0`
     // - embedded → `pr-agent 0.36.0` → 取 `0.36.0`
     // - local-cli → `pr-agent --help` 首行，截到首个空白前（避免长 usage 撑爆 chip）
     const ver =
-      status.strategy === 'docker'
-        ? (status.version.split(':').pop() ?? status.version)
-        : status.strategy === 'embedded'
-          ? status.version.replace(/^pr-agent\s+/, '')
-          : status.version.split(/\s+/)[0] || status.version;
-    // 按 strategy 上色：embedded / local-cli 绿（statusbar-chip-ok），docker 蓝
-    const colorClass =
-      status.strategy === 'docker' ? 'statusbar-chip-docker' : 'statusbar-chip-ok';
+      status.strategy === 'embedded'
+        ? status.version.replace(/^pr-agent\s+/, '')
+        : status.version.split(/\s+/)[0] || status.version;
     return (
       <span
-        className={`statusbar-chip ${colorClass}`}
+        className="statusbar-chip statusbar-chip-ok"
         title={`${status.strategy} · ${status.version}`}
       >
         PR Agent: {ver}

@@ -363,7 +363,7 @@
   font-size: $fs-xs; // 跟 chip 一档；align-items:center 下基线就齐了
   color: $color-info;
 }
-// 中性胶囊：策略 (Docker/CLI) / token 用量 / 耗时共用。跟 status 胶囊同尺寸，
+// 中性胶囊：模型 / token 用量 / 耗时共用。跟 status 胶囊同尺寸，
 // 整行视觉成一条胶囊队列
 .chat-run-chip {
   padding: 1px $space-3;

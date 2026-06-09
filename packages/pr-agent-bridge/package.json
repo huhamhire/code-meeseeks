@@ -2,7 +2,7 @@
   "name": "@meebox/pr-agent-bridge",
   "version": "0.0.0",
   "private": true,
-  "description": "pr-agent integration bridge (local CLI / Docker strategy)",
+  "description": "pr-agent integration bridge (embedded runtime / local CLI strategy)",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

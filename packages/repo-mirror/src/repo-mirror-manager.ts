@@ -220,11 +220,11 @@ export class RepoMirrorManager {
    *
    * 为什么不用 `git worktree add`：worktree 的 `.git` 是个 file，内容是
    *   `gitdir: <bare-host-path>/worktrees/<name>`
-   * 这个 host 绝对路径挂进 Docker 容器后失效，GitPython 顺链找不到 git dir → 抛
-   * `Could not find repository root`。
+   * 依赖一个外部 host 绝对路径，bare 仓库移动 / 清理后顺链断裂，GitPython 找不到
+   * git dir → 抛 `Could not find repository root`。
    *
    * 实现：`git clone --local --no-checkout` 从 bare 派生独立 repo —— 同盘时
-   * objects 走 hardlinks，磁盘 ~0；.git 自含，跨 docker mount 边界也成立。再 fetch
+   * objects 走 hardlinks，磁盘 ~0；.git 自含、不依赖外部路径，更稳。再 fetch
    * 一道 Bitbucket 专有的 refspec `refs/pull-requests/<id>/from` 把 PR 源 sha 拉齐 (默认
    * refspec 不拉它，否则 PR 源分支被删 / 强推后 checkout 会失败)。
    *

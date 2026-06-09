@@ -34,8 +34,8 @@ describe('detect: embedded strategy 选择', () => {
     expect(status.available).toBe(false);
   });
 
-  it('未传 embeddedPythonPath → embedded 不参与（回退探测 local-cli/docker）', async () => {
-    // 这里只断言不会因 embedded 缺失而抛错；local-cli/docker 是否可用取决于环境
+  it('未传 embeddedPythonPath → embedded 不参与（回退探测 local-cli）', async () => {
+    // 这里只断言不会因 embedded 缺失而抛错；local-cli 是否可用取决于环境
     const status = await detectPrAgent({});
     expect(status.available === true || status.available === false).toBe(true);
     if (status.available) expect(status.strategy).not.toBe('embedded');

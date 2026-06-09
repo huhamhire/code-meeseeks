@@ -1,12 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { PrAgentStatus, PrAgentStrategy } from '@meebox/shared';
-import {
-  DEFAULT_DOCKER_IMAGE_TAG,
-  DockerBridge,
-  EmbeddedRuntimeBridge,
-  LocalCliBridge,
-} from './bridge.js';
+import { EmbeddedRuntimeBridge, LocalCliBridge } from './bridge.js';
 import { defaultExec } from './exec.js';
 import type { ExecFn, PrAgentBridge } from './types.js';
 
@@ -20,7 +15,7 @@ export interface DetectOptions {
    * 所以路径必须由调用方注入。
    */
   embeddedPythonPath?: string;
-  /** 强制策略；'auto'（默认）按 embedded → local-cli → docker 顺序探测。 */
+  /** 强制策略；'auto'（默认）按 embedded → local-cli 顺序探测。 */
   forceStrategy?: StrategyChoice;
 }
 
@@ -113,10 +108,6 @@ async function probeLocalCli(): Promise<ProbeResult> {
   return exec('pr-agent', ['--help']);
 }
 
-async function probeDocker(): Promise<ProbeResult> {
-  return exec('docker', ['--version']);
-}
-
 /**
  * 查嵌入式运行时里实际安装的 pr-agent 版本（importlib.metadata，不 import pr_agent，
  * 快）。失败（未装 / 解释器异常）返回 null，调用方兜底。
@@ -145,13 +136,12 @@ function buildStrategies(
     all.push({ name: 'embedded', probe: () => exec(pyPath, ['--version']) });
   }
   all.push({ name: 'local-cli', probe: probeLocalCli });
-  all.push({ name: 'docker', probe: probeDocker });
   const force = opts.forceStrategy ?? 'auto';
   return force === 'auto' ? all : all.filter((s) => s.name === force);
 }
 
 /**
- * 按优先级探测 pr-agent 可用性：embedded（随 app 打包）→ local CLI（pipx）→ Docker。
+ * 按优先级探测 pr-agent 可用性：embedded（随 app 打包）→ local CLI（pipx）。
  * 返回首个成功的策略；全部失败则报告所有尝试结果。
  */
 export async function detectPrAgent(opts: DetectOptions = {}): Promise<PrAgentStatus> {
@@ -161,14 +151,11 @@ export async function detectPrAgent(opts: DetectOptions = {}): Promise<PrAgentSt
     const r = await probe();
     if (r.ok) {
       // version 字段语义：用户在 UI 看到的"pr-agent 版本"。
-      // - docker：probe 拿到 docker daemon 版本，跟镜像无关 → 改成 pin 的 image tag
       // - embedded：另查 importlib.metadata 拿实际安装的 pr-agent 版本 (`pr-agent 0.36.0`)，
       //   而非解释器的 Python 版本（用户关心的是 pr-agent 版本）
       // - local-cli：`pr-agent --help` 首行，保持原值
       let version: string;
-      if (name === 'docker') {
-        version = `pragent/pr-agent:${DEFAULT_DOCKER_IMAGE_TAG}`;
-      } else if (name === 'embedded') {
+      if (name === 'embedded') {
         const pv = opts.embeddedPythonPath
           ? await embeddedPrAgentVersion(opts.embeddedPythonPath)
           : null;
@@ -185,7 +172,7 @@ export async function detectPrAgent(opts: DetectOptions = {}): Promise<PrAgentSt
 
 /**
  * 探测并构造一个可调用的 PrAgentBridge。embedded 优先（需传 embeddedPythonPath）→
- * LocalCli → Docker；都不可用时返回 null + status（UI 走 unavailable 占位）。
+ * LocalCli；都不可用时返回 null + status（UI 走 unavailable 占位）。
  * 可注入 ExecFn 便于单测 / mock。
  */
 export async function createPrAgentBridge(
@@ -194,14 +181,10 @@ export async function createPrAgentBridge(
   const status = await detectPrAgent(opts);
   if (!status.available) return { bridge: null, status };
   const exec = opts.exec ?? defaultExec;
-  let bridge: PrAgentBridge;
-  if (status.strategy === 'embedded') {
-    // detectPrAgent 选中 embedded 时 embeddedPythonPath 必定存在（buildStrategies 已校验）
-    bridge = new EmbeddedRuntimeBridge(status.version, opts.embeddedPythonPath!, exec);
-  } else if (status.strategy === 'local-cli') {
-    bridge = new LocalCliBridge(status.version, exec);
-  } else {
-    bridge = new DockerBridge(status.version, exec);
-  }
+  // detectPrAgent 选中 embedded 时 embeddedPythonPath 必定存在（buildStrategies 已校验）
+  const bridge: PrAgentBridge =
+    status.strategy === 'embedded'
+      ? new EmbeddedRuntimeBridge(status.version, opts.embeddedPythonPath!, exec)
+      : new LocalCliBridge(status.version, exec);
   return { bridge, status };
 }

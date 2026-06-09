@@ -26,6 +26,10 @@
 - 全仓内部命名统一为 **Bitbucket**，去除 `BBS` / `BB` 等歧义缩写（纯改名，无行为变化）。
 - 架构设计文档目录 `docs/modules/` → `docs/arch/`，统一定位为「架构设计文档」。
 
+### Removed
+- **移除 Docker 运行策略**：容器文件系统装载效率低、与「零依赖」定位不符；嵌入式运行时
+  （默认）+ 系统 local-cli 已覆盖全部场景。`pr_agent.strategy` 不再接受 `docker`。
+
 ### Fixed
 - 修复模型返回多行自由文本值（如中文 `issue_content`）未用块标量、续行顶格导致 pr-agent
   `load_yaml` 解析失败、整个 `/review` 崩溃（`NoneType is not iterable`）：`sitecustomize`

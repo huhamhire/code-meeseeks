@@ -61,7 +61,7 @@
 - **GitHub Adapter**：github.com + GitHub Enterprise Server（REST API v3）；统一 `PlatformAdapter`
   契约 + 一致性测试套件；PR 发现分类（待我评审 / 我创建 / 指派 / 提及，本地缓存按标记过滤）。
   Bitbucket 同步提供「待我评审 / 我创建」两类。
-- 嵌入式 pr-agent 运行时打包（内嵌 Python，免装 Python/Docker）
+- 嵌入式 pr-agent 运行时打包（内嵌 Python，免装 Python/Docker）；**移除 Docker 运行策略**（容器装载效率低、与「零依赖」定位不符，embedded / local-cli 已覆盖全部场景）
 - 首发桌面安装包：Windows x64（NSIS）+ macOS arm64（dmg，ad-hoc 签名）
 - 出站 HTTP 代理（LLM / 代码平台 / git HTTPS 统一，loopback 直连）
 - `/review` finding anchor 根因修复（get_line_link 注入）
@@ -81,7 +81,6 @@
 - **国际化（i18n）**：多语言界面，优先简体中文 / English。
 - **规则市场**：导入 / 导出 rules.dir 片段。
 - **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
-- **移除 Docker 运行策略**：启动效率低、与「零依赖」定位不符；嵌入式本地进程已是默认（启动开销当前无瓶颈）。
 - **大 PR 性能验证**：等真实大样本实测。
 - **ollama / openai-compatible 验证**：本地模型 / 自部署链路实测。
 - **凭据存储升级 keytar** / **状态存储按需升级 SQLite**（替换抽象实现，业务不变）。

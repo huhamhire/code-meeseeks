@@ -150,13 +150,12 @@ export const ConfigSchema = z.object({
   /**
    * pr-agent 运行时策略选择。
    * - 'auto'（默认）：优先嵌入式运行时（随 app 打包，正常安装恒可用），缺失则
-   *   回退探测 local-cli → docker；
-   * - 显式 'embedded' / 'local-cli' / 'docker'：强制该策略，便于高级用户切到
-   *   自有 Docker / 系统 CLI。
+   *   回退探测系统 local-cli；
+   * - 显式 'embedded' / 'local-cli'：强制该策略，便于高级用户切到自有系统 CLI。
    */
   pr_agent: z
     .object({
-      strategy: z.enum(['auto', 'embedded', 'local-cli', 'docker']).default('auto'),
+      strategy: z.enum(['auto', 'embedded', 'local-cli']).default('auto'),
     })
     .default({}),
   connections: z.array(ConnectionSchema).default([]),

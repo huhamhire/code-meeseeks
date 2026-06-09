@@ -38,7 +38,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * - dev：`apps/desktop/vendor/pragent/...`（app.getAppPath() = apps/desktop）
  * - 打包：`<resources>/pragent/...`（electron-builder extraResources）
  * - `MEEBOX_PRAGENT_PYTHON` env 覆盖兜底
- * 探测层据此判断 embedded 是否可用（文件不存在则回退 local-cli/docker）。
+ * 探测层据此判断 embedded 是否可用（文件不存在则回退 local-cli）。
  */
 function resolveEmbeddedPython(): string {
   const override = process.env.MEEBOX_PRAGENT_PYTHON;

@@ -255,7 +255,7 @@ export interface ReviewRun {
   tool: ReviewRunTool;
   /** /ask 工具的问题内容；其他 tool 不填。UI 把它当用户发言渲染在 run 卡片之上 */
   question?: string;
-  /** 探测时拿到的 pr-agent 版本（CLI 首行 / docker version 字符串） */
+  /** 探测时拿到的 pr-agent 版本（CLI 首行 / 嵌入式查出的 pr-agent 版本） */
   prAgentVersion: string;
   strategy: PrAgentStrategy;
   /**

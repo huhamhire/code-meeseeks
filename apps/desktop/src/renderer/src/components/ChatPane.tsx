@@ -417,7 +417,7 @@ export function ChatPane({
             #{pr.remoteId}
           </span>
         )}
-        {/* strategy chip (Docker/CLI) 撤掉：部署细节用户不关心，状态栏已有 PR Agent 版本 chip */}
+        {/* 运行时策略 chip 撤掉：部署细节用户不关心，状态栏已有 PR Agent 版本 chip */}
       </header>
 
       {/* 当前 PR 命中的规则 chip：rules.dir 未配置 / 整体禁用 / 无命中 → 不显示。
@@ -1182,7 +1182,7 @@ function RunningView({
 
   // 跟 RunMeta 完全同结构的 chip 行。running 跟 succeeded/failed 共享一套视觉
   // 骨架，用户从列表扫一眼能在固定位置看到 tool / 状态 / 模型 / 时长。strategy
-  // (Docker/CLI) 是部署细节用户不关心，撤掉；model 是真正影响 review 质量的变量
+  // 运行时策略是部署细节用户不关心，撤掉；model 是真正影响 review 质量的变量
   return (
     <div className="chat-run-running" data-run-id={runId}>
       <header className="chat-run-meta">
@@ -1624,7 +1624,7 @@ function RunMeta({ run }: { run: ReviewRun }) {
       <span className={`chat-run-status chat-run-status-${run.status}`}>
         {RUN_STATUS_LABEL[run.status]}
       </span>
-      {/* 模型 chip 取代 Docker/CLI strategy chip — strategy 是部署细节用户不
+      {/* 模型 chip 取代运行时策略 chip — strategy 是部署细节用户不
           关心，model 是真正影响 review 质量的变量 */}
       {run.model && (
         <span className="chat-run-chip chat-run-model" title={`使用模型 ${run.model}`}>
@@ -1926,7 +1926,7 @@ function ChatEmpty({
         </div>
         <p className="chat-empty-title">PR Agent 未就绪</p>
         <p className="chat-empty-sub">
-          本机 CLI 与 Docker 都未探测到。打开 Settings 看探测详情，或安装其中一种后重启应用。
+          嵌入式运行时与本机 CLI 都未探测到。打开 Settings 看探测详情后重启应用。
         </p>
       </div>
     );

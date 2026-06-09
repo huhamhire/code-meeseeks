@@ -30,7 +30,7 @@ apps/desktop/vendor/pragent/         # gitignore，不入库
 ## 版本来源
 
 - Python / pr-agent 版本 pin 在 [`pragent-runtime.json`](./pragent-runtime.json)。
-- pr-agent 版本须与 `packages/pr-agent-bridge` 的 `DEFAULT_DOCKER_IMAGE_TAG` 对齐。
+- pr-agent 版本须与 `sitecustomize.py` 的 `_EXPECTED_PRAGENT_VERSION` 对齐（assemble 期强校验）。
 - 脚本按 pin 的 `tag` + `pythonMajorMinor` + 宿主平台三元组，从 GitHub release 解析
   `install_only` 资产，下载后用官方 `.sha256` sidecar 校验完整性。
 
