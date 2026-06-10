@@ -210,10 +210,54 @@
   margin: $space-3 0;
   overflow-x: auto; // 宽图横向滚动，不撑破容器
   text-align: center;
+  cursor: zoom-in; // 提示可点击放大
 
   svg {
     max-width: 100%;
     height: auto;
+  }
+}
+
+// 点击图表后的全屏放大预览（portal 到 body）
+.mermaid-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  cursor: zoom-out;
+}
+.mermaid-zoom-inner {
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow: auto;
+  cursor: default;
+
+  svg {
+    width: auto;
+    height: auto;
+    max-width: none; // 放大态不受容器限制，配合 overflow 滚动看大图
+  }
+}
+.mermaid-zoom-close {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: $radius-sm;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.22);
   }
 }
 .mermaid-loading {

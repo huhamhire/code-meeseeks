@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Mermaid 渲染：把 ```mermaid 代码块渲染成 SVG 图（Qodo `/describe` 常生成架构图）。
@@ -40,6 +41,7 @@ export function MermaidDiagram({ source }: { source: string }) {
   const renderId = `mmd-${useId().replace(/:/g, '')}`;
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +63,16 @@ export function MermaidDiagram({ source }: { source: string }) {
     };
   }, [source, renderId]);
 
+  // 放大态：Esc 关闭
+  useEffect(() => {
+    if (!zoomed) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setZoomed(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoomed]);
+
   if (failed) {
     // 回退：保留原始 mermaid 源码，至少可读
     return (
@@ -72,6 +84,49 @@ export function MermaidDiagram({ source }: { source: string }) {
   if (svg === null) {
     return <div className="mermaid-loading muted">渲染图表…</div>;
   }
-  // mermaid strict 模式产出的 SVG 已转义不可信内容，可安全注入
-  return <div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
+  // mermaid strict 模式产出的 SVG 已转义不可信内容，可安全注入。
+  // 点击图表 → 模态放大预览（Esc / 点击遮罩关闭）。
+  return (
+    <>
+      <div
+        className="mermaid-diagram"
+        role="button"
+        tabIndex={0}
+        title="点击放大查看"
+        onClick={() => setZoomed(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setZoomed(true);
+          }
+        }}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      {zoomed &&
+        createPortal(
+          <div
+            className="mermaid-zoom-overlay"
+            role="presentation"
+            onClick={() => setZoomed(false)}
+          >
+            <button
+              type="button"
+              className="mermaid-zoom-close"
+              title="关闭（Esc）"
+              aria-label="关闭"
+              onClick={() => setZoomed(false)}
+            >
+              ×
+            </button>
+            <div
+              className="mermaid-zoom-inner"
+              role="presentation"
+              onClick={(e) => e.stopPropagation()}
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          </div>,
+          document.body,
+        )}
+    </>
+  );
 }

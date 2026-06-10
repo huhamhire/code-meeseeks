@@ -379,3 +379,58 @@ describe('parseReviewOutput', () => {
     expect(findings.some((f) => /格式漂移/.test(f.body))).toBe(true);
   });
 });
+
+describe('parseReviewOutput · describe 架构图 / 文件走查', () => {
+  const md = [
+    '### **PR Type**',
+    'Enhancement',
+    '',
+    '### **Description**',
+    '- 增加缓存合并',
+    '',
+    '### Diagram Walkthrough',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  A["缓存未命中"] --> B["合并请求"]',
+    '```',
+    '',
+    '<details> <summary><h3> File Walkthrough</h3></summary>',
+    '',
+    '<table><thead><tr><th></th><th align="left">Relevant files</th></tr></thead><tbody>',
+    '<tr><td><strong>功能增强</strong></td><td><details><summary>2 files</summary><table>',
+    '<tr><td><strong>CacheValueProvider.ts</strong><dd><code>增加缓存合并配置透传</code>&nbsp;</dd></td><td><a href="meebox:///packages/core/src/cache/CacheValueProvider.ts#L-1">+-1/--1</a>&nbsp;</td></tr>',
+    '<tr><td><strong>SingleFlight.ts</strong><dd><code>新增进程内请求合并器</code>&nbsp;</dd></td><td><a href="meebox:///packages/core/src/cache/SingleFlight.ts#L-1">+-1/--1</a>&nbsp;</td></tr>',
+    '</table></details></td></tr>',
+    '<tr><td><strong>测试</strong></td><td><details><summary>1 files</summary><table>',
+    '<tr><td><strong>SingleFlight.test.ts</strong><dd><code>覆盖请求合并核心逻辑</code>&nbsp;</dd></td><td><a href="meebox:///packages/core/tests/cache/SingleFlight.test.ts#L-1">+-1/--1</a>&nbsp;</td></tr>',
+    '</table></details></td></tr>',
+    '</tbody></table>',
+    '',
+    '</details>',
+    '',
+    '___',
+  ].join('\n');
+
+  it('Diagram Walkthrough → diagram 段，body 含 mermaid，不含走查表格', () => {
+    const { findings } = parseReviewOutput(md, 'describe');
+    const diagram = findings.find((f) => f.sectionKey === 'diagram');
+    expect(diagram).toBeDefined();
+    expect(diagram!.body).toMatch(/```mermaid/);
+    expect(diagram!.body).toMatch(/flowchart LR/);
+    // 走查块已被抽走，不应黏在 diagram body 里
+    expect(diagram!.body).not.toMatch(/File Walkthrough|<table/);
+  });
+
+  it('File Walkthrough → walkthrough 段，转成分组折叠列表，去掉 +1/-1', () => {
+    const { findings } = parseReviewOutput(md, 'describe');
+    const wt = findings.find((f) => f.sectionKey === 'walkthrough');
+    expect(wt).toBeDefined();
+    // 分组折叠 + 文件无序列表 + 描述
+    expect(wt!.body).toMatch(/<summary>功能增强（2）<\/summary>/);
+    expect(wt!.body).toMatch(/- \*\*CacheValueProvider\.ts\*\* — 增加缓存合并配置透传/);
+    expect(wt!.body).toMatch(/<summary>测试（1）<\/summary>/);
+    // 不保留原始表格 / +1/-1 统计
+    expect(wt!.body).not.toMatch(/<table|\+-1|\/--1|Relevant files/);
+  });
+});

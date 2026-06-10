@@ -144,6 +144,8 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
   [/^type$/i, 'pr-type'],
   [/^(?:pr[\s_-]+reviewer[\s_-]+guide|review[\s_-]+summary|summary)$/i, 'summary'],
   [/^description$/i, 'description'],
+  // "Diagram Walkthrough" → diagram（含 walkthrough 子串，故须排在 walkthrough 之前）
+  [/diagram/i, 'diagram'],
   [/^walkthrough$/i, 'walkthrough'],
   [/^relevant[\s_-]+tests?$/i, 'relevant-tests'],
   [/^security(?:[\s_-]+concerns?)?$/i, 'security'],
@@ -533,6 +535,63 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
   };
 }
 
+// ===== /describe 的 File Walkthrough 处理 =====
+// pr-agent 把 File Walkthrough 作为 HTML <details><table> 追加在 describe 末尾（line 131），
+// 没有 markdown header，会黏进上一段（通常是 ### Diagram Walkthrough）的 body。这里把它
+// 单独抽出，并把嵌套表格转成「按分组折叠的无序列表」（聊天面板里表格体验差），同时丢掉
+// 无实际意义的 +1/-1 统计列。
+
+/**
+ * 从 describe 输出抽出 File Walkthrough 块（追加在末尾，含嵌套 details，故从起点取到结尾）。
+ * 返回 { rest: 去掉该块的正文, block: 该块原文 }；没有则 null。
+ */
+function extractFileWalkthrough(md: string): { rest: string; block: string } | null {
+  const startRe = /<details[^>]*>\s*<summary>\s*<h3>\s*File Walkthrough\s*<\/h3>\s*<\/summary>/i;
+  const m = startRe.exec(md);
+  if (!m) return null;
+  return { rest: md.slice(0, m.index).trimEnd(), block: md.slice(m.index) };
+}
+
+/**
+ * 把 File Walkthrough 的嵌套 HTML 表格转成「分组折叠 + 无序列表」markdown：
+ *   <details><summary>分组名（N）</summary>
+ *   - **文件名** — 描述
+ *   </details>
+ * 丢掉每行后面的 +1/-1 链接列。分组靠「<strong>X</strong></td><td><details>」识别，
+ * 文件靠「<strong>X</strong><dd><code>desc</code>」识别，按出现位置归到所属分组。
+ */
+function walkthroughToList(block: string): string {
+  const GROUP_RE = /<strong>([^<]+?)<\/strong>\s*<\/td>\s*<td>\s*<details/gi;
+  const FILE_RE = /<strong>([^<]+?)<\/strong>\s*<dd>\s*<code>([\s\S]*?)<\/code>/gi;
+  const groups = [...block.matchAll(GROUP_RE)].map((g) => ({ index: g.index, name: g[1]!.trim() }));
+  const files = [...block.matchAll(FILE_RE)].map((f) => ({
+    index: f.index,
+    name: f[1]!.trim(),
+    desc: gfmInlineToText(f[2]!).replace(/\s+/g, ' ').trim(),
+  }));
+  const fmtFile = (f: { name: string; desc: string }): string =>
+    `- **${f.name}**${f.desc ? ` — ${f.desc}` : ''}`;
+
+  if (groups.length === 0) {
+    // 无分组：直接平铺列表
+    const list = files.map(fmtFile).join('\n');
+    return list || '（无文件变更明细）';
+  }
+  const parts: string[] = [];
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i]!;
+    const next = i + 1 < groups.length ? groups[i + 1]!.index : Infinity;
+    const inGroup = files.filter((f) => f.index > g.index && f.index < next);
+    if (inGroup.length === 0) continue;
+    parts.push(
+      `<details><summary>${g.name}（${String(inGroup.length)}）</summary>\n\n${inGroup
+        .map(fmtFile)
+        .join('\n')}\n\n</details>`,
+    );
+  }
+  return parts.join('\n\n') || files.map(fmtFile).join('\n');
+}
+
 /**
  * 解析 pr-agent stdout 为 findings 列表。M3-B2 是 best-effort：
  * - 切 markdown sections
@@ -556,15 +615,32 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
     return llmFailure ? { ...out, llmFailure } : out;
   }
   const cleanStdout = stripAnsi(stdout);
+  // describe：先把追加在末尾的 File Walkthrough <details> 块抽出（否则黏进 ### Diagram
+  // Walkthrough 段），单独成一条「文件走查」finding，并把嵌套表格转成折叠无序列表。
+  let walkthroughFinding: Finding | undefined;
+  let baseMd = cleanStdout;
+  if (tool === 'describe') {
+    const wt = extractFileWalkthrough(cleanStdout);
+    if (wt) {
+      baseMd = wt.rest;
+      walkthroughFinding = {
+        id: 'describe-walkthrough',
+        category: 'description',
+        sectionKey: 'walkthrough',
+        body: walkthroughToList(wt.block),
+      };
+    }
+  }
   // GFM 路径仅用于 /review（gfm_markdown 下整体是 <table>）；describe/ask 仍走 markdown
   // 切片（其 HTML/表格/mermaid 由下游 react-markdown 渲染，section 结构不受影响）。
-  const gfm = tool === 'review' && isGfmReviewOutput(cleanStdout);
+  const gfm = tool === 'review' && isGfmReviewOutput(baseMd);
   const allSections = gfm
-    ? splitGfmTableSections(cleanStdout)
-    : splitMarkdownSections(cleanStdout);
+    ? splitGfmTableSections(baseMd)
+    : splitMarkdownSections(baseMd);
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) {
-    return llmFailure ? { findings: [], llmFailure } : { findings: [] };
+    const fs = walkthroughFinding ? [walkthroughFinding] : [];
+    return llmFailure ? { findings: fs, llmFailure } : { findings: fs };
   }
   // 单 section 可能展开成多个 findings (key_issues_to_review 段)。用游标 idx 维持
   // 全局 finding 编号稳定，UI list-key 不冲突
@@ -592,6 +668,8 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
       idx += 1;
     }
   }
+  // describe 的 File Walkthrough 单独成段（渲染顺序由 SECTION_ORDER 的 walkthrough 决定）
+  if (walkthroughFinding) findings.push(walkthroughFinding);
   // summary：优先取首个有 title 的 section；都没有 title 取首个 body 首行
   let summary: string | undefined;
   const titled = sections.find((s) => s.title);

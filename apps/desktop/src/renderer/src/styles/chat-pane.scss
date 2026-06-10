@@ -555,6 +555,11 @@
     background: rgba(22, 163, 74, 0.18); // $color-approved fade
     color: $color-approved;
   }
+  // 架构图：强调蓝，跟其它文档段区分
+  &.chat-finding-cat-diagram {
+    background: $color-accent-bg-fade;
+    color: $color-info;
+  }
   // 评估指标组：中性灰
   &.chat-finding-cat-relevant-tests,
   &.chat-finding-cat-effort,

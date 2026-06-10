@@ -63,6 +63,7 @@ export type PrDocSectionKey =
   | 'pr-type'           // 类型标签 (Bug fix / Enhancement / Tests / ...)
   | 'summary'           // /review 顶部总结
   | 'description'       // 主描述段
+  | 'diagram'           // 架构图（changes_diagram，mermaid）
   | 'walkthrough'       // 文件级走查
   | 'relevant-tests'    // 相关测试
   | 'security'          // 安全发现
