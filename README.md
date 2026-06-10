@@ -45,7 +45,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - 🔌 **开箱即用，零外部依赖** —— 安装包内嵌可重定位的 Python 运行时 + 固定版本 pr-agent，**无需自行安装 Python 或 Docker**。
 - 📥 **PR 自动发现** —— 轮询拉取评审者待评审的 Open PR，按仓库分组、状态过滤、搜索。
 - 🔍 **本地 Diff 阅读** —— Monaco 并排 / 内联 diff、文件树、行内评论、blame、跨文件代码搜索。
-- 🤖 **AI 评审** —— `/describe`、`/review`、`/ask` 对话式驱动 pr-agent，结果结构化成可操作的 findings。
+- 🤖 **AI 评审** —— `/describe`、`/review`、`/improve`、`/ask` 对话式驱动 pr-agent，结果结构化成可操作的 findings。
 - 📐 **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter），按项目 / 仓库 / 目标分支命中后注入评审。
 - ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
 - 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
