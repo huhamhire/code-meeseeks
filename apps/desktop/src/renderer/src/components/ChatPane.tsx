@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -103,6 +105,7 @@ export function ChatPane({
   maxConcurrency = 2,
   onOpenSettings,
 }: ChatPaneProps) {
+  const { t } = useTranslation();
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
@@ -274,7 +277,7 @@ export function ChatPane({
     // 去重（即时反馈）：同一 PR 同一工具已在执行 / 排队 → 阻止重复触发（main 端亦有
     // 权威校验兜底）。/ask 每次问题不同，不限制。
     if (tool !== 'ask' && (myActiveRuns.some((r) => r.tool === tool) || myWaiting.some((w) => w.tool === tool))) {
-      setError(`该 PR 的 /${tool} 正在执行或排队中，请勿重复触发`);
+      setError(t('chatPane.duplicateRun', { tool }));
       return;
     }
     setError(null);
@@ -327,7 +330,7 @@ export function ChatPane({
    * 看到时知道这条评论来自 pr-agent
    */
   const buildDraftBodyFromFinding = (body: string): string =>
-    `[AI 建议] ${htmlInlineToMarkdown(stripFindingMarker(body))}`;
+    `${t('chatPane.aiSuggestionPrefix')} ${htmlInlineToMarkdown(stripFindingMarker(body))}`;
 
   const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
     if (!pr) return;
@@ -443,14 +446,14 @@ export function ChatPane({
     <aside
       className={`chat-pane${collapsed ? ' chat-pane-collapsed' : ''}`}
       style={{ width: `${String(width)}px` }}
-      aria-label="PR Agent chat"
+      aria-label={t('chatPane.paneAria')}
       aria-hidden={collapsed ? true : undefined}
     >
       <div
         className="chat-pane-resize-handle"
         onMouseDown={startResize}
-        title="拖动调整 chat 宽度"
-        aria-label="resize chat"
+        title={t('chatPane.resizeWidthTitle')}
+        aria-label={t('chatPane.resizeWidthAria')}
       />
       <header className="chat-pane-header">
         <ChatIcon />
@@ -465,8 +468,8 @@ export function ChatPane({
           <button
             type="button"
             className="icon-btn chat-pane-clear"
-            title="清空本 PR 的执行历史"
-            aria-label="清空执行历史"
+            title={t('chatPane.clearHistoryTitle')}
+            aria-label={t('chatPane.clearHistoryAria')}
             onClick={() => setShowClearConfirm(true)}
           >
             <TrashIcon />
@@ -481,9 +484,9 @@ export function ChatPane({
           type="button"
           className="chat-rule-chip"
           onClick={() => setShowRulePreview(true)}
-          title="点击查看规则正文"
+          title={t('chatPane.ruleChipTitle')}
         >
-          <span className="chat-rule-chip-label">规则</span>
+          <span className="chat-rule-chip-label">{t('chatPane.ruleChipLabel')}</span>
           <span className="chat-rule-chip-id">{matchedRule.id}</span>
         </button>
       )}
@@ -500,7 +503,7 @@ export function ChatPane({
         {/* 还有更早的 run 未拉到本地 → 顶部出加载提示。继续向上滚自动游标拉一页 */}
         {(hasMoreOlder || loadingOlder) && (
           <div className="chat-run-more-hint muted" role="status">
-            {loadingOlder ? '加载中…' : '向上滚动加载更早历史…'}
+            {loadingOlder ? t('common.loading') : t('chatPane.scrollUpForOlder')}
           </div>
         )}
         {/* 历史 run 按时间升序堆叠，每条独立卡片 (内部维护自己的 raw stdout 折叠状态)。
@@ -548,13 +551,12 @@ export function ChatPane({
             状态栏的队列 chip 可点开查看 / 取消任务 */}
         {concurrencyReached && (
           <div className="chat-busy" role="status">
-            已达并发上限（{maxConcurrency} 个同时执行）。本 PR 新提交的任务会进入排队，
-            等空出名额后自动执行
+            {t('chatPane.concurrencyReached', { n: maxConcurrency })}
           </div>
         )}
         {error && (
           <div className="chat-error" role="alert">
-            <strong>失败：</strong>
+            <strong>{t('chatPane.errorPrefix')}</strong>
             <span>{error}</span>
           </div>
         )}
@@ -581,9 +583,9 @@ export function ChatPane({
       )}
       {showClearConfirm && (
         <ConfirmModal
-          title="清空执行历史"
-          message="确定清空当前 PR 的全部 PR Agent 执行历史记录？仅影响该 PR，不可恢复。"
-          confirmLabel="清空"
+          title={t('chatPane.clearConfirmTitle')}
+          message={t('chatPane.clearConfirmMessage')}
+          confirmLabel={t('chatPane.clearConfirmLabel')}
           danger
           onConfirm={() => void handleClearRuns()}
           onCancel={() => setShowClearConfirm(false)}
@@ -605,14 +607,16 @@ type CommandSpec =
       kind: 'pragent';
       name: ReviewRunTool;
       label: string;
-      desc: string;
+      /** i18n key (chatPane 命名空间) 解析命令描述，渲染时用 t(descKey) */
+      descKey: string;
       insertAs: string;
     }
   | {
       kind: 'review-action';
       name: 'approve' | 'needswork';
       label: string;
-      desc: string;
+      /** i18n key (chatPane 命名空间) 解析命令描述，渲染时用 t(descKey) */
+      descKey: string;
       insertAs: string;
       reviewStatus: LocalPrStatus;
     };
@@ -620,19 +624,19 @@ type CommandSpec =
 // 分组顺序：pr-agent 工具 → 分隔线 → review 决断
 const COMMANDS: ReadonlyArray<CommandSpec> = [
   // pr-agent
-  { kind: 'pragent', name: 'review', label: '/review', desc: '代码评审', insertAs: '/review' },
-  { kind: 'pragent', name: 'describe', label: '/describe', desc: '生成 PR 描述', insertAs: '/describe' },
+  { kind: 'pragent', name: 'review', label: '/review', descKey: 'chatPane.cmdReviewDesc', insertAs: '/review' },
+  { kind: 'pragent', name: 'describe', label: '/describe', descKey: 'chatPane.cmdDescribeDesc', insertAs: '/describe' },
   // /improve：shim 强制 gfm_markdown=True 后，improve 走「汇总建议 → publish_comment →
   // review.md」路径（非 committable，inline 模式仍不可用），parse-output 按
   // generate_summarized_suggestions 的 <details> 模板解析出带重要度评分的 finding。
-  { kind: 'pragent', name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
-  { kind: 'pragent', name: 'ask', label: '/ask', desc: '自然语言追问', insertAs: '/ask ' },
+  { kind: 'pragent', name: 'improve', label: '/improve', descKey: 'chatPane.cmdImproveDesc', insertAs: '/improve' },
+  { kind: 'pragent', name: 'ask', label: '/ask', descKey: 'chatPane.cmdAskDesc', insertAs: '/ask ' },
   // review 决断 (跟 PR header 按钮共用 prs:setLocalStatus，写 Bitbucket reviewer status)
   {
     kind: 'review-action',
     name: 'approve',
     label: '/approve',
-    desc: '标记 PR 为通过',
+    descKey: 'chatPane.cmdApproveDesc',
     insertAs: '/approve',
     reviewStatus: 'approved',
   },
@@ -640,7 +644,7 @@ const COMMANDS: ReadonlyArray<CommandSpec> = [
     kind: 'review-action',
     name: 'needswork',
     label: '/needswork',
-    desc: '标记 PR 为需修改',
+    descKey: 'chatPane.cmdNeedsworkDesc',
     insertAs: '/needswork',
     reviewStatus: 'needs_work',
   },
@@ -747,6 +751,7 @@ function ChatInputBar({
   onCancel,
   onSetReviewStatus,
 }: ChatInputBarProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
   // PR 切换时清掉异常提示 + 输入框残留 (避免跨 PR 显示陈旧的错误"未知命令" 等)
@@ -880,7 +885,12 @@ function ChatInputBar({
       rest = spaceIdx < 0 ? '' : trimmed.slice(spaceIdx + 1).trim();
       const found = COMMANDS.find((c) => c.label === head);
       if (!found) {
-        setParseError(`未知命令 ${head}；支持：${COMMANDS.map((c) => c.label).join(' / ')}`);
+        setParseError(
+          t('chatPane.unknownCommand', {
+            head,
+            cmds: COMMANDS.map((c) => c.label).join(' / '),
+          }),
+        );
         return;
       }
       cmd = found;
@@ -892,7 +902,7 @@ function ChatInputBar({
     // review-action：/approve /needswork 没有参数，多余文本拒绝以免误用
     if (cmd.kind === 'review-action') {
       if (rest) {
-        setParseError(`${cmd.label} 不接受参数`);
+        setParseError(t('chatPane.commandNoArgs', { cmd: cmd.label }));
         return;
       }
       if (!onSetReviewStatus) return; // 没装回调直接忽略 (保护性)
@@ -907,7 +917,7 @@ function ChatInputBar({
     let question: string | undefined;
     if (cmd.name === 'ask') {
       if (!rest) {
-        setParseError('/ask 需要输入问题内容');
+        setParseError(t('chatPane.askNeedsQuestion'));
         return;
       }
       question = rest;
@@ -999,12 +1009,12 @@ function ChatInputBar({
   };
 
   const placeholder = !prAgent.available
-    ? 'PR Agent 未就绪'
+    ? t('chatPane.placeholderNotReady')
     : !llmConfigured
-      ? '需先配置 LLM 模型才能启用'
+      ? t('chatPane.placeholderNeedLlm')
       : !pr
-        ? '选中一个 PR 后可发起对话'
-        : '输入问题，或用 / 选择命令 (↑↓ 翻历史)';
+        ? t('chatPane.placeholderNoPr')
+        : t('chatPane.placeholderReady');
 
   return (
     <form
@@ -1015,7 +1025,7 @@ function ChatInputBar({
       }}
     >
       {showAutocomplete && filtered.length > 0 && (
-        <ul className="chat-cmd-suggest" role="listbox" aria-label="命令补全">
+        <ul className="chat-cmd-suggest" role="listbox" aria-label={t('chatPane.cmdSuggestAria')}>
           {filtered.map((c, i) => {
             const active = i === Math.min(autocompleteIdx, filtered.length - 1);
             const prev = filtered[i - 1];
@@ -1035,7 +1045,7 @@ function ChatInputBar({
                   aria-selected={active}
                 >
                   <code>{c.label}</code>
-                  <span className="muted">{c.desc}</span>
+                  <span className="muted">{t(c.descKey)}</span>
                 </button>
               </li>
             );
@@ -1047,8 +1057,8 @@ function ChatInputBar({
         <div
           className="chat-pane-textarea-resize-handle"
           onMouseDown={handleTextareaResizeStart}
-          title="拖动调整输入框高度 (2-5 行)"
-          aria-label="resize chat input"
+          title={t('chatPane.resizeInputTitle')}
+          aria-label={t('chatPane.resizeInputAria')}
         />
         <textarea
           ref={textareaRef}
@@ -1059,7 +1069,7 @@ function ChatInputBar({
           placeholder={placeholder}
           disabled={disabled}
           rows={2}
-          aria-label="chat input"
+          aria-label={t('chatPane.inputAria')}
           style={textareaHeightPx !== null ? { height: `${String(textareaHeightPx)}px` } : undefined}
         />
       </div>
@@ -1073,7 +1083,7 @@ function ChatInputBar({
             disabled={disabled}
             aria-haspopup="menu"
             aria-expanded={cmdMenuOpen}
-            title="选择预定义命令"
+            title={t('chatPane.cmdTriggerTitle')}
           >
             /
           </button>
@@ -1092,7 +1102,7 @@ function ChatInputBar({
                       role="menuitem"
                     >
                       <code>{c.label}</code>
-                      <span className="muted">{c.desc}</span>
+                      <span className="muted">{t(c.descKey)}</span>
                     </button>
                   </li>
                 );
@@ -1113,8 +1123,8 @@ function ChatInputBar({
                 onCancel();
               }}
               disabled={stopRequested}
-              title="终止当前 PR Agent 调用 (SIGKILL)"
-              aria-label="停止"
+              title={t('chatPane.stopTitle')}
+              aria-label={t('chatPane.stopAria')}
             >
               <StopIcon />
             </button>
@@ -1123,8 +1133,8 @@ function ChatInputBar({
             type="submit"
             className="chat-pane-send"
             disabled={disabled || !trimmed}
-            title={running ? '发送 (新任务会进队列)' : '发送 (Enter)'}
-            aria-label="发送"
+            title={running ? t('chatPane.sendQueuedTitle') : t('chatPane.sendTitle')}
+            aria-label={t('chatPane.sendAria')}
           >
             <SendIcon />
           </button>
@@ -1141,23 +1151,24 @@ function RulePreviewModal({
   rule: NonNullable<MatchedRule>;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal modal-sm"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="规则预览"
+        aria-label={t('chatPane.rulePreviewAria')}
       >
         <div className="modal-header">
-          <h3>规则: {rule.id}</h3>
+          <h3>{t('chatPane.rulePreviewTitle', { id: rule.id })}</h3>
           <button className="btn" type="button" onClick={onClose}>
-            关闭
+            {t('common.close')}
           </button>
         </div>
         <div className="modal-body">
           <div className="modal-kv">
-            <div className="modal-kv-key">文件路径</div>
+            <div className="modal-kv-key">{t('chatPane.ruleFilePath')}</div>
             <div className="modal-kv-val">{rule.filePath}</div>
             <div className="modal-kv-key">priority</div>
             <div className="modal-kv-val">{rule.priority}</div>
@@ -1187,17 +1198,17 @@ function RulePreviewModal({
  * 大仓库 /review 总时长可能 5min+，没有这个推断只看到 spinner + elapsed 容易
  * 误以为卡住。
  */
-function inferPhase(lines: ReadonlyArray<string>): string {
+function inferPhase(lines: ReadonlyArray<string>, t: TFunction): string {
   // 从后往前找最近的命中标志，越靠后的标志代表更"晚"的阶段
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]!;
-    if (/returning full diff|tokens?\s*[:：]\s*\d+/i.test(line)) return '等待 LLM 响应…';
+    if (/returning full diff|tokens?\s*[:：]\s*\d+/i.test(line)) return t('chatPane.phaseWaitingLlm');
     if (/answering a pr question|reviewing pr|generating a pr description/i.test(line))
-      return '组装 prompt…';
-    if (/pr main language/i.test(line)) return '解析 diff…';
-    if (/response language/i.test(line)) return '初始化配置…';
+      return t('chatPane.phaseAssemblingPrompt');
+    if (/pr main language/i.test(line)) return t('chatPane.phaseParsingDiff');
+    if (/response language/i.test(line)) return t('chatPane.phaseInitConfig');
   }
-  return '启动 PR Agent…';
+  return t('chatPane.phaseStarting');
 }
 
 function RunningView({
@@ -1215,6 +1226,7 @@ function RunningView({
       跟 succeeded 视觉一致；可选 (无 active profile 时不显示) */
   model: string | null;
 }) {
+  const { t } = useTranslation();
   // 末行追加时自动滚到底
   const ref = useRef<HTMLPreElement | null>(null);
   useEffect(() => {
@@ -1230,7 +1242,7 @@ function RunningView({
     return () => clearInterval(id);
   }, [startedAt]);
 
-  const phase = useMemo(() => inferPhase(lines), [lines]);
+  const phase = useMemo(() => inferPhase(lines, t), [lines, t]);
 
   // 跟 RunMeta 完全同结构的 chip 行。running 跟 succeeded/failed 共享一套视觉
   // 骨架，用户从列表扫一眼能在固定位置看到 tool / 状态 / 模型 / 时长。strategy
@@ -1241,10 +1253,10 @@ function RunningView({
         <span className={`chat-run-tool chat-run-tool-${tool}`}>/{tool}</span>
         <span className="chat-run-status chat-run-status-running">
           <Spinner />
-          {RUN_STATUS_LABEL.running}
+          {runStatusLabel('running', t)}
         </span>
         {model && (
-          <span className="chat-run-chip chat-run-model" title={`使用模型 ${model}`}>
+          <span className="chat-run-chip chat-run-model" title={t('chatPane.modelTitle', { model })}>
             {model}
           </span>
         )}
@@ -1253,7 +1265,7 @@ function RunningView({
             两态最右侧元素位置稳定 */}
         <span
           className="chat-run-time"
-          title={`开始于 ${new Date(startedAt).toLocaleString()}`}
+          title={t('chatPane.startedAtTitle', { time: new Date(startedAt).toLocaleString() })}
         >
           {formatStartTime(startedAt)}
         </span>
@@ -1263,7 +1275,7 @@ function RunningView({
         className="chat-run-stdout"
         preRef={ref}
         text={lines.join('\n')}
-        placeholder="(等待 PR Agent 输出…)"
+        placeholder={t('chatPane.waitingOutput')}
       />
     </div>
   );
@@ -1284,13 +1296,16 @@ function QueuedView({
   position: number;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [cancelling, setCancelling] = useState(false);
   const userMessage = tool === 'ask' ? question?.trim() : undefined;
   return (
     <div className="chat-run-queued">
       <header className="chat-run-meta">
         <span className={`chat-run-tool chat-run-tool-${tool}`}>/{tool}</span>
-        <span className="chat-run-status chat-run-status-queued">排队中 · 第 {position} 位</span>
+        <span className="chat-run-status chat-run-status-queued">
+          {t('chatPane.queuedPosition', { position })}
+        </span>
         <button
           type="button"
           className="chat-run-queued-cancel"
@@ -1300,14 +1315,14 @@ function QueuedView({
             onCancel();
           }}
           disabled={cancelling}
-          title="取消排队任务"
-          aria-label="取消排队任务"
+          title={t('chatPane.cancelQueuedTitle')}
+          aria-label={t('chatPane.cancelQueuedTitle')}
         >
           <CloseIcon size={14} />
         </button>
       </header>
       {userMessage && (
-        <div className="chat-user-msg" aria-label="用户提问">
+        <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
           <QuestionIcon />
           <div className="chat-user-msg-body">{userMessage}</div>
         </div>
@@ -1378,6 +1393,7 @@ function RunResultView({
   /** 点击 finding 锚点：仅导航到 Diff 对应行（不进编辑态） */
   onNavigateToFinding: (finding: Finding) => void;
 }) {
+  const { t } = useTranslation();
   const findings = run.findings ?? [];
   // 失败 + 取消都用红 banner 提示。取消是用户主动行为，UI 用更轻文案区分
   const isFailed = run.status === 'failed';
@@ -1395,7 +1411,7 @@ function RunResultView({
     <div className="chat-run-result">
       <RunMeta run={run} />
       {userMessage && (
-        <div className="chat-user-msg" aria-label="用户提问">
+        <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
           <QuestionIcon />
           <div className="chat-user-msg-body">{userMessage}</div>
         </div>
@@ -1410,7 +1426,7 @@ function RunResultView({
             if (e.currentTarget.open !== showRawStdout) setShowRawStdout(e.currentTarget.open);
           }}
         >
-          <summary>原始输出 ({stdout.length} chars)</summary>
+          <summary>{t('chatPane.rawOutput', { n: stdout.length })}</summary>
           <AnsiPre className="chat-run-stdout" text={stdout} />
         </details>
       )}
@@ -1418,10 +1434,12 @@ function RunResultView({
         <div className="chat-error" role="alert">
           <strong>
             {isCancelled
-              ? '已取消'
+              ? t('chatPane.runCancelled')
               : run.errorReason === 'llm-error'
-                ? 'LLM 调用失败'
-                : `run 失败${run.errorReason ? ` (${run.errorReason})` : ''}`}
+                ? t('chatPane.llmCallFailed')
+                : run.errorReason
+                  ? t('chatPane.runFailedReason', { reason: run.errorReason })
+                  : t('chatPane.runFailed')}
             {/* llm-error 时 exitCode 是 0 (pr-agent 自己 catch 了)，显示出来反而
                 让用户误以为没出错，所以跳过 */}
             {run.exitCode != null && !isCancelled && run.errorReason !== 'llm-error' &&
@@ -1432,8 +1450,12 @@ function RunResultView({
               type="button"
               className="chat-run-retry"
               onClick={() => onRetry(run)}
-              title={`重试 /${run.tool}${run.question ? ` ${run.question}` : ''}`}
-              aria-label="重试"
+              title={
+                run.question
+                  ? t('chatPane.retryWithQuestionTitle', { tool: run.tool, question: run.question })
+                  : t('chatPane.retryTitle', { tool: run.tool })
+              }
+              aria-label={t('chatPane.retryAria')}
             >
               <RetryIcon />
             </button>
@@ -1477,8 +1499,7 @@ function RunResultView({
         </ul>
       ) : run.status === 'succeeded' ? (
         <div className="chat-finding-empty muted">
-          PR Agent 跑完没有解析出 finding（可能 /describe 仅返回摘要、或解析器跳过了未识别段）。
-          可以展开上方原始输出核对。
+          {t('chatPane.noFindings')}
         </div>
       ) : null}
     </div>
@@ -1505,12 +1526,13 @@ function FindingDraftActions({
   onJump?: () => void;
   onReject?: () => void;
 }) {
+  const { t } = useTranslation();
   const status = relatedDraft?.status;
   const chipText: Record<NonNullable<typeof status>, string> = {
-    pending: '待处理',
-    edited: '已编辑',
-    posted: '已发布',
-    rejected: '已拒绝',
+    pending: t('chatPane.draftStatusPending'),
+    edited: t('chatPane.draftStatusEdited'),
+    posted: t('chatPane.draftStatusPosted'),
+    rejected: t('chatPane.draftStatusRejected'),
   };
   return (
     <div className="chat-finding-draft-actions">
@@ -1527,13 +1549,17 @@ function FindingDraftActions({
           onClick={onJump}
           title={
             status === 'posted'
-              ? '查看远端评论'
+              ? t('chatPane.draftJumpViewTitle')
               : status === 'rejected'
-                ? '恢复并编辑'
-                : '在代码中编辑'
+                ? t('chatPane.draftJumpRestoreTitle')
+                : t('chatPane.draftJumpEditTitle')
           }
         >
-          {status === 'posted' ? '查看' : status === 'rejected' ? '恢复' : '编辑'}
+          {status === 'posted'
+            ? t('chatPane.draftJumpView')
+            : status === 'rejected'
+              ? t('chatPane.draftJumpRestore')
+              : t('common.edit')}
         </button>
       )}
       {/* posted 不允许 reject (远端已存)；rejected 也不允许 reject (已经是了) */}
@@ -1542,9 +1568,9 @@ function FindingDraftActions({
           type="button"
           className="chat-finding-draft-btn chat-finding-draft-btn-reject"
           onClick={onReject}
-          title="拒绝此条建议（不会发布到远端）"
+          title={t('chatPane.rejectFindingTitle')}
         >
-          拒绝
+          {t('chatPane.reject')}
         </button>
       )}
     </div>
@@ -1608,14 +1634,21 @@ function formatTokens(n: number): string {
   return `${(n / 1000).toFixed(1)}k`;
 }
 
-const RUN_STATUS_LABEL: Record<ReviewRun['status'], string> = {
-  running: '运行中',
-  succeeded: '完成',
-  failed: '失败',
-  cancelled: '已取消',
-};
+function runStatusLabel(status: ReviewRun['status'], t: TFunction): string {
+  switch (status) {
+    case 'running':
+      return t('chatPane.statusRunning');
+    case 'succeeded':
+      return t('chatPane.statusSucceeded');
+    case 'failed':
+      return t('chatPane.statusFailed');
+    case 'cancelled':
+      return t('chatPane.statusCancelled');
+  }
+}
 
 function RunMeta({ run }: { run: ReviewRun }) {
+  const { t } = useTranslation();
   const duration = run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—';
   // 优先用 run.tokenUsage（litellm callback 捕获的 API 真实 usage，见 sitecustomize）；
   // 历史 run 没这字段时回退到从 stdout 抓取的旧估算，保持向后兼容。
@@ -1632,12 +1665,12 @@ function RunMeta({ run }: { run: ReviewRun }) {
     <header className="chat-run-meta">
       <span className={`chat-run-tool chat-run-tool-${run.tool}`}>/{run.tool}</span>
       <span className={`chat-run-status chat-run-status-${run.status}`}>
-        {RUN_STATUS_LABEL[run.status]}
+        {runStatusLabel(run.status, t)}
       </span>
       {/* 模型 chip 取代运行时策略 chip — strategy 是部署细节用户不
           关心，model 是真正影响 review 质量的变量 */}
       {run.model && (
-        <span className="chat-run-chip chat-run-model" title={`使用模型 ${run.model}`}>
+        <span className="chat-run-chip chat-run-model" title={t('chatPane.modelTitle', { model: run.model })}>
           {run.model}
         </span>
       )}
@@ -1645,7 +1678,10 @@ function RunMeta({ run }: { run: ReviewRun }) {
       {usage.prompt !== undefined || usage.completion !== undefined ? (
         <span
           className="chat-run-chip chat-run-tokens"
-          title={`输入(prompt) ${usage.prompt ?? '—'} · 输出(completion) ${usage.completion ?? '—'} tokens`}
+          title={t('chatPane.tokensTitle', {
+            prompt: usage.prompt ?? '—',
+            completion: usage.completion ?? '—',
+          })}
         >
           {usage.prompt !== undefined && (
             <>
@@ -1667,7 +1703,7 @@ function RunMeta({ run }: { run: ReviewRun }) {
           tool/status/strategy chip 拉开距离，视觉权重比 chip 轻一档 */}
       <span
         className="chat-run-time"
-        title={`开始于 ${new Date(run.startedAt).toLocaleString()}`}
+        title={t('chatPane.startedAtTitle', { time: new Date(run.startedAt).toLocaleString() })}
       >
         {formatStartTime(run.startedAt)}
       </span>
@@ -1720,22 +1756,26 @@ const SECTION_ORDER: Record<PrDocSectionKey, number> = {
   score: 11,
   general: 12,
 };
-const SECTION_LABEL: Record<PrDocSectionKey, string> = {
-  title: '建议标题',
-  'pr-type': '类型',
-  summary: '总结',
-  description: '描述',
-  diagram: '架构图',
-  assessment: '思路建议',
-  walkthrough: '文件变更',
-  'relevant-tests': '相关测试',
-  security: '安全',
-  'code-feedback': '代码反馈',
-  'code-suggestion': '改进建议',
-  effort: '工作量',
-  score: '评分',
-  general: '',
+const SECTION_LABEL_KEY: Record<PrDocSectionKey, string | null> = {
+  title: 'chatPane.sectionTitle',
+  'pr-type': 'chatPane.sectionPrType',
+  summary: 'chatPane.sectionSummary',
+  description: 'chatPane.sectionDescription',
+  diagram: 'chatPane.sectionDiagram',
+  assessment: 'chatPane.sectionAssessment',
+  walkthrough: 'chatPane.sectionWalkthrough',
+  'relevant-tests': 'chatPane.sectionRelevantTests',
+  security: 'chatPane.sectionSecurity',
+  'code-feedback': 'chatPane.sectionCodeFeedback',
+  'code-suggestion': 'chatPane.sectionCodeSuggestion',
+  effort: 'chatPane.sectionEffort',
+  score: 'chatPane.sectionScore',
+  general: null, // general / 未知段无 chip 标签
 };
+function sectionLabel(key: PrDocSectionKey, t: TFunction): string {
+  const k = SECTION_LABEL_KEY[key];
+  return k ? t(k) : '';
+}
 
 /**
  * 工作量段已用 emoji 圆点（🔵🔵🔵⚪⚪）直观表示 1-5 分，去掉前面冗余的数字分数：
@@ -1805,9 +1845,10 @@ function FindingCard({
   /** 点击锚点：仅导航到 Diff 对应行（不进编辑态） */
   onNavigate?: () => void;
 }) {
+  const { t } = useTranslation();
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
-  const label = SECTION_LABEL[key];
+  const label = sectionLabel(key, t);
   // 标题在已知 sectionKey 上**通常**跟 chip label 内容重复 (h4 显示 "PR Type" + chip
   // 显示 "类型")，所以默认只有 general 段才出 title。但 pr-agent 把若干段的"值"放在
   // 标题里 (e.g., `Estimated effort to review: 3 🔵🔵🔵⚪⚪` / `Score: 85 🟢🟢...`)，
@@ -1847,7 +1888,7 @@ function FindingCard({
               type="button"
               className="chat-finding-anchor-link"
               onClick={onNavigate}
-              title="跳转到代码对应行"
+              title={t('chatPane.anchorJumpTitle')}
             >
               <code>{finding.anchor.path}</code>
               <span>
@@ -1874,7 +1915,7 @@ function FindingCard({
           {typeof finding.score === 'number' && (
             <span
               className={`chat-finding-score${finding.score >= 8 ? ' chat-finding-score-high' : ''}`}
-              title="pr-agent 给出的重要度评分 1-10"
+              title={t('chatPane.scoreTitle')}
             >
               {finding.score}/10
             </span>
@@ -1924,7 +1965,7 @@ function FindingCard({
           {finding.codeChange.existing && (
             <pre
               className="chat-finding-code-change-block chat-finding-code-change-existing"
-              aria-label="原代码"
+              aria-label={t('chatPane.codeExistingAria')}
             >
               {finding.codeChange.existing}
             </pre>
@@ -1932,7 +1973,7 @@ function FindingCard({
           {finding.codeChange.improved && (
             <pre
               className="chat-finding-code-change-block chat-finding-code-change-improved"
-              aria-label="改进代码"
+              aria-label={t('chatPane.codeImprovedAria')}
             >
               {finding.codeChange.improved}
             </pre>
@@ -1954,16 +1995,15 @@ function ChatEmpty({
   llmConfigured: boolean;
   onOpenSettings?: () => void;
 }) {
+  const { t } = useTranslation();
   if (!prAgent.available) {
     return (
       <div className="chat-empty">
         <div className="chat-empty-icon" aria-hidden="true">
           <ChatIcon size={28} />
         </div>
-        <p className="chat-empty-title">PR Agent 未就绪</p>
-        <p className="chat-empty-sub">
-          嵌入式运行时与本机 CLI 都未探测到。打开 Settings 看探测详情后重启应用。
-        </p>
+        <p className="chat-empty-title">{t('chatPane.emptyNotReadyTitle')}</p>
+        <p className="chat-empty-sub">{t('chatPane.emptyNotReadySub')}</p>
       </div>
     );
   }
@@ -1974,10 +2014,8 @@ function ChatEmpty({
         <div className="chat-empty-icon" aria-hidden="true">
           <ChatIcon size={28} />
         </div>
-        <p className="chat-empty-title">需要配置 AI 模型</p>
-        <p className="chat-empty-sub">
-          配置一个 LLM 模型后即可使用 /review、/describe 等能力。PR 同步等基础功能不受影响。
-        </p>
+        <p className="chat-empty-title">{t('chatPane.emptyNeedLlmTitle')}</p>
+        <p className="chat-empty-sub">{t('chatPane.emptyNeedLlmSub')}</p>
         {onOpenSettings && (
           <button
             type="button"
@@ -1985,7 +2023,7 @@ function ChatEmpty({
             style={{ marginTop: 12 }}
             onClick={onOpenSettings}
           >
-            去设置
+            {t('chatPane.goToSettings')}
           </button>
         )}
       </div>
@@ -1996,24 +2034,26 @@ function ChatEmpty({
       <div className="chat-empty-icon" aria-hidden="true">
         <ChatIcon size={28} />
       </div>
-      <p className="chat-empty-title">{pr ? '可以开始对话' : '选中一个 PR 后开始'}</p>
-      <p className="chat-empty-sub">下方输入框接受命令或自然语言：</p>
+      <p className="chat-empty-title">
+        {pr ? t('chatPane.emptyReadyTitle') : t('chatPane.emptySelectPrTitle')}
+      </p>
+      <p className="chat-empty-sub">{t('chatPane.emptyInputHint')}</p>
       <ul className="chat-empty-list">
         <Bullet>
-          <code>/describe</code> 自动生成 PR 摘要 / labels
+          <code>/describe</code> {t('chatPane.bulletDescribe')}
         </Bullet>
         <Bullet>
-          <code>/review</code> 跑一次 AI review，结果落到 findings 列表
+          <code>/review</code> {t('chatPane.bulletReview')}
         </Bullet>
         <Bullet>
-          <code>/improve</code> 逐行代码改进建议（带重要度评分）
+          <code>/improve</code> {t('chatPane.bulletImprove')}
         </Bullet>
         <Bullet>
-          <code>/ask &lt;问题&gt;</code> 自然语言追问 (或直接打字，自动当 ask)
+          <code>/ask &lt;{t('chatPane.askArgQuestion')}&gt;</code> {t('chatPane.bulletAsk')}
         </Bullet>
       </ul>
       <p className="chat-empty-foot muted">
-        {pr ? '输入框打 / 看命令补全；Shift+Enter 换行' : '未选中 PR：先在左侧列表里挑一条'}
+        {pr ? t('chatPane.emptyFootWithPr') : t('chatPane.emptyFootNoPr')}
       </p>
     </div>
   );

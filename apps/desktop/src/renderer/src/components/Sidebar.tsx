@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LocalPrStatus, PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
 import { PrItem } from './PrItem';
 
@@ -21,21 +22,21 @@ interface SidebarProps {
 export const SIDEBAR_MIN_WIDTH = 240;
 export const SIDEBAR_MAX_WIDTH = 720;
 
-/** 发现分类标签文案；实际展示哪几类由活动连接的 capabilities.discoveryFilters 决定。 */
-const DISCOVERY_LABELS: Record<PrDiscoveryFilter, string> = {
-  'review-requested': '待我评审',
-  created: '我创建的',
-  assigned: '指派给我',
-  mentioned: '提及我',
+/** 发现分类标签 i18n key；实际展示哪几类由活动连接的 capabilities.discoveryFilters 决定。 */
+const DISCOVERY_LABEL_KEYS: Record<PrDiscoveryFilter, string> = {
+  'review-requested': 'sidebar.discoveryReviewRequested',
+  created: 'sidebar.discoveryCreated',
+  assigned: 'sidebar.discoveryAssigned',
+  mentioned: 'sidebar.discoveryMentioned',
 };
 
-const FILTERS: ReadonlyArray<{ value: FilterKey; label: string }> = [
-  { value: 'pending', label: '待处理' },
-  { value: 'all', label: '全部' },
-  { value: 'approved', label: '通过' },
-  { value: 'needs_work', label: '需修改' },
-  { value: 'conflict', label: '冲突' },
-  { value: 'mergeable', label: '可合并' },
+const FILTERS: ReadonlyArray<{ value: FilterKey; labelKey: string }> = [
+  { value: 'pending', labelKey: 'sidebar.filterPending' },
+  { value: 'all', labelKey: 'sidebar.filterAll' },
+  { value: 'approved', labelKey: 'sidebar.filterApproved' },
+  { value: 'needs_work', labelKey: 'sidebar.filterNeedsWork' },
+  { value: 'conflict', labelKey: 'sidebar.filterConflict' },
+  { value: 'mergeable', labelKey: 'sidebar.filterMergeable' },
 ];
 
 // reviewer 决断类（通过/需修改）：有发现分类标签时只对「待我评审」有意义，其余标签下恒空，
@@ -57,6 +58,7 @@ export function Sidebar({
   discoveryFilter,
   onDiscoveryFilterChange,
 }: SidebarProps) {
+  const { t } = useTranslation();
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
@@ -179,11 +181,11 @@ export function Sidebar({
       <div
         className="sidebar-resize-handle"
         onMouseDown={startResize}
-        title="拖动调整侧栏宽度"
+        title={t('sidebar.resizeTitle')}
         aria-label="resize sidebar"
       />
       {hasDiscoveryTabs && availableFilters && onDiscoveryFilterChange && (
-        <div className="sidebar-toolbar sidebar-discovery" role="tablist" aria-label="PR 发现范围">
+        <div className="sidebar-toolbar sidebar-discovery" role="tablist" aria-label={t('sidebar.discoveryTablistAria')}>
           {availableFilters.map((f) => (
             <button
               key={f}
@@ -193,7 +195,7 @@ export function Sidebar({
               onClick={() => onDiscoveryFilterChange(f)}
               type="button"
             >
-              {DISCOVERY_LABELS[f]}
+              {t(DISCOVERY_LABEL_KEYS[f])}
             </button>
           ))}
         </div>
@@ -202,7 +204,7 @@ export function Sidebar({
         <input
           type="text"
           className="sidebar-search"
-          placeholder="搜索标题 / 仓库 / 作者 / ID"
+          placeholder={t('sidebar.searchPlaceholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -215,7 +217,7 @@ export function Sidebar({
             onClick={() => setFilter(f.value)}
             type="button"
           >
-            {f.label}
+            {t(f.labelKey)}
             <span
               className={`count-pill ${
                 f.value === 'mergeable' && counts.mergeable > 0 ? 'count-pill-mergeable' : ''
@@ -228,7 +230,7 @@ export function Sidebar({
       </div>
       <div className="sidebar-list">
         {groups.length === 0 ? (
-          <div className="sidebar-empty">没有匹配的 PR</div>
+          <div className="sidebar-empty">{t('sidebar.empty')}</div>
         ) : (
           groups.map((g) => {
             const expanded = searching || !collapsed.has(g.key);

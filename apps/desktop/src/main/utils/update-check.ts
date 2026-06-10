@@ -5,6 +5,7 @@
 import type { ProxyConfig, UpdateCheckResult } from '@meebox/shared';
 import { gt as semverGt, valid as semverValid } from 'semver';
 import { proxyFetchForHost } from './proxy.js';
+import { t } from '../i18n/index.js';
 
 const OWNER = 'huhamhire';
 const REPO = 'code-meeseeks';
@@ -36,7 +37,7 @@ export async function checkForUpdate(
 
   // semver.valid 容忍前缀 v、拒绝尾部垃圾（1.2.3beta / 1.2.3.4 → null）
   const current = semverValid(currentVersion);
-  if (!current) return fail(`无法解析当前版本号：${currentVersion}`);
+  if (!current) return fail(t('update.parseCurrentFailed', { version: currentVersion }));
 
   // 代理感知 fetch（命中本地/代理关闭则用全局 fetch 直连）
   const doFetch = proxyFetchForHost(proxy, API_HOST) ?? fetch;
@@ -59,9 +60,9 @@ export async function checkForUpdate(
       return { ok: true, hasUpdate: false, currentVersion };
     }
     const tag = data.tag_name;
-    if (!tag) return fail('Release 缺少 tag_name');
+    if (!tag) return fail(t('update.missingTag'));
     const latest = semverValid(tag);
-    if (!latest) return fail(`无法解析最新版本号：${tag}`);
+    if (!latest) return fail(t('update.parseLatestFailed', { tag }));
     return {
       ok: true,
       hasUpdate: semverGt(latest, current),

@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LlmProfile, LlmProvider } from '@meebox/shared';
+import i18n from '../i18n';
 import { EyeIcon, EyeOffIcon } from './icons';
 
 export interface ProviderMeta {
@@ -16,73 +18,77 @@ export interface ProviderMeta {
 
 // 顺序：海外通用 (OpenAI / OpenAI 兼容 / Anthropic) → 国内三家 (DeepSeek / 阿里
 // 百炼 / 火山方舟) → 本地 (Ollama)，方便用户按主流程扫读
+//
+// label / hint / modelExample 用 getter 经 i18n.t 惰性取值：保持数组形状不变（消费方
+// 直接读 .label 等），同时让文案随当前语言解析（品牌名等无对应 key 时退回字面量）。
+function provider(
+  meta: Omit<ProviderMeta, 'label' | 'hint' | 'modelExample'> & {
+    /** label 无 i18n key（品牌名）时给字面量；有 key 时省略 */
+    label?: string;
+  },
+): ProviderMeta {
+  const { value } = meta;
+  return {
+    ...meta,
+    get label() {
+      return meta.label ?? i18n.t(`llmProfileForm.provider.${value}.label`);
+    },
+    get hint() {
+      return i18n.t(`llmProfileForm.provider.${value}.hint`);
+    },
+    get modelExample() {
+      return i18n.t(`llmProfileForm.provider.${value}.modelExample`);
+    },
+  };
+}
+
 export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
-  {
+  provider({
     value: 'openai',
     label: 'OpenAI',
-    hint: '官方 OpenAI API；Base URL 留空走默认 endpoint',
-    modelExample: 'gpt-4o / gpt-4o-mini',
     defaultBaseUrl: 'https://api.openai.com',
     needsKey: true,
-  },
-  {
+  }),
+  provider({
     value: 'anthropic',
     label: 'Anthropic',
-    hint: '官方 Anthropic API；模型直接填型号名（claude-opus-4-8 等），会自动补 anthropic/ 前缀',
-    modelExample: 'claude-opus-4-8 / claude-sonnet-4-6 / claude-haiku-4-5',
     defaultBaseUrl: 'https://api.anthropic.com',
     needsKey: true,
-  },
-  {
+  }),
+  provider({
     value: 'deepseek',
     label: 'DeepSeek',
-    hint: '官方 DeepSeek API；模型直接填型号名，会自动补 deepseek/ 前缀',
-    modelExample: 'deepseek-chat / deepseek-reasoner',
     defaultBaseUrl: 'https://api.deepseek.com',
     needsKey: true,
-  },
-  {
+  }),
+  provider({
     value: 'dashscope',
-    label: '阿里百炼 (DashScope)',
-    hint: '阿里云 DashScope OpenAI 兼容接入；含千问 (Qwen)、DeepSeek-on-DashScope 等。API Key 在 DashScope 控制台生成',
-    modelExample: 'qwen-max / qwen-plus / qwen-turbo / qwen3-235b-a22b',
     defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     needsKey: true,
-  },
-  {
+  }),
+  provider({
     value: 'volcengine-ark',
-    label: '火山方舟 (Volcengine Ark)',
-    hint: '火山方舟 OpenAI 兼容接入；含豆包 (Doubao)、DeepSeek-on-Ark 等。模型用方舟 endpoint id (ep-...) 或预设模型名',
-    modelExample: 'ep-20240xxxxxx-xxxxx / doubao-pro-32k / doubao-1-5-pro-256k',
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     needsKey: true,
-  },
-  {
+  }),
+  provider({
     value: 'ollama',
     label: 'Ollama',
-    hint: '本地 Ollama 服务；模型直接填名字，会自动补 ollama/ 前缀',
-    modelExample: 'qwen2.5 / llama3.1',
     defaultBaseUrl: 'http://localhost:11434',
     needsKey: false,
-  },
+  }),
   // 「OpenAI 兼容」：兜底通用项，主流程让用户先扫读具名 provider
-  {
+  provider({
     value: 'openai-compatible',
-    label: 'OpenAI 兼容',
-    hint: '任何遵循 OpenAI API 协议的服务（vLLM / FastChat / 自建代理 …）；必须填 Base URL',
-    modelExample: 'gpt-4o-mini / qwen2.5-72b-instruct',
     defaultBaseUrl: '',
     needsKey: true,
-  },
+  }),
   // 「本地 CLI」放最后：进阶项，转交本机命令行工具代调模型，不直连 API
-  {
+  provider({
     value: 'cli',
-    label: '本地 CLI',
-    hint: '将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。',
-    modelExample: '命令名',
     defaultBaseUrl: '',
     needsKey: false,
-  },
+  }),
 ];
 
 export function getProviderMeta(p: LlmProvider): ProviderMeta {
@@ -119,14 +125,14 @@ export function validateProfile(p: LlmProfile, existing: LlmProfile[]): ProfileE
   const errors: ProfileErrors = {};
   const label = p.label.trim();
   if (!label) {
-    errors.label = '必填';
+    errors.label = i18n.t('llmProfileForm.errorRequired');
   } else if (!LABEL_SLUG_RE.test(label)) {
-    errors.label = '只允许 字母 / 数字 / - / _，1-32 字符';
+    errors.label = i18n.t('llmProfileForm.errorLabelSlug');
   } else {
     const dup = existing.find(
       (x) => x.id !== p.id && x.label.trim().toLowerCase() === label.toLowerCase(),
     );
-    if (dup) errors.label = '名称已存在';
+    if (dup) errors.label = i18n.t('llmProfileForm.errorLabelDuplicate');
   }
 
   // cli：model 字段填的是本机命令名，无 base_url / api_key 概念。隐藏校验——只放行已适配的
@@ -134,15 +140,17 @@ export function validateProfile(p: LlmProfile, existing: LlmProfile[]): ProfileE
   // 提示不点名受支持的命令（保持隐晦），仅给通用的「不受支持」反馈。
   if (p.provider === 'cli') {
     const cmd = p.model.trim().toLowerCase();
-    if (!cmd) errors.model = '必填';
-    else if (cmd !== 'claude' && cmd !== 'codex') errors.model = '不受支持的 CLI 工具';
+    if (!cmd) errors.model = i18n.t('llmProfileForm.errorRequired');
+    else if (cmd !== 'claude' && cmd !== 'codex')
+      errors.model = i18n.t('llmProfileForm.errorCliUnsupported');
     return errors;
   }
 
   const meta = getProviderMeta(p.provider);
-  if (!p.model.trim()) errors.model = '必填';
-  if (meta.needsKey && !p.api_key.trim()) errors.api_key = '必填';
-  if (!meta.defaultBaseUrl && !p.base_url.trim()) errors.base_url = '必填';
+  if (!p.model.trim()) errors.model = i18n.t('llmProfileForm.errorRequired');
+  if (meta.needsKey && !p.api_key.trim()) errors.api_key = i18n.t('llmProfileForm.errorRequired');
+  if (!meta.defaultBaseUrl && !p.base_url.trim())
+    errors.base_url = i18n.t('llmProfileForm.errorRequired');
   return errors;
 }
 
@@ -176,6 +184,7 @@ export function LlmProfileForm({
   /** 由外部（如向导左侧列表）控制 provider 时，隐藏表单内的 Provider 下拉 */
   hideProvider?: boolean;
 }) {
+  const { t } = useTranslation();
   const [keyVisible, setKeyVisible] = useState(false);
   const [touched, setTouched] = useState<Record<keyof ProfileErrors, boolean>>({
     label: false,
@@ -202,7 +211,7 @@ export function LlmProfileForm({
     <>
       <div className="modal-kv">
         <div className="modal-kv-key">
-          名称 <span className="settings-required">*</span>
+          {t('llmProfileForm.nameLabel')} <span className="settings-required">*</span>
         </div>
         <div className="modal-kv-val">
           <input
@@ -211,7 +220,7 @@ export function LlmProfileForm({
             value={draft.label}
             onChange={(e) => update('label', e.target.value)}
             onBlur={() => markTouched('label')}
-            placeholder="如 openai-prod / local-ollama"
+            placeholder={t('llmProfileForm.namePlaceholder')}
             autoFocus
             maxLength={32}
           />
@@ -236,7 +245,8 @@ export function LlmProfileForm({
           </>
         )}
         <div className="modal-kv-key">
-          {isCli ? 'CLI 命令' : 'Model'} <span className="settings-required">*</span>
+          {isCli ? t('llmProfileForm.cliCommandLabel') : 'Model'}{' '}
+          <span className="settings-required">*</span>
         </div>
         <div className="modal-kv-val">
           <input
@@ -245,7 +255,7 @@ export function LlmProfileForm({
             value={draft.model}
             onChange={(e) => update('model', e.target.value)}
             onBlur={() => markTouched('model')}
-            placeholder={isCli ? '命令名' : providerMeta.modelExample}
+            placeholder={isCli ? t('llmProfileForm.cliCommandPlaceholder') : providerMeta.modelExample}
           />
           {showError('model') && <p className="settings-field-error">{errors.model}</p>}
         </div>
@@ -277,15 +287,15 @@ export function LlmProfileForm({
                   value={draft.api_key}
                   onChange={(e) => update('api_key', e.target.value)}
                   onBlur={() => markTouched('api_key')}
-                  placeholder={providerMeta.needsKey ? 'sk-...' : '该 provider 无需密钥（留空）'}
+                  placeholder={providerMeta.needsKey ? 'sk-...' : t('llmProfileForm.apiKeyOptionalPlaceholder')}
                   autoComplete="off"
                 />
                 <button
                   type="button"
                   className="btn btn-sm btn-icon"
                   onClick={() => setKeyVisible((v) => !v)}
-                  title={keyVisible ? '隐藏' : '显示'}
-                  aria-label={keyVisible ? '隐藏' : '显示'}
+                  title={keyVisible ? t('llmProfileForm.hide') : t('llmProfileForm.show')}
+                  aria-label={keyVisible ? t('llmProfileForm.hide') : t('llmProfileForm.show')}
                 >
                   {keyVisible ? <EyeIcon /> : <EyeOffIcon />}
                 </button>
@@ -297,8 +307,9 @@ export function LlmProfileForm({
       </div>
       {isCli && (
         <p className="muted modal-footer">
-          ⚠️ 填写并启用此预设，即代表你授权 Code Meeseeks 调用本机的 <code>{draft.model.trim() || '命令行'}</code>{' '}
-          工具执行评审操作（在子进程中以你的本地登录态运行）。请确认对应命令已安装并完成登录。
+          {t('llmProfileForm.cliWarningPrefix')}{' '}
+          <code>{draft.model.trim() || t('llmProfileForm.cliCommandFallback')}</code>{' '}
+          {t('llmProfileForm.cliWarningSuffix')}
         </p>
       )}
       <p className="muted modal-footer">{providerMeta.hint}</p>

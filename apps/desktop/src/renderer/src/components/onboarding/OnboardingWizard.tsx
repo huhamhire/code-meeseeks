@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LlmProfile } from '@meebox/shared';
 import { invoke } from '../../api';
 import {
@@ -32,13 +33,19 @@ interface OnboardingWizardProps {
 }
 
 // 步骤：欢迎 → 平台（必填）→ LLM（可跳过）→ 完成
-const STEPS = ['欢迎', '代码平台', 'AI 模型', '完成'] as const;
+const STEP_KEYS = [
+  'onboarding.stepWelcome',
+  'onboarding.stepPlatform',
+  'onboarding.stepLlm',
+  'onboarding.stepDone',
+] as const;
 
 export function OnboardingWizard({
   existingLlmProfiles,
   initialReposDir,
   onComplete,
 }: OnboardingWizardProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState(0);
 
   const [connDraft, setConnDraft] = useState<ConnDraft>(() => ({
@@ -89,14 +96,14 @@ export function OnboardingWizard({
   return (
     <div className="onboarding">
       <div className="onboarding-card">
-        <ol className="onboarding-dots" aria-label="配置进度">
-          {STEPS.map((label, i) => (
+        <ol className="onboarding-dots" aria-label={t('onboarding.progressAria')}>
+          {STEP_KEYS.map((labelKey, i) => (
             <li
-              key={label}
+              key={labelKey}
               className={`onboarding-dot${i === step ? ' current' : ''}${i < step ? ' done' : ''}`}
             >
               <span className="onboarding-dot-mark">{i + 1}</span>
-              <span className="onboarding-dot-label">{label}</span>
+              <span className="onboarding-dot-label">{t(labelKey)}</span>
             </li>
           ))}
         </ol>
@@ -131,7 +138,7 @@ export function OnboardingWizard({
           <div className="onboarding-nav-left">
             {step > 0 && step < 3 && (
               <button type="button" className="btn" onClick={() => setStep((s) => s - 1)}>
-                上一步
+                {t('onboarding.back')}
               </button>
             )}
           </div>
@@ -142,9 +149,9 @@ export function OnboardingWizard({
                 className="btn btn-primary"
                 onClick={() => setStep(2)}
                 disabled={!platformCanAdvance}
-                title={platformCanAdvance ? undefined : '请填完名称 / Base URL / Token'}
+                title={platformCanAdvance ? undefined : t('onboarding.platformIncompleteHint')}
               >
-                下一步
+                {t('onboarding.next')}
               </button>
             )}
             {step === 2 && (
@@ -157,7 +164,7 @@ export function OnboardingWizard({
                     setStep(3);
                   }}
                 >
-                  跳过
+                  {t('onboarding.skip')}
                 </button>
                 <button
                   type="button"
@@ -167,9 +174,9 @@ export function OnboardingWizard({
                     setStep(3);
                   }}
                   disabled={!llmValid}
-                  title={llmValid ? undefined : '请填完必填项，或点「跳过」'}
+                  title={llmValid ? undefined : t('onboarding.llmIncompleteHint')}
                 >
-                  下一步
+                  {t('onboarding.next')}
                 </button>
               </>
             )}
@@ -180,7 +187,7 @@ export function OnboardingWizard({
                 onClick={() => void finish()}
                 disabled={submitting}
               >
-                {submitting ? '初始化中…' : '进入应用'}
+                {submitting ? t('onboarding.initializing') : t('onboarding.enterApp')}
               </button>
             )}
           </div>
@@ -191,6 +198,7 @@ export function OnboardingWizard({
 }
 
 function WelcomeStep({ onStart }: { onStart: () => void }) {
+  const { t } = useTranslation();
   // 隐藏后门：连续快速点击 logo 7 次打开 DevTools（每次间隔 > 800ms 则计数清零）。
   // 首启向导下没有菜单 / 状态栏入口，给开发排障留一个不显眼的手势。
   const tapRef = useRef<{ count: number; last: number }>({ count: 0, last: 0 });
@@ -209,14 +217,14 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
       <div className="onboarding-logo" onClick={onLogoTap} aria-hidden="true">
         <PullRequestIcon size={56} />
       </div>
-      <h2 className="onboarding-title">欢迎使用 Code Meeseeks</h2>
-      <p className="onboarding-lead">只需几步配置即可连接你的代码平台。</p>
+      <h2 className="onboarding-title">{t('onboarding.welcomeTitle')}</h2>
+      <p className="onboarding-lead">{t('onboarding.welcomeLead')}</p>
       <ul className="onboarding-points">
-        <li>连接你的代码平台，自动同步待你评审的 PR</li>
-        <li>可选接入 AI 模型，一键 /review、/describe</li>
+        <li>{t('onboarding.welcomePoint1')}</li>
+        <li>{t('onboarding.welcomePoint2')}</li>
       </ul>
       <button type="button" className="btn btn-primary onboarding-start" onClick={onStart}>
-        开始配置
+        {t('onboarding.startConfig')}
       </button>
     </div>
   );
@@ -237,13 +245,14 @@ function PlatformStep({
   cacheOpen: boolean;
   onToggleCache: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="onboarding-platform">
-      <h2 className="onboarding-step-title">连接代码平台</h2>
-      <p className="muted onboarding-step-sub">选择平台方案并填写连接信息。</p>
+      <h2 className="onboarding-step-title">{t('onboarding.platformTitle')}</h2>
+      <p className="muted onboarding-step-sub">{t('onboarding.platformSub')}</p>
       <div className="onboarding-platform-grid">
         {/* 左：平台方案选择 */}
-        <div className="onboarding-platform-list" role="radiogroup" aria-label="代码平台">
+        <div className="onboarding-platform-list" role="radiogroup" aria-label={t('onboarding.platformGroupAria')}>
           {PLATFORM_META.map((p) => {
             // 可用平台（Bitbucket / GitHub）可点选并设 kind；GitLab 等未实现的置灰
             const selected = p.kind === connDraft.kind;
@@ -267,7 +276,7 @@ function PlatformStep({
                 </span>
                 <span className="onboarding-platform-text">
                   <span className="onboarding-platform-name">{p.label}</span>
-                  <span className="onboarding-platform-meta">{p.sub}</span>
+                  <span className="onboarding-platform-meta">{t(p.subKey)}</span>
                 </span>
               </button>
             );
@@ -288,12 +297,12 @@ function PlatformStep({
               <span className={`onboarding-caret${cacheOpen ? ' open' : ''}`} aria-hidden="true">
                 ▸
               </span>
-              缓存目录（可选）
+              {t('onboarding.cacheDirToggle')}
             </button>
             {cacheOpen && (
               <div className="onboarding-advanced-body">
                 <p className="muted" style={{ margin: '0 0 6px' }}>
-                  本地仓库镜像 + worktree 的存放位置，可重建的缓存。留默认即可。
+                  {t('onboarding.cacheDirDesc')}
                 </p>
                 <div className="settings-edit-row" style={{ marginTop: 0 }}>
                   <input
@@ -310,19 +319,19 @@ function PlatformStep({
                       void (async () => {
                         const r = await invoke('dialog:pickDirectory', {
                           defaultPath: reposDir.trim() || undefined,
-                          title: '选择缓存目录',
+                          title: t('onboarding.pickCacheDirTitle'),
                         });
                         if (r.path) onReposDirChange(r.path);
                       })();
                     }}
-                    title="选择目录"
-                    aria-label="选择目录"
+                    title={t('onboarding.pickDir')}
+                    aria-label={t('onboarding.pickDir')}
                   >
                     <FolderIcon />
                   </button>
                 </div>
                 <p className="muted" style={{ margin: '6px 0 0' }}>
-                  改缓存目录需重启应用后完全生效。
+                  {t('onboarding.cacheDirRestartNote')}
                 </p>
               </div>
             )}
@@ -344,6 +353,7 @@ function LlmStep({
   onChange: (d: LlmProfile) => void;
   onValidityChange: (valid: boolean) => void;
 }) {
+  const { t } = useTranslation();
   // 两阶段：先选 provider（居中滚动列表）→ 选定后列表收到左侧、右侧展开配置
   const [chosen, setChosen] = useState(false);
   const pick = (provider: LlmProfile['provider']): void => {
@@ -352,14 +362,14 @@ function LlmStep({
   };
   return (
     <div className="onboarding-llm">
-      <h2 className="onboarding-step-title">接入 AI 模型（可选）</h2>
-      <p className="muted onboarding-step-sub">配置后即可在 PR 上使用 /review、/describe 等能力。</p>
+      <h2 className="onboarding-step-title">{t('onboarding.llmTitle')}</h2>
+      <p className="muted onboarding-step-sub">{t('onboarding.llmSub')}</p>
 
       {!chosen ? (
         // 阶段一：居中的 provider 选择列表（滚动）
         <div className="onboarding-provider-pick">
-          <p className="muted onboarding-provider-pick-hint">选择要对接的 Provider</p>
-          <div className="onboarding-provider-list" role="radiogroup" aria-label="选择 Provider">
+          <p className="muted onboarding-provider-pick-hint">{t('onboarding.providerPickHint')}</p>
+          <div className="onboarding-provider-list" role="radiogroup" aria-label={t('onboarding.providerPickAria')}>
             {LLM_PROVIDERS.map((p) => (
               <button
                 key={p.value}
@@ -413,17 +423,16 @@ function LlmStep({
 }
 
 function DoneStep({ submitting, error }: { submitting: boolean; error: string | null }) {
+  const { t } = useTranslation();
   return (
     <div className="onboarding-done">
       <div className="onboarding-done-badge" aria-hidden="true">
         <SuccessBadgeIcon size={76} />
       </div>
-      <h2 className="onboarding-title">一切就绪 🎉</h2>
-      <p className="onboarding-lead">
-        配置完成！点下方按钮进入应用，Code Meeseeks 会开始同步待你评审的 PR。
-      </p>
-      {submitting && <p className="muted">正在初始化连接并拉取 PR…</p>}
-      {error && <p className="error-text">初始化失败：{error}</p>}
+      <h2 className="onboarding-title">{t('onboarding.doneTitle')}</h2>
+      <p className="onboarding-lead">{t('onboarding.doneLead')}</p>
+      {submitting && <p className="muted">{t('onboarding.doneSubmitting')}</p>}
+      {error && <p className="error-text">{t('onboarding.doneError', { error })}</p>}
     </div>
   );
 }

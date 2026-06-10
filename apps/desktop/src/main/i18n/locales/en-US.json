@@ -1,0 +1,24 @@
+{
+  "dialog": {
+    "selectDirectory": "Select directory"
+  },
+  "drafts": {
+    "notFound": "Draft not found (it may have been deleted)",
+    "rejected": "Draft was rejected, skipping"
+  },
+  "prAgent": {
+    "askNeedsQuestion": "/ask requires a question",
+    "duplicateTask": "A /{{tool}} task for this PR is already running or queued; do not trigger it again.",
+    "notReady": "pr-agent not ready",
+    "notReadyDetail": "pr-agent not ready: neither the embedded runtime nor a local CLI was detected. See probe details in Settings."
+  },
+  "proxy": {
+    "authFailed": "Proxy authentication failed (407); check the username/password",
+    "disabled": "Proxy is disabled or its address is empty"
+  },
+  "update": {
+    "missingTag": "Release is missing tag_name",
+    "parseCurrentFailed": "Unable to parse the current version: {{version}}",
+    "parseLatestFailed": "Unable to parse the latest version: {{tag}}"
+  }
+}

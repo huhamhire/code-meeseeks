@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { PrComment, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
+import i18n from '../i18n';
 import { formatBackendError, type FormattedError } from '../errors';
 import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { Avatar } from './Avatar';
@@ -33,6 +35,7 @@ interface CommentsPanelProps {
  * 顶部标 `path:line` chip 让用户知道这条评论锚在哪。replies 嵌套缩进 1 层渲染。
  */
 export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
+  const { t } = useTranslation();
   const [comments, setComments] = useState<PrComment[] | null>(null);
   const [error, setError] = useState<FormattedError | null>(null);
 
@@ -90,7 +93,7 @@ export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
     return (
       <div className="pr-comments-panel">
         <div className="pr-comments-error" role="alert">
-          <strong>评论加载失败 · {error.title}</strong>
+          <strong>{t('commentsPanel.loadError', { title: error.title })}</strong>
           <pre>{error.detail}</pre>
         </div>
       </div>
@@ -99,14 +102,14 @@ export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
   if (comments === null) {
     return (
       <div className="pr-comments-panel">
-        <p className="muted">加载评论中…</p>
+        <p className="muted">{t('commentsPanel.loading')}</p>
       </div>
     );
   }
   if (ordered.length === 0) {
     return (
       <div className="pr-comments-panel">
-        <p className="muted">这条 PR 还没有任何评论</p>
+        <p className="muted">{t('commentsPanel.empty')}</p>
       </div>
     );
   }
@@ -145,6 +148,7 @@ function CommentItem({
   /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
   autoExpandCode?: boolean;
 }) {
+  const { t } = useTranslation();
   // 评论 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)
   const mdComponents = useMemo(
     () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId) }),
@@ -196,7 +200,10 @@ function CommentItem({
           // 让用户在评论面板里也能定位到代码位置 (后续可点击跳 Diff 视图)
           <span
             className={`pr-comment-anchor pr-comment-anchor-${comment.anchor.side}`}
-            title={`锚定 ${comment.anchor.side === 'old' ? 'base' : 'head'} 侧 · ${comment.anchor.lineType}`}
+            title={t('commentsPanel.anchorTitle', {
+              side: comment.anchor.side === 'old' ? 'base' : 'head',
+              lineType: comment.anchor.lineType,
+            })}
           >
             <code>{comment.anchor.path}</code>:{comment.anchor.line}
           </span>
@@ -209,7 +216,7 @@ function CommentItem({
           replies (depth > 0) 不重复展示，避免冗余 —— 父评论已经给了上下文。
           autoExpandCode 由父组件按"最新 N 条"决定，超额条目用户点开才挂 editor */}
       {comment.anchor && depth === 0 && (
-        <Suspense fallback={<div className="pane-loading muted">加载代码上下文…</div>}>
+        <Suspense fallback={<div className="pane-loading muted">{t('commentsPanel.loadingCodeContext')}</div>}>
           <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
         </Suspense>
       )}
@@ -245,7 +252,7 @@ function CommentItem({
               className="pr-comment-reply-btn"
               onClick={() => setReplyOpen(true)}
             >
-              回复
+              {t('commentsPanel.reply')}
             </button>
           )}
           {canEdit && !replyOpen && (
@@ -253,9 +260,9 @@ function CommentItem({
               type="button"
               className="pr-comment-edit-btn"
               onClick={() => setEditOpen(true)}
-              title="编辑自己发布的评论 (远端同步)"
+              title={t('commentsPanel.editTitle')}
             >
-              编辑
+              {t('common.edit')}
             </button>
           )}
           {/* 删除按钮在最后，跟其它按钮风格对齐 — disable 期间文案变"删除中…" */}
@@ -265,22 +272,22 @@ function CommentItem({
               className="pr-comment-delete-btn"
               onClick={() => setConfirmDelete(true)}
               disabled={deleting}
-              title="删除自己发布的评论 (远端同步)"
+              title={t('commentsPanel.deleteTitle')}
             >
-              {deleting ? '删除中…' : '删除'}
+              {deleting ? t('commentsPanel.deleting') : t('common.delete')}
             </button>
           )}
         </div>
       )}
       {deleteError && (
         <div className="pr-comment-delete-error" role="alert">
-          删除失败：{deleteError}
+          {t('commentsPanel.deleteFailed', { msg: deleteError })}
           <button
             type="button"
             className="pr-comment-delete-error-dismiss"
             onClick={() => setDeleteError(null)}
-            aria-label="关闭错误"
-            title="知道了"
+            aria-label={t('commentsPanel.dismissErrorAria')}
+            title={t('commentsPanel.dismissErrorTitle')}
           >
             ✕
           </button>
@@ -303,10 +310,10 @@ function CommentItem({
       )}
       {confirmDelete && (
         <ConfirmModal
-          title="删除评论"
-          message="此操作会删除远端 Bitbucket 上的这条评论，且无法恢复。确定继续吗？"
-          confirmLabel="删除"
-          cancelLabel="取消"
+          title={t('commentsPanel.deleteConfirmTitle')}
+          message={t('commentsPanel.deleteConfirmMessage')}
+          confirmLabel={t('common.delete')}
+          cancelLabel={t('common.cancel')}
           danger
           onConfirm={() => void handleDelete()}
           onCancel={() => setConfirmDelete(false)}
@@ -320,9 +327,11 @@ function formatRelativeTime(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return iso;
   const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (diffSec < 60) return '刚刚';
-  if (diffSec < 3600) return `${String(Math.round(diffSec / 60))} 分钟前`;
-  if (diffSec < 86400) return `${String(Math.round(diffSec / 3600))} 小时前`;
-  if (diffSec < 86400 * 7) return `${String(Math.round(diffSec / 86400))} 天前`;
+  if (diffSec < 60) return i18n.t('commentsPanel.justNow');
+  if (diffSec < 3600) return i18n.t('commentsPanel.minutesAgo', { count: Math.round(diffSec / 60) });
+  if (diffSec < 86400)
+    return i18n.t('commentsPanel.hoursAgo', { count: Math.round(diffSec / 3600) });
+  if (diffSec < 86400 * 7)
+    return i18n.t('commentsPanel.daysAgo', { count: Math.round(diffSec / 86400) });
   return new Date(t).toLocaleDateString();
 }

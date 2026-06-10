@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 interface ConfirmModalProps {
   title?: string;
@@ -20,14 +21,18 @@ interface ConfirmModalProps {
  * 键盘：Esc 取消，Enter 确认（焦点默认在取消按钮，避免误触）
  */
 export function ConfirmModal({
-  title = '请确认',
+  title,
   message,
-  confirmLabel = '确定',
-  cancelLabel = '取消',
+  confirmLabel,
+  cancelLabel,
   danger = false,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t('confirmModal.defaultTitle');
+  const resolvedConfirmLabel = confirmLabel ?? t('common.confirm');
+  const resolvedCancelLabel = cancelLabel ?? t('common.cancel');
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
@@ -62,21 +67,21 @@ export function ConfirmModal({
         aria-labelledby="confirm-modal-title"
       >
         <div className="modal-header">
-          <h3 id="confirm-modal-title">{title}</h3>
+          <h3 id="confirm-modal-title">{resolvedTitle}</h3>
         </div>
         <div className="modal-body modal-confirm-body">
           <p>{message}</p>
         </div>
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onCancel} autoFocus>
-            {cancelLabel}
+            {resolvedCancelLabel}
           </button>
           <button
             type="button"
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={onConfirm}
           >
-            {confirmLabel}
+            {resolvedConfirmLabel}
           </button>
         </div>
       </div>

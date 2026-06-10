@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Mermaid 渲染：把 ```mermaid 代码块渲染成 SVG 图（Qodo `/describe` 常生成架构图）。
@@ -36,6 +37,7 @@ function loadMermaid(): Promise<MermaidApi> {
 }
 
 export function MermaidDiagram({ source }: { source: string }) {
+  const { t } = useTranslation();
   // mermaid.render 需要唯一 id（内部建临时 DOM 节点）；useId 保证每个实例稳定唯一，
   // 去掉 `:`（mermaid 用作 DOM id / CSS 选择器，冒号非法）
   const renderId = `mmd-${useId().replace(/:/g, '')}`;
@@ -72,7 +74,7 @@ export function MermaidDiagram({ source }: { source: string }) {
     );
   }
   if (svg === null) {
-    return <div className="mermaid-loading muted">渲染图表…</div>;
+    return <div className="mermaid-loading muted">{t('mermaidDiagram.rendering')}</div>;
   }
   // mermaid strict 模式产出的 SVG 已转义不可信内容，可安全注入。点击图表 → 模态预览。
   return (
@@ -81,7 +83,7 @@ export function MermaidDiagram({ source }: { source: string }) {
         className="mermaid-diagram"
         role="button"
         tabIndex={0}
-        title="点击放大查看"
+        title={t('mermaidDiagram.zoomHint')}
         onClick={() => setZoomed(true)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -119,6 +121,7 @@ const clampScale = (s: number): number => Math.min(MAX_SCALE, Math.max(MIN_SCALE
  * - 滚轮缩放（锚定光标）、左键拖拽平移、工具栏放大/缩小/复位、Esc / 点遮罩关闭。
  */
 function MermaidZoomModal({ svgHtml, onClose }: { svgHtml: string; onClose: () => void }) {
+  const { t } = useTranslation();
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
   // scale=1 即「原生适应窗口」基准；缩放/平移在其上叠加。
@@ -194,16 +197,36 @@ function MermaidZoomModal({ svgHtml, onClose }: { svgHtml: string; onClose: () =
       >
         <div className="mermaid-zoom-toolbar">
           <span className="mermaid-zoom-scale">{Math.round(scale * 100)}%</span>
-          <button type="button" title="缩小" aria-label="缩小" onClick={() => zoomButton(1 / 1.2)}>
+          <button
+            type="button"
+            title={t('mermaidDiagram.zoomOut')}
+            aria-label={t('mermaidDiagram.zoomOut')}
+            onClick={() => zoomButton(1 / 1.2)}
+          >
             −
           </button>
-          <button type="button" title="放大" aria-label="放大" onClick={() => zoomButton(1.2)}>
+          <button
+            type="button"
+            title={t('mermaidDiagram.zoomIn')}
+            aria-label={t('mermaidDiagram.zoomIn')}
+            onClick={() => zoomButton(1.2)}
+          >
             +
           </button>
-          <button type="button" title="适应窗口" aria-label="适应窗口" onClick={resetFit}>
+          <button
+            type="button"
+            title={t('mermaidDiagram.fitWindow')}
+            aria-label={t('mermaidDiagram.fitWindow')}
+            onClick={resetFit}
+          >
             ⤢
           </button>
-          <button type="button" title="关闭（Esc）" aria-label="关闭" onClick={onClose}>
+          <button
+            type="button"
+            title={t('mermaidDiagram.closeEsc')}
+            aria-label={t('common.close')}
+            onClick={onClose}
+          >
             ×
           </button>
         </div>

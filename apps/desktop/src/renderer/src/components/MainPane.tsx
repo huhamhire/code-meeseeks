@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   LocalPrStatus,
   PlatformCapabilities,
@@ -76,6 +77,7 @@ export function MainPane({
   onDiffNavConsumed,
   onRequestDiffNav,
 }: MainPaneProps) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('diff');
   // 收到跳转请求 → 强制切到 Diff tab，DiffView 自己负责消费 anchor
   useEffect(() => {
@@ -170,16 +172,16 @@ export function MainPane({
         <div className="main-empty">
           {hasConnections ? (
             <div>
-              <p>← 从左侧选择一个 PR</p>
+              <p>{t('mainPane.emptySelectPr')}</p>
               <p className="muted" style={{ marginTop: 12 }}>
-                选中后会自动 sync 本地镜像并显示 side-by-side diff
+                {t('mainPane.emptySelectPrHint')}
               </p>
             </div>
           ) : (
             <div>
-              <p>尚未配置任何连接</p>
+              <p>{t('mainPane.emptyNoConnections')}</p>
               <p className="muted" style={{ marginTop: 12 }}>
-                右下"设置"→"编辑 config.yaml"添加 Bitbucket Server 连接
+                {t('mainPane.emptyNoConnectionsHint')}
               </p>
             </div>
           )}
@@ -193,7 +195,7 @@ export function MainPane({
   const reviewAllowed = (s: ReviewerStatus): boolean =>
     !capabilities || capabilities.reviewStatuses.includes(s);
   const isOwnPr = !!currentUserName && pr.author.name === currentUserName;
-  const ownPrReason = isOwnPr ? '不能审批自己的 PR' : undefined;
+  const ownPrReason = isOwnPr ? t('mainPane.ownPrReason') : undefined;
 
   return (
     <main className="main">
@@ -204,8 +206,8 @@ export function MainPane({
         <div className="pr-header-meta">
           {pr.hasConflict && (
             <>
-              <span className="conflict-tag" title="远端 Bitbucket 报告存在合并冲突">
-                ⚠️ 冲突
+              <span className="conflict-tag" title={t('mainPane.conflictTitle')}>
+                ⚠️ {t('mainPane.conflict')}
               </span>
               <span> · </span>
             </>
@@ -227,9 +229,9 @@ export function MainPane({
             href={pr.url}
             target="_blank"
             rel="noreferrer"
-            title="在系统默认浏览器打开 PR 远端页面"
+            title={t('mainPane.openInBrowserTitle')}
           >
-            <GlobeIcon /> 浏览器打开
+            <GlobeIcon /> {t('mainPane.openInBrowser')}
           </a>
           {/* approve / needs work：当前状态 = 高亮；点已高亮的回退到 pending（撤销远端标记）。
               这两个 review 决断按钮右对齐，跟"浏览器打开"在左侧拉开距离。
@@ -246,9 +248,9 @@ export function MainPane({
                 type="button"
                 className="btn btn-sm pr-header-publish"
                 onClick={() => setPublishModalOpen(true)}
-                title={`批量发布 ${String(publishableCount)} 条草稿到 Bitbucket`}
+                title={t('mainPane.publishCommentsTitle', { n: publishableCount })}
               >
-                提交评论 ({String(publishableCount)})
+                {t('mainPane.publishComments', { n: publishableCount })}
               </button>
             )}
             {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现。放在「通过」左侧、
@@ -261,9 +263,9 @@ export function MainPane({
                 onClick={onMerge}
                 disabled={merging}
                 aria-busy={merging}
-                title="合并此 PR 到目标分支"
+                title={t('mainPane.mergeTitle')}
               >
-                <PullRequestIcon size={14} /> {merging ? '合并中…' : '合并'}
+                <PullRequestIcon size={14} /> {merging ? t('mainPane.merging') : t('mainPane.merge')}
               </button>
             )}
             {reviewAllowed('approved') && (
@@ -274,10 +276,15 @@ export function MainPane({
                 onClick={() =>
                   onSetStatus(pr.localStatus === 'approved' ? 'pending' : 'approved')
                 }
-                title={ownPrReason ?? (pr.localStatus === 'approved' ? '撤销通过' : '标记为通过')}
+                title={
+                  ownPrReason ??
+                  (pr.localStatus === 'approved'
+                    ? t('mainPane.undoApprove')
+                    : t('mainPane.markApprove'))
+                }
                 aria-pressed={pr.localStatus === 'approved'}
               >
-                <ApproveIcon /> 通过
+                <ApproveIcon /> {t('mainPane.approve')}
               </button>
             )}
             {reviewAllowed('needsWork') && (
@@ -288,10 +295,15 @@ export function MainPane({
                 onClick={() =>
                   onSetStatus(pr.localStatus === 'needs_work' ? 'pending' : 'needs_work')
                 }
-                title={ownPrReason ?? (pr.localStatus === 'needs_work' ? '撤销"需修改"' : '标记为需修改')}
+                title={
+                  ownPrReason ??
+                  (pr.localStatus === 'needs_work'
+                    ? t('mainPane.undoNeedsWork')
+                    : t('mainPane.markNeedsWork'))
+                }
                 aria-pressed={pr.localStatus === 'needs_work'}
               >
-                <NeedsWorkIcon /> 需修改
+                <NeedsWorkIcon /> {t('mainPane.needsWork')}
               </button>
             )}
           </div>
@@ -305,7 +317,7 @@ export function MainPane({
           role="tab"
           aria-selected={tab === 'diff'}
         >
-          变更
+          {t('mainPane.tabDiff')}
         </button>
         {/* comments 在 commits 前：评审决断时评论的权重大于 commit 时间线 */}
         <button
@@ -315,9 +327,9 @@ export function MainPane({
           role="tab"
           aria-selected={tab === 'comments'}
         >
-          评论
+          {t('mainPane.tabComments')}
           {commentCount !== null && commentCount > 0 && (
-            <span className="pr-tab-badge" aria-label={`${String(commentCount)} 条评论`}>
+            <span className="pr-tab-badge" aria-label={t('mainPane.commentCountAria', { count: commentCount })}>
               {commentCount}
             </span>
           )}
@@ -333,12 +345,12 @@ export function MainPane({
             role="tab"
             aria-selected={tab === 'drafts'}
           >
-            草稿
+            {t('mainPane.tabDrafts')}
             {publishableCount > 0 && (
               <span
                 className="pr-tab-badge pr-tab-badge-warning"
-                aria-label={`${String(publishableCount)} 条待发布草稿`}
-                title="待发布 (pending + edited)"
+                aria-label={t('mainPane.draftBadgeAria', { count: publishableCount })}
+                title={t('mainPane.draftBadgeTitle')}
               >
                 {publishableCount}
               </span>
@@ -352,9 +364,9 @@ export function MainPane({
           role="tab"
           aria-selected={tab === 'commits'}
         >
-          提交
+          {t('mainPane.tabCommits')}
           {commitCount !== null && commitCount > 0 && (
-            <span className="pr-tab-badge" aria-label={`${String(commitCount)} 个提交`}>
+            <span className="pr-tab-badge" aria-label={t('mainPane.commitCountAria', { count: commitCount })}>
               {commitCount}
             </span>
           )}
@@ -366,7 +378,7 @@ export function MainPane({
           role="tab"
           aria-selected={tab === 'info'}
         >
-          详情
+          {t('mainPane.tabInfo')}
         </button>
         {tab === 'diff' && (
           <div className="pr-tabs-right">
@@ -374,21 +386,21 @@ export function MainPane({
               type="button"
               className={`blame-toggle ${showWhitespace ? 'active' : ''}`}
               onClick={() => setShowWhitespace((b) => !b)}
-              title={showWhitespace ? '隐藏空白字符' : '显示空白字符（空格 / Tab）'}
+              title={showWhitespace ? t('mainPane.hideWhitespace') : t('mainPane.showWhitespace')}
               aria-pressed={showWhitespace}
             >
-              <WhitespaceIcon /> 空白
+              <WhitespaceIcon /> {t('mainPane.whitespace')}
             </button>
             <button
               type="button"
               className={`blame-toggle ${showBlame ? 'active' : ''}`}
               onClick={() => setShowBlame((b) => !b)}
-              title={showBlame ? '关闭追溯显示' : '开启追溯显示（仅 head 侧）'}
+              title={showBlame ? t('mainPane.hideBlame') : t('mainPane.showBlame')}
               aria-pressed={showBlame}
             >
-              <PersonIcon /> 追溯
+              <PersonIcon /> {t('mainPane.blame')}
             </button>
-            <div className="diff-mode-toggle" role="tablist" aria-label="diff 显示模式">
+            <div className="diff-mode-toggle" role="tablist" aria-label={t('mainPane.diffModeAria')}>
               <button
                 type="button"
                 className={renderSideBySide ? 'active' : ''}
@@ -396,7 +408,7 @@ export function MainPane({
                 role="tab"
                 aria-selected={renderSideBySide}
               >
-                并排
+                {t('mainPane.sideBySide')}
               </button>
               <button
                 type="button"
@@ -405,7 +417,7 @@ export function MainPane({
                 role="tab"
                 aria-selected={!renderSideBySide}
               >
-                统一
+                {t('mainPane.unified')}
               </button>
             </div>
           </div>
@@ -413,7 +425,7 @@ export function MainPane({
       </nav>
       <div className="pr-tab-content">
         {tab === 'diff' && (
-          <Suspense fallback={<div className="pane-loading muted">加载编辑器…</div>}>
+          <Suspense fallback={<div className="pane-loading muted">{t('mainPane.loadingEditor')}</div>}>
             <DiffView
               pr={pr}
               renderSideBySide={renderSideBySide}

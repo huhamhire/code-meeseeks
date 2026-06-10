@@ -29,6 +29,14 @@
   High-Level Assessment（社区版原生无此字段）。pr-agent 通用渲染成段、parse-output 映射 sectionKey，
   英文结构串经渲染期翻译表中文化，chip 配主蓝（信息性）色。
 
+### Changed
+- **国际化（i18n）重构**：接入 **react-i18next**，渲染层与主进程各持一份 locale 资源；全部 GUI
+  文本与主进程面向用户文案（目录对话框 / 错误提示）从硬编码抽取为 `zh-CN` / `en-US` 资源（按组件
+  命名空间组织、递归字典序维护），UI 语言由 `config.language` 驱动、渲染层支持实时切换。pr-agent
+  输出模板的渲染期翻译改为**语言感知**（字典外置为独立领域 JSON，中文查表、英文 passthrough）。
+  默认仍简体中文、暂未开放语言切换入口；`en-US` 为机器初稿，待人工校对。维护规范见
+  [`docs/arch/10-i18n.md`](docs/arch/10-i18n.md)。
+
 ## [0.2.0] - 2026-06-09
 
 > 第二个正式版（仍属 0.x · 早期预览）。本版重点：**接入 GitHub**（github.com + GitHub Enterprise Server）
