@@ -1717,6 +1717,15 @@ const SECTION_LABEL: Record<PrDocSectionKey, string> = {
   general: '',
 };
 
+/**
+ * 工作量段已用 emoji 圆点（🔵🔵🔵⚪⚪）直观表示 1-5 分，去掉前面冗余的数字分数：
+ *   "3 🔵🔵🔵⚪⚪" → "🔵🔵🔵⚪⚪"；"工作量: 3 🔵🔵" → "工作量: 🔵🔵"
+ * 仅在数字后紧跟圆点 emoji 时才剥，避免误删正文里的普通数字。
+ */
+function stripEffortScoreNumber(s: string): string {
+  return s.replace(/(^|[:：]\s*)\d+\s*(?=[🔵⚪⚫🟢🔴🟠🟡🟣🟤])/u, '$1');
+}
+
 /** Stable sort by sectionKey 排序 + 同 key 保留原顺序 (兼容 Array.sort 非 stable JS 引擎) */
 function orderFindings(findings: Finding[]): Finding[] {
   return findings
@@ -1789,9 +1798,16 @@ function FindingCard({
   const bodyEmpty = !strippedBody.trim();
   const showTitle = !!finding.title && (key === 'general' || bodyEmpty);
   // pr-agent 把若干 section 标题 / 固定模板字符串硬编码成英文 (CONFIG__RESPONSE_LANGUAGE
-  // 只翻译 LLM 内容值)，渲染前替换成中文
-  const translatedBody = translatePrAgentLabels(strippedBody);
-  const translatedTitle = finding.title ? translatePrAgentLabels(finding.title) : undefined;
+  // 只翻译 LLM 内容值)，渲染前替换成中文。工作量已用 emoji 圆点表分值，去掉冗余的数字分数。
+  const translatedBody =
+    key === 'effort'
+      ? stripEffortScoreNumber(translatePrAgentLabels(strippedBody))
+      : translatePrAgentLabels(strippedBody);
+  const translatedTitle = finding.title
+    ? key === 'effort'
+      ? stripEffortScoreNumber(translatePrAgentLabels(finding.title))
+      : translatePrAgentLabels(finding.title)
+    : undefined;
   return (
     <li className={`chat-finding chat-finding-${key}`}>
       <header className="chat-finding-head">
