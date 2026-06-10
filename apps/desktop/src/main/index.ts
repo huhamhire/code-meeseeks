@@ -28,6 +28,12 @@ import { checkForUpdate } from './utils/update-check.js';
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
 const PROCESS_START_MS = Date.now();
 
+// 版本更新检测节流：由 poller tick 顺带发起（不另起定时器），至多每小时一次。
+// lastUpdateCheckMs 初值取进程启动时刻 → 首次检测落在启动后约 1h，刻意不在启动瞬间检测，
+// 避免占用冷启动网络 / 打断启动；之后随 poller tick 每满 1h 触发一次。
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+let lastUpdateCheckMs = PROCESS_START_MS;
+
 // macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
 // 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
 // 用 mock keychain 让它走内存、不碰真钥匙串、不再弹。代价：cookie 加密退化为静态 key，
@@ -244,6 +250,8 @@ async function start(): Promise<void> {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('poll:tick', info);
       }
+      // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器
+      void runUpdateCheckIfDue();
     },
     // PR 新增 / 内容变更时，顺手 syncMirror 把本地镜像跟上，让用户随后点开 PR
     // 时省一趟 fetch。失败不阻断 poll 流程 (mirror 也有自己的全局队列 + 错误隔离)
@@ -378,22 +386,37 @@ function resolveSplashLogo(): string | null {
 }
 
 /**
- * 启动后异步检测版本更新（config.update.check_enabled 开启时）。仅检测 + 提示：
- * 有新版才把结果推给渲染层（StatusBar 提示 + 跳转下载），不下载 / 不安装。失败静默。
+ * 版本更新检测（config.update.check_enabled 开启时）。由 poller tick 顺带发起，内部用
+ * lastUpdateCheckMs 时间戳门控成「至多每小时一次」——复用既有 poll 周期，不引入额外定时器。
+ * 仅检测 + 提示：有新版才广播给所有窗口（StatusBar 提示 + 跳转下载），不下载 / 不安装。失败静默。
+ *
+ * 时间戳在 await 前即更新，避免 await 窗口内下一次 tick 重复发起。
  */
-async function maybeCheckUpdate(win: BrowserWindow): Promise<void> {
+async function runUpdateCheckIfDue(): Promise<void> {
   if (!bootstrap.config.update.check_enabled) return;
+  if (Date.now() - lastUpdateCheckMs < UPDATE_CHECK_INTERVAL_MS) return;
+  lastUpdateCheckMs = Date.now();
   try {
     const result = await checkForUpdate(app.getVersion(), bootstrap.config.proxy);
-    if (result.ok && result.hasUpdate && !win.isDestroyed()) {
-      win.webContents.send('app:updateAvailable', result);
+    // 获取失败（网络 / 解析 / 超时 / 限流，ok=false）：只记 debug 日志，**绝不推任何 IPC** →
+    // 渲染层完全无感，不弹任何提示 / chip。保证「拿不到更新信息」对用户零打扰。
+    if (!result.ok) {
+      logger.debug({ error: result.error }, 'update check failed (silent, no prompt)');
+      return;
+    }
+    // 仅「检测成功且确有新版」才广播；ok=true&hasUpdate=false（已是最新）同样静默。
+    if (result.hasUpdate) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('app:updateAvailable', result);
+      }
       logger.info(
         { current: result.currentVersion, latest: result.latestVersion },
         'update available',
       );
     }
-  } catch {
-    /* 检测失败不影响使用，静默 */
+  } catch (err) {
+    // 兜底：checkForUpdate 约定不抛；万一抛了也吞掉，绝不冒泡成任何用户可见行为。
+    logger.debug({ err }, 'update check threw (silent, no prompt)');
   }
 }
 
@@ -495,8 +518,6 @@ function createWindow(splash?: BrowserWindow): void {
       { elapsedMs: Date.now() - PROCESS_START_MS },
       'main window first paint (ready-to-show)',
     );
-    // 启动后异步检测版本更新（不阻塞、不打断）；有新版才推给渲染层提示。
-    void maybeCheckUpdate(win);
   });
 
   // 把 <a target="_blank"> / window.open 都路由到 OS 默认浏览器，不在 Electron 内开新窗口
