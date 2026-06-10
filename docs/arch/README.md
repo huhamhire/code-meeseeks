@@ -37,6 +37,7 @@
 | [`07-config-and-secrets`](07-config-and-secrets.md) | 配置与凭据（config.yaml / SecretStore / 设置页 / 首启向导） |
 | [`08-networking-proxy`](08-networking-proxy.md) | 出站网络与代理（HTTP 代理统一 / loopback 直连 / SSH） |
 | [`09-ui-interaction`](09-ui-interaction.md) | GUI 与交互（渲染层布局 / 面板 / 跨 PR 保活 / 交互约定） |
+| [`10-i18n`](10-i18n.md) | 国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / pr-agent 输出模板翻译） |
 
 > 打包 / 构建 / 签名 / CI 不属于产品子系统，已移到开发专题：[`../development/packaging-release.md`](../development/packaging-release.md)。
 
