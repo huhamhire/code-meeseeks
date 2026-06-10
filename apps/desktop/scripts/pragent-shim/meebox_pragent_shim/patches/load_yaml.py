@@ -70,36 +70,69 @@ def patch(module) -> None:
 
     import re as _re
 
+    # loguru 全局单例（pr_agent.log 用的同一个）。用于在「首探+修复」阶段临时压制
+    # pr_agent.algo.utils 的失败日志；import 失败则降级为不压制（不致命）。
+    try:
+        from loguru import logger as _loguru_logger
+    except Exception:  # noqa: BLE001
+        _loguru_logger = None
+
     orig_load_yaml = module.load_yaml
     # 整行仅为 `[file: ...]`（含缩进/path-only 形式），吃掉行尾换行
     marker_line_re = _re.compile(r"(?m)^[ \t]*\[file:[^\]\n]*\][ \t]*$\n?")
+    # 激进兜底：`[file:` 起、吃到 `]` 或行尾（闭合 `]` 可选），出现在**任意位置**都抹掉。
+    # 统一覆盖：独占整行、行内（`issue text [file:...]`）、值位、以及模型截断漏 `]` 的未闭合
+    # marker。marker_line_re（仅独占整行的闭合形式）漏掉的破格全归它收。
+    marker_any_re = _re.compile(r"\[file:[^\]\n]*\]?")
 
-    def load_yaml(response_text, *args, **kwargs):
-        data = orig_load_yaml(response_text, *args, **kwargs)
-        if data:
-            return data
-        if not isinstance(response_text, str):
-            return data
-        # 候选修复，按代价从小到大；每个交回原 load_yaml（其内部还会再跑 try_fix_yaml）
+    def _repair_candidates(response_text):
+        """生成修复候选，按代价从小到大；每个交回原 load_yaml（其内部还会再跑 try_fix_yaml）。
+        marker 仅是行号兜底（anchor 主源是 get_line_link 的 meebox:/// 链接），recovery 路径剥掉
+        它不影响主锚点，优先保证整个 /review 不因一条破格 marker 整体失败。"""
         stripped = marker_line_re.sub("", response_text)
+        # 更激进：任意位置 / 未闭合 marker 全清（marker_line_re 只清独占整行的闭合形式）
+        aggressive = marker_any_re.sub("", response_text)
         attempts = []
         if stripped != response_text:
             attempts.append(stripped)
         reflowed = _reflow_unindented_multiline(response_text)
-        if reflowed != response_text:
+        if reflowed != response_text and reflowed not in attempts:
             attempts.append(reflowed)
         if stripped != response_text:
             r2 = _reflow_unindented_multiline(stripped)
-            if r2 != stripped and r2 != response_text:
+            if r2 != stripped and r2 not in attempts:
                 attempts.append(r2)
-        for cand in attempts:
-            try:
-                d = orig_load_yaml(cand, *args, **kwargs)
-            except Exception:  # noqa: BLE001 - 修复尝试失败不致命，继续下一个
-                d = None
-            if d:
-                _debug("load_yaml recovered via meebox repair")
-                return d
-        return data
+        if aggressive != response_text and aggressive not in attempts:
+            attempts.append(aggressive)
+            ra = _reflow_unindented_multiline(aggressive)
+            if ra != aggressive and ra not in attempts:
+                attempts.append(ra)
+        return attempts
+
+    def load_yaml(response_text, *args, **kwargs):
+        # 「首探 + 修复」阶段静默：orig 对带 marker 的原文必然解析失败并打 WARNING+ERROR，但这些
+        # 破格我们随后能修复，那两条日志是误导噪音（让用户以为 /review 挂了）。故临时压制
+        # pr_agent.algo.utils 的日志；仅当所有修复都失败，才放**原始报错**出来（真失败应可见）。
+        # 本 shim 跑在单次 review 的独立 python 子进程、无并发，disable/enable 全局开关安全。
+        if _loguru_logger is not None:
+            _loguru_logger.disable("pr_agent.algo.utils")
+        try:
+            data = orig_load_yaml(response_text, *args, **kwargs)
+            if data:
+                return data
+            if isinstance(response_text, str):
+                for cand in _repair_candidates(response_text):
+                    try:
+                        d = orig_load_yaml(cand, *args, **kwargs)
+                    except Exception:  # noqa: BLE001 - 修复尝试失败不致命，继续下一个
+                        d = None
+                    if d:
+                        _debug("load_yaml recovered via meebox repair")
+                        return d
+        finally:
+            if _loguru_logger is not None:
+                _loguru_logger.enable("pr_agent.algo.utils")
+        # 全部修复失败 → 日志已恢复，重跑一次 orig 让真实报错可见，并返回其结果（None/空）
+        return orig_load_yaml(response_text, *args, **kwargs)
 
     module.load_yaml = load_yaml
