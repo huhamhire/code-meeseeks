@@ -20,6 +20,10 @@
   文件走查保留多级分类、每个分类独立成可收起/展开的折叠块（去掉无意义的 +1/-1 统计）；
   mermaid 图点击进入模态预览，支持滚轮缩放、拖拽平移与「适应窗口」，预览区为固定纯色背景。
 - **清空执行历史**：chat 面板标题栏新增垃圾桶按钮，清空**当前 PR**的 PR Agent 执行历史记录（仅该 PR）。
+- **启用 `/improve` 指令**：逐行代码改进建议（带 1-10 重要度评分）。依托 shim 的 GFM 支持走
+  「汇总建议」路径（committable/inline 模式在本地 provider 下不可用，已显式关死兜底）；输出落
+  独立 `improve.md` 与 `/review` 分流（经 `local.review_path` 原生配置）；关闭 persistent_comment
+  避免本地 provider 翻历史评论刷无意义 traceback。
 
 ## [0.2.0] - 2026-06-09
 

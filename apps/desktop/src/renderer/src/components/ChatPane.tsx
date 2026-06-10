@@ -621,11 +621,10 @@ const COMMANDS: ReadonlyArray<CommandSpec> = [
   // pr-agent
   { kind: 'pragent', name: 'review', label: '/review', desc: '代码评审', insertAs: '/review' },
   { kind: 'pragent', name: 'describe', label: '/describe', desc: '生成 PR 描述', insertAs: '/describe' },
-  // /improve 暂屏蔽：实测 pr-agent 的 improve 工具依赖在线平台 (GitHub / GitLab /
-  // Bitbucket Cloud) 的 inline code suggestion / best practices 集成，跟 meebox
-  // 本地 PR 管理路径不兼容。后端类型 / parser / IPC 仍保留，等策略变化或上游
-  // 支持 local provider 时直接放开
-  // { kind: 'pragent', name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
+  // /improve：shim 强制 gfm_markdown=True 后，improve 走「汇总建议 → publish_comment →
+  // review.md」路径（非 committable，inline 模式仍不可用），parse-output 按
+  // generate_summarized_suggestions 的 <details> 模板解析出带重要度评分的 finding。
+  { kind: 'pragent', name: 'improve', label: '/improve', desc: '逐行代码改进建议', insertAs: '/improve' },
   { kind: 'pragent', name: 'ask', label: '/ask', desc: '自然语言追问', insertAs: '/ask ' },
   // review 决断 (跟 PR header 按钮共用 prs:setLocalStatus，写 Bitbucket reviewer status)
   {
@@ -1982,6 +1981,9 @@ function ChatEmpty({
         </Bullet>
         <Bullet>
           <code>/review</code> 跑一次 AI review，结果落到 findings 列表
+        </Bullet>
+        <Bullet>
+          <code>/improve</code> 逐行代码改进建议（带重要度评分）
         </Bullet>
         <Bullet>
           <code>/ask &lt;问题&gt;</code> 自然语言追问 (或直接打字，自动当 ask)

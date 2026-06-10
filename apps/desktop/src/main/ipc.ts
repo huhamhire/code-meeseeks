@@ -813,6 +813,21 @@ export function registerIpcHandlers({
           ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
           CONFIG__RESPONSE_LANGUAGE: bootstrap.config.language,
         };
+        if (req.tool === 'improve') {
+          // /improve 在 local provider 下只有「汇总建议 → publish_comment」一条可用路径
+          // （shim 已强制 gfm_markdown=True）。committable/inline 模式会走
+          // publish_code_suggestions → local provider 直接 NotImplementedError，显式关死兜底
+          // （pr-agent 默认即 false，此处防上游翻默认值）。
+          env['PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS'] = 'false';
+          // persistent_comment（默认 true）会走 publish_persistent_comment_with_history →
+          // get_issue_comments() 翻历史评论做增量更新 → local provider 不实现，每次 improve
+          // 都刷一段 NotImplementedError traceback（被上游捕获后兜底 publish_comment，正文
+          // 不丢但日志吵）。local 每次都是全新 worktree、无历史可翻，直接关掉走 publish_comment。
+          env['PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT'] = 'false';
+          // 输出与 /review /ask 的 review.md 分流：pr-agent 原生支持 local.review_path 覆盖
+          // publish_comment 的落盘路径；相对路径按子进程 cwd（= worktree 根）解析。
+          env['LOCAL__REVIEW_PATH'] = 'improve.md';
+        }
 
         // 注给 pr-agent 的 EXTRA_INSTRUCTIONS 由三部分按顺序拼接：
         //   1. 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但
@@ -989,10 +1004,15 @@ export function registerIpcHandlers({
         //   /describe → <wt>/description.md  (走 publish_description)
         //   /review   → <wt>/review.md       (走 publish_comment)
         //   /ask      → <wt>/review.md       ← 共用同一文件 (publish_comment 会覆盖)
-        //   /improve  → <wt>/review.md       ← 同上：local provider 不实现
-        //                                      publish_code_suggestions，汇总走 publish_comment
+        //   /improve  → <wt>/improve.md      ← 汇总建议走 publish_comment，经 LOCAL__REVIEW_PATH
+        //                                      重定向与 review.md 分流（见上方 env 注入）
         // 走 worktree 路径，cleanup 前必须先把文件读出来。
-        const outFile = req.tool === 'describe' ? 'description.md' : 'review.md';
+        const outFile =
+          req.tool === 'describe'
+            ? 'description.md'
+            : req.tool === 'improve'
+              ? 'improve.md'
+              : 'review.md';
         let fileContent = '';
         try {
           fileContent = await fs.readFile(path.join(wt.path, outFile), 'utf8');
