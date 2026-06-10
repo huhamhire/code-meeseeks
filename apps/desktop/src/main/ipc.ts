@@ -45,7 +45,7 @@ import type {
 } from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import { buildDraftAdapter, type BuiltAdapter, type ConnectionRuntime } from './adapters.js';
-import { t } from './i18n/index.js';
+import { t, getMainLanguage } from './i18n/index.js';
 import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
@@ -812,7 +812,7 @@ export function registerIpcHandlers({
           // 开关开时让嵌入式 python(litellm/httpx) 经代理出网调 LLM。
           ...buildProxyEnv(bootstrap.config.proxy),
           ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
-          CONFIG__RESPONSE_LANGUAGE: bootstrap.config.language,
+          CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
         };
         if (req.tool === 'improve') {
           // /improve 在 local provider 下只有「汇总建议 → publish_comment」一条可用路径
@@ -837,7 +837,7 @@ export function registerIpcHandlers({
         //      去 Bitbucket 拉这些，必须我们这边喂；让 /describe /review 不只是看 diff
         //   3. 规则正文 (rules.dir 命中)：项目编码规约
         // /ask 只取 1 (语言)，跳 2/3 (用户问题往往跟历史评论 / 规约无关)
-        const langDirective = languageDirectiveFor(bootstrap.config.language);
+        const langDirective = languageDirectiveFor(getMainLanguage());
         let prContext = '';
         let matchedRuleInstructions = '';
         let matchedRuleId: string | undefined;
@@ -1682,6 +1682,12 @@ function languageDirectiveFor(lang: string): string {
   }
   if (norm.startsWith('zh-tw') || norm.startsWith('zh-hk')) {
     return 'Respond in Traditional Chinese (繁體中文). All section labels, table headers, column names, headings, and content MUST be in Chinese.';
+  }
+  if (norm.startsWith('ja')) {
+    return 'Respond in Japanese (日本語). All section labels, table headers, column names, headings, and content MUST be in Japanese — do not leave any English template strings untranslated.';
+  }
+  if (norm.startsWith('de')) {
+    return 'Respond in German (Deutsch). All section labels, table headers, column names, headings, and content MUST be in German — do not leave any English template strings untranslated.';
   }
   return '';
 }

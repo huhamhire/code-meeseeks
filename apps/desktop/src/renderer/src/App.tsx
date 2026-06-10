@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import i18n, { normalizeLanguage } from './i18n';
+import i18n, { resolveUiLanguage, persistLanguage } from './i18n';
 import type {
   AppInfo,
   AppPaths,
@@ -148,6 +148,11 @@ export default function App() {
             invoke('app:connections', undefined),
             invoke('prs:lastSync', undefined),
           ]);
+        // 先按 config.language 切到目标语言并**等其资源加载完**（懒加载语言会异步拉 chunk），
+        // 再 setBoot 渲染主界面 —— 首屏直接是用户语言，不闪兜底。persist 供下次启动同步命中。
+        const lang = resolveUiLanguage(config.language);
+        persistLanguage(lang);
+        await i18n.changeLanguage(lang);
         setBoot({ info, paths, config, prAgent, connections, lastSyncAt: lastSync.at });
         setPrs(initialPrs);
         setLastSyncAt(lastSync.at);
@@ -157,10 +162,14 @@ export default function App() {
     })();
   }, []);
 
-  // config.language 决定 UI 语言：boot 拿到配置后切到对应语言（默认 zh-CN）。
+  // 运行时语言切换（如设置页改 config.language）：boot 后 language 变化即切换并回写持久化。
+  // 首次 boot 时已在上面 await 切好，这里对同值是幂等 no-op。
   useEffect(() => {
-    void i18n.changeLanguage(normalizeLanguage(boot?.config.language));
-  }, [boot?.config.language]);
+    if (!boot) return;
+    const lang = resolveUiLanguage(boot.config.language);
+    persistLanguage(lang);
+    void i18n.changeLanguage(lang);
+  }, [boot]);
 
   // 启动时把 pr-agent 活动 run + 实时 stdout 流接到全局 store；ChatPane 跨 PR
   // 切换时可读 store 拿回运行中的状态 (本组件挂载到树根，效果等价于"应用级 hook")

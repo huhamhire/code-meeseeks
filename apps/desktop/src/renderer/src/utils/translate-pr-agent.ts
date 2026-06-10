@@ -20,12 +20,16 @@
  * `pr-agent-labels/<lang>.json` 并在 TRANSLATION_MAPS 注册。
  */
 
-import i18n, { normalizeLanguage, type SupportedLanguage } from '../i18n';
+import i18n, { matchSupportedLanguage, type SupportedLanguage } from '../i18n';
 import zhCN from './pr-agent-labels/zh-CN.json';
+import jaJP from './pr-agent-labels/ja-JP.json';
+import deDE from './pr-agent-labels/de-DE.json';
 
 // 各语言的 <英文模板 → 译文> 表注册表。未注册的语言（如 en-US）→ passthrough。
 const TRANSLATION_MAPS: Partial<Record<SupportedLanguage, Record<string, string>>> = {
   'zh-CN': zhCN,
+  'ja-JP': jaJP,
+  'de-DE': deDE,
 };
 
 // 按语言缓存「预排序条目」(长 key 在前，避免短 key 先吃掉长 key 的子串)
@@ -49,7 +53,8 @@ function sortedEntriesFor(lang: SupportedLanguage): Array<[string, string]> | nu
  */
 export function translatePrAgentLabels(text: string): string {
   if (!text) return text;
-  const entries = sortedEntriesFor(normalizeLanguage(i18n.language));
+  const lang = matchSupportedLanguage(i18n.language);
+  const entries = lang ? sortedEntriesFor(lang) : null;
   if (!entries) return text;
   let result = text;
   for (const [en, zh] of entries) {

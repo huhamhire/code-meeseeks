@@ -373,40 +373,32 @@
     "namePlaceholder": "如 openai-prod / local-ollama",
     "provider": {
       "anthropic": {
-        "hint": "官方 Anthropic API；模型直接填型号名（claude-opus-4-8 等），会自动补 anthropic/ 前缀",
-        "modelExample": "claude-opus-4-8 / claude-sonnet-4-6 / claude-haiku-4-5"
+        "hint": "官方 Anthropic API；模型直接填型号名（claude-opus-4-8 等），会自动补 anthropic/ 前缀"
       },
       "cli": {
         "hint": "将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。",
-        "label": "本地 CLI",
-        "modelExample": "命令名"
+        "label": "本地 CLI"
       },
       "dashscope": {
         "hint": "阿里云 DashScope OpenAI 兼容接入；含千问 (Qwen)、DeepSeek-on-DashScope 等。API Key 在 DashScope 控制台生成",
-        "label": "阿里百炼 (DashScope)",
-        "modelExample": "qwen-max / qwen-plus / qwen-turbo / qwen3-235b-a22b"
+        "label": "阿里百炼 (DashScope)"
       },
       "deepseek": {
-        "hint": "官方 DeepSeek API；模型直接填型号名，会自动补 deepseek/ 前缀",
-        "modelExample": "deepseek-chat / deepseek-reasoner"
+        "hint": "官方 DeepSeek API；模型直接填型号名，会自动补 deepseek/ 前缀"
       },
       "ollama": {
-        "hint": "本地 Ollama 服务；模型直接填名字，会自动补 ollama/ 前缀",
-        "modelExample": "qwen2.5 / llama3.1"
+        "hint": "本地 Ollama 服务；模型直接填名字，会自动补 ollama/ 前缀"
       },
       "openai": {
-        "hint": "官方 OpenAI API；Base URL 留空走默认 endpoint",
-        "modelExample": "gpt-4o / gpt-4o-mini"
+        "hint": "官方 OpenAI API；Base URL 留空走默认 endpoint"
       },
       "openai-compatible": {
         "hint": "任何遵循 OpenAI API 协议的服务（vLLM / FastChat / 自建代理 …）；必须填 Base URL",
-        "label": "OpenAI 兼容",
-        "modelExample": "gpt-4o-mini / qwen2.5-72b-instruct"
+        "label": "OpenAI 兼容"
       },
       "volcengine-ark": {
         "hint": "火山方舟 OpenAI 兼容接入；含豆包 (Doubao)、DeepSeek-on-Ark 等。模型用方舟 endpoint id (ep-...) 或预设模型名",
-        "label": "火山方舟 (Volcengine Ark)",
-        "modelExample": "ep-20240xxxxxx-xxxxx / doubao-pro-32k / doubao-1-5-pro-256k"
+        "label": "火山方舟 (Volcengine Ark)"
       }
     },
     "show": "显示"
