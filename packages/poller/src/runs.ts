@@ -137,6 +137,21 @@ export async function getReviewRun(
  * - 不读文件就能定位 page：先按 key 字典序排序 + 过滤 + 切片，再批量读，避免大库
  *   全表扫描
  */
+/**
+ * 清空某 PR 的全部 run 历史记录（仅该 PR；删 `prs/<localId>/runs/*`）。返回删除条数。
+ * 正在跑的 run 其落盘记录也会被删，但跑完时 finishReviewRun 会重新落盘 → 不影响进行中的 run。
+ */
+export async function clearReviewRunsForPr(
+  stateStore: StateStore,
+  prLocalId: string,
+): Promise<number> {
+  const prefix = `prs/${prLocalId}/runs`;
+  const keys: string[] = [];
+  for await (const k of stateStore.list(prefix)) keys.push(k);
+  for (const k of keys) await stateStore.delete(k);
+  return keys.length;
+}
+
 export async function listReviewRunsForPr(
   stateStore: StateStore,
   prLocalId: string,

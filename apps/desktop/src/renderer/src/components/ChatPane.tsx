@@ -23,7 +23,9 @@ import {
   RetryIcon,
   SendIcon,
   StopIcon,
+  TrashIcon,
 } from './icons';
+import { ConfirmModal } from './ConfirmModal';
 import { mermaidComponents } from './markdownMermaid';
 import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { useChatRunStore } from '../stores/chat-run-store';
@@ -132,6 +134,7 @@ export function ChatPane({
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
   const [showRulePreview, setShowRulePreview] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   // 全局活动 run + 实时 stdout 缓存。store 来源于 main 的 'pragent:activeChanged'
@@ -277,6 +280,20 @@ export function ChatPane({
     setError(null);
     try {
       await invoke('pragent:run', { localId: pr.localId, tool, question });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  // 清空当前 PR 的执行历史（仅该 PR）：删远端记录 + 清本地列表。进行中的 run 不受影响
+  // （在 chatRunStore，跑完会重新落盘）。
+  const handleClearRuns = async (): Promise<void> => {
+    setShowClearConfirm(false);
+    if (!prLocalId) return;
+    try {
+      await invoke('pragent:clearRuns', { localId: prLocalId });
+      setRuns([]);
+      setHasMoreOlder(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -443,6 +460,17 @@ export function ChatPane({
           </span>
         )}
         {/* 运行时策略 chip 撤掉：部署细节用户不关心，状态栏已有 PR Agent 版本 chip */}
+        {pr && runs.length > 0 && (
+          <button
+            type="button"
+            className="icon-btn chat-pane-clear"
+            title="清空本 PR 的执行历史"
+            aria-label="清空执行历史"
+            onClick={() => setShowClearConfirm(true)}
+          >
+            <TrashIcon />
+          </button>
+        )}
       </header>
 
       {/* 当前 PR 命中的规则 chip：rules.dir 未配置 / 整体禁用 / 无命中 → 不显示。
@@ -549,6 +577,16 @@ export function ChatPane({
 
       {showRulePreview && matchedRule && (
         <RulePreviewModal rule={matchedRule} onClose={() => setShowRulePreview(false)} />
+      )}
+      {showClearConfirm && (
+        <ConfirmModal
+          title="清空执行历史"
+          message="确定清空当前 PR 的全部 PR Agent 执行历史记录？仅影响该 PR，不可恢复。"
+          confirmLabel="清空"
+          danger
+          onConfirm={() => void handleClearRuns()}
+          onCancel={() => setShowClearConfirm(false)}
+        />
       )}
     </aside>
   );

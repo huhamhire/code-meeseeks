@@ -16,6 +16,9 @@
   使社区版 `/describe` 的 `enable_pr_diagram`（默认开）按实际改动**选择性输出 mermaid 架构图**，
   配合 Mermaid 渲染直接成图；`/review` 等同步走 GFM 富 markdown，输出解析（parse-output）相应
   兼容 GFM 的 `<table>` / `<details>` / `<a href>` finding 形态。
+- **describe 排版优化**：架构图、文件走查各自独立成段，配中文色块标题（「架构图」/「文件走查」）；
+  文件走查从表格改为「按分组折叠的无序列表」并去掉无意义的 +1/-1 统计；mermaid 图可点击放大预览。
+- **清空执行历史**：chat 面板标题栏新增垃圾桶按钮，清空**当前 PR**的 PR Agent 执行历史记录（仅该 PR）。
 
 ## [0.2.0] - 2026-06-09
 

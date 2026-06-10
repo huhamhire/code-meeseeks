@@ -17,6 +17,7 @@ import {
   isCommentsCacheStale,
   listDrafts,
   listReviewRunsForPr,
+  clearReviewRunsForPr,
   listStoredPullRequests,
   makeRunId,
   parseReviewOutput,
@@ -1240,6 +1241,15 @@ export function registerIpcHandlers({
       req: IpcChannels['pragent:getRun']['request'],
     ): Promise<IpcChannels['pragent:getRun']['response']> =>
       getReviewRun(stateStore, req.localId, req.runId),
+  );
+  ipcMain.handle(
+    'pragent:clearRuns',
+    async (
+      _evt,
+      req: IpcChannels['pragent:clearRuns']['request'],
+    ): Promise<IpcChannels['pragent:clearRuns']['response']> => ({
+      cleared: await clearReviewRunsForPr(stateStore, req.localId),
+    }),
   );
 
   // === M4 草稿 IPC ===

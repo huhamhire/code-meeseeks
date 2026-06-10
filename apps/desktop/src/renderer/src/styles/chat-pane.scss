@@ -62,6 +62,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+// 清空历史按钮：顶到标题栏最右
+.chat-pane-clear {
+  margin-left: auto;
+}
 .chat-pane-stage-tag {
   margin-left: auto;
   padding: 1px $space-3;

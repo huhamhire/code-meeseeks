@@ -473,6 +473,11 @@ export interface IpcChannels {
     request: { localId: string; runId: string };
     response: ReviewRun | null;
   };
+  /** 清空指定 PR 的全部 run 历史记录（仅该 PR 生效）。返回删除条数。 */
+  'pragent:clearRuns': {
+    request: { localId: string };
+    response: { cleared: number };
+  };
   /**
    * 取消一个 run。语义跟 run 当前状态相关：
    * - 跟 active 匹配 → SIGKILL 子进程，落盘 status='cancelled'
