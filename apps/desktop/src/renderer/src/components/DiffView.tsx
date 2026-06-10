@@ -2,6 +2,7 @@
 // 本文件经 React.lazy 动态加载，故 Monaco 随本 chunk 按需拉取，不进入口包。
 import '../monaco-setup';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createRoot, type Root } from 'react-dom/client';
 import { DiffEditor } from '@monaco-editor/react';
 import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
@@ -143,6 +144,7 @@ export function DiffView({
   pendingNav,
   onNavConsumed,
 }: DiffViewProps) {
+  const { t } = useTranslation();
   const [files, setFiles] = useState<DiffChangedFile[] | null>(null);
   const [filesError, setFilesError] = useState<FormattedError | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -1116,7 +1118,7 @@ export function DiffView({
                   // 之前试过 linesDecorationsClassName 但挤压 line number 列体验更差，
                   // 撤回到这里。DiffEditor 已开启 glyphMargin:true 让那一列宽到足够装 +
                   glyphMarginClassName: 'monaco-draft-add-glyph',
-                  glyphMarginHoverMessage: { value: '点击新增评论' },
+                  glyphMarginHoverMessage: { value: t('diffView.addCommentHint') },
                 },
               },
             ],
@@ -1186,7 +1188,7 @@ export function DiffView({
         /* editor disposed */
       }
     };
-  }, [diffEditor, content, selected, drafts, comments, pr.localId, pr.platform]);
+  }, [diffEditor, content, selected, drafts, comments, pr.localId, pr.platform, t]);
 
   // M4 nav 完成消费：scroll + highlight + autoEdit 关联草稿。等 selected 文件
   // 切换 + content 加载 + diffEditor 就绪 + drafts hydrated 完，再 revealLine。
@@ -1258,7 +1260,7 @@ export function DiffView({
     return (
       <BackendErrorView
         err={filesError}
-        scope="拉取变更文件列表失败"
+        scope={t('diffView.loadChangedFilesFailed')}
         onRetry={() => setFilesRetry((n) => n + 1)}
       />
     );
@@ -1271,7 +1273,7 @@ export function DiffView({
     );
   }
   if (files.length === 0) {
-    return <div className="diff-empty">该 PR 无文件变更</div>;
+    return <div className="diff-empty">{t('diffView.noFileChanges')}</div>;
   }
 
   return (
@@ -1282,14 +1284,16 @@ export function DiffView({
             语义清晰 */}
         <div className="diff-file-list-header">
           <span>
-            {sidebarMode === 'search' ? '搜索变更内容' : `${String(files.length)} 个文件`}
+            {sidebarMode === 'search'
+              ? t('diffView.searchChanges')
+              : t('diffView.fileCount', { count: files.length })}
           </span>
           <button
             type="button"
             className="diff-file-list-search-btn"
             onClick={() => setSidebarMode((m) => (m === 'search' ? 'tree' : 'search'))}
-            title={sidebarMode === 'search' ? '返回文件树' : '搜索变更内容 (head + base)'}
-            aria-label={sidebarMode === 'search' ? '返回文件树' : '搜索'}
+            title={sidebarMode === 'search' ? t('diffView.backToFileTree') : t('diffView.searchChangesTitle')}
+            aria-label={sidebarMode === 'search' ? t('diffView.backToFileTree') : t('diffView.searchAria')}
           >
             {sidebarMode === 'search' ? <FileTreeIcon /> : <SearchIcon />}
           </button>
@@ -1318,7 +1322,7 @@ export function DiffView({
         <div
           className="diff-file-list-resize-handle"
           onMouseDown={startFileListResize}
-          title="拖动调整文件树宽度"
+          title={t('diffView.resizeFileListTitle')}
           aria-label="resize diff file list"
         />
       </aside>
@@ -1326,7 +1330,7 @@ export function DiffView({
         {commentsError && (
           <BackendErrorBanner
             err={commentsError}
-            scope="拉取评论失败"
+            scope={t('diffView.loadCommentsFailed')}
             onRetry={() => setCommentsRetry((n) => n + 1)}
             onDismiss={() => setCommentsError(null)}
           />
@@ -1334,14 +1338,20 @@ export function DiffView({
         {contentError && (
           <BackendErrorBanner
             err={contentError}
-            scope={selected ? `读取 ${selected.path} 内容失败` : '读取文件内容失败'}
+            scope={
+              selected
+                ? t('diffView.readFileContentFailedNamed', { path: selected.path })
+                : t('diffView.readFileContentFailed')
+            }
             onDismiss={() => setContentError(null)}
           />
         )}
         {showBlame && blameError && (
           <BackendErrorBanner
             err={blameError}
-            scope={selected ? `${selected.path} blame 失败` : 'blame 失败'}
+            scope={
+              selected ? t('diffView.blameFailedNamed', { path: selected.path }) : t('diffView.blameFailed')
+            }
             onDismiss={() => setBlameError(null)}
           />
         )}
@@ -1359,12 +1369,12 @@ export function DiffView({
               label="DiffPane"
               fallback={(err, reset) => (
                 <div className="diff-empty diff-error">
-                  <p>diff 渲染失败：{err.message}</p>
+                  <p>{t('diffView.diffRenderFailed', { message: err.message })}</p>
                   <p className="muted" style={{ marginTop: 8 }}>
-                    切换文件 / 重试通常能恢复。底层异常已记录到 console。
+                    {t('diffView.diffRenderFailedHint')}
                   </p>
                   <button type="button" className="btn btn-sm" onClick={reset}>
-                    重试
+                    {t('diffView.retry')}
                   </button>
                 </div>
               )}
@@ -1419,6 +1429,7 @@ function DraftZoneList({
   prLocalId: string;
   registerEditTrigger: (draftId: string, fn: (() => void) | null) => void;
 }) {
+  const { t } = useTranslation();
   const onSave = async (draftId: string, body: string): Promise<void> => {
     await invoke('drafts:update', {
       localId: prLocalId,
@@ -1441,7 +1452,7 @@ function DraftZoneList({
       draftIds: [draftId],
     });
     const r = resp.results[0];
-    if (!r) return { ok: false, error: 'main 端未返回结果' };
+    if (!r) return { ok: false, error: t('diffView.noResultFromMain') };
     return { ok: r.ok, error: r.error };
   };
   return (
@@ -1559,6 +1570,7 @@ function CommentNode({
   attachmentBase: string | null;
   prLocalId: string;
 }) {
+  const { t } = useTranslation();
   const components = useMemo(
     () => makeCommentMarkdownComponents(attachmentBase, prLocalId),
     [attachmentBase, prLocalId],
@@ -1633,16 +1645,16 @@ function CommentNode({
               className="comment-zone-reply-btn"
               onClick={() => setReplyOpen(true)}
             >
-              回复
+              {t('diffView.reply')}
             </button>
             {canEdit && (
               <button
                 type="button"
                 className="comment-zone-edit-btn"
                 onClick={() => setEditOpen(true)}
-                title="编辑自己发布的评论 (远端同步)"
+                title={t('diffView.editCommentTitle')}
               >
-                编辑
+                {t('common.edit')}
               </button>
             )}
             {canDelete && (
@@ -1651,9 +1663,9 @@ function CommentNode({
                 className="comment-zone-delete-btn"
                 onClick={() => setConfirmDelete(true)}
                 disabled={deleting}
-                title="删除自己发布的评论 (远端同步)"
+                title={t('diffView.deleteCommentTitle')}
               >
-                {deleting ? '删除中…' : '删除'}
+                {deleting ? t('diffView.deleting') : t('common.delete')}
               </button>
             )}
           </div>
@@ -1668,13 +1680,13 @@ function CommentNode({
         )}
         {deleteError && (
           <div className="comment-zone-delete-error" role="alert">
-            删除失败：{deleteError}
+            {t('diffView.deleteFailed', { error: deleteError })}
             <button
               type="button"
               className="comment-zone-delete-error-dismiss"
               onClick={() => setDeleteError(null)}
-              aria-label="关闭错误"
-              title="知道了"
+              aria-label={t('diffView.dismissErrorAria')}
+              title={t('diffView.gotIt')}
             >
               ✕
             </button>
@@ -1693,10 +1705,10 @@ function CommentNode({
       ))}
       {confirmDelete && (
         <ConfirmModal
-          title="删除评论"
-          message="此操作会删除远端 Bitbucket 上的这条评论，且无法恢复。确定继续吗？"
-          confirmLabel="删除"
-          cancelLabel="取消"
+          title={t('diffView.deleteCommentModalTitle')}
+          message={t('diffView.deleteCommentModalMessage')}
+          confirmLabel={t('common.delete')}
+          cancelLabel={t('common.cancel')}
           danger
           onConfirm={() => void handleDelete()}
           onCancel={() => setConfirmDelete(false)}
@@ -1743,26 +1755,31 @@ function CommentAuthorRow({
 }
 
 function SyncProgress({ progress }: { progress: SyncProgressEvent | null }) {
+  const { t } = useTranslation();
   if (!progress) {
     return (
       <span className="muted">
-        <Spinner /> 同步本地镜像…
+        <Spinner /> {t('diffView.syncingMirror')}
       </span>
     );
   }
   if (progress.phase === 'error') {
-    return <span className="diff-error">同步失败：{progress.message ?? '未知错误'}</span>;
+    return (
+      <span className="diff-error">
+        {t('diffView.syncFailed', { message: progress.message ?? t('diffView.unknownError') })}
+      </span>
+    );
   }
   // sync 完成后 IPC handler 还在跑 git diff 算变更文件列表，显示对应阶段提示
   if (progress.phase === 'done') {
     return (
       <span className="muted">
-        <Spinner /> 同步完成，正在拉取变更文件列表…
+        <Spinner /> {t('diffView.syncDoneLoadingFiles')}
       </span>
     );
   }
   const label =
-    progress.phase === 'start' ? progress.message ?? '准备同步' : progress.stage ?? '同步';
+    progress.phase === 'start' ? progress.message ?? t('diffView.preparingSync') : progress.stage ?? t('diffView.syncing');
   const pct =
     progress.percent !== undefined && Number.isFinite(progress.percent) ? progress.percent : null;
   return (
@@ -1807,6 +1824,7 @@ function BlameColumn({
   connectionId: string;
   diffEditor: MonacoEditor.IStandaloneDiffEditor;
 }) {
+  const { t } = useTranslation();
   const blocks = useMemo(() => groupBlameByCommit(blame.lines), [blame.lines]);
   // 把 changedLines 合并成连续区段，渲染色带（减少 DOM 数量）
   const changedRanges = useMemo(
@@ -1929,7 +1947,7 @@ function BlameColumn({
                 key={it.segId}
                 className="blame-row-change"
                 style={{ top: it.top, height: it.height }}
-                title="此区段为本 PR 引入的改动"
+                title={t('diffView.blameChangeRangeTitle')}
                 aria-hidden="true"
               />
             );
@@ -1993,16 +2011,17 @@ function BackendErrorView({
   scope: string;
   onRetry?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="diff-empty diff-error backend-error-view">
       <p className="backend-error-title">
-        <strong>{scope}：</strong>
+        <strong>{t('diffView.scopeLabel', { scope })}</strong>
         {err.title}
       </p>
       <pre className="backend-error-detail">{err.detail}</pre>
       {onRetry && (
         <button type="button" className="btn btn-sm" onClick={onRetry}>
-          重试
+          {t('diffView.retry')}
         </button>
       )}
     </div>
@@ -2021,13 +2040,14 @@ function BackendErrorBanner({
   onRetry?: () => void;
   onDismiss?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className={`backend-error-banner backend-error-banner-${err.kind}`} role="alert">
       <span className="backend-error-banner-icon" aria-hidden="true">
         ⚠
       </span>
       <span className="backend-error-banner-text">
-        <strong>{scope}：</strong>
+        <strong>{t('diffView.scopeLabel', { scope })}</strong>
         <span className="muted">{err.title}</span>
         <span className="backend-error-banner-detail" title={err.detail}>
           {summarizeDetail(err.detail)}
@@ -2036,7 +2056,7 @@ function BackendErrorBanner({
       <span className="backend-error-banner-actions">
         {onRetry && (
           <button type="button" className="btn btn-sm" onClick={onRetry}>
-            重试
+            {t('diffView.retry')}
           </button>
         )}
         {onDismiss && (
@@ -2044,7 +2064,7 @@ function BackendErrorBanner({
             type="button"
             className="btn btn-sm backend-error-banner-dismiss"
             onClick={onDismiss}
-            title="收起此通知"
+            title={t('diffView.dismissNotificationTitle')}
             aria-label="dismiss"
           >
             ×
@@ -2082,19 +2102,21 @@ function DiffPane({
   showWhitespace: boolean;
   onMount: (editor: MonacoEditor.IStandaloneDiffEditor) => void;
 }) {
+  const { t } = useTranslation();
   if (loading || !content) {
     return (
       <div className="diff-empty">
         <span className="muted">
-          <Spinner /> 拉取 <code>{file.path}</code> 内容…
+          <Spinner /> {t('diffView.loadingContentPrefix')} <code>{file.path}</code>{' '}
+          {t('diffView.loadingContentSuffix')}
           <br />
-          <small>从本地镜像读 git blob，大文件 / 二进制判定时可能略慢</small>
+          <small>{t('diffView.loadingContentHint')}</small>
         </span>
       </div>
     );
   }
   if (content.base.binary || content.head.binary) {
-    return <div className="diff-binary">⚠️ 二进制文件，不渲染 diff</div>;
+    return <div className="diff-binary">{t('diffView.binaryNotRendered')}</div>;
   }
   return (
     <DiffEditor

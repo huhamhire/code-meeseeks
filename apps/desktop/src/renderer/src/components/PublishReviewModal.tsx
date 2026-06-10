@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ReviewDraft } from '@meebox/shared';
 import { invoke } from '../api';
 
@@ -40,6 +41,7 @@ export function PublishReviewModal({
    */
   onJumpToAnchor?: (draftId: string) => void;
 }) {
+  const { t } = useTranslation();
   // 列表用快照：进入 modal 时定下，避免 drafts 变动 (其它窗口编辑) 把当前选择洗掉
   const candidates = useMemo<ReviewDraft[]>(
     () => drafts.filter((d) => d.status === 'pending' || d.status === 'edited'),
@@ -103,14 +105,14 @@ export function PublishReviewModal({
       <div className="publish-review-backdrop" onClick={onClose}>
         <div className="publish-review-modal" onClick={(e) => e.stopPropagation()}>
           <header className="publish-review-head">
-            <h3>提交评论</h3>
+            <h3>{t('publishReviewModal.title')}</h3>
           </header>
           <div className="publish-review-body">
-            <p className="muted">当前 PR 没有待发布的草稿。</p>
+            <p className="muted">{t('publishReviewModal.emptyState')}</p>
           </div>
           <footer className="publish-review-foot">
             <button type="button" className="btn btn-sm" onClick={onClose}>
-              关闭
+              {t('common.close')}
             </button>
           </footer>
         </div>
@@ -124,10 +126,13 @@ export function PublishReviewModal({
         <header className="publish-review-head">
           <h3>
             {phase === 'done'
-              ? '发布完成'
+              ? t('publishReviewModal.headDone')
               : phase === 'publishing'
-                ? '发布中…'
-                : `提交评论 (${selected.size}/${candidates.length})`}
+                ? t('publishReviewModal.headPublishing')
+                : t('publishReviewModal.headConfirm', {
+                    selected: selected.size,
+                    total: candidates.length,
+                  })}
           </h3>
         </header>
 
@@ -136,10 +141,15 @@ export function PublishReviewModal({
             <div className="publish-review-body">
               <div className="publish-review-toolbar">
                 <button type="button" className="btn-link" onClick={toggleAll}>
-                  {selected.size === candidates.length ? '取消全选' : '全选'}
+                  {selected.size === candidates.length
+                    ? t('publishReviewModal.deselectAll')
+                    : t('publishReviewModal.selectAll')}
                 </button>
                 <span className="muted">
-                  共 {candidates.length} 条，已选 {selected.size}
+                  {t('publishReviewModal.countSummary', {
+                    total: candidates.length,
+                    selected: selected.size,
+                  })}
                 </span>
               </div>
               <ul className="publish-review-list">
@@ -148,7 +158,10 @@ export function PublishReviewModal({
                     d.anchor.endLine !== d.anchor.startLine
                       ? `${String(d.anchor.startLine)}-${String(d.anchor.endLine)}`
                       : String(d.anchor.startLine);
-                  const sideLabel = d.anchor.side === 'old' ? '基线' : '新版';
+                  const sideLabel =
+                    d.anchor.side === 'old'
+                      ? t('publishReviewModal.sideOld')
+                      : t('publishReviewModal.sideNew');
                   return (
                     <li key={d.id} className="publish-review-item">
                       <label>
@@ -169,7 +182,7 @@ export function PublishReviewModal({
                                 e.stopPropagation();
                                 onJumpToAnchor(d.id);
                               }}
-                              title="跳到 Diff 查看代码上下文"
+                              title={t('publishReviewModal.jumpToDiffTitle')}
                             >
                               {d.anchor.path}:{lineLabel}
                               <span className="muted"> · {sideLabel}</span>
@@ -181,7 +194,9 @@ export function PublishReviewModal({
                             </code>
                           )}
                           <span className={`publish-review-item-status status-${d.status}`}>
-                            {d.status === 'pending' ? '待处理' : '已编辑'}
+                            {d.status === 'pending'
+                              ? t('publishReviewModal.statusPending')
+                              : t('publishReviewModal.statusEdited')}
                           </span>
                         </div>
                       </label>
@@ -194,16 +209,20 @@ export function PublishReviewModal({
             </div>
             <footer className="publish-review-foot">
               <button type="button" className="btn btn-sm" onClick={onClose}>
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
                 className="btn btn-sm btn-primary"
                 disabled={selected.size === 0}
                 onClick={() => void handlePublish()}
-                title={selected.size === 0 ? '至少选择一条' : '发布到 Bitbucket'}
+                title={
+                  selected.size === 0
+                    ? t('publishReviewModal.publishDisabledTitle')
+                    : t('publishReviewModal.publishTitle')
+                }
               >
-                发布 {selected.size} 条
+                {t('publishReviewModal.publishBtn', { n: selected.size })}
               </button>
             </footer>
           </>
@@ -212,8 +231,8 @@ export function PublishReviewModal({
         {phase === 'publishing' && (
           <div className="publish-review-body publish-review-publishing">
             <div className="publish-review-spinner" aria-hidden="true" />
-            <p>正在串行发布 {selected.size} 条评论到 Bitbucket…</p>
-            <p className="muted">请勿关闭窗口</p>
+            <p>{t('publishReviewModal.publishingMessage', { n: selected.size })}</p>
+            <p className="muted">{t('publishReviewModal.doNotClose')}</p>
           </div>
         )}
 
@@ -221,9 +240,13 @@ export function PublishReviewModal({
           <>
             <div className="publish-review-body">
               <div className="publish-review-summary">
-                <span className="publish-review-summary-ok">✓ 成功 {okCount}</span>
+                <span className="publish-review-summary-ok">
+                  {t('publishReviewModal.summaryOk', { n: okCount })}
+                </span>
                 {failCount > 0 && (
-                  <span className="publish-review-summary-fail">✗ 失败 {failCount}</span>
+                  <span className="publish-review-summary-fail">
+                    {t('publishReviewModal.summaryFail', { n: failCount })}
+                  </span>
                 )}
               </div>
               {failCount > 0 && (
@@ -244,12 +267,12 @@ export function PublishReviewModal({
                 </ul>
               )}
               {failCount === 0 && (
-                <p className="muted">所有草稿已写入远端，评论列表会立即刷新。</p>
+                <p className="muted">{t('publishReviewModal.allPublished')}</p>
               )}
             </div>
             <footer className="publish-review-foot">
               <button type="button" className="btn btn-sm btn-primary" onClick={onClose}>
-                关闭
+                {t('common.close')}
               </button>
             </footer>
           </>

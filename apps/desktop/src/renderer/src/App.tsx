@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { normalizeLanguage } from './i18n';
 import type {
   AppInfo,
   AppPaths,
@@ -31,6 +33,7 @@ interface BootstrapState {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const [boot, setBoot] = useState<BootstrapState | null>(null);
   const [prs, setPrs] = useState<StoredPullRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -153,6 +156,11 @@ export default function App() {
       }
     })();
   }, []);
+
+  // config.language 决定 UI 语言：boot 拿到配置后切到对应语言（默认 zh-CN）。
+  useEffect(() => {
+    void i18n.changeLanguage(normalizeLanguage(boot?.config.language));
+  }, [boot?.config.language]);
 
   // 启动时把 pr-agent 活动 run + 实时 stdout 流接到全局 store；ChatPane 跨 PR
   // 切换时可读 store 拿回运行中的状态 (本组件挂载到树根，效果等价于"应用级 hook")
@@ -279,11 +287,11 @@ export default function App() {
         // 远端拒绝（如 PR 已关闭 / 合并 / 权限不足）→ 本地状态不变，弹 toast 提示。
         // 顺手刷新一次：PR 若已关闭，下一轮 poll 会把它软删，列表自洽
         const msg = e instanceof Error ? e.message : String(e);
-        notifyError(`审批操作失败：${msg}`);
+        notifyError(t('app.approveActionFailed', { msg }));
         void triggerRefresh();
       }
     },
-    [selected, notifyError, triggerRefresh],
+    [selected, notifyError, triggerRefresh, t],
   );
 
   const mergeSelectedPr = useCallback(async (): Promise<void> => {
@@ -295,7 +303,7 @@ export default function App() {
     } catch (e) {
       // 合并失败（冲突 / veto / 权限 / PR 已关闭）→ 弹 toast，本地不变
       const msg = e instanceof Error ? e.message : String(e);
-      notifyError(`合并失败：${msg}`);
+      notifyError(t('app.mergeFailed', { msg }));
       void triggerRefresh();
       return;
     } finally {
@@ -304,7 +312,7 @@ export default function App() {
     // 合并成功：PR 已转 MERGED，会从 pending 列表退场。取消选中 + 刷新让其消失
     if (selectedId === mergedId) setSelectedId(null);
     await triggerRefresh();
-  }, [selected, selectedId, triggerRefresh, notifyError, merging]);
+  }, [selected, selectedId, triggerRefresh, notifyError, merging, t]);
 
   // 首启向导完成：落盘连接（必）+ LLM / 缓存目录（按需），再重拉配置/连接/PR 更新
   // boot。boot.config 拿到有效 active 连接后，下方 needsOnboarding 派生为 false，
@@ -353,7 +361,7 @@ export default function App() {
   if (!boot) {
     return (
       <div className="app fatal-app">
-        <p className="muted">加载中…</p>
+        <p className="muted">{t('app.loading')}</p>
       </div>
     );
   }
@@ -477,7 +485,7 @@ export default function App() {
           className="app-toast app-toast-error"
           role="alert"
           onClick={() => setToast(null)}
-          title="点击关闭"
+          title={t('app.toastCloseTitle')}
         >
           {toast.text}
         </div>

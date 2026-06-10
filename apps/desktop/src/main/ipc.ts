@@ -45,6 +45,7 @@ import type {
 } from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import { buildDraftAdapter, type BuiltAdapter, type ConnectionRuntime } from './adapters.js';
+import { t } from './i18n/index.js';
 import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
@@ -468,12 +469,12 @@ export function registerIpcHandlers({
       const win = BrowserWindow.fromWebContents(evt.sender) ?? undefined;
       const result = win
         ? await dialog.showOpenDialog(win, {
-            title: req.title ?? '选择目录',
+            title: req.title ?? t('dialog.selectDirectory'),
             defaultPath: req.defaultPath,
             properties: ['openDirectory', 'createDirectory'],
           })
         : await dialog.showOpenDialog({
-            title: req.title ?? '选择目录',
+            title: req.title ?? t('dialog.selectDirectory'),
             defaultPath: req.defaultPath,
             properties: ['openDirectory', 'createDirectory'],
           });
@@ -749,7 +750,7 @@ export function registerIpcHandlers({
    */
   const executeRun = async (item: QueueItem): Promise<ReviewRun> => {
     const prAgentBridge = getPrAgentBridge();
-    if (!prAgentBridge) throw new Error('pr-agent 未就绪');
+    if (!prAgentBridge) throw new Error(t('prAgent.notReady'));
     const { req, pr } = item;
     // 提前 resolve active LLM profile — model 字段要随 startReviewRun 一起落
     // 盘，让 UI 在 meta 行展示"这次 run 用的什么模型"。后面 buildPragentEnv
@@ -1161,12 +1162,12 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['pragent:run']['response']> => {
       if (!getPrAgentBridge()) {
         throw new Error(
-          'pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节',
+          t('prAgent.notReadyDetail'),
         );
       }
       // 早期校验：/ask 必须带 question，避免排队后才报错
       if (req.tool === 'ask' && !req.question?.trim()) {
-        throw new Error('/ask 需要提供 question');
+        throw new Error(t('prAgent.askNeedsQuestion'));
       }
       const pr = await findPrOrThrow(req.localId);
       // 去重（权威）：同一 PR 同一工具已在执行 / 排队 → 拒绝重复触发，避免并发模式下
@@ -1175,7 +1176,7 @@ export function registerIpcHandlers({
         const sameTask = (q: QueueItem): boolean =>
           q.info.prLocalId === pr.localId && q.info.tool === req.tool;
         if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
-          throw new Error(`该 PR 的 /${req.tool} 任务已在执行或排队中，请勿重复触发`);
+          throw new Error(t('prAgent.duplicateTask', { tool: req.tool }));
         }
       }
       // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
@@ -1349,14 +1350,14 @@ export function registerIpcHandlers({
       for (const draftId of req.draftIds) {
         const draft = draftById.get(draftId);
         if (!draft) {
-          results.push({ draftId, ok: false, error: '草稿不存在 (可能已被删除)' });
+          results.push({ draftId, ok: false, error: t('drafts.notFound') });
           continue;
         }
         // 状态守卫：rejected 不发 (用户决断不发)。
         // posted 不再守卫 — 发布成功后本地草稿直接删除，不存 'posted' 历史状态，
         // 调用方传过来的 draftId 在 listDrafts 找不到时已经被前面 `if (!draft)` 兜住
         if (draft.status === 'rejected') {
-          results.push({ draftId, ok: false, error: '草稿已被拒绝，跳过' });
+          results.push({ draftId, ok: false, error: t('drafts.rejected') });
           continue;
         }
         try {

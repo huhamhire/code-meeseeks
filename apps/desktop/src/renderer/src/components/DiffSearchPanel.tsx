@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { editor as MonacoEditorNs } from 'monaco-editor';
 import type { DiffChangedFile } from '@meebox/shared';
 import { invoke } from '../api';
@@ -76,6 +78,7 @@ export function DiffSearchPanel({
   onJumpToMatch,
   onExit,
 }: DiffSearchPanelProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   // 大小写敏感跨 session 持久化 — 用户习惯一旦定下来 (一般是关或开)，每次
   // 进搜索面板都得重新切一次很烦。localStorage 写一次就记住
@@ -142,7 +145,7 @@ export function DiffSearchPanel({
     setLoading(true);
     setError(null);
     const timer = window.setTimeout(() => {
-      void runSearch(token, q, caseSensitive, files, prLocalId, contentCacheRef.current)
+      void runSearch(token, q, caseSensitive, files, prLocalId, contentCacheRef.current, t)
         .then(({ results: r, partialError }) => {
           if (token !== sessionRef.current) return;
           // 先显示带 <mark> 关键词高亮的纯文本结果 — 用户立刻能看到命中
@@ -166,7 +169,7 @@ export function DiffSearchPanel({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [query, caseSensitive, files, prLocalId]);
+  }, [query, caseSensitive, files, prLocalId, t]);
 
   const totalMatches = useMemo(
     () => results.reduce((n, fr) => n + fr.matches.length, 0),
@@ -191,14 +194,14 @@ export function DiffSearchPanel({
           className="diff-search-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索变更内容…"
-          aria-label="搜索 PR 变更内容"
+          placeholder={t('diffSearchPanel.searchPlaceholder')}
+          aria-label={t('diffSearchPanel.searchAria')}
         />
         <button
           type="button"
           className={`diff-search-case-toggle${caseSensitive ? ' active' : ''}`}
           onClick={() => setCaseSensitive((c) => !c)}
-          title={caseSensitive ? '区分大小写 (已开启)' : '区分大小写 (已关闭)'}
+          title={caseSensitive ? t('diffSearchPanel.caseSensitiveOn') : t('diffSearchPanel.caseSensitiveOff')}
           aria-pressed={caseSensitive}
         >
           Aa
@@ -207,8 +210,8 @@ export function DiffSearchPanel({
       {query.trim() && (
         <div className="diff-search-stats muted">
           {loading
-            ? '搜索中…'
-            : `${String(totalMatches)} 条命中 · ${String(results.length)} 个文件`}
+            ? t('diffSearchPanel.searching')
+            : t('diffSearchPanel.matchStats', { matches: totalMatches, files: results.length })}
         </div>
       )}
       {error && (
@@ -247,7 +250,10 @@ export function DiffSearchPanel({
                         type="button"
                         className="diff-search-match"
                         onClick={() => onJumpToMatch(fr.file, m.line, m.srcSide)}
-                        title={`跳到 ${m.srcSide === 'new' ? 'head' : 'base'} 第 ${String(m.line)} 行`}
+                        title={t('diffSearchPanel.jumpToLineTitle', {
+                          side: m.srcSide === 'new' ? 'head' : 'base',
+                          line: m.line,
+                        })}
                       >
                         <span
                           className={`diff-search-match-marker diff-search-match-marker-${m.diffRole}`}
@@ -274,8 +280,10 @@ export function DiffSearchPanel({
                   ))}
                   {overflow > 0 && (
                     <li className="diff-search-match-overflow muted">
-                      …还有 {String(overflow)} 条 (单文件命中过多，仅显示前
-                      {String(PER_FILE_MATCH_CAP)} 条)
+                      {t('diffSearchPanel.matchOverflow', {
+                        overflow,
+                        cap: PER_FILE_MATCH_CAP,
+                      })}
                     </li>
                   )}
                 </ul>
@@ -284,7 +292,7 @@ export function DiffSearchPanel({
           );
         })}
         {!loading && query.trim() && results.length === 0 && !error && (
-          <li className="diff-search-empty muted">未找到匹配</li>
+          <li className="diff-search-empty muted">{t('diffSearchPanel.noMatch')}</li>
         )}
       </ul>
     </div>
@@ -337,6 +345,7 @@ async function runSearch(
   files: DiffChangedFile[],
   prLocalId: string,
   cache: Map<string, string | null>,
+  t: TFunction,
 ): Promise<{ results: FileResults[]; partialError: string | null }> {
   const out: FileResults[] = [];
   let failedCount = 0;
@@ -421,9 +430,7 @@ async function runSearch(
   return {
     results: out,
     partialError:
-      failedCount > 0
-        ? `${String(failedCount)} 个文件无法搜索 (二进制 / 太大 / 拉取失败)`
-        : null,
+      failedCount > 0 ? t('diffSearchPanel.partialError', { count: failedCount }) : null,
   };
 }
 

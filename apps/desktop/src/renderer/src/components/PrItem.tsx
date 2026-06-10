@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { StoredPullRequest } from '@meebox/shared';
 import { Avatar } from './Avatar';
 import { PersonIcon, PullRequestIcon } from './icons';
@@ -9,6 +10,7 @@ interface PrItemProps {
 }
 
 export function PrItem({ pr, selected, onClick }: PrItemProps) {
+  const { t } = useTranslation();
   const approvedCount = pr.reviewers.filter((r) => r.status === 'approved').length;
   const needsWorkCount = pr.reviewers.filter((r) => r.status === 'needsWork').length;
   // 服务端判定可直接合并：列表里用分支合并图标 chip 标注（纯状态，无数值）。
@@ -37,7 +39,7 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
       <div className="pr-item-body">
         <div className="pr-item-title">
           {pr.hasConflict && (
-            <span className="conflict-warn" title="存在合并冲突" aria-label="conflict">
+            <span className="conflict-warn" title={t('prItem.hasConflict')} aria-label="conflict">
               ⚠️
             </span>
           )}
@@ -54,7 +56,7 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
                 {canMerge && (
                   <span
                     className="review-chip review-chip-mergeable"
-                    title="可合并：已满足所有合并条件"
+                    title={t('prItem.mergeable')}
                     aria-label="mergeable"
                   >
                     <PullRequestIcon />
@@ -63,7 +65,7 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
                 {approvedCount > 0 && (
                   <span
                     className="review-chip review-chip-approved"
-                    title={`${String(approvedCount)} 位 reviewer 已 approve`}
+                    title={t('prItem.approvedCount', { count: approvedCount })}
                   >
                     ✓ {approvedCount}
                   </span>
@@ -71,7 +73,7 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
                 {needsWorkCount > 0 && (
                   <span
                     className="review-chip review-chip-needs-work"
-                    title={`${String(needsWorkCount)} 位 reviewer 标记 needs work`}
+                    title={t('prItem.needsWorkCount', { count: needsWorkCount })}
                   >
                     ✗ {needsWorkCount}
                   </span>

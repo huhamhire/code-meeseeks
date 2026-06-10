@@ -4,6 +4,7 @@ import '../monaco-setup';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
 import { editorFontSize } from '../editor-font';
@@ -38,6 +39,7 @@ export function InlineCodeContext({
   contextLines = 5,
   autoExpand = true,
 }: InlineCodeContextProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(autoExpand);
   const [snippet, setSnippet] = useState<{
     text: string;
@@ -62,7 +64,7 @@ export function InlineCodeContext({
         });
         if (cancelled) return;
         if (c.binary) {
-          setError('(二进制文件，无法显示上下文)');
+          setError(t('inlineCodeContext.binaryNoContext'));
           return;
         }
         const allLines = c.content.split('\n');
@@ -79,7 +81,7 @@ export function InlineCodeContext({
     return () => {
       cancelled = true;
     };
-  }, [expanded, pr.localId, anchor.path, anchor.side, anchor.line, contextLines]);
+  }, [expanded, pr.localId, anchor.path, anchor.side, anchor.line, contextLines, t]);
 
   if (!expanded) {
     return (
@@ -87,9 +89,9 @@ export function InlineCodeContext({
         type="button"
         className="comment-code-context-toggle"
         onClick={() => setExpanded(true)}
-        title="展开锚定行前后代码"
+        title={t('inlineCodeContext.expandTitle')}
       >
-        ⊕ 展开代码上下文 ({anchor.path}:{anchor.line})
+        {t('inlineCodeContext.expandLabel', { path: anchor.path, line: anchor.line })}
       </button>
     );
   }
@@ -97,7 +99,7 @@ export function InlineCodeContext({
     return <div className="comment-code-context-error muted">{error}</div>;
   }
   if (!snippet) {
-    return <div className="comment-code-context-loading muted">加载代码上下文…</div>;
+    return <div className="comment-code-context-loading muted">{t('inlineCodeContext.loading')}</div>;
   }
 
   // 高度按片段行数算；19px 行高 (Monaco fs=12 时近似) + 8px 上下 padding

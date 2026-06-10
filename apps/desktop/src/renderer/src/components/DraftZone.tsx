@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -75,6 +76,7 @@ export function DraftZone({
   onDelete,
   onPublish,
 }: DraftZoneProps) {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [editingBody, setEditingBody] = useState(draft.body);
   const [saving, setSaving] = useState(false);
@@ -233,7 +235,7 @@ export function DraftZone({
     try {
       const res = await onPublish();
       if (!res.ok) {
-        setPublishError(res.error ?? '发布失败');
+        setPublishError(res.error ?? t('draftZone.publishFailed'));
       }
       // 成功 → drafts-store 广播让 status 切到 'posted'，组件自动 re-render 显示
       // posted chip + 远端 id。无需手动 setIsEditing 之类，draft prop 流推回
@@ -271,7 +273,7 @@ export function DraftZone({
       if (res.ok) {
         setIsEditing(false);
       } else {
-        setPublishError(res.error ?? '发布失败');
+        setPublishError(res.error ?? t('draftZone.publishFailed'));
       }
     } catch (e) {
       setPublishError(e instanceof Error ? e.message : String(e));
@@ -348,24 +350,26 @@ export function DraftZone({
   // 真空草稿 / revert)。
   // 不再用"dirty (editing != persisted)"作判据 — 用户进 edit 看到已存的旧内容
   // 没改也"有文字"，按用户心智应该是暂存 (即使内部走 no-op 直接退出 edit)
-  const cancelLabel = trimmedEditing ? '暂存' : '取消';
+  // textarea 有内容 → 暂存语义；空 → 取消语义。stash 标志驱动按钮文案与 title
+  const isStash = trimmedEditing.length > 0;
+  const cancelLabel = isStash ? t('draftZone.stash') : t('common.cancel');
 
   const statusLabel: Record<typeof status, string> = {
-    pending: '待处理',
-    edited: '已编辑',
-    posted: '已发布',
-    rejected: '已拒绝',
+    pending: t('draftZone.statusPending'),
+    edited: t('draftZone.statusEdited'),
+    posted: t('draftZone.statusPosted'),
+    rejected: t('draftZone.statusRejected'),
   };
 
   return (
     <div className={`draft-zone-inner draft-zone-status-${status}`}>
       <div className="draft-zone-head">
-        <span className="draft-zone-tag">草稿</span>
+        <span className="draft-zone-tag">{t('draftZone.tag')}</span>
         <span className={`draft-zone-status draft-zone-status-chip-${status}`}>
           {statusLabel[status]}
         </span>
         <span className="draft-zone-origin muted">
-          {draft.origin === 'finding' ? 'AI 建议' : '我的评论'}
+          {draft.origin === 'finding' ? t('draftZone.originFinding') : t('draftZone.originMine')}
         </span>
         {!isEditing && canEdit && (
           <div className="draft-zone-actions">
@@ -381,11 +385,11 @@ export function DraftZone({
                 disabled={publishing || !draft.body.trim()}
                 title={
                   !draft.body.trim()
-                    ? '空草稿不能发布；先点编辑写入内容'
-                    : '发布到 Bitbucket (这一条)'
+                    ? t('draftZone.publishEmptyTitle')
+                    : t('draftZone.publishOneTitle')
                 }
               >
-                {publishing ? '发布中…' : '发布'}
+                {publishing ? t('draftZone.publishing') : t('draftZone.publish')}
               </button>
             )}
             <button
@@ -396,17 +400,17 @@ export function DraftZone({
                 setIsEditing(true);
               }}
               disabled={publishing}
-              title="编辑评论"
+              title={t('draftZone.editTitle')}
             >
-              编辑
+              {t('common.edit')}
             </button>
             <button
               type="button"
               className="draft-zone-btn draft-zone-btn-icon draft-zone-btn-danger"
               onClick={() => void handleDelete()}
               disabled={publishing}
-              title="删除草稿（本地，不影响远端）"
-              aria-label="删除草稿"
+              title={t('draftZone.deleteTitle')}
+              aria-label={t('draftZone.deleteAria')}
             >
               <TrashIcon />
             </button>
@@ -421,10 +425,10 @@ export function DraftZone({
             value={editingBody}
             onChange={(e) => setEditingBody(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="写一条评论..."
+            placeholder={t('draftZone.textareaPlaceholder')}
             rows={4}
             disabled={saving || publishing}
-            aria-label="草稿评论编辑器"
+            aria-label={t('draftZone.textareaAria')}
           />
           <div className="draft-zone-edit-actions">
             {/* 主按钮：有 onPublish 时是"发布" (先 auto-save 再 POST，跟取消的
@@ -437,11 +441,15 @@ export function DraftZone({
                 disabled={saving || publishing || !canSave}
                 title={
                   !canSave
-                    ? '评论不能为空'
-                    : '发布到 Bitbucket (Cmd/Ctrl+Enter，会先自动保存当前内容)'
+                    ? t('draftZone.emptyCommentTitle')
+                    : t('draftZone.publishFromEditTitle')
                 }
               >
-                {publishing ? '发布中…' : saving ? '保存中…' : '发布'}
+                {publishing
+                  ? t('draftZone.publishing')
+                  : saving
+                    ? t('draftZone.saving')
+                    : t('draftZone.publish')}
               </button>
             ) : (
               <button
@@ -449,9 +457,9 @@ export function DraftZone({
                 className="draft-zone-btn draft-zone-btn-primary"
                 onClick={() => void handleSave()}
                 disabled={saving || !canSave}
-                title={!canSave ? '评论不能为空' : '保存 (Cmd/Ctrl+Enter)'}
+                title={!canSave ? t('draftZone.emptyCommentTitle') : t('draftZone.saveTitle')}
               >
-                {saving ? '保存中…' : '保存'}
+                {saving ? t('draftZone.saving') : t('common.save')}
               </button>
             )}
             <button
@@ -459,11 +467,7 @@ export function DraftZone({
               className="draft-zone-btn"
               onClick={() => void handleCancel()}
               disabled={saving || publishing}
-              title={
-                cancelLabel === '暂存'
-                  ? '暂存改动 (本地保留，未发布；Esc 同效)'
-                  : '取消 (Esc)'
-              }
+              title={isStash ? t('draftZone.stashTitle') : t('draftZone.cancelTitle')}
             >
               {cancelLabel}
             </button>
@@ -473,8 +477,8 @@ export function DraftZone({
                 className="draft-zone-btn draft-zone-btn-icon draft-zone-btn-danger draft-zone-edit-delete"
                 onClick={() => void handleDelete()}
                 disabled={saving || publishing}
-                title="删除草稿（有内容时二次确认）"
-                aria-label="删除草稿"
+                title={t('draftZone.deleteEditTitle')}
+                aria-label={t('draftZone.deleteAria')}
               >
                 <TrashIcon />
               </button>
@@ -486,22 +490,24 @@ export function DraftZone({
           {draft.body.trim() ? (
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{draft.body}</ReactMarkdown>
           ) : (
-            <span className="muted">(空草稿；点编辑写入内容)</span>
+            <span className="muted">{t('draftZone.emptyDraftHint')}</span>
           )}
         </div>
       )}
       {draft.posted_remote_id && (
-        <div className="draft-zone-foot muted">已发布 · 远端 id: {draft.posted_remote_id}</div>
+        <div className="draft-zone-foot muted">
+          {t('draftZone.postedRemoteId', { id: draft.posted_remote_id })}
+        </div>
       )}
       {publishError && (
         <div className="draft-zone-publish-error" role="alert">
-          发布失败：{publishError}
+          {t('draftZone.publishErrorPrefix', { error: publishError })}
           <button
             type="button"
             className="draft-zone-publish-error-dismiss"
             onClick={() => setPublishError(null)}
-            aria-label="关闭错误提示"
-            title="知道了"
+            aria-label={t('draftZone.dismissErrorAria')}
+            title={t('draftZone.gotIt')}
           >
             ✕
           </button>
@@ -509,10 +515,10 @@ export function DraftZone({
       )}
       {confirmDelete && (
         <ConfirmModal
-          title="删除草稿"
-          message="此草稿包含内容，删除后无法恢复。确定删除吗？"
-          confirmLabel="删除"
-          cancelLabel="取消"
+          title={t('draftZone.deleteConfirmTitle')}
+          message={t('draftZone.deleteConfirmMessage')}
+          confirmLabel={t('common.delete')}
+          cancelLabel={t('common.cancel')}
           danger
           onConfirm={() => void handleConfirmDelete()}
           onCancel={() => setConfirmDelete(false)}

@@ -11,6 +11,7 @@ import { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { PlatformAdapter, PlatformUser, PrAgentStatus } from '@meebox/shared';
 import { JsonFileStateStore } from '@meebox/state-store';
 import { buildAdapters, type ConnectionRuntime } from './adapters.js';
+import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
 import { buildProxyEnv } from './utils/proxy.js';
 import {
@@ -85,6 +86,8 @@ let windowState: WindowState = {};
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
+  // 主进程 i18n 按配置语言定档（dialog 标题、错误消息等面向用户文本）。
+  initMainI18n(bootstrap.config.language);
   // pretty 仅非打包态开：dev 控制台单行 + ISO8601 + 上色；打包态保持原始 JSON。
   logger = await createLogger({ logsDir: bootstrap.paths.logsDir, pretty: !app.isPackaged });
   logger.info(

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -29,6 +30,7 @@ interface DraftsPanelProps {
  * 检视本 PR 自己发出去的评论历史，"已拒绝"可恢复 (M4 暂未做 unreject UI)
  */
 export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
+  const { t } = useTranslation();
   const drafts = useDraftsForPr(pr.localId);
   const [filter, setFilter] = useState<Filter>('publishable');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
       });
       const r = resp.results[0];
       if (!r || !r.ok) {
-        setError(draftId, r?.error ?? '发布失败');
+        setError(draftId, r?.error ?? t('draftsPanel.publishFailed'));
       }
       // 成功 → main 端直接删本地草稿 (不留 posted 历史)，broadcastDraftsChanged
       // 让本面板重拉，被删的条目从列表里消失。远端评论由 force-refresh comments
@@ -111,24 +113,21 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
   if (drafts === null) {
     return (
       <div className="drafts-panel">
-        <div className="drafts-panel-empty muted">加载草稿中…</div>
+        <div className="drafts-panel-empty muted">{t('draftsPanel.loading')}</div>
       </div>
     );
   }
   if (drafts.length === 0) {
     return (
       <div className="drafts-panel">
-        <div className="drafts-panel-empty muted">
-          本 PR 暂无草稿。在「变更」视图行 hover「+」可创建评论草稿；或在「对话」
-          视图里把 AI 建议 (/review、/ask) 转为草稿。
-        </div>
+        <div className="drafts-panel-empty muted">{t('draftsPanel.emptyHint')}</div>
       </div>
     );
   }
 
   return (
     <div className="drafts-panel">
-      <nav className="drafts-panel-filter" role="tablist" aria-label="按状态筛选草稿">
+      <nav className="drafts-panel-filter" role="tablist" aria-label={t('draftsPanel.filterAria')}>
         {(['publishable', 'all', 'rejected'] as const).map((f) => (
           <button
             key={f}
@@ -138,7 +137,7 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
             role="tab"
             aria-selected={filter === f}
           >
-            {FILTER_LABEL[f]}
+            {t(FILTER_LABEL_KEY[f])}
             {counts[f] > 0 && (
               <span className="drafts-panel-filter-badge">{counts[f]}</span>
             )}
@@ -146,7 +145,7 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
         ))}
       </nav>
       {filtered.length === 0 ? (
-        <div className="drafts-panel-empty muted">当前筛选下没有草稿。</div>
+        <div className="drafts-panel-empty muted">{t('draftsPanel.emptyFiltered')}</div>
       ) : (
         <ul className="drafts-panel-list">
           {filtered.map((d) => {
@@ -154,7 +153,7 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
               d.anchor.endLine !== d.anchor.startLine
                 ? `${String(d.anchor.startLine)}-${String(d.anchor.endLine)}`
                 : String(d.anchor.startLine);
-            const sideLabel = d.anchor.side === 'old' ? '基线' : '新版';
+            const sideLabel = d.anchor.side === 'old' ? t('draftsPanel.sideOld') : t('draftsPanel.sideNew');
             const publishable = d.status === 'pending' || d.status === 'edited';
             const pubErr = errors.get(d.id);
             const isPublishing = publishingIds.has(d.id);
@@ -169,7 +168,7 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
                       type="button"
                       className="drafts-panel-item-anchor drafts-panel-item-anchor-link"
                       onClick={() => onJumpToAnchor(d.id)}
-                      title="跳到 Diff 查看代码上下文"
+                      title={t('draftsPanel.jumpToDiffTitle')}
                     >
                       {d.anchor.path}:{lineLabel}
                       <span className="muted"> · {sideLabel}</span>
@@ -181,10 +180,12 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
                     </code>
                   )}
                   <span className={`drafts-panel-item-status status-${d.status}`}>
-                    {STATUS_LABEL[d.status]}
+                    {t(STATUS_LABEL_KEY[d.status])}
                   </span>
                   <span className="drafts-panel-item-origin muted">
-                    {d.origin === 'finding' ? 'AI 建议' : '我的评论'}
+                    {d.origin === 'finding'
+                      ? t('draftsPanel.originFinding')
+                      : t('draftsPanel.originMine')}
                   </span>
                   <div className="drafts-panel-item-actions">
                     {publishable && (
@@ -195,11 +196,11 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
                         disabled={isPublishing || !d.body.trim()}
                         title={
                           !d.body.trim()
-                            ? '空草稿不能发布'
-                            : '发布这一条 (跟 DraftZone 内"发布"按钮同路径)'
+                            ? t('draftsPanel.publishEmptyTitle')
+                            : t('draftsPanel.publishOneTitle')
                         }
                       >
-                        {isPublishing ? '发布中…' : '发布'}
+                        {isPublishing ? t('draftsPanel.publishing') : t('draftsPanel.publish')}
                       </button>
                     )}
                     {d.status !== 'posted' && (
@@ -208,14 +209,14 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
                         className="btn btn-sm"
                         onClick={() => setConfirmDelete(d.id)}
                         disabled={isPublishing}
-                        title="删除草稿（本地，不影响远端）"
+                        title={t('draftsPanel.deleteTitle')}
                       >
-                        删除
+                        {t('common.delete')}
                       </button>
                     )}
                     {d.posted_remote_id && (
                       <span className="drafts-panel-item-remote muted">
-                        远端 id: {d.posted_remote_id}
+                        {t('draftsPanel.remoteId', { id: d.posted_remote_id })}
                       </span>
                     )}
                   </div>
@@ -226,18 +227,18 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
                       {d.body}
                     </ReactMarkdown>
                   ) : (
-                    <span className="muted">(空草稿)</span>
+                    <span className="muted">{t('draftsPanel.emptyDraft')}</span>
                   )}
                 </div>
                 {pubErr && (
                   <div className="drafts-panel-item-error" role="alert">
-                    发布失败：{pubErr}
+                    {t('draftsPanel.publishErrorPrefix', { error: pubErr })}
                     <button
                       type="button"
                       className="drafts-panel-item-error-dismiss"
                       onClick={() => setError(d.id, null)}
-                      aria-label="关闭错误"
-                      title="知道了"
+                      aria-label={t('draftsPanel.dismissErrorAria')}
+                      title={t('draftsPanel.gotIt')}
                     >
                       ✕
                     </button>
@@ -250,10 +251,10 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
       )}
       {confirmDelete && (
         <ConfirmModal
-          title="删除草稿"
-          message="确定删除此草稿？删除后无法恢复。"
-          confirmLabel="删除"
-          cancelLabel="取消"
+          title={t('draftsPanel.deleteConfirmTitle')}
+          message={t('draftsPanel.deleteConfirmMessage')}
+          confirmLabel={t('common.delete')}
+          cancelLabel={t('common.cancel')}
           danger
           onConfirm={() => void handleDelete(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
@@ -263,15 +264,16 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
   );
 }
 
-const FILTER_LABEL: Record<Filter, string> = {
-  publishable: '待发布',
-  all: '全部',
-  rejected: '已拒绝',
+// 状态/筛选项映射 i18n key（实际文案在组件内用 t() 解析，保持模块级表稳定）
+const FILTER_LABEL_KEY: Record<Filter, string> = {
+  publishable: 'draftsPanel.filterPublishable',
+  all: 'draftsPanel.filterAll',
+  rejected: 'draftsPanel.filterRejected',
 };
 
-const STATUS_LABEL: Record<ReviewDraft['status'], string> = {
-  pending: '待处理',
-  edited: '已编辑',
-  posted: '已发布',
-  rejected: '已拒绝',
+const STATUS_LABEL_KEY: Record<ReviewDraft['status'], string> = {
+  pending: 'draftsPanel.statusPending',
+  edited: 'draftsPanel.statusEdited',
+  posted: 'draftsPanel.statusPosted',
+  rejected: 'draftsPanel.statusRejected',
 };

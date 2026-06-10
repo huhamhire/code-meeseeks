@@ -5,6 +5,7 @@
 // 一期仅 HTTP 代理；enabled=false 时全部产出「空/直连」，调用点无需各自判断开关。
 import { ProxyAgent, type Dispatcher } from 'undici';
 import type { ProxyConfig } from '@meebox/shared';
+import { t } from '../i18n/index.js';
 
 // loopback / 本地：始终直连，不经代理。env 路径靠 NO_PROXY，dispatcher 路径靠 shouldBypass。
 const NO_PROXY = 'localhost,127.0.0.1,::1';
@@ -65,7 +66,7 @@ export async function testProxyConnectivity(
   proxy: ProxyConfig,
 ): Promise<{ ok: boolean; reason?: string }> {
   const dispatcher = buildProxyDispatcher(proxy);
-  if (!dispatcher) return { ok: false, reason: '代理未启用或地址为空' };
+  if (!dispatcher) return { ok: false, reason: t('proxy.disabled') };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
@@ -73,7 +74,7 @@ export async function testProxyConnectivity(
       signal: ctrl.signal,
       dispatcher,
     } as RequestInit & { dispatcher: Dispatcher });
-    if (res.status === 407) return { ok: false, reason: '代理认证失败 (407)，检查用户名/密码' };
+    if (res.status === 407) return { ok: false, reason: t('proxy.authFailed') };
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };

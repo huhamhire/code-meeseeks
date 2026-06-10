@@ -51,23 +51,24 @@ export function GitLabIcon({ size = 24 }: PlatformIconProps) {
 export const PLATFORM_META: ReadonlyArray<{
   kind: PlatformKind;
   label: string;
-  sub: string;
+  /** i18n key（在消费端用 t() 翻译；含技术性副标题与「即将支持」等状态文案） */
+  subKey: string;
   available: boolean;
   Icon: (p: PlatformIconProps) => JSX.Element;
 }> = [
   {
     kind: 'github',
     label: 'GitHub',
-    sub: 'github.com / Enterprise',
+    subKey: 'platformIcon.githubSub',
     available: true,
     Icon: GitHubIcon,
   },
   {
     kind: 'bitbucket-server',
     label: 'Bitbucket',
-    sub: 'Server / Data Center',
+    subKey: 'platformIcon.bitbucketSub',
     available: true,
     Icon: BitbucketIcon,
   },
-  { kind: 'gitlab', label: 'GitLab', sub: '即将支持', available: false, Icon: GitLabIcon },
+  { kind: 'gitlab', label: 'GitLab', subKey: 'platformIcon.gitlabSub', available: false, Icon: GitLabIcon },
 ];

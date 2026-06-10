@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { GITHUB_DOTCOM_API_BASE, type Config } from '@meebox/shared';
 import { invoke } from '../api';
 import { EyeIcon, EyeOffIcon } from './icons';
@@ -45,18 +47,20 @@ export function fromConnDraft(d: ConnDraft): ConnEntry {
 }
 
 /** 各平台的字段文案（名称 / Base URL / 令牌 占位） */
-const KIND_HINTS: Record<ConnKind, { name: string; baseUrl: string; token: string }> = {
-  github: {
-    name: '如 公司 GitHub',
-    baseUrl: '留空默认 https://api.github.com；GHE 填 https://<host>/api/v3',
-    token: 'GitHub Personal Access Token',
-  },
-  'bitbucket-server': {
-    name: '如 公司 Bitbucket',
-    baseUrl: 'https://bitbucket.example.com',
-    token: 'Bitbucket HTTP 访问令牌',
-  },
-};
+function kindHints(t: TFunction): Record<ConnKind, { name: string; baseUrl: string; token: string }> {
+  return {
+    github: {
+      name: t('connectionForm.githubNamePlaceholder'),
+      baseUrl: t('connectionForm.githubBaseUrlPlaceholder'),
+      token: t('connectionForm.githubTokenPlaceholder'),
+    },
+    'bitbucket-server': {
+      name: t('connectionForm.bitbucketNamePlaceholder'),
+      baseUrl: t('connectionForm.bitbucketBaseUrlPlaceholder'),
+      token: t('connectionForm.bitbucketTokenPlaceholder'),
+    },
+  };
+}
 
 /** Base URL 形如 http(s)://… 才算合法；GitHub 允许留空（默认官方 api.github.com）。 */
 export function connUrlValid(d: ConnDraft): boolean {
@@ -84,6 +88,7 @@ export function ConnectionForm({
   onChange: (draft: ConnDraft) => void;
   autoFocus?: boolean;
 }) {
+  const { t } = useTranslation();
   const [tokenVisible, setTokenVisible] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -95,7 +100,7 @@ export function ConnectionForm({
 
   const urlValid = connUrlValid(draft);
   const canTest = urlValid && draft.token.trim() !== '';
-  const hints = KIND_HINTS[draft.kind];
+  const hints = kindHints(t)[draft.kind];
 
   const runTest = async (): Promise<void> => {
     setTesting(true);
@@ -110,11 +115,11 @@ export function ConnectionForm({
         r.ok
           ? {
               ok: true,
-              text: `连接成功${r.user ? ` · ${r.user.displayName}` : ''}${
+              text: `${t('connectionForm.testSuccess')}${r.user ? ` · ${r.user.displayName}` : ''}${
                 r.serverVersion ? ` · v${r.serverVersion}` : ''
               }`,
             }
-          : { ok: false, text: r.reason ?? '连接失败' },
+          : { ok: false, text: r.reason ?? t('connectionForm.testFailed') },
       );
     } catch (e) {
       setTestResult({ ok: false, text: e instanceof Error ? e.message : String(e) });
@@ -127,7 +132,7 @@ export function ConnectionForm({
     <>
       <div className="modal-kv">
         <div className="modal-kv-key">
-          名称 <span className="settings-required">*</span>
+          {t('connectionForm.nameLabel')} <span className="settings-required">*</span>
         </div>
         <div className="modal-kv-val">
           <input
@@ -143,7 +148,7 @@ export function ConnectionForm({
         <div className="modal-kv-key">
           Base URL{' '}
           {draft.kind === 'github' ? (
-            <span className="settings-optional">(可选)</span>
+            <span className="settings-optional">{t('connectionForm.optional')}</span>
           ) : (
             <span className="settings-required">*</span>
           )}
@@ -158,7 +163,7 @@ export function ConnectionForm({
           />
         </div>
         <div className="modal-kv-key">
-          访问令牌 (PAT) <span className="settings-required">*</span>
+          {t('connectionForm.tokenLabel')} <span className="settings-required">*</span>
         </div>
         <div className="modal-kv-val">
           <div className="settings-secret-row">
@@ -174,14 +179,14 @@ export function ConnectionForm({
               type="button"
               className="btn btn-sm btn-icon"
               onClick={() => setTokenVisible((v) => !v)}
-              title={tokenVisible ? '隐藏' : '显示'}
-              aria-label={tokenVisible ? '隐藏' : '显示'}
+              title={tokenVisible ? t('connectionForm.hide') : t('connectionForm.show')}
+              aria-label={tokenVisible ? t('connectionForm.hide') : t('connectionForm.show')}
             >
               {tokenVisible ? <EyeIcon /> : <EyeOffIcon />}
             </button>
           </div>
         </div>
-        <div className="modal-kv-key">Clone 协议</div>
+        <div className="modal-kv-key">{t('connectionForm.cloneProtocolLabel')}</div>
         <div className="modal-kv-val">
           <select
             className="settings-input"
@@ -189,14 +194,14 @@ export function ConnectionForm({
             onChange={(e) => update('protocol', e.target.value as 'pat' | 'ssh')}
           >
             <option value="pat">HTTPS</option>
-            <option value="ssh">SSH（本地 ssh config）</option>
+            <option value="ssh">{t('connectionForm.cloneProtocolSsh')}</option>
           </select>
         </div>
       </div>
       {/* 测试连接：独立一行，左按钮右结果。保存 / 取消 由外层决定布局 */}
       <div className="settings-actions" style={{ marginTop: 12, alignItems: 'center' }}>
         <button type="button" className="btn" onClick={() => void runTest()} disabled={!canTest || testing}>
-          {testing ? '测试中…' : '测试连接'}
+          {testing ? t('connectionForm.testing') : t('connectionForm.testConnection')}
         </button>
         {testResult && (
           <span
