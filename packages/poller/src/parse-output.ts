@@ -654,7 +654,7 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
   }
   const cleanStdout = stripAnsi(stdout);
   // describe：先把追加在末尾的 File Walkthrough <details> 块抽出（否则黏进 ### Diagram
-  // Walkthrough 段），单独成一条「文件走查」finding，并把嵌套表格转成折叠无序列表。
+  // Walkthrough 段），单独成一条「文件变更」finding，并把嵌套表格转成折叠无序列表。
   let walkthroughFinding: Finding | undefined;
   let baseMd = cleanStdout;
   if (tool === 'describe') {

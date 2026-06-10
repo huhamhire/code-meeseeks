@@ -1706,7 +1706,7 @@ const SECTION_LABEL: Record<PrDocSectionKey, string> = {
   summary: '总结',
   description: '描述',
   diagram: '架构图',
-  walkthrough: '文件走查',
+  walkthrough: '文件变更',
   'relevant-tests': '相关测试',
   security: '安全',
   'code-feedback': '代码反馈',
