@@ -378,6 +378,34 @@ describe('parseReviewOutput', () => {
     const { findings } = parseReviewOutput(md, 'review');
     expect(findings.some((f) => /格式漂移/.test(f.body))).toBe(true);
   });
+
+  it('GFM 多列行：保留每个 <td> 单元格内容，不丢后续列', () => {
+    const md = [
+      '<table>',
+      '<tr><td><strong>第一列标题</strong>: 左侧内容</td><td>右侧第二列内容 keep-me</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    // 第二个单元格的内容必须保留在 section body 里
+    expect(findings.some((f) => /keep-me/.test(f.body))).toBe(true);
+    expect(findings.some((f) => /左侧内容/.test(f.body))).toBe(true);
+  });
+
+  it('非 GFM /review：代码围栏里提到 <table>/<tr> 仍走 markdown 路径（不丢正文）', () => {
+    const md = [
+      '### PR 分析',
+      '',
+      '以下示例 HTML 仅作说明，并非 GFM 表格输出：',
+      '',
+      '```html',
+      '<table><tr><td>example-cell</td></tr></table>',
+      '```',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    // 若误判进 GFM 表格路径，splitGfmTableSections 只会按 <tr> 行切片、丢弃 markdown 正文。
+    // 走 markdown 路径则正文（含说明文字）完整保留 —— 以此判定未走偏。
+    expect(findings.some((f) => /仅作说明/.test(f.body))).toBe(true);
+  });
 });
 
 describe('parseReviewOutput · describe 架构图 / 文件走查', () => {
@@ -434,5 +462,35 @@ describe('parseReviewOutput · describe 架构图 / 文件走查', () => {
     expect(wt!.body).toMatch(/<details open><summary>测试（1）<\/summary>/);
     // 不保留原始表格 / +1/-1 统计
     expect(wt!.body).not.toMatch(/\+-1|\/--1|Relevant files/);
+  });
+
+  it('File Walkthrough 非折叠形态（小 PR，<td><table> 无 <details>）仍识别出分类', () => {
+    // pr-agent 在文件数低于阈值时不给分类包 <details>，分类单元格直接是 <td><table>。
+    const small = [
+      '### Diagram Walkthrough',
+      '',
+      '<details> <summary><h3> File Walkthrough</h3></summary>',
+      '',
+      '<table><thead><tr><th></th><th align="left">Relevant files</th></tr></thead><tbody>',
+      '<tr><td><strong>功能增强</strong></td><td><table>',
+      '<tr><td><strong>Message.ts</strong><dd><code>新增飞书 Markdown 长度限制常量</code>&nbsp;</dd></td><td><a href="meebox:///src/Message.ts#L-1">+-1/--1</a></td></tr>',
+      '</table></td></tr>',
+      '<tr><td><strong>测试</strong></td><td><table>',
+      '<tr><td><strong>Message.spec.ts</strong><dd><code>补充子产品未读状态测试</code>&nbsp;</dd></td><td><a href="meebox:///src/Message.spec.ts#L-1">+-1/--1</a></td></tr>',
+      '</table></td></tr>',
+      '</tbody></table>',
+      '',
+      '</details>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(small, 'describe');
+    const wt = findings.find((f) => f.sectionKey === 'walkthrough');
+    expect(wt).toBeDefined();
+    expect(wt!.body).toMatch(/<details open><summary>功能增强（1）<\/summary>/);
+    expect(wt!.body).toMatch(/<details open><summary>测试（1）<\/summary>/);
+    expect(wt!.body).toMatch(
+      /<li><strong>Message\.ts<\/strong> — 新增飞书 Markdown 长度限制常量<\/li>/,
+    );
+    // 不应退化成无分类的平铺列表
+    expect(wt!.body).toContain('<details open>');
   });
 });

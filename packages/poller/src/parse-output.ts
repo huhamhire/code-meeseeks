@@ -291,9 +291,17 @@ function expandKeyIssuesSection(
 // 或 <a href='meebox://…'><strong>标题</strong></a><br>内容。markdown H1-H6 切片对其失配，
 // 故另走这条 HTML 解析路径（仅 review + 检测到 GFM 时）。
 
-/** 是否是 GFM 表格形态的 /review 输出（决定走 HTML 还是 markdown 解析路径）。 */
+/**
+ * 是否是 GFM 表格形态的 /review 输出（决定走 HTML 还是 markdown 解析路径）。
+ *
+ * 严格判定，避免误判：要求输出**以** `<table>` 开头（允许前导空白）、含闭合 `</table>`、
+ * 且至少有一个单元格 `<td>`/`<th>`。仅在正文里出现 `<table>`/`<tr>` 子串（如 markdown 输出
+ * 在代码围栏里提到 HTML）不会被当成 GFM 表格 —— 那会把整条解析管线带偏到 HTML 路径。
+ */
 function isGfmReviewOutput(text: string): boolean {
-  return /<table>/i.test(text) && /<tr\b/i.test(text);
+  return (
+    /^\s*<table[\s>]/i.test(text) && /<\/table>/i.test(text) && /<(?:td|th)\b/i.test(text)
+  );
 }
 
 /** GFM finding 片段 → 可渲染文本：<br>/<summary>/<details> → 换行，其余标签剥掉，
@@ -311,22 +319,26 @@ function gfmInlineToText(s: string): string {
     .trim();
 }
 
-/** 把 GFM <table> 拆成行 section：每个 <tr> 的 <td> 内容，行首 <strong> 作 title，
- *  其余作 body（key_issues 行的 body 保留原始 HTML 供 expandGfmKeyIssues 抽 finding）。 */
+/** 把 GFM <table> 拆成行 section：每个 <tr> 内**所有**单元格（<td>/<th>）内容，行首 <strong>
+ *  作 title，其余作 body（key_issues 行的 body 保留原始 HTML 供 expandGfmKeyIssues 抽 finding）。 */
 function splitGfmTableSections(html: string): Section[] {
   const sections: Section[] = [];
   const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
   let rm: RegExpExecArray | null;
   while ((rm = rowRe.exec(html)) !== null) {
     const row = rm[1]!;
-    const tdMatch = /<td\b[^>]*>([\s\S]*?)<\/td>/i.exec(row);
-    const td = tdMatch ? tdMatch[1]! : row;
-    const titleMatch = /<strong>([\s\S]*?)<\/strong>/i.exec(td);
+    // 收集行内所有单元格并以 \n\n 连接：多列表格不丢后续单元格内容（只取首个 <td> 会漏掉评审条目）。
+    const cellRe = /<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi;
+    const cells: string[] = [];
+    let cm: RegExpExecArray | null;
+    while ((cm = cellRe.exec(row)) !== null) cells.push(cm[1]!);
+    const cellText = cells.length > 0 ? cells.join('\n\n') : row;
+    const titleMatch = /<strong>([\s\S]*?)<\/strong>/i.exec(cellText);
     const title = titleMatch
       ? gfmInlineToText(titleMatch[1]!).replace(/[:：]\s*$/, '').trim()
       : '';
     // `<strong>标题</strong>: 值` 形态：去掉标题后残留的前导分隔符（: ：&nbsp; 空白）
-    const body = (titleMatch ? td.slice(titleMatch.index + titleMatch[0].length) : td)
+    const body = (titleMatch ? cellText.slice(titleMatch.index + titleMatch[0].length) : cellText)
       .replace(/^(?:&nbsp;|\s|[:：])+/gi, '')
       .trim();
     sections.push({ level: 3, title, body });
@@ -567,14 +579,16 @@ function escapeHtml(s: string): string {
  *   <ul><li><strong>文件名</strong> — 描述</li>…</ul>
  *   </details>
  * 保留 pr-agent 的多级分类（每个分类各自独立成可收起/展开的 <details>），丢掉每行后面
- * 无意义的 +1/-1 链接列。分类靠「<strong>X</strong></td><td><details>」识别，文件靠
+ * 无意义的 +1/-1 链接列。分类靠「<strong>X</strong></td><td><details|table>」识别 —— pr-agent
+ * 仅在文件数超阈值时给分类包一层 <details>（collapsible_file_list=adaptive），小 PR 则是
+ * 裸 <td><table>，两种都要认，否则小 PR 会识别不到分类、退化成平铺列表。文件靠
  * 「<strong>X</strong><dd><code>desc</code>」识别，按出现位置归到所属分类。
  *
  * 注：产出纯 HTML（非 markdown `- ` 列表）——「markdown 列表嵌在 <details> 原始 HTML 块内」
  * 在 react-markdown(rehype-raw) 下并不稳定渲染成折叠区，纯 HTML 才能确保各级可靠折叠。
  */
 function walkthroughToList(block: string): string {
-  const GROUP_RE = /<strong>([^<]+?)<\/strong>\s*<\/td>\s*<td>\s*<details/gi;
+  const GROUP_RE = /<strong>([^<]+?)<\/strong>\s*<\/td>\s*<td>\s*<(?:details|table)\b/gi;
   const FILE_RE = /<strong>([^<]+?)<\/strong>\s*<dd>\s*<code>([\s\S]*?)<\/code>/gi;
   const groups = [...block.matchAll(GROUP_RE)].map((g) => ({ index: g.index, name: g[1]!.trim() }));
   const files = [...block.matchAll(FILE_RE)].map((f) => ({
