@@ -391,6 +391,32 @@ describe('parseReviewOutput', () => {
     expect(findings.some((f) => /左侧内容/.test(f.body))).toBe(true);
   });
 
+  it('GFM /review：表格前有前导说明文字仍走 HTML 路径，逐段拆分 + key_issues 抽 finding', () => {
+    const md = [
+      '以下是辅助评审的关键观察：', // 真实输出常见的前导句，不应导致漏判
+      '',
+      '<table>',
+      '<tr><td>⏱️&nbsp;<strong>Estimated effort to review</strong>: 3 🔵🔵🔵⚪⚪</td></tr>',
+      '<tr><td>🔒&nbsp;<strong>Security concerns</strong>: 未发现安全风险</td></tr>',
+      "<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>",
+      '',
+      "<a href='meebox:///pkg/cache.go#L17'><strong>缓存未加锁</strong></a><br>并发写 map 可能 panic。",
+      '',
+      '</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    // 逐段独立：工作量 / 安全 各自成段；key_issues 抽成 code-feedback finding（不再挤进单条总结）
+    expect(findings.some((f) => f.sectionKey === 'effort')).toBe(true);
+    expect(findings.some((f) => f.sectionKey === 'security')).toBe(true);
+    const code = findings.filter((f) => f.category === 'code-feedback');
+    expect(code.map((f) => f.title)).toContain('缓存未加锁');
+    expect(code.find((f) => f.title === '缓存未加锁')!.anchor).toEqual({
+      path: 'pkg/cache.go',
+      startLine: 17,
+    });
+  });
+
   it('非 GFM /review：代码围栏里提到 <table>/<tr> 仍走 markdown 路径（不丢正文）', () => {
     const md = [
       '### PR 分析',

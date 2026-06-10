@@ -294,13 +294,19 @@ function expandKeyIssuesSection(
 /**
  * 是否是 GFM 表格形态的 /review 输出（决定走 HTML 还是 markdown 解析路径）。
  *
- * 严格判定，避免误判：要求输出**以** `<table>` 开头（允许前导空白）、含闭合 `</table>`、
- * 且至少有一个单元格 `<td>`/`<th>`。仅在正文里出现 `<table>`/`<tr>` 子串（如 markdown 输出
- * 在代码围栏里提到 HTML）不会被当成 GFM 表格 —— 那会把整条解析管线带偏到 HTML 路径。
+ * 判定：含闭合 `<table>…</table>` 且至少有一个单元格 `<td>`/`<th>`。判定前先剥掉代码围栏
+ * （```…```），避免「markdown 正文在代码块里提到 `<table>`」被误判进 HTML 路径。
+ *
+ * 注意：不能要求「以 <table> 开头」—— 真实 GFM /review 常在表格前带一句前导说明
+ * （如「以下是辅助评审的关键观察：」），强行锚定开头会漏判、导致整表退化成单条总结、
+ * key_issues 也不再拆成独立 code-feedback。
  */
 function isGfmReviewOutput(text: string): boolean {
+  const withoutFences = text.replace(/```[\s\S]*?```/g, '');
   return (
-    /^\s*<table[\s>]/i.test(text) && /<\/table>/i.test(text) && /<(?:td|th)\b/i.test(text)
+    /<table[\s>]/i.test(withoutFences) &&
+    /<\/table>/i.test(withoutFences) &&
+    /<(?:td|th)\b/i.test(withoutFences)
   );
 }
 
