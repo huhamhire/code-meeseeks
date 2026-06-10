@@ -83,6 +83,12 @@ export const PR_AGENT_TRANSLATIONS_ZH: ReadonlyMap<string, string> = new Map([
   ['Lines:', '行号：'],
   ['Relevant file:', '相关文件：'],
   ['Relevant lines:', '相关行号：'],
+  // /describe 思路建议段（shim 注入的固定英文结构串，内容值已随 response language 中文化，
+  // 这里把结构串也翻成中文，与其余 pr-agent 模板词同一套渲染期替换）
+  ['The following are alternative approaches to this PR:', '可考虑的其他实现思路：'],
+  ['The following are alternative approaches to this PR', '可考虑的其他实现思路'],
+  ['Recommendation:', '推荐方案：'],
+  ['Recommendation', '推荐方案'],
   // /describe 结构化标签
   ['PR Type', '类型'],
   ['Description', '描述'],

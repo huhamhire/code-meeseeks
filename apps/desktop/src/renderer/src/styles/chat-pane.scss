@@ -512,6 +512,7 @@
   &.chat-finding-title,
   &.chat-finding-pr-type,
   &.chat-finding-diagram,
+  &.chat-finding-assessment,
   &.chat-finding-effort {
     border-left-color: $color-info;
   }
@@ -551,6 +552,7 @@
   &.chat-finding-cat-title,
   &.chat-finding-cat-pr-type,
   &.chat-finding-cat-diagram,
+  &.chat-finding-cat-assessment,
   &.chat-finding-cat-effort {
     background: $color-accent-bg-fade;
     color: $color-info;

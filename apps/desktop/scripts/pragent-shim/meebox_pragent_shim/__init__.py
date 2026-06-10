@@ -7,6 +7,7 @@
 所有对 pr-agent 行为的改造集中在本包，上游源码保持原封。每个补丁用 try/except 包裹（见
 runtime._register_post_import），打不上则静默降级，绝不让 shim 异常阻断流程。
 """
+from .patches.describe_assessment import patch as _patch_describe_assessment
 from .patches.litellm_handler import patch as _patch_litellm_handler
 from .patches.load_yaml import patch as _patch_load_yaml
 from .patches.local_git_provider import patch as _patch_local_git_provider
@@ -29,5 +30,10 @@ def apply() -> None:
     _register_post_import(
         "pr_agent.algo.utils",
         _patch_load_yaml,
+    )
+    # /describe 思路建议：往 describe prompt 注入 assessment 字段，产出「替代方案 + 倾向性建议」段。
+    _register_post_import(
+        "pr_agent.tools.pr_description",
+        _patch_describe_assessment,
     )
     _debug("meebox shim loaded")

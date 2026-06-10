@@ -1691,14 +1691,15 @@ const SECTION_ORDER: Record<PrDocSectionKey, number> = {
   summary: 2,
   description: 3,
   diagram: 4,
-  walkthrough: 5,
-  'relevant-tests': 6,
-  security: 7,
-  'code-feedback': 8,
-  'code-suggestion': 8, // 跟 code-feedback 一组，UI 顺序无优先关系
-  effort: 9,
-  score: 10,
-  general: 11,
+  assessment: 5, // 思路建议紧随架构图（对齐 Qodo：Description → Diagram → Assessment）
+  walkthrough: 6,
+  'relevant-tests': 7,
+  security: 8,
+  'code-feedback': 9,
+  'code-suggestion': 9, // 跟 code-feedback 一组，UI 顺序无优先关系
+  effort: 10,
+  score: 11,
+  general: 12,
 };
 const SECTION_LABEL: Record<PrDocSectionKey, string> = {
   title: '建议标题',
@@ -1706,6 +1707,7 @@ const SECTION_LABEL: Record<PrDocSectionKey, string> = {
   summary: '总结',
   description: '描述',
   diagram: '架构图',
+  assessment: '思路建议',
   walkthrough: '文件变更',
   'relevant-tests': '相关测试',
   security: '安全',
