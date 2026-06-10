@@ -24,6 +24,10 @@
   「汇总建议」路径（committable/inline 模式在本地 provider 下不可用，已显式关死兜底）；输出落
   独立 `improve.md` 与 `/review` 分流（经 `local.review_path` 原生配置）；关闭 persistent_comment
   避免本地 provider 翻历史评论刷无意义 traceback。
+- **/describe 思路建议段**：shim 往 describe prompt 注入 `assessment` 字段，让社区版 `/describe`
+  额外产出「思路建议」段——2-4 个替代实现方案（各自折叠）+ 倾向性推荐，对齐 Qodo Merge 的
+  High-Level Assessment（社区版原生无此字段）。pr-agent 通用渲染成段、parse-output 映射 sectionKey，
+  英文结构串经渲染期翻译表中文化，chip 配主蓝（信息性）色。
 
 ## [0.2.0] - 2026-06-09
 

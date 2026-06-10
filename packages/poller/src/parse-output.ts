@@ -146,6 +146,8 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
   [/^description$/i, 'description'],
   // "Diagram Walkthrough" → diagram（含 walkthrough 子串，故须排在 walkthrough 之前）
   [/diagram/i, 'diagram'],
+  // 注入的高层评估段（shim 给 describe schema 加 assessment 字段 → 渲染为 `### **Assessment**`）
+  [/^(?:high[\s_-]+level[\s_-]+)?assessment$/i, 'assessment'],
   [/^walkthrough$/i, 'walkthrough'],
   // 测试/安全段的 <strong> 文案随结论变化（pr-agent 模板硬编码，恒英文）：
   //   测试：Relevant tests / PR contains tests / No relevant tests[ found]

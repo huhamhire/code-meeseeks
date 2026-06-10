@@ -64,6 +64,7 @@ export type PrDocSectionKey =
   | 'summary'           // /review 顶部总结
   | 'description'       // 主描述段
   | 'diagram'           // 架构图（changes_diagram，mermaid）
+  | 'assessment'        // 思路建议（注入字段：替代方案 + 倾向性建议，对齐 Qodo High-Level Assessment）
   | 'walkthrough'       // 文件级走查
   | 'relevant-tests'    // 相关测试
   | 'security'          // 安全发现
