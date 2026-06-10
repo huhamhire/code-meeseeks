@@ -227,11 +227,21 @@ export default function App() {
 
   // 订阅 main 推送的 poll tick；用于刷新 statusbar "最近同步" 显示，
   // 并顺便重拉一次 PR 列表使后台轮询新增/删除立刻反映在 UI。
+  // 同时刷新连接摘要：启动时连接的 ping（缓存 currentUser）在建窗后才完成，首轮 tick 即随其后，
+  // 借此把状态栏用户/能力位补上（否则需手动刷新才显示）。app:connections 为廉价同步调用。
   useEffect(() => {
     if (!window.api) return;
     return subscribe('poll:tick', (info) => {
       setLastSyncAt(info.at);
       void reloadPrs();
+      void invoke('app:connections', undefined).then(
+        (connections) => {
+          setBoot((b) => (b ? { ...b, connections } : b));
+        },
+        () => {
+          /* 摘要刷新失败不影响主流程 */
+        },
+      );
     });
   }, [reloadPrs]);
 

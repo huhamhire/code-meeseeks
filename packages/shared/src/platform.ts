@@ -267,6 +267,13 @@ export interface PlatformAdapter {
   getCurrentUser(): PlatformUser | null;
 
   /**
+   * 注入/恢复当前用户缓存（与 getCurrentUser 对应）。main 在建连接时用本地持久化的上次
+   * 用户身份预热，使首轮 poll 在 ping 完成前即可正确判定本人评审态；ping 完成后以远端
+   * 结果覆盖。可选：未实现则退化为必须等 ping 才有 currentUser。
+   */
+  setCurrentUser?(user: PlatformUser | null): void;
+
+  /**
    * 列出待处理 PR，跨项目跨仓库。默认（review-requested）= 当前 PAT 用户作为 reviewer 待评审；
    * GitHub 适配器按 opts.filter 切换发现范围（created/assigned/mentioned），其他平台忽略。
    */

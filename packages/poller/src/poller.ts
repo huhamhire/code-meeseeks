@@ -14,6 +14,7 @@ import {
   PURGE_GRACE_MS,
   prDirKey,
   readPrIndex,
+  readPrMeta,
   writePrIndex,
   writePrMeta,
   type PrIndexEntry,
@@ -76,6 +77,8 @@ const EMPTY: PollResult = { fetched: 0, changed: 0, added: 0, removed: 0, errors
 export class Poller {
   private interval?: ReturnType<typeof setInterval>;
   private inFlight = false;
+  /** tick 在 inFlight 期间又被请求 → 标记，当前轮结束后紧接着补跑一轮（不丢请求）。 */
+  private rerunRequested = false;
   private _lastPollAt: string | null = null;
   /** 可热替换的连接集合（设置页改连接 / 切换启用时换）。初值取自构造 opts */
   private connections: ReadonlyArray<PollerConnection>;
@@ -154,13 +157,23 @@ export class Poller {
   }
 
   /**
-   * 立刻发起一次 poll；如果上一次还在跑就跳过本次。
+   * 立刻发起一次 poll。若上一次还在跑，则不并发，而是登记「补跑」：当前轮结束后紧接着再跑
+   * 一轮。这样在「ping 异步补到 currentUser 后请求重新分类」等场景下，请求不会因恰好撞上
+   * 进行中的 poll 而被丢弃。
    */
   async tick(): Promise<PollResult> {
-    if (this.inFlight) return EMPTY;
+    if (this.inFlight) {
+      this.rerunRequested = true;
+      return EMPTY;
+    }
     this.inFlight = true;
     try {
-      return await this.pollOnce();
+      let result = await this.pollOnce();
+      while (this.rerunRequested) {
+        this.rerunRequested = false;
+        result = await this.pollOnce();
+      }
+      return result;
     } finally {
       this.inFlight = false;
     }
@@ -264,10 +277,19 @@ export class Poller {
             }
           }
 
-          // localStatus 直接镜像 Bitbucket 上当前用户的 reviewer.status。
-          // UI 上点 approve / needs work 时会先 PUT 到 Bitbucket，再下一轮 poll 时此处取回。
-          const mine = me ? pr.reviewers.find((r) => r.name === me.name) : undefined;
-          const localStatus = statusFromReviewer(mine?.status);
+          // localStatus 直接镜像远端当前用户的 reviewer.status（远端为权威态）。
+          // UI 上点 approve / needs work 时会先 PUT 到远端，再下一轮 poll 时此处取回。
+          // currentUser 未知时（ping 未完成/失败）无法可靠判定本人评审态：此时**保留已记录的
+          // 状态**而非覆盖成 pending，避免「已评审」被误降级（首轮 poll 已由 main 确保 me 就绪，
+          // 此分支仅作 ping 异常时的兜底）。
+          let localStatus: LocalPrStatus;
+          if (me) {
+            const mine = pr.reviewers.find((r) => r.name === me.name);
+            localStatus = statusFromReviewer(mine?.status);
+          } else {
+            const prevMeta = prev ? await readPrMeta(this.opts.stateStore, localId) : null;
+            localStatus = prevMeta?.pr.localStatus ?? 'pending';
+          }
 
           // 完整 PR 元数据落到 per-PR meta.json。platform 字段让 meta 自描述
           await writePrMeta(this.opts.stateStore, localId, {
