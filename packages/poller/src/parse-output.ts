@@ -147,8 +147,12 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
   // "Diagram Walkthrough" → diagram（含 walkthrough 子串，故须排在 walkthrough 之前）
   [/diagram/i, 'diagram'],
   [/^walkthrough$/i, 'walkthrough'],
-  [/^relevant[\s_-]+tests?$/i, 'relevant-tests'],
-  [/^security(?:[\s_-]+concerns?)?$/i, 'security'],
+  // 测试/安全段的 <strong> 文案随结论变化（pr-agent 模板硬编码，恒英文）：
+  //   测试：Relevant tests / PR contains tests / No relevant tests[ found]
+  //   安全：Security concerns / No security concerns[ identified]
+  // 只匹配 "Relevant tests"/"Security concerns" 会漏掉「有测试」「无安全风险」等常见结论 → 退化成 general。
+  [/^(?:relevant[\s_-]+tests?|pr[\s_-]+contains[\s_-]+tests?|no[\s_-]+relevant[\s_-]+tests?(?:[\s_-]+found)?)$/i, 'relevant-tests'],
+  [/^(?:no[\s_-]+)?security[\s_-]+concerns?(?:[\s_-]+identified)?$/i, 'security'],
   [/^estimated[\s_-]+effort.*$/i, 'effort'],
   [/^(?:code[\s_-]+quality[\s_-]+)?score$/i, 'score'],
 ];

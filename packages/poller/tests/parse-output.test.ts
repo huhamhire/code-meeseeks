@@ -432,6 +432,19 @@ describe('parseReviewOutput', () => {
     // 走 markdown 路径则正文（含说明文字）完整保留 —— 以此判定未走偏。
     expect(findings.some((f) => /仅作说明/.test(f.body))).toBe(true);
   });
+
+  it('GFM /review：测试/安全段按结论变体文案（PR contains tests / No security concerns）正确归类', () => {
+    const md = [
+      '<table>',
+      '<tr><td>🧪&nbsp;<strong>PR contains tests</strong></td></tr>',
+      '<tr><td>🔒&nbsp;<strong>No security concerns identified</strong></td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    // 旧实现只认 "Relevant tests"/"Security concerns"，这两种常见结论会退化成 general（无 chip/配色）
+    expect(findings.find((f) => /tests/i.test(f.title ?? ''))?.sectionKey).toBe('relevant-tests');
+    expect(findings.find((f) => /security/i.test(f.title ?? ''))?.sectionKey).toBe('security');
+  });
 });
 
 describe('parseReviewOutput · describe 架构图 / 文件走查', () => {
