@@ -144,9 +144,15 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
   [/^type$/i, 'pr-type'],
   [/^(?:pr[\s_-]+reviewer[\s_-]+guide|review[\s_-]+summary|summary)$/i, 'summary'],
   [/^description$/i, 'description'],
+  // "Diagram Walkthrough" → diagram（含 walkthrough 子串，故须排在 walkthrough 之前）
+  [/diagram/i, 'diagram'],
   [/^walkthrough$/i, 'walkthrough'],
-  [/^relevant[\s_-]+tests?$/i, 'relevant-tests'],
-  [/^security(?:[\s_-]+concerns?)?$/i, 'security'],
+  // 测试/安全段的 <strong> 文案随结论变化（pr-agent 模板硬编码，恒英文）：
+  //   测试：Relevant tests / PR contains tests / No relevant tests[ found]
+  //   安全：Security concerns / No security concerns[ identified]
+  // 只匹配 "Relevant tests"/"Security concerns" 会漏掉「有测试」「无安全风险」等常见结论 → 退化成 general。
+  [/^(?:relevant[\s_-]+tests?|pr[\s_-]+contains[\s_-]+tests?|no[\s_-]+relevant[\s_-]+tests?(?:[\s_-]+found)?)$/i, 'relevant-tests'],
+  [/^(?:no[\s_-]+)?security[\s_-]+concerns?(?:[\s_-]+identified)?$/i, 'security'],
   [/^estimated[\s_-]+effort.*$/i, 'effort'],
   [/^(?:code[\s_-]+quality[\s_-]+)?score$/i, 'score'],
 ];
@@ -266,14 +272,115 @@ function expandKeyIssuesSection(
   }
 
   return blocks.map((b, i) => {
-    const issueBody = b.body.trim();
-    const anchor = resolveIssueAnchor(b.link, issueBody);
+    const raw = b.body.trim();
+    // 先用含 marker 的原文解析 anchor（marker 是行号兜底），再 strip 用于展示
+    const anchor = resolveIssueAnchor(b.link, raw);
+    const issueBody = stripAnchorMarker(raw);
     const id = `${tool}-${String(baseIndex + i).padStart(3, '0')}`;
     return {
       id,
       category: 'code-feedback' as const,
       sectionKey: 'code-feedback' as const,
       title: b.title,
+      body: issueBody,
+      ...(anchor ? { anchor } : {}),
+    };
+  });
+}
+
+// ===== GFM 输出解析（gfm_markdown=True：shim 让 LocalGitProvider 支持 GFM，使 /describe
+// 出 mermaid 图、/review 走 GFM 富 markdown）。GFM 下 /review 整体是 <table>，每段一个
+// <tr><td>…<strong>标题</strong>…</td></tr>；key_issues 段内 finding 是
+//   <details><summary><a href='meebox://…'><strong>标题</strong></a>\n\n内容\n</summary>\n\n代码片段\n\n</details>
+// 或 <a href='meebox://…'><strong>标题</strong></a><br>内容。markdown H1-H6 切片对其失配，
+// 故另走这条 HTML 解析路径（仅 review + 检测到 GFM 时）。
+
+/**
+ * 是否是 GFM 表格形态的 /review 输出（决定走 HTML 还是 markdown 解析路径）。
+ *
+ * 判定：含闭合 `<table>…</table>` 且至少有一个单元格 `<td>`/`<th>`。判定前先剥掉代码围栏
+ * （```…```），避免「markdown 正文在代码块里提到 `<table>`」被误判进 HTML 路径。
+ *
+ * 注意：不能要求「以 <table> 开头」—— 真实 GFM /review 常在表格前带一句前导说明
+ * （如「以下是辅助评审的关键观察：」），强行锚定开头会漏判、导致整表退化成单条总结、
+ * key_issues 也不再拆成独立 code-feedback。
+ */
+function isGfmReviewOutput(text: string): boolean {
+  const withoutFences = text.replace(/```[\s\S]*?```/g, '');
+  return (
+    /<table[\s>]/i.test(withoutFences) &&
+    /<\/table>/i.test(withoutFences) &&
+    /<(?:td|th)\b/i.test(withoutFences)
+  );
+}
+
+/** GFM finding 片段 → 可渲染文本：<br>/<summary>/<details> → 换行，其余标签剥掉，
+ *  常见实体解码；代码围栏(```)是字面文本，原样保留。 */
+function gfmInlineToText(s: string): string {
+  return s
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(?:summary|details)[^>]*>/gi, '\n')
+    .replace(/<\/?[a-z][^>]*>/gi, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** 把 GFM <table> 拆成行 section：每个 <tr> 内**所有**单元格（<td>/<th>）内容，行首 <strong>
+ *  作 title，其余作 body（key_issues 行的 body 保留原始 HTML 供 expandGfmKeyIssues 抽 finding）。 */
+function splitGfmTableSections(html: string): Section[] {
+  const sections: Section[] = [];
+  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let rm: RegExpExecArray | null;
+  while ((rm = rowRe.exec(html)) !== null) {
+    const row = rm[1]!;
+    // 收集行内所有单元格并以 \n\n 连接：多列表格不丢后续单元格内容（只取首个 <td> 会漏掉评审条目）。
+    const cellRe = /<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi;
+    const cells: string[] = [];
+    let cm: RegExpExecArray | null;
+    while ((cm = cellRe.exec(row)) !== null) cells.push(cm[1]!);
+    const cellText = cells.length > 0 ? cells.join('\n\n') : row;
+    const titleMatch = /<strong>([\s\S]*?)<\/strong>/i.exec(cellText);
+    const title = titleMatch
+      ? gfmInlineToText(titleMatch[1]!).replace(/[:：]\s*$/, '').trim()
+      : '';
+    // `<strong>标题</strong>: 值` 形态：去掉标题后残留的前导分隔符（: ：&nbsp; 空白）
+    const body = (titleMatch ? cellText.slice(titleMatch.index + titleMatch[0].length) : cellText)
+      .replace(/^(?:&nbsp;|\s|[:：])+/gi, '')
+      .trim();
+    sections.push({ level: 3, title, body });
+  }
+  return sections;
+}
+
+/** 从 GFM key_issues 段 body（原始 HTML）抽多条 finding：以 <a href><strong>标题</strong></a>
+ *  为锚，相邻两条之间为该条正文。link 取结构化 anchor，与 markdown 路径同源。 */
+function expandGfmKeyIssues(html: string, baseIndex: number, tool: ReviewRunTool): Finding[] {
+  const FIND_RE =
+    /<a\s+href=['"]([^'"]+)['"]\s*>\s*<strong>([\s\S]*?)<\/strong>\s*<\/a>/gi;
+  const matches = [...html.matchAll(FIND_RE)];
+  return matches.map((m, i) => {
+    const link = m[1]!;
+    const title = gfmInlineToText(m[2]!).trim();
+    const start = m.index + m[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1]!.index : html.length;
+    let chunk = html.slice(start, end);
+    // <details> 形态：issue_content 在 </summary> 前；其后是 relevant_lines 代码片段，
+    // 不塞进 body（代码由 anchor → DiffView 展示，body 重复贴大段代码很吵）。
+    const sumIdx = chunk.search(/<\/summary>/i);
+    if (sumIdx >= 0) chunk = chunk.slice(0, sumIdx);
+    const raw = gfmInlineToText(chunk);
+    // 先用含 marker 的原文解析 anchor（行号兜底），再 strip 用于展示
+    const anchor = resolveIssueAnchor(link, raw);
+    const issueBody = stripAnchorMarker(raw);
+    return {
+      id: `${tool}-${String(baseIndex + i).padStart(3, '0')}`,
+      category: 'code-feedback' as const,
+      sectionKey: 'code-feedback' as const,
+      title,
       body: issueBody,
       ...(anchor ? { anchor } : {}),
     };
@@ -332,6 +439,20 @@ function resolveIssueAnchor(link: string | undefined, body: string): FindingAnch
     };
   }
   return linkAnchor;
+}
+
+/** 锚点 marker `[file: <path>, lines: <s>-<e>]`（我们 prompt 注入的）。抽成 anchor 后
+ *  应从展示 body 删除，否则会作为多余文字泄漏到 finding 正文。 */
+const ANCHOR_MARKER_RE =
+  /\[\s*file\s*:\s*[^,\]\n]+?(?:\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?)?\s*\]/gi;
+
+/** 从 finding body 删掉锚点 marker，并收敛多余空白。 */
+function stripAnchorMarker(body: string): string {
+  return body
+    .replace(ANCHOR_MARKER_RE, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
@@ -436,6 +557,79 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
   };
 }
 
+// ===== /describe 的 File Walkthrough 处理 =====
+// pr-agent 把 File Walkthrough 作为 HTML <details><table> 追加在 describe 末尾（line 131），
+// 没有 markdown header，会黏进上一段（通常是 ### Diagram Walkthrough）的 body。这里把它
+// 单独抽出，并把嵌套表格转成「按分组折叠的无序列表」（聊天面板里表格体验差），同时丢掉
+// 无实际意义的 +1/-1 统计列。
+
+/**
+ * 从 describe 输出抽出 File Walkthrough 块（追加在末尾，含嵌套 details，故从起点取到结尾）。
+ * 返回 { rest: 去掉该块的正文, block: 该块原文 }；没有则 null。
+ */
+function extractFileWalkthrough(md: string): { rest: string; block: string } | null {
+  const startRe = /<details[^>]*>\s*<summary>\s*<h3>\s*File Walkthrough\s*<\/h3>\s*<\/summary>/i;
+  const m = startRe.exec(md);
+  if (!m) return null;
+  return { rest: md.slice(0, m.index).trimEnd(), block: md.slice(m.index) };
+}
+
+/** HTML 文本节点转义：desc/文件名经 gfmInlineToText 已把实体解码成裸 < > &，
+ *  再放进 <li> 文本上下文须重新转义，避免破坏结构 / 被下游清洗器误判。 */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * 把 File Walkthrough 的嵌套 HTML 表格转成「按分类折叠的无序列表」纯 HTML：
+ *   <details open><summary>分类名（N）</summary>
+ *   <ul><li><strong>文件名</strong> — 描述</li>…</ul>
+ *   </details>
+ * 保留 pr-agent 的多级分类（每个分类各自独立成可收起/展开的 <details>），丢掉每行后面
+ * 无意义的 +1/-1 链接列。分类靠「<strong>X</strong></td><td><details|table>」识别 —— pr-agent
+ * 仅在文件数超阈值时给分类包一层 <details>（collapsible_file_list=adaptive），小 PR 则是
+ * 裸 <td><table>，两种都要认，否则小 PR 会识别不到分类、退化成平铺列表。文件靠
+ * 「<strong>X</strong><dd><code>desc</code>」识别，按出现位置归到所属分类。
+ *
+ * 注：产出纯 HTML（非 markdown `- ` 列表）——「markdown 列表嵌在 <details> 原始 HTML 块内」
+ * 在 react-markdown(rehype-raw) 下并不稳定渲染成折叠区，纯 HTML 才能确保各级可靠折叠。
+ */
+function walkthroughToList(block: string): string {
+  const GROUP_RE = /<strong>([^<]+?)<\/strong>\s*<\/td>\s*<td>\s*<(?:details|table)\b/gi;
+  const FILE_RE = /<strong>([^<]+?)<\/strong>\s*<dd>\s*<code>([\s\S]*?)<\/code>/gi;
+  const groups = [...block.matchAll(GROUP_RE)].map((g) => ({ index: g.index, name: g[1]!.trim() }));
+  const files = [...block.matchAll(FILE_RE)].map((f) => ({
+    index: f.index,
+    name: f[1]!.trim(),
+    desc: gfmInlineToText(f[2]!).replace(/\s+/g, ' ').trim(),
+  }));
+  const fmtItem = (f: { name: string; desc: string }): string =>
+    `<li><strong>${escapeHtml(f.name)}</strong>${f.desc ? ` — ${escapeHtml(f.desc)}` : ''}</li>`;
+  const fmtList = (items: ReadonlyArray<{ name: string; desc: string }>): string =>
+    `<ul>\n${items.map(fmtItem).join('\n')}\n</ul>`;
+
+  if (groups.length === 0) {
+    // 无分类：直接平铺列表
+    return files.length ? fmtList(files) : '（无文件变更明细）';
+  }
+  const parts: string[] = [];
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i]!;
+    const next = i + 1 < groups.length ? groups[i + 1]!.index : Infinity;
+    const inGroup = files.filter((f) => f.index > g.index && f.index < next);
+    if (inGroup.length === 0) continue;
+    parts.push(
+      `<details open><summary>${escapeHtml(g.name)}（${String(inGroup.length)}）</summary>\n${fmtList(
+        inGroup,
+      )}\n</details>`,
+    );
+  }
+  return parts.join('\n') || (files.length ? fmtList(files) : '（无文件变更明细）');
+}
+
 /**
  * 解析 pr-agent stdout 为 findings 列表。M3-B2 是 best-effort：
  * - 切 markdown sections
@@ -458,10 +652,33 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
     const out = parseImproveOutput(stdout);
     return llmFailure ? { ...out, llmFailure } : out;
   }
-  const allSections = splitMarkdownSections(stripAnsi(stdout));
+  const cleanStdout = stripAnsi(stdout);
+  // describe：先把追加在末尾的 File Walkthrough <details> 块抽出（否则黏进 ### Diagram
+  // Walkthrough 段），单独成一条「文件走查」finding，并把嵌套表格转成折叠无序列表。
+  let walkthroughFinding: Finding | undefined;
+  let baseMd = cleanStdout;
+  if (tool === 'describe') {
+    const wt = extractFileWalkthrough(cleanStdout);
+    if (wt) {
+      baseMd = wt.rest;
+      walkthroughFinding = {
+        id: 'describe-walkthrough',
+        category: 'description',
+        sectionKey: 'walkthrough',
+        body: walkthroughToList(wt.block),
+      };
+    }
+  }
+  // GFM 路径仅用于 /review（gfm_markdown 下整体是 <table>）；describe/ask 仍走 markdown
+  // 切片（其 HTML/表格/mermaid 由下游 react-markdown 渲染，section 结构不受影响）。
+  const gfm = tool === 'review' && isGfmReviewOutput(baseMd);
+  const allSections = gfm
+    ? splitGfmTableSections(baseMd)
+    : splitMarkdownSections(baseMd);
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) {
-    return llmFailure ? { findings: [], llmFailure } : { findings: [] };
+    const fs = walkthroughFinding ? [walkthroughFinding] : [];
+    return llmFailure ? { findings: fs, llmFailure } : { findings: fs };
   }
   // 单 section 可能展开成多个 findings (key_issues_to_review 段)。用游标 idx 维持
   // 全局 finding 编号稳定，UI list-key 不冲突
@@ -469,14 +686,28 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
   let idx = 0;
   for (const sec of sections) {
     if (tool === 'review' && isKeyIssuesSection(normalizeTitle(sec.title))) {
-      const expanded = expandKeyIssuesSection(sec, idx, tool);
-      findings.push(...expanded);
-      idx += expanded.length;
+      // GFM：sec.body 是原始 HTML，按 <a href><strong> 抽 finding；非 GFM 走 markdown 展开
+      const expanded = gfm
+        ? expandGfmKeyIssues(sec.body, idx, tool)
+        : expandKeyIssuesSection(sec, idx, tool);
+      if (expanded.length === 0) {
+        // 抽不到（格式漂移）→ 退回整段一条 finding，body 清成可读文本
+        findings.push(sectionToFinding(gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec, idx, tool));
+        idx += 1;
+      } else {
+        findings.push(...expanded);
+        idx += expanded.length;
+      }
     } else {
-      findings.push(sectionToFinding(sec, idx, tool));
+      // GFM 非 key-issues 段：body 是 HTML，清成文本再交 sectionToFinding（其 **File:** 等
+      // 锚点匹配按 markdown 文本设计；这些段一般无行级 anchor，清理后展示即可）
+      const s = gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec;
+      findings.push(sectionToFinding(s, idx, tool));
       idx += 1;
     }
   }
+  // describe 的 File Walkthrough 单独成段（渲染顺序由 SECTION_ORDER 的 walkthrough 决定）
+  if (walkthroughFinding) findings.push(walkthroughFinding);
   // summary：优先取首个有 title 的 section；都没有 title 取首个 body 首行
   let summary: string | undefined;
   const titled = sections.find((s) => s.title);

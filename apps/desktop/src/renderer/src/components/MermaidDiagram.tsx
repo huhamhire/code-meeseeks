@@ -1,4 +1,5 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Mermaid 渲染：把 ```mermaid 代码块渲染成 SVG 图（Qodo `/describe` 常生成架构图）。
@@ -40,6 +41,7 @@ export function MermaidDiagram({ source }: { source: string }) {
   const renderId = `mmd-${useId().replace(/:/g, '')}`;
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +74,155 @@ export function MermaidDiagram({ source }: { source: string }) {
   if (svg === null) {
     return <div className="mermaid-loading muted">渲染图表…</div>;
   }
-  // mermaid strict 模式产出的 SVG 已转义不可信内容，可安全注入
-  return <div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
+  // mermaid strict 模式产出的 SVG 已转义不可信内容，可安全注入。点击图表 → 模态预览。
+  return (
+    <>
+      <div
+        className="mermaid-diagram"
+        role="button"
+        tabIndex={0}
+        title="点击放大查看"
+        onClick={() => setZoomed(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setZoomed(true);
+          }
+        }}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      {zoomed &&
+        createPortal(
+          <MermaidZoomModal
+            // 重写 id（含 <style> 选择器 / 箭头 marker 引用），避免与内联副本同 id 冲突
+            svgHtml={svg.replaceAll(renderId, `${renderId}-zoom`)}
+            onClose={() => setZoomed(false)}
+          />,
+          document.body,
+        )}
+    </>
+  );
+}
+
+const MIN_SCALE = 0.2;
+const MAX_SCALE = 8;
+const clampScale = (s: number): number => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+
+/**
+ * mermaid 模态预览：固定纯色背景的预览区 + 可缩放/拖拽视图。
+ *
+ * 不再手动测量 svg 内容并算缩放 —— mermaid 的 svg 在「width:100% / 内联 max-width / 绝对定位
+ * 容器 / transform」相互作用下，渲染像素尺寸在「测量时」与「绘制后」并不一致，手算 fit 必然偏差。
+ * 改为让浏览器原生处理「适应」：svg `width/height:100%` 充满预览区 + `preserveAspectRatio`
+ * （默认 xMidYMid meet）自动等比缩放并居中；缩放/拖拽只是在其上叠加一层 transform。
+ * - 默认（scale=1）：图自动适应窗口、居中（原生）。
+ * - 滚轮缩放（锚定光标）、左键拖拽平移、工具栏放大/缩小/复位、Esc / 点遮罩关闭。
+ */
+function MermaidZoomModal({ svgHtml, onClose }: { svgHtml: string; onClose: () => void }) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; y: number } | null>(null);
+  // scale=1 即「原生适应窗口」基准；缩放/平移在其上叠加。
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+
+  const resetFit = (): void => {
+    setScale(1);
+    setTx(0);
+    setTy(0);
+  };
+
+  // Esc 关闭
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // 以预览区内 (px,py) 为锚点缩放：保持光标下的点不动。
+  const zoomAt = (px: number, py: number, factor: number): void => {
+    const ns = clampScale(scale * factor);
+    const k = ns / scale;
+    setTx(px - (px - tx) * k);
+    setTy(py - (py - ty) * k);
+    setScale(ns);
+  };
+
+  const onWheel = (e: React.WheelEvent): void => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+  };
+
+  const zoomButton = (factor: number): void => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const sr = stage.getBoundingClientRect();
+    zoomAt(sr.width / 2, sr.height / 2, factor);
+  };
+
+  const onMouseDown = (e: React.MouseEvent): void => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    drag.current = { x: e.clientX, y: e.clientY };
+    const move = (ev: MouseEvent): void => {
+      if (!drag.current) return;
+      const dx = ev.clientX - drag.current.x;
+      const dy = ev.clientY - drag.current.y;
+      drag.current = { x: ev.clientX, y: ev.clientY };
+      setTx((t) => t + dx);
+      setTy((t) => t + dy);
+    };
+    const up = (): void => {
+      drag.current = null;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  return (
+    <div className="mermaid-zoom-overlay" role="presentation" onClick={onClose}>
+      <div
+        className="mermaid-zoom-dialog"
+        role="presentation"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mermaid-zoom-toolbar">
+          <span className="mermaid-zoom-scale">{Math.round(scale * 100)}%</span>
+          <button type="button" title="缩小" aria-label="缩小" onClick={() => zoomButton(1 / 1.2)}>
+            −
+          </button>
+          <button type="button" title="放大" aria-label="放大" onClick={() => zoomButton(1.2)}>
+            +
+          </button>
+          <button type="button" title="适应窗口" aria-label="适应窗口" onClick={resetFit}>
+            ⤢
+          </button>
+          <button type="button" title="关闭（Esc）" aria-label="关闭" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div
+          className="mermaid-zoom-stage"
+          ref={stageRef}
+          role="presentation"
+          onWheel={onWheel}
+          onMouseDown={onMouseDown}
+        >
+          <div
+            className="mermaid-zoom-content"
+            style={{
+              transform: `translate(${String(tx)}px, ${String(ty)}px) scale(${String(scale)})`,
+            }}
+            dangerouslySetInnerHTML={{ __html: svgHtml }}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }

@@ -23,8 +23,11 @@ import {
   RetryIcon,
   SendIcon,
   StopIcon,
+  TrashIcon,
 } from './icons';
+import { ConfirmModal } from './ConfirmModal';
 import { mermaidComponents } from './markdownMermaid';
+import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { parseAnsi, segmentStyle } from '../utils/ansi';
@@ -131,6 +134,7 @@ export function ChatPane({
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
   const [showRulePreview, setShowRulePreview] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   // 全局活动 run + 实时 stdout 缓存。store 来源于 main 的 'pragent:activeChanged'
@@ -276,6 +280,20 @@ export function ChatPane({
     setError(null);
     try {
       await invoke('pragent:run', { localId: pr.localId, tool, question });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  // 清空当前 PR 的执行历史（仅该 PR）：删远端记录 + 清本地列表。进行中的 run 不受影响
+  // （在 chatRunStore，跑完会重新落盘）。
+  const handleClearRuns = async (): Promise<void> => {
+    setShowClearConfirm(false);
+    if (!prLocalId) return;
+    try {
+      await invoke('pragent:clearRuns', { localId: prLocalId });
+      setRuns([]);
+      setHasMoreOlder(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -442,6 +460,17 @@ export function ChatPane({
           </span>
         )}
         {/* 运行时策略 chip 撤掉：部署细节用户不关心，状态栏已有 PR Agent 版本 chip */}
+        {pr && runs.length > 0 && (
+          <button
+            type="button"
+            className="icon-btn chat-pane-clear"
+            title="清空本 PR 的执行历史"
+            aria-label="清空执行历史"
+            onClick={() => setShowClearConfirm(true)}
+          >
+            <TrashIcon />
+          </button>
+        )}
       </header>
 
       {/* 当前 PR 命中的规则 chip：rules.dir 未配置 / 整体禁用 / 无命中 → 不显示。
@@ -548,6 +577,16 @@ export function ChatPane({
 
       {showRulePreview && matchedRule && (
         <RulePreviewModal rule={matchedRule} onClose={() => setShowRulePreview(false)} />
+      )}
+      {showClearConfirm && (
+        <ConfirmModal
+          title="清空执行历史"
+          message="确定清空当前 PR 的全部 PR Agent 执行历史记录？仅影响该 PR，不可恢复。"
+          confirmLabel="清空"
+          danger
+          onConfirm={() => void handleClearRuns()}
+          onCancel={() => setShowClearConfirm(false)}
+        />
       )}
     </aside>
   );
@@ -1109,7 +1148,11 @@ function RulePreviewModal({
             <div className="modal-kv-val">{rule.tools.join(', ')}</div>
           </div>
           <div className="markdown" style={{ marginTop: 12 }}>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={mermaidComponents}>
+            <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            rehypePlugins={REMOTE_REHYPE_PLUGINS}
+            components={mermaidComponents}
+          >
               {rule.instructions}
             </ReactMarkdown>
           </div>
@@ -1648,21 +1691,23 @@ const SECTION_ORDER: Record<PrDocSectionKey, number> = {
   'pr-type': 1,
   summary: 2,
   description: 3,
-  walkthrough: 4,
-  'relevant-tests': 5,
-  security: 6,
-  'code-feedback': 7,
-  'code-suggestion': 7, // 跟 code-feedback 一组，UI 顺序无优先关系
-  effort: 8,
-  score: 9,
-  general: 10,
+  diagram: 4,
+  walkthrough: 5,
+  'relevant-tests': 6,
+  security: 7,
+  'code-feedback': 8,
+  'code-suggestion': 8, // 跟 code-feedback 一组，UI 顺序无优先关系
+  effort: 9,
+  score: 10,
+  general: 11,
 };
 const SECTION_LABEL: Record<PrDocSectionKey, string> = {
   title: '建议标题',
   'pr-type': '类型',
   summary: '总结',
   description: '描述',
-  walkthrough: '走查',
+  diagram: '架构图',
+  walkthrough: '文件走查',
   'relevant-tests': '相关测试',
   security: '安全',
   'code-feedback': '代码反馈',
@@ -1671,6 +1716,15 @@ const SECTION_LABEL: Record<PrDocSectionKey, string> = {
   score: '评分',
   general: '',
 };
+
+/**
+ * 工作量段已用 emoji 圆点（🔵🔵🔵⚪⚪）直观表示 1-5 分，去掉前面冗余的数字分数：
+ *   "3 🔵🔵🔵⚪⚪" → "🔵🔵🔵⚪⚪"；"工作量: 3 🔵🔵" → "工作量: 🔵🔵"
+ * 仅在数字后紧跟圆点 emoji 时才剥，避免误删正文里的普通数字。
+ */
+function stripEffortScoreNumber(s: string): string {
+  return s.replace(/(^|[:：]\s*)\d+\s*(?=[🔵⚪⚫🟢🔴🟠🟡🟣🟤])/u, '$1');
+}
 
 /** Stable sort by sectionKey 排序 + 同 key 保留原顺序 (兼容 Array.sort 非 stable JS 引擎) */
 function orderFindings(findings: Finding[]): Finding[] {
@@ -1744,9 +1798,16 @@ function FindingCard({
   const bodyEmpty = !strippedBody.trim();
   const showTitle = !!finding.title && (key === 'general' || bodyEmpty);
   // pr-agent 把若干 section 标题 / 固定模板字符串硬编码成英文 (CONFIG__RESPONSE_LANGUAGE
-  // 只翻译 LLM 内容值)，渲染前替换成中文
-  const translatedBody = translatePrAgentLabels(strippedBody);
-  const translatedTitle = finding.title ? translatePrAgentLabels(finding.title) : undefined;
+  // 只翻译 LLM 内容值)，渲染前替换成中文。工作量已用 emoji 圆点表分值，去掉冗余的数字分数。
+  const translatedBody =
+    key === 'effort'
+      ? stripEffortScoreNumber(translatePrAgentLabels(strippedBody))
+      : translatePrAgentLabels(strippedBody);
+  const translatedTitle = finding.title
+    ? key === 'effort'
+      ? stripEffortScoreNumber(translatePrAgentLabels(finding.title))
+      : translatePrAgentLabels(finding.title)
+    : undefined;
   return (
     <li className={`chat-finding chat-finding-${key}`}>
       <header className="chat-finding-head">
@@ -1825,7 +1886,11 @@ function FindingCard({
           {/* remarkBreaks 把 finding body 里的单换行也当成 <br>。pr-agent 的 trace、
               或一般段落里 reviewer 习惯按软换行折行，不加 remarkBreaks 会被 markdown
               合并成长一行。Findings 主要是富文本说明，不存在"故意软换行连接"的场景 */}
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={mermaidComponents}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            rehypePlugins={REMOTE_REHYPE_PLUGINS}
+            components={mermaidComponents}
+          >
             {translatedBody}
           </ReactMarkdown>
         </div>

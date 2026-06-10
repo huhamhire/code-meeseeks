@@ -334,4 +334,202 @@ describe('parseReviewOutput', () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]!.body).toMatch(/说明文字/);
   });
+
+  it('GFM 表格输出：key_issues 的 <details>/<a href> finding 抽取 + anchor', () => {
+    const md = [
+      '<table>',
+      '<tr><td>⏱️&nbsp;<strong>Estimated effort to review</strong>: 3 🔵🔵🔵⚪⚪</td></tr>',
+      "<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>",
+      '',
+      "<details><summary><a href='meebox:///src/auth/login.ts#L42-L50'><strong>潜在空引用</strong></a>",
+      '',
+      'user 可能为 null，访问 user.id 前未判空。',
+      '</summary>',
+      '',
+      '```ts',
+      '42  const id = user.id;',
+      '```',
+      '',
+      '</details>',
+      '',
+      "<a href='meebox:///pkg/cache.go#L17'><strong>缓存未加锁</strong></a><br>并发写 map 可能 panic。",
+      '',
+      '</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const code = findings.filter((f) => f.category === 'code-feedback');
+    expect(code.map((f) => f.title)).toEqual(['潜在空引用', '缓存未加锁']);
+    expect(code[0]!.anchor).toEqual({ path: 'src/auth/login.ts', startLine: 42, endLine: 50 });
+    expect(code[0]!.body).toMatch(/未判空/);
+    expect(code[1]!.anchor).toEqual({ path: 'pkg/cache.go', startLine: 17 });
+    // effort 行也切成 section finding（标题映射到 effort）
+    expect(findings.some((f) => f.sectionKey === 'effort')).toBe(true);
+  });
+
+  it('GFM key_issues 抽不到 finding → 退回单条（不丢内容）', () => {
+    const md = [
+      '<table>',
+      '<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>',
+      '格式漂移，没有 a/strong 锚。',
+      '</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    expect(findings.some((f) => /格式漂移/.test(f.body))).toBe(true);
+  });
+
+  it('GFM 多列行：保留每个 <td> 单元格内容，不丢后续列', () => {
+    const md = [
+      '<table>',
+      '<tr><td><strong>第一列标题</strong>: 左侧内容</td><td>右侧第二列内容 keep-me</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    // 第二个单元格的内容必须保留在 section body 里
+    expect(findings.some((f) => /keep-me/.test(f.body))).toBe(true);
+    expect(findings.some((f) => /左侧内容/.test(f.body))).toBe(true);
+  });
+
+  it('GFM /review：表格前有前导说明文字仍走 HTML 路径，逐段拆分 + key_issues 抽 finding', () => {
+    const md = [
+      '以下是辅助评审的关键观察：', // 真实输出常见的前导句，不应导致漏判
+      '',
+      '<table>',
+      '<tr><td>⏱️&nbsp;<strong>Estimated effort to review</strong>: 3 🔵🔵🔵⚪⚪</td></tr>',
+      '<tr><td>🔒&nbsp;<strong>Security concerns</strong>: 未发现安全风险</td></tr>',
+      "<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>",
+      '',
+      "<a href='meebox:///pkg/cache.go#L17'><strong>缓存未加锁</strong></a><br>并发写 map 可能 panic。",
+      '',
+      '</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    // 逐段独立：工作量 / 安全 各自成段；key_issues 抽成 code-feedback finding（不再挤进单条总结）
+    expect(findings.some((f) => f.sectionKey === 'effort')).toBe(true);
+    expect(findings.some((f) => f.sectionKey === 'security')).toBe(true);
+    const code = findings.filter((f) => f.category === 'code-feedback');
+    expect(code.map((f) => f.title)).toContain('缓存未加锁');
+    expect(code.find((f) => f.title === '缓存未加锁')!.anchor).toEqual({
+      path: 'pkg/cache.go',
+      startLine: 17,
+    });
+  });
+
+  it('非 GFM /review：代码围栏里提到 <table>/<tr> 仍走 markdown 路径（不丢正文）', () => {
+    const md = [
+      '### PR 分析',
+      '',
+      '以下示例 HTML 仅作说明，并非 GFM 表格输出：',
+      '',
+      '```html',
+      '<table><tr><td>example-cell</td></tr></table>',
+      '```',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    // 若误判进 GFM 表格路径，splitGfmTableSections 只会按 <tr> 行切片、丢弃 markdown 正文。
+    // 走 markdown 路径则正文（含说明文字）完整保留 —— 以此判定未走偏。
+    expect(findings.some((f) => /仅作说明/.test(f.body))).toBe(true);
+  });
+
+  it('GFM /review：测试/安全段按结论变体文案（PR contains tests / No security concerns）正确归类', () => {
+    const md = [
+      '<table>',
+      '<tr><td>🧪&nbsp;<strong>PR contains tests</strong></td></tr>',
+      '<tr><td>🔒&nbsp;<strong>No security concerns identified</strong></td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    // 旧实现只认 "Relevant tests"/"Security concerns"，这两种常见结论会退化成 general（无 chip/配色）
+    expect(findings.find((f) => /tests/i.test(f.title ?? ''))?.sectionKey).toBe('relevant-tests');
+    expect(findings.find((f) => /security/i.test(f.title ?? ''))?.sectionKey).toBe('security');
+  });
+});
+
+describe('parseReviewOutput · describe 架构图 / 文件走查', () => {
+  const md = [
+    '### **PR Type**',
+    'Enhancement',
+    '',
+    '### **Description**',
+    '- 增加缓存合并',
+    '',
+    '### Diagram Walkthrough',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  A["缓存未命中"] --> B["合并请求"]',
+    '```',
+    '',
+    '<details> <summary><h3> File Walkthrough</h3></summary>',
+    '',
+    '<table><thead><tr><th></th><th align="left">Relevant files</th></tr></thead><tbody>',
+    '<tr><td><strong>功能增强</strong></td><td><details><summary>2 files</summary><table>',
+    '<tr><td><strong>CacheValueProvider.ts</strong><dd><code>增加缓存合并配置透传</code>&nbsp;</dd></td><td><a href="meebox:///packages/core/src/cache/CacheValueProvider.ts#L-1">+-1/--1</a>&nbsp;</td></tr>',
+    '<tr><td><strong>SingleFlight.ts</strong><dd><code>新增进程内请求合并器</code>&nbsp;</dd></td><td><a href="meebox:///packages/core/src/cache/SingleFlight.ts#L-1">+-1/--1</a>&nbsp;</td></tr>',
+    '</table></details></td></tr>',
+    '<tr><td><strong>测试</strong></td><td><details><summary>1 files</summary><table>',
+    '<tr><td><strong>SingleFlight.test.ts</strong><dd><code>覆盖请求合并核心逻辑</code>&nbsp;</dd></td><td><a href="meebox:///packages/core/tests/cache/SingleFlight.test.ts#L-1">+-1/--1</a>&nbsp;</td></tr>',
+    '</table></details></td></tr>',
+    '</tbody></table>',
+    '',
+    '</details>',
+    '',
+    '___',
+  ].join('\n');
+
+  it('Diagram Walkthrough → diagram 段，body 含 mermaid，不含走查表格', () => {
+    const { findings } = parseReviewOutput(md, 'describe');
+    const diagram = findings.find((f) => f.sectionKey === 'diagram');
+    expect(diagram).toBeDefined();
+    expect(diagram!.body).toMatch(/```mermaid/);
+    expect(diagram!.body).toMatch(/flowchart LR/);
+    // 走查块已被抽走，不应黏在 diagram body 里
+    expect(diagram!.body).not.toMatch(/File Walkthrough|<table/);
+  });
+
+  it('File Walkthrough → walkthrough 段，保留多级分类折叠列表，去掉 +1/-1', () => {
+    const { findings } = parseReviewOutput(md, 'describe');
+    const wt = findings.find((f) => f.sectionKey === 'walkthrough');
+    expect(wt).toBeDefined();
+    // 每个分类各自独立成可折叠 <details>，内部纯 HTML 无序列表 + 描述
+    expect(wt!.body).toMatch(/<details open><summary>功能增强（2）<\/summary>/);
+    expect(wt!.body).toMatch(
+      /<li><strong>CacheValueProvider\.ts<\/strong> — 增加缓存合并配置透传<\/li>/,
+    );
+    expect(wt!.body).toMatch(/<details open><summary>测试（1）<\/summary>/);
+    // 不保留原始表格 / +1/-1 统计
+    expect(wt!.body).not.toMatch(/\+-1|\/--1|Relevant files/);
+  });
+
+  it('File Walkthrough 非折叠形态（小 PR，<td><table> 无 <details>）仍识别出分类', () => {
+    // pr-agent 在文件数低于阈值时不给分类包 <details>，分类单元格直接是 <td><table>。
+    const small = [
+      '### Diagram Walkthrough',
+      '',
+      '<details> <summary><h3> File Walkthrough</h3></summary>',
+      '',
+      '<table><thead><tr><th></th><th align="left">Relevant files</th></tr></thead><tbody>',
+      '<tr><td><strong>功能增强</strong></td><td><table>',
+      '<tr><td><strong>Message.ts</strong><dd><code>新增飞书 Markdown 长度限制常量</code>&nbsp;</dd></td><td><a href="meebox:///src/Message.ts#L-1">+-1/--1</a></td></tr>',
+      '</table></td></tr>',
+      '<tr><td><strong>测试</strong></td><td><table>',
+      '<tr><td><strong>Message.spec.ts</strong><dd><code>补充子产品未读状态测试</code>&nbsp;</dd></td><td><a href="meebox:///src/Message.spec.ts#L-1">+-1/--1</a></td></tr>',
+      '</table></td></tr>',
+      '</tbody></table>',
+      '',
+      '</details>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(small, 'describe');
+    const wt = findings.find((f) => f.sectionKey === 'walkthrough');
+    expect(wt).toBeDefined();
+    expect(wt!.body).toMatch(/<details open><summary>功能增强（1）<\/summary>/);
+    expect(wt!.body).toMatch(/<details open><summary>测试（1）<\/summary>/);
+    expect(wt!.body).toMatch(
+      /<li><strong>Message\.ts<\/strong> — 新增飞书 Markdown 长度限制常量<\/li>/,
+    );
+    // 不应退化成无分类的平铺列表
+    expect(wt!.body).toContain('<details open>');
+  });
 });

@@ -28,7 +28,8 @@ class FakeAdapter implements PlatformAdapter {
   failNextList(): void {
     this.failList = true;
   }
-  setCurrentUser(name: string, displayName = name): void {
+  // 测试辅助：直接灌入当前用户（区别于 PlatformAdapter 的 setCurrentUser(user) 契约方法）。
+  seedUser(name: string, displayName = name): void {
     this.currentUser = { name, displayName };
   }
   getCurrentUser() {
@@ -175,7 +176,7 @@ describe('Poller.tick', () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
     pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }];
     const adapter = new FakeAdapter([pr]);
-    adapter.setCurrentUser('kyle');
+    adapter.seedUser('kyle');
     let now = new Date('2026-06-01T00:00:00.000Z');
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
@@ -235,8 +236,9 @@ describe('Poller.tick', () => {
     expect(stored[0]!.connectionId).toBe('good');
   });
 
-  it('tick re-entrancy: a second tick while one is in flight returns immediately', async () => {
+  it('tick re-entrancy: a second tick while one is in flight returns immediately (并登记补跑)', async () => {
     let resolveList: ((v: PullRequest[]) => void) | undefined;
+    let listCalls = 0;
     const slow: PlatformAdapter = {
       kind: 'bitbucket-server',
       capabilities: () => ({
@@ -276,7 +278,15 @@ describe('Poller.tick', () => {
       publishInlineComment: () => Promise.reject(new Error('unused')),
       deleteComment: () => Promise.reject(new Error('unused')),
       editComment: () => Promise.reject(new Error('unused')),
-      listPendingPullRequests: () => new Promise<PullRequest[]>((r) => (resolveList = r)),
+      // 首次返回受 resolveList 控制的挂起 promise；后续（in-flight 期间第二次 tick 登记的
+      // 「补跑」）立即返回，避免测试悬挂。补跑是新语义：第二次 tick 虽即时返回 EMPTY，但当前轮
+      // 结束后会紧接着再 poll 一轮（保证 ping 异步补到 currentUser 后的重分类请求不丢）。
+      listPendingPullRequests: () => {
+        listCalls += 1;
+        return listCalls === 1
+          ? new Promise<PullRequest[]>((r) => (resolveList = r))
+          : Promise.resolve([makePr('1', '2026-05-28T01:00:00.000Z')]);
+      },
     };
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter: slow }],
@@ -421,7 +431,7 @@ describe('Poller.tick', () => {
       { name: 'other', displayName: 'Other', status: 'unapproved' as const },
     ];
     const adapter = new FakeAdapter([pr]);
-    adapter.setCurrentUser('kyle', 'Kyle');
+    adapter.seedUser('kyle', 'Kyle');
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
@@ -436,7 +446,7 @@ describe('Poller.tick', () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
     pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'needsWork' as const }];
     const adapter = new FakeAdapter([pr]);
-    adapter.setCurrentUser('kyle');
+    adapter.seedUser('kyle');
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
@@ -451,7 +461,7 @@ describe('Poller.tick', () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
     pr.reviewers = [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }];
     const adapter = new FakeAdapter([pr]);
-    adapter.setCurrentUser('kyle');
+    adapter.seedUser('kyle');
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,

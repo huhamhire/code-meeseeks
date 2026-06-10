@@ -12,6 +12,14 @@
 - **版本更新检测**：启动时（及设置页「检查更新」）查 GitHub Releases 最新稳定版与当前版本比对，
   有新版在状态栏提示并可点击前往下载（仅检测 + 提示，不自动下载 / 安装）。检测走配置的出站代理
   （内网友好），可经 `update.check_enabled` 关闭。
+- **/describe 架构图**：嵌入式 pr-agent 统一启用 GFM（shim 让本地 provider 支持 gfm_markdown），
+  使社区版 `/describe` 的 `enable_pr_diagram`（默认开）按实际改动**选择性输出 mermaid 架构图**，
+  配合 Mermaid 渲染直接成图；`/review` 等同步走 GFM 富 markdown，输出解析（parse-output）相应
+  兼容 GFM 的 `<table>` / `<details>` / `<a href>` finding 形态。
+- **describe 排版优化**：架构图、文件走查各自独立成段，配中文色块标题（「架构图」/「文件走查」）；
+  文件走查保留多级分类、每个分类独立成可收起/展开的折叠块（去掉无意义的 +1/-1 统计）；
+  mermaid 图点击进入模态预览，支持滚轮缩放、拖拽平移与「适应窗口」，预览区为固定纯色背景。
+- **清空执行历史**：chat 面板标题栏新增垃圾桶按钮，清空**当前 PR**的 PR Agent 执行历史记录（仅该 PR）。
 
 ## [0.2.0] - 2026-06-09
 

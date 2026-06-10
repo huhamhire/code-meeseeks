@@ -62,6 +62,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+// 清空历史按钮：顶到标题栏最右
+.chat-pane-clear {
+  margin-left: auto;
+}
 .chat-pane-stage-tag {
   margin-left: auto;
   padding: 1px $space-3;
@@ -500,26 +504,27 @@
   line-height: $lh-normal;
 
   // 按 sectionKey 着不同的左条颜色，呈现"标准文档"骨架的视觉分组：
-  //   - 元信息 (建议标题 / 类型) 走主蓝
-  //   - 描述 / 走查 / 总结 走绿 (内容主体，跟 git-added 视觉系)
-  //   - 测试 / 评分 / 工作量 走中性灰
-  //   - 安全 / 代码反馈走警示色 (黄/橙)
+  //   - 元信息 (建议标题 / 类型) + 架构图 + 工作量 走主蓝
+  //   - 描述 / 走查 / 总结 + 测试 / 安全（概览结论）走绿
+  //   - 评分 走中性灰
+  //   - 代码反馈 / 改进建议 走警示色 (黄/橙)
   // general (兜底) 不着色，保留默认灰
   &.chat-finding-title,
-  &.chat-finding-pr-type {
+  &.chat-finding-pr-type,
+  &.chat-finding-diagram,
+  &.chat-finding-effort {
     border-left-color: $color-info;
   }
   &.chat-finding-summary,
   &.chat-finding-description,
-  &.chat-finding-walkthrough {
+  &.chat-finding-walkthrough,
+  &.chat-finding-relevant-tests,
+  &.chat-finding-security {
     border-left-color: $color-approved;
   }
-  &.chat-finding-relevant-tests,
-  &.chat-finding-effort,
   &.chat-finding-score {
     border-left-color: $text-muted;
   }
-  &.chat-finding-security,
   &.chat-finding-code-feedback,
   &.chat-finding-code-suggestion {
     border-left-color: $color-warning;
@@ -542,28 +547,29 @@
   letter-spacing: 0.02em;
   flex-shrink: 0;
 
-  // 元信息组：主蓝
+  // 元信息组 + 架构图 + 工作量：主蓝
   &.chat-finding-cat-title,
-  &.chat-finding-cat-pr-type {
+  &.chat-finding-cat-pr-type,
+  &.chat-finding-cat-diagram,
+  &.chat-finding-cat-effort {
     background: $color-accent-bg-fade;
     color: $color-info;
   }
-  // 内容主体组：绿
+  // 内容主体组 + 测试 / 安全（概览结论）：绿
   &.chat-finding-cat-summary,
   &.chat-finding-cat-description,
-  &.chat-finding-cat-walkthrough {
+  &.chat-finding-cat-walkthrough,
+  &.chat-finding-cat-relevant-tests,
+  &.chat-finding-cat-security {
     background: rgba(22, 163, 74, 0.18); // $color-approved fade
     color: $color-approved;
   }
-  // 评估指标组：中性灰
-  &.chat-finding-cat-relevant-tests,
-  &.chat-finding-cat-effort,
+  // 评分：中性灰
   &.chat-finding-cat-score {
     background: $bg-surface;
     color: $text-muted;
   }
   // 警示组：琥珀
-  &.chat-finding-cat-security,
   &.chat-finding-cat-code-feedback,
   &.chat-finding-cat-code-suggestion {
     background: rgba(217, 119, 6, 0.18); // $color-warning fade
@@ -573,6 +579,28 @@
   &.chat-finding-cat-general {
     background: $bg-surface;
     color: $text-muted;
+  }
+}
+// 概览指标（工作量 / 测试 / 安全 / 评分）：值很短，chip 与值排同一行、紧凑展示，不再各占两行。
+.chat-finding-effort,
+.chat-finding-relevant-tests,
+.chat-finding-security,
+.chat-finding-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $space-3;
+
+  .chat-finding-head {
+    margin-bottom: 0;
+  }
+  .chat-finding-body {
+    margin: 0;
+
+    // 去掉 markdown 段落块级外边距，使「2 🔵🔵」之类短值与 chip 同排
+    p {
+      margin: 0;
+    }
   }
 }
 .chat-finding-title {
