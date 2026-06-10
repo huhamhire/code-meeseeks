@@ -65,7 +65,7 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 
 ## 国际化 (i18n)
 
-GUI 文本走 **react-i18next**（源 `zh-CN` / 目标 `en-US`，UI 语言由 `config.language` 驱动）；渲染层与主进程各持一份 locale 资源。设计、key 命名、翻译规范见 [docs/arch/10-i18n](docs/arch/10-i18n.md)。两条易踩的：新增文本须在 `zh-CN.json` 与 `en-US.json` **两份**都加并保持**递归字典序**；i18next **只有 `count`** 触发复数，普通计数插值要换别的变量名。
+GUI 文本走 **react-i18next**（源 `zh-CN`，译文 `en-US` / `ja-JP` / `de-DE`；UI 语言由 `config.language` 经 `resolveLanguage` 决定，空则按 OS 回落英语）；渲染层默认静态 + 其余懒加载，主进程各持一份 locale。设计、key 命名、翻译规范见 [docs/arch/10-i18n](docs/arch/10-i18n.md)。两条易踩的：新增文本须在**各语言 locale 都加**并保持**递归字典序**（日语复数同中文仅 `_other`、德语同英语需 `_one`/`_other`）；i18next **只有 `count`** 触发复数，普通计数插值要换别的变量名。
 
 ## 文档约定
 
