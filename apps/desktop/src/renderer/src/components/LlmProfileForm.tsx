@@ -19,10 +19,13 @@ export interface ProviderMeta {
 // 顺序：海外通用 (OpenAI / OpenAI 兼容 / Anthropic) → 国内三家 (DeepSeek / 阿里
 // 百炼 / 火山方舟) → 本地 (Ollama)，方便用户按主流程扫读
 //
-// label / hint / modelExample 用 getter 经 i18n.t 惰性取值：保持数组形状不变（消费方
-// 直接读 .label 等），同时让文案随当前语言解析（品牌名等无对应 key 时退回字面量）。
+// label / hint 用 getter 经 i18n.t 惰性取值：保持数组形状不变（消费方直接读 .label 等），
+// 同时让文案随当前语言解析（品牌名等无对应 key 时退回字面量）。modelExample 是纯模型名示例
+// （各语言相同、不翻译），作静态字面量、不进 i18n。
 function provider(
-  meta: Omit<ProviderMeta, 'label' | 'hint' | 'modelExample'> & {
+  // modelExample 是纯模型名示例（各语言相同、不翻译），作静态字面量传入、**不进 i18n**；
+  // label / hint 才走 i18n（label 为品牌名时给字面量、省略 key）。
+  meta: Omit<ProviderMeta, 'label' | 'hint'> & {
     /** label 无 i18n key（品牌名）时给字面量；有 key 时省略 */
     label?: string;
   },
@@ -36,9 +39,6 @@ function provider(
     get hint() {
       return i18n.t(`llmProfileForm.provider.${value}.hint`);
     },
-    get modelExample() {
-      return i18n.t(`llmProfileForm.provider.${value}.modelExample`);
-    },
   };
 }
 
@@ -48,46 +48,55 @@ export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     label: 'OpenAI',
     defaultBaseUrl: 'https://api.openai.com',
     needsKey: true,
+    modelExample: 'gpt-4o / gpt-4o-mini',
   }),
   provider({
     value: 'anthropic',
     label: 'Anthropic',
     defaultBaseUrl: 'https://api.anthropic.com',
     needsKey: true,
+    modelExample: 'claude-opus-4-8 / claude-sonnet-4-6 / claude-haiku-4-5',
   }),
   provider({
     value: 'deepseek',
     label: 'DeepSeek',
     defaultBaseUrl: 'https://api.deepseek.com',
     needsKey: true,
+    modelExample: 'deepseek-chat / deepseek-reasoner',
   }),
   provider({
     value: 'dashscope',
     defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     needsKey: true,
+    modelExample: 'qwen-max / qwen-plus / qwen-turbo / qwen3-235b-a22b',
   }),
   provider({
     value: 'volcengine-ark',
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     needsKey: true,
+    modelExample: 'ep-20240xxxxxx-xxxxx / doubao-pro-32k / doubao-1-5-pro-256k',
   }),
   provider({
     value: 'ollama',
     label: 'Ollama',
     defaultBaseUrl: 'http://localhost:11434',
     needsKey: false,
+    modelExample: 'qwen2.5 / llama3.1',
   }),
   // 「OpenAI 兼容」：兜底通用项，主流程让用户先扫读具名 provider
   provider({
     value: 'openai-compatible',
     defaultBaseUrl: '',
     needsKey: true,
+    modelExample: 'gpt-4o-mini / qwen2.5-72b-instruct',
   }),
-  // 「本地 CLI」放最后：进阶项，转交本机命令行工具代调模型，不直连 API
+  // 「本地 CLI」放最后：进阶项，转交本机命令行工具代调模型，不直连 API。
+  // modelExample 不展示（model 输入框对 cli 用 cliCommandPlaceholder），置空。
   provider({
     value: 'cli',
     defaultBaseUrl: '',
     needsKey: false,
+    modelExample: '',
   }),
 ];
 

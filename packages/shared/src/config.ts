@@ -115,11 +115,11 @@ export type ProxyConfig = z.infer<typeof ProxySchema>;
 
 export const ConfigSchema = z.object({
   /**
-   * pr-agent 生成内容时使用的自然语言 (ISO locale，如 'zh-CN' / 'en-US')。
-   * 透传到容器 `CONFIG__RESPONSE_LANGUAGE`。一期默认 zh-CN，UI 暂不暴露切换 ——
-   * 后续如果做多语言再加 Settings 入口
+   * UI 与 pr-agent 输出使用的语言 (ISO locale，如 'zh-CN' / 'en-US' / 'ja-JP' / 'de-DE')。
+   * **默认空串 = 自动**：由 `resolveLanguage` 按操作系统偏好语言匹配，无合适项回落英语。
+   * 非空则按显式选择。透传到容器 `CONFIG__RESPONSE_LANGUAGE`（经解析后的有效值）。
    */
-  language: z.string().default('zh-CN'),
+  language: z.string().default(''),
   workspace: z
     .object({
       repos_dir: z.string().default('~/.code-meeseeks/repos'),

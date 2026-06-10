@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
+import { resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
 import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import { Poller } from '@meebox/poller';
@@ -92,8 +93,9 @@ let windowState: WindowState = {};
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
-  // 主进程 i18n 按配置语言定档（dialog 标题、错误消息等面向用户文本）。
-  initMainI18n(bootstrap.config.language);
+  // 主进程 i18n 定档（dialog 标题、错误消息等面向用户文本）。config.language 为空时
+  // 按操作系统偏好语言解析、无合适项回落英语；结果同时供 pr-agent 响应语言复用，与 UI 一致。
+  initMainI18n(resolveLanguage(bootstrap.config.language, app.getPreferredSystemLanguages()));
   // pretty 仅非打包态开：dev 控制台单行 + ISO8601 + 上色；打包态保持原始 JSON。
   logger = await createLogger({ logsDir: bootstrap.paths.logsDir, pretty: !app.isPackaged });
   logger.info(
