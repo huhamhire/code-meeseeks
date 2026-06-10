@@ -18,6 +18,11 @@ import {
   writeConnectionStates,
   type ConnectionState,
 } from './utils/connection-state.js';
+import {
+  readWindowState,
+  writeWindowState,
+  type WindowState,
+} from './utils/window-state.js';
 import { checkForUpdate } from './utils/update-check.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
@@ -75,6 +80,8 @@ let repoMirror: RepoMirrorManager;
 // 连接级本地状态（按 connectionId）：持久化上次 ping 的 currentUser，用于建连接时预热，
 // 使首轮 poll 不依赖网络即可判 approved。启动时从 state store 载入一次，ping 后增量回写。
 let connectionStates: Record<string, ConnectionState> = {};
+// 主窗口本地状态（尺寸 / 最大化）：启动时载入一次，建窗时恢复、resize/move/close 时回写。
+let windowState: WindowState = {};
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
@@ -126,6 +133,14 @@ async function start(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, 'read connection states failed; degrade to empty (no cached identities)');
     connectionStates = {};
+  }
+
+  // 载入窗口状态（尺寸/最大化）。缺失或损坏 → 空对象，建窗回退默认尺寸。
+  try {
+    windowState = await readWindowState(stateStore);
+  } catch (err) {
+    logger.warn({ err }, 'read window state failed; use default window size');
+    windowState = {};
   }
 
   // 连接运行时（可变持有）：adapters 全量（IPC 按 id 查任意连接，历史 PR 都能操作）
@@ -428,9 +443,10 @@ function createSplash(): BrowserWindow {
 function createWindow(splash?: BrowserWindow): void {
   // 最小尺寸保证核心三栏 (sidebar 240 + file-tree 180 + diff 内容)
   // 在 chat-pane 折叠态下仍可用；高度兜住 pr-header + tabs + diff + statusbar
+  // 尺寸优先用本地记录的上次大小（windowState），无记录回退默认 1280×800。
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: windowState.width ?? 1280,
+    height: windowState.height ?? 800,
     minWidth: 960,
     minHeight: 600,
     show: false,
@@ -448,6 +464,28 @@ function createWindow(splash?: BrowserWindow): void {
       sandbox: false,
     },
   });
+
+  // 恢复最大化态：以正常尺寸建窗后再 maximize，使「还原」回到记录的正常大小。
+  if (windowState.maximized) win.maximize();
+
+  // 记住窗口大小：resize/move 防抖回写、关闭时立即回写。getNormalBounds 取「非最大化」尺寸，
+  // 故最大化时记录的仍是还原后的正常大小。写盘失败不影响使用。
+  const persistWindowState = (): void => {
+    if (win.isDestroyed()) return;
+    const b = win.getNormalBounds();
+    windowState = { width: b.width, height: b.height, maximized: win.isMaximized() };
+    void writeWindowState(stateStore, windowState).catch((err: unknown) => {
+      logger.warn({ err }, 'persist window state failed');
+    });
+  };
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleSave = (): void => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistWindowState, 400);
+  };
+  win.on('resize', scheduleSave);
+  win.on('move', scheduleSave);
+  win.on('close', persistWindowState);
 
   // 主界面首帧就绪：关闭 splash、显示主窗口，并记录进程启动→首帧耗时（度量启动性能）。
   win.once('ready-to-show', () => {
