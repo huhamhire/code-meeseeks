@@ -236,23 +236,29 @@
   overflow: auto;
   cursor: default;
 
+  // mermaid svg 仅带内联 max-width、无显式宽度，在 flex 收缩容器里宽度会塌缩为 0
+  // （故模态里看不到图）。给固定放大宽度 + 覆盖内联 max-width，确保撑开并真正放大。
   svg {
-    width: auto;
+    display: block;
+    width: 90vw;
+    max-width: none !important;
     height: auto;
-    max-width: none; // 放大态不受容器限制，配合 overflow 滚动看大图
   }
 }
 .mermaid-zoom-close {
   position: fixed;
   top: 16px;
   right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
   height: 32px;
   border: none;
   border-radius: $radius-sm;
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
 

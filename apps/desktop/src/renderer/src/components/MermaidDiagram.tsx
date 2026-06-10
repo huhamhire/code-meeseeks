@@ -122,7 +122,8 @@ export function MermaidDiagram({ source }: { source: string }) {
               className="mermaid-zoom-inner"
               role="presentation"
               onClick={(e) => e.stopPropagation()}
-              dangerouslySetInnerHTML={{ __html: svg }}
+              // 重写 id（含 <style> 选择器 / 箭头 marker 引用），避免与内联副本同 id 冲突
+              dangerouslySetInnerHTML={{ __html: svg.replaceAll(renderId, `${renderId}-zoom`) }}
             />
           </div>,
           document.body,
