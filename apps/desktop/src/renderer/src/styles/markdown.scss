@@ -218,52 +218,87 @@
   }
 }
 
-// 点击图表后的全屏放大预览（portal 到 body）
+// 点击图表后的模态预览（portal 到 body）：固定纯色背景预览区 + 缩放/拖拽视图
 .mermaid-zoom-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px;
-  cursor: zoom-out;
+  padding: 24px;
 }
-.mermaid-zoom-inner {
-  max-width: 95vw;
-  max-height: 90vh;
-  overflow: auto;
-  cursor: default;
+.mermaid-zoom-dialog {
+  position: relative;
+  width: 92vw;
+  height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  overflow: hidden;
+}
+.mermaid-zoom-toolbar {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  justify-content: flex-end;
+  padding: $space-2 $space-3;
+  border-bottom: 1px solid $border-muted;
+  flex-shrink: 0;
 
-  // mermaid svg 仅带内联 max-width、无显式宽度，在 flex 收缩容器里宽度会塌缩为 0
-  // （故模态里看不到图）。给固定放大宽度 + 覆盖内联 max-width，确保撑开并真正放大。
-  svg {
-    display: block;
-    width: 90vw;
-    max-width: none !important;
-    height: auto;
+  .mermaid-zoom-scale {
+    margin-right: auto;
+    color: $text-muted;
+    font-size: $fs-sm;
+    font-variant-numeric: tabular-nums;
+  }
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: $radius-sm;
+    background: transparent;
+    color: $text-body;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+
+    &:hover {
+      background: $bg-white-fade;
+    }
   }
 }
-.mermaid-zoom-close {
-  position: fixed;
-  top: 16px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: $radius-sm;
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
+// 纯色预览区：图在此缩放/拖拽，超出裁剪
+.mermaid-zoom-stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: $bg-app; // 固定纯色背景
+  cursor: grab;
 
-  &:hover {
-    background: rgba(255, 255, 255, 0.22);
+  &:active {
+    cursor: grabbing;
+  }
+}
+// 缩放/平移层：充满预览区，transform 叠加缩放/平移（origin 0 0 与 zoomAt 数学一致）
+.mermaid-zoom-content {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+
+  // svg 充满本层，由原生 preserveAspectRatio(默认 xMidYMid meet) 等比缩放并居中实现「适应窗口」。
+  // !important 覆盖 mermaid 注入的内联 max-width / width，避免其按自身固有尺寸渲染。
+  svg {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
   }
 }
 .mermaid-loading {

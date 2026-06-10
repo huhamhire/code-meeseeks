@@ -552,13 +552,26 @@ function extractFileWalkthrough(md: string): { rest: string; block: string } | n
   return { rest: md.slice(0, m.index).trimEnd(), block: md.slice(m.index) };
 }
 
+/** HTML 文本节点转义：desc/文件名经 gfmInlineToText 已把实体解码成裸 < > &，
+ *  再放进 <li> 文本上下文须重新转义，避免破坏结构 / 被下游清洗器误判。 */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 /**
- * 把 File Walkthrough 的嵌套 HTML 表格转成「分组折叠 + 无序列表」markdown：
- *   <details><summary>分组名（N）</summary>
- *   - **文件名** — 描述
+ * 把 File Walkthrough 的嵌套 HTML 表格转成「按分类折叠的无序列表」纯 HTML：
+ *   <details open><summary>分类名（N）</summary>
+ *   <ul><li><strong>文件名</strong> — 描述</li>…</ul>
  *   </details>
- * 丢掉每行后面的 +1/-1 链接列。分组靠「<strong>X</strong></td><td><details>」识别，
- * 文件靠「<strong>X</strong><dd><code>desc</code>」识别，按出现位置归到所属分组。
+ * 保留 pr-agent 的多级分类（每个分类各自独立成可收起/展开的 <details>），丢掉每行后面
+ * 无意义的 +1/-1 链接列。分类靠「<strong>X</strong></td><td><details>」识别，文件靠
+ * 「<strong>X</strong><dd><code>desc</code>」识别，按出现位置归到所属分类。
+ *
+ * 注：产出纯 HTML（非 markdown `- ` 列表）——「markdown 列表嵌在 <details> 原始 HTML 块内」
+ * 在 react-markdown(rehype-raw) 下并不稳定渲染成折叠区，纯 HTML 才能确保各级可靠折叠。
  */
 function walkthroughToList(block: string): string {
   const GROUP_RE = /<strong>([^<]+?)<\/strong>\s*<\/td>\s*<td>\s*<details/gi;
@@ -569,13 +582,14 @@ function walkthroughToList(block: string): string {
     name: f[1]!.trim(),
     desc: gfmInlineToText(f[2]!).replace(/\s+/g, ' ').trim(),
   }));
-  const fmtFile = (f: { name: string; desc: string }): string =>
-    `- **${f.name}**${f.desc ? ` — ${f.desc}` : ''}`;
+  const fmtItem = (f: { name: string; desc: string }): string =>
+    `<li><strong>${escapeHtml(f.name)}</strong>${f.desc ? ` — ${escapeHtml(f.desc)}` : ''}</li>`;
+  const fmtList = (items: ReadonlyArray<{ name: string; desc: string }>): string =>
+    `<ul>\n${items.map(fmtItem).join('\n')}\n</ul>`;
 
   if (groups.length === 0) {
-    // 无分组：直接平铺列表
-    const list = files.map(fmtFile).join('\n');
-    return list || '（无文件变更明细）';
+    // 无分类：直接平铺列表
+    return files.length ? fmtList(files) : '（无文件变更明细）';
   }
   const parts: string[] = [];
   for (let i = 0; i < groups.length; i++) {
@@ -584,12 +598,12 @@ function walkthroughToList(block: string): string {
     const inGroup = files.filter((f) => f.index > g.index && f.index < next);
     if (inGroup.length === 0) continue;
     parts.push(
-      `<details><summary>${g.name}（${String(inGroup.length)}）</summary>\n\n${inGroup
-        .map(fmtFile)
-        .join('\n')}\n\n</details>`,
+      `<details open><summary>${escapeHtml(g.name)}（${String(inGroup.length)}）</summary>\n${fmtList(
+        inGroup,
+      )}\n</details>`,
     );
   }
-  return parts.join('\n\n') || files.map(fmtFile).join('\n');
+  return parts.join('\n') || (files.length ? fmtList(files) : '（无文件变更明细）');
 }
 
 /**

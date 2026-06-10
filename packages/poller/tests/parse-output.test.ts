@@ -422,15 +422,17 @@ describe('parseReviewOutput · describe 架构图 / 文件走查', () => {
     expect(diagram!.body).not.toMatch(/File Walkthrough|<table/);
   });
 
-  it('File Walkthrough → walkthrough 段，转成分组折叠列表，去掉 +1/-1', () => {
+  it('File Walkthrough → walkthrough 段，保留多级分类折叠列表，去掉 +1/-1', () => {
     const { findings } = parseReviewOutput(md, 'describe');
     const wt = findings.find((f) => f.sectionKey === 'walkthrough');
     expect(wt).toBeDefined();
-    // 分组折叠 + 文件无序列表 + 描述
-    expect(wt!.body).toMatch(/<summary>功能增强（2）<\/summary>/);
-    expect(wt!.body).toMatch(/- \*\*CacheValueProvider\.ts\*\* — 增加缓存合并配置透传/);
-    expect(wt!.body).toMatch(/<summary>测试（1）<\/summary>/);
+    // 每个分类各自独立成可折叠 <details>，内部纯 HTML 无序列表 + 描述
+    expect(wt!.body).toMatch(/<details open><summary>功能增强（2）<\/summary>/);
+    expect(wt!.body).toMatch(
+      /<li><strong>CacheValueProvider\.ts<\/strong> — 增加缓存合并配置透传<\/li>/,
+    );
+    expect(wt!.body).toMatch(/<details open><summary>测试（1）<\/summary>/);
     // 不保留原始表格 / +1/-1 统计
-    expect(wt!.body).not.toMatch(/<table|\+-1|\/--1|Relevant files/);
+    expect(wt!.body).not.toMatch(/\+-1|\/--1|Relevant files/);
   });
 });

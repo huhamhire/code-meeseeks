@@ -510,7 +510,9 @@
   //   - 安全 / 代码反馈走警示色 (黄/橙)
   // general (兜底) 不着色，保留默认灰
   &.chat-finding-title,
-  &.chat-finding-pr-type {
+  &.chat-finding-pr-type,
+  &.chat-finding-diagram {
+    // 架构图跟元信息一样走强调蓝，与其 chip 同色，不再落到默认灰
     border-left-color: $color-info;
   }
   &.chat-finding-summary,
