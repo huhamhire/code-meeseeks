@@ -72,7 +72,8 @@
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: $text-dim;
+  // 非活动 tab 用可读的 muted，而非几乎不可见的 dim，提升整组可视性
+  color: $text-muted;
   padding: $space-2 0;
   font-size: 12px;
   cursor: pointer;
@@ -84,9 +85,10 @@
     color: $text-body;
   }
 
+  // 活动 tab 用亮蓝 $color-info（对齐 ChatPane 的明亮配色），比深蓝 $color-accent 更醒目
   &.is-active {
-    color: $color-accent;
-    border-bottom-color: $color-accent;
+    color: $color-info;
+    border-bottom-color: $color-info;
   }
 }
 
