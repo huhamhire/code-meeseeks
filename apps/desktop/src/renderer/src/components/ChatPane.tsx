@@ -325,11 +325,12 @@ export function ChatPane({
    */
   /**
    * 把 AI finding body 转成草稿初始 body：先 stripFindingMarker 去掉 [file:...]
-   * 末尾 marker，再加 `[AI 建议]` 前缀 — 让远端 reviewer 看到时知道这条评论
-   * 来自 pr-agent
+   * 末尾 marker，再把 pr-agent GFM 里的内联 HTML 标签归一成 markdown（草稿编辑器是
+   * 纯文本，裸 `<code>`/`<br>` 会露馅），最后加 `[AI 建议]` 前缀 — 让远端 reviewer
+   * 看到时知道这条评论来自 pr-agent
    */
   const buildDraftBodyFromFinding = (body: string): string =>
-    `${t('chatPane.aiSuggestionPrefix')} ${stripFindingMarker(body)}`;
+    `${t('chatPane.aiSuggestionPrefix')} ${htmlInlineToMarkdown(stripFindingMarker(body))}`;
 
   const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
     if (!pr) return;
@@ -681,6 +682,23 @@ const CHAT_HISTORY_MAX = 5;
  */
 function stripFindingMarker(body: string): string {
   return body.replace(/\s*\[\s*file\s*:\s*[^\]]*?\]\s*$/i, '').trimEnd();
+}
+
+/**
+ * 把 pr-agent GFM 输出里的内联 HTML 标签归一成 markdown。finding 卡片走 ReactMarkdown
+ * (允许 HTML) 能正常渲染这些标签，但转成草稿正文落进编辑器 textarea / 发布到远端后，
+ * 裸 `<code>` `<br>` 不一定被渲染，会暴露成字面标签。这里把常见内联标签转成等价
+ * markdown：`<code>x</code>`→`` `x` ``、`<br>`→换行、`<b>/<strong>`→`**`、`<i>/<em>`→`*`。
+ * 空 `<code></code>` 直接丢弃，避免产出孤立的空反引号。
+ */
+function htmlInlineToMarkdown(text: string): string {
+  return text
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\s*code\s*>([\s\S]*?)<\s*\/\s*code\s*>/gi, (_, inner: string) =>
+      inner.trim() ? `\`${inner}\`` : '',
+    )
+    .replace(/<\s*(?:strong|b)\s*>([\s\S]*?)<\s*\/\s*(?:strong|b)\s*>/gi, '**$1**')
+    .replace(/<\s*(?:em|i)\s*>([\s\S]*?)<\s*\/\s*(?:em|i)\s*>/gi, '*$1*');
 }
 
 function loadChatHistory(): string[] {
@@ -1489,7 +1507,8 @@ function RunResultView({
 }
 
 /**
- * Finding card 上的草稿状态 chip + 操作按钮。仅 code-feedback + anchor 完整时出现。
+ * Finding card 上的草稿状态 chip + 操作按钮。仅代码类 finding（/review code-feedback
+ * 与 /improve code-suggestion）+ anchor 完整时出现。
  *
  * 状态可视化：
  * - 无 relatedDraft（用户从未交互）→ 不显示 status chip，只展示"→ 编辑 / ✗ 拒绝"按钮
@@ -1901,11 +1920,13 @@ function FindingCard({
               {finding.score}/10
             </span>
           )}
-          {/* M4 草稿状态 chip + 操作按钮：仅锚到具体行的 code-feedback 才展示
-              (其它如 summary / description / score 没法变 inline 评论) */}
+          {/* M4 草稿状态 chip + 操作按钮：锚到具体行的代码类 finding 才展示——
+              /review 的 code-feedback 与 /improve 的 code-suggestion 同享这套
+              「编辑转草稿 → 发布行内评论」交互（其它如 summary / description /
+              score 没法变 inline 评论） */}
           {finding.anchor.startLine !== undefined &&
             (onJump || onReject) &&
-            key === 'code-feedback' && (
+            (key === 'code-feedback' || key === 'code-suggestion') && (
               <FindingDraftActions
                 relatedDraft={relatedDraft}
                 onJump={onJump}
