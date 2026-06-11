@@ -143,9 +143,14 @@ export class Poller {
     return this._lastPollAt;
   }
 
-  start(): void {
+  /**
+   * 启动常驻轮询。`immediate=true`（默认）立刻先跑一轮；`immediate=false` 只装定时器、
+   * 不跑首轮——用于「活动连接无缓存身份」场景：避免用 me=null 跑出半成品首轮，改由调用方
+   * 在 ping 确认身份后再触发首次 tick（见 index.ts pingConnections）。
+   */
+  start(immediate = true): void {
     if (this.interval) return;
-    void this.tick();
+    if (immediate) void this.tick();
     this.interval = setInterval(() => void this.tick(), this.intervalSeconds * 1000);
   }
 

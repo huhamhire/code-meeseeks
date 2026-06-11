@@ -216,7 +216,12 @@ async function start(): Promise<void> {
   const pingConnections = (): void => {
     const activeId = bootstrap.config.active_connection_id;
     for (const { connectionId, adapter } of connectionRuntime.adapters) {
+      const isActive = connectionId === activeId;
       const beforeName = adapter.getCurrentUser()?.name ?? null;
+      // 活动连接启动时无缓存身份 → poller.start(immediate=false) 没跑首轮；此处 ping settle 后
+      // 必须触发**首次同步**（无论 ping 成功与否：成功则带确认的身份分类，失败也用 PAT 拉一轮，
+      // 不让「无身份」永远等到下个 interval）。这就是「先确认身份，再立即同步一次」。
+      const hadIdentity = beforeName !== null;
       void adapter.ping().then(
         async (r) => {
           logger.info(
@@ -225,14 +230,16 @@ async function start(): Promise<void> {
           );
           const user = adapter.getCurrentUser();
           await persistConnectionUser(connectionId, user);
-          // 身份变化（含本地无记录、ping 才首次取得 / 换号）→ 重新分类，让首跑/换号场景立即正确。
+          // 触发重分类/首次同步：活动连接且（身份变化 含首次取得/换号，或本就无身份需补首轮）。
           // poller.tick 已做「进行中则补跑」，不会因撞上首轮 poll 而丢失。
-          if (connectionId === activeId && (user?.name ?? null) !== beforeName) {
+          if (isActive && (!hadIdentity || (user?.name ?? null) !== beforeName)) {
             void poller.tick();
           }
         },
         (err: unknown) => {
           logger.warn({ err, connectionId }, 'adapter ping failed');
+          // ping 失败但活动连接本就无缓存身份（首轮被跳过）→ 仍用 PAT 兜底同步一次，避免看似没同步。
+          if (isActive && !hadIdentity) void poller.tick();
         },
       );
     }
@@ -344,15 +351,24 @@ async function start(): Promise<void> {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // 启动关键路径已无网络调用：归档（本地 IO）后直接启动 poller，首轮用预热的 currentUser 分类。
+  // 启动关键路径已无网络调用：归档（本地 IO）后启动 poller。
   await poller.archiveConnectionsExcept(activeConnectionIds());
-  // poller 常驻：当前启用连接为空时 tick 是空操作；用户在设置页启用 / 切换连接后
-  // reconfigureConnections 热生效，无需重启
-  poller.start();
+  // 活动连接是否已有缓存身份（wireConnections 已用本地持久化身份预热）：
+  // - 有 → poller 立即跑首轮（me 就绪，分类正确）；
+  // - 无 → **不跑 me=null 的半成品首轮**，只装定时器；首次同步改由下面 pingConnections 在 ping
+  //   确认身份后立即触发（见 pingConnections：无身份的活动连接 ping settle 后必 tick 一次）。
+  // 这样「首次启动 / state 缺失」时也是「先确认身份，再同步一次」，避免首轮全标 pending 或看似没同步。
+  const activeHasIdentity = connectionRuntime.adapters.some(
+    (a) =>
+      a.connectionId === bootstrap.config.active_connection_id &&
+      a.adapter.getCurrentUser() != null,
+  );
+  poller.start(activeHasIdentity);
   logger.info(
     {
       connections: bootstrap.config.connections.length,
       activeId: bootstrap.config.active_connection_id,
+      activeHasIdentity,
     },
     'poller started',
   );
