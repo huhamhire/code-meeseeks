@@ -85,6 +85,9 @@ let prAgentProbe: Promise<PrAgentStatus>;
 let stateStore: JsonFileStateStore;
 let poller: Poller;
 let repoMirror: RepoMirrorManager;
+// IPC 运行时控制句柄（registerIpcHandlers 返回）：退出时据此中止所有进行中的 pr-agent run，
+// 触发其子进程树清理（见 before-quit）。注册前为 undefined。
+let ipcControl: { abortAllActiveRuns: () => number } | undefined;
 // 连接级本地状态（按 connectionId）：持久化上次 ping 的 currentUser，用于建连接时预热，
 // 使首轮 poll 不依赖网络即可判 approved。启动时从 state store 载入一次，ping 后增量回写。
 let connectionStates: Record<string, ConnectionState> = {};
@@ -312,7 +315,7 @@ async function start(): Promise<void> {
   // 这样 app:connections 与首轮判 approved 都不依赖网络；ping 留到建窗后全异步刷新。
   wireConnections();
 
-  registerIpcHandlers({
+  ipcControl = registerIpcHandlers({
     bootstrap,
     logger,
     // 惰性读取：探测异步回填后，handler 调用时才取到最新值（注册时探测可能尚未完成）
@@ -377,8 +380,20 @@ async function start(): Promise<void> {
   pingConnections();
 }
 
-app.on('before-quit', () => {
+// 退出清理：停轮询 + 终止所有进行中的 pr-agent run 的子进程树（python + litellm 等孙进程）。
+// 不清理会留孤儿进程锁住安装目录 → 升级时 NSIS 报「应用无法关闭」。
+let quitCleanupDone = false;
+app.on('before-quit', (event) => {
   if (poller) poller.stop();
+  if (quitCleanupDone) return;
+  const aborted = ipcControl?.abortAllActiveRuns() ?? 0;
+  if (aborted === 0) return; // 无进行中 run，直接退出
+  // 有 run 在跑：abort 已触发各自 exec 的 killTree（win32=taskkill /T /F，异步）。延后真正退出，
+  // 给 taskkill 跑完，避免主进程先退出、孙进程没杀干净。
+  event.preventDefault();
+  quitCleanupDone = true;
+  if (logger) logger.info({ abortedRuns: aborted }, 'terminating active pr-agent runs before quit');
+  setTimeout(() => app.quit(), 800);
 });
 
 /**
