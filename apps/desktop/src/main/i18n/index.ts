@@ -19,7 +19,7 @@ const instance: I18n = createInstance();
 
 // 当前生效语言：由 initMainI18n 定档（传入的已是 resolveLanguage 解析后的有效值）。
 // 供 pr-agent 响应语言（CONFIG__RESPONSE_LANGUAGE）等与 UI 保持一致地复用。
-let currentLanguage: SupportedLanguage = 'zh-CN';
+let currentLanguage: SupportedLanguage = 'en-US';
 
 /** 主进程当前生效语言，供 pr-agent 响应语言等复用，保证与 UI 一致。 */
 export function getMainLanguage(): SupportedLanguage {
@@ -28,7 +28,7 @@ export function getMainLanguage(): SupportedLanguage {
 
 /** 启动时调用一次：按已解析的有效语言（resolveLanguage 的结果）初始化主进程 i18n。 */
 export function initMainI18n(language: string): void {
-  currentLanguage = matchSupportedLanguage(language) ?? 'zh-CN';
+  currentLanguage = matchSupportedLanguage(language) ?? 'en-US';
   void instance.init({
     resources: {
       'zh-CN': { translation: zhCN },
@@ -37,7 +37,8 @@ export function initMainI18n(language: string): void {
       'de-DE': { translation: deDE },
     },
     lng: currentLanguage,
-    fallbackLng: 'zh-CN',
+    // 兜底取 en-US（国际化标准，与渲染层一致）：缺 key 回退英文而非中文。
+    fallbackLng: 'en-US',
     load: 'currentOnly',
     interpolation: { escapeValue: false },
     returnNull: false,

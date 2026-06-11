@@ -66,7 +66,7 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 
 ## 国际化 (i18n)
 
-GUI 文本走 **react-i18next**（源 `zh-CN`，译文 `en-US` / `ja-JP` / `de-DE`；UI 语言由 `config.language` 经 `resolveLanguage` 决定，空则按 OS 回落英语）；渲染层默认静态 + 其余懒加载，主进程各持一份 locale。设计、key 命名、翻译规范见 [docs/arch/10-i18n](docs/arch/10-i18n.md)。两条易踩的：新增文本须在**各语言 locale 都加**并保持**递归字典序**（日语复数同中文仅 `_other`、德语同英语需 `_one`/`_other`）；i18next **只有 `count`** 触发复数，普通计数插值要换别的变量名。
+GUI 文本走 **react-i18next**（key 为中立标识符，`zh-CN` / `en-US` / `ja-JP` / `de-DE` 为**对等译文集**，无源/译层级；UI 语言由 `config.language` 经 `resolveLanguage` 决定，空则按 OS 回落英语）。**默认 / 兜底语言取 `en-US`**（国际化标准：缺 key 回退英文而非中文）：渲染层 en-US 静态打包进入口 + 其余懒加载、`fallbackLng: 'en-US'`，主进程各持一份 locale、同样兜底 en-US。设计、key 命名、翻译规范见 [docs/arch/10-i18n](docs/arch/10-i18n.md)。三条易踩的：①新增文本须在**各语言 locale 都加**并保持**递归字典序**（日语复数同中文仅 `_other`、德语同英语需 `_one`/`_other`）；②i18next **只有 `count`** 触发复数，普通计数插值要换别的变量名；③**不要开 `nonExplicitSupportedLngs`**——它把 `zh-CN` 按基码 `zh` 查找、与按 `zh-CN` 注册的 bundle 错位 → 整页裸 key。
 
 ## 文档约定
 
