@@ -15,6 +15,7 @@ import { buildAdapters, type ConnectionRuntime } from './adapters.js';
 import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
 import { buildProxyEnv } from './utils/proxy.js';
+import { fixMacPath } from './utils/mac-path.js';
 import {
   readConnectionStates,
   writeConnectionStates,
@@ -105,6 +106,14 @@ async function start(): Promise<void> {
     { firstRun: bootstrap.firstRun, appDir: bootstrap.paths.appDir },
     'meebox main process started',
   );
+
+  // macOS GUI 启动（Finder/Dock）只有 launchd 最小 PATH，找不到本机 CLI（claude/codex，常在
+  // ~/.local/bin / homebrew）。启动期前置常见目录到 process.env.PATH，使后续 spawn 的嵌入式
+  // python 及其 CLI 子进程（经 {...process.env} 继承）都能定位到命令。须在 pr-agent 探测/运行前。
+  const macPath = fixMacPath();
+  if (macPath.applied) {
+    logger.info({ added: macPath.added }, 'macOS PATH 已补全');
+  }
 
   // main 进程全局兜底：未捕获异常 / 未处理 rejection 至少留一条日志，不静默崩溃。
   process.on('uncaughtException', (err) => {
