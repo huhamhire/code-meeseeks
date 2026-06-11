@@ -948,9 +948,30 @@ export function registerIpcHandlers({
                 ].join('\n')
               : '';
 
+        // 排版指令：只改 /review 每条 key_issue 的断行排版，提升 GUI 可读性，不增加篇幅。
+        // pr-agent 原 prompt 要 "short and concise summary"，模型默认堆成单段长跑文；
+        // 渲染层 (ReactMarkdown + remarkBreaks) 忠实呈现，空行分段即成独立 <p>。
+        // 关键是「保持简洁」——只在现象/影响/建议的语义边界换行，不得借分段扩写内容。
+        // 须与上面的 anchor marker 指令协同：分段在正文内部，marker 仍独占最末行。
+        const reviewLayoutDirective =
+          req.tool === 'review'
+            ? [
+                'FORMATTING ONLY: Keep each `key_issues_to_review` item as concise as you',
+                'already would — do NOT add length, padding, or extra explanation. The only',
+                'change is line breaks: instead of one dense run-on paragraph, insert a BLANK',
+                'LINE at the natural boundaries (e.g. problem → impact → suggested fix) so the',
+                'text reads as a few short paragraphs. Same words, better layout.',
+                '',
+                'This applies to the issue PROSE only. The machine-readable anchor marker',
+                'described above still goes on its OWN LAST LINE, after the final paragraph',
+                '(a blank line may precede it).',
+              ].join('\n')
+            : '';
+
         const extraParts = [
           langDirective,
           reviewAnchorDirective,
+          reviewLayoutDirective,
           prContext,
           matchedRuleInstructions,
         ].filter((s) => s.trim());
