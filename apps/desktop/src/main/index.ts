@@ -20,11 +20,7 @@ import {
   writeConnectionStates,
   type ConnectionState,
 } from './utils/connection-state.js';
-import {
-  readWindowState,
-  writeWindowState,
-  type WindowState,
-} from './utils/window-state.js';
+import { readWindowState, writeWindowState, type WindowState } from './utils/window-state.js';
 import { checkForUpdate } from './utils/update-check.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
@@ -35,6 +31,12 @@ const PROCESS_START_MS = Date.now();
 // 避免占用冷启动网络 / 打断启动；之后随 poller tick 每满 1h 触发一次。
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let lastUpdateCheckMs = PROCESS_START_MS;
+
+// 嵌入式 python 子进程不写 .pyc：安装目录（per-user 可写）运行期会积累上万个 __pycache__/.pyc，
+// 升级时旧卸载器要 grinding 这些文件 → 卸载极慢、易拖到「应用无法关闭」。设 PYTHONDONTWRITEBYTECODE=1
+// 让运行期不落 .pyc，安装目录文件数稳定（仅装包时的量）。子进程经 spawn 继承本进程 env。
+// 代价：每次 python 启动重编译（略慢）；评审为 LLM 网络主导，影响有限。
+process.env.PYTHONDONTWRITEBYTECODE = '1';
 
 // macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
 // 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
@@ -67,9 +69,7 @@ function resolveEmbeddedPython(): string {
   const override = process.env.MEEBOX_PRAGENT_PYTHON;
   if (override) return override;
   const rel =
-    process.platform === 'win32'
-      ? ['python', 'python.exe']
-      : ['python', 'bin', 'python3'];
+    process.platform === 'win32' ? ['python', 'python.exe'] : ['python', 'bin', 'python3'];
   const base = app.isPackaged
     ? path.join(process.resourcesPath, 'pragent')
     : path.join(app.getAppPath(), 'vendor', 'pragent');
@@ -282,11 +282,9 @@ async function start(): Promise<void> {
         }
         // identity 字段映射：poller 用 group/repo 中性命名，repo-mirror 仍保留
         // Bitbucket-shaped projectKey/repoSlug (跟 git 路径布局一致，沿用便于排障)
-        void repoMirror
-          .syncMirror({ host, projectKey: r.group, repoSlug: r.repo })
-          .catch((err) => {
-            logger.warn({ err, repo: r }, 'auto syncMirror after poll failed');
-          });
+        void repoMirror.syncMirror({ host, projectKey: r.group, repoSlug: r.repo }).catch((err) => {
+          logger.warn({ err, repo: r }, 'auto syncMirror after poll failed');
+        });
       }
     },
   });
@@ -513,9 +511,7 @@ function createWindow(splash?: BrowserWindow): void {
     backgroundColor: '#1e1e1e',
     // dev 下显式给窗口图标（assets/icons/icon.ico）；打包态窗口/任务栏图标走 exe
     // 内嵌（electron-builder），且 assets 不进 asar，故仅 dev 设置
-    icon: app.isPackaged
-      ? undefined
-      : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
+    icon: app.isPackaged ? undefined : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,

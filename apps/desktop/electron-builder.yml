@@ -20,7 +20,9 @@ publish:
 
 directories:
   output: release
-  buildResources: build
+  # 指向已入库的 build-resources/：其中的 installer.nsh 会被 electron-builder **自动收录**
+  # （auto-include `${buildResources}/installer.nsh`，路径无歧义）。原默认 build/ 被 gitignore、未用。
+  buildResources: build-resources
 
 # 入口 + 所有 bundle 产物。out/* 是 electron-vite build 的输出。
 files:
@@ -101,3 +103,4 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # 自定义注入见 build-resources/installer.nsh —— 由 buildResources auto-include 自动收录，无需显式 include。
