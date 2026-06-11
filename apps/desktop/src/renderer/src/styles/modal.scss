@@ -100,6 +100,30 @@
   }
 }
 
+// 标题 + 状态 chip 成组靠左，让右侧操作按钮保持两端对齐
+.modal-section-head-title {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+}
+
+// 设置项启用状态 chip：on=绿(同 draft posted)、off=灰(muted)，与全局 chip 观感一致
+.settings-status-chip {
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  font-size: $fs-xs;
+  font-weight: 600;
+
+  &.is-on {
+    background: rgba(22, 163, 74, 0.18);
+    color: $color-approved;
+  }
+  &.is-off {
+    background: $bg-surface;
+    color: $text-muted;
+  }
+}
+
 .modal-kv {
   display: grid;
   grid-template-columns: 140px 1fr;

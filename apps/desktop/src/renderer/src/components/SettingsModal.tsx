@@ -483,7 +483,20 @@ export function SettingsModal({
 
           <section className="modal-section">
             <div className="modal-section-head">
-              <h4>{t('settings.proxyTitle')}</h4>
+              <div className="modal-section-head-title">
+                <h4>{t('settings.proxyTitle')}</h4>
+                {/* 启用状态用 chip 表达（绿=已启用/灰=未启用），与应用其它状态视觉一致；
+                    地址不在此展示，详情见「配置」弹窗。 */}
+                <span
+                  className={`settings-status-chip ${
+                    proxy.enabled && proxy.host ? 'is-on' : 'is-off'
+                  }`}
+                >
+                  {proxy.enabled && proxy.host
+                    ? t('settings.proxyEnabledStatus')
+                    : t('settings.proxyDisabledStatus')}
+                </span>
+              </div>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
@@ -493,9 +506,6 @@ export function SettingsModal({
               </button>
             </div>
             <p className="muted" style={{ margin: 0 }}>
-              {proxy.enabled && proxy.host
-                ? t('settings.proxyEnabledStatus', { host: proxy.host, port: proxy.port })
-                : t('settings.proxyDisabledStatus')}
               {t('settings.proxyStatusHint')}
             </p>
           </section>
