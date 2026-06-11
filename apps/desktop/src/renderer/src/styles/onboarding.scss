@@ -165,18 +165,17 @@
     }
   }
 }
-// 欢迎页语言选择：标签 + 下拉，居中、与开始按钮留间距
-.onboarding-language {
+// 欢迎页底部 nav 内的语言选择：标签 + 定宽下拉，标签与下拉之间留白。位于 nav-left /
+// nav-right（step 0 均为空）之间，靠父级 justify-content:space-between 居中。
+.onboarding-nav-language {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: $space-2;
-  margin-bottom: $space-5;
-
-  select {
-    width: auto;
-    min-width: 160px;
-  }
+  gap: $space-4;
+}
+// 语言下拉：收窄固定宽度、左对齐；不被 .settings-input 的 flex:1 撑满（复合选择器提权）
+.settings-input.onboarding-language-select {
+  flex: 0 0 auto;
+  width: 160px;
 }
 .onboarding-start {
   min-width: 160px;

@@ -52,6 +52,21 @@ export function OnboardingWizard({
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
 
+  // 界面语言：即时生效（写盘 + 渲染层切换）。初值取当前生效语言——无配置时按 OS 偏好匹配。
+  // 选择项放在欢迎页底部 nav（复用其分割线），仅 step 0 显示。
+  const [language, setLanguage] = useState<SupportedLanguage>(() =>
+    resolveUiLanguage(initialLanguage),
+  );
+  const onLanguageChange = (next: SupportedLanguage): void => {
+    if (next === language) return;
+    setLanguage(next);
+    void i18n.changeLanguage(next);
+    persistLanguage(next);
+    void invoke('config:setLanguage', { language: next }).catch(() => {
+      /* 写盘失败不阻断向导：渲染层已切、localStorage 已存，完成向导后随整体落盘兜底 */
+    });
+  };
+
   const [connDraft, setConnDraft] = useState<ConnDraft>(() => ({
     id: newProfileId(),
     kind: 'github',
@@ -113,9 +128,7 @@ export function OnboardingWizard({
         </ol>
 
         <div className="onboarding-slide" key={step}>
-          {step === 0 && (
-            <WelcomeStep onStart={() => setStep(1)} initialLanguage={initialLanguage} />
-          )}
+          {step === 0 && <WelcomeStep onStart={() => setStep(1)} />}
 
           {step === 1 && (
             <PlatformStep
@@ -148,6 +161,25 @@ export function OnboardingWizard({
               </button>
             )}
           </div>
+          {/* 欢迎页：语言选择放在底部 nav（复用其分割线），居于两端（空）之间 → 居中显示。
+              选项用各语言自身 endonym，不随 UI 翻译；选择即时生效。 */}
+          {step === 0 && (
+            <div className="onboarding-nav-language">
+              <span className="muted">{t('onboarding.languageLabel')}</span>
+              <select
+                className="settings-input onboarding-language-select"
+                value={language}
+                onChange={(e) => onLanguageChange(e.target.value as SupportedLanguage)}
+                aria-label={t('onboarding.languageLabel')}
+              >
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.endonym}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="onboarding-nav-right">
             {step === 1 && (
               <button
@@ -203,27 +235,8 @@ export function OnboardingWizard({
   );
 }
 
-function WelcomeStep({
-  onStart,
-  initialLanguage,
-}: {
-  onStart: () => void;
-  initialLanguage: string;
-}) {
+function WelcomeStep({ onStart }: { onStart: () => void }) {
   const { t } = useTranslation();
-  // 界面语言：即时生效（写盘 + 渲染层切换）。初值取当前生效语言——无配置时按 OS 偏好匹配。
-  const [language, setLanguage] = useState<SupportedLanguage>(() =>
-    resolveUiLanguage(initialLanguage),
-  );
-  const onLanguageChange = (next: SupportedLanguage): void => {
-    if (next === language) return;
-    setLanguage(next);
-    void i18n.changeLanguage(next);
-    persistLanguage(next);
-    void invoke('config:setLanguage', { language: next }).catch(() => {
-      /* 写盘失败不阻断向导：渲染层已切，localStorage 已存，完成向导后随整体落盘兜底 */
-    });
-  };
   // 隐藏后门：连续快速点击 logo 7 次打开 DevTools（每次间隔 > 800ms 则计数清零）。
   // 首启向导下没有菜单 / 状态栏入口，给开发排障留一个不显眼的手势。
   const tapRef = useRef<{ count: number; last: number }>({ count: 0, last: 0 });
@@ -248,22 +261,6 @@ function WelcomeStep({
         <li>{t('onboarding.welcomePoint1')}</li>
         <li>{t('onboarding.welcomePoint2')}</li>
       </ul>
-      {/* 界面语言：选项用各语言自身 endonym，不随 UI 翻译；选择即时生效。 */}
-      <label className="onboarding-language">
-        <span className="muted">{t('onboarding.languageLabel')}</span>
-        <select
-          className="settings-input"
-          value={language}
-          onChange={(e) => onLanguageChange(e.target.value as SupportedLanguage)}
-          aria-label={t('onboarding.languageLabel')}
-        >
-          {LANGUAGE_OPTIONS.map((opt) => (
-            <option key={opt.code} value={opt.code}>
-              {opt.endonym}
-            </option>
-          ))}
-        </select>
-      </label>
       <button type="button" className="btn btn-primary onboarding-start" onClick={onStart}>
         {t('onboarding.startConfig')}
       </button>
