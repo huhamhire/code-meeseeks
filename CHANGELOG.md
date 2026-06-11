@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-11
+
+### Fixed
+- **macOS 分发版「本地 CLI」provider（claude / codex）失效**（Finder/Dock 启动）：macOS GUI 应用
+  只继承 launchd 的最小 PATH（`/usr/bin:/bin:/usr/sbin:/sbin`），读不到 shell 配置，故找不到装在
+  `~/.local/bin` / homebrew 等目录的 CLI，评审报错（`litellm ... LLM Provider NOT provided` 或
+  "找不到命令"）。启动期把常见 CLI 安装目录（`~/.local/bin` / `/usr/local/bin` /
+  `/opt/homebrew/bin` 等）前置进 `PATH`，使嵌入式 python 及其 CLI 子进程都能定位命令。仅 macOS
+  受影响；终端启动（dev）与 Windows 不受影响。(#21)
+
 ## [0.3.0] - 2026-06-11
 
 > 第三个正式版（仍属 0.x · 早期预览）。本版重点：**界面国际化（四语 + 即时切换）**、Mermaid 架构图
