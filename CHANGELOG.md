@@ -5,16 +5,17 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-11
+
+> 第三个正式版（仍属 0.x · 早期预览）。本版重点：**界面国际化（四语 + 即时切换）**、Mermaid 架构图
+> 渲染、版本更新检测、`/improve` 与 `/describe` 思路建议段等 pr-agent 能力扩展，并修复首启同步、
+> 子进程树清理与安装 / 升级健壮性。开发期 0.3.0-alpha.1 的变更已并入本版。
+
 > ⚠️ **Windows 用户升级注意**：若已安装**早期版本**（含 `0.3.0-alpha.1` 及更早），升级到本版前请
 > **先手动卸载旧版**（设置 → 应用 → Code Meeseeks → 卸载，或安装目录下的 `Uninstall Code Meeseeks.exe`），
 > 完成后再运行新安装器；否则覆盖安装可能长时间卡住或弹出「Code Meeseeks 无法关闭」。
 > 原因：早期版本运行时会在安装目录写入上万个 Python 字节码（`.pyc`）缓存文件，使覆盖升级时「卸载旧版」
 > 一步需逐个删除海量小文件、极慢甚至卡死。本版起运行时不再写入这些缓存，**之后的升级可正常覆盖、无需手动卸载**。
-
-## [0.3.0-alpha.1] - 2026-06-11
-
-> 第三个版本的首个开发预览（alpha）。本版重点：**界面国际化（四语 + 即时切换）**、Mermaid 架构图
-> 渲染、版本更新检测、`/improve` 与 `/describe` 思路建议段等 pr-agent 能力扩展。
 
 ### Added
 
@@ -51,6 +52,21 @@
   额外产出「思路建议」段——2-4 个替代实现方案（各自折叠）+ 倾向性推荐，对齐 Qodo Merge 的
   High-Level Assessment（社区版原生无此字段）。pr-agent 通用渲染成段、parse-output 映射 sectionKey，
   英文结构串经渲染期翻译表中文化，chip 配主蓝（信息性）色。
+
+### Fixed
+
+- 修复活动连接无缓存身份时首启「看似未触发远端同步」：改为先经 ping 确认身份、再立即同步一次
+  （有缓存身份仍立即同步），不再用 me=null 跑半成品首轮。
+- 修复取消 / 超时 / 退出时只终止 pr-agent 的 python 主进程、其 litellm 等孙进程变孤儿（Windows
+  `child.kill` 不级联）：改为进程树级终止（win32 `taskkill /T /F`），避免孤儿进程锁住安装目录。
+- **安装 / 升级健壮性**：嵌入式 python 运行期不再写 `.pyc`（`PYTHONDONTWRITEBYTECODE`）、运行时瘦身
+  （删 tests / `__pycache__` / 类型存根等）+ 构建期端到端冒烟（防过度裁剪）；NSIS 安装器强杀残留进程
+  不弹阻塞框 + 展开文件处理进度。减少安装目录小文件数，缓解升级时卸载缓慢 / 卡死。**已装早期版本仍需
+  先手动卸载再升级**（见上方注意事项）。
+
+## [0.3.0-alpha.1] - 2026-06-11
+
+> 开发期预览版。其全部变更内容已并入正式版 **[0.3.0](#030---2026-06-11)**，此处不再展开。
 
 ## [0.2.0] - 2026-06-09
 
@@ -180,7 +196,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.0-alpha.1...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0...v0.3.0
 [0.3.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0...v0.3.0-alpha.1
 [0.2.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0...v0.2.0
 [0.2.0-alpha.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0-alpha.1...v0.2.0-alpha.2
