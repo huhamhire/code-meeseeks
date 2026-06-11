@@ -20,11 +20,7 @@ import {
   writeConnectionStates,
   type ConnectionState,
 } from './utils/connection-state.js';
-import {
-  readWindowState,
-  writeWindowState,
-  type WindowState,
-} from './utils/window-state.js';
+import { readWindowState, writeWindowState, type WindowState } from './utils/window-state.js';
 import { checkForUpdate } from './utils/update-check.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
@@ -35,6 +31,12 @@ const PROCESS_START_MS = Date.now();
 // 避免占用冷启动网络 / 打断启动；之后随 poller tick 每满 1h 触发一次。
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let lastUpdateCheckMs = PROCESS_START_MS;
+
+// 嵌入式 python 子进程不写 .pyc：安装目录（per-user 可写）运行期会积累上万个 __pycache__/.pyc，
+// 升级时旧卸载器要 grinding 这些文件 → 卸载极慢、易拖到「应用无法关闭」。设 PYTHONDONTWRITEBYTECODE=1
+// 让运行期不落 .pyc，安装目录文件数稳定（仅装包时的量）。子进程经 spawn 继承本进程 env。
+// 代价：每次 python 启动重编译（略慢）；评审为 LLM 网络主导，影响有限。
+process.env.PYTHONDONTWRITEBYTECODE = '1';
 
 // macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
 // 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
@@ -67,9 +69,7 @@ function resolveEmbeddedPython(): string {
   const override = process.env.MEEBOX_PRAGENT_PYTHON;
   if (override) return override;
   const rel =
-    process.platform === 'win32'
-      ? ['python', 'python.exe']
-      : ['python', 'bin', 'python3'];
+    process.platform === 'win32' ? ['python', 'python.exe'] : ['python', 'bin', 'python3'];
   const base = app.isPackaged
     ? path.join(process.resourcesPath, 'pragent')
     : path.join(app.getAppPath(), 'vendor', 'pragent');
@@ -85,6 +85,9 @@ let prAgentProbe: Promise<PrAgentStatus>;
 let stateStore: JsonFileStateStore;
 let poller: Poller;
 let repoMirror: RepoMirrorManager;
+// IPC 运行时控制句柄（registerIpcHandlers 返回）：退出时据此中止所有进行中的 pr-agent run，
+// 触发其子进程树清理（见 before-quit）。注册前为 undefined。
+let ipcControl: { abortAllActiveRuns: () => number } | undefined;
 // 连接级本地状态（按 connectionId）：持久化上次 ping 的 currentUser，用于建连接时预热，
 // 使首轮 poll 不依赖网络即可判 approved。启动时从 state store 载入一次，ping 后增量回写。
 let connectionStates: Record<string, ConnectionState> = {};
@@ -216,7 +219,12 @@ async function start(): Promise<void> {
   const pingConnections = (): void => {
     const activeId = bootstrap.config.active_connection_id;
     for (const { connectionId, adapter } of connectionRuntime.adapters) {
+      const isActive = connectionId === activeId;
       const beforeName = adapter.getCurrentUser()?.name ?? null;
+      // 活动连接启动时无缓存身份 → poller.start(immediate=false) 没跑首轮；此处 ping settle 后
+      // 必须触发**首次同步**（无论 ping 成功与否：成功则带确认的身份分类，失败也用 PAT 拉一轮，
+      // 不让「无身份」永远等到下个 interval）。这就是「先确认身份，再立即同步一次」。
+      const hadIdentity = beforeName !== null;
       void adapter.ping().then(
         async (r) => {
           logger.info(
@@ -225,14 +233,16 @@ async function start(): Promise<void> {
           );
           const user = adapter.getCurrentUser();
           await persistConnectionUser(connectionId, user);
-          // 身份变化（含本地无记录、ping 才首次取得 / 换号）→ 重新分类，让首跑/换号场景立即正确。
+          // 触发重分类/首次同步：活动连接且（身份变化 含首次取得/换号，或本就无身份需补首轮）。
           // poller.tick 已做「进行中则补跑」，不会因撞上首轮 poll 而丢失。
-          if (connectionId === activeId && (user?.name ?? null) !== beforeName) {
+          if (isActive && (!hadIdentity || (user?.name ?? null) !== beforeName)) {
             void poller.tick();
           }
         },
         (err: unknown) => {
           logger.warn({ err, connectionId }, 'adapter ping failed');
+          // ping 失败但活动连接本就无缓存身份（首轮被跳过）→ 仍用 PAT 兜底同步一次，避免看似没同步。
+          if (isActive && !hadIdentity) void poller.tick();
         },
       );
     }
@@ -272,11 +282,9 @@ async function start(): Promise<void> {
         }
         // identity 字段映射：poller 用 group/repo 中性命名，repo-mirror 仍保留
         // Bitbucket-shaped projectKey/repoSlug (跟 git 路径布局一致，沿用便于排障)
-        void repoMirror
-          .syncMirror({ host, projectKey: r.group, repoSlug: r.repo })
-          .catch((err) => {
-            logger.warn({ err, repo: r }, 'auto syncMirror after poll failed');
-          });
+        void repoMirror.syncMirror({ host, projectKey: r.group, repoSlug: r.repo }).catch((err) => {
+          logger.warn({ err, repo: r }, 'auto syncMirror after poll failed');
+        });
       }
     },
   });
@@ -305,7 +313,7 @@ async function start(): Promise<void> {
   // 这样 app:connections 与首轮判 approved 都不依赖网络；ping 留到建窗后全异步刷新。
   wireConnections();
 
-  registerIpcHandlers({
+  ipcControl = registerIpcHandlers({
     bootstrap,
     logger,
     // 惰性读取：探测异步回填后，handler 调用时才取到最新值（注册时探测可能尚未完成）
@@ -344,15 +352,24 @@ async function start(): Promise<void> {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // 启动关键路径已无网络调用：归档（本地 IO）后直接启动 poller，首轮用预热的 currentUser 分类。
+  // 启动关键路径已无网络调用：归档（本地 IO）后启动 poller。
   await poller.archiveConnectionsExcept(activeConnectionIds());
-  // poller 常驻：当前启用连接为空时 tick 是空操作；用户在设置页启用 / 切换连接后
-  // reconfigureConnections 热生效，无需重启
-  poller.start();
+  // 活动连接是否已有缓存身份（wireConnections 已用本地持久化身份预热）：
+  // - 有 → poller 立即跑首轮（me 就绪，分类正确）；
+  // - 无 → **不跑 me=null 的半成品首轮**，只装定时器；首次同步改由下面 pingConnections 在 ping
+  //   确认身份后立即触发（见 pingConnections：无身份的活动连接 ping settle 后必 tick 一次）。
+  // 这样「首次启动 / state 缺失」时也是「先确认身份，再同步一次」，避免首轮全标 pending 或看似没同步。
+  const activeHasIdentity = connectionRuntime.adapters.some(
+    (a) =>
+      a.connectionId === bootstrap.config.active_connection_id &&
+      a.adapter.getCurrentUser() != null,
+  );
+  poller.start(activeHasIdentity);
   logger.info(
     {
       connections: bootstrap.config.connections.length,
       activeId: bootstrap.config.active_connection_id,
+      activeHasIdentity,
     },
     'poller started',
   );
@@ -361,8 +378,20 @@ async function start(): Promise<void> {
   pingConnections();
 }
 
-app.on('before-quit', () => {
+// 退出清理：停轮询 + 终止所有进行中的 pr-agent run 的子进程树（python + litellm 等孙进程）。
+// 不清理会留孤儿进程锁住安装目录 → 升级时 NSIS 报「应用无法关闭」。
+let quitCleanupDone = false;
+app.on('before-quit', (event) => {
   if (poller) poller.stop();
+  if (quitCleanupDone) return;
+  const aborted = ipcControl?.abortAllActiveRuns() ?? 0;
+  if (aborted === 0) return; // 无进行中 run，直接退出
+  // 有 run 在跑：abort 已触发各自 exec 的 killTree（win32=taskkill /T /F，异步）。延后真正退出，
+  // 给 taskkill 跑完，避免主进程先退出、孙进程没杀干净。
+  event.preventDefault();
+  quitCleanupDone = true;
+  if (logger) logger.info({ abortedRuns: aborted }, 'terminating active pr-agent runs before quit');
+  setTimeout(() => app.quit(), 800);
 });
 
 /**
@@ -482,9 +511,7 @@ function createWindow(splash?: BrowserWindow): void {
     backgroundColor: '#1e1e1e',
     // dev 下显式给窗口图标（assets/icons/icon.ico）；打包态窗口/任务栏图标走 exe
     // 内嵌（electron-builder），且 assets 不进 asar，故仅 dev 设置
-    icon: app.isPackaged
-      ? undefined
-      : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
+    icon: app.isPackaged ? undefined : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,

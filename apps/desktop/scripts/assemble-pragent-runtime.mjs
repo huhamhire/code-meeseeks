@@ -21,7 +21,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
@@ -202,6 +202,101 @@ async function ensureSecretsPlaceholders(sitePackages) {
   }
 }
 
+// ── 运行时瘦身（B）：删运行时不需要的目录/文件，减少安装包小文件数（Windows 升级时
+//    删旧+写新海量小文件极慢、被 Defender 逐个扫，会拖到安装器误判「应用无法关闭」）。
+//    取保守通用集：纯粹运行期用不到、删了不影响 pr-agent / shim。准确性由 smokeTest 兜底。
+// 目录名（任意层级整删）：stdlib 测试套件 / 字节码缓存 / GUI(tkinter,turtledemo) /
+//    交互式(idlelib) / 历史迁移(lib2to3) / 运行期不用的 pip 引导(ensurepip) / 文档数据(pydoc_data)。
+const SLIM_DIR_NAMES = new Set([
+  '__pycache__',
+  'test',
+  'tests',
+  'tkinter',
+  'turtledemo',
+  'idlelib',
+  'lib2to3',
+  'ensurepip',
+  'pydoc_data',
+]);
+// 文件扩展名：字节码(随源码运行期可再生) + 类型存根(仅类型检查用)。
+const SLIM_FILE_EXTS = new Set(['.pyc', '.pyo', '.pyi']);
+
+/**
+ * 递归瘦身 root：整删 SLIM_DIR_NAMES 目录、删 SLIM_FILE_EXTS 文件。幂等（已删则跳过），
+ * 故全量构建与快路径都可调。返回删除统计。
+ */
+async function slimRuntime(root) {
+  let dirsRemoved = 0;
+  let filesRemoved = 0;
+  async function walk(dir) {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (SLIM_DIR_NAMES.has(e.name)) {
+          await rm(p, { recursive: true, force: true });
+          dirsRemoved++;
+        } else {
+          await walk(p);
+        }
+      } else if (e.isFile()) {
+        const dot = e.name.lastIndexOf('.');
+        if (dot >= 0 && SLIM_FILE_EXTS.has(e.name.slice(dot))) {
+          await rm(p, { force: true });
+          filesRemoved++;
+        }
+      }
+    }
+  }
+  await walk(root);
+  log(`运行时瘦身：删除 ${dirsRemoved} 个目录 + ${filesRemoved} 个文件`);
+}
+
+// 注：曾尝试删未用 provider SDK（botocore/azure/grpc…）瘦身，但 smokeTest 证明不可行——
+// pr-agent 的 git_providers/__init__ **启动即 eager 导入全部 provider**（CodeCommit→boto3、
+// AzureDevOps→azure），删了 `import pr_agent` 直接崩。故这些 SDK 必须保留，不做 provider 裁剪。
+
+/**
+ * 构建期冒烟（CI 安全网）：用嵌入式解释器端到端验证瘦身后运行时仍完好——pr-agent 可导入、
+ * shim 补丁链路在位、pr-agent 实际依赖的 stdlib C 扩展/纯 py 模块都在。任一项失败即 fail()
+ * 让构建红，**过度裁剪在 CI 直接挡下、不会出包**。
+ */
+function smokeTest(pythonExe) {
+  // (0) 拆分铁律：单独 import meebox_pragent_shim 不应把 pr_agent 拉进 sys.modules（顶层禁 eager
+  //     import pr_agent，否则拖慢每次 python 启动）。fresh 解释器里验。
+  const lazy = pythonStdout(
+    pythonExe,
+    'import sys, meebox_pragent_shim; assert "pr_agent" not in sys.modules, "shim 顶层 eager 加载了 pr_agent"; print("LAZY_OK")',
+  );
+  if (!lazy.includes('LAZY_OK')) fail(`冒烟未通过（shim 惰性加载，输出：${lazy.slice(0, 200)}）`);
+  // shim 生效校验：get_pr_labels 被 sitecustomize 的补丁打成返回 []（未打补丁会抛 NotImplementedError）。
+  const code = [
+    'import os',
+    "os.environ.setdefault('OPENAI_API_KEY', 'sk-smoke-test')",
+    'import pr_agent',
+    'from pr_agent.algo.utils import load_yaml',
+    'import pr_agent.git_providers.local_git_provider as lgp',
+    'inst = object.__new__(lgp.LocalGitProvider)',
+    'assert lgp.LocalGitProvider.get_pr_labels(inst) == [], "shim get_pr_labels 未生效"',
+    // pr-agent 实际用到的关键 stdlib（含 C 扩展）：删 stdlib / 误删依赖在此暴露。
+    'import ssl, json, asyncio, hashlib, sqlite3, ctypes, lzma, bz2, zlib, decimal, socket, importlib.metadata',
+    // litellm 实际 completion 路径（mock_response，不走网络）——验证「删 lazy provider SDK」后核心
+    // 评审链路不破：若误删了 litellm 共享路径需要的依赖，这里会 ImportError 失败。
+    'import litellm',
+    "r = litellm.completion(model='gpt-3.5-turbo', messages=[{'role':'user','content':'hi'}], mock_response='MEEBOX_PONG')",
+    "assert 'MEEBOX_PONG' in str(r), 'litellm mock completion 异常'",
+    'print("MEEBOX_SMOKE_OK")',
+  ].join('\n');
+  const out = pythonStdout(pythonExe, code);
+  if (!out.includes('MEEBOX_SMOKE_OK')) fail(`冒烟未通过（输出：${out.slice(0, 300)}）`);
+  log('冒烟 OK：pr_agent 可导入 + shim 补丁生效 + 关键 stdlib + litellm completion 路径完好');
+}
+
 async function main() {
   configureProxy();
   const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
@@ -234,7 +329,10 @@ async function main() {
       // CPython + 重装 pr-agent）。
       const sp = await syncShim(pythonExe);
       await ensureSecretsPlaceholders(sp);
-      log(`已就绪，跳过重建（${versionKey}）；已重新同步 shim → ${sp}。--force 可强制全量重建。`);
+      // 瘦身幂等：已删则跳过，故快路径也跑——已组装的旧 vendor 跑一次 prepare:pragent 即变瘦。
+      await slimRuntime(VENDOR_DIR);
+      smokeTest(pythonExe);
+      log(`已就绪，跳过重建（${versionKey}）；已重新同步 shim + 瘦身 + 冒烟 → ${sp}。--force 可强制全量重建。`);
       return;
     }
     log(`VERSION 不匹配（旧: ${prev.key}），重建。`);
@@ -293,12 +391,9 @@ async function main() {
   await ensureSecretsPlaceholders(sitePackages);
   log('已写入 pr_agent/settings(_prod)/.secrets.toml 空占位');
 
-  // 7. 冒烟 + 写 VERSION
-  const prAgentFile = pythonStdout(pythonExe, 'import pr_agent;print(pr_agent.__file__)');
-  log(`冒烟 OK：import pr_agent → ${prAgentFile}`);
-  // shim 包冒烟：import 不应触发 pr_agent eager 加载，import 报错则不让出包
-  pythonStdout(pythonExe, 'import meebox_pragent_shim');
-  log('冒烟 OK：import meebox_pragent_shim');
+  // 7. 瘦身（B）+ 冒烟（CI 安全网）+ 写 VERSION
+  await slimRuntime(VENDOR_DIR);
+  smokeTest(pythonExe);
   await writeFile(
     versionFile,
     `${JSON.stringify({ key: versionKey, asset: asset.name, sha256: actualSha, builtOn: `${process.platform}/${process.arch}` }, null, 2)}\n`,

@@ -1,4 +1,5 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
+import treeKill from 'tree-kill';
 import { PrAgentRunError, type ExecFn, type PrAgentRunResult } from './types.js';
 
 /** spawn 函数的最小依赖切片，便于测试注入 fake */
@@ -9,11 +10,40 @@ interface DataEmitter {
 }
 
 interface SpawnedChild {
+  /** 子进程 pid；spawn 失败时为 undefined。用于调用方做进程树级清理。 */
+  pid?: number;
   stdout: DataEmitter | null;
   stderr: DataEmitter | null;
   on(event: 'error', cb: (err: Error) => void): void;
   on(event: 'close', cb: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   kill(signal?: NodeJS.Signals | number): boolean;
+}
+
+/**
+ * 杀掉子进程的**整棵进程树**。pr-agent 的 python 会再 spawn litellm/网络库等孙进程，
+ * Windows 下 `child.kill` 不级联——只杀 python 主进程，孙进程变孤儿继续占着 vendor/python
+ * 等文件句柄，导致升级时 NSIS 安装器报「应用无法关闭」。tree-kill 在 win32 即原生
+ * `taskkill /pid X /T /F`（级联、不依赖已被 Win11 移除的 wmic）；posix 走 ps 遍历进程树。
+ * 无 pid（spawn 失败 / 测试 fake child）时回退直接 kill。
+ */
+function killTree(child: SpawnedChild): void {
+  const pid = child.pid;
+  if (typeof pid !== 'number') {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* already exited */
+    }
+    return;
+  }
+  treeKill(pid, 'SIGKILL', () => {
+    // tree-kill 失败兜底：至少杀掉直接子进程
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* already exited */
+    }
+  });
 }
 
 /**
@@ -61,22 +91,14 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
 
       const timer = setTimeout(() => {
         killedByTimeout = true;
-        try {
-          child.kill('SIGKILL');
-        } catch {
-          /* already exited */
-        }
+        killTree(child);
       }, opts.timeoutMs);
 
       // 用户取消：监听 AbortSignal，触发 SIGKILL；signal 在我们入参前就 aborted 也兜住
       const onAbort = (): void => {
         if (settled) return;
         cancelled = true;
-        try {
-          child.kill('SIGKILL');
-        } catch {
-          /* already exited */
-        }
+        killTree(child);
       };
       if (opts.signal) {
         if (opts.signal.aborted) {

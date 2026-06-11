@@ -85,7 +85,7 @@ export function registerIpcHandlers({
   connectionRuntime,
   reconfigureConnections,
   repoMirror,
-}: RegisterDeps): void {
+}: RegisterDeps): { abortAllActiveRuns: () => number } {
   // === pr-agent run 队列 ===
   //
   // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 worktree)，
@@ -1617,6 +1617,22 @@ export function registerIpcHandlers({
   );
 
   logger.debug('IPC handlers registered');
+
+  return {
+    /**
+     * 应用退出时调用：中止所有进行中的 run。每个 run 的 AbortController.abort() 会触发 exec 的
+     * onAbort → killTree（进程树级杀），连带终止 python 及其 litellm 等孙进程，避免孤儿进程锁住
+     * 安装目录导致升级安装失败。返回被中止的 run 数，供调用方决定是否需要短暂等待 taskkill 跑完。
+     */
+    abortAllActiveRuns: () => {
+      let n = 0;
+      for (const item of active.values()) {
+        item.ac?.abort();
+        n++;
+      }
+      return n;
+    },
+  };
 }
 
 /**
