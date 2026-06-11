@@ -23,14 +23,14 @@
 
 每一期都设计为**可独立交付**的里程碑。实现细节见对应模块文档。
 
-| 里程碑 | 状态 | 交付摘要 |
-| --- | --- | --- |
-| **M0** 工程基线 | ✅ | 单仓多包（npm + Nx）+ Electron 壳 + 类型化 IPC + 工作目录 bootstrap + CI |
-| **M1** 平台接入 + PR 发现 | ✅ | Bitbucket Server adapter + 轮询发现 + PR 列表 / 分组 / 过滤 UI |
-| **M2** 仓库镜像 + Diff | ✅ | bare 镜像 + Monaco 并排 diff + 文件树 + 行内评论 + blame |
-| **M3** pr-agent 集成 | ✅ | bridge + `/describe`·`/review`·`/ask` + 输出解析 + rules 注入 + 对话式队列 |
-| **M4** 评审 → 发布闭环 | ✅ | findings → 草稿池 → 内联编辑 → 批量发布 + 评论 reply/edit/delete + 合并 |
-| **M5** 打磨 + 多平台 | 🔄 | 持续，见 §3 |
+| 里程碑                    | 状态 | 交付摘要                                                                   |
+| ------------------------- | ---- | -------------------------------------------------------------------------- |
+| **M0** 工程基线           | ✅   | 单仓多包（npm + Nx）+ Electron 壳 + 类型化 IPC + 工作目录 bootstrap + CI   |
+| **M1** 平台接入 + PR 发现 | ✅   | Bitbucket Server adapter + 轮询发现 + PR 列表 / 分组 / 过滤 UI             |
+| **M2** 仓库镜像 + Diff    | ✅   | bare 镜像 + Monaco 并排 diff + 文件树 + 行内评论 + blame                   |
+| **M3** pr-agent 集成      | ✅   | bridge + `/describe`·`/review`·`/ask` + 输出解析 + rules 注入 + 对话式队列 |
+| **M4** 评审 → 发布闭环    | ✅   | findings → 草稿池 → 内联编辑 → 批量发布 + 评论 reply/edit/delete + 合并    |
+| **M5** 打磨 + 多平台      | 🔄   | 持续，见 §3                                                                |
 
 > 详细设计：平台适配见 [01](arch/01-platform-adapter.md)、仓库镜像见 [02](arch/02-repo-mirror.md)、
 > 状态存储见 [03](arch/03-state-storage.md)、pr-agent 运行时见 [04](arch/04-pragent-runtime.md)、
@@ -42,7 +42,7 @@
 
 开放的持续阶段，不设单一 Done when。
 
-### 已交付 ✅（截至 2026-06-08）
+### 已交付 ✅（截至 2026-06-11）
 
 - **GitHub Adapter**：github.com + GitHub Enterprise Server（REST API v3）；统一 `PlatformAdapter`
   契约 + 一致性测试套件；PR 发现分类（待我评审 / 我创建 / 指派 / 提及，本地缓存按标记过滤）。
@@ -57,6 +57,9 @@
 - 设置页连接 / LLM / 代理可视化 CRUD
 - 单例锁（二次启动聚焦已有窗口）
 - 开源发布准备（README + 开发指南 + Apache-2.0 + NOTICE）
+- **国际化（i18n）**：react-i18next 四语界面（简体中文 / English / 日本語 / Deutsch），默认/兜底
+  en-US，空配置按 OS 偏好回落；设置页与首启向导可即时切换（写盘 + 主进程同步，AI 回复语言随之），
+  渲染层默认静态 + 其余懒加载
 
 ### 进行中 / 待办 ⏭️
 
@@ -64,7 +67,6 @@
   （SaaS + 自建）。数据层多平台身份字段已预留。
 - **高阶 Agent 能力**：复杂任务分步规划 + 长期 Memory。
 - **AutoPilot 预评审**：轮询发现新 PR 后按规则自动预跑，进应用即见待确认草稿（决策权仍在评审者）。
-- **国际化（i18n）**：多语言界面，优先简体中文 / English。
 - **规则市场**：导入 / 导出 rules.dir 片段。
 - **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
 - **大 PR 性能验证**：等真实大样本实测。
@@ -76,14 +78,14 @@
 
 ## 4. 风险与未决项
 
-| 风险 / 议题 | 应对 |
-| --- | --- |
-| pr-agent 升级破坏输出格式 | 输出解析层独立 + shim 版本守卫（见 [04](arch/04-pragent-runtime.md)）；CI 跑兼容测试 |
-| 大型 PR 性能 / diff 截断 | Diff 走本地 git（不用平台截断端点）+ Monaco 懒加载 + 大文件跳过（见 [02](arch/02-repo-mirror.md)） |
-| 大型仓库挤爆磁盘 | `repos_dir` 可配置 + 设置页显示体积 + 清理 |
-| 明文凭据（config.yaml） | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留 keytar（见 [07](arch/07-config-and-secrets.md)） |
-| JSON 状态文件膨胀 | 监控单文件大小；触发条件达成切 SQLite（见 [03](arch/03-state-storage.md)） |
-| LLM 调用成本 | token 用量统计已做；规则层可控 max_tokens / 模型分级 |
+| 风险 / 议题               | 应对                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------------------- |
+| pr-agent 升级破坏输出格式 | 输出解析层独立 + shim 版本守卫（见 [04](arch/04-pragent-runtime.md)）；CI 跑兼容测试               |
+| 大型 PR 性能 / diff 截断  | Diff 走本地 git（不用平台截断端点）+ Monaco 懒加载 + 大文件跳过（见 [02](arch/02-repo-mirror.md)） |
+| 大型仓库挤爆磁盘          | `repos_dir` 可配置 + 设置页显示体积 + 清理                                                         |
+| 明文凭据（config.yaml）   | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留 keytar（见 [07](arch/07-config-and-secrets.md)）  |
+| JSON 状态文件膨胀         | 监控单文件大小；触发条件达成切 SQLite（见 [03](arch/03-state-storage.md)）                         |
+| LLM 调用成本              | token 用量统计已做；规则层可控 max_tokens / 模型分级                                               |
 
 ---
 

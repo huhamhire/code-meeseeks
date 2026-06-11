@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LlmProfile } from '@meebox/shared';
+import { LANGUAGE_OPTIONS, type LlmProfile, type SupportedLanguage } from '@meebox/shared';
 import { invoke } from '../../api';
+import i18n, { persistLanguage, resolveUiLanguage } from '../../i18n';
 import {
   ConnectionForm,
   connDraftCanSave,
@@ -28,6 +29,8 @@ interface OnboardingWizardProps {
   existingLlmProfiles: LlmProfile[];
   /** 缓存目录初值（config.workspace.repos_dir，未展开的 `~/...` 形态） */
   initialReposDir: string;
+  /** UI 语言初值（config.language 原始值，空串=自动）；欢迎页据此回显，空则按 OS 偏好 */
+  initialLanguage: string;
   /** 全部配置完成 → App 落盘 + 切主界面。reject 时向导展示错误允许重试 */
   onComplete: (result: OnboardingResult) => Promise<void>;
 }
@@ -43,10 +46,26 @@ const STEP_KEYS = [
 export function OnboardingWizard({
   existingLlmProfiles,
   initialReposDir,
+  initialLanguage,
   onComplete,
 }: OnboardingWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
+
+  // 界面语言：即时生效（写盘 + 渲染层切换）。初值取当前生效语言——无配置时按 OS 偏好匹配。
+  // 选择项放在欢迎页底部 nav（复用其分割线），仅 step 0 显示。
+  const [language, setLanguage] = useState<SupportedLanguage>(() =>
+    resolveUiLanguage(initialLanguage),
+  );
+  const onLanguageChange = (next: SupportedLanguage): void => {
+    if (next === language) return;
+    setLanguage(next);
+    void i18n.changeLanguage(next);
+    persistLanguage(next);
+    void invoke('config:setLanguage', { language: next }).catch(() => {
+      /* 写盘失败不阻断向导：渲染层已切、localStorage 已存，完成向导后随整体落盘兜底 */
+    });
+  };
 
   const [connDraft, setConnDraft] = useState<ConnDraft>(() => ({
     id: newProfileId(),
@@ -142,6 +161,25 @@ export function OnboardingWizard({
               </button>
             )}
           </div>
+          {/* 欢迎页：语言选择放在底部 nav（复用其分割线），居于两端（空）之间 → 居中显示。
+              选项用各语言自身 endonym，不随 UI 翻译；选择即时生效。 */}
+          {step === 0 && (
+            <div className="onboarding-nav-language">
+              <span className="muted">{t('onboarding.languageLabel')}</span>
+              <select
+                className="settings-input onboarding-language-select"
+                value={language}
+                onChange={(e) => onLanguageChange(e.target.value as SupportedLanguage)}
+                aria-label={t('onboarding.languageLabel')}
+              >
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.endonym}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="onboarding-nav-right">
             {step === 1 && (
               <button
@@ -252,7 +290,11 @@ function PlatformStep({
       <p className="muted onboarding-step-sub">{t('onboarding.platformSub')}</p>
       <div className="onboarding-platform-grid">
         {/* 左：平台方案选择 */}
-        <div className="onboarding-platform-list" role="radiogroup" aria-label={t('onboarding.platformGroupAria')}>
+        <div
+          className="onboarding-platform-list"
+          role="radiogroup"
+          aria-label={t('onboarding.platformGroupAria')}
+        >
           {PLATFORM_META.map((p) => {
             // 可用平台（Bitbucket / GitHub）可点选并设 kind；GitLab 等未实现的置灰
             const selected = p.kind === connDraft.kind;
@@ -268,7 +310,8 @@ function PlatformStep({
                 aria-disabled={!p.available}
                 disabled={!p.available}
                 onClick={() => {
-                  if (p.available) onConnChange({ ...connDraft, kind: p.kind as ConnDraft['kind'] });
+                  if (p.available)
+                    onConnChange({ ...connDraft, kind: p.kind as ConnDraft['kind'] });
                 }}
               >
                 <span className={`onboarding-platform-icon${p.available ? '' : ' muted-icon'}`}>
@@ -369,7 +412,11 @@ function LlmStep({
         // 阶段一：居中的 provider 选择列表（滚动）
         <div className="onboarding-provider-pick">
           <p className="muted onboarding-provider-pick-hint">{t('onboarding.providerPickHint')}</p>
-          <div className="onboarding-provider-list" role="radiogroup" aria-label={t('onboarding.providerPickAria')}>
+          <div
+            className="onboarding-provider-list"
+            role="radiogroup"
+            aria-label={t('onboarding.providerPickAria')}
+          >
             {LLM_PROVIDERS.map((p) => (
               <button
                 key={p.value}

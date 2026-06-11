@@ -1,7 +1,16 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppInfo, AppPaths, Config, LlmProfile, UpdateCheckResult } from '@meebox/shared';
+import {
+  LANGUAGE_OPTIONS,
+  type AppInfo,
+  type AppPaths,
+  type Config,
+  type LlmProfile,
+  type SupportedLanguage,
+  type UpdateCheckResult,
+} from '@meebox/shared';
 import { invoke } from '../api';
+import i18n, { persistLanguage, resolveUiLanguage } from '../i18n';
 import { ConfirmModal } from './ConfirmModal';
 import {
   ConnectionForm,
@@ -10,12 +19,7 @@ import {
   toConnDraft,
   type ConnDraft,
 } from './ConnectionForm';
-import {
-  LlmProfileForm,
-  newProfileId,
-  providerLabel,
-  validateProfile,
-} from './LlmProfileForm';
+import { LlmProfileForm, newProfileId, providerLabel, validateProfile } from './LlmProfileForm';
 import { CloseIcon, EyeIcon, EyeOffIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
 
 interface SettingsModalProps {
@@ -25,6 +29,8 @@ interface SettingsModalProps {
   /** LLM 配置改动后通知父级同步状态（StatusBar chip 等） */
   onLlmChange?: (llm: Config['llm']) => void;
   onProxyChange?: (proxy: Config['proxy']) => void;
+  /** UI 语言即时切换后通知父级同步 boot.config.language（与写盘/实时切换解耦的状态同步） */
+  onLanguageChange?: (language: SupportedLanguage) => void;
   /**
    * 连接改动（含切换活动连接）保存成功后通知父级。父级需重拉 config + 连接摘要 + PR 列表：
    * 活动连接变化后，main 端 app:connections 只返回新活动连接的摘要、prs:list 只返回其 PR，
@@ -52,6 +58,7 @@ export function SettingsModal({
   config,
   onLlmChange,
   onProxyChange,
+  onLanguageChange,
   onConnectionsChange,
   onClose,
 }: SettingsModalProps) {
@@ -87,6 +94,23 @@ export function SettingsModal({
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // UI 语言：即时生效项（不走全局保存）。下拉值取「当前生效语言」(config.language 经
+  // resolveUiLanguage 解析，空配置 → OS 偏好)。选择后立即写盘 + 主进程/渲染层同步切换。
+  const [language, setLanguage] = useState<SupportedLanguage>(() =>
+    resolveUiLanguage(config.language),
+  );
+  const handleLanguageChange = (next: SupportedLanguage): void => {
+    if (next === language) return;
+    setLanguage(next);
+    void i18n.changeLanguage(next); // 渲染层实时切换
+    persistLanguage(next); // localStorage 缓存，下次启动同步命中
+    onLanguageChange?.(next); // 同步父级 boot.config.language
+    invoke('config:setLanguage', { language: next }).catch((e: unknown) => {
+      // 写盘 / 主进程切换失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
+      setSaveError(e instanceof Error ? e.message : String(e));
+    });
+  };
+
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
 
   useEffect(() => {
@@ -112,7 +136,11 @@ export function SettingsModal({
 
   // 连接 / LLM 编辑：改本地 state + 自动写入 config.yaml（防丢失），但不应用到运行时
   //（不 reconfigure；重启或点底栏「保存」才生效）。其余配置（规则/轮询/缓存）仍纯草稿。
-  const autosaveDraft = (nextConnections: Config['connections'], activeId: string, nextLlm: Config['llm']): void => {
+  const autosaveDraft = (
+    nextConnections: Config['connections'],
+    activeId: string,
+    nextLlm: Config['llm'],
+  ): void => {
     void invoke('config:autosaveDraft', {
       connections: nextConnections,
       active_connection_id: activeId,
@@ -207,7 +235,9 @@ export function SettingsModal({
     const { mode, draft } = connEditor;
     const conn = fromConnDraft(draft);
     const next =
-      mode === 'add' ? [...connections, conn] : connections.map((c) => (c.id === conn.id ? conn : c));
+      mode === 'add'
+        ? [...connections, conn]
+        : connections.map((c) => (c.id === conn.id ? conn : c));
     // 新增首条自动设为启用
     const activeId = mode === 'add' && !activeConnId ? conn.id : activeConnId;
     await persistConnections(next, activeId);
@@ -312,6 +342,29 @@ export function SettingsModal({
           </button>
         </div>
         <div className="modal-body">
+          {/* 界面语言：即时生效项，放在最前。固定宽度下拉靠右（标题两端对齐）；选项用各
+              语言自身的 endonym，不随 UI 语言翻译。 */}
+          <section className="modal-section">
+            <div className="modal-section-head">
+              <h4>{t('settings.languageTitle')}</h4>
+              <select
+                className="settings-input settings-language-select"
+                value={language}
+                onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
+                aria-label={t('settings.languageTitle')}
+              >
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.endonym}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              {t('settings.languageHint')}
+            </p>
+          </section>
+
           <section className="modal-section">
             <div className="modal-section-head">
               <h4>{t('settings.connectionsTitle')}</h4>
@@ -434,12 +487,10 @@ export function SettingsModal({
               <div className="llm-profile-list">
                 {llm.profiles.map((p) => {
                   const isActive = p.id === llm.active_id;
-                  const titleText = p.label || t('settings.llmProfileFallback', { id: p.id.slice(0, 4) });
+                  const titleText =
+                    p.label || t('settings.llmProfileFallback', { id: p.id.slice(0, 4) });
                   return (
-                    <div
-                      key={p.id}
-                      className={`llm-profile-row${isActive ? ' active' : ''}`}
-                    >
+                    <div key={p.id} className={`llm-profile-row${isActive ? ' active' : ''}`}>
                       <label className="llm-profile-active">
                         <input
                           type="radio"
@@ -644,7 +695,6 @@ export function SettingsModal({
               </button>
             </div>
           </section>
-
         </div>
         <div className="modal-footer-bar">
           <div className="modal-footer-left">
@@ -809,7 +859,9 @@ function ConnectionEditorModal({
     >
       <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="modal-header">
-          <h3>{mode === 'add' ? t('settings.addConnectionTitle') : t('settings.editConnectionTitle')}</h3>
+          <h3>
+            {mode === 'add' ? t('settings.addConnectionTitle') : t('settings.editConnectionTitle')}
+          </h3>
         </div>
         <div className="modal-body">
           {/* 平台选择仅新增时可改；编辑既有连接不允许切平台（base_url/token 语义不同） */}

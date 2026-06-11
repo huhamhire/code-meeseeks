@@ -8,6 +8,27 @@
 export const SUPPORTED_LANGUAGES = ['zh-CN', 'en-US', 'ja-JP', 'de-DE'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
+/**
+ * UI 语言选择项：每个语言以**自身的本地化名称（endonym）**展示，不随当前 UI 语言翻译
+ * （English 永远是 "English"、中文永远是 "中文 (简体)"）。
+ *
+ * 顺序：English 作为国际化通用语 + 当前默认/兜底语言**优先置顶**；其余按 endonym 字母序
+ * （拉丁文名在前，CJK 在后）：English → Deutsch → 中文 (简体) → 日本語。设置页下拉框与
+ * 首启向导共用此列表，保持一致。
+ */
+export interface LanguageOption {
+  code: SupportedLanguage;
+  /** 该语言的本地化名称（endonym），直接用作下拉项文案，不经 i18n 翻译。 */
+  endonym: string;
+}
+
+export const LANGUAGE_OPTIONS: readonly LanguageOption[] = [
+  { code: 'en-US', endonym: 'English' },
+  { code: 'de-DE', endonym: 'Deutsch' },
+  { code: 'zh-CN', endonym: '中文 (简体)' },
+  { code: 'ja-JP', endonym: '日本語' },
+];
+
 /** 把任意 locale 串（zh-Hans-CN / en / ja-JP / de-DE…）匹配到受支持语言，无匹配返回 null。 */
 export function matchSupportedLanguage(lang: string | null | undefined): SupportedLanguage | null {
   const n = (lang ?? '').toLowerCase();

@@ -24,7 +24,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - **规则在本地** —— 评审者自行配置检查规则、风格偏好、LLM Provider。
 - **数据在本地** —— 仓库副本、PR 元数据、评论草稿都存在本机工作目录，企业内网友好。
 
-> 灵感来自 *Rick and Morty* 里的 Mr. Meeseeks：召之即来、专做一件事、做完即走。
+> 灵感来自 _Rick and Morty_ 里的 Mr. Meeseeks：召之即来、专做一件事、做完即走。
 
 ## 适用场景
 
@@ -50,6 +50,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
 - 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
 - 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等；也可通过本机已授权的本地 CLI 工具调用第三方模型。
+- 🌐 **多语言界面** —— 简体中文 / English / 日本語 / Deutsch；设置页与首启向导即时切换，空配置自动匹配系统语言（AI 回复语言随之）。
 
 <div align="center">
 
@@ -63,10 +64,10 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 到 [Releases](../../releases) 下载对应平台安装包：
 
-| 平台 | 产物 | 状态 |
-| --- | --- | --- |
+| 平台        | 产物                                                 | 状态    |
+| ----------- | ---------------------------------------------------- | ------- |
 | Windows x64 | `code-meeseeks-<version>-win-x64.exe`（NSIS 安装包） | ✅ 可用 |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg` | ✅ 可用 |
+| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg`              | ✅ 可用 |
 
 安装包已内嵌 pr-agent，安装后即可使用，无需额外环境。
 
@@ -96,11 +97,11 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 ## 平台支持
 
-| 平台 | 状态 |
-| --- | --- |
-| GitHub | ✅ 已验证（github.com + GitHub Enterprise Server，REST API v3） |
-| Bitbucket Server / Data Center | ✅ 已支持（REST API v1，>= 7.0） |
-| GitLab | 🚧 规划中 |
+| 平台                           | 状态                                                            |
+| ------------------------------ | --------------------------------------------------------------- |
+| GitHub                         | ✅ 已验证（github.com + GitHub Enterprise Server，REST API v3） |
+| Bitbucket Server / Data Center | ✅ 已支持（REST API v1，>= 7.0）                                |
+| GitLab                         | 🚧 规划中                                                       |
 
 ---
 
@@ -108,16 +109,16 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 评审能力经 pr-agent（底层 litellm）接入，**理论上兼容任意 OpenAI 兼容 / litellm 支持的模型供应商**（在设置页选模型供应商，填 API Key、base_url、模型名即可）。下表为设置页内置的厂商选项及实测状态：
 
-| 模型供应商（厂商） | 说明 | 状态 |
-| --- | --- | --- |
-| `openai` | OpenAI（GPT 系） | ✅ 已验证 |
-| `anthropic` | Anthropic（Claude 系） | ✅ 已验证 |
-| `deepseek` | DeepSeek | ✅ 已验证 |
-| `dashscope` | 阿里百炼（DashScope，通义千问） | ✅ 已验证 |
-| `volcengine-ark` | 火山方舟（Volcengine Ark，豆包） | ✅ 已验证 |
-| `ollama` | Ollama（本地模型） | 🚧 理论可行，未验证 |
+| 模型供应商（厂商）  | 说明                                        | 状态                |
+| ------------------- | ------------------------------------------- | ------------------- |
+| `openai`            | OpenAI（GPT 系）                            | ✅ 已验证           |
+| `anthropic`         | Anthropic（Claude 系）                      | ✅ 已验证           |
+| `deepseek`          | DeepSeek                                    | ✅ 已验证           |
+| `dashscope`         | 阿里百炼（DashScope，通义千问）             | ✅ 已验证           |
+| `volcengine-ark`    | 火山方舟（Volcengine Ark，豆包）            | ✅ 已验证           |
+| `ollama`            | Ollama（本地模型）                          | 🚧 理论可行，未验证 |
 | `openai-compatible` | OpenAI API 协议兼容（vLLM / 中转 / 自建等） | 🚧 理论可行，未验证 |
-| `cli` | 通过本地 CLI 工具调用第三方模型 | ✅ 已验证 |
+| `cli`               | 通过本地 CLI 工具调用第三方模型             | ✅ 已验证           |
 
 > **本地 CLI 模式说明**：该模式不直连模型 API，而是把评审请求转交给使用者**自行安装并授权**的本地命令行工具，由其代为调用背后的第三方模型。需先在本机完成对应 CLI 工具的安装与登录授权，应用本身不负责其凭据管理与计费。
 
@@ -130,7 +131,6 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - [ ] **多代码平台适配** —— 在统一适配层上继续扩展 GitLab，自建与公有云托管一并接入。
 - [ ] **高阶 Agent 能力** —— 复杂任务的分步规划 + 长期 Memory，让评审从单轮问答走向可累积上下文、多步工具调用的协作。
 - [ ] **AutoPilot 预评审** —— 轮询发现新 PR 后按评审者配置的规则自动跑一遍预评审，进应用即见待确认草稿，省去逐个手动触发（决策权仍在评审者，发布前仍需确认）。
-- [ ] **国际化（i18n）** —— 多语言界面，优先覆盖简体中文 / English。
 
 更细的分期里程碑见 **[Roadmap](docs/ROADMAP.md)**。
 
@@ -174,7 +174,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 ## 商标与免责声明
 
-本项目为非官方、独立的开源工具，**与 *Rick and Morty* 及其权利方无任何关联，亦未获其授权或认可**。「Rick and Morty」「Mr. Meeseeks」等名称、角色及相关元素的版权与商标归其各自权利人所有（Adult Swim / Warner Bros. Discovery 等）。本项目名称与图标仅出于致敬目的进行借用，不主张任何相关权利；如权利方有异议，将配合调整。
+本项目为非官方、独立的开源工具，**与 _Rick and Morty_ 及其权利方无任何关联，亦未获其授权或认可**。「Rick and Morty」「Mr. Meeseeks」等名称、角色及相关元素的版权与商标归其各自权利人所有（Adult Swim / Warner Bros. Discovery 等）。本项目名称与图标仅出于致敬目的进行借用，不主张任何相关权利；如权利方有异议，将配合调整。
 
 ---
 
