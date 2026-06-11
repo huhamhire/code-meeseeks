@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '../api';
 
 interface CommentEditEditorProps {
@@ -32,6 +33,7 @@ export function CommentEditEditor({
   onCancel,
   onSaved,
 }: CommentEditEditorProps) {
+  const { t } = useTranslation();
   const [body, setBody] = useState(initialBody);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,10 +90,10 @@ export function CommentEditEditor({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={onKeyDown}
-        placeholder="编辑评论…"
+        placeholder={t('commentEditEditor.placeholder')}
         rows={3}
         disabled={saving}
-        aria-label="评论编辑器"
+        aria-label={t('commentEditEditor.textareaAria')}
       />
       <div className="comment-reply-actions">
         <button
@@ -101,22 +103,22 @@ export function CommentEditEditor({
           disabled={!canSave}
           title={
             !trimmed
-              ? '评论不能为空'
+              ? t('commentEditEditor.emptyTitle')
               : !changed
-                ? '内容未变化'
-                : '保存 (Cmd/Ctrl+Enter)'
+                ? t('commentEditEditor.unchangedTitle')
+                : t('commentEditEditor.saveTitle')
           }
         >
-          {saving ? '保存中…' : '保存'}
+          {saving ? t('commentEditEditor.saving') : t('common.save')}
         </button>
         <button
           type="button"
           className="comment-reply-btn"
           onClick={onCancel}
           disabled={saving}
-          title="取消 (Esc)"
+          title={t('commentEditEditor.cancelTitle')}
         >
-          取消
+          {t('common.cancel')}
         </button>
         {error && <span className="comment-reply-error">{error}</span>}
       </div>

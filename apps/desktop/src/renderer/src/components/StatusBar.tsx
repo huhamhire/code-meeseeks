@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Config, ConnectionSummary, PrAgentStatus } from '@meebox/shared';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import type { Config, ConnectionSummary, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
 import { invoke } from '../api';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { useRepoSyncStore } from '../stores/repo-sync-store';
@@ -32,6 +34,8 @@ interface StatusBarProps {
    * 不可点击。父组件传 `setSelectedId` 即可
    */
   onJumpToPr?: (localId: string) => void;
+  /** 启动检测到的新版本；非空且 hasUpdate 时展示「新版本」chip，点击跳转下载页。 */
+  updateInfo?: UpdateCheckResult | null;
 }
 
 export function StatusBar({
@@ -49,15 +53,17 @@ export function StatusBar({
   onOpenSettings,
   onSwitchActiveLlm,
   onJumpToPr,
+  updateInfo,
 }: StatusBarProps) {
+  const { t } = useTranslation();
   return (
     <footer className="app-statusbar" role="contentinfo">
       <button
         type="button"
         className="icon-btn"
         onClick={onToggleSidebar}
-        title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-        aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+        title={sidebarCollapsed ? t('statusBar.expandSidebar') : t('statusBar.collapseSidebar')}
+        aria-label={sidebarCollapsed ? t('statusBar.expandSidebar') : t('statusBar.collapseSidebar')}
         aria-pressed={!sidebarCollapsed}
       >
         <PanelToggleIcon side="left" collapsed={sidebarCollapsed} />
@@ -69,7 +75,7 @@ export function StatusBar({
       {prAgent && <PrAgentChip status={prAgent} />}
       <span
         className="statusbar-chip statusbar-chip-ok statusbar-chip-prs"
-        title={`待审 PR 数：${String(prsCount)}`}
+        title={t('statusBar.pendingPrsCount', { n: prsCount })}
         aria-label={`PRs ${String(prsCount)}`}
       >
         <PullRequestIcon />
@@ -82,12 +88,25 @@ export function StatusBar({
           信息。pr-agent 不可用时不显示 (上方 PrAgentChip 已经红色提示) */}
       {prAgent?.available && <PrAgentActiveChip onJumpToPr={onJumpToPr} />}
       <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />
+      {updateInfo?.hasUpdate && updateInfo.url && (
+        <button
+          type="button"
+          className="statusbar-chip statusbar-chip-update"
+          title={t('statusBar.updateAvailableTitle', {
+            latest: updateInfo.latestVersion ?? '',
+            current: updateInfo.currentVersion,
+          })}
+          onClick={() => void invoke('app:openExternal', { url: updateInfo.url! })}
+        >
+          {t('statusBar.updateChipLabel', { latest: updateInfo.latestVersion })}
+        </button>
+      )}
       <button
         type="button"
         className="icon-btn"
         onClick={onToggleChat}
-        title={chatCollapsed ? '展开 PR Agent chat' : '收起 PR Agent chat'}
-        aria-label={chatCollapsed ? '展开 chat' : '收起 chat'}
+        title={chatCollapsed ? t('statusBar.expandChat') : t('statusBar.collapseChat')}
+        aria-label={chatCollapsed ? t('statusBar.expandChatAria') : t('statusBar.collapseChatAria')}
         aria-pressed={!chatCollapsed}
       >
         <PanelToggleIcon side="right" collapsed={chatCollapsed} />
@@ -96,8 +115,8 @@ export function StatusBar({
         type="button"
         className="icon-btn"
         onClick={onOpenSettings}
-        title="设置"
-        aria-label="设置"
+        title={t('statusBar.settings')}
+        aria-label={t('statusBar.settings')}
       >
         <SettingsIcon />
       </button>
@@ -111,6 +130,7 @@ export function StatusBar({
  * idle 不渲染，避免占状态栏宽度。
  */
 function RepoSyncChip() {
+  const { t } = useTranslation();
   const { active } = useRepoSyncStore();
   if (active.size === 0) return null;
   // Map 没保证迭代序，但 sync 同时只跑一个，多于一个时按 startedAt 升序选最早的
@@ -119,7 +139,7 @@ function RepoSyncChip() {
   const more = snapshots.length - 1;
   // repo = "host/projectKey/repoSlug"，UI 紧凑只展示最后一段
   const shortRepo = cur.repo.split('/').slice(-1)[0] ?? cur.repo;
-  const stageLabel = cur.stage ? `${cur.stage}` : '同步中';
+  const stageLabel = cur.stage ? `${cur.stage}` : t('statusBar.syncing');
   const pct = typeof cur.percent === 'number' ? ` ${String(Math.round(cur.percent))}%` : '';
   const queueSuffix = more > 0 ? ` (+${String(more)})` : '';
   return (
@@ -146,6 +166,7 @@ function RepoSyncChip() {
  * 运行时 / 本机 CLI 都没探到) 时由 PrAgentChip 显示错误态，这里不重复"空闲"语义
  */
 function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => void }) {
+  const { t } = useTranslation();
   const { active, waiting } = useChatRunStore();
   // 并发模型：active 是运行中 run 列表。chip 主体展示第一条（primary）的 tool + elapsed，
   // 多于一条时用徽标显示并发总数；点开 popover 列出全部运行中 + 排队中。
@@ -196,10 +217,10 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
     return (
       <span
         className="statusbar-chip statusbar-pragent-chip statusbar-pragent-chip-idle"
-        title="PR Agent 当前空闲"
+        title={t('statusBar.prAgentIdleTitle')}
       >
         <span className="statusbar-pragent-dot statusbar-pragent-dot-idle" aria-hidden="true" />
-        <span>空闲</span>
+        <span>{t('statusBar.idle')}</span>
       </span>
     );
   }
@@ -217,8 +238,9 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
   // 徽标数 = 其它并发运行中(runningCount-1) + 排队中(waiting)
   const extraCount = runningCount - 1 + waiting.length;
   const title = expandable
-    ? `PR Agent · ${String(runningCount)} 个运行中 · ${String(waiting.length)} 个排队中 · 点击查看`
-    : `PR Agent 运行中 · PR ${primary.prLocalId} · /${primary.tool}${clickable ? ' · 点击跳转到该 PR' : ''}`;
+    ? t('statusBar.prAgentExpandableTitle', { running: runningCount, waiting: waiting.length })
+    : t('statusBar.prAgentRunningTitle', { pr: primary.prLocalId, tool: primary.tool }) +
+      (clickable ? t('statusBar.jumpHint') : '');
   const inner = (
     <>
       <span className="statusbar-pragent-dot" aria-hidden="true" />
@@ -227,7 +249,7 @@ function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => v
       {extraCount > 0 && (
         <span
           className="statusbar-pragent-queue-count"
-          aria-label={`另有 ${String(extraCount)} 个运行中 / 排队`}
+          aria-label={t('statusBar.extraRunningAria', { n: extraCount })}
         >
           +{extraCount}
         </span>
@@ -281,12 +303,13 @@ function QueuePopover({
   onCancel: (runId: string) => void;
   onJumpToPr: (localId: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="statusbar-queue-popover" role="menu" aria-label="PR Agent 任务队列">
+    <div className="statusbar-queue-popover" role="menu" aria-label={t('statusBar.queueAria')}>
       <div className="statusbar-queue-header">
-        <span className="muted">PR Agent 队列</span>
+        <span className="muted">{t('statusBar.queueHeader')}</span>
         <span className="muted">
-          {active.length} 运行 · {waiting.length} 排队
+          {t('statusBar.queueSummary', { running: active.length, waiting: waiting.length })}
         </span>
       </div>
       <ul className="statusbar-queue-list">
@@ -297,12 +320,12 @@ function QueuePopover({
               type="button"
               className="statusbar-queue-meta"
               onClick={() => onJumpToPr(a.prLocalId)}
-              title="点击跳转到该 PR"
+              title={t('statusBar.jumpToPr')}
             >
               <span className="statusbar-queue-tool">/{a.tool}</span>
               <code className="statusbar-queue-pr">{a.prLocalId}</code>
             </button>
-            <span className="muted statusbar-queue-state">运行中</span>
+            <span className="muted statusbar-queue-state">{t('statusBar.running')}</span>
           </li>
         ))}
         {waiting.map((q) => (
@@ -312,18 +335,18 @@ function QueuePopover({
               type="button"
               className="statusbar-queue-meta"
               onClick={() => onJumpToPr(q.prLocalId)}
-              title="点击跳转到该 PR"
+              title={t('statusBar.jumpToPr')}
             >
               <span className="statusbar-queue-tool">/{q.tool}</span>
               <code className="statusbar-queue-pr">{q.prLocalId}</code>
             </button>
-            <span className="muted statusbar-queue-state">排队中</span>
+            <span className="muted statusbar-queue-state">{t('statusBar.queued')}</span>
             <button
               type="button"
               className="statusbar-queue-cancel"
               onClick={() => onCancel(q.runId)}
-              title="从队列移除"
-              aria-label="取消"
+              title={t('statusBar.removeFromQueue')}
+              aria-label={t('common.cancel')}
             >
               ×
             </button>
@@ -361,6 +384,7 @@ function LlmChip({
   onSwitch: (id: string) => void;
   onOpenSettings: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   // 点外面关菜单
   useEffect(() => {
@@ -376,10 +400,10 @@ function LlmChip({
 
   const active = llm.profiles.find((p) => p.id === llm.active_id);
   const empty = !active;
-  const text = empty ? '未配置' : active.model || active.label || active.provider;
+  const text = empty ? t('statusBar.llmNotConfigured') : active.model || active.label || active.provider;
   const title = empty
-    ? 'LLM 模型未配置；点击打开设置'
-    : `LLM: ${active.label || '(未命名)'}\nprovider: ${active.provider}${
+    ? t('statusBar.llmNotConfiguredTitle')
+    : `LLM: ${active.label || t('statusBar.unnamed')}\nprovider: ${active.provider}${
         active.model ? `\nmodel: ${active.model}` : ''
       }${active.base_url ? `\nbase_url: ${active.base_url}` : ''}`;
 
@@ -420,7 +444,7 @@ function LlmChip({
                 </span>
                 <span className="llm-chip-menu-meta">
                   <span className="llm-chip-menu-title">
-                    {p.label || `配置 ${p.id.slice(0, 4)}`}
+                    {p.label || t('statusBar.profileFallbackName', { id: p.id.slice(0, 4) })}
                   </span>
                   <span className="muted llm-chip-menu-sub">
                     {p.provider}
@@ -440,7 +464,7 @@ function LlmChip({
             }}
           >
             <span className="llm-chip-menu-tick" aria-hidden="true" />
-            <span className="muted">管理 LLM 模型…</span>
+            <span className="muted">{t('statusBar.manageLlm')}</span>
           </button>
         </div>
       )}
@@ -459,6 +483,7 @@ function LastSyncChip({
   refreshing: boolean;
   onRefresh: () => void;
 }) {
+  const { t } = useTranslation();
   // 每 30s 重渲染一次，让 "刚刚 / N 分钟前" 文案随时间向前推进
   const [, tick] = useState(0);
   useEffect(() => {
@@ -466,12 +491,12 @@ function LastSyncChip({
     return () => clearInterval(id);
   }, []);
   const date = at ? new Date(at) : null;
-  const label = refreshing ? '刷新中…' : date ? formatRelative(date) : '—';
+  const label = refreshing ? t('statusBar.refreshing') : date ? formatRelative(date, t) : '—';
   const title = refreshing
-    ? '刷新中…'
+    ? t('statusBar.refreshing')
     : date
-      ? `最近同步：${date.toLocaleString()} · 点击刷新`
-      : '尚未同步 · 点击刷新';
+      ? t('statusBar.lastSyncTitle', { time: date.toLocaleString() })
+      : t('statusBar.neverSyncedTitle');
   return (
     <button
       type="button"
@@ -481,7 +506,7 @@ function LastSyncChip({
       onClick={onRefresh}
       disabled={refreshing}
       title={title}
-      aria-label="刷新（触发一次轮询）"
+      aria-label={t('statusBar.refreshAria')}
     >
       <SyncIcon />
       {label}
@@ -489,19 +514,20 @@ function LastSyncChip({
   );
 }
 
-function formatRelative(date: Date): string {
+function formatRelative(date: Date, t: TFunction): string {
   const diffSec = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
-  if (diffSec < 30) return '刚刚';
-  if (diffSec < 60) return `${diffSec} 秒前`;
+  if (diffSec < 30) return t('statusBar.justNow');
+  if (diffSec < 60) return t('statusBar.secondsAgo', { count: diffSec });
   const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} 分钟前`;
+  if (diffMin < 60) return t('statusBar.minutesAgo', { count: diffMin });
   const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} 小时前`;
+  if (diffHr < 24) return t('statusBar.hoursAgo', { count: diffHr });
   // 超过 1 天直接给绝对时间，避免 "3 天前" 这种模糊
   return date.toLocaleString();
 }
 
 function PrAgentChip({ status }: { status: PrAgentStatus }) {
+  const { t } = useTranslation();
   if (status.available) {
     // chip 只显示 pr-agent 版本，不显示 strategy（embedded/local-cli 对用户无意义；
     // 完整 strategy + version 放 hover title）。version 来自 detect：
@@ -516,7 +542,7 @@ function PrAgentChip({ status }: { status: PrAgentStatus }) {
         className="statusbar-chip statusbar-chip-ok"
         title={`${status.strategy} · ${status.version}`}
       >
-        PR Agent: {ver}
+        {t('statusBar.prAgentVersion', { ver })}
       </span>
     );
   }
@@ -525,12 +551,13 @@ function PrAgentChip({ status }: { status: PrAgentStatus }) {
       className="statusbar-chip statusbar-chip-err"
       title={status.attempts.map((a) => a.error).join('\n')}
     >
-      PR Agent: unavailable
+      {t('statusBar.prAgentUnavailable')}
     </span>
   );
 }
 
 function UserChip({ connections }: { connections: ConnectionSummary[] }) {
+  const { t } = useTranslation();
   const labels = connections
     .filter((c) => c.user)
     .map((c) =>
@@ -539,7 +566,7 @@ function UserChip({ connections }: { connections: ConnectionSummary[] }) {
   if (labels.length === 0) return null;
   const title = connections
     .map(
-      (c) => `${c.displayName}: ${c.user ? `${c.user.displayName} (${c.user.name})` : '未识别'}`,
+      (c) => `${c.displayName}: ${c.user ? `${c.user.displayName} (${c.user.name})` : t('statusBar.userUnidentified')}`,
     )
     .join('\n');
   return (

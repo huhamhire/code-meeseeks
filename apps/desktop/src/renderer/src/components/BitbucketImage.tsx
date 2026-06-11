@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '../api';
 
 /**
@@ -26,6 +27,7 @@ export function transformBitbucketUrl(url: string): string {
  */
 export function makeBitbucketImageFor(localId: string) {
   return function BitbucketImage(props: React.ImgHTMLAttributes<HTMLImageElement>) {
+    const { t } = useTranslation();
     const { src, alt } = props;
     const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
@@ -64,8 +66,8 @@ export function makeBitbucketImageFor(localId: string) {
       // 损坏图标；http/https URL fail 时退回原生 <img> (可能是跨 host 公网图)
       if (src.startsWith('attachment:')) {
         return (
-          <span className="bitbucket-image-failed muted" aria-label="图片加载失败">
-            🖼️ {alt || '附件'} (加载失败)
+          <span className="bitbucket-image-failed muted" aria-label={t('bitbucketImage.loadFailedAria')}>
+            🖼️ {t('bitbucketImage.attachmentFailed', { name: alt || t('bitbucketImage.attachment') })}
           </span>
         );
       }
@@ -79,7 +81,7 @@ export function makeBitbucketImageFor(localId: string) {
     }
     if (!resolvedSrc) {
       return (
-        <span className="bitbucket-image-loading muted" aria-label="加载图片中">
+        <span className="bitbucket-image-loading muted" aria-label={t('bitbucketImage.loadingAria')}>
           🖼️ {alt || src}
         </span>
       );
@@ -116,6 +118,7 @@ function ImageZoomOverlay({
   alt: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose();
@@ -140,7 +143,7 @@ function ImageZoomOverlay({
         type="button"
         className="bitbucket-image-zoom-close"
         onClick={onClose}
-        aria-label="关闭大图预览 (Esc)"
+        aria-label={t('bitbucketImage.closeZoomAria')}
       >
         ×
       </button>

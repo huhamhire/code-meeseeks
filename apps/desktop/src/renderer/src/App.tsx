@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { resolveUiLanguage, persistLanguage } from './i18n';
 import type {
   AppInfo,
   AppPaths,
@@ -8,6 +10,7 @@ import type {
   PrAgentStatus,
   PrDiscoveryFilter,
   StoredPullRequest,
+  UpdateCheckResult,
 } from '@meebox/shared';
 import { invoke, subscribe } from './api';
 import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/ChatPane';
@@ -30,6 +33,7 @@ interface BootstrapState {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const [boot, setBoot] = useState<BootstrapState | null>(null);
   const [prs, setPrs] = useState<StoredPullRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -38,6 +42,8 @@ export default function App() {
   const [merging, setMerging] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
+  // 启动检测到的新版本（main 推 app:updateAvailable）；StatusBar 据此提示跳转下载。
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   // 操作级 toast（审批 / 合并等远端动作失败时提示，区别于 fatalError 整屏报错）。
   // key 用随机数：同样文案连续触发也能重置自动消失计时器。
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
@@ -132,8 +138,8 @@ export default function App() {
         if (!window.api) {
           throw new Error('preload bridge missing: window.api is undefined');
         }
-        const [info, paths, config, prAgent, initialPrs, connections, lastSync] =
-          await Promise.all([
+        const [info, paths, config, prAgent, initialPrs, connections, lastSync] = await Promise.all(
+          [
             invoke('app:info', undefined),
             invoke('app:paths', undefined),
             invoke('config:read', undefined),
@@ -141,7 +147,13 @@ export default function App() {
             invoke('prs:list', undefined),
             invoke('app:connections', undefined),
             invoke('prs:lastSync', undefined),
-          ]);
+          ],
+        );
+        // 先按 config.language 切到目标语言并**等其资源加载完**（懒加载语言会异步拉 chunk），
+        // 再 setBoot 渲染主界面 —— 首屏直接是用户语言，不闪兜底。persist 供下次启动同步命中。
+        const lang = resolveUiLanguage(config.language);
+        persistLanguage(lang);
+        await i18n.changeLanguage(lang);
         setBoot({ info, paths, config, prAgent, connections, lastSyncAt: lastSync.at });
         setPrs(initialPrs);
         setLastSyncAt(lastSync.at);
@@ -151,6 +163,15 @@ export default function App() {
     })();
   }, []);
 
+  // 运行时语言切换（如设置页改 config.language）：boot 后 language 变化即切换并回写持久化。
+  // 首次 boot 时已在上面 await 切好，这里对同值是幂等 no-op。
+  useEffect(() => {
+    if (!boot) return;
+    const lang = resolveUiLanguage(boot.config.language);
+    persistLanguage(lang);
+    void i18n.changeLanguage(lang);
+  }, [boot]);
+
   // 启动时把 pr-agent 活动 run + 实时 stdout 流接到全局 store；ChatPane 跨 PR
   // 切换时可读 store 拿回运行中的状态 (本组件挂载到树根，效果等价于"应用级 hook")
   useEffect(() => wireChatRunStore(), []);
@@ -158,6 +179,32 @@ export default function App() {
   useEffect(() => wireRepoSyncStore(), []);
   // M4 草稿事件 → store；写盘后 drafts:changed 触发指定 PR 的草稿列表自动刷新
   useEffect(() => wireDraftsStore(), []);
+  // 启动版本更新检测：main 仅在有新版时推 app:updateAvailable
+  useEffect(() => subscribe('app:updateAvailable', (info) => setUpdateInfo(info)), []);
+  // dev 调试钩子：控制台 dispatch CustomEvent 模拟「发现新版」以验证状态栏 chip
+  // （dev 版本通常高于 latest，自然不会触发）。detail=null 清除。
+  //   window.dispatchEvent(new CustomEvent('meebox:debug-update'))
+  //   window.dispatchEvent(new CustomEvent('meebox:debug-update', { detail: { latestVersion: '1.2.3' } }))
+  //   window.dispatchEvent(new CustomEvent('meebox:debug-update', { detail: null }))
+  useEffect(() => {
+    const onDebug = (e: Event): void => {
+      const d = (e as CustomEvent<Partial<UpdateCheckResult> | null>).detail;
+      setUpdateInfo(
+        d === null
+          ? null
+          : {
+              ok: true,
+              hasUpdate: true,
+              currentVersion: '0.0.0',
+              latestVersion: '9.9.9',
+              url: 'https://github.com/huhamhire/code-meeseeks/releases/latest',
+              ...d,
+            },
+      );
+    };
+    window.addEventListener('meebox:debug-update', onDebug);
+    return () => window.removeEventListener('meebox:debug-update', onDebug);
+  }, []);
 
   // 全局外链跳转防护 — 所有 UGC 场景 (评论 / PR 描述 / finding / chat 等) 内
   // 的 <a href="http(s)://"> 点击都走系统默认浏览器，不允许 Electron 在 app
@@ -198,11 +245,21 @@ export default function App() {
 
   // 订阅 main 推送的 poll tick；用于刷新 statusbar "最近同步" 显示，
   // 并顺便重拉一次 PR 列表使后台轮询新增/删除立刻反映在 UI。
+  // 同时刷新连接摘要：启动时连接的 ping（缓存 currentUser）在建窗后才完成，首轮 tick 即随其后，
+  // 借此把状态栏用户/能力位补上（否则需手动刷新才显示）。app:connections 为廉价同步调用。
   useEffect(() => {
     if (!window.api) return;
     return subscribe('poll:tick', (info) => {
       setLastSyncAt(info.at);
       void reloadPrs();
+      void invoke('app:connections', undefined).then(
+        (connections) => {
+          setBoot((b) => (b ? { ...b, connections } : b));
+        },
+        () => {
+          /* 摘要刷新失败不影响主流程 */
+        },
+      );
     });
   }, [reloadPrs]);
 
@@ -240,11 +297,11 @@ export default function App() {
         // 远端拒绝（如 PR 已关闭 / 合并 / 权限不足）→ 本地状态不变，弹 toast 提示。
         // 顺手刷新一次：PR 若已关闭，下一轮 poll 会把它软删，列表自洽
         const msg = e instanceof Error ? e.message : String(e);
-        notifyError(`审批操作失败：${msg}`);
+        notifyError(t('app.approveActionFailed', { msg }));
         void triggerRefresh();
       }
     },
-    [selected, notifyError, triggerRefresh],
+    [selected, notifyError, triggerRefresh, t],
   );
 
   const mergeSelectedPr = useCallback(async (): Promise<void> => {
@@ -256,7 +313,7 @@ export default function App() {
     } catch (e) {
       // 合并失败（冲突 / veto / 权限 / PR 已关闭）→ 弹 toast，本地不变
       const msg = e instanceof Error ? e.message : String(e);
-      notifyError(`合并失败：${msg}`);
+      notifyError(t('app.mergeFailed', { msg }));
       void triggerRefresh();
       return;
     } finally {
@@ -265,7 +322,7 @@ export default function App() {
     // 合并成功：PR 已转 MERGED，会从 pending 列表退场。取消选中 + 刷新让其消失
     if (selectedId === mergedId) setSelectedId(null);
     await triggerRefresh();
-  }, [selected, selectedId, triggerRefresh, notifyError, merging]);
+  }, [selected, selectedId, triggerRefresh, notifyError, merging, t]);
 
   // 首启向导完成：落盘连接（必）+ LLM / 缓存目录（按需），再重拉配置/连接/PR 更新
   // boot。boot.config 拿到有效 active 连接后，下方 needsOnboarding 派生为 false，
@@ -314,7 +371,7 @@ export default function App() {
   if (!boot) {
     return (
       <div className="app fatal-app">
-        <p className="muted">加载中…</p>
+        <p className="muted">{t('app.loading')}</p>
       </div>
     );
   }
@@ -329,6 +386,7 @@ export default function App() {
       <OnboardingWizard
         existingLlmProfiles={boot.config.llm.profiles}
         initialReposDir={boot.config.workspace.repos_dir}
+        initialLanguage={boot.config.language}
         onComplete={completeOnboarding}
       />
     );
@@ -416,17 +474,19 @@ export default function App() {
           setBoot((b) => (b ? { ...b, config: { ...b.config, llm: next } } : b));
         }}
         onJumpToPr={setSelectedId}
+        updateInfo={updateInfo}
       />
       {showSettings && (
         <SettingsModal
           info={boot.info}
           paths={boot.paths}
           config={boot.config}
-          onLlmChange={(llm) =>
-            setBoot((b) => (b ? { ...b, config: { ...b.config, llm } } : b))
-          }
+          onLlmChange={(llm) => setBoot((b) => (b ? { ...b, config: { ...b.config, llm } } : b))}
           onProxyChange={(proxy) =>
             setBoot((b) => (b ? { ...b, config: { ...b.config, proxy } } : b))
+          }
+          onLanguageChange={(language) =>
+            setBoot((b) => (b ? { ...b, config: { ...b.config, language } } : b))
           }
           onConnectionsChange={refreshBootAndPrs}
           onClose={() => setShowSettings(false)}
@@ -437,7 +497,7 @@ export default function App() {
           className="app-toast app-toast-error"
           role="alert"
           onClick={() => setToast(null)}
-          title="点击关闭"
+          title={t('app.toastCloseTitle')}
         >
           {toast.text}
         </div>

@@ -1,4 +1,6 @@
 import { useMemo, useState, type ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Icon } from '@iconify/react';
 import type { DiffChangedFile } from '@meebox/shared';
 import { ChevronIcon } from './icons';
@@ -44,6 +46,7 @@ export function FileTree({
   draftCountByPath,
   onSelect,
 }: FileTreeProps) {
+  const { t } = useTranslation();
   const tree = useMemo(() => buildTree(files), [files]);
   // 默认全部展开。collapsed 记的是被折叠的 path 集合（默认空 = 全展开）
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -70,6 +73,7 @@ export function FileTree({
           onSelect,
           collapsed,
           toggle,
+          t,
         })}
       </div>
     </div>
@@ -83,6 +87,7 @@ interface RenderCtx {
   onSelect: (file: DiffChangedFile) => void;
   collapsed: Set<string>;
   toggle: (path: string) => void;
+  t: TFunction;
 }
 
 function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): ReactElement[] {
@@ -151,13 +156,13 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
             {draftCount > 0 && (
               <span
                 className="tree-draft-count"
-                title={`${String(draftCount)} 条待发布草稿`}
+                title={ctx.t('fileTree.draftCountTitle', { count: draftCount })}
               >
                 {draftCount}
               </span>
             )}
             {count > 0 && (
-              <span className="tree-comment-count" title={`${String(count)} 条远端评论`}>
+              <span className="tree-comment-count" title={ctx.t('fileTree.commentCountTitle', { count })}>
                 {count}
               </span>
             )}

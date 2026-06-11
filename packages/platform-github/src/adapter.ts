@@ -175,6 +175,10 @@ export class GitHubAdapter implements PlatformAdapter {
     return this.cachedUser;
   }
 
+  setCurrentUser(user: PlatformUser | null): void {
+    this.cachedUser = user;
+  }
+
   async getCloneUrl(repo: RepoRef): Promise<string> {
     if (this.cloneProtocol === 'ssh') {
       return `git@${this.gitHost}:${repo.projectKey}/${repo.repoSlug}.git`;

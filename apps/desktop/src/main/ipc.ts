@@ -17,6 +17,7 @@ import {
   isCommentsCacheStale,
   listDrafts,
   listReviewRunsForPr,
+  clearReviewRunsForPr,
   listStoredPullRequests,
   makeRunId,
   parseReviewOutput,
@@ -44,9 +45,11 @@ import type {
 } from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import { buildDraftAdapter, type BuiltAdapter, type ConnectionRuntime } from './adapters.js';
+import { t, getMainLanguage, setMainLanguage } from './i18n/index.js';
 import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
+import { checkForUpdate } from './utils/update-check.js';
 import { buildPrContext } from './utils/pr-context.js';
 
 interface RegisterDeps {
@@ -212,10 +215,8 @@ export function registerIpcHandlers({
         break;
     }
   });
-  ipcMain.handle(
-    'app:connections',
-    (): IpcChannels['app:connections']['response'] =>
-      buildConnectionSummaries(bootstrap, connectionRuntime.adapters),
+  ipcMain.handle('app:connections', (): IpcChannels['app:connections']['response'] =>
+    buildConnectionSummaries(bootstrap, connectionRuntime.adapters),
   );
 
   // (connectionId, slug) → dataUrl 或 null。两级 cache：
@@ -234,7 +235,9 @@ export function registerIpcHandlers({
       req: IpcChannels['comments:reply']['request'],
     ): Promise<IpcChannels['comments:reply']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === pr.connectionId,
+      )?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       const reply = await adapter.replyToComment(
         { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
@@ -264,7 +267,9 @@ export function registerIpcHandlers({
       req: IpcChannels['comments:delete']['request'],
     ): Promise<IpcChannels['comments:delete']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === pr.connectionId,
+      )?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // Bitbucket 在以下情形 409/403：
       //   - version 跟远端不一致 (用户在别处已编辑)
@@ -296,7 +301,9 @@ export function registerIpcHandlers({
       req: IpcChannels['comments:edit']['request'],
     ): Promise<IpcChannels['comments:edit']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === pr.connectionId,
+      )?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // Bitbucket 409 (version 不一致) 时 BitbucketClientError.message 会带 "expected version X"
       // 这种细节，原样抛给 renderer 显示让用户知道"远端有新版本"
@@ -331,7 +338,9 @@ export function registerIpcHandlers({
       // 加载概率低 (用户决策)，每次进入 PR 走 IPC 跟头像走 cache 不同
       try {
         const pr = await findPrOrThrow(req.localId);
-        const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+        const adapter = connectionRuntime.adapters.find(
+          (a) => a.connectionId === pr.connectionId,
+        )?.adapter;
         if (!adapter) return null;
         // 传 pr.repo 给 adapter — Bitbucket 的 attachment: 协议需要 repo 上下文拼 URL
         const res = await adapter.getAttachment(req.url, pr.repo);
@@ -353,11 +362,7 @@ export function registerIpcHandlers({
       const memKey = `${req.connectionId}|${req.slug}`;
       if (avatarMem.has(memKey)) return avatarMem.get(memKey)!;
 
-      const hash = crypto
-        .createHash('sha256')
-        .update(memKey)
-        .digest('hex')
-        .slice(0, 24);
+      const hash = crypto.createHash('sha256').update(memKey).digest('hex').slice(0, 24);
       const filePath = path.join(avatarDir, `${hash}.bin`);
 
       // 1) 磁盘 cache 命中且未过期？命中不打日志 (高频路径，避免日志噪音)
@@ -380,7 +385,9 @@ export function registerIpcHandlers({
       }
 
       // 2) 没缓存 / 已过期：去 Bitbucket 拉
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === req.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === req.connectionId,
+      )?.adapter;
       if (!adapter) {
         avatarMem.set(memKey, null);
         return null;
@@ -416,10 +423,7 @@ export function registerIpcHandlers({
         );
         return result;
       } catch (err) {
-        logger.warn(
-          { err, connectionId: req.connectionId, slug: req.slug },
-          'avatar fetch threw',
-        );
+        logger.warn({ err, connectionId: req.connectionId, slug: req.slug }, 'avatar fetch threw');
         avatarMem.set(memKey, null);
         return null;
       }
@@ -432,6 +436,18 @@ export function registerIpcHandlers({
   });
   ipcMain.handle('app:openDevTools', (evt) => {
     evt.sender.openDevTools({ mode: 'detach' });
+  });
+  ipcMain.handle('app:checkUpdate', (): Promise<IpcChannels['app:checkUpdate']['response']> => {
+    // 与启动检测一致受 check_enabled 控制：关闭时不发起请求，直接返回禁用结果。
+    if (!bootstrap.config.update.check_enabled) {
+      return Promise.resolve({
+        ok: false,
+        hasUpdate: false,
+        currentVersion: app.getVersion(),
+        error: 'update check disabled by config',
+      });
+    }
+    return checkForUpdate(app.getVersion(), bootstrap.config.proxy);
   });
   ipcMain.handle(
     'app:openExternal',
@@ -451,12 +467,12 @@ export function registerIpcHandlers({
       const win = BrowserWindow.fromWebContents(evt.sender) ?? undefined;
       const result = win
         ? await dialog.showOpenDialog(win, {
-            title: req.title ?? '选择目录',
+            title: req.title ?? t('dialog.selectDirectory'),
             defaultPath: req.defaultPath,
             properties: ['openDirectory', 'createDirectory'],
           })
         : await dialog.showOpenDialog({
-            title: req.title ?? '选择目录',
+            title: req.title ?? t('dialog.selectDirectory'),
             defaultPath: req.defaultPath,
             properties: ['openDirectory', 'createDirectory'],
           });
@@ -467,24 +483,20 @@ export function registerIpcHandlers({
     },
   );
 
-  ipcMain.handle(
-    'prs:list',
-    async (): Promise<IpcChannels['prs:list']['response']> => {
-      // 单活动连接模型：只展示当前活动连接的 PR。状态库可能仍存着切换前其他连接的
-      // 历史 PR（poller 只轮询活动连接，不会清理旧的），故在出口按 connectionId 过滤。
-      const activeId = bootstrap.config.active_connection_id;
-      const all = await listStoredPullRequests(stateStore);
-      return activeId ? all.filter((pr) => pr.connectionId === activeId) : all;
-    },
-  );
+  ipcMain.handle('prs:list', async (): Promise<IpcChannels['prs:list']['response']> => {
+    // 单活动连接模型：只展示当前活动连接的 PR。状态库可能仍存着切换前其他连接的
+    // 历史 PR（poller 只轮询活动连接，不会清理旧的），故在出口按 connectionId 过滤。
+    const activeId = bootstrap.config.active_connection_id;
+    const all = await listStoredPullRequests(stateStore);
+    return activeId ? all.filter((pr) => pr.connectionId === activeId) : all;
+  });
   ipcMain.handle(
     'prs:refresh',
     async (): Promise<IpcChannels['prs:refresh']['response']> => poller.tick(),
   );
-  ipcMain.handle(
-    'prs:lastSync',
-    (): IpcChannels['prs:lastSync']['response'] => ({ at: poller.getLastPollAt() }),
-  );
+  ipcMain.handle('prs:lastSync', (): IpcChannels['prs:lastSync']['response'] => ({
+    at: poller.getLastPollAt(),
+  }));
   ipcMain.handle(
     'prs:setLocalStatus',
     async (
@@ -492,7 +504,9 @@ export function registerIpcHandlers({
       req: IpcChannels['prs:setLocalStatus']['request'],
     ): Promise<IpcChannels['prs:setLocalStatus']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === pr.connectionId,
+      )?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // 先写远端：本地 status → Bitbucket reviewer.status；失败抛出，前端不会看到本地变更
       const remoteStatus =
@@ -515,7 +529,9 @@ export function registerIpcHandlers({
     'prs:merge',
     async (_evt, req: IpcChannels['prs:merge']['request']): Promise<void> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === pr.connectionId,
+      )?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // 合并远端；失败 (冲突 / veto / 权限) 抛出，renderer 提示，本地不变。
       // 成功后不在此落本地：PR 转 MERGED 会从 pending 消失，靠 renderer 触发的
@@ -627,7 +643,9 @@ export function registerIpcHandlers({
       // dedup：同 localId 的 in-flight Promise 直接复用
       const existing = listCommentsInFlight.get(pr.localId);
       if (existing) return existing;
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === pr.connectionId,
+      )?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       const fetchPromise = adapter
         .listPullRequestComments(
@@ -658,7 +676,9 @@ export function registerIpcHandlers({
       req: IpcChannels['diff:listCommits']['request'],
     ): Promise<IpcChannels['diff:listCommits']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === pr.connectionId,
+      )?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
       // commits 不缓存（量少 + UI 进 commits 标签页才拉，频率低）；后续如发现频繁拉
       // 再补 prs/<hash>/commits.json 缓存层 (走 pr_updated_at 失效，跟 comments 同模式)
@@ -732,7 +752,7 @@ export function registerIpcHandlers({
    */
   const executeRun = async (item: QueueItem): Promise<ReviewRun> => {
     const prAgentBridge = getPrAgentBridge();
-    if (!prAgentBridge) throw new Error('pr-agent 未就绪');
+    if (!prAgentBridge) throw new Error(t('prAgent.notReady'));
     const { req, pr } = item;
     // 提前 resolve active LLM profile — model 字段要随 startReviewRun 一起落
     // 盘，让 UI 在 meta 行展示"这次 run 用的什么模型"。后面 buildPragentEnv
@@ -770,277 +790,298 @@ export function registerIpcHandlers({
       }
     };
 
-    const finishWith = async (
-      patch: Parameters<typeof finishReviewRun>[3],
-    ): Promise<ReviewRun> => {
+    const finishWith = async (patch: Parameters<typeof finishReviewRun>[3]): Promise<ReviewRun> => {
       const updated = await finishReviewRun(stateStore, pr.localId, run.id, patch);
       return updated ?? { ...run, ...patch };
     };
 
     const repoId = repoIdentityFor(pr);
     await repoMirror.syncMirror(repoId);
-    const wt = await repoMirror.materializeWorktree(
-      repoId,
-      pr.sourceRef.sha,
-      pr.targetRef.sha,
-    );
+    const wt = await repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, pr.targetRef.sha);
     const ac = item.ac!;
     try {
-        const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
-        // LLM env + 全局 pr-agent 配置 (响应语言)。语言配置一期写死在 config 里，
-        // UI 还不暴露切换；后续多语言时改成 Settings 入口
-        const env: Record<string, string> = {
-          // 代理 env 先铺底，LLM/语言配置在后（互不冲突，仅 HTTP(S)_PROXY 类）。
-          // 开关开时让嵌入式 python(litellm/httpx) 经代理出网调 LLM。
-          ...buildProxyEnv(bootstrap.config.proxy),
-          ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
-          CONFIG__RESPONSE_LANGUAGE: bootstrap.config.language,
-        };
+      const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
+      // LLM env + 全局 pr-agent 配置 (响应语言)。语言配置一期写死在 config 里，
+      // UI 还不暴露切换；后续多语言时改成 Settings 入口
+      const env: Record<string, string> = {
+        // 代理 env 先铺底，LLM/语言配置在后（互不冲突，仅 HTTP(S)_PROXY 类）。
+        // 开关开时让嵌入式 python(litellm/httpx) 经代理出网调 LLM。
+        ...buildProxyEnv(bootstrap.config.proxy),
+        ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
+        CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
+      };
+      if (req.tool === 'improve') {
+        // /improve 在 local provider 下只有「汇总建议 → publish_comment」一条可用路径
+        // （shim 已强制 gfm_markdown=True）。committable/inline 模式会走
+        // publish_code_suggestions → local provider 直接 NotImplementedError，显式关死兜底
+        // （pr-agent 默认即 false，此处防上游翻默认值）。
+        env['PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS'] = 'false';
+        // persistent_comment（默认 true）会走 publish_persistent_comment_with_history →
+        // get_issue_comments() 翻历史评论做增量更新 → local provider 不实现，每次 improve
+        // 都刷一段 NotImplementedError traceback（被上游捕获后兜底 publish_comment，正文
+        // 不丢但日志吵）。local 每次都是全新 worktree、无历史可翻，直接关掉走 publish_comment。
+        env['PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT'] = 'false';
+        // 输出与 /review /ask 的 review.md 分流：pr-agent 原生支持 local.review_path 覆盖
+        // publish_comment 的落盘路径；相对路径按子进程 cwd（= worktree 根）解析。
+        env['LOCAL__REVIEW_PATH'] = 'improve.md';
+      }
 
-        // 注给 pr-agent 的 EXTRA_INSTRUCTIONS 由三部分按顺序拼接：
-        //   1. 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但
-        //      /ask 走 [pr_questions] 配置段不那么严格遵守，必须显式 prompt 强化
-        //   2. PR 上下文 (title / description / 已有评论)：local provider 自己不会
-        //      去 Bitbucket 拉这些，必须我们这边喂；让 /describe /review 不只是看 diff
-        //   3. 规则正文 (rules.dir 命中)：项目编码规约
-        // /ask 只取 1 (语言)，跳 2/3 (用户问题往往跟历史评论 / 规约无关)
-        const langDirective = languageDirectiveFor(bootstrap.config.language);
-        let prContext = '';
-        let matchedRuleInstructions = '';
-        let matchedRuleId: string | undefined;
-        if (req.tool !== 'ask') {
-          const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
-          if (adapter) {
-            try {
-              prContext = await buildPrContext({ pr, adapter, logger });
-            } catch (err) {
-              logger.warn(
-                { err, runId: run.id, localId: pr.localId },
-                'buildPrContext threw; proceeding without PR context',
-              );
-            }
-          }
-
-          const rulesCfg = bootstrap.config.rules;
-          if (rulesCfg.enabled && rulesCfg.dir) {
-            const rules = await loadRules(rulesCfg.dir, {
-              onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
-            });
-            const matched = pickMatchingRule(rules, {
-              projectKey: pr.repo.projectKey,
-              repoSlug: pr.repo.repoSlug,
-              targetBranch: pr.targetRef.displayId,
-              tool: req.tool,
-            });
-            if (matched) {
-              matchedRuleInstructions = matched.instructions;
-              matchedRuleId = matched.id;
-            }
+      // 注给 pr-agent 的 EXTRA_INSTRUCTIONS 由三部分按顺序拼接：
+      //   1. 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但
+      //      /ask 走 [pr_questions] 配置段不那么严格遵守，必须显式 prompt 强化
+      //   2. PR 上下文 (title / description / 已有评论)：local provider 自己不会
+      //      去 Bitbucket 拉这些，必须我们这边喂；让 /describe /review 不只是看 diff
+      //   3. 规则正文 (rules.dir 命中)：项目编码规约
+      // /ask 只取 1 (语言)，跳 2/3 (用户问题往往跟历史评论 / 规约无关)
+      const langDirective = languageDirectiveFor(getMainLanguage());
+      let prContext = '';
+      let matchedRuleInstructions = '';
+      let matchedRuleId: string | undefined;
+      if (req.tool !== 'ask') {
+        const adapter = connectionRuntime.adapters.find(
+          (a) => a.connectionId === pr.connectionId,
+        )?.adapter;
+        if (adapter) {
+          try {
+            prContext = await buildPrContext({ pr, adapter, logger });
+          } catch (err) {
+            logger.warn(
+              { err, runId: run.id, localId: pr.localId },
+              'buildPrContext threw; proceeding without PR context',
+            );
           }
         }
 
-        // anchor marker 指令：让 model 在涉及代码位置的内容末尾显式追加
-        //   [file: <path>, lines: <start_line>-<end_line>]
-        //
-        // 主路径已改为 sitecustomize 注入 LocalGitProvider.get_line_link → key_issues 渲染成
-        // `[**header**](meebox:///<file>#L<s>-L<e>)`，parse-output 取结构化 anchor（path 来自
-        // provider 同源、最可靠）。但 #L 行号仍依赖 model 填了 pr-agent 原生 start_line/
-        // end_line YAML 字段；实测部分模型只填这条 marker、留空结构化字段 → 链接只有 path。
-        // 故这条 marker 作为**行号兜底**保留：parse-output 合并时链接给 path、缺行号则用 marker
-        // 的行号补（resolveIssueAnchor）。两路信号都用上，最大化 anchor 覆盖。
-        //
-        // 两种工具措辞不同：
-        // - /review: 每条 key_issue 末尾 **必加** marker
-        // - /ask: 仅当回答涉及具体文件 / 代码位置时 **才加** (自由问答可能完全跟代码
-        //   无关 e.g. "PR 概述")，强制会产出假阳性
-        //
-        // /describe / /improve 不注入：前者不出 issue，后者走 marker 行
-        // `[file [start-end]](url)` 自己有 anchor
-        const reviewAnchorDirective =
-          req.tool === 'review'
+        const rulesCfg = bootstrap.config.rules;
+        if (rulesCfg.enabled && rulesCfg.dir) {
+          const rules = await loadRules(rulesCfg.dir, {
+            onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
+          });
+          const matched = pickMatchingRule(rules, {
+            projectKey: pr.repo.projectKey,
+            repoSlug: pr.repo.repoSlug,
+            targetBranch: pr.targetRef.displayId,
+            tool: req.tool,
+          });
+          if (matched) {
+            matchedRuleInstructions = matched.instructions;
+            matchedRuleId = matched.id;
+          }
+        }
+      }
+
+      // anchor marker 指令：让 model 在涉及代码位置的内容末尾显式追加
+      //   [file: <path>, lines: <start_line>-<end_line>]
+      //
+      // 主路径已改为 sitecustomize 注入 LocalGitProvider.get_line_link → key_issues 渲染成
+      // `[**header**](meebox:///<file>#L<s>-L<e>)`，parse-output 取结构化 anchor（path 来自
+      // provider 同源、最可靠）。但 #L 行号仍依赖 model 填了 pr-agent 原生 start_line/
+      // end_line YAML 字段；实测部分模型只填这条 marker、留空结构化字段 → 链接只有 path。
+      // 故这条 marker 作为**行号兜底**保留：parse-output 合并时链接给 path、缺行号则用 marker
+      // 的行号补（resolveIssueAnchor）。两路信号都用上，最大化 anchor 覆盖。
+      //
+      // 两种工具措辞不同：
+      // - /review: 每条 key_issue 末尾 **必加** marker
+      // - /ask: 仅当回答涉及具体文件 / 代码位置时 **才加** (自由问答可能完全跟代码
+      //   无关 e.g. "PR 概述")，强制会产出假阳性
+      //
+      // /describe / /improve 不注入：前者不出 issue，后者走 marker 行
+      // `[file [start-end]](url)` 自己有 anchor
+      const reviewAnchorDirective =
+        req.tool === 'review'
+          ? [
+              'When writing each item under `key_issues_to_review`, append on its OWN LAST LINE',
+              'a machine-readable anchor marker in this EXACT format:',
+              '',
+              '    [file: <relevant_file>, lines: <start_line>-<end_line>]',
+              '',
+              'Examples:',
+              '  [file: src/auth/login.ts, lines: 42-50]',
+              '  [file: pkg/cache.go, lines: 17]',
+              '',
+              'Use the exact relevant_file path and start_line/end_line you already',
+              'identified in the YAML output. Do NOT wrap the path in backticks. If you',
+              'truly cannot identify a file/line for an issue, omit the marker for that',
+              'item only.',
+            ].join('\n')
+          : req.tool === 'ask'
             ? [
-                'When writing each item under `key_issues_to_review`, append on its OWN LAST LINE',
-                'a machine-readable anchor marker in this EXACT format:',
+                'CRITICAL: This answer is consumed by a code review GUI that converts your',
+                'per-paragraph recommendations into INLINE COMMENTS pinned to specific code',
+                'lines. For that to work, EVERY paragraph that names a code symbol (function,',
+                'method, class, variable, identifier) from this PR MUST end with a',
+                'machine-readable anchor marker on its OWN LAST LINE:',
                 '',
-                '    [file: <relevant_file>, lines: <start_line>-<end_line>]',
+                '    [file: <path>, lines: <start_line>-<end_line>]',
                 '',
                 'Examples:',
                 '  [file: src/auth/login.ts, lines: 42-50]',
                 '  [file: pkg/cache.go, lines: 17]',
+                '  [file: pkg/store.ts]              (path-only fallback; only when you',
+                '                                     truly cannot infer any line number)',
                 '',
-                'Use the exact relevant_file path and start_line/end_line you already',
-                'identified in the YAML output. Do NOT wrap the path in backticks. If you',
-                'truly cannot identify a file/line for an issue, omit the marker for that',
-                'item only.',
+                'How to derive line numbers from the diff:',
+                '- Every hunk in the diff begins with a header:',
+                '    @@ -<base_start>,<base_count> +<head_start>,<head_count> @@',
+                '  The number after `+` is the FIRST head-side line of that hunk. Count down',
+                '  through `+` (added) and ` ` (context) lines — DO NOT count `-` (removed)',
+                '  lines — to locate the line where the symbol appears. Prefer head-side',
+                '  line numbers. For code that ONLY exists on the base side (purely removed),',
+                '  use the base-side `-` line number instead.',
+                '',
+                'Rules — read carefully:',
+                '- The marker is REQUIRED. Do not skip it when your paragraph references a',
+                '  real code symbol from the diff. A paragraph without a marker becomes',
+                '  un-pinnable feedback the user cannot turn into a comment.',
+                '- Append exactly ONE marker per paragraph, at the very end of that paragraph,',
+                '  on its own line (blank line above it optional but recommended).',
+                '- If a paragraph discusses multiple locations, pick the most important one',
+                '  (the line where the recommended change should be made).',
+                '- Paragraphs that are purely general / conceptual / meta (e.g., overall',
+                '  praise, no specific symbol named) MAY omit the marker.',
+                '- Use the exact file path from the diff. Do NOT wrap the path in backticks',
+                '  or quotes inside the marker.',
+                '- If you really cannot pin a line, fall back to path-only `[file: <path>]`',
+                '  rather than omitting the marker entirely.',
               ].join('\n')
-            : req.tool === 'ask'
-              ? [
-                  'CRITICAL: This answer is consumed by a code review GUI that converts your',
-                  'per-paragraph recommendations into INLINE COMMENTS pinned to specific code',
-                  'lines. For that to work, EVERY paragraph that names a code symbol (function,',
-                  'method, class, variable, identifier) from this PR MUST end with a',
-                  'machine-readable anchor marker on its OWN LAST LINE:',
-                  '',
-                  '    [file: <path>, lines: <start_line>-<end_line>]',
-                  '',
-                  'Examples:',
-                  '  [file: src/auth/login.ts, lines: 42-50]',
-                  '  [file: pkg/cache.go, lines: 17]',
-                  '  [file: pkg/store.ts]              (path-only fallback; only when you',
-                  '                                     truly cannot infer any line number)',
-                  '',
-                  'How to derive line numbers from the diff:',
-                  '- Every hunk in the diff begins with a header:',
-                  '    @@ -<base_start>,<base_count> +<head_start>,<head_count> @@',
-                  '  The number after `+` is the FIRST head-side line of that hunk. Count down',
-                  '  through `+` (added) and ` ` (context) lines — DO NOT count `-` (removed)',
-                  '  lines — to locate the line where the symbol appears. Prefer head-side',
-                  '  line numbers. For code that ONLY exists on the base side (purely removed),',
-                  '  use the base-side `-` line number instead.',
-                  '',
-                  'Rules — read carefully:',
-                  '- The marker is REQUIRED. Do not skip it when your paragraph references a',
-                  '  real code symbol from the diff. A paragraph without a marker becomes',
-                  '  un-pinnable feedback the user cannot turn into a comment.',
-                  '- Append exactly ONE marker per paragraph, at the very end of that paragraph,',
-                  '  on its own line (blank line above it optional but recommended).',
-                  '- If a paragraph discusses multiple locations, pick the most important one',
-                  '  (the line where the recommended change should be made).',
-                  '- Paragraphs that are purely general / conceptual / meta (e.g., overall',
-                  '  praise, no specific symbol named) MAY omit the marker.',
-                  '- Use the exact file path from the diff. Do NOT wrap the path in backticks',
-                  '  or quotes inside the marker.',
-                  '- If you really cannot pin a line, fall back to path-only `[file: <path>]`',
-                  '  rather than omitting the marker entirely.',
-                ].join('\n')
-              : '';
+            : '';
 
-        const extraParts = [
-          langDirective,
-          reviewAnchorDirective,
-          prContext,
-          matchedRuleInstructions,
-        ].filter((s) => s.trim());
-        if (extraParts.length > 0) {
-          const envKey =
-            req.tool === 'describe'
-              ? 'PR_DESCRIPTION__EXTRA_INSTRUCTIONS'
-              : req.tool === 'review'
-                ? 'PR_REVIEWER__EXTRA_INSTRUCTIONS'
-                : req.tool === 'improve'
-                  ? 'PR_CODE_SUGGESTIONS__EXTRA_INSTRUCTIONS'
-                  : 'PR_QUESTIONS__EXTRA_INSTRUCTIONS';
-          env[envKey] = extraParts.join('\n\n---\n\n');
-        }
-        if (matchedRuleId) {
-          logger.info(
-            { runId: run.id, ruleId: matchedRuleId, tool: req.tool },
-            'pragent run: matched rule',
-          );
-        }
-        if (prContext) {
-          logger.debug(
-            { runId: run.id, tool: req.tool, contextChars: prContext.length },
-            'pragent run: pr context injected',
-          );
-        }
+      // 排版指令：只改 /review 每条 key_issue 的断行排版，提升 GUI 可读性，不增加篇幅。
+      // pr-agent 原 prompt 要 "short and concise summary"，模型默认堆成单段长跑文；
+      // 渲染层 (ReactMarkdown + remarkBreaks) 忠实呈现，空行分段即成独立 <p>。
+      // 关键是「保持简洁」——只在现象/影响/建议的语义边界换行，不得借分段扩写内容。
+      // 须与上面的 anchor marker 指令协同：分段在正文内部，marker 仍独占最末行。
+      const reviewLayoutDirective =
+        req.tool === 'review'
+          ? [
+              'FORMATTING ONLY: Keep each `key_issues_to_review` item as concise as you',
+              'already would — do NOT add length, padding, or extra explanation. The only',
+              'change is line breaks: instead of one dense run-on paragraph, insert a BLANK',
+              'LINE at the natural boundaries (e.g. problem → impact → suggested fix) so the',
+              'text reads as a few short paragraphs. Same words, better layout.',
+              '',
+              'This applies to the issue PROSE only. The machine-readable anchor marker',
+              'described above still goes on its OWN LAST LINE, after the final paragraph',
+              '(a blank line may precede it).',
+            ].join('\n')
+          : '';
 
+      const extraParts = [
+        langDirective,
+        reviewAnchorDirective,
+        reviewLayoutDirective,
+        prContext,
+        matchedRuleInstructions,
+      ].filter((s) => s.trim());
+      if (extraParts.length > 0) {
+        const envKey =
+          req.tool === 'describe'
+            ? 'PR_DESCRIPTION__EXTRA_INSTRUCTIONS'
+            : req.tool === 'review'
+              ? 'PR_REVIEWER__EXTRA_INSTRUCTIONS'
+              : req.tool === 'improve'
+                ? 'PR_CODE_SUGGESTIONS__EXTRA_INSTRUCTIONS'
+                : 'PR_QUESTIONS__EXTRA_INSTRUCTIONS';
+        env[envKey] = extraParts.join('\n\n---\n\n');
+      }
+      if (matchedRuleId) {
+        logger.info(
+          { runId: run.id, ruleId: matchedRuleId, tool: req.tool },
+          'pragent run: matched rule',
+        );
+      }
+      if (prContext) {
+        logger.debug(
+          { runId: run.id, tool: req.tool, contextChars: prContext.length },
+          'pragent run: pr context injected',
+        );
+      }
 
-        // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
-        const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
+      // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
+      const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
 
-        // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉启动告警
-        // （直接写安装目录；memo 化只首次做）。local-cli 不需要 (pipx 装的 pr-agent
-        // 路径不同，告警也不出)
-        if (prAgentBridge.strategy === 'embedded' && embeddedPythonPath) {
-          await ensureEmbeddedSecrets(embeddedPythonPath);
-        }
+      // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉启动告警
+      // （直接写安装目录；memo 化只首次做）。local-cli 不需要 (pipx 装的 pr-agent
+      // 路径不同，告警也不出)
+      if (prAgentBridge.strategy === 'embedded' && embeddedPythonPath) {
+        await ensureEmbeddedSecrets(embeddedPythonPath);
+      }
 
-        const result = await prAgentBridge.run({
-          prUrl: pr.url,
-          tool: req.tool,
-          env,
-          onLine,
-          cwd: wt.path,
-          targetBranch: wt.targetBranchName,
-          extraArgs,
-          signal: ac.signal,
-        });
-        // 真实 token 用量（onLine 累加的 stderr 哨兵行），落到 succeeded / llm-failed 收尾。
-        const tokenUsage = finalizeUsage(usageAcc);
-        // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
-        //   /describe → <wt>/description.md  (走 publish_description)
-        //   /review   → <wt>/review.md       (走 publish_comment)
-        //   /ask      → <wt>/review.md       ← 共用同一文件 (publish_comment 会覆盖)
-        //   /improve  → <wt>/review.md       ← 同上：local provider 不实现
-        //                                      publish_code_suggestions，汇总走 publish_comment
-        // 走 worktree 路径，cleanup 前必须先把文件读出来。
-        const outFile = req.tool === 'describe' ? 'description.md' : 'review.md';
-        let fileContent = '';
+      const result = await prAgentBridge.run({
+        prUrl: pr.url,
+        tool: req.tool,
+        env,
+        onLine,
+        cwd: wt.path,
+        targetBranch: wt.targetBranchName,
+        extraArgs,
+        signal: ac.signal,
+      });
+      // 真实 token 用量（onLine 累加的 stderr 哨兵行），落到 succeeded / llm-failed 收尾。
+      const tokenUsage = finalizeUsage(usageAcc);
+      // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
+      //   /describe → <wt>/description.md  (走 publish_description)
+      //   /review   → <wt>/review.md       (走 publish_comment)
+      //   /ask      → <wt>/review.md       ← 共用同一文件 (publish_comment 会覆盖)
+      //   /improve  → <wt>/improve.md      ← 汇总建议走 publish_comment，经 LOCAL__REVIEW_PATH
+      //                                      重定向与 review.md 分流（见上方 env 注入）
+      // 走 worktree 路径，cleanup 前必须先把文件读出来。
+      const outFile =
+        req.tool === 'describe'
+          ? 'description.md'
+          : req.tool === 'improve'
+            ? 'improve.md'
+            : 'review.md';
+      let fileContent = '';
+      try {
+        fileContent = await fs.readFile(path.join(wt.path, outFile), 'utf8');
+      } catch (readErr) {
+        logger.warn(
+          { err: readErr, wtPath: wt.path, outFile, runId: run.id },
+          'pr-agent local provider output file missing; fall back to stdout',
+        );
+      }
+      // /ask 输出里 pr-agent 把问题原样回显在 answer body 顶部 (跟 chat 输入气泡完全
+      // 重复)。在解析前把跟用户问题逐字匹配的整行删掉，避免渲染时出现两次问题
+      const cleanedContent =
+        req.tool === 'ask' && req.question?.trim()
+          ? stripAskQuestionEcho(fileContent, req.question)
+          : fileContent;
+      const parsed = parseReviewOutput(cleanedContent || result.stdout, req.tool);
+      // M4 草稿再摄入：/review 成功完成时丢掉 pending+finding 旧草稿，
+      // 让本轮 ChatPane 上的 finding 列表成为新的候选源。edited/posted/rejected/
+      // manual 保留不动。失败的 /review 不触发清理 (没建设性数据)。
+      if (req.tool === 'review') {
         try {
-          fileContent = await fs.readFile(path.join(wt.path, outFile), 'utf8');
-        } catch (readErr) {
-          logger.warn(
-            { err: readErr, wtPath: wt.path, outFile, runId: run.id },
-            'pr-agent local provider output file missing; fall back to stdout',
-          );
-        }
-        // /ask 输出里 pr-agent 把问题原样回显在 answer body 顶部 (跟 chat 输入气泡完全
-         // 重复)。在解析前把跟用户问题逐字匹配的整行删掉，避免渲染时出现两次问题
-        const cleanedContent =
-          req.tool === 'ask' && req.question?.trim()
-            ? stripAskQuestionEcho(fileContent, req.question)
-            : fileContent;
-        const parsed = parseReviewOutput(cleanedContent || result.stdout, req.tool);
-        // M4 草稿再摄入：/review 成功完成时丢掉 pending+finding 旧草稿，
-        // 让本轮 ChatPane 上的 finding 列表成为新的候选源。edited/posted/rejected/
-        // manual 保留不动。失败的 /review 不触发清理 (没建设性数据)。
-        if (req.tool === 'review') {
-          try {
-            const dropped = await dropPendingFindingDrafts(stateStore, pr.localId);
-            if (dropped > 0) {
-              logger.info(
-                { runId: run.id, localId: pr.localId, dropped },
-                'pragent /review: dropped stale pending drafts',
-              );
-              broadcastDraftsChanged(pr.localId);
-            }
-          } catch (err) {
-            logger.warn({ err, runId: run.id }, 'dropPendingFindingDrafts failed');
+          const dropped = await dropPendingFindingDrafts(stateStore, pr.localId);
+          if (dropped > 0) {
+            logger.info(
+              { runId: run.id, localId: pr.localId, dropped },
+              'pragent /review: dropped stale pending drafts',
+            );
+            broadcastDraftsChanged(pr.localId);
           }
+        } catch (err) {
+          logger.warn({ err, runId: run.id }, 'dropPendingFindingDrafts failed');
         }
-        // pr-agent CLI 可能 exit 0 但 stdout 里其实是 LLM 调用全失败 (litellm
-        // AuthenticationError / "Failed to generate prediction with any model" 等
-        // marker)。parseReviewOutput 会在 ParsedReviewOutput.llmFailure 标出 —
-        // 此时不算 succeeded，落盘为 failed + reason='llm-error'，UI 用红色失败
-        // chip 渲染而不是"完成"
-        if (parsed.llmFailure) {
-          logger.warn(
-            { runId: run.id, reason: parsed.llmFailure.message },
-            'pragent exit 0 but LLM call failed; marking run as failed',
-          );
-          return await finishWith({
-            status: 'failed',
-            finishedAt: new Date().toISOString(),
-            durationMs: Date.now() - t0,
-            exitCode: result.exitCode,
-            errorReason: 'llm-error',
-            errorMessage: parsed.llmFailure.message,
-            stdout: fileContent
-              ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
-              : result.stdout,
-            stderr: stripUsageSentinels(result.stderr),
-            findings: parsed.findings,
-            summary: parsed.summary,
-            tokenUsage,
-          });
-        }
+      }
+      // pr-agent CLI 可能 exit 0 但 stdout 里其实是 LLM 调用全失败 (litellm
+      // AuthenticationError / "Failed to generate prediction with any model" 等
+      // marker)。parseReviewOutput 会在 ParsedReviewOutput.llmFailure 标出 —
+      // 此时不算 succeeded，落盘为 failed + reason='llm-error'，UI 用红色失败
+      // chip 渲染而不是"完成"
+      if (parsed.llmFailure) {
+        logger.warn(
+          { runId: run.id, reason: parsed.llmFailure.message },
+          'pragent exit 0 but LLM call failed; marking run as failed',
+        );
         return await finishWith({
-          status: 'succeeded',
+          status: 'failed',
           finishedAt: new Date().toISOString(),
           durationMs: Date.now() - t0,
           exitCode: result.exitCode,
-          // 持久化「LLM 真实产出」(文件内容)；stdout 留作日志在折叠区供排障
+          errorReason: 'llm-error',
+          errorMessage: parsed.llmFailure.message,
           stdout: fileContent
             ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
             : result.stdout,
@@ -1049,43 +1090,58 @@ export function registerIpcHandlers({
           summary: parsed.summary,
           tokenUsage,
         });
-      } catch (err) {
-        if (err instanceof PrAgentRunError) {
-          // 用户主动取消 → status='cancelled'，其它 reason → 'failed'。
-          // 二者都仍走 finishReviewRun 落盘，让 UI 能从历史 run 里看到这次取消事件
-          const status: ReviewRunStatus = err.reason === 'cancelled' ? 'cancelled' : 'failed';
-          logger.warn(
-            { runId: run.id, reason: err.reason, exitCode: err.result.exitCode },
-            `pragent run ${status}`,
-          );
-          // 失败 / 取消时也尽量解析已收集的 stdout：很多情况 pr-agent 已写了一部分输出
-          const partialStdout = err.result.stdout ?? '';
-          const parsed = partialStdout
-            ? parseReviewOutput(partialStdout, req.tool)
-            : { findings: [], summary: undefined };
-          // 失败 / 取消前可能已有若干次 LLM 调用，尽量把已产生的 token 用量也记上
-          const tokenUsage = finalizeUsage(usageAcc);
-          return await finishWith({
-            status,
-            finishedAt: new Date().toISOString(),
-            durationMs: Date.now() - t0,
-            exitCode: err.result.exitCode,
-            errorReason: err.reason,
-            errorMessage: err.message,
-            stdout: err.result.stdout,
-            stderr: stripUsageSentinels(err.result.stderr),
-            findings: parsed.findings,
-            summary: parsed.summary,
-            tokenUsage,
-          });
-        }
-        // 非预期异常：仍记一笔 failed，避免 run 永远卡在 running，再把异常往上抛
-        await finishWith({
-          status: 'failed',
+      }
+      return await finishWith({
+        status: 'succeeded',
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0,
+        exitCode: result.exitCode,
+        // 持久化「LLM 真实产出」(文件内容)；stdout 留作日志在折叠区供排障
+        stdout: fileContent
+          ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
+          : result.stdout,
+        stderr: stripUsageSentinels(result.stderr),
+        findings: parsed.findings,
+        summary: parsed.summary,
+        tokenUsage,
+      });
+    } catch (err) {
+      if (err instanceof PrAgentRunError) {
+        // 用户主动取消 → status='cancelled'，其它 reason → 'failed'。
+        // 二者都仍走 finishReviewRun 落盘，让 UI 能从历史 run 里看到这次取消事件
+        const status: ReviewRunStatus = err.reason === 'cancelled' ? 'cancelled' : 'failed';
+        logger.warn(
+          { runId: run.id, reason: err.reason, exitCode: err.result.exitCode },
+          `pragent run ${status}`,
+        );
+        // 失败 / 取消时也尽量解析已收集的 stdout：很多情况 pr-agent 已写了一部分输出
+        const partialStdout = err.result.stdout ?? '';
+        const parsed = partialStdout
+          ? parseReviewOutput(partialStdout, req.tool)
+          : { findings: [], summary: undefined };
+        // 失败 / 取消前可能已有若干次 LLM 调用，尽量把已产生的 token 用量也记上
+        const tokenUsage = finalizeUsage(usageAcc);
+        return await finishWith({
+          status,
           finishedAt: new Date().toISOString(),
           durationMs: Date.now() - t0,
-          errorMessage: err instanceof Error ? err.message : String(err),
+          exitCode: err.result.exitCode,
+          errorReason: err.reason,
+          errorMessage: err.message,
+          stdout: err.result.stdout,
+          stderr: stripUsageSentinels(err.result.stderr),
+          findings: parsed.findings,
+          summary: parsed.summary,
+          tokenUsage,
         });
+      }
+      // 非预期异常：仍记一笔 failed，避免 run 永远卡在 running，再把异常往上抛
+      await finishWith({
+        status: 'failed',
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       throw err;
     } finally {
       await wt.cleanup();
@@ -1123,13 +1179,11 @@ export function registerIpcHandlers({
       req: IpcChannels['pragent:run']['request'],
     ): Promise<IpcChannels['pragent:run']['response']> => {
       if (!getPrAgentBridge()) {
-        throw new Error(
-          'pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节',
-        );
+        throw new Error(t('prAgent.notReadyDetail'));
       }
       // 早期校验：/ask 必须带 question，避免排队后才报错
       if (req.tool === 'ask' && !req.question?.trim()) {
-        throw new Error('/ask 需要提供 question');
+        throw new Error(t('prAgent.askNeedsQuestion'));
       }
       const pr = await findPrOrThrow(req.localId);
       // 去重（权威）：同一 PR 同一工具已在执行 / 排队 → 拒绝重复触发，避免并发模式下
@@ -1138,7 +1192,7 @@ export function registerIpcHandlers({
         const sameTask = (q: QueueItem): boolean =>
           q.info.prLocalId === pr.localId && q.info.tool === req.tool;
         if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
-          throw new Error(`该 PR 的 /${req.tool} 任务已在执行或排队中，请勿重复触发`);
+          throw new Error(t('prAgent.duplicateTask', { tool: req.tool }));
         }
       }
       // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
@@ -1185,10 +1239,7 @@ export function registerIpcHandlers({
       const idx = waiting.findIndex((q) => q.info.runId === req.runId);
       if (idx >= 0) {
         const [removed] = waiting.splice(idx, 1);
-        logger.info(
-          { runId: req.runId, queueLen: waiting.length },
-          'pragent run cancel: queued',
-        );
+        logger.info({ runId: req.runId, queueLen: waiting.length }, 'pragent run cancel: queued');
         removed!.reject(new Error('queued run cancelled'));
         broadcastQueueChanged();
         return { ok: true };
@@ -1197,13 +1248,10 @@ export function registerIpcHandlers({
     },
   );
 
-  ipcMain.handle(
-    'pragent:queue',
-    (): IpcChannels['pragent:queue']['response'] => ({
-      active: [...active.values()].map((q) => q.info),
-      waiting: waiting.map((q) => q.info),
-    }),
-  );
+  ipcMain.handle('pragent:queue', (): IpcChannels['pragent:queue']['response'] => ({
+    active: [...active.values()].map((q) => q.info),
+    waiting: waiting.map((q) => q.info),
+  }));
 
   ipcMain.handle(
     'pragent:listRuns',
@@ -1225,6 +1273,15 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['pragent:getRun']['response']> =>
       getReviewRun(stateStore, req.localId, req.runId),
   );
+  ipcMain.handle(
+    'pragent:clearRuns',
+    async (
+      _evt,
+      req: IpcChannels['pragent:clearRuns']['request'],
+    ): Promise<IpcChannels['pragent:clearRuns']['response']> => ({
+      cleared: await clearReviewRunsForPr(stateStore, req.localId),
+    }),
+  );
 
   // === M4 草稿 IPC ===
   // 所有 mutator (create / update / delete) 写盘成功后立刻广播 drafts:changed，
@@ -1235,8 +1292,7 @@ export function registerIpcHandlers({
     async (
       _evt,
       req: IpcChannels['drafts:list']['request'],
-    ): Promise<IpcChannels['drafts:list']['response']> =>
-      listDrafts(stateStore, req.localId),
+    ): Promise<IpcChannels['drafts:list']['response']> => listDrafts(stateStore, req.localId),
   );
 
   ipcMain.handle(
@@ -1290,7 +1346,9 @@ export function registerIpcHandlers({
       req: IpcChannels['drafts:publishBatch']['request'],
     ): Promise<IpcChannels['drafts:publishBatch']['response']> => {
       const pr = await findPrOrThrow(req.localId);
-      const adapter = connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)?.adapter;
+      const adapter = connectionRuntime.adapters.find(
+        (a) => a.connectionId === pr.connectionId,
+      )?.adapter;
       if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
 
       // 拉一次当前草稿池：localId → id → draft，下面遍历 draftIds 时按 id 查。
@@ -1303,14 +1361,14 @@ export function registerIpcHandlers({
       for (const draftId of req.draftIds) {
         const draft = draftById.get(draftId);
         if (!draft) {
-          results.push({ draftId, ok: false, error: '草稿不存在 (可能已被删除)' });
+          results.push({ draftId, ok: false, error: t('drafts.notFound') });
           continue;
         }
         // 状态守卫：rejected 不发 (用户决断不发)。
         // posted 不再守卫 — 发布成功后本地草稿直接删除，不存 'posted' 历史状态，
         // 调用方传过来的 draftId 在 listDrafts 找不到时已经被前面 `if (!draft)` 兜住
         if (draft.status === 'rejected') {
-          results.push({ draftId, ok: false, error: '草稿已被拒绝，跳过' });
+          results.push({ draftId, ok: false, error: t('drafts.rejected') });
           continue;
         }
         try {
@@ -1383,6 +1441,18 @@ export function registerIpcHandlers({
       };
       await writeConfig(bootstrap.paths.configFile, next);
       logger.info({ reposDir: req.reposDir }, 'repos_dir updated; restart required');
+    },
+  );
+
+  ipcMain.handle(
+    'config:setLanguage',
+    async (_evt, req: IpcChannels['config:setLanguage']['request']): Promise<void> => {
+      const next = { ...bootstrap.config, language: req.language };
+      await writeConfig(bootstrap.paths.configFile, next);
+      // 内存同步 + 主进程 i18n 即时切换（新 dialog/错误文案与下次 pragent:run 的响应语言随之）。
+      bootstrap.config.language = req.language;
+      setMainLanguage(req.language);
+      logger.info({ language: req.language }, 'language config updated');
     },
   );
 
@@ -1636,6 +1706,12 @@ function languageDirectiveFor(lang: string): string {
   if (norm.startsWith('zh-tw') || norm.startsWith('zh-hk')) {
     return 'Respond in Traditional Chinese (繁體中文). All section labels, table headers, column names, headings, and content MUST be in Chinese.';
   }
+  if (norm.startsWith('ja')) {
+    return 'Respond in Japanese (日本語). All section labels, table headers, column names, headings, and content MUST be in Japanese — do not leave any English template strings untranslated.';
+  }
+  if (norm.startsWith('de')) {
+    return 'Respond in German (Deutsch). All section labels, table headers, column names, headings, and content MUST be in German — do not leave any English template strings untranslated.';
+  }
   return '';
 }
 
@@ -1650,10 +1726,7 @@ function languageDirectiveFor(lang: string): string {
  * 当前用户拿不到 (ping 未完成 / 失败) → 全部 false。renderer 直读 flag 不再
  * 自己比对 author / version / replies，链路最短最稳。
  */
-function annotateOwnership(
-  comments: PrComment[],
-  adapter: PlatformAdapter,
-): PrComment[] {
+function annotateOwnership(comments: PrComment[], adapter: PlatformAdapter): PrComment[] {
   const me = adapter.getCurrentUser();
   if (!me) {
     return setOwnershipRecursive(comments, () => ({ canDelete: false, canEdit: false }));
@@ -1702,12 +1775,12 @@ function buildConnectionSummaries(
   return adapters
     .filter(({ connectionId }) => connectionId === activeId)
     .map(({ connectionId, adapter }) => {
-    const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
-    return {
-      connectionId,
-      displayName: conn?.display_name ?? connectionId,
-      user: adapter.getCurrentUser(),
-      capabilities: adapter.capabilities(),
-    };
-  });
+      const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
+      return {
+        connectionId,
+        displayName: conn?.display_name ?? connectionId,
+        user: adapter.getCurrentUser(),
+        capabilities: adapter.capabilities(),
+      };
+    });
 }

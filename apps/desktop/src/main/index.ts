@@ -1,21 +1,40 @@
-import { app, BrowserWindow, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu, nativeTheme, shell } from 'electron';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
+import { resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
 import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import { Poller } from '@meebox/poller';
 import { RepoMirrorManager } from '@meebox/repo-mirror';
-import type { PlatformAdapter, PrAgentStatus } from '@meebox/shared';
+import type { PlatformAdapter, PlatformUser, PrAgentStatus } from '@meebox/shared';
 import { JsonFileStateStore } from '@meebox/state-store';
 import { buildAdapters, type ConnectionRuntime } from './adapters.js';
+import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
 import { buildProxyEnv } from './utils/proxy.js';
+import {
+  readConnectionStates,
+  writeConnectionStates,
+  type ConnectionState,
+} from './utils/connection-state.js';
+import {
+  readWindowState,
+  writeWindowState,
+  type WindowState,
+} from './utils/window-state.js';
+import { checkForUpdate } from './utils/update-check.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
 const PROCESS_START_MS = Date.now();
+
+// 版本更新检测节流：由 poller tick 顺带发起（不另起定时器），至多每小时一次。
+// lastUpdateCheckMs 初值取进程启动时刻 → 首次检测落在启动后约 1h，刻意不在启动瞬间检测，
+// 避免占用冷启动网络 / 打断启动；之后随 poller tick 每满 1h 触发一次。
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+let lastUpdateCheckMs = PROCESS_START_MS;
 
 // macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
 // 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
@@ -66,9 +85,17 @@ let prAgentProbe: Promise<PrAgentStatus>;
 let stateStore: JsonFileStateStore;
 let poller: Poller;
 let repoMirror: RepoMirrorManager;
+// 连接级本地状态（按 connectionId）：持久化上次 ping 的 currentUser，用于建连接时预热，
+// 使首轮 poll 不依赖网络即可判 approved。启动时从 state store 载入一次，ping 后增量回写。
+let connectionStates: Record<string, ConnectionState> = {};
+// 主窗口本地状态（尺寸 / 最大化）：启动时载入一次，建窗时恢复、resize/move/close 时回写。
+let windowState: WindowState = {};
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
+  // 主进程 i18n 定档（dialog 标题、错误消息等面向用户文本）。config.language 为空时
+  // 按操作系统偏好语言解析、无合适项回落英语；结果同时供 pr-agent 响应语言复用，与 UI 一致。
+  initMainI18n(resolveLanguage(bootstrap.config.language, app.getPreferredSystemLanguages()));
   // pretty 仅非打包态开：dev 控制台单行 + ISO8601 + 上色；打包态保持原始 JSON。
   logger = await createLogger({ logsDir: bootstrap.paths.logsDir, pretty: !app.isPackaged });
   logger.info(
@@ -109,31 +136,48 @@ async function start(): Promise<void> {
 
   stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
 
+  // 载入连接级本地状态（含上次 ping 的 currentUser）。文件不存在（首跑）→ 空表；读取/解析
+  // 失败（损坏）→ 也降级为空表并记一条 warn。降级后果仅是：首轮 poll 无预热身份，待异步 ping
+  // 补到 currentUser 后自动重分类（见 pingConnections），功能不受损、只是首轮可能短暂偏「待处理」。
+  try {
+    connectionStates = await readConnectionStates(stateStore);
+  } catch (err) {
+    logger.warn({ err }, 'read connection states failed; degrade to empty (no cached identities)');
+    connectionStates = {};
+  }
+
+  // 载入窗口状态（尺寸/最大化）。缺失或损坏 → 空对象，建窗回退默认尺寸。
+  try {
+    windowState = await readWindowState(stateStore);
+  } catch (err) {
+    logger.warn({ err }, 'read window state failed; use default window size');
+    windowState = {};
+  }
+
   // 连接运行时（可变持有）：adapters 全量（IPC 按 id 查任意连接，历史 PR 都能操作）
   // + adapterByHost（repo-mirror 取 clone url）。reconfigureConnections 原地替换内容，
   // IPC handler / repoMirror 经引用读到新值 → 设置页改连接热生效，无需重启。
   const connectionRuntime: ConnectionRuntime = { adapters: [], adapterByHost: new Map() };
 
-  // 重建 adapters + ping（缓存 currentUser）+ 重算 adapterByHost + 把"当前启用"的那条
-  // 喂给 poller。启动时跑一次；设置页 config:setConnections 后再跑实现热生效。不在此 tick。
-  const reconfigureConnections = async (): Promise<void> => {
+  // 连接「接线」与「ping」解耦，实现「启动不依赖网络」：
+  // - wireConnections（同步、无网络）：重建 adapters/byHost、用本地持久化的上次身份预热
+  //   currentUser、把活动连接喂给 poller。建窗前即可调用 → app:connections 能力位与首轮判
+  //   approved 都不等网络。
+  // - pingConnections（全异步、有网络）：刷新远端身份并增量持久化；活动连接身份因此变化
+  //   （含「本地无记录、ping 才首次取得」）则补一轮 poll 重新分类。不在启动关键路径。
+
+  const activeConnectionIds = (): string[] =>
+    connectionRuntime.adapters
+      .filter((a) => a.connectionId === bootstrap.config.active_connection_id)
+      .map((a) => a.connectionId);
+
+  const wireConnections = (): void => {
     const adapters = buildAdapters(bootstrap.config.connections, bootstrap.config.proxy);
-    // ping 全部连接（失败不阻塞），让 poller 首轮就能按 currentUser 判 approved
-    await Promise.all(
-      adapters.map(async ({ connectionId, adapter }) => {
-        try {
-          const r = await adapter.ping();
-          logger.info(
-            { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
-            'adapter ping',
-          );
-        } catch (err) {
-          logger.warn({ err, connectionId }, 'adapter ping failed');
-        }
-      }),
-    );
     const byHost = new Map<string, PlatformAdapter>();
     for (const { connectionId, adapter } of adapters) {
+      // 预热 currentUser：有本地记录就先填上（无记录则保持 null，由 pingConnections 兜底）。
+      const cachedUser = connectionStates[connectionId]?.user;
+      if (cachedUser) adapter.setCurrentUser?.(cachedUser);
       const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
       if (!conn) continue;
       try {
@@ -145,21 +189,61 @@ async function start(): Promise<void> {
     connectionRuntime.adapters = adapters;
     connectionRuntime.adapterByHost = byHost;
     // 只轮询当前启用的连接（同时仅一条）；其余仅保留配置不轮询
-    const active = adapters.filter(
-      (a) => a.connectionId === bootstrap.config.active_connection_id,
+    poller.setConnections(
+      adapters.filter((a) => a.connectionId === bootstrap.config.active_connection_id),
     );
-    poller.setConnections(active);
-    // 归档非活动连接的 PR：它们已不再被轮询，否则软删段永远碰不到 → 永不 purge。
-    // 这是用户显式切换/禁用连接的结果（非网络故障），交给 purge 段在 grace 期满后清理。
-    await poller.archiveConnectionsExcept(active.map((a) => a.connectionId));
-    logger.info(
-      {
-        total: adapters.length,
-        active: active.length,
-        activeId: bootstrap.config.active_connection_id,
-      },
-      'connections reconfigured',
-    );
+  };
+
+  // 持久化某连接的 currentUser（仅身份变化时写盘，避免无谓 IO）。写盘失败不影响运行。
+  const persistConnectionUser = async (
+    connectionId: string,
+    user: PlatformUser | null,
+  ): Promise<void> => {
+    const prevName = connectionStates[connectionId]?.user?.name ?? null;
+    if (prevName === (user?.name ?? null)) return;
+    connectionStates = {
+      ...connectionStates,
+      [connectionId]: { ...connectionStates[connectionId], user },
+    };
+    try {
+      await writeConnectionStates(stateStore, connectionStates);
+    } catch (err) {
+      logger.warn({ err, connectionId }, 'persist connection user failed');
+    }
+  };
+
+  // 全异步 ping：刷新 + 持久化 currentUser；活动连接身份变化（含首次取得）则补一轮 poll 重新分类。
+  const pingConnections = (): void => {
+    const activeId = bootstrap.config.active_connection_id;
+    for (const { connectionId, adapter } of connectionRuntime.adapters) {
+      const beforeName = adapter.getCurrentUser()?.name ?? null;
+      void adapter.ping().then(
+        async (r) => {
+          logger.info(
+            { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
+            'adapter ping',
+          );
+          const user = adapter.getCurrentUser();
+          await persistConnectionUser(connectionId, user);
+          // 身份变化（含本地无记录、ping 才首次取得 / 换号）→ 重新分类，让首跑/换号场景立即正确。
+          // poller.tick 已做「进行中则补跑」，不会因撞上首轮 poll 而丢失。
+          if (connectionId === activeId && (user?.name ?? null) !== beforeName) {
+            void poller.tick();
+          }
+        },
+        (err: unknown) => {
+          logger.warn({ err, connectionId }, 'adapter ping failed');
+        },
+      );
+    }
+  };
+
+  // 设置页 config:setConnections / setProxy 后的热生效：重接线 + 归档非活动连接（本地 IO）+ 异步
+  // ping。调用方（IPC）随后会 poller.tick() 立即刷新列表，ping 完成若改了身份会再补一轮。
+  const reconfigureConnections = async (): Promise<void> => {
+    wireConnections();
+    await poller.archiveConnectionsExcept(activeConnectionIds());
+    pingConnections();
   };
 
   poller = new Poller({
@@ -171,6 +255,8 @@ async function start(): Promise<void> {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('poll:tick', info);
       }
+      // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器
+      void runUpdateCheckIfDue();
     },
     // PR 新增 / 内容变更时，顺手 syncMirror 把本地镜像跟上，让用户随后点开 PR
     // 时省一趟 fetch。失败不阻断 poll 流程 (mirror 也有自己的全局队列 + 错误隔离)
@@ -215,8 +301,9 @@ async function start(): Promise<void> {
     proxyEnv: () => buildProxyEnv(bootstrap.config.proxy),
   });
 
-  // 初次构建连接（含 ping + 把 active 连接喂给 poller）
-  await reconfigureConnections();
+  // 建窗前同步把连接接好（无网络）：构建 adapters、用本地持久化身份预热 currentUser、喂 poller。
+  // 这样 app:connections 与首轮判 approved 都不依赖网络；ping 留到建窗后全异步刷新。
+  wireConnections();
 
   registerIpcHandlers({
     bootstrap,
@@ -235,6 +322,30 @@ async function start(): Promise<void> {
   // 不要 Electron 默认菜单栏（File/Edit/View/...），meebox 自己提供工具栏
   Menu.setApplicationMenu(null);
 
+  await app.whenReady();
+
+  // dev 下 Dock 图标走通用 Electron.app（未经 electron-builder 烤 icns）→ 手动设成 mac 专用图标。
+  // 打包态 Dock 图标由 bundle 的 icns 决定，无需且不应在此覆盖。仅 mac 有 app.dock。
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
+  }
+
+  // 强制原生窗口 chrome 走深色：Windows 据此设 DWMWA_USE_IMMERSIVE_DARK_MODE，原生标题栏 +
+  // 那条细边框渲染成深色，与 #1e1e1e 应用一致，不再跟随系统浅色主题（splash + 主窗口都受益）。
+  // macOS/Linux 无副作用；只影响原生 chrome，应用本身已是自绘深色样式。
+  nativeTheme.themeSource = 'dark';
+
+  // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。
+  // 主窗口 ready-to-show 时关闭它。
+  const splash = createSplash();
+  createWindow(splash);
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+
+  // 启动关键路径已无网络调用：归档（本地 IO）后直接启动 poller，首轮用预热的 currentUser 分类。
+  await poller.archiveConnectionsExcept(activeConnectionIds());
   // poller 常驻：当前启用连接为空时 tick 是空操作；用户在设置页启用 / 切换连接后
   // reconfigureConnections 热生效，无需重启
   poller.start();
@@ -245,23 +356,9 @@ async function start(): Promise<void> {
     },
     'poller started',
   );
-
-  await app.whenReady();
-
-  // dev 下 Dock 图标走通用 Electron.app（未经 electron-builder 烤 icns）→ 手动设成 mac 专用图标。
-  // 打包态 Dock 图标由 bundle 的 icns 决定，无需且不应在此覆盖。仅 mac 有 app.dock。
-  if (process.platform === 'darwin' && !app.isPackaged) {
-    app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
-  }
-
-  // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。
-  // 主窗口 ready-to-show 时关闭它。
-  const splash = createSplash();
-  createWindow(splash);
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  // ping 全异步刷新远端身份（不在启动关键路径）：刷新/持久化 currentUser，身份变化则补一轮 poll。
+  // 这是「本地无身份记录」（首跑 / state 缺失）时的兜底来源；ping 慢或不可达都不影响已启动的 UI。
+  pingConnections();
 }
 
 app.on('before-quit', () => {
@@ -291,6 +388,41 @@ function resolveSplashLogo(): string | null {
     }
   }
   return null;
+}
+
+/**
+ * 版本更新检测（config.update.check_enabled 开启时）。由 poller tick 顺带发起，内部用
+ * lastUpdateCheckMs 时间戳门控成「至多每小时一次」——复用既有 poll 周期，不引入额外定时器。
+ * 仅检测 + 提示：有新版才广播给所有窗口（StatusBar 提示 + 跳转下载），不下载 / 不安装。失败静默。
+ *
+ * 时间戳在 await 前即更新，避免 await 窗口内下一次 tick 重复发起。
+ */
+async function runUpdateCheckIfDue(): Promise<void> {
+  if (!bootstrap.config.update.check_enabled) return;
+  if (Date.now() - lastUpdateCheckMs < UPDATE_CHECK_INTERVAL_MS) return;
+  lastUpdateCheckMs = Date.now();
+  try {
+    const result = await checkForUpdate(app.getVersion(), bootstrap.config.proxy);
+    // 获取失败（网络 / 解析 / 超时 / 限流，ok=false）：只记 debug 日志，**绝不推任何 IPC** →
+    // 渲染层完全无感，不弹任何提示 / chip。保证「拿不到更新信息」对用户零打扰。
+    if (!result.ok) {
+      logger.debug({ error: result.error }, 'update check failed (silent, no prompt)');
+      return;
+    }
+    // 仅「检测成功且确有新版」才广播；ok=true&hasUpdate=false（已是最新）同样静默。
+    if (result.hasUpdate) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('app:updateAvailable', result);
+      }
+      logger.info(
+        { current: result.currentVersion, latest: result.latestVersion },
+        'update available',
+      );
+    }
+  } catch (err) {
+    // 兜底：checkForUpdate 约定不抛；万一抛了也吞掉，绝不冒泡成任何用户可见行为。
+    logger.debug({ err }, 'update check threw (silent, no prompt)');
+  }
 }
 
 /**
@@ -339,9 +471,10 @@ function createSplash(): BrowserWindow {
 function createWindow(splash?: BrowserWindow): void {
   // 最小尺寸保证核心三栏 (sidebar 240 + file-tree 180 + diff 内容)
   // 在 chat-pane 折叠态下仍可用；高度兜住 pr-header + tabs + diff + statusbar
+  // 尺寸优先用本地记录的上次大小（windowState），无记录回退默认 1280×800。
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: windowState.width ?? 1280,
+    height: windowState.height ?? 800,
     minWidth: 960,
     minHeight: 600,
     show: false,
@@ -359,6 +492,28 @@ function createWindow(splash?: BrowserWindow): void {
       sandbox: false,
     },
   });
+
+  // 恢复最大化态：以正常尺寸建窗后再 maximize，使「还原」回到记录的正常大小。
+  if (windowState.maximized) win.maximize();
+
+  // 记住窗口大小：resize/move 防抖回写、关闭时立即回写。getNormalBounds 取「非最大化」尺寸，
+  // 故最大化时记录的仍是还原后的正常大小。写盘失败不影响使用。
+  const persistWindowState = (): void => {
+    if (win.isDestroyed()) return;
+    const b = win.getNormalBounds();
+    windowState = { width: b.width, height: b.height, maximized: win.isMaximized() };
+    void writeWindowState(stateStore, windowState).catch((err: unknown) => {
+      logger.warn({ err }, 'persist window state failed');
+    });
+  };
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleSave = (): void => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistWindowState, 400);
+  };
+  win.on('resize', scheduleSave);
+  win.on('move', scheduleSave);
+  win.on('close', persistWindowState);
 
   // 主界面首帧就绪：关闭 splash、显示主窗口，并记录进程启动→首帧耗时（度量启动性能）。
   win.once('ready-to-show', () => {

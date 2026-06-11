@@ -62,6 +62,11 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 - **提交信息**：约定式提交、**中文**，带 scope，例：`feat(desktop): …` / `fix(review): …` / `docs(readme): …` / `build(mac): …`。结尾带 `Co-Authored-By` trailer。**改完不要自动提交**，等明确指示。
 - **不提交无关改动**：工作区可能混有他人未提交编辑，按文件归属拆成内聚 commit，别混进同一条。
 - **按文件显式暂存**：只 `git add` 自己本次改动的具体文件路径，**禁止 `git add -A` / `git add .` / `git add :/`** 整目录暂存。多个 agent 任务可能并行编辑同一工作区，全量暂存会把他人未完成的改动一并卷入。暂存后 `git status` 复核暂存区，确认只含本任务文件再提交。
+- **PR 打标签**：开 / 更新 PR 后**习惯性打标签**——从仓库既有标签集（`gh label list`：enhancement / documentation / bug / …）选最贴切的一或多个贴上（`gh pr edit <n> --add-label`）。没有合适的现成标签时按需新建或留空并说明，不强凑。
+
+## 国际化 (i18n)
+
+GUI 文本走 **react-i18next**（key 为中立标识符，`zh-CN` / `en-US` / `ja-JP` / `de-DE` 为**对等译文集**，无源/译层级；UI 语言由 `config.language` 经 `resolveLanguage` 决定，空则按 OS 回落英语）。**默认 / 兜底语言取 `en-US`**（国际化标准：缺 key 回退英文而非中文）：渲染层 en-US 静态打包进入口 + 其余懒加载、`fallbackLng: 'en-US'`，主进程各持一份 locale、同样兜底 en-US。设计、key 命名、翻译规范见 [docs/arch/10-i18n](docs/arch/10-i18n.md)。三条易踩的：①新增文本须在**各语言 locale 都加**并保持**递归字典序**（日语复数同中文仅 `_other`、德语同英语需 `_one`/`_other`）；②i18next **只有 `count`** 触发复数，普通计数插值要换别的变量名；③**不要开 `nonExplicitSupportedLngs`**——它把 `zh-CN` 按基码 `zh` 查找、与按 `zh-CN` 注册的 bundle 错位 → 整页裸 key。
 
 ## 文档约定
 

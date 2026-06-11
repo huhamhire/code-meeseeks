@@ -224,6 +224,10 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     return this.cachedUser;
   }
 
+  setCurrentUser(user: PlatformUser | null): void {
+    this.cachedUser = user;
+  }
+
   async listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]> {
     // 发现分类 → dashboard role：created=我创建(AUTHOR)，其余(待我评审)=REVIEWER。
     const role = opts?.filter === 'created' ? 'AUTHOR' : 'REVIEWER';

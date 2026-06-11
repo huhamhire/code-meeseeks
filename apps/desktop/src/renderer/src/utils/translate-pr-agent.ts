@@ -1,130 +1,63 @@
 /**
- * pr-agent 输出模板的中文翻译字典。
+ * pr-agent 输出模板的翻译（独立于 react-i18next 的 UI 文案）。
  *
  * 背景：`CONFIG__RESPONSE_LANGUAGE=zh-CN` 只影响 LLM 生成的**内容值**，但 pr-agent
  * 在其 Python 源码里**硬编码**了一批结构化模板字符串（section 标题 / fixed labels /
- * checkbox 文字），这些 LLM 不动它们，所以中文环境下仍以英文出现。
+ * checkbox 文字），这些 LLM 不动它们，所以中文环境下仍以英文出现。我们在渲染层做一次
+ * 替换，把已知模板词翻成目标语言。
  *
- * 我们在渲染层做一次替换，把已知模板词翻成中文。字典按 pr-agent 0.35.x 实际
- * 输出模板维护：跟上游升级需要 spot-check 一次。
+ * 这不是「按 key 取串」而是「按英文原文匹配、整段 blob 子串替换」，与 react-i18next 的
+ * 访问模型不同，故**不进 locale 资源**，各语言的 <英文模板 → 译文> 表独立维护在同目录
+ * 的 `pr-agent-labels/<lang>.json`，由本文件的替换引擎加载。
  *
- * 实现：把 `text` 里出现的英文键全部 literal 替换为对应中文。按 key 长度倒序
- * 处理避免"短键先把长键的子串吃掉"——例如先翻译 "PR contains tests" 再翻译 "Tests"，
- * 否则 "PR contains tests" 里的 "tests" 会被先替换成 "测试"，毁掉长 phrase 匹配。
+ * 字典随 pr-agent 版本维护（按输出模板分组、便于跟上游升级 spot-check；JSON 顺序不影响
+ * 正确性——引擎按 key 长度倒序处理，避免"短键先吃掉长键的子串"）。pr-agent v0.36 把
+ * issue_header "Possible bug" rewrite 成大写 I 的 "Possible Issue" 绕过 LLM 翻译，故字典
+ * 里另列了大写版本。
  *
- * 未匹配的英文保持原样 (兜底，确保新版本 pr-agent 多出来的词不被吞)。
+ * 语言感知：仅当 UI 语言 (config.language) 有对应字典（当前 zh-CN）时替换；en-US 等无字典
+ * 语言下 pr-agent 输出本就是英文，原样返回 (passthrough)。新增目标语言 = 加一份
+ * `pr-agent-labels/<lang>.json` 并在 TRANSLATION_MAPS 注册。
  */
 
-export const PR_AGENT_TRANSLATIONS_ZH: ReadonlyMap<string, string> = new Map([
-  // /review 结构化标签
-  ['PR Reviewer Guide', 'PR 评审导引'],
-  [
-    'Here are some key observations to aid the review process:',
-    '以下是辅助评审的关键观察：',
-  ],
-  ['Here are some key observations to aid the review process', '以下是辅助评审的关键观察'],
-  ['Estimated effort to review', '预估评审工作量'],
-  ['Estimated effort to review:', '预估评审工作量：'],
-  ['PR contains tests', '已包含测试'],
-  ['PR does not contain tests', '未包含测试'],
-  ['Recommended focus areas for review', '建议重点评审区域'],
-  ['Recommended focus areas for review:', '建议重点评审区域：'],
-  ['No security concerns identified', '未发现安全风险'],
-  ['Security concerns', '安全关注'],
-  ['Major issues detected', '发现重大问题'],
-  ['No major issues detected', '未发现重大问题'],
-  ['Possible issues', '潜在问题'],
-  ['Possible issues:', '潜在问题：'],
-  ['Key issues to review', '关键评审要点'],
-  ['Relevant tests', '相关测试'],
-  // "无相关测试" 系列：pr-agent 在没找到相关测试时回这两条之一，截图里就漏在了原文
-  ['No relevant tests found', '未发现相关测试'],
-  ['No relevant tests', '无相关测试'],
-  ['Code feedback', '代码反馈'],
-  ['Suggestions', '建议'],
-  ['Score', '评分'],
-  ['Ticket compliance analysis', '工单合规分析'],
-  // /improve 模板词：标题 / 默认 label / 评分行 / 总结
-  ['PR Code Suggestions', 'PR 代码改进建议'],
-  ['Code Suggestions', '改进建议'],
-  ['Suggestion importance[1-10]:', '重要度（1-10）：'],
-  ['Suggestion importance', '重要度'],
-  ['Why:', '原因：'],
-  ['Possible improvement', '可优化点'],
-  ['Possible issue', '潜在问题'],
-  ['Improvement', '改进'],
-  ['Security', '安全'],
-  ['Best practice', '最佳实践'],
-  ['Maintainability', '可维护性'],
-  ['Readability', '可读性'],
-  ['Performance', '性能'],
-  ['Error handling', '错误处理'],
-  ['Possible bug', '潜在 bug'],
-  // pr-agent v0.36 utils.py 硬编码把 issue_header "Possible bug" rewrite 成
-  // "Possible Issue" (大写 I)，绕过 LLM 翻译路径 → CONFIG__RESPONSE_LANGUAGE 救
-  // 不了它，必须在 translate 字典里手动加大写 I 版本
-  ['Possible Issue', '潜在问题'],
-  ['Possible Issues', '潜在问题'],
-  ['General Suggestion', '一般建议'],
-  ['Critical Issue', '严重问题'],
-  ['Typo', '拼写'],
-  ['Style', '风格'],
-  ['Documentation', '文档'],
-  // /review code-feedback finding 内嵌 labels (pr-agent 模板每条 finding 的子项标题)
-  ['Suggested fix', '建议修复'],
-  ['Existing code', '原代码'],
-  ['Improved code', '改进代码'],
-  ['Why:', '原因：'],
-  ['Issue:', '问题：'],
-  ['Suggestion:', '建议：'],
-  ['Severity:', '严重度：'],
-  ['Category:', '类别：'],
-  ['File:', '文件：'],
-  ['Lines:', '行号：'],
-  ['Relevant file:', '相关文件：'],
-  ['Relevant lines:', '相关行号：'],
-  // /describe 结构化标签
-  ['PR Type', '类型'],
-  ['Description', '描述'],
-  ['Walkthrough', '走查'],
-  ['Title', '标题'],
-  ['User description', '用户描述'],
-  ['Auto-generated', '自动生成'],
-  // /ask 结构化标签
-  ['Question', '问题'],
-  ['Questions', '问题'],
-  ['Answer', '回答'],
-  ['Answers', '回答'],
-  ['Analysis', '分析'],
-  // PR Type 取值
-  ['Bug fix', '缺陷修复'],
-  ['Enhancement', '功能增强'],
-  ['Documentation', '文档'],
-  ['Refactoring', '重构'],
-  ['Performance', '性能'],
-  ['Configuration changes', '配置变更'],
-  ['Tests', '测试'],
-  ['Other', '其他'],
-  // 严重度 (短词最后处理，避免误伤上面长 phrase)
-  ['High', '高'],
-  ['Medium', '中'],
-  ['Low', '低'],
-]);
+import i18n, { matchSupportedLanguage, type SupportedLanguage } from '../i18n';
+import zhCN from './pr-agent-labels/zh-CN.json';
+import jaJP from './pr-agent-labels/ja-JP.json';
+import deDE from './pr-agent-labels/de-DE.json';
 
-// 预排序：长 key 在前，避免短 key 先吃掉长 key 的子串
-const SORTED_ENTRIES: Array<[string, string]> = [...PR_AGENT_TRANSLATIONS_ZH.entries()].sort(
-  (a, b) => b[0].length - a[0].length,
-);
+// 各语言的 <英文模板 → 译文> 表注册表。未注册的语言（如 en-US）→ passthrough。
+const TRANSLATION_MAPS: Partial<Record<SupportedLanguage, Record<string, string>>> = {
+  'zh-CN': zhCN,
+  'ja-JP': jaJP,
+  'de-DE': deDE,
+};
+
+// 按语言缓存「预排序条目」(长 key 在前，避免短 key 先吃掉长 key 的子串)
+const SORTED_BY_LANG = new Map<SupportedLanguage, Array<[string, string]>>();
+function sortedEntriesFor(lang: SupportedLanguage): Array<[string, string]> | null {
+  const map = TRANSLATION_MAPS[lang];
+  if (!map) return null;
+  let cached = SORTED_BY_LANG.get(lang);
+  if (!cached) {
+    cached = Object.entries(map).sort((a, b) => b[0].length - a[0].length);
+    SORTED_BY_LANG.set(lang, cached);
+  }
+  return cached;
+}
 
 /**
- * 把含 pr-agent 模板英文标签的字符串翻成中文。
- * 替换是字面量 (split/join)，不走正则，避免特殊字符意外匹配。
- * 大小写敏感：模板里都是首字母大写，保持原样。
+ * 把含 pr-agent 模板英文标签的字符串按当前 UI 语言翻译。
+ * - 替换是字面量 (split/join)，不走正则，避免特殊字符意外匹配。
+ * - 大小写敏感：模板里都是首字母大写，保持原样。
+ * - 当前语言无对应字典 (如 en-US) 时原样返回 (pr-agent 输出本就是英文)。
  */
 export function translatePrAgentLabels(text: string): string {
   if (!text) return text;
+  const lang = matchSupportedLanguage(i18n.language);
+  const entries = lang ? sortedEntriesFor(lang) : null;
+  if (!entries) return text;
   let result = text;
-  for (const [en, zh] of SORTED_ENTRIES) {
+  for (const [en, zh] of entries) {
     if (result.includes(en)) {
       result = result.split(en).join(zh);
     }

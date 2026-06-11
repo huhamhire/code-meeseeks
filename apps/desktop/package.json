@@ -1,6 +1,6 @@
 {
   "name": "@meebox/desktop",
-  "version": "0.2.0",
+  "version": "0.3.0-alpha.1",
   "private": true,
   "description": "meebox Electron desktop app",
   "author": {
@@ -74,16 +74,21 @@
     "@meebox/state-store": "*",
     "@monaco-editor/react": "^4.7.0",
     "anser": "^2.3.5",
+    "i18next": "^26.3.1",
+    "i18next-resources-to-backend": "^1.2.1",
+    "mermaid": "^11.4.0",
     "monaco-editor": "^0.55.0",
     "pino": "^9.5.0",
     "pino-roll": "^3.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-i18next": "^17.0.8",
     "react-markdown": "^9.1.0",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
+    "semver": "^7.6.3",
     "undici": "^6.21.1",
     "yaml": "^2.6.0",
     "zod": "^3.23.0"
@@ -91,6 +96,7 @@
   "devDependencies": {
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@types/semver": "^7.5.8",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^42.3.0",
     "electron-builder": "^26.8.1",

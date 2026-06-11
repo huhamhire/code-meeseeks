@@ -1,6 +1,16 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { AppInfo, AppPaths, Config, LlmProfile } from '@meebox/shared';
+import { useTranslation } from 'react-i18next';
+import {
+  LANGUAGE_OPTIONS,
+  type AppInfo,
+  type AppPaths,
+  type Config,
+  type LlmProfile,
+  type SupportedLanguage,
+  type UpdateCheckResult,
+} from '@meebox/shared';
 import { invoke } from '../api';
+import i18n, { persistLanguage, resolveUiLanguage } from '../i18n';
 import { ConfirmModal } from './ConfirmModal';
 import {
   ConnectionForm,
@@ -9,12 +19,7 @@ import {
   toConnDraft,
   type ConnDraft,
 } from './ConnectionForm';
-import {
-  LlmProfileForm,
-  newProfileId,
-  providerLabel,
-  validateProfile,
-} from './LlmProfileForm';
+import { LlmProfileForm, newProfileId, providerLabel, validateProfile } from './LlmProfileForm';
 import { CloseIcon, EyeIcon, EyeOffIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
 
 interface SettingsModalProps {
@@ -24,6 +29,8 @@ interface SettingsModalProps {
   /** LLM 配置改动后通知父级同步状态（StatusBar chip 等） */
   onLlmChange?: (llm: Config['llm']) => void;
   onProxyChange?: (proxy: Config['proxy']) => void;
+  /** UI 语言即时切换后通知父级同步 boot.config.language（与写盘/实时切换解耦的状态同步） */
+  onLanguageChange?: (language: SupportedLanguage) => void;
   /**
    * 连接改动（含切换活动连接）保存成功后通知父级。父级需重拉 config + 连接摘要 + PR 列表：
    * 活动连接变化后，main 端 app:connections 只返回新活动连接的摘要、prs:list 只返回其 PR，
@@ -51,9 +58,11 @@ export function SettingsModal({
   config,
   onLlmChange,
   onProxyChange,
+  onLanguageChange,
   onConnectionsChange,
   onClose,
 }: SettingsModalProps) {
+  const { t } = useTranslation();
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
 
@@ -85,6 +94,23 @@ export function SettingsModal({
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // UI 语言：即时生效项（不走全局保存）。下拉值取「当前生效语言」(config.language 经
+  // resolveUiLanguage 解析，空配置 → OS 偏好)。选择后立即写盘 + 主进程/渲染层同步切换。
+  const [language, setLanguage] = useState<SupportedLanguage>(() =>
+    resolveUiLanguage(config.language),
+  );
+  const handleLanguageChange = (next: SupportedLanguage): void => {
+    if (next === language) return;
+    setLanguage(next);
+    void i18n.changeLanguage(next); // 渲染层实时切换
+    persistLanguage(next); // localStorage 缓存，下次启动同步命中
+    onLanguageChange?.(next); // 同步父级 boot.config.language
+    invoke('config:setLanguage', { language: next }).catch((e: unknown) => {
+      // 写盘 / 主进程切换失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
+      setSaveError(e instanceof Error ? e.message : String(e));
+    });
+  };
+
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
 
   useEffect(() => {
@@ -110,7 +136,11 @@ export function SettingsModal({
 
   // 连接 / LLM 编辑：改本地 state + 自动写入 config.yaml（防丢失），但不应用到运行时
   //（不 reconfigure；重启或点底栏「保存」才生效）。其余配置（规则/轮询/缓存）仍纯草稿。
-  const autosaveDraft = (nextConnections: Config['connections'], activeId: string, nextLlm: Config['llm']): void => {
+  const autosaveDraft = (
+    nextConnections: Config['connections'],
+    activeId: string,
+    nextLlm: Config['llm'],
+  ): void => {
     void invoke('config:autosaveDraft', {
       connections: nextConnections,
       active_connection_id: activeId,
@@ -205,7 +235,9 @@ export function SettingsModal({
     const { mode, draft } = connEditor;
     const conn = fromConnDraft(draft);
     const next =
-      mode === 'add' ? [...connections, conn] : connections.map((c) => (c.id === conn.id ? conn : c));
+      mode === 'add'
+        ? [...connections, conn]
+        : connections.map((c) => (c.id === conn.id ? conn : c));
     // 新增首条自动设为启用
     const activeId = mode === 'add' && !activeConnId ? conn.id : activeConnId;
     await persistConnections(next, activeId);
@@ -248,7 +280,8 @@ export function SettingsModal({
     try {
       if (pollerChanged) {
         const n = Number.parseInt(pollerInput, 10);
-        if (!Number.isFinite(n) || n < 60 || n > 900) throw new Error('轮询间隔需 60~900 秒整数');
+        if (!Number.isFinite(n) || n < 60 || n > 900)
+          throw new Error(t('settings.pollerRangeError'));
         await invoke('config:setPoller', { interval_seconds: n });
       }
       if (rulesChanged) {
@@ -297,30 +330,53 @@ export function SettingsModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="modal-header">
-          <h3>设置</h3>
+          <h3>{t('settings.title')}</h3>
           <button
             className="icon-btn modal-close"
             type="button"
             onClick={onClose}
-            aria-label="关闭"
-            title="关闭"
+            aria-label={t('common.close')}
+            title={t('common.close')}
           >
             <CloseIcon />
           </button>
         </div>
         <div className="modal-body">
+          {/* 界面语言：即时生效项，放在最前。固定宽度下拉靠右（标题两端对齐）；选项用各
+              语言自身的 endonym，不随 UI 语言翻译。 */}
           <section className="modal-section">
             <div className="modal-section-head">
-              <h4>连接</h4>
+              <h4>{t('settings.languageTitle')}</h4>
+              <select
+                className="settings-input settings-language-select"
+                value={language}
+                onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
+                aria-label={t('settings.languageTitle')}
+              >
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.endonym}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              {t('settings.languageHint')}
+            </p>
+          </section>
+
+          <section className="modal-section">
+            <div className="modal-section-head">
+              <h4>{t('settings.connectionsTitle')}</h4>
               <button type="button" className="btn btn-primary btn-sm" onClick={openAddConn}>
-                + 添加连接
+                {t('settings.addConnection')}
               </button>
             </div>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              同时只启用一个连接。
+              {t('settings.connectionsHint')}
             </p>
             {connections.length === 0 ? (
-              <p className="muted">尚未配置；添加一条 Bitbucket Server 连接以开始。</p>
+              <p className="muted">{t('settings.connectionsEmpty')}</p>
             ) : (
               <div className="llm-profile-list">
                 {connections.map((c) => {
@@ -333,7 +389,7 @@ export function SettingsModal({
                           name="conn-active"
                           checked={isActive}
                           onChange={() => void setActiveConn(c.id)}
-                          aria-label="启用该连接"
+                          aria-label={t('settings.enableConnectionAria')}
                         />
                       </label>
                       <div className="llm-profile-meta">
@@ -346,8 +402,8 @@ export function SettingsModal({
                         type="button"
                         className="btn btn-sm btn-icon btn-icon-primary"
                         onClick={() => openEditConn(c.id)}
-                        title="编辑"
-                        aria-label="编辑"
+                        title={t('common.edit')}
+                        aria-label={t('common.edit')}
                       >
                         <PencilIcon />
                       </button>
@@ -355,8 +411,8 @@ export function SettingsModal({
                         type="button"
                         className="btn btn-sm btn-icon btn-icon-danger"
                         onClick={() => setConnDeleteId(c.id)}
-                        title="删除该连接"
-                        aria-label="删除"
+                        title={t('settings.deleteConnectionTitle')}
+                        aria-label={t('common.delete')}
                       >
                         <TrashIcon />
                       </button>
@@ -368,9 +424,9 @@ export function SettingsModal({
           </section>
 
           <section className="modal-section">
-            <h4>轮询</h4>
+            <h4>{t('settings.pollerTitle')}</h4>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              自动检查 PR 的间隔，60~900 秒整数。
+              {t('settings.pollerHint')}
             </p>
             <div className="settings-edit-row" style={{ alignItems: 'center' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -387,7 +443,7 @@ export function SettingsModal({
                     setPollerInput(String(POLLER_TIERS[idx]));
                     setSaved(false);
                   }}
-                  aria-label="轮询间隔档位"
+                  aria-label={t('settings.pollerSliderAria')}
                 />
                 {/* 档位刻度：按 thumb 实际停靠位置绝对定位（thumb 宽 12px，两端内缩 6px），
                     translateX(-50%) 居中对齐；当前档位高亮 */}
@@ -410,40 +466,38 @@ export function SettingsModal({
                 className="muted"
                 style={{ minWidth: 56, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
               >
-                {pollerInput} 秒
+                {t('settings.pollerSeconds', { n: pollerInput })}
               </span>
             </div>
           </section>
 
           <section className="modal-section">
             <div className="modal-section-head">
-              <h4>LLM 模型</h4>
+              <h4>{t('settings.llmTitle')}</h4>
               <button type="button" className="btn btn-primary btn-sm" onClick={openAddProfile}>
-                + 添加配置
+                {t('settings.addLlmProfile')}
               </button>
             </div>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              选择活跃配置决定 PR Agent 调用哪个模型。
+              {t('settings.llmHint')}
             </p>
             {llm.profiles.length === 0 ? (
-              <p className="muted">尚未配置；添加一条以启用 PR Agent。</p>
+              <p className="muted">{t('settings.llmEmpty')}</p>
             ) : (
               <div className="llm-profile-list">
                 {llm.profiles.map((p) => {
                   const isActive = p.id === llm.active_id;
-                  const titleText = p.label || `配置 ${p.id.slice(0, 4)}`;
+                  const titleText =
+                    p.label || t('settings.llmProfileFallback', { id: p.id.slice(0, 4) });
                   return (
-                    <div
-                      key={p.id}
-                      className={`llm-profile-row${isActive ? ' active' : ''}`}
-                    >
+                    <div key={p.id} className={`llm-profile-row${isActive ? ' active' : ''}`}>
                       <label className="llm-profile-active">
                         <input
                           type="radio"
                           name="llm-active"
                           checked={isActive}
                           onChange={() => void setActive(p.id)}
-                          aria-label="设为活跃"
+                          aria-label={t('settings.setActiveLlmAria')}
                         />
                       </label>
                       <div className="llm-profile-meta">
@@ -457,8 +511,8 @@ export function SettingsModal({
                         type="button"
                         className="btn btn-sm btn-icon btn-icon-primary"
                         onClick={() => openEditProfile(p.id)}
-                        title="编辑"
-                        aria-label="编辑"
+                        title={t('common.edit')}
+                        aria-label={t('common.edit')}
                       >
                         <PencilIcon />
                       </button>
@@ -466,8 +520,8 @@ export function SettingsModal({
                         type="button"
                         className="btn btn-sm btn-icon btn-icon-danger"
                         onClick={() => void deleteProfile(p.id)}
-                        title="删除该配置"
-                        aria-label="删除"
+                        title={t('settings.deleteLlmProfileTitle')}
+                        aria-label={t('common.delete')}
                       >
                         <TrashIcon />
                       </button>
@@ -480,25 +534,37 @@ export function SettingsModal({
 
           <section className="modal-section">
             <div className="modal-section-head">
-              <h4>网络代理</h4>
+              <div className="modal-section-head-title">
+                <h4>{t('settings.proxyTitle')}</h4>
+                {/* 启用状态用 chip 表达（绿=已启用/灰=未启用），与应用其它状态视觉一致；
+                    地址不在此展示，详情见「配置」弹窗。 */}
+                <span
+                  className={`settings-status-chip ${
+                    proxy.enabled && proxy.host ? 'is-on' : 'is-off'
+                  }`}
+                >
+                  {proxy.enabled && proxy.host
+                    ? t('settings.proxyEnabledStatus')
+                    : t('settings.proxyDisabledStatus')}
+                </span>
+              </div>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={() => setProxyEditor(proxy)}
               >
-                配置
+                {t('settings.configure')}
               </button>
             </div>
             <p className="muted" style={{ margin: 0 }}>
-              {proxy.enabled && proxy.host ? `已启用 · ${proxy.host}:${proxy.port}` : '未启用'}
-              。开启后 LLM / 代码平台 / git(HTTPS) 经 HTTP 代理，本地地址直连。
+              {t('settings.proxyStatusHint')}
             </p>
           </section>
 
           <section className="modal-section">
-            <h4>规则目录</h4>
+            <h4>{t('settings.rulesTitle')}</h4>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              目录下每个 <code>.md</code> 是一条个性化 review 规则。
+              {t('settings.rulesHintPrefix')} <code>.md</code> {t('settings.rulesHintSuffix')}
             </p>
             <div className="settings-edit-row">
               <input
@@ -509,7 +575,7 @@ export function SettingsModal({
                   setRulesDirInput(e.target.value);
                   setSaved(false);
                 }}
-                placeholder="可选；如 ~/code/team-pr-rules"
+                placeholder={t('settings.rulesDirPlaceholder')}
               />
               <button
                 type="button"
@@ -518,7 +584,7 @@ export function SettingsModal({
                   void (async () => {
                     const r = await invoke('dialog:pickDirectory', {
                       defaultPath: rulesDirInput.trim() || paths.appDir,
-                      title: '选择规则目录',
+                      title: t('settings.pickRulesDirTitle'),
                     });
                     if (r.path) {
                       setRulesDirInput(r.path);
@@ -526,8 +592,8 @@ export function SettingsModal({
                     }
                   })();
                 }}
-                title="选择目录"
-                aria-label="选择目录"
+                title={t('settings.pickDirectory')}
+                aria-label={t('settings.pickDirectory')}
               >
                 <FolderIcon />
               </button>
@@ -540,33 +606,33 @@ export function SettingsModal({
                   setRules((r) => ({ ...r, enabled: e.target.checked }));
                   setSaved(false);
                 }}
-                aria-label="启用规则"
+                aria-label={t('settings.enableRules')}
               />
-              <span className="muted">启用规则</span>
+              <span className="muted">{t('settings.enableRules')}</span>
             </label>
           </section>
 
           <section className="modal-section">
-            <h4>工作目录</h4>
+            <h4>{t('settings.workDirTitle')}</h4>
             <div className="modal-kv">
-              <div className="modal-kv-key">应用根</div>
+              <div className="modal-kv-key">{t('settings.appRoot')}</div>
               <div className="modal-kv-val">{paths.appDir}</div>
-              <div className="modal-kv-key">配置</div>
+              <div className="modal-kv-key">{t('settings.configKey')}</div>
               <div className="modal-kv-val">{paths.configFile}</div>
             </div>
           </section>
 
           <section className="modal-section">
-            <h4>缓存目录</h4>
+            <h4>{t('settings.cacheDirTitle')}</h4>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              本地仓库镜像 + worktree 的存放位置，可重建的缓存。
+              {t('settings.cacheDirHint')}
             </p>
             <div className="modal-kv">
-              <div className="modal-kv-key">当前目录</div>
+              <div className="modal-kv-key">{t('settings.currentDir')}</div>
               <div className="modal-kv-val">{paths.reposDir}</div>
-              <div className="modal-kv-key">缓存占用</div>
+              <div className="modal-kv-key">{t('settings.cacheUsage')}</div>
               <div className="modal-kv-val">
-                {totalBytes === null ? '计算中…' : formatBytes(totalBytes)}
+                {totalBytes === null ? t('settings.calculating') : formatBytes(totalBytes)}
               </div>
             </div>
             <div className="settings-edit-row">
@@ -587,7 +653,7 @@ export function SettingsModal({
                   void (async () => {
                     const r = await invoke('dialog:pickDirectory', {
                       defaultPath: reposDirInput.trim() || paths.reposDir,
-                      title: '选择缓存目录',
+                      title: t('settings.pickCacheDirTitle'),
                     });
                     if (r.path) {
                       setReposDirInput(r.path);
@@ -595,39 +661,40 @@ export function SettingsModal({
                     }
                   })();
                 }}
-                title="选择目录"
-                aria-label="选择目录"
+                title={t('settings.pickDirectory')}
+                aria-label={t('settings.pickDirectory')}
               >
                 <FolderIcon />
               </button>
             </div>
-            <p className="muted modal-footer">改缓存目录需重启应用生效；原目录内容不会自动迁移。</p>
+            <p className="muted modal-footer">{t('settings.cacheDirRestartNote')}</p>
           </section>
 
           <section className="modal-section">
-            <h4>运行环境</h4>
+            <h4>{t('settings.runtimeTitle')}</h4>
             <div className="modal-kv">
-              <div className="modal-kv-key">应用版本</div>
+              <div className="modal-kv-key">{t('settings.appVersion')}</div>
               <div className="modal-kv-val">{info.appVersion}</div>
               <div className="modal-kv-key">Electron</div>
               <div className="modal-kv-val">{info.electronVersion}</div>
               <div className="modal-kv-key">Node</div>
               <div className="modal-kv-val">{info.nodeVersion}</div>
-              <div className="modal-kv-key">平台</div>
+              <div className="modal-kv-key">{t('settings.platform')}</div>
               <div className="modal-kv-val">{info.platform}</div>
             </div>
-            <div className="settings-actions" style={{ marginTop: 10 }}>
+            <div className="settings-actions" style={{ marginTop: 10, alignItems: 'center' }}>
+              <UpdateCheckButton enabled={config.update.check_enabled} />
               <button
                 className="btn"
                 type="button"
+                style={{ marginLeft: 'auto' }}
                 onClick={() => void invoke('app:openDevTools', undefined)}
-                title="打开 Electron 开发者工具（分离窗口）"
+                title={t('settings.openDevToolsTitle')}
               >
-                打开 DevTools
+                {t('settings.openDevTools')}
               </button>
             </div>
           </section>
-
         </div>
         <div className="modal-footer-bar">
           <div className="modal-footer-left">
@@ -637,21 +704,21 @@ export function SettingsModal({
               onClick={() => void openConfigFile()}
               disabled={opening}
             >
-              {opening ? '打开中…' : '编辑 config.yaml'}
+              {opening ? t('settings.opening') : t('settings.editConfigYaml')}
             </button>
           </div>
           <div className="modal-footer-right">
             {(saveError ?? openError) && (
               <span className="error-text">{saveError ?? openError}</span>
             )}
-            {saved && !anyChanged && <span className="muted">已保存</span>}
+            {saved && !anyChanged && <span className="muted">{t('settings.saved')}</span>}
             <button
               className="btn btn-primary"
               type="button"
               onClick={() => void saveAll()}
               disabled={!anyChanged || saving}
             >
-              {saving ? '保存中…' : '保存'}
+              {saving ? t('settings.saving') : t('common.save')}
             </button>
           </div>
         </div>
@@ -687,11 +754,11 @@ export function SettingsModal({
       )}
       {connDeleteId && (
         <ConfirmModal
-          title="删除连接"
-          message={`确定删除连接「${
-            connections.find((c) => c.id === connDeleteId)?.display_name || connDeleteId
-          }」？点底栏「保存」后生效。`}
-          confirmLabel="删除"
+          title={t('settings.deleteConnectionConfirmTitle')}
+          message={t('settings.deleteConnectionConfirmMessage', {
+            name: connections.find((c) => c.id === connDeleteId)?.display_name || connDeleteId,
+          })}
+          confirmLabel={t('common.delete')}
           danger
           onConfirm={() => {
             deleteConn(connDeleteId);
@@ -701,6 +768,69 @@ export function SettingsModal({
         />
       )}
     </div>
+  );
+}
+
+/** 「检查更新」按钮（运行环境段）：手动查 GitHub 最新版，自管 loading + 结果展示。
+ *  enabled=false（config.update.check_enabled 关闭）时禁用按钮并提示，不发起检测。 */
+function UpdateCheckButton({ enabled }: { enabled: boolean }) {
+  const { t } = useTranslation();
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<UpdateCheckResult | null>(null);
+  if (!enabled) {
+    return (
+      <>
+        <button className="btn" type="button" disabled title={t('settings.updateDisabledTitle')}>
+          {t('settings.checkUpdate')}
+        </button>
+        <span className="muted">{t('settings.updateDisabledHint')}</span>
+      </>
+    );
+  }
+  const run = async (): Promise<void> => {
+    setChecking(true);
+    try {
+      setResult(await invoke('app:checkUpdate', undefined));
+    } catch (e) {
+      setResult({
+        ok: false,
+        hasUpdate: false,
+        currentVersion: '',
+        error: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setChecking(false);
+    }
+  };
+  return (
+    <>
+      <button
+        className="btn"
+        type="button"
+        onClick={() => void run()}
+        disabled={checking}
+        title={t('settings.checkUpdateTitle')}
+      >
+        {checking ? t('settings.checking') : t('settings.checkUpdate')}
+      </button>
+      {result &&
+        !checking &&
+        (result.ok ? (
+          result.hasUpdate ? (
+            <button
+              className="btn btn-sm"
+              type="button"
+              onClick={() => result.url && void invoke('app:openExternal', { url: result.url })}
+            >
+              {t('settings.updateAvailableLabel', { version: result.latestVersion })}
+            </button>
+          ) : (
+            <span className="muted">{t('settings.upToDate')}</span>
+          )
+        ) : (
+          <span className="error-text">{t('settings.checkFailed', { error: result.error })}</span>
+        ))}
+    </>
   );
 }
 
@@ -715,6 +845,7 @@ function ConnectionEditorModal({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const { mode, draft } = state;
   const canSave = connDraftCanSave(draft);
   return (
@@ -728,13 +859,15 @@ function ConnectionEditorModal({
     >
       <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="modal-header">
-          <h3>{mode === 'add' ? '新增连接' : '编辑连接'}</h3>
+          <h3>
+            {mode === 'add' ? t('settings.addConnectionTitle') : t('settings.editConnectionTitle')}
+          </h3>
         </div>
         <div className="modal-body">
           {/* 平台选择仅新增时可改；编辑既有连接不允许切平台（base_url/token 语义不同） */}
           {mode === 'add' && (
             <div className="modal-kv" style={{ marginBottom: 8 }}>
-              <div className="modal-kv-key">平台</div>
+              <div className="modal-kv-key">{t('settings.platform')}</div>
               <div className="modal-kv-val">
                 <select
                   className="settings-input"
@@ -743,7 +876,7 @@ function ConnectionEditorModal({
                     onChange({ ...draft, kind: e.target.value as ConnDraft['kind'] })
                   }
                 >
-                  <option value="github">GitHub（github.com / Enterprise Server）</option>
+                  <option value="github">{t('settings.platformGithub')}</option>
                   <option value="bitbucket-server">Bitbucket Server / Data Center</option>
                 </select>
               </div>
@@ -755,16 +888,16 @@ function ConnectionEditorModal({
             style={{ marginTop: 12, justifyContent: 'flex-end', alignItems: 'center' }}
           >
             <button type="button" className="btn" onClick={onCancel}>
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={onSave}
               disabled={!canSave}
-              title={!canSave ? '请填完名称 / Base URL / Token' : undefined}
+              title={!canSave ? t('settings.connSaveHint') : undefined}
             >
-              保存
+              {t('common.save')}
             </button>
           </div>
         </div>
@@ -784,6 +917,7 @@ function ProxyEditorModal({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [test, setTest] = useState<{
     testing: boolean;
     result: { ok: boolean; reason?: string } | null;
@@ -810,37 +944,37 @@ function ProxyEditorModal({
         role="dialog"
       >
         <div className="modal-header">
-          <h3>网络代理</h3>
+          <h3>{t('settings.proxyTitle')}</h3>
         </div>
         <div className="modal-body">
           <p className="muted" style={{ margin: '0 0 10px' }}>
-            HTTP 代理（出站）。开启后 LLM 调用、代码平台、git(HTTPS) 统一经代理，本地地址直连。
+            {t('settings.proxyModalHint')}
           </p>
           <label className="settings-secret-row">
             <input
               type="checkbox"
               checked={draft.enabled}
               onChange={(e) => patch({ enabled: e.target.checked })}
-              aria-label="启用代理"
+              aria-label={t('settings.enableProxy')}
             />
-            <span className="muted">启用代理</span>
+            <span className="muted">{t('settings.enableProxy')}</span>
           </label>
           {draft.enabled && (
             <>
               {/* 字段名放输入框前（modal-kv 网格）；用户名 / 密码分上下两行，均可选 */}
               <div className="modal-kv" style={{ marginTop: 10, alignItems: 'center' }}>
-                <div className="modal-kv-key">地址</div>
+                <div className="modal-kv-key">{t('settings.proxyHost')}</div>
                 <div className="modal-kv-val">
                   <input
                     type="text"
                     className="settings-input"
                     value={draft.host}
                     onChange={(e) => patch({ host: e.target.value.trim() })}
-                    placeholder="如 127.0.0.1"
-                    aria-label="代理地址"
+                    placeholder={t('settings.proxyHostPlaceholder')}
+                    aria-label={t('settings.proxyHostAria')}
                   />
                 </div>
-                <div className="modal-kv-key">端口</div>
+                <div className="modal-kv-key">{t('settings.proxyPort')}</div>
                 <div className="modal-kv-val">
                   <input
                     type="number"
@@ -849,22 +983,22 @@ function ProxyEditorModal({
                     min={1}
                     max={65535}
                     onChange={(e) => patch({ port: Number.parseInt(e.target.value, 10) || 0 })}
-                    aria-label="代理端口"
+                    aria-label={t('settings.proxyPortAria')}
                   />
                 </div>
-                <div className="modal-kv-key">用户名</div>
+                <div className="modal-kv-key">{t('settings.proxyUsername')}</div>
                 <div className="modal-kv-val">
                   <input
                     type="text"
                     className="settings-input"
                     value={draft.username}
                     onChange={(e) => patch({ username: e.target.value })}
-                    placeholder="可选（Basic Auth）"
-                    aria-label="代理用户名"
+                    placeholder={t('settings.proxyUsernamePlaceholder')}
+                    aria-label={t('settings.proxyUsernameAria')}
                     autoComplete="off"
                   />
                 </div>
-                <div className="modal-kv-key">密码</div>
+                <div className="modal-kv-key">{t('settings.proxyPassword')}</div>
                 <div className="modal-kv-val">
                   <div className="settings-secret-row">
                     <input
@@ -872,16 +1006,16 @@ function ProxyEditorModal({
                       className="settings-input"
                       value={draft.password}
                       onChange={(e) => patch({ password: e.target.value })}
-                      placeholder="可选"
-                      aria-label="代理密码"
+                      placeholder={t('settings.proxyPasswordPlaceholder')}
+                      aria-label={t('settings.proxyPasswordAria')}
                       autoComplete="off"
                     />
                     <button
                       type="button"
                       className="btn btn-sm btn-icon"
                       onClick={() => setPwVisible((v) => !v)}
-                      title={pwVisible ? '隐藏' : '显示'}
-                      aria-label={pwVisible ? '隐藏' : '显示'}
+                      title={pwVisible ? t('settings.hide') : t('settings.show')}
+                      aria-label={pwVisible ? t('settings.hide') : t('settings.show')}
                     >
                       {pwVisible ? <EyeIcon /> : <EyeOffIcon />}
                     </button>
@@ -911,15 +1045,17 @@ function ProxyEditorModal({
                     })();
                   }}
                 >
-                  {test.testing ? '测试中…' : '测试连通'}
+                  {test.testing ? t('settings.testing') : t('settings.testProxy')}
                 </button>
                 {test.result &&
                   (test.result.ok ? (
                     <span className="muted" style={{ color: '#16825d' }}>
-                      ✓ 代理可用
+                      {t('settings.proxyOk')}
                     </span>
                   ) : (
-                    <span className="error-text">✗ {test.result.reason ?? '失败'}</span>
+                    <span className="error-text">
+                      ✗ {test.result.reason ?? t('settings.testFailed')}
+                    </span>
                   ))}
               </div>
             </>
@@ -929,16 +1065,16 @@ function ProxyEditorModal({
             style={{ marginTop: 12, justifyContent: 'flex-end', alignItems: 'center' }}
           >
             <button type="button" className="btn" onClick={onCancel}>
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={onSave}
               disabled={draft.enabled && !draft.host}
-              title={draft.enabled && !draft.host ? '请填代理地址' : undefined}
+              title={draft.enabled && !draft.host ? t('settings.proxyHostRequired') : undefined}
             >
-              确定
+              {t('common.confirm')}
             </button>
           </div>
         </div>
@@ -960,6 +1096,7 @@ function LlmEditorModal({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const { mode, draft } = state;
   // 点保存才把所有必填项暴露出来（LlmProfileForm 内部按 touched 渐进显示）
   const [forceShowErrors, setForceShowErrors] = useState(false);
@@ -982,7 +1119,7 @@ function LlmEditorModal({
     >
       <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="modal-header">
-          <h3>{mode === 'add' ? '新增 LLM 模型' : '编辑 LLM 模型'}</h3>
+          <h3>{mode === 'add' ? t('settings.addLlmTitle') : t('settings.editLlmTitle')}</h3>
         </div>
         <div className="modal-body">
           <LlmProfileForm
@@ -993,16 +1130,16 @@ function LlmEditorModal({
           />
           <div className="settings-actions" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
             <button type="button" className="btn" onClick={onCancel}>
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={trySave}
               disabled={forceShowErrors && !isValid}
-              title={forceShowErrors && !isValid ? '请先填完必填项' : undefined}
+              title={forceShowErrors && !isValid ? t('settings.fillRequiredHint') : undefined}
             >
-              保存
+              {t('common.save')}
             </button>
           </div>
         </div>

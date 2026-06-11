@@ -86,3 +86,27 @@ def patch(module) -> None:
         return f"meebox:///{f}#L{relevant_line_start}"
 
     module.LocalGitProvider.get_line_link = get_line_link
+
+    # 统一启用 GFM：LocalGitProvider 默认对 'gfm_markdown' 报 False，导致 /describe 的
+    # enable_pr_diagram（configuration.toml 默认开）被 `enable and is_supported(gfm_markdown)`
+    # 门控关掉、不产出 mermaid 架构图；/review 等也走非 GFM 简化分支。这里让 gfm_markdown
+    # 返回 True，使 describe 按需输出 mermaid 图、各工具走 GFM 富 markdown（details / 表格 /
+    # mermaid）。格式兼容由应用端 markdown 解析（rehype + mermaid 渲染）处理。其余能力保持原状。
+    _orig_is_supported = module.LocalGitProvider.is_supported
+
+    def is_supported(self, capability):
+        if capability == "gfm_markdown":
+            return True
+        return _orig_is_supported(self, capability)
+
+    module.LocalGitProvider.is_supported = is_supported
+
+    # get_pr_labels: 基类未实现，LocalGitProvider 直接抛 NotImplementedError('Getting labels
+    # is not implemented for the local git provider')。/review 跑完会调 set_review_labels →
+    # get_pr_labels(update=True) 读现有标签做 merge，本地仓库无"标签"概念，异常被 pr_reviewer
+    # catch 后打成 ERROR 噪音（review 结果不受影响）。本地无远端标签，返回空列表即可：
+    # set_review_labels 据此走 publish_labels（LocalGitProvider 本就是 no-op），全程静默。
+    def get_pr_labels(self, update=False):
+        return []
+
+    module.LocalGitProvider.get_pr_labels = get_pr_labels
