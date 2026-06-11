@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+## [0.3.0-alpha.1] - 2026-06-11
+
+> 第三个版本的首个开发预览（alpha）。本版重点：**界面国际化（四语 + 即时切换）**、Mermaid 架构图
+> 渲染、版本更新检测、`/improve` 与 `/describe` 思路建议段等 pr-agent 能力扩展。
+
 ### Added
 
 - **多语言界面（i18n）**：接入 **react-i18next**，全部 GUI 文本与主进程面向用户文案（目录对话框 /
@@ -169,7 +174,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.0-alpha.1...HEAD
+[0.3.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0...v0.3.0-alpha.1
 [0.2.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0...v0.2.0
 [0.2.0-alpha.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0-alpha.1...v0.2.0-alpha.2
 [0.2.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0...v0.2.0-alpha.1
