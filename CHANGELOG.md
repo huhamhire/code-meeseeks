@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-11
+
 ### Fixed
 - **macOS 分发版「本地 CLI」provider（claude / codex）失效**（Finder/Dock 启动）：macOS GUI 应用
   只继承 launchd 的最小 PATH（`/usr/bin:/bin:/usr/sbin:/sbin`），读不到 shell 配置，故找不到装在
