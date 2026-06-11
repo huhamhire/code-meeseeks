@@ -50,7 +50,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
 - 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
 - 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等；也可通过本机已授权的本地 CLI 工具调用第三方模型。
-- 🌐 **多语言界面** —— 简体中文 / English / 日本語 / Deutsch；设置页与首启向导即时切换，空配置自动匹配系统语言（AI 回复语言随之）。
+- 🌐 **多语言界面** —— 简体中文 / English / 日本語 / Deutsch，AI 回复语言随界面语言。
 
 <div align="center">
 
