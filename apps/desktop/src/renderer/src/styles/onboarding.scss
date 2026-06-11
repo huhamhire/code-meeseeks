@@ -165,6 +165,19 @@
     }
   }
 }
+// 欢迎页语言选择：标签 + 下拉，居中、与开始按钮留间距
+.onboarding-language {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  margin-bottom: $space-5;
+
+  select {
+    width: auto;
+    min-width: 160px;
+  }
+}
 .onboarding-start {
   min-width: 160px;
   justify-content: center;

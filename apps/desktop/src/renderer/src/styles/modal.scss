@@ -107,6 +107,12 @@
   gap: $space-2;
 }
 
+// 语言下拉：固定宽度、靠右，不被 .settings-input 的 flex:1 撑满（复合选择器提权覆盖）
+.settings-input.settings-language-select {
+  flex: 0 0 auto;
+  width: 200px;
+}
+
 // 设置项启用状态 chip：on=绿(同 draft posted)、off=灰(muted)，与全局 chip 观感一致
 .settings-status-chip {
   padding: 1px $space-2;

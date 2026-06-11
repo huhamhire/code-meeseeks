@@ -1,5 +1,6 @@
 import type { AppInfo, AppPaths, UpdateCheckResult } from './app-info.js';
 import type { Config } from './config.js';
+import type { SupportedLanguage } from './language.js';
 import type {
   PingResult,
   PlatformCapabilities,
@@ -19,13 +20,7 @@ import type {
 import type { PrAgentStatus } from './pr-agent-status.js';
 
 /** ChangedFile / FileContent 跨 IPC 边界用，与 @meebox/repo-mirror 类型同形。 */
-export type DiffFileStatus =
-  | 'added'
-  | 'modified'
-  | 'deleted'
-  | 'renamed'
-  | 'copied'
-  | 'typechange';
+export type DiffFileStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'typechange';
 
 export interface DiffChangedFile {
   path: string;
@@ -323,6 +318,12 @@ export interface IpcChannels {
   'repo:getTotalSize': { request: void; response: { totalBytes: number } };
   /** 写入新的 repos_dir 到 config.yaml；重启生效 */
   'config:setReposDir': { request: { reposDir: string }; response: void };
+  /**
+   * 写入 UI 语言到 config.yaml 并**即时生效**：主进程 i18n 立刻 changeLanguage（后续 dialog/
+   * 错误文案 + 下次 pragent:run 的响应语言随之），渲染层另行 i18n.changeLanguage 实时切换。
+   * 与代理/连接同属热生效项，无需依赖设置页全局保存。
+   */
+  'config:setLanguage': { request: { language: SupportedLanguage }; response: void };
   /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
   /** 写入 rules.dir + enabled 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
@@ -507,8 +508,5 @@ export interface IpcBridge {
     req: IpcChannels[K]['request'],
   ): Promise<IpcChannels[K]['response']>;
   /** 订阅 main → renderer 推送事件，返回取消订阅函数。 */
-  subscribe<E extends IpcEventName>(
-    event: E,
-    handler: (data: IpcEvents[E]) => void,
-  ): () => void;
+  subscribe<E extends IpcEventName>(event: E, handler: (data: IpcEvents[E]) => void): () => void;
 }

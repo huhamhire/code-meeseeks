@@ -138,8 +138,8 @@ export default function App() {
         if (!window.api) {
           throw new Error('preload bridge missing: window.api is undefined');
         }
-        const [info, paths, config, prAgent, initialPrs, connections, lastSync] =
-          await Promise.all([
+        const [info, paths, config, prAgent, initialPrs, connections, lastSync] = await Promise.all(
+          [
             invoke('app:info', undefined),
             invoke('app:paths', undefined),
             invoke('config:read', undefined),
@@ -147,7 +147,8 @@ export default function App() {
             invoke('prs:list', undefined),
             invoke('app:connections', undefined),
             invoke('prs:lastSync', undefined),
-          ]);
+          ],
+        );
         // 先按 config.language 切到目标语言并**等其资源加载完**（懒加载语言会异步拉 chunk），
         // 再 setBoot 渲染主界面 —— 首屏直接是用户语言，不闪兜底。persist 供下次启动同步命中。
         const lang = resolveUiLanguage(config.language);
@@ -385,6 +386,7 @@ export default function App() {
       <OnboardingWizard
         existingLlmProfiles={boot.config.llm.profiles}
         initialReposDir={boot.config.workspace.repos_dir}
+        initialLanguage={boot.config.language}
         onComplete={completeOnboarding}
       />
     );
@@ -479,11 +481,12 @@ export default function App() {
           info={boot.info}
           paths={boot.paths}
           config={boot.config}
-          onLlmChange={(llm) =>
-            setBoot((b) => (b ? { ...b, config: { ...b.config, llm } } : b))
-          }
+          onLlmChange={(llm) => setBoot((b) => (b ? { ...b, config: { ...b.config, llm } } : b))}
           onProxyChange={(proxy) =>
             setBoot((b) => (b ? { ...b, config: { ...b.config, proxy } } : b))
+          }
+          onLanguageChange={(language) =>
+            setBoot((b) => (b ? { ...b, config: { ...b.config, language } } : b))
           }
           onConnectionsChange={refreshBootAndPrs}
           onClose={() => setShowSettings(false)}

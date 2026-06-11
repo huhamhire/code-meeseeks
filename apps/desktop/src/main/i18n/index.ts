@@ -45,6 +45,16 @@ export function initMainI18n(language: string): void {
   });
 }
 
+/**
+ * 运行时切换主进程语言（设置页 / 首启向导即时改语言时调用）。所有 locale 已静态打包，
+ * changeLanguage 同步生效；同步更新 currentLanguage，使 getMainLanguage()（pr-agent 响应
+ * 语言）随之。已弹出的 dialog 不回溯，新产生的文案与下次 run 用新语言。
+ */
+export function setMainLanguage(language: string): void {
+  currentLanguage = matchSupportedLanguage(language) ?? 'en-US';
+  void instance.changeLanguage(currentLanguage);
+}
+
 /** 主进程翻译函数。未 init 时退化为返回 key（不抛错，保证健壮）。 */
 export const t: TFunction = ((key: string, options?: Record<string, unknown>) =>
   instance.isInitialized ? instance.t(key, options) : key) as TFunction;
