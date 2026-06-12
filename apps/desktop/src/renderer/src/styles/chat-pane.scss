@@ -533,6 +533,11 @@
   &.chat-finding-general {
     border-left-color: $border-default;
   }
+  // 已拒绝：左色条转中性灰（盖过 code-feedback / suggestion 的警示色）、整卡降饱和收起
+  &.chat-finding-rejected {
+    border-left-color: $text-muted;
+    opacity: 0.68;
+  }
 }
 .chat-finding-head {
   display: flex;
@@ -581,6 +586,39 @@
   &.chat-finding-cat-general {
     background: $bg-surface;
     color: $text-muted;
+  }
+}
+// 已拒绝卡片：类别 chip 一并置灰，盖过分类配色（与左色条置灰一致）
+.chat-finding-rejected .chat-finding-cat {
+  background: $bg-surface;
+  color: $text-muted;
+}
+// 已拒绝卡片头部的展开 / 收起切换：chevron 图标，推到头部最右，低调中性样式。
+// 图标在右侧，收起态朝左（◂，旋转 180° 指回内容），展开态朝下（▾，旋转 90°）。
+.chat-finding-collapse-toggle {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
+  // ChevronIcon 原始朝右（▸）；收起态旋转 180° 朝左
+  svg {
+    transition: transform 0.15s ease;
+    transform: rotate(180deg);
+  }
+  &.is-expanded svg {
+    transform: rotate(90deg);
+  }
+
+  &:hover {
+    color: $text-primary;
+    background: $bg-surface;
   }
 }
 // 概览指标（工作量 / 测试 / 安全 / 评分）：值很短，chip 与值排同一行、紧凑展示，不再各占两行。
