@@ -135,7 +135,8 @@ export class BitbucketClient {
         // 相对路径 (e.g., /projects/.../attachments/xxx) 拼当前 baseUrl
         absoluteUrl = new URL(url, `https://${myHost}`).toString();
       }
-    } catch {
+    } catch (e) {
+      console.warn(`[bb-attachment] URL 解析失败 src=${url}:`, e);
       return null;
     }
 
@@ -151,12 +152,21 @@ export class BitbucketClient {
         },
         signal: ctl.signal,
       });
-    } catch {
+    } catch (e) {
       clearTimeout(timer);
+      console.warn(`[bb-attachment] fetch 抛错 src=${url} url=${absoluteUrl}:`, e);
       return null;
     }
     clearTimeout(timer);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // 非 2xx 不再静默吞掉（原先直接 return null，无任何线索）。记 status / 是否重定向 /
+      // 重定向后最终 URL / content-type —— 跨源重定向会丢 Authorization 头（fetch 规范）、
+      // PAT 未被认可常返回 200 登录页等失败模式，都靠这行定位。
+      console.warn(
+        `[bb-attachment] 取附件失败 src=${url} url=${absoluteUrl} status=${String(res.status)} redirected=${String(res.redirected)} finalUrl=${res.url} contentType=${res.headers.get('content-type') ?? '(none)'}`,
+      );
+      return null;
+    }
     const buf = await res.arrayBuffer();
     return {
       bytes: new Uint8Array(buf),

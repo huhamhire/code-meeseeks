@@ -15,6 +15,15 @@ function extend<T>(list: readonly T[] | null | undefined, extra: readonly T[]): 
 // 在 rehype-sanitize 的 GitHub 默认白名单基础上，补齐 Qodo 等机器人常用但默认未必放开的标签/属性。
 const schema = {
   ...defaultSchema,
+  // 放行 Bitbucket 评论的 `attachment:<repoId>/<id>` 内部协议（内嵌图片/附件引用）。
+  // 默认 protocols 白名单 src/href 只许 http/https，会在 react-markdown 的 urlTransform
+  // 之前就把 attachment: 的 src/href 整个剥掉 → img 收不到 src（BitbucketImage 不触发）、
+  // a 收不到 href（渲染成裸文字）。两条附件渲染路径都被卡死，故在此显式放行 attachment 协议。
+  protocols: {
+    ...defaultSchema.protocols,
+    src: extend(defaultSchema.protocols?.src, ['attachment']),
+    href: extend(defaultSchema.protocols?.href, ['attachment']),
+  },
   tagNames: extend(defaultSchema.tagNames, [
     'details',
     'summary',
