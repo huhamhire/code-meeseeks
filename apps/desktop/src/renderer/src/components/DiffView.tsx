@@ -422,7 +422,8 @@ export function DiffView({
           )
         : undefined;
     setPendingScroll({
-      line: pendingNav.anchor.startLine,
+      // 取 endLine 跟草稿 zone / 发布锚点对齐（见 zone 行号注释），高亮行与草稿区同位
+      line: pendingNav.anchor.endLine,
       side: 'new',
       draftId: matchingDraft?.id,
     });
@@ -847,12 +848,13 @@ export function DiffView({
     const newByLine = new Map<number, ReviewDraft[]>();
     for (const d of fileDrafts) {
       const target = d.anchor.side === 'old' ? oldByLine : newByLine;
-      // 用 startLine 作为 zone 行号 — finding 跨多行 (startLine=403, endLine=425)
-      // 时 zone 紧贴 startLine 下方，跟 nav reveal 的高亮行视觉一致；之前用 endLine
-      // 让 zone 出现在 finding 段末尾 (425 后)，高亮行在起始 (403)，跨 23 行错位
-      const arr = target.get(d.anchor.startLine) ?? [];
+      // 用 endLine 作为 zone 行号，跟发布锚点对齐 —— publishInlineComment 用
+      // anchor.endLine 发到远端，草稿区也落 endLine 即「预览位置 = 最终发布位置」
+      // (WYSIWYG)。nav reveal 的高亮行同样取 endLine（见下方 pendingScroll），二者
+      // 视觉一致，跨多行 finding (startLine=403, endLine=425) 也不会起止错位。
+      const arr = target.get(d.anchor.endLine) ?? [];
       arr.push(d);
-      target.set(d.anchor.startLine, arr);
+      target.set(d.anchor.endLine, arr);
     }
 
     const originalEditor = diffEditor.getOriginalEditor();
