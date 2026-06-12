@@ -5,6 +5,24 @@
 
 ## [Unreleased]
 
+### Changed
+- 拒绝代码反馈 / 改进建议后，卡片自动折叠收起并置灰：左色条转中性灰、类别 chip 置灰，正文与
+  代码对比收起，仅保留头部与锚点行（含撤销入口）；头部 chevron 图标可临时展开回看。降低已决断
+  项的视觉占用。
+- 危险按钮（「清空」「删除」等确认操作）实底由偏浅的鲑红改为饱和红 `#c72e0f`，提高警示力。
+- Windows 安装页不再强制展开文件日志列表：electron-builder 整包解包（`Nsis7z::Extract` +
+  `CopyFiles /SILENT`）不产生逐文件日志，展开只会显示空白框、反而像卡住，改为仅保留进度条；
+  卸载页仍展开（逐文件删除有真实进度）。
+
+### Fixed
+- Bitbucket 评论内嵌附件图片不渲染：`rehype-sanitize` 的协议白名单（`src` / `href` 仅
+  http/https）在 `urlTransform` 之前即剥掉 `attachment:` 内部协议，使 img/a 收不到 src/href、
+  图片代理永不触发（属随 sanitize 链引入的回归）。schema 放行 `attachment` 协议；并让附件拉取
+  失败不再静默吞错（记 status / 重定向 / 最终 URL / content-type）。
+- 代码建议草稿区的锚定行与最终发布落点不一致：草稿预览按 `startLine` 渲染、发布却落
+  `endLine`。统一以发布落点为准，草稿预览行与跳转高亮行改用 `endLine`，实现「预览位置 = 远端
+  评论落点」（评论统一落在 finding 范围末行）。
+
 ## [0.3.1] - 2026-06-11
 
 ### Fixed
