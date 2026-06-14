@@ -116,7 +116,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 | `deepseek`          | DeepSeek                                    | ✅ 已验证           |
 | `dashscope`         | 阿里百炼（DashScope，通义千问）             | ✅ 已验证           |
 | `volcengine-ark`    | 火山方舟（Volcengine Ark，豆包）            | ✅ 已验证           |
-| `openai-compatible` | OpenAI 协议兼容（vLLM / 中转 / 自建 / 本地 Ollama 的 `/v1`） | 🚧 理论可行，未验证 |
+| `openai-compatible` | OpenAI 协议兼容（vLLM / 中转 / 自建 / 本地 Ollama 的 `/v1`） | ✅ 已验证           |
 | `cli`               | 通过本地 CLI 工具调用第三方模型             | ✅ 已验证           |
 
 > **本地 CLI 模式说明**：该模式不直连模型 API，而是把评审请求转交给使用者**自行安装并授权**的本地命令行工具，由其代为调用背后的第三方模型。需先在本机完成对应 CLI 工具的安装与登录授权，应用本身不负责其凭据管理与计费。
