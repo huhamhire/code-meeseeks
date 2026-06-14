@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+### Added
+- 设置页「运行环境」新增「关于 & 反馈」入口：GitHub 仓库（Star）/ 提交 Issue / Releases 三个外链
+  （各带专属图标，点击经系统浏览器打开），低频社区入口集中于「关于」区、不进状态栏。
+
+### Changed
+- **移除独立 `ollama` provider**，统一经 `openai-compatible` 接入本地 Ollama（Base URL 填
+  `http://localhost:11434/v1`）：Ollama 自带 OpenAI 兼容端点，走此路径更标准稳健。旧 `ollama` 配置
+  加载时**自动迁移**为 `openai-compatible` 并补足 `/v1`，存量无感升级。
+- `openai-compatible` 经实测标记为**已验证**。
+
 ## [0.4.0] - 2026-06-14
 
 > 第四个正式版（仍属 0.x · 早期预览）。本版重点：**接入 GitLab**（gitlab.com + Self-Managed，
