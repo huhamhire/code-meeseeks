@@ -4,7 +4,7 @@
 
 - **GitHub**（github.com 与 GitHub Enterprise Server）
 - **Bitbucket Server / Data Center**（REST API v1，≥ 7.0）
-- **GitLab**（gitlab.com 与 Self-Managed，CE / EE，REST API v4）
+- **GitLab**（gitlab.com 与 Self-Managed，CE / EE，REST API v4，≥ 13.8，推荐 15.6+）
 
 ## 添加连接
 
@@ -24,6 +24,21 @@
 
 - **pat（默认）**：克隆走 HTTPS，URL 里内嵌令牌，无需额外配置。
 - **ssh**：克隆走 `git@host:...`，端口 / 密钥由系统 `~/.ssh/config` 决定，**与 PAT 无关**（PAT 仅用于 REST API）。GHE / Bitbucket 自定义 SSH 端口（如 Bitbucket 默认 7999）需在 ssh config 里配好。
+
+## 发现过滤器支持矩阵
+
+侧栏「发现分类」标签按**活动连接的平台能力**显示——各平台原生支持的列表筛选不同，**不支持的分类不渲染对应标签**（由 `capabilities.discoveryFilters` 决定，非各处硬编码）。
+
+| 发现过滤器 | 含义 | GitHub | Bitbucket | GitLab |
+| --- | --- | :---: | :---: | :---: |
+| 待我评审 | 请求我评审的 PR / MR | ✅ | ✅ | ✅ |
+| 我创建的 | 我作为作者的 PR / MR | ✅ | ✅ | ✅ |
+| 指派给我 | 指派给我的 PR / MR | ✅ | ❌ | ✅ |
+| 提及我 | 正文 / 评论 @ 我的 PR / MR | ✅ | ❌ | ❌ |
+
+- **GitLab**：映射到 REST API 的 `reviewer_username` / `author_username` / `assignee_username`；GitLab MR 列表无原生「提及我」筛选，故不提供该分类。
+- **Bitbucket**：仅「待我评审 / 我创建的」，无「指派给我 / 提及我」。
+- 新增平台时按其 API 实际支持的筛选填 `discoveryFilters`，UI 与文档随之自动对齐。
 
 ---
 
@@ -113,6 +128,12 @@
 > 连接里的 **Base URL**：gitlab.com 填 `https://gitlab.com/api/v4`（留空即默认此值）；Self-Managed 填 `https://<你的 GitLab 域名>/api/v4`。
 
 创建：**右上角头像 → Edit profile → Access Tokens**（或 `User Settings → Access Tokens`）→ Add new token，勾选 scope 并设置有效期。
+
+> **版本兼容**：接入走 GitLab REST API v4，覆盖 gitlab.com SaaS 与 Self-Managed（CE / EE）。
+> - **推荐 GitLab 15.6 及以上**：`/metadata`（15.2+）自动探测 edition、`detailed_merge_status`（15.6+）令可合并状态 full 保真，体验最完整。
+> - **最低 GitLab 13.8**：「待我评审」发现依赖 MR Reviewers 的 `reviewer_username` 筛选（13.8 起提供）；更低版本该过滤不可用，可改用「我创建的 / 分配给我的」发现过滤。
+> - **13.8 ~ 15.5 自动降级**：缺 `/metadata` 退回 `/version`（保守按 CE、审批 UI 灰显），缺 `detailed_merge_status` 退回 `merge_status`（可合并判断略粗）；发现 / 评论 / 合并 / clone 均正常。
+> - **审批（通过 / 撤销）**：属 EE Premium / Ultimate（MR 审批 API 自 13.9），经 edition 探测启用，CE 灰显，详见下文 3.2。
 
 ### 3.1 Scope（最小授权）
 
