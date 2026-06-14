@@ -130,11 +130,17 @@ llm:
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | string | 连接唯一标识，被 `active_connection_id` 引用。 |
-| `kind` | enum | 平台类型：`bitbucket-server` / `github`。 |
+| `kind` | enum | 平台类型：`github` / `bitbucket-server` / `gitlab`。 |
 | `display_name` | string | 显示名称（设置页与状态栏展示）。 |
 | `auth.type` | literal | 固定 `pat`。 |
 | `auth.token` | string | 访问令牌（PAT）。所需权限见 [代码平台配置](01-code-platform.md)。 |
 | `clone.protocol` | enum | git 克隆协议：`pat`（默认，HTTPS，URL 内嵌用户名 + PAT）/ `ssh`（走系统 `~/.ssh/config`）。 |
+
+### `kind: github`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `base_url` | string (URL) | GitHub REST API base。**可选**：留空默认 `https://api.github.com`（github.com）；GitHub Enterprise Server 填 `https://<ghe-host>/api/v3`。clone / web 域名由应用自动推导。 |
 
 ### `kind: bitbucket-server`
 
@@ -142,11 +148,11 @@ llm:
 | --- | --- | --- |
 | `base_url` | string (URL) | Bitbucket Server / Data Center 地址，如 `https://bitbucket.example.com`。**必填**。 |
 
-### `kind: github`
+### `kind: gitlab`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `base_url` | string (URL) | GitHub REST API base。**可选**：留空默认 `https://api.github.com`（github.com）；GitHub Enterprise Server 填 `https://<ghe-host>/api/v3`。clone / web 域名由应用自动推导。 |
+| `base_url` | string (URL) | GitLab REST API base。**可选**：留空默认 `https://gitlab.com/api/v4`（gitlab.com）；Self-Managed 填 `https://<gitlab-host>/api/v4`。clone / web 域名由应用自动推导。 |
 
 ## `active_connection_id` — 当前启用连接
 

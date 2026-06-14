@@ -2,8 +2,9 @@
 
 接入你的代码托管平台，客户端才能发现待评审的 PR、读 diff、发评论 / 审批 / 合并。目前支持：
 
-- **Bitbucket Server / Data Center**（REST API v1，≥ 7.0）
 - **GitHub**（github.com 与 GitHub Enterprise Server）
+- **Bitbucket Server / Data Center**（REST API v1，≥ 7.0）
+- **GitLab**（gitlab.com 与 Self-Managed，CE / EE，REST API v4）
 
 ## 添加连接
 
@@ -102,3 +103,55 @@
   - 只读评审（不评论 / 不合并）可降到 **Repository: Read**，但客户端的评论 / 审批 / 合并将不可用。
   - 合并 PR 需要仓库写权限。
 - **克隆 URL 形态**：pat → `https://<user>:<PAT>@host/scm/<proj>/<repo>.git`（用户名取当前登录用户）；ssh → `git@host:<proj>/<repo>.git`。
+
+---
+
+## 三、GitLab（gitlab.com / Self-Managed，CE / EE）
+
+接入 GitLab（gitlab.com 或自建 Self-Managed 实例）需要一个 **Personal Access Token (PAT)**。本节给出最小权限集。
+
+> 连接里的 **Base URL**：gitlab.com 填 `https://gitlab.com/api/v4`（留空即默认此值）；Self-Managed 填 `https://<你的 GitLab 域名>/api/v4`。
+
+创建：**右上角头像 → Edit profile → Access Tokens**（或 `User Settings → Access Tokens`）→ Add new token，勾选 scope 并设置有效期。
+
+### 3.1 Scope（最小授权）
+
+GitLab PAT 按 scope 授权，自动覆盖你有权限的全部项目，契合本客户端跨项目轮询发现 MR 的用法。
+
+| Scope | 用途 | 何时需要 |
+| --- | --- | --- |
+| `api` | 完整 REST API 读写：MR 发现、读 / 发 / 改 / 删评论与回复、审批（EE）、合并 | 需要评论 / 审批 / 合并时（最常见，**推荐**） |
+| `read_api` | 只读 REST API | 仅浏览（不评论 / 不审批 / 不合并）时，替代 `api` |
+| `read_repository` | Git-over-HTTPS 克隆 / 拉取私有项目 | Clone 协议为 `pat` 且 token 只给了 `read_api` 时补上 |
+
+**推荐：单勾 `api`**——它已涵盖 REST API 写操作与 HTTPS 克隆，最省心。
+只读浏览：`read_api` +（pat 克隆再加）`read_repository`。
+
+### 3.2 CE / EE 审批差异
+
+GitLab 的 MR 审批 API（`approve` / `unapprove`）自 13.9 起属 **Premium / Ultimate（EE 付费版）** 功能，且 GitLab 审批是二元的——**只有「通过 / 撤销」，无「需修改」**。
+
+- 客户端经 `/metadata` 探测实例 edition，据此降级审批能力：
+  - **EE（Premium 及以上）**：审批按钮可用（通过 / 撤销）。
+  - **CE / 社区版**：无审批 API，审批按钮 **灰显不可用**；发现 / 评论 / 合并照常。
+- 可合并状态走 `detailed_merge_status`，对合并阻塞原因（冲突 / 待审批 / 流水线未过等）full 保真展示。
+
+### 3.3 按客户端操作对应的权限速查
+
+| 客户端操作 | 端点 | 所需 scope |
+| --- | --- | --- |
+| 发现待我评审的 MR | `GET /merge_requests?reviewer_username=…` | `read_api` / `api` |
+| 读 MR / 评论（discussions） | `GET …/merge_requests/{iid}`、`/discussions` | `read_api` / `api` |
+| 发 / 改 / 删评论、回复 | `POST/PUT/DELETE …/discussions[/notes]` | `api` |
+| 审批（通过 / 撤销，仅 EE） | `POST …/approve`、`/unapprove` | `api` |
+| 合并 MR | `PUT …/merge` | `api` |
+| 克隆仓库（本地 diff） | git over HTTPS（PAT） | `read_repository`（或 `api`） |
+| 头像 / 评论内嵌图片 | 资源 URL（带 token） | 无需额外 |
+
+### 3.4 注意事项
+
+- **克隆 URL 形态**：pat → `https://<user>:<PAT>@host/<group>/<repo>.git`（用户名取当前登录用户，支持嵌套 group）；ssh → `git@host:<group>/<repo>.git`。
+- **嵌套 group**：路径含多级 group（如 `group/subgroup/proj`）已正确解析。
+- **审批自己的 MR**：受项目「阻止作者审批」等服务端设置约束，按 GitLab 规则裁决，客户端透传 API 结果。
+- **SSH 克隆**：Clone 协议选 SSH 时走系统 `~/.ssh/config`，与 PAT 无关（PAT 仅用于 REST API）。
+- **安全**：按最小必要 scope 授权并设置有效期，离职 / 泄露时及时吊销。
