@@ -32,9 +32,66 @@
 > - OpenAI → 直接使用内置模型名，不加前缀
 > - 本地 CLI → 填的是命令名，不涉及前缀
 
-> **本地 Ollama**：选 **OpenAI 兼容**，Base URL 填 `http://localhost:11434/v1`，密钥留空，Model 填
-> Ollama 已拉取的模型名（如 `qwen2.5` / `llama3.1`）。Ollama 自带 OpenAI 兼容端点，走此路径即可，
-> 无需单独的 Ollama 渠道。（旧版的 `ollama` 预设会在升级后自动迁移为此形态。）
+## 配置示例
+
+按 Provider 给出设置页各字段的填法（**名称**仅作标识、随意取；除特别说明外 Model 只填型号名，路由前缀客户端自动补全）。
+
+### OpenAI
+
+- Provider：`OpenAI`
+- Model：`gpt-4o-mini`
+- Base URL：留空（默认 `https://api.openai.com`）
+- API Key：`sk-…`
+
+### Anthropic
+
+- Provider：`Anthropic`
+- Model：`claude-sonnet-4-6`
+- Base URL：留空
+- API Key：`sk-ant-…`
+
+### DeepSeek
+
+- Provider：`DeepSeek`
+- Model：`deepseek-v4-pro`
+- Base URL：留空
+- API Key：`sk-…`
+
+### 阿里百炼（DashScope）
+
+- Provider：`阿里百炼`
+- Model：`qwen-plus`
+- Base URL：留空（已内置默认）
+- API Key：DashScope 密钥
+
+### 火山方舟（Volcengine Ark）
+
+- Provider：`火山方舟`
+- Model：`doubao-pro-32k`（或推理接入点 `ep-…`）
+- Base URL：留空（已内置默认）
+- API Key：Ark 密钥
+
+### OpenAI 兼容（自建 / 中转 / 本地 Ollama）
+
+Provider 选 **OpenAI 兼容**，Base URL **必填**为目标服务的 `/v1` 端点，Model 填平台特定型号名。两个常见场景：
+
+**自建 vLLM / 中转**
+
+- Provider：`OpenAI 兼容`
+- Model：`qwen2.5-72b-instruct`
+- Base URL：`http://10.0.0.5:8000/v1`
+- API Key：视服务而定（无鉴权留空）
+
+**本地 Ollama**
+
+- Provider：`OpenAI 兼容`
+- Model：`qwen2.5`（需先 `ollama pull`）
+- Base URL：`http://localhost:11434/v1`
+- API Key：留空
+
+> Ollama 自带 OpenAI 兼容端点，走此路径即可，无需单独渠道（旧 `ollama` 预设升级后自动迁移为此形态）。
+
+> **本地 CLI** 预设的配置见下方独立章节。
 
 ## 本地 CLI 模式
 
