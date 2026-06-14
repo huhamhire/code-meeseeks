@@ -5,7 +5,15 @@
 
 ## [Unreleased]
 
-## [0.4.0-alpha.1] - 2026-06-14
+## [0.4.0] - 2026-06-14
+
+> 第四个正式版（仍属 0.x · 早期预览）。本版重点：**接入 GitLab**（gitlab.com + Self-Managed，
+> CE / EE），评审交互与渲染打磨（拒绝折叠收起、代码建议草稿锚点对齐、评论内嵌附件图片、GitHub /
+> GitLab 评论编辑删除），**连接 Base URL 放宽**，以及 **Windows 升级安装健壮性**（per-machine 提权 +
+> 绕过旧卸载器）。开发期 0.4.0-alpha.1 的变更已并入本版。
+>
+> ⚠️ **Windows 安装说明**：本版为 **per-machine 安装**（所有用户 / Program Files），安装器双击即弹
+> UAC 提权运行；安装后的应用以普通权限启动。从旧版升级会自动清理旧安装，无需手动卸载。
 
 ### Added
 - **GitLab 接入**（gitlab.com + Self-Managed，CE / EE，REST API v4）：新增 `@meebox/platform-gitlab`
@@ -47,6 +55,16 @@
   哨兵统一通过判定，恢复 GitHub / GitLab 评论的编辑与删除；「带 reply 不可删」收敛为 Bitbucket 专属。
 - 评论内嵌图片代理失败时，降级为指向 PR 网页的「浏览器打开」链接（在系统浏览器带 session 渲染评论
   与图片），不再显示破图标；并修正相对图片路径在降级时误跳 localhost。
+- **Windows 升级安装卡死 /「无法关闭」**：① 改为 per-machine 提权安装（清单 requireAdministrator，
+  双击即弹 UAC、提权运行），取代 perMachine:false 在已存在 per-machine 安装时「按需提权失败 → 静默
+  退出 → 双击打不开」的半吊子路径；② 升级时绕过 electron-builder 旧卸载器——在 customInit（早于
+  uninstallOldVersion 执行）清掉旧版卸载注册表项使其读空值直接 no-op、改由安装器自行强删旧目录，
+  规避旧卸载器原位 `_?=` 模式下「数万文件原子 rename、瞬时占用即整批回滚 → 重试 5 次后『无法关闭』」
+  的死结。
+
+## [0.4.0-alpha.1] - 2026-06-14
+
+> 开发期预览版。其全部变更内容已并入正式版 **[0.4.0](#040---2026-06-14)**，此处不再展开。
 
 ## [0.3.1] - 2026-06-11
 
@@ -249,7 +267,10 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0
+[0.4.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0-alpha.1
+[0.3.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0...v0.3.0
 [0.3.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.2.0...v0.3.0-alpha.1
 [0.2.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.1.0...v0.2.0
