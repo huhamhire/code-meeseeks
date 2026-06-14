@@ -97,6 +97,8 @@ describe('GitLabAdapter ping / edition / capabilities', () => {
     const c = adapter.capabilities();
     expect(c.mergeVetoFidelity).toBe('full');
     expect(c.commentOptimisticLock).toBe(false);
+    // GitLab 走标准 CommonMark 换行（单 \n = 空格），非 hard-break
+    expect(c.commentHardBreaks).toBe(false);
     expect(c.discoveryRateLimited).toBe(false);
     expect(c.inlineComments).toBe(true);
     expect(c.discoveryFilters).toEqual(['review-requested', 'created', 'assigned']);
@@ -306,5 +308,37 @@ describe('normalizeGitLabApiBase', () => {
     expect(normalizeGitLabApiBase('https://example.com/gitlab')).toBe(
       'https://example.com/gitlab/api/v4',
     );
+  });
+});
+
+describe('GitLabAdapter 头像代理', () => {
+  it('本实例头像：带 PAT 取', async () => {
+    const { adapter, captured } = makeAdapter([
+      { match: '/uploads/', body: 'PNG', headers: { 'content-type': 'image/png' } },
+    ]);
+    const res = await adapter.getUserAvatar(
+      'alice',
+      'https://gitlab.com/uploads/-/system/user/avatar/2/avatar.png',
+    );
+    expect(res).not.toBeNull();
+    const req = captured.find((c) => c.url.includes('/uploads/'));
+    expect(req?.headers['PRIVATE-TOKEN']).toBe('tok');
+  });
+
+  it('gravatar 头像：公网直取，绝不带 PAT', async () => {
+    const { adapter, captured } = makeAdapter([
+      { match: 'gravatar.com', body: 'PNG', headers: { 'content-type': 'image/png' } },
+    ]);
+    const res = await adapter.getUserAvatar('alice', 'https://www.gravatar.com/avatar/abc?s=80');
+    expect(res).not.toBeNull();
+    const req = captured.find((c) => c.url.includes('gravatar.com'));
+    expect(req).toBeDefined();
+    expect(req?.headers['PRIVATE-TOKEN']).toBeUndefined();
+  });
+
+  it('其它外部 host：不代拉（防 SSRF）', async () => {
+    const { adapter } = makeAdapter([{ match: 'evil.example.com', body: 'x' }]);
+    const res = await adapter.getUserAvatar('alice', 'https://evil.example.com/x.png');
+    expect(res).toBeNull();
   });
 });

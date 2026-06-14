@@ -154,11 +154,19 @@ export class GitLabClient {
   }
 
   /**
-   * 判断目标 host 是否为本连接所属 GitLab 实例 host —— 只有同实例资产才会带 PAT。
-   * 评论里攻击者放的外部图片 URL 一律不带凭据（防 PAT 外泄）、也不代拉（防 SSRF）。
+   * 资产 host 鉴权模式：
+   * - `'pat'`：本连接所属 GitLab 实例 host —— 带 PAT 取（私有资产需鉴权）；
+   * - `'public'`：公共头像 CDN（gravatar）—— GitLab 用户未设自定义头像时 `avatar_url` 即指向
+   *   此，是公开图片，按公网直取且**绝不带 PAT**（防令牌泄露给第三方）；
+   * - `null`：其它外部 host —— 不代拉（防 SSRF）、不带凭据。
+   * 评论里攻击者放的任意外部图片 URL 落到 `null` 分支，既不取也不带凭据。
    */
-  private isTrustedAssetHost(host: string): boolean {
-    return host === new URL(this.baseUrl).host;
+  private assetHostMode(host: string): 'pat' | 'public' | null {
+    if (host === new URL(this.baseUrl).host) return 'pat';
+    if (host === 'gravatar.com' || host === 'www.gravatar.com' || host === 'secure.gravatar.com') {
+      return 'public';
+    }
+    return null;
   }
 
   /**
@@ -173,14 +181,18 @@ export class GitLabClient {
     } catch {
       return null;
     }
-    if (!this.isTrustedAssetHost(host)) return null;
+    const mode = this.assetHostMode(host);
+    if (!mode) return null;
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
+    // 本实例资产带 PAT；公共 CDN（gravatar）绝不带 PAT，避免把令牌发给第三方。
+    const headers: Record<string, string> = { Accept: 'image/*,*/*;q=0.5' };
+    if (mode === 'pat') headers['PRIVATE-TOKEN'] = this.token;
     let res: Response;
     try {
       res = await this.fetchFn(url, {
         method: 'GET',
-        headers: { 'PRIVATE-TOKEN': this.token, Accept: 'image/*,*/*;q=0.5' },
+        headers,
         signal: ctl.signal,
       });
     } catch {
