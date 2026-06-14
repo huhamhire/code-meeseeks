@@ -19,8 +19,9 @@
 - **凭据抽象 `SecretStore`**：所有 token / API key 读写经它，不直接 `fs`。一期实现把凭据存在 `config.yaml`
   （`ConfigFileSecretStore`）；预留 keytar/OS Keychain 实现，将来只换注入、业务零改动。凭据**绝不进日志/异常栈**。
 - **多套 LLM 预设（profiles）**：`llm.profiles[]` 每条独立 `provider / model / base_url / api_key`，`active_id`
-  切当前生效。内置 7 个 provider 选项（openai / openai-compatible / deepseek / anthropic / ollama / dashscope /
-  volcengine-ark）；按 provider 决定注入哪族 env（见 [04](04-pragent-runtime.md)）。
+  切当前生效。内置 provider 选项（openai / openai-compatible / deepseek / anthropic / dashscope /
+  volcengine-ark / cli）；按 provider 决定注入哪族 env（见 [04](04-pragent-runtime.md)）。本地 Ollama
+  经 openai-compatible 的 `/v1` 端点接入（旧 `ollama` 值自动迁移）。
 - **热更新（写盘 + 内存同步）**：每个设置项保存时写 `config.yaml` **并**更新内存中的 config，必要时热重建
   受影响运行时（如连接/代理变更重建 adapter、轮询间隔热替换定时器），无需重启。
 - **设置页可视化 CRUD**：连接、LLM 预设、代理、规则目录、轮询间隔、`repos_dir` 都能在设置页编辑；

@@ -390,9 +390,6 @@
       "deepseek": {
         "hint": "公式 DeepSeek API；モデル名を直接入力してください。deepseek/ プレフィックスは自動的に付加されます"
       },
-      "ollama": {
-        "hint": "ローカルの Ollama サービス；モデル名を直接入力してください。ollama/ プレフィックスは自動的に付加されます"
-      },
       "openai": {
         "hint": "公式 OpenAI API；Base URL を空のままにするとデフォルトの endpoint を使用します"
       },

@@ -390,9 +390,6 @@
       "deepseek": {
         "hint": "官方 DeepSeek API；模型直接填型号名，会自动补 deepseek/ 前缀"
       },
-      "ollama": {
-        "hint": "本地 Ollama 服务；模型直接填名字，会自动补 ollama/ 前缀"
-      },
       "openai": {
         "hint": "官方 OpenAI API；Base URL 留空走默认 endpoint"
       },

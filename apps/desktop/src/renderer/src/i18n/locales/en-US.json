@@ -400,9 +400,6 @@
       "deepseek": {
         "hint": "Official DeepSeek API; enter the model name directly; the deepseek/ prefix is added automatically"
       },
-      "ollama": {
-        "hint": "Local Ollama service; enter the model name directly; the ollama/ prefix is added automatically"
-      },
       "openai": {
         "hint": "Official OpenAI API; leave Base URL empty to use the default endpoint"
       },
