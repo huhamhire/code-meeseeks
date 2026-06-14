@@ -101,6 +101,10 @@ linux:
 
 nsis:
   oneClick: false
-  perMachine: false
+  # per-machine 安装（所有用户 / Program Files）。electron-builder 据此定义 INSTALL_MODE_PER_ALL_USERS
+  # → 安装器清单 RequestExecutionLevel admin（installer.nsi:20-25）→ 双击即弹 UAC、提权运行，
+  # 避免 perMachine:false(asInvoker) 在已有 per-machine 安装时"按需提权失败→静默退出→打不开"。
+  # 升级也变成单一提权实例，customInit 绕过旧卸载器更稳。安装后的应用本体仍 asInvoker、普通启动。
+  perMachine: true
   allowToChangeInstallationDirectory: true
   # 自定义注入见 build-resources/installer.nsh —— 由 buildResources auto-include 自动收录，无需显式 include。
