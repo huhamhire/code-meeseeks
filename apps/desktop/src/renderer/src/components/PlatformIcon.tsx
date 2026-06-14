@@ -70,5 +70,5 @@ export const PLATFORM_META: ReadonlyArray<{
     available: true,
     Icon: BitbucketIcon,
   },
-  { kind: 'gitlab', label: 'GitLab', subKey: 'platformIcon.gitlabSub', available: false, Icon: GitLabIcon },
+  { kind: 'gitlab', label: 'GitLab', subKey: 'platformIcon.gitlabSub', available: true, Icon: GitLabIcon },
 ];

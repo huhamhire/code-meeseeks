@@ -195,6 +195,9 @@
     "githubBaseUrlPlaceholder": "留空默认 https://api.github.com；GHE 填 https://<host>/api/v3",
     "githubNamePlaceholder": "如 公司 GitHub",
     "githubTokenPlaceholder": "GitHub Personal Access Token",
+    "gitlabBaseUrlPlaceholder": "留空默认 https://gitlab.com/api/v4；自建填 https://<host>/api/v4",
+    "gitlabNamePlaceholder": "如 公司 GitLab",
+    "gitlabTokenPlaceholder": "GitLab Personal Access Token",
     "hide": "隐藏",
     "nameLabel": "名称",
     "optional": "(可选)",
@@ -491,7 +494,7 @@
   "platformIcon": {
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
-    "gitlabSub": "即将支持"
+    "gitlabSub": "gitlab.com / Self-Managed"
   },
   "prItem": {
     "approvedCount_other": "{{count}} 位 reviewer 已 approve",

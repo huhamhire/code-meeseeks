@@ -201,6 +201,9 @@
     "githubBaseUrlPlaceholder": "Leave empty for https://api.github.com; for GHE enter https://<host>/api/v3",
     "githubNamePlaceholder": "e.g. Company GitHub",
     "githubTokenPlaceholder": "GitHub Personal Access Token",
+    "gitlabBaseUrlPlaceholder": "Leave empty for https://gitlab.com/api/v4; for self-managed enter https://<host>/api/v4",
+    "gitlabNamePlaceholder": "e.g. Company GitLab",
+    "gitlabTokenPlaceholder": "GitLab Personal Access Token",
     "hide": "Hide",
     "nameLabel": "Name",
     "optional": "(optional)",
@@ -504,7 +507,7 @@
   "platformIcon": {
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
-    "gitlabSub": "Coming soon"
+    "gitlabSub": "gitlab.com / Self-Managed"
   },
   "prItem": {
     "approvedCount_one": "{{count}} reviewer approved",

@@ -66,6 +66,7 @@
     "@meebox/logger": "*",
     "@meebox/platform-bitbucket-server": "*",
     "@meebox/platform-github": "*",
+    "@meebox/platform-gitlab": "*",
     "@meebox/poller": "*",
     "@meebox/pr-agent-bridge": "*",
     "@meebox/repo-mirror": "*",

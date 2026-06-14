@@ -296,7 +296,8 @@ function CommentItem({
       {replyOpen && (
         <CommentReplyEditor
           prLocalId={pr.localId}
-          parentCommentId={comment.remoteId}
+          // 回复目标抽象（threadId）：GitLab=discussion id（reply 必需）；Bitbucket 空 / GitHub=remoteId → 回退 remoteId。
+          parentCommentId={comment.threadId ?? comment.remoteId}
           onCancel={() => setReplyOpen(false)}
           onPosted={() => setReplyOpen(false)}
         />
