@@ -167,6 +167,8 @@ export class GitLabAdapter implements PlatformAdapter {
       inlineComments: true,
       inlineMultiline: false,
       commentOptimisticLock: false,
+      // GitLab 评论走标准 CommonMark（单 \n = 软换行/空格），不按 hard-break。
+      commentHardBreaks: false,
       mergeVetoFidelity: 'full',
       discoveryRateLimited: false,
       // GitLab MR 列表支持 reviewer_username / author_username / assignee_username 筛选 → 三类分页。

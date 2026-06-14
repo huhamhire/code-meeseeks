@@ -211,6 +211,12 @@ export interface PlatformCapabilities {
   inlineMultiline: boolean;
   /** 评论删改是否需要 version 乐观锁（仅 Bitbucket） */
   commentOptimisticLock: boolean;
+  /**
+   * 评论正文单换行是否按 hard-break 渲染（单 `\n` → `<br>`）。GitHub / Bitbucket 评论上下文
+   * 是（`true`）；GitLab 走标准 CommonMark（单 `\n` 作软换行 = 空格，`false`）。renderer 据此
+   * 决定是否启用 remark-breaks，使本地渲染与各平台 web 一致。
+   */
+  commentHardBreaks: boolean;
   /** 合并否决项保真度：'full' 逐条可得（Bitbucket/GitLab）；'partial' 只能近似（GitHub） */
   mergeVetoFidelity: 'full' | 'partial';
   /** 发现端点是否强限流（GitHub search 30/分）→ 该平台轮询间隔单独拉长 */

@@ -14,6 +14,7 @@ import type {
   DiffChangedFile,
   DiffFileContent,
   DiffHunkRange,
+  PlatformCapabilities,
   PrComment,
   ReviewDraft,
   StoredPullRequest,
@@ -41,6 +42,8 @@ interface DiffViewProps {
   renderSideBySide: boolean;
   showBlame: boolean;
   showWhitespace: boolean;
+  /** 活动连接能力位；此处用 commentHardBreaks 决定评论是否启用 remark-breaks。 */
+  capabilities?: PlatformCapabilities;
   /**
    * M4 跳转目标：来自 ChatPane finding card → App pendingDiffNav。
    * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + (带 runId/findingId
@@ -196,9 +199,13 @@ export function DiffView({
   renderSideBySide,
   showBlame,
   showWhitespace,
+  capabilities,
   pendingNav,
   onNavConsumed,
 }: DiffViewProps) {
+  // 评论换行策略：GitHub/Bitbucket hard-break（单 \n → <br>）；GitLab CommonMark 软换行。
+  // 能力位缺省（旧数据/无连接）回退 true，保持既有行为。
+  const commentHardBreaks = capabilities?.commentHardBreaks ?? true;
   const { t } = useTranslation();
   const [files, setFiles] = useState<DiffChangedFile[] | null>(null);
   const [filesError, setFilesError] = useState<FormattedError | null>(null);
@@ -663,6 +670,7 @@ export function DiffView({
               connectionId={pr.connectionId}
               attachmentBase={attachmentBase}
               prLocalId={pr.localId}
+              hardBreaks={commentHardBreaks}
             />,
           );
 
@@ -823,6 +831,7 @@ export function DiffView({
     attachmentBase,
     pr.localId,
     renderSideBySide,
+    commentHardBreaks,
   ]);
 
   // M4: 内联草稿 view zones (蓝底，editable)。跟 comments 同套机制：
@@ -1011,6 +1020,7 @@ export function DiffView({
               drafts={ds}
               prLocalId={pr.localId}
               registerEditTrigger={registerEditTrigger}
+              hardBreaks={commentHardBreaks}
             />,
           );
 
@@ -1117,7 +1127,16 @@ export function DiffView({
     // 不依赖 autoEditTokens (已移除 state) / registerEditTrigger (稳定的 useCallback)
     // — 避免 trigger 引发 zone 重建带来的 DraftZone unmount/mount，根除取消后重入
     // edit 模式的 race
-  }, [diffEditor, drafts, content, selected, pr.localId, registerEditTrigger, renderSideBySide]);
+  }, [
+    diffEditor,
+    drafts,
+    content,
+    selected,
+    pr.localId,
+    registerEditTrigger,
+    renderSideBySide,
+    commentHardBreaks,
+  ]);
 
   // M4 行 hover '+' 新建 manual 草稿：modifiedEditor (head 侧) 上加 mousemove +
   // mousedown 监听。已有评论 / 草稿的行不重复出 + glyph，避免误触。
@@ -1500,10 +1519,12 @@ function DraftZoneList({
   drafts,
   prLocalId,
   registerEditTrigger,
+  hardBreaks,
 }: {
   drafts: ReviewDraft[];
   prLocalId: string;
   registerEditTrigger: (draftId: string, fn: (() => void) | null) => void;
+  hardBreaks: boolean;
 }) {
   const { t } = useTranslation();
   const onSave = async (draftId: string, body: string): Promise<void> => {
@@ -1540,6 +1561,7 @@ function DraftZoneList({
         >
           <DraftZone
             draft={d}
+            hardBreaks={hardBreaks}
             registerEditTrigger={registerEditTrigger}
             onSave={(body) => onSave(d.id, body)}
             onDelete={() => onDelete(d.id)}
@@ -1556,11 +1578,13 @@ function CommentZone({
   connectionId,
   attachmentBase,
   prLocalId,
+  hardBreaks,
 }: {
   comments: PrComment[];
   connectionId: string;
   attachmentBase: string | null;
   prLocalId: string;
+  hardBreaks: boolean;
 }) {
   return (
     <div className="comment-zone-inner">
@@ -1575,6 +1599,7 @@ function CommentZone({
             depth={0}
             attachmentBase={attachmentBase}
             prLocalId={prLocalId}
+            hardBreaks={hardBreaks}
           />
         </div>
       ))}
@@ -1639,12 +1664,14 @@ function CommentNode({
   depth,
   attachmentBase,
   prLocalId,
+  hardBreaks,
 }: {
   comment: PrComment;
   connectionId: string;
   depth: number;
   attachmentBase: string | null;
   prLocalId: string;
+  hardBreaks: boolean;
 }) {
   const { t } = useTranslation();
   const components = useMemo(
@@ -1702,10 +1729,10 @@ function CommentNode({
           />
         ) : (
           <div className="comment-zone-body markdown">
-            {/* remarkBreaks：单换行即渲染成 <br>，与 Bitbucket/GitHub 评论上下文一致
-                （评论场景按 hard-break，单 \n 就换行），也跟草稿预览/评论列表保持统一 */}
+            {/* hardBreaks（Bitbucket/GitHub）：remarkBreaks 让单 \n → <br>，与其评论上下文一致；
+                GitLab 走标准 CommonMark（单 \n = 空格）→ 不挂 remarkBreaks，与 web 渲染对齐 */}
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkBreaks]}
+              remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}
               rehypePlugins={REMOTE_REHYPE_PLUGINS}
               components={components}
               urlTransform={transformBitbucketUrl}
@@ -1780,6 +1807,7 @@ function CommentNode({
           depth={depth + 1}
           attachmentBase={attachmentBase}
           prLocalId={prLocalId}
+          hardBreaks={hardBreaks}
         />
       ))}
       {confirmDelete && (

@@ -431,17 +431,23 @@ export function MainPane({
               renderSideBySide={renderSideBySide}
               showBlame={showBlame}
               showWhitespace={showWhitespace}
+              capabilities={capabilities}
               pendingNav={pendingDiffNav ?? null}
               onNavConsumed={onDiffNavConsumed}
             />
           </Suspense>
         )}
         {tab === 'comments' && (
-          <CommentsPanel pr={pr} onCommentsLoaded={(n) => setCommentCount(n)} />
+          <CommentsPanel
+            pr={pr}
+            onCommentsLoaded={(n) => setCommentCount(n)}
+            capabilities={capabilities}
+          />
         )}
         {tab === 'drafts' && (
           <DraftsPanel
             pr={pr}
+            capabilities={capabilities}
             onJumpToAnchor={(draftId) => {
               // 跟 PublishReviewModal 同套：查 draft 拿 anchor → 上抛 pendingDiffNav
               // → App 切到 Diff tab。不带 runId/findingId 仅 navigate 不进 edit
