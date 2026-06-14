@@ -228,6 +228,9 @@ describe('GitLabAdapter 评论树（discussions/notes）', () => {
     expect(top.replies).toHaveLength(1);
     expect(top.replies[0]!.canEdit).toBe(true); // reply 作者是 ME
     expect(top.canEdit).toBe(false); // top 作者是 bob
+    // 无乐观锁哨兵：version=0，使编辑/删除 IPC 的 version:number 契约与 ownership 判定统一通过
+    expect(top.version).toBe(0);
+    expect(top.replies[0]!.version).toBe(0);
   });
 });
 

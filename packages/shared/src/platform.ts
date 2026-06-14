@@ -148,8 +148,9 @@ export interface PrComment {
   replies: PrComment[];
   /**
    * 远端版本号 (乐观锁)。Bitbucket 走 0/1/2... 单调递增；DELETE / PUT 时必须在 query
-   * 里带当前 version，否则 409 conflict。其他平台没这语义可以留 undefined，
-   * adapter 实现时按需带上 / 兜底 0
+   * 里带当前 version，否则 409 conflict。GitHub / GitLab 无此语义，置 `0` 作「无需并发令牌」
+   * 哨兵——让 canEdit/canDelete 判定与编辑/删除 IPC 的 `version: number` 契约统一通过，
+   * 其编辑/删除 API 忽略该值。
    */
   version?: number;
   /**

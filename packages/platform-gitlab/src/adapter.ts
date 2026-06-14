@@ -607,5 +607,8 @@ function mapNote(n: GlNote, discussionId: string, me: string | undefined): PrCom
     nativeId: String(n.id),
     canDelete: isMine,
     canEdit: isMine,
+    // GitLab 无乐观锁：置 0 作「无需并发令牌」哨兵，让 canEdit/canDelete 判定与编辑/删除 IPC
+    // 的 version: number 契约统一通过（editComment/deleteComment 忽略 version）。
+    version: 0,
   };
 }

@@ -1747,11 +1747,14 @@ function annotateOwnership(comments: PrComment[], adapter: PlatformAdapter): PrC
   if (!me) {
     return setOwnershipRecursive(comments, () => ({ canDelete: false, canEdit: false }));
   }
+  // 「带 reply 的评论不可删」是 Bitbucket 限制（删父评论会孤立子评论）；GitHub / GitLab 允许删
+  // 自己的评论（含有 reply 的）。用乐观锁能力位作 Bitbucket 代理。
+  const noDeleteWithReplies = adapter.capabilities().commentOptimisticLock;
   return setOwnershipRecursive(comments, (c) => {
     const isMine = c.author.name === me.name;
     const hasVersion = typeof c.version === 'number';
     return {
-      canDelete: isMine && c.replies.length === 0 && hasVersion,
+      canDelete: isMine && hasVersion && (!noDeleteWithReplies || c.replies.length === 0),
       canEdit: isMine && hasVersion,
     };
   });
