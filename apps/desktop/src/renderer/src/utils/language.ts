@@ -2,8 +2,7 @@
  * 按文件扩展名映射到 Monaco language id。Monaco 自带的 language 列表参见
  * https://github.com/microsoft/monaco-editor/tree/main/src/basic-languages
  *
- * 未识别 → 返回 'plaintext'。新增条目时同步把 DiffView 里的 `languageFor` 也
- * 删掉转用此函数 (M3-D 后整理时再做)。
+ * 未识别 → 返回 'plaintext'。无扩展名文件按 basename 识别（Dockerfile / Makefile）。
  */
 export function languageFor(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
@@ -45,5 +44,10 @@ export function languageFor(filePath: string): string {
     cs: 'csharp',
     dockerfile: 'dockerfile',
   };
+  if (!ext || ext === filePath.toLowerCase()) {
+    const base = filePath.split('/').pop()?.toLowerCase() ?? '';
+    if (base === 'dockerfile') return 'dockerfile';
+    if (base === 'makefile') return 'makefile';
+  }
   return map[ext] ?? 'plaintext';
 }
