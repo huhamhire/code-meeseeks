@@ -24,6 +24,9 @@
 - Windows 安装页不再强制展开文件日志列表：electron-builder 整包解包（`Nsis7z::Extract` +
   `CopyFiles /SILENT`）不产生逐文件日志，展开只会显示空白框、反而像卡住，改为仅保留进度条；
   卸载页仍展开（逐文件删除有真实进度）。
+- **连接 Base URL 放宽**：GitHub Enterprise / GitLab Self-Managed 可直接填实例地址（如
+  `https://ghe.example.com`），`/api/v3`、`/api/v4` 自动补全；github.com / gitlab.com 留空即用默认。
+  免去记忆 API 路径（此前 GHE 漏填 `/api/v3` 会失败）。
 
 ### Fixed
 - Bitbucket 评论内嵌附件图片不渲染：`rehype-sanitize` 的协议白名单（`src` / `href` 仅
@@ -33,6 +36,11 @@
 - 代码建议草稿区的锚定行与最终发布落点不一致：草稿预览按 `startLine` 渲染、发布却落
   `endLine`。统一以发布落点为准，草稿预览行与跳转高亮行改用 `endLine`，实现「预览位置 = 远端
   评论落点」（评论统一落在 finding 范围末行）。
+- **GitHub 无法编辑 / 删除自己的评论**：评论可编辑 / 删除判定此前一律要求 `version`（仅 Bitbucket
+  的乐观锁语义），而 GitHub / GitLab 评论无此字段 → 编辑 / 删除入口从不出现。改用「无需并发令牌」
+  哨兵统一通过判定，恢复 GitHub / GitLab 评论的编辑与删除；「带 reply 不可删」收敛为 Bitbucket 专属。
+- 评论内嵌图片代理失败时，降级为指向 PR 网页的「浏览器打开」链接（在系统浏览器带 session 渲染评论
+  与图片），不再显示破图标；并修正相对图片路径在降级时误跳 localhost。
 
 ## [0.3.1] - 2026-06-11
 
