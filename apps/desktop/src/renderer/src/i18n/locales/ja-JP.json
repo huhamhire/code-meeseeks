@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (読み込みに失敗しました)",
     "closeZoomAria": "画像プレビューを閉じる (Esc)",
     "loadFailedAria": "画像の読み込みに失敗しました",
-    "loadingAria": "画像を読み込み中"
+    "loadingAria": "画像を読み込み中",
+    "openInBrowser": "ブラウザで開く"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[AI 提案]",
@@ -192,9 +193,12 @@
     "bitbucketTokenPlaceholder": "Bitbucket HTTP アクセストークン",
     "cloneProtocolLabel": "Clone プロトコル",
     "cloneProtocolSsh": "SSH（ローカルの ssh config）",
-    "githubBaseUrlPlaceholder": "空欄で https://api.github.com；GHE の場合は https://<host>/api/v3 を入力",
+    "githubBaseUrlPlaceholder": "空欄で github.com；GHE はインスタンス URL（例 https://ghe.example.com、/api/v3 は省略可）",
     "githubNamePlaceholder": "例：会社の GitHub",
     "githubTokenPlaceholder": "GitHub Personal Access Token",
+    "gitlabBaseUrlPlaceholder": "空欄で gitlab.com；Self-Managed はインスタンス URL（例 https://gitlab.example.com、/api/v4 は省略可）",
+    "gitlabNamePlaceholder": "例：会社の GitLab",
+    "gitlabTokenPlaceholder": "GitLab Personal Access Token",
     "hide": "非表示",
     "nameLabel": "名前",
     "optional": "(任意)",
@@ -491,7 +495,7 @@
   "platformIcon": {
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
-    "gitlabSub": "近日対応予定"
+    "gitlabSub": "gitlab.com / Self-Managed"
   },
   "prItem": {
     "approvedCount_other": "{{count}} 人のレビュアーが承認しました",
@@ -571,6 +575,7 @@
     "pickRulesDirTitle": "ルールディレクトリを選択",
     "platform": "プラットフォーム",
     "platformGithub": "GitHub（github.com / Enterprise Server）",
+    "platformGitlab": "GitLab（gitlab.com / Self-Managed）",
     "pollerHint": "PR を自動チェックする間隔。60〜900 秒の整数です。",
     "pollerRangeError": "ポーリング間隔は 60〜900 秒の整数である必要があります",
     "pollerSeconds": "{{n}} 秒",

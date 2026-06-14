@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (failed to load)",
     "closeZoomAria": "Close image preview (Esc)",
     "loadFailedAria": "Image failed to load",
-    "loadingAria": "Loading image"
+    "loadingAria": "Loading image",
+    "openInBrowser": "Open in browser"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[AI suggestion]",
@@ -198,9 +199,12 @@
     "bitbucketTokenPlaceholder": "Bitbucket HTTP access token",
     "cloneProtocolLabel": "Clone Protocol",
     "cloneProtocolSsh": "SSH (local ssh config)",
-    "githubBaseUrlPlaceholder": "Leave empty for https://api.github.com; for GHE enter https://<host>/api/v3",
+    "githubBaseUrlPlaceholder": "Leave empty for github.com; for GHE enter the instance URL, e.g. https://ghe.example.com (/api/v3 optional)",
     "githubNamePlaceholder": "e.g. Company GitHub",
     "githubTokenPlaceholder": "GitHub Personal Access Token",
+    "gitlabBaseUrlPlaceholder": "Leave empty for gitlab.com; for self-managed enter the instance URL, e.g. https://gitlab.example.com (/api/v4 optional)",
+    "gitlabNamePlaceholder": "e.g. Company GitLab",
+    "gitlabTokenPlaceholder": "GitLab Personal Access Token",
     "hide": "Hide",
     "nameLabel": "Name",
     "optional": "(optional)",
@@ -504,7 +508,7 @@
   "platformIcon": {
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
-    "gitlabSub": "Coming soon"
+    "gitlabSub": "gitlab.com / Self-Managed"
   },
   "prItem": {
     "approvedCount_one": "{{count}} reviewer approved",
@@ -586,6 +590,7 @@
     "pickRulesDirTitle": "Select Rules Directory",
     "platform": "Platform",
     "platformGithub": "GitHub (github.com / Enterprise Server)",
+    "platformGitlab": "GitLab (gitlab.com / Self-Managed)",
     "pollerHint": "Interval for automatically checking PRs, an integer between 60 and 900 seconds.",
     "pollerRangeError": "Polling interval must be an integer between 60 and 900 seconds",
     "pollerSeconds": "{{n}} s",

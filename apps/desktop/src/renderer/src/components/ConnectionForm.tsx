@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { GITHUB_DOTCOM_API_BASE, type Config } from '@meebox/shared';
+import { GITHUB_DOTCOM_API_BASE, GITLAB_DOTCOM_API_BASE, type Config } from '@meebox/shared';
 import { invoke } from '../api';
 import { EyeIcon, EyeOffIcon } from './icons';
 
 // 连接编辑用的扁平草稿（Connection 是嵌套的 auth/clone，拍平后表单好写），存盘前还原。
 // 设置页 ConnectionEditorModal 与首启向导 PlatformStep 共用同一份草稿形状 + 表单。
 export type ConnEntry = Config['connections'][number];
-/** 当前支持配置的平台 kind（gitlab/gitea 尚未实现，不在草稿可选范围） */
-export type ConnKind = 'github' | 'bitbucket-server';
+/** 当前支持配置的平台 kind */
+export type ConnKind = 'github' | 'bitbucket-server' | 'gitlab';
 export type ConnDraft = {
   id: string;
   kind: ConnKind;
@@ -31,9 +31,14 @@ export function toConnDraft(c: ConnEntry): ConnDraft {
 }
 
 export function fromConnDraft(d: ConnDraft): ConnEntry {
-  // GitHub 的 Base URL 可留空 → 默认官方 api.github.com（GHE 才需手填 /api/v3）。
+  // GitHub / GitLab 的 Base URL 可留空 → 默认官方 endpoint（GHE / 自建实例才需手填）。
   const trimmed = d.base_url.trim();
-  const base_url = d.kind === 'github' && trimmed === '' ? GITHUB_DOTCOM_API_BASE : trimmed;
+  const base_url =
+    trimmed === '' && d.kind === 'github'
+      ? GITHUB_DOTCOM_API_BASE
+      : trimmed === '' && d.kind === 'gitlab'
+        ? GITLAB_DOTCOM_API_BASE
+        : trimmed;
   const common = {
     id: d.id,
     base_url,
@@ -43,7 +48,9 @@ export function fromConnDraft(d: ConnDraft): ConnEntry {
   };
   return d.kind === 'github'
     ? { ...common, kind: 'github' as const }
-    : { ...common, kind: 'bitbucket-server' as const };
+    : d.kind === 'gitlab'
+      ? { ...common, kind: 'gitlab' as const }
+      : { ...common, kind: 'bitbucket-server' as const };
 }
 
 /** 各平台的字段文案（名称 / Base URL / 令牌 占位） */
@@ -59,13 +66,18 @@ function kindHints(t: TFunction): Record<ConnKind, { name: string; baseUrl: stri
       baseUrl: t('connectionForm.bitbucketBaseUrlPlaceholder'),
       token: t('connectionForm.bitbucketTokenPlaceholder'),
     },
+    gitlab: {
+      name: t('connectionForm.gitlabNamePlaceholder'),
+      baseUrl: t('connectionForm.gitlabBaseUrlPlaceholder'),
+      token: t('connectionForm.gitlabTokenPlaceholder'),
+    },
   };
 }
 
-/** Base URL 形如 http(s)://… 才算合法；GitHub 允许留空（默认官方 api.github.com）。 */
+/** Base URL 形如 http(s)://… 才算合法；GitHub / GitLab 允许留空（默认官方 endpoint）。 */
 export function connUrlValid(d: ConnDraft): boolean {
   const u = d.base_url.trim();
-  if (d.kind === 'github' && u === '') return true;
+  if ((d.kind === 'github' || d.kind === 'gitlab') && u === '') return true;
   return /^https?:\/\/.+/i.test(u);
 }
 /** 名称 + 合法 URL + token 三者齐全才允许保存 */
@@ -147,7 +159,7 @@ export function ConnectionForm({
         </div>
         <div className="modal-kv-key">
           Base URL{' '}
-          {draft.kind === 'github' ? (
+          {draft.kind === 'github' || draft.kind === 'gitlab' ? (
             <span className="settings-optional">{t('connectionForm.optional')}</span>
           ) : (
             <span className="settings-required">*</span>

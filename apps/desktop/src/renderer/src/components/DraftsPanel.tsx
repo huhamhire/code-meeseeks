@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { ReviewDraft, StoredPullRequest } from '@meebox/shared';
+import type { PlatformCapabilities, ReviewDraft, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
 import { useDraftsForPr } from '../stores/drafts-store';
 import { ConfirmModal } from './ConfirmModal';
@@ -15,6 +15,8 @@ interface DraftsPanelProps {
   pr: StoredPullRequest;
   /** 点 anchor 跳 Diff 视图。父端 wire 到 pendingDiffNav (走 App 顶层) */
   onJumpToAnchor?: (draftId: string) => void;
+  /** 活动连接能力位；此处用 commentHardBreaks 决定草稿预览是否启用 remark-breaks。 */
+  capabilities?: PlatformCapabilities;
 }
 
 /**
@@ -29,7 +31,9 @@ interface DraftsPanelProps {
  * status 筛选默认落在"待发布" — 用户最关心还没发的那批；筛选切到"已发布"可
  * 检视本 PR 自己发出去的评论历史，"已拒绝"可恢复 (M4 暂未做 unreject UI)
  */
-export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
+export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelProps) {
+  // 草稿预览换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
+  const hardBreaks = capabilities?.commentHardBreaks ?? true;
   const { t } = useTranslation();
   const drafts = useDraftsForPr(pr.localId);
   const [filter, setFilter] = useState<Filter>('publishable');
@@ -223,7 +227,7 @@ export function DraftsPanel({ pr, onJumpToAnchor }: DraftsPanelProps) {
                 </div>
                 <div className="drafts-panel-item-body markdown">
                   {d.body.trim() ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                    <ReactMarkdown remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}>
                       {d.body}
                     </ReactMarkdown>
                   ) : (

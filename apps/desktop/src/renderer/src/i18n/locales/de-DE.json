@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (Laden fehlgeschlagen)",
     "closeZoomAria": "Bildvorschau schließen (Esc)",
     "loadFailedAria": "Bild konnte nicht geladen werden",
-    "loadingAria": "Bild wird geladen"
+    "loadingAria": "Bild wird geladen",
+    "openInBrowser": "Im Browser öffnen"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[KI-Vorschlag]",
@@ -198,9 +199,12 @@
     "bitbucketTokenPlaceholder": "Bitbucket HTTP-Zugriffstoken",
     "cloneProtocolLabel": "Clone-Protokoll",
     "cloneProtocolSsh": "SSH (lokale ssh-Konfiguration)",
-    "githubBaseUrlPlaceholder": "Leer lassen für https://api.github.com; für GHE https://<host>/api/v3 eingeben",
+    "githubBaseUrlPlaceholder": "Leer lassen für github.com; für GHE die Instanz-URL, z. B. https://ghe.example.com (/api/v3 optional)",
     "githubNamePlaceholder": "z. B. Firmen-GitHub",
     "githubTokenPlaceholder": "GitHub Personal Access Token",
+    "gitlabBaseUrlPlaceholder": "Leer lassen für gitlab.com; für Self-Managed die Instanz-URL, z. B. https://gitlab.example.com (/api/v4 optional)",
+    "gitlabNamePlaceholder": "z. B. Firmen-GitLab",
+    "gitlabTokenPlaceholder": "GitLab Personal Access Token",
     "hide": "Ausblenden",
     "nameLabel": "Name",
     "optional": "(optional)",
@@ -504,7 +508,7 @@
   "platformIcon": {
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
-    "gitlabSub": "Demnächst verfügbar"
+    "gitlabSub": "gitlab.com / Self-Managed"
   },
   "prItem": {
     "approvedCount_one": "{{count}} Reviewer hat genehmigt",
@@ -586,6 +590,7 @@
     "pickRulesDirTitle": "Regelverzeichnis auswählen",
     "platform": "Plattform",
     "platformGithub": "GitHub (github.com / Enterprise Server)",
+    "platformGitlab": "GitLab (gitlab.com / Self-Managed)",
     "pollerHint": "Intervall für die automatische Prüfung von PRs, eine Ganzzahl zwischen 60 und 900 Sekunden.",
     "pollerRangeError": "Das Polling-Intervall muss eine Ganzzahl zwischen 60 und 900 Sekunden sein",
     "pollerSeconds": "{{n}} s",

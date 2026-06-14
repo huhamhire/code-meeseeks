@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (加载失败)",
     "closeZoomAria": "关闭大图预览 (Esc)",
     "loadFailedAria": "图片加载失败",
-    "loadingAria": "加载图片中"
+    "loadingAria": "加载图片中",
+    "openInBrowser": "浏览器打开"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[AI 建议]",
@@ -192,9 +193,12 @@
     "bitbucketTokenPlaceholder": "Bitbucket HTTP 访问令牌",
     "cloneProtocolLabel": "Clone 协议",
     "cloneProtocolSsh": "SSH（本地 ssh config）",
-    "githubBaseUrlPlaceholder": "留空默认 https://api.github.com；GHE 填 https://<host>/api/v3",
+    "githubBaseUrlPlaceholder": "留空默认 github.com；GHE 填实例地址，如 https://ghe.example.com（/api/v3 可省略）",
     "githubNamePlaceholder": "如 公司 GitHub",
     "githubTokenPlaceholder": "GitHub Personal Access Token",
+    "gitlabBaseUrlPlaceholder": "留空默认 gitlab.com；自建填实例地址，如 https://gitlab.example.com（/api/v4 可省略）",
+    "gitlabNamePlaceholder": "如 公司 GitLab",
+    "gitlabTokenPlaceholder": "GitLab Personal Access Token",
     "hide": "隐藏",
     "nameLabel": "名称",
     "optional": "(可选)",
@@ -491,7 +495,7 @@
   "platformIcon": {
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
-    "gitlabSub": "即将支持"
+    "gitlabSub": "gitlab.com / Self-Managed"
   },
   "prItem": {
     "approvedCount_other": "{{count}} 位 reviewer 已 approve",
@@ -571,6 +575,7 @@
     "pickRulesDirTitle": "选择规则目录",
     "platform": "平台",
     "platformGithub": "GitHub（github.com / Enterprise Server）",
+    "platformGitlab": "GitLab（gitlab.com / Self-Managed）",
     "pollerHint": "自动检查 PR 的间隔，60~900 秒整数。",
     "pollerRangeError": "轮询间隔需 60~900 秒整数",
     "pollerSeconds": "{{n}} 秒",

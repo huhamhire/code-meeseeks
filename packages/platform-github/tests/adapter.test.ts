@@ -1,6 +1,6 @@
 import type { PrDiscoveryFilter } from '@meebox/shared';
 import { describe, expect, it } from 'vitest';
-import { GitHubAdapter } from '../src/adapter.js';
+import { GitHubAdapter, normalizeGitHubApiBase } from '../src/adapter.js';
 
 // ---- 路由式 mock fetch：按 method + URL 子串匹配，返回 JSON Response，并记录请求 ----
 interface Route {
@@ -260,5 +260,29 @@ describe('GitHubAdapter getAttachment（PAT 仅发可信域）', () => {
     expect(asset).not.toBeNull();
     const gh = captured.find((c) => c.url.includes('githubusercontent.com'))!;
     expect(gh.headers.Authorization).toMatch(/^Bearer /);
+  });
+});
+
+describe('normalizeGitHubApiBase', () => {
+  it('github.com SaaS：官方 API host 原样保留（不破坏公共 SaaS 对接）', () => {
+    expect(normalizeGitHubApiBase('https://api.github.com')).toBe('https://api.github.com');
+  });
+
+  it('github.com web host → 官方 API host', () => {
+    expect(normalizeGitHubApiBase('https://github.com')).toBe('https://api.github.com');
+    expect(normalizeGitHubApiBase('https://www.github.com/')).toBe('https://api.github.com');
+  });
+
+  it('GHE 实例根自动补 /api/v3', () => {
+    expect(normalizeGitHubApiBase('https://ghe.example.com')).toBe('https://ghe.example.com/api/v3');
+    expect(normalizeGitHubApiBase('https://ghe.example.com/')).toBe(
+      'https://ghe.example.com/api/v3',
+    );
+  });
+
+  it('GHE 已带 /api/v3 原样（含尾斜杠归一）', () => {
+    expect(normalizeGitHubApiBase('https://ghe.example.com/api/v3/')).toBe(
+      'https://ghe.example.com/api/v3',
+    );
   });
 });

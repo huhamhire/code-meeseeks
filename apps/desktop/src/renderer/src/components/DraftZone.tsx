@@ -9,6 +9,8 @@ import { TrashIcon } from './icons';
 
 interface DraftZoneProps {
   draft: ReviewDraft;
+  /** 评论换行策略（活动平台 commentHardBreaks）：决定预览是否启用 remark-breaks，使草稿预览 WYSIWYG。 */
+  hardBreaks: boolean;
   /**
    * 注册 "进入编辑模式" 触发函数到外部 ref map。DiffView 调用注册的 fn 时本组件
    * setIsEditing(true)。
@@ -71,6 +73,7 @@ interface DraftZoneProps {
  */
 export function DraftZone({
   draft,
+  hardBreaks,
   registerEditTrigger,
   onSave,
   onDelete,
@@ -488,7 +491,9 @@ export function DraftZone({
       ) : (
         <div className="draft-zone-body markdown">
           {draft.body.trim() ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{draft.body}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}>
+              {draft.body}
+            </ReactMarkdown>
           ) : (
             <span className="muted">{t('draftZone.emptyDraftHint')}</span>
           )}

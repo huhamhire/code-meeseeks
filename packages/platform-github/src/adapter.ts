@@ -119,6 +119,26 @@ export interface GitHubAdapterOptions extends GitHubClientOptions {
   cloneProtocol?: 'pat' | 'ssh';
 }
 
+/**
+ * 容错归一 GitHub API base：用户可只填实例地址或完整 API base。
+ * - `github.com` / `www.github.com`（或留空场景的官方域）→ 官方 API host `https://api.github.com`；
+ * - GitHub Enterprise Server 实例根 `https://ghe.example.com` → 补 `/api/v3`（已带 `/api/vN` 则原样）。
+ */
+export function normalizeGitHubApiBase(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, '');
+  if (!trimmed) return trimmed;
+  let u: URL;
+  try {
+    u = new URL(trimmed);
+  } catch {
+    return trimmed;
+  }
+  if (u.hostname === 'api.github.com') return trimmed;
+  if (u.hostname === 'github.com' || u.hostname === 'www.github.com') return 'https://api.github.com';
+  if (/\/api\/v\d+$/.test(u.pathname.replace(/\/+$/, ''))) return trimmed;
+  return `${trimmed}/api/v3`;
+}
+
 export class GitHubAdapter implements PlatformAdapter {
   readonly kind = 'github' as const;
   private readonly client: GitHubClient;
@@ -130,10 +150,11 @@ export class GitHubAdapter implements PlatformAdapter {
   private cachedUser: PlatformUser | null = null;
 
   constructor(opts: GitHubAdapterOptions) {
-    this.client = new GitHubClient(opts);
+    const apiBase = normalizeGitHubApiBase(opts.baseUrl);
+    this.client = new GitHubClient({ ...opts, baseUrl: apiBase });
     this.token = opts.token;
     this.cloneProtocol = opts.cloneProtocol ?? 'pat';
-    const api = new URL(opts.baseUrl);
+    const api = new URL(apiBase);
     // github.com 的 API 在 api.github.com，但 clone/web 在 github.com；GHE 同 host。
     this.webBase =
       api.hostname === 'api.github.com' ? 'https://github.com' : `${api.protocol}//${api.host}`;
@@ -151,6 +172,7 @@ export class GitHubAdapter implements PlatformAdapter {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: false,
+      commentHardBreaks: true,
       mergeVetoFidelity: 'partial',
       discoveryRateLimited: true,
       discoveryFilters: ['review-requested', 'created', 'assigned', 'mentioned'],
@@ -531,6 +553,9 @@ function mapIssueComment(c: GhIssueComment): PrComment {
     replies: [],
     kind: 'summary',
     nativeId: String(c.id),
+    // GitHub 无乐观锁：置 0 作「无需并发令牌」哨兵，让 canEdit/canDelete 判定与编辑/删除 IPC
+    // 的 version: number 契约统一通过（editComment/deleteComment 忽略 version）。
+    version: 0,
   };
 }
 
@@ -557,5 +582,7 @@ function mapReviewComment(c: GhReviewComment): PrComment {
     kind: 'inline',
     threadId: String(c.id),
     nativeId: String(c.id),
+    // 无乐观锁哨兵，同 mapIssueComment。
+    version: 0,
   };
 }

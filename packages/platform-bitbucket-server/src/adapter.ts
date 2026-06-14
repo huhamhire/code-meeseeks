@@ -148,6 +148,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: true,
+      commentHardBreaks: true,
       mergeVetoFidelity: 'full',
       discoveryRateLimited: false,
       // Bitbucket dashboard 支持 role=REVIEWER/AUTHOR → 提供「待我评审 / 我创建的」两类
