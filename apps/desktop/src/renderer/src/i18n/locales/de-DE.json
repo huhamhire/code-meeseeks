@@ -539,6 +539,7 @@
     "title": "Kommentare absenden"
   },
   "settings": {
+    "aboutFeedback": "Info & Feedback",
     "addConnection": "+ Verbindung hinzufügen",
     "addConnectionTitle": "Verbindung hinzufügen",
     "addLlmProfile": "+ Profil hinzufügen",
@@ -613,6 +614,8 @@
     "proxyUsername": "Benutzername",
     "proxyUsernameAria": "Proxy-Benutzername",
     "proxyUsernamePlaceholder": "Optional (Basic Auth)",
+    "releases": "Releases",
+    "reportIssue": "Problem melden / Issue",
     "rulesDirPlaceholder": "Optional; z. B. ~/code/team-pr-rules",
     "rulesHintPrefix": "Jede",
     "rulesHintSuffix": "Datei im Verzeichnis ist eine benutzerdefinierte Review-Regel.",
@@ -622,6 +625,7 @@
     "saving": "Speichere…",
     "setActiveLlmAria": "Als aktiv festlegen",
     "show": "Anzeigen",
+    "starOnGithub": "Auf GitHub favorisieren",
     "testFailed": "Fehlgeschlagen",
     "testProxy": "Verbindung testen",
     "testing": "Teste…",

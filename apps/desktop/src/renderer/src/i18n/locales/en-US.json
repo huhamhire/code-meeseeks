@@ -539,6 +539,7 @@
     "title": "Submit comments"
   },
   "settings": {
+    "aboutFeedback": "About & feedback",
     "addConnection": "+ Add Connection",
     "addConnectionTitle": "Add Connection",
     "addLlmProfile": "+ Add Profile",
@@ -613,6 +614,8 @@
     "proxyUsername": "Username",
     "proxyUsernameAria": "Proxy username",
     "proxyUsernamePlaceholder": "Optional (Basic Auth)",
+    "releases": "Releases",
+    "reportIssue": "Report an issue",
     "rulesDirPlaceholder": "Optional; e.g. ~/code/team-pr-rules",
     "rulesHintPrefix": "Each",
     "rulesHintSuffix": "file in the directory is a custom review rule.",
@@ -622,6 +625,7 @@
     "saving": "Saving…",
     "setActiveLlmAria": "Set as active",
     "show": "Show",
+    "starOnGithub": "Star on GitHub",
     "testFailed": "Failed",
     "testProxy": "Test Connection",
     "testing": "Testing…",

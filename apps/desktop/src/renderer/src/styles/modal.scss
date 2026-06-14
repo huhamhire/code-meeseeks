@@ -266,6 +266,35 @@
   flex-wrap: wrap;
 }
 
+// 关于 & 反馈：低频社区外链行（Star / Issue / Releases）。带 1px 分隔线 + 留白与上方运行时
+// 控件清晰分区；各链接带专属图标、加大间距，彼此可辨。克制的文字链接，不抢运行时控件。
+.settings-about-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $space-6;
+  margin-top: $space-6;
+  padding-top: $space-5;
+  border-top: 1px solid $border-default-fade;
+  font-size: $fs-sm;
+}
+.settings-about-label {
+  margin-right: $space-2;
+}
+.settings-about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  color: $text-body;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    color: $color-accent;
+    text-decoration: underline;
+  }
+}
+
 .settings-input {
   flex: 1;
   box-sizing: border-box;

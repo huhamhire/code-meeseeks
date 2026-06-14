@@ -20,7 +20,17 @@ import {
   type ConnDraft,
 } from './ConnectionForm';
 import { LlmProfileForm, newProfileId, providerLabel, validateProfile } from './LlmProfileForm';
-import { CloseIcon, EyeIcon, EyeOffIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
+import {
+  CloseIcon,
+  EyeIcon,
+  EyeOffIcon,
+  FolderIcon,
+  GitHubMarkIcon,
+  IssueIcon,
+  PencilIcon,
+  TagIcon,
+  TrashIcon,
+} from './icons';
 import { LlmProviderIcon } from './LlmProviderIcon';
 import { PLATFORM_META } from './PlatformIcon';
 
@@ -714,6 +724,37 @@ export function SettingsModal({
               >
                 {t('settings.openDevTools')}
               </button>
+            </div>
+            {/* 关于 & 反馈：低频社区链接。http(s) 外链由 App 顶层点击拦截走 openExternal 在系统浏览器打开。 */}
+            <div className="settings-about-links">
+              <span className="muted settings-about-label">{t('settings.aboutFeedback')}</span>
+              <a
+                className="settings-about-link"
+                href="https://github.com/huhamhire/code-meeseeks"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <GitHubMarkIcon size={14} />
+                {t('settings.starOnGithub')}
+              </a>
+              <a
+                className="settings-about-link"
+                href="https://github.com/huhamhire/code-meeseeks/issues/new"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <IssueIcon size={14} />
+                {t('settings.reportIssue')}
+              </a>
+              <a
+                className="settings-about-link"
+                href="https://github.com/huhamhire/code-meeseeks/releases"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <TagIcon size={14} />
+                {t('settings.releases')}
+              </a>
             </div>
           </section>
         </div>

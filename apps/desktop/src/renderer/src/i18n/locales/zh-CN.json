@@ -524,6 +524,7 @@
     "title": "提交评论"
   },
   "settings": {
+    "aboutFeedback": "关于 & 反馈",
     "addConnection": "+ 添加连接",
     "addConnectionTitle": "新增连接",
     "addLlmProfile": "+ 添加配置",
@@ -598,6 +599,8 @@
     "proxyUsername": "用户名",
     "proxyUsernameAria": "代理用户名",
     "proxyUsernamePlaceholder": "可选（Basic Auth）",
+    "releases": "发布记录",
+    "reportIssue": "提交反馈 / Issue",
     "rulesDirPlaceholder": "可选；如 ~/code/team-pr-rules",
     "rulesHintPrefix": "目录下每个",
     "rulesHintSuffix": "是一条个性化 review 规则。",
@@ -607,6 +610,7 @@
     "saving": "保存中…",
     "setActiveLlmAria": "设为活跃",
     "show": "显示",
+    "starOnGithub": "GitHub 上 Star",
     "testFailed": "失败",
     "testProxy": "测试连通",
     "testing": "测试中…",

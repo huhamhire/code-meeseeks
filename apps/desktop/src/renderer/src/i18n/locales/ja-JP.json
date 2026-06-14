@@ -524,6 +524,7 @@
     "title": "コメントを投稿"
   },
   "settings": {
+    "aboutFeedback": "情報 & フィードバック",
     "addConnection": "+ 接続を追加",
     "addConnectionTitle": "接続を追加",
     "addLlmProfile": "+ プロファイルを追加",
@@ -598,6 +599,8 @@
     "proxyUsername": "ユーザー名",
     "proxyUsernameAria": "プロキシユーザー名",
     "proxyUsernamePlaceholder": "任意（Basic Auth）",
+    "releases": "リリース",
+    "reportIssue": "問題を報告 / Issue",
     "rulesDirPlaceholder": "任意；例：~/code/team-pr-rules",
     "rulesHintPrefix": "ディレクトリ内の各",
     "rulesHintSuffix": "ファイルは 1 つのカスタムレビュールールです。",
@@ -607,6 +610,7 @@
     "saving": "保存中…",
     "setActiveLlmAria": "アクティブに設定",
     "show": "表示",
+    "starOnGithub": "GitHub でスター",
     "testFailed": "失敗",
     "testProxy": "接続テスト",
     "testing": "テスト中…",
