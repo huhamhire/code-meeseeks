@@ -589,6 +589,7 @@
     "pickRulesDirTitle": "Select Rules Directory",
     "platform": "Platform",
     "platformGithub": "GitHub (github.com / Enterprise Server)",
+    "platformGitlab": "GitLab (gitlab.com / Self-Managed)",
     "pollerHint": "Interval for automatically checking PRs, an integer between 60 and 900 seconds.",
     "pollerRangeError": "Polling interval must be an integer between 60 and 900 seconds",
     "pollerSeconds": "{{n}} s",

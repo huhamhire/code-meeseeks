@@ -574,6 +574,7 @@
     "pickRulesDirTitle": "ルールディレクトリを選択",
     "platform": "プラットフォーム",
     "platformGithub": "GitHub（github.com / Enterprise Server）",
+    "platformGitlab": "GitLab（gitlab.com / Self-Managed）",
     "pollerHint": "PR を自動チェックする間隔。60〜900 秒の整数です。",
     "pollerRangeError": "ポーリング間隔は 60〜900 秒の整数である必要があります",
     "pollerSeconds": "{{n}} 秒",

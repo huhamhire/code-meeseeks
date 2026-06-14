@@ -574,6 +574,7 @@
     "pickRulesDirTitle": "选择规则目录",
     "platform": "平台",
     "platformGithub": "GitHub（github.com / Enterprise Server）",
+    "platformGitlab": "GitLab（gitlab.com / Self-Managed）",
     "pollerHint": "自动检查 PR 的间隔，60~900 秒整数。",
     "pollerRangeError": "轮询间隔需 60~900 秒整数",
     "pollerSeconds": "{{n}} 秒",

@@ -589,6 +589,7 @@
     "pickRulesDirTitle": "Regelverzeichnis auswählen",
     "platform": "Plattform",
     "platformGithub": "GitHub (github.com / Enterprise Server)",
+    "platformGitlab": "GitLab (gitlab.com / Self-Managed)",
     "pollerHint": "Intervall für die automatische Prüfung von PRs, eine Ganzzahl zwischen 60 und 900 Sekunden.",
     "pollerRangeError": "Das Polling-Intervall muss eine Ganzzahl zwischen 60 und 900 Sekunden sein",
     "pollerSeconds": "{{n}} s",
