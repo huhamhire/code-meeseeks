@@ -140,7 +140,7 @@ llm:
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `base_url` | string (URL) | GitHub REST API base。**可选**：留空默认 `https://api.github.com`（github.com）；GitHub Enterprise Server 填 `https://<ghe-host>/api/v3`。clone / web 域名由应用自动推导。 |
+| `base_url` | string (URL) | GitHub API base。**可选**：留空默认 `https://api.github.com`（github.com）；GitHub Enterprise Server 填实例地址 `https://<ghe-host>`，`/api/v3` 自动补全（手填完整 API base 亦可）。clone / web 域名由应用自动推导。 |
 
 ### `kind: bitbucket-server`
 
@@ -152,7 +152,7 @@ llm:
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `base_url` | string (URL) | GitLab REST API base。**可选**：留空默认 `https://gitlab.com/api/v4`（gitlab.com）；Self-Managed 填 `https://<gitlab-host>/api/v4`。clone / web 域名由应用自动推导。 |
+| `base_url` | string (URL) | GitLab API base。**可选**：留空默认 `https://gitlab.com/api/v4`（gitlab.com）；Self-Managed 填实例地址 `https://<gitlab-host>`，`/api/v4` 自动补全（手填完整 API base 亦可）。clone / web 域名由应用自动推导。 |
 
 ## `active_connection_id` — 当前启用连接
 

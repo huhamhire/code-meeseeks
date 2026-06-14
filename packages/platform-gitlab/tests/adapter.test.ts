@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GitLabAdapter } from '../src/adapter.js';
+import { GitLabAdapter, normalizeGitLabApiBase } from '../src/adapter.js';
 
 // ---- 路由式 mock fetch：按 method + URL 子串匹配（数组序优先），返回 JSON Response，记录请求 ----
 interface Route {
@@ -279,5 +279,32 @@ describe('GitLabAdapter 写路径 + clone', () => {
     expect(pos.base_sha).toBe('basesha');
     expect(pos.head_sha).toBe('headsha');
     expect(pos.new_line).toBe(5);
+  });
+});
+
+describe('normalizeGitLabApiBase', () => {
+  it('gitlab.com SaaS：官方 API base 原样保留（不破坏公共 SaaS 对接）', () => {
+    expect(normalizeGitLabApiBase('https://gitlab.com/api/v4')).toBe('https://gitlab.com/api/v4');
+  });
+
+  it('实例根地址自动补 /api/v4', () => {
+    expect(normalizeGitLabApiBase('https://gitlab.example.com')).toBe(
+      'https://gitlab.example.com/api/v4',
+    );
+    expect(normalizeGitLabApiBase('https://gitlab.example.com/')).toBe(
+      'https://gitlab.example.com/api/v4',
+    );
+  });
+
+  it('已带 /api/v4 原样（含尾斜杠归一）', () => {
+    expect(normalizeGitLabApiBase('https://gitlab.example.com/api/v4/')).toBe(
+      'https://gitlab.example.com/api/v4',
+    );
+  });
+
+  it('relative-url-root 子路径安装：补在子路径之后', () => {
+    expect(normalizeGitLabApiBase('https://example.com/gitlab')).toBe(
+      'https://example.com/gitlab/api/v4',
+    );
   });
 });

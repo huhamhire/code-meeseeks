@@ -117,6 +117,16 @@ export interface GitLabAdapterOptions extends GitLabClientOptions {
   cloneProtocol?: 'pat' | 'ssh';
 }
 
+/**
+ * 容错归一 GitLab API base：用户可只填实例地址（`https://gitlab.example.com`）或完整
+ * `.../api/v4`；统一补足 `/api/v4`（已带 `/api/vN` 则原样）。免去用户记忆 API 路径。
+ */
+export function normalizeGitLabApiBase(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, '');
+  if (!trimmed) return trimmed;
+  return /\/api\/v\d+$/.test(trimmed) ? trimmed : `${trimmed}/api/v4`;
+}
+
 export class GitLabAdapter implements PlatformAdapter {
   readonly kind = 'gitlab' as const;
   private readonly client: GitLabClient;
@@ -134,10 +144,11 @@ export class GitLabAdapter implements PlatformAdapter {
   private approvalsAvailable = false;
 
   constructor(opts: GitLabAdapterOptions) {
-    this.client = new GitLabClient(opts);
+    const apiBase = normalizeGitLabApiBase(opts.baseUrl);
+    this.client = new GitLabClient({ ...opts, baseUrl: apiBase });
     this.token = opts.token;
     this.cloneProtocol = opts.cloneProtocol ?? 'pat';
-    const api = new URL(opts.baseUrl);
+    const api = new URL(apiBase);
     this.webBase = `${api.protocol}//${api.host}`;
     this.gitHost = api.host;
   }

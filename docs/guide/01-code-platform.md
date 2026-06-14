@@ -46,7 +46,7 @@
 
 接入 GitHub（github.com 或 GitHub Enterprise Server）需要一个 **Personal Access Token (PAT)**。本节给出最小权限集。
 
-> 连接里的 **Base URL**：github.com 填 `https://api.github.com`；GitHub Enterprise Server 填 `https://<你的 GHE 域名>/api/v3`。
+> 连接里的 **Base URL**：github.com **留空即可**（默认 `https://api.github.com`）；GitHub Enterprise Server 填**实例地址**即可，如 `https://<你的 GHE 域名>`——`/api/v3` 会自动补全（手填完整 API base 也兼容）。
 
 ### 1.1 经典 Token（Classic PAT）— 推荐
 
@@ -125,7 +125,7 @@
 
 接入 GitLab（gitlab.com 或自建 Self-Managed 实例）需要一个 **Personal Access Token (PAT)**。本节给出最小权限集。
 
-> 连接里的 **Base URL**：gitlab.com 填 `https://gitlab.com/api/v4`（留空即默认此值）；Self-Managed 填 `https://<你的 GitLab 域名>/api/v4`。
+> 连接里的 **Base URL**：gitlab.com **留空即可**（默认 `https://gitlab.com/api/v4`）；Self-Managed 填**实例地址**即可，如 `https://<你的 GitLab 域名>`——`/api/v4` 会自动补全（手填完整 API base 也兼容）。
 
 创建：**右上角头像 → Edit profile → Access Tokens**（或 `User Settings → Access Tokens`）→ Add new token，勾选 scope 并设置有效期。
 
