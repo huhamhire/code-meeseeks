@@ -10,7 +10,7 @@
 | Provider | LLM 服务商，决定鉴权与路由方式（见下表） |
 | Model | 模型名（多数 provider 只填型号名，客户端自动补 litellm 前缀） |
 | Base URL | API 端点；多数官方 provider 有默认值，留空即可 |
-| API Key | 鉴权密钥；本地类（Ollama / CLI）不需要 |
+| API Key | 鉴权密钥；本地类（本地 CLI / 自建无鉴权服务）不需要 |
 
 ## Provider 一览
 
@@ -21,18 +21,20 @@
 | DeepSeek | 官方 DeepSeek API | `deepseek-v4-pro` / `deepseek-v4-flash` | 是 | 默认 |
 | 阿里百炼 (DashScope) | OpenAI 兼容入口，含千问 / DeepSeek-on-DashScope | `qwen-max` / `qwen-plus` | 是 | 已内置默认 |
 | 火山方舟 (Volcengine Ark) | OpenAI 兼容入口，含豆包 / DeepSeek-on-Ark | `ep-xxxxx` / `doubao-pro-32k` | 是 | 已内置默认 |
-| Ollama | 本地 Ollama 服务 | `qwen2.5` / `llama3.1` | 否 | `http://localhost:11434` |
-| OpenAI 兼容 | 任意遵循 OpenAI 协议的服务（vLLM / 自建代理 / 中转） | 平台特定 | 是 | **必填** |
+| OpenAI 兼容 | 任意遵循 OpenAI 协议的服务（vLLM / 自建代理 / 中转 / **本地 Ollama**） | 平台特定 | 视服务而定 | **必填** |
 | **本地 CLI** | 用本机 agentic CLI 执行评审，**不直连 API**（**实验性**，见下文） | `claude` / `codex` | 否 | 不适用 |
 
 > **关于模型前缀**：各 provider 只需填模型名，客户端会按 provider 自动补全 litellm 路由前缀；已手动带前缀的不会重复添加。
 >
 > - Anthropic → 默认补 `anthropic/`
 > - DeepSeek → 默认补 `deepseek/`
-> - Ollama → 默认补 `ollama/`
 > - OpenAI 兼容 / 阿里百炼 / 火山方舟 → 默认补 `openai/`
 > - OpenAI → 直接使用内置模型名，不加前缀
 > - 本地 CLI → 填的是命令名，不涉及前缀
+
+> **本地 Ollama**：选 **OpenAI 兼容**，Base URL 填 `http://localhost:11434/v1`，密钥留空，Model 填
+> Ollama 已拉取的模型名（如 `qwen2.5` / `llama3.1`）。Ollama 自带 OpenAI 兼容端点，走此路径即可，
+> 无需单独的 Ollama 渠道。（旧版的 `ollama` 预设会在升级后自动迁移为此形态。）
 
 ## 本地 CLI 模式
 

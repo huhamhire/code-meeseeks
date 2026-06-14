@@ -173,9 +173,9 @@ llm:
 | --- | --- | --- | --- |
 | `id` | string | — | 预设唯一标识，被 `active_id` 引用。 |
 | `label` | string | `''` | 显示名称，留空时界面用 provider + model 兜底。 |
-| `provider` | enum | `openai-compatible` | 服务商：`openai` / `anthropic` / `deepseek` / `dashscope`（阿里百炼）/ `volcengine-ark`（火山方舟）/ `ollama` / `openai-compatible`（任意 OpenAI 协议兼容服务）/ `cli`（本机 agentic CLI，不直连 API）。 |
+| `provider` | enum | `openai-compatible` | 服务商：`openai` / `anthropic` / `deepseek` / `dashscope`（阿里百炼）/ `volcengine-ark`（火山方舟）/ `openai-compatible`（任意 OpenAI 协议兼容服务，含本地 Ollama 的 `/v1`）/ `cli`（本机 agentic CLI，不直连 API）。旧值 `ollama` 自动迁移为 `openai-compatible`。 |
 | `base_url` | string | `''` | API 端点。多数官方 provider 留空走默认；`openai-compatible` / 自部署需填。 |
 | `model` | string | `''` | 模型名。多数 provider 只填型号名，应用按 provider 自动补 litellm 前缀；`cli` 模式此处填命令名（如 `claude`）。 |
-| `api_key` | string | `''` | 鉴权密钥。本地类（Ollama / CLI）留空。 |
+| `api_key` | string | `''` | 鉴权密钥。本地类（本地 CLI / 无鉴权自建服务）留空。 |
 
 各 provider 的取值示例与本地 CLI 模式说明见 [LLM 配置](02-llm.md)。

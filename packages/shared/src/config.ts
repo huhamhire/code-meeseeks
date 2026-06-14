@@ -77,45 +77,59 @@ export const ConnectionSchema = z.discriminatedUnion('kind', [
 
 /**
  * 单条 LLM 预设。多条 profile 共存，由 `llm.active_id` 切换当前生效。
- * pr-agent 内部用 litellm；provider 决定走 OPENAI__* / ANTHROPIC__* / OLLAMA__*
- * 哪族环境变量。`openai-compatible` 覆盖 vLLM / DeepSeek / 中转 / Ollama OpenAI
- * mode 等所有 OpenAI API 协议兼容的方案。
+ * pr-agent 内部用 litellm；provider 决定走 OPENAI__* / ANTHROPIC__* 等哪族环境变量。
+ * `openai-compatible` 覆盖 vLLM / DeepSeek / 中转 / 本地 Ollama 的 OpenAI 兼容端点（/v1）
+ * 等所有 OpenAI API 协议兼容的方案。
  */
-export const LlmProfileSchema = z.object({
+/**
+ * 兼容迁移：已废弃的 `ollama` provider → `openai-compatible`。Ollama 自带 OpenAI 兼容端点
+ * `/v1`，统一走更标准、更稳的 OpenAI 路径（litellm `openai/` + OPENAI__API_BASE）。base_url
+ * 补足 `/v1`（旧 ollama 默认是原生 API 根 `http://localhost:11434`，无 `/v1`）。
+ */
+function migrateLegacyLlmProvider(val: unknown): unknown {
+  if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+    const o = val as Record<string, unknown>;
+    if (o.provider === 'ollama') {
+      const raw = typeof o.base_url === 'string' && o.base_url.trim() ? o.base_url.trim() : '';
+      const base = (raw || 'http://localhost:11434').replace(/\/+$/, '');
+      return {
+        ...o,
+        provider: 'openai-compatible',
+        base_url: /\/v\d+$/.test(base) ? base : `${base}/v1`,
+      };
+    }
+  }
+  return val;
+}
+
+const LlmProfileObject = z.object({
   /** 稳定 id，UI 选中 / 引用用；新建时 renderer 生成 (uuid 或 timestamp) */
   id: z.string().min(1),
   /** 给人看的名字，可空，UI 会拿 provider+model 做后备显示 */
   label: z.string().default(''),
   provider: z
-    .enum([
-      'openai',
-      'openai-compatible',
-      'deepseek',
-      'anthropic',
-      'ollama',
-      'dashscope',
-      'volcengine-ark',
-      'cli',
-    ])
+    .enum(['openai', 'openai-compatible', 'deepseek', 'anthropic', 'dashscope', 'volcengine-ark', 'cli'])
     .default('openai-compatible'),
-  /** OpenAI 系: api_base；Ollama: api_base。非必填留空 */
+  /** OpenAI 系 / 本地服务: api_base。非必填留空 */
   base_url: z.string().default(''),
   /**
    * pr-agent 的 `config.model`，litellm 接受 `<provider>/<name>` 前缀
-   * （如 `ollama/qwen2.5`、`anthropic/claude-3-5-sonnet`），也接受裸名
+   * （如 `openai/qwen2.5`、`anthropic/claude-3-5-sonnet`），也接受裸名
    * (`gpt-4o`) 走 OpenAI。
    */
   model: z.string().default(''),
-  /** 主密钥；Ollama 之类不需要鉴权的留空 */
+  /** 主密钥；本地 / 不需要鉴权的服务留空 */
   api_key: z.string().default(''),
 });
+
+/** 旧 `ollama` profile 在校验前迁移为 `openai-compatible`（见 migrateLegacyLlmProvider）。 */
+export const LlmProfileSchema = z.preprocess(migrateLegacyLlmProvider, LlmProfileObject);
 
 export type LlmProvider =
   | 'openai'
   | 'openai-compatible'
   | 'deepseek'
   | 'anthropic'
-  | 'ollama'
   | 'dashscope' // 阿里百炼（DashScope，OpenAI 兼容入口，含千问 / Qwen / DeepSeek-on-DashScope）
   | 'volcengine-ark' // 火山方舟（Volcengine Ark，OpenAI 兼容入口，含豆包 / Doubao 等）
   | 'cli'; // 本地命令行：由本机已安装的 agentic CLI（一期 claude code）执行评审，不直连 API

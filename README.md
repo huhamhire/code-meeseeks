@@ -49,7 +49,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - 📐 **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter），按项目 / 仓库 / 目标分支命中后注入评审。
 - ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
 - 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
-- 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等；也可通过本机已授权的本地 CLI 工具调用第三方模型。
+- 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / 通义千问 / 火山方舟等（本地 Ollama 经 openai-compatible 的 `/v1` 接入）；也可通过本机已授权的本地 CLI 工具调用第三方模型。
 - 🌐 **多语言界面** —— 简体中文 / English / 日本語 / Deutsch，AI 回复语言随界面语言。
 
 <div align="center">
@@ -116,8 +116,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 | `deepseek`          | DeepSeek                                    | ✅ 已验证           |
 | `dashscope`         | 阿里百炼（DashScope，通义千问）             | ✅ 已验证           |
 | `volcengine-ark`    | 火山方舟（Volcengine Ark，豆包）            | ✅ 已验证           |
-| `ollama`            | Ollama（本地模型）                          | 🚧 理论可行，未验证 |
-| `openai-compatible` | OpenAI API 协议兼容（vLLM / 中转 / 自建等） | 🚧 理论可行，未验证 |
+| `openai-compatible` | OpenAI 协议兼容（vLLM / 中转 / 自建 / 本地 Ollama 的 `/v1`） | 🚧 理论可行，未验证 |
 | `cli`               | 通过本地 CLI 工具调用第三方模型             | ✅ 已验证           |
 
 > **本地 CLI 模式说明**：该模式不直连模型 API，而是把评审请求转交给使用者**自行安装并授权**的本地命令行工具，由其代为调用背后的第三方模型。需先在本机完成对应 CLI 工具的安装与登录授权，应用本身不负责其凭据管理与计费。
@@ -156,7 +155,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 ## 隐私与数据
 
 - **本地优先**：除调用 LLM API 与访问所配置的 Git 平台外，不向任何第三方上报数据。
-- **工作目录**：应用数据固定在 `~/.code-meeseeks/`（config / state / logs），仓库镜像目录可配置。
+- **工作目录**：应用数据固定在 `~/.code-meeseeks/`（config / state / l；ogs），仓库镜像目录可配置。
 - pr-agent 评审时仅把 PR diff + 评审者的规则发给评审者自行配置的 LLM。
 
 ---

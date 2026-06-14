@@ -13,8 +13,8 @@ export function resolveActiveLlmProfile(llm: {
  * 把 provider + 用户输入的 model 字符串规整成 litellm 期望的形式。
  *
  * litellm 通过 model 字符串的前缀路由到对应 provider（`deepseek/...` → DeepSeek
- * SDK，`anthropic/...` / `claude-*` → Anthropic，`ollama/...` → Ollama，无前缀
- * → 默认走 OpenAI）。用户在 LLM Profile 里只填模型名（如 `deepseek-v4-pro`），
+ * SDK，`anthropic/...` / `claude-*` → Anthropic，`openai/...` → OpenAI 兼容客户端，
+ * 无前缀 → 默认走 OpenAI）。用户在 LLM Profile 里只填模型名（如 `deepseek-v4-pro`），
  * 这里按 provider 自动补前缀，避免 litellm 路由错到 OpenAI 用 `dummy_key` 报错。
  *
  * 用户若手动写了带前缀的形式（兼容多 provider 用户 / 高级用户），不重复加。
@@ -32,8 +32,6 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
       // 过去第一道 provider 路由就抛 "LLM Provider NOT provided"。带前缀则无需查表，
       // 厂商原厂模型只填型号名即可直接用。用户手写带前缀的不重复加。
       return m.startsWith('anthropic/') ? m : `anthropic/${m}`;
-    case 'ollama':
-      return m.startsWith('ollama/') ? m : `ollama/${m}`;
     case 'openai':
       // 真 OpenAI：litellm 认 gpt-* / o1-* 等内置模型名；带 openai/ 前缀也直认。
       // 用户写的就是 litellm 内置表里的名字，不主动加前缀避免重复 (`openai/openai/...`)
@@ -137,9 +135,6 @@ export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
       break;
     case 'anthropic':
       if (profile.api_key) env['ANTHROPIC__KEY'] = profile.api_key;
-      break;
-    case 'ollama':
-      if (profile.base_url) env['OLLAMA__API_BASE'] = profile.base_url;
       break;
     case 'cli': {
       // 本地 CLI 模式：不直连任何 API，也不下发任何密钥。仅打两个哨兵 env 让
