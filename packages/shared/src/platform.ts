@@ -1,4 +1,4 @@
-export type PlatformKind = 'bitbucket-server' | 'github' | 'gitlab' | 'gitea';
+export type PlatformKind = 'bitbucket-server' | 'github' | 'gitlab';
 
 export interface RepoRef {
   /** Bitbucket: project key; GitHub: org/user; GitLab: namespace */

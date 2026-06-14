@@ -81,7 +81,6 @@ export const INLINE_COMMENT_POLICIES: Readonly<Record<PlatformKind, InlineCommen
   'bitbucket-server': bitbucketPolicy,
   github: permissivePolicy,
   gitlab: permissivePolicy,
-  gitea: permissivePolicy,
 };
 
 /** 平台值未知时回退宽松 policy，避免新平台接入时把 + 全屏蔽 */

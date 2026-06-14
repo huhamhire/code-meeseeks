@@ -8,7 +8,7 @@ import { EyeIcon, EyeOffIcon } from './icons';
 // 连接编辑用的扁平草稿（Connection 是嵌套的 auth/clone，拍平后表单好写），存盘前还原。
 // 设置页 ConnectionEditorModal 与首启向导 PlatformStep 共用同一份草稿形状 + 表单。
 export type ConnEntry = Config['connections'][number];
-/** 当前支持配置的平台 kind（gitea 尚未实现，不在草稿可选范围） */
+/** 当前支持配置的平台 kind */
 export type ConnKind = 'github' | 'bitbucket-server' | 'gitlab';
 export type ConnDraft = {
   id: string;
