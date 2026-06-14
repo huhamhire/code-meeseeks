@@ -380,7 +380,7 @@
         "hint": "官方 Anthropic API；模型直接填型号名（claude-opus-4-8 等），会自动补 anthropic/ 前缀"
       },
       "cli": {
-        "hint": "将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。",
+        "hint": "🧪 实验性：依赖上游 CLI（claude / codex 等），行为可能随其版本变更，稳定性与持续可用性不作保证。将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。",
         "label": "本地 CLI"
       },
       "dashscope": {
@@ -542,6 +542,7 @@
     "checkUpdate": "检查更新",
     "checkUpdateTitle": "查 GitHub 最新版本（仅检测，不自动安装）",
     "checking": "检查中…",
+    "cliExperimentalHint": "本地 CLI provider 依赖上游 CLI（如 claude / codex），其行为可能随上游版本变更，稳定性与持续可用性不作保证。",
     "configKey": "配置",
     "configure": "配置",
     "connSaveHint": "请填完名称 / Base URL / Token",
@@ -559,6 +560,7 @@
     "enableConnectionAria": "启用该连接",
     "enableProxy": "启用代理",
     "enableRules": "启用规则",
+    "experimental": "实验性",
     "fillRequiredHint": "请先填完必填项",
     "hide": "隐藏",
     "languageHint": "选择后立即切换界面语言，AI 回复语言也随之调整。",

@@ -390,7 +390,7 @@
         "hint": "Official Anthropic API; enter the model name directly (e.g. claude-opus-4-8); the anthropic/ prefix is added automatically"
       },
       "cli": {
-        "hint": "Delegates review requests to a locally installed and authorized command-line tool to call the model, without connecting to the API directly or requiring a key; the tool manages its own model and quota. Filling in and enabling this authorizes invoking that command-line tool in a subprocess under your local login session.",
+        "hint": "🧪 Experimental: depends on the upstream CLI (e.g. claude / codex); its behavior may change with upstream releases — stability and continued availability are not guaranteed. Delegates review requests to a locally installed and authorized command-line tool to call the model, without connecting to the API directly or requiring a key; the tool manages its own model and quota. Filling in and enabling this authorizes invoking that command-line tool in a subprocess under your local login session.",
         "label": "Local CLI"
       },
       "dashscope": {
@@ -557,6 +557,7 @@
     "checkUpdate": "Check for Updates",
     "checkUpdateTitle": "Check GitHub for the latest version (detection only, no auto-install)",
     "checking": "Checking…",
+    "cliExperimentalHint": "Local CLI providers depend on upstream CLIs (e.g. claude / codex); their behavior may change with upstream releases — stability and continued availability are not guaranteed.",
     "configKey": "Config",
     "configure": "Configure",
     "connSaveHint": "Please fill in Name / Base URL / Token",
@@ -574,6 +575,7 @@
     "enableConnectionAria": "Activate this connection",
     "enableProxy": "Enable Proxy",
     "enableRules": "Enable Rules",
+    "experimental": "Experimental",
     "fillRequiredHint": "Please fill in all required fields first",
     "hide": "Hide",
     "languageHint": "Switches the interface immediately; the AI reply language follows as well.",

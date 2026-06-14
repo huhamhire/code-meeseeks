@@ -21,6 +21,8 @@ import {
 } from './ConnectionForm';
 import { LlmProfileForm, newProfileId, providerLabel, validateProfile } from './LlmProfileForm';
 import { CloseIcon, EyeIcon, EyeOffIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
+import { LlmProviderIcon } from './LlmProviderIcon';
+import { PLATFORM_META } from './PlatformIcon';
 
 interface SettingsModalProps {
   info: AppInfo;
@@ -381,6 +383,7 @@ export function SettingsModal({
               <div className="llm-profile-list">
                 {connections.map((c) => {
                   const isActive = c.id === activeConnId;
+                  const platformMeta = PLATFORM_META.find((m) => m.kind === c.kind);
                   return (
                     <div key={c.id} className={`llm-profile-row${isActive ? ' active' : ''}`}>
                       <label className="llm-profile-active">
@@ -392,8 +395,15 @@ export function SettingsModal({
                           aria-label={t('settings.enableConnectionAria')}
                         />
                       </label>
+                      {platformMeta && (
+                        <span className="llm-profile-icon" title={platformMeta.label}>
+                          <platformMeta.Icon size={20} />
+                        </span>
+                      )}
                       <div className="llm-profile-meta">
-                        <div className="llm-profile-title">{c.display_name || c.id}</div>
+                        <div className="llm-profile-title">
+                          <span className="llm-profile-title-text">{c.display_name || c.id}</span>
+                        </div>
                         <div className="muted llm-profile-sub">
                           {c.base_url} · clone via {c.clone.protocol === 'ssh' ? 'SSH' : 'PAT'}
                         </div>
@@ -489,6 +499,7 @@ export function SettingsModal({
                   const isActive = p.id === llm.active_id;
                   const titleText =
                     p.label || t('settings.llmProfileFallback', { id: p.id.slice(0, 4) });
+                  const isCli = p.provider === 'cli';
                   return (
                     <div key={p.id} className={`llm-profile-row${isActive ? ' active' : ''}`}>
                       <label className="llm-profile-active">
@@ -500,8 +511,18 @@ export function SettingsModal({
                           aria-label={t('settings.setActiveLlmAria')}
                         />
                       </label>
+                      <span className="llm-profile-icon" title={providerLabel(p.provider)}>
+                        <LlmProviderIcon provider={p.provider} size={20} />
+                      </span>
                       <div className="llm-profile-meta">
-                        <div className="llm-profile-title">{titleText}</div>
+                        <div className="llm-profile-title">
+                          <span className="llm-profile-title-text">{titleText}</span>
+                          {isCli && (
+                            <span className="badge-experimental" title={t('settings.cliExperimentalHint')}>
+                              {t('settings.experimental')}
+                            </span>
+                          )}
+                        </div>
                         <div className="muted llm-profile-sub">
                           {providerLabel(p.provider)}
                           {p.model ? ` · ${p.model}` : ''}

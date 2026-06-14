@@ -27,6 +27,10 @@
 - **连接 Base URL 放宽**：GitHub Enterprise / GitLab Self-Managed 可直接填实例地址（如
   `https://ghe.example.com`），`/api/v3`、`/api/v4` 自动补全；github.com / gitlab.com 留空即用默认。
   免去记忆 API 路径（此前 GHE 漏填 `/api/v3` 会失败）。
+- 设置页连接 / LLM 预设卡片显示对应**品牌类型图标**（代码平台 / LLM provider，与首启向导同源），
+  一眼区分类型、避免误配。
+- **本地 CLI 类 LLM provider 标注「实验性」**：卡片琥珀徽标 + 配置注释（🧪）+ 文档说明，提示其
+  依赖上游 CLI（claude / codex 等）、行为可能随上游版本变更，稳定性与持续可用性不作保证。
 
 ### Fixed
 - Bitbucket 评论内嵌附件图片不渲染：`rehype-sanitize` 的协议白名单（`src` / `href` 仅
