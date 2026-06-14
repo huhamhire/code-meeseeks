@@ -171,7 +171,8 @@ export class GitLabClient {
 
   /**
    * 拉二进制资源（头像 / 评论内嵌附件）。url 为完整 http(s)。**只代理本实例 host**（带 PAT 取私有
-   * 资源）；非本实例 host 直接返回 null（不外发 PAT、不代拉任意 URL）。非 2xx / 异常 → null 让上层 fallback。
+   * 资源）；公共 CDN（gravatar）公网直取不带 PAT；非白名单 host 直接返回 null（不外发 PAT、不代拉
+   * 任意 URL）。非 2xx / 异常 → null 让上层 fallback。
    */
   async getBinary(url: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
     if (!/^https?:\/\//.test(url)) return null;
@@ -183,29 +184,42 @@ export class GitLabClient {
     }
     const mode = this.assetHostMode(host);
     if (!mode) return null;
+    return this.fetchBinary(url, mode === 'pat');
+  }
+
+  /**
+   * 拉 API 相对路径的二进制（始终本实例 + PAT）。用于私有项目 markdown 上传的 API 下载端点
+   * `GET /projects/:id/uploads/:secret/:filename`（GitLab 17.4+；旧版无此路由 → 404 → null）。
+   * 上传的 web 路由 `/<ns>/<proj>/uploads/...` 对 PAT 一律 302 到登录页，故私有上传只能走 API。
+   */
+  async getApiBinary(path: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+    return this.fetchBinary(this.buildUrl(path), true);
+  }
+
+  private async fetchBinary(
+    url: string,
+    withPat: boolean,
+  ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
-    // 本实例资产带 PAT；公共 CDN（gravatar）绝不带 PAT，避免把令牌发给第三方。
+    // 本实例 / API 资产带 PAT；公共 CDN（gravatar）绝不带 PAT，避免把令牌发给第三方。
     const headers: Record<string, string> = { Accept: 'image/*,*/*;q=0.5' };
-    if (mode === 'pat') headers['PRIVATE-TOKEN'] = this.token;
+    if (withPat) headers['PRIVATE-TOKEN'] = this.token;
     let res: Response;
     try {
-      res = await this.fetchFn(url, {
-        method: 'GET',
-        headers,
-        signal: ctl.signal,
-      });
+      res = await this.fetchFn(url, { method: 'GET', headers, signal: ctl.signal });
     } catch {
       clearTimeout(timer);
       return null;
     }
     clearTimeout(timer);
     if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+    // text/html = 登录重定向 / 错误页（如私有上传 web 路由 302→sign_in），不是资产 → null，
+    // 避免把 HTML 当图片塞进 data URL 显示成损坏图标。
+    if (contentType.toLowerCase().startsWith('text/html')) return null;
     const buf = await res.arrayBuffer();
-    return {
-      bytes: new Uint8Array(buf),
-      contentType: res.headers.get('content-type') ?? 'application/octet-stream',
-    };
+    return { bytes: new Uint8Array(buf), contentType };
   }
 }
 

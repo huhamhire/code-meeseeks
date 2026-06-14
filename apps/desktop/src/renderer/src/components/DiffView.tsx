@@ -670,6 +670,7 @@ export function DiffView({
               connectionId={pr.connectionId}
               attachmentBase={attachmentBase}
               prLocalId={pr.localId}
+              prWebUrl={pr.url}
               hardBreaks={commentHardBreaks}
             />,
           );
@@ -830,6 +831,7 @@ export function DiffView({
     pr.connectionId,
     attachmentBase,
     pr.localId,
+    pr.url,
     renderSideBySide,
     commentHardBreaks,
   ]);
@@ -1578,12 +1580,14 @@ function CommentZone({
   connectionId,
   attachmentBase,
   prLocalId,
+  prWebUrl,
   hardBreaks,
 }: {
   comments: PrComment[];
   connectionId: string;
   attachmentBase: string | null;
   prLocalId: string;
+  prWebUrl: string;
   hardBreaks: boolean;
 }) {
   return (
@@ -1599,6 +1603,7 @@ function CommentZone({
             depth={0}
             attachmentBase={attachmentBase}
             prLocalId={prLocalId}
+            prWebUrl={prWebUrl}
             hardBreaks={hardBreaks}
           />
         </div>
@@ -1627,8 +1632,9 @@ function resolveAttachmentUrl(href: string, base: string | null): string | null 
 function makeCommentMarkdownComponents(
   attachmentBase: string | null,
   prLocalId: string,
+  prWebUrl: string,
 ): Parameters<typeof ReactMarkdown>[0]['components'] {
-  const BitbucketImage = makeBitbucketImageFor(prLocalId);
+  const BitbucketImage = makeBitbucketImageFor(prLocalId, prWebUrl);
   return {
     a: ({ href, children, ...rest }) => {
       const resolved = href ? resolveAttachmentUrl(href, attachmentBase) : null;
@@ -1664,6 +1670,7 @@ function CommentNode({
   depth,
   attachmentBase,
   prLocalId,
+  prWebUrl,
   hardBreaks,
 }: {
   comment: PrComment;
@@ -1671,12 +1678,13 @@ function CommentNode({
   depth: number;
   attachmentBase: string | null;
   prLocalId: string;
+  prWebUrl: string;
   hardBreaks: boolean;
 }) {
   const { t } = useTranslation();
   const components = useMemo(
-    () => makeCommentMarkdownComponents(attachmentBase, prLocalId),
-    [attachmentBase, prLocalId],
+    () => makeCommentMarkdownComponents(attachmentBase, prLocalId, prWebUrl),
+    [attachmentBase, prLocalId, prWebUrl],
   );
   const [replyOpen, setReplyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -1807,6 +1815,7 @@ function CommentNode({
           depth={depth + 1}
           attachmentBase={attachmentBase}
           prLocalId={prLocalId}
+          prWebUrl={prWebUrl}
           hardBreaks={hardBreaks}
         />
       ))}

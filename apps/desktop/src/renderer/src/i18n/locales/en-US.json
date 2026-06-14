@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (failed to load)",
     "closeZoomAria": "Close image preview (Esc)",
     "loadFailedAria": "Image failed to load",
-    "loadingAria": "Loading image"
+    "loadingAria": "Loading image",
+    "openInBrowser": "Open in browser"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[AI suggestion]",

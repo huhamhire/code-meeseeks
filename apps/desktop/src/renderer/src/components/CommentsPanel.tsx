@@ -158,8 +158,8 @@ function CommentItem({
   const { t } = useTranslation();
   // 评论 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)
   const mdComponents = useMemo(
-    () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId) }),
-    [pr.localId],
+    () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId, pr.url) }),
+    [pr.localId, pr.url],
   );
   const [replyOpen, setReplyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);

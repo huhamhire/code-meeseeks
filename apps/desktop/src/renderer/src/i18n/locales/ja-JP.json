@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (読み込みに失敗しました)",
     "closeZoomAria": "画像プレビューを閉じる (Esc)",
     "loadFailedAria": "画像の読み込みに失敗しました",
-    "loadingAria": "画像を読み込み中"
+    "loadingAria": "画像を読み込み中",
+    "openInBrowser": "ブラウザで開く"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[AI 提案]",

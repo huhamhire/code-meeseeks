@@ -305,12 +305,27 @@ export class GitLabAdapter implements PlatformAdapter {
     url: string,
     repo?: RepoRef,
   ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
-    // 绝对 URL（本实例 host）直接代理；评论 body 里的相对 `/uploads/...` 是相对项目的上传，
-    // 补成 `<webBase>/<group>/<project>/uploads/...` 再拉。非本实例 / 解析不出 → null 让上层 fallback。
-    if (/^https?:\/\//.test(url)) return this.client.getBinary(url);
-    if (url.startsWith('/uploads/') && repo) {
-      return this.client.getBinary(`${this.webBase}/${repo.projectKey}/${repo.repoSlug}${url}`);
+    // 项目 markdown 上传 `/uploads/<secret>/<file>`（绝对或相对皆可）：其 web 路由对 PAT 一律 302
+    // 到登录页（私有项目仅认浏览器 session），故改走 API 下载端点 `GET /projects/:id/uploads/
+    // :secret/:filename`（GitLab 17.4+ 认 PRIVATE-TOKEN；旧版无此路由 → 404 → null）。
+    const isRelative = !/^https?:\/\//.test(url);
+    let sameHost = isRelative;
+    if (!isRelative) {
+      try {
+        sameHost = new URL(url).host === this.gitHost;
+      } catch {
+        sameHost = false;
+      }
     }
+    const m = url.match(/\/uploads\/([0-9a-f]+)\/([^/?#]+)/i);
+    if (m && repo && sameHost) {
+      const [, secret, filename] = m;
+      return this.client.getApiBinary(
+        `/projects/${projectId(repo)}/uploads/${secret}/${filename}`,
+      );
+    }
+    // 其它本实例绝对 URL（非 /uploads 的图）仍直接代理；非本实例 / 解析不出 → null 让上层 fallback。
+    if (/^https?:\/\//.test(url)) return this.client.getBinary(url);
     return null;
   }
 

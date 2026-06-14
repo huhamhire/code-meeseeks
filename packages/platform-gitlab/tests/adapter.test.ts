@@ -342,3 +342,48 @@ describe('GitLabAdapter 头像代理', () => {
     expect(res).toBeNull();
   });
 });
+
+describe('GitLabAdapter 附件代理', () => {
+  const SECRET = 'f28aebc97ff910addda099ad1a4456d3';
+
+  it('/uploads（绝对实例 URL）走 API 下载端点，带 PAT', async () => {
+    const { adapter, captured } = makeAdapter([
+      { match: '/api/v4/projects/', body: 'PNG', headers: { 'content-type': 'image/png' } },
+    ]);
+    const res = await adapter.getAttachment(
+      `https://gitlab.com/group/proj/uploads/${SECRET}/image.png`,
+      { projectKey: 'group', repoSlug: 'proj' },
+    );
+    expect(res).not.toBeNull();
+    const req = captured.find((c) => c.url.includes('/uploads/'));
+    expect(req?.url).toContain(`/api/v4/projects/group%2Fproj/uploads/${SECRET}/image.png`);
+    expect(req?.headers['PRIVATE-TOKEN']).toBe('tok');
+  });
+
+  it('/uploads（相对路径）同样映射到 API 端点', async () => {
+    const { adapter, captured } = makeAdapter([
+      { match: '/api/v4/projects/', body: 'PNG', headers: { 'content-type': 'image/png' } },
+    ]);
+    await adapter.getAttachment(`/uploads/${SECRET}/image.png`, {
+      projectKey: 'group/sub',
+      repoSlug: 'proj',
+    });
+    const req = captured.find((c) => c.url.includes('/uploads/'));
+    expect(req?.url).toContain(`/api/v4/projects/group%2Fsub%2Fproj/uploads/${SECRET}/image.png`);
+  });
+
+  it('API 返回 text/html（旧版无端点 / 登录重定向）→ null（避免 HTML 当图片）', async () => {
+    const { adapter } = makeAdapter([
+      {
+        match: '/api/v4/projects/',
+        body: '<html>sign in</html>',
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      },
+    ]);
+    const res = await adapter.getAttachment(`/uploads/${SECRET}/image.png`, {
+      projectKey: 'group',
+      repoSlug: 'proj',
+    });
+    expect(res).toBeNull();
+  });
+});

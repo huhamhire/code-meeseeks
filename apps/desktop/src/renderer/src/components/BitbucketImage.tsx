@@ -22,15 +22,17 @@ export function transformBitbucketUrl(url: string): string {
  * **不缓存** (用户决策 — 评论图片重复加载概率低，跟头像走磁盘缓存不同)。每次
  * mount 调一次 IPC。
  *
- * 用工厂 makeBitbucketImageFor(localId) 包出 ReactMarkdown components.img 用的
- * 组件 — 闭包捕获 localId 给 IPC 用
+ * 用工厂 makeBitbucketImageFor(localId, prWebUrl) 包出 ReactMarkdown components.img 用的
+ * 组件 — 闭包捕获 localId 给 IPC 用；prWebUrl 为 PR 网页地址，代理失败时降级链接指向它
+ * （在系统浏览器里带 session 渲染评论与图片），而非指向拉不到的资产 URL（相对路径会落到 localhost）
  */
-export function makeBitbucketImageFor(localId: string) {
+export function makeBitbucketImageFor(localId: string, prWebUrl?: string) {
   return function BitbucketImage(props: React.ImgHTMLAttributes<HTMLImageElement>) {
     const { t } = useTranslation();
     const { src, alt } = props;
     const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
+    const [nativeError, setNativeError] = useState(false);
     const [zoomed, setZoomed] = useState(false);
 
     useEffect(() => {
@@ -40,6 +42,7 @@ export function makeBitbucketImageFor(localId: string) {
       }
       let cancelled = false;
       setFailed(false);
+      setNativeError(false);
       setResolvedSrc(null);
       void (async () => {
         try {
@@ -71,11 +74,36 @@ export function makeBitbucketImageFor(localId: string) {
           </span>
         );
       }
+      // 代理拉不到（如 GitLab <17.4 私有上传仅认浏览器 session，PAT 无法代理）：先试浏览器原生
+      // 加载（公网图可成）；原生也失败则降级成链接 —— 指向 PR 网页（在系统浏览器带 session 看
+      // 评论与图片），避免破图标，也避免相对 /uploads 路径被解析成 localhost。
+      if (nativeError) {
+        const fallbackHref = prWebUrl ?? (/^https?:\/\//.test(src) ? src : null);
+        if (fallbackHref) {
+          return (
+            <a
+              href={fallbackHref}
+              target="_blank"
+              rel="noreferrer"
+              className="bitbucket-image-failed muted"
+              aria-label={t('bitbucketImage.loadFailedAria')}
+            >
+              🖼️ {alt || t('bitbucketImage.attachment')} · {t('bitbucketImage.openInBrowser')}
+            </a>
+          );
+        }
+        return (
+          <span className="bitbucket-image-failed muted" aria-label={t('bitbucketImage.loadFailedAria')}>
+            🖼️ {t('bitbucketImage.attachmentFailed', { name: alt || t('bitbucketImage.attachment') })}
+          </span>
+        );
+      }
       return (
         <img
           src={src}
           alt={alt ?? ''}
           className="bitbucket-image bitbucket-image-fallback"
+          onError={() => setNativeError(true)}
         />
       );
     }

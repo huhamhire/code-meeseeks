@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (加载失败)",
     "closeZoomAria": "关闭大图预览 (Esc)",
     "loadFailedAria": "图片加载失败",
-    "loadingAria": "加载图片中"
+    "loadingAria": "加载图片中",
+    "openInBrowser": "浏览器打开"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[AI 建议]",
