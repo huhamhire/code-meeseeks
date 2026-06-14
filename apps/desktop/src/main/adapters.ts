@@ -1,7 +1,9 @@
 import { BitbucketServerAdapter } from '@meebox/platform-bitbucket-server';
 import { GitHubAdapter } from '@meebox/platform-github';
+import { GitLabAdapter } from '@meebox/platform-gitlab';
 import {
   GITHUB_DOTCOM_API_BASE,
+  GITLAB_DOTCOM_API_BASE,
   type Connection,
   type PlatformAdapter,
   type PlatformKind,
@@ -49,6 +51,12 @@ export function buildDraftAdapter(
     const fetchFn = proxyFetchForHost(proxy, hostOf(ghBase));
     return new GitHubAdapter({ baseUrl: ghBase, token, cloneProtocol: 'pat', fetch: fetchFn });
   }
+  if (kind === 'gitlab') {
+    // GitLab 草稿 base_url 可留空 → 默认官方 gitlab.com/api/v4
+    const glBase = baseUrl.trim() || GITLAB_DOTCOM_API_BASE;
+    const fetchFn = proxyFetchForHost(proxy, hostOf(glBase));
+    return new GitLabAdapter({ baseUrl: glBase, token, cloneProtocol: 'pat', fetch: fetchFn });
+  }
   const fetchFn = proxyFetchForHost(proxy, hostOf(baseUrl));
   return new BitbucketServerAdapter({ baseUrl, token, cloneProtocol: 'pat', fetch: fetchFn });
 }
@@ -81,6 +89,13 @@ function buildOne(conn: Connection, proxy: ProxyConfig): PlatformAdapter {
       });
     case 'github':
       return new GitHubAdapter({
+        baseUrl: conn.base_url,
+        token: conn.auth.token,
+        cloneProtocol: conn.clone.protocol,
+        fetch: fetchFn,
+      });
+    case 'gitlab':
+      return new GitLabAdapter({
         baseUrl: conn.base_url,
         token: conn.auth.token,
         cloneProtocol: conn.clone.protocol,

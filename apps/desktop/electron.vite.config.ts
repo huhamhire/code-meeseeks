@@ -12,6 +12,7 @@ const internalPackages = [
   '@meebox/state-store',
   '@meebox/platform-bitbucket-server',
   '@meebox/platform-github',
+  '@meebox/platform-gitlab',
   '@meebox/poller',
   '@meebox/repo-mirror',
   '@meebox/rules',

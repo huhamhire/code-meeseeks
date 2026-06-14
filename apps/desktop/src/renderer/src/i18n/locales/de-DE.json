@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (Laden fehlgeschlagen)",
     "closeZoomAria": "Bildvorschau schließen (Esc)",
     "loadFailedAria": "Bild konnte nicht geladen werden",
-    "loadingAria": "Bild wird geladen"
+    "loadingAria": "Bild wird geladen",
+    "openInBrowser": "Im Browser öffnen"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[KI-Vorschlag]",
@@ -198,9 +199,12 @@
     "bitbucketTokenPlaceholder": "Bitbucket HTTP-Zugriffstoken",
     "cloneProtocolLabel": "Clone-Protokoll",
     "cloneProtocolSsh": "SSH (lokale ssh-Konfiguration)",
-    "githubBaseUrlPlaceholder": "Leer lassen für https://api.github.com; für GHE https://<host>/api/v3 eingeben",
+    "githubBaseUrlPlaceholder": "Leer lassen für github.com; für GHE die Instanz-URL, z. B. https://ghe.example.com (/api/v3 optional)",
     "githubNamePlaceholder": "z. B. Firmen-GitHub",
     "githubTokenPlaceholder": "GitHub Personal Access Token",
+    "gitlabBaseUrlPlaceholder": "Leer lassen für gitlab.com; für Self-Managed die Instanz-URL, z. B. https://gitlab.example.com (/api/v4 optional)",
+    "gitlabNamePlaceholder": "z. B. Firmen-GitLab",
+    "gitlabTokenPlaceholder": "GitLab Personal Access Token",
     "hide": "Ausblenden",
     "nameLabel": "Name",
     "optional": "(optional)",
@@ -386,7 +390,7 @@
         "hint": "Offizielle Anthropic-API; geben Sie den Modellnamen direkt ein (z. B. claude-opus-4-8); das Präfix anthropic/ wird automatisch hinzugefügt"
       },
       "cli": {
-        "hint": "Delegiert Review-Anfragen an ein lokal installiertes und autorisiertes Kommandozeilen-Tool, um das Modell aufzurufen, ohne sich direkt mit der API zu verbinden oder einen Schlüssel zu benötigen; das Tool verwaltet sein eigenes Modell und Kontingent. Das Ausfüllen und Aktivieren autorisiert den Aufruf dieses Kommandozeilen-Tools in einem Unterprozess unter Ihrer lokalen Anmeldesitzung.",
+        "hint": "🧪 Experimentell: hängt vom Upstream-CLI ab (z. B. claude / codex); sein Verhalten kann sich mit Upstream-Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert. Delegiert Review-Anfragen an ein lokal installiertes und autorisiertes Kommandozeilen-Tool, um das Modell aufzurufen, ohne sich direkt mit der API zu verbinden oder einen Schlüssel zu benötigen; das Tool verwaltet sein eigenes Modell und Kontingent. Das Ausfüllen und Aktivieren autorisiert den Aufruf dieses Kommandozeilen-Tools in einem Unterprozess unter Ihrer lokalen Anmeldesitzung.",
         "label": "Lokales CLI"
       },
       "dashscope": {
@@ -504,7 +508,7 @@
   "platformIcon": {
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
-    "gitlabSub": "Demnächst verfügbar"
+    "gitlabSub": "gitlab.com / Self-Managed"
   },
   "prItem": {
     "approvedCount_one": "{{count}} Reviewer hat genehmigt",
@@ -553,6 +557,7 @@
     "checkUpdate": "Nach Updates suchen",
     "checkUpdateTitle": "GitHub auf die neueste Version prüfen (nur Erkennung, keine automatische Installation)",
     "checking": "Prüfe…",
+    "cliExperimentalHint": "Lokale CLI-Provider hängen von Upstream-CLIs ab (z. B. claude / codex); ihr Verhalten kann sich mit Upstream-Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert.",
     "configKey": "Konfiguration",
     "configure": "Konfigurieren",
     "connSaveHint": "Bitte Name / Base URL / Token ausfüllen",
@@ -570,6 +575,7 @@
     "enableConnectionAria": "Diese Verbindung aktivieren",
     "enableProxy": "Proxy aktivieren",
     "enableRules": "Regeln aktivieren",
+    "experimental": "Experimentell",
     "fillRequiredHint": "Bitte zuerst alle Pflichtfelder ausfüllen",
     "hide": "Ausblenden",
     "languageHint": "Schaltet die Oberfläche sofort um; die Antwortsprache der KI folgt ebenfalls.",
@@ -586,6 +592,7 @@
     "pickRulesDirTitle": "Regelverzeichnis auswählen",
     "platform": "Plattform",
     "platformGithub": "GitHub (github.com / Enterprise Server)",
+    "platformGitlab": "GitLab (gitlab.com / Self-Managed)",
     "pollerHint": "Intervall für die automatische Prüfung von PRs, eine Ganzzahl zwischen 60 und 900 Sekunden.",
     "pollerRangeError": "Das Polling-Intervall muss eine Ganzzahl zwischen 60 und 900 Sekunden sein",
     "pollerSeconds": "{{n}} s",

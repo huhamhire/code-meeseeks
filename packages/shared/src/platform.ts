@@ -1,4 +1,5 @@
-export type PlatformKind = 'bitbucket-server' | 'github' | 'gitlab' | 'gitea';
+// 顺序即各处平台展示准绳：GitHub → Bitbucket → GitLab，新平台追加末尾（见 PlatformIcon.PLATFORM_META）。
+export type PlatformKind = 'github' | 'bitbucket-server' | 'gitlab';
 
 export interface RepoRef {
   /** Bitbucket: project key; GitHub: org/user; GitLab: namespace */
@@ -147,8 +148,9 @@ export interface PrComment {
   replies: PrComment[];
   /**
    * 远端版本号 (乐观锁)。Bitbucket 走 0/1/2... 单调递增；DELETE / PUT 时必须在 query
-   * 里带当前 version，否则 409 conflict。其他平台没这语义可以留 undefined，
-   * adapter 实现时按需带上 / 兜底 0
+   * 里带当前 version，否则 409 conflict。GitHub / GitLab 无此语义，置 `0` 作「无需并发令牌」
+   * 哨兵——让 canEdit/canDelete 判定与编辑/删除 IPC 的 `version: number` 契约统一通过，
+   * 其编辑/删除 API 忽略该值。
    */
   version?: number;
   /**
@@ -210,6 +212,12 @@ export interface PlatformCapabilities {
   inlineMultiline: boolean;
   /** 评论删改是否需要 version 乐观锁（仅 Bitbucket） */
   commentOptimisticLock: boolean;
+  /**
+   * 评论正文单换行是否按 hard-break 渲染（单 `\n` → `<br>`）。GitHub / Bitbucket 评论上下文
+   * 是（`true`）；GitLab 走标准 CommonMark（单 `\n` 作软换行 = 空格，`false`）。renderer 据此
+   * 决定是否启用 remark-breaks，使本地渲染与各平台 web 一致。
+   */
+  commentHardBreaks: boolean;
   /** 合并否决项保真度：'full' 逐条可得（Bitbucket/GitLab）；'partial' 只能近似（GitHub） */
   mergeVetoFidelity: 'full' | 'partial';
   /** 发现端点是否强限流（GitHub search 30/分）→ 该平台轮询间隔单独拉长 */

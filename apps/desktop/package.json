@@ -1,6 +1,6 @@
 {
   "name": "@meebox/desktop",
-  "version": "0.3.1",
+  "version": "0.4.0-alpha.1",
   "private": true,
   "description": "meebox Electron desktop app",
   "author": {
@@ -66,6 +66,7 @@
     "@meebox/logger": "*",
     "@meebox/platform-bitbucket-server": "*",
     "@meebox/platform-github": "*",
+    "@meebox/platform-gitlab": "*",
     "@meebox/poller": "*",
     "@meebox/pr-agent-bridge": "*",
     "@meebox/repo-mirror": "*",

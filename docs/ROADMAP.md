@@ -1,7 +1,7 @@
 # Code Meeseeks Roadmap
 
-> 最后更新：2026-06-09
-> 状态：**M0–M4 已交付**；**M5（打磨 + 多平台扩展）持续中**。GitHub Adapter 已交付，下一步主线：**GitLab Adapter**。
+> 最后更新：2026-06-14
+> 状态：**M0–M4 已交付**；**M5（打磨 + 多平台扩展）持续中**。GitHub / Bitbucket / **GitLab** Adapter 均已交付（GitLab：CE / EE，gitlab.com + Self-Managed）。
 >
 > **命名约定**：对外品牌 **Code Meeseeks**（灵感来自 Rick and Morty 的 Mr. Meeseeks）；代码内部
 > 统一用中性代号 **meebox**（npm 作用域 `@meebox/*`，数据目录 `~/.code-meeseeks`）。pr-agent 为
@@ -42,11 +42,14 @@
 
 开放的持续阶段，不设单一 Done when。
 
-### 已交付 ✅（截至 2026-06-11）
+### 已交付 ✅（截至 2026-06-14）
 
 - **GitHub Adapter**：github.com + GitHub Enterprise Server（REST API v3）；统一 `PlatformAdapter`
   契约 + 一致性测试套件；PR 发现分类（待我评审 / 我创建 / 指派 / 提及，本地缓存按标记过滤）。
   Bitbucket 同步提供「待我评审 / 我创建」两类。
+- **GitLab Adapter**：gitlab.com + Self-Managed（CE / EE，REST API v4）；复用 `PlatformAdapter` 契约
+  + 一致性测试套件。MR 发现（待我评审 / 我创建 / 指派）、diff 评论读写、合并、clone、头像 / 图片代理；
+  经 `/metadata` 探测 edition，审批能力按 CE / EE 降级（详见 [docs/arch/01-platform-adapter.md](arch/01-platform-adapter.md) §4.3）。
 - 嵌入式 pr-agent 运行时打包（内嵌 Python，免装 Python/Docker）；**移除 Docker 运行策略**（容器装载效率低、与「零依赖」定位不符，embedded / local-cli 已覆盖全部场景）
 - 首发桌面安装包：Windows x64（NSIS）+ macOS arm64（dmg，ad-hoc 签名）
 - 出站 HTTP 代理（LLM / 代码平台 / git HTTPS 统一，loopback 直连）
@@ -57,14 +60,10 @@
 - 设置页连接 / LLM / 代理可视化 CRUD
 - 单例锁（二次启动聚焦已有窗口）
 - 开源发布准备（README + 开发指南 + Apache-2.0 + NOTICE）
-- **国际化（i18n）**：react-i18next 四语界面（简体中文 / English / 日本語 / Deutsch），默认/兜底
-  en-US，空配置按 OS 偏好回落；设置页与首启向导可即时切换（写盘 + 主进程同步，AI 回复语言随之），
-  渲染层默认静态 + 其余懒加载
+- **国际化（i18n）**：四语界面（简体中文 / English / 日本語 / Deutsch），AI 回复语言随界面语言
 
 ### 进行中 / 待办 ⏭️
 
-- **GitLab Adapter（下一步主线）**：复用已锁定的 `PlatformAdapter` 契约 + 一致性测试套件实现 GitLab
-  （SaaS + 自建）。数据层多平台身份字段已预留。
 - **高阶 Agent 能力**：复杂任务分步规划 + 长期 Memory。
 - **AutoPilot 预评审**：轮询发现新 PR 后按规则自动预跑，进应用即见待确认草稿（决策权仍在评审者）。
 - **规则市场**：导入 / 导出 rules.dir 片段。

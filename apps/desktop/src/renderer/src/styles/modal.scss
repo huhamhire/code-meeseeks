@@ -363,6 +363,16 @@ select.settings-input {
   align-items: center;
   cursor: pointer;
 }
+// 卡片前缀类型图标：连接=平台品牌图标（彩色），LLM=模型/终端图标（随文字色）。固定占位
+// 让标题起点对齐，一眼区分类型、避免误判。
+.llm-profile-icon {
+  flex-shrink: 0;
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: $text-muted;
+}
 .llm-profile-meta {
   flex: 1;
   min-width: 0;
@@ -374,9 +384,28 @@ select.settings-input {
   color: $text-primary;
   font-size: $fs-md;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  min-width: 0;
+}
+.llm-profile-title-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+// 实验性标记：本地 CLI 类 provider 受上游 CLI 行为变更影响，标注以示风险。
+.badge-experimental {
+  flex-shrink: 0;
+  font-size: $fs-xs;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 0 $space-2;
+  border-radius: $radius-sm;
+  color: $color-warning;
+  border: 1px solid $color-warning;
+  opacity: 0.85;
 }
 .llm-profile-sub {
   font-size: $fs-sm;

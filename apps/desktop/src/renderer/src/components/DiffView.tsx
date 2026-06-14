@@ -14,6 +14,7 @@ import type {
   DiffChangedFile,
   DiffFileContent,
   DiffHunkRange,
+  PlatformCapabilities,
   PrComment,
   ReviewDraft,
   StoredPullRequest,
@@ -35,12 +36,15 @@ import { ConfirmModal } from './ConfirmModal';
 import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
 import { FileTreeIcon, SearchIcon } from './icons';
+import { languageFor } from '../utils/language';
 
 interface DiffViewProps {
   pr: StoredPullRequest;
   renderSideBySide: boolean;
   showBlame: boolean;
   showWhitespace: boolean;
+  /** 活动连接能力位；此处用 commentHardBreaks 决定评论是否启用 remark-breaks。 */
+  capabilities?: PlatformCapabilities;
   /**
    * M4 跳转目标：来自 ChatPane finding card → App pendingDiffNav。
    * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + (带 runId/findingId
@@ -196,9 +200,13 @@ export function DiffView({
   renderSideBySide,
   showBlame,
   showWhitespace,
+  capabilities,
   pendingNav,
   onNavConsumed,
 }: DiffViewProps) {
+  // 评论换行策略：GitHub/Bitbucket hard-break（单 \n → <br>）；GitLab CommonMark 软换行。
+  // 能力位缺省（旧数据/无连接）回退 true，保持既有行为。
+  const commentHardBreaks = capabilities?.commentHardBreaks ?? true;
   const { t } = useTranslation();
   const [files, setFiles] = useState<DiffChangedFile[] | null>(null);
   const [filesError, setFilesError] = useState<FormattedError | null>(null);
@@ -422,7 +430,8 @@ export function DiffView({
           )
         : undefined;
     setPendingScroll({
-      line: pendingNav.anchor.startLine,
+      // 取 endLine 跟草稿 zone / 发布锚点对齐（见 zone 行号注释），高亮行与草稿区同位
+      line: pendingNav.anchor.endLine,
       side: 'new',
       draftId: matchingDraft?.id,
     });
@@ -662,6 +671,8 @@ export function DiffView({
               connectionId={pr.connectionId}
               attachmentBase={attachmentBase}
               prLocalId={pr.localId}
+              prWebUrl={pr.url}
+              hardBreaks={commentHardBreaks}
             />,
           );
 
@@ -821,7 +832,9 @@ export function DiffView({
     pr.connectionId,
     attachmentBase,
     pr.localId,
+    pr.url,
     renderSideBySide,
+    commentHardBreaks,
   ]);
 
   // M4: 内联草稿 view zones (蓝底，editable)。跟 comments 同套机制：
@@ -847,12 +860,13 @@ export function DiffView({
     const newByLine = new Map<number, ReviewDraft[]>();
     for (const d of fileDrafts) {
       const target = d.anchor.side === 'old' ? oldByLine : newByLine;
-      // 用 startLine 作为 zone 行号 — finding 跨多行 (startLine=403, endLine=425)
-      // 时 zone 紧贴 startLine 下方，跟 nav reveal 的高亮行视觉一致；之前用 endLine
-      // 让 zone 出现在 finding 段末尾 (425 后)，高亮行在起始 (403)，跨 23 行错位
-      const arr = target.get(d.anchor.startLine) ?? [];
+      // 用 endLine 作为 zone 行号，跟发布锚点对齐 —— publishInlineComment 用
+      // anchor.endLine 发到远端，草稿区也落 endLine 即「预览位置 = 最终发布位置」
+      // (WYSIWYG)。nav reveal 的高亮行同样取 endLine（见下方 pendingScroll），二者
+      // 视觉一致，跨多行 finding (startLine=403, endLine=425) 也不会起止错位。
+      const arr = target.get(d.anchor.endLine) ?? [];
       arr.push(d);
-      target.set(d.anchor.startLine, arr);
+      target.set(d.anchor.endLine, arr);
     }
 
     const originalEditor = diffEditor.getOriginalEditor();
@@ -1009,6 +1023,7 @@ export function DiffView({
               drafts={ds}
               prLocalId={pr.localId}
               registerEditTrigger={registerEditTrigger}
+              hardBreaks={commentHardBreaks}
             />,
           );
 
@@ -1115,7 +1130,16 @@ export function DiffView({
     // 不依赖 autoEditTokens (已移除 state) / registerEditTrigger (稳定的 useCallback)
     // — 避免 trigger 引发 zone 重建带来的 DraftZone unmount/mount，根除取消后重入
     // edit 模式的 race
-  }, [diffEditor, drafts, content, selected, pr.localId, registerEditTrigger, renderSideBySide]);
+  }, [
+    diffEditor,
+    drafts,
+    content,
+    selected,
+    pr.localId,
+    registerEditTrigger,
+    renderSideBySide,
+    commentHardBreaks,
+  ]);
 
   // M4 行 hover '+' 新建 manual 草稿：modifiedEditor (head 侧) 上加 mousemove +
   // mousedown 监听。已有评论 / 草稿的行不重复出 + glyph，避免误触。
@@ -1498,10 +1522,12 @@ function DraftZoneList({
   drafts,
   prLocalId,
   registerEditTrigger,
+  hardBreaks,
 }: {
   drafts: ReviewDraft[];
   prLocalId: string;
   registerEditTrigger: (draftId: string, fn: (() => void) | null) => void;
+  hardBreaks: boolean;
 }) {
   const { t } = useTranslation();
   const onSave = async (draftId: string, body: string): Promise<void> => {
@@ -1538,6 +1564,7 @@ function DraftZoneList({
         >
           <DraftZone
             draft={d}
+            hardBreaks={hardBreaks}
             registerEditTrigger={registerEditTrigger}
             onSave={(body) => onSave(d.id, body)}
             onDelete={() => onDelete(d.id)}
@@ -1554,11 +1581,15 @@ function CommentZone({
   connectionId,
   attachmentBase,
   prLocalId,
+  prWebUrl,
+  hardBreaks,
 }: {
   comments: PrComment[];
   connectionId: string;
   attachmentBase: string | null;
   prLocalId: string;
+  prWebUrl: string;
+  hardBreaks: boolean;
 }) {
   return (
     <div className="comment-zone-inner">
@@ -1573,6 +1604,8 @@ function CommentZone({
             depth={0}
             attachmentBase={attachmentBase}
             prLocalId={prLocalId}
+            prWebUrl={prWebUrl}
+            hardBreaks={hardBreaks}
           />
         </div>
       ))}
@@ -1600,8 +1633,9 @@ function resolveAttachmentUrl(href: string, base: string | null): string | null 
 function makeCommentMarkdownComponents(
   attachmentBase: string | null,
   prLocalId: string,
+  prWebUrl: string,
 ): Parameters<typeof ReactMarkdown>[0]['components'] {
-  const BitbucketImage = makeBitbucketImageFor(prLocalId);
+  const BitbucketImage = makeBitbucketImageFor(prLocalId, prWebUrl);
   return {
     a: ({ href, children, ...rest }) => {
       const resolved = href ? resolveAttachmentUrl(href, attachmentBase) : null;
@@ -1637,17 +1671,21 @@ function CommentNode({
   depth,
   attachmentBase,
   prLocalId,
+  prWebUrl,
+  hardBreaks,
 }: {
   comment: PrComment;
   connectionId: string;
   depth: number;
   attachmentBase: string | null;
   prLocalId: string;
+  prWebUrl: string;
+  hardBreaks: boolean;
 }) {
   const { t } = useTranslation();
   const components = useMemo(
-    () => makeCommentMarkdownComponents(attachmentBase, prLocalId),
-    [attachmentBase, prLocalId],
+    () => makeCommentMarkdownComponents(attachmentBase, prLocalId, prWebUrl),
+    [attachmentBase, prLocalId, prWebUrl],
   );
   const [replyOpen, setReplyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -1700,10 +1738,10 @@ function CommentNode({
           />
         ) : (
           <div className="comment-zone-body markdown">
-            {/* remarkBreaks：单换行即渲染成 <br>，与 Bitbucket/GitHub 评论上下文一致
-                （评论场景按 hard-break，单 \n 就换行），也跟草稿预览/评论列表保持统一 */}
+            {/* hardBreaks（Bitbucket/GitHub）：remarkBreaks 让单 \n → <br>，与其评论上下文一致；
+                GitLab 走标准 CommonMark（单 \n = 空格）→ 不挂 remarkBreaks，与 web 渲染对齐 */}
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkBreaks]}
+              remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}
               rehypePlugins={REMOTE_REHYPE_PLUGINS}
               components={components}
               urlTransform={transformBitbucketUrl}
@@ -1749,7 +1787,8 @@ function CommentNode({
         {replyOpen && (
           <CommentReplyEditor
             prLocalId={prLocalId}
-            parentCommentId={comment.remoteId}
+            // 回复目标抽象（threadId）：GitLab=discussion id（reply 必需）；Bitbucket 空 / GitHub=remoteId → 回退 remoteId。
+            parentCommentId={comment.threadId ?? comment.remoteId}
             onCancel={() => setReplyOpen(false)}
             onPosted={() => setReplyOpen(false)}
           />
@@ -1777,6 +1816,8 @@ function CommentNode({
           depth={depth + 1}
           attachmentBase={attachmentBase}
           prLocalId={prLocalId}
+          prWebUrl={prWebUrl}
+          hardBreaks={hardBreaks}
         />
       ))}
       {confirmDelete && (
@@ -2259,51 +2300,4 @@ function renderHoverMd(comments: PrComment[]): string {
     .join('\n\n---\n\n');
 }
 
-export function languageFor(filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-  const map: Record<string, string> = {
-    ts: 'typescript',
-    tsx: 'typescript',
-    mts: 'typescript',
-    cts: 'typescript',
-    js: 'javascript',
-    jsx: 'javascript',
-    mjs: 'javascript',
-    cjs: 'javascript',
-    json: 'json',
-    yaml: 'yaml',
-    yml: 'yaml',
-    md: 'markdown',
-    css: 'css',
-    scss: 'scss',
-    less: 'less',
-    html: 'html',
-    htm: 'html',
-    py: 'python',
-    go: 'go',
-    rs: 'rust',
-    java: 'java',
-    kt: 'kotlin',
-    swift: 'swift',
-    sh: 'shell',
-    bash: 'shell',
-    sql: 'sql',
-    xml: 'xml',
-    php: 'php',
-    rb: 'ruby',
-    c: 'c',
-    h: 'c',
-    cpp: 'cpp',
-    hpp: 'cpp',
-    cc: 'cpp',
-    cs: 'csharp',
-    dockerfile: 'dockerfile',
-  };
-  if (!ext || ext === filePath.toLowerCase()) {
-    const base = filePath.split('/').pop()?.toLowerCase() ?? '';
-    if (base === 'dockerfile') return 'dockerfile';
-    if (base === 'makefile') return 'makefile';
-  }
-  return map[ext] ?? 'plaintext';
-}
 

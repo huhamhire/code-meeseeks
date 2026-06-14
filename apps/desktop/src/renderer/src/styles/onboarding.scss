@@ -185,7 +185,8 @@
 // ===== 平台步：左右布局 =====
 .onboarding-platform-grid {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  // 左列固定 220px：容下最长副标题「gitlab.com / Self-Managed」单行不折行（见 PLATFORM_META）
+  grid-template-columns: 220px 1fr;
   gap: $space-8;
   align-items: start;
 }
@@ -240,6 +241,7 @@
 .onboarding-platform-meta {
   color: $text-muted;
   font-size: $fs-sm;
+  white-space: nowrap; // 副标题始终单行，避免「Self-Managed」被拆词换行
 }
 
 .onboarding-platform-form {

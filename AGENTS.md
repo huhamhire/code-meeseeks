@@ -63,6 +63,7 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 - **不提交无关改动**：工作区可能混有他人未提交编辑，按文件归属拆成内聚 commit，别混进同一条。
 - **按文件显式暂存**：只 `git add` 自己本次改动的具体文件路径，**禁止 `git add -A` / `git add .` / `git add :/`** 整目录暂存。多个 agent 任务可能并行编辑同一工作区，全量暂存会把他人未完成的改动一并卷入。暂存后 `git status` 复核暂存区，确认只含本任务文件再提交。
 - **PR 打标签**：开 / 更新 PR 后**习惯性打标签**——从仓库既有标签集（`gh label list`：enhancement / documentation / bug / …）选最贴切的一或多个贴上（`gh pr edit <n> --add-label`）。没有合适的现成标签时按需新建或留空并说明，不强凑。
+- **平台展示顺序统一**：代码平台（GitHub / Bitbucket / GitLab …）在各处的展示顺序统一为 **GitHub → Bitbucket → GitLab**，**新增平台一律追加在末尾**。准绳是 [PlatformIcon.tsx](apps/desktop/src/renderer/src/components/PlatformIcon.tsx) 的 `PLATFORM_META` 数组；设置页平台下拉、首启向导网格、使用文档 [docs/guide/01-code-platform.md](docs/guide/01-code-platform.md)、`PlatformKind` 类型等各处均以此为序，改动平台清单时同步对齐，避免各处错位。
 
 ## 国际化 (i18n)
 
@@ -77,6 +78,7 @@ GUI 文本走 **react-i18next**（key 为中立标识符，`zh-CN` / `en-US` / `
 
 ## 工程维护坑
 
+- **新增内部 `@meebox/*` 包必做两步登记**（漏则报 `Cannot find module …/src/<x>.js`）：内部包源码是 `.ts`、相对 import 带 `.js` 扩展（NodeNext 约定），Node 运行期不能直接读。新建一个被 desktop 主/preload 引用的内部包后，除 `npm install`（建 workspace 软链）外，**必须**：① 在 `apps/desktop/package.json` 依赖加 `"@meebox/<name>": "*"`；② 在 [apps/desktop/electron.vite.config.ts](apps/desktop/electron.vite.config.ts) 的 `internalPackages` 数组加该名——让 electron-vite 把它 **bundle**（转译 TS、解析 `.js`→`.ts`）而非 externalize。漏 ② 时 Node 把它当外部包按 `main: src/index.ts` 加载，撞到 `export … from './x.js'` 而文件是 `.ts` → 运行期崩。
 - **嵌入式 pr-agent 运行时**（[modules/04](docs/arch/04-pragent-runtime.md)）：`apps/desktop/scripts/assemble-pragent-runtime.mjs` 按 `pragent-runtime.json` 把可重定位 CPython + pinned pr-agent 装到 `apps/desktop/vendor/pragent/`（gitignored）。
 - **monkeypatch shim** `apps/desktop/scripts/pragent-shim/`（薄加载器 `sitecustomize.py` + 领域拆分包 `meebox_pragent_shim/`：`patches/` 各 patch + `cli/` 本地 CLI provider + `runtime.py`/`usage.py`。对 pr-agent 的无侵入补丁）：
   - 改了它，跑一次 `npm --prefix apps/desktop run prepare:pragent` 即重新同步进 vendor（幂等跳过分支也会同步 shim），**无需 `--force` 全量重建**。

@@ -16,7 +16,7 @@
 
 > ⚠️ **早期预览版（0.x）**：项目仍在快速迭代，功能、配置与数据格式可能发生不兼容变更，稳定性未经充分验证。请勿用于关键的生产评审流程，使用前请自行评估风险并做好数据备份。
 
-Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](https://docs.pr-agent.ai/) 的**桌面图形界面 (GUI)**：把 AI 辅助的代码评审装进一个桌面客户端 —— 拉取评审者待评审的 PR（Pull Request / Merge Request），本地跑 pr-agent 生成评审意见，由评审者**逐条确认 / 编辑后**再发布到代码托管平台（Bitbucket / GitHub）。
+Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](https://docs.pr-agent.ai/) 的**桌面图形界面 (GUI)**：把 AI 辅助的代码评审装进一个桌面客户端 —— 拉取评审者待评审的 PR（Pull Request / Merge Request），本地跑 pr-agent 生成评审意见，由评审者**逐条确认 / 编辑后**再发布到代码托管平台（GitHub / Bitbucket / GitLab）。
 
 核心设计立场：
 
@@ -50,7 +50,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
 - 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
 - 🧩 **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / Ollama / 通义千问 / 火山方舟等；也可通过本机已授权的本地 CLI 工具调用第三方模型。
-- 🌐 **多语言界面** —— 简体中文 / English / 日本語 / Deutsch；设置页与首启向导即时切换，空配置自动匹配系统语言（AI 回复语言随之）。
+- 🌐 **多语言界面** —— 简体中文 / English / 日本語 / Deutsch，AI 回复语言随界面语言。
 
 <div align="center">
 
@@ -101,7 +101,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 | ------------------------------ | --------------------------------------------------------------- |
 | GitHub                         | ✅ 已验证（github.com + GitHub Enterprise Server，REST API v3） |
 | Bitbucket Server / Data Center | ✅ 已支持（REST API v1，>= 7.0）                                |
-| GitLab                         | 🚧 规划中                                                       |
+| GitLab                         | ✅ 已支持（gitlab.com + Self-Managed，CE / EE，REST API v4，>= 13.8，推荐 15.6+） |
 
 ---
 
@@ -128,7 +128,6 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 围绕「让本地化、半自动评审更省心」展开的几个核心方向（排序不代表优先级，欢迎在 issue 中讨论）：
 
-- [ ] **多代码平台适配** —— 在统一适配层上继续扩展 GitLab，自建与公有云托管一并接入。
 - [ ] **高阶 Agent 能力** —— 复杂任务的分步规划 + 长期 Memory，让评审从单轮问答走向可累积上下文、多步工具调用的协作。
 - [ ] **AutoPilot 预评审** —— 轮询发现新 PR 后按评审者配置的规则自动跑一遍预评审，进应用即见待确认草稿，省去逐个手动触发（决策权仍在评审者，发布前仍需确认）。
 

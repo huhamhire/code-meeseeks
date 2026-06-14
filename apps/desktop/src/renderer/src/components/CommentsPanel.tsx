@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { PrComment, StoredPullRequest } from '@meebox/shared';
+import type { PlatformCapabilities, PrComment, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import i18n from '../i18n';
 import { formatBackendError, type FormattedError } from '../errors';
@@ -23,6 +23,8 @@ interface CommentsPanelProps {
   pr: StoredPullRequest;
   /** 拉取成功后回调，把顶层评论数 (不含 replies) 报给父组件用于 tab 角标 */
   onCommentsLoaded?: (count: number) => void;
+  /** 活动连接能力位；此处用 commentHardBreaks 决定评论是否启用 remark-breaks。 */
+  capabilities?: PlatformCapabilities;
 }
 
 /**
@@ -34,7 +36,9 @@ interface CommentsPanelProps {
  * 排版：summary 评论 (anchor=null) 跟 inline 评论 (anchor!=null) 都展示，inline
  * 顶部标 `path:line` chip 让用户知道这条评论锚在哪。replies 嵌套缩进 1 层渲染。
  */
-export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
+export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPanelProps) {
+  // 评论换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
+  const hardBreaks = capabilities?.commentHardBreaks ?? true;
   const { t } = useTranslation();
   const [comments, setComments] = useState<PrComment[] | null>(null);
   const [error, setError] = useState<FormattedError | null>(null);
@@ -124,6 +128,7 @@ export function CommentsPanel({ pr, onCommentsLoaded }: CommentsPanelProps) {
             pr={pr}
             depth={0}
             autoExpandCode={autoExpandSet.has(c.remoteId)}
+            hardBreaks={hardBreaks}
           />
         ))}
       </ul>
@@ -141,18 +146,20 @@ function CommentItem({
   pr,
   depth,
   autoExpandCode = false,
+  hardBreaks,
 }: {
   comment: PrComment;
   pr: StoredPullRequest;
   depth: number;
   /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
   autoExpandCode?: boolean;
+  hardBreaks: boolean;
 }) {
   const { t } = useTranslation();
   // 评论 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)
   const mdComponents = useMemo(
-    () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId) }),
-    [pr.localId],
+    () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId, pr.url) }),
+    [pr.localId, pr.url],
   );
   const [replyOpen, setReplyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -232,8 +239,9 @@ function CommentItem({
         />
       ) : (
         <div className="pr-comment-body markdown">
+          {/* hardBreaks（Bitbucket/GitHub）挂 remarkBreaks 单 \n→<br>；GitLab CommonMark 不挂 */}
           <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkBreaks]}
+            remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}
             rehypePlugins={REMOTE_REHYPE_PLUGINS}
             components={mdComponents}
             urlTransform={transformBitbucketUrl}
@@ -296,7 +304,8 @@ function CommentItem({
       {replyOpen && (
         <CommentReplyEditor
           prLocalId={pr.localId}
-          parentCommentId={comment.remoteId}
+          // 回复目标抽象（threadId）：GitLab=discussion id（reply 必需）；Bitbucket 空 / GitHub=remoteId → 回退 remoteId。
+          parentCommentId={comment.threadId ?? comment.remoteId}
           onCancel={() => setReplyOpen(false)}
           onPosted={() => setReplyOpen(false)}
         />
@@ -304,7 +313,13 @@ function CommentItem({
       {comment.replies.length > 0 && (
         <ul className="pr-comments-list pr-comments-replies">
           {comment.replies.map((r) => (
-            <CommentItem key={r.remoteId} comment={r} pr={pr} depth={depth + 1} />
+            <CommentItem
+              key={r.remoteId}
+              comment={r}
+              pr={pr}
+              depth={depth + 1}
+              hardBreaks={hardBreaks}
+            />
           ))}
         </ul>
       )}

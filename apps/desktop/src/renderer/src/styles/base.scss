@@ -133,13 +133,15 @@ textarea {
 }
 
 .btn-danger {
-  background: $color-danger;
-  border-color: $color-danger;
+  // 实底用饱和的 $color-danger-bg（#c72e0f），而非偏浅鲑红的 $color-danger
+  // （后者是为文案 / 红边框设计的浅色，当实底背景会发灰白、警示力不足）。
+  background: $color-danger-bg;
+  border-color: $color-danger-bg;
   color: $text-on-accent;
 
   &:hover:not(:disabled) {
     filter: brightness(1.1);
-    background: $color-danger;
+    background: $color-danger-bg;
   }
 }
 

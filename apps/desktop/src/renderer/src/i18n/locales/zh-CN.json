@@ -10,7 +10,8 @@
     "attachmentFailed": "{{name}} (加载失败)",
     "closeZoomAria": "关闭大图预览 (Esc)",
     "loadFailedAria": "图片加载失败",
-    "loadingAria": "加载图片中"
+    "loadingAria": "加载图片中",
+    "openInBrowser": "浏览器打开"
   },
   "chatPane": {
     "aiSuggestionPrefix": "[AI 建议]",
@@ -192,9 +193,12 @@
     "bitbucketTokenPlaceholder": "Bitbucket HTTP 访问令牌",
     "cloneProtocolLabel": "Clone 协议",
     "cloneProtocolSsh": "SSH（本地 ssh config）",
-    "githubBaseUrlPlaceholder": "留空默认 https://api.github.com；GHE 填 https://<host>/api/v3",
+    "githubBaseUrlPlaceholder": "留空默认 github.com；GHE 填实例地址，如 https://ghe.example.com（/api/v3 可省略）",
     "githubNamePlaceholder": "如 公司 GitHub",
     "githubTokenPlaceholder": "GitHub Personal Access Token",
+    "gitlabBaseUrlPlaceholder": "留空默认 gitlab.com；自建填实例地址，如 https://gitlab.example.com（/api/v4 可省略）",
+    "gitlabNamePlaceholder": "如 公司 GitLab",
+    "gitlabTokenPlaceholder": "GitLab Personal Access Token",
     "hide": "隐藏",
     "nameLabel": "名称",
     "optional": "(可选)",
@@ -376,7 +380,7 @@
         "hint": "官方 Anthropic API；模型直接填型号名（claude-opus-4-8 等），会自动补 anthropic/ 前缀"
       },
       "cli": {
-        "hint": "将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。",
+        "hint": "🧪 实验性：依赖上游 CLI（claude / codex 等），行为可能随其版本变更，稳定性与持续可用性不作保证。将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。",
         "label": "本地 CLI"
       },
       "dashscope": {
@@ -491,7 +495,7 @@
   "platformIcon": {
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
-    "gitlabSub": "即将支持"
+    "gitlabSub": "gitlab.com / Self-Managed"
   },
   "prItem": {
     "approvedCount_other": "{{count}} 位 reviewer 已 approve",
@@ -538,6 +542,7 @@
     "checkUpdate": "检查更新",
     "checkUpdateTitle": "查 GitHub 最新版本（仅检测，不自动安装）",
     "checking": "检查中…",
+    "cliExperimentalHint": "本地 CLI provider 依赖上游 CLI（如 claude / codex），其行为可能随上游版本变更，稳定性与持续可用性不作保证。",
     "configKey": "配置",
     "configure": "配置",
     "connSaveHint": "请填完名称 / Base URL / Token",
@@ -555,6 +560,7 @@
     "enableConnectionAria": "启用该连接",
     "enableProxy": "启用代理",
     "enableRules": "启用规则",
+    "experimental": "实验性",
     "fillRequiredHint": "请先填完必填项",
     "hide": "隐藏",
     "languageHint": "选择后立即切换界面语言，AI 回复语言也随之调整。",
@@ -571,6 +577,7 @@
     "pickRulesDirTitle": "选择规则目录",
     "platform": "平台",
     "platformGithub": "GitHub（github.com / Enterprise Server）",
+    "platformGitlab": "GitLab（gitlab.com / Self-Managed）",
     "pollerHint": "自动检查 PR 的间隔，60~900 秒整数。",
     "pollerRangeError": "轮询间隔需 60~900 秒整数",
     "pollerSeconds": "{{n}} 秒",

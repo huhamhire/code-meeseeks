@@ -46,9 +46,33 @@ export const GitHubConnectionSchema = z.object({
   clone: CloneSettingsSchema,
 });
 
+/** gitlab.com 官方 REST API v4 base。GitLab 连接的 base_url 留空时默认走这里。 */
+export const GITLAB_DOTCOM_API_BASE = 'https://gitlab.com/api/v4';
+
+export const GitLabConnectionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('gitlab'),
+  /**
+   * GitLab REST API v4 base。**可选**：留空 / 缺省时默认 `https://gitlab.com/api/v4`（gitlab.com）；
+   * 自建 / GitLab Self-Managed 填 `https://<host>/api/v4`。clone / web host 由 adapter 推导
+   * （去掉 `/api/v4` 取实例 host），CE 与 EE 经 edition 探测在能力位上降级（审批）。
+   */
+  base_url: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().url().default(GITLAB_DOTCOM_API_BASE),
+  ),
+  display_name: z.string(),
+  auth: z.object({
+    type: z.literal('pat'),
+    token: z.string(),
+  }),
+  clone: CloneSettingsSchema,
+});
+
 export const ConnectionSchema = z.discriminatedUnion('kind', [
-  BitbucketServerConnectionSchema,
   GitHubConnectionSchema,
+  BitbucketServerConnectionSchema,
+  GitLabConnectionSchema,
 ]);
 
 /**

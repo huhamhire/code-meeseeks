@@ -24,30 +24,32 @@ export function BitbucketIcon({ size = 24 }: PlatformIconProps) {
   );
 }
 
-/** GitHub：Octocat 猫头剪影（单色，向导里置灰展示） */
+/** GitHub：Octocat 猫头剪影（品牌单色 logo；深色 UI 用官方反白 invertocat #fff，与蓝/橙区分） */
 export function GitHubIcon({ size = 24 }: PlatformIconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <path
-        fill="currentColor"
+        fill="#ffffff"
         d="M12 1.5a10.5 10.5 0 0 0-3.32 20.46c.52.1.71-.23.71-.5l-.01-1.77c-2.92.64-3.54-1.25-3.54-1.25-.48-1.22-1.17-1.54-1.17-1.54-.95-.65.07-.64.07-.64 1.06.07 1.61 1.09 1.61 1.09.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.66-1.4-2.33-.27-4.78-1.17-4.78-5.18 0-1.15.41-2.08 1.08-2.82-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.88 1.07a10 10 0 0 1 5.24 0c2-1.35 2.88-1.07 2.88-1.07.57 1.45.21 2.52.1 2.79.67.74 1.08 1.67 1.08 2.82 0 4.02-2.46 4.9-4.8 5.16.38.33.71.97.71 1.96l-.01 2.9c0 .28.19.61.72.5A10.5 10.5 0 0 0 12 1.5z"
       />
     </svg>
   );
 }
 
-/** GitLab：tanuki 狐狸标记（simple-icons 路径，向导里置灰展示） */
+/** GitLab：tanuki 狐狸标记（simple-icons 路径，品牌橙 #FC6D26 一眼可辨） */
 export function GitLabIcon({ size = 24 }: PlatformIconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <path
-        fill="currentColor"
+        fill="#FC6D26"
         d="M23.955 13.587l-1.342-4.135-2.664-8.189a.455.455 0 0 0-.867 0L16.418 9.45H7.582L4.919 1.263a.455.455 0 0 0-.867 0L1.386 9.452.044 13.587a.924.924 0 0 0 .331 1.023L12 23.054l11.625-8.443a.92.92 0 0 0 .33-1.024"
       />
     </svg>
   );
 }
 
+// 平台展示顺序的唯一准绳：GitHub → Bitbucket → GitLab，新增平台一律追加在末尾。
+// 设置页下拉、使用文档（docs/guide/01-code-platform.md）等各处展示顺序均以此为准。
 export const PLATFORM_META: ReadonlyArray<{
   kind: PlatformKind;
   label: string;
@@ -70,5 +72,5 @@ export const PLATFORM_META: ReadonlyArray<{
     available: true,
     Icon: BitbucketIcon,
   },
-  { kind: 'gitlab', label: 'GitLab', subKey: 'platformIcon.gitlabSub', available: false, Icon: GitLabIcon },
+  { kind: 'gitlab', label: 'GitLab', subKey: 'platformIcon.gitlabSub', available: true, Icon: GitLabIcon },
 ];

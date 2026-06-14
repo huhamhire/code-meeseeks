@@ -296,7 +296,7 @@ function PlatformStep({
           aria-label={t('onboarding.platformGroupAria')}
         >
           {PLATFORM_META.map((p) => {
-            // 可用平台（Bitbucket / GitHub）可点选并设 kind；GitLab 等未实现的置灰
+            // 可用平台（Bitbucket / GitHub / GitLab）可点选并设 kind；未实现的置灰
             const selected = p.kind === connDraft.kind;
             return (
               <button
