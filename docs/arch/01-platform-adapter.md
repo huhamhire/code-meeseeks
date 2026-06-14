@@ -4,8 +4,9 @@
 只依赖该接口、不感知具体平台。本章是平台适配的**统一设计与维护入口**：抽象实现、能力位与降级、
 评论统一模型，以及各平台（Bitbucket / GitHub / GitLab）差异化适配逻辑。
 
-已实现：**Bitbucket Server / Data Center**、**GitHub（github.com + GitHub Enterprise Server）**。
-规划中：**GitLab**。不负责：git 本地操作（见 [02](02-repo-mirror.md)）、pr-agent 调用（见 [04](04-pragent-runtime.md)）。
+已实现：**Bitbucket Server / Data Center**、**GitHub（github.com + GitHub Enterprise Server）**、
+**GitLab（gitlab.com + Self-Managed，CE/EE，REST API v4）**。不负责：git 本地操作（见
+[02](02-repo-mirror.md)）、pr-agent 调用（见 [04](04-pragent-runtime.md)）。
 
 ---
 
@@ -17,7 +18,7 @@
 - **平台中性的 PR 身份 `PrIdentity`**：`platform / group / repo / remoteId / connectionId`（+ 可选 url）。
   各平台把自己的概念映射进来；这套身份也是状态存储 hash localId 的输入（见 [03](03-state-storage.md)）。
 
-  | 中性概念 | Bitbucket | GitHub | GitLab（规划） |
+  | 中性概念 | Bitbucket | GitHub | GitLab |
   | --- | --- | --- | --- |
   | group | projectKey | owner（org/user） | namespace |
   | repo | repoSlug | repo | project path |
@@ -63,7 +64,7 @@ UI 据此 显/隐/灰，业务层据此调策略——**绝不在调用处 `try/
 
 各平台能力一览：
 
-| 能力 | Bitbucket | GitHub | GitLab（规划） |
+| 能力 | Bitbucket | GitHub | GitLab |
 | --- | --- | --- | --- |
 | reviewStatuses | 通过/需修改/撤销 | 通过/需修改/撤销 | Premium：通过/撤销；CE：无 API 审批 |
 | commentOptimisticLock | 是（version） | 否 | 否 |
@@ -145,13 +146,30 @@ UI 据此 显/隐/灰，业务层据此调策略——**绝不在调用处 `try/
   经 main 端带 PAT 代理拉（私有需鉴权）。
 - **Token 权限**：见 [代码平台配置 · GitHub PAT 权限参考](../guide/01-code-platform.md)（经典 `repo`；细粒度 Pull requests RW + Contents RW + Metadata R）。
 
-### 4.3 GitLab（规划中）
+### 4.3 GitLab（gitlab.com + Self-Managed CE/EE，REST API v4）
 
-- 发现端点干净：`GET /merge_requests?scope=all&state=opened&reviewer_username=<me>`（全局跨项目）。
-- 评论 = notes + discussions（inline 在 discussion 的 `position` 里，需 base/start/head 三 sha；过滤 system note）。
-- 可合并：`detailed_merge_status` 枚举丰富（full 保真）。
-- **缺口**：approve/unapprove API **自 13.9 起为 Premium**，CE 实例无 API 审批；needsWork 无干净对应 →
-  `capabilities.reviewStatuses` 据 edition 降级（Premium：通过/撤销；CE：空 + UI 灰显）。接入时重点是 edition 探测 + 降级。
+- **Base URL 与 host 推导**：连接 base 是 **API base**（gitlab.com→`https://gitlab.com/api/v4`；自建→`https://<host>/api/v4`），
+  可留空默认官方。clone / 附件 / 网页用的 web host 由 adapter 推导（取 base 的 host，去掉 `/api/v4`）。鉴权走 `PRIVATE-TOKEN` 头。
+- **身份映射**：`projectKey`=namespace（**含嵌套 group**，如 `group/subgroup`）、`repoSlug`=project、`remoteId`=MR **iid**。
+  端点 `:id` 用 `encodeURIComponent(projectKey/repoSlug)`（GitLab 接受 URL-encoded 全路径作 project id）。MR web_url 解析出项目路径。
+- **发现（三类）**：`GET /merge_requests?scope=all&state=opened&...`（全局跨项目）。`discoveryFilters` =
+  待我评审（`reviewer_username`）/ 我创建（`author_username`）/ 指派我（`assignee_username`）；GitLab 无 "mentioned"
+  概念故不含。poller 逐类轮询 union 打标，renderer 切标签。列表项再逐条取详情（`diff_refs` 三 sha +
+  `detailed_merge_status`）+（EE）`/approvals`（approved_by → reviewer 状态），N+1。
+- **评论 = discussions + notes**：`GET …/discussions` 一棵棵讨论，首 note 作顶层、其余作 reply；过滤 `system` note。
+  inline = note 带 `position`（`new_path/new_line` 或 `old_path/old_line`）。reply 走 **discussion_id**（= `threadId`）；改 / 删走
+  **note_id**（= `remoteId`）—— 二者不同，故 renderer 回复入口改传 `threadId ?? remoteId`（Bitbucket/GitHub 不受影响）。
+- **行内锚点需三 sha**：`POST …/discussions{body, position}`，position 含 `base/start/head_sha`（adapter 内部先拉 MR 取 `diff_refs`）+
+  `position_type:'text'` + 按 side 填 `new_line`/`old_line`。当前**单行**（`inlineMultiline=false`）。
+- **审批（edition 降级）**：approve/unapprove API **自 13.9 起为 Premium/Ultimate**，CE / EE-Free 无；GitLab 审批二元、**无
+  needsWork**。`ping()` 经 `GET /metadata`（15.2+）的 `enterprise` 标志探测 edition（旧实例退 `/version` 保守按 CE）；
+  `capabilities.reviewStatuses` = EE→`['approved','unapproved']` / CE→`[]`（UI 灰显）。注：`enterprise=true` 不绝对保证审批可用
+  （EE-Free 无），故写路径仍优雅失败提示。
+- **可合并（full 保真）**：`detailed_merge_status`（15.6+，`mergeable` / `broken_status` / `not_approved` / `ci_must_pass` …）逐条派生
+  veto + `has_conflicts` 定 conflicted；旧实例退 `merge_status`。合并 `PUT …/merge`。
+- **提交**：`/commits` 已是 newest-first，无需反转。
+- **头像 / 附件**：头像用 `avatar_url` 直链（仅本实例 host 才带 PAT）；评论内嵌相对 `/uploads/...` 补成
+  `<webBase>/<project>/uploads/...` 经 PAT 代理拉，外部 host 不带凭据。
 
 ---
 
@@ -163,4 +181,4 @@ UI 据此 显/隐/灰，业务层据此调策略——**绝不在调用处 `try/
 - **写路径有副作用**：合并不可逆；评论发布要幂等（成功落远端 id 防重发，见 [05](05-review-workflow.md)）；
   审批 / 合并远端失败要给用户明确提示（toast），不可静默。
 - **作者字段双名**：展示名（中文/真名）与登录名（英文 id）分清——展示用前者，匹配「当前用户 / 是否自己的 PR」用后者。
-- **后续未尽项**：评论「解决线程 / suggestion 应用」UI（能力位已留位，未实现）；GitLab 接入；真实 GHE/github.com 端到端联调。
+- **后续未尽项**：评论「解决线程 / suggestion 应用」UI（能力位已留位，未实现）；真实 GHE / GitLab Self-Managed 端到端联调。

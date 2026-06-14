@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+### Added
+- **GitLab 接入**（gitlab.com + Self-Managed，CE / EE，REST API v4）：新增 `@meebox/platform-gitlab`
+  适配器——MR 发现（`reviewer_username` 待我评审，跨项目）、diff 评论读 / 发 / 改 / 删 / 回复
+  （discussions + notes 归一）、合并、clone（PAT / SSH）、头像 / 内嵌附件代理。设置页与首启向导可
+  新增 GitLab 连接（Base URL 可留空默认 gitlab.com）。
+  - **CE / EE 审批降级**：MR approve/unapprove API 自 13.9 起为 Premium/Ultimate，且 GitLab 审批二元
+    （无「需修改」）。经 `/metadata` 探测 edition，能力位据此降级——EE：通过 / 撤销；CE：无 API 审批、
+    UI 灰显。可合并状态走 `detailed_merge_status`（full 保真）。
+  - 嵌套 group 路径、N+1 取详情（diff_refs / 审批）、行内评论按 `position` 三 sha 锚定等设计见
+    [`docs/arch/01-platform-adapter.md`](docs/arch/01-platform-adapter.md) §4.3。
+
 ### Changed
 - 拒绝代码反馈 / 改进建议后，卡片自动折叠收起并置灰：左色条转中性灰、类别 chip 置灰，正文与
   代码对比收起，仅保留头部与锚点行（含撤销入口）；头部 chevron 图标可临时展开回看。降低已决断

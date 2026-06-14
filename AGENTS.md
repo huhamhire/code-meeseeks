@@ -77,6 +77,7 @@ GUI 文本走 **react-i18next**（key 为中立标识符，`zh-CN` / `en-US` / `
 
 ## 工程维护坑
 
+- **新增内部 `@meebox/*` 包必做两步登记**（漏则报 `Cannot find module …/src/<x>.js`）：内部包源码是 `.ts`、相对 import 带 `.js` 扩展（NodeNext 约定），Node 运行期不能直接读。新建一个被 desktop 主/preload 引用的内部包后，除 `npm install`（建 workspace 软链）外，**必须**：① 在 `apps/desktop/package.json` 依赖加 `"@meebox/<name>": "*"`；② 在 [apps/desktop/electron.vite.config.ts](apps/desktop/electron.vite.config.ts) 的 `internalPackages` 数组加该名——让 electron-vite 把它 **bundle**（转译 TS、解析 `.js`→`.ts`）而非 externalize。漏 ② 时 Node 把它当外部包按 `main: src/index.ts` 加载，撞到 `export … from './x.js'` 而文件是 `.ts` → 运行期崩。
 - **嵌入式 pr-agent 运行时**（[modules/04](docs/arch/04-pragent-runtime.md)）：`apps/desktop/scripts/assemble-pragent-runtime.mjs` 按 `pragent-runtime.json` 把可重定位 CPython + pinned pr-agent 装到 `apps/desktop/vendor/pragent/`（gitignored）。
 - **monkeypatch shim** `apps/desktop/scripts/pragent-shim/`（薄加载器 `sitecustomize.py` + 领域拆分包 `meebox_pragent_shim/`：`patches/` 各 patch + `cli/` 本地 CLI provider + `runtime.py`/`usage.py`。对 pr-agent 的无侵入补丁）：
   - 改了它，跑一次 `npm --prefix apps/desktop run prepare:pragent` 即重新同步进 vendor（幂等跳过分支也会同步 shim），**无需 `--force` 全量重建**。
