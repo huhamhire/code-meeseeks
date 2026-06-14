@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.4.0-alpha.1] - 2026-06-14
+
 ### Added
 - **GitLab 接入**（gitlab.com + Self-Managed，CE / EE，REST API v4）：新增 `@meebox/platform-gitlab`
   适配器——MR 发现（`reviewer_username` 待我评审，跨项目）、diff 评论读 / 发 / 改 / 删 / 回复
