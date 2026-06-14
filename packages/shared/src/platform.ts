@@ -1,4 +1,5 @@
-export type PlatformKind = 'bitbucket-server' | 'github' | 'gitlab';
+// 顺序即各处平台展示准绳：GitHub → Bitbucket → GitLab，新平台追加末尾（见 PlatformIcon.PLATFORM_META）。
+export type PlatformKind = 'github' | 'bitbucket-server' | 'gitlab';
 
 export interface RepoRef {
   /** Bitbucket: project key; GitHub: org/user; GitLab: namespace */

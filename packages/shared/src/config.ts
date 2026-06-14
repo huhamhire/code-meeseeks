@@ -70,8 +70,8 @@ export const GitLabConnectionSchema = z.object({
 });
 
 export const ConnectionSchema = z.discriminatedUnion('kind', [
-  BitbucketServerConnectionSchema,
   GitHubConnectionSchema,
+  BitbucketServerConnectionSchema,
   GitLabConnectionSchema,
 ]);
 

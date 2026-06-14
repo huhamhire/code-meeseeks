@@ -877,8 +877,8 @@ function ConnectionEditorModal({
                   }
                 >
                   <option value="github">{t('settings.platformGithub')}</option>
-                  <option value="gitlab">{t('settings.platformGitlab')}</option>
                   <option value="bitbucket-server">Bitbucket Server / Data Center</option>
+                  <option value="gitlab">{t('settings.platformGitlab')}</option>
                 </select>
               </div>
             </div>

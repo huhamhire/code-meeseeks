@@ -48,6 +48,8 @@ export function GitLabIcon({ size = 24 }: PlatformIconProps) {
   );
 }
 
+// 平台展示顺序的唯一准绳：GitHub → Bitbucket → GitLab，新增平台一律追加在末尾。
+// 设置页下拉、使用文档（docs/guide/01-code-platform.md）等各处展示顺序均以此为准。
 export const PLATFORM_META: ReadonlyArray<{
   kind: PlatformKind;
   label: string;

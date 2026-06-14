@@ -78,8 +78,8 @@ const permissivePolicy: InlineCommentPolicy = {
 };
 
 export const INLINE_COMMENT_POLICIES: Readonly<Record<PlatformKind, InlineCommentPolicy>> = {
-  'bitbucket-server': bitbucketPolicy,
   github: permissivePolicy,
+  'bitbucket-server': bitbucketPolicy,
   gitlab: permissivePolicy,
 };
 
