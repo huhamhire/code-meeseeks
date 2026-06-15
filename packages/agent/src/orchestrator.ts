@@ -118,6 +118,8 @@ function summaryPrompt(
     'Write a STRICTLY short closing summary of this pre-review for the human reviewer',
     `(at most ${String(maxChars)} characters; compress, do not truncate key points).`,
     'Include the key points, risks, and a non-binding recommendation.',
+    'Format for readability: use newlines (\\n) to separate sections; lead with the core change,',
+    'then list each key risk on its own line prefixed with "- ". Keep lines short.',
     '',
     'Reply with JSON only:',
     '{"summary": string, "recommendation": {"verdict": "approve"|"needs_work"|"manual_review", "reason": string}}',

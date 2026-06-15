@@ -131,45 +131,6 @@
 }
 
 // === Agent 自动评审：触发条 + 收尾总结卡 ===
-.chat-agent-bar {
-  display: flex;
-  padding: $space-2 $space-6;
-  border-bottom: 1px solid $border-muted;
-  flex-shrink: 0;
-}
-.chat-agent-review-btn {
-  padding: $space-2 $space-5;
-  background: $color-accent-bg-fade;
-  border: 1px solid $border-muted;
-  border-radius: $radius-sm;
-  color: $color-info;
-  font-size: $fs-sm;
-  font-weight: 600;
-  cursor: pointer;
-
-  &:hover:not(:disabled) {
-    background: $color-accent-strong-fade;
-  }
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-}
-.chat-agent-stop-btn {
-  margin-left: $space-3;
-  padding: $space-2 $space-5;
-  background: transparent;
-  border: 1px solid $color-danger;
-  border-radius: $radius-sm;
-  color: $color-danger;
-  font-size: $fs-sm;
-  font-weight: 600;
-  cursor: pointer;
-
-  &:hover {
-    background: rgba(244, 135, 113, 0.15);
-  }
-}
 .chat-agent-summary {
   margin: $space-4 $space-6;
   padding: $space-4 $space-5;
@@ -207,30 +168,26 @@
   white-space: pre-wrap;
 }
 
-// Agent 步骤流式列表：跑动时实时追加（describe → review → judge → ask → 总结）
-.chat-agent-steps {
-  margin: $space-3 $space-6 0;
-  display: flex;
-  flex-direction: column;
-  gap: $space-2;
-}
-.chat-agent-step {
+// Agent 元步骤内联标记：在时间线中按自然时间顺序穿插的决策节点（judge 判读）。
+// 左侧一道强调色竖条，与 run 卡片区分但保持同一缩进。
+.chat-agent-step-marker {
+  margin: $space-3 $space-6;
+  padding: $space-2 $space-4;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: $space-3;
   font-size: $fs-sm;
-}
-.chat-agent-step-kind {
-  font-family: $font-mono;
-  color: $color-info;
-  flex-shrink: 0;
+  border-left: 2px solid $color-accent;
+  background: $color-accent-bg-fade;
+  border-radius: 0 $radius-sm $radius-sm 0;
 }
 .chat-agent-step-thought {
   color: $text-body;
 }
 .chat-agent-step-result {
-  flex-basis: 100%;
+  font-weight: 600;
+  color: $color-info;
   white-space: pre-wrap;
 }
 
@@ -1011,10 +968,42 @@
   gap: $space-2;
 }
 
+// 命令触发器组：`/` 命令按钮 + 自动评审图标按钮，左对齐成一组
+.chat-cmd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+}
+
 // 命令触发器：单 `/` 按钮 + 弹出菜单 (替代之前 3 个并列按钮)
 .chat-cmd-bar {
   position: relative;
   display: inline-flex;
+}
+
+// 自动评审图标按钮：复用 .chat-cmd-trigger 基样式，强调色区分；运行中停止按钮走危险色。
+.chat-agent-review-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: $color-info;
+
+  &:hover:not(:disabled),
+  &.active {
+    color: $color-info;
+    border-color: $color-accent;
+  }
+}
+.chat-agent-review-stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: $color-danger;
+
+  &:hover:not(:disabled) {
+    border-color: $color-danger;
+    color: $color-danger;
+  }
 }
 .chat-cmd-trigger {
   font-family: $font-mono;

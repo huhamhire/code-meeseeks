@@ -21,6 +21,7 @@ type MatchedRule = IpcChannels['rules:matchForPr']['response'];
 import type { ReviewDraft } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import {
+  AutoReviewIcon,
   ChatIcon,
   ChevronIcon,
   CloseIcon,
@@ -175,6 +176,22 @@ export function ChatPane({
   const myActiveIdSet = new Set(myActiveRuns.map((a) => a.runId));
   const visibleRuns = hasMyActive ? runs.filter((r) => !myActiveIdSet.has(r.id)) : runs;
 
+  // 历史时间线：把 run 卡片与 Agent 的元步骤按时间归并，让过程性步骤按自然时间顺序
+  // 穿插展示（而非堆在末尾）。工具步骤（describe/review/ask）已由 run 卡片代表、不重复；
+  // 收尾 plan 即「评审总结」卡片、不重复 → 仅保留判读（judge）这类决策节点作为内联标记。
+  const timeline = useMemo(() => {
+    const runEntries = visibleRuns.map((r) => ({
+      key: `run-${r.id}`,
+      time: r.startedAt,
+      run: r as ReviewRun | null,
+      step: null as AgentStep | null,
+    }));
+    const stepEntries = agentSteps
+      .filter((s) => s.kind === 'judge')
+      .map((s, i) => ({ key: `step-${i}-${s.at ?? ''}`, time: s.at ?? '', run: null, step: s }));
+    return [...runEntries, ...stepEntries].sort((a, b) => a.time.localeCompare(b.time));
+  }, [visibleRuns, agentSteps]);
+
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
   // reloadPrs → 新 prs 数组 → selected 是新对象引用 → 如果依赖 pr，此 effect 重跑，
@@ -215,7 +232,10 @@ export function ChatPane({
   useEffect(() => {
     if (!prLocalId) return;
     return subscribe('agent:stepProgress', (ev) => {
-      if (ev.prLocalId === prLocalId) setAgentSteps((s) => [...s, ev.step]);
+      // 流式步骤可能未带 at（编排器广播在落盘 stamp 之前）→ 到达即补一个时间戳，
+      // 供下方与 run 卡片按时间归并排序（自然时间顺序展示）。
+      if (ev.prLocalId === prLocalId)
+        setAgentSteps((s) => [...s, { ...ev.step, at: ev.step.at ?? new Date().toISOString() }]);
     });
   }, [prLocalId]);
 
@@ -566,24 +586,6 @@ export function ChatPane({
         </button>
       )}
 
-      {pr && prAgent.available && (
-        <div className="chat-agent-bar">
-          <button
-            type="button"
-            className="chat-agent-review-btn"
-            disabled={!llmConfigured || agentRunning}
-            onClick={() => void handleAgentReview()}
-          >
-            {agentRunning ? t('chatPane.agent.autoReviewRunning') : t('chatPane.agent.autoReview')}
-          </button>
-          {agentRunning && (
-            <button type="button" className="chat-agent-stop-btn" onClick={handleAgentStop}>
-              {t('chatPane.agent.stop')}
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="chat-pane-body" ref={bodyRef}>
         {visibleRuns.length === 0 && !hasMyActive && myWaiting.length === 0 && (
           <ChatEmpty
@@ -601,21 +603,25 @@ export function ChatPane({
         )}
         {/* 历史 run 按时间升序堆叠，每条独立卡片 (内部维护自己的 raw stdout 折叠状态)。
             初始只拉最新 RUNS_PAGE_SIZE 条；向上滚到顶后再用游标拉更早一批 */}
-        {visibleRuns.map((r, i) => (
-          <RunResultView
-            key={r.id}
-            run={r}
-            onRetry={handleRetry}
-            // 只有"列表里最后一条 + 没有正在跑的"这一种情形下，失败 / 取消的 run 才
-            // 可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
-            // 避免回头再点重新插队、打乱对话顺序
-            canRetry={i === visibleRuns.length - 1 && !hasMyActive}
-            drafts={drafts ?? []}
-            onJumpToDraft={handleJumpToDraft}
-            onRejectFinding={handleRejectFinding}
-            onNavigateToFinding={handleNavigateToFinding}
-          />
-        ))}
+        {timeline.map((entry, i) =>
+          entry.run ? (
+            <RunResultView
+              key={entry.key}
+              run={entry.run}
+              onRetry={handleRetry}
+              // 只有"时间线里最后一条 run + 没有正在跑的"这一种情形下，失败 / 取消的 run
+              // 才可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
+              // 避免回头再点重新插队、打乱对话顺序
+              canRetry={i === timeline.length - 1 && !hasMyActive}
+              drafts={drafts ?? []}
+              onJumpToDraft={handleJumpToDraft}
+              onRejectFinding={handleRejectFinding}
+              onNavigateToFinding={handleNavigateToFinding}
+            />
+          ) : entry.step ? (
+            <AgentStepMarker key={entry.key} step={entry.step} />
+          ) : null,
+        )}
         {/* 正在跑（可并发多条）：每条一个进度条 + 实时 stdout 流，贴在历史末尾。
             startedAt 入队时为 null，executeRun 真正起跑时设值；窗口非常短一般看不到
             — fallback 到 enqueuedAt */}
@@ -645,17 +651,6 @@ export function ChatPane({
         {concurrencyReached && (
           <div className="chat-busy" role="status">
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
-          </div>
-        )}
-        {agentSteps.length > 0 && (
-          <div className="chat-agent-steps">
-            {agentSteps.map((s, i) => (
-              <div key={i} className="chat-agent-step">
-                <span className="chat-agent-step-kind">{s.toolCall?.tool ?? s.kind}</span>
-                {s.thought && <span className="chat-agent-step-thought">{s.thought}</span>}
-                {s.result && <span className="chat-agent-step-result muted">{s.result}</span>}
-              </div>
-            ))}
           </div>
         )}
         {agentResult && (
@@ -699,6 +694,10 @@ export function ChatPane({
             : undefined
         }
         onSetReviewStatus={onSetReviewStatus}
+        // 一键自动评审：图标按钮置于 `/` 命令触发器右侧；运行中显示停止
+        agentRunning={agentRunning}
+        onAgentReview={() => void handleAgentReview()}
+        onAgentStop={handleAgentStop}
       />
 
       {showRulePreview && matchedRule && (
@@ -793,6 +792,12 @@ interface ChatInputBarProps {
   onCancel?: () => void;
   /** /approve /needswork 命令触发的 review 决断，跟 PR header 按钮共用 prs:setLocalStatus */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
+  /** 自动评审是否进行中（决定图标按钮禁用 + 是否显示停止）。 */
+  agentRunning: boolean;
+  /** 触发一键自动评审微流程（describe→review→条件追问→总结）。 */
+  onAgentReview: () => void;
+  /** 停止当前 PR 的 Agent 运行。 */
+  onAgentStop: () => void;
 }
 
 // 输入历史：最近 5 次成功提交，localStorage 持久化。Up/Down 按键在 textarea 末尾
@@ -876,6 +881,9 @@ function ChatInputBar({
   onAgentAsk,
   onCancel,
   onSetReviewStatus,
+  agentRunning,
+  onAgentReview,
+  onAgentStop,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -1205,6 +1213,7 @@ function ChatInputBar({
       </div>
       {parseError && <div className="chat-input-error">{parseError}</div>}
       <div className="chat-pane-input-row">
+        <div className="chat-cmd-group">
         <div className="chat-cmd-bar" ref={cmdMenuRef}>
           <button
             type="button"
@@ -1240,6 +1249,38 @@ function ChatInputBar({
             </ul>
           )}
         </div>
+        {/* 自动评审：图标按钮紧贴 `/` 命令触发器右侧；运行中显示停止按钮。
+            仅 pr-agent 就绪时出现，LLM 未配置 / 运行中则禁用触发。 */}
+        {pr && prAgent.available && (
+          <>
+            <button
+              type="button"
+              className={`chat-cmd-trigger chat-agent-review-trigger${agentRunning ? ' active' : ''}`}
+              onClick={onAgentReview}
+              disabled={!llmConfigured || agentRunning}
+              title={
+                agentRunning
+                  ? t('chatPane.agent.autoReviewRunning')
+                  : t('chatPane.agent.autoReview')
+              }
+              aria-label={t('chatPane.agent.autoReview')}
+            >
+              <AutoReviewIcon />
+            </button>
+            {agentRunning && (
+              <button
+                type="button"
+                className="chat-cmd-trigger chat-agent-review-stop"
+                onClick={onAgentStop}
+                title={t('chatPane.agent.stop')}
+                aria-label={t('chatPane.agent.stop')}
+              >
+                <StopIcon />
+              </button>
+            )}
+          </>
+        )}
+        </div>
         {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时 stop 紧贴 send 左侧。
             包到一个 group 里避免 input-row 的 space-between 把 stop 推到中央 */}
         <div className="chat-pane-send-group">
@@ -1271,6 +1312,19 @@ function ChatInputBar({
         </div>
       </div>
     </form>
+  );
+}
+
+/**
+ * Agent 元步骤内联标记：在时间线中按自然时间顺序穿插展示的决策节点（如 judge 判读）。
+ * 工具步骤由 run 卡片代表、收尾 plan 由「评审总结」卡片代表，均不走此标记（见时间线归并）。
+ */
+function AgentStepMarker({ step }: { step: AgentStep }) {
+  return (
+    <div className="chat-agent-step-marker" role="status">
+      {step.result && <span className="chat-agent-step-result">{step.result}</span>}
+      {step.thought && <span className="chat-agent-step-thought muted">{step.thought}</span>}
+    </div>
   );
 }
 

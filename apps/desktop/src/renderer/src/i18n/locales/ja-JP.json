@@ -19,7 +19,7 @@
       "autoReviewRunning": "レビュー中…",
       "failed": "Agent レビューに失敗しました",
       "stop": "停止",
-      "summaryTitle": "Agent サマリー",
+      "summaryTitle": "レビュー総括",
       "verdictApprove": "問題なし",
       "verdictManualReview": "手動レビュー推奨",
       "verdictNeedsWork": "要修正"
