@@ -5,3 +5,20 @@ export { scaffoldAgentDir } from './scaffold.js';
 export { AGENT_TEMPLATES } from './templates.js';
 export type { AgentTemplate } from './templates.js';
 export type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
+export { assembleSystemContext } from './assemble.js';
+export type {
+  AssembleInput,
+  AssemblePrMeta,
+  AssembleSessionSnapshot,
+} from './assemble.js';
+export type {
+  AgentRecommendation,
+  AgentRecommendationVerdict,
+  AgentSession,
+  AgentSessionStatus,
+  AgentStep,
+  AgentStepKind,
+  AgentTodoItem,
+  AgentToolCall,
+  ToolCatalogEntry,
+} from './session.js';
