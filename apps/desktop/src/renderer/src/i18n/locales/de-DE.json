@@ -661,6 +661,9 @@
     "searchPlaceholder": "Titel / Repo / Autor / ID suchen"
   },
   "statusBar": {
+    "autopilot": "AutoPilot",
+    "autopilotOffTitle": "AutoPilot ist aus — klicken zum Aktivieren (automatische Vorab-Review neuer PRs)",
+    "autopilotOnTitle": "AutoPilot ist an — klicken zum Deaktivieren",
     "collapseChat": "PR-Agent-Chat einklappen",
     "collapseChatAria": "Chat einklappen",
     "collapseSidebar": "Seitenleiste einklappen",

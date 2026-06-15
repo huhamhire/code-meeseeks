@@ -83,3 +83,29 @@ export interface AgentTranscriptFile {
   schema_version: 1;
   steps: AgentStep[];
 }
+
+export type AutopilotDecision = 'review' | 'skipped';
+
+/**
+ * AutoPilot 每 PR 一条台账：去重 + 审计（见 docs/arch/06-agent.md「AutoPilot」）。
+ * 是否「未自动评审过当前版本」据 `autoReviewedUpdatedAt` 与当前 PR `updatedAt` 是否一致判定，
+ * 故 PR 推新 commit 后能再次进入候选、内容未变则不重复跑。
+ */
+export interface AutopilotLedger {
+  prLocalId: string;
+  /** 评审 / 判定时所对应的 PR updatedAt 快照。 */
+  autoReviewedUpdatedAt: string;
+  decision: AutopilotDecision;
+  /** 判定原因（skipped 时尤其有用，便于审计 / UI 展示）。 */
+  reason?: string;
+  /** 若评审，子 agent 给出的建议倾向（供 PR 列表徽标直接读、无需加载会话）。 */
+  recommendation?: AgentRecommendationVerdict;
+  /** 写入时间（ISO）。 */
+  at: string;
+}
+
+/** 持久化包装：`prs/<localId>/agent/autopilot.json`。 */
+export interface AutopilotLedgerFile {
+  schema_version: 1;
+  ledger: AutopilotLedger;
+}

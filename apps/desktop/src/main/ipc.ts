@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
-import { loadAgentContext, loadAgentRules } from '@meebox/agent';
+import { judgeAutopilotBatch, loadAgentContext, loadAgentRules } from '@meebox/agent';
+import type { AgentContext } from '@meebox/agent';
 import { writeConfig, type BootstrapResult } from '@meebox/config';
 import { PrAgentRunError, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import {
@@ -28,10 +29,13 @@ import {
   startReviewRun,
   updateDraft,
   writeCommentsCache,
+  writeAutopilotLedger,
+  needsAutoReview,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
 import { pickMatchingRule } from '@meebox/rules';
 import type {
+  AgentSession,
   AppInfo,
   ConnectionSummary,
   IpcChannels,
@@ -88,7 +92,7 @@ export function registerIpcHandlers({
   connectionRuntime,
   reconfigureConnections,
   repoMirror,
-}: RegisterDeps): { abortAllActiveRuns: () => number } {
+}: RegisterDeps): { abortAllActiveRuns: () => number; runAutopilotIfDue: () => void } {
   // === pr-agent run 队列 ===
   //
   // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 worktree)，
@@ -1236,67 +1240,159 @@ export function registerIpcHandlers({
     },
   );
 
+  // ── Agent 评审编排：共享 chat 通道 + 单 PR 微流程，agent:run 与 AutoPilot 都用 ──
+  type AgentChat = (input: {
+    system: string;
+    user: string;
+  }) => Promise<{ text: string; usage?: TokenUsage }>;
+
+  /** 设置 LLM env + 临时 chat cwd + chat 函数，运行 fn，收尾清理临时目录。 */
+  const withAgentChat = async <T>(fn: (chat: AgentChat) => Promise<T>): Promise<T> => {
+    const bridge = getPrAgentBridge();
+    if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
+    // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。
+    const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
+    const env: Record<string, string> = {
+      ...buildProxyEnv(bootstrap.config.proxy),
+      ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
+      CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
+    };
+    // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
+    const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
+    try {
+      const chat: AgentChat = async ({ system, user }) => {
+        const r = await bridge.chat({ system, user, env, cwd: chatCwd });
+        const acc: UsageAcc = { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
+        for (const line of (r.stderr ?? '').split('\n')) accumulateUsageSentinel(line, acc);
+        return { text: r.stdout.trim(), usage: finalizeUsage(acc) };
+      };
+      return await fn(chat);
+    } finally {
+      await fs.rm(chatCwd, { recursive: true, force: true });
+    }
+  };
+
+  /** 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。 */
+  const runReviewForPr = (
+    pr: StoredPullRequest,
+    agentContext: AgentContext,
+    chat: AgentChat,
+  ): Promise<AgentSession> => {
+    const agentCfg = bootstrap.config.agent;
+    const matchedRule = pickMatchingRule(agentContext.rules, {
+      projectKey: pr.repo.projectKey,
+      repoSlug: pr.repo.repoSlug,
+      targetBranch: pr.targetRef.displayId,
+      tool: 'review',
+    });
+    return runAgentReview(pr, {
+      stateStore,
+      enqueueRun: enqueuePragentRun,
+      chat,
+      agentContext,
+      matchedRule,
+      language: getMainLanguage(),
+      maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
+      summaryMaxChars: agentCfg.summary_max_chars,
+      onStep: (sessionId, step) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+        }
+      },
+    });
+  };
+
   ipcMain.handle(
     'agent:run',
     async (
       _evt,
       req: IpcChannels['agent:run']['request'],
     ): Promise<IpcChannels['agent:run']['response']> => {
-      const bridge = getPrAgentBridge();
-      if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
+      if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
       const agentCfg = bootstrap.config.agent;
-      if (!agentCfg.enabled || !agentCfg.dir) {
-        throw new Error(t('prAgent.agentNotEnabled'));
-      }
-
+      if (!agentCfg.enabled || !agentCfg.dir) throw new Error(t('prAgent.agentNotEnabled'));
       const pr = await findPrOrThrow(req.localId);
       // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存。
       const agentContext = await loadAgentContext(agentCfg.dir, {
         onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
-      const matchedRule = pickMatchingRule(agentContext.rules, {
-        projectKey: pr.repo.projectKey,
-        repoSlug: pr.repo.repoSlug,
-        targetBranch: pr.targetRef.displayId,
-        tool: 'review',
-      });
-
-      // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。
-      const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
-      const env: Record<string, string> = {
-        ...buildProxyEnv(bootstrap.config.proxy),
-        ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
-        CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
-      };
-
-      // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
-      const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
-      try {
-        return await runAgentReview(pr, {
-          stateStore,
-          enqueueRun: enqueuePragentRun,
-          chat: async ({ system, user }) => {
-            const r = await bridge.chat({ system, user, env, cwd: chatCwd });
-            const acc: UsageAcc = { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
-            for (const line of (r.stderr ?? '').split('\n')) accumulateUsageSentinel(line, acc);
-            return { text: r.stdout.trim(), usage: finalizeUsage(acc) };
-          },
-          agentContext,
-          matchedRule,
-          language: getMainLanguage(),
-          maxFollowupAsks: 2,
-          summaryMaxChars: 800,
-          onStep: (sessionId, step) => {
-            for (const win of BrowserWindow.getAllWindows()) {
-              win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
-            }
-          },
-        });
-      } finally {
-        await fs.rm(chatCwd, { recursive: true, force: true });
-      }
+      return withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
     },
   );
+
+  // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===
+  // Agent 编排层全局单并发：一次只跑一遍 pass（busy 锁）；其派发的工具 run 在共享队列并行。
+  // 由 poller onTick 触发（见 index.ts），最小间隔守卫 + 台账去重防止打爆 LLM。
+  let autopilotBusy = false;
+  let lastAutopilotEvalAt = 0;
+  const runAutopilotIfDue = (): void => {
+    const agentCfg = bootstrap.config.agent;
+    const ap = agentCfg.autopilot;
+    if (!agentCfg.enabled || !agentCfg.dir || !ap.enabled || autopilotBusy || !getPrAgentBridge()) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastAutopilotEvalAt < ap.min_interval_seconds * 1000) return; // 最小间隔守卫
+    lastAutopilotEvalAt = now;
+    autopilotBusy = true;
+    void (async () => {
+      try {
+        // 候选：未自动评审过当前版本的 PR（台账去重），按 batch_size 截断。
+        const prs = await listStoredPullRequests(stateStore);
+        const candidates: StoredPullRequest[] = [];
+        for (const pr of prs) {
+          if (candidates.length >= ap.batch_size) break;
+          if (await needsAutoReview(stateStore, pr.localId, pr.updatedAt)) candidates.push(pr);
+        }
+        if (candidates.length === 0) return;
+
+        const agentContext = await loadAgentContext(agentCfg.dir, {
+          onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
+        });
+        await withAgentChat(async (chat) => {
+          // 批量判定（例外规则来自 AGENTS.md）。
+          const { decisions } = await judgeAutopilotBatch(chat, {
+            candidates: candidates.map((p) => ({
+              prLocalId: p.localId,
+              title: p.title,
+              description: p.description,
+            })),
+            agentsRules: agentContext.files.agents,
+          });
+          const byId = new Map(candidates.map((p) => [p.localId, p] as const));
+          for (const d of decisions) {
+            const pr = byId.get(d.prLocalId);
+            if (!pr) continue;
+            const at = new Date().toISOString();
+            if (!d.review) {
+              await writeAutopilotLedger(stateStore, {
+                prLocalId: pr.localId,
+                autoReviewedUpdatedAt: pr.updatedAt,
+                decision: 'skipped',
+                reason: d.reason,
+                at,
+              });
+              continue;
+            }
+            // 单并发：逐 PR 顺序跑编排（工具 run 在共享队列并行消化）。
+            const session = await runReviewForPr(pr, agentContext, chat);
+            await writeAutopilotLedger(stateStore, {
+              prLocalId: pr.localId,
+              autoReviewedUpdatedAt: pr.updatedAt,
+              decision: 'review',
+              recommendation: session.recommendation?.verdict,
+              at,
+            });
+          }
+        });
+        logger.info({ candidates: candidates.length }, 'autopilot pass done');
+      } catch (err) {
+        logger.warn({ err }, 'autopilot pass failed (ignored)');
+      } finally {
+        autopilotBusy = false;
+      }
+    })();
+  };
 
   ipcMain.handle(
     'pragent:cancel',
@@ -1543,6 +1639,19 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
+    'agent:setAutopilotEnabled',
+    async (_evt, req: IpcChannels['agent:setAutopilotEnabled']['request']): Promise<void> => {
+      const agent = {
+        ...bootstrap.config.agent,
+        autopilot: { ...bootstrap.config.agent.autopilot, enabled: req.enabled },
+      };
+      await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, agent });
+      bootstrap.config.agent = agent;
+      logger.info({ enabled: req.enabled }, 'autopilot toggled');
+    },
+  );
+
+  ipcMain.handle(
     'rules:matchForPr',
     async (
       _evt,
@@ -1708,6 +1817,8 @@ export function registerIpcHandlers({
       }
       return n;
     },
+    /** 每次 poll tick 由 index.ts 调用：满足开关 + 最小间隔 + 候选时跑一遍 AutoPilot pass。 */
+    runAutopilotIfDue,
   };
 }
 

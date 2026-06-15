@@ -661,6 +661,9 @@
     "searchPlaceholder": "Search title / repo / author / ID"
   },
   "statusBar": {
+    "autopilot": "AutoPilot",
+    "autopilotOffTitle": "AutoPilot is off — click to enable auto pre-review of new PRs",
+    "autopilotOnTitle": "AutoPilot is on — click to disable",
     "collapseChat": "Collapse PR Agent chat",
     "collapseChatAria": "Collapse chat",
     "collapseSidebar": "Collapse sidebar",

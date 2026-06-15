@@ -175,6 +175,30 @@ export const ConfigSchema = z.object({
     .object({
       dir: z.string().default(''),
       enabled: z.boolean().default(true),
+      /** 单会话步数上限（默认取小值；见 docs/arch/06-agent.md「会话 Agent 化」）。 */
+      max_steps: z.number().int().min(1).max(50).default(8),
+      /** 收尾总结严格篇幅上限（字符）。 */
+      summary_max_chars: z.number().int().min(100).max(4000).default(800),
+      /**
+       * AutoPilot 预评审（见 docs/arch/06-agent.md「AutoPilot」）。默认关闭，状态栏可启用。
+       * enabled=false 时调度逻辑完全不跑。
+       */
+      autopilot: z
+        .object({
+          enabled: z.boolean().default(false),
+          /** 两次 AI 评估的最小间隔（秒），防高频轮询打爆 LLM。 */
+          min_interval_seconds: z.number().int().min(60).default(900),
+          /** 单批 LLM 判定的 PR 上限。 */
+          batch_size: z.number().int().min(1).max(50).default(10),
+          /** 自动评审微流程中条件性追问 /ask 的硬上限。 */
+          max_followup_asks: z.number().int().min(0).max(5).default(2),
+          /**
+           * 逐项写权限授权（默认空 = 全拒）。如 'approve' / 'needs_work' /
+           * 'publish_comment'；运行期按红线硬校验放行（见「工具修改红线」）。
+           */
+          grants: z.array(z.string()).default([]),
+        })
+        .default({}),
     })
     .default({}),
   poller: z
