@@ -703,6 +703,7 @@
     "secondsAgo_one": "{{count}} second ago",
     "secondsAgo_other": "{{count}} seconds ago",
     "settings": "Settings",
+    "stopRunning": "Stop the running task",
     "syncing": "Syncing",
     "unnamed": "(unnamed)",
     "updateAvailableTitle": "New version v{{latest}} available (current v{{current}}) · click to download",

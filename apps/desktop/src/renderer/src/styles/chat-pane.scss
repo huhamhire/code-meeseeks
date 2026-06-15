@@ -145,8 +145,24 @@
   justify-content: space-between;
   gap: $space-3;
   margin-bottom: $space-3;
+
+  // 标题做成实色 chip（与「代码反馈 / 工作量」等卡片标签同款），右侧判定为描边 chip，成对。
+  strong {
+    flex-shrink: 0;
+    padding: 2px $space-3;
+    border-radius: $radius-sm;
+    background: $color-accent;
+    color: $text-on-accent;
+    font-size: $fs-sm;
+    font-weight: 600;
+  }
 }
+// 判定徽标：描边色 chip（边框 + 文字同色，随判定变色），比纯文字更醒目、与卡片标题成对。
 .chat-agent-verdict {
+  flex-shrink: 0;
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  border: 1px solid currentColor;
   font-size: $fs-sm;
   font-weight: 600;
   white-space: nowrap;
@@ -165,6 +181,21 @@
   margin: 0 0 $space-3;
   font-size: $fs-md;
   color: $text-body;
+}
+// 评审总结 / 对话回复内的 markdown 章节标题（## 摘要 等）压到不超过卡片标题（评审总结）字号，
+// 避免章节标题比卡片标题还大、层级倒置。组合类选择器提升特异性以盖过 markdown.scss 的默认 h 字号。
+.markdown.chat-agent-summary-text,
+.markdown.chat-agent-reply-body {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-size: $fs-md;
+    margin: $space-3 0 $space-1;
+  }
+  > :first-child {
+    margin-top: 0;
+  }
 }
 // 建议理由：markdown 渲染但保持次要灰（覆盖 .markdown 默认正文色）。
 .chat-agent-summary-reason {

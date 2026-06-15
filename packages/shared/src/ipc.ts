@@ -95,6 +95,9 @@ export interface PragentRunProgressEvent {
 export interface PragentRunInfo {
   runId: string;
   prLocalId: string;
+  /** 仓库 slug 与 PR 号（队列展示用，避免只显示 localId hash）。 */
+  repoSlug: string;
+  prNumber: string;
   tool: ReviewRunTool;
   question?: string;
   /** 入队时间，ISO */

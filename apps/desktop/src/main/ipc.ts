@@ -1219,6 +1219,8 @@ export function registerIpcHandlers({
         info: {
           runId,
           prLocalId: pr.localId,
+          repoSlug: pr.repo.repoSlug,
+          prNumber: pr.remoteId,
           tool,
           question: tool === 'ask' ? question : undefined,
           enqueuedAt: new Date().toISOString(),

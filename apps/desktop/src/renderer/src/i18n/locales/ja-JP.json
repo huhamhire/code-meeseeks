@@ -685,6 +685,7 @@
     "running": "実行中",
     "secondsAgo_other": "{{count}} 秒前",
     "settings": "設定",
+    "stopRunning": "実行中のタスクを停止",
     "syncing": "同期中",
     "unnamed": "(名称なし)",
     "updateAvailableTitle": "新しいバージョン v{{latest}} が利用可能です（現在 v{{current}}）· クリックでダウンロード",
