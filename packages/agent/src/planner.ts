@@ -8,6 +8,7 @@ import type {
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
 import { extractJson } from './orchestrator.js';
+import { runStaggered } from './stagger.js';
 import { assertToolAllowed } from './tool-catalog.js';
 import type { AgentContext } from './types.js';
 
@@ -113,9 +114,13 @@ const PROTOCOL = [
   '(must-fix / concerns as a bulleted list, empty-safe), "## 建议" (next steps); AND include a',
   '"recommendation" object: {"verdict": "approve"|"needs_work"|"manual_review", "reason": "<one line>"}.',
   'verdict is non-binding (no write action). Omit "recommendation" for non-review answers.',
-  'Routing policy:',
-  '- If the request concerns this PR but no other tool clearly fits, default to /ask with a focused question.',
-  '- If the request is unrelated to this PR, do NOT call any tool — briefly decline in "final".',
+  'Conversation & scope:',
+  '- Natural conversation is fine: greet, say who you are, ask a clarifying question — answer directly',
+  '  in "final" without calling tools.',
+  '- Your domain is reviewing THIS PR (describing it, reviewing its changes, answering questions about',
+  '  them). Politely DECLINE in "final" any task OUTSIDE that domain (unrelated coding, general/off-topic',
+  '  requests) — do NOT call tools for it.',
+  '- For a PR-related request with no clearly fitting tool, default to /ask with a focused question.',
 ].join('\n');
 
 export async function runPlanningAgent(
@@ -195,8 +200,9 @@ export async function runPlanningAgent(
     }
     if (!allowed.length) continue; // 全被拒 → 回喂后下一轮重选
 
-    // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；thought 只系在首条，避免重复。
-    const ran = await Promise.all(allowed.map(async (c) => ({ c, res: await deps.runTool(c) })));
+    // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；相互错开 100~200ms 起跑，
+    // 避免同一瞬间齐发。thought 只系在首条，避免重复。
+    const ran = await runStaggered(allowed, async (c) => ({ c, res: await deps.runTool(c) }));
     for (let k = 0; k < ran.length; k++) {
       const { c, res } = ran[k]!;
       usage = addUsage(usage, res.usage);

@@ -162,11 +162,12 @@ describe('runPlanningAgent', () => {
     expect(r.finalText).toBe('just some text, no json');
   });
 
-  it('injects the routing policy (PR-content → /ask fallback, unrelated → decline) into the system prompt', async () => {
+  it('injects the conversation/scope policy (chat ok, off-domain declined, PR → /ask fallback) into the system prompt', async () => {
     const { deps } = makeDeps(['{"final":"done"}']);
     await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
     const system = vi.mocked(deps.chat).mock.calls[0]?.[0]?.system ?? '';
+    expect(system).toContain('Natural conversation is fine');
+    expect(system).toContain('DECLINE');
     expect(system).toContain('default to /ask');
-    expect(system).toContain('unrelated to this PR');
   });
 });

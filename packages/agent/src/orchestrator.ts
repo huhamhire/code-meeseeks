@@ -7,6 +7,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
+import { runStaggered } from './stagger.js';
 import type { AgentContext } from './types.js';
 
 /**
@@ -162,10 +163,11 @@ export async function runReviewMicroflow(
 
   // 1. describe + review（固定两步，并行——彼此独立、都只读 PR，无先后依赖；
   //    实际并发度受运行队列 max_concurrency 约束，串行执行时结果同样正确）。
-  const [describe, review] = await Promise.all([
-    deps.runTool({ tool: 'describe' }),
-    deps.runTool({ tool: 'review' }),
-  ]);
+  //    错开 100~200ms 起跑，避免两个工具同一瞬间齐发。
+  const [describe, review] = await runStaggered(
+    [{ tool: 'describe' as const }, { tool: 'review' as const }],
+    (c) => deps.runTool(c),
+  );
   usage = addUsage(usage, describe.usage);
   await record({ kind: 'tool', toolCall: { tool: '/describe' }, result: clamp(describe.text, 400) });
   usage = addUsage(usage, review.usage);
