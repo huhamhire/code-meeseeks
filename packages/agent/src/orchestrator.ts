@@ -4,6 +4,7 @@ import type {
   AgentRecommendationVerdict,
   AgentStep,
   TokenUsage,
+  ToolCatalogEntry,
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
 import type { AgentContext } from './types.js';
@@ -39,6 +40,8 @@ export interface ReviewOrchestratorInput {
   pr: AssemblePrMeta;
   matchedRule?: Rule | null;
   language?: string;
+  /** 注入提示词的工具目录（含修改红线标注，见 buildToolCatalog）。 */
+  toolCatalog?: ToolCatalogEntry[];
   /** 条件性追问 /ask 的硬上限（默认 2）。 */
   maxFollowupAsks?: number;
   /** 总结严格篇幅上限（默认 800 字符）。 */
@@ -150,7 +153,7 @@ export async function runReviewMicroflow(
   const system = assembleSystemContext({
     context: input.context,
     pr: input.pr,
-    toolCatalog: [],
+    toolCatalog: input.toolCatalog ?? [],
     matchedRule: input.matchedRule,
     language: input.language,
   });

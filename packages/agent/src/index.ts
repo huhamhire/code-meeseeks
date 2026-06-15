@@ -12,6 +12,7 @@ export type {
   AssembleSessionSnapshot,
 } from './assemble.js';
 export { runReviewMicroflow, extractJson } from './orchestrator.js';
+export { buildToolCatalog, assertToolAllowed, READ_TOOLS, MUTATING_TOOLS } from './tool-catalog.js';
 export { judgeAutopilotBatch } from './autopilot-judge.js';
 export type {
   AutopilotJudgeInput,
