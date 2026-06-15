@@ -178,6 +178,20 @@ export const ConfigSchema = z.object({
       enabled: z.boolean().default(true),
     })
     .default({}),
+  /**
+   * 高阶 Agent（见 docs/arch/06-agent.md）。Agent 目录是 Agent 的完整人格与知识来源：
+   * `<agent.dir>/` 下含 SOUL.md / AGENTS.md / MEMORY.md / USER.md 与 rules/ 子目录
+   * （规则正文，匹配语义见 @meebox/rules）。
+   *
+   * dir 留空 = 不启用（默认），Agent 退化为原生行为；建议指向一个 git repo 让团队共享。
+   * enabled 是全局开关，dir 配了但 enabled=false 时跳过加载。
+   */
+  agent: z
+    .object({
+      dir: z.string().default(''),
+      enabled: z.boolean().default(true),
+    })
+    .default({}),
   poller: z
     .object({
       interval_seconds: z.number().int().min(30).default(300),
