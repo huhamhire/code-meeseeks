@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
+import { loadAgentRules } from '@meebox/agent';
 import { writeConfig, type BootstrapResult } from '@meebox/config';
 import { PrAgentRunError, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import {
@@ -28,7 +29,7 @@ import {
   writeCommentsCache,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
-import { loadRules, pickMatchingRule } from '@meebox/rules';
+import { pickMatchingRule } from '@meebox/rules';
 import type {
   AppInfo,
   ConnectionSummary,
@@ -852,9 +853,9 @@ export function registerIpcHandlers({
           }
         }
 
-        const rulesCfg = bootstrap.config.rules;
-        if (rulesCfg.enabled && rulesCfg.dir) {
-          const rules = await loadRules(rulesCfg.dir, {
+        const agentCfg = bootstrap.config.agent;
+        if (agentCfg.enabled && agentCfg.dir) {
+          const rules = await loadAgentRules(agentCfg.dir, {
             onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
           });
           const matched = pickMatchingRule(rules, {
@@ -1457,12 +1458,12 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
-    'config:setRules',
-    async (_evt, req: IpcChannels['config:setRules']['request']): Promise<void> => {
-      const next = { ...bootstrap.config, rules: req.rules };
+    'config:setAgent',
+    async (_evt, req: IpcChannels['config:setAgent']['request']): Promise<void> => {
+      const next = { ...bootstrap.config, agent: req.agent };
       await writeConfig(bootstrap.paths.configFile, next);
-      bootstrap.config.rules = req.rules;
-      logger.info({ rules: req.rules }, 'rules config updated');
+      bootstrap.config.agent = req.agent;
+      logger.info({ agent: req.agent }, 'agent config updated');
     },
   );
 
@@ -1472,12 +1473,12 @@ export function registerIpcHandlers({
       _evt,
       req: IpcChannels['rules:matchForPr']['request'],
     ): Promise<IpcChannels['rules:matchForPr']['response']> => {
-      const cfg = bootstrap.config.rules;
+      const cfg = bootstrap.config.agent;
       if (!cfg.enabled || !cfg.dir) return null;
       // ask 工具不接规则 (问答自由形式，没什么"规约"可应用)
       if (req.tool === 'ask') return null;
       const pr = await findPrOrThrow(req.localId);
-      const rules = await loadRules(cfg.dir, {
+      const rules = await loadAgentRules(cfg.dir, {
         onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
       });
       const matched = pickMatchingRule(rules, {

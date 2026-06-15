@@ -33,7 +33,7 @@ export async function ensureWorkspace(): Promise<BootstrapResult> {
     stubPaths.appDir,
     stubPaths.stateDir,
     stubPaths.logsDir,
-    stubPaths.rulesDir,
+    stubPaths.agentDir,
     stubPaths.cacheDir,
   ]) {
     await fs.mkdir(dir, { recursive: true });

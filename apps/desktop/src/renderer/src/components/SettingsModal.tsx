@@ -80,8 +80,8 @@ export function SettingsModal({
 
   // 草稿 → 整体保存：所有编辑只改本地 state，点底栏"保存"才整体写盘 + 生效
   const [reposDirInput, setReposDirInput] = useState(config.workspace.repos_dir);
-  const [rules, setRules] = useState<Config['rules']>(config.rules);
-  const [rulesDirInput, setRulesDirInput] = useState(config.rules.dir);
+  const [agent, setAgent] = useState<Config['agent']>(config.agent);
+  const [agentDirInput, setAgentDirInput] = useState(config.agent.dir);
   const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
   const [llmEditor, setLlmEditor] = useState<{ mode: 'add' | 'edit'; draft: LlmProfile } | null>(
@@ -94,8 +94,8 @@ export function SettingsModal({
   // 保存基线：保存成功后更新，用于 changed 判定（禁用保存按钮）
   const [base, setBase] = useState(() => ({
     reposDir: config.workspace.repos_dir,
-    rulesDir: config.rules.dir,
-    rulesEnabled: config.rules.enabled,
+    agentDir: config.agent.dir,
+    agentEnabled: config.agent.enabled,
     poller: config.poller.interval_seconds,
     llm: config.llm,
     proxy: config.proxy,
@@ -268,8 +268,8 @@ export function SettingsModal({
 
   // ── 变更检测（对比基线）+ 整体保存（仅写有变更的部分，全成功后更新基线）──
   const reposDirChanged = reposDirInput.trim() !== base.reposDir;
-  const rulesChanged =
-    rulesDirInput.trim() !== base.rulesDir || rules.enabled !== base.rulesEnabled;
+  const agentChanged =
+    agentDirInput.trim() !== base.agentDir || agent.enabled !== base.agentEnabled;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
   const proxyChanged = JSON.stringify(proxy) !== JSON.stringify(base.proxy);
@@ -278,7 +278,7 @@ export function SettingsModal({
     JSON.stringify(connections) !== JSON.stringify(base.connections);
   const anyChanged =
     reposDirChanged ||
-    rulesChanged ||
+    agentChanged ||
     pollerChanged ||
     llmChanged ||
     proxyChanged ||
@@ -296,9 +296,9 @@ export function SettingsModal({
           throw new Error(t('settings.pollerRangeError'));
         await invoke('config:setPoller', { interval_seconds: n });
       }
-      if (rulesChanged) {
-        await invoke('config:setRules', {
-          rules: { dir: rulesDirInput.trim(), enabled: rules.enabled },
+      if (agentChanged) {
+        await invoke('config:setAgent', {
+          agent: { dir: agentDirInput.trim(), enabled: agent.enabled },
         });
       }
       if (llmChanged) {
@@ -320,8 +320,8 @@ export function SettingsModal({
       }
       setBase({
         reposDir: reposDirInput.trim(),
-        rulesDir: rulesDirInput.trim(),
-        rulesEnabled: rules.enabled,
+        agentDir: agentDirInput.trim(),
+        agentEnabled: agent.enabled,
         poller: Number.parseInt(pollerInput, 10),
         llm,
         proxy,
@@ -593,20 +593,20 @@ export function SettingsModal({
           </section>
 
           <section className="modal-section">
-            <h4>{t('settings.rulesTitle')}</h4>
+            <h4>{t('settings.agentDirTitle')}</h4>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              {t('settings.rulesHintPrefix')} <code>.md</code> {t('settings.rulesHintSuffix')}
+              {t('settings.agentDirHint')}
             </p>
             <div className="settings-edit-row">
               <input
                 type="text"
                 className="settings-input"
-                value={rulesDirInput}
+                value={agentDirInput}
                 onChange={(e) => {
-                  setRulesDirInput(e.target.value);
+                  setAgentDirInput(e.target.value);
                   setSaved(false);
                 }}
-                placeholder={t('settings.rulesDirPlaceholder')}
+                placeholder={t('settings.agentDirPlaceholder')}
               />
               <button
                 type="button"
@@ -614,11 +614,11 @@ export function SettingsModal({
                 onClick={() => {
                   void (async () => {
                     const r = await invoke('dialog:pickDirectory', {
-                      defaultPath: rulesDirInput.trim() || paths.appDir,
-                      title: t('settings.pickRulesDirTitle'),
+                      defaultPath: agentDirInput.trim() || paths.appDir,
+                      title: t('settings.pickAgentDirTitle'),
                     });
                     if (r.path) {
-                      setRulesDirInput(r.path);
+                      setAgentDirInput(r.path);
                       setSaved(false);
                     }
                   })();
@@ -632,14 +632,14 @@ export function SettingsModal({
             <label className="settings-secret-row" style={{ marginTop: 8 }}>
               <input
                 type="checkbox"
-                checked={rules.enabled}
+                checked={agent.enabled}
                 onChange={(e) => {
-                  setRules((r) => ({ ...r, enabled: e.target.checked }));
+                  setAgent((a) => ({ ...a, enabled: e.target.checked }));
                   setSaved(false);
                 }}
-                aria-label={t('settings.enableRules')}
+                aria-label={t('settings.enableAgent')}
               />
-              <span className="muted">{t('settings.enableRules')}</span>
+              <span className="muted">{t('settings.enableAgent')}</span>
             </label>
           </section>
 
