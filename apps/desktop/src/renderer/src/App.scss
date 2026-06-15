@@ -15,6 +15,7 @@
 //   drafts-panel "草稿" tab 列表页 (.drafts-panel / -filter / -item / -anchor)
 //   modal        SettingsModal + LlmEditorModal 子模态 + LLM profile 列表
 @use './styles/base';
+@use './styles/titlebar';
 @use './styles/statusbar';
 @use './styles/sidebar';
 @use './styles/main-pane';
