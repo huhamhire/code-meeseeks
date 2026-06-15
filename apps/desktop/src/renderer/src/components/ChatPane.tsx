@@ -684,9 +684,25 @@ export function ChatPane({
                 </span>
               )}
             </div>
-            <p className="chat-agent-summary-text">{agentResult.summary}</p>
+            <div className="markdown chat-agent-summary-text">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                rehypePlugins={REMOTE_REHYPE_PLUGINS}
+                components={mermaidComponents}
+              >
+                {agentResult.summary}
+              </ReactMarkdown>
+            </div>
             {agentResult.recommendation?.reason && (
-              <p className="muted">{agentResult.recommendation.reason}</p>
+              <div className="markdown muted chat-agent-summary-reason">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  rehypePlugins={REMOTE_REHYPE_PLUGINS}
+                  components={mermaidComponents}
+                >
+                  {agentResult.recommendation.reason}
+                </ReactMarkdown>
+              </div>
             )}
           </div>
         )}

@@ -165,7 +165,11 @@
   margin: 0 0 $space-3;
   font-size: $fs-md;
   color: $text-body;
-  white-space: pre-wrap;
+}
+// 建议理由：markdown 渲染但保持次要灰（覆盖 .markdown 默认正文色）。
+.chat-agent-summary-reason {
+  font-size: $fs-sm;
+  color: $text-muted;
 }
 
 // Agent 元步骤内联标记：在时间线中按自然时间顺序穿插的决策节点（judge 判读）。
