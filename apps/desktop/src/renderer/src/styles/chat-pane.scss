@@ -173,7 +173,8 @@
 }
 
 // 用户输入气泡：自然语言「对话即委派」的输入回显，右对齐成对话气泡。
-.chat-user-msg {
+// 注意类名避开既有 .chat-user-msg（/ask 提问行，带左竖条 + 淡蓝底），否则会叠到气泡外形成第二层底色。
+.chat-user-row {
   margin: $space-3 $space-6;
   display: flex;
   justify-content: flex-end;
@@ -188,6 +189,16 @@
   line-height: $lh-normal;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+// Agent 自身 LLM 调用（规划 / 判读 / 收尾）期间的「思考中」指示：spinner + 文案。
+.chat-agent-thinking {
+  margin: $space-3 $space-6;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  color: $text-muted;
+  font-size: $fs-sm;
 }
 
 // Agent 元步骤内联标记：在时间线中按自然时间顺序穿插的决策节点（judge 判读）。

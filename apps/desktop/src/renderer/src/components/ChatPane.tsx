@@ -628,14 +628,20 @@ export function ChatPane({
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
-        {visibleRuns.length === 0 && !hasMyActive && myWaiting.length === 0 && (
-          <ChatEmpty
-            pr={pr}
-            prAgent={prAgent}
-            llmConfigured={llmConfigured}
-            onOpenSettings={onOpenSettings}
-          />
-        )}
+        {/* 使用提示仅在「全无会话内容」时显示：一旦有用户输入气泡 / run / 步骤 / 收尾结果，
+            或 Agent 正在运行 / 有排队任务，即隐藏，避免输入后仍残留提示。 */}
+        {timeline.length === 0 &&
+          !agentResult &&
+          !agentRunning &&
+          !hasMyActive &&
+          myWaiting.length === 0 && (
+            <ChatEmpty
+              pr={pr}
+              prAgent={prAgent}
+              llmConfigured={llmConfigured}
+              onOpenSettings={onOpenSettings}
+            />
+          )}
         {/* 还有更早的 run 未拉到本地 → 顶部出加载提示。继续向上滚自动游标拉一页 */}
         {(hasMoreOlder || loadingOlder) && (
           <div className="chat-run-more-hint muted" role="status">
@@ -662,7 +668,7 @@ export function ChatPane({
           ) : entry.step ? (
             <AgentStepMarker key={entry.key} step={entry.step} />
           ) : entry.user != null ? (
-            <div key={entry.key} className="chat-user-msg">
+            <div key={entry.key} className="chat-user-row">
               <div className="chat-user-bubble">{entry.user}</div>
             </div>
           ) : null,
@@ -696,6 +702,14 @@ export function ChatPane({
         {concurrencyReached && (
           <div className="chat-busy" role="status">
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
+          </div>
+        )}
+        {/* Agent 自身 LLM 调用（规划 / 判读 / 收尾）无对应 pragent run，此时队列里看不到进度 →
+            补一条「思考中」指示，避免运行期界面看似停滞。子任务运行时由 RunningView 负责进度。 */}
+        {agentRunning && !hasMyActive && myWaiting.length === 0 && (
+          <div className="chat-agent-thinking" role="status">
+            <Spinner />
+            <span>{t('chatPane.agent.thinking')}</span>
           </div>
         )}
         {agentResult && (
