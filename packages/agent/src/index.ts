@@ -2,6 +2,8 @@ export { AGENT_FILES, AGENT_RULES_SUBDIR, resolveAgentPaths } from './layout.js'
 export type { AgentContextKind } from './layout.js';
 export { loadAgentContext, loadAgentRules } from './load.js';
 export { scaffoldAgentDir } from './scaffold.js';
+export { appendAgentNotes } from './memory.js';
+export type { WritableAgentFile } from './memory.js';
 export { AGENT_TEMPLATES } from './templates.js';
 export type { AgentTemplate } from './templates.js';
 export type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
@@ -14,6 +16,7 @@ export type {
 export { runReviewMicroflow, extractJson } from './orchestrator.js';
 export { runPlanningAgent } from './planner.js';
 export type {
+  AgentMemoryNotes,
   PlanningDeps,
   PlanningInput,
   PlanningResult,

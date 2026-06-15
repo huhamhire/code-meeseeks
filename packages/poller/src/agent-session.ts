@@ -162,6 +162,18 @@ export async function getAgentConversation(
   return file?.messages ?? [];
 }
 
+/** 整体重写某 PR 的多轮对话（用于压缩 / 摘要替换旧消息）。 */
+export async function writeAgentConversation(
+  stateStore: StateStore,
+  prLocalId: string,
+  messages: AgentMessage[],
+): Promise<void> {
+  await stateStore.write<AgentConversationFile>(conversationKey(prLocalId), {
+    schema_version: 1,
+    messages,
+  });
+}
+
 /** 追加一条对话消息（用户 / 助手），返回追加后的完整消息列表。`at` 缺省打当前时间。 */
 export async function appendAgentMessage(
   stateStore: StateStore,
