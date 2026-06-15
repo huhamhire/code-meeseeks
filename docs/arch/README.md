@@ -33,11 +33,12 @@
 | [`03-state-storage`](03-state-storage.md) | 状态存储与数据模型（StateStore / per-PR 目录 / schema） |
 | [`04-pragent-runtime`](04-pragent-runtime.md) | pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage） |
 | [`05-review-workflow`](05-review-workflow.md) | 评审→发布闭环（命令 / findings 解析 / 草稿池 / 发布 / merge） |
-| [`06-rules`](06-rules.md) | 规则系统（rules.dir / frontmatter / 匹配优先级） |
-| [`07-config-and-secrets`](07-config-and-secrets.md) | 配置与凭据（config.yaml / SecretStore / 设置页 / 首启向导） |
-| [`08-networking-proxy`](08-networking-proxy.md) | 出站网络与代理（HTTP 代理统一 / loopback 直连 / SSH） |
-| [`09-ui-interaction`](09-ui-interaction.md) | GUI 与交互（渲染层布局 / 面板 / 跨 PR 保活 / 交互约定） |
-| [`10-i18n`](10-i18n.md) | 国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / pr-agent 输出模板翻译） |
+| [`06-agent`](06-agent.md) | Agent 设计（Agent 目录 / 上下文注入 / 会话 Agent 化 / 工具红线 / AutoPilot 预评审 / 优先级调度） |
+| [`07-rules`](07-rules.md) | 规则系统（frontmatter / 匹配优先级；目录已并入 `<agent.dir>/rules/`，见 06） |
+| [`08-config-and-secrets`](08-config-and-secrets.md) | 配置与凭据（config.yaml / SecretStore / 设置页 / 首启向导） |
+| [`09-networking-proxy`](09-networking-proxy.md) | 出站网络与代理（HTTP 代理统一 / loopback 直连 / SSH） |
+| [`10-ui-interaction`](10-ui-interaction.md) | GUI 与交互（渲染层布局 / 面板 / 跨 PR 保活 / 交互约定） |
+| [`11-i18n`](11-i18n.md) | 国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / pr-agent 输出模板翻译） |
 
 > 打包 / 构建 / 签名 / CI 不属于产品子系统，已移到开发专题：[`../development/packaging-release.md`](../development/packaging-release.md)。
 

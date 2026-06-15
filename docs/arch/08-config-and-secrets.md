@@ -1,4 +1,4 @@
-# 07 · 配置与凭据
+# 08 · 配置与凭据
 
 ## 职责与边界
 
@@ -14,7 +14,7 @@
   `workspace.repos_dir` 可改（见 [03](03-state-storage.md)）。
 - **schema 用 zod 定义 + 全字段默认值**：解析时缺字段补默认，老配置自动兼容、新增字段非破坏性。顶层含：
   `connections[]` + `active_connection_id`、`llm{profiles[], active_id}`、`rules{dir,enabled}`、`poller{interval_seconds}`、
-  `proxy{...}`（见 [08](08-networking-proxy.md)）、`pr_agent{strategy}`（见 [04](04-pragent-runtime.md)）、
+  `proxy{...}`（见 [09](09-networking-proxy.md)）、`pr_agent{strategy}`（见 [04](04-pragent-runtime.md)）、
   `workspace{repos_dir}`、`language`。
 - **凭据抽象 `SecretStore`**：所有 token / API key 读写经它，不直接 `fs`。一期实现把凭据存在 `config.yaml`
   （`ConfigFileSecretStore`）；预留 keytar/OS Keychain 实现，将来只换注入、业务零改动。凭据**绝不进日志/异常栈**。

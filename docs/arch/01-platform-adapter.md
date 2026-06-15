@@ -25,7 +25,7 @@
   | remoteId | PR id | PR number | MR **iid**（项目内编号） |
 
 - **认证只用 PAT**：`Authorization: Bearer <token>`（GitLab 亦可走此头）。token 经凭据层读取，绝不进日志。
-- **REST 客户端可注入 fetch**：底层 HTTP 客户端暴露 `fetch` 注入口，用于挂代理 dispatcher（见 [08](08-networking-proxy.md)）
+- **REST 客户端可注入 fetch**：底层 HTTP 客户端暴露 `fetch` 注入口，用于挂代理 dispatcher（见 [09](09-networking-proxy.md)）
   与测试桩；默认用全局 fetch。分页按平台风格封装成异步迭代器（Bitbucket `start/limit`；GitHub/GitLab `Link` 头）。
 - **Diff 不走 adapter 抓取**：平台 `/diff` 端点对大 PR 会 `truncated`；Diff 展示一律由本地镜像 `git` 算
   （见 [02](02-repo-mirror.md)），与平台解耦。**仅「发布行内评论」时用平台锚点**——本地算 diff 时已知每行

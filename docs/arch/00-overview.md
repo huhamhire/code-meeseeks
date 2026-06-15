@@ -53,10 +53,11 @@ flowchart TB
 | 状态存储与数据模型 | `state-store` + `poller` 的 pr-state | [03](03-state-storage.md) |
 | pr-agent 集成与运行时 | `pr-agent-bridge` + 嵌入式运行时 | [04](04-pragent-runtime.md) |
 | 评审→发布闭环 | `poller`(输出解析) + 主进程草稿/发布 | [05](05-review-workflow.md) |
-| 规则系统 | `rules` | [06](06-rules.md) |
-| 配置与凭据 | `config` + 设置页 | [07](07-config-and-secrets.md) |
-| 出站网络与代理 | 主进程 proxy plumbing | [08](08-networking-proxy.md) |
-| GUI 与交互 | 渲染层 React（布局 / 面板 / 跨 PR 保活） | [09](09-ui-interaction.md) |
+| 高阶 Agent 与 AutoPilot | Agent 运行时（编排）+ `rules` 注入 | [06](06-agent.md) |
+| 规则系统 | `rules` | [07](07-rules.md) |
+| 配置与凭据 | `config` + 设置页 | [08](08-config-and-secrets.md) |
+| 出站网络与代理 | 主进程 proxy plumbing | [09](09-networking-proxy.md) |
+| GUI 与交互 | 渲染层 React（布局 / 面板 / 跨 PR 保活） | [10](10-ui-interaction.md) |
 
 > 打包 / 构建 / 签名 / CI 见开发专题 [`../development/packaging-release.md`](../development/packaging-release.md)（非产品子系统）。
 
@@ -72,11 +73,11 @@ flowchart TB
 - **本地优先**：仓库副本、PR 元数据、评论缓存、草稿、配置全部留在本地工作目录 `~/.code-meeseeks/`
   （仓库镜像可改到 `repos_dir`）。无服务端、不做多用户同步。
 - **出站只有两类**：① 评审者自配的 **LLM API**（经 pr-agent / litellm）；② 所配置的**代码平台**
-  （PR / 评论 REST + git 拉取）。除此不向任何第三方上报数据。两类出站都可经统一 HTTP 代理管控（见 [08](08-networking-proxy.md)）。
+  （PR / 评论 REST + git 拉取）。除此不向任何第三方上报数据。两类出站都可经统一 HTTP 代理管控（见 [09](09-networking-proxy.md)）。
 - **发给 LLM 的内容**：pr-agent 评审时只把 **PR diff + 命中的规则**（extra_instructions）发给 LLM，不发其它本地数据。
 - **凭据**：平台 token / LLM API key / 代理密码**明文**存 `config.yaml`（文件权限收紧），属已知风险；
-  抽象层预留 keytar 升级（见 [07](07-config-and-secrets.md)）。
-- **安全基线**：渲染层 `contextIsolation` 开、无 `nodeIntegration`、CSP；preload 仅暴露白名单能力（见 [09](09-ui-interaction.md)）。
+  抽象层预留 keytar 升级（见 [08](08-config-and-secrets.md)）。
+- **安全基线**：渲染层 `contextIsolation` 开、无 `nodeIntegration`、CSP；preload 仅暴露白名单能力（见 [10](10-ui-interaction.md)）。
 
 ## 数据 / 接口契约
 

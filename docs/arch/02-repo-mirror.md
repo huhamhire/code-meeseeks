@@ -22,7 +22,7 @@
   pr-agent 的 LocalGitProvider 在这个 worktree 上算 diff（见 [04](04-pragent-runtime.md)）。
 - **Diff 不 checkout 文件**：展示 diff 只需按 sha 读 blob（`git show <sha>:<path>`）+ 改动文件列表，
   不把文件 checkout 到磁盘，省 IO。Monaco 侧按文件懒加载，二进制/超大文件跳过。
-- **出站代理**：打远端的 clone/fetch 按代理配置注入 env（见 [08](08-networking-proxy.md)）；本地只读操作不注入。
+- **出站代理**：打远端的 clone/fetch 按代理配置注入 env（见 [09](09-networking-proxy.md)）；本地只读操作不注入。
 
 ## 数据 / 接口契约
 

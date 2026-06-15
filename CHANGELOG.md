@@ -11,8 +11,7 @@
 - **无边框窗口 + 自绘标题栏**（VS Code 风）：主窗口去掉系统原生标题栏，渲染层自绘 36px 标题栏，
   深色主题从顶贯通到底。窗控按钮交由系统绘制以保留原生行为——macOS 保留红绿灯（下移到标题栏内）、
   Windows/Linux 用 `titleBarOverlay` 在右上画最小化/最大化/关闭。标题栏展示品牌名与当前 PR 标题，
-  Windows/Linux 开头另显应用图标（macOS 因红绿灯占位不显）。设计见
-  [`docs/arch/09-ui-interaction.md`](docs/arch/09-ui-interaction.md)。
+  Windows/Linux 开头另显应用图标（macOS 因红绿灯占位不显）。
 
 ### Changed
 - **移除独立 `ollama` provider**，统一经 `openai-compatible` 接入本地 Ollama（Base URL 填
@@ -38,8 +37,7 @@
   - **CE / EE 审批降级**：MR approve/unapprove API 自 13.9 起为 Premium/Ultimate，且 GitLab 审批二元
     （无「需修改」）。经 `/metadata` 探测 edition，能力位据此降级——EE：通过 / 撤销；CE：无 API 审批、
     UI 灰显。可合并状态走 `detailed_merge_status`（full 保真）。
-  - 嵌套 group 路径、N+1 取详情（diff_refs / 审批）、行内评论按 `position` 三 sha 锚定等设计见
-    [`docs/arch/01-platform-adapter.md`](docs/arch/01-platform-adapter.md) §4.3。
+  - 嵌套 group 路径、N+1 取详情（diff_refs / 审批）、行内评论按 `position` 三 sha 锚定。
 
 ### Changed
 - 拒绝代码反馈 / 改进建议后，卡片自动折叠收起并置灰：左色条转中性灰、类别 chip 置灰，正文与
@@ -114,8 +112,7 @@
   - **语言解析**：`config.language` 为空时按**操作系统偏好语言**自动匹配，非空则按显式选择。默认 /
     兜底语言为 **en-US**（缺译文回退英文而非中文）。
   - **按需懒加载**：默认语言（en-US）静态进入口（首帧不闪），其余语言由 Vite 拆成独立 chunk、切换时
-    才拉取，不进入口包。`ja-JP` / `de-DE` 为机器初稿，发布前建议人工校对；维护与翻译规范见
-    [`docs/arch/10-i18n.md`](docs/arch/10-i18n.md)。
+    才拉取，不进入口包。`ja-JP` / `de-DE` 为机器初稿，发布前建议人工校对。
 - **Mermaid 图渲染**：markdown 里的 `mermaid` 代码块（Qodo `/describe` 常生成的架构图）渲染为图形，
   覆盖 PR 描述 / 评论 / chat 评审输出。mermaid 懒加载（独立 chunk，仅出现图表时才拉取，不进入口包）；
   深色主题、`securityLevel: strict`，渲染失败回退原始代码块。
