@@ -448,6 +448,12 @@ export function ChatPane({
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+  // 停止本 PR 会话内进行中的全部任务：逐条取消所有活动 run（Agent 并行多选时可能 >1），
+  // 并中止 Agent 编排（abort，阻止其在子任务取消后继续后续步骤）。
+  const handleStopAll = (): void => {
+    for (const r of myActiveRuns) void handleCancel(r.runId);
+    if (agentRunning && prLocalId) void invoke('agent:stop', { localId: prLocalId });
+  };
   const handleRetry = (run: ReviewRun): void => {
     void handleRun(run.tool, run.question);
   };
@@ -714,40 +720,54 @@ export function ChatPane({
             <span>{t('chatPane.agent.thinking')}</span>
           </div>
         )}
-        {agentResult && (
-          <div className="chat-agent-summary" role="status">
-            <div className="chat-agent-summary-head">
-              <strong>{t('chatPane.agent.summaryTitle')}</strong>
-              {agentResult.recommendation && (
+        {/* 收尾结果两种形态：评审类（带 recommendation）→「评审总结」卡片 + 判定徽标；
+            自然对话（无 recommendation）→ 专属对话回复包装，不套用评审总结标题。 */}
+        {agentResult &&
+          (agentResult.recommendation ? (
+            <div className="chat-agent-summary" role="status">
+              <div className="chat-agent-summary-head">
+                <strong>{t('chatPane.agent.summaryTitle')}</strong>
                 <span
                   className={`chat-agent-verdict verdict-${agentResult.recommendation.verdict}`}
                 >
                   {t(VERDICT_LABEL_KEY[agentResult.recommendation.verdict])}
                 </span>
-              )}
-            </div>
-            <div className="markdown chat-agent-summary-text">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-                rehypePlugins={REMOTE_REHYPE_PLUGINS}
-                components={mermaidComponents}
-              >
-                {agentResult.summary}
-              </ReactMarkdown>
-            </div>
-            {agentResult.recommendation?.reason && (
-              <div className="markdown muted chat-agent-summary-reason">
+              </div>
+              <div className="markdown chat-agent-summary-text">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkBreaks]}
                   rehypePlugins={REMOTE_REHYPE_PLUGINS}
                   components={mermaidComponents}
                 >
-                  {agentResult.recommendation.reason}
+                  {agentResult.summary}
                 </ReactMarkdown>
               </div>
-            )}
-          </div>
-        )}
+              {agentResult.recommendation.reason && (
+                <div className="markdown muted chat-agent-summary-reason">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    rehypePlugins={REMOTE_REHYPE_PLUGINS}
+                    components={mermaidComponents}
+                  >
+                    {agentResult.recommendation.reason}
+                  </ReactMarkdown>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="chat-agent-reply" role="status">
+              <ChatIcon size={16} />
+              <div className="markdown chat-agent-reply-body">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  rehypePlugins={REMOTE_REHYPE_PLUGINS}
+                  components={mermaidComponents}
+                >
+                  {agentResult.summary}
+                </ReactMarkdown>
+              </div>
+            </div>
+          ))}
         {error && (
           <div className="chat-error" role="alert">
             <strong>{t('chatPane.errorPrefix')}</strong>
@@ -765,11 +785,7 @@ export function ChatPane({
         runningTool={myActiveRuns[myActiveRuns.length - 1]?.tool ?? null}
         onRun={(t, q) => void handleRun(t, q)}
         onAgentAsk={(q) => void handleAgentAsk(q)}
-        onCancel={
-          hasMyActive
-            ? () => void handleCancel(myActiveRuns[myActiveRuns.length - 1]!.runId)
-            : undefined
-        }
+        onCancel={hasMyActive ? handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
         // 一键自动评审：图标按钮置于 `/` 命令触发器右侧
         agentRunning={agentRunning}

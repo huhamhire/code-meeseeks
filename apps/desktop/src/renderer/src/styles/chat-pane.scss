@@ -201,6 +201,28 @@
   font-size: $fs-sm;
 }
 
+// Agent 自然对话回复：左对齐、带 Agent 图标的轻量包装，区别于「评审总结」卡片（无判定 / 无标题）。
+.chat-agent-reply {
+  margin: $space-3 $space-6;
+  display: flex;
+  gap: $space-3;
+  align-items: flex-start;
+  padding: $space-3 $space-4;
+  border-radius: $radius-md;
+  background: $bg-elev;
+  border: 1px solid $border-muted;
+
+  > svg {
+    flex-shrink: 0;
+    color: $color-info;
+    margin-top: 2px;
+  }
+}
+.chat-agent-reply-body {
+  flex: 1;
+  min-width: 0;
+}
+
 // Agent 元步骤内联标记：在时间线中按自然时间顺序穿插的决策节点（judge 判读）。
 // 左侧一道强调色竖条，与 run 卡片区分但保持同一缩进。
 .chat-agent-step-marker {
