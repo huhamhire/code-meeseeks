@@ -155,6 +155,8 @@ export function ChatPane({
     recommendation?: AgentRecommendation;
   } | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  // 触发本次会话的用户自然语言输入（对话即委派）：回显为右对齐气泡；at 用于在时间线中定位。
+  const [userRequest, setUserRequest] = useState<{ text: string; at: string } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // 当前展示中的 PR id（每渲染同步）：异步 Agent 任务 resolve 时据此判断是否仍停在发起 PR，
@@ -188,12 +190,24 @@ export function ChatPane({
       time: r.startedAt,
       run: r as ReviewRun | null,
       step: null as AgentStep | null,
+      user: null as string | null,
     }));
     const stepEntries = agentSteps
       .filter((s) => s.kind === 'judge')
-      .map((s, i) => ({ key: `step-${i}-${s.at ?? ''}`, time: s.at ?? '', run: null, step: s }));
-    return [...runEntries, ...stepEntries].sort((a, b) => a.time.localeCompare(b.time));
-  }, [visibleRuns, agentSteps]);
+      .map((s, i) => ({
+        key: `step-${i}-${s.at ?? ''}`,
+        time: s.at ?? '',
+        run: null,
+        step: s,
+        user: null as string | null,
+      }));
+    const userEntries = userRequest
+      ? [{ key: `user-${userRequest.at}`, time: userRequest.at, run: null, step: null, user: userRequest.text }]
+      : [];
+    return [...runEntries, ...stepEntries, ...userEntries].sort((a, b) =>
+      a.time.localeCompare(b.time),
+    );
+  }, [visibleRuns, agentSteps, userRequest]);
 
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
@@ -209,6 +223,7 @@ export function ChatPane({
     setMatchedRule(null);
     setAgentSteps([]);
     setAgentResult(null);
+    setUserRequest(null);
     if (!prLocalId) return;
     let cancelled = false;
     void (async () => {
@@ -225,6 +240,9 @@ export function ChatPane({
         setRuns([...list].reverse());
         setHasMoreOlder(list.length === RUNS_PAGE_SIZE);
         setMatchedRule(rule);
+        if (session?.userRequest) {
+          setUserRequest({ text: session.userRequest, at: session.startedAt });
+        }
         if (session?.summary) {
           setAgentResult({ summary: session.summary, recommendation: session.recommendation });
         }
@@ -352,6 +370,7 @@ export function ChatPane({
     setError(null);
     setAgentResult(null);
     setAgentSteps([]);
+    setUserRequest(null); // 自动评审无文本输入，清掉上一轮对话气泡
     setAgentRunning(true);
     try {
       const session = await invoke('agent:run', { localId: startedId });
@@ -380,6 +399,8 @@ export function ChatPane({
     setError(null);
     setAgentResult(null);
     setAgentSteps([]);
+    // 立即回显用户输入气泡（main 落盘 session.userRequest 后，切回该 PR 亦能恢复）。
+    setUserRequest({ text: question, at: new Date().toISOString() });
     setAgentRunning(true);
     try {
       const session = await invoke('agent:ask', { localId: startedId, question });
@@ -411,6 +432,7 @@ export function ChatPane({
       setError(null);
       setAgentResult(null);
       setAgentSteps([]);
+      setUserRequest(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -639,6 +661,10 @@ export function ChatPane({
             />
           ) : entry.step ? (
             <AgentStepMarker key={entry.key} step={entry.step} />
+          ) : entry.user != null ? (
+            <div key={entry.key} className="chat-user-msg">
+              <div className="chat-user-bubble">{entry.user}</div>
+            </div>
           ) : null,
         )}
         {/* 正在跑（可并发多条）：每条一个进度条 + 实时 stdout 流，贴在历史末尾。

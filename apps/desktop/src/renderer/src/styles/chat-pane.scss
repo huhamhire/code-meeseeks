@@ -172,6 +172,24 @@
   color: $text-muted;
 }
 
+// 用户输入气泡：自然语言「对话即委派」的输入回显，右对齐成对话气泡。
+.chat-user-msg {
+  margin: $space-3 $space-6;
+  display: flex;
+  justify-content: flex-end;
+}
+.chat-user-bubble {
+  max-width: 85%;
+  padding: $space-2 $space-4;
+  border-radius: $radius-md;
+  background: $color-accent;
+  color: $text-on-accent;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 // Agent 元步骤内联标记：在时间线中按自然时间顺序穿插的决策节点（judge 判读）。
 // 左侧一道强调色竖条，与 run 卡片区分但保持同一缩进。
 .chat-agent-step-marker {

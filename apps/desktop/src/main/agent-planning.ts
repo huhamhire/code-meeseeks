@@ -48,7 +48,7 @@ export async function runAgentPlanning(
 ): Promise<AgentSession> {
   const session = await startAgentSession(
     deps.stateStore,
-    { prLocalId: pr.localId, maxSteps: deps.maxSteps },
+    { prLocalId: pr.localId, maxSteps: deps.maxSteps, userRequest },
     now,
   );
 
