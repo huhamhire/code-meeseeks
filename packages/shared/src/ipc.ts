@@ -1,3 +1,4 @@
+import type { AgentSession, AgentStep } from './agent-contract.js';
 import type { AppInfo, AppPaths, UpdateCheckResult } from './app-info.js';
 import type { Config } from './config.js';
 import type { SupportedLanguage } from './language.js';
@@ -123,6 +124,8 @@ export interface IpcEvents {
   };
   /** 启动检测到新版本时推送（仅 hasUpdate=true 时发），renderer 据此提示。 */
   'app:updateAvailable': UpdateCheckResult;
+  /** Agent 编排步骤流式推送：每产生一个 AgentStep 即发，renderer 据此实时呈现。 */
+  'agent:stepProgress': { sessionId: string; prLocalId: string; step: AgentStep };
 }
 
 export type IpcEventName = keyof IpcEvents;
@@ -392,6 +395,15 @@ export interface IpcChannels {
      */
     request: { localId: string; tool: ReviewRunTool; question?: string };
     response: ReviewRun;
+  };
+  /**
+   * 对指定 PR 跑一次 Agent 评审微流程（describe→review→条件追问→总结）。同步等待，
+   * 期间经 agent:stepProgress 推送步骤；返回收尾后的 AgentSession（含 summary /
+   * recommendation）。agent.enabled=false / pr-agent 不可用时 reject。
+   */
+  'agent:run': {
+    request: { localId: string };
+    response: AgentSession;
   };
   /**
    * 列出指定 PR 的全部草稿 (pending / edited / posted / rejected 都返回，UI 端按

@@ -2,10 +2,11 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
-import { loadAgentRules } from '@meebox/agent';
+import { loadAgentContext, loadAgentRules } from '@meebox/agent';
 import { writeConfig, type BootstrapResult } from '@meebox/config';
 import { PrAgentRunError, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import {
@@ -52,6 +53,7 @@ import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
 import { checkForUpdate } from './utils/update-check.js';
 import { buildPrContext } from './utils/pr-context.js';
+import { runAgentReview } from './agent-review.js';
 
 interface RegisterDeps {
   bootstrap: BootstrapResult;
@@ -1173,6 +1175,49 @@ export function registerIpcHandlers({
     broadcastQueueChanged();
   };
 
+  /**
+   * 入队一个 pr-agent run（与用户手动 run 共用同一队列 / 并发 / 取消机制）。dedup：同 PR
+   * 同工具已在执行 / 排队则抛错（/ask 不限）。resolve 完成的 ReviewRun。
+   * `pragent:run` handler 与 Agent 编排器（runTool）都走它。
+   */
+  const enqueuePragentRun = (
+    pr: StoredPullRequest,
+    tool: ReviewRunTool,
+    question?: string,
+  ): Promise<ReviewRun> => {
+    if (tool !== 'ask') {
+      const sameTask = (q: QueueItem): boolean =>
+        q.info.prLocalId === pr.localId && q.info.tool === tool;
+      if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
+        throw new Error(t('prAgent.duplicateTask', { tool }));
+      }
+    }
+    // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
+    const runId = makeRunId(new Date());
+    return new Promise<ReviewRun>((resolve, reject) => {
+      const item: QueueItem = {
+        info: {
+          runId,
+          prLocalId: pr.localId,
+          tool,
+          question: tool === 'ask' ? question : undefined,
+          enqueuedAt: new Date().toISOString(),
+          startedAt: null,
+        },
+        req: { localId: pr.localId, tool, question },
+        pr,
+        resolve,
+        reject,
+      };
+      waiting.push(item);
+      logger.info(
+        { runId, localId: pr.localId, tool, queueLen: waiting.length },
+        'pragent run enqueued',
+      );
+      pump();
+    });
+  };
+
   ipcMain.handle(
     'pragent:run',
     async (
@@ -1187,39 +1232,69 @@ export function registerIpcHandlers({
         throw new Error(t('prAgent.askNeedsQuestion'));
       }
       const pr = await findPrOrThrow(req.localId);
-      // 去重（权威）：同一 PR 同一工具已在执行 / 排队 → 拒绝重复触发，避免并发模式下
-      // 对同一 PR 跑多份相同评审。/ask 每次问题不同，不在限制范围。
-      if (req.tool !== 'ask') {
-        const sameTask = (q: QueueItem): boolean =>
-          q.info.prLocalId === pr.localId && q.info.tool === req.tool;
-        if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
-          throw new Error(t('prAgent.duplicateTask', { tool: req.tool }));
-        }
+      return enqueuePragentRun(pr, req.tool, req.question);
+    },
+  );
+
+  ipcMain.handle(
+    'agent:run',
+    async (
+      _evt,
+      req: IpcChannels['agent:run']['request'],
+    ): Promise<IpcChannels['agent:run']['response']> => {
+      const bridge = getPrAgentBridge();
+      if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
+      const agentCfg = bootstrap.config.agent;
+      if (!agentCfg.enabled || !agentCfg.dir) {
+        throw new Error(t('prAgent.agentNotEnabled'));
       }
-      // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
-      const runId = makeRunId(new Date());
-      return new Promise<ReviewRun>((resolve, reject) => {
-        const item: QueueItem = {
-          info: {
-            runId,
-            prLocalId: pr.localId,
-            tool: req.tool,
-            question: req.tool === 'ask' ? req.question : undefined,
-            enqueuedAt: new Date().toISOString(),
-            startedAt: null,
-          },
-          req,
-          pr,
-          resolve,
-          reject,
-        };
-        waiting.push(item);
-        logger.info(
-          { runId, localId: pr.localId, tool: req.tool, queueLen: waiting.length },
-          'pragent run enqueued',
-        );
-        pump();
+
+      const pr = await findPrOrThrow(req.localId);
+      // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存。
+      const agentContext = await loadAgentContext(agentCfg.dir, {
+        onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
+      const matchedRule = pickMatchingRule(agentContext.rules, {
+        projectKey: pr.repo.projectKey,
+        repoSlug: pr.repo.repoSlug,
+        targetBranch: pr.targetRef.displayId,
+        tool: 'review',
+      });
+
+      // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。
+      const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
+      const env: Record<string, string> = {
+        ...buildProxyEnv(bootstrap.config.proxy),
+        ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
+        CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
+      };
+
+      // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
+      const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
+      try {
+        return await runAgentReview(pr, {
+          stateStore,
+          enqueueRun: enqueuePragentRun,
+          chat: async ({ system, user }) => {
+            const r = await bridge.chat({ system, user, env, cwd: chatCwd });
+            const acc: UsageAcc = { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
+            for (const line of (r.stderr ?? '').split('\n')) accumulateUsageSentinel(line, acc);
+            return { text: r.stdout.trim(), usage: finalizeUsage(acc) };
+          },
+          agentContext,
+          matchedRule,
+          language: getMainLanguage(),
+          maxFollowupAsks: 2,
+          summaryMaxChars: 800,
+          onStep: (sessionId, step) => {
+            for (const win of BrowserWindow.getAllWindows()) {
+              win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+            }
+          },
+        });
+      } finally {
+        await fs.rm(chatCwd, { recursive: true, force: true });
+      }
     },
   );
 
