@@ -14,6 +14,15 @@
     "openInBrowser": "Im Browser öffnen"
   },
   "chatPane": {
+    "agent": {
+      "autoReview": "Auto-Review",
+      "autoReviewRunning": "Wird geprüft…",
+      "failed": "Agent-Review fehlgeschlagen",
+      "summaryTitle": "Agent-Zusammenfassung",
+      "verdictApprove": "Sieht gut aus",
+      "verdictManualReview": "Manuelle Prüfung",
+      "verdictNeedsWork": "Nachbesserung nötig"
+    },
     "aiSuggestionPrefix": "[KI-Vorschlag]",
     "anchorJumpTitle": "Zur entsprechenden Zeile im Code springen",
     "askArgQuestion": "Frage",

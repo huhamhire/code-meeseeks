@@ -14,6 +14,15 @@
     "openInBrowser": "ブラウザで開く"
   },
   "chatPane": {
+    "agent": {
+      "autoReview": "自動レビュー",
+      "autoReviewRunning": "レビュー中…",
+      "failed": "Agent レビューに失敗しました",
+      "summaryTitle": "Agent サマリー",
+      "verdictApprove": "問題なし",
+      "verdictManualReview": "手動レビュー推奨",
+      "verdictNeedsWork": "要修正"
+    },
     "aiSuggestionPrefix": "[AI 提案]",
     "anchorJumpTitle": "コードの該当行へジャンプ",
     "askArgQuestion": "質問",

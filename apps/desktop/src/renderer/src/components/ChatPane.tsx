@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type {
+  AgentRecommendation,
   Finding,
   IpcChannels,
   LocalPrStatus,
@@ -40,6 +41,13 @@ export const CHAT_MIN_WIDTH = 280;
 export const CHAT_MAX_WIDTH = 720;
 /** 历史 run 的分页大小：进入 PR 默认展示最新 N 条，向上滚动到顶端再追加一批 */
 const RUNS_PAGE_SIZE = 10;
+
+/** Agent 建议 verdict → i18n key（chatPane.agent.*）。 */
+const VERDICT_LABEL_KEY: Record<string, string> = {
+  approve: 'chatPane.agent.verdictApprove',
+  needs_work: 'chatPane.agent.verdictNeedsWork',
+  manual_review: 'chatPane.agent.verdictManualReview',
+};
 
 interface ChatPaneProps {
   pr: StoredPullRequest | null;
@@ -138,6 +146,12 @@ export function ChatPane({
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
   const [showRulePreview, setShowRulePreview] = useState(false);
+  // Agent 自动评审（微流程：describe→review→条件追问→总结）：运行态 + 收尾结果。
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentResult, setAgentResult] = useState<{
+    summary: string;
+    recommendation?: AgentRecommendation;
+  } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -286,6 +300,28 @@ export function ChatPane({
       await invoke('pragent:run', { localId: pr.localId, tool, question });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  // 一键自动评审：触发 main 的 agent:run（评审微流程）。describe/review/ask 子 run 经
+  // 既有运行队列展示在历史里；收尾总结 + 建议落 agentResult 单独呈现。
+  const handleAgentReview = async (): Promise<void> => {
+    if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
+    setError(null);
+    setAgentResult(null);
+    setAgentRunning(true);
+    try {
+      const session = await invoke('agent:run', { localId: pr.localId });
+      if (session.summary) {
+        setAgentResult({ summary: session.summary, recommendation: session.recommendation });
+      }
+      if (session.status === 'failed') {
+        setError(session.terminationReason ?? t('chatPane.agent.failed'));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAgentRunning(false);
     }
   };
 
@@ -492,6 +528,19 @@ export function ChatPane({
         </button>
       )}
 
+      {pr && prAgent.available && (
+        <div className="chat-agent-bar">
+          <button
+            type="button"
+            className="chat-agent-review-btn"
+            disabled={!llmConfigured || agentRunning}
+            onClick={() => void handleAgentReview()}
+          >
+            {agentRunning ? t('chatPane.agent.autoReviewRunning') : t('chatPane.agent.autoReview')}
+          </button>
+        </div>
+      )}
+
       <div className="chat-pane-body" ref={bodyRef}>
         {visibleRuns.length === 0 && !hasMyActive && myWaiting.length === 0 && (
           <ChatEmpty
@@ -553,6 +602,24 @@ export function ChatPane({
         {concurrencyReached && (
           <div className="chat-busy" role="status">
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
+          </div>
+        )}
+        {agentResult && (
+          <div className="chat-agent-summary" role="status">
+            <div className="chat-agent-summary-head">
+              <strong>{t('chatPane.agent.summaryTitle')}</strong>
+              {agentResult.recommendation && (
+                <span
+                  className={`chat-agent-verdict verdict-${agentResult.recommendation.verdict}`}
+                >
+                  {t(VERDICT_LABEL_KEY[agentResult.recommendation.verdict])}
+                </span>
+              )}
+            </div>
+            <p className="chat-agent-summary-text">{agentResult.summary}</p>
+            {agentResult.recommendation?.reason && (
+              <p className="muted">{agentResult.recommendation.reason}</p>
+            )}
           </div>
         )}
         {error && (
