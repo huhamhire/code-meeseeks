@@ -11,14 +11,3 @@ export type {
   AssemblePrMeta,
   AssembleSessionSnapshot,
 } from './assemble.js';
-export type {
-  AgentRecommendation,
-  AgentRecommendationVerdict,
-  AgentSession,
-  AgentSessionStatus,
-  AgentStep,
-  AgentStepKind,
-  AgentTodoItem,
-  AgentToolCall,
-  ToolCatalogEntry,
-} from './session.js';

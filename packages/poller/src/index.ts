@@ -4,5 +4,6 @@ export * from './pr-hash-id.js';
 export * from './pr-state.js';
 export * from './comments-cache.js';
 export * from './runs.js';
+export * from './agent-session.js';
 export * from './drafts.js';
 export * from './parse-output.js';

@@ -1,6 +1,6 @@
 import type { Rule } from '@meebox/rules';
+import type { AgentTodoItem, ToolCatalogEntry } from '@meebox/shared';
 import type { AgentContext } from './types.js';
-import type { AgentTodoItem, ToolCatalogEntry } from './session.js';
 
 /** 当前 PR 的最小元数据（装配进上下文）。 */
 export interface AssemblePrMeta {
@@ -21,9 +21,9 @@ export interface AssembleInput {
   context: AgentContext;
   pr: AssemblePrMeta;
   toolCatalog: ToolCatalogEntry[];
-  /** 命中的规则（按 §2 第 4 项注入正文）；无命中传 null。 */
+  /** 命中的规则（按「上下文注入」次序注入正文）；无命中传 null。 */
   matchedRule?: Rule | null;
-  /** 输出 / 记忆写入语言（解析后的 locale code；空 = 默认 en-US，见 §2 第 8 项）。 */
+  /** 输出 / 记忆写入语言（解析后的 locale code；空 = 默认 en-US，见「语言行为指令」）。 */
   language?: string;
   session?: AssembleSessionSnapshot;
 }
@@ -74,7 +74,7 @@ function renderLanguage(language: string | undefined): string {
 }
 
 /**
- * 现读现装配：按 §2 固定次序拼接系统上下文。空段跳过。
+ * 现读现装配：按「上下文注入」固定次序拼接系统上下文。空段跳过。
  * 次序：SOUL → AGENTS → 工具目录 → 命中规则 → MEMORY + USER → PR 元数据
  *      → 会话快照 → 语言行为指令。
  */
