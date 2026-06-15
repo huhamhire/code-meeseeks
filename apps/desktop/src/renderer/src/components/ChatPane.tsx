@@ -6,6 +6,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type {
   AgentRecommendation,
+  AgentStep,
   Finding,
   IpcChannels,
   LocalPrStatus,
@@ -18,7 +19,7 @@ import type {
 
 type MatchedRule = IpcChannels['rules:matchForPr']['response'];
 import type { ReviewDraft } from '@meebox/shared';
-import { invoke } from '../api';
+import { invoke, subscribe } from '../api';
 import {
   ChatIcon,
   ChevronIcon,
@@ -152,6 +153,7 @@ export function ChatPane({
     summary: string;
     recommendation?: AgentRecommendation;
   } | null>(null);
+  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -184,6 +186,8 @@ export function ChatPane({
     setLoadingOlder(false);
     setError(null);
     setMatchedRule(null);
+    setAgentSteps([]);
+    setAgentResult(null);
     if (!prLocalId) return;
     let cancelled = false;
     void (async () => {
@@ -205,6 +209,14 @@ export function ChatPane({
     return () => {
       cancelled = true;
     };
+  }, [prLocalId]);
+
+  // Agent 步骤流式：订阅 main 的 agent:stepProgress，按当前 PR 过滤实时追加。
+  useEffect(() => {
+    if (!prLocalId) return;
+    return subscribe('agent:stepProgress', (ev) => {
+      if (ev.prLocalId === prLocalId) setAgentSteps((s) => [...s, ev.step]);
+    });
   }, [prLocalId]);
 
   // 本 PR 的运行中 run 集合发生「移除」→ 那条跑完了：单独 fetch 它 + 按 runId 升序
@@ -309,6 +321,7 @@ export function ChatPane({
     if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
     setError(null);
     setAgentResult(null);
+    setAgentSteps([]);
     setAgentRunning(true);
     try {
       const session = await invoke('agent:run', { localId: pr.localId });
@@ -602,6 +615,17 @@ export function ChatPane({
         {concurrencyReached && (
           <div className="chat-busy" role="status">
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
+          </div>
+        )}
+        {agentSteps.length > 0 && (
+          <div className="chat-agent-steps">
+            {agentSteps.map((s, i) => (
+              <div key={i} className="chat-agent-step">
+                <span className="chat-agent-step-kind">{s.toolCall?.tool ?? s.kind}</span>
+                {s.thought && <span className="chat-agent-step-thought">{s.thought}</span>}
+                {s.result && <span className="chat-agent-step-result muted">{s.result}</span>}
+              </div>
+            ))}
           </div>
         )}
         {agentResult && (

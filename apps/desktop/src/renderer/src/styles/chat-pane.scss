@@ -192,6 +192,33 @@
   white-space: pre-wrap;
 }
 
+// Agent 步骤流式列表：跑动时实时追加（describe → review → judge → ask → 总结）
+.chat-agent-steps {
+  margin: $space-3 $space-6 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+.chat-agent-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: $space-3;
+  font-size: $fs-sm;
+}
+.chat-agent-step-kind {
+  font-family: $font-mono;
+  color: $color-info;
+  flex-shrink: 0;
+}
+.chat-agent-step-thought {
+  color: $text-body;
+}
+.chat-agent-step-result {
+  flex-basis: 100%;
+  white-space: pre-wrap;
+}
+
 // === 空态 ===
 .chat-empty {
   display: flex;

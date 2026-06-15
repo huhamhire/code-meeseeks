@@ -115,6 +115,8 @@ export function registerIpcHandlers({
     pr: StoredPullRequest;
     resolve: (run: ReviewRun) => void;
     reject: (err: Error) => void;
+    /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。见 §7 调度。 */
+    priority: 'user' | 'agent';
     /** 仅 active 状态填；用于 cancel SIGKILL */
     ac?: AbortController;
   }
@@ -1193,6 +1195,7 @@ export function registerIpcHandlers({
     pr: StoredPullRequest,
     tool: ReviewRunTool,
     question?: string,
+    priority: 'user' | 'agent' = 'user',
   ): Promise<ReviewRun> => {
     if (tool !== 'ask') {
       const sameTask = (q: QueueItem): boolean =>
@@ -1215,12 +1218,20 @@ export function registerIpcHandlers({
         },
         req: { localId: pr.localId, tool, question },
         pr,
+        priority,
         resolve,
         reject,
       };
-      waiting.push(item);
+      // 优先级插队：user 任务排到所有 agent 任务之前（同泳道内仍 FIFO）；不打断在跑的 run。
+      if (priority === 'user') {
+        const firstAgentIdx = waiting.findIndex((q) => q.priority === 'agent');
+        if (firstAgentIdx >= 0) waiting.splice(firstAgentIdx, 0, item);
+        else waiting.push(item);
+      } else {
+        waiting.push(item);
+      }
       logger.info(
-        { runId, localId: pr.localId, tool, queueLen: waiting.length },
+        { runId, localId: pr.localId, tool, priority, queueLen: waiting.length },
         'pragent run enqueued',
       );
       pump();
@@ -1292,7 +1303,8 @@ export function registerIpcHandlers({
     });
     return runAgentReview(pr, {
       stateStore,
-      enqueueRun: enqueuePragentRun,
+      // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。
+      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent'),
       chat,
       agentContext,
       matchedRule,
