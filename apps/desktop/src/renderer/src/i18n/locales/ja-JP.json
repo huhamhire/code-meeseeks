@@ -19,7 +19,7 @@
       "autoReviewRunning": "レビュー中…",
       "failed": "Agent レビューに失敗しました",
       "summaryTitle": "レビュー総括",
-      "thinking": "Agent が思考中…",
+      "thinking": "思考中…",
       "verdictApprove": "問題なし",
       "verdictManualReview": "手動レビュー推奨",
       "verdictNeedsWork": "要修正"

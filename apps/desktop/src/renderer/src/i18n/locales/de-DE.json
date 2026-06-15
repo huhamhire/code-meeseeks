@@ -19,7 +19,7 @@
       "autoReviewRunning": "Wird geprüft…",
       "failed": "Agent-Review fehlgeschlagen",
       "summaryTitle": "Prüfzusammenfassung",
-      "thinking": "Agent denkt nach…",
+      "thinking": "Denkt nach…",
       "verdictApprove": "Sieht gut aus",
       "verdictManualReview": "Manuelle Prüfung",
       "verdictNeedsWork": "Nachbesserung nötig"

@@ -19,7 +19,7 @@
       "autoReviewRunning": "评审中…",
       "failed": "Agent 评审失败",
       "summaryTitle": "评审总结",
-      "thinking": "Agent 思考中…",
+      "thinking": "思考中…",
       "verdictApprove": "建议通过",
       "verdictManualReview": "建议人工复核",
       "verdictNeedsWork": "建议修改"
