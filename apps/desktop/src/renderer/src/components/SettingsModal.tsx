@@ -297,8 +297,10 @@ export function SettingsModal({
         await invoke('config:setPoller', { interval_seconds: n });
       }
       if (agentChanged) {
+        // 仅 UI 编辑 dir / enabled；其余字段（max_steps / summary_max_chars / autopilot）
+        // 从已加载的 config 原样保留，避免被覆盖成默认值。
         await invoke('config:setAgent', {
-          agent: { dir: agentDirInput.trim(), enabled: agent.enabled },
+          agent: { ...agent, dir: agentDirInput.trim(), enabled: agent.enabled },
         });
       }
       if (llmChanged) {

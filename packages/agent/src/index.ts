@@ -12,6 +12,13 @@ export type {
   AssembleSessionSnapshot,
 } from './assemble.js';
 export { runReviewMicroflow, extractJson } from './orchestrator.js';
+export { judgeAutopilotBatch } from './autopilot-judge.js';
+export type {
+  AutopilotJudgeInput,
+  AutopilotJudgeResult,
+  JudgeCandidate,
+  JudgeDecision,
+} from './autopilot-judge.js';
 export type {
   ReviewOrchestratorDeps,
   ReviewOrchestratorInput,

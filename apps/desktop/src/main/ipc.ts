@@ -1284,8 +1284,8 @@ export function registerIpcHandlers({
           agentContext,
           matchedRule,
           language: getMainLanguage(),
-          maxFollowupAsks: 2,
-          summaryMaxChars: 800,
+          maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
+          summaryMaxChars: agentCfg.summary_max_chars,
           onStep: (sessionId, step) => {
             for (const win of BrowserWindow.getAllWindows()) {
               win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
