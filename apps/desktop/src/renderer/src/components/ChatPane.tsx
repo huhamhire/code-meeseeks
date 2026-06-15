@@ -1405,6 +1405,25 @@ function AgentStepMarker({ step }: { step: AgentStep }) {
   );
 }
 
+/** /ask 提问行：问号图标 + markdown 渲染的提问内容（Agent 自拟的追问常含内联代码 / 列表）。 */
+function AskQuestion({ text }: { text: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
+      <QuestionIcon />
+      <div className="markdown chat-user-msg-body">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkBreaks]}
+          rehypePlugins={REMOTE_REHYPE_PLUGINS}
+          components={mermaidComponents}
+        >
+          {text}
+        </ReactMarkdown>
+      </div>
+    </div>
+  );
+}
+
 function RulePreviewModal({
   rule,
   onClose,
@@ -1582,12 +1601,7 @@ function QueuedView({
           <CloseIcon size={14} />
         </button>
       </header>
-      {userMessage && (
-        <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
-          <QuestionIcon />
-          <div className="chat-user-msg-body">{userMessage}</div>
-        </div>
-      )}
+      {userMessage && <AskQuestion text={userMessage} />}
     </div>
   );
 }
@@ -1671,12 +1685,7 @@ function RunResultView({
   return (
     <div className="chat-run-result">
       <RunMeta run={run} />
-      {userMessage && (
-        <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
-          <QuestionIcon />
-          <div className="chat-user-msg-body">{userMessage}</div>
-        </div>
-      )}
+      {userMessage && <AskQuestion text={userMessage} />}
       {/* 原始输出：始终紧跟 meta 行，让用户在任何状态下都能在固定位置找到日志。
           失败 / 取消默认展开，成功默认收起 */}
       {stdout.length > 0 && (
@@ -2319,6 +2328,7 @@ function ChatEmpty({
         {pr ? t('chatPane.emptyReadyTitle') : t('chatPane.emptySelectPrTitle')}
       </p>
       <p className="chat-empty-sub">{t('chatPane.emptyInputHint')}</p>
+      <p className="chat-empty-sub">{t('chatPane.emptyCmdHint')}</p>
       <ul className="chat-empty-list">
         <Bullet>
           <code>/describe</code> {t('chatPane.bulletDescribe')}
