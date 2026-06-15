@@ -34,7 +34,7 @@
 
 > 详细设计：平台适配见 [01](arch/01-platform-adapter.md)、仓库镜像见 [02](arch/02-repo-mirror.md)、
 > 状态存储见 [03](arch/03-state-storage.md)、pr-agent 运行时见 [04](arch/04-pragent-runtime.md)、
-> 评审闭环见 [05](arch/05-review-workflow.md)、规则见 [06](arch/06-rules.md)、配置见 [07](arch/07-config-and-secrets.md)。
+> 评审闭环见 [05](arch/05-review-workflow.md)、规则见 [07](arch/07-rules.md)、配置见 [08](arch/08-config-and-secrets.md)。
 
 ---
 
@@ -64,9 +64,10 @@
 
 ### 进行中 / 待办 ⏭️
 
-- **高阶 Agent 能力**：复杂任务分步规划 + 长期 Memory。
-- **AutoPilot 预评审**：轮询发现新 PR 后按规则自动预跑，进应用即见待确认草稿（决策权仍在评审者）。
-- **规则市场**：导入 / 导出 rules.dir 片段。
+- **高阶 Agent**（设计见 [06](arch/06-agent.md)）：对话 Agent 化（自然语言 → 自主规划 + 多工具编排）、分层 Agent 目录（`SOUL` / `AGENTS` / `MEMORY` / `USER` / `rules`）、长期记忆。
+  - **破坏性变更（落地时）**：配置由 `rules.*` 改为 `agent.*`，原 `rules.dir` 并入 `<agent.dir>/rules/`，**不做兼容**；旧配置需手动迁移（把原 rules 目录移入 `<agent.dir>/rules/`，并补 `SOUL.md` / `AGENTS.md` 等），首启向导给出迁移指引。
+- **AutoPilot 预评审**（设计见 [06](arch/06-agent.md)）：轮询发现新 PR 后，规划 agent 批量判定 → 各 PR 子 agent 自动预跑 `/describe` + `/review`（严重问题条件追问 + 逐 PR 总结 / 建议），进应用即见待确认草稿（决策权仍在评审者）；状态栏 AutoPilot 开关默认关。
+- **规则市场**：导入 / 导出规则片段（`<agent.dir>/rules/`）。
 - **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
 - **大 PR 性能验证**：等真实大样本实测。
 - **凭据存储升级 keytar** / **状态存储按需升级 SQLite**（替换抽象实现，业务不变）。
@@ -81,7 +82,7 @@
 | pr-agent 升级破坏输出格式 | 输出解析层独立 + shim 版本守卫（见 [04](arch/04-pragent-runtime.md)）；CI 跑兼容测试               |
 | 大型 PR 性能 / diff 截断  | Diff 走本地 git（不用平台截断端点）+ Monaco 懒加载 + 大文件跳过（见 [02](arch/02-repo-mirror.md)） |
 | 大型仓库挤爆磁盘          | `repos_dir` 可配置 + 设置页显示体积 + 清理                                                         |
-| 明文凭据（config.yaml）   | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留 keytar（见 [07](arch/07-config-and-secrets.md)）  |
+| 明文凭据（config.yaml）   | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留 keytar（见 [08](arch/08-config-and-secrets.md)）  |
 | JSON 状态文件膨胀         | 监控单文件大小；触发条件达成切 SQLite（见 [03](arch/03-state-storage.md)）                         |
 | LLM 调用成本              | token 用量统计已做；规则层可控 max_tokens / 模型分级                                               |
 

@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 // 外部第三方依赖（electron / pino / yaml / zod ...）继续 externalize 让 Node 在运行时解析。
 const internalPackages = [
   '@meebox/shared',
+  '@meebox/agent',
   '@meebox/config',
   '@meebox/logger',
   '@meebox/pr-agent-bridge',

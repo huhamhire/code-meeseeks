@@ -62,6 +62,7 @@
   "dependencies": {
     "@iconify-json/material-icon-theme": "^1.2.66",
     "@iconify/react": "^5.2.1",
+    "@meebox/agent": "*",
     "@meebox/config": "*",
     "@meebox/logger": "*",
     "@meebox/platform-bitbucket-server": "*",
