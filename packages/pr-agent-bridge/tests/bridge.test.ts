@@ -110,6 +110,11 @@ describe('LocalCliBridge', () => {
     expect(calls[0]!.args).toEqual(['--pr_url', '', 'review']);
     expect(calls[0]!.opts.env).toEqual({ CONFIG__GIT_PROVIDER: 'local' });
   });
+
+  it('chat: local-cli 不支持，调用即抛错（无嵌入式运行时）', async () => {
+    const bridge = new LocalCliBridge('v', makeRecordingExec().exec);
+    await expect(bridge.chat({ user: 'hi' })).rejects.toThrow(/嵌入式/);
+  });
 });
 
 describe('EmbeddedRuntimeBridge', () => {
@@ -165,5 +170,34 @@ describe('EmbeddedRuntimeBridge', () => {
     const bridge = new EmbeddedRuntimeBridge('embedded Python 3.12.13', PY, makeRecordingExec().exec);
     expect(bridge.strategy).toBe('embedded');
     expect(bridge.version).toBe('embedded Python 3.12.13');
+  });
+
+  it('chat: 跑 meebox_pragent_shim.chat，prompt 走 stdin，UTF-8 + 中性 cwd', async () => {
+    const { exec, calls } = makeRecordingExec({ stdout: 'reply' });
+    const bridge = new EmbeddedRuntimeBridge('v', PY, exec);
+    const res = await bridge.chat({
+      system: 'sys',
+      user: 'hi',
+      env: { OPENAI__KEY: 'sk' },
+      cwd: '/tmp/neutral',
+    });
+    expect(res.stdout).toBe('reply');
+    expect(calls[0]!.cmd).toBe(PY);
+    expect(calls[0]!.args).toEqual(['-m', 'meebox_pragent_shim.chat']);
+    expect(calls[0]!.opts.cwd).toBe('/tmp/neutral');
+    expect(calls[0]!.opts.env).toEqual({
+      OPENAI__KEY: 'sk',
+      PYTHONUTF8: '1',
+      PYTHONIOENCODING: 'utf-8',
+    });
+    expect(JSON.parse(calls[0]!.opts.input!)).toEqual({ system: 'sys', user: 'hi' });
+    expect(calls[0]!.opts.timeoutMs).toBe(5 * 60 * 1000);
+  });
+
+  it('chat: temperature 仅在显式传入时进 payload', async () => {
+    const { exec, calls } = makeRecordingExec();
+    const bridge = new EmbeddedRuntimeBridge('v', PY, exec);
+    await bridge.chat({ user: 'hi', temperature: 0.7 });
+    expect(JSON.parse(calls[0]!.opts.input!)).toEqual({ system: '', user: 'hi', temperature: 0.7 });
   });
 });
