@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LocalPrStatus, PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
+import type {
+  AgentRecommendationVerdict,
+  LocalPrStatus,
+  PrDiscoveryFilter,
+  StoredPullRequest,
+} from '@meebox/shared';
+import { invoke } from '../api';
 import { PrItem } from './PrItem';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
@@ -84,6 +90,10 @@ export function Sidebar({
   const [filter, setFilter] = useState<FilterKey>('pending');
   // 哪些组当前折叠了。默认空集合 = 全部展开。
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // AutoPilot 台账 recommendation（per localId），PR 列表徽标用；prs 变化时批量重取。
+  const [autopilotVerdicts, setAutopilotVerdicts] = useState<
+    Record<string, AgentRecommendationVerdict>
+  >({});
 
   // 有发现分类标签时（GitHub / Bitbucket 均含「我创建的」），reviewer 决断类（通过/需修改）
   // 只对「待我评审」有意义、其余标签下恒空，故精简隐藏；无分类的场景保持全部六项。
@@ -96,6 +106,22 @@ export function Sidebar({
   useEffect(() => {
     if (hasDiscoveryTabs && DECISION_STATUS_FILTERS.has(filter)) setFilter('pending');
   }, [hasDiscoveryTabs, filter]);
+
+  // AutoPilot 徽标：批量取当前 PR 的台账建议（prs 变化时刷新；ledger 在下次 poll 更新 prs 后体现）。
+  useEffect(() => {
+    const localIds = prs.map((p) => p.localId);
+    if (localIds.length === 0) {
+      setAutopilotVerdicts({});
+      return;
+    }
+    let cancelled = false;
+    void invoke('agent:autopilotLedgers', { localIds }).then((v) => {
+      if (!cancelled) setAutopilotVerdicts(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [prs]);
 
   // GitHub 发现分类：按 PR 上的 discoveryFilters 标记本地过滤（poller 已把四类都抓回来缓存），
   // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。
@@ -256,6 +282,7 @@ export function Sidebar({
                         pr={pr}
                         selected={selectedId === pr.localId}
                         onClick={() => onSelect(pr)}
+                        autopilotVerdict={autopilotVerdicts[pr.localId] ?? null}
                       />
                     ))}
                   </div>

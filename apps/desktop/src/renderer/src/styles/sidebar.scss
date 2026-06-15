@@ -296,6 +296,24 @@
       display: block;
     }
   }
+
+  // AutoPilot 建议徽标（★）：approve 绿 / needs_work 琥珀 / manual_review 蓝
+  &.autopilot-chip {
+    padding: 1px $space-2;
+
+    &.autopilot-approve {
+      background: $color-approved;
+      color: $text-on-accent;
+    }
+    &.autopilot-needs_work {
+      background: $color-warning;
+      color: $text-on-accent;
+    }
+    &.autopilot-manual_review {
+      background: $color-accent;
+      color: $text-on-accent;
+    }
+  }
 }
 
 .tag-needs-work {
