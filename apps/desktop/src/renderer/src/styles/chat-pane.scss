@@ -155,6 +155,21 @@
     cursor: not-allowed;
   }
 }
+.chat-agent-stop-btn {
+  margin-left: $space-3;
+  padding: $space-2 $space-5;
+  background: transparent;
+  border: 1px solid $color-danger;
+  border-radius: $radius-sm;
+  color: $color-danger;
+  font-size: $fs-sm;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(244, 135, 113, 0.15);
+  }
+}
 .chat-agent-summary {
   margin: $space-4 $space-6;
   padding: $space-4 $space-5;

@@ -65,6 +65,7 @@ import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
 import { checkForUpdate } from './utils/update-check.js';
 import { buildPrContext } from './utils/pr-context.js';
 import { runAgentReview } from './agent-review.js';
+import { runAgentPlanning } from './agent-planning.js';
 
 interface RegisterDeps {
   bootstrap: BootstrapResult;
@@ -1338,6 +1339,76 @@ export function registerIpcHandlers({
         onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
       return withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
+    },
+  );
+
+  // 自由规划 Agent（自然语言入口）：每 PR 至多一个在跑，AbortController 供 agent:stop 暂停。
+  const agentControllers = new Map<string, AbortController>();
+
+  const runPlanningForPr = (
+    pr: StoredPullRequest,
+    userRequest: string,
+    agentContext: AgentContext,
+    chat: AgentChat,
+    signal: AbortSignal,
+  ): Promise<AgentSession> => {
+    const agentCfg = bootstrap.config.agent;
+    const matchedRule = pickMatchingRule(agentContext.rules, {
+      projectKey: pr.repo.projectKey,
+      repoSlug: pr.repo.repoSlug,
+      targetBranch: pr.targetRef.displayId,
+      tool: 'review',
+    });
+    return runAgentPlanning(pr, userRequest, {
+      stateStore,
+      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent'),
+      chat,
+      agentContext,
+      toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
+      matchedRule,
+      language: getMainLanguage(),
+      maxSteps: agentCfg.max_steps,
+      signal,
+      onStep: (sessionId, step) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+        }
+      },
+    });
+  };
+
+  ipcMain.handle(
+    'agent:ask',
+    async (
+      _evt,
+      req: IpcChannels['agent:ask']['request'],
+    ): Promise<IpcChannels['agent:ask']['response']> => {
+      if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
+      const agentCfg = bootstrap.config.agent;
+      if (!agentCfg.enabled || !agentCfg.dir) throw new Error(t('prAgent.agentNotEnabled'));
+      const pr = await findPrOrThrow(req.localId);
+      const agentContext = await loadAgentContext(agentCfg.dir, {
+        onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
+      });
+      const ac = new AbortController();
+      agentControllers.set(pr.localId, ac);
+      try {
+        return await withAgentChat((chat) =>
+          runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
+        );
+      } finally {
+        agentControllers.delete(pr.localId);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'agent:stop',
+    (_evt, req: IpcChannels['agent:stop']['request']): IpcChannels['agent:stop']['response'] => {
+      const ac = agentControllers.get(req.localId);
+      if (!ac) return { ok: false };
+      ac.abort();
+      return { ok: true };
     },
   );
 
