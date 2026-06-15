@@ -14,7 +14,7 @@ async function exists(p: string): Promise<boolean> {
 
 /**
  * 幂等脚手架：把缺失的模版文件写入 agentDir（已存在不覆盖），并确保 rules/ 子目录存在。
- * 返回**实际创建**的文件相对路径列表（已存在的不计）。见 docs/arch/06-agent.md §8。
+ * 返回**实际创建**的文件相对路径列表（已存在的不计）。见 docs/arch/06-agent.md「提示词模版」。
  */
 export async function scaffoldAgentDir(agentDir: string): Promise<string[]> {
   if (!agentDir) throw new Error('scaffoldAgentDir: agentDir 不能为空');

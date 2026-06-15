@@ -1,9 +1,10 @@
 /**
- * Agent 会话与工具目录的领域类型（见 docs/arch/06-agent.md §3 / 数据契约）。
- * 纯类型 + 不依赖运行时；编排器、持久化、IPC 后续接入。
+ * 高阶 Agent 的会话与工具契约类型（见 docs/arch/06-agent.md「会话 Agent 化」与「数据契约」）。
+ * 这些类型被**持久化**（@meebox/poller）、**经 IPC 传输**（ipc.ts）、并在渲染层呈现，
+ * 故置于 shared（与 ReviewRun / Finding 同处）。@meebox/agent 的纯逻辑从此引用。
  */
 
-/** 工具的副作用分类与可用性（红线落地的依据，见 §4）。 */
+/** 工具的副作用分类与可用性（红线落地的依据，见「工具修改红线」）。 */
 export interface ToolCatalogEntry {
   /** 工具指令名，如 `/describe`。 */
   name: string;
@@ -17,7 +18,7 @@ export interface ToolCatalogEntry {
 
 export type AgentSessionStatus = 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 
-/** 编排步骤的种类：规划 / 工具分发 / 判读（见 §3 计量边界）。 */
+/** 编排步骤的种类：规划 / 工具分发 / 判读（见「步与子任务的计量边界」）。 */
 export type AgentStepKind = 'plan' | 'tool' | 'judge';
 
 export interface AgentTodoItem {
@@ -41,11 +42,13 @@ export interface AgentStep {
   toolCall?: AgentToolCall;
   /** 工具结果 / 判读结论的摘要。 */
   result?: string;
+  /** 步骤产生时间（ISO）。 */
+  at?: string;
 }
 
 export type AgentRecommendationVerdict = 'approve' | 'needs_work' | 'manual_review';
 
-/** 收尾建议（非约束性，不触发任何写操作，见 §6）。 */
+/** 收尾建议（非约束性，不触发任何写操作，见「AutoPilot」）。 */
 export interface AgentRecommendation {
   verdict: AgentRecommendationVerdict;
   reason: string;
@@ -67,4 +70,16 @@ export interface AgentSession {
   finishedAt?: string;
   /** 终止原因（如「步数上限中止」「用户暂停」）。 */
   terminationReason?: string;
+}
+
+/** 持久化包装：`prs/<localId>/agent/session.json`。 */
+export interface AgentSessionFile {
+  schema_version: 1;
+  session: AgentSession;
+}
+
+/** 持久化包装：`prs/<localId>/agent/transcript.json`（步骤流式追加）。 */
+export interface AgentTranscriptFile {
+  schema_version: 1;
+  steps: AgentStep[];
 }

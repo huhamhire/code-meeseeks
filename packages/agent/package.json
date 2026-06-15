@@ -22,7 +22,8 @@
     }
   },
   "dependencies": {
-    "@meebox/rules": "*"
+    "@meebox/rules": "*",
+    "@meebox/shared": "*"
   },
   "devDependencies": {
     "vitest": "^4.1.0"

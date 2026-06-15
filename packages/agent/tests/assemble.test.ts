@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assembleSystemContext } from '../src/assemble.js';
+import type { ToolCatalogEntry } from '@meebox/shared';
 import type { AgentContext } from '../src/types.js';
-import type { ToolCatalogEntry } from '../src/session.js';
 
 const emptyContext: AgentContext = {
   files: { soul: '', agents: '', memory: '', user: '' },
