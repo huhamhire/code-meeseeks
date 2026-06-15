@@ -137,6 +137,22 @@ describe('runPlanningAgent', () => {
     expect(r.steps).toHaveLength(0);
   });
 
+  it('accumulates remember notes by target file across actions', async () => {
+    const { deps } = makeDeps([
+      '{"tool":"/review","remember":{"user":["称呼: Kyle"]}}',
+      '{"final":"done","remember":{"memory":["repo uses g- prefix"],"agents":["check tenant mapping"]}}',
+    ]);
+    const r = await runPlanningAgent(deps, {
+      context,
+      pr,
+      toolCatalog: catalog,
+      userRequest: 'x',
+    });
+    expect(r.memories.user).toEqual(['称呼: Kyle']);
+    expect(r.memories.memory).toEqual(['repo uses g- prefix']);
+    expect(r.memories.agents).toEqual(['check tenant mapping']);
+  });
+
   it('returns a structured recommendation when the review close includes one', async () => {
     const { deps } = makeDeps([
       '{"final":"## 摘要\\n...","recommendation":{"verdict":"needs_work","reason":"fix log key"}}',

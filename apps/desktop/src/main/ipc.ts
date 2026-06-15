@@ -7,6 +7,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
 import {
+  appendAgentNotes,
   buildToolCatalog,
   judgeAutopilotBatch,
   loadAgentContext,
@@ -1384,6 +1385,18 @@ export function registerIpcHandlers({
       onStep: (sessionId, step) => {
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+        }
+      },
+      // 持久化 Agent 主动记下的非隐私条目到当前 Agent 目录的各可写文件（USER/MEMORY/AGENTS）；
+      // SOUL.md 永不写。下一轮 loadAgentContext 现读即生效（跨会话记忆）。
+      recordMemory: async (notes) => {
+        const dir = effectiveAgentDir();
+        for (const kind of ['user', 'memory', 'agents'] as const) {
+          const added = await appendAgentNotes(dir, kind, notes[kind]).catch((err: unknown) => {
+            logger.warn({ err, kind }, 'record agent memory failed');
+            return [] as string[];
+          });
+          if (added.length) logger.info({ kind, added }, 'agent memory recorded');
         }
       },
     });

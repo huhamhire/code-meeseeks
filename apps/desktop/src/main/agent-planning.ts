@@ -1,4 +1,9 @@
-import { runPlanningAgent, type AgentContext, type PlanningToolResult } from '@meebox/agent';
+import {
+  runPlanningAgent,
+  type AgentContext,
+  type AgentMemoryNotes,
+  type PlanningToolResult,
+} from '@meebox/agent';
 import {
   appendAgentMessage,
   appendAgentStep,
@@ -44,6 +49,8 @@ export interface AgentPlanningDeps {
   maxSteps: number;
   signal?: AbortSignal;
   onStep?: (sessionId: string, step: AgentStep) => void;
+  /** 持久化 Agent 主动记下的非隐私条目到各可写上下文文件（USER/MEMORY/AGENTS）。 */
+  recordMemory?: (notes: AgentMemoryNotes) => Promise<void>;
 }
 
 export async function runAgentPlanning(
@@ -101,6 +108,12 @@ export async function runAgentPlanning(
         { role: 'assistant', content: result.finalText, recommendation: result.recommendation },
         now,
       );
+    }
+
+    // 持久化本轮主动记忆（非隐私）到各可写文件；失败不阻断会话收尾。
+    const mem = result.memories;
+    if (deps.recordMemory && (mem.user.length || mem.memory.length || mem.agents.length)) {
+      await deps.recordMemory(mem);
     }
 
     return (

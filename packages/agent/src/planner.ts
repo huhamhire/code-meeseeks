@@ -59,6 +59,8 @@ export interface PlanningResult {
   tokenUsage: TokenUsage;
   /** 收尾建议（仅评审类请求；非约束性）。供 UI 展示判定徽标，与 AutoPilot / 微流程一致。 */
   recommendation?: AgentRecommendation;
+  /** 本轮主动记下、待持久化到各可写文件的非隐私条目（去重后写盘由上层处理）。 */
+  memories: AgentMemoryNotes;
   terminationReason?: string;
 }
 
@@ -71,6 +73,38 @@ interface PlannerAction {
   final?: string;
   /** 评审类收尾的非约束性判定建议（verdict + 理由）；非评审请求省略。 */
   recommendation?: { verdict?: unknown; reason?: unknown };
+  /**
+   * 主动记下的**非隐私**条目，按目标可写文件分组：user→USER.md（用户信息），memory→MEMORY.md
+   * （长期知识），agents→AGENTS.md（工作规范，仅追加）。SOUL.md 永不写。
+   */
+  remember?: { user?: unknown; memory?: unknown; agents?: unknown };
+}
+
+/** Agent 主动记忆，按目标可写文件分组（键与 WritableAgentFile 对齐）。 */
+export interface AgentMemoryNotes {
+  user: string[];
+  memory: string[];
+  agents: string[];
+}
+
+function emptyMemoryNotes(): AgentMemoryNotes {
+  return { user: [], memory: [], agents: [] };
+}
+
+function toNoteList(raw: unknown): string[] {
+  if (typeof raw === 'string') return raw.trim() ? [raw.trim()] : [];
+  if (Array.isArray(raw)) {
+    return raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim());
+  }
+  return [];
+}
+
+/** 把一个动作里的 remember 累加进 acc（容错；非对象忽略）。 */
+function accumulateRemember(value: PlannerAction['remember'], acc: AgentMemoryNotes): void {
+  if (!value || typeof value !== 'object') return;
+  acc.user.push(...toNoteList(value.user));
+  acc.memory.push(...toNoteList(value.memory));
+  acc.agents.push(...toNoteList(value.agents));
 }
 
 const VERDICTS: readonly AgentRecommendationVerdict[] = ['approve', 'needs_work', 'manual_review'];
@@ -143,6 +177,15 @@ const PROTOCOL = [
   '(must-fix / concerns as a bulleted list, empty-safe), "## 建议" (next steps); AND include a',
   '"recommendation" object: {"verdict": "approve"|"needs_work"|"manual_review", "reason": "<one line>"}.',
   'verdict is non-binding (no write action). Omit "recommendation" for non-review answers.',
+  'Memory: persist useful, stable, NON-private facts across sessions via a "remember" object on your',
+  'action, grouped by target file (short notes in the user\'s language):',
+  '  {"remember": {"user": ["称呼: Kyle"], "memory": ["repo uses g-<id> for gray apps"], "agents": ["..."]}}',
+  '- user   → the person you talk to: preferred 称呼, language, review/working habits & preferences.',
+  '- memory → durable knowledge about this project / repo (facts that help future reviews).',
+  '- agents → working norms / review conventions you should keep following (append-only).',
+  'NEVER record private or sensitive data: real identity beyond a chosen 称呼, email / phone / address,',
+  'employer-confidential specifics, secrets / tokens. When unsure whether something is private, do NOT',
+  'record it. Only remember when there is something genuinely worth persisting — omit otherwise.',
   'Conversation & scope:',
   '- Natural conversation is fine: greet, say who you are, ask a clarifying question — answer directly',
   '  in "final" without calling tools.',
@@ -160,6 +203,7 @@ export async function runPlanningAgent(
   const steps: AgentStep[] = [];
   let usage: TokenUsage = {};
   const history: string[] = [];
+  const memories = emptyMemoryNotes();
 
   const system = `${assembleSystemContext({
     context: input.context,
@@ -180,7 +224,7 @@ export async function runPlanningAgent(
 
   for (let i = 0; i < maxSteps; i++) {
     if (deps.signal?.aborted) {
-      return { steps, finalText: '', tokenUsage: usage, terminationReason: '用户暂停' };
+      return { steps, finalText: '', tokenUsage: usage, memories, terminationReason: '用户暂停' };
     }
 
     const user = [
@@ -197,6 +241,8 @@ export async function runPlanningAgent(
     const r = await deps.chat({ system, user });
     usage = addUsage(usage, r.usage);
     const action = extractJson<PlannerAction>(r.text);
+    // 累加本动作携带的记忆（任何动作都可附 remember）。
+    accumulateRemember(action?.remember, memories);
 
     const hasCalls = Boolean(action?.tool) || Boolean(action?.tools?.length);
 
@@ -204,7 +250,7 @@ export async function runPlanningAgent(
     if (!action || (!hasCalls && !action.final)) {
       const finalText = action?.final ?? r.text.trim();
       await record({ kind: 'plan', thought: action?.thought, result: finalText });
-      return { steps, finalText, tokenUsage: usage };
+      return { steps, finalText, tokenUsage: usage, memories };
     }
 
     if (action.final && !hasCalls) {
@@ -214,6 +260,7 @@ export async function runPlanningAgent(
         finalText: action.final,
         tokenUsage: usage,
         recommendation: parseRecommendation(action.recommendation),
+        memories,
       };
     }
 
@@ -254,5 +301,5 @@ export async function runPlanningAgent(
     }
   }
 
-  return { steps, finalText: '', tokenUsage: usage, terminationReason: '步数上限中止' };
+  return { steps, finalText: '', tokenUsage: usage, memories, terminationReason: '步数上限中止' };
 }
