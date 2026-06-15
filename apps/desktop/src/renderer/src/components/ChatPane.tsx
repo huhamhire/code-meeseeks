@@ -157,6 +157,9 @@ export function ChatPane({
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  // 当前展示中的 PR id（每渲染同步）：异步 Agent 任务 resolve 时据此判断是否仍停在发起 PR，
+  // 避免把收尾结果 / 错误串台到切换后打开的别的 PR 会话。
+  const currentPrIdRef = useRef<string | undefined>(undefined);
 
   // 全局活动 run + 实时 stdout 缓存。store 来源于 main 的 'pragent:activeChanged'
   // / 'pragent:runProgress' 事件，PR 切换不丢，所以这里只读，不在本组件维护
@@ -197,6 +200,7 @@ export function ChatPane({
   // reloadPrs → 新 prs 数组 → selected 是新对象引用 → 如果依赖 pr，此 effect 重跑，
   // 用户输入 / 规则提示等组件状态被清空。localId 是稳定字符串，同 PR 刷新不触发。
   const prLocalId = pr?.localId;
+  currentPrIdRef.current = prLocalId;
   useEffect(() => {
     setRuns([]);
     setHasMoreOlder(false);
@@ -209,16 +213,21 @@ export function ChatPane({
     let cancelled = false;
     void (async () => {
       try {
-        // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)
-        const [list, rule] = await Promise.all([
+        // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)。
+        // 同时拉已落盘的 Agent 会话：把「评审总结」卡片恢复到其发起 PR，跨切换不丢失。
+        const [list, rule, session] = await Promise.all([
           invoke('pragent:listRuns', { localId: prLocalId, limit: RUNS_PAGE_SIZE }),
           invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
+          invoke('agent:getSession', { localId: prLocalId }),
         ]);
         if (cancelled) return;
         // 反转为升序 (chat 习惯)，UI 直接读 runs 即可
         setRuns([...list].reverse());
         setHasMoreOlder(list.length === RUNS_PAGE_SIZE);
         setMatchedRule(rule);
+        if (session?.summary) {
+          setAgentResult({ summary: session.summary, recommendation: session.recommendation });
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -339,12 +348,16 @@ export function ChatPane({
   // 既有运行队列展示在历史里；收尾总结 + 建议落 agentResult 单独呈现。
   const handleAgentReview = async (): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
+    const startedId = pr.localId;
     setError(null);
     setAgentResult(null);
     setAgentSteps([]);
     setAgentRunning(true);
     try {
-      const session = await invoke('agent:run', { localId: pr.localId });
+      const session = await invoke('agent:run', { localId: startedId });
+      // 已切到别的 PR：结果归属其发起 PR（已落盘），不串台到当前会话；回到该 PR 时由切换 effect
+      // 从落盘会话恢复总结。
+      if (currentPrIdRef.current !== startedId) return;
       if (session.summary) {
         setAgentResult({ summary: session.summary, recommendation: session.recommendation });
       }
@@ -352,7 +365,9 @@ export function ChatPane({
         setError(session.terminationReason ?? t('chatPane.agent.failed'));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (currentPrIdRef.current === startedId) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setAgentRunning(false);
     }
@@ -361,18 +376,23 @@ export function ChatPane({
   // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。最终回答落 agentResult，步骤同样流式。
   const handleAgentAsk = async (question: string): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
+    const startedId = pr.localId;
     setError(null);
     setAgentResult(null);
     setAgentSteps([]);
     setAgentRunning(true);
     try {
-      const session = await invoke('agent:ask', { localId: pr.localId, question });
+      const session = await invoke('agent:ask', { localId: startedId, question });
+      // 已切到别的 PR：不串台（回该 PR 时由切换 effect 从落盘会话恢复）。
+      if (currentPrIdRef.current !== startedId) return;
       if (session.summary) setAgentResult({ summary: session.summary });
       if (session.status === 'failed') {
         setError(session.terminationReason ?? t('chatPane.agent.failed'));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (currentPrIdRef.current === startedId) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setAgentRunning(false);
     }

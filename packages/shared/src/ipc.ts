@@ -418,6 +418,11 @@ export interface IpcChannels {
   /** 暂停当前 PR 的 Agent 运行（abort）；会话置 paused、保态。 */
   'agent:stop': { request: { localId: string }; response: { ok: boolean } };
   /**
+   * 读取指定 PR 已落盘的 Agent 会话（含收尾 summary / recommendation）；无则返回 null。
+   * 供 UI 打开 PR 时恢复「评审总结」卡片——总结归属其发起 PR、跨 PR 切换不丢失、不串台。
+   */
+  'agent:getSession': { request: { localId: string }; response: AgentSession | null };
+  /**
    * 批量读 AutoPilot 台账：返回各 PR 已自动评审的 recommendation（仅 decision=review 且有
    * 建议者）。PR 列表据此显示徽标，无需逐个加载会话。
    */
