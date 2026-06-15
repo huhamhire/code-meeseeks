@@ -646,6 +646,9 @@
     "searchPlaceholder": "搜索标题 / 仓库 / 作者 / ID"
   },
   "statusBar": {
+    "autopilot": "AutoPilot",
+    "autopilotOffTitle": "AutoPilot 已关闭 — 点击启用，新 PR 自动预评审",
+    "autopilotOnTitle": "AutoPilot 已启用 — 点击关闭",
     "collapseChat": "收起 PR Agent chat",
     "collapseChatAria": "收起 chat",
     "collapseSidebar": "收起侧栏",

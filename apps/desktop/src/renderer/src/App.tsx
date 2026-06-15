@@ -477,6 +477,25 @@ export default function App() {
         }}
         onJumpToPr={setSelectedId}
         updateInfo={updateInfo}
+        autopilotEnabled={boot.config.agent.autopilot.enabled}
+        onToggleAutopilot={() => {
+          const enabled = !boot.config.agent.autopilot.enabled;
+          void invoke('agent:setAutopilotEnabled', { enabled });
+          setBoot((b) =>
+            b
+              ? {
+                  ...b,
+                  config: {
+                    ...b.config,
+                    agent: {
+                      ...b.config.agent,
+                      autopilot: { ...b.config.agent.autopilot, enabled },
+                    },
+                  },
+                }
+              : b,
+          );
+        }}
       />
       {showSettings && (
         <SettingsModal

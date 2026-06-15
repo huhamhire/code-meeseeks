@@ -331,6 +331,8 @@ export interface IpcChannels {
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
   /** 写入 agent.dir + enabled 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
   'config:setAgent': { request: { agent: Config['agent'] }; response: void };
+  /** 翻转 AutoPilot 开关 (agent.autopilot.enabled) 并写 config.yaml；下次 poll tick 生效。 */
+  'agent:setAutopilotEnabled': { request: { enabled: boolean }; response: void };
   /** 写入轮询间隔 (秒，60~900 整数) 到 config.yaml，并热替换 poller 定时器，无需重启 */
   'config:setPoller': { request: { interval_seconds: number }; response: void };
   /**

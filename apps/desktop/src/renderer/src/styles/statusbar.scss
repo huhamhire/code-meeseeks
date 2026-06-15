@@ -41,6 +41,16 @@
   color: $text-on-accent;
 }
 
+// AutoPilot 开关 chip：默认中性（关），启用时绿底强调
+.statusbar-chip-autopilot {
+  cursor: pointer;
+
+  &.is-on {
+    background: $color-success;
+    color: $text-on-accent;
+  }
+}
+
 // 新版本提示 chip：强调蓝底，点击跳转下载页
 .statusbar-chip-update {
   background: $color-accent;

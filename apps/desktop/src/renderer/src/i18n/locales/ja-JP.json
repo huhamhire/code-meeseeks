@@ -646,6 +646,9 @@
     "searchPlaceholder": "タイトル / リポジトリ / 作成者 / ID を検索"
   },
   "statusBar": {
+    "autopilot": "AutoPilot",
+    "autopilotOffTitle": "AutoPilot はオフ — クリックで有効化、新規 PR を自動プレレビュー",
+    "autopilotOnTitle": "AutoPilot はオン — クリックで無効化",
     "collapseChat": "PR Agent チャットを折りたたむ",
     "collapseChatAria": "チャットを折りたたむ",
     "collapseSidebar": "サイドバーを折りたたむ",

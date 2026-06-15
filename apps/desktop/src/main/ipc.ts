@@ -1639,6 +1639,19 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
+    'agent:setAutopilotEnabled',
+    async (_evt, req: IpcChannels['agent:setAutopilotEnabled']['request']): Promise<void> => {
+      const agent = {
+        ...bootstrap.config.agent,
+        autopilot: { ...bootstrap.config.agent.autopilot, enabled: req.enabled },
+      };
+      await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, agent });
+      bootstrap.config.agent = agent;
+      logger.info({ enabled: req.enabled }, 'autopilot toggled');
+    },
+  );
+
+  ipcMain.handle(
     'rules:matchForPr',
     async (
       _evt,
