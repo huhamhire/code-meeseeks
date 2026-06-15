@@ -1,5 +1,11 @@
 import type { Rule } from '@meebox/rules';
-import type { AgentStep, TokenUsage, ToolCatalogEntry } from '@meebox/shared';
+import type {
+  AgentRecommendation,
+  AgentRecommendationVerdict,
+  AgentStep,
+  TokenUsage,
+  ToolCatalogEntry,
+} from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
 import { extractJson } from './orchestrator.js';
 import { assertToolAllowed } from './tool-catalog.js';
@@ -44,6 +50,8 @@ export interface PlanningResult {
   steps: AgentStep[];
   finalText: string;
   tokenUsage: TokenUsage;
+  /** 收尾建议（仅评审类请求；非约束性）。供 UI 展示判定徽标，与 AutoPilot / 微流程一致。 */
+  recommendation?: AgentRecommendation;
   terminationReason?: string;
 }
 
@@ -54,6 +62,23 @@ interface PlannerAction {
   tools?: string[];
   question?: string;
   final?: string;
+  /** 评审类收尾的非约束性判定建议（verdict + 理由）；非评审请求省略。 */
+  recommendation?: { verdict?: unknown; reason?: unknown };
+}
+
+const VERDICTS: readonly AgentRecommendationVerdict[] = ['approve', 'needs_work', 'manual_review'];
+
+/** 从收尾动作解析出合法 recommendation；verdict 非法 / 缺省 → undefined（不强加判定）。 */
+function parseRecommendation(rec?: PlannerAction['recommendation']): AgentRecommendation | undefined {
+  if (!rec) return undefined;
+  const verdict = rec.verdict;
+  if (typeof verdict !== 'string' || !VERDICTS.includes(verdict as AgentRecommendationVerdict)) {
+    return undefined;
+  }
+  return {
+    verdict: verdict as AgentRecommendationVerdict,
+    reason: typeof rec.reason === 'string' ? rec.reason : '',
+  };
 }
 
 function addUsage(acc: TokenUsage, u?: TokenUsage): TokenUsage {
@@ -83,6 +108,11 @@ const PROTOCOL = [
   'but when the request needs multiple independent read-only tools (e.g. summary AND review), call',
   'them together via "tools" so they run in parallel instead of one per turn. Use "tool"+"question"',
   'for /ask (single only).',
+  'Closing a CODE REVIEW: when your final answer reviews this PR, you MUST follow this fixed shape —',
+  'format "final" as markdown with these sections in order: "## 摘要" (PR summary), "## 关键发现"',
+  '(must-fix / concerns as a bulleted list, empty-safe), "## 建议" (next steps); AND include a',
+  '"recommendation" object: {"verdict": "approve"|"needs_work"|"manual_review", "reason": "<one line>"}.',
+  'verdict is non-binding (no write action). Omit "recommendation" for non-review answers.',
   'Routing policy:',
   '- If the request concerns this PR but no other tool clearly fits, default to /ask with a focused question.',
   '- If the request is unrelated to this PR, do NOT call any tool — briefly decline in "final".',
@@ -138,7 +168,12 @@ export async function runPlanningAgent(
 
     if (action.final && !hasCalls) {
       await record({ kind: 'plan', thought: action.thought, result: action.final });
-      return { steps, finalText: action.final, tokenUsage: usage };
+      return {
+        steps,
+        finalText: action.final,
+        tokenUsage: usage,
+        recommendation: parseRecommendation(action.recommendation),
+      };
     }
 
     // 归一为待执行工具列表：tools 多选（并行、只读，无 per-tool question）优先；否则单 tool（可带 question）。

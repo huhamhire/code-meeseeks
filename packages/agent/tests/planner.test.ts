@@ -137,6 +137,25 @@ describe('runPlanningAgent', () => {
     expect(r.steps).toHaveLength(0);
   });
 
+  it('returns a structured recommendation when the review close includes one', async () => {
+    const { deps } = makeDeps([
+      '{"final":"## 摘要\\n...","recommendation":{"verdict":"needs_work","reason":"fix log key"}}',
+    ]);
+    const r = await runPlanningAgent(deps, {
+      context,
+      pr,
+      toolCatalog: catalog,
+      userRequest: 'review',
+    });
+    expect(r.recommendation).toEqual({ verdict: 'needs_work', reason: 'fix log key' });
+  });
+
+  it('ignores an invalid / missing verdict (no recommendation forced)', async () => {
+    const { deps } = makeDeps(['{"final":"answer","recommendation":{"verdict":"lgtm"}}']);
+    const r = await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
+    expect(r.recommendation).toBeUndefined();
+  });
+
   it('treats unparseable output as a final answer', async () => {
     const { deps } = makeDeps(['just some text, no json']);
     const r = await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });

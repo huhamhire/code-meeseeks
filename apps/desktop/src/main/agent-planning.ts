@@ -86,6 +86,7 @@ export async function runAgentPlanning(
       (await updateAgentSession(deps.stateStore, pr.localId, {
         status: result.terminationReason === '用户暂停' ? 'paused' : 'done',
         summary: result.finalText,
+        recommendation: result.recommendation,
         finishedAt: now().toISOString(),
         terminationReason: result.terminationReason,
       })) ?? session

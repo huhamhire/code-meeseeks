@@ -406,7 +406,9 @@ export function ChatPane({
       const session = await invoke('agent:ask', { localId: startedId, question });
       // 已切到别的 PR：不串台（回该 PR 时由切换 effect 从落盘会话恢复）。
       if (currentPrIdRef.current !== startedId) return;
-      if (session.summary) setAgentResult({ summary: session.summary });
+      if (session.summary) {
+        setAgentResult({ summary: session.summary, recommendation: session.recommendation });
+      }
       if (session.status === 'failed') {
         setError(session.terminationReason ?? t('chatPane.agent.failed'));
       }
