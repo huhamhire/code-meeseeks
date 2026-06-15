@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { loadRules } from '@meebox/rules';
+import type { Rule } from '@meebox/rules';
 import { resolveAgentPaths } from './layout.js';
 import type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
 
@@ -39,4 +40,16 @@ export async function loadAgentContext(
   ]);
   const files: AgentContextFiles = { soul, agents, memory, user };
   return { files, rules };
+}
+
+/**
+ * 只加载规则（`<agentDir>/rules`），供「现读取首条命中规则」的注入路径用——无需读
+ * SOUL/AGENTS 等上下文文件。空 agentDir → 空数组。
+ */
+export async function loadAgentRules(
+  agentDir: string,
+  opts: LoadAgentContextOptions = {},
+): Promise<Rule[]> {
+  if (!agentDir) return [];
+  return loadRules(resolveAgentPaths(agentDir).rulesDir, { onWarn: opts.onWarn });
 }

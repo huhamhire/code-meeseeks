@@ -7,8 +7,8 @@ export interface AppPaths {
   stateDir: string;
   /** logs/ subdir */
   logsDir: string;
-  /** rules/ subdir */
-  rulesDir: string;
+  /** agent/ subdir — 默认 Agent 目录位置（SOUL/AGENTS/MEMORY/USER + rules/） */
+  agentDir: string;
   /** cache/ subdir — 临时性可重建数据 (avatars 等)，可被外部清空 */
   cacheDir: string;
   /** repos_dir resolved from config (may differ from default) */

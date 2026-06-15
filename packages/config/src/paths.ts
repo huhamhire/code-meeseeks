@@ -29,7 +29,7 @@ export function buildAppPaths(reposDirRaw: string): AppPaths {
     configFile: path.join(appDir, 'config.yaml'),
     stateDir: path.join(appDir, 'state'),
     logsDir: path.join(appDir, 'logs'),
-    rulesDir: path.join(appDir, 'rules'),
+    agentDir: path.join(appDir, 'agent'),
     cacheDir: path.join(appDir, 'cache'),
     reposDir: path.resolve(expandHome(reposDirRaw)),
   };

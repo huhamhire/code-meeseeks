@@ -326,8 +326,8 @@ export interface IpcChannels {
   'config:setLanguage': { request: { language: SupportedLanguage }; response: void };
   /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
-  /** 写入 rules.dir + enabled 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
-  'config:setRules': { request: { rules: Config['rules'] }; response: void };
+  /** 写入 agent.dir + enabled 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
+  'config:setAgent': { request: { agent: Config['agent'] }; response: void };
   /** 写入轮询间隔 (秒，60~900 整数) 到 config.yaml，并热替换 poller 定时器，无需重启 */
   'config:setPoller': { request: { interval_seconds: number }; response: void };
   /**
@@ -366,9 +366,9 @@ export interface IpcChannels {
     response: void;
   };
   /**
-   * 给指定 PR 查 rules.dir 当前命中的规则 (按 priority desc + path asc 取首条)。
+   * 给指定 PR 查 `<agent.dir>/rules` 当前命中的规则 (按 priority desc + path asc 取首条)。
    * 调用方传 tool 区分 /describe / /review (规则可能只对其中一个 tool 生效)。
-   * rules.dir 未配置 / 整体禁用 / 无命中 → 返回 null。
+   * agent.dir 未配置 / 整体禁用 / 无命中 → 返回 null。
    */
   'rules:matchForPr': {
     request: { localId: string; tool: ReviewRunTool };
