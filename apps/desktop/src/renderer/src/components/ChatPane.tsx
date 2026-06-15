@@ -378,12 +378,8 @@ export function ChatPane({
     }
   };
 
-  // 暂停当前 PR 的 Agent 运行（agent:stop → 编排器 abort）。仅自由规划 run 可中断。
-  const handleAgentStop = (): void => {
-    if (prLocalId) void invoke('agent:stop', { localId: prLocalId });
-  };
-
-  // 清空当前 PR 的执行历史（仅该 PR）：删远端记录 + 清本地列表。进行中的 run 不受影响
+  // 清空当前 PR 的执行历史（仅该 PR）：删远端记录 + 清本地列表，并一并清掉 Agent 收尾结果 /
+  // 步骤 / 错误横幅（含「已停止 / 失败」提示），避免清空后仍残留陈旧反馈。进行中的 run 不受影响
   // （在 chatRunStore，跑完会重新落盘）。
   const handleClearRuns = async (): Promise<void> => {
     setShowClearConfirm(false);
@@ -392,6 +388,9 @@ export function ChatPane({
       await invoke('pragent:clearRuns', { localId: prLocalId });
       setRuns([]);
       setHasMoreOlder(false);
+      setError(null);
+      setAgentResult(null);
+      setAgentSteps([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -694,10 +693,9 @@ export function ChatPane({
             : undefined
         }
         onSetReviewStatus={onSetReviewStatus}
-        // 一键自动评审：图标按钮置于 `/` 命令触发器右侧；运行中显示停止
+        // 一键自动评审：图标按钮置于 `/` 命令触发器右侧
         agentRunning={agentRunning}
         onAgentReview={() => void handleAgentReview()}
-        onAgentStop={handleAgentStop}
       />
 
       {showRulePreview && matchedRule && (
@@ -796,8 +794,6 @@ interface ChatInputBarProps {
   agentRunning: boolean;
   /** 触发一键自动评审微流程（describe→review→条件追问→总结）。 */
   onAgentReview: () => void;
-  /** 停止当前 PR 的 Agent 运行。 */
-  onAgentStop: () => void;
 }
 
 // 输入历史：最近 5 次成功提交，localStorage 持久化。Up/Down 按键在 textarea 末尾
@@ -883,7 +879,6 @@ function ChatInputBar({
   onSetReviewStatus,
   agentRunning,
   onAgentReview,
-  onAgentStop,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -1249,36 +1244,24 @@ function ChatInputBar({
             </ul>
           )}
         </div>
-        {/* 自动评审：图标按钮紧贴 `/` 命令触发器右侧；运行中显示停止按钮。
-            仅 pr-agent 就绪时出现，LLM 未配置 / 运行中则禁用触发。 */}
+        {/* 自动评审：图标按钮紧贴 `/` 命令触发器右侧。仅 pr-agent 就绪时出现，LLM 未配置 /
+            运行中则禁用触发。停止统一由发送区的停止按钮负责（取消进行中的子任务即终止流程），
+            不再单独提供 Agent 停止按钮，避免出现两个语义重叠的停止入口。 */}
         {pr && prAgent.available && (
-          <>
-            <button
-              type="button"
-              className={`chat-cmd-trigger chat-agent-review-trigger${agentRunning ? ' active' : ''}`}
-              onClick={onAgentReview}
-              disabled={!llmConfigured || agentRunning}
-              title={
-                agentRunning
-                  ? t('chatPane.agent.autoReviewRunning')
-                  : t('chatPane.agent.autoReview')
-              }
-              aria-label={t('chatPane.agent.autoReview')}
-            >
-              <AutoReviewIcon />
-            </button>
-            {agentRunning && (
-              <button
-                type="button"
-                className="chat-cmd-trigger chat-agent-review-stop"
-                onClick={onAgentStop}
-                title={t('chatPane.agent.stop')}
-                aria-label={t('chatPane.agent.stop')}
-              >
-                <StopIcon />
-              </button>
-            )}
-          </>
+          <button
+            type="button"
+            className={`chat-cmd-trigger chat-agent-review-trigger${agentRunning ? ' active' : ''}`}
+            onClick={onAgentReview}
+            disabled={!llmConfigured || agentRunning}
+            title={
+              agentRunning
+                ? t('chatPane.agent.autoReviewRunning')
+                : t('chatPane.agent.autoReview')
+            }
+            aria-label={t('chatPane.agent.autoReview')}
+          >
+            <AutoReviewIcon />
+          </button>
         )}
         </div>
         {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时 stop 紧贴 send 左侧。
