@@ -518,6 +518,13 @@ function createWindow(splash?: BrowserWindow): void {
     show: false,
     // 首帧前的窗口底色与 app 一致，避免显示瞬间白闪
     backgroundColor: '#1e1e1e',
+    // 无边框 + 自绘标题栏（VS Code 风）：macOS 保留红绿灯并下移到自绘标题栏内；
+    // Windows/Linux 用 titleBarOverlay 让系统继续画窗控按钮（最小化/最大化/关闭），
+    // 渲染层只接管中间标题区。高度需与渲染层 .app-titlebar 一致（36px）。
+    titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 12, y: 11 } }
+      : { titleBarOverlay: { color: '#1e1e1e', symbolColor: '#cccccc', height: 36 } }),
     // dev 下显式给窗口图标（assets/icons/icon.ico）；打包态窗口/任务栏图标走 exe
     // 内嵌（electron-builder），且 assets 不进 asar，故仅 dev 设置
     icon: app.isPackaged ? undefined : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),

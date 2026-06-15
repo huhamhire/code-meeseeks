@@ -8,6 +8,11 @@
 ### Added
 - 设置页「运行环境」新增「关于 & 反馈」入口：GitHub 仓库（Star）/ 提交 Issue / Releases 三个外链
   （各带专属图标，点击经系统浏览器打开），低频社区入口集中于「关于」区、不进状态栏。
+- **无边框窗口 + 自绘标题栏**（VS Code 风）：主窗口去掉系统原生标题栏，渲染层自绘 36px 标题栏，
+  深色主题从顶贯通到底。窗控按钮交由系统绘制以保留原生行为——macOS 保留红绿灯（下移到标题栏内）、
+  Windows/Linux 用 `titleBarOverlay` 在右上画最小化/最大化/关闭。标题栏展示品牌名与当前 PR 标题，
+  Windows/Linux 开头另显应用图标（macOS 因红绿灯占位不显）。设计见
+  [`docs/arch/09-ui-interaction.md`](docs/arch/09-ui-interaction.md)。
 
 ### Changed
 - **移除独立 `ollama` provider**，统一经 `openai-compatible` 接入本地 Ollama（Base URL 填
