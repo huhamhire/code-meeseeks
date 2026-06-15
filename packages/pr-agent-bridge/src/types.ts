@@ -81,6 +81,29 @@ export interface ExecOptions {
   cwd?: string;
   /** 用户主动取消信号；abort 后 SIGKILL 子进程并 reject reason='cancelled' */
   signal?: AbortSignal;
+  /** 写入子进程 stdin 的内容（写完即 end）；chat 通道传 prompt 用。 */
+  input?: string;
+}
+
+/**
+ * 编排器「独立 LLM 通道」的一次原始对话调用（见 docs/arch/06-agent.md §3）。
+ * 复用嵌入式运行时的 litellm（provider 路由 / 代理 / token 采集已解决）：
+ * 子进程跑 `meebox_pragent_shim.chat`，prompt 经 stdin 传入，结果走 stdout，
+ * token 用量经 `@@MEEBOX_USAGE@@` 哨兵打到 stderr（与 pr-agent run 同一套）。
+ */
+export interface ChatRunOptions {
+  /** system 段（可空）。 */
+  system?: string;
+  /** user 段（必填）。 */
+  user: string;
+  /** 采样温度；anthropic 经 shim 自动剔除。 */
+  temperature?: number;
+  /** 注入子进程的 env（LLM key / model / 代理，复用 buildPragentEnv）。 */
+  env?: Record<string, string>;
+  /** 子进程工作目录；建议传中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。 */
+  cwd?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -100,4 +123,10 @@ export interface PrAgentBridge {
   review(opts: Omit<PrAgentRunOptions, 'tool'>): Promise<PrAgentRunResult>;
   /** 通用入口；后续加 /ask /improve 时直接用 run */
   run(opts: PrAgentRunOptions): Promise<PrAgentRunResult>;
+  /**
+   * 编排器的独立 LLM 对话通道（复用嵌入式 litellm，见 ChatRunOptions）。
+   * 仅嵌入式策略支持；local-cli 策略调用即抛错。结果 stdout = 回复文本，
+   * stderr 含 `@@MEEBOX_USAGE@@` token 哨兵（调用方按既有解析器累加）。
+   */
+  chat(opts: ChatRunOptions): Promise<PrAgentRunResult>;
 }

@@ -9,11 +9,18 @@ interface DataEmitter {
   on(event: 'data', cb: (chunk: Buffer | string) => void): void;
 }
 
+interface WritableLike {
+  write(chunk: string): unknown;
+  end(): unknown;
+}
+
 interface SpawnedChild {
   /** 子进程 pid；spawn 失败时为 undefined。用于调用方做进程树级清理。 */
   pid?: number;
   stdout: DataEmitter | null;
   stderr: DataEmitter | null;
+  /** 子进程 stdin；opts.input 时写入后 end。spawn 失败 / fake child 可为空。 */
+  stdin?: WritableLike | null;
   on(event: 'error', cb: (err: Error) => void): void;
   on(event: 'close', cb: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   kill(signal?: NodeJS.Signals | number): boolean;
@@ -87,6 +94,16 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
           ),
         );
         return;
+      }
+
+      // 把 prompt 等输入写进子进程 stdin（chat 通道用），写完即 end 触发 EOF。
+      if (opts.input != null) {
+        try {
+          child.stdin?.write(opts.input);
+          child.stdin?.end();
+        } catch {
+          /* stdin 已关闭 / 子进程已退出，忽略 */
+        }
       }
 
       const timer = setTimeout(() => {

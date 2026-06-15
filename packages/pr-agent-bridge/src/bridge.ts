@@ -1,6 +1,8 @@
 import type { PrAgentStrategy } from '@meebox/shared';
 import { defaultExec } from './exec.js';
+import { PrAgentRunError } from './types.js';
 import type {
+  ChatRunOptions,
   ExecFn,
   PrAgentBridge,
   PrAgentRunOptions,
@@ -11,6 +13,10 @@ import type {
 // 3-8 min；5 min 经常打 timeout。设到 10 min 让绝大多数真实 PR 能跑完，仍能兜住
 // 卡死的子进程不让它无限挂着。需要更长的话调用方可在 opts.timeoutMs 显式覆盖
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+// chat 通道单次默认 5 min：编排 / 判定调用通常远快于 /review，但推理型模型仍可能慢。
+const DEFAULT_CHAT_TIMEOUT_MS = 5 * 60 * 1000;
+// 强制 UTF-8（中文 Windows 默认码页会让含 emoji 的输出崩，见 buildInvocation）。
+const UTF8_ENV = { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } as const;
 
 /** 各策略共享的骨架：把 RunOptions 翻成 (cmd, args, env) 后委派给 ExecFn */
 abstract class BaseBridge implements PrAgentBridge {
@@ -40,7 +46,31 @@ abstract class BaseBridge implements PrAgentBridge {
     });
   }
 
+  async chat(opts: ChatRunOptions): Promise<PrAgentRunResult> {
+    const { cmd, args, env, cwd } = this.buildChatInvocation(opts);
+    const input = JSON.stringify({
+      system: opts.system ?? '',
+      user: opts.user,
+      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+    });
+    return this.exec(cmd, args, {
+      timeoutMs: opts.timeoutMs ?? DEFAULT_CHAT_TIMEOUT_MS,
+      env,
+      cwd,
+      input,
+      signal: opts.signal,
+    });
+  }
+
   protected abstract buildInvocation(opts: PrAgentRunOptions): {
+    cmd: string;
+    args: string[];
+    env?: Record<string, string>;
+    cwd?: string;
+  };
+
+  /** chat 通道的 (cmd, args, env, cwd)；仅嵌入式支持，其余策略抛错。 */
+  protected abstract buildChatInvocation(opts: ChatRunOptions): {
     cmd: string;
     args: string[];
     env?: Record<string, string>;
@@ -91,6 +121,18 @@ export class LocalCliBridge extends BaseBridge {
       env: opts.env,
     };
   }
+
+  protected buildChatInvocation(): {
+    cmd: string;
+    args: string[];
+    env?: Record<string, string>;
+    cwd?: string;
+  } {
+    throw new PrAgentRunError(
+      'chat 通道仅支持嵌入式运行时（local-cli 策略无 meebox 运行时）',
+      'spawn-failed',
+    );
+  }
 }
 
 /**
@@ -136,6 +178,22 @@ export class EmbeddedRuntimeBridge extends BaseBridge {
       cmd: this.pythonPath,
       args: [...cli, '--pr_url', opts.prUrl, opts.tool, ...(opts.extraArgs ?? [])],
       env: { ...(opts.env ?? {}), ...utf8 },
+    };
+  }
+
+  protected buildChatInvocation(opts: ChatRunOptions): {
+    cmd: string;
+    args: string[];
+    env?: Record<string, string>;
+    cwd?: string;
+  } {
+    // 跑随运行时打包的 chat helper：复用 pr-agent 已被 shim 补丁的 LiteLLMAIHandler
+    // （provider 路由 / CLI 模式 / 去 temperature / usage 哨兵全继承）。
+    return {
+      cmd: this.pythonPath,
+      args: ['-m', 'meebox_pragent_shim.chat'],
+      env: { ...(opts.env ?? {}), ...UTF8_ENV },
+      cwd: opts.cwd,
     };
   }
 }
