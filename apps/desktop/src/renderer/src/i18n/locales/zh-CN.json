@@ -685,6 +685,7 @@
     "running": "运行中",
     "secondsAgo_other": "{{count}} 秒前",
     "settings": "设置",
+    "stopRunning": "停止运行中的任务",
     "syncing": "同步中",
     "unnamed": "(未命名)",
     "updateAvailableTitle": "发现新版本 v{{latest}}（当前 v{{current}}）· 点击前往下载",

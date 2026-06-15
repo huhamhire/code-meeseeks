@@ -341,9 +341,20 @@ function QueuePopover({
               title={t('statusBar.jumpToPr')}
             >
               <span className="statusbar-queue-tool">/{a.tool}</span>
-              <code className="statusbar-queue-pr">{a.prLocalId}</code>
+              <span className="statusbar-queue-pr">
+                {a.repoSlug} <span className="statusbar-queue-prnum">#{a.prNumber}</span>
+              </span>
             </button>
             <span className="muted statusbar-queue-state">{t('statusBar.running')}</span>
+            <button
+              type="button"
+              className="statusbar-queue-cancel"
+              onClick={() => onCancel(a.runId)}
+              title={t('statusBar.stopRunning')}
+              aria-label={t('common.cancel')}
+            >
+              ×
+            </button>
           </li>
         ))}
         {waiting.map((q) => (
@@ -356,7 +367,9 @@ function QueuePopover({
               title={t('statusBar.jumpToPr')}
             >
               <span className="statusbar-queue-tool">/{q.tool}</span>
-              <code className="statusbar-queue-pr">{q.prLocalId}</code>
+              <span className="statusbar-queue-pr">
+                {q.repoSlug} <span className="statusbar-queue-prnum">#{q.prNumber}</span>
+              </span>
             </button>
             <span className="muted statusbar-queue-state">{t('statusBar.queued')}</span>
             <button

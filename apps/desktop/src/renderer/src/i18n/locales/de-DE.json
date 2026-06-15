@@ -703,6 +703,7 @@
     "secondsAgo_one": "vor {{count}} Sekunde",
     "secondsAgo_other": "vor {{count}} Sekunden",
     "settings": "Einstellungen",
+    "stopRunning": "Laufende Aufgabe stoppen",
     "syncing": "Synchronisieren",
     "unnamed": "(unbenannt)",
     "updateAvailableTitle": "Neue Version v{{latest}} verfügbar (aktuell v{{current}}) · klicken zum Herunterladen",
