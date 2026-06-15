@@ -10,7 +10,9 @@ import {
   getAgentConversation,
   startAgentSession,
   updateAgentSession,
+  writeAgentConversation,
 } from '@meebox/poller';
+import type { AgentMessage } from '@meebox/shared';
 import type { Rule } from '@meebox/rules';
 import type {
   AgentSession,
@@ -33,6 +35,45 @@ function reviewRunText(run: ReviewRun): string {
 }
 
 const READ_TOOLS = new Set(['describe', 'review', 'ask']);
+
+// 会话压缩：存储超阈值时把较早消息摘要成一条 digest、仅留最近若干条原文，控制存储与后续注入规模
+// （约定会话上下文不超 LLM 半窗：先压缩/裁剪再注入）。阈值高于注入预算，超出才触发、不频繁。
+const CONVO_COMPACT_THRESHOLD_CHARS = 80000;
+const CONVO_KEEP_RECENT = 6;
+const COMPACT_SYSTEM =
+  'You compress earlier turns of a conversation between a user and a code-review assistant into a ' +
+  'concise digest. Preserve key facts, decisions, the user’s stated preferences / 称呼, and any open ' +
+  'threads. Reply in the same language as the conversation. Output plain text only, no preamble.';
+
+/** 存储超阈值时，把较早消息摘要为一条 digest 替换之；未超阈值 / 失败则原样保留。 */
+async function maybeCompactConversation(
+  stateStore: AgentPlanningDeps['stateStore'],
+  chat: AgentPlanningDeps['chat'],
+  prLocalId: string,
+  now: () => Date,
+): Promise<void> {
+  const messages = await getAgentConversation(stateStore, prLocalId);
+  const total = messages.reduce((n, m) => n + m.content.length, 0);
+  if (total <= CONVO_COMPACT_THRESHOLD_CHARS || messages.length <= CONVO_KEEP_RECENT + 1) return;
+
+  const older = messages.slice(0, -CONVO_KEEP_RECENT);
+  const recent = messages.slice(-CONVO_KEEP_RECENT);
+  const transcript = older
+    .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+    .join('\n\n');
+  try {
+    const { text } = await chat({ system: COMPACT_SYSTEM, user: transcript });
+    const digest: AgentMessage = {
+      role: 'assistant',
+      content: `（早期对话摘要）\n${text.trim()}`,
+      // 用最早消息的时间戳，保证 digest 仍排在时间线最前。
+      at: older[0]?.at ?? now().toISOString(),
+    };
+    await writeAgentConversation(stateStore, prLocalId, [digest, ...recent]);
+  } catch {
+    /* 压缩失败：保留原对话，下次再试（读时仍有预算裁剪兜底） */
+  }
+}
 
 export interface AgentPlanningDeps {
   stateStore: StateStore;
@@ -115,6 +156,9 @@ export async function runAgentPlanning(
     if (deps.recordMemory && (mem.user.length || mem.memory.length || mem.agents.length)) {
       await deps.recordMemory(mem);
     }
+
+    // 会话超阈值时压缩较早消息（best-effort，不阻断收尾）。
+    await maybeCompactConversation(deps.stateStore, deps.chat, pr.localId, now);
 
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {
