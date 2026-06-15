@@ -137,17 +137,37 @@ describe('runPlanningAgent', () => {
     expect(r.steps).toHaveLength(0);
   });
 
+  it('returns a structured recommendation when the review close includes one', async () => {
+    const { deps } = makeDeps([
+      '{"final":"## 摘要\\n...","recommendation":{"verdict":"needs_work","reason":"fix log key"}}',
+    ]);
+    const r = await runPlanningAgent(deps, {
+      context,
+      pr,
+      toolCatalog: catalog,
+      userRequest: 'review',
+    });
+    expect(r.recommendation).toEqual({ verdict: 'needs_work', reason: 'fix log key' });
+  });
+
+  it('ignores an invalid / missing verdict (no recommendation forced)', async () => {
+    const { deps } = makeDeps(['{"final":"answer","recommendation":{"verdict":"lgtm"}}']);
+    const r = await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
+    expect(r.recommendation).toBeUndefined();
+  });
+
   it('treats unparseable output as a final answer', async () => {
     const { deps } = makeDeps(['just some text, no json']);
     const r = await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
     expect(r.finalText).toBe('just some text, no json');
   });
 
-  it('injects the routing policy (PR-content → /ask fallback, unrelated → decline) into the system prompt', async () => {
+  it('injects the conversation/scope policy (chat ok, off-domain declined, PR → /ask fallback) into the system prompt', async () => {
     const { deps } = makeDeps(['{"final":"done"}']);
     await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
     const system = vi.mocked(deps.chat).mock.calls[0]?.[0]?.system ?? '';
+    expect(system).toContain('Natural conversation is fine');
+    expect(system).toContain('DECLINE');
     expect(system).toContain('default to /ask');
-    expect(system).toContain('unrelated to this PR');
   });
 });

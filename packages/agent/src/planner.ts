@@ -1,7 +1,14 @@
 import type { Rule } from '@meebox/rules';
-import type { AgentStep, TokenUsage, ToolCatalogEntry } from '@meebox/shared';
+import type {
+  AgentRecommendation,
+  AgentRecommendationVerdict,
+  AgentStep,
+  TokenUsage,
+  ToolCatalogEntry,
+} from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
 import { extractJson } from './orchestrator.js';
+import { runStaggered } from './stagger.js';
 import { assertToolAllowed } from './tool-catalog.js';
 import type { AgentContext } from './types.js';
 
@@ -44,6 +51,8 @@ export interface PlanningResult {
   steps: AgentStep[];
   finalText: string;
   tokenUsage: TokenUsage;
+  /** 收尾建议（仅评审类请求；非约束性）。供 UI 展示判定徽标，与 AutoPilot / 微流程一致。 */
+  recommendation?: AgentRecommendation;
   terminationReason?: string;
 }
 
@@ -54,6 +63,23 @@ interface PlannerAction {
   tools?: string[];
   question?: string;
   final?: string;
+  /** 评审类收尾的非约束性判定建议（verdict + 理由）；非评审请求省略。 */
+  recommendation?: { verdict?: unknown; reason?: unknown };
+}
+
+const VERDICTS: readonly AgentRecommendationVerdict[] = ['approve', 'needs_work', 'manual_review'];
+
+/** 从收尾动作解析出合法 recommendation；verdict 非法 / 缺省 → undefined（不强加判定）。 */
+function parseRecommendation(rec?: PlannerAction['recommendation']): AgentRecommendation | undefined {
+  if (!rec) return undefined;
+  const verdict = rec.verdict;
+  if (typeof verdict !== 'string' || !VERDICTS.includes(verdict as AgentRecommendationVerdict)) {
+    return undefined;
+  }
+  return {
+    verdict: verdict as AgentRecommendationVerdict,
+    reason: typeof rec.reason === 'string' ? rec.reason : '',
+  };
 }
 
 function addUsage(acc: TokenUsage, u?: TokenUsage): TokenUsage {
@@ -83,9 +109,18 @@ const PROTOCOL = [
   'but when the request needs multiple independent read-only tools (e.g. summary AND review), call',
   'them together via "tools" so they run in parallel instead of one per turn. Use "tool"+"question"',
   'for /ask (single only).',
-  'Routing policy:',
-  '- If the request concerns this PR but no other tool clearly fits, default to /ask with a focused question.',
-  '- If the request is unrelated to this PR, do NOT call any tool — briefly decline in "final".',
+  'Closing a CODE REVIEW: when your final answer reviews this PR, you MUST follow this fixed shape —',
+  'format "final" as markdown with these sections in order: "## 摘要" (PR summary), "## 关键发现"',
+  '(must-fix / concerns as a bulleted list, empty-safe), "## 建议" (next steps); AND include a',
+  '"recommendation" object: {"verdict": "approve"|"needs_work"|"manual_review", "reason": "<one line>"}.',
+  'verdict is non-binding (no write action). Omit "recommendation" for non-review answers.',
+  'Conversation & scope:',
+  '- Natural conversation is fine: greet, say who you are, ask a clarifying question — answer directly',
+  '  in "final" without calling tools.',
+  '- Your domain is reviewing THIS PR (describing it, reviewing its changes, answering questions about',
+  '  them). Politely DECLINE in "final" any task OUTSIDE that domain (unrelated coding, general/off-topic',
+  '  requests) — do NOT call tools for it.',
+  '- For a PR-related request with no clearly fitting tool, default to /ask with a focused question.',
 ].join('\n');
 
 export async function runPlanningAgent(
@@ -138,7 +173,12 @@ export async function runPlanningAgent(
 
     if (action.final && !hasCalls) {
       await record({ kind: 'plan', thought: action.thought, result: action.final });
-      return { steps, finalText: action.final, tokenUsage: usage };
+      return {
+        steps,
+        finalText: action.final,
+        tokenUsage: usage,
+        recommendation: parseRecommendation(action.recommendation),
+      };
     }
 
     // 归一为待执行工具列表：tools 多选（并行、只读，无 per-tool question）优先；否则单 tool（可带 question）。
@@ -160,8 +200,9 @@ export async function runPlanningAgent(
     }
     if (!allowed.length) continue; // 全被拒 → 回喂后下一轮重选
 
-    // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；thought 只系在首条，避免重复。
-    const ran = await Promise.all(allowed.map(async (c) => ({ c, res: await deps.runTool(c) })));
+    // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；相互错开 100~200ms 起跑，
+    // 避免同一瞬间齐发。thought 只系在首条，避免重复。
+    const ran = await runStaggered(allowed, async (c) => ({ c, res: await deps.runTool(c) }));
     for (let k = 0; k < ran.length; k++) {
       const { c, res } = ran[k]!;
       usage = addUsage(usage, res.usage);
