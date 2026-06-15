@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 /**
- * Agent 目录的固定文件布局（见 docs/arch/06-agent.md §1）。
+ * Agent 目录的固定文件布局（见 docs/arch/06-agent.md「Agent 目录」）。
  * - SOUL.md  灵魂：核心职责与边界（Agent 只读，默认由模版规定）
  * - AGENTS.md 工作规范与红线
  * - MEMORY.md 长期记忆（可写）

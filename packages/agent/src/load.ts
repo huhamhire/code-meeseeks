@@ -22,7 +22,7 @@ const EMPTY_FILES: AgentContextFiles = { soul: '', agents: '', memory: '', user:
 
 /**
  * 现读现装配：每次执行重新读 Agent 目录的 SOUL / AGENTS / MEMORY / USER 与 rules/，
- * **无缓存**（见 docs/arch/06-agent.md §2）。空 agentDir → 全空上下文（Agent 退化为原生）。
+ * **无缓存**（见 docs/arch/06-agent.md「上下文注入」）。空 agentDir → 全空上下文（Agent 退化为原生）。
  */
 export async function loadAgentContext(
   agentDir: string,
