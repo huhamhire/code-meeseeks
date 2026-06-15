@@ -14,6 +14,15 @@
     "openInBrowser": "浏览器打开"
   },
   "chatPane": {
+    "agent": {
+      "autoReview": "自动评审",
+      "autoReviewRunning": "评审中…",
+      "failed": "Agent 评审失败",
+      "summaryTitle": "Agent 总结",
+      "verdictApprove": "建议通过",
+      "verdictManualReview": "建议人工复核",
+      "verdictNeedsWork": "建议修改"
+    },
     "aiSuggestionPrefix": "[AI 建议]",
     "anchorJumpTitle": "跳转到代码对应行",
     "askArgQuestion": "问题",
