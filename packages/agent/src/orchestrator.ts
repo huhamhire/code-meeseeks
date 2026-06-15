@@ -118,6 +118,8 @@ function summaryPrompt(
     'Write a STRICTLY short closing summary of this pre-review for the human reviewer',
     `(at most ${String(maxChars)} characters; compress, do not truncate key points).`,
     'Include the key points, risks, and a non-binding recommendation.',
+    'Format for readability: use newlines (\\n) to separate sections; lead with the core change,',
+    'then list each key risk on its own line prefixed with "- ". Keep lines short.',
     '',
     'Reply with JSON only:',
     '{"summary": string, "recommendation": {"verdict": "approve"|"needs_work"|"manual_review", "reason": string}}',
@@ -158,12 +160,14 @@ export async function runReviewMicroflow(
     language: input.language,
   });
 
-  // 1. describe + review（固定两步）
-  const describe = await deps.runTool({ tool: 'describe' });
+  // 1. describe + review（固定两步，并行——彼此独立、都只读 PR，无先后依赖；
+  //    实际并发度受运行队列 max_concurrency 约束，串行执行时结果同样正确）。
+  const [describe, review] = await Promise.all([
+    deps.runTool({ tool: 'describe' }),
+    deps.runTool({ tool: 'review' }),
+  ]);
   usage = addUsage(usage, describe.usage);
   await record({ kind: 'tool', toolCall: { tool: '/describe' }, result: clamp(describe.text, 400) });
-
-  const review = await deps.runTool({ tool: 'review' });
   usage = addUsage(usage, review.usage);
   await record({ kind: 'tool', toolCall: { tool: '/review' }, result: clamp(review.text, 400) });
 

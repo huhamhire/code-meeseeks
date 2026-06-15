@@ -27,6 +27,8 @@ export interface StartAgentSessionInput {
   maxSteps: number;
   /** 外部预分配的 session id（与队列 id 对齐）；缺省按时序生成。 */
   id?: string;
+  /** 触发会话的用户自然语言请求（agent:ask）；自动评审无文本则缺省。 */
+  userRequest?: string;
 }
 
 /**
@@ -46,6 +48,7 @@ export async function startAgentSession(
     todo: [],
     stepCount: 0,
     maxSteps: input.maxSteps,
+    ...(input.userRequest ? { userRequest: input.userRequest } : {}),
     startedAt: at.toISOString(),
   };
   await stateStore.write<AgentSessionFile>(sessionKey(input.prLocalId), {

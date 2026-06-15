@@ -62,6 +62,11 @@ export interface AgentSession {
   todo: AgentTodoItem[];
   stepCount: number;
   maxSteps: number;
+  /**
+   * 触发本会话的用户自然语言请求（「对话即委派」入口 agent:ask）。自动评审（agent:run）
+   * 无文本输入 → 不填。UI 据此把用户输入回显为右对齐气泡、归属其发起 PR、持久化恢复。
+   */
+  userRequest?: string;
   /** 本 PR 收尾总结正文（受 summary_max_chars 限长）。 */
   summary?: string;
   /** 收尾建议（非约束性）。 */

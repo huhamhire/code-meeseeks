@@ -37,6 +37,8 @@ import {
   writeAutopilotLedger,
   needsAutoReview,
   getAutopilotLedger,
+  getAgentSession,
+  clearAgentSession,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
 import { pickMatchingRule } from '@meebox/rules';
@@ -1408,6 +1410,15 @@ export function registerIpcHandlers({
     },
   );
 
+  ipcMain.handle(
+    'agent:getSession',
+    async (
+      _evt,
+      req: IpcChannels['agent:getSession']['request'],
+    ): Promise<IpcChannels['agent:getSession']['response']> =>
+      getAgentSession(stateStore, req.localId),
+  );
+
   // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===
   // Agent 编排层全局单并发：一次只跑一遍 pass（busy 锁）；其派发的工具 run 在共享队列并行。
   // 由 poller onTick 触发（见 index.ts），最小间隔守卫 + 台账去重防止打爆 LLM。
@@ -1537,9 +1548,12 @@ export function registerIpcHandlers({
     async (
       _evt,
       req: IpcChannels['pragent:clearRuns']['request'],
-    ): Promise<IpcChannels['pragent:clearRuns']['response']> => ({
-      cleared: await clearReviewRunsForPr(stateStore, req.localId),
-    }),
+    ): Promise<IpcChannels['pragent:clearRuns']['response']> => {
+      // 清执行历史时一并清掉 Agent 会话（含收尾 summary / 步骤 transcript），否则清空后
+      // 重开 PR 仍会从落盘会话恢复出「评审总结」卡片。
+      await clearAgentSession(stateStore, req.localId);
+      return { cleared: await clearReviewRunsForPr(stateStore, req.localId) };
+    },
   );
 
   // === M4 草稿 IPC ===

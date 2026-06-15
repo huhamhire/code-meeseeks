@@ -131,45 +131,6 @@
 }
 
 // === Agent 自动评审：触发条 + 收尾总结卡 ===
-.chat-agent-bar {
-  display: flex;
-  padding: $space-2 $space-6;
-  border-bottom: 1px solid $border-muted;
-  flex-shrink: 0;
-}
-.chat-agent-review-btn {
-  padding: $space-2 $space-5;
-  background: $color-accent-bg-fade;
-  border: 1px solid $border-muted;
-  border-radius: $radius-sm;
-  color: $color-info;
-  font-size: $fs-sm;
-  font-weight: 600;
-  cursor: pointer;
-
-  &:hover:not(:disabled) {
-    background: $color-accent-strong-fade;
-  }
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-}
-.chat-agent-stop-btn {
-  margin-left: $space-3;
-  padding: $space-2 $space-5;
-  background: transparent;
-  border: 1px solid $color-danger;
-  border-radius: $radius-sm;
-  color: $color-danger;
-  font-size: $fs-sm;
-  font-weight: 600;
-  cursor: pointer;
-
-  &:hover {
-    background: rgba(244, 135, 113, 0.15);
-  }
-}
 .chat-agent-summary {
   margin: $space-4 $space-6;
   padding: $space-4 $space-5;
@@ -204,33 +165,62 @@
   margin: 0 0 $space-3;
   font-size: $fs-md;
   color: $text-body;
-  white-space: pre-wrap;
+}
+// 建议理由：markdown 渲染但保持次要灰（覆盖 .markdown 默认正文色）。
+.chat-agent-summary-reason {
+  font-size: $fs-sm;
+  color: $text-muted;
 }
 
-// Agent 步骤流式列表：跑动时实时追加（describe → review → judge → ask → 总结）
-.chat-agent-steps {
-  margin: $space-3 $space-6 0;
+// 用户输入气泡：自然语言「对话即委派」的输入回显，右对齐成对话气泡。
+// 注意类名避开既有 .chat-user-msg（/ask 提问行，带左竖条 + 淡蓝底），否则会叠到气泡外形成第二层底色。
+.chat-user-row {
+  margin: $space-3 $space-6;
   display: flex;
-  flex-direction: column;
-  gap: $space-2;
+  justify-content: flex-end;
 }
-.chat-agent-step {
+.chat-user-bubble {
+  max-width: 85%;
+  padding: $space-2 $space-4;
+  border-radius: $radius-md;
+  background: $color-accent;
+  color: $text-on-accent;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+// Agent 自身 LLM 调用（规划 / 判读 / 收尾）期间的「思考中」指示：spinner + 文案。
+.chat-agent-thinking {
+  margin: $space-3 $space-6;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  color: $text-muted;
+  font-size: $fs-sm;
+}
+
+// Agent 元步骤内联标记：在时间线中按自然时间顺序穿插的决策节点（judge 判读）。
+// 左侧一道强调色竖条，与 run 卡片区分但保持同一缩进。
+.chat-agent-step-marker {
+  margin: $space-3 $space-6;
+  padding: $space-2 $space-4;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: $space-3;
   font-size: $fs-sm;
-}
-.chat-agent-step-kind {
-  font-family: $font-mono;
-  color: $color-info;
-  flex-shrink: 0;
+  border-left: 2px solid $color-accent;
+  background: $color-accent-bg-fade;
+  border-radius: 0 $radius-sm $radius-sm 0;
 }
 .chat-agent-step-thought {
   color: $text-body;
 }
 .chat-agent-step-result {
-  flex-basis: 100%;
+  font-weight: 600;
+  color: $color-info;
   white-space: pre-wrap;
 }
 
@@ -1011,17 +1001,32 @@
   gap: $space-2;
 }
 
+// 命令触发器组：`/` 命令按钮 + 自动评审图标按钮，左对齐成一组（两者间距略放宽）
+.chat-cmd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+}
+
 // 命令触发器：单 `/` 按钮 + 弹出菜单 (替代之前 3 个并列按钮)
 .chat-cmd-bar {
   position: relative;
   display: inline-flex;
 }
+
 .chat-cmd-trigger {
+  // 等宽按钮：`/` 命令触发器与自动评审图标按钮宽度一致、左对齐成一组；高度随内容（padding
+  // 决定），不固定行高外的额外高度，避免显得过高。
+  box-sizing: border-box;
+  min-width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: $font-mono;
   font-size: $fs-lg;
   font-weight: 600;
   line-height: 1;
-  padding: $space-2 $space-4;
+  padding: $space-2 $space-3;
   border-radius: $radius-sm;
   background: $bg-surface;
   border: 1px solid $border-default;
@@ -1037,6 +1042,17 @@
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+// 自动评审图标按钮：复用 .chat-cmd-trigger 基样式，强调色区分。
+.chat-agent-review-trigger {
+  color: $color-info;
+
+  &:hover:not(:disabled),
+  &.active {
+    color: $color-info;
+    border-color: $color-accent;
   }
 }
 

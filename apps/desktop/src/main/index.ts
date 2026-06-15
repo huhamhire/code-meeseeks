@@ -564,9 +564,6 @@ function createWindow(splash?: BrowserWindow): void {
     },
   });
 
-  // 恢复最大化态：以正常尺寸建窗后再 maximize，使「还原」回到记录的正常大小。
-  if (windowState.maximized) win.maximize();
-
   // 记住窗口大小：resize/move 防抖回写、关闭时立即回写。getNormalBounds 取「非最大化」尺寸，
   // 故最大化时记录的仍是还原后的正常大小。写盘失败不影响使用。
   const persistWindowState = (): void => {
@@ -586,10 +583,14 @@ function createWindow(splash?: BrowserWindow): void {
   win.on('move', scheduleSave);
   win.on('close', persistWindowState);
 
-  // 主界面首帧就绪：关闭 splash、显示主窗口，并记录进程启动→首帧耗时（度量启动性能）。
+  // 主界面首帧就绪：恢复最大化态 → 显示主窗口 → 关闭 splash，并记录进程启动→首帧耗时。
+  // maximize 必须放到这里：`win.maximize()` 会立即「显示」隐藏窗口，若在建窗后即调用，无边框
+  // 主窗口会在内容就绪前以空白态抢先出现（盖过/早于 splash）。改到 ready-to-show 内与首帧一起
+  // maximize + show，再关 splash → 启动期只见 splash，主窗口一出现即为已渲染态。
   win.once('ready-to-show', () => {
-    if (splash && !splash.isDestroyed()) splash.close();
+    if (windowState.maximized) win.maximize();
     win.show();
+    if (splash && !splash.isDestroyed()) splash.close();
     logger.info(
       { elapsedMs: Date.now() - PROCESS_START_MS },
       'main window first paint (ready-to-show)',

@@ -50,6 +50,8 @@ export interface PlanningResult {
 interface PlannerAction {
   thought?: string;
   tool?: string;
+  /** 一次并行多选只读工具（如 describe + review）；与 tool 二选一，tools 优先。 */
+  tools?: string[];
   question?: string;
   final?: string;
 }
@@ -69,11 +71,18 @@ function clamp(s: string, max: number): string {
   return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
 }
 
+/** 一次并行最多分发的工具数：多选时截断，防止一轮打出过多 pr-agent run。 */
+const MAX_PARALLEL_TOOLS = 3;
+
 const PROTOCOL = [
   'Each turn, reply with JSON ONLY for the next action:',
-  '- Use a tool: {"thought": "...", "tool": "/review", "question": "<only for /ask>"}',
+  '- One tool:   {"thought": "...", "tool": "/review", "question": "<only for /ask>"}',
+  '- Several read-only tools AT ONCE (run in parallel, at most 3): {"thought": "...", "tools": ["/describe", "/review"]}',
   '- Finish:     {"thought": "...", "final": "<your answer to the user>"}',
-  'Only call tools listed under "Available tools" that are NOT disabled. Prefer few precise steps.',
+  'Only call tools listed under "Available tools" that are NOT disabled. Prefer few precise steps,',
+  'but when the request needs multiple independent read-only tools (e.g. summary AND review), call',
+  'them together via "tools" so they run in parallel instead of one per turn. Use "tool"+"question"',
+  'for /ask (single only).',
   'Routing policy:',
   '- If the request concerns this PR but no other tool clearly fits, default to /ask with a focused question.',
   '- If the request is unrelated to this PR, do NOT call any tool — briefly decline in "final".',
@@ -118,40 +127,54 @@ export async function runPlanningAgent(
     usage = addUsage(usage, r.usage);
     const action = extractJson<PlannerAction>(r.text);
 
-    // 无法解析 / 既无 tool 又无 final → 当作收尾（原文兜底）。
-    if (!action || (!action.tool && !action.final)) {
+    const hasCalls = Boolean(action?.tool) || Boolean(action?.tools?.length);
+
+    // 无法解析 / 既无 tool(s) 又无 final → 当作收尾（原文兜底）。
+    if (!action || (!hasCalls && !action.final)) {
       const finalText = action?.final ?? r.text.trim();
       await record({ kind: 'plan', thought: action?.thought, result: finalText });
       return { steps, finalText, tokenUsage: usage };
     }
 
-    if (action.final && !action.tool) {
+    if (action.final && !hasCalls) {
       await record({ kind: 'plan', thought: action.thought, result: action.final });
       return { steps, finalText: action.final, tokenUsage: usage };
     }
 
-    const tool = action.tool ?? '';
-    // 红线硬校验：修改类未授权 / 未知工具即拒，回喂让 LLM 改选（不崩流程）。
-    try {
-      assertToolAllowed(tool, input.toolCatalog);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await record({ kind: 'judge', thought: action.thought, toolCall: { tool }, result: `拒绝：${msg}` });
-      history.push(`Refused ${tool}: ${msg}`);
-      continue;
-    }
+    // 归一为待执行工具列表：tools 多选（并行、只读，无 per-tool question）优先；否则单 tool（可带 question）。
+    const requested: Array<{ tool: string; question?: string }> = action.tools?.length
+      ? action.tools.slice(0, MAX_PARALLEL_TOOLS).map((tl) => ({ tool: tl }))
+      : [{ tool: action.tool ?? '', question: action.question }];
 
-    const res = await deps.runTool({ tool, question: action.question });
-    usage = addUsage(usage, res.usage);
-    await record({
-      kind: 'tool',
-      thought: action.thought,
-      toolCall: { tool, args: action.question ? { question: action.question } : undefined },
-      result: clamp(res.text, 400),
-    });
-    history.push(
-      `Called ${tool}${action.question ? ` ("${action.question}")` : ''} → ${clamp(res.text, 600)}`,
-    );
+    // 红线硬校验逐个把关：未授权 / 未知即拒并回喂；允许的留待并行执行。
+    const allowed: Array<{ tool: string; question?: string }> = [];
+    for (const c of requested) {
+      try {
+        assertToolAllowed(c.tool, input.toolCatalog);
+        allowed.push(c);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await record({ kind: 'judge', thought: action.thought, toolCall: { tool: c.tool }, result: `拒绝：${msg}` });
+        history.push(`Refused ${c.tool}: ${msg}`);
+      }
+    }
+    if (!allowed.length) continue; // 全被拒 → 回喂后下一轮重选
+
+    // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；thought 只系在首条，避免重复。
+    const ran = await Promise.all(allowed.map(async (c) => ({ c, res: await deps.runTool(c) })));
+    for (let k = 0; k < ran.length; k++) {
+      const { c, res } = ran[k]!;
+      usage = addUsage(usage, res.usage);
+      await record({
+        kind: 'tool',
+        thought: k === 0 ? action.thought : undefined,
+        toolCall: { tool: c.tool, args: c.question ? { question: c.question } : undefined },
+        result: clamp(res.text, 400),
+      });
+      history.push(
+        `Called ${c.tool}${c.question ? ` ("${c.question}")` : ''} → ${clamp(res.text, 600)}`,
+      );
+    }
   }
 
   return { steps, finalText: '', tokenUsage: usage, terminationReason: '步数上限中止' };

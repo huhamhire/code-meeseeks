@@ -47,6 +47,47 @@ describe('runPlanningAgent', () => {
     expect(r.tokenUsage.totalTokens).toBe(20); // 2 chat(5) + 1 tool(10)
   });
 
+  it('dispatches multiple read-only tools in one turn (parallel) then finishes', async () => {
+    const { deps, toolCalls } = makeDeps([
+      '{"thought":"need both","tools":["/describe","/review"]}',
+      '{"final":"done"}',
+    ]);
+    const r = await runPlanningAgent(deps, {
+      context,
+      pr,
+      toolCatalog: catalog,
+      userRequest: 'summary and review',
+    });
+    expect(toolCalls.map((c) => c.tool)).toEqual(['/describe', '/review']);
+    // 两个工具步骤 + 收尾 plan
+    expect(r.steps.map((s) => s.kind)).toEqual(['tool', 'tool', 'plan']);
+    expect(r.finalText).toBe('done');
+  });
+
+  it('runs allowed tools and refuses disallowed ones within the same multi-tool turn', async () => {
+    const { deps, toolCalls } = makeDeps([
+      '{"tools":["/review","/approve"]}',
+      '{"final":"ok"}',
+    ]);
+    const r = await runPlanningAgent(deps, {
+      context,
+      pr,
+      toolCatalog: catalog, // /approve 未授权
+      userRequest: 'x',
+    });
+    expect(toolCalls.map((c) => c.tool)).toEqual(['/review']); // 仅允许的被分发
+    expect(r.steps.some((s) => s.kind === 'judge')).toBe(true); // /approve 被拒记录
+  });
+
+  it('caps parallel tool selection at 3', async () => {
+    const { deps, toolCalls } = makeDeps([
+      '{"tools":["/review","/review","/review","/review"]}',
+      '{"final":"ok"}',
+    ]);
+    await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
+    expect(toolCalls).toHaveLength(3); // 4 选 → 截断为 3
+  });
+
   it('refuses ungranted mutating tools (red line) and lets the agent re-plan', async () => {
     const { deps, toolCalls } = makeDeps(['{"tool":"/approve"}', '{"final":"cannot approve"}']);
     const r = await runPlanningAgent(deps, {
