@@ -153,6 +153,9 @@ export function registerIpcHandlers({
     return pr;
   };
 
+  /** 生效的 Agent 目录：用户配置优先，未配置则回落工作目录默认位置（~/.code-meeseeks/agent）。 */
+  const effectiveAgentDir = (): string => bootstrap.config.agent.dir || bootstrap.paths.agentDir;
+
   // /ask 输出去重：pr-agent answer markdown 里会回显完整问题，跟 UI chat-user-msg
   // 气泡重复。逐行精确匹配 question (含 trim 后) 的行整行删掉，保留其余正文
   const stripAskQuestionEcho = (md: string, question: string): string => {
@@ -869,21 +872,18 @@ export function registerIpcHandlers({
           }
         }
 
-        const agentCfg = bootstrap.config.agent;
-        if (agentCfg.enabled && agentCfg.dir) {
-          const rules = await loadAgentRules(agentCfg.dir, {
-            onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
-          });
-          const matched = pickMatchingRule(rules, {
-            projectKey: pr.repo.projectKey,
-            repoSlug: pr.repo.repoSlug,
-            targetBranch: pr.targetRef.displayId,
-            tool: req.tool,
-          });
-          if (matched) {
-            matchedRuleInstructions = matched.instructions;
-            matchedRuleId = matched.id;
-          }
+        const rules = await loadAgentRules(effectiveAgentDir(), {
+          onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
+        });
+        const matched = pickMatchingRule(rules, {
+          projectKey: pr.repo.projectKey,
+          repoSlug: pr.repo.repoSlug,
+          targetBranch: pr.targetRef.displayId,
+          tool: req.tool,
+        });
+        if (matched) {
+          matchedRuleInstructions = matched.instructions;
+          matchedRuleId = matched.id;
         }
       }
 
@@ -1331,11 +1331,9 @@ export function registerIpcHandlers({
       req: IpcChannels['agent:run']['request'],
     ): Promise<IpcChannels['agent:run']['response']> => {
       if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
-      const agentCfg = bootstrap.config.agent;
-      if (!agentCfg.enabled || !agentCfg.dir) throw new Error(t('prAgent.agentNotEnabled'));
       const pr = await findPrOrThrow(req.localId);
       // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存。
-      const agentContext = await loadAgentContext(agentCfg.dir, {
+      const agentContext = await loadAgentContext(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
       return withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
@@ -1384,10 +1382,8 @@ export function registerIpcHandlers({
       req: IpcChannels['agent:ask']['request'],
     ): Promise<IpcChannels['agent:ask']['response']> => {
       if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
-      const agentCfg = bootstrap.config.agent;
-      if (!agentCfg.enabled || !agentCfg.dir) throw new Error(t('prAgent.agentNotEnabled'));
       const pr = await findPrOrThrow(req.localId);
-      const agentContext = await loadAgentContext(agentCfg.dir, {
+      const agentContext = await loadAgentContext(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
       const ac = new AbortController();
@@ -1418,9 +1414,8 @@ export function registerIpcHandlers({
   let autopilotBusy = false;
   let lastAutopilotEvalAt = 0;
   const runAutopilotIfDue = (): void => {
-    const agentCfg = bootstrap.config.agent;
-    const ap = agentCfg.autopilot;
-    if (!agentCfg.enabled || !agentCfg.dir || !ap.enabled || autopilotBusy || !getPrAgentBridge()) {
+    const ap = bootstrap.config.agent.autopilot;
+    if (!ap.enabled || autopilotBusy || !getPrAgentBridge()) {
       return;
     }
     const now = Date.now();
@@ -1438,7 +1433,7 @@ export function registerIpcHandlers({
         }
         if (candidates.length === 0) return;
 
-        const agentContext = await loadAgentContext(agentCfg.dir, {
+        const agentContext = await loadAgentContext(effectiveAgentDir(), {
           onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
         });
         await withAgentChat(async (chat) => {
@@ -1766,12 +1761,10 @@ export function registerIpcHandlers({
       _evt,
       req: IpcChannels['rules:matchForPr']['request'],
     ): Promise<IpcChannels['rules:matchForPr']['response']> => {
-      const cfg = bootstrap.config.agent;
-      if (!cfg.enabled || !cfg.dir) return null;
       // ask 工具不接规则 (问答自由形式，没什么"规约"可应用)
       if (req.tool === 'ask') return null;
       const pr = await findPrOrThrow(req.localId);
-      const rules = await loadAgentRules(cfg.dir, {
+      const rules = await loadAgentRules(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
       });
       const matched = pickMatchingRule(rules, {

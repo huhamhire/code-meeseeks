@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
+import { scaffoldAgentDir } from '@meebox/agent';
 import { resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
 import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
@@ -108,6 +109,17 @@ async function start(): Promise<void> {
     { firstRun: bootstrap.firstRun, appDir: bootstrap.paths.appDir },
     'meebox main process started',
   );
+
+  // Agent 目录脚手架：未配置自定义目录时，Agent 上下文默认落在工作目录下的 agent/（见 ipc.ts
+  // effectiveAgentDir）。启动期幂等补齐默认目录的模版（已存在不覆盖），使首次使用即有 SOUL/AGENTS
+  // 等上下文文件可读。失败不阻断启动（运行期 loadAgentContext 仍会按缺失文件降级 + warn）。
+  void scaffoldAgentDir(bootstrap.paths.agentDir)
+    .then((created) => {
+      if (created.length) logger.info({ created }, 'agent dir scaffolded');
+    })
+    .catch((err: unknown) => {
+      logger.warn({ err }, 'scaffold agent dir failed');
+    });
 
   // macOS GUI 启动（Finder/Dock）只有 launchd 最小 PATH，找不到本机 CLI（claude/codex，常在
   // ~/.local/bin / homebrew）。启动期前置常见目录到 process.env.PATH，使后续 spawn 的嵌入式
