@@ -9,6 +9,8 @@ import {
   PanelToggleIcon,
   PersonIcon,
   PullRequestIcon,
+  RobotIcon,
+  RobotOffIcon,
   SettingsIcon,
   SyncIcon,
 } from './icons';
@@ -100,7 +102,8 @@ export function StatusBar({
         title={autopilotEnabled ? t('statusBar.autopilotOnTitle') : t('statusBar.autopilotOffTitle')}
         aria-pressed={autopilotEnabled}
       >
-        {t('statusBar.autopilot')}
+        {autopilotEnabled ? <RobotIcon size={13} /> : <RobotOffIcon size={13} />}
+        <span>{t('statusBar.autopilot')}</span>
       </button>
       <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />
       {updateInfo?.hasUpdate && updateInfo.url && (

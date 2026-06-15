@@ -408,6 +408,57 @@ export function NeedsWorkIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 机器人头像：AutoPilot 启用态。天线 + 头框 + 双眼 + 两侧耳。 */
+export function RobotIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5.5" width="10" height="7.5" rx="1.6" />
+      <path d="M8 3.2v2.3" />
+      <circle cx="8" cy="2.6" r="0.7" fill="currentColor" stroke="none" />
+      <circle cx="6" cy="9" r="0.85" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="9" r="0.85" fill="currentColor" stroke="none" />
+      <path d="M1.6 8.5v2" />
+      <path d="M14.4 8.5v2" />
+    </svg>
+  );
+}
+
+/** 机器人头像 + 斜杠：AutoPilot 关闭态。 */
+export function RobotOffIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5.5" width="10" height="7.5" rx="1.6" />
+      <path d="M8 3.2v2.3" />
+      <circle cx="8" cy="2.6" r="0.7" fill="currentColor" stroke="none" />
+      <circle cx="6" cy="9" r="0.85" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="9" r="0.85" fill="currentColor" stroke="none" />
+      <path d="M1.6 8.5v2" />
+      <path d="M14.4 8.5v2" />
+      <path d="M2.3 2.3l11.4 11.4" />
+    </svg>
+  );
+}
+
 /** 双星火花（sparkles）：AI 自动评审动作。两颗四角星，区别于工具命令的 `/` 触发器 */
 export function AutoReviewIcon({ size = 14 }: IconProps) {
   return (

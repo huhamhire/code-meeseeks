@@ -41,9 +41,14 @@
   color: $text-on-accent;
 }
 
-// AutoPilot 开关 chip：默认中性（关），启用时绿底强调
+// AutoPilot 开关 chip：机器人图标（开）/ 斜杠机器人（关）+ 文案；默认中性，启用时绿底强调
 .statusbar-chip-autopilot {
   cursor: pointer;
+  gap: $space-2;
+
+  svg {
+    flex-shrink: 0;
+  }
 
   &.is-on {
     background: $color-success;
