@@ -1,15 +1,24 @@
 import { useTranslation } from 'react-i18next';
-import type { StoredPullRequest } from '@meebox/shared';
+import type { AgentRecommendationVerdict, StoredPullRequest } from '@meebox/shared';
 import { Avatar } from './Avatar';
 import { PersonIcon, PullRequestIcon } from './icons';
+
+/** AutoPilot 建议 verdict → 复用 chatPane.agent.* 文案（不另加 i18n）。 */
+const VERDICT_TITLE: Record<string, string> = {
+  approve: 'chatPane.agent.verdictApprove',
+  needs_work: 'chatPane.agent.verdictNeedsWork',
+  manual_review: 'chatPane.agent.verdictManualReview',
+};
 
 interface PrItemProps {
   pr: StoredPullRequest;
   selected: boolean;
   onClick: () => void;
+  /** AutoPilot 已自动评审给出的建议倾向（来自台账）；无则不显示徽标。 */
+  autopilotVerdict?: AgentRecommendationVerdict | null;
 }
 
-export function PrItem({ pr, selected, onClick }: PrItemProps) {
+export function PrItem({ pr, selected, onClick, autopilotVerdict }: PrItemProps) {
   const { t } = useTranslation();
   const approvedCount = pr.reviewers.filter((r) => r.status === 'approved').length;
   const needsWorkCount = pr.reviewers.filter((r) => r.status === 'needsWork').length;
@@ -51,8 +60,17 @@ export function PrItem({ pr, selected, onClick }: PrItemProps) {
               <PersonIcon />
               {pr.author.displayName}
             </span>
-            {(approvedCount > 0 || needsWorkCount > 0 || canMerge) && (
+            {(approvedCount > 0 || needsWorkCount > 0 || canMerge || autopilotVerdict) && (
               <span className="pr-item-review-chips">
+                {autopilotVerdict && (
+                  <span
+                    className={`review-chip autopilot-chip autopilot-${autopilotVerdict}`}
+                    title={t(VERDICT_TITLE[autopilotVerdict])}
+                    aria-label={`AutoPilot ${autopilotVerdict}`}
+                  >
+                    ★
+                  </span>
+                )}
                 {canMerge && (
                   <span
                     className="review-chip review-chip-mergeable"

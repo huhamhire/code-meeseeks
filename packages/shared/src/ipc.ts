@@ -1,4 +1,4 @@
-import type { AgentSession, AgentStep } from './agent-contract.js';
+import type { AgentRecommendationVerdict, AgentSession, AgentStep } from './agent-contract.js';
 import type { AppInfo, AppPaths, UpdateCheckResult } from './app-info.js';
 import type { Config } from './config.js';
 import type { SupportedLanguage } from './language.js';
@@ -406,6 +406,14 @@ export interface IpcChannels {
   'agent:run': {
     request: { localId: string };
     response: AgentSession;
+  };
+  /**
+   * 批量读 AutoPilot 台账：返回各 PR 已自动评审的 recommendation（仅 decision=review 且有
+   * 建议者）。PR 列表据此显示徽标，无需逐个加载会话。
+   */
+  'agent:autopilotLedgers': {
+    request: { localIds: string[] };
+    response: Record<string, AgentRecommendationVerdict>;
   };
   /**
    * 列出指定 PR 的全部草稿 (pending / edited / posted / rejected 都返回，UI 端按

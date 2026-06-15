@@ -36,10 +36,12 @@ import {
   writeCommentsCache,
   writeAutopilotLedger,
   needsAutoReview,
+  getAutopilotLedger,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
 import { pickMatchingRule } from '@meebox/rules';
 import type {
+  AgentRecommendationVerdict,
   AgentSession,
   AppInfo,
   ConnectionSummary,
@@ -1667,6 +1669,23 @@ export function registerIpcHandlers({
       await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, agent });
       bootstrap.config.agent = agent;
       logger.info({ enabled: req.enabled }, 'autopilot toggled');
+    },
+  );
+
+  ipcMain.handle(
+    'agent:autopilotLedgers',
+    async (
+      _evt,
+      req: IpcChannels['agent:autopilotLedgers']['request'],
+    ): Promise<IpcChannels['agent:autopilotLedgers']['response']> => {
+      const out: Record<string, AgentRecommendationVerdict> = {};
+      for (const id of req.localIds) {
+        const ledger = await getAutopilotLedger(stateStore, id);
+        if (ledger?.decision === 'review' && ledger.recommendation) {
+          out[id] = ledger.recommendation;
+        }
+      }
+      return out;
     },
   );
 
