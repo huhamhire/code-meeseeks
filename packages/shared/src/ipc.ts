@@ -1,4 +1,9 @@
-import type { AgentRecommendationVerdict, AgentSession, AgentStep } from './agent-contract.js';
+import type {
+  AgentMessage,
+  AgentRecommendationVerdict,
+  AgentSession,
+  AgentStep,
+} from './agent-contract.js';
 import type { AppInfo, AppPaths, UpdateCheckResult } from './app-info.js';
 import type { Config } from './config.js';
 import type { SupportedLanguage } from './language.js';
@@ -422,6 +427,11 @@ export interface IpcChannels {
    * 供 UI 打开 PR 时恢复「评审总结」卡片——总结归属其发起 PR、跨 PR 切换不丢失、不串台。
    */
   'agent:getSession': { request: { localId: string }; response: AgentSession | null };
+  /**
+   * 读取指定 PR 的多轮对话消息（用户输入 + Agent 回答，按时间升序）；无则空数组。
+   * UI 据此渲染多轮会话；跨 PR 切换 / 重启后恢复。
+   */
+  'agent:getConversation': { request: { localId: string }; response: AgentMessage[] };
   /**
    * 批量读 AutoPilot 台账：返回各 PR 已自动评审的 recommendation（仅 decision=review 且有
    * 建议者）。PR 列表据此显示徽标，无需逐个加载会话。

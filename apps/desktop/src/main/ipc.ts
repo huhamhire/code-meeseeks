@@ -39,6 +39,8 @@ import {
   getAutopilotLedger,
   getAgentSession,
   clearAgentSession,
+  getAgentConversation,
+  appendAgentMessage,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
 import { pickMatchingRule } from '@meebox/rules';
@@ -1338,7 +1340,17 @@ export function registerIpcHandlers({
       const agentContext = await loadAgentContext(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
-      return withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
+      const session = await withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
+      // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（走 1476
+      // 的 runReviewForPr，不经此处）。无文本 / 失败不记。
+      if (session.status === 'done' && session.summary) {
+        await appendAgentMessage(stateStore, pr.localId, {
+          role: 'assistant',
+          content: session.summary,
+          recommendation: session.recommendation,
+        });
+      }
+      return session;
     },
   );
 
@@ -1417,6 +1429,15 @@ export function registerIpcHandlers({
       req: IpcChannels['agent:getSession']['request'],
     ): Promise<IpcChannels['agent:getSession']['response']> =>
       getAgentSession(stateStore, req.localId),
+  );
+
+  ipcMain.handle(
+    'agent:getConversation',
+    async (
+      _evt,
+      req: IpcChannels['agent:getConversation']['request'],
+    ): Promise<IpcChannels['agent:getConversation']['response']> =>
+      getAgentConversation(stateStore, req.localId),
   );
 
   // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===
