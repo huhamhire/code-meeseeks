@@ -50,6 +50,17 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 
 环境：Node ≥ 20（实测 22）、npm ≥ 10。**包管理器统一用 npm**（workspaces，lockfile `package-lock.json`）——勿用 yarn / pnpm。
 
+## 依赖同步
+
+**每次拉取代码后、以及发布前**，在仓库根目录执行一次完整安装并对齐运行时：
+
+```bash
+npm install                                      # 完整安装依赖、对齐 package-lock.json（workspaces 软链）
+npm --prefix apps/desktop run prepare:pragent    # 对齐嵌入式 pr-agent 运行时与 shim（见 docs/arch/04）
+```
+
+`npm install`（非 `npm ci`）会按 `package.json` 解析并写回 lockfile，确保本地与远端 `package-lock.json` 一致；`prepare:pragent` 幂等，按 `pragent-runtime.json` 对齐本地 pr-agent 运行时（版本不变则跳过、仅同步 shim）。lockfile 若被改动，按本次改动归属一并提交。
+
 ## 提交前必做
 
 改完代码务必本地跑通这四步再收尾（CI 就是这套）：`lint` → `typecheck` → `test` → `build`。lint 零容忍（`--max-warnings=0`），warning 也会让 CI 红。
