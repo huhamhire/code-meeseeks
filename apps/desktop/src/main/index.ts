@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, nativeTheme, shell } from 'electron';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
@@ -39,6 +40,17 @@ let lastUpdateCheckMs = PROCESS_START_MS;
 // 让运行期不落 .pyc，安装目录文件数稳定（仅装包时的量）。子进程经 spawn 继承本进程 env。
 // 代价：每次 python 启动重编译（略慢）；评审为 LLM 网络主导，影响有限。
 process.env.PYTHONDONTWRITEBYTECODE = '1';
+
+// Windows 控制台默认活动代码页为本地化 OEM 页（简中为 cp936/GBK），而 Node/pino 按 UTF-8 写出
+// 字节 → 中文日志在 dev 终端显示为乱码。启动期把附着控制台的输出代码页切到 65001(UTF-8)，使其与
+// 写出的 UTF-8 字节对齐。仅 win32；无附着控制台（打包态）时 chcp 静默失败，已 try 吞掉、无副作用。
+if (process.platform === 'win32') {
+  try {
+    execSync('chcp 65001', { stdio: 'ignore' });
+  } catch {
+    /* 无控制台 / chcp 不可用：忽略，日志仍按 UTF-8 字节写出 */
+  }
+}
 
 // macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
 // 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
