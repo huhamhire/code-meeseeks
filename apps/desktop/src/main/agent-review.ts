@@ -7,6 +7,7 @@ import type {
   ReviewRun,
   StoredPullRequest,
   TokenUsage,
+  ToolCatalogEntry,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
 
@@ -38,6 +39,8 @@ export interface AgentReviewDeps {
   agentContext: AgentContext;
   matchedRule?: Rule | null;
   language: string;
+  /** 工具目录（含修改红线标注）；注入编排器系统上下文。 */
+  toolCatalog?: ToolCatalogEntry[];
   maxFollowupAsks: number;
   summaryMaxChars: number;
   /** 步骤流式回调（广播给渲染层）。 */
@@ -81,6 +84,7 @@ export async function runAgentReview(
         pr: { title: pr.title, description: pr.description, targetBranch: pr.targetRef.displayId },
         matchedRule: deps.matchedRule,
         language: deps.language,
+        toolCatalog: deps.toolCatalog,
         maxFollowupAsks: deps.maxFollowupAsks,
         summaryMaxChars: deps.summaryMaxChars,
       },

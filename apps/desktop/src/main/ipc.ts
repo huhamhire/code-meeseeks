@@ -6,7 +6,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
-import { judgeAutopilotBatch, loadAgentContext, loadAgentRules } from '@meebox/agent';
+import {
+  buildToolCatalog,
+  judgeAutopilotBatch,
+  loadAgentContext,
+  loadAgentRules,
+} from '@meebox/agent';
 import type { AgentContext } from '@meebox/agent';
 import { writeConfig, type BootstrapResult } from '@meebox/config';
 import { PrAgentRunError, type PrAgentBridge } from '@meebox/pr-agent-bridge';
@@ -1292,6 +1297,8 @@ export function registerIpcHandlers({
       agentContext,
       matchedRule,
       language: getMainLanguage(),
+      // 工具目录注入：修改类工具按 grants 门控（默认全禁，红线见 buildToolCatalog）。
+      toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
       maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
       summaryMaxChars: agentCfg.summary_max_chars,
       onStep: (sessionId, step) => {
