@@ -1,4 +1,6 @@
 import type {
+  AgentConversationFile,
+  AgentMessage,
   AgentSession,
   AgentSessionFile,
   AgentSessionStatus,
@@ -20,6 +22,9 @@ function sessionKey(prLocalId: string): string {
 }
 function transcriptKey(prLocalId: string): string {
   return `prs/${prLocalId}/agent/transcript`;
+}
+function conversationKey(prLocalId: string): string {
+  return `prs/${prLocalId}/agent/conversation`;
 }
 
 export interface StartAgentSessionInput {
@@ -135,11 +140,40 @@ export async function appendAgentStep(
   return next;
 }
 
-/** 清掉某 PR 的会话 + transcript（删 `prs/<localId>/agent/*`）。 */
+/** 清掉某 PR 的会话 + transcript + 多轮对话（删 `prs/<localId>/agent/*`）。 */
 export async function clearAgentSession(
   stateStore: StateStore,
   prLocalId: string,
 ): Promise<void> {
   await stateStore.delete(sessionKey(prLocalId));
   await stateStore.delete(transcriptKey(prLocalId));
+  await stateStore.delete(conversationKey(prLocalId));
+}
+
+/**
+ * 多轮对话日志（跨回合保留，独立于 per-turn 的 session / transcript 生命周期）：读取本 PR
+ * 全部消息（用户输入 + Agent 收尾回答）。无则空数组。
+ */
+export async function getAgentConversation(
+  stateStore: StateStore,
+  prLocalId: string,
+): Promise<AgentMessage[]> {
+  const file = await stateStore.read<AgentConversationFile>(conversationKey(prLocalId));
+  return file?.messages ?? [];
+}
+
+/** 追加一条对话消息（用户 / 助手），返回追加后的完整消息列表。`at` 缺省打当前时间。 */
+export async function appendAgentMessage(
+  stateStore: StateStore,
+  prLocalId: string,
+  message: Omit<AgentMessage, 'at'> & { at?: string },
+  now: () => Date = () => new Date(),
+): Promise<AgentMessage[]> {
+  const messages = await getAgentConversation(stateStore, prLocalId);
+  messages.push({ ...message, at: message.at ?? now().toISOString() });
+  await stateStore.write<AgentConversationFile>(conversationKey(prLocalId), {
+    schema_version: 1,
+    messages,
+  });
+  return messages;
 }

@@ -1,5 +1,11 @@
 import { runPlanningAgent, type AgentContext, type PlanningToolResult } from '@meebox/agent';
-import { appendAgentStep, startAgentSession, updateAgentSession } from '@meebox/poller';
+import {
+  appendAgentMessage,
+  appendAgentStep,
+  getAgentConversation,
+  startAgentSession,
+  updateAgentSession,
+} from '@meebox/poller';
 import type { Rule } from '@meebox/rules';
 import type {
   AgentSession,
@@ -46,6 +52,10 @@ export async function runAgentPlanning(
   deps: AgentPlanningDeps,
   now: () => Date = () => new Date(),
 ): Promise<AgentSession> {
+  // 多轮对话：先读既往消息（注入规划上下文），再把本轮用户输入追加为一条消息（持久化）。
+  const history = await getAgentConversation(deps.stateStore, pr.localId);
+  await appendAgentMessage(deps.stateStore, pr.localId, { role: 'user', content: userRequest }, now);
+
   const session = await startAgentSession(
     deps.stateStore,
     { prLocalId: pr.localId, maxSteps: deps.maxSteps, userRequest },
@@ -78,9 +88,20 @@ export async function runAgentPlanning(
         matchedRule: deps.matchedRule,
         language: deps.language,
         userRequest,
+        history,
         maxSteps: deps.maxSteps,
       },
     );
+
+    // 把 Agent 收尾回答追加为一条助手消息（评审类带 recommendation）；暂停 / 空回答不记。
+    if (result.finalText && result.terminationReason !== '用户暂停') {
+      await appendAgentMessage(
+        deps.stateStore,
+        pr.localId,
+        { role: 'assistant', content: result.finalText, recommendation: result.recommendation },
+        now,
+      );
+    }
 
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {

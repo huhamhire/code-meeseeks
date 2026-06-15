@@ -54,6 +54,28 @@ export interface AgentRecommendation {
   reason: string;
 }
 
+export type AgentMessageRole = 'user' | 'assistant';
+
+/**
+ * 一条对话消息（回合级，区别于回合内的 AgentStep）。多轮对话的持久化单元：用户输入与 Agent
+ * 收尾回答各一条，按时间追加。Agent 自身上下文（规划）会读取历史消息，但**绝不**注入 pr-agent
+ * 工具调用（工具只看 PR + 当轮问题）。
+ */
+export interface AgentMessage {
+  role: AgentMessageRole;
+  content: string;
+  /** assistant 评审类回合的非约束性判定；对话 / 用户消息不填。 */
+  recommendation?: AgentRecommendation;
+  /** 产生时间（ISO），用于时间线排序。 */
+  at: string;
+}
+
+/** 持久化包装：`prs/<localId>/agent/conversation.json`（多轮消息流式追加，跨回合保留）。 */
+export interface AgentConversationFile {
+  schema_version: 1;
+  messages: AgentMessage[];
+}
+
 /** 每个 PR 一份、由子 agent 所有的会话记录（见数据契约）。 */
 export interface AgentSession {
   id: string;

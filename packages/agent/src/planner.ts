@@ -1,5 +1,6 @@
 import type { Rule } from '@meebox/rules';
 import type {
+  AgentMessage,
   AgentRecommendation,
   AgentRecommendationVerdict,
   AgentStep,
@@ -43,6 +44,11 @@ export interface PlanningInput {
   language?: string;
   /** 用户的自然语言请求。 */
   userRequest: string;
+  /**
+   * 既往多轮对话（用户 / 助手消息，按时间升序，不含本轮请求）。注入规划 LLM 的上下文，使
+   * Agent 跨轮记住此前交流；**绝不**透传给 pr-agent 工具（工具只看 PR + 当轮问题）。
+   */
+  history?: AgentMessage[];
   /** 步数上限（默认 8）。 */
   maxSteps?: number;
 }
@@ -100,6 +106,29 @@ function clamp(s: string, max: number): string {
 /** 一次并行最多分发的工具数：多选时截断，防止一轮打出过多 pr-agent run。 */
 const MAX_PARALLEL_TOOLS = 3;
 
+/**
+ * 注入规划上下文的历史对话预算：单条字符上限 + 总字符预算（从最新往回累计、超预算即裁剪更早的）。
+ * 约定会话上下文不超过 LLM 上下文窗口的一半——以字符近似 token 做保守封顶：64k 字符 ≈ 16~40k token
+ * （视中英文占比），对应约 32k~64k token 半窗的目标量级。后续可按模型实际窗口精确估算 token，并引入
+ * 老消息压缩（摘要）替代直接裁剪。
+ */
+const HISTORY_MESSAGE_MAX = 2000;
+const HISTORY_BUDGET_CHARS = 64000;
+
+/** 取最近若干轮、各自限长，并按总预算从新到旧裁剪（丢弃超预算的更早消息），返回时间升序文本。 */
+function buildConversationContext(history: readonly AgentMessage[]): string {
+  const lines: string[] = [];
+  let budget = HISTORY_BUDGET_CHARS;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i]!;
+    const line = `${m.role === 'user' ? 'User' : 'Assistant'}: ${clamp(m.content, HISTORY_MESSAGE_MAX)}`;
+    if (line.length + 1 > budget) break; // 预算耗尽：更早的对话整体裁掉
+    budget -= line.length + 1;
+    lines.push(line);
+  }
+  return lines.reverse().join('\n');
+}
+
 const PROTOCOL = [
   'Each turn, reply with JSON ONLY for the next action:',
   '- One tool:   {"thought": "...", "tool": "/review", "question": "<only for /ask>"}',
@@ -145,12 +174,19 @@ export async function runPlanningAgent(
     await deps.onStep?.(step);
   };
 
+  // 既往多轮对话注入规划上下文（按预算裁剪），让 Agent 跨轮记住交流；仅供规划 LLM 参考，
+  // 绝不透传给 pr-agent 工具。
+  const convo = buildConversationContext(input.history ?? []);
+
   for (let i = 0; i < maxSteps; i++) {
     if (deps.signal?.aborted) {
       return { steps, finalText: '', tokenUsage: usage, terminationReason: '用户暂停' };
     }
 
     const user = [
+      convo
+        ? `Conversation so far (your context only — NEVER pass any of it to tools):\n${convo}\n`
+        : '',
       `User request: ${input.userRequest}`,
       history.length ? `\nProgress so far:\n${history.join('\n')}` : '',
       '\nReply with the next JSON action.',

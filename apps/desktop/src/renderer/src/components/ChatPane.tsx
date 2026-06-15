@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type {
-  AgentRecommendation,
+  AgentMessage,
   AgentStep,
   Finding,
   IpcChannels,
@@ -148,15 +148,12 @@ export function ChatPane({
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
   const [showRulePreview, setShowRulePreview] = useState(false);
-  // Agent 自动评审（微流程：describe→review→条件追问→总结）：运行态 + 收尾结果。
+  // Agent 运行态（自动评审微流程 / 自由规划对话）。
   const [agentRunning, setAgentRunning] = useState(false);
-  const [agentResult, setAgentResult] = useState<{
-    summary: string;
-    recommendation?: AgentRecommendation;
-  } | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
-  // 触发本次会话的用户自然语言输入（对话即委派）：回显为右对齐气泡；at 用于在时间线中定位。
-  const [userRequest, setUserRequest] = useState<{ text: string; at: string } | null>(null);
+  // 多轮对话消息（用户输入 + Agent 回答），跨回合保留、由 main 落盘 conversation.json，
+  // 切回该 PR 恢复。用户消息含临时 optimistic 项（提交即回显），收尾后整体以落盘版重载对齐。
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // 当前展示中的 PR id（每渲染同步）：异步 Agent 任务 resolve 时据此判断是否仍停在发起 PR，
@@ -190,7 +187,7 @@ export function ChatPane({
       time: r.startedAt,
       run: r as ReviewRun | null,
       step: null as AgentStep | null,
-      user: null as string | null,
+      message: null as AgentMessage | null,
     }));
     const stepEntries = agentSteps
       .filter((s) => s.kind === 'judge')
@@ -199,15 +196,19 @@ export function ChatPane({
         time: s.at ?? '',
         run: null,
         step: s,
-        user: null as string | null,
+        message: null as AgentMessage | null,
       }));
-    const userEntries = userRequest
-      ? [{ key: `user-${userRequest.at}`, time: userRequest.at, run: null, step: null, user: userRequest.text }]
-      : [];
-    return [...runEntries, ...stepEntries, ...userEntries].sort((a, b) =>
+    const msgEntries = messages.map((m, i) => ({
+      key: `msg-${i}-${m.at}`,
+      time: m.at,
+      run: null,
+      step: null as AgentStep | null,
+      message: m,
+    }));
+    return [...runEntries, ...stepEntries, ...msgEntries].sort((a, b) =>
       a.time.localeCompare(b.time),
     );
-  }, [visibleRuns, agentSteps, userRequest]);
+  }, [visibleRuns, agentSteps, messages]);
 
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
@@ -222,30 +223,24 @@ export function ChatPane({
     setError(null);
     setMatchedRule(null);
     setAgentSteps([]);
-    setAgentResult(null);
-    setUserRequest(null);
+    setMessages([]);
     if (!prLocalId) return;
     let cancelled = false;
     void (async () => {
       try {
         // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)。
-        // 同时拉已落盘的 Agent 会话：把「评审总结」卡片恢复到其发起 PR，跨切换不丢失。
-        const [list, rule, session] = await Promise.all([
+        // 同时拉已落盘的多轮对话：把会话消息恢复到其 PR，跨切换 / 重启不丢失。
+        const [list, rule, conversation] = await Promise.all([
           invoke('pragent:listRuns', { localId: prLocalId, limit: RUNS_PAGE_SIZE }),
           invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
-          invoke('agent:getSession', { localId: prLocalId }),
+          invoke('agent:getConversation', { localId: prLocalId }),
         ]);
         if (cancelled) return;
         // 反转为升序 (chat 习惯)，UI 直接读 runs 即可
         setRuns([...list].reverse());
         setHasMoreOlder(list.length === RUNS_PAGE_SIZE);
         setMatchedRule(rule);
-        if (session?.userRequest) {
-          setUserRequest({ text: session.userRequest, at: session.startedAt });
-        }
-        if (session?.summary) {
-          setAgentResult({ summary: session.summary, recommendation: session.recommendation });
-        }
+        setMessages(conversation);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -362,25 +357,28 @@ export function ChatPane({
     }
   };
 
-  // 一键自动评审：触发 main 的 agent:run（评审微流程）。describe/review/ask 子 run 经
-  // 既有运行队列展示在历史里；收尾总结 + 建议落 agentResult 单独呈现。
+  // 从 main 重载某 PR 的多轮对话（落盘版为准）；仅当仍停在该 PR 才落到当前视图，避免串台。
+  const reloadConversation = async (localId: string): Promise<void> => {
+    try {
+      const conversation = await invoke('agent:getConversation', { localId });
+      if (currentPrIdRef.current === localId) setMessages(conversation);
+    } catch {
+      /* 忽略：下次 PR 切换 effect 会重载 */
+    }
+  };
+
+  // 一键自动评审：触发 main 的 agent:run（评审微流程）。describe/review/ask 子 run 经既有运行
+  // 队列展示在历史里；收尾评审作为一条 assistant 消息落入多轮对话，完成后重载对话呈现。
   const handleAgentReview = async (): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
     const startedId = pr.localId;
     setError(null);
-    setAgentResult(null);
     setAgentSteps([]);
-    setUserRequest(null); // 自动评审无文本输入，清掉上一轮对话气泡
     setAgentRunning(true);
     try {
       const session = await invoke('agent:run', { localId: startedId });
-      // 已切到别的 PR：结果归属其发起 PR（已落盘），不串台到当前会话；回到该 PR 时由切换 effect
-      // 从落盘会话恢复总结。
-      if (currentPrIdRef.current !== startedId) return;
-      if (session.summary) {
-        setAgentResult({ summary: session.summary, recommendation: session.recommendation });
-      }
-      if (session.status === 'failed') {
+      await reloadConversation(startedId);
+      if (currentPrIdRef.current === startedId && session.status === 'failed') {
         setError(session.terminationReason ?? t('chatPane.agent.failed'));
       }
     } catch (e) {
@@ -392,24 +390,19 @@ export function ChatPane({
     }
   };
 
-  // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。最终回答落 agentResult，步骤同样流式。
+  // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。用户输入即时 optimistic 回显，
+  // 收尾后以落盘对话（含用户 + 助手消息）整体对齐。
   const handleAgentAsk = async (question: string): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
     const startedId = pr.localId;
     setError(null);
-    setAgentResult(null);
     setAgentSteps([]);
-    // 立即回显用户输入气泡（main 落盘 session.userRequest 后，切回该 PR 亦能恢复）。
-    setUserRequest({ text: question, at: new Date().toISOString() });
+    setMessages((prev) => [...prev, { role: 'user', content: question, at: new Date().toISOString() }]);
     setAgentRunning(true);
     try {
       const session = await invoke('agent:ask', { localId: startedId, question });
-      // 已切到别的 PR：不串台（回该 PR 时由切换 effect 从落盘会话恢复）。
-      if (currentPrIdRef.current !== startedId) return;
-      if (session.summary) {
-        setAgentResult({ summary: session.summary, recommendation: session.recommendation });
-      }
-      if (session.status === 'failed') {
+      await reloadConversation(startedId);
+      if (currentPrIdRef.current === startedId && session.status === 'failed') {
         setError(session.terminationReason ?? t('chatPane.agent.failed'));
       }
     } catch (e) {
@@ -432,9 +425,8 @@ export function ChatPane({
       setRuns([]);
       setHasMoreOlder(false);
       setError(null);
-      setAgentResult(null);
       setAgentSteps([]);
-      setUserRequest(null);
+      setMessages([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -639,7 +631,6 @@ export function ChatPane({
         {/* 使用提示仅在「全无会话内容」时显示：一旦有用户输入气泡 / run / 步骤 / 收尾结果，
             或 Agent 正在运行 / 有排队任务，即隐藏，避免输入后仍残留提示。 */}
         {timeline.length === 0 &&
-          !agentResult &&
           !agentRunning &&
           !hasMyActive &&
           myWaiting.length === 0 && (
@@ -675,10 +666,8 @@ export function ChatPane({
             />
           ) : entry.step ? (
             <AgentStepMarker key={entry.key} step={entry.step} />
-          ) : entry.user != null ? (
-            <div key={entry.key} className="chat-user-row">
-              <div className="chat-user-bubble">{entry.user}</div>
-            </div>
+          ) : entry.message ? (
+            <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
         )}
         {/* 正在跑（可并发多条）：每条一个进度条 + 实时 stdout 流，贴在历史末尾。
@@ -720,54 +709,6 @@ export function ChatPane({
             <span>{t('chatPane.agent.thinking')}</span>
           </div>
         )}
-        {/* 收尾结果两种形态：评审类（带 recommendation）→「评审总结」卡片 + 判定徽标；
-            自然对话（无 recommendation）→ 专属对话回复包装，不套用评审总结标题。 */}
-        {agentResult &&
-          (agentResult.recommendation ? (
-            <div className="chat-agent-summary" role="status">
-              <div className="chat-agent-summary-head">
-                <strong>{t('chatPane.agent.summaryTitle')}</strong>
-                <span
-                  className={`chat-agent-verdict verdict-${agentResult.recommendation.verdict}`}
-                >
-                  {t(VERDICT_LABEL_KEY[agentResult.recommendation.verdict])}
-                </span>
-              </div>
-              <div className="markdown chat-agent-summary-text">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkBreaks]}
-                  rehypePlugins={REMOTE_REHYPE_PLUGINS}
-                  components={mermaidComponents}
-                >
-                  {agentResult.summary}
-                </ReactMarkdown>
-              </div>
-              {agentResult.recommendation.reason && (
-                <div className="markdown muted chat-agent-summary-reason">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    rehypePlugins={REMOTE_REHYPE_PLUGINS}
-                    components={mermaidComponents}
-                  >
-                    {agentResult.recommendation.reason}
-                  </ReactMarkdown>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="chat-agent-reply" role="status">
-              <ChatIcon size={16} />
-              <div className="markdown chat-agent-reply-body">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkBreaks]}
-                  rehypePlugins={REMOTE_REHYPE_PLUGINS}
-                  components={mermaidComponents}
-                >
-                  {agentResult.summary}
-                </ReactMarkdown>
-              </div>
-            </div>
-          ))}
         {error && (
           <div className="chat-error" role="alert">
             <strong>{t('chatPane.errorPrefix')}</strong>
@@ -1412,13 +1353,63 @@ function AskQuestion({ text }: { text: string }) {
     <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
       <QuestionIcon />
       <div className="markdown chat-user-msg-body">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkBreaks]}
-          rehypePlugins={REMOTE_REHYPE_PLUGINS}
-          components={mermaidComponents}
-        >
-          {text}
-        </ReactMarkdown>
+        <Md>{text}</Md>
+      </div>
+    </div>
+  );
+}
+
+/** chat 区统一的 markdown 渲染（与 finding 卡片同套 remark/rehype 配置）。 */
+function Md({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkBreaks]}
+      rehypePlugins={REMOTE_REHYPE_PLUGINS}
+      components={mermaidComponents}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
+/**
+ * 一条多轮对话消息的展示：用户 → 右对齐气泡；助手评审类（带 recommendation）→「评审总结」卡片 +
+ * 判定徽标；助手对话类（无 recommendation）→ 左对齐专属对话回复包装。
+ */
+function ConversationMessage({ message }: { message: AgentMessage }) {
+  const { t } = useTranslation();
+  if (message.role === 'user') {
+    return (
+      <div className="chat-user-row">
+        <div className="chat-user-bubble">{message.content}</div>
+      </div>
+    );
+  }
+  if (message.recommendation) {
+    return (
+      <div className="chat-agent-summary" role="status">
+        <div className="chat-agent-summary-head">
+          <strong>{t('chatPane.agent.summaryTitle')}</strong>
+          <span className={`chat-agent-verdict verdict-${message.recommendation.verdict}`}>
+            {t(VERDICT_LABEL_KEY[message.recommendation.verdict])}
+          </span>
+        </div>
+        <div className="markdown chat-agent-summary-text">
+          <Md>{message.content}</Md>
+        </div>
+        {message.recommendation.reason && (
+          <div className="markdown muted chat-agent-summary-reason">
+            <Md>{message.recommendation.reason}</Md>
+          </div>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="chat-agent-reply" role="status">
+      <ChatIcon size={16} />
+      <div className="markdown chat-agent-reply-body">
+        <Md>{message.content}</Md>
       </div>
     </div>
   );
