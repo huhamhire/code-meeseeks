@@ -583,7 +583,6 @@
     "editConfigYaml": "Edit config.yaml",
     "editConnectionTitle": "Edit Connection",
     "editLlmTitle": "Edit LLM Model",
-    "enableAgent": "Enable Agent",
     "enableConnectionAria": "Activate this connection",
     "enableProxy": "Enable Proxy",
     "experimental": "Experimental",

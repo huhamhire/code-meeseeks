@@ -568,7 +568,6 @@
     "editConfigYaml": "config.yaml を編集",
     "editConnectionTitle": "接続を編集",
     "editLlmTitle": "LLM モデルを編集",
-    "enableAgent": "Agent を有効化",
     "enableConnectionAria": "この接続を有効化",
     "enableProxy": "プロキシを有効化",
     "experimental": "実験的",

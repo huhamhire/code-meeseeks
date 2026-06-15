@@ -7,7 +7,6 @@
     "rejected": "Draft was rejected, skipping"
   },
   "prAgent": {
-    "agentNotEnabled": "Agent is not enabled. Set the Agent directory in Settings and enable it.",
     "askNeedsQuestion": "/ask requires a question",
     "duplicateTask": "A /{{tool}} task for this PR is already running or queued; do not trigger it again.",
     "notReady": "pr-agent not ready",

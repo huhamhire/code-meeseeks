@@ -329,7 +329,7 @@ export interface IpcChannels {
   'config:setLanguage': { request: { language: SupportedLanguage }; response: void };
   /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
-  /** 写入 agent.dir + enabled 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
+  /** 写入 agent.dir 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
   'config:setAgent': { request: { agent: Config['agent'] }; response: void };
   /** 翻转 AutoPilot 开关 (agent.autopilot.enabled) 并写 config.yaml；下次 poll tick 生效。 */
   'agent:setAutopilotEnabled': { request: { enabled: boolean }; response: void };
@@ -401,7 +401,7 @@ export interface IpcChannels {
   /**
    * 对指定 PR 跑一次 Agent 评审微流程（describe→review→条件追问→总结）。同步等待，
    * 期间经 agent:stepProgress 推送步骤；返回收尾后的 AgentSession（含 summary /
-   * recommendation）。agent.enabled=false / pr-agent 不可用时 reject。
+   * recommendation）。pr-agent 不可用时 reject。
    */
   'agent:run': {
     request: { localId: string };

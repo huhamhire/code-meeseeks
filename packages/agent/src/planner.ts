@@ -74,6 +74,9 @@ const PROTOCOL = [
   '- Use a tool: {"thought": "...", "tool": "/review", "question": "<only for /ask>"}',
   '- Finish:     {"thought": "...", "final": "<your answer to the user>"}',
   'Only call tools listed under "Available tools" that are NOT disabled. Prefer few precise steps.',
+  'Routing policy:',
+  '- If the request concerns this PR but no other tool clearly fits, default to /ask with a focused question.',
+  '- If the request is unrelated to this PR, do NOT call any tool — briefly decline in "final".',
 ].join('\n');
 
 export async function runPlanningAgent(

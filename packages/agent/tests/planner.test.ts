@@ -101,4 +101,12 @@ describe('runPlanningAgent', () => {
     const r = await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
     expect(r.finalText).toBe('just some text, no json');
   });
+
+  it('injects the routing policy (PR-content → /ask fallback, unrelated → decline) into the system prompt', async () => {
+    const { deps } = makeDeps(['{"final":"done"}']);
+    await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
+    const system = vi.mocked(deps.chat).mock.calls[0]?.[0]?.system ?? '';
+    expect(system).toContain('default to /ask');
+    expect(system).toContain('unrelated to this PR');
+  });
 });
