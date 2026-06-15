@@ -408,6 +408,16 @@ export interface IpcChannels {
     response: AgentSession;
   };
   /**
+   * 对指定 PR 跑自由规划 Agent（自然语言入口「对话即委派」）。同步等待，步骤经
+   * agent:stepProgress 推送；返回收尾会话（summary = Agent 最终回答）。
+   */
+  'agent:ask': {
+    request: { localId: string; question: string };
+    response: AgentSession;
+  };
+  /** 暂停当前 PR 的 Agent 运行（abort）；会话置 paused、保态。 */
+  'agent:stop': { request: { localId: string }; response: { ok: boolean } };
+  /**
    * 批量读 AutoPilot 台账：返回各 PR 已自动评审的 recommendation（仅 decision=review 且有
    * 建议者）。PR 列表据此显示徽标，无需逐个加载会话。
    */

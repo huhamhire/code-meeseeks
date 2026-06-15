@@ -18,6 +18,7 @@
       "autoReview": "Auto Review",
       "autoReviewRunning": "Reviewing…",
       "failed": "Agent review failed",
+      "stop": "Stop",
       "summaryTitle": "Agent summary",
       "verdictApprove": "Looks good",
       "verdictManualReview": "Manual review",

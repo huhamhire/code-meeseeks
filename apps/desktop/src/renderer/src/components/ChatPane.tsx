@@ -338,6 +338,31 @@ export function ChatPane({
     }
   };
 
+  // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。最终回答落 agentResult，步骤同样流式。
+  const handleAgentAsk = async (question: string): Promise<void> => {
+    if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
+    setError(null);
+    setAgentResult(null);
+    setAgentSteps([]);
+    setAgentRunning(true);
+    try {
+      const session = await invoke('agent:ask', { localId: pr.localId, question });
+      if (session.summary) setAgentResult({ summary: session.summary });
+      if (session.status === 'failed') {
+        setError(session.terminationReason ?? t('chatPane.agent.failed'));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
+  // 暂停当前 PR 的 Agent 运行（agent:stop → 编排器 abort）。仅自由规划 run 可中断。
+  const handleAgentStop = (): void => {
+    if (prLocalId) void invoke('agent:stop', { localId: prLocalId });
+  };
+
   // 清空当前 PR 的执行历史（仅该 PR）：删远端记录 + 清本地列表。进行中的 run 不受影响
   // （在 chatRunStore，跑完会重新落盘）。
   const handleClearRuns = async (): Promise<void> => {
@@ -551,6 +576,11 @@ export function ChatPane({
           >
             {agentRunning ? t('chatPane.agent.autoReviewRunning') : t('chatPane.agent.autoReview')}
           </button>
+          {agentRunning && (
+            <button type="button" className="chat-agent-stop-btn" onClick={handleAgentStop}>
+              {t('chatPane.agent.stop')}
+            </button>
+          )}
         </div>
       )}
 
@@ -662,6 +692,7 @@ export function ChatPane({
         // 渲染 stop 按钮 (本 PR 有运行中 run 时可点终止)。多并发时 stop 终止最近一条。
         runningTool={myActiveRuns[myActiveRuns.length - 1]?.tool ?? null}
         onRun={(t, q) => void handleRun(t, q)}
+        onAgentAsk={(q) => void handleAgentAsk(q)}
         onCancel={
           hasMyActive
             ? () => void handleCancel(myActiveRuns[myActiveRuns.length - 1]!.runId)
@@ -753,6 +784,8 @@ interface ChatInputBarProps {
    */
   runningTool: ReviewRunTool | null;
   onRun: (tool: ReviewRunTool, question?: string) => void;
+  /** 无 '/' 前缀的自然语言输入 → 交给自由规划 Agent（对话即委派，见设计「会话 Agent 化」）。 */
+  onAgentAsk: (question: string) => void;
   /**
    * 终止当前活动 run。仅 runningTool 非空时有意义；ChatPane 已绑好对应 runId。
    * stop 按钮跟 send 共用槽位：runningTool 时点击触发此回调而非 onRun
@@ -840,6 +873,7 @@ function ChatInputBar({
   llmConfigured,
   runningTool,
   onRun,
+  onAgentAsk,
   onCancel,
   onSetReviewStatus,
 }: ChatInputBarProps) {
@@ -987,9 +1021,13 @@ function ChatInputBar({
       }
       cmd = found;
     } else {
-      // COMMANDS 里固定有 /ask，find 不会为 undefined — 用 ! 让 TS 收窄即可
-      cmd = COMMANDS.find((c) => c.kind === 'pragent' && c.name === 'ask')!;
-      rest = trimmed;
+      // 无 '/' → 自然语言「对话即委派」：交给自由规划 Agent（而非 /ask）。
+      setHistory(pushChatHistory(input));
+      setHistoryIdx(-1);
+      draftBeforeHistoryRef.current = '';
+      setInput('');
+      onAgentAsk(trimmed);
+      return;
     }
     // review-action：/approve /needswork 没有参数，多余文本拒绝以免误用
     if (cmd.kind === 'review-action') {
