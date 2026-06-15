@@ -11,3 +11,10 @@ export type {
   AssemblePrMeta,
   AssembleSessionSnapshot,
 } from './assemble.js';
+export { runReviewMicroflow, extractJson } from './orchestrator.js';
+export type {
+  ReviewOrchestratorDeps,
+  ReviewOrchestratorInput,
+  ReviewOrchestratorResult,
+  ToolText,
+} from './orchestrator.js';

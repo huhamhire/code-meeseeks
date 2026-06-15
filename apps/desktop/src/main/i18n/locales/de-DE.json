@@ -7,6 +7,7 @@
     "rejected": "Entwurf wurde abgelehnt, wird übersprungen"
   },
   "prAgent": {
+    "agentNotEnabled": "Agent ist nicht aktiviert. Bitte das Agent-Verzeichnis in den Einstellungen festlegen und aktivieren.",
     "askNeedsQuestion": "/ask erfordert eine Frage",
     "duplicateTask": "Eine /{{tool}}-Aufgabe für diesen PR wird bereits ausgeführt oder steht in der Warteschlange; bitte nicht erneut auslösen.",
     "notReady": "pr-agent ist nicht bereit",
