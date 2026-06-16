@@ -226,24 +226,27 @@
 // 首行 + 另起的步骤结果次行。无底色 / 无边框（思考态不加蓝色背景）；实时「思考中」首行以 spinner 充当
 // 进行中的 bullet，计时紧贴提示之后。
 .chat-agent-step {
-  margin: $space-2 $space-6;
+  margin: $space-2 $space-6 $space-2 $space-1; // 左缩进收到最小，让 bullet 视觉尽量靠前
   font-size: $fs-sm;
 }
 // 首行：bullet / spinner 标记 + 「已思考 / 思考中 xx s」提示，计时紧贴文本（不撑开到行尾）。
+// bullet 占固定列宽、与文案间留 gap 间距；正文按「列宽 + gap」缩进，保证首行文案与正文左对齐。
 .chat-agent-step-head {
   display: flex;
   align-items: center;
-  gap: $space-2;
+  gap: $space-3; // bullet 与文案之间的留白
   color: $text-muted;
 }
 .chat-agent-step-bullet {
+  flex: 0 0 $space-3; // 固定 bullet 列宽，文本对齐的基准
   color: $color-info;
+  font-size: $fs-md; // 略大，标记更醒目
   line-height: 1;
 }
-// 次行：步骤结果（思考内容 / 判读结论），缩进对齐到首行文本之下。
+// 次行：步骤结果（思考内容 / 判读结论），缩进到首行文案的左缘（= bullet 列宽 + gap）对齐。
 .chat-agent-step-body {
   margin-top: $space-1;
-  padding-left: $space-4;
+  padding-left: $space-3 + $space-3;
   color: $text-body;
   word-break: break-word;
 

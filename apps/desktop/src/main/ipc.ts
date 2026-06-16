@@ -41,6 +41,7 @@ import {
   getAgentSession,
   clearAgentSession,
   getAgentConversation,
+  getAgentTranscript,
   appendAgentMessage,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
@@ -1308,7 +1309,8 @@ export function registerIpcHandlers({
    * 每个编排步骤的统一出口：① 后台日志（工具选择 / 判读 / 收尾各落一条，便于排障与离线回看）；
    * ② 广播给渲染层（agent:stepProgress）做过程化展示。thought / result 截断避免刷屏。
    */
-  const logClamp = (s: string): string => (s.length > 200 ? `${s.slice(0, 199)}…` : s);
+  // 后台日志只留骨架（kind / tool / 用时）：thought 与 result（含用户输入 / 总结正文）不入日志，
+  // 避免刷屏 + 泄漏内容；完整步骤已落 transcript.json，需要时从那里回看。
   const emitAgentStep = (pr: StoredPullRequest, sessionId: string, step: AgentStep): void => {
     logger.info(
       {
@@ -1316,8 +1318,7 @@ export function registerIpcHandlers({
         sessionId,
         kind: step.kind,
         tool: step.toolCall?.tool,
-        thought: step.thought ? logClamp(step.thought) : undefined,
-        result: step.result ? logClamp(step.result) : undefined,
+        thinkMs: step.thinkMs,
       },
       'agent step',
     );
@@ -1442,10 +1443,8 @@ export function registerIpcHandlers({
       });
       const ac = new AbortController();
       agentControllers.set(pr.localId, ac);
-      logger.info(
-        { prLocalId: pr.localId, request: logClamp(req.question) },
-        'agent chat start (planning)',
-      );
+      // 不记用户输入正文（避免泄漏 / 刷屏）：只记发起本身，输入已落多轮对话。
+      logger.info({ prLocalId: pr.localId }, 'agent chat start (planning)');
       try {
         const session = await withAgentChat((chat) =>
           runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
@@ -1492,6 +1491,15 @@ export function registerIpcHandlers({
       req: IpcChannels['agent:getConversation']['request'],
     ): Promise<IpcChannels['agent:getConversation']['response']> =>
       getAgentConversation(stateStore, req.localId),
+  );
+
+  ipcMain.handle(
+    'agent:getTranscript',
+    async (
+      _evt,
+      req: IpcChannels['agent:getTranscript']['request'],
+    ): Promise<IpcChannels['agent:getTranscript']['response']> =>
+      getAgentTranscript(stateStore, req.localId),
   );
 
   // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===

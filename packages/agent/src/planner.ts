@@ -8,7 +8,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
-import { extractJson } from './orchestrator.js';
+import { extractJson, salvageProse, stripTrailingJson, summarySections } from './orchestrator.js';
 import { runStaggered } from './stagger.js';
 import { assertToolAllowed } from './tool-catalog.js';
 import type { AgentContext } from './types.js';
@@ -163,37 +163,47 @@ function buildConversationContext(history: readonly AgentMessage[]): string {
   return lines.reverse().join('\n');
 }
 
-const PROTOCOL = [
-  'Each turn, reply with JSON ONLY for the next action:',
-  '- One tool:   {"thought": "...", "tool": "/review", "question": "<only for /ask>"}',
-  '- Several read-only tools AT ONCE (run in parallel, at most 3): {"thought": "...", "tools": ["/describe", "/review"]}',
-  '- Finish:     {"thought": "...", "final": "<your answer to the user>"}',
-  'Only call tools listed under "Available tools" that are NOT disabled. Prefer few precise steps,',
-  'but when the request needs multiple independent read-only tools (e.g. summary AND review), call',
-  'them together via "tools" so they run in parallel instead of one per turn. Use "tool"+"question"',
-  'for /ask (single only).',
-  'Closing a CODE REVIEW: when your final answer reviews this PR, you MUST follow this fixed shape —',
-  'format "final" as markdown with these sections in order: "## 摘要" (PR summary), "## 关键发现"',
-  '(must-fix / concerns as a bulleted list, empty-safe), "## 建议" (next steps); AND include a',
-  '"recommendation" object: {"verdict": "approve"|"needs_work"|"manual_review", "reason": "<one line>"}.',
-  'verdict is non-binding (no write action). Omit "recommendation" for non-review answers.',
-  'Memory: persist useful, stable, NON-private facts across sessions via a "remember" object on your',
-  'action, grouped by target file (short notes in the user\'s language):',
-  '  {"remember": {"user": ["称呼: Kyle"], "memory": ["repo uses g-<id> for gray apps"], "agents": ["..."]}}',
-  '- user   → the person you talk to: preferred 称呼, language, review/working habits & preferences.',
-  '- memory → durable knowledge about this project / repo (facts that help future reviews).',
-  '- agents → working norms / review conventions you should keep following (append-only).',
-  'NEVER record private or sensitive data: real identity beyond a chosen 称呼, email / phone / address,',
-  'employer-confidential specifics, secrets / tokens. When unsure whether something is private, do NOT',
-  'record it. Only remember when there is something genuinely worth persisting — omit otherwise.',
-  'Conversation & scope:',
-  '- Natural conversation is fine: greet, say who you are, ask a clarifying question — answer directly',
-  '  in "final" without calling tools.',
-  '- Your domain is reviewing THIS PR (describing it, reviewing its changes, answering questions about',
-  '  them). Politely DECLINE in "final" any task OUTSIDE that domain (unrelated coding, general/off-topic',
-  '  requests) — do NOT call tools for it.',
-  '- For a PR-related request with no clearly fitting tool, default to /ask with a focused question.',
-].join('\n');
+function buildProtocol(sections: readonly [string, string, string]): string {
+  const [overview, findings, suggestions] = sections;
+  return [
+    'Each turn, reply with JSON ONLY for the next action:',
+    '- One tool:   {"thought": "...", "tool": "/review", "question": "<only for /ask>"}',
+    '- Several read-only tools AT ONCE (run in parallel, at most 3): {"thought": "...", "tools": ["/describe", "/review"]}',
+    '- Finish:     {"thought": "...", "final": "<your answer to the user>"}',
+    'Only call tools listed under "Available tools" that are NOT disabled. Prefer few precise steps,',
+    'but when the request needs multiple independent read-only tools (e.g. summary AND review), call',
+    'them together via "tools" so they run in parallel instead of one per turn. Use "tool"+"question"',
+    'for /ask (single only).',
+    'Closing a CODE REVIEW: when your final answer reviews this PR, you MUST follow this fixed shape —',
+    `format "final" as markdown with these sections in order: "## ${overview}" (PR summary), "## ${findings}"`,
+    `(must-fix / concerns as a bulleted list, empty-safe), "## ${suggestions}" (next steps); AND include a`,
+    '"recommendation" object: {"verdict": "approve"|"needs_work"|"manual_review", "reason": "<one line>"}.',
+    'verdict is non-binding (no write action). Omit "recommendation" for non-review answers.',
+    'NEVER repeat the recommendation / verdict inside "final" itself (no trailing JSON block) — it goes',
+    'ONLY in the separate "recommendation" field.',
+    'Memory: persisting is RARE and OPT-IN. Most turns have NOTHING to remember — then OMIT "remember"',
+    'entirely. Use a "remember" object only for a fact that will matter ACROSS MANY FUTURE, UNRELATED',
+    'reviews, grouped by target file (short notes in the user\'s language):',
+    '  {"remember": {"user": ["称呼: Kyle"], "memory": ["repo uses g-<id> for gray apps"], "agents": ["..."]}}',
+    '- user   → the person you talk to: preferred 称呼, language, lasting review/working preferences.',
+    '- memory → durable PROJECT facts (stable architecture / conventions / IDs that outlive any one PR).',
+    '- agents → general working norms you should always follow (e.g. reply language, review order).',
+    'HARD BAR — do NOT record findings or heuristics tied to THIS PR or a specific feature / module /',
+    'symbol: e.g. "评审涉及 X 时重点核对 Y", "注意 fn() 对数字 ID 误判". Those are this review\'s OUTPUT,',
+    'not durable rules — putting them in agents/memory pollutes future behavior. If a note names a specific',
+    'function / field / feature / scenario, it is a finding, NOT a memory — keep it in the review, omit here.',
+    'When in doubt, do NOT record. Over a whole session you should rarely write more than a note or two.',
+    'NEVER record private or sensitive data: real identity beyond a chosen 称呼, email / phone / address,',
+    'employer-confidential specifics, secrets / tokens. When unsure whether something is private, do NOT record.',
+    'Conversation & scope:',
+    '- Natural conversation is fine: greet, say who you are, ask a clarifying question — answer directly',
+    '  in "final" without calling tools.',
+    '- Your domain is reviewing THIS PR (describing it, reviewing its changes, answering questions about',
+    '  them). Politely DECLINE in "final" any task OUTSIDE that domain (unrelated coding, general/off-topic',
+    '  requests) — do NOT call tools for it.',
+    '- For a PR-related request with no clearly fitting tool, default to /ask with a focused question.',
+  ].join('\n');
+}
 
 export async function runPlanningAgent(
   deps: PlanningDeps,
@@ -211,7 +221,7 @@ export async function runPlanningAgent(
     toolCatalog: input.toolCatalog,
     matchedRule: input.matchedRule,
     language: input.language,
-  })}\n\n---\n\n# Protocol\n\n${PROTOCOL}`;
+  })}\n\n---\n\n# Protocol\n\n${buildProtocol(summarySections(input.language))}`;
 
   const record = async (step: AgentStep): Promise<void> => {
     const stamped = { ...step, at: step.at ?? new Date().toISOString() };
@@ -250,18 +260,20 @@ export async function runPlanningAgent(
 
     const hasCalls = Boolean(action?.tool) || Boolean(action?.tools?.length);
 
-    // 无法解析 / 既无 tool(s) 又无 final → 当作收尾（原文兜底）。
+    // 无法解析 / 既无 tool(s) 又无 final → 当作收尾。兜底从原始文本打捞散文，绝不把原始 JSON 动作丢给用户。
     if (!action || (!hasCalls && !action.final)) {
-      const finalText = action?.final ?? r.text.trim();
+      const finalText = action?.final ?? salvageProse(r.text);
       await record({ kind: 'plan', thought: action?.thought, result: finalText, thinkMs });
       return { steps, finalText, tokenUsage: usage, memories };
     }
 
     if (action.final && !hasCalls) {
-      await record({ kind: 'plan', thought: action.thought, result: action.final, thinkMs });
+      // 剥掉模型误并入 final 末尾的判定 JSON（recommendation 走独立字段渲染为判定徽标）。
+      const finalText = stripTrailingJson(action.final);
+      await record({ kind: 'plan', thought: action.thought, result: finalText, thinkMs });
       return {
         steps,
-        finalText: action.final,
+        finalText,
         tokenUsage: usage,
         recommendation: parseRecommendation(action.recommendation),
         memories,

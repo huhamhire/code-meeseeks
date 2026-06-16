@@ -218,6 +218,25 @@ export function ChatPane({
   // 全局单并发：任一 PR 在跑即占用（禁止再发起）；仅「跑在当前 PR」才在本会话显示运行态 / 思考中。
   const agentBusy = runningPr !== null;
   const agentRunningHere = runningPr?.id === prLocalId && prLocalId !== undefined;
+  // 「思考中」实时计时的锚点：取「最近一次活动结束」——{本 PR run 起点, 末个思考步 at, 末个完成 run
+  // 的结束时刻} 三者最晚者。锚到持久数据（runningPr 跨 PR 切换不清、run 历史会重载）而非组件挂载，
+  // 故切走再切回不清零；用 run 结束而非步骤记录时刻，避免把工具执行时间算进当前思考。
+  const thinkingSince = useMemo(() => {
+    const cands: number[] = [];
+    if (runningPr && runningPr.id === prLocalId) cands.push(runningPr.since);
+    const lastStepAt = agentSteps[agentSteps.length - 1]?.at;
+    if (lastStepAt) {
+      const ms = new Date(lastStepAt).getTime();
+      if (Number.isFinite(ms)) cands.push(ms);
+    }
+    const lastRun = visibleRuns[visibleRuns.length - 1];
+    const lastRunEnd = lastRun?.finishedAt ?? lastRun?.startedAt;
+    if (lastRunEnd) {
+      const ms = new Date(lastRunEnd).getTime();
+      if (Number.isFinite(ms)) cands.push(ms);
+    }
+    return cands.length ? Math.max(...cands) : Date.now();
+  }, [runningPr, prLocalId, agentSteps, visibleRuns]);
   useEffect(() => {
     setRuns([]);
     setHasMoreOlder(false);
@@ -231,11 +250,13 @@ export function ChatPane({
     void (async () => {
       try {
         // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)。
-        // 同时拉已落盘的多轮对话：把会话消息恢复到其 PR，跨切换 / 重启不丢失。
-        const [list, rule, conversation] = await Promise.all([
+        // 同时拉已落盘的多轮对话 + 过程步骤（transcript）：把会话恢复到其 PR，跨切换 / 重启不丢失，
+        // 过程化跟踪的思考步骤也随之恢复（步骤随产生增量落盘）。
+        const [list, rule, conversation, transcript] = await Promise.all([
           invoke('pragent:listRuns', { localId: prLocalId, limit: RUNS_PAGE_SIZE }),
           invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
           invoke('agent:getConversation', { localId: prLocalId }),
+          invoke('agent:getTranscript', { localId: prLocalId }),
         ]);
         if (cancelled) return;
         // 反转为升序 (chat 习惯)，UI 直接读 runs 即可
@@ -243,6 +264,7 @@ export function ChatPane({
         setHasMoreOlder(list.length === RUNS_PAGE_SIZE);
         setMatchedRule(rule);
         setMessages(conversation);
+        setAgentSteps(transcript);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -705,8 +727,11 @@ export function ChatPane({
         )}
         {/* 过程化跟踪（类 Claude Code）：已完成的思考步骤已按时间穿插进上面的时间线（AgentStepRow），
             此处只在 Agent 自身 LLM 正在推理（无 pr-agent 工具 run 占用 / 排队）时补一条实时「思考中」
-            指示——等待工具调用不算思考。计时随指示挂载从零起算，即当前这步的思考时长。 */}
-        {agentRunningHere && !hasMyActive && myWaiting.length === 0 && <ThinkingLive />}
+            指示——等待工具调用不算思考。计时锚定到「最近一次活动结束」（run 起点 / 末步 / 末个完成
+            run 的结束时刻取最晚者）而非组件挂载——切换 PR 再切回不会清零（runningPr 与 run 历史持久）。 */}
+        {agentRunningHere && !hasMyActive && myWaiting.length === 0 && (
+          <ThinkingLive since={thinkingSince} />
+        )}
         {error && (
           <div className="chat-error" role="alert">
             <strong>{t('chatPane.errorPrefix')}</strong>
@@ -724,7 +749,7 @@ export function ChatPane({
         runningTool={myActiveRuns[myActiveRuns.length - 1]?.tool ?? null}
         onRun={(t, q) => void handleRun(t, q)}
         onAgentAsk={(q) => void handleAgentAsk(q)}
-        onCancel={hasMyActive ? handleStopAll : undefined}
+        onCancel={hasMyActive || agentRunningHere ? handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
         // 一键自动评审：图标按钮置于 `/` 命令触发器右侧。busy=全局占用（禁用触发）、
         // runningHere=跑在当前 PR（高亮 / 运行中文案）。
@@ -948,8 +973,9 @@ function ChatInputBar({
   const cmdMenuRef = useRef<HTMLDivElement | null>(null);
 
   // 队列模型：仅 !pr / pr-agent 未就绪 时禁用 input。activeRun / busyOnOtherPr
-  // 不再阻塞新提交 (会排队 by main)
-  const running = runningTool !== null;
+  // 不再阻塞新提交 (会排队 by main)。running 决定是否渲染 stop 按钮：除活动工具 run 外，
+  // Agent 自身执行阶段（思考 / 编排，无工具 run 占用）也算「运行中」，以便随时取消。
+  const running = runningTool !== null || agentRunningHere;
   // LLM 未配置时一并禁用：即便 pr-agent 运行时就绪，没有模型也无法发起调用
   const disabled = !pr || !prAgent.available || !llmConfigured;
   // stop 按钮点过后等 main 回 queueChanged 才会改变状态；中间这段时间二次点击
@@ -1351,17 +1377,21 @@ function ChatInputBar({
  */
 function AgentStepRow({ step }: { step: AgentStep }) {
   const { t } = useTranslation();
+  // 首行始终带 bullet 标记：有思考计时 → 「已思考 xx s」；无计时（如微流程固定派发步）→ 用思考内容
+  // 当首行，保证每一步都可见、都有分段标记，绝不渲染成空行。
+  const hasTime = step.thinkMs != null;
+  const headText = hasTime
+    ? t('chatPane.agent.thoughtFor', { time: formatElapsed(step.thinkMs ?? 0) })
+    : step.thought;
   return (
     <div className="chat-agent-step" role="note">
-      {step.thinkMs != null && (
-        <div className="chat-agent-step-head">
-          <span className="chat-agent-step-bullet" aria-hidden>
-            •
-          </span>
-          <span>{t('chatPane.agent.thoughtFor', { time: formatElapsed(step.thinkMs) })}</span>
-        </div>
-      )}
-      {step.thought && <div className="chat-agent-step-body">{step.thought}</div>}
+      <div className="chat-agent-step-head">
+        <span className="chat-agent-step-bullet" aria-hidden>
+          •
+        </span>
+        {headText && <span>{headText}</span>}
+      </div>
+      {hasTime && step.thought && <div className="chat-agent-step-body">{step.thought}</div>}
       {step.kind === 'judge' && step.result && (
         <div className="chat-agent-step-body muted">{step.result}</div>
       )}
@@ -1370,13 +1400,13 @@ function AgentStepRow({ step }: { step: AgentStep }) {
 }
 
 /**
- * 实时「思考中」指示：仅在 Agent 自身 LLM 正在推理（无工具 run 占用 / 排队）时挂载。计时随挂载
- * 从零起算 = 当前这步的思考时长（非总任务累计）；下一步产生 / 转入工具执行即卸载、计时归零。
+ * 实时「思考中」指示：仅在 Agent 自身 LLM 正在推理（无工具 run 占用 / 排队）时挂载。计时锚定到传入的
+ * `since`（最近一次活动结束时刻，由父级从持久数据算出），而非组件挂载——切走再切回不清零；新一步产生
+ * 后 since 前移 → 计时回到当前步从零起算（仍是单步思考时长，非总累计）。
  * 首行布局与已完成步骤对齐：spinner 充当进行中的 bullet 标记，「思考中」后紧贴计时。
  */
-function ThinkingLive() {
+function ThinkingLive({ since }: { since: number }) {
   const { t } = useTranslation();
-  const startRef = useRef<number>(Date.now());
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -1387,7 +1417,7 @@ function ThinkingLive() {
       <div className="chat-agent-step-head">
         <Spinner />
         <span>
-          {t('chatPane.agent.thinking')} {formatElapsed(Math.max(0, now - startRef.current))}
+          {t('chatPane.agent.thinking')} {formatElapsed(Math.max(0, now - since))}
         </span>
       </div>
     </div>

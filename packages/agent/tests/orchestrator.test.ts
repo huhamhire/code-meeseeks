@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { extractJson, runReviewMicroflow } from '../src/orchestrator.js';
+import {
+  extractJson,
+  runReviewMicroflow,
+  salvageProse,
+  stripTrailingJson,
+} from '../src/orchestrator.js';
 import type { ReviewOrchestratorDeps } from '../src/orchestrator.js';
 import type { AgentContext } from '../src/types.js';
 
@@ -34,6 +39,41 @@ describe('extractJson', () => {
     expect(extractJson<{ a: number }>('```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(extractJson<{ a: number }>('noise {"a":2} tail')).toEqual({ a: 2 });
     expect(extractJson('no json here')).toBeNull();
+  });
+
+  it('recovers JSON with unescaped raw newlines inside string values', () => {
+    // 模型常把多行 markdown 原样塞进字符串值、不转义换行——补转义后应能解析。
+    const raw = '{"final": "## 摘要\n\n第一行\n第二行", "recommendation": {"verdict": "needs_work"}}';
+    const parsed = extractJson<{ final: string; recommendation: { verdict: string } }>(raw);
+    expect(parsed?.final).toBe('## 摘要\n\n第一行\n第二行');
+    expect(parsed?.recommendation.verdict).toBe('needs_work');
+  });
+});
+
+describe('salvageProse', () => {
+  it('extracts the final/summary prose from an unparseable JSON action', () => {
+    // 截断（无闭合 } / 引号）时仍捞出散文，绝不把原始 JSON 丢给用户。
+    const truncated = '{"thought":"t","final":"## 摘要\\n\\n本 PR 修复了空值崩溃';
+    expect(salvageProse(truncated)).toBe('## 摘要\n\n本 PR 修复了空值崩溃');
+    expect(salvageProse('{"summary":"all good"}')).toBe('all good');
+  });
+
+  it('falls back to trimmed raw text when no prose field is present', () => {
+    expect(salvageProse('  just text  ')).toBe('just text');
+  });
+});
+
+describe('stripTrailingJson', () => {
+  it('strips a trailing recommendation JSON block the model wrongly appended', () => {
+    const fenced = '## 摘要\n\n本 PR 修复了空值崩溃。\n\n```json\n{"recommendation": {"verdict": "needs_work"}}\n```';
+    expect(stripTrailingJson(fenced)).toBe('## 摘要\n\n本 PR 修复了空值崩溃。');
+    const bare = '## 摘要\n\n本 PR 修复了空值崩溃。\n\n{\n  "recommendation": {"verdict": "approve"}\n}';
+    expect(stripTrailingJson(bare)).toBe('## 摘要\n\n本 PR 修复了空值崩溃。');
+  });
+
+  it('leaves legitimate trailing JSON / braces untouched', () => {
+    const code = '说明：配置形如 `{ "port": 8080 }`，按需调整。';
+    expect(stripTrailingJson(code)).toBe(code);
   });
 });
 
