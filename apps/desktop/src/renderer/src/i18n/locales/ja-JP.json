@@ -541,7 +541,7 @@
     "addConnectionTitle": "接続を追加",
     "addLlmProfile": "+ プロファイルを追加",
     "addLlmTitle": "LLM モデルを追加",
-    "agentDirHint": "SOUL.md / AGENTS.md / MEMORY.md / USER.md と rules/ サブディレクトリ（レビュールール）を格納します。",
+    "agentDirHint": "Agent の人格・記憶・レビュールールの保存先。セッションをまたいで保持され、チームで共有できます。",
     "agentDirPlaceholder": "任意；例：~/code/team-agent",
     "agentDirTitle": "Agent ディレクトリ",
     "appRoot": "アプリルート",

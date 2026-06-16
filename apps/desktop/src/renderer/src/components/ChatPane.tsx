@@ -1465,6 +1465,33 @@ function Md({ children }: { children: string }) {
 }
 
 /**
+ * 代码路径折行优化：在分隔符 `/` 与连接符 `.` `_` `-` 之后插入 <wbr> 软断点，配合 CSS
+ * `word-break: normal`，让长路径优先按这些字符折断（而非从单词中间断开），保证可读性。
+ */
+function BreakablePath({ path }: { path: string }) {
+  const parts = path.split(/(?<=[/._-])/);
+  const nodes: ReactNode[] = [];
+  parts.forEach((p, i) => {
+    nodes.push(p);
+    if (i < parts.length - 1) nodes.push(<wbr key={`wbr-${i}`} />);
+  });
+  return <>{nodes}</>;
+}
+
+/** 行内 markdown：用于标题等单行文本，渲染内联代码 / 强调，去掉块级 <p> 包裹保持行内排版。 */
+function MdInline({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={REMOTE_REHYPE_PLUGINS}
+      components={{ p: ({ children }) => <>{children}</> }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
+/**
  * 一条多轮对话消息的展示：用户 → 右对齐气泡；助手评审类（带 recommendation）→「评审总结」卡片 +
  * 判定徽标；助手对话类（无 recommendation）→ 左对齐专属对话回复包装。
  */
@@ -2237,7 +2264,9 @@ function FindingCard({
           <span className={`chat-finding-cat chat-finding-cat-${key}`}>{label}</span>
         )}
         {showTitle && translatedTitle && !collapsed && (
-          <h4 className="chat-finding-title">{translatedTitle}</h4>
+          <h4 className="chat-finding-title">
+            <MdInline>{translatedTitle}</MdInline>
+          </h4>
         )}
         {/* 已拒绝才出现的展开 / 收起切换：chevron 图标，收起态指右、展开态转下，纯图标交互 */}
         {isRejected && (
@@ -2261,7 +2290,9 @@ function FindingCard({
               onClick={onNavigate}
               title={t('chatPane.anchorJumpTitle')}
             >
-              <code>{finding.anchor.path}</code>
+              <code>
+                <BreakablePath path={finding.anchor.path} />
+              </code>
               <span>
                 :{finding.anchor.startLine}
                 {finding.anchor.endLine && finding.anchor.endLine !== finding.anchor.startLine
@@ -2271,7 +2302,9 @@ function FindingCard({
             </button>
           ) : (
             <>
-              <code>{finding.anchor.path}</code>
+              <code>
+                <BreakablePath path={finding.anchor.path} />
+              </code>
               {finding.anchor.startLine && (
                 <span>
                   :{finding.anchor.startLine}

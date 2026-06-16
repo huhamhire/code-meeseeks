@@ -179,12 +179,31 @@ function mapSectionKey(displayTitle: string): PrDocSectionKey | undefined {
  *   pr-agent 把问题回显在答案文本里是冗余的
  */
 const SKIP_TITLES = new Set(['user description']);
-const SKIP_TITLES_ASK = new Set(['question', 'questions', '问题']);
+const ASK_QUESTION_HEADERS = new Set(['ask', 'question', 'questions', '问题', '提问']);
+const ASK_ANSWER_HEADERS = new Set(['answer', 'answers', '回答', '答案', '解答']);
+
+/**
+ * /ask 输出里的结构性表头判别：pr-agent 把「Ask ❓」「回答:」这类标题段回显出来，对 UI 是冗余的
+ * （提问已在上方气泡展示、答案紧跟其下）。先剥首尾的 emoji / 标点 / 空格再按集合匹配。
+ */
+function askHeaderKind(title: string): 'question' | 'answer' | null {
+  const t = normalizeTitle(title)
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+    .toLowerCase();
+  if (ASK_QUESTION_HEADERS.has(t)) return 'question';
+  if (ASK_ANSWER_HEADERS.has(t)) return 'answer';
+  return null;
+}
 
 function shouldSkipSection(sec: Section, tool: ReviewRunTool): boolean {
   const t = normalizeTitle(sec.title).toLowerCase();
   if (SKIP_TITLES.has(t)) return true;
-  if (tool === 'ask' && SKIP_TITLES_ASK.has(t)) return true;
+  if (tool === 'ask') {
+    const kind = askHeaderKind(sec.title);
+    // 「Ask ❓」等问题回显段整段剔除；空的「回答」表头段（仅标题无正文）同样剔除。
+    if (kind === 'question') return true;
+    if (kind === 'answer' && !trimNoise(sec.body).trim()) return true;
+  }
   // title 含内部分支名 (e.g., "meebox/head" / "meebox/head 🔍" / "## meebox/head")
   if (INTERNAL_BRANCH_RE.test(t)) return true;
   // trimNoise 把首尾的 HR / 分支名 leak 剥掉后，body 空 = 整段都是噪音
@@ -500,8 +519,11 @@ function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
 export function sectionToFinding(sec: Section, index: number, tool: ReviewRunTool): Finding {
   const id = `${tool}-${String(index).padStart(3, '0')}`;
   const body = trimNoise(sec.body);
-  const displayTitle = normalizeTitle(sec.title) || undefined;
-  const mappedKey = displayTitle ? mapSectionKey(displayTitle) : undefined;
+  const rawTitle = normalizeTitle(sec.title) || undefined;
+  const mappedKey = rawTitle ? mapSectionKey(rawTitle) : undefined;
+  // /ask：带正文的「回答 / Answer」表头是冗余的（其下就是答案正文）→ 清掉标题只留正文。
+  const displayTitle =
+    tool === 'ask' && askHeaderKind(sec.title) === 'answer' ? undefined : rawTitle;
 
   // pr-agent 0.36.0 review 输出形如 (pr-agent 自定义 prompt 或非 LocalGitProvider 时)：
   //   **File:** src/foo.ts

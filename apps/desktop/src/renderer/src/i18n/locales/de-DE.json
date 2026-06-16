@@ -556,7 +556,7 @@
     "addConnectionTitle": "Verbindung hinzufügen",
     "addLlmProfile": "+ Profil hinzufügen",
     "addLlmTitle": "LLM-Modell hinzufügen",
-    "agentDirHint": "Enthält SOUL.md / AGENTS.md / MEMORY.md / USER.md und einen rules/-Unterordner (Review-Regeln).",
+    "agentDirHint": "Speicherort für Persona, Gedächtnis und Review-Regeln des Agents; bleibt über Sitzungen erhalten und ist teamweit teilbar.",
     "agentDirPlaceholder": "Optional; z. B. ~/code/team-agent",
     "agentDirTitle": "Agent-Verzeichnis",
     "appRoot": "App-Root",

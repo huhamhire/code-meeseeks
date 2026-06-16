@@ -918,8 +918,11 @@
     border-radius: $radius-sm;
     font-family: $font-mono;
     color: $text-body;
-    // path 单段太长 (含 / 路径) 时允许在任意字符断行，不让单 code 块撑爆容器
-    word-break: break-all;
+    // 长路径优先按分隔符 / 连接符折断（BreakablePath 在 / . _ - 后插了 <wbr> 软断点）：
+    // word-break:normal 让浏览器只在这些软断点（及空格 / CJK）处折行，保证可读性；overflow-wrap:anywhere
+    // 仅作兜底——单个分段仍超宽时才允许任意断开，且让 code 作为 flex item 能正常收缩不撑爆容器。
+    word-break: normal;
+    overflow-wrap: anywhere;
     min-width: 0;
   }
 }
