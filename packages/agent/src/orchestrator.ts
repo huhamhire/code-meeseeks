@@ -148,8 +148,9 @@ export async function runReviewMicroflow(
   let usage: TokenUsage = {};
 
   const record = async (step: AgentStep): Promise<void> => {
-    steps.push(step);
-    await deps.onStep?.(step);
+    const stamped = { ...step, at: step.at ?? new Date().toISOString() };
+    steps.push(stamped);
+    await deps.onStep?.(stamped);
   };
 
   // base system context（工具目录留空：微流程不暴露自由工具选择）
@@ -164,17 +165,24 @@ export async function runReviewMicroflow(
   // 1. describe + review（固定两步，并行——彼此独立、都只读 PR，无先后依赖；
   //    实际并发度受运行队列 max_concurrency 约束，串行执行时结果同样正确）。
   //    错开 100~200ms 起跑，避免两个工具同一瞬间齐发。
+  //    类 Claude Code：先把所选步骤作为一步流式出去（思考在前），工具执行的进度 / 计时由 run 卡片承载，
+  //    不再为每个工具补记 tool 步，避免决策被堆到结果之后。
+  await record({
+    kind: 'plan',
+    thought: '生成 PR 描述与审查发现',
+    toolCall: { tool: 'describe、review' },
+  });
   const [describe, review] = await runStaggered(
     [{ tool: 'describe' as const }, { tool: 'review' as const }],
     (c) => deps.runTool(c),
   );
   usage = addUsage(usage, describe.usage);
-  await record({ kind: 'tool', toolCall: { tool: '/describe' }, result: clamp(describe.text, 400) });
   usage = addUsage(usage, review.usage);
-  await record({ kind: 'tool', toolCall: { tool: '/review' }, result: clamp(review.text, 400) });
 
   // 2. 仅严重问题条件性追问
+  const judgeStart = Date.now();
   const judge = await deps.chat({ system, user: judgePrompt(review.text, maxAsks) });
+  const judgeMs = Date.now() - judgeStart;
   usage = addUsage(usage, judge.usage);
   const verdict = extractJson<{ severe?: boolean; questions?: string[] }>(judge.text);
   const questions = verdict?.severe ? (verdict.questions ?? []).slice(0, maxAsks) : [];
@@ -182,6 +190,7 @@ export async function runReviewMicroflow(
     kind: 'judge',
     thought: '判断是否存在需追问的严重问题',
     result: questions.length ? `严重，追问 ${String(questions.length)} 个` : '无严重问题，不追问',
+    thinkMs: judgeMs,
   });
 
   const askResults: string[] = [];
@@ -189,18 +198,15 @@ export async function runReviewMicroflow(
     const ask = await deps.runTool({ tool: 'ask', question: q });
     usage = addUsage(usage, ask.usage);
     askResults.push(`Q: ${q}\nA: ${ask.text}`);
-    await record({
-      kind: 'tool',
-      toolCall: { tool: '/ask', args: { question: q } },
-      result: clamp(ask.text, 300),
-    });
   }
 
   // 3. 收尾总结 + 建议
+  const sumStart = Date.now();
   const sum = await deps.chat({
     system,
     user: summaryPrompt(describe.text, review.text, askResults, summaryMax),
   });
+  const sumMs = Date.now() - sumStart;
   usage = addUsage(usage, sum.usage);
   const parsed = extractJson<{
     summary?: string;
@@ -215,7 +221,12 @@ export async function runReviewMicroflow(
             typeof parsed.recommendation.reason === 'string' ? parsed.recommendation.reason : '',
         }
       : { verdict: 'manual_review', reason: '无法解析建议，转人工复核' };
-  await record({ kind: 'plan', thought: '收尾总结', result: summary });
+  await record({
+    kind: 'plan',
+    thought: '综合描述与审查发现，生成评审总结',
+    result: summary,
+    thinkMs: sumMs,
+  });
 
   return { steps, summary, recommendation, tokenUsage: usage };
 }

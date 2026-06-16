@@ -18,10 +18,9 @@
       "autoReview": "自動レビュー",
       "autoReviewRunning": "レビュー中…",
       "failed": "Agent レビューに失敗しました",
-      "stepJudge": "判定",
-      "stepPlan": "まとめ",
       "summaryTitle": "レビュー総括",
       "thinking": "思考中…",
+      "thoughtFor": "{{time}} 思考",
       "verdictApprove": "問題なし",
       "verdictManualReview": "手動レビュー推奨",
       "verdictNeedsWork": "要修正"

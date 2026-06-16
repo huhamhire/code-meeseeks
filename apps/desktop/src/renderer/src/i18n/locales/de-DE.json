@@ -18,10 +18,9 @@
       "autoReview": "Auto-Review",
       "autoReviewRunning": "Wird geprüft…",
       "failed": "Agent-Review fehlgeschlagen",
-      "stepJudge": "Bewertung",
-      "stepPlan": "Abschluss",
       "summaryTitle": "Prüfzusammenfassung",
       "thinking": "Denkt nach…",
+      "thoughtFor": "{{time}} nachgedacht",
       "verdictApprove": "Sieht gut aus",
       "verdictManualReview": "Manuelle Prüfung",
       "verdictNeedsWork": "Nachbesserung nötig"

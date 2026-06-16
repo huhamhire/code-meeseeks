@@ -222,43 +222,34 @@
   word-break: break-word;
 }
 
-// 过程化跟踪（类 Claude Code）：纯文本逐步列表 + 单步计时，按时间顺序。无底色 / 无边框（思考态
-// 不加蓝色背景）；末尾思考中行带 spinner + 实时单步计时。
-.chat-agent-activity {
-  margin: $space-3 $space-6;
-  display: flex;
-  flex-direction: column;
-  gap: $space-2;
-}
-.chat-agent-activity-item {
-  display: flex;
-  align-items: baseline;
-  gap: $space-3;
+// 过程化跟踪（类 Claude Code）：思考步骤按时间穿插进时间线。两行——带 bullet 标记的「已思考 xx s」
+// 首行 + 另起的步骤结果次行。无底色 / 无边框（思考态不加蓝色背景）；实时「思考中」首行以 spinner 充当
+// 进行中的 bullet，计时紧贴提示之后。
+.chat-agent-step {
+  margin: $space-2 $space-6;
   font-size: $fs-sm;
+}
+// 首行：bullet / spinner 标记 + 「已思考 / 思考中 xx s」提示，计时紧贴文本（不撑开到行尾）。
+.chat-agent-step-head {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
   color: $text-muted;
 }
-.chat-agent-activity-live {
-  align-items: center; // spinner 与文字垂直居中
-}
-.chat-agent-activity-kind {
-  font-family: $font-mono;
+.chat-agent-step-bullet {
   color: $color-info;
-  flex-shrink: 0;
+  line-height: 1;
 }
-.chat-agent-activity-thought {
-  flex: 1;
-  min-width: 0;
+// 次行：步骤结果（思考内容 / 判读结论），缩进对齐到首行文本之下。
+.chat-agent-step-body {
+  margin-top: $space-1;
+  padding-left: $space-4;
   color: $text-body;
   word-break: break-word;
-}
-.chat-agent-activity-result {
-  flex-shrink: 0;
-}
-.chat-agent-activity-time {
-  font-family: $font-mono;
-  font-variant-numeric: tabular-nums;
-  color: $text-muted;
-  flex-shrink: 0;
+
+  &.muted {
+    color: $text-muted;
+  }
 }
 
 // Agent 自然对话回复：左对齐、带 Agent 图标的轻量包装，区别于「评审总结」卡片（无判定 / 无标题）。

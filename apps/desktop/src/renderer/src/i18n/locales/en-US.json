@@ -18,10 +18,9 @@
       "autoReview": "Auto Review",
       "autoReviewRunning": "Reviewing…",
       "failed": "Agent review failed",
-      "stepJudge": "judge",
-      "stepPlan": "wrap-up",
       "summaryTitle": "Review Summary",
       "thinking": "Thinking…",
+      "thoughtFor": "Thought for {{time}}",
       "verdictApprove": "Looks good",
       "verdictManualReview": "Manual review",
       "verdictNeedsWork": "Needs work"

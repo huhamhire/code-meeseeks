@@ -179,15 +179,22 @@ export function ChatPane({
   const myActiveIdSet = new Set(myActiveRuns.map((a) => a.runId));
   const visibleRuns = hasMyActive ? runs.filter((r) => !myActiveIdSet.has(r.id)) : runs;
 
-  // 历史时间线：把 run 卡片与 Agent 的元步骤按时间归并，让过程性步骤按自然时间顺序
-  // 穿插展示（而非堆在末尾）。工具步骤（describe/review/ask）已由 run 卡片代表、不重复；
-  // 收尾 plan 即「评审总结」卡片、不重复 → 仅保留判读（judge）这类决策节点作为内联标记。
+  // 历史时间线：把 run 卡片、Agent 的思考步骤、对话消息按时间归并，让过程性步骤按自然时间顺序
+  // 穿插展示（而非堆在末尾）。类 Claude Code「先思考→定步骤→执行步骤」：思考步骤（plan/judge）
+  // 是工具选择的前因，排在所选工具的 run 卡片之前；工具执行的进度 / 计时由 run 卡片承载，不重复。
   const timeline = useMemo(() => {
     const runEntries = visibleRuns.map((r) => ({
       key: `run-${r.id}`,
       time: r.startedAt,
       run: r as ReviewRun | null,
       step: null as AgentStep | null,
+      message: null as AgentMessage | null,
+    }));
+    const stepEntries = agentSteps.map((s, i) => ({
+      key: `step-${i}-${s.at ?? ''}`,
+      time: s.at ?? '',
+      run: null,
+      step: s as AgentStep | null,
       message: null as AgentMessage | null,
     }));
     const msgEntries = messages.map((m, i) => ({
@@ -197,9 +204,10 @@ export function ChatPane({
       step: null as AgentStep | null,
       message: m,
     }));
-    // Agent 过程步骤不再逐条入时间线——统一交给底部「过程化跟踪」活动条（AgentActivity）呈现。
-    return [...runEntries, ...msgEntries].sort((a, b) => a.time.localeCompare(b.time));
-  }, [visibleRuns, messages]);
+    return [...runEntries, ...stepEntries, ...msgEntries].sort((a, b) =>
+      a.time.localeCompare(b.time),
+    );
+  }, [visibleRuns, agentSteps, messages]);
 
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
@@ -658,6 +666,8 @@ export function ChatPane({
               onRejectFinding={handleRejectFinding}
               onNavigateToFinding={handleNavigateToFinding}
             />
+          ) : entry.step ? (
+            <AgentStepRow key={entry.key} step={entry.step} />
           ) : entry.message ? (
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
@@ -693,21 +703,10 @@ export function ChatPane({
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
           </div>
         )}
-        {/* 过程化跟踪：Agent 逐步工具选择 / 判读 / 收尾 + 单步计时（类 Claude Code），仅作用于当前
-            PR。「思考中」只在 Agent 自身 LLM 在跑（无 pr-agent 工具 run 占用）时出现——等待工具调用
-            不算思考；已有步骤时也列出过程，便于回看。 */}
-        {(() => {
-          const thinking = agentRunningHere && !hasMyActive && myWaiting.length === 0;
-          return (
-            (agentSteps.length > 0 || thinking) && (
-              <AgentActivity
-                steps={agentSteps}
-                since={runningPr && runningPr.id === prLocalId ? runningPr.since : null}
-                thinking={thinking}
-              />
-            )
-          );
-        })()}
+        {/* 过程化跟踪（类 Claude Code）：已完成的思考步骤已按时间穿插进上面的时间线（AgentStepRow），
+            此处只在 Agent 自身 LLM 正在推理（无 pr-agent 工具 run 占用 / 排队）时补一条实时「思考中」
+            指示——等待工具调用不算思考。计时随指示挂载从零起算，即当前这步的思考时长。 */}
+        {agentRunningHere && !hasMyActive && myWaiting.length === 0 && <ThinkingLive />}
         {error && (
           <div className="chat-error" role="alert">
             <strong>{t('chatPane.errorPrefix')}</strong>
@@ -1344,68 +1343,53 @@ function ChatInputBar({
   );
 }
 
-/** 一个编排步骤的展示标签：工具步骤显示所选工具名，judge → 判读，plan → 收尾。 */
-function stepLabel(step: AgentStep, t: TFunction): string {
-  if (step.toolCall?.tool) return step.toolCall.tool;
-  if (step.kind === 'judge') return t('chatPane.agent.stepJudge');
-  return t('chatPane.agent.stepPlan');
+/**
+ * 内联思考步骤（类 Claude Code「先思考→定步骤→执行步骤」）：穿插在时间线里、排在所选工具的 run
+ * 卡片之前。两行展示——首行带 bullet 标记的「已思考 xx s」（单步思考耗时，非总累计），次行另起展示
+ * 步骤结果（思考内容 / 判读结论）。不展示选了哪个工具（由随后的 run 卡片体现）；工具执行的进度 /
+ * 计时也归 run 卡片。
+ */
+function AgentStepRow({ step }: { step: AgentStep }) {
+  const { t } = useTranslation();
+  return (
+    <div className="chat-agent-step" role="note">
+      {step.thinkMs != null && (
+        <div className="chat-agent-step-head">
+          <span className="chat-agent-step-bullet" aria-hidden>
+            •
+          </span>
+          <span>{t('chatPane.agent.thoughtFor', { time: formatElapsed(step.thinkMs) })}</span>
+        </div>
+      )}
+      {step.thought && <div className="chat-agent-step-body">{step.thought}</div>}
+      {step.kind === 'judge' && step.result && (
+        <div className="chat-agent-step-body muted">{step.result}</div>
+      )}
+    </div>
+  );
 }
 
 /**
- * 过程化跟踪（类 Claude Code）：把 Agent 已完成的步骤按时间顺序列出（工具选择 / 判读 / 收尾），
- * 末尾在 Agent 自身 LLM 思考时补一条带计时的「思考中」行。计时按**单个步骤**——每步用各自时长
- * （上一步结束→本步），当前思考从上一步结束起算，绝非总任务累计。
- * `thinking`：Agent 自身 LLM 正在跑（无 pr-agent 工具 run 占用）——工具执行的进度/计时由 run 卡片
- * 负责，故工具步骤这里不再重复计时，只列出选择。
+ * 实时「思考中」指示：仅在 Agent 自身 LLM 正在推理（无工具 run 占用 / 排队）时挂载。计时随挂载
+ * 从零起算 = 当前这步的思考时长（非总任务累计）；下一步产生 / 转入工具执行即卸载、计时归零。
+ * 首行布局与已完成步骤对齐：spinner 充当进行中的 bullet 标记，「思考中」后紧贴计时。
  */
-function AgentActivity({
-  steps,
-  since,
-  thinking,
-}: {
-  steps: AgentStep[];
-  since: number | null;
-  thinking: boolean;
-}) {
+function ThinkingLive() {
   const { t } = useTranslation();
+  const startRef = useRef<number>(Date.now());
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!thinking) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [thinking]);
-
-  const stamps = steps.map((s) => (s.at ? new Date(s.at).getTime() : null));
-  const stepMs = (i: number): number | null => {
-    const end = stamps[i];
-    const start = i > 0 ? stamps[i - 1] : since;
-    return end != null && start != null ? Math.max(0, end - start) : null;
-  };
-  const lastStamp = stamps.length ? stamps[stamps.length - 1] : since;
-  const liveMs = thinking && lastStamp != null ? Math.max(0, now - lastStamp) : 0;
-
+  }, []);
   return (
-    <div className="chat-agent-activity" role="status">
-      {steps.map((s, i) => (
-        <div key={i} className="chat-agent-activity-item">
-          <span className="chat-agent-activity-kind">{stepLabel(s, t)}</span>
-          {s.thought && <span className="chat-agent-activity-thought">{s.thought}</span>}
-          {s.kind === 'judge' && s.result && (
-            <span className="chat-agent-activity-result muted">{s.result}</span>
-          )}
-          {/* 工具步骤的耗时由 run 卡片展示（并行更准）；这里只给推理步骤（判读 / 收尾）计时。 */}
-          {s.kind !== 'tool' && stepMs(i) != null && (
-            <span className="chat-agent-activity-time">{formatElapsed(stepMs(i)!)}</span>
-          )}
-        </div>
-      ))}
-      {thinking && (
-        <div className="chat-agent-activity-item chat-agent-activity-live">
-          <Spinner />
-          <span className="chat-agent-activity-thought">{t('chatPane.agent.thinking')}</span>
-          <span className="chat-agent-activity-time">{formatElapsed(liveMs)}</span>
-        </div>
-      )}
+    <div className="chat-agent-step" role="status">
+      <div className="chat-agent-step-head">
+        <Spinner />
+        <span>
+          {t('chatPane.agent.thinking')} {formatElapsed(Math.max(0, now - startRef.current))}
+        </span>
+      </div>
     </div>
   );
 }

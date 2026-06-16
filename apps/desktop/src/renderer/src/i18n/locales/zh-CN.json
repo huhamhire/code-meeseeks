@@ -18,10 +18,9 @@
       "autoReview": "自动评审",
       "autoReviewRunning": "评审中…",
       "failed": "Agent 评审失败",
-      "stepJudge": "判读",
-      "stepPlan": "收尾",
       "summaryTitle": "评审总结",
       "thinking": "思考中…",
+      "thoughtFor": "已思考 {{time}}",
       "verdictApprove": "建议通过",
       "verdictManualReview": "建议人工复核",
       "verdictNeedsWork": "建议修改"

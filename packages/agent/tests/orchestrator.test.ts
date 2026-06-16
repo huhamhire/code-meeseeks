@@ -48,7 +48,9 @@ describe('runReviewMicroflow', () => {
     const r = await runReviewMicroflow(deps, { context, pr });
 
     expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
-    expect(r.steps.map((s) => s.kind)).toEqual(['tool', 'tool', 'judge', 'plan']);
+    // 类 Claude Code：一条思考步（plan，承载 describe+review 选择）→ judge → 收尾 plan；
+    // describe/review/ask 的执行由 run 卡片代表、不再补记 tool 步。
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'judge', 'plan']);
     expect(r.summary).toBe('all good');
     expect(r.recommendation).toEqual({ verdict: 'approve', reason: 'no issues' });
     // usage accumulated: 2 tools (10 each) + 2 chats (5 each) = 30
@@ -66,8 +68,7 @@ describe('runReviewMicroflow', () => {
     const r = await runReviewMicroflow(deps, { context, pr, maxFollowupAsks: 2 });
 
     const askCalls = toolCalls.filter((c) => c.tool === 'ask');
-    expect(askCalls.map((c) => c.question)).toEqual(['q1', 'q2']); // capped at 2
-    expect(r.steps.filter((s) => s.toolCall?.tool === '/ask')).toHaveLength(2);
+    expect(askCalls.map((c) => c.question)).toEqual(['q1', 'q2']); // capped at 2（执行经 runTool / run 卡片）
     expect(r.recommendation.verdict).toBe('needs_work');
   });
 
@@ -100,6 +101,6 @@ describe('runReviewMicroflow', () => {
       seen.push(step.kind);
     };
     await runReviewMicroflow(deps, { context, pr });
-    expect(seen).toEqual(['tool', 'tool', 'judge', 'plan']);
+    expect(seen).toEqual(['plan', 'judge', 'plan']);
   });
 });

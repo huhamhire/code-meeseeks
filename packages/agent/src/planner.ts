@@ -214,8 +214,9 @@ export async function runPlanningAgent(
   })}\n\n---\n\n# Protocol\n\n${PROTOCOL}`;
 
   const record = async (step: AgentStep): Promise<void> => {
-    steps.push(step);
-    await deps.onStep?.(step);
+    const stamped = { ...step, at: step.at ?? new Date().toISOString() };
+    steps.push(stamped);
+    await deps.onStep?.(stamped);
   };
 
   // 既往多轮对话注入规划上下文（按预算裁剪），让 Agent 跨轮记住交流；仅供规划 LLM 参考，
@@ -238,7 +239,10 @@ export async function runPlanningAgent(
       .filter(Boolean)
       .join('\n');
 
+    // 计本轮 LLM 推理耗时（单步思考时长，类 Claude Code 的「Thought for Ns」），系到该决策步上。
+    const thinkStart = Date.now();
     const r = await deps.chat({ system, user });
+    const thinkMs = Date.now() - thinkStart;
     usage = addUsage(usage, r.usage);
     const action = extractJson<PlannerAction>(r.text);
     // 累加本动作携带的记忆（任何动作都可附 remember）。
@@ -249,12 +253,12 @@ export async function runPlanningAgent(
     // 无法解析 / 既无 tool(s) 又无 final → 当作收尾（原文兜底）。
     if (!action || (!hasCalls && !action.final)) {
       const finalText = action?.final ?? r.text.trim();
-      await record({ kind: 'plan', thought: action?.thought, result: finalText });
+      await record({ kind: 'plan', thought: action?.thought, result: finalText, thinkMs });
       return { steps, finalText, tokenUsage: usage, memories };
     }
 
     if (action.final && !hasCalls) {
-      await record({ kind: 'plan', thought: action.thought, result: action.final });
+      await record({ kind: 'plan', thought: action.thought, result: action.final, thinkMs });
       return {
         steps,
         finalText: action.final,
@@ -283,18 +287,19 @@ export async function runPlanningAgent(
     }
     if (!allowed.length) continue; // 全被拒 → 回喂后下一轮重选
 
-    // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；相互错开 100~200ms 起跑，
-    // 避免同一瞬间齐发。thought 只系在首条，避免重复。
+    // 类 Claude Code：先把本轮思考与所选步骤作为一步流式出去（思考是工具选择的前因），随后才执行工具。
+    // 工具执行的进度 / 计时由 run 卡片承载，这里不再为每个工具补记 tool 步，避免决策被堆到结果之后。
+    await record({
+      kind: 'plan',
+      thought: action.thought,
+      toolCall: { tool: allowed.map((c) => c.tool).join('、') },
+      thinkMs,
+    });
+
+    // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；相互错开 100~200ms 起跑，避免同一瞬间齐发。
     const ran = await runStaggered(allowed, async (c) => ({ c, res: await deps.runTool(c) }));
-    for (let k = 0; k < ran.length; k++) {
-      const { c, res } = ran[k]!;
+    for (const { c, res } of ran) {
       usage = addUsage(usage, res.usage);
-      await record({
-        kind: 'tool',
-        thought: k === 0 ? action.thought : undefined,
-        toolCall: { tool: c.tool, args: c.question ? { question: c.question } : undefined },
-        result: clamp(res.text, 400),
-      });
       history.push(
         `Called ${c.tool}${c.question ? ` ("${c.question}")` : ''} → ${clamp(res.text, 600)}`,
       );

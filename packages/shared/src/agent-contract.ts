@@ -44,6 +44,9 @@ export interface AgentStep {
   result?: string;
   /** 步骤产生时间（ISO）。 */
   at?: string;
+  /** 本步思考（产生该决策的单次 LLM 推理）耗时（毫秒）；类 Claude Code 的「Thought for Ns」单步计时。
+   *  仅推理类步骤（plan/judge）有值；固定派发（如微流程的 describe/review 选择）无 LLM 思考则缺省。 */
+  thinkMs?: number;
 }
 
 export type AgentRecommendationVerdict = 'approve' | 'needs_work' | 'manual_review';

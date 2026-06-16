@@ -43,7 +43,9 @@ describe('runPlanningAgent', () => {
     });
     expect(toolCalls.map((c) => c.tool)).toEqual(['/review']);
     expect(r.finalText).toBe('LGTM');
-    expect(r.steps.map((s) => s.kind)).toEqual(['tool', 'plan']);
+    // 类 Claude Code：每回合一条思考步（plan）承载本轮工具选择；工具执行由 run 卡片代表、不再补记 tool 步。
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
+    expect(r.steps[0]?.toolCall?.tool).toBe('/review');
     expect(r.tokenUsage.totalTokens).toBe(20); // 2 chat(5) + 1 tool(10)
   });
 
@@ -59,8 +61,9 @@ describe('runPlanningAgent', () => {
       userRequest: 'summary and review',
     });
     expect(toolCalls.map((c) => c.tool)).toEqual(['/describe', '/review']);
-    // 两个工具步骤 + 收尾 plan
-    expect(r.steps.map((s) => s.kind)).toEqual(['tool', 'tool', 'plan']);
+    // 一条思考步（plan，承载并行所选工具）+ 收尾 plan；工具执行由 run 卡片代表。
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
+    expect(r.steps[0]?.toolCall?.tool).toBe('/describe、/review');
     expect(r.finalText).toBe('done');
   });
 
