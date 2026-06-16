@@ -140,10 +140,10 @@ describe('runPlanningAgent', () => {
     expect(r.steps).toHaveLength(0);
   });
 
-  it('accumulates remember notes by target file across actions', async () => {
+  it('accumulates section-tagged remember notes and drops un-abstractable (sectionless) ones', async () => {
     const { deps } = makeDeps([
-      '{"tool":"/review","remember":{"user":["称呼: Kyle"]}}',
-      '{"final":"done","remember":{"memory":["repo uses g- prefix"],"agents":["check tenant mapping"]}}',
+      '{"tool":"/review","remember":{"user":[{"section":"评审偏好","note":"称呼: Kyle"}]}}',
+      '{"final":"done","remember":{"memory":["repo uses g- prefix"],"agents":[{"section":"AutoPilot","note":"check tenant mapping"}]}}',
     ]);
     const r = await runPlanningAgent(deps, {
       context,
@@ -151,9 +151,9 @@ describe('runPlanningAgent', () => {
       toolCatalog: catalog,
       userRequest: 'x',
     });
-    expect(r.memories.user).toEqual(['称呼: Kyle']);
-    expect(r.memories.memory).toEqual(['repo uses g- prefix']);
-    expect(r.memories.agents).toEqual(['check tenant mapping']);
+    expect(r.memories.user).toEqual([{ section: '评审偏好', note: '称呼: Kyle' }]);
+    expect(r.memories.memory).toEqual([]); // 纯字符串无法归类 → 丢弃
+    expect(r.memories.agents).toEqual([{ section: 'AutoPilot', note: 'check tenant mapping' }]);
   });
 
   it('returns a structured recommendation when the review close includes one', async () => {

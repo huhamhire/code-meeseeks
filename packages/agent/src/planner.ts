@@ -8,6 +8,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
+import type { MemoryNote } from './memory.js';
 import { extractJson, salvageProse, stripTrailingJson, summarySections } from './orchestrator.js';
 import { runStaggered } from './stagger.js';
 import { assertToolAllowed } from './tool-catalog.js';
@@ -83,23 +84,34 @@ interface PlannerAction {
   remember?: { user?: unknown; memory?: unknown; agents?: unknown };
 }
 
-/** Agent 主动记忆，按目标可写文件分组（键与 WritableAgentFile 对齐）。 */
+/** Agent 主动记忆，按目标可写文件分组（键与 WritableAgentFile 对齐），各条带目标专题章节。 */
 export interface AgentMemoryNotes {
-  user: string[];
-  memory: string[];
-  agents: string[];
+  user: MemoryNote[];
+  memory: MemoryNote[];
+  agents: MemoryNote[];
 }
 
 function emptyMemoryNotes(): AgentMemoryNotes {
   return { user: [], memory: [], agents: [] };
 }
 
-function toNoteList(raw: unknown): string[] {
-  if (typeof raw === 'string') return raw.trim() ? [raw.trim()] : [];
-  if (Array.isArray(raw)) {
-    return raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim());
-  }
-  return [];
+/**
+ * 解析单条记忆：必须是带 `section` + `note` 的对象。无法归入专题章节的条目（纯字符串 / 缺 section）
+ * 不是耐久记忆 → 丢弃（返回 null）。
+ */
+function toNote(raw: unknown): MemoryNote | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as { section?: unknown; note?: unknown };
+  const note = typeof obj.note === 'string' ? obj.note.trim() : '';
+  const section = typeof obj.section === 'string' ? obj.section.trim() : '';
+  if (!note || !section) return null;
+  return { section, note };
+}
+
+/** 把目标文件的 remember 数组解析为 MemoryNote[]（容错；丢弃无法归类的条目）。 */
+function toNoteList(raw: unknown): MemoryNote[] {
+  const items = Array.isArray(raw) ? raw : raw == null ? [] : [raw];
+  return items.map(toNote).filter((n): n is MemoryNote => n !== null);
 }
 
 /** 把一个动作里的 remember 累加进 acc（容错；非对象忽略）。 */
@@ -188,17 +200,26 @@ function buildProtocol(sections: readonly [string, string, string]): string {
     'ONLY in the separate "recommendation" field.',
     'Memory: persisting is RARE and OPT-IN. Most turns have NOTHING to remember — then OMIT "remember"',
     'entirely. Use a "remember" object only for a fact that will matter ACROSS MANY FUTURE, UNRELATED',
-    'reviews, grouped by target file (short notes in the user\'s language):',
-    '  {"remember": {"user": ["称呼: Kyle"], "memory": ["repo uses g-<id> for gray apps"], "agents": ["..."]}}',
-    '- user   → the person you talk to: preferred 称呼, language, lasting review/working preferences.',
+    'reviews, grouped by target file. Each note is {"section": "<a fitting ## heading>", "note": "<short, in',
+    "the user's language>\"}:",
+    '  {"remember": {"user": [{"section": "Review preferences", "note": "preferred name: Kyle"}],',
+    '                "memory": [{"section": "Project conventions", "note": "repo uses g-<id> for gray apps"}]}}',
+    '- "section" is REQUIRED: ABSTRACT the note into a durable, general topic. You are NOT limited to existing',
+    '  headings — a target file may have NONE yet (e.g. USER.md starts empty). PREFER reusing a fitting "## ..."',
+    '  already in that file (its current content is shown above, match it verbatim); otherwise FREELY introduce a',
+    '  new concise topical heading (the section set is meant to grow). Only OMIT a note when it is not a durable,',
+    '  generalizable topic at all (a PR-specific finding) — never force such a note in. If a note merely restates',
+    '  guidance already present in that section, do NOT record it.',
+    '- user   → the person you talk to: preferred name, language, lasting review/working preferences.',
     '- memory → durable PROJECT facts (stable architecture / conventions / IDs that outlive any one PR).',
     '- agents → general working norms you should always follow (e.g. reply language, review order).',
     'HARD BAR — do NOT record findings or heuristics tied to THIS PR or a specific feature / module /',
-    'symbol: e.g. "评审涉及 X 时重点核对 Y", "注意 fn() 对数字 ID 误判". Those are this review\'s OUTPUT,',
-    'not durable rules — putting them in agents/memory pollutes future behavior. If a note names a specific',
-    'function / field / feature / scenario, it is a finding, NOT a memory — keep it in the review, omit here.',
+    'symbol: e.g. "when reviewing X, double-check Y", "note: fn() misjudges numeric IDs". Those are this',
+    "review's OUTPUT, not durable rules — putting them in agents/memory pollutes future behavior. If a note",
+    'names a specific function / field / feature / scenario, it is a finding, NOT a memory — keep it in the',
+    'review, omit here.',
     'When in doubt, do NOT record. Over a whole session you should rarely write more than a note or two.',
-    'NEVER record private or sensitive data: real identity beyond a chosen 称呼, email / phone / address,',
+    'NEVER record private or sensitive data: real identity beyond a chosen display name, email / phone / address,',
     'employer-confidential specifics, secrets / tokens. When unsure whether something is private, do NOT record.',
     'Conversation & scope:',
     '- Natural conversation is fine: greet, say who you are, ask a clarifying question — answer directly',

@@ -3,7 +3,7 @@ export type { AgentContextKind } from './layout.js';
 export { loadAgentContext, loadAgentRules } from './load.js';
 export { scaffoldAgentDir } from './scaffold.js';
 export { appendAgentNotes } from './memory.js';
-export type { WritableAgentFile } from './memory.js';
+export type { MemoryNote, WritableAgentFile } from './memory.js';
 export { AGENT_TEMPLATES } from './templates.js';
 export type { AgentTemplate } from './templates.js';
 export type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
