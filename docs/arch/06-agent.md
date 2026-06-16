@@ -298,17 +298,26 @@ flowchart TD
 **启用开关**：底部状态栏新增 **AutoPilot 按钮**，默认**禁用**，用户手动启用；
 状态持久化于配置（`agent.autopilot.enabled`，默认 `false`）。禁用时下述逻辑完全不跑。
 
-**触发与最小间隔**：AutoPilot 挂在 Poller 的「PR 变更」回调上，但**并非每次 poll 都唤起 AI**。
-两道闸：
+**触发与准入闸**：AutoPilot 挂在 Poller 的「PR 变更」回调上，但**并非每次 poll 都唤起 AI**。自上而下
+的准入门控（任一不满足即跳过该 PR）：
 
 1. **最小间隔守卫** `agent.autopilot.min_interval_seconds`（默认取较大值）——距上次 AI
    评估不足间隔则本轮跳过，避免高频轮询把 LLM 判定打爆。
-2. **候选去重**——只对「新发现」或「内容已变更且未自动评审过当前版本」的 PR 触发。
+2. **分类 + 状态硬门控**——只对**「待我评审」分类**（`discoveryFilters` 含 `review-requested`）下、
+   **「待处理」状态**（`localStatus === 'pending'`）的 PR 触发；已通过 / 标记需修改、或非「待我评审」
+   的一律不自动评审。不支持发现分类的平台（`discoveryFilters` 为空）天然不命中。
+3. **已评审即止**——会话中一旦已有 `/describe` 或 `/review` 的有效产出（成功或正在跑，手动或自动皆算）
+   即判定已评审过，不再自动触发（见 `hasReviewOutput`），避免重复评审。
+4. **候选去重（台账）**——只对「内容已变更且未自动评审过当前版本」的 PR 触发。
 
 **自动评审状态记录（ledger）**：每个 PR 记录一份 AutoPilot 台账（`autoReviewedAt` / 评审时所对应的
 PR `updatedAt` / 判定结果与原因）。是否「未执行过自动化 review」据此判定：台账记录的 `updatedAt`
 与当前 PR `updatedAt` 不一致（含从无记录）即视为待处理——这样 PR 被推新 commit 后能再次进入候选，
 而内容未变则不重复跑。
+
+**移除 / purge 即终止**：每轮 poll tick 后，对**已不在本地 PR 列表**（被移除 / 软删后 purge）的 PR，
+若其上仍有在执行的 agent 操作（编排控制器 + 派发到运行队列的工具 run），一律直接终止——PR 都没了，
+继续评审无意义且空耗 LLM / 占用 worktree。
 
 **批量判定（例外规则）**：候选 PR 不无脑全跑，先过一道 LLM 判定：
 

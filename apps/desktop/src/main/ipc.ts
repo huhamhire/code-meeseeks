@@ -26,6 +26,7 @@ import {
   isCommentsCacheStale,
   listDrafts,
   listReviewRunsForPr,
+  hasReviewOutput,
   clearReviewRunsForPr,
   listStoredPullRequests,
   makeRunId,
@@ -107,7 +108,11 @@ export function registerIpcHandlers({
   connectionRuntime,
   reconfigureConnections,
   repoMirror,
-}: RegisterDeps): { abortAllActiveRuns: () => number; runAutopilotIfDue: () => void } {
+}: RegisterDeps): {
+  abortAllActiveRuns: () => number;
+  runAutopilotIfDue: () => void;
+  terminateAgentsForGonePrs: () => void;
+} {
   // === pr-agent run 队列 ===
   //
   // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 worktree)，
@@ -1342,6 +1347,45 @@ export function registerIpcHandlers({
   // agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
   const agentControllers = new Map<string, AbortController>();
 
+  /** 取消某 PR 的全部 pr-agent run：active 的 SIGKILL，waiting 的出队 + reject。 */
+  const cancelRunsForPr = (localId: string): void => {
+    for (const item of active.values()) if (item.req.localId === localId) item.ac?.abort();
+    let removed = false;
+    for (let i = waiting.length - 1; i >= 0; i--) {
+      if (waiting[i]!.req.localId === localId) {
+        const [q] = waiting.splice(i, 1);
+        q!.reject(new Error('pr removed'));
+        removed = true;
+      }
+    }
+    if (removed) broadcastQueueChanged();
+  };
+
+  /** 终止某 PR 上的全部 agent 操作：中止编排（agent:run/ask）+ 取消其派发的工具 run。 */
+  const terminateAgentForPr = (localId: string): void => {
+    agentControllers.get(localId)?.abort();
+    cancelRunsForPr(localId);
+  };
+
+  /**
+   * poll tick 后调用：把已被移除 / purge（不再在 listStoredPullRequests 里）的 PR 上仍在执行的
+   * agent 操作一律直接终止——PR 都没了，继续评审无意义且浪费 LLM / 占用 worktree。
+   */
+  const terminateAgentsForGonePrs = async (): Promise<void> => {
+    const opPrIds = new Set<string>();
+    for (const id of agentControllers.keys()) opPrIds.add(id);
+    for (const item of active.values()) opPrIds.add(item.req.localId);
+    for (const item of waiting) opPrIds.add(item.req.localId);
+    if (opPrIds.size === 0) return;
+    const live = new Set((await listStoredPullRequests(stateStore)).map((p) => p.localId));
+    for (const id of opPrIds) {
+      if (!live.has(id)) {
+        logger.info({ prLocalId: id }, 'agent ops terminated: pr removed/purged');
+        terminateAgentForPr(id);
+      }
+    }
+  };
+
   /** 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。 */
   const runReviewForPr = (
     pr: StoredPullRequest,
@@ -1543,11 +1587,20 @@ export function registerIpcHandlers({
     autopilotBusy = true;
     void (async () => {
       try {
-        // 候选：未自动评审过当前版本的 PR（台账去重），按 batch_size 截断。
+        // 候选准入（硬性门控，自上而下）：
+        //   1. 仅「待我评审」分类（discoveryFilters 含 review-requested）下、「待处理」状态（localStatus
+        //      === 'pending'）的 PR —— 已通过 / 标记需修改、或非待我评审的一律不自动评审。
+        //      （不支持发现分类的平台 discoveryFilters 为空 → 不命中，自然不自动触发。）
+        //   2. 会话中已有 /describe 或 /review 产出（手动或自动）→ 判定已评审过，不再自动触发。
+        //   3. 台账去重：同版本未变 / 已有跳过决策的不重复。
+        //   再按 batch_size 截断。
         const prs = await listStoredPullRequests(stateStore);
         const candidates: StoredPullRequest[] = [];
         for (const pr of prs) {
           if (candidates.length >= ap.batch_size) break;
+          if (!pr.discoveryFilters.includes('review-requested')) continue;
+          if (pr.localStatus !== 'pending') continue;
+          if (await hasReviewOutput(stateStore, pr.localId)) continue;
           if (await needsAutoReview(stateStore, pr.localId, pr.updatedAt)) candidates.push(pr);
         }
         if (candidates.length === 0) return;
@@ -2043,6 +2096,8 @@ export function registerIpcHandlers({
     },
     /** 每次 poll tick 由 index.ts 调用：满足开关 + 最小间隔 + 候选时跑一遍 AutoPilot pass。 */
     runAutopilotIfDue,
+    /** 每次 poll tick 由 index.ts 调用：终止已被移除 / purge 的 PR 上仍在执行的 agent 操作。 */
+    terminateAgentsForGonePrs: () => void terminateAgentsForGonePrs(),
   };
 }
 

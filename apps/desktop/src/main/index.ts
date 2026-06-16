@@ -102,7 +102,11 @@ let repoMirror: RepoMirrorManager;
 // IPC 运行时控制句柄（registerIpcHandlers 返回）：退出时据此中止所有进行中的 pr-agent run，
 // 触发其子进程树清理（见 before-quit）。注册前为 undefined。
 let ipcControl:
-  | { abortAllActiveRuns: () => number; runAutopilotIfDue: () => void }
+  | {
+      abortAllActiveRuns: () => number;
+      runAutopilotIfDue: () => void;
+      terminateAgentsForGonePrs: () => void;
+    }
   | undefined;
 // 连接级本地状态（按 connectionId）：持久化上次 ping 的 currentUser，用于建连接时预热，
 // 使首轮 poll 不依赖网络即可判 approved。启动时从 state store 载入一次，ping 后增量回写。
@@ -300,6 +304,8 @@ async function start(): Promise<void> {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('poll:tick', info);
       }
+      // 本轮已被移除 / purge 的 PR：终止其上仍在执行的 agent 操作（先于 AutoPilot，避免给已消失的 PR 起新评审）。
+      ipcControl?.terminateAgentsForGonePrs();
       // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器
       void runUpdateCheckIfDue();
       // AutoPilot 预评审：满足开关 + 最小间隔 + 候选时跑一遍 pass（内部门控，复用 poller 周期）。
