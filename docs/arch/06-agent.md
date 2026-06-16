@@ -307,13 +307,14 @@ flowchart TD
    **「待处理」状态**（`localStatus === 'pending'`）的 PR 触发；已通过 / 标记需修改、或非「待我评审」
    的一律不自动评审。不支持发现分类的平台（`discoveryFilters` 为空）天然不命中。
 2. **已评审即止**——会话中一旦已有 `/describe` 或 `/review` 的有效产出（成功或正在跑，手动或自动皆算）
-   即判定已评审过，不再自动触发（见 `hasReviewOutput`），避免重复评审。
-3. **候选去重（台账）**——只对「内容已变更且未自动评审过当前版本」的 PR 触发。
+   即判定已评审过 / 评审中，不再自动触发（见 `hasReviewOutput`）；评审**失败无产出**则不算、下轮可重试。
+3. **跳过去重（台账）**——仅排除「本版本已被 LLM 判定 skip」的 PR（台账 `decision='skipped'` 且
+   `autoReviewedUpdatedAt` 等于当前 `updatedAt`），避免对判过 skip 的 PR 反复重判；无产出又未被 skip 的
+   待评审 PR 一律放行（**不再因台账里有任意记录就拦下**——「已成功评审」由准入闸 2 用产出判定，不靠台账）。
 
-**自动评审状态记录（ledger）**：每个 PR 记录一份 AutoPilot 台账（`autoReviewedAt` / 评审时所对应的
-PR `updatedAt` / 判定结果与原因）。是否「未执行过自动化 review」据此判定：台账记录的 `updatedAt`
-与当前 PR `updatedAt` 不一致（含从无记录）即视为待处理——这样 PR 被推新 commit 后能再次进入候选，
-而内容未变则不重复跑。
+**自动评审状态记录（ledger）**：每个 PR 记录一份 AutoPilot 台账（评审时所对应的 PR `updatedAt` / 判定
+结果与原因 / 建议倾向）。台账主要供：① PR 列表的建议徽标（★，手动 / 自动一视同仁）；② 上述「跳过去重」
+（只看 `decision='skipped'`）。PR 被推新 commit（`updatedAt` 变）后，旧 skip 记录自然失效、可再次进入候选。
 
 **移除 / purge 即终止**：每轮 poll tick 后，对**已不在本地 PR 列表**（被移除 / 软删后 purge）的 PR，
 若其上仍有在执行的 agent 操作（编排控制器 + 派发到运行队列的工具 run），一律直接终止——PR 都没了，

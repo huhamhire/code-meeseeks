@@ -37,7 +37,6 @@ import {
   updateDraft,
   writeCommentsCache,
   writeAutopilotLedger,
-  needsAutoReview,
   getAutopilotLedger,
   getAgentSession,
   clearAgentSession,
@@ -1612,14 +1611,17 @@ export function registerIpcHandlers({
         //   1. 仅「待我评审」分类（discoveryFilters 含 review-requested）下、「待处理」状态（localStatus
         //      === 'pending'）的 PR —— 已通过 / 标记需修改、或非待我评审的一律不自动评审。
         //      （不支持发现分类的平台 discoveryFilters 为空 → 不命中，自然不自动触发。）
-        //   2. 会话中已有 /describe 或 /review 产出（手动或自动）→ 判定已评审过，不再自动触发。
-        //   3. 台账去重：同版本未变 / 已有跳过决策的不重复。
+        //   2. 会话中已有 /describe 或 /review 产出（成功 / 正在跑，手动或自动）→ 判定已评审过 / 评审中，
+        //      不再自动触发（评审失败无产出 → 不算，下轮可重试）。
+        //   3. 仅排除「本版本已被判定跳过」的 PR（台账 decision='skipped'）——避免对判过 skip 的 PR 反复
+        //      重判；无产出又未被 skip 的待评审 PR 一律放行（不再因台账有任意记录就拦下）。
         //   再按 batch_size 截断。
         const prs = await listStoredPullRequests(stateStore);
         const candidates: StoredPullRequest[] = [];
         // 准入漏斗计数（用于 0 候选时定位卡在哪一道闸——便于排查「为何不再触发」）。
         let reviewReqPending = 0; // 命中「待我评审 + 待处理」
-        let alreadyReviewed = 0; // 其中已有 describe/review 产出而被排除
+        let alreadyReviewed = 0; // 其中已有 describe/review 产出（成功 / 进行中）而被排除
+        let skipDeduped = 0; // 其中本版本已被判定跳过而被排除
         for (const pr of prs) {
           if (candidates.length >= ap.batch_size) break;
           if (!pr.discoveryFilters.includes('review-requested')) continue;
@@ -1629,12 +1631,17 @@ export function registerIpcHandlers({
             alreadyReviewed++;
             continue;
           }
-          if (await needsAutoReview(stateStore, pr.localId, pr.updatedAt)) candidates.push(pr);
+          const ledger = await getAutopilotLedger(stateStore, pr.localId);
+          if (ledger?.decision === 'skipped' && ledger.autoReviewedUpdatedAt === pr.updatedAt) {
+            skipDeduped++;
+            continue;
+          }
+          candidates.push(pr);
         }
         if (candidates.length === 0) {
           // 仍在按周期评估，只是当前无新合格 PR——把漏斗计数打出来，避免被误读成「没在跑」。
           logger.info(
-            { total: prs.length, reviewReqPending, alreadyReviewed },
+            { total: prs.length, reviewReqPending, alreadyReviewed, skipDeduped },
             'autopilot pass: no eligible candidates',
           );
           return;
@@ -1677,16 +1684,8 @@ export function registerIpcHandlers({
             toReview.map(async (pr) => {
               const session = await runReviewForPr(pr, agentContext, chat, undefined, true);
               // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
+              // 失败 / 暂停不落台账 → 无产出，下轮可重试（准入闸 2 用 hasReviewOutput 判，不再靠台账拦）。
               await recordReviewSummaryMessage(pr, session);
-              // 失败 / 暂停未落台账 → 补一条去重台账（无 verdict），避免下轮反复重试同版本。
-              if (session.status !== 'done') {
-                await writeAutopilotLedger(stateStore, {
-                  prLocalId: pr.localId,
-                  autoReviewedUpdatedAt: pr.updatedAt,
-                  decision: 'review',
-                  at: new Date().toISOString(),
-                });
-              }
             }),
           );
         });
