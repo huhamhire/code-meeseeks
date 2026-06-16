@@ -79,6 +79,54 @@ Agent 目录是 Agent 的**完整人格与知识来源**，挂载于配置 `agen
 3. 每步的**思考摘要**与**工具调用结果**写入会话 transcript，并实时流式推送渲染层；todo 项随之标记完成、进度落盘。
 4. 满足完成条件或触达步数上限即收尾。
 
+**工具选择与路由：哪些决策在「同一次 LLM 调用」内完成**：自由规划 Agent（自然语言入口）是一个
+ReAct 循环——**每一轮就是一次编排级 LLM 调用**（一个 `AgentStep`）：输入「上下文、既往多轮对话、
+至此进展」，输出一段 **JSON 动作**。关键边界是——**路由、工具选择、收尾、记忆这几类「决策」全在
+这一次调用内拍板**；真正耗时的是动作里被选中的工具去 pr-agent 执行、以及循环本身的多轮往返。
+
+一段动作（单次调用的产物）可同时承载：
+
+- `thought`：本轮思考摘要（留档 + 流式推送）。
+- **工具选择**，三选一：`tool`（单个，`/ask` 可带 `question`）；`tools`（**一次并行多选只读工具**，
+  如 `["/describe","/review"]`，**上限 3**、彼此错开 100~200ms 起跑）；或不选工具直接 `final`（收尾）。
+- `recommendation`：评审类收尾的非约束性判定（`approve` / `needs_work` / `manual_review` + 理由），
+  与 `final` 在**同一次调用**产出，供 UI 展示判定徽标。
+- `remember`：主动记下的**非隐私**条目，按目标可写文件分组（`user` → USER.md / `memory` → MEMORY.md
+  / `agents` → AGENTS.md），随本轮动作一并返回、收尾后落盘（**`SOUL.md` 永不写**）。
+
+**路由策略**（写进规划提示词，也在这同一次调用里裁决）：自然对话（问候 / 自我介绍 / 澄清）直接
+`final` 回答、不调工具；评审领域外的任务礼貌拒绝、不调工具；与本 PR 相关但无明确工具指向时默认
+`/ask` 兜底（带聚焦问题）；评审收尾固定为 `## 摘要` / `## 关键发现` / `## 建议` + `recommendation`。
+
+**单次调用内 vs 跨多次调用**——这条边界是读懂运行态与计量（见下「步 vs 子任务」）的关键：
+
+- **同一次 LLM 调用内**：路由判定、（可并行的）工具选择、收尾答复、判定建议、记忆写入意图。
+- **跨多次调用 / 多进程**：被选中工具的实际执行（各为独立 `ReviewRun` / pr-agent run）、ReAct 的
+  多轮循环（每轮一次新的规划调用）、以及固定微流程（§6）里 judge / summary 各自的独立 LLM 调用。
+
+```mermaid
+flowchart TD
+    U["自然语言输入"] --> CALL["规划 LLM 调用（一轮 = 一个 AgentStep）<br/>输入：上下文 + 既往多轮对话 + 至此进展"]
+
+    subgraph ONECALL["这一次 LLM 调用的产物（一段 JSON 动作）— 以下决策全在同一次调用内拍板"]
+        direction TB
+        CALL --> ROUTE{"路由"}
+        ROUTE -- "对话 / 领域外 → 直接答 / 礼貌拒绝" --> FIN["final（+ recommendation 评审判定）"]
+        ROUTE -- "需要工具" --> SEL["tool / tools 多选<br/>≤3 并行只读 · 无明确指向 → /ask 兜底"]
+        FIN -. 可附带 .-> REM["remember：user / memory / agents（非隐私）"]
+        SEL -. 可附带 .-> REM
+    end
+
+    SEL --> EXEC["工具执行（跨进程 / 并行）<br/>各为独立 ReviewRun · pr-agent run"]
+    EXEC -. "结果回喂 → 下一轮规划调用" .-> CALL
+    FIN --> DONE["收尾：落多轮对话消息 + 判定徽标"]
+    REM --> MEM["落盘 USER / MEMORY / AGENTS.md（SOUL 永不写）"]
+```
+
+固定微流程（§6 的自动评审 / AutoPilot）是另一种形态：工具序列**预定**（describe + review → 条件
+追问 → 总结），judge / summary 各是**独立**的编排级 LLM 调用，不走上面这套「单次调用内自由多选」的
+规划——两者互补，见「步 vs 子任务」的计量口径。
+
 **步 vs 子任务（pr-agent run）的计量边界**：**编排 agent**（交互式即 PR 自身的 agent，autopilot 即各 PR 的子 agent）**不只是规划分发**——每一步（`AgentStep`）是一次 plan / judge / 工具分发的**编排级 LLM 调用**：规划 todo、读 findings 判断是否追问、收尾总结都算它的步。而 `/describe`·`/review`·`/ask` 这些**拆给 pr-agent 子进程跑的任务**，在编排层维度**只计「分发」那一步**；pr-agent run **内部**自己的多次 LLM 调用**不计入 `stepCount`**——它是一条独立 `ReviewRun`，按自身 `tokenUsage` 计量。由此：① 步数是**编排级**概念，衡量编排 agent 的决策回合，不被子任务内部复杂度撑大；② **token 两层都采**——编排开销 + 各 pr-agent run 用量都归入会话计量（见「扩展与注意事项」的 Agent LLM 成本），只是不混进步数。§6 autopilot 的步数公式正按此口径数：describe / review / 每个 ask / summary 各算一步。
 
 **过程留存**：思考步骤、工具结果、todo、进度均持久化于本 PR 工作目录，跨 PR 切换与组件卸载存活（与 05 的 run store 保活一致），可事后回看。
