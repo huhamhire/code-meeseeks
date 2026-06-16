@@ -15,7 +15,6 @@
   },
   "chatPane": {
     "agent": {
-      "activityDone": "已完成 · {{n}} 步",
       "autoReview": "自动评审",
       "autoReviewRunning": "评审中…",
       "failed": "Agent 评审失败",

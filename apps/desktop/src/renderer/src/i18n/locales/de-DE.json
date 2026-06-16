@@ -15,7 +15,6 @@
   },
   "chatPane": {
     "agent": {
-      "activityDone": "Fertig · {{n}} Schritte",
       "autoReview": "Auto-Review",
       "autoReviewRunning": "Wird geprüft…",
       "failed": "Agent-Review fehlgeschlagen",

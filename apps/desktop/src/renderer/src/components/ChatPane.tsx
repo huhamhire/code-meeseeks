@@ -693,16 +693,21 @@ export function ChatPane({
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
           </div>
         )}
-        {/* 过程化跟踪：Agent 的逐步工具选择 / 判读 / 收尾 + 计时（类 Claude Code）。仅当 Agent
-            跑在**当前 PR** 或本轮已有步骤时显示，不串到其它会话。计时按**单个步骤**——当前思考
-            从上一步结束起算，每步完成后冻结各自用时。 */}
-        {(agentRunningHere || agentSteps.length > 0) && (
-          <AgentActivity
-            steps={agentSteps}
-            running={agentRunningHere}
-            since={runningPr && runningPr.id === prLocalId ? runningPr.since : null}
-          />
-        )}
+        {/* 过程化跟踪：Agent 逐步工具选择 / 判读 / 收尾 + 单步计时（类 Claude Code），仅作用于当前
+            PR。「思考中」只在 Agent 自身 LLM 在跑（无 pr-agent 工具 run 占用）时出现——等待工具调用
+            不算思考；已有步骤时也列出过程，便于回看。 */}
+        {(() => {
+          const thinking = agentRunningHere && !hasMyActive && myWaiting.length === 0;
+          return (
+            (agentSteps.length > 0 || thinking) && (
+              <AgentActivity
+                steps={agentSteps}
+                since={runningPr && runningPr.id === prLocalId ? runningPr.since : null}
+                thinking={thinking}
+              />
+            )
+          );
+        })()}
         {error && (
           <div className="chat-error" role="alert">
             <strong>{t('chatPane.errorPrefix')}</strong>
@@ -1347,26 +1352,28 @@ function stepLabel(step: AgentStep, t: TFunction): string {
 }
 
 /**
- * 过程化跟踪（类 Claude Code）：把 Agent 的逐步工具选择 / 判读 / 收尾流式列出，配**单步**计时——
- * 当前思考从「上一步结束」起算（非总任务累计）；每步完成后用各自时长冻结。可折叠。
+ * 过程化跟踪（类 Claude Code）：把 Agent 已完成的步骤按时间顺序列出（工具选择 / 判读 / 收尾），
+ * 末尾在 Agent 自身 LLM 思考时补一条带计时的「思考中」行。计时按**单个步骤**——每步用各自时长
+ * （上一步结束→本步），当前思考从上一步结束起算，绝非总任务累计。
+ * `thinking`：Agent 自身 LLM 正在跑（无 pr-agent 工具 run 占用）——工具执行的进度/计时由 run 卡片
+ * 负责，故工具步骤这里不再重复计时，只列出选择。
  */
 function AgentActivity({
   steps,
-  running,
   since,
+  thinking,
 }: {
   steps: AgentStep[];
-  running: boolean;
   since: number | null;
+  thinking: boolean;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!running) return;
+    if (!thinking) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [running]);
+  }, [thinking]);
 
   const stamps = steps.map((s) => (s.at ? new Date(s.at).getTime() : null));
   const stepMs = (i: number): number | null => {
@@ -1374,41 +1381,30 @@ function AgentActivity({
     const start = i > 0 ? stamps[i - 1] : since;
     return end != null && start != null ? Math.max(0, end - start) : null;
   };
-  // 当前思考：从最后一步结束（无步骤则从 since）到现在。
   const lastStamp = stamps.length ? stamps[stamps.length - 1] : since;
-  const liveMs = running && lastStamp != null ? Math.max(0, now - lastStamp) : 0;
+  const liveMs = thinking && lastStamp != null ? Math.max(0, now - lastStamp) : 0;
 
   return (
     <div className="chat-agent-activity" role="status">
-      <button
-        type="button"
-        className="chat-agent-activity-head"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        {running ? <Spinner /> : <ChevronIcon className={open ? 'rot' : ''} />}
-        <span className="chat-agent-activity-title">
-          {running
-            ? t('chatPane.agent.thinking')
-            : t('chatPane.agent.activityDone', { n: steps.length })}
-        </span>
-        {running && <span className="chat-agent-activity-time">{formatElapsed(liveMs)}</span>}
-      </button>
-      {open && steps.length > 0 && (
-        <ol className="chat-agent-activity-list">
-          {steps.map((s, i) => (
-            <li key={i} className="chat-agent-activity-item">
-              <span className="chat-agent-activity-kind">{stepLabel(s, t)}</span>
-              {s.thought && <span className="chat-agent-activity-thought">{s.thought}</span>}
-              {s.kind === 'judge' && s.result && (
-                <span className="chat-agent-activity-result muted">{s.result}</span>
-              )}
-              {stepMs(i) != null && (
-                <span className="chat-agent-activity-time">{formatElapsed(stepMs(i)!)}</span>
-              )}
-            </li>
-          ))}
-        </ol>
+      {steps.map((s, i) => (
+        <div key={i} className="chat-agent-activity-item">
+          <span className="chat-agent-activity-kind">{stepLabel(s, t)}</span>
+          {s.thought && <span className="chat-agent-activity-thought">{s.thought}</span>}
+          {s.kind === 'judge' && s.result && (
+            <span className="chat-agent-activity-result muted">{s.result}</span>
+          )}
+          {/* 工具步骤的耗时由 run 卡片展示（并行更准）；这里只给推理步骤（判读 / 收尾）计时。 */}
+          {s.kind !== 'tool' && stepMs(i) != null && (
+            <span className="chat-agent-activity-time">{formatElapsed(stepMs(i)!)}</span>
+          )}
+        </div>
+      ))}
+      {thinking && (
+        <div className="chat-agent-activity-item chat-agent-activity-live">
+          <Spinner />
+          <span className="chat-agent-activity-thought">{t('chatPane.agent.thinking')}</span>
+          <span className="chat-agent-activity-time">{formatElapsed(liveMs)}</span>
+        </div>
       )}
     </div>
   );

@@ -15,7 +15,6 @@
   },
   "chatPane": {
     "agent": {
-      "activityDone": "Done · {{n}} steps",
       "autoReview": "Auto Review",
       "autoReviewRunning": "Reviewing…",
       "failed": "Agent review failed",

@@ -222,38 +222,10 @@
   word-break: break-word;
 }
 
-// 过程化跟踪（类 Claude Code）：可折叠活动条 + 逐步列表 + 单步计时。左侧强调色竖条与 run 卡片区分。
+// 过程化跟踪（类 Claude Code）：纯文本逐步列表 + 单步计时，按时间顺序。无底色 / 无边框（思考态
+// 不加蓝色背景）；末尾思考中行带 spinner + 实时单步计时。
 .chat-agent-activity {
   margin: $space-3 $space-6;
-  border-left: 2px solid $color-accent;
-  background: $color-accent-bg-fade;
-  border-radius: 0 $radius-sm $radius-sm 0;
-}
-.chat-agent-activity-head {
-  display: flex;
-  align-items: center;
-  gap: $space-3;
-  width: 100%;
-  padding: $space-2 $space-4;
-  background: transparent;
-  border: none;
-  color: $text-muted;
-  font-size: $fs-sm;
-  text-align: left;
-  cursor: pointer;
-
-  .rot {
-    transform: rotate(90deg); // chevron ▸ → ▾（展开态）
-  }
-}
-.chat-agent-activity-title {
-  flex: 1;
-  min-width: 0;
-}
-.chat-agent-activity-list {
-  list-style: none;
-  margin: 0;
-  padding: 0 $space-4 $space-2 $space-6;
   display: flex;
   flex-direction: column;
   gap: $space-2;
@@ -263,6 +235,10 @@
   align-items: baseline;
   gap: $space-3;
   font-size: $fs-sm;
+  color: $text-muted;
+}
+.chat-agent-activity-live {
+  align-items: center; // spinner 与文字垂直居中
 }
 .chat-agent-activity-kind {
   font-family: $font-mono;
