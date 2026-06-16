@@ -50,6 +50,14 @@
   稳定后才揭开，遮罩底色与编辑器一致、揭开无缝。
 
 ### Fixed
+- **修复 PR diff 基准随目标分支漂移导致的「修改被撤回」误判**：此前文件内容（Monaco 左栏）按目标
+  分支当前 tip（`targetRef.sha`）读取，目标分支被别的 PR 合入而前移后，编辑器实际成了两点对比，
+  别的 PR 的改动会以倒挂 / 撤回形式串进当前 PR 的 diff（变更文件列表用三点 diff 本不受影响，但内容
+  与之不一致）。改为首次为 PR 算出 `merge-base(target, head)` 并固化到 `prs/<localId>/diff-base.json`，
+  之后变更文件列表 / 文件内容 / 提交计数 / blame 改动行 / pr-agent 评审一律以它为 base：编辑器即真
+  三点、对目标分支前移稳定，行锚点（评论 / finding）也有了固定参照。源分支被 rebase（固化 base 不再是
+  head 祖先）时自动重算；正常 push 不失效。固化值为本地派生缓存、独立于平台元数据，poller 重写
+  meta.json 不触碰；历史 PR 无需迁移，首次访问 diff 时按需回填（算不出则退回旧行为且不固化）。
 - 修复 Windows 控制台中文日志仍显示为乱码：① dev 下 electron-vite 把 main 的 stdout 接成管道
   （`isTTY=false`）原会跳过转码，UTF-8 字节被 CJK 控制台按 GBK/SJIS 渲染——改为 `pretty` 模式不卡
   `isTTY`（与上色路径一致）；② 启动期探测真实活动代码页（`chcp`）替代按 locale 猜测：UTF-8 控制台
