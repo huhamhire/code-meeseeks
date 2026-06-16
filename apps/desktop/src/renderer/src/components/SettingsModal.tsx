@@ -594,7 +594,21 @@ export function SettingsModal({
           </section>
 
           <section className="modal-section">
-            <h4>{t('settings.agentDirTitle')}</h4>
+            {/* 标题行：左侧标题 + 右侧蓝色「打开当前目录」按钮（在系统文件管理器打开生效的 Agent 目录，
+                便于直接查看 / 编辑文件）。放在标题行而非配置行，避免与下方的目录选择按钮混淆。 */}
+            <div className="modal-section-head">
+              <h4>{t('settings.agentDirTitle')}</h4>
+              {/* 文案按钮（非图标）：与下方的目录「选择」图标按钮区分开，避免混淆。尺寸与其它区块标题行
+                  的操作按钮（添加连接 / 添加配置 / 代理配置）一致，统一用 btn-sm。 */}
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => void invoke('app:openAgentDir', undefined)}
+                title={t('settings.openAgentDir')}
+              >
+                {t('settings.openAgentDir')}
+              </button>
+            </div>
             <p className="muted" style={{ margin: '0 0 8px' }}>
               {t('settings.agentDirHint')}
             </p>

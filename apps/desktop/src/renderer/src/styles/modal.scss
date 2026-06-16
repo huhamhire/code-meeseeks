@@ -369,8 +369,8 @@ select.settings-input {
   display: flex;
   flex-direction: column;
   gap: $space-3;
-  // 最多展示约 4 行，超出滚动
-  max-height: 236px;
+  // 最多展示约 4.5 行：露出半行提示下方还有内容、可滚动，避免漏看（4 行整高会被误以为到底）
+  max-height: 266px;
   overflow-y: auto;
 }
 .llm-profile-row {

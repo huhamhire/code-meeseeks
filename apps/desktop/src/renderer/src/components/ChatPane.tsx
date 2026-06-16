@@ -179,37 +179,50 @@ export function ChatPane({
   const myActiveIdSet = new Set(myActiveRuns.map((a) => a.runId));
   const visibleRuns = hasMyActive ? runs.filter((r) => !myActiveIdSet.has(r.id)) : runs;
 
-  // 历史时间线：把 run 卡片与 Agent 的元步骤按时间归并，让过程性步骤按自然时间顺序
-  // 穿插展示（而非堆在末尾）。工具步骤（describe/review/ask）已由 run 卡片代表、不重复；
-  // 收尾 plan 即「评审总结」卡片、不重复 → 仅保留判读（judge）这类决策节点作为内联标记。
+  // 历史时间线：把已完成 run、正在执行的 run、Agent 思考步骤、对话消息统一按**启动时间**归并排序，
+  // 顺序固定——即便后启动的任务先完成，也排在先启动（仍在执行）的任务下方，不因完成先后跳序。
+  // 类 Claude Code「先思考→定步骤→执行步骤」：思考步骤（plan/judge）是工具选择的前因，排在所选工具的
+  // run 卡片之前；工具执行的进度 / 计时由 run 卡片承载，不重复。排队中（未启动）的任务不入此列，另置末尾。
+  type ActiveRun = (typeof myActiveRuns)[number];
   const timeline = useMemo(() => {
-    const runEntries = visibleRuns.map((r) => ({
-      key: `run-${r.id}`,
-      time: r.startedAt,
-      run: r as ReviewRun | null,
+    const ms = (iso: string | null | undefined): number => {
+      const n = iso ? new Date(iso).getTime() : NaN;
+      return Number.isFinite(n) ? n : 0;
+    };
+    const base = {
+      run: null as ReviewRun | null,
+      active: null as ActiveRun | null,
       step: null as AgentStep | null,
       message: null as AgentMessage | null,
+    };
+    const runEntries = visibleRuns.map((r) => ({
+      ...base,
+      key: `run-${r.id}`,
+      sortTime: ms(r.startedAt),
+      run: r as ReviewRun | null,
     }));
-    const stepEntries = agentSteps
-      .filter((s) => s.kind === 'judge')
-      .map((s, i) => ({
-        key: `step-${i}-${s.at ?? ''}`,
-        time: s.at ?? '',
-        run: null,
-        step: s,
-        message: null as AgentMessage | null,
-      }));
+    const activeEntries = myActiveRuns.map((a) => ({
+      ...base,
+      key: `active-${a.runId}`,
+      sortTime: ms(a.startedAt ?? a.enqueuedAt),
+      active: a,
+    }));
+    const stepEntries = agentSteps.map((s, i) => ({
+      ...base,
+      key: `step-${i}-${s.at ?? ''}`,
+      sortTime: ms(s.at),
+      step: s as AgentStep | null,
+    }));
     const msgEntries = messages.map((m, i) => ({
+      ...base,
       key: `msg-${i}-${m.at}`,
-      time: m.at,
-      run: null,
-      step: null as AgentStep | null,
+      sortTime: ms(m.at),
       message: m,
     }));
-    return [...runEntries, ...stepEntries, ...msgEntries].sort((a, b) =>
-      a.time.localeCompare(b.time),
+    return [...runEntries, ...activeEntries, ...stepEntries, ...msgEntries].sort(
+      (a, b) => a.sortTime - b.sortTime,
     );
-  }, [visibleRuns, agentSteps, messages]);
+  }, [visibleRuns, myActiveRuns, agentSteps, messages]);
 
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
@@ -220,6 +233,25 @@ export function ChatPane({
   // 全局单并发：任一 PR 在跑即占用（禁止再发起）；仅「跑在当前 PR」才在本会话显示运行态 / 思考中。
   const agentBusy = runningPr !== null;
   const agentRunningHere = runningPr?.id === prLocalId && prLocalId !== undefined;
+  // 「思考中」实时计时的锚点：取「最近一次活动结束」——{本 PR run 起点, 末个思考步 at, 末个完成 run
+  // 的结束时刻} 三者最晚者。锚到持久数据（runningPr 跨 PR 切换不清、run 历史会重载）而非组件挂载，
+  // 故切走再切回不清零；用 run 结束而非步骤记录时刻，避免把工具执行时间算进当前思考。
+  const thinkingSince = useMemo(() => {
+    const cands: number[] = [];
+    if (runningPr && runningPr.id === prLocalId) cands.push(runningPr.since);
+    const lastStepAt = agentSteps[agentSteps.length - 1]?.at;
+    if (lastStepAt) {
+      const ms = new Date(lastStepAt).getTime();
+      if (Number.isFinite(ms)) cands.push(ms);
+    }
+    const lastRun = visibleRuns[visibleRuns.length - 1];
+    const lastRunEnd = lastRun?.finishedAt ?? lastRun?.startedAt;
+    if (lastRunEnd) {
+      const ms = new Date(lastRunEnd).getTime();
+      if (Number.isFinite(ms)) cands.push(ms);
+    }
+    return cands.length ? Math.max(...cands) : Date.now();
+  }, [runningPr, prLocalId, agentSteps, visibleRuns]);
   useEffect(() => {
     setRuns([]);
     setHasMoreOlder(false);
@@ -233,11 +265,13 @@ export function ChatPane({
     void (async () => {
       try {
         // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)。
-        // 同时拉已落盘的多轮对话：把会话消息恢复到其 PR，跨切换 / 重启不丢失。
-        const [list, rule, conversation] = await Promise.all([
+        // 同时拉已落盘的多轮对话 + 过程步骤（transcript）：把会话恢复到其 PR，跨切换 / 重启不丢失，
+        // 过程化跟踪的思考步骤也随之恢复（步骤随产生增量落盘）。
+        const [list, rule, conversation, transcript] = await Promise.all([
           invoke('pragent:listRuns', { localId: prLocalId, limit: RUNS_PAGE_SIZE }),
           invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
           invoke('agent:getConversation', { localId: prLocalId }),
+          invoke('agent:getTranscript', { localId: prLocalId }),
         ]);
         if (cancelled) return;
         // 反转为升序 (chat 习惯)，UI 直接读 runs 即可
@@ -245,6 +279,7 @@ export function ChatPane({
         setHasMoreOlder(list.length === RUNS_PAGE_SIZE);
         setMatchedRule(rule);
         setMessages(conversation);
+        setAgentSteps(transcript);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -668,26 +703,25 @@ export function ChatPane({
               onRejectFinding={handleRejectFinding}
               onNavigateToFinding={handleNavigateToFinding}
             />
+          ) : entry.active ? (
+            // 正在跑：进度条 + 实时 stdout 流，按启动时间穿插在时间线里（startedAt 入队时为 null、
+            // 起跑时设值，fallback enqueuedAt）。prAgent 未就绪时不渲染。
+            prAgent.available ? (
+              <RunningView
+                key={entry.key}
+                tool={entry.active.tool}
+                runId={entry.active.runId}
+                lines={linesByRunId.get(entry.active.runId) ?? []}
+                startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
+                model={currentLlmModel ?? null}
+              />
+            ) : null
           ) : entry.step ? (
-            <AgentStepMarker key={entry.key} step={entry.step} />
+            <AgentStepRow key={entry.key} step={entry.step} />
           ) : entry.message ? (
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
         )}
-        {/* 正在跑（可并发多条）：每条一个进度条 + 实时 stdout 流，贴在历史末尾。
-            startedAt 入队时为 null，executeRun 真正起跑时设值；窗口非常短一般看不到
-            — fallback 到 enqueuedAt */}
-        {prAgent.available &&
-          myActiveRuns.map((r) => (
-            <RunningView
-              key={r.runId}
-              tool={r.tool}
-              runId={r.runId}
-              lines={linesByRunId.get(r.runId) ?? []}
-              startedAt={new Date(r.startedAt ?? r.enqueuedAt).getTime()}
-              model={currentLlmModel ?? null}
-            />
-          ))}
         {/* 本 PR 排队中的任务：贴在运行中之后，按队列顺序展示，可单条取消 */}
         {myWaiting.map((w, i) => (
           <QueuedView
@@ -705,11 +739,12 @@ export function ChatPane({
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
           </div>
         )}
-        {/* Agent 自身 LLM 调用（规划 / 判读 / 收尾）无对应 pragent run，此时队列里看不到进度 →
-            补一条「思考中」指示（带动态计时），避免运行期界面看似停滞。仅当 Agent 跑在**当前 PR**
-            才显示，不串到其它会话；子任务运行时由 RunningView 负责进度。 */}
-        {agentRunningHere && runningPr && !hasMyActive && myWaiting.length === 0 && (
-          <ThinkingIndicator since={runningPr.since} />
+        {/* 过程化跟踪（类 Claude Code）：已完成的思考步骤已按时间穿插进上面的时间线（AgentStepRow），
+            此处只在 Agent 自身 LLM 正在推理（无 pr-agent 工具 run 占用 / 排队）时补一条实时「思考中」
+            指示——等待工具调用不算思考。计时锚定到「最近一次活动结束」（run 起点 / 末步 / 末个完成
+            run 的结束时刻取最晚者）而非组件挂载——切换 PR 再切回不会清零（runningPr 与 run 历史持久）。 */}
+        {agentRunningHere && !hasMyActive && myWaiting.length === 0 && (
+          <ThinkingLive since={thinkingSince} />
         )}
         {error && (
           <div className="chat-error" role="alert">
@@ -728,7 +763,7 @@ export function ChatPane({
         runningTool={myActiveRuns[myActiveRuns.length - 1]?.tool ?? null}
         onRun={(t, q) => void handleRun(t, q)}
         onAgentAsk={(q) => void handleAgentAsk(q)}
-        onCancel={hasMyActive ? handleStopAll : undefined}
+        onCancel={hasMyActive || agentRunningHere ? handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
         // 一键自动评审：图标按钮置于 `/` 命令触发器右侧。busy=全局占用（禁用触发）、
         // runningHere=跑在当前 PR（高亮 / 运行中文案）。
@@ -952,8 +987,9 @@ function ChatInputBar({
   const cmdMenuRef = useRef<HTMLDivElement | null>(null);
 
   // 队列模型：仅 !pr / pr-agent 未就绪 时禁用 input。activeRun / busyOnOtherPr
-  // 不再阻塞新提交 (会排队 by main)
-  const running = runningTool !== null;
+  // 不再阻塞新提交 (会排队 by main)。running 决定是否渲染 stop 按钮：除活动工具 run 外，
+  // Agent 自身执行阶段（思考 / 编排，无工具 run 占用）也算「运行中」，以便随时取消。
+  const running = runningTool !== null || agentRunningHere;
   // LLM 未配置时一并禁用：即便 pr-agent 运行时就绪，没有模型也无法发起调用
   const disabled = !pr || !prAgent.available || !llmConfigured;
   // stop 按钮点过后等 main 回 queueChanged 才会改变状态；中间这段时间二次点击
@@ -1348,32 +1384,56 @@ function ChatInputBar({
 }
 
 /**
- * Agent 元步骤内联标记：在时间线中按自然时间顺序穿插展示的决策节点（如 judge 判读）。
- * 工具步骤由 run 卡片代表、收尾 plan 由「评审总结」卡片代表，均不走此标记（见时间线归并）。
+ * 内联思考步骤（类 Claude Code「先思考→定步骤→执行步骤」）：穿插在时间线里、排在所选工具的 run
+ * 卡片之前。两行展示——首行带 bullet 标记的「已思考 xx s」（单步思考耗时，非总累计），次行另起展示
+ * 步骤结果（思考内容 / 判读结论）。不展示选了哪个工具（由随后的 run 卡片体现）；工具执行的进度 /
+ * 计时也归 run 卡片。
  */
-function AgentStepMarker({ step }: { step: AgentStep }) {
+function AgentStepRow({ step }: { step: AgentStep }) {
+  const { t } = useTranslation();
+  // 首行始终带 bullet 标记：有思考计时 → 「已思考 xx s」；无计时（如微流程固定派发步）→ 用思考内容
+  // 当首行，保证每一步都可见、都有分段标记，绝不渲染成空行。
+  const hasTime = step.thinkMs != null;
+  const headText = hasTime
+    ? t('chatPane.agent.thoughtFor', { time: formatElapsed(step.thinkMs ?? 0) })
+    : step.thought;
   return (
-    <div className="chat-agent-step-marker" role="status">
-      {step.result && <span className="chat-agent-step-result">{step.result}</span>}
-      {step.thought && <span className="chat-agent-step-thought muted">{step.thought}</span>}
+    <div className="chat-agent-step" role="note">
+      <div className="chat-agent-step-head">
+        <span className="chat-agent-step-bullet" aria-hidden>
+          •
+        </span>
+        {headText && <span>{headText}</span>}
+      </div>
+      {hasTime && step.thought && <div className="chat-agent-step-body">{step.thought}</div>}
+      {step.kind === 'judge' && step.result && (
+        <div className="chat-agent-step-body muted">{step.result}</div>
+      )}
     </div>
   );
 }
 
-/** 「思考中」指示：spinner + 文案 + 动态计时（1s 粒度，跟 RunningView 同款 elapsed）。 */
-function ThinkingIndicator({ since }: { since: number }) {
+/**
+ * 实时「思考中」指示：仅在 Agent 自身 LLM 正在推理（无工具 run 占用 / 排队）时挂载。计时锚定到传入的
+ * `since`（最近一次活动结束时刻，由父级从持久数据算出），而非组件挂载——切走再切回不清零；新一步产生
+ * 后 since 前移 → 计时回到当前步从零起算（仍是单步思考时长，非总累计）。
+ * 首行布局与已完成步骤对齐：spinner 充当进行中的 bullet 标记，「思考中」后紧贴计时。
+ */
+function ThinkingLive({ since }: { since: number }) {
   const { t } = useTranslation();
-  const [elapsedMs, setElapsedMs] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    setElapsedMs(Date.now() - since);
-    const id = setInterval(() => setElapsedMs(Date.now() - since), 1000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [since]);
+  }, []);
   return (
-    <div className="chat-agent-thinking" role="status">
-      <Spinner />
-      <span>{t('chatPane.agent.thinking')}</span>
-      <span className="chat-agent-thinking-elapsed">{formatElapsed(elapsedMs)}</span>
+    <div className="chat-agent-step" role="status">
+      <div className="chat-agent-step-head">
+        <Spinner />
+        <span>
+          {t('chatPane.agent.thinking')} {formatElapsed(Math.max(0, now - since))}
+        </span>
+      </div>
     </div>
   );
 }
@@ -1398,6 +1458,33 @@ function Md({ children }: { children: string }) {
       remarkPlugins={[remarkGfm, remarkBreaks]}
       rehypePlugins={REMOTE_REHYPE_PLUGINS}
       components={mermaidComponents}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
+/**
+ * 代码路径折行优化：在分隔符 `/` 与连接符 `.` `_` `-` 之后插入 <wbr> 软断点，配合 CSS
+ * `word-break: normal`，让长路径优先按这些字符折断（而非从单词中间断开），保证可读性。
+ */
+function BreakablePath({ path }: { path: string }) {
+  const parts = path.split(/(?<=[/._-])/);
+  const nodes: ReactNode[] = [];
+  parts.forEach((p, i) => {
+    nodes.push(p);
+    if (i < parts.length - 1) nodes.push(<wbr key={`wbr-${i}`} />);
+  });
+  return <>{nodes}</>;
+}
+
+/** 行内 markdown：用于标题等单行文本，渲染内联代码 / 强调，去掉块级 <p> 包裹保持行内排版。 */
+function MdInline({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={REMOTE_REHYPE_PLUGINS}
+      components={{ p: ({ children }) => <>{children}</> }}
     >
       {children}
     </ReactMarkdown>
@@ -2177,7 +2264,9 @@ function FindingCard({
           <span className={`chat-finding-cat chat-finding-cat-${key}`}>{label}</span>
         )}
         {showTitle && translatedTitle && !collapsed && (
-          <h4 className="chat-finding-title">{translatedTitle}</h4>
+          <h4 className="chat-finding-title">
+            <MdInline>{translatedTitle}</MdInline>
+          </h4>
         )}
         {/* 已拒绝才出现的展开 / 收起切换：chevron 图标，收起态指右、展开态转下，纯图标交互 */}
         {isRejected && (
@@ -2201,7 +2290,9 @@ function FindingCard({
               onClick={onNavigate}
               title={t('chatPane.anchorJumpTitle')}
             >
-              <code>{finding.anchor.path}</code>
+              <code>
+                <BreakablePath path={finding.anchor.path} />
+              </code>
               <span>
                 :{finding.anchor.startLine}
                 {finding.anchor.endLine && finding.anchor.endLine !== finding.anchor.startLine
@@ -2211,7 +2302,9 @@ function FindingCard({
             </button>
           ) : (
             <>
-              <code>{finding.anchor.path}</code>
+              <code>
+                <BreakablePath path={finding.anchor.path} />
+              </code>
               {finding.anchor.startLine && (
                 <span>
                   :{finding.anchor.startLine}

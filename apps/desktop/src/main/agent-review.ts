@@ -45,6 +45,8 @@ export interface AgentReviewDeps {
   summaryMaxChars: number;
   /** 步骤流式回调（广播给渲染层）。 */
   onStep?: (sessionId: string, step: AgentStep) => void;
+  /** 用户停止：透传给微流程，思考 / 执行任意阶段都能立即中止（停止按钮 → agent:stop）。 */
+  signal?: AbortSignal;
 }
 
 /**
@@ -78,6 +80,7 @@ export async function runAgentReview(
           await appendAgentStep(deps.stateStore, pr.localId, step, now);
           deps.onStep?.(session.id, step);
         },
+        signal: deps.signal,
       },
       {
         context: deps.agentContext,
@@ -99,11 +102,13 @@ export async function runAgentReview(
       })) ?? session
     );
   } catch (err) {
+    // 用户停止（abort）→ 干净的 paused 收尾，不当失败报错；其余异常仍记为 failed。
+    const aborted = deps.signal?.aborted || (err instanceof Error && err.message === '用户暂停');
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {
-        status: 'failed',
+        status: aborted ? 'paused' : 'failed',
         finishedAt: now().toISOString(),
-        terminationReason: err instanceof Error ? err.message : String(err),
+        terminationReason: aborted ? '用户暂停' : err instanceof Error ? err.message : String(err),
       })) ?? session
     );
   }

@@ -222,18 +222,37 @@
   word-break: break-word;
 }
 
-// Agent 自身 LLM 调用（规划 / 判读 / 收尾）期间的「思考中」指示：spinner + 文案。
-.chat-agent-thinking {
-  margin: $space-3 $space-6;
-  display: flex;
-  align-items: center;
-  gap: $space-3;
-  color: $text-muted;
+// 过程化跟踪（类 Claude Code）：思考步骤按时间穿插进时间线。两行——带 bullet 标记的「已思考 xx s」
+// 首行 + 另起的步骤结果次行。无底色 / 无边框（思考态不加蓝色背景）；实时「思考中」首行以 spinner 充当
+// 进行中的 bullet，计时紧贴提示之后。
+.chat-agent-step {
+  margin: $space-2 $space-6 $space-2 $space-1; // 左缩进收到最小，让 bullet 视觉尽量靠前
   font-size: $fs-sm;
 }
-.chat-agent-thinking-elapsed {
-  font-family: $font-mono;
-  font-variant-numeric: tabular-nums;
+// 首行：bullet / spinner 标记 + 「已思考 / 思考中 xx s」提示，计时紧贴文本（不撑开到行尾）。
+// bullet 占固定列宽、与文案间留 gap 间距；正文按「列宽 + gap」缩进，保证首行文案与正文左对齐。
+.chat-agent-step-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3; // bullet 与文案之间的留白
+  color: $text-muted;
+}
+.chat-agent-step-bullet {
+  flex: 0 0 $space-3; // 固定 bullet 列宽，文本对齐的基准
+  color: $color-info;
+  font-size: $fs-md; // 略大，标记更醒目
+  line-height: 1;
+}
+// 次行：步骤结果（思考内容 / 判读结论），缩进到首行文案的左缘（= bullet 列宽 + gap）对齐。
+.chat-agent-step-body {
+  margin-top: $space-1;
+  padding-left: $space-3 + $space-3;
+  color: $text-body;
+  word-break: break-word;
+
+  &.muted {
+    color: $text-muted;
+  }
 }
 
 // Agent 自然对话回复：左对齐、带 Agent 图标的轻量包装，区别于「评审总结」卡片（无判定 / 无标题）。
@@ -258,28 +277,6 @@
   min-width: 0;
 }
 
-// Agent 元步骤内联标记：在时间线中按自然时间顺序穿插的决策节点（judge 判读）。
-// 左侧一道强调色竖条，与 run 卡片区分但保持同一缩进。
-.chat-agent-step-marker {
-  margin: $space-3 $space-6;
-  padding: $space-2 $space-4;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: $space-3;
-  font-size: $fs-sm;
-  border-left: 2px solid $color-accent;
-  background: $color-accent-bg-fade;
-  border-radius: 0 $radius-sm $radius-sm 0;
-}
-.chat-agent-step-thought {
-  color: $text-body;
-}
-.chat-agent-step-result {
-  font-weight: 600;
-  color: $color-info;
-  white-space: pre-wrap;
-}
 
 // === 空态 ===
 .chat-empty {
@@ -921,8 +918,11 @@
     border-radius: $radius-sm;
     font-family: $font-mono;
     color: $text-body;
-    // path 单段太长 (含 / 路径) 时允许在任意字符断行，不让单 code 块撑爆容器
-    word-break: break-all;
+    // 长路径优先按分隔符 / 连接符折断（BreakablePath 在 / . _ - 后插了 <wbr> 软断点）：
+    // word-break:normal 让浏览器只在这些软断点（及空格 / CJK）处折行，保证可读性；overflow-wrap:anywhere
+    // 仅作兜底——单个分段仍超宽时才允许任意断开，且让 code 作为 flex item 能正常收缩不撑爆容器。
+    word-break: normal;
+    overflow-wrap: anywhere;
     min-width: 0;
   }
 }

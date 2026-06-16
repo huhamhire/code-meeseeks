@@ -161,6 +161,8 @@ export interface IpcChannels {
   'app:prAgentStatus': { request: void; response: PrAgentStatus };
   /** 调 Electron shell.openPath 让 OS 默认编辑器打开 config.yaml */
   'app:openConfigFile': { request: void; response: void };
+  /** 调 shell.openPath 在系统文件管理器打开当前生效的 Agent 目录（不存在则先建）。 */
+  'app:openAgentDir': { request: void; response: void };
   /** 打开 Electron DevTools（分离窗口） */
   'app:openDevTools': { request: void; response: void };
   /** 手动检测版本更新（设置页「检查更新」）。仅检测 + 返回结果，不下载 / 安装。 */
@@ -435,6 +437,11 @@ export interface IpcChannels {
    * UI 据此渲染多轮会话；跨 PR 切换 / 重启后恢复。
    */
   'agent:getConversation': { request: { localId: string }; response: AgentMessage[] };
+  /**
+   * 读取指定 PR 已落盘的 Agent 过程步骤（transcript，按时间升序）；无则空数组。
+   * UI 据此恢复「过程化跟踪」的思考步骤——跨 PR 切换 / 重启后不丢失（步骤随产生增量落盘）。
+   */
+  'agent:getTranscript': { request: { localId: string }; response: AgentStep[] };
   /**
    * 批量读 AutoPilot 台账：返回各 PR 已自动评审的 recommendation（仅 decision=review 且有
    * 建议者）。PR 列表据此显示徽标，无需逐个加载会话。

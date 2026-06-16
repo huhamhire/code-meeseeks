@@ -41,6 +41,7 @@ import {
   getAgentSession,
   clearAgentSession,
   getAgentConversation,
+  getAgentTranscript,
   appendAgentMessage,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
@@ -48,6 +49,7 @@ import { pickMatchingRule } from '@meebox/rules';
 import type {
   AgentRecommendationVerdict,
   AgentSession,
+  AgentStep,
   AppInfo,
   ConnectionSummary,
   IpcChannels,
@@ -458,6 +460,13 @@ export function registerIpcHandlers({
   ipcMain.handle('app:openConfigFile', async (): Promise<void> => {
     const err = await shell.openPath(bootstrap.paths.configFile);
     if (err) throw new Error(`failed to open config.yaml: ${err}`);
+  });
+  ipcMain.handle('app:openAgentDir', async (): Promise<void> => {
+    // 当前生效的 Agent 目录（用户配置优先，否则默认 ~/.code-meeseeks/agent）；先确保存在再打开。
+    const dir = effectiveAgentDir();
+    await fs.mkdir(dir, { recursive: true }).catch(() => undefined);
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(`failed to open agent dir: ${err}`);
   });
   ipcMain.handle('app:openDevTools', (evt) => {
     evt.sender.openDevTools({ mode: 'detach' });
@@ -1272,8 +1281,12 @@ export function registerIpcHandlers({
     user: string;
   }) => Promise<{ text: string; usage?: TokenUsage }>;
 
-  /** 设置 LLM env + 临时 chat cwd + chat 函数，运行 fn，收尾清理临时目录。 */
-  const withAgentChat = async <T>(fn: (chat: AgentChat) => Promise<T>): Promise<T> => {
+  /** 设置 LLM env + 临时 chat cwd + chat 函数，运行 fn，收尾清理临时目录。
+   *  signal：用户停止时 abort → 杀掉在跑的 LLM chat 子进程，让思考阶段也能立即中止（不必等模型返回）。 */
+  const withAgentChat = async <T>(
+    fn: (chat: AgentChat) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> => {
     const bridge = getPrAgentBridge();
     if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
     // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。
@@ -1292,7 +1305,7 @@ export function registerIpcHandlers({
     const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
     try {
       const chat: AgentChat = async ({ system, user }) => {
-        const r = await bridge.chat({ system, user, env, cwd: chatCwd });
+        const r = await bridge.chat({ system, user, env, cwd: chatCwd, signal });
         const acc: UsageAcc = { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
         for (const line of (r.stderr ?? '').split('\n')) accumulateUsageSentinel(line, acc);
         return { text: r.stdout.trim(), usage: finalizeUsage(acc) };
@@ -1303,11 +1316,38 @@ export function registerIpcHandlers({
     }
   };
 
+  /**
+   * 每个编排步骤的统一出口：① 后台日志（工具选择 / 判读 / 收尾各落一条，便于排障与离线回看）；
+   * ② 广播给渲染层（agent:stepProgress）做过程化展示。thought / result 截断避免刷屏。
+   */
+  // 后台日志只留骨架（kind / tool / 用时）：thought 与 result（含用户输入 / 总结正文）不入日志，
+  // 避免刷屏 + 泄漏内容；完整步骤已落 transcript.json，需要时从那里回看。
+  const emitAgentStep = (pr: StoredPullRequest, sessionId: string, step: AgentStep): void => {
+    logger.info(
+      {
+        prLocalId: pr.localId,
+        sessionId,
+        kind: step.kind,
+        tool: step.toolCall?.tool,
+        thinkMs: step.thinkMs,
+      },
+      'agent step',
+    );
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+    }
+  };
+
+  // 编排 Agent（手动评审 agent:run + 自由规划 agent:ask）每 PR 至多一个在跑，AbortController 供
+  // agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
+  const agentControllers = new Map<string, AbortController>();
+
   /** 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。 */
   const runReviewForPr = (
     pr: StoredPullRequest,
     agentContext: AgentContext,
     chat: AgentChat,
+    signal?: AbortSignal,
   ): Promise<AgentSession> => {
     const agentCfg = bootstrap.config.agent;
     const matchedRule = pickMatchingRule(agentContext.rules, {
@@ -1328,11 +1368,8 @@ export function registerIpcHandlers({
       toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
       maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
       summaryMaxChars: agentCfg.summary_max_chars,
-      onStep: (sessionId, step) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
-        }
-      },
+      onStep: (sessionId, step) => emitAgentStep(pr, sessionId, step),
+      signal,
     });
   };
 
@@ -1348,22 +1385,34 @@ export function registerIpcHandlers({
       const agentContext = await loadAgentContext(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
-      const session = await withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
-      // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（走 1476
-      // 的 runReviewForPr，不经此处）。无文本 / 失败不记。
-      if (session.status === 'done' && session.summary) {
-        await appendAgentMessage(stateStore, pr.localId, {
-          role: 'assistant',
-          content: session.summary,
-          recommendation: session.recommendation,
-        });
+      // 注册 AbortController，让停止按钮（agent:stop）能在思考 / 执行任意阶段即时中止本次评审。
+      const ac = new AbortController();
+      agentControllers.set(pr.localId, ac);
+      logger.info({ prLocalId: pr.localId }, 'agent review start (manual)');
+      try {
+        const session = await withAgentChat(
+          (chat) => runReviewForPr(pr, agentContext, chat, ac.signal),
+          ac.signal,
+        );
+        logger.info(
+          { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
+          'agent review done',
+        );
+        // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（不经此处）。
+        // 仅成功收尾才记：失败 / 用户停止（paused）不落消息。
+        if (session.status === 'done' && session.summary) {
+          await appendAgentMessage(stateStore, pr.localId, {
+            role: 'assistant',
+            content: session.summary,
+            recommendation: session.recommendation,
+          });
+        }
+        return session;
+      } finally {
+        agentControllers.delete(pr.localId);
       }
-      return session;
     },
   );
-
-  // 自由规划 Agent（自然语言入口）：每 PR 至多一个在跑，AbortController 供 agent:stop 暂停。
-  const agentControllers = new Map<string, AbortController>();
 
   const runPlanningForPr = (
     pr: StoredPullRequest,
@@ -1389,11 +1438,7 @@ export function registerIpcHandlers({
       language: getMainLanguage(),
       maxSteps: agentCfg.max_steps,
       signal,
-      onStep: (sessionId, step) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
-        }
-      },
+      onStep: (sessionId, step) => emitAgentStep(pr, sessionId, step),
       // 持久化 Agent 主动记下的非隐私条目到当前 Agent 目录的各可写文件（USER/MEMORY/AGENTS）；
       // SOUL.md 永不写。下一轮 loadAgentContext 现读即生效（跨会话记忆）。
       recordMemory: async (notes) => {
@@ -1422,10 +1467,23 @@ export function registerIpcHandlers({
       });
       const ac = new AbortController();
       agentControllers.set(pr.localId, ac);
+      // 不记用户输入正文（避免泄漏 / 刷屏）：只记发起本身，输入已落多轮对话。
+      logger.info({ prLocalId: pr.localId }, 'agent chat start (planning)');
       try {
-        return await withAgentChat((chat) =>
-          runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
+        const session = await withAgentChat(
+          (chat) => runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
+          ac.signal,
         );
+        logger.info(
+          {
+            prLocalId: pr.localId,
+            status: session.status,
+            steps: session.stepCount,
+            terminationReason: session.terminationReason,
+          },
+          'agent chat done',
+        );
+        return session;
       } finally {
         agentControllers.delete(pr.localId);
       }
@@ -1458,6 +1516,15 @@ export function registerIpcHandlers({
       req: IpcChannels['agent:getConversation']['request'],
     ): Promise<IpcChannels['agent:getConversation']['response']> =>
       getAgentConversation(stateStore, req.localId),
+  );
+
+  ipcMain.handle(
+    'agent:getTranscript',
+    async (
+      _evt,
+      req: IpcChannels['agent:getTranscript']['request'],
+    ): Promise<IpcChannels['agent:getTranscript']['response']> =>
+      getAgentTranscript(stateStore, req.localId),
   );
 
   // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===
