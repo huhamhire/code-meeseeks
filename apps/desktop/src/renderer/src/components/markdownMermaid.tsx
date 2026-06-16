@@ -41,3 +41,13 @@ export const mermaidComponents: Components = {
     return <pre {...rest}>{children}</pre>;
   },
 };
+
+/**
+ * describe「文件变更」walkthrough 专用 components：在 mermaid 覆盖之上再去掉 <details> 的 open
+ * 属性。pr-agent 把各文件分类（功能增强 / 配置变更 …）输出为 <details open> 默认展开，文件多时正文
+ * 很长；去掉 open 让每个分类默认折叠收起，点 <summary> 标题按需展开（原生 <details> 交互、不持久化）。
+ */
+export const walkthroughMdComponents: Components = {
+  ...mermaidComponents,
+  details: ({ node: _node, open: _open, ...rest }) => <details {...rest} />,
+};

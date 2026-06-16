@@ -34,7 +34,7 @@ import {
 } from './icons';
 import { ConfirmModal } from './ConfirmModal';
 import { PaneLoading } from './Loading';
-import { mermaidComponents } from './markdownMermaid';
+import { mermaidComponents, walkthroughMdComponents } from './markdownMermaid';
 import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { useDraftsForPr } from '../stores/drafts-store';
@@ -2455,7 +2455,8 @@ function FindingCard({
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
               rehypePlugins={REMOTE_REHYPE_PLUGINS}
-              components={mermaidComponents}
+              // 「文件变更」walkthrough 用去掉 <details open> 的覆盖，使各文件分类默认折叠收起。
+              components={key === 'walkthrough' ? walkthroughMdComponents : mermaidComponents}
             >
               {translatedBody}
             </ReactMarkdown>
