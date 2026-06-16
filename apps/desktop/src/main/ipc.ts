@@ -1418,19 +1418,31 @@ export function registerIpcHandlers({
   };
 
   /**
-   * 把一次评审收尾总结追加为该 PR 的一条 assistant 评审消息（多轮对话）——UI 据此渲染「评审总结」卡片。
-   * 手动一键评审与 AutoPilot 背景评审共用；仅成功收尾（done）且有总结才记，失败 / 用户停止（paused）不落。
+   * 评审收尾的统一落地（手动一键评审与 AutoPilot 背景评审共用）：仅成功收尾（done）且有总结时——
+   * ① 追加一条 assistant 评审消息（UI 渲染「评审总结」卡片）；② 写评审台账（recommendation + 当前
+   *    updatedAt）。台账既给 PR 列表的建议徽标（★，手动 / 自动一视同仁），也供 AutoPilot 同版本去重。
+   * 失败 / 用户停止（paused）不落，便于后续重试。
    */
   const recordReviewSummaryMessage = async (
     pr: StoredPullRequest,
     session: AgentSession,
   ): Promise<void> => {
-    if (session.status === 'done' && session.summary) {
-      await appendAgentMessage(stateStore, pr.localId, {
-        role: 'assistant',
-        content: session.summary,
-        recommendation: session.recommendation,
-      });
+    if (session.status !== 'done' || !session.summary) return;
+    await appendAgentMessage(stateStore, pr.localId, {
+      role: 'assistant',
+      content: session.summary,
+      recommendation: session.recommendation,
+    });
+    await writeAutopilotLedger(stateStore, {
+      prLocalId: pr.localId,
+      autoReviewedUpdatedAt: pr.updatedAt,
+      decision: 'review',
+      recommendation: session.recommendation?.verdict,
+      at: new Date().toISOString(),
+    });
+    // 通知渲染层：若正打开该 PR，重载会话让后台评审的「评审总结」卡片即时出现（手动评审自行重载，重复无害）。
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('agent:conversationChanged', { prLocalId: pr.localId });
     }
   };
 
@@ -1643,32 +1655,41 @@ export function registerIpcHandlers({
             agentsRules: agentContext.files.agents,
           });
           const byId = new Map(candidates.map((p) => [p.localId, p] as const));
+          // 先落「跳过」决策（无工具开销，顺序写盘即可）；收集「评审」决策待并行编排。
+          const toReview: StoredPullRequest[] = [];
           for (const d of decisions) {
             const pr = byId.get(d.prLocalId);
             if (!pr) continue;
-            const at = new Date().toISOString();
             if (!d.review) {
               await writeAutopilotLedger(stateStore, {
                 prLocalId: pr.localId,
                 autoReviewedUpdatedAt: pr.updatedAt,
                 decision: 'skipped',
                 reason: d.reason,
-                at,
+                at: new Date().toISOString(),
               });
               continue;
             }
-            // 单并发：逐 PR 顺序跑编排（工具 run 在共享队列并行消化）。
-            const session = await runReviewForPr(pr, agentContext, chat);
-            // 与手动评审一致：收尾总结落多轮对话，PR 会话里能看到「评审总结」卡片（此前 AutoPilot 漏记）。
-            await recordReviewSummaryMessage(pr, session);
-            await writeAutopilotLedger(stateStore, {
-              prLocalId: pr.localId,
-              autoReviewedUpdatedAt: pr.updatedAt,
-              decision: 'review',
-              recommendation: session.recommendation?.verdict,
-              at,
-            });
+            toReview.push(pr);
           }
+          // 多 PR 评审并行编排：各编排 await 自己的工具 run 时彼此不挡，让工具的并发队列
+          // （run-queue maxConcurrency）尽量被填满，而非逐 PR 串行空等。各 PR 写各自的文件，无竞争。
+          await Promise.all(
+            toReview.map(async (pr) => {
+              const session = await runReviewForPr(pr, agentContext, chat);
+              // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
+              await recordReviewSummaryMessage(pr, session);
+              // 失败 / 暂停未落台账 → 补一条去重台账（无 verdict），避免下轮反复重试同版本。
+              if (session.status !== 'done') {
+                await writeAutopilotLedger(stateStore, {
+                  prLocalId: pr.localId,
+                  autoReviewedUpdatedAt: pr.updatedAt,
+                  decision: 'review',
+                  at: new Date().toISOString(),
+                });
+              }
+            }),
+          );
         });
         logger.info({ candidates: candidates.length }, 'autopilot pass done');
       } catch (err) {

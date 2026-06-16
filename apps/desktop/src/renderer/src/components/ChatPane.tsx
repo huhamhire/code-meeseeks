@@ -300,6 +300,14 @@ export function ChatPane({
     });
   }, [prLocalId]);
 
+  // 后台评审（AutoPilot）收尾追加「评审总结」消息时，若正打开该 PR 则重载会话，让总结卡片即时出现。
+  useEffect(() => {
+    if (!prLocalId) return;
+    return subscribe('agent:conversationChanged', (ev) => {
+      if (ev.prLocalId === prLocalId) void reloadConversation(prLocalId);
+    });
+  }, [prLocalId]);
+
   // 本 PR 的运行中 run 集合发生「移除」→ 那条跑完了：单独 fetch 它 + 按 runId 升序
   // 插入 runs（不重拉整页，避免毁掉用户已向上加载的更早历史）。lines 缓存的回收已
   // 上移到 store 层（setQueue 全局处理），这里不再负责。多并发下逐条 diff 处理。
