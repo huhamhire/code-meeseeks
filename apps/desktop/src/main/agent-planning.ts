@@ -170,11 +170,13 @@ export async function runAgentPlanning(
       })) ?? session
     );
   } catch (err) {
+    // 用户停止（abort 杀掉在跑的 chat / 工具子进程 → 抛错）→ 干净的 paused 收尾，不当失败报错。
+    const aborted = deps.signal?.aborted || (err instanceof Error && err.message === '用户暂停');
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {
-        status: 'failed',
+        status: aborted ? 'paused' : 'failed',
         finishedAt: now().toISOString(),
-        terminationReason: err instanceof Error ? err.message : String(err),
+        terminationReason: aborted ? '用户暂停' : err instanceof Error ? err.message : String(err),
       })) ?? session
     );
   }

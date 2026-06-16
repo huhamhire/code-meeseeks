@@ -1274,8 +1274,12 @@ export function registerIpcHandlers({
     user: string;
   }) => Promise<{ text: string; usage?: TokenUsage }>;
 
-  /** 设置 LLM env + 临时 chat cwd + chat 函数，运行 fn，收尾清理临时目录。 */
-  const withAgentChat = async <T>(fn: (chat: AgentChat) => Promise<T>): Promise<T> => {
+  /** 设置 LLM env + 临时 chat cwd + chat 函数，运行 fn，收尾清理临时目录。
+   *  signal：用户停止时 abort → 杀掉在跑的 LLM chat 子进程，让思考阶段也能立即中止（不必等模型返回）。 */
+  const withAgentChat = async <T>(
+    fn: (chat: AgentChat) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> => {
     const bridge = getPrAgentBridge();
     if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
     // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。
@@ -1294,7 +1298,7 @@ export function registerIpcHandlers({
     const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
     try {
       const chat: AgentChat = async ({ system, user }) => {
-        const r = await bridge.chat({ system, user, env, cwd: chatCwd });
+        const r = await bridge.chat({ system, user, env, cwd: chatCwd, signal });
         const acc: UsageAcc = { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
         for (const line of (r.stderr ?? '').split('\n')) accumulateUsageSentinel(line, acc);
         return { text: r.stdout.trim(), usage: finalizeUsage(acc) };
@@ -1379,8 +1383,9 @@ export function registerIpcHandlers({
       agentControllers.set(pr.localId, ac);
       logger.info({ prLocalId: pr.localId }, 'agent review start (manual)');
       try {
-        const session = await withAgentChat((chat) =>
-          runReviewForPr(pr, agentContext, chat, ac.signal),
+        const session = await withAgentChat(
+          (chat) => runReviewForPr(pr, agentContext, chat, ac.signal),
+          ac.signal,
         );
         logger.info(
           { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
@@ -1458,8 +1463,9 @@ export function registerIpcHandlers({
       // 不记用户输入正文（避免泄漏 / 刷屏）：只记发起本身，输入已落多轮对话。
       logger.info({ prLocalId: pr.localId }, 'agent chat start (planning)');
       try {
-        const session = await withAgentChat((chat) =>
-          runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
+        const session = await withAgentChat(
+          (chat) => runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
+          ac.signal,
         );
         logger.info(
           {

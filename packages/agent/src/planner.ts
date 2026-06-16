@@ -253,6 +253,10 @@ export async function runPlanningAgent(
     const thinkStart = Date.now();
     const r = await deps.chat({ system, user });
     const thinkMs = Date.now() - thinkStart;
+    // 思考刚结束就发现已被停止 → 立即收尾，不再据此动作分发工具（停止在思考阶段也即时生效）。
+    if (deps.signal?.aborted) {
+      return { steps, finalText: '', tokenUsage: usage, memories, terminationReason: '用户暂停' };
+    }
     usage = addUsage(usage, r.usage);
     const action = extractJson<PlannerAction>(r.text);
     // 累加本动作携带的记忆（任何动作都可附 remember）。
