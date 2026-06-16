@@ -35,6 +35,7 @@ import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from './ConfirmModal';
 import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
+import { PaneLoading } from './Loading';
 import { FileTreeIcon, SearchIcon } from './icons';
 import { languageFor } from '../utils/language';
 
@@ -253,10 +254,7 @@ export function DiffView({
     const startWidth = fileListWidth;
     const onMove = (ev: MouseEvent): void => {
       const dx = ev.clientX - startX;
-      const next = Math.min(
-        DIFF_FILE_LIST_MAX,
-        Math.max(DIFF_FILE_LIST_MIN, startWidth + dx),
-      );
+      const next = Math.min(DIFF_FILE_LIST_MAX, Math.max(DIFF_FILE_LIST_MIN, startWidth + dx));
       setFileListWidth(next);
     };
     const onUp = (): void => {
@@ -272,9 +270,7 @@ export function DiffView({
   };
   // 用 state 而非 ref：onMount 异步触发，必须靠 state 变更触发后续 useEffect
   // 重新运行 decorations 应用逻辑。
-  const [diffEditor, setDiffEditor] = useState<MonacoEditor.IStandaloneDiffEditor | null>(
-    null,
-  );
+  const [diffEditor, setDiffEditor] = useState<MonacoEditor.IStandaloneDiffEditor | null>(null);
 
   // 订阅 sync:progress 并按当前 PR 所属 repo 过滤
   const repoKeySuffix = `/${pr.repo.projectKey}/${pr.repo.repoSlug}`;
@@ -367,20 +363,17 @@ export function DiffView({
   // (典型场景：hover '+' 创建后立即 trigger，drafts store 异步更新)。fn 不在 map
   // 时把 id 加 pending；registerEditTrigger 时如果发现自己 pending 立即 fire
   const pendingTriggersRef = useRef<Set<string>>(new Set());
-  const registerEditTrigger = useCallback(
-    (draftId: string, fn: (() => void) | null): void => {
-      if (fn) {
-        editTriggerFnsRef.current.set(draftId, fn);
-        if (pendingTriggersRef.current.has(draftId)) {
-          pendingTriggersRef.current.delete(draftId);
-          fn();
-        }
-      } else {
-        editTriggerFnsRef.current.delete(draftId);
+  const registerEditTrigger = useCallback((draftId: string, fn: (() => void) | null): void => {
+    if (fn) {
+      editTriggerFnsRef.current.set(draftId, fn);
+      if (pendingTriggersRef.current.has(draftId)) {
+        pendingTriggersRef.current.delete(draftId);
+        fn();
       }
-    },
-    [],
-  );
+    } else {
+      editTriggerFnsRef.current.delete(draftId);
+    }
+  }, []);
   const triggerAutoEdit = (draftId: string): void => {
     const fn = editTriggerFnsRef.current.get(draftId);
     if (fn) {
@@ -459,9 +452,7 @@ export function DiffView({
     if (!files) return m;
     for (const f of files) {
       const n = comments.filter(
-        (c) =>
-          c.anchor &&
-          (c.anchor.path === f.path || (f.oldPath && c.anchor.path === f.oldPath)),
+        (c) => c.anchor && (c.anchor.path === f.path || (f.oldPath && c.anchor.path === f.oldPath)),
       ).length;
       if (n > 0) m.set(f.path, n);
     }
@@ -475,13 +466,10 @@ export function DiffView({
   const draftCountByPath = useMemo(() => {
     const m = new Map<string, number>();
     if (!files || !drafts) return m;
-    const publishable = drafts.filter(
-      (d) => d.status === 'pending' || d.status === 'edited',
-    );
+    const publishable = drafts.filter((d) => d.status === 'pending' || d.status === 'edited');
     for (const f of files) {
       const n = publishable.filter(
-        (d) =>
-          d.anchor.path === f.path || (f.oldPath && d.anchor.path === f.oldPath),
+        (d) => d.anchor.path === f.path || (f.oldPath && d.anchor.path === f.oldPath),
       ).length;
       if (n > 0) m.set(f.path, n);
     }
@@ -767,7 +755,10 @@ export function DiffView({
     if (renderSideBySide) {
       addZonesFor(originalEditor, oldByLine);
     } else if (oldByLine.size > 0) {
-      addZonesFor(modifiedEditor, remapOldByLineToModified(diffEditor.getLineChanges() ?? [], oldByLine));
+      addZonesFor(
+        modifiedEditor,
+        remapOldByLineToModified(diffEditor.getLineChanges() ?? [], oldByLine),
+      );
     }
     addZonesFor(modifiedEditor, newByLine);
 
@@ -1075,7 +1066,10 @@ export function DiffView({
     if (renderSideBySide) {
       addZonesFor(originalEditor, oldByLine);
     } else if (oldByLine.size > 0) {
-      addZonesFor(modifiedEditor, remapOldByLineToModified(diffEditor.getLineChanges() ?? [], oldByLine));
+      addZonesFor(
+        modifiedEditor,
+        remapOldByLineToModified(diffEditor.getLineChanges() ?? [], oldByLine),
+      );
     }
     addZonesFor(modifiedEditor, newByLine);
 
@@ -1177,13 +1171,11 @@ export function DiffView({
       const lineChanges = diffEditor.getLineChanges() ?? [];
       return lineChanges.map((c) => ({
         original:
-          c.originalEndLineNumber >= c.originalStartLineNumber &&
-          c.originalEndLineNumber > 0
+          c.originalEndLineNumber >= c.originalStartLineNumber && c.originalEndLineNumber > 0
             ? { start: c.originalStartLineNumber, end: c.originalEndLineNumber }
             : null,
         modified:
-          c.modifiedEndLineNumber >= c.modifiedStartLineNumber &&
-          c.modifiedEndLineNumber > 0
+          c.modifiedEndLineNumber >= c.modifiedStartLineNumber && c.modifiedEndLineNumber > 0
             ? { start: c.modifiedStartLineNumber, end: c.modifiedEndLineNumber }
             : null,
       }));
@@ -1298,7 +1290,9 @@ export function DiffView({
       // 用 selected.path 跟 pendingScroll 的 anchor.path 关联间接判断
     }
     const editor =
-      pendingScroll.side === 'old' ? diffEditor.getOriginalEditor() : diffEditor.getModifiedEditor();
+      pendingScroll.side === 'old'
+        ? diffEditor.getOriginalEditor()
+        : diffEditor.getModifiedEditor();
 
     let highlightTimer: ReturnType<typeof setTimeout> | undefined;
     let revealed = false;
@@ -1390,8 +1384,14 @@ export function DiffView({
             type="button"
             className="diff-file-list-search-btn"
             onClick={() => setSidebarMode((m) => (m === 'search' ? 'tree' : 'search'))}
-            title={sidebarMode === 'search' ? t('diffView.backToFileTree') : t('diffView.searchChangesTitle')}
-            aria-label={sidebarMode === 'search' ? t('diffView.backToFileTree') : t('diffView.searchAria')}
+            title={
+              sidebarMode === 'search'
+                ? t('diffView.backToFileTree')
+                : t('diffView.searchChangesTitle')
+            }
+            aria-label={
+              sidebarMode === 'search' ? t('diffView.backToFileTree') : t('diffView.searchAria')
+            }
           >
             {sidebarMode === 'search' ? <FileTreeIcon /> : <SearchIcon />}
           </button>
@@ -1448,7 +1448,9 @@ export function DiffView({
           <BackendErrorBanner
             err={blameError}
             scope={
-              selected ? t('diffView.blameFailedNamed', { path: selected.path }) : t('diffView.blameFailed')
+              selected
+                ? t('diffView.blameFailedNamed', { path: selected.path })
+                : t('diffView.blameFailed')
             }
             onDismiss={() => setBlameError(null)}
           />
@@ -1544,9 +1546,7 @@ function DraftZoneList({
   // PublishReviewModal 的批量路径共用同一份 main 端逻辑 (anchor 映射 / posted
   // 回写 / force-refresh 评论 / 失败收集都一致)，行为可预测，未来改任一处不会
   // 让两条路径分叉
-  const onPublish = async (
-    draftId: string,
-  ): Promise<{ ok: boolean; error?: string }> => {
+  const onPublish = async (draftId: string): Promise<{ ok: boolean; error?: string }> => {
     const resp = await invoke('drafts:publishBatch', {
       localId: prLocalId,
       draftIds: [draftId],
@@ -1558,10 +1558,7 @@ function DraftZoneList({
   return (
     <div className="draft-zone-list">
       {drafts.map((d, i) => (
-        <div
-          key={d.id}
-          className={`draft-zone-item${i > 0 ? ' draft-zone-item-divider' : ''}`}
-        >
+        <div key={d.id} className={`draft-zone-item${i > 0 ? ' draft-zone-item-divider' : ''}`}>
           <DraftZone
             draft={d}
             hardBreaks={hardBreaks}
@@ -1896,7 +1893,9 @@ function SyncProgress({ progress }: { progress: SyncProgressEvent | null }) {
     );
   }
   const label =
-    progress.phase === 'start' ? progress.message ?? t('diffView.preparingSync') : progress.stage ?? t('diffView.syncing');
+    progress.phase === 'start'
+      ? (progress.message ?? t('diffView.preparingSync'))
+      : (progress.stage ?? t('diffView.syncing'));
   const pct =
     progress.percent !== undefined && Number.isFinite(progress.percent) ? progress.percent : null;
   return (
@@ -2201,7 +2200,6 @@ function fileKey(f: DiffChangedFile): string {
   return `${f.oldPath ?? ''}|${f.path}`;
 }
 
-
 function DiffPane({
   file,
   content,
@@ -2220,6 +2218,31 @@ function DiffPane({
   onMount: (editor: MonacoEditor.IStandaloneDiffEditor) => void;
 }) {
   const { t } = useTranslation();
+  // Monaco 挂载后 diff 还要异步计算 + hideUnchangedRegions 折叠才稳定（见上文 reveal 逻辑），
+  // 期间编辑器是「空 → 跳一下」的重排。在它之上盖一层 overlay loading，首次 onDidUpdateDiff
+  // （或挂载即已算完）后卸载，遮住这段抖动一次性 reveal。DiffPane 按 file path keyed →
+  // 切文件自然 remount，diffReady 随之复位。
+  const [diffReady, setDiffReady] = useState(false);
+  const handleMount = useCallback(
+    (editor: MonacoEditor.IStandaloneDiffEditor) => {
+      onMount(editor);
+      // diff 算完触发 onDidUpdateDiff，但 hideUnchangedRegions 折叠的布局还要再 paint
+      // 一两帧才稳定 → 不在事件里立即揭开（否则露出折叠那一跳），略等 80ms 让折叠 paint
+      // 完成、overlay 一直盖着，再一次性 reveal。
+      const reveal = (): void => {
+        window.setTimeout(() => setDiffReady(true), 80);
+      };
+      if (editor.getLineChanges() != null) {
+        reveal();
+        return;
+      }
+      const d = editor.onDidUpdateDiff(() => {
+        d.dispose();
+        reveal();
+      });
+    },
+    [onMount],
+  );
   if (loading || !content) {
     return (
       <div className="diff-empty">
@@ -2236,50 +2259,50 @@ function DiffPane({
     return <div className="diff-binary">{t('diffView.binaryNotRendered')}</div>;
   }
   return (
-    <DiffEditor
-      height="100%"
-      language={languageFor(file.path)}
-      original={content.base.content}
-      modified={content.head.content}
-      onMount={onMount}
-      className={
-        [
-          showBlame ? 'diff-editor-with-blame' : '',
-          showWhitespace ? 'diff-editor-show-eol' : '',
-        ]
-          .filter(Boolean)
-          .join(' ') || undefined
-      }
-      options={{
-        readOnly: true,
-        renderSideBySide,
-        minimap: { enabled: false },
-        fontSize: editorFontSize(14),
-        scrollBeyondLastLine: false,
-        renderOverviewRuler: false,
-        // 显式开 glyph margin，给行内评论标记留位置
-        glyphMargin: true,
-        // 空白字符可视化：toolbar 按钮控制；'all' 时空格显示 · / Tab 显示 →
-        renderWhitespace: showWhitespace ? 'all' : 'none',
-        // GitHub 风格折叠：未变更段缩成可展开占位行
-        hideUnchangedRegions: {
-          enabled: true,
-          contextLineCount: 10,
-          minimumLineCount: 5,
-          revealLineCount: 20,
-        },
-        // 关掉依赖 ts.worker 的高级特性（diff review 不需要），同时消掉
-        // `Missing requestHandler` 噪音。hover 保留给 blame / 评论装饰用。
-        inlayHints: { enabled: 'off' },
-        quickSuggestions: false,
-        suggestOnTriggerCharacters: false,
-        parameterHints: { enabled: false },
-        codeLens: false,
-        stickyScroll: { enabled: false },
-        occurrencesHighlight: 'off',
-      }}
-      theme="vs-dark"
-    />
+    <div className="diff-pane-editor">
+      {!diffReady && <PaneLoading overlay delayMs={0} />}
+      <DiffEditor
+        height="100%"
+        language={languageFor(file.path)}
+        original={content.base.content}
+        modified={content.head.content}
+        onMount={handleMount}
+        className={
+          [showBlame ? 'diff-editor-with-blame' : '', showWhitespace ? 'diff-editor-show-eol' : '']
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
+        options={{
+          readOnly: true,
+          renderSideBySide,
+          minimap: { enabled: false },
+          fontSize: editorFontSize(14),
+          scrollBeyondLastLine: false,
+          renderOverviewRuler: false,
+          // 显式开 glyph margin，给行内评论标记留位置
+          glyphMargin: true,
+          // 空白字符可视化：toolbar 按钮控制；'all' 时空格显示 · / Tab 显示 →
+          renderWhitespace: showWhitespace ? 'all' : 'none',
+          // GitHub 风格折叠：未变更段缩成可展开占位行
+          hideUnchangedRegions: {
+            enabled: true,
+            contextLineCount: 10,
+            minimumLineCount: 5,
+            revealLineCount: 20,
+          },
+          // 关掉依赖 ts.worker 的高级特性（diff review 不需要），同时消掉
+          // `Missing requestHandler` 噪音。hover 保留给 blame / 评论装饰用。
+          inlayHints: { enabled: 'off' },
+          quickSuggestions: false,
+          suggestOnTriggerCharacters: false,
+          parameterHints: { enabled: false },
+          codeLens: false,
+          stickyScroll: { enabled: false },
+          occurrencesHighlight: 'off',
+        }}
+        theme="vs-dark"
+      />
+    </div>
   );
 }
 
@@ -2299,5 +2322,3 @@ function renderHoverMd(comments: PrComment[]): string {
     })
     .join('\n\n---\n\n');
 }
-
-

@@ -33,6 +33,7 @@ import {
   TrashIcon,
 } from './icons';
 import { ConfirmModal } from './ConfirmModal';
+import { PaneLoading } from './Loading';
 import { mermaidComponents } from './markdownMermaid';
 import { REMOTE_REHYPE_PLUGINS } from '../markdown';
 import { useChatRunStore } from '../stores/chat-run-store';
@@ -145,6 +146,9 @@ export function ChatPane({
   const [runs, setRuns] = useState<ReviewRun[]>([]);
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  // 切 PR 时初次拉取（runs / 规则 / 会话 / transcript）在飞标志：期间盖延迟 loading，
+  // 避免「清空 → 空白 → 内容 pop-in」的抖动。延迟显示让快路径（缓存命中）零闪烁。
+  const [loadingSession, setLoadingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
@@ -262,8 +266,10 @@ export function ChatPane({
     setMatchedRule(null);
     setAgentSteps([]);
     setMessages([]);
+    setLoadingSession(false);
     if (!prLocalId) return;
     let cancelled = false;
+    setLoadingSession(true);
     void (async () => {
       try {
         // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)。
@@ -284,6 +290,8 @@ export function ChatPane({
         setAgentSteps(transcript);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setLoadingSession(false);
       }
     })();
     return () => {
@@ -394,7 +402,10 @@ export function ChatPane({
     if (!pr || !prAgent.available || !llmConfigured) return;
     // 去重（即时反馈）：同一 PR 同一工具已在执行 / 排队 → 阻止重复触发（main 端亦有
     // 权威校验兜底）。/ask 每次问题不同，不限制。
-    if (tool !== 'ask' && (myActiveRuns.some((r) => r.tool === tool) || myWaiting.some((w) => w.tool === tool))) {
+    if (
+      tool !== 'ask' &&
+      (myActiveRuns.some((r) => r.tool === tool) || myWaiting.some((w) => w.tool === tool))
+    ) {
       setError(t('chatPane.duplicateRun', { tool }));
       return;
     }
@@ -452,7 +463,10 @@ export function ChatPane({
     const startedId = pr.localId;
     setError(null);
     setAgentSteps([]);
-    setMessages((prev) => [...prev, { role: 'user', content: question, at: new Date().toISOString() }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: question, at: new Date().toISOString() },
+    ]);
     setRunningPrs((m) => new Map(m).set(startedId, Date.now()));
     try {
       const session = await invoke('agent:ask', { localId: startedId, question });
@@ -529,10 +543,7 @@ export function ChatPane({
 
   const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
     if (!pr) return;
-    if (
-      !finding.anchor ||
-      typeof finding.anchor.startLine !== 'number'
-    ) {
+    if (!finding.anchor || typeof finding.anchor.startLine !== 'number') {
       return; // 没 anchor 行号 → 没法变 inline，按钮本不该出现，兜底
     }
     const startLine = finding.anchor.startLine;
@@ -687,9 +698,13 @@ export function ChatPane({
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
+        {/* 初次拉取会话期间盖延迟 loading（>150ms 才显），遮住「清空 → 内容 pop-in」抖动；
+            加载完成才落到下方的真实空态，避免空 PR 误显 loading。 */}
+        {loadingSession && <PaneLoading />}
         {/* 使用提示仅在「全无会话内容」时显示：一旦有用户输入气泡 / run / 步骤 / 收尾结果，
             或 Agent 正在运行 / 有排队任务，即隐藏，避免输入后仍残留提示。 */}
-        {timeline.length === 0 &&
+        {!loadingSession &&
+          timeline.length === 0 &&
           !agentRunningHere &&
           !hasMyActive &&
           myWaiting.length === 0 && (
@@ -838,13 +853,37 @@ type CommandSpec =
 // 分组顺序：pr-agent 工具 → 分隔线 → review 决断
 const COMMANDS: ReadonlyArray<CommandSpec> = [
   // pr-agent
-  { kind: 'pragent', name: 'review', label: '/review', descKey: 'chatPane.cmdReviewDesc', insertAs: '/review' },
-  { kind: 'pragent', name: 'describe', label: '/describe', descKey: 'chatPane.cmdDescribeDesc', insertAs: '/describe' },
+  {
+    kind: 'pragent',
+    name: 'review',
+    label: '/review',
+    descKey: 'chatPane.cmdReviewDesc',
+    insertAs: '/review',
+  },
+  {
+    kind: 'pragent',
+    name: 'describe',
+    label: '/describe',
+    descKey: 'chatPane.cmdDescribeDesc',
+    insertAs: '/describe',
+  },
   // /improve：shim 强制 gfm_markdown=True 后，improve 走「汇总建议 → publish_comment →
   // review.md」路径（非 committable，inline 模式仍不可用），parse-output 按
   // generate_summarized_suggestions 的 <details> 模板解析出带重要度评分的 finding。
-  { kind: 'pragent', name: 'improve', label: '/improve', descKey: 'chatPane.cmdImproveDesc', insertAs: '/improve' },
-  { kind: 'pragent', name: 'ask', label: '/ask', descKey: 'chatPane.cmdAskDesc', insertAs: '/ask ' },
+  {
+    kind: 'pragent',
+    name: 'improve',
+    label: '/improve',
+    descKey: 'chatPane.cmdImproveDesc',
+    insertAs: '/improve',
+  },
+  {
+    kind: 'pragent',
+    name: 'ask',
+    label: '/ask',
+    descKey: 'chatPane.cmdAskDesc',
+    insertAs: '/ask ',
+  },
   // review 决断 (跟 PR header 按钮共用 prs:setLocalStatus，写 Bitbucket reviewer status)
   {
     kind: 'review-action',
@@ -1019,10 +1058,7 @@ function ChatInputBar({
   const trimmed = input.trim();
   // `/` 开头 + 命令名还没敲完整 (没空格) → 显示候选；已为当前 input dismiss 过则隐藏
   const showAutocomplete =
-    !disabled &&
-    dismissedFor !== input &&
-    input.startsWith('/') &&
-    !input.includes(' ');
+    !disabled && dismissedFor !== input && input.startsWith('/') && !input.includes(' ');
   const filtered = showAutocomplete
     ? COMMANDS.filter((c) => c.label.startsWith(input.split(' ')[0] ?? ''))
     : [];
@@ -1305,66 +1341,68 @@ function ChatInputBar({
           disabled={disabled}
           rows={2}
           aria-label={t('chatPane.inputAria')}
-          style={textareaHeightPx !== null ? { height: `${String(textareaHeightPx)}px` } : undefined}
+          style={
+            textareaHeightPx !== null ? { height: `${String(textareaHeightPx)}px` } : undefined
+          }
         />
       </div>
       {parseError && <div className="chat-input-error">{parseError}</div>}
       <div className="chat-pane-input-row">
         <div className="chat-cmd-group">
-        <div className="chat-cmd-bar" ref={cmdMenuRef}>
-          <button
-            type="button"
-            className={`chat-cmd-trigger${cmdMenuOpen ? ' active' : ''}`}
-            onClick={() => setCmdMenuOpen((v) => !v)}
-            disabled={disabled}
-            aria-haspopup="menu"
-            aria-expanded={cmdMenuOpen}
-            title={t('chatPane.cmdTriggerTitle')}
-          >
-            /
-          </button>
-          {cmdMenuOpen && (
-            <ul className="chat-cmd-menu" role="menu">
-              {COMMANDS.map((c, i) => {
-                const prev = COMMANDS[i - 1];
-                // pragent → review-action 边界插一道分隔线
-                const needDivider = prev !== undefined && prev.kind !== c.kind;
-                return (
-                  <li key={c.name} className={needDivider ? 'chat-cmd-menu-group' : undefined}>
-                    <button
-                      type="button"
-                      className="chat-cmd-suggest-item"
-                      onClick={() => handleInsertCommand(c)}
-                      role="menuitem"
-                    >
-                      <code>{c.label}</code>
-                      <span className="muted">{t(c.descKey)}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-        {/* 自动评审：图标按钮紧贴 `/` 命令触发器右侧。仅 pr-agent 就绪时出现，LLM 未配置 / 本 PR 评审
+          <div className="chat-cmd-bar" ref={cmdMenuRef}>
+            <button
+              type="button"
+              className={`chat-cmd-trigger${cmdMenuOpen ? ' active' : ''}`}
+              onClick={() => setCmdMenuOpen((v) => !v)}
+              disabled={disabled}
+              aria-haspopup="menu"
+              aria-expanded={cmdMenuOpen}
+              title={t('chatPane.cmdTriggerTitle')}
+            >
+              /
+            </button>
+            {cmdMenuOpen && (
+              <ul className="chat-cmd-menu" role="menu">
+                {COMMANDS.map((c, i) => {
+                  const prev = COMMANDS[i - 1];
+                  // pragent → review-action 边界插一道分隔线
+                  const needDivider = prev !== undefined && prev.kind !== c.kind;
+                  return (
+                    <li key={c.name} className={needDivider ? 'chat-cmd-menu-group' : undefined}>
+                      <button
+                        type="button"
+                        className="chat-cmd-suggest-item"
+                        onClick={() => handleInsertCommand(c)}
+                        role="menuitem"
+                      >
+                        <code>{c.label}</code>
+                        <span className="muted">{t(c.descKey)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+          {/* 自动评审：图标按钮紧贴 `/` 命令触发器右侧。仅 pr-agent 就绪时出现，LLM 未配置 / 本 PR 评审
             进行中则禁用触发（其它 PR 在跑不禁用——可并发 / 排队）。停止统一由发送区的停止按钮负责（取消
             进行中的子任务即终止流程），不再单独提供 Agent 停止按钮，避免两个语义重叠的停止入口。 */}
-        {pr && prAgent.available && (
-          <button
-            type="button"
-            className={`chat-cmd-trigger chat-agent-review-trigger${agentRunningHere ? ' active' : ''}`}
-            onClick={onAgentReview}
-            disabled={!llmConfigured || agentRunningHere}
-            title={
-              agentRunningHere
-                ? t('chatPane.agent.autoReviewRunning')
-                : t('chatPane.agent.autoReview')
-            }
-            aria-label={t('chatPane.agent.autoReview')}
-          >
-            <AutoReviewIcon />
-          </button>
-        )}
+          {pr && prAgent.available && (
+            <button
+              type="button"
+              className={`chat-cmd-trigger chat-agent-review-trigger${agentRunningHere ? ' active' : ''}`}
+              onClick={onAgentReview}
+              disabled={!llmConfigured || agentRunningHere}
+              title={
+                agentRunningHere
+                  ? t('chatPane.agent.autoReviewRunning')
+                  : t('chatPane.agent.autoReview')
+              }
+              aria-label={t('chatPane.agent.autoReview')}
+            >
+              <AutoReviewIcon />
+            </button>
+          )}
         </div>
         {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时 stop 紧贴 send 左侧。
             包到一个 group 里避免 input-row 的 space-between 把 stop 推到中央 */}
@@ -1595,10 +1633,10 @@ function RulePreviewModal({
           </div>
           <div className="markdown" style={{ marginTop: 12 }}>
             <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkBreaks]}
-            rehypePlugins={REMOTE_REHYPE_PLUGINS}
-            components={mermaidComponents}
-          >
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              rehypePlugins={REMOTE_REHYPE_PLUGINS}
+              components={mermaidComponents}
+            >
               {rule.instructions}
             </ReactMarkdown>
           </div>
@@ -1620,7 +1658,8 @@ function inferPhase(lines: ReadonlyArray<string>, t: TFunction): string {
   // 从后往前找最近的命中标志，越靠后的标志代表更"晚"的阶段
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]!;
-    if (/returning full diff|tokens?\s*[:：]\s*\d+/i.test(line)) return t('chatPane.phaseWaitingLlm');
+    if (/returning full diff|tokens?\s*[:：]\s*\d+/i.test(line))
+      return t('chatPane.phaseWaitingLlm');
     if (/answering a pr question|reviewing pr|generating a pr description/i.test(line))
       return t('chatPane.phaseAssemblingPrompt');
     if (/pr main language/i.test(line)) return t('chatPane.phaseParsingDiff');
@@ -1674,7 +1713,10 @@ function RunningView({
           {runStatusLabel('running', t)}
         </span>
         {model && (
-          <span className="chat-run-chip chat-run-model" title={t('chatPane.modelTitle', { model })}>
+          <span
+            className="chat-run-chip chat-run-model"
+            title={t('chatPane.modelTitle', { model })}
+          >
             {model}
           </span>
         )}
@@ -1850,7 +1892,9 @@ function RunResultView({
                   : t('chatPane.runFailed')}
             {/* llm-error 时 exitCode 是 0 (pr-agent 自己 catch 了)，显示出来反而
                 让用户误以为没出错，所以跳过 */}
-            {run.exitCode != null && !isCancelled && run.errorReason !== 'llm-error' &&
+            {run.exitCode != null &&
+              !isCancelled &&
+              run.errorReason !== 'llm-error' &&
               ` · exit ${String(run.exitCode)}`}
           </strong>
           {canRetry && (
@@ -1889,9 +1933,7 @@ function RunResultView({
             // FindingCard 据此显示状态 chip + 跳转/拒绝按钮行为分支
             const relatedDraft = drafts.find(
               (d) =>
-                d.source !== undefined &&
-                d.source.runId === run.id &&
-                d.source.findingId === f.id,
+                d.source !== undefined && d.source.runId === run.id && d.source.findingId === f.id,
             );
             return (
               <FindingCard
@@ -1906,9 +1948,7 @@ function RunResultView({
           })}
         </ul>
       ) : run.status === 'succeeded' ? (
-        <div className="chat-finding-empty muted">
-          {t('chatPane.noFindings')}
-        </div>
+        <div className="chat-finding-empty muted">{t('chatPane.noFindings')}</div>
       ) : null}
     </div>
   );
@@ -2078,7 +2118,10 @@ function RunMeta({ run }: { run: ReviewRun }) {
       {/* 模型 chip 取代运行时策略 chip — strategy 是部署细节用户不
           关心，model 是真正影响 review 质量的变量 */}
       {run.model && (
-        <span className="chat-run-chip chat-run-model" title={t('chatPane.modelTitle', { model: run.model })}>
+        <span
+          className="chat-run-chip chat-run-model"
+          title={t('chatPane.modelTitle', { model: run.model })}
+        >
           {run.model}
         </span>
       )}
@@ -2288,9 +2331,7 @@ function FindingCard({
     >
       <header className="chat-finding-head">
         {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
-        {label && (
-          <span className={`chat-finding-cat chat-finding-cat-${key}`}>{label}</span>
-        )}
+        {label && <span className={`chat-finding-cat chat-finding-cat-${key}`}>{label}</span>}
         {showTitle && translatedTitle && !collapsed && (
           <h4 className="chat-finding-title">
             <MdInline>{translatedTitle}</MdInline>
@@ -2506,4 +2547,3 @@ function Bullet({ children }: { children: ReactNode }) {
 function Spinner() {
   return <span className="spinner" aria-hidden="true" />;
 }
-
