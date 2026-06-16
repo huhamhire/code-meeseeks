@@ -231,6 +231,10 @@
   color: $text-muted;
   font-size: $fs-sm;
 }
+.chat-agent-thinking-elapsed {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+}
 
 // Agent 自然对话回复：左对齐、带 Agent 图标的轻量包装，区别于「评审总结」卡片（无判定 / 无标题）。
 .chat-agent-reply {

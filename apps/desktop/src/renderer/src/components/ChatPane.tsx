@@ -148,8 +148,9 @@ export function ChatPane({
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
   const [showRulePreview, setShowRulePreview] = useState(false);
-  // Agent 运行态（自动评审微流程 / 自由规划对话）。
-  const [agentRunning, setAgentRunning] = useState(false);
+  // Agent 运行态（自动评审微流程 / 自由规划对话）：记录**哪个 PR** 在跑 + 起跑时刻（计时用）。
+  // 编排层全局单并发（一次只跑一个），但运行态 / 思考中指示按发起 PR 归属，不串到其它 PR 会话。
+  const [runningPr, setRunningPr] = useState<{ id: string; since: number } | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   // 多轮对话消息（用户输入 + Agent 回答），跨回合保留、由 main 落盘 conversation.json，
   // 切回该 PR 恢复。用户消息含临时 optimistic 项（提交即回显），收尾后整体以落盘版重载对齐。
@@ -216,6 +217,9 @@ export function ChatPane({
   // 用户输入 / 规则提示等组件状态被清空。localId 是稳定字符串，同 PR 刷新不触发。
   const prLocalId = pr?.localId;
   currentPrIdRef.current = prLocalId;
+  // 全局单并发：任一 PR 在跑即占用（禁止再发起）；仅「跑在当前 PR」才在本会话显示运行态 / 思考中。
+  const agentBusy = runningPr !== null;
+  const agentRunningHere = runningPr?.id === prLocalId && prLocalId !== undefined;
   useEffect(() => {
     setRuns([]);
     setHasMoreOlder(false);
@@ -370,11 +374,11 @@ export function ChatPane({
   // 一键自动评审：触发 main 的 agent:run（评审微流程）。describe/review/ask 子 run 经既有运行
   // 队列展示在历史里；收尾评审作为一条 assistant 消息落入多轮对话，完成后重载对话呈现。
   const handleAgentReview = async (): Promise<void> => {
-    if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
+    if (!pr || !prAgent.available || !llmConfigured || agentBusy) return;
     const startedId = pr.localId;
     setError(null);
     setAgentSteps([]);
-    setAgentRunning(true);
+    setRunningPr({ id: startedId, since: Date.now() });
     try {
       const session = await invoke('agent:run', { localId: startedId });
       await reloadConversation(startedId);
@@ -386,19 +390,19 @@ export function ChatPane({
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
-      setAgentRunning(false);
+      setRunningPr((cur) => (cur?.id === startedId ? null : cur));
     }
   };
 
   // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。用户输入即时 optimistic 回显，
   // 收尾后以落盘对话（含用户 + 助手消息）整体对齐。
   const handleAgentAsk = async (question: string): Promise<void> => {
-    if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
+    if (!pr || !prAgent.available || !llmConfigured || agentBusy) return;
     const startedId = pr.localId;
     setError(null);
     setAgentSteps([]);
     setMessages((prev) => [...prev, { role: 'user', content: question, at: new Date().toISOString() }]);
-    setAgentRunning(true);
+    setRunningPr({ id: startedId, since: Date.now() });
     try {
       const session = await invoke('agent:ask', { localId: startedId, question });
       await reloadConversation(startedId);
@@ -410,7 +414,7 @@ export function ChatPane({
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
-      setAgentRunning(false);
+      setRunningPr((cur) => (cur?.id === startedId ? null : cur));
     }
   };
 
@@ -444,7 +448,7 @@ export function ChatPane({
   // 并中止 Agent 编排（abort，阻止其在子任务取消后继续后续步骤）。
   const handleStopAll = (): void => {
     for (const r of myActiveRuns) void handleCancel(r.runId);
-    if (agentRunning && prLocalId) void invoke('agent:stop', { localId: prLocalId });
+    if (agentRunningHere && prLocalId) void invoke('agent:stop', { localId: prLocalId });
   };
   const handleRetry = (run: ReviewRun): void => {
     void handleRun(run.tool, run.question);
@@ -631,7 +635,7 @@ export function ChatPane({
         {/* 使用提示仅在「全无会话内容」时显示：一旦有用户输入气泡 / run / 步骤 / 收尾结果，
             或 Agent 正在运行 / 有排队任务，即隐藏，避免输入后仍残留提示。 */}
         {timeline.length === 0 &&
-          !agentRunning &&
+          !agentRunningHere &&
           !hasMyActive &&
           myWaiting.length === 0 && (
             <ChatEmpty
@@ -702,12 +706,10 @@ export function ChatPane({
           </div>
         )}
         {/* Agent 自身 LLM 调用（规划 / 判读 / 收尾）无对应 pragent run，此时队列里看不到进度 →
-            补一条「思考中」指示，避免运行期界面看似停滞。子任务运行时由 RunningView 负责进度。 */}
-        {agentRunning && !hasMyActive && myWaiting.length === 0 && (
-          <div className="chat-agent-thinking" role="status">
-            <Spinner />
-            <span>{t('chatPane.agent.thinking')}</span>
-          </div>
+            补一条「思考中」指示（带动态计时），避免运行期界面看似停滞。仅当 Agent 跑在**当前 PR**
+            才显示，不串到其它会话；子任务运行时由 RunningView 负责进度。 */}
+        {agentRunningHere && runningPr && !hasMyActive && myWaiting.length === 0 && (
+          <ThinkingIndicator since={runningPr.since} />
         )}
         {error && (
           <div className="chat-error" role="alert">
@@ -728,8 +730,10 @@ export function ChatPane({
         onAgentAsk={(q) => void handleAgentAsk(q)}
         onCancel={hasMyActive ? handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
-        // 一键自动评审：图标按钮置于 `/` 命令触发器右侧
-        agentRunning={agentRunning}
+        // 一键自动评审：图标按钮置于 `/` 命令触发器右侧。busy=全局占用（禁用触发）、
+        // runningHere=跑在当前 PR（高亮 / 运行中文案）。
+        agentBusy={agentBusy}
+        agentRunningHere={agentRunningHere}
         onAgentReview={() => void handleAgentReview()}
       />
 
@@ -825,8 +829,10 @@ interface ChatInputBarProps {
   onCancel?: () => void;
   /** /approve /needswork 命令触发的 review 决断，跟 PR header 按钮共用 prs:setLocalStatus */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
-  /** 自动评审是否进行中（决定图标按钮禁用 + 是否显示停止）。 */
-  agentRunning: boolean;
+  /** Agent 是否全局占用（任一 PR 在跑）：禁用本 PR 的触发（单并发）。 */
+  agentBusy: boolean;
+  /** Agent 是否跑在当前 PR：决定图标按钮高亮 + 运行中文案。 */
+  agentRunningHere: boolean;
   /** 触发一键自动评审微流程（describe→review→条件追问→总结）。 */
   onAgentReview: () => void;
 }
@@ -912,7 +918,8 @@ function ChatInputBar({
   onAgentAsk,
   onCancel,
   onSetReviewStatus,
-  agentRunning,
+  agentBusy,
+  agentRunningHere,
   onAgentReview,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
@@ -1285,11 +1292,11 @@ function ChatInputBar({
         {pr && prAgent.available && (
           <button
             type="button"
-            className={`chat-cmd-trigger chat-agent-review-trigger${agentRunning ? ' active' : ''}`}
+            className={`chat-cmd-trigger chat-agent-review-trigger${agentRunningHere ? ' active' : ''}`}
             onClick={onAgentReview}
-            disabled={!llmConfigured || agentRunning}
+            disabled={!llmConfigured || agentBusy}
             title={
-              agentRunning
+              agentRunningHere
                 ? t('chatPane.agent.autoReviewRunning')
                 : t('chatPane.agent.autoReview')
             }
@@ -1342,6 +1349,24 @@ function AgentStepMarker({ step }: { step: AgentStep }) {
     <div className="chat-agent-step-marker" role="status">
       {step.result && <span className="chat-agent-step-result">{step.result}</span>}
       {step.thought && <span className="chat-agent-step-thought muted">{step.thought}</span>}
+    </div>
+  );
+}
+
+/** 「思考中」指示：spinner + 文案 + 动态计时（1s 粒度，跟 RunningView 同款 elapsed）。 */
+function ThinkingIndicator({ since }: { since: number }) {
+  const { t } = useTranslation();
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    setElapsedMs(Date.now() - since);
+    const id = setInterval(() => setElapsedMs(Date.now() - since), 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  return (
+    <div className="chat-agent-thinking" role="status">
+      <Spinner />
+      <span>{t('chatPane.agent.thinking')}</span>
+      <span className="chat-agent-thinking-elapsed">{formatElapsed(elapsedMs)}</span>
     </div>
   );
 }
