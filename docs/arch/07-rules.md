@@ -9,10 +9,10 @@
 
 ## 核心设计
 
-- **独立目录 `rules.dir`，与应用数据解耦**：配置在 `config.yaml`（`rules.dir` + `rules.enabled`），**不放**
-  `~/.code-meeseeks/` 下。理由：团队把 `rules.dir` 指向一个 git repo，所有人 clone 即同一套规则；个人默认空 =
-  不启用、pr-agent 走原生行为；规则纯「读」，跟可变状态隔离。
-- **Markdown + YAML frontmatter，一文件一规则**：递归扫 `rules.dir` 下所有 `.md`（**目录层级不参与匹配**，纯组织）。
+- **规则目录归于 Agent 目录 `<agent.dir>/rules/`**：规则正文是 Agent 知识来源的一部分，随 Agent 目录统一管理
+  （见 [06](06-agent.md)「Agent 目录」），不再单设顶层 `rules.*` 配置。`agent.dir` 留空时默认 `~/.code-meeseeks/agent`；
+  团队把 `agent.dir` 指向一个 git repo，所有人 clone 即同一套规则与上下文。规则纯「读」，跟可变状态隔离。
+- **Markdown + YAML frontmatter，一文件一规则**：递归扫 `<agent.dir>/rules/` 下所有 `.md`（**目录层级不参与匹配**，纯组织）。
   frontmatter 是结构化元数据，**markdown 正文就是注入给 pr-agent 的 `extra_instructions`**——人能读、git diff 清楚、
   无重复内容。
 - **匹配语义：每次 run 现读 + 取首条命中**：
@@ -44,7 +44,7 @@ enabled: true
 # 正文即 extra_instructions（给 pr-agent 的规约）
 ```
 
-配置：`rules.dir`（路径，空 = 停用）/ `rules.enabled`（总开关）。
+配置：规则目录固定为 `<agent.dir>/rules/`（`agent.dir` 见 [08](08-config-and-secrets.md)，空 = 默认 `~/.code-meeseeks/agent`）。
 
 ## 扩展与注意事项
 

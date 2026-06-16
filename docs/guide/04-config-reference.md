@@ -14,9 +14,15 @@ language: zh-CN
 workspace:
   repos_dir: ~/.code-meeseeks/repos
 
-rules:
+agent:
   dir: ''
-  enabled: true
+  max_steps: 8
+  summary_max_chars: 800
+  autopilot:
+    enabled: false
+    batch_size: 10
+    max_followup_asks: 2
+    grants: []
 
 poller:
   interval_seconds: 300
@@ -72,7 +78,7 @@ llm:
 | --- | --- | --- | --- |
 | `language` | string | `zh-CN` | pr-agent 生成评审内容使用的自然语言（ISO locale，如 `zh-CN` / `en-US`）。设置页暂不暴露，需手改。 |
 | `workspace` | object | — | 工作目录设置，见下。 |
-| `rules` | object | — | 个性化规则目录设置，见下。 |
+| `agent` | object | — | 高阶 Agent 与 AutoPilot 设置（Agent 目录、个性化规则均归于此），见下。 |
 | `poller` | object | — | PR 轮询设置，见下。 |
 | `proxy` | object | — | 出站网络代理设置，见下（详见 [网络代理配置](03-proxy.md)）。 |
 | `pr_agent` | object | — | pr-agent 运行时设置，见下。 |
@@ -86,14 +92,40 @@ llm:
 | --- | --- | --- | --- |
 | `repos_dir` | string | `~/.code-meeseeks/repos` | 仓库本地镜像（bare clone）的存放目录。改动需重启应用后完全生效。支持 `~` 展开。 |
 
-## `rules` — 个性化规则
+## `agent` — 高阶 Agent 与 AutoPilot
 
-规则目录下每个 `.md` 文件即一条规则：frontmatter（YAML）声明命中范围（项目 / 仓库 / 目标分支）、适用工具、优先级，正文作为 `extra_instructions` 注入 pr-agent。
+高阶 Agent 把自然语言请求转成自主规划 + 多工具编排（设计见 [docs/arch/06-agent.md](../arch/06-agent.md)）。**Agent 目录** `<agent.dir>/` 是 Agent 的完整人格与知识来源，其固定布局为：
+
+```
+<agent.dir>/
+├── SOUL.md      # 灵魂：核心职责与边界（只读）
+├── AGENTS.md    # 工作规范与红线
+├── MEMORY.md    # 长期记忆（可写）
+├── USER.md      # 用户画像（可写）
+└── rules/       # 个性化规则目录（原 rules.dir 并入此处，结构见 自定义评审规则）
+```
+
+Agent **无独立启用开关**——配置了 LLM 且 pr-agent 就绪即可用。`dir` 留空时回落到工作目录下的默认位置 `~/.code-meeseeks/agent`（启动期幂等脚手架自动补齐缺失文件）；配自定义路径可指向一个 git 仓库，便于团队共享上下文与规则。
+
+> **从旧 `rules.*` 迁移**：早期版本的个性化规则配置在顶层 `rules.dir`；现已并入 `<agent.dir>/rules/`，**不再读取旧 `rules.*` 字段**。把原规则目录的内容移入 `<agent.dir>/rules/` 即可（规则文件结构不变，见 [自定义评审规则](05-rules.md)）。
 
 | 字段 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `dir` | string | `''` | 规则目录路径。留空 = 不启用。建议指向一个 git 仓库，便于团队共享规约。 |
-| `enabled` | boolean | `true` | 全局开关。`dir` 已配置但 `enabled: false` 时跳过加载（应急关闭用）。 |
+| `dir` | string | `''` | Agent 目录路径。留空 = 工作目录下默认 `~/.code-meeseeks/agent`。支持 `~` 展开。可指向 git 仓库以共享。 |
+| `max_steps` | integer | `8` | 单次会话的 Agent 规划步数上限，`1`–`50`。 |
+| `summary_max_chars` | integer | `800` | 收尾总结的严格篇幅上限（字符），`100`–`4000`。 |
+| `autopilot` | object | — | AutoPilot 预评审设置，见下。 |
+
+### `agent.autopilot` — AutoPilot 预评审
+
+轮询发现待评审 PR 后自动预跑 `/describe` + `/review`，进应用即见待确认草稿（决策权仍在评审者）。准入控制只放行「待我评审·待处理」且未评审过的 PR，PR 被移除 / purge 即终止在途任务。
+
+| 字段 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | AutoPilot 总开关。状态栏可切换；`false` 时调度逻辑完全不跑。 |
+| `batch_size` | integer | `10` | 单批 LLM 判定的 PR 上限，`1`–`50`。 |
+| `max_followup_asks` | integer | `2` | 自动评审中针对严重问题条件性追问 `/ask` 的硬上限，`0`–`5`。 |
+| `grants` | array | `[]` | 逐项写权限授权（默认空 = 全拒），如 `approve` / `needs_work` / `publish_comment`；运行期按红线硬校验放行。 |
 
 ## `poller` — PR 轮询
 

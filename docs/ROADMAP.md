@@ -1,7 +1,7 @@
 # Code Meeseeks Roadmap
 
-> 最后更新：2026-06-14
-> 状态：**M0–M4 已交付**；**M5（打磨 + 多平台扩展）持续中**。GitHub / Bitbucket / **GitLab** Adapter 均已交付（GitLab：CE / EE，gitlab.com + Self-Managed）。
+> 最后更新：2026-06-16
+> 状态：**M0–M4 已交付**；**M5（打磨 + 多平台扩展）持续中**。GitHub / Bitbucket / **GitLab** Adapter 均已交付（GitLab：CE / EE，gitlab.com + Self-Managed）。**高阶 Agent 评审 + AutoPilot 预评审已交付**。
 >
 > **命名约定**：对外品牌 **Code Meeseeks**（灵感来自 Rick and Morty 的 Mr. Meeseeks）；代码内部
 > 统一用中性代号 **meebox**（npm 作用域 `@meebox/*`，数据目录 `~/.code-meeseeks`）。pr-agent 为
@@ -42,37 +42,36 @@
 
 开放的持续阶段，不设单一 Done when。
 
-### 已交付 ✅（截至 2026-06-14）
+### 已交付 ✅（截至 2026-06-16）
 
-- **GitHub Adapter**：github.com + GitHub Enterprise Server（REST API v3）；统一 `PlatformAdapter`
+- [x] **GitHub Adapter**：github.com + GitHub Enterprise Server（REST API v3）；统一 `PlatformAdapter`
   契约 + 一致性测试套件；PR 发现分类（待我评审 / 我创建 / 指派 / 提及，本地缓存按标记过滤）。
   Bitbucket 同步提供「待我评审 / 我创建」两类。
-- **GitLab Adapter**：gitlab.com + Self-Managed（CE / EE，REST API v4）；复用 `PlatformAdapter` 契约
+- [x] **GitLab Adapter**：gitlab.com + Self-Managed（CE / EE，REST API v4）；复用 `PlatformAdapter` 契约
   + 一致性测试套件。MR 发现（待我评审 / 我创建 / 指派）、diff 评论读写、合并、clone、头像 / 图片代理；
   经 `/metadata` 探测 edition，审批能力按 CE / EE 降级（详见 [docs/arch/01-platform-adapter.md](arch/01-platform-adapter.md) §4.3）。
-- 嵌入式 pr-agent 运行时打包（内嵌 Python，免装 Python/Docker）；**移除 Docker 运行策略**（容器装载效率低、与「零依赖」定位不符，embedded / local-cli 已覆盖全部场景）
-- 首发桌面安装包：Windows x64（NSIS）+ macOS arm64（dmg，ad-hoc 签名）
-- 出站 HTTP 代理（LLM / 代码平台 / git HTTPS 统一，loopback 直连）
-- `/review` finding anchor 根因修复（get_line_link 注入）
-- 多 LLM Provider 适配 + 实测验证（openai / anthropic / deepseek / dashscope / volcengine-ark）
-- 真实 token 用量采集（输入 / 输出分列）
-- 首启配置向导
-- 设置页连接 / LLM / 代理可视化 CRUD
-- 单例锁（二次启动聚焦已有窗口）
-- 开源发布准备（README + 开发指南 + Apache-2.0 + NOTICE）
-- **国际化（i18n）**：四语界面（简体中文 / English / 日本語 / Deutsch），AI 回复语言随界面语言
+- [x] 嵌入式 pr-agent 运行时打包（内嵌 Python，免装 Python/Docker）；**移除 Docker 运行策略**（容器装载效率低、与「零依赖」定位不符，embedded / local-cli 已覆盖全部场景）
+- [x] 首发桌面安装包：Windows x64（NSIS）+ macOS arm64（dmg，ad-hoc 签名）
+- [x] 出站 HTTP 代理（LLM / 代码平台 / git HTTPS 统一，loopback 直连）
+- [x] `/review` finding anchor 根因修复（get_line_link 注入）
+- [x] 多 LLM Provider 适配 + 实测验证（openai / anthropic / deepseek / dashscope / volcengine-ark）
+- [x] 真实 token 用量采集（输入 / 输出分列）
+- [x] 首启配置向导
+- [x] 设置页连接 / LLM / 代理可视化 CRUD
+- [x] 单例锁（二次启动聚焦已有窗口）
+- [x] 开源发布准备（README + 开发指南 + Apache-2.0 + NOTICE）
+- [x] **国际化（i18n）**：四语界面（简体中文 / English / 日本語 / Deutsch），AI 回复语言随界面语言
+- [x] **高阶 Agent 评审**（设计见 [06](arch/06-agent.md)）：对话 Agent 化（自然语言 → 自主规划 + 多工具编排）；分层 Agent 目录（`SOUL` / `AGENTS` / `MEMORY` / `USER` / `rules`）+ 长期记忆；过程可观测（think → tool → think 时间线、逐步计时）、可随时停止。配置由 `rules.*` 迁移为 `agent.*`，原 `rules.dir` 并入 `<agent.dir>/rules/`（不做兼容，首启向导给出迁移指引）。
+- [x] **AutoPilot 预评审**（设计见 [06](arch/06-agent.md)）：轮询发现待评审 PR 后规划 agent 批量判定 → 各 PR 子 agent 自动预跑 `/describe` + `/review`（严重问题条件追问 + 逐 PR 总结 / 建议）；准入控制（仅「待我评审·待处理」、跳过已评审、PR 移除 / purge 即终止在途任务）、评估周期对齐轮询间隔、多 PR 并发以填满工具队列；进应用即见待确认草稿（决策权仍在评审者），状态栏开关默认关。
 
 ### 进行中 / 待办 ⏭️
 
-- **高阶 Agent**（设计见 [06](arch/06-agent.md)）：对话 Agent 化（自然语言 → 自主规划 + 多工具编排）、分层 Agent 目录（`SOUL` / `AGENTS` / `MEMORY` / `USER` / `rules`）、长期记忆。
-  - **破坏性变更（落地时）**：配置由 `rules.*` 改为 `agent.*`，原 `rules.dir` 并入 `<agent.dir>/rules/`，**不做兼容**；旧配置需手动迁移（把原 rules 目录移入 `<agent.dir>/rules/`，并补 `SOUL.md` / `AGENTS.md` 等），首启向导给出迁移指引。
-- **AutoPilot 预评审**（设计见 [06](arch/06-agent.md)）：轮询发现新 PR 后，规划 agent 批量判定 → 各 PR 子 agent 自动预跑 `/describe` + `/review`（严重问题条件追问 + 逐 PR 总结 / 建议），进应用即见待确认草稿（决策权仍在评审者）；状态栏 AutoPilot 开关默认关。
-- **CLI 模式下 /ask 仓库文件访问**（设计见 [06](arch/06-agent.md)）：CLI 模式（claude/codex）现把工具子进程落在中性临时目录（避免被评审仓库的 `CLAUDE.md`/`AGENTS.md` 污染输出），故 /ask 只能基于 diff 推理、读不到完整文件。计划仅对 /ask 提供 worktree 工作目录（如经 `MEEBOX_CLI_WORKDIR` env 让 shim 按工具切 cwd，describe/review 维持中性），在"更全的文件上下文"与"仓库自带指令污染"间取舍；或评估 `--add-dir` 只读授权方案。API 模式不涉及（远程接口本就只有 diff）。
-- **规则市场**：导入 / 导出规则片段（`<agent.dir>/rules/`）。
-- **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
-- **大 PR 性能验证**：等真实大样本实测。
-- **凭据存储升级 keytar** / **状态存储按需升级 SQLite**（替换抽象实现，业务不变）。
-- **CI 自动出包（Win + mac）**：当前手工触发；仅计划 Windows + macOS，暂不出 Linux。
+- [ ] **CLI 模式下 /ask 仓库文件访问**（设计见 [06](arch/06-agent.md)）：CLI 模式（claude/codex）现把工具子进程落在中性临时目录（避免被评审仓库的 `CLAUDE.md`/`AGENTS.md` 污染输出），故 /ask 只能基于 diff 推理、读不到完整文件。计划仅对 /ask 提供 worktree 工作目录（如经 `MEEBOX_CLI_WORKDIR` env 让 shim 按工具切 cwd，describe/review 维持中性），在"更全的文件上下文"与"仓库自带指令污染"间取舍；或评估 `--add-dir` 只读授权方案。API 模式不涉及（远程接口本就只有 diff）。
+- [ ] **规则市场**：导入 / 导出规则片段（`<agent.dir>/rules/`）。
+- [ ] **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
+- [ ] **大 PR 性能验证**：等真实大样本实测。
+- [ ] **凭据存储升级 keytar** / **状态存储按需升级 SQLite**（替换抽象实现，业务不变）。
+- [ ] **CI 自动出包（Win + mac）**：当前手工触发；仅计划 Windows + macOS，暂不出 Linux。
 
 ---
 

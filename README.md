@@ -42,10 +42,13 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 ## 核心特性
 
-- 🔌 **开箱即用，零外部依赖** —— 安装包内嵌可重定位的 Python 运行时 + 固定版本 pr-agent，**无需自行安装 Python 或 Docker**。
-- 📥 **PR 自动发现** —— 轮询拉取评审者待评审的 Open PR，按仓库分组、状态过滤、搜索。
+- 🔌 **开箱即用，零外部依赖** —— 下载安装即用，无需额外配置运行环境。
+- 🌍 **多平台支持** —— GitHub / Bitbucket / GitLab 统一接入。
+- 📥 **PR 自动发现** —— 轮询拉取待评审的 PR，按仓库分组、状态过滤、搜索。
 - 🔍 **本地 Diff 阅读** —— Monaco 并排 / 内联 diff、文件树、行内评论、blame、跨文件代码搜索。
 - 🤖 **AI 评审** —— `/describe`、`/review`、`/improve`、`/ask` 对话式驱动 pr-agent，结果结构化成可操作的 findings。
+- 🧠 **Agentic 评审** —— 自然语言驱动的自主规划 + 多工具编排 + 长期 Memory，过程可观测（think → tool → think 时间线）、可随时停止，让评审从单轮问答走向可累积上下文的协作。
+- 🛸 **AutoPilot 预评审** —— 轮询发现待评审 PR 后按规则自动预跑评审（准入控制：仅待我评审·待处理、跳过已评审），进应用即见待确认草稿，决策权仍在评审者。
 - 📐 **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter），按项目 / 仓库 / 目标分支命中后注入评审。
 - ✍️ **确认 → 发布闭环** —— finding 转草稿，行内编辑，单条 / 批量发布到远端；自己的评论支持回复 / 编辑 / 删除。
 - 🔀 **合并状态** —— 展示远端可合并状态，满足条件时一键合并。
@@ -82,7 +85,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 1. **配置连接** —— 设置页填入代码平台地址 + 鉴权信息。
 2. **配置 LLM** —— 选择 Provider，填 API Key / base_url / 模型名。
 3. **发现 PR** —— 应用自动轮询拉取评审者待评审的 PR，左侧列表按仓库分组。
-4. **阅读 + 评审** —— 选中 PR 看 diff，在对话框输入 `/review` 让 AI 生成 findings。
+4. **阅读 + 评审** —— 选中 PR 看 diff，点击自动评审按钮让 AI 生成 findings；也可在对话框输入固定指令（如 `/describe`）或自然语言请求。
 5. **确认 + 发布** —— 把 finding 转成草稿、编辑措辞，单条或批量发布到远端。
 
 配置存放在 `~/.code-meeseeks/config.yaml`；仓库镜像默认在 `~/.code-meeseeks/repos/`，可在设置页改到其他目录。
@@ -123,17 +126,6 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 ---
 
-## 路线图
-
-围绕「让本地化、半自动评审更省心」展开的几个核心方向（排序不代表优先级，欢迎在 issue 中讨论）：
-
-- [ ] **高阶 Agent 能力** —— 复杂任务的分步规划 + 长期 Memory，让评审从单轮问答走向可累积上下文、多步工具调用的协作。
-- [ ] **AutoPilot 预评审** —— 轮询发现新 PR 后按评审者配置的规则自动跑一遍预评审，进应用即见待确认草稿，省去逐个手动触发（决策权仍在评审者，发布前仍需确认）。
-
-更细的分期里程碑见 **[Roadmap](docs/ROADMAP.md)**。
-
----
-
 ## 技术栈
 
 - **桌面壳**：Electron + Vite（electron-vite）
@@ -142,7 +134,8 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - **工程**：npm workspaces + Nx 单仓多包
 - **pr-agent 集成**：内嵌 Python 运行时子进程（缺失时回退系统 pr-agent CLI）
 
-详细架构、数据模型、分期里程碑见 **[Roadmap](docs/ROADMAP.md)**；各模块设计见 **[模块文档](docs/arch/README.md)**。
+- **规划进度、里程碑与未决项** —— 见 **[Roadmap](docs/ROADMAP.md)**。
+- **详细架构与各模块设计** —— 见 **[模块文档](docs/arch/README.md)**。
 
 ---
 
@@ -155,8 +148,8 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 ## 隐私与数据
 
 - **本地优先**：除调用 LLM API 与访问所配置的 Git 平台外，不向任何第三方上报数据。
-- **工作目录**：应用数据固定在 `~/.code-meeseeks/`（config / state / l；ogs），仓库镜像目录可配置。
-- pr-agent 评审时仅把 PR diff + 评审者的规则发给评审者自行配置的 LLM。
+- **工作目录**：应用数据固定在 `~/.code-meeseeks/`，仓库镜像目录可配置。
+- pr-agent 评审时仅把 PR diff + 评审者的规则发给评审者自行配置的 LLM；接入本地模型（如本地 Ollama）即可全程不出本机。
 
 ---
 

@@ -32,10 +32,10 @@
 
 ## 数据 / 接口契约
 
-- `config.yaml` 顶层（节选）：`connections` / `active_connection_id` / `llm{profiles,active_id}` / `rules` /
-  `poller` / `proxy` / `pr_agent` / `workspace.repos_dir` / `language`。
+- `config.yaml` 顶层（节选）：`connections` / `active_connection_id` / `llm{profiles,active_id}` /
+  `agent{dir,max_steps,summary_max_chars,autopilot}` / `poller` / `proxy` / `pr_agent` / `workspace.repos_dir` / `language`。
 - `SecretStore`：`get(key)` / `set(key,value)` / `delete(key)`。
-- 设置相关 IPC：分项 `config:setConnections` / `config:setLlm` / `config:setProxy` / `config:setRules` /
+- 设置相关 IPC：分项 `config:setConnections` / `config:setLlm` / `config:setProxy` / `config:setAgent` /
   `config:setPoller` / `config:setReposDir`，以及 `config:read` / `config:testConnection` / `config:testProxy` /
   「打开 config 文件」等；保存即热生效。
 
