@@ -1465,6 +1465,34 @@ function AgentStepRow({ step }: { step: AgentStep }) {
           </span>
         )}
         {headText && <span>{headText}</span>}
+        {/* 本步**单独**的 token 用量（不累计）：judge / 总结 / 规划等经独立 LLM 通道的推理步带值；
+            与 run 卡片同款 ↑输入(绿) / ↓输出(红) 计法，靠行尾对齐。describe/review/ask 的开销在各自 run 卡片上。 */}
+        {step.usage &&
+        (step.usage.promptTokens !== undefined || step.usage.completionTokens !== undefined) ? (
+          <span
+            className="chat-agent-step-tokens"
+            title={t('chatPane.tokensTitle', {
+              prompt: step.usage.promptTokens ?? '—',
+              completion: step.usage.completionTokens ?? '—',
+            })}
+          >
+            {step.usage.promptTokens !== undefined && (
+              <>
+                <span style={{ color: '#22c55e' }}>↑</span>
+                {formatTokens(step.usage.promptTokens)}
+              </>
+            )}
+            {step.usage.promptTokens !== undefined && step.usage.completionTokens !== undefined
+              ? ' '
+              : ''}
+            {step.usage.completionTokens !== undefined && (
+              <>
+                <span style={{ color: '#ef4444' }}>↓</span>
+                {formatTokens(step.usage.completionTokens)}
+              </>
+            )}
+          </span>
+        ) : null}
       </div>
       {hasTime && step.thought && <div className="chat-agent-step-body">{step.thought}</div>}
       {step.kind === 'judge' && step.result && (

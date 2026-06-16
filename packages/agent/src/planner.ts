@@ -293,14 +293,14 @@ export async function runPlanningAgent(
     // 无法解析 / 既无 tool(s) 又无 final → 当作收尾。兜底从原始文本打捞散文，绝不把原始 JSON 动作丢给用户。
     if (!action || (!hasCalls && !action.final)) {
       const finalText = action?.final ?? salvageProse(r.text);
-      await record({ kind: 'plan', thought: action?.thought, result: finalText, thinkMs });
+      await record({ kind: 'plan', thought: action?.thought, result: finalText, thinkMs, usage: r.usage });
       return { steps, finalText, tokenUsage: usage, memories };
     }
 
     if (action.final && !hasCalls) {
       // 剥掉模型误并入 final 末尾的判定 JSON（recommendation 走独立字段渲染为判定徽标）。
       const finalText = stripTrailingJson(action.final);
-      await record({ kind: 'plan', thought: action.thought, result: finalText, thinkMs });
+      await record({ kind: 'plan', thought: action.thought, result: finalText, thinkMs, usage: r.usage });
       return {
         steps,
         finalText,
@@ -343,6 +343,7 @@ export async function runPlanningAgent(
       thought: action.thought,
       toolCall: { tool: allowed.map((c) => c.tool).join('、') },
       thinkMs,
+      usage: r.usage,
     });
 
     // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；相互错开 100~200ms 起跑，避免同一瞬间齐发。
