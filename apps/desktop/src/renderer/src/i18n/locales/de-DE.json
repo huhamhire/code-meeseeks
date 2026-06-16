@@ -130,7 +130,7 @@
     "statusRunning": "Läuft",
     "statusSucceeded": "Fertig",
     "stopAria": "Stoppen",
-    "stopTitle": "Aktuellen PR-Agent-Lauf beenden (SIGKILL)",
+    "stopTitle": "Ausführung stoppen",
     "tokensTitle": "Eingabe (prompt) {{prompt}} · Ausgabe (completion) {{completion}} Tokens",
     "unknownCommand": "Unbekannter Befehl {{head}}; unterstützt: {{cmds}}",
     "userQuestionAria": "Benutzerfrage",

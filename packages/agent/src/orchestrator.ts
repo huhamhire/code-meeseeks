@@ -34,6 +34,8 @@ export interface ReviewOrchestratorDeps {
   chat(input: { system: string; user: string }): Promise<ToolText>;
   /** 每产生一个编排步骤即回调（持久化 / 流式推送）。 */
   onStep?(step: AgentStep): void | Promise<void>;
+  /** 用户停止：每步边界检查，已 abort 即抛 `用户暂停` 中止微流程（思考阶段也能立即终止）。 */
+  signal?: AbortSignal;
 }
 
 export interface ReviewOrchestratorInput {
@@ -251,6 +253,11 @@ export async function runReviewMicroflow(
     await deps.onStep?.(stamped);
   };
 
+  // 用户停止：每个步骤边界检查，已 abort 即抛 `用户暂停`（思考阶段也能立即中止，不必等当前工具跑完）。
+  const checkAbort = (): void => {
+    if (deps.signal?.aborted) throw new Error('用户暂停');
+  };
+
   // base system context（工具目录留空：微流程不暴露自由工具选择）
   const system = assembleSystemContext({
     context: input.context,
@@ -265,6 +272,7 @@ export async function runReviewMicroflow(
   //    错开 100~200ms 起跑，避免两个工具同一瞬间齐发。
   //    类 Claude Code：先把所选步骤作为一步流式出去（思考在前），工具执行的进度 / 计时由 run 卡片承载，
   //    不再为每个工具补记 tool 步，避免决策被堆到结果之后。
+  checkAbort();
   await record({
     kind: 'plan',
     thought: '生成 PR 描述与审查发现',
@@ -278,6 +286,7 @@ export async function runReviewMicroflow(
   usage = addUsage(usage, review.usage);
 
   // 2. 仅严重问题条件性追问
+  checkAbort();
   const judgeStart = Date.now();
   const judge = await deps.chat({ system, user: judgePrompt(review.text, maxAsks) });
   const judgeMs = Date.now() - judgeStart;
@@ -293,12 +302,14 @@ export async function runReviewMicroflow(
 
   const askResults: string[] = [];
   for (const q of questions) {
+    checkAbort();
     const ask = await deps.runTool({ tool: 'ask', question: q });
     usage = addUsage(usage, ask.usage);
     askResults.push(`Q: ${q}\nA: ${ask.text}`);
   }
 
   // 3. 收尾总结 + 建议
+  checkAbort();
   const sumStart = Date.now();
   const sum = await deps.chat({
     system,

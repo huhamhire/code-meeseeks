@@ -1327,11 +1327,16 @@ export function registerIpcHandlers({
     }
   };
 
+  // 编排 Agent（手动评审 agent:run + 自由规划 agent:ask）每 PR 至多一个在跑，AbortController 供
+  // agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
+  const agentControllers = new Map<string, AbortController>();
+
   /** 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。 */
   const runReviewForPr = (
     pr: StoredPullRequest,
     agentContext: AgentContext,
     chat: AgentChat,
+    signal?: AbortSignal,
   ): Promise<AgentSession> => {
     const agentCfg = bootstrap.config.agent;
     const matchedRule = pickMatchingRule(agentContext.rules, {
@@ -1353,6 +1358,7 @@ export function registerIpcHandlers({
       maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
       summaryMaxChars: agentCfg.summary_max_chars,
       onStep: (sessionId, step) => emitAgentStep(pr, sessionId, step),
+      signal,
     });
   };
 
@@ -1368,27 +1374,33 @@ export function registerIpcHandlers({
       const agentContext = await loadAgentContext(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
+      // 注册 AbortController，让停止按钮（agent:stop）能在思考 / 执行任意阶段即时中止本次评审。
+      const ac = new AbortController();
+      agentControllers.set(pr.localId, ac);
       logger.info({ prLocalId: pr.localId }, 'agent review start (manual)');
-      const session = await withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
-      logger.info(
-        { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
-        'agent review done',
-      );
-      // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（走 1476
-      // 的 runReviewForPr，不经此处）。无文本 / 失败不记。
-      if (session.status === 'done' && session.summary) {
-        await appendAgentMessage(stateStore, pr.localId, {
-          role: 'assistant',
-          content: session.summary,
-          recommendation: session.recommendation,
-        });
+      try {
+        const session = await withAgentChat((chat) =>
+          runReviewForPr(pr, agentContext, chat, ac.signal),
+        );
+        logger.info(
+          { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
+          'agent review done',
+        );
+        // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（不经此处）。
+        // 仅成功收尾才记：失败 / 用户停止（paused）不落消息。
+        if (session.status === 'done' && session.summary) {
+          await appendAgentMessage(stateStore, pr.localId, {
+            role: 'assistant',
+            content: session.summary,
+            recommendation: session.recommendation,
+          });
+        }
+        return session;
+      } finally {
+        agentControllers.delete(pr.localId);
       }
-      return session;
     },
   );
-
-  // 自由规划 Agent（自然语言入口）：每 PR 至多一个在跑，AbortController 供 agent:stop 暂停。
-  const agentControllers = new Map<string, AbortController>();
 
   const runPlanningForPr = (
     pr: StoredPullRequest,

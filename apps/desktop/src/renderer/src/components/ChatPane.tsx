@@ -179,35 +179,50 @@ export function ChatPane({
   const myActiveIdSet = new Set(myActiveRuns.map((a) => a.runId));
   const visibleRuns = hasMyActive ? runs.filter((r) => !myActiveIdSet.has(r.id)) : runs;
 
-  // 历史时间线：把 run 卡片、Agent 的思考步骤、对话消息按时间归并，让过程性步骤按自然时间顺序
-  // 穿插展示（而非堆在末尾）。类 Claude Code「先思考→定步骤→执行步骤」：思考步骤（plan/judge）
-  // 是工具选择的前因，排在所选工具的 run 卡片之前；工具执行的进度 / 计时由 run 卡片承载，不重复。
+  // 历史时间线：把已完成 run、正在执行的 run、Agent 思考步骤、对话消息统一按**启动时间**归并排序，
+  // 顺序固定——即便后启动的任务先完成，也排在先启动（仍在执行）的任务下方，不因完成先后跳序。
+  // 类 Claude Code「先思考→定步骤→执行步骤」：思考步骤（plan/judge）是工具选择的前因，排在所选工具的
+  // run 卡片之前；工具执行的进度 / 计时由 run 卡片承载，不重复。排队中（未启动）的任务不入此列，另置末尾。
+  type ActiveRun = (typeof myActiveRuns)[number];
   const timeline = useMemo(() => {
-    const runEntries = visibleRuns.map((r) => ({
-      key: `run-${r.id}`,
-      time: r.startedAt,
-      run: r as ReviewRun | null,
+    const ms = (iso: string | null | undefined): number => {
+      const n = iso ? new Date(iso).getTime() : NaN;
+      return Number.isFinite(n) ? n : 0;
+    };
+    const base = {
+      run: null as ReviewRun | null,
+      active: null as ActiveRun | null,
       step: null as AgentStep | null,
       message: null as AgentMessage | null,
+    };
+    const runEntries = visibleRuns.map((r) => ({
+      ...base,
+      key: `run-${r.id}`,
+      sortTime: ms(r.startedAt),
+      run: r as ReviewRun | null,
+    }));
+    const activeEntries = myActiveRuns.map((a) => ({
+      ...base,
+      key: `active-${a.runId}`,
+      sortTime: ms(a.startedAt ?? a.enqueuedAt),
+      active: a,
     }));
     const stepEntries = agentSteps.map((s, i) => ({
+      ...base,
       key: `step-${i}-${s.at ?? ''}`,
-      time: s.at ?? '',
-      run: null,
+      sortTime: ms(s.at),
       step: s as AgentStep | null,
-      message: null as AgentMessage | null,
     }));
     const msgEntries = messages.map((m, i) => ({
+      ...base,
       key: `msg-${i}-${m.at}`,
-      time: m.at,
-      run: null,
-      step: null as AgentStep | null,
+      sortTime: ms(m.at),
       message: m,
     }));
-    return [...runEntries, ...stepEntries, ...msgEntries].sort((a, b) =>
-      a.time.localeCompare(b.time),
+    return [...runEntries, ...activeEntries, ...stepEntries, ...msgEntries].sort(
+      (a, b) => a.sortTime - b.sortTime,
     );
-  }, [visibleRuns, agentSteps, messages]);
+  }, [visibleRuns, myActiveRuns, agentSteps, messages]);
 
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
@@ -688,26 +703,25 @@ export function ChatPane({
               onRejectFinding={handleRejectFinding}
               onNavigateToFinding={handleNavigateToFinding}
             />
+          ) : entry.active ? (
+            // 正在跑：进度条 + 实时 stdout 流，按启动时间穿插在时间线里（startedAt 入队时为 null、
+            // 起跑时设值，fallback enqueuedAt）。prAgent 未就绪时不渲染。
+            prAgent.available ? (
+              <RunningView
+                key={entry.key}
+                tool={entry.active.tool}
+                runId={entry.active.runId}
+                lines={linesByRunId.get(entry.active.runId) ?? []}
+                startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
+                model={currentLlmModel ?? null}
+              />
+            ) : null
           ) : entry.step ? (
             <AgentStepRow key={entry.key} step={entry.step} />
           ) : entry.message ? (
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
         )}
-        {/* 正在跑（可并发多条）：每条一个进度条 + 实时 stdout 流，贴在历史末尾。
-            startedAt 入队时为 null，executeRun 真正起跑时设值；窗口非常短一般看不到
-            — fallback 到 enqueuedAt */}
-        {prAgent.available &&
-          myActiveRuns.map((r) => (
-            <RunningView
-              key={r.runId}
-              tool={r.tool}
-              runId={r.runId}
-              lines={linesByRunId.get(r.runId) ?? []}
-              startedAt={new Date(r.startedAt ?? r.enqueuedAt).getTime()}
-              model={currentLlmModel ?? null}
-            />
-          ))}
         {/* 本 PR 排队中的任务：贴在运行中之后，按队列顺序展示，可单条取消 */}
         {myWaiting.map((w, i) => (
           <QueuedView

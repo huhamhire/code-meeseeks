@@ -130,7 +130,7 @@
     "statusRunning": "运行中",
     "statusSucceeded": "完成",
     "stopAria": "停止",
-    "stopTitle": "终止当前 PR Agent 调用 (SIGKILL)",
+    "stopTitle": "停止执行",
     "tokensTitle": "输入(prompt) {{prompt}} · 输出(completion) {{completion}} tokens",
     "unknownCommand": "未知命令 {{head}}；支持：{{cmds}}",
     "userQuestionAria": "用户提问",

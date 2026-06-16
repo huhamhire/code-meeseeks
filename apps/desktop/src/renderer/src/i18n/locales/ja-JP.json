@@ -130,7 +130,7 @@
     "statusRunning": "実行中",
     "statusSucceeded": "完了",
     "stopAria": "停止",
-    "stopTitle": "現在の PR Agent 実行を強制終了 (SIGKILL)",
+    "stopTitle": "実行を停止",
     "tokensTitle": "入力(prompt) {{prompt}} · 出力(completion) {{completion}} トークン",
     "unknownCommand": "不明なコマンド {{head}}。サポート対象：{{cmds}}",
     "userQuestionAria": "ユーザーの質問",
