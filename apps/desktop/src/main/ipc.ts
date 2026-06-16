@@ -1417,6 +1417,23 @@ export function registerIpcHandlers({
     });
   };
 
+  /**
+   * 把一次评审收尾总结追加为该 PR 的一条 assistant 评审消息（多轮对话）——UI 据此渲染「评审总结」卡片。
+   * 手动一键评审与 AutoPilot 背景评审共用；仅成功收尾（done）且有总结才记，失败 / 用户停止（paused）不落。
+   */
+  const recordReviewSummaryMessage = async (
+    pr: StoredPullRequest,
+    session: AgentSession,
+  ): Promise<void> => {
+    if (session.status === 'done' && session.summary) {
+      await appendAgentMessage(stateStore, pr.localId, {
+        role: 'assistant',
+        content: session.summary,
+        recommendation: session.recommendation,
+      });
+    }
+  };
+
   ipcMain.handle(
     'agent:run',
     async (
@@ -1442,15 +1459,8 @@ export function registerIpcHandlers({
           { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
           'agent review done',
         );
-        // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（不经此处）。
-        // 仅成功收尾才记：失败 / 用户停止（paused）不落消息。
-        if (session.status === 'done' && session.summary) {
-          await appendAgentMessage(stateStore, pr.localId, {
-            role: 'assistant',
-            content: session.summary,
-            recommendation: session.recommendation,
-          });
-        }
+        // 收尾总结计入多轮对话（assistant 评审消息）→ UI 渲染「评审总结」卡片。
+        await recordReviewSummaryMessage(pr, session);
         return session;
       } finally {
         agentControllers.delete(pr.localId);
@@ -1596,14 +1606,28 @@ export function registerIpcHandlers({
         //   再按 batch_size 截断。
         const prs = await listStoredPullRequests(stateStore);
         const candidates: StoredPullRequest[] = [];
+        // 准入漏斗计数（用于 0 候选时定位卡在哪一道闸——便于排查「为何不再触发」）。
+        let reviewReqPending = 0; // 命中「待我评审 + 待处理」
+        let alreadyReviewed = 0; // 其中已有 describe/review 产出而被排除
         for (const pr of prs) {
           if (candidates.length >= ap.batch_size) break;
           if (!pr.discoveryFilters.includes('review-requested')) continue;
           if (pr.localStatus !== 'pending') continue;
-          if (await hasReviewOutput(stateStore, pr.localId)) continue;
+          reviewReqPending++;
+          if (await hasReviewOutput(stateStore, pr.localId)) {
+            alreadyReviewed++;
+            continue;
+          }
           if (await needsAutoReview(stateStore, pr.localId, pr.updatedAt)) candidates.push(pr);
         }
-        if (candidates.length === 0) return;
+        if (candidates.length === 0) {
+          // 仍在按周期评估，只是当前无新合格 PR——把漏斗计数打出来，避免被误读成「没在跑」。
+          logger.info(
+            { total: prs.length, reviewReqPending, alreadyReviewed },
+            'autopilot pass: no eligible candidates',
+          );
+          return;
+        }
 
         const agentContext = await loadAgentContext(effectiveAgentDir(), {
           onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
@@ -1635,6 +1659,8 @@ export function registerIpcHandlers({
             }
             // 单并发：逐 PR 顺序跑编排（工具 run 在共享队列并行消化）。
             const session = await runReviewForPr(pr, agentContext, chat);
+            // 与手动评审一致：收尾总结落多轮对话，PR 会话里能看到「评审总结」卡片（此前 AutoPilot 漏记）。
+            await recordReviewSummaryMessage(pr, session);
             await writeAutopilotLedger(stateStore, {
               prLocalId: pr.localId,
               autoReviewedUpdatedAt: pr.updatedAt,
