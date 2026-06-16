@@ -9,6 +9,8 @@ import {
   PanelToggleIcon,
   PersonIcon,
   PullRequestIcon,
+  RobotIcon,
+  RobotOffIcon,
   SettingsIcon,
   SyncIcon,
 } from './icons';
@@ -36,6 +38,9 @@ interface StatusBarProps {
   onJumpToPr?: (localId: string) => void;
   /** 启动检测到的新版本；非空且 hasUpdate 时展示「新版本」chip，点击跳转下载页。 */
   updateInfo?: UpdateCheckResult | null;
+  /** AutoPilot 是否启用（agent.autopilot.enabled）；点击切换，由父组件持久化。 */
+  autopilotEnabled: boolean;
+  onToggleAutopilot: () => void;
 }
 
 export function StatusBar({
@@ -54,6 +59,8 @@ export function StatusBar({
   onSwitchActiveLlm,
   onJumpToPr,
   updateInfo,
+  autopilotEnabled,
+  onToggleAutopilot,
 }: StatusBarProps) {
   const { t } = useTranslation();
   return (
@@ -87,6 +94,17 @@ export function StatusBar({
           上跑 / 当前空闲"。放右侧贴近 LLM chip：一组都是"当前 run 用什么 / 跑得如何"的实时
           信息。pr-agent 不可用时不显示 (上方 PrAgentChip 已经红色提示) */}
       {prAgent?.available && <PrAgentActiveChip onJumpToPr={onJumpToPr} />}
+      {/* AutoPilot 开关：默认关，点击切换（持久化到 agent.autopilot.enabled，下次 poll 生效）。 */}
+      <button
+        type="button"
+        className={`statusbar-chip statusbar-chip-autopilot${autopilotEnabled ? ' is-on' : ''}`}
+        onClick={onToggleAutopilot}
+        title={autopilotEnabled ? t('statusBar.autopilotOnTitle') : t('statusBar.autopilotOffTitle')}
+        aria-pressed={autopilotEnabled}
+      >
+        {autopilotEnabled ? <RobotIcon size={13} /> : <RobotOffIcon size={13} />}
+        <span>{t('statusBar.autopilot')}</span>
+      </button>
       <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />
       {updateInfo?.hasUpdate && updateInfo.url && (
         <button
@@ -323,9 +341,20 @@ function QueuePopover({
               title={t('statusBar.jumpToPr')}
             >
               <span className="statusbar-queue-tool">/{a.tool}</span>
-              <code className="statusbar-queue-pr">{a.prLocalId}</code>
+              <span className="statusbar-queue-pr">
+                {a.repoSlug} <span className="statusbar-queue-prnum">#{a.prNumber}</span>
+              </span>
             </button>
             <span className="muted statusbar-queue-state">{t('statusBar.running')}</span>
+            <button
+              type="button"
+              className="statusbar-queue-cancel"
+              onClick={() => onCancel(a.runId)}
+              title={t('statusBar.stopRunning')}
+              aria-label={t('common.cancel')}
+            >
+              ×
+            </button>
           </li>
         ))}
         {waiting.map((q) => (
@@ -338,7 +367,9 @@ function QueuePopover({
               title={t('statusBar.jumpToPr')}
             >
               <span className="statusbar-queue-tool">/{q.tool}</span>
-              <code className="statusbar-queue-pr">{q.prLocalId}</code>
+              <span className="statusbar-queue-pr">
+                {q.repoSlug} <span className="statusbar-queue-prnum">#{q.prNumber}</span>
+              </span>
             </button>
             <span className="muted statusbar-queue-state">{t('statusBar.queued')}</span>
             <button

@@ -80,7 +80,9 @@ export function SettingsModal({
 
   // 草稿 → 整体保存：所有编辑只改本地 state，点底栏"保存"才整体写盘 + 生效
   const [reposDirInput, setReposDirInput] = useState(config.workspace.repos_dir);
-  const [agent, setAgent] = useState<Config['agent']>(config.agent);
+  // Agent 其余字段（max_steps / summary_max_chars / autopilot）在 UI 不编辑，仅持有以便保存时
+  // 原样回传、不被覆盖成默认值；只有目录经 agentDirInput 可编辑。
+  const [agent] = useState<Config['agent']>(config.agent);
   const [agentDirInput, setAgentDirInput] = useState(config.agent.dir);
   const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
@@ -95,7 +97,6 @@ export function SettingsModal({
   const [base, setBase] = useState(() => ({
     reposDir: config.workspace.repos_dir,
     agentDir: config.agent.dir,
-    agentEnabled: config.agent.enabled,
     poller: config.poller.interval_seconds,
     llm: config.llm,
     proxy: config.proxy,
@@ -268,8 +269,7 @@ export function SettingsModal({
 
   // ── 变更检测（对比基线）+ 整体保存（仅写有变更的部分，全成功后更新基线）──
   const reposDirChanged = reposDirInput.trim() !== base.reposDir;
-  const agentChanged =
-    agentDirInput.trim() !== base.agentDir || agent.enabled !== base.agentEnabled;
+  const agentChanged = agentDirInput.trim() !== base.agentDir;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
   const proxyChanged = JSON.stringify(proxy) !== JSON.stringify(base.proxy);
@@ -297,8 +297,10 @@ export function SettingsModal({
         await invoke('config:setPoller', { interval_seconds: n });
       }
       if (agentChanged) {
+        // 仅 UI 编辑 dir；其余字段（max_steps / summary_max_chars / autopilot）从已加载的
+        // config 原样保留，避免被覆盖成默认值。
         await invoke('config:setAgent', {
-          agent: { dir: agentDirInput.trim(), enabled: agent.enabled },
+          agent: { ...agent, dir: agentDirInput.trim() },
         });
       }
       if (llmChanged) {
@@ -321,7 +323,6 @@ export function SettingsModal({
       setBase({
         reposDir: reposDirInput.trim(),
         agentDir: agentDirInput.trim(),
-        agentEnabled: agent.enabled,
         poller: Number.parseInt(pollerInput, 10),
         llm,
         proxy,
@@ -629,18 +630,6 @@ export function SettingsModal({
                 <FolderIcon />
               </button>
             </div>
-            <label className="settings-secret-row" style={{ marginTop: 8 }}>
-              <input
-                type="checkbox"
-                checked={agent.enabled}
-                onChange={(e) => {
-                  setAgent((a) => ({ ...a, enabled: e.target.checked }));
-                  setSaved(false);
-                }}
-                aria-label={t('settings.enableAgent')}
-              />
-              <span className="muted">{t('settings.enableAgent')}</span>
-            </label>
           </section>
 
           <section className="modal-section">

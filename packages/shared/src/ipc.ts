@@ -1,3 +1,9 @@
+import type {
+  AgentMessage,
+  AgentRecommendationVerdict,
+  AgentSession,
+  AgentStep,
+} from './agent-contract.js';
 import type { AppInfo, AppPaths, UpdateCheckResult } from './app-info.js';
 import type { Config } from './config.js';
 import type { SupportedLanguage } from './language.js';
@@ -89,6 +95,9 @@ export interface PragentRunProgressEvent {
 export interface PragentRunInfo {
   runId: string;
   prLocalId: string;
+  /** 仓库 slug 与 PR 号（队列展示用，避免只显示 localId hash）。 */
+  repoSlug: string;
+  prNumber: string;
   tool: ReviewRunTool;
   question?: string;
   /** 入队时间，ISO */
@@ -123,6 +132,8 @@ export interface IpcEvents {
   };
   /** 启动检测到新版本时推送（仅 hasUpdate=true 时发），renderer 据此提示。 */
   'app:updateAvailable': UpdateCheckResult;
+  /** Agent 编排步骤流式推送：每产生一个 AgentStep 即发，renderer 据此实时呈现。 */
+  'agent:stepProgress': { sessionId: string; prLocalId: string; step: AgentStep };
 }
 
 export type IpcEventName = keyof IpcEvents;
@@ -326,8 +337,10 @@ export interface IpcChannels {
   'config:setLanguage': { request: { language: SupportedLanguage }; response: void };
   /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
-  /** 写入 agent.dir + enabled 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
+  /** 写入 agent.dir 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
   'config:setAgent': { request: { agent: Config['agent'] }; response: void };
+  /** 翻转 AutoPilot 开关 (agent.autopilot.enabled) 并写 config.yaml；下次 poll tick 生效。 */
+  'agent:setAutopilotEnabled': { request: { enabled: boolean }; response: void };
   /** 写入轮询间隔 (秒，60~900 整数) 到 config.yaml，并热替换 poller 定时器，无需重启 */
   'config:setPoller': { request: { interval_seconds: number }; response: void };
   /**
@@ -392,6 +405,43 @@ export interface IpcChannels {
      */
     request: { localId: string; tool: ReviewRunTool; question?: string };
     response: ReviewRun;
+  };
+  /**
+   * 对指定 PR 跑一次 Agent 评审微流程（describe→review→条件追问→总结）。同步等待，
+   * 期间经 agent:stepProgress 推送步骤；返回收尾后的 AgentSession（含 summary /
+   * recommendation）。pr-agent 不可用时 reject。
+   */
+  'agent:run': {
+    request: { localId: string };
+    response: AgentSession;
+  };
+  /**
+   * 对指定 PR 跑自由规划 Agent（自然语言入口「对话即委派」）。同步等待，步骤经
+   * agent:stepProgress 推送；返回收尾会话（summary = Agent 最终回答）。
+   */
+  'agent:ask': {
+    request: { localId: string; question: string };
+    response: AgentSession;
+  };
+  /** 暂停当前 PR 的 Agent 运行（abort）；会话置 paused、保态。 */
+  'agent:stop': { request: { localId: string }; response: { ok: boolean } };
+  /**
+   * 读取指定 PR 已落盘的 Agent 会话（含收尾 summary / recommendation）；无则返回 null。
+   * 供 UI 打开 PR 时恢复「评审总结」卡片——总结归属其发起 PR、跨 PR 切换不丢失、不串台。
+   */
+  'agent:getSession': { request: { localId: string }; response: AgentSession | null };
+  /**
+   * 读取指定 PR 的多轮对话消息（用户输入 + Agent 回答，按时间升序）；无则空数组。
+   * UI 据此渲染多轮会话；跨 PR 切换 / 重启后恢复。
+   */
+  'agent:getConversation': { request: { localId: string }; response: AgentMessage[] };
+  /**
+   * 批量读 AutoPilot 台账：返回各 PR 已自动评审的 recommendation（仅 decision=review 且有
+   * 建议者）。PR 列表据此显示徽标，无需逐个加载会话。
+   */
+  'agent:autopilotLedgers': {
+    request: { localIds: string[] };
+    response: Record<string, AgentRecommendationVerdict>;
   };
   /**
    * 列出指定 PR 的全部草稿 (pending / edited / posted / rejected 都返回，UI 端按

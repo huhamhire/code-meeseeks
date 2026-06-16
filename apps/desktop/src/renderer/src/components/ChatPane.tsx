@@ -5,6 +5,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type {
+  AgentMessage,
+  AgentStep,
   Finding,
   IpcChannels,
   LocalPrStatus,
@@ -17,8 +19,9 @@ import type {
 
 type MatchedRule = IpcChannels['rules:matchForPr']['response'];
 import type { ReviewDraft } from '@meebox/shared';
-import { invoke } from '../api';
+import { invoke, subscribe } from '../api';
 import {
+  AutoReviewIcon,
   ChatIcon,
   ChevronIcon,
   CloseIcon,
@@ -40,6 +43,13 @@ export const CHAT_MIN_WIDTH = 280;
 export const CHAT_MAX_WIDTH = 720;
 /** 历史 run 的分页大小：进入 PR 默认展示最新 N 条，向上滚动到顶端再追加一批 */
 const RUNS_PAGE_SIZE = 10;
+
+/** Agent 建议 verdict → i18n key（chatPane.agent.*）。 */
+const VERDICT_LABEL_KEY: Record<string, string> = {
+  approve: 'chatPane.agent.verdictApprove',
+  needs_work: 'chatPane.agent.verdictNeedsWork',
+  manual_review: 'chatPane.agent.verdictManualReview',
+};
 
 interface ChatPaneProps {
   pr: StoredPullRequest | null;
@@ -138,8 +148,17 @@ export function ChatPane({
   // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
   const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
   const [showRulePreview, setShowRulePreview] = useState(false);
+  // Agent 运行态（自动评审微流程 / 自由规划对话）。
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  // 多轮对话消息（用户输入 + Agent 回答），跨回合保留、由 main 落盘 conversation.json，
+  // 切回该 PR 恢复。用户消息含临时 optimistic 项（提交即回显），收尾后整体以落盘版重载对齐。
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  // 当前展示中的 PR id（每渲染同步）：异步 Agent 任务 resolve 时据此判断是否仍停在发起 PR，
+  // 避免把收尾结果 / 错误串台到切换后打开的别的 PR 会话。
+  const currentPrIdRef = useRef<string | undefined>(undefined);
 
   // 全局活动 run + 实时 stdout 缓存。store 来源于 main 的 'pragent:activeChanged'
   // / 'pragent:runProgress' 事件，PR 切换不丢，所以这里只读，不在本组件维护
@@ -159,31 +178,69 @@ export function ChatPane({
   const myActiveIdSet = new Set(myActiveRuns.map((a) => a.runId));
   const visibleRuns = hasMyActive ? runs.filter((r) => !myActiveIdSet.has(r.id)) : runs;
 
+  // 历史时间线：把 run 卡片与 Agent 的元步骤按时间归并，让过程性步骤按自然时间顺序
+  // 穿插展示（而非堆在末尾）。工具步骤（describe/review/ask）已由 run 卡片代表、不重复；
+  // 收尾 plan 即「评审总结」卡片、不重复 → 仅保留判读（judge）这类决策节点作为内联标记。
+  const timeline = useMemo(() => {
+    const runEntries = visibleRuns.map((r) => ({
+      key: `run-${r.id}`,
+      time: r.startedAt,
+      run: r as ReviewRun | null,
+      step: null as AgentStep | null,
+      message: null as AgentMessage | null,
+    }));
+    const stepEntries = agentSteps
+      .filter((s) => s.kind === 'judge')
+      .map((s, i) => ({
+        key: `step-${i}-${s.at ?? ''}`,
+        time: s.at ?? '',
+        run: null,
+        step: s,
+        message: null as AgentMessage | null,
+      }));
+    const msgEntries = messages.map((m, i) => ({
+      key: `msg-${i}-${m.at}`,
+      time: m.at,
+      run: null,
+      step: null as AgentStep | null,
+      message: m,
+    }));
+    return [...runEntries, ...stepEntries, ...msgEntries].sort((a, b) =>
+      a.time.localeCompare(b.time),
+    );
+  }, [visibleRuns, agentSteps, messages]);
+
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
   // reloadPrs → 新 prs 数组 → selected 是新对象引用 → 如果依赖 pr，此 effect 重跑，
   // 用户输入 / 规则提示等组件状态被清空。localId 是稳定字符串，同 PR 刷新不触发。
   const prLocalId = pr?.localId;
+  currentPrIdRef.current = prLocalId;
   useEffect(() => {
     setRuns([]);
     setHasMoreOlder(false);
     setLoadingOlder(false);
     setError(null);
     setMatchedRule(null);
+    setAgentSteps([]);
+    setMessages([]);
     if (!prLocalId) return;
     let cancelled = false;
     void (async () => {
       try {
-        // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)
-        const [list, rule] = await Promise.all([
+        // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)。
+        // 同时拉已落盘的多轮对话：把会话消息恢复到其 PR，跨切换 / 重启不丢失。
+        const [list, rule, conversation] = await Promise.all([
           invoke('pragent:listRuns', { localId: prLocalId, limit: RUNS_PAGE_SIZE }),
           invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
+          invoke('agent:getConversation', { localId: prLocalId }),
         ]);
         if (cancelled) return;
         // 反转为升序 (chat 习惯)，UI 直接读 runs 即可
         setRuns([...list].reverse());
         setHasMoreOlder(list.length === RUNS_PAGE_SIZE);
         setMatchedRule(rule);
+        setMessages(conversation);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -191,6 +248,17 @@ export function ChatPane({
     return () => {
       cancelled = true;
     };
+  }, [prLocalId]);
+
+  // Agent 步骤流式：订阅 main 的 agent:stepProgress，按当前 PR 过滤实时追加。
+  useEffect(() => {
+    if (!prLocalId) return;
+    return subscribe('agent:stepProgress', (ev) => {
+      // 流式步骤可能未带 at（编排器广播在落盘 stamp 之前）→ 到达即补一个时间戳，
+      // 供下方与 run 卡片按时间归并排序（自然时间顺序展示）。
+      if (ev.prLocalId === prLocalId)
+        setAgentSteps((s) => [...s, { ...ev.step, at: ev.step.at ?? new Date().toISOString() }]);
+    });
   }, [prLocalId]);
 
   // 本 PR 的运行中 run 集合发生「移除」→ 那条跑完了：单独 fetch 它 + 按 runId 升序
@@ -289,7 +357,65 @@ export function ChatPane({
     }
   };
 
-  // 清空当前 PR 的执行历史（仅该 PR）：删远端记录 + 清本地列表。进行中的 run 不受影响
+  // 从 main 重载某 PR 的多轮对话（落盘版为准）；仅当仍停在该 PR 才落到当前视图，避免串台。
+  const reloadConversation = async (localId: string): Promise<void> => {
+    try {
+      const conversation = await invoke('agent:getConversation', { localId });
+      if (currentPrIdRef.current === localId) setMessages(conversation);
+    } catch {
+      /* 忽略：下次 PR 切换 effect 会重载 */
+    }
+  };
+
+  // 一键自动评审：触发 main 的 agent:run（评审微流程）。describe/review/ask 子 run 经既有运行
+  // 队列展示在历史里；收尾评审作为一条 assistant 消息落入多轮对话，完成后重载对话呈现。
+  const handleAgentReview = async (): Promise<void> => {
+    if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
+    const startedId = pr.localId;
+    setError(null);
+    setAgentSteps([]);
+    setAgentRunning(true);
+    try {
+      const session = await invoke('agent:run', { localId: startedId });
+      await reloadConversation(startedId);
+      if (currentPrIdRef.current === startedId && session.status === 'failed') {
+        setError(session.terminationReason ?? t('chatPane.agent.failed'));
+      }
+    } catch (e) {
+      if (currentPrIdRef.current === startedId) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
+  // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。用户输入即时 optimistic 回显，
+  // 收尾后以落盘对话（含用户 + 助手消息）整体对齐。
+  const handleAgentAsk = async (question: string): Promise<void> => {
+    if (!pr || !prAgent.available || !llmConfigured || agentRunning) return;
+    const startedId = pr.localId;
+    setError(null);
+    setAgentSteps([]);
+    setMessages((prev) => [...prev, { role: 'user', content: question, at: new Date().toISOString() }]);
+    setAgentRunning(true);
+    try {
+      const session = await invoke('agent:ask', { localId: startedId, question });
+      await reloadConversation(startedId);
+      if (currentPrIdRef.current === startedId && session.status === 'failed') {
+        setError(session.terminationReason ?? t('chatPane.agent.failed'));
+      }
+    } catch (e) {
+      if (currentPrIdRef.current === startedId) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
+  // 清空当前 PR 的执行历史（仅该 PR）：删远端记录 + 清本地列表，并一并清掉 Agent 收尾结果 /
+  // 步骤 / 错误横幅（含「已停止 / 失败」提示），避免清空后仍残留陈旧反馈。进行中的 run 不受影响
   // （在 chatRunStore，跑完会重新落盘）。
   const handleClearRuns = async (): Promise<void> => {
     setShowClearConfirm(false);
@@ -298,6 +424,9 @@ export function ChatPane({
       await invoke('pragent:clearRuns', { localId: prLocalId });
       setRuns([]);
       setHasMoreOlder(false);
+      setError(null);
+      setAgentSteps([]);
+      setMessages([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -310,6 +439,12 @@ export function ChatPane({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
+  };
+  // 停止本 PR 会话内进行中的全部任务：逐条取消所有活动 run（Agent 并行多选时可能 >1），
+  // 并中止 Agent 编排（abort，阻止其在子任务取消后继续后续步骤）。
+  const handleStopAll = (): void => {
+    for (const r of myActiveRuns) void handleCancel(r.runId);
+    if (agentRunning && prLocalId) void invoke('agent:stop', { localId: prLocalId });
   };
   const handleRetry = (run: ReviewRun): void => {
     void handleRun(run.tool, run.question);
@@ -493,14 +628,19 @@ export function ChatPane({
       )}
 
       <div className="chat-pane-body" ref={bodyRef}>
-        {visibleRuns.length === 0 && !hasMyActive && myWaiting.length === 0 && (
-          <ChatEmpty
-            pr={pr}
-            prAgent={prAgent}
-            llmConfigured={llmConfigured}
-            onOpenSettings={onOpenSettings}
-          />
-        )}
+        {/* 使用提示仅在「全无会话内容」时显示：一旦有用户输入气泡 / run / 步骤 / 收尾结果，
+            或 Agent 正在运行 / 有排队任务，即隐藏，避免输入后仍残留提示。 */}
+        {timeline.length === 0 &&
+          !agentRunning &&
+          !hasMyActive &&
+          myWaiting.length === 0 && (
+            <ChatEmpty
+              pr={pr}
+              prAgent={prAgent}
+              llmConfigured={llmConfigured}
+              onOpenSettings={onOpenSettings}
+            />
+          )}
         {/* 还有更早的 run 未拉到本地 → 顶部出加载提示。继续向上滚自动游标拉一页 */}
         {(hasMoreOlder || loadingOlder) && (
           <div className="chat-run-more-hint muted" role="status">
@@ -509,21 +649,27 @@ export function ChatPane({
         )}
         {/* 历史 run 按时间升序堆叠，每条独立卡片 (内部维护自己的 raw stdout 折叠状态)。
             初始只拉最新 RUNS_PAGE_SIZE 条；向上滚到顶后再用游标拉更早一批 */}
-        {visibleRuns.map((r, i) => (
-          <RunResultView
-            key={r.id}
-            run={r}
-            onRetry={handleRetry}
-            // 只有"列表里最后一条 + 没有正在跑的"这一种情形下，失败 / 取消的 run 才
-            // 可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
-            // 避免回头再点重新插队、打乱对话顺序
-            canRetry={i === visibleRuns.length - 1 && !hasMyActive}
-            drafts={drafts ?? []}
-            onJumpToDraft={handleJumpToDraft}
-            onRejectFinding={handleRejectFinding}
-            onNavigateToFinding={handleNavigateToFinding}
-          />
-        ))}
+        {timeline.map((entry, i) =>
+          entry.run ? (
+            <RunResultView
+              key={entry.key}
+              run={entry.run}
+              onRetry={handleRetry}
+              // 只有"时间线里最后一条 run + 没有正在跑的"这一种情形下，失败 / 取消的 run
+              // 才可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
+              // 避免回头再点重新插队、打乱对话顺序
+              canRetry={i === timeline.length - 1 && !hasMyActive}
+              drafts={drafts ?? []}
+              onJumpToDraft={handleJumpToDraft}
+              onRejectFinding={handleRejectFinding}
+              onNavigateToFinding={handleNavigateToFinding}
+            />
+          ) : entry.step ? (
+            <AgentStepMarker key={entry.key} step={entry.step} />
+          ) : entry.message ? (
+            <ConversationMessage key={entry.key} message={entry.message} />
+          ) : null,
+        )}
         {/* 正在跑（可并发多条）：每条一个进度条 + 实时 stdout 流，贴在历史末尾。
             startedAt 入队时为 null，executeRun 真正起跑时设值；窗口非常短一般看不到
             — fallback 到 enqueuedAt */}
@@ -555,6 +701,14 @@ export function ChatPane({
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
           </div>
         )}
+        {/* Agent 自身 LLM 调用（规划 / 判读 / 收尾）无对应 pragent run，此时队列里看不到进度 →
+            补一条「思考中」指示，避免运行期界面看似停滞。子任务运行时由 RunningView 负责进度。 */}
+        {agentRunning && !hasMyActive && myWaiting.length === 0 && (
+          <div className="chat-agent-thinking" role="status">
+            <Spinner />
+            <span>{t('chatPane.agent.thinking')}</span>
+          </div>
+        )}
         {error && (
           <div className="chat-error" role="alert">
             <strong>{t('chatPane.errorPrefix')}</strong>
@@ -571,12 +725,12 @@ export function ChatPane({
         // 渲染 stop 按钮 (本 PR 有运行中 run 时可点终止)。多并发时 stop 终止最近一条。
         runningTool={myActiveRuns[myActiveRuns.length - 1]?.tool ?? null}
         onRun={(t, q) => void handleRun(t, q)}
-        onCancel={
-          hasMyActive
-            ? () => void handleCancel(myActiveRuns[myActiveRuns.length - 1]!.runId)
-            : undefined
-        }
+        onAgentAsk={(q) => void handleAgentAsk(q)}
+        onCancel={hasMyActive ? handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
+        // 一键自动评审：图标按钮置于 `/` 命令触发器右侧
+        agentRunning={agentRunning}
+        onAgentReview={() => void handleAgentReview()}
       />
 
       {showRulePreview && matchedRule && (
@@ -662,6 +816,8 @@ interface ChatInputBarProps {
    */
   runningTool: ReviewRunTool | null;
   onRun: (tool: ReviewRunTool, question?: string) => void;
+  /** 无 '/' 前缀的自然语言输入 → 交给自由规划 Agent（对话即委派，见设计「会话 Agent 化」）。 */
+  onAgentAsk: (question: string) => void;
   /**
    * 终止当前活动 run。仅 runningTool 非空时有意义；ChatPane 已绑好对应 runId。
    * stop 按钮跟 send 共用槽位：runningTool 时点击触发此回调而非 onRun
@@ -669,6 +825,10 @@ interface ChatInputBarProps {
   onCancel?: () => void;
   /** /approve /needswork 命令触发的 review 决断，跟 PR header 按钮共用 prs:setLocalStatus */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
+  /** 自动评审是否进行中（决定图标按钮禁用 + 是否显示停止）。 */
+  agentRunning: boolean;
+  /** 触发一键自动评审微流程（describe→review→条件追问→总结）。 */
+  onAgentReview: () => void;
 }
 
 // 输入历史：最近 5 次成功提交，localStorage 持久化。Up/Down 按键在 textarea 末尾
@@ -749,8 +909,11 @@ function ChatInputBar({
   llmConfigured,
   runningTool,
   onRun,
+  onAgentAsk,
   onCancel,
   onSetReviewStatus,
+  agentRunning,
+  onAgentReview,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -896,9 +1059,13 @@ function ChatInputBar({
       }
       cmd = found;
     } else {
-      // COMMANDS 里固定有 /ask，find 不会为 undefined — 用 ! 让 TS 收窄即可
-      cmd = COMMANDS.find((c) => c.kind === 'pragent' && c.name === 'ask')!;
-      rest = trimmed;
+      // 无 '/' → 自然语言「对话即委派」：交给自由规划 Agent（而非 /ask）。
+      setHistory(pushChatHistory(input));
+      setHistoryIdx(-1);
+      draftBeforeHistoryRef.current = '';
+      setInput('');
+      onAgentAsk(trimmed);
+      return;
     }
     // review-action：/approve /needswork 没有参数，多余文本拒绝以免误用
     if (cmd.kind === 'review-action') {
@@ -1076,6 +1243,7 @@ function ChatInputBar({
       </div>
       {parseError && <div className="chat-input-error">{parseError}</div>}
       <div className="chat-pane-input-row">
+        <div className="chat-cmd-group">
         <div className="chat-cmd-bar" ref={cmdMenuRef}>
           <button
             type="button"
@@ -1111,6 +1279,26 @@ function ChatInputBar({
             </ul>
           )}
         </div>
+        {/* 自动评审：图标按钮紧贴 `/` 命令触发器右侧。仅 pr-agent 就绪时出现，LLM 未配置 /
+            运行中则禁用触发。停止统一由发送区的停止按钮负责（取消进行中的子任务即终止流程），
+            不再单独提供 Agent 停止按钮，避免出现两个语义重叠的停止入口。 */}
+        {pr && prAgent.available && (
+          <button
+            type="button"
+            className={`chat-cmd-trigger chat-agent-review-trigger${agentRunning ? ' active' : ''}`}
+            onClick={onAgentReview}
+            disabled={!llmConfigured || agentRunning}
+            title={
+              agentRunning
+                ? t('chatPane.agent.autoReviewRunning')
+                : t('chatPane.agent.autoReview')
+            }
+            aria-label={t('chatPane.agent.autoReview')}
+          >
+            <AutoReviewIcon />
+          </button>
+        )}
+        </div>
         {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时 stop 紧贴 send 左侧。
             包到一个 group 里避免 input-row 的 space-between 把 stop 推到中央 */}
         <div className="chat-pane-send-group">
@@ -1142,6 +1330,88 @@ function ChatInputBar({
         </div>
       </div>
     </form>
+  );
+}
+
+/**
+ * Agent 元步骤内联标记：在时间线中按自然时间顺序穿插展示的决策节点（如 judge 判读）。
+ * 工具步骤由 run 卡片代表、收尾 plan 由「评审总结」卡片代表，均不走此标记（见时间线归并）。
+ */
+function AgentStepMarker({ step }: { step: AgentStep }) {
+  return (
+    <div className="chat-agent-step-marker" role="status">
+      {step.result && <span className="chat-agent-step-result">{step.result}</span>}
+      {step.thought && <span className="chat-agent-step-thought muted">{step.thought}</span>}
+    </div>
+  );
+}
+
+/** /ask 提问行：问号图标 + markdown 渲染的提问内容（Agent 自拟的追问常含内联代码 / 列表）。 */
+function AskQuestion({ text }: { text: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
+      <QuestionIcon />
+      <div className="markdown chat-user-msg-body">
+        <Md>{text}</Md>
+      </div>
+    </div>
+  );
+}
+
+/** chat 区统一的 markdown 渲染（与 finding 卡片同套 remark/rehype 配置）。 */
+function Md({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkBreaks]}
+      rehypePlugins={REMOTE_REHYPE_PLUGINS}
+      components={mermaidComponents}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
+/**
+ * 一条多轮对话消息的展示：用户 → 右对齐气泡；助手评审类（带 recommendation）→「评审总结」卡片 +
+ * 判定徽标；助手对话类（无 recommendation）→ 左对齐专属对话回复包装。
+ */
+function ConversationMessage({ message }: { message: AgentMessage }) {
+  const { t } = useTranslation();
+  if (message.role === 'user') {
+    return (
+      <div className="chat-user-row">
+        <div className="chat-user-bubble">{message.content}</div>
+      </div>
+    );
+  }
+  if (message.recommendation) {
+    return (
+      <div className="chat-agent-summary" role="status">
+        <div className="chat-agent-summary-head">
+          <strong>{t('chatPane.agent.summaryTitle')}</strong>
+          <span className={`chat-agent-verdict verdict-${message.recommendation.verdict}`}>
+            {t(VERDICT_LABEL_KEY[message.recommendation.verdict])}
+          </span>
+        </div>
+        <div className="markdown chat-agent-summary-text">
+          <Md>{message.content}</Md>
+        </div>
+        {message.recommendation.reason && (
+          <div className="markdown muted chat-agent-summary-reason">
+            <Md>{message.recommendation.reason}</Md>
+          </div>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="chat-agent-reply" role="status">
+      <ChatIcon size={16} />
+      <div className="markdown chat-agent-reply-body">
+        <Md>{message.content}</Md>
+      </div>
+    </div>
   );
 }
 
@@ -1322,12 +1592,7 @@ function QueuedView({
           <CloseIcon size={14} />
         </button>
       </header>
-      {userMessage && (
-        <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
-          <QuestionIcon />
-          <div className="chat-user-msg-body">{userMessage}</div>
-        </div>
-      )}
+      {userMessage && <AskQuestion text={userMessage} />}
     </div>
   );
 }
@@ -1411,12 +1676,7 @@ function RunResultView({
   return (
     <div className="chat-run-result">
       <RunMeta run={run} />
-      {userMessage && (
-        <div className="chat-user-msg" aria-label={t('chatPane.userQuestionAria')}>
-          <QuestionIcon />
-          <div className="chat-user-msg-body">{userMessage}</div>
-        </div>
-      )}
+      {userMessage && <AskQuestion text={userMessage} />}
       {/* 原始输出：始终紧跟 meta 行，让用户在任何状态下都能在固定位置找到日志。
           失败 / 取消默认展开，成功默认收起 */}
       {stdout.length > 0 && (
@@ -2059,6 +2319,7 @@ function ChatEmpty({
         {pr ? t('chatPane.emptyReadyTitle') : t('chatPane.emptySelectPrTitle')}
       </p>
       <p className="chat-empty-sub">{t('chatPane.emptyInputHint')}</p>
+      <p className="chat-empty-sub">{t('chatPane.emptyCmdHint')}</p>
       <ul className="chat-empty-list">
         <Bullet>
           <code>/describe</code> {t('chatPane.bulletDescribe')}

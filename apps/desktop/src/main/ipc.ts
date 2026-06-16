@@ -2,10 +2,18 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
-import { loadAgentRules } from '@meebox/agent';
+import {
+  appendAgentNotes,
+  buildToolCatalog,
+  judgeAutopilotBatch,
+  loadAgentContext,
+  loadAgentRules,
+} from '@meebox/agent';
+import type { AgentContext } from '@meebox/agent';
 import { writeConfig, type BootstrapResult } from '@meebox/config';
 import { PrAgentRunError, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import {
@@ -27,10 +35,19 @@ import {
   startReviewRun,
   updateDraft,
   writeCommentsCache,
+  writeAutopilotLedger,
+  needsAutoReview,
+  getAutopilotLedger,
+  getAgentSession,
+  clearAgentSession,
+  getAgentConversation,
+  appendAgentMessage,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
 import { pickMatchingRule } from '@meebox/rules';
 import type {
+  AgentRecommendationVerdict,
+  AgentSession,
   AppInfo,
   ConnectionSummary,
   IpcChannels,
@@ -52,6 +69,8 @@ import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
 import { checkForUpdate } from './utils/update-check.js';
 import { buildPrContext } from './utils/pr-context.js';
+import { runAgentReview } from './agent-review.js';
+import { runAgentPlanning } from './agent-planning.js';
 
 interface RegisterDeps {
   bootstrap: BootstrapResult;
@@ -86,7 +105,7 @@ export function registerIpcHandlers({
   connectionRuntime,
   reconfigureConnections,
   repoMirror,
-}: RegisterDeps): { abortAllActiveRuns: () => number } {
+}: RegisterDeps): { abortAllActiveRuns: () => number; runAutopilotIfDue: () => void } {
   // === pr-agent run 队列 ===
   //
   // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 worktree)，
@@ -104,6 +123,8 @@ export function registerIpcHandlers({
     pr: StoredPullRequest;
     resolve: (run: ReviewRun) => void;
     reject: (err: Error) => void;
+    /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。见 §7 调度。 */
+    priority: 'user' | 'agent';
     /** 仅 active 状态填；用于 cancel SIGKILL */
     ac?: AbortController;
   }
@@ -136,6 +157,9 @@ export function registerIpcHandlers({
     if (!pr) throw new Error(`PR not found in local state: ${localId}`);
     return pr;
   };
+
+  /** 生效的 Agent 目录：用户配置优先，未配置则回落工作目录默认位置（~/.code-meeseeks/agent）。 */
+  const effectiveAgentDir = (): string => bootstrap.config.agent.dir || bootstrap.paths.agentDir;
 
   // /ask 输出去重：pr-agent answer markdown 里会回显完整问题，跟 UI chat-user-msg
   // 气泡重复。逐行精确匹配 question (含 trim 后) 的行整行删掉，保留其余正文
@@ -853,21 +877,18 @@ export function registerIpcHandlers({
           }
         }
 
-        const agentCfg = bootstrap.config.agent;
-        if (agentCfg.enabled && agentCfg.dir) {
-          const rules = await loadAgentRules(agentCfg.dir, {
-            onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
-          });
-          const matched = pickMatchingRule(rules, {
-            projectKey: pr.repo.projectKey,
-            repoSlug: pr.repo.repoSlug,
-            targetBranch: pr.targetRef.displayId,
-            tool: req.tool,
-          });
-          if (matched) {
-            matchedRuleInstructions = matched.instructions;
-            matchedRuleId = matched.id;
-          }
+        const rules = await loadAgentRules(effectiveAgentDir(), {
+          onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
+        });
+        const matched = pickMatchingRule(rules, {
+          projectKey: pr.repo.projectKey,
+          repoSlug: pr.repo.repoSlug,
+          targetBranch: pr.targetRef.displayId,
+          tool: req.tool,
+        });
+        if (matched) {
+          matchedRuleInstructions = matched.instructions;
+          matchedRuleId = matched.id;
         }
       }
 
@@ -1173,6 +1194,60 @@ export function registerIpcHandlers({
     broadcastQueueChanged();
   };
 
+  /**
+   * 入队一个 pr-agent run（与用户手动 run 共用同一队列 / 并发 / 取消机制）。dedup：同 PR
+   * 同工具已在执行 / 排队则抛错（/ask 不限）。resolve 完成的 ReviewRun。
+   * `pragent:run` handler 与 Agent 编排器（runTool）都走它。
+   */
+  const enqueuePragentRun = (
+    pr: StoredPullRequest,
+    tool: ReviewRunTool,
+    question?: string,
+    priority: 'user' | 'agent' = 'user',
+  ): Promise<ReviewRun> => {
+    if (tool !== 'ask') {
+      const sameTask = (q: QueueItem): boolean =>
+        q.info.prLocalId === pr.localId && q.info.tool === tool;
+      if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
+        throw new Error(t('prAgent.duplicateTask', { tool }));
+      }
+    }
+    // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
+    const runId = makeRunId(new Date());
+    return new Promise<ReviewRun>((resolve, reject) => {
+      const item: QueueItem = {
+        info: {
+          runId,
+          prLocalId: pr.localId,
+          repoSlug: pr.repo.repoSlug,
+          prNumber: pr.remoteId,
+          tool,
+          question: tool === 'ask' ? question : undefined,
+          enqueuedAt: new Date().toISOString(),
+          startedAt: null,
+        },
+        req: { localId: pr.localId, tool, question },
+        pr,
+        priority,
+        resolve,
+        reject,
+      };
+      // 优先级插队：user 任务排到所有 agent 任务之前（同泳道内仍 FIFO）；不打断在跑的 run。
+      if (priority === 'user') {
+        const firstAgentIdx = waiting.findIndex((q) => q.priority === 'agent');
+        if (firstAgentIdx >= 0) waiting.splice(firstAgentIdx, 0, item);
+        else waiting.push(item);
+      } else {
+        waiting.push(item);
+      }
+      logger.info(
+        { runId, localId: pr.localId, tool, priority, queueLen: waiting.length },
+        'pragent run enqueued',
+      );
+      pump();
+    });
+  };
+
   ipcMain.handle(
     'pragent:run',
     async (
@@ -1187,41 +1262,271 @@ export function registerIpcHandlers({
         throw new Error(t('prAgent.askNeedsQuestion'));
       }
       const pr = await findPrOrThrow(req.localId);
-      // 去重（权威）：同一 PR 同一工具已在执行 / 排队 → 拒绝重复触发，避免并发模式下
-      // 对同一 PR 跑多份相同评审。/ask 每次问题不同，不在限制范围。
-      if (req.tool !== 'ask') {
-        const sameTask = (q: QueueItem): boolean =>
-          q.info.prLocalId === pr.localId && q.info.tool === req.tool;
-        if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
-          throw new Error(t('prAgent.duplicateTask', { tool: req.tool }));
-        }
-      }
-      // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
-      const runId = makeRunId(new Date());
-      return new Promise<ReviewRun>((resolve, reject) => {
-        const item: QueueItem = {
-          info: {
-            runId,
-            prLocalId: pr.localId,
-            tool: req.tool,
-            question: req.tool === 'ask' ? req.question : undefined,
-            enqueuedAt: new Date().toISOString(),
-            startedAt: null,
-          },
-          req,
-          pr,
-          resolve,
-          reject,
-        };
-        waiting.push(item);
-        logger.info(
-          { runId, localId: pr.localId, tool: req.tool, queueLen: waiting.length },
-          'pragent run enqueued',
-        );
-        pump();
-      });
+      return enqueuePragentRun(pr, req.tool, req.question);
     },
   );
+
+  // ── Agent 评审编排：共享 chat 通道 + 单 PR 微流程，agent:run 与 AutoPilot 都用 ──
+  type AgentChat = (input: {
+    system: string;
+    user: string;
+  }) => Promise<{ text: string; usage?: TokenUsage }>;
+
+  /** 设置 LLM env + 临时 chat cwd + chat 函数，运行 fn，收尾清理临时目录。 */
+  const withAgentChat = async <T>(fn: (chat: AgentChat) => Promise<T>): Promise<T> => {
+    const bridge = getPrAgentBridge();
+    if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
+    // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。
+    const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
+    const env: Record<string, string> = {
+      ...buildProxyEnv(bootstrap.config.proxy),
+      ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
+      CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
+    };
+    // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
+    const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
+    try {
+      const chat: AgentChat = async ({ system, user }) => {
+        const r = await bridge.chat({ system, user, env, cwd: chatCwd });
+        const acc: UsageAcc = { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
+        for (const line of (r.stderr ?? '').split('\n')) accumulateUsageSentinel(line, acc);
+        return { text: r.stdout.trim(), usage: finalizeUsage(acc) };
+      };
+      return await fn(chat);
+    } finally {
+      await fs.rm(chatCwd, { recursive: true, force: true });
+    }
+  };
+
+  /** 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。 */
+  const runReviewForPr = (
+    pr: StoredPullRequest,
+    agentContext: AgentContext,
+    chat: AgentChat,
+  ): Promise<AgentSession> => {
+    const agentCfg = bootstrap.config.agent;
+    const matchedRule = pickMatchingRule(agentContext.rules, {
+      projectKey: pr.repo.projectKey,
+      repoSlug: pr.repo.repoSlug,
+      targetBranch: pr.targetRef.displayId,
+      tool: 'review',
+    });
+    return runAgentReview(pr, {
+      stateStore,
+      // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。
+      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent'),
+      chat,
+      agentContext,
+      matchedRule,
+      language: getMainLanguage(),
+      // 工具目录注入：修改类工具按 grants 门控（默认全禁，红线见 buildToolCatalog）。
+      toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
+      maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
+      summaryMaxChars: agentCfg.summary_max_chars,
+      onStep: (sessionId, step) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+        }
+      },
+    });
+  };
+
+  ipcMain.handle(
+    'agent:run',
+    async (
+      _evt,
+      req: IpcChannels['agent:run']['request'],
+    ): Promise<IpcChannels['agent:run']['response']> => {
+      if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
+      const pr = await findPrOrThrow(req.localId);
+      // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存。
+      const agentContext = await loadAgentContext(effectiveAgentDir(), {
+        onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
+      });
+      const session = await withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
+      // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（走 1476
+      // 的 runReviewForPr，不经此处）。无文本 / 失败不记。
+      if (session.status === 'done' && session.summary) {
+        await appendAgentMessage(stateStore, pr.localId, {
+          role: 'assistant',
+          content: session.summary,
+          recommendation: session.recommendation,
+        });
+      }
+      return session;
+    },
+  );
+
+  // 自由规划 Agent（自然语言入口）：每 PR 至多一个在跑，AbortController 供 agent:stop 暂停。
+  const agentControllers = new Map<string, AbortController>();
+
+  const runPlanningForPr = (
+    pr: StoredPullRequest,
+    userRequest: string,
+    agentContext: AgentContext,
+    chat: AgentChat,
+    signal: AbortSignal,
+  ): Promise<AgentSession> => {
+    const agentCfg = bootstrap.config.agent;
+    const matchedRule = pickMatchingRule(agentContext.rules, {
+      projectKey: pr.repo.projectKey,
+      repoSlug: pr.repo.repoSlug,
+      targetBranch: pr.targetRef.displayId,
+      tool: 'review',
+    });
+    return runAgentPlanning(pr, userRequest, {
+      stateStore,
+      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent'),
+      chat,
+      agentContext,
+      toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
+      matchedRule,
+      language: getMainLanguage(),
+      maxSteps: agentCfg.max_steps,
+      signal,
+      onStep: (sessionId, step) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+        }
+      },
+      // 持久化 Agent 主动记下的非隐私条目到当前 Agent 目录的各可写文件（USER/MEMORY/AGENTS）；
+      // SOUL.md 永不写。下一轮 loadAgentContext 现读即生效（跨会话记忆）。
+      recordMemory: async (notes) => {
+        const dir = effectiveAgentDir();
+        for (const kind of ['user', 'memory', 'agents'] as const) {
+          const added = await appendAgentNotes(dir, kind, notes[kind]).catch((err: unknown) => {
+            logger.warn({ err, kind }, 'record agent memory failed');
+            return [] as string[];
+          });
+          if (added.length) logger.info({ kind, added }, 'agent memory recorded');
+        }
+      },
+    });
+  };
+
+  ipcMain.handle(
+    'agent:ask',
+    async (
+      _evt,
+      req: IpcChannels['agent:ask']['request'],
+    ): Promise<IpcChannels['agent:ask']['response']> => {
+      if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
+      const pr = await findPrOrThrow(req.localId);
+      const agentContext = await loadAgentContext(effectiveAgentDir(), {
+        onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
+      });
+      const ac = new AbortController();
+      agentControllers.set(pr.localId, ac);
+      try {
+        return await withAgentChat((chat) =>
+          runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
+        );
+      } finally {
+        agentControllers.delete(pr.localId);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'agent:stop',
+    (_evt, req: IpcChannels['agent:stop']['request']): IpcChannels['agent:stop']['response'] => {
+      const ac = agentControllers.get(req.localId);
+      if (!ac) return { ok: false };
+      ac.abort();
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    'agent:getSession',
+    async (
+      _evt,
+      req: IpcChannels['agent:getSession']['request'],
+    ): Promise<IpcChannels['agent:getSession']['response']> =>
+      getAgentSession(stateStore, req.localId),
+  );
+
+  ipcMain.handle(
+    'agent:getConversation',
+    async (
+      _evt,
+      req: IpcChannels['agent:getConversation']['request'],
+    ): Promise<IpcChannels['agent:getConversation']['response']> =>
+      getAgentConversation(stateStore, req.localId),
+  );
+
+  // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===
+  // Agent 编排层全局单并发：一次只跑一遍 pass（busy 锁）；其派发的工具 run 在共享队列并行。
+  // 由 poller onTick 触发（见 index.ts），最小间隔守卫 + 台账去重防止打爆 LLM。
+  let autopilotBusy = false;
+  let lastAutopilotEvalAt = 0;
+  const runAutopilotIfDue = (): void => {
+    const ap = bootstrap.config.agent.autopilot;
+    if (!ap.enabled || autopilotBusy || !getPrAgentBridge()) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastAutopilotEvalAt < ap.min_interval_seconds * 1000) return; // 最小间隔守卫
+    lastAutopilotEvalAt = now;
+    autopilotBusy = true;
+    void (async () => {
+      try {
+        // 候选：未自动评审过当前版本的 PR（台账去重），按 batch_size 截断。
+        const prs = await listStoredPullRequests(stateStore);
+        const candidates: StoredPullRequest[] = [];
+        for (const pr of prs) {
+          if (candidates.length >= ap.batch_size) break;
+          if (await needsAutoReview(stateStore, pr.localId, pr.updatedAt)) candidates.push(pr);
+        }
+        if (candidates.length === 0) return;
+
+        const agentContext = await loadAgentContext(effectiveAgentDir(), {
+          onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
+        });
+        await withAgentChat(async (chat) => {
+          // 批量判定（例外规则来自 AGENTS.md）。
+          const { decisions } = await judgeAutopilotBatch(chat, {
+            candidates: candidates.map((p) => ({
+              prLocalId: p.localId,
+              title: p.title,
+              description: p.description,
+            })),
+            agentsRules: agentContext.files.agents,
+          });
+          const byId = new Map(candidates.map((p) => [p.localId, p] as const));
+          for (const d of decisions) {
+            const pr = byId.get(d.prLocalId);
+            if (!pr) continue;
+            const at = new Date().toISOString();
+            if (!d.review) {
+              await writeAutopilotLedger(stateStore, {
+                prLocalId: pr.localId,
+                autoReviewedUpdatedAt: pr.updatedAt,
+                decision: 'skipped',
+                reason: d.reason,
+                at,
+              });
+              continue;
+            }
+            // 单并发：逐 PR 顺序跑编排（工具 run 在共享队列并行消化）。
+            const session = await runReviewForPr(pr, agentContext, chat);
+            await writeAutopilotLedger(stateStore, {
+              prLocalId: pr.localId,
+              autoReviewedUpdatedAt: pr.updatedAt,
+              decision: 'review',
+              recommendation: session.recommendation?.verdict,
+              at,
+            });
+          }
+        });
+        logger.info({ candidates: candidates.length }, 'autopilot pass done');
+      } catch (err) {
+        logger.warn({ err }, 'autopilot pass failed (ignored)');
+      } finally {
+        autopilotBusy = false;
+      }
+    })();
+  };
 
   ipcMain.handle(
     'pragent:cancel',
@@ -1279,9 +1584,12 @@ export function registerIpcHandlers({
     async (
       _evt,
       req: IpcChannels['pragent:clearRuns']['request'],
-    ): Promise<IpcChannels['pragent:clearRuns']['response']> => ({
-      cleared: await clearReviewRunsForPr(stateStore, req.localId),
-    }),
+    ): Promise<IpcChannels['pragent:clearRuns']['response']> => {
+      // 清执行历史时一并清掉 Agent 会话（含收尾 summary / 步骤 transcript），否则清空后
+      // 重开 PR 仍会从落盘会话恢复出「评审总结」卡片。
+      await clearAgentSession(stateStore, req.localId);
+      return { cleared: await clearReviewRunsForPr(stateStore, req.localId) };
+    },
   );
 
   // === M4 草稿 IPC ===
@@ -1468,17 +1776,45 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
+    'agent:setAutopilotEnabled',
+    async (_evt, req: IpcChannels['agent:setAutopilotEnabled']['request']): Promise<void> => {
+      const agent = {
+        ...bootstrap.config.agent,
+        autopilot: { ...bootstrap.config.agent.autopilot, enabled: req.enabled },
+      };
+      await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, agent });
+      bootstrap.config.agent = agent;
+      logger.info({ enabled: req.enabled }, 'autopilot toggled');
+    },
+  );
+
+  ipcMain.handle(
+    'agent:autopilotLedgers',
+    async (
+      _evt,
+      req: IpcChannels['agent:autopilotLedgers']['request'],
+    ): Promise<IpcChannels['agent:autopilotLedgers']['response']> => {
+      const out: Record<string, AgentRecommendationVerdict> = {};
+      for (const id of req.localIds) {
+        const ledger = await getAutopilotLedger(stateStore, id);
+        if (ledger?.decision === 'review' && ledger.recommendation) {
+          out[id] = ledger.recommendation;
+        }
+      }
+      return out;
+    },
+  );
+
+  ipcMain.handle(
     'rules:matchForPr',
     async (
       _evt,
       req: IpcChannels['rules:matchForPr']['request'],
     ): Promise<IpcChannels['rules:matchForPr']['response']> => {
-      const cfg = bootstrap.config.agent;
-      if (!cfg.enabled || !cfg.dir) return null;
       // ask 工具不接规则 (问答自由形式，没什么"规约"可应用)
       if (req.tool === 'ask') return null;
       const pr = await findPrOrThrow(req.localId);
-      const rules = await loadAgentRules(cfg.dir, {
+      const rules = await loadAgentRules(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
       });
       const matched = pickMatchingRule(rules, {
@@ -1633,6 +1969,8 @@ export function registerIpcHandlers({
       }
       return n;
     },
+    /** 每次 poll tick 由 index.ts 调用：满足开关 + 最小间隔 + 候选时跑一遍 AutoPilot pass。 */
+    runAutopilotIfDue,
   };
 }
 
