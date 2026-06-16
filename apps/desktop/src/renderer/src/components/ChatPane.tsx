@@ -848,7 +848,14 @@ const CHAT_HISTORY_MAX = 5;
  * FindingCard 渲染前 / 转 draft 时统一清洗
  */
 function stripFindingMarker(body: string): string {
-  return body.replace(/\s*\[\s*file\s*:\s*[^\]]*?\]\s*$/i, '').trimEnd();
+  // 路径可能含 `[]`：带 lines 时用惰性 `.+?` + 必现 `, lines:` 后缀界定（`.` 匹配 `]`，不被
+  // 路径里的 `]` 误截）；无 lines 时回退到不含 `]` 的旧式。末尾锚定，只清尾部 marker。
+  return body
+    .replace(
+      /\s*\[\s*file\s*:\s*(?:.+?\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?|[^\]\n]*?)\s*\]\s*$/i,
+      '',
+    )
+    .trimEnd();
 }
 
 /**

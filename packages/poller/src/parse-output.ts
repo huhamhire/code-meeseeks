@@ -444,12 +444,14 @@ function resolveIssueAnchor(link: string | undefined, body: string): FindingAnch
 }
 
 /** 锚点 marker `[file: <path>, lines: <s>-<e>]`（我们 prompt 注入的）。抽成 anchor 后
- *  应从展示 body 删除，否则会作为多余文字泄漏到 finding 正文。 */
+ *  应从展示 body 删除，否则会作为多余文字泄漏到 finding 正文。
+ *  路径本身可能含 `[]`（如 `a/[m-123]/x.ts`）：带 lines 时用惰性 `.+?` + 必现的 `, lines:`
+ *  后缀界定（`.` 可匹配 `]`，故路径里的 `]` 不再误截）；无 lines 时回退到不含 `]` 的旧式。 */
 const ANCHOR_MARKER_RE =
-  /\[\s*file\s*:\s*[^,\]\n]+?(?:\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?)?\s*\]/gi;
+  /\[\s*file\s*:\s*(?:.+?\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?|[^,\]\n]+?)\s*\]/gi;
 
 /** 从 finding body 删掉锚点 marker，并收敛多余空白。 */
-function stripAnchorMarker(body: string): string {
+export function stripAnchorMarker(body: string): string {
   return body
     .replace(ANCHOR_MARKER_RE, '')
     .replace(/[ \t]+\n/g, '\n')
@@ -458,10 +460,12 @@ function stripAnchorMarker(body: string): string {
 }
 
 function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
-  // 显式 marker (我们 prompt 注入的)
-  const markerRe =
-    /\[\s*file\s*:\s*([^,\]\s][^,\]]*?)\s*(?:,\s*lines?\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?\s*\]/i;
-  const mm = markerRe.exec(text);
+  // 显式 marker (我们 prompt 注入的)。带 lines 时路径用惰性 `.+?` + 必现 `, lines:` 后缀界定，
+  // 允许路径含 `[]`（`.` 匹配 `]`，不被路径里的 `]` 误截）；无 lines 时回退到不含 `]` 的旧式。
+  const markerWithLines =
+    /\[\s*file\s*:\s*(.+?)\s*,\s*lines?\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?\s*\]/i;
+  const markerNoLines = /\[\s*file\s*:\s*([^,\]\s][^,\]]*?)\s*\]/i;
+  const mm = markerWithLines.exec(text) ?? markerNoLines.exec(text);
   if (mm) {
     const path = stripBackticks(mm[1]!.trim());
     const anchor: FindingAnchor = { path };
@@ -762,10 +766,11 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
 export function parseImproveOutput(stdout: string): ParsedReviewOutput {
   const cleaned = stripAnsi(stdout).replace(/\r\n/g, '\n');
   const lines = cleaned.split('\n');
-  // file marker 行：`[<path> [<start>-<end>]](<url>)`，path 内不含 `]` / 空白；
-  // range 可能 `[42-45]` 或 `[42]` (单行)
+  // file marker 行：`[<path> [<start>-<end>]](<url>)`，path 内不含空白（但可含 `[]`，如
+  // `a/[m-123]/x.ts`）；range 可能 `[42-45]` 或 `[42]` (单行)。path 用惰性非空白 `[^\s]+?` +
+  // 必现的 ` [<range>]](` 后缀界定，路径里的 `]` 不再误截。
   const markerRe =
-    /^\[([^\]\s]+)\s+\[(\d+)(?:-(\d+))?\]\]\(/;
+    /^\[([^\s]+?)\s+\[(\d+)(?:-(\d+))?\]\]\(/;
   interface Marker {
     idx: number;
     file: string;
