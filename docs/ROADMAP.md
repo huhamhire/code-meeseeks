@@ -44,25 +44,17 @@
 
 ### 已交付 ✅（截至 2026-06-16）
 
-- [x] **GitHub Adapter**：github.com + GitHub Enterprise Server（REST API v3）；统一 `PlatformAdapter`
-  契约 + 一致性测试套件；PR 发现分类（待我评审 / 我创建 / 指派 / 提及，本地缓存按标记过滤）。
-  Bitbucket 同步提供「待我评审 / 我创建」两类。
-- [x] **GitLab Adapter**：gitlab.com + Self-Managed（CE / EE，REST API v4）；复用 `PlatformAdapter` 契约
-  + 一致性测试套件。MR 发现（待我评审 / 我创建 / 指派）、diff 评论读写、合并、clone、头像 / 图片代理；
-  经 `/metadata` 探测 edition，审批能力按 CE / EE 降级（详见 [docs/arch/01-platform-adapter.md](arch/01-platform-adapter.md) §4.3）。
-- [x] 嵌入式 pr-agent 运行时打包（内嵌 Python，免装 Python/Docker）；**移除 Docker 运行策略**（容器装载效率低、与「零依赖」定位不符，embedded / local-cli 已覆盖全部场景）
-- [x] 首发桌面安装包：Windows x64（NSIS）+ macOS arm64（dmg，ad-hoc 签名）
-- [x] 出站 HTTP 代理（LLM / 代码平台 / git HTTPS 统一，loopback 直连）
-- [x] `/review` finding anchor 根因修复（get_line_link 注入）
-- [x] 多 LLM Provider 适配 + 实测验证（openai / anthropic / deepseek / dashscope / volcengine-ark）
-- [x] 真实 token 用量采集（输入 / 输出分列）
-- [x] 首启配置向导
-- [x] 设置页连接 / LLM / 代理可视化 CRUD
-- [x] 单例锁（二次启动聚焦已有窗口）
-- [x] 开源发布准备（README + 开发指南 + Apache-2.0 + NOTICE）
-- [x] **国际化（i18n）**：四语界面（简体中文 / English / 日本語 / Deutsch），AI 回复语言随界面语言
-- [x] **高阶 Agent 评审**（设计见 [06](arch/06-agent.md)）：对话 Agent 化（自然语言 → 自主规划 + 多工具编排）；分层 Agent 目录（`SOUL` / `AGENTS` / `MEMORY` / `USER` / `rules`）+ 长期记忆；过程可观测（think → tool → think 时间线、逐步计时）、可随时停止。配置由 `rules.*` 迁移为 `agent.*`，原 `rules.dir` 并入 `<agent.dir>/rules/`（不做兼容，首启向导给出迁移指引）。
-- [x] **AutoPilot 预评审**（设计见 [06](arch/06-agent.md)）：轮询发现待评审 PR 后规划 agent 批量判定 → 各 PR 子 agent 自动预跑 `/describe` + `/review`（严重问题条件追问 + 逐 PR 总结 / 建议）；准入控制（仅「待我评审·待处理」、跳过已评审、PR 移除 / purge 即终止在途任务）、评估周期对齐轮询间隔、多 PR 并发以填满工具队列；进应用即见待确认草稿（决策权仍在评审者），状态栏开关默认关。
+- [x] 多平台接入：GitHub / Bitbucket / GitLab（含企业自建）
+- [x] PR 发现与分类（待我评审 / 我创建 / 指派 / 提及）
+- [x] 嵌入式 pr-agent 运行时（免装 Python / Docker）
+- [x] 桌面安装包：Windows x64 + macOS arm64
+- [x] 出站 HTTP 代理
+- [x] 多 LLM Provider 适配 + token 用量采集
+- [x] 首启配置向导 + 设置页可视化 CRUD
+- [x] 国际化：四语界面（简体中文 / English / 日本語 / Deutsch）
+- [x] 高阶 Agent 评审：自主规划 + 多工具编排 + 长期记忆 + 过程可观测
+- [x] AutoPilot 预评审：自动预跑评审、准入控制、进应用即见待确认草稿
+- [x] 开源发布（Apache-2.0 + NOTICE）
 
 ### 进行中 / 待办 ⏭️
 
