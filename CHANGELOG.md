@@ -43,6 +43,11 @@
   `http://localhost:11434/v1`）：Ollama 自带 OpenAI 兼容端点，走此路径更标准稳健。旧 `ollama` 配置
   加载时**自动迁移**为 `openai-compatible` 并补足 `/v1`，存量无感升级。
 - `openai-compatible` 经实测标记为**已验证**。
+- **重型组件加载抖动收敛**：切换 PR / 文件时，diff（Monaco）、聊天会话内容等重型区域在
+  异步初始化完成前统一盖一层居中 loading，就绪后一次性 reveal，消除「空白 → 内容弹出 → 折叠跳一下」
+  的多段重排。loading 延迟显示（>150ms 才出现）——本地缓存命中的快切换零闪烁，仅真慢场景才落到
+  loading。Monaco 区域特别处理：从挂载第一帧即盖遮罩、并等折叠（hideUnchangedRegions）布局 paint
+  稳定后才揭开，遮罩底色与编辑器一致、揭开无缝。
 
 ### Fixed
 - 修复 Windows 控制台中文日志仍显示为乱码：① dev 下 electron-vite 把 main 的 stdout 接成管道

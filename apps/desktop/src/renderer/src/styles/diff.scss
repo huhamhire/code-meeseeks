@@ -79,6 +79,13 @@
   }
 }
 
+// Monaco 编辑器外壳：position:relative 作为 diff 就绪前 overlay loading 的定位锚点。
+.diff-pane-editor {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
 .diff-empty {
   display: flex;
   align-items: center;

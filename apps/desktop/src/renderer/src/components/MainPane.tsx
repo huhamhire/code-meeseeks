@@ -14,6 +14,7 @@ import { CommitsPanel } from './CommitsPanel';
 // 不阻塞窗口首帧 / PR 列表 / 首启向导。
 const DiffView = lazy(() => import('./DiffView').then((m) => ({ default: m.DiffView })));
 import { DraftsPanel } from './DraftsPanel';
+import { PaneLoading } from './Loading';
 import { PrInfoView } from './PrInfoView';
 import { PublishReviewModal } from './PublishReviewModal';
 import {
@@ -265,7 +266,8 @@ export function MainPane({
                 aria-busy={merging}
                 title={t('mainPane.mergeTitle')}
               >
-                <PullRequestIcon size={14} /> {merging ? t('mainPane.merging') : t('mainPane.merge')}
+                <PullRequestIcon size={14} />{' '}
+                {merging ? t('mainPane.merging') : t('mainPane.merge')}
               </button>
             )}
             {reviewAllowed('approved') && (
@@ -273,9 +275,7 @@ export function MainPane({
                 className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
                 type="button"
                 disabled={isOwnPr}
-                onClick={() =>
-                  onSetStatus(pr.localStatus === 'approved' ? 'pending' : 'approved')
-                }
+                onClick={() => onSetStatus(pr.localStatus === 'approved' ? 'pending' : 'approved')}
                 title={
                   ownPrReason ??
                   (pr.localStatus === 'approved'
@@ -329,7 +329,10 @@ export function MainPane({
         >
           {t('mainPane.tabComments')}
           {commentCount !== null && commentCount > 0 && (
-            <span className="pr-tab-badge" aria-label={t('mainPane.commentCountAria', { count: commentCount })}>
+            <span
+              className="pr-tab-badge"
+              aria-label={t('mainPane.commentCountAria', { count: commentCount })}
+            >
               {commentCount}
             </span>
           )}
@@ -366,7 +369,10 @@ export function MainPane({
         >
           {t('mainPane.tabCommits')}
           {commitCount !== null && commitCount > 0 && (
-            <span className="pr-tab-badge" aria-label={t('mainPane.commitCountAria', { count: commitCount })}>
+            <span
+              className="pr-tab-badge"
+              aria-label={t('mainPane.commitCountAria', { count: commitCount })}
+            >
               {commitCount}
             </span>
           )}
@@ -400,7 +406,11 @@ export function MainPane({
             >
               <PersonIcon /> {t('mainPane.blame')}
             </button>
-            <div className="diff-mode-toggle" role="tablist" aria-label={t('mainPane.diffModeAria')}>
+            <div
+              className="diff-mode-toggle"
+              role="tablist"
+              aria-label={t('mainPane.diffModeAria')}
+            >
               <button
                 type="button"
                 className={renderSideBySide ? 'active' : ''}
@@ -425,7 +435,7 @@ export function MainPane({
       </nav>
       <div className="pr-tab-content">
         {tab === 'diff' && (
-          <Suspense fallback={<div className="pane-loading muted">{t('mainPane.loadingEditor')}</div>}>
+          <Suspense fallback={<PaneLoading label={t('mainPane.loadingEditor')} />}>
             <DiffView
               pr={pr}
               renderSideBySide={renderSideBySide}
