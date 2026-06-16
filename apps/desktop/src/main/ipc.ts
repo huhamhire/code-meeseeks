@@ -1667,6 +1667,9 @@ export function registerIpcHandlers({
             const pr = byId.get(d.prLocalId);
             if (!pr) continue;
             if (!d.review) {
+              // 输出判定 skip 的原因（候选都已过准入闸、非「已评审」，故这里的原因都是 LLM 的领域判定，
+              // 如分支合并 / 纯依赖升级 — 打出来便于核对「为何没评审这个 PR」）。
+              logger.info({ prLocalId: pr.localId, reason: d.reason }, 'autopilot judge skip');
               await writeAutopilotLedger(stateStore, {
                 prLocalId: pr.localId,
                 autoReviewedUpdatedAt: pr.updatedAt,
