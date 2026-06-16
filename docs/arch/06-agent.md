@@ -140,7 +140,10 @@ ReAct 循环——**每一轮就是一次编排级 LLM 调用**（一个 `AgentS
 - `recommendation`：评审类收尾的非约束性判定（`approve` / `needs_work` / `manual_review` + 理由），
   与 `final` 在**同一次调用**产出，供 UI 展示判定徽标。
 - `remember`：主动记下的**非隐私**条目，按目标可写文件分组（`user` → USER.md / `memory` → MEMORY.md
-  / `agents` → AGENTS.md），随本轮动作一并返回、收尾后落盘（**`SOUL.md` 永不写**）。
+  / `agents` → AGENTS.md），随本轮动作一并返回、收尾后落盘（**`SOUL.md` 永不写**）。每条**必带**
+  `section`：把条目**抽象归纳**后归入目标文件里最贴切的既有 `## 专题章节`（命中则追加到该节末尾、不存在则
+  文件末尾新建），而非统一堆到单一记录区，便于跨会话上下文管理。**无法归入某个专题的条目不是耐久记忆**
+  （多半是本 PR 的发现）——直接丢弃、不记录（无兜底区）。
 
 **路由策略**（写进规划提示词，也在这同一次调用里裁决）：自然对话（问候 / 自我介绍 / 澄清）直接
 `final` 回答、不调工具；评审领域外的任务礼貌拒绝、不调工具；与本 PR 相关但无明确工具指向时默认
@@ -168,7 +171,7 @@ flowchart TD
     SEL --> EXEC["工具执行（跨进程 / 并行）<br/>各为独立 ReviewRun · pr-agent run"]
     EXEC -. "结果回喂 → 下一轮规划调用" .-> CALL
     FIN --> DONE["收尾：落多轮对话消息 + 判定徽标"]
-    REM --> MEM["落盘 USER / MEMORY / AGENTS.md（SOUL 永不写）"]
+    REM --> MEM["按专题章节落盘 USER / MEMORY / AGENTS.md（SOUL 永不写）"]
 ```
 
 固定微流程（§6 的自动评审 / AutoPilot）是另一种形态：工具序列**预定**（describe + review → 条件
