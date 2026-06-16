@@ -7,6 +7,7 @@ import type {
   StoredPullRequest,
 } from '@meebox/shared';
 import { invoke } from '../api';
+import { useChatRunStore } from '../stores/chat-run-store';
 import { PrItem } from './PrItem';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
@@ -90,10 +91,18 @@ export function Sidebar({
   const [filter, setFilter] = useState<FilterKey>('pending');
   // 哪些组当前折叠了。默认空集合 = 全部展开。
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  // AutoPilot 台账 recommendation（per localId），PR 列表徽标用；prs 变化时批量重取。
-  const [autopilotVerdicts, setAutopilotVerdicts] = useState<
+  // 评审建议台账 recommendation（per localId，手动 / AutoPilot 一视同仁），PR 列表 ★ 徽标用；
+  // prs 变化时批量重取。
+  const [reviewVerdicts, setReviewVerdicts] = useState<
     Record<string, AgentRecommendationVerdict>
   >({});
+
+  // 「执行中」指示数据源：运行队列里有在跑 / 排队 run 的 PR 集合（active + waiting），随队列实时变化。
+  const { active, waiting } = useChatRunStore();
+  const executingPrIds = useMemo(
+    () => new Set([...active, ...waiting].map((r) => r.prLocalId)),
+    [active, waiting],
+  );
 
   // 有发现分类标签时（GitHub / Bitbucket 均含「我创建的」），reviewer 决断类（通过/需修改）
   // 只对「待我评审」有意义、其余标签下恒空，故精简隐藏；无分类的场景保持全部六项。
@@ -111,12 +120,12 @@ export function Sidebar({
   useEffect(() => {
     const localIds = prs.map((p) => p.localId);
     if (localIds.length === 0) {
-      setAutopilotVerdicts({});
+      setReviewVerdicts({});
       return;
     }
     let cancelled = false;
     void invoke('agent:autopilotLedgers', { localIds }).then((v) => {
-      if (!cancelled) setAutopilotVerdicts(v);
+      if (!cancelled) setReviewVerdicts(v);
     });
     return () => {
       cancelled = true;
@@ -282,7 +291,8 @@ export function Sidebar({
                         pr={pr}
                         selected={selectedId === pr.localId}
                         onClick={() => onSelect(pr)}
-                        autopilotVerdict={autopilotVerdicts[pr.localId] ?? null}
+                        reviewVerdict={reviewVerdicts[pr.localId] ?? null}
+                        executing={executingPrIds.has(pr.localId)}
                       />
                     ))}
                   </div>

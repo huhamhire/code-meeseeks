@@ -52,6 +52,8 @@ export interface StartReviewRunInput {
    * 未指定时 run.model 留空，UI 自然不展示模型 chip
    */
   model?: string;
+  /** 是否由 AutoPilot 后台自动评审派发；落盘供 UI 在 run 卡片打机器人 chip。 */
+  autopilot?: boolean;
 }
 
 /** 写入初始 running 状态；调用方在 pr-agent 调用前必须先 start。 */
@@ -71,6 +73,7 @@ export async function startReviewRun(
     model: input.model,
     status: 'running',
     startedAt: at.toISOString(),
+    ...(input.autopilot ? { autopilot: true } : {}),
   };
   await stateStore.write<ReviewRunFile>(runKey(run.prLocalId, run.id), {
     schema_version: 1,

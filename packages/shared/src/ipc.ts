@@ -104,6 +104,8 @@ export interface PragentRunInfo {
   enqueuedAt: string;
   /** 开始执行时间，ISO；waiting 状态为 null */
   startedAt: string | null;
+  /** 是否由 AutoPilot 后台自动评审派发；UI 据此在 run 卡片打机器人 chip。 */
+  autopilot?: boolean;
 }
 
 /** 兼容旧引用：active 状态本质就是 startedAt 非空的 PragentRunInfo */

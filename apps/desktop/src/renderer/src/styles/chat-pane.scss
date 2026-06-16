@@ -537,6 +537,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+// AutoPilot 后台派发标记：机器人图标 chip（强调色），与手动触发的 run 区分。
+.chat-run-autopilot {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px $space-2;
+  background: $color-accent-bg-fade;
+  color: $color-accent;
+
+  svg {
+    display: block;
+  }
+}
 // 开始时间：纯文本不带胶囊背景；margin-left:auto 顶到 chip 队列最右，把视觉
 // 权重让给左侧主信息 (tool/状态/strategy/时长)，自己只作为 "什么时候跑的" 标注
 .chat-run-time {

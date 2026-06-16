@@ -297,22 +297,51 @@
     }
   }
 
-  // AutoPilot 建议徽标（★）：approve 绿 / needs_work 琥珀 / manual_review 蓝
-  &.autopilot-chip {
+  // 评审建议徽标（★，手动 / AutoPilot 一视同仁）：approve 绿 / needs_work 琥珀 / manual_review 蓝。
+  // flex 居中让 SVG 星形垂直对齐（此前 ★ 字形基线偏移、不居中）。
+  &.verdict-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 1px $space-2;
 
-    &.autopilot-approve {
+    svg {
+      display: block;
+    }
+
+    &.verdict-chip-approve {
       background: $color-approved;
       color: $text-on-accent;
     }
-    &.autopilot-needs_work {
+    &.verdict-chip-needs_work {
       background: $color-warning;
       color: $text-on-accent;
     }
-    &.autopilot-manual_review {
+    &.verdict-chip-manual_review {
       background: $color-accent;
       color: $text-on-accent;
     }
+  }
+
+  // 执行中指示：蓝底 + 旋转弧动画，表该 PR 有在跑的 agent 任务（同 ★ 位置）。
+  &.executing-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px $space-2;
+    background: $color-accent;
+    color: $text-on-accent;
+
+    svg {
+      display: block;
+      animation: pr-chip-spin 0.8s linear infinite;
+    }
+  }
+}
+
+@keyframes pr-chip-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

@@ -67,6 +67,7 @@
 - **高阶 Agent**（设计见 [06](arch/06-agent.md)）：对话 Agent 化（自然语言 → 自主规划 + 多工具编排）、分层 Agent 目录（`SOUL` / `AGENTS` / `MEMORY` / `USER` / `rules`）、长期记忆。
   - **破坏性变更（落地时）**：配置由 `rules.*` 改为 `agent.*`，原 `rules.dir` 并入 `<agent.dir>/rules/`，**不做兼容**；旧配置需手动迁移（把原 rules 目录移入 `<agent.dir>/rules/`，并补 `SOUL.md` / `AGENTS.md` 等），首启向导给出迁移指引。
 - **AutoPilot 预评审**（设计见 [06](arch/06-agent.md)）：轮询发现新 PR 后，规划 agent 批量判定 → 各 PR 子 agent 自动预跑 `/describe` + `/review`（严重问题条件追问 + 逐 PR 总结 / 建议），进应用即见待确认草稿（决策权仍在评审者）；状态栏 AutoPilot 开关默认关。
+- **CLI 模式下 /ask 仓库文件访问**（设计见 [06](arch/06-agent.md)）：CLI 模式（claude/codex）现把工具子进程落在中性临时目录（避免被评审仓库的 `CLAUDE.md`/`AGENTS.md` 污染输出），故 /ask 只能基于 diff 推理、读不到完整文件。计划仅对 /ask 提供 worktree 工作目录（如经 `MEEBOX_CLI_WORKDIR` env 让 shim 按工具切 cwd，describe/review 维持中性），在"更全的文件上下文"与"仓库自带指令污染"间取舍；或评估 `--add-dir` 只读授权方案。API 模式不涉及（远程接口本就只有 diff）。
 - **规则市场**：导入 / 导出规则片段（`<agent.dir>/rules/`）。
 - **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
 - **大 PR 性能验证**：等真实大样本实测。

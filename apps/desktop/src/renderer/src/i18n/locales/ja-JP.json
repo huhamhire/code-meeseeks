@@ -29,6 +29,7 @@
     "anchorJumpTitle": "コードの該当行へジャンプ",
     "askArgQuestion": "質問",
     "askNeedsQuestion": "/ask には質問の入力が必要です",
+    "autopilotRun": "AutoPilot 自動レビュー",
     "bulletAsk": "pr-agent に直接質問する",
     "bulletDescribe": "PR の概要 / ラベルを自動生成",
     "bulletImprove": "行単位のコード改善提案（重要度スコア付き）",
@@ -508,6 +509,7 @@
   },
   "prItem": {
     "approvedCount_other": "{{count}} 人のレビュアーが承認しました",
+    "executing": "Agent タスク実行中",
     "hasConflict": "マージコンフリクトがあります",
     "mergeable": "マージ可能：すべてのマージ条件を満たしています",
     "needsWorkCount_other": "{{count}} 人のレビュアーが要修正とマークしました"

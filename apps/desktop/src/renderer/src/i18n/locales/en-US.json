@@ -29,6 +29,7 @@
     "anchorJumpTitle": "Jump to the corresponding line in code",
     "askArgQuestion": "question",
     "askNeedsQuestion": "/ask requires a question",
+    "autopilotRun": "AutoPilot auto-review",
     "bulletAsk": "ask pr-agent a direct question",
     "bulletDescribe": "auto-generate PR summary / labels",
     "bulletImprove": "line-by-line code improvement suggestions (with importance scores)",
@@ -522,6 +523,7 @@
   "prItem": {
     "approvedCount_one": "{{count}} reviewer approved",
     "approvedCount_other": "{{count}} reviewers approved",
+    "executing": "Agent task running",
     "hasConflict": "Has merge conflict",
     "mergeable": "Mergeable: all merge conditions met",
     "needsWorkCount_one": "{{count}} reviewer marked needs work",

@@ -20,7 +20,13 @@
     **「待我评审」分类下、「待处理」状态**的 PR 触发；会话中一旦已有 `/describe` 或 `/review` 产出
     （手动或自动）即判定已评审、不再自动触发，避免重复评审。启用开关时（关 → 开）立即触发一次 poll
     并按上述规则评估、按需开评审，不必等下个轮询周期。PR 在 poll 中被移除 / purge 时，其上仍在执行的
-    agent 操作（编排 + 派发的工具 run）一律即时终止，不为已消失的 PR 空耗。
+    agent 操作（编排 + 派发的工具 run）一律即时终止，不为已消失的 PR 空耗。多个待评审 PR 在一轮内
+    并行编排，尽量填满工具的并发队列、不逐 PR 串行空等。
+  - **评审状态可视化**：PR 列表项在同一位置展示——有在跑的 agent 任务时蓝色「执行中」旋转指示，否则
+    展示评审建议 ★（手动 / AutoPilot 一视同仁，approve 绿 / needs_work 琥珀 / manual_review 蓝，SVG
+    居中）；AutoPilot 后台派发的 run 卡片打机器人 chip，与手动触发区分。
+  - **并行多问**：规划 Agent 可在一轮内并行派发多个 `/ask`（`tools` 元素支持 `{tool, question}` 形式），
+    经运行队列并发执行，而非逐个串行。
   - **Agent 上下文目录**：以 SOUL / AGENTS / MEMORY / USER 与 rules/ 规则子目录构成 Agent 的人格与
     知识来源；未配置自定义目录时默认落 `~/.code-meeseeks/agent`，首次启动幂等补齐模版，开箱即用。
 - 设置页「运行环境」新增「关于 & 反馈」入口：GitHub 仓库（Star）/ 提交 Issue / Releases 三个外链

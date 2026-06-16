@@ -132,6 +132,8 @@ export function registerIpcHandlers({
     reject: (err: Error) => void;
     /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。见 §7 调度。 */
     priority: 'user' | 'agent';
+    /** 是否 AutoPilot 后台派发：落盘到 ReviewRun，UI 据此打机器人 chip。 */
+    autopilot?: boolean;
     /** 仅 active 状态填；用于 cancel SIGKILL */
     ac?: AbortController;
   }
@@ -809,6 +811,7 @@ export function registerIpcHandlers({
       // 持久化用 profile.model 原文，不做 normalizeModel 前缀处理 — 跟用户
       // Settings 里看到的名字一致更直观
       model: activeLlmForRecord?.model || undefined,
+      autopilot: item.autopilot,
     });
     // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播
     item.info = { ...item.info, startedAt: run.startedAt };
@@ -1218,6 +1221,7 @@ export function registerIpcHandlers({
     tool: ReviewRunTool,
     question?: string,
     priority: 'user' | 'agent' = 'user',
+    autopilot = false,
   ): Promise<ReviewRun> => {
     if (tool !== 'ask') {
       const sameTask = (q: QueueItem): boolean =>
@@ -1239,10 +1243,12 @@ export function registerIpcHandlers({
           question: tool === 'ask' ? question : undefined,
           enqueuedAt: new Date().toISOString(),
           startedAt: null,
+          ...(autopilot ? { autopilot: true } : {}),
         },
         req: { localId: pr.localId, tool, question },
         pr,
         priority,
+        autopilot,
         resolve,
         reject,
       };
@@ -1392,6 +1398,7 @@ export function registerIpcHandlers({
     agentContext: AgentContext,
     chat: AgentChat,
     signal?: AbortSignal,
+    autopilot = false,
   ): Promise<AgentSession> => {
     const agentCfg = bootstrap.config.agent;
     const matchedRule = pickMatchingRule(agentContext.rules, {
@@ -1403,7 +1410,8 @@ export function registerIpcHandlers({
     return runAgentReview(pr, {
       stateStore,
       // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。
-      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent'),
+      // autopilot 标记落到 run，UI 在卡片上打机器人 chip 区分「后台自动评审」。
+      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent', autopilot),
       chat,
       agentContext,
       matchedRule,
@@ -1676,7 +1684,7 @@ export function registerIpcHandlers({
           // （run-queue maxConcurrency）尽量被填满，而非逐 PR 串行空等。各 PR 写各自的文件，无竞争。
           await Promise.all(
             toReview.map(async (pr) => {
-              const session = await runReviewForPr(pr, agentContext, chat);
+              const session = await runReviewForPr(pr, agentContext, chat, undefined, true);
               // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
               await recordReviewSummaryMessage(pr, session);
               // 失败 / 暂停未落台账 → 补一条去重台账（无 verdict），避免下轮反复重试同版本。

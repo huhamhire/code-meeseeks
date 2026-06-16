@@ -29,6 +29,7 @@
     "anchorJumpTitle": "Zur entsprechenden Zeile im Code springen",
     "askArgQuestion": "Frage",
     "askNeedsQuestion": "/ask erfordert eine Frage",
+    "autopilotRun": "AutoPilot-Auto-Review",
     "bulletAsk": "pr-agent eine direkte Frage stellen",
     "bulletDescribe": "PR-Zusammenfassung / Labels automatisch generieren",
     "bulletImprove": "zeilenweise Vorschläge zur Codeverbesserung (mit Wichtigkeitsbewertung)",
@@ -522,6 +523,7 @@
   "prItem": {
     "approvedCount_one": "{{count}} Reviewer hat genehmigt",
     "approvedCount_other": "{{count}} Reviewer haben genehmigt",
+    "executing": "Agent-Aufgabe läuft",
     "hasConflict": "Merge-Konflikt vorhanden",
     "mergeable": "Mergebar: alle Merge-Bedingungen erfüllt",
     "needsWorkCount_one": "{{count}} Reviewer hat „Nachbesserung nötig“ markiert",

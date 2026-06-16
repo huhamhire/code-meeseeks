@@ -433,6 +433,39 @@ export function RobotIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 实心五角星：评审建议徽标（手动 / AutoPilot 一视同仁）。SVG 保证字形居中、跨平台一致。 */
+export function StarIcon({ size = 11 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M8 1l1.65 4.74 5.01.1-4 3.03 1.45 4.79L8 10.8l-4.11 2.86 1.45-4.79-4-3.03 5.01-.1L8 1z" />
+    </svg>
+  );
+}
+
+/** 旋转加载弧：「正在执行」动画指示（旋转由 CSS `is-spinning` 控制）。 */
+export function SpinnerIcon({ size = 11 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M8 1.6a6.4 6.4 0 1 1-6.4 6.4" />
+    </svg>
+  );
+}
+
 /** 机器人头像 + 斜杠：AutoPilot 关闭态。 */
 export function RobotOffIcon({ size = 14 }: IconProps) {
   return (
