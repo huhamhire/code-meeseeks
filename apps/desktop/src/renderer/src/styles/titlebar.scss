@@ -14,9 +14,10 @@
   // 整条作为拖拽区；内部交互元素需各自 no-drag
   -webkit-app-region: drag;
 
-  // macOS：为左上角红绿灯留位（trafficLightPosition x=12 起，约 3 颗 + 间距）
+  // macOS：为左上角红绿灯留位（trafficLightPosition x=12 起，3 颗 + 间距约到 x≈64）。再留一段
+  // 舒适间隔，避免品牌名紧贴红绿灯显得局促。
   &--mac {
-    padding-left: 72px;
+    padding-left: 92px;
   }
 }
 

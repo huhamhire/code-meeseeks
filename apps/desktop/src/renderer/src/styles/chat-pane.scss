@@ -243,6 +243,17 @@
   font-size: $fs-md; // 略大，标记更醒目
   line-height: 1;
 }
+// AutoPilot 触发标记：评审首步行内的机器人图标（强调色），表「这次评审由 AutoPilot 触发」。
+.chat-agent-step-autopilot {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: $color-accent;
+
+  svg {
+    display: block;
+  }
+}
 // 次行：步骤结果（思考内容 / 判读结论），缩进到首行文案的左缘（= bullet 列宽 + gap）对齐。
 .chat-agent-step-body {
   margin-top: $space-1;

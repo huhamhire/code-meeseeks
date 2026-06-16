@@ -6,6 +6,7 @@ import { JsonFileStateStore } from '@meebox/state-store';
 import {
   finishReviewRun,
   getReviewRun,
+  hasReviewOutput,
   listReviewRunsForPr,
   makeRunId,
   startReviewRun,
@@ -123,6 +124,41 @@ describe('getReviewRun', () => {
   it('找不到时返回 null', async () => {
     const r = await getReviewRun(store, 'abc123def456', 'nope');
     expect(r).toBeNull();
+  });
+});
+
+describe('hasReviewOutput', () => {
+  const pr = 'abc123def456';
+  const startWith = (tool: 'describe' | 'review' | 'ask', at: Date) =>
+    startReviewRun(store, { prLocalId: pr, tool, prAgentVersion: 'v', strategy: 'embedded' }, () => at);
+
+  it('无 run → false', async () => {
+    expect(await hasReviewOutput(store, pr)).toBe(false);
+  });
+
+  it('describe / review 成功 → true', async () => {
+    const r = await startWith('describe', new Date('2026-05-29T10:00:00.000Z'));
+    await finishReviewRun(store, pr, r.id, { status: 'succeeded', finishedAt: 'x', durationMs: 1 });
+    expect(await hasReviewOutput(store, pr)).toBe(true);
+  });
+
+  it('review 正在跑（running）→ true', async () => {
+    await startWith('review', new Date('2026-05-29T10:00:00.000Z'));
+    expect(await hasReviewOutput(store, pr)).toBe(true);
+  });
+
+  it('describe/review 失败 / 取消不算，仍可触发 → false', async () => {
+    const a = await startWith('describe', new Date('2026-05-29T10:00:00.000Z'));
+    await finishReviewRun(store, pr, a.id, { status: 'failed', finishedAt: 'x', durationMs: 1 });
+    const b = await startWith('review', new Date('2026-05-29T10:01:00.000Z'));
+    await finishReviewRun(store, pr, b.id, { status: 'cancelled', finishedAt: 'x', durationMs: 1 });
+    expect(await hasReviewOutput(store, pr)).toBe(false);
+  });
+
+  it('仅 /ask 成功不算「已评审」→ false', async () => {
+    const r = await startWith('ask', new Date('2026-05-29T10:00:00.000Z'));
+    await finishReviewRun(store, pr, r.id, { status: 'succeeded', finishedAt: 'x', durationMs: 1 });
+    expect(await hasReviewOutput(store, pr)).toBe(false);
   });
 });
 

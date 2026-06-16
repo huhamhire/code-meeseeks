@@ -134,6 +134,11 @@ export interface IpcEvents {
   'app:updateAvailable': UpdateCheckResult;
   /** Agent 编排步骤流式推送：每产生一个 AgentStep 即发，renderer 据此实时呈现。 */
   'agent:stepProgress': { sessionId: string; prLocalId: string; step: AgentStep };
+  /**
+   * 某 PR 的多轮对话有新落盘消息（如后台 AutoPilot 评审收尾追加的「评审总结」）。renderer 若正打开
+   * 该 PR 则据此重载会话，让后台产生的总结卡片即时出现（手动评审走 invoke 返回后自行重载，不依赖此事件）。
+   */
+  'agent:conversationChanged': { prLocalId: string };
 }
 
 export type IpcEventName = keyof IpcEvents;

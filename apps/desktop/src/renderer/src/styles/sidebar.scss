@@ -297,23 +297,39 @@
     }
   }
 
-  // AutoPilot 建议徽标（★）：approve 绿 / needs_work 琥珀 / manual_review 蓝
-  &.autopilot-chip {
+  // 评审建议徽标（★，手动 / AutoPilot 一视同仁）：approve 绿 / needs_work 琥珀 / manual_review 蓝。
+  // flex 居中让 SVG 星形垂直对齐（此前 ★ 字形基线偏移、不居中）。
+  &.verdict-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 1px $space-2;
 
-    &.autopilot-approve {
+    svg {
+      display: block;
+    }
+
+    &.verdict-chip-approve {
       background: $color-approved;
       color: $text-on-accent;
     }
-    &.autopilot-needs_work {
+    &.verdict-chip-needs_work {
       background: $color-warning;
       color: $text-on-accent;
     }
-    &.autopilot-manual_review {
+    &.verdict-chip-manual_review {
       background: $color-accent;
       color: $text-on-accent;
     }
   }
+
+}
+
+// 执行中指示：复用运行卡片同款 .spinner（中心对称的蓝色环旋转），裸图标无 chip 外框；
+// 清掉 .spinner 默认的 inline-文字外边距，在徽标行里居中对齐。
+.pr-item-spinner {
+  margin: 0;
+  vertical-align: middle;
 }
 
 .tag-needs-work {

@@ -47,6 +47,8 @@ export interface AgentReviewDeps {
   onStep?: (sessionId: string, step: AgentStep) => void;
   /** 用户停止：透传给微流程，思考 / 执行任意阶段都能立即中止（停止按钮 → agent:stop）。 */
   signal?: AbortSignal;
+  /** 是否 AutoPilot 后台派发：标到本次评审的**首步**上，UI 据此在步骤行打机器人 chip。 */
+  autopilot?: boolean;
 }
 
 /**
@@ -65,6 +67,8 @@ export async function runAgentReview(
     now,
   );
 
+  // AutoPilot 触发时，机器人标记只打在本次评审的**首步**上（首步即「生成 PR 描述与审查发现」）。
+  let firstStep = true;
   try {
     const result = await runReviewMicroflow(
       {
@@ -77,8 +81,10 @@ export async function runAgentReview(
         },
         chat: deps.chat,
         onStep: async (step) => {
-          await appendAgentStep(deps.stateStore, pr.localId, step, now);
-          deps.onStep?.(session.id, step);
+          const tagged = deps.autopilot && firstStep ? { ...step, autopilot: true } : step;
+          firstStep = false;
+          await appendAgentStep(deps.stateStore, pr.localId, tagged, now);
+          deps.onStep?.(session.id, tagged);
         },
         signal: deps.signal,
       },

@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import type { AgentRecommendationVerdict, StoredPullRequest } from '@meebox/shared';
 import { Avatar } from './Avatar';
-import { PersonIcon, PullRequestIcon } from './icons';
+import { PersonIcon, PullRequestIcon, StarIcon } from './icons';
 
-/** AutoPilot 建议 verdict → 复用 chatPane.agent.* 文案（不另加 i18n）。 */
+/** 评审建议 verdict → 复用 chatPane.agent.* 文案（不另加 i18n）。 */
 const VERDICT_TITLE: Record<string, string> = {
   approve: 'chatPane.agent.verdictApprove',
   needs_work: 'chatPane.agent.verdictNeedsWork',
@@ -14,11 +14,13 @@ interface PrItemProps {
   pr: StoredPullRequest;
   selected: boolean;
   onClick: () => void;
-  /** AutoPilot 已自动评审给出的建议倾向（来自台账）；无则不显示徽标。 */
-  autopilotVerdict?: AgentRecommendationVerdict | null;
+  /** 评审建议倾向（手动 / AutoPilot 评审写入的台账，一视同仁）；无则不显示 ★ 徽标。 */
+  reviewVerdict?: AgentRecommendationVerdict | null;
+  /** 该 PR 当前有在执行的 agent 任务（工具 run 在跑 / 排队）：同位置显示蓝色「执行中」动画指示。 */
+  executing?: boolean;
 }
 
-export function PrItem({ pr, selected, onClick, autopilotVerdict }: PrItemProps) {
+export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrItemProps) {
   const { t } = useTranslation();
   const approvedCount = pr.reviewers.filter((r) => r.status === 'approved').length;
   const needsWorkCount = pr.reviewers.filter((r) => r.status === 'needsWork').length;
@@ -60,15 +62,25 @@ export function PrItem({ pr, selected, onClick, autopilotVerdict }: PrItemProps)
               <PersonIcon />
               {pr.author.displayName}
             </span>
-            {(approvedCount > 0 || needsWorkCount > 0 || canMerge || autopilotVerdict) && (
+            {(approvedCount > 0 || needsWorkCount > 0 || canMerge || reviewVerdict || executing) && (
               <span className="pr-item-review-chips">
-                {autopilotVerdict && (
+                {/* 执行中优先占位（同 ★ 位置）：复用运行卡片同款 .spinner（蓝色环旋转、中心对称），
+                    裸图标无 chip 外框，表示该 PR 有在跑的 agent 任务。 */}
+                {executing && (
                   <span
-                    className={`review-chip autopilot-chip autopilot-${autopilotVerdict}`}
-                    title={t(VERDICT_TITLE[autopilotVerdict])}
-                    aria-label={`AutoPilot ${autopilotVerdict}`}
+                    className="spinner pr-item-spinner"
+                    role="img"
+                    title={t('prItem.executing')}
+                    aria-label="executing"
+                  />
+                )}
+                {reviewVerdict && (
+                  <span
+                    className={`review-chip verdict-chip verdict-chip-${reviewVerdict}`}
+                    title={t(VERDICT_TITLE[reviewVerdict])}
+                    aria-label={`review ${reviewVerdict}`}
                   >
-                    ★
+                    <StarIcon />
                   </span>
                 )}
                 {canMerge && (

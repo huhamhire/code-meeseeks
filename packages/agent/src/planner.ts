@@ -67,8 +67,11 @@ export interface PlanningResult {
 interface PlannerAction {
   thought?: string;
   tool?: string;
-  /** 一次并行多选只读工具（如 describe + review）；与 tool 二选一，tools 优先。 */
-  tools?: string[];
+  /**
+   * 一次并行多选只读工具（如 describe + review，或多个 /ask）；与 tool 二选一，tools 优先。
+   * 元素可为工具名字符串，或 `{tool, question}` 对象——后者让一轮里并行派发多个带问题的 /ask。
+   */
+  tools?: Array<string | { tool?: string; question?: string }>;
   question?: string;
   final?: string;
   /** 评审类收尾的非约束性判定建议（verdict + 理由）；非评审请求省略。 */
@@ -169,11 +172,13 @@ function buildProtocol(sections: readonly [string, string, string]): string {
     'Each turn, reply with JSON ONLY for the next action:',
     '- One tool:   {"thought": "...", "tool": "/review", "question": "<only for /ask>"}',
     '- Several read-only tools AT ONCE (run in parallel, at most 3): {"thought": "...", "tools": ["/describe", "/review"]}',
+    '- Several /ask at once (parallel): {"thought": "...", "tools": [{"tool": "/ask", "question": "Q1"}, {"tool": "/ask", "question": "Q2"}]}',
     '- Finish:     {"thought": "...", "final": "<your answer to the user>"}',
     'Only call tools listed under "Available tools" that are NOT disabled. Prefer few precise steps,',
-    'but when the request needs multiple independent read-only tools (e.g. summary AND review), call',
-    'them together via "tools" so they run in parallel instead of one per turn. Use "tool"+"question"',
-    'for /ask (single only).',
+    'but when the request needs multiple independent read-only tools (e.g. summary AND review, or several',
+    'distinct questions), call them together via "tools" so they run in parallel instead of one per turn.',
+    'In "tools" each element is either a tool name (e.g. "/review") or, for /ask, an object',
+    '{"tool": "/ask", "question": "..."} — use the object form to fire several /ask questions concurrently.',
     'Closing a CODE REVIEW: when your final answer reviews this PR, you MUST follow this fixed shape —',
     `format "final" as markdown with these sections in order: "## ${overview}" (PR summary), "## ${findings}"`,
     `(must-fix / concerns as a bulleted list, empty-safe), "## ${suggestions}" (next steps); AND include a`,
@@ -284,9 +289,16 @@ export async function runPlanningAgent(
       };
     }
 
-    // 归一为待执行工具列表：tools 多选（并行、只读，无 per-tool question）优先；否则单 tool（可带 question）。
+    // 归一为待执行工具列表：tools 多选（并行、只读）优先——元素可为工具名或 {tool, question}（多个
+    // 带问题的 /ask 也能一轮并行派发）；否则单 tool（可带 question）。
     const requested: Array<{ tool: string; question?: string }> = action.tools?.length
-      ? action.tools.slice(0, MAX_PARALLEL_TOOLS).map((tl) => ({ tool: tl }))
+      ? action.tools
+          .slice(0, MAX_PARALLEL_TOOLS)
+          .map((tl) =>
+            typeof tl === 'string'
+              ? { tool: tl }
+              : { tool: tl.tool ?? '', question: tl.question },
+          )
       : [{ tool: action.tool ?? '', question: action.question }];
 
     // 红线硬校验逐个把关：未授权 / 未知即拒并回喂；允许的留待并行执行。

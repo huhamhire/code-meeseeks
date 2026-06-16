@@ -26,6 +26,7 @@ import {
   isCommentsCacheStale,
   listDrafts,
   listReviewRunsForPr,
+  hasReviewOutput,
   clearReviewRunsForPr,
   listStoredPullRequests,
   makeRunId,
@@ -36,7 +37,6 @@ import {
   updateDraft,
   writeCommentsCache,
   writeAutopilotLedger,
-  needsAutoReview,
   getAutopilotLedger,
   getAgentSession,
   clearAgentSession,
@@ -107,7 +107,11 @@ export function registerIpcHandlers({
   connectionRuntime,
   reconfigureConnections,
   repoMirror,
-}: RegisterDeps): { abortAllActiveRuns: () => number; runAutopilotIfDue: () => void } {
+}: RegisterDeps): {
+  abortAllActiveRuns: () => number;
+  runAutopilotIfDue: () => void;
+  terminateAgentsForGonePrs: () => void;
+} {
   // === pr-agent run 队列 ===
   //
   // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 worktree)，
@@ -1342,12 +1346,52 @@ export function registerIpcHandlers({
   // agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
   const agentControllers = new Map<string, AbortController>();
 
+  /** 取消某 PR 的全部 pr-agent run：active 的 SIGKILL，waiting 的出队 + reject。 */
+  const cancelRunsForPr = (localId: string): void => {
+    for (const item of active.values()) if (item.req.localId === localId) item.ac?.abort();
+    let removed = false;
+    for (let i = waiting.length - 1; i >= 0; i--) {
+      if (waiting[i]!.req.localId === localId) {
+        const [q] = waiting.splice(i, 1);
+        q!.reject(new Error('pr removed'));
+        removed = true;
+      }
+    }
+    if (removed) broadcastQueueChanged();
+  };
+
+  /** 终止某 PR 上的全部 agent 操作：中止编排（agent:run/ask）+ 取消其派发的工具 run。 */
+  const terminateAgentForPr = (localId: string): void => {
+    agentControllers.get(localId)?.abort();
+    cancelRunsForPr(localId);
+  };
+
+  /**
+   * poll tick 后调用：把已被移除 / purge（不再在 listStoredPullRequests 里）的 PR 上仍在执行的
+   * agent 操作一律直接终止——PR 都没了，继续评审无意义且浪费 LLM / 占用 worktree。
+   */
+  const terminateAgentsForGonePrs = async (): Promise<void> => {
+    const opPrIds = new Set<string>();
+    for (const id of agentControllers.keys()) opPrIds.add(id);
+    for (const item of active.values()) opPrIds.add(item.req.localId);
+    for (const item of waiting) opPrIds.add(item.req.localId);
+    if (opPrIds.size === 0) return;
+    const live = new Set((await listStoredPullRequests(stateStore)).map((p) => p.localId));
+    for (const id of opPrIds) {
+      if (!live.has(id)) {
+        logger.info({ prLocalId: id }, 'agent ops terminated: pr removed/purged');
+        terminateAgentForPr(id);
+      }
+    }
+  };
+
   /** 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。 */
   const runReviewForPr = (
     pr: StoredPullRequest,
     agentContext: AgentContext,
     chat: AgentChat,
     signal?: AbortSignal,
+    autopilot = false,
   ): Promise<AgentSession> => {
     const agentCfg = bootstrap.config.agent;
     const matchedRule = pickMatchingRule(agentContext.rules, {
@@ -1370,7 +1414,37 @@ export function registerIpcHandlers({
       summaryMaxChars: agentCfg.summary_max_chars,
       onStep: (sessionId, step) => emitAgentStep(pr, sessionId, step),
       signal,
+      autopilot,
     });
+  };
+
+  /**
+   * 评审收尾的统一落地（手动一键评审与 AutoPilot 背景评审共用）：仅成功收尾（done）且有总结时——
+   * ① 追加一条 assistant 评审消息（UI 渲染「评审总结」卡片）；② 写评审台账（recommendation + 当前
+   *    updatedAt）。台账既给 PR 列表的建议徽标（★，手动 / 自动一视同仁），也供 AutoPilot 同版本去重。
+   * 失败 / 用户停止（paused）不落，便于后续重试。
+   */
+  const recordReviewSummaryMessage = async (
+    pr: StoredPullRequest,
+    session: AgentSession,
+  ): Promise<void> => {
+    if (session.status !== 'done' || !session.summary) return;
+    await appendAgentMessage(stateStore, pr.localId, {
+      role: 'assistant',
+      content: session.summary,
+      recommendation: session.recommendation,
+    });
+    await writeAutopilotLedger(stateStore, {
+      prLocalId: pr.localId,
+      autoReviewedUpdatedAt: pr.updatedAt,
+      decision: 'review',
+      recommendation: session.recommendation?.verdict,
+      at: new Date().toISOString(),
+    });
+    // 通知渲染层：若正打开该 PR，重载会话让后台评审的「评审总结」卡片即时出现（手动评审自行重载，重复无害）。
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('agent:conversationChanged', { prLocalId: pr.localId });
+    }
   };
 
   ipcMain.handle(
@@ -1398,15 +1472,8 @@ export function registerIpcHandlers({
           { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
           'agent review done',
         );
-        // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（不经此处）。
-        // 仅成功收尾才记：失败 / 用户停止（paused）不落消息。
-        if (session.status === 'done' && session.summary) {
-          await appendAgentMessage(stateStore, pr.localId, {
-            role: 'assistant',
-            content: session.summary,
-            recommendation: session.recommendation,
-          });
-        }
+        // 收尾总结计入多轮对话（assistant 评审消息）→ UI 渲染「评审总结」卡片。
+        await recordReviewSummaryMessage(pr, session);
         return session;
       } finally {
         agentControllers.delete(pr.localId);
@@ -1529,28 +1596,56 @@ export function registerIpcHandlers({
 
   // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===
   // Agent 编排层全局单并发：一次只跑一遍 pass（busy 锁）；其派发的工具 run 在共享队列并行。
-  // 由 poller onTick 触发（见 index.ts），最小间隔守卫 + 台账去重防止打爆 LLM。
+  // 触发节奏对齐轮询：每个 poller onTick（间隔 = poller.interval_seconds）评估一遍，不再另设独立的最小
+  // 间隔守卫——准入门控 + 台账去重已防止重复评审 / 打爆 LLM；busy 锁防止上一遍未完又叠跑。
   let autopilotBusy = false;
-  let lastAutopilotEvalAt = 0;
   const runAutopilotIfDue = (): void => {
     const ap = bootstrap.config.agent.autopilot;
     if (!ap.enabled || autopilotBusy || !getPrAgentBridge()) {
       return;
     }
-    const now = Date.now();
-    if (now - lastAutopilotEvalAt < ap.min_interval_seconds * 1000) return; // 最小间隔守卫
-    lastAutopilotEvalAt = now;
     autopilotBusy = true;
     void (async () => {
       try {
-        // 候选：未自动评审过当前版本的 PR（台账去重），按 batch_size 截断。
+        // 候选准入（硬性门控，自上而下）：
+        //   1. 仅「待我评审」分类（discoveryFilters 含 review-requested）下、「待处理」状态（localStatus
+        //      === 'pending'）的 PR —— 已通过 / 标记需修改、或非待我评审的一律不自动评审。
+        //      （不支持发现分类的平台 discoveryFilters 为空 → 不命中，自然不自动触发。）
+        //   2. 会话中已有 /describe 或 /review 产出（成功 / 正在跑，手动或自动）→ 判定已评审过 / 评审中，
+        //      不再自动触发（评审失败无产出 → 不算，下轮可重试）。
+        //   3. 仅排除「本版本已被判定跳过」的 PR（台账 decision='skipped'）——避免对判过 skip 的 PR 反复
+        //      重判；无产出又未被 skip 的待评审 PR 一律放行（不再因台账有任意记录就拦下）。
+        //   再按 batch_size 截断。
         const prs = await listStoredPullRequests(stateStore);
         const candidates: StoredPullRequest[] = [];
+        // 准入漏斗计数（用于 0 候选时定位卡在哪一道闸——便于排查「为何不再触发」）。
+        let reviewReqPending = 0; // 命中「待我评审 + 待处理」
+        let alreadyReviewed = 0; // 其中已有 describe/review 产出（成功 / 进行中）而被排除
+        let skipDeduped = 0; // 其中本版本已被判定跳过而被排除
         for (const pr of prs) {
           if (candidates.length >= ap.batch_size) break;
-          if (await needsAutoReview(stateStore, pr.localId, pr.updatedAt)) candidates.push(pr);
+          if (!pr.discoveryFilters.includes('review-requested')) continue;
+          if (pr.localStatus !== 'pending') continue;
+          reviewReqPending++;
+          if (await hasReviewOutput(stateStore, pr.localId)) {
+            alreadyReviewed++;
+            continue;
+          }
+          const ledger = await getAutopilotLedger(stateStore, pr.localId);
+          if (ledger?.decision === 'skipped' && ledger.autoReviewedUpdatedAt === pr.updatedAt) {
+            skipDeduped++;
+            continue;
+          }
+          candidates.push(pr);
         }
-        if (candidates.length === 0) return;
+        if (candidates.length === 0) {
+          // 仍在按周期评估，只是当前无新合格 PR——把漏斗计数打出来，避免被误读成「没在跑」。
+          logger.info(
+            { total: prs.length, reviewReqPending, alreadyReviewed, skipDeduped },
+            'autopilot pass: no eligible candidates',
+          );
+          return;
+        }
 
         const agentContext = await loadAgentContext(effectiveAgentDir(), {
           onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
@@ -1566,30 +1661,33 @@ export function registerIpcHandlers({
             agentsRules: agentContext.files.agents,
           });
           const byId = new Map(candidates.map((p) => [p.localId, p] as const));
+          // 先落「跳过」决策（无工具开销，顺序写盘即可）；收集「评审」决策待并行编排。
+          const toReview: StoredPullRequest[] = [];
           for (const d of decisions) {
             const pr = byId.get(d.prLocalId);
             if (!pr) continue;
-            const at = new Date().toISOString();
             if (!d.review) {
               await writeAutopilotLedger(stateStore, {
                 prLocalId: pr.localId,
                 autoReviewedUpdatedAt: pr.updatedAt,
                 decision: 'skipped',
                 reason: d.reason,
-                at,
+                at: new Date().toISOString(),
               });
               continue;
             }
-            // 单并发：逐 PR 顺序跑编排（工具 run 在共享队列并行消化）。
-            const session = await runReviewForPr(pr, agentContext, chat);
-            await writeAutopilotLedger(stateStore, {
-              prLocalId: pr.localId,
-              autoReviewedUpdatedAt: pr.updatedAt,
-              decision: 'review',
-              recommendation: session.recommendation?.verdict,
-              at,
-            });
+            toReview.push(pr);
           }
+          // 多 PR 评审并行编排：各编排 await 自己的工具 run 时彼此不挡，让工具的并发队列
+          // （run-queue maxConcurrency）尽量被填满，而非逐 PR 串行空等。各 PR 写各自的文件，无竞争。
+          await Promise.all(
+            toReview.map(async (pr) => {
+              const session = await runReviewForPr(pr, agentContext, chat, undefined, true);
+              // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
+              // 失败 / 暂停不落台账 → 无产出，下轮可重试（准入闸 2 用 hasReviewOutput 判，不再靠台账拦）。
+              await recordReviewSummaryMessage(pr, session);
+            }),
+          );
         });
         logger.info({ candidates: candidates.length }, 'autopilot pass done');
       } catch (err) {
@@ -1850,6 +1948,7 @@ export function registerIpcHandlers({
   ipcMain.handle(
     'agent:setAutopilotEnabled',
     async (_evt, req: IpcChannels['agent:setAutopilotEnabled']['request']): Promise<void> => {
+      const was = bootstrap.config.agent.autopilot.enabled;
       const agent = {
         ...bootstrap.config.agent,
         autopilot: { ...bootstrap.config.agent.autopilot, enabled: req.enabled },
@@ -1857,6 +1956,11 @@ export function registerIpcHandlers({
       await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, agent });
       bootstrap.config.agent = agent;
       logger.info({ enabled: req.enabled }, 'autopilot toggled');
+      // 关 → 开：立即触发一次 poll（刷新 PR 列表 / 状态），其 onTick 即按准入规则评估并按需开评审，
+      // 不必等下个轮询周期。
+      if (req.enabled && !was) {
+        void poller.tick();
+      }
     },
   );
 
@@ -2043,6 +2147,8 @@ export function registerIpcHandlers({
     },
     /** 每次 poll tick 由 index.ts 调用：满足开关 + 最小间隔 + 候选时跑一遍 AutoPilot pass。 */
     runAutopilotIfDue,
+    /** 每次 poll tick 由 index.ts 调用：终止已被移除 / purge 的 PR 上仍在执行的 agent 操作。 */
+    terminateAgentsForGonePrs: () => void terminateAgentsForGonePrs(),
   };
 }
 

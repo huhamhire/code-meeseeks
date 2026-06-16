@@ -298,17 +298,27 @@ flowchart TD
 **启用开关**：底部状态栏新增 **AutoPilot 按钮**，默认**禁用**，用户手动启用；
 状态持久化于配置（`agent.autopilot.enabled`，默认 `false`）。禁用时下述逻辑完全不跑。
 
-**触发与最小间隔**：AutoPilot 挂在 Poller 的「PR 变更」回调上，但**并非每次 poll 都唤起 AI**。
-两道闸：
+**触发与准入闸**：AutoPilot 挂在 Poller 的「PR 变更」回调上，**评估节奏对齐轮询**——每个 poller tick
+（间隔 = `poller.interval_seconds`）评估一遍，不再单设独立的最小间隔守卫；准入门控 + 台账去重已防止重复
+评审 / 打爆 LLM，全局 `busy` 锁防止上一遍未完又叠跑。此外**启用开关时（关 → 开）立即触发一次 poll**，
+让本轮即时评估、不必等下个轮询周期。自上而下的准入门控（任一不满足即跳过该 PR）：
 
-1. **最小间隔守卫** `agent.autopilot.min_interval_seconds`（默认取较大值）——距上次 AI
-   评估不足间隔则本轮跳过，避免高频轮询把 LLM 判定打爆。
-2. **候选去重**——只对「新发现」或「内容已变更且未自动评审过当前版本」的 PR 触发。
+1. **分类 + 状态硬门控**——只对**「待我评审」分类**（`discoveryFilters` 含 `review-requested`）下、
+   **「待处理」状态**（`localStatus === 'pending'`）的 PR 触发；已通过 / 标记需修改、或非「待我评审」
+   的一律不自动评审。不支持发现分类的平台（`discoveryFilters` 为空）天然不命中。
+2. **已评审即止**——会话中一旦已有 `/describe` 或 `/review` 的有效产出（成功或正在跑，手动或自动皆算）
+   即判定已评审过 / 评审中，不再自动触发（见 `hasReviewOutput`）；评审**失败无产出**则不算、下轮可重试。
+3. **跳过去重（台账）**——仅排除「本版本已被 LLM 判定 skip」的 PR（台账 `decision='skipped'` 且
+   `autoReviewedUpdatedAt` 等于当前 `updatedAt`），避免对判过 skip 的 PR 反复重判；无产出又未被 skip 的
+   待评审 PR 一律放行（**不再因台账里有任意记录就拦下**——「已成功评审」由准入闸 2 用产出判定，不靠台账）。
 
-**自动评审状态记录（ledger）**：每个 PR 记录一份 AutoPilot 台账（`autoReviewedAt` / 评审时所对应的
-PR `updatedAt` / 判定结果与原因）。是否「未执行过自动化 review」据此判定：台账记录的 `updatedAt`
-与当前 PR `updatedAt` 不一致（含从无记录）即视为待处理——这样 PR 被推新 commit 后能再次进入候选，
-而内容未变则不重复跑。
+**自动评审状态记录（ledger）**：每个 PR 记录一份 AutoPilot 台账（评审时所对应的 PR `updatedAt` / 判定
+结果与原因 / 建议倾向）。台账主要供：① PR 列表的建议徽标（★，手动 / 自动一视同仁）；② 上述「跳过去重」
+（只看 `decision='skipped'`）。PR 被推新 commit（`updatedAt` 变）后，旧 skip 记录自然失效、可再次进入候选。
+
+**移除 / purge 即终止**：每轮 poll tick 后，对**已不在本地 PR 列表**（被移除 / 软删后 purge）的 PR，
+若其上仍有在执行的 agent 操作（编排控制器 + 派发到运行队列的工具 run），一律直接终止——PR 都没了，
+继续评审无意义且空耗 LLM / 占用 worktree。
 
 **批量判定（例外规则）**：候选 PR 不无脑全跑，先过一道 LLM 判定：
 
@@ -428,8 +438,8 @@ AutoPilot 可执行自动发布 comment、自动 `approve` / `needswork`。**默
 - `agent.enabled`：总开关。
 - `agent.max_steps`：单会话步数上限（默认取小值）。
 - `agent.summary_max_chars`：收尾总结的严格篇幅上限（默认数百字内）。
-- `agent.autopilot.enabled`：AutoPilot 开关（默认 `false`）。
-- `agent.autopilot.min_interval_seconds`：两次 AI 评估的最小间隔。
+- `agent.autopilot.enabled`：AutoPilot 开关（默认 `false`）。评估节奏对齐轮询（每个 poller tick 一遍），
+  不再单设最小间隔配置。
 - `agent.autopilot.batch_size`：单批判定的 PR 上限（默认 10）。
 - `agent.autopilot.max_followup_asks`：自动评审微流程中条件性追问 `/ask` 的硬上限（默认 2）。
 - `agent.autopilot.max_steps`：每个 PR 的子 agent 的结构化步数 backstop（默认按微流程模板推导：≈

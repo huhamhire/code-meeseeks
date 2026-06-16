@@ -27,6 +27,7 @@ import {
   CloseIcon,
   QuestionIcon,
   RetryIcon,
+  RobotIcon,
   SendIcon,
   StopIcon,
   TrashIcon,
@@ -297,6 +298,14 @@ export function ChatPane({
       // 供下方与 run 卡片按时间归并排序（自然时间顺序展示）。
       if (ev.prLocalId === prLocalId)
         setAgentSteps((s) => [...s, { ...ev.step, at: ev.step.at ?? new Date().toISOString() }]);
+    });
+  }, [prLocalId]);
+
+  // 后台评审（AutoPilot）收尾追加「评审总结」消息时，若正打开该 PR 则重载会话，让总结卡片即时出现。
+  useEffect(() => {
+    if (!prLocalId) return;
+    return subscribe('agent:conversationChanged', (ev) => {
+      if (ev.prLocalId === prLocalId) void reloadConversation(prLocalId);
     });
   }, [prLocalId]);
 
@@ -722,13 +731,14 @@ export function ChatPane({
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
         )}
-        {/* 本 PR 排队中的任务：贴在运行中之后，按队列顺序展示，可单条取消 */}
-        {myWaiting.map((w, i) => (
+        {/* 本 PR 排队中的任务：贴在运行中之后，可单条取消。位次取**全局**队列位序（队列跨 PR 共享，
+            否则每个 PR 都显示「第 1 位」会误导）——以 runId 在全局 waiting 数组里的下标 +1 为序。 */}
+        {myWaiting.map((w) => (
           <QueuedView
             key={w.runId}
             tool={w.tool}
             question={w.question}
-            position={i + 1}
+            position={waiting.findIndex((x) => x.runId === w.runId) + 1}
             onCancel={() => void handleCancel(w.runId)}
           />
         ))}
@@ -1403,6 +1413,12 @@ function AgentStepRow({ step }: { step: AgentStep }) {
         <span className="chat-agent-step-bullet" aria-hidden>
           •
         </span>
+        {/* AutoPilot 后台评审的首步打机器人 chip，标识「这次评审由 AutoPilot 触发」。 */}
+        {step.autopilot && (
+          <span className="chat-agent-step-autopilot" title={t('chatPane.autopilotRun')}>
+            <RobotIcon size={12} />
+          </span>
+        )}
         {headText && <span>{headText}</span>}
       </div>
       {hasTime && step.thought && <div className="chat-agent-step-body">{step.thought}</div>}

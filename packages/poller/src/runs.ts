@@ -178,3 +178,17 @@ export async function listReviewRunsForPr(
   }
   return out;
 }
+
+/**
+ * 该 PR 是否已有 /describe 或 /review 的有效产出（已成功，或正在跑）。用于 AutoPilot 准入：
+ * 会话中一旦有 describe/review 输出（手动或自动）即判定已评审过，不再自动触发，避免重复评审。
+ * 失败 / 取消的 run 不算（未产出有效结果），仍可触发。
+ */
+export async function hasReviewOutput(stateStore: StateStore, prLocalId: string): Promise<boolean> {
+  const runs = await listReviewRunsForPr(stateStore, prLocalId);
+  return runs.some(
+    (r) =>
+      (r.tool === 'describe' || r.tool === 'review') &&
+      (r.status === 'succeeded' || r.status === 'running'),
+  );
+}

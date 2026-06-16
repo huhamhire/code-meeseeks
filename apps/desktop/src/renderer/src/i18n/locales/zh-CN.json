@@ -29,6 +29,7 @@
     "anchorJumpTitle": "跳转到代码对应行",
     "askArgQuestion": "问题",
     "askNeedsQuestion": "/ask 需要输入问题内容",
+    "autopilotRun": "AutoPilot 自动评审",
     "bulletAsk": "向 pr-agent 直接提一个问题",
     "bulletDescribe": "自动生成 PR 摘要 / labels",
     "bulletImprove": "逐行代码改进建议（带重要度评分）",
@@ -508,6 +509,7 @@
   },
   "prItem": {
     "approvedCount_other": "{{count}} 位 reviewer 已 approve",
+    "executing": "Agent 任务执行中",
     "hasConflict": "存在合并冲突",
     "mergeable": "可合并：已满足所有合并条件",
     "needsWorkCount_other": "{{count}} 位 reviewer 标记 needs work"
