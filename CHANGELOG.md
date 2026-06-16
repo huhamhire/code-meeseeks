@@ -32,7 +32,11 @@
 - `openai-compatible` 经实测标记为**已验证**。
 
 ### Fixed
-- 修复 Windows 控制台中文日志显示为乱码：启动期将输出代码页对齐为 UTF-8（cp936/GBK → 65001）。
+- 修复 Windows 控制台中文日志仍显示为乱码：① dev 下 electron-vite 把 main 的 stdout 接成管道
+  （`isTTY=false`）原会跳过转码，UTF-8 字节被 CJK 控制台按 GBK/SJIS 渲染——改为 `pretty` 模式不卡
+  `isTTY`（与上色路径一致）；② 启动期探测真实活动代码页（`chcp`）替代按 locale 猜测：UTF-8 控制台
+  （65001）直出 UTF-8，CJK 代码页（cp936/cp932/cp949/cp950）转码到对应页，避免用户已 `chcp 65001`
+  切到 UTF-8 时反而把正确输出转乱。
 
 ## [0.4.0] - 2026-06-14
 
