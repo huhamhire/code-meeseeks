@@ -10,6 +10,7 @@
   "Recommended focus areas for review:": "レビューで重点的に確認すべき領域：",
   "No security concerns identified": "セキュリティ上の懸念は見つかりませんでした",
   "Security concerns": "セキュリティ上の懸念",
+  "Sensitive information exposure": "機密情報の漏えい",
   "Major issues detected": "重大な問題が検出されました",
   "No major issues detected": "重大な問題は検出されませんでした",
   "Possible issues": "潜在的な問題",

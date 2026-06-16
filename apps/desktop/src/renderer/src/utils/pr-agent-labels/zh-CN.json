@@ -10,6 +10,7 @@
   "Recommended focus areas for review:": "建议重点评审区域：",
   "No security concerns identified": "未发现安全风险",
   "Security concerns": "安全关注",
+  "Sensitive information exposure": "敏感信息泄露",
   "Major issues detected": "发现重大问题",
   "No major issues detected": "未发现重大问题",
   "Possible issues": "潜在问题",
