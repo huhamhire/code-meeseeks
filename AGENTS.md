@@ -50,6 +50,17 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 
 环境：Node ≥ 20（实测 22）、npm ≥ 10。**包管理器统一用 npm**（workspaces，lockfile `package-lock.json`）——勿用 yarn / pnpm。
 
+## 依赖同步
+
+**每次拉取代码后、以及发布前**，在仓库根目录执行一次完整安装并对齐运行时：
+
+```bash
+npm install                                      # 完整安装依赖、对齐 package-lock.json（workspaces 软链）
+npm --prefix apps/desktop run prepare:pragent    # 对齐嵌入式 pr-agent 运行时与 shim（见 docs/arch/04）
+```
+
+`npm install`（非 `npm ci`）会按 `package.json` 解析并写回 lockfile，确保本地与远端 `package-lock.json` 一致；`prepare:pragent` 幂等，按 `pragent-runtime.json` 对齐本地 pr-agent 运行时（版本不变则跳过、仅同步 shim）。lockfile 若被改动，按本次改动归属一并提交。
+
 ## 提交前必做
 
 改完代码务必本地跑通这四步再收尾（CI 就是这套）：`lint` → `typecheck` → `test` → `build`。lint 零容忍（`--max-warnings=0`），warning 也会让 CI 红。
@@ -67,7 +78,7 @@ npm --prefix apps/desktop run dist              # 出安装包（见 docs/develo
 
 ## 国际化 (i18n)
 
-GUI 文本走 **react-i18next**（key 为中立标识符，`zh-CN` / `en-US` / `ja-JP` / `de-DE` 为**对等译文集**，无源/译层级；UI 语言由 `config.language` 经 `resolveLanguage` 决定，空则按 OS 回落英语）。**默认 / 兜底语言取 `en-US`**（国际化标准：缺 key 回退英文而非中文）：渲染层 en-US 静态打包进入口 + 其余懒加载、`fallbackLng: 'en-US'`，主进程各持一份 locale、同样兜底 en-US。设计、key 命名、翻译规范见 [docs/arch/10-i18n](docs/arch/10-i18n.md)。三条易踩的：①新增文本须在**各语言 locale 都加**并保持**递归字典序**（日语复数同中文仅 `_other`、德语同英语需 `_one`/`_other`）；②i18next **只有 `count`** 触发复数，普通计数插值要换别的变量名；③**不要开 `nonExplicitSupportedLngs`**——它把 `zh-CN` 按基码 `zh` 查找、与按 `zh-CN` 注册的 bundle 错位 → 整页裸 key。
+GUI 文本走 **react-i18next**（key 为中立标识符，`zh-CN` / `en-US` / `ja-JP` / `de-DE` 为**对等译文集**，无源/译层级；UI 语言由 `config.language` 经 `resolveLanguage` 决定，空则按 OS 回落英语）。**默认 / 兜底语言取 `en-US`**（国际化标准：缺 key 回退英文而非中文）：渲染层 en-US 静态打包进入口 + 其余懒加载、`fallbackLng: 'en-US'`，主进程各持一份 locale、同样兜底 en-US。设计、key 命名、翻译规范见 [docs/arch/11-i18n](docs/arch/11-i18n.md)。三条易踩的：①新增文本须在**各语言 locale 都加**并保持**递归字典序**（日语复数同中文仅 `_other`、德语同英语需 `_one`/`_other`）；②i18next **只有 `count`** 触发复数，普通计数插值要换别的变量名；③**不要开 `nonExplicitSupportedLngs`**——它把 `zh-CN` 按基码 `zh` 查找、与按 `zh-CN` 注册的 bundle 错位 → 整页裸 key。
 
 ## 文档约定
 

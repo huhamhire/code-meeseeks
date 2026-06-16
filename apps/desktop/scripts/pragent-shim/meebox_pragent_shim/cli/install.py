@@ -38,17 +38,29 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
     name = (bin_name or "").strip().lower()
     spec = _CLI_SPECS.get(name)
     exe, needs_cmd = _resolve_cli_exe(bin_name) if spec else (None, False)
-    argv = ((["cmd", "/c", exe] if needs_cmd else [exe]) + spec["flags"]) if (spec and exe) else None
+    # 命令前缀（cmd 包装 + exe）；exe 解析失败为 None。flags 每次调用按 env 组装（低算力档）。
+    cmd_prefix = (["cmd", "/c", exe] if needs_cmd else [exe]) if (spec and exe) else None
+
+    def _build_argv():
+        flags = list(spec["flags"])
+        # 低算力档：仅 Agent 编排通道经 MEEBOX_CLI_REASONING=low/minimal 开启；把 low_effort_flags
+        # 插到尾部 `-`（stdin 占位）之前、保持 `-` 在末位；无尾部 `-` 则直接追加。
+        if os.environ.get("MEEBOX_CLI_REASONING", "").strip().lower() in ("low", "minimal"):
+            extra = list(spec.get("low_effort_flags") or [])
+            if extra:
+                flags = flags[:-1] + extra + ["-"] if flags and flags[-1] == "-" else flags + extra
+        return cmd_prefix + flags
 
     async def chat_completion(self, model, system, user, temperature=0.2, img_path=None):
         if spec is None:
             raise RuntimeError(
                 f"不支持的本地 CLI 命令 '{bin_name}'（当前已适配 claude / codex）。"
             )
-        if argv is None:
+        if cmd_prefix is None:
             raise RuntimeError(
                 f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装、已登录，且 '{bin_name}' 在 PATH 中。"
             )
+        argv = _build_argv()
         prompt = f"{system}\n\n\n{user}" if system else user
         # 基于 os.environ 拷贝再剔除计费 key——其余（PATH/HOME/代理变量等）原样保留。
         child_env = {k: v for k, v in os.environ.items() if k not in spec["strip_env"]}

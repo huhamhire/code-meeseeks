@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { Writable } from 'node:stream';
+import { promisify } from 'node:util';
 import iconv from 'iconv-lite';
 import pino, { type Logger, type StreamEntry } from 'pino';
 import pinoRoll from 'pino-roll';
@@ -49,7 +51,9 @@ export async function createLogger(opts: LoggerOptions): Promise<Logger> {
 
   const streams: StreamEntry[] = [{ level, stream: fileStream }];
   if (alsoStdout) {
-    streams.push({ level, stream: makeConsoleStream(pretty) });
+    // 控制台代码页只需在 stdout 开启时探一次（async，故在此 await）。
+    const codePage = await detectWindowsConsoleCodePage();
+    streams.push({ level, stream: makeConsoleStream(pretty, codePage) });
   }
   return pino({ level }, pino.multistream(streams));
 }
@@ -60,8 +64,8 @@ export async function createLogger(opts: LoggerOptions): Promise<Logger> {
  * `<ISO8601> LEVEL msg k=v k=v`（Go 风格 kv，对象/堆栈走 JSON.stringify 把换行转义掉，
  * 保证一条日志一物理行，不再被 pino-pretty 的多行对象/堆栈渲染撑断）。
  */
-function makeConsoleStream(pretty: boolean): Writable {
-  const encoding = pickWindowsConsoleEncoding();
+function makeConsoleStream(pretty: boolean, codePage: number | null): Writable {
+  const encoding = pickWindowsConsoleEncoding(pretty, codePage);
   const raw: Writable = encoding ? makeTranscodingWritable(encoding) : process.stdout;
   if (!pretty) return raw;
   // pretty 即 dev 人读模式：默认上色。不卡 isTTY——electron-vite dev 下 main 的 stdout
@@ -174,22 +178,64 @@ function makeTranscodingWritable(encoding: string): Writable {
 }
 
 /**
- * Windows + CJK locale 下推断当前控制台代码页：
- *   - zh-* → CP936 (GBK)
- *   - ja-* → CP932 (SJIS)
- *   - ko-* → CP949
- * 其它 / 非 Windows / 非 TTY (重定向到管道 / 文件) 返回 null，跳过转码。
+ * Windows 下挑选控制台转码目标编码。优先用启动时探测到的**真实活动代码页**
+ * （`codePage`，来自 detectWindowsConsoleCodePage）：
+ *   - 65001 (UTF-8)            → 返回 null，直出 UTF-8 不转码（控制台本就是 UTF-8）；
+ *   - 936/950/932/949 (CJK)    → 转码到对应代码页；
+ *   - 其它已知 ASCII 兼容页     → 返回 null，直出（中文字节本就无法正确显示，转码无益）；
+ *   - 探测失败（null）          → 回落到按 locale 启发式猜（zh→cp936 / ja→cp932 / ko→cp949）。
  *
- * 不区分简繁体（CP950 vs CP936）：开发者环境一般 GBK 即可，输出失真极少；
- * 错了用户也能从 logs/ 文件里拿到原始 UTF-8。
+ * 探测真实代码页避免了纯 locale 猜的脆弱点：用户若已 `chcp 65001` 切到 UTF-8 控制台，
+ * 再转码成 GBK 反而把正确输出搞乱——此时探测会返回 65001 → 直出 UTF-8。
+ *
+ * TTY 判定：直挂终端（isTTY=true）固然要转码；但 dev（pretty=true）下 electron-vite
+ * 把 main 的 stdout 接成管道（isTTY=false），下游仍是 CJK 代码页的终端——此时同样必须转码，
+ * 否则 UTF-8 字节被当 GBK/SJIS 渲染出乱码。故 pretty 时不卡 isTTY（与上色路径一致）；
+ * 仅打包态原始 JSON（pretty=false）保留 isTTY 守卫，让重定向到管道 / 文件的 JSON 维持 UTF-8。
+ *
+ * 不区分简繁体（CP950 vs CP936）：locale 回落分支按 zh-TW/zh-HK 区分，探测分支按真实页号精确命中。
+ * 探测/转码错了用户也能从 logs/ 文件里拿到原始 UTF-8。
  */
-function pickWindowsConsoleEncoding(): string | null {
+function pickWindowsConsoleEncoding(pretty: boolean, codePage: number | null): string | null {
   if (process.platform !== 'win32') return null;
-  if (!process.stdout.isTTY) return null;
+  if (!pretty && !process.stdout.isTTY) return null;
+  // 真实活动代码页优先。CP_MAP 命中即用；65001/其它 ASCII 兼容页落到 map 外 → 直出 UTF-8。
+  if (codePage !== null) {
+    return CP_MAP[codePage] ?? null;
+  }
+  // 探测失败：按 locale 猜。
   const locale = Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase();
   if (locale.startsWith('zh-tw') || locale.startsWith('zh-hk')) return 'cp950';
   if (locale.startsWith('zh')) return 'cp936';
   if (locale.startsWith('ja')) return 'cp932';
   if (locale.startsWith('ko')) return 'cp949';
   return null;
+}
+
+/** 需要转码的 CJK 代码页号 → iconv-lite 编码名。65001 (UTF-8) 等不在表中者直出。 */
+const CP_MAP: Record<number, string> = {
+  936: 'cp936',
+  950: 'cp950',
+  932: 'cp932',
+  949: 'cp949',
+};
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * 探测当前控制台的活动输出代码页（GetConsoleOutputCP 等价物）。跑 `chcp.com`（System32 下的
+ * 真实可执行文件）解析其输出里的页号——`chcp` 文本如「活动代码页: 936」/「Active code page: 65001」，
+ * 仅数字部分恒为 ASCII，故按当前页号无关地用正则抽数字即可。
+ *
+ * 非 Windows、命令缺失 / 超时 / 解析失败一律返回 null，由调用方回落 locale 启发式。
+ */
+async function detectWindowsConsoleCodePage(): Promise<number | null> {
+  if (process.platform !== 'win32') return null;
+  try {
+    const { stdout } = await execFileAsync('chcp.com', { timeout: 2000, windowsHide: true });
+    const m = /(\d+)/.exec(stdout);
+    return m ? Number(m[1]) : null;
+  } catch {
+    return null;
+  }
 }

@@ -1,9 +1,11 @@
 import { app, BrowserWindow, Menu, nativeTheme, shell } from 'electron';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
+import { scaffoldAgentDir } from '@meebox/agent';
 import { resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
 import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
@@ -38,6 +40,17 @@ let lastUpdateCheckMs = PROCESS_START_MS;
 // 让运行期不落 .pyc，安装目录文件数稳定（仅装包时的量）。子进程经 spawn 继承本进程 env。
 // 代价：每次 python 启动重编译（略慢）；评审为 LLM 网络主导，影响有限。
 process.env.PYTHONDONTWRITEBYTECODE = '1';
+
+// Windows 控制台默认活动代码页为本地化 OEM 页（简中为 cp936/GBK），而 Node/pino 按 UTF-8 写出
+// 字节 → 中文日志在 dev 终端显示为乱码。启动期把附着控制台的输出代码页切到 65001(UTF-8)，使其与
+// 写出的 UTF-8 字节对齐。仅 win32；无附着控制台（打包态）时 chcp 静默失败，已 try 吞掉、无副作用。
+if (process.platform === 'win32') {
+  try {
+    execSync('chcp 65001', { stdio: 'ignore' });
+  } catch {
+    /* 无控制台 / chcp 不可用：忽略，日志仍按 UTF-8 字节写出 */
+  }
+}
 
 // macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
 // 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
@@ -88,7 +101,13 @@ let poller: Poller;
 let repoMirror: RepoMirrorManager;
 // IPC 运行时控制句柄（registerIpcHandlers 返回）：退出时据此中止所有进行中的 pr-agent run，
 // 触发其子进程树清理（见 before-quit）。注册前为 undefined。
-let ipcControl: { abortAllActiveRuns: () => number } | undefined;
+let ipcControl:
+  | {
+      abortAllActiveRuns: () => number;
+      runAutopilotIfDue: () => void;
+      terminateAgentsForGonePrs: () => void;
+    }
+  | undefined;
 // 连接级本地状态（按 connectionId）：持久化上次 ping 的 currentUser，用于建连接时预热，
 // 使首轮 poll 不依赖网络即可判 approved。启动时从 state store 载入一次，ping 后增量回写。
 let connectionStates: Record<string, ConnectionState> = {};
@@ -106,6 +125,17 @@ async function start(): Promise<void> {
     { firstRun: bootstrap.firstRun, appDir: bootstrap.paths.appDir },
     'meebox main process started',
   );
+
+  // Agent 目录脚手架：未配置自定义目录时，Agent 上下文默认落在工作目录下的 agent/（见 ipc.ts
+  // effectiveAgentDir）。启动期幂等补齐默认目录的模版（已存在不覆盖），使首次使用即有 SOUL/AGENTS
+  // 等上下文文件可读。失败不阻断启动（运行期 loadAgentContext 仍会按缺失文件降级 + warn）。
+  void scaffoldAgentDir(bootstrap.paths.agentDir)
+    .then((created) => {
+      if (created.length) logger.info({ created }, 'agent dir scaffolded');
+    })
+    .catch((err: unknown) => {
+      logger.warn({ err }, 'scaffold agent dir failed');
+    });
 
   // macOS GUI 启动（Finder/Dock）只有 launchd 最小 PATH，找不到本机 CLI（claude/codex，常在
   // ~/.local/bin / homebrew）。启动期前置常见目录到 process.env.PATH，使后续 spawn 的嵌入式
@@ -274,8 +304,12 @@ async function start(): Promise<void> {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('poll:tick', info);
       }
+      // 本轮已被移除 / purge 的 PR：终止其上仍在执行的 agent 操作（先于 AutoPilot，避免给已消失的 PR 起新评审）。
+      ipcControl?.terminateAgentsForGonePrs();
       // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器
       void runUpdateCheckIfDue();
+      // AutoPilot 预评审：满足开关 + 最小间隔 + 候选时跑一遍 pass（内部门控，复用 poller 周期）。
+      ipcControl?.runAutopilotIfDue();
     },
     // PR 新增 / 内容变更时，顺手 syncMirror 把本地镜像跟上，让用户随后点开 PR
     // 时省一趟 fetch。失败不阻断 poll 流程 (mirror 也有自己的全局队列 + 错误隔离)
@@ -518,6 +552,13 @@ function createWindow(splash?: BrowserWindow): void {
     show: false,
     // 首帧前的窗口底色与 app 一致，避免显示瞬间白闪
     backgroundColor: '#1e1e1e',
+    // 无边框 + 自绘标题栏（VS Code 风）：macOS 保留红绿灯并下移到自绘标题栏内；
+    // Windows/Linux 用 titleBarOverlay 让系统继续画窗控按钮（最小化/最大化/关闭），
+    // 渲染层只接管中间标题区。高度需与渲染层 .app-titlebar 一致（36px）。
+    titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 12, y: 11 } }
+      : { titleBarOverlay: { color: '#1e1e1e', symbolColor: '#cccccc', height: 36 } }),
     // dev 下显式给窗口图标（assets/icons/icon.ico）；打包态窗口/任务栏图标走 exe
     // 内嵌（electron-builder），且 assets 不进 asar，故仅 dev 设置
     icon: app.isPackaged ? undefined : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
@@ -528,9 +569,6 @@ function createWindow(splash?: BrowserWindow): void {
       sandbox: false,
     },
   });
-
-  // 恢复最大化态：以正常尺寸建窗后再 maximize，使「还原」回到记录的正常大小。
-  if (windowState.maximized) win.maximize();
 
   // 记住窗口大小：resize/move 防抖回写、关闭时立即回写。getNormalBounds 取「非最大化」尺寸，
   // 故最大化时记录的仍是还原后的正常大小。写盘失败不影响使用。
@@ -551,10 +589,14 @@ function createWindow(splash?: BrowserWindow): void {
   win.on('move', scheduleSave);
   win.on('close', persistWindowState);
 
-  // 主界面首帧就绪：关闭 splash、显示主窗口，并记录进程启动→首帧耗时（度量启动性能）。
+  // 主界面首帧就绪：恢复最大化态 → 显示主窗口 → 关闭 splash，并记录进程启动→首帧耗时。
+  // maximize 必须放到这里：`win.maximize()` 会立即「显示」隐藏窗口，若在建窗后即调用，无边框
+  // 主窗口会在内容就绪前以空白态抢先出现（盖过/早于 splash）。改到 ready-to-show 内与首帧一起
+  // maximize + show，再关 splash → 启动期只见 splash，主窗口一出现即为已渲染态。
   win.once('ready-to-show', () => {
-    if (splash && !splash.isDestroyed()) splash.close();
+    if (windowState.maximized) win.maximize();
     win.show();
+    if (splash && !splash.isDestroyed()) splash.close();
     logger.info(
       { elapsedMs: Date.now() - PROCESS_START_MS },
       'main window first paint (ready-to-show)',

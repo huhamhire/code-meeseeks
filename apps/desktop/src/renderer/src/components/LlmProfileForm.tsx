@@ -17,7 +17,7 @@ export interface ProviderMeta {
 }
 
 // 顺序：海外通用 (OpenAI / OpenAI 兼容 / Anthropic) → 国内三家 (DeepSeek / 阿里
-// 百炼 / 火山方舟) → 本地 (Ollama)，方便用户按主流程扫读
+// 百炼 / 火山方舟) → 兜底 (OpenAI 兼容) → 本地 CLI，方便用户按主流程扫读
 //
 // label / hint 用 getter 经 i18n.t 惰性取值：保持数组形状不变（消费方直接读 .label 等），
 // 同时让文案随当前语言解析（品牌名等无对应 key 时退回字面量）。modelExample 是纯模型名示例
@@ -76,14 +76,8 @@ export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     needsKey: true,
     modelExample: 'ep-20240xxxxxx-xxxxx / doubao-pro-32k / doubao-1-5-pro-256k',
   }),
-  provider({
-    value: 'ollama',
-    label: 'Ollama',
-    defaultBaseUrl: 'http://localhost:11434',
-    needsKey: false,
-    modelExample: 'qwen2.5 / llama3.1',
-  }),
-  // 「OpenAI 兼容」：兜底通用项，主流程让用户先扫读具名 provider
+  // 「OpenAI 兼容」：兜底通用项，主流程让用户先扫读具名 provider；本地 Ollama 也走它
+  // （Base URL 填 http://localhost:11434/v1，密钥留空）。
   provider({
     value: 'openai-compatible',
     defaultBaseUrl: '',
@@ -125,7 +119,7 @@ const LABEL_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
  * 按 provider 元信息判定 profile 哪些字段必填：
  *   - label 必填，且必须符合 slug 规则
  *   - model 永远必填（pr-agent 必须知道用哪个模型）
- *   - api_key：needsKey=true 的 provider 必填（Ollama 不需要）
+ *   - api_key：needsKey=true 的 provider 必填（本地 CLI / 本地服务不需要）
  *   - base_url：没有默认值的 provider 必填（仅 openai-compatible）
  *
  * existing 传入用于唯一性校验（编辑时排除自身 id）。

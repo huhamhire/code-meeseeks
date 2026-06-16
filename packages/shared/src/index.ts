@@ -1,3 +1,4 @@
+export * from './agent-contract.js';
 export * from './app-info.js';
 export * from './config.js';
 export * from './inline-comment-policy.js';

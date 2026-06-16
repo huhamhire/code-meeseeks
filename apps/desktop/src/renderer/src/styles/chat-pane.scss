@@ -87,6 +87,12 @@
   // 比 .chat-run-result 内部 gap ($space-4) 更宽，让"运行边界"在视觉上清晰可辨，
   // 避免上一条 finding 列表跟下一条 meta 行黏成一块
   gap: $space-8;
+
+  // flex column 子项默认 min-width:auto，宽内容（代码块 / 长串）会把子块撑过面板宽度 → 整条会话
+  // 横向溢出。允许子块收缩到面板宽度，宽内容在块内横向滚动 / 换行，而非把整个会话撑出横向滚动条。
+  > * {
+    min-width: 0;
+  }
 }
 
 // "向上滚动加载更早" 提示行：顶端显眼但不抢眼，居中虚化
@@ -129,6 +135,173 @@
   min-width: 0;
   flex: 1;
 }
+
+// === Agent 自动评审：触发条 + 收尾总结卡 ===
+.chat-agent-summary {
+  margin: $space-4 $space-6;
+  padding: $space-4 $space-5;
+  border: 1px solid $border-muted;
+  border-radius: $radius-md;
+  background: $color-accent-bg-fade;
+  flex-shrink: 0;
+}
+.chat-agent-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-3;
+  margin-bottom: $space-3;
+
+  // 标题做成实色 chip（与「代码反馈 / 工作量」等卡片标签同款），右侧判定为描边 chip，成对。
+  strong {
+    flex-shrink: 0;
+    padding: 2px $space-3;
+    border-radius: $radius-sm;
+    background: $color-accent;
+    color: $text-on-accent;
+    font-size: $fs-sm;
+    font-weight: 600;
+  }
+}
+// 判定徽标：描边色 chip（边框 + 文字同色，随判定变色），比纯文字更醒目、与卡片标题成对。
+.chat-agent-verdict {
+  flex-shrink: 0;
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  border: 1px solid currentColor;
+  font-size: $fs-sm;
+  font-weight: 600;
+  white-space: nowrap;
+
+  &.verdict-approve {
+    color: $color-approved;
+  }
+  &.verdict-needs_work {
+    color: $color-warning;
+  }
+  &.verdict-manual_review {
+    color: $color-info;
+  }
+}
+.chat-agent-summary-text {
+  margin: 0 0 $space-3;
+  font-size: $fs-md;
+  color: $text-body;
+}
+// 评审总结 / 对话回复内的 markdown 章节标题（## 摘要 等）压到不超过卡片标题（评审总结）字号，
+// 避免章节标题比卡片标题还大、层级倒置。组合类选择器提升特异性以盖过 markdown.scss 的默认 h 字号。
+.markdown.chat-agent-summary-text,
+.markdown.chat-agent-reply-body {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-size: $fs-md;
+    margin: $space-3 0 $space-1;
+  }
+  > :first-child {
+    margin-top: 0;
+  }
+}
+// 建议理由：markdown 渲染但保持次要灰（覆盖 .markdown 默认正文色）。
+.chat-agent-summary-reason {
+  font-size: $fs-sm;
+  color: $text-muted;
+}
+
+// 用户输入气泡：自然语言「对话即委派」的输入回显，右对齐成对话气泡。
+// 注意类名避开既有 .chat-user-msg（/ask 提问行，带左竖条 + 淡蓝底），否则会叠到气泡外形成第二层底色。
+.chat-user-row {
+  margin: $space-3 $space-6;
+  display: flex;
+  justify-content: flex-end;
+}
+.chat-user-bubble {
+  max-width: 85%;
+  padding: $space-2 $space-4;
+  border-radius: $radius-md;
+  background: $color-accent;
+  color: $text-on-accent;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+// 过程化跟踪（类 Claude Code）：思考步骤按时间穿插进时间线。两行——带 bullet 标记的「已思考 xx s」
+// 首行 + 另起的步骤结果次行。无底色 / 无边框（思考态不加蓝色背景）；实时「思考中」首行以 spinner 充当
+// 进行中的 bullet，计时紧贴提示之后。
+.chat-agent-step {
+  margin: $space-2 $space-6 $space-2 $space-1; // 左缩进收到最小，让 bullet 视觉尽量靠前
+  font-size: $fs-sm;
+}
+// 首行：bullet / spinner 标记 + 「已思考 / 思考中 xx s」提示，计时紧贴文本（不撑开到行尾）。
+// bullet 占固定列宽、与文案间留 gap 间距；正文按「列宽 + gap」缩进，保证首行文案与正文左对齐。
+.chat-agent-step-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3; // bullet 与文案之间的留白
+  color: $text-muted;
+}
+.chat-agent-step-bullet {
+  flex: 0 0 $space-3; // 固定 bullet 列宽，文本对齐的基准
+  color: $color-info;
+  font-size: $fs-md; // 略大，标记更醒目
+  line-height: 1;
+}
+// 步骤行内的本步 token 用量（不累计）：等宽数字、顶到行尾，与「已思考 xx s」同一行右侧轻量呈现。
+.chat-agent-step-tokens {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  font-size: $fs-xs;
+}
+// AutoPilot 触发标记：评审首步行内的机器人图标（强调色），表「这次评审由 AutoPilot 触发」。
+.chat-agent-step-autopilot {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: $color-accent;
+
+  svg {
+    display: block;
+  }
+}
+// 次行：步骤结果（思考内容 / 判读结论），缩进到首行文案的左缘（= bullet 列宽 + gap）对齐。
+.chat-agent-step-body {
+  margin-top: $space-1;
+  padding-left: $space-3 + $space-3;
+  color: $text-body;
+  word-break: break-word;
+
+  &.muted {
+    color: $text-muted;
+  }
+}
+
+// Agent 自然对话回复：左对齐、带 Agent 图标的轻量包装，区别于「评审总结」卡片（无判定 / 无标题）。
+.chat-agent-reply {
+  margin: $space-3 $space-6;
+  display: flex;
+  gap: $space-3;
+  align-items: flex-start;
+  padding: $space-3 $space-4;
+  border-radius: $radius-md;
+  background: $bg-elev;
+  border: 1px solid $border-muted;
+
+  > svg {
+    flex-shrink: 0;
+    color: $color-info;
+    margin-top: 2px;
+  }
+}
+.chat-agent-reply-body {
+  flex: 1;
+  min-width: 0;
+}
+
 
 // === 空态 ===
 .chat-empty {
@@ -344,7 +517,6 @@
 .chat-user-msg-body {
   flex: 1;
   min-width: 0;
-  white-space: pre-wrap;
   word-break: break-word;
 }
 .chat-run-meta {
@@ -771,8 +943,11 @@
     border-radius: $radius-sm;
     font-family: $font-mono;
     color: $text-body;
-    // path 单段太长 (含 / 路径) 时允许在任意字符断行，不让单 code 块撑爆容器
-    word-break: break-all;
+    // 长路径优先按分隔符 / 连接符折断（BreakablePath 在 / . _ - 后插了 <wbr> 软断点）：
+    // word-break:normal 让浏览器只在这些软断点（及空格 / CJK）处折行，保证可读性；overflow-wrap:anywhere
+    // 仅作兜底——单个分段仍超宽时才允许任意断开，且让 code 作为 flex item 能正常收缩不撑爆容器。
+    word-break: normal;
+    overflow-wrap: anywhere;
     min-width: 0;
   }
 }
@@ -907,17 +1082,32 @@
   gap: $space-2;
 }
 
+// 命令触发器组：`/` 命令按钮 + 自动评审图标按钮，左对齐成一组（两者间距略放宽）
+.chat-cmd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+}
+
 // 命令触发器：单 `/` 按钮 + 弹出菜单 (替代之前 3 个并列按钮)
 .chat-cmd-bar {
   position: relative;
   display: inline-flex;
 }
+
 .chat-cmd-trigger {
+  // 等宽按钮：`/` 命令触发器与自动评审图标按钮宽度一致、左对齐成一组；高度随内容（padding
+  // 决定），不固定行高外的额外高度，避免显得过高。
+  box-sizing: border-box;
+  min-width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: $font-mono;
   font-size: $fs-lg;
   font-weight: 600;
   line-height: 1;
-  padding: $space-2 $space-4;
+  padding: $space-2 $space-3;
   border-radius: $radius-sm;
   background: $bg-surface;
   border: 1px solid $border-default;
@@ -933,6 +1123,17 @@
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+// 自动评审图标按钮：复用 .chat-cmd-trigger 基样式，强调色区分。
+.chat-agent-review-trigger {
+  color: $color-info;
+
+  &:hover:not(:disabled),
+  &.active {
+    color: $color-info;
+    border-color: $color-accent;
   }
 }
 

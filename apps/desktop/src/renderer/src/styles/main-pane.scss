@@ -19,15 +19,33 @@
   padding: 24px;
 }
 
-// Monaco 懒加载 chunk 拉取期间的占位（DiffView / InlineCodeContext 的 Suspense fallback）
+// 重型组件 async init 期间的延迟 loading 占位（PaneLoading；Monaco Suspense fallback、
+// ChatPane 会话加载、diff 编辑器 ready 前的 overlay 共用）
 .pane-loading {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: $space-2;
   min-height: 120px;
   height: 100%;
   padding: 24px;
   font-size: 13px;
+
+  // .spinner 默认带右 margin（inline-文字场景用），居中布局里由 gap 接管，清掉避免偏移
+  .spinner {
+    margin: 0;
+  }
+}
+
+// overlay 变体：绝对定位铺满父容器（父需 position:relative），盖在 Monaco 编辑器之上，
+// 遮住「空编辑器 → diff 计算 / 折叠跳一下」那段重排，diff 就绪后由调用方卸载。
+.pane-loading-overlay {
+  position: absolute;
+  inset: 0;
+  // 盖在 Monaco 之上：编辑器内部有自带 stacking context，z-index 取高值确保 overlay 在最上层
+  z-index: 20;
+  height: auto;
+  background: $bg-app;
 }
 
 .pr-header {

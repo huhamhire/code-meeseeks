@@ -14,11 +14,23 @@
     "openInBrowser": "ブラウザで開く"
   },
   "chatPane": {
+    "agent": {
+      "autoReview": "自動レビュー",
+      "autoReviewRunning": "レビュー中…",
+      "failed": "Agent レビューに失敗しました",
+      "summaryTitle": "レビュー総括",
+      "thinking": "思考中…",
+      "thoughtFor": "{{time}} 思考",
+      "verdictApprove": "問題なし",
+      "verdictManualReview": "手動レビュー推奨",
+      "verdictNeedsWork": "要修正"
+    },
     "aiSuggestionPrefix": "[AI 提案]",
     "anchorJumpTitle": "コードの該当行へジャンプ",
     "askArgQuestion": "質問",
     "askNeedsQuestion": "/ask には質問の入力が必要です",
-    "bulletAsk": "自然言語で追加の質問をする（または直接入力すると ask として扱われます）",
+    "autopilotRun": "AutoPilot 自動レビュー",
+    "bulletAsk": "pr-agent に直接質問する",
     "bulletDescribe": "PR の概要 / ラベルを自動生成",
     "bulletImprove": "行単位のコード改善提案（重要度スコア付き）",
     "bulletReview": "AI レビューを実行し、結果は 指摘リストに表示されます",
@@ -50,9 +62,10 @@
     "draftStatusPosted": "投稿済み",
     "draftStatusRejected": "却下済み",
     "duplicateRun": "この PR の /{{tool}} はすでに実行中またはキュー待ちです。重複して実行しないでください",
+    "emptyCmdHint": "または / でコマンドを選択：",
     "emptyFootNoPr": "PR が選択されていません。まず左側のリストから 1 件選んでください",
     "emptyFootWithPr": "入力欄に / を入力するとコマンド補完が表示されます。Shift+Enter で改行",
-    "emptyInputHint": "下の入力欄はコマンドまたは自然言語を受け付けます：",
+    "emptyInputHint": "そのまま入力すれば Agent と対話できます（自動で計画：要約 / レビュー / 追加質問と判定）",
     "emptyNeedLlmSub": "LLM モデルを設定すると /review、/describe などの機能が利用できます。PR 同期などの基本機能には影響しません。",
     "emptyNeedLlmTitle": "AI モデルの設定が必要です",
     "emptyNotReadySub": "埋め込みランタイムもローカル CLI も検出されませんでした。設定を開いて検出の詳細を確認し、アプリを再起動してください。",
@@ -118,7 +131,7 @@
     "statusRunning": "実行中",
     "statusSucceeded": "完了",
     "stopAria": "停止",
-    "stopTitle": "現在の PR Agent 実行を強制終了 (SIGKILL)",
+    "stopTitle": "実行を停止",
     "tokensTitle": "入力(prompt) {{prompt}} · 出力(completion) {{completion}} トークン",
     "unknownCommand": "不明なコマンド {{head}}。サポート対象：{{cmds}}",
     "userQuestionAria": "ユーザーの質問",
@@ -390,9 +403,6 @@
       "deepseek": {
         "hint": "公式 DeepSeek API；モデル名を直接入力してください。deepseek/ プレフィックスは自動的に付加されます"
       },
-      "ollama": {
-        "hint": "ローカルの Ollama サービス；モデル名を直接入力してください。ollama/ プレフィックスは自動的に付加されます"
-      },
       "openai": {
         "hint": "公式 OpenAI API；Base URL を空のままにするとデフォルトの endpoint を使用します"
       },
@@ -499,6 +509,7 @@
   },
   "prItem": {
     "approvedCount_other": "{{count}} 人のレビュアーが承認しました",
+    "executing": "Agent タスク実行中",
     "hasConflict": "マージコンフリクトがあります",
     "mergeable": "マージ可能：すべてのマージ条件を満たしています",
     "needsWorkCount_other": "{{count}} 人のレビュアーが要修正とマークしました"
@@ -527,10 +538,14 @@
     "title": "コメントを投稿"
   },
   "settings": {
+    "aboutFeedback": "情報 & フィードバック",
     "addConnection": "+ 接続を追加",
     "addConnectionTitle": "接続を追加",
     "addLlmProfile": "+ プロファイルを追加",
     "addLlmTitle": "LLM モデルを追加",
+    "agentDirHint": "Agent の人格・記憶・レビュールールの保存先。セッションをまたいで保持され、チームで共有できます。",
+    "agentDirPlaceholder": "任意；例：~/code/team-agent",
+    "agentDirTitle": "Agent ディレクトリ",
     "appRoot": "アプリルート",
     "appVersion": "アプリバージョン",
     "cacheDirHint": "ローカルリポジトリのミラーと worktree の保存先。再構築可能なキャッシュです。",
@@ -559,7 +574,6 @@
     "editLlmTitle": "LLM モデルを編集",
     "enableConnectionAria": "この接続を有効化",
     "enableProxy": "プロキシを有効化",
-    "enableRules": "ルールを有効化",
     "experimental": "実験的",
     "fillRequiredHint": "まず必須項目をすべて入力してください",
     "hide": "非表示",
@@ -569,12 +583,13 @@
     "llmHint": "アクティブなプロファイルが、PR Agent の呼び出すモデルを決定します。",
     "llmProfileFallback": "プロファイル {{id}}",
     "llmTitle": "LLM モデル",
+    "openAgentDir": "現在のディレクトリを開く",
     "openDevTools": "DevTools を開く",
     "openDevToolsTitle": "Electron DevTools を開く（分離ウィンドウ）",
     "opening": "オープン中…",
+    "pickAgentDirTitle": "Agent ディレクトリを選択",
     "pickCacheDirTitle": "キャッシュディレクトリを選択",
     "pickDirectory": "ディレクトリを選択",
-    "pickRulesDirTitle": "ルールディレクトリを選択",
     "platform": "プラットフォーム",
     "platformGithub": "GitHub（github.com / Enterprise Server）",
     "platformGitlab": "GitLab（gitlab.com / Self-Managed）",
@@ -601,15 +616,14 @@
     "proxyUsername": "ユーザー名",
     "proxyUsernameAria": "プロキシユーザー名",
     "proxyUsernamePlaceholder": "任意（Basic Auth）",
-    "rulesDirPlaceholder": "任意；例：~/code/team-pr-rules",
-    "rulesHintPrefix": "ディレクトリ内の各",
-    "rulesHintSuffix": "ファイルは 1 つのカスタムレビュールールです。",
-    "rulesTitle": "ルールディレクトリ",
+    "releases": "リリース",
+    "reportIssue": "問題を報告 / Issue",
     "runtimeTitle": "実行環境",
     "saved": "保存しました",
     "saving": "保存中…",
     "setActiveLlmAria": "アクティブに設定",
     "show": "表示",
+    "starOnGithub": "GitHub でスター",
     "testFailed": "失敗",
     "testProxy": "接続テスト",
     "testing": "テスト中…",
@@ -637,6 +651,9 @@
     "searchPlaceholder": "タイトル / リポジトリ / 作成者 / ID を検索"
   },
   "statusBar": {
+    "autopilot": "AutoPilot",
+    "autopilotOffTitle": "AutoPilot はオフ — クリックで有効化、新規 PR を自動プレレビュー",
+    "autopilotOnTitle": "AutoPilot はオン — クリックで無効化",
     "collapseChat": "PR Agent チャットを折りたたむ",
     "collapseChatAria": "チャットを折りたたむ",
     "collapseSidebar": "サイドバーを折りたたむ",
@@ -672,6 +689,7 @@
     "running": "実行中",
     "secondsAgo_other": "{{count}} 秒前",
     "settings": "設定",
+    "stopRunning": "実行中のタスクを停止",
     "syncing": "同期中",
     "unnamed": "(名称なし)",
     "updateAvailableTitle": "新しいバージョン v{{latest}} が利用可能です（現在 v{{current}}）· クリックでダウンロード",

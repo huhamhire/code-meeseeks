@@ -5,6 +5,68 @@
 
 ## [Unreleased]
 
+### Added
+- **高阶 Agent（会话 Agent 化 + AutoPilot 预评审）**：在 PR 评审中引入可委派的智能体能力，随 LLM
+  配置自动可用、无需单独的启用开关。
+  - **一键自动评审**：聊天框命令区右侧新增自动评审按钮（✦ 图标），对当前 PR 跑「描述 → 评审 →
+    （仅严重问题）条件追问 → 收尾总结」微流程，给出非约束性建议（建议通过 / 建议修改 / 建议人工
+    复核）；过程步骤按自然时间顺序内联展示，结尾汇总为「评审总结」卡片。
+  - **对话即委派**：聊天框直接输入自然语言，自由规划 Agent 按需调用只读工具（描述 / 评审 / 追问）
+    完成请求——与 PR 内容相关但无明确工具指向时默认走追问兜底，与 PR 无关的请求则礼貌拒绝；运行中
+    可随时停止。
+  - **AutoPilot 后台预评审**：状态栏开关启用后，对满足最小间隔的新 PR 在后台自动预评审，建议倾向
+    落入 PR 列表徽标，收尾总结同步落入该 PR 会话（与手动评审一致，可在聊天里看到「评审总结」卡片）；
+    写操作经逐项授权 + 红线硬校验把关（默认全拒，仅开放只读工具）。准入从严：仅对
+    **「待我评审」分类下、「待处理」状态**的 PR 触发；会话中一旦已有 `/describe` 或 `/review` 产出
+    （手动或自动）即判定已评审、不再自动触发，避免重复评审。启用开关时（关 → 开）立即触发一次 poll
+    并按上述规则评估、按需开评审，不必等下个轮询周期。评估节奏对齐轮询——每个 poller tick（间隔 =
+    `poller.interval_seconds`）评估一遍，不再单设独立的最小间隔配置（准入门控 + 台账去重已防重复 / 打爆
+    LLM）。PR 在 poll 中被移除 / purge 时，其上仍在执行的 agent 操作（编排 + 派发的工具 run）一律即时终止，
+    不为已消失的 PR 空耗。多个待评审 PR 在一轮内并行编排，尽量填满工具的并发队列、不逐 PR 串行空等。
+  - **评审状态可视化**：PR 列表项在同一位置展示——有在跑的 agent 任务时蓝色「执行中」旋转指示（复用
+    运行卡片同款 .spinner、中心对称、无 chip 外框），否则展示评审建议 ★（手动 / AutoPilot 一视同仁，
+    approve 绿 / needs_work 琥珀 / manual_review 蓝，SVG 居中）；AutoPilot 触发的评审在其**首个步骤行**
+    打机器人标记，与手动触发区分。排队位次取全局队列位序（跨 PR 共享队列，不再每 PR 都显示「第 1 位」）。
+  - **并行多问**：规划 Agent 可在一轮内并行派发多个 `/ask`（`tools` 元素支持 `{tool, question}` 形式），
+    经运行队列并发执行，而非逐个串行。
+  - **Agent 上下文目录**：以 SOUL / AGENTS / MEMORY / USER 与 rules/ 规则子目录构成 Agent 的人格与
+    知识来源；未配置自定义目录时默认落 `~/.code-meeseeks/agent`，首次启动幂等补齐模版，开箱即用。
+- 设置页「运行环境」新增「关于 & 反馈」入口：GitHub 仓库（Star）/ 提交 Issue / Releases 三个外链
+  （各带专属图标，点击经系统浏览器打开），低频社区入口集中于「关于」区、不进状态栏。
+- **无边框窗口 + 自绘标题栏**（VS Code 风）：主窗口去掉系统原生标题栏，渲染层自绘 36px 标题栏，
+  深色主题从顶贯通到底。窗控按钮交由系统绘制以保留原生行为——macOS 保留红绿灯（下移到标题栏内）、
+  Windows/Linux 用 `titleBarOverlay` 在右上画最小化/最大化/关闭。标题栏展示品牌名与当前 PR 标题，
+  Windows/Linux 开头另显应用图标（macOS 因红绿灯占位不显）。
+
+### Changed
+- **移除独立 `ollama` provider**，统一经 `openai-compatible` 接入本地 Ollama（Base URL 填
+  `http://localhost:11434/v1`）：Ollama 自带 OpenAI 兼容端点，走此路径更标准稳健。旧 `ollama` 配置
+  加载时**自动迁移**为 `openai-compatible` 并补足 `/v1`，存量无感升级。
+- `openai-compatible` 经实测标记为**已验证**。
+- **重型组件加载抖动收敛**：切换 PR / 文件时，diff（Monaco）、聊天会话内容等重型区域在
+  异步初始化完成前统一盖一层居中 loading，就绪后一次性 reveal，消除「空白 → 内容弹出 → 折叠跳一下」
+  的多段重排。loading 延迟显示（>150ms 才出现）——本地缓存命中的快切换零闪烁，仅真慢场景才落到
+  loading。Monaco 区域特别处理：从挂载第一帧即盖遮罩、并等折叠（hideUnchangedRegions）布局 paint
+  稳定后才揭开，遮罩底色与编辑器一致、揭开无缝。
+
+### Fixed
+- **修复 PR diff 基准随目标分支漂移导致的「修改被撤回」误判**：此前文件内容（Monaco 左栏）按目标
+  分支当前 tip（`targetRef.sha`）读取，目标分支被别的 PR 合入而前移后，编辑器实际成了两点对比，
+  别的 PR 的改动会以倒挂 / 撤回形式串进当前 PR 的 diff（变更文件列表用三点 diff 本不受影响，但内容
+  与之不一致）。改为首次为 PR 算出 `merge-base(target, head)` 并固化到 `prs/<localId>/diff-base.json`，
+  之后变更文件列表 / 文件内容 / 提交计数 / blame 改动行 / pr-agent 评审一律以它为 base：编辑器即真
+  三点、对目标分支前移稳定，行锚点（评论 / finding）也有了固定参照。源分支被 rebase（固化 base 不再是
+  head 祖先）时自动重算；正常 push 不失效。固化值为本地派生缓存、独立于平台元数据，poller 重写
+  meta.json 不触碰；历史 PR 无需迁移，首次访问 diff 时按需回填（算不出则退回旧行为且不固化）。
+- 修复 Windows 控制台中文日志仍显示为乱码：① dev 下 electron-vite 把 main 的 stdout 接成管道
+  （`isTTY=false`）原会跳过转码，UTF-8 字节被 CJK 控制台按 GBK/SJIS 渲染——改为 `pretty` 模式不卡
+  `isTTY`（与上色路径一致）；② 启动期探测真实活动代码页（`chcp`）替代按 locale 猜测：UTF-8 控制台
+  （65001）直出 UTF-8，CJK 代码页（cp936/cp932/cp949/cp950）转码到对应页，避免用户已 `chcp 65001`
+  切到 UTF-8 时反而把正确输出转乱。
+- 修复 finding 锚点解析在文件路径含方括号（如 `a/[m-123]/x.ts`）时出错：marker `[file: …, lines: …]`
+  的路径捕获原排除了 `]`，遇到路径里的 `]` 即误截，导致 marker 抽不出跳转锚点、且原样泄漏到
+  finding 正文。改为带 lines 时以 `, lines:` 后缀界定路径（允许路径含 `[]`）。
+
 ## [0.4.0] - 2026-06-14
 
 > 第四个正式版（仍属 0.x · 早期预览）。本版重点：**接入 GitLab**（gitlab.com + Self-Managed，
@@ -23,8 +85,7 @@
   - **CE / EE 审批降级**：MR approve/unapprove API 自 13.9 起为 Premium/Ultimate，且 GitLab 审批二元
     （无「需修改」）。经 `/metadata` 探测 edition，能力位据此降级——EE：通过 / 撤销；CE：无 API 审批、
     UI 灰显。可合并状态走 `detailed_merge_status`（full 保真）。
-  - 嵌套 group 路径、N+1 取详情（diff_refs / 审批）、行内评论按 `position` 三 sha 锚定等设计见
-    [`docs/arch/01-platform-adapter.md`](docs/arch/01-platform-adapter.md) §4.3。
+  - 嵌套 group 路径、N+1 取详情（diff_refs / 审批）、行内评论按 `position` 三 sha 锚定。
 
 ### Changed
 - 拒绝代码反馈 / 改进建议后，卡片自动折叠收起并置灰：左色条转中性灰、类别 chip 置灰，正文与
@@ -99,8 +160,7 @@
   - **语言解析**：`config.language` 为空时按**操作系统偏好语言**自动匹配，非空则按显式选择。默认 /
     兜底语言为 **en-US**（缺译文回退英文而非中文）。
   - **按需懒加载**：默认语言（en-US）静态进入口（首帧不闪），其余语言由 Vite 拆成独立 chunk、切换时
-    才拉取，不进入口包。`ja-JP` / `de-DE` 为机器初稿，发布前建议人工校对；维护与翻译规范见
-    [`docs/arch/10-i18n.md`](docs/arch/10-i18n.md)。
+    才拉取，不进入口包。`ja-JP` / `de-DE` 为机器初稿，发布前建议人工校对。
 - **Mermaid 图渲染**：markdown 里的 `mermaid` 代码块（Qodo `/describe` 常生成的架构图）渲染为图形，
   覆盖 PR 描述 / 评论 / chat 评审输出。mermaid 懒加载（独立 chunk，仅出现图表时才拉取，不进入口包）；
   深色主题、`securityLevel: strict`，渲染失败回退原始代码块。

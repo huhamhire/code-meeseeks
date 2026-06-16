@@ -20,7 +20,17 @@ import {
   type ConnDraft,
 } from './ConnectionForm';
 import { LlmProfileForm, newProfileId, providerLabel, validateProfile } from './LlmProfileForm';
-import { CloseIcon, EyeIcon, EyeOffIcon, FolderIcon, PencilIcon, TrashIcon } from './icons';
+import {
+  CloseIcon,
+  EyeIcon,
+  EyeOffIcon,
+  FolderIcon,
+  GitHubMarkIcon,
+  IssueIcon,
+  PencilIcon,
+  TagIcon,
+  TrashIcon,
+} from './icons';
 import { LlmProviderIcon } from './LlmProviderIcon';
 import { PLATFORM_META } from './PlatformIcon';
 
@@ -70,8 +80,10 @@ export function SettingsModal({
 
   // 草稿 → 整体保存：所有编辑只改本地 state，点底栏"保存"才整体写盘 + 生效
   const [reposDirInput, setReposDirInput] = useState(config.workspace.repos_dir);
-  const [rules, setRules] = useState<Config['rules']>(config.rules);
-  const [rulesDirInput, setRulesDirInput] = useState(config.rules.dir);
+  // Agent 其余字段（max_steps / summary_max_chars / autopilot）在 UI 不编辑，仅持有以便保存时
+  // 原样回传、不被覆盖成默认值；只有目录经 agentDirInput 可编辑。
+  const [agent] = useState<Config['agent']>(config.agent);
+  const [agentDirInput, setAgentDirInput] = useState(config.agent.dir);
   const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
   const [llmEditor, setLlmEditor] = useState<{ mode: 'add' | 'edit'; draft: LlmProfile } | null>(
@@ -84,8 +96,7 @@ export function SettingsModal({
   // 保存基线：保存成功后更新，用于 changed 判定（禁用保存按钮）
   const [base, setBase] = useState(() => ({
     reposDir: config.workspace.repos_dir,
-    rulesDir: config.rules.dir,
-    rulesEnabled: config.rules.enabled,
+    agentDir: config.agent.dir,
     poller: config.poller.interval_seconds,
     llm: config.llm,
     proxy: config.proxy,
@@ -258,8 +269,7 @@ export function SettingsModal({
 
   // ── 变更检测（对比基线）+ 整体保存（仅写有变更的部分，全成功后更新基线）──
   const reposDirChanged = reposDirInput.trim() !== base.reposDir;
-  const rulesChanged =
-    rulesDirInput.trim() !== base.rulesDir || rules.enabled !== base.rulesEnabled;
+  const agentChanged = agentDirInput.trim() !== base.agentDir;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
   const proxyChanged = JSON.stringify(proxy) !== JSON.stringify(base.proxy);
@@ -268,7 +278,7 @@ export function SettingsModal({
     JSON.stringify(connections) !== JSON.stringify(base.connections);
   const anyChanged =
     reposDirChanged ||
-    rulesChanged ||
+    agentChanged ||
     pollerChanged ||
     llmChanged ||
     proxyChanged ||
@@ -286,9 +296,11 @@ export function SettingsModal({
           throw new Error(t('settings.pollerRangeError'));
         await invoke('config:setPoller', { interval_seconds: n });
       }
-      if (rulesChanged) {
-        await invoke('config:setRules', {
-          rules: { dir: rulesDirInput.trim(), enabled: rules.enabled },
+      if (agentChanged) {
+        // 仅 UI 编辑 dir；其余字段（max_steps / summary_max_chars / autopilot）从已加载的
+        // config 原样保留，避免被覆盖成默认值。
+        await invoke('config:setAgent', {
+          agent: { ...agent, dir: agentDirInput.trim() },
         });
       }
       if (llmChanged) {
@@ -310,8 +322,7 @@ export function SettingsModal({
       }
       setBase({
         reposDir: reposDirInput.trim(),
-        rulesDir: rulesDirInput.trim(),
-        rulesEnabled: rules.enabled,
+        agentDir: agentDirInput.trim(),
         poller: Number.parseInt(pollerInput, 10),
         llm,
         proxy,
@@ -583,20 +594,34 @@ export function SettingsModal({
           </section>
 
           <section className="modal-section">
-            <h4>{t('settings.rulesTitle')}</h4>
+            {/* 标题行：左侧标题 + 右侧蓝色「打开当前目录」按钮（在系统文件管理器打开生效的 Agent 目录，
+                便于直接查看 / 编辑文件）。放在标题行而非配置行，避免与下方的目录选择按钮混淆。 */}
+            <div className="modal-section-head">
+              <h4>{t('settings.agentDirTitle')}</h4>
+              {/* 文案按钮（非图标）：与下方的目录「选择」图标按钮区分开，避免混淆。尺寸与其它区块标题行
+                  的操作按钮（添加连接 / 添加配置 / 代理配置）一致，统一用 btn-sm。 */}
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => void invoke('app:openAgentDir', undefined)}
+                title={t('settings.openAgentDir')}
+              >
+                {t('settings.openAgentDir')}
+              </button>
+            </div>
             <p className="muted" style={{ margin: '0 0 8px' }}>
-              {t('settings.rulesHintPrefix')} <code>.md</code> {t('settings.rulesHintSuffix')}
+              {t('settings.agentDirHint')}
             </p>
             <div className="settings-edit-row">
               <input
                 type="text"
                 className="settings-input"
-                value={rulesDirInput}
+                value={agentDirInput}
                 onChange={(e) => {
-                  setRulesDirInput(e.target.value);
+                  setAgentDirInput(e.target.value);
                   setSaved(false);
                 }}
-                placeholder={t('settings.rulesDirPlaceholder')}
+                placeholder={t('settings.agentDirPlaceholder')}
               />
               <button
                 type="button"
@@ -604,11 +629,11 @@ export function SettingsModal({
                 onClick={() => {
                   void (async () => {
                     const r = await invoke('dialog:pickDirectory', {
-                      defaultPath: rulesDirInput.trim() || paths.appDir,
-                      title: t('settings.pickRulesDirTitle'),
+                      defaultPath: agentDirInput.trim() || paths.appDir,
+                      title: t('settings.pickAgentDirTitle'),
                     });
                     if (r.path) {
-                      setRulesDirInput(r.path);
+                      setAgentDirInput(r.path);
                       setSaved(false);
                     }
                   })();
@@ -619,18 +644,6 @@ export function SettingsModal({
                 <FolderIcon />
               </button>
             </div>
-            <label className="settings-secret-row" style={{ marginTop: 8 }}>
-              <input
-                type="checkbox"
-                checked={rules.enabled}
-                onChange={(e) => {
-                  setRules((r) => ({ ...r, enabled: e.target.checked }));
-                  setSaved(false);
-                }}
-                aria-label={t('settings.enableRules')}
-              />
-              <span className="muted">{t('settings.enableRules')}</span>
-            </label>
           </section>
 
           <section className="modal-section">
@@ -714,6 +727,37 @@ export function SettingsModal({
               >
                 {t('settings.openDevTools')}
               </button>
+            </div>
+            {/* 关于 & 反馈：低频社区链接。http(s) 外链由 App 顶层点击拦截走 openExternal 在系统浏览器打开。 */}
+            <div className="settings-about-links">
+              <span className="muted settings-about-label">{t('settings.aboutFeedback')}</span>
+              <a
+                className="settings-about-link"
+                href="https://github.com/huhamhire/code-meeseeks"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <GitHubMarkIcon size={14} />
+                {t('settings.starOnGithub')}
+              </a>
+              <a
+                className="settings-about-link"
+                href="https://github.com/huhamhire/code-meeseeks/issues/new"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <IssueIcon size={14} />
+                {t('settings.reportIssue')}
+              </a>
+              <a
+                className="settings-about-link"
+                href="https://github.com/huhamhire/code-meeseeks/releases"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <TagIcon size={14} />
+                {t('settings.releases')}
+              </a>
             </div>
           </section>
         </div>

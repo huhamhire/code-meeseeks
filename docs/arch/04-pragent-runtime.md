@@ -90,7 +90,7 @@ litellm**。
   为避免本机环境里残留的 API key 串入、覆盖 CLI 自身的登录方式，shim 显式从子进程 env **剥掉
   `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`**。使用的模型、额度与合规均由该 CLI 的账户与用户授权决定。
 - **代理自动透传**：子进程 env 由 `os.environ` 拷贝而来（仅剔除上面两个 API key），`HTTP(S)_PROXY` / `NO_PROXY`
-  原样保留 → `claude` 出站自动走用户配置的代理（见 [08](08-networking-proxy.md)），无需另设。
+  原样保留 → `claude` 出站自动走用户配置的代理（见 [09](09-networking-proxy.md)），无需另设。
 - **token usage**：从 claude JSON 的 `usage`（`input_tokens`(+cache_*) ≈ prompt，`output_tokens` ≈ completion）
   构造同款 `@@MEEBOX_USAGE@@` 哨兵，主进程同一套累加。
 - **一期边界**：仅 `claude`（UI 校验拦下 codex 等，命令框可输入留待后续）；并发为「一次调用一个子进程」；父进程被
@@ -100,7 +100,7 @@ litellm**。
 
 每次 run 给子进程注入：LLM provider 凭据（`OPENAI__KEY` / `DEEPSEEK__KEY` / `ANTHROPIC__KEY` 等，按 provider 分族；
 cli 模式不下发任何密钥，只给 `MEEBOX_CLI_MODE` / `MEEBOX_CLI_BIN` 两个哨兵）+
-模型名 + 响应语言 + 命中规则的 `EXTRA_INSTRUCTIONS`（见 [06](06-rules.md)）+ 出站代理（见 [08](08-networking-proxy.md)）。
+模型名 + 响应语言 + 命中规则的 `EXTRA_INSTRUCTIONS`（见 [07](07-rules.md)）+ 出站代理（见 [09](09-networking-proxy.md)）。
 
 ## 数据 / 接口契约
 

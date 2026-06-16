@@ -10,6 +10,7 @@
   "Recommended focus areas for review:": "Empfohlene Schwerpunktbereiche für das Review:",
   "No security concerns identified": "Keine Sicherheitsbedenken festgestellt",
   "Security concerns": "Sicherheitsbedenken",
+  "Sensitive information exposure": "Offenlegung sensibler Informationen",
   "Major issues detected": "Schwerwiegende Probleme erkannt",
   "No major issues detected": "Keine schwerwiegenden Probleme erkannt",
   "Possible issues": "Mögliche Probleme",
@@ -76,6 +77,7 @@
   "Configuration changes": "Konfigurationsänderungen",
   "Tests": "Tests",
   "Other": "Sonstiges",
+  "Miscellaneous": "Verschiedenes",
   "High": "Hoch",
   "Medium": "Mittel",
   "Low": "Niedrig"

@@ -408,6 +408,88 @@ export function NeedsWorkIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 机器人头像：AutoPilot 启用态。天线 + 头框 + 双眼 + 两侧耳。 */
+export function RobotIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5.5" width="10" height="7.5" rx="1.6" />
+      <path d="M8 3.2v2.3" />
+      <circle cx="8" cy="2.6" r="0.7" fill="currentColor" stroke="none" />
+      <circle cx="6" cy="9" r="0.85" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="9" r="0.85" fill="currentColor" stroke="none" />
+      <path d="M1.6 8.5v2" />
+      <path d="M14.4 8.5v2" />
+    </svg>
+  );
+}
+
+/** 实心五角星：评审建议徽标（手动 / AutoPilot 一视同仁）。SVG 保证字形居中、跨平台一致。 */
+export function StarIcon({ size = 11 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M8 1l1.65 4.74 5.01.1-4 3.03 1.45 4.79L8 10.8l-4.11 2.86 1.45-4.79-4-3.03 5.01-.1L8 1z" />
+    </svg>
+  );
+}
+
+/** 机器人头像 + 斜杠：AutoPilot 关闭态。 */
+export function RobotOffIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5.5" width="10" height="7.5" rx="1.6" />
+      <path d="M8 3.2v2.3" />
+      <circle cx="8" cy="2.6" r="0.7" fill="currentColor" stroke="none" />
+      <circle cx="6" cy="9" r="0.85" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="9" r="0.85" fill="currentColor" stroke="none" />
+      <path d="M1.6 8.5v2" />
+      <path d="M14.4 8.5v2" />
+      <path d="M2.3 2.3l11.4 11.4" />
+    </svg>
+  );
+}
+
+/** 双星火花（sparkles）：AI 自动评审动作。两颗四角星，区别于工具命令的 `/` 触发器 */
+export function AutoReviewIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M9.6 2l1 2.7 2.7 1-2.7 1-1 2.7-1-2.7-2.7-1 2.7-1z" />
+      <path d="M4.4 9.1l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z" />
+    </svg>
+  );
+}
+
 /** 双向循环箭头（Lucide refresh-cw-2 风格）：同步状态。与 RetryIcon（单箭头，重试动作）区分语义 */
 export function SyncIcon({ size = 12 }: IconProps) {
   return (
@@ -494,6 +576,47 @@ export function SuccessBadgeIcon({ size = 76 }: IconProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+/** GitHub Octocat 标记（随文字色，用于「关于」链接的 GitHub / Star 入口）。 */
+export function GitHubMarkIcon({ size = 14 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 1.5a10.5 10.5 0 0 0-3.32 20.46c.52.1.71-.23.71-.5l-.01-1.77c-2.92.64-3.54-1.25-3.54-1.25-.48-1.22-1.17-1.54-1.17-1.54-.95-.65.07-.64.07-.64 1.06.07 1.61 1.09 1.61 1.09.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.66-1.4-2.33-.27-4.78-1.17-4.78-5.18 0-1.15.41-2.08 1.08-2.82-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.88 1.07a10 10 0 0 1 5.24 0c2-1.35 2.88-1.07 2.88-1.07.57 1.45.21 2.52.1 2.79.67.74 1.08 1.67 1.08 2.82 0 4.02-2.46 4.9-4.8 5.16.38.33.71.97.71 1.96l-.01 2.9c0 .28.19.61.72.5A10.5 10.5 0 0 0 12 1.5z"
+      />
+    </svg>
+  );
+}
+
+/** GitHub issue 字形：空心圆 + 实心圆点。用于「提交反馈 / Issue」入口。 */
+export function IssueIcon({ size = 14 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="8" cy="8" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** 标签 / 发布字形：带孔的 tag。用于「发布记录」入口。 */
+export function TagIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M7.6 2.2H3.2a1 1 0 0 0-1 1v4.4a1 1 0 0 0 .3.7l6 6a1 1 0 0 0 1.4 0l4.1-4.1a1 1 0 0 0 0-1.4l-6-6a1 1 0 0 0-.4-.3 1 1 0 0 0-.4-.6z" />
+      <circle cx="5" cy="5" r="0.95" fill="currentColor" stroke="none" />
     </svg>
   );
 }

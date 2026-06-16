@@ -179,12 +179,31 @@ function mapSectionKey(displayTitle: string): PrDocSectionKey | undefined {
  *   pr-agent 把问题回显在答案文本里是冗余的
  */
 const SKIP_TITLES = new Set(['user description']);
-const SKIP_TITLES_ASK = new Set(['question', 'questions', '问题']);
+const ASK_QUESTION_HEADERS = new Set(['ask', 'question', 'questions', '问题', '提问']);
+const ASK_ANSWER_HEADERS = new Set(['answer', 'answers', '回答', '答案', '解答']);
+
+/**
+ * /ask 输出里的结构性表头判别：pr-agent 把「Ask ❓」「回答:」这类标题段回显出来，对 UI 是冗余的
+ * （提问已在上方气泡展示、答案紧跟其下）。先剥首尾的 emoji / 标点 / 空格再按集合匹配。
+ */
+function askHeaderKind(title: string): 'question' | 'answer' | null {
+  const t = normalizeTitle(title)
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+    .toLowerCase();
+  if (ASK_QUESTION_HEADERS.has(t)) return 'question';
+  if (ASK_ANSWER_HEADERS.has(t)) return 'answer';
+  return null;
+}
 
 function shouldSkipSection(sec: Section, tool: ReviewRunTool): boolean {
   const t = normalizeTitle(sec.title).toLowerCase();
   if (SKIP_TITLES.has(t)) return true;
-  if (tool === 'ask' && SKIP_TITLES_ASK.has(t)) return true;
+  if (tool === 'ask') {
+    const kind = askHeaderKind(sec.title);
+    // 「Ask ❓」等问题回显段整段剔除；空的「回答」表头段（仅标题无正文）同样剔除。
+    if (kind === 'question') return true;
+    if (kind === 'answer' && !trimNoise(sec.body).trim()) return true;
+  }
   // title 含内部分支名 (e.g., "meebox/head" / "meebox/head 🔍" / "## meebox/head")
   if (INTERNAL_BRANCH_RE.test(t)) return true;
   // trimNoise 把首尾的 HR / 分支名 leak 剥掉后，body 空 = 整段都是噪音
@@ -444,12 +463,14 @@ function resolveIssueAnchor(link: string | undefined, body: string): FindingAnch
 }
 
 /** 锚点 marker `[file: <path>, lines: <s>-<e>]`（我们 prompt 注入的）。抽成 anchor 后
- *  应从展示 body 删除，否则会作为多余文字泄漏到 finding 正文。 */
+ *  应从展示 body 删除，否则会作为多余文字泄漏到 finding 正文。
+ *  路径本身可能含 `[]`（如 `a/[m-123]/x.ts`）：带 lines 时用惰性 `.+?` + 必现的 `, lines:`
+ *  后缀界定（`.` 可匹配 `]`，故路径里的 `]` 不再误截）；无 lines 时回退到不含 `]` 的旧式。 */
 const ANCHOR_MARKER_RE =
-  /\[\s*file\s*:\s*[^,\]\n]+?(?:\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?)?\s*\]/gi;
+  /\[\s*file\s*:\s*(?:.+?\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?|[^,\]\n]+?)\s*\]/gi;
 
 /** 从 finding body 删掉锚点 marker，并收敛多余空白。 */
-function stripAnchorMarker(body: string): string {
+export function stripAnchorMarker(body: string): string {
   return body
     .replace(ANCHOR_MARKER_RE, '')
     .replace(/[ \t]+\n/g, '\n')
@@ -458,10 +479,12 @@ function stripAnchorMarker(body: string): string {
 }
 
 function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
-  // 显式 marker (我们 prompt 注入的)
-  const markerRe =
-    /\[\s*file\s*:\s*([^,\]\s][^,\]]*?)\s*(?:,\s*lines?\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?\s*\]/i;
-  const mm = markerRe.exec(text);
+  // 显式 marker (我们 prompt 注入的)。带 lines 时路径用惰性 `.+?` + 必现 `, lines:` 后缀界定，
+  // 允许路径含 `[]`（`.` 匹配 `]`，不被路径里的 `]` 误截）；无 lines 时回退到不含 `]` 的旧式。
+  const markerWithLines =
+    /\[\s*file\s*:\s*(.+?)\s*,\s*lines?\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?\s*\]/i;
+  const markerNoLines = /\[\s*file\s*:\s*([^,\]\s][^,\]]*?)\s*\]/i;
+  const mm = markerWithLines.exec(text) ?? markerNoLines.exec(text);
   if (mm) {
     const path = stripBackticks(mm[1]!.trim());
     const anchor: FindingAnchor = { path };
@@ -496,8 +519,11 @@ function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
 export function sectionToFinding(sec: Section, index: number, tool: ReviewRunTool): Finding {
   const id = `${tool}-${String(index).padStart(3, '0')}`;
   const body = trimNoise(sec.body);
-  const displayTitle = normalizeTitle(sec.title) || undefined;
-  const mappedKey = displayTitle ? mapSectionKey(displayTitle) : undefined;
+  const rawTitle = normalizeTitle(sec.title) || undefined;
+  const mappedKey = rawTitle ? mapSectionKey(rawTitle) : undefined;
+  // /ask：带正文的「回答 / Answer」表头是冗余的（其下就是答案正文）→ 清掉标题只留正文。
+  const displayTitle =
+    tool === 'ask' && askHeaderKind(sec.title) === 'answer' ? undefined : rawTitle;
 
   // pr-agent 0.36.0 review 输出形如 (pr-agent 自定义 prompt 或非 LocalGitProvider 时)：
   //   **File:** src/foo.ts
@@ -762,10 +788,11 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
 export function parseImproveOutput(stdout: string): ParsedReviewOutput {
   const cleaned = stripAnsi(stdout).replace(/\r\n/g, '\n');
   const lines = cleaned.split('\n');
-  // file marker 行：`[<path> [<start>-<end>]](<url>)`，path 内不含 `]` / 空白；
-  // range 可能 `[42-45]` 或 `[42]` (单行)
+  // file marker 行：`[<path> [<start>-<end>]](<url>)`，path 内不含空白（但可含 `[]`，如
+  // `a/[m-123]/x.ts`）；range 可能 `[42-45]` 或 `[42]` (单行)。path 用惰性非空白 `[^\s]+?` +
+  // 必现的 ` [<range>]](` 后缀界定，路径里的 `]` 不再误截。
   const markerRe =
-    /^\[([^\]\s]+)\s+\[(\d+)(?:-(\d+))?\]\]\(/;
+    /^\[([^\s]+?)\s+\[(\d+)(?:-(\d+))?\]\]\(/;
   interface Marker {
     idx: number;
     file: string;

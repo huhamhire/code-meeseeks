@@ -41,6 +41,21 @@
   color: $text-on-accent;
 }
 
+// AutoPilot 开关 chip：机器人图标（开）/ 斜杠机器人（关）+ 文案；默认中性，启用时蓝底强调
+.statusbar-chip-autopilot {
+  cursor: pointer;
+  gap: $space-2;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  &.is-on {
+    background: $color-accent;
+    color: $text-on-accent;
+  }
+}
+
 // 新版本提示 chip：强调蓝底，点击跳转下载页
 .statusbar-chip-update {
   background: $color-accent;
@@ -251,7 +266,6 @@ button.statusbar-pragent-chip {
   flex-shrink: 0;
 }
 .statusbar-queue-pr {
-  font-family: $font-mono;
   font-size: $fs-xs;
   color: $text-muted;
   background: transparent;
@@ -260,6 +274,9 @@ button.statusbar-pragent-chip {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+.statusbar-queue-prnum {
+  font-family: $font-mono;
 }
 .statusbar-queue-state {
   font-size: $fs-xs;

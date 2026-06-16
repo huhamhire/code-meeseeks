@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseReviewOutput, sectionToFinding, splitMarkdownSections } from '../src/parse-output.js';
+import {
+  parseReviewOutput,
+  sectionToFinding,
+  splitMarkdownSections,
+  stripAnchorMarker,
+} from '../src/parse-output.js';
 
 describe('splitMarkdownSections', () => {
   it('按 H1-H6 切片，body 去前后空白', () => {
@@ -122,6 +127,24 @@ describe('sectionToFinding', () => {
     expect(f.anchor).toEqual({ path: 'pkg/cache.go', startLine: 17 });
   });
 
+  it('marker 路径含 [] 仍能抽出 anchor（path 不被路径里的 ] 误截）', () => {
+    const f = sectionToFinding(
+      {
+        level: 2,
+        title: 'Answer',
+        body: '租户错位风险。\n[file: 2026/11.1.x/[m-6837803244].迁移/src/context.ts, lines: 92-101]',
+      },
+      0,
+      'ask',
+    );
+    expect(f.category).toBe('code-feedback');
+    expect(f.anchor).toEqual({
+      path: '2026/11.1.x/[m-6837803244].迁移/src/context.ts',
+      startLine: 92,
+      endLine: 101,
+    });
+  });
+
   it('/ask 答案不涉及具体位置 (无 marker) → 留 general，不强行兜底路径 token', () => {
     const f = sectionToFinding(
       // 故意含 src/foo.ts 路径 token，但没显式 marker 也没行号 → 应保持 general
@@ -140,6 +163,22 @@ describe('sectionToFinding', () => {
       'describe',
     );
     expect(f.category).toBe('description');
+  });
+});
+
+describe('stripAnchorMarker', () => {
+  it('清掉 [file:…, lines:…] marker（含路径里的 []，不被 ] 误截）', () => {
+    const body =
+      '租户错位风险。\n[file: 2026/11.1.x/[m-6837803244].迁移/src/context.ts, lines: 92-101]';
+    const out = stripAnchorMarker(body);
+    expect(out).toBe('租户错位风险。');
+    expect(out).not.toContain('[file:');
+    expect(out).not.toContain('lines: 92-101');
+  });
+
+  it('清掉无 [] 的普通 marker，并兼容无 lines 的旧式', () => {
+    expect(stripAnchorMarker('问题。\n[file: src/a.ts, lines: 5-9]')).toBe('问题。');
+    expect(stripAnchorMarker('问题。\n[file: src/a.ts]')).toBe('问题。');
   });
 });
 

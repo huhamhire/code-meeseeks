@@ -12,8 +12,9 @@
 ### 布局
 
 根组件挂载后做一次 bootstrap（并行拉 app 信息 / 配置 / PR 列表 / pr-agent 状态 / 连接 / 上次同步），
-之后是三栏 + 状态栏的主界面，外加按需浮层：
+之后是自绘标题栏 + 三栏 + 状态栏的主界面，外加按需浮层：
 
+- **TitleBar（顶）**：无边框窗口的自绘标题栏（见下「无边框窗口」），展示品牌名 + 选中 PR 标题，整条可拖拽窗口。
 - **Sidebar（左）**：待评审 PR 列表，按 `项目/仓库` 分组 + 手风琴折叠，updatedAt 倒序，状态过滤 + 搜索；
   宽度可拖拽、可整体收起。
 - **MainPane（中）**：选中 PR 的详情，分「变更 / 评论 / 提交 / 详情」标签页。变更页即 **DiffView**。
@@ -38,6 +39,19 @@ pr-agent run 的实时状态、仓库同步、草稿都用**模块级 store**（
 启动时把主进程的事件流（run 进度 / 队列变化 / 同步进度 / 草稿变化）接入。这样切换 PR 时运行中的状态、
 实时 stdout、草稿列表不随组件卸载丢失。
 
+### 无边框窗口
+
+主窗口去掉系统原生标题栏（`titleBarStyle: 'hidden'`），由渲染层自绘一条 36px 标题栏（VS Code 风），
+让深色主题从顶贯通到底。窗控按钮**不自绘**，交由系统画以保留原生行为（Snap Layouts / 双击最大化 / 吸附）：
+
+- **macOS**：保留红绿灯，`trafficLightPosition` 下移到自绘标题栏内；标题栏左侧留 72px 占位避让。
+- **Windows / Linux**：`titleBarOverlay` 让系统在右上画最小化/最大化/关闭，渲染层只接管中间标题区，
+  **勿在右上角放可点元素**（会被 overlay 覆盖）。`titleBarOverlay.height` 必须与渲染层 `.app-titlebar` 高度（36px）一致。
+
+拖拽实现：整条标题栏 `-webkit-app-region: drag`，其中的按钮/链接/输入等交互元素各自 `no-drag`，否则点击被当成拖窗。
+
+平台差异经 `AppInfo.platform`（bootstrap 时由主进程下发）判定，渲染层不直接读 `process`。
+
 ### 交互约定
 
 - **外链统一外开**：所有 UGC（评论 / PR 描述 / finding / chat）里的 `http(s)` 链接点击都走系统默认浏览器
@@ -60,4 +74,5 @@ pr-agent run 的实时状态、仓库同步、草稿都用**模块级 store**（
 - **跨 PR 需存活的状态进模块级 store**，不要塞组件 useState（切 PR 即丢）。
 - **安全基线**：`contextIsolation` 开、无 `nodeIntegration`、CSP；preload 只暴露白名单能力。
 - **二层模态**新增时记得 backdrop `stopPropagation`，否则会连带关掉外层。
+- **无边框标题栏高度**改动时，渲染层 `.app-titlebar` 与主进程 `titleBarOverlay.height` 两处须同步，否则 Windows 窗控与标题区错位；标题栏内新增交互元素记得标 `no-drag`。
 - Monaco 的 worker、view zone（行内评论/草稿）渲染较重，注意大 PR 下的懒加载与销毁。

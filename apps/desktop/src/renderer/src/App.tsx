@@ -22,6 +22,7 @@ import { OnboardingWizard, type OnboardingResult } from './components/onboarding
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
+import { TitleBar } from './components/TitleBar';
 
 interface BootstrapState {
   info: AppInfo;
@@ -408,6 +409,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <TitleBar platform={boot.info.platform} title={selected?.title} />
       <div className="app-body">
         {!sidebarCollapsed && (
           <Sidebar
@@ -475,6 +477,25 @@ export default function App() {
         }}
         onJumpToPr={setSelectedId}
         updateInfo={updateInfo}
+        autopilotEnabled={boot.config.agent.autopilot.enabled}
+        onToggleAutopilot={() => {
+          const enabled = !boot.config.agent.autopilot.enabled;
+          void invoke('agent:setAutopilotEnabled', { enabled });
+          setBoot((b) =>
+            b
+              ? {
+                  ...b,
+                  config: {
+                    ...b.config,
+                    agent: {
+                      ...b.config.agent,
+                      autopilot: { ...b.config.agent.autopilot, enabled },
+                    },
+                  },
+                }
+              : b,
+          );
+        }}
       />
       {showSettings && (
         <SettingsModal

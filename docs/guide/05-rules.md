@@ -4,17 +4,18 @@
 
 规则是**纯文件**：一个规则目录下，每个 `.md` 文件就是一条规则。`frontmatter`（文件顶部的 YAML）声明这条规则**何时命中**，正文（markdown）是命中后**注入给 AI 的指令**。
 
-## 启用规则目录
+## 规则目录
 
-在 `config.yaml` 配置规则目录（见 [配置文件参考 · rules](04-config-reference.md#rules--个性化规则)）：
+规则目录是 **Agent 目录下的 `rules/` 子目录**：`<agent.dir>/rules/`（见 [配置文件参考 · agent](04-config-reference.md#agent--高阶-agent-与-autopilot)）。无需单独配置规则路径——只要把规则文件放进该目录即可生效。
 
-```yaml
-rules:
-  dir: ~/code-review-rules   # 规则目录；留空 = 不启用
-  enabled: true              # 全局开关
+```
+<agent.dir>/            # 默认 ~/.code-meeseeks/agent，可由 agent.dir 指向自定义 / git 仓库
+└── rules/              # 规则目录：放入 .md 规则文件
+    ├── fx-amount.md
+    └── api-breaking.md
 ```
 
-建议把规则目录指向一个 git 仓库，便于团队共享与版本化。目录下可按子目录组织，应用会递归扫描所有 `.md`。
+`agent.dir` 留空时默认 `~/.code-meeseeks/agent`；指向一个 git 仓库即可让团队共享与版本化规则。目录下可按子目录组织，应用会递归扫描所有 `.md`。
 
 ## 规则文件结构
 
@@ -46,7 +47,7 @@ enabled: true
 | `applies_to.target_branch` | 正则源串 | 省略 = 匹配任意 | 命中 PR 的**目标分支**名。 |
 | `tools` | 数组 | `[review]` | 规则作用的工具，可取 `review` / `describe`。默认只作用于 `/review`（评审规约注入 `/describe` 会让描述偏题）。 |
 | `priority` | 数字 | `0` | 多条规则同时命中时的取舍权重，越大越优先（见下「命中与取舍」）。 |
-| `enabled` | 布尔 | `true` | 单条规则开关；`false` 时跳过该文件（区别于全局 `rules.enabled`）。 |
+| `enabled` | 布尔 | `true` | 单条规则开关；`false` 时跳过该文件。 |
 | `custom_labels` | 数组 | `[]` | 预留字段，当前版本解析但尚未注入 pr-agent。 |
 
 > **正则说明**：`applies_to.*` 的值是正则**源串**，**不自动加锚点** `^`/`$`，是否精确匹配由你自己写。例如 `fx` 会匹配任何含 `fx` 的名字；要精确匹配写 `^fx$`。非法正则会被忽略（视为该字段未配置）。
@@ -104,4 +105,4 @@ applies_to:
 - **单文件解析失败不影响整体**：某个文件 frontmatter YAML 写坏 / 字段类型不对，应用会跳过该文件并继续加载其余规则。
 - **当前命中提示**：选中 PR 后，chat 面板会显示本次命中的规则标识，点击可预览规则正文，便于确认本次评审受哪条规则约束。
 
-> 设计与实现细节见架构文档 [docs/arch/06-rules.md](../arch/06-rules.md)。
+> 设计与实现细节见架构文档 [docs/arch/07-rules.md](../arch/07-rules.md)。

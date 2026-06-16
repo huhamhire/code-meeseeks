@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 // 外部第三方依赖（electron / pino / yaml / zod ...）继续 externalize 让 Node 在运行时解析。
 const internalPackages = [
   '@meebox/shared',
+  '@meebox/agent',
   '@meebox/config',
   '@meebox/logger',
   '@meebox/pr-agent-bridge',
@@ -37,6 +38,10 @@ export default defineConfig({
   },
   renderer: {
     root: resolve('src/renderer'),
+    // 渲染层引用仓库根 assets/（品牌图标等单一来源，避免拷贝重复二进制）
+    resolve: {
+      alias: { '@assets': resolve('../../assets') },
+    },
     plugins: [react()],
     build: {
       rollupOptions: {

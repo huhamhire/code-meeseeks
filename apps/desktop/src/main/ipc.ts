@@ -2,9 +2,18 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
+import {
+  appendAgentNotes,
+  buildToolCatalog,
+  judgeAutopilotBatch,
+  loadAgentContext,
+  loadAgentRules,
+} from '@meebox/agent';
+import type { AgentContext } from '@meebox/agent';
 import { writeConfig, type BootstrapResult } from '@meebox/config';
 import { PrAgentRunError, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import {
@@ -17,19 +26,32 @@ import {
   isCommentsCacheStale,
   listDrafts,
   listReviewRunsForPr,
+  hasReviewOutput,
   clearReviewRunsForPr,
   listStoredPullRequests,
   makeRunId,
   parseReviewOutput,
   readCommentsCache,
+  readDiffBaseCache,
+  writeDiffBaseCache,
   setLocalStatus,
   startReviewRun,
   updateDraft,
   writeCommentsCache,
+  writeAutopilotLedger,
+  getAutopilotLedger,
+  getAgentSession,
+  clearAgentSession,
+  getAgentConversation,
+  getAgentTranscript,
+  appendAgentMessage,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
-import { loadRules, pickMatchingRule } from '@meebox/rules';
+import { pickMatchingRule } from '@meebox/rules';
 import type {
+  AgentRecommendationVerdict,
+  AgentSession,
+  AgentStep,
   AppInfo,
   ConnectionSummary,
   IpcChannels,
@@ -51,6 +73,8 @@ import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
 import { checkForUpdate } from './utils/update-check.js';
 import { buildPrContext } from './utils/pr-context.js';
+import { runAgentReview } from './agent-review.js';
+import { runAgentPlanning } from './agent-planning.js';
 
 interface RegisterDeps {
   bootstrap: BootstrapResult;
@@ -85,7 +109,11 @@ export function registerIpcHandlers({
   connectionRuntime,
   reconfigureConnections,
   repoMirror,
-}: RegisterDeps): { abortAllActiveRuns: () => number } {
+}: RegisterDeps): {
+  abortAllActiveRuns: () => number;
+  runAutopilotIfDue: () => void;
+  terminateAgentsForGonePrs: () => void;
+} {
   // === pr-agent run 队列 ===
   //
   // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 worktree)，
@@ -103,6 +131,8 @@ export function registerIpcHandlers({
     pr: StoredPullRequest;
     resolve: (run: ReviewRun) => void;
     reject: (err: Error) => void;
+    /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。见 §7 调度。 */
+    priority: 'user' | 'agent';
     /** 仅 active 状态填；用于 cancel SIGKILL */
     ac?: AbortController;
   }
@@ -135,6 +165,9 @@ export function registerIpcHandlers({
     if (!pr) throw new Error(`PR not found in local state: ${localId}`);
     return pr;
   };
+
+  /** 生效的 Agent 目录：用户配置优先，未配置则回落工作目录默认位置（~/.code-meeseeks/agent）。 */
+  const effectiveAgentDir = (): string => bootstrap.config.agent.dir || bootstrap.paths.agentDir;
 
   // /ask 输出去重：pr-agent answer markdown 里会回显完整问题，跟 UI chat-user-msg
   // 气泡重复。逐行精确匹配 question (含 trim 后) 的行整行删掉，保留其余正文
@@ -434,6 +467,13 @@ export function registerIpcHandlers({
     const err = await shell.openPath(bootstrap.paths.configFile);
     if (err) throw new Error(`failed to open config.yaml: ${err}`);
   });
+  ipcMain.handle('app:openAgentDir', async (): Promise<void> => {
+    // 当前生效的 Agent 目录（用户配置优先，否则默认 ~/.code-meeseeks/agent）；先确保存在再打开。
+    const dir = effectiveAgentDir();
+    await fs.mkdir(dir, { recursive: true }).catch(() => undefined);
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(`failed to open agent dir: ${err}`);
+  });
   ipcMain.handle('app:openDevTools', (evt) => {
     evt.sender.openDevTools({ mode: 'detach' });
   });
@@ -569,6 +609,37 @@ export function registerIpcHandlers({
     return { mirrorPath: r.mirrorPath, freshClone: r.freshClone };
   };
 
+  /**
+   * 解析 PR diff 的固定 base（merge-base）——见 `@meebox/poller` diff-base-cache。
+   *
+   * PR diff 的语义基准是「源分支自目标分支分叉处」= `merge-base(targetRef.sha, sourceRef.sha)`，
+   * 而非目标分支当前 tip（会随别的 PR 合入前移）。首次算出后固化于 `prs/<localId>/diff-base.json`，
+   * 之后 listChangedFiles / 文件内容 / commitCount / blame / pr-agent worktree 一律以它为 base：
+   * - 内容（Monaco 左栏）锚到 merge-base → 编辑器即真三点，目标漂移不再把别的 PR 改动倒挂进来；
+   * - 行锚点（评论 / finding）有了固定参照，目标漂移不致错位。
+   *
+   * 失效重算：固化 base 不再是当前 head 的祖先（源分支被 rebase）→ 重算。head 正常 push（仅前进）
+   * 不失效。算不出（缺对象 / 无共同祖先）→ 兜底退回 targetRef.sha 且**不固化**，下次再试。
+   *
+   * 前置：mirror 已含 head + targetRef.sha（diff 入口已 ensureMirrorReadyForPr / syncMirror）。
+   */
+  const resolveDiffBaseSha = async (pr: StoredPullRequest): Promise<string> => {
+    const id = repoIdentityFor(pr);
+    const head = pr.sourceRef.sha;
+    const cached = await readDiffBaseCache(stateStore, pr.localId);
+    if (cached?.base_sha && (await repoMirror.isAncestor(id, cached.base_sha, head))) {
+      return cached.base_sha;
+    }
+    const mb = await repoMirror.mergeBase(id, pr.targetRef.sha, head);
+    if (!mb) return pr.targetRef.sha;
+    await writeDiffBaseCache(stateStore, pr.localId, {
+      base_sha: mb,
+      head_sha: head,
+      computed_at: new Date().toISOString(),
+    });
+    return mb;
+  };
+
   ipcMain.handle(
     'repo:sync',
     async (
@@ -590,7 +661,9 @@ export function registerIpcHandlers({
       const id = repoIdentityFor(pr);
       // 自动确保 mirror 含 head + base sha (快速路径命中即 noop)；再算 diff
       await ensureMirrorReadyForPr(pr);
-      return repoMirror.listChangedFiles(id, pr.targetRef.sha, pr.sourceRef.sha);
+      // base 锚到固定 merge-base（非漂移的 targetRef.sha），三点 diff 对目标分支前移稳定
+      const base = await resolveDiffBaseSha(pr);
+      return repoMirror.listChangedFiles(id, base, pr.sourceRef.sha);
     },
   );
 
@@ -602,7 +675,8 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['diff:getFileContent']['response']> => {
       const pr = await findPrOrThrow(req.localId);
       const id = repoIdentityFor(pr);
-      const sha = req.side === 'base' ? pr.targetRef.sha : pr.sourceRef.sha;
+      // base 侧读固定 merge-base 的内容（与三点 diff 一致），head 侧读源 tip
+      const sha = req.side === 'base' ? await resolveDiffBaseSha(pr) : pr.sourceRef.sha;
       return repoMirror.getFileContent(id, sha, req.path);
     },
   );
@@ -698,8 +772,11 @@ export function registerIpcHandlers({
       const pr = await findPrOrThrow(req.localId);
       const id = repoIdentityFor(pr);
       // 本地 git 算 base..head；不打远端、不主动触发 sync。镜像还没拉齐就返回 null，
-      // UI 角标暂不显示，等下次 poll 触发 syncMirror 完成后自然命中
-      const n = await repoMirror.countCommits(id, pr.targetRef.sha, pr.sourceRef.sha);
+      // UI 角标暂不显示，等下次 poll 触发 syncMirror 完成后自然命中。
+      // base 用固定 merge-base：base..head（base 为 merge-base 时）即 PR 自身提交数，
+      // 与三点 diff 同源、对目标分支前移稳定（旧版用 targetRef.sha 会随漂移跳变）
+      const base = await resolveDiffBaseSha(pr);
+      const n = await repoMirror.countCommits(id, base, pr.sourceRef.sha);
       return n === null ? null : { count: n };
     },
   );
@@ -714,9 +791,10 @@ export function registerIpcHandlers({
       const id = repoIdentityFor(pr);
       // 只对 base 已有部分展示 blame；PR 引入的行单独返给 renderer，
       // 由 BlameColumn 画色带占位（对应 Monaco diff 添加/修改区的视觉）。
+      const base = await resolveDiffBaseSha(pr);
       const [allBlame, changedSet] = await Promise.all([
         repoMirror.getBlame(id, pr.sourceRef.sha, req.path),
-        repoMirror.listChangedHeadLines(id, pr.targetRef.sha, pr.sourceRef.sha, req.path),
+        repoMirror.listChangedHeadLines(id, base, pr.sourceRef.sha, req.path),
       ]);
       return {
         lines: allBlame.filter((b) => !changedSet.has(b.line)),
@@ -797,7 +875,10 @@ export function registerIpcHandlers({
 
     const repoId = repoIdentityFor(pr);
     await repoMirror.syncMirror(repoId);
-    const wt = await repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, pr.targetRef.sha);
+    // pr-agent 的 LOCAL__TARGET_BRANCH 用固定 merge-base（与 UI diff 同源）：让 AI 评审基于
+    // 「PR 自分叉后引入的改动」，而非 targetRef.sha 漂移后混入别的 PR 的两点对比
+    const diffBase = await resolveDiffBaseSha(pr);
+    const wt = await repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase);
     const ac = item.ac!;
     try {
       const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
@@ -852,21 +933,18 @@ export function registerIpcHandlers({
           }
         }
 
-        const rulesCfg = bootstrap.config.rules;
-        if (rulesCfg.enabled && rulesCfg.dir) {
-          const rules = await loadRules(rulesCfg.dir, {
-            onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
-          });
-          const matched = pickMatchingRule(rules, {
-            projectKey: pr.repo.projectKey,
-            repoSlug: pr.repo.repoSlug,
-            targetBranch: pr.targetRef.displayId,
-            tool: req.tool,
-          });
-          if (matched) {
-            matchedRuleInstructions = matched.instructions;
-            matchedRuleId = matched.id;
-          }
+        const rules = await loadAgentRules(effectiveAgentDir(), {
+          onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
+        });
+        const matched = pickMatchingRule(rules, {
+          projectKey: pr.repo.projectKey,
+          repoSlug: pr.repo.repoSlug,
+          targetBranch: pr.targetRef.displayId,
+          tool: req.tool,
+        });
+        if (matched) {
+          matchedRuleInstructions = matched.instructions;
+          matchedRuleId = matched.id;
         }
       }
 
@@ -1172,6 +1250,60 @@ export function registerIpcHandlers({
     broadcastQueueChanged();
   };
 
+  /**
+   * 入队一个 pr-agent run（与用户手动 run 共用同一队列 / 并发 / 取消机制）。dedup：同 PR
+   * 同工具已在执行 / 排队则抛错（/ask 不限）。resolve 完成的 ReviewRun。
+   * `pragent:run` handler 与 Agent 编排器（runTool）都走它。
+   */
+  const enqueuePragentRun = (
+    pr: StoredPullRequest,
+    tool: ReviewRunTool,
+    question?: string,
+    priority: 'user' | 'agent' = 'user',
+  ): Promise<ReviewRun> => {
+    if (tool !== 'ask') {
+      const sameTask = (q: QueueItem): boolean =>
+        q.info.prLocalId === pr.localId && q.info.tool === tool;
+      if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
+        throw new Error(t('prAgent.duplicateTask', { tool }));
+      }
+    }
+    // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
+    const runId = makeRunId(new Date());
+    return new Promise<ReviewRun>((resolve, reject) => {
+      const item: QueueItem = {
+        info: {
+          runId,
+          prLocalId: pr.localId,
+          repoSlug: pr.repo.repoSlug,
+          prNumber: pr.remoteId,
+          tool,
+          question: tool === 'ask' ? question : undefined,
+          enqueuedAt: new Date().toISOString(),
+          startedAt: null,
+        },
+        req: { localId: pr.localId, tool, question },
+        pr,
+        priority,
+        resolve,
+        reject,
+      };
+      // 优先级插队：user 任务排到所有 agent 任务之前（同泳道内仍 FIFO）；不打断在跑的 run。
+      if (priority === 'user') {
+        const firstAgentIdx = waiting.findIndex((q) => q.priority === 'agent');
+        if (firstAgentIdx >= 0) waiting.splice(firstAgentIdx, 0, item);
+        else waiting.push(item);
+      } else {
+        waiting.push(item);
+      }
+      logger.info(
+        { runId, localId: pr.localId, tool, priority, queueLen: waiting.length },
+        'pragent run enqueued',
+      );
+      pump();
+    });
+  };
+
   ipcMain.handle(
     'pragent:run',
     async (
@@ -1186,41 +1318,431 @@ export function registerIpcHandlers({
         throw new Error(t('prAgent.askNeedsQuestion'));
       }
       const pr = await findPrOrThrow(req.localId);
-      // 去重（权威）：同一 PR 同一工具已在执行 / 排队 → 拒绝重复触发，避免并发模式下
-      // 对同一 PR 跑多份相同评审。/ask 每次问题不同，不在限制范围。
-      if (req.tool !== 'ask') {
-        const sameTask = (q: QueueItem): boolean =>
-          q.info.prLocalId === pr.localId && q.info.tool === req.tool;
-        if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
-          throw new Error(t('prAgent.duplicateTask', { tool: req.tool }));
-        }
-      }
-      // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
-      const runId = makeRunId(new Date());
-      return new Promise<ReviewRun>((resolve, reject) => {
-        const item: QueueItem = {
-          info: {
-            runId,
-            prLocalId: pr.localId,
-            tool: req.tool,
-            question: req.tool === 'ask' ? req.question : undefined,
-            enqueuedAt: new Date().toISOString(),
-            startedAt: null,
-          },
-          req,
-          pr,
-          resolve,
-          reject,
-        };
-        waiting.push(item);
-        logger.info(
-          { runId, localId: pr.localId, tool: req.tool, queueLen: waiting.length },
-          'pragent run enqueued',
-        );
-        pump();
-      });
+      return enqueuePragentRun(pr, req.tool, req.question);
     },
   );
+
+  // ── Agent 评审编排：共享 chat 通道 + 单 PR 微流程，agent:run 与 AutoPilot 都用 ──
+  type AgentChat = (input: {
+    system: string;
+    user: string;
+  }) => Promise<{ text: string; usage?: TokenUsage }>;
+
+  /** 设置 LLM env + 临时 chat cwd + chat 函数，运行 fn，收尾清理临时目录。
+   *  signal：用户停止时 abort → 杀掉在跑的 LLM chat 子进程，让思考阶段也能立即中止（不必等模型返回）。 */
+  const withAgentChat = async <T>(
+    fn: (chat: AgentChat) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> => {
+    const bridge = getPrAgentBridge();
+    if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
+    // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。
+    const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
+    const env: Record<string, string> = {
+      ...buildProxyEnv(bootstrap.config.proxy),
+      ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
+      CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
+      // Agent 编排通道（规划 / 判读 / 收尾 / 对话）是路由 + 轻量综合，非深度代码分析（那在
+      // pr-agent /review 里）。本机 CLI 模式下调低推理档（codex: model_reasoning_effort=minimal）
+      // 提速；仅作用于本 chat spawn，pr-agent 工具 run 的 env 不含此项 → /review 仍满档推理。
+      // 非 CLI 模式（API）由 CLI handler 之外的路径处理，该 env 无副作用。
+      MEEBOX_CLI_REASONING: 'low',
+    };
+    // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
+    const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
+    try {
+      const chat: AgentChat = async ({ system, user }) => {
+        const r = await bridge.chat({ system, user, env, cwd: chatCwd, signal });
+        const acc: UsageAcc = { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
+        for (const line of (r.stderr ?? '').split('\n')) accumulateUsageSentinel(line, acc);
+        return { text: r.stdout.trim(), usage: finalizeUsage(acc) };
+      };
+      return await fn(chat);
+    } finally {
+      await fs.rm(chatCwd, { recursive: true, force: true });
+    }
+  };
+
+  /**
+   * 每个编排步骤的统一出口：① 后台日志（工具选择 / 判读 / 收尾各落一条，便于排障与离线回看）；
+   * ② 广播给渲染层（agent:stepProgress）做过程化展示。thought / result 截断避免刷屏。
+   */
+  // 后台日志只留骨架（kind / tool / 用时）：thought 与 result（含用户输入 / 总结正文）不入日志，
+  // 避免刷屏 + 泄漏内容；完整步骤已落 transcript.json，需要时从那里回看。
+  const emitAgentStep = (pr: StoredPullRequest, sessionId: string, step: AgentStep): void => {
+    logger.info(
+      {
+        prLocalId: pr.localId,
+        sessionId,
+        kind: step.kind,
+        tool: step.toolCall?.tool,
+        thinkMs: step.thinkMs,
+      },
+      'agent step',
+    );
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+    }
+  };
+
+  // 编排 Agent（手动评审 agent:run + 自由规划 agent:ask）每 PR 至多一个在跑，AbortController 供
+  // agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
+  const agentControllers = new Map<string, AbortController>();
+
+  /** 取消某 PR 的全部 pr-agent run：active 的 SIGKILL，waiting 的出队 + reject。 */
+  const cancelRunsForPr = (localId: string): void => {
+    for (const item of active.values()) if (item.req.localId === localId) item.ac?.abort();
+    let removed = false;
+    for (let i = waiting.length - 1; i >= 0; i--) {
+      if (waiting[i]!.req.localId === localId) {
+        const [q] = waiting.splice(i, 1);
+        q!.reject(new Error('pr removed'));
+        removed = true;
+      }
+    }
+    if (removed) broadcastQueueChanged();
+  };
+
+  /** 终止某 PR 上的全部 agent 操作：中止编排（agent:run/ask）+ 取消其派发的工具 run。 */
+  const terminateAgentForPr = (localId: string): void => {
+    agentControllers.get(localId)?.abort();
+    cancelRunsForPr(localId);
+  };
+
+  /**
+   * poll tick 后调用：把已被移除 / purge（不再在 listStoredPullRequests 里）的 PR 上仍在执行的
+   * agent 操作一律直接终止——PR 都没了，继续评审无意义且浪费 LLM / 占用 worktree。
+   */
+  const terminateAgentsForGonePrs = async (): Promise<void> => {
+    const opPrIds = new Set<string>();
+    for (const id of agentControllers.keys()) opPrIds.add(id);
+    for (const item of active.values()) opPrIds.add(item.req.localId);
+    for (const item of waiting) opPrIds.add(item.req.localId);
+    if (opPrIds.size === 0) return;
+    const live = new Set((await listStoredPullRequests(stateStore)).map((p) => p.localId));
+    for (const id of opPrIds) {
+      if (!live.has(id)) {
+        logger.info({ prLocalId: id }, 'agent ops terminated: pr removed/purged');
+        terminateAgentForPr(id);
+      }
+    }
+  };
+
+  /** 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。 */
+  const runReviewForPr = (
+    pr: StoredPullRequest,
+    agentContext: AgentContext,
+    chat: AgentChat,
+    signal?: AbortSignal,
+    autopilot = false,
+  ): Promise<AgentSession> => {
+    const agentCfg = bootstrap.config.agent;
+    const matchedRule = pickMatchingRule(agentContext.rules, {
+      projectKey: pr.repo.projectKey,
+      repoSlug: pr.repo.repoSlug,
+      targetBranch: pr.targetRef.displayId,
+      tool: 'review',
+    });
+    return runAgentReview(pr, {
+      stateStore,
+      // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。
+      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent'),
+      chat,
+      agentContext,
+      matchedRule,
+      language: getMainLanguage(),
+      // 工具目录注入：修改类工具按 grants 门控（默认全禁，红线见 buildToolCatalog）。
+      toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
+      maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
+      summaryMaxChars: agentCfg.summary_max_chars,
+      onStep: (sessionId, step) => emitAgentStep(pr, sessionId, step),
+      signal,
+      autopilot,
+    });
+  };
+
+  /**
+   * 评审收尾的统一落地（手动一键评审与 AutoPilot 背景评审共用）：仅成功收尾（done）且有总结时——
+   * ① 追加一条 assistant 评审消息（UI 渲染「评审总结」卡片）；② 写评审台账（recommendation + 当前
+   *    updatedAt）。台账既给 PR 列表的建议徽标（★，手动 / 自动一视同仁），也供 AutoPilot 同版本去重。
+   * 失败 / 用户停止（paused）不落，便于后续重试。
+   */
+  const recordReviewSummaryMessage = async (
+    pr: StoredPullRequest,
+    session: AgentSession,
+  ): Promise<void> => {
+    if (session.status !== 'done' || !session.summary) return;
+    await appendAgentMessage(stateStore, pr.localId, {
+      role: 'assistant',
+      content: session.summary,
+      recommendation: session.recommendation,
+    });
+    await writeAutopilotLedger(stateStore, {
+      prLocalId: pr.localId,
+      autoReviewedUpdatedAt: pr.updatedAt,
+      decision: 'review',
+      recommendation: session.recommendation?.verdict,
+      at: new Date().toISOString(),
+    });
+    // 通知渲染层：若正打开该 PR，重载会话让后台评审的「评审总结」卡片即时出现（手动评审自行重载，重复无害）。
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('agent:conversationChanged', { prLocalId: pr.localId });
+    }
+  };
+
+  ipcMain.handle(
+    'agent:run',
+    async (
+      _evt,
+      req: IpcChannels['agent:run']['request'],
+    ): Promise<IpcChannels['agent:run']['response']> => {
+      if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
+      const pr = await findPrOrThrow(req.localId);
+      // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存。
+      const agentContext = await loadAgentContext(effectiveAgentDir(), {
+        onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
+      });
+      // 注册 AbortController，让停止按钮（agent:stop）能在思考 / 执行任意阶段即时中止本次评审。
+      const ac = new AbortController();
+      agentControllers.set(pr.localId, ac);
+      logger.info({ prLocalId: pr.localId }, 'agent review start (manual)');
+      try {
+        const session = await withAgentChat(
+          (chat) => runReviewForPr(pr, agentContext, chat, ac.signal),
+          ac.signal,
+        );
+        logger.info(
+          { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
+          'agent review done',
+        );
+        // 收尾总结计入多轮对话（assistant 评审消息）→ UI 渲染「评审总结」卡片。
+        await recordReviewSummaryMessage(pr, session);
+        return session;
+      } finally {
+        agentControllers.delete(pr.localId);
+      }
+    },
+  );
+
+  const runPlanningForPr = (
+    pr: StoredPullRequest,
+    userRequest: string,
+    agentContext: AgentContext,
+    chat: AgentChat,
+    signal: AbortSignal,
+  ): Promise<AgentSession> => {
+    const agentCfg = bootstrap.config.agent;
+    const matchedRule = pickMatchingRule(agentContext.rules, {
+      projectKey: pr.repo.projectKey,
+      repoSlug: pr.repo.repoSlug,
+      targetBranch: pr.targetRef.displayId,
+      tool: 'review',
+    });
+    return runAgentPlanning(pr, userRequest, {
+      stateStore,
+      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent'),
+      chat,
+      agentContext,
+      toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
+      matchedRule,
+      language: getMainLanguage(),
+      maxSteps: agentCfg.max_steps,
+      signal,
+      onStep: (sessionId, step) => emitAgentStep(pr, sessionId, step),
+      // 持久化 Agent 主动记下的非隐私条目到当前 Agent 目录的各可写文件（USER/MEMORY/AGENTS）；
+      // SOUL.md 永不写。下一轮 loadAgentContext 现读即生效（跨会话记忆）。
+      recordMemory: async (notes) => {
+        const dir = effectiveAgentDir();
+        for (const kind of ['user', 'memory', 'agents'] as const) {
+          const added = await appendAgentNotes(dir, kind, notes[kind]).catch((err: unknown) => {
+            logger.warn({ err, kind }, 'record agent memory failed');
+            return [] as string[];
+          });
+          if (added.length) logger.info({ kind, added }, 'agent memory recorded');
+        }
+      },
+    });
+  };
+
+  ipcMain.handle(
+    'agent:ask',
+    async (
+      _evt,
+      req: IpcChannels['agent:ask']['request'],
+    ): Promise<IpcChannels['agent:ask']['response']> => {
+      if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
+      const pr = await findPrOrThrow(req.localId);
+      const agentContext = await loadAgentContext(effectiveAgentDir(), {
+        onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
+      });
+      const ac = new AbortController();
+      agentControllers.set(pr.localId, ac);
+      // 不记用户输入正文（避免泄漏 / 刷屏）：只记发起本身，输入已落多轮对话。
+      logger.info({ prLocalId: pr.localId }, 'agent chat start (planning)');
+      try {
+        const session = await withAgentChat(
+          (chat) => runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
+          ac.signal,
+        );
+        logger.info(
+          {
+            prLocalId: pr.localId,
+            status: session.status,
+            steps: session.stepCount,
+            terminationReason: session.terminationReason,
+          },
+          'agent chat done',
+        );
+        return session;
+      } finally {
+        agentControllers.delete(pr.localId);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'agent:stop',
+    (_evt, req: IpcChannels['agent:stop']['request']): IpcChannels['agent:stop']['response'] => {
+      const ac = agentControllers.get(req.localId);
+      if (!ac) return { ok: false };
+      ac.abort();
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    'agent:getSession',
+    async (
+      _evt,
+      req: IpcChannels['agent:getSession']['request'],
+    ): Promise<IpcChannels['agent:getSession']['response']> =>
+      getAgentSession(stateStore, req.localId),
+  );
+
+  ipcMain.handle(
+    'agent:getConversation',
+    async (
+      _evt,
+      req: IpcChannels['agent:getConversation']['request'],
+    ): Promise<IpcChannels['agent:getConversation']['response']> =>
+      getAgentConversation(stateStore, req.localId),
+  );
+
+  ipcMain.handle(
+    'agent:getTranscript',
+    async (
+      _evt,
+      req: IpcChannels['agent:getTranscript']['request'],
+    ): Promise<IpcChannels['agent:getTranscript']['response']> =>
+      getAgentTranscript(stateStore, req.localId),
+  );
+
+  // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===
+  // Agent 编排层全局单并发：一次只跑一遍 pass（busy 锁）；其派发的工具 run 在共享队列并行。
+  // 触发节奏对齐轮询：每个 poller onTick（间隔 = poller.interval_seconds）评估一遍，不再另设独立的最小
+  // 间隔守卫——准入门控 + 台账去重已防止重复评审 / 打爆 LLM；busy 锁防止上一遍未完又叠跑。
+  let autopilotBusy = false;
+  const runAutopilotIfDue = (): void => {
+    const ap = bootstrap.config.agent.autopilot;
+    if (!ap.enabled || autopilotBusy || !getPrAgentBridge()) {
+      return;
+    }
+    autopilotBusy = true;
+    void (async () => {
+      try {
+        // 候选准入（硬性门控，自上而下）：
+        //   1. 仅「待我评审」分类（discoveryFilters 含 review-requested）下、「待处理」状态（localStatus
+        //      === 'pending'）的 PR —— 已通过 / 标记需修改、或非待我评审的一律不自动评审。
+        //      （不支持发现分类的平台 discoveryFilters 为空 → 不命中，自然不自动触发。）
+        //   2. 会话中已有 /describe 或 /review 产出（成功 / 正在跑，手动或自动）→ 判定已评审过 / 评审中，
+        //      不再自动触发（评审失败无产出 → 不算，下轮可重试）。
+        //   3. 仅排除「本版本已被判定跳过」的 PR（台账 decision='skipped'）——避免对判过 skip 的 PR 反复
+        //      重判；无产出又未被 skip 的待评审 PR 一律放行（不再因台账有任意记录就拦下）。
+        //   再按 batch_size 截断。
+        const prs = await listStoredPullRequests(stateStore);
+        const candidates: StoredPullRequest[] = [];
+        // 准入漏斗计数（用于 0 候选时定位卡在哪一道闸——便于排查「为何不再触发」）。
+        let reviewReqPending = 0; // 命中「待我评审 + 待处理」
+        let alreadyReviewed = 0; // 其中已有 describe/review 产出（成功 / 进行中）而被排除
+        let skipDeduped = 0; // 其中本版本已被判定跳过而被排除
+        for (const pr of prs) {
+          if (candidates.length >= ap.batch_size) break;
+          if (!pr.discoveryFilters.includes('review-requested')) continue;
+          if (pr.localStatus !== 'pending') continue;
+          reviewReqPending++;
+          if (await hasReviewOutput(stateStore, pr.localId)) {
+            alreadyReviewed++;
+            continue;
+          }
+          const ledger = await getAutopilotLedger(stateStore, pr.localId);
+          if (ledger?.decision === 'skipped' && ledger.autoReviewedUpdatedAt === pr.updatedAt) {
+            skipDeduped++;
+            continue;
+          }
+          candidates.push(pr);
+        }
+        if (candidates.length === 0) {
+          // 仍在按周期评估，只是当前无新合格 PR——把漏斗计数打出来，避免被误读成「没在跑」。
+          logger.info(
+            { total: prs.length, reviewReqPending, alreadyReviewed, skipDeduped },
+            'autopilot pass: no eligible candidates',
+          );
+          return;
+        }
+
+        const agentContext = await loadAgentContext(effectiveAgentDir(), {
+          onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
+        });
+        await withAgentChat(async (chat) => {
+          // 批量判定（例外规则来自 AGENTS.md）。
+          const { decisions } = await judgeAutopilotBatch(chat, {
+            candidates: candidates.map((p) => ({
+              prLocalId: p.localId,
+              title: p.title,
+              description: p.description,
+            })),
+            agentsRules: agentContext.files.agents,
+          });
+          const byId = new Map(candidates.map((p) => [p.localId, p] as const));
+          // 先落「跳过」决策（无工具开销，顺序写盘即可）；收集「评审」决策待并行编排。
+          const toReview: StoredPullRequest[] = [];
+          for (const d of decisions) {
+            const pr = byId.get(d.prLocalId);
+            if (!pr) continue;
+            if (!d.review) {
+              // 输出判定 skip 的原因（候选都已过准入闸、非「已评审」，故这里的原因都是 LLM 的领域判定，
+              // 如分支合并 / 纯依赖升级 — 打出来便于核对「为何没评审这个 PR」）。
+              logger.info({ prLocalId: pr.localId, reason: d.reason }, 'autopilot judge skip');
+              await writeAutopilotLedger(stateStore, {
+                prLocalId: pr.localId,
+                autoReviewedUpdatedAt: pr.updatedAt,
+                decision: 'skipped',
+                reason: d.reason,
+                at: new Date().toISOString(),
+              });
+              continue;
+            }
+            toReview.push(pr);
+          }
+          // 多 PR 评审并行编排：各编排 await 自己的工具 run 时彼此不挡，让工具的并发队列
+          // （run-queue maxConcurrency）尽量被填满，而非逐 PR 串行空等。各 PR 写各自的文件，无竞争。
+          await Promise.all(
+            toReview.map(async (pr) => {
+              const session = await runReviewForPr(pr, agentContext, chat, undefined, true);
+              // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
+              // 失败 / 暂停不落台账 → 无产出，下轮可重试（准入闸 2 用 hasReviewOutput 判，不再靠台账拦）。
+              await recordReviewSummaryMessage(pr, session);
+            }),
+          );
+        });
+        logger.info({ candidates: candidates.length }, 'autopilot pass done');
+      } catch (err) {
+        logger.warn({ err }, 'autopilot pass failed (ignored)');
+      } finally {
+        autopilotBusy = false;
+      }
+    })();
+  };
 
   ipcMain.handle(
     'pragent:cancel',
@@ -1278,9 +1800,12 @@ export function registerIpcHandlers({
     async (
       _evt,
       req: IpcChannels['pragent:clearRuns']['request'],
-    ): Promise<IpcChannels['pragent:clearRuns']['response']> => ({
-      cleared: await clearReviewRunsForPr(stateStore, req.localId),
-    }),
+    ): Promise<IpcChannels['pragent:clearRuns']['response']> => {
+      // 清执行历史时一并清掉 Agent 会话（含收尾 summary / 步骤 transcript），否则清空后
+      // 重开 PR 仍会从落盘会话恢复出「评审总结」卡片。
+      await clearAgentSession(stateStore, req.localId);
+      return { cleared: await clearReviewRunsForPr(stateStore, req.localId) };
+    },
   );
 
   // === M4 草稿 IPC ===
@@ -1457,12 +1982,48 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
-    'config:setRules',
-    async (_evt, req: IpcChannels['config:setRules']['request']): Promise<void> => {
-      const next = { ...bootstrap.config, rules: req.rules };
+    'config:setAgent',
+    async (_evt, req: IpcChannels['config:setAgent']['request']): Promise<void> => {
+      const next = { ...bootstrap.config, agent: req.agent };
       await writeConfig(bootstrap.paths.configFile, next);
-      bootstrap.config.rules = req.rules;
-      logger.info({ rules: req.rules }, 'rules config updated');
+      bootstrap.config.agent = req.agent;
+      logger.info({ agent: req.agent }, 'agent config updated');
+    },
+  );
+
+  ipcMain.handle(
+    'agent:setAutopilotEnabled',
+    async (_evt, req: IpcChannels['agent:setAutopilotEnabled']['request']): Promise<void> => {
+      const was = bootstrap.config.agent.autopilot.enabled;
+      const agent = {
+        ...bootstrap.config.agent,
+        autopilot: { ...bootstrap.config.agent.autopilot, enabled: req.enabled },
+      };
+      await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, agent });
+      bootstrap.config.agent = agent;
+      logger.info({ enabled: req.enabled }, 'autopilot toggled');
+      // 关 → 开：立即触发一次 poll（刷新 PR 列表 / 状态），其 onTick 即按准入规则评估并按需开评审，
+      // 不必等下个轮询周期。
+      if (req.enabled && !was) {
+        void poller.tick();
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'agent:autopilotLedgers',
+    async (
+      _evt,
+      req: IpcChannels['agent:autopilotLedgers']['request'],
+    ): Promise<IpcChannels['agent:autopilotLedgers']['response']> => {
+      const out: Record<string, AgentRecommendationVerdict> = {};
+      for (const id of req.localIds) {
+        const ledger = await getAutopilotLedger(stateStore, id);
+        if (ledger?.decision === 'review' && ledger.recommendation) {
+          out[id] = ledger.recommendation;
+        }
+      }
+      return out;
     },
   );
 
@@ -1472,12 +2033,10 @@ export function registerIpcHandlers({
       _evt,
       req: IpcChannels['rules:matchForPr']['request'],
     ): Promise<IpcChannels['rules:matchForPr']['response']> => {
-      const cfg = bootstrap.config.rules;
-      if (!cfg.enabled || !cfg.dir) return null;
       // ask 工具不接规则 (问答自由形式，没什么"规约"可应用)
       if (req.tool === 'ask') return null;
       const pr = await findPrOrThrow(req.localId);
-      const rules = await loadRules(cfg.dir, {
+      const rules = await loadAgentRules(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
       });
       const matched = pickMatchingRule(rules, {
@@ -1632,6 +2191,10 @@ export function registerIpcHandlers({
       }
       return n;
     },
+    /** 每次 poll tick 由 index.ts 调用：满足开关 + 最小间隔 + 候选时跑一遍 AutoPilot pass。 */
+    runAutopilotIfDue,
+    /** 每次 poll tick 由 index.ts 调用：终止已被移除 / purge 的 PR 上仍在执行的 agent 操作。 */
+    terminateAgentsForGonePrs: () => void terminateAgentsForGonePrs(),
   };
 }
 
