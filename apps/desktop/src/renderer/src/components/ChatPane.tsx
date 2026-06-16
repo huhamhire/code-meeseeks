@@ -190,15 +190,6 @@ export function ChatPane({
       step: null as AgentStep | null,
       message: null as AgentMessage | null,
     }));
-    const stepEntries = agentSteps
-      .filter((s) => s.kind === 'judge')
-      .map((s, i) => ({
-        key: `step-${i}-${s.at ?? ''}`,
-        time: s.at ?? '',
-        run: null,
-        step: s,
-        message: null as AgentMessage | null,
-      }));
     const msgEntries = messages.map((m, i) => ({
       key: `msg-${i}-${m.at}`,
       time: m.at,
@@ -206,10 +197,9 @@ export function ChatPane({
       step: null as AgentStep | null,
       message: m,
     }));
-    return [...runEntries, ...stepEntries, ...msgEntries].sort((a, b) =>
-      a.time.localeCompare(b.time),
-    );
-  }, [visibleRuns, agentSteps, messages]);
+    // Agent 过程步骤不再逐条入时间线——统一交给底部「过程化跟踪」活动条（AgentActivity）呈现。
+    return [...runEntries, ...msgEntries].sort((a, b) => a.time.localeCompare(b.time));
+  }, [visibleRuns, messages]);
 
   // PR 切换：重置面板状态 + 拉该 PR 的 run 历史 (含切走前还在跑、现在已落盘的 run)。
   // 依赖用 pr?.localId 而不是 pr 对象引用：App 在 poll tick / window focus 时会
@@ -668,8 +658,6 @@ export function ChatPane({
               onRejectFinding={handleRejectFinding}
               onNavigateToFinding={handleNavigateToFinding}
             />
-          ) : entry.step ? (
-            <AgentStepMarker key={entry.key} step={entry.step} />
           ) : entry.message ? (
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
@@ -705,11 +693,15 @@ export function ChatPane({
             {t('chatPane.concurrencyReached', { n: maxConcurrency })}
           </div>
         )}
-        {/* Agent 自身 LLM 调用（规划 / 判读 / 收尾）无对应 pragent run，此时队列里看不到进度 →
-            补一条「思考中」指示（带动态计时），避免运行期界面看似停滞。仅当 Agent 跑在**当前 PR**
-            才显示，不串到其它会话；子任务运行时由 RunningView 负责进度。 */}
-        {agentRunningHere && runningPr && !hasMyActive && myWaiting.length === 0 && (
-          <ThinkingIndicator since={runningPr.since} />
+        {/* 过程化跟踪：Agent 的逐步工具选择 / 判读 / 收尾 + 计时（类 Claude Code）。仅当 Agent
+            跑在**当前 PR** 或本轮已有步骤时显示，不串到其它会话。计时按**单个步骤**——当前思考
+            从上一步结束起算，每步完成后冻结各自用时。 */}
+        {(agentRunningHere || agentSteps.length > 0) && (
+          <AgentActivity
+            steps={agentSteps}
+            running={agentRunningHere}
+            since={runningPr && runningPr.id === prLocalId ? runningPr.since : null}
+          />
         )}
         {error && (
           <div className="chat-error" role="alert">
@@ -1347,33 +1339,77 @@ function ChatInputBar({
   );
 }
 
-/**
- * Agent 元步骤内联标记：在时间线中按自然时间顺序穿插展示的决策节点（如 judge 判读）。
- * 工具步骤由 run 卡片代表、收尾 plan 由「评审总结」卡片代表，均不走此标记（见时间线归并）。
- */
-function AgentStepMarker({ step }: { step: AgentStep }) {
-  return (
-    <div className="chat-agent-step-marker" role="status">
-      {step.result && <span className="chat-agent-step-result">{step.result}</span>}
-      {step.thought && <span className="chat-agent-step-thought muted">{step.thought}</span>}
-    </div>
-  );
+/** 一个编排步骤的展示标签：工具步骤显示所选工具名，judge → 判读，plan → 收尾。 */
+function stepLabel(step: AgentStep, t: TFunction): string {
+  if (step.toolCall?.tool) return step.toolCall.tool;
+  if (step.kind === 'judge') return t('chatPane.agent.stepJudge');
+  return t('chatPane.agent.stepPlan');
 }
 
-/** 「思考中」指示：spinner + 文案 + 动态计时（1s 粒度，跟 RunningView 同款 elapsed）。 */
-function ThinkingIndicator({ since }: { since: number }) {
+/**
+ * 过程化跟踪（类 Claude Code）：把 Agent 的逐步工具选择 / 判读 / 收尾流式列出，配**单步**计时——
+ * 当前思考从「上一步结束」起算（非总任务累计）；每步完成后用各自时长冻结。可折叠。
+ */
+function AgentActivity({
+  steps,
+  running,
+  since,
+}: {
+  steps: AgentStep[];
+  running: boolean;
+  since: number | null;
+}) {
   const { t } = useTranslation();
-  const [elapsedMs, setElapsedMs] = useState(0);
+  const [open, setOpen] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    setElapsedMs(Date.now() - since);
-    const id = setInterval(() => setElapsedMs(Date.now() - since), 1000);
+    if (!running) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [since]);
+  }, [running]);
+
+  const stamps = steps.map((s) => (s.at ? new Date(s.at).getTime() : null));
+  const stepMs = (i: number): number | null => {
+    const end = stamps[i];
+    const start = i > 0 ? stamps[i - 1] : since;
+    return end != null && start != null ? Math.max(0, end - start) : null;
+  };
+  // 当前思考：从最后一步结束（无步骤则从 since）到现在。
+  const lastStamp = stamps.length ? stamps[stamps.length - 1] : since;
+  const liveMs = running && lastStamp != null ? Math.max(0, now - lastStamp) : 0;
+
   return (
-    <div className="chat-agent-thinking" role="status">
-      <Spinner />
-      <span>{t('chatPane.agent.thinking')}</span>
-      <span className="chat-agent-thinking-elapsed">{formatElapsed(elapsedMs)}</span>
+    <div className="chat-agent-activity" role="status">
+      <button
+        type="button"
+        className="chat-agent-activity-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        {running ? <Spinner /> : <ChevronIcon className={open ? 'rot' : ''} />}
+        <span className="chat-agent-activity-title">
+          {running
+            ? t('chatPane.agent.thinking')
+            : t('chatPane.agent.activityDone', { n: steps.length })}
+        </span>
+        {running && <span className="chat-agent-activity-time">{formatElapsed(liveMs)}</span>}
+      </button>
+      {open && steps.length > 0 && (
+        <ol className="chat-agent-activity-list">
+          {steps.map((s, i) => (
+            <li key={i} className="chat-agent-activity-item">
+              <span className="chat-agent-activity-kind">{stepLabel(s, t)}</span>
+              {s.thought && <span className="chat-agent-activity-thought">{s.thought}</span>}
+              {s.kind === 'judge' && s.result && (
+                <span className="chat-agent-activity-result muted">{s.result}</span>
+              )}
+              {stepMs(i) != null && (
+                <span className="chat-agent-activity-time">{formatElapsed(stepMs(i)!)}</span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

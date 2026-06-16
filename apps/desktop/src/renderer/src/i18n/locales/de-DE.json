@@ -15,9 +15,12 @@
   },
   "chatPane": {
     "agent": {
+      "activityDone": "Fertig · {{n}} Schritte",
       "autoReview": "Auto-Review",
       "autoReviewRunning": "Wird geprüft…",
       "failed": "Agent-Review fehlgeschlagen",
+      "stepJudge": "Bewertung",
+      "stepPlan": "Abschluss",
       "summaryTitle": "Prüfzusammenfassung",
       "thinking": "Denkt nach…",
       "verdictApprove": "Sieht gut aus",

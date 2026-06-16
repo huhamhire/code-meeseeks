@@ -15,9 +15,12 @@
   },
   "chatPane": {
     "agent": {
+      "activityDone": "已完成 · {{n}} 步",
       "autoReview": "自动评审",
       "autoReviewRunning": "评审中…",
       "failed": "Agent 评审失败",
+      "stepJudge": "判读",
+      "stepPlan": "收尾",
       "summaryTitle": "评审总结",
       "thinking": "思考中…",
       "verdictApprove": "建议通过",

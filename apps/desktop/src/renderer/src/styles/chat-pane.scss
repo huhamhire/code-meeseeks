@@ -222,18 +222,67 @@
   word-break: break-word;
 }
 
-// Agent 自身 LLM 调用（规划 / 判读 / 收尾）期间的「思考中」指示：spinner + 文案。
-.chat-agent-thinking {
+// 过程化跟踪（类 Claude Code）：可折叠活动条 + 逐步列表 + 单步计时。左侧强调色竖条与 run 卡片区分。
+.chat-agent-activity {
   margin: $space-3 $space-6;
+  border-left: 2px solid $color-accent;
+  background: $color-accent-bg-fade;
+  border-radius: 0 $radius-sm $radius-sm 0;
+}
+.chat-agent-activity-head {
   display: flex;
   align-items: center;
   gap: $space-3;
+  width: 100%;
+  padding: $space-2 $space-4;
+  background: transparent;
+  border: none;
   color: $text-muted;
   font-size: $fs-sm;
+  text-align: left;
+  cursor: pointer;
+
+  .rot {
+    transform: rotate(90deg); // chevron ▸ → ▾（展开态）
+  }
 }
-.chat-agent-thinking-elapsed {
+.chat-agent-activity-title {
+  flex: 1;
+  min-width: 0;
+}
+.chat-agent-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 $space-4 $space-2 $space-6;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+.chat-agent-activity-item {
+  display: flex;
+  align-items: baseline;
+  gap: $space-3;
+  font-size: $fs-sm;
+}
+.chat-agent-activity-kind {
+  font-family: $font-mono;
+  color: $color-info;
+  flex-shrink: 0;
+}
+.chat-agent-activity-thought {
+  flex: 1;
+  min-width: 0;
+  color: $text-body;
+  word-break: break-word;
+}
+.chat-agent-activity-result {
+  flex-shrink: 0;
+}
+.chat-agent-activity-time {
   font-family: $font-mono;
   font-variant-numeric: tabular-nums;
+  color: $text-muted;
+  flex-shrink: 0;
 }
 
 // Agent 自然对话回复：左对齐、带 Agent 图标的轻量包装，区别于「评审总结」卡片（无判定 / 无标题）。
@@ -258,28 +307,6 @@
   min-width: 0;
 }
 
-// Agent 元步骤内联标记：在时间线中按自然时间顺序穿插的决策节点（judge 判读）。
-// 左侧一道强调色竖条，与 run 卡片区分但保持同一缩进。
-.chat-agent-step-marker {
-  margin: $space-3 $space-6;
-  padding: $space-2 $space-4;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: $space-3;
-  font-size: $fs-sm;
-  border-left: 2px solid $color-accent;
-  background: $color-accent-bg-fade;
-  border-radius: 0 $radius-sm $radius-sm 0;
-}
-.chat-agent-step-thought {
-  color: $text-body;
-}
-.chat-agent-step-result {
-  font-weight: 600;
-  color: $color-info;
-  white-space: pre-wrap;
-}
 
 // === 空态 ===
 .chat-empty {

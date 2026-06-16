@@ -48,6 +48,7 @@ import { pickMatchingRule } from '@meebox/rules';
 import type {
   AgentRecommendationVerdict,
   AgentSession,
+  AgentStep,
   AppInfo,
   ConnectionSummary,
   IpcChannels,
@@ -1303,6 +1304,28 @@ export function registerIpcHandlers({
     }
   };
 
+  /**
+   * 每个编排步骤的统一出口：① 后台日志（工具选择 / 判读 / 收尾各落一条，便于排障与离线回看）；
+   * ② 广播给渲染层（agent:stepProgress）做过程化展示。thought / result 截断避免刷屏。
+   */
+  const logClamp = (s: string): string => (s.length > 200 ? `${s.slice(0, 199)}…` : s);
+  const emitAgentStep = (pr: StoredPullRequest, sessionId: string, step: AgentStep): void => {
+    logger.info(
+      {
+        prLocalId: pr.localId,
+        sessionId,
+        kind: step.kind,
+        tool: step.toolCall?.tool,
+        thought: step.thought ? logClamp(step.thought) : undefined,
+        result: step.result ? logClamp(step.result) : undefined,
+      },
+      'agent step',
+    );
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
+    }
+  };
+
   /** 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。 */
   const runReviewForPr = (
     pr: StoredPullRequest,
@@ -1328,11 +1351,7 @@ export function registerIpcHandlers({
       toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
       maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
       summaryMaxChars: agentCfg.summary_max_chars,
-      onStep: (sessionId, step) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
-        }
-      },
+      onStep: (sessionId, step) => emitAgentStep(pr, sessionId, step),
     });
   };
 
@@ -1348,7 +1367,12 @@ export function registerIpcHandlers({
       const agentContext = await loadAgentContext(effectiveAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
       });
+      logger.info({ prLocalId: pr.localId }, 'agent review start (manual)');
       const session = await withAgentChat((chat) => runReviewForPr(pr, agentContext, chat));
+      logger.info(
+        { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
+        'agent review done',
+      );
       // 手动一键评审计入多轮对话（作为一条 assistant 评审消息）；AutoPilot 背景评审不计（走 1476
       // 的 runReviewForPr，不经此处）。无文本 / 失败不记。
       if (session.status === 'done' && session.summary) {
@@ -1422,10 +1446,24 @@ export function registerIpcHandlers({
       });
       const ac = new AbortController();
       agentControllers.set(pr.localId, ac);
+      logger.info(
+        { prLocalId: pr.localId, request: logClamp(req.question) },
+        'agent chat start (planning)',
+      );
       try {
-        return await withAgentChat((chat) =>
+        const session = await withAgentChat((chat) =>
           runPlanningForPr(pr, req.question, agentContext, chat, ac.signal),
         );
+        logger.info(
+          {
+            prLocalId: pr.localId,
+            status: session.status,
+            steps: session.stepCount,
+            terminationReason: session.terminationReason,
+          },
+          'agent chat done',
+        );
+        return session;
       } finally {
         agentControllers.delete(pr.localId);
       }
