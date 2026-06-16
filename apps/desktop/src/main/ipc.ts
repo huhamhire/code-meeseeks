@@ -1282,6 +1282,11 @@ export function registerIpcHandlers({
       ...buildProxyEnv(bootstrap.config.proxy),
       ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
       CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
+      // Agent 编排通道（规划 / 判读 / 收尾 / 对话）是路由 + 轻量综合，非深度代码分析（那在
+      // pr-agent /review 里）。本机 CLI 模式下调低推理档（codex: model_reasoning_effort=minimal）
+      // 提速；仅作用于本 chat spawn，pr-agent 工具 run 的 env 不含此项 → /review 仍满档推理。
+      // 非 CLI 模式（API）由 CLI handler 之外的路径处理，该 env 无副作用。
+      MEEBOX_CLI_REASONING: 'low',
     };
     // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
     const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
