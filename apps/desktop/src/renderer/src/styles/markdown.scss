@@ -184,6 +184,9 @@
   h4 {
     margin: $space-4 0 $space-2;
     font-weight: 600;
+    // 标题里常含长路径 / 长标识符（含或不含反引号），无 break 机会会撑出容器；允许超宽时断行。
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   h1 {
     font-size: 18px;
