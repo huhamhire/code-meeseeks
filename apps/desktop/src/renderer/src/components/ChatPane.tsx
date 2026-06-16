@@ -1503,13 +1503,18 @@ function BreakablePath({ path }: { path: string }) {
 
 /** 行内 markdown：用于标题等单行文本，渲染内联代码 / 强调，去掉块级 <p> 包裹保持行内排版。 */
 function MdInline({ children }: { children: string }) {
+  // 标题以「2. 」「- 」这类列表标记开头时，markdown 会把它解析成 <ol>/<ul> 块塞进 <h4>，撑破内联布局
+  // 并溢出。转义行首列表标记，按字面渲染序号 / 符号（保留文字），不再生成列表块。
+  const inlineSafe = children
+    .replace(/^(\s*)(\d+)\.(\s)/, '$1$2\\.$3')
+    .replace(/^(\s*)([-*+])(\s)/, '$1\\$2$3');
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={REMOTE_REHYPE_PLUGINS}
       components={{ p: ({ children }) => <>{children}</> }}
     >
-      {children}
+      {inlineSafe}
     </ReactMarkdown>
   );
 }
