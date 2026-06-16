@@ -1903,6 +1903,7 @@ export function registerIpcHandlers({
   ipcMain.handle(
     'agent:setAutopilotEnabled',
     async (_evt, req: IpcChannels['agent:setAutopilotEnabled']['request']): Promise<void> => {
+      const was = bootstrap.config.agent.autopilot.enabled;
       const agent = {
         ...bootstrap.config.agent,
         autopilot: { ...bootstrap.config.agent.autopilot, enabled: req.enabled },
@@ -1910,6 +1911,12 @@ export function registerIpcHandlers({
       await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, agent });
       bootstrap.config.agent = agent;
       logger.info({ enabled: req.enabled }, 'autopilot toggled');
+      // 关 → 开：立即触发一次 poll（刷新 PR 列表 / 状态），其 onTick 即按准入规则评估并按需开评审；
+      // 同时清零最小间隔守卫，确保这一轮 AutoPilot pass 立即执行、不被上次评估的间隔挡掉。不必等下个周期。
+      if (req.enabled && !was) {
+        lastAutopilotEvalAt = 0;
+        void poller.tick();
+      }
     },
   );
 
