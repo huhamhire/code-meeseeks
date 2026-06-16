@@ -249,6 +249,14 @@
   font-size: $fs-md; // 略大，标记更醒目
   line-height: 1;
 }
+// 步骤行内的本步 token 用量（不累计）：等宽数字、顶到行尾，与「已思考 xx s」同一行右侧轻量呈现。
+.chat-agent-step-tokens {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  font-size: $fs-xs;
+}
 // AutoPilot 触发标记：评审首步行内的机器人图标（强调色），表「这次评审由 AutoPilot 触发」。
 .chat-agent-step-autopilot {
   display: inline-flex;

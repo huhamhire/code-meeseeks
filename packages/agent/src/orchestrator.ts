@@ -298,6 +298,7 @@ export async function runReviewMicroflow(
     thought: '判断是否存在需追问的严重问题',
     result: questions.length ? `严重，追问 ${String(questions.length)} 个` : '无严重问题，不追问',
     thinkMs: judgeMs,
+    usage: judge.usage,
   });
 
   const askResults: string[] = [];
@@ -342,6 +343,7 @@ export async function runReviewMicroflow(
     thought: '综合描述与审查发现，生成评审总结',
     result: summary,
     thinkMs: sumMs,
+    usage: sum.usage,
   });
 
   return { steps, summary, recommendation, tokenUsage: usage };

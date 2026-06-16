@@ -124,6 +124,8 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 > **本地 CLI 模式说明**：该模式不直连模型 API，而是把评审请求转交给使用者**自行安装并授权**的本地命令行工具，由其代为调用背后的第三方模型。需先在本机完成对应 CLI 工具的安装与登录授权，应用本身不负责其凭据管理与计费。
 
+> 💸 **成本提示**：Agentic 评审与 AutoPilot 预评审会对每个 PR 串联多次模型调用（描述、评审、必要时追问、汇总），token 消耗显著高于单次手动评审。无论使用按量计费的 API、还是有额度上限的订阅 / 本地 CLI 账户，都请留意用量节奏，自行评估成本投入；每步的 token 用量已在评审时间线上分步展示，便于观察消耗。
+
 ---
 
 ## 技术栈
@@ -134,8 +136,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - **工程**：npm workspaces + Nx 单仓多包
 - **pr-agent 集成**：内嵌 Python 运行时子进程（缺失时回退系统 pr-agent CLI）
 
-- **规划进度、里程碑与未决项** —— 见 **[Roadmap](docs/ROADMAP.md)**。
-- **详细架构与各模块设计** —— 见 **[模块文档](docs/arch/README.md)**。
+> 📚 **延伸阅读**：规划进度、里程碑与未决项见 **[Roadmap](docs/ROADMAP.md)**；详细架构与各模块设计见 **[模块文档](docs/arch/README.md)**。
 
 ---
 

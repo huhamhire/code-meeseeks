@@ -4,6 +4,8 @@
  * 故置于 shared（与 ReviewRun / Finding 同处）。@meebox/agent 的纯逻辑从此引用。
  */
 
+import type { TokenUsage } from './poller-contract.js';
+
 /** 工具的副作用分类与可用性（红线落地的依据，见「工具修改红线」）。 */
 export interface ToolCatalogEntry {
   /** 工具指令名，如 `/describe`。 */
@@ -42,6 +44,9 @@ export interface AgentStep {
   toolCall?: AgentToolCall;
   /** 工具结果 / 判读结论的摘要。 */
   result?: string;
+  /** 本步**单独**的 LLM token 用量（不累计、不含其它步）：judge / 总结 / 规划等经独立通道的推理步在此带值；
+   *  describe/review/ask 的工具开销由其各自 run 卡片承载、不在步骤上重复计。UI 在步骤行展示，使每步成本可见。 */
+  usage?: TokenUsage;
   /** 步骤产生时间（ISO）。 */
   at?: string;
   /** 本步思考（产生该决策的单次 LLM 推理）耗时（毫秒）；类 Claude Code 的「Thought for Ns」单步计时。
