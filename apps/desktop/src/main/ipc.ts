@@ -461,6 +461,13 @@ export function registerIpcHandlers({
     const err = await shell.openPath(bootstrap.paths.configFile);
     if (err) throw new Error(`failed to open config.yaml: ${err}`);
   });
+  ipcMain.handle('app:openAgentDir', async (): Promise<void> => {
+    // 当前生效的 Agent 目录（用户配置优先，否则默认 ~/.code-meeseeks/agent）；先确保存在再打开。
+    const dir = effectiveAgentDir();
+    await fs.mkdir(dir, { recursive: true }).catch(() => undefined);
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(`failed to open agent dir: ${err}`);
+  });
   ipcMain.handle('app:openDevTools', (evt) => {
     evt.sender.openDevTools({ mode: 'detach' });
   });

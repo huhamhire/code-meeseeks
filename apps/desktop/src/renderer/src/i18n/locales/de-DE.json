@@ -596,6 +596,7 @@
     "llmHint": "Das aktive Profil bestimmt, welches Modell PR Agent aufruft.",
     "llmProfileFallback": "Profil {{id}}",
     "llmTitle": "LLM-Modelle",
+    "openAgentDir": "Aktuelles Verzeichnis öffnen",
     "openDevTools": "DevTools öffnen",
     "openDevToolsTitle": "Electron DevTools öffnen (separates Fenster)",
     "opening": "Öffne…",

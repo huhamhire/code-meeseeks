@@ -161,6 +161,8 @@ export interface IpcChannels {
   'app:prAgentStatus': { request: void; response: PrAgentStatus };
   /** 调 Electron shell.openPath 让 OS 默认编辑器打开 config.yaml */
   'app:openConfigFile': { request: void; response: void };
+  /** 调 shell.openPath 在系统文件管理器打开当前生效的 Agent 目录（不存在则先建）。 */
+  'app:openAgentDir': { request: void; response: void };
   /** 打开 Electron DevTools（分离窗口） */
   'app:openDevTools': { request: void; response: void };
   /** 手动检测版本更新（设置页「检查更新」）。仅检测 + 返回结果，不下载 / 安装。 */

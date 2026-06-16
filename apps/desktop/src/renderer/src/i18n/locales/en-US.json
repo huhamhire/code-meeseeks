@@ -596,6 +596,7 @@
     "llmHint": "The active profile determines which model PR Agent calls.",
     "llmProfileFallback": "Profile {{id}}",
     "llmTitle": "LLM Models",
+    "openAgentDir": "Open current directory",
     "openDevTools": "Open DevTools",
     "openDevToolsTitle": "Open Electron DevTools (detached window)",
     "opening": "Opening…",

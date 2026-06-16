@@ -581,6 +581,7 @@
     "llmHint": "アクティブなプロファイルが、PR Agent の呼び出すモデルを決定します。",
     "llmProfileFallback": "プロファイル {{id}}",
     "llmTitle": "LLM モデル",
+    "openAgentDir": "現在のディレクトリを開く",
     "openDevTools": "DevTools を開く",
     "openDevToolsTitle": "Electron DevTools を開く（分離ウィンドウ）",
     "opening": "オープン中…",
