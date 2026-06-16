@@ -171,6 +171,39 @@ export class RepoMirrorManager {
   }
 
   /**
+   * `git merge-base a b` —— 两 sha 的最近共同祖先（PR 源分支自目标分叉处）。
+   * 用于把 PR diff 的 base 锚到分叉点（而非随别的 PR 合入而前移的目标分支 tip）。
+   * 任一 sha 缺失 / 无共同祖先 / 缺对象 → 返回 null，调用方兜底（不固化、下次再试）。
+   */
+  async mergeBase(repo: RepoIdentity, a: string, b: string): Promise<string | null> {
+    if (!a || !b) return null;
+    const mp = this.mirrorPath(repo);
+    try {
+      const out = await simpleGit(mp).raw(['merge-base', a, b]);
+      const sha = out.trim();
+      return sha || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * `git merge-base --is-ancestor anc desc` —— anc 是否为 desc 的祖先。
+   * 用于校验固化的 base 对当前 head 仍有效（head 正常 push 仍成立；被 rebase 则不成立 → 触发重算）。
+   * exit 0 → true；exit 1（非祖先）/ 缺对象 → false。
+   */
+  async isAncestor(repo: RepoIdentity, anc: string, desc: string): Promise<boolean> {
+    if (!anc || !desc) return false;
+    const mp = this.mirrorPath(repo);
+    try {
+      await simpleGit(mp).raw(['merge-base', '--is-ancestor', anc, desc]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * 同步镜像：首次 clone bare partial，后续 fetch。
    *
    * 调度规则：
