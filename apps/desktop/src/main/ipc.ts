@@ -132,8 +132,6 @@ export function registerIpcHandlers({
     reject: (err: Error) => void;
     /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。见 §7 调度。 */
     priority: 'user' | 'agent';
-    /** 是否 AutoPilot 后台派发：落盘到 ReviewRun，UI 据此打机器人 chip。 */
-    autopilot?: boolean;
     /** 仅 active 状态填；用于 cancel SIGKILL */
     ac?: AbortController;
   }
@@ -811,7 +809,6 @@ export function registerIpcHandlers({
       // 持久化用 profile.model 原文，不做 normalizeModel 前缀处理 — 跟用户
       // Settings 里看到的名字一致更直观
       model: activeLlmForRecord?.model || undefined,
-      autopilot: item.autopilot,
     });
     // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播
     item.info = { ...item.info, startedAt: run.startedAt };
@@ -1221,7 +1218,6 @@ export function registerIpcHandlers({
     tool: ReviewRunTool,
     question?: string,
     priority: 'user' | 'agent' = 'user',
-    autopilot = false,
   ): Promise<ReviewRun> => {
     if (tool !== 'ask') {
       const sameTask = (q: QueueItem): boolean =>
@@ -1243,12 +1239,10 @@ export function registerIpcHandlers({
           question: tool === 'ask' ? question : undefined,
           enqueuedAt: new Date().toISOString(),
           startedAt: null,
-          ...(autopilot ? { autopilot: true } : {}),
         },
         req: { localId: pr.localId, tool, question },
         pr,
         priority,
-        autopilot,
         resolve,
         reject,
       };
@@ -1410,8 +1404,7 @@ export function registerIpcHandlers({
     return runAgentReview(pr, {
       stateStore,
       // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。
-      // autopilot 标记落到 run，UI 在卡片上打机器人 chip 区分「后台自动评审」。
-      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent', autopilot),
+      enqueueRun: (p, tool, question) => enqueuePragentRun(p, tool, question, 'agent'),
       chat,
       agentContext,
       matchedRule,
@@ -1422,6 +1415,7 @@ export function registerIpcHandlers({
       summaryMaxChars: agentCfg.summary_max_chars,
       onStep: (sessionId, step) => emitAgentStep(pr, sessionId, step),
       signal,
+      autopilot,
     });
   };
 
@@ -1603,17 +1597,14 @@ export function registerIpcHandlers({
 
   // === AutoPilot 调度（见 docs/arch/06-agent.md「AutoPilot」）===
   // Agent 编排层全局单并发：一次只跑一遍 pass（busy 锁）；其派发的工具 run 在共享队列并行。
-  // 由 poller onTick 触发（见 index.ts），最小间隔守卫 + 台账去重防止打爆 LLM。
+  // 触发节奏对齐轮询：每个 poller onTick（间隔 = poller.interval_seconds）评估一遍，不再另设独立的最小
+  // 间隔守卫——准入门控 + 台账去重已防止重复评审 / 打爆 LLM；busy 锁防止上一遍未完又叠跑。
   let autopilotBusy = false;
-  let lastAutopilotEvalAt = 0;
   const runAutopilotIfDue = (): void => {
     const ap = bootstrap.config.agent.autopilot;
     if (!ap.enabled || autopilotBusy || !getPrAgentBridge()) {
       return;
     }
-    const now = Date.now();
-    if (now - lastAutopilotEvalAt < ap.min_interval_seconds * 1000) return; // 最小间隔守卫
-    lastAutopilotEvalAt = now;
     autopilotBusy = true;
     void (async () => {
       try {
@@ -1966,10 +1957,9 @@ export function registerIpcHandlers({
       await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, agent });
       bootstrap.config.agent = agent;
       logger.info({ enabled: req.enabled }, 'autopilot toggled');
-      // 关 → 开：立即触发一次 poll（刷新 PR 列表 / 状态），其 onTick 即按准入规则评估并按需开评审；
-      // 同时清零最小间隔守卫，确保这一轮 AutoPilot pass 立即执行、不被上次评估的间隔挡掉。不必等下个周期。
+      // 关 → 开：立即触发一次 poll（刷新 PR 列表 / 状态），其 onTick 即按准入规则评估并按需开评审，
+      // 不必等下个轮询周期。
       if (req.enabled && !was) {
-        lastAutopilotEvalAt = 0;
         void poller.tick();
       }
     },

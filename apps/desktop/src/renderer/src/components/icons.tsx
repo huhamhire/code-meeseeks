@@ -448,24 +448,6 @@ export function StarIcon({ size = 11 }: IconProps) {
   );
 }
 
-/** 旋转加载弧：「正在执行」动画指示（旋转由 CSS `is-spinning` 控制）。 */
-export function SpinnerIcon({ size = 11 }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M8 1.6a6.4 6.4 0 1 1-6.4 6.4" />
-    </svg>
-  );
-}
-
 /** 机器人头像 + 斜杠：AutoPilot 关闭态。 */
 export function RobotOffIcon({ size = 14 }: IconProps) {
   return (

@@ -323,26 +323,13 @@
     }
   }
 
-  // 执行中指示：蓝底 + 旋转弧动画，表该 PR 有在跑的 agent 任务（同 ★ 位置）。
-  &.executing-chip {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1px $space-2;
-    background: $color-accent;
-    color: $text-on-accent;
-
-    svg {
-      display: block;
-      animation: pr-chip-spin 0.8s linear infinite;
-    }
-  }
 }
 
-@keyframes pr-chip-spin {
-  to {
-    transform: rotate(360deg);
-  }
+// 执行中指示：复用运行卡片同款 .spinner（中心对称的蓝色环旋转），裸图标无 chip 外框；
+// 清掉 .spinner 默认的 inline-文字外边距，在徽标行里居中对齐。
+.pr-item-spinner {
+  margin: 0;
+  vertical-align: middle;
 }
 
 .tag-needs-work {

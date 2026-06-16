@@ -723,7 +723,6 @@ export function ChatPane({
                 lines={linesByRunId.get(entry.active.runId) ?? []}
                 startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
                 model={currentLlmModel ?? null}
-                autopilot={entry.active.autopilot}
               />
             ) : null
           ) : entry.step ? (
@@ -732,13 +731,14 @@ export function ChatPane({
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
         )}
-        {/* 本 PR 排队中的任务：贴在运行中之后，按队列顺序展示，可单条取消 */}
-        {myWaiting.map((w, i) => (
+        {/* 本 PR 排队中的任务：贴在运行中之后，可单条取消。位次取**全局**队列位序（队列跨 PR 共享，
+            否则每个 PR 都显示「第 1 位」会误导）——以 runId 在全局 waiting 数组里的下标 +1 为序。 */}
+        {myWaiting.map((w) => (
           <QueuedView
             key={w.runId}
             tool={w.tool}
             question={w.question}
-            position={i + 1}
+            position={waiting.findIndex((x) => x.runId === w.runId) + 1}
             onCancel={() => void handleCancel(w.runId)}
           />
         ))}
@@ -1413,6 +1413,12 @@ function AgentStepRow({ step }: { step: AgentStep }) {
         <span className="chat-agent-step-bullet" aria-hidden>
           •
         </span>
+        {/* AutoPilot 后台评审的首步打机器人 chip，标识「这次评审由 AutoPilot 触发」。 */}
+        {step.autopilot && (
+          <span className="chat-agent-step-autopilot" title={t('chatPane.autopilotRun')}>
+            <RobotIcon size={12} />
+          </span>
+        )}
         {headText && <span>{headText}</span>}
       </div>
       {hasTime && step.thought && <div className="chat-agent-step-body">{step.thought}</div>}
@@ -1617,7 +1623,6 @@ function RunningView({
   lines,
   startedAt,
   model,
-  autopilot,
 }: {
   tool: ReviewRunTool;
   runId: string;
@@ -1626,8 +1631,6 @@ function RunningView({
   /** 当前 active LLM profile.model — 跟 RunMeta 同源放在 chip 行，让 running
       跟 succeeded 视觉一致；可选 (无 active profile 时不显示) */
   model: string | null;
-  /** AutoPilot 后台派发：打机器人 chip，与已完成卡片一致。 */
-  autopilot?: boolean;
 }) {
   const { t } = useTranslation();
   // 末行追加时自动滚到底
@@ -1658,15 +1661,6 @@ function RunningView({
           <Spinner />
           {runStatusLabel('running', t)}
         </span>
-        {autopilot && (
-          <span
-            className="chat-run-chip chat-run-autopilot"
-            title={t('chatPane.autopilotRun')}
-            aria-label="AutoPilot"
-          >
-            <RobotIcon size={12} />
-          </span>
-        )}
         {model && (
           <span className="chat-run-chip chat-run-model" title={t('chatPane.modelTitle', { model })}>
             {model}
@@ -2069,15 +2063,6 @@ function RunMeta({ run }: { run: ReviewRun }) {
       <span className={`chat-run-status chat-run-status-${run.status}`}>
         {runStatusLabel(run.status, t)}
       </span>
-      {run.autopilot && (
-        <span
-          className="chat-run-chip chat-run-autopilot"
-          title={t('chatPane.autopilotRun')}
-          aria-label="AutoPilot"
-        >
-          <RobotIcon size={12} />
-        </span>
-      )}
       {/* 模型 chip 取代运行时策略 chip — strategy 是部署细节用户不
           关心，model 是真正影响 review 质量的变量 */}
       {run.model && (

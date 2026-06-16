@@ -291,8 +291,6 @@ export interface ReviewRun {
   summary?: string;
   /** 本次 run 的真实 LLM token 用量（累加）；缺失 = 未捕获到（见 TokenUsage） */
   tokenUsage?: TokenUsage;
-  /** 是否由 AutoPilot 后台自动评审派发（区别于用户手动触发）；UI 据此打机器人 chip。 */
-  autopilot?: boolean;
 }
 
 export interface ReviewRunFile {

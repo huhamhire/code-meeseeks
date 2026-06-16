@@ -186,8 +186,7 @@ export const ConfigSchema = z.object({
       autopilot: z
         .object({
           enabled: z.boolean().default(false),
-          /** 两次 AI 评估的最小间隔（秒），防高频轮询打爆 LLM。 */
-          min_interval_seconds: z.number().int().min(60).default(900),
+          // 评估节奏对齐轮询（每个 poller tick 评估一遍），不再单设最小间隔；准入门控 + 台账去重防重复。
           /** 单批 LLM 判定的 PR 上限。 */
           batch_size: z.number().int().min(1).max(50).default(10),
           /** 自动评审微流程中条件性追问 /ask 的硬上限。 */
