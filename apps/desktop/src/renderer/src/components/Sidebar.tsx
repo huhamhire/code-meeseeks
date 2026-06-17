@@ -146,6 +146,21 @@ export function Sidebar({
     return unsub;
   }, []);
 
+  // 评审完成（手动 / AutoPilot 都经 recordReviewSummaryMessage 写台账 + 广播 agent:conversationChanged）→
+  // 即时重取该 PR 的评审建议，让 ★ 立刻出现在 PR 列表，不必等下个 poll 刷新 prs 才体现。
+  useEffect(() => {
+    const unsub = subscribe('agent:conversationChanged', (ev) => {
+      void invoke('agent:autopilotLedgers', { localIds: [ev.prLocalId] }).then((v) => {
+        const verdict = v[ev.prLocalId];
+        if (verdict === undefined) return;
+        setReviewVerdicts((prev) =>
+          prev[ev.prLocalId] === verdict ? prev : { ...prev, [ev.prLocalId]: verdict },
+        );
+      });
+    });
+    return unsub;
+  }, []);
+
   // GitHub 发现分类：按 PR 上的 discoveryFilters 标记本地过滤（poller 已把四类都抓回来缓存），
   // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。
   const scopedPrs = useMemo(
