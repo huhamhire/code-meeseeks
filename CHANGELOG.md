@@ -27,6 +27,7 @@
 - PR「提交」数角标排除「源分支把目标分支合入自己」带进来的提交与 merge 提交，与「提交」列表口径一致（此前会多计）。
 - 补 walkthrough 文件分类标题「Miscellaneous」「Formatting」「Dependencies」的中 / 日 / 德译文（此前非英文界面下仍显示英文）。
 - Anthropic provider 配置的 base_url（自建 / 中转端点）此前未透传给底层 litellm → 请求仍打到官方 `api.anthropic.com`；现经 `ANTHROPIC_API_BASE` 正确透传（填根域名即可，litellm 自动补 `/v1/messages`）。(#65，感谢 @dnvyrn)
+- 本地仓库镜像 clone/fetch 中途被打断后留下残缺镜像（缺 origin remote），导致后续拉取变更文件一直 fatal（`'origin' does not appear to be a git repository`）、点「重试」也卡在同一坏镜像：现自动识别不健康 / 损坏镜像并删库重建，可自愈。
 
 ## [0.5.0-alpha.1] - 2026-06-17
 
