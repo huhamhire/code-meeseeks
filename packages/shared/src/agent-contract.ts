@@ -99,7 +99,7 @@ export interface AgentSession {
    * 无文本输入 → 不填。UI 据此把用户输入回显为右对齐气泡、归属其发起 PR、持久化恢复。
    */
   userRequest?: string;
-  /** 本 PR 收尾总结正文（受 summary_max_chars 限长）。 */
+  /** 本 PR 收尾总结正文（summary_max_chars 仅作提示词软约束引导篇幅，不对正文硬截断）。 */
   summary?: string;
   /** 收尾建议（非约束性）。 */
   recommendation?: AgentRecommendation;

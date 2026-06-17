@@ -26,10 +26,7 @@ export interface ToolText {
 
 export interface ReviewOrchestratorDeps {
   /** 分发一个只读 pr-agent 工具，返回文本结果（描述 / findings / 回答）。 */
-  runTool(call: {
-    tool: 'describe' | 'review' | 'ask';
-    question?: string;
-  }): Promise<ToolText>;
+  runTool(call: { tool: 'describe' | 'review' | 'ask'; question?: string }): Promise<ToolText>;
   /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。 */
   chat(input: { system: string; user: string }): Promise<ToolText>;
   /** 每产生一个编排步骤即回调（持久化 / 流式推送）。 */
@@ -47,7 +44,7 @@ export interface ReviewOrchestratorInput {
   toolCatalog?: ToolCatalogEntry[];
   /** 条件性追问 /ask 的硬上限（默认 2）。 */
   maxFollowupAsks?: number;
-  /** 总结严格篇幅上限（默认 800 字符）。 */
+  /** 总结篇幅的**参考**上限（默认 800 字符）：仅作提示词里的软约束引导 LLM 收敛，**不**对产出做硬截断。 */
   summaryMaxChars?: number;
 }
 
@@ -72,11 +69,6 @@ function addUsage(acc: TokenUsage, u?: TokenUsage): TokenUsage {
     totalTokens: (acc.totalTokens ?? 0) + (u.totalTokens ?? 0),
     calls: (acc.calls ?? 0) + (u.calls ?? 1),
   };
-}
-
-function clamp(s: string, max: number): string {
-  const t = s.trim();
-  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
 }
 
 /** 把 JSON 串字面量内部未转义的裸控制符（换行/回车/制表）补转义。LLM 常把多行 markdown 原样塞进
@@ -208,7 +200,7 @@ function summaryPrompt(
   const [overview, findings, suggestions] = sections;
   return [
     'Write a closing review summary for the human reviewer, in the SAME LANGUAGE as the review findings',
-    `(at most ${String(maxChars)} characters; compress, never truncate key points).`,
+    `(aim for roughly ${String(maxChars)} characters — compress and prioritize; this is a soft guideline, not a hard limit, so do NOT truncate key points to fit).`,
     'Use EXACTLY this markdown skeleton — these three "## " sections, in this order, and nothing else.',
     'Keep each line short; put every finding / suggestion on its own "- " bullet:',
     '',
@@ -329,7 +321,9 @@ export async function runReviewMicroflow(
     recommendation?: { verdict?: unknown; reason?: unknown };
   }>(sum.text);
   // 解析失败兜底：从原始文本捞 summary 散文；再剥掉模型误并入末尾的判定 JSON，绝不把原始 JSON 展示给用户。
-  const summary = clamp(stripTrailingJson(parsed?.summary ?? salvageProse(sum.text)), summaryMax);
+  // **不做硬截断**：篇幅只在提示词里作参考性约束（summaryMax，见 summaryPrompt），AI 已生成的总结完整保留，
+  // 避免「参数…」这种半句被切断。
+  const summary = stripTrailingJson(parsed?.summary ?? salvageProse(sum.text)).trim();
   const recommendation: AgentRecommendation =
     parsed?.recommendation && isVerdict(parsed.recommendation.verdict)
       ? {

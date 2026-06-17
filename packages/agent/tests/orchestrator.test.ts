@@ -24,7 +24,10 @@ function makeDeps(opts: {
   const deps: ReviewOrchestratorDeps = {
     runTool: vi.fn(async (call: { tool: 'describe' | 'review' | 'ask'; question?: string }) => {
       toolCalls.push(call);
-      return { text: opts.toolText?.[call.tool] ?? `${call.tool}-result`, usage: { totalTokens: 10 } };
+      return {
+        text: opts.toolText?.[call.tool] ?? `${call.tool}-result`,
+        usage: { totalTokens: 10 },
+      };
     }),
     chat: vi.fn(async () => {
       const text = opts.chatReplies[chatIdx++] ?? '{}';
@@ -43,7 +46,8 @@ describe('extractJson', () => {
 
   it('recovers JSON with unescaped raw newlines inside string values', () => {
     // 模型常把多行 markdown 原样塞进字符串值、不转义换行——补转义后应能解析。
-    const raw = '{"final": "## 摘要\n\n第一行\n第二行", "recommendation": {"verdict": "needs_work"}}';
+    const raw =
+      '{"final": "## 摘要\n\n第一行\n第二行", "recommendation": {"verdict": "needs_work"}}';
     const parsed = extractJson<{ final: string; recommendation: { verdict: string } }>(raw);
     expect(parsed?.final).toBe('## 摘要\n\n第一行\n第二行');
     expect(parsed?.recommendation.verdict).toBe('needs_work');
@@ -65,9 +69,11 @@ describe('salvageProse', () => {
 
 describe('stripTrailingJson', () => {
   it('strips a trailing recommendation JSON block the model wrongly appended', () => {
-    const fenced = '## 摘要\n\n本 PR 修复了空值崩溃。\n\n```json\n{"recommendation": {"verdict": "needs_work"}}\n```';
+    const fenced =
+      '## 摘要\n\n本 PR 修复了空值崩溃。\n\n```json\n{"recommendation": {"verdict": "needs_work"}}\n```';
     expect(stripTrailingJson(fenced)).toBe('## 摘要\n\n本 PR 修复了空值崩溃。');
-    const bare = '## 摘要\n\n本 PR 修复了空值崩溃。\n\n{\n  "recommendation": {"verdict": "approve"}\n}';
+    const bare =
+      '## 摘要\n\n本 PR 修复了空值崩溃。\n\n{\n  "recommendation": {"verdict": "approve"}\n}';
     expect(stripTrailingJson(bare)).toBe('## 摘要\n\n本 PR 修复了空值崩溃。');
   });
 
@@ -112,7 +118,7 @@ describe('runReviewMicroflow', () => {
     expect(r.recommendation.verdict).toBe('needs_work');
   });
 
-  it('clamps the summary to summaryMaxChars', async () => {
+  it('does not truncate the summary (summaryMaxChars is a soft prompt hint only)', async () => {
     const long = 'x'.repeat(500);
     const { deps } = makeDeps({
       chatReplies: [
@@ -120,8 +126,9 @@ describe('runReviewMicroflow', () => {
         `{"summary": "${long}", "recommendation": {"verdict": "approve", "reason": "ok"}}`,
       ],
     });
+    // summaryMaxChars=100 远小于 500 字符的产出：现仅作提示词软约束，不再硬截断 → 完整保留。
     const r = await runReviewMicroflow(deps, { context, pr, summaryMaxChars: 100 });
-    expect(r.summary.length).toBe(100);
+    expect(r.summary).toBe(long);
   });
 
   it('falls back to manual_review when the summary JSON is unparseable', async () => {
@@ -135,7 +142,10 @@ describe('runReviewMicroflow', () => {
   it('streams every step via onStep', async () => {
     const seen: string[] = [];
     const { deps } = makeDeps({
-      chatReplies: ['{"severe": false}', '{"summary": "s", "recommendation": {"verdict": "approve", "reason": "r"}}'],
+      chatReplies: [
+        '{"severe": false}',
+        '{"summary": "s", "recommendation": {"verdict": "approve", "reason": "r"}}',
+      ],
     });
     deps.onStep = (step) => {
       seen.push(step.kind);

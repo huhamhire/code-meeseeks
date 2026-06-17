@@ -19,6 +19,7 @@
 - 评审建议星标由五角星改为 AI 常见的四角 sparkle ✦。
 - /ask 在问题末尾追加语言要求，改善按界面语言（中 / 日 / 德）作答的遵循度——此前自由问答常被大量英文 diff 盖过而用英文作答。
 - 统一 PR 列表状态 chip 带高，消除「星标」与「星标 + 计数」等不同行的高度漂移。
+- 评审总结不再硬截断：`summary_max_chars` 仅作提示词里的参考性软约束引导 LLM 收敛篇幅，AI 已生成的总结完整保留，不再被切在词中间（如「参数…」）。
 
 ### Fixed
 
@@ -28,6 +29,7 @@
 - 补 walkthrough 文件分类标题「Miscellaneous」「Formatting」「Dependencies」的中 / 日 / 德译文（此前非英文界面下仍显示英文）。
 - Anthropic provider 配置的 base_url（自建 / 中转端点）此前未透传给底层 litellm → 请求仍打到官方 `api.anthropic.com`；现经 `ANTHROPIC_API_BASE` 正确透传（填根域名即可，litellm 自动补 `/v1/messages`）。(#65，感谢 @dnvyrn)
 - 本地仓库镜像 clone/fetch 中途被打断后留下残缺镜像（缺 origin remote），导致后续拉取变更文件一直 fatal（`'origin' does not appear to be a git repository`）、点「重试」也卡在同一坏镜像：现自动识别不健康 / 损坏镜像并删库重建，可自愈。
+- 消除评论页 poll / 刷新触发的渲染抖动：pr 按 localId 冻结后下传、评论内容结构相等就跳过重渲染、内嵌 Monaco 按锚点值 memo——定位信息没变时不再重渲染重排。
 
 ## [0.5.0-alpha.1] - 2026-06-17
 
