@@ -5,33 +5,10 @@
 
 ## [Unreleased]
 
-### Added
+## [0.5.0] - 2026-06-17
 
-- 评审步骤分步展示 token 用量：judge / 总结 / 规划等经独立通道的推理步在步骤行右侧显示本步
-  输入 / 输出 token（不累计）；工具调用的开销仍由各自运行卡片承载。
-- PR 列表项「执行中」标记覆盖 Agent **纯思考阶段**（无活跃工具运行时，含后台 AutoPilot），不再只在工具运行时显示。
-
-### Changed
-
-- describe「文件变更」walkthrough 各文件分类（功能增强 / 配置变更 …）默认折叠，点分类标题按需展开，避免输出过长。
-- **评论嵌套展示统一**（评论 tab + 行内评论）：回复满 5 层后拉平为同一缩进层级、纵向排列并加横向分割线，
-  避免无限右移；嵌套回复改走「左竖线缩进」的扁平样式（不再层层卡片「盒中盒」），两处视觉一致。
-- 评审建议星标由五角星改为 AI 常见的四角 sparkle ✦。
-- /ask 在问题末尾追加语言要求，改善按界面语言（中 / 日 / 德）作答的遵循度——此前自由问答常被大量英文 diff 盖过而用英文作答。
-- 统一 PR 列表状态 chip 带高，消除「星标」与「星标 + 计数」等不同行的高度漂移。
-- 评审总结不再硬截断：`summary_max_chars` 仅作提示词里的参考性软约束引导 LLM 收敛篇幅，AI 已生成的总结完整保留，不再被切在词中间（如「参数…」）。
-
-### Fixed
-
-- 清空某 PR 执行历史时一并清掉其 PR 列表 AI 评审建议 ★ 徽标，不再残留陈旧评审状态。
-- 自动评审（手动 / AutoPilot）完成后，PR 列表的评审建议 ★ 现即时更新，不必等下个轮询周期才体现。
-- PR「提交」数角标排除「源分支把目标分支合入自己」带进来的提交与 merge 提交，与「提交」列表口径一致（此前会多计）。
-- 补 walkthrough 文件分类标题「Miscellaneous」「Formatting」「Dependencies」的中 / 日 / 德译文（此前非英文界面下仍显示英文）。
-- Anthropic provider 配置的 base_url（自建 / 中转端点）此前未透传给底层 litellm → 请求仍打到官方 `api.anthropic.com`；现经 `ANTHROPIC_API_BASE` 正确透传（填根域名即可，litellm 自动补 `/v1/messages`）。(#65，感谢 @dnvyrn)
-- 本地仓库镜像 clone/fetch 中途被打断后留下残缺镜像（缺 origin remote），导致后续拉取变更文件一直 fatal（`'origin' does not appear to be a git repository`）、点「重试」也卡在同一坏镜像：现自动识别不健康 / 损坏镜像并删库重建，可自愈。
-- 消除评论页 poll / 刷新触发的渲染抖动：pr 按 localId 冻结后下传、评论内容结构相等就跳过重渲染、内嵌 Monaco 按锚点值 memo——定位信息没变时不再重渲染重排。
-
-## [0.5.0-alpha.1] - 2026-06-17
+> 首个 0.5 正式版。本版重点：在 PR 评审中引入可委派的**高阶 Agent（会话 Agent 化 + AutoPilot 后台预评审）**，
+> 并打磨无边框窗口、重型组件加载抖动、评论嵌套展示等体验。开发期 0.5.0-alpha.1 的变更已并入本版。
 
 ### Added
 
@@ -68,6 +45,7 @@
   深色主题从顶贯通到底。窗控按钮交由系统绘制以保留原生行为——macOS 保留红绿灯（下移到标题栏内）、
   Windows/Linux 用 `titleBarOverlay` 在右上画最小化/最大化/关闭。标题栏展示品牌名与当前 PR 标题，
   Windows/Linux 开头另显应用图标（macOS 因红绿灯占位不显）。
+- PR 列表项「执行中」标记覆盖 Agent **纯思考阶段**（无活跃工具运行时，含后台 AutoPilot），不再只在工具运行时显示。
 
 ### Changed
 
@@ -82,6 +60,12 @@
   稳定后才揭开，遮罩底色与编辑器一致、揭开无缝。
 - **describe「文件变更」分类默认折叠**：walkthrough 各文件分类（功能增强 / 配置变更 …）默认折叠收起，
   点分类标题按需展开，避免 describe 输出过长（仅作用于 walkthrough，不影响其它折叠区）。
+- **评论嵌套展示统一**（评论 tab + 行内评论）：回复满 5 层后拉平为同一缩进层级、纵向排列并加横向分割线，
+  避免无限右移；嵌套回复改走「左竖线缩进」的扁平样式（不再层层卡片「盒中盒」），两处视觉一致。
+- 评审建议星标由五角星改为 AI 常见的四角 sparkle ✦。
+- /ask 在问题末尾追加语言要求，改善按界面语言（中 / 日 / 德）作答的遵循度——此前自由问答常被大量英文 diff 盖过而用英文作答。
+- 统一 PR 列表状态 chip 带高，消除「星标」与「星标 + 计数」等不同行的高度漂移。
+- 评审总结不再硬截断：`summary_max_chars` 仅作提示词里的参考性软约束引导 LLM 收敛篇幅，AI 已生成的总结完整保留，不再被切在词中间（如「参数…」）。
 
 ### Fixed
 
@@ -101,8 +85,17 @@
 - 修复 finding 锚点解析在文件路径含方括号（如 `a/[m-123]/x.ts`）时出错：marker `[file: …, lines: …]`
   的路径捕获原排除了 `]`，遇到路径里的 `]` 即误截，导致 marker 抽不出跳转锚点、且原样泄漏到
   finding 正文。改为带 lines 时以 `, lines:` 后缀界定路径（允许路径含 `[]`）。
-- 补 describe 文件走查分类标题「Miscellaneous」的中 / 日 / 德译文：此前未在 pr-agent 标签字典中，
-  非英文界面下仍以英文显示。
+- 清空某 PR 执行历史时一并清掉其 PR 列表 AI 评审建议 ★ 徽标，不再残留陈旧评审状态。
+- 自动评审（手动 / AutoPilot）完成后，PR 列表的评审建议 ★ 现即时更新，不必等下个轮询周期才体现。
+- PR「提交」数角标排除「源分支把目标分支合入自己」带进来的提交与 merge 提交，与「提交」列表口径一致（此前会多计）。
+- 补 walkthrough 文件分类标题「Miscellaneous」「Formatting」「Dependencies」的中 / 日 / 德译文（此前非英文界面下仍显示英文）。
+- Anthropic provider 配置的 base_url（自建 / 中转端点）此前未透传给底层 litellm → 请求仍打到官方 `api.anthropic.com`；现经 `ANTHROPIC_API_BASE` 正确透传（填根域名即可，litellm 自动补 `/v1/messages`）。(#65，感谢 @dnvyrn)
+- 本地仓库镜像 clone/fetch 中途被打断后留下残缺镜像（缺 origin remote），导致后续拉取变更文件一直 fatal（`'origin' does not appear to be a git repository`）、点「重试」也卡在同一坏镜像：现自动识别不健康 / 损坏镜像并删库重建，可自愈。
+- 消除评论页 poll / 刷新触发的渲染抖动：pr 按 localId 冻结后下传、评论内容结构相等就跳过重渲染、内嵌 Monaco 按锚点值 memo——定位信息没变时不再重渲染重排。
+
+## [0.5.0-alpha.1] - 2026-06-17
+
+> 开发期预览版。其全部变更内容已并入正式版 **[0.5.0](#050---2026-06-17)**，此处不再展开。
 
 ## [0.4.0] - 2026-06-14
 
@@ -369,6 +362,7 @@
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
 [Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0-alpha.1...HEAD
+[0.5.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0
 [0.5.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0-alpha.1
 [0.4.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0
 [0.4.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0-alpha.1
