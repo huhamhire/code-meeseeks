@@ -8,7 +8,10 @@
 
 社区版 [PR-Agent](https://docs.pr-agent.ai/) 的图形界面 (GUI) · Electron 桌面应用 · 数据全部留在本地
 
-[![Electron](https://img.shields.io/badge/Electron-2B2E3A?logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![Release](https://img.shields.io/github/v/release/huhamhire/code-meeseeks?include_prereleases&sort=semver&label=release&color=4c9a40)](https://github.com/huhamhire/code-meeseeks/releases)
+[![Electron](https://img.shields.io/badge/Electron-2B2E3A?logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Release](https://img.shields.io/github/v/release/huhamhire/code-meeseeks?include_prereleases&sort=semver&label=release&color=4c9a40)](https://github.com/huhamhire/code-meeseeks/releases)
 
 <sub>关键词 / Keywords：PR-Agent GUI · pr-agent desktop client · AI 代码评审 / AI code review · Pull Request &amp; Merge Request review · Bitbucket / GitHub reviewer 工具 · 本地化 / 私有部署 / self-hosted</sub>
 
