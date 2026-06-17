@@ -78,6 +78,8 @@
   "Tests": "Tests",
   "Other": "Sonstiges",
   "Miscellaneous": "Verschiedenes",
+  "Formatting": "Formatierung",
+  "Dependencies": "Abhängigkeiten",
   "High": "Hoch",
   "Medium": "Mittel",
   "Low": "Niedrig"

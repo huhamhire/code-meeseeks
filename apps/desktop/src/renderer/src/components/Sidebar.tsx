@@ -6,7 +6,7 @@ import type {
   PrDiscoveryFilter,
   StoredPullRequest,
 } from '@meebox/shared';
-import { invoke } from '../api';
+import { invoke, subscribe } from '../api';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { PrItem } from './PrItem';
 
@@ -97,11 +97,12 @@ export function Sidebar({
     Record<string, AgentRecommendationVerdict>
   >({});
 
-  // 「执行中」指示数据源：运行队列里有在跑 / 排队 run 的 PR 集合（active + waiting），随队列实时变化。
-  const { active, waiting } = useChatRunStore();
+  // 「执行中」指示数据源：运行队列里有在跑 / 排队 run 的 PR（active + waiting），**并上**有编排 Agent
+  // 运行中的 PR（agentPrs，含纯思考阶段、无活跃工具 run 时）——补齐 agent 思考态下列表项缺执行中标记的空档。
+  const { active, waiting, agentPrs } = useChatRunStore();
   const executingPrIds = useMemo(
-    () => new Set([...active, ...waiting].map((r) => r.prLocalId)),
-    [active, waiting],
+    () => new Set([...active.map((r) => r.prLocalId), ...waiting.map((r) => r.prLocalId), ...agentPrs]),
+    [active, waiting, agentPrs],
   );
 
   // 有发现分类标签时（GitHub / Bitbucket 均含「我创建的」），reviewer 决断类（通过/需修改）
@@ -131,6 +132,34 @@ export function Sidebar({
       cancelled = true;
     };
   }, [prs]);
+
+  // 清空某 PR 执行历史会一并清掉其 AutoPilot 台账 → 即时清掉该 PR 的评审建议 ★（不必等下个 poll 重取）。
+  useEffect(() => {
+    const unsub = subscribe('agent:reviewStatusCleared', (ev) => {
+      setReviewVerdicts((prev) => {
+        if (!(ev.prLocalId in prev)) return prev;
+        const next = { ...prev };
+        delete next[ev.prLocalId];
+        return next;
+      });
+    });
+    return unsub;
+  }, []);
+
+  // 评审完成（手动 / AutoPilot 都经 recordReviewSummaryMessage 写台账 + 广播 agent:conversationChanged）→
+  // 即时重取该 PR 的评审建议，让 ★ 立刻出现在 PR 列表，不必等下个 poll 刷新 prs 才体现。
+  useEffect(() => {
+    const unsub = subscribe('agent:conversationChanged', (ev) => {
+      void invoke('agent:autopilotLedgers', { localIds: [ev.prLocalId] }).then((v) => {
+        const verdict = v[ev.prLocalId];
+        if (verdict === undefined) return;
+        setReviewVerdicts((prev) =>
+          prev[ev.prLocalId] === verdict ? prev : { ...prev, [ev.prLocalId]: verdict },
+        );
+      });
+    });
+    return unsub;
+  }, []);
 
   // GitHub 发现分类：按 PR 上的 discoveryFilters 标记本地过滤（poller 已把四类都抓回来缓存），
   // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。

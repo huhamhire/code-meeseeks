@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
@@ -18,6 +18,30 @@ import { mermaidComponents } from './markdownMermaid';
 const InlineCodeContext = lazy(() =>
   import('./InlineCodeContext').then((m) => ({ default: m.InlineCodeContext })),
 );
+
+/**
+ * 评论树结构相等比较（按 remoteId + 正文 + version + 编辑/删除权限 + 递归 replies）。poll 多数返回
+ * 内容不变的评论：相等就跳过 setComments、保留旧引用，让 React bail-out，避免整棵评论树（含内联
+ * Monaco）无谓重渲染（刷新抖动）。
+ */
+function sameCommentList(a: readonly PrComment[], b: readonly PrComment[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (
+      x.remoteId !== y.remoteId ||
+      x.body !== y.body ||
+      x.version !== y.version ||
+      x.canEdit !== y.canEdit ||
+      x.canDelete !== y.canDelete ||
+      !sameCommentList(x.replies, y.replies)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 interface CommentsPanelProps {
   pr: StoredPullRequest;
@@ -42,6 +66,11 @@ export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPa
   const { t } = useTranslation();
   const [comments, setComments] = useState<PrComment[] | null>(null);
   const [error, setError] = useState<FormattedError | null>(null);
+  // poll 会把选中的 pr 换成新对象（localId 不变）；内联 Monaco 编辑器若收到新 pr ref 会重渲染/重排 →
+  // 刷新抖动。把 pr 按 localId 冻结：同一 PR 内传给评论树的 pr ref 跨 poll 稳定，切 PR 才更新。
+  const stablePrRef = useRef(pr);
+  if (stablePrRef.current.localId !== pr.localId) stablePrRef.current = pr;
+  const stablePr = stablePrRef.current;
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +80,8 @@ export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPa
       try {
         const list = await invoke('diff:listComments', { localId: pr.localId, force });
         if (cancelled) return;
-        setComments(list);
+        // 内容相等就保留旧引用让 React bail-out：poll 多数返回不变的评论，避免整棵评论树重渲染抖动。
+        setComments((prev) => (prev && sameCommentList(prev, list) ? prev : list));
         onCommentsLoaded?.(list.length);
       } catch (e) {
         if (!cancelled) setError(formatBackendError(e));
@@ -93,6 +123,24 @@ export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPa
     return out;
   }, [ordered]);
 
+  // 缓存顶层评论元素列表：deps 全是稳定引用（ordered 经 sameCommentList 跳过后不变、stablePr 按 localId
+  // 冻结、autoExpandSet 随 ordered）。poll 无评论变化时元素引用不变 → React 跳过整棵评论子树（含内联
+  // Monaco），消除刷新抖动。
+  const commentEls = useMemo(
+    () =>
+      ordered.map((c) => (
+        <CommentItem
+          key={c.remoteId}
+          comment={c}
+          pr={stablePr}
+          depth={0}
+          autoExpandCode={autoExpandSet.has(c.remoteId)}
+          hardBreaks={hardBreaks}
+        />
+      )),
+    [ordered, stablePr, autoExpandSet, hardBreaks],
+  );
+
   if (error) {
     return (
       <div className="pr-comments-panel">
@@ -120,26 +168,22 @@ export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPa
 
   return (
     <div className="pr-comments-panel">
-      <ul className="pr-comments-list">
-        {ordered.map((c) => (
-          <CommentItem
-            key={c.remoteId}
-            comment={c}
-            pr={pr}
-            depth={0}
-            autoExpandCode={autoExpandSet.has(c.remoteId)}
-            hardBreaks={hardBreaks}
-          />
-        ))}
-      </ul>
+      <ul className="pr-comments-list">{commentEls}</ul>
     </div>
   );
 }
 
 /**
+ * 嵌套回复的最大缩进层级：满此层级后继续递归但**不再加缩进**（拉平展示），避免深嵌套把内容挤到
+ * 右侧极窄。depth 0 为顶层评论；depth 1..MAX 逐级缩进，超过 MAX 的更深回复一律平铺在 MAX 层缩进上，
+ * 仍按作者归属可读。Bitbucket 实际只一层 reply，GitHub / GitLab 可深嵌套，故设上限。
+ */
+const MAX_REPLY_DEPTH = 5;
+
+/**
  * 单条评论 + 嵌套 replies。inline 评论顶部显示 `path:line side` chip 区分锚点位置；
- * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进 (Bitbucket 实际只一层 reply
- * 但 schema 允许深嵌套，递归更稳)。
+ * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进；满 MAX_REPLY_DEPTH 层后拉平
+ * （不再加缩进，见该常量）。
  */
 function CommentItem({
   comment,
@@ -192,7 +236,7 @@ function CommentItem({
   };
 
   return (
-    <li className={`pr-comment pr-comment-depth-${String(depth)}`}>
+    <li className={`pr-comment pr-comment-depth-${String(Math.min(depth, MAX_REPLY_DEPTH))}`}>
       <div className="pr-comment-head">
         <Avatar
           connectionId={pr.connectionId}
@@ -311,7 +355,11 @@ function CommentItem({
         />
       )}
       {comment.replies.length > 0 && (
-        <ul className="pr-comments-list pr-comments-replies">
+        // 满 MAX_REPLY_DEPTH 层后用 pr-comments-flat 取代 pr-comments-replies（不再缩进 / 左边框）→
+        // 更深回复拉平在该层缩进上；pr-comments-flat 据此给同层级相邻评论加横向分割线区分。
+        <ul
+          className={`pr-comments-list ${depth < MAX_REPLY_DEPTH ? 'pr-comments-replies' : 'pr-comments-flat'}`}
+        >
           {comment.replies.map((r) => (
             <CommentItem
               key={r.remoteId}

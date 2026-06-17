@@ -5,9 +5,13 @@
 
 ## [Unreleased]
 
-## [0.5.0-alpha.1] - 2026-06-17
+## [0.5.0] - 2026-06-17
+
+> 首个 0.5 正式版。本版重点：在 PR 评审中引入可委派的**高阶 Agent（会话 Agent 化 + AutoPilot 后台预评审）**，
+> 并打磨无边框窗口、重型组件加载抖动、评论嵌套展示等体验。开发期 0.5.0-alpha.1 的变更已并入本版。
 
 ### Added
+
 - **高阶 Agent（会话 Agent 化 + AutoPilot 预评审）**：在 PR 评审中引入可委派的智能体能力，随 LLM
   配置自动可用、无需单独的启用开关。
   - **一键自动评审**：聊天框命令区右侧新增自动评审按钮（✦ 图标），对当前 PR 跑「描述 → 评审 →
@@ -41,8 +45,10 @@
   深色主题从顶贯通到底。窗控按钮交由系统绘制以保留原生行为——macOS 保留红绿灯（下移到标题栏内）、
   Windows/Linux 用 `titleBarOverlay` 在右上画最小化/最大化/关闭。标题栏展示品牌名与当前 PR 标题，
   Windows/Linux 开头另显应用图标（macOS 因红绿灯占位不显）。
+- PR 列表项「执行中」标记覆盖 Agent **纯思考阶段**（无活跃工具运行时，含后台 AutoPilot），不再只在工具运行时显示。
 
 ### Changed
+
 - **移除独立 `ollama` provider**，统一经 `openai-compatible` 接入本地 Ollama（Base URL 填
   `http://localhost:11434/v1`）：Ollama 自带 OpenAI 兼容端点，走此路径更标准稳健。旧 `ollama` 配置
   加载时**自动迁移**为 `openai-compatible` 并补足 `/v1`，存量无感升级。
@@ -54,8 +60,15 @@
   稳定后才揭开，遮罩底色与编辑器一致、揭开无缝。
 - **describe「文件变更」分类默认折叠**：walkthrough 各文件分类（功能增强 / 配置变更 …）默认折叠收起，
   点分类标题按需展开，避免 describe 输出过长（仅作用于 walkthrough，不影响其它折叠区）。
+- **评论嵌套展示统一**（评论 tab + 行内评论）：回复满 5 层后拉平为同一缩进层级、纵向排列并加横向分割线，
+  避免无限右移；嵌套回复改走「左竖线缩进」的扁平样式（不再层层卡片「盒中盒」），两处视觉一致。
+- 评审建议星标由五角星改为 AI 常见的四角 sparkle ✦。
+- /ask 在问题末尾追加语言要求，改善按界面语言（中 / 日 / 德）作答的遵循度——此前自由问答常被大量英文 diff 盖过而用英文作答。
+- 统一 PR 列表状态 chip 带高，消除「星标」与「星标 + 计数」等不同行的高度漂移。
+- 评审总结不再硬截断：`summary_max_chars` 仅作提示词里的参考性软约束引导 LLM 收敛篇幅，AI 已生成的总结完整保留，不再被切在词中间（如「参数…」）。
 
 ### Fixed
+
 - **修复 PR diff 基准随目标分支漂移导致的「修改被撤回」误判**：此前文件内容（Monaco 左栏）按目标
   分支当前 tip（`targetRef.sha`）读取，目标分支被别的 PR 合入而前移后，编辑器实际成了两点对比，
   别的 PR 的改动会以倒挂 / 撤回形式串进当前 PR 的 diff（变更文件列表用三点 diff 本不受影响，但内容
@@ -72,8 +85,17 @@
 - 修复 finding 锚点解析在文件路径含方括号（如 `a/[m-123]/x.ts`）时出错：marker `[file: …, lines: …]`
   的路径捕获原排除了 `]`，遇到路径里的 `]` 即误截，导致 marker 抽不出跳转锚点、且原样泄漏到
   finding 正文。改为带 lines 时以 `, lines:` 后缀界定路径（允许路径含 `[]`）。
-- 补 describe 文件走查分类标题「Miscellaneous」的中 / 日 / 德译文：此前未在 pr-agent 标签字典中，
-  非英文界面下仍以英文显示。
+- 清空某 PR 执行历史时一并清掉其 PR 列表 AI 评审建议 ★ 徽标，不再残留陈旧评审状态。
+- 自动评审（手动 / AutoPilot）完成后，PR 列表的评审建议 ★ 现即时更新，不必等下个轮询周期才体现。
+- PR「提交」数角标排除「源分支把目标分支合入自己」带进来的提交与 merge 提交，与「提交」列表口径一致（此前会多计）。
+- 补 walkthrough 文件分类标题「Miscellaneous」「Formatting」「Dependencies」的中 / 日 / 德译文（此前非英文界面下仍显示英文）。
+- Anthropic provider 配置的 base_url（自建 / 中转端点）此前未透传给底层 litellm → 请求仍打到官方 `api.anthropic.com`；现经 `ANTHROPIC_API_BASE` 正确透传（填根域名即可，litellm 自动补 `/v1/messages`）。(#65，感谢 @dnvyrn)
+- 本地仓库镜像 clone/fetch 中途被打断后留下残缺镜像（缺 origin remote），导致后续拉取变更文件一直 fatal（`'origin' does not appear to be a git repository`）、点「重试」也卡在同一坏镜像：现自动识别不健康 / 损坏镜像并删库重建，可自愈。
+- 消除评论页 poll / 刷新触发的渲染抖动：pr 按 localId 冻结后下传、评论内容结构相等就跳过重渲染、内嵌 Monaco 按锚点值 memo——定位信息没变时不再重渲染重排。
+
+## [0.5.0-alpha.1] - 2026-06-17
+
+> 开发期预览版。其全部变更内容已并入正式版 **[0.5.0](#050---2026-06-17)**，此处不再展开。
 
 ## [0.4.0] - 2026-06-14
 
@@ -86,6 +108,7 @@
 > UAC 提权运行；安装后的应用以普通权限启动。从旧版升级会自动清理旧安装，无需手动卸载。
 
 ### Added
+
 - **GitLab 接入**（gitlab.com + Self-Managed，CE / EE，REST API v4）：新增 `@meebox/platform-gitlab`
   适配器——MR 发现（`reviewer_username` 待我评审，跨项目）、diff 评论读 / 发 / 改 / 删 / 回复
   （discussions + notes 归一）、合并、clone（PAT / SSH）、头像 / 内嵌附件代理。设置页与首启向导可
@@ -96,6 +119,7 @@
   - 嵌套 group 路径、N+1 取详情（diff_refs / 审批）、行内评论按 `position` 三 sha 锚定。
 
 ### Changed
+
 - 拒绝代码反馈 / 改进建议后，卡片自动折叠收起并置灰：左色条转中性灰、类别 chip 置灰，正文与
   代码对比收起，仅保留头部与锚点行（含撤销入口）；头部 chevron 图标可临时展开回看。降低已决断
   项的视觉占用。
@@ -112,6 +136,7 @@
   依赖上游 CLI（claude / codex 等）、行为可能随上游版本变更，稳定性与持续可用性不作保证。
 
 ### Fixed
+
 - Bitbucket 评论内嵌附件图片不渲染：`rehype-sanitize` 的协议白名单（`src` / `href` 仅
   http/https）在 `urlTransform` 之前即剥掉 `attachment:` 内部协议，使 img/a 收不到 src/href、
   图片代理永不触发（属随 sanitize 链引入的回归）。schema 放行 `attachment` 协议；并让附件拉取
@@ -138,6 +163,7 @@
 ## [0.3.1] - 2026-06-11
 
 ### Fixed
+
 - **macOS 分发版「本地 CLI」provider（claude / codex）失效**（Finder/Dock 启动）：macOS GUI 应用
   只继承 launchd 的最小 PATH（`/usr/bin:/bin:/usr/sbin:/sbin`），读不到 shell 配置，故找不到装在
   `~/.local/bin` / homebrew 等目录的 CLI，评审报错（`litellm ... LLM Provider NOT provided` 或
@@ -336,6 +362,7 @@
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
 [Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0-alpha.1...HEAD
+[0.5.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0
 [0.5.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0-alpha.1
 [0.4.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0
 [0.4.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0-alpha.1

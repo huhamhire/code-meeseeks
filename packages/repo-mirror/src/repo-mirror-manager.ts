@@ -141,10 +141,28 @@ export class RepoMirrorManager {
   }
 
   /**
+   * 镜像是否「健康」：是有效 git 目录且 origin remote 已配置。clone/fetch 中途被打断会留下「HEAD 在、
+   * 但 git 元数据残缺（常缺 origin remote）」的目录，仅判 HEAD 存在会误以为可 fetch → `git fetch origin`
+   * 直接 fatal（`'origin' does not appear to be a git repository`）。用 `git config --get
+   * remote.origin.url` 同时验证两点：命令在非 git 目录会失败，origin 未配置则无输出 → 任一不满足即不健康，
+   * 调用方据此删库重建（见 doSyncMirror 的主动自愈）。
+   */
+  private async isHealthyMirror(mirrorPath: string): Promise<boolean> {
+    try {
+      const url = await simpleGit(mirrorPath).raw(['config', '--get', 'remote.origin.url']);
+      return url.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * 计算 base..head 之间的 commit 数 (PR 引入的提交数)。完全走本地 bare 镜像
-   * `git rev-list --count <base>..<head>` —— 不打远端，毫秒级返回。
+   * `git rev-list --count --no-merges <base>..<head>` —— 不打远端，毫秒级返回。
    *
-   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。
+   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。base 传**目标分支 sha**
+   * 时 base..head = head ^target，即「源分支不在目标分支上的提交」；`--no-merges` 略去合并提交，
+   * 与平台 PR /commits 列表口径一致（不把源分支合入目标分支带进来的提交、以及 merge 提交计入）。
    *
    * 任一 sha 不在本地镜像 (尚未 sync 到本 PR 范围) → 返回 null，调用方把它
    * 当 "暂时未知" 处理 (不显示角标 / 显示加载占位)。
@@ -162,7 +180,12 @@ export class RepoMirrorManager {
     if (!hasBase || !hasHead) return null;
     const mp = this.mirrorPath(repo);
     try {
-      const out = await simpleGit(mp).raw(['rev-list', '--count', `${baseSha}..${headSha}`]);
+      const out = await simpleGit(mp).raw([
+        'rev-list',
+        '--count',
+        '--no-merges',
+        `${baseSha}..${headSha}`,
+      ]);
       const n = Number.parseInt(out.trim(), 10);
       return Number.isNaN(n) ? null : n;
     } catch {
@@ -492,8 +515,19 @@ export class RepoMirrorManager {
 
   private async doSyncMirror(repo: RepoIdentity): Promise<MirrorResult> {
     const mirrorPath = this.mirrorPath(repo);
-    const hasMirror = await this.exists(path.join(mirrorPath, 'HEAD'));
     const key = this.repoKey(repo);
+    let hasMirror = await this.exists(path.join(mirrorPath, 'HEAD'));
+    // 自愈（主动）：目录存在但不是**健康**镜像 —— clone/fetch 中途被打断会留下「HEAD 在、但缺 origin
+    // remote / 非有效 git 目录」的残缺镜像，后续 `git fetch origin` 直接 fatal
+    // （`'origin' does not appear to be a git repository`）。检出即删掉，按首次 clone 走完整重建。
+    if (hasMirror && !(await this.isHealthyMirror(mirrorPath))) {
+      this.opts.logger?.warn(
+        { repo: key, mirrorPath },
+        'unhealthy mirror detected (interrupted clone?); removing for full re-clone',
+      );
+      await fs.rm(mirrorPath, { recursive: true, force: true }).catch(() => undefined);
+      hasMirror = false;
+    }
 
     const emit = (e: Omit<SyncProgressEvent, 'repo'>): void => {
       this.opts.onProgress?.({ repo: key, ...e });
@@ -517,22 +551,34 @@ export class RepoMirrorManager {
 
     try {
       if (hasMirror) {
-        this.opts.logger?.debug({ repo: key }, 'mirror exists, fetching');
-        // 显式 refspec，覆盖式拉：
-        //   - refs/heads/*：所有分支（含 PR target 与 source 分支）
-        //   - refs/pull-requests/*/from：Bitbucket 把 PR 源头 sha 单独保存在这里。
-        //     当源分支已被删除 / 强推后，refs/heads 看不到，但 from ref 仍指向
-        //     PR 开启时的 sha；没有它 `git diff base...head` 会 "Invalid
-        //     symmetric difference" 因为 head 不可达。
-        await this.withProxyEnv(simpleGit({ baseDir: mirrorPath, ...gitProgressOpt })).raw([
-          'fetch',
-          '--progress',
-          'origin',
-          '+refs/heads/*:refs/heads/*',
-          '+refs/pull-requests/*/from:refs/pull-requests/*/from',
-        ]);
-        emit({ phase: 'done' });
-        return { mirrorPath, freshClone: false };
+        try {
+          this.opts.logger?.debug({ repo: key }, 'mirror exists, fetching');
+          // 显式 refspec，覆盖式拉：
+          //   - refs/heads/*：所有分支（含 PR target 与 source 分支）
+          //   - refs/pull-requests/*/from：Bitbucket 把 PR 源头 sha 单独保存在这里。
+          //     当源分支已被删除 / 强推后，refs/heads 看不到，但 from ref 仍指向
+          //     PR 开启时的 sha；没有它 `git diff base...head` 会 "Invalid
+          //     symmetric difference" 因为 head 不可达。
+          await this.withProxyEnv(simpleGit({ baseDir: mirrorPath, ...gitProgressOpt })).raw([
+            'fetch',
+            '--progress',
+            'origin',
+            '+refs/heads/*:refs/heads/*',
+            '+refs/pull-requests/*/from:refs/pull-requests/*/from',
+          ]);
+          emit({ phase: 'done' });
+          return { mirrorPath, freshClone: false };
+        } catch (fetchErr) {
+          // 自愈（被动）：fetch 撞上**本地损坏 / 残缺**镜像（缺 origin、坏对象等）→ 删掉，落到下方完整
+          // clone 重建。其它错误（网络 / 认证 / 远端拒绝）原样抛出，不误删健康镜像、不把临时网络问题当损坏。
+          if (!isLocalMirrorCorruption(fetchErr)) throw fetchErr;
+          this.opts.logger?.warn(
+            { repo: key, err: fetchErr instanceof Error ? fetchErr.message : String(fetchErr) },
+            'fetch failed on corrupt mirror; removing for full re-clone',
+          );
+          await fs.rm(mirrorPath, { recursive: true, force: true }).catch(() => undefined);
+          // 不 return，落到下方完整 clone 自愈重建。
+        }
       }
 
       this.opts.logger?.info({ repo: key }, 'cloning bare mirror (full + all refs)');
@@ -596,6 +642,24 @@ export class RepoMirrorManager {
     return total;
   }
 
+}
+
+/**
+ * 错误消息是否指向**本地镜像损坏 / 残缺**（而非网络 / 认证 / 远端拒绝等可重试的远端问题）。fetch 失败
+ * 后据此判断是否「删库重 clone」自愈——只对本地损坏自愈，避免把临时网络问题误判为损坏而无谓全量重建。
+ * 不匹配 "could not read from remote repository"：它对网络 / 认证失败也会出现，不能据它判定本地损坏。
+ */
+function isLocalMirrorCorruption(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes('does not appear to be a git repository') || // 缺 origin remote（中断的 clone）
+    msg.includes('not a git repository') ||
+    msg.includes('bad object') ||
+    msg.includes('object file is empty') ||
+    msg.includes('loose object') || // "loose object <sha> is corrupt"
+    msg.includes('did not send all necessary objects') ||
+    msg.includes('unable to read')
+  );
 }
 
 /**

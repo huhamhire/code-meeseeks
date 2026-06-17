@@ -1655,11 +1655,11 @@ function makeCommentMarkdownComponents(
 }
 
 /**
- * 递归渲染单条评论 + 它的回复子树。Bitbucket 的 comment.comments[] 是任意层级的，
- * 之前只画了第一层 → 第三层及以上不显示；这里递归到底。每往下一层左移 18px
- * 并多一道左竖线（跟 Bitbucket 原生 UI 视觉对齐）。
+ * 递归渲染单条评论 + 它的回复子树。comment.replies 是任意层级的；这里递归到底。每往下一层
+ * 步进缩进 + 一道左竖线（缩进量 / 边框色与评论 tab 的 .pr-comments-replies 对齐，见 comment-zone.scss）。
  */
-/** 嵌套缩进最大 5 层；第 6 层起 ml=0，跟第 5 层左对齐（避免过深一直右滑） */
+/** 嵌套缩进最大 5 层；超过此层级的更深回复**拉平**（comment-zone-reply-flat：去步进 / 边框 / 左 padding），
+ *  平铺在第 5 层缩进上、上下排列，避免无限嵌套一直右滑。 */
 const MAX_REPLY_INDENT_DEPTH = 5;
 
 function CommentNode({
@@ -1831,12 +1831,12 @@ function CommentNode({
     </>
   );
   if (depth === 0) return inner;
-  // 第 1~5 层每层缩进 18px (相对父)；第 6+ 层 ml=0 跟上一级平齐
-  const ml = depth <= MAX_REPLY_INDENT_DEPTH ? 18 : 0;
+  // 满 MAX_REPLY_INDENT_DEPTH 层后**拉平**：去掉步进缩进与左竖线，更深回复平铺在上限层级上
+  // （与评论 tab 设计一致）。关键：必须同时去掉 padding-left 与 border —— 仅去步进、保留每层的
+  // padding/border 会逐级累加仍右移（之前"还是有缩进"的根因）。
+  const flat = depth > MAX_REPLY_INDENT_DEPTH;
   return (
-    <div className="comment-zone-reply" style={{ marginLeft: ml }}>
-      {inner}
-    </div>
+    <div className={`comment-zone-reply${flat ? ' comment-zone-reply-flat' : ''}`}>{inner}</div>
   );
 }
 
