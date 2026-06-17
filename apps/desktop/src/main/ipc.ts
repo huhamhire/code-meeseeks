@@ -40,6 +40,7 @@ import {
   writeCommentsCache,
   writeAutopilotLedger,
   getAutopilotLedger,
+  clearAutopilotLedger,
   getAgentSession,
   clearAgentSession,
   getAgentConversation,
@@ -1842,6 +1843,12 @@ export function registerIpcHandlers({
       // 清执行历史时一并清掉 Agent 会话（含收尾 summary / 步骤 transcript），否则清空后
       // 重开 PR 仍会从落盘会话恢复出「评审总结」卡片。
       await clearAgentSession(stateStore, req.localId);
+      // 一并清掉 AutoPilot 台账（评审建议 verdict），并广播 → PR 列表该 PR 的 ★ 徽标即时消失，
+      // 不残留陈旧评审状态、也不必等下个 poll 重取台账。
+      await clearAutopilotLedger(stateStore, req.localId);
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('agent:reviewStatusCleared', { prLocalId: req.localId });
+      }
       return { cleared: await clearReviewRunsForPr(stateStore, req.localId) };
     },
   );

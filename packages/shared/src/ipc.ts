@@ -145,6 +145,11 @@ export interface IpcEvents {
    * （无活跃工具 run 时），补齐仅看运行队列时思考态缺失执行中标记的空档。
    */
   'agent:runningChanged': { prLocalIds: string[] };
+  /**
+   * 某 PR 的评审状态被清除（清空执行历史时一并清掉 AutoPilot 台账）。renderer 据此即时清掉 PR 列表
+   * 该 PR 的评审建议 ★ 徽标，避免清空后仍残留陈旧评审状态（不必等下个 poll 重取台账）。
+   */
+  'agent:reviewStatusCleared': { prLocalId: string };
 }
 
 export type IpcEventName = keyof IpcEvents;
