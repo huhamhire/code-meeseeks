@@ -257,16 +257,23 @@
   margin-left: auto;
 }
 
-// reviewer 统计胶囊：靠右贴边，把 author/branch meta 挤左
+// reviewer 统计胶囊：靠右贴边，把 author/branch meta 挤左。固定带高 + 居中：让不同行无论含哪种
+// chip（文字计数 / 图标星标 / 执行中 spinner）都占同一高度，避免跨行 chip 垂直位置漂移。
 .pr-item-review-chips {
   display: inline-flex;
+  align-items: center;
+  min-height: 18px;
   gap: $space-2;
   margin-left: auto;
 }
 
+// 所有 chip 统一带高（含图标类 verdict / mergeable 与文字类 approved / needs-work）：图标 chip 原本
+// 只有 ~13px、比文字 chip(~17px)矮，导致「星标 only」行与「星标+计数」行高度不一。固定 18px + 居中对齐。
 .review-chip {
   display: inline-flex;
   align-items: center;
+  box-sizing: border-box;
+  height: 18px;
   gap: 3px;
   padding: 1px $space-3;
   border-radius: $radius-pill;
