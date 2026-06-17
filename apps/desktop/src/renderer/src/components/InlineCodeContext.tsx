@@ -3,7 +3,7 @@
 import '../monaco-setup';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
@@ -33,7 +33,7 @@ interface InlineCodeContextProps {
  * 性能：每个 inline 评论都会挂一个 Monaco 实例 (读 + tokenize)。CommentsPanel 控
  * 默认只 auto-expand 前 N 条 (按时间线)，超额走 click-to-expand 懒加载。
  */
-export function InlineCodeContext({
+function InlineCodeContextImpl({
   pr,
   anchor,
   contextLines = 5,
@@ -158,3 +158,19 @@ export function InlineCodeContext({
     </div>
   );
 }
+
+/**
+ * 按**锚点值**（path / line / side）+ pr.localId + 展示选项比较的 memo：父级（CommentsPanel）在 poll
+ * 重渲染时会传新的 anchor / pr **对象引用**（值未变），默认浅比较会误判变化 → 内嵌 Monaco 重渲染重排
+ * （刷新抖动）。这里按值比较，定位信息没变就跳过整个组件，Monaco 不动。
+ */
+export const InlineCodeContext = memo(
+  InlineCodeContextImpl,
+  (prev, next) =>
+    prev.pr.localId === next.pr.localId &&
+    prev.anchor.path === next.anchor.path &&
+    prev.anchor.line === next.anchor.line &&
+    prev.anchor.side === next.anchor.side &&
+    (prev.contextLines ?? 5) === (next.contextLines ?? 5) &&
+    (prev.autoExpand ?? true) === (next.autoExpand ?? true),
+);
