@@ -6,7 +6,7 @@ import type {
   PrDiscoveryFilter,
   StoredPullRequest,
 } from '@meebox/shared';
-import { invoke } from '../api';
+import { invoke, subscribe } from '../api';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { PrItem } from './PrItem';
 
@@ -132,6 +132,19 @@ export function Sidebar({
       cancelled = true;
     };
   }, [prs]);
+
+  // 清空某 PR 执行历史会一并清掉其 AutoPilot 台账 → 即时清掉该 PR 的评审建议 ★（不必等下个 poll 重取）。
+  useEffect(() => {
+    const unsub = subscribe('agent:reviewStatusCleared', (ev) => {
+      setReviewVerdicts((prev) => {
+        if (!(ev.prLocalId in prev)) return prev;
+        const next = { ...prev };
+        delete next[ev.prLocalId];
+        return next;
+      });
+    });
+    return unsub;
+  }, []);
 
   // GitHub 发现分类：按 PR 上的 discoveryFilters 标记本地过滤（poller 已把四类都抓回来缓存），
   // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。

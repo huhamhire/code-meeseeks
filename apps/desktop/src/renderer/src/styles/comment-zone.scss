@@ -183,13 +183,23 @@
 // (前 5 层每层 18px，第 6+ 层 0 跟第 5 层平齐)
 .comment-zone-reply {
   margin-top: $space-4;
+  // 每层步进 12px + 左竖线 —— 缩进量与边框色对齐评论 tab 的 .pr-comments-replies（$space-6 / $border-muted）。
+  margin-left: $space-6;
   padding: $space-2 0 $space-2 $space-5;
-  border-left: 2px solid $border-default;
+  border-left: 2px solid $border-muted;
   // 字号继承父级 (.monaco-comment-zone-inner 14px)，不再缩减 — 嵌套 reply 跟
   // 父评论同等可读性，视觉层级靠左侧 border + indent 区分就够
 
   & + & {
     margin-top: $space-3;
+  }
+
+  // 满 MAX_REPLY_INDENT_DEPTH 层后拉平：去步进 / 去左竖线 / 去左 padding，更深回复平铺在上限层级上。
+  // 必须三者全去 —— 仅去 margin 步进、保留 padding-left + border 会逐级累加仍右移（"还是有缩进"的根因）。
+  &.comment-zone-reply-flat {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
   }
 
   .comment-zone-body {

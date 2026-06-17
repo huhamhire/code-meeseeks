@@ -142,9 +142,11 @@ export class RepoMirrorManager {
 
   /**
    * 计算 base..head 之间的 commit 数 (PR 引入的提交数)。完全走本地 bare 镜像
-   * `git rev-list --count <base>..<head>` —— 不打远端，毫秒级返回。
+   * `git rev-list --count --no-merges <base>..<head>` —— 不打远端，毫秒级返回。
    *
-   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。
+   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。base 传**目标分支 sha**
+   * 时 base..head = head ^target，即「源分支不在目标分支上的提交」；`--no-merges` 略去合并提交，
+   * 与平台 PR /commits 列表口径一致（不把源分支合入目标分支带进来的提交、以及 merge 提交计入）。
    *
    * 任一 sha 不在本地镜像 (尚未 sync 到本 PR 范围) → 返回 null，调用方把它
    * 当 "暂时未知" 处理 (不显示角标 / 显示加载占位)。
@@ -162,7 +164,12 @@ export class RepoMirrorManager {
     if (!hasBase || !hasHead) return null;
     const mp = this.mirrorPath(repo);
     try {
-      const out = await simpleGit(mp).raw(['rev-list', '--count', `${baseSha}..${headSha}`]);
+      const out = await simpleGit(mp).raw([
+        'rev-list',
+        '--count',
+        '--no-merges',
+        `${baseSha}..${headSha}`,
+      ]);
       const n = Number.parseInt(out.trim(), 10);
       return Number.isNaN(n) ? null : n;
     } catch {

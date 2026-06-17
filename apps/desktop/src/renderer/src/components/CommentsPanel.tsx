@@ -137,9 +137,16 @@ export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPa
 }
 
 /**
+ * 嵌套回复的最大缩进层级：满此层级后继续递归但**不再加缩进**（拉平展示），避免深嵌套把内容挤到
+ * 右侧极窄。depth 0 为顶层评论；depth 1..MAX 逐级缩进，超过 MAX 的更深回复一律平铺在 MAX 层缩进上，
+ * 仍按作者归属可读。Bitbucket 实际只一层 reply，GitHub / GitLab 可深嵌套，故设上限。
+ */
+const MAX_REPLY_DEPTH = 5;
+
+/**
  * 单条评论 + 嵌套 replies。inline 评论顶部显示 `path:line side` chip 区分锚点位置；
- * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进 (Bitbucket 实际只一层 reply
- * 但 schema 允许深嵌套，递归更稳)。
+ * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进；满 MAX_REPLY_DEPTH 层后拉平
+ * （不再加缩进，见该常量）。
  */
 function CommentItem({
   comment,
@@ -192,7 +199,7 @@ function CommentItem({
   };
 
   return (
-    <li className={`pr-comment pr-comment-depth-${String(depth)}`}>
+    <li className={`pr-comment pr-comment-depth-${String(Math.min(depth, MAX_REPLY_DEPTH))}`}>
       <div className="pr-comment-head">
         <Avatar
           connectionId={pr.connectionId}
@@ -311,7 +318,11 @@ function CommentItem({
         />
       )}
       {comment.replies.length > 0 && (
-        <ul className="pr-comments-list pr-comments-replies">
+        // 满 MAX_REPLY_DEPTH 层后用 pr-comments-flat 取代 pr-comments-replies（不再缩进 / 左边框）→
+        // 更深回复拉平在该层缩进上；pr-comments-flat 据此给同层级相邻评论加横向分割线区分。
+        <ul
+          className={`pr-comments-list ${depth < MAX_REPLY_DEPTH ? 'pr-comments-replies' : 'pr-comments-flat'}`}
+        >
           {comment.replies.map((r) => (
             <CommentItem
               key={r.remoteId}

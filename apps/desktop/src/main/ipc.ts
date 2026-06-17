@@ -40,6 +40,7 @@ import {
   writeCommentsCache,
   writeAutopilotLedger,
   getAutopilotLedger,
+  clearAutopilotLedger,
   getAgentSession,
   clearAgentSession,
   getAgentConversation,
@@ -203,7 +204,7 @@ export function registerIpcHandlers({
         } catch {
           await fs.writeFile(
             f,
-            '# meebox 占位空文件：抑制 pr-agent 缺失 .secrets.toml 的启动告警\n',
+            '# meebox placeholder: silence pr-agent warning about a missing .secrets.toml\n',
           );
         }
       }
@@ -771,12 +772,14 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['diff:commitCount']['response']> => {
       const pr = await findPrOrThrow(req.localId);
       const id = repoIdentityFor(pr);
-      // 本地 git 算 base..head；不打远端、不主动触发 sync。镜像还没拉齐就返回 null，
+      // 本地 git 算提交数；不打远端、不主动触发 sync。镜像还没拉齐就返回 null，
       // UI 角标暂不显示，等下次 poll 触发 syncMirror 完成后自然命中。
-      // base 用固定 merge-base：base..head（base 为 merge-base 时）即 PR 自身提交数，
-      // 与三点 diff 同源、对目标分支前移稳定（旧版用 targetRef.sha 会随漂移跳变）
-      const base = await resolveDiffBaseSha(pr);
-      const n = await repoMirror.countCommits(id, base, pr.sourceRef.sha);
+      // 口径 = PR 自身提交（源分支「不在目标分支上」的非 merge 提交），对齐平台 /commits 列表。
+      // **基准用目标分支 sha（head ^target）而非固定 merge-base**：源分支把目标分支（如 dev）合入自己后，
+      // merge-base 之后被带进来的目标提交也可达 head、不可达 merge-base → 用 merge-base 会把它们误计
+      // （标 31 实则 2）。以 targetRef.sha 排除这些合入提交；merge 提交本身由 countCommits 的 --no-merges 略去。
+      // （diff 仍用固定 merge-base 保稳定，与本计数口径各司其职。）
+      const n = await repoMirror.countCommits(id, pr.targetRef.sha, pr.sourceRef.sha);
       return n === null ? null : { count: n };
     },
   );
@@ -1842,6 +1845,12 @@ export function registerIpcHandlers({
       // 清执行历史时一并清掉 Agent 会话（含收尾 summary / 步骤 transcript），否则清空后
       // 重开 PR 仍会从落盘会话恢复出「评审总结」卡片。
       await clearAgentSession(stateStore, req.localId);
+      // 一并清掉 AutoPilot 台账（评审建议 verdict），并广播 → PR 列表该 PR 的 ★ 徽标即时消失，
+      // 不残留陈旧评审状态、也不必等下个 poll 重取台账。
+      await clearAutopilotLedger(stateStore, req.localId);
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('agent:reviewStatusCleared', { prLocalId: req.localId });
+      }
       return { cleared: await clearReviewRunsForPr(stateStore, req.localId) };
     },
   );
