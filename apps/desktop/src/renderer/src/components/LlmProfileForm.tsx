@@ -10,7 +10,7 @@ export interface ProviderMeta {
   hint: string;
   /** Model 字段示例值 / placeholder */
   modelExample: string;
-  /** Base URL 字段默认值（有就回显；填空字段时 pr-agent 会用它） */
+  /** Base URL 字段的默认 endpoint：作占位提示；用户填了即透传给 pr-agent，留空则由下游回落到等同此处的默认 endpoint */
   defaultBaseUrl: string;
   /** API Key 字段是否必填 */
   needsKey: boolean;
