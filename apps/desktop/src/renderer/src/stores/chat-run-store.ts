@@ -18,9 +18,17 @@ export interface ChatRunStoreState {
   waiting: ReadonlyArray<PragentRunInfo>;
   /** 各 run 的实时 stdout 行缓存。键 = runId；run 完成后保留直到 clearLines 调用 */
   linesByRunId: ReadonlyMap<string, ReadonlyArray<string>>;
+  /** 有编排 Agent 运行中（思考或派发工具）的 PR localId 集合——含纯思考阶段（无活跃工具 run），
+   *  来自主进程 `agent:runningChanged`。PR 列表项「执行中」指示在工具队列之外再并入此集合。 */
+  agentPrs: ReadonlyArray<string>;
 }
 
-let state: ChatRunStoreState = { active: [], waiting: [], linesByRunId: new Map() };
+let state: ChatRunStoreState = {
+  active: [],
+  waiting: [],
+  linesByRunId: new Map(),
+  agentPrs: [],
+};
 const subscribers = new Set<() => void>();
 
 function notify(): void {
@@ -62,6 +70,19 @@ function setQueue(
   notify();
 }
 
+/** 集合相等（顺序无关）：长度相同且每个 id 都在旧集合里。避免广播顺序差异引发无谓 re-render。 */
+function sameIdSet(a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean {
+  if (a.length !== b.length) return false;
+  const sa = new Set(a);
+  return b.every((id) => sa.has(id));
+}
+
+function setAgentPrs(ids: ReadonlyArray<string>): void {
+  if (sameIdSet(state.agentPrs, ids)) return;
+  state = { ...state, agentPrs: ids };
+  notify();
+}
+
 function appendLine(runId: string, line: string): void {
   const cur = state.linesByRunId.get(runId) ?? [];
   const nextMap = new Map(state.linesByRunId);
@@ -87,6 +108,7 @@ export const chatRunStore = {
     };
   },
   setQueue,
+  setAgentPrs,
   appendLine,
   clearLines,
 };
@@ -119,9 +141,14 @@ export function wireChatRunStore(): () => void {
   const unsubProgress = subscribe('pragent:runProgress', (ev) => {
     chatRunStore.appendLine(ev.runId, ev.line);
   });
+  // 编排 Agent 运行中（含纯思考阶段）的 PR 集合：手动 run/ask 与 AutoPilot 后台评审一并计入。
+  const unsubAgentRunning = subscribe('agent:runningChanged', (ev) => {
+    chatRunStore.setAgentPrs(ev.prLocalIds);
+  });
   return () => {
     cancelled = true;
     unsubQueue();
     unsubProgress();
+    unsubAgentRunning();
   };
 }

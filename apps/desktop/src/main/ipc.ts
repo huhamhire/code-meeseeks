@@ -169,14 +169,14 @@ export function registerIpcHandlers({
   /** 生效的 Agent 目录：用户配置优先，未配置则回落工作目录默认位置（~/.code-meeseeks/agent）。 */
   const effectiveAgentDir = (): string => bootstrap.config.agent.dir || bootstrap.paths.agentDir;
 
-  // /ask 输出去重：pr-agent answer markdown 里会回显完整问题，跟 UI chat-user-msg
-  // 气泡重复。逐行精确匹配 question (含 trim 后) 的行整行删掉，保留其余正文
-  const stripAskQuestionEcho = (md: string, question: string): string => {
-    const q = question.trim();
-    if (!q || !md) return md;
+  // /ask 输出去重：pr-agent answer markdown 里会回显完整问题（以及我们追加到问题末尾的语言要求），
+  // 跟 UI chat-user-msg 气泡重复。逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
+  const stripAskQuestionEcho = (md: string, ...echoed: string[]): string => {
+    const qs = new Set(echoed.map((q) => q.trim()).filter(Boolean));
+    if (!qs.size || !md) return md;
     return md
       .split('\n')
-      .filter((line) => line.trim() !== q)
+      .filter((line) => !qs.has(line.trim()))
       .join('\n');
   };
 
@@ -1075,8 +1075,18 @@ export function registerIpcHandlers({
         );
       }
 
-      // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
-      const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
+      // ask 工具：问题作为位置参数（user turn，spawn args 单元素，含空格也是一个 arg 不切分），
+      // 并在问题**末尾**硬性追加语言要求。系统侧 CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS 对
+      // 自由问答常被大量英文 diff（full diff 数万 token）盖过 → 模型用英文作答；在 user turn 末尾
+      // （近因位置、用目标语言书写）再要求一次，显著提升按 UI 语言作答的遵循度。en-US 返回空、不追加。
+      const askLangSuffix = req.tool === 'ask' ? askLanguageSuffixFor(getMainLanguage()) : '';
+      const askQuestion =
+        req.tool === 'ask' && req.question
+          ? askLangSuffix
+            ? `${req.question}\n\n${askLangSuffix}`
+            : req.question
+          : undefined;
+      const extraArgs = askQuestion ? [askQuestion] : undefined;
 
       // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉启动告警
       // （直接写安装目录；memo 化只首次做）。local-cli 不需要 (pipx 装的 pr-agent
@@ -1123,7 +1133,7 @@ export function registerIpcHandlers({
       // 重复)。在解析前把跟用户问题逐字匹配的整行删掉，避免渲染时出现两次问题
       const cleanedContent =
         req.tool === 'ask' && req.question?.trim()
-          ? stripAskQuestionEcho(fileContent, req.question)
+          ? stripAskQuestionEcho(fileContent, req.question, askLangSuffix)
           : fileContent;
       const parsed = parseReviewOutput(cleanedContent || result.stdout, req.tool);
       // M4 草稿再摄入：/review 成功完成时丢掉 pending+finding 旧草稿，
@@ -1389,6 +1399,24 @@ export function registerIpcHandlers({
   // agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
   const agentControllers = new Map<string, AbortController>();
 
+  // 运行中（思考或派发工具）的编排 Agent 所属 PR 集合，向 renderer 广播「执行中」。区别于
+  // agentControllers（仅手动可停会话）：这里**手动 run/ask 与 AutoPilot 后台评审一并计入**，
+  // 让 PR 列表项在纯思考阶段（无活跃工具 run）也显示执行中标记。
+  const runningAgentPrs = new Set<string>();
+  const broadcastAgentRunning = (): void => {
+    const prLocalIds = [...runningAgentPrs];
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('agent:runningChanged', { prLocalIds });
+    }
+  };
+  const markAgentRunning = (localId: string): void => {
+    runningAgentPrs.add(localId);
+    broadcastAgentRunning();
+  };
+  const unmarkAgentRunning = (localId: string): void => {
+    if (runningAgentPrs.delete(localId)) broadcastAgentRunning();
+  };
+
   /** 取消某 PR 的全部 pr-agent run：active 的 SIGKILL，waiting 的出队 + reject。 */
   const cancelRunsForPr = (localId: string): void => {
     for (const item of active.values()) if (item.req.localId === localId) item.ac?.abort();
@@ -1505,6 +1533,7 @@ export function registerIpcHandlers({
       // 注册 AbortController，让停止按钮（agent:stop）能在思考 / 执行任意阶段即时中止本次评审。
       const ac = new AbortController();
       agentControllers.set(pr.localId, ac);
+      markAgentRunning(pr.localId);
       logger.info({ prLocalId: pr.localId }, 'agent review start (manual)');
       try {
         const session = await withAgentChat(
@@ -1520,6 +1549,7 @@ export function registerIpcHandlers({
         return session;
       } finally {
         agentControllers.delete(pr.localId);
+        unmarkAgentRunning(pr.localId);
       }
     },
   );
@@ -1577,6 +1607,7 @@ export function registerIpcHandlers({
       });
       const ac = new AbortController();
       agentControllers.set(pr.localId, ac);
+      markAgentRunning(pr.localId);
       // 不记用户输入正文（避免泄漏 / 刷屏）：只记发起本身，输入已落多轮对话。
       logger.info({ prLocalId: pr.localId }, 'agent chat start (planning)');
       try {
@@ -1596,6 +1627,7 @@ export function registerIpcHandlers({
         return session;
       } finally {
         agentControllers.delete(pr.localId);
+        unmarkAgentRunning(pr.localId);
       }
     },
   );
@@ -1728,10 +1760,16 @@ export function registerIpcHandlers({
           // （run-queue maxConcurrency）尽量被填满，而非逐 PR 串行空等。各 PR 写各自的文件，无竞争。
           await Promise.all(
             toReview.map(async (pr) => {
-              const session = await runReviewForPr(pr, agentContext, chat, undefined, true);
-              // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
-              // 失败 / 暂停不落台账 → 无产出，下轮可重试（准入闸 2 用 hasReviewOutput 判，不再靠台账拦）。
-              await recordReviewSummaryMessage(pr, session);
+              // AutoPilot 后台评审无 AbortController，但同样标记「执行中」——纯思考阶段也在 PR 列表项显示。
+              markAgentRunning(pr.localId);
+              try {
+                const session = await runReviewForPr(pr, agentContext, chat, undefined, true);
+                // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
+                // 失败 / 暂停不落台账 → 无产出，下轮可重试（准入闸 2 用 hasReviewOutput 判，不再靠台账拦）。
+                await recordReviewSummaryMessage(pr, session);
+              } finally {
+                unmarkAgentRunning(pr.localId);
+              }
             }),
           );
         });
@@ -2290,6 +2328,28 @@ function languageDirectiveFor(lang: string): string {
   }
   if (norm.startsWith('de')) {
     return 'Respond in German (Deutsch). All section labels, table headers, column names, headings, and content MUST be in German — do not leave any English template strings untranslated.';
+  }
+  return '';
+}
+
+/**
+ * /ask 专用：把语言要求作为「问题末尾」的硬性指令，**用目标语言书写本身**（最能促使模型切换到该
+ * 语言作答）。系统侧 CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS 对自由问答常被大量英文 diff
+ * 盖过，故在 user turn 末尾（近因位置）再要求一次。en-US / 未知 locale 返回空串（默认即英文）。
+ */
+function askLanguageSuffixFor(lang: string): string {
+  const norm = lang.toLowerCase();
+  if (norm.startsWith('zh-cn') || norm === 'zh') {
+    return '请用简体中文回答整个回复（包括所有解释、说明与结论）。代码、标识符、文件路径保留原样，但所有叙述文字必须是简体中文，不要用英文作答。';
+  }
+  if (norm.startsWith('zh-tw') || norm.startsWith('zh-hk')) {
+    return '請用繁體中文回答整個回覆（包括所有解釋、說明與結論）。程式碼、識別符、檔案路徑保留原樣，但所有敘述文字必須是繁體中文，不要用英文作答。';
+  }
+  if (norm.startsWith('ja')) {
+    return '回答全体を日本語で記述してください（説明・結論を含む）。コード・識別子・ファイルパスはそのまま残し、説明文はすべて日本語にしてください。英語で回答しないでください。';
+  }
+  if (norm.startsWith('de')) {
+    return 'Bitte antworte vollständig auf Deutsch (einschließlich aller Erklärungen und Schlussfolgerungen). Code, Bezeichner und Dateipfade bleiben unverändert, aber der gesamte erläuternde Text muss auf Deutsch sein. Antworte nicht auf Englisch.';
   }
   return '';
 }
