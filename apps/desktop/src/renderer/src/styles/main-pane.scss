@@ -425,10 +425,26 @@
   border-left: 2px solid $border-muted;
 }
 .pr-comment {
-  background: $bg-elev;
-  border: 1px solid $border-default;
-  border-radius: $radius-md;
   padding: $space-4 $space-5;
+  // 卡片视觉（底色 / 边框 / 圆角）只给**顶层评论**；嵌套回复改走「左竖线缩进」的扁平样式（与行内
+  // 评论 DiffView 一致）——回复的 <ul> 渲染在父 <li.pr-comment> 内部，若每层都是卡片就会层层「盒中盒」。
+  &.pr-comment-depth-0 {
+    background: $bg-elev;
+    border: 1px solid $border-default;
+    border-radius: $radius-md;
+  }
+  // 嵌套回复：无卡片盒子，仅纵向留白；横向缩进与左竖线由 .pr-comments-replies 提供，满 5 层后拉平。
+  &:not(.pr-comment-depth-0) {
+    padding: $space-3 0;
+  }
+}
+// 拉平层（满 MAX_REPLY_DEPTH 层后）的回复同层级、无卡片盒子区隔 → 每条加一道顶部横向分割线 + 上下
+// 留白（margin 在线上方、padding 在线下方），清晰区分上下相邻评论（首条同时与上一缩进层级隔开）。
+// 置于 .pr-comment 之后以盖过其 padding-top。
+.pr-comments-flat > .pr-comment {
+  margin-top: $space-4;
+  padding-top: $space-4;
+  border-top: 1px solid $border-muted;
 }
 .pr-comment-head {
   display: flex;
