@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.5.0-alpha.1] - 2026-06-17
+
 ### Added
 - **高阶 Agent（会话 Agent 化 + AutoPilot 预评审）**：在 PR 评审中引入可委派的智能体能力，随 LLM
   配置自动可用、无需单独的启用开关。
@@ -29,6 +31,8 @@
     打机器人标记，与手动触发区分。排队位次取全局队列位序（跨 PR 共享队列，不再每 PR 都显示「第 1 位」）。
   - **并行多问**：规划 Agent 可在一轮内并行派发多个 `/ask`（`tools` 元素支持 `{tool, question}` 形式），
     经运行队列并发执行，而非逐个串行。
+  - **评审步骤 token 用量可见**：编排的每个推理步（判读 / 总结 / 自由规划）在步骤行右侧分步展示本步
+    LLM token 用量（↑输入 / ↓输出，**不累计**）；工具调用（描述 / 评审 / 追问）的开销仍由各自运行卡片承载。
   - **Agent 上下文目录**：以 SOUL / AGENTS / MEMORY / USER 与 rules/ 规则子目录构成 Agent 的人格与
     知识来源；未配置自定义目录时默认落 `~/.code-meeseeks/agent`，首次启动幂等补齐模版，开箱即用。
 - 设置页「运行环境」新增「关于 & 反馈」入口：GitHub 仓库（Star）/ 提交 Issue / Releases 三个外链
@@ -48,6 +52,8 @@
   的多段重排。loading 延迟显示（>150ms 才出现）——本地缓存命中的快切换零闪烁，仅真慢场景才落到
   loading。Monaco 区域特别处理：从挂载第一帧即盖遮罩、并等折叠（hideUnchangedRegions）布局 paint
   稳定后才揭开，遮罩底色与编辑器一致、揭开无缝。
+- **describe「文件变更」分类默认折叠**：walkthrough 各文件分类（功能增强 / 配置变更 …）默认折叠收起，
+  点分类标题按需展开，避免 describe 输出过长（仅作用于 walkthrough，不影响其它折叠区）。
 
 ### Fixed
 - **修复 PR diff 基准随目标分支漂移导致的「修改被撤回」误判**：此前文件内容（Monaco 左栏）按目标
@@ -66,6 +72,8 @@
 - 修复 finding 锚点解析在文件路径含方括号（如 `a/[m-123]/x.ts`）时出错：marker `[file: …, lines: …]`
   的路径捕获原排除了 `]`，遇到路径里的 `]` 即误截，导致 marker 抽不出跳转锚点、且原样泄漏到
   finding 正文。改为带 lines 时以 `, lines:` 后缀界定路径（允许路径含 `[]`）。
+- 补 describe 文件走查分类标题「Miscellaneous」的中 / 日 / 德译文：此前未在 pr-agent 标签字典中，
+  非英文界面下仍以英文显示。
 
 ## [0.4.0] - 2026-06-14
 
@@ -327,7 +335,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0-alpha.1...HEAD
+[0.5.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0-alpha.1
 [0.4.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0
 [0.4.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0-alpha.1
 [0.3.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.0...v0.3.1
