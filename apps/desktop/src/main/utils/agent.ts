@@ -135,6 +135,14 @@ export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
       break;
     case 'anthropic':
       if (profile.api_key) env['ANTHROPIC__KEY'] = profile.api_key;
+      // base_url 必须走 litellm 原生 env `ANTHROPIC_API_BASE`（单下划线），**不能**用
+      // pr-agent 风格的双下划线 `ANTHROPIC__API_BASE`：pr-agent 0.36 的 litellm_ai_handler
+      // 只读 settings.anthropic.key、不读 anthropic.api_base，对 anthropic 把 api_base=None
+      // 透传给 litellm.acompletion；litellm 的 get_api_base 仅在 api_base 为空时才回落到
+      // ANTHROPIC_API_BASE / ANTHROPIC_BASE_URL（都没有才用官方 https://api.anthropic.com）。
+      // litellm 默认会给 base 自动补 `/v1/messages`，故填到根域名即可、勿自带该后缀（中转端点
+      // 本身已是完整路径时，另设 LITELLM_ANTHROPIC_DISABLE_URL_SUFFIX=true 关掉自动补全）。
+      if (profile.base_url) env['ANTHROPIC_API_BASE'] = profile.base_url;
       break;
     case 'cli': {
       // 本地 CLI 模式：不直连任何 API，也不下发任何密钥。仅打两个哨兵 env 让
