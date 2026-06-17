@@ -203,7 +203,7 @@ export function registerIpcHandlers({
         } catch {
           await fs.writeFile(
             f,
-            '# meebox 占位空文件：抑制 pr-agent 缺失 .secrets.toml 的启动告警\n',
+            '# meebox placeholder: silence pr-agent warning about a missing .secrets.toml\n',
           );
         }
       }
