@@ -190,6 +190,70 @@ export function summarySections(language?: string): readonly [string, string, st
   return SUMMARY_SECTIONS[language ?? 'en-US'] ?? SUMMARY_SECTIONS['en-US']!;
 }
 
+/**
+ * 编排 / 规划步骤行里**直接展示**给用户的固定文案（thought / 判读结果 / 兜底建议理由 / 拒绝前缀）。
+ * 这些串经 transcript 持久化、由渲染层逐字显示（不走 i18next key 映射），故必须在生成时按会话语言
+ * （input.language）落地、缺省回落英文——与 summarySections 同策略。LLM 生成的自由 thought 本就跟随
+ * 作答语言，不在此列。事后切 UI 语言不回改历史步骤（同总结正文）。
+ */
+export interface AgentStepLabels {
+  /** 微流程首步（describe + review）思考。 */
+  describeReview: string;
+  /** 微流程判读步思考。 */
+  judge: string;
+  /** 判读结果：存在严重问题、将追问 n 个。 */
+  judgeSevere: (n: number) => string;
+  /** 判读结果：无严重问题、不追问。 */
+  judgeNone: string;
+  /** 收尾步思考。 */
+  summary: string;
+  /** 收尾建议解析失败、转人工复核的兜底理由。 */
+  parseFail: string;
+  /** 规划步：工具调用被红线拒绝的结果前缀（后接具体原因）。 */
+  rejectedPrefix: string;
+}
+const STEP_LABELS: Record<string, AgentStepLabels> = {
+  'zh-CN': {
+    describeReview: '生成 PR 描述与审查发现',
+    judge: '判断是否存在需追问的严重问题',
+    judgeSevere: (n) => `严重，追问 ${String(n)} 个`,
+    judgeNone: '无严重问题，不追问',
+    summary: '综合描述与审查发现，生成评审总结',
+    parseFail: '无法解析建议，转人工复核',
+    rejectedPrefix: '拒绝：',
+  },
+  'en-US': {
+    describeReview: 'Generate the PR description and review findings',
+    judge: 'Decide whether there are severe issues needing follow-up',
+    judgeSevere: (n) => `Severe — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
+    judgeNone: 'No severe issues — no follow-up',
+    summary: 'Synthesize the description and findings into a review summary',
+    parseFail: 'Could not parse a recommendation — routing to manual review',
+    rejectedPrefix: 'Rejected: ',
+  },
+  'ja-JP': {
+    describeReview: 'PR の説明とレビュー指摘を生成',
+    judge: '追加質問が必要な重大な問題があるか判断',
+    judgeSevere: (n) => `重大、追加質問 ${String(n)} 件`,
+    judgeNone: '重大な問題なし、追加質問なし',
+    summary: '説明とレビュー指摘を統合してレビュー要約を生成',
+    parseFail: '提案を解析できないため、手動レビューに回します',
+    rejectedPrefix: '却下：',
+  },
+  'de-DE': {
+    describeReview: 'PR-Beschreibung und Review-Befunde erstellen',
+    judge: 'Entscheiden, ob schwerwiegende Probleme eine Rückfrage erfordern',
+    judgeSevere: (n) => `Schwerwiegend — ${String(n)} Rückfrage${n === 1 ? '' : 'n'}`,
+    judgeNone: 'Keine schwerwiegenden Probleme — keine Rückfrage',
+    summary: 'Beschreibung und Befunde zu einer Review-Zusammenfassung zusammenfassen',
+    parseFail: 'Empfehlung konnte nicht geparst werden — manuelle Prüfung',
+    rejectedPrefix: 'Abgelehnt: ',
+  },
+};
+export function stepLabels(language?: string): AgentStepLabels {
+  return STEP_LABELS[language ?? 'en-US'] ?? STEP_LABELS['en-US']!;
+}
+
 function summaryPrompt(
   describeText: string,
   reviewText: string,
@@ -236,6 +300,7 @@ export async function runReviewMicroflow(
 ): Promise<ReviewOrchestratorResult> {
   const maxAsks = input.maxFollowupAsks ?? 2;
   const summaryMax = input.summaryMaxChars ?? 800;
+  const labels = stepLabels(input.language);
   const steps: AgentStep[] = [];
   let usage: TokenUsage = {};
 
@@ -267,8 +332,8 @@ export async function runReviewMicroflow(
   checkAbort();
   await record({
     kind: 'plan',
-    thought: '生成 PR 描述与审查发现',
-    toolCall: { tool: 'describe、review' },
+    thought: labels.describeReview,
+    toolCall: { tool: 'describe + review' },
   });
   const [describe, review] = await runStaggered(
     [{ tool: 'describe' as const }, { tool: 'review' as const }],
@@ -287,8 +352,8 @@ export async function runReviewMicroflow(
   const questions = verdict?.severe ? (verdict.questions ?? []).slice(0, maxAsks) : [];
   await record({
     kind: 'judge',
-    thought: '判断是否存在需追问的严重问题',
-    result: questions.length ? `严重，追问 ${String(questions.length)} 个` : '无严重问题，不追问',
+    thought: labels.judge,
+    result: questions.length ? labels.judgeSevere(questions.length) : labels.judgeNone,
     thinkMs: judgeMs,
     usage: judge.usage,
   });
@@ -331,10 +396,10 @@ export async function runReviewMicroflow(
           reason:
             typeof parsed.recommendation.reason === 'string' ? parsed.recommendation.reason : '',
         }
-      : { verdict: 'manual_review', reason: '无法解析建议，转人工复核' };
+      : { verdict: 'manual_review', reason: labels.parseFail };
   await record({
     kind: 'plan',
-    thought: '综合描述与审查发现，生成评审总结',
+    thought: labels.summary,
     result: summary,
     thinkMs: sumMs,
     usage: sum.usage,

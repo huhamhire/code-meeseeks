@@ -9,7 +9,13 @@ import type {
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
 import type { MemoryNote } from './memory.js';
-import { extractJson, salvageProse, stripTrailingJson, summarySections } from './orchestrator.js';
+import {
+  extractJson,
+  salvageProse,
+  stepLabels,
+  stripTrailingJson,
+  summarySections,
+} from './orchestrator.js';
 import { runStaggered } from './stagger.js';
 import { assertToolAllowed } from './tool-catalog.js';
 import type { AgentContext } from './types.js';
@@ -240,6 +246,7 @@ export async function runPlanningAgent(
   let usage: TokenUsage = {};
   const history: string[] = [];
   const memories = emptyMemoryNotes();
+  const labels = stepLabels(input.language);
 
   const system = `${assembleSystemContext({
     context: input.context,
@@ -330,7 +337,12 @@ export async function runPlanningAgent(
         allowed.push(c);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        await record({ kind: 'judge', thought: action.thought, toolCall: { tool: c.tool }, result: `拒绝：${msg}` });
+        await record({
+          kind: 'judge',
+          thought: action.thought,
+          toolCall: { tool: c.tool },
+          result: `${labels.rejectedPrefix}${msg}`,
+        });
         history.push(`Refused ${c.tool}: ${msg}`);
       }
     }
@@ -341,7 +353,7 @@ export async function runPlanningAgent(
     await record({
       kind: 'plan',
       thought: action.thought,
-      toolCall: { tool: allowed.map((c) => c.tool).join('、') },
+      toolCall: { tool: allowed.map((c) => c.tool).join(' + ') },
       thinkMs,
       usage: r.usage,
     });
