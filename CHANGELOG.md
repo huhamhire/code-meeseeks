@@ -5,9 +5,31 @@
 
 ## [Unreleased]
 
+### Added
+
+- 评审步骤分步展示 token 用量：judge / 总结 / 规划等经独立通道的推理步在步骤行右侧显示本步
+  输入 / 输出 token（不累计）；工具调用的开销仍由各自运行卡片承载。
+- PR 列表项「执行中」标记覆盖 Agent **纯思考阶段**（无活跃工具运行时，含后台 AutoPilot），不再只在工具运行时显示。
+
+### Changed
+
+- describe「文件变更」walkthrough 各文件分类（功能增强 / 配置变更 …）默认折叠，点分类标题按需展开，避免输出过长。
+- **评论嵌套展示统一**（评论 tab + 行内评论）：回复满 5 层后拉平为同一缩进层级、纵向排列并加横向分割线，
+  避免无限右移；嵌套回复改走「左竖线缩进」的扁平样式（不再层层卡片「盒中盒」），两处视觉一致。
+- 评审建议星标由五角星改为 AI 常见的四角 sparkle ✦。
+- /ask 在问题末尾追加语言要求，改善按界面语言（中 / 日 / 德）作答的遵循度——此前自由问答常被大量英文 diff 盖过而用英文作答。
+- 统一 PR 列表状态 chip 带高，消除「星标」与「星标 + 计数」等不同行的高度漂移。
+
+### Fixed
+
+- 清空某 PR 执行历史时一并清掉其 PR 列表 AI 评审建议 ★ 徽标，不再残留陈旧评审状态。
+- PR「提交」数角标排除「源分支把目标分支合入自己」带进来的提交与 merge 提交，与「提交」列表口径一致（此前会多计）。
+- 补 walkthrough 文件分类标题「Miscellaneous」「Formatting」的中 / 日 / 德译文（此前非英文界面下仍显示英文）。
+
 ## [0.5.0-alpha.1] - 2026-06-17
 
 ### Added
+
 - **高阶 Agent（会话 Agent 化 + AutoPilot 预评审）**：在 PR 评审中引入可委派的智能体能力，随 LLM
   配置自动可用、无需单独的启用开关。
   - **一键自动评审**：聊天框命令区右侧新增自动评审按钮（✦ 图标），对当前 PR 跑「描述 → 评审 →
@@ -43,6 +65,7 @@
   Windows/Linux 开头另显应用图标（macOS 因红绿灯占位不显）。
 
 ### Changed
+
 - **移除独立 `ollama` provider**，统一经 `openai-compatible` 接入本地 Ollama（Base URL 填
   `http://localhost:11434/v1`）：Ollama 自带 OpenAI 兼容端点，走此路径更标准稳健。旧 `ollama` 配置
   加载时**自动迁移**为 `openai-compatible` 并补足 `/v1`，存量无感升级。
@@ -56,6 +79,7 @@
   点分类标题按需展开，避免 describe 输出过长（仅作用于 walkthrough，不影响其它折叠区）。
 
 ### Fixed
+
 - **修复 PR diff 基准随目标分支漂移导致的「修改被撤回」误判**：此前文件内容（Monaco 左栏）按目标
   分支当前 tip（`targetRef.sha`）读取，目标分支被别的 PR 合入而前移后，编辑器实际成了两点对比，
   别的 PR 的改动会以倒挂 / 撤回形式串进当前 PR 的 diff（变更文件列表用三点 diff 本不受影响，但内容
@@ -86,6 +110,7 @@
 > UAC 提权运行；安装后的应用以普通权限启动。从旧版升级会自动清理旧安装，无需手动卸载。
 
 ### Added
+
 - **GitLab 接入**（gitlab.com + Self-Managed，CE / EE，REST API v4）：新增 `@meebox/platform-gitlab`
   适配器——MR 发现（`reviewer_username` 待我评审，跨项目）、diff 评论读 / 发 / 改 / 删 / 回复
   （discussions + notes 归一）、合并、clone（PAT / SSH）、头像 / 内嵌附件代理。设置页与首启向导可
@@ -96,6 +121,7 @@
   - 嵌套 group 路径、N+1 取详情（diff_refs / 审批）、行内评论按 `position` 三 sha 锚定。
 
 ### Changed
+
 - 拒绝代码反馈 / 改进建议后，卡片自动折叠收起并置灰：左色条转中性灰、类别 chip 置灰，正文与
   代码对比收起，仅保留头部与锚点行（含撤销入口）；头部 chevron 图标可临时展开回看。降低已决断
   项的视觉占用。
@@ -112,6 +138,7 @@
   依赖上游 CLI（claude / codex 等）、行为可能随上游版本变更，稳定性与持续可用性不作保证。
 
 ### Fixed
+
 - Bitbucket 评论内嵌附件图片不渲染：`rehype-sanitize` 的协议白名单（`src` / `href` 仅
   http/https）在 `urlTransform` 之前即剥掉 `attachment:` 内部协议，使 img/a 收不到 src/href、
   图片代理永不触发（属随 sanitize 链引入的回归）。schema 放行 `attachment` 协议；并让附件拉取
@@ -138,6 +165,7 @@
 ## [0.3.1] - 2026-06-11
 
 ### Fixed
+
 - **macOS 分发版「本地 CLI」provider（claude / codex）失效**（Finder/Dock 启动）：macOS GUI 应用
   只继承 launchd 的最小 PATH（`/usr/bin:/bin:/usr/sbin:/sbin`），读不到 shell 配置，故找不到装在
   `~/.local/bin` / homebrew 等目录的 CLI，评审报错（`litellm ... LLM Provider NOT provided` 或
