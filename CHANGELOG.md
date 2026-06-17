@@ -23,8 +23,9 @@
 ### Fixed
 
 - 清空某 PR 执行历史时一并清掉其 PR 列表 AI 评审建议 ★ 徽标，不再残留陈旧评审状态。
+- 自动评审（手动 / AutoPilot）完成后，PR 列表的评审建议 ★ 现即时更新，不必等下个轮询周期才体现。
 - PR「提交」数角标排除「源分支把目标分支合入自己」带进来的提交与 merge 提交，与「提交」列表口径一致（此前会多计）。
-- 补 walkthrough 文件分类标题「Miscellaneous」「Formatting」的中 / 日 / 德译文（此前非英文界面下仍显示英文）。
+- 补 walkthrough 文件分类标题「Miscellaneous」「Formatting」「Dependencies」的中 / 日 / 德译文（此前非英文界面下仍显示英文）。
 - Anthropic provider 配置的 base_url（自建 / 中转端点）此前未透传给底层 litellm → 请求仍打到官方 `api.anthropic.com`；现经 `ANTHROPIC_API_BASE` 正确透传（填根域名即可，litellm 自动补 `/v1/messages`）。(#65，感谢 @dnvyrn)
 
 ## [0.5.0-alpha.1] - 2026-06-17
