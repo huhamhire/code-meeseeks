@@ -772,12 +772,14 @@ export function registerIpcHandlers({
     ): Promise<IpcChannels['diff:commitCount']['response']> => {
       const pr = await findPrOrThrow(req.localId);
       const id = repoIdentityFor(pr);
-      // 本地 git 算 base..head；不打远端、不主动触发 sync。镜像还没拉齐就返回 null，
+      // 本地 git 算提交数；不打远端、不主动触发 sync。镜像还没拉齐就返回 null，
       // UI 角标暂不显示，等下次 poll 触发 syncMirror 完成后自然命中。
-      // base 用固定 merge-base：base..head（base 为 merge-base 时）即 PR 自身提交数，
-      // 与三点 diff 同源、对目标分支前移稳定（旧版用 targetRef.sha 会随漂移跳变）
-      const base = await resolveDiffBaseSha(pr);
-      const n = await repoMirror.countCommits(id, base, pr.sourceRef.sha);
+      // 口径 = PR 自身提交（源分支「不在目标分支上」的非 merge 提交），对齐平台 /commits 列表。
+      // **基准用目标分支 sha（head ^target）而非固定 merge-base**：源分支把目标分支（如 dev）合入自己后，
+      // merge-base 之后被带进来的目标提交也可达 head、不可达 merge-base → 用 merge-base 会把它们误计
+      // （标 31 实则 2）。以 targetRef.sha 排除这些合入提交；merge 提交本身由 countCommits 的 --no-merges 略去。
+      // （diff 仍用固定 merge-base 保稳定，与本计数口径各司其职。）
+      const n = await repoMirror.countCommits(id, pr.targetRef.sha, pr.sourceRef.sha);
       return n === null ? null : { count: n };
     },
   );
