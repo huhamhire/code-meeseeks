@@ -63,7 +63,7 @@ describe('runPlanningAgent', () => {
     expect(toolCalls.map((c) => c.tool)).toEqual(['/describe', '/review']);
     // 一条思考步（plan，承载并行所选工具）+ 收尾 plan；工具执行由 run 卡片代表。
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
-    expect(r.steps[0]?.toolCall?.tool).toBe('/describe、/review');
+    expect(r.steps[0]?.toolCall?.tool).toBe('/describe + /review');
     expect(r.finalText).toBe('done');
   });
 
