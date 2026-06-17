@@ -97,11 +97,12 @@ export function Sidebar({
     Record<string, AgentRecommendationVerdict>
   >({});
 
-  // 「执行中」指示数据源：运行队列里有在跑 / 排队 run 的 PR 集合（active + waiting），随队列实时变化。
-  const { active, waiting } = useChatRunStore();
+  // 「执行中」指示数据源：运行队列里有在跑 / 排队 run 的 PR（active + waiting），**并上**有编排 Agent
+  // 运行中的 PR（agentPrs，含纯思考阶段、无活跃工具 run 时）——补齐 agent 思考态下列表项缺执行中标记的空档。
+  const { active, waiting, agentPrs } = useChatRunStore();
   const executingPrIds = useMemo(
-    () => new Set([...active, ...waiting].map((r) => r.prLocalId)),
-    [active, waiting],
+    () => new Set([...active.map((r) => r.prLocalId), ...waiting.map((r) => r.prLocalId), ...agentPrs]),
+    [active, waiting, agentPrs],
   );
 
   // 有发现分类标签时（GitHub / Bitbucket 均含「我创建的」），reviewer 决断类（通过/需修改）

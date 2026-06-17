@@ -1389,6 +1389,24 @@ export function registerIpcHandlers({
   // agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
   const agentControllers = new Map<string, AbortController>();
 
+  // 运行中（思考或派发工具）的编排 Agent 所属 PR 集合，向 renderer 广播「执行中」。区别于
+  // agentControllers（仅手动可停会话）：这里**手动 run/ask 与 AutoPilot 后台评审一并计入**，
+  // 让 PR 列表项在纯思考阶段（无活跃工具 run）也显示执行中标记。
+  const runningAgentPrs = new Set<string>();
+  const broadcastAgentRunning = (): void => {
+    const prLocalIds = [...runningAgentPrs];
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('agent:runningChanged', { prLocalIds });
+    }
+  };
+  const markAgentRunning = (localId: string): void => {
+    runningAgentPrs.add(localId);
+    broadcastAgentRunning();
+  };
+  const unmarkAgentRunning = (localId: string): void => {
+    if (runningAgentPrs.delete(localId)) broadcastAgentRunning();
+  };
+
   /** 取消某 PR 的全部 pr-agent run：active 的 SIGKILL，waiting 的出队 + reject。 */
   const cancelRunsForPr = (localId: string): void => {
     for (const item of active.values()) if (item.req.localId === localId) item.ac?.abort();
@@ -1505,6 +1523,7 @@ export function registerIpcHandlers({
       // 注册 AbortController，让停止按钮（agent:stop）能在思考 / 执行任意阶段即时中止本次评审。
       const ac = new AbortController();
       agentControllers.set(pr.localId, ac);
+      markAgentRunning(pr.localId);
       logger.info({ prLocalId: pr.localId }, 'agent review start (manual)');
       try {
         const session = await withAgentChat(
@@ -1520,6 +1539,7 @@ export function registerIpcHandlers({
         return session;
       } finally {
         agentControllers.delete(pr.localId);
+        unmarkAgentRunning(pr.localId);
       }
     },
   );
@@ -1577,6 +1597,7 @@ export function registerIpcHandlers({
       });
       const ac = new AbortController();
       agentControllers.set(pr.localId, ac);
+      markAgentRunning(pr.localId);
       // 不记用户输入正文（避免泄漏 / 刷屏）：只记发起本身，输入已落多轮对话。
       logger.info({ prLocalId: pr.localId }, 'agent chat start (planning)');
       try {
@@ -1596,6 +1617,7 @@ export function registerIpcHandlers({
         return session;
       } finally {
         agentControllers.delete(pr.localId);
+        unmarkAgentRunning(pr.localId);
       }
     },
   );
@@ -1728,10 +1750,16 @@ export function registerIpcHandlers({
           // （run-queue maxConcurrency）尽量被填满，而非逐 PR 串行空等。各 PR 写各自的文件，无竞争。
           await Promise.all(
             toReview.map(async (pr) => {
-              const session = await runReviewForPr(pr, agentContext, chat, undefined, true);
-              // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
-              // 失败 / 暂停不落台账 → 无产出，下轮可重试（准入闸 2 用 hasReviewOutput 判，不再靠台账拦）。
-              await recordReviewSummaryMessage(pr, session);
+              // AutoPilot 后台评审无 AbortController，但同样标记「执行中」——纯思考阶段也在 PR 列表项显示。
+              markAgentRunning(pr.localId);
+              try {
+                const session = await runReviewForPr(pr, agentContext, chat, undefined, true);
+                // done：落「评审总结」消息 + 台账（含 verdict）+ 广播会话变更（与手动评审一致）。
+                // 失败 / 暂停不落台账 → 无产出，下轮可重试（准入闸 2 用 hasReviewOutput 判，不再靠台账拦）。
+                await recordReviewSummaryMessage(pr, session);
+              } finally {
+                unmarkAgentRunning(pr.localId);
+              }
             }),
           );
         });
