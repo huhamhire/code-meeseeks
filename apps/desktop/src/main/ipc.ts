@@ -169,14 +169,14 @@ export function registerIpcHandlers({
   /** 生效的 Agent 目录：用户配置优先，未配置则回落工作目录默认位置（~/.code-meeseeks/agent）。 */
   const effectiveAgentDir = (): string => bootstrap.config.agent.dir || bootstrap.paths.agentDir;
 
-  // /ask 输出去重：pr-agent answer markdown 里会回显完整问题，跟 UI chat-user-msg
-  // 气泡重复。逐行精确匹配 question (含 trim 后) 的行整行删掉，保留其余正文
-  const stripAskQuestionEcho = (md: string, question: string): string => {
-    const q = question.trim();
-    if (!q || !md) return md;
+  // /ask 输出去重：pr-agent answer markdown 里会回显完整问题（以及我们追加到问题末尾的语言要求），
+  // 跟 UI chat-user-msg 气泡重复。逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
+  const stripAskQuestionEcho = (md: string, ...echoed: string[]): string => {
+    const qs = new Set(echoed.map((q) => q.trim()).filter(Boolean));
+    if (!qs.size || !md) return md;
     return md
       .split('\n')
-      .filter((line) => line.trim() !== q)
+      .filter((line) => !qs.has(line.trim()))
       .join('\n');
   };
 
@@ -1075,8 +1075,18 @@ export function registerIpcHandlers({
         );
       }
 
-      // ask 工具的问题作为位置参数 (spawn args 单元素，含空格也是一个 arg 不切分)
-      const extraArgs = req.tool === 'ask' && req.question ? [req.question] : undefined;
+      // ask 工具：问题作为位置参数（user turn，spawn args 单元素，含空格也是一个 arg 不切分），
+      // 并在问题**末尾**硬性追加语言要求。系统侧 CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS 对
+      // 自由问答常被大量英文 diff（full diff 数万 token）盖过 → 模型用英文作答；在 user turn 末尾
+      // （近因位置、用目标语言书写）再要求一次，显著提升按 UI 语言作答的遵循度。en-US 返回空、不追加。
+      const askLangSuffix = req.tool === 'ask' ? askLanguageSuffixFor(getMainLanguage()) : '';
+      const askQuestion =
+        req.tool === 'ask' && req.question
+          ? askLangSuffix
+            ? `${req.question}\n\n${askLangSuffix}`
+            : req.question
+          : undefined;
+      const extraArgs = askQuestion ? [askQuestion] : undefined;
 
       // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉启动告警
       // （直接写安装目录；memo 化只首次做）。local-cli 不需要 (pipx 装的 pr-agent
@@ -1123,7 +1133,7 @@ export function registerIpcHandlers({
       // 重复)。在解析前把跟用户问题逐字匹配的整行删掉，避免渲染时出现两次问题
       const cleanedContent =
         req.tool === 'ask' && req.question?.trim()
-          ? stripAskQuestionEcho(fileContent, req.question)
+          ? stripAskQuestionEcho(fileContent, req.question, askLangSuffix)
           : fileContent;
       const parsed = parseReviewOutput(cleanedContent || result.stdout, req.tool);
       // M4 草稿再摄入：/review 成功完成时丢掉 pending+finding 旧草稿，
@@ -2318,6 +2328,28 @@ function languageDirectiveFor(lang: string): string {
   }
   if (norm.startsWith('de')) {
     return 'Respond in German (Deutsch). All section labels, table headers, column names, headings, and content MUST be in German — do not leave any English template strings untranslated.';
+  }
+  return '';
+}
+
+/**
+ * /ask 专用：把语言要求作为「问题末尾」的硬性指令，**用目标语言书写本身**（最能促使模型切换到该
+ * 语言作答）。系统侧 CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS 对自由问答常被大量英文 diff
+ * 盖过，故在 user turn 末尾（近因位置）再要求一次。en-US / 未知 locale 返回空串（默认即英文）。
+ */
+function askLanguageSuffixFor(lang: string): string {
+  const norm = lang.toLowerCase();
+  if (norm.startsWith('zh-cn') || norm === 'zh') {
+    return '请用简体中文回答整个回复（包括所有解释、说明与结论）。代码、标识符、文件路径保留原样，但所有叙述文字必须是简体中文，不要用英文作答。';
+  }
+  if (norm.startsWith('zh-tw') || norm.startsWith('zh-hk')) {
+    return '請用繁體中文回答整個回覆（包括所有解釋、說明與結論）。程式碼、識別符、檔案路徑保留原樣，但所有敘述文字必須是繁體中文，不要用英文作答。';
+  }
+  if (norm.startsWith('ja')) {
+    return '回答全体を日本語で記述してください（説明・結論を含む）。コード・識別子・ファイルパスはそのまま残し、説明文はすべて日本語にしてください。英語で回答しないでください。';
+  }
+  if (norm.startsWith('de')) {
+    return 'Bitte antworte vollständig auf Deutsch (einschließlich aller Erklärungen und Schlussfolgerungen). Code, Bezeichner und Dateipfade bleiben unverändert, aber der gesamte erläuternde Text muss auf Deutsch sein. Antworte nicht auf Englisch.';
   }
   return '';
 }
