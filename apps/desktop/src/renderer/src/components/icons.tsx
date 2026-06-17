@@ -433,7 +433,8 @@ export function RobotIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 实心五角星：评审建议徽标（手动 / AutoPilot 一视同仁）。SVG 保证字形居中、跨平台一致。 */
+/** 实心四角星（AI 常见 sparkle）：评审建议徽标（手动 / AutoPilot 一视同仁）。四条边向中心内凹，
+ *  四个尖角居中对称，SVG 保证字形居中、跨平台一致。 */
 export function StarIcon({ size = 11 }: IconProps) {
   return (
     <svg
@@ -443,7 +444,7 @@ export function StarIcon({ size = 11 }: IconProps) {
       fill="currentColor"
       aria-hidden="true"
     >
-      <path d="M8 1l1.65 4.74 5.01.1-4 3.03 1.45 4.79L8 10.8l-4.11 2.86 1.45-4.79-4-3.03 5.01-.1L8 1z" />
+      <path d="M8 1 Q9 7 15 8 Q9 9 8 15 Q7 9 1 8 Q7 7 8 1 Z" />
     </svg>
   );
 }
