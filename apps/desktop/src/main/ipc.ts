@@ -75,12 +75,6 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('diff:commitCount', pr.getCommitCount); // 提交数角标（本地 git）
   ipcMain.handle('diff:getBlame', pr.getBlame); // blame + PR 引入行
   ipcMain.handle('repo:getTotalSize', pr.getTotalSize); // 本地镜像总占用（设置页）
-  ipcMain.handle('pragent:run', pr.runPragent); // 触发一次 pr-agent run（入队）
-  ipcMain.handle('pragent:cancel', pr.cancelPragent); // 取消一个 run
-  ipcMain.handle('pragent:queue', pr.getQueue); // 队列快照（active + waiting）
-  ipcMain.handle('pragent:listRuns', pr.listRuns); // 历史 run 列表（游标分页）
-  ipcMain.handle('pragent:getRun', pr.getRun); // 单条 run 查询
-  ipcMain.handle('pragent:clearRuns', pr.clearRuns); // 清空 run 历史 + Agent 会话 / 台账
   ipcMain.handle('drafts:list', pr.getDrafts); // 草稿列表
   ipcMain.handle('drafts:create', pr.addDraft); // 新建草稿
   ipcMain.handle('drafts:update', pr.patchDraft); // 更新草稿
@@ -106,7 +100,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
 
   /*
    * Agent 交互
-   * 规则匹配 / 评审编排 / 自由规划 / 会话与台账读取
+   * 规则匹配 / 评审编排 / 自由规划 / 会话与台账读取 / pr-agent run 队列
    */
   ipcMain.handle('rules:matchForPr', agent.matchRuleForPr); // 查 PR 命中的规则
   ipcMain.handle('agent:run', agent.runReview); // 一键评审编排（describe→review→总结）
@@ -116,6 +110,12 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('agent:getConversation', agent.getConversation); // 读多轮对话消息
   ipcMain.handle('agent:getTranscript', agent.getTranscript); // 读 Agent 过程步骤
   ipcMain.handle('agent:autopilotLedgers', agent.getAutopilotLedgers); // 批量读 AutoPilot 评审台账
+  ipcMain.handle('pragent:run', agent.runPragent); // 触发一次 pr-agent run（入队）
+  ipcMain.handle('pragent:cancel', agent.cancelPragent); // 取消一个 run
+  ipcMain.handle('pragent:queue', agent.getQueue); // 队列快照（active + waiting）
+  ipcMain.handle('pragent:listRuns', agent.listRuns); // 历史 run 列表（游标分页）
+  ipcMain.handle('pragent:getRun', agent.getRun); // 单条 run 查询
+  ipcMain.handle('pragent:clearRuns', agent.clearRuns); // 清空 run 历史 + Agent 会话 / 台账
 
   base.logger.debug('IPC handlers registered');
 

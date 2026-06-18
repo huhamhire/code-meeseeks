@@ -4,19 +4,11 @@ import type {
   PrComment,
   PrCommit,
   ReviewDraft,
-  ReviewRun,
-  ReviewRunTool,
   StoredPullRequest,
 } from '@meebox/shared';
-import type {
-  DiffBlameLine,
-  DiffChangedFile,
-  DiffFileContent,
-  DiffSide,
-  PragentRunInfo,
-} from './common.js';
+import type { DiffBlameLine, DiffChangedFile, DiffFileContent, DiffSide } from './common.js';
 
-/** PR 操作域：评论 / 列表 / 状态 / 合并 / 镜像 / diff / 草稿 / pr-agent run 队列。 */
+/** PR 操作域：评论 / 列表 / 状态 / 合并 / 镜像 / diff / 草稿。 */
 export interface PrChannels {
   /**
    * 拉评论 body 内嵌图片 (`![alt](url)`)。url 可能是 Bitbucket attachment 绝对/相对地址，
@@ -143,19 +135,6 @@ export interface PrChannels {
   /** 计算本地所有 repo 镜像的总占用字节数（设置页用） */
   'repo:getTotalSize': { request: void; response: { totalBytes: number } };
   /**
-   * 触发一次 pr-agent /describe 或 /review。同步等待执行结束（可能数十秒到数分钟），
-   * 期间通过 pragent:runProgress 事件推送 stdout / stderr 行。返回最终 ReviewRun
-   * 状态 (succeeded / failed)。pr-agent 不可用时 reject。
-   */
-  'pragent:run': {
-    /**
-     * tool='ask' 时 question 必填，作为 pr-agent CLI 的位置参数传给 ask 子命令。
-     * tool='describe'/'review' 时 question 字段被忽略。
-     */
-    request: { localId: string; tool: ReviewRunTool; question?: string };
-    response: ReviewRun;
-  };
-  /**
    * 列出指定 PR 的全部草稿 (pending / edited / posted / rejected 都返回，UI 端按
    * status 过滤显示 / 折叠)。
    */
@@ -219,45 +198,5 @@ export interface PrChannels {
         error?: string;
       }>;
     };
-  };
-  /**
-   * 列出某 PR 的历史 run，newest first。支持时间戳游标分页：
-   * - limit：截到 N 条；省略 = 不限（renderer 端慎用，规模大时可能慢）
-   * - beforeId：游标，返回 runId **严格小于** 此值的条目；省略 = 不限上界
-   *
-   * runId 是时序字典序 (`yyyymmdd-HHmmss-mmm`)，"取游标后 N 条" 即"取此时刻之前的 N 条"
-   */
-  'pragent:listRuns': {
-    request: { localId: string; limit?: number; beforeId?: string };
-    response: ReviewRun[];
-  };
-  /** 单条 run 查询（用于 renderer 在事件断流后兜底刷新） */
-  'pragent:getRun': {
-    request: { localId: string; runId: string };
-    response: ReviewRun | null;
-  };
-  /** 清空指定 PR 的全部 run 历史记录（仅该 PR 生效）。返回删除条数。 */
-  'pragent:clearRuns': {
-    request: { localId: string };
-    response: { cleared: number };
-  };
-  /**
-   * 取消一个 run。语义跟 run 当前状态相关：
-   * - 跟 active 匹配 → SIGKILL 子进程，落盘 status='cancelled'
-   * - 在 waiting 队列里 → 从队列删除，**不**写盘 (从未真正跑过)；触发 pragent:run
-   *   原调用方的 Promise reject 让 ChatPane handleRun 走 error 分支
-   * - 都不匹配 (已结束 / 不存在) → 静默 no-op (返回 ok:false)
-   */
-  'pragent:cancel': {
-    request: { runId: string };
-    response: { ok: boolean };
-  };
-  /**
-   * 查询当前队列快照 (active + waiting)；renderer 启动 / 重连时拉一下，
-   * 跟 queueChanged 事件配套兜底。
-   */
-  'pragent:queue': {
-    request: void;
-    response: { active: PragentRunInfo[]; waiting: PragentRunInfo[] };
   };
 }

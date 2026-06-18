@@ -1,13 +1,8 @@
 import {
-  clearAgentSession,
-  clearAutopilotLedger,
-  clearReviewRunsForPr,
   createDraft,
   deleteDraft,
-  getReviewRun,
   isCommentsCacheStale,
   listDrafts,
-  listReviewRunsForPr,
   listStoredPullRequests,
   readCommentsCache,
   setLocalStatus,
@@ -22,7 +17,7 @@ import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
 
 /*
- * PR 操作域 controllers：评论 / 列表 / 状态 / 合并 / 镜像 / diff / 草稿 / pr-agent run 队列
+ * PR 操作域 controllers：评论 / 列表 / 状态 / 合并 / 镜像 / diff / 草稿
  */
 
 /**
@@ -298,58 +293,6 @@ export const getTotalSize: IpcController<'repo:getTotalSize'> = async () => {
     total += r.totalBytes;
   }
   return { totalBytes: total };
-};
-
-/**
- * 触发一次 run（队列调度）。/ask 必须带 question，提前校验避免排队后才报错。
- */
-export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
-  const ctx = getContext();
-  if (!ctx.getPrAgentBridge()) {
-    throw new Error(t('prAgent.notReadyDetail'));
-  }
-  if (req.tool === 'ask' && !req.question?.trim()) {
-    throw new Error(t('prAgent.askNeedsQuestion'));
-  }
-  const pr = await ctx.pr.findPrOrThrow(req.localId);
-  return ctx.runQueue.enqueuePragentRun(pr, req.tool, req.question);
-};
-
-/**
- * 取消一个 run（active SIGKILL / waiting 出队）。
- */
-export const cancelPragent: IpcController<'pragent:cancel'> = (_event, req) =>
-  getContext().runQueue.cancel(req.runId);
-
-/**
- * 当前队列快照（启动 / 重连兜底）。
- */
-export const getQueue: IpcController<'pragent:queue'> = () => getContext().runQueue.snapshot();
-
-/**
- * 列某 PR 历史 run（游标分页）。
- */
-export const listRuns: IpcController<'pragent:listRuns'> = (_event, req) =>
-  listReviewRunsForPr(getContext().stateStore, req.localId, {
-    limit: req.limit,
-    beforeId: req.beforeId,
-  });
-
-/**
- * 单条 run 查询。
- */
-export const getRun: IpcController<'pragent:getRun'> = (_event, req) =>
-  getReviewRun(getContext().stateStore, req.localId, req.runId);
-
-/**
- * 清某 PR 全部 run 历史，并一并清 Agent 会话 + AutoPilot 台账（广播 ★ 徽标即时消失）。
- */
-export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req) => {
-  const ctx = getContext();
-  await clearAgentSession(ctx.stateStore, req.localId);
-  await clearAutopilotLedger(ctx.stateStore, req.localId);
-  ctx.broadcast('agent:reviewStatusCleared', { prLocalId: req.localId });
-  return { cleared: await clearReviewRunsForPr(ctx.stateStore, req.localId) };
 };
 
 /**
