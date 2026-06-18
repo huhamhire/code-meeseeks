@@ -556,6 +556,13 @@
   font-family: $font-mono;
   font-variant-numeric: tabular-nums;
 }
+// token 用量箭头：↑输入(绿) / ↓输出(红)，run 卡片与思考步骤共用
+.chat-token-in {
+  color: $color-token-in;
+}
+.chat-token-out {
+  color: $color-token-out;
+}
 // 模型名可能很长：单行截断 + 省略号，避免一个 chip 撑爆整行
 .chat-run-model {
   max-width: 100%;

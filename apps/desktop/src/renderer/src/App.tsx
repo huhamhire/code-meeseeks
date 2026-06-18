@@ -13,7 +13,7 @@ import type {
   UpdateCheckResult,
 } from '@meebox/shared';
 import { invoke, subscribe } from './api';
-import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/ChatPane';
+import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/chat';
 import { wireChatRunStore } from './stores/chat-run-store';
 import { wireDraftsStore } from './stores/drafts-store';
 import { wireRepoSyncStore } from './stores/repo-sync-store';
