@@ -13,6 +13,7 @@
 - 新增通用 `common/Modal` 模态壳（backdrop / header / body / footer / portal / nested / size 变体），统一各处手写的模态脚手架；ConfirmModal、RulePreviewModal 及设置面板的全部弹窗改用之。
 - 设置面板内部重构：1222 行的 `SettingsModal.tsx` 拆分为容器（175 行）+ `useSettingsDraft`（草稿/保存状态机）+ 九个独立 `sections/` 分区 + `editors/`（连接/代理/LLM 编辑器）+ `elements/`（小部件）+ `utils`（formatBytes / 轮询档位），各分区可独立维护。对外接口与界面行为不变。
 - PR 作用域的评审面板（`diff` / `comments` / `drafts`）收归 `features/pr/` 之下，使 `pr/` 成为「PR 评审工作区」的统一归属；`chat` / `onboarding` / `settings` 仍在 `features/` 顶层。纯目录迁移 + import 路径改写，无逻辑 / 界面变更。
+- 状态栏重构：新增 `common/StatusChip` 通用 chip 壳（span/button + ok/err 色调 + 专属类名），各 chip 复用；`StatusBar` 退化为薄壳（610→146 行），各业务 chip 按归属下沉到所属 feature 的 `statusbar/`——LLM / 用户 → settings，pr-agent 活动队列 / AutoPilot → chat，最近同步 / 仓库镜像 / PR 计数 → pr；pr-agent 运行时与更新 chip 留 layout。时长 / 相对时间格式化统一抽到 `utils/time`（`formatElapsed` 带 `compact` 选项、`formatRelative`），消除与状态栏的重复实现。无逻辑 / 界面变更。
 
 ### Fixed
 

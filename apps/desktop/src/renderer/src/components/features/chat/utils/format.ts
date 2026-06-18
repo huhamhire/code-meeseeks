@@ -1,14 +1,8 @@
 import type { TFunction } from 'i18next';
 import type { ReviewRun } from '@meebox/shared';
 
-/** 把 ms 翻成 "12s" / "1m 23s" 形式；超过分钟阈值后只保留秒粒度 */
-export function formatElapsed(ms: number): string {
-  const totalSec = Math.floor(ms / 1000);
-  if (totalSec < 60) return `${String(totalSec)}s`;
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${String(m)}m ${String(s).padStart(2, '0')}s`;
-}
+// 时长格式化统一在 utils/time（状态栏紧凑版用 compact 选项）；此处再导出，chat 各组件就近引用。
+export { formatElapsed } from '../../../../utils/time';
 
 /** 1234 → "1.2k"；保留 1 位小数；< 1000 直接返回数字 */
 export function formatTokens(n: number): string {
