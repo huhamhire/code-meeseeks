@@ -1,0 +1,53 @@
+@use '../tokens' as *;
+
+// 无边框窗口的自绘标题栏。高度必须与 main 进程 titleBarOverlay.height 一致（36px）。
+.app-titlebar {
+  flex: 0 0 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  padding: 0 $space-6;
+  background: $bg-app;
+  border-bottom: 1px solid $border-muted;
+  user-select: none;
+  // 整条作为拖拽区；内部交互元素需各自 no-drag
+  -webkit-app-region: drag;
+
+  // macOS：为左上角红绿灯留位（trafficLightPosition x=12 起，3 颗 + 间距约到 x≈64）。再留一段
+  // 舒适间隔，避免品牌名紧贴红绿灯显得局促。
+  &--mac {
+    padding-left: 92px;
+  }
+}
+
+.app-titlebar-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: $radius-md;
+  flex: 0 0 auto;
+  // 拖拽区内的图片默认可被拖出，禁掉以免误触发原生图片拖拽
+  -webkit-user-drag: none;
+}
+
+.app-titlebar-brand {
+  font-size: $fs-md;
+  font-weight: 600;
+  color: $text-primary;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.app-titlebar-title {
+  font-size: $fs-sm;
+  color: $text-muted;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+// 标题栏内的可点元素需关闭拖拽，否则点击会被当成拖窗
+.app-titlebar :is(button, a, input, select) {
+  -webkit-app-region: no-drag;
+}

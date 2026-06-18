@@ -5,6 +5,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **前端代码结构重构（可维护性）**：纯结构调整，对外接口与界面 / 交互行为均不变。重点：
+  - 组件按 `common/`（基础 UI）/ `layout/`（应用骨架）/ `features/`（业务领域）三层归类；样式 `styles/` 同构归并
+  - 超大组件按「容器 + 领域组件 + hooks + 工具方法」分层拆分：ChatPane、SettingsModal、MainPane、StatusBar
+  - 业务逻辑下沉所属领域：PR 列表 / 详情 / 工作区归 `features/pr`；App 主入口退化为组合根，启动 / 布局 / 更新提示等拆成 app 级 hooks
+  - 抽出通用基础组件 `Modal` / `StatusChip`；状态栏 chip 按归属下沉到各 feature
+  - 其它整理：目录归并、工具方法去重、main 进程 splash 拆分
+
 ### Fixed
 
 - Agent 评审 / 规划步骤行的固定文案（如「判断是否存在需追问的严重问题」「严重，追问 N 个」）此前在 `@meebox/agent` 层写死中文、被渲染层逐字显示，日 / 英 / 德界面下漏出中文；现按会话语言落地（zh-CN / en-US / ja-JP / de-DE，缺省回落英文），与评审总结骨架同策略。

@@ -1,0 +1,77 @@
+@use '../tokens' as *;
+
+.pr-info-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  max-width: 960px;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  font-size: $fs-sm;
+  font-weight: 600;
+  margin-left: $space-1;
+  text-transform: uppercase;
+}
+// pending 用 VS Code 主蓝；approved 走成功绿；needs_work 走 git-decoration 红
+.status-pending {
+  background: $color-accent;
+  color: $text-on-accent;
+}
+.status-approved {
+  background: $color-approved;
+  color: $text-on-accent;
+}
+.status-needs_work {
+  background: $color-warning;
+  color: $text-on-accent;
+}
+
+.conflict-tag {
+  color: $color-warning-bright;
+  font-weight: 600;
+}
+
+.pr-detail-section {
+  margin-top: 24px;
+
+  h3 {
+    font-size: $fs-xl;
+    font-weight: 600;
+    margin-bottom: $space-5;
+    color: $text-primary;
+  }
+}
+
+.pr-detail-description {
+  white-space: pre-wrap;
+  font-size: $fs-lg;
+  line-height: $lh-loose;
+  color: $text-primary;
+}
+
+.reviewer-list {
+  // 显式无序列表样式：disc bullet + 适度左 padding 给 marker 留位置。
+  // 12 个 reviewer 的视觉区分靠 bullet 更直观，纯堆叠看起来像段落
+  list-style: disc;
+  padding-left: $space-8;
+
+  li {
+    padding: $space-2 0;
+  }
+}
+
+.tag-approved {
+  color: $git-added;
+  font-size: $fs-md;
+}
+
+.pr-detail-kv {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: $space-3 $space-6;
+  font-size: $fs-lg;
+}
