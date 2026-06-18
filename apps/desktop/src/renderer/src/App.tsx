@@ -6,10 +6,8 @@ import type {
   AppPaths,
   Config,
   ConnectionSummary,
-  LocalPrStatus,
   PrAgentStatus,
   PrDiscoveryFilter,
-  StoredPullRequest,
   UpdateCheckResult,
 } from '@meebox/shared';
 import { invoke, subscribe } from './api';
@@ -20,6 +18,7 @@ import { wireRepoSyncStore } from './stores/repo-sync-store';
 import { MainPane } from './components/layout/MainPane';
 import { PrPanel } from './components/features/pr/PrPanel';
 import { PrEmpty } from './components/features/pr/PrEmpty';
+import { usePullRequests } from './components/features/pr/hooks/usePullRequests';
 import { OnboardingWizard, type OnboardingResult } from './components/features/onboarding/OnboardingWizard';
 import { SettingsModal } from './components/features/settings/SettingsModal';
 import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/layout/Sidebar';
@@ -38,11 +37,6 @@ interface BootstrapState {
 export default function App() {
   const { t } = useTranslation();
   const [boot, setBoot] = useState<BootstrapState | null>(null);
-  const [prs, setPrs] = useState<StoredPullRequest[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  // 合并进行中：GitHub 合并可能较慢（异步算 mergeable），按钮置等待态并防重复点击。
-  const [merging, setMerging] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
   // 启动检测到的新版本（main 推 app:updateAvailable）；StatusBar 据此提示跳转下载。
@@ -53,6 +47,22 @@ export default function App() {
   const notifyError = useCallback((text: string): void => {
     setToast({ text, key: Math.random() });
   }, []);
+  // PR 列表 / 选中 / 审批 / 合并 / 刷新归 features/pr 的 usePullRequests；App 仅注入连接摘要与
+  // 就绪态，并在 bootstrap / 向导完成时经 setPrs 注入初始列表、poll tick 时调 reloadPrs。
+  const {
+    prs,
+    setPrs,
+    selectedId,
+    setSelectedId,
+    selected,
+    selectedConn,
+    refreshing,
+    merging,
+    reloadPrs,
+    triggerRefresh,
+    setSelectedPrStatus,
+    mergeSelectedPr,
+  } = usePullRequests({ connections: boot?.connections, ready: !!boot, notifyError });
   // toast 自动消失（6s）；key 变化即重置计时
   useEffect(() => {
     if (!toast) return;
@@ -116,11 +126,6 @@ export default function App() {
     localStorage.setItem('meebox.chatCollapsed', chatCollapsed ? '1' : '0');
   }, [chatCollapsed]);
 
-  const reloadPrs = useCallback(async (): Promise<void> => {
-    const fresh = await invoke('prs:list', undefined);
-    setPrs(fresh);
-  }, []);
-
   // 连接改动（尤其切换活动连接）后整体刷新 boot：活动连接变化后 main 端 app:connections /
   // prs:list 都随之变，必须重拉，否则 boot.connections、PR 列表会过期。
   const refreshBootAndPrs = useCallback(async (): Promise<void> => {
@@ -133,7 +138,7 @@ export default function App() {
     setBoot((b) => (b ? { ...b, config, connections, lastSyncAt: lastSync.at } : b));
     setPrs(freshPrs);
     setLastSyncAt(lastSync.at);
-  }, []);
+  }, [setPrs]);
 
   useEffect(() => {
     void (async () => {
@@ -164,7 +169,7 @@ export default function App() {
         setFatalError(e instanceof Error ? e.message : String(e));
       }
     })();
-  }, []);
+  }, [setPrs]);
 
   // 运行时语言切换（如设置页改 config.language）：boot 后 language 变化即切换并回写持久化。
   // 首次 boot 时已在上面 await 切好，这里对同值是幂等 no-op。
@@ -232,26 +237,6 @@ export default function App() {
     return () => document.removeEventListener('click', onClick, true);
   }, []);
 
-  // 窗口重新获得焦点时主动 refresh 远端：调 prs:refresh 拉 PR meta，Bitbucket 上
-  // 加 comment / 改状态后 PR.updatedAt 跳变 → MainPane useEffect 的 prUpdatedAt
-  // dep 触发 → force listComments 拉到新评论。比纯 reloadPrs (只读 cache) 多
-  // 一次远端调用但能跟上"用户切到 Bitbucket 评论再切回应用"的常见场景
-  useEffect(() => {
-    const onFocus = (): void => {
-      if (!boot) return;
-      void (async () => {
-        try {
-          await invoke('prs:refresh', undefined);
-          await reloadPrs();
-        } catch {
-          // 静默：focus 触发的刷新失败不该弹错给用户
-        }
-      })();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [boot, reloadPrs]);
-
   // 订阅 main 推送的 poll tick；用于刷新 statusbar "最近同步" 显示，
   // 并顺便重拉一次 PR 列表使后台轮询新增/删除立刻反映在 UI。
   // 同时刷新连接摘要：启动时连接的 ping（缓存 currentUser）在建窗后才完成，首轮 tick 即随其后，
@@ -271,67 +256,6 @@ export default function App() {
       );
     });
   }, [reloadPrs]);
-
-  const triggerRefresh = useCallback(async (): Promise<void> => {
-    if (refreshing) return;
-    setRefreshing(true);
-    try {
-      await invoke('prs:refresh', undefined);
-      await reloadPrs();
-    } catch (e) {
-      console.error('refresh failed', e);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refreshing, reloadPrs]);
-
-  const selected = prs.find((p) => p.localId === selectedId) ?? null;
-  // 选中 PR 所属连接的能力位 + 当前 PAT 用户（多平台降级：审批按钮显隐 / 自己 PR 灰显）
-  const selectedConn = selected
-    ? boot?.connections.find((c) => c.connectionId === selected.connectionId)
-    : undefined;
-
-  const setSelectedPrStatus = useCallback(
-    async (status: LocalPrStatus): Promise<void> => {
-      if (!selected) return;
-      try {
-        const updated = await invoke('prs:setLocalStatus', {
-          localId: selected.localId,
-          status,
-        });
-        if (updated) {
-          setPrs((prev) => prev.map((p) => (p.localId === updated.localId ? updated : p)));
-        }
-      } catch (e) {
-        // 远端拒绝（如 PR 已关闭 / 合并 / 权限不足）→ 本地状态不变，弹 toast 提示。
-        // 顺手刷新一次：PR 若已关闭，下一轮 poll 会把它软删，列表自洽
-        const msg = e instanceof Error ? e.message : String(e);
-        notifyError(t('app.approveActionFailed', { msg }));
-        void triggerRefresh();
-      }
-    },
-    [selected, notifyError, triggerRefresh, t],
-  );
-
-  const mergeSelectedPr = useCallback(async (): Promise<void> => {
-    if (!selected || merging) return;
-    const mergedId = selected.localId;
-    setMerging(true);
-    try {
-      await invoke('prs:merge', { localId: mergedId });
-    } catch (e) {
-      // 合并失败（冲突 / veto / 权限 / PR 已关闭）→ 弹 toast，本地不变
-      const msg = e instanceof Error ? e.message : String(e);
-      notifyError(t('app.mergeFailed', { msg }));
-      void triggerRefresh();
-      return;
-    } finally {
-      setMerging(false);
-    }
-    // 合并成功：PR 已转 MERGED，会从 pending 列表退场。取消选中 + 刷新让其消失
-    if (selectedId === mergedId) setSelectedId(null);
-    await triggerRefresh();
-  }, [selected, selectedId, triggerRefresh, notifyError, merging, t]);
 
   // 首启向导完成：落盘连接（必）+ LLM / 缓存目录（按需），再重拉配置/连接/PR 更新
   // boot。boot.config 拿到有效 active 连接后，下方 needsOnboarding 派生为 false，
@@ -366,7 +290,7 @@ export default function App() {
         setForceOnboarding(false);
       }
     },
-    [boot, forceOnboarding],
+    [boot, forceOnboarding, setPrs],
   );
 
   if (fatalError) {
