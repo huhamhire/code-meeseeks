@@ -6,10 +6,10 @@ import i18n, { persistLanguage, resolveUiLanguage } from '../../../i18n';
 import {
   connDraftCanSave,
   fromConnDraft,
+  newProfileId,
   type ConnDraft,
   type ConnEntry,
-} from '../settings/ConnectionForm';
-import { newProfileId } from '../settings/LlmProfileForm';
+} from '../settings';
 import { WelcomeStep } from './steps/WelcomeStep';
 import { PlatformStep } from './steps/PlatformStep';
 import { LlmStep } from './steps/LlmStep';

@@ -1,0 +1,233 @@
+@use '../tokens' as *;
+
+// DiffSearchPanel：替换文件树位置的搜索面板。
+// 结构：input row → stats line → 结果列表 (按文件 group)。
+// 视觉跟 Bitbucket "Search code" 风格对齐：紧凑列表 + 文件名 chip + 行号 +
+// 关键词黄背景高亮 + +/- diff role marker
+
+.diff-search-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.diff-search-input-row {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  padding: $space-3 $space-4;
+  border-bottom: 1px solid $border-muted;
+  flex-shrink: 0;
+}
+
+// input 跟 case toggle 共用基础尺寸 — 同 box-sizing + 同 padding 上下 + 同
+// font-size，才能在 flex row 里基线和外框双对齐。toggle 一般比 input 文字略小
+// 但因为字符宽度 ("Aa")，按钮还要够宽不被挤
+%diff-search-input-base {
+  box-sizing: border-box;
+  padding: 5px $space-4;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  font-size: $fs-md;
+}
+
+.diff-search-input {
+  @extend %diff-search-input-base;
+  flex: 1;
+  min-width: 0;
+  background: $bg-surface;
+  color: $text-body;
+
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+
+.diff-search-case-toggle {
+  @extend %diff-search-input-base;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+  font-family: $font-mono;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  line-height: 1;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+  &.active {
+    background: $color-accent;
+    border-color: $color-accent;
+    color: $text-on-accent;
+  }
+}
+
+.diff-search-stats {
+  padding: $space-2 $space-4;
+  font-size: $fs-sm;
+  border-bottom: 1px solid $border-muted;
+  flex-shrink: 0;
+}
+.diff-search-error {
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba(244, 135, 113, 0.08);
+  border-bottom: 1px solid $border-muted;
+}
+
+.diff-search-results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.diff-search-empty {
+  padding: $space-6 $space-4;
+  font-size: $fs-md;
+  text-align: center;
+}
+
+// 文件级行：头 (折叠按钮 + 文件名 + 路径 + 命中数 chip)，下方是 matches 列表
+.diff-search-file {
+  border-bottom: 1px solid $border-muted;
+}
+
+.diff-search-file-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  padding: $space-3 $space-4;
+  background: $bg-elev;
+  border: none;
+  border-bottom: 1px solid $border-muted;
+  color: $text-primary;
+  cursor: pointer;
+  text-align: left;
+  font-size: $fs-md;
+
+  &:hover {
+    background: $bg-hover;
+  }
+}
+.diff-search-file-chevron {
+  flex-shrink: 0;
+  font-size: $fs-xs;
+  color: $text-muted;
+  width: 10px;
+  display: inline-block;
+  transition: transform 0.12s;
+
+  &.collapsed {
+    transform: rotate(-90deg);
+  }
+}
+.diff-search-file-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 40%;
+}
+.diff-search-file-path {
+  font-size: $fs-sm;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: $font-mono;
+}
+.diff-search-file-count {
+  flex-shrink: 0;
+  font-size: $fs-xs;
+  font-weight: 600;
+  padding: 1px $space-3;
+  border-radius: $radius-pill;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-search-file-matches {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+// 单条匹配：[marker] [line#] [content with <mark>]
+.diff-search-match {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: $space-3;
+  padding: 2px $space-4 2px $space-5;
+  background: transparent;
+  border: none;
+  color: $text-body;
+  cursor: pointer;
+  text-align: left;
+  font-family: $font-mono;
+  font-size: $fs-sm;
+  line-height: 1.5;
+
+  &:hover {
+    background: $bg-hover;
+  }
+  &:focus-visible {
+    outline: 1px solid $color-accent;
+    outline-offset: -1px;
+  }
+}
+.diff-search-match-marker {
+  flex-shrink: 0;
+  width: 10px;
+  text-align: center;
+  font-weight: 700;
+
+  &.diff-search-match-marker-added {
+    color: $git-added;
+  }
+  &.diff-search-match-marker-removed {
+    color: $git-deleted;
+  }
+  &.diff-search-match-marker-context {
+    color: $text-muted;
+  }
+}
+.diff-search-match-line {
+  flex-shrink: 0;
+  width: 36px;
+  text-align: right;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+}
+.diff-search-match-content {
+  flex: 1;
+  min-width: 0;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.diff-search-highlight {
+  background: rgba(255, 213, 79, 0.42);
+  color: $text-primary;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.diff-search-match-overflow {
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+}

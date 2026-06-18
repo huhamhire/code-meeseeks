@@ -15,18 +15,18 @@
 //   drafts-panel "草稿" tab 列表页 (.drafts-panel / -filter / -item / -anchor)
 //   modal        SettingsModal + LlmEditorModal 子模态 + LLM profile 列表
 @use './styles/base';
-@use './styles/titlebar';
-@use './styles/statusbar';
-@use './styles/sidebar';
-@use './styles/main-pane';
-@use './styles/file-tree';
-@use './styles/diff';
-@use './styles/diff-search';
-@use './styles/comment-zone';
-@use './styles/draft-zone';
+@use './styles/layout/titlebar';
+@use './styles/layout/statusbar';
+@use './styles/layout/sidebar';
+@use './styles/layout/main-pane';
+@use './styles/features/file-tree';
+@use './styles/features/diff';
+@use './styles/features/diff-search';
+@use './styles/features/comment-zone';
+@use './styles/features/draft-zone';
 @use './styles/markdown';
-@use './styles/pr-info';
-@use './styles/chat-pane';
-@use './styles/drafts-panel';
-@use './styles/modal';
-@use './styles/onboarding';
+@use './styles/features/pr-info';
+@use './styles/features/chat-pane';
+@use './styles/features/drafts-panel';
+@use './styles/common/modal';
+@use './styles/features/onboarding';

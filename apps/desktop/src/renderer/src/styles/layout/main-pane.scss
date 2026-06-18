@@ -1,0 +1,799 @@
+@use '../tokens' as *;
+
+.main {
+  flex: 1;
+  overflow: hidden;
+  background: $bg-app;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.main-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: $text-muted;
+  padding: 24px;
+}
+
+// 重型组件 async init 期间的延迟 loading 占位（PaneLoading；Monaco Suspense fallback、
+// ChatPane 会话加载、diff 编辑器 ready 前的 overlay 共用）
+.pane-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  min-height: 120px;
+  height: 100%;
+  padding: 24px;
+  font-size: 13px;
+
+  // .spinner 默认带右 margin（inline-文字场景用），居中布局里由 gap 接管，清掉避免偏移
+  .spinner {
+    margin: 0;
+  }
+}
+
+// overlay 变体：绝对定位铺满父容器（父需 position:relative），盖在 Monaco 编辑器之上，
+// 遮住「空编辑器 → diff 计算 / 折叠跳一下」那段重排，diff 就绪后由调用方卸载。
+.pane-loading-overlay {
+  position: absolute;
+  inset: 0;
+  // 盖在 Monaco 之上：编辑器内部有自带 stacking context，z-index 取高值确保 overlay 在最上层
+  z-index: 20;
+  height: auto;
+  background: $bg-app;
+}
+
+.pr-header {
+  padding: $space-6 20px $space-5;
+  border-bottom: 1px solid $border-default;
+  flex-shrink: 0;
+}
+
+.pr-header-title {
+  font-size: $fs-xl;
+  font-weight: 600;
+  margin-bottom: $space-3;
+  line-height: $lh-tight;
+}
+
+.pr-header-meta {
+  font-size: $fs-md;
+  color: $text-primary;
+  margin-bottom: $space-4;
+}
+
+.pr-header-actions {
+  display: flex;
+  gap: $space-3;
+  flex-wrap: wrap;
+  align-items: center;
+}
+// "浏览器打开" 按钮：图标 + 文案 横排
+.pr-header-open-browser {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+}
+
+// "合并" 按钮：分支合并图标 + 文案。绿底实心强调"放行 / 合并"终态动作，跟 review
+// approve 同绿色系但用填充 (区别于 approve 的描边态)；仅在 canMerge 时渲染
+.pr-header-merge {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  background: $color-approved;
+  border-color: $color-approved;
+  color: $text-on-accent;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    filter: brightness(0.93);
+  }
+}
+
+// review 决断按钮组：用 auto margin 顶到右边；wrap 时整组下沉但仍保持右对齐
+.pr-header-actions-right {
+  margin-left: auto;
+  display: inline-flex;
+  gap: $space-3;
+}
+
+// "提交评审 (N)" 入口：N > 0 时主色描边 + 主色文字，跟"通过 / 需修改"
+// inactive 态视觉权重一致 (它俩也是默认描边、靠 icon 颜色做语义)；不做整块
+// 填充避免在 header 里盖过"浏览器打开"主色按钮。hover 时浅填一层主色提示
+// 可点。0 条时走默认 :disabled 灰显
+.pr-header-publish {
+  &:not(:disabled) {
+    border-color: $color-info;
+    color: $color-info;
+
+    &:hover {
+      // 用极浅的主色填充 (~10% 透明)；border 同时加深一档强化可点感
+      background: rgba(14, 99, 156, 0.12);
+    }
+  }
+}
+
+// PR review 操作按钮 (approve / needs work) —— 图标 + 文案。
+// 图标用动作语义色：approve = 绿，needs work = 黄 (amber)。
+// 文案在 inactive 状态仍是 $text-body，避免整行文字被绿/黄"染色"破坏对比；
+// active 状态整体填充语义色，icon 与文字一起翻到对比色
+.review-action {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+
+  svg {
+    flex-shrink: 0;
+  }
+  &.review-action-approve svg {
+    color: $color-approved;
+  }
+  &.review-action-needs-work svg {
+    color: $color-warning;
+  }
+
+  &.active.review-action-approve {
+    background: $color-approved;
+    border-color: $color-approved;
+    color: $text-on-accent;
+    svg {
+      color: inherit;
+    }
+  }
+  &.active.review-action-needs-work {
+    background: $color-warning;
+    border-color: $color-warning;
+    color: $text-on-accent;
+    svg {
+      color: inherit;
+    }
+  }
+}
+
+.pr-tabs {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid $border-default;
+  background: $bg-elev;
+  flex-shrink: 0;
+  padding: 0 $space-6;
+  gap: 0;
+  // 容器宽度不够时整组横向滑动，不让单个 tab 被挤压触发文字换行 (会让 tab 栏
+  // 高度从 1 行变 2 行，破坏 main-pane 上半区固定高度的预期)。
+  // overflow-y: hidden 防止纵向出现 scrollbar 影响视觉
+  overflow-x: auto;
+  overflow-y: hidden;
+  // 隐藏横向滚动条但保留滚动能力 — 用户拖也能滑，但视觉上跟原 tab 栏一致
+  scrollbar-width: none; // Firefox
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  // tab 内嵌的数字角标 (评论数 / 待办数等)。圆角胶囊紧贴文字右侧
+  .pr-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    margin-left: $space-2;
+    padding: 0 $space-2;
+    border-radius: $radius-pill;
+    background: $color-accent-bg-fade;
+    color: $color-info;
+    font-size: $fs-xs;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+
+    // warning 变体：草稿待发布 chip 用 amber，跟文件树 .tree-draft-count 同色
+    // 让用户对"待办"语义在不同位置的识别保持一致
+    &.pr-tab-badge-warning {
+      background: rgba(229, 158, 30, 0.15);
+      color: $color-warning;
+    }
+  }
+
+  .diff-mode-toggle {
+    margin-left: auto;
+  }
+}
+
+/* 右侧操作组：blame 开关 + 并列/合并 切换。整组顶到右边 */
+.pr-tabs-right {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-4;
+  margin-left: auto;
+  padding-right: $space-4;
+  // 整组不被 flex 压缩 — diff 区窄时靠 .pr-tabs overflow-x 横向滑动，
+  // 而不是把按钮挤窄触发文字 wrap
+  flex-shrink: 0;
+
+  .diff-mode-toggle {
+    margin-left: 0; /* 在 right 组内不需要再 margin-left:auto */
+  }
+
+  /* 操作按钮高度钉死：带图标的"空白/追溯"行盒比纯文字略高，不固定就会顶出
+     tab 栏、跟"并排/统一"参差。统一 height + box-sizing 让四个按钮严丝合缝；
+     nowrap + 不收缩 防止窄宽度下中文竖排换行撑破固定高度。 */
+  .blame-toggle,
+  .diff-mode-toggle button {
+    height: 22px;
+    box-sizing: border-box;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* 跟 .diff-mode-toggle button 保持同尺寸：padding / font-size / border 同步。
+   高度由 .pr-tabs-right 内统一 height 钉死（见上），不靠字体行高，避免带图标的
+   按钮被行盒撑高。 */
+.blame-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  padding: 2px $space-4;
+  background: transparent;
+  border: 1px solid $border-default;
+  color: $text-muted;
+  cursor: pointer;
+  font-size: $fs-sm;
+  border-radius: $radius-sm;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+  &.active {
+    background: $color-accent;
+    border-color: $color-accent;
+    color: $text-on-accent;
+  }
+}
+
+/* Bitbucket 风格 blame 列：独立 React 组件，做 diff-pane-wrapper 的左侧 flex 子项。
+   内部 row 用 absolute 子项画，按 Monaco scrollTop 实时同步位置。 */
+.blame-column {
+  flex-shrink: 0;
+  background: $bg-panel-alt;
+  border-right: 1px solid $border-default;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.blame-column-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* 4 列 grid 固定布局：头像 | 名 | sha | 日期。
+   - 区块跨多行时，内容贴顶部（align-content: start）；下方留空给该 commit 的后续行
+   - 顶部一行的 track 高度 = --blame-lh（Monaco 实际行高），跟第一行代码同 Y、同高
+   - 行内三个文本 + 头像 align-items: center 共享同一垂直中线，避免错位 */
+.blame-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 80px 70px;
+  grid-auto-rows: var(--blame-lh, 21px);
+  gap: $space-3;
+  align-items: center;
+  align-content: start;
+  padding: 0 $space-4 0 $space-5;
+  font-size: $fs-sm;
+  line-height: var(--blame-lh, 21px);
+  color: $text-primary;
+  border-bottom: 1px solid $border-default-fade;
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
+
+  &:hover {
+    background: $bg-hover;
+  }
+
+  // 头像在 row 中也以 lineHeight 为基准居中：grid align-items: center 已经处理，
+  // 这里只统一尺寸 + 不收缩
+  .avatar {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* 三个文本元素共享 line-height + font-size，baseline 一致 */
+.blame-row-name,
+.blame-row-sha,
+.blame-row-date {
+  font-size: $fs-sm;
+  line-height: var(--blame-lh, 21px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blame-row-name {
+  color: $text-primary;
+}
+
+.blame-row-sha {
+  font-family: $font-mono;
+  color: $color-info;
+  letter-spacing: 0.02em;
+}
+
+.blame-row-date {
+  color: $text-muted;
+  text-align: right;
+}
+
+/* PR 改动行色带：左侧 3px 绿条，对齐 Monaco diff 的 "added" 装饰色 */
+.blame-row-change {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding-left: 10px;
+  border-left: 3px solid #487e02;
+  background: rgba(72, 126, 2, 0.08);
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+/* 折叠占位行（"X hidden lines"）：斜纹背景 + 灰底，表示"非真实行 / 无 blame" */
+.blame-row-fold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(110, 118, 129, 0.08) 0,
+    rgba(110, 118, 129, 0.08) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-bottom: 1px solid $border-default-fade;
+  border-top: 1px solid $border-default-fade;
+  pointer-events: none;
+}
+
+.pr-tab {
+  padding: $space-4 $space-8;
+  background: transparent;
+  border: none;
+  color: $text-muted;
+  cursor: pointer;
+  font-size: $fs-lg;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  // 文字单行 + 不被 flex 容器挤压 — 窄宽度下保持单 tab 完整尺寸，整组靠
+  // .pr-tabs overflow-x 横向滑动而不是文字 wrap (避免 tab 栏高度变化)
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &.active {
+    color: $text-body;
+    border-bottom-color: $color-accent;
+  }
+  &:hover:not(.active) {
+    color: $text-primary;
+  }
+}
+
+.pr-tab-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+}
+
+// === 评论标签页 ===
+// 区别于 DiffView 内嵌 inline 评论：这里是 PR 全量评论 (含 summary + inline)，
+// 卡片式排版，自带滚动
+.pr-comments-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: $space-6 20px;
+  background: $bg-app;
+}
+.pr-comments-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-5;
+}
+.pr-comments-replies {
+  margin-top: $space-4;
+  padding-left: $space-6;
+  border-left: 2px solid $border-muted;
+}
+.pr-comment {
+  padding: $space-4 $space-5;
+  // 卡片视觉（底色 / 边框 / 圆角）只给**顶层评论**；嵌套回复改走「左竖线缩进」的扁平样式（与行内
+  // 评论 DiffView 一致）——回复的 <ul> 渲染在父 <li.pr-comment> 内部，若每层都是卡片就会层层「盒中盒」。
+  &.pr-comment-depth-0 {
+    background: $bg-elev;
+    border: 1px solid $border-default;
+    border-radius: $radius-md;
+  }
+  // 嵌套回复：无卡片盒子，仅纵向留白；横向缩进与左竖线由 .pr-comments-replies 提供，满 5 层后拉平。
+  &:not(.pr-comment-depth-0) {
+    padding: $space-3 0;
+  }
+}
+// 拉平层（满 MAX_REPLY_DEPTH 层后）的回复同层级、无卡片盒子区隔 → 每条加一道顶部横向分割线 + 上下
+// 留白（margin 在线上方、padding 在线下方），清晰区分上下相邻评论（首条同时与上一缩进层级隔开）。
+// 置于 .pr-comment 之后以盖过其 padding-top。
+.pr-comments-flat > .pr-comment {
+  margin-top: $space-4;
+  padding-top: $space-4;
+  border-top: 1px solid $border-muted;
+}
+.pr-comment-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  margin-bottom: $space-3;
+  flex-wrap: wrap;
+}
+.pr-comment-author {
+  font-weight: 600;
+  color: $text-primary;
+}
+.pr-comment-anchor {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-size: $fs-xs;
+
+  // base 侧 (old) 用红调，head 侧 (new) 用绿调，跟 diff 视觉一致
+  &.pr-comment-anchor-old {
+    background: rgba(244, 135, 113, 0.15);
+    color: $color-danger;
+  }
+  &.pr-comment-anchor-new {
+    background: rgba(22, 163, 74, 0.18);
+    color: $color-approved;
+  }
+
+  code {
+    font-family: $font-mono;
+    background: transparent;
+    padding: 0;
+  }
+}
+.pr-comment-time {
+  margin-left: auto;
+  font-size: $fs-xs;
+}
+.pr-comment-body {
+  font-size: $fs-md;
+  line-height: $lh-normal;
+}
+.pr-comment-foot {
+  margin-top: $space-3;
+  display: flex;
+  gap: $space-3;
+  align-items: center;
+}
+.pr-comment-reply-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover {
+    border-color: $color-accent;
+    color: $color-info;
+    background: $bg-hover;
+  }
+}
+// 编辑按钮：跟回复按钮同尺寸，hover 主色描边 — 是中性操作，不需要 danger 配色
+.pr-comment-edit-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-info;
+    color: $color-info;
+    background: rgba(14, 99, 156, 0.08);
+  }
+}
+// 删除按钮：跟回复按钮同尺寸，主色用 danger 让用户一眼识别为破坏性操作。
+// 二次确认走 ConfirmModal，按钮上不再加 hover-only 隐藏 (避免误以为没这功能)
+.pr-comment-delete-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-danger;
+    color: $color-danger;
+    background: rgba(244, 135, 113, 0.08);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+// 删除失败 inline 红条
+.pr-comment-delete-error {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  margin-top: $space-3;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba(244, 135, 113, 0.10);
+  border-left: 3px solid $color-danger;
+  border-radius: $radius-sm;
+  word-break: break-word;
+}
+.pr-comment-delete-error-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: $color-danger;
+  cursor: pointer;
+  padding: 0 $space-2;
+  font-size: $fs-md;
+  line-height: 1;
+  flex-shrink: 0;
+  &:hover {
+    opacity: 0.7;
+  }
+}
+.comment-reply-editor {
+  margin-top: $space-3;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+.comment-reply-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: $space-3 $space-4;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-body;
+  font-family: inherit;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  resize: vertical;
+  min-height: calc(#{$fs-md} * #{$lh-normal} * 3 + #{$space-3} * 2);
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+.comment-reply-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+}
+.comment-reply-btn {
+  padding: 1px $space-4;
+  font-size: $fs-sm;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-accent;
+    color: $color-info;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+.comment-reply-btn-primary {
+  background: $color-accent;
+  border-color: $color-accent;
+  color: $text-on-accent;
+  &:hover:not(:disabled) {
+    filter: brightness(1.15);
+    color: $text-on-accent;
+  }
+}
+.comment-reply-error {
+  color: $color-danger;
+  font-size: $fs-sm;
+}
+.pr-comments-error {
+  background: rgba(244, 135, 113, 0.08);
+  border: 1px solid rgba(244, 135, 113, 0.35);
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+
+  strong {
+    color: $color-danger;
+  }
+  pre {
+    margin-top: $space-3;
+    font-family: $font-mono;
+    font-size: $fs-xs;
+    color: $text-muted;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
+// inline 评论上方嵌的代码上下文：Monaco read-only，锚定行整行底色
+.comment-code-context {
+  margin: $space-3 0;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  overflow: hidden;
+  background: $bg-app;
+}
+.comment-code-context-loading,
+.comment-code-context-error {
+  margin: $space-3 0;
+  padding: $space-3 $space-4;
+  border: 1px dashed $border-muted;
+  border-radius: $radius-md;
+  font-size: $fs-sm;
+}
+// 懒加载占位按钮：CAP 之外的 inline 评论用，点击才挂 Monaco
+.comment-code-context-toggle {
+  margin: $space-3 0;
+  padding: $space-3 $space-4;
+  border: 1px dashed $border-default;
+  border-radius: $radius-md;
+  background: $bg-surface;
+  color: $text-muted;
+  font-size: $fs-sm;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+  &:hover {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+// Monaco decoration：锚定行整行底色 + 左侧色带 (margin gutter)，跟 inline 锚点
+// chip 颜色保持一组语义 (warning amber 区分于 added 绿 / removed 红)
+.comment-code-context-anchor-line {
+  background: rgba(217, 119, 6, 0.18);
+}
+.comment-code-context-anchor-gutter {
+  background: $color-warning;
+  width: 2px !important;
+}
+
+// === Commits 标签页 ===
+.pr-commits-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: $space-6 20px;
+  background: $bg-app;
+}
+.pr-commits-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: $fs-md;
+
+  thead {
+    position: sticky;
+    top: 0;
+    background: $bg-elev;
+    z-index: 1;
+  }
+  th {
+    text-align: left;
+    padding: $space-3 $space-4;
+    font-weight: 600;
+    color: $text-muted;
+    font-size: $fs-sm;
+    border-bottom: 1px solid $border-default;
+    white-space: nowrap;
+  }
+  td {
+    padding: $space-3 $space-4;
+    border-bottom: 1px solid $border-muted;
+    vertical-align: middle;
+  }
+}
+.pr-commits-row-clickable {
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: $bg-hover;
+  }
+}
+.pr-commits-col-sha {
+  width: 120px;
+  white-space: nowrap;
+
+  code {
+    font-family: $font-mono;
+    font-size: $fs-sm;
+    color: $color-info;
+  }
+}
+.pr-commits-merge-tag {
+  margin-left: $space-2;
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-size: $fs-xs;
+  font-weight: 600;
+}
+.pr-commits-col-subject {
+  // 主题列允许折行；但 cap 高度避免极长 message 把表格撑炸
+  max-width: 0; // trick: 配合 width:100% 让 table-layout 算可用宽，剩余给主题列
+  width: 100%;
+  word-break: break-word;
+}
+.pr-commits-col-author {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding-right: $space-5;
+}
+.pr-commits-col-time {
+  white-space: nowrap;
+  color: $text-muted;
+  font-size: $fs-sm;
+  font-variant-numeric: tabular-nums;
+}
+.pr-commits-error {
+  background: rgba(244, 135, 113, 0.08);
+  border: 1px solid rgba(244, 135, 113, 0.35);
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+
+  strong {
+    color: $color-danger;
+  }
+  pre {
+    margin-top: $space-3;
+    font-family: $font-mono;
+    font-size: $fs-xs;
+    color: $text-muted;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+

@@ -1,0 +1,234 @@
+// Monaco 行内评论 view zone + glyph margin 标记。
+// 通过 DiffView 内 viewZone 注入 DOM；样式跟 markdown.scss 配合，
+// .comment-zone-body 也会加 .markdown class 走 markdown 视觉规则。
+
+@use '../tokens' as *;
+
+// 结构 (跟 DraftZone 同):
+//   .monaco-comment-zone (= dom，monaco 控制 style.height inline，不能放视觉样式)
+//     .monaco-comment-zone-inner (= 内容容器，背景 / padding / 边框全在这)
+//       .comment-zone-inner (= CommentZone React 根，flex column 列表)
+//
+// dom 自身设了视觉样式时蓝框尺寸 = monaco wrapper 高度 ≠ 内容高度，图片异步
+// 加载 / 嵌套评论展开后会出现内容溢出。挪到 inner + RO 监听 inner.offsetHeight
+// 同步 zoneObj.heightInPx 让 zone 自动撑高
+.monaco-comment-zone {
+  overflow: visible;
+  // monaco view zone 内部某层 z-index 较高会遮挡 view zone DOM 的鼠标命中
+  // (跟 DraftZone z-index:50 同套防御)，不然 click 完全到不了 inner 内 img/a
+  z-index: 50;
+}
+.monaco-comment-zone-inner {
+  position: relative;
+  z-index: 51;
+}
+// monaco editor 全局会给 view zone 内 element 加 user-select: none / cursor:text，
+// 让评论变得既不能选文字也不能点链接。这里 reset 让评论变成"普通可交互内容"：
+//  - user-select: text 让浏览器允许 selection
+//  - cursor: text 让 hover 评论体看起来"像可选文本"
+//  - a / .bitbucket-image 覆盖各自语义 cursor
+.monaco-comment-zone,
+.monaco-comment-zone-inner {
+  // monaco view zone 默认可能给子元素设 pointer-events: none 让代码命中区干净
+  // (DraftZone 工作是因为 button/textarea 浏览器特殊处理)。显式 auto 让 Bitbucket
+  // 评论里 img / a 也能接收 click
+  pointer-events: auto !important;
+}
+.monaco-comment-zone-inner {
+  user-select: text;
+  cursor: text;
+}
+.monaco-comment-zone-inner a {
+  cursor: pointer !important;
+}
+.monaco-comment-zone-inner .bitbucket-image {
+  cursor: zoom-in !important;
+}
+
+// 回复 / 删除按钮：默认 hidden，hover 父评论时显示，避免常驻占视觉
+.comment-zone-foot {
+  margin-top: $space-2;
+  min-height: 22px; // 占位防 hover 抖动
+  display: flex;
+  gap: $space-3;
+  align-items: center;
+}
+.comment-zone-reply-btn,
+.comment-zone-edit-btn,
+.comment-zone-delete-btn {
+  padding: 2px $space-3;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer !important;
+  opacity: 0;
+  transition: opacity 0.12s, border-color 0.12s, color 0.12s;
+}
+.comment-zone-reply-btn:hover {
+  border-color: $color-accent;
+  color: $color-info;
+}
+// 编辑按钮：中性操作走主色描边，跟"回复"风格相似但有微差让人区分
+.comment-zone-edit-btn:hover {
+  border-color: $color-info;
+  color: $color-info;
+  background: rgba(14, 99, 156, 0.08);
+}
+// 删除按钮主色用 danger，跟其它按钮拉开语义；disabled 时半透明
+.comment-zone-delete-btn:hover:not(:disabled) {
+  border-color: $color-danger;
+  color: $color-danger;
+  background: rgba(244, 135, 113, 0.08);
+}
+.comment-zone-delete-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed !important;
+}
+// hover comment body 区时显示 foot 里的所有按钮
+.comment-zone-item-body:hover > .comment-zone-foot .comment-zone-reply-btn,
+.comment-zone-item-body:hover > .comment-zone-foot .comment-zone-edit-btn,
+.comment-zone-item-body:hover > .comment-zone-foot .comment-zone-delete-btn,
+.comment-zone-foot:focus-within .comment-zone-reply-btn,
+.comment-zone-foot:focus-within .comment-zone-edit-btn,
+.comment-zone-foot:focus-within .comment-zone-delete-btn,
+.comment-zone-reply-btn:focus,
+.comment-zone-edit-btn:focus,
+.comment-zone-delete-btn:focus {
+  opacity: 1;
+}
+
+// 删除失败 inline 红条 (跟 .pr-comment-delete-error 同模)
+.comment-zone-delete-error {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  margin-top: $space-3;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba(244, 135, 113, 0.10);
+  border-left: 3px solid $color-danger;
+  border-radius: $radius-sm;
+  word-break: break-word;
+}
+.comment-zone-delete-error-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: $color-danger;
+  cursor: pointer !important;
+  padding: 0 $space-2;
+  font-size: $fs-md;
+  line-height: 1;
+  flex-shrink: 0;
+  &:hover {
+    opacity: 0.7;
+  }
+}
+.monaco-comment-zone-inner {
+  background: $bg-panel-alt;
+  border-left: 3px solid $color-accent;
+  padding: $space-3 $space-6 $space-4 $space-8;
+  // 跟代码字号同等 (14px) — 评论不该比代码小
+  font-size: $fs-lg;
+  color: $text-primary;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
+  line-height: $lh-loose;
+  box-sizing: border-box;
+}
+
+.comment-zone-inner {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+
+.comment-zone-item-divider {
+  border-top: 1px solid $border-muted;
+  padding-top: $space-3;
+  margin-top: $space-1;
+}
+
+.comment-zone-head {
+  display: flex;
+  gap: $space-4;
+  align-items: center;
+  font-size: $fs-md;
+
+  .avatar {
+    margin-top: 0;
+  }
+  .muted {
+    color: $text-muted;
+    font-size: $fs-sm;
+  }
+}
+
+// 评论正文 / reply 与头像列对齐：左侧缩进 = 头像宽(18) + head gap(8) = 26
+.comment-zone-body {
+  word-wrap: break-word;
+  margin-top: $space-2;
+  padding-left: 26px;
+}
+
+// margin-left 由 DiffView 内 CommentNode 按 depth 计算后写到 style 里
+// (前 5 层每层 18px，第 6+ 层 0 跟第 5 层平齐)
+.comment-zone-reply {
+  margin-top: $space-4;
+  // 每层步进 12px + 左竖线 —— 缩进量与边框色对齐评论 tab 的 .pr-comments-replies（$space-6 / $border-muted）。
+  margin-left: $space-6;
+  padding: $space-2 0 $space-2 $space-5;
+  border-left: 2px solid $border-muted;
+  // 字号继承父级 (.monaco-comment-zone-inner 14px)，不再缩减 — 嵌套 reply 跟
+  // 父评论同等可读性，视觉层级靠左侧 border + indent 区分就够
+
+  & + & {
+    margin-top: $space-3;
+  }
+
+  // 满 MAX_REPLY_INDENT_DEPTH 层后拉平：去步进 / 去左竖线 / 去左 padding，更深回复平铺在上限层级上。
+  // 必须三者全去 —— 仅去 margin 步进、保留 padding-left + border 会逐级累加仍右移（"还是有缩进"的根因）。
+  &.comment-zone-reply-flat {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+  }
+
+  .comment-zone-body {
+    // reply 头像也是 18px，从左对齐头像列
+    padding-left: 26px;
+    margin-top: 3px;
+  }
+}
+
+// Monaco 行内评论标记 (glyph margin 蓝点 + 行号左侧细条)
+.monaco-comment-glyph {
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: $color-accent;
+    border-radius: $radius-full;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 1px rgba(14, 99, 156, 0.4);
+  }
+}
+
+.monaco-comment-line-deco {
+  background: $color-accent;
+  width: 3px !important;
+  margin-left: 3px;
+}

@@ -7,9 +7,12 @@
 
 ### Changed
 
-- 聊天面板（PR Agent）内部重构：2578 行的单文件 `ChatPane.tsx` 按「容器 / 领域组件 / hooks / 工具方法」分层拆分到 `components/chat/`，状态与生命周期、业务动作、时间线归并各自成 hook，展示组件与工具方法独立成文件。对外接口与界面行为保持不变，仅改善可维护性；token 用量 ↑/↓ 的绿红色值一并从内联样式收进设计令牌与样式类。
-- 首启向导内部重构：`OnboardingWizard.tsx` 的四个步骤组件（欢迎 / 平台 / LLM / 完成）拆分到 `steps/` 各自成文件，容器只留向导骨架（步骤指示 + 切换 + 导航）。对外接口与界面行为不变。
-- `components/` 目录按职责重组：扁平堆叠的组件归入三类——`common/`（基础公共 UI）、`layout/`（应用骨架）、`features/`（业务领域：pr / diff / comments / drafts / settings / chat / onboarding），顶层只剩这三个桶。纯文件位置调整 + import 路径改写，无逻辑 / 界面变更。
+- **前端代码结构重构（可维护性）**：纯结构调整，对外接口与界面 / 交互行为均不变。重点：
+  - 组件按 `common/`（基础 UI）/ `layout/`（应用骨架）/ `features/`（业务领域）三层归类；样式 `styles/` 同构归并
+  - 超大组件按「容器 + 领域组件 + hooks + 工具方法」分层拆分：ChatPane、SettingsModal、MainPane、StatusBar
+  - 业务逻辑下沉所属领域：PR 列表 / 详情 / 工作区归 `features/pr`；App 主入口退化为组合根，启动 / 布局 / 更新提示等拆成 app 级 hooks
+  - 抽出通用基础组件 `Modal` / `StatusChip`；状态栏 chip 按归属下沉到各 feature
+  - 其它整理：目录归并、工具方法去重、main 进程 splash 拆分
 
 ### Fixed
 
