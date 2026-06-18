@@ -7,14 +7,7 @@
 
 ### Changed
 
-- 聊天面板（PR Agent）内部重构：2578 行的单文件 `ChatPane.tsx` 按「容器 / 领域组件 / hooks / 工具方法」分层拆分到 `components/chat/`，状态与生命周期、业务动作、时间线归并各自成 hook，展示组件与工具方法独立成文件。对外接口与界面行为保持不变，仅改善可维护性；token 用量 ↑/↓ 的绿红色值一并从内联样式收进设计令牌与样式类。
-- 首启向导内部重构：`OnboardingWizard.tsx` 的四个步骤组件（欢迎 / 平台 / LLM / 完成）拆分到 `steps/` 各自成文件，容器只留向导骨架（步骤指示 + 切换 + 导航）。对外接口与界面行为不变。
-- `components/` 目录按职责重组：扁平堆叠的组件归入三类——`common/`（基础公共 UI）、`layout/`（应用骨架）、`features/`（业务领域：pr / diff / comments / drafts / settings / chat / onboarding），顶层只剩这三个桶。纯文件位置调整 + import 路径改写，无逻辑 / 界面变更。
-- 新增通用 `common/Modal` 模态壳（backdrop / header / body / footer / portal / nested / size 变体），统一各处手写的模态脚手架；ConfirmModal、RulePreviewModal 及设置面板的全部弹窗改用之。
-- 设置面板内部重构：1222 行的 `SettingsModal.tsx` 拆分为容器（175 行）+ `useSettingsDraft`（草稿/保存状态机）+ 九个独立 `sections/` 分区 + `editors/`（连接/代理/LLM 编辑器）+ `elements/`（小部件）+ `utils`（formatBytes / 轮询档位），各分区可独立维护。对外接口与界面行为不变。
-- PR 作用域的评审面板（`diff` / `comments` / `drafts`）收归 `features/pr/` 之下，使 `pr/` 成为「PR 评审工作区」的统一归属；`chat` / `onboarding` / `settings` 仍在 `features/` 顶层。纯目录迁移 + import 路径改写，无逻辑 / 界面变更。
-- 状态栏重构：新增 `common/StatusChip` 通用 chip 壳（span/button + ok/err 色调 + 专属类名），各 chip 复用；`StatusBar` 退化为薄壳（610→146 行），各业务 chip 按归属下沉到所属 feature 的 `statusbar/`——LLM / 用户 → settings，pr-agent 活动队列 / AutoPilot → chat，最近同步 / 仓库镜像 / PR 计数 → pr；pr-agent 运行时与更新 chip 留 layout。时长 / 相对时间格式化统一抽到 `utils/time`（`formatElapsed` 带 `compact` 选项、`formatRelative`），消除与状态栏的重复实现。无逻辑 / 界面变更。
-- 主内容区重构：`MainPane.tsx`（503 行）中的 PR 详情工作区剥离到 `features/pr/`——`PrPanel`（容器：tab / diff 选项 / 计数 / 草稿 / 发布弹窗状态）+ `PrHeader`（标题 / 动作）+ `PrTabs`（tab 栏 + diff 工具条）。`layout/MainPane` 进一步退化为内容无关槽位（仅 `<main>` + children，不感知 PR 领域，便于扩展非 PR 主区业务）；空态下沉为 `features/pr/PrEmpty`，由 App 决定槽位内容。`features/pr/` 再按职责归拢：tab 导航与各 tab 内容（diff / comments / drafts / commits / info）收进 `tabs/` 子目录，根目录只剩工作区外壳（PrPanel / PrHeader / PrEmpty / PrItem）+ `statusbar/`。无逻辑 / 界面变更。
+- **前端代码结构重构（可维护性）**：渲染层组件按 `common/`（基础公共 UI）/ `layout/`（应用骨架）/ `features/`（业务领域）三层归类；超大组件（ChatPane / SettingsModal / MainPane / StatusBar 等）一律按「容器 + 领域组件 + hooks + 工具方法」分层拆分，业务逻辑下沉到所属领域（如 PR 列表 / 详情归 `features/pr`）；抽出通用 `Modal` / `StatusChip` 等公共基础组件复用。另含目录归并、工具方法去重等整理。对外接口与界面 / 交互行为均不变。
 
 ### Fixed
 
