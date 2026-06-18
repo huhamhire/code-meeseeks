@@ -14,7 +14,7 @@
 - 设置面板内部重构：1222 行的 `SettingsModal.tsx` 拆分为容器（175 行）+ `useSettingsDraft`（草稿/保存状态机）+ 九个独立 `sections/` 分区 + `editors/`（连接/代理/LLM 编辑器）+ `elements/`（小部件）+ `utils`（formatBytes / 轮询档位），各分区可独立维护。对外接口与界面行为不变。
 - PR 作用域的评审面板（`diff` / `comments` / `drafts`）收归 `features/pr/` 之下，使 `pr/` 成为「PR 评审工作区」的统一归属；`chat` / `onboarding` / `settings` 仍在 `features/` 顶层。纯目录迁移 + import 路径改写，无逻辑 / 界面变更。
 - 状态栏重构：新增 `common/StatusChip` 通用 chip 壳（span/button + ok/err 色调 + 专属类名），各 chip 复用；`StatusBar` 退化为薄壳（610→146 行），各业务 chip 按归属下沉到所属 feature 的 `statusbar/`——LLM / 用户 → settings，pr-agent 活动队列 / AutoPilot → chat，最近同步 / 仓库镜像 / PR 计数 → pr；pr-agent 运行时与更新 chip 留 layout。时长 / 相对时间格式化统一抽到 `utils/time`（`formatElapsed` 带 `compact` 选项、`formatRelative`），消除与状态栏的重复实现。无逻辑 / 界面变更。
-- 主内容区重构：`MainPane.tsx`（503 行）中的 PR 详情工作区剥离到 `features/pr/`——`PrPanel`（容器：tab / diff 选项 / 计数 / 草稿 / 发布弹窗状态）+ `PrHeader`（标题 / 动作）+ `PrTabs`（tab 栏 + diff 工具条）；`layout/MainPane` 退化为薄壳（96 行），仅保留主区与「未选 PR」空态。无逻辑 / 界面变更。
+- 主内容区重构：`MainPane.tsx`（503 行）中的 PR 详情工作区剥离到 `features/pr/`——`PrPanel`（容器：tab / diff 选项 / 计数 / 草稿 / 发布弹窗状态）+ `PrHeader`（标题 / 动作）+ `PrTabs`（tab 栏 + diff 工具条）。`layout/MainPane` 进一步退化为内容无关槽位（仅 `<main>` + children，不感知 PR 领域，便于扩展非 PR 主区业务）；空态下沉为 `features/pr/PrEmpty`，由 App 决定槽位内容。`features/pr/` 再按职责归拢：tab 导航与各 tab 内容（diff / comments / drafts / commits / info）收进 `tabs/` 子目录，根目录只剩工作区外壳（PrPanel / PrHeader / PrEmpty / PrItem）+ `statusbar/`。无逻辑 / 界面变更。
 
 ### Fixed
 

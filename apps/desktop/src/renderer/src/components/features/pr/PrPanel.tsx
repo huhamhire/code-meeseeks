@@ -4,16 +4,16 @@ import type { LocalPrStatus, PlatformCapabilities, StoredPullRequest } from '@me
 import { invoke } from '../../../api';
 import { useDraftsForPr } from '../../../stores/drafts-store';
 import { PaneLoading } from '../../common/Loading';
-import { CommentsPanel } from './comments/CommentsPanel';
-import { CommitsPanel } from './CommitsPanel';
+import { CommentsPanel } from './tabs/comments/CommentsPanel';
+import { CommitsPanel } from './tabs/CommitsPanel';
 // Monaco 编辑器（~10MB）懒加载：只有真正切到 Diff tab 才拉取 DiffView chunk，
 // 不阻塞窗口首帧 / PR 列表 / 首启向导。
-const DiffView = lazy(() => import('./diff/DiffView').then((m) => ({ default: m.DiffView })));
-import { DraftsPanel } from './drafts/DraftsPanel';
-import { PrInfoView } from './PrInfoView';
-import { PublishReviewModal } from './drafts/PublishReviewModal';
+const DiffView = lazy(() => import('./tabs/diff/DiffView').then((m) => ({ default: m.DiffView })));
+import { DraftsPanel } from './tabs/drafts/DraftsPanel';
+import { PrInfoView } from './tabs/PrInfoView';
+import { PublishReviewModal } from './tabs/drafts/PublishReviewModal';
 import { PrHeader } from './PrHeader';
-import { PrTabs, type PrTab } from './PrTabs';
+import { PrTabs, type PrTab } from './tabs/PrTabs';
 
 export interface PrPanelProps {
   pr: StoredPullRequest;

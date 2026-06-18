@@ -4,16 +4,16 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { PlatformCapabilities, PrComment, StoredPullRequest } from '@meebox/shared';
-import { invoke, subscribe } from '../../../../api';
-import i18n from '../../../../i18n';
-import { formatBackendError, type FormattedError } from '../../../../errors';
-import { REMOTE_REHYPE_PLUGINS } from '../../../../markdown';
-import { Avatar } from '../../../common/Avatar';
-import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../common/BitbucketImage';
+import { invoke, subscribe } from '../../../../../api';
+import i18n from '../../../../../i18n';
+import { formatBackendError, type FormattedError } from '../../../../../errors';
+import { REMOTE_REHYPE_PLUGINS } from '../../../../../markdown';
+import { Avatar } from '../../../../common/Avatar';
+import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../../common/BitbucketImage';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
-import { ConfirmModal } from '../../../common/ConfirmModal';
-import { mermaidComponents } from '../../../common/markdownMermaid';
+import { ConfirmModal } from '../../../../common/ConfirmModal';
+import { mermaidComponents } from '../../../../common/markdownMermaid';
 // 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
 const InlineCodeContext = lazy(() =>
   import('./InlineCodeContext').then((m) => ({ default: m.InlineCodeContext })),

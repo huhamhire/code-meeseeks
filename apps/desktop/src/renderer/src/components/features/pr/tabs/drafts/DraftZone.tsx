@@ -4,8 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { ReviewDraft } from '@meebox/shared';
-import { ConfirmModal } from '../../../common/ConfirmModal';
-import { TrashIcon } from '../../../common/icons';
+import { ConfirmModal } from '../../../../common/ConfirmModal';
+import { TrashIcon } from '../../../../common/icons';
 
 interface DraftZoneProps {
   draft: ReviewDraft;

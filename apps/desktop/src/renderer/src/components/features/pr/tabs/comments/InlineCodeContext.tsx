@@ -1,14 +1,14 @@
 // 必须在用到 @monaco-editor/react 之前执行（见 DiffView 同款说明）。本文件经
 // React.lazy 动态加载 → Monaco 随本 chunk 按需拉取，不进入口包。
-import '../../../../monaco-setup';
+import '../../../../../monaco-setup';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
-import { invoke } from '../../../../api';
-import { editorFontSize } from '../../../../editor-font';
-import { languageFor } from '../../../../utils/language';
+import { invoke } from '../../../../../api';
+import { editorFontSize } from '../../../../../editor-font';
+import { languageFor } from '../../../../../utils/language';
 
 interface InlineCodeContextProps {
   pr: StoredPullRequest;
