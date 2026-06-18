@@ -181,8 +181,12 @@ export interface IpcChannels {
   'app:openAgentDir': { request: void; response: void };
   /** 打开 Electron DevTools（分离窗口） */
   'app:openDevTools': { request: void; response: void };
-  /** 手动检测版本更新（设置页「检查更新」）。仅检测 + 返回结果，不下载 / 安装。 */
+  /** 手动检测版本更新（设置页「检查更新」）。仅检测 + 返回结果，不下载 / 安装；
+   *  结果同时缓存进 main 单一真相源并在有新版时广播 app:updateAvailable，使状态栏同步。 */
   'app:checkUpdate': { request: void; response: UpdateCheckResult };
+  /** 读取 main 缓存的最近一次成功更新检测结果（不发起网络请求）。供窗口 / 状态栏挂载时水合，
+   *  无缓存（尚未检测过）时返回 null。 */
+  'app:getUpdateStatus': { request: void; response: UpdateCheckResult | null };
   /**
    * 渲染层日志回传：把渲染进程的错误 / 未捕获异常转发到 main，落进同一份 meebox.log
    * （renderer 自己的 console 不进文件）。preload 装 window.onerror / unhandledrejection

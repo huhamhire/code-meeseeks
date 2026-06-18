@@ -25,6 +25,7 @@ import {
 } from './utils/connection-state.js';
 import { readWindowState, writeWindowState, type WindowState } from './utils/window-state.js';
 import { checkForUpdate } from './utils/update-check.js';
+import { publishUpdateResult } from './utils/update-state.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
 const PROCESS_START_MS = Date.now();
@@ -481,11 +482,10 @@ async function runUpdateCheckIfDue(): Promise<void> {
       logger.debug({ error: result.error }, 'update check failed (silent, no prompt)');
       return;
     }
-    // 仅「检测成功且确有新版」才广播；ok=true&hasUpdate=false（已是最新）同样静默。
+    // 交给单一真相源：缓存结果，并仅在确有新版时广播（与设置页手动检查共用同一路径，
+    // ok=true&hasUpdate=false 已是最新则只更新缓存、不打扰）。
+    publishUpdateResult(result);
     if (result.hasUpdate) {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send('app:updateAvailable', result);
-      }
       logger.info(
         { current: result.currentVersion, latest: result.latestVersion },
         'update available',
