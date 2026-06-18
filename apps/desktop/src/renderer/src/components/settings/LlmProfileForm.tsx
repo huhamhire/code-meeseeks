@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LlmProfile, LlmProvider } from '@meebox/shared';
-import i18n from '../i18n';
-import { EyeIcon, EyeOffIcon } from './icons';
+import i18n from '../../i18n';
+import { EyeIcon, EyeOffIcon } from '../common/icons';
 
 export interface ProviderMeta {
   value: LlmProvider;

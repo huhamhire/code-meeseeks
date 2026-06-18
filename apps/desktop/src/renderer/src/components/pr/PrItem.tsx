@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { AgentRecommendationVerdict, StoredPullRequest } from '@meebox/shared';
-import { Avatar } from './Avatar';
-import { PersonIcon, PullRequestIcon, StarIcon } from './icons';
+import { Avatar } from '../common/Avatar';
+import { PersonIcon, PullRequestIcon, StarIcon } from '../common/icons';
 
 /** 评审建议 verdict → 复用 chatPane.agent.* 文案（不另加 i18n）。 */
 const VERDICT_TITLE: Record<string, string> = {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '../api';
+import { invoke } from '../../api';
 
 interface CommentReplyEditorProps {
   prLocalId: string;

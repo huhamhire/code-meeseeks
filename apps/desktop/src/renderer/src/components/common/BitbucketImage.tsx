@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '../api';
+import { invoke } from '../../api';
 
 /**
  * react-markdown 默认 url sanitize 只允许 http/https/mailto/tel 协议，

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LocalPrStatus, PrAgentStatus, StoredPullRequest } from '@meebox/shared';
-import { ChatIcon, TrashIcon } from '../icons';
-import { ConfirmModal } from '../ConfirmModal';
-import { PaneLoading } from '../Loading';
+import { ChatIcon, TrashIcon } from '../common/icons';
+import { ConfirmModal } from '../common/ConfirmModal';
+import { PaneLoading } from '../common/Loading';
 import { useChatRunStore } from '../../stores/chat-run-store';
 import { useDraftsForPr } from '../../stores/drafts-store';
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './constants';

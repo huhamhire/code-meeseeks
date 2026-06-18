@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { PrCommit, StoredPullRequest } from '@meebox/shared';
-import { invoke } from '../api';
-import { formatBackendError, type FormattedError } from '../errors';
-import { Avatar } from './Avatar';
+import { invoke } from '../../api';
+import { formatBackendError, type FormattedError } from '../../errors';
+import { Avatar } from '../common/Avatar';
 
 interface CommitsPanelProps {
   pr: StoredPullRequest;

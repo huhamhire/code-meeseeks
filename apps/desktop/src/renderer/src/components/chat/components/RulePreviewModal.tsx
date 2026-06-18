@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import { mermaidComponents } from '../../markdownMermaid';
+import { mermaidComponents } from '../../common/markdownMermaid';
 import { REMOTE_REHYPE_PLUGINS } from '../../../markdown';
 import type { MatchedRule } from '../types';
 

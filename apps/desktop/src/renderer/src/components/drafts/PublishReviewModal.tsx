@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReviewDraft } from '@meebox/shared';
-import { invoke } from '../api';
+import { invoke } from '../../api';
 
 /**
  * 批量发布草稿到 Bitbucket 的确认 modal。M4 发布闭环最后一公里。

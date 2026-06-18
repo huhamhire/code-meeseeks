@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { Config, ConnectionSummary, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
-import { invoke } from '../api';
-import { useChatRunStore } from '../stores/chat-run-store';
-import { useRepoSyncStore } from '../stores/repo-sync-store';
+import { invoke } from '../../api';
+import { useChatRunStore } from '../../stores/chat-run-store';
+import { useRepoSyncStore } from '../../stores/repo-sync-store';
 import {
   PanelToggleIcon,
   PersonIcon,
@@ -13,7 +13,7 @@ import {
   RobotOffIcon,
   SettingsIcon,
   SyncIcon,
-} from './icons';
+} from '../common/icons';
 
 interface StatusBarProps {
   prsCount: number;

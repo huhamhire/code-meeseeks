@@ -2,9 +2,9 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
-import { REMOTE_REHYPE_PLUGINS } from '../markdown';
-import { makeBitbucketImageFor, transformBitbucketUrl } from './BitbucketImage';
-import { mermaidComponents } from './markdownMermaid';
+import { REMOTE_REHYPE_PLUGINS } from '../../markdown';
+import { makeBitbucketImageFor, transformBitbucketUrl } from '../common/BitbucketImage';
+import { mermaidComponents } from '../common/markdownMermaid';
 
 interface PrInfoViewProps {
   pr: StoredPullRequest;

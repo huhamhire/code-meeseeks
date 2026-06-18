@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Finding, ReviewDraft, ReviewRun } from '@meebox/shared';
-import { RetryIcon } from '../../icons';
+import { RetryIcon } from '../../common/icons';
 import { orderFindings } from '../utils/findings';
 import { formatStartTime, formatTokens, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';

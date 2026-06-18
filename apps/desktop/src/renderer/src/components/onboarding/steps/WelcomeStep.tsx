@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '../../../api';
-import { PullRequestIcon } from '../../icons';
+import { PullRequestIcon } from '../../common/icons';
 
 export function WelcomeStep({ onStart }: { onStart: () => void }) {
   const { t } = useTranslation();

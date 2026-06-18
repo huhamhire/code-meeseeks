@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { invoke } from '../../../api';
-import { ConnectionForm, type ConnDraft } from '../../ConnectionForm';
-import { PLATFORM_META } from '../../PlatformIcon';
-import { FolderIcon } from '../../icons';
+import { ConnectionForm, type ConnDraft } from '../../settings/ConnectionForm';
+import { PLATFORM_META } from '../../common/PlatformIcon';
+import { FolderIcon } from '../../common/icons';
 
 export function PlatformStep({
   connDraft,

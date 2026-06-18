@@ -9,9 +9,9 @@ import {
   type SupportedLanguage,
   type UpdateCheckResult,
 } from '@meebox/shared';
-import { invoke } from '../api';
-import i18n, { persistLanguage, resolveUiLanguage } from '../i18n';
-import { ConfirmModal } from './ConfirmModal';
+import { invoke } from '../../api';
+import i18n, { persistLanguage, resolveUiLanguage } from '../../i18n';
+import { ConfirmModal } from '../common/ConfirmModal';
 import {
   ConnectionForm,
   connDraftCanSave,
@@ -30,9 +30,9 @@ import {
   PencilIcon,
   TagIcon,
   TrashIcon,
-} from './icons';
-import { LlmProviderIcon } from './LlmProviderIcon';
-import { PLATFORM_META } from './PlatformIcon';
+} from '../common/icons';
+import { LlmProviderIcon } from '../common/LlmProviderIcon';
+import { PLATFORM_META } from '../common/PlatformIcon';
 
 interface SettingsModalProps {
   info: AppInfo;

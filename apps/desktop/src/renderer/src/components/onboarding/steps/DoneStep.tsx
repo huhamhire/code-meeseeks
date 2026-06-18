@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { SuccessBadgeIcon } from '../../icons';
+import { SuccessBadgeIcon } from '../../common/icons';
 
 export function DoneStep({ submitting, error }: { submitting: boolean; error: string | null }) {
   const { t } = useTranslation();

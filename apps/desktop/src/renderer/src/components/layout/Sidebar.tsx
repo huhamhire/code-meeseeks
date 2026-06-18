@@ -6,9 +6,9 @@ import type {
   PrDiscoveryFilter,
   StoredPullRequest,
 } from '@meebox/shared';
-import { invoke, subscribe } from '../api';
-import { useChatRunStore } from '../stores/chat-run-store';
-import { PrItem } from './PrItem';
+import { invoke, subscribe } from '../../api';
+import { useChatRunStore } from '../../stores/chat-run-store';
+import { PrItem } from '../pr/PrItem';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
 type FilterKey = 'all' | LocalPrStatus | 'conflict' | 'mergeable';

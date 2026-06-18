@@ -17,12 +17,12 @@ import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/chat';
 import { wireChatRunStore } from './stores/chat-run-store';
 import { wireDraftsStore } from './stores/drafts-store';
 import { wireRepoSyncStore } from './stores/repo-sync-store';
-import { MainPane } from './components/MainPane';
+import { MainPane } from './components/layout/MainPane';
 import { OnboardingWizard, type OnboardingResult } from './components/onboarding/OnboardingWizard';
-import { SettingsModal } from './components/SettingsModal';
-import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/Sidebar';
-import { StatusBar } from './components/StatusBar';
-import { TitleBar } from './components/TitleBar';
+import { SettingsModal } from './components/settings/SettingsModal';
+import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/layout/Sidebar';
+import { StatusBar } from './components/layout/StatusBar';
+import { TitleBar } from './components/layout/TitleBar';
 
 interface BootstrapState {
   info: AppInfo;

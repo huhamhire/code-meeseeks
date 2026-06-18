@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { AgentMessage } from '@meebox/shared';
-import { ChatIcon } from '../../icons';
+import { ChatIcon } from '../../common/icons';
 import { VERDICT_LABEL_KEY } from '../constants';
 import { Md } from './shared';
 

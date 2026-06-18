@@ -4,9 +4,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { PlatformCapabilities, ReviewDraft, StoredPullRequest } from '@meebox/shared';
-import { invoke } from '../api';
-import { useDraftsForPr } from '../stores/drafts-store';
-import { ConfirmModal } from './ConfirmModal';
+import { invoke } from '../../api';
+import { useDraftsForPr } from '../../stores/drafts-store';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 // posted 已不存在 (发布成功即删本地)，筛选项只保留 publishable / all / rejected
 type Filter = 'all' | 'publishable' | 'rejected';

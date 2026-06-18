@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LlmProfile } from '@meebox/shared';
-import { LLM_PROVIDERS, LlmProfileForm } from '../../LlmProfileForm';
-import { LlmProviderIcon } from '../../LlmProviderIcon';
+import { LLM_PROVIDERS, LlmProfileForm } from '../../settings/LlmProfileForm';
+import { LlmProviderIcon } from '../../common/LlmProviderIcon';
 
 export function LlmStep({
   draft,

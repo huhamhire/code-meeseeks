@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LocalPrStatus, PrAgentStatus, ReviewRunTool, StoredPullRequest } from '@meebox/shared';
-import { AutoReviewIcon, SendIcon, StopIcon } from '../../icons';
+import { AutoReviewIcon, SendIcon, StopIcon } from '../../common/icons';
 import { COMMANDS, type CommandSpec } from '../commands';
 import { loadChatHistory, pushChatHistory } from '../utils/chat-history';
 

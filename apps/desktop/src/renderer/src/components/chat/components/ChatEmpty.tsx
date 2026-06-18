@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { PrAgentStatus, StoredPullRequest } from '@meebox/shared';
-import { ChatIcon } from '../../icons';
+import { ChatIcon } from '../../common/icons';
 import { Bullet } from './shared';
 
 export function ChatEmpty({

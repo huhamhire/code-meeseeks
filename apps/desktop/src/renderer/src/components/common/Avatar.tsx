@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { invoke } from '../api';
+import { invoke } from '../../api';
 
 interface AvatarProps {
   connectionId: string;
