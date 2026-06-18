@@ -23,13 +23,13 @@ import { getMainLanguage, t } from '../i18n/index.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from '../utils/agent.js';
 import { buildPrContext } from '../utils/pr-context.js';
 import { buildProxyEnv } from '../utils/proxy.js';
-import type { IpcContext } from './context.js';
+import type { ServiceContext } from './context.js';
 import {
   accumulateUsageSentinel,
   finalizeUsage,
   newUsageAcc,
   stripUsageSentinels,
-} from './common/usage.js';
+} from './usage.js';
 
 /** pr-agent run 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。 */
 export type RunPriority = 'user' | 'agent';
@@ -57,7 +57,7 @@ export interface RunQueueService {
   abortAllActiveRuns(): number;
 }
 
-export function createRunQueueService(ctx: IpcContext): RunQueueService {
+export function createRunQueueService(ctx: ServiceContext): RunQueueService {
   const {
     bootstrap,
     logger,
@@ -66,11 +66,10 @@ export function createRunQueueService(ctx: IpcContext): RunQueueService {
     stateStore,
     repoMirror,
     broadcast,
-    adapterFor,
-    repoIdentityFor,
-    resolveDiffBaseSha,
     effectiveAgentDir,
   } = ctx;
+  // PR 领域操作（镜像 / diff base / adapter）经 PR 领域服务获取。
+  const { pr: prService } = ctx;
 
   // === pr-agent run 队列 ===
   //
@@ -201,11 +200,11 @@ export function createRunQueueService(ctx: IpcContext): RunQueueService {
       return updated ?? { ...run, ...patch };
     };
 
-    const repoId = repoIdentityFor(pr);
+    const repoId = prService.repoIdentityFor(pr);
     await repoMirror.syncMirror(repoId);
     // pr-agent 的 LOCAL__TARGET_BRANCH 用固定 merge-base（与 UI diff 同源）：让 AI 评审基于
     // 「PR 自分叉后引入的改动」，而非 targetRef.sha 漂移后混入别的 PR 的两点对比
-    const diffBase = await resolveDiffBaseSha(pr);
+    const diffBase = await prService.resolveDiffBaseSha(pr);
     const wt = await repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase);
     const ac = item.ac!;
     try {
@@ -247,7 +246,7 @@ export function createRunQueueService(ctx: IpcContext): RunQueueService {
       let matchedRuleInstructions = '';
       let matchedRuleId: string | undefined;
       if (req.tool !== 'ask') {
-        const adapter = adapterFor(pr);
+        const adapter = prService.adapterFor(pr);
         if (adapter) {
           try {
             prContext = await buildPrContext({ pr, adapter, logger });

@@ -6,10 +6,10 @@ import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { PrAgentStatus } from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { ConnectionRuntime } from '../adapters.js';
-import { broadcast } from './common/broadcast.js';
-import { invalidateCommentsCache } from './common/comments-cache.js';
-import { createMirrorHelpers, type MirrorHelpers } from './common/mirror.js';
-import { createPrLookup, type PrLookup } from './common/pr-lookup.js';
+import type { AgentOrchestratorService } from './agent-orchestrator.js';
+import { broadcast } from './broadcast.js';
+import { PrService } from './pr-service.js';
+import type { RunQueueService } from './run-queue.js';
 
 /** registerIpcHandlers 的外部依赖（由 main/index.ts 注入）。 */
 export interface RegisterDeps {
@@ -31,35 +31,38 @@ export interface RegisterDeps {
 }
 
 /**
- * 各 service 共享的运行时上下文：外部依赖 + 收口好的公共工具（广播 / PR 定位 / 镜像 /
- * 评论缓存 / Agent 目录）。各域 handler 接收 ctx 即可，避免逐个透传裸 deps。
+ * 各 service 共享的运行时上下文：外部依赖 + 跨域工具（广播 / Agent 目录）+ PR 领域服务。
+ * 跨域服务（run 队列 / Agent 编排）在此之上由 ipc.ts 合成 ControllerContext，避免构造环。
  */
-export interface IpcContext extends RegisterDeps, PrLookup, MirrorHelpers {
+export interface ServiceContext extends RegisterDeps {
   /** 向所有窗口广播 main → renderer 事件（按 IpcEvents 强类型）。 */
   broadcast: typeof broadcast;
-  /** 清 PR 评论缓存 + 广播 comments:changed。 */
-  invalidateCommentsCache(localId: string): Promise<void>;
   /** 生效的 Agent 目录：用户配置优先，未配置则回落默认位置（~/.code-meeseeks/agent）。 */
   effectiveAgentDir(): string;
+  /** PR 领域服务：PR 定位 / adapter / 镜像 / diff base / 评论缓存。 */
+  pr: PrService;
 }
 
-export function createIpcContext(deps: RegisterDeps): IpcContext {
-  const prLookup = createPrLookup({
-    bootstrap: deps.bootstrap,
-    stateStore: deps.stateStore,
-    connectionRuntime: deps.connectionRuntime,
-  });
-  const mirror = createMirrorHelpers({
-    repoMirror: deps.repoMirror,
-    stateStore: deps.stateStore,
-    repoIdentityFor: prLookup.repoIdentityFor,
-  });
+/**
+ * controller 层统一上下文：在 ServiceContext 之上再挂两个跨域 service（run 队列 / Agent 编排），
+ * 使所有 controller 共享同一 `ctx` 入参即可拿到全部能力，签名统一为 `(ctx, req, evt)`。
+ * 两个跨域服务以基础 ServiceContext 构建（见 ipc.ts 装配顺序），构建完成后合成本上下文。
+ */
+export interface ControllerContext extends ServiceContext {
+  runQueue: RunQueueService;
+  orchestrator: AgentOrchestratorService;
+}
+
+export function createServiceContext(deps: RegisterDeps): ServiceContext {
   return {
     ...deps,
-    ...prLookup,
-    ...mirror,
     broadcast,
-    invalidateCommentsCache: (localId) => invalidateCommentsCache(deps.stateStore, localId),
     effectiveAgentDir: () => deps.bootstrap.config.agent.dir || deps.bootstrap.paths.agentDir,
+    pr: new PrService({
+      bootstrap: deps.bootstrap,
+      stateStore: deps.stateStore,
+      connectionRuntime: deps.connectionRuntime,
+      repoMirror: deps.repoMirror,
+    }),
   };
 }

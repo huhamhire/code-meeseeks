@@ -22,8 +22,8 @@ import { runAgentReview } from '../agent-review.js';
 import { getMainLanguage, t } from '../i18n/index.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from '../utils/agent.js';
 import { buildProxyEnv } from '../utils/proxy.js';
-import { accumulateUsageSentinel, finalizeUsage, newUsageAcc } from './common/usage.js';
-import type { IpcContext } from './context.js';
+import { accumulateUsageSentinel, finalizeUsage, newUsageAcc } from './usage.js';
+import type { ServiceContext } from './context.js';
 import type { RunQueueService } from './run-queue.js';
 
 // 共享 chat 通道：system + user → 文本 + usage。agent:run 评审与 AutoPilot 都用。
@@ -46,7 +46,7 @@ export interface AgentOrchestratorService {
 }
 
 export function createAgentOrchestratorService(
-  ctx: IpcContext,
+  ctx: ServiceContext,
   runQueue: RunQueueService,
 ): AgentOrchestratorService {
   const { bootstrap, logger, stateStore, getPrAgentBridge, broadcast, effectiveAgentDir } = ctx;
