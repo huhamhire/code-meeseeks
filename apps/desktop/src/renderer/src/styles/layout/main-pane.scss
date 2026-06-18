@@ -419,6 +419,12 @@
   flex-direction: column;
   gap: $space-5;
 }
+// 顶层评论列表限宽 + 居中，与详情页一致；滚动条留在外层 .pr-comments-panel
+// 右缘。仅约束直接子列表，嵌套 replies 的 .pr-comments-list 不受影响。
+.pr-comments-panel > .pr-comments-list {
+  max-width: 960px;
+  margin: 0 auto;
+}
 .pr-comments-replies {
   margin-top: $space-4;
   padding-left: $space-6;
@@ -555,7 +561,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba(244, 135, 113, 0.10);
+  background: rgba(244, 135, 113, 0.1);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;
@@ -681,7 +687,10 @@
   cursor: pointer;
   text-align: left;
   width: 100%;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
 
   &:hover {
     background: $bg-hover;
@@ -796,4 +805,3 @@
     word-break: break-word;
   }
 }
-
