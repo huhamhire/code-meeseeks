@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
-import { REMOTE_REHYPE_PLUGINS } from '../../../../markdown';
+import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../common/BitbucketImage';
 import { mermaidComponents } from '../../../common/markdownMermaid';
 

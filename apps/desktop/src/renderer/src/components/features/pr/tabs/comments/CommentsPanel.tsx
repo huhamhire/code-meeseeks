@@ -7,7 +7,7 @@ import type { PlatformCapabilities, PrComment, StoredPullRequest } from '@meebox
 import { invoke, subscribe } from '../../../../../api';
 import i18n from '../../../../../i18n';
 import { formatBackendError, type FormattedError } from '../../../../../errors';
-import { REMOTE_REHYPE_PLUGINS } from '../../../../../markdown';
+import { REMOTE_REHYPE_PLUGINS } from '../../../../../lib/markdown';
 import { Avatar } from '../../../../common/Avatar';
 import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../../common/BitbucketImage';
 import { CommentEditEditor } from './CommentEditEditor';

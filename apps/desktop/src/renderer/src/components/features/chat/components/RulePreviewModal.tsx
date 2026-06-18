@@ -4,7 +4,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { Modal } from '../../../common/Modal';
 import { mermaidComponents } from '../../../common/markdownMermaid';
-import { REMOTE_REHYPE_PLUGINS } from '../../../../markdown';
+import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import type { MatchedRule } from '../types';
 
 export function RulePreviewModal({

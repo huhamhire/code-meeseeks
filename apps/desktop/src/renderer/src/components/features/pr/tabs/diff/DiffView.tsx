@@ -1,6 +1,6 @@
 // 必须在用到 @monaco-editor/react 之前执行（loader.config 指向本地 monaco）。
 // 本文件经 React.lazy 动态加载，故 Monaco 随本 chunk 按需拉取，不进入口包。
-import '../../../../../monaco-setup';
+import '../../../../../lib/monaco-setup';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createRoot, type Root } from 'react-dom/client';
@@ -22,9 +22,9 @@ import type {
 } from '@meebox/shared';
 import { policyForPlatform } from '@meebox/shared';
 import { invoke, subscribe } from '../../../../../api';
-import { editorFontSize } from '../../../../../editor-font';
+import { editorFontSize } from '../../../../../lib/editor-font';
 import { formatBackendError, type FormattedError } from '../../../../../errors';
-import { REMOTE_REHYPE_PLUGINS } from '../../../../../markdown';
+import { REMOTE_REHYPE_PLUGINS } from '../../../../../lib/markdown';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
 import { Avatar } from '../../../../common/Avatar';
 import { DraftZone } from '../drafts/DraftZone';

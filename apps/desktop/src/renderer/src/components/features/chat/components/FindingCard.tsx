@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import type { Finding, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
 import { ChevronIcon } from '../../../common/icons';
 import { mermaidComponents, walkthroughMdComponents } from '../../../common/markdownMermaid';
-import { REMOTE_REHYPE_PLUGINS } from '../../../../markdown';
+import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { translatePrAgentLabels } from '../../../../utils/translate-pr-agent';
 import {
   pillStyle,

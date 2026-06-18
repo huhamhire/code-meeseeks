@@ -5,7 +5,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { QuestionIcon } from '../../../common/icons';
 import { mermaidComponents } from '../../../common/markdownMermaid';
-import { REMOTE_REHYPE_PLUGINS } from '../../../../markdown';
+import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { parseAnsi, segmentStyle } from '../../../../utils/ansi';
 
 export function Spinner() {
