@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LocalPrStatus, PlatformCapabilities, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../api';
@@ -154,7 +154,9 @@ export function PrPanel({
         onSetRenderSideBySide={setRenderSideBySide}
       />
       <div className="pr-tab-content">
-        {tab === 'diff' && (
+        {/* keep-alive：各 tab 首访才挂载、之后保活仅 CSS 显隐（见 KeepAliveTab）。
+            切走再切回瞬时、无重拉、内嵌 Monaco / 滚动位置 / 展开态全部保留，消除切换抖动。 */}
+        <KeepAliveTab active={tab === 'diff'}>
           <Suspense fallback={<PaneLoading label={t('mainPane.loadingEditor')} />}>
             <DiffView
               pr={pr}
@@ -166,15 +168,15 @@ export function PrPanel({
               onNavConsumed={onDiffNavConsumed}
             />
           </Suspense>
-        )}
-        {tab === 'comments' && (
+        </KeepAliveTab>
+        <KeepAliveTab active={tab === 'comments'}>
           <CommentsPanel
             pr={pr}
             onCommentsLoaded={(n) => setCommentCount(n)}
             capabilities={capabilities}
           />
-        )}
-        {tab === 'drafts' && (
+        </KeepAliveTab>
+        <KeepAliveTab active={tab === 'drafts'}>
           <DraftsPanel
             pr={pr}
             capabilities={capabilities}
@@ -190,9 +192,13 @@ export function PrPanel({
               });
             }}
           />
-        )}
-        {tab === 'commits' && <CommitsPanel pr={pr} />}
-        {tab === 'info' && <PrInfoView pr={pr} />}
+        </KeepAliveTab>
+        <KeepAliveTab active={tab === 'commits'}>
+          <CommitsPanel pr={pr} />
+        </KeepAliveTab>
+        <KeepAliveTab active={tab === 'info'}>
+          <PrInfoView pr={pr} />
+        </KeepAliveTab>
       </div>
       {publishModalOpen && (
         <PublishReviewModal
@@ -216,5 +222,23 @@ export function PrPanel({
         />
       )}
     </>
+  );
+}
+
+/**
+ * tab 内容保活容器：首次 active 才挂载（保留 DiffView 等的懒加载优势），此后**不卸载**，
+ * 仅靠 CSS `display` 显隐。切走再切回瞬时、无重拉、内嵌 Monaco / 滚动位置 / 展开态全保留 →
+ * 消除切换抖动。隐藏期 Monaco 容器尺寸为 0，再显示需重排——由编辑器侧 `automaticLayout`
+ * 自动处理（见 DiffView / InlineCodeContext）。
+ */
+function KeepAliveTab({ active, children }: { active: boolean; children: ReactNode }) {
+  // 「一旦 active 过就保活」latch：ref 在 render 期写入是幂等闩锁，与本仓 stablePr 同模式。
+  const mounted = useRef(false);
+  if (active) mounted.current = true;
+  if (!mounted.current) return null;
+  return (
+    <div className="pr-tab-pane" style={{ display: active ? undefined : 'none' }}>
+      {children}
+    </div>
   );
 }

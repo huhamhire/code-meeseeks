@@ -2230,6 +2230,9 @@ function DiffPane({
     () => ({
       readOnly: true,
       renderSideBySide,
+      // keep-alive：tab 切走时本编辑器被 display:none（尺寸归 0），切回需重排。automaticLayout
+      // 让 Monaco 自带 ResizeObserver 在显隐/尺寸变化时自动 layout，避免切回空白/错位。
+      automaticLayout: true,
       minimap: { enabled: false },
       fontSize,
       scrollBeyondLastLine: false,

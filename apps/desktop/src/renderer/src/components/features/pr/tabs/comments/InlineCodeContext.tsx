@@ -114,7 +114,12 @@ function InlineCodeContextImpl({
 /** Monaco fs=12 时近似行高；上下各 6px padding */
 const SNIPPET_LINE_HEIGHT = 19;
 
-const READONLY_OPTIONS: editor.IStandaloneEditorConstructionOptions = { readOnly: true };
+const READONLY_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
+  readOnly: true,
+  // keep-alive：评论 tab 切走时本编辑器被 display:none（尺寸归 0），切回需重排。
+  // automaticLayout 让 Monaco 自带 ResizeObserver 在显隐时自动 layout，避免切回空白/错位。
+  automaticLayout: true,
+};
 
 interface Snippet {
   text: string;

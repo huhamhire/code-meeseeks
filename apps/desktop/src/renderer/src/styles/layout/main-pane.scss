@@ -401,6 +401,13 @@
   min-height: 0;
   display: flex;
 }
+// keep-alive tab 保活容器：active 时铺满 .pr-tab-content（内部面板各自 flex:1），
+// inactive 由内联 display:none 隐藏但保留挂载（见 PrPanel KeepAliveTab）。
+.pr-tab-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
 
 // === 评论标签页 ===
 // 区别于 DiffView 内嵌 inline 评论：这里是 PR 全量评论 (含 summary + inline)，
