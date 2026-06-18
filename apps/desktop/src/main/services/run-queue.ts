@@ -34,7 +34,48 @@ import {
 /** pr-agent run 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。 */
 export type RunPriority = 'user' | 'agent';
 
-export interface RunQueueService {
+/** 队列项：一次入队的 pr-agent run 的全部上下文（含 resolve/reject 回原始调用方）。 */
+interface QueueItem {
+  info: PragentRunInfo;
+  req: { localId: string; tool: ReviewRunTool; question?: string };
+  pr: StoredPullRequest;
+  resolve: (run: ReviewRun) => void;
+  reject: (err: Error) => void;
+  /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。 */
+  priority: RunPriority;
+  /** 仅 active 状态填；用于 cancel SIGKILL */
+  ac?: AbortController;
+}
+
+/**
+ * pr-agent run 队列服务。
+ *
+ * FIFO 队列，并发上限 maxConcurrency（post-Docker 下每个 run 独立 worktree + 独立子进程，
+ * 并发安全）。其余在 waiting 排队；每次 active 完成 / 取消 → 自动泵下一条。
+ *
+ * 设计要点：
+ *   - runId 在入队时就分配（跟最终落盘 ReviewRun.id 一致），cancel(runId) 在 active / waiting
+ *     两种状态都能精确定位
+ *   - queued 状态不落盘；被取消时直接 reject 原 Promise，不留 disk artifact
+ *   - 真正 dequeue 才 startReviewRun 写 disk + 跑 pr-agent
+ *   - 每次队列变化广播 'pragent:queueChanged'，renderer store 同步
+ *
+ * 队列与运行态（waiting / active / 并发上限）是实例可变状态，故以 class 封装；PR 领域操作
+ * （镜像 / diff base / adapter）经注入的 ctx.pr 取用。
+ */
+export class RunQueueService {
+  private readonly waiting: QueueItem[] = [];
+  /** 并发运行中的 run（runId → item）；上限 maxConcurrency。 */
+  private readonly active = new Map<string, QueueItem>();
+  private readonly maxConcurrency: number;
+  private readonly execFileP = promisify(execFile);
+  /** embedded .secrets.toml 兜底的 memo（只在首个 embedded run 解析一次目录 + 写文件）。 */
+  private embeddedSecretsEnsured: Promise<void> | null = null;
+
+  constructor(private readonly ctx: ServiceContext) {
+    this.maxConcurrency = ctx.bootstrap.config.pr_agent.max_concurrency;
+  }
+
   /**
    * 入队一个 pr-agent run（与用户手动 run 共用同一队列 / 并发 / 取消机制）。dedup：同 PR
    * 同工具已在执行 / 排队则抛错（/ask 不限）。resolve 完成的 ReviewRun。
@@ -43,92 +84,151 @@ export interface RunQueueService {
     pr: StoredPullRequest,
     tool: ReviewRunTool,
     question?: string,
-    priority?: RunPriority,
-  ): Promise<ReviewRun>;
-  /** 取消一个 run（pragent:cancel）：active→SIGKILL；waiting→出队 + reject；都不匹配→ok:false。 */
-  cancel(runId: string): { ok: boolean };
-  /** 当前队列快照（pragent:queue / 广播用）。 */
-  snapshot(): { active: PragentRunInfo[]; waiting: PragentRunInfo[] };
-  /** 取消某 PR 的全部 run：active 的 SIGKILL，waiting 的出队 + reject。 */
-  cancelRunsForPr(localId: string): void;
-  /** active + waiting 涉及的 PR localId 集合（terminateAgentsForGonePrs 用）。 */
-  queuedPrLocalIds(): string[];
-  /** 应用退出时中止所有进行中的 run，返回被中止的 run 数。 */
-  abortAllActiveRuns(): number;
-}
-
-export function createRunQueueService(ctx: ServiceContext): RunQueueService {
-  const {
-    bootstrap,
-    logger,
-    getPrAgentBridge,
-    embeddedPythonPath,
-    stateStore,
-    repoMirror,
-    broadcast,
-    effectiveAgentDir,
-  } = ctx;
-  // PR 领域操作（镜像 / diff base / adapter）经 PR 领域服务获取。
-  const { pr: prService } = ctx;
-
-  // === pr-agent run 队列 ===
-  //
-  // FIFO 队列，同时只有 1 条在跑 (避免撞 LLM rate limit / 抢 worktree)，
-  // 其余在 waiting 排队。每次 active 完成 / 取消 → 自动开下一条。
-  //
-  // 设计要点：
-  //   - runId 在入队时就分配 (跟最终落盘 ReviewRun.id 一致)，cancel(runId) 在
-  //     active / waiting 两种状态都能精确定位
-  //   - queued 状态不落盘；被取消时直接 reject 原 Promise，不留 disk artifact
-  //   - 真正 dequeue 才 startReviewRun 写 disk + 跑 pr-agent
-  //   - 每次队列变化广播 'pragent:queueChanged'，renderer store 同步
-  interface QueueItem {
-    info: PragentRunInfo;
-    req: { localId: string; tool: ReviewRunTool; question?: string };
-    pr: StoredPullRequest;
-    resolve: (run: ReviewRun) => void;
-    reject: (err: Error) => void;
-    /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。见 §7 调度。 */
-    priority: RunPriority;
-    /** 仅 active 状态填；用于 cancel SIGKILL */
-    ac?: AbortController;
+    priority: RunPriority = 'user',
+  ): Promise<ReviewRun> {
+    const { logger } = this.ctx;
+    if (tool !== 'ask') {
+      const sameTask = (q: QueueItem): boolean =>
+        q.info.prLocalId === pr.localId && q.info.tool === tool;
+      if ([...this.active.values()].some(sameTask) || this.waiting.some(sameTask)) {
+        throw new Error(t('prAgent.duplicateTask', { tool }));
+      }
+    }
+    // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
+    const runId = makeRunId(new Date());
+    return new Promise<ReviewRun>((resolve, reject) => {
+      const item: QueueItem = {
+        info: {
+          runId,
+          prLocalId: pr.localId,
+          repoSlug: pr.repo.repoSlug,
+          prNumber: pr.remoteId,
+          tool,
+          question: tool === 'ask' ? question : undefined,
+          enqueuedAt: new Date().toISOString(),
+          startedAt: null,
+        },
+        req: { localId: pr.localId, tool, question },
+        pr,
+        priority,
+        resolve,
+        reject,
+      };
+      // 优先级插队：user 任务排到所有 agent 任务之前（同泳道内仍 FIFO）；不打断在跑的 run。
+      if (priority === 'user') {
+        const firstAgentIdx = this.waiting.findIndex((q) => q.priority === 'agent');
+        if (firstAgentIdx >= 0) this.waiting.splice(firstAgentIdx, 0, item);
+        else this.waiting.push(item);
+      } else {
+        this.waiting.push(item);
+      }
+      logger.info(
+        { runId, localId: pr.localId, tool, priority, queueLen: this.waiting.length },
+        'pragent run enqueued',
+      );
+      this.pump();
+    });
   }
-  const waiting: QueueItem[] = [];
-  // 并发运行中的 run（runId → item）；上限 maxConcurrency。post-Docker 下每个 run
-  // 独立 worktree（路径带 nonce）+ 独立子进程，并发安全；串行不再是正确性要求。
-  const active = new Map<string, QueueItem>();
-  const maxConcurrency = bootstrap.config.pr_agent.max_concurrency;
 
-  const snapshot = (): { active: PragentRunInfo[]; waiting: PragentRunInfo[] } => ({
-    active: [...active.values()].map((q) => q.info),
-    waiting: waiting.map((q) => q.info),
-  });
+  /** 取消一个 run（pragent:cancel）：active→SIGKILL；waiting→出队 + reject；都不匹配→ok:false。 */
+  cancel(runId: string): { ok: boolean } {
+    const { logger } = this.ctx;
+    // active 命中 → SIGKILL (finally 会写 cancelled 到 disk)
+    const running = this.active.get(runId);
+    if (running) {
+      logger.info({ runId }, 'pragent run cancel: active');
+      running.ac?.abort();
+      return { ok: true };
+    }
+    // waiting 命中 → 从队列删除 + reject 原 Promise，不写盘 (从未真正跑过)
+    const idx = this.waiting.findIndex((q) => q.info.runId === runId);
+    if (idx >= 0) {
+      const [removed] = this.waiting.splice(idx, 1);
+      logger.info({ runId, queueLen: this.waiting.length }, 'pragent run cancel: queued');
+      removed!.reject(new Error('queued run cancelled'));
+      this.broadcastQueueChanged();
+      return { ok: true };
+    }
+    return { ok: false };
+  }
 
-  const broadcastQueueChanged = (): void => {
-    broadcast('pragent:queueChanged', snapshot());
-  };
+  /** 当前队列快照（pragent:queue / 广播用）。 */
+  snapshot(): { active: PragentRunInfo[]; waiting: PragentRunInfo[] } {
+    return {
+      active: [...this.active.values()].map((q) => q.info),
+      waiting: this.waiting.map((q) => q.info),
+    };
+  }
 
-  // /ask 输出去重：pr-agent answer markdown 里会回显完整问题（以及我们追加到问题末尾的语言要求），
-  // 跟 UI chat-user-msg 气泡重复。逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
-  const stripAskQuestionEcho = (md: string, ...echoed: string[]): string => {
-    const qs = new Set(echoed.map((q) => q.trim()).filter(Boolean));
-    if (!qs.size || !md) return md;
-    return md
-      .split('\n')
-      .filter((line) => !qs.has(line.trim()))
-      .join('\n');
-  };
+  /** 取消某 PR 的全部 run：active 的 SIGKILL，waiting 的出队 + reject。 */
+  cancelRunsForPr(localId: string): void {
+    for (const item of this.active.values()) if (item.req.localId === localId) item.ac?.abort();
+    let removed = false;
+    for (let i = this.waiting.length - 1; i >= 0; i--) {
+      if (this.waiting[i]!.req.localId === localId) {
+        const [q] = this.waiting.splice(i, 1);
+        q!.reject(new Error('pr removed'));
+        removed = true;
+      }
+    }
+    if (removed) this.broadcastQueueChanged();
+  }
 
-  // embedded 策略：执行期在嵌入式安装目录的 settings/ 与 settings_prod/ 补空
-  // .secrets.toml（pr-agent 启动会去找该文件，缺失就打 WARNING；我们走 env 传密钥
-  // 不用 secrets.toml，写个空文件压掉告警）。
-  // memo 化：只在首个 embedded run 解析一次 pr_agent 目录 + 写文件，后续直接复用。
-  // importlib.util.find_spec 仅定位不 import pr_agent，快；失败仅 warn 不阻断 run。
-  const execFileP = promisify(execFile);
-  let embeddedSecretsEnsured: Promise<void> | null = null;
-  const ensureEmbeddedSecrets = (pythonPath: string): Promise<void> => {
-    embeddedSecretsEnsured ??= (async () => {
-      const { stdout } = await execFileP(pythonPath, [
+  /** active + waiting 涉及的 PR localId 集合（terminateAgentsForGonePrs 用）。 */
+  queuedPrLocalIds(): string[] {
+    const ids: string[] = [];
+    for (const item of this.active.values()) ids.push(item.req.localId);
+    for (const item of this.waiting) ids.push(item.req.localId);
+    return ids;
+  }
+
+  /** 应用退出时中止所有进行中的 run，返回被中止的 run 数。 */
+  abortAllActiveRuns(): number {
+    let n = 0;
+    for (const item of this.active.values()) {
+      item.ac?.abort();
+      n++;
+    }
+    return n;
+  }
+
+  private broadcastQueueChanged(): void {
+    this.ctx.broadcast('pragent:queueChanged', this.snapshot());
+  }
+
+  /**
+   * 队列泵：在并发未达上限且 waiting 非空时，连续 dequeue 起跑，直到填满 maxConcurrency。
+   * 每条 run 结束（成功/失败/取消）后从 active 移除并再泵一次，自然续上后续任务。
+   */
+  private pump(): void {
+    while (this.active.size < this.maxConcurrency && this.waiting.length > 0) {
+      const item = this.waiting.shift()!;
+      this.active.set(item.info.runId, item);
+      item.ac = new AbortController();
+      void this.executeRun(item)
+        .then((finished) => item.resolve(finished))
+        .catch((err: unknown) => {
+          item.reject(err instanceof Error ? err : new Error(String(err)));
+        })
+        .finally(() => {
+          this.active.delete(item.info.runId);
+          this.broadcastQueueChanged();
+          // 放微任务里再泵，避免递归栈累积
+          queueMicrotask(() => this.pump());
+        });
+    }
+    this.broadcastQueueChanged();
+  }
+
+  /**
+   * embedded 策略：执行期在嵌入式安装目录的 settings/ 与 settings_prod/ 补空 .secrets.toml
+   * （pr-agent 启动会去找该文件，缺失就打 WARNING；我们走 env 传密钥不用 secrets.toml，写个空
+   * 文件压掉告警）。memo 化：只在首个 embedded run 解析一次目录 + 写文件，后续直接复用。
+   * importlib.util.find_spec 仅定位不 import pr_agent，快；失败仅 warn 不阻断 run。
+   */
+  private ensureEmbeddedSecrets(pythonPath: string): Promise<void> {
+    this.embeddedSecretsEnsured ??= (async () => {
+      const { stdout } = await this.execFileP(pythonPath, [
         '-c',
         "import importlib.util,os;print(os.path.dirname(importlib.util.find_spec('pr_agent').origin))",
       ]);
@@ -147,17 +247,28 @@ export function createRunQueueService(ctx: ServiceContext): RunQueueService {
         }
       }
     })().catch((err: unknown) => {
-      logger.warn({ err }, 'ensure embedded .secrets.toml failed (ignored)');
+      this.ctx.logger.warn({ err }, 'ensure embedded .secrets.toml failed (ignored)');
     });
-    return embeddedSecretsEnsured;
-  };
+    return this.embeddedSecretsEnsured;
+  }
 
   /**
    * 真正执行一个 queue item：startReviewRun → worktree → bridge.run → finishWith。
-   * 由 pump() 调用，签名稳定后跟 queue 主体解耦；任何抛错都被 pump 兜成
-   * Promise reject，外层 pragent:run 调用方收到。
+   * 由 pump() 调用；任何抛错都被 pump 兜成 Promise reject，外层 pragent:run 调用方收到。
    */
-  const executeRun = async (item: QueueItem): Promise<ReviewRun> => {
+  private async executeRun(item: QueueItem): Promise<ReviewRun> {
+    const {
+      bootstrap,
+      logger,
+      getPrAgentBridge,
+      embeddedPythonPath,
+      stateStore,
+      repoMirror,
+      broadcast,
+      effectiveAgentDir,
+      pr: prService,
+    } = this.ctx;
+
     const prAgentBridge = getPrAgentBridge();
     if (!prAgentBridge) throw new Error(t('prAgent.notReady'));
     const { req, pr } = item;
@@ -180,7 +291,7 @@ export function createRunQueueService(ctx: ServiceContext): RunQueueService {
     });
     // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播
     item.info = { ...item.info, startedAt: run.startedAt };
-    broadcastQueueChanged();
+    this.broadcastQueueChanged();
     logger.info(
       { runId: run.id, localId: pr.localId, tool: req.tool, strategy: prAgentBridge.strategy },
       'pragent run start',
@@ -417,7 +528,7 @@ export function createRunQueueService(ctx: ServiceContext): RunQueueService {
       // （直接写安装目录；memo 化只首次做）。local-cli 不需要 (pipx 装的 pr-agent
       // 路径不同，告警也不出)
       if (prAgentBridge.strategy === 'embedded' && embeddedPythonPath) {
-        await ensureEmbeddedSecrets(embeddedPythonPath);
+        await this.ensureEmbeddedSecrets(embeddedPythonPath);
       }
 
       const result = await prAgentBridge.run({
@@ -559,138 +670,20 @@ export function createRunQueueService(ctx: ServiceContext): RunQueueService {
     } finally {
       await wt.cleanup();
     }
-  };
+  }
+}
 
-  /**
-   * 队列泵：在并发未达上限且 waiting 非空时，连续 dequeue 起跑，直到填满 maxConcurrency。
-   * 每条 run 结束（成功/失败/取消）后从 active 移除并再泵一次，自然续上后续任务。
-   */
-  const pump = (): void => {
-    while (active.size < maxConcurrency && waiting.length > 0) {
-      const item = waiting.shift()!;
-      active.set(item.info.runId, item);
-      item.ac = new AbortController();
-      void executeRun(item)
-        .then((finished) => item.resolve(finished))
-        .catch((err: unknown) => {
-          item.reject(err instanceof Error ? err : new Error(String(err)));
-        })
-        .finally(() => {
-          active.delete(item.info.runId);
-          broadcastQueueChanged();
-          // 放微任务里再泵，避免递归栈累积
-          queueMicrotask(pump);
-        });
-    }
-    broadcastQueueChanged();
-  };
-
-  const enqueuePragentRun = (
-    pr: StoredPullRequest,
-    tool: ReviewRunTool,
-    question?: string,
-    priority: RunPriority = 'user',
-  ): Promise<ReviewRun> => {
-    if (tool !== 'ask') {
-      const sameTask = (q: QueueItem): boolean =>
-        q.info.prLocalId === pr.localId && q.info.tool === tool;
-      if ([...active.values()].some(sameTask) || waiting.some(sameTask)) {
-        throw new Error(t('prAgent.duplicateTask', { tool }));
-      }
-    }
-    // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
-    const runId = makeRunId(new Date());
-    return new Promise<ReviewRun>((resolve, reject) => {
-      const item: QueueItem = {
-        info: {
-          runId,
-          prLocalId: pr.localId,
-          repoSlug: pr.repo.repoSlug,
-          prNumber: pr.remoteId,
-          tool,
-          question: tool === 'ask' ? question : undefined,
-          enqueuedAt: new Date().toISOString(),
-          startedAt: null,
-        },
-        req: { localId: pr.localId, tool, question },
-        pr,
-        priority,
-        resolve,
-        reject,
-      };
-      // 优先级插队：user 任务排到所有 agent 任务之前（同泳道内仍 FIFO）；不打断在跑的 run。
-      if (priority === 'user') {
-        const firstAgentIdx = waiting.findIndex((q) => q.priority === 'agent');
-        if (firstAgentIdx >= 0) waiting.splice(firstAgentIdx, 0, item);
-        else waiting.push(item);
-      } else {
-        waiting.push(item);
-      }
-      logger.info(
-        { runId, localId: pr.localId, tool, priority, queueLen: waiting.length },
-        'pragent run enqueued',
-      );
-      pump();
-    });
-  };
-
-  const cancel = (runId: string): { ok: boolean } => {
-    // active 命中 → SIGKILL (finally 会写 cancelled 到 disk)
-    const running = active.get(runId);
-    if (running) {
-      logger.info({ runId }, 'pragent run cancel: active');
-      running.ac?.abort();
-      return { ok: true };
-    }
-    // waiting 命中 → 从队列删除 + reject 原 Promise，不写盘 (从未真正跑过)
-    const idx = waiting.findIndex((q) => q.info.runId === runId);
-    if (idx >= 0) {
-      const [removed] = waiting.splice(idx, 1);
-      logger.info({ runId, queueLen: waiting.length }, 'pragent run cancel: queued');
-      removed!.reject(new Error('queued run cancelled'));
-      broadcastQueueChanged();
-      return { ok: true };
-    }
-    return { ok: false };
-  };
-
-  const cancelRunsForPr = (localId: string): void => {
-    for (const item of active.values()) if (item.req.localId === localId) item.ac?.abort();
-    let removed = false;
-    for (let i = waiting.length - 1; i >= 0; i--) {
-      if (waiting[i]!.req.localId === localId) {
-        const [q] = waiting.splice(i, 1);
-        q!.reject(new Error('pr removed'));
-        removed = true;
-      }
-    }
-    if (removed) broadcastQueueChanged();
-  };
-
-  const queuedPrLocalIds = (): string[] => {
-    const ids: string[] = [];
-    for (const item of active.values()) ids.push(item.req.localId);
-    for (const item of waiting) ids.push(item.req.localId);
-    return ids;
-  };
-
-  const abortAllActiveRuns = (): number => {
-    let n = 0;
-    for (const item of active.values()) {
-      item.ac?.abort();
-      n++;
-    }
-    return n;
-  };
-
-  return {
-    enqueuePragentRun,
-    cancel,
-    snapshot,
-    cancelRunsForPr,
-    queuedPrLocalIds,
-    abortAllActiveRuns,
-  };
+/**
+ * /ask 输出去重：pr-agent answer markdown 里会回显完整问题（以及我们追加到问题末尾的语言要求），
+ * 跟 UI chat-user-msg 气泡重复。逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
+ */
+function stripAskQuestionEcho(md: string, ...echoed: string[]): string {
+  const qs = new Set(echoed.map((q) => q.trim()).filter(Boolean));
+  if (!qs.size || !md) return md;
+  return md
+    .split('\n')
+    .filter((line) => !qs.has(line.trim()))
+    .join('\n');
 }
 
 /**

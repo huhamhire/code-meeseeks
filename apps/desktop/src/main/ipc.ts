@@ -3,13 +3,13 @@ import * as app from './controllers/app.js';
 import * as config from './controllers/config.js';
 import * as pr from './controllers/pr.js';
 import { handle } from './controllers/register.js';
-import { createAgentOrchestratorService } from './services/agent-orchestrator.js';
+import { AgentOrchestratorService } from './services/agent-orchestrator.js';
 import {
   createServiceContext,
   type ControllerContext,
   type RegisterDeps,
 } from './services/context.js';
-import { createRunQueueService } from './services/run-queue.js';
+import { RunQueueService } from './services/run-queue.js';
 
 export type { RegisterDeps } from './services/context.js';
 
@@ -24,9 +24,9 @@ export function registerIpcHandlers(deps: RegisterDeps): {
 } {
   const base = createServiceContext(deps);
   // run 队列：pragent:run（PR 域）、Agent 编排、AutoPilot 三方共用。
-  const runQueue = createRunQueueService(base);
+  const runQueue = new RunQueueService(base);
   // Agent 编排：复用 run 队列派发工具 run（agent 低优先级泳道）。
-  const orchestrator = createAgentOrchestratorService(base, runQueue);
+  const orchestrator = new AgentOrchestratorService(base, runQueue);
   // controller 层统一上下文：基础上下文 + 两个跨域 service，所有 controller 共享同一 ctx。
   const ctx: ControllerContext = { ...base, runQueue, orchestrator };
 
