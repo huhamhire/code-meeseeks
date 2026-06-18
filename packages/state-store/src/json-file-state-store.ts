@@ -10,6 +10,8 @@ import type { StateStore } from './types.js';
  */
 export class JsonFileStateStore implements StateStore {
   private readonly rootResolved: string;
+  /** tmp 文件名去重计数器：避免同进程内对同一 key 的并发写撞用同一 tmp 路径 */
+  private tmpSeq = 0;
 
   constructor(private readonly stateDir: string) {
     this.rootResolved = path.resolve(stateDir);
@@ -31,7 +33,9 @@ export class JsonFileStateStore implements StateStore {
     const filePath = this.keyToPath(key);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
 
-    const tmp = `${filePath}.${String(process.pid)}.tmp`;
+    // pid 隔离多进程、tmpSeq 隔离同进程内对同一 key 的并发写——否则两次并发写
+    // 共用同一 tmp，先完成者 rename 走文件后，后完成者 rename 即 ENOENT。
+    const tmp = `${filePath}.${String(process.pid)}.${String(this.tmpSeq++)}.tmp`;
     const handle = await fs.open(tmp, 'w');
     try {
       await handle.writeFile(JSON.stringify(data, null, 2) + '\n', 'utf8');
