@@ -15,7 +15,7 @@ import type {
 } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import i18n, { persistLanguage, resolveUiLanguage } from '../i18n';
-import type { OnboardingResult } from '../components/features/onboarding/OnboardingWizard';
+import type { OnboardingResult } from '../components/features/onboarding';
 
 export interface BootstrapState {
   info: AppInfo;
