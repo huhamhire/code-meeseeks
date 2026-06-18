@@ -180,8 +180,14 @@ export default function App() {
   useEffect(() => wireRepoSyncStore(), []);
   // M4 草稿事件 → store；写盘后 drafts:changed 触发指定 PR 的草稿列表自动刷新
   useEffect(() => wireDraftsStore(), []);
-  // 启动版本更新检测：main 仅在有新版时推 app:updateAvailable
-  useEffect(() => subscribe('app:updateAvailable', (info) => setUpdateInfo(info)), []);
+  // 版本更新：main 为单一真相源。挂载时先水合已缓存结果（设置页手动检查 / 定时检查到的新版
+  // 不会因窗口重挂载而丢失），再订阅后续广播（手动与定时检查都经此推送）。
+  useEffect(() => {
+    void invoke('app:getUpdateStatus', undefined).then((info) => {
+      if (info) setUpdateInfo(info);
+    });
+    return subscribe('app:updateAvailable', (info) => setUpdateInfo(info));
+  }, []);
   // dev 调试钩子：控制台 dispatch CustomEvent 模拟「发现新版」以验证状态栏 chip
   // （dev 版本通常高于 latest，自然不会触发）。detail=null 清除。
   //   window.dispatchEvent(new CustomEvent('meebox:debug-update'))

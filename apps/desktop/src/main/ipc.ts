@@ -73,6 +73,7 @@ import { sniffImageContentType } from './utils/image.js';
 import { buildPragentEnv, resolveActiveLlmProfile } from './utils/agent.js';
 import { buildProxyEnv, testProxyConnectivity } from './utils/proxy.js';
 import { checkForUpdate } from './utils/update-check.js';
+import { getLastUpdateResult, publishUpdateResult } from './utils/update-state.js';
 import { buildPrContext } from './utils/pr-context.js';
 import { runAgentReview } from './agent-review.js';
 import { runAgentPlanning } from './agent-planning.js';
@@ -478,18 +479,28 @@ export function registerIpcHandlers({
   ipcMain.handle('app:openDevTools', (evt) => {
     evt.sender.openDevTools({ mode: 'detach' });
   });
-  ipcMain.handle('app:checkUpdate', (): Promise<IpcChannels['app:checkUpdate']['response']> => {
-    // 与启动检测一致受 check_enabled 控制：关闭时不发起请求，直接返回禁用结果。
-    if (!bootstrap.config.update.check_enabled) {
-      return Promise.resolve({
-        ok: false,
-        hasUpdate: false,
-        currentVersion: app.getVersion(),
-        error: 'update check disabled by config',
-      });
-    }
-    return checkForUpdate(app.getVersion(), bootstrap.config.proxy);
-  });
+  ipcMain.handle(
+    'app:checkUpdate',
+    async (): Promise<IpcChannels['app:checkUpdate']['response']> => {
+      // 与启动检测一致受 check_enabled 控制：关闭时不发起请求，直接返回禁用结果。
+      if (!bootstrap.config.update.check_enabled) {
+        return {
+          ok: false,
+          hasUpdate: false,
+          currentVersion: app.getVersion(),
+          error: 'update check disabled by config',
+        };
+      }
+      const result = await checkForUpdate(app.getVersion(), bootstrap.config.proxy);
+      // 交给单一真相源：缓存 + 有新版则广播到所有窗口（状态栏据此同步，不再只回设置页本地）。
+      publishUpdateResult(result);
+      return result;
+    },
+  );
+  ipcMain.handle(
+    'app:getUpdateStatus',
+    (): IpcChannels['app:getUpdateStatus']['response'] => getLastUpdateResult(),
+  );
   ipcMain.handle(
     'app:openExternal',
     async (_evt, req: IpcChannels['app:openExternal']['request']): Promise<void> => {
