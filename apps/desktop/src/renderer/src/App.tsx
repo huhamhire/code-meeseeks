@@ -18,6 +18,8 @@ import { wireChatRunStore } from './stores/chat-run-store';
 import { wireDraftsStore } from './stores/drafts-store';
 import { wireRepoSyncStore } from './stores/repo-sync-store';
 import { MainPane } from './components/layout/MainPane';
+import { PrPanel } from './components/features/pr/PrPanel';
+import { PrEmpty } from './components/features/pr/PrEmpty';
 import { OnboardingWizard, type OnboardingResult } from './components/features/onboarding/OnboardingWizard';
 import { SettingsModal } from './components/features/settings/SettingsModal';
 import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/layout/Sidebar';
@@ -429,18 +431,23 @@ export default function App() {
             onDiscoveryFilterChange={showDiscoveryFilter ? setDiscoveryFilter : undefined}
           />
         )}
-        <MainPane
-          pr={selected}
-          hasConnections={boot.config.connections.length > 0}
-          onSetStatus={(s) => void setSelectedPrStatus(s)}
-          onMerge={() => void mergeSelectedPr()}
-          merging={merging}
-          capabilities={selectedConn?.capabilities}
-          currentUserName={selectedConn?.user?.name ?? null}
-          pendingDiffNav={pendingDiffNav}
-          onDiffNavConsumed={() => setPendingDiffNav(null)}
-          onRequestDiffNav={(target) => setPendingDiffNav(target)}
-        />
+        <MainPane>
+          {selected ? (
+            <PrPanel
+              pr={selected}
+              onSetStatus={(s) => void setSelectedPrStatus(s)}
+              onMerge={() => void mergeSelectedPr()}
+              merging={merging}
+              capabilities={selectedConn?.capabilities}
+              currentUserName={selectedConn?.user?.name ?? null}
+              pendingDiffNav={pendingDiffNav}
+              onDiffNavConsumed={() => setPendingDiffNav(null)}
+              onRequestDiffNav={(target) => setPendingDiffNav(target)}
+            />
+          ) : (
+            <PrEmpty hasConnections={boot.config.connections.length > 0} />
+          )}
+        </MainPane>
         {/* ChatPane 始终挂载，折叠只是 CSS 隐藏：保住运行中的 run 生命周期。
             如果走条件渲染，折叠 = 卸载组件，进行中的计时器 / runProgress 订阅
             全丢，再展开只能从持久化里看到已完成的结果 */}
