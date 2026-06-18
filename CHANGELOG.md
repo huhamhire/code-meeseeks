@@ -10,6 +10,8 @@
 - 聊天面板（PR Agent）内部重构：2578 行的单文件 `ChatPane.tsx` 按「容器 / 领域组件 / hooks / 工具方法」分层拆分到 `components/chat/`，状态与生命周期、业务动作、时间线归并各自成 hook，展示组件与工具方法独立成文件。对外接口与界面行为保持不变，仅改善可维护性；token 用量 ↑/↓ 的绿红色值一并从内联样式收进设计令牌与样式类。
 - 首启向导内部重构：`OnboardingWizard.tsx` 的四个步骤组件（欢迎 / 平台 / LLM / 完成）拆分到 `steps/` 各自成文件，容器只留向导骨架（步骤指示 + 切换 + 导航）。对外接口与界面行为不变。
 - `components/` 目录按职责重组：扁平堆叠的组件归入三类——`common/`（基础公共 UI）、`layout/`（应用骨架）、`features/`（业务领域：pr / diff / comments / drafts / settings / chat / onboarding），顶层只剩这三个桶。纯文件位置调整 + import 路径改写，无逻辑 / 界面变更。
+- 新增通用 `common/Modal` 模态壳（backdrop / header / body / footer / portal / nested / size 变体），统一各处手写的模态脚手架；ConfirmModal、RulePreviewModal 及设置面板的全部弹窗改用之。
+- 设置面板内部重构：1222 行的 `SettingsModal.tsx` 拆分为容器（175 行）+ `useSettingsDraft`（草稿/保存状态机）+ 九个独立 `sections/` 分区 + `editors/`（连接/代理/LLM 编辑器）+ `elements/`（小部件）+ `utils`（formatBytes / 轮询档位），各分区可独立维护。对外接口与界面行为不变。
 
 ### Fixed
 
