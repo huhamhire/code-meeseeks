@@ -16,10 +16,19 @@ _CLI_SPECS = {
     },
     # codex：exec 非交互 + --json（JSONL 事件流）；末位 `-` 让 stdin 作完整 prompt；
     # --skip-git-repo-check 容许临时目录运行，--sandbox read-only 只读不改文件。
-    # 低算力档：-c model_reasoning_effort=minimal（codex 默认推理较重，编排通道无需，调低提速）。
+    # 默认禁用 web_search / image_gen：评审与编排在只读临时目录里跑，这两个工具用不到，
+    # 关掉既收敛工具面、又省 ~3K tokens（工具定义不再随每次请求下发）。键值：
+    #   web_search 是字符串枚举（disabled / cached / live），用 `-c web_search=disabled`；
+    #   image_gen 是 feature flag，用 `-c features.image_generation=false`（等价 --disable image_generation）。
+    # 低算力档：-c model_reasoning_effort=low（codex 默认推理较重，编排通道无需，调低提速）。
+    # 不用 minimal：gpt-5.x-codex 不支持 minimal（仅 none/low/medium/high/xhigh，传 minimal 报 400），
+    # 且 minimal 还与 web_search / image_gen 互斥；low 普遍受支持、与工具兼容，作低算力档更稳。
     "codex": {
-        "flags": ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only", "-"],
-        "low_effort_flags": ["-c", "model_reasoning_effort=minimal"],
+        "flags": [
+            "exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only",
+            "-c", "web_search=disabled", "-c", "features.image_generation=false", "-",
+        ],
+        "low_effort_flags": ["-c", "model_reasoning_effort=low"],
         "parser": _parse_codex_output,
         "strip_env": ("OPENAI_API_KEY", "CODEX_API_KEY"),
     },
