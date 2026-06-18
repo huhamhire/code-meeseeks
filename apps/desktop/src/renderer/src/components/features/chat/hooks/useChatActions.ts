@@ -1,10 +1,10 @@
 import { useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { PragentRunInfo } from '@meebox/ipc';
 import type {
   AgentMessage,
   AgentStep,
   Finding,
-  PragentRunInfo,
   PrAgentStatus,
   ReviewDraft,
   ReviewRun,

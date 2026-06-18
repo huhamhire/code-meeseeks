@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import type { AgentMessage, AgentStep, PragentRunInfo, ReviewRun } from '@meebox/shared';
+import type { PragentRunInfo } from '@meebox/ipc';
+import type { AgentMessage, AgentStep, ReviewRun } from '@meebox/shared';
 
 /** 时间线一项：四类内容（run 卡片 / 运行中 run / 思考步骤 / 对话消息）按启动时间归并后的承载体。 */
 export interface TimelineEntry {

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import type { Config, ConnectionSummary, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
+import type { ConnectionSummary } from '@meebox/ipc';
+import type { Config, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
 import { invoke } from '../../api';
 import { PanelToggleIcon, SettingsIcon } from '../common/icons';
 import { StatusChip } from '../common/StatusChip';

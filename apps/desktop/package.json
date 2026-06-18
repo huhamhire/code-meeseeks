@@ -64,6 +64,7 @@
     "@iconify/react": "^5.2.1",
     "@meebox/agent": "*",
     "@meebox/config": "*",
+    "@meebox/ipc": "*",
     "@meebox/logger": "*",
     "@meebox/platform-bitbucket-server": "*",
     "@meebox/platform-github": "*",

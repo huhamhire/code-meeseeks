@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import type { ConnectionSummary } from '@meebox/shared';
+import type { ConnectionSummary } from '@meebox/ipc';
 import { PersonIcon } from '../../../common/icons';
 
 /** 当前连接的登录用户概要（多连接时带连接名前缀）。无可识别用户时不渲染。 */

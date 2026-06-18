@@ -5,11 +5,11 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
+import type { ConnectionSummary } from '@meebox/ipc';
 import type {
   AppInfo,
   AppPaths,
   Config,
-  ConnectionSummary,
   PrAgentStatus,
   StoredPullRequest,
 } from '@meebox/shared';
