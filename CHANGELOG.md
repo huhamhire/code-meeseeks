@@ -12,6 +12,7 @@
 - `components/` 目录按职责重组：扁平堆叠的组件归入三类——`common/`（基础公共 UI）、`layout/`（应用骨架）、`features/`（业务领域：pr / diff / comments / drafts / settings / chat / onboarding），顶层只剩这三个桶。纯文件位置调整 + import 路径改写，无逻辑 / 界面变更。
 - 新增通用 `common/Modal` 模态壳（backdrop / header / body / footer / portal / nested / size 变体），统一各处手写的模态脚手架；ConfirmModal、RulePreviewModal 及设置面板的全部弹窗改用之。
 - 设置面板内部重构：1222 行的 `SettingsModal.tsx` 拆分为容器（175 行）+ `useSettingsDraft`（草稿/保存状态机）+ 九个独立 `sections/` 分区 + `editors/`（连接/代理/LLM 编辑器）+ `elements/`（小部件）+ `utils`（formatBytes / 轮询档位），各分区可独立维护。对外接口与界面行为不变。
+- PR 作用域的评审面板（`diff` / `comments` / `drafts`）收归 `features/pr/` 之下，使 `pr/` 成为「PR 评审工作区」的统一归属；`chat` / `onboarding` / `settings` 仍在 `features/` 顶层。纯目录迁移 + import 路径改写，无逻辑 / 界面变更。
 
 ### Fixed
 

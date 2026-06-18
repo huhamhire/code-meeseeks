@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { Icon } from '@iconify/react';
 import type { DiffChangedFile } from '@meebox/shared';
-import { ChevronIcon } from '../../common/icons';
+import { ChevronIcon } from '../../../common/icons';
 
 interface FileTreeProps {
   files: DiffChangedFile[];

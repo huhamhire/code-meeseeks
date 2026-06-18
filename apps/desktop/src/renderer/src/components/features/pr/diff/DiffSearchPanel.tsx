@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { editor as MonacoEditorNs } from 'monaco-editor';
 import type { DiffChangedFile } from '@meebox/shared';
-import { invoke } from '../../../api';
-import { languageFor } from '../../../utils/language';
+import { invoke } from '../../../../api';
+import { languageFor } from '../../../../utils/language';
 
 /**
  * 搜索 PR diff 全部变更文件内容。仿 Bitbucket "Search code" 入口的行为：
