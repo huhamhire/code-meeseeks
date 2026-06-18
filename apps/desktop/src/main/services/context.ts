@@ -66,3 +66,22 @@ export function createServiceContext(deps: RegisterDeps): ServiceContext {
     }),
   };
 }
+
+// === controller 层进程级单例上下文 ===
+// registerIpcHandlers 启动时合成一次 ControllerContext（base + runQueue + orchestrator）并安装；
+// controller 经 getContext() 取用，从而 handler 签名回归标准 ipcMain.handle 形态 (req, evt)、不带 ctx。
+// 单一真相、随进程生命周期存活；测试可先 setControllerContext(mock) 再调 controller。
+let currentContext: ControllerContext | undefined;
+
+/** 由 registerIpcHandlers 在装配完成后调用，安装进程级 controller 上下文单例。 */
+export function setControllerContext(ctx: ControllerContext): void {
+  currentContext = ctx;
+}
+
+/** 取 controller 上下文单例；未初始化（registerIpcHandlers 之前 / 模块加载期）即抛错兜住时序。 */
+export function getContext(): ControllerContext {
+  if (!currentContext) {
+    throw new Error('ControllerContext 尚未初始化（registerIpcHandlers 未调用）');
+  }
+  return currentContext;
+}
