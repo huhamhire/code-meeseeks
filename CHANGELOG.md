@@ -16,6 +16,9 @@
 
 ### Fixed
 
+- 刷新（后台轮询 / 窗口聚焦）时编辑器渲染抖动：评论页内嵌代码片段（Monaco）与 diff 编辑器此前每次刷新都重渲染 / 重建。根因有二——其一，i18n 语言切换 effect 依赖整个 boot 对象，poll 刷新 setBoot 后对同一语言反复 `changeLanguage`，触发 `languageChanged` 致所有 `useTranslation` 的 `t` 换新引用，凡 effect 依赖 `t` 的组件（如内嵌代码片段抓取逻辑）都被无谓重跑、连带 Monaco 卸载重建；其二，DiffEditor 的 `options` 为渲染期新建对象，被 `@monaco-editor/react` 按引用判变而反复 `updateOptions`。现语言 effect 仅在语言真正变化时切换、DiffEditor options 稳定化，刷新不再抖动。
+- PR 详情页与评论页排版：正文限宽 960px 并居中，滚动条回到外层容器右缘（此前 max-width 加在滚动容器上，滚动条停在中部）；详情页 reviewers 列表按字典序固定排序，刷新不再随平台返回顺序抖动。
+- 拉取变更文件列表偶发失败（`ENOENT … diff-base.json`）：状态存储对同一 key 的并发写共用同一临时文件，先完成者 rename 后，后完成者 rename 即 ENOENT。临时文件名追加进程内自增序号去重，并发写各用独立临时文件。
 - Agent 评审 / 规划步骤行的固定文案（如「判断是否存在需追问的严重问题」「严重，追问 N 个」）此前在 `@meebox/agent` 层写死中文、被渲染层逐字显示，日 / 英 / 德界面下漏出中文；现按会话语言落地（zh-CN / en-US / ja-JP / de-DE，缺省回落英文），与评审总结骨架同策略。
 - 设置页手动「检查更新」查到的新版此前不同步到状态栏、也不缓存：手动检查只把结果回给设置页本地，与定时检查各自为政、无共享。现 main 侧统一为单一真相源——手动 / 定时检查都缓存结果并在有新版时广播 `app:updateAvailable`，状态栏即时出现升级 chip；新增只读 `app:getUpdateStatus`，窗口 / 状态栏挂载时水合已知结果，不因重挂载而丢失。
 
