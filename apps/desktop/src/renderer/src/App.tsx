@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n, { resolveUiLanguage, persistLanguage } from './i18n';
+import type { ConnectionSummary } from '@meebox/ipc';
 import type {
   AppInfo,
   AppPaths,
   Config,
-  ConnectionSummary,
   LocalPrStatus,
   PrAgentStatus,
   PrDiscoveryFilter,

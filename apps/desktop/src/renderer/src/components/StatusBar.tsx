@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import type { Config, ConnectionSummary, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
+import type { ConnectionSummary } from '@meebox/ipc';
+import type { Config, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
 import { invoke } from '../api';
 import { useChatRunStore } from '../stores/chat-run-store';
 import { useRepoSyncStore } from '../stores/repo-sync-store';

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { PragentRunInfo } from '@meebox/shared';
+import type { PragentRunInfo } from '@meebox/ipc';
 import { invoke, subscribe } from '../api';
 
 /**

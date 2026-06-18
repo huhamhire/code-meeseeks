@@ -9,10 +9,8 @@ import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-ed
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import type { DiffBlameLine, DiffChangedFile, DiffFileContent } from '@meebox/ipc';
 import type {
-  DiffBlameLine,
-  DiffChangedFile,
-  DiffFileContent,
   DiffHunkRange,
   PlatformCapabilities,
   PrComment,

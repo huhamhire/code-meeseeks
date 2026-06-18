@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { Icon } from '@iconify/react';
-import type { DiffChangedFile } from '@meebox/shared';
+import type { DiffChangedFile } from '@meebox/ipc';
 import { ChevronIcon } from './icons';
 
 interface FileTreeProps {
