@@ -1,23 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ConnectionSummary, LocalPrStatus, StoredPullRequest } from '@meebox/shared';
+import type { LocalPrStatus, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../api';
-
-interface UsePullRequestsParams {
-  /** 已加载的连接摘要（用于反查选中 PR 所属连接的能力位 / 当前用户）。 */
-  connections: ConnectionSummary[] | undefined;
-  /** 应用是否已 bootstrap 完成；false 时不挂 focus 刷新（尚无连接 / PR 可刷）。 */
-  ready: boolean;
-  /** 操作级错误提示（审批 / 合并失败弹 toast）。 */
-  notifyError: (msg: string) => void;
-}
 
 /**
  * PR 列表生命周期与详情动作（领域内聚）：列表 state + 选中态、读缓存 reload / 拉远端 refresh、
- * 审批状态决断、合并，以及窗口重获焦点时的主动刷新。App 仅在 bootstrap / 向导完成时经 setPrs
- * 注入初始列表、在 poll tick 时调 reloadPrs，其余 PR 业务都归这里。
+ * 审批状态决断、合并。不感知 boot/连接（选中连接的反查由 App 持 boot 派生；启动 / 焦点刷新由
+ * useBootstrap 经 reloadPrs 驱动），仅依赖 notifyError 弹操作级错误。
  */
-export function usePullRequests({ connections, ready, notifyError }: UsePullRequestsParams) {
+export function usePullRequests({ notifyError }: { notifyError: (msg: string) => void }) {
   const { t } = useTranslation();
   const [prs, setPrs] = useState<StoredPullRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -44,10 +35,6 @@ export function usePullRequests({ connections, ready, notifyError }: UsePullRequ
   }, [refreshing, reloadPrs]);
 
   const selected = prs.find((p) => p.localId === selectedId) ?? null;
-  // 选中 PR 所属连接的能力位 + 当前 PAT 用户（多平台降级：审批按钮显隐 / 自己 PR 灰显）
-  const selectedConn = selected
-    ? connections?.find((c) => c.connectionId === selected.connectionId)
-    : undefined;
 
   const setSelectedPrStatus = useCallback(
     async (status: LocalPrStatus): Promise<void> => {
@@ -88,31 +75,12 @@ export function usePullRequests({ connections, ready, notifyError }: UsePullRequ
     await triggerRefresh();
   }, [selected, selectedId, triggerRefresh, notifyError, merging, t]);
 
-  // 窗口重新获得焦点时主动 refresh 远端：拉 PR meta，Bitbucket 上加 comment / 改状态后
-  // PR.updatedAt 跳变 → PrPanel useEffect 的 prUpdatedAt dep 触发 → force listComments 拉新评论。
-  useEffect(() => {
-    if (!ready) return;
-    const onFocus = (): void => {
-      void (async () => {
-        try {
-          await invoke('prs:refresh', undefined);
-          await reloadPrs();
-        } catch {
-          // 静默：focus 触发的刷新失败不该弹错给用户
-        }
-      })();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [ready, reloadPrs]);
-
   return {
     prs,
     setPrs,
     selectedId,
     setSelectedId,
     selected,
-    selectedConn,
     refreshing,
     merging,
     reloadPrs,
