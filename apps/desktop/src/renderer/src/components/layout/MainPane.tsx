@@ -8,15 +8,15 @@ import type {
 } from '@meebox/shared';
 import { invoke } from '../../api';
 import { useDraftsForPr } from '../../stores/drafts-store';
-import { CommentsPanel } from '../comments/CommentsPanel';
-import { CommitsPanel } from '../pr/CommitsPanel';
+import { CommentsPanel } from '../features/comments/CommentsPanel';
+import { CommitsPanel } from '../features/pr/CommitsPanel';
 // Monaco 编辑器（~10MB）懒加载：只有真正切到 Diff tab 才拉取 DiffView chunk，
 // 不阻塞窗口首帧 / PR 列表 / 首启向导。
-const DiffView = lazy(() => import('../diff/DiffView').then((m) => ({ default: m.DiffView })));
-import { DraftsPanel } from '../drafts/DraftsPanel';
+const DiffView = lazy(() => import('../features/diff/DiffView').then((m) => ({ default: m.DiffView })));
+import { DraftsPanel } from '../features/drafts/DraftsPanel';
 import { PaneLoading } from '../common/Loading';
-import { PrInfoView } from '../pr/PrInfoView';
-import { PublishReviewModal } from '../drafts/PublishReviewModal';
+import { PrInfoView } from '../features/pr/PrInfoView';
+import { PublishReviewModal } from '../features/drafts/PublishReviewModal';
 import {
   ApproveIcon,
   GlobeIcon,

@@ -1,0 +1,270 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
+import type { Finding, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
+import { ChevronIcon } from '../../../common/icons';
+import { mermaidComponents, walkthroughMdComponents } from '../../../common/markdownMermaid';
+import { REMOTE_REHYPE_PLUGINS } from '../../../../markdown';
+import { translatePrAgentLabels } from '../../../../utils/translate-pr-agent';
+import {
+  pillStyle,
+  sectionLabel,
+  splitTypeLabels,
+  stripEffortScoreNumber,
+  stripFindingMarker,
+} from '../utils/findings';
+import { BreakablePath, MdInline } from './shared';
+
+/**
+ * Finding card 上的草稿状态 chip + 操作按钮。仅代码类 finding（/review code-feedback
+ * 与 /improve code-suggestion）+ anchor 完整时出现。
+ *
+ * 状态可视化：
+ * - 无 relatedDraft（用户从未交互）→ 不显示 status chip，只展示"→ 编辑 / ✗ 拒绝"按钮
+ * - pending → 蓝 chip "待处理" + 跳转 + 拒绝
+ * - edited → 蓝 chip "已编辑" + 跳转 + 拒绝
+ * - posted → 绿 chip "已发布" + 跳转 (查看)，无拒绝 (远端已存，本地不该撤销)
+ * - rejected → 灰 chip "已拒绝" + 撤销 (即重新跳转编辑)
+ */
+function FindingDraftActions({
+  relatedDraft,
+  onJump,
+  onReject,
+}: {
+  relatedDraft?: ReviewDraft;
+  onJump?: () => void;
+  onReject?: () => void;
+}) {
+  const { t } = useTranslation();
+  const status = relatedDraft?.status;
+  const chipText: Record<NonNullable<typeof status>, string> = {
+    pending: t('chatPane.draftStatusPending'),
+    edited: t('chatPane.draftStatusEdited'),
+    posted: t('chatPane.draftStatusPosted'),
+    rejected: t('chatPane.draftStatusRejected'),
+  };
+  return (
+    <div className="chat-finding-draft-actions">
+      {status && (
+        <span className={`chat-finding-draft-chip chat-finding-draft-chip-${status}`}>
+          {chipText[status]}
+        </span>
+      )}
+      {/* posted 后跳转只是"查看"语义，不再有编辑动作；rejected 跳转即"撤销并继续编辑" */}
+      {onJump && (
+        <button
+          type="button"
+          className="chat-finding-draft-btn"
+          onClick={onJump}
+          title={
+            status === 'posted'
+              ? t('chatPane.draftJumpViewTitle')
+              : status === 'rejected'
+                ? t('chatPane.draftJumpRestoreTitle')
+                : t('chatPane.draftJumpEditTitle')
+          }
+        >
+          {status === 'posted'
+            ? t('chatPane.draftJumpView')
+            : status === 'rejected'
+              ? t('chatPane.draftJumpRestore')
+              : t('common.edit')}
+        </button>
+      )}
+      {/* posted 不允许 reject (远端已存)；rejected 也不允许 reject (已经是了) */}
+      {onReject && status !== 'posted' && status !== 'rejected' && (
+        <button
+          type="button"
+          className="chat-finding-draft-btn chat-finding-draft-btn-reject"
+          onClick={onReject}
+          title={t('chatPane.rejectFindingTitle')}
+        >
+          {t('chatPane.reject')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function FindingCard({
+  finding,
+  relatedDraft,
+  onJump,
+  onReject,
+  onNavigate,
+}: {
+  finding: Finding;
+  /** 该 finding 关联的草稿；undefined = 尚未交互过；不为空 = 已 pending / edited / rejected / posted */
+  relatedDraft?: ReviewDraft;
+  /** 「→ 跳到代码编辑」按钮回调 */
+  onJump?: () => void;
+  /** 「✗ 拒绝」按钮回调 */
+  onReject?: () => void;
+  /** 点击锚点：仅导航到 Diff 对应行（不进编辑态） */
+  onNavigate?: () => void;
+}) {
+  const { t } = useTranslation();
+  // 已拒绝：左色条 + 类别 chip 置灰，卡片默认折叠收起（仅留头部 chip + 锚点行 +
+  // 撤销按钮）。点头部的展开/收起切换可临时回看正文，不影响草稿状态。
+  const isRejected = relatedDraft?.status === 'rejected';
+  const [expanded, setExpanded] = useState(false);
+  const collapsed = isRejected && !expanded;
+  // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
+  const key: PrDocSectionKey = finding.sectionKey ?? 'general';
+  const label = sectionLabel(key, t);
+  // 标题在已知 sectionKey 上**通常**跟 chip label 内容重复 (h4 显示 "PR Type" + chip
+  // 显示 "类型")，所以默认只有 general 段才出 title。但 pr-agent 把若干段的"值"放在
+  // 标题里 (e.g., `Estimated effort to review: 3 🔵🔵🔵⚪⚪` / `Score: 85 🟢🟢...`)，
+  // body 是空的；这种情况强制把 title 渲染出来，否则卡片只剩 chip 一片空白。
+  // 先剥 [file:...] 末尾 marker (pr-agent /review 的 anchor 注入用，用户不可见)
+  // 再走 pr-agent 模板翻译。bodyEmpty 也按 stripped 后判断
+  const strippedBody = stripFindingMarker(finding.body);
+  const bodyEmpty = !strippedBody.trim();
+  const showTitle = !!finding.title && (key === 'general' || bodyEmpty);
+  // pr-agent 把若干 section 标题 / 固定模板字符串硬编码成英文 (CONFIG__RESPONSE_LANGUAGE
+  // 只翻译 LLM 内容值)，渲染前替换成中文。工作量已用 emoji 圆点表分值，去掉冗余的数字分数。
+  const translatedBody =
+    key === 'effort'
+      ? stripEffortScoreNumber(translatePrAgentLabels(strippedBody))
+      : translatePrAgentLabels(strippedBody);
+  const translatedTitle = finding.title
+    ? key === 'effort'
+      ? stripEffortScoreNumber(translatePrAgentLabels(finding.title))
+      : translatePrAgentLabels(finding.title)
+    : undefined;
+  return (
+    <li
+      className={`chat-finding chat-finding-${key}${isRejected ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
+    >
+      <header className="chat-finding-head">
+        {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
+        {label && <span className={`chat-finding-cat chat-finding-cat-${key}`}>{label}</span>}
+        {showTitle && translatedTitle && !collapsed && (
+          <h4 className="chat-finding-title">
+            <MdInline>{translatedTitle}</MdInline>
+          </h4>
+        )}
+        {/* 已拒绝才出现的展开 / 收起切换：chevron 图标，收起态指右、展开态转下，纯图标交互 */}
+        {isRejected && (
+          <button
+            type="button"
+            className={`chat-finding-collapse-toggle${collapsed ? '' : ' is-expanded'}`}
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={!collapsed}
+          >
+            <ChevronIcon />
+          </button>
+        )}
+      </header>
+      {finding.anchor && (
+        <div className="chat-finding-anchor muted">
+          {finding.anchor.startLine !== undefined && onNavigate ? (
+            // 可点击：跳转到 Diff 对应行（scroll+highlight，不进编辑态）
+            <button
+              type="button"
+              className="chat-finding-anchor-link"
+              onClick={onNavigate}
+              title={t('chatPane.anchorJumpTitle')}
+            >
+              <code>
+                <BreakablePath path={finding.anchor.path} />
+              </code>
+              <span>
+                :{finding.anchor.startLine}
+                {finding.anchor.endLine && finding.anchor.endLine !== finding.anchor.startLine
+                  ? `-${String(finding.anchor.endLine)}`
+                  : ''}
+              </span>
+            </button>
+          ) : (
+            <>
+              <code>
+                <BreakablePath path={finding.anchor.path} />
+              </code>
+              {finding.anchor.startLine && (
+                <span>
+                  :{finding.anchor.startLine}
+                  {finding.anchor.endLine && finding.anchor.endLine !== finding.anchor.startLine
+                    ? `-${String(finding.anchor.endLine)}`
+                    : ''}
+                </span>
+              )}
+            </>
+          )}
+          {/* /improve 建议带的 1-10 重要度评分；高分加 warning 着色提示 reviewer */}
+          {typeof finding.score === 'number' && (
+            <span
+              className={`chat-finding-score${finding.score >= 8 ? ' chat-finding-score-high' : ''}`}
+              title={t('chatPane.scoreTitle')}
+            >
+              {finding.score}/10
+            </span>
+          )}
+          {/* M4 草稿状态 chip + 操作按钮：锚到具体行的代码类 finding 才展示——
+              /review 的 code-feedback 与 /improve 的 code-suggestion 同享这套
+              「编辑转草稿 → 发布行内评论」交互（其它如 summary / description /
+              score 没法变 inline 评论） */}
+          {finding.anchor.startLine !== undefined &&
+            (onJump || onReject) &&
+            (key === 'code-feedback' || key === 'code-suggestion') && (
+              <FindingDraftActions
+                relatedDraft={relatedDraft}
+                onJump={onJump}
+                onReject={onReject}
+              />
+            )}
+        </div>
+      )}
+      {/* 已拒绝折叠态隐藏正文与代码对比，只留头部 chip + 锚点行 + 撤销入口 */}
+      {!collapsed &&
+        (key === 'pr-type' ? (
+          // PR Type 段：拆成胶囊，每个标签按内容 hash 取色
+          <div className="chat-finding-pills">
+            {splitTypeLabels(translatedBody).map((t) => (
+              <span key={t} className="pr-type-pill" style={pillStyle(t)}>
+                {t}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="chat-finding-body markdown">
+            {/* remarkBreaks 把 finding body 里的单换行也当成 <br>。pr-agent 的 trace、
+                或一般段落里 reviewer 习惯按软换行折行，不加 remarkBreaks 会被 markdown
+                合并成长一行。Findings 主要是富文本说明，不存在"故意软换行连接"的场景 */}
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              rehypePlugins={REMOTE_REHYPE_PLUGINS}
+              // 「文件变更」walkthrough 用去掉 <details open> 的覆盖，使各文件分类默认折叠收起。
+              components={key === 'walkthrough' ? walkthroughMdComponents : mermaidComponents}
+            >
+              {translatedBody}
+            </ReactMarkdown>
+          </div>
+        ))}
+      {/* /improve 给的 existing → improved 代码对比。两段都是片段，独立 <pre> 块
+          + 红/绿背景 模拟 diff 视觉 (不用 Monaco DiffEditor 节省开销) */}
+      {!collapsed && finding.codeChange && (
+        <div className="chat-finding-code-change">
+          {finding.codeChange.existing && (
+            <pre
+              className="chat-finding-code-change-block chat-finding-code-change-existing"
+              aria-label={t('chatPane.codeExistingAria')}
+            >
+              {finding.codeChange.existing}
+            </pre>
+          )}
+          {finding.codeChange.improved && (
+            <pre
+              className="chat-finding-code-change-block chat-finding-code-change-improved"
+              aria-label={t('chatPane.codeImprovedAria')}
+            >
+              {finding.codeChange.improved}
+            </pre>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}

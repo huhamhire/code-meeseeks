@@ -13,13 +13,13 @@ import type {
   UpdateCheckResult,
 } from '@meebox/shared';
 import { invoke, subscribe } from './api';
-import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/chat';
+import { ChatPane, CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './components/features/chat';
 import { wireChatRunStore } from './stores/chat-run-store';
 import { wireDraftsStore } from './stores/drafts-store';
 import { wireRepoSyncStore } from './stores/repo-sync-store';
 import { MainPane } from './components/layout/MainPane';
-import { OnboardingWizard, type OnboardingResult } from './components/onboarding/OnboardingWizard';
-import { SettingsModal } from './components/settings/SettingsModal';
+import { OnboardingWizard, type OnboardingResult } from './components/features/onboarding/OnboardingWizard';
+import { SettingsModal } from './components/features/settings/SettingsModal';
 import { Sidebar, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
 import { TitleBar } from './components/layout/TitleBar';
