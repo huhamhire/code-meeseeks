@@ -1,4 +1,4 @@
-@use './tokens' as *;
+@use '../tokens' as *;
 
 // 无边框窗口的自绘标题栏。高度必须与 main 进程 titleBarOverlay.height 一致（36px）。
 .app-titlebar {

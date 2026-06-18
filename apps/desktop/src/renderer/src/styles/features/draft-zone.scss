@@ -1,7 +1,7 @@
 // Monaco 行内草稿 view zone (M4 ADR-0007)：跟 comment-zone 视觉区分 ——
 // remote 评论是黄底，草稿用蓝底 + "草稿" 标识；posted 状态切回绿底跟远端评论形态一致
 
-@use './tokens' as *;
+@use '../tokens' as *;
 
 // **结构**：
 //   .monaco-draft-zone (= dom，monaco 控制 style.height, 不能放视觉样式)

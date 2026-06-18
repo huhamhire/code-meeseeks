@@ -1,6 +1,6 @@
 // 右侧 pr-agent chat 面板 (M3-D 真实交互)
 
-@use './tokens' as *;
+@use '../tokens' as *;
 
 .chat-pane {
   flex-shrink: 0;

@@ -3,7 +3,7 @@
 // 颜色跟 VS Code Git decoration 对齐：filename 走 $git-*；状态点用更亮的 Material 系
 // 以在小尺寸点上保持识别度。
 
-@use './tokens' as *;
+@use '../tokens' as *;
 
 .diff-file-list {
   // width 通过 inline style 由 DiffView 控制；CSS 端兜底最小值，避免 width 丢失时塌缩

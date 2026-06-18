@@ -7,7 +7,7 @@
 
 ### Changed
 
-- **前端代码结构重构（可维护性）**：渲染层组件按 `common/`（基础公共 UI）/ `layout/`（应用骨架）/ `features/`（业务领域）三层归类；超大组件（ChatPane / SettingsModal / MainPane / StatusBar 等）一律按「容器 + 领域组件 + hooks + 工具方法」分层拆分，业务逻辑下沉到所属领域（如 PR 列表 / 详情归 `features/pr`）；抽出通用 `Modal` / `StatusChip` 等公共基础组件复用。另含目录归并、工具方法去重等整理。对外接口与界面 / 交互行为均不变。
+- **前端代码结构重构（可维护性）**：渲染层组件按 `common/`（基础公共 UI）/ `layout/`（应用骨架）/ `features/`（业务领域）三层归类；超大组件（ChatPane / SettingsModal / MainPane / StatusBar 等）一律按「容器 + 领域组件 + hooks + 工具方法」分层拆分，业务逻辑下沉到所属领域（如 PR 列表 / 详情归 `features/pr`）；抽出通用 `Modal` / `StatusChip` 等公共基础组件复用；样式（`styles/`）按同一 common / layout / features 分类归并。另含目录归并、工具方法去重、main 进程 splash 拆分等整理。对外接口与界面 / 交互行为均不变。
 
 ### Fixed
 
