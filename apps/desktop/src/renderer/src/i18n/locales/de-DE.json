@@ -548,6 +548,16 @@
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
   },
+  "prInfo": {
+    "createdAt": "Erstellt (remote)",
+    "description": "Beschreibung",
+    "descriptionEmpty": "Keine Beschreibung",
+    "recentUpdate": "Zuletzt aktualisiert",
+    "reviewers": "Reviewer ({{n}})",
+    "reviewersEmpty": "Keine",
+    "timeline": "Zeitleiste",
+    "updatedAt": "Aktualisiert (remote)"
+  },
   "prItem": {
     "approvedCount_one": "{{count}} Reviewer hat genehmigt",
     "approvedCount_other": "{{count}} Reviewer haben genehmigt",

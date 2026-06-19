@@ -534,6 +534,16 @@
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
   },
+  "prInfo": {
+    "createdAt": "远端创建",
+    "description": "描述",
+    "descriptionEmpty": "无描述",
+    "recentUpdate": "最近更新时间",
+    "reviewers": "评审者 ({{n}})",
+    "reviewersEmpty": "无",
+    "timeline": "时间线",
+    "updatedAt": "远端更新"
+  },
   "prItem": {
     "approvedCount_other": "{{count}} 位 reviewer 已 approve",
     "executing": "Agent 任务执行中",

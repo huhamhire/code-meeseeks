@@ -4,22 +4,31 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
+import { Avatar } from '../../../common/Avatar';
 import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../common/BitbucketImage';
+import { ApproveIcon, NeedsWorkIcon } from '../../../common/icons';
 import { mermaidComponents } from '../../../common/markdownMermaid';
 
 interface PrInfoViewProps {
   pr: StoredPullRequest;
 }
 
-function ReviewerStatusTag({ status }: { status: ReviewerStatus }) {
-  const { t } = useTranslation();
-  if (status === 'approved') return <span className="tag-approved">✓ {t('prStatus.approved')}</span>;
-  if (status === 'needsWork')
-    return <span className="tag-needs-work">✗ {t('prStatus.needsWork')}</span>;
-  return <span className="muted">{t('prStatus.pending')}</span>;
+/** reviewer 状态 → 决断 chip 类型（复用活动时间线 chip 配色）+ 文案 key（复用 prStatus）。 */
+const REVIEWER_STATUS_META: Record<ReviewerStatus, { chipKind: string; labelKey: string }> = {
+  approved: { chipKind: 'approved', labelKey: 'prStatus.approved' },
+  needsWork: { chipKind: 'needsWork', labelKey: 'prStatus.needsWork' },
+  unapproved: { chipKind: 'unapproved', labelKey: 'prStatus.pending' },
+};
+
+/** reviewer 前置状态图标：approve 绿勾 / needs-work 琥珀叹号 / 待评审 中性空心点。 */
+function ReviewerStatusIcon({ status }: { status: ReviewerStatus }) {
+  if (status === 'approved') return <ApproveIcon size={16} />;
+  if (status === 'needsWork') return <NeedsWorkIcon size={16} />;
+  return <span className="reviewer-pending-dot" />;
 }
 
 export function PrInfoView({ pr }: PrInfoViewProps) {
+  const { t } = useTranslation();
   // 描述 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)，与评论/diff 一致
   const mdComponents = useMemo(
     () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId, pr.url) }),
@@ -39,53 +48,80 @@ export function PrInfoView({ pr }: PrInfoViewProps) {
 
   return (
     <div className="pr-info-view">
-      <div className="pr-info-content">
-        {pr.description && (
+      <div className="pr-info-content pr-info-layout">
+        {/* 左：描述（主内容）；右：时间线 + 评审者（元信息侧栏，参考 PR overview 布局） */}
+        <div className="pr-info-main">
+          {pr.description ? (
+            <section className="pr-detail-section">
+              <h3>{t('prInfo.description')}</h3>
+              <div className="pr-detail-description markdown">
+                {/* Bitbucket 远端用 \r\n 行尾，remark 解析时 CR 跟 LF 各算一次换行 → 单换行
+                    被当成段落分隔，每个 list item 之间多一段空白。归一化成 \n */}
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={REMOTE_REHYPE_PLUGINS}
+                  components={mdComponents}
+                  urlTransform={transformBitbucketUrl}
+                >
+                  {pr.description.replace(/\r\n?/g, '\n')}
+                </ReactMarkdown>
+              </div>
+            </section>
+          ) : (
+            <section className="pr-detail-section">
+              <h3>{t('prInfo.description')}</h3>
+              <p className="muted">{t('prInfo.descriptionEmpty')}</p>
+            </section>
+          )}
+        </div>
+
+        <aside className="pr-info-side">
           <section className="pr-detail-section">
-            <h3>描述</h3>
-            <div className="pr-detail-description markdown">
-              {/* Bitbucket 远端用 \r\n 行尾，remark 解析时 CR 跟 LF 各算一次换行 → 单换行
-                  被当成段落分隔，每个 list item 之间多一段空白。归一化成 \n */}
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={REMOTE_REHYPE_PLUGINS}
-                components={mdComponents}
-                urlTransform={transformBitbucketUrl}
-              >
-                {pr.description.replace(/\r\n?/g, '\n')}
-              </ReactMarkdown>
+            <h3>{t('prInfo.timeline')}</h3>
+            <div className="pr-detail-kv">
+              <div className="modal-kv-key">{t('prInfo.createdAt')}</div>
+              <div className="modal-kv-val">{new Date(pr.createdAt).toLocaleString()}</div>
+              <div className="modal-kv-key">{t('prInfo.updatedAt')}</div>
+              <div className="modal-kv-val">{new Date(pr.updatedAt).toLocaleString()}</div>
+              <div className="modal-kv-key">{t('prInfo.recentUpdate')}</div>
+              <div className="modal-kv-val">{new Date(pr.lastSeenAt).toLocaleString()}</div>
             </div>
           </section>
-        )}
 
-        <section className="pr-detail-section">
-          <h3>Reviewers ({reviewers.length})</h3>
-          {reviewers.length === 0 ? (
-            <p className="muted">无</p>
-          ) : (
-            <ul className="reviewer-list">
-              {reviewers.map((r) => (
-                <li key={r.name}>
-                  {r.displayName} <ReviewerStatusTag status={r.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="pr-detail-section">
-          <h3>时间线</h3>
-          <div className="pr-detail-kv">
-            <div className="modal-kv-key">远端创建</div>
-            <div className="modal-kv-val">{new Date(pr.createdAt).toLocaleString()}</div>
-            <div className="modal-kv-key">远端更新</div>
-            <div className="modal-kv-val">{new Date(pr.updatedAt).toLocaleString()}</div>
-            <div className="modal-kv-key">本地首次发现</div>
-            <div className="modal-kv-val">{new Date(pr.discoveredAt).toLocaleString()}</div>
-            <div className="modal-kv-key">最近一次 poll 看到</div>
-            <div className="modal-kv-val">{new Date(pr.lastSeenAt).toLocaleString()}</div>
-          </div>
-        </section>
+          <section className="pr-detail-section">
+            <h3>{t('prInfo.reviewers', { n: reviewers.length })}</h3>
+            {reviewers.length === 0 ? (
+              <p className="muted">{t('prInfo.reviewersEmpty')}</p>
+            ) : (
+              <ul className="reviewer-list">
+                {reviewers.map((r) => {
+                  const meta = REVIEWER_STATUS_META[r.status];
+                  return (
+                    <li key={r.name} className="reviewer-item">
+                      <span
+                        className={`reviewer-icon reviewer-icon-${r.status}`}
+                        aria-hidden="true"
+                      >
+                        <ReviewerStatusIcon status={r.status} />
+                      </span>
+                      <Avatar
+                        connectionId={pr.connectionId}
+                        slug={r.slug ?? r.name}
+                        displayName={r.displayName}
+                        avatarUrl={r.avatarUrl}
+                        size={22}
+                      />
+                      <span className="reviewer-name">{r.displayName}</span>
+                      <span className={`pr-activity-chip pr-activity-chip-${meta.chipKind}`}>
+                        {t(meta.labelKey)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </aside>
       </div>
     </div>
   );

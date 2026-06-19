@@ -534,6 +534,16 @@
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
   },
+  "prInfo": {
+    "createdAt": "リモート作成",
+    "description": "説明",
+    "descriptionEmpty": "説明なし",
+    "recentUpdate": "最終更新",
+    "reviewers": "レビュアー ({{n}})",
+    "reviewersEmpty": "なし",
+    "timeline": "タイムライン",
+    "updatedAt": "リモート更新"
+  },
   "prItem": {
     "approvedCount_other": "{{count}} 人のレビュアーが承認しました",
     "executing": "Agent タスク実行中",
