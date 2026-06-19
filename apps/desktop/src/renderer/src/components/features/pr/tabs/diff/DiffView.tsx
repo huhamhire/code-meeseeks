@@ -1250,16 +1250,19 @@ export function DiffView({
     // commit 只读视图：不挂行 hover '+' 新建草稿（草稿锚点属于 PR 全量 diff，不在单 commit 上创建）。
     if (scope.kind !== 'all') return;
     const modifiedEditor = diffEditor.getModifiedEditor();
-    // 已有评论 / 草稿的 head 侧行号集合 (避免在这些行额外显示 +)
-    const occupied = new Set<number>();
+    const originalEditor = diffEditor.getOriginalEditor();
+    // 已有评论 / 草稿占用的行，按侧分别记（避免在这些行额外显示 +）
+    const occupiedNew = new Set<number>();
+    const occupiedOld = new Set<number>();
     for (const c of comments) {
-      if (c.anchor && c.anchor.side === 'new') occupied.add(c.anchor.line);
+      if (!c.anchor) continue;
+      (c.anchor.side === 'old' ? occupiedOld : occupiedNew).add(c.anchor.line);
     }
     for (const d of drafts ?? []) {
       if (d.status === 'rejected') continue;
       // 跟 zone 创建时一致用 startLine — 之前用 endLine 会让 hover '+' 把行 403
       // (finding 起始) 当未占用错画 +；finding 跨多行场景下两个 + 同时出现
-      if (d.anchor.side === 'new') occupied.add(d.anchor.startLine);
+      (d.anchor.side === 'old' ? occupiedOld : occupiedNew).add(d.anchor.startLine);
     }
 
     // 把 monaco ILineChange[] 翻成 DiffHunkRange[]。LineChange 的 EndLineNumber=0
@@ -1288,100 +1291,130 @@ export function DiffView({
       hunks = computeHunks();
     });
 
-    /** 兜底允许：hunks 还没算完（空数组）就一律允许，避免初始"什么都点不出来"。
-     *  正常加载完 hunks 非空后才走 policy 严格判 */
-    const isAllowed = (line: number): boolean =>
-      hunks.length === 0 || policy.isLineAllowed(hunks, 'new', line);
+    const disposers: Array<() => void> = [];
 
-    let hoverLine: number | null = null;
-    const collection = modifiedEditor.createDecorationsCollection([]);
+    // 在指定编辑器 + 侧别上挂「hover 出 + / 点击建草稿」。modified=new（新增/上下文行），
+    // original=old（删除/上下文行，仅并排视图可点 —— 统一视图下原始编辑器隐藏、删除行是 view zone 无行号可 hover）。
+    const wireAdder = (
+      editorInst: MonacoEditor.ICodeEditor,
+      side: 'old' | 'new',
+      occupied: Set<number>,
+    ): void => {
+      /** 兜底允许：hunks 还没算完（空数组）就一律允许，避免初始"什么都点不出来"。
+       *  正常加载完 hunks 非空后才走 policy 严格判 */
+      const isAllowed = (line: number): boolean =>
+        hunks.length === 0 || policy.isLineAllowed(hunks, side, line);
 
-    const setHover = (line: number | null): void => {
-      hoverLine = line;
-      collection.set(
-        line === null || occupied.has(line) || !isAllowed(line)
-          ? []
-          : [
-              {
-                range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
-                options: {
-                  isWholeLine: false,
-                  // 用 glyphMarginClassName 跟 commentZone (远端评论) 一致 —— 渲染在
-                  // editor 最左 glyph margin 列 (跟 GitHub 评论 "+" 位置惯例一致)。
-                  // 之前试过 linesDecorationsClassName 但挤压 line number 列体验更差，
-                  // 撤回到这里。DiffEditor 已开启 glyphMargin:true 让那一列宽到足够装 +
-                  glyphMarginClassName: 'monaco-draft-add-glyph',
-                  glyphMarginHoverMessage: { value: t('diffView.addCommentHint') },
+      let hoverLine: number | null = null;
+      const collection = editorInst.createDecorationsCollection([]);
+
+      const setHover = (line: number | null): void => {
+        hoverLine = line;
+        collection.set(
+          line === null || occupied.has(line) || !isAllowed(line)
+            ? []
+            : [
+                {
+                  range: {
+                    startLineNumber: line,
+                    startColumn: 1,
+                    endLineNumber: line,
+                    endColumn: 1,
+                  },
+                  options: {
+                    isWholeLine: false,
+                    // 用 glyphMarginClassName 跟 commentZone (远端评论) 一致 —— 渲染在
+                    // editor 最左 glyph margin 列 (跟 GitHub 评论 "+" 位置惯例一致)。
+                    glyphMarginClassName: 'monaco-draft-add-glyph',
+                    glyphMarginHoverMessage: { value: t('diffView.addCommentHint') },
+                  },
                 },
-              },
-            ],
-      );
+              ],
+        );
+      };
+
+      const onMove = editorInst.onMouseMove((e) => {
+        const tgt = e.target;
+        if (
+          (tgt.type === MonacoEditorNs.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+            tgt.type === MonacoEditorNs.MouseTargetType.GUTTER_LINE_NUMBERS) &&
+          tgt.position
+        ) {
+          const ln = tgt.position.lineNumber;
+          if (hoverLine !== ln) setHover(ln);
+        } else if (hoverLine !== null) {
+          setHover(null);
+        }
+      });
+
+      const onLeave = editorInst.onMouseLeave(() => {
+        if (hoverLine !== null) setHover(null);
+      });
+
+      const onDown = editorInst.onMouseDown((e) => {
+        const tgt = e.target;
+        if (
+          tgt.type === MonacoEditorNs.MouseTargetType.GUTTER_GLYPH_MARGIN &&
+          tgt.position &&
+          !occupied.has(tgt.position.lineNumber) &&
+          isAllowed(tgt.position.lineNumber)
+        ) {
+          const line = tgt.position.lineNumber;
+          void (async () => {
+            try {
+              const created = await invoke('drafts:create', {
+                localId: pr.localId,
+                draft: {
+                  anchor: { path: selected.path, startLine: line, endLine: line, side },
+                  body: '',
+                  origin: 'manual',
+                  status: 'pending',
+                },
+              });
+              // 新建后立即触发 auto edit，让用户能马上输入
+              triggerAutoEdit(created.id);
+            } catch {
+              // 静默；UI 上没出 zone 就视为没创建成功
+            }
+          })();
+        }
+      });
+
+      disposers.push(() => {
+        onMove.dispose();
+        onLeave.dispose();
+        onDown.dispose();
+        try {
+          collection.clear();
+        } catch {
+          /* editor disposed */
+        }
+      });
     };
 
-    const onMove = modifiedEditor.onMouseMove((e) => {
-      const t = e.target;
-      if (
-        (t.type === MonacoEditorNs.MouseTargetType.GUTTER_GLYPH_MARGIN ||
-          t.type === MonacoEditorNs.MouseTargetType.GUTTER_LINE_NUMBERS) &&
-        t.position
-      ) {
-        const ln = t.position.lineNumber;
-        if (hoverLine !== ln) setHover(ln);
-      } else if (hoverLine !== null) {
-        setHover(null);
-      }
-    });
-
-    const onLeave = modifiedEditor.onMouseLeave(() => {
-      if (hoverLine !== null) setHover(null);
-    });
-
-    const onDown = modifiedEditor.onMouseDown((e) => {
-      const t = e.target;
-      if (
-        t.type === MonacoEditorNs.MouseTargetType.GUTTER_GLYPH_MARGIN &&
-        t.position &&
-        !occupied.has(t.position.lineNumber) &&
-        isAllowed(t.position.lineNumber)
-      ) {
-        const line = t.position.lineNumber;
-        void (async () => {
-          try {
-            const created = await invoke('drafts:create', {
-              localId: pr.localId,
-              draft: {
-                anchor: {
-                  path: selected.path,
-                  startLine: line,
-                  endLine: line,
-                  side: 'new',
-                },
-                body: '',
-                origin: 'manual',
-                status: 'pending',
-              },
-            });
-            // 新建后立即触发 auto edit，让用户能马上输入
-            triggerAutoEdit(created.id);
-          } catch {
-            // 静默；UI 上没出 zone 就视为没创建成功
-          }
-        })();
-      }
-    });
+    // 新增 / 上下文行（head 侧）始终可点；删除 / 上下文行（base 侧）仅并排视图可点
+    // （统一视图原始编辑器隐藏，删除行以 view zone 呈现、无可 hover 的行号）。
+    wireAdder(modifiedEditor, 'new', occupiedNew);
+    if (renderSideBySide) {
+      wireAdder(originalEditor, 'old', occupiedOld);
+    }
 
     return () => {
-      onMove.dispose();
-      onLeave.dispose();
-      onDown.dispose();
       diffUpdateDisp.dispose();
-      try {
-        collection.clear();
-      } catch {
-        /* editor disposed */
-      }
+      for (const dispose of disposers) dispose();
     };
-  }, [diffEditor, content, selected, drafts, comments, pr.localId, pr.platform, t, scope.kind]);
+  }, [
+    diffEditor,
+    content,
+    selected,
+    drafts,
+    comments,
+    pr.localId,
+    pr.platform,
+    t,
+    scope.kind,
+    renderSideBySide,
+  ]);
 
   // M4 nav 完成消费：scroll + highlight + autoEdit 关联草稿。等 selected 文件
   // 切换 + content 加载 + diffEditor 就绪 + drafts hydrated 完，再 revealLine。
