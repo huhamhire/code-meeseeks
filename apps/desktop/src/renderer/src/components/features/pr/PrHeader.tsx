@@ -6,6 +6,7 @@ import type {
   StoredPullRequest,
 } from '@meebox/shared';
 import { ApproveIcon, GlobeIcon, NeedsWorkIcon, PullRequestIcon } from '../../common';
+import { ReviewerStack } from './ReviewerStack';
 
 /**
  * PR 详情头：标题 / 元信息 + 动作区（浏览器打开 · 提交评论 N · 合并 · 通过 / 需修改）。
@@ -39,30 +40,40 @@ export function PrHeader({
 
   return (
     <header className="pr-header">
-      <h2 className="pr-header-title">
-        <span className="muted">#{pr.remoteId}</span> {pr.title}
-      </h2>
-      <div className="pr-header-meta">
-        {pr.hasConflict && (
-          <>
-            <span className="conflict-tag" title={t('mainPane.conflictTitle')}>
-              ⚠️ {t('mainPane.conflict')}
+      <div className="pr-header-top">
+        <div className="pr-header-main">
+          <h2 className="pr-header-title">
+            <span className="muted">#{pr.remoteId}</span> {pr.title}
+          </h2>
+          <div className="pr-header-meta">
+            {pr.hasConflict && (
+              <>
+                <span className="conflict-tag" title={t('mainPane.conflictTitle')}>
+                  ⚠️ {t('mainPane.conflict')}
+                </span>
+                <span> · </span>
+              </>
+            )}
+            <strong>
+              {pr.repo.projectKey}/{pr.repo.repoSlug}
+            </strong>
+            <span> · {pr.author.displayName}</span>
+            <span>
+              {' '}
+              · {pr.sourceRef.displayId} → {pr.targetRef.displayId}
             </span>
             <span> · </span>
-          </>
-        )}
-        <strong>
-          {pr.repo.projectKey}/{pr.repo.repoSlug}
-        </strong>
-        <span> · {pr.author.displayName}</span>
-        <span>
-          {' '}
-          · {pr.sourceRef.displayId} → {pr.targetRef.displayId}
-        </span>
-        <span> · </span>
-        <span className={`status-tag status-${pr.localStatus}`}>
-          {t(`prStatus.${pr.localStatus === 'needs_work' ? 'needsWork' : pr.localStatus}`)}
-        </span>
+            <span className={`status-tag status-${pr.localStatus}`}>
+              {t(`prStatus.${pr.localStatus === 'needs_work' ? 'needsWork' : pr.localStatus}`)}
+            </span>
+          </div>
+        </div>
+        {/* reviewer 头像栈：标题 + 元信息 band 右侧、按钮行之上，垂直居中 */}
+        <ReviewerStack
+          reviewers={pr.reviewers}
+          connectionId={pr.connectionId}
+          currentUserName={currentUserName}
+        />
       </div>
       <div className="pr-header-actions">
         <a

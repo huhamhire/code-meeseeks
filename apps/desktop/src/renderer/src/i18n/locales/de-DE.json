@@ -472,6 +472,7 @@
     "merge": "Merge",
     "mergeTitle": "Diesen PR in den Ziel-Branch mergen",
     "merging": "Wird gemergt…",
+    "moreReviewers": "{{n}} weitere Reviewer",
     "needsWork": "Nachbesserung nötig",
     "newComment": "Kommentieren",
     "openInBrowser": "Im Browser öffnen",
