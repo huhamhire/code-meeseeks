@@ -216,6 +216,7 @@
     "close": "关闭",
     "confirm": "确定",
     "delete": "删除",
+    "discard": "放弃",
     "edit": "编辑",
     "loading": "加载中…",
     "save": "保存"
@@ -603,6 +604,8 @@
     "deleteConnectionConfirmTitle": "删除连接",
     "deleteConnectionTitle": "删除该连接",
     "deleteLlmProfileTitle": "删除该配置",
+    "discardChangesMessage": "当前表单有未保存的更改，确定不保存就关闭？",
+    "discardChangesTitle": "放弃未保存的更改？",
     "editConfigYaml": "编辑 config.yaml",
     "editConnectionTitle": "编辑连接",
     "editLlmTitle": "编辑 LLM 模型",

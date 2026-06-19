@@ -222,6 +222,7 @@
     "close": "Close",
     "confirm": "OK",
     "delete": "Delete",
+    "discard": "Discard",
     "edit": "Edit",
     "loading": "Loading…",
     "save": "Save"
@@ -619,6 +620,8 @@
     "deleteConnectionConfirmTitle": "Delete Connection",
     "deleteConnectionTitle": "Delete this connection",
     "deleteLlmProfileTitle": "Delete this profile",
+    "discardChangesMessage": "This form has unsaved changes. Close without saving?",
+    "discardChangesTitle": "Discard unsaved changes?",
     "editConfigYaml": "Edit config.yaml",
     "editConnectionTitle": "Edit Connection",
     "editLlmTitle": "Edit LLM Model",

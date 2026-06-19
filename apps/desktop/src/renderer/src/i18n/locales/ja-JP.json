@@ -216,6 +216,7 @@
     "close": "閉じる",
     "confirm": "OK",
     "delete": "削除",
+    "discard": "破棄",
     "edit": "編集",
     "loading": "読み込み中…",
     "save": "保存"
@@ -603,6 +604,8 @@
     "deleteConnectionConfirmTitle": "接続を削除",
     "deleteConnectionTitle": "この接続を削除",
     "deleteLlmProfileTitle": "このプロファイルを削除",
+    "discardChangesMessage": "このフォームには未保存の変更があります。保存せずに閉じますか？",
+    "discardChangesTitle": "未保存の変更を破棄しますか？",
     "editConfigYaml": "config.yaml を編集",
     "editConnectionTitle": "接続を編集",
     "editLlmTitle": "LLM モデルを編集",

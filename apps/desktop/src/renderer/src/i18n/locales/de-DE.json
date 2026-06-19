@@ -222,6 +222,7 @@
     "close": "Schließen",
     "confirm": "OK",
     "delete": "Löschen",
+    "discard": "Verwerfen",
     "edit": "Bearbeiten",
     "loading": "Wird geladen…",
     "save": "Speichern"
@@ -619,6 +620,8 @@
     "deleteConnectionConfirmTitle": "Verbindung löschen",
     "deleteConnectionTitle": "Diese Verbindung löschen",
     "deleteLlmProfileTitle": "Dieses Profil löschen",
+    "discardChangesMessage": "Dieses Formular enthält nicht gespeicherte Änderungen. Ohne Speichern schließen?",
+    "discardChangesTitle": "Nicht gespeicherte Änderungen verwerfen?",
     "editConfigYaml": "config.yaml bearbeiten",
     "editConnectionTitle": "Verbindung bearbeiten",
     "editLlmTitle": "LLM-Modell bearbeiten",
