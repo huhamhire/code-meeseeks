@@ -178,6 +178,7 @@
     "textareaAria": "Editor für Kommentarantworten"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "Zur Stelle im Diff springen",
     "anchorTitle": "Verankert an {{side}}-Seite · {{lineType}}",
     "daysAgo_one": "vor {{count}} Tag",
     "daysAgo_other": "vor {{count}} Tagen",

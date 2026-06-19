@@ -178,6 +178,7 @@
     "textareaAria": "Comment reply editor"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "Jump to this line in Diff",
     "anchorTitle": "Anchored to {{side}} side · {{lineType}}",
     "daysAgo_one": "{{count}} day ago",
     "daysAgo_other": "{{count}} days ago",

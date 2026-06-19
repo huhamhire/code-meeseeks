@@ -5,6 +5,7 @@ import type {
   PrActivityEvent,
   PrActivityKind,
   PrComment,
+  PrCommentAnchor,
   PrCommit,
   StoredPullRequest,
 } from '@meebox/shared';
@@ -35,6 +36,8 @@ interface ActivityPanelProps {
   currentUserName?: string | null;
   /** 点击时间线上的 commit 事件 → 在 Diff 标签页本地渲染该 commit 的变更（不再跳浏览器） */
   onViewCommit?: (commit: PrCommit) => void;
+  /** 点击 inline 评论锚点 chip → 跳到 Diff 对应文件/行 */
+  onJumpToAnchor?: (anchor: PrCommentAnchor) => void;
 }
 
 /** 三路数据 + 其配对 PR 一起冻结，跨 poll 稳定引用，给评论树（含内联 Monaco）稳定身份避免重渲染。 */
@@ -75,6 +78,7 @@ export function ActivityPanel({
   onComposeClose,
   currentUserName,
   onViewCommit,
+  onJumpToAnchor,
 }: ActivityPanelProps) {
   // 评论换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
@@ -171,6 +175,7 @@ export function ActivityPanel({
             autoExpandCode={autoExpandSet.has(c.remoteId)}
             hardBreaks={hardBreaks}
             timeline={showTimeline}
+            onJumpToAnchor={onJumpToAnchor}
           />
         ),
       });
@@ -194,7 +199,7 @@ export function ActivityPanel({
     // newest first；稳定排序下同刻条目按 评论→提交→决断 入队序排列
     rows.sort((a, b) => b.at - a.at);
     return rows.map((r) => r.node);
-  }, [view, viewPr, autoExpandSet, hardBreaks, showTimeline, onViewCommit]);
+  }, [view, viewPr, autoExpandSet, hardBreaks, showTimeline, onViewCommit, onJumpToAnchor]);
 
   // 首载失败 / 切 PR 失败（无可信展示内容，或现有 view 属于旧 PR）：整块错误，不拿旧 PR 内容冒充新的。
   if (error && (!view || view.pr.localId !== pr.localId)) {

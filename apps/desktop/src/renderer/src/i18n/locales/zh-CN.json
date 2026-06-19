@@ -178,6 +178,7 @@
     "textareaAria": "评论回复编辑器"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "跳转到 Diff 对应位置",
     "anchorTitle": "锚定 {{side}} 侧 · {{lineType}}",
     "daysAgo_other": "{{count}} 天前",
     "deleteConfirmMessage": "此操作会删除远端的这条评论，且无法恢复。确定继续吗？",

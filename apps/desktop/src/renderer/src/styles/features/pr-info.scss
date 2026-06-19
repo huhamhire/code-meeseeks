@@ -71,9 +71,17 @@
   color: $text-on-accent;
 }
 
+// 冲突标记：chip 效果（琥珀色 tint 底 + 警示色文字），比纯文字更突出
 .conflict-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-1;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  background: rgba(245, 158, 11, 0.18);
   color: $color-warning-bright;
   font-weight: 600;
+  font-size: $fs-sm;
 }
 
 .pr-detail-section {

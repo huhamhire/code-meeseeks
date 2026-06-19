@@ -178,6 +178,7 @@
     "textareaAria": "コメント返信エディタ"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "Diff の該当位置へ移動",
     "anchorTitle": "{{side}} 側にアンカー · {{lineType}}",
     "daysAgo_other": "{{count}} 日前",
     "deleteConfirmMessage": "この操作はリモートのこのコメントを削除し、元に戻せません。続行しますか？",

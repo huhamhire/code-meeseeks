@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type {
   LocalPrStatus,
   PlatformCapabilities,
+  PrCommentAnchor,
   PrCommit,
   StoredPullRequest,
 } from '@meebox/shared';
@@ -201,6 +202,11 @@ export function PrPanel({
             onComposeClose={() => setComposingComment(false)}
             currentUserName={currentUserName}
             onViewCommit={viewCommit}
+            onJumpToAnchor={(a: PrCommentAnchor) =>
+              onRequestDiffNav?.({
+                anchor: { path: a.path, startLine: a.line, endLine: a.line },
+              })
+            }
           />
         </KeepAliveTab>
         <KeepAliveTab active={tab === 'drafts'}>
