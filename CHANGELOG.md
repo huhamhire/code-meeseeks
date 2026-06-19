@@ -7,6 +7,8 @@
 
 ### Added
 
+- Diff 滚动条总览标尺：diff 增 / 改 / 删与「有评论的行」投影到滚动条旁的总览标尺（编辑模式风格，按 1/3 分道、中间留白，不启用 minimap），拖动滚动条即可快速定位变更与评论位置。增 / 改按行高显示；并排视图删除在左侧 original 编辑器标尺按行高标红，统一(inline)视图下删除行无 model 行号、以删除点标记。
+
 - Diff 标签支持按「变更范围」查看：文件树头部「<n> 个文件」补充范围信息，变为「<n> 个文件 · 全部变更」或「<n> 个文件 · <commit>」，整体可点击弹出下拉，选择查看「全部变更（PR base..head）」或某个 commit 的变更（该 commit 的 `parent..sha`）。提交 / 活动标签页点击 commit 不再跳浏览器，而是切到 Diff 标签本地渲染该 commit 的变更。commit 视图为只读 diff（行内评论 / 草稿锚定在 PR 全量 diff 行号上，不套用于单 commit）。`diff:listChangedFiles` / `getFileContent` / `getBlame` 增加可选 base/head 范围参数。
 
 - Diff 支持给「删除行」新增行内评论 / 草稿：此前 hover「+」只挂在 head 侧（新增行），现并排视图下 base 侧（删除 / 上下文行）也可 hover「+」创建，锚定 `side: 'old'`（发布映射 Bitbucket `lineType: removed / fileType: FROM`）。统一(inline)视图下删除行以 view zone 呈现、无可 hover 行号，仍需切并排视图创建。
@@ -27,10 +29,14 @@
   - 超大组件按「容器 + 领域组件 + hooks + 工具方法」分层拆分：ChatPane、SettingsModal、MainPane、StatusBar
   - 业务逻辑下沉所属领域：PR 列表 / 详情 / 工作区归 `features/pr`；App 主入口退化为组合根，启动 / 布局 / 更新提示等拆成 app 级 hooks
   - 抽出通用基础组件 `Modal` / `StatusChip`；状态栏 chip 按归属下沉到各 feature
+  - DiffView 退化为组合根：数据流（变更文件 / 内容 / 评论 / blame / 范围 / 跳转）拆成 hooks，行内 view-zone 装配抽象为通用 `mountInlineZones`，行内评论渲染独立成域；评论渲染原语（`useCommentThread` / `CommentMarkdown`）与「活动」标签页共用
+  - DiffSearchPanel / DraftZone / ChatInputBar 三个单体组件拆分：搜索算法、read/edit/publish 状态机、命令解析 / 输入状态机各抽为 util / hook，组件退化为瘦渲染
+  - `components/common` 收敛 `index` barrel，跨域 import 统一走 barrel
   - 其它整理：目录归并、工具方法去重、main 进程 splash 拆分
 
 ### Fixed
 
+- Monaco 控制台噪音报错治理：只读 diff + 着色用不到的 typescript/javascript · json · css · html 语言服务从源头关闭（对各 `*Defaults` 传空 `ModeConfiguration`，不注册任何 provider），消除其向未注册 worker 发 RPC 抛出的 `Missing requestHandler or method: …`（`getNavigationTree` / `getSyntacticDiagnostics` 等整族）；着色走 tokenizer 不受影响。剩余 Monaco 上游已知竞态（`TextModel got disposed before DiffEditorWidget model got reset`）作为已知问题默认静默，需诊断时 `localStorage.setItem('meebox.monacoDebug','1')` 再刷新可看明细——仅命中白名单消息，其它异常照常抛出。
 - PR 头部与详情页的评审状态 chip（pending / approved / needs_work、reviewer 的 approved / needs work / pending）此前为写死英文，现按界面语言出国际化文案（新增 `prStatus` 文案集，四语言）。
 - 切换不同 PR 时 diff 文件树「左栏空白 → 文件树整体弹出」的抖动：DiffView 改为 stale-while-loading——引入 `loadedPrId` 标记当前已渲染内容所属 PR，切 PR 期间保留旧树 / 旧内容渲染、上盖加载遮罩（延迟 150ms，命中缓存的快切换直接换新），并门控 content / comments / blame 拉取（避免「新 localId + 旧选中文件」错拉），新文件列表 ready 后整体替换。
 - diff 文件树首次加载时文件名被图标渲染推移的抖动：图标改用固定 16px 占位槽包裹，iconify 的 svg 晚一帧进 DOM 也不塌缩，文件名位置稳定。
