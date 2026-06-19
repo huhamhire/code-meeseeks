@@ -952,7 +952,10 @@
   background: $bg-app;
 }
 .pr-commits-table {
+  // 表格限宽 960 居中，与详情 / 活动 / 评论页一致；滚动条留在外层 .pr-commits-panel 右缘
   width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
   border-collapse: collapse;
   font-size: $fs-md;
 

@@ -81,14 +81,20 @@ export interface PrChannels {
     request: { localId: string };
     response: { mirrorPath: string; freshClone: boolean };
   };
-  /** 列出 PR baseSha → headSha 之间变更的文件（自动先 sync mirror） */
+  /**
+   * 列出变更文件（自动先 sync mirror）。默认 PR baseSha → headSha 的全部变更；
+   * 传 base / head（如某 commit 的 `parent..sha`）则列该范围的变更，用于「查看特定 commit」。
+   */
   'diff:listChangedFiles': {
-    request: { localId: string };
+    request: { localId: string; base?: string; head?: string };
     response: DiffChangedFile[];
   };
-  /** 读取 PR base 或 head 一侧某文件的内容（二进制返回 {binary:true}） */
+  /**
+   * 读取 base 或 head 一侧某文件的内容（二进制返回 {binary:true}）。默认取 PR base / head 一侧；
+   * 传 base / head sha 则按指定范围取（commit 视图：base=parent、head=commit）。
+   */
   'diff:getFileContent': {
-    request: { localId: string; side: DiffSide; path: string };
+    request: { localId: string; side: DiffSide; path: string; base?: string; head?: string };
     response: DiffFileContent;
   };
   /**
@@ -142,7 +148,7 @@ export interface PrChannels {
    * renderer 能区分"未变更行（出 blame）"vs"PR 改动行（出色带占位）"。
    */
   'diff:getBlame': {
-    request: { localId: string; path: string };
+    request: { localId: string; path: string; base?: string; head?: string };
     response: {
       /** 仅未变更行的 blame（已过滤掉 PR 改动行） */
       lines: DiffBlameLine[];

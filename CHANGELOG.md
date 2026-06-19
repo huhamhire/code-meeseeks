@@ -7,6 +7,8 @@
 
 ### Added
 
+- Diff 标签支持按「变更范围」查看：文件树头部「<n> 个文件」补充范围信息，变为「<n> 个文件 · 全部变更」或「<n> 个文件 · <commit>」，整体可点击弹出下拉，选择查看「全部变更（PR base..head）」或某个 commit 的变更（该 commit 的 `parent..sha`）。提交 / 活动标签页点击 commit 不再跳浏览器，而是切到 Diff 标签本地渲染该 commit 的变更。commit 视图为只读 diff（行内评论 / 草稿锚定在 PR 全量 diff 行号上，不套用于单 commit）。`diff:listChangedFiles` / `getFileContent` / `getBlame` 增加可选 base/head 范围参数。
+
 - PR 详情「评论」标签页演进为「活动」时间线（GitHub / Bitbucket）：把评论、提交更新、reviewer 评审决断（approve / needs-work / unapprove / dismiss）按时间倒序归并为一条活动时间线，保留原有评论内容、排序与编辑 / 回复 / 删除 / 内联代码能力。新增统一的 `listPullRequestActivity` 平台契约——GitHub 取自 `/pulls/{n}/reviews`、Bitbucket 取自 `/activities`（带时间戳的决断事件）。提交另保留独立「提交」标签页。
   - 视觉：各条目统一为「图标节点 + 头像 + 加粗作者名 + 动词 + 时间」，一条竖向虚线轨贯穿图标列连接相邻条目；评论标题统一为「xxx 评论」并前置评论图标，正文整体缩进成挂在轨上的卡片；作者头像 / 文本与评论主体人一致，不做差异化。评审决断动词统一为「批准 / 要求修改」并用带色 chip（绿 / 琥珀 / 中性）突出。时间标签 hover 显示精确到秒的实际时间点。
   - 新建评论：标签栏右侧「评论」按钮可直接发一条不锚到文件的 summary 评论，编辑框作为时间线首个节点（头像在轨上、编辑框缩进）展开，发布后新评论即时出现在顶部（新增 `publishSummaryComment` 平台契约 + `comments:create` 通道）。

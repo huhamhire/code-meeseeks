@@ -33,6 +33,8 @@ interface ActivityPanelProps {
   onComposeClose?: () => void;
   /** 当前 PAT 用户名（新建评论编辑框头像用） */
   currentUserName?: string | null;
+  /** 点击时间线上的 commit 事件 → 在 Diff 标签页本地渲染该 commit 的变更（不再跳浏览器） */
+  onViewCommit?: (commit: PrCommit) => void;
 }
 
 /** 三路数据 + 其配对 PR 一起冻结，跨 poll 稳定引用，给评论树（含内联 Monaco）稳定身份避免重渲染。 */
@@ -72,6 +74,7 @@ export function ActivityPanel({
   composing = false,
   onComposeClose,
   currentUserName,
+  onViewCommit,
 }: ActivityPanelProps) {
   // 评论换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
@@ -176,7 +179,9 @@ export function ActivityPanel({
       rows.push({
         key: `commit:${cm.sha}`,
         at: Date.parse(cm.committedAt || cm.authoredAt) || 0,
-        node: <CommitEvent key={`commit:${cm.sha}`} commit={cm} pr={viewPr} />,
+        node: (
+          <CommitEvent key={`commit:${cm.sha}`} commit={cm} pr={viewPr} onView={onViewCommit} />
+        ),
       });
     }
     for (const ev of view.activity) {
@@ -189,7 +194,7 @@ export function ActivityPanel({
     // newest first；稳定排序下同刻条目按 评论→提交→决断 入队序排列
     rows.sort((a, b) => b.at - a.at);
     return rows.map((r) => r.node);
-  }, [view, viewPr, autoExpandSet, hardBreaks, showTimeline]);
+  }, [view, viewPr, autoExpandSet, hardBreaks, showTimeline, onViewCommit]);
 
   // 首载失败 / 切 PR 失败（无可信展示内容，或现有 view 属于旧 PR）：整块错误，不拿旧 PR 内容冒充新的。
   if (error && (!view || view.pr.localId !== pr.localId)) {
@@ -248,17 +253,22 @@ export function ActivityPanel({
 }
 
 /** 时间线上的提交事件：commit 图标 + 短 SHA + 主题 + 作者 + 时间；可点击跳远端 commit 页。 */
-function CommitEvent({ commit, pr }: { commit: PrCommit; pr: StoredPullRequest }) {
+function CommitEvent({
+  commit,
+  pr,
+  onView,
+}: {
+  commit: PrCommit;
+  pr: StoredPullRequest;
+  onView?: (commit: PrCommit) => void;
+}) {
   const { t } = useTranslation();
   const isMerge = commit.parents.length > 1;
   const subject = commit.message.split('\n', 1)[0]!;
-  const open = (): void => {
-    if (commit.url) window.open(commit.url, '_blank', 'noreferrer');
-  };
   return (
     <li
-      className={`pr-activity-item pr-activity-commit ${commit.url ? 'pr-activity-clickable' : ''}`}
-      onClick={open}
+      className={`pr-activity-item pr-activity-commit ${onView ? 'pr-activity-clickable' : ''}`}
+      onClick={() => onView?.(commit)}
       title={commit.message}
     >
       <span className="pr-activity-icon pr-activity-icon-commit" aria-hidden="true">

@@ -4,6 +4,7 @@ import '../../../../../lib/monaco-setup';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createRoot, type Root } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import { DiffEditor } from '@monaco-editor/react';
 import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
 import ReactMarkdown from 'react-markdown';
@@ -14,6 +15,7 @@ import type {
   DiffHunkRange,
   PlatformCapabilities,
   PrComment,
+  PrCommit,
   ReviewDraft,
   StoredPullRequest,
   SyncProgressEvent,
@@ -30,11 +32,18 @@ import { ErrorBoundary } from '../../../../common/ErrorBoundary';
 import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../../common/BitbucketImage';
 import { CommentEditEditor } from '../comments/CommentEditEditor';
 import { CommentReplyEditor } from '../comments/CommentReplyEditor';
+import { formatRelativeTime } from '../comments/CommentItem';
 import { ConfirmModal } from '../../../../common/ConfirmModal';
 import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
 import { PaneLoading } from '../../../../common/Loading';
-import { FileTreeIcon, SearchIcon } from '../../../../common/icons';
+import {
+  ChevronIcon,
+  CommitIcon,
+  FileTreeIcon,
+  PullRequestIcon,
+  SearchIcon,
+} from '../../../../common/icons';
 import { languageFor } from '../../../../../utils/language';
 
 interface DiffViewProps {
@@ -57,7 +66,35 @@ interface DiffViewProps {
     anchor: { path: string; startLine: number; endLine: number };
   } | null;
   onNavConsumed?: () => void;
+  /**
+   * 外部请求切到「查看特定 commit」视图（来自 提交 / 活动 标签页点击某 commit）。
+   * 非 null 时 DiffView 把变更范围切到该 commit 的 `parent..sha`；消费完调 onCommitViewConsumed。
+   */
+  pendingCommitView?: PendingCommitView | null;
+  onCommitViewConsumed?: () => void;
 }
+
+/** 「查看特定 commit」请求载荷（parent 来自 PrCommit.parents[0]，root commit 无 parent 为 null）。 */
+export interface PendingCommitView {
+  sha: string;
+  parent: string | null;
+  abbreviatedSha: string;
+  subject: string;
+}
+
+/**
+ * diff 变更范围：'all' = PR 全部变更（merge-base..head）；'commit' = 单个 commit 的 parent..sha。
+ * commit 视图为只读 diff（行内评论 / 草稿锚定在 PR 全量 diff 行号上，不套用于单 commit 版本）。
+ */
+type DiffScope =
+  | { kind: 'all' }
+  | {
+      kind: 'commit';
+      sha: string;
+      parent: string | null;
+      abbreviatedSha: string;
+      subject: string;
+    };
 
 interface LoadedContent {
   base: DiffFileContent;
@@ -202,6 +239,8 @@ export function DiffView({
   capabilities,
   pendingNav,
   onNavConsumed,
+  pendingCommitView,
+  onCommitViewConsumed,
 }: DiffViewProps) {
   // 评论换行策略：GitHub/Bitbucket hard-break（单 \n → <br>）；GitLab CommonMark 软换行。
   // 能力位缺省（旧数据/无连接）回退 true，保持既有行为。
@@ -213,7 +252,33 @@ export function DiffView({
   // 据此做 stale-while-loading：切 PR 期间保留旧树/旧内容渲染 + 盖加载遮罩，并门控 content /
   // comments / blame effect（避免「新 localId + 旧选中文件」错拉），新数据 ready 再整体替换，
   // 消除「左栏 blank → 文件树整体弹出」的切换抖动。
-  const [loadedPrId, setLoadedPrId] = useState<string | null>(null);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  // 变更范围：全部变更 / 单个 commit。commit 视图为只读 diff（见 DiffScope）。
+  const [scope, setScope] = useState<DiffScope>({ kind: 'all' });
+  // 范围下拉用的 commit 列表（懒加载：首次展开下拉才拉）。
+  const [scopeCommits, setScopeCommits] = useState<PrCommit[] | null>(null);
+  // 当前视图标识 = PR + 范围。切 PR 或切范围都视为内容换新，驱动 stale-while-loading。
+  const viewKey = useMemo(
+    () => (scope.kind === 'all' ? `${pr.localId}|all` : `${pr.localId}|c:${scope.sha}`),
+    [pr.localId, scope],
+  );
+  // commit 视图的 diff 范围（parent..sha）；'all' 或 root commit（无 parent）为 null → 走 PR 默认范围。
+  const range = useMemo(
+    () =>
+      scope.kind === 'commit' && scope.parent
+        ? { base: scope.parent, head: scope.sha }
+        : null,
+    [scope],
+  );
+  const loadScopeCommits = useCallback(() => {
+    setScopeCommits((prev) => {
+      if (prev !== null) return prev;
+      void invoke('diff:listCommits', { localId: pr.localId })
+        .then((cs) => setScopeCommits(cs))
+        .catch(() => setScopeCommits([]));
+      return prev;
+    });
+  }, [pr.localId]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // sidebar 模式：'tree' (文件树) / 'search' (跨文件搜索)，默认进文件树。
   // PR 切换 / tab 切走 + 重进 (条件渲染 unmount/remount) 时自然回到 'tree' —
@@ -293,19 +358,35 @@ export function DiffView({
     setProgress(null);
     setCommentsError(null);
     setBlameError(null);
+    // 切 PR 回到「全部变更」范围，并丢弃旧 PR 的范围下拉 commit 列表
+    setScope({ kind: 'all' });
+    setScopeCommits(null);
   }, [pr.localId]);
+
+  // 消费外部「查看特定 commit」请求（提交 / 活动标签页点击 commit）→ 切到该 commit 范围。
+  useEffect(() => {
+    if (!pendingCommitView) return;
+    setScope({
+      kind: 'commit',
+      sha: pendingCommitView.sha,
+      parent: pendingCommitView.parent,
+      abbreviatedSha: pendingCommitView.abbreviatedSha,
+      subject: pendingCommitView.subject,
+    });
+    onCommitViewConsumed?.();
+  }, [pendingCommitView, onCommitViewConsumed]);
 
   // 拉变更文件列表 (fatal 失败 → 整个 diff 区域 fallback)
   useEffect(() => {
     let cancelled = false;
     setFilesError(null);
-    invoke('diff:listChangedFiles', { localId: pr.localId })
+    invoke('diff:listChangedFiles', { localId: pr.localId, ...(range ?? {}) })
       .then((f) => {
         if (cancelled) return;
         setFiles(f);
-        // 新 files 到位才把「已渲染 PR」推进到当前 pr —— 在此之前各 effect 门控、旧视图保活。
-        setLoadedPrId(pr.localId);
-        // 选中项：仍存在则保留（同 PR 重试不丢选中），否则回落首个（切 PR 后旧 key 失效 → 选首个）。
+        // 新 files 到位才把「已渲染视图」推进到当前 viewKey —— 在此之前各 effect 门控、旧视图保活。
+        setLoadedKey(viewKey);
+        // 选中项：仍存在则保留（同视图重试 / 切范围后同名文件仍在则不丢选中），否则回落首个。
         setSelectedKey((prev) =>
           prev && f.some((x) => fileKey(x) === prev) ? prev : f.length > 0 ? fileKey(f[0]!) : null,
         );
@@ -320,12 +401,17 @@ export function DiffView({
     return () => {
       cancelled = true;
     };
-  }, [pr.localId, filesRetry]);
+  }, [pr.localId, filesRetry, range, viewKey]);
 
   // 拉评论 (非 fatal：失败时给可重试 banner，不阻塞 diff 展示)
   useEffect(() => {
     // 门控：切 PR 期间（新 files 未到）不拉新评论，保留旧评论与旧内容一致渲染，避免 view zone 错位。
-    if (loadedPrId !== pr.localId) return;
+    if (loadedKey !== viewKey) return;
+    // commit 只读视图：行内评论锚定在 PR 全量 diff 行号上，套到单 commit 版本会错位，故不展示。
+    if (scope.kind !== 'all') {
+      setComments([]);
+      return;
+    }
     let cancelled = false;
     setCommentsError(null);
     const fetchList = (force: boolean): void => {
@@ -351,7 +437,7 @@ export function DiffView({
       cancelled = true;
       unsub();
     };
-  }, [pr.localId, commentsRetry, loadedPrId]);
+  }, [pr.localId, commentsRetry, loadedKey, viewKey, scope.kind]);
 
   const selected = files?.find((f) => fileKey(f) === selectedKey) ?? null;
   // M4 草稿池：跨 ChatPane / DiffView 共享 store；本组件需要它来渲染 inline zones
@@ -484,9 +570,9 @@ export function DiffView({
   }, [files, drafts]);
 
   useEffect(() => {
-    // 门控：切 PR 期间（新 files 未到、selected 仍指向旧文件）不拉内容，保留旧内容渲染，
-    // 避免用「新 localId + 旧文件路径」错拉。新 files ready 后 selected 切到新 PR 文件再拉。
-    if (loadedPrId !== pr.localId) return;
+    // 门控：切视图期间（新 files 未到、selected 仍指向旧文件）不拉内容，保留旧内容渲染，
+    // 避免用「新视图 + 旧文件路径」错拉。新 files ready 后 selected 切到新文件再拉。
+    if (loadedKey !== viewKey) return;
     if (!selected) {
       setContent(null);
       return;
@@ -498,8 +584,8 @@ export function DiffView({
     const basePath = selected.oldPath ?? selected.path;
     const headPath = selected.path;
     Promise.all([
-      invoke('diff:getFileContent', { localId: pr.localId, side: 'base', path: basePath }),
-      invoke('diff:getFileContent', { localId: pr.localId, side: 'head', path: headPath }),
+      invoke('diff:getFileContent', { localId: pr.localId, side: 'base', path: basePath, ...(range ?? {}) }),
+      invoke('diff:getFileContent', { localId: pr.localId, side: 'head', path: headPath, ...(range ?? {}) }),
     ])
       .then(([base, head]) => {
         if (!cancelled) setContent({ base, head });
@@ -516,12 +602,12 @@ export function DiffView({
     return () => {
       cancelled = true;
     };
-  }, [selected, pr.localId, loadedPrId]);
+  }, [selected, pr.localId, loadedKey, viewKey, range]);
 
   // 拉 blame：仅在开关开 + 文件有 head 内容时跑。deleted 文件 / 二进制不跑。
   useEffect(() => {
-    // 门控：切 PR 期间不拉 blame（同 content：避免新 localId + 旧文件错拉），保留旧 blame。
-    if (loadedPrId !== pr.localId) return;
+    // 门控：切视图期间不拉 blame（同 content：避免新视图 + 旧文件错拉），保留旧 blame。
+    if (loadedKey !== viewKey) return;
     if (!showBlame || !selected || !content || content.head.binary) {
       setBlame(null);
       setBlameError(null);
@@ -534,7 +620,7 @@ export function DiffView({
     }
     let cancelled = false;
     setBlameError(null);
-    invoke('diff:getBlame', { localId: pr.localId, path: selected.path })
+    invoke('diff:getBlame', { localId: pr.localId, path: selected.path, ...(range ?? {}) })
       .then((b) => {
         if (!cancelled) setBlame(b);
       })
@@ -548,7 +634,7 @@ export function DiffView({
     return () => {
       cancelled = true;
     };
-  }, [showBlame, selected, content, pr.localId, loadedPrId]);
+  }, [showBlame, selected, content, pr.localId, loadedKey, viewKey, range]);
 
   // Blame 走独立 React 列（Bitbucket 风格），不在 Monaco DOM 里。只需要从 Monaco
   // 同步 lineHeight / scrollTop / viewportHeight，BlameColumn 自己用 absolute
@@ -853,6 +939,8 @@ export function DiffView({
   // 草稿不再出现在 DiffView 里
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
+    // commit 只读视图：不渲染本地草稿 zone（草稿锚定在 PR 全量 diff 行号上，不套用于单 commit）。
+    if (scope.kind !== 'all') return;
     const fileDrafts = (drafts ?? []).filter((d) => {
       if (d.status === 'rejected' || d.status === 'posted') return false;
       return d.anchor.path === selected.path || selected.oldPath === d.anchor.path;
@@ -1145,6 +1233,7 @@ export function DiffView({
     registerEditTrigger,
     renderSideBySide,
     commentHardBreaks,
+    scope.kind,
   ]);
 
   // M4 行 hover '+' 新建 manual 草稿：modifiedEditor (head 侧) 上加 mousemove +
@@ -1158,6 +1247,8 @@ export function DiffView({
   // 不允许的行不画 glyph、点击也不创建草稿（避免后续 publishInline 时被 Bitbucket 400）
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
+    // commit 只读视图：不挂行 hover '+' 新建草稿（草稿锚点属于 PR 全量 diff，不在单 commit 上创建）。
+    if (scope.kind !== 'all') return;
     const modifiedEditor = diffEditor.getModifiedEditor();
     // 已有评论 / 草稿的 head 侧行号集合 (避免在这些行额外显示 +)
     const occupied = new Set<number>();
@@ -1290,7 +1381,7 @@ export function DiffView({
         /* editor disposed */
       }
     };
-  }, [diffEditor, content, selected, drafts, comments, pr.localId, pr.platform, t]);
+  }, [diffEditor, content, selected, drafts, comments, pr.localId, pr.platform, t, scope.kind]);
 
   // M4 nav 完成消费：scroll + highlight + autoEdit 关联草稿。等 selected 文件
   // 切换 + content 加载 + diffEditor 就绪 + drafts hydrated 完，再 revealLine。
@@ -1361,10 +1452,10 @@ export function DiffView({
   }, [pendingScroll, diffEditor, content, selected]);
 
   // 切 PR 进行中：仍渲染旧 PR 的树/内容（stale），由下方遮罩盖住，待新 files 到位再整体替换。
-  const switching = files !== null && loadedPrId !== pr.localId;
+  const switching = files !== null && loadedKey !== viewKey;
   // 错误仅在「无可信内容可展示」时整块呈现：首载失败（无 files）或切 PR 失败（现有 files 属于旧 PR）。
   // 不拿旧 PR 的树冒充新的。
-  if (filesError && (!files || loadedPrId !== pr.localId)) {
+  if (filesError && (!files || loadedKey !== viewKey)) {
     return (
       <BackendErrorView
         err={filesError}
@@ -1394,11 +1485,18 @@ export function DiffView({
             换"文件树"图标 (明示这是回到文件树的入口)，比"再点一次同图标切回"
             语义清晰 */}
         <div className="diff-file-list-header">
-          <span>
-            {sidebarMode === 'search'
-              ? t('diffView.searchChanges')
-              : t('diffView.fileCount', { count: files.length })}
-          </span>
+          {sidebarMode === 'search' ? (
+            <span>{t('diffView.searchChanges')}</span>
+          ) : (
+            <DiffScopeSelect
+              fileCount={files.length}
+              scope={scope}
+              commits={scopeCommits}
+              connectionId={pr.connectionId}
+              onOpen={loadScopeCommits}
+              onPick={setScope}
+            />
+          )}
           <button
             type="button"
             className="diff-file-list-search-btn"
@@ -2352,4 +2450,165 @@ function renderHoverMd(comments: PrComment[]): string {
       return `${head}\n\n${body}${replies ? '\n\n' + replies : ''}`;
     })
     .join('\n\n---\n\n');
+}
+
+/**
+ * 变更范围选择器：文件树头部「<n> 个文件 · 全部变更 / <commit>」，点击展开下拉切换查看范围。
+ * commit 列表懒加载（首次展开才拉）。选「全部变更」= PR 全量 diff；选某 commit = 该 commit
+ * 的 parent..sha 只读 diff。
+ */
+function DiffScopeSelect({
+  fileCount,
+  scope,
+  commits,
+  connectionId,
+  onOpen,
+  onPick,
+}: {
+  fileCount: number;
+  scope: DiffScope;
+  commits: PrCommit[] | null;
+  connectionId: string;
+  onOpen: () => void;
+  onPick: (scope: DiffScope) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+  // 下拉用 fixed 定位 + portal 挂到 body：否则会被 .diff-file-list 的 overflow 裁切、被右侧 Monaco 盖住。
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const computePos = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // 菜单整体拉宽：不小于触发器宽度，且给 commit 主题留足空间
+    setMenuPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 440) });
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    computePos();
+    const onDoc = (e: MouseEvent): void => {
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    // 触发器在文件树头部（不随文件列表滚动），但窗口缩放 / 外层滚动时重算位置
+    const onReflow = (): void => computePos();
+    document.addEventListener('mousedown', onDoc);
+    window.addEventListener('resize', onReflow);
+    window.addEventListener('scroll', onReflow, true);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('resize', onReflow);
+      window.removeEventListener('scroll', onReflow, true);
+    };
+  }, [open, computePos]);
+
+  const scopeLabel = scope.kind === 'all' ? t('diffView.scopeAll') : scope.abbreviatedSha;
+  const toggle = (): void => {
+    setOpen((o) => {
+      const next = !o;
+      if (next) onOpen();
+      return next;
+    });
+  };
+  return (
+    <div className="diff-scope-select" ref={ref}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="diff-scope-trigger"
+        onClick={toggle}
+        title={scope.kind === 'commit' ? scope.subject : undefined}
+        aria-expanded={open}
+      >
+        <span className="diff-scope-label">
+          {t('diffView.fileCount', { count: fileCount })} · {scopeLabel}
+        </span>
+        <ChevronIcon className={open ? 'diff-scope-chevron open' : 'diff-scope-chevron'} />
+      </button>
+      {open &&
+        menuPos &&
+        createPortal(
+          <ul
+            ref={menuRef}
+            className="diff-scope-menu"
+            role="listbox"
+            style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
+          >
+          {/* 「全部变更」：标题 + 提交数副行（参考 Bitbucket 两行布局） */}
+          <li>
+            <button
+              type="button"
+              className={`diff-scope-option ${scope.kind === 'all' ? 'active' : ''}`}
+              onClick={() => {
+                onPick({ kind: 'all' });
+                setOpen(false);
+              }}
+            >
+              <span className="diff-scope-option-icon" aria-hidden="true">
+                <PullRequestIcon size={16} />
+              </span>
+              <span className="diff-scope-option-body">
+                <span className="diff-scope-option-title">{t('diffView.scopeAll')}</span>
+                <span className="diff-scope-option-sub">
+                  {commits === null
+                    ? t('diffView.scopeLoading')
+                    : t('diffView.scopeCommitCount', { count: commits.length })}
+                </span>
+              </span>
+            </button>
+          </li>
+          {/* 每个 commit：标题（首行 message）+ 作者 / 短 SHA / 时间副行 */}
+          {(commits ?? []).map((c) => {
+            const subject = c.message.split('\n', 1)[0]!;
+            const active = scope.kind === 'commit' && scope.sha === c.sha;
+            return (
+              <li key={c.sha}>
+                <button
+                  type="button"
+                  className={`diff-scope-option diff-scope-option-commit ${active ? 'active' : ''}`}
+                  title={subject}
+                  onClick={() => {
+                    onPick({
+                      kind: 'commit',
+                      sha: c.sha,
+                      parent: c.parents[0] ?? null,
+                      abbreviatedSha: c.abbreviatedSha,
+                      subject,
+                    });
+                    setOpen(false);
+                  }}
+                >
+                  <span className="diff-scope-option-icon" aria-hidden="true">
+                    <CommitIcon size={16} />
+                  </span>
+                  <span className="diff-scope-option-body">
+                    <span className="diff-scope-option-title">{subject}</span>
+                    <span className="diff-scope-option-sub">
+                      <Avatar
+                        connectionId={connectionId}
+                        slug={c.author.slug ?? c.author.name}
+                        displayName={c.author.displayName}
+                        avatarUrl={c.author.avatarUrl}
+                        size={16}
+                      />
+                      <span className="diff-scope-author">{c.author.displayName}</span>
+                      <code className="diff-scope-sha">{c.abbreviatedSha}</code>
+                      <time className="diff-scope-time">
+                        {formatRelativeTime(c.committedAt || c.authoredAt)}
+                      </time>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+          </ul>,
+          document.body,
+        )}
+    </div>
+  );
 }
