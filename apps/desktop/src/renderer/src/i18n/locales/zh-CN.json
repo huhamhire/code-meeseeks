@@ -458,6 +458,7 @@
     "merge": "合并",
     "mergeTitle": "合并此 PR 到目标分支",
     "merging": "合并中…",
+    "moreReviewers": "其余 {{n}} 位评审者",
     "needsWork": "需修改",
     "newComment": "评论",
     "openInBrowser": "浏览器打开",

@@ -472,6 +472,7 @@
     "merge": "Merge",
     "mergeTitle": "Merge this PR into the target branch",
     "merging": "Merging…",
+    "moreReviewers": "{{n}} more reviewers",
     "needsWork": "Needs work",
     "newComment": "Comment",
     "openInBrowser": "Open in browser",

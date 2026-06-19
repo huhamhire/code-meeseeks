@@ -2,33 +2,18 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
+import type { StoredPullRequest } from '@meebox/shared';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import {
   Avatar,
   makeBitbucketImageFor,
   transformBitbucketUrl,
-  ApproveIcon,
-  NeedsWorkIcon,
   mermaidComponents,
 } from '../../../common';
+import { REVIEWER_STATUS_META, ReviewerStatusIcon } from '../reviewer-status';
 
 interface PrInfoViewProps {
   pr: StoredPullRequest;
-}
-
-/** reviewer 状态 → 决断 chip 类型（复用活动时间线 chip 配色）+ 文案 key（复用 prStatus）。 */
-const REVIEWER_STATUS_META: Record<ReviewerStatus, { chipKind: string; labelKey: string }> = {
-  approved: { chipKind: 'approved', labelKey: 'prStatus.approved' },
-  needsWork: { chipKind: 'needsWork', labelKey: 'prStatus.needsWork' },
-  unapproved: { chipKind: 'unapproved', labelKey: 'prStatus.pending' },
-};
-
-/** reviewer 前置状态图标：approve 绿勾 / needs-work 琥珀叹号 / 待评审 中性空心点。 */
-function ReviewerStatusIcon({ status }: { status: ReviewerStatus }) {
-  if (status === 'approved') return <ApproveIcon size={16} />;
-  if (status === 'needsWork') return <NeedsWorkIcon size={16} />;
-  return <span className="reviewer-pending-dot" />;
 }
 
 export function PrInfoView({ pr }: PrInfoViewProps) {

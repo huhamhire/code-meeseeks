@@ -458,6 +458,7 @@
     "merge": "マージ",
     "mergeTitle": "この PR をターゲットブランチにマージします",
     "merging": "マージ中…",
+    "moreReviewers": "他 {{n}} 名のレビュアー",
     "needsWork": "要修正",
     "newComment": "コメント",
     "openInBrowser": "ブラウザで開く",
