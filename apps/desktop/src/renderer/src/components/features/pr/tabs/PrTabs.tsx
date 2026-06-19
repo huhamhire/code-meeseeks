@@ -55,14 +55,10 @@ export function PrTabs({
         aria-selected={tab === 'comments'}
       >
         {t('mainPane.tabComments')}
-        {commentCount !== null && commentCount > 0 && (
-          <span
-            className="pr-tab-badge"
-            aria-label={t('mainPane.commentCountAria', { count: commentCount })}
-          >
-            {commentCount}
-          </span>
-        )}
+        <TabCountBadge
+          count={commentCount}
+          ariaLabel={(n) => t('mainPane.commentCountAria', { count: n })}
+        />
       </button>
       {/* 草稿 tab：显示条件用总数 — 全发完仍能进 tab 看 posted/rejected 历史；
           从未创建草稿的 PR 才完全隐藏 tab，避免冗余入口 */}
@@ -94,14 +90,10 @@ export function PrTabs({
         aria-selected={tab === 'commits'}
       >
         {t('mainPane.tabCommits')}
-        {commitCount !== null && commitCount > 0 && (
-          <span
-            className="pr-tab-badge"
-            aria-label={t('mainPane.commitCountAria', { count: commitCount })}
-          >
-            {commitCount}
-          </span>
-        )}
+        <TabCountBadge
+          count={commitCount}
+          ariaLabel={(n) => t('mainPane.commitCountAria', { count: n })}
+        />
       </button>
       <button
         type="button"
@@ -156,4 +148,30 @@ export function PrTabs({
       )}
     </nav>
   );
+}
+
+/**
+ * tab 计数角标。计数异步加载（评论 / 提交）：
+ * - `null`（加载中）：渲染等宽占位 chip，预留角标宽度，消除计数到达时 tab 的横向弹簧抖动；
+ * - `> 0`：真实数字角标；
+ * - `0`：不渲染（无角标）。
+ */
+function TabCountBadge({
+  count,
+  ariaLabel,
+}: {
+  count: number | null;
+  ariaLabel: (n: number) => string;
+}) {
+  if (count === null) {
+    return <span className="pr-tab-badge pr-tab-badge-loading" aria-hidden="true" />;
+  }
+  if (count > 0) {
+    return (
+      <span className="pr-tab-badge" aria-label={ariaLabel(count)}>
+        {count}
+      </span>
+    );
+  }
+  return null;
 }

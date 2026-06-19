@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
@@ -9,6 +9,7 @@ import i18n from '../../../../../i18n';
 import { formatBackendError, type FormattedError } from '../../../../../errors';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../../lib/markdown';
 import { Avatar } from '../../../../common/Avatar';
+import { PaneLoading } from '../../../../common/Loading';
 import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../../common/BitbucketImage';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
@@ -64,27 +65,36 @@ export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPa
   // 评论换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
   const { t } = useTranslation();
-  const [comments, setComments] = useState<PrComment[] | null>(null);
+  // 已展示的视图：评论与其配对的 pr 一起冻结。切 PR 时**不立刻清空**——旧视图继续渲染、上盖 loading
+  // 遮罩，新数据 ready 后整体替换（stale-while-loading），消除「先闪『加载中』再渲新」的空窗。
+  // pr 与评论必须配对：旧评论要用旧 PR 的上下文（图片代理 / 回复目标）渲染，且该 ref 跨 poll 稳定，
+  // 给评论树（含内联 Monaco）稳定引用避免重渲染。
+  const [view, setView] = useState<{ pr: StoredPullRequest; comments: PrComment[] } | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<FormattedError | null>(null);
-  // poll 会把选中的 pr 换成新对象（localId 不变）；内联 Monaco 编辑器若收到新 pr ref 会重渲染/重排 →
-  // 刷新抖动。把 pr 按 localId 冻结：同一 PR 内传给评论树的 pr ref 跨 poll 稳定，切 PR 才更新。
-  const stablePrRef = useRef(pr);
-  if (stablePrRef.current.localId !== pr.localId) stablePrRef.current = pr;
-  const stablePr = stablePrRef.current;
 
   useEffect(() => {
     let cancelled = false;
-    setComments(null);
+    setLoading(true);
     setError(null);
+    // 不清 view：切 PR 期间旧评论继续显示、由遮罩盖住，避免空窗闪烁。
     const fetchList = async (force: boolean): Promise<void> => {
       try {
         const list = await invoke('diff:listComments', { localId: pr.localId, force });
         if (cancelled) return;
-        // 内容相等就保留旧引用让 React bail-out：poll 多数返回不变的评论，避免整棵评论树重渲染抖动。
-        setComments((prev) => (prev && sameCommentList(prev, list) ? prev : list));
+        // 同 PR 且内容相等：保留旧 view 引用让 React bail（comments:changed 无实质变化时不重渲评论树）。
+        setView((prev) =>
+          prev && prev.pr.localId === pr.localId && sameCommentList(prev.comments, list)
+            ? prev
+            : { pr, comments: list },
+        );
+        setLoading(false);
         onCommentsLoaded?.(list.length);
       } catch (e) {
-        if (!cancelled) setError(formatBackendError(e));
+        if (!cancelled) {
+          setError(formatBackendError(e));
+          setLoading(false);
+        }
       }
     };
     void fetchList(true);
@@ -101,11 +111,12 @@ export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pr.localId]);
 
+  const viewPr = view?.pr;
   // 按 createdAt **倒序** (newest first)：评论页主要给用户快速看最新动态用，
   // 不是逐条对话回溯，最新在顶部更合理
   const ordered = useMemo(
-    () => (comments ?? []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [comments],
+    () => (view?.comments ?? []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [view],
   );
   // inline 评论自动挂 Monaco 上限：前 N 条 (按倒序后的顺序，最新 N 个 inline) 直接
   // 挂；超额走 click-to-expand 懒加载。CAP 取 10 跟用户感知节奏一致 —— 一屏内大
@@ -123,52 +134,51 @@ export function CommentsPanel({ pr, onCommentsLoaded, capabilities }: CommentsPa
     return out;
   }, [ordered]);
 
-  // 缓存顶层评论元素列表：deps 全是稳定引用（ordered 经 sameCommentList 跳过后不变、stablePr 按 localId
+  // 缓存顶层评论元素列表：deps 全是稳定引用（ordered 经 sameCommentList 跳过后不变、viewPr 与评论配对
   // 冻结、autoExpandSet 随 ordered）。poll 无评论变化时元素引用不变 → React 跳过整棵评论子树（含内联
   // Monaco），消除刷新抖动。
   const commentEls = useMemo(
     () =>
-      ordered.map((c) => (
-        <CommentItem
-          key={c.remoteId}
-          comment={c}
-          pr={stablePr}
-          depth={0}
-          autoExpandCode={autoExpandSet.has(c.remoteId)}
-          hardBreaks={hardBreaks}
-        />
-      )),
-    [ordered, stablePr, autoExpandSet, hardBreaks],
+      viewPr
+        ? ordered.map((c) => (
+            <CommentItem
+              key={c.remoteId}
+              comment={c}
+              pr={viewPr}
+              depth={0}
+              autoExpandCode={autoExpandSet.has(c.remoteId)}
+              hardBreaks={hardBreaks}
+            />
+          ))
+        : [],
+    [ordered, viewPr, autoExpandSet, hardBreaks],
   );
 
-  if (error) {
+  // 首载失败 / 切 PR 失败（无可信展示内容，或现有 view 属于旧 PR）：整块错误，不拿旧 PR 的评论冒充新的。
+  if (error && (!view || view.pr.localId !== pr.localId)) {
     return (
       <div className="pr-comments-panel">
-        <div className="pr-comments-error" role="alert">
-          <strong>{t('commentsPanel.loadError', { title: error.title })}</strong>
-          <pre>{error.detail}</pre>
+        <div className="pr-comments-scroll">
+          <div className="pr-comments-error" role="alert">
+            <strong>{t('commentsPanel.loadError', { title: error.title })}</strong>
+            <pre>{error.detail}</pre>
+          </div>
         </div>
-      </div>
-    );
-  }
-  if (comments === null) {
-    return (
-      <div className="pr-comments-panel">
-        <p className="muted">{t('commentsPanel.loading')}</p>
-      </div>
-    );
-  }
-  if (ordered.length === 0) {
-    return (
-      <div className="pr-comments-panel">
-        <p className="muted">{t('commentsPanel.empty')}</p>
       </div>
     );
   }
 
   return (
     <div className="pr-comments-panel">
-      <ul className="pr-comments-list">{commentEls}</ul>
+      <div className="pr-comments-scroll">
+        {view && ordered.length > 0 && <ul className="pr-comments-list">{commentEls}</ul>}
+        {view && ordered.length === 0 && !loading && (
+          <p className="muted">{t('commentsPanel.empty')}</p>
+        )}
+      </div>
+      {/* 加载遮罩盖住旧内容（或首载空面板），ready 后整体替换。PaneLoading 默认 delayMs=150：
+          命中本地缓存的快切换遮罩根本不出现、旧内容直接换新（零闪）；只有慢加载才显 spinner。 */}
+      {loading && <PaneLoading overlay label={t('commentsPanel.loading')} />}
     </div>
   );
 }
@@ -267,7 +277,11 @@ function CommentItem({
           replies (depth > 0) 不重复展示，避免冗余 —— 父评论已经给了上下文。
           autoExpandCode 由父组件按"最新 N 条"决定，超额条目用户点开才挂 editor */}
       {comment.anchor && depth === 0 && (
-        <Suspense fallback={<div className="pane-loading muted">{t('commentsPanel.loadingCodeContext')}</div>}>
+        <Suspense
+          fallback={
+            <div className="pane-loading muted">{t('commentsPanel.loadingCodeContext')}</div>
+          }
+        >
           <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
         </Suspense>
       )}
@@ -391,7 +405,8 @@ function formatRelativeTime(iso: string): string {
   if (Number.isNaN(t)) return iso;
   const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
   if (diffSec < 60) return i18n.t('commentsPanel.justNow');
-  if (diffSec < 3600) return i18n.t('commentsPanel.minutesAgo', { count: Math.round(diffSec / 60) });
+  if (diffSec < 3600)
+    return i18n.t('commentsPanel.minutesAgo', { count: Math.round(diffSec / 60) });
   if (diffSec < 86400)
     return i18n.t('commentsPanel.hoursAgo', { count: Math.round(diffSec / 3600) });
   if (diffSec < 86400 * 7)

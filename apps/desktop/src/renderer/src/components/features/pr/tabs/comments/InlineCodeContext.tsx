@@ -3,7 +3,7 @@
 import '../../../../../lib/monaco-setup';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
-import { memo, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../../api';
@@ -81,7 +81,11 @@ function InlineCodeContextImpl({
     return () => {
       cancelled = true;
     };
-  }, [expanded, pr.localId, anchor.path, anchor.side, anchor.line, contextLines, t]);
+    // 故意不依赖 t：useTranslation 的 t 会在 i18n languageChanged 时换新引用（poll 刷新也可能触发），
+    // 把它放进依赖会让本 effect 无谓重跑 → setSnippet(null) → 内嵌 Monaco 卸载重建（刷新抖动）。
+    // t 仅用于错误文案，重抓时机只该由 expanded / pr / anchor 决定。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, pr.localId, anchor.path, anchor.side, anchor.line, contextLines]);
 
   if (!expanded) {
     return (
@@ -99,65 +103,98 @@ function InlineCodeContextImpl({
     return <div className="comment-code-context-error muted">{error}</div>;
   }
   if (!snippet) {
-    return <div className="comment-code-context-loading muted">{t('inlineCodeContext.loading')}</div>;
+    return (
+      <div className="comment-code-context-loading muted">{t('inlineCodeContext.loading')}</div>
+    );
   }
 
-  // 高度按片段行数算；19px 行高 (Monaco fs=12 时近似) + 8px 上下 padding
-  const lineHeight = 19;
-  const lineCount = snippet.text.split('\n').length;
-  const height = lineCount * lineHeight + 12;
+  return <CodeSnippet snippet={snippet} language={languageFor(anchor.path)} />;
+}
 
-  const handleMount = (
-    ed: editor.IStandaloneCodeEditor,
-    monaco: Monaco,
-  ): void => {
-    // 真实文件行号 = snippet 内部行号 + startLine - 1。Monaco lineNumbers 函数式
-    // 完全可控，把内部 1..N 映射回去
-    ed.updateOptions({
-      readOnly: true,
-      domReadOnly: true,
-      lineNumbers: (lineNo) => String(lineNo + snippet.startLine - 1),
-      minimap: { enabled: false },
-      scrollBeyondLastLine: false,
-      scrollbar: { vertical: 'hidden', horizontal: 'hidden', handleMouseWheel: false },
-      overviewRulerLanes: 0,
-      hideCursorInOverviewRuler: true,
-      renderLineHighlight: 'none',
-      contextmenu: false,
-      folding: false,
-      glyphMargin: false,
-      fontSize: editorFontSize(12),
-      lineHeight,
-      padding: { top: 6, bottom: 6 },
-      // 行宽自适应，长行用 word wrap 而不是横向滚动条 (滚动条已禁)
-      wordWrap: 'on',
-    });
-    // 锚定行整行底色：用 Monaco decorations。线条 className 走 CSS 决定颜色
-    ed.createDecorationsCollection([
-      {
-        range: new monaco.Range(snippet.anchorInSnippet, 1, snippet.anchorInSnippet, 1),
-        options: {
-          isWholeLine: true,
-          className: 'comment-code-context-anchor-line',
-          marginClassName: 'comment-code-context-anchor-gutter',
+/** Monaco fs=12 时近似行高；上下各 6px padding */
+const SNIPPET_LINE_HEIGHT = 19;
+
+const READONLY_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
+  readOnly: true,
+  // keep-alive：评论 tab 切走时本编辑器被 display:none（尺寸归 0），切回需重排。
+  // automaticLayout 让 Monaco 自带 ResizeObserver 在显隐时自动 layout，避免切回空白/错位。
+  automaticLayout: true,
+};
+
+interface Snippet {
+  text: string;
+  startLine: number;
+  anchorInSnippet: number;
+}
+
+/**
+ * 只读代码片段编辑器。**独立 memo 组件**：props 只有稳定的 snippet（值不变就同一引用）+ language，
+ * 与父级 CommentItem / CommentsPanel 的任何重渲染（poll / 焦点刷新触发的 pr 换引用等）彻底隔离。
+ * 父级重渲染时本组件按 props 浅比较 bail → 不重建 <Editor> 元素 → @monaco-editor/react 的 value /
+ * options effect 都不触发（避免只读编辑器被无条件 setValue 重置 → 重新 tokenize 的刷新抖动）。
+ * onMount / options 也用稳定引用，杜绝即便重渲染时的 updateOptions 抖动。
+ */
+const CodeSnippet = memo(function CodeSnippet({
+  snippet,
+  language,
+}: {
+  snippet: Snippet;
+  language: string;
+}) {
+  const lineCount = snippet.text.split('\n').length;
+  const height = lineCount * SNIPPET_LINE_HEIGHT + 12;
+
+  const handleMount = useCallback(
+    (ed: editor.IStandaloneCodeEditor, monaco: Monaco): void => {
+      // 真实文件行号 = snippet 内部行号 + startLine - 1。Monaco lineNumbers 函数式
+      // 完全可控，把内部 1..N 映射回去
+      ed.updateOptions({
+        readOnly: true,
+        domReadOnly: true,
+        lineNumbers: (lineNo) => String(lineNo + snippet.startLine - 1),
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        scrollbar: { vertical: 'hidden', horizontal: 'hidden', handleMouseWheel: false },
+        overviewRulerLanes: 0,
+        hideCursorInOverviewRuler: true,
+        renderLineHighlight: 'none',
+        contextmenu: false,
+        folding: false,
+        glyphMargin: false,
+        fontSize: editorFontSize(12),
+        lineHeight: SNIPPET_LINE_HEIGHT,
+        padding: { top: 6, bottom: 6 },
+        // 行宽自适应，长行用 word wrap 而不是横向滚动条 (滚动条已禁)
+        wordWrap: 'on',
+      });
+      // 锚定行整行底色：用 Monaco decorations。线条 className 走 CSS 决定颜色
+      ed.createDecorationsCollection([
+        {
+          range: new monaco.Range(snippet.anchorInSnippet, 1, snippet.anchorInSnippet, 1),
+          options: {
+            isWholeLine: true,
+            className: 'comment-code-context-anchor-line',
+            marginClassName: 'comment-code-context-anchor-gutter',
+          },
         },
-      },
-    ]);
-  };
+      ]);
+    },
+    [snippet],
+  );
 
   return (
     <div className="comment-code-context" style={{ height: `${String(height)}px` }}>
       <Editor
         height={`${String(height)}px`}
-        language={languageFor(anchor.path)}
+        language={language}
         value={snippet.text}
         theme="vs-dark"
         onMount={handleMount}
-        options={{ readOnly: true }}
+        options={READONLY_OPTIONS}
       />
     </div>
   );
-}
+});
 
 /**
  * 按**锚点值**（path / line / side）+ pr.localId + 展示选项比较的 memo：父级（CommentsPanel）在 poll

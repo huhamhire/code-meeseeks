@@ -5,6 +5,8 @@
   width: 100%;
   height: 100%;
   min-height: 0;
+  // 定位锚：切 PR 时加载遮罩 .pane-loading-overlay 铺满整个 diff 区（树 + 编辑器）。
+  position: relative;
 }
 
 // 显示换行符 ↵：monaco renderWhitespace 只渲染 space/tab，不显示 EOL；

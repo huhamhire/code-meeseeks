@@ -40,6 +40,15 @@ describe('JsonFileStateStore', () => {
     expect(entries).toEqual(['atomic.json']);
   });
 
+  it('handles concurrent writes to the same key without ENOENT', async () => {
+    // 回归：tmp 文件名仅带 pid 时，同 key 的并发写共用同一 tmp，先完成者 rename 走文件后
+    // 后完成者 rename 即 ENOENT。各并发写须各用唯一 tmp。
+    await Promise.all(Array.from({ length: 20 }, (_, i) => store.write('hot', { v: i })));
+    const entries = await fs.readdir(tmpDir);
+    expect(entries).toEqual(['hot.json']); // 无遗留 .tmp
+    expect(await store.read<{ v: number }>('hot')).toMatchObject({ v: expect.any(Number) });
+  });
+
   it('overwrites an existing key', async () => {
     await store.write('x', { v: 1 });
     await store.write('x', { v: 2 });

@@ -16,6 +16,14 @@
 
 ### Fixed
 
+- 切换不同 PR 时 diff 文件树「左栏空白 → 文件树整体弹出」的抖动：DiffView 改为 stale-while-loading——引入 `loadedPrId` 标记当前已渲染内容所属 PR，切 PR 期间保留旧树 / 旧内容渲染、上盖加载遮罩（延迟 150ms，命中缓存的快切换直接换新），并门控 content / comments / blame 拉取（避免「新 localId + 旧选中文件」错拉），新文件列表 ready 后整体替换。
+- diff 文件树首次加载时文件名被图标渲染推移的抖动：图标改用固定 16px 占位槽包裹，iconify 的 svg 晚一帧进 DOM 也不塌缩，文件名位置稳定。
+- 切换不同 PR 时评论页先闪「加载评论中」再渲新内容的空窗：改为 stale-while-loading——切 PR 期间保留旧评论渲染、上盖加载遮罩，新数据 ready 后整体替换；遮罩延迟 150ms 显示，命中本地缓存的快切换直接换新、零闪。
+- PR 主面板 tab 栏角标（评论 / 提交计数）异步加载导致的抖动：计数加载中渲染等宽占位 chip 预留宽度，消除计数到达时的横向弹簧拉伸；`.pr-tab` 改 flex 布局 + 固定行高，角标占位 / 出现 / 消失不再改变 tab 高度，消除 tab 栏 1~2px 竖向跳动。
+- PR 主面板各 tab（diff / 评论 / 草稿 / 提交 / 信息）切换抖动：此前 tab 内容按条件渲染，每次切换旧面板卸载、新面板重挂 → 重新拉数据、闪「加载中」、内嵌 Monaco 重建。改为 keep-alive——tab 首访才挂载（保留懒加载）、之后保活仅 CSS 显隐不卸载，切走再切回瞬时、无重拉、滚动位置与展开态保留；配合 Monaco `automaticLayout` 处理显隐后的重排。
+- 刷新（后台轮询 / 窗口聚焦）时编辑器渲染抖动：评论页内嵌代码片段（Monaco）与 diff 编辑器此前每次刷新都重渲染 / 重建。根因有二——其一，i18n 语言切换 effect 依赖整个 boot 对象，poll 刷新 setBoot 后对同一语言反复 `changeLanguage`，触发 `languageChanged` 致所有 `useTranslation` 的 `t` 换新引用，凡 effect 依赖 `t` 的组件（如内嵌代码片段抓取逻辑）都被无谓重跑、连带 Monaco 卸载重建；其二，DiffEditor 的 `options` 为渲染期新建对象，被 `@monaco-editor/react` 按引用判变而反复 `updateOptions`。现语言 effect 仅在语言真正变化时切换、DiffEditor options 稳定化，刷新不再抖动。
+- PR 详情页与评论页排版：正文限宽 960px 并居中，滚动条回到外层容器右缘（此前 max-width 加在滚动容器上，滚动条停在中部）；详情页 reviewers 列表按字典序固定排序，刷新不再随平台返回顺序抖动。
+- 拉取变更文件列表偶发失败（`ENOENT … diff-base.json`）：状态存储对同一 key 的并发写共用同一临时文件，先完成者 rename 后，后完成者 rename 即 ENOENT。临时文件名追加进程内自增序号去重，并发写各用独立临时文件。
 - Agent 评审 / 规划步骤行的固定文案（如「判断是否存在需追问的严重问题」「严重，追问 N 个」）此前在 `@meebox/agent` 层写死中文、被渲染层逐字显示，日 / 英 / 德界面下漏出中文；现按会话语言落地（zh-CN / en-US / ja-JP / de-DE，缺省回落英文），与评审总结骨架同策略。
 - 设置页手动「检查更新」查到的新版此前不同步到状态栏、也不缓存：手动检查只把结果回给设置页本地，与定时检查各自为政、无共享。现 main 侧统一为单一真相源——手动 / 定时检查都缓存结果并在有新版时广播 `app:updateAvailable`，状态栏即时出现升级 chip；新增只读 `app:getUpdateStatus`，窗口 / 状态栏挂载时水合已知结果，不因重挂载而丢失。
 

@@ -23,54 +23,67 @@ export function PrInfoView({ pr }: PrInfoViewProps) {
     [pr.localId, pr.url],
   );
 
+  // 各平台 adapter 产出的 reviewers 顺序不稳定（GitHub 按 Map 插入序，随评审推进
+  // requested_reviewers 会被移除/补到末尾），每次 poll 列表抖动。展示层按 displayName
+  // 字典序固定排序，name 兜底兜稳，与平台无关。
+  const reviewers = useMemo(
+    () =>
+      [...pr.reviewers].sort(
+        (a, b) => a.displayName.localeCompare(b.displayName) || a.name.localeCompare(b.name),
+      ),
+    [pr.reviewers],
+  );
+
   return (
     <div className="pr-info-view">
-      {pr.description && (
+      <div className="pr-info-content">
+        {pr.description && (
+          <section className="pr-detail-section">
+            <h3>描述</h3>
+            <div className="pr-detail-description markdown">
+              {/* Bitbucket 远端用 \r\n 行尾，remark 解析时 CR 跟 LF 各算一次换行 → 单换行
+                  被当成段落分隔，每个 list item 之间多一段空白。归一化成 \n */}
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={REMOTE_REHYPE_PLUGINS}
+                components={mdComponents}
+                urlTransform={transformBitbucketUrl}
+              >
+                {pr.description.replace(/\r\n?/g, '\n')}
+              </ReactMarkdown>
+            </div>
+          </section>
+        )}
+
         <section className="pr-detail-section">
-          <h3>描述</h3>
-          <div className="pr-detail-description markdown">
-            {/* Bitbucket 远端用 \r\n 行尾，remark 解析时 CR 跟 LF 各算一次换行 → 单换行
-                被当成段落分隔，每个 list item 之间多一段空白。归一化成 \n */}
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={REMOTE_REHYPE_PLUGINS}
-              components={mdComponents}
-              urlTransform={transformBitbucketUrl}
-            >
-              {pr.description.replace(/\r\n?/g, '\n')}
-            </ReactMarkdown>
+          <h3>Reviewers ({reviewers.length})</h3>
+          {reviewers.length === 0 ? (
+            <p className="muted">无</p>
+          ) : (
+            <ul className="reviewer-list">
+              {reviewers.map((r) => (
+                <li key={r.name}>
+                  {r.displayName} <ReviewerStatusTag status={r.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="pr-detail-section">
+          <h3>时间线</h3>
+          <div className="pr-detail-kv">
+            <div className="modal-kv-key">远端创建</div>
+            <div className="modal-kv-val">{new Date(pr.createdAt).toLocaleString()}</div>
+            <div className="modal-kv-key">远端更新</div>
+            <div className="modal-kv-val">{new Date(pr.updatedAt).toLocaleString()}</div>
+            <div className="modal-kv-key">本地首次发现</div>
+            <div className="modal-kv-val">{new Date(pr.discoveredAt).toLocaleString()}</div>
+            <div className="modal-kv-key">最近一次 poll 看到</div>
+            <div className="modal-kv-val">{new Date(pr.lastSeenAt).toLocaleString()}</div>
           </div>
         </section>
-      )}
-
-      <section className="pr-detail-section">
-        <h3>Reviewers ({pr.reviewers.length})</h3>
-        {pr.reviewers.length === 0 ? (
-          <p className="muted">无</p>
-        ) : (
-          <ul className="reviewer-list">
-            {pr.reviewers.map((r) => (
-              <li key={r.name}>
-                {r.displayName} <ReviewerStatusTag status={r.status} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="pr-detail-section">
-        <h3>时间线</h3>
-        <div className="pr-detail-kv">
-          <div className="modal-kv-key">远端创建</div>
-          <div className="modal-kv-val">{new Date(pr.createdAt).toLocaleString()}</div>
-          <div className="modal-kv-key">远端更新</div>
-          <div className="modal-kv-val">{new Date(pr.updatedAt).toLocaleString()}</div>
-          <div className="modal-kv-key">本地首次发现</div>
-          <div className="modal-kv-val">{new Date(pr.discoveredAt).toLocaleString()}</div>
-          <div className="modal-kv-key">最近一次 poll 看到</div>
-          <div className="modal-kv-val">{new Date(pr.lastSeenAt).toLocaleString()}</div>
-        </div>
-      </section>
+      </div>
     </div>
   );
 }

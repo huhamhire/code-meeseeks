@@ -1,18 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ConnectionSummary } from '@meebox/ipc';
-import type {
-  AppInfo,
-  AppPaths,
-  Config,
-  PrAgentStatus,
-  StoredPullRequest,
-} from '@meebox/shared';
+import type { AppInfo, AppPaths, Config, PrAgentStatus, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import i18n, { persistLanguage, resolveUiLanguage } from '../i18n';
 import type { OnboardingResult } from '../components/features/onboarding';
@@ -76,15 +64,17 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
     void (async () => {
       try {
         if (!window.api) throw new Error('preload bridge missing: window.api is undefined');
-        const [info, paths, config, prAgent, initialPrs, connections, lastSync] = await Promise.all([
-          invoke('app:info', undefined),
-          invoke('app:paths', undefined),
-          invoke('config:read', undefined),
-          invoke('app:prAgentStatus', undefined),
-          invoke('prs:list', undefined),
-          invoke('app:connections', undefined),
-          invoke('prs:lastSync', undefined),
-        ]);
+        const [info, paths, config, prAgent, initialPrs, connections, lastSync] = await Promise.all(
+          [
+            invoke('app:info', undefined),
+            invoke('app:paths', undefined),
+            invoke('config:read', undefined),
+            invoke('app:prAgentStatus', undefined),
+            invoke('prs:list', undefined),
+            invoke('app:connections', undefined),
+            invoke('prs:lastSync', undefined),
+          ],
+        );
         const lang = resolveUiLanguage(config.language);
         persistLanguage(lang);
         await i18n.changeLanguage(lang);
@@ -97,13 +87,18 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
     })();
   }, [setPrs]);
 
-  // 运行时语言切换（如设置页改 config.language）：boot 后 language 变化即切换并回写持久化。
+  // 运行时语言切换（如设置页改 config.language）：仅依赖 config.language。
+  // **不能依赖整个 boot**——poll:tick 会 setBoot 刷新 connections 等字段，boot 频繁换新引用；
+  // 若依赖 boot，每次 poll 都会 i18n.changeLanguage(同一语言) → react-i18next 发 languageChanged
+  // → 所有 useTranslation 的 t 换新引用 → 凡是 effect 依赖 t 的组件（如 InlineCodeContext 抓取代码
+  // 片段的 effect）都被无谓重跑，内嵌 Monaco 随之 setSnippet(null)→重建 → 刷新抖动。
+  const configLanguage = boot?.config.language;
   useEffect(() => {
-    if (!boot) return;
-    const lang = resolveUiLanguage(boot.config.language);
+    if (configLanguage === undefined) return;
+    const lang = resolveUiLanguage(configLanguage);
     persistLanguage(lang);
     void i18n.changeLanguage(lang);
-  }, [boot]);
+  }, [configLanguage]);
 
   // poll tick：刷新「最近同步」+ 重拉列表（后台轮询新增/删除即时反映）+ 补连接摘要
   // （启动 ping 在建窗后才完成，借首轮 tick 把状态栏用户/能力位补上）。

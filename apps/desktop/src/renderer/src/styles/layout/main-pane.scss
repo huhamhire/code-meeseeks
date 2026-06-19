@@ -201,6 +201,24 @@
       background: rgba(229, 158, 30, 0.15);
       color: $color-warning;
     }
+
+    // 加载占位：等宽空 chip 预留角标宽度，消除计数异步到达时 tab 的横向弹簧抖动。
+    // 底色更淡 + 轻微脉冲，提示"加载中"而非真实计数。
+    &.pr-tab-badge-loading {
+      background: $color-accent-bg-fade;
+      opacity: 0.45;
+      animation: pr-tab-badge-pulse 1.2s ease-in-out infinite;
+    }
+  }
+
+  @keyframes pr-tab-badge-pulse {
+    0%,
+    100% {
+      opacity: 0.25;
+    }
+    50% {
+      opacity: 0.55;
+    }
   }
 
   .diff-mode-toggle {
@@ -373,12 +391,18 @@
 }
 
 .pr-tab {
+  // inline-flex + 垂直居中：tab 高度由始终存在的文字行盒决定，计数角标（inline-flex 16px）
+  // 居中放置、不超过文字行高 → 角标加载占位 / 出现 / 消失都不改变 tab 高度，消除 tab 栏
+  // 加载计数时的 1~2px 竖向抖动（默认 inline 布局下角标会按基线顶高行盒）。
+  display: inline-flex;
+  align-items: center;
   padding: $space-4 $space-8;
   background: transparent;
   border: none;
   color: $text-muted;
   cursor: pointer;
   font-size: $fs-lg;
+  line-height: $lh-normal;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   // 文字单行 + 不被 flex 容器挤压 — 窄宽度下保持单 tab 完整尺寸，整组靠
@@ -401,15 +425,32 @@
   min-height: 0;
   display: flex;
 }
+// keep-alive tab 保活容器：active 时铺满 .pr-tab-content（内部面板各自 flex:1），
+// inactive 由内联 display:none 隐藏但保留挂载（见 PrPanel KeepAliveTab）。
+.pr-tab-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
 
 // === 评论标签页 ===
 // 区别于 DiffView 内嵌 inline 评论：这里是 PR 全量评论 (含 summary + inline)，
 // 卡片式排版，自带滚动
+// 外层为定位锚（position:relative）+ 不滚动：让加载遮罩 .pane-loading-overlay 铺满视口、
+// 居中 spinner，而非随内部滚动跑到滚动区顶端。滚动交给内层 .pr-comments-scroll。
 .pr-comments-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: $bg-app;
+}
+.pr-comments-scroll {
   flex: 1;
   overflow-y: auto;
   padding: $space-6 20px;
-  background: $bg-app;
 }
 .pr-comments-list {
   list-style: none;
@@ -418,6 +459,12 @@
   display: flex;
   flex-direction: column;
   gap: $space-5;
+}
+// 顶层评论列表限宽 + 居中，与详情页一致；滚动条留在外层 .pr-comments-scroll
+// 右缘。仅约束直接子列表，嵌套 replies 的 .pr-comments-list 不受影响。
+.pr-comments-scroll > .pr-comments-list {
+  max-width: 960px;
+  margin: 0 auto;
 }
 .pr-comments-replies {
   margin-top: $space-4;
@@ -555,7 +602,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba(244, 135, 113, 0.10);
+  background: rgba(244, 135, 113, 0.1);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;
@@ -681,7 +728,10 @@
   cursor: pointer;
   text-align: left;
   width: 100%;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
 
   &:hover {
     background: $bg-hover;
@@ -796,4 +846,3 @@
     word-break: break-word;
   }
 }
-
