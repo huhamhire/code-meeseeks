@@ -2,13 +2,15 @@ import { lazy, Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import i18n from '../../../../../i18n';
-import { Avatar } from '../../../../common/Avatar';
-import { makeBitbucketImageFor } from '../../../../common/BitbucketImage';
-import { ChatIcon } from '../../../../common/icons';
+import {
+  Avatar,
+  makeBitbucketImageFor,
+  ChatIcon,
+  ConfirmModal,
+  mermaidComponents,
+} from '../../../../common';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
-import { ConfirmModal } from '../../../../common/ConfirmModal';
-import { mermaidComponents } from '../../../../common/markdownMermaid';
 import { CommentMarkdown } from '../shared/CommentMarkdown';
 import { useCommentThread } from '../shared/useCommentThread';
 // 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。

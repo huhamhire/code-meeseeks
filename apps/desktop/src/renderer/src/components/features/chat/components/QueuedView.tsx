@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReviewRunTool } from '@meebox/shared';
-import { CloseIcon } from '../../../common/icons';
+import { CloseIcon } from '../../../common';
 import { AskQuestion } from './shared';
 
 /**

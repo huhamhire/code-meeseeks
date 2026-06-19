@@ -5,7 +5,7 @@ import { type editor as MonacoEditor } from 'monaco-editor';
 import type { DiffChangedFile } from '@meebox/ipc';
 import { editorFontSize } from '../../../../../lib/editor-font';
 import { languageFor } from '../../../../../utils/language';
-import { PaneLoading } from '../../../../common/Loading';
+import { PaneLoading } from '../../../../common';
 import { Spinner } from './DiffStatus';
 import type { LoadedContent } from './diff-types';
 

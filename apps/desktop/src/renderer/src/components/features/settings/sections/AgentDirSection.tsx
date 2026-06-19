@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { FolderIcon } from '../../../common/icons';
+import { FolderIcon } from '../../../common';
 import { invoke } from '../../../../api';
 
 export function AgentDirSection({

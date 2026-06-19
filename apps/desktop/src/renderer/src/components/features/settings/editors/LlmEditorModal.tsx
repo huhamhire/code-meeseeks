@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LlmProfile } from '@meebox/shared';
-import { Modal } from '../../../common/Modal';
+import { Modal } from '../../../common';
 import { LlmProfileForm, validateProfile } from '../LlmProfileForm';
 
 export function LlmEditorModal({

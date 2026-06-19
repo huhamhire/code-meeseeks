@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { Config } from '@meebox/shared';
-import { PencilIcon, TrashIcon } from '../../../common/icons';
-import { PLATFORM_META } from '../../../common/PlatformIcon';
+import { PencilIcon, TrashIcon, PLATFORM_META } from '../../../common';
 
 export function ConnectionsSection({
   connections,

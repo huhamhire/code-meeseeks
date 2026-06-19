@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentStep } from '@meebox/shared';
-import { RobotIcon } from '../../../common/icons';
+import { RobotIcon } from '../../../common';
 import { formatElapsed, formatTokens } from '../utils/format';
 import { Spinner } from './shared';
 

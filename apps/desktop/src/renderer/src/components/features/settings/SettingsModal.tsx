@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { AppInfo, AppPaths, Config, SupportedLanguage } from '@meebox/shared';
-import { ConfirmModal } from '../../common/ConfirmModal';
-import { Modal } from '../../common/Modal';
+import { ConfirmModal, Modal } from '../../common';
 import { useSettingsDraft } from './hooks/useSettingsDraft';
 import { ConnectionEditorModal } from './editors/ConnectionEditorModal';
 import { LlmEditorModal } from './editors/LlmEditorModal';

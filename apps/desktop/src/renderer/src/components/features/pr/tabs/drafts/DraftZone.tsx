@@ -4,8 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { ReviewDraft } from '@meebox/shared';
-import { ConfirmModal } from '../../../../common/ConfirmModal';
-import { TrashIcon } from '../../../../common/icons';
+import { ConfirmModal, TrashIcon } from '../../../../common';
 
 interface DraftZoneProps {
   draft: ReviewDraft;
@@ -443,9 +442,7 @@ export function DraftZone({
                 onClick={() => void handlePublishFromEdit()}
                 disabled={saving || publishing || !canSave}
                 title={
-                  !canSave
-                    ? t('draftZone.emptyCommentTitle')
-                    : t('draftZone.publishFromEditTitle')
+                  !canSave ? t('draftZone.emptyCommentTitle') : t('draftZone.publishFromEditTitle')
                 }
               >
                 {publishing
@@ -532,4 +529,3 @@ export function DraftZone({
     </div>
   );
 }
-

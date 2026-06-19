@@ -4,8 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { Finding, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
-import { ChevronIcon } from '../../../common/icons';
-import { mermaidComponents, walkthroughMdComponents } from '../../../common/markdownMermaid';
+import { ChevronIcon, mermaidComponents, walkthroughMdComponents } from '../../../common';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { translatePrAgentLabels } from '../../../../utils/translate-pr-agent';
 import {

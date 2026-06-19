@@ -5,7 +5,7 @@ import type {
   ReviewerStatus,
   StoredPullRequest,
 } from '@meebox/shared';
-import { ApproveIcon, GlobeIcon, NeedsWorkIcon, PullRequestIcon } from '../../common/icons';
+import { ApproveIcon, GlobeIcon, NeedsWorkIcon, PullRequestIcon } from '../../common';
 
 /**
  * PR 详情头：标题 / 元信息 + 动作区（浏览器打开 · 提交评论 N · 合并 · 通过 / 需修改）。
@@ -123,7 +123,9 @@ export function PrHeader({
               className={`btn btn-sm review-action review-action-needs-work ${pr.localStatus === 'needs_work' ? 'active' : ''}`}
               type="button"
               disabled={isOwnPr}
-              onClick={() => onSetStatus(pr.localStatus === 'needs_work' ? 'pending' : 'needs_work')}
+              onClick={() =>
+                onSetStatus(pr.localStatus === 'needs_work' ? 'pending' : 'needs_work')
+              }
               title={
                 ownPrReason ??
                 (pr.localStatus === 'needs_work'

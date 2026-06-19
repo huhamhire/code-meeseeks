@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { AgentRecommendationVerdict, StoredPullRequest } from '@meebox/shared';
-import { Avatar } from '../../common/Avatar';
-import { PersonIcon, PullRequestIcon, StarIcon } from '../../common/icons';
+import { Avatar, PersonIcon, PullRequestIcon, StarIcon } from '../../common';
 
 /** 评审建议 verdict → 复用 chatPane.agent.* 文案（不另加 i18n）。 */
 const VERDICT_TITLE: Record<string, string> = {
@@ -62,7 +61,11 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
               <PersonIcon />
               {pr.author.displayName}
             </span>
-            {(approvedCount > 0 || needsWorkCount > 0 || canMerge || reviewVerdict || executing) && (
+            {(approvedCount > 0 ||
+              needsWorkCount > 0 ||
+              canMerge ||
+              reviewVerdict ||
+              executing) && (
               <span className="pr-item-review-chips">
                 {/* 执行中优先占位（同 ★ 位置）：复用运行卡片同款 .spinner（蓝色环旋转、中心对称），
                     裸图标无 chip 外框，表示该 PR 有在跑的 agent 任务。 */}

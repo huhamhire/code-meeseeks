@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import type { PlatformCapabilities, ReviewDraft, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
-import { ConfirmModal } from '../../../../common/ConfirmModal';
+import { ConfirmModal } from '../../../../common';
 
 // posted 已不存在 (发布成功即删本地)，筛选项只保留 publishable / all / rejected
 type Filter = 'all' | 'publishable' | 'rejected';
@@ -56,11 +56,13 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelPro
     const list = drafts ?? [];
     // 排序：同文件按 startLine 升序 (跟代码自上而下阅读顺序一致)；不同文件按
     // path 字典序 (跟文件树顺序对齐，扫起来不跳跃)
-    const sorted = list.slice().sort((a, b) =>
-      a.anchor.path === b.anchor.path
-        ? a.anchor.startLine - b.anchor.startLine
-        : a.anchor.path.localeCompare(b.anchor.path),
-    );
+    const sorted = list
+      .slice()
+      .sort((a, b) =>
+        a.anchor.path === b.anchor.path
+          ? a.anchor.startLine - b.anchor.startLine
+          : a.anchor.path.localeCompare(b.anchor.path),
+      );
     if (filter === 'all') return sorted;
     if (filter === 'publishable')
       return sorted.filter((d) => d.status === 'pending' || d.status === 'edited');
@@ -142,9 +144,7 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelPro
             aria-selected={filter === f}
           >
             {t(FILTER_LABEL_KEY[f])}
-            {counts[f] > 0 && (
-              <span className="drafts-panel-filter-badge">{counts[f]}</span>
-            )}
+            {counts[f] > 0 && <span className="drafts-panel-filter-badge">{counts[f]}</span>}
           </button>
         ))}
       </nav>
@@ -157,15 +157,13 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelPro
               d.anchor.endLine !== d.anchor.startLine
                 ? `${String(d.anchor.startLine)}-${String(d.anchor.endLine)}`
                 : String(d.anchor.startLine);
-            const sideLabel = d.anchor.side === 'old' ? t('draftsPanel.sideOld') : t('draftsPanel.sideNew');
+            const sideLabel =
+              d.anchor.side === 'old' ? t('draftsPanel.sideOld') : t('draftsPanel.sideNew');
             const publishable = d.status === 'pending' || d.status === 'edited';
             const pubErr = errors.get(d.id);
             const isPublishing = publishingIds.has(d.id);
             return (
-              <li
-                key={d.id}
-                className={`drafts-panel-item drafts-panel-item-${d.status}`}
-              >
+              <li key={d.id} className={`drafts-panel-item drafts-panel-item-${d.status}`}>
                 <div className="drafts-panel-item-head">
                   {onJumpToAnchor ? (
                     <button
@@ -227,7 +225,9 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelPro
                 </div>
                 <div className="drafts-panel-item-body markdown">
                   {d.body.trim() ? (
-                    <ReactMarkdown remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}>
+                    <ReactMarkdown
+                      remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}
+                    >
                       {d.body}
                     </ReactMarkdown>
                   ) : (

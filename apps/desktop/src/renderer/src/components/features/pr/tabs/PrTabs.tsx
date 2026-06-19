@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { ChatIcon, PersonIcon, WhitespaceIcon } from '../../../common/icons';
+import { ChatIcon, PersonIcon, WhitespaceIcon } from '../../../common';
 
 export type PrTab = 'diff' | 'activity' | 'drafts' | 'commits' | 'info';
 
