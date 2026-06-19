@@ -183,70 +183,8 @@
 }
 
 // ===== 平台步：左右布局 =====
-.onboarding-platform-grid {
-  display: grid;
-  // 左列固定 220px：容下最长副标题「gitlab.com / Self-Managed」单行不折行（见 PLATFORM_META）
-  grid-template-columns: 220px 1fr;
-  gap: $space-8;
-  align-items: start;
-}
-.onboarding-platform-list {
-  display: flex;
-  flex-direction: column;
-  gap: $space-3;
-}
-.onboarding-platform-item {
-  display: flex;
-  align-items: center;
-  gap: $space-4;
-  padding: $space-4 $space-5;
-  border: 1px solid $border-default;
-  border-radius: $radius-lg;
-  background: $bg-panel;
-
-  &.selected {
-    border-color: $color-accent;
-    box-shadow: inset 3px 0 0 $color-accent;
-  }
-  &.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-}
-.onboarding-platform-icon {
-  display: inline-flex;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 24px; // 固定宽度，保证各卡图标占位一致、文字起点不漂移
-
-  &.muted-icon {
-    color: $text-muted;
-    filter: grayscale(1);
-  }
-}
-.onboarding-platform-text {
-  flex: 1; // 占满图标右侧区域
-  display: flex;
-  flex-direction: column;
-  align-items: center; // 名称 / 副标题在右侧区域水平居中
-  text-align: center;
-  gap: 1px;
-  min-width: 0;
-}
-.onboarding-platform-name {
-  color: $text-primary;
-  font-size: $fs-md;
-  font-weight: 500;
-}
-.onboarding-platform-meta {
-  color: $text-muted;
-  font-size: $fs-sm;
-  white-space: nowrap; // 副标题始终单行，避免「Self-Managed」被拆词换行
-}
-
-.onboarding-platform-form {
-  min-width: 0;
-}
+// 平台选择列表 + 表单的左右两栏布局收敛到 config-picker.scss（.config-pick-grid / -list / -item …），
+// 由 PlatformStep 与设置面板「连接」子模态共用，本文件不再单独维护。
 
 // ===== 折叠的「缓存目录」高级入口 =====
 .onboarding-advanced {
@@ -295,51 +233,8 @@
   }
 }
 
-// provider 行（两阶段共用）：图标 + 名称 (+ 箭头/选中)
-.onboarding-provider-list {
-  display: flex;
-  flex-direction: column;
-  gap: $space-3;
-  max-height: 320px;
-  overflow-y: auto;
-}
-.onboarding-provider-item {
-  display: flex;
-  align-items: center;
-  gap: $space-4;
-  width: 100%;
-  text-align: left;
-  padding: $space-4 $space-5;
-  border: 1px solid $border-default;
-  border-radius: $radius-lg;
-  background: $bg-panel;
-  color: $text-body;
-  cursor: pointer;
-
-  &:hover {
-    background: $bg-hover;
-    border-color: $color-accent;
-  }
-  &.selected {
-    border-color: $color-accent;
-    box-shadow: inset 3px 0 0 $color-accent;
-    color: $text-primary;
-  }
-}
-.onboarding-provider-name {
-  flex: 1;
-  min-width: 0;
-  font-size: $fs-md;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.onboarding-provider-arrow {
-  color: $text-muted;
-  font-size: $fs-lg;
-  flex-shrink: 0;
-}
+// provider 选择列表（两阶段共用：图标 + 名称 + 箭头/选中）收敛到 config-picker.scss
+// （.config-pick-list / -item / -name / -arrow …），由 LlmStep 与设置面板「LLM」子模态共用。
 
 // 阶段一：居中的选择列表
 .onboarding-provider-pick {
@@ -359,7 +254,7 @@
   align-items: start;
 
   // 左侧列表：从右侧滑入到位（视觉上「收到左边」）
-  .onboarding-provider-list {
+  .config-pick-list {
     animation: onboarding-slide-left 0.28s ease both;
   }
 }
@@ -441,7 +336,7 @@
 }
 
 @media (max-width: 640px) {
-  .onboarding-platform-grid,
+  // .config-pick-grid 的窄屏单列回退在 config-picker.scss；此处仅 LLM 步的 grid
   .onboarding-llm-grid {
     grid-template-columns: 1fr;
   }
