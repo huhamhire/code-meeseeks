@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { type editor as MonacoEditor } from 'monaco-editor';
+import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
 import type { PrComment } from '@meebox/shared';
 import type { DiffChangedFile } from '@meebox/ipc';
 import {
@@ -67,6 +67,12 @@ export function useCommentZones(opts: {
           glyphMarginClassName: 'monaco-comment-glyph',
           glyphMarginHoverMessage: { value: renderHoverMd(cs) },
           linesDecorationsClassName: 'monaco-comment-line-deco',
+          // 评论锚点行在滚动条总览标尺投一个蓝色刻度（与评论 glyph 同色系），
+          // 用户拖滚动条一眼可见「哪里有评论」；minimap 仍关闭。
+          overviewRuler: {
+            color: '#3794ff',
+            position: MonacoEditorNs.OverviewRulerLane.Right,
+          },
         },
       }));
 

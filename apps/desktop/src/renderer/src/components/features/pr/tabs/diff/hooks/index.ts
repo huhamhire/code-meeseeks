@@ -10,5 +10,6 @@ export { useBlame, type BlameState } from './useBlame';
 export { useDraftAutoEdit, type DraftAutoEdit } from './useDraftAutoEdit';
 export { useDiffNav, type PendingNav, type PendingScroll } from './useDiffNav';
 export { useCommentZones } from './useCommentZones';
+export { useDiffOverviewMarks } from './useDiffOverviewMarks';
 export { useDraftZones } from './useDraftZones';
 export { useLineCommentAdder } from './useLineCommentAdder';

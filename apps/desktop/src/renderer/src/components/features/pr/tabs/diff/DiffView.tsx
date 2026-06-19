@@ -20,6 +20,7 @@ import {
   useCommentZones,
   useDiffComments,
   useDiffNav,
+  useDiffOverviewMarks,
   useDiffScope,
   useDraftAutoEdit,
   useDraftZones,
@@ -176,6 +177,8 @@ export function DiffView({
     return m;
   }, [files, drafts]);
 
+  // diff 增/删/改投影到滚动条总览标尺左道（编辑模式风格；评论锚点走右道，见下）
+  useDiffOverviewMarks({ diffEditor, content, selected, renderSideBySide });
   // 行内评论标记 + view zone
   useCommentZones({
     diffEditor,
