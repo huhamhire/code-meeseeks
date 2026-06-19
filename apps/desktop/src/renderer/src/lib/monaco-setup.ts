@@ -64,13 +64,21 @@ for (const d of [
  * quickInfo / navigationTree / ...，editor.worker 没实现对应方法"的一系列运行时
  * 报错。两类都不影响渲染，但污染 console 让用户以为应用挂了。
  *
- * 仅按消息前缀黑名单吞掉，不动其他真实业务错误，也不动 Monaco 各 language
- * 默认配置（保持 vendor 默认行为，未来换 monaco 版本时不用维护补丁）。
+ * 仅按消息前缀黑名单吞掉，不动其他真实业务错误。
  *
- * `Missing requestHandler or method:` 整族都源于同一机制（Monaco 给 worker
- * 发 RPC 找不到 handler），用前缀一勺烩；不一一列出 getQuickInfoAtPosition /
- * getCompletionsAtPosition / provideInlayHints 这种 whack-a-mole 名单。
+ * `Missing requestHandler or method:` 整族源于 worker RPC 找不到 handler（已在上方从源头
+ * 关闭对应语言服务，这里留作双保险）；`TextModel got disposed …` 是 DiffEditor 切换 model
+ * 的 dispose 竞态。两类都是 Monaco 上游已知问题、不影响渲染、应用侧无法根除 → **默认静默忽略**
+ * （作为已知问题）。需诊断时在 devtools 执行 `localStorage.setItem('meebox.monacoDebug','1')`
+ * 再刷新，即可看到被吞的报错明细。
  */
+const MONACO_DEBUG = (() => {
+  try {
+    return localStorage.getItem('meebox.monacoDebug') === '1';
+  } catch {
+    return false;
+  }
+})();
 const BENIGN_MONACO_ERROR_PREFIXES = ['Missing requestHandler or method:'];
 const BENIGN_MONACO_ERROR_SUBSTRINGS = [
   'TextModel got disposed before DiffEditorWidget model got reset',
@@ -86,8 +94,8 @@ function isBenignMonacoError(msg: unknown): boolean {
 window.addEventListener('error', (e) => {
   if (isBenignMonacoError(e.message) || isBenignMonacoError(e.error?.message)) {
     e.preventDefault();
-    // 留一行 console.warn 便于诊断，避免完全静默
-    console.warn('[monaco] suppressed benign error:', e.message);
+    // 默认静默（已知问题）；开 meebox.monacoDebug 才打一行便于诊断
+    if (MONACO_DEBUG) console.warn('[monaco] suppressed benign error:', e.message);
   }
 });
 
@@ -96,6 +104,6 @@ window.addEventListener('unhandledrejection', (e) => {
   const msg = typeof reason === 'string' ? reason : (reason as { message?: unknown })?.message;
   if (isBenignMonacoError(msg)) {
     e.preventDefault();
-    console.warn('[monaco] suppressed benign rejection:', msg);
+    if (MONACO_DEBUG) console.warn('[monaco] suppressed benign rejection:', msg);
   }
 });
