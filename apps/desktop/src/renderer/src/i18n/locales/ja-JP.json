@@ -396,9 +396,10 @@
     "apiKeyOptionalPlaceholder": "このプロバイダーはキー不要です（空のままに）",
     "cliCommandFallback": "コマンドラインツール",
     "cliCommandLabel": "CLI コマンド",
-    "cliCommandPlaceholder": "コマンド名",
+    "cliCommandPlaceholder": "コマンド名（例：claude / codex）",
+    "cliNamePlaceholder": "例：claude / codex",
     "cliWarningPrefix": "⚠️ このプロファイルを入力して有効化すると、Code Meeseeks がローカルの",
-    "cliWarningSuffix": "ツールを呼び出して レビュー操作を実行することを許可します（ローカルのログインセッション下のサブプロセスで実行されます）。対応するコマンドがインストール済みで、サインイン済みであることを確認してください。",
+    "cliWarningSuffix": "ツールを呼び出してレビュー操作を実行することを許可します。対応するコマンドがインストール済みで、サインイン済みであることを確認してください。",
     "errorCliUnsupported": "サポートされていない CLI ツール",
     "errorLabelDuplicate": "名前はすでに存在します",
     "errorLabelSlug": "使用できるのは 英字 / 数字 / - / _ のみ、1〜32 文字",
@@ -411,7 +412,7 @@
         "hint": "公式 Anthropic API；モデル名を直接入力してください（例：claude-opus-4-8）。anthropic/ プレフィックスは自動的に付加されます"
       },
       "cli": {
-        "hint": "🧪 実験的：上流 CLI（claude / codex など）に依存し、その挙動は上流のバージョン変更で変わる可能性があります。安定性・継続的な利用は保証されません。レビューリクエストを、ローカルにインストール済みかつ認可されたコマンドラインツールに委譲してモデルを呼び出します。API に直接接続せず、キーも不要です。使用するモデルと利用枠はそのツールが自己管理します。入力して有効化すると、ローカルのログインセッション下のサブプロセスでそのコマンドラインツールを呼び出すことを許可します。",
+        "hint": "🧪 実験的：ローカルのコマンドラインツールに依存し、その挙動はツールのバージョン変更で変わる可能性があります。安定性・継続的な利用は保証されません。レビューリクエストを、ローカルにインストール済みかつ認可されたコマンドラインツールに委譲してモデルを呼び出します。",
         "label": "ローカル CLI"
       },
       "dashscope": {
@@ -509,9 +510,7 @@
     "platformSub": "プラットフォームを選択し、接続情報を入力してください。",
     "platformTitle": "コードプラットフォームに接続",
     "progressAria": "設定の進捗",
-    "providerPickAria": "プロバイダーを選択",
-    "providerPickHint": "接続するプロバイダーを選択してください",
-    "skip": "スキップ",
+    "providerPickAria": "プロバイダーを選択",    "skip": "スキップ",
     "startConfig": "始める",
     "stepDone": "完了",
     "stepLlm": "AI モデル",
@@ -592,7 +591,7 @@
     "checkUpdate": "アップデートを確認",
     "checkUpdateTitle": "GitHub で最新バージョンを確認（検出のみ、自動インストールなし）",
     "checking": "確認中…",
-    "cliExperimentalHint": "ローカル CLI プロバイダーは上流 CLI（claude / codex など）に依存し、その挙動は上流のバージョン変更で変わる可能性があります。安定性・継続的な利用は保証されません。",
+    "cliExperimentalHint": "ローカル CLI プロバイダーはローカルのコマンドラインツールに依存し、その挙動はツールのバージョン変更で変わる可能性があります。安定性・継続的な利用は保証されません。",
     "configKey": "設定",
     "configure": "設定",
     "connSaveHint": "Name / Base URL / Token を入力してください",

@@ -20,12 +20,23 @@
   flex-direction: column;
   gap: $space-3;
 }
-// provider 列表项较多时可滚动；平台列表项少不需要。
-// 限高 ~4 项（< 右侧表单常见高度）：让表单成为模态高度的下限，列表在其内滚动，
-// 既不把设置子模态撑高，也不在右侧表单下方留大片空白。向导里在大卡片中铺开，不传 scroll、不受此限。
-.config-pick-list-scroll {
-  max-height: 180px;
-  overflow-y: auto;
+
+// 设置子模态内的左右两栏：固定高度，避免切换 provider 时右侧表单高矮变化导致模态抖动。
+// 左侧列表与右侧表单各自在该固定高度内独立滚动（自适应填满，内容不足时下方留白、内容超出则滚动），
+// 整体高度恒定。向导里在大卡片中铺开、不加此类，保持自适应。
+.config-pick-grid-fixed {
+  height: 190px;
+  align-items: stretch;
+
+  > .config-pick-list,
+  > .config-pick-form {
+    min-height: 0; // 允许在 grid 行内收缩，从而触发自身滚动
+    overflow-y: auto;
+  }
+  // 右侧表单顶部留半行余白，第一项不贴顶、与左侧列表卡片视觉更协调
+  > .config-pick-form {
+    padding-top: $space-5;
+  }
 }
 
 .config-pick-item {

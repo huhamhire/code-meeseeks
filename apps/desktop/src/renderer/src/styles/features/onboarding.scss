@@ -241,26 +241,34 @@
   max-width: 360px;
   margin: 0 auto;
 }
-.onboarding-provider-pick-hint {
-  margin: 0 0 $space-4;
-  text-align: center;
+// 阶段一选择列表：与阶段二网格同高（190px），两步切换不跳动；provider 增多时在内滚动
+.onboarding-provider-pick .config-pick-list {
+  height: 190px;
+  overflow-y: auto;
 }
 
-// 阶段二：左列表 + 右配置
+// 阶段二：左列表 + 右配置。固定高度 + 两栏各自滚动，
+// 切换 provider 时模态高度恒定、不抖动，列表后续扩展也不撑高（同设置子模态）。
 .onboarding-llm-grid {
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: $space-8;
-  align-items: start;
+  align-items: stretch;
+  height: 190px;
 
-  // 左侧列表：从右侧滑入到位（视觉上「收到左边」）
+  // 左侧列表：从右侧滑入到位（视觉上「收到左边」），并在固定高度内滚动
   .config-pick-list {
+    min-height: 0;
+    overflow-y: auto;
     animation: onboarding-slide-left 0.28s ease both;
   }
 }
-// 右侧配置：略微延迟后渐隐进入
+// 右侧配置：略微延迟后渐隐进入；固定高度内滚动，顶部留半行余白与左侧列表协调
 .onboarding-llm-form {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: $space-5;
   animation: onboarding-form-fade 0.3s ease 0.08s both;
 }
 

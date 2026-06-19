@@ -47,12 +47,12 @@ export function LlmEditorModal({
         onClose={requestClose}
         title={mode === 'add' ? t('settings.addLlmTitle') : t('settings.editLlmTitle')}
       >
-        {/* 左右两栏：左选 provider（复用向导布局），右填该 provider 的配置（隐藏表单内冗余的 provider 下拉）。 */}
-        <div className="config-pick-grid">
+        {/* 左右两栏：左选 provider（复用向导布局），右填该 provider 的配置（隐藏表单内冗余的 provider 下拉）。
+            固定高度：两栏各自在其内滚动，切换 provider 时模态高度恒定、不抖动。 */}
+        <div className="config-pick-grid config-pick-grid-fixed">
           <LlmProviderPicker
             value={draft.provider}
             onChange={(provider) => onChange({ ...draft, provider })}
-            scroll
           />
           <div className="config-pick-form">
             <LlmProfileForm

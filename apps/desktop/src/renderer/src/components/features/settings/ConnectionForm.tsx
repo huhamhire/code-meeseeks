@@ -216,7 +216,7 @@ export function ConnectionForm({
       <div className="settings-actions" style={{ marginTop: 12, alignItems: 'center' }}>
         <button
           type="button"
-          className="btn"
+          className="btn btn-sm"
           onClick={() => void runTest()}
           disabled={!canTest || testing}
         >

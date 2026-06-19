@@ -407,9 +407,10 @@
     "apiKeyOptionalPlaceholder": "This provider needs no key (leave empty)",
     "cliCommandFallback": "command-line tool",
     "cliCommandLabel": "CLI Command",
-    "cliCommandPlaceholder": "Command name",
+    "cliCommandPlaceholder": "Command name, e.g. claude / codex",
+    "cliNamePlaceholder": "e.g. claude / codex",
     "cliWarningPrefix": "⚠️ Filling in and enabling this profile authorizes Code Meeseeks to invoke the local",
-    "cliWarningSuffix": "tool to perform review operations (running in a subprocess under your local login session). Make sure the command is installed and signed in.",
+    "cliWarningSuffix": "tool to perform review operations. Make sure the command is installed and signed in.",
     "errorCliUnsupported": "Unsupported CLI tool",
     "errorLabelDuplicate": "Name already exists",
     "errorLabelSlug": "Only letters / digits / - / _ allowed, 1-32 characters",
@@ -422,7 +423,7 @@
         "hint": "Official Anthropic API; enter the model name directly (e.g. claude-opus-4-8); the anthropic/ prefix is added automatically"
       },
       "cli": {
-        "hint": "🧪 Experimental: depends on the upstream CLI (e.g. claude / codex); its behavior may change with upstream releases — stability and continued availability are not guaranteed. Delegates review requests to a locally installed and authorized command-line tool to call the model, without connecting to the API directly or requiring a key; the tool manages its own model and quota. Filling in and enabling this authorizes invoking that command-line tool in a subprocess under your local login session.",
+        "hint": "🧪 Experimental: depends on a local command-line tool; its behavior may change with the tool's releases — stability and continued availability are not guaranteed. Delegates review requests to a locally installed and authorized command-line tool to call the model.",
         "label": "Local CLI"
       },
       "dashscope": {
@@ -523,9 +524,7 @@
     "platformSub": "Choose a platform and enter your connection details.",
     "platformTitle": "Connect Code Platform",
     "progressAria": "Setup progress",
-    "providerPickAria": "Choose provider",
-    "providerPickHint": "Choose a provider to connect",
-    "skip": "Skip",
+    "providerPickAria": "Choose provider",    "skip": "Skip",
     "startConfig": "Get Started",
     "stepDone": "Done",
     "stepLlm": "AI Model",
@@ -608,7 +607,7 @@
     "checkUpdate": "Check for Updates",
     "checkUpdateTitle": "Check GitHub for the latest version (detection only, no auto-install)",
     "checking": "Checking…",
-    "cliExperimentalHint": "Local CLI providers depend on upstream CLIs (e.g. claude / codex); their behavior may change with upstream releases — stability and continued availability are not guaranteed.",
+    "cliExperimentalHint": "Local CLI providers depend on a local command-line tool; its behavior may change with the tool's releases — stability and continued availability are not guaranteed.",
     "configKey": "Config",
     "configure": "Configure",
     "connSaveHint": "Please fill in Name / Base URL / Token",

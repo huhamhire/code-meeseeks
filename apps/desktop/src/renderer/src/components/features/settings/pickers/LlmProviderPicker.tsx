@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { LlmProvider } from '@meebox/shared';
 import { LlmProviderIcon } from '../../../common';
 import { LLM_PROVIDERS } from '../LlmProfileForm';
@@ -9,23 +10,17 @@ import { LLM_PROVIDERS } from '../LlmProfileForm';
 export function LlmProviderPicker({
   value,
   onChange,
-  scroll = false,
   iconSize = 24,
   ariaLabel = 'Provider',
 }: {
   value: LlmProvider;
   onChange: (provider: LlmProvider) => void;
-  /** 列表项较多时限高滚动（如设置子模态内，避免撑高模态） */
-  scroll?: boolean;
   iconSize?: number;
   ariaLabel?: string;
 }) {
+  const { t } = useTranslation();
   return (
-    <div
-      className={`config-pick-list${scroll ? ' config-pick-list-scroll' : ''}`}
-      role="radiogroup"
-      aria-label={ariaLabel}
-    >
+    <div className="config-pick-list" role="radiogroup" aria-label={ariaLabel}>
       {LLM_PROVIDERS.map((p) => {
         const selected = p.value === value;
         return (
@@ -39,6 +34,11 @@ export function LlmProviderPicker({
           >
             <LlmProviderIcon provider={p.value} size={iconSize} />
             <span className="config-pick-name config-pick-name-fill">{p.label}</span>
+            {p.value === 'cli' && (
+              <span className="badge-experimental" title={t('settings.cliExperimentalHint')}>
+                {t('settings.experimental')}
+              </span>
+            )}
           </button>
         );
       })}

@@ -30,7 +30,6 @@ export function LlmStep({
       {!chosen ? (
         // 阶段一：居中的 provider 选择列表（滚动）
         <div className="onboarding-provider-pick">
-          <p className="muted onboarding-provider-pick-hint">{t('onboarding.providerPickHint')}</p>
           {/* 阶段一沿用中性配置选择器视觉，但每项尾随「›」提示可进入、且不预选高亮 */}
           <div
             className="config-pick-list"
@@ -44,8 +43,13 @@ export function LlmStep({
                 className="config-pick-item"
                 onClick={() => pick(p.value)}
               >
-                <LlmProviderIcon provider={p.value} size={28} />
+                <LlmProviderIcon provider={p.value} size={24} />
                 <span className="config-pick-name config-pick-name-fill">{p.label}</span>
+                {p.value === 'cli' && (
+                  <span className="badge-experimental" title={t('settings.cliExperimentalHint')}>
+                    {t('settings.experimental')}
+                  </span>
+                )}
                 <span className="config-pick-arrow" aria-hidden="true">
                   ›
                 </span>
