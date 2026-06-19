@@ -120,10 +120,11 @@ textarea {
   }
 }
 
-// 危险图标按钮（删除）：hover 变红
+// 危险图标按钮（删除连接 / LLM 配置等）：hover 变饱和红，与其它危险按钮统一
 .btn-icon-danger:hover:not(:disabled) {
-  border-color: $color-danger;
-  color: $color-danger;
+  border-color: $color-danger-strong;
+  color: $color-danger-strong;
+  background: $color-danger-strong-fade;
 }
 
 // 主操作图标按钮（编辑）：hover 变蓝

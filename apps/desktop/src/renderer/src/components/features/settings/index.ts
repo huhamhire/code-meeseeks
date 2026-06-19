@@ -9,3 +9,5 @@ export {
   type ConnEntry,
 } from './ConnectionForm';
 export { LlmProfileForm, newProfileId, LLM_PROVIDERS } from './LlmProfileForm';
+export { PlatformPicker } from './pickers/PlatformPicker';
+export { LlmProviderPicker } from './pickers/LlmProviderPicker';

@@ -222,6 +222,7 @@
     "close": "Schließen",
     "confirm": "OK",
     "delete": "Löschen",
+    "discard": "Verwerfen",
     "edit": "Bearbeiten",
     "loading": "Wird geladen…",
     "save": "Speichern"
@@ -406,9 +407,10 @@
     "apiKeyOptionalPlaceholder": "Dieser Provider benötigt keinen Schlüssel (leer lassen)",
     "cliCommandFallback": "Kommandozeilen-Tool",
     "cliCommandLabel": "CLI-Befehl",
-    "cliCommandPlaceholder": "Befehlsname",
+    "cliCommandPlaceholder": "Befehlsname, z. B. claude / codex",
+    "cliNamePlaceholder": "z. B. claude / codex",
     "cliWarningPrefix": "⚠️ Das Ausfüllen und Aktivieren dieses Profils autorisiert Code Meeseeks, das lokale",
-    "cliWarningSuffix": "Tool aufzurufen, um Review-Operationen durchzuführen (läuft in einem Unterprozess unter Ihrer lokalen Anmeldesitzung). Stellen Sie sicher, dass der Befehl installiert und angemeldet ist.",
+    "cliWarningSuffix": "Tool aufzurufen, um Review-Operationen durchzuführen. Stellen Sie sicher, dass der Befehl installiert und angemeldet ist.",
     "errorCliUnsupported": "Nicht unterstütztes CLI-Tool",
     "errorLabelDuplicate": "Name existiert bereits",
     "errorLabelSlug": "Nur Buchstaben / Ziffern / - / _ erlaubt, 1-32 Zeichen",
@@ -421,7 +423,7 @@
         "hint": "Offizielle Anthropic-API; geben Sie den Modellnamen direkt ein (z. B. claude-opus-4-8); das Präfix anthropic/ wird automatisch hinzugefügt"
       },
       "cli": {
-        "hint": "🧪 Experimentell: hängt vom Upstream-CLI ab (z. B. claude / codex); sein Verhalten kann sich mit Upstream-Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert. Delegiert Review-Anfragen an ein lokal installiertes und autorisiertes Kommandozeilen-Tool, um das Modell aufzurufen, ohne sich direkt mit der API zu verbinden oder einen Schlüssel zu benötigen; das Tool verwaltet sein eigenes Modell und Kontingent. Das Ausfüllen und Aktivieren autorisiert den Aufruf dieses Kommandozeilen-Tools in einem Unterprozess unter Ihrer lokalen Anmeldesitzung.",
+        "hint": "🧪 Experimentell: hängt von einem lokalen Kommandozeilen-Tool ab; sein Verhalten kann sich mit dessen Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert. Delegiert Review-Anfragen an ein lokal installiertes und autorisiertes Kommandozeilen-Tool, um das Modell aufzurufen.",
         "label": "Lokales CLI"
       },
       "dashscope": {
@@ -522,9 +524,7 @@
     "platformSub": "Wählen Sie eine Plattform und geben Sie Ihre Verbindungsdaten ein.",
     "platformTitle": "Code-Plattform verbinden",
     "progressAria": "Einrichtungsfortschritt",
-    "providerPickAria": "Provider auswählen",
-    "providerPickHint": "Wählen Sie einen Provider zum Verbinden",
-    "skip": "Überspringen",
+    "providerPickAria": "Provider auswählen",    "skip": "Überspringen",
     "startConfig": "Loslegen",
     "stepDone": "Fertig",
     "stepLlm": "KI-Modell",
@@ -607,7 +607,7 @@
     "checkUpdate": "Nach Updates suchen",
     "checkUpdateTitle": "GitHub auf die neueste Version prüfen (nur Erkennung, keine automatische Installation)",
     "checking": "Prüfe…",
-    "cliExperimentalHint": "Lokale CLI-Provider hängen von Upstream-CLIs ab (z. B. claude / codex); ihr Verhalten kann sich mit Upstream-Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert.",
+    "cliExperimentalHint": "Lokale CLI-Provider hängen von einem lokalen Kommandozeilen-Tool ab; sein Verhalten kann sich mit dessen Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert.",
     "configKey": "Konfiguration",
     "configure": "Konfigurieren",
     "connSaveHint": "Bitte Name / Base URL / Token ausfüllen",
@@ -619,6 +619,8 @@
     "deleteConnectionConfirmTitle": "Verbindung löschen",
     "deleteConnectionTitle": "Diese Verbindung löschen",
     "deleteLlmProfileTitle": "Dieses Profil löschen",
+    "discardChangesMessage": "Dieses Formular enthält nicht gespeicherte Änderungen. Ohne Speichern schließen?",
+    "discardChangesTitle": "Nicht gespeicherte Änderungen verwerfen?",
     "editConfigYaml": "config.yaml bearbeiten",
     "editConnectionTitle": "Verbindung bearbeiten",
     "editLlmTitle": "LLM-Modell bearbeiten",

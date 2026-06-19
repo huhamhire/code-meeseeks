@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LlmProfile } from '@meebox/shared';
-import { LLM_PROVIDERS, LlmProfileForm } from '../../settings';
+import { LLM_PROVIDERS, LlmProfileForm, LlmProviderPicker } from '../../settings';
 import { LlmProviderIcon } from '../../../common';
 
 export function LlmStep({
@@ -30,9 +30,9 @@ export function LlmStep({
       {!chosen ? (
         // 阶段一：居中的 provider 选择列表（滚动）
         <div className="onboarding-provider-pick">
-          <p className="muted onboarding-provider-pick-hint">{t('onboarding.providerPickHint')}</p>
+          {/* 阶段一沿用中性配置选择器视觉，但每项尾随「›」提示可进入、且不预选高亮 */}
           <div
-            className="onboarding-provider-list"
+            className="config-pick-list"
             role="radiogroup"
             aria-label={t('onboarding.providerPickAria')}
           >
@@ -40,12 +40,17 @@ export function LlmStep({
               <button
                 key={p.value}
                 type="button"
-                className="onboarding-provider-item"
+                className="config-pick-item"
                 onClick={() => pick(p.value)}
               >
-                <LlmProviderIcon provider={p.value} size={28} />
-                <span className="onboarding-provider-name">{p.label}</span>
-                <span className="onboarding-provider-arrow" aria-hidden="true">
+                <LlmProviderIcon provider={p.value} size={24} />
+                <span className="config-pick-name config-pick-name-fill">{p.label}</span>
+                {p.value === 'cli' && (
+                  <span className="badge-experimental" title={t('settings.cliExperimentalHint')}>
+                    {t('settings.experimental')}
+                  </span>
+                )}
+                <span className="config-pick-arrow" aria-hidden="true">
                   ›
                 </span>
               </button>
@@ -55,24 +60,10 @@ export function LlmStep({
       ) : (
         // 阶段二：左侧列表（图标左移）+ 右侧配置
         <div className="onboarding-llm-grid">
-          <div className="onboarding-provider-list" role="radiogroup" aria-label="Provider">
-            {LLM_PROVIDERS.map((p) => {
-              const selected = p.value === draft.provider;
-              return (
-                <button
-                  key={p.value}
-                  type="button"
-                  className={`onboarding-provider-item${selected ? ' selected' : ''}`}
-                  onClick={() => onChange({ ...draft, provider: p.value })}
-                  role="radio"
-                  aria-checked={selected}
-                >
-                  <LlmProviderIcon provider={p.value} size={24} />
-                  <span className="onboarding-provider-name">{p.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          <LlmProviderPicker
+            value={draft.provider}
+            onChange={(provider) => onChange({ ...draft, provider })}
+          />
           <div className="onboarding-llm-form">
             <LlmProfileForm
               draft={draft}

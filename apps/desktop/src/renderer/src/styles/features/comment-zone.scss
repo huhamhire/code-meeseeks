@@ -78,9 +78,9 @@
 }
 // 删除按钮主色用 danger，跟其它按钮拉开语义；disabled 时半透明
 .comment-zone-delete-btn:hover:not(:disabled) {
-  border-color: $color-danger;
-  color: $color-danger;
-  background: rgba(244, 135, 113, 0.08);
+  border-color: $color-danger-strong;
+  color: $color-danger-strong;
+  background: $color-danger-strong-fade;
 }
 .comment-zone-delete-btn:disabled {
   opacity: 0.4;

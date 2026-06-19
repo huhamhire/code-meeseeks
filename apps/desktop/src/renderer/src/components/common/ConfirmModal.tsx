@@ -9,6 +9,8 @@ interface ConfirmModalProps {
   cancelLabel?: string;
   /** 危险操作（删除等）时确认按钮显红色 */
   danger?: boolean;
+  /** 从二层嵌套子模态弹出时置 true：用嵌套 backdrop（z-index 抬到 nested 层），叠在子模态之上 */
+  nested?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -25,6 +27,7 @@ export function ConfirmModal({
   confirmLabel,
   cancelLabel,
   danger = false,
+  nested = false,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
@@ -49,6 +52,7 @@ export function ConfirmModal({
   return (
     <Modal
       portal
+      nested={nested}
       size="confirm"
       onClose={onCancel}
       title={resolvedTitle}

@@ -1,0 +1,122 @@
+@use '../tokens' as *;
+
+// 配置选择器：左右两栏布局 —— 左侧集成平台 / LLM provider 选择列表，右侧受控表单。
+// 由 settings 域的 PlatformPicker / LlmProviderPicker 复用，首启向导与设置面板子模态共用同一视觉。
+// （从原 .onboarding-platform-* / .onboarding-provider-* 收敛为中性类，统一在 settings 维护。）
+
+.config-pick-grid {
+  display: grid;
+  // 左列固定 220px：容下最长副标题（如「gitlab.com / Self-Managed」）单行不折行
+  grid-template-columns: 220px 1fr;
+  gap: $space-8;
+  align-items: start;
+}
+.config-pick-form {
+  min-width: 0; // 防止右栏内容把 grid 撑出
+}
+
+.config-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+
+// 设置子模态内的左右两栏：固定高度，避免切换 provider 时右侧表单高矮变化导致模态抖动。
+// 左侧列表与右侧表单各自在该固定高度内独立滚动（自适应填满，内容不足时下方留白、内容超出则滚动），
+// 整体高度恒定。向导里在大卡片中铺开、不加此类，保持自适应。
+.config-pick-grid-fixed {
+  height: 190px;
+  align-items: stretch;
+
+  > .config-pick-list,
+  > .config-pick-form {
+    min-height: 0; // 允许在 grid 行内收缩，从而触发自身滚动
+    overflow-y: auto;
+  }
+  // 右侧表单顶部留半行余白，第一项不贴顶、与左侧列表卡片视觉更协调
+  > .config-pick-form {
+    padding-top: $space-5;
+  }
+}
+
+.config-pick-item {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  width: 100%;
+  text-align: left;
+  padding: $space-4 $space-5;
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+  background: $bg-panel;
+  color: $text-body;
+  cursor: pointer;
+
+  &:hover:not(.disabled):not(:disabled) {
+    background: $bg-hover;
+    border-color: $color-accent;
+  }
+  &.selected {
+    border-color: $color-accent;
+    box-shadow: inset 3px 0 0 $color-accent;
+    color: $text-primary;
+  }
+  // 置灰：未实现平台 / 只读态的非当前项。仅 .disabled 控制视觉淡化，
+  // 交互失效单独用 HTML disabled 属性 —— 这样只读态下「当前选中项」可保持高亮不被淡化。
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.config-pick-icon {
+  display: inline-flex;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px; // 固定宽度，保证各项图标占位一致、文字起点不漂移
+
+  &.muted-icon {
+    color: $text-muted;
+    filter: grayscale(1);
+  }
+}
+
+// 平台项：图标右侧名称 + 副标题居中
+.config-pick-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1px;
+  min-width: 0;
+}
+.config-pick-name {
+  color: $text-primary;
+  font-size: $fs-md;
+  font-weight: 500;
+}
+.config-pick-meta {
+  color: $text-muted;
+  font-size: $fs-sm;
+  white-space: nowrap; // 副标题始终单行，避免被拆词换行
+}
+// provider 项：名称占满图标右侧、过长省略号（无副标题，与平台项区分）
+.config-pick-name-fill {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-pick-arrow {
+  color: $text-muted;
+  font-size: $fs-lg;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .config-pick-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -224,11 +224,12 @@ export function LlmProfileForm({
             value={draft.label}
             onChange={(e) => update('label', e.target.value)}
             onBlur={() => markTouched('label')}
-            placeholder={t('llmProfileForm.namePlaceholder')}
+            placeholder={
+              isCli ? t('llmProfileForm.cliNamePlaceholder') : t('llmProfileForm.namePlaceholder')
+            }
             autoFocus
             maxLength={32}
           />
-          {showError('label') && <p className="settings-field-error">{errors.label}</p>}
         </div>
         {!hideProvider && (
           <>
@@ -263,7 +264,6 @@ export function LlmProfileForm({
               isCli ? t('llmProfileForm.cliCommandPlaceholder') : providerMeta.modelExample
             }
           />
-          {showError('model') && <p className="settings-field-error">{errors.model}</p>}
         </div>
         {/* cli 模式不直连 API：没有 Base URL / API Key 概念，整组隐藏 */}
         {!isCli && (
@@ -281,7 +281,6 @@ export function LlmProfileForm({
                 onBlur={() => markTouched('base_url')}
                 placeholder={baseUrlPlaceholder}
               />
-              {showError('base_url') && <p className="settings-field-error">{errors.base_url}</p>}
             </div>
             <div className="modal-kv-key">
               API Key{providerMeta.needsKey && <span className="settings-required"> *</span>}
@@ -309,7 +308,6 @@ export function LlmProfileForm({
                   {keyVisible ? <EyeIcon /> : <EyeOffIcon />}
                 </button>
               </div>
-              {showError('api_key') && <p className="settings-field-error">{errors.api_key}</p>}
             </div>
           </>
         )}

@@ -14,6 +14,7 @@
 //   chat-pane    右侧 pr-agent chat 面板
 //   drafts-panel "草稿" tab 列表页 (.drafts-panel / -filter / -item / -anchor)
 //   modal        SettingsModal + LlmEditorModal 子模态 + LLM profile 列表
+//   config-picker 配置选择器左右布局 (平台 / LLM provider 选择列表 + 表单，向导与设置子模态共用)
 @use './styles/base';
 @use './styles/layout/titlebar';
 @use './styles/layout/statusbar';
@@ -29,4 +30,5 @@
 @use './styles/features/chat-pane';
 @use './styles/features/drafts-panel';
 @use './styles/common/modal';
+@use './styles/features/config-picker';
 @use './styles/features/onboarding';
