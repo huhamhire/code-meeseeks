@@ -28,11 +28,20 @@
   // （16px ≈ 原 latin chip 高度，11px 字号居中不裁切 CJK）。
   display: inline-flex;
   align-items: center;
+  gap: $space-2;
   height: 16px;
   box-sizing: border-box;
   padding: 0 $space-3;
   border-radius: $radius-sm;
   white-space: nowrap;
+
+  // 图标统一行为：`display:block` 干掉 inline svg 自带的基线缝隙（否则图标相对
+  // flex 居中的文字会偏下、视觉不齐线），`flex-shrink:0` 防窄状态被压缩。所有带
+  // 前置图标的 chip（autopilot / llm / prs / sync …）共用此基线，不再各自补丁。
+  svg {
+    display: block;
+    flex-shrink: 0;
+  }
 }
 
 // VS Code 远程指示器 statusBarItem.remoteBackground 配色：实色深绿 + 白字
@@ -44,11 +53,6 @@
 // AutoPilot 开关 chip：机器人图标（开）/ 斜杠机器人（关）+ 文案；默认中性，启用时蓝底强调
 .statusbar-chip-autopilot {
   cursor: pointer;
-  gap: $space-2;
-
-  svg {
-    flex-shrink: 0;
-  }
 
   &.is-on {
     background: $color-accent;
@@ -68,16 +72,9 @@
   }
 }
 
-// PR 数 chip：图标 + 数字横排，svg 跟数字基线对齐
+// PR 数 chip：图标 + 数字横排（gap / svg 基线由 .statusbar-chip 统一）
 .statusbar-chip-prs {
-  display: inline-flex;
-  align-items: center;
-  gap: $space-2;
   font-variant-numeric: tabular-nums;
-
-  svg {
-    display: block; // 干掉 inline svg 自带的 baseline 间隙
-  }
 }
 
 // 同步时间 chip：时钟图标 + 相对时间文本
@@ -99,25 +96,20 @@
 }
 
 .statusbar-chip-sync {
-  display: inline-flex;
-  align-items: center;
-  gap: $space-2;
   font-variant-numeric: tabular-nums;
+}
 
-  svg {
-    display: block;
-  }
+// pr-agent 活动 / repo sync 共用的「运行中」蓝调：accent 浅底 + info 字色 + 等宽数字
+%statusbar-chip-running {
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-variant-numeric: tabular-nums;
 }
 
 // 当前 repo sync (clone/fetch) chip：跟 pr-agent 活动 chip 同蓝调，但 dot 用
 // pragent-dot 的脉冲动画语义即"在跑"。idle 时整条不渲染
 .statusbar-repo-sync-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: $space-2;
-  background: $color-accent-bg-fade;
-  color: $color-info;
-  font-variant-numeric: tabular-nums;
+  @extend %statusbar-chip-running;
   max-width: 240px;
 }
 .statusbar-repo-sync-name {
@@ -143,18 +135,11 @@
 // pr-agent 运行中指示。蓝色调跟 .chat-pane-stage-tag / chat-run-phase 一致；
 // button 形态时给 hover 边框反馈，span 形态不可点不出 hover
 .statusbar-pragent-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: $space-2;
-  background: $color-accent-bg-fade;
-  color: $color-info;
+  @extend %statusbar-chip-running;
   border: 1px solid transparent;
-  font-variant-numeric: tabular-nums;
 }
 button.statusbar-pragent-chip {
   cursor: pointer;
-  font: inherit;
-  font-weight: 600;
 
   &:hover {
     border-color: $color-accent;
@@ -192,19 +177,25 @@ button.statusbar-pragent-chip {
   background: rgba(255, 255, 255, 0.1);
 }
 
-// === 队列 popover ===
-// chip 上方弹出。最多 6 行高 + 内部滚动，避免遮住其他状态栏元素
-.statusbar-queue-popover {
+// chip 正上方右对齐弹出的菜单容器（队列 popover / LLM 切换菜单共用定位与浮层外观，
+// 各自只叠 width / border-radius / padding 差异）
+%statusbar-popover {
   position: absolute;
   bottom: calc(100% + #{$space-2});
   right: 0;
-  min-width: 280px;
-  max-width: 420px;
   background: $bg-elev;
   border: 1px solid $border-default;
-  border-radius: $radius-md;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   z-index: $z-statusbar-menu;
+}
+
+// === 队列 popover ===
+// chip 上方弹出。最多 6 行高 + 内部滚动，避免遮住其他状态栏元素
+.statusbar-queue-popover {
+  @extend %statusbar-popover;
+  min-width: 280px;
+  max-width: 420px;
+  border-radius: $radius-md;
   padding: $space-3 0;
   display: flex;
   flex-direction: column;
@@ -378,9 +369,7 @@ button.statusbar-pragent-chip {
   display: inline-flex;
 }
 .statusbar-llm-chip {
-  font: inherit;
   cursor: pointer;
-  border: none;
 }
 // 启用模型时用 VS Code 蓝标签色，跟 pending status-tag / blame-toggle.active 同色
 .statusbar-llm-chip-active {
@@ -389,17 +378,11 @@ button.statusbar-pragent-chip {
 }
 
 .llm-chip-menu {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  right: 0;
+  @extend %statusbar-popover;
   min-width: 240px;
   max-width: 360px;
-  background: $bg-elev;
-  border: 1px solid $border-default;
   border-radius: $radius-lg;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   padding: $space-2 0;
-  z-index: $z-statusbar-menu;
 }
 .llm-chip-menu-item {
   width: 100%;
