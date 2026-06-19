@@ -6,6 +6,7 @@ import type {
   PlatformAdapter,
   PlatformCapabilities,
   PlatformUser,
+  PrActivityEvent,
   PrComment,
   PrCommentAnchor,
   PrCommit,
@@ -177,6 +178,8 @@ export class GitLabAdapter implements PlatformAdapter {
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,
+      // GitLab 无统一活动事件源（CE 无审批、审批系统 note 解析脆弱）→ PR 标签页退化为纯评论视图。
+      activityTimeline: false,
     };
   }
 
@@ -289,6 +292,13 @@ export class GitLabAdapter implements PlatformAdapter {
       out.push(top);
     }
     return out;
+  }
+
+  async listPullRequestActivity(_repo: RepoRef, _prId: string): Promise<PrActivityEvent[]> {
+    // 差异化设计：GitLab 不参与活动时间线（capabilities.activityTimeline=false，PR 标签页退化为纯
+    // 评论视图），故无需提供决断事件。GitLab 也没有统一活动事件源——CE 无审批、审批仅以脆弱的英文
+    // 系统 note 体现，与 Bitbucket /activities、GitHub /reviews 的可靠时间戳事件不对等——返回空。
+    return [];
   }
 
   async getUserAvatar(

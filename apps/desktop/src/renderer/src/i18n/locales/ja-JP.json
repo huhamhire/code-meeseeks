@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "この PR にはまだアクティビティがありません",
+    "loadError": "アクティビティの読み込みに失敗しました · {{title}}",
+    "loading": "アクティビティを読み込み中…",
+    "mergeCommit": "マージコミット · 親 {{parents}} 件",
+    "verb": {
+      "approved": "変更を承認しました",
+      "commented": "コメントしました",
+      "dismissed": "レビューを取り消しました",
+      "needsWork": "変更をリクエストしました",
+      "unapproved": "承認を取り消しました"
+    }
+  },
   "app": {
     "approveActionFailed": "承認操作に失敗しました：{{msg}}",
     "loading": "読み込み中…",
@@ -448,6 +461,7 @@
     "showBlame": "Blame を有効化（head 側のみ）",
     "showWhitespace": "空白文字を表示（スペース / Tab）",
     "sideBySide": "並べて表示",
+    "tabActivity": "アクティビティ",
     "tabComments": "コメント",
     "tabCommits": "コミット",
     "tabDiff": "変更",

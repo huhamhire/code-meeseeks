@@ -493,6 +493,121 @@
   padding-top: $space-4;
   border-top: 1px solid $border-muted;
 }
+
+// 时间线模式的顶层评论：li 自身退掉卡片样式（卡片下移到 .pr-comment-card），标题行走 .pr-activity-item
+// 版式与其它事件统一；正文卡片整体缩进、挂在时间线轨右侧。
+.pr-comment-timeline.pr-comment-depth-0 {
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+.pr-comment-card {
+  // 缩进对齐到标题行的头像左缘（行左 padding + 图标 22 + gap）
+  margin-left: calc(22px + #{$space-3} * 2);
+  margin-top: $space-2;
+  padding: $space-4 $space-5;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+}
+
+// ── 活动时间线：提交 / 评审决断事件行 + 评论行 ──
+// 所有条目（评论 / 提交 / 决断）首列都是同一位置的图标节点，正文在右；一条竖向虚线轨贯穿图标列、
+// 连接相邻条目，图标用面板底色遮住轨线形成「节点」效果。
+.pr-activity-list {
+  position: relative;
+
+  // 竖向虚线轨：居中于图标列（行左 padding $space-3 + 图标半宽 11px）。首尾各内缩一点，不超出首/末节点。
+  &::before {
+    content: '';
+    position: absolute;
+    top: $space-5;
+    bottom: $space-5;
+    left: calc(#{$space-3} + 11px);
+    border-left: 1px dashed $border-default;
+    z-index: 0;
+  }
+}
+.pr-activity-item {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding: $space-2 $space-3;
+  // 与评论主体人文本同字号（body 默认 14px），作者展示不做差异化
+  font-size: $fs-lg;
+  color: $text-body;
+}
+.pr-activity-clickable {
+  cursor: pointer;
+  border-radius: $radius-sm;
+
+  &:hover {
+    background: $bg-hover;
+  }
+}
+.pr-activity-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: $text-muted;
+  // 浮于虚线轨之上并用面板底色遮挡轨线 → 图标成为时间线节点
+  position: relative;
+  z-index: 1;
+  background: $bg-app;
+}
+// 决断语义色：approve 绿、needs-work 琥珀；unapproved / dismissed 维持中性 muted
+.pr-activity-icon-approved {
+  color: $color-approved;
+}
+.pr-activity-icon-needsWork {
+  color: $color-warning-bright;
+}
+.pr-activity-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  overflow: hidden;
+}
+.pr-activity-commit-subject {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pr-activity-sha {
+  flex-shrink: 0;
+  font-family: $font-mono;
+  font-size: $fs-xs;
+  color: $text-muted;
+}
+.pr-activity-merge-tag {
+  flex-shrink: 0;
+  font-size: $fs-xs;
+  padding: 0 $space-2;
+  border-radius: $radius-sm;
+  background: $bg-hover;
+  color: $text-muted;
+}
+.pr-activity-actor {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: $text-primary;
+}
+.pr-activity-verb {
+  color: $text-muted;
+}
+.pr-activity-time {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: $fs-xs;
+}
 .pr-comment-head {
   display: flex;
   align-items: center;

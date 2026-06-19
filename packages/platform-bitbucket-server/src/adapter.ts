@@ -5,6 +5,8 @@ import type {
   PlatformAdapter,
   PlatformCapabilities,
   PlatformUser,
+  PrActivityEvent,
+  PrActivityKind,
   PrComment,
   PrCommentAnchor,
   PrCommit,
@@ -87,7 +89,7 @@ interface BitbucketComment {
 interface BitbucketCommentAnchor {
   diffType?: 'EFFECTIVE' | 'COMMIT' | 'RANGE';
   // line / lineType 对文件级评论（挂在文件而非具体行）或孤儿 anchor（锚定行已不存在）
-  // 可能缺省 —— 标可选，mapBBAnchor 据此降级，避免读 undefined.toLowerCase 崩
+  // 可能缺省 —— 标可选，mapBitbucketAnchor 据此降级，避免读 undefined.toLowerCase 崩
   line?: number;
   lineType?: 'ADDED' | 'REMOVED' | 'CONTEXT';
   fileType?: 'FROM' | 'TO';
@@ -156,6 +158,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,
+      activityTimeline: true,
     };
   }
 
@@ -287,7 +290,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments`,
       { text: body, parent: { id: Number(parentCommentId) } },
     );
-    return mapBBComment(created);
+    return mapBitbucketComment(created);
   }
 
   async deleteComment(
@@ -324,7 +327,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       // PUT 接口正常返回 JSON；走到这里只可能是上游 Bitbucket 配错回了 204
       throw new Error('editComment: Bitbucket 返回空响应，无法确认更新结果');
     }
-    return mapBBComment(updated);
+    return mapBitbucketComment(updated);
   }
 
   async publishInlineComment(
@@ -344,7 +347,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments`,
       { text: body, anchor: toBBAnchor(anchor) },
     );
-    return mapBBComment(created);
+    return mapBitbucketComment(created);
   }
 
   async getUserAvatar(
@@ -416,7 +419,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     for await (const c of this.client.paginate<BitbucketCommit>(
       `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/commits`,
     )) {
-      out.push(mapBBCommit(c, this.baseUrl, repo));
+      out.push(mapBitbucketCommit(c, this.baseUrl, repo));
     }
     return out;
   }
@@ -439,13 +442,39 @@ export class BitbucketServerAdapter implements PlatformAdapter {
       const id = String(c.id);
       if (seen.has(id)) continue;
       seen.add(id);
-      out.push(mapBBComment(c, activity.commentAnchor));
+      out.push(mapBitbucketComment(c, activity.commentAnchor));
+    }
+    return out;
+  }
+
+  async listPullRequestActivity(repo: RepoRef, prId: string): Promise<PrActivityEvent[]> {
+    // 同 /activities 流里挑出决断类事件：APPROVED / UNAPPROVED / REVIEWED（= 标记 Needs Work）。
+    // 评论（COMMENTED）走 listPullRequestComments，这里只取评审决断。
+    const out: PrActivityEvent[] = [];
+    for await (const activity of this.client.paginate<BitbucketActivity>(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/activities`,
+    )) {
+      const kind: PrActivityKind | null =
+        activity.action === 'APPROVED'
+          ? 'approved'
+          : activity.action === 'UNAPPROVED'
+            ? 'unapproved'
+            : activity.action === 'REVIEWED'
+              ? 'needsWork'
+              : null;
+      if (!kind) continue;
+      out.push({
+        remoteId: String(activity.id),
+        kind,
+        actor: mapUser(activity.user),
+        createdAt: new Date(activity.createdDate).toISOString(),
+      });
     }
     return out;
   }
 }
 
-function mapBBCommit(c: BitbucketCommit, baseUrl: string, repo: RepoRef): PrCommit {
+function mapBitbucketCommit(c: BitbucketCommit, baseUrl: string, repo: RepoRef): PrCommit {
   // Bitbucket commit URL：/projects/<p>/repos/<r>/commits/<sha>
   const url = `${baseUrl}/projects/${repo.projectKey}/repos/${repo.repoSlug}/commits/${c.id}`;
   return {
@@ -470,21 +499,21 @@ function bitbucketCommitterToUser(c: { name: string; emailAddress?: string }): P
   return { name: c.name, displayName: c.name };
 }
 
-function mapBBComment(c: BitbucketComment, anchor?: BitbucketCommentAnchor): PrComment {
+function mapBitbucketComment(c: BitbucketComment, anchor?: BitbucketCommentAnchor): PrComment {
   return {
     remoteId: String(c.id),
     author: mapUser(c.author),
     body: c.text,
     createdAt: new Date(c.createdDate).toISOString(),
     updatedAt: new Date(c.updatedDate).toISOString(),
-    anchor: anchor ? mapBBAnchor(anchor) : null,
-    replies: (c.comments ?? []).map((r) => mapBBComment(r)),
+    anchor: anchor ? mapBitbucketAnchor(anchor) : null,
+    replies: (c.comments ?? []).map((r) => mapBitbucketComment(r)),
     // 透传 Bitbucket 乐观锁版本号 — DELETE / PUT 时调用方必须带回来，否则 409
     version: c.version,
   };
 }
 
-function mapBBAnchor(a: BitbucketCommentAnchor): PrCommentAnchor | null {
+function mapBitbucketAnchor(a: BitbucketCommentAnchor): PrCommentAnchor | null {
   // 无行号 = 文件级 / 孤儿 anchor，无法锚到具体行 → 返回 null，调用方退化成 summary 评论
   if (a.line == null) return null;
   return {
@@ -497,7 +526,7 @@ function mapBBAnchor(a: BitbucketCommentAnchor): PrCommentAnchor | null {
 }
 
 /**
- * 跨平台中性 anchor → Bitbucket REST 字段。mapBBAnchor 的反方向，发布 inline 评论时
+ * 跨平台中性 anchor → Bitbucket REST 字段。mapBitbucketAnchor 的反方向，发布 inline 评论时
  * 用。diffType 显式给 'EFFECTIVE' 让评论锚到"当前生效 diff"而不是某次具体 commit
  * —— PR 后续 push 新 commit 时评论仍跟着行走。
  */

@@ -243,6 +243,20 @@ export const listCommits: IpcController<'diff:listCommits'> = async (_event, req
 };
 
 /**
+ * 拉评审决断活动事件（approve / needs-work / unapprove / dismiss）。不缓存，量小；
+ * 进活动时间线时与评论 / 提交归并。平台取不到历史决断时 adapter 返回 []。
+ */
+export const listActivity: IpcController<'diff:listActivity'> = async (_event, req) => {
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  const adapter = ctx.pr.adapterForOrThrow(pr);
+  return adapter.listPullRequestActivity(
+    { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+    pr.remoteId,
+  );
+};
+
+/**
  * 本地 git 算 PR 引入提交数（base=targetRef.sha 排除合入的目标提交）；镜像未齐返回 null。
  */
 export const getCommitCount: IpcController<'diff:commitCount'> = async (_event, req) => {

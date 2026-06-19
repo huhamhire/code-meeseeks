@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "No activity yet",
+    "loadError": "Failed to load activity · {{title}}",
+    "loading": "Loading activity…",
+    "mergeCommit": "Merge commit · {{parents}} parents",
+    "verb": {
+      "approved": "approved these changes",
+      "commented": "commented",
+      "dismissed": "dismissed their review",
+      "needsWork": "requested changes",
+      "unapproved": "withdrew their approval"
+    }
+  },
   "app": {
     "approveActionFailed": "Approval action failed: {{msg}}",
     "loading": "Loading…",
@@ -461,6 +474,7 @@
     "showBlame": "Enable blame (head side only)",
     "showWhitespace": "Show whitespace (spaces / tabs)",
     "sideBySide": "Side by side",
+    "tabActivity": "Activity",
     "tabComments": "Comments",
     "tabCommits": "Commits",
     "tabDiff": "Changes",

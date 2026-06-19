@@ -47,6 +47,7 @@ class FakeAdapter implements PlatformAdapter {
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,
+      activityTimeline: true,
     };
   }
   async ping() {
@@ -67,6 +68,9 @@ class FakeAdapter implements PlatformAdapter {
     return [];
   }
   async listPullRequestCommits(): Promise<never[]> {
+    return [];
+  }
+  async listPullRequestActivity(): Promise<never[]> {
     return [];
   }
   async getUserAvatar(): Promise<null> {
@@ -253,6 +257,7 @@ describe('Poller.tick', () => {
         resolvableThreads: false,
         suggestions: false,
         reviewGrouping: false,
+        activityTimeline: true,
       }),
       async ping() {
         return { ok: true };
@@ -265,6 +270,9 @@ describe('Poller.tick', () => {
         return [];
       },
       async listPullRequestCommits() {
+        return [];
+      },
+      async listPullRequestActivity() {
         return [];
       },
       async getUserAvatar() {

@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "Noch keine Aktivität in diesem PR",
+    "loadError": "Aktivität konnte nicht geladen werden · {{title}}",
+    "loading": "Aktivität wird geladen…",
+    "mergeCommit": "Merge-Commit · {{parents}} Eltern",
+    "verb": {
+      "approved": "hat diese Änderungen genehmigt",
+      "commented": "hat kommentiert",
+      "dismissed": "hat die Review verworfen",
+      "needsWork": "hat Änderungen angefordert",
+      "unapproved": "hat die Genehmigung zurückgezogen"
+    }
+  },
   "app": {
     "approveActionFailed": "Genehmigungsaktion fehlgeschlagen: {{msg}}",
     "loading": "Wird geladen…",
@@ -461,6 +474,7 @@
     "showBlame": "Blame aktivieren (nur head-Seite)",
     "showWhitespace": "Leerzeichen anzeigen (Leerzeichen / Tab)",
     "sideBySide": "Nebeneinander",
+    "tabActivity": "Aktivität",
     "tabComments": "Kommentare",
     "tabCommits": "Commits",
     "tabDiff": "Änderungen",

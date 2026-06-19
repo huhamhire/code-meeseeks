@@ -72,6 +72,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('diff:commentCountCached', pr.getCommentCountCached); // 评论数角标（仅缓存）
   ipcMain.handle('diff:listComments', pr.listComments); // 拉评论（缓存 + in-flight 去重）
   ipcMain.handle('diff:listCommits', pr.listCommits); // 提交列表
+  ipcMain.handle('diff:listActivity', pr.listActivity); // 评审决断活动事件（时间线）
   ipcMain.handle('diff:commitCount', pr.getCommitCount); // 提交数角标（本地 git）
   ipcMain.handle('diff:getBlame', pr.getBlame); // blame + PR 引入行
   ipcMain.handle('repo:getTotalSize', pr.getTotalSize); // 本地镜像总占用（设置页）

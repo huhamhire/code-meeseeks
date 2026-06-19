@@ -1,6 +1,7 @@
 import type {
   LocalPrStatus,
   PollResult,
+  PrActivityEvent,
   PrComment,
   PrCommit,
   ReviewDraft,
@@ -109,6 +110,15 @@ export interface PrChannels {
   'diff:listCommits': {
     request: { localId: string };
     response: PrCommit[];
+  };
+  /**
+   * 拉取 PR 上的评审决断活动事件（approve / needs-work / unapprove / dismiss），带时间戳。
+   * 活动时间线把它与评论 / 提交按时间归并。不缓存（量小，量级同 commits）；平台取不到历史
+   * 决断（如 GitLab CE 无审批）时返回 []，时间线只展示评论与提交。
+   */
+  'diff:listActivity': {
+    request: { localId: string };
+    response: PrActivityEvent[];
   };
   /**
    * 本地 git rev-list 算 PR 引入的 commit 数 (base..head)。完全走本地 bare 镜像，

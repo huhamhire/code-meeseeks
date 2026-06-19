@@ -6,6 +6,8 @@ import type {
   PlatformAdapter,
   PlatformCapabilities,
   PlatformUser,
+  PrActivityEvent,
+  PrActivityKind,
   PrComment,
   PrCommentAnchor,
   PrCommit,
@@ -179,6 +181,7 @@ export class GitHubAdapter implements PlatformAdapter {
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,
+      activityTimeline: true,
     };
   }
 
@@ -251,6 +254,35 @@ export class GitHubAdapter implements PlatformAdapter {
     }
     // GitHub commits 是 oldest-first；契约要求 newest-first
     return out.reverse();
+  }
+
+  async listPullRequestActivity(repo: RepoRef, prId: string): Promise<PrActivityEvent[]> {
+    const reviews = await collect(
+      this.client.paginate<GhReview>(
+        `/repos/${repo.projectKey}/${repo.repoSlug}/pulls/${prId}/reviews`,
+      ),
+    );
+    const out: PrActivityEvent[] = [];
+    for (const r of reviews) {
+      // COMMENTED / PENDING 不是决断；submitted_at 缺失（草稿态）跳过
+      if (!r.user || !r.submitted_at) continue;
+      const kind: PrActivityKind | null =
+        r.state === 'APPROVED'
+          ? 'approved'
+          : r.state === 'CHANGES_REQUESTED'
+            ? 'needsWork'
+            : r.state === 'DISMISSED'
+              ? 'dismissed'
+              : null;
+      if (!kind) continue;
+      out.push({
+        remoteId: String(r.id),
+        kind,
+        actor: mapUser(r.user),
+        createdAt: r.submitted_at,
+      });
+    }
+    return out;
   }
 
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
