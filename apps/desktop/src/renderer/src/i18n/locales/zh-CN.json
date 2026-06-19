@@ -178,6 +178,7 @@
     "textareaAria": "评论回复编辑器"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "跳转到 Diff 对应位置",
     "anchorTitle": "锚定 {{side}} 侧 · {{lineType}}",
     "daysAgo_other": "{{count}} 天前",
     "deleteConfirmMessage": "此操作会删除远端的这条评论，且无法恢复。确定继续吗？",
@@ -288,7 +289,10 @@
     "reply": "回复",
     "resizeFileListTitle": "拖动调整文件树宽度",
     "retry": "重试",
+    "scopeAll": "全部变更",
+    "scopeCommitCount_other": "{{count}} 个提交",
     "scopeLabel": "{{scope}}：",
+    "scopeLoading": "加载提交中…",
     "searchAria": "搜索",
     "searchChanges": "搜索变更内容",
     "searchChangesTitle": "搜索变更内容 (head + base)",
@@ -530,6 +534,16 @@
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
+  },
+  "prInfo": {
+    "createdAt": "远端创建",
+    "description": "描述",
+    "descriptionEmpty": "无描述",
+    "recentUpdate": "最近更新时间",
+    "reviewers": "评审者 ({{n}})",
+    "reviewersEmpty": "无",
+    "timeline": "时间线",
+    "updatedAt": "远端更新"
   },
   "prItem": {
     "approvedCount_other": "{{count}} 位 reviewer 已 approve",

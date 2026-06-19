@@ -83,6 +83,141 @@
   }
 }
 
+// 变更范围选择器（文件树头部「<n> 个文件 · 全部变更 / <commit>」可点击下拉）
+.diff-scope-select {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.diff-scope-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  max-width: 100%;
+  padding: 1px $space-2;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  // header 整体 uppercase + letterspacing；trigger 内含 commit 主题，需还原为普通可读文本
+  text-transform: none;
+  letter-spacing: normal;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+    border-color: $border-default;
+  }
+}
+.diff-scope-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diff-scope-chevron {
+  flex-shrink: 0;
+  transition: transform 0.12s ease;
+
+  &.open {
+    transform: rotate(180deg);
+  }
+}
+// 下拉用 fixed 定位（top/left/width 由 JS 按触发器位置计算）+ portal 挂 body，
+// 避免被 .diff-file-list 的 overflow 裁切 / 被右侧 Monaco 盖住。
+.diff-scope-menu {
+  position: fixed;
+  z-index: 100;
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: 0;
+  padding: $space-2;
+  list-style: none;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+// 每个选项：左侧横跨两行高度的图标 + 右侧两行正文（标题行 + 元信息副行，参考 Bitbucket）
+.diff-scope-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: $space-3;
+  width: 100%;
+  overflow: hidden;
+  padding: $space-3;
+  background: transparent;
+  border: none;
+  border-radius: $radius-sm;
+  color: $text-body;
+  cursor: pointer;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+
+  &:hover {
+    background: $bg-hover;
+  }
+  &.active {
+    background: $bg-selected;
+    color: $text-on-accent;
+  }
+}
+.diff-scope-option-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  color: $text-muted;
+}
+.diff-scope-option.active .diff-scope-option-icon {
+  color: $text-on-accent;
+}
+.diff-scope-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.diff-scope-option-title {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: $fs-md;
+}
+.diff-scope-option-sub {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  min-width: 0;
+  font-size: $fs-sm;
+  color: $text-muted;
+}
+.diff-scope-option.active .diff-scope-option-sub {
+  color: $text-on-accent;
+}
+.diff-scope-author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diff-scope-sha {
+  flex-shrink: 0;
+  font-family: $font-mono;
+  font-size: $fs-xs;
+}
+.diff-scope-time {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 // 文件树容器
 .diff-file-tree {
   flex: 1;

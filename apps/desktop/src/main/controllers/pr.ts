@@ -172,25 +172,31 @@ export const syncRepo: IpcController<'repo:sync'> = async (_event, req) => {
 };
 
 /**
- * 列出 base..head 变更文件（先确保镜像 + 锚到固定 merge-base）。
+ * 列出变更文件（先确保镜像）。默认 PR merge-base..head 全部变更；传 base/head 则列该范围
+ * （如某 commit 的 parent..sha），用于「查看特定 commit」。
  */
 export const listChangedFiles: IpcController<'diff:listChangedFiles'> = async (_event, req) => {
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const id = ctx.pr.repoIdentityFor(pr);
   await ctx.pr.ensureMirrorReadyForPr(pr);
-  const base = await ctx.pr.resolveDiffBaseSha(pr);
-  return ctx.repoMirror.listChangedFiles(id, base, pr.sourceRef.sha);
+  const base = req.base ?? (await ctx.pr.resolveDiffBaseSha(pr));
+  const head = req.head ?? pr.sourceRef.sha;
+  return ctx.repoMirror.listChangedFiles(id, base, head);
 };
 
 /**
- * 读 base（固定 merge-base）/ head 一侧文件内容。
+ * 读 base / head 一侧文件内容。默认 PR merge-base / head；传 base/head 则按指定范围
+ * （commit 视图：base=parent、head=commit）。
  */
 export const getFileContent: IpcController<'diff:getFileContent'> = async (_event, req) => {
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const id = ctx.pr.repoIdentityFor(pr);
-  const sha = req.side === 'base' ? await ctx.pr.resolveDiffBaseSha(pr) : pr.sourceRef.sha;
+  const sha =
+    req.side === 'base'
+      ? (req.base ?? (await ctx.pr.resolveDiffBaseSha(pr)))
+      : (req.head ?? pr.sourceRef.sha);
   return ctx.repoMirror.getFileContent(id, sha, req.path);
 };
 
@@ -290,10 +296,11 @@ export const getBlame: IpcController<'diff:getBlame'> = async (_event, req) => {
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const id = ctx.pr.repoIdentityFor(pr);
-  const base = await ctx.pr.resolveDiffBaseSha(pr);
+  const base = req.base ?? (await ctx.pr.resolveDiffBaseSha(pr));
+  const head = req.head ?? pr.sourceRef.sha;
   const [allBlame, changedSet] = await Promise.all([
-    ctx.repoMirror.getBlame(id, pr.sourceRef.sha, req.path),
-    ctx.repoMirror.listChangedHeadLines(id, base, pr.sourceRef.sha, req.path),
+    ctx.repoMirror.getBlame(id, head, req.path),
+    ctx.repoMirror.listChangedHeadLines(id, base, head, req.path),
   ]);
   return {
     lines: allBlame.filter((b) => !changedSet.has(b.line)),

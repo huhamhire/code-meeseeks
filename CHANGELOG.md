@@ -7,6 +7,14 @@
 
 ### Added
 
+- Diff 标签支持按「变更范围」查看：文件树头部「<n> 个文件」补充范围信息，变为「<n> 个文件 · 全部变更」或「<n> 个文件 · <commit>」，整体可点击弹出下拉，选择查看「全部变更（PR base..head）」或某个 commit 的变更（该 commit 的 `parent..sha`）。提交 / 活动标签页点击 commit 不再跳浏览器，而是切到 Diff 标签本地渲染该 commit 的变更。commit 视图为只读 diff（行内评论 / 草稿锚定在 PR 全量 diff 行号上，不套用于单 commit）。`diff:listChangedFiles` / `getFileContent` / `getBlame` 增加可选 base/head 范围参数。
+
+- Diff 支持给「删除行」新增行内评论 / 草稿：此前 hover「+」只挂在 head 侧（新增行），现并排视图下 base 侧（删除 / 上下文行）也可 hover「+」创建，锚定 `side: 'old'`（发布映射 Bitbucket `lineType: removed / fileType: FROM`）。统一(inline)视图下删除行以 view zone 呈现、无可 hover 行号，仍需切并排视图创建。
+
+- PR 评审界面交互细节优化：合并按钮去掉「常绿填充」（易误判为已点击），改为与 approve 同款基础态 + 1s blink 突出可点击、点击后沿用 disabled 灰显；提交标签页表格行高加高、表头字号不小于正文；活动视图 inline 评论的「文件:行号」锚点可点击，直接跳到 Diff 标签对应位置；活动内容区宽度在 [480, 960] 内自适应、窄于 480 转横向滚动（修正窄宽下被 ChatPane 遮盖）；PR 头部「冲突」标记改为带色 chip 展示。
+
+- PR 详情标签页交互优化：整面板国际化（原「描述 / 时间线」写死中文、「Reviewers」写死英文，现按界面语言出文案）；reviewer 列表参照活动时间线行式展示（前置状态图标 + 头像 + 名 + 决断 chip，「评审者 / 已批准 / 要求修改 / 待评审」）；时间线精简为「远端创建 / 远端更新 / 最近更新时间」（移除「本地首次发现」）；改为左右布局（左描述、右时间线 + 评审者），面板窄到阈值时按容器查询响应式将侧栏堆叠到描述下方；侧栏限宽 400px、时间小字号右对齐，避免元素过散。
+
 - PR 详情「评论」标签页演进为「活动」时间线（GitHub / Bitbucket）：把评论、提交更新、reviewer 评审决断（approve / needs-work / unapprove / dismiss）按时间倒序归并为一条活动时间线，保留原有评论内容、排序与编辑 / 回复 / 删除 / 内联代码能力。新增统一的 `listPullRequestActivity` 平台契约——GitHub 取自 `/pulls/{n}/reviews`、Bitbucket 取自 `/activities`（带时间戳的决断事件）。提交另保留独立「提交」标签页。
   - 视觉：各条目统一为「图标节点 + 头像 + 加粗作者名 + 动词 + 时间」，一条竖向虚线轨贯穿图标列连接相邻条目；评论标题统一为「xxx 评论」并前置评论图标，正文整体缩进成挂在轨上的卡片；作者头像 / 文本与评论主体人一致，不做差异化。评审决断动词统一为「批准 / 要求修改」并用带色 chip（绿 / 琥珀 / 中性）突出。时间标签 hover 显示精确到秒的实际时间点。
   - 新建评论：标签栏右侧「评论」按钮可直接发一条不锚到文件的 summary 评论，编辑框作为时间线首个节点（头像在轨上、编辑框缩进）展开，发布后新评论即时出现在顶部（新增 `publishSummaryComment` 平台契约 + `comments:create` 通道）。

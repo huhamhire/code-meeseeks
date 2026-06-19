@@ -82,20 +82,45 @@
 
 // "合并" 按钮：分支合并图标 + 文案。绿底实心强调"放行 / 合并"终态动作，跟 review
 // approve 同绿色系但用填充 (区别于 approve 的描边态)；仅在 canMerge 时渲染
+// 合并按钮：基础态与 approve 的 inactive 一致（默认描边 + 正文色，仅图标用绿色语义色），
+// 不再「常绿填充」——常绿易被误判为「已点击 / 已合并」态。改以 1s 周期 blink 突出可点击；
+// 点击后（merging → disabled）走 .btn:disabled 灰显并停闪。
 .pr-header-merge {
   display: inline-flex;
   align-items: center;
   gap: $space-2;
-  background: $color-approved;
-  border-color: $color-approved;
-  color: $text-on-accent;
+  animation: pr-merge-blink 1s ease-in-out infinite;
 
   svg {
     flex-shrink: 0;
+    color: $color-approved;
   }
 
-  &:hover {
-    filter: brightness(0.93);
+  &:hover:not(:disabled) {
+    // hover 给确定反馈：停闪 + 实心绿描边 + 浅绿填充
+    animation: none;
+    background: rgba(22, 163, 74, 0.14);
+    border-color: $color-approved;
+  }
+  &:disabled {
+    animation: none;
+  }
+}
+@keyframes pr-merge-blink {
+  0%,
+  100% {
+    border-color: $border-default;
+  }
+  50% {
+    border-color: $color-approved;
+    background: rgba(22, 163, 74, 0.14);
+  }
+}
+// 降低动态偏好：不闪烁，保留绿描边以示可合并
+@media (prefers-reduced-motion: reduce) {
+  .pr-header-merge {
+    animation: none;
+    border-color: $color-approved;
   }
 }
 
@@ -430,6 +455,8 @@
 .pr-tab-pane {
   flex: 1;
   min-height: 0;
+  // 允许在窄宽度下收缩到小于内容固有宽度，让内部滚动容器接管横向滚动（否则会撑破、被 ChatPane 盖住）
+  min-width: 0;
   display: flex;
 }
 
@@ -441,6 +468,8 @@
 .pr-comments-panel {
   flex: 1;
   min-height: 0;
+  // 同 .pr-tab-pane：可收缩到小于内容固有宽度，横向滚动交给内层 .pr-comments-scroll
+  min-width: 0;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -449,7 +478,8 @@
 }
 .pr-comments-scroll {
   flex: 1;
-  overflow-y: auto;
+  // 纵向常驻滚动；横向在内容低于最小宽度时出现滚动条（见下方 min-width）
+  overflow: auto;
   padding: $space-6 20px;
 }
 .pr-comments-list {
@@ -460,10 +490,12 @@
   flex-direction: column;
   gap: $space-5;
 }
-// 顶层评论列表限宽 + 居中，与详情页一致；滚动条留在外层 .pr-comments-scroll
-// 右缘。仅约束直接子列表，嵌套 replies 的 .pr-comments-list 不受影响。
+// 顶层时间线 / 评论列表：宽度在 [480, 960] 内自适应缩放并居中；窄于 480 不再压缩，
+// 转为外层 .pr-comments-scroll 的横向滚动（避免内嵌代码 / 评论被挤到不可读）。
+// 仅约束直接子列表，嵌套 replies 的 .pr-comments-list 不受影响。
 .pr-comments-scroll > .pr-comments-list {
   max-width: 960px;
+  min-width: 480px;
   margin: 0 auto;
 }
 .pr-comments-replies {
@@ -725,6 +757,17 @@
     padding: 0;
   }
 }
+// 可点击锚点 chip（活动视图）：button 形态需重置原生样式，并给可点反馈
+.pr-comment-anchor-link {
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.15);
+    text-decoration: underline;
+  }
+}
 .pr-comment-time {
   margin-left: auto;
   font-size: $fs-xs;
@@ -952,7 +995,10 @@
   background: $bg-app;
 }
 .pr-commits-table {
+  // 表格限宽 960 居中，与详情 / 活动 / 评论页一致；滚动条留在外层 .pr-commits-panel 右缘
   width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
   border-collapse: collapse;
   font-size: $fs-md;
 
@@ -964,15 +1010,18 @@
   }
   th {
     text-align: left;
-    padding: $space-3 $space-4;
+    // 表头与行同步加高，保持视觉一致
+    padding: $space-5 $space-4;
     font-weight: 600;
     color: $text-muted;
-    font-size: $fs-sm;
+    // 表头字号不小于正文（与表格 $fs-md 一致），靠加粗 + muted 色区分而非缩小
+    font-size: $fs-md;
     border-bottom: 1px solid $border-default;
     white-space: nowrap;
   }
   td {
-    padding: $space-3 $space-4;
+    // 行高适当加高（纵向 padding 6px → 10px），提交列表更松弛易读
+    padding: $space-5 $space-4;
     border-bottom: 1px solid $border-muted;
     vertical-align: middle;
   }

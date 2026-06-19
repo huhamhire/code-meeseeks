@@ -178,6 +178,7 @@
     "textareaAria": "Editor für Kommentarantworten"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "Zur Stelle im Diff springen",
     "anchorTitle": "Verankert an {{side}}-Seite · {{lineType}}",
     "daysAgo_one": "vor {{count}} Tag",
     "daysAgo_other": "vor {{count}} Tagen",
@@ -296,7 +297,11 @@
     "reply": "Antworten",
     "resizeFileListTitle": "Ziehen, um die Breite des Dateibaums anzupassen",
     "retry": "Erneut versuchen",
+    "scopeAll": "Alle Änderungen",
+    "scopeCommitCount_one": "{{count}} Commit",
+    "scopeCommitCount_other": "{{count}} Commits",
     "scopeLabel": "{{scope}}: ",
+    "scopeLoading": "Commits werden geladen…",
     "searchAria": "Suchen",
     "searchChanges": "Änderungen durchsuchen",
     "searchChangesTitle": "Änderungen durchsuchen (head + base)",
@@ -543,6 +548,16 @@
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
+  },
+  "prInfo": {
+    "createdAt": "Erstellt (remote)",
+    "description": "Beschreibung",
+    "descriptionEmpty": "Keine Beschreibung",
+    "recentUpdate": "Zuletzt aktualisiert",
+    "reviewers": "Reviewer ({{n}})",
+    "reviewersEmpty": "Keine",
+    "timeline": "Zeitleiste",
+    "updatedAt": "Aktualisiert (remote)"
   },
   "prItem": {
     "approvedCount_one": "{{count}} Reviewer hat genehmigt",

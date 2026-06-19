@@ -178,6 +178,7 @@
     "textareaAria": "コメント返信エディタ"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "Diff の該当位置へ移動",
     "anchorTitle": "{{side}} 側にアンカー · {{lineType}}",
     "daysAgo_other": "{{count}} 日前",
     "deleteConfirmMessage": "この操作はリモートのこのコメントを削除し、元に戻せません。続行しますか？",
@@ -288,7 +289,10 @@
     "reply": "返信",
     "resizeFileListTitle": "ドラッグしてファイルツリーの幅を調整",
     "retry": "再試行",
+    "scopeAll": "すべての変更",
+    "scopeCommitCount_other": "{{count}} 件のコミット",
     "scopeLabel": "{{scope}}: ",
+    "scopeLoading": "コミットを読み込み中…",
     "searchAria": "検索",
     "searchChanges": "変更内容を検索",
     "searchChangesTitle": "変更内容を検索 (head + base)",
@@ -530,6 +534,16 @@
     "bitbucketSub": "Server / Data Center",
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
+  },
+  "prInfo": {
+    "createdAt": "リモート作成",
+    "description": "説明",
+    "descriptionEmpty": "説明なし",
+    "recentUpdate": "最終更新",
+    "reviewers": "レビュアー ({{n}})",
+    "reviewersEmpty": "なし",
+    "timeline": "タイムライン",
+    "updatedAt": "リモート更新"
   },
   "prItem": {
     "approvedCount_other": "{{count}} 人のレビュアーが承認しました",

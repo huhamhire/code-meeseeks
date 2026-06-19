@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { PrComment, StoredPullRequest } from '@meebox/shared';
+import type { PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import i18n from '../../../../../i18n';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../../lib/markdown';
@@ -66,6 +66,7 @@ export function CommentItem({
   autoExpandCode = false,
   hardBreaks,
   timeline = false,
+  onJumpToAnchor,
 }: {
   comment: PrComment;
   pr: StoredPullRequest;
@@ -75,6 +76,8 @@ export function CommentItem({
   hardBreaks: boolean;
   /** 是否处于活动时间线模式（仅影响顶层评论版式，见上方说明） */
   timeline?: boolean;
+  /** inline 评论锚点 chip 点击 → 跳到 Diff 对应文件/行。提供时 chip 变可点击。 */
+  onJumpToAnchor?: (anchor: PrCommentAnchor) => void;
 }) {
   const { t } = useTranslation();
   // 评论 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)
@@ -112,17 +115,30 @@ export function CommentItem({
     }
   };
 
-  // inline 评论锚点 chip：path:line + 侧别 (old=base / new=head)，让用户在评论里定位到代码位置
-  const anchorChip = comment.anchor ? (
-    <span
-      className={`pr-comment-anchor pr-comment-anchor-${comment.anchor.side}`}
-      title={t('commentsPanel.anchorTitle', {
-        side: comment.anchor.side === 'old' ? 'base' : 'head',
-        lineType: comment.anchor.lineType,
-      })}
-    >
-      <code>{comment.anchor.path}</code>:{comment.anchor.line}
-    </span>
+  // inline 评论锚点 chip：path:line + 侧别 (old=base / new=head)，让用户在评论里定位到代码位置。
+  // 提供 onJumpToAnchor 时（活动视图）chip 变可点击 → 跳到 Diff 对应文件/行。
+  const anchor = comment.anchor;
+  const anchorChip = anchor ? (
+    onJumpToAnchor ? (
+      <button
+        type="button"
+        className={`pr-comment-anchor pr-comment-anchor-${anchor.side} pr-comment-anchor-link`}
+        onClick={() => onJumpToAnchor(anchor)}
+        title={t('commentsPanel.anchorJumpTitle')}
+      >
+        <code>{anchor.path}</code>:{anchor.line}
+      </button>
+    ) : (
+      <span
+        className={`pr-comment-anchor pr-comment-anchor-${anchor.side}`}
+        title={t('commentsPanel.anchorTitle', {
+          side: anchor.side === 'old' ? 'base' : 'head',
+          lineType: anchor.lineType,
+        })}
+      >
+        <code>{anchor.path}</code>:{anchor.line}
+      </span>
+    )
   ) : null;
 
   // inline 评论：在正文上方嵌一段代码上下文 (Monaco read-only)。replies (depth > 0) 不重复展示。
@@ -232,6 +248,7 @@ export function CommentItem({
             pr={pr}
             depth={depth + 1}
             hardBreaks={hardBreaks}
+            onJumpToAnchor={onJumpToAnchor}
           />
         ))}
       </ul>

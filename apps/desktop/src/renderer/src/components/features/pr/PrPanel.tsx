@@ -1,6 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LocalPrStatus, PlatformCapabilities, StoredPullRequest } from '@meebox/shared';
+import type {
+  LocalPrStatus,
+  PlatformCapabilities,
+  PrCommentAnchor,
+  PrCommit,
+  StoredPullRequest,
+} from '@meebox/shared';
 import { invoke } from '../../../api';
 import { useDraftsForPr } from '../../../stores/drafts-store';
 import { PaneLoading } from '../../common/Loading';
@@ -9,6 +15,7 @@ import { CommitsPanel } from './tabs/CommitsPanel';
 // Monaco 编辑器（~10MB）懒加载：只有真正切到 Diff tab 才拉取 DiffView chunk，
 // 不阻塞窗口首帧 / PR 列表 / 首启向导。
 const DiffView = lazy(() => import('./tabs/diff/DiffView').then((m) => ({ default: m.DiffView })));
+import type { PendingCommitView } from './tabs/diff/DiffView';
 import { DraftsPanel } from './tabs/drafts/DraftsPanel';
 import { PrInfoView } from './tabs/PrInfoView';
 import { PublishReviewModal } from './tabs/drafts/PublishReviewModal';
@@ -55,6 +62,17 @@ export function PrPanel({
   const [tab, setTab] = useState<PrTab>('diff');
   // 活动标签页「新建评论」编辑框开关（由标签栏「评论」按钮触发，编辑框出现在时间线顶部）
   const [composingComment, setComposingComment] = useState(false);
+  // 「查看特定 commit」请求：提交 / 活动标签页点击某 commit → 切到 Diff tab 本地渲染该 commit 变更
+  const [pendingCommitView, setPendingCommitView] = useState<PendingCommitView | null>(null);
+  const viewCommit = (commit: PrCommit): void => {
+    setPendingCommitView({
+      sha: commit.sha,
+      parent: commit.parents[0] ?? null,
+      abbreviatedSha: commit.abbreviatedSha,
+      subject: commit.message.split('\n', 1)[0] ?? commit.abbreviatedSha,
+    });
+    setTab('diff');
+  };
   // 收到跳转请求 → 强制切到 Diff tab，DiffView 自己负责消费 anchor
   useEffect(() => {
     if (pendingDiffNav) setTab('diff');
@@ -170,6 +188,8 @@ export function PrPanel({
               capabilities={capabilities}
               pendingNav={pendingDiffNav ?? null}
               onNavConsumed={onDiffNavConsumed}
+              pendingCommitView={pendingCommitView}
+              onCommitViewConsumed={() => setPendingCommitView(null)}
             />
           </Suspense>
         </KeepAliveTab>
@@ -181,6 +201,12 @@ export function PrPanel({
             composing={composingComment}
             onComposeClose={() => setComposingComment(false)}
             currentUserName={currentUserName}
+            onViewCommit={viewCommit}
+            onJumpToAnchor={(a: PrCommentAnchor) =>
+              onRequestDiffNav?.({
+                anchor: { path: a.path, startLine: a.line, endLine: a.line },
+              })
+            }
           />
         </KeepAliveTab>
         <KeepAliveTab active={tab === 'drafts'}>
@@ -201,7 +227,7 @@ export function PrPanel({
           />
         </KeepAliveTab>
         <KeepAliveTab active={tab === 'commits'}>
-          <CommitsPanel pr={pr} />
+          <CommitsPanel pr={pr} onViewCommit={viewCommit} />
         </KeepAliveTab>
         <KeepAliveTab active={tab === 'info'}>
           <PrInfoView pr={pr} />

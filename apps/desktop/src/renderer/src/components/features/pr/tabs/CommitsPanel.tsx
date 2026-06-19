@@ -5,20 +5,23 @@ import type { PrCommit, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../api';
 import { formatBackendError, type FormattedError } from '../../../../errors';
 import { Avatar } from '../../../common/Avatar';
+import { formatExactTime } from './comments/CommentItem';
 
 interface CommitsPanelProps {
   pr: StoredPullRequest;
+  /** 点击某 commit → 在 Diff 标签页本地渲染该 commit 的变更（不再跳浏览器） */
+  onViewCommit?: (commit: PrCommit) => void;
 }
 
 /**
  * PR commits 列表，表格布局。来源 `diff:listCommits` (无缓存，进入面板时拉一次)。
  *
  * 列：短 SHA / 提交主题 (commit message 首行) / 作者 / 时间。merge commit 用
- * 标记 chip 区分。点击行打开远端 commit 详情页 (Bitbucket commit URL)。
+ * 标记 chip 区分。点击行 → 在 Diff 标签页本地渲染该 commit 的变更。
  *
  * 列表默认按平台返回顺序 (newest first)，跟 git log 习惯一致。
  */
-export function CommitsPanel({ pr }: CommitsPanelProps) {
+export function CommitsPanel({ pr, onViewCommit }: CommitsPanelProps) {
   const { t } = useTranslation();
   const [commits, setCommits] = useState<PrCommit[] | null>(null);
   const [error, setError] = useState<FormattedError | null>(null);
@@ -78,7 +81,7 @@ export function CommitsPanel({ pr }: CommitsPanelProps) {
         </thead>
         <tbody>
           {commits.map((c) => (
-            <CommitRow key={c.sha} commit={c} pr={pr} />
+            <CommitRow key={c.sha} commit={c} pr={pr} onView={onViewCommit} />
           ))}
         </tbody>
       </table>
@@ -86,17 +89,22 @@ export function CommitsPanel({ pr }: CommitsPanelProps) {
   );
 }
 
-function CommitRow({ commit, pr }: { commit: PrCommit; pr: StoredPullRequest }) {
+function CommitRow({
+  commit,
+  pr,
+  onView,
+}: {
+  commit: PrCommit;
+  pr: StoredPullRequest;
+  onView?: (commit: PrCommit) => void;
+}) {
   const { t } = useTranslation();
   const isMerge = commit.parents.length > 1;
   const subject = commit.message.split('\n', 1)[0]!;
-  const open = (): void => {
-    if (commit.url) window.open(commit.url, '_blank', 'noreferrer');
-  };
   return (
     <tr
-      className={`pr-commits-row ${commit.url ? 'pr-commits-row-clickable' : ''}`}
-      onClick={open}
+      className={`pr-commits-row ${onView ? 'pr-commits-row-clickable' : ''}`}
+      onClick={() => onView?.(commit)}
       title={commit.message /* 完整 commit body hover 可见 */}
     >
       <td className="pr-commits-col-sha">
@@ -119,7 +127,13 @@ function CommitRow({ commit, pr }: { commit: PrCommit; pr: StoredPullRequest }) 
         <span>{commit.author.displayName}</span>
       </td>
       <td className="pr-commits-col-time">
-        <time dateTime={commit.authoredAt}>{formatCommitTime(commit.authoredAt, t)}</time>
+        <time
+          className="time-tip"
+          dateTime={commit.authoredAt}
+          data-tip={formatExactTime(commit.authoredAt)}
+        >
+          {formatCommitTime(commit.authoredAt, t)}
+        </time>
       </td>
     </tr>
   );
