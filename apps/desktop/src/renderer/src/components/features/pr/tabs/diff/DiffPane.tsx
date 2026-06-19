@@ -47,7 +47,13 @@ export function DiffPane({
       minimap: { enabled: false },
       fontSize,
       scrollBeyondLastLine: false,
+      // 关掉 diff 专属的合并总览列（renderOverviewRuler=true 会在两侧滚动条之外再加一条宽列，
+      // 跟 VS Code 编辑模式「滚动条内打标」不一致）。改走编辑模式效果：内层 modified 编辑器自带的
+      // overview ruler（默认渲染、独立于 minimap）+ 行内评论装饰的 overviewRuler 投影（见 useCommentZones）。
       renderOverviewRuler: false,
+      // 显式 3 道：让 overview ruler 按 1/3 分道（diff 占左道、评论占右道，各 1/3 宽），
+      // 避免被按 2 道算成各占一半，色条更细。
+      overviewRulerLanes: 3,
       // 显式开 glyph margin，给行内评论标记留位置
       glyphMargin: true,
       // 空白字符可视化：toolbar 按钮控制；'all' 时空格显示 · / Tab 显示 →
