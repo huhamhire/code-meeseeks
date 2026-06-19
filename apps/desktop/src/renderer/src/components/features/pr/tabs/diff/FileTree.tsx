@@ -112,14 +112,15 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
           }}
         >
           <ChevronIcon className="tree-chevron" />
-          <Icon
-            icon={
-              isOpen ? 'material-icon-theme:folder-base-open' : 'material-icon-theme:folder-base'
-            }
-            width="16"
-            height="16"
-            className="tree-icon"
-          />
+          <span className="tree-icon">
+            <Icon
+              icon={
+                isOpen ? 'material-icon-theme:folder-base-open' : 'material-icon-theme:folder-base'
+              }
+              width="16"
+              height="16"
+            />
+          </span>
           <span className="tree-name">{n.name}</span>
         </div>,
       );
@@ -148,7 +149,9 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
           title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}
         >
           <span className="tree-chevron-spacer" aria-hidden="true" />
-          <Icon icon={fileIconFor(f.path)} width="16" height="16" className="tree-icon" />
+          <span className="tree-icon">
+            <Icon icon={fileIconFor(f.path)} width="16" height="16" />
+          </span>
           <span className="tree-name">{n.name}</span>
           <span className="tree-row-right" aria-hidden="false">
             {/* draft chip 在前 / comment chip 在后：阅读顺序 "未发的 → 已发的"，
@@ -162,7 +165,10 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
               </span>
             )}
             {count > 0 && (
-              <span className="tree-comment-count" title={ctx.t('fileTree.commentCountTitle', { count })}>
+              <span
+                className="tree-comment-count"
+                title={ctx.t('fileTree.commentCountTitle', { count })}
+              >
                 {count}
               </span>
             )}

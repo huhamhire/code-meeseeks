@@ -209,6 +209,11 @@ export function DiffView({
   const { t } = useTranslation();
   const [files, setFiles] = useState<DiffChangedFile[] | null>(null);
   const [filesError, setFilesError] = useState<FormattedError | null>(null);
+  // 当前已渲染的文件树 / 内容属于哪个 PR。切 PR 时它仍指向旧 PR，直到新 files 拉到才更新 →
+  // 据此做 stale-while-loading：切 PR 期间保留旧树/旧内容渲染 + 盖加载遮罩，并门控 content /
+  // comments / blame effect（避免「新 localId + 旧选中文件」错拉），新数据 ready 再整体替换，
+  // 消除「左栏 blank → 文件树整体弹出」的切换抖动。
+  const [loadedPrId, setLoadedPrId] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // sidebar 模式：'tree' (文件树) / 'search' (跨文件搜索)，默认进文件树。
   // PR 切换 / tab 切走 + 重进 (条件渲染 unmount/remount) 时自然回到 'tree' —
@@ -280,16 +285,13 @@ export function DiffView({
   }, [repoKeySuffix]);
 
   // 切 PR 时清掉旧状态（含两个错误 + 选中文件 + 内容）
+  // 切 PR 时只清瞬态错误/进度，**不清空 files/selected/content/comments/blame**——保留旧 PR 的树与
+  // 内容继续渲染（stale-while-loading），由加载遮罩盖住，新 PR 数据 ready 后整体替换，消除切换 blank。
   useEffect(() => {
-    setFiles(null);
     setFilesError(null);
-    setSelectedKey(null);
-    setContent(null);
     setContentError(null);
     setProgress(null);
-    setComments([]);
     setCommentsError(null);
-    setBlame(null);
     setBlameError(null);
   }, [pr.localId]);
 
@@ -301,7 +303,12 @@ export function DiffView({
       .then((f) => {
         if (cancelled) return;
         setFiles(f);
-        if (f.length > 0) setSelectedKey((prev) => prev ?? fileKey(f[0]!));
+        // 新 files 到位才把「已渲染 PR」推进到当前 pr —— 在此之前各 effect 门控、旧视图保活。
+        setLoadedPrId(pr.localId);
+        // 选中项：仍存在则保留（同 PR 重试不丢选中），否则回落首个（切 PR 后旧 key 失效 → 选首个）。
+        setSelectedKey((prev) =>
+          prev && f.some((x) => fileKey(x) === prev) ? prev : f.length > 0 ? fileKey(f[0]!) : null,
+        );
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -317,6 +324,8 @@ export function DiffView({
 
   // 拉评论 (非 fatal：失败时给可重试 banner，不阻塞 diff 展示)
   useEffect(() => {
+    // 门控：切 PR 期间（新 files 未到）不拉新评论，保留旧评论与旧内容一致渲染，避免 view zone 错位。
+    if (loadedPrId !== pr.localId) return;
     let cancelled = false;
     setCommentsError(null);
     const fetchList = (force: boolean): void => {
@@ -342,7 +351,7 @@ export function DiffView({
       cancelled = true;
       unsub();
     };
-  }, [pr.localId, commentsRetry]);
+  }, [pr.localId, commentsRetry, loadedPrId]);
 
   const selected = files?.find((f) => fileKey(f) === selectedKey) ?? null;
   // M4 草稿池：跨 ChatPane / DiffView 共享 store；本组件需要它来渲染 inline zones
@@ -475,6 +484,9 @@ export function DiffView({
   }, [files, drafts]);
 
   useEffect(() => {
+    // 门控：切 PR 期间（新 files 未到、selected 仍指向旧文件）不拉内容，保留旧内容渲染，
+    // 避免用「新 localId + 旧文件路径」错拉。新 files ready 后 selected 切到新 PR 文件再拉。
+    if (loadedPrId !== pr.localId) return;
     if (!selected) {
       setContent(null);
       return;
@@ -504,10 +516,12 @@ export function DiffView({
     return () => {
       cancelled = true;
     };
-  }, [selected, pr.localId]);
+  }, [selected, pr.localId, loadedPrId]);
 
   // 拉 blame：仅在开关开 + 文件有 head 内容时跑。deleted 文件 / 二进制不跑。
   useEffect(() => {
+    // 门控：切 PR 期间不拉 blame（同 content：避免新 localId + 旧文件错拉），保留旧 blame。
+    if (loadedPrId !== pr.localId) return;
     if (!showBlame || !selected || !content || content.head.binary) {
       setBlame(null);
       setBlameError(null);
@@ -534,7 +548,7 @@ export function DiffView({
     return () => {
       cancelled = true;
     };
-  }, [showBlame, selected, content, pr.localId]);
+  }, [showBlame, selected, content, pr.localId, loadedPrId]);
 
   // Blame 走独立 React 列（Bitbucket 风格），不在 Monaco DOM 里。只需要从 Monaco
   // 同步 lineHeight / scrollTop / viewportHeight，BlameColumn 自己用 absolute
@@ -1346,7 +1360,11 @@ export function DiffView({
     };
   }, [pendingScroll, diffEditor, content, selected]);
 
-  if (filesError) {
+  // 切 PR 进行中：仍渲染旧 PR 的树/内容（stale），由下方遮罩盖住，待新 files 到位再整体替换。
+  const switching = files !== null && loadedPrId !== pr.localId;
+  // 错误仅在「无可信内容可展示」时整块呈现：首载失败（无 files）或切 PR 失败（现有 files 属于旧 PR）。
+  // 不拿旧 PR 的树冒充新的。
+  if (filesError && (!files || loadedPrId !== pr.localId)) {
     return (
       <BackendErrorView
         err={filesError}
@@ -1368,6 +1386,9 @@ export function DiffView({
 
   return (
     <div className="diff-view">
+      {/* 切 PR 加载遮罩：盖住旧树/内容，新数据 ready（loadedPrId 推进）后自动消失整体换新。
+          PaneLoading 默认 delayMs=150：命中缓存的快切换遮罩不出现、直接换新（零闪）。 */}
+      {switching && <PaneLoading overlay label={t('mainPane.loadingEditor')} />}
       <aside className="diff-file-list" style={{ width: `${String(fileListWidth)}px` }}>
         {/* header 一直显示。tree 模式右侧是"搜索"图标 (进搜索)；search 模式
             换"文件树"图标 (明示这是回到文件树的入口)，比"再点一次同图标切回"

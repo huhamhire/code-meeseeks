@@ -125,8 +125,14 @@
   }
 }
 
+// 固定 16px 占位槽：始终占位，iconify 的 svg 晚一帧进 DOM 也不塌缩 → 文件名不再左右抖动。
 .tree-icon {
   flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tree-name {
