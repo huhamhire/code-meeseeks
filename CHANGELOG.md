@@ -22,6 +22,8 @@
   - 新建评论：标签栏右侧「评论」按钮可直接发一条不锚到文件的 summary 评论，编辑框作为时间线首个节点（头像在轨上、编辑框缩进）展开，发布后新评论即时出现在顶部（新增 `publishSummaryComment` 平台契约 + `comments:create` 通道）。
   - GitLab 走差异化设计：无统一活动事件源（CE 无审批、审批系统 note 解析脆弱），标签页保持纯「评论」视图（`capabilities.activityTimeline=false`），不混入提交 / 决断。
 
+- 连接 / LLM 配置模态退出拦截：编辑配置时若存在未提交改动，关闭（背景点击 / 取消 / 关闭键）会弹确认框拦截，确认放弃才关闭，避免误丢未保存内容。
+
 ### Changed
 
 - **前端代码结构重构（可维护性）**：纯结构调整，对外接口与界面 / 交互行为均不变。重点：
@@ -33,6 +35,9 @@
   - DiffSearchPanel / DraftZone / ChatInputBar 三个单体组件拆分：搜索算法、read/edit/publish 状态机、命令解析 / 输入状态机各抽为 util / hook，组件退化为瘦渲染
   - `components/common` 收敛 `index` barrel，跨域 import 统一走 barrel
   - 其它整理：目录归并、工具方法去重、main 进程 splash 拆分
+
+- 设置面板「连接 / LLM 配置」模态复用首启向导的左右布局：左侧选集成平台 / LLM provider、右侧填表单（复用的 `PlatformPicker` / `LlmProviderPicker` 统一在 settings 域维护，首启向导同步复用）。LLM 模态与向导 LLM 步改为固定高度、两栏各自滚动——切换 provider 不再抖动、provider 列表后续扩展也不撑高，向导两子步等高对齐；CLI 模式补「实验性」标记、名称 / 命令占位提示 `claude / codex`、文案精简（去品牌名与内部细节）；必填校验改为只标红框（去错误文案、消除控件位置抖动）；「测试连接」按钮收窄为 `btn-sm` 并与结果文案垂直对齐。
+- 危险按钮统一为高饱和度红描边：新增 `$color-danger-strong` token，删除评论（评论 tab + 行内）/ 删除草稿 / 删除连接 / LLM、停止、拒绝 finding 等按钮 hover 由偏浅鲑红改为与模态删除按钮同色系的饱和红，警示力更强、全局一致（保留 ghost 描边风格，不改为实底）。
 
 ### Fixed
 
