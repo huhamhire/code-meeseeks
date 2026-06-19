@@ -393,22 +393,24 @@
   height: 8px;
   border-radius: $radius-full;
   flex-shrink: 0;
-}
-.diff-file-status-added {
-  background: #4caf50;
-}
-.diff-file-status-modified {
-  background: #f59e0b;
-}
-.diff-file-status-deleted {
-  background: #dc2626;
-}
-.diff-file-status-renamed {
-  background: #a78bfa;
-}
-.diff-file-status-copied {
-  background: #60a5fa;
-}
-.diff-file-status-typechange {
-  background: $text-muted;
+
+  // 状态色叠加（markup：`diff-file-status file-<status>`），色值统一走 token
+  &.file-added {
+    background: $file-status-added;
+  }
+  &.file-modified {
+    background: $file-status-modified;
+  }
+  &.file-deleted {
+    background: $file-status-deleted;
+  }
+  &.file-renamed {
+    background: $file-status-renamed;
+  }
+  &.file-copied {
+    background: $file-status-copied;
+  }
+  &.file-typechange {
+    background: $text-muted;
+  }
 }

@@ -173,7 +173,7 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
               </span>
             )}
             <span
-              className={`tree-status diff-file-status diff-file-status-${f.status}`}
+              className={`tree-status diff-file-status file-${f.status}`}
               aria-label={f.status}
             />
           </span>

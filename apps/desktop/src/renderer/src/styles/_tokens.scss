@@ -55,6 +55,14 @@ $git-deleted:         #c74e39;
 $git-needs-work-fade: rgba(199, 78, 57, 0.18);
 $git-needs-work-fg:   #f48771;
 
+// ===== 文件改动状态点 (文件树右栏 8px 圆点) =====
+// 比 $git-* 装饰色更亮的 Material 系：小圆点上比装饰色更易辨认。typechange 用 $text-muted
+$file-status-added:    #4caf50;
+$file-status-modified: #f59e0b;
+$file-status-deleted:  #dc2626;
+$file-status-renamed:  #a78bfa;
+$file-status-copied:   #60a5fa;
+
 // ===== Avatar / Initials 等装饰 =====
 $avatar-bg-default:   #2a2d2e;
 
