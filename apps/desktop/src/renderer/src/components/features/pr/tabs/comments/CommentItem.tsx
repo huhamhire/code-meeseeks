@@ -1,19 +1,16 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
 import type { PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
-import { invoke } from '../../../../../api';
 import i18n from '../../../../../i18n';
-import { REMOTE_REHYPE_PLUGINS } from '../../../../../lib/markdown';
 import { Avatar } from '../../../../common/Avatar';
-import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../../common/BitbucketImage';
+import { makeBitbucketImageFor } from '../../../../common/BitbucketImage';
 import { ChatIcon } from '../../../../common/icons';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { ConfirmModal } from '../../../../common/ConfirmModal';
 import { mermaidComponents } from '../../../../common/markdownMermaid';
+import { CommentMarkdown } from '../shared/CommentMarkdown';
+import { useCommentThread } from '../shared/useCommentThread';
 // 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
 const InlineCodeContext = lazy(() =>
   import('./InlineCodeContext').then((m) => ({ default: m.InlineCodeContext })),
@@ -85,35 +82,21 @@ export function CommentItem({
     () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId, pr.url) }),
     [pr.localId, pr.url],
   );
-  const [replyOpen, setReplyOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  // 删除/编辑条件 main 端预判好了 (annotateOwnership)。renderer 直读 flag，
-  // 不再自己比对 author / version / replies
-  const canDelete = comment.canDelete === true;
-  const canEdit = comment.canEdit === true;
-
-  const handleDelete = async (): Promise<void> => {
-    if (!canDelete || comment.version === undefined) return;
-    setConfirmDelete(false);
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await invoke('comments:delete', {
-        localId: pr.localId,
-        commentId: comment.remoteId,
-        version: comment.version,
-      });
-      // 成功 → main 端清 cache + 广播 comments:changed → 本面板 useEffect 重拉，
-      // 这条评论自然从列表里消失，不用手动维护本地 state
-    } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : String(e));
-      setDeleting(false);
-    }
-  };
+  // 回复 / 编辑 / 删除 交互状态机（与 diff 行内评论 zone 共用，见 shared/useCommentThread）
+  const {
+    replyOpen,
+    setReplyOpen,
+    editOpen,
+    setEditOpen,
+    confirmDelete,
+    setConfirmDelete,
+    deleting,
+    deleteError,
+    setDeleteError,
+    canEdit,
+    canDelete,
+    handleDelete,
+  } = useCommentThread(pr.localId, comment);
 
   // inline 评论锚点 chip：path:line + 侧别 (old=base / new=head)，让用户在评论里定位到代码位置。
   // 提供 onJumpToAnchor 时（活动视图）chip 变可点击 → 跳到 Diff 对应文件/行。
@@ -163,17 +146,12 @@ export function CommentItem({
         onSaved={() => setEditOpen(false)}
       />
     ) : (
-      <div className="pr-comment-body markdown">
-        {/* hardBreaks（Bitbucket/GitHub）挂 remarkBreaks 单 \n→<br>；GitLab CommonMark 不挂 */}
-        <ReactMarkdown
-          remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}
-          rehypePlugins={REMOTE_REHYPE_PLUGINS}
-          components={mdComponents}
-          urlTransform={transformBitbucketUrl}
-        >
-          {comment.body}
-        </ReactMarkdown>
-      </div>
+      <CommentMarkdown
+        body={comment.body}
+        hardBreaks={hardBreaks}
+        components={mdComponents}
+        className="pr-comment-body markdown"
+      />
     );
 
   // 操作行：编辑态隐藏所有按钮（避免跟编辑器底部按钮组重复）
