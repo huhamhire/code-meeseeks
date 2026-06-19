@@ -89,6 +89,9 @@ class FakeAdapter implements PlatformAdapter {
   async replyToComment(): Promise<never> {
     throw new Error('FakeAdapter.replyToComment 未实现（poller 测试不使用）');
   }
+  async publishSummaryComment(): Promise<never> {
+    throw new Error('FakeAdapter.publishSummaryComment 未实现（poller 测试不使用）');
+  }
   async publishInlineComment(): Promise<never> {
     throw new Error('FakeAdapter.publishInlineComment 未实现（poller 测试不使用）');
   }
@@ -285,6 +288,7 @@ describe('Poller.tick', () => {
       getAttachment: () => Promise.reject(new Error('unused')),
       mergePullRequest: () => Promise.reject(new Error('unused')),
       replyToComment: () => Promise.reject(new Error('unused')),
+      publishSummaryComment: () => Promise.reject(new Error('unused')),
       publishInlineComment: () => Promise.reject(new Error('unused')),
       deleteComment: () => Promise.reject(new Error('unused')),
       editComment: () => Promise.reject(new Error('unused')),

@@ -339,6 +339,15 @@ export class GitLabAdapter implements PlatformAdapter {
     return null;
   }
 
+  async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
+    // summary 评论 = 不带 position 的新 discussion（顶层 note）
+    const created = await this.client.post<GlDiscussion>(
+      `/projects/${projectId(repo)}/merge_requests/${prId}/discussions`,
+      { body },
+    );
+    return mapNote(created.notes[0]!, created.id, this.cachedUser?.name);
+  }
+
   async publishInlineComment(
     repo: RepoRef,
     prId: string,

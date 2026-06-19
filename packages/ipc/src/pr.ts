@@ -29,6 +29,14 @@ export interface PrChannels {
     response: PrComment;
   };
   /**
+   * 在 PR 上发一条 summary（顶层、不锚到文件）评论。成功后 main 端清评论缓存 + 广播
+   * comments:changed，活动 / 评论面板自动重拉，新评论出现在时间线顶部。
+   */
+  'comments:create': {
+    request: { localId: string; body: string };
+    response: PrComment;
+  };
+  /**
    * 删除自己作者的远端评论。Bitbucket 要求带 version (乐观锁)，调用方从已有 PrComment
    * 拿；不一致 / 评论已有回复 / 自己不是作者都会失败 (Bitbucket 409/403)。成功后 main
    * 端清空评论缓存 + broadcast comments:changed，UI 自动重拉刷新

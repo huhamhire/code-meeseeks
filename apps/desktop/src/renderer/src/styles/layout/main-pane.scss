@@ -603,10 +603,90 @@
 .pr-activity-verb {
   color: $text-muted;
 }
+// reviewer 决断动词用带色 chip 突出：approve 绿、needs-work 琥珀、unapproved/dismissed 中性
+.pr-activity-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px $space-3;
+  border-radius: $radius-pill;
+  // 与行内文本同字号（14px），比默认 chip 更突出
+  font-size: $fs-lg;
+  font-weight: 600;
+}
+.pr-activity-chip-approved {
+  background: rgba(22, 163, 74, 0.16);
+  color: $color-approved;
+}
+.pr-activity-chip-needsWork {
+  background: rgba(245, 158, 11, 0.18);
+  color: $color-warning-bright;
+}
+.pr-activity-chip-unapproved,
+.pr-activity-chip-dismissed {
+  background: $bg-hover;
+  color: $text-muted;
+}
 .pr-activity-time {
   flex-shrink: 0;
   margin-left: auto;
   font-size: $fs-xs;
+}
+
+// 时间标签自定义 tooltip：原生 title 延迟长、且部分场景不弹（review 行），改用 data-tip + ::after，
+// 短延迟（120ms 显示、移开即隐），各时间标签行为一致、精确到秒。
+.time-tip {
+  position: relative;
+}
+.time-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 5;
+  padding: 2px $space-3;
+  white-space: nowrap;
+  font-size: $fs-sm;
+  color: $text-primary;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+.time-tip:hover::after {
+  opacity: 1;
+  transition-delay: 0.12s;
+}
+
+// 新建评论编辑框：缩进对齐到标题行头像左缘，挂在时间线轨右侧（与评论卡片同一缩进）
+.pr-activity-compose-card {
+  margin-left: calc(22px + #{$space-3} * 2);
+}
+
+// 活动标签页右侧「评论」按钮：复用 diff 工具条按钮的轻量样式
+.pr-tab-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 2px $space-4;
+  background: transparent;
+  border: 1px solid $border-default;
+  color: $text-muted;
+  cursor: pointer;
+  font-size: $fs-sm;
+  border-radius: $radius-sm;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
 }
 .pr-comment-head {
   display: flex;

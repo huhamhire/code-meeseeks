@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { PersonIcon, WhitespaceIcon } from '../../../common/icons';
+import { ChatIcon, PersonIcon, WhitespaceIcon } from '../../../common/icons';
 
 export type PrTab = 'diff' | 'activity' | 'drafts' | 'commits' | 'info';
 
@@ -15,6 +15,7 @@ export function PrTabs({
   totalDraftCount,
   publishableCount,
   activityTimeline,
+  onNewComment,
   showWhitespace,
   onToggleWhitespace,
   showBlame,
@@ -30,6 +31,8 @@ export function PrTabs({
   publishableCount: number;
   /** 该平台是否提供活动时间线（见 capabilities.activityTimeline）；否则该 tab 标题退化为「评论」 */
   activityTimeline: boolean;
+  /** 活动标签页右侧「评论」按钮：新建一条不锚到文件的评论 */
+  onNewComment: () => void;
   showWhitespace: boolean;
   onToggleWhitespace: () => void;
   showBlame: boolean;
@@ -108,6 +111,13 @@ export function PrTabs({
       >
         {t('mainPane.tabInfo')}
       </button>
+      {tab === 'activity' && (
+        <div className="pr-tabs-right">
+          <button type="button" className="pr-tab-action-btn" onClick={onNewComment}>
+            <ChatIcon /> {t('mainPane.newComment')}
+          </button>
+        </div>
+      )}
       {tab === 'diff' && (
         <div className="pr-tabs-right">
           <button

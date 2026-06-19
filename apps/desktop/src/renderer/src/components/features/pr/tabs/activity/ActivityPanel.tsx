@@ -11,9 +11,15 @@ import type {
 import { invoke, subscribe } from '../../../../../api';
 import { formatBackendError, type FormattedError } from '../../../../../errors';
 import { Avatar } from '../../../../common/Avatar';
-import { ApproveIcon, CloseIcon, CommitIcon, NeedsWorkIcon } from '../../../../common/icons';
+import { ApproveIcon, ChatIcon, CloseIcon, CommitIcon, NeedsWorkIcon } from '../../../../common/icons';
 import { PaneLoading } from '../../../../common/Loading';
-import { CommentItem, formatRelativeTime, sameCommentList } from '../comments/CommentItem';
+import { CommentComposer } from '../comments/CommentComposer';
+import {
+  CommentItem,
+  formatExactTime,
+  formatRelativeTime,
+  sameCommentList,
+} from '../comments/CommentItem';
 
 interface ActivityPanelProps {
   pr: StoredPullRequest;
@@ -21,6 +27,12 @@ interface ActivityPanelProps {
   onCommentsLoaded?: (count: number) => void;
   /** 活动连接能力位；此处用 commentHardBreaks 决定评论是否启用 remark-breaks。 */
   capabilities?: PlatformCapabilities;
+  /** 是否展开「新建评论」编辑框（由标签栏「评论」按钮控制，出现在时间线顶部） */
+  composing?: boolean;
+  /** 新建评论编辑框收起（取消 / 发布成功）回调 */
+  onComposeClose?: () => void;
+  /** 当前 PAT 用户名（新建评论编辑框头像用） */
+  currentUserName?: string | null;
 }
 
 /** 三路数据 + 其配对 PR 一起冻结，跨 poll 稳定引用，给评论树（含内联 Monaco）稳定身份避免重渲染。 */
@@ -53,7 +65,14 @@ function sameIds<T>(a: readonly T[], b: readonly T[], id: (x: T) => string): boo
  * 切 PR 时不立刻清空（stale-while-loading）：旧时间线继续渲染、上盖 loading 遮罩，新数据 ready 后
  * 整体替换，消除「先闪加载中再渲新」的空窗。
  */
-export function ActivityPanel({ pr, onCommentsLoaded, capabilities }: ActivityPanelProps) {
+export function ActivityPanel({
+  pr,
+  onCommentsLoaded,
+  capabilities,
+  composing = false,
+  onComposeClose,
+  currentUserName,
+}: ActivityPanelProps) {
   // 评论换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
   // 差异化：GitHub/Bitbucket 渲染评论+提交+决断的活动时间线；GitLab（activityTimeline=false）退化为
@@ -189,10 +208,35 @@ export function ActivityPanel({ pr, onCommentsLoaded, capabilities }: ActivityPa
   return (
     <div className="pr-comments-panel">
       <div className="pr-comments-scroll">
-        {view && timeline.length > 0 && (
-          <ul className="pr-comments-list pr-activity-list">{timeline}</ul>
+        {(composing || (view && timeline.length > 0)) && (
+          <ul className="pr-comments-list pr-activity-list">
+            {/* 新建评论编辑框作为时间线首个节点：与其它条目同款图标节点 + 头像，编辑框缩进挂在轨上。 */}
+            {composing && (
+              <li className="pr-comment pr-comment-timeline pr-comment-depth-0">
+                <div className="pr-activity-item pr-activity-comment-head">
+                  <span className="pr-activity-icon pr-activity-icon-comment" aria-hidden="true">
+                    <ChatIcon size={18} />
+                  </span>
+                  <Avatar
+                    connectionId={pr.connectionId}
+                    slug={currentUserName ?? ''}
+                    displayName={currentUserName ?? ''}
+                    size={22}
+                  />
+                </div>
+                <div className="pr-activity-compose-card">
+                  <CommentComposer
+                    prLocalId={pr.localId}
+                    onCancel={() => onComposeClose?.()}
+                    onPosted={() => onComposeClose?.()}
+                  />
+                </div>
+              </li>
+            )}
+            {view ? timeline : null}
+          </ul>
         )}
-        {view && timeline.length === 0 && !loading && (
+        {view && timeline.length === 0 && !composing && !loading && (
           <p className="muted">{t(`${ns}.empty`)}</p>
         )}
       </div>
@@ -241,7 +285,11 @@ function CommitEvent({ commit, pr }: { commit: PrCommit; pr: StoredPullRequest }
         )}
         <code className="pr-activity-sha">{commit.abbreviatedSha}</code>
       </div>
-      <time className="pr-activity-time muted" dateTime={commit.committedAt}>
+      <time
+        className="pr-activity-time muted time-tip"
+        dateTime={commit.committedAt}
+        data-tip={formatExactTime(commit.committedAt || commit.authoredAt)}
+      >
         {formatRelativeTime(commit.committedAt || commit.authoredAt)}
       </time>
     </li>
@@ -273,9 +321,15 @@ function ReviewEvent({ event, pr }: { event: PrActivityEvent; pr: StoredPullRequ
       />
       <div className="pr-activity-main">
         <span className="pr-activity-actor">{event.actor.displayName}</span>
-        <span className="pr-activity-verb">{t(`activityPanel.verb.${event.kind}`)}</span>
+        <span className={`pr-activity-chip pr-activity-chip-${event.kind}`}>
+          {t(`activityPanel.verb.${event.kind}`)}
+        </span>
       </div>
-      <time className="pr-activity-time muted" dateTime={event.createdAt}>
+      <time
+        className="pr-activity-time muted time-tip"
+        dateTime={event.createdAt}
+        data-tip={formatExactTime(event.createdAt)}
+      >
         {formatRelativeTime(event.createdAt)}
       </time>
     </li>

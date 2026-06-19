@@ -58,6 +58,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
    * 评论 / 列表 / 状态 / 合并 / 镜像 / diff / 草稿 / pr-agent run 队列
    */
   ipcMain.handle('comments:reply', pr.replyComment); // 回复评论
+  ipcMain.handle('comments:create', pr.createComment); // 新建 summary 评论
   ipcMain.handle('comments:delete', pr.deleteComment); // 删除自己的评论
   ipcMain.handle('comments:edit', pr.editComment); // 编辑自己的评论
   ipcMain.handle('comments:fetchAttachment', pr.fetchAttachment); // 拉评论内嵌图片（代理带 PAT）

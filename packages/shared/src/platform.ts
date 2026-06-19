@@ -414,6 +414,14 @@ export interface PlatformAdapter {
   ): Promise<PrComment>;
 
   /**
+   * 在 PR 上发一条 summary（顶层、不锚到文件）评论。GitHub: POST /issues/{n}/comments；
+   * Bitbucket: POST /pull-requests/{id}/comments（不带 anchor / parent）；GitLab: POST
+   * /merge_requests/{iid}/discussions（不带 position）。返回新建评论（anchor=null），
+   * 调用方刷新 comments cache 让 UI 立即看到。
+   */
+  publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment>;
+
+  /**
    * 在 PR diff 上发一条 inline 评论 (锚到具体文件 + 行号)。这是 M4 草稿发布闭环
    * 的 sink —— 本地 ReviewDraft 经此方法落到远端，成功后返回新评论 (含 remoteId
    * 让本地 draft 回写 posted_remote_id 做幂等)。

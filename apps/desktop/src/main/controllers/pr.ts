@@ -38,6 +38,22 @@ export const replyComment: IpcController<'comments:reply'> = async (_event, req)
 };
 
 /**
+ * 在 PR 上新建一条 summary（顶层、不锚文件）评论，成功后清评论缓存 + 广播 comments:changed 让 UI 重拉。
+ */
+export const createComment: IpcController<'comments:create'> = async (_event, req) => {
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  const adapter = ctx.pr.adapterForOrThrow(pr);
+  const created = await adapter.publishSummaryComment(
+    { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+    pr.remoteId,
+    req.body,
+  );
+  await ctx.pr.invalidateCommentsCache(pr.localId);
+  return created;
+};
+
+/**
  * 删除自己作者的远端评论（带 version 乐观锁）。失败原文抛给 renderer；成功后清缓存 + 广播。
  */
 export const deleteComment: IpcController<'comments:delete'> = async (_event, req) => {

@@ -5,7 +5,7 @@
     "loading": "Aktivität wird geladen…",
     "mergeCommit": "Merge-Commit · {{parents}} Eltern",
     "verb": {
-      "approved": "hat diese Änderungen genehmigt",
+      "approved": "hat genehmigt",
       "commented": "hat kommentiert",
       "dismissed": "hat die Review verworfen",
       "needsWork": "hat Änderungen angefordert",
@@ -149,6 +149,15 @@
     "unknownCommand": "Unbekannter Befehl {{head}}; unterstützt: {{cmds}}",
     "userQuestionAria": "Benutzerfrage",
     "waitingOutput": "(Warte auf PR-Agent-Ausgabe…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "Abbrechen (Esc)",
+    "emptyTitle": "Kommentar darf nicht leer sein",
+    "placeholder": "Kommentar schreiben…",
+    "send": "Kommentieren",
+    "sendTitle": "Senden (Cmd/Ctrl+Enter)",
+    "sending": "Wird gesendet…",
+    "textareaAria": "Editor für neuen Kommentar"
   },
   "commentEditEditor": {
     "cancelTitle": "Abbrechen (Esc)",
@@ -466,6 +475,7 @@
     "mergeTitle": "Diesen PR in den Ziel-Branch mergen",
     "merging": "Wird gemergt…",
     "needsWork": "Nachbesserung nötig",
+    "newComment": "Kommentieren",
     "openInBrowser": "Im Browser öffnen",
     "openInBrowserTitle": "Die entfernte Seite des PR im Standardbrowser öffnen",
     "ownPrReason": "Sie können Ihren eigenen PR nicht reviewen",

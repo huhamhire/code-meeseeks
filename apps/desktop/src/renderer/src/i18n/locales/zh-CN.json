@@ -5,11 +5,11 @@
     "loading": "加载活动中…",
     "mergeCommit": "合并提交 · {{parents}} 个父提交",
     "verb": {
-      "approved": "批准了这些更改",
+      "approved": "批准",
       "commented": "评论",
-      "dismissed": "撤销了评审",
-      "needsWork": "请求修改",
-      "unapproved": "撤回了批准"
+      "dismissed": "驳回评审",
+      "needsWork": "要求修改",
+      "unapproved": "撤销批准"
     }
   },
   "app": {
@@ -149,6 +149,15 @@
     "unknownCommand": "未知命令 {{head}}；支持：{{cmds}}",
     "userQuestionAria": "用户提问",
     "waitingOutput": "(等待 PR Agent 输出…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "取消 (Esc)",
+    "emptyTitle": "评论不能为空",
+    "placeholder": "写一条评论…",
+    "send": "评论",
+    "sendTitle": "发送 (Cmd/Ctrl+Enter)",
+    "sending": "发送中…",
+    "textareaAria": "新建评论编辑器"
   },
   "commentEditEditor": {
     "cancelTitle": "取消 (Esc)",
@@ -453,6 +462,7 @@
     "mergeTitle": "合并此 PR 到目标分支",
     "merging": "合并中…",
     "needsWork": "需修改",
+    "newComment": "评论",
     "openInBrowser": "浏览器打开",
     "openInBrowserTitle": "在系统默认浏览器打开 PR 远端页面",
     "ownPrReason": "不能审批自己的 PR",

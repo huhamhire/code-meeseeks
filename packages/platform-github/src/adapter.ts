@@ -335,6 +335,15 @@ export class GitHubAdapter implements PlatformAdapter {
     return this.client.getBinary(url);
   }
 
+  async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
+    // summary 评论 = issue 评论（无线程、无锚点）
+    const created = await this.client.post<GhIssueComment>(
+      `/repos/${repo.projectKey}/${repo.repoSlug}/issues/${prId}/comments`,
+      { body },
+    );
+    return mapIssueComment(created);
+  }
+
   async publishInlineComment(
     repo: RepoRef,
     prId: string,

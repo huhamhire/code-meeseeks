@@ -269,7 +269,11 @@ export function CommentItem({
             <span className="pr-activity-verb">{t('activityPanel.verb.commented')}</span>
             {anchorChip}
           </div>
-          <time className="pr-activity-time muted" dateTime={comment.createdAt}>
+          <time
+            className="pr-activity-time muted time-tip"
+            dateTime={comment.createdAt}
+            data-tip={formatExactTime(comment.createdAt)}
+          >
             {formatRelativeTime(comment.createdAt)}
           </time>
         </div>
@@ -298,7 +302,11 @@ export function CommentItem({
         />
         <span className="pr-comment-author">{comment.author.displayName}</span>
         {anchorChip}
-        <time className="pr-comment-time muted" dateTime={comment.createdAt}>
+        <time
+          className="pr-comment-time muted time-tip"
+          dateTime={comment.createdAt}
+          data-tip={formatExactTime(comment.createdAt)}
+        >
           {formatRelativeTime(comment.createdAt)}
         </time>
       </div>
@@ -311,6 +319,17 @@ export function CommentItem({
       {confirmModalEl}
     </li>
   );
+}
+
+/**
+ * 精确到秒的本地时间文案（`YYYY-MM-DD HH:mm:ss`），供时间标签 hover tooltip 展示实际时间点。
+ */
+export function formatExactTime(iso: string): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  const d = new Date(ms);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /**

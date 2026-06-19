@@ -5,11 +5,11 @@
     "loading": "Loading activity…",
     "mergeCommit": "Merge commit · {{parents}} parents",
     "verb": {
-      "approved": "approved these changes",
+      "approved": "approved",
       "commented": "commented",
-      "dismissed": "dismissed their review",
+      "dismissed": "dismissed review",
       "needsWork": "requested changes",
-      "unapproved": "withdrew their approval"
+      "unapproved": "withdrew approval"
     }
   },
   "app": {
@@ -149,6 +149,15 @@
     "unknownCommand": "Unknown command {{head}}; supported: {{cmds}}",
     "userQuestionAria": "User question",
     "waitingOutput": "(Waiting for PR Agent output…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "Cancel (Esc)",
+    "emptyTitle": "Comment can't be empty",
+    "placeholder": "Write a comment…",
+    "send": "Comment",
+    "sendTitle": "Send (Cmd/Ctrl+Enter)",
+    "sending": "Sending…",
+    "textareaAria": "New comment editor"
   },
   "commentEditEditor": {
     "cancelTitle": "Cancel (Esc)",
@@ -466,6 +475,7 @@
     "mergeTitle": "Merge this PR into the target branch",
     "merging": "Merging…",
     "needsWork": "Needs work",
+    "newComment": "Comment",
     "openInBrowser": "Open in browser",
     "openInBrowserTitle": "Open the PR's remote page in your default browser",
     "ownPrReason": "You can't review your own PR",

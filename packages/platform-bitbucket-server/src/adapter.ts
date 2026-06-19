@@ -330,6 +330,15 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     return mapBitbucketComment(updated);
   }
 
+  async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
+    // summary 评论：POST /pull-requests/{id}/comments，仅 text（不带 anchor / parent）
+    const created = await this.client.post<BitbucketComment>(
+      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments`,
+      { text: body },
+    );
+    return mapBitbucketComment(created);
+  }
+
   async publishInlineComment(
     repo: RepoRef,
     prId: string,

@@ -5,7 +5,7 @@
     "loading": "アクティビティを読み込み中…",
     "mergeCommit": "マージコミット · 親 {{parents}} 件",
     "verb": {
-      "approved": "変更を承認しました",
+      "approved": "承認しました",
       "commented": "コメントしました",
       "dismissed": "レビューを取り消しました",
       "needsWork": "変更をリクエストしました",
@@ -149,6 +149,15 @@
     "unknownCommand": "不明なコマンド {{head}}。サポート対象：{{cmds}}",
     "userQuestionAria": "ユーザーの質問",
     "waitingOutput": "(PR Agent の出力を待機中…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "キャンセル (Esc)",
+    "emptyTitle": "コメントを空にはできません",
+    "placeholder": "コメントを入力…",
+    "send": "コメント",
+    "sendTitle": "送信 (Cmd/Ctrl+Enter)",
+    "sending": "送信中…",
+    "textareaAria": "新規コメントエディタ"
   },
   "commentEditEditor": {
     "cancelTitle": "キャンセル (Esc)",
@@ -453,6 +462,7 @@
     "mergeTitle": "この PR をターゲットブランチにマージします",
     "merging": "マージ中…",
     "needsWork": "要修正",
+    "newComment": "コメント",
     "openInBrowser": "ブラウザで開く",
     "openInBrowserTitle": "PR のリモートページを既定のブラウザで開きます",
     "ownPrReason": "自分の PR はレビューできません",
