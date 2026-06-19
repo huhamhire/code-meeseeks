@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Modal } from '../../../common/Modal';
+import { Modal } from '../../../common';
 import { ConnectionForm, connDraftCanSave, type ConnDraft } from '../ConnectionForm';
 
 export function ConnectionEditorModal({

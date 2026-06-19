@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { AppPaths } from '@meebox/shared';
-import { FolderIcon } from '../../../common/icons';
+import { FolderIcon } from '../../../common';
 import { formatBytes } from '../utils';
 
 export function CacheDirSection({

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LlmProfile } from '@meebox/shared';
 import { LLM_PROVIDERS, LlmProfileForm } from '../../settings';
-import { LlmProviderIcon } from '../../../common/LlmProviderIcon';
+import { LlmProviderIcon } from '../../../common';
 
 export function LlmStep({
   draft,

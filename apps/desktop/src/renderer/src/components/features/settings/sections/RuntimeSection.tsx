@@ -1,16 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import type { AppInfo } from '@meebox/shared';
-import { GitHubMarkIcon, IssueIcon, TagIcon } from '../../../common/icons';
+import { GitHubMarkIcon, IssueIcon, TagIcon } from '../../../common';
 import { invoke } from '../../../../api';
 import { UpdateCheckButton } from '../elements/UpdateCheckButton';
 
-export function RuntimeSection({
-  info,
-  updateEnabled,
-}: {
-  info: AppInfo;
-  updateEnabled: boolean;
-}) {
+export function RuntimeSection({ info, updateEnabled }: { info: AppInfo; updateEnabled: boolean }) {
   const { t } = useTranslation();
   return (
     <section className="modal-section">

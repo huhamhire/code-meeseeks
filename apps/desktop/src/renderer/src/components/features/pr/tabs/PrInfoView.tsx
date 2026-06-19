@@ -4,10 +4,14 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
-import { Avatar } from '../../../common/Avatar';
-import { makeBitbucketImageFor, transformBitbucketUrl } from '../../../common/BitbucketImage';
-import { ApproveIcon, NeedsWorkIcon } from '../../../common/icons';
-import { mermaidComponents } from '../../../common/markdownMermaid';
+import {
+  Avatar,
+  makeBitbucketImageFor,
+  transformBitbucketUrl,
+  ApproveIcon,
+  NeedsWorkIcon,
+  mermaidComponents,
+} from '../../../common';
 
 interface PrInfoViewProps {
   pr: StoredPullRequest;

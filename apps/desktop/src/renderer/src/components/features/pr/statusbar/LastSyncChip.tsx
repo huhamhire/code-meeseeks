@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { SyncIcon } from '../../../common/icons';
-import { StatusChip } from '../../../common/StatusChip';
+import { SyncIcon, StatusChip } from '../../../common';
 import { formatRelative } from '../../../../utils/time';
 
 /**

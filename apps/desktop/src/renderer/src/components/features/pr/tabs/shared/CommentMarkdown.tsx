@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../../lib/markdown';
-import { transformBitbucketUrl } from '../../../../common/BitbucketImage';
+import { transformBitbucketUrl } from '../../../../common';
 
 /**
  * 评论正文 markdown 渲染样板：评论/活动 tab 与 diff 行内评论 zone 共用同一套

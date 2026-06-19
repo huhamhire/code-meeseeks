@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '../../../../api';
 import { useChatRunStore } from '../../../../stores/chat-run-store';
 import { formatElapsed } from '../../../../utils/time';
-import { StatusChip } from '../../../common/StatusChip';
+import { StatusChip } from '../../../common';
 
 /**
  * 队列弹出菜单：状态栏 chip 上方弹出。先列全部运行中（active）行，再列 waiting 行。
@@ -173,7 +173,9 @@ export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: strin
     <>
       <span className="statusbar-pragent-dot" aria-hidden="true" />
       <span>/{primary.tool}</span>
-      <span className="statusbar-pragent-elapsed">{formatElapsed(elapsedMs, { compact: true })}</span>
+      <span className="statusbar-pragent-elapsed">
+        {formatElapsed(elapsedMs, { compact: true })}
+      </span>
       {extraCount > 0 && (
         <span
           className="statusbar-pragent-queue-count"

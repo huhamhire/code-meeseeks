@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import { QuestionIcon } from '../../../common/icons';
-import { mermaidComponents } from '../../../common/markdownMermaid';
+import { QuestionIcon, mermaidComponents } from '../../../common';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { parseAnsi, segmentStyle } from '../../../../utils/ansi';
 

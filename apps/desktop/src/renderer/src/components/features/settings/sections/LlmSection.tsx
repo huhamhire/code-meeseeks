@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { Config } from '@meebox/shared';
-import { PencilIcon, TrashIcon } from '../../../common/icons';
-import { LlmProviderIcon } from '../../../common/LlmProviderIcon';
+import { PencilIcon, TrashIcon, LlmProviderIcon } from '../../../common';
 import { providerLabel } from '../LlmProfileForm';
 
 export function LlmSection({
@@ -55,7 +54,10 @@ export function LlmSection({
                   <div className="llm-profile-title">
                     <span className="llm-profile-title-text">{titleText}</span>
                     {isCli && (
-                      <span className="badge-experimental" title={t('settings.cliExperimentalHint')}>
+                      <span
+                        className="badge-experimental"
+                        title={t('settings.cliExperimentalHint')}
+                      >
                         {t('settings.experimental')}
                       </span>
                     )}

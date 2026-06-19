@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type editor as MonacoEditor } from 'monaco-editor';
 import type { DiffBlameLine } from '@meebox/ipc';
-import { Avatar } from '../../../../../common/Avatar';
+import { Avatar } from '../../../../../common';
 import {
   BLAME_COLUMN_WIDTH,
   formatIsoDate,

@@ -2,8 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { ConnectionSummary } from '@meebox/ipc';
 import type { Config, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
 import { invoke } from '../../api';
-import { PanelToggleIcon, SettingsIcon } from '../common/icons';
-import { StatusChip } from '../common/StatusChip';
+import { PanelToggleIcon, SettingsIcon, StatusChip } from '../common';
 import { PrAgentActiveChip } from '../features/chat/statusbar/PrAgentActiveChip';
 import { AutopilotChip } from '../features/chat/statusbar/AutopilotChip';
 import { LlmChip } from '../features/settings/statusbar/LlmChip';
@@ -95,7 +94,9 @@ export function StatusBar({
         className="icon-btn"
         onClick={onToggleSidebar}
         title={sidebarCollapsed ? t('statusBar.expandSidebar') : t('statusBar.collapseSidebar')}
-        aria-label={sidebarCollapsed ? t('statusBar.expandSidebar') : t('statusBar.collapseSidebar')}
+        aria-label={
+          sidebarCollapsed ? t('statusBar.expandSidebar') : t('statusBar.collapseSidebar')
+        }
         aria-pressed={!sidebarCollapsed}
       >
         <PanelToggleIcon side="left" collapsed={sidebarCollapsed} />

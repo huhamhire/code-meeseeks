@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useRepoSyncStore } from '../../../../stores/repo-sync-store';
-import { StatusChip } from '../../../common/StatusChip';
+import { StatusChip } from '../../../common';
 
 /**
  * Repo sync 活动 chip：显示当前正在 clone/fetch 的 repo + 阶段 + 百分比。

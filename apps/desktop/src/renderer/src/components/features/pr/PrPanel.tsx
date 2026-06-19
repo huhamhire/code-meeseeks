@@ -9,7 +9,7 @@ import type {
 } from '@meebox/shared';
 import { invoke } from '../../../api';
 import { useDraftsForPr } from '../../../stores/drafts-store';
-import { PaneLoading } from '../../common/Loading';
+import { PaneLoading } from '../../common';
 import { ActivityPanel } from './tabs/activity/ActivityPanel';
 import { CommitsPanel } from './tabs/CommitsPanel';
 // Monaco 编辑器（~10MB）懒加载：只有真正切到 Diff tab 才拉取 DiffView chunk，

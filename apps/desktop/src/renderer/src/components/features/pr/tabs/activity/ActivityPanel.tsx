@@ -11,9 +11,15 @@ import type {
 } from '@meebox/shared';
 import { invoke, subscribe } from '../../../../../api';
 import { formatBackendError, type FormattedError } from '../../../../../errors';
-import { Avatar } from '../../../../common/Avatar';
-import { ApproveIcon, ChatIcon, CloseIcon, CommitIcon, NeedsWorkIcon } from '../../../../common/icons';
-import { PaneLoading } from '../../../../common/Loading';
+import {
+  Avatar,
+  ApproveIcon,
+  ChatIcon,
+  CloseIcon,
+  CommitIcon,
+  NeedsWorkIcon,
+  PaneLoading,
+} from '../../../../common';
 import { CommentComposer } from '../comments/CommentComposer';
 import {
   CommentItem,

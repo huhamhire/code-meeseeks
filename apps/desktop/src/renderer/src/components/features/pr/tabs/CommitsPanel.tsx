@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import type { PrCommit, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../api';
 import { formatBackendError, type FormattedError } from '../../../../errors';
-import { Avatar } from '../../../common/Avatar';
+import { Avatar } from '../../../common';
 import { formatExactTime } from './comments/CommentItem';
 
 interface CommitsPanelProps {
@@ -110,7 +110,10 @@ function CommitRow({
       <td className="pr-commits-col-sha">
         <code>{commit.abbreviatedSha}</code>
         {isMerge && (
-          <span className="pr-commits-merge-tag" title={`merge commit (${String(commit.parents.length)} parents)`}>
+          <span
+            className="pr-commits-merge-tag"
+            title={`merge commit (${String(commit.parents.length)} parents)`}
+          >
             merge
           </span>
         )}

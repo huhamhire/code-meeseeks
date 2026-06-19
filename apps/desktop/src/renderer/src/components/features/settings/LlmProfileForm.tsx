@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LlmProfile, LlmProvider } from '@meebox/shared';
 import i18n from '../../../i18n';
-import { EyeIcon, EyeOffIcon } from '../../common/icons';
+import { EyeIcon, EyeOffIcon } from '../../common';
 
 export interface ProviderMeta {
   value: LlmProvider;
@@ -201,7 +201,8 @@ export function LlmProfileForm({
   const providerMeta = getProviderMeta(draft.provider);
   const isCli = draft.provider === 'cli';
   const errors = validateProfile(draft, existing);
-  const showError = (k: keyof ProfileErrors): boolean => (forceShowErrors || touched[k]) && !!errors[k];
+  const showError = (k: keyof ProfileErrors): boolean =>
+    (forceShowErrors || touched[k]) && !!errors[k];
   const update = <K extends keyof LlmProfile>(field: K, value: LlmProfile[K]): void => {
     const next = { ...draft, [field]: value };
     onChange(next);
@@ -258,7 +259,9 @@ export function LlmProfileForm({
             value={draft.model}
             onChange={(e) => update('model', e.target.value)}
             onBlur={() => markTouched('model')}
-            placeholder={isCli ? t('llmProfileForm.cliCommandPlaceholder') : providerMeta.modelExample}
+            placeholder={
+              isCli ? t('llmProfileForm.cliCommandPlaceholder') : providerMeta.modelExample
+            }
           />
           {showError('model') && <p className="settings-field-error">{errors.model}</p>}
         </div>
@@ -266,7 +269,8 @@ export function LlmProfileForm({
         {!isCli && (
           <>
             <div className="modal-kv-key">
-              Base URL{!providerMeta.defaultBaseUrl && <span className="settings-required"> *</span>}
+              Base URL
+              {!providerMeta.defaultBaseUrl && <span className="settings-required"> *</span>}
             </div>
             <div className="modal-kv-val">
               <input
@@ -290,7 +294,9 @@ export function LlmProfileForm({
                   value={draft.api_key}
                   onChange={(e) => update('api_key', e.target.value)}
                   onBlur={() => markTouched('api_key')}
-                  placeholder={providerMeta.needsKey ? 'sk-...' : t('llmProfileForm.apiKeyOptionalPlaceholder')}
+                  placeholder={
+                    providerMeta.needsKey ? 'sk-...' : t('llmProfileForm.apiKeyOptionalPlaceholder')
+                  }
                   autoComplete="off"
                 />
                 <button

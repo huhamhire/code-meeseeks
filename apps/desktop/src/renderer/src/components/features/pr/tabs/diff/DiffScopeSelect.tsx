@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import type { PrCommit } from '@meebox/shared';
-import { Avatar } from '../../../../common/Avatar';
-import { ChevronIcon, CommitIcon, PullRequestIcon } from '../../../../common/icons';
+import { Avatar, ChevronIcon, CommitIcon, PullRequestIcon } from '../../../../common';
 import { formatRelativeTime } from '../comments/CommentItem';
 import type { DiffScope } from './diff-types';
 

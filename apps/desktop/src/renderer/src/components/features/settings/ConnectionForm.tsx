@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { GITHUB_DOTCOM_API_BASE, GITLAB_DOTCOM_API_BASE, type Config } from '@meebox/shared';
 import { invoke } from '../../../api';
-import { EyeIcon, EyeOffIcon } from '../../common/icons';
+import { EyeIcon, EyeOffIcon } from '../../common';
 
 // 连接编辑用的扁平草稿（Connection 是嵌套的 auth/clone，拍平后表单好写），存盘前还原。
 // 设置页 ConnectionEditorModal 与首启向导 PlatformStep 共用同一份草稿形状 + 表单。
@@ -54,7 +54,9 @@ export function fromConnDraft(d: ConnDraft): ConnEntry {
 }
 
 /** 各平台的字段文案（名称 / Base URL / 令牌 占位） */
-function kindHints(t: TFunction): Record<ConnKind, { name: string; baseUrl: string; token: string }> {
+function kindHints(
+  t: TFunction,
+): Record<ConnKind, { name: string; baseUrl: string; token: string }> {
   return {
     github: {
       name: t('connectionForm.githubNamePlaceholder'),
@@ -212,7 +214,12 @@ export function ConnectionForm({
       </div>
       {/* 测试连接：独立一行，左按钮右结果。保存 / 取消 由外层决定布局 */}
       <div className="settings-actions" style={{ marginTop: 12, alignItems: 'center' }}>
-        <button type="button" className="btn" onClick={() => void runTest()} disabled={!canTest || testing}>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => void runTest()}
+          disabled={!canTest || testing}
+        >
           {testing ? t('connectionForm.testing') : t('connectionForm.testConnection')}
         </button>
         {testResult && (

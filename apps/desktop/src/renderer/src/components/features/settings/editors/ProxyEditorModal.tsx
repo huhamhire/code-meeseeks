@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Config } from '@meebox/shared';
-import { Modal } from '../../../common/Modal';
-import { EyeIcon, EyeOffIcon } from '../../../common/icons';
+import { Modal, EyeIcon, EyeOffIcon } from '../../../common';
 import { invoke } from '../../../../api';
 
 export function ProxyEditorModal({
@@ -110,7 +109,10 @@ export function ProxyEditorModal({
               </div>
             </div>
           </div>
-          <div className="settings-edit-row" style={{ marginTop: 10, alignItems: 'center', gap: 10 }}>
+          <div
+            className="settings-edit-row"
+            style={{ marginTop: 10, alignItems: 'center', gap: 10 }}
+          >
             <button
               type="button"
               className="btn"
@@ -138,7 +140,9 @@ export function ProxyEditorModal({
                   {t('settings.proxyOk')}
                 </span>
               ) : (
-                <span className="error-text">✗ {test.result.reason ?? t('settings.testFailed')}</span>
+                <span className="error-text">
+                  ✗ {test.result.reason ?? t('settings.testFailed')}
+                </span>
               ))}
           </div>
         </>

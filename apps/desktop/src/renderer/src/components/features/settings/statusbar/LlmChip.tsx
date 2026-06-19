@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Config } from '@meebox/shared';
-import { StatusChip } from '../../../common/StatusChip';
+import { StatusChip } from '../../../common';
 
 /**
  * 当前 active LLM profile 概要。点击展开下拉，列出所有 profile 直接切换。
