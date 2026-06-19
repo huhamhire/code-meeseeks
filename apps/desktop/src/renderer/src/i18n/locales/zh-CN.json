@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "该 PR 暂无活动",
+    "loadError": "加载活动失败 · {{title}}",
+    "loading": "加载活动中…",
+    "mergeCommit": "合并提交 · {{parents}} 个父提交",
+    "verb": {
+      "approved": "批准",
+      "commented": "评论",
+      "dismissed": "驳回评审",
+      "needsWork": "要求修改",
+      "unapproved": "撤销批准"
+    }
+  },
   "app": {
     "approveActionFailed": "审批操作失败：{{msg}}",
     "loading": "加载中…",
@@ -136,6 +149,15 @@
     "unknownCommand": "未知命令 {{head}}；支持：{{cmds}}",
     "userQuestionAria": "用户提问",
     "waitingOutput": "(等待 PR Agent 输出…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "取消 (Esc)",
+    "emptyTitle": "评论不能为空",
+    "placeholder": "写一条评论…",
+    "send": "评论",
+    "sendTitle": "发送 (Cmd/Ctrl+Enter)",
+    "sending": "发送中…",
+    "textareaAria": "新建评论编辑器"
   },
   "commentEditEditor": {
     "cancelTitle": "取消 (Esc)",
@@ -440,6 +462,7 @@
     "mergeTitle": "合并此 PR 到目标分支",
     "merging": "合并中…",
     "needsWork": "需修改",
+    "newComment": "评论",
     "openInBrowser": "浏览器打开",
     "openInBrowserTitle": "在系统默认浏览器打开 PR 远端页面",
     "ownPrReason": "不能审批自己的 PR",
@@ -448,6 +471,7 @@
     "showBlame": "开启追溯显示（仅 head 侧）",
     "showWhitespace": "显示空白字符（空格 / Tab）",
     "sideBySide": "并排",
+    "tabActivity": "活动",
     "tabComments": "评论",
     "tabCommits": "提交",
     "tabDiff": "变更",
@@ -513,6 +537,11 @@
     "hasConflict": "存在合并冲突",
     "mergeable": "可合并：已满足所有合并条件",
     "needsWorkCount_other": "{{count}} 位 reviewer 标记 needs work"
+  },
+  "prStatus": {
+    "approved": "已批准",
+    "needsWork": "要求修改",
+    "pending": "待评审"
   },
   "publishReviewModal": {
     "allPublished": "所有草稿已写入远端，评论列表会立即刷新。",

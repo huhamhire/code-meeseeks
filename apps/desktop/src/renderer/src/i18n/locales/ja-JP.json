@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "この PR にはまだアクティビティがありません",
+    "loadError": "アクティビティの読み込みに失敗しました · {{title}}",
+    "loading": "アクティビティを読み込み中…",
+    "mergeCommit": "マージコミット · 親 {{parents}} 件",
+    "verb": {
+      "approved": "承認しました",
+      "commented": "コメントしました",
+      "dismissed": "レビューを取り消しました",
+      "needsWork": "変更をリクエストしました",
+      "unapproved": "承認を取り消しました"
+    }
+  },
   "app": {
     "approveActionFailed": "承認操作に失敗しました：{{msg}}",
     "loading": "読み込み中…",
@@ -136,6 +149,15 @@
     "unknownCommand": "不明なコマンド {{head}}。サポート対象：{{cmds}}",
     "userQuestionAria": "ユーザーの質問",
     "waitingOutput": "(PR Agent の出力を待機中…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "キャンセル (Esc)",
+    "emptyTitle": "コメントを空にはできません",
+    "placeholder": "コメントを入力…",
+    "send": "コメント",
+    "sendTitle": "送信 (Cmd/Ctrl+Enter)",
+    "sending": "送信中…",
+    "textareaAria": "新規コメントエディタ"
   },
   "commentEditEditor": {
     "cancelTitle": "キャンセル (Esc)",
@@ -440,6 +462,7 @@
     "mergeTitle": "この PR をターゲットブランチにマージします",
     "merging": "マージ中…",
     "needsWork": "要修正",
+    "newComment": "コメント",
     "openInBrowser": "ブラウザで開く",
     "openInBrowserTitle": "PR のリモートページを既定のブラウザで開きます",
     "ownPrReason": "自分の PR はレビューできません",
@@ -448,6 +471,7 @@
     "showBlame": "Blame を有効化（head 側のみ）",
     "showWhitespace": "空白文字を表示（スペース / Tab）",
     "sideBySide": "並べて表示",
+    "tabActivity": "アクティビティ",
     "tabComments": "コメント",
     "tabCommits": "コミット",
     "tabDiff": "変更",
@@ -513,6 +537,11 @@
     "hasConflict": "マージコンフリクトがあります",
     "mergeable": "マージ可能：すべてのマージ条件を満たしています",
     "needsWorkCount_other": "{{count}} 人のレビュアーが要修正とマークしました"
+  },
+  "prStatus": {
+    "approved": "承認済み",
+    "needsWork": "要修正",
+    "pending": "保留中"
   },
   "publishReviewModal": {
     "allPublished": "すべての下書きがリモートに書き込まれました。コメント一覧はすぐに更新されます。",

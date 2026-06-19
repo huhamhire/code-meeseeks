@@ -4,7 +4,7 @@ import type { LocalPrStatus, PlatformCapabilities, StoredPullRequest } from '@me
 import { invoke } from '../../../api';
 import { useDraftsForPr } from '../../../stores/drafts-store';
 import { PaneLoading } from '../../common/Loading';
-import { CommentsPanel } from './tabs/comments/CommentsPanel';
+import { ActivityPanel } from './tabs/activity/ActivityPanel';
 import { CommitsPanel } from './tabs/CommitsPanel';
 // Monaco 编辑器（~10MB）懒加载：只有真正切到 Diff tab 才拉取 DiffView chunk，
 // 不阻塞窗口首帧 / PR 列表 / 首启向导。
@@ -53,6 +53,8 @@ export function PrPanel({
 }: PrPanelProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<PrTab>('diff');
+  // 活动标签页「新建评论」编辑框开关（由标签栏「评论」按钮触发，编辑框出现在时间线顶部）
+  const [composingComment, setComposingComment] = useState(false);
   // 收到跳转请求 → 强制切到 Diff tab，DiffView 自己负责消费 anchor
   useEffect(() => {
     if (pendingDiffNav) setTab('diff');
@@ -146,6 +148,8 @@ export function PrPanel({
         commitCount={commitCount}
         totalDraftCount={totalDraftCount}
         publishableCount={publishableCount}
+        activityTimeline={capabilities?.activityTimeline ?? false}
+        onNewComment={() => setComposingComment(true)}
         showWhitespace={showWhitespace}
         onToggleWhitespace={() => setShowWhitespace((b) => !b)}
         showBlame={showBlame}
@@ -169,11 +173,14 @@ export function PrPanel({
             />
           </Suspense>
         </KeepAliveTab>
-        <KeepAliveTab active={tab === 'comments'}>
-          <CommentsPanel
+        <KeepAliveTab active={tab === 'activity'}>
+          <ActivityPanel
             pr={pr}
             onCommentsLoaded={(n) => setCommentCount(n)}
             capabilities={capabilities}
+            composing={composingComment}
+            onComposeClose={() => setComposingComment(false)}
+            currentUserName={currentUserName}
           />
         </KeepAliveTab>
         <KeepAliveTab active={tab === 'drafts'}>

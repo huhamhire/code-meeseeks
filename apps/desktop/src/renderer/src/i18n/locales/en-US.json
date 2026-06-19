@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "No activity yet",
+    "loadError": "Failed to load activity · {{title}}",
+    "loading": "Loading activity…",
+    "mergeCommit": "Merge commit · {{parents}} parents",
+    "verb": {
+      "approved": "approved",
+      "commented": "commented",
+      "dismissed": "dismissed review",
+      "needsWork": "requested changes",
+      "unapproved": "withdrew approval"
+    }
+  },
   "app": {
     "approveActionFailed": "Approval action failed: {{msg}}",
     "loading": "Loading…",
@@ -136,6 +149,15 @@
     "unknownCommand": "Unknown command {{head}}; supported: {{cmds}}",
     "userQuestionAria": "User question",
     "waitingOutput": "(Waiting for PR Agent output…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "Cancel (Esc)",
+    "emptyTitle": "Comment can't be empty",
+    "placeholder": "Write a comment…",
+    "send": "Comment",
+    "sendTitle": "Send (Cmd/Ctrl+Enter)",
+    "sending": "Sending…",
+    "textareaAria": "New comment editor"
   },
   "commentEditEditor": {
     "cancelTitle": "Cancel (Esc)",
@@ -453,6 +475,7 @@
     "mergeTitle": "Merge this PR into the target branch",
     "merging": "Merging…",
     "needsWork": "Needs work",
+    "newComment": "Comment",
     "openInBrowser": "Open in browser",
     "openInBrowserTitle": "Open the PR's remote page in your default browser",
     "ownPrReason": "You can't review your own PR",
@@ -461,6 +484,7 @@
     "showBlame": "Enable blame (head side only)",
     "showWhitespace": "Show whitespace (spaces / tabs)",
     "sideBySide": "Side by side",
+    "tabActivity": "Activity",
     "tabComments": "Comments",
     "tabCommits": "Commits",
     "tabDiff": "Changes",
@@ -528,6 +552,11 @@
     "mergeable": "Mergeable: all merge conditions met",
     "needsWorkCount_one": "{{count}} reviewer marked needs work",
     "needsWorkCount_other": "{{count}} reviewers marked needs work"
+  },
+  "prStatus": {
+    "approved": "Approved",
+    "needsWork": "Needs work",
+    "pending": "Pending"
   },
   "publishReviewModal": {
     "allPublished": "All drafts were written to the remote; the comment list will refresh immediately.",

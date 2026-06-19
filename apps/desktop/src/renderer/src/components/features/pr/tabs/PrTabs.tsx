@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { PersonIcon, WhitespaceIcon } from '../../../common/icons';
+import { ChatIcon, PersonIcon, WhitespaceIcon } from '../../../common/icons';
 
-export type PrTab = 'diff' | 'comments' | 'drafts' | 'commits' | 'info';
+export type PrTab = 'diff' | 'activity' | 'drafts' | 'commits' | 'info';
 
 /**
  * PR 详情 tab 栏：diff / 评论 / 草稿 / 提交 / 信息（带计数徽标），diff tab 时右侧附带
@@ -14,6 +14,8 @@ export function PrTabs({
   commitCount,
   totalDraftCount,
   publishableCount,
+  activityTimeline,
+  onNewComment,
   showWhitespace,
   onToggleWhitespace,
   showBlame,
@@ -27,6 +29,10 @@ export function PrTabs({
   commitCount: number | null;
   totalDraftCount: number;
   publishableCount: number;
+  /** 该平台是否提供活动时间线（见 capabilities.activityTimeline）；否则该 tab 标题退化为「评论」 */
+  activityTimeline: boolean;
+  /** 活动标签页右侧「评论」按钮：新建一条不锚到文件的评论 */
+  onNewComment: () => void;
   showWhitespace: boolean;
   onToggleWhitespace: () => void;
   showBlame: boolean;
@@ -46,15 +52,16 @@ export function PrTabs({
       >
         {t('mainPane.tabDiff')}
       </button>
-      {/* comments 在 commits 前：评审决断时评论的权重大于 commit 时间线 */}
+      {/* 活动时间线（评论 + 提交 + 评审决断）在 commits 前：评审决断时讨论权重大于纯 commit 列表。
+          角标仍取评论数——讨论量最具行动指引，提交另有独立 tab 计数。 */}
       <button
         type="button"
-        className={`pr-tab ${tab === 'comments' ? 'active' : ''}`}
-        onClick={() => onTab('comments')}
+        className={`pr-tab ${tab === 'activity' ? 'active' : ''}`}
+        onClick={() => onTab('activity')}
         role="tab"
-        aria-selected={tab === 'comments'}
+        aria-selected={tab === 'activity'}
       >
-        {t('mainPane.tabComments')}
+        {t(activityTimeline ? 'mainPane.tabActivity' : 'mainPane.tabComments')}
         <TabCountBadge
           count={commentCount}
           ariaLabel={(n) => t('mainPane.commentCountAria', { count: n })}
@@ -104,6 +111,13 @@ export function PrTabs({
       >
         {t('mainPane.tabInfo')}
       </button>
+      {tab === 'activity' && (
+        <div className="pr-tabs-right">
+          <button type="button" className="pr-tab-action-btn" onClick={onNewComment}>
+            <ChatIcon /> {t('mainPane.newComment')}
+          </button>
+        </div>
+      )}
       {tab === 'diff' && (
         <div className="pr-tabs-right">
           <button

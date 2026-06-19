@@ -60,7 +60,9 @@ export function PrHeader({
           · {pr.sourceRef.displayId} → {pr.targetRef.displayId}
         </span>
         <span> · </span>
-        <span className={`status-tag status-${pr.localStatus}`}>{pr.localStatus}</span>
+        <span className={`status-tag status-${pr.localStatus}`}>
+          {t(`prStatus.${pr.localStatus === 'needs_work' ? 'needsWork' : pr.localStatus}`)}
+        </span>
       </div>
       <div className="pr-header-actions">
         <a

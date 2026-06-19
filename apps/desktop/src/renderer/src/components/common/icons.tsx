@@ -408,6 +408,27 @@ export function NeedsWorkIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** git commit 字形：横线上一个实心节点（活动时间线提交事件用）。 */
+export function CommitIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="1.5" y1="8" x2="5" y2="8" />
+      <line x1="11" y1="8" x2="14.5" y2="8" />
+      <circle cx="8" cy="8" r="2.8" />
+    </svg>
+  );
+}
+
 /** 机器人头像：AutoPilot 启用态。天线 + 头框 + 双眼 + 两侧耳。 */
 export function RobotIcon({ size = 14 }: IconProps) {
   return (

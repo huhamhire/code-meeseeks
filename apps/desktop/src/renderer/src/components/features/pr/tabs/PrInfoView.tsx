@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReviewerStatus, StoredPullRequest } from '@meebox/shared';
@@ -11,9 +12,11 @@ interface PrInfoViewProps {
 }
 
 function ReviewerStatusTag({ status }: { status: ReviewerStatus }) {
-  if (status === 'approved') return <span className="tag-approved">✓ approved</span>;
-  if (status === 'needsWork') return <span className="tag-needs-work">✗ needs work</span>;
-  return <span className="muted">pending</span>;
+  const { t } = useTranslation();
+  if (status === 'approved') return <span className="tag-approved">✓ {t('prStatus.approved')}</span>;
+  if (status === 'needsWork')
+    return <span className="tag-needs-work">✗ {t('prStatus.needsWork')}</span>;
+  return <span className="muted">{t('prStatus.pending')}</span>;
 }
 
 export function PrInfoView({ pr }: PrInfoViewProps) {

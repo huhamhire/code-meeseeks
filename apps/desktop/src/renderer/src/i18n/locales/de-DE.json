@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "Noch keine Aktivität in diesem PR",
+    "loadError": "Aktivität konnte nicht geladen werden · {{title}}",
+    "loading": "Aktivität wird geladen…",
+    "mergeCommit": "Merge-Commit · {{parents}} Eltern",
+    "verb": {
+      "approved": "hat genehmigt",
+      "commented": "hat kommentiert",
+      "dismissed": "hat die Review verworfen",
+      "needsWork": "hat Änderungen angefordert",
+      "unapproved": "hat die Genehmigung zurückgezogen"
+    }
+  },
   "app": {
     "approveActionFailed": "Genehmigungsaktion fehlgeschlagen: {{msg}}",
     "loading": "Wird geladen…",
@@ -136,6 +149,15 @@
     "unknownCommand": "Unbekannter Befehl {{head}}; unterstützt: {{cmds}}",
     "userQuestionAria": "Benutzerfrage",
     "waitingOutput": "(Warte auf PR-Agent-Ausgabe…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "Abbrechen (Esc)",
+    "emptyTitle": "Kommentar darf nicht leer sein",
+    "placeholder": "Kommentar schreiben…",
+    "send": "Kommentieren",
+    "sendTitle": "Senden (Cmd/Ctrl+Enter)",
+    "sending": "Wird gesendet…",
+    "textareaAria": "Editor für neuen Kommentar"
   },
   "commentEditEditor": {
     "cancelTitle": "Abbrechen (Esc)",
@@ -453,6 +475,7 @@
     "mergeTitle": "Diesen PR in den Ziel-Branch mergen",
     "merging": "Wird gemergt…",
     "needsWork": "Nachbesserung nötig",
+    "newComment": "Kommentieren",
     "openInBrowser": "Im Browser öffnen",
     "openInBrowserTitle": "Die entfernte Seite des PR im Standardbrowser öffnen",
     "ownPrReason": "Sie können Ihren eigenen PR nicht reviewen",
@@ -461,6 +484,7 @@
     "showBlame": "Blame aktivieren (nur head-Seite)",
     "showWhitespace": "Leerzeichen anzeigen (Leerzeichen / Tab)",
     "sideBySide": "Nebeneinander",
+    "tabActivity": "Aktivität",
     "tabComments": "Kommentare",
     "tabCommits": "Commits",
     "tabDiff": "Änderungen",
@@ -528,6 +552,11 @@
     "mergeable": "Mergebar: alle Merge-Bedingungen erfüllt",
     "needsWorkCount_one": "{{count}} Reviewer hat „Nachbesserung nötig“ markiert",
     "needsWorkCount_other": "{{count}} Reviewer haben „Nachbesserung nötig“ markiert"
+  },
+  "prStatus": {
+    "approved": "Genehmigt",
+    "needsWork": "Änderungen nötig",
+    "pending": "Ausstehend"
   },
   "publishReviewModal": {
     "allPublished": "Alle Entwürfe wurden auf den Remote geschrieben; die Kommentarliste wird sofort aktualisiert.",

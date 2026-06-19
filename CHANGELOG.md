@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- PR 详情「评论」标签页演进为「活动」时间线（GitHub / Bitbucket）：把评论、提交更新、reviewer 评审决断（approve / needs-work / unapprove / dismiss）按时间倒序归并为一条活动时间线，保留原有评论内容、排序与编辑 / 回复 / 删除 / 内联代码能力。新增统一的 `listPullRequestActivity` 平台契约——GitHub 取自 `/pulls/{n}/reviews`、Bitbucket 取自 `/activities`（带时间戳的决断事件）。提交另保留独立「提交」标签页。
+  - 视觉：各条目统一为「图标节点 + 头像 + 加粗作者名 + 动词 + 时间」，一条竖向虚线轨贯穿图标列连接相邻条目；评论标题统一为「xxx 评论」并前置评论图标，正文整体缩进成挂在轨上的卡片；作者头像 / 文本与评论主体人一致，不做差异化。评审决断动词统一为「批准 / 要求修改」并用带色 chip（绿 / 琥珀 / 中性）突出。时间标签 hover 显示精确到秒的实际时间点。
+  - 新建评论：标签栏右侧「评论」按钮可直接发一条不锚到文件的 summary 评论，编辑框作为时间线首个节点（头像在轨上、编辑框缩进）展开，发布后新评论即时出现在顶部（新增 `publishSummaryComment` 平台契约 + `comments:create` 通道）。
+  - GitLab 走差异化设计：无统一活动事件源（CE 无审批、审批系统 note 解析脆弱），标签页保持纯「评论」视图（`capabilities.activityTimeline=false`），不混入提交 / 决断。
+
 ### Changed
 
 - **前端代码结构重构（可维护性）**：纯结构调整，对外接口与界面 / 交互行为均不变。重点：
@@ -16,6 +23,7 @@
 
 ### Fixed
 
+- PR 头部与详情页的评审状态 chip（pending / approved / needs_work、reviewer 的 approved / needs work / pending）此前为写死英文，现按界面语言出国际化文案（新增 `prStatus` 文案集，四语言）。
 - 切换不同 PR 时 diff 文件树「左栏空白 → 文件树整体弹出」的抖动：DiffView 改为 stale-while-loading——引入 `loadedPrId` 标记当前已渲染内容所属 PR，切 PR 期间保留旧树 / 旧内容渲染、上盖加载遮罩（延迟 150ms，命中缓存的快切换直接换新），并门控 content / comments / blame 拉取（避免「新 localId + 旧选中文件」错拉），新文件列表 ready 后整体替换。
 - diff 文件树首次加载时文件名被图标渲染推移的抖动：图标改用固定 16px 占位槽包裹，iconify 的 svg 晚一帧进 DOM 也不塌缩，文件名位置稳定。
 - 切换不同 PR 时评论页先闪「加载评论中」再渲新内容的空窗：改为 stale-while-loading——切 PR 期间保留旧评论渲染、上盖加载遮罩，新数据 ready 后整体替换；遮罩延迟 150ms 显示，命中本地缓存的快切换直接换新、零闪。

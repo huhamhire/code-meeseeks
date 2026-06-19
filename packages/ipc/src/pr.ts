@@ -1,6 +1,7 @@
 import type {
   LocalPrStatus,
   PollResult,
+  PrActivityEvent,
   PrComment,
   PrCommit,
   ReviewDraft,
@@ -25,6 +26,14 @@ export interface PrChannels {
    */
   'comments:reply': {
     request: { localId: string; parentCommentId: string; body: string };
+    response: PrComment;
+  };
+  /**
+   * 在 PR 上发一条 summary（顶层、不锚到文件）评论。成功后 main 端清评论缓存 + 广播
+   * comments:changed，活动 / 评论面板自动重拉，新评论出现在时间线顶部。
+   */
+  'comments:create': {
+    request: { localId: string; body: string };
     response: PrComment;
   };
   /**
@@ -109,6 +118,15 @@ export interface PrChannels {
   'diff:listCommits': {
     request: { localId: string };
     response: PrCommit[];
+  };
+  /**
+   * 拉取 PR 上的评审决断活动事件（approve / needs-work / unapprove / dismiss），带时间戳。
+   * 活动时间线把它与评论 / 提交按时间归并。不缓存（量小，量级同 commits）；平台取不到历史
+   * 决断（如 GitLab CE 无审批）时返回 []，时间线只展示评论与提交。
+   */
+  'diff:listActivity': {
+    request: { localId: string };
+    response: PrActivityEvent[];
   };
   /**
    * 本地 git rev-list 算 PR 引入的 commit 数 (base..head)。完全走本地 bare 镜像，

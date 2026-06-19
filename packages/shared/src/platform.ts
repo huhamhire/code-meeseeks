@@ -185,6 +185,33 @@ export interface PrComment {
 }
 
 /**
+ * PR 评审决断事件的判定类型。`dismissed` = 决断被撤销/作废（GitHub DISMISSED），
+ * 与主动 `unapproved`（撤回赞成）语义相近但来源不同，保留区分供 UI 文案。
+ */
+export type PrActivityKind = 'approved' | 'needsWork' | 'unapproved' | 'dismissed';
+
+/**
+ * PR 活动时间线上的「评审决断」事件（带时间戳）。跨平台中性形状，由各 adapter 从原生活动流
+ * 映射：GitHub `/pulls/{n}/reviews`（state + submitted_at）；Bitbucket `/activities`
+ * （action=APPROVED/REVIEWED/UNAPPROVED + createdDate）；GitLab 系统 note（approved/
+ * unapproved，CE 无审批则取不到）。
+ *
+ * 仅承载评论 / 提交之外的「决断类」事件——评论走 {@link PrComment}、提交走 {@link PrCommit}，
+ * 渲染层把三路按时间归并成一条时间线。平台拿不到历史事件时该方法返回空数组。
+ */
+export interface PrActivityEvent {
+  /** 平台侧事件 id（去重 / React key 用） */
+  remoteId: string;
+  kind: PrActivityKind;
+  /** 触发该决断的用户 */
+  actor: PlatformUser;
+  /** ISO */
+  createdAt: string;
+  /** 决断附带正文（GitHub review body 可能带说明）；无则省略 */
+  body?: string;
+}
+
+/**
  * PR 的 diff 基准 sha（行内评论发布锚点用）。GitHub 用 `headSha` 作 commit_id；
  * GitLab 用三者拼 position；Bitbucket 不需要（忽略）。adapter 可按 prId 内部拉取，
  * 也可由调用方（已持 PR meta + 本地镜像 sha）传入，避免每次发布多打一次 API。
@@ -233,6 +260,13 @@ export interface PlatformCapabilities {
   suggestions: boolean;
   /** 决断 + 行内评论是否可成组提交（pending review）；映射到本地草稿池→批量发布 */
   reviewGrouping: boolean;
+  /**
+   * 是否提供「带时间戳的评审决断活动事件流」（{@link PrActivityEvent}）以支撑活动时间线。
+   * GitHub（/reviews）/ Bitbucket（/activities）为 `true`：该 PR 标签页渲染评论 + 提交 + 决断
+   * 归并的「活动」时间线。GitLab 为 `false`：无统一活动事件源（CE 无审批、系统 note 解析脆弱），
+   * 标签页退化为纯「评论」视图（沿用原行为与文案），不混入提交 / 决断。
+   */
+  activityTimeline: boolean;
 }
 
 /**
@@ -309,6 +343,15 @@ export interface PlatformAdapter {
   listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]>;
 
   /**
+   * 列出 PR 上的「评审决断」活动事件（approve / needs-work / unapprove / dismiss），带时间戳。
+   * 供活动时间线与评论 / 提交归并展示。各平台映射来源见 {@link PrActivityEvent}。
+   *
+   * 顺序不约定（调用方按 createdAt 自行排序）。平台不支持取历史决断事件（如 GitLab CE 无审批）
+   * 时返回 `[]`，而非抛错——时间线据此优雅降级、只展示评论与提交。
+   */
+  listPullRequestActivity(repo: RepoRef, prId: string): Promise<PrActivityEvent[]>;
+
+  /**
    * 拉用户头像图片。返回原始字节 + content-type，main 进程负责缓存与转 data URL；
    * renderer 不直接 fetch（无 token、无法跨 origin 取私有 Bitbucket 资源）。
    * 有 avatarUrl（平台返回的直链）时优先按它拉——GitHub 机器人靠它才取得到头像；
@@ -369,6 +412,14 @@ export interface PlatformAdapter {
     parentCommentId: string,
     body: string,
   ): Promise<PrComment>;
+
+  /**
+   * 在 PR 上发一条 summary（顶层、不锚到文件）评论。GitHub: POST /issues/{n}/comments；
+   * Bitbucket: POST /pull-requests/{id}/comments（不带 anchor / parent）；GitLab: POST
+   * /merge_requests/{iid}/discussions（不带 position）。返回新建评论（anchor=null），
+   * 调用方刷新 comments cache 让 UI 立即看到。
+   */
+  publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment>;
 
   /**
    * 在 PR diff 上发一条 inline 评论 (锚到具体文件 + 行号)。这是 M4 草稿发布闭环
