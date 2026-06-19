@@ -553,6 +553,11 @@
     "needsWorkCount_one": "{{count}} reviewer marked needs work",
     "needsWorkCount_other": "{{count}} reviewers marked needs work"
   },
+  "prStatus": {
+    "approved": "Approved",
+    "needsWork": "Needs work",
+    "pending": "Pending"
+  },
   "publishReviewModal": {
     "allPublished": "All drafts were written to the remote; the comment list will refresh immediately.",
     "countSummary": "{{total}} total, {{selected}} selected",

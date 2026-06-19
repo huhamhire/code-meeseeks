@@ -553,6 +553,11 @@
     "needsWorkCount_one": "{{count}} Reviewer hat „Nachbesserung nötig“ markiert",
     "needsWorkCount_other": "{{count}} Reviewer haben „Nachbesserung nötig“ markiert"
   },
+  "prStatus": {
+    "approved": "Genehmigt",
+    "needsWork": "Änderungen nötig",
+    "pending": "Ausstehend"
+  },
   "publishReviewModal": {
     "allPublished": "Alle Entwürfe wurden auf den Remote geschrieben; die Kommentarliste wird sofort aktualisiert.",
     "countSummary": "{{total}} insgesamt, {{selected}} ausgewählt",

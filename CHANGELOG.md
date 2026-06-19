@@ -23,6 +23,7 @@
 
 ### Fixed
 
+- PR 头部与详情页的评审状态 chip（pending / approved / needs_work、reviewer 的 approved / needs work / pending）此前为写死英文，现按界面语言出国际化文案（新增 `prStatus` 文案集，四语言）。
 - 切换不同 PR 时 diff 文件树「左栏空白 → 文件树整体弹出」的抖动：DiffView 改为 stale-while-loading——引入 `loadedPrId` 标记当前已渲染内容所属 PR，切 PR 期间保留旧树 / 旧内容渲染、上盖加载遮罩（延迟 150ms，命中缓存的快切换直接换新），并门控 content / comments / blame 拉取（避免「新 localId + 旧选中文件」错拉），新文件列表 ready 后整体替换。
 - diff 文件树首次加载时文件名被图标渲染推移的抖动：图标改用固定 16px 占位槽包裹，iconify 的 svg 晚一帧进 DOM 也不塌缩，文件名位置稳定。
 - 切换不同 PR 时评论页先闪「加载评论中」再渲新内容的空窗：改为 stale-while-loading——切 PR 期间保留旧评论渲染、上盖加载遮罩，新数据 ready 后整体替换；遮罩延迟 150ms 显示，命中本地缓存的快切换直接换新、零闪。

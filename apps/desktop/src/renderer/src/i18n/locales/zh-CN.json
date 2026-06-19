@@ -538,6 +538,11 @@
     "mergeable": "可合并：已满足所有合并条件",
     "needsWorkCount_other": "{{count}} 位 reviewer 标记 needs work"
   },
+  "prStatus": {
+    "approved": "已批准",
+    "needsWork": "要求修改",
+    "pending": "待评审"
+  },
   "publishReviewModal": {
     "allPublished": "所有草稿已写入远端，评论列表会立即刷新。",
     "countSummary": "共 {{total}} 条，已选 {{selected}}",
