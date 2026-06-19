@@ -154,9 +154,9 @@
 }
 
 .draft-zone-btn-danger:hover:not(:disabled) {
-  border-color: $color-danger;
-  color: $color-danger;
-  background: rgba(244, 135, 113, 0.08);
+  border-color: $color-danger-strong;
+  color: $color-danger-strong;
+  background: $color-danger-strong-fade;
 }
 
 // 图标按钮 (垃圾桶等)：方形紧凑，跟文字按钮高度对齐

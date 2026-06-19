@@ -883,9 +883,9 @@
 }
 .chat-finding-draft-btn-reject {
   &:hover {
-    border-color: $color-danger;
-    color: $color-danger;
-    background: rgba(244, 135, 113, 0.08);
+    border-color: $color-danger-strong;
+    color: $color-danger-strong;
+    background: $color-danger-strong-fade;
   }
 }
 
@@ -1259,12 +1259,12 @@
     cursor: not-allowed;
   }
 }
-// Stop 形态：保留同样的边框结构但用 danger 着色，hover 仍变深，明确表达"危险动作"
+// Stop 形态：保留同样的边框结构但用饱和 danger 着色，hover 仍变深，明确表达"危险动作"
 .chat-pane-send-stop {
-  color: $color-danger;
+  color: $color-danger-strong;
   &:hover:not(:disabled) {
-    background: rgba(244, 135, 113, 0.12);
-    border-color: $color-danger;
-    color: $color-danger;
+    background: $color-danger-strong-fade;
+    border-color: $color-danger-strong;
+    color: $color-danger-strong;
   }
 }

@@ -39,7 +39,11 @@ $color-approved:       #16a34a; // PR review "approved/通过" 专用绿 (Tailwi
 $color-warning:        #d97706; // PR review "needs work / 需修改" 饱和琥珀 (Tailwind amber-600，对齐 $color-approved 重量)
 $color-warning-bright: #fbbf24; // 亮琥珀，只用于纯文字告警 (conflict-tag / diff-binary)，无背景
 $color-danger:        #f48771; // 错误文案 / 红边框
-$color-danger-bg:     #c72e0f; // 错误 chip 实底
+$color-danger-bg:     #c72e0f; // 错误 chip / 模态删除按钮实底（高饱和）
+// ghost 危险按钮（删除评论 / 草稿 / 连接 / LLM、停止、拒绝等）的描边 + 文字饱和红：
+// 与实底 $color-danger-bg(#c72e0f) 同色相、提亮以保暗底可读，比 $color-danger 更饱和、警示力更强
+$color-danger-strong:      #e8512e;
+$color-danger-strong-fade: rgba(232, 81, 46, 0.12); // ghost 危险按钮 hover 浅红底
 $color-token-in:       #22c55e; // token 用量 ↑输入 (Tailwind green-500)
 $color-token-out:      #ef4444; // token 用量 ↓输出 (Tailwind red-500)
 
