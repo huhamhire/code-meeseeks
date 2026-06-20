@@ -1,0 +1,107 @@
+// PR Commits 标签页：限宽居中表格（sha / 主题 / 作者 / 时间）+ 合并标记。
+// 见 components/features/pr/tabs/CommitsPanel。
+
+@use '../../tokens' as *;
+
+.pr-commits-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: $space-6 20px;
+  background: $bg-app;
+}
+.pr-commits-table {
+  // 表格限宽 960 居中，与详情 / 活动 / 评论页一致；滚动条留在外层 .pr-commits-panel 右缘
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  border-collapse: collapse;
+  font-size: $fs-md;
+
+  thead {
+    position: sticky;
+    top: 0;
+    background: $bg-elev;
+    z-index: 1;
+  }
+  th {
+    text-align: left;
+    // 表头与行同步加高，保持视觉一致
+    padding: $space-5 $space-4;
+    font-weight: 600;
+    color: $text-muted;
+    // 表头字号不小于正文（与表格 $fs-md 一致），靠加粗 + muted 色区分而非缩小
+    font-size: $fs-md;
+    border-bottom: 1px solid $border-default;
+    white-space: nowrap;
+  }
+  td {
+    // 行高适当加高（纵向 padding 6px → 10px），提交列表更松弛易读
+    padding: $space-5 $space-4;
+    border-bottom: 1px solid $border-muted;
+    vertical-align: middle;
+  }
+}
+.pr-commits-row-clickable {
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: $bg-hover;
+  }
+}
+.pr-commits-col-sha {
+  width: 120px;
+  white-space: nowrap;
+
+  code {
+    font-family: $font-mono;
+    font-size: $fs-sm;
+    color: $color-info;
+  }
+}
+.pr-commits-merge-tag {
+  margin-left: $space-2;
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-size: $fs-xs;
+  font-weight: 600;
+}
+.pr-commits-col-subject {
+  // 主题列允许折行；但 cap 高度避免极长 message 把表格撑炸
+  max-width: 0; // trick: 配合 width:100% 让 table-layout 算可用宽，剩余给主题列
+  width: 100%;
+  word-break: break-word;
+}
+.pr-commits-col-author {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding-right: $space-5;
+}
+.pr-commits-col-time {
+  white-space: nowrap;
+  color: $text-muted;
+  font-size: $fs-sm;
+  font-variant-numeric: tabular-nums;
+}
+.pr-commits-error {
+  background: $color-danger-fade;
+  border: 1px solid $color-danger-border;
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+
+  strong {
+    color: $color-danger;
+  }
+  pre {
+    margin-top: $space-3;
+    font-family: $font-mono;
+    font-size: $fs-xs;
+    color: $text-muted;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}

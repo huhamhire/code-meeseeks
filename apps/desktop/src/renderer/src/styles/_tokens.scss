@@ -15,6 +15,7 @@ $bg-elev:        #252526; // 浮层 / 弹出菜单
 $bg-surface:     #2d2d30; // 输入框 / chip 默认底 / 代码块底
 $bg-hover:       #2a2d2e; // hover 高亮
 $bg-selected:    #094771; // 列表项选中（VS Code activeList）
+$bg-group-header: #181818; // 侧栏 PR 分组头，比 panel 更深一档
 
 // ===== 边框 =====
 $border-default:      #3e3e42;
@@ -31,6 +32,7 @@ $text-on-accent: #ffffff;
 
 // ===== 语义色 (动作 / 状态) =====
 $color-accent:        #0e639c; // VS Code 主蓝，active / primary
+$color-accent-hover:  #1177bb; // primary 按钮 hover（比 accent 提亮一档）
 $color-accent-bg-fade: rgba(14, 99, 156, 0.18);
 $color-accent-strong-fade: rgba(14, 99, 156, 0.5); // resize handle hover/active
 $color-info:          #6cb6ff; // 浅蓝，链接 / 提示
@@ -47,6 +49,20 @@ $color-danger-strong-fade: rgba(232, 81, 46, 0.12); // ghost 危险按钮 hover 
 $color-token-in:       #22c55e; // token 用量 ↑输入 (Tailwind green-500)
 $color-token-out:      #ef4444; // token 用量 ↓输出 (Tailwind red-500)
 
+// 语义色浅底 (chip / banner 背景，与对应主色同色相；chat 卡片大量复用)
+$color-accent-bg-hover:    rgba(14, 99, 156, 0.28);  // 蓝调 chip hover 加深 (rule-chip)
+$color-approved-fade:      rgba(22, 163, 74, 0.18);  // approved chip 浅绿底
+$color-approved-fade-soft: rgba(22, 163, 74, 0.1);   // 代码 diff improved 块浅绿底 (比 chip 更淡)
+$color-warning-fade:       rgba(217, 119, 6, 0.18);  // warning chip 浅琥珀底
+$color-danger-fade:        rgba(244, 135, 113, 0.08); // 错误 banner / existing 代码块 浅红底
+$color-danger-border:      rgba(244, 135, 113, 0.35); // 错误 banner 描边
+
+// off-palette 状态浅底（amber/green/yellow 与主色略有出入，暂各自具名以消除硬编码，待后续与主色收敛）
+$color-conflict-fade:      rgba(245, 158, 11, 0.18); // 冲突 / needsWork chip 填充 (conflict-tag / pr-activity needsWork)
+$color-pending-fade:       rgba(229, 158, 30, 0.15); // 待办 / 草稿 pending 填充 (tab badge / drafts pending)
+$color-posted-fade:        rgba(95, 165, 109, 0.15); // 草稿已发布填充
+$color-search-hit:         rgba(255, 213, 79, 0.42); // diff 搜索命中高亮
+
 // ===== Git decoration 配色 (跟 Monaco / VS Code 一致) =====
 $git-added:           #73c991;
 $git-added-bg-fade:   rgba(115, 199, 145, 0.16);
@@ -54,6 +70,17 @@ $git-modified:        #e2c08d;
 $git-deleted:         #c74e39;
 $git-needs-work-fade: rgba(199, 78, 57, 0.18);
 $git-needs-work-fg:   #f48771;
+// blame 列专属（off-palette）：PR 改动行绿条（对齐 Monaco diff added 装饰绿）+ 折叠占位斜纹灰
+$blame-change:        #487e02;
+$blame-fold:          #6e7681;
+
+// ===== 文件改动状态点 (文件树右栏 8px 圆点) =====
+// 比 $git-* 装饰色更亮的 Material 系：小圆点上比装饰色更易辨认。typechange 用 $text-muted
+$file-status-added:    #4caf50;
+$file-status-modified: #f59e0b;
+$file-status-deleted:  #dc2626;
+$file-status-renamed:  #a78bfa;
+$file-status-copied:   #60a5fa;
 
 // ===== Avatar / Initials 等装饰 =====
 $avatar-bg-default:   #2a2d2e;

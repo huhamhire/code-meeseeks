@@ -1,0 +1,91 @@
+// settings 域在底部状态栏的 chip：当前连接用户 + LLM 切换 chip / 下拉菜单。
+// 组件见 components/features/settings/statusbar/。基础壳在 layout/statusbar。
+
+@use '../../tokens' as *;
+@use '../../mixins' as *;
+
+.statusbar-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: $text-primary;
+  font-size: $fs-sm;
+  padding: 0 $space-2;
+
+  svg {
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
+}
+
+// === LLM 切换 chip + 下拉菜单：自洽组件，统一 llm-chip-* 命名（原 statusbar-llm-* 并入）===
+.llm-chip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+// chip 本体（与 .statusbar-chip 基类组合）；active 态用 VS Code 蓝标签色，
+// 跟 pending status-tag / blame-toggle.active 同色
+.llm-chip {
+  cursor: pointer;
+
+  &-active {
+    background: $color-accent;
+    color: $text-on-accent;
+  }
+}
+// 切换菜单：chip 正上方弹出
+.llm-chip-menu {
+  @include popover;
+  bottom: calc(100% + #{$space-2});
+  right: 0;
+  min-width: 240px;
+  max-width: 360px;
+  border-radius: $radius-lg;
+  padding: $space-2 0;
+
+  &-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: $space-4;
+    padding: $space-3 $space-5;
+    background: transparent;
+    border: none;
+    color: $text-primary;
+    font-size: $fs-md;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background: $bg-hover;
+    }
+    &.active .llm-chip-menu-title {
+      color: $color-info;
+    }
+  }
+  &-tick {
+    width: 12px;
+    color: $color-info;
+    font-size: $fs-sm;
+    flex-shrink: 0;
+  }
+  &-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  &-title {
+    @include ellipsis;
+    font-size: $fs-md;
+  }
+  &-sub {
+    @include ellipsis;
+    font-size: $fs-sm;
+  }
+  &-divider {
+    height: 1px;
+    background: $border-default;
+    margin: $space-2 0;
+  }
+}

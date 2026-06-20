@@ -1,0 +1,118 @@
+// PR 头部动作区：浏览器打开 / 合并 / 提交评审 / approve·needs-work 决断按钮。
+// 见 components/features/pr/PrHeader。头部带布局 (.pr-header / -top / -title / -meta) 在 layout/main-pane。
+
+@use '../../tokens' as *;
+
+.pr-header-actions {
+  display: flex;
+  gap: $space-3;
+  flex-wrap: wrap;
+  align-items: center;
+}
+// "浏览器打开" 按钮：图标 + 文案 横排
+.pr-header-open-browser {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+}
+
+// "合并" 按钮：分支合并图标 + 文案。基础态与 approve 的 inactive 一致（默认描边 + 正文色，仅图标用
+// 绿色语义色），不再「常绿填充」——常绿易被误判为「已点击 / 已合并」态。改以 1s 周期 blink 突出
+// 可点击；点击后（merging → disabled）走 .btn:disabled 灰显并停闪。
+.pr-header-merge {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  animation: pr-merge-blink 1s ease-in-out infinite;
+
+  svg {
+    flex-shrink: 0;
+    color: $color-approved;
+  }
+
+  &:hover:not(:disabled) {
+    // hover 给确定反馈：停闪 + 实心绿描边 + 浅绿填充
+    animation: none;
+    background: rgba($color-approved, 0.14);
+    border-color: $color-approved;
+  }
+  &:disabled {
+    animation: none;
+  }
+}
+@keyframes pr-merge-blink {
+  0%,
+  100% {
+    border-color: $border-default;
+  }
+  50% {
+    border-color: $color-approved;
+    background: rgba($color-approved, 0.14);
+  }
+}
+// 降低动态偏好：不闪烁，保留绿描边以示可合并
+@media (prefers-reduced-motion: reduce) {
+  .pr-header-merge {
+    animation: none;
+    border-color: $color-approved;
+  }
+}
+
+// review 决断按钮组：用 auto margin 顶到右边；wrap 时整组下沉但仍保持右对齐
+.pr-header-actions-right {
+  margin-left: auto;
+  display: inline-flex;
+  gap: $space-3;
+}
+
+// "提交评审 (N)" 入口：N > 0 时主色描边 + 主色文字，跟"通过 / 需修改" inactive 态视觉权重一致
+// （它俩也是默认描边、靠 icon 颜色做语义）；不做整块填充避免在 header 里盖过"浏览器打开"主色按钮。
+// hover 时浅填一层主色提示可点。0 条时走默认 :disabled 灰显
+.pr-header-publish {
+  &:not(:disabled) {
+    border-color: $color-info;
+    color: $color-info;
+
+    &:hover {
+      // 用极浅的主色填充 (~10% 透明)；border 同时加深一档强化可点感
+      background: rgba($color-accent, 0.12);
+    }
+  }
+}
+
+// PR review 操作按钮 (approve / needs work) —— 图标 + 文案。
+// 图标用动作语义色：approve = 绿，needs work = 黄 (amber)。
+// 文案在 inactive 状态仍是 $text-body，避免整行文字被绿/黄"染色"破坏对比；
+// active 状态整体填充语义色，icon 与文字一起翻到对比色
+.review-action {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+
+  svg {
+    flex-shrink: 0;
+  }
+  &.review-action-approve svg {
+    color: $color-approved;
+  }
+  &.review-action-needs-work svg {
+    color: $color-warning;
+  }
+
+  &.active.review-action-approve {
+    background: $color-approved;
+    border-color: $color-approved;
+    color: $text-on-accent;
+    svg {
+      color: inherit;
+    }
+  }
+  &.active.review-action-needs-work {
+    background: $color-warning;
+    border-color: $color-warning;
+    color: $text-on-accent;
+    svg {
+      color: inherit;
+    }
+  }
+}

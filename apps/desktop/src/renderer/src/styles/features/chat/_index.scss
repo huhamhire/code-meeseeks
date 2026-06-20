@@ -1,0 +1,8 @@
+// chat 面板样式簇入口：@forward 各 partial，App.scss 用 `@use '.../features/chat'` 一行引入。
+// 新增 chat partial 在此登记即可，无需改 App.scss。chip 原子先行（供各 partial 的 markup 组合）。
+@forward 'chip';
+@forward 'pane';
+@forward 'run';
+@forward 'findings';
+@forward 'agent';
+@forward 'statusbar';

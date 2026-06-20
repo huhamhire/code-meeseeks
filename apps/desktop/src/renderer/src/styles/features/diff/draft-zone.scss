@@ -1,7 +1,7 @@
-// Monaco 行内草稿 view zone (M4 ADR-0007)：跟 comment-zone 视觉区分 ——
+// Monaco 行内草稿 view zone (设计见 ADR-0007)：跟 comment-zone 视觉区分 ——
 // remote 评论是黄底，草稿用蓝底 + "草稿" 标识；posted 状态切回绿底跟远端评论形态一致
 
-@use '../tokens' as *;
+@use '../../tokens' as *;
 
 // **结构**：
 //   .monaco-draft-zone (= dom，monaco 控制 style.height, 不能放视觉样式)
@@ -24,7 +24,7 @@
   // 同样防御 z-index：inner 内部按钮永远在最顶层
   position: relative;
   z-index: 51;
-  background: rgba(14, 99, 156, 0.12); // $color-accent fade
+  background: rgba($color-accent, 0.12); // $color-accent fade
   border-left: 3px solid $color-accent;
   padding: $space-3 $space-6 $space-4 $space-6;
   font-family:
@@ -98,7 +98,7 @@
     color: $color-info;
   }
   &.draft-zone-status-chip-posted {
-    background: rgba(22, 163, 74, 0.18);
+    background: rgba($color-approved, 0.18);
     color: $color-approved;
   }
   &.draft-zone-status-chip-rejected {
@@ -232,7 +232,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba(244, 135, 113, 0.10);
+  background: rgba($color-danger, 0.10);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;
@@ -270,7 +270,7 @@
     font-size: 14px;
     font-weight: 700;
     line-height: 1;
-    background: rgba(14, 99, 156, 0.18);
+    background: rgba($color-accent, 0.18);
     border-radius: $radius-sm;
   }
 
@@ -282,14 +282,14 @@
 
 // nav 跳转 reveal 后短暂高亮 (0.8s 脉冲)，help 用户看清落到哪一行
 .monaco-draft-highlight-flash {
-  background: rgba(217, 119, 6, 0.25);
+  background: rgba($color-warning, 0.25);
   animation: draft-nav-flash 0.8s ease-out;
 }
 @keyframes draft-nav-flash {
   0% {
-    background: rgba(217, 119, 6, 0.5);
+    background: rgba($color-warning, 0.5);
   }
   100% {
-    background: rgba(217, 119, 6, 0.05);
+    background: rgba($color-warning, 0.05);
   }
 }

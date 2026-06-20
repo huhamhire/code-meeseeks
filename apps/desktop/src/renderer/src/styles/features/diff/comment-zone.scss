@@ -2,7 +2,7 @@
 // 通过 DiffView 内 viewZone 注入 DOM；样式跟 markdown.scss 配合，
 // .comment-zone-body 也会加 .markdown class 走 markdown 视觉规则。
 
-@use '../tokens' as *;
+@use '../../tokens' as *;
 
 // 结构 (跟 DraftZone 同):
 //   .monaco-comment-zone (= dom，monaco 控制 style.height inline，不能放视觉样式)
@@ -74,7 +74,7 @@
 .comment-zone-edit-btn:hover {
   border-color: $color-info;
   color: $color-info;
-  background: rgba(14, 99, 156, 0.08);
+  background: rgba($color-accent, 0.08);
 }
 // 删除按钮主色用 danger，跟其它按钮拉开语义；disabled 时半透明
 .comment-zone-delete-btn:hover:not(:disabled) {
@@ -108,7 +108,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba(244, 135, 113, 0.10);
+  background: rgba($color-danger, 0.10);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;
@@ -223,7 +223,7 @@
     background: $color-accent;
     border-radius: $radius-full;
     transform: translate(-50%, -50%);
-    box-shadow: 0 0 0 1px rgba(14, 99, 156, 0.4);
+    box-shadow: 0 0 0 1px rgba($color-accent, 0.4);
   }
 }
 

@@ -1,34 +1,37 @@
 // meebox renderer 样式总入口。各区域拆在 styles/ 下；
 // 设计 token 在 styles/_tokens.scss，每个 .scss 文件用 `@use './tokens' as *;` 拉取。
 //
-//   base         全局 reset / html-body / .app / .btn / .muted / .badge 等通用原子
-//   statusbar    底部 .app-statusbar + chips + LLM 切换菜单
+//   base         全局 reset / html-body / .app / .btn / .muted / .activity-dot / .icon-btn 等通用原子
+//   statusbar    底部状态栏基础壳 (.app-statusbar + .statusbar-chip 基类 + ok/err/update + spacer)；
+//                各业务域 chip 样式在 features/<域>/statusbar.scss
 //   sidebar      左侧 PR 列表 (sidebar / pr-group / pr-item / avatar / review-chip)
 //   main-pane    .main / pr-header / pr-tabs / blame-toggle / blame-column
-//   file-tree    DiffView 左侧文件树 (.diff-file-list / .tree-* / status dot)
-//   diff         DiffView 主体 (.diff-pane-wrapper / sync-progress / error-boundary)
-//   diff-search  DiffView sidebar 搜索模式 (.diff-search-panel / -input / -results)
-//   comment-zone Monaco 行内评论 view zone + glyph margin 标记
-//   markdown     react-markdown 输出的 h/p/li/code/pre/table 等 dark-theme 配色
+//   diff/        DiffView 簇：view(主体) / search(搜索) / file-tree(文件树) /
+//                comment-zone(行内评论) / draft-zone(草稿编辑)
+//   common/      共享渲染组件样式：markdown(react-markdown 输出) / mermaid(图) /
+//                bitbucket-image(图片缩放) / modal(模态壳)
 //   pr-info      "详情" tab 内容 (.pr-info-view / pr-detail-*)
-//   chat-pane    右侧 pr-agent chat 面板
+//   chat/        右侧 pr-agent chat 面板簇：chip(共享 chip 原子) / pane(外壳 + 输入) /
+//                run(run 状态输出) / findings(结果卡片) / agent(总结 + 思考 + 对话 + 空态)
 //   drafts-panel "草稿" tab 列表页 (.drafts-panel / -filter / -item / -anchor)
-//   modal        SettingsModal + LlmEditorModal 子模态 + LLM profile 列表
+//   modal        通用模态壳 (.modal-backdrop / .modal / header / section / kv / footer / actions)；
+//                业务专属内容在 features/<域>/（settings/forms、pr/publish-review 等）
 //   config-picker 配置选择器左右布局 (平台 / LLM provider 选择列表 + 表单，向导与设置子模态共用)
 @use './styles/base';
 @use './styles/layout/titlebar';
 @use './styles/layout/statusbar';
 @use './styles/layout/sidebar';
 @use './styles/layout/main-pane';
-@use './styles/features/file-tree';
 @use './styles/features/diff';
-@use './styles/features/diff-search';
-@use './styles/features/comment-zone';
-@use './styles/features/draft-zone';
-@use './styles/markdown';
+@use './styles/common/markdown';
+@use './styles/common/mermaid';
+@use './styles/common/bitbucket-image';
 @use './styles/features/pr-info';
-@use './styles/features/chat-pane';
+@use './styles/features/chat';
 @use './styles/features/drafts-panel';
 @use './styles/common/modal';
+@use './styles/features/pr'; // pr 簇（含 publish-review，须在 common/modal 之后）
+@use './styles/features/settings/forms';
 @use './styles/features/config-picker';
 @use './styles/features/onboarding';
+@use './styles/features/settings/statusbar' as settings-statusbar;

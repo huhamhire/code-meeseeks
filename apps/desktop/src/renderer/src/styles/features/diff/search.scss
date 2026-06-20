@@ -1,4 +1,4 @@
-@use '../tokens' as *;
+@use '../../tokens' as *;
 
 // DiffSearchPanel：替换文件树位置的搜索面板。
 // 结构：input row → stats line → 结果列表 (按文件 group)。
@@ -80,7 +80,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba(244, 135, 113, 0.08);
+  background: rgba($color-danger, 0.08);
   border-bottom: 1px solid $border-muted;
 }
 
@@ -222,7 +222,7 @@
   text-overflow: ellipsis;
 }
 .diff-search-highlight {
-  background: rgba(255, 213, 79, 0.42);
+  background: $color-search-hit;
   color: $text-primary;
   border-radius: 2px;
   padding: 0 1px;

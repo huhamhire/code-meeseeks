@@ -1,0 +1,150 @@
+// Markdown 渲染：用于评论 view zone (.comment-zone-body.markdown) 和 PR 描述
+// (.pr-detail-description.markdown) 等。react-markdown 输出的 h/p/li/code/pre/
+// blockquote/table 元素的 dark-theme 配色，跟 VS Code Dark+ 视觉对齐。
+// 组件见 components/common/（markdownMermaid 等）。mermaid 图 / Bitbucket 图各自拆出。
+
+@use '../tokens' as *;
+
+.markdown {
+  p {
+    margin: 0 0 $space-3;
+  }
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  code {
+    background: $bg-surface;
+    padding: 1px 5px;
+    border-radius: $radius-sm;
+    font-family: $font-mono;
+    font-size: 0.92em;
+    // 长行内代码（如 `analyticsUsage.get(...)` / `tenant.getId().toString()`）超宽时允许断行，
+    // 避免把有序列表 / 标题那一行（含开头的数字序号）撑出卡片边界。块级 pre 里的 code 不受影响
+    // （pre 为 white-space:pre，不参与换行，仍横向滚动）。
+    overflow-wrap: anywhere;
+  }
+
+  pre {
+    background: $bg-surface;
+    padding: $space-4 $space-6;
+    border-radius: $radius-md;
+    overflow-x: auto;
+    margin: $space-3 0;
+    font-size: $fs-md;
+
+    code {
+      background: transparent;
+      padding: 0;
+      font-size: inherit;
+    }
+  }
+
+  blockquote {
+    margin: $space-3 0;
+    padding-left: $space-6;
+    border-left: 3px solid $border-default;
+    color: $text-subtle;
+  }
+
+  ul,
+  ol {
+    margin: $space-2 0 $space-3;
+    padding-left: 24px;
+  }
+  li {
+    margin-bottom: $space-1;
+  }
+
+  a {
+    color: $color-info;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  table {
+    border-collapse: collapse;
+    margin: $space-3 0;
+    font-size: $fs-md;
+    // pr-agent 的 walkthrough / 路径列经常塞长 monospace 字符串 (file paths)，
+    // 默认布局会让单元格溢出甚至撑爆面板宽度。table-layout:fixed + width:100% 强制
+    // 按容器宽度分列，单元格内强制 break-word，长路径在 code 字符间断行
+    width: 100%;
+    table-layout: fixed;
+  }
+  th,
+  td {
+    border: 1px solid $border-default;
+    padding: $space-2 $space-4;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+  }
+  th {
+    background: $bg-surface;
+    font-weight: 600;
+  }
+  // 单元格里的 inline code：长 path 没空格也得断；overflow-wrap:anywhere 让浏览器
+  // 在任意字符位置断行 (比 break-all 更宽容，会优先在 - / _ 等位置断)
+  td code,
+  th code {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  // <details>/<summary> 折叠块：Qodo / pr-agent 机器人评论大量使用。
+  details {
+    margin: $space-3 0;
+    border: 1px solid $border-default;
+    border-radius: $radius-md;
+    padding: 0 $space-4;
+    background: $bg-surface;
+
+    &[open] {
+      padding-bottom: $space-3;
+    }
+  }
+  summary {
+    cursor: pointer;
+    padding: $space-3 0;
+    font-weight: 600;
+    user-select: none;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: $space-4 0 $space-2;
+    font-weight: 600;
+    // 标题里常含长路径 / 长标识符（含或不含反引号），无 break 机会会撑出容器；允许超宽时断行。
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  h1 {
+    font-size: 18px;
+  }
+  h2 {
+    font-size: $fs-xl;
+  }
+  h3 {
+    font-size: $fs-lg;
+  }
+  h4 {
+    font-size: $fs-md;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid $border-default;
+    margin: $space-3 0;
+  }
+
+  input[type='checkbox'] {
+    margin-right: $space-2;
+  }
+}

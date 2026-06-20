@@ -107,7 +107,7 @@ export function StatusBar({
       {prAgent && <PrAgentRuntimeChip status={prAgent} />}
       <PrsCountChip count={prsCount} />
       <UserChip connections={connections} />
-      <div className="spacer" />
+      <div className="statusbar-spacer" />
       {/* pr-agent 活动 / 空闲指示。pr-agent 不可用时不显示（上方运行时 chip 已红色提示）。 */}
       {prAgent?.available && <PrAgentActiveChip onJumpToPr={onJumpToPr} />}
       <AutopilotChip enabled={autopilotEnabled} onToggle={onToggleAutopilot} />

@@ -44,19 +44,21 @@ export function RunningView({
     <div className="chat-run-running" data-run-id={runId}>
       <header className="chat-run-meta">
         <span className={`chat-run-tool chat-run-tool-${tool}`}>/{tool}</span>
-        <span className="chat-run-status chat-run-status-running">
+        <span className="chat-chip chat-run-status chat-run-status-running">
           <Spinner />
           {runStatusLabel('running', t)}
         </span>
         {model && (
           <span
-            className="chat-run-chip chat-run-model"
+            className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-model"
             title={t('chatPane.modelTitle', { model })}
           >
             {model}
           </span>
         )}
-        <span className="chat-run-chip chat-run-duration">{formatElapsed(elapsedMs)}</span>
+        <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-duration">
+          {formatElapsed(elapsedMs)}
+        </span>
         {/* 开始时间：跟 RunMeta 同模 — 纯文本右对齐，让 running 跟 succeeded
             两态最右侧元素位置稳定 */}
         <span
@@ -66,7 +68,11 @@ export function RunningView({
           {formatStartTime(startedAt)}
         </span>
       </header>
-      {phase && <div className="chat-run-phase">{phase}</div>}
+      {phase && (
+        <div className="chat-chip chat-chip-md chat-chip-quiet chat-chip-accent chat-run-phase">
+          {phase}
+        </div>
+      )}
       <AnsiPre
         className="chat-run-stdout"
         preRef={ref}

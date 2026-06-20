@@ -32,7 +32,7 @@ function QueuePopover({
       <ul className="statusbar-queue-list">
         {active.map((a) => (
           <li className="statusbar-queue-item statusbar-queue-item-active" key={a.runId}>
-            <span className="statusbar-pragent-dot" aria-hidden="true" />
+            <span className="activity-dot" aria-hidden="true" />
             <button
               type="button"
               className="statusbar-queue-meta"
@@ -58,7 +58,7 @@ function QueuePopover({
         ))}
         {waiting.map((q) => (
           <li className="statusbar-queue-item" key={q.runId}>
-            <span className="statusbar-pragent-dot statusbar-pragent-dot-idle" aria-hidden="true" />
+            <span className="activity-dot activity-dot-idle" aria-hidden="true" />
             <button
               type="button"
               className="statusbar-queue-meta"
@@ -147,7 +147,7 @@ export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: strin
         className="statusbar-pragent-chip statusbar-pragent-chip-idle"
         title={t('statusBar.prAgentIdleTitle')}
       >
-        <span className="statusbar-pragent-dot statusbar-pragent-dot-idle" aria-hidden="true" />
+        <span className="activity-dot activity-dot-idle" aria-hidden="true" />
         <span>{t('statusBar.idle')}</span>
       </StatusChip>
     );
@@ -171,7 +171,7 @@ export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: strin
       (clickable ? t('statusBar.jumpHint') : '');
   const inner = (
     <>
-      <span className="statusbar-pragent-dot" aria-hidden="true" />
+      <span className="activity-dot" aria-hidden="true" />
       <span>/{primary.tool}</span>
       <span className="statusbar-pragent-elapsed">
         {formatElapsed(elapsedMs, { compact: true })}

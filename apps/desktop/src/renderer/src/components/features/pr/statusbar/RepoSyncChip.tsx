@@ -25,7 +25,7 @@ export function RepoSyncChip() {
       className="statusbar-repo-sync-chip"
       title={`${cur.repo} · ${stageLabel}${pct}${cur.message ? `\n${cur.message}` : ''}`}
     >
-      <span className="statusbar-pragent-dot" aria-hidden="true" />
+      <span className="activity-dot" aria-hidden="true" />
       <span className="statusbar-repo-sync-name">{shortRepo}</span>
       <span className="statusbar-repo-sync-progress muted">
         {stageLabel}

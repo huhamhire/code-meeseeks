@@ -1,0 +1,353 @@
+// PR 评论标签页：全量评论（summary + inline）卡片排版 + 嵌套回复 + 锚点 chip + 回复/编辑/删除
+// 操作 + 代码上下文。见 components/features/pr/tabs/comments。活动时间线版式在 features/pr/activity。
+
+@use '../../tokens' as *;
+
+// 外层为定位锚（position:relative）+ 不滚动：让加载遮罩 .pane-loading-overlay 铺满视口、
+// 居中 spinner，而非随内部滚动跑到滚动区顶端。滚动交给内层 .pr-comments-scroll。
+.pr-comments-panel {
+  flex: 1;
+  min-height: 0;
+  // 同 .pr-tab-pane：可收缩到小于内容固有宽度，横向滚动交给内层 .pr-comments-scroll
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: $bg-app;
+}
+.pr-comments-scroll {
+  flex: 1;
+  // 纵向常驻滚动；横向在内容低于最小宽度时出现滚动条（见下方 min-width）
+  overflow: auto;
+  padding: $space-6 20px;
+}
+.pr-comments-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-5;
+}
+// 顶层时间线 / 评论列表：宽度在 [480, 960] 内自适应缩放并居中；窄于 480 不再压缩，
+// 转为外层 .pr-comments-scroll 的横向滚动（避免内嵌代码 / 评论被挤到不可读）。
+// 仅约束直接子列表，嵌套 replies 的 .pr-comments-list 不受影响。
+.pr-comments-scroll > .pr-comments-list {
+  max-width: 960px;
+  min-width: 480px;
+  margin: 0 auto;
+}
+.pr-comments-replies {
+  margin-top: $space-4;
+  padding-left: $space-6;
+  border-left: 2px solid $border-muted;
+}
+.pr-comment {
+  padding: $space-4 $space-5;
+  // 卡片视觉（底色 / 边框 / 圆角）只给**顶层评论**；嵌套回复改走「左竖线缩进」的扁平样式（与行内
+  // 评论 DiffView 一致）——回复的 <ul> 渲染在父 <li.pr-comment> 内部，若每层都是卡片就会层层「盒中盒」。
+  &.pr-comment-depth-0 {
+    background: $bg-elev;
+    border: 1px solid $border-default;
+    border-radius: $radius-md;
+  }
+  // 嵌套回复：无卡片盒子，仅纵向留白；横向缩进与左竖线由 .pr-comments-replies 提供，满 5 层后拉平。
+  &:not(.pr-comment-depth-0) {
+    padding: $space-3 0;
+  }
+}
+// 拉平层（满 MAX_REPLY_DEPTH 层后）的回复同层级、无卡片盒子区隔 → 每条加一道顶部横向分割线 + 上下
+// 留白（margin 在线上方、padding 在线下方），清晰区分上下相邻评论（首条同时与上一缩进层级隔开）。
+// 置于 .pr-comment 之后以盖过其 padding-top。
+.pr-comments-flat > .pr-comment {
+  margin-top: $space-4;
+  padding-top: $space-4;
+  border-top: 1px solid $border-muted;
+}
+
+// 时间线模式的顶层评论：li 自身退掉卡片样式（卡片下移到 .pr-comment-card），标题行走 .pr-activity-item
+// 版式与其它事件统一；正文卡片整体缩进、挂在时间线轨右侧。
+.pr-comment-timeline.pr-comment-depth-0 {
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+.pr-comment-card {
+  // 缩进对齐到标题行的头像左缘（行左 padding + 图标 22 + gap）
+  margin-left: calc(22px + #{$space-3} * 2);
+  margin-top: $space-2;
+  padding: $space-4 $space-5;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+}
+
+.pr-comment-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  margin-bottom: $space-3;
+  flex-wrap: wrap;
+}
+.pr-comment-author {
+  font-weight: 600;
+  color: $text-primary;
+}
+.pr-comment-anchor {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  background: $color-accent-bg-fade;
+  color: $color-info;
+  font-size: $fs-xs;
+
+  // base 侧 (old) 用红调，head 侧 (new) 用绿调，跟 diff 视觉一致
+  &.pr-comment-anchor-old {
+    background: rgba($color-danger, 0.15);
+    color: $color-danger;
+  }
+  &.pr-comment-anchor-new {
+    background: $color-approved-fade;
+    color: $color-approved;
+  }
+
+  code {
+    font-family: $font-mono;
+    background: transparent;
+    padding: 0;
+  }
+}
+// 可点击锚点 chip（活动视图）：button 形态需重置原生样式，并给可点反馈。
+// 注意：它是「可点击的 chip」（保留 chip 底色），不同于纯文本链接的 anchor-link mixin。
+.pr-comment-anchor-link {
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.15);
+    text-decoration: underline;
+  }
+}
+.pr-comment-time {
+  margin-left: auto;
+  font-size: $fs-xs;
+}
+.pr-comment-body {
+  font-size: $fs-md;
+  line-height: $lh-normal;
+}
+.pr-comment-foot {
+  margin-top: $space-3;
+  display: flex;
+  gap: $space-3;
+  align-items: center;
+}
+.pr-comment-reply-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover {
+    border-color: $color-accent;
+    color: $color-info;
+    background: $bg-hover;
+  }
+}
+// 编辑按钮：跟回复按钮同尺寸，hover 主色描边 — 是中性操作，不需要 danger 配色
+.pr-comment-edit-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-info;
+    color: $color-info;
+    background: rgba($color-accent, 0.08);
+  }
+}
+// 删除按钮：跟回复按钮同尺寸，主色用 danger 让用户一眼识别为破坏性操作。
+// 二次确认走 ConfirmModal，按钮上不再加 hover-only 隐藏 (避免误以为没这功能)
+.pr-comment-delete-btn {
+  padding: 2px $space-4;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-danger-strong;
+    color: $color-danger-strong;
+    background: $color-danger-strong-fade;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+// 删除失败 inline 红条
+.pr-comment-delete-error {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  margin-top: $space-3;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba($color-danger, 0.1);
+  border-left: 3px solid $color-danger;
+  border-radius: $radius-sm;
+  word-break: break-word;
+}
+.pr-comment-delete-error-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: $color-danger;
+  cursor: pointer;
+  padding: 0 $space-2;
+  font-size: $fs-md;
+  line-height: 1;
+  flex-shrink: 0;
+  &:hover {
+    opacity: 0.7;
+  }
+}
+.comment-reply-editor {
+  margin-top: $space-3;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+.comment-reply-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: $space-3 $space-4;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-body;
+  font-family: inherit;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  resize: vertical;
+  min-height: calc(#{$fs-md} * #{$lh-normal} * 3 + #{$space-3} * 2);
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+.comment-reply-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+}
+.comment-reply-btn {
+  padding: 1px $space-4;
+  font-size: $fs-sm;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-accent;
+    color: $color-info;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+.comment-reply-btn-primary {
+  background: $color-accent;
+  border-color: $color-accent;
+  color: $text-on-accent;
+  &:hover:not(:disabled) {
+    filter: brightness(1.15);
+    color: $text-on-accent;
+  }
+}
+.comment-reply-error {
+  color: $color-danger;
+  font-size: $fs-sm;
+}
+.pr-comments-error {
+  background: $color-danger-fade;
+  border: 1px solid $color-danger-border;
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+
+  strong {
+    color: $color-danger;
+  }
+  pre {
+    margin-top: $space-3;
+    font-family: $font-mono;
+    font-size: $fs-xs;
+    color: $text-muted;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
+// inline 评论上方嵌的代码上下文：Monaco read-only，锚定行整行底色
+.comment-code-context {
+  margin: $space-3 0;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  overflow: hidden;
+  background: $bg-app;
+}
+.comment-code-context-loading,
+.comment-code-context-error {
+  margin: $space-3 0;
+  padding: $space-3 $space-4;
+  border: 1px dashed $border-muted;
+  border-radius: $radius-md;
+  font-size: $fs-sm;
+}
+// 懒加载占位按钮：CAP 之外的 inline 评论用，点击才挂 Monaco
+.comment-code-context-toggle {
+  margin: $space-3 0;
+  padding: $space-3 $space-4;
+  border: 1px dashed $border-default;
+  border-radius: $radius-md;
+  background: $bg-surface;
+  color: $text-muted;
+  font-size: $fs-sm;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+
+  &:hover {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+// Monaco decoration：锚定行整行底色 + 左侧色带 (margin gutter)，跟 inline 锚点
+// chip 颜色保持一组语义 (warning amber 区分于 added 绿 / removed 红)
+.comment-code-context-anchor-line {
+  background: rgba($color-warning, 0.18);
+}
+.comment-code-context-anchor-gutter {
+  background: $color-warning;
+  width: 2px !important;
+}

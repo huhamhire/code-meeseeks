@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Config } from '@meebox/shared';
-import { StatusChip } from '../../../common';
+import { StarIcon, StatusChip } from '../../../common';
 
 /**
  * 当前 active LLM profile 概要。点击展开下拉，列出所有 profile 直接切换。
@@ -50,13 +50,14 @@ export function LlmChip({
   };
 
   return (
-    <span className="statusbar-llm-wrap">
+    <span className="llm-chip-wrap">
       <StatusChip
-        className={`statusbar-llm-chip${empty ? '' : ' statusbar-llm-chip-active'}`}
+        className={`llm-chip${empty ? '' : ' llm-chip-active'}`}
         title={title}
         onClick={onClick}
       >
-        LLM: {text}
+        <StarIcon />
+        {text}
       </StatusChip>
       {open && (
         <div className="llm-chip-menu" role="menu">
