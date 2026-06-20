@@ -149,7 +149,7 @@
 
   &.status-pending {
     color: $color-warning;
-    background: rgba(229, 158, 30, 0.15);
+    background: $color-pending-fade;
   }
   &.status-edited {
     color: $color-info;
@@ -157,7 +157,7 @@
   }
   &.status-posted {
     color: $color-success;
-    background: rgba(95, 165, 109, 0.15);
+    background: $color-posted-fade;
   }
   &.status-rejected {
     color: $text-muted;

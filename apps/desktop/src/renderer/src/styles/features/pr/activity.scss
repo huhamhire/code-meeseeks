@@ -109,7 +109,7 @@
   color: $color-approved;
 }
 .pr-activity-chip-needsWork {
-  background: rgba(245, 158, 11, 0.18);
+  background: $color-conflict-fade;
   color: $color-warning-bright;
 }
 .pr-activity-chip-unapproved,

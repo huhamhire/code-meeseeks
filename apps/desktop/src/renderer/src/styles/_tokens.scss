@@ -15,6 +15,7 @@ $bg-elev:        #252526; // 浮层 / 弹出菜单
 $bg-surface:     #2d2d30; // 输入框 / chip 默认底 / 代码块底
 $bg-hover:       #2a2d2e; // hover 高亮
 $bg-selected:    #094771; // 列表项选中（VS Code activeList）
+$bg-group-header: #181818; // 侧栏 PR 分组头，比 panel 更深一档
 
 // ===== 边框 =====
 $border-default:      #3e3e42;
@@ -31,6 +32,7 @@ $text-on-accent: #ffffff;
 
 // ===== 语义色 (动作 / 状态) =====
 $color-accent:        #0e639c; // VS Code 主蓝，active / primary
+$color-accent-hover:  #1177bb; // primary 按钮 hover（比 accent 提亮一档）
 $color-accent-bg-fade: rgba(14, 99, 156, 0.18);
 $color-accent-strong-fade: rgba(14, 99, 156, 0.5); // resize handle hover/active
 $color-info:          #6cb6ff; // 浅蓝，链接 / 提示
@@ -54,6 +56,12 @@ $color-approved-fade-soft: rgba(22, 163, 74, 0.1);   // 代码 diff improved 块
 $color-warning-fade:       rgba(217, 119, 6, 0.18);  // warning chip 浅琥珀底
 $color-danger-fade:        rgba(244, 135, 113, 0.08); // 错误 banner / existing 代码块 浅红底
 $color-danger-border:      rgba(244, 135, 113, 0.35); // 错误 banner 描边
+
+// off-palette 状态浅底（amber/green/yellow 与主色略有出入，暂各自具名以消除硬编码，待后续与主色收敛）
+$color-conflict-fade:      rgba(245, 158, 11, 0.18); // 冲突 / needsWork chip 填充 (conflict-tag / pr-activity needsWork)
+$color-pending-fade:       rgba(229, 158, 30, 0.15); // 待办 / 草稿 pending 填充 (tab badge / drafts pending)
+$color-posted-fade:        rgba(95, 165, 109, 0.15); // 草稿已发布填充
+$color-search-hit:         rgba(255, 213, 79, 0.42); // diff 搜索命中高亮
 
 // ===== Git decoration 配色 (跟 Monaco / VS Code 一致) =====
 $git-added:           #73c991;

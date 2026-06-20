@@ -152,7 +152,7 @@ textarea {
   color: $text-on-accent;
 
   &:hover:not(:disabled) {
-    background: #1177bb;
+    background: $color-accent-hover;
   }
 }
 

@@ -222,7 +222,7 @@
   text-overflow: ellipsis;
 }
 .diff-search-highlight {
-  background: rgba(255, 213, 79, 0.42);
+  background: $color-search-hit;
   color: $text-primary;
   border-radius: 2px;
   padding: 0 1px;
