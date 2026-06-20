@@ -1,0 +1,109 @@
+// PR 头部右上角的 reviewer 头像栈（Bitbucket 风格略重叠 + 决断角标 + 「+n」下拉）。
+// 见 components/features/pr/ReviewerStack。
+
+@use '../../tokens' as *;
+
+.reviewer-stack {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+
+  // 重叠：除首个外左移；各项带灰色描边环分隔相邻头像
+  > * + * {
+    margin-left: -6px;
+  }
+  .avatar {
+    box-shadow: 0 0 0 1px $border-default;
+  }
+}
+.reviewer-stack-item {
+  position: relative;
+  display: inline-flex;
+}
+// 角标：复用 approve 绿勾 / needs-work 琥珀叹号「圆环」图标，撑满钉在头像右上角（待评审无角标）。
+// 不加外框，仅靠图标着色区分。
+.reviewer-stack-badge {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  // 圆环内填白底（限定在圆环范围内，不外溢成白晕），让勾/叹号在白底上清晰、不透出头像
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 11px;
+    height: 11px;
+    transform: translate(-50%, -50%);
+    border-radius: $radius-full;
+    background: #fff;
+  }
+  svg {
+    display: block;
+    position: relative; // 压在白底之上
+  }
+}
+.reviewer-stack-badge-approved {
+  color: $color-approved;
+}
+.reviewer-stack-badge-needsWork {
+  color: $color-warning;
+}
+// 「+n」溢出项：灰圆，点击展开下拉
+.reviewer-stack-more {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none; // 复位浏览器默认 button 边框，使其与头像一致只剩 box-shadow 外框
+  border-radius: $radius-full;
+  background: $bg-surface;
+  box-shadow: 0 0 0 1px $border-default;
+  color: $text-muted;
+  font-size: $fs-sm;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover,
+  &.open {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+}
+// 「+n」下拉（fixed + portal，视觉同 diff-scope-menu）：其余 reviewer 头像 + 名 + 决断 chip
+.reviewer-stack-menu {
+  z-index: $z-statusbar-menu;
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  padding: $space-3;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+.reviewer-stack-menu-item {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+}
+.reviewer-stack-menu-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: $fs-md;
+  color: $text-primary;
+}

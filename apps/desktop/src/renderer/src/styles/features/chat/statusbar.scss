@@ -155,7 +155,7 @@ button.statusbar-pragent-chip {
   cursor: pointer;
 
   &:hover {
-    background: rgba(244, 135, 113, 0.15);
+    background: rgba($color-danger, 0.15);
     color: $color-danger;
   }
 }

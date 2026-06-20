@@ -37,6 +37,21 @@
   white-space: nowrap;
 }
 
+// 「按钮即链接」复位：把 <button> 退成行内链接外观（透明底 / 无边框 / 无内边距）+ 统一
+// focus-visible 焦点环。各调用点自定 color / font / hover（评论锚点 / 草稿锚点 / finding 锚点等）。
+@mixin anchor-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 1px solid $color-info;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
 // ===== chip 共性词汇（statusbar / chat / 各业务域的小圆标签复用）=====
 // 各场景 chip 度量（高度 / padding / 字号）差异大，故 common 只共「本质 + 色板词汇」，
 // 不强塞统一 class：各场景类 @include chip 后自叠度量，配色统一走 chip-tone。

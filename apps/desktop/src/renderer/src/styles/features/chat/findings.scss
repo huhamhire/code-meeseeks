@@ -235,17 +235,14 @@
 }
 // 可点击锚点：path + 行号整体作为「跳转到代码对应行」的链接按钮
 .chat-finding-anchor-link {
+  @include anchor-link;
   display: inline-flex;
   align-items: baseline;
   gap: $space-2;
   min-width: 0;
-  padding: 0;
   margin: 0;
-  background: transparent;
-  border: none;
   font: inherit;
   color: inherit;
-  cursor: pointer;
 
   &:hover {
     color: $color-info;
@@ -253,11 +250,6 @@
     code {
       color: $color-info;
     }
-  }
-  &:focus-visible {
-    outline: 1px solid $color-info;
-    outline-offset: 2px;
-    border-radius: 2px;
   }
 }
 .chat-finding-body {

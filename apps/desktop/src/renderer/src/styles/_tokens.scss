@@ -62,6 +62,9 @@ $git-modified:        #e2c08d;
 $git-deleted:         #c74e39;
 $git-needs-work-fade: rgba(199, 78, 57, 0.18);
 $git-needs-work-fg:   #f48771;
+// blame 列专属（off-palette）：PR 改动行绿条（对齐 Monaco diff added 装饰绿）+ 折叠占位斜纹灰
+$blame-change:        #487e02;
+$blame-fold:          #6e7681;
 
 // ===== 文件改动状态点 (文件树右栏 8px 圆点) =====
 // 比 $git-* 装饰色更亮的 Material 系：小圆点上比装饰色更易辨认。typechange 用 $text-muted

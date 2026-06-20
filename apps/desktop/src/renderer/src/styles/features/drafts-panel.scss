@@ -1,4 +1,5 @@
 @use '../tokens' as *;
+@use '../mixins' as *;
 
 // 草稿管理面板。布局跟 CommentsPanel 一致：上半个状态筛选条、下半个滚动
 // 列表。每条卡片含 anchor + status chip + actions + body markdown + (可选) 错误
@@ -127,10 +128,7 @@
   word-break: break-all;
 }
 .drafts-panel-item-anchor-link {
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
+  @include anchor-link;
   color: $color-info;
   text-align: left;
   font-family: $font-mono;
@@ -138,11 +136,6 @@
 
   &:hover {
     text-decoration: underline;
-  }
-  &:focus-visible {
-    outline: 1px solid $color-info;
-    outline-offset: 2px;
-    border-radius: 2px;
   }
 }
 
@@ -206,7 +199,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba(244, 135, 113, 0.10);
+  background: rgba($color-danger, 0.10);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;

@@ -80,7 +80,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba(244, 135, 113, 0.08);
+  background: rgba($color-danger, 0.08);
   border-bottom: 1px solid $border-muted;
 }
 

@@ -202,7 +202,7 @@ select.settings-input {
 
   &:focus {
     border-color: $color-danger !important;
-    box-shadow: 0 0 0 1px rgba(244, 135, 113, 0.3);
+    box-shadow: 0 0 0 1px rgba($color-danger, 0.3);
   }
 }
 .settings-field-error {

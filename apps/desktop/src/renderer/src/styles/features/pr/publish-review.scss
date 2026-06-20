@@ -3,6 +3,7 @@
 // 外框 → .modal（本文件只叠更宽的 max-width）。这里只放发布列表 / 进度 / 结果等专属内容。
 
 @use '../../tokens' as *;
+@use '../../mixins' as *;
 
 // 比默认 .modal(640) 宽：要展示 N 条草稿的 anchor + body 摘要，太窄一条占两屏不利核对
 .publish-review-modal {
@@ -72,22 +73,14 @@
   color: $text-primary;
   word-break: break-all;
 }
-// anchor 可点版本：button reset + hover 主色，让用户知道是个 link
+// anchor 可点版本：button 退成链接外观（@include anchor-link）+ hover 主色
 .publish-review-item-anchor-link {
-  background: transparent;
-  border: none;
-  padding: 0;
+  @include anchor-link;
   text-align: left;
-  cursor: pointer;
   color: $color-info;
 
   &:hover {
     text-decoration: underline;
-  }
-  &:focus-visible {
-    outline: 1px solid $color-info;
-    outline-offset: 2px;
-    border-radius: 2px;
   }
 }
 .publish-review-item-status {
@@ -101,7 +94,7 @@
 
   &.status-edited {
     color: $color-info;
-    background: rgba(14, 99, 156, 0.15);
+    background: rgba($color-accent, 0.15);
   }
 }
 .publish-review-item-body {

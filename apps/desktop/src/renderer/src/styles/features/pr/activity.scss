@@ -1,0 +1,180 @@
+// PR 活动时间线（提交 / 评审决断事件行 + 评论行）：竖向虚线轨 + 图标节点 + 决断 chip。
+// 见 components/features/pr/tabs/activity。评论卡片样式在 features/pr/comments。
+
+@use '../../tokens' as *;
+
+// 所有条目（评论 / 提交 / 决断）首列都是同一位置的图标节点，正文在右；一条竖向虚线轨贯穿图标列、
+// 连接相邻条目，图标用面板底色遮住轨线形成「节点」效果。
+.pr-activity-list {
+  position: relative;
+
+  // 竖向虚线轨：居中于图标列（行左 padding $space-3 + 图标半宽 11px）。首尾各内缩一点，不超出首/末节点。
+  &::before {
+    content: '';
+    position: absolute;
+    top: $space-5;
+    bottom: $space-5;
+    left: calc(#{$space-3} + 11px);
+    border-left: 1px dashed $border-default;
+    z-index: 0;
+  }
+}
+.pr-activity-item {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding: $space-2 $space-3;
+  // 与评论主体人文本同字号（body 默认 14px），作者展示不做差异化
+  font-size: $fs-lg;
+  color: $text-body;
+}
+.pr-activity-clickable {
+  cursor: pointer;
+  border-radius: $radius-sm;
+
+  &:hover {
+    background: $bg-hover;
+  }
+}
+.pr-activity-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: $text-muted;
+  // 浮于虚线轨之上并用面板底色遮挡轨线 → 图标成为时间线节点
+  position: relative;
+  z-index: 1;
+  background: $bg-app;
+}
+// 决断语义色：approve 绿、needs-work 琥珀；unapproved / dismissed 维持中性 muted
+.pr-activity-icon-approved {
+  color: $color-approved;
+}
+.pr-activity-icon-needsWork {
+  color: $color-warning-bright;
+}
+.pr-activity-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  overflow: hidden;
+}
+.pr-activity-commit-subject {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pr-activity-sha {
+  flex-shrink: 0;
+  font-family: $font-mono;
+  font-size: $fs-xs;
+  color: $text-muted;
+}
+.pr-activity-merge-tag {
+  flex-shrink: 0;
+  font-size: $fs-xs;
+  padding: 0 $space-2;
+  border-radius: $radius-sm;
+  background: $bg-hover;
+  color: $text-muted;
+}
+.pr-activity-actor {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: $text-primary;
+}
+.pr-activity-verb {
+  color: $text-muted;
+}
+// reviewer 决断动词用带色 chip 突出：approve 绿、needs-work 琥珀、unapproved/dismissed 中性
+.pr-activity-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px $space-3;
+  border-radius: $radius-pill;
+  // 与行内文本同字号（14px），比默认 chip 更突出
+  font-size: $fs-lg;
+  font-weight: 600;
+}
+.pr-activity-chip-approved {
+  background: rgba($color-approved, 0.16);
+  color: $color-approved;
+}
+.pr-activity-chip-needsWork {
+  background: rgba(245, 158, 11, 0.18);
+  color: $color-warning-bright;
+}
+.pr-activity-chip-unapproved,
+.pr-activity-chip-dismissed {
+  background: $bg-hover;
+  color: $text-muted;
+}
+.pr-activity-time {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: $fs-xs;
+}
+
+// 时间标签自定义 tooltip：原生 title 延迟长、且部分场景不弹（review 行），改用 data-tip + ::after，
+// 短延迟（120ms 显示、移开即隐），各时间标签行为一致、精确到秒。
+.time-tip {
+  position: relative;
+}
+.time-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 5;
+  padding: 2px $space-3;
+  white-space: nowrap;
+  font-size: $fs-sm;
+  color: $text-primary;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+.time-tip:hover::after {
+  opacity: 1;
+  transition-delay: 0.12s;
+}
+
+// 新建评论编辑框：缩进对齐到标题行头像左缘，挂在时间线轨右侧（与评论卡片同一缩进）
+.pr-activity-compose-card {
+  margin-left: calc(22px + #{$space-3} * 2);
+}
+
+// 活动标签页右侧「评论」按钮：复用 diff 工具条按钮的轻量样式
+.pr-tab-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 2px $space-4;
+  background: transparent;
+  border: 1px solid $border-default;
+  color: $text-muted;
+  cursor: pointer;
+  font-size: $fs-sm;
+  border-radius: $radius-sm;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+}

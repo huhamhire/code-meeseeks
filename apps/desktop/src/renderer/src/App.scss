@@ -27,11 +27,10 @@
 @use './styles/common/mermaid';
 @use './styles/common/bitbucket-image';
 @use './styles/features/pr-info';
-@use './styles/features/pr/statusbar' as pr-statusbar;
 @use './styles/features/chat';
 @use './styles/features/drafts-panel';
 @use './styles/common/modal';
-@use './styles/features/pr/publish-review';
+@use './styles/features/pr'; // pr 簇（含 publish-review，须在 common/modal 之后）
 @use './styles/features/settings/forms';
 @use './styles/features/config-picker';
 @use './styles/features/onboarding';
