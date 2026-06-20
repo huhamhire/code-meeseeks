@@ -14,7 +14,8 @@
 //   chat/        右侧 pr-agent chat 面板簇：chip(共享 chip 原子) / pane(外壳 + 输入) /
 //                run(run 状态输出) / findings(结果卡片) / agent(总结 + 思考 + 对话 + 空态)
 //   drafts-panel "草稿" tab 列表页 (.drafts-panel / -filter / -item / -anchor)
-//   modal        SettingsModal + LlmEditorModal 子模态 + LLM profile 列表
+//   modal        通用模态壳 (.modal-backdrop / .modal / header / section / kv / footer / actions)；
+//                业务专属内容在 features/<域>/（settings/forms、pr/publish-review 等）
 //   config-picker 配置选择器左右布局 (平台 / LLM provider 选择列表 + 表单，向导与设置子模态共用)
 @use './styles/base';
 @use './styles/layout/titlebar';
@@ -30,6 +31,8 @@
 @use './styles/features/chat';
 @use './styles/features/drafts-panel';
 @use './styles/common/modal';
+@use './styles/features/pr/publish-review';
+@use './styles/features/settings/forms';
 @use './styles/features/config-picker';
 @use './styles/features/onboarding';
 @use './styles/features/settings/statusbar' as settings-statusbar;

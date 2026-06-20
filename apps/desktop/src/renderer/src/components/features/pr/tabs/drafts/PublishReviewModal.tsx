@@ -102,15 +102,15 @@ export function PublishReviewModal({
   // 时不会触发开 modal，但作 fallback)
   if (candidates.length === 0) {
     return (
-      <div className="publish-review-backdrop" onClick={onClose}>
-        <div className="publish-review-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal publish-review-modal" onClick={(e) => e.stopPropagation()}>
           <header className="publish-review-head">
             <h3>{t('publishReviewModal.title')}</h3>
           </header>
           <div className="publish-review-body">
             <p className="muted">{t('publishReviewModal.emptyState')}</p>
           </div>
-          <footer className="publish-review-foot">
+          <footer className="modal-actions">
             <button type="button" className="btn btn-sm" onClick={onClose}>
               {t('common.close')}
             </button>
@@ -121,8 +121,8 @@ export function PublishReviewModal({
   }
 
   return (
-    <div className="publish-review-backdrop" onClick={onClose}>
-      <div className="publish-review-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal publish-review-modal" onClick={(e) => e.stopPropagation()}>
         <header className="publish-review-head">
           <h3>
             {phase === 'done'
@@ -207,7 +207,7 @@ export function PublishReviewModal({
               </ul>
               {error && <div className="publish-review-error">{error}</div>}
             </div>
-            <footer className="publish-review-foot">
+            <footer className="modal-actions">
               <button type="button" className="btn btn-sm" onClick={onClose}>
                 {t('common.cancel')}
               </button>
@@ -270,7 +270,7 @@ export function PublishReviewModal({
                 <p className="muted">{t('publishReviewModal.allPublished')}</p>
               )}
             </div>
-            <footer className="publish-review-foot">
+            <footer className="modal-actions">
               <button type="button" className="btn btn-sm btn-primary" onClick={onClose}>
                 {t('common.close')}
               </button>
