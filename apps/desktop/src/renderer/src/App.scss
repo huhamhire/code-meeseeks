@@ -8,7 +8,8 @@
 //   main-pane    .main / pr-header / pr-tabs / blame-toggle / blame-column
 //   diff/        DiffView 簇：view(主体) / search(搜索) / file-tree(文件树) /
 //                comment-zone(行内评论) / draft-zone(草稿编辑)
-//   markdown     react-markdown 输出的 h/p/li/code/pre/table 等 dark-theme 配色
+//   common/      共享渲染组件样式：markdown(react-markdown 输出) / mermaid(图) /
+//                bitbucket-image(图片缩放) / modal(模态壳)
 //   pr-info      "详情" tab 内容 (.pr-info-view / pr-detail-*)
 //   chat/        右侧 pr-agent chat 面板簇：chip(共享 chip 原子) / pane(外壳 + 输入) /
 //                run(run 状态输出) / findings(结果卡片) / agent(总结 + 思考 + 对话 + 空态)
@@ -21,7 +22,9 @@
 @use './styles/layout/sidebar';
 @use './styles/layout/main-pane';
 @use './styles/features/diff';
-@use './styles/markdown';
+@use './styles/common/markdown';
+@use './styles/common/mermaid';
+@use './styles/common/bitbucket-image';
 @use './styles/features/pr-info';
 @use './styles/features/pr/statusbar' as pr-statusbar;
 @use './styles/features/chat';
