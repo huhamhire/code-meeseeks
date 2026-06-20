@@ -1,6 +1,7 @@
 // StatusBar (底部状态栏)
 
 @use '../tokens' as *;
+@use '../mixins' as *;
 
 .app-statusbar {
   display: flex;
@@ -177,22 +178,12 @@ button.statusbar-pragent-chip {
   background: rgba(255, 255, 255, 0.1);
 }
 
-// chip 正上方右对齐弹出的菜单容器（队列 popover / LLM 切换菜单共用定位与浮层外观，
-// 各自只叠 width / border-radius / padding 差异）
-%statusbar-popover {
-  position: absolute;
-  bottom: calc(100% + #{$space-2});
-  right: 0;
-  background: $bg-elev;
-  border: 1px solid $border-default;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  z-index: $z-statusbar-menu;
-}
-
 // === 队列 popover ===
 // chip 上方弹出。最多 6 行高 + 内部滚动，避免遮住其他状态栏元素
 .statusbar-queue-popover {
-  @extend %statusbar-popover;
+  @include popover;
+  bottom: calc(100% + #{$space-2});
+  right: 0;
   min-width: 280px;
   max-width: 420px;
   border-radius: $radius-md;
@@ -378,7 +369,9 @@ button.statusbar-pragent-chip {
 }
 
 .llm-chip-menu {
-  @extend %statusbar-popover;
+  @include popover;
+  bottom: calc(100% + #{$space-2});
+  right: 0;
   min-width: 240px;
   max-width: 360px;
   border-radius: $radius-lg;

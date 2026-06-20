@@ -16,6 +16,32 @@ import {
 } from '../utils/findings';
 import { BreakablePath, MdInline } from './shared';
 
+// chip 配色 tone → chat-chip-<tone>（色板见 styles/features/chat/chip.scss）。
+// finding 类别：元信息/图/工作量→accent，内容/测试/安全→approved，代码反馈/建议→warning，评分/兜底→neutral。
+const CAT_TONE: Record<PrDocSectionKey, 'accent' | 'approved' | 'warning' | 'neutral'> = {
+  title: 'accent',
+  'pr-type': 'accent',
+  diagram: 'accent',
+  assessment: 'accent',
+  effort: 'accent',
+  summary: 'approved',
+  description: 'approved',
+  walkthrough: 'approved',
+  'relevant-tests': 'approved',
+  security: 'approved',
+  'code-feedback': 'warning',
+  'code-suggestion': 'warning',
+  score: 'neutral',
+  general: 'neutral',
+};
+// 草稿状态：待处理/已编辑→accent，已发布→approved，已拒绝→neutral
+const DRAFT_TONE: Record<NonNullable<ReviewDraft['status']>, 'accent' | 'approved' | 'neutral'> = {
+  pending: 'accent',
+  edited: 'accent',
+  posted: 'approved',
+  rejected: 'neutral',
+};
+
 /**
  * Finding card 上的草稿状态 chip + 操作按钮。仅代码类 finding（/review code-feedback
  * 与 /improve code-suggestion）+ anchor 完整时出现。
@@ -47,7 +73,11 @@ function FindingDraftActions({
   return (
     <div className="chat-finding-draft-actions">
       {status && (
-        <span className={`chat-finding-draft-chip chat-finding-draft-chip-${status}`}>
+        <span
+          className={`chat-chip chat-chip-tight chat-chip-${DRAFT_TONE[status]}${
+            status === 'rejected' ? ' chat-finding-draft-chip-rejected' : ''
+          }`}
+        >
           {chipText[status]}
         </span>
       )}
@@ -139,7 +169,11 @@ export function FindingCard({
     >
       <header className="chat-finding-head">
         {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
-        {label && <span className={`chat-finding-cat chat-finding-cat-${key}`}>{label}</span>}
+        {label && (
+          <span className={`chat-chip chat-chip-md chat-finding-cat chat-chip-${CAT_TONE[key]}`}>
+            {label}
+          </span>
+        )}
         {showTitle && translatedTitle && !collapsed && (
           <h4 className="chat-finding-title">
             <MdInline>{translatedTitle}</MdInline>

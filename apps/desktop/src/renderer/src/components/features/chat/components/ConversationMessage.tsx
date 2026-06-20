@@ -22,7 +22,9 @@ export function ConversationMessage({ message }: { message: AgentMessage }) {
       <div className="chat-agent-summary" role="status">
         <div className="chat-agent-summary-head">
           <strong>{t('chatPane.agent.summaryTitle')}</strong>
-          <span className={`chat-agent-verdict verdict-${message.recommendation.verdict}`}>
+          <span
+            className={`chat-chip chat-chip-tight chat-chip-md chat-chip-outline chat-agent-verdict verdict-${message.recommendation.verdict}`}
+          >
             {t(VERDICT_LABEL_KEY[message.recommendation.verdict])}
           </span>
         </div>

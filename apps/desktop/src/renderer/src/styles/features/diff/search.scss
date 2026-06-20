@@ -1,4 +1,4 @@
-@use '../tokens' as *;
+@use '../../tokens' as *;
 
 // DiffSearchPanel：替换文件树位置的搜索面板。
 // 结构：input row → stats line → 结果列表 (按文件 group)。

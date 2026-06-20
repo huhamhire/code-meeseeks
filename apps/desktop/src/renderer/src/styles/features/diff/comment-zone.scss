@@ -2,7 +2,7 @@
 // 通过 DiffView 内 viewZone 注入 DOM；样式跟 markdown.scss 配合，
 // .comment-zone-body 也会加 .markdown class 走 markdown 视觉规则。
 
-@use '../tokens' as *;
+@use '../../tokens' as *;
 
 // 结构 (跟 DraftZone 同):
 //   .monaco-comment-zone (= dom，monaco 控制 style.height inline，不能放视觉样式)

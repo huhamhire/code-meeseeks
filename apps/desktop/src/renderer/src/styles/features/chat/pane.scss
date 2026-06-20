@@ -1,0 +1,354 @@
+// 右侧 pr-agent chat 面板：外壳 + 标题栏 + 滚动体容器 + 底部输入区。
+// run 卡片 / findings / agent 输出分别拆到 chat-run / chat-findings / chat-agent。
+
+@use '../../tokens' as *;
+@use '../../mixins' as *;
+
+.chat-pane {
+  flex-shrink: 0;
+  border-left: 1px solid $border-default;
+  background: $bg-panel;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+// 折叠态：组件仍挂载 (保住 run 计时器 + runProgress 订阅) 但视觉上消失。
+// width:0 + overflow:hidden 替代 display:none，避免 width inline style 反复变化
+// 触发 layout thrash；inline style 上的 width 仍按用户上次设的值保留，下次展开
+// 直接生效
+.chat-pane-collapsed {
+  width: 0 !important;
+  overflow: hidden;
+  border-left: none;
+  pointer-events: none;
+}
+
+// 拖拽柄基样式：透明热区 + hover/active 主色高亮（左缘 col-resize 与输入区顶边 row-resize 共用）
+%chat-resize-handle {
+  position: absolute;
+  z-index: $z-resize-handle;
+  background: transparent;
+  transition: background 0.12s;
+
+  &:hover,
+  &:active {
+    background: $color-accent-strong-fade;
+  }
+}
+
+// 拖拽柄：左缘，跟 sidebar 镜像
+.chat-pane-resize-handle {
+  @extend %chat-resize-handle;
+  top: 0;
+  left: -3px;
+  bottom: 0;
+  width: $space-3;
+  cursor: col-resize;
+}
+
+.chat-pane-header {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  padding: $space-4 $space-6;
+  border-bottom: 1px solid $border-muted;
+  font-size: $fs-md;
+  color: $text-primary;
+  flex-shrink: 0;
+}
+.chat-pane-title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.chat-pane-subtitle {
+  @include ellipsis;
+  color: $text-muted;
+  font-size: $fs-sm;
+}
+// 清空历史按钮：顶到标题栏最右
+.chat-pane-clear {
+  margin-left: auto;
+}
+.chat-pane-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: $space-5 $space-6;
+  display: flex;
+  flex-direction: column;
+  // 顶层每个 chunk (run 卡片 / 运行中视图 / busy / error) 之间留较大间距 ——
+  // 比 .chat-run-result 内部 gap ($space-4) 更宽，让"运行边界"在视觉上清晰可辨，
+  // 避免上一条 finding 列表跟下一条 meta 行黏成一块
+  gap: $space-8;
+
+  // flex column 子项默认 min-width:auto，宽内容（代码块 / 长串）会把子块撑过面板宽度 → 整条会话
+  // 横向溢出。允许子块收缩到面板宽度，宽内容在块内横向滚动 / 换行，而非把整个会话撑出横向滚动条。
+  > * {
+    min-width: 0;
+  }
+}
+
+// "向上滚动加载更早" 提示行：顶端显眼但不抢眼，居中虚化
+.chat-run-more-hint {
+  text-align: center;
+  font-size: $fs-xs;
+  padding: $space-2 0;
+  border-bottom: 1px dashed $border-muted;
+}
+
+// 当前 PR 命中的规则 chip：actions bar 下方一行，点击弹出正文预览
+.chat-rule-chip {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding: $space-2 $space-6;
+  background: $color-accent-bg-fade;
+  border: none;
+  border-bottom: 1px solid $border-muted;
+  color: $color-info;
+  font-size: $fs-sm;
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover {
+    background: $color-accent-bg-hover;
+  }
+}
+.chat-rule-chip-label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.chat-rule-chip-id {
+  @include ellipsis;
+  font-family: $font-mono;
+  color: $text-body;
+  min-width: 0;
+  flex: 1;
+}
+
+// === 底部交互输入区 (ChatInputBar) ===
+.chat-pane-input {
+  border-top: 1px solid $border-muted;
+  padding: $space-4 $space-6 $space-5;
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  flex-shrink: 0;
+  background: $bg-panel-alt;
+  position: relative; // 给 .chat-cmd-suggest 浮层做定位基
+}
+// textarea + 顶边拖动 handle 的容器
+.chat-pane-textarea-wrap {
+  position: relative;
+}
+// 顶边自绘 handle：向上拖让 textarea 长高 (input 区在底部, 视觉是向上扩展，
+// 跟操作方向一致)。CSS native `resize: vertical` 的右下角 handle 跟视觉方向反，
+// 不用。
+.chat-pane-textarea-resize-handle {
+  @extend %chat-resize-handle;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+}
+.chat-pane-textarea {
+  resize: none; // 用自绘 handle 代替 CSS resize
+  width: 100%;
+  display: block;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  font-family: inherit;
+  font-size: $fs-lg;
+  line-height: $lh-normal;
+  padding: $space-3 $space-4;
+  border-radius: $radius-md;
+  overflow-y: auto; // 内容超过当前高度时内部滚动
+  // 默认 2 行；JS 端 handle 拖动可调到 5 行；继续输入超过当前高度走内部滚动
+  min-height: calc(#{$fs-lg} * #{$lh-normal} * 2 + #{$space-3} * 2);
+  max-height: calc(#{$fs-lg} * #{$lh-normal} * 5 + #{$space-3} * 2);
+  box-sizing: border-box;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+.chat-pane-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+}
+// stop + send 包在一个 group 里，让 space-between 只对"/ 按钮 vs 这一组"生效，
+// stop 跟 send 之间用 group 自己的 gap 控制贴近距离
+.chat-pane-send-group {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+}
+
+// 命令触发器组：`/` 命令按钮 + 自动评审图标按钮，左对齐成一组（两者间距略放宽）
+.chat-cmd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+}
+
+// 命令触发器：单 `/` 按钮 + 弹出菜单 (替代之前 3 个并列按钮)
+.chat-cmd-bar {
+  position: relative;
+  display: inline-flex;
+}
+
+.chat-cmd-trigger {
+  // 等宽按钮：`/` 命令触发器与自动评审图标按钮宽度一致、左对齐成一组；高度随内容（padding
+  // 决定），不固定行高外的额外高度，避免显得过高。共用 ghost 按钮外框。
+  @include ghost-btn;
+  box-sizing: border-box;
+  min-width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: $font-mono;
+  font-size: $fs-lg;
+  font-weight: 600;
+  line-height: 1;
+  padding: $space-2 $space-3;
+
+  &.active {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+// 自动评审图标按钮：复用 .chat-cmd-trigger 基样式，强调色区分。
+.chat-agent-review-trigger {
+  color: $color-info;
+
+  &:hover:not(:disabled),
+  &.active {
+    color: $color-info;
+    border-color: $color-accent;
+  }
+}
+
+// `/` 按钮弹出的菜单：在按钮正上方展开
+.chat-cmd-menu {
+  @include popover;
+  bottom: calc(100% + #{$space-2});
+  left: 0;
+  // 宽到能让最长一条 (label + desc) 单行展示，避免说明被挤换行
+  min-width: 240px;
+  width: max-content;
+  max-width: 360px;
+  list-style: none;
+  padding: $space-2 0;
+  margin: 0;
+  border-radius: $radius-md;
+}
+
+// 分组分隔：pragent 工具 (/review /describe /ask) ↔ review 决断 (/approve /needswork)
+// 之间画一条横线，让两类操作在视觉上分开
+.chat-cmd-menu-group {
+  border-top: 1px solid $border-muted;
+  margin-top: $space-2;
+  padding-top: $space-2;
+}
+
+// `/` 自动补全浮层：positioned 在 textarea 正上方 (input 容器是 relative)。
+// 宽度跟 .chat-cmd-menu 对齐 —— 紧凑自适应，避免 space-between 把 label 和
+// desc 推到 textarea 两端 (700px+) 导致说明文字离指令太远不易读
+.chat-cmd-suggest {
+  @include popover;
+  bottom: 100%;
+  left: $space-6;
+  margin-bottom: $space-2;
+  min-width: 240px;
+  width: max-content;
+  max-width: 360px;
+  list-style: none;
+  padding: $space-2 0;
+  border-radius: $radius-md;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.chat-cmd-suggest-item {
+  display: flex;
+  align-items: baseline;
+  // label 左 / desc 右，两端对齐 — 横向空间不够时不让 desc 换到下一行
+  justify-content: space-between;
+  gap: $space-6;
+  width: 100%;
+  padding: $space-2 $space-5;
+  background: transparent;
+  border: none;
+  color: $text-primary;
+  font-size: $fs-md;
+  text-align: left;
+  cursor: pointer;
+
+  code {
+    font-family: $font-mono;
+    color: $color-info;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  // desc 走 muted；不要换行，避免 "标记 PR 为需修改" 被拆成两行
+  .muted {
+    white-space: nowrap;
+  }
+  // hover + 键盘选中态共用 .active；hover 通过 onMouseEnter 同步 selectedIdx 触发
+  &.active,
+  &:hover {
+    background: $bg-hover;
+  }
+}
+
+// 解析错误 (未知命令 / ask 缺 question)
+.chat-input-error {
+  color: $color-danger;
+  font-size: $fs-xs;
+  margin-top: -$space-2;
+}
+
+// 输入栏右侧的发送 / 停止按钮。跟左侧 `/` 命令按钮 (.chat-cmd-trigger) 共用 ghost 外框：
+// 浅底 + 1px 边框 + radius-sm，hover 时主色描边 + 主色文字。
+// 同槽位形态切换：idle 纸飞机 / running stop 方块
+.chat-pane-send {
+  @include ghost-btn;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: $space-2 $space-4;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
+  flex-shrink: 0;
+  line-height: 1; // 让 svg 在中线对齐 / 命令按钮高度一致
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+// Stop 形态：保留同样的边框结构但用饱和 danger 着色，hover 仍变深，明确表达"危险动作"
+.chat-pane-send-stop {
+  color: $color-danger-strong;
+  &:hover:not(:disabled) {
+    background: $color-danger-strong-fade;
+    border-color: $color-danger-strong;
+    color: $color-danger-strong;
+  }
+}

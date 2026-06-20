@@ -1,0 +1,36 @@
+// 跨文件复用的样式片段。mixin 可经 @use 跨模块复用（placeholder/@extend 不能跨模块），
+// 因此「多文件共用」的片段统一沉到这里。各文件按层级 `@use '../mixins' as *;` 拉取。
+@use './tokens' as *;
+
+// 浮层菜单基座：绝对定位的暗色浮层（statusbar 队列 / LLM 菜单、chat `/` 命令菜单与补全浮层）。
+// 仅含「浮层外观」共性；定位锚点 / 圆角 / 内边距 / 宽度由各调用点自定。
+@mixin popover {
+  position: absolute;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: $z-statusbar-menu;
+}
+
+// Ghost 按钮外框：浅底 + 1px 边框 + 小圆角，hover 主色描边 + 主色文字。
+// chat 的 `/` 命令触发 / 发送 / 重试 / 草稿操作按钮共用；display / padding / disabled 各自补。
+@mixin ghost-btn {
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-body;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+
+// 单行截断省略号（需配合确定的宽度约束生效）。
+@mixin ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

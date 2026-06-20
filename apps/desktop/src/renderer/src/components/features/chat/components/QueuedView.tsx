@@ -26,7 +26,7 @@ export function QueuedView({
     <div className="chat-run-queued">
       <header className="chat-run-meta">
         <span className={`chat-run-tool chat-run-tool-${tool}`}>/{tool}</span>
-        <span className="chat-run-status chat-run-status-queued">
+        <span className="chat-chip chat-run-status chat-run-status-queued">
           {t('chatPane.queuedPosition', { position })}
         </span>
         <button

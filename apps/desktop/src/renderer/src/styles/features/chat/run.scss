@@ -1,0 +1,270 @@
+// chat 面板内 pr-agent run 的状态输出：失败 / 占用 banner、运行中视图、run 结果头
+// (RunMeta 行 + 各类胶囊 + 状态徽标)、/ask 提问行、排队卡片。findings 见 chat-findings。
+
+@use '../../tokens' as *;
+@use '../../mixins' as *;
+
+// === 失败 banner ===
+.chat-error {
+  background: $color-danger-fade;
+  border: 1px solid $color-danger-border;
+  color: $text-body;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+
+  strong {
+    color: $color-danger;
+    margin-right: $space-2;
+  }
+}
+
+// 重试按钮：ghost 图标按钮（跟 .chat-pane-send 共用外框），浮到 banner 顶行右侧
+.chat-run-retry {
+  @include ghost-btn;
+  float: right;
+  margin-left: $space-3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: $space-2;
+  line-height: 1;
+}
+
+// 全局单并发占用提示：另一 PR 正在 review 时显示。跟 .chat-error 同视觉权重但
+// 用中性蓝调，告诉用户这不是错误 (只是要等)
+.chat-busy {
+  background: $color-accent-bg-fade;
+  border: 1px solid $border-default;
+  border-left: 3px solid $color-accent;
+  color: $text-body;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+
+  code {
+    font-family: $font-mono;
+    color: $color-info;
+  }
+}
+.chat-error-detail {
+  margin-top: $space-2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: $font-mono;
+  font-size: $fs-xs;
+  color: $text-muted;
+}
+
+// 失败 run 内嵌的 stderr / stdout 折叠区：在 chat-error 红色 banner 里多一层缩进
+.chat-error-stderr,
+.chat-error-stdout {
+  margin-top: $space-3;
+  font-size: $fs-xs;
+
+  summary {
+    cursor: pointer;
+    color: $text-muted;
+    padding: $space-1 0;
+    user-select: none;
+  }
+  // 内嵌的 stdout panel 用更小的字号 + 限高，避免遮住下方 finding 列表
+  .chat-run-stdout {
+    max-height: 280px;
+    font-size: $fs-xs;
+    margin-top: $space-2;
+  }
+}
+
+// === 运行中：spinner + 实时 stdout ===
+.chat-run-running {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+
+// 阶段推断 chip：从 stdout 命中关键字得到的当前阶段文案 (启动 / 解析 diff /
+// 组装 prompt / 等待 LLM 响应)。放在 RunMeta 行下方独立一行，跟 stdout 之间
+// 用 gap 隔开 — 不挤进 chip 行避免横向溢出，单独一行也让"当前在做什么"更醒目
+// 度量/配色走 chat-chip + chat-chip-md + chat-chip-quiet + chat-chip-accent，这里只留布局
+.chat-run-phase {
+  align-self: flex-start;
+}
+
+.chat-run-stdout {
+  margin: 0;
+  background: $bg-app;
+  border: 1px solid $border-muted;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  font-family: $font-mono;
+  font-size: $fs-sm;
+  color: $text-body;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+// === Run 结果 ===
+.chat-run-result {
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+// /ask 用户提问行：贴在 RunMeta 下方，左侧 `?` 图标 + 提问内容，
+// 视觉上让人立即识别"这是用户输入而不是答案"
+.chat-user-msg {
+  display: flex;
+  gap: $space-3;
+  align-items: flex-start;
+  padding: $space-3 $space-4;
+  background: $color-accent-bg-fade;
+  border-left: 3px solid $color-accent;
+  border-radius: $radius-md;
+  font-size: $fs-lg;
+  line-height: $lh-normal;
+  color: $text-body;
+
+  svg {
+    flex-shrink: 0;
+    color: $color-info;
+    margin-top: 2px; // 跟首行文字基线对齐
+  }
+}
+.chat-user-msg-body {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+.chat-run-meta {
+  display: flex;
+  flex-wrap: wrap; // 空间不够时整块 chip 换行，而非互相挤压重叠
+  align-items: center;
+  gap: $space-3;
+  font-size: $fs-sm;
+  padding-bottom: $space-3;
+  border-bottom: 1px solid $border-muted;
+
+  // chip 不收缩：保持各自完整宽度，宁可换行也不压缩文字造成重叠
+  > * {
+    flex-shrink: 0;
+  }
+}
+.chat-run-tool {
+  font-family: $font-mono;
+  font-weight: 600;
+  font-size: $fs-xs; // 跟 chip 一档；align-items:center 下基线就齐了
+  color: $color-info;
+}
+// 中性胶囊：模型 / token 用量 / 耗时共用 chat-chip + chat-chip-quiet + chat-chip-neutral；
+// 各自只补字体差异（下方 mono / 截断）。
+.chat-run-tokens,
+.chat-run-duration {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+}
+// token 用量箭头：↑输入(绿) / ↓输出(红)，run 卡片与思考步骤共用
+.chat-token-in {
+  color: $color-token-in;
+}
+.chat-token-out {
+  color: $color-token-out;
+}
+// 模型名可能很长：单行截断 + 省略号，避免一个 chip 撑爆整行
+.chat-run-model {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+// 开始时间：纯文本不带胶囊背景；margin-left:auto 顶到 chip 队列最右，把视觉
+// 权重让给左侧主信息 (tool/状态/strategy/时长)，自己只作为 "什么时候跑的" 标注
+.chat-run-time {
+  margin-left: auto;
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  font-size: $fs-xs;
+  color: $text-muted;
+  white-space: nowrap;
+}
+// 度量走 chat-chip；这里只留 status 专属：大写 + spinner gap + 实色状态变体
+.chat-run-status {
+  gap: $space-2;
+  text-transform: uppercase;
+
+  &.chat-run-status-running {
+    background: $color-accent;
+    color: $text-on-accent;
+
+    // status 内嵌 Spinner 跟"运行中"文字 inline 排。.spinner 默认 12×12，
+    // border-top-color: $color-accent 在蓝底上看不见 — 这里 override 用半透明
+    // 白 + 实白顶部，跟 chip 文字色对比明显
+    .spinner {
+      width: 10px;
+      height: 10px;
+      border-width: 1.5px;
+      border-color: rgba(255, 255, 255, 0.35);
+      border-top-color: $text-on-accent;
+      margin-right: 0;
+      vertical-align: 0;
+    }
+  }
+  &.chat-run-status-succeeded {
+    background: $color-approved;
+    color: $text-on-accent;
+  }
+  &.chat-run-status-failed {
+    background: $color-danger-bg;
+    color: $text-on-accent;
+  }
+  &.chat-run-status-cancelled {
+    background: $border-default;
+    color: $text-primary;
+  }
+  // 排队中：弱化的中性胶囊，区别于运行中的高亮蓝
+  &.chat-run-status-queued {
+    background: $bg-surface;
+    color: $text-muted;
+  }
+}
+
+// 排队中卡片：比运行中更轻，留点上下间距跟历史/运行中区隔
+.chat-run-queued {
+  padding: $space-3 0;
+  opacity: 0.85;
+}
+// 取消排队按钮：跟在 meta 行最右，纯图标
+.chat-run-queued-cancel {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+  border-radius: $radius-sm;
+
+  &:hover:not(:disabled) {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.chat-run-raw {
+  margin-top: $space-2;
+  font-size: $fs-sm;
+
+  summary {
+    cursor: pointer;
+    color: $text-muted;
+    padding: $space-2 0;
+  }
+}

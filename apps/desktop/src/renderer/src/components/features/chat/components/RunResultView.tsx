@@ -25,14 +25,14 @@ function RunMeta({ run }: { run: ReviewRun }) {
   return (
     <header className="chat-run-meta">
       <span className={`chat-run-tool chat-run-tool-${run.tool}`}>/{run.tool}</span>
-      <span className={`chat-run-status chat-run-status-${run.status}`}>
+      <span className={`chat-chip chat-run-status chat-run-status-${run.status}`}>
         {runStatusLabel(run.status, t)}
       </span>
       {/* 模型 chip 取代运行时策略 chip — strategy 是部署细节用户不
           关心，model 是真正影响 review 质量的变量 */}
       {run.model && (
         <span
-          className="chat-run-chip chat-run-model"
+          className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-model"
           title={t('chatPane.modelTitle', { model: run.model })}
         >
           {run.model}
@@ -41,7 +41,7 @@ function RunMeta({ run }: { run: ReviewRun }) {
       {/* 只分别展示输入(↑prompt,绿) / 输出(↓completion,红)，不显示总数。旧 run 可能只有 prompt */}
       {usage.prompt !== undefined || usage.completion !== undefined ? (
         <span
-          className="chat-run-chip chat-run-tokens"
+          className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-tokens"
           title={t('chatPane.tokensTitle', {
             prompt: usage.prompt ?? '—',
             completion: usage.completion ?? '—',
@@ -62,7 +62,9 @@ function RunMeta({ run }: { run: ReviewRun }) {
           )}
         </span>
       ) : null}
-      <span className="chat-run-chip chat-run-duration">{duration}</span>
+      <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-duration">
+        {duration}
+      </span>
       {/* 开始时间：纯文本不带胶囊背景，margin-left:auto 顶到最右 — 跟左侧
           tool/status/strategy chip 拉开距离，视觉权重比 chip 轻一档 */}
       <span
