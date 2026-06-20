@@ -1,5 +1,7 @@
 // 跨文件复用的样式片段。mixin 可经 @use 跨模块复用（placeholder/@extend 不能跨模块），
 // 因此「多文件共用」的片段统一沉到这里。各文件按层级 `@use '../mixins' as *;` 拉取。
+@use 'sass:map';
+@use 'sass:list';
 @use './tokens' as *;
 
 // 浮层菜单基座：绝对定位的暗色浮层（statusbar 队列 / LLM 菜单、chat `/` 命令菜单与补全浮层）。
@@ -33,4 +35,42 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// ===== chip 共性词汇（statusbar / chat / 各业务域的小圆标签复用）=====
+// 各场景 chip 度量（高度 / padding / 字号）差异大，故 common 只共「本质 + 色板词汇」，
+// 不强塞统一 class：各场景类 @include chip 后自叠度量，配色统一走 chip-tone。
+//
+// chip 本质：行内 flex 居中 + 圆角 + 不换行 + 加粗。
+// 注意：若调用方还需 `font: inherit`（按钮型 chip 重置 UA 字体），须先写 font:inherit
+// 再 @include chip，否则简写会把这里的 font-weight 顶回继承值。
+@mixin chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: $radius-sm;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+// 语义色板：浅底 + 同色相前景。扩展语义色 = 在此 map 加一条，全场景（含 @each 生成的
+// chat-chip-<name>）即时可用 —— 这是 chip 的可扩展轴。
+$chip-tones: (
+  'accent': ($color-accent-bg-fade, $color-info),
+  'approved': ($color-approved-fade, $color-approved),
+  'warning': ($color-warning-fade, $color-warning-bright),
+  'neutral': ($bg-surface, $text-muted),
+);
+@mixin chip-tone($name) {
+  $pair: map.get($chip-tones, $name);
+  background: list.nth($pair, 1);
+  color: list.nth($pair, 2);
+}
+// 实色填充（强调态，如运行中 / 选中）
+@mixin chip-solid($bg: $color-accent, $fg: $text-on-accent) {
+  background: $bg;
+  color: $fg;
+}
+// 描边（边框随 currentColor，由调用方设 color）
+@mixin chip-outline {
+  border: 1px solid currentColor;
 }

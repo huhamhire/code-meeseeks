@@ -50,9 +50,9 @@ export function LlmChip({
   };
 
   return (
-    <span className="statusbar-llm-wrap">
+    <span className="llm-chip-wrap">
       <StatusChip
-        className={`statusbar-llm-chip${empty ? '' : ' statusbar-llm-chip-active'}`}
+        className={`llm-chip${empty ? '' : ' llm-chip-active'}`}
         title={title}
         onClick={onClick}
       >

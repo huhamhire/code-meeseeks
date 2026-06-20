@@ -1,21 +1,17 @@
-// chat 面板共享 chip 原子。各类 chip（run 状态 / 模型胶囊 / finding 类别 / 草稿状态 /
-// 阶段 / 判定 / 标签）在 markup 里组合 `chat-chip` + 形/尺/色修饰类，各家族类只保留
-// 自己的专属差异（如 run-status 的实色 + 大写、verdict 的描边）。改 chip 的通用度量
-// 只动这一处。
+// chat 面板 chip：在 common chip 词汇（_mixins）之上叠 chat 自己的度量（padding / 字号 /
+// 字距）。各类 chip 在 markup 组合 `chat-chip` + 形/尺/色修饰类，家族类只留专属差异。
+// 配色修饰由 $chip-tones 经 @each 生成 —— 扩展语义色只需在 map 加一条。
 
 @use '../../tokens' as *;
+@use '../../mixins' as *;
 
-// 共享原子：取各家族 chip 的多数派度量
+// 共享本质 + chat 度量
 .chat-chip {
-  display: inline-flex;
-  align-items: center;
+  @include chip;
   padding: 1px $space-3;
-  border-radius: $radius-sm;
   font-size: $fs-xs;
-  font-weight: 600;
   line-height: $lh-normal;
   letter-spacing: 0.02em;
-  white-space: nowrap;
 }
 
 // 形 / 尺修饰（少数派覆盖）
@@ -32,29 +28,17 @@
   font-weight: 400;
 } // run-chip / phase（非加粗）
 
-// 配色修饰：浅底语义色（全走 token），跨家族统一色板
-.chat-chip-accent {
-  background: $color-accent-bg-fade;
-  color: $color-info;
-}
-.chat-chip-approved {
-  background: $color-approved-fade;
-  color: $color-approved;
-}
-.chat-chip-warning {
-  background: $color-warning-fade;
-  color: $color-warning-bright;
-}
-.chat-chip-neutral {
-  background: $bg-surface;
-  color: $text-muted;
+// 配色修饰：由 common 色板词汇生成（accent / approved / warning / neutral）
+@each $name, $pair in $chip-tones {
+  .chat-chip-#{$name} {
+    @include chip-tone($name);
+  }
 }
 // 实色填充（run-status 运行中等强调态）
 .chat-chip-solid {
-  background: $color-accent;
-  color: $text-on-accent;
+  @include chip-solid;
 }
 // 描边（判定徽标：边框跟随 currentColor，由家族类设 color）
 .chat-chip-outline {
-  border: 1px solid currentColor;
+  @include chip-outline;
 }

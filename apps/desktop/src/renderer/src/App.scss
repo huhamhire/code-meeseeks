@@ -1,8 +1,9 @@
 // meebox renderer 样式总入口。各区域拆在 styles/ 下；
 // 设计 token 在 styles/_tokens.scss，每个 .scss 文件用 `@use './tokens' as *;` 拉取。
 //
-//   base         全局 reset / html-body / .app / .btn / .muted / .badge 等通用原子
-//   statusbar    底部 .app-statusbar + chips + LLM 切换菜单
+//   base         全局 reset / html-body / .app / .btn / .muted / .activity-dot / .icon-btn 等通用原子
+//   statusbar    底部状态栏基础壳 (.app-statusbar + .statusbar-chip 基类 + ok/err/update + spacer)；
+//                各业务域 chip 样式在 features/<域>/statusbar.scss
 //   sidebar      左侧 PR 列表 (sidebar / pr-group / pr-item / avatar / review-chip)
 //   main-pane    .main / pr-header / pr-tabs / blame-toggle / blame-column
 //   diff/        DiffView 簇：view(主体) / search(搜索) / file-tree(文件树) /
@@ -22,8 +23,10 @@
 @use './styles/features/diff';
 @use './styles/markdown';
 @use './styles/features/pr-info';
+@use './styles/features/pr/statusbar' as pr-statusbar;
 @use './styles/features/chat';
 @use './styles/features/drafts-panel';
 @use './styles/common/modal';
 @use './styles/features/config-picker';
 @use './styles/features/onboarding';
+@use './styles/features/settings/statusbar' as settings-statusbar;
