@@ -3,8 +3,8 @@ import type { Poller } from '@meebox/poller';
 import type { PlatformAdapter, PlatformUser } from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { Logger } from 'pino';
-import { buildAdapters, type ConnectionRuntime } from './adapters.js';
-import { writeConnectionStates, type ConnectionState } from './utils/connection-state.js';
+import { buildAdapters, type ConnectionRuntime } from '../adapters.js';
+import { writeConnectionStates, type ConnectionState } from '../utils/connection-state.js';
 
 /**
  * 连接运行时控制器：把启动序列里的「连接接线 / ping / 热重配」从 index.ts 收口。「接线」与「ping」解耦，

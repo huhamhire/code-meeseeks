@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { Logger } from 'pino';
-import { readWindowState, writeWindowState, type WindowState } from './utils/window-state.js';
+import { readWindowState, writeWindowState, type WindowState } from '../utils/window-state.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

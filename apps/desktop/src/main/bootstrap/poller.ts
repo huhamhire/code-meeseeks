@@ -3,7 +3,7 @@ import { Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { Logger } from 'pino';
-import { broadcast } from './services/broadcast.js';
+import { broadcast } from '../services/broadcast.js';
 
 /**
  * 构造轮询器：tick 广播 poll:tick + 触发顺带副作用（onTickExtras）；PR 变更顺手 syncMirror 跟本地镜像。

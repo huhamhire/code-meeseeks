@@ -1,8 +1,8 @@
 import type { BootstrapResult } from '@meebox/config';
 import { app } from 'electron';
 import type { Logger } from 'pino';
-import { checkForUpdate } from './utils/update-check.js';
-import { publishUpdateResult } from './utils/update-state.js';
+import { checkForUpdate } from '../utils/update-check.js';
+import { publishUpdateResult } from '../utils/update-state.js';
 
 // 至多每小时一次（复用 poller 周期，不另起定时器）。
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;

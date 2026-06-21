@@ -1,9 +1,9 @@
 import type { BootstrapResult } from '@meebox/config';
 import { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { Logger } from 'pino';
-import type { ConnectionRuntime } from './adapters.js';
-import { broadcast } from './services/broadcast.js';
-import { buildProxyEnv } from './utils/proxy.js';
+import type { ConnectionRuntime } from '../adapters.js';
+import { broadcast } from '../services/broadcast.js';
+import { buildProxyEnv } from '../utils/proxy.js';
 
 /**
  * 构造本地仓库镜像管理器：clone url 经连接运行时按 host 取 adapter 求得（设置页改连接热生效，读 runtime 引用）；

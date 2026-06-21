@@ -8,18 +8,20 @@ import { createLogger } from '@meebox/logger';
 import type { Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import { JsonFileStateStore } from '@meebox/state-store';
-import { ConnectionRuntimeController } from './connections-runtime.js';
-import { createPoller } from './poller.js';
-import { createRepoMirror } from './repo-mirror.js';
-import { PrAgentRuntime } from './pragent-runtime.js';
-import { UpdateRunner } from './update-runner.js';
-import { applyProcessStartupTweaks } from './process-tweaks.js';
+import {
+  ConnectionRuntimeController,
+  PrAgentRuntime,
+  UpdateRunner,
+  applyProcessStartupTweaks,
+  createPoller,
+  createRepoMirror,
+  loadWindowManager,
+} from './bootstrap/index.js';
 import { createSplash } from './splash.js';
 import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
 import { fixMacPath } from './utils/mac-path.js';
 import { readConnectionStates } from './utils/connection-state.js';
-import { loadWindowManager } from './window.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
 const PROCESS_START_MS = Date.now();
