@@ -13,11 +13,10 @@ import {
   PrAgentRuntime,
   Updater,
   type WindowManager,
-  applyProcessStartupTweaks,
+  applyOsStartupTweaks,
   createPoller,
   createRepoMirror,
   createSplash,
-  fixMacPath,
   loadWindowManager,
 } from './bootstrap/index.js';
 import { initMainI18n } from './i18n/index.js';
@@ -101,14 +100,6 @@ class App {
       .catch((err: unknown) => {
         this.logger.warn({ err }, 'scaffold agent dir failed');
       });
-
-    // macOS GUI 启动（Finder/Dock）只有 launchd 最小 PATH，找不到本机 CLI（claude/codex，常在
-    // ~/.local/bin / homebrew）。启动期前置常见目录到 process.env.PATH，使后续 spawn 的嵌入式
-    // python 及其 CLI 子进程（经 {...process.env} 继承）都能定位到命令。须在 pr-agent 探测/运行前。
-    const macPath = fixMacPath();
-    if (macPath.applied) {
-      this.logger.info({ added: macPath.added }, 'macOS PATH augmented');
-    }
 
     // main 进程全局兜底：未捕获异常 / 未处理 rejection 至少留一条日志，不静默崩溃。
     process.on('uncaughtException', (err) => {
@@ -297,13 +288,13 @@ class App {
 
 /**
  * 进程入口：
- * ① 进程/平台启动微调（须在 whenReady 前）。
+ * ① OS/平台启动微调（须在 whenReady 前；含 Windows 控制台编码 / macOS keychain + PATH 补全）。
  * ② 单例锁——同一时刻只允许一个实例，多实例会共享同一份 config.yaml / repos 镜像 / state store
  *    导致写竞争，拿不到锁者直接退出（由已有实例的 second-instance 回调聚焦窗口）。
  * ③ 拿到锁则构造 App 并启动。
  */
 function main(): void {
-  applyProcessStartupTweaks();
+  applyOsStartupTweaks();
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
