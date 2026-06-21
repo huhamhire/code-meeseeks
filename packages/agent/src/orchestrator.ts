@@ -8,6 +8,7 @@ import type {
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
 import { runStaggered } from './stagger.js';
+import { createStepRecorder, type StepHandler, type StepRecorder } from './steps/context.js';
 import type { AgentContext } from './types.js';
 
 /**
@@ -59,16 +60,6 @@ export interface ReviewOrchestratorResult {
 const VERDICTS: readonly AgentRecommendationVerdict[] = ['approve', 'needs_work', 'manual_review'];
 function isVerdict(v: unknown): v is AgentRecommendationVerdict {
   return typeof v === 'string' && (VERDICTS as readonly string[]).includes(v);
-}
-
-function addUsage(acc: TokenUsage, u?: TokenUsage): TokenUsage {
-  if (!u) return acc;
-  return {
-    promptTokens: (acc.promptTokens ?? 0) + (u.promptTokens ?? 0),
-    completionTokens: (acc.completionTokens ?? 0) + (u.completionTokens ?? 0),
-    totalTokens: (acc.totalTokens ?? 0) + (u.totalTokens ?? 0),
-    calls: (acc.calls ?? 0) + (u.calls ?? 1),
-  };
 }
 
 /** 把 JSON 串字面量内部未转义的裸控制符（换行/回车/制表）补转义。LLM 常把多行 markdown 原样塞进
@@ -312,32 +303,166 @@ function summaryPrompt(
   ].join('\n');
 }
 
+/** 评审微流程的步骤运行上下文：依赖 + 输入 + 共享记录器 + 跨步骤累加器（bag）。 */
+interface ReviewBag {
+  describe?: ToolText;
+  review?: ToolText;
+  /** judge 判出的追问问题（asks 步消费）。 */
+  questions: string[];
+  askResults: string[];
+  summary?: string;
+  recommendation?: AgentRecommendation;
+}
+interface ReviewStepCtx {
+  deps: ReviewOrchestratorDeps;
+  input: ReviewOrchestratorInput;
+  rec: StepRecorder;
+  /** 用户停止：每步边界检查，已 abort 即抛 `用户暂停`（思考阶段也能立即中止）。 */
+  checkAbort: () => void;
+  maxAsks: number;
+  summaryMax: number;
+  labels: AgentStepLabels;
+  /** 微流程完整 system 上下文（summary 用；judge 另用精简 JUDGE_SYSTEM）。 */
+  system: string;
+  bag: ReviewBag;
+}
+
+// 1. describe + review（固定两步，并行——彼此独立、都只读 PR，无先后依赖；实际并发度受运行队列约束，
+//    错开 100~200ms 起跑）。类 Claude Code：先把所选步骤作为一步流式出去（思考在前），工具执行进度 /
+//    计时由 run 卡片承载，不为每个工具补记 tool 步。
+const describeReviewStep: StepHandler<ReviewStepCtx> = {
+  name: 'describe-review',
+  run: async (ctx) => {
+    ctx.checkAbort();
+    await ctx.rec.record({
+      kind: 'plan',
+      thought: ctx.labels.describeReview,
+      toolCall: { tool: 'describe + review' },
+    });
+    const [describe, review] = await runStaggered(
+      [{ tool: 'describe' as const }, { tool: 'review' as const }],
+      (c) => ctx.deps.runTool(c),
+    );
+    ctx.rec.track(describe.usage);
+    ctx.rec.track(review.usage);
+    ctx.bag.describe = describe;
+    ctx.bag.review = review;
+  },
+};
+
+// 2. 仅严重问题条件性追问的判读（精简 system 轻量路由 + 输出封顶）。
+const judgeStep: StepHandler<ReviewStepCtx> = {
+  name: 'judge',
+  run: async (ctx) => {
+    ctx.checkAbort();
+    const judgeStart = Date.now();
+    const judge = await ctx.deps.chat({
+      system: JUDGE_SYSTEM,
+      user: judgePrompt(
+        ctx.bag.describe!.text,
+        ctx.bag.review!.text,
+        ctx.maxAsks,
+        ctx.input.language ?? '',
+      ),
+      // 判读产物只是极小 JSON（severe + 至多数条问题），封顶输出避免对 yes/no 决策狂吐 token。
+      maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
+    });
+    const judgeMs = Date.now() - judgeStart;
+    ctx.rec.track(judge.usage);
+    const verdict = extractJson<{ severe?: boolean; questions?: string[] }>(judge.text);
+    const questions = verdict?.severe ? (verdict.questions ?? []).slice(0, ctx.maxAsks) : [];
+    ctx.bag.questions = questions;
+    await ctx.rec.record({
+      kind: 'judge',
+      thought: ctx.labels.judge,
+      result: questions.length ? ctx.labels.judgeSevere(questions.length) : ctx.labels.judgeNone,
+      thinkMs: judgeMs,
+      usage: judge.usage,
+    });
+  },
+};
+
+// 多个追问同属一个阶段、彼此独立，故并行派发（runStaggered 保序、错开起跑；questions 为空不触发）。
+const asksStep: StepHandler<ReviewStepCtx> = {
+  name: 'asks',
+  run: async (ctx) => {
+    ctx.checkAbort();
+    const { questions } = ctx.bag;
+    const asks = questions.length
+      ? await runStaggered(questions, (q) => ctx.deps.runTool({ tool: 'ask', question: q }))
+      : [];
+    ctx.bag.askResults = asks.map((ask, i) => {
+      ctx.rec.track(ask.usage);
+      return `Q: ${questions[i]}\nA: ${ask.text}`;
+    });
+  },
+};
+
+// 3. 收尾总结 + 建议。解析失败兜底打捞散文 + 剥末尾判定 JSON；**不做硬截断**。
+const summaryStep: StepHandler<ReviewStepCtx> = {
+  name: 'summary',
+  run: async (ctx) => {
+    ctx.checkAbort();
+    const sumStart = Date.now();
+    const sum = await ctx.deps.chat({
+      system: ctx.system,
+      user: summaryPrompt(
+        ctx.bag.describe!.text,
+        ctx.bag.review!.text,
+        ctx.bag.askResults,
+        ctx.summaryMax,
+        summarySections(ctx.input.language),
+      ),
+    });
+    const sumMs = Date.now() - sumStart;
+    ctx.rec.track(sum.usage);
+    const parsed = extractJson<{
+      summary?: string;
+      recommendation?: { verdict?: unknown; reason?: unknown };
+    }>(sum.text);
+    const summary = stripTrailingJson(parsed?.summary ?? salvageProse(sum.text)).trim();
+    const recommendation: AgentRecommendation =
+      parsed?.recommendation && isVerdict(parsed.recommendation.verdict)
+        ? {
+            verdict: parsed.recommendation.verdict,
+            reason:
+              typeof parsed.recommendation.reason === 'string' ? parsed.recommendation.reason : '',
+          }
+        : { verdict: 'manual_review', reason: ctx.labels.parseFail };
+    ctx.bag.summary = summary;
+    ctx.bag.recommendation = recommendation;
+    await ctx.rec.record({
+      kind: 'plan',
+      thought: ctx.labels.summary,
+      result: summary,
+      thinkMs: sumMs,
+      usage: sum.usage,
+    });
+  },
+};
+
+/** 评审微流程的步骤注册表（有序执行）。新增 / 调整阶段在此组合，驱动无需改动。 */
+const REVIEW_STEPS: ReadonlyArray<StepHandler<ReviewStepCtx>> = [
+  describeReviewStep,
+  judgeStep,
+  asksStep,
+  summaryStep,
+];
+
 /**
- * 跑一次评审微流程。只用只读工具（describe/review/ask），不触碰修改类操作（红线见设计
- * 「工具修改红线」，由分发层 + 交互式编排另行把关）。
+ * 跑一次评审微流程：describe → review →（仅严重问题）条件追问 ≤N → 收尾总结 + 建议。只用只读工具
+ * （describe/review/ask），不碰修改类操作。驱动顺序跑 REVIEW_STEPS、与各步共享 StepRecorder。
  */
 export async function runReviewMicroflow(
   deps: ReviewOrchestratorDeps,
   input: ReviewOrchestratorInput,
 ): Promise<ReviewOrchestratorResult> {
-  const maxAsks = input.maxFollowupAsks ?? 2;
-  const summaryMax = input.summaryMaxChars ?? 800;
   const labels = stepLabels(input.language);
-  const steps: AgentStep[] = [];
-  let usage: TokenUsage = {};
-
-  const record = async (step: AgentStep): Promise<void> => {
-    const stamped = { ...step, at: step.at ?? new Date().toISOString() };
-    steps.push(stamped);
-    await deps.onStep?.(stamped);
-  };
-
-  // 用户停止：每个步骤边界检查，已 abort 即抛 `用户暂停`（思考阶段也能立即中止，不必等当前工具跑完）。
+  const rec = createStepRecorder(deps.onStep);
   const checkAbort = (): void => {
     if (deps.signal?.aborted) throw new Error('用户暂停');
   };
-
-  // base system context（工具目录留空：微流程不暴露自由工具选择）
+  // base system context（工具目录留空：微流程不暴露自由工具选择）。
   const system = assembleSystemContext({
     context: input.context,
     pr: input.pr,
@@ -345,96 +470,24 @@ export async function runReviewMicroflow(
     matchedRule: input.matchedRule,
     language: input.language,
   });
-
-  // 1. describe + review（固定两步，并行——彼此独立、都只读 PR，无先后依赖；
-  //    实际并发度受运行队列 max_concurrency 约束，串行执行时结果同样正确）。
-  //    错开 100~200ms 起跑，避免两个工具同一瞬间齐发。
-  //    类 Claude Code：先把所选步骤作为一步流式出去（思考在前），工具执行的进度 / 计时由 run 卡片承载，
-  //    不再为每个工具补记 tool 步，避免决策被堆到结果之后。
-  checkAbort();
-  await record({
-    kind: 'plan',
-    thought: labels.describeReview,
-    toolCall: { tool: 'describe + review' },
-  });
-  const [describe, review] = await runStaggered(
-    [{ tool: 'describe' as const }, { tool: 'review' as const }],
-    (c) => deps.runTool(c),
-  );
-  usage = addUsage(usage, describe.usage);
-  usage = addUsage(usage, review.usage);
-
-  // 2. 仅严重问题条件性追问
-  checkAbort();
-  const judgeStart = Date.now();
-  const judge = await deps.chat({
-    system: JUDGE_SYSTEM,
-    user: judgePrompt(describe.text, review.text, maxAsks, input.language ?? ''),
-    // 判读产物只是极小的结构化 JSON（severe + 至多数条问题），封顶输出避免模型对 yes/no 决策狂吐 token。
-    maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
-  });
-  const judgeMs = Date.now() - judgeStart;
-  usage = addUsage(usage, judge.usage);
-  const verdict = extractJson<{ severe?: boolean; questions?: string[] }>(judge.text);
-  const questions = verdict?.severe ? (verdict.questions ?? []).slice(0, maxAsks) : [];
-  await record({
-    kind: 'judge',
-    thought: labels.judge,
-    result: questions.length ? labels.judgeSevere(questions.length) : labels.judgeNone,
-    thinkMs: judgeMs,
-    usage: judge.usage,
-  });
-
-  // 多个追问同属一个阶段、彼此独立（各自只读 PR、互不依赖），故并行派发——与上面 describe + review
-  // 同模式：runStaggered 保序（askResults 与 questions 一一对应）、错开 100~200ms 起跑，实际并发度仍受
-  // 运行队列 max_concurrency 兜底。questions 为空时不触发任何调用。
-  checkAbort();
-  const asks = questions.length
-    ? await runStaggered(questions, (q) => deps.runTool({ tool: 'ask', question: q }))
-    : [];
-  const askResults = asks.map((ask, i) => {
-    usage = addUsage(usage, ask.usage);
-    return `Q: ${questions[i]}\nA: ${ask.text}`;
-  });
-
-  // 3. 收尾总结 + 建议
-  checkAbort();
-  const sumStart = Date.now();
-  const sum = await deps.chat({
+  const ctx: ReviewStepCtx = {
+    deps,
+    input,
+    rec,
+    checkAbort,
+    maxAsks: input.maxFollowupAsks ?? 2,
+    summaryMax: input.summaryMaxChars ?? 800,
+    labels,
     system,
-    user: summaryPrompt(
-      describe.text,
-      review.text,
-      askResults,
-      summaryMax,
-      summarySections(input.language),
-    ),
-  });
-  const sumMs = Date.now() - sumStart;
-  usage = addUsage(usage, sum.usage);
-  const parsed = extractJson<{
-    summary?: string;
-    recommendation?: { verdict?: unknown; reason?: unknown };
-  }>(sum.text);
-  // 解析失败兜底：从原始文本捞 summary 散文；再剥掉模型误并入末尾的判定 JSON，绝不把原始 JSON 展示给用户。
-  // **不做硬截断**：篇幅只在提示词里作参考性约束（summaryMax，见 summaryPrompt），AI 已生成的总结完整保留，
-  // 避免「参数…」这种半句被切断。
-  const summary = stripTrailingJson(parsed?.summary ?? salvageProse(sum.text)).trim();
-  const recommendation: AgentRecommendation =
-    parsed?.recommendation && isVerdict(parsed.recommendation.verdict)
-      ? {
-          verdict: parsed.recommendation.verdict,
-          reason:
-            typeof parsed.recommendation.reason === 'string' ? parsed.recommendation.reason : '',
-        }
-      : { verdict: 'manual_review', reason: labels.parseFail };
-  await record({
-    kind: 'plan',
-    thought: labels.summary,
-    result: summary,
-    thinkMs: sumMs,
-    usage: sum.usage,
-  });
+    bag: { questions: [], askResults: [] },
+  };
 
-  return { steps, summary, recommendation, tokenUsage: usage };
+  for (const step of REVIEW_STEPS) await step.run(ctx);
+
+  return {
+    steps: rec.steps,
+    summary: ctx.bag.summary ?? '',
+    recommendation: ctx.bag.recommendation ?? { verdict: 'manual_review', reason: labels.parseFail },
+    tokenUsage: rec.usage,
+  };
 }
