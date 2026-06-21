@@ -4,9 +4,25 @@ import type { ReviewRun, ReviewRunTool, StoredPullRequest } from '@meebox/shared
 import { t } from '../i18n/index.js';
 import type { ServiceContext } from './context.js';
 import { PragentRunExecutor } from './run-executor.js';
-import type { QueueItem, RunPriority } from './run-queue-types.js';
 
-export type { RunPriority } from './run-queue-types.js';
+/** pr-agent run 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。 */
+export type RunPriority = 'user' | 'agent';
+
+/**
+ * 队列项：一次入队的 pr-agent run 的全部上下文（含 resolve/reject 回原始调用方）。归调度器所有；执行器
+ * （run-executor）仅以 `import type` 引用本类型，类型在运行时被擦除，故不构成运行时循环依赖。
+ */
+export interface QueueItem {
+  info: PragentRunInfo;
+  req: { localId: string; tool: ReviewRunTool; question?: string; referencedContext?: string };
+  pr: StoredPullRequest;
+  resolve: (run: ReviewRun) => void;
+  reject: (err: Error) => void;
+  /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。 */
+  priority: RunPriority;
+  /** 仅 active 状态填；用于 cancel SIGKILL */
+  ac?: AbortController;
+}
 
 /**
  * pr-agent run 队列服务。
