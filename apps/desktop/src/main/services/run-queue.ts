@@ -8,6 +8,7 @@ import {
   PrAgentRunError,
   askLanguageSuffixFor,
   buildExtraInstructions,
+  buildPragentEnv,
   extraInstructionsEnvKey,
   stripAskQuestionEcho,
 } from '@meebox/pr-agent-bridge';
@@ -26,7 +27,7 @@ import type {
   StoredPullRequest,
 } from '@meebox/shared';
 import { getMainLanguage, t } from '../i18n/index.js';
-import { buildPragentEnv, resolveActiveLlmProfile } from '../utils/agent.js';
+import { resolveActiveLlmProfile } from '../utils/agent.js';
 import { buildPrContext } from '../utils/pr-context.js';
 import { buildProxyEnv } from '../utils/proxy.js';
 import type { ServiceContext } from './context.js';
