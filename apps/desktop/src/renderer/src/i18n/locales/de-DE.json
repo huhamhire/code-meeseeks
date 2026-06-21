@@ -101,6 +101,7 @@
     "placeholderNoPr": "Wählen Sie einen PR, um eine Unterhaltung zu starten",
     "placeholderNotReady": "PR Agent nicht bereit",
     "placeholderReady": "Geben Sie eine Frage ein oder verwenden Sie /, um einen Befehl zu wählen (↑↓ für Verlauf)",
+    "planTitle": "Plan",
     "queuedPosition": "Eingereiht · Position {{position}}",
     "rawOutput": "Rohausgabe ({{n}} chars)",
     "reject": "Ablehnen",

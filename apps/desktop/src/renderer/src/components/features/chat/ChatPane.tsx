@@ -17,6 +17,7 @@ import { AgentStepRow, ThinkingLive } from './components/AgentStep';
 import { ChatEmpty } from './components/ChatEmpty';
 import { ChatInputBar } from './components/ChatInputBar';
 import { ConversationMessage } from './components/ConversationMessage';
+import { PlanPanel } from './components/PlanPanel';
 import { QueuedView } from './components/QueuedView';
 import { RulePreviewModal } from './components/RulePreviewModal';
 import { RunningView } from './components/RunningView';
@@ -158,6 +159,7 @@ export function ChatPane({
     setHasMoreOlder: session.setHasMoreOlder,
     setAgentSteps: session.setAgentSteps,
     setMessages: session.setMessages,
+    setTodo: session.setTodo,
     currentPrIdRef: session.currentPrIdRef,
     reloadConversation: session.reloadConversation,
     onJumpToDraftEditor,
@@ -229,6 +231,10 @@ export function ChatPane({
           <span className="chat-rule-chip-id">{matchedRule.id}</span>
         </button>
       )}
+
+      {/* 规划 Agent 的计划面板：运行中据 agent:planUpdated 实时刷新、随新输入重排；空计划不渲染。
+          置于 header 之下、滚动区之上，始终可见。 */}
+      <PlanPanel todo={session.todo} />
 
       <div className="chat-pane-body" ref={bodyRef}>
         {/* 初次拉取会话期间盖延迟 loading（>150ms 才显），遮住「清空 → 内容 pop-in」抖动；

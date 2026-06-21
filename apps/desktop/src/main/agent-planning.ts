@@ -17,6 +17,7 @@ import type { Rule } from '@meebox/rules';
 import type {
   AgentSession,
   AgentStep,
+  AgentTodoItem,
   ReviewRun,
   StoredPullRequest,
   ToolCatalogEntry,
@@ -99,6 +100,8 @@ export interface AgentPlanningDeps {
    * 负责持久化进会话并广播刷新；此处直接透传给 planner，由其并入当轮 progress。
    */
   drainPendingInput?: () => Promise<string[]> | string[];
+  /** 计划（todo）更新回调：planner 给出 / 更新 plan 时调用，由 orchestrator 持久化 + 广播。 */
+  recordPlan?: (todo: AgentTodoItem[]) => void | Promise<void>;
 }
 
 export async function runAgentPlanning(
@@ -136,6 +139,7 @@ export async function runAgentPlanning(
         },
         signal: deps.signal,
         drainPendingInput: deps.drainPendingInput,
+        recordPlan: deps.recordPlan,
       },
       {
         context: deps.agentContext,

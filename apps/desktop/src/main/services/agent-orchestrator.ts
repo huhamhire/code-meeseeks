@@ -13,6 +13,7 @@ import {
   getAutopilotLedger,
   hasReviewOutput,
   listStoredPullRequests,
+  updateAgentSession,
   writeAutopilotLedger,
 } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
@@ -469,6 +470,12 @@ export class AgentOrchestratorService {
         }
         if (msgs.length) this.ctx.broadcast('agent:conversationChanged', { prLocalId: pr.localId });
         return msgs;
+      },
+      // 计划（todo）更新：planner 给出 plan 即持久化进会话 + 广播刷新计划面板；切 PR / 重启经
+      // agent:getSession 水合。
+      recordPlan: async (todo) => {
+        await updateAgentSession(this.ctx.stateStore, pr.localId, { todo });
+        this.ctx.broadcast('agent:planUpdated', { prLocalId: pr.localId, todo });
       },
       // 持久化 Agent 主动记下的非隐私条目到当前 Agent 目录的各可写文件（USER/MEMORY/AGENTS）；
       // SOUL.md 永不写。下一轮 loadAgentContext 现读即生效（跨会话记忆）。

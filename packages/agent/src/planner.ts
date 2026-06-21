@@ -4,6 +4,7 @@ import type {
   AgentRecommendation,
   AgentRecommendationVerdict,
   AgentStep,
+  AgentTodoItem,
   TokenUsage,
   ToolCatalogEntry,
 } from '@meebox/shared';
@@ -48,6 +49,11 @@ export interface PlanningDeps {
    * 最新指令与当前进度重排下一步。返回的消息由实现方（主进程）负责持久化到会话（此处只注入、不再落盘）。
    */
   drainPendingInput?: () => Promise<string[]> | string[];
+  /**
+   * 计划（todo）更新回调：模型每轮给出 / 更新 plan 时调用，由实现方持久化（session.todo）+ 广播刷新。
+   * 计划随轮回喂提示、收到新输入时重排——见 buildProtocol 的 plan 约定。
+   */
+  recordPlan?: (todo: AgentTodoItem[]) => void | Promise<void>;
 }
 
 export interface PlanningInput {
@@ -93,6 +99,11 @@ interface PlannerAction {
   tools?: Array<string | { tool?: string; question?: string }>;
   question?: string;
   final?: string;
+  /**
+   * 计划（todo）：模型可在任意动作里给出 / 更新一份简短步骤清单（标 done、按优先级重排、增删）。
+   * 元素可为字符串或 `{id?, text, done?}`。省略 = 计划不变（沿用上一轮）。见 buildProtocol 的 plan 约定。
+   */
+  plan?: Array<string | { id?: unknown; text?: unknown; done?: unknown }>;
   /** 评审类收尾的非约束性判定建议（verdict + 理由）；非评审请求省略。 */
   recommendation?: { verdict?: unknown; reason?: unknown };
   /**
@@ -153,6 +164,28 @@ function parseRecommendation(rec?: PlannerAction['recommendation']): AgentRecomm
     verdict: verdict as AgentRecommendationVerdict,
     reason: typeof rec.reason === 'string' ? rec.reason : '',
   };
+}
+
+/** 把模型给出的 plan 归一为 AgentTodoItem[]：容字符串 / 对象，丢空文本；缺 id 按序补。 */
+function normalizePlan(raw: PlannerAction['plan']): AgentTodoItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AgentTodoItem[] = [];
+  raw.forEach((it, i) => {
+    if (typeof it === 'string') {
+      const text = it.trim();
+      if (text) out.push({ id: `s${String(i + 1)}`, text, done: false });
+    } else if (it && typeof it === 'object') {
+      const text = typeof it.text === 'string' ? it.text.trim() : '';
+      if (text) {
+        out.push({
+          id: typeof it.id === 'string' && it.id ? it.id : `s${String(i + 1)}`,
+          text,
+          done: it.done === true,
+        });
+      }
+    }
+  });
+  return out;
 }
 
 function clamp(s: string, max: number): string {
@@ -229,6 +262,12 @@ function buildProtocol(sections: readonly [string, string, string]): string {
     'When in doubt, do NOT record. Over a whole session you should rarely write more than a note or two.',
     'NEVER record private or sensitive data: real identity beyond a chosen display name, email / phone / address,',
     'employer-confidential specifics, secrets / tokens. When unsure whether something is private, do NOT record.',
+    'Plan (todo): for any multi-step task, MAINTAIN a short plan via an optional "plan" array on your',
+    'action: {"plan": [{"text": "<step>", "done": false}, ...]} (3-6 concise steps, in execution order).',
+    'Each turn you may update it — mark finished steps done:true, REORDER by current priority, add/remove',
+    'steps as the task evolves. When a NEW user message arrives mid-run, re-evaluate and REORDER the plan',
+    'to fit the latest instruction before choosing the next action. Omit "plan" on turns where it is',
+    'unchanged. Skip the plan entirely for a trivial single-step answer or plain conversation.',
     'Conversation & scope:',
     '- Natural conversation is fine: greet, say who you are, ask a clarifying question — answer directly',
     '  in "final" without calling tools.',
@@ -253,6 +292,8 @@ interface PlanStepCtx {
   history: string[];
   /** 本轮主动记下、待持久化的非隐私条目，逐轮累加。 */
   memories: AgentMemoryNotes;
+  /** 当前计划（todo），逐轮回喂提示；模型给出 plan 即更新（重排 / 勾选 / 增删）。 */
+  plan: AgentTodoItem[];
 }
 
 /** plan-cycle 的产出：继续下一轮 / 收尾（带 final + 可选建议）/ 用户暂停。 */
@@ -284,6 +325,9 @@ async function runPlanCycle(ctx: PlanStepCtx): Promise<PlanCycleOutcome> {
     input.referencedContext
       ? `\nReferenced selection (your context only — NEVER pass any of it to tools):\n${input.referencedContext}`
       : '',
+    ctx.plan.length
+      ? `\nCurrent plan (keep it updated — mark items done, reorder by priority, add/remove as the task or new user messages change):\n${ctx.plan.map((t) => `- [${t.done ? 'x' : ' '}] ${t.text}`).join('\n')}`
+      : '',
     history.length ? `\nProgress so far:\n${history.join('\n')}` : '',
     '\nReply with the next JSON action.',
   ]
@@ -300,6 +344,11 @@ async function runPlanCycle(ctx: PlanStepCtx): Promise<PlanCycleOutcome> {
   const action = extractJson<PlannerAction>(r.text);
   // 累加本动作携带的记忆（任何动作都可附 remember）。
   accumulateRemember(action?.remember, memories);
+  // 计划更新：模型给出 plan 即归一、更新当前计划并持久化 + 广播（省略 plan = 沿用上一轮）。
+  if (action?.plan !== undefined) {
+    ctx.plan = normalizePlan(action.plan);
+    await deps.recordPlan?.(ctx.plan);
+  }
 
   const hasCalls = Boolean(action?.tool) || Boolean(action?.tools?.length);
 
@@ -384,7 +433,7 @@ export async function runPlanningAgent(
   // 既往多轮对话注入规划上下文（按预算裁剪），让 Agent 跨轮记住交流；仅供规划 LLM 参考，
   // 绝不透传给 pr-agent 工具。
   const convo = buildConversationContext(input.history ?? []);
-  const ctx: PlanStepCtx = { deps, input, rec, system, convo, labels, history, memories };
+  const ctx: PlanStepCtx = { deps, input, rec, system, convo, labels, history, memories, plan: [] };
 
   // 规划是单步循环：重复跑 plan-cycle 直至收尾 / 暂停 / 步数上限。
   for (let i = 0; i < maxSteps; i++) {

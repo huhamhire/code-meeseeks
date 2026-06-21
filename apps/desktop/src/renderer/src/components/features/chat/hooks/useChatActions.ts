@@ -4,6 +4,7 @@ import type { PragentRunInfo } from '@meebox/ipc';
 import type {
   AgentMessage,
   AgentStep,
+  AgentTodoItem,
   Finding,
   PrAgentStatus,
   ReviewDraft,
@@ -31,6 +32,7 @@ interface UseChatActionsParams {
   setHasMoreOlder: Dispatch<SetStateAction<boolean>>;
   setAgentSteps: Dispatch<SetStateAction<AgentStep[]>>;
   setMessages: Dispatch<SetStateAction<AgentMessage[]>>;
+  setTodo: Dispatch<SetStateAction<AgentTodoItem[]>>;
   currentPrIdRef: MutableRefObject<string | undefined>;
   reloadConversation: (localId: string) => Promise<void>;
   // 跨组件跳转回调（由 MainPane / App 注入）
@@ -82,6 +84,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     setHasMoreOlder,
     setAgentSteps,
     setMessages,
+    setTodo,
     currentPrIdRef,
     reloadConversation,
     onJumpToDraftEditor,
@@ -203,6 +206,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
       setError(null);
       setAgentSteps([]);
       setMessages([]);
+      setTodo([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

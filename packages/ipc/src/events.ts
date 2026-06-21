@@ -1,4 +1,10 @@
-import type { AgentStep, PollResult, SyncProgressEvent, UpdateCheckResult } from '@meebox/shared';
+import type {
+  AgentStep,
+  AgentTodoItem,
+  PollResult,
+  SyncProgressEvent,
+  UpdateCheckResult,
+} from '@meebox/shared';
 import type { PragentRunInfo } from './common.js';
 
 /** Poller tick 完成后广播给 renderer 用于更新"最近一次同步"显示。 */
@@ -48,6 +54,11 @@ export interface IpcEvents {
    * 该 PR 则据此重载会话，让后台产生的总结卡片即时出现（手动评审走 invoke 返回后自行重载，不依赖此事件）。
    */
   'agent:conversationChanged': { prLocalId: string };
+  /**
+   * 规划 Agent 的「计划（todo）」更新时推送：每当模型给出 / 更新计划即发，renderer 据此实时刷新计划面板。
+   * 计划随会话持久化（session.todo），切 PR / 重启后经 agent:getSession 水合。
+   */
+  'agent:planUpdated': { prLocalId: string; todo: AgentTodoItem[] };
   /**
    * 运行中（思考或派发工具）的编排 Agent 所属 PR 集合变化时推送：手动 `agent:run` / `agent:ask`
    * 与 AutoPilot 后台评审一并计入。renderer 据此在 PR 列表项显示「执行中」指示——覆盖**纯思考阶段**
