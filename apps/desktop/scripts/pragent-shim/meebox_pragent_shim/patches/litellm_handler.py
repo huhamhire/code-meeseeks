@@ -61,6 +61,15 @@ def patch(module) -> None:
         _orig_get_completion = handler_cls._get_completion
 
         async def _get_completion_with_usage(self, **kwargs):
+            # 输出封顶（编排器 chat 通道经 MEEBOX_CHAT_MAX_TOKENS 设；pr-agent 工具 run 的 env 不含
+            # 该项，故 /describe /review 不受限）。"thinking" 在场（Claude 扩展思考）时不覆盖其 max_tokens
+            # （否则会低于 thinking budget 报错）；已有 max_tokens 也不覆盖。
+            mt = os.environ.get("MEEBOX_CHAT_MAX_TOKENS")
+            if mt and "thinking" not in kwargs and "max_tokens" not in kwargs:
+                try:
+                    kwargs["max_tokens"] = int(mt)
+                except (TypeError, ValueError):
+                    _debug(f"ignore invalid MEEBOX_CHAT_MAX_TOKENS={mt!r}")
             result = await _orig_get_completion(self, **kwargs)
             try:
                 if isinstance(result, tuple) and len(result) >= 3:

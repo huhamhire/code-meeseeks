@@ -27,8 +27,8 @@ export interface ToolText {
 export interface ReviewOrchestratorDeps {
   /** 分发一个只读 pr-agent 工具，返回文本结果（描述 / findings / 回答）。 */
   runTool(call: { tool: 'describe' | 'review' | 'ask'; question?: string }): Promise<ToolText>;
-  /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。 */
-  chat(input: { system: string; user: string }): Promise<ToolText>;
+  /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。maxOutputTokens 可给轻量路由判读封顶输出。 */
+  chat(input: { system: string; user: string; maxOutputTokens?: number }): Promise<ToolText>;
   /** 每产生一个编排步骤即回调（持久化 / 流式推送）。 */
   onStep?(step: AgentStep): void | Promise<void>;
   /** 用户停止：每步边界检查，已 abort 即抛 `用户暂停` 中止微流程（思考阶段也能立即终止）。 */
@@ -169,6 +169,9 @@ export function salvageProse(raw: string): string {
  *  （judgeAutopilotBatch）同思路——砍掉无关前缀大幅降输入 token、提速；产物只是结构化布尔 + 问题列表。 */
 const JUDGE_SYSTEM =
   'You are a senior code reviewer triaging review findings for follow-up. Be decisive and terse; reply with JSON only, no reasoning.';
+
+/** 追问判读的输出 token 上限：产物是极小 JSON（severe + 至多数条问题），无需大额度。 */
+const JUDGE_MAX_OUTPUT_TOKENS = 1024;
 
 function judgePrompt(describeText: string, reviewText: string, maxAsks: number): string {
   return [
@@ -357,6 +360,8 @@ export async function runReviewMicroflow(
   const judge = await deps.chat({
     system: JUDGE_SYSTEM,
     user: judgePrompt(describe.text, review.text, maxAsks),
+    // 判读产物只是极小的结构化 JSON（severe + 至多数条问题），封顶输出避免模型对 yes/no 决策狂吐 token。
+    maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
   });
   const judgeMs = Date.now() - judgeStart;
   usage = addUsage(usage, judge.usage);
