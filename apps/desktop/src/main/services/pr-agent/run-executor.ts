@@ -21,27 +21,27 @@ import {
 } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
 import type { ReviewRun, ReviewRunStatus } from '@meebox/shared';
-import { getMainLanguage, t } from '../i18n/index.js';
-import { resolveActiveLlmProfile } from '../utils/agent.js';
-import { buildPrContext } from '../utils/pr-context.js';
-import { buildProxyEnv } from '../utils/proxy.js';
-import type { ServiceContext } from './context.js';
+import { getMainLanguage, t } from '../../i18n/index.js';
+import { resolveActiveLlmProfile } from '../../utils/agent.js';
+import { buildPrContext } from '../../utils/pr-context.js';
+import { buildProxyEnv } from '../../utils/proxy.js';
+import type { ServiceContext } from '../context.js';
 import type { QueueItem } from './run-queue.js';
 import {
   accumulateUsageSentinel,
   finalizeUsage,
   newUsageAcc,
   stripUsageSentinels,
-} from './usage.js';
+} from '../usage.js';
 
 /**
- * pr-agent run 的**执行器**（与队列调度 RunQueueService 分离）：给定一个已 dequeue 的队列项，跑完一个 run。
- * 调度（并发 / 优先级 / 取消 / 泵）归 RunQueueService；本类只管「怎么跑一个 run」，无队列状态。
+ * pr-agent run 的**执行器**（与队列调度 RunQueue 分离）：给定一个已 dequeue 的队列项，跑完一个 run。
+ * 调度（并发 / 优先级 / 取消 / 泵）归 RunQueue；本类只管「怎么跑一个 run」，无队列状态。
  *
  * execute 编排五个阶段：startRun（落盘 + 标记开始）→ prepareWorkspace（镜像 + worktree）→
  * buildInvocation（env + 提示词组装）→ bridge.run（spawn）→ collectOutput（读产物 + 解析）→ 收尾落盘。
  */
-export class PragentRunExecutor {
+export class RunExecutor {
   private readonly execFileP = promisify(execFile);
   /** embedded .secrets.toml 兜底的 memo（只在首个 embedded run 解析一次目录 + 写文件）。 */
   private embeddedSecretsEnsured: Promise<void> | null = null;
@@ -50,7 +50,7 @@ export class PragentRunExecutor {
 
   /**
    * 真正执行一个 queue item：startRun → worktree → bridge.run → finishWith。
-   * 由 RunQueueService.pump() 调用；任何抛错都被调度层兜成 Promise reject，外层 pragent:run 调用方收到。
+   * 由 RunQueue.pump() 调用；任何抛错都被调度层兜成 Promise reject，外层 pragent:run 调用方收到。
    * notifyStarted：startedAt 落定后回调调度层广播队列变化（执行器不持队列态）。
    */
   async execute(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {

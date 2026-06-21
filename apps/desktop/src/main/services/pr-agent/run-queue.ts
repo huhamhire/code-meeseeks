@@ -1,9 +1,9 @@
 import type { PragentRunInfo } from '@meebox/ipc';
 import { makeRunId } from '@meebox/poller';
 import type { ReviewRun, ReviewRunTool, StoredPullRequest } from '@meebox/shared';
-import { t } from '../i18n/index.js';
-import type { ServiceContext } from './context.js';
-import { PragentRunExecutor } from './run-executor.js';
+import { t } from '../../i18n/index.js';
+import type { ServiceContext } from '../context.js';
+import { RunExecutor } from './run-executor.js';
 
 /** pr-agent run 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。 */
 export type RunPriority = 'user' | 'agent';
@@ -40,17 +40,17 @@ export interface QueueItem {
  * 队列与运行态（waiting / active / 并发上限）是实例可变状态，故以 class 封装；PR 领域操作
  * （镜像 / diff base / adapter）经注入的 ctx.pr 取用。
  */
-export class RunQueueService {
+export class RunQueue {
   private readonly waiting: QueueItem[] = [];
   /** 并发运行中的 run（runId → item）；上限 maxConcurrency。 */
   private readonly active = new Map<string, QueueItem>();
   private readonly maxConcurrency: number;
   /** run 执行器（落盘 / worktree / spawn / 解析收尾）；调度与执行分离，本类只负责并发 / 优先级 / 取消。 */
-  private readonly executor: PragentRunExecutor;
+  private readonly executor: RunExecutor;
 
   constructor(private readonly ctx: ServiceContext) {
     this.maxConcurrency = ctx.bootstrap.config.pr_agent.max_concurrency;
-    this.executor = new PragentRunExecutor(ctx);
+    this.executor = new RunExecutor(ctx);
   }
 
   /**
