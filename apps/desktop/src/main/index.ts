@@ -7,15 +7,16 @@ import { scaffoldAgentDir } from '@meebox/agent';
 import { resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
 import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
-import { Poller } from '@meebox/poller';
-import { RepoMirrorManager } from '@meebox/repo-mirror';
+import type { Poller } from '@meebox/poller';
+import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { PrAgentStatus } from '@meebox/shared';
 import { JsonFileStateStore } from '@meebox/state-store';
 import { createConnectionRuntime } from './connections-runtime.js';
+import { createPoller } from './poller.js';
+import { createRepoMirror } from './repo-mirror.js';
 import { createSplash } from './splash.js';
 import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
-import { buildProxyEnv } from './utils/proxy.js';
 import { fixMacPath } from './utils/mac-path.js';
 import { readConnectionStates } from './utils/connection-state.js';
 import { createWindowManager } from './window.js';
@@ -175,41 +176,19 @@ async function start(): Promise<void> {
     return {};
   });
 
-  poller = new Poller({
-    connections: [],
+  poller = createPoller({
+    bootstrap,
     stateStore,
-    intervalSeconds: bootstrap.config.poller.interval_seconds,
-    logger: logger.child({ scope: 'poller' }),
-    onTick: (info) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send('poll:tick', info);
-      }
+    logger,
+    onTickExtras: () => {
       // 本轮已被移除 / purge 的 PR：终止其上仍在执行的 agent 操作（先于 AutoPilot，避免给已消失的 PR 起新评审）。
       ipcControl?.terminateAgentsForGonePrs();
-      // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器
+      // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器。
       void runUpdateCheckIfDue();
       // AutoPilot 预评审：满足开关 + 最小间隔 + 候选时跑一遍 pass（内部门控，复用 poller 周期）。
       ipcControl?.runAutopilotIfDue();
     },
-    // PR 新增 / 内容变更时，顺手 syncMirror 把本地镜像跟上，让用户随后点开 PR
-    // 时省一趟 fetch。失败不阻断 poll 流程 (mirror 也有自己的全局队列 + 错误隔离)
-    onPrsChanged: (repos) => {
-      for (const r of repos) {
-        const conn = bootstrap.config.connections.find((c) => c.id === r.connectionId);
-        if (!conn) continue;
-        let host: string;
-        try {
-          host = new URL(conn.base_url).hostname;
-        } catch {
-          continue;
-        }
-        // identity 字段映射：poller 用 group/repo 中性命名，repo-mirror 仍保留
-        // Bitbucket-shaped projectKey/repoSlug (跟 git 路径布局一致，沿用便于排障)
-        void repoMirror.syncMirror({ host, projectKey: r.group, repoSlug: r.repo }).catch((err) => {
-          logger.warn({ err, repo: r }, 'auto syncMirror after poll failed');
-        });
-      }
-    },
+    getRepoMirror: () => repoMirror,
   });
 
   // 连接运行时（接线 / ping / 热重配）：依赖已建好的 poller；repoMirror 经 conns.runtime 读 adapterByHost。
@@ -221,25 +200,7 @@ async function start(): Promise<void> {
     initialStates: connectionStates,
   });
 
-  repoMirror = new RepoMirrorManager({
-    reposDir: bootstrap.paths.reposDir,
-    getCloneUrl: async (repo) => {
-      const adapter = conns.runtime.adapterByHost.get(repo.host);
-      if (!adapter) throw new Error(`no adapter for host ${repo.host}`);
-      return adapter.getCloneUrl({
-        projectKey: repo.projectKey,
-        repoSlug: repo.repoSlug,
-      });
-    },
-    logger: logger.child({ scope: 'repo-mirror' }),
-    onProgress: (event) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send('sync:progress', event);
-      }
-    },
-    // 出站代理：getter 每次远端 clone/fetch 求值，设置页改代理后即生效。
-    proxyEnv: () => buildProxyEnv(bootstrap.config.proxy),
-  });
+  repoMirror = createRepoMirror({ bootstrap, logger, connectionRuntime: conns.runtime });
 
   // 建窗前同步把连接接好（无网络）：构建 adapters、用本地持久化身份预热 currentUser、喂 poller。
   // 这样 app:connections 与首轮判 approved 都不依赖网络；ping 留到建窗后全异步刷新。
