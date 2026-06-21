@@ -151,15 +151,26 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。用户输入即时 optimistic 回显，
   // 收尾后以落盘对话（含用户 + 助手消息）整体对齐。
   const handleAgentAsk = async (question: string, referencedContext?: string): Promise<void> => {
-    // 仅禁止对同一 PR 重复发起；其它 PR 在跑不阻塞（并发 / 排队）。
-    if (!pr || !prAgent.available || !llmConfigured || runningPrs.has(pr.localId)) return;
+    if (!pr || !prAgent.available || !llmConfigured) return;
     const startedId = pr.localId;
-    setError(null);
-    setAgentSteps([]);
+    // 即时 optimistic 回显用户气泡（运行中 / 新轮都先冒泡，不再静默丢弃中途输入）。
     setMessages((prev) => [
       ...prev,
       { role: 'user', content: question, at: new Date().toISOString() },
     ]);
+    // 本 PR 已有 Agent 在跑：不另起一轮，入队到下一主 Agent 周期并入、据最新指令重排（中途输入转向）。
+    if (runningPrs.has(startedId)) {
+      try {
+        await invoke('agent:enqueueMessage', { localId: startedId, message: question });
+      } catch (e) {
+        if (currentPrIdRef.current === startedId) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      }
+      return;
+    }
+    setError(null);
+    setAgentSteps([]);
     setRunningPrs((m) => new Map(m).set(startedId, Date.now()));
     try {
       const session = await invoke('agent:ask', { localId: startedId, question, referencedContext });

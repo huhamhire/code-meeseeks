@@ -94,6 +94,11 @@ export interface AgentPlanningDeps {
   onStep?: (sessionId: string, step: AgentStep) => void;
   /** 持久化 Agent 主动记下的非隐私条目到各可写上下文文件（USER/MEMORY/AGENTS）。 */
   recordMemory?: (notes: AgentMemoryNotes) => Promise<void>;
+  /**
+   * 取出运行期间排队的用户新消息（中途输入转向）：每轮顶部由 planner 调用。实现方（orchestrator）
+   * 负责持久化进会话并广播刷新；此处直接透传给 planner，由其并入当轮 progress。
+   */
+  drainPendingInput?: () => Promise<string[]> | string[];
 }
 
 export async function runAgentPlanning(
@@ -130,6 +135,7 @@ export async function runAgentPlanning(
           deps.onStep?.(session.id, step);
         },
         signal: deps.signal,
+        drainPendingInput: deps.drainPendingInput,
       },
       {
         context: deps.agentContext,

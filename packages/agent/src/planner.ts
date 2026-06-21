@@ -43,6 +43,11 @@ export interface PlanningDeps {
   onStep?: (step: AgentStep) => void | Promise<void>;
   /** 用户暂停信号；abort 后循环在下一步前停下，返回 terminationReason='用户暂停'。 */
   signal?: AbortSignal;
+  /**
+   * 取出运行期间排队的用户新消息（中途输入转向）：每轮顶部调用，非空则并入当轮 progress，让 ReAct 据
+   * 最新指令与当前进度重排下一步。返回的消息由实现方（主进程）负责持久化到会话（此处只注入、不再落盘）。
+   */
+  drainPendingInput?: () => Promise<string[]> | string[];
 }
 
 export interface PlanningInput {
@@ -263,6 +268,13 @@ type PlanCycleOutcome =
 async function runPlanCycle(ctx: PlanStepCtx): Promise<PlanCycleOutcome> {
   const { deps, input, rec, system, convo, labels, history, memories } = ctx;
   if (deps.signal?.aborted) return { kind: 'aborted' };
+
+  // 中途输入转向：把运行期间排队的用户新消息并入 progress，让本轮 ReAct 据「最新指令 + 当前进度」重排
+  // 下一步。消息已由实现方在取出时持久化进会话，此处只注入提示、不再落盘。
+  const pending = (await deps.drainPendingInput?.()) ?? [];
+  for (const m of pending) {
+    history.push(`New user message (latest instruction — reconcile with the plan and progress): ${m}`);
+  }
 
   const user = [
     convo
