@@ -1,12 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  extractJson,
-  runReviewMicroflow,
-  salvageProse,
-  stripTrailingJson,
-} from '../src/orchestrator.js';
+import { runReviewMicroflow } from '../src/orchestrator.js';
 import type { ReviewOrchestratorDeps } from '../src/orchestrator.js';
 import type { AgentContext } from '../src/types.js';
+import { extractJson, salvageProse, stripTrailingJson } from '../src/utils/index.js';
 
 const context: AgentContext = {
   files: { soul: 'soul', agents: 'agents', memory: '', user: '' },

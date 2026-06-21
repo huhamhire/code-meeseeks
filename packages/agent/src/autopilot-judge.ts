@@ -1,7 +1,7 @@
 import type { TokenUsage } from '@meebox/shared';
 import { DESC_CLAMP } from './constants.js';
-import { extractJson } from './orchestrator.js';
-import { PROMPT_TEMPLATES, fillTemplate } from './prompts.js';
+import { PROMPT_TEMPLATES } from './prompts.js';
+import { extractJson, fillTemplate } from './utils/index.js';
 
 /**
  * AutoPilot 批量判定（见 docs/arch/06-agent.md「AutoPilot」的例外规则）：把一批候选 PR 的

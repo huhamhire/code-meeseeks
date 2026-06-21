@@ -6,7 +6,8 @@ import type {
   ReviewOrchestratorInput,
   ToolText,
 } from '../../orchestrator.js';
-import { PROMPT_TEMPLATES, fillTemplate } from '../../prompts.js';
+import { PROMPT_TEMPLATES } from '../../prompts.js';
+import { fillTemplate } from '../../utils/index.js';
 import type { StepRecorder } from '../context.js';
 
 /**

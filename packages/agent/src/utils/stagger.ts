@@ -1,4 +1,4 @@
-import { STAGGER_MIN_MS, STAGGER_SPAN_MS } from './constants.js';
+import { STAGGER_MIN_MS, STAGGER_SPAN_MS } from '../constants.js';
 
 /**
  * 把并发分发的工具调用相互错开一个**累计的 100~200ms 随机延迟**：首个立即发出，其余各在前一个

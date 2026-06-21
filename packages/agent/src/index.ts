@@ -16,7 +16,8 @@ export type {
   AssemblePrMeta,
   AssembleSessionSnapshot,
 } from './assemble.js';
-export { runReviewMicroflow, extractJson } from './orchestrator.js';
+export { runReviewMicroflow } from './orchestrator.js';
+export { extractJson } from './utils/index.js';
 export { runPlanningAgent } from './planner.js';
 export type {
   AgentMemoryNotes,

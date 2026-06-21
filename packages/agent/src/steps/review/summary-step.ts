@@ -1,5 +1,6 @@
 import type { AgentRecommendation } from '@meebox/shared';
-import { extractJson, salvageProse, stripTrailingJson, summarySections } from '../../orchestrator.js';
+import { summarySections } from '../../orchestrator.js';
+import { extractJson, salvageProse, stripTrailingJson } from '../../utils/index.js';
 import { Step } from '../context.js';
 import { isVerdict, summaryPrompt, type ReviewStepCtx } from './shared.js';
 

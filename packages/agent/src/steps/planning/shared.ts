@@ -8,7 +8,8 @@ import { HISTORY_BUDGET_CHARS, HISTORY_MESSAGE_MAX, VERDICTS } from '../../const
 import type { MemoryNote } from '../../memory.js';
 import type { AgentStepLabels } from '../../orchestrator.js';
 import type { AgentMemoryNotes, PlanningDeps, PlanningInput } from '../../planner.js';
-import { PROMPT_TEMPLATES, fillTemplate } from '../../prompts.js';
+import { PROMPT_TEMPLATES } from '../../prompts.js';
+import { clamp, fillTemplate } from '../../utils/index.js';
 import type { StepRecorder } from '../context.js';
 
 /**
@@ -99,11 +100,6 @@ export function normalizePlan(raw: PlannerAction['plan']): AgentTodoItem[] {
     }
   });
   return out;
-}
-
-export function clamp(s: string, max: number): string {
-  const t = s.trim();
-  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
 }
 
 /** 取最近若干轮、各自限长，并按总预算从新到旧裁剪（丢弃超预算的更早消息），返回时间升序文本。 */

@@ -1,5 +1,5 @@
 import { JUDGE_MAX_OUTPUT_TOKENS, JUDGE_SYSTEM } from '../../constants.js';
-import { extractJson } from '../../orchestrator.js';
+import { extractJson } from '../../utils/index.js';
 import { Step } from '../context.js';
 import { judgePrompt, type ReviewStepCtx } from './shared.js';
 
