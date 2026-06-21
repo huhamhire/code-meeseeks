@@ -152,6 +152,18 @@ export async function clearReviewRunsForPr(
   return keys.length;
 }
 
+/** Delete a single run record by id. Returns whether a record existed before deletion. */
+export async function deleteReviewRun(
+  stateStore: StateStore,
+  prLocalId: string,
+  runId: string,
+): Promise<boolean> {
+  const key = runKey(prLocalId, runId);
+  const existed = (await stateStore.read<ReviewRunFile>(key)) != null;
+  await stateStore.delete(key);
+  return existed;
+}
+
 export async function listReviewRunsForPr(
   stateStore: StateStore,
   prLocalId: string,

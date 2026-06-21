@@ -263,6 +263,15 @@
   flex-wrap: wrap;
   gap: $space-2;
 }
+// PR Type 值胶囊并入头部行时：推到「类型」标签右侧、右对齐（多个仍可换行），单行省纵向空间。
+.chat-finding-pills-inline {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+// 值胶囊已并入头部行，头部即整卡内容，去掉下外边距避免多余留白。
+.chat-finding-pr-type .chat-finding-head {
+  margin-bottom: 0;
+}
 .pr-type-pill {
   display: inline-block;
   padding: 2px $space-4;

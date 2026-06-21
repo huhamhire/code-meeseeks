@@ -119,6 +119,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('pragent:listRuns', agent.listRuns); // 历史 run 列表（游标分页）
   ipcMain.handle('pragent:getRun', agent.getRun); // 单条 run 查询
   ipcMain.handle('pragent:clearRuns', agent.clearRuns); // 清空 run 历史 + Agent 会话 / 台账
+  ipcMain.handle('pragent:deleteRun', agent.deleteRun); // 删除单条 run 记录
 
   base.logger.debug('IPC handlers registered');
 

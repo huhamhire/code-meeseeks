@@ -121,6 +121,11 @@ export interface AgentChannels {
     request: { localId: string };
     response: { cleared: number };
   };
+  /** 删除指定 PR 的单条 run 记录（仅该 run，不动 Agent 会话 / 台账）。返回是否确有删除。 */
+  'pragent:deleteRun': {
+    request: { localId: string; runId: string };
+    response: { ok: boolean };
+  };
   /**
    * 取消一个 run。语义跟 run 当前状态相关：
    * - 跟 active 匹配 → SIGKILL 子进程，落盘 status='cancelled'

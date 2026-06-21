@@ -70,10 +70,8 @@ export const DEFAULT_SUMMARY_SECTIONS: readonly [string, string, string] = [
  * LLM 生成的自由 thought 本就跟随作答语言，不在此列；事后切 UI 语言不回改历史步骤（同总结正文）。
  */
 export interface AgentStepLabels {
-  /** 微流程「生成 PR 描述」步思考。 */
-  describe: string;
-  /** 微流程「生成代码评审发现」步思考。 */
-  review: string;
+  /** 微流程「生成 PR 描述与审查发现」步思考（describe + review 合并为一行；二者并行执行）。 */
+  describeReview: string;
   /** 微流程判读步思考。 */
   judge: string;
   /** 判读结果：存在严重问题、将追问 n 个。 */
@@ -89,11 +87,10 @@ export interface AgentStepLabels {
 }
 /** 步骤文案默认值（en-US 兜底）；多语言由主进程 i18n 解析后经 input.labels 注入，未注入时回落本默认。 */
 export const DEFAULT_STEP_LABELS: AgentStepLabels = {
-  describe: 'Generate the PR description',
-  review: 'Generate the code review findings',
-  judge: 'Decide whether there are severe issues needing follow-up',
-  judgeSevere: (n) => `Severe — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
-  judgeNone: 'No severe issues — no follow-up',
+  describeReview: 'Generate the PR description and review findings',
+  judge: 'Decide whether there are important issues needing follow-up',
+  judgeSevere: (n) => `Important — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
+  judgeNone: 'No important issues — no follow-up',
   summary: 'Synthesize the description and findings into a review summary',
   parseFail: 'Could not parse a recommendation — routing to manual review',
   rejectedPrefix: 'Rejected: ',
