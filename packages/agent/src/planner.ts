@@ -7,7 +7,7 @@ import type {
   TokenUsage,
   ToolCatalogEntry,
 } from '@meebox/shared';
-import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
+import { assembleSystemContext, type AssemblePrMeta } from './prompts.js';
 import type { MemoryNote } from './memory.js';
 import { stepLabels, summarySections } from './orchestrator.js';
 import { createStepRecorder } from './steps/context.js';

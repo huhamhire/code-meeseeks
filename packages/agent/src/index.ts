@@ -10,12 +10,12 @@ export type { AgentContextKind, AgentTemplate } from './agent-files.js';
 export { appendAgentNotes } from './memory.js';
 export type { MemoryNote, WritableAgentFile } from './memory.js';
 export type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
-export { assembleSystemContext } from './assemble.js';
+export { assembleSystemContext } from './prompts.js';
 export type {
   AssembleInput,
   AssemblePrMeta,
   AssembleSessionSnapshot,
-} from './assemble.js';
+} from './prompts.js';
 export { runReviewMicroflow } from './orchestrator.js';
 export { extractJson } from './utils/index.js';
 export { runPlanningAgent } from './planner.js';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assembleSystemContext } from '../src/assemble.js';
+import { assembleSystemContext } from '../src/prompts.js';
 import type { ToolCatalogEntry } from '@meebox/shared';
 import type { AgentContext } from '../src/types.js';
 

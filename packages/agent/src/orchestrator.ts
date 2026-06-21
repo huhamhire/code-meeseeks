@@ -1,6 +1,6 @@
 import type { Rule } from '@meebox/rules';
 import type { AgentRecommendation, AgentStep, TokenUsage, ToolCatalogEntry } from '@meebox/shared';
-import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
+import { assembleSystemContext, type AssemblePrMeta } from './prompts.js';
 import { createStepRecorder } from './steps/context.js';
 import { REVIEW_STEPS, type ReviewStepCtx } from './steps/review/index.js';
 import type { AgentContext } from './types.js';
