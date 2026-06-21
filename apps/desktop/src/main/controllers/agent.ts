@@ -59,7 +59,11 @@ export const runReview: IpcController<'agent:run'> = async (_event, req) => {
  */
 export const runPlanning: IpcController<'agent:ask'> = async (_event, req) => {
   const ctx = getContext();
-  return ctx.orchestrator.runPlanning(await ctx.pr.findPrOrThrow(req.localId), req.question);
+  return ctx.orchestrator.runPlanning(
+    await ctx.pr.findPrOrThrow(req.localId),
+    req.question,
+    req.referencedContext,
+  );
 };
 
 /**
@@ -117,7 +121,7 @@ export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
     throw new Error(t('prAgent.askNeedsQuestion'));
   }
   const pr = await ctx.pr.findPrOrThrow(req.localId);
-  return ctx.runQueue.enqueuePragentRun(pr, req.tool, req.question);
+  return ctx.runQueue.enqueuePragentRun(pr, req.tool, req.question, 'user', req.referencedContext);
 };
 
 /**

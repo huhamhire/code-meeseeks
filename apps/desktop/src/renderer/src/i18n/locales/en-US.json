@@ -135,6 +135,11 @@
     "sectionSummary": "Summary",
     "sectionTitle": "Suggested title",
     "sectionWalkthrough": "File changes",
+    "selection": {
+      "attachedTitle": "Selected lines attached to your next question — click to ignore",
+      "ignoredTitle": "Selected lines ignored — click to attach to your next question",
+      "linesSelected": "{{lines}} lines selected"
+    },
     "sendAria": "Send",
     "sendQueuedTitle": "Send (new task will be queued)",
     "sendTitle": "Send (Enter)",

@@ -88,6 +88,8 @@ export interface AgentPlanningDeps {
   matchedRule?: Rule | null;
   language: string;
   maxSteps: number;
+  /** 用户选中的代码引用（隐式上下文）：注入规划 LLM 当轮提示，不进持久化用户消息。 */
+  referencedContext?: string;
   signal?: AbortSignal;
   onStep?: (sessionId: string, step: AgentStep) => void;
   /** 持久化 Agent 主动记下的非隐私条目到各可写上下文文件（USER/MEMORY/AGENTS）。 */
@@ -137,6 +139,7 @@ export async function runAgentPlanning(
         language: deps.language,
         userRequest,
         history,
+        referencedContext: deps.referencedContext,
         maxSteps: deps.maxSteps,
       },
     );

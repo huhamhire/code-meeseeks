@@ -245,6 +245,53 @@
   }
 }
 
+// AutoReview 与「选区角标」之间的竖线分隔：居中、定高（略低于按钮，不顶满）；
+// 额外左间距，与左侧按钮拉开（在组 gap 基础上再加）。
+.chat-cmd-divider {
+  width: 1px;
+  height: 18px;
+  align-self: center;
+  flex-shrink: 0;
+  margin-left: $space-2;
+  background: $border-default;
+}
+
+// Diff 选区角标：图标 + 「N 行已选中」。点击切忽略态——忽略时置灰 + 删除线 + eye-slash 图标。
+.chat-selection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  max-width: 180px;
+  padding: $space-2 $space-2;
+  background: transparent;
+  border: none;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  font-size: $fs-md;
+  line-height: 1;
+  cursor: pointer;
+
+  svg {
+    flex-shrink: 0;
+  }
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+  &.ignored {
+    opacity: 0.55;
+
+    span {
+      text-decoration: line-through;
+    }
+  }
+}
+
 // `/` 按钮弹出的菜单：在按钮正上方展开
 .chat-cmd-menu {
   @include popover;

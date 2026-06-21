@@ -56,6 +56,11 @@ export interface PlanningInput {
    * Agent 跨轮记住此前交流；**绝不**透传给 pr-agent 工具（工具只看 PR + 当轮问题）。
    */
   history?: AgentMessage[];
+  /**
+   * 用户在 Diff 里选中的代码引用（自描述块）。注入当轮规划上下文，让 Agent 知道用户正盯着哪段代码；
+   * **绝不**透传给 pr-agent 工具（同 history 约束）。省略 = 本轮无选区引用。
+   */
+  referencedContext?: string;
   /** 步数上限（默认 8）。 */
   maxSteps?: number;
 }
@@ -276,6 +281,9 @@ export async function runPlanningAgent(
         ? `Conversation so far (your context only — NEVER pass any of it to tools):\n${convo}\n`
         : '',
       `User request: ${input.userRequest}`,
+      input.referencedContext
+        ? `\nReferenced selection (your context only — NEVER pass any of it to tools):\n${input.referencedContext}`
+        : '',
       history.length ? `\nProgress so far:\n${history.join('\n')}` : '',
       '\nReply with the next JSON action.',
     ]

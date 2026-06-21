@@ -39,7 +39,11 @@ export interface AgentChannels {
    * agent:stepProgress 推送；返回收尾会话（summary = Agent 最终回答）。
    */
   'agent:ask': {
-    request: { localId: string; question: string };
+    /**
+     * referencedContext：用户在 Diff 里选中的代码片段（含路径 + 行范围 + 代码），作为**隐式上下文**
+     * 注入规划 LLM 的当轮提示，不进入持久化的用户消息正文。省略 = 本轮不带选区引用。
+     */
+    request: { localId: string; question: string; referencedContext?: string };
     response: AgentSession;
   };
   /** 暂停当前 PR 的 Agent 运行（abort）；会话置 paused、保态。 */
@@ -77,8 +81,15 @@ export interface AgentChannels {
     /**
      * tool='ask' 时 question 必填，作为 pr-agent CLI 的位置参数传给 ask 子命令。
      * tool='describe'/'review' 时 question 字段被忽略。
+     * referencedContext：用户在 Diff 里选中的代码片段（隐式上下文），仅 tool='ask' 时生效——经
+     * EXTRA_INSTRUCTIONS 注入，不进入问题位置参数（故不污染回答 echo / 会话气泡）。
      */
-    request: { localId: string; tool: ReviewRunTool; question?: string };
+    request: {
+      localId: string;
+      tool: ReviewRunTool;
+      question?: string;
+      referencedContext?: string;
+    };
     response: ReviewRun;
   };
   /**

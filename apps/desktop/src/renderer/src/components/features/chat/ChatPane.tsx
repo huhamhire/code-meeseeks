@@ -4,6 +4,11 @@ import type { LocalPrStatus, PrAgentStatus, StoredPullRequest } from '@meebox/sh
 import { ChatIcon, TrashIcon, ConfirmModal, PaneLoading } from '../../common';
 import { useChatRunStore } from '../../../stores/chat-run-store';
 import { useDraftsForPr } from '../../../stores/drafts-store';
+import {
+  formatReferencedContext,
+  selectionStore,
+  useDiffSelection,
+} from '../../../stores/selection-store';
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './constants';
 import { useChatSession } from './hooks/useChatSession';
 import { useChatActions } from './hooks/useChatActions';
@@ -121,6 +126,12 @@ export function ChatPane({
 
   // M4 草稿池：从 main 进程拉本 PR 的草稿，跟 finding 通过 source 字段反查关联
   const drafts = useDraftsForPr(prLocalId);
+
+  // Diff 选区（归属当前 PR）：用于输入栏「N 行已选中」角标 + 把选中代码作为隐式上下文带进提问。
+  const { selection: diffSelection, ignored: selectionIgnored } = useDiffSelection(prLocalId);
+  // 未忽略时把选区拼成引用串；/ask 与自然语言提问共用。忽略 / 无选区 → undefined（本条不带引用）。
+  const referencedContext =
+    diffSelection && !selectionIgnored ? formatReferencedContext(diffSelection) : undefined;
 
   // 会话态 + 生命周期（切 PR 重载 / 流式步骤 / 分页 / 自动滚动）
   const session = useChatSession(prLocalId, myActiveIds);
@@ -319,14 +330,21 @@ export function ChatPane({
         // 队列模型下输入永远开启 (新提交进队列 / 并发执行)；runningTool 仅决定是否额外
         // 渲染 stop 按钮 (本 PR 有运行中 run 时可点终止)。多并发时 stop 终止最近一条。
         runningTool={myActiveRuns[myActiveRuns.length - 1]?.tool ?? null}
-        onRun={(tool, q) => void actions.handleRun(tool, q)}
-        onAgentAsk={(q) => void actions.handleAgentAsk(q)}
+        // referencedContext 仅 /ask 与自然语言提问携带选区引用（describe/review 不带）。
+        onRun={(tool, q) =>
+          void actions.handleRun(tool, q, tool === 'ask' ? referencedContext : undefined)
+        }
+        onAgentAsk={(q) => void actions.handleAgentAsk(q, referencedContext)}
         onCancel={hasMyActive || agentRunningHere ? actions.handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
         // 一键自动评审：图标按钮置于 `/` 命令触发器右侧。runningHere=跑在当前 PR（高亮 / 运行中文案 +
         // 禁用重复发起）；其它 PR 在跑不禁用本 PR 的触发（可并发 / 排队）。
         agentRunningHere={agentRunningHere}
         onAgentReview={() => void actions.handleAgentReview()}
+        // Diff 选区角标：N 行已选中 / 点击切忽略；无选区时 null（不渲染）。
+        selectionLineCount={diffSelection?.lineCount ?? null}
+        selectionIgnored={selectionIgnored}
+        onToggleSelection={() => selectionStore.toggleIgnored()}
       />
 
       {showRulePreview && matchedRule && (

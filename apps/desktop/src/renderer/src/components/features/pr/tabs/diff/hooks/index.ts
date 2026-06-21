@@ -13,3 +13,4 @@ export { useCommentZones } from './useCommentZones';
 export { useDiffOverviewMarks } from './useDiffOverviewMarks';
 export { useDraftZones } from './useDraftZones';
 export { useLineCommentAdder } from './useLineCommentAdder';
+export { useSelectionCapture } from './useSelectionCapture';

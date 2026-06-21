@@ -135,6 +135,11 @@
     "sectionSummary": "まとめ",
     "sectionTitle": "タイトル候補",
     "sectionWalkthrough": "ファイル変更",
+    "selection": {
+      "attachedTitle": "選択行を次の質問に添付 — クリックで無視",
+      "ignoredTitle": "選択行を無視中 — クリックで次の質問に添付",
+      "linesSelected": "{{lines}} 行を選択中"
+    },
     "sendAria": "送信",
     "sendQueuedTitle": "送信（新しいタスクはキューに入ります）",
     "sendTitle": "送信 (Enter)",
