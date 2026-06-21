@@ -35,11 +35,11 @@ export async function buildPrContext({
 }: BuildPrContextOpts): Promise<string> {
   const sections: string[] = [];
 
-  sections.push(`**标题**: ${pr.title}`);
+  sections.push(`**Title**: ${pr.title}`);
 
   const desc = pr.description.trim();
   if (desc) {
-    sections.push(`**描述**:\n${desc}`);
+    sections.push(`**Description**:\n${desc}`);
   }
 
   let comments: PrComment[] = [];
@@ -57,7 +57,7 @@ export async function buildPrContext({
   const formatted = formatComments(comments, maxComments, maxCommentLen);
   if (formatted.length > 0) {
     sections.push(
-      `**已有评论** (${String(formatted.length)} 条，最新在前):\n${formatted.join('\n')}`,
+      `**Existing comments** (${String(formatted.length)}, newest first):\n${formatted.join('\n')}`,
     );
   }
 
@@ -66,7 +66,7 @@ export async function buildPrContext({
   if (sections.length === 1 && !desc && comments.length === 0) {
     return '';
   }
-  return `## PR 上下文\n\n${sections.join('\n\n')}`;
+  return `## PR context\n\n${sections.join('\n\n')}`;
 }
 
 /**
