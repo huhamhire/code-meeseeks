@@ -25,7 +25,7 @@ import { getMainLanguage, t } from '../i18n/index.js';
 import { resolveActiveLlmProfile } from '../utils/agent.js';
 import { buildProxyEnv } from '../utils/proxy.js';
 import type { ServiceContext } from './context.js';
-import type { RunQueueService } from './run-queue.js';
+import type { RunQueue } from './pr-agent/index.js';
 import { accumulateUsageSentinel, finalizeUsage, newUsageAcc } from './usage.js';
 
 // 共享 chat 通道：system + user → 文本 + usage。agent:run 评审与 AutoPilot 都用。
@@ -41,7 +41,7 @@ type AgentChat = (input: {
  * 以及随 poll tick 清理已消失 PR 的在跑操作。
  *
  * 运行态（每 PR 的 AbortController、「执行中」PR 集合、AutoPilot busy 锁）是实例可变状态，
- * 故以 class 封装；派发的工具 run 复用注入的 RunQueueService（agent 低优先级泳道）。
+ * 故以 class 封装；派发的工具 run 复用注入的 RunQueue（agent 低优先级泳道）。
  */
 export class AgentOrchestratorService {
   // 编排 Agent（手动评审 agent:run + 自由规划 agent:ask）每 PR 至多一个在跑，AbortController 供
@@ -59,7 +59,7 @@ export class AgentOrchestratorService {
 
   constructor(
     private readonly ctx: ServiceContext,
-    private readonly runQueue: RunQueueService,
+    private readonly runQueue: RunQueue,
   ) {}
 
   /**

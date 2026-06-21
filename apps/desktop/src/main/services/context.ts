@@ -9,7 +9,7 @@ import type { ConnectionRuntime } from '../adapters.js';
 import type { AgentOrchestratorService } from './agent-orchestrator.js';
 import { broadcast } from './broadcast.js';
 import { PrService } from './pr-service.js';
-import type { RunQueueService } from './run-queue.js';
+import type { RunQueue } from './pr-agent/index.js';
 
 /** registerIpcHandlers 的外部依赖（由 main/index.ts 注入）。 */
 export interface RegisterDeps {
@@ -49,7 +49,7 @@ export interface ServiceContext extends RegisterDeps {
  * 两个跨域服务以基础 ServiceContext 构建（见 ipc.ts 装配顺序），构建完成后合成本上下文。
  */
 export interface ControllerContext extends ServiceContext {
-  runQueue: RunQueueService;
+  runQueue: RunQueue;
   orchestrator: AgentOrchestratorService;
 }
 

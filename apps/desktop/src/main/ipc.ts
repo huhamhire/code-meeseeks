@@ -10,7 +10,7 @@ import {
   type ControllerContext,
   type RegisterDeps,
 } from './services/context.js';
-import { RunQueueService } from './services/run-queue.js';
+import { RunQueue } from './services/pr-agent/index.js';
 
 export type { RegisterDeps } from './services/context.js';
 
@@ -28,7 +28,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
 } {
   const base = createServiceContext(deps);
   // run 队列：pragent:run（PR 域）、Agent 编排、AutoPilot 三方共用。
-  const runQueue = new RunQueueService(base);
+  const runQueue = new RunQueue(base);
   // Agent 编排：复用 run 队列派发工具 run（agent 低优先级泳道）。
   const orchestrator = new AgentOrchestratorService(base, runQueue);
   // controller 层统一上下文：基础上下文 + 两个跨域 service，安装为进程级单例（controller 经 getContext() 取用）。
