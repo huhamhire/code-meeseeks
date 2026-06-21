@@ -12,7 +12,7 @@ const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
  * 构造时刻 → 首次检测落在启动后约 1h，刻意不在启动瞬间检测（避免占冷启动网络 / 打断启动）。仅检测 + 提示：
  * 有新版才广播给所有窗口；失败静默（绝不推任何 IPC，对用户零打扰）。节流状态是实例字段，故以 class 封装。
  */
-export class UpdateRunner {
+export class Updater {
   private lastCheckMs = Date.now();
 
   constructor(
