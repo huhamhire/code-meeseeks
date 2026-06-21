@@ -7,6 +7,8 @@
 
 ### Added
 
+- Agent 会话「中途输入」与「计划」：Agent 运行期间再输入消息不再被静默丢弃——即时显示用户气泡并入队，下一主 Agent 周期并入、与当前进度对比后重排后续行动（评审微流程跑完后接续处理排队消息；无在跑则直接起一轮规划）。规划 Agent 维护一份可视的「计划」(todo) 面板：每轮给出 / 更新步骤、随进展勾选、收到新输入按最新指令重排；随会话持久化，切 PR / 重启经 `agent:getSession` 恢复。新增 `agent:enqueueMessage` 通道与 `agent:planUpdated` 事件。
+
 - Diff 选中代码引用进提问：在 Diff 选中若干行后，聊天输入栏 AutoReview 按钮右侧出现「N 行已选中」角标（竖线分隔），点击可切换忽略态（eye-slash + 置灰）——忽略时本条消息不带引用。发送 `/ask` 或自然语言提问时，选中代码作为**隐式上下文**注入模型（带文件路径 + 行范围 + base/head 侧），不进入会话气泡、不落盘（`agent:ask` / `pragent:run` 增可选 `referencedContext`，经 EXTRA_INSTRUCTIONS / 规划当轮提示注入，且约束不透传给 pr-agent 工具）。引用不受「可评论区域」限制，未改动的上下文行同样可引用。统一(inline)视图下删除行无法被光标选中，但 head 选区跨到的删除 / 改动 hunk 会据 diff 映射从基线侧取出真实代码一并引用（删除内容也能像添加行一样被引用）；并排视图删除行可直接选中。切换 PR / 选区塌缩即清。
 
 - Diff 滚动条总览标尺：diff 增 / 改 / 删与「有评论的行」投影到滚动条旁的总览标尺（编辑模式风格，按 1/3 分道、中间留白，不启用 minimap），拖动滚动条即可快速定位变更与评论位置。增 / 改按行高显示；并排视图删除在左侧 original 编辑器标尺按行高标红，统一(inline)视图下删除行无 model 行号、以删除点标记。
@@ -35,6 +37,8 @@
   - 追问判读瘦身为轻量路由：判「是否需追问」不再带整份 agent 系统上下文（SOUL / 记忆 / 用户档 / 工具目录 / 规则 / PR 元数据），仅凭 describe + review 结果判断，输入 token 大降；追问问题随会话语言书写（不再固定英文）。
   - 编排通道（判读 / 收尾 / 规划）全模式低推理 + 判读输出封顶：CLI（claude→haiku、codex→reasoning_effort=low）之外，API / litellm 路径补 `reasoning_effort=low`（仅对 reasoning 类模型生效、其余无副作用），并给判读这类轻量路由封顶输出，避免一个 yes/no 决策吐大量 token；均仅作用于编排 chat，`/review` 等工具 run 仍满档推理。
   - 全局系统前缀走 Anthropic 1h 提示缓存：系统上下文拆为「全局稳定前缀（SOUL / AGENTS / 工具目录 / 记忆 / 用户档）」+「PR/运行相关尾部」，稳定前缀标服务端提示缓存（ephemeral, 1h），跨 PR / 运行在窗口内命中、降延迟与成本；OpenAI / DeepSeek 自带自动前缀缓存、无需额外处理。
+
+- **Agent 引擎可维护性重构**（行为不变）：① 抽出可插拔「步骤」抽象（StepRecorder / StepHandler），评审微流程拆为有序步骤（describe-review / judge / asks / summary）+ 注册表、规划 ReAct 抽为单步循环，统一此前各自重复的记步与用量累计；② 编排提示词外置到 `resources/prompts/*.md`（协议 / 判读 / 总结 / AutoPilot 判定，Vite `?raw` 内联 + `{{占位符}}` 注入、残留占位即抛错），脚手架模板归入 `resources/template/`。
 
 - **前端代码结构重构（可维护性）**：纯结构调整，对外接口与界面 / 交互行为均不变。重点：
   - 组件按 `common/`（基础 UI）/ `layout/`（应用骨架）/ `features/`（业务领域）三层归类；样式 `styles/` 同构归并
