@@ -1,4 +1,26 @@
 {
+  "agent": {
+    "steps": {
+      "describe": "PR-Beschreibung erstellen",
+      "judge": "Entscheiden, ob schwerwiegende Probleme eine Rückfrage erfordern",
+      "judgeNone": "Keine schwerwiegenden Probleme — keine Rückfrage",
+      "judgeSevere_one": "Schwerwiegend — {{count}} Rückfrage",
+      "judgeSevere_other": "Schwerwiegend — {{count}} Rückfragen",
+      "parseFail": "Empfehlung konnte nicht geparst werden — manuelle Prüfung",
+      "rejectedPrefix": "Abgelehnt: ",
+      "review": "Code-Review-Befunde erstellen",
+      "summary": "Beschreibung und Befunde zu einer Review-Zusammenfassung zusammenfassen"
+    },
+    "summarySections": {
+      "findings": "Wichtige Erkenntnisse",
+      "overview": "Zusammenfassung",
+      "suggestions": "Empfehlungen"
+    },
+    "termination": {
+      "aborted": "Vom Benutzer abgebrochen",
+      "maxSteps": "Schrittlimit erreicht"
+    }
+  },
   "dialog": {
     "selectDirectory": "Verzeichnis auswählen"
   },

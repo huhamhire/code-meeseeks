@@ -26,7 +26,7 @@ export interface ReviewOrchestratorDeps {
   chat(input: { system: string; user: string; maxOutputTokens?: number }): Promise<ToolText>;
   /** 每产生一个编排步骤即回调（持久化 / 流式推送）。 */
   onStep?(step: AgentStep): void | Promise<void>;
-  /** 用户停止：每步边界检查，已 abort 即抛 `用户暂停` 中止微流程（思考阶段也能立即终止）。 */
+  /** 用户停止：每步边界检查，已 abort 即抛 `aborted` 中止微流程（思考阶段也能立即终止）。 */
   signal?: AbortSignal;
 }
 
@@ -35,6 +35,10 @@ export interface ReviewOrchestratorInput {
   pr: AssemblePrMeta;
   matchedRule?: Rule | null;
   language?: string;
+  /** 步骤展示文案（主进程 i18n 解析后注入）；省略回落 DEFAULT_STEP_LABELS（en-US）。 */
+  labels?: AgentStepLabels;
+  /** 总结三段骨架标题（主进程 i18n 注入）；省略回落 DEFAULT_SUMMARY_SECTIONS（en-US）。 */
+  summarySections?: readonly [string, string, string];
   /** 注入提示词的工具目录（含修改红线标注，见 buildToolCatalog）。 */
   toolCatalog?: ToolCatalogEntry[];
   /** 条件性追问 /ask 的硬上限（默认 2）。 */
@@ -51,23 +55,19 @@ export interface ReviewOrchestratorResult {
   terminationReason?: string;
 }
 
-/** 评审总结的统一三段式骨架标题（按语言本地化，缺省回落英文）：固定结构 → 输出稳定、可预期。
- *  顺序固定为 概述 / 关键发现 / 建议。 */
-const SUMMARY_SECTIONS: Record<string, readonly [string, string, string]> = {
-  'zh-CN': ['摘要', '关键发现', '建议'],
-  'en-US': ['Summary', 'Key findings', 'Suggestions'],
-  'ja-JP': ['概要', '主な指摘', '提案'],
-  'de-DE': ['Zusammenfassung', 'Wichtige Erkenntnisse', 'Empfehlungen'],
-};
-export function summarySections(language?: string): readonly [string, string, string] {
-  return SUMMARY_SECTIONS[language ?? 'en-US'] ?? SUMMARY_SECTIONS['en-US']!;
-}
+/** 评审总结三段式骨架标题的**默认值（en-US 兜底）**：顺序固定为 概述 / 关键发现 / 建议。多语言译文由
+ *  调用方（主进程 i18n 资源）解析后经 input.summarySections 注入；未注入时回落本默认。 */
+export const DEFAULT_SUMMARY_SECTIONS: readonly [string, string, string] = [
+  'Summary',
+  'Key findings',
+  'Suggestions',
+];
 
 /**
  * 编排 / 规划步骤行里**直接展示**给用户的固定文案（thought / 判读结果 / 兜底建议理由 / 拒绝前缀）。
- * 这些串经 transcript 持久化、由渲染层逐字显示（不走 i18next key 映射），故必须在生成时按会话语言
- * （input.language）落地、缺省回落英文——与 summarySections 同策略。LLM 生成的自由 thought 本就跟随
- * 作答语言，不在此列。事后切 UI 语言不回改历史步骤（同总结正文）。
+ * 这些串经 transcript 持久化、由渲染层逐字显示（不走 i18next key 映射），故须在**生成时**就是目标语言文本：
+ * 由调用方（主进程 i18n 资源）解析后经 input.labels 注入，agent 内仅留 en-US 兜底（DEFAULT_STEP_LABELS）。
+ * LLM 生成的自由 thought 本就跟随作答语言，不在此列；事后切 UI 语言不回改历史步骤（同总结正文）。
  */
 export interface AgentStepLabels {
   /** 微流程「生成 PR 描述」步思考。 */
@@ -87,51 +87,17 @@ export interface AgentStepLabels {
   /** 规划步：工具调用被红线拒绝的结果前缀（后接具体原因）。 */
   rejectedPrefix: string;
 }
-const STEP_LABELS: Record<string, AgentStepLabels> = {
-  'zh-CN': {
-    describe: '生成 PR 描述',
-    review: '生成代码评审发现',
-    judge: '判断是否存在需追问的严重问题',
-    judgeSevere: (n) => `严重，追问 ${String(n)} 个`,
-    judgeNone: '无严重问题，不追问',
-    summary: '综合描述与审查发现，生成评审总结',
-    parseFail: '无法解析建议，转人工复核',
-    rejectedPrefix: '拒绝：',
-  },
-  'en-US': {
-    describe: 'Generate the PR description',
-    review: 'Generate the code review findings',
-    judge: 'Decide whether there are severe issues needing follow-up',
-    judgeSevere: (n) => `Severe — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
-    judgeNone: 'No severe issues — no follow-up',
-    summary: 'Synthesize the description and findings into a review summary',
-    parseFail: 'Could not parse a recommendation — routing to manual review',
-    rejectedPrefix: 'Rejected: ',
-  },
-  'ja-JP': {
-    describe: 'PR の説明を生成',
-    review: 'コードレビュー指摘を生成',
-    judge: '追加質問が必要な重大な問題があるか判断',
-    judgeSevere: (n) => `重大、追加質問 ${String(n)} 件`,
-    judgeNone: '重大な問題なし、追加質問なし',
-    summary: '説明とレビュー指摘を統合してレビュー要約を生成',
-    parseFail: '提案を解析できないため、手動レビューに回します',
-    rejectedPrefix: '却下：',
-  },
-  'de-DE': {
-    describe: 'PR-Beschreibung erstellen',
-    review: 'Code-Review-Befunde erstellen',
-    judge: 'Entscheiden, ob schwerwiegende Probleme eine Rückfrage erfordern',
-    judgeSevere: (n) => `Schwerwiegend — ${String(n)} Rückfrage${n === 1 ? '' : 'n'}`,
-    judgeNone: 'Keine schwerwiegenden Probleme — keine Rückfrage',
-    summary: 'Beschreibung und Befunde zu einer Review-Zusammenfassung zusammenfassen',
-    parseFail: 'Empfehlung konnte nicht geparst werden — manuelle Prüfung',
-    rejectedPrefix: 'Abgelehnt: ',
-  },
+/** 步骤文案默认值（en-US 兜底）；多语言由主进程 i18n 解析后经 input.labels 注入，未注入时回落本默认。 */
+export const DEFAULT_STEP_LABELS: AgentStepLabels = {
+  describe: 'Generate the PR description',
+  review: 'Generate the code review findings',
+  judge: 'Decide whether there are severe issues needing follow-up',
+  judgeSevere: (n) => `Severe — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
+  judgeNone: 'No severe issues — no follow-up',
+  summary: 'Synthesize the description and findings into a review summary',
+  parseFail: 'Could not parse a recommendation — routing to manual review',
+  rejectedPrefix: 'Rejected: ',
 };
-export function stepLabels(language?: string): AgentStepLabels {
-  return STEP_LABELS[language ?? 'en-US'] ?? STEP_LABELS['en-US']!;
-}
 
 /**
  * 跑一次评审微流程：describe → review →（仅严重问题）条件追问 ≤N → 收尾总结 + 建议。只用只读工具
@@ -141,10 +107,11 @@ export async function runReviewMicroflow(
   deps: ReviewOrchestratorDeps,
   input: ReviewOrchestratorInput,
 ): Promise<ReviewOrchestratorResult> {
-  const labels = stepLabels(input.language);
+  const labels = input.labels ?? DEFAULT_STEP_LABELS;
   const rec = createStepRecorder(deps.onStep);
   const checkAbort = (): void => {
-    if (deps.signal?.aborted) throw new Error('用户暂停');
+    // 抛稳定 code 'aborted'（非本地化文案）：主进程据 signal.aborted / 此 code 收尾为 paused 并落本地化文案。
+    if (deps.signal?.aborted) throw new Error('aborted');
   };
   // base system context（工具目录留空：微流程不暴露自由工具选择）。
   const system = assembleSystemContext({

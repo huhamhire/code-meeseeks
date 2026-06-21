@@ -35,6 +35,7 @@ export type {
   JudgeDecision,
 } from './autopilot-judge.js';
 export type {
+  AgentStepLabels,
   ReviewOrchestratorDeps,
   ReviewOrchestratorInput,
   ReviewOrchestratorResult,

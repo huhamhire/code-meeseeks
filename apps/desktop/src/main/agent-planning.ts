@@ -23,6 +23,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
+import { buildAgentStepLabels, buildSummarySections, mapTerminationReason } from './agent-labels.js';
 
 /**
  * 把自由规划编排器（runPlanningAgent）接到主进程：自然语言入口的「对话即委派」。
@@ -147,6 +148,8 @@ export async function runAgentPlanning(
         toolCatalog: deps.toolCatalog,
         matchedRule: deps.matchedRule,
         language: deps.language,
+        labels: buildAgentStepLabels(),
+        summarySections: buildSummarySections(),
         userRequest,
         history,
         referencedContext: deps.referencedContext,
@@ -155,7 +158,7 @@ export async function runAgentPlanning(
     );
 
     // 把 Agent 收尾回答追加为一条助手消息（评审类带 recommendation）；暂停 / 空回答不记。
-    if (result.finalText && result.terminationReason !== '用户暂停') {
+    if (result.finalText && result.terminationReason !== 'aborted') {
       await appendAgentMessage(
         deps.stateStore,
         pr.localId,
@@ -175,21 +178,25 @@ export async function runAgentPlanning(
 
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {
-        status: result.terminationReason === '用户暂停' ? 'paused' : 'done',
+        status: result.terminationReason === 'aborted' ? 'paused' : 'done',
         summary: result.finalText,
         recommendation: result.recommendation,
         finishedAt: now().toISOString(),
-        terminationReason: result.terminationReason,
+        terminationReason: mapTerminationReason(result.terminationReason),
       })) ?? session
     );
   } catch (err) {
     // 用户停止（abort 杀掉在跑的 chat / 工具子进程 → 抛错）→ 干净的 paused 收尾，不当失败报错。
-    const aborted = deps.signal?.aborted || (err instanceof Error && err.message === '用户暂停');
+    const aborted = deps.signal?.aborted || (err instanceof Error && err.message === 'aborted');
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {
         status: aborted ? 'paused' : 'failed',
         finishedAt: now().toISOString(),
-        terminationReason: aborted ? '用户暂停' : err instanceof Error ? err.message : String(err),
+        terminationReason: aborted
+          ? mapTerminationReason('aborted')
+          : err instanceof Error
+            ? err.message
+            : String(err),
       })) ?? session
     );
   }

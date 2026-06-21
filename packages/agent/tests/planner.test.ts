@@ -125,7 +125,7 @@ describe('runPlanningAgent', () => {
       userRequest: 'loop',
       maxSteps: 2,
     });
-    expect(r.terminationReason).toBe('步数上限中止');
+    expect(r.terminationReason).toBe('max_steps');
   });
 
   it('stops immediately when the signal is aborted', async () => {
@@ -136,7 +136,7 @@ describe('runPlanningAgent', () => {
       { ...deps, signal: ac.signal },
       { context, pr, toolCatalog: catalog, userRequest: 'x' },
     );
-    expect(r.terminationReason).toBe('用户暂停');
+    expect(r.terminationReason).toBe('aborted');
     expect(r.steps).toHaveLength(0);
   });
 
