@@ -358,13 +358,17 @@ export async function runReviewMicroflow(
     usage: judge.usage,
   });
 
-  const askResults: string[] = [];
-  for (const q of questions) {
-    checkAbort();
-    const ask = await deps.runTool({ tool: 'ask', question: q });
+  // 多个追问同属一个阶段、彼此独立（各自只读 PR、互不依赖），故并行派发——与上面 describe + review
+  // 同模式：runStaggered 保序（askResults 与 questions 一一对应）、错开 100~200ms 起跑，实际并发度仍受
+  // 运行队列 max_concurrency 兜底。questions 为空时不触发任何调用。
+  checkAbort();
+  const asks = questions.length
+    ? await runStaggered(questions, (q) => deps.runTool({ tool: 'ask', question: q }))
+    : [];
+  const askResults = asks.map((ask, i) => {
     usage = addUsage(usage, ask.usage);
-    askResults.push(`Q: ${q}\nA: ${ask.text}`);
-  }
+    return `Q: ${questions[i]}\nA: ${ask.text}`;
+  });
 
   // 3. 收尾总结 + 建议
   checkAbort();
