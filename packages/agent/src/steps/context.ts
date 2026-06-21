@@ -48,10 +48,11 @@ export function createStepRecorder(onStep?: (step: AgentStep) => void | Promise<
 }
 
 /**
- * 可插拔步骤：一个具名处理器，对给定运行上下文 `Ctx` 执行一段编排逻辑（记步、调工具 / LLM、写回累加器）。
- * 评审微流程是一组 StepHandler 的有序「注册表」；规划是单个循环步骤。`name` 便于调试 / 注册表可读。
+ * 可插拔步骤：一个具名处理器，对给定运行上下文 `Ctx` 执行一段编排逻辑（记步、调工具 / LLM、写回累加器），
+ * 返回 `R`。评审微流程是一组 `StepHandler<Ctx>`（R=void）的有序「注册表」、顺序跑；规划是单个
+ * `StepHandler<Ctx, PlanCycleOutcome>`、被驱动反复跑直至收尾。`name` 便于调试 / 注册表可读。
  */
-export interface StepHandler<Ctx> {
+export interface StepHandler<Ctx, R = void> {
   readonly name: string;
-  run(ctx: Ctx): Promise<void>;
+  run(ctx: Ctx): Promise<R>;
 }
