@@ -10,19 +10,15 @@ import { createLogger } from '@meebox/logger';
 import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import { Poller } from '@meebox/poller';
 import { RepoMirrorManager } from '@meebox/repo-mirror';
-import type { PlatformAdapter, PlatformUser, PrAgentStatus } from '@meebox/shared';
+import type { PrAgentStatus } from '@meebox/shared';
 import { JsonFileStateStore } from '@meebox/state-store';
-import { buildAdapters, type ConnectionRuntime } from './adapters.js';
+import { createConnectionRuntime } from './connections-runtime.js';
 import { createSplash } from './splash.js';
 import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
 import { buildProxyEnv } from './utils/proxy.js';
 import { fixMacPath } from './utils/mac-path.js';
-import {
-  readConnectionStates,
-  writeConnectionStates,
-  type ConnectionState,
-} from './utils/connection-state.js';
+import { readConnectionStates } from './utils/connection-state.js';
 import { readWindowState, writeWindowState, type WindowState } from './utils/window-state.js';
 import { checkForUpdate } from './utils/update-check.js';
 import { publishUpdateResult } from './utils/update-state.js';
@@ -109,9 +105,6 @@ let ipcControl:
       terminateAgentsForGonePrs: () => void;
     }
   | undefined;
-// 连接级本地状态（按 connectionId）：持久化上次 ping 的 currentUser，用于建连接时预热，
-// 使首轮 poll 不依赖网络即可判 approved。启动时从 state store 载入一次，ping 后增量回写。
-let connectionStates: Record<string, ConnectionState> = {};
 // 主窗口本地状态（尺寸 / 最大化）：启动时载入一次，建窗时恢复、resize/move/close 时回写。
 let windowState: WindowState = {};
 
@@ -179,15 +172,12 @@ async function start(): Promise<void> {
 
   stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
 
-  // 载入连接级本地状态（含上次 ping 的 currentUser）。文件不存在（首跑）→ 空表；读取/解析
-  // 失败（损坏）→ 也降级为空表并记一条 warn。降级后果仅是：首轮 poll 无预热身份，待异步 ping
-  // 补到 currentUser 后自动重分类（见 pingConnections），功能不受损、只是首轮可能短暂偏「待处理」。
-  try {
-    connectionStates = await readConnectionStates(stateStore);
-  } catch (err) {
+  // 载入连接级本地状态（含上次 ping 的 currentUser）。缺失（首跑）/ 损坏 → 降级空表 + warn；后果仅首轮
+  // poll 无预热身份，待异步 ping 补到 currentUser 后自动重分类，功能不受损（接线 / ping 见 connections-runtime）。
+  const connectionStates = await readConnectionStates(stateStore).catch((err: unknown) => {
     logger.warn({ err }, 'read connection states failed; degrade to empty (no cached identities)');
-    connectionStates = {};
-  }
+    return {};
+  });
 
   // 载入窗口状态（尺寸/最大化）。缺失或损坏 → 空对象，建窗回退默认尺寸。
   try {
@@ -196,105 +186,6 @@ async function start(): Promise<void> {
     logger.warn({ err }, 'read window state failed; use default window size');
     windowState = {};
   }
-
-  // 连接运行时（可变持有）：adapters 全量（IPC 按 id 查任意连接，历史 PR 都能操作）
-  // + adapterByHost（repo-mirror 取 clone url）。reconfigureConnections 原地替换内容，
-  // IPC handler / repoMirror 经引用读到新值 → 设置页改连接热生效，无需重启。
-  const connectionRuntime: ConnectionRuntime = { adapters: [], adapterByHost: new Map() };
-
-  // 连接「接线」与「ping」解耦，实现「启动不依赖网络」：
-  // - wireConnections（同步、无网络）：重建 adapters/byHost、用本地持久化的上次身份预热
-  //   currentUser、把活动连接喂给 poller。建窗前即可调用 → app:connections 能力位与首轮判
-  //   approved 都不等网络。
-  // - pingConnections（全异步、有网络）：刷新远端身份并增量持久化；活动连接身份因此变化
-  //   （含「本地无记录、ping 才首次取得」）则补一轮 poll 重新分类。不在启动关键路径。
-
-  const activeConnectionIds = (): string[] =>
-    connectionRuntime.adapters
-      .filter((a) => a.connectionId === bootstrap.config.active_connection_id)
-      .map((a) => a.connectionId);
-
-  const wireConnections = (): void => {
-    const adapters = buildAdapters(bootstrap.config.connections, bootstrap.config.proxy);
-    const byHost = new Map<string, PlatformAdapter>();
-    for (const { connectionId, adapter } of adapters) {
-      // 预热 currentUser：有本地记录就先填上（无记录则保持 null，由 pingConnections 兜底）。
-      const cachedUser = connectionStates[connectionId]?.user;
-      if (cachedUser) adapter.setCurrentUser?.(cachedUser);
-      const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
-      if (!conn) continue;
-      try {
-        byHost.set(new URL(conn.base_url).hostname, adapter);
-      } catch (err) {
-        logger.warn({ err, connectionId, base_url: conn.base_url }, 'invalid base_url');
-      }
-    }
-    connectionRuntime.adapters = adapters;
-    connectionRuntime.adapterByHost = byHost;
-    // 只轮询当前启用的连接（同时仅一条）；其余仅保留配置不轮询
-    poller.setConnections(
-      adapters.filter((a) => a.connectionId === bootstrap.config.active_connection_id),
-    );
-  };
-
-  // 持久化某连接的 currentUser（仅身份变化时写盘，避免无谓 IO）。写盘失败不影响运行。
-  const persistConnectionUser = async (
-    connectionId: string,
-    user: PlatformUser | null,
-  ): Promise<void> => {
-    const prevName = connectionStates[connectionId]?.user?.name ?? null;
-    if (prevName === (user?.name ?? null)) return;
-    connectionStates = {
-      ...connectionStates,
-      [connectionId]: { ...connectionStates[connectionId], user },
-    };
-    try {
-      await writeConnectionStates(stateStore, connectionStates);
-    } catch (err) {
-      logger.warn({ err, connectionId }, 'persist connection user failed');
-    }
-  };
-
-  // 全异步 ping：刷新 + 持久化 currentUser；活动连接身份变化（含首次取得）则补一轮 poll 重新分类。
-  const pingConnections = (): void => {
-    const activeId = bootstrap.config.active_connection_id;
-    for (const { connectionId, adapter } of connectionRuntime.adapters) {
-      const isActive = connectionId === activeId;
-      const beforeName = adapter.getCurrentUser()?.name ?? null;
-      // 活动连接启动时无缓存身份 → poller.start(immediate=false) 没跑首轮；此处 ping settle 后
-      // 必须触发**首次同步**（无论 ping 成功与否：成功则带确认的身份分类，失败也用 PAT 拉一轮，
-      // 不让「无身份」永远等到下个 interval）。这就是「先确认身份，再立即同步一次」。
-      const hadIdentity = beforeName !== null;
-      void adapter.ping().then(
-        async (r) => {
-          logger.info(
-            { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
-            'adapter ping',
-          );
-          const user = adapter.getCurrentUser();
-          await persistConnectionUser(connectionId, user);
-          // 触发重分类/首次同步：活动连接且（身份变化 含首次取得/换号，或本就无身份需补首轮）。
-          // poller.tick 已做「进行中则补跑」，不会因撞上首轮 poll 而丢失。
-          if (isActive && (!hadIdentity || (user?.name ?? null) !== beforeName)) {
-            void poller.tick();
-          }
-        },
-        (err: unknown) => {
-          logger.warn({ err, connectionId }, 'adapter ping failed');
-          // ping 失败但活动连接本就无缓存身份（首轮被跳过）→ 仍用 PAT 兜底同步一次，避免看似没同步。
-          if (isActive && !hadIdentity) void poller.tick();
-        },
-      );
-    }
-  };
-
-  // 设置页 config:setConnections / setProxy 后的热生效：重接线 + 归档非活动连接（本地 IO）+ 异步
-  // ping。调用方（IPC）随后会 poller.tick() 立即刷新列表，ping 完成若改了身份会再补一轮。
-  const reconfigureConnections = async (): Promise<void> => {
-    wireConnections();
-    await poller.archiveConnectionsExcept(activeConnectionIds());
-    pingConnections();
-  };
 
   poller = new Poller({
     connections: [],
@@ -333,10 +224,19 @@ async function start(): Promise<void> {
     },
   });
 
+  // 连接运行时（接线 / ping / 热重配）：依赖已建好的 poller；repoMirror 经 conns.runtime 读 adapterByHost。
+  const conns = createConnectionRuntime({
+    bootstrap,
+    stateStore,
+    poller,
+    logger,
+    initialStates: connectionStates,
+  });
+
   repoMirror = new RepoMirrorManager({
     reposDir: bootstrap.paths.reposDir,
     getCloneUrl: async (repo) => {
-      const adapter = connectionRuntime.adapterByHost.get(repo.host);
+      const adapter = conns.runtime.adapterByHost.get(repo.host);
       if (!adapter) throw new Error(`no adapter for host ${repo.host}`);
       return adapter.getCloneUrl({
         projectKey: repo.projectKey,
@@ -355,7 +255,7 @@ async function start(): Promise<void> {
 
   // 建窗前同步把连接接好（无网络）：构建 adapters、用本地持久化身份预热 currentUser、喂 poller。
   // 这样 app:connections 与首轮判 approved 都不依赖网络；ping 留到建窗后全异步刷新。
-  wireConnections();
+  conns.wire();
 
   ipcControl = registerIpcHandlers({
     bootstrap,
@@ -366,8 +266,8 @@ async function start(): Promise<void> {
     embeddedPythonPath,
     stateStore,
     poller,
-    connectionRuntime,
-    reconfigureConnections,
+    connectionRuntime: conns.runtime,
+    reconfigureConnections: conns.reconfigure,
     repoMirror,
   });
 
@@ -397,13 +297,13 @@ async function start(): Promise<void> {
   });
 
   // 启动关键路径已无网络调用：归档（本地 IO）后启动 poller。
-  await poller.archiveConnectionsExcept(activeConnectionIds());
-  // 活动连接是否已有缓存身份（wireConnections 已用本地持久化身份预热）：
+  await poller.archiveConnectionsExcept(conns.activeConnectionIds());
+  // 活动连接是否已有缓存身份（conns.wire 已用本地持久化身份预热）：
   // - 有 → poller 立即跑首轮（me 就绪，分类正确）；
-  // - 无 → **不跑 me=null 的半成品首轮**，只装定时器；首次同步改由下面 pingConnections 在 ping
-  //   确认身份后立即触发（见 pingConnections：无身份的活动连接 ping settle 后必 tick 一次）。
+  // - 无 → **不跑 me=null 的半成品首轮**，只装定时器；首次同步改由下面 conns.ping 在 ping
+  //   确认身份后立即触发（无身份的活动连接 ping settle 后必 tick 一次）。
   // 这样「首次启动 / state 缺失」时也是「先确认身份，再同步一次」，避免首轮全标 pending 或看似没同步。
-  const activeHasIdentity = connectionRuntime.adapters.some(
+  const activeHasIdentity = conns.runtime.adapters.some(
     (a) =>
       a.connectionId === bootstrap.config.active_connection_id &&
       a.adapter.getCurrentUser() != null,
@@ -419,7 +319,7 @@ async function start(): Promise<void> {
   );
   // ping 全异步刷新远端身份（不在启动关键路径）：刷新/持久化 currentUser，身份变化则补一轮 poll。
   // 这是「本地无身份记录」（首跑 / state 缺失）时的兜底来源；ping 慢或不可达都不影响已启动的 UI。
-  pingConnections();
+  conns.ping();
 }
 
 // 退出清理：停轮询 + 终止所有进行中的 pr-agent run 的子进程树（python + litellm 等孙进程）。
