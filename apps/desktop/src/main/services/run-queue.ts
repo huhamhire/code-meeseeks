@@ -4,7 +4,13 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { loadAgentRules } from '@meebox/agent';
 import type { PragentRunInfo } from '@meebox/ipc';
-import { PrAgentRunError } from '@meebox/pr-agent-bridge';
+import {
+  PrAgentRunError,
+  askLanguageSuffixFor,
+  buildExtraInstructions,
+  extraInstructionsEnvKey,
+  stripAskQuestionEcho,
+} from '@meebox/pr-agent-bridge';
 import {
   dropPendingFindingDrafts,
   finishReviewRun,
@@ -24,12 +30,6 @@ import { buildPragentEnv, resolveActiveLlmProfile } from '../utils/agent.js';
 import { buildPrContext } from '../utils/pr-context.js';
 import { buildProxyEnv } from '../utils/proxy.js';
 import type { ServiceContext } from './context.js';
-import {
-  askLanguageSuffixFor,
-  buildExtraInstructions,
-  extraInstructionsEnvKey,
-  stripAskQuestionEcho,
-} from './pragent-prompts.js';
 import {
   accumulateUsageSentinel,
   finalizeUsage,
@@ -354,7 +354,7 @@ export class RunQueueService {
       }
 
       // PR 上下文 + 命中规则：local provider 不会自己去远端拉，须现读喂给 EXTRA_INSTRUCTIONS；
-      // /ask 跳过（用户问题往往跟历史评论 / 规约无关）。提示词文本的组装见 pragent-prompts。
+      // /ask 跳过（用户问题往往跟历史评论 / 规约无关）。提示词文本的组装见 @meebox/pr-agent-bridge 的 prompts。
       let prContext = '';
       let matchedRuleInstructions = '';
       let matchedRuleId: string | undefined;
@@ -386,7 +386,7 @@ export class RunQueueService {
         }
       }
 
-      // 提示词组装收口到 pragent-prompts：语言指示 / anchor marker / 排版 / PR 上下文 / 命中规则。
+      // 提示词组装收口到 @meebox/pr-agent-bridge 的 prompts：语言指示 / anchor marker / 排版 / PR 上下文 / 命中规则。
       const extraInstructions = buildExtraInstructions({
         tool: req.tool,
         language: getMainLanguage(),
