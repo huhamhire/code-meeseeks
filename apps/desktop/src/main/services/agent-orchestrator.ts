@@ -16,12 +16,13 @@ import {
   updateAgentSession,
   writeAutopilotLedger,
 } from '@meebox/poller';
+import { buildChatEnv } from '@meebox/pr-agent-bridge';
 import { pickMatchingRule } from '@meebox/rules';
 import type { AgentSession, AgentStep, StoredPullRequest, TokenUsage } from '@meebox/shared';
 import { runAgentPlanning } from '../agent-planning.js';
 import { runAgentReview } from '../agent-review.js';
 import { getMainLanguage, t } from '../i18n/index.js';
-import { buildPragentEnv, resolveActiveLlmProfile } from '../utils/agent.js';
+import { resolveActiveLlmProfile } from '../utils/agent.js';
 import { buildProxyEnv } from '../utils/proxy.js';
 import type { ServiceContext } from './context.js';
 import type { RunQueueService } from './run-queue.js';
@@ -328,23 +329,17 @@ export class AgentOrchestratorService {
     if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
     // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。
     const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
+    // 代理 env 先铺底（非 pr-agent 范畴）；LLM 凭据/模型 + 编排 chat 专属档（响应语言 / 低推理档 /
+    // 提示缓存）由 bridge 的 buildChatEnv 按意图组装——这些 pr-agent / shim 契约 key 收口在
+    // @meebox/pr-agent-bridge，主服务只表达意图。低推理档与缓存仅作用于本 chat spawn：pr-agent 工具 run
+    // （/review 等）的 env 不含 → /review 仍满档推理（编排通道是路由 + 轻量综合，故降档提速）。
     const env: Record<string, string> = {
       ...buildProxyEnv(bootstrap.config.proxy),
-      ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
-      CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
-      // Agent 编排通道（规划 / 判读 / 收尾 / 对话）是路由 + 轻量综合，非深度代码分析（那在
-      // pr-agent /review 里）。两条路径都调低推理档提速，且仅作用于本 chat spawn——pr-agent 工具 run
-      // 的 env 不含这两项 → /review 仍满档推理。
-      // - 本机 CLI 模式：codex → model_reasoning_effort=low、claude → haiku（见 cli/specs）。
-      MEEBOX_CLI_REASONING: 'low',
-      // - API / litellm 模式：对 reasoning 类模型（o 系 / deepseek-reasoner 等）设 reasoning_effort=low
-      //   （pr-agent 仅对 support_reasoning_models 应用，非 reasoning 模型该项无副作用），避免编排里
-      //   一个 yes/no 路由判读也吐大量思考 token、拖慢响应。
-      CONFIG__REASONING_EFFORT: 'low',
-      // 提示缓存（服务端、5min TTL）：为编排 chat 的大块 system 前缀打 cache_control。多轮规划逐轮共享
-      // 同一 system → 第 2 轮起命中、降延迟/成本（仅 Anthropic 需显式标；OpenAI/DeepSeek 自动前缀缓存）。
-      // 仅作用于本 chat spawn；判读 system 过小不达缓存粒度自动跳过（见 litellm_handler）。
-      MEEBOX_CHAT_CACHE: '1',
+      ...buildChatEnv(activeLlm, {
+        responseLanguage: getMainLanguage(),
+        lowReasoning: true,
+        promptCache: true,
+      }),
     };
     // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
     const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
