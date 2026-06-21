@@ -10,7 +10,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
-import { buildAgentStepLabels, buildSummarySections, mapTerminationReason } from './agent-labels.js';
+import { buildStepLabels, buildSummarySections, mapTerminationReason } from './labels.js';
 
 /**
  * 把纯逻辑的 `runReviewMicroflow` 接到主进程能力上（见 docs/arch/06-agent.md
@@ -27,7 +27,7 @@ function reviewRunText(run: ReviewRun): string {
   return (run.stdout ?? '').split(STDOUT_LOG_SEP)[0]?.trim() ?? '';
 }
 
-export interface AgentReviewDeps {
+export interface ReviewDeps {
   stateStore: StateStore;
   /** 入队一个 pr-agent run，resolve 完成的 ReviewRun（与用户手动 run 共用队列）。 */
   enqueueRun: (
@@ -56,9 +56,9 @@ export interface AgentReviewDeps {
  * 对一个 PR 跑评审微流程并落盘会话。返回收尾后的 AgentSession（成功 done / 失败 failed）。
  * 微流程内部工具失败会抛错，这里兜成 failed 会话而非向上抛（背景自动化不该崩主流程）。
  */
-export async function runAgentReview(
+export async function runReview(
   pr: StoredPullRequest,
-  deps: AgentReviewDeps,
+  deps: ReviewDeps,
   now: () => Date = () => new Date(),
 ): Promise<AgentSession> {
   // 步数上限按微流程模板推导：describe + review + ≤N 追问 + 总结（+判定余量）。
@@ -94,7 +94,7 @@ export async function runAgentReview(
         pr: { title: pr.title, description: pr.description, targetBranch: pr.targetRef.displayId },
         matchedRule: deps.matchedRule,
         language: deps.language,
-        labels: buildAgentStepLabels(),
+        labels: buildStepLabels(),
         summarySections: buildSummarySections(),
         toolCatalog: deps.toolCatalog,
         maxFollowupAsks: deps.maxFollowupAsks,

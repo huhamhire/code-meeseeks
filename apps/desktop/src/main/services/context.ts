@@ -6,7 +6,7 @@ import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { PrAgentStatus } from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { ConnectionRuntime } from '../adapters.js';
-import type { AgentOrchestratorService } from './agent-orchestrator.js';
+import type { Orchestrator } from './agent/index.js';
 import { broadcast } from './broadcast.js';
 import { PrService } from './pr-service.js';
 import type { RunQueue } from './pr-agent/index.js';
@@ -50,7 +50,7 @@ export interface ServiceContext extends RegisterDeps {
  */
 export interface ControllerContext extends ServiceContext {
   runQueue: RunQueue;
-  orchestrator: AgentOrchestratorService;
+  orchestrator: Orchestrator;
 }
 
 export function createServiceContext(deps: RegisterDeps): ServiceContext {

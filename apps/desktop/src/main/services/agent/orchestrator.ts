@@ -19,14 +19,14 @@ import {
 import { buildChatEnv } from '@meebox/pr-agent-bridge';
 import { pickMatchingRule } from '@meebox/rules';
 import type { AgentSession, AgentStep, StoredPullRequest, TokenUsage } from '@meebox/shared';
-import { runAgentPlanning } from '../agent-planning.js';
-import { runAgentReview } from '../agent-review.js';
-import { getMainLanguage, t } from '../i18n/index.js';
-import { resolveActiveLlmProfile } from '../utils/agent.js';
-import { buildProxyEnv } from '../utils/proxy.js';
-import type { ServiceContext } from './context.js';
-import type { RunQueue } from './pr-agent/index.js';
-import { accumulateUsageSentinel, finalizeUsage, newUsageAcc } from './usage.js';
+import { getMainLanguage, t } from '../../i18n/index.js';
+import { resolveActiveLlmProfile } from '../../utils/agent.js';
+import { buildProxyEnv } from '../../utils/proxy.js';
+import type { ServiceContext } from '../context.js';
+import type { RunQueue } from '../pr-agent/index.js';
+import { accumulateUsageSentinel, finalizeUsage, newUsageAcc } from '../usage.js';
+import { runPlanning } from './planning.js';
+import { runReview } from './review.js';
 
 // 共享 chat 通道：system + user → 文本 + usage。agent:run 评审与 AutoPilot 都用。
 type AgentChat = (input: {
@@ -43,7 +43,7 @@ type AgentChat = (input: {
  * 运行态（每 PR 的 AbortController、「执行中」PR 集合、AutoPilot busy 锁）是实例可变状态，
  * 故以 class 封装；派发的工具 run 复用注入的 RunQueue（agent 低优先级泳道）。
  */
-export class AgentOrchestratorService {
+export class Orchestrator {
   // 编排 Agent（手动评审 agent:run + 自由规划 agent:ask）每 PR 至多一个在跑，AbortController 供
   // agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
   private readonly agentControllers = new Map<string, AbortController>();
@@ -410,7 +410,7 @@ export class AgentOrchestratorService {
       targetBranch: pr.targetRef.displayId,
       tool: 'review',
     });
-    return runAgentReview(pr, {
+    return runReview(pr, {
       stateStore: this.ctx.stateStore,
       // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。
       enqueueRun: (p, tool, question) => this.runQueue.enqueuePragentRun(p, tool, question, 'agent'),
@@ -444,7 +444,7 @@ export class AgentOrchestratorService {
       targetBranch: pr.targetRef.displayId,
       tool: 'review',
     });
-    return runAgentPlanning(pr, userRequest, {
+    return runPlanning(pr, userRequest, {
       stateStore: this.ctx.stateStore,
       enqueueRun: (p, tool, question) => this.runQueue.enqueuePragentRun(p, tool, question, 'agent'),
       referencedContext,

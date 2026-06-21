@@ -23,7 +23,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
-import { buildAgentStepLabels, buildSummarySections, mapTerminationReason } from './agent-labels.js';
+import { buildStepLabels, buildSummarySections, mapTerminationReason } from './labels.js';
 
 /**
  * 把自由规划编排器（runPlanningAgent）接到主进程：自然语言入口的「对话即委派」。
@@ -49,8 +49,8 @@ const COMPACT_SYSTEM =
 
 /** 存储超阈值时，把较早消息摘要为一条 digest 替换之；未超阈值 / 失败则原样保留。 */
 async function maybeCompactConversation(
-  stateStore: AgentPlanningDeps['stateStore'],
-  chat: AgentPlanningDeps['chat'],
+  stateStore: PlanningDeps['stateStore'],
+  chat: PlanningDeps['chat'],
   prLocalId: string,
   now: () => Date,
 ): Promise<void> {
@@ -77,7 +77,7 @@ async function maybeCompactConversation(
   }
 }
 
-export interface AgentPlanningDeps {
+export interface PlanningDeps {
   stateStore: StateStore;
   enqueueRun: (
     pr: StoredPullRequest,
@@ -105,10 +105,10 @@ export interface AgentPlanningDeps {
   recordPlan?: (todo: AgentTodoItem[]) => void | Promise<void>;
 }
 
-export async function runAgentPlanning(
+export async function runPlanning(
   pr: StoredPullRequest,
   userRequest: string,
-  deps: AgentPlanningDeps,
+  deps: PlanningDeps,
   now: () => Date = () => new Date(),
 ): Promise<AgentSession> {
   // 多轮对话：先读既往消息（注入规划上下文），再把本轮用户输入追加为一条消息（持久化）。
@@ -148,7 +148,7 @@ export async function runAgentPlanning(
         toolCatalog: deps.toolCatalog,
         matchedRule: deps.matchedRule,
         language: deps.language,
-        labels: buildAgentStepLabels(),
+        labels: buildStepLabels(),
         summarySections: buildSummarySections(),
         userRequest,
         history,
