@@ -16,7 +16,7 @@ import {
   buildProtocol,
   planCycleStep,
   type PlanStepCtx,
-} from './steps/planning.js';
+} from './steps/planning/index.js';
 import type { AgentContext } from './types.js';
 
 /**

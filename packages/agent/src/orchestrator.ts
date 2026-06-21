@@ -2,7 +2,7 @@ import type { Rule } from '@meebox/rules';
 import type { AgentRecommendation, AgentStep, TokenUsage, ToolCatalogEntry } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
 import { createStepRecorder } from './steps/context.js';
-import { REVIEW_STEPS, type ReviewStepCtx } from './steps/review.js';
+import { REVIEW_STEPS, type ReviewStepCtx } from './steps/review/index.js';
 import type { AgentContext } from './types.js';
 
 /**
@@ -163,8 +163,10 @@ export function summarySections(language?: string): readonly [string, string, st
  * 作答语言，不在此列。事后切 UI 语言不回改历史步骤（同总结正文）。
  */
 export interface AgentStepLabels {
-  /** 微流程首步（describe + review）思考。 */
-  describeReview: string;
+  /** 微流程「生成 PR 描述」步思考。 */
+  describe: string;
+  /** 微流程「生成代码评审发现」步思考。 */
+  review: string;
   /** 微流程判读步思考。 */
   judge: string;
   /** 判读结果：存在严重问题、将追问 n 个。 */
@@ -180,7 +182,8 @@ export interface AgentStepLabels {
 }
 const STEP_LABELS: Record<string, AgentStepLabels> = {
   'zh-CN': {
-    describeReview: '生成 PR 描述与审查发现',
+    describe: '生成 PR 描述',
+    review: '生成代码评审发现',
     judge: '判断是否存在需追问的严重问题',
     judgeSevere: (n) => `严重，追问 ${String(n)} 个`,
     judgeNone: '无严重问题，不追问',
@@ -189,7 +192,8 @@ const STEP_LABELS: Record<string, AgentStepLabels> = {
     rejectedPrefix: '拒绝：',
   },
   'en-US': {
-    describeReview: 'Generate the PR description and review findings',
+    describe: 'Generate the PR description',
+    review: 'Generate the code review findings',
     judge: 'Decide whether there are severe issues needing follow-up',
     judgeSevere: (n) => `Severe — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
     judgeNone: 'No severe issues — no follow-up',
@@ -198,7 +202,8 @@ const STEP_LABELS: Record<string, AgentStepLabels> = {
     rejectedPrefix: 'Rejected: ',
   },
   'ja-JP': {
-    describeReview: 'PR の説明とレビュー指摘を生成',
+    describe: 'PR の説明を生成',
+    review: 'コードレビュー指摘を生成',
     judge: '追加質問が必要な重大な問題があるか判断',
     judgeSevere: (n) => `重大、追加質問 ${String(n)} 件`,
     judgeNone: '重大な問題なし、追加質問なし',
@@ -207,7 +212,8 @@ const STEP_LABELS: Record<string, AgentStepLabels> = {
     rejectedPrefix: '却下：',
   },
   'de-DE': {
-    describeReview: 'PR-Beschreibung und Review-Befunde erstellen',
+    describe: 'PR-Beschreibung erstellen',
+    review: 'Code-Review-Befunde erstellen',
     judge: 'Entscheiden, ob schwerwiegende Probleme eine Rückfrage erfordern',
     judgeSevere: (n) => `Schwerwiegend — ${String(n)} Rückfrage${n === 1 ? '' : 'n'}`,
     judgeNone: 'Keine schwerwiegenden Probleme — keine Rückfrage',
