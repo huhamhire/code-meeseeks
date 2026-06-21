@@ -24,10 +24,10 @@ describe('assertToolAllowed', () => {
   });
 
   it('rejects ungranted mutating tools (red line)', () => {
-    expect(() => assertToolAllowed('/needswork', cat)).toThrow(/红线/);
+    expect(() => assertToolAllowed('/needswork', cat)).toThrow(/guardrail/);
   });
 
   it('rejects unknown tools', () => {
-    expect(() => assertToolAllowed('/bogus', cat)).toThrow(/未知工具/);
+    expect(() => assertToolAllowed('/bogus', cat)).toThrow(/Unknown tool/);
   });
 });

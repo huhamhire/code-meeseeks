@@ -37,10 +37,10 @@ export function assertToolAllowed(
   catalog: ReadonlyArray<ToolCatalogEntry>,
 ): void {
   const entry = catalog.find((e) => e.name === toolName);
-  if (!entry) throw new Error(`未知工具：${toolName}`);
+  if (!entry) throw new Error(`Unknown tool: ${toolName}`);
   if (entry.mutating && !entry.enabled) {
     throw new Error(
-      `工具 ${toolName} 为修改类且未授权，红线拒绝（需 grants 显式授权或用户直接指令）`,
+      `Tool ${toolName} performs a write action and is not authorized; rejected by guardrail (requires explicit grants or a direct user instruction)`,
     );
   }
 }
