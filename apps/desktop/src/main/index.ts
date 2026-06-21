@@ -1,7 +1,6 @@
-import { app, BrowserWindow, Menu, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, Menu, nativeTheme } from 'electron';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
 import { scaffoldAgentDir } from '@meebox/agent';
@@ -19,7 +18,7 @@ import { registerIpcHandlers } from './ipc.js';
 import { buildProxyEnv } from './utils/proxy.js';
 import { fixMacPath } from './utils/mac-path.js';
 import { readConnectionStates } from './utils/connection-state.js';
-import { readWindowState, writeWindowState, type WindowState } from './utils/window-state.js';
+import { createWindowManager } from './window.js';
 import { checkForUpdate } from './utils/update-check.js';
 import { publishUpdateResult } from './utils/update-state.js';
 
@@ -67,7 +66,6 @@ if (!gotSingleInstanceLock) {
   app.quit();
 }
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * 嵌入式 pr-agent 运行时的解释器绝对路径。
@@ -105,8 +103,6 @@ let ipcControl:
       terminateAgentsForGonePrs: () => void;
     }
   | undefined;
-// 主窗口本地状态（尺寸 / 最大化）：启动时载入一次，建窗时恢复、resize/move/close 时回写。
-let windowState: WindowState = {};
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
@@ -178,14 +174,6 @@ async function start(): Promise<void> {
     logger.warn({ err }, 'read connection states failed; degrade to empty (no cached identities)');
     return {};
   });
-
-  // 载入窗口状态（尺寸/最大化）。缺失或损坏 → 空对象，建窗回退默认尺寸。
-  try {
-    windowState = await readWindowState(stateStore);
-  } catch (err) {
-    logger.warn({ err }, 'read window state failed; use default window size');
-    windowState = {};
-  }
 
   poller = new Poller({
     connections: [],
@@ -287,13 +275,16 @@ async function start(): Promise<void> {
   // macOS/Linux 无副作用；只影响原生 chrome，应用本身已是自绘深色样式。
   nativeTheme.themeSource = 'dark';
 
+  // 主窗口管理（载入窗口状态 + 建窗 + 尺寸回写）。
+  const windowManager = await createWindowManager({ stateStore, logger, startMs: PROCESS_START_MS });
+
   // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。
   // 主窗口 ready-to-show 时关闭它。
   const splash = createSplash();
-  createWindow(splash);
+  windowManager.create(splash);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) windowManager.create();
   });
 
   // 启动关键路径已无网络调用：归档（本地 IO）后启动 poller。
@@ -369,82 +360,6 @@ async function runUpdateCheckIfDue(): Promise<void> {
   } catch (err) {
     // 兜底：checkForUpdate 约定不抛；万一抛了也吞掉，绝不冒泡成任何用户可见行为。
     logger.debug({ err }, 'update check threw (silent, no prompt)');
-  }
-}
-
-function createWindow(splash?: BrowserWindow): void {
-  // 最小尺寸保证核心三栏 (sidebar 240 + file-tree 180 + diff 内容)
-  // 在 chat-pane 折叠态下仍可用；高度兜住 pr-header + tabs + diff + statusbar
-  // 尺寸优先用本地记录的上次大小（windowState），无记录回退默认 1280×800。
-  const win = new BrowserWindow({
-    width: windowState.width ?? 1280,
-    height: windowState.height ?? 800,
-    minWidth: 960,
-    minHeight: 600,
-    show: false,
-    // 首帧前的窗口底色与 app 一致，避免显示瞬间白闪
-    backgroundColor: '#1e1e1e',
-    // 无边框 + 自绘标题栏（VS Code 风）：macOS 保留红绿灯并下移到自绘标题栏内；
-    // Windows/Linux 用 titleBarOverlay 让系统继续画窗控按钮（最小化/最大化/关闭），
-    // 渲染层只接管中间标题区。高度需与渲染层 .app-titlebar 一致（36px）。
-    titleBarStyle: 'hidden',
-    ...(process.platform === 'darwin'
-      ? { trafficLightPosition: { x: 12, y: 11 } }
-      : { titleBarOverlay: { color: '#1e1e1e', symbolColor: '#cccccc', height: 36 } }),
-    // dev 下显式给窗口图标（assets/icons/icon.ico）；打包态窗口/任务栏图标走 exe
-    // 内嵌（electron-builder），且 assets 不进 asar，故仅 dev 设置
-    icon: app.isPackaged ? undefined : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.mjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  // 记住窗口大小：resize/move 防抖回写、关闭时立即回写。getNormalBounds 取「非最大化」尺寸，
-  // 故最大化时记录的仍是还原后的正常大小。写盘失败不影响使用。
-  const persistWindowState = (): void => {
-    if (win.isDestroyed()) return;
-    const b = win.getNormalBounds();
-    windowState = { width: b.width, height: b.height, maximized: win.isMaximized() };
-    void writeWindowState(stateStore, windowState).catch((err: unknown) => {
-      logger.warn({ err }, 'persist window state failed');
-    });
-  };
-  let saveTimer: ReturnType<typeof setTimeout> | undefined;
-  const scheduleSave = (): void => {
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(persistWindowState, 400);
-  };
-  win.on('resize', scheduleSave);
-  win.on('move', scheduleSave);
-  win.on('close', persistWindowState);
-
-  // 主界面首帧就绪：恢复最大化态 → 显示主窗口 → 关闭 splash，并记录进程启动→首帧耗时。
-  // maximize 必须放到这里：`win.maximize()` 会立即「显示」隐藏窗口，若在建窗后即调用，无边框
-  // 主窗口会在内容就绪前以空白态抢先出现（盖过/早于 splash）。改到 ready-to-show 内与首帧一起
-  // maximize + show，再关 splash → 启动期只见 splash，主窗口一出现即为已渲染态。
-  win.once('ready-to-show', () => {
-    if (windowState.maximized) win.maximize();
-    win.show();
-    if (splash && !splash.isDestroyed()) splash.close();
-    logger.info(
-      { elapsedMs: Date.now() - PROCESS_START_MS },
-      'main window first paint (ready-to-show)',
-    );
-  });
-
-  // 把 <a target="_blank"> / window.open 都路由到 OS 默认浏览器，不在 Electron 内开新窗口
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  } else {
-    void win.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 }
 
