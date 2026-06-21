@@ -481,7 +481,7 @@ export class GitHubAdapter implements PlatformAdapter {
 function parseRepositoryUrl(repositoryUrl: string): { owner: string; repo: string } {
   // https://api.github.com/repos/{owner}/{repo}
   const m = /\/repos\/([^/]+)\/([^/]+)$/.exec(repositoryUrl);
-  if (!m) throw new Error(`无法解析 repository_url: ${repositoryUrl}`);
+  if (!m) throw new Error(`Cannot parse repository_url: ${repositoryUrl}`);
   return { owner: m[1]!, repo: m[2]! };
 }
 
