@@ -2,10 +2,10 @@
   "agent": {
     "steps": {
       "describe": "PR-Beschreibung erstellen",
-      "judge": "Entscheiden, ob schwerwiegende Probleme eine Rückfrage erfordern",
-      "judgeNone": "Keine schwerwiegenden Probleme — keine Rückfrage",
-      "judgeSevere_one": "Schwerwiegend — {{count}} Rückfrage",
-      "judgeSevere_other": "Schwerwiegend — {{count}} Rückfragen",
+      "judge": "Entscheiden, ob wichtige Probleme eine Rückfrage erfordern",
+      "judgeNone": "Keine wichtigen Probleme — keine Rückfrage",
+      "judgeSevere_one": "Wichtig — {{count}} Rückfrage",
+      "judgeSevere_other": "Wichtig — {{count}} Rückfragen",
       "parseFail": "Empfehlung konnte nicht geparst werden — manuelle Prüfung",
       "rejectedPrefix": "Abgelehnt: ",
       "review": "Code-Review-Befunde erstellen",

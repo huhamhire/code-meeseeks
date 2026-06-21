@@ -91,9 +91,9 @@ export interface AgentStepLabels {
 export const DEFAULT_STEP_LABELS: AgentStepLabels = {
   describe: 'Generate the PR description',
   review: 'Generate the code review findings',
-  judge: 'Decide whether there are severe issues needing follow-up',
-  judgeSevere: (n) => `Severe — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
-  judgeNone: 'No severe issues — no follow-up',
+  judge: 'Decide whether there are important issues needing follow-up',
+  judgeSevere: (n) => `Important — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
+  judgeNone: 'No important issues — no follow-up',
   summary: 'Synthesize the description and findings into a review summary',
   parseFail: 'Could not parse a recommendation — routing to manual review',
   rejectedPrefix: 'Rejected: ',
