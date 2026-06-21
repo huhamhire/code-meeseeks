@@ -173,12 +173,22 @@ const JUDGE_SYSTEM =
 /** 追问判读的输出 token 上限：产物是极小 JSON（severe + 至多数条问题），无需大额度。 */
 const JUDGE_MAX_OUTPUT_TOKENS = 1024;
 
-function judgePrompt(describeText: string, reviewText: string, maxAsks: number): string {
+function judgePrompt(
+  describeText: string,
+  reviewText: string,
+  maxAsks: number,
+  language: string,
+): string {
+  // 与 renderLanguage 同策略：空 / 未知回落 en-US。
+  const lang = language.trim() || 'en-US';
   return [
     'You just produced the PR description and review findings below. Decide whether any finding is a',
     '*particularly severe* issue (e.g. likely security hole, data loss, serious logic bug)',
     `that genuinely needs a clarifying follow-up question. Default to NO follow-up.`,
     `Ask at most ${String(maxAsks)} questions, and only for severe issues.`,
+    // 精简 system 不再带 assembleSystemContext 的语言指令，故在此显式要求：追问问题须用会话语言书写
+    // （否则模型默认英文，追问气泡不随 locale）。问题最终会作为 /ask 的 user turn 展示并发给模型。
+    `Write every question in ${lang} (the user's language).`,
     '',
     'Reply with JSON only: {"severe": boolean, "questions": string[]}. No explanation, no reasoning.',
     '',
@@ -359,7 +369,7 @@ export async function runReviewMicroflow(
   const judgeStart = Date.now();
   const judge = await deps.chat({
     system: JUDGE_SYSTEM,
-    user: judgePrompt(describe.text, review.text, maxAsks),
+    user: judgePrompt(describe.text, review.text, maxAsks, input.language ?? ''),
     // 判读产物只是极小的结构化 JSON（severe + 至多数条问题），封顶输出避免模型对 yes/no 决策狂吐 token。
     maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
   });
