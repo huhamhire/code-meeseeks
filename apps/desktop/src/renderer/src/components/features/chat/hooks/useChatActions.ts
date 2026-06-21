@@ -58,6 +58,7 @@ export interface ChatActions {
   handleAgentAsk: (question: string, referencedContext?: string) => Promise<void>;
   handleClearRuns: () => Promise<void>;
   handleCancel: (runId: string) => Promise<void>;
+  handleDeleteRun: (runId: string) => Promise<void>;
   handleStopAll: () => void;
   handleRetry: (run: ReviewRun) => void;
   handleJumpToDraft: (finding: Finding, run: ReviewRun) => Promise<void>;
@@ -220,6 +221,17 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+  // 删除单条已结束的 run 记录（成功 / 失败 / 取消）：删远端记录后乐观从本地列表移除该条。
+  // 仅删该 run，不动 Agent 会话 / 台账 / 徽标（与「清空」区分）。
+  const handleDeleteRun = async (runId: string): Promise<void> => {
+    if (!prLocalId) return;
+    try {
+      await invoke('pragent:deleteRun', { localId: prLocalId, runId });
+      setRuns((prev) => prev.filter((r) => r.id !== runId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
   // 停止本 PR 会话内进行中的全部任务：逐条取消所有活动 run（Agent 并行多选时可能 >1），
   // 并中止 Agent 编排（abort，阻止其在子任务取消后继续后续步骤）。
   const handleStopAll = (): void => {
@@ -340,6 +352,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     handleAgentAsk,
     handleClearRuns,
     handleCancel,
+    handleDeleteRun,
     handleStopAll,
     handleRetry,
     handleJumpToDraft,

@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Finding, ReviewDraft, ReviewRun } from '@meebox/shared';
-import { RetryIcon } from '../../../common';
+import { RetryIcon, TrashIcon } from '../../../common';
 import { orderFindings } from '../utils/findings';
 import { formatStartTime, formatTokens, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
 import { AnsiPre, AskQuestion } from './shared';
 import { FindingCard } from './FindingCard';
 
-function RunMeta({ run }: { run: ReviewRun }) {
+function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
   const { t } = useTranslation();
   const duration = run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—';
   // 优先用 run.tokenUsage（litellm callback 捕获的 API 真实 usage，见 sitecustomize）；
@@ -73,6 +73,16 @@ function RunMeta({ run }: { run: ReviewRun }) {
       >
         {formatStartTime(run.startedAt)}
       </span>
+      {/* 删除本条 run 记录：状态行最右的小垃圾桶按钮（仅删该 run，不影响其它记录 / 徽标）。 */}
+      <button
+        type="button"
+        className="chat-run-delete"
+        onClick={onDelete}
+        title={t('chatPane.deleteRunTitle')}
+        aria-label={t('chatPane.deleteRunAria')}
+      >
+        <TrashIcon />
+      </button>
     </header>
   );
 }
@@ -80,6 +90,7 @@ function RunMeta({ run }: { run: ReviewRun }) {
 export function RunResultView({
   run,
   onRetry,
+  onDelete,
   canRetry,
   drafts,
   onJumpToDraft,
@@ -88,6 +99,8 @@ export function RunResultView({
 }: {
   run: ReviewRun;
   onRetry: (run: ReviewRun) => void;
+  /** 删除本条 run 记录（仅该 run）。 */
+  onDelete: (runId: string) => void;
   /** 由父组件按"最后一条 + 无活动 run"判定；false 时失败 / 取消 run 也不显示重试键 */
   canRetry: boolean;
   /** 本 PR 当前草稿池快照；FindingCard 据此显示 status chip + 决定 reject 行为 */
@@ -105,7 +118,6 @@ export function RunResultView({
   const isFailed = run.status === 'failed';
   const isCancelled = run.status === 'cancelled';
   const isFailedOrCancelled = isFailed || isCancelled;
-  const stderr = run.stderr ?? '';
   const stdout = run.stdout ?? '';
   // "原始输出" 折叠区独立 per-run 维护状态，互不影响。失败 / 取消默认展开方便排障，
   // 成功默认关闭只是诊断兜底
@@ -115,7 +127,7 @@ export function RunResultView({
   const userMessage = run.tool === 'ask' ? run.question?.trim() : undefined;
   return (
     <div className="chat-run-result">
-      <RunMeta run={run} />
+      <RunMeta run={run} onDelete={() => onDelete(run.id)} />
       {userMessage && <AskQuestion text={userMessage} />}
       {/* 原始输出：始终紧跟 meta 行，让用户在任何状态下都能在固定位置找到日志。
           失败 / 取消默认展开，成功默认收起 */}
@@ -166,41 +178,40 @@ export function RunResultView({
           {run.errorMessage && !isCancelled && (
             <pre className="chat-error-detail">{run.errorMessage}</pre>
           )}
-          {/* 失败时 stderr 是排障的关键，默认展开。stdout 不再在这里重复展示 ——
-              已经放到上方"原始输出"统一位置了 */}
-          {stderr.length > 0 && (
-            <details className="chat-error-stderr" open>
-              <summary>stderr ({stderr.length} chars)</summary>
-              <AnsiPre className="chat-run-stdout" text={stderr} />
-            </details>
-          )}
+          {/* 失败 / 取消不再单独展示输出区块：pr-agent 日志已在上方可折叠的「原始输出」（stdout 含
+              [pr-agent stdout log] 段，与 stderr 同源），避免同一份日志重复成两块。 */}
         </div>
       )}
 
-      {findings.length > 0 ? (
-        <ul className="chat-finding-list">
-          {orderFindings(findings).map((f) => {
-            // 同 run 内 finding 跟草稿一对一：source.runId+findingId 反查。命中后
-            // FindingCard 据此显示状态 chip + 跳转/拒绝按钮行为分支
-            const relatedDraft = drafts.find(
-              (d) =>
-                d.source !== undefined && d.source.runId === run.id && d.source.findingId === f.id,
-            );
-            return (
-              <FindingCard
-                key={f.id}
-                finding={f}
-                relatedDraft={relatedDraft}
-                onJump={() => onJumpToDraft(f, run)}
-                onReject={() => onRejectFinding(f, run)}
-                onNavigate={() => onNavigateToFinding(f)}
-              />
-            );
-          })}
-        </ul>
-      ) : run.status === 'succeeded' ? (
-        <div className="chat-finding-empty muted">{t('chatPane.noFindings')}</div>
-      ) : null}
+      {/* 失败 / 取消不渲染 findings：取消的 /describe 会把部分 stdout 解析成「段落」误当结果展示。
+          失败 / 取消统一只保留上方可折叠的「原始输出」+ 状态横幅，不在下方另起输出区块。 */}
+      {!isFailedOrCancelled &&
+        (findings.length > 0 ? (
+          <ul className="chat-finding-list">
+            {orderFindings(findings).map((f) => {
+              // 同 run 内 finding 跟草稿一对一：source.runId+findingId 反查。命中后
+              // FindingCard 据此显示状态 chip + 跳转/拒绝按钮行为分支
+              const relatedDraft = drafts.find(
+                (d) =>
+                  d.source !== undefined &&
+                  d.source.runId === run.id &&
+                  d.source.findingId === f.id,
+              );
+              return (
+                <FindingCard
+                  key={f.id}
+                  finding={f}
+                  relatedDraft={relatedDraft}
+                  onJump={() => onJumpToDraft(f, run)}
+                  onReject={() => onRejectFinding(f, run)}
+                  onNavigate={() => onNavigateToFinding(f)}
+                />
+              );
+            })}
+          </ul>
+        ) : run.status === 'succeeded' ? (
+          <div className="chat-finding-empty muted">{t('chatPane.noFindings')}</div>
+        ) : null)}
     </div>
   );
 }

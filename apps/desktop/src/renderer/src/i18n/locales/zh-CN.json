@@ -65,6 +65,8 @@
     "codeImprovedAria": "改进代码",
     "commandNoArgs": "{{cmd}} 不接受参数",
     "concurrencyReached": "已达并发上限（{{n}} 个同时执行）。本 PR 新提交的任务会进入排队，等空出名额后自动执行",
+    "deleteRunAria": "删除",
+    "deleteRunTitle": "删除此记录",
     "draftJumpEditTitle": "在代码中编辑",
     "draftJumpRestore": "恢复",
     "draftJumpRestoreTitle": "恢复并编辑",

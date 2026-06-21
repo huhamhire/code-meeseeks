@@ -268,6 +268,7 @@ export function ChatPane({
               key={entry.key}
               run={entry.run}
               onRetry={actions.handleRetry}
+              onDelete={actions.handleDeleteRun}
               // 只有"时间线里最后一条 run + 没有正在跑的"这一种情形下，失败 / 取消的 run
               // 才可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
               // 避免回头再点重新插队、打乱对话顺序

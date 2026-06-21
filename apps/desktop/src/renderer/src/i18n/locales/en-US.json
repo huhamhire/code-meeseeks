@@ -65,6 +65,8 @@
     "codeImprovedAria": "Improved code",
     "commandNoArgs": "{{cmd}} does not accept arguments",
     "concurrencyReached": "Concurrency limit reached ({{n}} running at once). New tasks for this PR will be queued and run automatically once a slot frees up",
+    "deleteRunAria": "Delete",
+    "deleteRunTitle": "Delete this run",
     "draftJumpEditTitle": "Edit in code",
     "draftJumpRestore": "Restore",
     "draftJumpRestoreTitle": "Restore and edit",

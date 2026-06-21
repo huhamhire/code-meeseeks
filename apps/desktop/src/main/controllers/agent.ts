@@ -3,6 +3,7 @@ import {
   clearAgentSession,
   clearAutopilotLedger,
   clearReviewRunsForPr,
+  deleteReviewRun,
   getAgentConversation,
   getAgentSession,
   getAgentTranscript,
@@ -167,4 +168,11 @@ export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req)
   await clearAutopilotLedger(ctx.stateStore, req.localId);
   ctx.broadcast('agent:reviewStatusCleared', { prLocalId: req.localId });
   return { cleared: await clearReviewRunsForPr(ctx.stateStore, req.localId) };
+};
+
+/**
+ * 删除单条 run 记录（仅该 run，不动 Agent 会话 / 台账 / ★ 徽标）。renderer 乐观从列表移除。
+ */
+export const deleteRun: IpcController<'pragent:deleteRun'> = async (_event, req) => {
+  return { ok: await deleteReviewRun(getContext().stateStore, req.localId, req.runId) };
 };

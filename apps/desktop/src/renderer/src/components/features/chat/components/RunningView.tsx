@@ -36,6 +36,7 @@ export function RunningView({
   }, [startedAt]);
 
   const phase = useMemo(() => inferPhase(lines, t), [lines, t]);
+  const text = useMemo(() => lines.join('\n'), [lines]);
 
   // 跟 RunMeta 完全同结构的 chip 行。running 跟 succeeded/failed 共享一套视觉
   // 骨架，用户从列表扫一眼能在固定位置看到 tool / 状态 / 模型 / 时长。strategy
@@ -73,12 +74,16 @@ export function RunningView({
           {phase}
         </div>
       )}
-      <AnsiPre
-        className="chat-run-stdout"
-        preRef={ref}
-        text={lines.join('\n')}
-        placeholder={t('chatPane.waitingOutput')}
-      />
+      {/* 控制台输出：执行中默认折叠收起、可手动展开（与完成态「原始输出」同款折叠效果）。 */}
+      <details className="chat-run-raw">
+        <summary>{t('chatPane.rawOutput', { n: text.length })}</summary>
+        <AnsiPre
+          className="chat-run-stdout"
+          preRef={ref}
+          text={text}
+          placeholder={t('chatPane.waitingOutput')}
+        />
+      </details>
     </div>
   );
 }

@@ -190,6 +190,25 @@
   color: $text-muted;
   white-space: nowrap;
 }
+// 状态行最右的删除按钮：默认低调隐于行内，hover 变红强调「删除本条记录」。
+.chat-run-delete {
+  display: inline-flex;
+  align-items: center;
+  margin-left: $space-2;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+  border-radius: $radius-sm;
+  opacity: 0.6;
+
+  &:hover {
+    background: $bg-hover;
+    color: $color-danger;
+    opacity: 1;
+  }
+}
 // 度量走 chat-chip；这里只留 status 专属：大写 + spinner gap + 实色状态变体
 .chat-run-status {
   gap: $space-2;
