@@ -1,4 +1,4 @@
-import type { LlmProfile } from '@meebox/shared';
+import type { LlmProfile, ReviewRunTool } from '@meebox/shared';
 
 /**
  * pr-agent 环境变量构造：把一条 LLM Profile 翻成 pr-agent / 嵌入式 shim 认的 env（provider 凭据 /
@@ -193,5 +193,56 @@ export function buildChatEnv(
     env['CONFIG__REASONING_EFFORT'] = 'low';
   }
   if (opts.promptCache) env['MEEBOX_CHAT_CACHE'] = '1';
+  return env;
+}
+
+/**
+ * pr-agent local provider 各 tool 的产出落盘文件名（worktree 根的相对路径）：
+ *   /describe → description.md（publish_description）
+ *   /review   → review.md     （publish_comment）
+ *   /ask      → review.md     （共用同一文件，publish_comment 覆盖）
+ *   /improve  → improve.md    （汇总建议走 publish_comment，经 LOCAL__REVIEW_PATH 重定向与 review.md 分流）
+ * 既供 buildToolEnv 设 LOCAL__REVIEW_PATH，也供调用方 run 结束后读取产出文件——两处共用此表保持同步。
+ */
+export const PRAGENT_LOCAL_OUTPUT: Record<ReviewRunTool, string> = {
+  describe: 'description.md',
+  review: 'review.md',
+  ask: 'review.md',
+  improve: 'improve.md',
+};
+
+/** pr-agent tool run 的 env 高层选项：调用方只表达意图（tool + 响应语言），契约 key 由 bridge 持有。 */
+export interface ToolEnvOptions {
+  tool: ReviewRunTool;
+  /** pr-agent 响应语言（CONFIG__RESPONSE_LANGUAGE）；空则不设。 */
+  responseLanguage?: string;
+}
+
+/**
+ * 组装一次 pr-agent tool run 的 env：在 LLM Profile 基础 env 之上叠加响应语言与 per-tool pr-agent 配置 key。
+ * 调用方传 LlmProfile + 意图（不直接写 CONFIG__* / PR_CODE_SUGGESTIONS__* / LOCAL__* key）。代理 env 由调用方
+ * 另铺（非 pr-agent 范畴）。
+ *
+ * /improve 在 local provider 下只有「汇总建议 → publish_comment」一条可用路径（shim 已强制 gfm_markdown=True），
+ * 故显式关死两项默认、并把产出重定向到 improve.md：
+ * - PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS=false：committable/inline 会走 publish_code_suggestions →
+ *   local provider 直接 NotImplementedError（pr-agent 默认即 false，此处防上游翻默认值）。
+ * - PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT=false：persistent_comment（默认 true）会翻历史评论做增量更新 →
+ *   local provider 不实现、每次刷一段 NotImplementedError traceback（被兜底捕获，正文不丢但日志吵）；local 每次
+ *   全新 worktree、无历史可翻，直接关掉走 publish_comment。
+ * - LOCAL__REVIEW_PATH=improve.md：与 /review /ask 的 review.md 分流（pr-agent 原生 local.review_path 覆盖
+ *   publish_comment 落盘路径，相对路径按子进程 cwd = worktree 根解析）。
+ */
+export function buildToolEnv(
+  profile: LlmProfile | null,
+  opts: ToolEnvOptions,
+): Record<string, string> {
+  const env: Record<string, string> = profile ? buildPragentEnv(profile) : {};
+  if (opts.responseLanguage) env['CONFIG__RESPONSE_LANGUAGE'] = opts.responseLanguage;
+  if (opts.tool === 'improve') {
+    env['PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS'] = 'false';
+    env['PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT'] = 'false';
+    env['LOCAL__REVIEW_PATH'] = PRAGENT_LOCAL_OUTPUT.improve;
+  }
   return env;
 }

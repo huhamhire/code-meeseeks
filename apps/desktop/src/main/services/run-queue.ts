@@ -5,10 +5,11 @@ import { promisify } from 'node:util';
 import { loadAgentRules } from '@meebox/agent';
 import type { PragentRunInfo } from '@meebox/ipc';
 import {
+  PRAGENT_LOCAL_OUTPUT,
   PrAgentRunError,
   askLanguageSuffixFor,
   buildExtraInstructions,
-  buildPragentEnv,
+  buildToolEnv,
   extraInstructionsEnvKey,
   stripAskQuestionEcho,
 } from '@meebox/pr-agent-bridge';
@@ -282,7 +283,7 @@ export class RunQueueService {
     if (!prAgentBridge) throw new Error(t('prAgent.notReady'));
     const { req, pr } = item;
     // 提前 resolve active LLM profile — model 字段要随 startReviewRun 一起落
-    // 盘，让 UI 在 meta 行展示"这次 run 用的什么模型"。后面 buildPragentEnv
+    // 盘，让 UI 在 meta 行展示"这次 run 用的什么模型"。后面 buildToolEnv
     // 同样会用到，这里 resolve 一次复用
     const activeLlmForRecord = resolveActiveLlmProfile(bootstrap.config.llm);
     // 用入队预分配的 runId 覆盖 startReviewRun 的自生 id，让 cancel(runId) 在 active
@@ -329,30 +330,14 @@ export class RunQueueService {
     const ac = item.ac!;
     try {
       const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
-      // LLM env + 全局 pr-agent 配置 (响应语言)。语言配置一期写死在 config 里，
-      // UI 还不暴露切换；后续多语言时改成 Settings 入口
+      // 代理 env 先铺底（非 pr-agent 范畴，仅 HTTP(S)_PROXY 类；开关开时让嵌入式 python(litellm/httpx)
+      // 经代理出网调 LLM）；LLM 凭据/模型 + 响应语言 + per-tool pr-agent 配置（/improve 的关项与产出重定向）
+      // 由 bridge 的 buildToolEnv 按意图组装——这些 pr-agent 契约 key 收口在 @meebox/pr-agent-bridge。
+      // 响应语言一期写死在 config 里、UI 还不暴露切换，后续多语言时改成 Settings 入口。
       const env: Record<string, string> = {
-        // 代理 env 先铺底，LLM/语言配置在后（互不冲突，仅 HTTP(S)_PROXY 类）。
-        // 开关开时让嵌入式 python(litellm/httpx) 经代理出网调 LLM。
         ...buildProxyEnv(bootstrap.config.proxy),
-        ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
-        CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
+        ...buildToolEnv(activeLlm, { tool: req.tool, responseLanguage: getMainLanguage() }),
       };
-      if (req.tool === 'improve') {
-        // /improve 在 local provider 下只有「汇总建议 → publish_comment」一条可用路径
-        // （shim 已强制 gfm_markdown=True）。committable/inline 模式会走
-        // publish_code_suggestions → local provider 直接 NotImplementedError，显式关死兜底
-        // （pr-agent 默认即 false，此处防上游翻默认值）。
-        env['PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS'] = 'false';
-        // persistent_comment（默认 true）会走 publish_persistent_comment_with_history →
-        // get_issue_comments() 翻历史评论做增量更新 → local provider 不实现，每次 improve
-        // 都刷一段 NotImplementedError traceback（被上游捕获后兜底 publish_comment，正文
-        // 不丢但日志吵）。local 每次都是全新 worktree、无历史可翻，直接关掉走 publish_comment。
-        env['PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT'] = 'false';
-        // 输出与 /review /ask 的 review.md 分流：pr-agent 原生支持 local.review_path 覆盖
-        // publish_comment 的落盘路径；相对路径按子进程 cwd（= worktree 根）解析。
-        env['LOCAL__REVIEW_PATH'] = 'improve.md';
-      }
 
       // PR 上下文 + 命中规则：local provider 不会自己去远端拉，须现读喂给 EXTRA_INSTRUCTIONS；
       // /ask 跳过（用户问题往往跟历史评论 / 规约无关）。提示词文本的组装见 @meebox/pr-agent-bridge 的 prompts。
@@ -442,19 +427,9 @@ export class RunQueueService {
       });
       // 真实 token 用量（onLine 累加的 stderr 哨兵行），落到 succeeded / llm-failed 收尾。
       const tokenUsage = finalizeUsage(usageAcc);
-      // pr-agent 的 local provider 把生成结果**写到工作树根的 markdown 文件**：
-      //   /describe → <wt>/description.md  (走 publish_description)
-      //   /review   → <wt>/review.md       (走 publish_comment)
-      //   /ask      → <wt>/review.md       ← 共用同一文件 (publish_comment 会覆盖)
-      //   /improve  → <wt>/improve.md      ← 汇总建议走 publish_comment，经 LOCAL__REVIEW_PATH
-      //                                      重定向与 review.md 分流（见上方 env 注入）
-      // 走 worktree 路径，cleanup 前必须先把文件读出来。
-      const outFile =
-        req.tool === 'describe'
-          ? 'description.md'
-          : req.tool === 'improve'
-            ? 'improve.md'
-            : 'review.md';
+      // pr-agent 的 local provider 把生成结果写到 worktree 根的 markdown 文件（落盘文件名见 bridge 的
+      // PRAGENT_LOCAL_OUTPUT，与 buildToolEnv 的 LOCAL__REVIEW_PATH 同源）。cleanup 前必须先读出来。
+      const outFile = PRAGENT_LOCAL_OUTPUT[req.tool];
       let fileContent = '';
       try {
         fileContent = await fs.readFile(path.join(wt.path, outFile), 'utf8');
