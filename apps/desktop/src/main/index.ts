@@ -143,7 +143,7 @@ async function start(): Promise<void> {
   // python 及其 CLI 子进程（经 {...process.env} 继承）都能定位到命令。须在 pr-agent 探测/运行前。
   const macPath = fixMacPath();
   if (macPath.applied) {
-    logger.info({ added: macPath.added }, 'macOS PATH 已补全');
+    logger.info({ added: macPath.added }, 'macOS PATH augmented');
   }
 
   // main 进程全局兜底：未捕获异常 / 未处理 rejection 至少留一条日志，不静默崩溃。

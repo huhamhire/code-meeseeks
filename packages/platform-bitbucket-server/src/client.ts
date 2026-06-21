@@ -136,7 +136,7 @@ export class BitbucketClient {
         absoluteUrl = new URL(url, `https://${myHost}`).toString();
       }
     } catch (e) {
-      console.warn(`[bb-attachment] URL 解析失败 src=${url}:`, e);
+      console.warn(`[bb-attachment] URL parse failed src=${url}:`, e);
       return null;
     }
 
@@ -154,7 +154,7 @@ export class BitbucketClient {
       });
     } catch (e) {
       clearTimeout(timer);
-      console.warn(`[bb-attachment] fetch 抛错 src=${url} url=${absoluteUrl}:`, e);
+      console.warn(`[bb-attachment] fetch threw src=${url} url=${absoluteUrl}:`, e);
       return null;
     }
     clearTimeout(timer);
