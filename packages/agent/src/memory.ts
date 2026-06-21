@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { resolveAgentPaths } from './layout.js';
+import { resolveAgentPaths } from './agent-files.js';
 
 /** Agent 可写的上下文文件（SOUL.md 永远只读、绝不写）。 */
 export type WritableAgentFile = 'user' | 'memory' | 'agents';
