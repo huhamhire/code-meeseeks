@@ -74,25 +74,40 @@ function renderLanguage(language: string | undefined): string {
 }
 
 /**
- * 现读现装配：按「上下文注入」固定次序拼接系统上下文。空段跳过。
- * 次序：SOUL → AGENTS → 工具目录 → 命中规则 → MEMORY + USER → PR 元数据
- *      → 会话快照 → 语言行为指令。
+ * 缓存断点标记：插在「全局稳定前缀」与「PR/运行相关尾部」之间（含两侧 --- 分隔）。嵌入式 shim 据此把
+ * 稳定前缀单独标 Anthropic 提示缓存（1h）、跨 PR/运行命中，尾部保持纯文本；消费端分割 / 剥除后标记绝不
+ * 进入发给模型的 prompt（litellm 分块、CLI 拼接均处理）。
+ * **须与 scripts/pragent-shim/meebox_pragent_shim/runtime.py 的 `CACHE_BREAK` 逐字一致。**
+ */
+const CACHE_BREAK = '\n\n---\n\n[[MEEBOX:CACHE_BREAK]]\n\n---\n\n';
+
+/**
+ * 现读现装配：按「上下文注入」固定次序拼接系统上下文，并按缓存友好分两段：
+ * - 全局稳定前缀（跨 PR/运行一致，置最前供 1h 缓存）：SOUL → AGENTS → 工具目录 → MEMORY → USER。
+ * - PR/运行相关尾部（每次不同，置最后）：命中规则 → PR 元数据 → 会话快照 → 语言行为指令。
+ * 两段间插 CACHE_BREAK；任一段为空则不插标记。空段跳过。
  */
 export function assembleSystemContext(input: AssembleInput): string {
   const { context, pr, toolCatalog, matchedRule, language, session } = input;
   const { files } = context;
 
-  const blocks: Array<string | null> = [
+  const stable: Array<string | null> = [
     section('Soul', files.soul),
     section('Working agreement', files.agents),
     renderToolCatalog(toolCatalog),
-    matchedRule ? section('Matched rule', matchedRule.instructions) : null,
     section('Memory', files.memory),
     section('User profile', files.user),
+  ];
+  const variable: Array<string | null> = [
+    matchedRule ? section('Matched rule', matchedRule.instructions) : null,
     renderPr(pr),
     session ? renderSession(session) : null,
     renderLanguage(language),
   ];
 
-  return blocks.filter((b): b is string => b !== null).join('\n\n---\n\n');
+  const stableStr = stable.filter((b): b is string => b !== null).join('\n\n---\n\n');
+  const variableStr = variable.filter((b): b is string => b !== null).join('\n\n---\n\n');
+  if (!stableStr) return variableStr;
+  if (!variableStr) return stableStr;
+  return stableStr + CACHE_BREAK + variableStr;
 }

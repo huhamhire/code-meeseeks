@@ -52,6 +52,7 @@ abstract class BaseBridge implements PrAgentBridge {
       system: opts.system ?? '',
       user: opts.user,
       ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+      ...(opts.maxOutputTokens != null ? { max_output_tokens: opts.maxOutputTokens } : {}),
     });
     return this.exec(cmd, args, {
       timeoutMs: opts.timeoutMs ?? DEFAULT_CHAT_TIMEOUT_MS,
