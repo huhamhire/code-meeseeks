@@ -11,7 +11,7 @@ import type { Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { PrAgentStatus } from '@meebox/shared';
 import { JsonFileStateStore } from '@meebox/state-store';
-import { createConnectionRuntime } from './connections-runtime.js';
+import { ConnectionRuntimeController } from './connections-runtime.js';
 import { createPoller } from './poller.js';
 import { createRepoMirror } from './repo-mirror.js';
 import { createSplash } from './splash.js';
@@ -19,7 +19,7 @@ import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
 import { fixMacPath } from './utils/mac-path.js';
 import { readConnectionStates } from './utils/connection-state.js';
-import { createWindowManager } from './window.js';
+import { loadWindowManager } from './window.js';
 import { checkForUpdate } from './utils/update-check.js';
 import { publishUpdateResult } from './utils/update-state.js';
 
@@ -192,13 +192,13 @@ async function start(): Promise<void> {
   });
 
   // 连接运行时（接线 / ping / 热重配）：依赖已建好的 poller；repoMirror 经 conns.runtime 读 adapterByHost。
-  const conns = createConnectionRuntime({
+  const conns = new ConnectionRuntimeController(
     bootstrap,
     stateStore,
     poller,
     logger,
-    initialStates: connectionStates,
-  });
+    connectionStates,
+  );
 
   repoMirror = createRepoMirror({ bootstrap, logger, connectionRuntime: conns.runtime });
 
@@ -237,7 +237,7 @@ async function start(): Promise<void> {
   nativeTheme.themeSource = 'dark';
 
   // 主窗口管理（载入窗口状态 + 建窗 + 尺寸回写）。
-  const windowManager = await createWindowManager({ stateStore, logger, startMs: PROCESS_START_MS });
+  const windowManager = await loadWindowManager({ stateStore, logger, startMs: PROCESS_START_MS });
 
   // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。
   // 主窗口 ready-to-show 时关闭它。
