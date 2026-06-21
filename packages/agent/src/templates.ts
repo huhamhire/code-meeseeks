@@ -1,8 +1,8 @@
-import soul from '../resources/SOUL.md?raw';
-import agents from '../resources/AGENTS.md?raw';
-import memory from '../resources/MEMORY.md?raw';
-import user from '../resources/USER.md?raw';
-import ruleExample from '../resources/rules/example.md?raw';
+import soul from '../resources/template/SOUL.md?raw';
+import agents from '../resources/template/AGENTS.md?raw';
+import memory from '../resources/template/MEMORY.md?raw';
+import user from '../resources/template/USER.md?raw';
+import ruleExample from '../resources/template/rules/example.md?raw';
 
 /**
  * Agent 目录初始化模版（统一 **en-US**、不做 i18n，见 docs/arch/06-agent.md「提示词模版」）。

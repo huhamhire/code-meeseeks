@@ -7,6 +7,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
+import { PROMPT_TEMPLATES, fillTemplate } from './prompts.js';
 import { runStaggered } from './stagger.js';
 import { createStepRecorder, type StepHandler, type StepRecorder } from './steps/context.js';
 import type { AgentContext } from './types.js';
@@ -164,6 +165,8 @@ const JUDGE_SYSTEM =
 /** 追问判读的输出 token 上限：产物是极小 JSON（severe + 至多数条问题），无需大额度。 */
 const JUDGE_MAX_OUTPUT_TOKENS = 1024;
 
+/** 追问判读 user 指令外置在 resources/prompts/judge.md（占位 maxAsks/language）；describe/review 正文在此追加。
+ *  语言显式要求随会话语言出题（精简 system 不带 assembleSystemContext 的语言指令，否则默认英文）。 */
 function judgePrompt(
   describeText: string,
   reviewText: string,
@@ -172,23 +175,10 @@ function judgePrompt(
 ): string {
   // 与 renderLanguage 同策略：空 / 未知回落 en-US。
   const lang = language.trim() || 'en-US';
-  return [
-    'You just produced the PR description and review findings below. Decide whether any finding is a',
-    '*particularly severe* issue (e.g. likely security hole, data loss, serious logic bug)',
-    `that genuinely needs a clarifying follow-up question. Default to NO follow-up.`,
-    `Ask at most ${String(maxAsks)} questions, and only for severe issues.`,
-    // 精简 system 不再带 assembleSystemContext 的语言指令，故在此显式要求：追问问题须用会话语言书写
-    // （否则模型默认英文，追问气泡不随 locale）。问题最终会作为 /ask 的 user turn 展示并发给模型。
-    `Write every question in ${lang} (the user's language).`,
-    '',
-    'Reply with JSON only: {"severe": boolean, "questions": string[]}. No explanation, no reasoning.',
-    '',
-    '--- PR description ---',
-    describeText,
-    '',
-    '--- Review findings ---',
-    reviewText,
-  ].join('\n');
+  const head = fillTemplate(PROMPT_TEMPLATES.judge, { maxAsks: String(maxAsks), language: lang });
+  return [head, '', '--- PR description ---', describeText, '', '--- Review findings ---', reviewText].join(
+    '\n',
+  );
 }
 
 /** 评审总结的统一三段式骨架标题（按语言本地化，缺省回落英文）：固定结构 → 输出稳定、可预期。
@@ -267,6 +257,8 @@ export function stepLabels(language?: string): AgentStepLabels {
   return STEP_LABELS[language ?? 'en-US'] ?? STEP_LABELS['en-US']!;
 }
 
+/** 收尾总结 user 指令 + 三段骨架外置在 resources/prompts/summary.md（占位 maxChars/三段标题）；
+ *  描述 / 评审发现 / 追问 Q&A 等正文在此按需追加（条件拼接仍在 TS）。 */
 function summaryPrompt(
   describeText: string,
   reviewText: string,
@@ -275,24 +267,14 @@ function summaryPrompt(
   sections: readonly [string, string, string],
 ): string {
   const [overview, findings, suggestions] = sections;
+  const head = fillTemplate(PROMPT_TEMPLATES.summary, {
+    maxChars: String(maxChars),
+    overview,
+    findings,
+    suggestions,
+  });
   return [
-    'Write a closing review summary for the human reviewer, in the SAME LANGUAGE as the review findings',
-    `(aim for roughly ${String(maxChars)} characters — compress and prioritize; this is a soft guideline, not a hard limit, so do NOT truncate key points to fit).`,
-    'Use EXACTLY this markdown skeleton — these three "## " sections, in this order, and nothing else.',
-    'Keep each line short; put every finding / suggestion on its own "- " bullet:',
-    '',
-    `## ${overview}`,
-    '<one short paragraph: the core change and overall risk level>',
-    `## ${findings}`,
-    '<each key finding or risk on its own "- " bullet; if genuinely none, write a single line saying so>',
-    `## ${suggestions}`,
-    '<each actionable suggestion on its own "- " bullet>',
-    '',
-    'Put that markdown (with literal \\n newlines) into "summary"; give a separate non-binding recommendation.',
-    'NEVER repeat the recommendation / verdict inside "summary" itself (no trailing JSON block) — it goes',
-    'ONLY in the separate "recommendation" field.',
-    'Reply with JSON only:',
-    '{"summary": string, "recommendation": {"verdict": "approve"|"needs_work"|"manual_review", "reason": string}}',
+    head,
     '',
     '--- Description ---',
     describeText,

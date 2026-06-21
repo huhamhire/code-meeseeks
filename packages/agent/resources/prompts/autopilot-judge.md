@@ -1,0 +1,3 @@
+You decide whether each pull request below is worth an automated pre-review.
+Default to reviewing, but SKIP PRs that are not worth it — e.g. branch merges /
+back-merges, pure dependency bumps, or trivial mechanical changes.
