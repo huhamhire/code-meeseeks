@@ -1,63 +1,31 @@
 import { app, BrowserWindow, Menu, nativeTheme } from 'electron';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
 import { scaffoldAgentDir } from '@meebox/agent';
 import { resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
-import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
 import type { Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
-import type { PrAgentStatus } from '@meebox/shared';
 import { JsonFileStateStore } from '@meebox/state-store';
 import { ConnectionRuntimeController } from './connections-runtime.js';
 import { createPoller } from './poller.js';
 import { createRepoMirror } from './repo-mirror.js';
+import { PrAgentRuntime } from './pragent-runtime.js';
+import { UpdateRunner } from './update-runner.js';
+import { applyProcessStartupTweaks } from './process-tweaks.js';
 import { createSplash } from './splash.js';
 import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
 import { fixMacPath } from './utils/mac-path.js';
 import { readConnectionStates } from './utils/connection-state.js';
 import { loadWindowManager } from './window.js';
-import { checkForUpdate } from './utils/update-check.js';
-import { publishUpdateResult } from './utils/update-state.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
 const PROCESS_START_MS = Date.now();
 
-// 版本更新检测节流：由 poller tick 顺带发起（不另起定时器），至多每小时一次。
-// lastUpdateCheckMs 初值取进程启动时刻 → 首次检测落在启动后约 1h，刻意不在启动瞬间检测，
-// 避免占用冷启动网络 / 打断启动；之后随 poller tick 每满 1h 触发一次。
-const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
-let lastUpdateCheckMs = PROCESS_START_MS;
-
-// 嵌入式 python 子进程不写 .pyc：安装目录（per-user 可写）运行期会积累上万个 __pycache__/.pyc，
-// 升级时旧卸载器要 grinding 这些文件 → 卸载极慢、易拖到「应用无法关闭」。设 PYTHONDONTWRITEBYTECODE=1
-// 让运行期不落 .pyc，安装目录文件数稳定（仅装包时的量）。子进程经 spawn 继承本进程 env。
-// 代价：每次 python 启动重编译（略慢）；评审为 LLM 网络主导，影响有限。
-process.env.PYTHONDONTWRITEBYTECODE = '1';
-
-// Windows 控制台默认活动代码页为本地化 OEM 页（简中为 cp936/GBK），而 Node/pino 按 UTF-8 写出
-// 字节 → 中文日志在 dev 终端显示为乱码。启动期把附着控制台的输出代码页切到 65001(UTF-8)，使其与
-// 写出的 UTF-8 字节对齐。仅 win32；无附着控制台（打包态）时 chcp 静默失败，已 try 吞掉、无副作用。
-if (process.platform === 'win32') {
-  try {
-    execSync('chcp 65001', { stdio: 'ignore' });
-  } catch {
-    /* 无控制台 / chcp 不可用：忽略，日志仍按 UTF-8 字节写出 */
-  }
-}
-
-// macOS 免费(ad-hoc)路线：Chromium 的 os_crypt 首启会建「<App> Safe Storage」钥匙串项
-// 加密 cookie/本地存储，但 ad-hoc 签名身份不稳定(cdhash 每次构建变) → 每次启动弹「访问钥匙串」。
-// 用 mock keychain 让它走内存、不碰真钥匙串、不再弹。代价：cookie 加密退化为静态 key，
-// 但本应用密钥本就明文落盘(config-store)，cookie 加密非依赖项，无实质损失。
-// 仅 mac：本开关只控 macOS Keychain 后端；win(DPAPI)/linux(libsecret) 不受影响，故守卫掉。
-// 必须在 app.whenReady() 之前；模块加载期即最早时机。有正式 Developer ID 签名后可移除。
-if (process.platform === 'darwin') {
-  app.commandLine.appendSwitch('use-mock-keychain');
-}
+// 进程 / 平台启动微调（PYTHONDONTWRITEBYTECODE / Windows chcp / macOS mock-keychain）：须在 whenReady 前。
+applyProcessStartupTweaks();
 
 // 单例锁：同一时刻只允许一个实例运行。多实例会共享同一份 config.yaml / repos 镜像 /
 // state store，导致写竞争、poller 重复轮询、git 镜像并发写冲突，必须互斥。拿不到锁的
@@ -68,30 +36,8 @@ if (!gotSingleInstanceLock) {
 }
 
 
-/**
- * 嵌入式 pr-agent 运行时的解释器绝对路径。
- * - dev：`apps/desktop/vendor/pragent/...`（app.getAppPath() = apps/desktop）
- * - 打包：`<resources>/pragent/...`（electron-builder extraResources）
- * - `MEEBOX_PRAGENT_PYTHON` env 覆盖兜底
- * 探测层据此判断 embedded 是否可用（文件不存在则回退 local-cli）。
- */
-function resolveEmbeddedPython(): string {
-  const override = process.env.MEEBOX_PRAGENT_PYTHON;
-  if (override) return override;
-  const rel =
-    process.platform === 'win32' ? ['python', 'python.exe'] : ['python', 'bin', 'python3'];
-  const base = app.isPackaged
-    ? path.join(process.resourcesPath, 'pragent')
-    : path.join(app.getAppPath(), 'vendor', 'pragent');
-  return path.join(base, ...rel);
-}
-
 let bootstrap: BootstrapResult;
 let logger: Logger;
-// 探测结果异步回填（见下方 kick-off）：probe 完成前 bridge=null。
-let prAgentBridge: PrAgentBridge | null = null;
-// 探测 promise：app:prAgentStatus 据此 await 拿最终状态；构造逻辑保证恒 resolve、不 reject。
-let prAgentProbe: Promise<PrAgentStatus>;
 let stateStore: JsonFileStateStore;
 let poller: Poller;
 let repoMirror: RepoMirrorManager;
@@ -144,28 +90,10 @@ async function start(): Promise<void> {
     logger.error({ err: reason }, 'unhandledRejection');
   });
 
-  const embeddedPythonPath = resolveEmbeddedPython();
-  // pr-agent 探测**不放在建窗关键路径上**：它走 spawn 探测（auto 模式回退 local-cli
-  // 时最坏 5s 超时），过去 await 在此会把窗口首帧整体推迟数秒。改为 kick-off 不 await，
-  // 与 app.whenReady() + 渲染层加载并发跑；结果异步回填模块变量。
-  // - app:prAgentStatus 会 await prAgentProbe 拿最终状态（boot 时序通常已完成）
-  // - pragent run 入口读 getPrAgentBridge()，未就绪时为 null → 走"未就绪"提示
-  prAgentProbe = (async (): Promise<PrAgentStatus> => {
-    const probe = await createPrAgentBridge({
-      embeddedPythonPath,
-      forceStrategy: bootstrap.config.pr_agent.strategy,
-    });
-    prAgentBridge = probe.bridge;
-    logger.info(
-      {
-        available: probe.status.available,
-        strategy: probe.status.available ? probe.status.strategy : undefined,
-        version: probe.status.available ? probe.status.version : undefined,
-      },
-      'pr-agent probe complete',
-    );
-    return probe.status;
-  })();
+  // pr-agent 运行时：解析嵌入式解释器 + kick-off 探测（不 await，不阻塞建窗首帧），结果异步回填。
+  const prAgent = new PrAgentRuntime(bootstrap, logger);
+  // 版本检测节流器：由 poller tick 顺带调 runIfDue（至多每小时一次，复用 poller 周期、不另起定时器）。
+  const updateRunner = new UpdateRunner(bootstrap, logger);
 
   stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
 
@@ -184,7 +112,7 @@ async function start(): Promise<void> {
       // 本轮已被移除 / purge 的 PR：终止其上仍在执行的 agent 操作（先于 AutoPilot，避免给已消失的 PR 起新评审）。
       ipcControl?.terminateAgentsForGonePrs();
       // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器。
-      void runUpdateCheckIfDue();
+      void updateRunner.runIfDue();
       // AutoPilot 预评审：满足开关 + 最小间隔 + 候选时跑一遍 pass（内部门控，复用 poller 周期）。
       ipcControl?.runAutopilotIfDue();
     },
@@ -210,13 +138,13 @@ async function start(): Promise<void> {
     bootstrap,
     logger,
     // 惰性读取：探测异步回填后，handler 调用时才取到最新值（注册时探测可能尚未完成）
-    getPrAgentStatus: () => prAgentProbe,
-    getPrAgentBridge: () => prAgentBridge,
-    embeddedPythonPath,
+    getPrAgentStatus: () => prAgent.probe,
+    getPrAgentBridge: () => prAgent.getBridge(),
+    embeddedPythonPath: prAgent.embeddedPythonPath,
     stateStore,
     poller,
     connectionRuntime: conns.runtime,
-    reconfigureConnections: conns.reconfigure,
+    reconfigureConnections: () => conns.reconfigure(),
     repoMirror,
   });
 
@@ -289,41 +217,6 @@ app.on('before-quit', (event) => {
   if (logger) logger.info({ abortedRuns: aborted }, 'terminating active pr-agent runs before quit');
   setTimeout(() => app.quit(), 800);
 });
-
-/**
- * 版本更新检测（config.update.check_enabled 开启时）。由 poller tick 顺带发起，内部用
- * lastUpdateCheckMs 时间戳门控成「至多每小时一次」——复用既有 poll 周期，不引入额外定时器。
- * 仅检测 + 提示：有新版才广播给所有窗口（StatusBar 提示 + 跳转下载），不下载 / 不安装。失败静默。
- *
- * 时间戳在 await 前即更新，避免 await 窗口内下一次 tick 重复发起。
- */
-async function runUpdateCheckIfDue(): Promise<void> {
-  if (!bootstrap.config.update.check_enabled) return;
-  if (Date.now() - lastUpdateCheckMs < UPDATE_CHECK_INTERVAL_MS) return;
-  lastUpdateCheckMs = Date.now();
-  try {
-    const result = await checkForUpdate(app.getVersion(), bootstrap.config.proxy);
-    // 获取失败（网络 / 解析 / 超时 / 限流，ok=false）：只记 debug 日志，**绝不推任何 IPC** →
-    // 渲染层完全无感，不弹任何提示 / chip。保证「拿不到更新信息」对用户零打扰。
-    if (!result.ok) {
-      logger.debug({ error: result.error }, 'update check failed (silent, no prompt)');
-      return;
-    }
-    // 交给单一真相源：缓存结果，并仅在确有新版时广播（与设置页手动检查共用同一路径，
-    // ok=true&hasUpdate=false 已是最新则只更新缓存、不打扰）。
-    publishUpdateResult(result);
-    if (result.hasUpdate) {
-      logger.info(
-        { current: result.currentVersion, latest: result.latestVersion },
-        'update available',
-      );
-    }
-  } catch (err) {
-    // 兜底：checkForUpdate 约定不抛；万一抛了也吞掉，绝不冒泡成任何用户可见行为。
-    logger.debug({ err }, 'update check threw (silent, no prompt)');
-  }
-}
-
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
