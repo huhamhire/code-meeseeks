@@ -7,8 +7,68 @@
 import os
 
 from ..cli.install import _install_cli_chat_completion
-from ..runtime import _EXPECTED_PRAGENT_VERSION, _debug, _pragent_version
+from ..runtime import (
+    _EXPECTED_PRAGENT_VERSION,
+    _debug,
+    _pragent_version,
+    split_cache_break,
+)
 from ..usage import _emit_usage
+
+# Anthropic 提示缓存最小可缓存粒度约 1k token；稳定前缀低于此不标缓存（含极小的判读 system）。
+_CACHE_MIN_CHARS = 4000
+# 全局稳定前缀用 1h 扩展 TTL：跨所有 PR/运行在 1h 内命中，写入 2× 由大量命中摊薄；需带 beta 头。
+_CACHE_TTL = "1h"
+_CACHE_BETA_FLAG = "extended-cache-ttl-2025-04-11"
+
+
+def _add_cache_beta_header(kwargs: dict) -> None:
+    """合入 1h 缓存所需 anthropic-beta 头（不覆盖既有标志）。"""
+    headers = kwargs.get("extra_headers")
+    if not isinstance(headers, dict):
+        headers = {}
+    existing = headers.get("anthropic-beta")
+    if not existing:
+        headers["anthropic-beta"] = _CACHE_BETA_FLAG
+    elif _CACHE_BETA_FLAG not in existing:
+        headers["anthropic-beta"] = f"{existing},{_CACHE_BETA_FLAG}"
+    kwargs["extra_headers"] = headers
+
+
+def _apply_chat_system_cache(kwargs: dict) -> None:
+    """编排 chat 通道为 Anthropic 缓存「全局稳定前缀」(1h)；并在任何情况下剥除缓存断点标记。
+
+    assembleSystemContext 在全局稳定段（SOUL/AGENTS/工具/记忆/用户）与 PR/运行相关尾部之间插了 CACHE_BREAK。
+    Anthropic 提示缓存按**前缀**生效、**服务端**缓存（不依赖暖会话）：把稳定前缀单独标 cache_control(1h)，
+    则跨所有 PR/运行在 1h 内命中（写入 2× 由大量命中摊薄），尾部（每 PR 不同）保持纯文本。仅作用于编排
+    chat（MEEBOX_CHAT_CACHE 置位）；OpenAI/DeepSeek 自带自动前缀缓存、无需此标，但仍须剥除标记。
+    无断点的 system（如精简判读 system）原样放过。
+    """
+    msgs = kwargs.get("messages")
+    if not isinstance(msgs, list):
+        return
+    is_anthropic = (kwargs.get("model") or "").lower().startswith("anthropic/")
+    cache_on = bool(os.environ.get("MEEBOX_CHAT_CACHE"))
+    for m in msgs:
+        if m.get("role") != "system" or not isinstance(m.get("content"), str):
+            continue
+        stable, variable = split_cache_break(m["content"])
+        if stable is None:
+            return  # 无断点：不缓存、原样
+        if cache_on and is_anthropic and len(stable) >= _CACHE_MIN_CHARS:
+            m["content"] = [
+                {
+                    "type": "text",
+                    "text": stable,
+                    "cache_control": {"type": "ephemeral", "ttl": _CACHE_TTL},
+                },
+                {"type": "text", "text": variable},
+            ]
+            _add_cache_beta_header(kwargs)
+        else:
+            # 非 anthropic / 未开缓存 / 前缀过小：去标记拼回纯文本（自动前缀缓存仍可命中）。
+            m["content"] = f"{stable}\n\n---\n\n{variable}"
+        return
 
 
 def patch(module) -> None:
@@ -70,6 +130,7 @@ def patch(module) -> None:
                     kwargs["max_tokens"] = int(mt)
                 except (TypeError, ValueError):
                     _debug(f"ignore invalid MEEBOX_CHAT_MAX_TOKENS={mt!r}")
+            _apply_chat_system_cache(kwargs)
             result = await _orig_get_completion(self, **kwargs)
             try:
                 if isinstance(result, tuple) and len(result) >= 3:

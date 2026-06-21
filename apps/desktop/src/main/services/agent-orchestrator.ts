@@ -292,6 +292,10 @@ export class AgentOrchestratorService {
       //   （pr-agent 仅对 support_reasoning_models 应用，非 reasoning 模型该项无副作用），避免编排里
       //   一个 yes/no 路由判读也吐大量思考 token、拖慢响应。
       CONFIG__REASONING_EFFORT: 'low',
+      // 提示缓存（服务端、5min TTL）：为编排 chat 的大块 system 前缀打 cache_control。多轮规划逐轮共享
+      // 同一 system → 第 2 轮起命中、降延迟/成本（仅 Anthropic 需显式标；OpenAI/DeepSeek 自动前缀缓存）。
+      // 仅作用于本 chat spawn；判读 system 过小不达缓存粒度自动跳过（见 litellm_handler）。
+      MEEBOX_CHAT_CACHE: '1',
     };
     // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
     const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
