@@ -174,6 +174,16 @@ export function FindingCard({
             {label}
           </span>
         )}
+        {/* PR Type 段：值胶囊与「类型」标签同排、右对齐（不再上下两排，提升空间利用率） */}
+        {key === 'pr-type' && (
+          <div className="chat-finding-pills chat-finding-pills-inline">
+            {splitTypeLabels(translatedBody).map((t) => (
+              <span key={t} className="pr-type-pill" style={pillStyle(t)}>
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
         {showTitle && translatedTitle && !collapsed && (
           <h4 className="chat-finding-title">
             <MdInline>{translatedTitle}</MdInline>
@@ -250,32 +260,23 @@ export function FindingCard({
             )}
         </div>
       )}
-      {/* 已拒绝折叠态隐藏正文与代码对比，只留头部 chip + 锚点行 + 撤销入口 */}
-      {!collapsed &&
-        (key === 'pr-type' ? (
-          // PR Type 段：拆成胶囊，每个标签按内容 hash 取色
-          <div className="chat-finding-pills">
-            {splitTypeLabels(translatedBody).map((t) => (
-              <span key={t} className="pr-type-pill" style={pillStyle(t)}>
-                {t}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <div className="chat-finding-body markdown">
-            {/* remarkBreaks 把 finding body 里的单换行也当成 <br>。pr-agent 的 trace、
-                或一般段落里 reviewer 习惯按软换行折行，不加 remarkBreaks 会被 markdown
-                合并成长一行。Findings 主要是富文本说明，不存在"故意软换行连接"的场景 */}
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkBreaks]}
-              rehypePlugins={REMOTE_REHYPE_PLUGINS}
-              // 「文件变更」walkthrough 用去掉 <details open> 的覆盖，使各文件分类默认折叠收起。
-              components={key === 'walkthrough' ? walkthroughMdComponents : mermaidComponents}
-            >
-              {translatedBody}
-            </ReactMarkdown>
-          </div>
-        ))}
+      {/* 已拒绝折叠态隐藏正文与代码对比，只留头部 chip + 锚点行 + 撤销入口。
+          pr-type 的值胶囊已并入头部行（见上），此处不再单独成段。 */}
+      {!collapsed && key !== 'pr-type' && (
+        <div className="chat-finding-body markdown">
+          {/* remarkBreaks 把 finding body 里的单换行也当成 <br>。pr-agent 的 trace、
+              或一般段落里 reviewer 习惯按软换行折行，不加 remarkBreaks 会被 markdown
+              合并成长一行。Findings 主要是富文本说明，不存在"故意软换行连接"的场景 */}
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            rehypePlugins={REMOTE_REHYPE_PLUGINS}
+            // 「文件变更」walkthrough 用去掉 <details open> 的覆盖，使各文件分类默认折叠收起。
+            components={key === 'walkthrough' ? walkthroughMdComponents : mermaidComponents}
+          >
+            {translatedBody}
+          </ReactMarkdown>
+        </div>
+      )}
       {/* /improve 给的 existing → improved 代码对比。两段都是片段，独立 <pre> 块
           + 红/绿背景 模拟 diff 视觉 (不用 Monaco DiffEditor 节省开销) */}
       {!collapsed && finding.codeChange && (
