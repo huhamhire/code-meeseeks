@@ -9,7 +9,7 @@ import { resolveActiveLlmProfile } from '../../utils/agent.js';
 import { buildProxyEnv } from '../../utils/proxy.js';
 import type { ServiceContext } from '../context.js';
 import type { RunQueue } from '../pr-agent/index.js';
-import { accumulateUsageSentinel, finalizeUsage, newUsageAcc } from '../usage.js';
+import { accumulateUsageSentinel, finalizeUsage, newUsageAcc } from '../pr-agent/usage.js';
 import { autopilotPass } from './flows/autopilot.js';
 import { planningFlow } from './flows/planning.js';
 import { reviewFlow } from './flows/review.js';
