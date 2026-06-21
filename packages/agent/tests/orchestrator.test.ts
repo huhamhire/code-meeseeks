@@ -90,8 +90,8 @@ describe('runReviewMicroflow', () => {
     const r = await runReviewMicroflow(deps, { context, pr });
 
     expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
-    // describe 步 → review 步 → judge → 收尾 plan（各步先记一条思考 plan，工具执行由 run 卡片代表）。
-    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan', 'judge', 'plan']);
+    // describe+review 合并步（一条 plan，两工具并行）→ judge → 收尾 plan（工具执行由 run 卡片代表）。
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'judge', 'plan']);
     expect(r.summary).toBe('all good');
     expect(r.recommendation).toEqual({ verdict: 'approve', reason: 'no issues' });
     // usage accumulated: 2 tools (10 each) + 2 chats (5 each) = 30
@@ -146,6 +146,6 @@ describe('runReviewMicroflow', () => {
       seen.push(step.kind);
     };
     await runReviewMicroflow(deps, { context, pr });
-    expect(seen).toEqual(['plan', 'plan', 'judge', 'plan']);
+    expect(seen).toEqual(['plan', 'judge', 'plan']);
   });
 });

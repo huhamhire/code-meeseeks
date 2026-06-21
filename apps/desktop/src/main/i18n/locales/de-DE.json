@@ -1,14 +1,13 @@
 {
   "agent": {
     "steps": {
-      "describe": "PR-Beschreibung erstellen",
+      "describeReview": "PR-Beschreibung und Review-Befunde erstellen",
       "judge": "Entscheiden, ob wichtige Probleme eine Rückfrage erfordern",
       "judgeNone": "Keine wichtigen Probleme — keine Rückfrage",
       "judgeSevere_one": "Wichtig — {{count}} Rückfrage",
       "judgeSevere_other": "Wichtig — {{count}} Rückfragen",
       "parseFail": "Empfehlung konnte nicht geparst werden — manuelle Prüfung",
       "rejectedPrefix": "Abgelehnt: ",
-      "review": "Code-Review-Befunde erstellen",
       "summary": "Beschreibung und Befunde zu einer Review-Zusammenfassung zusammenfassen"
     },
     "summarySections": {

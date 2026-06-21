@@ -10,8 +10,7 @@ import { t } from '../../i18n/index.js';
 /** 从 i18n 资源构造步骤展示文案（judgeSevere 走 i18next 复数 count）。 */
 export function buildStepLabels(): AgentStepLabels {
   return {
-    describe: t('agent.steps.describe'),
-    review: t('agent.steps.review'),
+    describeReview: t('agent.steps.describeReview'),
     judge: t('agent.steps.judge'),
     judgeSevere: (n) => t('agent.steps.judgeSevere', { count: n }),
     judgeNone: t('agent.steps.judgeNone'),

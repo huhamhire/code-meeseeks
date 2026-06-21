@@ -1,14 +1,13 @@
 {
   "agent": {
     "steps": {
-      "describe": "Generate the PR description",
+      "describeReview": "Generate the PR description and review findings",
       "judge": "Decide whether there are important issues needing follow-up",
       "judgeNone": "No important issues — no follow-up",
       "judgeSevere_one": "Important — {{count}} follow-up question",
       "judgeSevere_other": "Important — {{count}} follow-up questions",
       "parseFail": "Could not parse a recommendation — routing to manual review",
       "rejectedPrefix": "Rejected: ",
-      "review": "Generate the code review findings",
       "summary": "Synthesize the description and findings into a review summary"
     },
     "summarySections": {
