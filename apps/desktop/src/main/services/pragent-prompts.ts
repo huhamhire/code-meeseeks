@@ -139,12 +139,15 @@ export function buildExtraInstructions(input: {
   language: string;
   prContext: string;
   matchedRuleInstructions: string;
+  /** 用户在 Diff 里选中的代码片段（自描述引用块，渲染层已拼好），仅 /ask 注入。 */
+  referencedContext?: string;
 }): string | undefined {
   const parts = [
     languageDirectiveFor(input.language),
     anchorMarkerDirective(input.tool),
     reviewLayoutDirective(input.tool),
     input.prContext,
+    input.referencedContext ?? '',
     input.matchedRuleInstructions,
   ].filter((s) => s.trim());
   return parts.length > 0 ? parts.join('\n\n---\n\n') : undefined;

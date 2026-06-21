@@ -135,6 +135,11 @@
     "sectionSummary": "总结",
     "sectionTitle": "建议标题",
     "sectionWalkthrough": "文件变更",
+    "selection": {
+      "attachedTitle": "选中行将随下一次提问发送 — 点击忽略",
+      "ignoredTitle": "已忽略选中行 — 点击随下一次提问发送",
+      "linesSelected": "已选中 {{lines}} 行"
+    },
     "sendAria": "发送",
     "sendQueuedTitle": "发送 (新任务会进队列)",
     "sendTitle": "发送 (Enter)",

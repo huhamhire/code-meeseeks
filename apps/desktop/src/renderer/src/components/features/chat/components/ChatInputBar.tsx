@@ -5,7 +5,7 @@ import type {
   ReviewRunTool,
   StoredPullRequest,
 } from '@meebox/shared';
-import { AutoReviewIcon, SendIcon, StopIcon } from '../../../common';
+import { AutoReviewIcon, EyeOffIcon, FileTreeIcon, SendIcon, StopIcon } from '../../../common';
 import { COMMANDS } from '../commands';
 import { useChatInput } from '../hooks/useChatInput';
 import { useTextareaAutosizeDrag } from '../hooks/useTextareaAutosizeDrag';
@@ -34,6 +34,15 @@ interface ChatInputBarProps {
   agentRunningHere: boolean;
   /** 触发一键自动评审微流程（describe→review→条件追问→总结）。 */
   onAgentReview: () => void;
+  /**
+   * 当前 Diff 选区行数；null = 无选区（不渲染选区角标）。角标位于 AutoReview 右侧，提示「N 行已选中」，
+   * 发送时把选中代码作为隐式上下文带进提问。
+   */
+  selectionLineCount: number | null;
+  /** 选区忽略态：true 时本条消息不带选区引用（角标置灰 + eye-slash）。 */
+  selectionIgnored: boolean;
+  /** 点击选区角标 → 切换忽略态。 */
+  onToggleSelection: () => void;
 }
 
 /**
@@ -54,6 +63,9 @@ export function ChatInputBar({
   onSetReviewStatus,
   agentRunningHere,
   onAgentReview,
+  selectionLineCount,
+  selectionIgnored,
+  onToggleSelection,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
   const {
@@ -204,6 +216,26 @@ export function ChatInputBar({
             >
               <AutoReviewIcon />
             </button>
+          )}
+          {/* Diff 选区角标：竖线分隔后展示「N 行已选中」。点击切忽略态（eye-slash + 置灰）——忽略时
+              本条消息不带选区引用。选中代码以隐式上下文随提问发出，不进入会话气泡。 */}
+          {selectionLineCount !== null && (
+            <>
+              <span className="chat-cmd-divider" aria-hidden="true" />
+              <button
+                type="button"
+                className={`chat-selection-chip${selectionIgnored ? ' ignored' : ''}`}
+                onClick={onToggleSelection}
+                title={
+                  selectionIgnored
+                    ? t('chatPane.selection.ignoredTitle')
+                    : t('chatPane.selection.attachedTitle')
+                }
+              >
+                {selectionIgnored ? <EyeOffIcon /> : <FileTreeIcon />}
+                <span>{t('chatPane.selection.linesSelected', { lines: selectionLineCount })}</span>
+              </button>
+            </>
           )}
         </div>
         {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时 stop 紧贴 send 左侧。

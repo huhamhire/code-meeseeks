@@ -135,6 +135,11 @@
     "sectionSummary": "Zusammenfassung",
     "sectionTitle": "Titelvorschlag",
     "sectionWalkthrough": "Dateiänderungen",
+    "selection": {
+      "attachedTitle": "Ausgewählte Zeilen an die nächste Frage angehängt – zum Ignorieren klicken",
+      "ignoredTitle": "Ausgewählte Zeilen ignoriert – zum Anhängen an die nächste Frage klicken",
+      "linesSelected": "{{lines}} Zeilen ausgewählt"
+    },
     "sendAria": "Senden",
     "sendQueuedTitle": "Senden (neue Aufgabe wird eingereiht)",
     "sendTitle": "Senden (Enter)",

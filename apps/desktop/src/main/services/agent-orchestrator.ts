@@ -92,7 +92,11 @@ export class AgentOrchestratorService {
   }
 
   /** 对指定 PR 跑自由规划 Agent（agent:ask）。 */
-  async runPlanning(pr: StoredPullRequest, question: string): Promise<AgentSession> {
+  async runPlanning(
+    pr: StoredPullRequest,
+    question: string,
+    referencedContext?: string,
+  ): Promise<AgentSession> {
     const { getPrAgentBridge, effectiveAgentDir, logger } = this.ctx;
     if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
     const agentContext = await loadAgentContext(effectiveAgentDir(), {
@@ -105,7 +109,7 @@ export class AgentOrchestratorService {
     logger.info({ prLocalId: pr.localId }, 'agent chat start (planning)');
     try {
       const session = await this.withAgentChat(
-        (chat) => this.runPlanningForPr(pr, question, agentContext, chat, ac.signal),
+        (chat) => this.runPlanningForPr(pr, question, agentContext, chat, ac.signal, referencedContext),
         ac.signal,
       );
       logger.info(
@@ -390,6 +394,7 @@ export class AgentOrchestratorService {
     agentContext: AgentContext,
     chat: AgentChat,
     signal: AbortSignal,
+    referencedContext?: string,
   ): Promise<AgentSession> {
     const { bootstrap, effectiveAgentDir, logger } = this.ctx;
     const agentCfg = bootstrap.config.agent;
@@ -402,6 +407,7 @@ export class AgentOrchestratorService {
     return runAgentPlanning(pr, userRequest, {
       stateStore: this.ctx.stateStore,
       enqueueRun: (p, tool, question) => this.runQueue.enqueuePragentRun(p, tool, question, 'agent'),
+      referencedContext,
       chat,
       agentContext,
       toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),

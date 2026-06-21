@@ -43,7 +43,7 @@ export type RunPriority = 'user' | 'agent';
 /** 队列项：一次入队的 pr-agent run 的全部上下文（含 resolve/reject 回原始调用方）。 */
 interface QueueItem {
   info: PragentRunInfo;
-  req: { localId: string; tool: ReviewRunTool; question?: string };
+  req: { localId: string; tool: ReviewRunTool; question?: string; referencedContext?: string };
   pr: StoredPullRequest;
   resolve: (run: ReviewRun) => void;
   reject: (err: Error) => void;
@@ -91,6 +91,7 @@ export class RunQueueService {
     tool: ReviewRunTool,
     question?: string,
     priority: RunPriority = 'user',
+    referencedContext?: string,
   ): Promise<ReviewRun> {
     const { logger } = this.ctx;
     if (tool !== 'ask') {
@@ -114,7 +115,8 @@ export class RunQueueService {
           enqueuedAt: new Date().toISOString(),
           startedAt: null,
         },
-        req: { localId: pr.localId, tool, question },
+        // referencedContext 仅入 req（内存态，不进 info/PragentRunInfo）→ 不落盘、不进队列广播。
+        req: { localId: pr.localId, tool, question, referencedContext: tool === 'ask' ? referencedContext : undefined },
         pr,
         priority,
         resolve,
@@ -390,6 +392,8 @@ export class RunQueueService {
         language: getMainLanguage(),
         prContext,
         matchedRuleInstructions,
+        // /ask 选中行引用：经 EXTRA_INSTRUCTIONS 注入（不进问题位置参数，故不污染回答 echo）。
+        referencedContext: req.tool === 'ask' ? req.referencedContext : undefined,
       });
       if (extraInstructions) env[extraInstructionsEnvKey(req.tool)] = extraInstructions;
       if (matchedRuleId) {

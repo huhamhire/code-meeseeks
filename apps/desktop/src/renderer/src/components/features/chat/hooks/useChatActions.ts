@@ -47,9 +47,13 @@ export interface ChatActions {
   runningPrs: Map<string, number>;
   /** 仅「跑在当前 PR」才在本会话显示运行态 / 思考中。 */
   agentRunningHere: boolean;
-  handleRun: (tool: ReviewRunTool, question?: string) => Promise<void>;
+  handleRun: (
+    tool: ReviewRunTool,
+    question?: string,
+    referencedContext?: string,
+  ) => Promise<void>;
   handleAgentReview: () => Promise<void>;
-  handleAgentAsk: (question: string) => Promise<void>;
+  handleAgentAsk: (question: string, referencedContext?: string) => Promise<void>;
   handleClearRuns: () => Promise<void>;
   handleCancel: (runId: string) => Promise<void>;
   handleStopAll: () => void;
@@ -93,7 +97,11 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   // 触发 /describe / /review / /ask。队列模型下 active 非空也允许提交，新 run 进
   // 队列，main 端先后串行执行。失败抛 banner；成功不需要手动 setRuns，session effect
   // 会在 active 切换时自动 refresh
-  const handleRun = async (tool: ReviewRunTool, question?: string): Promise<void> => {
+  const handleRun = async (
+    tool: ReviewRunTool,
+    question?: string,
+    referencedContext?: string,
+  ): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured) return;
     // 去重（即时反馈）：同一 PR 同一工具已在执行 / 排队 → 阻止重复触发（main 端亦有
     // 权威校验兜底）。/ask 每次问题不同，不限制。
@@ -106,7 +114,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     }
     setError(null);
     try {
-      await invoke('pragent:run', { localId: pr.localId, tool, question });
+      await invoke('pragent:run', { localId: pr.localId, tool, question, referencedContext });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -142,7 +150,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
 
   // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。用户输入即时 optimistic 回显，
   // 收尾后以落盘对话（含用户 + 助手消息）整体对齐。
-  const handleAgentAsk = async (question: string): Promise<void> => {
+  const handleAgentAsk = async (question: string, referencedContext?: string): Promise<void> => {
     // 仅禁止对同一 PR 重复发起；其它 PR 在跑不阻塞（并发 / 排队）。
     if (!pr || !prAgent.available || !llmConfigured || runningPrs.has(pr.localId)) return;
     const startedId = pr.localId;
@@ -154,7 +162,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     ]);
     setRunningPrs((m) => new Map(m).set(startedId, Date.now()));
     try {
-      const session = await invoke('agent:ask', { localId: startedId, question });
+      const session = await invoke('agent:ask', { localId: startedId, question, referencedContext });
       await reloadConversation(startedId);
       if (currentPrIdRef.current === startedId && session.status === 'failed') {
         setError(session.terminationReason ?? t('chatPane.agent.failed'));
