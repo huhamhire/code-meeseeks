@@ -27,8 +27,8 @@ export interface ToolText {
 export interface ReviewOrchestratorDeps {
   /** 分发一个只读 pr-agent 工具，返回文本结果（描述 / findings / 回答）。 */
   runTool(call: { tool: 'describe' | 'review' | 'ask'; question?: string }): Promise<ToolText>;
-  /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。 */
-  chat(input: { system: string; user: string }): Promise<ToolText>;
+  /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。maxOutputTokens 可给轻量路由判读封顶输出。 */
+  chat(input: { system: string; user: string; maxOutputTokens?: number }): Promise<ToolText>;
   /** 每产生一个编排步骤即回调（持久化 / 流式推送）。 */
   onStep?(step: AgentStep): void | Promise<void>;
   /** 用户停止：每步边界检查，已 abort 即抛 `用户暂停` 中止微流程（思考阶段也能立即终止）。 */
@@ -164,14 +164,36 @@ export function salvageProse(raw: string): string {
   return raw.trim();
 }
 
-function judgePrompt(reviewText: string, maxAsks: number): string {
+/** 追问判断用的精简系统提示：不带 agent 完整上下文（SOUL / 记忆 / 用户档 / 工具目录 / 规则 / PR 元数据）。
+ *  这是一次轻量路由判读，仅凭 describe + review 结果判「是否有严重问题需追问」，与 AutoPilot 初判
+ *  （judgeAutopilotBatch）同思路——砍掉无关前缀大幅降输入 token、提速；产物只是结构化布尔 + 问题列表。 */
+const JUDGE_SYSTEM =
+  'You are a senior code reviewer triaging review findings for follow-up. Be decisive and terse; reply with JSON only, no reasoning.';
+
+/** 追问判读的输出 token 上限：产物是极小 JSON（severe + 至多数条问题），无需大额度。 */
+const JUDGE_MAX_OUTPUT_TOKENS = 1024;
+
+function judgePrompt(
+  describeText: string,
+  reviewText: string,
+  maxAsks: number,
+  language: string,
+): string {
+  // 与 renderLanguage 同策略：空 / 未知回落 en-US。
+  const lang = language.trim() || 'en-US';
   return [
-    'You just produced the review findings below. Decide whether any finding is a',
+    'You just produced the PR description and review findings below. Decide whether any finding is a',
     '*particularly severe* issue (e.g. likely security hole, data loss, serious logic bug)',
     `that genuinely needs a clarifying follow-up question. Default to NO follow-up.`,
     `Ask at most ${String(maxAsks)} questions, and only for severe issues.`,
+    // 精简 system 不再带 assembleSystemContext 的语言指令，故在此显式要求：追问问题须用会话语言书写
+    // （否则模型默认英文，追问气泡不随 locale）。问题最终会作为 /ask 的 user turn 展示并发给模型。
+    `Write every question in ${lang} (the user's language).`,
     '',
-    'Reply with JSON only: {"severe": boolean, "questions": string[]}.',
+    'Reply with JSON only: {"severe": boolean, "questions": string[]}. No explanation, no reasoning.',
+    '',
+    '--- PR description ---',
+    describeText,
     '',
     '--- Review findings ---',
     reviewText,
@@ -345,7 +367,12 @@ export async function runReviewMicroflow(
   // 2. 仅严重问题条件性追问
   checkAbort();
   const judgeStart = Date.now();
-  const judge = await deps.chat({ system, user: judgePrompt(review.text, maxAsks) });
+  const judge = await deps.chat({
+    system: JUDGE_SYSTEM,
+    user: judgePrompt(describe.text, review.text, maxAsks, input.language ?? ''),
+    // 判读产物只是极小的结构化 JSON（severe + 至多数条问题），封顶输出避免模型对 yes/no 决策狂吐 token。
+    maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
+  });
   const judgeMs = Date.now() - judgeStart;
   usage = addUsage(usage, judge.usage);
   const verdict = extractJson<{ severe?: boolean; questions?: string[] }>(judge.text);
@@ -358,13 +385,17 @@ export async function runReviewMicroflow(
     usage: judge.usage,
   });
 
-  const askResults: string[] = [];
-  for (const q of questions) {
-    checkAbort();
-    const ask = await deps.runTool({ tool: 'ask', question: q });
+  // 多个追问同属一个阶段、彼此独立（各自只读 PR、互不依赖），故并行派发——与上面 describe + review
+  // 同模式：runStaggered 保序（askResults 与 questions 一一对应）、错开 100~200ms 起跑，实际并发度仍受
+  // 运行队列 max_concurrency 兜底。questions 为空时不触发任何调用。
+  checkAbort();
+  const asks = questions.length
+    ? await runStaggered(questions, (q) => deps.runTool({ tool: 'ask', question: q }))
+    : [];
+  const askResults = asks.map((ask, i) => {
     usage = addUsage(usage, ask.usage);
-    askResults.push(`Q: ${q}\nA: ${ask.text}`);
-  }
+    return `Q: ${questions[i]}\nA: ${ask.text}`;
+  });
 
   // 3. 收尾总结 + 建议
   checkAbort();

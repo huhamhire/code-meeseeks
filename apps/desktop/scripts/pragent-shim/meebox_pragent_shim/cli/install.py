@@ -3,7 +3,7 @@
 import os
 import sys
 
-from ..runtime import _debug
+from ..runtime import _debug, strip_cache_break
 from ..usage import _emit_usage_tokens
 from .specs import _CLI_SPECS
 
@@ -61,6 +61,9 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
                 f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装、已登录，且 '{bin_name}' 在 PATH 中。"
             )
         argv = _build_argv()
+        # CLI 单轮无独立 system 槽：system+user 拼一段。先剥除缓存断点标记（仅 Anthropic litellm 路径用于
+        # 分块缓存；CLI 不缓存、标记不得进入 prompt）。
+        system = strip_cache_break(system) if system else system
         prompt = f"{system}\n\n\n{user}" if system else user
         # 基于 os.environ 拷贝再剔除计费 key——其余（PATH/HOME/代理变量等）原样保留。
         child_env = {k: v for k, v in os.environ.items() if k not in spec["strip_env"]}

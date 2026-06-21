@@ -30,6 +30,8 @@ import { accumulateUsageSentinel, finalizeUsage, newUsageAcc } from './usage.js'
 type AgentChat = (input: {
   system: string;
   user: string;
+  /** 输出 token 上限（轻量路由判读封顶用，见 ChatRunOptions.maxOutputTokens）。 */
+  maxOutputTokens?: number;
 }) => Promise<{ text: string; usage?: TokenUsage }>;
 
 /**
@@ -286,16 +288,24 @@ export class AgentOrchestratorService {
       ...(activeLlm ? buildPragentEnv(activeLlm) : {}),
       CONFIG__RESPONSE_LANGUAGE: getMainLanguage(),
       // Agent 编排通道（规划 / 判读 / 收尾 / 对话）是路由 + 轻量综合，非深度代码分析（那在
-      // pr-agent /review 里）。本机 CLI 模式下调低推理档（codex: model_reasoning_effort=low）
-      // 提速；仅作用于本 chat spawn，pr-agent 工具 run 的 env 不含此项 → /review 仍满档推理。
-      // 非 CLI 模式（API）由 CLI handler 之外的路径处理，该 env 无副作用。
+      // pr-agent /review 里）。两条路径都调低推理档提速，且仅作用于本 chat spawn——pr-agent 工具 run
+      // 的 env 不含这两项 → /review 仍满档推理。
+      // - 本机 CLI 模式：codex → model_reasoning_effort=low、claude → haiku（见 cli/specs）。
       MEEBOX_CLI_REASONING: 'low',
+      // - API / litellm 模式：对 reasoning 类模型（o 系 / deepseek-reasoner 等）设 reasoning_effort=low
+      //   （pr-agent 仅对 support_reasoning_models 应用，非 reasoning 模型该项无副作用），避免编排里
+      //   一个 yes/no 路由判读也吐大量思考 token、拖慢响应。
+      CONFIG__REASONING_EFFORT: 'low',
+      // 提示缓存（服务端、5min TTL）：为编排 chat 的大块 system 前缀打 cache_control。多轮规划逐轮共享
+      // 同一 system → 第 2 轮起命中、降延迟/成本（仅 Anthropic 需显式标；OpenAI/DeepSeek 自动前缀缓存）。
+      // 仅作用于本 chat spawn；判读 system 过小不达缓存粒度自动跳过（见 litellm_handler）。
+      MEEBOX_CHAT_CACHE: '1',
     };
     // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
     const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
     try {
-      const chat: AgentChat = async ({ system, user }) => {
-        const r = await bridge.chat({ system, user, env, cwd: chatCwd, signal });
+      const chat: AgentChat = async ({ system, user, maxOutputTokens }) => {
+        const r = await bridge.chat({ system, user, maxOutputTokens, env, cwd: chatCwd, signal });
         const acc = newUsageAcc();
         for (const line of (r.stderr ?? '').split('\n')) accumulateUsageSentinel(line, acc);
         return { text: r.stdout.trim(), usage: finalizeUsage(acc) };

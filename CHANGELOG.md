@@ -30,6 +30,12 @@
 
 ### Changed
 
+- **Agent 编排响应提速**（评审微流程 / 自由规划）：一批降延迟与降成本优化，对用户行为不变。
+  - 条件追问并行：判读为「严重需追问」时，多个 `/ask` 由串行改为并行派发（同 describe + review 模式，错开起跑、保序），多追问场景明显更快。
+  - 追问判读瘦身为轻量路由：判「是否需追问」不再带整份 agent 系统上下文（SOUL / 记忆 / 用户档 / 工具目录 / 规则 / PR 元数据），仅凭 describe + review 结果判断，输入 token 大降；追问问题随会话语言书写（不再固定英文）。
+  - 编排通道（判读 / 收尾 / 规划）全模式低推理 + 判读输出封顶：CLI（claude→haiku、codex→reasoning_effort=low）之外，API / litellm 路径补 `reasoning_effort=low`（仅对 reasoning 类模型生效、其余无副作用），并给判读这类轻量路由封顶输出，避免一个 yes/no 决策吐大量 token；均仅作用于编排 chat，`/review` 等工具 run 仍满档推理。
+  - 全局系统前缀走 Anthropic 1h 提示缓存：系统上下文拆为「全局稳定前缀（SOUL / AGENTS / 工具目录 / 记忆 / 用户档）」+「PR/运行相关尾部」，稳定前缀标服务端提示缓存（ephemeral, 1h），跨 PR / 运行在窗口内命中、降延迟与成本；OpenAI / DeepSeek 自带自动前缀缓存、无需额外处理。
+
 - **前端代码结构重构（可维护性）**：纯结构调整，对外接口与界面 / 交互行为均不变。重点：
   - 组件按 `common/`（基础 UI）/ `layout/`（应用骨架）/ `features/`（业务领域）三层归类；样式 `styles/` 同构归并
   - 超大组件按「容器 + 领域组件 + hooks + 工具方法」分层拆分：ChatPane、SettingsModal、MainPane、StatusBar
