@@ -1,9 +1,9 @@
+import { MAX_PARALLEL_TOOLS } from '../../constants.js';
 import { extractJson, salvageProse, stripTrailingJson } from '../../orchestrator.js';
 import { runStaggered } from '../../stagger.js';
 import { assertToolAllowed } from '../../tool-catalog.js';
 import { Step } from '../context.js';
 import {
-  MAX_PARALLEL_TOOLS,
   accumulateRemember,
   clamp,
   normalizePlan,

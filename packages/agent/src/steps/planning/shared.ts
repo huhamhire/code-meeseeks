@@ -4,6 +4,7 @@ import type {
   AgentRecommendationVerdict,
   AgentTodoItem,
 } from '@meebox/shared';
+import { HISTORY_BUDGET_CHARS, HISTORY_MESSAGE_MAX, VERDICTS } from '../../constants.js';
 import type { MemoryNote } from '../../memory.js';
 import type { AgentStepLabels } from '../../orchestrator.js';
 import type { AgentMemoryNotes, PlanningDeps, PlanningInput } from '../../planner.js';
@@ -63,8 +64,6 @@ export function accumulateRemember(value: PlannerAction['remember'], acc: AgentM
   acc.agents.push(...toNoteList(value.agents));
 }
 
-const VERDICTS: readonly AgentRecommendationVerdict[] = ['approve', 'needs_work', 'manual_review'];
-
 /** 从收尾动作解析出合法 recommendation；verdict 非法 / 缺省 → undefined（不强加判定）。 */
 export function parseRecommendation(
   rec?: PlannerAction['recommendation'],
@@ -106,16 +105,6 @@ export function clamp(s: string, max: number): string {
   const t = s.trim();
   return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
 }
-
-/** 一次并行最多分发的工具数：多选时截断，防止一轮打出过多 pr-agent run。 */
-export const MAX_PARALLEL_TOOLS = 3;
-
-/**
- * 注入规划上下文的历史对话预算：单条字符上限 + 总字符预算（从最新往回累计、超预算即裁剪更早的）。
- * 约定会话上下文不超过 LLM 上下文窗口的一半——以字符近似 token 做保守封顶：64k 字符 ≈ 16~40k token。
- */
-const HISTORY_MESSAGE_MAX = 2000;
-const HISTORY_BUDGET_CHARS = 64000;
 
 /** 取最近若干轮、各自限长，并按总预算从新到旧裁剪（丢弃超预算的更早消息），返回时间升序文本。 */
 export function buildConversationContext(history: readonly AgentMessage[]): string {

@@ -1,10 +1,10 @@
+import { STAGGER_MIN_MS, STAGGER_SPAN_MS } from './constants.js';
+
 /**
  * 把并发分发的工具调用相互错开一个**累计的 100~200ms 随机延迟**：首个立即发出，其余各在前一个
  * 基础上再加 100~200ms 起跑，避免不同工具在同一瞬间齐发、抢占子进程 spawn / LLM 网络。
- * 返回顺序与入参一致（Promise.all 保序），不改变并发语义、只错开起跑时刻。
+ * 返回顺序与入参一致（Promise.all 保序），不改变并发语义、只错开起跑时刻。延迟参数见 constants.ts。
  */
-const STAGGER_MIN_MS = 100;
-const STAGGER_SPAN_MS = 100; // 实际单步延迟 ∈ [100, 200]
 
 function sleep(ms: number): Promise<void> {
   return ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,6 +1,6 @@
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { AGENT_RULES_SUBDIR } from './layout.js';
+import { AGENT_RULES_SUBDIR } from './constants.js';
 import { AGENT_TEMPLATES } from './templates.js';
 
 async function exists(p: string): Promise<boolean> {

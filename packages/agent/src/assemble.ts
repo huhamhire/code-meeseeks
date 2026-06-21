@@ -1,5 +1,6 @@
 import type { Rule } from '@meebox/rules';
 import type { AgentTodoItem, ToolCatalogEntry } from '@meebox/shared';
+import { CACHE_BREAK } from './constants.js';
 import type { AgentContext } from './types.js';
 
 /** 当前 PR 的最小元数据（装配进上下文）。 */
@@ -72,14 +73,6 @@ function renderLanguage(language: string | undefined): string {
     `When appending new entries to MEMORY.md / USER.md, also write them in ${lang}.`,
   ].join('\n');
 }
-
-/**
- * 缓存断点标记：插在「全局稳定前缀」与「PR/运行相关尾部」之间（含两侧 --- 分隔）。嵌入式 shim 据此把
- * 稳定前缀单独标 Anthropic 提示缓存（1h）、跨 PR/运行命中，尾部保持纯文本；消费端分割 / 剥除后标记绝不
- * 进入发给模型的 prompt（litellm 分块、CLI 拼接均处理）。
- * **须与 scripts/pragent-shim/meebox_pragent_shim/runtime.py 的 `CACHE_BREAK` 逐字一致。**
- */
-const CACHE_BREAK = '\n\n---\n\n[[MEEBOX:CACHE_BREAK]]\n\n---\n\n';
 
 /**
  * 现读现装配：按「上下文注入」固定次序拼接系统上下文，并按缓存友好分两段：

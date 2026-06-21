@@ -1,26 +1,12 @@
 import type { ToolCatalogEntry } from '@meebox/shared';
+import { MUTATING_TOOLS, READ_TOOLS } from './constants.js';
 
 /**
- * 工具目录与修改红线（见 docs/arch/06-agent.md「工具修改红线」）。
- *
- * 读 / 分析类工具 Agent 始终可自主调用；修改类（对远端有副作用）**默认禁止**，仅在
- * `grants` 显式授权时放行——以**禁用态**注入目录（Agent 知其存在但不可调用），并由
- * `assertToolAllowed` 在分发入口**运行时硬校验**：即便 LLM 越权产出修改类调用也被拒。
+ * 工具目录与修改红线（见 docs/arch/06-agent.md「工具修改红线」）。读 / 分析类工具 Agent 始终可自主调用；
+ * 修改类（对远端有副作用）**默认禁止**，仅在 `grants` 显式授权时放行——以**禁用态**注入目录（Agent 知其
+ * 存在但不可调用），并由 `assertToolAllowed` 在分发入口**运行时硬校验**：即便 LLM 越权产出修改类调用也被拒。
+ * 工具清单常量（READ_TOOLS / MUTATING_TOOLS）见 constants.ts。
  */
-
-/** 只读 / 分析类工具：始终可用。 */
-export const READ_TOOLS = [
-  { name: '/describe', summary: 'Generate the PR description.' },
-  { name: '/review', summary: 'Generate review findings.' },
-  { name: '/ask', summary: 'Ask a free-form question about the PR.' },
-] as const;
-
-/** 修改类工具：对远端有副作用，默认禁止；`grant` 是授权它所需的 grants 项。 */
-export const MUTATING_TOOLS = [
-  { name: '/approve', summary: 'Approve the PR.', grant: 'approve' },
-  { name: '/needswork', summary: 'Request changes on the PR.', grant: 'needs_work' },
-  { name: '/publish', summary: 'Publish review comments to the remote.', grant: 'publish_comment' },
-] as const;
 
 /**
  * 构建工具目录：读类 enabled=true；修改类仅在 grants 含其授权项时 enabled，否则禁用态。

@@ -1,4 +1,5 @@
-export { AGENT_FILES, AGENT_RULES_SUBDIR, resolveAgentPaths } from './layout.js';
+export { AGENT_FILES, AGENT_RULES_SUBDIR, READ_TOOLS, MUTATING_TOOLS } from './constants.js';
+export { resolveAgentPaths } from './layout.js';
 export type { AgentContextKind } from './layout.js';
 export { loadAgentContext, loadAgentRules } from './load.js';
 export { scaffoldAgentDir } from './scaffold.js';
@@ -22,7 +23,7 @@ export type {
   PlanningResult,
   PlanningToolResult,
 } from './planner.js';
-export { buildToolCatalog, assertToolAllowed, READ_TOOLS, MUTATING_TOOLS } from './tool-catalog.js';
+export { buildToolCatalog, assertToolAllowed } from './tool-catalog.js';
 export { judgeAutopilotBatch } from './autopilot-judge.js';
 export type {
   AutopilotJudgeInput,

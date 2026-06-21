@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { PrAgentStatus, PrAgentStrategy } from '@meebox/shared';
 import { EmbeddedRuntimeBridge, LocalCliBridge } from './bridge.js';
+import { DEFAULT_PROBE_TIMEOUT_MS } from './constants.js';
 import { defaultExec } from './exec.js';
 import type { ExecFn, PrAgentBridge } from './types.js';
 
@@ -35,12 +36,12 @@ type ProbeResult = ProbeOk | ProbeFail;
 
 /**
  * Spawn a command, treat ANY output (even non-zero exit) as "binary exists",
- * spawn ENOENT as "binary missing". 5s 超时兜底。
+ * spawn ENOENT as "binary missing". 默认超时兜底见 DEFAULT_PROBE_TIMEOUT_MS。
  */
 async function exec(
   cmd: string,
   args: string[],
-  timeoutMs = 5000,
+  timeoutMs = DEFAULT_PROBE_TIMEOUT_MS,
   requireZeroExit = false,
 ): Promise<ProbeResult> {
   return new Promise<ProbeResult>((resolve) => {

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { loadRules } from '@meebox/rules';
 import type { Rule } from '@meebox/rules';
+import { EMPTY_FILES } from './constants.js';
 import { resolveAgentPaths } from './layout.js';
 import type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
 
@@ -17,8 +18,6 @@ async function readOptional(
     return '';
   }
 }
-
-const EMPTY_FILES: AgentContextFiles = { soul: '', agents: '', memory: '', user: '' };
 
 /**
  * 现读现装配：每次执行重新读 Agent 目录的 SOUL / AGENTS / MEMORY / USER 与 rules/，

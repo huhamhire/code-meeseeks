@@ -1,4 +1,5 @@
 import type { TokenUsage } from '@meebox/shared';
+import { DESC_CLAMP } from './constants.js';
 import { extractJson } from './orchestrator.js';
 import { PROMPT_TEMPLATES, fillTemplate } from './prompts.js';
 
@@ -30,8 +31,6 @@ export interface AutopilotJudgeResult {
   decisions: JudgeDecision[];
   usage?: TokenUsage;
 }
-
-const DESC_CLAMP = 600;
 
 export async function judgeAutopilotBatch(
   chat: (input: { system: string; user: string }) => Promise<{ text: string; usage?: TokenUsage }>,
