@@ -1,5 +1,5 @@
 import type { AgentStepLabels } from '@meebox/agent';
-import { t } from './i18n/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * 把 agent 步骤展示文案 / 总结骨架 / 中止原因从主进程 i18n 资源（locales/*.json 的 `agent.*`）解析出来，
@@ -8,7 +8,7 @@ import { t } from './i18n/index.js';
  */
 
 /** 从 i18n 资源构造步骤展示文案（judgeSevere 走 i18next 复数 count）。 */
-export function buildAgentStepLabels(): AgentStepLabels {
+export function buildStepLabels(): AgentStepLabels {
   return {
     describe: t('agent.steps.describe'),
     review: t('agent.steps.review'),
