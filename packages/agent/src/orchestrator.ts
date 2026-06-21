@@ -164,14 +164,23 @@ export function salvageProse(raw: string): string {
   return raw.trim();
 }
 
-function judgePrompt(reviewText: string, maxAsks: number): string {
+/** 追问判断用的精简系统提示：不带 agent 完整上下文（SOUL / 记忆 / 用户档 / 工具目录 / 规则 / PR 元数据）。
+ *  这是一次轻量路由判读，仅凭 describe + review 结果判「是否有严重问题需追问」，与 AutoPilot 初判
+ *  （judgeAutopilotBatch）同思路——砍掉无关前缀大幅降输入 token、提速；产物只是结构化布尔 + 问题列表。 */
+const JUDGE_SYSTEM =
+  'You are a senior code reviewer triaging review findings for follow-up. Be decisive and terse; reply with JSON only, no reasoning.';
+
+function judgePrompt(describeText: string, reviewText: string, maxAsks: number): string {
   return [
-    'You just produced the review findings below. Decide whether any finding is a',
+    'You just produced the PR description and review findings below. Decide whether any finding is a',
     '*particularly severe* issue (e.g. likely security hole, data loss, serious logic bug)',
     `that genuinely needs a clarifying follow-up question. Default to NO follow-up.`,
     `Ask at most ${String(maxAsks)} questions, and only for severe issues.`,
     '',
-    'Reply with JSON only: {"severe": boolean, "questions": string[]}.',
+    'Reply with JSON only: {"severe": boolean, "questions": string[]}. No explanation, no reasoning.',
+    '',
+    '--- PR description ---',
+    describeText,
     '',
     '--- Review findings ---',
     reviewText,
@@ -345,7 +354,10 @@ export async function runReviewMicroflow(
   // 2. 仅严重问题条件性追问
   checkAbort();
   const judgeStart = Date.now();
-  const judge = await deps.chat({ system, user: judgePrompt(review.text, maxAsks) });
+  const judge = await deps.chat({
+    system: JUDGE_SYSTEM,
+    user: judgePrompt(describe.text, review.text, maxAsks),
+  });
   const judgeMs = Date.now() - judgeStart;
   usage = addUsage(usage, judge.usage);
   const verdict = extractJson<{ severe?: boolean; questions?: string[] }>(judge.text);
