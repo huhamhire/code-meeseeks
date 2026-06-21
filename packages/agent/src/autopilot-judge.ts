@@ -1,5 +1,6 @@
 import type { TokenUsage } from '@meebox/shared';
 import { extractJson } from './orchestrator.js';
+import { PROMPT_TEMPLATES, fillTemplate } from './prompts.js';
 
 /**
  * AutoPilot 批量判定（见 docs/arch/06-agent.md「AutoPilot」的例外规则）：把一批候选 PR 的
@@ -38,10 +39,9 @@ export async function judgeAutopilotBatch(
 ): Promise<AutopilotJudgeResult> {
   if (input.candidates.length === 0) return { decisions: [] };
 
+  // 判定 system 基底外置在 resources/prompts/autopilot-judge.md；项目规则（AGENTS.md 正文）按需追加。
   const system = [
-    'You decide whether each pull request below is worth an automated pre-review.',
-    'Default to reviewing, but SKIP PRs that are not worth it — e.g. branch merges /',
-    'back-merges, pure dependency bumps, or trivial mechanical changes.',
+    fillTemplate(PROMPT_TEMPLATES.autopilotJudge, {}),
     input.agentsRules?.trim()
       ? `\nProject rules (may add skip exceptions):\n${input.agentsRules.trim()}`
       : '',

@@ -128,6 +128,70 @@
   flex: 1;
 }
 
+// === 规划 Agent 计划面板 (PlanPanel)：header 下、滚动区上，始终可见的复选清单 ===
+.chat-plan-panel {
+  flex-shrink: 0;
+  margin: 0 $space-6 $space-3;
+  padding: $space-3 $space-4;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.chat-plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $space-2;
+}
+.chat-plan-title {
+  font-size: $fs-sm;
+  font-weight: 600;
+  color: $text-muted;
+  letter-spacing: 0.02em;
+}
+.chat-plan-count {
+  font-size: $fs-xs;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+}
+.chat-plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+.chat-plan-item {
+  display: flex;
+  align-items: baseline;
+  gap: $space-3;
+  font-size: $fs-md;
+  color: $text-primary;
+
+  &.done {
+    color: $text-muted;
+
+    .chat-plan-text {
+      text-decoration: line-through;
+    }
+    .chat-plan-check {
+      color: $color-success;
+    }
+  }
+}
+.chat-plan-check {
+  flex-shrink: 0;
+  color: $text-muted;
+  font-size: $fs-sm;
+}
+.chat-plan-text {
+  min-width: 0;
+  word-break: break-word;
+}
+
 // === 底部交互输入区 (ChatInputBar) ===
 .chat-pane-input {
   border-top: 1px solid $border-muted;

@@ -49,6 +49,14 @@ export interface AgentChannels {
   /** 暂停当前 PR 的 Agent 运行（abort）；会话置 paused、保态。 */
   'agent:stop': { request: { localId: string }; response: { ok: boolean } };
   /**
+   * 运行期间追加一条用户消息：若该 PR 正有 Agent 在跑 → 入队，下一主 Agent 周期并入、据最新指令重排
+   * （queued=true）；若没有在跑 → 直接起一轮自由规划（queued=false，竞态兜底，不丢消息）。
+   */
+  'agent:enqueueMessage': {
+    request: { localId: string; message: string };
+    response: { queued: boolean };
+  };
+  /**
    * 读取指定 PR 已落盘的 Agent 会话（含收尾 summary / recommendation）；无则返回 null。
    * 供 UI 打开 PR 时恢复「评审总结」卡片——总结归属其发起 PR、跨 PR 切换不丢失、不串台。
    */

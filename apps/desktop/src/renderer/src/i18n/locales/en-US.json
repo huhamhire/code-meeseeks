@@ -101,6 +101,7 @@
     "placeholderNoPr": "Select a PR to start a conversation",
     "placeholderNotReady": "PR Agent not ready",
     "placeholderReady": "Type a question, or use / to pick a command (↑↓ for history)",
+    "planTitle": "Plan",
     "queuedPosition": "Queued · position {{position}}",
     "rawOutput": "Raw output ({{n}} chars)",
     "reject": "Reject",

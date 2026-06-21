@@ -67,6 +67,14 @@ export const runPlanning: IpcController<'agent:ask'> = async (_event, req) => {
 };
 
 /**
+ * 运行期间追加一条用户消息：有 Agent 在跑则入队（下一周期并入重排），否则起一轮自由规划兜底。
+ */
+export const enqueueMessage: IpcController<'agent:enqueueMessage'> = async (_event, req) => {
+  const ctx = getContext();
+  return ctx.orchestrator.enqueueMessage(await ctx.pr.findPrOrThrow(req.localId), req.message);
+};
+
+/**
  * 暂停某 PR 的 Agent 运行（思考 / 执行任意阶段即时中止）。
  */
 export const stopAgent: IpcController<'agent:stop'> = (_event, req) =>

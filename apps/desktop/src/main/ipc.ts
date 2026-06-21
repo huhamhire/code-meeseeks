@@ -107,6 +107,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('rules:matchForPr', agent.matchRuleForPr); // 查 PR 命中的规则
   ipcMain.handle('agent:run', agent.runReview); // 一键评审编排（describe→review→总结）
   ipcMain.handle('agent:ask', agent.runPlanning); // 自由规划 Agent（对话即委派）
+  ipcMain.handle('agent:enqueueMessage', agent.enqueueMessage); // 运行中追加用户消息（入队 / 起新轮）
   ipcMain.handle('agent:stop', agent.stopAgent); // 停止某 PR 的 Agent 运行
   ipcMain.handle('agent:getSession', agent.getSession); // 读已落盘评审会话
   ipcMain.handle('agent:getConversation', agent.getConversation); // 读多轮对话消息

@@ -101,6 +101,7 @@
     "placeholderNoPr": "选中一个 PR 后可发起对话",
     "placeholderNotReady": "PR Agent 未就绪",
     "placeholderReady": "输入问题，或用 / 选择命令 (↑↓ 翻历史)",
+    "planTitle": "计划",
     "queuedPosition": "排队中 · 第 {{position}} 位",
     "rawOutput": "原始输出 ({{n}} chars)",
     "reject": "拒绝",

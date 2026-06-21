@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
-import type { AgentMessage, AgentStep, ReviewRun } from '@meebox/shared';
+import type { AgentMessage, AgentStep, AgentTodoItem, ReviewRun } from '@meebox/shared';
 import { invoke, subscribe } from '../../../../api';
 import { RUNS_PAGE_SIZE } from '../constants';
 import type { MatchedRule } from '../types';
@@ -18,6 +18,9 @@ export interface ChatSession {
   setAgentSteps: React.Dispatch<React.SetStateAction<AgentStep[]>>;
   messages: AgentMessage[];
   setMessages: React.Dispatch<React.SetStateAction<AgentMessage[]>>;
+  /** 规划 Agent 的计划（todo）：随 agent:planUpdated 实时刷新，切 PR 经 getSession 水合。 */
+  todo: AgentTodoItem[];
+  setTodo: React.Dispatch<React.SetStateAction<AgentTodoItem[]>>;
   bodyRef: MutableRefObject<HTMLDivElement | null>;
   /** 当前展示中的 PR id（每渲染同步）：异步任务 resolve 时据此判断是否仍停在发起 PR。 */
   currentPrIdRef: MutableRefObject<string | undefined>;
@@ -51,6 +54,8 @@ export function useChatSession(
   // 多轮对话消息（用户输入 + Agent 回答），跨回合保留、由 main 落盘 conversation.json，
   // 切回该 PR 恢复。用户消息含临时 optimistic 项（提交即回显），收尾后整体以落盘版重载对齐。
   const [messages, setMessages] = useState<AgentMessage[]>([]);
+  // 规划 Agent 的计划（todo）：随 agent:planUpdated 实时刷新；切 PR 经 agent:getSession 水合。
+  const [todo, setTodo] = useState<AgentTodoItem[]>([]);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // 当前展示中的 PR id（每渲染同步）：异步 Agent 任务 resolve 时据此判断是否仍停在发起 PR，
   // 避免把收尾结果 / 错误串台到切换后打开的别的 PR 会话。
@@ -68,6 +73,7 @@ export function useChatSession(
     setMatchedRule(null);
     setAgentSteps([]);
     setMessages([]);
+    setTodo([]);
     setLoadingSession(false);
     if (!prLocalId) return;
     let cancelled = false;
@@ -77,11 +83,12 @@ export function useChatSession(
         // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)。
         // 同时拉已落盘的多轮对话 + 过程步骤（transcript）：把会话恢复到其 PR，跨切换 / 重启不丢失，
         // 过程化跟踪的思考步骤也随之恢复（步骤随产生增量落盘）。
-        const [list, rule, conversation, transcript] = await Promise.all([
+        const [list, rule, conversation, transcript, session] = await Promise.all([
           invoke('pragent:listRuns', { localId: prLocalId, limit: RUNS_PAGE_SIZE }),
           invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
           invoke('agent:getConversation', { localId: prLocalId }),
           invoke('agent:getTranscript', { localId: prLocalId }),
+          invoke('agent:getSession', { localId: prLocalId }),
         ]);
         if (cancelled) return;
         // 反转为升序 (chat 习惯)，UI 直接读 runs 即可
@@ -90,6 +97,7 @@ export function useChatSession(
         setMatchedRule(rule);
         setMessages(conversation);
         setAgentSteps(transcript);
+        setTodo(session?.todo ?? []);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -127,6 +135,14 @@ export function useChatSession(
     if (!prLocalId) return;
     return subscribe('agent:conversationChanged', (ev) => {
       if (ev.prLocalId === prLocalId) void reloadConversation(prLocalId);
+    });
+  }, [prLocalId]);
+
+  // 计划（todo）实时刷新：规划 Agent 每轮给出 / 更新 plan 即广播，按当前 PR 过滤更新计划面板。
+  useEffect(() => {
+    if (!prLocalId) return;
+    return subscribe('agent:planUpdated', (ev) => {
+      if (ev.prLocalId === prLocalId) setTodo(ev.todo);
     });
   }, [prLocalId]);
 
@@ -240,6 +256,8 @@ export function useChatSession(
     setAgentSteps,
     messages,
     setMessages,
+    todo,
+    setTodo,
     bodyRef,
     currentPrIdRef,
     reloadConversation,

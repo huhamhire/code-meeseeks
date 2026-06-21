@@ -13,6 +13,7 @@ import {
   getAutopilotLedger,
   hasReviewOutput,
   listStoredPullRequests,
+  updateAgentSession,
   writeAutopilotLedger,
 } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
@@ -51,6 +52,9 @@ export class AgentOrchestratorService {
   private readonly runningAgentPrs = new Set<string>();
   // Agent 编排层全局单并发：一次只跑一遍 AutoPilot pass（busy 锁），防止上一遍未完又叠跑。
   private autopilotBusy = false;
+  // 中途输入转向：每 PR 一个待处理用户消息队列。运行中追加 → 入队，下一主 Agent 周期 drain 注入并据
+  // 最新指令重排；评审微流程跑完后接续处理；无在跑则直接起一轮规划（竞态兜底，不丢消息）。
+  private readonly pendingInputByPr = new Map<string, string[]>();
 
   constructor(
     private readonly ctx: ServiceContext,
@@ -73,8 +77,9 @@ export class AgentOrchestratorService {
     this.agentControllers.set(pr.localId, ac);
     this.markAgentRunning(pr.localId);
     logger.info({ prLocalId: pr.localId }, 'agent review start (manual)');
+    let session: AgentSession;
     try {
-      const session = await this.withAgentChat(
+      session = await this.withAgentChat(
         (chat) => this.runReviewForPr(pr, agentContext, chat, ac.signal),
         ac.signal,
       );
@@ -84,11 +89,19 @@ export class AgentOrchestratorService {
       );
       // 收尾总结计入多轮对话（assistant 评审消息）→ UI 渲染「评审总结」卡片。
       await this.recordReviewSummaryMessage(pr, session);
-      return session;
     } finally {
       this.agentControllers.delete(pr.localId);
       this.unmarkAgentRunning(pr.localId);
     }
+    // 评审微流程是固定模板、无法中途转向：跑完后把运行期间排队的用户消息作为一轮自由规划接续处理
+    // （runPlanning 会把它们落盘进会话；fire-and-forget，本次评审会话照常返回）。
+    const pending = this.takePending(pr.localId);
+    if (pending.length) {
+      void this.runPlanning(pr, pending.join('\n\n')).catch((err: unknown) => {
+        logger.warn({ err, prLocalId: pr.localId }, 'post-review planning (queued input) failed');
+      });
+    }
+    return session;
   }
 
   /** 对指定 PR 跑自由规划 Agent（agent:ask）。 */
@@ -126,6 +139,38 @@ export class AgentOrchestratorService {
       this.agentControllers.delete(pr.localId);
       this.unmarkAgentRunning(pr.localId);
     }
+  }
+
+  /**
+   * 运行期间追加用户消息（agent:enqueueMessage）：有 Agent 在跑 → 入队，下一主 Agent 周期 drain 注入
+   * （queued=true）；无在跑 → 直接起一轮自由规划兜底（queued=false，fire-and-forget，不丢消息）。
+   */
+  enqueueMessage(pr: StoredPullRequest, message: string): { queued: boolean } {
+    const text = message.trim();
+    if (!text) return { queued: false };
+    if (this.agentControllers.has(pr.localId)) {
+      const q = this.pendingInputByPr.get(pr.localId) ?? [];
+      q.push(text);
+      this.pendingInputByPr.set(pr.localId, q);
+      this.ctx.logger.info(
+        { prLocalId: pr.localId, queueLen: q.length },
+        'agent message queued (mid-run)',
+      );
+      return { queued: true };
+    }
+    // 竞态兜底：检查到没有在跑 → 直接起一轮自由规划（UI 经 step / conversation 事件更新）。
+    void this.runPlanning(pr, text).catch((err: unknown) => {
+      this.ctx.logger.warn({ err, prLocalId: pr.localId }, 'enqueueMessage fallback planning failed');
+    });
+    return { queued: false };
+  }
+
+  /** 取出并清空某 PR 的待处理用户消息队列。 */
+  private takePending(localId: string): string[] {
+    const q = this.pendingInputByPr.get(localId);
+    if (!q || q.length === 0) return [];
+    this.pendingInputByPr.delete(localId);
+    return q;
   }
 
   /** 暂停某 PR 的 Agent 运行（agent:stop）：abort 其 AbortController。 */
@@ -416,6 +461,22 @@ export class AgentOrchestratorService {
       maxSteps: agentCfg.max_steps,
       signal,
       onStep: (sessionId, step) => this.emitAgentStep(pr, sessionId, step),
+      // 中途输入转向：planner 每轮取出排队消息时在此落盘进会话 + 广播刷新（即时显示为用户气泡），
+      // planner 再把它们并入当轮 progress、据最新指令重排下一步。
+      drainPendingInput: async () => {
+        const msgs = this.takePending(pr.localId);
+        for (const m of msgs) {
+          await appendAgentMessage(this.ctx.stateStore, pr.localId, { role: 'user', content: m });
+        }
+        if (msgs.length) this.ctx.broadcast('agent:conversationChanged', { prLocalId: pr.localId });
+        return msgs;
+      },
+      // 计划（todo）更新：planner 给出 plan 即持久化进会话 + 广播刷新计划面板；切 PR / 重启经
+      // agent:getSession 水合。
+      recordPlan: async (todo) => {
+        await updateAgentSession(this.ctx.stateStore, pr.localId, { todo });
+        this.ctx.broadcast('agent:planUpdated', { prLocalId: pr.localId, todo });
+      },
       // 持久化 Agent 主动记下的非隐私条目到当前 Agent 目录的各可写文件（USER/MEMORY/AGENTS）；
       // SOUL.md 永不写。下一轮 loadAgentContext 现读即生效（跨会话记忆）。
       recordMemory: async (notes) => {
