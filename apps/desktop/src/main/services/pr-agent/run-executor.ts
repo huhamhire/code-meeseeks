@@ -20,7 +20,7 @@ import {
   startReviewRun,
 } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
-import type { ReviewRun, ReviewRunStatus } from '@meebox/shared';
+import type { ReviewRun, ReviewRunStatus, ReviewRunTool } from '@meebox/shared';
 import { getMainLanguage, t } from '../../i18n/index.js';
 import { resolveActiveLlmProfile } from '../../utils/agent.js';
 import { buildPrContext } from '../../utils/pr-context.js';
@@ -32,7 +32,10 @@ import {
   finalizeUsage,
   newUsageAcc,
   stripUsageSentinels,
-} from '../usage.js';
+} from './usage.js';
+
+/** finishReviewRun 的收尾 patch 类型（收尾 helper 的返回）。 */
+type FinishPatch = Parameters<typeof finishReviewRun>[3];
 
 /**
  * pr-agent run 的**执行器**（与队列调度 RunQueue 分离）：给定一个已 dequeue 的队列项，跑完一个 run。
@@ -54,7 +57,7 @@ export class RunExecutor {
    * notifyStarted：startedAt 落定后回调调度层广播队列变化（执行器不持队列态）。
    */
   async execute(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {
-    const { logger, getPrAgentBridge, embeddedPythonPath, stateStore, broadcast } = this.ctx;
+    const { getPrAgentBridge, embeddedPythonPath, stateStore, broadcast } = this.ctx;
     const bridge = getPrAgentBridge();
     if (!bridge) throw new Error(t('prAgent.notReady'));
     const { req, pr } = item;
@@ -97,87 +100,107 @@ export class RunExecutor {
       // 真实 token 用量（onLine 累加的 stderr 哨兵行），落到 succeeded / llm-failed 收尾。
       const tokenUsage = finalizeUsage(usageAcc);
       const { parsed, fileContent } = await this.collectOutput(wt, result.stdout, req, run.id, askLangSuffix);
-
-      // pr-agent CLI 可能 exit 0 但 stdout 里其实是 LLM 调用全失败 (litellm AuthenticationError /
-      // "Failed to generate prediction with any model" 等 marker)。parseReviewOutput 会在
-      // ParsedReviewOutput.llmFailure 标出——此时不算 succeeded，落盘为 failed + reason='llm-error'，
-      // UI 用红色失败 chip 渲染而不是"完成"。
-      if (parsed.llmFailure) {
-        logger.warn(
-          { runId: run.id, reason: parsed.llmFailure.message },
-          'pragent exit 0 but LLM call failed; marking run as failed',
-        );
-        return await finishWith({
-          status: 'failed',
-          finishedAt: new Date().toISOString(),
-          durationMs: Date.now() - t0,
-          exitCode: result.exitCode,
-          errorReason: 'llm-error',
-          errorMessage: parsed.llmFailure.message,
-          stdout: fileContent
-            ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
-            : result.stdout,
-          stderr: stripUsageSentinels(result.stderr),
-          findings: parsed.findings,
-          summary: parsed.summary,
-          tokenUsage,
-        });
-      }
-      return await finishWith({
-        status: 'succeeded',
-        finishedAt: new Date().toISOString(),
-        durationMs: Date.now() - t0,
-        exitCode: result.exitCode,
-        // 持久化「LLM 真实产出」(文件内容)；stdout 留作日志在折叠区供排障
-        stdout: fileContent
-          ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
-          : result.stdout,
-        stderr: stripUsageSentinels(result.stderr),
-        findings: parsed.findings,
-        summary: parsed.summary,
-        tokenUsage,
-      });
+      return await finishWith(
+        this.finishPatchForResult(result, parsed, fileContent, tokenUsage, t0, run.id),
+      );
     } catch (err) {
-      if (err instanceof PrAgentRunError) {
-        // 用户主动取消 → status='cancelled'，其它 reason → 'failed'。
-        // 二者都仍走 finishReviewRun 落盘，让 UI 能从历史 run 里看到这次取消事件。
-        const status: ReviewRunStatus = err.reason === 'cancelled' ? 'cancelled' : 'failed';
-        logger.warn(
-          { runId: run.id, reason: err.reason, exitCode: err.result.exitCode },
-          `pragent run ${status}`,
-        );
-        // 失败 / 取消时也尽量解析已收集的 stdout：很多情况 pr-agent 已写了一部分输出
-        const partialStdout = err.result.stdout ?? '';
-        const parsed = partialStdout
-          ? parseReviewOutput(partialStdout, req.tool)
-          : { findings: [], summary: undefined };
-        // 失败 / 取消前可能已有若干次 LLM 调用，尽量把已产生的 token 用量也记上
-        const tokenUsage = finalizeUsage(usageAcc);
-        return await finishWith({
-          status,
-          finishedAt: new Date().toISOString(),
-          durationMs: Date.now() - t0,
-          exitCode: err.result.exitCode,
-          errorReason: err.reason,
-          errorMessage: err.message,
-          stdout: err.result.stdout,
-          stderr: stripUsageSentinels(err.result.stderr),
-          findings: parsed.findings,
-          summary: parsed.summary,
-          tokenUsage,
-        });
-      }
-      // 非预期异常：仍记一笔 failed，避免 run 永远卡在 running，再把异常往上抛
-      await finishWith({
-        status: 'failed',
-        finishedAt: new Date().toISOString(),
-        durationMs: Date.now() - t0,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
-      throw err;
+      const tokenUsage = finalizeUsage(usageAcc);
+      const finished = await finishWith(
+        this.finishPatchForError(err, req.tool, tokenUsage, t0, run.id),
+      );
+      // 非预期异常（非 PrAgentRunError）：落 failed 后仍把异常往上抛，避免吞掉。
+      if (!(err instanceof PrAgentRunError)) throw err;
+      return finished;
     } finally {
       await wt.cleanup();
     }
+  }
+
+  /**
+   * 成功路径收尾 patch：parsed.llmFailure → failed(reason=llm-error)，否则 succeeded。
+   * pr-agent CLI 可能 exit 0 但 stdout 其实是 LLM 调用全失败（litellm AuthenticationError /
+   * "Failed to generate prediction with any model" 等 marker）→ 不算 succeeded，UI 用红色失败 chip 渲染。
+   * stdout 持久化「LLM 真实产出」(文件内容)；原 stdout 留作日志在折叠区供排障。
+   */
+  private finishPatchForResult(
+    result: { exitCode: number; stdout: string; stderr: string },
+    parsed: ReturnType<typeof parseReviewOutput>,
+    fileContent: string,
+    tokenUsage: ReturnType<typeof finalizeUsage>,
+    t0: number,
+    runId: string,
+  ): FinishPatch {
+    const stdout = fileContent
+      ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
+      : result.stdout;
+    const base = {
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - t0,
+      exitCode: result.exitCode,
+      stdout,
+      stderr: stripUsageSentinels(result.stderr),
+      findings: parsed.findings,
+      summary: parsed.summary,
+      tokenUsage,
+    };
+    if (parsed.llmFailure) {
+      this.ctx.logger.warn(
+        { runId, reason: parsed.llmFailure.message },
+        'pragent exit 0 but LLM call failed; marking run as failed',
+      );
+      return {
+        ...base,
+        status: 'failed',
+        errorReason: 'llm-error',
+        errorMessage: parsed.llmFailure.message,
+      };
+    }
+    return { ...base, status: 'succeeded' };
+  }
+
+  /**
+   * 异常路径收尾 patch：PrAgentRunError → cancelled（用户取消）/ failed（其它 reason），尽量解析已收集的
+   * 部分 stdout + 记已产生的 token 用量；其它非预期异常 → failed（仅 errorMessage，避免 run 卡在 running）。
+   */
+  private finishPatchForError(
+    err: unknown,
+    tool: ReviewRunTool,
+    tokenUsage: ReturnType<typeof finalizeUsage>,
+    t0: number,
+    runId: string,
+  ): FinishPatch {
+    if (err instanceof PrAgentRunError) {
+      // 用户主动取消 → cancelled，其它 reason → failed；二者都落盘让 UI 能从历史 run 里看到该事件。
+      const status: ReviewRunStatus = err.reason === 'cancelled' ? 'cancelled' : 'failed';
+      this.ctx.logger.warn(
+        { runId, reason: err.reason, exitCode: err.result.exitCode },
+        `pragent run ${status}`,
+      );
+      // 失败 / 取消时也尽量解析已收集的 stdout（很多情况 pr-agent 已写了一部分输出）。
+      const partialStdout = err.result.stdout ?? '';
+      const parsed = partialStdout
+        ? parseReviewOutput(partialStdout, tool)
+        : { findings: [], summary: undefined };
+      return {
+        status,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0,
+        exitCode: err.result.exitCode,
+        errorReason: err.reason,
+        errorMessage: err.message,
+        stdout: err.result.stdout,
+        stderr: stripUsageSentinels(err.result.stderr),
+        findings: parsed.findings,
+        summary: parsed.summary,
+        tokenUsage,
+      };
+    }
+    return {
+      status: 'failed',
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - t0,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    };
   }
 
   /** 阶段①：落盘 startReviewRun（用入队预分配 runId）+ 标记 startedAt 并通知调度层广播 + 记日志。 */
