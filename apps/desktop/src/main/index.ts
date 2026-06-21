@@ -1,29 +1,25 @@
-import { app, BrowserWindow, Menu, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, Menu, nativeTheme } from 'electron';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
 import { scaffoldAgentDir } from '@meebox/agent';
 import { resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
 import { createPrAgentBridge, type PrAgentBridge } from '@meebox/pr-agent-bridge';
-import { Poller } from '@meebox/poller';
-import { RepoMirrorManager } from '@meebox/repo-mirror';
-import type { PlatformAdapter, PlatformUser, PrAgentStatus } from '@meebox/shared';
+import type { Poller } from '@meebox/poller';
+import type { RepoMirrorManager } from '@meebox/repo-mirror';
+import type { PrAgentStatus } from '@meebox/shared';
 import { JsonFileStateStore } from '@meebox/state-store';
-import { buildAdapters, type ConnectionRuntime } from './adapters.js';
+import { createConnectionRuntime } from './connections-runtime.js';
+import { createPoller } from './poller.js';
+import { createRepoMirror } from './repo-mirror.js';
 import { createSplash } from './splash.js';
 import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
-import { buildProxyEnv } from './utils/proxy.js';
 import { fixMacPath } from './utils/mac-path.js';
-import {
-  readConnectionStates,
-  writeConnectionStates,
-  type ConnectionState,
-} from './utils/connection-state.js';
-import { readWindowState, writeWindowState, type WindowState } from './utils/window-state.js';
+import { readConnectionStates } from './utils/connection-state.js';
+import { createWindowManager } from './window.js';
 import { checkForUpdate } from './utils/update-check.js';
 import { publishUpdateResult } from './utils/update-state.js';
 
@@ -71,7 +67,6 @@ if (!gotSingleInstanceLock) {
   app.quit();
 }
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * 嵌入式 pr-agent 运行时的解释器绝对路径。
@@ -109,11 +104,6 @@ let ipcControl:
       terminateAgentsForGonePrs: () => void;
     }
   | undefined;
-// 连接级本地状态（按 connectionId）：持久化上次 ping 的 currentUser，用于建连接时预热，
-// 使首轮 poll 不依赖网络即可判 approved。启动时从 state store 载入一次，ping 后增量回写。
-let connectionStates: Record<string, ConnectionState> = {};
-// 主窗口本地状态（尺寸 / 最大化）：启动时载入一次，建窗时恢复、resize/move/close 时回写。
-let windowState: WindowState = {};
 
 async function start(): Promise<void> {
   bootstrap = await ensureWorkspace();
@@ -143,7 +133,7 @@ async function start(): Promise<void> {
   // python 及其 CLI 子进程（经 {...process.env} 继承）都能定位到命令。须在 pr-agent 探测/运行前。
   const macPath = fixMacPath();
   if (macPath.applied) {
-    logger.info({ added: macPath.added }, 'macOS PATH 已补全');
+    logger.info({ added: macPath.added }, 'macOS PATH augmented');
   }
 
   // main 进程全局兜底：未捕获异常 / 未处理 rejection 至少留一条日志，不静默崩溃。
@@ -179,183 +169,42 @@ async function start(): Promise<void> {
 
   stateStore = new JsonFileStateStore(bootstrap.paths.stateDir);
 
-  // 载入连接级本地状态（含上次 ping 的 currentUser）。文件不存在（首跑）→ 空表；读取/解析
-  // 失败（损坏）→ 也降级为空表并记一条 warn。降级后果仅是：首轮 poll 无预热身份，待异步 ping
-  // 补到 currentUser 后自动重分类（见 pingConnections），功能不受损、只是首轮可能短暂偏「待处理」。
-  try {
-    connectionStates = await readConnectionStates(stateStore);
-  } catch (err) {
+  // 载入连接级本地状态（含上次 ping 的 currentUser）。缺失（首跑）/ 损坏 → 降级空表 + warn；后果仅首轮
+  // poll 无预热身份，待异步 ping 补到 currentUser 后自动重分类，功能不受损（接线 / ping 见 connections-runtime）。
+  const connectionStates = await readConnectionStates(stateStore).catch((err: unknown) => {
     logger.warn({ err }, 'read connection states failed; degrade to empty (no cached identities)');
-    connectionStates = {};
-  }
+    return {};
+  });
 
-  // 载入窗口状态（尺寸/最大化）。缺失或损坏 → 空对象，建窗回退默认尺寸。
-  try {
-    windowState = await readWindowState(stateStore);
-  } catch (err) {
-    logger.warn({ err }, 'read window state failed; use default window size');
-    windowState = {};
-  }
-
-  // 连接运行时（可变持有）：adapters 全量（IPC 按 id 查任意连接，历史 PR 都能操作）
-  // + adapterByHost（repo-mirror 取 clone url）。reconfigureConnections 原地替换内容，
-  // IPC handler / repoMirror 经引用读到新值 → 设置页改连接热生效，无需重启。
-  const connectionRuntime: ConnectionRuntime = { adapters: [], adapterByHost: new Map() };
-
-  // 连接「接线」与「ping」解耦，实现「启动不依赖网络」：
-  // - wireConnections（同步、无网络）：重建 adapters/byHost、用本地持久化的上次身份预热
-  //   currentUser、把活动连接喂给 poller。建窗前即可调用 → app:connections 能力位与首轮判
-  //   approved 都不等网络。
-  // - pingConnections（全异步、有网络）：刷新远端身份并增量持久化；活动连接身份因此变化
-  //   （含「本地无记录、ping 才首次取得」）则补一轮 poll 重新分类。不在启动关键路径。
-
-  const activeConnectionIds = (): string[] =>
-    connectionRuntime.adapters
-      .filter((a) => a.connectionId === bootstrap.config.active_connection_id)
-      .map((a) => a.connectionId);
-
-  const wireConnections = (): void => {
-    const adapters = buildAdapters(bootstrap.config.connections, bootstrap.config.proxy);
-    const byHost = new Map<string, PlatformAdapter>();
-    for (const { connectionId, adapter } of adapters) {
-      // 预热 currentUser：有本地记录就先填上（无记录则保持 null，由 pingConnections 兜底）。
-      const cachedUser = connectionStates[connectionId]?.user;
-      if (cachedUser) adapter.setCurrentUser?.(cachedUser);
-      const conn = bootstrap.config.connections.find((c) => c.id === connectionId);
-      if (!conn) continue;
-      try {
-        byHost.set(new URL(conn.base_url).hostname, adapter);
-      } catch (err) {
-        logger.warn({ err, connectionId, base_url: conn.base_url }, 'invalid base_url');
-      }
-    }
-    connectionRuntime.adapters = adapters;
-    connectionRuntime.adapterByHost = byHost;
-    // 只轮询当前启用的连接（同时仅一条）；其余仅保留配置不轮询
-    poller.setConnections(
-      adapters.filter((a) => a.connectionId === bootstrap.config.active_connection_id),
-    );
-  };
-
-  // 持久化某连接的 currentUser（仅身份变化时写盘，避免无谓 IO）。写盘失败不影响运行。
-  const persistConnectionUser = async (
-    connectionId: string,
-    user: PlatformUser | null,
-  ): Promise<void> => {
-    const prevName = connectionStates[connectionId]?.user?.name ?? null;
-    if (prevName === (user?.name ?? null)) return;
-    connectionStates = {
-      ...connectionStates,
-      [connectionId]: { ...connectionStates[connectionId], user },
-    };
-    try {
-      await writeConnectionStates(stateStore, connectionStates);
-    } catch (err) {
-      logger.warn({ err, connectionId }, 'persist connection user failed');
-    }
-  };
-
-  // 全异步 ping：刷新 + 持久化 currentUser；活动连接身份变化（含首次取得）则补一轮 poll 重新分类。
-  const pingConnections = (): void => {
-    const activeId = bootstrap.config.active_connection_id;
-    for (const { connectionId, adapter } of connectionRuntime.adapters) {
-      const isActive = connectionId === activeId;
-      const beforeName = adapter.getCurrentUser()?.name ?? null;
-      // 活动连接启动时无缓存身份 → poller.start(immediate=false) 没跑首轮；此处 ping settle 后
-      // 必须触发**首次同步**（无论 ping 成功与否：成功则带确认的身份分类，失败也用 PAT 拉一轮，
-      // 不让「无身份」永远等到下个 interval）。这就是「先确认身份，再立即同步一次」。
-      const hadIdentity = beforeName !== null;
-      void adapter.ping().then(
-        async (r) => {
-          logger.info(
-            { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
-            'adapter ping',
-          );
-          const user = adapter.getCurrentUser();
-          await persistConnectionUser(connectionId, user);
-          // 触发重分类/首次同步：活动连接且（身份变化 含首次取得/换号，或本就无身份需补首轮）。
-          // poller.tick 已做「进行中则补跑」，不会因撞上首轮 poll 而丢失。
-          if (isActive && (!hadIdentity || (user?.name ?? null) !== beforeName)) {
-            void poller.tick();
-          }
-        },
-        (err: unknown) => {
-          logger.warn({ err, connectionId }, 'adapter ping failed');
-          // ping 失败但活动连接本就无缓存身份（首轮被跳过）→ 仍用 PAT 兜底同步一次，避免看似没同步。
-          if (isActive && !hadIdentity) void poller.tick();
-        },
-      );
-    }
-  };
-
-  // 设置页 config:setConnections / setProxy 后的热生效：重接线 + 归档非活动连接（本地 IO）+ 异步
-  // ping。调用方（IPC）随后会 poller.tick() 立即刷新列表，ping 完成若改了身份会再补一轮。
-  const reconfigureConnections = async (): Promise<void> => {
-    wireConnections();
-    await poller.archiveConnectionsExcept(activeConnectionIds());
-    pingConnections();
-  };
-
-  poller = new Poller({
-    connections: [],
+  poller = createPoller({
+    bootstrap,
     stateStore,
-    intervalSeconds: bootstrap.config.poller.interval_seconds,
-    logger: logger.child({ scope: 'poller' }),
-    onTick: (info) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send('poll:tick', info);
-      }
+    logger,
+    onTickExtras: () => {
       // 本轮已被移除 / purge 的 PR：终止其上仍在执行的 agent 操作（先于 AutoPilot，避免给已消失的 PR 起新评审）。
       ipcControl?.terminateAgentsForGonePrs();
-      // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器
+      // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器。
       void runUpdateCheckIfDue();
       // AutoPilot 预评审：满足开关 + 最小间隔 + 候选时跑一遍 pass（内部门控，复用 poller 周期）。
       ipcControl?.runAutopilotIfDue();
     },
-    // PR 新增 / 内容变更时，顺手 syncMirror 把本地镜像跟上，让用户随后点开 PR
-    // 时省一趟 fetch。失败不阻断 poll 流程 (mirror 也有自己的全局队列 + 错误隔离)
-    onPrsChanged: (repos) => {
-      for (const r of repos) {
-        const conn = bootstrap.config.connections.find((c) => c.id === r.connectionId);
-        if (!conn) continue;
-        let host: string;
-        try {
-          host = new URL(conn.base_url).hostname;
-        } catch {
-          continue;
-        }
-        // identity 字段映射：poller 用 group/repo 中性命名，repo-mirror 仍保留
-        // Bitbucket-shaped projectKey/repoSlug (跟 git 路径布局一致，沿用便于排障)
-        void repoMirror.syncMirror({ host, projectKey: r.group, repoSlug: r.repo }).catch((err) => {
-          logger.warn({ err, repo: r }, 'auto syncMirror after poll failed');
-        });
-      }
-    },
+    getRepoMirror: () => repoMirror,
   });
 
-  repoMirror = new RepoMirrorManager({
-    reposDir: bootstrap.paths.reposDir,
-    getCloneUrl: async (repo) => {
-      const adapter = connectionRuntime.adapterByHost.get(repo.host);
-      if (!adapter) throw new Error(`no adapter for host ${repo.host}`);
-      return adapter.getCloneUrl({
-        projectKey: repo.projectKey,
-        repoSlug: repo.repoSlug,
-      });
-    },
-    logger: logger.child({ scope: 'repo-mirror' }),
-    onProgress: (event) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send('sync:progress', event);
-      }
-    },
-    // 出站代理：getter 每次远端 clone/fetch 求值，设置页改代理后即生效。
-    proxyEnv: () => buildProxyEnv(bootstrap.config.proxy),
+  // 连接运行时（接线 / ping / 热重配）：依赖已建好的 poller；repoMirror 经 conns.runtime 读 adapterByHost。
+  const conns = createConnectionRuntime({
+    bootstrap,
+    stateStore,
+    poller,
+    logger,
+    initialStates: connectionStates,
   });
+
+  repoMirror = createRepoMirror({ bootstrap, logger, connectionRuntime: conns.runtime });
 
   // 建窗前同步把连接接好（无网络）：构建 adapters、用本地持久化身份预热 currentUser、喂 poller。
   // 这样 app:connections 与首轮判 approved 都不依赖网络；ping 留到建窗后全异步刷新。
-  wireConnections();
+  conns.wire();
 
   ipcControl = registerIpcHandlers({
     bootstrap,
@@ -366,8 +215,8 @@ async function start(): Promise<void> {
     embeddedPythonPath,
     stateStore,
     poller,
-    connectionRuntime,
-    reconfigureConnections,
+    connectionRuntime: conns.runtime,
+    reconfigureConnections: conns.reconfigure,
     repoMirror,
   });
 
@@ -387,23 +236,26 @@ async function start(): Promise<void> {
   // macOS/Linux 无副作用；只影响原生 chrome，应用本身已是自绘深色样式。
   nativeTheme.themeSource = 'dark';
 
+  // 主窗口管理（载入窗口状态 + 建窗 + 尺寸回写）。
+  const windowManager = await createWindowManager({ stateStore, logger, startMs: PROCESS_START_MS });
+
   // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。
   // 主窗口 ready-to-show 时关闭它。
   const splash = createSplash();
-  createWindow(splash);
+  windowManager.create(splash);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) windowManager.create();
   });
 
   // 启动关键路径已无网络调用：归档（本地 IO）后启动 poller。
-  await poller.archiveConnectionsExcept(activeConnectionIds());
-  // 活动连接是否已有缓存身份（wireConnections 已用本地持久化身份预热）：
+  await poller.archiveConnectionsExcept(conns.activeConnectionIds());
+  // 活动连接是否已有缓存身份（conns.wire 已用本地持久化身份预热）：
   // - 有 → poller 立即跑首轮（me 就绪，分类正确）；
-  // - 无 → **不跑 me=null 的半成品首轮**，只装定时器；首次同步改由下面 pingConnections 在 ping
-  //   确认身份后立即触发（见 pingConnections：无身份的活动连接 ping settle 后必 tick 一次）。
+  // - 无 → **不跑 me=null 的半成品首轮**，只装定时器；首次同步改由下面 conns.ping 在 ping
+  //   确认身份后立即触发（无身份的活动连接 ping settle 后必 tick 一次）。
   // 这样「首次启动 / state 缺失」时也是「先确认身份，再同步一次」，避免首轮全标 pending 或看似没同步。
-  const activeHasIdentity = connectionRuntime.adapters.some(
+  const activeHasIdentity = conns.runtime.adapters.some(
     (a) =>
       a.connectionId === bootstrap.config.active_connection_id &&
       a.adapter.getCurrentUser() != null,
@@ -419,7 +271,7 @@ async function start(): Promise<void> {
   );
   // ping 全异步刷新远端身份（不在启动关键路径）：刷新/持久化 currentUser，身份变化则补一轮 poll。
   // 这是「本地无身份记录」（首跑 / state 缺失）时的兜底来源；ping 慢或不可达都不影响已启动的 UI。
-  pingConnections();
+  conns.ping();
 }
 
 // 退出清理：停轮询 + 终止所有进行中的 pr-agent run 的子进程树（python + litellm 等孙进程）。
@@ -469,82 +321,6 @@ async function runUpdateCheckIfDue(): Promise<void> {
   } catch (err) {
     // 兜底：checkForUpdate 约定不抛；万一抛了也吞掉，绝不冒泡成任何用户可见行为。
     logger.debug({ err }, 'update check threw (silent, no prompt)');
-  }
-}
-
-function createWindow(splash?: BrowserWindow): void {
-  // 最小尺寸保证核心三栏 (sidebar 240 + file-tree 180 + diff 内容)
-  // 在 chat-pane 折叠态下仍可用；高度兜住 pr-header + tabs + diff + statusbar
-  // 尺寸优先用本地记录的上次大小（windowState），无记录回退默认 1280×800。
-  const win = new BrowserWindow({
-    width: windowState.width ?? 1280,
-    height: windowState.height ?? 800,
-    minWidth: 960,
-    minHeight: 600,
-    show: false,
-    // 首帧前的窗口底色与 app 一致，避免显示瞬间白闪
-    backgroundColor: '#1e1e1e',
-    // 无边框 + 自绘标题栏（VS Code 风）：macOS 保留红绿灯并下移到自绘标题栏内；
-    // Windows/Linux 用 titleBarOverlay 让系统继续画窗控按钮（最小化/最大化/关闭），
-    // 渲染层只接管中间标题区。高度需与渲染层 .app-titlebar 一致（36px）。
-    titleBarStyle: 'hidden',
-    ...(process.platform === 'darwin'
-      ? { trafficLightPosition: { x: 12, y: 11 } }
-      : { titleBarOverlay: { color: '#1e1e1e', symbolColor: '#cccccc', height: 36 } }),
-    // dev 下显式给窗口图标（assets/icons/icon.ico）；打包态窗口/任务栏图标走 exe
-    // 内嵌（electron-builder），且 assets 不进 asar，故仅 dev 设置
-    icon: app.isPackaged ? undefined : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.mjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  // 记住窗口大小：resize/move 防抖回写、关闭时立即回写。getNormalBounds 取「非最大化」尺寸，
-  // 故最大化时记录的仍是还原后的正常大小。写盘失败不影响使用。
-  const persistWindowState = (): void => {
-    if (win.isDestroyed()) return;
-    const b = win.getNormalBounds();
-    windowState = { width: b.width, height: b.height, maximized: win.isMaximized() };
-    void writeWindowState(stateStore, windowState).catch((err: unknown) => {
-      logger.warn({ err }, 'persist window state failed');
-    });
-  };
-  let saveTimer: ReturnType<typeof setTimeout> | undefined;
-  const scheduleSave = (): void => {
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(persistWindowState, 400);
-  };
-  win.on('resize', scheduleSave);
-  win.on('move', scheduleSave);
-  win.on('close', persistWindowState);
-
-  // 主界面首帧就绪：恢复最大化态 → 显示主窗口 → 关闭 splash，并记录进程启动→首帧耗时。
-  // maximize 必须放到这里：`win.maximize()` 会立即「显示」隐藏窗口，若在建窗后即调用，无边框
-  // 主窗口会在内容就绪前以空白态抢先出现（盖过/早于 splash）。改到 ready-to-show 内与首帧一起
-  // maximize + show，再关 splash → 启动期只见 splash，主窗口一出现即为已渲染态。
-  win.once('ready-to-show', () => {
-    if (windowState.maximized) win.maximize();
-    win.show();
-    if (splash && !splash.isDestroyed()) splash.close();
-    logger.info(
-      { elapsedMs: Date.now() - PROCESS_START_MS },
-      'main window first paint (ready-to-show)',
-    );
-  });
-
-  // 把 <a target="_blank"> / window.open 都路由到 OS 默认浏览器，不在 Electron 内开新窗口
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  } else {
-    void win.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 }
 
