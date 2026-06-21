@@ -21,10 +21,16 @@ export interface DiffSelection {
   /** 起止行（含两端，1 基，即该侧显示文件行号）。 */
   startLine: number;
   endLine: number;
-  /** 行数（endLine - startLine + 1）。 */
+  /** 行数（endLine - startLine + 1）。指 head/old 主选区的行数，不含下方 removed 附带行。 */
   lineCount: number;
   /** 选中文本快照（选区产生时即取，发送时直接用，无需回查 model）。 */
   text: string;
+  /**
+   * 内联（统一）视图专属：head 选区跨到的删除/改动 hunk 的**基线侧**原始行（含真实代码）。统一视图下
+   * 删除行是 Monaco view-zone、无法被光标选中，故据 getLineChanges() 映射、从 original model 取出，与
+   * 所选 head 行一并引用——让删除内容也能「像添加行一样」被引用。side==='new' 且非并排视图时可能有。
+   */
+  removed?: { startLine: number; endLine: number; text: string };
 }
 
 interface SelectionStoreState {
@@ -82,18 +88,38 @@ export function useDiffSelection(prLocalId: string | null | undefined): {
   return snap;
 }
 
+/** 行范围标签：单行 `Lx`，多行 `Lx-Ly`。 */
+function rangeLabel(startLine: number, endLine: number): string {
+  return startLine === endLine
+    ? `L${String(startLine)}`
+    : `L${String(startLine)}-L${String(endLine)}`;
+}
+
 /**
  * 把选区拼成自描述的引用块（路径 + 行范围 + 侧 + 代码围栏），渲染层拼一次作为 referencedContext 发出。
  * 两条注入路径（pragent /ask 与 planner）共用此串。用四个反引号围栏，避免选中代码内含三反引号时破栏。
+ *
+ * 内联视图带 removed 时分两块列出：所选 head 行 + 跨到的基线删除行，让删除内容也能被引用。
  */
 export function formatReferencedContext(sel: DiffSelection): string {
   const sideLabel = sel.side === 'old' ? 'base' : 'head';
-  const range =
-    sel.startLine === sel.endLine
-      ? `L${String(sel.startLine)}`
-      : `L${String(sel.startLine)}-L${String(sel.endLine)}`;
+  if (sel.removed) {
+    return [
+      `The user has selected a region in \`${sel.path}\` and is asking about it.`,
+      '',
+      `Selected lines (${rangeLabel(sel.startLine, sel.endLine)}, head side):`,
+      '````',
+      sel.text,
+      '````',
+      '',
+      `Removed lines spanned by the selection (${rangeLabel(sel.removed.startLine, sel.removed.endLine)}, base side):`,
+      '````',
+      sel.removed.text,
+      '````',
+    ].join('\n');
+  }
   return [
-    `The user has selected these lines from \`${sel.path}\` (${range}, ${sideLabel} side) and is asking about them:`,
+    `The user has selected these lines from \`${sel.path}\` (${rangeLabel(sel.startLine, sel.endLine)}, ${sideLabel} side) and is asking about them:`,
     '',
     '````',
     sel.text,

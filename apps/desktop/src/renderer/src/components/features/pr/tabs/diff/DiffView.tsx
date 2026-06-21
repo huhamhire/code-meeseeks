@@ -132,7 +132,7 @@ export function DiffView({
     triggerAutoEdit,
   });
   // 捕获 Diff 选区 → selectionStore，供 ChatPane 把选中代码作为隐式上下文带进 agent/ask 提问。
-  useSelectionCapture({ diffEditor, selected, prLocalId: pr.localId });
+  useSelectionCapture({ diffEditor, selected, prLocalId: pr.localId, renderSideBySide });
 
   // sidebar 模式：'tree' (文件树) / 'search' (跨文件搜索)，默认进文件树。PR 切换时回到 'tree'。
   const [sidebarMode, setSidebarMode] = useState<'tree' | 'search'>('tree');
