@@ -1,4 +1,4 @@
-import { runStaggered } from '../../stagger.js';
+import { runStaggered } from '../../utils/index.js';
 import { Step } from '../context.js';
 import type { ReviewStepCtx } from './shared.js';
 

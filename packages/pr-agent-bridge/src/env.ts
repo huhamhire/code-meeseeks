@@ -1,4 +1,5 @@
 import type { LlmProfile, ReviewRunTool } from '@meebox/shared';
+import { PRAGENT_LOCAL_OUTPUT } from './constants.js';
 
 /**
  * pr-agent 环境变量构造：把一条 LLM Profile 翻成 pr-agent / 嵌入式 shim 认的 env（provider 凭据 /
@@ -195,21 +196,6 @@ export function buildChatEnv(
   if (opts.promptCache) env['MEEBOX_CHAT_CACHE'] = '1';
   return env;
 }
-
-/**
- * pr-agent local provider 各 tool 的产出落盘文件名（worktree 根的相对路径）：
- *   /describe → description.md（publish_description）
- *   /review   → review.md     （publish_comment）
- *   /ask      → review.md     （共用同一文件，publish_comment 覆盖）
- *   /improve  → improve.md    （汇总建议走 publish_comment，经 LOCAL__REVIEW_PATH 重定向与 review.md 分流）
- * 既供 buildToolEnv 设 LOCAL__REVIEW_PATH，也供调用方 run 结束后读取产出文件——两处共用此表保持同步。
- */
-export const PRAGENT_LOCAL_OUTPUT: Record<ReviewRunTool, string> = {
-  describe: 'description.md',
-  review: 'review.md',
-  ask: 'review.md',
-  improve: 'improve.md',
-};
 
 /** pr-agent tool run 的 env 高层选项：调用方只表达意图（tool + 响应语言），契约 key 由 bridge 持有。 */
 export interface ToolEnvOptions {

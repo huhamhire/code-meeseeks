@@ -1,5 +1,6 @@
 import type { AgentRecommendation } from '@meebox/shared';
-import { extractJson, salvageProse, stripTrailingJson, summarySections } from '../../orchestrator.js';
+import { DEFAULT_SUMMARY_SECTIONS } from '../../orchestrator.js';
+import { extractJson, salvageProse, stripTrailingJson } from '../../utils/index.js';
 import { Step } from '../context.js';
 import { isVerdict, summaryPrompt, type ReviewStepCtx } from './shared.js';
 
@@ -17,7 +18,7 @@ export class SummaryStep extends Step<ReviewStepCtx> {
         ctx.bag.review!.text,
         ctx.bag.askResults,
         ctx.summaryMax,
-        summarySections(ctx.input.language),
+        ctx.input.summarySections ?? DEFAULT_SUMMARY_SECTIONS,
       ),
     });
     const sumMs = Date.now() - sumStart;

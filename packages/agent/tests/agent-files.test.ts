@@ -2,8 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadAgentContext } from '../src/load.js';
-import { scaffoldAgentDir } from '../src/scaffold.js';
+import { loadAgentContext, scaffoldAgentDir } from '../src/agent-files.js';
 
 let dir: string;
 

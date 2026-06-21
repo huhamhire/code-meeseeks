@@ -359,7 +359,7 @@ export class GitLabAdapter implements PlatformAdapter {
     const mr = await this.client.get<GlMr>(base);
     const refs = mr.diff_refs;
     if (!refs) {
-      throw new Error('无法发布行内评论：该 MR 缺少 diff_refs（diff 可能尚未生成）');
+      throw new Error('Cannot post inline comment: this MR has no diff_refs (the diff may not be generated yet)');
     }
     const position: Record<string, unknown> = {
       base_sha: refs.base_sha,
@@ -402,7 +402,7 @@ export class GitLabAdapter implements PlatformAdapter {
       `/projects/${projectId(repo)}/merge_requests/${prId}/notes/${commentId}`,
       { body },
     );
-    if (!note) throw new Error('编辑评论失败：远端空响应');
+    if (!note) throw new Error('Failed to edit comment: empty response from remote');
     // 编辑响应不带 discussion id，threadId 用 note id 兜底（UI 删改后会 force-refresh 评论树）。
     return mapNote(note, String(note.id), this.cachedUser?.name);
   }
@@ -434,7 +434,7 @@ export class GitLabAdapter implements PlatformAdapter {
     }
     // needsWork：GitLab 无 "request changes" 概念。capabilities.reviewStatuses 不含 needsWork，
     // UI 不会触发；防御性抛错。
-    throw new Error('GitLab 不支持「需修改」审批状态');
+    throw new Error('GitLab does not support the "request changes" review status');
   }
 
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {

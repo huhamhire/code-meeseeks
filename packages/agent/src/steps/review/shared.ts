@@ -1,11 +1,13 @@
 import type { AgentRecommendation, AgentRecommendationVerdict } from '@meebox/shared';
+import { VERDICTS } from '../../constants.js';
 import type {
   AgentStepLabels,
   ReviewOrchestratorDeps,
   ReviewOrchestratorInput,
   ToolText,
 } from '../../orchestrator.js';
-import { PROMPT_TEMPLATES, fillTemplate } from '../../prompts.js';
+import { PROMPT_TEMPLATES } from '../../prompts.js';
+import { fillTemplate } from '../../utils/index.js';
 import type { StepRecorder } from '../context.js';
 
 /**
@@ -13,20 +15,10 @@ import type { StepRecorder } from '../context.js';
  * 注册表见 ./index。
  */
 
-const VERDICTS: readonly AgentRecommendationVerdict[] = ['approve', 'needs_work', 'manual_review'];
-
 /** verdict 合法性判定（用于收尾解析；非法 / 缺省回落 manual_review）。 */
 export function isVerdict(v: unknown): v is AgentRecommendationVerdict {
   return typeof v === 'string' && (VERDICTS as readonly string[]).includes(v);
 }
-
-/** 追问判断用的精简系统提示：不带 agent 完整上下文（SOUL / 记忆 / 用户档 / 工具目录 / 规则 / PR 元数据）。
- *  这是一次轻量路由判读，仅凭 describe + review 结果判「是否有严重问题需追问」，与 AutoPilot 初判同思路。 */
-export const JUDGE_SYSTEM =
-  'You are a senior code reviewer triaging review findings for follow-up. Be decisive and terse; reply with JSON only, no reasoning.';
-
-/** 追问判读的输出 token 上限：产物是极小 JSON（severe + 至多数条问题），无需大额度。 */
-export const JUDGE_MAX_OUTPUT_TOKENS = 1024;
 
 /** 追问判读 user 指令外置在 resources/prompts/judge.md（占位 maxAsks/language）；describe/review 正文在此追加。
  *  语言显式要求随会话语言出题（精简 system 不带 assembleSystemContext 的语言指令，否则默认英文）。 */

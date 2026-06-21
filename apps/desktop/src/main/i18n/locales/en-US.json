@@ -1,4 +1,26 @@
 {
+  "agent": {
+    "steps": {
+      "describe": "Generate the PR description",
+      "judge": "Decide whether there are severe issues needing follow-up",
+      "judgeNone": "No severe issues — no follow-up",
+      "judgeSevere_one": "Severe — {{count}} follow-up question",
+      "judgeSevere_other": "Severe — {{count}} follow-up questions",
+      "parseFail": "Could not parse a recommendation — routing to manual review",
+      "rejectedPrefix": "Rejected: ",
+      "review": "Generate the code review findings",
+      "summary": "Synthesize the description and findings into a review summary"
+    },
+    "summarySections": {
+      "findings": "Key findings",
+      "overview": "Summary",
+      "suggestions": "Suggestions"
+    },
+    "termination": {
+      "aborted": "Paused by user",
+      "maxSteps": "Step limit reached"
+    }
+  },
   "dialog": {
     "selectDirectory": "Select directory"
   },

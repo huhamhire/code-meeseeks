@@ -1,4 +1,5 @@
 import type { PrAgentStrategy } from '@meebox/shared';
+import { DEFAULT_CHAT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, UTF8_ENV } from './constants.js';
 import { defaultExec } from './exec.js';
 import { PrAgentRunError } from './types.js';
 import type {
@@ -8,15 +9,6 @@ import type {
   PrAgentRunOptions,
   PrAgentRunResult,
 } from './types.js';
-
-// 10 min — /review 在长 PR + 推理型模型 (DeepSeek-v4 / Claude thinking) 下常跑
-// 3-8 min；5 min 经常打 timeout。设到 10 min 让绝大多数真实 PR 能跑完，仍能兜住
-// 卡死的子进程不让它无限挂着。需要更长的话调用方可在 opts.timeoutMs 显式覆盖
-const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
-// chat 通道单次默认 5 min：编排 / 判定调用通常远快于 /review，但推理型模型仍可能慢。
-const DEFAULT_CHAT_TIMEOUT_MS = 5 * 60 * 1000;
-// 强制 UTF-8（中文 Windows 默认码页会让含 emoji 的输出崩，见 buildInvocation）。
-const UTF8_ENV = { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } as const;
 
 /** 各策略共享的骨架：把 RunOptions 翻成 (cmd, args, env) 后委派给 ExecFn */
 abstract class BaseBridge implements PrAgentBridge {
@@ -163,22 +155,19 @@ export class EmbeddedRuntimeBridge extends BaseBridge {
     cwd?: string;
   } {
     const cli = ['-m', 'pr_agent.cli'];
-    // 强制 UTF-8 模式：嵌入式 Python 在中文 Windows 上默认用系统码页 (GBK/cp936) 做
-    // stdio / 文件编码，pr-agent 输出含 emoji (如 🔍 section 标题) 时会 'gbk' codec
-    // can't encode 崩掉。PYTHONUTF8=1 覆盖 stdio+fs+默认 open() 编码，IOENCODING 兜底。
-    const utf8 = { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
+    // 强制 UTF-8（UTF8_ENV）：嵌入式 Python 在中文 Windows 上默认系统码页会让含 emoji 的输出崩，见 constants。
     if (opts.cwd) {
       return {
         cmd: this.pythonPath,
         args: [...cli, '--pr_url', opts.targetBranch ?? '', opts.tool, ...(opts.extraArgs ?? [])],
-        env: { ...(opts.env ?? {}), ...utf8, CONFIG__GIT_PROVIDER: 'local' },
+        env: { ...(opts.env ?? {}), ...UTF8_ENV, CONFIG__GIT_PROVIDER: 'local' },
         cwd: opts.cwd,
       };
     }
     return {
       cmd: this.pythonPath,
       args: [...cli, '--pr_url', opts.prUrl, opts.tool, ...(opts.extraArgs ?? [])],
-      env: { ...(opts.env ?? {}), ...utf8 },
+      env: { ...(opts.env ?? {}), ...UTF8_ENV },
     };
   }
 

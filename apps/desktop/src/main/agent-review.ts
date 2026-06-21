@@ -10,6 +10,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
+import { buildAgentStepLabels, buildSummarySections, mapTerminationReason } from './agent-labels.js';
 
 /**
  * 把纯逻辑的 `runReviewMicroflow` 接到主进程能力上（见 docs/arch/06-agent.md
@@ -93,6 +94,8 @@ export async function runAgentReview(
         pr: { title: pr.title, description: pr.description, targetBranch: pr.targetRef.displayId },
         matchedRule: deps.matchedRule,
         language: deps.language,
+        labels: buildAgentStepLabels(),
+        summarySections: buildSummarySections(),
         toolCatalog: deps.toolCatalog,
         maxFollowupAsks: deps.maxFollowupAsks,
         summaryMaxChars: deps.summaryMaxChars,
@@ -109,12 +112,16 @@ export async function runAgentReview(
     );
   } catch (err) {
     // 用户停止（abort）→ 干净的 paused 收尾，不当失败报错；其余异常仍记为 failed。
-    const aborted = deps.signal?.aborted || (err instanceof Error && err.message === '用户暂停');
+    const aborted = deps.signal?.aborted || (err instanceof Error && err.message === 'aborted');
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {
         status: aborted ? 'paused' : 'failed',
         finishedAt: now().toISOString(),
-        terminationReason: aborted ? '用户暂停' : err instanceof Error ? err.message : String(err),
+        terminationReason: aborted
+          ? mapTerminationReason('aborted')
+          : err instanceof Error
+            ? err.message
+            : String(err),
       })) ?? session
     );
   }

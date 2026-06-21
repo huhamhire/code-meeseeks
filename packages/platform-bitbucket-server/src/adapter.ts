@@ -325,7 +325,7 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     );
     if (!updated) {
       // PUT 接口正常返回 JSON；走到这里只可能是上游 Bitbucket 配错回了 204
-      throw new Error('editComment: Bitbucket 返回空响应，无法确认更新结果');
+      throw new Error('editComment: Bitbucket returned an empty response; cannot confirm the update');
     }
     return mapBitbucketComment(updated);
   }

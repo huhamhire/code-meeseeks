@@ -7,9 +7,9 @@ import type {
   TokenUsage,
   ToolCatalogEntry,
 } from '@meebox/shared';
-import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
+import { assembleSystemContext, type AssemblePrMeta } from './prompts.js';
 import type { MemoryNote } from './memory.js';
-import { stepLabels, summarySections } from './orchestrator.js';
+import { DEFAULT_STEP_LABELS, DEFAULT_SUMMARY_SECTIONS, type AgentStepLabels } from './orchestrator.js';
 import { createStepRecorder } from './steps/context.js';
 import {
   buildConversationContext,
@@ -38,7 +38,7 @@ export interface PlanningDeps {
   /** 分发一个工具，返回文本结果（红线已由编排器先行校验）。 */
   runTool: (call: { tool: string; question?: string }) => Promise<PlanningToolResult>;
   onStep?: (step: AgentStep) => void | Promise<void>;
-  /** 用户暂停信号；abort 后循环在下一步前停下，返回 terminationReason='用户暂停'。 */
+  /** 用户暂停信号；abort 后循环在下一步前停下，返回 terminationReason='aborted'（稳定 code，主进程映射本地化）。 */
   signal?: AbortSignal;
   /**
    * 取出运行期间排队的用户新消息（中途输入转向）：每轮顶部调用，非空则并入当轮 progress，让 ReAct 据
@@ -58,6 +58,10 @@ export interface PlanningInput {
   toolCatalog: ToolCatalogEntry[];
   matchedRule?: Rule | null;
   language?: string;
+  /** 步骤展示文案（主进程 i18n 解析后注入）；省略回落 DEFAULT_STEP_LABELS（en-US）。 */
+  labels?: AgentStepLabels;
+  /** 评审收尾骨架三段标题（主进程 i18n 注入 buildProtocol）；省略回落 DEFAULT_SUMMARY_SECTIONS（en-US）。 */
+  summarySections?: readonly [string, string, string];
   /** 用户的自然语言请求。 */
   userRequest: string;
   /**
@@ -82,6 +86,7 @@ export interface PlanningResult {
   recommendation?: AgentRecommendation;
   /** 本轮主动记下、待持久化到各可写文件的非隐私条目（去重后写盘由上层处理）。 */
   memories: AgentMemoryNotes;
+  /** 中止原因的稳定 code：'aborted'（用户暂停）/ 'max_steps'（步数上限）；本地化文案由主进程映射。 */
   terminationReason?: string;
 }
 
@@ -108,7 +113,7 @@ export async function runPlanningAgent(
   const rec = createStepRecorder(deps.onStep);
   const history: string[] = [];
   const memories = emptyMemoryNotes();
-  const labels = stepLabels(input.language);
+  const labels = input.labels ?? DEFAULT_STEP_LABELS;
 
   const system = `${assembleSystemContext({
     context: input.context,
@@ -116,7 +121,7 @@ export async function runPlanningAgent(
     toolCatalog: input.toolCatalog,
     matchedRule: input.matchedRule,
     language: input.language,
-  })}\n\n---\n\n# Protocol\n\n${buildProtocol(summarySections(input.language))}`;
+  })}\n\n---\n\n# Protocol\n\n${buildProtocol(input.summarySections ?? DEFAULT_SUMMARY_SECTIONS)}`;
 
   // 既往多轮对话注入规划上下文（按预算裁剪），让 Agent 跨轮记住交流；仅供规划 LLM 参考，
   // 绝不透传给 pr-agent 工具。
@@ -127,7 +132,7 @@ export async function runPlanningAgent(
   for (let i = 0; i < maxSteps; i++) {
     const outcome = await planCycleStep.run(ctx);
     if (outcome.kind === 'aborted') {
-      return { steps: rec.steps, finalText: '', tokenUsage: rec.usage, memories, terminationReason: '用户暂停' };
+      return { steps: rec.steps, finalText: '', tokenUsage: rec.usage, memories, terminationReason: 'aborted' };
     }
     if (outcome.kind === 'final') {
       return {
@@ -140,5 +145,5 @@ export async function runPlanningAgent(
     }
   }
 
-  return { steps: rec.steps, finalText: '', tokenUsage: rec.usage, memories, terminationReason: '步数上限中止' };
+  return { steps: rec.steps, finalText: '', tokenUsage: rec.usage, memories, terminationReason: 'max_steps' };
 }

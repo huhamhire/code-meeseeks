@@ -1,6 +1,7 @@
-import { extractJson } from '../../orchestrator.js';
+import { JUDGE_MAX_OUTPUT_TOKENS, JUDGE_SYSTEM } from '../../constants.js';
+import { extractJson } from '../../utils/index.js';
 import { Step } from '../context.js';
-import { JUDGE_MAX_OUTPUT_TOKENS, JUDGE_SYSTEM, judgePrompt, type ReviewStepCtx } from './shared.js';
+import { judgePrompt, type ReviewStepCtx } from './shared.js';
 
 /** 仅严重问题条件性追问的判读（精简 system 轻量路由 + 输出封顶）。 */
 export class JudgeStep extends Step<ReviewStepCtx> {
