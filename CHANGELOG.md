@@ -7,6 +7,8 @@
 
 ### Added
 
+- CLI 模式 `/ask` 取完整文件上下文：本机 CLI（claude / codex）接管 LLM 时，`/ask` 自由问答此前只能基于 diff 推理、读不到仓库完整文件（CLI 子进程被钉在中性临时目录以隔离仓库自带指令）。现仅对 `/ask` 经 `MEEBOX_CLI_WORKDIR` 把子进程 cwd 落到一次性 worktree，能读真实文件作答（如「某函数在别处被谁调用」）；落 cwd 前清空该 worktree 内仓库自带的 agent 指令文件（`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor` 规则 / `.github/copilot-instructions.md`），避免被评审 PR（worktree 即 PR HEAD、作者可控）经指令文件注入 / 污染回答。`/describe`、`/review` 维持中性临时目录不变；API 模式不涉及（远程接口本就只有 diff）。
+
 - Agent 会话「中途输入」与「计划」：Agent 运行期间再输入消息不再被静默丢弃——即时显示用户气泡并入队，下一主 Agent 周期并入、与当前进度对比后重排后续行动（评审微流程跑完后接续处理排队消息；无在跑则直接起一轮规划）。规划 Agent 维护一份可视的「计划」(todo) 面板：每轮给出 / 更新步骤、随进展勾选、收到新输入按最新指令重排；随会话持久化，切 PR / 重启经 `agent:getSession` 恢复。新增 `agent:enqueueMessage` 通道与 `agent:planUpdated` 事件。
 
 - Diff 选中代码引用进提问：在 Diff 选中若干行后，聊天输入栏 AutoReview 按钮右侧出现「N 行已选中」角标（竖线分隔），点击可切换忽略态（eye-slash + 置灰）——忽略时本条消息不带引用。发送 `/ask` 或自然语言提问时，选中代码作为**隐式上下文**注入模型（带文件路径 + 行范围 + base/head 侧），不进入会话气泡、不落盘（`agent:ask` / `pragent:run` 增可选 `referencedContext`，经 EXTRA_INSTRUCTIONS / 规划当轮提示注入，且约束不透传给 pr-agent 工具）。引用不受「可评论区域」限制，未改动的上下文行同样可引用。统一(inline)视图下删除行无法被光标选中，但 head 选区跨到的删除 / 改动 hunk 会据 diff 映射从基线侧取出真实代码一并引用（删除内容也能像添加行一样被引用）；并排视图删除行可直接选中。切换 PR / 选区塌缩即清。
