@@ -2,17 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReviewRunTool } from '@meebox/shared';
 import { formatElapsed, formatStartTime, inferPhase, runStatusLabel } from '../utils/format';
-import { AnsiPre, Spinner } from './shared';
+import { AnsiPre, AskQuestion, Spinner } from './shared';
 
 export function RunningView({
   tool,
   runId,
+  question,
   lines,
   startedAt,
   model,
 }: {
   tool: ReviewRunTool;
   runId: string;
+  /** /ask 的提问：执行中也直接展示（与排队 / 完成态一致；问题在派发时已生成）。 */
+  question?: string;
   lines: ReadonlyArray<string>;
   startedAt: number;
   /** 当前 active LLM profile.model — 跟 RunMeta 同源放在 chip 行，让 running
@@ -69,6 +72,8 @@ export function RunningView({
           {formatStartTime(startedAt)}
         </span>
       </header>
+      {/* /ask 的提问执行中也直接展示（问题已生成，不必等排队 / 完成才可见）。 */}
+      {tool === 'ask' && question?.trim() && <AskQuestion text={question.trim()} />}
       {phase && (
         <div className="chat-chip chat-chip-md chat-chip-quiet chat-chip-accent chat-run-phase">
           {phase}

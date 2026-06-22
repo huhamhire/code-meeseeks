@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runReviewMicroflow } from '../src/orchestrator.js';
 import type { ReviewOrchestratorDeps } from '../src/orchestrator.js';
+import { DEFAULT_REVIEW_PLAN, isValidReviewPlan } from '../src/steps/review/index.js';
 import type { AgentContext } from '../src/types.js';
 import { extractJson, salvageProse, stripTrailingJson } from '../src/utils/index.js';
 
@@ -147,5 +148,46 @@ describe('runReviewMicroflow', () => {
     };
     await runReviewMicroflow(deps, { context, pr });
     expect(seen).toEqual(['plan', 'judge', 'plan']);
+  });
+
+  it('runs a custom plan (skip judge/asks)', async () => {
+    const { deps, toolCalls } = makeDeps({
+      chatReplies: ['{"summary": "ok", "recommendation": {"verdict": "approve", "reason": "r"}}'],
+    });
+    const r = await runReviewMicroflow(deps, {
+      context,
+      pr,
+      plan: { steps: ['describe-review', 'summary'] },
+    });
+    // describe-review 步两只读工具仍并行跑；judge / asks 被跳过。
+    expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
+    expect(r.summary).toBe('ok');
+  });
+
+  it('falls back to the default plan when the plan is invalid (summary without describe-review)', async () => {
+    const { deps, toolCalls } = makeDeps({
+      chatReplies: [
+        '{"severe": false, "questions": []}',
+        '{"summary": "all good", "recommendation": {"verdict": "approve", "reason": "ok"}}',
+      ],
+    });
+    const r = await runReviewMicroflow(deps, { context, pr, plan: { steps: ['summary'] } });
+    // 非法计划回落 DEFAULT：describe-review → judge → asks(空) → summary。
+    expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'judge', 'plan']);
+  });
+});
+
+describe('isValidReviewPlan', () => {
+  it('accepts the default plan', () => {
+    expect(isValidReviewPlan(DEFAULT_REVIEW_PLAN)).toBe(true);
+  });
+  it('rejects empty / unknown-kind / judge|summary lacking describe-review', () => {
+    expect(isValidReviewPlan({ steps: [] })).toBe(false);
+    expect(isValidReviewPlan({ steps: ['nope' as never] })).toBe(false);
+    expect(isValidReviewPlan({ steps: ['judge'] })).toBe(false);
+    expect(isValidReviewPlan({ steps: ['summary'] })).toBe(false);
+    expect(isValidReviewPlan({ steps: ['describe-review', 'summary'] })).toBe(true);
   });
 });

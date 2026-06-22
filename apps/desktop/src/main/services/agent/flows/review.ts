@@ -1,5 +1,5 @@
 import { buildToolCatalog, loadAgentContext } from '@meebox/agent';
-import type { AgentContext } from '@meebox/agent';
+import type { AgentContext, ReviewPlan } from '@meebox/agent';
 import { pickMatchingRule } from '@meebox/rules';
 import type { AgentSession, StoredPullRequest } from '@meebox/shared';
 import { getMainLanguage, t } from '../../../i18n/index.js';
@@ -64,6 +64,8 @@ export function runReviewForPr(
   chat: AgentChat,
   signal?: AbortSignal,
   autopilot = false,
+  /** 评审执行计划（仅 AutoPilot 按规则注入）；省略 → 微流程走默认全集。 */
+  plan?: ReviewPlan,
 ): Promise<AgentSession> {
   const agentCfg = runtime.ctx.bootstrap.config.agent;
   const matchedRule = pickMatchingRule(agentContext.rules, {
@@ -81,6 +83,7 @@ export function runReviewForPr(
     matchedRule,
     language: getMainLanguage(),
     toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
+    plan,
     maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
     summaryMaxChars: agentCfg.summary_max_chars,
     onStep: (sessionId, step) => runtime.emitStep(pr, sessionId, step),

@@ -17,6 +17,8 @@ export type {
   AssembleSessionSnapshot,
 } from './prompts.js';
 export { runReviewMicroflow } from './orchestrator.js';
+export { DEFAULT_REVIEW_PLAN, isValidReviewPlan } from './steps/review/index.js';
+export type { ReviewPlan, ReviewStepKind } from './steps/review/index.js';
 export { extractJson } from './utils/index.js';
 export { runPlanningAgent } from './planner.js';
 export type {

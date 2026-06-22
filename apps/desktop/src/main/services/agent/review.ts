@@ -1,4 +1,4 @@
-import { runReviewMicroflow, type AgentContext } from '@meebox/agent';
+import { runReviewMicroflow, type AgentContext, type ReviewPlan } from '@meebox/agent';
 import { appendAgentStep, startAgentSession, updateAgentSession } from '@meebox/poller';
 import type { Rule } from '@meebox/rules';
 import type {
@@ -44,6 +44,8 @@ export interface ReviewDeps {
   toolCatalog?: ToolCatalogEntry[];
   maxFollowupAsks: number;
   summaryMaxChars: number;
+  /** 评审执行计划（步骤序列）；省略 / 非法时微流程回落默认全集。仅 AutoPilot 按规则注入，手动评审省略。 */
+  plan?: ReviewPlan;
   /** 步骤流式回调（广播给渲染层）。 */
   onStep?: (sessionId: string, step: AgentStep) => void;
   /** 用户停止：透传给微流程，思考 / 执行任意阶段都能立即中止（停止按钮 → agent:stop）。 */
@@ -97,6 +99,7 @@ export async function runReview(
         labels: buildStepLabels(),
         summarySections: buildSummarySections(),
         toolCatalog: deps.toolCatalog,
+        plan: deps.plan,
         maxFollowupAsks: deps.maxFollowupAsks,
         summaryMaxChars: deps.summaryMaxChars,
       },
