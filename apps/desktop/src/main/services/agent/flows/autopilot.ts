@@ -1,4 +1,4 @@
-import { judgeAutopilotBatch, loadAgentContext } from '@meebox/agent';
+import { judgeAutopilotBatch, loadAgentContext, type ReviewPlan } from '@meebox/agent';
 import {
   getAutopilotLedger,
   hasReviewOutput,
@@ -64,8 +64,8 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
         agentsRules: agentContext.files.agents,
       });
       const byId = new Map(candidates.map((p) => [p.localId, p] as const));
-      // 先落「跳过」决策（无工具开销，顺序写盘即可）；收集「评审」决策待并行编排。
-      const toReview: StoredPullRequest[] = [];
+      // 先落「跳过」决策（无工具开销，顺序写盘即可）；收集「评审」决策（连同其执行计划）待并行编排。
+      const toReview: Array<{ pr: StoredPullRequest; plan?: ReviewPlan }> = [];
       for (const d of decisions) {
         const pr = byId.get(d.prLocalId);
         if (!pr) continue;
@@ -81,15 +81,16 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
           });
           continue;
         }
-        toReview.push(pr);
+        // d.plan 为本期判定恒省略 → 微流程走默认全集；预留规则驱动计划的注入点（见 JudgeDecision.plan）。
+        toReview.push({ pr, plan: d.plan });
       }
       // 多 PR 评审并行编排：各编排 await 自己的工具 run 时彼此不挡，让 run-queue 并发尽量被填满。
       await Promise.all(
-        toReview.map(async (pr) => {
+        toReview.map(async ({ pr, plan }) => {
           // AutoPilot 后台评审无 AbortController，但同样标记「执行中」——纯思考阶段也在 PR 列表项显示。
           runtime.markRunning(pr.localId);
           try {
-            const session = await runReviewForPr(runtime,pr, agentContext, chat, undefined, true);
+            const session = await runReviewForPr(runtime, pr, agentContext, chat, undefined, true, plan);
             // done：落「评审总结」消息 + 台账（含 verdict）+ 广播（与手动评审一致）。失败 / 暂停不落台账。
             await runtime.recordReviewSummaryMessage(pr, session);
           } finally {

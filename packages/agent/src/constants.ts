@@ -3,7 +3,7 @@ import type { AgentContextFiles } from './types.js';
 
 /**
  * 包内常量统一收口：所有值常量（标量 / 字符串 / 纯数据数组与映射）集中于此，便于复用与调参。
- * 不收的两类（非「值常量」）：step 注册表（steps/review/index.ts 的 REVIEW_STEPS，实例化各 step 类的组合根）、
+ * 不收的两类（非「值常量」）：step 注册表（steps/review/index.ts 的 REVIEW_STEP_REGISTRY，实例化各 step 类的组合根）、
  * ?raw 资源载入对象（prompts.ts 的 PROMPT_TEMPLATES、templates.ts 的 AGENT_TEMPLATES）——它们是各自模块的本体。
  */
 

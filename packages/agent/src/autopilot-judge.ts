@@ -1,6 +1,7 @@
 import type { TokenUsage } from '@meebox/shared';
 import { DESC_CLAMP } from './constants.js';
 import { PROMPT_TEMPLATES } from './prompts.js';
+import type { ReviewPlan } from './steps/review/index.js';
 import { extractJson, fillTemplate } from './utils/index.js';
 
 /**
@@ -19,6 +20,11 @@ export interface JudgeDecision {
   prLocalId: string;
   review: boolean;
   reason: string;
+  /**
+   * 该 PR 的评审执行计划（步骤序列）。本期判定**不产出**（恒省略 → 走 DEFAULT_REVIEW_PLAN）；预留为后续
+   * 「规则驱动步骤选择」的注入点：judge 提示词 + AGENTS.md 规则可逐 PR 给出计划（跳过 / 重排 / 增删步骤）。
+   */
+  plan?: ReviewPlan;
 }
 
 export interface AutopilotJudgeInput {

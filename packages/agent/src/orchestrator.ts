@@ -2,7 +2,13 @@ import type { Rule } from '@meebox/rules';
 import type { AgentRecommendation, AgentStep, TokenUsage, ToolCatalogEntry } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './prompts.js';
 import { createStepRecorder } from './steps/context.js';
-import { REVIEW_STEPS, type ReviewStepCtx } from './steps/review/index.js';
+import {
+  DEFAULT_REVIEW_PLAN,
+  assembleReviewSteps,
+  isValidReviewPlan,
+  type ReviewPlan,
+  type ReviewStepCtx,
+} from './steps/review/index.js';
 import type { AgentContext } from './types.js';
 
 /**
@@ -45,6 +51,11 @@ export interface ReviewOrchestratorInput {
   maxFollowupAsks?: number;
   /** 总结篇幅的**参考**上限（默认 800 字符）：仅作提示词里的软约束引导 LLM 收敛，**不**对产出做硬截断。 */
   summaryMaxChars?: number;
+  /**
+   * 执行计划（步骤序列）。省略 / 非法时用 DEFAULT_REVIEW_PLAN（即 describe-review → judge → asks →
+   * summary，与拆 plan 前一致）。仅 AutoPilot 路径会按规则注入自定义计划；手动评审恒省略走默认。
+   */
+  plan?: ReviewPlan;
 }
 
 export interface ReviewOrchestratorResult {
@@ -97,8 +108,9 @@ export const DEFAULT_STEP_LABELS: AgentStepLabels = {
 };
 
 /**
- * 跑一次评审微流程：describe → review →（仅严重问题）条件追问 ≤N → 收尾总结 + 建议。只用只读工具
- * （describe/review/ask），不碰修改类操作。驱动顺序跑 REVIEW_STEPS、与各步共享 StepRecorder。
+ * 跑一次评审微流程：默认 describe → review →（仅严重问题）条件追问 ≤N → 收尾总结 + 建议。只用只读工具
+ * （describe/review/ask），不碰修改类操作。驱动按 input.plan（省略 / 非法回落 DEFAULT_REVIEW_PLAN）经
+ * assembleReviewSteps 顺序跑各步、与各步共享 StepRecorder。
  */
 export async function runReviewMicroflow(
   deps: ReviewOrchestratorDeps,
@@ -130,7 +142,9 @@ export async function runReviewMicroflow(
     bag: { questions: [], askResults: [] },
   };
 
-  for (const step of REVIEW_STEPS) await step.run(ctx);
+  // 计划：省略 / 非法（如 judge/summary 缺前置 describe-review）一律回落默认全集，避免坏计划崩在步骤里。
+  const plan = input.plan && isValidReviewPlan(input.plan) ? input.plan : DEFAULT_REVIEW_PLAN;
+  for (const step of assembleReviewSteps(plan)) await step.run(ctx);
 
   return {
     steps: rec.steps,
