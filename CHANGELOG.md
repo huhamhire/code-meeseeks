@@ -7,6 +7,14 @@
 
 ### Added
 
+- agent 自动评审自动「复评 / 取代」review 评论：自动评审微流程（describe→review→judge→asks→summary）里，judge 现可对某条 review 代码评论（finding）出**复评追问**（按 id 点名 `targetFindingId`），asks 步以复评模式跑该追问（携 `referencedFinding`），裁决为「取代 / 撤销」时**自动关闭**被取代的原 finding（建立 `FindingClosure`，原卡转关闭态并与复评 ask 卡互链）——无需用户手动点「引用」。默认开启、保守：仅 judge 明确点名某条 finding 且复评裁决为 replace/drop 时才关闭，keep / 未点名不动；新评论不自动落草稿，仍由用户在复评卡手动「采纳」（与手动引用路径一致）。复用 `/ask` 复评闭环的数据与渲染（`referencedFinding` / `askVerdict` / `FindingClosure`）。
+
+- `/ask` 复评引用闭环：可对先前 review/improve 在 ChatPane 生成的代码评论建议（finding 卡片）发起「复评」。finding 卡片新增「引用」按钮 → 把该条挂到输入栏（复用 diff 选区引用的 chip + 预填可编辑的默认复评问题），发送后本条 `/ask` 携带该引用走复评模式：按结构化分段额外产出裁决 `<verdict>`（取代 / 保留 / 撤销），结果卡顶部显示「复评自 <file:line>」徽标（点击回链原卡）+ 裁决 chip + **手动**动作。「采纳并关闭原」把建议作为新评论草稿锚定原位置并关闭原 finding；「关闭原评论」仅关闭；关闭后原 finding 卡转「已被复评取代/关闭」态（折叠 + 撤销关闭 + 互链到复评卡）。关闭关系独立持久化（非草稿语义），新增 `findingClosures:list/create/delete` 通道与 `findingClosures:changed` 事件、`ReviewRun.referencedFinding` / `askVerdict` 字段。仅 `/ask`；agent 自动评审里 ask 自动关联 / 取代 review 建议为后续迭代。
+
+- `/ask` 结构化分段输出：自由问答此前无结构、冗长，reviewer 难以快速获取信息。现经提示词约束模型按确定性分段输出——`<summary>`（结论 / 直接回答，绿色高亮、默认展开）、`<analysis>`（过程性分析 / 讨论，灰色、**默认收起**可展开）、`<suggestions>`（可执行建议，琥珀色高亮）。解析层按标签切段成独立卡片（模型未遵循 / 无标签时整体回退普通解析，不破坏既有行为），渲染层按段着色 + 过程段折叠，关键结论与建议一眼可见。仅 `/ask`，`/describe`、`/review` 输出不变。
+
+- CLI 模式 `/ask` 取完整文件上下文：本机 CLI（claude / codex）接管 LLM 时，`/ask` 自由问答此前只能基于 diff 推理、读不到仓库完整文件（CLI 子进程被钉在中性临时目录以隔离仓库自带指令）。现仅对 `/ask` 经 `MEEBOX_CLI_WORKDIR` 把子进程 cwd 落到一次性 worktree，能读真实文件作答（如「某函数在别处被谁调用」）；落 cwd 前清空该 worktree 内仓库自带的 agent 指令文件（`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor` 规则 / `.github/copilot-instructions.md`），避免被评审 PR（worktree 即 PR HEAD、作者可控）经指令文件注入 / 污染回答。`/describe`、`/review` 维持中性临时目录不变；API 模式不涉及（远程接口本就只有 diff）。
+
 - Agent 会话「中途输入」与「计划」：Agent 运行期间再输入消息不再被静默丢弃——即时显示用户气泡并入队，下一主 Agent 周期并入、与当前进度对比后重排后续行动（评审微流程跑完后接续处理排队消息；无在跑则直接起一轮规划）。规划 Agent 维护一份可视的「计划」(todo) 面板：每轮给出 / 更新步骤、随进展勾选、收到新输入按最新指令重排；随会话持久化，切 PR / 重启经 `agent:getSession` 恢复。新增 `agent:enqueueMessage` 通道与 `agent:planUpdated` 事件。
 
 - Diff 选中代码引用进提问：在 Diff 选中若干行后，聊天输入栏 AutoReview 按钮右侧出现「N 行已选中」角标（竖线分隔），点击可切换忽略态（eye-slash + 置灰）——忽略时本条消息不带引用。发送 `/ask` 或自然语言提问时，选中代码作为**隐式上下文**注入模型（带文件路径 + 行范围 + base/head 侧），不进入会话气泡、不落盘（`agent:ask` / `pragent:run` 增可选 `referencedContext`，经 EXTRA_INSTRUCTIONS / 规划当轮提示注入，且约束不透传给 pr-agent 工具）。引用不受「可评论区域」限制，未改动的上下文行同样可引用。统一(inline)视图下删除行无法被光标选中，但 head 选区跨到的删除 / 改动 hunk 会据 diff 映射从基线侧取出真实代码一并引用（删除内容也能像添加行一样被引用）；并排视图删除行可直接选中。切换 PR / 选区塌缩即清。

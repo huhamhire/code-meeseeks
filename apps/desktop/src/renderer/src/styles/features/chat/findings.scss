@@ -39,14 +39,18 @@
   &.chat-finding-description,
   &.chat-finding-walkthrough,
   &.chat-finding-relevant-tests,
-  &.chat-finding-security {
+  &.chat-finding-security,
+  &.chat-finding-ask-summary {
     border-left-color: $color-approved;
   }
-  &.chat-finding-score {
+  // /ask 过程分析：中性灰（默认收起的过程性段，不抢眼）
+  &.chat-finding-score,
+  &.chat-finding-ask-analysis {
     border-left-color: $text-muted;
   }
   &.chat-finding-code-feedback,
-  &.chat-finding-code-suggestion {
+  &.chat-finding-code-suggestion,
+  &.chat-finding-ask-suggestions {
     border-left-color: $color-warning;
   }
   &.chat-finding-general {
@@ -99,6 +103,29 @@
 
   &:hover {
     color: $text-primary;
+    background: $bg-surface;
+  }
+}
+// 「引用」按钮：独立置于卡片头部右上角（与其他评论操作区分），社媒「转发」箭头图标。低调中性 → hover 主色。
+// margin-left:auto 顶到最右；与 collapse-toggle 并存时排在其左侧（二者贴右成一组）。
+.chat-finding-reference-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
+  // 与其后的 collapse-toggle 并排时，自身已吃掉左侧空白，二者紧贴卡片右缘。
+  & + .chat-finding-collapse-toggle {
+    margin-left: 0;
+  }
+  &:hover {
+    color: $color-info;
     background: $bg-surface;
   }
 }

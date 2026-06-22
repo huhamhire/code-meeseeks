@@ -85,7 +85,12 @@ litellm**。
   解析 JSON 的 `result` 文本 + `usage`」的版本，返回 `(text, "stop")`。**只依赖 `base_ai_handler` 的稳定契约，
   不受版本守卫限制**（区别于其它依赖内部实现的补丁，放在版本守卫之前）。
 - **prompt 走 stdin**：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；system/user 合并成
-  一段喂入（CLI 无独立 system 槽）。cwd 落到临时目录，避免吃到被评审仓库的 `CLAUDE.md`。
+  一段喂入（CLI 无独立 system 槽）。cwd 默认落到中性临时目录，避免吃到被评审仓库的 `CLAUDE.md`/`AGENTS.md`。
+- **`/ask` 例外（取完整文件上下文）**：自由问答需读真实文件，仅对 `/ask` 由主进程下发 env `MEEBOX_CLI_WORKDIR`
+  = 物化好的 worktree，shim 据此把子进程 cwd 落到 worktree（`describe`/`review` 不下发、维持中性临时目录）。
+  落 cwd 前主进程先**清空该 worktree 内仓库自带的 agent 指令文件**（`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor`
+  规则 / `.github/copilot-instructions.md`，见 `services/pr-agent/worktree-sanitize.ts`）——worktree 即 PR HEAD、
+  作者可控，不清空则 CLI 会自动加载这些指令、被评审 PR 可经此注入 / 污染回答；worktree 用后即弃，就地清空无副作用。
 - **沿用 CLI 自身登录态**：子进程继承 `HOME`/`USERPROFILE`，CLI 读自己的登录凭据（如 `~/.claude`）运行。
   为避免本机环境里残留的 API key 串入、覆盖 CLI 自身的登录方式，shim 显式从子进程 env **剥掉
   `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`**。使用的模型、额度与合规均由该 CLI 的账户与用户授权决定。

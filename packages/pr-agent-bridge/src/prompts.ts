@@ -128,8 +128,72 @@ function reviewLayoutDirective(tool: ReviewRunTool): string {
 }
 
 /**
- * 组装注入 pr-agent 的 EXTRA_INSTRUCTIONS：按序拼接 语言指示 / anchor marker / 排版 / PR 上下文 /
- * 命中规则，空段跳过；全空返回 undefined（调用方据此决定是否设 env）。
+ * /ask 结构化分段指令：让自由问答按确定性分段输出，便于 GUI 快速归纳。要求把回答包进字面
+ * `<summary>` / `<analysis>` / `<suggestions>` 三段——summary 必填（结论，GUI 高亮展开）、analysis
+ * 可省（过程分析，GUI 默认收起）、suggestions 可省（可执行建议，GUI 高亮）。仅 /ask 注入；模型未遵循
+ * 时 parse-output 整体回退普通解析（见 packages/poller）。anchor marker 规则在各段内仍适用。
+ */
+function structuredAskDirective(tool: ReviewRunTool): string {
+  if (tool !== 'ask') return '';
+  return [
+    'STRUCTURE YOUR ANSWER into these XML-style sections, in this exact order, each',
+    'tag on its own line. A code-review GUI parses these tags to present a scannable,',
+    'structured answer — avoid free-form prose outside the tags.',
+    '',
+    '  <summary>',
+    '  A direct, concise answer / conclusion to the question (a few sentences). This',
+    '  is the key takeaway the reviewer reads first.',
+    '  </summary>',
+    '',
+    '  <analysis>',
+    '  Your supporting reasoning / investigation / discussion. This section is',
+    '  collapsed by default in the GUI — put the verbose process here, not in summary.',
+    '  </analysis>',
+    '',
+    '  <suggestions>',
+    '  Concrete, actionable recommendations. Omit this section entirely if you have',
+    '  no actionable suggestion.',
+    '  </suggestions>',
+    '',
+    'Rules:',
+    '- <summary> is REQUIRED. <analysis> and <suggestions> are OPTIONAL — omit the',
+    '  whole tag pair when you have nothing for it; never emit an empty tag.',
+    '- Use the literal lowercase tags exactly as shown; do not nest them or invent',
+    '  other tags. Put the section content (in the requested response language)',
+    '  between the tags.',
+    '- The anchor-marker rule above still applies to paragraphs INSIDE these sections',
+    '  (especially <suggestions>) that name a specific code symbol.',
+  ].join('\n');
+}
+
+/**
+ * /ask 复评模式指令：本次 /ask 是对一条既有评审评论（正文随 referencedContext 给出）的复评时注入。
+ * 在结构化三段基础上，要求模型额外给出 `<verdict>` 裁决——replace（取代：给改进后的评论，写进
+ * `<suggestions>`）/ keep（原评论成立）/ drop（原评论不成立、无需评论）。驱动结果卡的采纳 / 关闭动作。
+ */
+function referencedAskDirective(tool: ReviewRunTool, hasReferencedFinding: boolean): string {
+  if (tool !== 'ask' || !hasReferencedFinding) return '';
+  return [
+    'RE-EVALUATION MODE: You are re-evaluating an EXISTING review comment (its text is',
+    'provided in the referenced selection). Decide whether that comment should stand, be',
+    'replaced, or be dropped, and end your answer with EXACTLY ONE verdict tag on its own',
+    'line:',
+    '',
+    '  <verdict>replace</verdict>  — the original comment is wrong / weak / outdated; your',
+    '    improved comment should REPLACE it. Put the proposed replacement comment text in',
+    '    the <suggestions> section.',
+    '  <verdict>keep</verdict>     — the original comment is valid and should stand as-is.',
+    '  <verdict>drop</verdict>     — the original comment is not warranted (false positive /',
+    '    non-issue); no comment is needed.',
+    '',
+    'Keep <summary> to your conclusion, put the reasoning in <analysis>, and (for replace)',
+    'the proposed replacement comment in <suggestions>.',
+  ].join('\n');
+}
+
+/**
+ * 组装注入 pr-agent 的 EXTRA_INSTRUCTIONS：按序拼接 语言指示 / anchor marker / 结构化分段 / 复评裁决 /
+ * 排版 / PR 上下文 / 命中规则，空段跳过；全空返回 undefined（调用方据此决定是否设 env）。
  * - 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但 /ask 走 [pr_questions] 不严格
  *   遵守，必须显式强化
  * - PR 上下文 / 规则由调用方现读传入（local provider 不自己去远端拉这些）
@@ -141,10 +205,14 @@ export function buildExtraInstructions(input: {
   matchedRuleInstructions: string;
   /** 用户在 Diff 里选中的代码片段（自描述引用块，渲染层已拼好），仅 /ask 注入。 */
   referencedContext?: string;
+  /** 本次 /ask 是否为对某条既有评论的「复评」；为真则注入复评裁决指示（仅 /ask）。 */
+  referencedFinding?: boolean;
 }): string | undefined {
   const parts = [
     languageDirectiveFor(input.language),
     anchorMarkerDirective(input.tool),
+    structuredAskDirective(input.tool),
+    referencedAskDirective(input.tool, !!input.referencedFinding),
     reviewLayoutDirective(input.tool),
     input.prContext,
     input.referencedContext ?? '',

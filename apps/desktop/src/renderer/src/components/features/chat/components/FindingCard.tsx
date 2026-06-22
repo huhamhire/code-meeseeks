@@ -3,8 +3,13 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { Finding, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
-import { ChevronIcon, mermaidComponents, walkthroughMdComponents } from '../../../common';
+import type { Finding, FindingClosure, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
+import {
+  ChevronIcon,
+  ShareIcon,
+  mermaidComponents,
+  walkthroughMdComponents,
+} from '../../../common';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { translatePrAgentLabels } from '../../../../utils/translate-pr-agent';
 import {
@@ -31,6 +36,10 @@ const CAT_TONE: Record<PrDocSectionKey, 'accent' | 'approved' | 'warning' | 'neu
   security: 'approved',
   'code-feedback': 'warning',
   'code-suggestion': 'warning',
+  // /ask 结构化分段：结论高亮(绿)、建议高亮(琥珀)、过程分析中性(灰，默认收起)
+  'ask-summary': 'approved',
+  'ask-analysis': 'neutral',
+  'ask-suggestions': 'warning',
   score: 'neutral',
   general: 'neutral',
 };
@@ -57,12 +66,43 @@ function FindingDraftActions({
   relatedDraft,
   onJump,
   onReject,
+  closure,
+  onReopen,
+  onViewAsk,
 }: {
   relatedDraft?: ReviewDraft;
   onJump?: () => void;
   onReject?: () => void;
+  /** 已被复评关闭/取代时的关闭关系；存在则展示关闭态（替代草稿动作）。 */
+  closure?: FindingClosure;
+  /** 「撤销关闭」回调。 */
+  onReopen?: () => void;
+  /** 「查看复评」回调：滚动定位到关闭它的复评 /ask 卡片。 */
+  onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
+  // 已被复评关闭/取代：展示关闭 chip + 查看复评 + 撤销关闭，替代常规草稿动作。
+  if (closure) {
+    return (
+      <div className="chat-finding-draft-actions">
+        <span className="chat-chip chat-chip-tight chat-chip-neutral chat-finding-closed-chip">
+          {closure.verdict === 'replace'
+            ? t('chatPane.reference.closedReplaced')
+            : t('chatPane.reference.closedDropped')}
+        </span>
+        {onViewAsk && (
+          <button type="button" className="chat-finding-draft-btn" onClick={onViewAsk}>
+            {t('chatPane.reference.viewAsk')}
+          </button>
+        )}
+        {onReopen && (
+          <button type="button" className="chat-finding-draft-btn" onClick={onReopen}>
+            {t('chatPane.reference.reopen')}
+          </button>
+        )}
+      </div>
+    );
+  }
   const status = relatedDraft?.status;
   const chipText: Record<NonNullable<typeof status>, string> = {
     pending: t('chatPane.draftStatusPending'),
@@ -123,6 +163,10 @@ export function FindingCard({
   onJump,
   onReject,
   onNavigate,
+  onReference,
+  closure,
+  onReopen,
+  onViewAsk,
 }: {
   finding: Finding;
   /** 该 finding 关联的草稿；undefined = 尚未交互过；不为空 = 已 pending / edited / rejected / posted */
@@ -133,15 +177,27 @@ export function FindingCard({
   onReject?: () => void;
   /** 点击锚点：仅导航到 Diff 对应行（不进编辑态） */
   onNavigate?: () => void;
+  /** 「引用」按钮回调：把本 finding 挂到输入栏发起复评 /ask（仅 code 类 finding 出现）。 */
+  onReference?: () => void;
+  /** 本 finding 已被复评关闭/取代时的关闭关系（驱动关闭态渲染）。 */
+  closure?: FindingClosure;
+  /** 「撤销关闭」回调。 */
+  onReopen?: () => void;
+  /** 「查看复评」回调：滚动定位到关闭它的复评 /ask 卡片。 */
+  onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
   // 已拒绝：左色条 + 类别 chip 置灰，卡片默认折叠收起（仅留头部 chip + 锚点行 +
   // 撤销按钮）。点头部的展开/收起切换可临时回看正文，不影响草稿状态。
   const isRejected = relatedDraft?.status === 'rejected';
-  const [expanded, setExpanded] = useState(false);
-  const collapsed = isRejected && !expanded;
+  // 已被复评关闭/取代：同样收起降饱和（与已拒绝同套视觉），动作区改为查看复评 + 撤销关闭。
+  const isClosed = !!closure;
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
+  // 默认折叠：已拒绝 / 已关闭 finding，或 /ask「分析过程」段（过程性讨论默认收起、可展开，复用同套折叠 UI）。
+  const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
+  const [expanded, setExpanded] = useState(false);
+  const collapsed = collapsibleByDefault && !expanded;
   const label = sectionLabel(key, t);
   // 标题在已知 sectionKey 上**通常**跟 chip label 内容重复 (h4 显示 "PR Type" + chip
   // 显示 "类型")，所以默认只有 general 段才出 title。但 pr-agent 把若干段的"值"放在
@@ -165,7 +221,7 @@ export function FindingCard({
     : undefined;
   return (
     <li
-      className={`chat-finding chat-finding-${key}${isRejected ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
+      className={`chat-finding chat-finding-${key}${isRejected || isClosed ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
     >
       <header className="chat-finding-head">
         {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
@@ -189,8 +245,21 @@ export function FindingCard({
             <MdInline>{translatedTitle}</MdInline>
           </h4>
         )}
-        {/* 已拒绝才出现的展开 / 收起切换：chevron 图标，收起态指右、展开态转下，纯图标交互 */}
-        {isRejected && (
+        {/* 引用：与其他评论操作按钮区分——独立置于卡片右上角（与标题同排），社媒「转发」箭头图标。
+            仅可锚定的 code 类 finding（onReference 在）且未关闭时出现；发起复评 /ask（挂到输入栏）。 */}
+        {onReference && !isClosed && (
+          <button
+            type="button"
+            className="chat-finding-reference-btn"
+            onClick={onReference}
+            title={t('chatPane.reference.referenceTitle')}
+            aria-label={t('chatPane.reference.reference')}
+          >
+            <ShareIcon size={16} />
+          </button>
+        )}
+        {/* 可默认折叠的段（已拒绝 / ask 分析过程）出现展开 / 收起切换：chevron 收起态指右、展开态转下 */}
+        {collapsibleByDefault && (
           <button
             type="button"
             className={`chat-finding-collapse-toggle${collapsed ? '' : ' is-expanded'}`}
@@ -250,12 +319,15 @@ export function FindingCard({
               「编辑转草稿 → 发布行内评论」交互（其它如 summary / description /
               score 没法变 inline 评论） */}
           {finding.anchor.startLine !== undefined &&
-            (onJump || onReject) &&
+            (onJump || onReject || onReference || isClosed) &&
             (key === 'code-feedback' || key === 'code-suggestion') && (
               <FindingDraftActions
                 relatedDraft={relatedDraft}
                 onJump={onJump}
                 onReject={onReject}
+                closure={closure}
+                onReopen={onReopen}
+                onViewAsk={onViewAsk}
               />
             )}
         </div>

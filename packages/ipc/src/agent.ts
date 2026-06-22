@@ -91,12 +91,15 @@ export interface AgentChannels {
      * tool='describe'/'review' 时 question 字段被忽略。
      * referencedContext：用户在 Diff 里选中的代码片段（隐式上下文），仅 tool='ask' 时生效——经
      * EXTRA_INSTRUCTIONS 注入，不进入问题位置参数（故不污染回答 echo / 会话气泡）。
+     * referencedFinding：复评引用——本次 /ask 是对先前 review/improve 某条 finding 的复评（前向链，
+     * 落到 ReviewRun.referencedFinding），驱动复评模式提示词 + 结果卡的裁决动作。仅 tool='ask' 生效。
      */
     request: {
       localId: string;
       tool: ReviewRunTool;
       question?: string;
       referencedContext?: string;
+      referencedFinding?: ReviewRun['referencedFinding'];
     };
     response: ReviewRun;
   };

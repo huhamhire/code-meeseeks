@@ -1,14 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LocalPrStatus, PrAgentStatus, StoredPullRequest } from '@meebox/shared';
+import type {
+  Finding,
+  LocalPrStatus,
+  PrAgentStatus,
+  ReviewRun,
+  StoredPullRequest,
+} from '@meebox/shared';
 import { ChatIcon, TrashIcon, ConfirmModal, PaneLoading } from '../../common';
 import { useChatRunStore } from '../../../stores/chat-run-store';
 import { useDraftsForPr } from '../../../stores/drafts-store';
+import { useFindingClosuresForPr } from '../../../stores/finding-closures-store';
 import {
   formatReferencedContext,
   selectionStore,
   useDiffSelection,
 } from '../../../stores/selection-store';
+import { anchorShortLabel, formatFindingReference } from './utils/findings';
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './constants';
 import { useChatSession } from './hooks/useChatSession';
 import { useChatActions } from './hooks/useChatActions';
@@ -127,6 +135,18 @@ export function ChatPane({
 
   // M4 草稿池：从 main 进程拉本 PR 的草稿，跟 finding 通过 source 字段反查关联
   const drafts = useDraftsForPr(prLocalId);
+  // 复评关闭关系池：FindingCard 据 (runId,findingId) 反查某条 finding 是否已被复评 /ask 关闭/取代。
+  const closures = useFindingClosuresForPr(prLocalId) ?? [];
+
+  // 复评引用态：点 finding「引用」→ 仅挂到输入栏（chip）；不自动填写问题，用户自行输入。发送时携带该引用。
+  const [refFinding, setRefFinding] = useState<{ finding: Finding; run: ReviewRun } | null>(null);
+  // PR 切换清掉引用态，避免跨 PR 残留。
+  useEffect(() => {
+    setRefFinding(null);
+  }, [prLocalId]);
+  const onReferenceFinding = (finding: Finding, run: ReviewRun): void => {
+    setRefFinding({ finding, run });
+  };
 
   // Diff 选区（归属当前 PR）：用于输入栏「N 行已选中」角标 + 把选中代码作为隐式上下文带进提问。
   const { selection: diffSelection, ignored: selectionIgnored } = useDiffSelection(prLocalId);
@@ -167,6 +187,19 @@ export function ChatPane({
   });
   const { agentRunningHere } = actions;
 
+  // 发送一条复评 /ask：携带被引用 finding 的结构化引用 + 正文上下文，走 /ask 直达工具（出裁决 +
+  // 采纳/关闭动作）；发送后清空引用态。
+  const sendReferencedAsk = (q: string): void => {
+    if (!refFinding) return;
+    const { finding, run } = refFinding;
+    void actions.handleRun('ask', q, formatFindingReference(finding), {
+      runId: run.id,
+      findingId: finding.id,
+      anchor: finding.anchor,
+    });
+    setRefFinding(null);
+  };
+
   // 历史时间线归并 + 「思考中」实时计时锚点
   const { timeline, thinkingSince } = useChatTimeline({
     visibleRuns,
@@ -182,6 +215,16 @@ export function ChatPane({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const { runs, error, loadingSession, matchedRule, bodyRef, hasMoreOlder, loadingOlder } = session;
+
+  // 复评卡 ↔ 原 finding 卡互链：按 data-run-id 在时间线里滚动定位 + 短暂高亮。
+  const scrollToRun = (runId: string): void => {
+    const root = bodyRef.current;
+    const el = root?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('chat-run-flash');
+    window.setTimeout(() => el.classList.remove('chat-run-flash'), 1500);
+  };
 
   return (
     <aside
@@ -264,20 +307,30 @@ export function ChatPane({
             初始只拉最新 RUNS_PAGE_SIZE 条；向上滚到顶后再用游标拉更早一批 */}
         {timeline.map((entry, i) =>
           entry.run ? (
-            <RunResultView
-              key={entry.key}
-              run={entry.run}
-              onRetry={actions.handleRetry}
-              onDelete={actions.handleDeleteRun}
-              // 只有"时间线里最后一条 run + 没有正在跑的"这一种情形下，失败 / 取消的 run
-              // 才可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
-              // 避免回头再点重新插队、打乱对话顺序
-              canRetry={i === timeline.length - 1 && !hasMyActive}
-              drafts={drafts ?? []}
-              onJumpToDraft={actions.handleJumpToDraft}
-              onRejectFinding={actions.handleRejectFinding}
-              onNavigateToFinding={actions.handleNavigateToFinding}
-            />
+            // data-run-id：供复评卡 ↔ 原 finding 卡互链滚动定位（scrollToRun）。
+            <div key={entry.key} data-run-id={entry.run.id}>
+              <RunResultView
+                run={entry.run}
+                onRetry={actions.handleRetry}
+                onDelete={actions.handleDeleteRun}
+                // 只有"时间线里最后一条 run + 没有正在跑的"这一种情形下，失败 / 取消的 run
+                // 才可重试；用户已经发起新动作 (无论成功或正在跑) → 旧失败不再展示重试，
+                // 避免回头再点重新插队、打乱对话顺序
+                canRetry={i === timeline.length - 1 && !hasMyActive}
+                drafts={drafts ?? []}
+                closures={closures}
+                onJumpToDraft={actions.handleJumpToDraft}
+                onRejectFinding={actions.handleRejectFinding}
+                onNavigateToFinding={actions.handleNavigateToFinding}
+                onReferenceFinding={onReferenceFinding}
+                onReopenFinding={(runId, findingId) =>
+                  void actions.handleReopenFinding(runId, findingId)
+                }
+                onAdoptAskComment={(r) => void actions.handleAdoptAskComment(r)}
+                onCloseReferencedFinding={(r, v) => void actions.handleCloseReferencedFinding(r, v)}
+                onScrollToRun={scrollToRun}
+              />
+            </div>
           ) : entry.active ? (
             // 正在跑：进度条 + 实时 stdout 流，按启动时间穿插在时间线里（startedAt 入队时为 null、
             // 起跑时设值，fallback enqueuedAt）。prAgent 未就绪时不渲染。
@@ -339,10 +392,21 @@ export function ChatPane({
         // 渲染 stop 按钮 (本 PR 有运行中 run 时可点终止)。多并发时 stop 终止最近一条。
         runningTool={myActiveRuns[myActiveRuns.length - 1]?.tool ?? null}
         // referencedContext 仅 /ask 与自然语言提问携带选区引用（describe/review 不带）。
-        onRun={(tool, q) =>
-          void actions.handleRun(tool, q, tool === 'ask' ? referencedContext : undefined)
-        }
-        onAgentAsk={(q) => void actions.handleAgentAsk(q, referencedContext)}
+        // 引用了 finding 时：本条强制走复评 /ask（携带 finding 引用 + 正文上下文），发送后清空引用。
+        onRun={(tool, q) => {
+          if (tool === 'ask' && refFinding) {
+            sendReferencedAsk(q ?? '');
+            return;
+          }
+          void actions.handleRun(tool, q, tool === 'ask' ? referencedContext : undefined);
+        }}
+        onAgentAsk={(q) => {
+          if (refFinding) {
+            sendReferencedAsk(q);
+            return;
+          }
+          void actions.handleAgentAsk(q, referencedContext);
+        }}
         onCancel={hasMyActive || agentRunningHere ? actions.handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
         // 一键自动评审：图标按钮置于 `/` 命令触发器右侧。runningHere=跑在当前 PR（高亮 / 运行中文案 +
@@ -353,6 +417,19 @@ export function ChatPane({
         selectionLineCount={diffSelection?.lineCount ?? null}
         selectionIgnored={selectionIgnored}
         onToggleSelection={() => selectionStore.toggleIgnored()}
+        // 复评引用：chip（复评 <file:line> + 清除）；点 finding「引用」时挂上，不自动填写问题。
+        referenceChip={
+          refFinding
+            ? {
+                label: t('chatPane.reference.chipLabel', {
+                  loc: anchorShortLabel(refFinding.finding.anchor),
+                }),
+                onClear: () => {
+                  setRefFinding(null);
+                },
+              }
+            : null
+        }
       />
 
       {showRulePreview && matchedRule && (

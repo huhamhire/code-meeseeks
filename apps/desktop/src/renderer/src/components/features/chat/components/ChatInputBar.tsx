@@ -43,6 +43,8 @@ interface ChatInputBarProps {
   selectionIgnored: boolean;
   /** 点击选区角标 → 切换忽略态。 */
   onToggleSelection: () => void;
+  /** 复评引用 chip：引用了某条 finding 时展示「复评 <file:line>」+ 清除；null = 不渲染。 */
+  referenceChip?: { label: string; onClear: () => void } | null;
 }
 
 /**
@@ -66,6 +68,7 @@ export function ChatInputBar({
   selectionLineCount,
   selectionIgnored,
   onToggleSelection,
+  referenceChip,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
   const {
@@ -235,6 +238,26 @@ export function ChatInputBar({
                 {selectionIgnored ? <EyeOffIcon /> : <FileTreeIcon />}
                 <span>{t('chatPane.selection.linesSelected', { lines: selectionLineCount })}</span>
               </button>
+            </>
+          )}
+          {/* 复评引用 chip：引用了某条 review/improve finding 时展示「复评 <file:line>」，点 ✕ 清除引用。
+              发送时本条 /ask 会携带该 finding 引用走复评模式（出裁决 + 采纳/关闭动作）。 */}
+          {referenceChip && (
+            <>
+              <span className="chat-cmd-divider" aria-hidden="true" />
+              <span className="chat-selection-chip chat-reference-chip" title={referenceChip.label}>
+                <FileTreeIcon />
+                <span>{referenceChip.label}</span>
+                <button
+                  type="button"
+                  className="chat-reference-chip-clear"
+                  onClick={referenceChip.onClear}
+                  title={t('chatPane.reference.clearTitle')}
+                  aria-label={t('chatPane.reference.clearTitle')}
+                >
+                  ✕
+                </button>
+              </span>
             </>
           )}
         </div>

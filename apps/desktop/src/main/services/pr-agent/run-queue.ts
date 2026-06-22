@@ -19,7 +19,13 @@ export type RunPriority = 'user' | 'agent';
  */
 export interface QueueItem {
   info: PragentRunInfo;
-  req: { localId: string; tool: ReviewRunTool; question?: string; referencedContext?: string };
+  req: {
+    localId: string;
+    tool: ReviewRunTool;
+    question?: string;
+    referencedContext?: string;
+    referencedFinding?: ReviewRun['referencedFinding'];
+  };
   pr: StoredPullRequest;
   resolve: (run: ReviewRun) => void;
   reject: (err: Error) => void;
@@ -68,6 +74,7 @@ export class RunQueue {
     question?: string,
     priority: RunPriority = 'user',
     referencedContext?: string,
+    referencedFinding?: ReviewRun['referencedFinding'],
   ): Promise<ReviewRun> {
     const { logger } = this.ctx;
     if (tool !== 'ask') {
@@ -91,8 +98,15 @@ export class RunQueue {
           enqueuedAt: new Date().toISOString(),
           startedAt: null,
         },
-        // referencedContext 仅入 req（内存态，不进 info/PragentRunInfo）→ 不落盘、不进队列广播。
-        req: { localId: pr.localId, tool, question, referencedContext: tool === 'ask' ? referencedContext : undefined },
+        // referencedContext / referencedFinding 仅入 req（内存态，不进 info/PragentRunInfo）→ 不进队列广播。
+        // referencedFinding 会在 run-executor startRun 时落到 ReviewRun（前向链持久化）。
+        req: {
+          localId: pr.localId,
+          tool,
+          question,
+          referencedContext: tool === 'ask' ? referencedContext : undefined,
+          referencedFinding: tool === 'ask' ? referencedFinding : undefined,
+        },
         pr,
         priority,
         resolve,

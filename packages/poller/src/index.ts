@@ -8,4 +8,5 @@ export * from './runs.js';
 export * from './agent-session.js';
 export * from './autopilot-ledger.js';
 export * from './drafts.js';
+export * from './finding-closures.js';
 export * from './parse-output.js';

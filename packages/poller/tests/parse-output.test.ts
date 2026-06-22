@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseReviewOutput,
+  parseStructuredAsk,
   sectionToFinding,
   splitMarkdownSections,
   stripAnchorMarker,
@@ -90,11 +91,7 @@ describe('sectionToFinding', () => {
   });
 
   it('describe tool 无 file → description', () => {
-    const f = sectionToFinding(
-      { level: 2, title: 'PR Type', body: 'feature' },
-      0,
-      'describe',
-    );
+    const f = sectionToFinding({ level: 2, title: 'PR Type', body: 'feature' }, 0, 'describe');
     expect(f.category).toBe('description');
   });
 
@@ -378,7 +375,7 @@ describe('parseReviewOutput', () => {
     const md = [
       '<table>',
       '<tr><td>⏱️&nbsp;<strong>Estimated effort to review</strong>: 3 🔵🔵🔵⚪⚪</td></tr>',
-      "<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>",
+      '<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>',
       '',
       "<details><summary><a href='meebox:///src/auth/login.ts#L42-L50'><strong>潜在空引用</strong></a>",
       '',
@@ -437,7 +434,7 @@ describe('parseReviewOutput', () => {
       '<table>',
       '<tr><td>⏱️&nbsp;<strong>Estimated effort to review</strong>: 3 🔵🔵🔵⚪⚪</td></tr>',
       '<tr><td>🔒&nbsp;<strong>Security concerns</strong>: 未发现安全风险</td></tr>',
-      "<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>",
+      '<tr><td>⚡&nbsp;<strong>Recommended focus areas for review</strong><br><br>',
       '',
       "<a href='meebox:///pkg/cache.go#L17'><strong>缓存未加锁</strong></a><br>并发写 map 可能 panic。",
       '',
@@ -570,5 +567,76 @@ describe('parseReviewOutput · describe 架构图 / 文件走查', () => {
     );
     // 不应退化成无分类的平铺列表
     expect(wt!.body).toContain('<details open>');
+  });
+});
+
+describe('parseStructuredAsk', () => {
+  it('命中三标签 → 三段 finding（ask-summary/analysis/suggestions），顺序固定、summary 入字段', () => {
+    const md = [
+      '<summary>',
+      'It is safe to merge.',
+      '</summary>',
+      '',
+      '<analysis>',
+      'Walked through the call sites; nothing reads the removed field.',
+      '</analysis>',
+      '',
+      '<suggestions>',
+      'Add a regression test for the empty-input path.',
+      '</suggestions>',
+    ].join('\n');
+    const { findings, summary } = parseReviewOutput(md, 'ask');
+    expect(findings.map((f) => f.sectionKey)).toEqual([
+      'ask-summary',
+      'ask-analysis',
+      'ask-suggestions',
+    ]);
+    expect(summary).toBe('It is safe to merge.');
+    expect(findings[0]!.body).toBe('It is safe to merge.');
+  });
+
+  it('只有 summary 段 → 单 finding，analysis/suggestions 省略', () => {
+    const md = '<summary>\nLooks good.\n</summary>';
+    const { findings } = parseReviewOutput(md, 'ask');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.sectionKey).toBe('ask-summary');
+  });
+
+  it('段内 anchor marker 被剥除（PR1 仅结构化展示）', () => {
+    const md = [
+      '<suggestions>',
+      'Guard the null case here.',
+      '[file: src/a.ts, lines: 10-12]',
+      '</suggestions>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'ask');
+    expect(findings[0]!.sectionKey).toBe('ask-suggestions');
+    expect(findings[0]!.body).toBe('Guard the null case here.');
+    expect(findings[0]!.body).not.toContain('[file:');
+  });
+
+  it('无标签 → 回退普通 /ask 解析（不产出 ask-* 段）', () => {
+    const md = 'Just a plain free-form answer with no tags.';
+    expect(parseStructuredAsk(md)).toBeNull();
+    const { findings } = parseReviewOutput(md, 'ask');
+    expect(findings.every((f) => !String(f.sectionKey).startsWith('ask-'))).toBe(true);
+  });
+
+  it('标签存在但内容全空 → 回退（返回 null）', () => {
+    expect(parseStructuredAsk('<summary>\n\n</summary>')).toBeNull();
+  });
+
+  it('复评 <verdict> 抽取（replace / keep / drop）', () => {
+    const mk = (v: string): string => `<summary>x</summary>\n<verdict>${v}</verdict>`;
+    expect(parseReviewOutput(mk('replace'), 'ask').askVerdict).toBe('replace');
+    expect(parseReviewOutput(mk('Keep'), 'ask').askVerdict).toBe('keep');
+    expect(parseReviewOutput(mk('drop'), 'ask').askVerdict).toBe('drop');
+  });
+
+  it('未知 verdict / 无 verdict → askVerdict undefined', () => {
+    expect(
+      parseReviewOutput('<summary>x</summary>\n<verdict>maybe</verdict>', 'ask').askVerdict,
+    ).toBeUndefined();
+    expect(parseReviewOutput('<summary>x</summary>', 'ask').askVerdict).toBeUndefined();
   });
 });

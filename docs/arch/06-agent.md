@@ -110,7 +110,21 @@ Agent 知其存在但不可调用。
 **输入路由**（在渲染层输入解析处分流）：
 
 - `/describe`、`/review` 开头 → **直达工具**，维持既有「忽略其余文本、直接跑该 tool」语义。
-- `/ask <text>` → **直达工具**，文本作为 question 直跑 `/ask`。
+- `/ask <text>` → **直达工具**，文本作为 question 直跑 `/ask`。CLI 模式（claude/codex）下 `/ask` 会把 CLI
+  子进程 cwd 落到（已净化的）一次性 worktree，取完整文件上下文作答——而非像 describe/review 只基于 diff
+  在中性临时目录推理；机制（`MEEBOX_CLI_WORKDIR` + worktree 指令文件净化防注入）见 [04](04-pragent-runtime.md)。
+  - **结构化分段输出**：提示词约束 `/ask` 按确定性标签 `<summary>` / `<analysis>` / `<suggestions>` 输出
+    （pr-agent-bridge `prompts.ts`），解析层（poller `parseStructuredAsk`）按标签切成独立 finding：summary
+    结论高亮展开、analysis 过程默认收起、suggestions 建议高亮。模型未遵循 / 无标签时整体回退普通解析。
+  - **复评引用闭环**：review/improve 的 code finding 卡片可点「引用」→ 挂到输入栏发起复评 `/ask`（携带
+    `referencedFinding` + finding 正文上下文）。复评模式额外产出 `<verdict>`（replace / keep / drop，落
+    `ReviewRun.askVerdict`），结果卡出裁决 + **手动**采纳/关闭动作：采纳取代 → 建新评论草稿锚定原位置 +
+    关闭原 finding；关闭关系独立存于 `findingClosures`（非草稿语义），原卡转关闭态并与复评卡互链。
+  - **agent 自动评审自动关联 / 取代**：自动评审微流程里 judge 可对某条 review finding 出复评追问
+    （`asks[].targetFindingId`，judge prompt 给 id 可寻址清单），asks 步以复评模式派发该追问（携
+    `referencedFinding`），裁决 replace/drop 时**自动**建 `FindingClosure` 关闭被取代的原 finding（经
+    `ReviewOrchestratorDeps.closeFinding`）。默认开启、保守（仅点名 + replace/drop 才关，keep / 未点名不动）；
+    新评论不自动落草稿，仍由用户在复评卡手动「采纳」。
 - 其余直接的工具 / 操作指令 → 维持各自原有调用。
 - **无斜杠的自然语言** → **交给 Agent 运行时**（旧行为是等价 `/ask`，此为本模块的核心改动）。
 - 未知 `/xxx` → 报错（不变）。

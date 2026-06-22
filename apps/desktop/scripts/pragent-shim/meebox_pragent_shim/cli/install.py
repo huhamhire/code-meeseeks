@@ -28,7 +28,9 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
     各命令差异（argv flags / 输出解析 / 需剥离的计费 env）集中在 _CLI_SPECS，按命令名取用：
       - prompt 经 **stdin** 喂入：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；
         system / user 拼成一段（CLI 单轮无独立 system 槽）。
-      - cwd 落到中性临时目录：避免吃到被评审仓库的上下文（CLAUDE.md / AGENTS.md 等）污染输出。
+      - cwd 默认落到中性临时目录：避免吃到被评审仓库的上下文（CLAUDE.md / AGENTS.md 等）污染输出。
+        例外：主进程仅对 /ask 经 MEEBOX_CLI_WORKDIR 下发（已净化的）worktree 路径，让自由问答能读到
+        完整文件；describe/review 不下发该 env、维持中性临时目录。净化在主进程侧做（清空仓库自带指令文件）。
       - 子进程继承父 env（PATH / HOME / 代理变量），故能找到命令、复用其登录态、出站自动走代理。
       - **凭据隔离**：剥掉对应计费 key（claude: ANTHROPIC_*；codex: OPENAI_API_KEY / CODEX_API_KEY），
         让 CLI 使用其自身登录会话，而非环境里残留的 API key。模型与额度由该 CLI 账户与用户授权决定。"""
@@ -73,7 +75,7 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=tempfile.gettempdir(),
+                cwd=(os.environ.get("MEEBOX_CLI_WORKDIR") or "").strip() or tempfile.gettempdir(),
                 env=child_env,
             )
         except Exception as exc:  # noqa: BLE001

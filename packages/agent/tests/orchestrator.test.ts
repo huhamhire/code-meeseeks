@@ -181,6 +181,112 @@ describe('runReviewMicroflow', () => {
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan', 'plan']);
   });
 
+  it('agent re-review: judge targets a finding → ask in re-review mode → auto-closes on replace', async () => {
+    const closeCalls: Array<{
+      runId: string;
+      findingId: string;
+      byAskRunId: string;
+      verdict: string;
+    }> = [];
+    const askReferenced: boolean[] = [];
+    const chatReplies = [
+      '{"severe": true, "asks": [{"question": "still valid?", "targetFindingId": "review-000"}]}',
+      '{"summary": "s", "recommendation": {"verdict": "needs_work", "reason": "r"}}',
+    ];
+    let chatIdx = 0;
+    let askSeq = 0;
+    const deps: ReviewOrchestratorDeps = {
+      runTool: vi.fn(async (call) => {
+        if (call.tool === 'review') {
+          return {
+            text: 'review',
+            usage: { totalTokens: 1 },
+            runId: 'rev-1',
+            findings: [
+              {
+                id: 'review-000',
+                category: 'code-feedback' as const,
+                sectionKey: 'code-feedback' as const,
+                body: 'possible null deref',
+                anchor: { path: 'a.ts', startLine: 5 },
+              },
+            ],
+          };
+        }
+        if (call.tool === 'ask') {
+          askSeq += 1;
+          askReferenced.push(!!call.referencedFinding);
+          return {
+            text: 'ask',
+            usage: { totalTokens: 1 },
+            runId: `ask-${String(askSeq)}`,
+            askVerdict: call.referencedFinding ? ('replace' as const) : undefined,
+          };
+        }
+        return { text: call.tool, usage: { totalTokens: 1 } };
+      }),
+      chat: vi.fn(async () => ({
+        text: chatReplies[chatIdx++] ?? '{}',
+        usage: { totalTokens: 1 },
+      })),
+      closeFinding: vi.fn(async (call) => {
+        closeCalls.push(call);
+      }),
+    };
+    await runReviewMicroflow(deps, { context, pr });
+    expect(askReferenced).toEqual([true]); // 复评模式派发（带 referencedFinding）
+    expect(closeCalls).toEqual([
+      { runId: 'rev-1', findingId: 'review-000', byAskRunId: 'ask-1', verdict: 'replace' },
+    ]);
+  });
+
+  it('agent re-review: keep verdict (or untargeted ask) does NOT close any finding', async () => {
+    const closeCalls: unknown[] = [];
+    const chatReplies = [
+      '{"severe": true, "asks": [{"question": "still valid?", "targetFindingId": "review-000"}]}',
+      '{"summary": "s", "recommendation": {"verdict": "approve", "reason": "r"}}',
+    ];
+    let chatIdx = 0;
+    const deps: ReviewOrchestratorDeps = {
+      runTool: vi.fn(async (call) => {
+        if (call.tool === 'review') {
+          return {
+            text: 'review',
+            usage: { totalTokens: 1 },
+            runId: 'rev-1',
+            findings: [
+              {
+                id: 'review-000',
+                category: 'code-feedback' as const,
+                sectionKey: 'code-feedback' as const,
+                body: 'x',
+                anchor: { path: 'a.ts', startLine: 5 },
+              },
+            ],
+          };
+        }
+        if (call.tool === 'ask') {
+          return {
+            text: 'ask',
+            usage: { totalTokens: 1 },
+            runId: 'ask-1',
+            askVerdict: 'keep' as const,
+          };
+        }
+        return { text: call.tool, usage: { totalTokens: 1 } };
+      }),
+      chat: vi.fn(async () => ({
+        text: chatReplies[chatIdx++] ?? '{}',
+        usage: { totalTokens: 1 },
+      })),
+      closeFinding: vi.fn(async (call) => {
+        closeCalls.push(call);
+      }),
+    };
+    await runReviewMicroflow(deps, { context, pr });
+    expect(closeCalls).toEqual([]);
+  });
+
   it('falls back to the default plan when the plan is invalid (summary without describe-review)', async () => {
     const { deps, toolCalls } = makeDeps({
       chatReplies: [

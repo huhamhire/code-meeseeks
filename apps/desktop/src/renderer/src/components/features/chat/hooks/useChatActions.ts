@@ -5,6 +5,7 @@ import type {
   AgentMessage,
   AgentStep,
   AgentTodoItem,
+  AskVerdict,
   Finding,
   PrAgentStatus,
   ReviewDraft,
@@ -54,6 +55,7 @@ export interface ChatActions {
     tool: ReviewRunTool,
     question?: string,
     referencedContext?: string,
+    referencedFinding?: ReviewRun['referencedFinding'],
   ) => Promise<void>;
   handleAgentReview: () => Promise<void>;
   handleAgentAsk: (question: string, referencedContext?: string) => Promise<void>;
@@ -65,6 +67,12 @@ export interface ChatActions {
   handleJumpToDraft: (finding: Finding, run: ReviewRun) => Promise<void>;
   handleNavigateToFinding: (finding: Finding) => void;
   handleRejectFinding: (finding: Finding, run: ReviewRun) => Promise<void>;
+  /** 复评 /ask：采纳建议为新评论草稿（锚定原 finding 位置）并关闭原 finding（裁决 replace）。 */
+  handleAdoptAskComment: (askRun: ReviewRun) => Promise<void>;
+  /** 复评 /ask：仅关闭被引用的原 finding（裁决 replace 的「仅关闭」/ drop 的「关闭原」）。 */
+  handleCloseReferencedFinding: (askRun: ReviewRun, verdict: AskVerdict) => Promise<void>;
+  /** 撤销某条 finding 的关闭。 */
+  handleReopenFinding: (runId: string, findingId: string) => Promise<void>;
 }
 
 /**
@@ -113,6 +121,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     tool: ReviewRunTool,
     question?: string,
     referencedContext?: string,
+    referencedFinding?: ReviewRun['referencedFinding'],
   ): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured) return;
     // 去重（即时反馈）：同一 PR 同一工具已在执行 / 排队 → 阻止重复触发（main 端亦有
@@ -126,7 +135,13 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     }
     setError(null);
     try {
-      await invoke('pragent:run', { localId: pr.localId, tool, question, referencedContext });
+      await invoke('pragent:run', {
+        localId: pr.localId,
+        tool,
+        question,
+        referencedContext,
+        referencedFinding,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -185,7 +200,11 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     setAgentSteps([]);
     setRunningPrs((m) => new Map(m).set(startedId, Date.now()));
     try {
-      const session = await invoke('agent:ask', { localId: startedId, question, referencedContext });
+      const session = await invoke('agent:ask', {
+        localId: startedId,
+        question,
+        referencedContext,
+      });
       await reloadConversation(startedId);
       if (currentPrIdRef.current === startedId && session.status === 'failed') {
         setError(session.terminationReason ?? t('chatPane.agent.failed'));
@@ -352,6 +371,83 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     }
   };
 
+  // 复评 /ask 采纳：把建议正文（ask-suggestions，退到 ask-summary）作为新评论草稿，锚定被引用 finding
+  // 的原位置；同时关闭原 finding（裁决 replace）。草稿仍待用户在草稿区复核后发布。
+  const handleAdoptAskComment = async (askRun: ReviewRun): Promise<void> => {
+    if (!pr) return;
+    const ref = askRun.referencedFinding;
+    if (!ref?.anchor || typeof ref.anchor.startLine !== 'number') return;
+    const startLine = ref.anchor.startLine;
+    const endLine = ref.anchor.endLine ?? startLine;
+    const findings = askRun.findings ?? [];
+    const sug = findings.find((f) => f.sectionKey === 'ask-suggestions');
+    const sum = findings.find((f) => f.sectionKey === 'ask-summary');
+    const src = sug ?? sum;
+    const body = (src?.body ?? '').trim();
+    if (!src || !body) {
+      setError(t('chatPane.reference.noSuggestion'));
+      return;
+    }
+    try {
+      await invoke('drafts:create', {
+        localId: pr.localId,
+        draft: {
+          anchor: { path: ref.anchor.path, startLine, endLine, side: 'new' },
+          body,
+          origin: 'finding',
+          source: { runId: askRun.id, findingId: src.id },
+          status: 'pending',
+        },
+      });
+      await invoke('findingClosures:create', {
+        localId: pr.localId,
+        runId: ref.runId,
+        findingId: ref.findingId,
+        byAskRunId: askRun.id,
+        verdict: 'replace',
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    onJumpToDraftEditor?.({
+      runId: askRun.id,
+      findingId: src.id,
+      anchor: { path: ref.anchor.path, startLine, endLine },
+    });
+  };
+
+  // 复评 /ask 关闭原 finding（replace 的「仅关闭」/ drop 的「关闭原」），不建草稿。
+  const handleCloseReferencedFinding = async (
+    askRun: ReviewRun,
+    verdict: AskVerdict,
+  ): Promise<void> => {
+    if (!pr) return;
+    const ref = askRun.referencedFinding;
+    if (!ref) return;
+    try {
+      await invoke('findingClosures:create', {
+        localId: pr.localId,
+        runId: ref.runId,
+        findingId: ref.findingId,
+        byAskRunId: askRun.id,
+        verdict,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  // 撤销某条 finding 的关闭（finding 卡片的「撤销关闭」）。
+  const handleReopenFinding = async (runId: string, findingId: string): Promise<void> => {
+    if (!pr) return;
+    try {
+      await invoke('findingClosures:delete', { localId: pr.localId, runId, findingId });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return {
     runningPrs,
     agentRunningHere,
@@ -366,5 +462,8 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     handleJumpToDraft,
     handleNavigateToFinding,
     handleRejectFinding,
+    handleAdoptAskComment,
+    handleCloseReferencedFinding,
+    handleReopenFinding,
   };
 }

@@ -2,6 +2,9 @@ import type { Rule } from '@meebox/rules';
 import type {
   AgentRecommendation,
   AgentStep,
+  AskVerdict,
+  Finding,
+  ReviewRun,
   ReviewRunTool,
   TokenUsage,
   ToolCatalogEntry,
@@ -29,15 +32,39 @@ import type { AgentContext } from './types.js';
 export interface ToolText {
   text: string;
   usage?: TokenUsage;
+  /** 本次工具 run 的 id（PR3：judge 点名 / asks 复评关联需引用，review / ask 回填）。 */
+  runId?: string;
+  /** 解析出的结构化 findings（review 回填，供 judge 按 id 点名复评）。 */
+  findings?: Finding[];
+  /** 复评 /ask 的裁决（复评模式 ask 回填，asks 步据此自动关闭原 finding）。 */
+  askVerdict?: AskVerdict;
 }
 
 export interface ReviewOrchestratorDeps {
-  /** 分发一个只读 pr-agent 工具，返回文本结果（描述 / findings / 回答）。 */
-  runTool(call: { tool: ReviewRunTool; question?: string }): Promise<ToolText>;
+  /**
+   * 分发一个只读 pr-agent 工具，返回结果（描述 / findings / 回答 + runId / findings / askVerdict）。
+   * referencedContext / referencedFinding 仅复评模式 /ask 用：注入被复评评论上下文 + 结构化引用前向链。
+   */
+  runTool(call: {
+    tool: ReviewRunTool;
+    question?: string;
+    referencedContext?: string;
+    referencedFinding?: ReviewRun['referencedFinding'];
+  }): Promise<ToolText>;
   /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。maxOutputTokens 可给轻量路由判读封顶输出。 */
   chat(input: { system: string; user: string; maxOutputTokens?: number }): Promise<ToolText>;
   /** 每产生一个编排步骤即回调（持久化 / 流式推送）。 */
   onStep?(step: AgentStep): void | Promise<void>;
+  /**
+   * PR3：复评 ask 裁决 replace/drop 时自动关闭被取代的原 review finding（建立 FindingClosure）。
+   * 缺省 = 不关（单测 / 未接主进程时）。
+   */
+  closeFinding?(call: {
+    runId: string;
+    findingId: string;
+    byAskRunId: string;
+    verdict: AskVerdict;
+  }): Promise<void>;
   /** 用户停止：每步边界检查，已 abort 即抛 `aborted` 中止微流程（思考阶段也能立即终止）。 */
   signal?: AbortSignal;
 }
@@ -148,7 +175,7 @@ export async function runReviewMicroflow(
     summaryMax: input.summaryMaxChars ?? 800,
     labels,
     system,
-    bag: { questions: [], askResults: [] },
+    bag: { asks: [], askResults: [] },
   };
 
   // 计划：省略 / 非法（如 judge/summary 缺前置 describe-review）一律回落默认全集，避免坏计划崩在步骤里。

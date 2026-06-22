@@ -39,6 +39,7 @@ import {
   newUsageAcc,
   stripUsageSentinels,
 } from './usage.js';
+import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 
 /** finishReviewRun 的收尾 patch 类型（收尾 helper 的返回）。 */
 type FinishPatch = Parameters<typeof finishReviewRun>[3];
@@ -85,7 +86,18 @@ export class RunExecutor {
 
     const wt = await this.prepareWorkspace(pr);
     try {
-      const { env, extraArgs, askLangSuffix } = await this.buildInvocation(req, pr, run.id);
+      const { env, extraArgs, askLangSuffix } = await this.buildInvocation(
+        req,
+        pr,
+        run.id,
+        wt.path,
+      );
+
+      // CLI 模式 /ask 把子进程 cwd 落到 worktree（取完整文件上下文，buildInvocation 已设 MEEBOX_CLI_WORKDIR）。
+      // 落 cwd 前先清空仓库自带的 agent 指令文件，避免被 CLI 自动加载污染回答。env key 在 = 走此路径。
+      if (env['MEEBOX_CLI_WORKDIR']) {
+        await neutralizeWorktreeInstructions(env['MEEBOX_CLI_WORKDIR'], this.ctx.logger);
+      }
 
       // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉启动告警（memo 化只首次做）。
       // local-cli 不需要（pipx 装的 pr-agent 路径不同，告警也不出）。
@@ -105,7 +117,13 @@ export class RunExecutor {
       });
       // 真实 token 用量（onLine 累加的 stderr 哨兵行），落到 succeeded / llm-failed 收尾。
       const tokenUsage = finalizeUsage(usageAcc);
-      const { parsed, fileContent } = await this.collectOutput(wt, result.stdout, req, run.id, askLangSuffix);
+      const { parsed, fileContent } = await this.collectOutput(
+        wt,
+        result.stdout,
+        req,
+        run.id,
+        askLangSuffix,
+      );
       return await finishWith(
         this.finishPatchForResult(result, parsed, fileContent, tokenUsage, t0, run.id),
       );
@@ -148,6 +166,8 @@ export class RunExecutor {
       findings: parsed.findings,
       summary: parsed.summary,
       tokenUsage,
+      // 复评裁决（解析自复评 /ask 的 <verdict>）；非复评 / 未给则 undefined。
+      askVerdict: parsed.askVerdict,
     };
     if (parsed.llmFailure) {
       this.ctx.logger.warn(
@@ -229,6 +249,8 @@ export class RunExecutor {
       prAgentVersion: bridge.version,
       strategy: bridge.strategy,
       model: activeLlmForRecord?.model || undefined,
+      // 复评引用前向链：随 run 落盘，UI 据此在 /ask 卡上展示「复评自…」徽标 + 裁决动作。
+      referencedFinding: req.tool === 'ask' ? req.referencedFinding : undefined,
     });
     // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播（经调度层）。
     item.info = { ...item.info, startedAt: run.startedAt };
@@ -259,7 +281,12 @@ export class RunExecutor {
     req: QueueItem['req'],
     pr: QueueItem['pr'],
     runId: string,
-  ): Promise<{ env: Record<string, string>; extraArgs: string[] | undefined; askLangSuffix: string }> {
+    wtPath: string,
+  ): Promise<{
+    env: Record<string, string>;
+    extraArgs: string[] | undefined;
+    askLangSuffix: string;
+  }> {
     const { bootstrap, logger, effectiveAgentDir, pr: prService } = this.ctx;
     const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
     // 代理 env 先铺底（非 pr-agent 范畴，仅 HTTP(S)_PROXY 类）；LLM 凭据/模型 + 响应语言 + per-tool 配置
@@ -268,6 +295,12 @@ export class RunExecutor {
       ...buildProxyEnv(bootstrap.config.proxy),
       ...buildToolEnv(activeLlm, { tool: req.tool, responseLanguage: getMainLanguage() }),
     };
+
+    // CLI 模式 /ask：把子进程 cwd 落到（待净化的）worktree，让自由问答能读完整文件（shim cli/install.py
+    // 据此 env 切 cwd）。describe/review 不下发、维持中性临时目录；API 模式不涉及（远程接口只有 diff）。
+    if (req.tool === 'ask' && activeLlm?.provider === 'cli') {
+      env['MEEBOX_CLI_WORKDIR'] = wtPath;
+    }
 
     let prContext = '';
     let matchedRuleInstructions = '';
@@ -308,6 +341,8 @@ export class RunExecutor {
       matchedRuleInstructions,
       // /ask 选中行引用：经 EXTRA_INSTRUCTIONS 注入（不进问题位置参数，故不污染回答 echo）。
       referencedContext: req.tool === 'ask' ? req.referencedContext : undefined,
+      // /ask 复评模式：引用了某条 finding 时注入裁决（replace/keep/drop）指示。
+      referencedFinding: req.tool === 'ask' ? !!req.referencedFinding : undefined,
     });
     if (extraInstructions) env[extraInstructionsEnvKey(req.tool)] = extraInstructions;
     if (matchedRuleId) {

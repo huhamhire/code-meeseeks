@@ -287,3 +287,42 @@
     padding: $space-2 0;
   }
 }
+
+// 复评「复评自 <file:line>」徽标：可点击回链被引用的原 finding 所在 run。
+.chat-run-ref-badge {
+  align-self: flex-start;
+  margin: $space-1 0;
+  padding: $space-1 $space-2;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: $color-info;
+  font-size: $fs-md;
+  cursor: pointer;
+
+  &:hover {
+    background: $bg-hover;
+  }
+}
+
+// 复评裁决 + 手动采纳/关闭动作区（裁决 chip + 按钮）。
+.chat-run-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $space-2;
+  margin-top: $space-3;
+}
+
+// 复评卡 ↔ 原 finding 卡互链滚动定位时的短暂高亮。
+.chat-run-flash {
+  animation: chat-run-flash-kf 1.5s ease-out;
+}
+@keyframes chat-run-flash-kf {
+  0% {
+    background: $bg-hover;
+  }
+  100% {
+    background: transparent;
+  }
+}

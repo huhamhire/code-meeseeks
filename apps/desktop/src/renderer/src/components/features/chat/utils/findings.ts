@@ -55,6 +55,10 @@ const SECTION_ORDER: Record<PrDocSectionKey, number> = {
   effort: 10,
   score: 11,
   general: 12,
+  // /ask 结构化分段（仅出现在 /ask run 内，彼此相对顺序：概述 → 分析 → 建议）
+  'ask-summary': 13,
+  'ask-analysis': 14,
+  'ask-suggestions': 15,
 };
 const SECTION_LABEL_KEY: Record<PrDocSectionKey, string | null> = {
   title: 'chatPane.sectionTitle',
@@ -71,6 +75,9 @@ const SECTION_LABEL_KEY: Record<PrDocSectionKey, string | null> = {
   effort: 'chatPane.sectionEffort',
   score: 'chatPane.sectionScore',
   general: null, // general / 未知段无 chip 标签
+  'ask-summary': 'chatPane.sectionAskSummary',
+  'ask-analysis': 'chatPane.sectionAskAnalysis',
+  'ask-suggestions': 'chatPane.sectionAskSuggestions',
 };
 export function sectionLabel(key: PrDocSectionKey, t: TFunction): string {
   const k = SECTION_LABEL_KEY[key];
@@ -96,6 +103,35 @@ export function orderFindings(findings: Finding[]): Finding[] {
       return ka === kb ? a.i - b.i : ka - kb;
     })
     .map((x) => x.f);
+}
+
+/** 锚点短标签 `<basename>:<startLine>`（复评徽标 / 引用 chip 用），无锚点返回空串。 */
+export function anchorShortLabel(anchor?: {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+}): string {
+  if (!anchor) return '';
+  const base = anchor.path.split('/').pop() ?? anchor.path;
+  return anchor.startLine ? `${base}:${String(anchor.startLine)}` : base;
+}
+
+/**
+ * 把一条待复评的 finding 拼成 /ask 的隐式引用上下文（referencedContext）：让模型看到原评论正文 + 位置，
+ * 据此复评。与 diff 选区引用（formatReferencedContext）同走 EXTRA_INSTRUCTIONS 注入，不进问题位置参数。
+ */
+export function formatFindingReference(finding: Finding): string {
+  const a = finding.anchor;
+  const loc = a
+    ? ` on \`${a.path}\`${
+        a.startLine
+          ? ` (L${String(a.startLine)}${
+              a.endLine && a.endLine !== a.startLine ? `-L${String(a.endLine)}` : ''
+            })`
+          : ''
+      }`
+    : '';
+  return `An existing review comment${loc} is being re-evaluated:\n\n${stripFindingMarker(finding.body)}`;
 }
 
 /**

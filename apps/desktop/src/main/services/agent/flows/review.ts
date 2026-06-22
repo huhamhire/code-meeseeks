@@ -1,5 +1,6 @@
 import { buildToolCatalog, loadAgentContext } from '@meebox/agent';
 import type { AgentContext, ReviewPlan } from '@meebox/agent';
+import { addFindingClosure } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
 import { AppError, ERROR_CODES, type AgentSession, type StoredPullRequest } from '@meebox/shared';
 import { getMainLanguage } from '../../../i18n/index.js';
@@ -30,7 +31,7 @@ export async function reviewFlow(
   let session: AgentSession;
   try {
     session = await runtime.withAgentChat(
-      (chat) => runReviewForPr(runtime,pr, agentContext, chat, ac.signal),
+      (chat) => runReviewForPr(runtime, pr, agentContext, chat, ac.signal),
       ac.signal,
     );
     logger.info(
@@ -46,7 +47,7 @@ export async function reviewFlow(
   // 评审微流程无法中途转向：跑完后把排队的用户消息作为一轮自由规划接续处理（fire-and-forget）。
   const pending = runtime.takePending(pr.localId);
   if (pending.length) {
-    void planningFlow(runtime,pr, pending.join('\n\n')).catch((err: unknown) => {
+    void planningFlow(runtime, pr, pending.join('\n\n')).catch((err: unknown) => {
       logger.warn({ err, prLocalId: pr.localId }, 'post-review planning (queued input) failed');
     });
   }
@@ -76,8 +77,21 @@ export function runReviewForPr(
   });
   return runReview(pr, {
     stateStore: runtime.ctx.stateStore,
-    // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。
-    enqueueRun: (p, tool, question) => runtime.runQueue.enqueuePragentRun(p, tool, question, 'agent'),
+    // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。复评 /ask 携引用上下文 + 前向链。
+    enqueueRun: (p, tool, question, referencedContext, referencedFinding) =>
+      runtime.runQueue.enqueuePragentRun(
+        p,
+        tool,
+        question,
+        'agent',
+        referencedContext,
+        referencedFinding,
+      ),
+    // PR3：复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播刷新卡片）。
+    closeFinding: async (p, call) => {
+      await addFindingClosure(runtime.ctx.stateStore, p.localId, call);
+      runtime.ctx.broadcast('findingClosures:changed', { localId: p.localId });
+    },
     chat,
     agentContext,
     matchedRule,
