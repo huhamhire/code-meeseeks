@@ -1,4 +1,9 @@
-import { judgeAutopilotBatch, loadAgentContext, type ReviewPlan } from '@meebox/agent';
+import {
+  classifyBranchMerge,
+  judgeAutopilotBatch,
+  loadAgentContext,
+  type ReviewPlan,
+} from '@meebox/agent';
 import {
   getAutopilotLedger,
   hasReviewOutput,
@@ -53,13 +58,41 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
     const agentContext = await loadAgentContext(effectiveAgentDir(), {
       onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
     });
+    // 第一步 judge 的背景输入：逐候选用元数据判「纯分支合并」——(c) 分支约定零成本先判，拿不准再 (b)
+    // 调一次 commits API 看「提交是否全为 merge」。并行跑，整体约一轮 round-trip。失败不阻断（按非合并处理）。
+    const branchMergeByPr = new Map<string, boolean>();
+    await Promise.all(
+      candidates.map(async (p) => {
+        const sourceBranch = p.sourceRef.displayId;
+        const targetBranch = p.targetRef.displayId;
+        let verdict = classifyBranchMerge({ sourceBranch, targetBranch });
+        if (verdict.basis === 'inconclusive') {
+          try {
+            const commits = await runtime.ctx.pr
+              .adapterFor(p)
+              ?.listPullRequestCommits(p.repo, p.remoteId);
+            if (commits) verdict = classifyBranchMerge({ sourceBranch, targetBranch, commits });
+          } catch (err) {
+            logger.debug(
+              { err, prLocalId: p.localId },
+              'branch-merge commits check failed (ignored)',
+            );
+          }
+        }
+        branchMergeByPr.set(p.localId, verdict.isBranchMerge);
+      }),
+    );
+
     await runtime.withAgentChat(async (chat) => {
-      // 批量判定（例外规则来自 AGENTS.md）。
+      // 批量判定（例外规则来自 AGENTS.md；分支信息 + 分支合并信号作背景输入）。
       const { decisions } = await judgeAutopilotBatch(chat, {
         candidates: candidates.map((p) => ({
           prLocalId: p.localId,
           title: p.title,
           description: p.description,
+          sourceBranch: p.sourceRef.displayId,
+          targetBranch: p.targetRef.displayId,
+          branchMerge: branchMergeByPr.get(p.localId),
         })),
         agentsRules: agentContext.files.agents,
       });
@@ -69,9 +102,18 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
       for (const d of decisions) {
         const pr = byId.get(d.prLocalId);
         if (!pr) continue;
+        // 每条决策都记日志（含 review/skip + 原因 + 计划 + 分支合并信号），便于排查「judge 是否在按规则跑」。
+        logger.info(
+          {
+            prLocalId: pr.localId,
+            review: d.review,
+            reason: d.reason,
+            plan: d.plan?.steps,
+            branchMerge: branchMergeByPr.get(pr.localId) ?? false,
+          },
+          'autopilot judge decision',
+        );
         if (!d.review) {
-          // 候选都已过准入闸、非「已评审」，故这里的原因都是 LLM 的领域判定（如分支合并 / 纯依赖升级）。
-          logger.info({ prLocalId: pr.localId, reason: d.reason }, 'autopilot judge skip');
           await writeAutopilotLedger(stateStore, {
             prLocalId: pr.localId,
             autoReviewedUpdatedAt: pr.updatedAt,
@@ -81,7 +123,7 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
           });
           continue;
         }
-        // d.plan 为本期判定恒省略 → 微流程走默认全集；预留规则驱动计划的注入点（见 JudgeDecision.plan）。
+        // d.plan 省略 → 微流程走默认全集；规则驱动计划的注入点（见 JudgeDecision.plan）。
         toReview.push({ pr, plan: d.plan });
       }
       // 多 PR 评审并行编排：各编排 await 自己的工具 run 时彼此不挡，让 run-queue 并发尽量被填满。
@@ -90,7 +132,15 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
           // AutoPilot 后台评审无 AbortController，但同样标记「执行中」——纯思考阶段也在 PR 列表项显示。
           runtime.markRunning(pr.localId);
           try {
-            const session = await runReviewForPr(runtime, pr, agentContext, chat, undefined, true, plan);
+            const session = await runReviewForPr(
+              runtime,
+              pr,
+              agentContext,
+              chat,
+              undefined,
+              true,
+              plan,
+            );
             // done：落「评审总结」消息 + 台账（含 verdict）+ 广播（与手动评审一致）。失败 / 暂停不落台账。
             await runtime.recordReviewSummaryMessage(pr, session);
           } finally {

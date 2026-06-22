@@ -11,11 +11,7 @@ export { appendAgentNotes } from './memory.js';
 export type { MemoryNote, WritableAgentFile } from './memory.js';
 export type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
 export { assembleSystemContext } from './prompts.js';
-export type {
-  AssembleInput,
-  AssemblePrMeta,
-  AssembleSessionSnapshot,
-} from './prompts.js';
+export type { AssembleInput, AssemblePrMeta, AssembleSessionSnapshot } from './prompts.js';
 export { runReviewMicroflow } from './orchestrator.js';
 export { DEFAULT_REVIEW_PLAN, isValidReviewPlan } from './steps/review/index.js';
 export type { ReviewPlan, ReviewStepKind } from './steps/review/index.js';
@@ -29,6 +25,8 @@ export type {
   PlanningToolResult,
 } from './planner.js';
 export { buildToolCatalog, assertToolAllowed } from './tool-catalog.js';
+export { classifyBranchMerge, isMainlineBranch } from './branch-merge.js';
+export type { BranchMergeInput, BranchMergeVerdict } from './branch-merge.js';
 export { judgeAutopilotBatch } from './autopilot-judge.js';
 export type {
   AutopilotJudgeInput,
