@@ -11,6 +11,7 @@ import { t } from '../../i18n/index.js';
 export function buildStepLabels(): AgentStepLabels {
   return {
     describeReview: t('agent.steps.describeReview'),
+    improve: t('agent.steps.improve'),
     judge: t('agent.steps.judge'),
     judgeSevere: (n) => t('agent.steps.judgeSevere', { count: n }),
     judgeNone: t('agent.steps.judgeNone'),

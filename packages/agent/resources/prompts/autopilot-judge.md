@@ -8,6 +8,7 @@ For each PR return:
 - `reason`: a short reason.
 - `plan` (optional): a custom ordered list of review-step ids. OMIT it to run the full default flow (`describe-review` → `judge` → `asks` → `summary`). Only set it when a project rule asks to customize the steps. Available step ids:
   - `describe-review`: generate the PR description and the code-review findings (REQUIRED whenever `judge` or `summary` is included)
+  - `improve`: generate code improvement suggestions (independent; include it only when a rule asks for improvement suggestions)
   - `judge`: decide whether follow-up questions are needed
   - `asks`: ask the follow-up questions deemed necessary
   - `summary`: synthesize the review summary + recommendation

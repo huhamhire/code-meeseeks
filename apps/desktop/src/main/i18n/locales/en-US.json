@@ -2,6 +2,7 @@
   "agent": {
     "steps": {
       "describeReview": "Generate the PR description and review findings",
+      "improve": "Generate code improvement suggestions",
       "judge": "Decide whether there are important issues needing follow-up",
       "judgeNone": "No important issues — no follow-up",
       "judgeSevere_one": "Important — {{count}} follow-up question",

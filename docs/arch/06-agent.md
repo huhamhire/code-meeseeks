@@ -380,12 +380,14 @@ flowchart TD
 **步骤计划可经规则定制（plan）**：上述微流程是**默认序列**（`describe-review` → `judge` → `asks` →
 `summary`，由步骤注册表 `REVIEW_STEP_REGISTRY` 组装、`assembleReviewSteps` 装配），而非写死。批量判定时，
 规划 agent 可据 `AGENTS.md` 规则为单个 PR 给出**自定义计划**（一组有序步骤 id），从而**跳过 / 重排 /
-裁剪**步骤——例如规则「配置类 PR 只生成描述与 findings、跳过追问」即得 `["describe-review", "summary"]`。
-计划**省略或非法时回落默认全集**：合法性校验 `isValidReviewPlan`——步骤 id 须在注册表内，且含 `judge` /
-`summary` 时必须先含 `describe-review`（后两步读其产物）；判定层与微流程驱动处**双重守卫**，坏计划不致崩在
-步骤里。**仅 autopilot 走计划**：手动评审按钮不经判定层、恒跑默认全集，不受规则影响。「跳过整篇」仍用判定的
-`review:false`（计划用于「评审但裁剪步骤」，非整篇跳过）。后续若要让计划引入**新工具**（如 `/improve`），
-在 `REVIEW_STEP_REGISTRY` 登记对应步骤、并入步骤 id 词表并放开 `runTool` 工具类型即可，驱动与手动路径无需改动。
+增删**步骤。可用步骤 id：`describe-review`、`improve`（生成代码改进建议，独立、默认不含、规则要时纳入）、
+`judge`、`asks`、`summary`——例如「配置类 PR 只生成描述与 findings、跳过追问」得 `["describe-review",
+"summary"]`；「需改进建议」得 `["describe-review", "improve", "summary"]`。计划**省略或非法时回落默认全集**：
+合法性校验 `isValidReviewPlan`——步骤 id 须在注册表内，且含 `judge` / `summary` 时必须先含 `describe-review`
+（后两步读其产物）；判定层与微流程驱动处**双重守卫**，坏计划不致崩在步骤里。**仅 autopilot 走计划**：手动
+评审按钮不经判定层、恒跑默认全集，不受规则影响。「跳过整篇」仍用判定的 `review:false`（计划用于「评审但裁剪 /
+增删步骤」，非整篇跳过）。新增工具步 = 在 `REVIEW_STEP_REGISTRY` 登记 + 并入 `ReviewStepKind`（工具本身见
+统一注册表 `TOOLS`）。
 
 **不自动发布**：上述全部产物——草稿、追问回答、总结——**只落本地、进待确认状态**，
 进应用即见,**不自动写远端**（除非 §4 / §6 扩展显式授权）。决策权仍在评审者。
@@ -394,9 +396,9 @@ flowchart TD
 
 - **规划 agent（planner）**：只做「批量判定 + 派发」，预算极小（一次 judge pass + 分发），
   不自由展开。
-- **每个 PR 的 agent**：**不自由规划**，只执行 planner 派的微流程——默认模板，或规则定制的计划（计划
-  仅在**既有步骤内裁剪 / 重排**、不引入新工具，故只会**减步**不会加步）；模板内唯一可变处是 0..N 个条件性
-  追问。故步数上限**由模板形状推导**，不套用更宽的交互式 `agent.max_steps`：硬上限 ≈
+- **每个 PR 的 agent**：**不自由规划**，只执行 planner 派的微流程——默认模板，或规则定制的计划（计划在
+  注册表既有步骤内裁剪 / 重排 / 增删，最多纳入一个 `improve` 步，**不会自由展开**）；模板内另一可变处是
+  0..N 个条件性追问。故步数上限**由模板形状 + 计划推导**，不套用更宽的交互式 `agent.max_steps`：硬上限 ≈
   `2（describe + review）+ max_followup_asks + 1（summary）` + 少量判定开销，
   **唯一能推高它的可调量是 `max_followup_asks`**。另设结构化硬 backstop
   `agent.autopilot.max_steps`（默认按上式推导、运行期不超过它）兜底，防自循环把背景任务撑爆；

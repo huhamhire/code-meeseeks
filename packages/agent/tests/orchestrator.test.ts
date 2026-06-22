@@ -13,19 +13,21 @@ const pr = { title: 'Fix bug', targetBranch: 'main' };
 
 /** 可编排的 fake deps：runTool 按 tool 返回固定文本；chat 顺序返回排好的回复。 */
 function makeDeps(opts: {
-  toolText?: Partial<Record<'describe' | 'review' | 'ask', string>>;
+  toolText?: Partial<Record<'describe' | 'review' | 'ask' | 'improve', string>>;
   chatReplies: string[];
 }): { deps: ReviewOrchestratorDeps; toolCalls: Array<{ tool: string; question?: string }> } {
   const toolCalls: Array<{ tool: string; question?: string }> = [];
   let chatIdx = 0;
   const deps: ReviewOrchestratorDeps = {
-    runTool: vi.fn(async (call: { tool: 'describe' | 'review' | 'ask'; question?: string }) => {
-      toolCalls.push(call);
-      return {
-        text: opts.toolText?.[call.tool] ?? `${call.tool}-result`,
-        usage: { totalTokens: 10 },
-      };
-    }),
+    runTool: vi.fn(
+      async (call: { tool: 'describe' | 'review' | 'ask' | 'improve'; question?: string }) => {
+        toolCalls.push(call);
+        return {
+          text: opts.toolText?.[call.tool] ?? `${call.tool}-result`,
+          usage: { totalTokens: 10 },
+        };
+      },
+    ),
     chat: vi.fn(async () => {
       const text = opts.chatReplies[chatIdx++] ?? '{}';
       return { text, usage: { totalTokens: 5 } };
@@ -163,6 +165,20 @@ describe('runReviewMicroflow', () => {
     expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
     expect(r.summary).toBe('ok');
+  });
+
+  it('runs a plan that includes the improve step', async () => {
+    const { deps, toolCalls } = makeDeps({
+      chatReplies: ['{"summary": "ok", "recommendation": {"verdict": "approve", "reason": "r"}}'],
+    });
+    const r = await runReviewMicroflow(deps, {
+      context,
+      pr,
+      plan: { steps: ['describe-review', 'improve', 'summary'] },
+    });
+    // describe + review（并行）→ improve → summary（chat）。
+    expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review', 'improve']);
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan', 'plan']);
   });
 
   it('falls back to the default plan when the plan is invalid (summary without describe-review)', async () => {

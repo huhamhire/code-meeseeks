@@ -2,6 +2,7 @@
   "agent": {
     "steps": {
       "describeReview": "PR の説明とコードレビュー指摘を生成",
+      "improve": "コード改善提案を生成",
       "judge": "追加質問が必要な重要な問題があるか判断",
       "judgeNone": "重要な問題なし、追加質問なし",
       "judgeSevere_other": "重要、追加質問 {{count}} 件",
