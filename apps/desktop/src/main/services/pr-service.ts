@@ -1,5 +1,10 @@
 import type { BootstrapResult } from '@meebox/config';
-import { listStoredPullRequests, readDiffBaseCache, writeDiffBaseCache } from '@meebox/poller';
+import {
+  isDiffBaseCacheReusable,
+  listStoredPullRequests,
+  readDiffBaseCache,
+  writeDiffBaseCache,
+} from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
 import type { PlatformAdapter, StoredPullRequest } from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
@@ -92,8 +97,11 @@ export class PrService {
    * - 内容（Monaco 左栏）锚到 merge-base → 编辑器即真三点，目标漂移不再把别的 PR 改动倒挂进来；
    * - 行锚点（评论 / finding）有了固定参照，目标漂移不致错位。
    *
-   * 失效重算：固化 base 不再是当前 head 的祖先（源分支被 rebase）→ 重算。head 正常 push（仅前进）
-   * 不失效。算不出（缺对象 / 无共同祖先）→ 兜底退回 targetRef.sha 且**不固化**，下次再试。
+   * 失效重算：
+   * - 固化 base 不再是当前 head 的祖先（源分支被 rebase）；
+   * - 当前 target 已经成为 head 的祖先，说明源分支把目标分支 merge 进来了，旧分叉点会把 merge
+   *   带来的目标分支内容也算进 PR diff。
+   * 算不出（缺对象 / 无共同祖先）→ 兜底退回 targetRef.sha 且**不固化**，下次再试。
    *
    * 前置：mirror 已含 head + targetRef.sha（diff 入口已 ensureMirrorReadyForPr / syncMirror）。
    */
@@ -101,7 +109,16 @@ export class PrService {
     const id = this.repoIdentityFor(pr);
     const head = pr.sourceRef.sha;
     const cached = await readDiffBaseCache(this.deps.stateStore, pr.localId);
-    if (cached?.base_sha && (await this.deps.repoMirror.isAncestor(id, cached.base_sha, head))) {
+    if (
+      cached?.base_sha &&
+      (await isDiffBaseCacheReusable({
+        cachedBaseSha: cached.base_sha,
+        targetSha: pr.targetRef.sha,
+        headSha: head,
+        isAncestor: (ancestor, descendant) =>
+          this.deps.repoMirror.isAncestor(id, ancestor, descendant),
+      }))
+    ) {
       return cached.base_sha;
     }
     const mb = await this.deps.repoMirror.mergeBase(id, pr.targetRef.sha, head);
