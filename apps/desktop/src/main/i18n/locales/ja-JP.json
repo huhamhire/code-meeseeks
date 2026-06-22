@@ -18,8 +18,5 @@
       "aborted": "ユーザーが中断しました",
       "maxSteps": "ステップ上限に到達"
     }
-  },
-  "dialog": {
-    "selectDirectory": "ディレクトリを選択"
   }
 }

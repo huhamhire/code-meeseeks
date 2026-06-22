@@ -18,8 +18,5 @@
       "aborted": "用户暂停",
       "maxSteps": "步数上限中止"
     }
-  },
-  "dialog": {
-    "selectDirectory": "选择目录"
   }
 }

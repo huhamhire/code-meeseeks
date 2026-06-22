@@ -41,7 +41,8 @@ export interface AppChannels {
    * defaultPath 可空，作为初始定位目录。
    */
   'dialog:pickDirectory': {
-    request: { defaultPath?: string; title?: string };
+    // title 由前端按 UI 语言提供（交互领域文案统一在渲染层 i18n 维护）；defaultPath 作初始定位目录。
+    request: { defaultPath?: string; title: string };
     response: { path: string | null };
   };
   /** 各连接的 ping 后缓存：当前用户 + display_name，Header 用 */

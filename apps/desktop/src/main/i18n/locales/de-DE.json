@@ -19,8 +19,5 @@
       "aborted": "Vom Benutzer abgebrochen",
       "maxSteps": "Schrittlimit erreicht"
     }
-  },
-  "dialog": {
-    "selectDirectory": "Verzeichnis auswählen"
   }
 }

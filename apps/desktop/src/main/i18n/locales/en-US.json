@@ -19,8 +19,5 @@
       "aborted": "Paused by user",
       "maxSteps": "Step limit reached"
     }
-  },
-  "dialog": {
-    "selectDirectory": "Select directory"
   }
 }
