@@ -12,8 +12,7 @@ import {
   listReviewRunsForPr,
 } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
-import type { AgentRecommendationVerdict } from '@meebox/shared';
-import { t } from '../i18n/index.js';
+import { AppError, ERROR_CODES, type AgentRecommendationVerdict } from '@meebox/shared';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
 
@@ -124,10 +123,10 @@ export const getAutopilotLedgers: IpcController<'agent:autopilotLedgers'> = asyn
 export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
   const ctx = getContext();
   if (!ctx.getPrAgentBridge()) {
-    throw new Error(t('prAgent.notReadyDetail'));
+    throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
   }
   if (req.tool === 'ask' && !req.question?.trim()) {
-    throw new Error(t('prAgent.askNeedsQuestion'));
+    throw new AppError(ERROR_CODES.AG_ASK_NEEDS_QUESTION);
   }
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   return ctx.runQueue.enqueuePragentRun(pr, req.tool, req.question, 'user', req.referencedContext);

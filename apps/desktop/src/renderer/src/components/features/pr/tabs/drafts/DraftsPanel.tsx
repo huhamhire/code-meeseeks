@@ -5,6 +5,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { PlatformCapabilities, ReviewDraft, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../../api';
+import { formatBackendError } from '../../../../../errors';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
 import { ConfirmModal } from '../../../../common';
 
@@ -97,7 +98,10 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelPro
       });
       const r = resp.results[0];
       if (!r || !r.ok) {
-        setError(draftId, r?.error ?? t('draftsPanel.publishFailed'));
+        setError(
+          draftId,
+          r?.error ? formatBackendError(r.error).title : t('draftsPanel.publishFailed'),
+        );
       }
       // 成功 → main 端直接删本地草稿 (不留 posted 历史)，broadcastDraftsChanged
       // 让本面板重拉，被删的条目从列表里消失。远端评论由 force-refresh comments

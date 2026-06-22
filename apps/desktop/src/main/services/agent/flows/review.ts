@@ -1,8 +1,8 @@
 import { buildToolCatalog, loadAgentContext } from '@meebox/agent';
 import type { AgentContext, ReviewPlan } from '@meebox/agent';
 import { pickMatchingRule } from '@meebox/rules';
-import type { AgentSession, StoredPullRequest } from '@meebox/shared';
-import { getMainLanguage, t } from '../../../i18n/index.js';
+import { AppError, ERROR_CODES, type AgentSession, type StoredPullRequest } from '@meebox/shared';
+import { getMainLanguage } from '../../../i18n/index.js';
 import { runReview } from '../review.js';
 import type { AgentChat, OrchestratorRuntime } from '../runtime.js';
 import { planningFlow } from './planning.js';
@@ -17,7 +17,7 @@ export async function reviewFlow(
   pr: StoredPullRequest,
 ): Promise<AgentSession> {
   const { getPrAgentBridge, effectiveAgentDir, logger } = runtime.ctx;
-  if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
+  if (!getPrAgentBridge()) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
   // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存。
   const agentContext = await loadAgentContext(effectiveAgentDir(), {
     onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),

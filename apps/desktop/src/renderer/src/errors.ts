@@ -1,3 +1,4 @@
+import { decodeAppError, errorDomain } from '@meebox/shared';
 import i18n from './i18n';
 
 /**
@@ -87,6 +88,17 @@ const MATCHERS: Array<{
 
 export function formatBackendError(err: unknown): FormattedError {
   const raw = err instanceof Error ? err.message : String(err);
+  // 先解码统一错误码（AppError 信封）→ 按码精确 i18n（errors.<CODE>，meta 作插值）。未注册码 / 缺 key →
+  // 通用兜底文案 + 显示原始码（便于报障）。非本信封 → 落到下方正则模式匹配（第三方 / 历史未编码错误兜底）。
+  const decoded = decodeAppError(raw);
+  if (decoded) {
+    const key = `errors.${decoded.code}`;
+    const text = i18n.t(key, decoded.meta ?? {});
+    const kind: FormattedError['kind'] = errorDomain(decoded.code) === 'NT' ? 'network' : 'unknown';
+    if (text !== key) return { title: text, detail: text, kind };
+    const fallback = i18n.t('errors.unknownCode', { code: decoded.code });
+    return { title: fallback, detail: fallback, kind: 'unknown' };
+  }
   for (const m of MATCHERS) {
     if (m.re.test(raw)) {
       return {

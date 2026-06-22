@@ -10,8 +10,7 @@ import {
   writeCommentsCache,
 } from '@meebox/poller';
 import type { RepoIdentity } from '@meebox/repo-mirror';
-import type { PrComment } from '@meebox/shared';
-import { t } from '../i18n/index.js';
+import { ERROR_CODES, errorCodeMessage, type PrComment } from '@meebox/shared';
 import { annotateOwnership } from '../services/comments.js';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
@@ -392,12 +391,12 @@ export const publishDraftBatch: IpcController<'drafts:publishBatch'> = async (_e
   for (const draftId of req.draftIds) {
     const draft = draftById.get(draftId);
     if (!draft) {
-      results.push({ draftId, ok: false, error: t('drafts.notFound') });
+      results.push({ draftId, ok: false, error: errorCodeMessage(ERROR_CODES.PR_DRAFT_NOT_FOUND) });
       continue;
     }
     // rejected 不发（用户决断不发）。posted 不守卫：发布成功即删本地草稿，不存历史 posted 态。
     if (draft.status === 'rejected') {
-      results.push({ draftId, ok: false, error: t('drafts.rejected') });
+      results.push({ draftId, ok: false, error: errorCodeMessage(ERROR_CODES.PR_DRAFT_REJECTED) });
       continue;
     }
     try {

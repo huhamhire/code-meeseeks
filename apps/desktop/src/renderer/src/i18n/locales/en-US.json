@@ -377,6 +377,13 @@
     "statusRejected": "Rejected"
   },
   "errors": {
+    "EAG0001": "/ask requires a question",
+    "EAG0002": "A /{{tool}} task for this PR is already running or queued; do not trigger it again.",
+    "EAG0003": "pr-agent not ready: neither the embedded runtime nor a local CLI was detected. See probe details in Settings.",
+    "ENT0001": "Proxy is disabled or its address is empty",
+    "ENT0407": "Proxy authentication failed (407); check the username/password",
+    "EPR0001": "Draft not found (it may have been deleted)",
+    "EPR0002": "Draft was rejected, skipping",
     "authHint": "Your Personal Access Token (PAT) may be expired or lack permissions; check it in Settings",
     "authTitle": "Authentication failed",
     "dnsHint": "The hostname could not be resolved; check base_url / DNS / proxy",
@@ -397,6 +404,7 @@
     "refusedTitle": "Connection refused",
     "timeoutHint": "Unable to reach the remote; check your network / VPN / proxy",
     "timeoutTitle": "Connection timeout",
+    "unknownCode": "Something went wrong ({{code}})",
     "unknownTitle": "Unknown error"
   },
   "fileTree": {
@@ -533,7 +541,8 @@
     "platformSub": "Choose a platform and enter your connection details.",
     "platformTitle": "Connect Code Platform",
     "progressAria": "Setup progress",
-    "providerPickAria": "Choose provider",    "skip": "Skip",
+    "providerPickAria": "Choose provider",
+    "skip": "Skip",
     "startConfig": "Get Started",
     "stepDone": "Done",
     "stepLlm": "AI Model",

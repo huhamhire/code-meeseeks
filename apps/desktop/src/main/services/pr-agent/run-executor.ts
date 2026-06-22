@@ -20,8 +20,14 @@ import {
   startReviewRun,
 } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
-import type { ReviewRun, ReviewRunStatus, ReviewRunTool } from '@meebox/shared';
-import { getMainLanguage, t } from '../../i18n/index.js';
+import {
+  AppError,
+  ERROR_CODES,
+  type ReviewRun,
+  type ReviewRunStatus,
+  type ReviewRunTool,
+} from '@meebox/shared';
+import { getMainLanguage } from '../../i18n/index.js';
 import { resolveActiveLlmProfile } from '../../utils/agent.js';
 import { buildPrContext } from '../../utils/pr-context.js';
 import { buildProxyEnv } from '../../utils/proxy.js';
@@ -59,7 +65,7 @@ export class RunExecutor {
   async execute(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {
     const { getPrAgentBridge, embeddedPythonPath, stateStore, broadcast } = this.ctx;
     const bridge = getPrAgentBridge();
-    if (!bridge) throw new Error(t('prAgent.notReady'));
+    if (!bridge) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
     const { req, pr } = item;
 
     const run = await this.startRun(item, bridge, notifyStarted);

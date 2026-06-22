@@ -2,8 +2,8 @@ import { appendAgentNotes, buildToolCatalog, loadAgentContext } from '@meebox/ag
 import type { AgentContext } from '@meebox/agent';
 import { appendAgentMessage, updateAgentSession } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
-import type { AgentSession, StoredPullRequest } from '@meebox/shared';
-import { getMainLanguage, t } from '../../../i18n/index.js';
+import { AppError, ERROR_CODES, type AgentSession, type StoredPullRequest } from '@meebox/shared';
+import { getMainLanguage } from '../../../i18n/index.js';
 import { runPlanning } from '../planning.js';
 import type { AgentChat, OrchestratorRuntime } from '../runtime.js';
 
@@ -15,7 +15,7 @@ export async function planningFlow(
   referencedContext?: string,
 ): Promise<AgentSession> {
   const { getPrAgentBridge, effectiveAgentDir, logger } = runtime.ctx;
-  if (!getPrAgentBridge()) throw new Error(t('prAgent.notReadyDetail'));
+  if (!getPrAgentBridge()) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
   const agentContext = await loadAgentContext(effectiveAgentDir(), {
     onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
   });

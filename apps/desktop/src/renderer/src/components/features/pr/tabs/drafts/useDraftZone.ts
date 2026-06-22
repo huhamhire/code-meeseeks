@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReviewDraft } from '@meebox/shared';
+import { formatBackendError } from '../../../../../errors';
 
 export interface UseDraftZoneParams {
   draft: ReviewDraft;
@@ -182,7 +183,9 @@ export function useDraftZone({
     try {
       const res = await onPublish();
       if (!res.ok) {
-        setPublishError(res.error ?? t('draftZone.publishFailed'));
+        setPublishError(
+          res.error ? formatBackendError(res.error).title : t('draftZone.publishFailed'),
+        );
       }
       // 成功 → drafts-store 广播让 status 切到 'posted'，组件自动 re-render 显示
       // posted chip + 远端 id。无需手动 setIsEditing 之类，draft prop 流推回
@@ -220,7 +223,9 @@ export function useDraftZone({
       if (res.ok) {
         setIsEditing(false);
       } else {
-        setPublishError(res.error ?? t('draftZone.publishFailed'));
+        setPublishError(
+          res.error ? formatBackendError(res.error).title : t('draftZone.publishFailed'),
+        );
       }
     } catch (e) {
       setPublishError(e instanceof Error ? e.message : String(e));
