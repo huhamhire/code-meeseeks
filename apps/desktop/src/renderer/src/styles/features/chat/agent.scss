@@ -66,6 +66,20 @@
     margin-top: 0;
   }
 }
+// 评审总结的 ## 小节之间用分割线隔开（首节不加，避免与卡片头部叠线），对应「概述 / 发现 / 建议」三段、
+// 层次清晰。仅评审总结（固定三段骨架）应用，对话回复（自由排版）不加。
+.markdown.chat-agent-summary-text {
+  h2 {
+    margin-top: $space-4;
+    padding-top: $space-3;
+    border-top: 1px solid $border-default;
+  }
+  > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+}
 // 建议理由：markdown 渲染但保持次要灰（覆盖 .markdown 默认正文色）。
 .chat-agent-summary-reason {
   font-size: $fs-sm;

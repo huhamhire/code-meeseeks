@@ -61,6 +61,12 @@ export class AsksStep extends Step<ReviewStepCtx> {
         });
       }
     }
-    ctx.bag.askResults = results.map((ask, i) => `Q: ${asks[i]!.question}\nA: ${ask.text}`);
+    // 喂给总结的只取追问的「结论」(ask-summary)，不灌全文——/ask 现产出富文本分析 / 表格 / 代码块 /
+    // 逐条代码建议，整段灌进去会撑爆总结、诱导模型照搬单条追问的细节，背离「总结=PR 整体结论」的初衷。
+    ctx.bag.askResults = results.map((ask, i) => {
+      const conclusion =
+        ask.findings?.find((f) => f.sectionKey === 'ask-summary')?.body?.trim() || ask.text.trim();
+      return `Q: ${asks[i]!.question}\nA: ${conclusion}`;
+    });
   }
 }
