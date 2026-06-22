@@ -304,6 +304,8 @@ function AskVerdictActions({
       </div>
     );
   }
+  // 保留（keep）：原评论成立、无破坏性动作，不展示任何标记（避免冗余的「保留原评论」chip）。
+  if (verdict === 'keep') return null;
   return (
     <div className="chat-run-verdict">
       {verdict && (
@@ -311,7 +313,7 @@ function AskVerdictActions({
           {t(`chatPane.reference.verdict_${verdict}`)}
         </span>
       )}
-      {verdict === 'keep' ? null : verdict === 'drop' ? (
+      {verdict === 'drop' ? (
         <button type="button" className="chat-finding-draft-btn" onClick={() => onClose('drop')}>
           {t('chatPane.reference.closeOriginal')}
         </button>

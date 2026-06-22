@@ -457,6 +457,45 @@ export function NeedsWorkIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 纯对勾字形（无外圆环）：用于实心彩底角标，只留内部符号。 */
+export function CheckGlyphIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4.2 8.4l2.6 2.6L12 5.4" />
+    </svg>
+  );
+}
+
+/** 纯感叹号字形（无外圆环）：用于实心彩底角标，只留内部符号。 */
+export function AlertGlyphIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 3.6v5" />
+      <circle cx="8" cy="11.6" r="0.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /** git commit 字形：横线上一个实心节点（活动时间线提交事件用）。 */
 export function CommitIcon({ size = 14 }: IconProps) {
   return (
