@@ -64,7 +64,6 @@
     "codeExistingAria": "Originalcode",
     "codeImprovedAria": "Verbesserter Code",
     "commandNoArgs": "{{cmd}} akzeptiert keine Argumente",
-    "concurrencyReached": "Parallelitätslimit erreicht ({{n}} gleichzeitig). Neue Aufgaben für diesen PR werden eingereiht und automatisch ausgeführt, sobald ein Platz frei wird",
     "deleteRunAria": "Löschen",
     "deleteRunTitle": "Diesen Lauf löschen",
     "draftJumpEditTitle": "Im Code bearbeiten",

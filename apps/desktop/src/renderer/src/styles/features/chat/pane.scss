@@ -67,9 +67,14 @@
   color: $text-muted;
   font-size: $fs-sm;
 }
-// 清空历史按钮：顶到标题栏最右
+// 清空历史按钮：顶到标题栏最右。hover 用统一的高饱和危险红（与删除单条记录 / .btn-icon-danger 一致）。
 .chat-pane-clear {
   margin-left: auto;
+
+  &:hover:not(:disabled) {
+    color: $color-danger-strong;
+    background: $color-danger-strong-fade;
+  }
 }
 .chat-pane-body {
   flex: 1;

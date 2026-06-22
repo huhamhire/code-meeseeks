@@ -40,6 +40,13 @@
 
 ### Changed
 
+- ChatPane 评审结果交互打磨（一批小优化）：
+  - 移除「已达并发上限」横幅——触达上限本就自动进排队（仍有队列卡片 + 状态栏队列 chip），强提示无实用价值。
+  - finding 卡的「编辑 / 拒绝」由 anchor 行的文字按钮改为头部右上角图标栏的图标（评论气泡 / 圆形禁止），排在「引用」转发箭头左侧，与标题同排成组；anchor 行仅保留草稿状态 / 复评关闭 chip。
+  - 删除按钮统一为高饱和危险红：单条记录删除（垃圾桶）与顶部「清空历史」hover 由偏浅鲑红改为 `$color-danger-strong`，与拒绝 finding / `.btn-icon-danger` 一致。
+  - `/review` 输出隐藏「评估工作量」（effort）段——实用价值低，不再展示。
+- 复评 `/ask` 取代 / 撤销改为静默自动关闭：引用某条 review/improve 评论发起的复评 `/ask`，裁决为「取代 / 撤销」时**自动**关闭被引用的原 finding（建立关闭关系），无需再手动点「关闭原」；裁决「取代」时把建议提升为**带代码定位**的代码反馈卡（取原评论的 anchor），渲染 / 采纳同 `/review` 代码反馈（点头部评论图标即转为锚定原位置的行内评论草稿）。裁决「保留」不动。自动关闭失败时仍回退到结果卡的手动动作。
+
 - **Agent 编排响应提速**（评审微流程 / 自由规划）：一批降延迟与降成本优化，对用户行为不变。
   - 条件追问并行：判读为「严重需追问」时，多个 `/ask` 由串行改为并行派发（同 describe + review 模式，错开起跑、保序），多追问场景明显更快。
   - 追问判读瘦身为轻量路由：判「是否需追问」不再带整份 agent 系统上下文（SOUL / 记忆 / 用户档 / 工具目录 / 规则 / PR 元数据），仅凭 describe + review 结果判断，输入 token 大降；追问问题随会话语言书写（不再固定英文）。
@@ -62,6 +69,8 @@
 - 危险按钮统一为高饱和度红描边：新增 `$color-danger-strong` token，删除评论（评论 tab + 行内）/ 删除草稿 / 删除连接 / LLM、停止、拒绝 finding 等按钮 hover 由偏浅鲑红改为与模态删除按钮同色系的饱和红，警示力更强、全局一致（保留 ghost 描边风格，不改为实底）。
 
 ### Fixed
+
+- `/ask` 的结构化分段 / anchor / 引用上下文 / 复评裁决指令此前对模型无效：pr-agent 的 `pr_questions` 提示词模板**不渲染 `extra_instructions`**（与 `/describe`、`/review`、`/improve` 不同），我们经 `PR_QUESTIONS__EXTRA_INSTRUCTIONS` 注入的这些指令对 `/ask` 是死字段、被静默丢弃，导致结构化输出 / 复评取代评论的代码定位时有时无。现 `/ask` 的这些指令改为拼进「问题」本身（user turn，唯一真正到达模型的文本，与语言后缀同路）；问题回显（含字面 `<summary>` / `<verdict>` 示例标签）按 pr-agent 固定的 `### **Answer:**` 表头整段切除，避免污染结构化解析。
 
 - 本地镜像缺 PR head sha 导致 diff / 评审失败且不自愈：源分支被删 / 强推（rebase / squash 常见）后，`refs/heads/*` 已看不到 PR 的 head sha，而 GitHub `refs/pull/<n>/head` / GitLab `refs/merge-requests/<n>/head` 默认不在 ref 广播里、通配 fetch 取不到 → `git diff base...head` 报 `Invalid symmetric difference`，此前只能手动删 bare 镜像目录重 clone（且删后对已删源分支仍救不回）。现 `ensureMirrorReadyForPr` 在常规 sync 后若 head sha 仍缺失，**按平台 + PR 号精确 fetch 该 PR 的头引用**（新增 `repoMirror.fetchRefspecs` + `pullRequestHeadRefspec`）把 head sha 钉回本地，自动恢复 diff / blame / pr-agent worktree（worktree 路径也改走同一 ensure 自愈）。Bitbucket 经既有通配 PR 引用本就覆盖。
 

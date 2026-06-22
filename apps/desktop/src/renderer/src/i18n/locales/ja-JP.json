@@ -64,7 +64,6 @@
     "codeExistingAria": "元のコード",
     "codeImprovedAria": "改善後のコード",
     "commandNoArgs": "{{cmd}} は引数を受け付けません",
-    "concurrencyReached": "並列実行の上限に達しました（同時に {{n}} 件まで）。この PR の新しいタスクはキューに入り、空きが出ると自動的に実行されます",
     "deleteRunAria": "削除",
     "deleteRunTitle": "この記録を削除",
     "draftJumpEditTitle": "コード内で編集",

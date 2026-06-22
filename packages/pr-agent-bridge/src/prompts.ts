@@ -258,12 +258,24 @@ export function askLanguageSuffixFor(lang: string): string {
 }
 
 /**
- * /ask 输出去重：pr-agent answer markdown 里会回显完整问题（以及我们追加到问题末尾的语言要求），
- * 跟 UI chat-user-msg 气泡重复。逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
+ * /ask 输出去问题回显。pr-agent 把答案产物写成
+ *   `### **Ask**❓\n<question>\n\n### **Answer:**\n<answer>`，
+ * 其中 `<question>` 含我们追加到问题末尾的格式指令（结构化分段 / anchor / 复评裁决——内含字面
+ * `<summary>` / `<verdict>` 等**示例标签**），若不剔除会污染下游结构化解析（parseStructuredAsk 会误把
+ * 示例标签当答案）。
+ *
+ * 策略：优先按 pr-agent 固定的英文「Answer」表头切，只取其后的答案（连同问题回显 + 注入指令一并丢弃）；
+ * 表头缺失（版本漂移）时回退到逐行精确匹配删掉回显的问题 / 语言后缀行。
  */
 export function stripAskQuestionEcho(md: string, ...echoed: string[]): string {
+  if (!md) return md;
+  // pr_questions.py `_prepare_pr_answer` 硬编码英文 `### **Answer:**`（不随响应语言本地化）。
+  const answerRe = /^#{1,6}\s*\*\*\s*Answer\s*:?\s*\*\*\s*$/im;
+  const m = answerRe.exec(md);
+  if (m) return md.slice(m.index + m[0].length).replace(/^\s+/, '');
+  // 回退：逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
   const qs = new Set(echoed.map((q) => q.trim()).filter(Boolean));
-  if (!qs.size || !md) return md;
+  if (!qs.size) return md;
   return md
     .split('\n')
     .filter((line) => !qs.has(line.trim()))

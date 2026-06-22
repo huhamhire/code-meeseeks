@@ -815,7 +815,11 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
       ?.trim();
     if (firstNonEmpty) summary = firstNonEmpty;
   }
-  return llmFailure ? { findings, summary, llmFailure } : { findings, summary };
+  // /ask 复评裁决兜底：结构化解析失败回退到这条普通路径时，仍从答案文本抽 <verdict>，
+  // 不丢复评的取代 / 关闭信号（run-executor 的自动关闭依赖它）。
+  const askVerdict = tool === 'ask' ? extractAskVerdict(cleanStdout) : undefined;
+  const base = askVerdict ? { findings, summary, askVerdict } : { findings, summary };
+  return llmFailure ? { ...base, llmFailure } : base;
 }
 
 /**

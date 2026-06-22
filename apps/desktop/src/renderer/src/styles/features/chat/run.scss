@@ -32,23 +32,6 @@
   line-height: 1;
 }
 
-// 全局单并发占用提示：另一 PR 正在 review 时显示。跟 .chat-error 同视觉权重但
-// 用中性蓝调，告诉用户这不是错误 (只是要等)
-.chat-busy {
-  background: $color-accent-bg-fade;
-  border: 1px solid $border-default;
-  border-left: 3px solid $color-accent;
-  color: $text-body;
-  border-radius: $radius-md;
-  padding: $space-3 $space-4;
-  font-size: $fs-sm;
-  line-height: $lh-normal;
-
-  code {
-    font-family: $font-mono;
-    color: $color-info;
-  }
-}
 .chat-error-detail {
   margin-top: $space-2;
   white-space: pre-wrap;
@@ -203,9 +186,10 @@
   border-radius: $radius-sm;
   opacity: 0.6;
 
+  // hover 用统一的高饱和危险红（$color-danger-strong），与 .btn-icon-danger / 拒绝按钮一致
   &:hover {
-    background: $bg-hover;
-    color: $color-danger;
+    background: $color-danger-strong-fade;
+    color: $color-danger-strong;
     opacity: 1;
   }
 }

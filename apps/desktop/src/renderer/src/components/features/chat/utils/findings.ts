@@ -93,9 +93,13 @@ export function stripEffortScoreNumber(s: string): string {
   return s.replace(/(^|[:：]\s*)\d+\s*(?=[🔵⚪⚫🟢🔴🟠🟡🟣🟤])/u, '$1');
 }
 
-/** Stable sort by sectionKey 排序 + 同 key 保留原顺序 (兼容 Array.sort 非 stable JS 引擎) */
+/**
+ * Stable sort by sectionKey 排序 + 同 key 保留原顺序 (兼容 Array.sort 非 stable JS 引擎)。
+ * effort（评估工作量）段直接过滤掉：「Estimated effort to review」实用价值低，不展示。
+ */
 export function orderFindings(findings: Finding[]): Finding[] {
   return findings
+    .filter((f) => f.sectionKey !== 'effort')
     .map((f, i) => ({ f, i }))
     .sort((a, b) => {
       const ka = SECTION_ORDER[a.f.sectionKey ?? 'general'] ?? 99;

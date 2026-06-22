@@ -66,8 +66,6 @@ interface ChatPaneProps {
    * 运行时就绪，也无法发起调用 —— 空态 / 输入栏给出「需配置」提示并禁用。
    */
   llmConfigured?: boolean;
-  /** 评审任务并发上限（pr_agent.max_concurrency）。达到后新提交进排队，据此显示提示 */
-  maxConcurrency?: number;
   /** 打开设置面板（LLM 未配置提示里的「去设置」按钮用） */
   onOpenSettings?: () => void;
 }
@@ -92,7 +90,6 @@ export function ChatPane({
   onNavigateToAnchor,
   currentLlmModel,
   llmConfigured = true,
-  maxConcurrency = 2,
   onOpenSettings,
 }: ChatPaneProps) {
   const { t } = useTranslation();
@@ -127,8 +124,6 @@ export function ChatPane({
   // PR 连发多个工具）；其它 PR 的并发数用于「别处在跑」提示。
   const myActiveRuns = active.filter((a) => a.prLocalId === pr?.localId);
   const hasMyActive = myActiveRuns.length > 0;
-  // 仅在「触达并发上限」时提示：此时新提交才会真正排队；未达上限即时并发执行，无需提示。
-  const concurrencyReached = active.length >= maxConcurrency;
   // 本 PR 排队中的任务（FIFO，前面的先跑），在 chat 末尾以「排队中」卡片展示
   const myWaiting = waiting.filter((w) => w.prLocalId === pr?.localId);
   const myActiveIds = myActiveRuns.map((a) => a.runId);
@@ -362,13 +357,6 @@ export function ChatPane({
             onCancel={() => void actions.handleCancel(w.runId)}
           />
         ))}
-        {/* 仅在触达并发上限时提示：此时新提交会排队（未达上限即时并发执行，无需提示）。
-            状态栏的队列 chip 可点开查看 / 取消任务 */}
-        {concurrencyReached && (
-          <div className="chat-busy" role="status">
-            {t('chatPane.concurrencyReached', { n: maxConcurrency })}
-          </div>
-        )}
         {/* 过程化跟踪（类 Claude Code）：已完成的思考步骤已按时间穿插进上面的时间线（AgentStepRow），
             此处只在 Agent 自身 LLM 正在推理（无 pr-agent 工具 run 占用 / 排队）时补一条实时「思考中」
             指示——等待工具调用不算思考。计时锚定到「最近一次活动结束」（run 起点 / 末步 / 末个完成

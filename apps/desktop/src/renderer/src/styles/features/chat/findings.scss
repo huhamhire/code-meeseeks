@@ -106,11 +106,21 @@
     background: $bg-surface;
   }
 }
-// 「引用」按钮：独立置于卡片头部右上角（与其他评论操作区分），社媒「转发」箭头图标。低调中性 → hover 主色。
-// margin-left:auto 顶到最右；与 collapse-toggle 并存时排在其左侧（二者贴右成一组）。
-.chat-finding-reference-btn {
+// 头部操作图标栏：编辑（评论）/ 拒绝（圆形禁止）/ 引用（转发箭头）成组贴右上角，排在折叠 chevron 之左。
+// margin-left:auto 顶到最右；与 collapse-toggle 并存时由本组吃掉左侧空白，二者贴右成一组。
+.chat-finding-head-actions {
   margin-left: auto;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+
+  & + .chat-finding-collapse-toggle {
+    margin-left: 0;
+  }
+}
+// 头部图标按钮（编辑 / 拒绝）：低调中性 → hover 主色；拒绝单独 → hover 高饱和危险红。
+.chat-finding-head-btn {
   display: inline-flex;
   align-items: center;
   background: none;
@@ -120,10 +130,26 @@
   color: $text-muted;
   cursor: pointer;
 
-  // 与其后的 collapse-toggle 并排时，自身已吃掉左侧空白，二者紧贴卡片右缘。
-  & + .chat-finding-collapse-toggle {
-    margin-left: 0;
+  &:hover {
+    color: $text-primary;
+    background: $bg-surface;
   }
+}
+.chat-finding-head-btn-reject:hover {
+  color: $color-danger-strong;
+  background: $color-danger-strong-fade;
+}
+// 「引用」按钮：社媒「转发」箭头图标，排在编辑 / 拒绝之右。低调中性 → hover 主色。
+.chat-finding-reference-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
   &:hover {
     color: $color-info;
     background: $bg-surface;
@@ -182,13 +208,6 @@
   font-family: inherit;
   line-height: $lh-normal;
   white-space: nowrap;
-}
-.chat-finding-draft-btn-reject {
-  &:hover {
-    border-color: $color-danger-strong;
-    color: $color-danger-strong;
-    background: $color-danger-strong-fade;
-  }
 }
 
 // /improve 的重要度评分 chip：右浮在 anchor 行末尾，高分 (>=8) 加 warning 调色

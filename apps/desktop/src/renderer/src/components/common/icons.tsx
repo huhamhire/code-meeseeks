@@ -234,6 +234,46 @@ export function ShareIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 评论：带文字行的对话气泡。finding 卡「编辑成评论草稿」动作用（与 ChatIcon 区分：内含文字行）。 */
+export function CommentIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 3.5h11A1 1 0 0 1 14.5 4.5v6A1 1 0 0 1 13.5 11.5H6L3 13.5V11.5H2.5A1 1 0 0 1 1.5 10.5v-6A1 1 0 0 1 2.5 3.5z" />
+      <line x1="4.5" y1="6.4" x2="11.5" y2="6.4" />
+      <line x1="4.5" y1="8.6" x2="9" y2="8.6" />
+    </svg>
+  );
+}
+
+/** 圆形禁止（no-entry）：圆 + 斜杠。finding 卡「拒绝」动作用。 */
+export function BanIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6" />
+      <line x1="3.8" y1="3.8" x2="12.2" y2="12.2" />
+    </svg>
+  );
+}
+
 /** 对话气泡：chat 面板触发 / 空态。large 场景传 size（如 28） */
 export function ChatIcon({ size = 14 }: IconProps) {
   return (
