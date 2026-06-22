@@ -1,7 +1,12 @@
 import type { PragentRunInfo } from '@meebox/ipc';
 import { makeRunId } from '@meebox/poller';
-import type { ReviewRun, ReviewRunTool, StoredPullRequest } from '@meebox/shared';
-import { t } from '../../i18n/index.js';
+import {
+  AppError,
+  ERROR_CODES,
+  type ReviewRun,
+  type ReviewRunTool,
+  type StoredPullRequest,
+} from '@meebox/shared';
 import type { ServiceContext } from '../context.js';
 import { RunExecutor } from './run-executor.js';
 
@@ -69,7 +74,7 @@ export class RunQueue {
       const sameTask = (q: QueueItem): boolean =>
         q.info.prLocalId === pr.localId && q.info.tool === tool;
       if ([...this.active.values()].some(sameTask) || this.waiting.some(sameTask)) {
-        throw new Error(t('prAgent.duplicateTask', { tool }));
+        throw new AppError(ERROR_CODES.AG_DUPLICATE_TASK, { tool });
       }
     }
     // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位

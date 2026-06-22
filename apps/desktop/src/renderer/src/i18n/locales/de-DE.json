@@ -377,6 +377,9 @@
     "statusRejected": "Abgelehnt"
   },
   "errors": {
+    "EAG0001": "/ask erfordert eine Frage",
+    "EAG0002": "Eine /{{tool}}-Aufgabe für diesen PR wird bereits ausgeführt oder steht in der Warteschlange; bitte nicht erneut auslösen.",
+    "EAG0003": "pr-agent ist nicht bereit: Weder die eingebettete Laufzeitumgebung noch eine lokale CLI wurde erkannt. Details siehe Erkennungsergebnisse unter Einstellungen.",
     "authHint": "Ihr Personal Access Token (PAT) ist möglicherweise abgelaufen oder hat unzureichende Berechtigungen; prüfen Sie ihn in den Einstellungen",
     "authTitle": "Authentifizierung fehlgeschlagen",
     "dnsHint": "Der Hostname konnte nicht aufgelöst werden; prüfen Sie base_url / DNS / Proxy",
@@ -397,6 +400,7 @@
     "refusedTitle": "Verbindung abgelehnt",
     "timeoutHint": "Das Remote ist nicht erreichbar; prüfen Sie Netzwerk / VPN / Proxy",
     "timeoutTitle": "Verbindungs-Timeout",
+    "unknownCode": "Etwas ist schiefgelaufen ({{code}})",
     "unknownTitle": "Unbekannter Fehler"
   },
   "fileTree": {

@@ -3,8 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { appendAgentMessage, listStoredPullRequests, writeAutopilotLedger } from '@meebox/poller';
 import { buildChatEnv } from '@meebox/pr-agent-bridge';
-import type { AgentSession, AgentStep, StoredPullRequest } from '@meebox/shared';
-import { getMainLanguage, t } from '../../i18n/index.js';
+import {
+  AppError,
+  ERROR_CODES,
+  type AgentSession,
+  type AgentStep,
+  type StoredPullRequest,
+} from '@meebox/shared';
+import { getMainLanguage } from '../../i18n/index.js';
 import { resolveActiveLlmProfile } from '../../utils/agent.js';
 import { buildProxyEnv } from '../../utils/proxy.js';
 import type { ServiceContext } from '../context.js';
@@ -169,7 +175,7 @@ export class Orchestrator implements OrchestratorRuntime {
   async withAgentChat<T>(fn: (chat: AgentChat) => Promise<T>, signal?: AbortSignal): Promise<T> {
     const { getPrAgentBridge, bootstrap } = this.ctx;
     const bridge = getPrAgentBridge();
-    if (!bridge) throw new Error(t('prAgent.notReadyDetail'));
+    if (!bridge) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
     // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。代理 env 先铺底（非
     // pr-agent 范畴）；LLM 凭据/模型 + 编排 chat 专属档（响应语言 / 低推理档 / 提示缓存）由 buildChatEnv 按
     // 意图组装。低档与缓存仅作用于本 chat spawn：pr-agent 工具 run（/review 等）的 env 不含 → 仍满档推理。

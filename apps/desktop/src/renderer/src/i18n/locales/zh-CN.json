@@ -368,6 +368,9 @@
     "statusRejected": "已拒绝"
   },
   "errors": {
+    "EAG0001": "/ask 需要提供 question",
+    "EAG0002": "该 PR 的 /{{tool}} 任务已在执行或排队中，请勿重复触发",
+    "EAG0003": "pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节",
     "authHint": "Personal Access Token (PAT) 可能已过期或权限不足，去 Settings 检查",
     "authTitle": "鉴权失败",
     "dnsHint": "主机名无法解析，检查 base_url / DNS / 代理",
@@ -388,6 +391,7 @@
     "refusedTitle": "连接被拒绝",
     "timeoutHint": "无法连接到远端，请检查网络 / VPN / 代理",
     "timeoutTitle": "连接超时",
+    "unknownCode": "出错了（{{code}}）",
     "unknownTitle": "未知错误"
   },
   "fileTree": {

@@ -27,12 +27,6 @@
     "notFound": "Entwurf nicht gefunden (möglicherweise gelöscht)",
     "rejected": "Entwurf wurde abgelehnt, wird übersprungen"
   },
-  "prAgent": {
-    "askNeedsQuestion": "/ask erfordert eine Frage",
-    "duplicateTask": "Eine /{{tool}}-Aufgabe für diesen PR wird bereits ausgeführt oder steht in der Warteschlange; bitte nicht erneut auslösen.",
-    "notReady": "pr-agent ist nicht bereit",
-    "notReadyDetail": "pr-agent ist nicht bereit: Weder die eingebettete Laufzeitumgebung noch eine lokale CLI wurde erkannt. Details siehe Erkennungsergebnisse unter Einstellungen."
-  },
   "proxy": {
     "authFailed": "Proxy-Authentifizierung fehlgeschlagen (407); Benutzername/Passwort prüfen",
     "disabled": "Proxy ist deaktiviert oder die Adresse ist leer"
