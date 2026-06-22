@@ -21,6 +21,21 @@ export function isVerdict(v: unknown): v is AgentRecommendationVerdict {
 }
 
 /**
+ * 给 judge / summary 瘦身的 describe 正文：剥掉低信号的「File Walkthrough」（逐文件分类 / 描述大表）与
+ * mermaid 图块，只留类型 / 总结 / 描述 / 评估等高价值文本——这两块对「是否有严重问题需追问」的判读、以及
+ * 「PR 整体结论」的总结都无实质帮助，却占大量 token。仅用于喂 judge / summary，不影响 describe 卡片展示。
+ */
+export function compactDescribe(text: string): string {
+  let out = text;
+  // File Walkthrough：pr-agent 追加在末尾的 <details><summary><h3>File Walkthrough...，含嵌套 details，取到结尾剥掉。
+  const wt = /<details[^>]*>\s*<summary>\s*<h3>\s*File Walkthrough\s*<\/h3>\s*<\/summary>/i.exec(out);
+  if (wt) out = out.slice(0, wt.index).trimEnd();
+  // mermaid 图（Diagram Walkthrough 的架构图）：判读 / 总结用不到，剥掉代码块本身。
+  out = out.replace(/```mermaid[\s\S]*?```/gi, '').replace(/\n{3,}/g, '\n\n');
+  return out.trim();
+}
+
+/**
  * 把 review 的代码类 findings 渲染成「可按 id 点名」的清单（供 judge 决定针对哪条出复评追问）。
  * 仅取 code-feedback / code-suggestion（可锚定、可被复评取代的代码评论），正文压一行截断控篇幅。
  */
@@ -56,7 +71,7 @@ export function judgePrompt(
     head,
     '',
     '--- PR description ---',
-    describeText,
+    compactDescribe(describeText),
     '',
     '--- Review findings ---',
     reviewText,
@@ -86,7 +101,7 @@ export function summaryPrompt(
     head,
     '',
     '--- Description ---',
-    describeText,
+    compactDescribe(describeText),
     '',
     '--- Review findings ---',
     reviewText,

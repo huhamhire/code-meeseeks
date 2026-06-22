@@ -40,7 +40,9 @@ function languageDirectiveFor(lang: string): string {
  * 兜底**保留：parse-output 合并时链接给 path、缺行号则用 marker 的行号补（resolveIssueAnchor）。
  *
  * - /review: 每条 key_issue 末尾 **必加** marker
- * - /ask: 仅当回答涉及具体文件 / 代码位置时 **才加**（自由问答可能完全跟代码无关，强制会产假阳性）
+ * - /ask: **不注入**——/ask 走结构化分段（见 structuredAskDirective），其建议定位走「被引用 finding 的
+ *   anchor」（复评取代场景），无需逐段 marker；而强制逐段 marker 会把回答压成纯文本逐段、回避表格 / 代码块，
+ *   削弱 pr-agent 原生 /ask 的富文本表现（实测）。故对 /ask 取消该指令，保留 pr-agent 原生作答风格。
  * - /describe / /improve 不注入：前者不出 issue，后者走 marker 行 `[file [start-end]](url)` 自带 anchor
  */
 function anchorMarkerDirective(tool: ReviewRunTool): string {
@@ -59,47 +61,6 @@ function anchorMarkerDirective(tool: ReviewRunTool): string {
       'identified in the YAML output. Do NOT wrap the path in backticks. If you',
       'truly cannot identify a file/line for an issue, omit the marker for that',
       'item only.',
-    ].join('\n');
-  }
-  if (tool === 'ask') {
-    return [
-      'CRITICAL: This answer is consumed by a code review GUI that converts your',
-      'per-paragraph recommendations into INLINE COMMENTS pinned to specific code',
-      'lines. For that to work, EVERY paragraph that names a code symbol (function,',
-      'method, class, variable, identifier) from this PR MUST end with a',
-      'machine-readable anchor marker on its OWN LAST LINE:',
-      '',
-      '    [file: <path>, lines: <start_line>-<end_line>]',
-      '',
-      'Examples:',
-      '  [file: src/auth/login.ts, lines: 42-50]',
-      '  [file: pkg/cache.go, lines: 17]',
-      '  [file: pkg/store.ts]              (path-only fallback; only when you',
-      '                                     truly cannot infer any line number)',
-      '',
-      'How to derive line numbers from the diff:',
-      '- Every hunk in the diff begins with a header:',
-      '    @@ -<base_start>,<base_count> +<head_start>,<head_count> @@',
-      '  The number after `+` is the FIRST head-side line of that hunk. Count down',
-      '  through `+` (added) and ` ` (context) lines — DO NOT count `-` (removed)',
-      '  lines — to locate the line where the symbol appears. Prefer head-side',
-      '  line numbers. For code that ONLY exists on the base side (purely removed),',
-      '  use the base-side `-` line number instead.',
-      '',
-      'Rules — read carefully:',
-      '- The marker is REQUIRED. Do not skip it when your paragraph references a',
-      '  real code symbol from the diff. A paragraph without a marker becomes',
-      '  un-pinnable feedback the user cannot turn into a comment.',
-      '- Append exactly ONE marker per paragraph, at the very end of that paragraph,',
-      '  on its own line (blank line above it optional but recommended).',
-      '- If a paragraph discusses multiple locations, pick the most important one',
-      '  (the line where the recommended change should be made).',
-      '- Paragraphs that are purely general / conceptual / meta (e.g., overall',
-      '  praise, no specific symbol named) MAY omit the marker.',
-      '- Use the exact file path from the diff. Do NOT wrap the path in backticks',
-      '  or quotes inside the marker.',
-      '- If you really cannot pin a line, fall back to path-only `[file: <path>]`',
-      '  rather than omitting the marker entirely.',
     ].join('\n');
   }
   return '';
@@ -128,41 +89,51 @@ function reviewLayoutDirective(tool: ReviewRunTool): string {
 }
 
 /**
- * /ask 结构化分段指令：让自由问答按确定性分段输出，便于 GUI 快速归纳。要求把回答包进字面
- * `<summary>` / `<analysis>` / `<suggestions>` 三段——summary 必填（结论，GUI 高亮展开）、analysis
- * 可省（过程分析，GUI 默认收起）、suggestions 可省（可执行建议，GUI 高亮）。仅 /ask 注入；模型未遵循
- * 时 parse-output 整体回退普通解析（见 packages/poller）。anchor marker 规则在各段内仍适用。
+ * /ask 结构化分段指令：结构化只是**在 pr-agent 原生 /ask 富文本回答之上加一层轻包装**——把回答包进
+ * 字面 `<summary>` / `<analysis>` / `<suggestions>` 三段，便于 GUI 归纳；段内内容保持 pr-agent 原生
+ * 表现（表格 / 代码块 / 子标题 / 列表、深度照常），不削减。summary 必填（结论，GUI 高亮展开）、analysis
+ * 可省（完整过程分析，GUI 默认收起）、suggestions 可省（可执行建议，**逐条带代码定位标记** → GUI 解析成
+ * 可采纳的「代码建议」卡）。仅 /ask 注入；模型未遵循时 parse-output 整体回退普通解析（见 packages/poller）。
  */
 function structuredAskDirective(tool: ReviewRunTool): string {
   if (tool !== 'ask') return '';
   return [
-    'STRUCTURE YOUR ANSWER into these XML-style sections, in this exact order, each',
-    'tag on its own line. A code-review GUI parses these tags to present a scannable,',
-    'structured answer — avoid free-form prose outside the tags.',
+    'Answer the question with the SAME depth, structure, and rich GitHub-flavored Markdown',
+    'you normally would — multiple paragraphs, sub-headings, bullet/numbered lists, TABLES,',
+    'and fenced ```code``` blocks wherever they help. On TOP of that natural answer, wrap it',
+    'in three XML-style sections (in this exact order, each tag on its own line) so a',
+    'code-review GUI can present it. The tags are an ADDITIVE wrapper — they must NOT make you',
+    'shorten, flatten, or strip formatting from your answer.',
     '',
     '  <summary>',
-    '  A direct, concise answer / conclusion to the question (a few sentences). This',
-    '  is the key takeaway the reviewer reads first.',
+    '  The key takeaway / direct conclusion in a few sentences — what the reviewer reads first.',
     '  </summary>',
     '',
     '  <analysis>',
-    '  Your supporting reasoning / investigation / discussion. This section is',
-    '  collapsed by default in the GUI — put the verbose process here, not in summary.',
+    '  Your full, natural answer: the complete investigation / discussion, AS DETAILED as the',
+    '  question warrants, using tables / code blocks / sub-sections freely (this is exactly the',
+    '  rich answer you would give without any wrapper). Collapsed by default in the GUI, so put',
+    '  the depth here.',
     '  </analysis>',
     '',
     '  <suggestions>',
-    '  Concrete, actionable recommendations. Omit this section entirely if you have',
-    '  no actionable suggestion.',
+    '  Concrete, actionable recommendations, as a list. For EACH recommendation that targets a',
+    '  specific place in the code, end that item with a machine-readable anchor marker on its',
+    '  OWN line so the GUI can pin it as an inline code suggestion with line-number location:',
+    '      [file: <path>, lines: <start_line>-<end_line>]',
+    '  Examples:  [file: src/auth/login.ts, lines: 42-50]   [file: pkg/cache.go, lines: 17]',
+    '  One marker per item, right after that item; derive the line numbers from the diff hunk',
+    '  headers (the number after `+` is the first head-side line; count `+` and ` ` lines, not',
+    '  `-`). Omit the marker for purely general / non-code advice. Omit this whole section if',
+    '  you have no actionable suggestion.',
     '  </suggestions>',
     '',
     'Rules:',
-    '- <summary> is REQUIRED. <analysis> and <suggestions> are OPTIONAL — omit the',
-    '  whole tag pair when you have nothing for it; never emit an empty tag.',
-    '- Use the literal lowercase tags exactly as shown; do not nest them or invent',
-    '  other tags. Put the section content (in the requested response language)',
-    '  between the tags.',
-    '- The anchor-marker rule above still applies to paragraphs INSIDE these sections',
-    '  (especially <suggestions>) that name a specific code symbol.',
+    '- <summary> is REQUIRED. <analysis> and <suggestions> are OPTIONAL — omit the whole tag',
+    '  pair when empty; never emit an empty tag.',
+    '- Use the literal lowercase tags exactly as shown; do not nest them or invent other tags.',
+    '  Write the content (in the requested response language) between the tags; avoid stray',
+    '  prose outside the tags.',
   ].join('\n');
 }
 
@@ -187,7 +158,9 @@ function referencedAskDirective(tool: ReviewRunTool, hasReferencedFinding: boole
     '    non-issue); no comment is needed.',
     '',
     'Keep <summary> to your conclusion, put the reasoning in <analysis>, and (for replace)',
-    'the proposed replacement comment in <suggestions>.',
+    'the proposed replacement comment in <suggestions>, ending it with the',
+    '[file: <path>, lines: <start>-<end>] marker for the referenced code location so the',
+    'replacement stays pinned to the same place as the original comment.',
   ].join('\n');
 }
 
@@ -258,12 +231,24 @@ export function askLanguageSuffixFor(lang: string): string {
 }
 
 /**
- * /ask 输出去重：pr-agent answer markdown 里会回显完整问题（以及我们追加到问题末尾的语言要求），
- * 跟 UI chat-user-msg 气泡重复。逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
+ * /ask 输出去问题回显。pr-agent 把答案产物写成
+ *   `### **Ask**❓\n<question>\n\n### **Answer:**\n<answer>`，
+ * 其中 `<question>` 含我们追加到问题末尾的格式指令（结构化分段 / anchor / 复评裁决——内含字面
+ * `<summary>` / `<verdict>` 等**示例标签**），若不剔除会污染下游结构化解析（parseStructuredAsk 会误把
+ * 示例标签当答案）。
+ *
+ * 策略：优先按 pr-agent 固定的英文「Answer」表头切，只取其后的答案（连同问题回显 + 注入指令一并丢弃）；
+ * 表头缺失（版本漂移）时回退到逐行精确匹配删掉回显的问题 / 语言后缀行。
  */
 export function stripAskQuestionEcho(md: string, ...echoed: string[]): string {
+  if (!md) return md;
+  // pr_questions.py `_prepare_pr_answer` 硬编码英文 `### **Answer:**`（不随响应语言本地化）。
+  const answerRe = /^#{1,6}\s*\*\*\s*Answer\s*:?\s*\*\*\s*$/im;
+  const m = answerRe.exec(md);
+  if (m) return md.slice(m.index + m[0].length).replace(/^\s+/, '');
+  // 回退：逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
   const qs = new Set(echoed.map((q) => q.trim()).filter(Boolean));
-  if (!qs.size || !md) return md;
+  if (!qs.size) return md;
   return md
     .split('\n')
     .filter((line) => !qs.has(line.trim()))

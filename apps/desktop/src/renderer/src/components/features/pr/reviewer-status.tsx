@@ -1,5 +1,5 @@
 import type { ReviewerStatus } from '@meebox/shared';
-import { ApproveIcon, NeedsWorkIcon } from '../../common';
+import { AlertGlyphIcon, ApproveIcon, CheckGlyphIcon, NeedsWorkIcon } from '../../common';
 
 /**
  * reviewer 状态的展示元信息与图标，供详情页 reviewer 列表（PrInfoView）、PR 头部头像栈
@@ -23,4 +23,14 @@ export function ReviewerStatusIcon({
   if (status === 'approved') return <ApproveIcon size={size} />;
   if (status === 'needsWork') return <NeedsWorkIcon size={size} />;
   return <span className="reviewer-pending-dot" />;
+}
+
+/**
+ * 头像栈角标用的纯符号字形（无外圆环）：搭配实心彩底反色展示，只留内部勾 / 叹号。
+ * approved / needsWork 才有；其它返回 null（待评审无角标）。
+ */
+export function ReviewerBadgeGlyph({ status, size = 16 }: { status: ReviewerStatus; size?: number }) {
+  if (status === 'approved') return <CheckGlyphIcon size={size} />;
+  if (status === 'needsWork') return <AlertGlyphIcon size={size} />;
+  return null;
 }

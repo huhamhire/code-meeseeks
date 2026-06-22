@@ -68,6 +68,18 @@ def patch(module) -> None:
 
     module.LocalGitProvider.get_diff_files = get_diff_files
 
+    # _prepare_repo: 上游在 repo.is_dirty() 时抛「repository is not in a clean state」。我们对 CLI 模式
+    # /ask 的 worktree 会按需净化——截断仓库自带的 agent 指令文件（CLAUDE.md / AGENTS.md / .cursor 规则
+    # 等，防 CLI 子进程自动加载污染回答）；若这些文件被仓库纳入版本管理，净化即让工作区变「脏」，触发该守卫
+    # → 整个 /ask 在取 git provider 阶段就崩、不写 review.md。而 diff 取自分支提交（head.commit vs
+    # merge-base，见 get_diff_files），与工作区是否脏无关，故脏检查对这套「一次性受控 worktree」是误报。
+    # 只保留必需的「目标分支存在」校验，去掉脏检查。
+    def _prepare_repo(self):
+        if self.target_branch_name not in self.repo.heads:
+            raise KeyError(f"Branch: {self.target_branch_name} does not exist")
+
+    module.LocalGitProvider._prepare_repo = _prepare_repo
+
     # get_line_link: 基类默认 `return ''`，LocalGitProvider 未实现 → /review 的
     # key_issues 渲染（convert_to_markdown_v2）走"无 link + 非 GFM"分支，把
     # relevant_file/start_line/end_line 抹掉（见 ROADMAP M5 anchor 根因）。补成

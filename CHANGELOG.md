@@ -40,6 +40,17 @@
 
 ### Changed
 
+- ChatPane 评审结果交互打磨（一批小优化）：
+  - 移除「已达并发上限」横幅——触达上限本就自动进排队（仍有队列卡片 + 状态栏队列 chip），强提示无实用价值。
+  - finding 卡的「编辑 / 拒绝」由 anchor 行的文字按钮改为头部右上角图标栏的图标（评论气泡 / 圆形禁止），排在「引用」转发箭头左侧，与标题同排成组；anchor 行仅保留草稿状态 / 复评关闭 chip。
+  - 删除按钮统一为高饱和危险红：单条记录删除（垃圾桶）与顶部「清空历史」hover 由偏浅鲑红改为 `$color-danger-strong`，与拒绝 finding / `.btn-icon-danger` 一致。
+  - `/review` 输出隐藏「评估工作量」（effort）段——实用价值低，不再展示。
+- 复评 `/ask` 取代 / 撤销改为静默自动关闭：引用某条 review/improve 评论发起的复评 `/ask`，裁决为「取代 / 撤销」时**自动**关闭被引用的原 finding（建立关闭关系），无需再手动点「关闭原」；裁决「取代」时把建议提升为**带代码定位**的代码反馈卡（取原评论的 anchor），渲染 / 采纳同 `/review` 代码反馈（点头部评论图标即转为锚定原位置的行内评论草稿）。裁决「保留」不动、且不再展示「保留原评论」标记（无破坏性动作，标记冗余）。自动关闭失败时仍回退到结果卡的手动动作。
+- `/ask` 引用展示简化与文案微调：复评结果卡顶部徽标与输入框引用 chip 不再用「复评自 / 复评 …」文案，直接显示引用定位（结果卡：转发箭头 + **完整路径:行号**，换行规则同代码建议定位、点击回链原评论；输入框 chip：只显示**文件名**），删除 `chipLabel` / `reviewedFrom` / `reviewedFromTitle` 三个 i18n key 减少维护；`/ask` 结构化「分析过程」段标签改为「分析解读」，其正文 H2 小节标题字号调小（靠加粗区分）、小节间用分割线隔开；该段展开时在 chip 行下加一条分割线，与下方富文本内容衔接更自然。
+- agent「评审总结」聚焦 PR 整体结论：`/ask` 改富文本后，追问答案（表格 / 代码块 / 逐条建议）此前被整段灌进总结输入、诱导模型照搬明细，背离「总结=控制篇幅的整体结论」初衷。现总结只吃每条追问的**结论**（ask-summary），提示词重写为「综合描述 / 评审发现 / 追问结论 → 输出 PR 整体结论，不复制明细」，并允许总结内适度用表格 / 引用 / emoji；「概述 / 发现 / 建议」三段间加分割线。
+- `/ask` 结论段标签由「概述」改为「结论」（四语言对齐：Conclusion / 結論 / Fazit），更贴合其「直接结论」定位。
+- PR 头部 reviewer 头像决断角标反色：由「白底 + 彩色勾/叹号圆环图标」改为「实心彩色圆底 + 纯白勾/叹号符号（去掉图标外圆环，只留内部符号）」+ 与头像同款灰色描边环，白色面积更小、更醒目。
+
 - **Agent 编排响应提速**（评审微流程 / 自由规划）：一批降延迟与降成本优化，对用户行为不变。
   - 条件追问并行：判读为「严重需追问」时，多个 `/ask` 由串行改为并行派发（同 describe + review 模式，错开起跑、保序），多追问场景明显更快。
   - 追问判读瘦身为轻量路由：判「是否需追问」不再带整份 agent 系统上下文（SOUL / 记忆 / 用户档 / 工具目录 / 规则 / PR 元数据），仅凭 describe + review 结果判断，输入 token 大降；追问问题随会话语言书写（不再固定英文）。
@@ -62,6 +73,12 @@
 - 危险按钮统一为高饱和度红描边：新增 `$color-danger-strong` token，删除评论（评论 tab + 行内）/ 删除草稿 / 删除连接 / LLM、停止、拒绝 finding 等按钮 hover 由偏浅鲑红改为与模态删除按钮同色系的饱和红，警示力更强、全局一致（保留 ghost 描边风格，不改为实底）。
 
 ### Fixed
+
+- CLI 模式 `/ask` 在「仓库自带 agent 指令文件被纳入版本管理」时整体失败：为防 CLI 子进程自动加载污染回答，`/ask` 会截断 worktree 内的 `CLAUDE.md` / `AGENTS.md` / `.cursor` 规则等；若这些文件被仓库跟踪，截断即让工作区变「脏」，触发 pr-agent `LocalGitProvider._prepare_repo` 的「repository is not in a clean state」守卫 → 取 git provider 阶段就崩、不写 `review.md`、`/ask` 失败（无此类跟踪文件的仓库不受影响）。修复：shim 覆写 `_prepare_repo` 去掉脏检查、仅保留「目标分支存在」校验——diff 取自分支提交（与工作区脏无关），该守卫对这套一次性受控 worktree 是误报。
+- 失败 / 取消的任务不再做结构化采集：`/ask`（及其它工具）run 失败（含 exit 0 但 LLM 调用失败）或被取消时，此前仍会把部分 / 报错输出解析成 finding 卡，易产出无意义的结构化元素。现失败 / 取消路径**不解析 findings**，只保留原始输出（stdout/stderr）供展示；复评 `/ask` 失败时也不触发自动关闭 / 建议提升。
+- `/ask` 的结构化分段 / 引用上下文 / 复评裁决指令此前对模型无效：pr-agent 的 `pr_questions` 提示词模板**不渲染 `extra_instructions`**（与 `/describe`、`/review`、`/improve` 不同），我们经 `PR_QUESTIONS__EXTRA_INSTRUCTIONS` 注入的这些指令对 `/ask` 是死字段、被静默丢弃，导致结构化输出 / 复评取代评论的代码定位时有时无。现 `/ask` 的这些指令改为拼进「问题」本身（user turn，唯一真正到达模型的文本，与语言后缀同路）；问题回显（含字面 `<summary>` / `<verdict>` 示例标签）按 pr-agent 固定的 `### **Answer:**` 表头整段切除，避免污染结构化解析。
+  - 结构化只作「轻包装」、不削减原生表现：`<analysis>` 保留 pr-agent 原生 `/ask` 的富文本（表格 / 代码块 / 子标题 / 分段、深度照常）。此前误把面向 `/review` 的「每段末尾追加 anchor marker」指令也套给 `/ask`（指令真正送达后）→ 模型为遵守而回避表格 / 代码块、回答被压成平铺纯文本；现对 `/ask` 取消该全局逐段 marker 指令（其标记在结构化解析里本就未被使用）。
+  - `<suggestions>` 改为可定位的代码建议：每条针对具体代码的建议末尾带 `[file:…, lines:…]` 标记，解析层据此**逐条拆成 `code-suggestion` 卡**（带行号定位 + 编辑 / 拒绝 / 引用，可采纳为行内评论），非代码类建议仍为普通段落。
 
 - 本地镜像缺 PR head sha 导致 diff / 评审失败且不自愈：源分支被删 / 强推（rebase / squash 常见）后，`refs/heads/*` 已看不到 PR 的 head sha，而 GitHub `refs/pull/<n>/head` / GitLab `refs/merge-requests/<n>/head` 默认不在 ref 广播里、通配 fetch 取不到 → `git diff base...head` 报 `Invalid symmetric difference`，此前只能手动删 bare 镜像目录重 clone（且删后对已删源分支仍救不回）。现 `ensureMirrorReadyForPr` 在常规 sync 后若 head sha 仍缺失，**按平台 + PR 号精确 fetch 该 PR 的头引用**（新增 `repoMirror.fetchRefspecs` + `pullRequestHeadRefspec`）把 head sha 钉回本地，自动恢复 diff / blame / pr-agent worktree（worktree 路径也改走同一 ensure 自愈）。Bitbucket 经既有通配 PR 引用本就覆盖。
 

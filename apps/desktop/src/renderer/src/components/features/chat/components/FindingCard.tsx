@@ -5,7 +5,9 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { Finding, FindingClosure, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
 import {
+  BanIcon,
   ChevronIcon,
+  CommentIcon,
   ShareIcon,
   mermaidComponents,
   walkthroughMdComponents,
@@ -52,28 +54,92 @@ const DRAFT_TONE: Record<NonNullable<ReviewDraft['status']>, 'accent' | 'approve
 };
 
 /**
- * Finding card 上的草稿状态 chip + 操作按钮。仅代码类 finding（/review code-feedback
- * 与 /improve code-suggestion）+ anchor 完整时出现。
- *
- * 状态可视化：
- * - 无 relatedDraft（用户从未交互）→ 不显示 status chip，只展示"→ 编辑 / ✗ 拒绝"按钮
- * - pending → 蓝 chip "待处理" + 跳转 + 拒绝
- * - edited → 蓝 chip "已编辑" + 跳转 + 拒绝
- * - posted → 绿 chip "已发布" + 跳转 (查看)，无拒绝 (远端已存，本地不该撤销)
- * - rejected → 灰 chip "已拒绝" + 撤销 (即重新跳转编辑)
+ * Finding 卡头部右上角的操作图标栏：编辑（评论气泡）/ 拒绝（圆形禁止）+ 引用（转发箭头）。
+ * 仅代码类 finding（/review code-feedback 与 /improve code-suggestion）+ anchor 完整、未关闭时出现，
+ * 排在折叠 chevron 之左。编辑动作随草稿状态切换语义（编辑 / 查看 / 撤销）；posted / rejected 不出拒绝。
  */
-function FindingDraftActions({
+function FindingHeadActions({
   relatedDraft,
   onJump,
   onReject,
+  onReference,
+}: {
+  relatedDraft?: ReviewDraft;
+  onJump?: () => void;
+  onReject?: () => void;
+  onReference?: () => void;
+}) {
+  const { t } = useTranslation();
+  const status = relatedDraft?.status;
+  // posted（远端已存，不撤销）/ rejected（已是拒绝态）不出拒绝按钮。
+  const canReject = status !== 'posted' && status !== 'rejected';
+  return (
+    <div className="chat-finding-head-actions">
+      {/* 编辑→评论草稿。posted 跳转即「查看」；rejected 跳转即「撤销并继续编辑」。 */}
+      {onJump && (
+        <button
+          type="button"
+          className="chat-finding-head-btn"
+          onClick={onJump}
+          title={
+            status === 'posted'
+              ? t('chatPane.draftJumpViewTitle')
+              : status === 'rejected'
+                ? t('chatPane.draftJumpRestoreTitle')
+                : t('chatPane.draftJumpEditTitle')
+          }
+          aria-label={
+            status === 'posted'
+              ? t('chatPane.draftJumpView')
+              : status === 'rejected'
+                ? t('chatPane.draftJumpRestore')
+                : t('common.edit')
+          }
+        >
+          <CommentIcon size={16} />
+        </button>
+      )}
+      {onReject && canReject && (
+        <button
+          type="button"
+          className="chat-finding-head-btn chat-finding-head-btn-reject"
+          onClick={onReject}
+          title={t('chatPane.rejectFindingTitle')}
+          aria-label={t('chatPane.reject')}
+        >
+          <BanIcon size={16} />
+        </button>
+      )}
+      {/* 引用：发起复评 /ask（挂到输入栏），社媒「转发」箭头图标，排在编辑 / 拒绝之右。 */}
+      {onReference && (
+        <button
+          type="button"
+          className="chat-finding-reference-btn"
+          onClick={onReference}
+          title={t('chatPane.reference.referenceTitle')}
+          aria-label={t('chatPane.reference.reference')}
+        >
+          <ShareIcon size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Finding 卡 anchor 行右侧的状态展示。仅代码类 finding（/review code-feedback 与 /improve
+ * code-suggestion）+ anchor 完整时出现。动作按钮已上移到头部图标栏（见 FindingHeadActions），
+ * 此处只承载**状态**：草稿状态 chip（待处理 / 已编辑 / 已发布 / 已拒绝），或被复评关闭/取代时的
+ * 关闭 chip + 查看复评 + 撤销关闭。
+ */
+function FindingDraftActions({
+  relatedDraft,
   closure,
   onReopen,
   onViewAsk,
 }: {
   relatedDraft?: ReviewDraft;
-  onJump?: () => void;
-  onReject?: () => void;
-  /** 已被复评关闭/取代时的关闭关系；存在则展示关闭态（替代草稿动作）。 */
+  /** 已被复评关闭/取代时的关闭关系；存在则展示关闭态（替代草稿状态）。 */
   closure?: FindingClosure;
   /** 「撤销关闭」回调。 */
   onReopen?: () => void;
@@ -81,7 +147,7 @@ function FindingDraftActions({
   onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
-  // 已被复评关闭/取代：展示关闭 chip + 查看复评 + 撤销关闭，替代常规草稿动作。
+  // 已被复评关闭/取代：展示关闭 chip + 查看复评 + 撤销关闭。
   if (closure) {
     return (
       <div className="chat-finding-draft-actions">
@@ -104,6 +170,7 @@ function FindingDraftActions({
     );
   }
   const status = relatedDraft?.status;
+  if (!status) return null;
   const chipText: Record<NonNullable<typeof status>, string> = {
     pending: t('chatPane.draftStatusPending'),
     edited: t('chatPane.draftStatusEdited'),
@@ -112,47 +179,13 @@ function FindingDraftActions({
   };
   return (
     <div className="chat-finding-draft-actions">
-      {status && (
-        <span
-          className={`chat-chip chat-chip-tight chat-chip-${DRAFT_TONE[status]}${
-            status === 'rejected' ? ' chat-finding-draft-chip-rejected' : ''
-          }`}
-        >
-          {chipText[status]}
-        </span>
-      )}
-      {/* posted 后跳转只是"查看"语义，不再有编辑动作；rejected 跳转即"撤销并继续编辑" */}
-      {onJump && (
-        <button
-          type="button"
-          className="chat-finding-draft-btn"
-          onClick={onJump}
-          title={
-            status === 'posted'
-              ? t('chatPane.draftJumpViewTitle')
-              : status === 'rejected'
-                ? t('chatPane.draftJumpRestoreTitle')
-                : t('chatPane.draftJumpEditTitle')
-          }
-        >
-          {status === 'posted'
-            ? t('chatPane.draftJumpView')
-            : status === 'rejected'
-              ? t('chatPane.draftJumpRestore')
-              : t('common.edit')}
-        </button>
-      )}
-      {/* posted 不允许 reject (远端已存)；rejected 也不允许 reject (已经是了) */}
-      {onReject && status !== 'posted' && status !== 'rejected' && (
-        <button
-          type="button"
-          className="chat-finding-draft-btn chat-finding-draft-btn-reject"
-          onClick={onReject}
-          title={t('chatPane.rejectFindingTitle')}
-        >
-          {t('chatPane.reject')}
-        </button>
-      )}
+      <span
+        className={`chat-chip chat-chip-tight chat-chip-${DRAFT_TONE[status]}${
+          status === 'rejected' ? ' chat-finding-draft-chip-rejected' : ''
+        }`}
+      >
+        {chipText[status]}
+      </span>
     </div>
   );
 }
@@ -194,6 +227,11 @@ export function FindingCard({
   const isClosed = !!closure;
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
+  // 可操作的代码类 finding（/review code-feedback、/improve code-suggestion 且 anchor 带行号）：
+  // 才出头部编辑 / 拒绝 / 引用图标栏 + anchor 行的草稿状态 / 关闭态。
+  const isActionableCode =
+    (key === 'code-feedback' || key === 'code-suggestion') &&
+    finding.anchor?.startLine !== undefined;
   // 默认折叠：已拒绝 / 已关闭 finding，或 /ask「分析过程」段（过程性讨论默认收起、可展开，复用同套折叠 UI）。
   const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
   const [expanded, setExpanded] = useState(false);
@@ -245,18 +283,15 @@ export function FindingCard({
             <MdInline>{translatedTitle}</MdInline>
           </h4>
         )}
-        {/* 引用：与其他评论操作按钮区分——独立置于卡片右上角（与标题同排），社媒「转发」箭头图标。
-            仅可锚定的 code 类 finding（onReference 在）且未关闭时出现；发起复评 /ask（挂到输入栏）。 */}
-        {onReference && !isClosed && (
-          <button
-            type="button"
-            className="chat-finding-reference-btn"
-            onClick={onReference}
-            title={t('chatPane.reference.referenceTitle')}
-            aria-label={t('chatPane.reference.reference')}
-          >
-            <ShareIcon size={16} />
-          </button>
+        {/* 头部操作图标栏：编辑（评论）/ 拒绝（圆形禁止）/ 引用（转发箭头）。仅可锚定的 code 类
+            finding 且未关闭时出现，排在折叠 chevron 之左；与标题同排、右上角成组。 */}
+        {isActionableCode && !isClosed && (onJump || onReject || onReference) && (
+          <FindingHeadActions
+            relatedDraft={relatedDraft}
+            onJump={onJump}
+            onReject={onReject}
+            onReference={onReference}
+          />
         )}
         {/* 可默认折叠的段（已拒绝 / ask 分析过程）出现展开 / 收起切换：chevron 收起态指右、展开态转下 */}
         {collapsibleByDefault && (
@@ -314,22 +349,16 @@ export function FindingCard({
               {finding.score}/10
             </span>
           )}
-          {/* M4 草稿状态 chip + 操作按钮：锚到具体行的代码类 finding 才展示——
-              /review 的 code-feedback 与 /improve 的 code-suggestion 同享这套
-              「编辑转草稿 → 发布行内评论」交互（其它如 summary / description /
-              score 没法变 inline 评论） */}
-          {finding.anchor.startLine !== undefined &&
-            (onJump || onReject || onReference || isClosed) &&
-            (key === 'code-feedback' || key === 'code-suggestion') && (
-              <FindingDraftActions
-                relatedDraft={relatedDraft}
-                onJump={onJump}
-                onReject={onReject}
-                closure={closure}
-                onReopen={onReopen}
-                onViewAsk={onViewAsk}
-              />
-            )}
+          {/* M4 草稿状态 chip / 复评关闭态：锚到具体行的代码类 finding 才展示（操作按钮已上移到
+              头部图标栏）。仅在有草稿状态或被复评关闭时出现，否则不占位。 */}
+          {isActionableCode && (isClosed || relatedDraft?.status) && (
+            <FindingDraftActions
+              relatedDraft={relatedDraft}
+              closure={closure}
+              onReopen={onReopen}
+              onViewAsk={onViewAsk}
+            />
+          )}
         </div>
       )}
       {/* 已拒绝折叠态隐藏正文与代码对比，只留头部 chip + 锚点行 + 撤销入口。

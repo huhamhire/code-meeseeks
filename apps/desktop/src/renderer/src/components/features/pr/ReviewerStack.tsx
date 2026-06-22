@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Reviewer, ReviewerStatus } from '@meebox/shared';
 import { Avatar } from '../../common';
-import { REVIEWER_STATUS_META, ReviewerStatusIcon } from './reviewer-status';
+import { REVIEWER_STATUS_META, ReviewerBadgeGlyph } from './reviewer-status';
 
 const STACK_AVATAR_SIZE = 32;
 // 总数 ≤ MAX_VISIBLE 全显；超出则显示 (MAX_VISIBLE-1) 个头像 + 一个「+n」溢出项
@@ -91,7 +91,7 @@ export function ReviewerStack({
               className={`reviewer-stack-badge reviewer-stack-badge-${r.status}`}
               aria-hidden="true"
             >
-              <ReviewerStatusIcon status={r.status} size={16} />
+              <ReviewerBadgeGlyph status={r.status} size={16} />
             </span>
           )}
         </span>

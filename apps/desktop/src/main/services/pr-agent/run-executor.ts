@@ -14,6 +14,7 @@ import {
   type PrAgentBridge,
 } from '@meebox/pr-agent-bridge';
 import {
+  addFindingClosure,
   dropPendingFindingDrafts,
   finishReviewRun,
   parseReviewOutput,
@@ -25,7 +26,6 @@ import {
   ERROR_CODES,
   type ReviewRun,
   type ReviewRunStatus,
-  type ReviewRunTool,
 } from '@meebox/shared';
 import { getMainLanguage } from '../../i18n/index.js';
 import { resolveActiveLlmProfile } from '../../utils/agent.js';
@@ -130,7 +130,7 @@ export class RunExecutor {
     } catch (err) {
       const tokenUsage = finalizeUsage(usageAcc);
       const finished = await finishWith(
-        this.finishPatchForError(err, req.tool, tokenUsage, t0, run.id),
+        this.finishPatchForError(err, tokenUsage, t0, run.id),
       );
       // 非预期异常（非 PrAgentRunError）：落 failed 后仍把异常往上抛，避免吞掉。
       if (!(err instanceof PrAgentRunError)) throw err;
@@ -163,25 +163,30 @@ export class RunExecutor {
       exitCode: result.exitCode,
       stdout,
       stderr: stripUsageSentinels(result.stderr),
-      findings: parsed.findings,
-      summary: parsed.summary,
       tokenUsage,
-      // 复评裁决（解析自复评 /ask 的 <verdict>）；非复评 / 未给则 undefined。
-      askVerdict: parsed.askVerdict,
     };
     if (parsed.llmFailure) {
       this.ctx.logger.warn(
         { runId, reason: parsed.llmFailure.message },
         'pragent exit 0 but LLM call failed; marking run as failed',
       );
+      // 失败任务不做结构化采集——findings 置空，UI 只展示原始输出（不转 chatpane finding 卡）。
       return {
         ...base,
         status: 'failed',
         errorReason: 'llm-error',
         errorMessage: parsed.llmFailure.message,
+        findings: [],
       };
     }
-    return { ...base, status: 'succeeded' };
+    return {
+      ...base,
+      status: 'succeeded',
+      findings: parsed.findings,
+      summary: parsed.summary,
+      // 复评裁决（解析自复评 /ask 的 <verdict>）；非复评 / 未给则 undefined。
+      askVerdict: parsed.askVerdict,
+    };
   }
 
   /**
@@ -190,7 +195,6 @@ export class RunExecutor {
    */
   private finishPatchForError(
     err: unknown,
-    tool: ReviewRunTool,
     tokenUsage: ReturnType<typeof finalizeUsage>,
     t0: number,
     runId: string,
@@ -202,11 +206,7 @@ export class RunExecutor {
         { runId, reason: err.reason, exitCode: err.result.exitCode },
         `pragent run ${status}`,
       );
-      // 失败 / 取消时也尽量解析已收集的 stdout（很多情况 pr-agent 已写了一部分输出）。
-      const partialStdout = err.result.stdout ?? '';
-      const parsed = partialStdout
-        ? parseReviewOutput(partialStdout, tool)
-        : { findings: [], summary: undefined };
+      // 失败 / 取消的任务不做结构化采集——只保留原始输出（stdout/stderr）供展示，不解析成 finding 卡。
       return {
         status,
         finishedAt: new Date().toISOString(),
@@ -216,8 +216,7 @@ export class RunExecutor {
         errorMessage: err.message,
         stdout: err.result.stdout,
         stderr: stripUsageSentinels(err.result.stderr),
-        findings: parsed.findings,
-        summary: parsed.summary,
+        findings: [],
         tokenUsage,
       };
     }
@@ -341,12 +340,17 @@ export class RunExecutor {
       language: getMainLanguage(),
       prContext,
       matchedRuleInstructions,
-      // /ask 选中行引用：经 EXTRA_INSTRUCTIONS 注入（不进问题位置参数，故不污染回答 echo）。
+      // /ask 选中行引用 + 复评裁决：拼进「问题」（user turn），见下方 askQuestion 组装。
       referencedContext: req.tool === 'ask' ? req.referencedContext : undefined,
       // /ask 复评模式：引用了某条 finding 时注入裁决（replace/keep/drop）指示。
       referencedFinding: req.tool === 'ask' ? !!req.referencedFinding : undefined,
     });
-    if (extraInstructions) env[extraInstructionsEnvKey(req.tool)] = extraInstructions;
+    // /ask 的 pr_questions prompt **不渲染 extra_instructions**（与 describe/review/improve 不同），
+    // 经 env 注入对 /ask 是死字段。故 /ask 的指令改为拼进「问题」（user turn，见下方 askQuestion），
+    // env 注入仅用于其它三个工具。
+    if (extraInstructions && req.tool !== 'ask') {
+      env[extraInstructionsEnvKey(req.tool)] = extraInstructions;
+    }
     if (matchedRuleId) {
       logger.info({ runId, ruleId: matchedRuleId, tool: req.tool }, 'pragent run: matched rule');
     }
@@ -361,12 +365,16 @@ export class RunExecutor {
     // **末尾**硬性追加语言要求。系统侧 CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS 对自由问答常被大量
     // 英文 diff 盖过 → 模型用英文作答；在 user turn 末尾（近因位置、用目标语言书写）再要求一次。en-US 返回空。
     const askLangSuffix = req.tool === 'ask' ? askLanguageSuffixFor(getMainLanguage()) : '';
-    const askQuestion =
-      req.tool === 'ask' && req.question
-        ? askLangSuffix
-          ? `${req.question}\n\n${askLangSuffix}`
-          : req.question
-        : undefined;
+    let askQuestion: string | undefined;
+    if (req.tool === 'ask' && req.question) {
+      // /ask 的指令（结构化分段 / anchor marker / 复评裁决 / 引用上下文）拼进 user turn——pr_questions
+      // 不读 extra_instructions，唯有问题文本真正到达模型。语言后缀放最末（近因位置最促使按目标语言作答）。
+      // 回显（pr-agent 把问题原样写进产物）由 collectOutput 的 stripAskQuestionEcho 整段剥掉。
+      const parts = [req.question];
+      if (extraInstructions) parts.push(extraInstructions);
+      if (askLangSuffix) parts.push(askLangSuffix);
+      askQuestion = parts.join('\n\n');
+    }
     const extraArgs = askQuestion ? [askQuestion] : undefined;
     return { env, extraArgs, askLangSuffix };
   }
@@ -401,6 +409,40 @@ export class RunExecutor {
         ? stripAskQuestionEcho(fileContent, req.question, askLangSuffix)
         : fileContent;
     const parsed = parseReviewOutput(cleanedContent || resultStdout, req.tool);
+    // 复评 /ask（引用了某条 finding）：
+    // - 裁决 replace → 把建议提升为带定位的代码评论（取原 finding 的 anchor），渲染 / 采纳同 /review 代码反馈；
+    // - 裁决 replace / drop → 静默关闭被引用的原 finding（建立关闭关系 + 广播），无需用户手动点关闭。
+    // keep / 无裁决：原评论保留、不动。
+    if (req.tool === 'ask' && req.referencedFinding && parsed.askVerdict && !parsed.llmFailure) {
+      const ref = req.referencedFinding;
+      const anchor = ref.anchor;
+      if (parsed.askVerdict === 'replace' && anchor && typeof anchor.startLine === 'number') {
+        // 已自带定位的 code-suggestion（模型按 marker 锚到引用处）保持不动；否则把建议（退到 summary）
+        // 兜底锚到被引用评论的原位置并升为代码反馈，保证取代评论始终带定位、可采纳。
+        const sug =
+          parsed.findings.find(
+            (f) => f.sectionKey === 'code-suggestion' || f.sectionKey === 'ask-suggestions',
+          ) ?? parsed.findings.find((f) => f.sectionKey === 'ask-summary');
+        if (sug && !sug.anchor) {
+          sug.anchor = { ...anchor };
+          sug.sectionKey = 'code-feedback';
+          sug.category = 'code-feedback';
+        }
+      }
+      if (parsed.askVerdict === 'replace' || parsed.askVerdict === 'drop') {
+        try {
+          await addFindingClosure(stateStore, req.localId, {
+            runId: ref.runId,
+            findingId: ref.findingId,
+            byAskRunId: runId,
+            verdict: parsed.askVerdict,
+          });
+          broadcast('findingClosures:changed', { localId: req.localId });
+        } catch (err) {
+          logger.warn({ err, runId }, 'auto-close referenced finding on /ask verdict failed');
+        }
+      }
+    }
     // M4 草稿再摄入：/review 成功完成时丢掉 pending+finding 旧草稿（edited/posted/rejected/manual 保留）。
     if (req.tool === 'review') {
       try {
