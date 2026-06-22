@@ -3,7 +3,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import type { Logger } from 'pino';
-import { t } from '../i18n/index.js';
 import { buildAppInfo, buildConnectionSummaries } from '../services/app.js';
 import { getContext } from '../services/context.js';
 import { sniffImageContentType } from '../utils/image.js';
@@ -193,14 +192,15 @@ export const openExternal: IpcController<'app:openExternal'> = async (_event, re
  */
 export const pickDirectory: IpcController<'dialog:pickDirectory'> = async (event, req) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+  // 标题由前端按 UI 语言提供（目录选择属交互领域文案，统一在渲染层 i18n 维护，主进程不再 localize）。
   const result = win
     ? await dialog.showOpenDialog(win, {
-        title: req.title ?? t('dialog.selectDirectory'),
+        title: req.title,
         defaultPath: req.defaultPath,
         properties: ['openDirectory', 'createDirectory'],
       })
     : await dialog.showOpenDialog({
-        title: req.title ?? t('dialog.selectDirectory'),
+        title: req.title,
         defaultPath: req.defaultPath,
         properties: ['openDirectory', 'createDirectory'],
       });
