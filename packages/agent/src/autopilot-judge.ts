@@ -22,6 +22,11 @@ export interface JudgeCandidate {
   prLocalId: string;
   title: string;
   description?: string;
+  /** 源 / 目标分支名（背景输入，助判分支合并 / 回合并）。 */
+  sourceBranch?: string;
+  targetBranch?: string;
+  /** 调用方据元数据判出的「纯分支合并」信号（见 classifyBranchMerge）；true 时强烈倾向 skip。 */
+  branchMerge?: boolean;
 }
 
 export interface JudgeDecision {
@@ -63,10 +68,13 @@ export async function judgeAutopilotBatch(
     .join('\n');
 
   const list = input.candidates
-    .map(
-      (c, i) =>
-        `${String(i + 1)}. [id:${c.prLocalId}] ${c.title}\n${(c.description ?? '').trim().slice(0, DESC_CLAMP)}`,
-    )
+    .map((c, i) => {
+      const branch =
+        c.sourceBranch && c.targetBranch
+          ? `\nbranches: ${c.sourceBranch} -> ${c.targetBranch}${c.branchMerge ? '  [detected branch merge — prefer skip]' : ''}`
+          : '';
+      return `${String(i + 1)}. [id:${c.prLocalId}] ${c.title}${branch}\n${(c.description ?? '').trim().slice(0, DESC_CLAMP)}`;
+    })
     .join('\n\n');
 
   const user = [
@@ -98,7 +106,12 @@ export async function judgeAutopilotBatch(
 
   // 解析缺失的候选默认评审，保证每个候选都有决策。
   const decisions = input.candidates.map(
-    (c) => byId.get(c.prLocalId) ?? { prLocalId: c.prLocalId, review: true, reason: 'default (unparsed)' },
+    (c) =>
+      byId.get(c.prLocalId) ?? {
+        prLocalId: c.prLocalId,
+        review: true,
+        reason: 'default (unparsed)',
+      },
   );
   return { decisions, usage: r.usage };
 }

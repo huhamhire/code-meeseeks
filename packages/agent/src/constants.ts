@@ -36,20 +36,8 @@ export const AGENT_RULES_SUBDIR = 'rules';
 /** 全空上下文文件集：空 agentDir / 读失败时的失败安全回退（Agent 退化为原生）。 */
 export const EMPTY_FILES: AgentContextFiles = { soul: '', agents: '', memory: '', user: '' };
 
-// ── 工具目录与红线（见 docs/arch/06-agent.md「工具修改红线」）──
-/** 只读 / 分析类工具：始终可用。 */
-export const READ_TOOLS = [
-  { name: '/describe', summary: 'Generate the PR description.' },
-  { name: '/review', summary: 'Generate review findings.' },
-  { name: '/ask', summary: 'Ask a free-form question about the PR.' },
-] as const;
-
-/** 修改类工具：对远端有副作用，默认禁止；`grant` 是授权它所需的 grants 项。 */
-export const MUTATING_TOOLS = [
-  { name: '/approve', summary: 'Approve the PR.', grant: 'approve' },
-  { name: '/needswork', summary: 'Request changes on the PR.', grant: 'needs_work' },
-  { name: '/publish', summary: 'Publish review comments to the remote.', grant: 'publish_comment' },
-] as const;
+// 工具清单（读 / 改 / grant）已收口到 @meebox/shared 的统一注册表 tool-registry（TOOLS）；
+// 工具目录由 buildToolCatalog 从中派生，见 tool-catalog.ts。
 
 // ── 工具并发错开（见 stagger.ts）──
 /**

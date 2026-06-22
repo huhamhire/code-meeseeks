@@ -1,6 +1,9 @@
 You decide, for each pull request below, whether an automated pre-review is worth running and (optionally) which review steps to run.
 
+Each PR may show `branches: <source> -> <target>`. A PR flagged `[detected branch merge]` is a same-repo integration / back-merge that brings already-reviewed changes — **skip it** (`review: false`) unless the title/description clearly indicate original work that warrants review.
+
 For each PR return:
+
 - `review`: true to run the review, false to SKIP it. Default to reviewing; SKIP PRs not worth it — e.g. branch merges / back-merges, pure dependency bumps, or trivial mechanical changes.
 - `reason`: a short reason.
 - `plan` (optional): a custom ordered list of review-step ids. OMIT it to run the full default flow (`describe-review` → `judge` → `asks` → `summary`). Only set it when a project rule asks to customize the steps. Available step ids:

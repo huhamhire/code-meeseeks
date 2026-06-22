@@ -233,6 +233,10 @@ flowchart TD
 LLM「越权」产出一个 `/approve` 调用，运行时也拒绝并记入 transcript。这样「提示词被绕过」
 不等于「操作被执行」。
 
+**工具清单单一真相源**：所有工具（id / 命令名 / 读改分类 / grant / 是否运行队列工具）集中声明在共享层的
+**统一注册表 `TOOLS`（tool-registry）**；运行工具枚举 `ReviewRunTool`、工具目录 `buildToolCatalog`、规划红线
+允许集均由它派生——新增 / 调整工具只改注册表一处。
+
 ### 5. 会话隔离与规则共享
 
 - **规则 / 上下文共享**：`agent.dir`（SOUL / AGENTS / MEMORY / USER / rules）是**全局单份**，所有
