@@ -45,4 +45,27 @@ describe('judgeAutopilotBatch', () => {
     });
     expect(system).toContain('Skip docs-only PRs.');
   });
+
+  it('parses a valid per-PR plan and drops an omitted / invalid one', async () => {
+    const chat = vi.fn(async () => ({
+      text: JSON.stringify({
+        decisions: [
+          { prLocalId: 'a', review: true, reason: 'config only', plan: ['describe-review', 'summary'] },
+          { prLocalId: 'b', review: true, reason: 'invalid', plan: ['summary'] },
+          { prLocalId: 'c', review: true, reason: 'no plan' },
+        ],
+      }),
+    }));
+    const r = await judgeAutopilotBatch(chat, {
+      candidates: [
+        { prLocalId: 'a', title: 'A' },
+        { prLocalId: 'b', title: 'B' },
+        { prLocalId: 'c', title: 'C' },
+      ],
+    });
+    const byId = Object.fromEntries(r.decisions.map((d) => [d.prLocalId, d]));
+    expect(byId.a?.plan).toEqual({ steps: ['describe-review', 'summary'] });
+    expect(byId.b?.plan).toBeUndefined(); // summary 缺前置 describe-review → 非法回落
+    expect(byId.c?.plan).toBeUndefined(); // 省略 → 默认全集
+  });
 });

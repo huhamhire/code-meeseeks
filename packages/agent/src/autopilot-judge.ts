@@ -1,8 +1,16 @@
 import type { TokenUsage } from '@meebox/shared';
 import { DESC_CLAMP } from './constants.js';
 import { PROMPT_TEMPLATES } from './prompts.js';
-import type { ReviewPlan } from './steps/review/index.js';
+import { isValidReviewPlan, type ReviewPlan, type ReviewStepKind } from './steps/review/index.js';
 import { extractJson, fillTemplate } from './utils/index.js';
+
+/** 解析 judge 给出的步骤计划：非数组 / 含非法 kind / 缺前置 describe-review → undefined（回落默认全集）。 */
+function parseReviewPlan(raw: unknown): ReviewPlan | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const steps = raw.filter((s): s is ReviewStepKind => typeof s === 'string') as ReviewStepKind[];
+  const plan: ReviewPlan = { steps };
+  return isValidReviewPlan(plan) ? plan : undefined;
+}
 
 /**
  * AutoPilot 批量判定（见 docs/arch/06-agent.md「AutoPilot」的例外规则）：把一批候选 PR 的
@@ -62,25 +70,28 @@ export async function judgeAutopilotBatch(
     .join('\n\n');
 
   const user = [
-    'For each PR decide review (true) or skip (false) with a short reason.',
-    'Reply with JSON only: {"decisions": [{"prLocalId": string, "review": boolean, "reason": string}]}.',
+    'For each PR decide review (true) or skip (false) with a short reason; optionally add a custom step "plan" (see system).',
+    'Reply with JSON only: {"decisions": [{"prLocalId": string, "review": boolean, "reason": string, "plan"?: string[]}]}.',
     '',
     list,
   ].join('\n');
 
   const r = await chat({ system, user });
   const parsed = extractJson<{
-    decisions?: Array<{ prLocalId?: unknown; review?: unknown; reason?: unknown }>;
+    decisions?: Array<{ prLocalId?: unknown; review?: unknown; reason?: unknown; plan?: unknown }>;
   }>(r.text);
 
   const byId = new Map<string, JudgeDecision>();
   for (const d of parsed?.decisions ?? []) {
     if (typeof d.prLocalId === 'string') {
+      // plan 非法 / 省略 → undefined（评审走默认全集）；合法才带上，由 autopilot 透传给微流程。
+      const plan = parseReviewPlan(d.plan);
       byId.set(d.prLocalId, {
         prLocalId: d.prLocalId,
         // 缺省 / 非显式 false → 评审（保守：宁可多评不漏）
         review: d.review !== false,
         reason: typeof d.reason === 'string' ? d.reason : '',
+        ...(plan ? { plan } : {}),
       });
     }
   }
