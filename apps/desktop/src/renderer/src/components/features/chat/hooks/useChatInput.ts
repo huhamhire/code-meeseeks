@@ -20,8 +20,6 @@ export interface UseChatInputParams {
   onAgentAsk: (question: string) => void;
   onCancel?: () => void;
   onSetReviewStatus?: (status: LocalPrStatus) => void;
-  /** 外部预填输入（如点 finding「引用」后填入默认复评问题）；seq 变化即重填一次（即便文本相同）。 */
-  prefill?: { text: string; seq: number };
 }
 
 /**
@@ -38,7 +36,6 @@ export function useChatInput({
   onAgentAsk,
   onCancel,
   onSetReviewStatus,
-  prefill,
 }: UseChatInputParams) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -61,21 +58,6 @@ export function useChatInput({
   const draftBeforeHistoryRef = useRef<string>('');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const cmdMenuRef = useRef<HTMLDivElement | null>(null);
-
-  // 外部预填（finding「引用」→ 默认复评问题）：seq 变化即填入并聚焦、光标移末尾。
-  useEffect(() => {
-    if (!prefill) return;
-    setInput(prefill.text);
-    setParseError(null);
-    const el = textareaRef.current;
-    if (el) {
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(prefill.text.length, prefill.text.length);
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefill?.seq]);
 
   // 队列模型：仅 !pr / pr-agent 未就绪 时禁用 input。activeRun / busyOnOtherPr
   // 不再阻塞新提交 (会排队 by main)。running 决定是否渲染 stop 按钮：除活动工具 run 外，

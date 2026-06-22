@@ -4,7 +4,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { Finding, FindingClosure, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
-import { ChevronIcon, mermaidComponents, walkthroughMdComponents } from '../../../common';
+import {
+  ChevronIcon,
+  ShareIcon,
+  mermaidComponents,
+  walkthroughMdComponents,
+} from '../../../common';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { translatePrAgentLabels } from '../../../../utils/translate-pr-agent';
 import {
@@ -61,7 +66,6 @@ function FindingDraftActions({
   relatedDraft,
   onJump,
   onReject,
-  onReference,
   closure,
   onReopen,
   onViewAsk,
@@ -69,8 +73,6 @@ function FindingDraftActions({
   relatedDraft?: ReviewDraft;
   onJump?: () => void;
   onReject?: () => void;
-  /** 「引用」按钮回调：把本 finding 挂到输入栏发起复评 /ask。 */
-  onReference?: () => void;
   /** 已被复评关闭/取代时的关闭关系；存在则展示关闭态（替代草稿动作）。 */
   closure?: FindingClosure;
   /** 「撤销关闭」回调。 */
@@ -149,17 +151,6 @@ function FindingDraftActions({
           title={t('chatPane.rejectFindingTitle')}
         >
           {t('chatPane.reject')}
-        </button>
-      )}
-      {/* 引用：把本条评论挂到输入栏发起复评 /ask（出裁决 + 采纳/关闭动作）。posted 后不再引用。 */}
-      {onReference && status !== 'posted' && (
-        <button
-          type="button"
-          className="chat-finding-draft-btn"
-          onClick={onReference}
-          title={t('chatPane.reference.referenceTitle')}
-        >
-          {t('chatPane.reference.reference')}
         </button>
       )}
     </div>
@@ -254,6 +245,19 @@ export function FindingCard({
             <MdInline>{translatedTitle}</MdInline>
           </h4>
         )}
+        {/* 引用：与其他评论操作按钮区分——独立置于卡片右上角（与标题同排），社媒「转发」箭头图标。
+            仅可锚定的 code 类 finding（onReference 在）且未关闭时出现；发起复评 /ask（挂到输入栏）。 */}
+        {onReference && !isClosed && (
+          <button
+            type="button"
+            className="chat-finding-reference-btn"
+            onClick={onReference}
+            title={t('chatPane.reference.referenceTitle')}
+            aria-label={t('chatPane.reference.reference')}
+          >
+            <ShareIcon size={16} />
+          </button>
+        )}
         {/* 可默认折叠的段（已拒绝 / ask 分析过程）出现展开 / 收起切换：chevron 收起态指右、展开态转下 */}
         {collapsibleByDefault && (
           <button
@@ -321,7 +325,6 @@ export function FindingCard({
                 relatedDraft={relatedDraft}
                 onJump={onJump}
                 onReject={onReject}
-                onReference={onReference}
                 closure={closure}
                 onReopen={onReopen}
                 onViewAsk={onViewAsk}

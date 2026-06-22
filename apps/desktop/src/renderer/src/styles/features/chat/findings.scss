@@ -106,6 +106,29 @@
     background: $bg-surface;
   }
 }
+// 「引用」按钮：独立置于卡片头部右上角（与其他评论操作区分），社媒「转发」箭头图标。低调中性 → hover 主色。
+// margin-left:auto 顶到最右；与 collapse-toggle 并存时排在其左侧（二者贴右成一组）。
+.chat-finding-reference-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
+  // 与其后的 collapse-toggle 并排时，自身已吃掉左侧空白，二者紧贴卡片右缘。
+  & + .chat-finding-collapse-toggle {
+    margin-left: 0;
+  }
+  &:hover {
+    color: $color-info;
+    background: $bg-surface;
+  }
+}
 // 概览指标（工作量 / 测试 / 安全 / 评分）：值很短，chip 与值排同一行、紧凑展示，不再各占两行。
 .chat-finding-effort,
 .chat-finding-relevant-tests,

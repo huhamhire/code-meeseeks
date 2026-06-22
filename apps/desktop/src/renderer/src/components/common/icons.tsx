@@ -225,6 +225,15 @@ export function RetryIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 转发 / 分享箭头（社交媒体「转发」实心弯箭头）：finding 卡片「引用」按钮用。 */
+export function ShareIcon({ size = 14 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M11 8V4l8 7-8 7v-4c-4.5 0-7.5 1.5-9 5 .5-6 3.5-10 9-11z" />
+    </svg>
+  );
+}
+
 /** 对话气泡：chat 面板触发 / 空态。large 场景传 size（如 28） */
 export function ChatIcon({ size = 14 }: IconProps) {
   return (
@@ -458,13 +467,7 @@ export function RobotIcon({ size = 14 }: IconProps) {
  *  四个尖角居中对称，SVG 保证字形居中、跨平台一致。 */
 export function StarIcon({ size = 11 }: IconProps) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      aria-hidden="true"
-    >
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
       <path d="M8 1 Q9 7 15 8 Q9 9 8 15 Q7 9 1 8 Q7 7 8 1 Z" />
     </svg>
   );
@@ -499,13 +502,7 @@ export function RobotOffIcon({ size = 14 }: IconProps) {
 /** 双星火花（sparkles）：AI 自动评审动作。两颗四角星，区别于工具命令的 `/` 触发器 */
 export function AutoReviewIcon({ size = 14 }: IconProps) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      aria-hidden="true"
-    >
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
       <path d="M9.6 2l1 2.7 2.7 1-2.7 1-1 2.7-1-2.7-2.7-1 2.7-1z" />
       <path d="M4.4 9.1l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z" />
     </svg>

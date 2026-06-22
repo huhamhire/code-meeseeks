@@ -43,8 +43,6 @@ interface ChatInputBarProps {
   selectionIgnored: boolean;
   /** 点击选区角标 → 切换忽略态。 */
   onToggleSelection: () => void;
-  /** 外部预填输入（点 finding「引用」后填入默认复评问题）；seq 变化即重填一次。 */
-  prefill?: { text: string; seq: number };
   /** 复评引用 chip：引用了某条 finding 时展示「复评 <file:line>」+ 清除；null = 不渲染。 */
   referenceChip?: { label: string; onClear: () => void } | null;
 }
@@ -70,7 +68,6 @@ export function ChatInputBar({
   selectionLineCount,
   selectionIgnored,
   onToggleSelection,
-  prefill,
   referenceChip,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
@@ -104,7 +101,6 @@ export function ChatInputBar({
     onAgentAsk,
     onCancel,
     onSetReviewStatus,
-    prefill,
   });
   const { textareaHeightPx, handleTextareaResizeStart } = useTextareaAutosizeDrag(textareaRef);
 

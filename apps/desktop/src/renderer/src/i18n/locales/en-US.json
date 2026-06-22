@@ -115,7 +115,6 @@
       "closeOriginal": "Close original comment",
       "closedDropped": "Closed by re-review",
       "closedReplaced": "Superseded by re-review",
-      "defaultQuestion": "Re-evaluate this review comment: propose a replacement comment, or decide no comment is needed.",
       "noSuggestion": "This re-review has no comment suggestion to adopt",
       "reference": "Reference",
       "referenceTitle": "Reference this comment to start a re-review",

@@ -115,7 +115,6 @@
       "closeOriginal": "关闭原评论",
       "closedDropped": "已被复评关闭",
       "closedReplaced": "已被复评取代",
-      "defaultQuestion": "请复评这条评审意见是否成立：给出取代性评论，或判断无需评论。",
       "noSuggestion": "该复评没有可采纳的评论建议",
       "reference": "引用",
       "referenceTitle": "引用此条评论发起复评",

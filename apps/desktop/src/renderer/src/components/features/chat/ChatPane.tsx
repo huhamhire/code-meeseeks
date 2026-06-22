@@ -138,22 +138,14 @@ export function ChatPane({
   // 复评关闭关系池：FindingCard 据 (runId,findingId) 反查某条 finding 是否已被复评 /ask 关闭/取代。
   const closures = useFindingClosuresForPr(prLocalId) ?? [];
 
-  // 复评引用态：点 finding「引用」→ 挂到输入栏（chip + 预填默认复评问题）；发送时本条 /ask 携带该引用。
+  // 复评引用态：点 finding「引用」→ 仅挂到输入栏（chip）；不自动填写问题，用户自行输入。发送时携带该引用。
   const [refFinding, setRefFinding] = useState<{ finding: Finding; run: ReviewRun } | null>(null);
-  const [refPrefill, setRefPrefill] = useState<{ text: string; seq: number } | undefined>(
-    undefined,
-  );
   // PR 切换清掉引用态，避免跨 PR 残留。
   useEffect(() => {
     setRefFinding(null);
-    setRefPrefill(undefined);
   }, [prLocalId]);
   const onReferenceFinding = (finding: Finding, run: ReviewRun): void => {
     setRefFinding({ finding, run });
-    setRefPrefill((p) => ({
-      text: t('chatPane.reference.defaultQuestion'),
-      seq: (p?.seq ?? 0) + 1,
-    }));
   };
 
   // Diff 选区（归属当前 PR）：用于输入栏「N 行已选中」角标 + 把选中代码作为隐式上下文带进提问。
@@ -206,7 +198,6 @@ export function ChatPane({
       anchor: finding.anchor,
     });
     setRefFinding(null);
-    setRefPrefill(undefined);
   };
 
   // 历史时间线归并 + 「思考中」实时计时锚点
@@ -426,8 +417,7 @@ export function ChatPane({
         selectionLineCount={diffSelection?.lineCount ?? null}
         selectionIgnored={selectionIgnored}
         onToggleSelection={() => selectionStore.toggleIgnored()}
-        // 复评引用：chip（复评 <file:line> + 清除）+ 预填默认复评问题（点 finding「引用」时设置）。
-        prefill={refPrefill}
+        // 复评引用：chip（复评 <file:line> + 清除）；点 finding「引用」时挂上，不自动填写问题。
         referenceChip={
           refFinding
             ? {
@@ -436,7 +426,6 @@ export function ChatPane({
                 }),
                 onClear: () => {
                   setRefFinding(null);
-                  setRefPrefill(undefined);
                 },
               }
             : null
