@@ -1,5 +1,6 @@
 import type { PlatformKind, PrDiscoveryFilter, PullRequest } from './platform.js';
 import type { PrAgentStrategy } from './pr-agent-status.js';
+import type { ReviewRunTool } from './tool-registry.js';
 
 /**
  * 本地 review 判定。和 Bitbucket reviewer.status 一一对应，UI 由它驱动两个 toggle 按钮：
@@ -11,20 +12,9 @@ import type { PrAgentStrategy } from './pr-agent-status.js';
  */
 export type LocalPrStatus = 'pending' | 'approved' | 'needs_work';
 
-/**
- * pr-agent 跑的工具枚举：
- * - describe / review：生成 PR 描述 / 代码评审，输出落到工作树的 markdown 文件
- * - ask：自然语言追问，输出走 stdout (没有专属 output 文件)，request 必带 question
- * - improve：逐行代码改进建议；pr-agent local provider 不实现
- *   `publish_code_suggestions`，所以走 `publish_comment` 把汇总 markdown 写到
- *   `review.md` (跟 review / ask 共用)。每条建议形态：
- *     <details><summary>file<br>[start-end]:</summary>...```diff\nold\nnew\n```...</details>
- *   parseReviewOutput 对 tool='improve' 走专门解析路径，把每条 details 拆成
- *   带 anchor (path / startLine / endLine) 的 code-feedback finding。
- *
- * 后续 /reflect 等接进来时往这里加值
- */
-export type ReviewRunTool = 'describe' | 'review' | 'ask' | 'improve';
+// 工具枚举 ReviewRunTool 见统一注册表 tool-registry（新增工具改那里）。注：improve 的 pr-agent local
+// provider 不实现 `publish_code_suggestions`，输出走 review.md（与 review / ask 共用）；parseReviewOutput
+// 对 tool='improve' 走专门解析路径，把每条 <details> 建议拆成带 anchor 的 code-feedback finding。
 
 export type ReviewRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -59,20 +49,20 @@ export type FindingCategory = 'description' | 'general' | 'code-feedback';
  * 是否隐藏 / 后续做特化卡片。
  */
 export type PrDocSectionKey =
-  | 'title'             // 建议的 PR 标题
-  | 'pr-type'           // 类型标签 (Bug fix / Enhancement / Tests / ...)
-  | 'summary'           // /review 顶部总结
-  | 'description'       // 主描述段
-  | 'diagram'           // 架构图（changes_diagram，mermaid）
-  | 'assessment'        // 思路建议（注入字段：替代方案 + 倾向性建议，对齐 Qodo High-Level Assessment）
-  | 'walkthrough'       // 文件级走查
-  | 'relevant-tests'    // 相关测试
-  | 'security'          // 安全发现
-  | 'code-feedback'     // /review 单条 finding (带 file:line anchor)
-  | 'code-suggestion'   // /improve 单条改进建议 (带 file:line anchor + existing/improved diff)
-  | 'effort'            // 评估工作量 1-5
-  | 'score'             // 质量分
-  | 'general';          // 兜底，未识别
+  | 'title' // 建议的 PR 标题
+  | 'pr-type' // 类型标签 (Bug fix / Enhancement / Tests / ...)
+  | 'summary' // /review 顶部总结
+  | 'description' // 主描述段
+  | 'diagram' // 架构图（changes_diagram，mermaid）
+  | 'assessment' // 思路建议（注入字段：替代方案 + 倾向性建议，对齐 Qodo High-Level Assessment）
+  | 'walkthrough' // 文件级走查
+  | 'relevant-tests' // 相关测试
+  | 'security' // 安全发现
+  | 'code-feedback' // /review 单条 finding (带 file:line anchor)
+  | 'code-suggestion' // /improve 单条改进建议 (带 file:line anchor + existing/improved diff)
+  | 'effort' // 评估工作量 1-5
+  | 'score' // 质量分
+  | 'general'; // 兜底，未识别
 
 export interface FindingAnchor {
   path: string;

@@ -12,13 +12,14 @@ import {
   updateAgentSession,
   writeAgentConversation,
 } from '@meebox/poller';
-import type { AgentMessage } from '@meebox/shared';
+import { READ_RUN_TOOL_IDS, type AgentMessage } from '@meebox/shared';
 import type { Rule } from '@meebox/rules';
 import type {
   AgentSession,
   AgentStep,
   AgentTodoItem,
   ReviewRun,
+  ReviewRunTool,
   StoredPullRequest,
   ToolCatalogEntry,
 } from '@meebox/shared';
@@ -35,8 +36,6 @@ const STDOUT_LOG_SEP = '\n\n---\n[pr-agent stdout log]\n';
 function reviewRunText(run: ReviewRun): string {
   return (run.stdout ?? '').split(STDOUT_LOG_SEP)[0]?.trim() ?? '';
 }
-
-const READ_TOOLS = new Set(['describe', 'review', 'ask']);
 
 // 会话压缩：存储超阈值时把较早消息摘要成一条 digest、仅留最近若干条原文，控制存储与后续注入规模
 // （约定会话上下文不超 LLM 半窗：先压缩/裁剪再注入）。阈值高于注入预算，超出才触发、不频繁。
@@ -79,11 +78,7 @@ async function maybeCompactConversation(
 
 export interface PlanningDeps {
   stateStore: StateStore;
-  enqueueRun: (
-    pr: StoredPullRequest,
-    tool: 'describe' | 'review' | 'ask',
-    question?: string,
-  ) => Promise<ReviewRun>;
+  enqueueRun: (pr: StoredPullRequest, tool: ReviewRunTool, question?: string) => Promise<ReviewRun>;
   chat: (input: { system: string; user: string }) => Promise<PlanningToolResult>;
   agentContext: AgentContext;
   toolCatalog: ToolCatalogEntry[];
@@ -113,7 +108,12 @@ export async function runPlanning(
 ): Promise<AgentSession> {
   // 多轮对话：先读既往消息（注入规划上下文），再把本轮用户输入追加为一条消息（持久化）。
   const history = await getAgentConversation(deps.stateStore, pr.localId);
-  await appendAgentMessage(deps.stateStore, pr.localId, { role: 'user', content: userRequest }, now);
+  await appendAgentMessage(
+    deps.stateStore,
+    pr.localId,
+    { role: 'user', content: userRequest },
+    now,
+  );
 
   const session = await startAgentSession(
     deps.stateStore,
@@ -127,8 +127,8 @@ export async function runPlanning(
         chat: deps.chat,
         runTool: async ({ tool, question }) => {
           const bare = tool.replace(/^\//, '');
-          if (!READ_TOOLS.has(bare)) throw new Error(`不支持的工具：${tool}`);
-          const run = await deps.enqueueRun(pr, bare as 'describe' | 'review' | 'ask', question);
+          if (!READ_RUN_TOOL_IDS.has(bare)) throw new Error(`不支持的工具：${tool}`);
+          const run = await deps.enqueueRun(pr, bare as ReviewRunTool, question);
           if (run.status !== 'succeeded') {
             throw new Error(`pr-agent ${bare} 未成功：${run.errorMessage ?? run.status}`);
           }
