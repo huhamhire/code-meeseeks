@@ -1,5 +1,11 @@
 import type { Rule } from '@meebox/rules';
-import type { AgentRecommendation, AgentStep, TokenUsage, ToolCatalogEntry } from '@meebox/shared';
+import type {
+  AgentRecommendation,
+  AgentStep,
+  ReviewRunTool,
+  TokenUsage,
+  ToolCatalogEntry,
+} from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './prompts.js';
 import { createStepRecorder } from './steps/context.js';
 import {
@@ -27,7 +33,7 @@ export interface ToolText {
 
 export interface ReviewOrchestratorDeps {
   /** 分发一个只读 pr-agent 工具，返回文本结果（描述 / findings / 回答）。 */
-  runTool(call: { tool: 'describe' | 'review' | 'ask'; question?: string }): Promise<ToolText>;
+  runTool(call: { tool: ReviewRunTool; question?: string }): Promise<ToolText>;
   /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。maxOutputTokens 可给轻量路由判读封顶输出。 */
   chat(input: { system: string; user: string; maxOutputTokens?: number }): Promise<ToolText>;
   /** 每产生一个编排步骤即回调（持久化 / 流式推送）。 */
@@ -83,6 +89,8 @@ export const DEFAULT_SUMMARY_SECTIONS: readonly [string, string, string] = [
 export interface AgentStepLabels {
   /** 微流程「生成 PR 描述与审查发现」步思考（describe + review 合并为一行；二者并行执行）。 */
   describeReview: string;
+  /** 微流程「生成代码改进建议」步思考（/improve；仅规则计划纳入时出现）。 */
+  improve: string;
   /** 微流程判读步思考。 */
   judge: string;
   /** 判读结果：存在严重问题、将追问 n 个。 */
@@ -99,6 +107,7 @@ export interface AgentStepLabels {
 /** 步骤文案默认值（en-US 兜底）；多语言由主进程 i18n 解析后经 input.labels 注入，未注入时回落本默认。 */
 export const DEFAULT_STEP_LABELS: AgentStepLabels = {
   describeReview: 'Generate the PR description and review findings',
+  improve: 'Generate code improvement suggestions',
   judge: 'Decide whether there are important issues needing follow-up',
   judgeSevere: (n) => `Important — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
   judgeNone: 'No important issues — no follow-up',
@@ -149,7 +158,10 @@ export async function runReviewMicroflow(
   return {
     steps: rec.steps,
     summary: ctx.bag.summary ?? '',
-    recommendation: ctx.bag.recommendation ?? { verdict: 'manual_review', reason: labels.parseFail },
+    recommendation: ctx.bag.recommendation ?? {
+      verdict: 'manual_review',
+      reason: labels.parseFail,
+    },
     tokenUsage: rec.usage,
   };
 }

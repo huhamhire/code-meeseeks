@@ -5,6 +5,7 @@ import type {
   AgentSession,
   AgentStep,
   ReviewRun,
+  ReviewRunTool,
   StoredPullRequest,
   TokenUsage,
   ToolCatalogEntry,
@@ -30,11 +31,7 @@ function reviewRunText(run: ReviewRun): string {
 export interface ReviewDeps {
   stateStore: StateStore;
   /** 入队一个 pr-agent run，resolve 完成的 ReviewRun（与用户手动 run 共用队列）。 */
-  enqueueRun: (
-    pr: StoredPullRequest,
-    tool: 'describe' | 'review' | 'ask',
-    question?: string,
-  ) => Promise<ReviewRun>;
+  enqueueRun: (pr: StoredPullRequest, tool: ReviewRunTool, question?: string) => Promise<ReviewRun>;
   /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。 */
   chat: (input: { system: string; user: string }) => Promise<{ text: string; usage?: TokenUsage }>;
   agentContext: AgentContext;

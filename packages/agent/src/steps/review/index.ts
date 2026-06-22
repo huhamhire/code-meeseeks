@@ -1,6 +1,7 @@
 import type { Step } from '../context.js';
 import { AsksStep } from './asks-step.js';
 import { DescribeReviewStep } from './describe-review-step.js';
+import { ImproveStep } from './improve-step.js';
 import { JudgeStep } from './judge-step.js';
 import type { ReviewStepCtx } from './shared.js';
 import { SummaryStep } from './summary-step.js';
@@ -9,9 +10,9 @@ export type { ReviewBag, ReviewStepCtx } from './shared.js';
 
 /**
  * 评审微流程可用步骤的稳定标识（与各 step.name 对应）。一份评审计划即由这些 kind 有序组成。
- * 新增工具步（如 'improve'）= 在 REVIEW_STEP_REGISTRY 登记 + 在此并上 kind，驱动与默认计划无需改动。
+ * 新增工具步 = 在 REVIEW_STEP_REGISTRY 登记 + 在此并上 kind，驱动与默认计划无需改动。
  */
-export type ReviewStepKind = 'describe-review' | 'judge' | 'asks' | 'summary';
+export type ReviewStepKind = 'describe-review' | 'improve' | 'judge' | 'asks' | 'summary';
 
 /**
  * 评审微流程执行计划：一组**有序**步骤 kind。AutoPilot 后续可据用户 agent 上下文规则给出自定义计划
@@ -25,6 +26,7 @@ export interface ReviewPlan {
 /** 步骤注册表（kind → 无状态单例）。各 step 运行态全在 ctx，故单例可复用。 */
 export const REVIEW_STEP_REGISTRY: Record<ReviewStepKind, Step<ReviewStepCtx>> = {
   'describe-review': new DescribeReviewStep(),
+  improve: new ImproveStep(),
   judge: new JudgeStep(),
   asks: new AsksStep(),
   summary: new SummaryStep(),

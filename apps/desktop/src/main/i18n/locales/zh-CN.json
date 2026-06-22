@@ -2,6 +2,7 @@
   "agent": {
     "steps": {
       "describeReview": "生成 PR 描述与审查发现",
+      "improve": "生成代码改进建议",
       "judge": "判断是否存在需追问的重要问题",
       "judgeNone": "无重要问题，不追问",
       "judgeSevere_other": "重要，追问 {{count}} 个",
