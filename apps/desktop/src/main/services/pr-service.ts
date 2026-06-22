@@ -6,7 +6,11 @@ import {
   writeDiffBaseCache,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
-import type { PlatformAdapter, StoredPullRequest } from '@meebox/shared';
+import {
+  pullRequestHeadRefspec,
+  type PlatformAdapter,
+  type StoredPullRequest,
+} from '@meebox/shared';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { ConnectionRuntime } from '../adapters.js';
 import { broadcast } from './broadcast.js';
@@ -85,6 +89,13 @@ export class PrService {
       return { mirrorPath: this.deps.repoMirror.mirrorPath(id), freshClone: false };
     }
     const r = await this.deps.repoMirror.syncMirror(id);
+    // 自愈：源分支被删 / 强推后 head sha 不在 refs/heads，syncMirror（只抓 heads + Bitbucket 通配 PR 引用）
+    // 仍补不齐 → 按平台 + PR 号精确 fetch PR 头引用（GitHub refs/pull/<n>/head 等，通配取不到，必须精确）。
+    // 补齐后 diff base...head 才不报 "Invalid symmetric difference"。best-effort，仍缺则由下游 diff 抛可读错误。
+    if (!(await this.deps.repoMirror.hasCommit(id, pr.sourceRef.sha))) {
+      const refspec = pullRequestHeadRefspec(pr.platform, pr.remoteId);
+      if (refspec) await this.deps.repoMirror.fetchRefspecs(id, [refspec]);
+    }
     return { mirrorPath: r.mirrorPath, freshClone: r.freshClone };
   }
 

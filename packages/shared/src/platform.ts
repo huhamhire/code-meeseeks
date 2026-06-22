@@ -1,6 +1,28 @@
 // 顺序即各处平台展示准绳：GitHub → Bitbucket → GitLab，新平台追加末尾（见 PlatformIcon.PLATFORM_META）。
 export type PlatformKind = 'github' | 'bitbucket-server' | 'gitlab';
 
+/**
+ * 各平台「PR 头」的 git 引用 refspec（fetch 进本地镜像，把 PR 源 sha 钉牢）。源分支被删 / 强推后，
+ * `refs/heads/*` 已看不到 head sha，但平台保留了 PR 专属引用——据此 fetch 才能让 `git diff base...head`
+ * 不报 "Invalid symmetric difference"。
+ *
+ * **必须按 PR 号精确取**：GitHub 的 pull 引用 / GitLab 的 merge-requests 引用默认不在 ref 广播里，
+ * 通配 fetch 匹配不到（Bitbucket 的 pull-requests 引用会广播、通配可取，二者不同）；按确切编号 fetch
+ * 平台才返回。remoteId 非纯数字（异常）→ 返回 null（不构造可疑 ref）。
+ */
+export function pullRequestHeadRefspec(platform: PlatformKind, remoteId: string): string | null {
+  const n = remoteId.trim();
+  if (!/^\d+$/.test(n)) return null;
+  switch (platform) {
+    case 'github':
+      return `+refs/pull/${n}/head:refs/pull/${n}/head`;
+    case 'gitlab':
+      return `+refs/merge-requests/${n}/head:refs/merge-requests/${n}/head`;
+    case 'bitbucket-server':
+      return `+refs/pull-requests/${n}/from:refs/pull-requests/${n}/from`;
+  }
+}
+
 export interface RepoRef {
   /** Bitbucket: project key; GitHub: org/user; GitLab: namespace */
   projectKey: string;
@@ -382,11 +404,7 @@ export interface PlatformAdapter {
    * 需要 ping() 已经跑过、cachedUser 已经落地，否则无法构造端点 (Bitbucket 需要 userSlug)。
    * 失败抛 PlatformError 子类；调用方决定是否回滚本地状态。
    */
-  setPullRequestReviewStatus(
-    repo: RepoRef,
-    prId: string,
-    status: ReviewerStatus,
-  ): Promise<void>;
+  setPullRequestReviewStatus(repo: RepoRef, prId: string, status: ReviewerStatus): Promise<void>;
 
   /**
    * 合并 PR 到目标分支。仅应在 mergeStatus.canMerge=true 时调用（上层据此控制
@@ -456,12 +474,7 @@ export interface PlatformAdapter {
    *
    * 跨平台契约：返回 void，调用方在删除成功后应清空缓存 + 广播 comments:changed
    */
-  deleteComment(
-    repo: RepoRef,
-    prId: string,
-    commentId: string,
-    version: number,
-  ): Promise<void>;
+  deleteComment(repo: RepoRef, prId: string, commentId: string, version: number): Promise<void>;
 
   /**
    * 编辑 PR 上的一条评论 (改 body 文本)。

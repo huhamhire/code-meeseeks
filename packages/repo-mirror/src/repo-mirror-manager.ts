@@ -141,6 +141,34 @@ export class RepoMirrorManager {
   }
 
   /**
+   * 按给定 refspec best-effort fetch 进 bare 镜像（典型用法：补一道平台 PR 头引用
+   * `refs/pull/<n>/head` 等，把被删 / 强推源分支的 PR head sha 钉回本地——`refs/heads/*` 已看不到它）。
+   * 镜像不存在 / fetch 失败均**不抛**（网络 / 远端拒绝 / 该 PR 引用不存在都可能），调用方随后自行复验
+   * hasCommit。空 refspec 直接返回。前置：调用方已 await 过 syncMirror，故与全局 sync 队列无并发。
+   */
+  async fetchRefspecs(repo: RepoIdentity, refspecs: string[]): Promise<void> {
+    if (refspecs.length === 0) return;
+    const mp = this.mirrorPath(repo);
+    try {
+      await fs.access(mp);
+    } catch {
+      return;
+    }
+    try {
+      await this.withProxyEnv(simpleGit({ baseDir: mp })).raw(['fetch', 'origin', ...refspecs]);
+    } catch (err) {
+      this.opts.logger?.debug(
+        {
+          err: err instanceof Error ? err.message : String(err),
+          repo: this.repoKey(repo),
+          refspecs,
+        },
+        'fetchRefspecs failed (best-effort); sha may still be unreachable',
+      );
+    }
+  }
+
+  /**
    * 镜像是否「健康」：是有效 git 目录且 origin remote 已配置。clone/fetch 中途被打断会留下「HEAD 在、
    * 但 git 元数据残缺（常缺 origin remote）」的目录，仅判 HEAD 存在会误以为可 fetch → `git fetch origin`
    * 直接 fatal（`'origin' does not appear to be a git repository`）。用 `git config --get
@@ -167,11 +195,7 @@ export class RepoMirrorManager {
    * 任一 sha 不在本地镜像 (尚未 sync 到本 PR 范围) → 返回 null，调用方把它
    * 当 "暂时未知" 处理 (不显示角标 / 显示加载占位)。
    */
-  async countCommits(
-    repo: RepoIdentity,
-    baseSha: string,
-    headSha: string,
-  ): Promise<number | null> {
+  async countCommits(repo: RepoIdentity, baseSha: string, headSha: string): Promise<number | null> {
     if (!baseSha || !headSha) return null;
     const [hasBase, hasHead] = await Promise.all([
       this.hasCommit(repo, baseSha),
@@ -306,13 +330,7 @@ export class RepoMirrorManager {
     const BASE_BRANCH = 'meebox/base';
 
     const mirrorPath = this.mirrorPath(repo);
-    const wtRoot = path.join(
-      this.opts.reposDir,
-      repo.host,
-      repo.projectKey,
-      repo.repoSlug,
-      'wt',
-    );
+    const wtRoot = path.join(this.opts.reposDir, repo.host, repo.projectKey, repo.repoSlug, 'wt');
     await fs.mkdir(wtRoot, { recursive: true });
     const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const wtPath = path.join(wtRoot, `${headSha.slice(0, 12)}-${nonce}`);
@@ -402,13 +420,7 @@ export class RepoMirrorManager {
     // git 可能短暂报 'Invalid symmetric difference' / 'bad revision'。简单重试
     // 两次，间隔 200ms / 400ms 后通常就稳了。失败再向上抛由 renderer 走 banner。
     const out = await retryTransientGit(
-      () =>
-        simpleGit(mirrorPath).raw([
-          'diff',
-          '-z',
-          '--name-status',
-          `${baseSha}...${headSha}`,
-        ]),
+      () => simpleGit(mirrorPath).raw(['diff', '-z', '--name-status', `${baseSha}...${headSha}`]),
       this.opts.logger,
       { op: 'listChangedFiles', repo: this.repoKey(repo), baseSha, headSha },
     );
@@ -420,11 +432,7 @@ export class RepoMirrorManager {
    * 文件不在该 commit (新增/删除场景) 返回空 content。
    * 简单 null-byte 启发判定二进制（前 8000 字符）。
    */
-  async getFileContent(
-    repo: RepoIdentity,
-    sha: string,
-    filePath: string,
-  ): Promise<FileContent> {
+  async getFileContent(repo: RepoIdentity, sha: string, filePath: string): Promise<FileContent> {
     const mirrorPath = this.mirrorPath(repo);
     let content: string;
     try {
@@ -488,13 +496,7 @@ export class RepoMirrorManager {
   async getBlame(repo: RepoIdentity, sha: string, filePath: string): Promise<BlameLine[]> {
     const mirrorPath = this.mirrorPath(repo);
     try {
-      const out = await simpleGit(mirrorPath).raw([
-        'blame',
-        '--porcelain',
-        sha,
-        '--',
-        filePath,
-      ]);
+      const out = await simpleGit(mirrorPath).raw(['blame', '--porcelain', sha, '--', filePath]);
       return parseBlamePorcelain(out);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -505,10 +507,7 @@ export class RepoMirrorManager {
         );
         return [];
       }
-      this.opts.logger?.warn(
-        { err, repo: this.repoKey(repo), sha, filePath },
-        'git blame failed',
-      );
+      this.opts.logger?.warn({ err, repo: this.repoKey(repo), sha, filePath }, 'git blame failed');
       throw err;
     }
   }
@@ -641,7 +640,6 @@ export class RepoMirrorManager {
     }
     return total;
   }
-
 }
 
 /**
@@ -827,9 +825,7 @@ export function parseBlamePorcelain(raw: string): BlameLine[] {
       commit: sha,
       author: meta.author,
       authorEmail: meta.authorEmail,
-      authorDate: meta.authorTime
-        ? new Date(meta.authorTime * 1000).toISOString()
-        : '',
+      authorDate: meta.authorTime ? new Date(meta.authorTime * 1000).toISOString() : '',
       summary: meta.summary,
     });
   }

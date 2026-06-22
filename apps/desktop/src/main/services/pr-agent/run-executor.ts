@@ -266,7 +266,9 @@ export class RunExecutor {
   private async prepareWorkspace(pr: QueueItem['pr']) {
     const { repoMirror, pr: prService } = this.ctx;
     const repoId = prService.repoIdentityFor(pr);
-    await repoMirror.syncMirror(repoId);
+    // 走 ensureMirrorReadyForPr（而非裸 syncMirror）：与 UI diff 同源，且复用其自愈——源分支被删 / 强推后
+    // 按平台精确 fetch PR 头引用补齐 head sha，否则 materializeWorktree 建 meebox/head 会因对象缺失失败。
+    await prService.ensureMirrorReadyForPr(pr);
     // pr-agent 的 LOCAL__TARGET_BRANCH 用固定 merge-base，而非 targetRef.sha 漂移后混入别的 PR 的两点对比。
     const diffBase = await prService.resolveDiffBaseSha(pr);
     return repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase);
