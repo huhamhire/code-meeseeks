@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { wireChatRunStore } from '../stores/chat-run-store';
 import { wireDraftsStore } from '../stores/drafts-store';
+import { wireFindingClosuresStore } from '../stores/finding-closures-store';
 import { wireRepoSyncStore } from '../stores/repo-sync-store';
 
 /**
@@ -13,4 +14,5 @@ export function useAppStores(): void {
   useEffect(() => wireChatRunStore(), []);
   useEffect(() => wireRepoSyncStore(), []);
   useEffect(() => wireDraftsStore(), []);
+  useEffect(() => wireFindingClosuresStore(), []);
 }

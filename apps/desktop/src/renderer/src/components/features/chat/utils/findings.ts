@@ -105,6 +105,35 @@ export function orderFindings(findings: Finding[]): Finding[] {
     .map((x) => x.f);
 }
 
+/** 锚点短标签 `<basename>:<startLine>`（复评徽标 / 引用 chip 用），无锚点返回空串。 */
+export function anchorShortLabel(anchor?: {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+}): string {
+  if (!anchor) return '';
+  const base = anchor.path.split('/').pop() ?? anchor.path;
+  return anchor.startLine ? `${base}:${String(anchor.startLine)}` : base;
+}
+
+/**
+ * 把一条待复评的 finding 拼成 /ask 的隐式引用上下文（referencedContext）：让模型看到原评论正文 + 位置，
+ * 据此复评。与 diff 选区引用（formatReferencedContext）同走 EXTRA_INSTRUCTIONS 注入，不进问题位置参数。
+ */
+export function formatFindingReference(finding: Finding): string {
+  const a = finding.anchor;
+  const loc = a
+    ? ` on \`${a.path}\`${
+        a.startLine
+          ? ` (L${String(a.startLine)}${
+              a.endLine && a.endLine !== a.startLine ? `-L${String(a.endLine)}` : ''
+            })`
+          : ''
+      }`
+    : '';
+  return `An existing review comment${loc} is being re-evaluated:\n\n${stripFindingMarker(finding.body)}`;
+}
+
 /**
  * 字符串 → HSL 色相。djb2 简化版，稳定 → 同一标签每次都同色。用于 PR Type 胶囊
  * 自动配色（"Bug fix" / "Enhancement" / "Tests" 各拿不同的色，不需要硬编码字典）。

@@ -1,4 +1,6 @@
 import type {
+  AskVerdict,
+  FindingClosure,
   LocalPrStatus,
   PollResult,
   PrActivityEvent,
@@ -195,6 +197,28 @@ export interface PrChannels {
   /** 删除一条草稿。删 posted 草稿是允许的 (只清本地，远端 comment 不动) */
   'drafts:delete': {
     request: { localId: string; draftId: string };
+    response: void;
+  };
+  /**
+   * finding 关闭关系（复评 /ask「取代 / 撤销」原 finding 时建立）。独立于草稿，仅作用于 ChatPane
+   * finding 卡片的关闭态 + 与复评卡片互链。create/delete 后 main 广播 `findingClosures:changed`。
+   */
+  'findingClosures:list': {
+    request: { localId: string };
+    response: FindingClosure[];
+  };
+  'findingClosures:create': {
+    request: {
+      localId: string;
+      runId: string;
+      findingId: string;
+      byAskRunId: string;
+      verdict: AskVerdict;
+    };
+    response: FindingClosure;
+  };
+  'findingClosures:delete': {
+    request: { localId: string; runId: string; findingId: string };
     response: void;
   };
   /**

@@ -34,6 +34,8 @@ export interface IpcEvents {
    * 清理都触发。renderer 据此重拉 drafts 列表 (per localId 过滤)。
    */
   'drafts:changed': { localId: string };
+  /** finding 关闭关系变更广播：复评 /ask 取代/撤销原 finding（或撤销关闭）后触发，renderer 重拉关闭关系。 */
+  'findingClosures:changed': { localId: string };
   /** 评论 reply / 状态变更后广播，renderer 各组件 (CommentsPanel / DiffView inline) 重拉 */
   'comments:changed': { localId: string };
   /**

@@ -166,6 +166,8 @@ export class RunExecutor {
       findings: parsed.findings,
       summary: parsed.summary,
       tokenUsage,
+      // 复评裁决（解析自复评 /ask 的 <verdict>）；非复评 / 未给则 undefined。
+      askVerdict: parsed.askVerdict,
     };
     if (parsed.llmFailure) {
       this.ctx.logger.warn(
@@ -247,6 +249,8 @@ export class RunExecutor {
       prAgentVersion: bridge.version,
       strategy: bridge.strategy,
       model: activeLlmForRecord?.model || undefined,
+      // 复评引用前向链：随 run 落盘，UI 据此在 /ask 卡上展示「复评自…」徽标 + 裁决动作。
+      referencedFinding: req.tool === 'ask' ? req.referencedFinding : undefined,
     });
     // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播（经调度层）。
     item.info = { ...item.info, startedAt: run.startedAt };
@@ -337,6 +341,8 @@ export class RunExecutor {
       matchedRuleInstructions,
       // /ask 选中行引用：经 EXTRA_INSTRUCTIONS 注入（不进问题位置参数，故不污染回答 echo）。
       referencedContext: req.tool === 'ask' ? req.referencedContext : undefined,
+      // /ask 复评模式：引用了某条 finding 时注入裁决（replace/keep/drop）指示。
+      referencedFinding: req.tool === 'ask' ? !!req.referencedFinding : undefined,
     });
     if (extraInstructions) env[extraInstructionsEnvKey(req.tool)] = extraInstructions;
     if (matchedRuleId) {

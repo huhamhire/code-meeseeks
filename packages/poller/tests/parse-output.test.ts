@@ -625,4 +625,18 @@ describe('parseStructuredAsk', () => {
   it('标签存在但内容全空 → 回退（返回 null）', () => {
     expect(parseStructuredAsk('<summary>\n\n</summary>')).toBeNull();
   });
+
+  it('复评 <verdict> 抽取（replace / keep / drop）', () => {
+    const mk = (v: string): string => `<summary>x</summary>\n<verdict>${v}</verdict>`;
+    expect(parseReviewOutput(mk('replace'), 'ask').askVerdict).toBe('replace');
+    expect(parseReviewOutput(mk('Keep'), 'ask').askVerdict).toBe('keep');
+    expect(parseReviewOutput(mk('drop'), 'ask').askVerdict).toBe('drop');
+  });
+
+  it('未知 verdict / 无 verdict → askVerdict undefined', () => {
+    expect(
+      parseReviewOutput('<summary>x</summary>\n<verdict>maybe</verdict>', 'ask').askVerdict,
+    ).toBeUndefined();
+    expect(parseReviewOutput('<summary>x</summary>', 'ask').askVerdict).toBeUndefined();
+  });
 });

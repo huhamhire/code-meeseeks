@@ -7,6 +7,8 @@
 
 ### Added
 
+- `/ask` 复评引用闭环：可对先前 review/improve 在 ChatPane 生成的代码评论建议（finding 卡片）发起「复评」。finding 卡片新增「引用」按钮 → 把该条挂到输入栏（复用 diff 选区引用的 chip + 预填可编辑的默认复评问题），发送后本条 `/ask` 携带该引用走复评模式：按结构化分段额外产出裁决 `<verdict>`（取代 / 保留 / 撤销），结果卡顶部显示「复评自 <file:line>」徽标（点击回链原卡）+ 裁决 chip + **手动**动作。「采纳并关闭原」把建议作为新评论草稿锚定原位置并关闭原 finding；「关闭原评论」仅关闭；关闭后原 finding 卡转「已被复评取代/关闭」态（折叠 + 撤销关闭 + 互链到复评卡）。关闭关系独立持久化（非草稿语义），新增 `findingClosures:list/create/delete` 通道与 `findingClosures:changed` 事件、`ReviewRun.referencedFinding` / `askVerdict` 字段。仅 `/ask`；agent 自动评审里 ask 自动关联 / 取代 review 建议为后续迭代。
+
 - `/ask` 结构化分段输出：自由问答此前无结构、冗长，reviewer 难以快速获取信息。现经提示词约束模型按确定性分段输出——`<summary>`（结论 / 直接回答，绿色高亮、默认展开）、`<analysis>`（过程性分析 / 讨论，灰色、**默认收起**可展开）、`<suggestions>`（可执行建议，琥珀色高亮）。解析层按标签切段成独立卡片（模型未遵循 / 无标签时整体回退普通解析，不破坏既有行为），渲染层按段着色 + 过程段折叠，关键结论与建议一眼可见。仅 `/ask`，`/describe`、`/review` 输出不变。
 
 - CLI 模式 `/ask` 取完整文件上下文：本机 CLI（claude / codex）接管 LLM 时，`/ask` 自由问答此前只能基于 diff 推理、读不到仓库完整文件（CLI 子进程被钉在中性临时目录以隔离仓库自带指令）。现仅对 `/ask` 经 `MEEBOX_CLI_WORKDIR` 把子进程 cwd 落到一次性 worktree，能读真实文件作答（如「某函数在别处被谁调用」）；落 cwd 前清空该 worktree 内仓库自带的 agent 指令文件（`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor` 规则 / `.github/copilot-instructions.md`），避免被评审 PR（worktree 即 PR HEAD、作者可控）经指令文件注入 / 污染回答。`/describe`、`/review` 维持中性临时目录不变；API 模式不涉及（远程接口本就只有 diff）。

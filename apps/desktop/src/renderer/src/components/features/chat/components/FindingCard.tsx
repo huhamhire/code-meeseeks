@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { Finding, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
+import type { Finding, FindingClosure, PrDocSectionKey, ReviewDraft } from '@meebox/shared';
 import { ChevronIcon, mermaidComponents, walkthroughMdComponents } from '../../../common';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { translatePrAgentLabels } from '../../../../utils/translate-pr-agent';
@@ -61,12 +61,46 @@ function FindingDraftActions({
   relatedDraft,
   onJump,
   onReject,
+  onReference,
+  closure,
+  onReopen,
+  onViewAsk,
 }: {
   relatedDraft?: ReviewDraft;
   onJump?: () => void;
   onReject?: () => void;
+  /** 「引用」按钮回调：把本 finding 挂到输入栏发起复评 /ask。 */
+  onReference?: () => void;
+  /** 已被复评关闭/取代时的关闭关系；存在则展示关闭态（替代草稿动作）。 */
+  closure?: FindingClosure;
+  /** 「撤销关闭」回调。 */
+  onReopen?: () => void;
+  /** 「查看复评」回调：滚动定位到关闭它的复评 /ask 卡片。 */
+  onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
+  // 已被复评关闭/取代：展示关闭 chip + 查看复评 + 撤销关闭，替代常规草稿动作。
+  if (closure) {
+    return (
+      <div className="chat-finding-draft-actions">
+        <span className="chat-chip chat-chip-tight chat-chip-neutral chat-finding-closed-chip">
+          {closure.verdict === 'replace'
+            ? t('chatPane.reference.closedReplaced')
+            : t('chatPane.reference.closedDropped')}
+        </span>
+        {onViewAsk && (
+          <button type="button" className="chat-finding-draft-btn" onClick={onViewAsk}>
+            {t('chatPane.reference.viewAsk')}
+          </button>
+        )}
+        {onReopen && (
+          <button type="button" className="chat-finding-draft-btn" onClick={onReopen}>
+            {t('chatPane.reference.reopen')}
+          </button>
+        )}
+      </div>
+    );
+  }
   const status = relatedDraft?.status;
   const chipText: Record<NonNullable<typeof status>, string> = {
     pending: t('chatPane.draftStatusPending'),
@@ -117,6 +151,17 @@ function FindingDraftActions({
           {t('chatPane.reject')}
         </button>
       )}
+      {/* 引用：把本条评论挂到输入栏发起复评 /ask（出裁决 + 采纳/关闭动作）。posted 后不再引用。 */}
+      {onReference && status !== 'posted' && (
+        <button
+          type="button"
+          className="chat-finding-draft-btn"
+          onClick={onReference}
+          title={t('chatPane.reference.referenceTitle')}
+        >
+          {t('chatPane.reference.reference')}
+        </button>
+      )}
     </div>
   );
 }
@@ -127,6 +172,10 @@ export function FindingCard({
   onJump,
   onReject,
   onNavigate,
+  onReference,
+  closure,
+  onReopen,
+  onViewAsk,
 }: {
   finding: Finding;
   /** 该 finding 关联的草稿；undefined = 尚未交互过；不为空 = 已 pending / edited / rejected / posted */
@@ -137,15 +186,25 @@ export function FindingCard({
   onReject?: () => void;
   /** 点击锚点：仅导航到 Diff 对应行（不进编辑态） */
   onNavigate?: () => void;
+  /** 「引用」按钮回调：把本 finding 挂到输入栏发起复评 /ask（仅 code 类 finding 出现）。 */
+  onReference?: () => void;
+  /** 本 finding 已被复评关闭/取代时的关闭关系（驱动关闭态渲染）。 */
+  closure?: FindingClosure;
+  /** 「撤销关闭」回调。 */
+  onReopen?: () => void;
+  /** 「查看复评」回调：滚动定位到关闭它的复评 /ask 卡片。 */
+  onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
   // 已拒绝：左色条 + 类别 chip 置灰，卡片默认折叠收起（仅留头部 chip + 锚点行 +
   // 撤销按钮）。点头部的展开/收起切换可临时回看正文，不影响草稿状态。
   const isRejected = relatedDraft?.status === 'rejected';
+  // 已被复评关闭/取代：同样收起降饱和（与已拒绝同套视觉），动作区改为查看复评 + 撤销关闭。
+  const isClosed = !!closure;
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
-  // 默认折叠：已拒绝 finding，或 /ask「分析过程」段（过程性讨论默认收起、可展开，复用同套折叠 UI）。
-  const collapsibleByDefault = isRejected || key === 'ask-analysis';
+  // 默认折叠：已拒绝 / 已关闭 finding，或 /ask「分析过程」段（过程性讨论默认收起、可展开，复用同套折叠 UI）。
+  const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
   const [expanded, setExpanded] = useState(false);
   const collapsed = collapsibleByDefault && !expanded;
   const label = sectionLabel(key, t);
@@ -171,7 +230,7 @@ export function FindingCard({
     : undefined;
   return (
     <li
-      className={`chat-finding chat-finding-${key}${isRejected ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
+      className={`chat-finding chat-finding-${key}${isRejected || isClosed ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
     >
       <header className="chat-finding-head">
         {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
@@ -256,12 +315,16 @@ export function FindingCard({
               「编辑转草稿 → 发布行内评论」交互（其它如 summary / description /
               score 没法变 inline 评论） */}
           {finding.anchor.startLine !== undefined &&
-            (onJump || onReject) &&
+            (onJump || onReject || onReference || isClosed) &&
             (key === 'code-feedback' || key === 'code-suggestion') && (
               <FindingDraftActions
                 relatedDraft={relatedDraft}
                 onJump={onJump}
                 onReject={onReject}
+                onReference={onReference}
+                closure={closure}
+                onReopen={onReopen}
+                onViewAsk={onViewAsk}
               />
             )}
         </div>

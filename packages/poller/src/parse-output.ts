@@ -1,4 +1,5 @@
 import type {
+  AskVerdict,
   Finding,
   FindingAnchor,
   FindingCodeChange,
@@ -10,6 +11,8 @@ export interface ParsedReviewOutput {
   /** 取首个非空 section 标题 / 描述首行作为 PR 摘要 */
   summary?: string;
   findings: Finding[];
+  /** 复评 /ask 的裁决（解析自 `<verdict>` 段）；非复评 / 未给则不填 */
+  askVerdict?: AskVerdict;
   /**
    * pr-agent CLI 看起来"完成"了 (exit 0) 但 stdout 里有 LLM 调用失败的 marker
    * (litellm AuthenticationError / "Failed to generate prediction" 等)。命中时
@@ -674,6 +677,13 @@ function extractAskSection(md: string, tag: string): string | undefined {
   return body || undefined;
 }
 
+/** 抽复评 /ask 的 `<verdict>replace|keep|drop</verdict>`（大小写 / 空白容错）。无 / 不认得则 undefined。 */
+function extractAskVerdict(md: string): AskVerdict | undefined {
+  const m = /<verdict\s*>([\s\S]*?)<\/verdict\s*>/i.exec(md);
+  const v = m?.[1]?.trim().toLowerCase();
+  return v === 'replace' || v === 'keep' || v === 'drop' ? v : undefined;
+}
+
 /**
  * /ask 结构化分段解析：把 prompt 注入要求模型输出的 `<summary>` / `<analysis>` / `<suggestions>`
  * 三段切成独立 finding（各带 ask-* sectionKey，UI 据此着色 / 折叠 / 排序）。summary 正文首行
@@ -706,7 +716,8 @@ export function parseStructuredAsk(stdout: string): ParsedReviewOutput | null {
         .find(Boolean);
   }
   if (findings.length === 0) return null; // 有标签但全空 → 回退
-  return summary ? { findings, summary } : { findings };
+  const askVerdict = extractAskVerdict(md);
+  return { findings, ...(summary ? { summary } : {}), ...(askVerdict ? { askVerdict } : {}) };
 }
 
 /**

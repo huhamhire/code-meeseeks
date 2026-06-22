@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Finding, ReviewDraft, ReviewRun } from '@meebox/shared';
+import type { AskVerdict, Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
 import { RetryIcon, TrashIcon } from '../../../common';
-import { orderFindings } from '../utils/findings';
+import { anchorShortLabel, orderFindings } from '../utils/findings';
 import { formatStartTime, formatTokens, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
 import { AnsiPre, AskQuestion } from './shared';
@@ -93,9 +93,15 @@ export function RunResultView({
   onDelete,
   canRetry,
   drafts,
+  closures,
   onJumpToDraft,
   onRejectFinding,
   onNavigateToFinding,
+  onReferenceFinding,
+  onReopenFinding,
+  onAdoptAskComment,
+  onCloseReferencedFinding,
+  onScrollToRun,
 }: {
   run: ReviewRun;
   onRetry: (run: ReviewRun) => void;
@@ -105,12 +111,24 @@ export function RunResultView({
   canRetry: boolean;
   /** 本 PR 当前草稿池快照；FindingCard 据此显示 status chip + 决定 reject 行为 */
   drafts: ReadonlyArray<ReviewDraft>;
+  /** 本 PR 的 finding 关闭关系快照；FindingCard 据 (run.id,finding.id) 反查关闭态 */
+  closures: ReadonlyArray<FindingClosure>;
   /** 点击 finding card 上"→ 跳到代码编辑"时触发。父组件做懒创建 + 跳转 */
   onJumpToDraft: (finding: Finding, run: ReviewRun) => void;
   /** 拒绝某条 finding：创建 / 更新草稿到 status='rejected' */
   onRejectFinding: (finding: Finding, run: ReviewRun) => void;
   /** 点击 finding 锚点：仅导航到 Diff 对应行（不进编辑态） */
   onNavigateToFinding: (finding: Finding) => void;
+  /** 「引用」一条 code finding 发起复评 /ask（挂到输入栏）。 */
+  onReferenceFinding: (finding: Finding, run: ReviewRun) => void;
+  /** 撤销某条 finding 的关闭。 */
+  onReopenFinding: (runId: string, findingId: string) => void;
+  /** 复评 /ask：采纳建议为新评论草稿 + 关闭原 finding（裁决 replace）。 */
+  onAdoptAskComment: (run: ReviewRun) => void;
+  /** 复评 /ask：仅关闭被引用的原 finding。 */
+  onCloseReferencedFinding: (run: ReviewRun, verdict: AskVerdict) => void;
+  /** 滚动定位到指定 run 卡片（复评卡 ↔ 原 finding 卡互链）。 */
+  onScrollToRun: (runId: string) => void;
 }) {
   const { t } = useTranslation();
   const findings = run.findings ?? [];
@@ -128,6 +146,19 @@ export function RunResultView({
   return (
     <div className="chat-run-result">
       <RunMeta run={run} onDelete={() => onDelete(run.id)} />
+      {/* 复评 /ask：顶部「复评自 <file:line>」徽标，点击滚动定位到被引用的原 finding 所在 run。 */}
+      {run.referencedFinding && (
+        <button
+          type="button"
+          className="chat-run-ref-badge"
+          onClick={() => onScrollToRun(run.referencedFinding!.runId)}
+          title={t('chatPane.reference.reviewedFromTitle')}
+        >
+          {t('chatPane.reference.reviewedFrom', {
+            loc: anchorShortLabel(run.referencedFinding.anchor),
+          })}
+        </button>
+      )}
       {userMessage && <AskQuestion text={userMessage} />}
       {/* 原始输出：始终紧跟 meta 行，让用户在任何状态下都能在固定位置找到日志。
           失败 / 取消默认展开，成功默认收起 */}
@@ -197,14 +228,23 @@ export function RunResultView({
                   d.source.runId === run.id &&
                   d.source.findingId === f.id,
               );
+              const closure = closures.find((c) => c.runId === run.id && c.findingId === f.id);
+              // 「引用」仅对可锚定的 code 类 finding（review/improve）提供——它们才是可被复评的代码评论。
+              const canReference =
+                (f.sectionKey === 'code-feedback' || f.sectionKey === 'code-suggestion') &&
+                typeof f.anchor?.startLine === 'number';
               return (
                 <FindingCard
                   key={f.id}
                   finding={f}
                   relatedDraft={relatedDraft}
+                  closure={closure}
                   onJump={() => onJumpToDraft(f, run)}
                   onReject={() => onRejectFinding(f, run)}
                   onNavigate={() => onNavigateToFinding(f)}
+                  onReference={canReference ? () => onReferenceFinding(f, run) : undefined}
+                  onReopen={closure ? () => onReopenFinding(run.id, f.id) : undefined}
+                  onViewAsk={closure ? () => onScrollToRun(closure.byAskRunId) : undefined}
                 />
               );
             })}
@@ -212,6 +252,84 @@ export function RunResultView({
         ) : run.status === 'succeeded' ? (
           <div className="chat-finding-empty muted">{t('chatPane.noFindings')}</div>
         ) : null)}
+
+      {/* 复评 /ask 裁决动作：被引用 finding + 成功时展示。按 askVerdict 出采纳 / 关闭，已应用则显示完成态。 */}
+      {run.referencedFinding && run.status === 'succeeded' && (
+        <AskVerdictActions
+          run={run}
+          applied={closures.some(
+            (c) =>
+              c.runId === run.referencedFinding!.runId &&
+              c.findingId === run.referencedFinding!.findingId &&
+              c.byAskRunId === run.id,
+          )}
+          onAdopt={() => onAdoptAskComment(run)}
+          onClose={(v) => onCloseReferencedFinding(run, v)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 复评裁决 → chip tone（取代=警示 / 保留=通过 / 撤销=中性）。 */
+const VERDICT_TONE: Record<AskVerdict, 'warning' | 'approved' | 'neutral'> = {
+  replace: 'warning',
+  keep: 'approved',
+  drop: 'neutral',
+};
+
+/**
+ * 复评 /ask 的裁决 + 手动采纳动作区。replace=采纳新评论并关闭原 / 仅关闭原；drop=关闭原评论；
+ * keep=仅展示裁决（原评论保留、无破坏性动作）；无裁决=兜底给「采纳 + 关闭原」手动选项。已应用则显示完成态。
+ */
+function AskVerdictActions({
+  run,
+  applied,
+  onAdopt,
+  onClose,
+}: {
+  run: ReviewRun;
+  applied: boolean;
+  onAdopt: () => void;
+  onClose: (verdict: AskVerdict) => void;
+}) {
+  const { t } = useTranslation();
+  const verdict = run.askVerdict;
+  if (applied) {
+    return (
+      <div className="chat-run-verdict">
+        <span className="chat-chip chat-chip-tight chat-chip-neutral">
+          {t('chatPane.reference.applied')}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="chat-run-verdict">
+      {verdict && (
+        <span className={`chat-chip chat-chip-tight chat-chip-${VERDICT_TONE[verdict]}`}>
+          {t(`chatPane.reference.verdict_${verdict}`)}
+        </span>
+      )}
+      {verdict === 'keep' ? null : verdict === 'drop' ? (
+        <button type="button" className="chat-finding-draft-btn" onClick={() => onClose('drop')}>
+          {t('chatPane.reference.closeOriginal')}
+        </button>
+      ) : (
+        // replace 或无裁决：采纳新评论并关闭原 + 仅关闭原
+        <>
+          <button type="button" className="chat-finding-draft-btn" onClick={onAdopt}>
+            {t('chatPane.reference.adoptReplace')}
+          </button>
+          <button
+            type="button"
+            className="chat-finding-draft-btn"
+            onClick={() => onClose('replace')}
+          >
+            {t('chatPane.reference.closeOnly')}
+          </button>
+        </>
+      )}
     </div>
   );
 }

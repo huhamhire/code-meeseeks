@@ -129,7 +129,14 @@ export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
     throw new AppError(ERROR_CODES.AG_ASK_NEEDS_QUESTION);
   }
   const pr = await ctx.pr.findPrOrThrow(req.localId);
-  return ctx.runQueue.enqueuePragentRun(pr, req.tool, req.question, 'user', req.referencedContext);
+  return ctx.runQueue.enqueuePragentRun(
+    pr,
+    req.tool,
+    req.question,
+    'user',
+    req.referencedContext,
+    req.referencedFinding,
+  );
 };
 
 /**

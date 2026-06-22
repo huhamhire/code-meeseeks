@@ -203,6 +203,11 @@ export interface DraftsFile {
   drafts: ReviewDraft[];
 }
 
+export interface FindingClosuresFile {
+  schema_version: 1;
+  closures: FindingClosure[];
+}
+
 /**
  * PR identity 快照：嵌进 ReviewRun (可选) 让 run 文件自描述，不依赖 `prs/index.json`
  * 也能反查所属 PR。M5 归档场景 (PR 已硬清但 run 单独导出) 会需要。
@@ -284,6 +289,37 @@ export interface ReviewRun {
   summary?: string;
   /** 本次 run 的真实 LLM token 用量（累加）；缺失 = 未捕获到（见 TokenUsage） */
   tokenUsage?: TokenUsage;
+  /**
+   * 复评引用：本次 /ask 是对先前 review/improve run 某条 finding 的「复评」时，记下被引用的源
+   * finding（前向链）。UI 据此在 /ask 卡片上展示「复评自 <file:line>」徽标 + 裁决动作。
+   * 仅 tool='ask' 且经「引用」触发时填。
+   */
+  referencedFinding?: { runId: string; findingId: string; anchor?: FindingAnchor };
+  /**
+   * 复评裁决：解析自复评 /ask 输出的 `<verdict>` 段——replace=给取代性新评论 / keep=原评论成立 /
+   * drop=原评论不成立。驱动 UI 的采纳 / 关闭动作。模型未给则 undefined（UI 仅展示、不出裁决动作）。
+   */
+  askVerdict?: AskVerdict;
+}
+
+/** 复评裁决：取代原评论 / 保留原评论 / 撤销原评论。 */
+export type AskVerdict = 'replace' | 'keep' | 'drop';
+
+/**
+ * finding 关闭关系：一条被复评 /ask「取代 / 撤销」而关闭的源 finding（独立于本地草稿语义，仅作用于
+ * ChatPane finding 卡片的关闭态 + 双向互链）。按 (runId, findingId) 标识源 finding。
+ */
+export interface FindingClosure {
+  /** 源 finding 所在的 review/improve run id */
+  runId: string;
+  /** 源 finding id */
+  findingId: string;
+  /** 关闭它的复评 /ask run id（用于卡片互链） */
+  byAskRunId: string;
+  /** 触发关闭的裁决（replace=被取代 / drop=被撤销） */
+  verdict: AskVerdict;
+  /** ISO 关闭时间 */
+  createdAt: string;
 }
 
 export interface ReviewRunFile {

@@ -356,6 +356,32 @@
   }
 }
 
+// 复评引用 chip：复用选区 chip 视觉，着 info 色以区分；末尾带 ✕ 清除按钮（chip 本身不可点）。
+.chat-reference-chip {
+  max-width: 220px;
+  color: $color-info;
+  cursor: default;
+
+  &:hover {
+    background: transparent;
+    color: $color-info;
+  }
+}
+.chat-reference-chip-clear {
+  flex-shrink: 0;
+  padding: 0 0 0 $space-1;
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  font-size: $fs-md;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    color: $text-primary;
+  }
+}
+
 // `/` 按钮弹出的菜单：在按钮正上方展开
 .chat-cmd-menu {
   @include popover;
@@ -445,7 +471,11 @@
   align-items: center;
   justify-content: center;
   padding: $space-2 $space-4;
-  transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s,
+    opacity 0.12s;
   flex-shrink: 0;
   line-height: 1; // 让 svg 在中线对齐 / 命令按钮高度一致
 

@@ -1,10 +1,13 @@
 import {
+  addFindingClosure,
   createDraft,
   deleteDraft,
   isCommentsCacheStale,
   listDrafts,
+  listFindingClosures,
   listStoredPullRequests,
   readCommentsCache,
+  removeFindingClosure,
   setLocalStatus,
   updateDraft,
   writeCommentsCache,
@@ -371,6 +374,30 @@ export const removeDraft: IpcController<'drafts:delete'> = async (_event, req) =
   const ctx = getContext();
   await deleteDraft(ctx.stateStore, req.localId, req.draftId);
   ctx.broadcast('drafts:changed', { localId: req.localId });
+};
+
+/** finding 关闭关系：列出本 PR 全部（复评 /ask 取代/撤销原 finding 的关闭记录）。 */
+export const getFindingClosures: IpcController<'findingClosures:list'> = (_event, req) =>
+  listFindingClosures(getContext().stateStore, req.localId);
+
+/** 记一条关闭关系（复评卡片的「采纳并关闭原 / 关闭原」动作）；广播让 finding 卡片重拉换关闭态。 */
+export const addClosure: IpcController<'findingClosures:create'> = async (_event, req) => {
+  const ctx = getContext();
+  const created = await addFindingClosure(ctx.stateStore, req.localId, {
+    runId: req.runId,
+    findingId: req.findingId,
+    byAskRunId: req.byAskRunId,
+    verdict: req.verdict,
+  });
+  ctx.broadcast('findingClosures:changed', { localId: req.localId });
+  return created;
+};
+
+/** 撤销关闭（finding 卡片的「撤销关闭」动作）。 */
+export const removeClosure: IpcController<'findingClosures:delete'> = async (_event, req) => {
+  const ctx = getContext();
+  await removeFindingClosure(ctx.stateStore, req.localId, req.runId, req.findingId);
+  ctx.broadcast('findingClosures:changed', { localId: req.localId });
 };
 
 /**

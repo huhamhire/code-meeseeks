@@ -116,6 +116,11 @@ Agent 知其存在但不可调用。
   - **结构化分段输出**：提示词约束 `/ask` 按确定性标签 `<summary>` / `<analysis>` / `<suggestions>` 输出
     （pr-agent-bridge `prompts.ts`），解析层（poller `parseStructuredAsk`）按标签切成独立 finding：summary
     结论高亮展开、analysis 过程默认收起、suggestions 建议高亮。模型未遵循 / 无标签时整体回退普通解析。
+  - **复评引用闭环**：review/improve 的 code finding 卡片可点「引用」→ 挂到输入栏发起复评 `/ask`（携带
+    `referencedFinding` + finding 正文上下文）。复评模式额外产出 `<verdict>`（replace / keep / drop，落
+    `ReviewRun.askVerdict`），结果卡出裁决 + **手动**采纳/关闭动作：采纳取代 → 建新评论草稿锚定原位置 +
+    关闭原 finding；关闭关系独立存于 `findingClosures`（非草稿语义），原卡转关闭态并与复评卡互链。
+    （agent 自动评审里 ask 自动关联 / 取代 review 建议为后续迭代。）
 - 其余直接的工具 / 操作指令 → 维持各自原有调用。
 - **无斜杠的自然语言** → **交给 Agent 运行时**（旧行为是等价 `/ask`，此为本模块的核心改动）。
 - 未知 `/xxx` → 报错（不变）。

@@ -82,6 +82,9 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('drafts:update', pr.patchDraft); // 更新草稿
   ipcMain.handle('drafts:delete', pr.removeDraft); // 删除草稿
   ipcMain.handle('drafts:publishBatch', pr.publishDraftBatch); // 批量发布草稿到远端
+  ipcMain.handle('findingClosures:list', pr.getFindingClosures); // finding 关闭关系列表
+  ipcMain.handle('findingClosures:create', pr.addClosure); // 复评取代/撤销 → 关闭原 finding
+  ipcMain.handle('findingClosures:delete', pr.removeClosure); // 撤销关闭
 
   /*
    * 配置操作
