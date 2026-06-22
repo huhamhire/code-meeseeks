@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReviewDraft } from '@meebox/shared';
 import { invoke } from '../../../../../api';
+import { formatBackendError } from '../../../../../errors';
 
 /**
  * 批量发布草稿到 Bitbucket 的确认 modal。M4 发布闭环最后一公里。
@@ -48,9 +49,7 @@ export function PublishReviewModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(candidates.map((d) => d.id)),
-  );
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(candidates.map((d) => d.id)));
   const [phase, setPhase] = useState<Phase>('confirm');
   const [results, setResults] = useState<PublishResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -257,18 +256,17 @@ export function PublishReviewModal({
                       const d = candidates.find((c) => c.id === r.draftId);
                       return (
                         <li key={r.draftId}>
-                          <code>
-                            {d ? `${d.anchor.path}:${d.anchor.startLine}` : r.draftId}
-                          </code>
-                          <span className="publish-review-failure-msg"> — {r.error}</span>
+                          <code>{d ? `${d.anchor.path}:${d.anchor.startLine}` : r.draftId}</code>
+                          <span className="publish-review-failure-msg">
+                            {' '}
+                            — {r.error && formatBackendError(r.error).title}
+                          </span>
                         </li>
                       );
                     })}
                 </ul>
               )}
-              {failCount === 0 && (
-                <p className="muted">{t('publishReviewModal.allPublished')}</p>
-              )}
+              {failCount === 0 && <p className="muted">{t('publishReviewModal.allPublished')}</p>}
             </div>
             <footer className="modal-actions">
               <button type="button" className="btn btn-sm btn-primary" onClick={onClose}>

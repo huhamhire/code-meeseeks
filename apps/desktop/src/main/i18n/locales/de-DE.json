@@ -22,18 +22,5 @@
   },
   "dialog": {
     "selectDirectory": "Verzeichnis auswählen"
-  },
-  "drafts": {
-    "notFound": "Entwurf nicht gefunden (möglicherweise gelöscht)",
-    "rejected": "Entwurf wurde abgelehnt, wird übersprungen"
-  },
-  "proxy": {
-    "authFailed": "Proxy-Authentifizierung fehlgeschlagen (407); Benutzername/Passwort prüfen",
-    "disabled": "Proxy ist deaktiviert oder die Adresse ist leer"
-  },
-  "update": {
-    "missingTag": "Im Release fehlt tag_name",
-    "parseCurrentFailed": "Aktuelle Version kann nicht ausgewertet werden: {{version}}",
-    "parseLatestFailed": "Neueste Version kann nicht ausgewertet werden: {{tag}}"
   }
 }

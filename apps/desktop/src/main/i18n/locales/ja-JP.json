@@ -21,18 +21,5 @@
   },
   "dialog": {
     "selectDirectory": "ディレクトリを選択"
-  },
-  "drafts": {
-    "notFound": "下書きが見つかりません（削除された可能性があります）",
-    "rejected": "下書きは却下されました。スキップします"
-  },
-  "proxy": {
-    "authFailed": "プロキシ認証に失敗しました (407)。ユーザー名／パスワードを確認してください",
-    "disabled": "プロキシが無効か、アドレスが空です"
-  },
-  "update": {
-    "missingTag": "リリースに tag_name がありません",
-    "parseCurrentFailed": "現在のバージョンを解析できません：{{version}}",
-    "parseLatestFailed": "最新バージョンを解析できません：{{tag}}"
   }
 }

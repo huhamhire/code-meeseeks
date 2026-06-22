@@ -21,18 +21,5 @@
   },
   "dialog": {
     "selectDirectory": "选择目录"
-  },
-  "drafts": {
-    "notFound": "草稿不存在 (可能已被删除)",
-    "rejected": "草稿已被拒绝，跳过"
-  },
-  "proxy": {
-    "authFailed": "代理认证失败 (407)，检查用户名/密码",
-    "disabled": "代理未启用或地址为空"
-  },
-  "update": {
-    "missingTag": "Release 缺少 tag_name",
-    "parseCurrentFailed": "无法解析当前版本号：{{version}}",
-    "parseLatestFailed": "无法解析最新版本号：{{tag}}"
   }
 }

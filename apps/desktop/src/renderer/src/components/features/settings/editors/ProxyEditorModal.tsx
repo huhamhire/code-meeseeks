@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { Config } from '@meebox/shared';
 import { Modal, EyeIcon, EyeOffIcon } from '../../../common';
 import { invoke } from '../../../../api';
+import { formatBackendError } from '../../../../errors';
 
 export function ProxyEditorModal({
   draft,
@@ -141,7 +142,10 @@ export function ProxyEditorModal({
                 </span>
               ) : (
                 <span className="error-text">
-                  ✗ {test.result.reason ?? t('settings.testFailed')}
+                  ✗{' '}
+                  {test.result.reason
+                    ? formatBackendError(test.result.reason).title
+                    : t('settings.testFailed')}
                 </span>
               ))}
           </div>

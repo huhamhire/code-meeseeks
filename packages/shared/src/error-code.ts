@@ -4,7 +4,7 @@
  */
 
 /** 领域标签（两字母大写）。新增领域追加在末尾。 */
-export type ErrorDomain = 'AG' | 'UI' | 'CF' | 'NT';
+export type ErrorDomain = 'AG' | 'UI' | 'CF' | 'NT' | 'PR';
 
 /**
  * 错误码注册表（唯一真相源）：`E` + 两字母领域 + 四位数字。新增码在此登记，并在渲染层各 locale 补
@@ -23,6 +23,16 @@ export const ERROR_CODES = {
   CF_UNCLASSIFIED: 'ECF0000',
   /** 未分类网络错误（兜底）。 */
   NT_UNCLASSIFIED: 'ENT0000',
+  /** 代理未启用或地址为空。 */
+  NT_PROXY_DISABLED: 'ENT0001',
+  /** 代理认证失败（407）。 */
+  NT_PROXY_AUTH_FAILED: 'ENT0407',
+  /** 未分类 PR / 草稿错误（兜底）。 */
+  PR_UNCLASSIFIED: 'EPR0000',
+  /** 草稿不存在（可能已被删除）。 */
+  PR_DRAFT_NOT_FOUND: 'EPR0001',
+  /** 草稿已被拒绝、跳过。 */
+  PR_DRAFT_REJECTED: 'EPR0002',
 } as const;
 
 /** 已登记的错误码字面量联合（抛错时只能用注册过的码，防笔误）。 */
@@ -53,6 +63,14 @@ export class AppError extends Error {
     this.code = code;
     this.meta = meta;
   }
+}
+
+/**
+ * 取错误码的 wire 编码串（与 AppError.message 同形）。供「结果信封」式错误使用：返回到前端的结果对象里
+ * 把已本地化字符串字段换成此编码串，前端经 decodeAppError / formatBackendError 走同一条解码 + i18n 路径。
+ */
+export function errorCodeMessage(code: ErrorCode, meta?: AppErrorMeta): string {
+  return encode(code, meta, code);
 }
 
 export interface DecodedAppError {

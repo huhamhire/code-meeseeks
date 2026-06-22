@@ -22,18 +22,5 @@
   },
   "dialog": {
     "selectDirectory": "Select directory"
-  },
-  "drafts": {
-    "notFound": "Draft not found (it may have been deleted)",
-    "rejected": "Draft was rejected, skipping"
-  },
-  "proxy": {
-    "authFailed": "Proxy authentication failed (407); check the username/password",
-    "disabled": "Proxy is disabled or its address is empty"
-  },
-  "update": {
-    "missingTag": "Release is missing tag_name",
-    "parseCurrentFailed": "Unable to parse the current version: {{version}}",
-    "parseLatestFailed": "Unable to parse the latest version: {{tag}}"
   }
 }

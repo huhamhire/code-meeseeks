@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { ReviewDraft } from '@meebox/shared';
 import { invoke } from '../../../../../api';
+import { formatBackendError } from '../../../../../errors';
 import { DraftZone } from '../drafts/DraftZone';
 
 /**
@@ -42,7 +43,8 @@ export function DraftZoneList({
     });
     const r = resp.results[0];
     if (!r) return { ok: false, error: t('diffView.noResultFromMain') };
-    return { ok: r.ok, error: r.error };
+    // r.error 是 AppError 编码串（草稿域 EPR* / 发布异常），在此解码为本地化文案再上交展示。
+    return { ok: r.ok, error: r.error ? formatBackendError(r.error).title : undefined };
   };
   return (
     <div className="draft-zone-list">
