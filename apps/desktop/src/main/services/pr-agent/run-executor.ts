@@ -26,7 +26,6 @@ import {
   ERROR_CODES,
   type ReviewRun,
   type ReviewRunStatus,
-  type ReviewRunTool,
 } from '@meebox/shared';
 import { getMainLanguage } from '../../i18n/index.js';
 import { resolveActiveLlmProfile } from '../../utils/agent.js';
@@ -131,7 +130,7 @@ export class RunExecutor {
     } catch (err) {
       const tokenUsage = finalizeUsage(usageAcc);
       const finished = await finishWith(
-        this.finishPatchForError(err, req.tool, tokenUsage, t0, run.id),
+        this.finishPatchForError(err, tokenUsage, t0, run.id),
       );
       // 非预期异常（非 PrAgentRunError）：落 failed 后仍把异常往上抛，避免吞掉。
       if (!(err instanceof PrAgentRunError)) throw err;
@@ -164,25 +163,30 @@ export class RunExecutor {
       exitCode: result.exitCode,
       stdout,
       stderr: stripUsageSentinels(result.stderr),
-      findings: parsed.findings,
-      summary: parsed.summary,
       tokenUsage,
-      // 复评裁决（解析自复评 /ask 的 <verdict>）；非复评 / 未给则 undefined。
-      askVerdict: parsed.askVerdict,
     };
     if (parsed.llmFailure) {
       this.ctx.logger.warn(
         { runId, reason: parsed.llmFailure.message },
         'pragent exit 0 but LLM call failed; marking run as failed',
       );
+      // 失败任务不做结构化采集——findings 置空，UI 只展示原始输出（不转 chatpane finding 卡）。
       return {
         ...base,
         status: 'failed',
         errorReason: 'llm-error',
         errorMessage: parsed.llmFailure.message,
+        findings: [],
       };
     }
-    return { ...base, status: 'succeeded' };
+    return {
+      ...base,
+      status: 'succeeded',
+      findings: parsed.findings,
+      summary: parsed.summary,
+      // 复评裁决（解析自复评 /ask 的 <verdict>）；非复评 / 未给则 undefined。
+      askVerdict: parsed.askVerdict,
+    };
   }
 
   /**
@@ -191,7 +195,6 @@ export class RunExecutor {
    */
   private finishPatchForError(
     err: unknown,
-    tool: ReviewRunTool,
     tokenUsage: ReturnType<typeof finalizeUsage>,
     t0: number,
     runId: string,
@@ -203,11 +206,7 @@ export class RunExecutor {
         { runId, reason: err.reason, exitCode: err.result.exitCode },
         `pragent run ${status}`,
       );
-      // 失败 / 取消时也尽量解析已收集的 stdout（很多情况 pr-agent 已写了一部分输出）。
-      const partialStdout = err.result.stdout ?? '';
-      const parsed = partialStdout
-        ? parseReviewOutput(partialStdout, tool)
-        : { findings: [], summary: undefined };
+      // 失败 / 取消的任务不做结构化采集——只保留原始输出（stdout/stderr）供展示，不解析成 finding 卡。
       return {
         status,
         finishedAt: new Date().toISOString(),
@@ -217,8 +216,7 @@ export class RunExecutor {
         errorMessage: err.message,
         stdout: err.result.stdout,
         stderr: stripUsageSentinels(err.result.stderr),
-        findings: parsed.findings,
-        summary: parsed.summary,
+        findings: [],
         tokenUsage,
       };
     }
@@ -415,7 +413,7 @@ export class RunExecutor {
     // - 裁决 replace → 把建议提升为带定位的代码评论（取原 finding 的 anchor），渲染 / 采纳同 /review 代码反馈；
     // - 裁决 replace / drop → 静默关闭被引用的原 finding（建立关闭关系 + 广播），无需用户手动点关闭。
     // keep / 无裁决：原评论保留、不动。
-    if (req.tool === 'ask' && req.referencedFinding && parsed.askVerdict) {
+    if (req.tool === 'ask' && req.referencedFinding && parsed.askVerdict && !parsed.llmFailure) {
       const ref = req.referencedFinding;
       const anchor = ref.anchor;
       if (parsed.askVerdict === 'replace' && anchor && typeof anchor.startLine === 'number') {
