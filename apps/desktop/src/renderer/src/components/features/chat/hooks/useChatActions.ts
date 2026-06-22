@@ -13,6 +13,7 @@ import type {
   StoredPullRequest,
 } from '@meebox/shared';
 import { invoke } from '../../../../api';
+import { useChatRunStore } from '../../../../stores/chat-run-store';
 import { htmlInlineToMarkdown, stripFindingMarker } from '../utils/findings';
 
 interface UseChatActionsParams {
@@ -94,9 +95,16 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   const { t } = useTranslation();
 
   // 记录**各 PR** 的起跑时刻（localId → since）。不同 PR 的 agent 任务可并发 / 排队，仅禁止对同一 PR 重复发起。
+  // 本地态只承载**用户手动发起**的乐观即时反馈（不等 main 广播回环）；AutoPilot 后台评审不经此处。
   const [runningPrs, setRunningPrs] = useState<Map<string, number>>(() => new Map());
+  // 编排 Agent 运行中的 PR 集合（含纯思考阶段）——来自 store 的 `agent:runningChanged`，手动与 AutoPilot
+  // 一并计入，是「是否在跑」的权威来源。
+  const { agentPrs } = useChatRunStore();
   // 仅「跑在当前 PR」才在本会话显示运行态 / 思考中；其它 PR 在跑不影响本会话发起（可并发 / 排队）。
-  const agentRunningHere = prLocalId !== undefined && runningPrs.has(prLocalId);
+  // 取「本地乐观态 ∪ store 权威态」：手动发起即时点亮（本地），AutoPilot 后台评审经 store 点亮——
+  // 否则后台评审的纯思考阶段（工具 run 跑完后的 judge / 总结）因 agentRunningHere=false 不显示「思考中」。
+  const agentRunningHere =
+    prLocalId !== undefined && (runningPrs.has(prLocalId) || agentPrs.includes(prLocalId));
 
   // 触发 /describe / /review / /ask。队列模型下 active 非空也允许提交，新 run 进
   // 队列，main 端先后串行执行。失败抛 banner；成功不需要手动 setRuns，session effect
