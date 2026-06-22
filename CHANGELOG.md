@@ -63,6 +63,8 @@
 
 ### Fixed
 
+- 本地镜像缺 PR head sha 导致 diff / 评审失败且不自愈：源分支被删 / 强推（rebase / squash 常见）后，`refs/heads/*` 已看不到 PR 的 head sha，而 GitHub `refs/pull/<n>/head` / GitLab `refs/merge-requests/<n>/head` 默认不在 ref 广播里、通配 fetch 取不到 → `git diff base...head` 报 `Invalid symmetric difference`，此前只能手动删 bare 镜像目录重 clone（且删后对已删源分支仍救不回）。现 `ensureMirrorReadyForPr` 在常规 sync 后若 head sha 仍缺失，**按平台 + PR 号精确 fetch 该 PR 的头引用**（新增 `repoMirror.fetchRefspecs` + `pullRequestHeadRefspec`）把 head sha 钉回本地，自动恢复 diff / blame / pr-agent worktree（worktree 路径也改走同一 ensure 自愈）。Bitbucket 经既有通配 PR 引用本就覆盖。
+
 - Monaco 控制台噪音报错治理：只读 diff + 着色用不到的 typescript/javascript · json · css · html 语言服务从源头关闭（对各 `*Defaults` 传空 `ModeConfiguration`，不注册任何 provider），消除其向未注册 worker 发 RPC 抛出的 `Missing requestHandler or method: …`（`getNavigationTree` / `getSyntacticDiagnostics` 等整族）；着色走 tokenizer 不受影响。剩余 Monaco 上游已知竞态（`TextModel got disposed before DiffEditorWidget model got reset`）作为已知问题默认静默，需诊断时 `localStorage.setItem('meebox.monacoDebug','1')` 再刷新可看明细——仅命中白名单消息，其它异常照常抛出。
 - PR 头部与详情页的评审状态 chip（pending / approved / needs_work、reviewer 的 approved / needs work / pending）此前为写死英文，现按界面语言出国际化文案（新增 `prStatus` 文案集，四语言）。
 - 切换不同 PR 时 diff 文件树「左栏空白 → 文件树整体弹出」的抖动：DiffView 改为 stale-while-loading——引入 `loadedPrId` 标记当前已渲染内容所属 PR，切 PR 期间保留旧树 / 旧内容渲染、上盖加载遮罩（延迟 150ms，命中缓存的快切换直接换新），并门控 content / comments / blame 拉取（避免「新 localId + 旧选中文件」错拉），新文件列表 ready 后整体替换。
