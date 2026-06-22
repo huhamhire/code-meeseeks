@@ -1,4 +1,4 @@
-import type { AgentRecommendation, AgentRecommendationVerdict } from '@meebox/shared';
+import type { AgentRecommendation, AgentRecommendationVerdict, Finding } from '@meebox/shared';
 import { VERDICTS } from '../../constants.js';
 import type {
   AgentStepLabels,
@@ -20,20 +20,50 @@ export function isVerdict(v: unknown): v is AgentRecommendationVerdict {
   return typeof v === 'string' && (VERDICTS as readonly string[]).includes(v);
 }
 
+/**
+ * 把 review 的代码类 findings 渲染成「可按 id 点名」的清单（供 judge 决定针对哪条出复评追问）。
+ * 仅取 code-feedback / code-suggestion（可锚定、可被复评取代的代码评论），正文压一行截断控篇幅。
+ */
+function renderFindingsForJudge(findings: Finding[]): string {
+  const code = findings.filter(
+    (f) => f.sectionKey === 'code-feedback' || f.sectionKey === 'code-suggestion',
+  );
+  if (code.length === 0) return '(none)';
+  return code
+    .map((f) => {
+      const a = f.anchor;
+      const loc = a ? `${a.path}${a.startLine ? `:${String(a.startLine)}` : ''}` : '';
+      const brief = f.body.replace(/\s+/g, ' ').trim().slice(0, 160);
+      return `- id=${f.id}${loc ? ` (${loc})` : ''}: ${brief}`;
+    })
+    .join('\n');
+}
+
 /** 追问判读 user 指令外置在 resources/prompts/judge.md（占位 maxAsks/language）；describe/review 正文在此追加。
- *  语言显式要求随会话语言出题（精简 system 不带 assembleSystemContext 的语言指令，否则默认英文）。 */
+ *  语言显式要求随会话语言出题（精简 system 不带 assembleSystemContext 的语言指令，否则默认英文）。
+ *  findings：review 解析出的结构化发现，渲染成 id 可寻址清单，供 judge 对某条出复评追问（targetFindingId）。 */
 export function judgePrompt(
   describeText: string,
   reviewText: string,
+  findings: Finding[],
   maxAsks: number,
   language: string,
 ): string {
   // 与 renderLanguage 同策略：空 / 未知回落 en-US。
   const lang = language.trim() || 'en-US';
   const head = fillTemplate(PROMPT_TEMPLATES.judge, { maxAsks: String(maxAsks), language: lang });
-  return [head, '', '--- PR description ---', describeText, '', '--- Review findings ---', reviewText].join(
-    '\n',
-  );
+  return [
+    head,
+    '',
+    '--- PR description ---',
+    describeText,
+    '',
+    '--- Review findings ---',
+    reviewText,
+    '',
+    '--- Review findings (id-addressable, for targetFindingId) ---',
+    renderFindingsForJudge(findings),
+  ].join('\n');
 }
 
 /** 收尾总结 user 指令 + 三段骨架外置在 resources/prompts/summary.md（占位 maxChars/三段标题）；
@@ -67,9 +97,10 @@ export function summaryPrompt(
 /** 跨步骤传递的中间产物。 */
 export interface ReviewBag {
   describe?: ToolText;
+  /** review 工具产物（含 runId / findings，供 judge 点名 + asks 复评关联）。 */
   review?: ToolText;
-  /** judge 判出的追问问题（asks 步消费）。 */
-  questions: string[];
+  /** judge 判出的追问（asks 步消费）；targetFindingId 在 = 对该条 review finding 的复评追问。 */
+  asks: Array<{ question: string; targetFindingId?: string }>;
   askResults: string[];
   summary?: string;
   recommendation?: AgentRecommendation;

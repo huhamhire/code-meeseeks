@@ -15,21 +15,33 @@ export class JudgeStep extends Step<ReviewStepCtx> {
       user: judgePrompt(
         ctx.bag.describe!.text,
         ctx.bag.review!.text,
+        ctx.bag.review?.findings ?? [],
         ctx.maxAsks,
         ctx.input.language ?? '',
       ),
-      // 判读产物只是极小 JSON（severe + 至多数条问题），封顶输出避免对 yes/no 决策狂吐 token。
+      // 判读产物只是极小 JSON（severe + 至多数条追问，可带 targetFindingId），封顶输出避免狂吐 token。
       maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
     });
     const judgeMs = Date.now() - judgeStart;
     ctx.rec.track(judge.usage);
-    const verdict = extractJson<{ severe?: boolean; questions?: string[] }>(judge.text);
-    const questions = verdict?.severe ? (verdict.questions ?? []).slice(0, ctx.maxAsks) : [];
-    ctx.bag.questions = questions;
+    // 新结构：asks:[{question, targetFindingId?}]；向后兼容旧 questions:string[]（映射为无 target）。
+    const verdict = extractJson<{
+      severe?: boolean;
+      asks?: Array<{ question?: string; targetFindingId?: string }>;
+      questions?: string[];
+    }>(judge.text);
+    const raw = verdict?.asks?.length
+      ? verdict.asks.map((a) => ({
+          question: a.question ?? '',
+          targetFindingId: a.targetFindingId,
+        }))
+      : (verdict?.questions ?? []).map((q) => ({ question: q }));
+    const asks = verdict?.severe ? raw.filter((a) => a.question.trim()).slice(0, ctx.maxAsks) : [];
+    ctx.bag.asks = asks;
     await ctx.rec.record({
       kind: 'judge',
       thought: ctx.labels.judge,
-      result: questions.length ? ctx.labels.judgeSevere(questions.length) : ctx.labels.judgeNone,
+      result: asks.length ? ctx.labels.judgeSevere(asks.length) : ctx.labels.judgeNone,
       thinkMs: judgeMs,
       usage: judge.usage,
     });

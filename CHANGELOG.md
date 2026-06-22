@@ -7,6 +7,8 @@
 
 ### Added
 
+- agent 自动评审自动「复评 / 取代」review 评论：自动评审微流程（describe→review→judge→asks→summary）里，judge 现可对某条 review 代码评论（finding）出**复评追问**（按 id 点名 `targetFindingId`），asks 步以复评模式跑该追问（携 `referencedFinding`），裁决为「取代 / 撤销」时**自动关闭**被取代的原 finding（建立 `FindingClosure`，原卡转关闭态并与复评 ask 卡互链）——无需用户手动点「引用」。默认开启、保守：仅 judge 明确点名某条 finding 且复评裁决为 replace/drop 时才关闭，keep / 未点名不动；新评论不自动落草稿，仍由用户在复评卡手动「采纳」（与手动引用路径一致）。复用 `/ask` 复评闭环的数据与渲染（`referencedFinding` / `askVerdict` / `FindingClosure`）。
+
 - `/ask` 复评引用闭环：可对先前 review/improve 在 ChatPane 生成的代码评论建议（finding 卡片）发起「复评」。finding 卡片新增「引用」按钮 → 把该条挂到输入栏（复用 diff 选区引用的 chip + 预填可编辑的默认复评问题），发送后本条 `/ask` 携带该引用走复评模式：按结构化分段额外产出裁决 `<verdict>`（取代 / 保留 / 撤销），结果卡顶部显示「复评自 <file:line>」徽标（点击回链原卡）+ 裁决 chip + **手动**动作。「采纳并关闭原」把建议作为新评论草稿锚定原位置并关闭原 finding；「关闭原评论」仅关闭；关闭后原 finding 卡转「已被复评取代/关闭」态（折叠 + 撤销关闭 + 互链到复评卡）。关闭关系独立持久化（非草稿语义），新增 `findingClosures:list/create/delete` 通道与 `findingClosures:changed` 事件、`ReviewRun.referencedFinding` / `askVerdict` 字段。仅 `/ask`；agent 自动评审里 ask 自动关联 / 取代 review 建议为后续迭代。
 
 - `/ask` 结构化分段输出：自由问答此前无结构、冗长，reviewer 难以快速获取信息。现经提示词约束模型按确定性分段输出——`<summary>`（结论 / 直接回答，绿色高亮、默认展开）、`<analysis>`（过程性分析 / 讨论，灰色、**默认收起**可展开）、`<suggestions>`（可执行建议，琥珀色高亮）。解析层按标签切段成独立卡片（模型未遵循 / 无标签时整体回退普通解析，不破坏既有行为），渲染层按段着色 + 过程段折叠，关键结论与建议一眼可见。仅 `/ask`，`/describe`、`/review` 输出不变。

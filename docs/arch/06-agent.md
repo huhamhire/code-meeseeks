@@ -120,7 +120,11 @@ Agent 知其存在但不可调用。
     `referencedFinding` + finding 正文上下文）。复评模式额外产出 `<verdict>`（replace / keep / drop，落
     `ReviewRun.askVerdict`），结果卡出裁决 + **手动**采纳/关闭动作：采纳取代 → 建新评论草稿锚定原位置 +
     关闭原 finding；关闭关系独立存于 `findingClosures`（非草稿语义），原卡转关闭态并与复评卡互链。
-    （agent 自动评审里 ask 自动关联 / 取代 review 建议为后续迭代。）
+  - **agent 自动评审自动关联 / 取代**：自动评审微流程里 judge 可对某条 review finding 出复评追问
+    （`asks[].targetFindingId`，judge prompt 给 id 可寻址清单），asks 步以复评模式派发该追问（携
+    `referencedFinding`），裁决 replace/drop 时**自动**建 `FindingClosure` 关闭被取代的原 finding（经
+    `ReviewOrchestratorDeps.closeFinding`）。默认开启、保守（仅点名 + replace/drop 才关，keep / 未点名不动）；
+    新评论不自动落草稿，仍由用户在复评卡手动「采纳」。
 - 其余直接的工具 / 操作指令 → 维持各自原有调用。
 - **无斜杠的自然语言** → **交给 Agent 运行时**（旧行为是等价 `/ask`，此为本模块的核心改动）。
 - 未知 `/xxx` → 报错（不变）。

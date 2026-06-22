@@ -4,6 +4,7 @@ import type { Rule } from '@meebox/rules';
 import type {
   AgentSession,
   AgentStep,
+  AskVerdict,
   ReviewRun,
   ReviewRunTool,
   StoredPullRequest,
@@ -30,8 +31,19 @@ function reviewRunText(run: ReviewRun): string {
 
 export interface ReviewDeps {
   stateStore: StateStore;
-  /** 入队一个 pr-agent run，resolve 完成的 ReviewRun（与用户手动 run 共用队列）。 */
-  enqueueRun: (pr: StoredPullRequest, tool: ReviewRunTool, question?: string) => Promise<ReviewRun>;
+  /** 入队一个 pr-agent run，resolve 完成的 ReviewRun（与用户手动 run 共用队列）。复评 /ask 携引用上下文 + 前向链。 */
+  enqueueRun: (
+    pr: StoredPullRequest,
+    tool: ReviewRunTool,
+    question?: string,
+    referencedContext?: string,
+    referencedFinding?: ReviewRun['referencedFinding'],
+  ) => Promise<ReviewRun>;
+  /** PR3：复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播）。缺省 = 不关。 */
+  closeFinding?: (
+    pr: StoredPullRequest,
+    call: { runId: string; findingId: string; byAskRunId: string; verdict: AskVerdict },
+  ) => Promise<void>;
   /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。 */
   chat: (input: { system: string; user: string }) => Promise<{ text: string; usage?: TokenUsage }>;
   agentContext: AgentContext;
@@ -72,13 +84,27 @@ export async function runReview(
   try {
     const result = await runReviewMicroflow(
       {
-        runTool: async ({ tool, question }) => {
-          const run = await deps.enqueueRun(pr, tool, question);
+        runTool: async ({ tool, question, referencedContext, referencedFinding }) => {
+          const run = await deps.enqueueRun(
+            pr,
+            tool,
+            question,
+            referencedContext,
+            referencedFinding,
+          );
           if (run.status !== 'succeeded') {
             throw new Error(`pr-agent ${tool} 未成功：${run.errorMessage ?? run.status}`);
           }
-          return { text: reviewRunText(run), usage: run.tokenUsage };
+          // 回带 runId / findings / askVerdict：供 judge 按 id 点名 finding、asks 复评关联与自动关闭。
+          return {
+            text: reviewRunText(run),
+            usage: run.tokenUsage,
+            runId: run.id,
+            findings: run.findings,
+            askVerdict: run.askVerdict,
+          };
         },
+        closeFinding: deps.closeFinding ? (call) => deps.closeFinding!(pr, call) : undefined,
         chat: deps.chat,
         onStep: async (step) => {
           const tagged = deps.autopilot && firstStep ? { ...step, autopilot: true } : step;
