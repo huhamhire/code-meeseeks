@@ -286,6 +286,7 @@ export function ChatPane({
                 key={entry.key}
                 tool={entry.active.tool}
                 runId={entry.active.runId}
+                question={entry.active.question}
                 lines={linesByRunId.get(entry.active.runId) ?? []}
                 startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
                 model={currentLlmModel ?? null}
