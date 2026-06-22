@@ -108,7 +108,6 @@
     "reference": {
       "adoptReplace": "Übernehmen & Original schließen",
       "applied": "Angewendet",
-      "chipLabel": "Nachprüfung {{loc}}",
       "clearTitle": "Referenz entfernen",
       "closeOnly": "Nur Original schließen",
       "closeOriginal": "Originalkommentar schließen",
@@ -118,8 +117,6 @@
       "reference": "Referenzieren",
       "referenceTitle": "Diesen Kommentar referenzieren, um eine Nachprüfung zu starten",
       "reopen": "Wieder öffnen",
-      "reviewedFrom": "Nachprüfung von {{loc}}",
-      "reviewedFromTitle": "Zum referenzierten Kommentar springen",
       "verdict_drop": "Original verwerfen",
       "verdict_keep": "Original behalten",
       "verdict_replace": "Original ersetzen",

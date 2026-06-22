@@ -46,6 +46,7 @@
   - 删除按钮统一为高饱和危险红：单条记录删除（垃圾桶）与顶部「清空历史」hover 由偏浅鲑红改为 `$color-danger-strong`，与拒绝 finding / `.btn-icon-danger` 一致。
   - `/review` 输出隐藏「评估工作量」（effort）段——实用价值低，不再展示。
 - 复评 `/ask` 取代 / 撤销改为静默自动关闭：引用某条 review/improve 评论发起的复评 `/ask`，裁决为「取代 / 撤销」时**自动**关闭被引用的原 finding（建立关闭关系），无需再手动点「关闭原」；裁决「取代」时把建议提升为**带代码定位**的代码反馈卡（取原评论的 anchor），渲染 / 采纳同 `/review` 代码反馈（点头部评论图标即转为锚定原位置的行内评论草稿）。裁决「保留」不动、且不再展示「保留原评论」标记（无破坏性动作，标记冗余）。自动关闭失败时仍回退到结果卡的手动动作。
+- `/ask` 引用展示简化与文案微调：复评结果卡顶部徽标与输入框引用 chip 不再用「复评自 / 复评 …」文案，直接显示引用定位（结果卡：转发箭头 + **完整路径:行号**，换行规则同代码建议定位、点击回链原评论；输入框 chip：只显示**文件名**），删除 `chipLabel` / `reviewedFrom` / `reviewedFromTitle` 三个 i18n key 减少维护；`/ask` 结构化「分析过程」段标签改为「分析解读」，其正文 H2 小节标题字号调小（靠加粗区分）、小节间用分割线隔开；该段展开时在 chip 行下加一条分割线，与下方富文本内容衔接更自然。
 - PR 头部 reviewer 头像决断角标反色：由「白底 + 彩色勾/叹号圆环图标」改为「实心彩色圆底 + 纯白勾/叹号符号（去掉图标外圆环，只留内部符号）」+ 与头像同款灰色描边环，白色面积更小、更醒目。
 
 - **Agent 编排响应提速**（评审微流程 / 自由规划）：一批降延迟与降成本优化，对用户行为不变。
@@ -71,7 +72,9 @@
 
 ### Fixed
 
-- `/ask` 的结构化分段 / anchor / 引用上下文 / 复评裁决指令此前对模型无效：pr-agent 的 `pr_questions` 提示词模板**不渲染 `extra_instructions`**（与 `/describe`、`/review`、`/improve` 不同），我们经 `PR_QUESTIONS__EXTRA_INSTRUCTIONS` 注入的这些指令对 `/ask` 是死字段、被静默丢弃，导致结构化输出 / 复评取代评论的代码定位时有时无。现 `/ask` 的这些指令改为拼进「问题」本身（user turn，唯一真正到达模型的文本，与语言后缀同路）；问题回显（含字面 `<summary>` / `<verdict>` 示例标签）按 pr-agent 固定的 `### **Answer:**` 表头整段切除，避免污染结构化解析。
+- `/ask` 的结构化分段 / 引用上下文 / 复评裁决指令此前对模型无效：pr-agent 的 `pr_questions` 提示词模板**不渲染 `extra_instructions`**（与 `/describe`、`/review`、`/improve` 不同），我们经 `PR_QUESTIONS__EXTRA_INSTRUCTIONS` 注入的这些指令对 `/ask` 是死字段、被静默丢弃，导致结构化输出 / 复评取代评论的代码定位时有时无。现 `/ask` 的这些指令改为拼进「问题」本身（user turn，唯一真正到达模型的文本，与语言后缀同路）；问题回显（含字面 `<summary>` / `<verdict>` 示例标签）按 pr-agent 固定的 `### **Answer:**` 表头整段切除，避免污染结构化解析。
+  - 结构化只作「轻包装」、不削减原生表现：`<analysis>` 保留 pr-agent 原生 `/ask` 的富文本（表格 / 代码块 / 子标题 / 分段、深度照常）。此前误把面向 `/review` 的「每段末尾追加 anchor marker」指令也套给 `/ask`（指令真正送达后）→ 模型为遵守而回避表格 / 代码块、回答被压成平铺纯文本；现对 `/ask` 取消该全局逐段 marker 指令（其标记在结构化解析里本就未被使用）。
+  - `<suggestions>` 改为可定位的代码建议：每条针对具体代码的建议末尾带 `[file:…, lines:…]` 标记，解析层据此**逐条拆成 `code-suggestion` 卡**（带行号定位 + 编辑 / 拒绝 / 引用，可采纳为行内评论），非代码类建议仍为普通段落。
 
 - 本地镜像缺 PR head sha 导致 diff / 评审失败且不自愈：源分支被删 / 强推（rebase / squash 常见）后，`refs/heads/*` 已看不到 PR 的 head sha，而 GitHub `refs/pull/<n>/head` / GitLab `refs/merge-requests/<n>/head` 默认不在 ref 广播里、通配 fetch 取不到 → `git diff base...head` 报 `Invalid symmetric difference`，此前只能手动删 bare 镜像目录重 clone（且删后对已删源分支仍救不回）。现 `ensureMirrorReadyForPr` 在常规 sync 后若 head sha 仍缺失，**按平台 + PR 号精确 fetch 该 PR 的头引用**（新增 `repoMirror.fetchRefspecs` + `pullRequestHeadRefspec`）把 head sha 钉回本地，自动恢复 diff / blame / pr-agent worktree（worktree 路径也改走同一 ensure 自愈）。Bitbucket 经既有通配 PR 引用本就覆盖。
 

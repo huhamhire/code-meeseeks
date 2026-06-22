@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AskVerdict, Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
-import { RetryIcon, TrashIcon } from '../../../common';
-import { anchorShortLabel, orderFindings } from '../utils/findings';
+import { RetryIcon, ShareIcon, TrashIcon } from '../../../common';
+import { orderFindings } from '../utils/findings';
 import { formatStartTime, formatTokens, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
-import { AnsiPre, AskQuestion } from './shared';
+import { AnsiPre, AskQuestion, BreakablePath } from './shared';
 import { FindingCard } from './FindingCard';
 
 function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
@@ -146,17 +146,32 @@ export function RunResultView({
   return (
     <div className="chat-run-result">
       <RunMeta run={run} onDelete={() => onDelete(run.id)} />
-      {/* 复评 /ask：顶部「复评自 <file:line>」徽标，点击滚动定位到被引用的原 finding 所在 run。 */}
+      {/* 复评 /ask：顶部引用定位徽标（转发箭头 + 完整路径:行号），点击滚动定位到被引用的原 finding 所在 run。
+          直接显示完整定位信息（不再用「复评自」文案，省 i18n）；路径换行规则同代码建议定位（BreakablePath 软断点）。 */}
       {run.referencedFinding && (
         <button
           type="button"
           className="chat-run-ref-badge"
           onClick={() => onScrollToRun(run.referencedFinding!.runId)}
-          title={t('chatPane.reference.reviewedFromTitle')}
+          title={run.referencedFinding.anchor?.path}
         >
-          {t('chatPane.reference.reviewedFrom', {
-            loc: anchorShortLabel(run.referencedFinding.anchor),
-          })}
+          <ShareIcon size={12} />
+          {run.referencedFinding.anchor && (
+            <span className="chat-run-ref-loc">
+              <code>
+                <BreakablePath path={run.referencedFinding.anchor.path} />
+              </code>
+              {run.referencedFinding.anchor.startLine !== undefined && (
+                <span>
+                  :{run.referencedFinding.anchor.startLine}
+                  {run.referencedFinding.anchor.endLine &&
+                  run.referencedFinding.anchor.endLine !== run.referencedFinding.anchor.startLine
+                    ? `-${String(run.referencedFinding.anchor.endLine)}`
+                    : ''}
+                </span>
+              )}
+            </span>
+          )}
         </button>
       )}
       {userMessage && <AskQuestion text={userMessage} />}

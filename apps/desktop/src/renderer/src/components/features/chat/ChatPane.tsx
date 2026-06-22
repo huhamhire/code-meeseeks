@@ -405,13 +405,11 @@ export function ChatPane({
         selectionLineCount={diffSelection?.lineCount ?? null}
         selectionIgnored={selectionIgnored}
         onToggleSelection={() => selectionStore.toggleIgnored()}
-        // 复评引用：chip（复评 <file:line> + 清除）；点 finding「引用」时挂上，不自动填写问题。
+        // 复评引用：chip（直接显示引用定位 <file:line> + 清除）；点 finding「引用」时挂上，不自动填写问题。
         referenceChip={
           refFinding
             ? {
-                label: t('chatPane.reference.chipLabel', {
-                  loc: anchorShortLabel(refFinding.finding.anchor),
-                }),
+                label: anchorShortLabel(refFinding.finding.anchor),
                 onClear: () => {
                   setRefFinding(null);
                 },

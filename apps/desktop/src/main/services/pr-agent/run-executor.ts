@@ -419,9 +419,12 @@ export class RunExecutor {
       const ref = req.referencedFinding;
       const anchor = ref.anchor;
       if (parsed.askVerdict === 'replace' && anchor && typeof anchor.startLine === 'number') {
+        // 已自带定位的 code-suggestion（模型按 marker 锚到引用处）保持不动；否则把建议（退到 summary）
+        // 兜底锚到被引用评论的原位置并升为代码反馈，保证取代评论始终带定位、可采纳。
         const sug =
-          parsed.findings.find((f) => f.sectionKey === 'ask-suggestions') ??
-          parsed.findings.find((f) => f.sectionKey === 'ask-summary');
+          parsed.findings.find(
+            (f) => f.sectionKey === 'code-suggestion' || f.sectionKey === 'ask-suggestions',
+          ) ?? parsed.findings.find((f) => f.sectionKey === 'ask-summary');
         if (sug && !sug.anchor) {
           sug.anchor = { ...anchor };
           sug.sectionKey = 'code-feedback';

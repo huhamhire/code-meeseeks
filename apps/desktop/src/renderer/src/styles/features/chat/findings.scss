@@ -68,6 +68,27 @@
   gap: $space-3;
   margin-bottom: $space-3;
 }
+// 分析解读（ask-analysis）展开时：chip 行下加一条分割线，与下方富文本内容（表格 / 代码块）衔接更自然，
+// 避免头部 chip 直接贴正文显得突兀。仅展开态（无 chat-finding-collapsed）出现。
+.chat-finding-ask-analysis:not(.chat-finding-collapsed) .chat-finding-head {
+  padding-bottom: $space-3;
+  border-bottom: 1px solid $border-default;
+}
+// 分析解读正文：H2 作为小节标题——字号调小到正文级（靠加粗区分，不过分抢眼），且每个小节上方用分割线
+// 隔开，长解读分段清晰。首个 H2（正文起始即标题）不重复加线，避免与头部分割线叠成双线。
+.chat-finding-ask-analysis .chat-finding-body {
+  h2 {
+    font-size: $fs-lg;
+    margin-top: $space-5;
+    padding-top: $space-4;
+    border-top: 1px solid $border-default;
+  }
+  > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+}
 // 度量走 chat-chip + chat-chip-md；配色由 markup 的 chat-chip-<tone(key)> 决定
 // (元信息/图/工作量→accent，内容/测试/安全→approved，警示→warning，评分/兜底→neutral)。
 .chat-finding-cat {

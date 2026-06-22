@@ -108,7 +108,6 @@
     "reference": {
       "adoptReplace": "採用して元を閉じる",
       "applied": "適用済み",
-      "chipLabel": "再レビュー {{loc}}",
       "clearTitle": "参照を解除",
       "closeOnly": "元のみ閉じる",
       "closeOriginal": "元のコメントを閉じる",
@@ -118,8 +117,6 @@
       "reference": "参照",
       "referenceTitle": "このコメントを参照して再レビューを開始",
       "reopen": "閉じるを取り消す",
-      "reviewedFrom": "再レビュー元 {{loc}}",
-      "reviewedFromTitle": "参照元のコメントへ移動",
       "verdict_drop": "元を取り下げ",
       "verdict_keep": "元を維持",
       "verdict_replace": "元を置き換え",

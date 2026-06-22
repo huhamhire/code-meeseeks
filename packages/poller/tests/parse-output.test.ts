@@ -602,7 +602,7 @@ describe('parseStructuredAsk', () => {
     expect(findings[0]!.sectionKey).toBe('ask-summary');
   });
 
-  it('段内 anchor marker 被剥除（PR1 仅结构化展示）', () => {
+  it('suggestions 段带行号 marker → 升为可定位 code-suggestion（anchor 提取、marker 剥除）', () => {
     const md = [
       '<suggestions>',
       'Guard the null case here.',
@@ -610,9 +610,40 @@ describe('parseStructuredAsk', () => {
       '</suggestions>',
     ].join('\n');
     const { findings } = parseReviewOutput(md, 'ask');
-    expect(findings[0]!.sectionKey).toBe('ask-suggestions');
+    expect(findings[0]!.sectionKey).toBe('code-suggestion');
     expect(findings[0]!.body).toBe('Guard the null case here.');
     expect(findings[0]!.body).not.toContain('[file:');
+    expect(findings[0]!.anchor).toEqual({ path: 'src/a.ts', startLine: 10, endLine: 12 });
+  });
+
+  it('suggestions 段多条 marker → 逐条拆成 code-suggestion；无 marker 尾部归并为 ask-suggestions', () => {
+    const md = [
+      '<suggestions>',
+      '- Add a null guard.',
+      '[file: src/a.ts, lines: 10]',
+      '- Rename for clarity.',
+      '[file: src/b.ts, lines: 20-22]',
+      '- Consider documenting the overall flow.',
+      '</suggestions>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'ask');
+    expect(findings.map((f) => f.sectionKey)).toEqual([
+      'code-suggestion',
+      'code-suggestion',
+      'ask-suggestions',
+    ]);
+    expect(findings[0]!.anchor).toEqual({ path: 'src/a.ts', startLine: 10 });
+    expect(findings[1]!.anchor).toEqual({ path: 'src/b.ts', startLine: 20, endLine: 22 });
+    expect(findings[2]!.anchor).toBeUndefined();
+  });
+
+  it('suggestions 段无 marker → 整段一条 ask-suggestions（同旧行为）', () => {
+    const md = ['<suggestions>', 'General advice with no specific code location.', '</suggestions>'].join(
+      '\n',
+    );
+    const { findings } = parseReviewOutput(md, 'ask');
+    expect(findings[0]!.sectionKey).toBe('ask-suggestions');
+    expect(findings[0]!.body).toBe('General advice with no specific code location.');
   });
 
   it('无标签 → 回退普通 /ask 解析（不产出 ask-* 段）', () => {

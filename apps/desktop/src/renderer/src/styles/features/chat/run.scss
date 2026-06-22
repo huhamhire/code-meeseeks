@@ -275,15 +275,37 @@
 // 复评「复评自 <file:line>」徽标：可点击回链被引用的原 finding 所在 run。
 .chat-run-ref-badge {
   align-self: flex-start;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: $space-1 $space-2;
   margin: $space-1 0;
   padding: $space-1 $space-2;
   border: 1px solid $border-default;
   border-radius: $radius-sm;
   background: transparent;
   color: $color-info;
-  font-size: $fs-md;
+  font-size: $fs-sm;
   cursor: pointer;
 
+  svg {
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .chat-run-ref-loc {
+    display: inline-flex;
+    align-items: baseline;
+    gap: $space-1;
+    min-width: 0;
+  }
+  code {
+    font-family: $font-mono;
+    // 换行规则同代码建议定位（.chat-finding-anchor code）：优先 BreakablePath 的软断点，超宽兜底任意断。
+    word-break: normal;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
   &:hover {
     background: $bg-hover;
   }

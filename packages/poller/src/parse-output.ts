@@ -667,14 +667,64 @@ const ASK_STRUCTURED_SECTIONS: ReadonlyArray<{ tag: string; key: PrDocSectionKey
   { tag: 'suggestions', key: 'ask-suggestions' },
 ];
 
-/** 取一个 `<tag>…</tag>` 块的正文（去 anchor marker + 噪音），空则 undefined。大小写不敏感、跨行。 */
+/** 取一个 `<tag>…</tag>` 块的正文（去 anchor marker + 噪音），空则 undefined。大小写不敏感、跨行。
+ *  summary / analysis 段是纯文本展示，marker 是阅读噪音先剥掉。 */
 function extractAskSection(md: string, tag: string): string | undefined {
+  const m = extractAskSectionRaw(md, tag);
+  if (!m) return undefined;
+  const body = trimNoise(stripAnchorMarker(m));
+  return body || undefined;
+}
+
+/** 取一个 `<tag>…</tag>` 块的原始正文（仅去首尾噪音，**保留 anchor marker**），空则 undefined。
+ *  suggestions 段要据 marker 拆条 / 定位，故走原始正文。 */
+function extractAskSectionRaw(md: string, tag: string): string | undefined {
   const re = new RegExp(`<${tag}\\s*>([\\s\\S]*?)<\\/${tag}\\s*>`, 'i');
   const m = re.exec(md);
   if (!m) return undefined;
-  // PR1 仅做结构化展示，anchor marker 是阅读噪音先剥掉（可操作锚点 / 跳草稿留待引用→评论闭环 PR）。
-  const body = trimNoise(stripAnchorMarker(m[1] ?? ''));
+  const body = trimNoise(m[1] ?? '');
   return body || undefined;
+}
+
+/**
+ * 解析 `<suggestions>` 段为 finding 列表：以 anchor marker 为锚把建议拆成逐条——带行号 marker 的条目
+ * 升为 `code-suggestion`（带 anchor，UI 出代码定位 + 编辑 / 拒绝 / 引用，可采纳为行内评论），其余文本归并为
+ * 普通 `ask-suggestions`。无任何 marker → 整段一条 `ask-suggestions`（同旧行为）。idx 从 baseIndex 起编号。
+ */
+function parseAskSuggestions(body: string, baseIndex: number): Finding[] {
+  const pad = (n: number): string => String(n).padStart(3, '0');
+  const matches = [...body.matchAll(ANCHOR_MARKER_RE)];
+  if (matches.length === 0) {
+    const clean = trimNoise(stripAnchorMarker(body));
+    return clean
+      ? [{ id: `ask-${pad(baseIndex)}`, category: 'general', sectionKey: 'ask-suggestions', body: clean }]
+      : [];
+  }
+  const findings: Finding[] = [];
+  let cursor = 0;
+  let idx = baseIndex;
+  for (const m of matches) {
+    const end = (m.index ?? 0) + m[0].length;
+    const chunk = trimNoise(stripAnchorMarker(body.slice(cursor, end)));
+    cursor = end;
+    if (!chunk) continue;
+    const anchor = inferAnchorFromIssueText(m[0]);
+    const located = anchor != null && typeof anchor.startLine === 'number';
+    findings.push({
+      id: `ask-${pad(idx)}`,
+      category: located ? 'code-feedback' : 'general',
+      sectionKey: located ? 'code-suggestion' : 'ask-suggestions',
+      body: chunk,
+      ...(located ? { anchor } : {}),
+    });
+    idx += 1;
+  }
+  // 末个 marker 之后的尾部（无 marker）文本归并为一条普通建议。
+  const tail = trimNoise(stripAnchorMarker(body.slice(cursor)));
+  if (tail) {
+    findings.push({ id: `ask-${pad(idx)}`, category: 'general', sectionKey: 'ask-suggestions', body: tail });
+  }
+  return findings;
 }
 
 /** 抽复评 /ask 的 `<verdict>replace|keep|drop</verdict>`（大小写 / 空白容错）。无 / 不认得则 undefined。 */
@@ -700,6 +750,15 @@ export function parseStructuredAsk(stdout: string): ParsedReviewOutput | null {
   let summary: string | undefined;
   let idx = 0;
   for (const { tag, key } of ASK_STRUCTURED_SECTIONS) {
+    // suggestions 段特殊处理：按 anchor marker 拆成逐条（带行号的升为可定位 code-suggestion）。
+    if (tag === 'suggestions') {
+      const raw = extractAskSectionRaw(md, tag);
+      if (!raw) continue;
+      const sug = parseAskSuggestions(raw, idx);
+      findings.push(...sug);
+      idx += sug.length;
+      continue;
+    }
     const body = extractAskSection(md, tag);
     if (!body) continue;
     findings.push({
