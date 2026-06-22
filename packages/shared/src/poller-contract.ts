@@ -60,6 +60,9 @@ export type PrDocSectionKey =
   | 'security' // 安全发现
   | 'code-feedback' // /review 单条 finding (带 file:line anchor)
   | 'code-suggestion' // /improve 单条改进建议 (带 file:line anchor + existing/improved diff)
+  | 'ask-summary' // /ask 结构化分段：结论 / 直接回答（高亮、展开）
+  | 'ask-analysis' // /ask 结构化分段：过程性分析 / 讨论（默认收起）
+  | 'ask-suggestions' // /ask 结构化分段：可执行建议（高亮）
   | 'effort' // 评估工作量 1-5
   | 'score' // 质量分
   | 'general'; // 兜底，未识别

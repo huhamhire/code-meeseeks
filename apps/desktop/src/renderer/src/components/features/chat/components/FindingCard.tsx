@@ -31,6 +31,10 @@ const CAT_TONE: Record<PrDocSectionKey, 'accent' | 'approved' | 'warning' | 'neu
   security: 'approved',
   'code-feedback': 'warning',
   'code-suggestion': 'warning',
+  // /ask 结构化分段：结论高亮(绿)、建议高亮(琥珀)、过程分析中性(灰，默认收起)
+  'ask-summary': 'approved',
+  'ask-analysis': 'neutral',
+  'ask-suggestions': 'warning',
   score: 'neutral',
   general: 'neutral',
 };
@@ -138,10 +142,12 @@ export function FindingCard({
   // 已拒绝：左色条 + 类别 chip 置灰，卡片默认折叠收起（仅留头部 chip + 锚点行 +
   // 撤销按钮）。点头部的展开/收起切换可临时回看正文，不影响草稿状态。
   const isRejected = relatedDraft?.status === 'rejected';
-  const [expanded, setExpanded] = useState(false);
-  const collapsed = isRejected && !expanded;
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
+  // 默认折叠：已拒绝 finding，或 /ask「分析过程」段（过程性讨论默认收起、可展开，复用同套折叠 UI）。
+  const collapsibleByDefault = isRejected || key === 'ask-analysis';
+  const [expanded, setExpanded] = useState(false);
+  const collapsed = collapsibleByDefault && !expanded;
   const label = sectionLabel(key, t);
   // 标题在已知 sectionKey 上**通常**跟 chip label 内容重复 (h4 显示 "PR Type" + chip
   // 显示 "类型")，所以默认只有 general 段才出 title。但 pr-agent 把若干段的"值"放在
@@ -189,8 +195,8 @@ export function FindingCard({
             <MdInline>{translatedTitle}</MdInline>
           </h4>
         )}
-        {/* 已拒绝才出现的展开 / 收起切换：chevron 图标，收起态指右、展开态转下，纯图标交互 */}
-        {isRejected && (
+        {/* 可默认折叠的段（已拒绝 / ask 分析过程）出现展开 / 收起切换：chevron 收起态指右、展开态转下 */}
+        {collapsibleByDefault && (
           <button
             type="button"
             className={`chat-finding-collapse-toggle${collapsed ? '' : ' is-expanded'}`}

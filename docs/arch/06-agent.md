@@ -113,6 +113,9 @@ Agent 知其存在但不可调用。
 - `/ask <text>` → **直达工具**，文本作为 question 直跑 `/ask`。CLI 模式（claude/codex）下 `/ask` 会把 CLI
   子进程 cwd 落到（已净化的）一次性 worktree，取完整文件上下文作答——而非像 describe/review 只基于 diff
   在中性临时目录推理；机制（`MEEBOX_CLI_WORKDIR` + worktree 指令文件净化防注入）见 [04](04-pragent-runtime.md)。
+  - **结构化分段输出**：提示词约束 `/ask` 按确定性标签 `<summary>` / `<analysis>` / `<suggestions>` 输出
+    （pr-agent-bridge `prompts.ts`），解析层（poller `parseStructuredAsk`）按标签切成独立 finding：summary
+    结论高亮展开、analysis 过程默认收起、suggestions 建议高亮。模型未遵循 / 无标签时整体回退普通解析。
 - 其余直接的工具 / 操作指令 → 维持各自原有调用。
 - **无斜杠的自然语言** → **交给 Agent 运行时**（旧行为是等价 `/ask`，此为本模块的核心改动）。
 - 未知 `/xxx` → 报错（不变）。

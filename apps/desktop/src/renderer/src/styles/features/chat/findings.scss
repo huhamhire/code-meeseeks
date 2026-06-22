@@ -39,14 +39,18 @@
   &.chat-finding-description,
   &.chat-finding-walkthrough,
   &.chat-finding-relevant-tests,
-  &.chat-finding-security {
+  &.chat-finding-security,
+  &.chat-finding-ask-summary {
     border-left-color: $color-approved;
   }
-  &.chat-finding-score {
+  // /ask 过程分析：中性灰（默认收起的过程性段，不抢眼）
+  &.chat-finding-score,
+  &.chat-finding-ask-analysis {
     border-left-color: $text-muted;
   }
   &.chat-finding-code-feedback,
-  &.chat-finding-code-suggestion {
+  &.chat-finding-code-suggestion,
+  &.chat-finding-ask-suggestions {
     border-left-color: $color-warning;
   }
   &.chat-finding-general {

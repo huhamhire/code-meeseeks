@@ -7,6 +7,8 @@
 
 ### Added
 
+- `/ask` 结构化分段输出：自由问答此前无结构、冗长，reviewer 难以快速获取信息。现经提示词约束模型按确定性分段输出——`<summary>`（结论 / 直接回答，绿色高亮、默认展开）、`<analysis>`（过程性分析 / 讨论，灰色、**默认收起**可展开）、`<suggestions>`（可执行建议，琥珀色高亮）。解析层按标签切段成独立卡片（模型未遵循 / 无标签时整体回退普通解析，不破坏既有行为），渲染层按段着色 + 过程段折叠，关键结论与建议一眼可见。仅 `/ask`，`/describe`、`/review` 输出不变。
+
 - CLI 模式 `/ask` 取完整文件上下文：本机 CLI（claude / codex）接管 LLM 时，`/ask` 自由问答此前只能基于 diff 推理、读不到仓库完整文件（CLI 子进程被钉在中性临时目录以隔离仓库自带指令）。现仅对 `/ask` 经 `MEEBOX_CLI_WORKDIR` 把子进程 cwd 落到一次性 worktree，能读真实文件作答（如「某函数在别处被谁调用」）；落 cwd 前清空该 worktree 内仓库自带的 agent 指令文件（`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor` 规则 / `.github/copilot-instructions.md`），避免被评审 PR（worktree 即 PR HEAD、作者可控）经指令文件注入 / 污染回答。`/describe`、`/review` 维持中性临时目录不变；API 模式不涉及（远程接口本就只有 diff）。
 
 - Agent 会话「中途输入」与「计划」：Agent 运行期间再输入消息不再被静默丢弃——即时显示用户气泡并入队，下一主 Agent 周期并入、与当前进度对比后重排后续行动（评审微流程跑完后接续处理排队消息；无在跑则直接起一轮规划）。规划 Agent 维护一份可视的「计划」(todo) 面板：每轮给出 / 更新步骤、随进展勾选、收到新输入按最新指令重排；随会话持久化，切 PR / 重启经 `agent:getSession` 恢复。新增 `agent:enqueueMessage` 通道与 `agent:planUpdated` 事件。

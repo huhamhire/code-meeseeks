@@ -153,7 +153,10 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
   //   测试：Relevant tests / PR contains tests / No relevant tests[ found]
   //   安全：Security concerns / No security concerns[ identified]
   // 只匹配 "Relevant tests"/"Security concerns" 会漏掉「有测试」「无安全风险」等常见结论 → 退化成 general。
-  [/^(?:relevant[\s_-]+tests?|pr[\s_-]+contains[\s_-]+tests?|no[\s_-]+relevant[\s_-]+tests?(?:[\s_-]+found)?)$/i, 'relevant-tests'],
+  [
+    /^(?:relevant[\s_-]+tests?|pr[\s_-]+contains[\s_-]+tests?|no[\s_-]+relevant[\s_-]+tests?(?:[\s_-]+found)?)$/i,
+    'relevant-tests',
+  ],
   [/^(?:no[\s_-]+)?security[\s_-]+concerns?(?:[\s_-]+identified)?$/i, 'security'],
   [/^estimated[\s_-]+effort.*$/i, 'effort'],
   [/^(?:code[\s_-]+quality[\s_-]+)?score$/i, 'score'],
@@ -248,11 +251,7 @@ function isKeyIssuesSection(title: string): boolean {
  * 或 `path/to/file.ext` + `第 N 行 / lines N-M` 关键词。都抽不到则 anchor 留空，
  * UI 端把"跳转编辑"按钮 disable。
  */
-function expandKeyIssuesSection(
-  sec: Section,
-  baseIndex: number,
-  tool: ReviewRunTool,
-): Finding[] {
+function expandKeyIssuesSection(sec: Section, baseIndex: number, tool: ReviewRunTool): Finding[] {
   const body = trimNoise(sec.body);
   const lines = body.split('\n');
   // issue header 行两种形态：
@@ -366,7 +365,9 @@ function splitGfmTableSections(html: string): Section[] {
     const cellText = cells.length > 0 ? cells.join('\n\n') : row;
     const titleMatch = /<strong>([\s\S]*?)<\/strong>/i.exec(cellText);
     const title = titleMatch
-      ? gfmInlineToText(titleMatch[1]!).replace(/[:：]\s*$/, '').trim()
+      ? gfmInlineToText(titleMatch[1]!)
+          .replace(/[:：]\s*$/, '')
+          .trim()
       : '';
     // `<strong>标题</strong>: 值` 形态：去掉标题后残留的前导分隔符（: ：&nbsp; 空白）
     const body = (titleMatch ? cellText.slice(titleMatch.index + titleMatch[0].length) : cellText)
@@ -380,8 +381,7 @@ function splitGfmTableSections(html: string): Section[] {
 /** 从 GFM key_issues 段 body（原始 HTML）抽多条 finding：以 <a href><strong>标题</strong></a>
  *  为锚，相邻两条之间为该条正文。link 取结构化 anchor，与 markdown 路径同源。 */
 function expandGfmKeyIssues(html: string, baseIndex: number, tool: ReviewRunTool): Finding[] {
-  const FIND_RE =
-    /<a\s+href=['"]([^'"]+)['"]\s*>\s*<strong>([\s\S]*?)<\/strong>\s*<\/a>/gi;
+  const FIND_RE = /<a\s+href=['"]([^'"]+)['"]\s*>\s*<strong>([\s\S]*?)<\/strong>\s*<\/a>/gi;
   const matches = [...html.matchAll(FIND_RE)];
   return matches.map((m, i) => {
     const link = m[1]!;
@@ -493,7 +493,8 @@ function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
     return anchor;
   }
   // 兜底 1：含 `/` 的路径 token (优先匹配 `path/to/file.ext`)
-  const pathRe = /(?:^|[\s(`'"])([A-Za-z0-9_./\\-]+\/[A-Za-z0-9_./\\-]*\.[A-Za-z0-9]{1,8})(?=[\s)`'":.,!?]|$)/m;
+  const pathRe =
+    /(?:^|[\s(`'"])([A-Za-z0-9_./\\-]+\/[A-Za-z0-9_./\\-]*\.[A-Za-z0-9]{1,8})(?=[\s)`'":.,!?]|$)/m;
   const pm = pathRe.exec(text);
   if (pm) {
     const path = pm[1]!;
@@ -530,8 +531,9 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
   //   **Lines:** 42-50
   //   **Issue:** ...
   // 兼容 file_path / Line / 行号 等中英变体
-  const fileMatch =
-    /^\s*\*\*\s*(?:file(?:[_\s]?path)?|路径|文件)\s*:?\s*\*\*\s*(.+?)\s*$/im.exec(body);
+  const fileMatch = /^\s*\*\*\s*(?:file(?:[_\s]?path)?|路径|文件)\s*:?\s*\*\*\s*(.+?)\s*$/im.exec(
+    body,
+  );
   const file = fileMatch?.[1]?.trim();
   if (file) {
     const anchor: FindingAnchor = { path: stripBackticks(file) };
@@ -605,10 +607,7 @@ function extractFileWalkthrough(md: string): { rest: string; block: string } | n
 /** HTML 文本节点转义：desc/文件名经 gfmInlineToText 已把实体解码成裸 < > &，
  *  再放进 <li> 文本上下文须重新转义，避免破坏结构 / 被下游清洗器误判。 */
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**
@@ -658,6 +657,58 @@ function walkthroughToList(block: string): string {
   return parts.join('\n') || (files.length ? fmtList(files) : '（无文件变更明细）');
 }
 
+/** /ask 结构化分段标签 → sectionKey（固定渲染顺序：summary → analysis → suggestions）。 */
+const ASK_STRUCTURED_SECTIONS: ReadonlyArray<{ tag: string; key: PrDocSectionKey }> = [
+  { tag: 'summary', key: 'ask-summary' },
+  { tag: 'analysis', key: 'ask-analysis' },
+  { tag: 'suggestions', key: 'ask-suggestions' },
+];
+
+/** 取一个 `<tag>…</tag>` 块的正文（去 anchor marker + 噪音），空则 undefined。大小写不敏感、跨行。 */
+function extractAskSection(md: string, tag: string): string | undefined {
+  const re = new RegExp(`<${tag}\\s*>([\\s\\S]*?)<\\/${tag}\\s*>`, 'i');
+  const m = re.exec(md);
+  if (!m) return undefined;
+  // PR1 仅做结构化展示，anchor marker 是阅读噪音先剥掉（可操作锚点 / 跳草稿留待引用→评论闭环 PR）。
+  const body = trimNoise(stripAnchorMarker(m[1] ?? ''));
+  return body || undefined;
+}
+
+/**
+ * /ask 结构化分段解析：把 prompt 注入要求模型输出的 `<summary>` / `<analysis>` / `<suggestions>`
+ * 三段切成独立 finding（各带 ask-* sectionKey，UI 据此着色 / 折叠 / 排序）。summary 正文首行
+ * 兼作 ParsedReviewOutput.summary。
+ *
+ * 回退：未出现任一配对标签、或标签都为空 → 返回 null，调用方走普通 /ask markdown 解析（模型没遵循
+ * 结构化指令时不破坏既有行为）。
+ */
+export function parseStructuredAsk(stdout: string): ParsedReviewOutput | null {
+  const md = stripAnsi(stdout);
+  // 至少要有一对识别的开合标签，否则视作非结构化输出、回退。
+  if (!/<(summary|analysis|suggestions)\s*>[\s\S]*?<\/\1\s*>/i.test(md)) return null;
+  const findings: Finding[] = [];
+  let summary: string | undefined;
+  let idx = 0;
+  for (const { tag, key } of ASK_STRUCTURED_SECTIONS) {
+    const body = extractAskSection(md, tag);
+    if (!body) continue;
+    findings.push({
+      id: `ask-${String(idx).padStart(3, '0')}`,
+      category: 'general',
+      sectionKey: key,
+      body,
+    });
+    idx += 1;
+    if (key === 'ask-summary')
+      summary = body
+        .split('\n')
+        .map((l) => l.trim())
+        .find(Boolean);
+  }
+  if (findings.length === 0) return null; // 有标签但全空 → 回退
+  return summary ? { findings, summary } : { findings };
+}
+
 /**
  * 解析 pr-agent stdout 为 findings 列表。M3-B2 是 best-effort：
  * - 切 markdown sections
@@ -680,6 +731,12 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
     const out = parseImproveOutput(stdout);
     return llmFailure ? { ...out, llmFailure } : out;
   }
+  // /ask 结构化分段：prompt 注入 <summary>/<analysis>/<suggestions> 标签（见 pr-agent-bridge
+  // prompts.ts），命中则按段产出彩色 / 可折叠 finding；模型未遵循（无配对标签）则回退到下方普通解析。
+  if (tool === 'ask') {
+    const structured = parseStructuredAsk(stdout);
+    if (structured) return llmFailure ? { ...structured, llmFailure } : structured;
+  }
   const cleanStdout = stripAnsi(stdout);
   // describe：先把追加在末尾的 File Walkthrough <details> 块抽出（否则黏进 ### Diagram
   // Walkthrough 段），单独成一条「文件变更」finding，并把嵌套表格转成折叠无序列表。
@@ -700,9 +757,7 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
   // GFM 路径仅用于 /review（gfm_markdown 下整体是 <table>）；describe/ask 仍走 markdown
   // 切片（其 HTML/表格/mermaid 由下游 react-markdown 渲染，section 结构不受影响）。
   const gfm = tool === 'review' && isGfmReviewOutput(baseMd);
-  const allSections = gfm
-    ? splitGfmTableSections(baseMd)
-    : splitMarkdownSections(baseMd);
+  const allSections = gfm ? splitGfmTableSections(baseMd) : splitMarkdownSections(baseMd);
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) {
     const fs = walkthroughFinding ? [walkthroughFinding] : [];
@@ -720,7 +775,9 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
         : expandKeyIssuesSection(sec, idx, tool);
       if (expanded.length === 0) {
         // 抽不到（格式漂移）→ 退回整段一条 finding，body 清成可读文本
-        findings.push(sectionToFinding(gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec, idx, tool));
+        findings.push(
+          sectionToFinding(gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec, idx, tool),
+        );
         idx += 1;
       } else {
         findings.push(...expanded);
@@ -741,7 +798,10 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
   const titled = sections.find((s) => s.title);
   if (titled) summary = normalizeTitle(titled.title);
   else {
-    const firstNonEmpty = sections.find((s) => s.body)?.body.split('\n')[0]?.trim();
+    const firstNonEmpty = sections
+      .find((s) => s.body)
+      ?.body.split('\n')[0]
+      ?.trim();
     if (firstNonEmpty) summary = firstNonEmpty;
   }
   return llmFailure ? { findings, summary, llmFailure } : { findings, summary };
@@ -791,8 +851,7 @@ export function parseImproveOutput(stdout: string): ParsedReviewOutput {
   // file marker 行：`[<path> [<start>-<end>]](<url>)`，path 内不含空白（但可含 `[]`，如
   // `a/[m-123]/x.ts`）；range 可能 `[42-45]` 或 `[42]` (单行)。path 用惰性非空白 `[^\s]+?` +
   // 必现的 ` [<range>]](` 后缀界定，路径里的 `]` 不再误截。
-  const markerRe =
-    /^\[([^\s]+?)\s+\[(\d+)(?:-(\d+))?\]\]\(/;
+  const markerRe = /^\[([^\s]+?)\s+\[(\d+)(?:-(\d+))?\]\]\(/;
   interface Marker {
     idx: number;
     file: string;

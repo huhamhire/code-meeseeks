@@ -55,6 +55,10 @@ const SECTION_ORDER: Record<PrDocSectionKey, number> = {
   effort: 10,
   score: 11,
   general: 12,
+  // /ask 结构化分段（仅出现在 /ask run 内，彼此相对顺序：概述 → 分析 → 建议）
+  'ask-summary': 13,
+  'ask-analysis': 14,
+  'ask-suggestions': 15,
 };
 const SECTION_LABEL_KEY: Record<PrDocSectionKey, string | null> = {
   title: 'chatPane.sectionTitle',
@@ -71,6 +75,9 @@ const SECTION_LABEL_KEY: Record<PrDocSectionKey, string | null> = {
   effort: 'chatPane.sectionEffort',
   score: 'chatPane.sectionScore',
   general: null, // general / 未知段无 chip 标签
+  'ask-summary': 'chatPane.sectionAskSummary',
+  'ask-analysis': 'chatPane.sectionAskAnalysis',
+  'ask-suggestions': 'chatPane.sectionAskSuggestions',
 };
 export function sectionLabel(key: PrDocSectionKey, t: TFunction): string {
   const k = SECTION_LABEL_KEY[key];
