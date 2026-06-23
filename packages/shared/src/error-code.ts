@@ -33,6 +33,8 @@ export const ERROR_CODES = {
   PR_DRAFT_NOT_FOUND: 'EPR0001',
   /** 草稿已被拒绝、跳过。 */
   PR_DRAFT_REJECTED: 'EPR0002',
+  /** PR 已被合并（本地状态滞后，合并时远端已是 merged）。 */
+  PR_ALREADY_MERGED: 'EPR0003',
 } as const;
 
 /** 已登记的错误码字面量联合（抛错时只能用注册过的码，防笔误）。 */

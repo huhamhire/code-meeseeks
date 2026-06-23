@@ -1,21 +1,23 @@
-import type {
-  ListPendingOptions,
-  MergeStatus,
-  PingResult,
-  PlatformAdapter,
-  PlatformCapabilities,
-  PlatformUser,
-  PrActivityEvent,
-  PrActivityKind,
-  PrComment,
-  PrCommentAnchor,
-  PrCommit,
-  PullRequest,
-  RepoRef,
-  Reviewer,
-  ReviewerStatus,
+import {
+  AppError,
+  ERROR_CODES,
+  type ListPendingOptions,
+  type MergeStatus,
+  type PingResult,
+  type PlatformAdapter,
+  type PlatformCapabilities,
+  type PlatformUser,
+  type PrActivityEvent,
+  type PrActivityKind,
+  type PrComment,
+  type PrCommentAnchor,
+  type PrCommit,
+  type PullRequest,
+  type RepoRef,
+  type Reviewer,
+  type ReviewerStatus,
 } from '@meebox/shared';
-import { BitbucketClient, type BitbucketClientOptions } from './client.js';
+import { BitbucketClient, BitbucketClientError, type BitbucketClientOptions } from './client.js';
 
 interface BitbucketUser {
   name: string;
@@ -413,7 +415,17 @@ export class BitbucketServerAdapter implements PlatformAdapter {
     const pr = await this.client.get<BitbucketPullRequest>(base);
     // POST .../merge?version=N；body 留空。冲突 / veto 未通过 / 无权限 → Bitbucket 回 409/403，
     // client 抛错冒泡给上层
-    await this.client.post(`${base}/merge?version=${String(pr.version)}`, {});
+    try {
+      await this.client.post(`${base}/merge?version=${String(pr.version)}`, {});
+    } catch (err) {
+      // PR 已被合并（本地状态滞后于远端：他人已合 / 重复点击）→ Bitbucket 回 409 +
+      // IllegalPullRequestStateException「already been merged」。归一成面向用户的错误码，
+      // 由前端 i18n 友好提示（而非把原始 409 stack 抛给用户）。其它 409（冲突 / veto）原样冒泡。
+      if (isAlreadyMergedError(err)) {
+        throw new AppError(ERROR_CODES.PR_ALREADY_MERGED, undefined, 'pull request already merged');
+      }
+      throw err;
+    }
   }
 
   /**
@@ -596,6 +608,17 @@ function mapPullRequest(bb: BitbucketPullRequest, mergeStatus: MergeStatus): Pul
     // 派生镜像，跟 mergeStatus.conflicted 保持一致供现有冲突角标直接读
     hasConflict: mergeStatus.conflicted,
   };
+}
+
+/**
+ * 该错误是否为「PR 已被合并」：Bitbucket 对已合并 / 已关闭 PR 的合并请求回 409 +
+ * `IllegalPullRequestStateException`，错误体里带「already ... merged」。据此识别，归一成
+ * PR_ALREADY_MERGED 错误码；其它 409（冲突 / veto / 无权限）不在此列。
+ */
+function isAlreadyMergedError(err: unknown): boolean {
+  if (!(err instanceof BitbucketClientError) || err.status !== 409) return false;
+  const body = err.body.toLowerCase();
+  return body.includes('illegalpullrequeststateexception') && body.includes('merged');
 }
 
 function compareVersion(actual: string, min: readonly [number, number, number]): number {

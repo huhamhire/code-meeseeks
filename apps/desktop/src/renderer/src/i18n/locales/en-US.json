@@ -403,6 +403,7 @@
     "ENT0407": "Proxy authentication failed (407); check the username/password",
     "EPR0001": "Draft not found (it may have been deleted)",
     "EPR0002": "Draft was rejected, skipping",
+    "EPR0003": "This pull request has already been merged; refresh to see the latest state.",
     "authHint": "Your Personal Access Token (PAT) may be expired or lack permissions; check it in Settings",
     "authTitle": "Authentication failed",
     "dnsHint": "The hostname could not be resolved; check base_url / DNS / proxy",
