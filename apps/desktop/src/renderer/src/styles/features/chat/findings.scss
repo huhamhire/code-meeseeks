@@ -65,30 +65,46 @@
 
 // 点击复评引用徽标定位到原 finding 卡片时的短暂高亮：用「覆盖式高亮环 + inset 淡色填充」而非背景渐隐
 // ——finding 卡有实底 $bg-elev，背景渐隐会被洗掉看不出闪烁；覆盖式与卡片底色无关、任意底色都清晰可见，
-// 动画结束自动回落（fill-mode 默认 none）。启用卡用主蓝、已关闭/拒绝卡用中性灰，色相区分两类状态。
+// 动画结束自动回落（fill-mode 默认 none）。高亮色 = 卡片左条主题色（--flash-color，按 sectionKey 取），
+// 让定位反馈与卡片类别视觉一致（如代码建议=橙黄）；已关闭/拒绝卡统一中性灰（盖过类别色）。
 .chat-finding-flash {
+  --flash-color: #{$border-default};
   animation: chat-finding-flash-kf 1.5s ease-out;
+}
+// 类别色：与上面 .chat-finding 的 border-left-color 分组逐一对应。
+.chat-finding-title.chat-finding-flash,
+.chat-finding-pr-type.chat-finding-flash,
+.chat-finding-diagram.chat-finding-flash,
+.chat-finding-assessment.chat-finding-flash,
+.chat-finding-effort.chat-finding-flash {
+  --flash-color: #{$color-info};
+}
+.chat-finding-summary.chat-finding-flash,
+.chat-finding-description.chat-finding-flash,
+.chat-finding-walkthrough.chat-finding-flash,
+.chat-finding-relevant-tests.chat-finding-flash,
+.chat-finding-security.chat-finding-flash,
+.chat-finding-ask-summary.chat-finding-flash {
+  --flash-color: #{$color-approved};
+}
+.chat-finding-score.chat-finding-flash,
+.chat-finding-ask-analysis.chat-finding-flash {
+  --flash-color: #{$text-muted};
+}
+.chat-finding-code-feedback.chat-finding-flash,
+.chat-finding-code-suggestion.chat-finding-flash,
+.chat-finding-ask-suggestions.chat-finding-flash {
+  --flash-color: #{$color-warning};
+}
+// 已关闭/拒绝卡：统一中性灰（语义=非活跃，盖过类别色）。须置于类别规则之后以同特异性覆盖。
+.chat-finding-rejected.chat-finding-flash {
+  --flash-color: #{$text-muted};
 }
 @keyframes chat-finding-flash-kf {
   0% {
     box-shadow:
-      0 0 0 2px $color-accent,
-      inset 0 0 0 9999px $color-accent-bg-fade;
-  }
-  100% {
-    box-shadow:
-      0 0 0 2px transparent,
-      inset 0 0 0 9999px transparent;
-  }
-}
-.chat-finding-rejected.chat-finding-flash {
-  animation-name: chat-finding-flash-closed-kf;
-}
-@keyframes chat-finding-flash-closed-kf {
-  0% {
-    box-shadow:
-      0 0 0 2px $text-muted,
-      inset 0 0 0 9999px rgba($text-muted, 0.18);
+      0 0 0 2px var(--flash-color),
+      inset 0 0 0 9999px color-mix(in srgb, var(--flash-color) 18%, transparent);
   }
   100% {
     box-shadow:
