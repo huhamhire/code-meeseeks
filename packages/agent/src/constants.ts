@@ -68,6 +68,10 @@ export const JUDGE_SYSTEM =
 /** 追问判读的输出 token 上限：产物是极小 JSON（severe + 至多数条问题），无需大额度。 */
 export const JUDGE_MAX_OUTPUT_TOKENS = 1024;
 
+/** 收尾总结的输出 token 上限：总结是整段 markdown 综合（三段 + 末尾判定 JSON），给足额度避免被 provider
+ *  默认上限截断（截断会连带丢掉末尾判定 → 回落 manual_review）。summaryMax 是软字符指引，这里是硬封顶。 */
+export const SUMMARY_MAX_OUTPUT_TOKENS = 4096;
+
 // ── AutoPilot 准入判读（autopilot-judge.ts）──
 /** 候选 PR 描述喂判读 LLM 前的截断字符数：控制 prompt 体积，准入判读不需要完整描述。 */
 export const DESC_CLAMP = 600;

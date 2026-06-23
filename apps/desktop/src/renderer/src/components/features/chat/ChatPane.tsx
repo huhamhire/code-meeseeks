@@ -130,7 +130,8 @@ export function ChatPane({
 
   // M4 草稿池：从 main 进程拉本 PR 的草稿，跟 finding 通过 source 字段反查关联
   const drafts = useDraftsForPr(prLocalId);
-  // 复评关闭关系池：FindingCard 据 (runId,findingId) 反查某条 finding 是否已被复评 /ask 关闭/取代。
+  // 复评关闭关系池（只读）：复评 /ask 裁决 replace/drop 时由后端自动关闭原 finding（见 asks-step →
+  // closeFinding）并广播；这里据 (runId,findingId) 反查、在 FindingCard 上以只读 chip 标注「已被复评取代/关闭」。
   const closures = useFindingClosuresForPr(prLocalId) ?? [];
 
   // 复评引用态：点 finding「引用」→ 仅挂到输入栏（chip）；不自动填写问题，用户自行输入。发送时携带该引用。
@@ -212,13 +213,22 @@ export function ChatPane({
   const { runs, error, loadingSession, matchedRule, bodyRef, hasMoreOlder, loadingOlder } = session;
 
   // 复评卡 ↔ 原 finding 卡互链：按 data-run-id 在时间线里滚动定位 + 短暂高亮。
-  const scrollToRun = (runId: string): void => {
-    const root = bodyRef.current;
-    const el = root?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
-    if (!el) return;
+  const flash = (el: Element): void => {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el.classList.add('chat-run-flash');
     window.setTimeout(() => el.classList.remove('chat-run-flash'), 1500);
+  };
+  const scrollToRun = (runId: string): void => {
+    const el = bodyRef.current?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
+    if (el) flash(el);
+  };
+  // 点击复评卡顶部引用徽标：精确定位到原 run 内被引用的那条 finding 卡片并闪烁高亮（找不到该卡片——
+  // 如已分页移出 / 折叠——回退到整条 run 高亮，至少给出定位反馈）。
+  const scrollToFinding = (runId: string, findingId: string): void => {
+    const runEl = bodyRef.current?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
+    if (!runEl) return;
+    const el = runEl.querySelector(`[data-finding-id="${CSS.escape(findingId)}"]`) ?? runEl;
+    flash(el);
   };
 
   return (
@@ -318,12 +328,8 @@ export function ChatPane({
                 onRejectFinding={actions.handleRejectFinding}
                 onNavigateToFinding={actions.handleNavigateToFinding}
                 onReferenceFinding={onReferenceFinding}
-                onReopenFinding={(runId, findingId) =>
-                  void actions.handleReopenFinding(runId, findingId)
-                }
-                onAdoptAskComment={(r) => void actions.handleAdoptAskComment(r)}
-                onCloseReferencedFinding={(r, v) => void actions.handleCloseReferencedFinding(r, v)}
                 onScrollToRun={scrollToRun}
+                onScrollToFinding={scrollToFinding}
               />
             </div>
           ) : entry.active ? (

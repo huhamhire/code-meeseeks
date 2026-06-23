@@ -118,7 +118,7 @@ class App {
     this.prAgent = new PrAgentRuntime(this.bootstrap, this.logger);
     // 版本更新器：由 poller tick 顺带调 runIfDue（至多每小时一次，复用 poller 周期、不另起定时器）。
     this.updater = new Updater(this.bootstrap, this.logger);
-    this.stateStore = new JsonFileStateStore(this.bootstrap.paths.stateDir);
+    this.stateStore = new JsonFileStateStore(this.bootstrap.paths.stateDir, this.logger);
   }
 
   /**

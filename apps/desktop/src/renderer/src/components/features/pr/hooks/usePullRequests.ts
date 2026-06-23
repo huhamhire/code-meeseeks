@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LocalPrStatus, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../api';
+import { formatBackendError } from '../../../../errors';
 
 /**
  * PR 列表生命周期与详情动作（领域内聚）：列表 state + 选中态、读缓存 reload / 拉远端 refresh、
@@ -62,9 +63,9 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     try {
       await invoke('prs:merge', { localId: mergedId });
     } catch (e) {
-      // 合并失败（冲突 / veto / 权限 / PR 已关闭）→ 弹 toast，本地不变
-      const msg = e instanceof Error ? e.message : String(e);
-      notifyError(t('app.mergeFailed', { msg }));
+      // 合并失败（PR 已合并 / 冲突 / veto / 权限）→ 弹 toast，本地不变。先经 formatBackendError 解码
+      // AppError 错误码做 i18n（如 EPR0003「已被合并」给友好提示），非编码错误回退原始 message。
+      notifyError(t('app.mergeFailed', { msg: formatBackendError(e).title }));
       void triggerRefresh();
       return;
     } finally {

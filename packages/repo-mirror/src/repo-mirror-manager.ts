@@ -185,17 +185,40 @@ export class RepoMirrorManager {
   }
 
   /**
-   * 计算 base..head 之间的 commit 数 (PR 引入的提交数)。完全走本地 bare 镜像
-   * `git rev-list --count --no-merges <base>..<head>` —— 不打远端，毫秒级返回。
+   * 计算 base..head 之间「源分支主干自产」的 commit 数 (PR 引入的提交数)。完全走本地 bare 镜像
+   * `git rev-list --count --first-parent --no-merges <base>..<head>` —— 不打远端，毫秒级返回。
    *
-   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。base 传**目标分支 sha**
-   * 时 base..head = head ^target，即「源分支不在目标分支上的提交」；`--no-merges` 略去合并提交，
-   * 与平台 PR /commits 列表口径一致（不把源分支合入目标分支带进来的提交、以及 merge 提交计入）。
+   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。base 传**分叉点 sha**
+   * （merge-base）时 base..head = 源分支自分叉后引入的提交；`--first-parent` 只沿源分支主干，把
+   * 历史上 merge 其它分支带进来的他人提交一并排除，`--no-merges` 再略去 merge 提交本身——口径
+   * 与 {@link listIntroducedCommitShas}（commit 列表 / 活动时间线的过滤集）一致，避免角标与列表对不上。
    *
    * 任一 sha 不在本地镜像 (尚未 sync 到本 PR 范围) → 返回 null，调用方把它
    * 当 "暂时未知" 处理 (不显示角标 / 显示加载占位)。
    */
   async countCommits(repo: RepoIdentity, baseSha: string, headSha: string): Promise<number | null> {
+    const shas = await this.listIntroducedCommitShas(repo, baseSha, headSha);
+    return shas === null ? null : shas.length;
+  }
+
+  /**
+   * 列出 base..head 之间「源分支主干自产」的提交 SHA（40-char），newest-first。完全走本地 bare
+   * 镜像 `git rev-list --first-parent --no-merges <base>..<head>` —— 不打远端。
+   *
+   * `--first-parent` 只沿源分支主干遍历：历史上把别的分支 merge 进源分支带来的**他人提交**（落在
+   * merge 提交的第二父侧）不会进入结果；`--no-merges` 再剔除 merge 提交本身。最终只剩源分支上直接
+   * 产出的提交。
+   *
+   * 用途：把平台 `/commits` 端点返回的完整列表（`target..source` 全集，含 merge 及合入的他人提交）
+   * 过滤为「本 PR 真正引入的提交」，消除长期分支 / fork 同步分支反复 merge 造成的列表噪声。
+   *
+   * 任一 sha 不在本地镜像（尚未 sync 到本 PR 范围）→ 返回 null，调用方退回未过滤的平台列表。
+   */
+  async listIntroducedCommitShas(
+    repo: RepoIdentity,
+    baseSha: string,
+    headSha: string,
+  ): Promise<string[] | null> {
     if (!baseSha || !headSha) return null;
     const [hasBase, hasHead] = await Promise.all([
       this.hasCommit(repo, baseSha),
@@ -206,12 +229,14 @@ export class RepoMirrorManager {
     try {
       const out = await simpleGit(mp).raw([
         'rev-list',
-        '--count',
+        '--first-parent',
         '--no-merges',
         `${baseSha}..${headSha}`,
       ]);
-      const n = Number.parseInt(out.trim(), 10);
-      return Number.isNaN(n) ? null : n;
+      return out
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
     } catch {
       return null;
     }

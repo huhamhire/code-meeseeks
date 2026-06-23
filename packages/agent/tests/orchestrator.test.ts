@@ -3,7 +3,12 @@ import { runReviewMicroflow } from '../src/orchestrator.js';
 import type { ReviewOrchestratorDeps } from '../src/orchestrator.js';
 import { DEFAULT_REVIEW_PLAN, isValidReviewPlan } from '../src/steps/review/index.js';
 import type { AgentContext } from '../src/types.js';
-import { extractJson, salvageProse, stripTrailingJson } from '../src/utils/index.js';
+import {
+  extractJson,
+  extractTrailingJson,
+  salvageProse,
+  stripTrailingJson,
+} from '../src/utils/index.js';
 
 const context: AgentContext = {
   files: { soul: 'soul', agents: 'agents', memory: '', user: '' },
@@ -80,6 +85,24 @@ describe('stripTrailingJson', () => {
     const code = '说明：配置形如 `{ "port": 8080 }`，按需调整。';
     expect(stripTrailingJson(code)).toBe(code);
   });
+
+  it('strips a truncated/unterminated trailing recommendation object', () => {
+    // 输出被 token 上限截断在判定 JSON 中途（无闭合 }）→ 仍把半截 JSON 从正文末尾剥掉。
+    const truncated = '## 摘要\n\n正文含"引号"也不应被腰斩。\n\n{"verdict": "needs_work", "rea';
+    expect(stripTrailingJson(truncated)).toBe('## 摘要\n\n正文含"引号"也不应被腰斩。');
+  });
+});
+
+describe('extractTrailingJson', () => {
+  it('extracts a flat trailing recommendation object', () => {
+    const text = '## 摘要\n\n结论。\n\n{"verdict": "needs_work", "reason": "有风险"}';
+    expect(extractTrailingJson(text)).toEqual({ verdict: 'needs_work', reason: '有风险' });
+  });
+
+  it('returns null when the trailing object is truncated / absent', () => {
+    expect(extractTrailingJson('## 摘要\n\n结论。')).toBeNull();
+    expect(extractTrailingJson('## 摘要\n\n{"verdict": "approve", "rea')).toBeNull();
+  });
 });
 
 describe('runReviewMicroflow', () => {
@@ -134,6 +157,31 @@ describe('runReviewMicroflow', () => {
       chatReplies: ['{"severe": false}', 'totally not json'],
     });
     const r = await runReviewMicroflow(deps, { context, pr });
+    expect(r.recommendation.verdict).toBe('manual_review');
+  });
+
+  it('parses markdown summary + a flat trailing recommendation JSON (new format)', async () => {
+    // 新格式：纯 markdown 正文（含引号，不被腰斩）+ 末尾一行扁平判定 JSON。
+    const md = '## 摘要\n\n本 PR 直接违反了 PR 的"单一职责"原则，需修改。';
+    const { deps } = makeDeps({
+      chatReplies: [
+        '{"severe": false}',
+        `${md}\n\n{"verdict": "needs_work", "reason": "违反单一职责"}`,
+      ],
+    });
+    const r = await runReviewMicroflow(deps, { context, pr });
+    expect(r.summary).toBe(md);
+    expect(r.recommendation).toEqual({ verdict: 'needs_work', reason: '违反单一职责' });
+  });
+
+  it('keeps the markdown summary intact when the trailing recommendation is truncated', async () => {
+    // 末尾判定被截断 → 正文完整保留（不腰斩）、判定回落 manual_review。
+    const md = '## 摘要\n\n结论：第 2 个问题直接违反了 PR 的约定。';
+    const { deps } = makeDeps({
+      chatReplies: ['{"severe": false}', `${md}\n\n{"verdict": "needs_w`],
+    });
+    const r = await runReviewMicroflow(deps, { context, pr });
+    expect(r.summary).toBe(md);
     expect(r.recommendation.verdict).toBe('manual_review');
   });
 

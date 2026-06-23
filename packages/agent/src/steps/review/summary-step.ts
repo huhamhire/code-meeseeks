@@ -1,10 +1,16 @@
 import type { AgentRecommendation } from '@meebox/shared';
+import { SUMMARY_MAX_OUTPUT_TOKENS } from '../../constants.js';
 import { DEFAULT_SUMMARY_SECTIONS } from '../../orchestrator.js';
-import { extractJson, salvageProse, stripTrailingJson } from '../../utils/index.js';
+import { extractTrailingJson, salvageProse, stripTrailingJson } from '../../utils/index.js';
 import { Step } from '../context.js';
 import { isVerdict, summaryPrompt, type ReviewStepCtx } from './shared.js';
 
-/** 收尾总结 + 建议。解析失败兜底打捞散文 + 剥末尾判定 JSON；**不做硬截断**。 */
+/**
+ * 收尾总结 + 建议。模型输出「纯 markdown 正文 + 末尾一行判定 JSON」（见 summary.md）：正文走
+ * stripTrailingJson 剥掉末尾判定（含被截断的 dangling JSON 兜底），判定走 extractTrailingJson 单独解析。
+ * 不再把整段 markdown 塞进 JSON 字符串——避免正文里的引号/换行破坏 JSON 解析、并在解析失败时被腰斩。
+ * 给足输出 token 上限，避免 provider 默认上限截断正文。
+ */
 export class SummaryStep extends Step<ReviewStepCtx> {
   readonly name = 'summary';
 
@@ -20,21 +26,23 @@ export class SummaryStep extends Step<ReviewStepCtx> {
         ctx.summaryMax,
         ctx.input.summarySections ?? DEFAULT_SUMMARY_SECTIONS,
       ),
+      maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
     });
     const sumMs = Date.now() - sumStart;
     ctx.rec.track(sum.usage);
-    const parsed = extractJson<{
-      summary?: string;
+    // 兜底：模型若仍把整段包进 JSON 字符串（违背 prompt），stripTrailingJson 会把整个对象剥空 → 用
+    // salvageProse 从 "summary"/"final" 字段捞回正文。
+    const summary = stripTrailingJson(sum.text).trim() || salvageProse(sum.text).trim();
+    // 末尾判定：新格式是扁平 {verdict,reason}；兼容旧格式（整体 JSON 的嵌套 recommendation 字段）。
+    const obj = extractTrailingJson<{
+      verdict?: unknown;
+      reason?: unknown;
       recommendation?: { verdict?: unknown; reason?: unknown };
     }>(sum.text);
-    const summary = stripTrailingJson(parsed?.summary ?? salvageProse(sum.text)).trim();
+    const rec = obj?.recommendation ?? obj;
     const recommendation: AgentRecommendation =
-      parsed?.recommendation && isVerdict(parsed.recommendation.verdict)
-        ? {
-            verdict: parsed.recommendation.verdict,
-            reason:
-              typeof parsed.recommendation.reason === 'string' ? parsed.recommendation.reason : '',
-          }
+      rec && isVerdict(rec.verdict)
+        ? { verdict: rec.verdict, reason: typeof rec.reason === 'string' ? rec.reason : '' }
         : { verdict: 'manual_review', reason: ctx.labels.parseFail };
     ctx.bag.summary = summary;
     ctx.bag.recommendation = recommendation;

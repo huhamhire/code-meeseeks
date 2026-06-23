@@ -129,25 +129,22 @@ function FindingHeadActions({
 /**
  * Finding 卡 anchor 行右侧的状态展示。仅代码类 finding（/review code-feedback 与 /improve
  * code-suggestion）+ anchor 完整时出现。动作按钮已上移到头部图标栏（见 FindingHeadActions），
- * 此处只承载**状态**：草稿状态 chip（待处理 / 已编辑 / 已发布 / 已拒绝），或被复评关闭/取代时的
- * 关闭 chip + 查看复评 + 撤销关闭。
+ * 此处只承载**状态**：被复评裁决 replace/drop 自动关闭时的只读关闭 chip（+「查看复评」导航，不提供
+ * 撤销/关闭等用户操作——关闭由后端 ask 任务驱动），否则草稿状态 chip（待处理 / 已编辑 / 已发布 / 已拒绝）。
  */
 function FindingDraftActions({
   relatedDraft,
   closure,
-  onReopen,
   onViewAsk,
 }: {
   relatedDraft?: ReviewDraft;
-  /** 已被复评关闭/取代时的关闭关系；存在则展示关闭态（替代草稿状态）。 */
+  /** 被复评裁决自动关闭/取代时的关闭关系（只读展示驱动）。 */
   closure?: FindingClosure;
-  /** 「撤销关闭」回调。 */
-  onReopen?: () => void;
-  /** 「查看复评」回调：滚动定位到关闭它的复评 /ask 卡片。 */
+  /** 「查看复评」导航回调：滚动定位到关闭它的复评 /ask 卡片（只读导航，非关闭操作）。 */
   onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
-  // 已被复评关闭/取代：展示关闭 chip + 查看复评 + 撤销关闭。
+  // 已被复评取代/关闭：只读 chip（+ 查看复评导航）。关闭由后端 ask 裁决驱动，不提供撤销按钮。
   if (closure) {
     return (
       <div className="chat-finding-draft-actions">
@@ -159,11 +156,6 @@ function FindingDraftActions({
         {onViewAsk && (
           <button type="button" className="chat-finding-draft-btn" onClick={onViewAsk}>
             {t('chatPane.reference.viewAsk')}
-          </button>
-        )}
-        {onReopen && (
-          <button type="button" className="chat-finding-draft-btn" onClick={onReopen}>
-            {t('chatPane.reference.reopen')}
           </button>
         )}
       </div>
@@ -198,7 +190,6 @@ export function FindingCard({
   onNavigate,
   onReference,
   closure,
-  onReopen,
   onViewAsk,
 }: {
   finding: Finding;
@@ -212,18 +203,16 @@ export function FindingCard({
   onNavigate?: () => void;
   /** 「引用」按钮回调：把本 finding 挂到输入栏发起复评 /ask（仅 code 类 finding 出现）。 */
   onReference?: () => void;
-  /** 本 finding 已被复评关闭/取代时的关闭关系（驱动关闭态渲染）。 */
+  /** 本 finding 被复评裁决 replace/drop 自动关闭时的关闭关系（只读展示驱动）。 */
   closure?: FindingClosure;
-  /** 「撤销关闭」回调。 */
-  onReopen?: () => void;
-  /** 「查看复评」回调：滚动定位到关闭它的复评 /ask 卡片。 */
+  /** 「查看复评」导航回调：滚动定位到关闭它的复评 /ask 卡片。 */
   onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
-  // 已拒绝：左色条 + 类别 chip 置灰，卡片默认折叠收起（仅留头部 chip + 锚点行 +
-  // 撤销按钮）。点头部的展开/收起切换可临时回看正文，不影响草稿状态。
+  // 已拒绝：左色条 + 类别 chip 置灰，卡片默认折叠收起（仅留头部 chip + 锚点行）。点头部的展开/收起
+  // 切换可临时回看正文，不影响草稿状态。
   const isRejected = relatedDraft?.status === 'rejected';
-  // 已被复评关闭/取代：同样收起降饱和（与已拒绝同套视觉），动作区改为查看复评 + 撤销关闭。
+  // 被复评取代/关闭：同样收起降饱和（与已拒绝同套视觉），anchor 行出只读关闭 chip。
   const isClosed = !!closure;
   // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
@@ -232,7 +221,7 @@ export function FindingCard({
   const isActionableCode =
     (key === 'code-feedback' || key === 'code-suggestion') &&
     finding.anchor?.startLine !== undefined;
-  // 默认折叠：已拒绝 / 已关闭 finding，或 /ask「分析过程」段（过程性讨论默认收起、可展开，复用同套折叠 UI）。
+  // 默认折叠：已拒绝 / 被复评关闭 finding，或 /ask「分析过程」段（过程性讨论默认收起、可展开）。
   const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
   const [expanded, setExpanded] = useState(false);
   const collapsed = collapsibleByDefault && !expanded;
@@ -259,6 +248,8 @@ export function FindingCard({
     : undefined;
   return (
     <li
+      // data-finding-id：供复评卡顶部引用徽标点击后在原 run 内精确定位到这条原 finding 卡片并闪烁高亮。
+      data-finding-id={finding.id}
       className={`chat-finding chat-finding-${key}${isRejected || isClosed ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
     >
       <header className="chat-finding-head">
@@ -284,7 +275,7 @@ export function FindingCard({
           </h4>
         )}
         {/* 头部操作图标栏：编辑（评论）/ 拒绝（圆形禁止）/ 引用（转发箭头）。仅可锚定的 code 类
-            finding 且未关闭时出现，排在折叠 chevron 之左；与标题同排、右上角成组。 */}
+            finding 且未被复评关闭时出现，排在折叠 chevron 之左；与标题同排、右上角成组。 */}
         {isActionableCode && !isClosed && (onJump || onReject || onReference) && (
           <FindingHeadActions
             relatedDraft={relatedDraft}
@@ -349,13 +340,12 @@ export function FindingCard({
               {finding.score}/10
             </span>
           )}
-          {/* M4 草稿状态 chip / 复评关闭态：锚到具体行的代码类 finding 才展示（操作按钮已上移到
-              头部图标栏）。仅在有草稿状态或被复评关闭时出现，否则不占位。 */}
+          {/* M4 草稿状态 chip / 复评关闭态：锚到具体行的代码类 finding 才展示（操作按钮已上移到头部
+              图标栏）。仅在有草稿状态或被复评关闭时出现，否则不占位。 */}
           {isActionableCode && (isClosed || relatedDraft?.status) && (
             <FindingDraftActions
               relatedDraft={relatedDraft}
               closure={closure}
-              onReopen={onReopen}
               onViewAsk={onViewAsk}
             />
           )}
