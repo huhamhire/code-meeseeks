@@ -1,0 +1,220 @@
+@use '../tokens' as *;
+@use '../mixins' as *;
+
+// 草稿管理面板。布局跟 CommentsPanel 一致：上半个状态筛选条、下半个滚动
+// 列表。每条卡片含 anchor + status chip + actions + body markdown + (可选) 错误
+
+.drafts-panel {
+  // 父 .pr-tab-content 是 display:flex row，子元素默认按 content 大小，要 flex:1
+  // 才能撑满 main pane 横向 (跟 .pr-comments-panel 同模)；min-width:0 防止内嵌
+  // 长 markdown / code 撑出父容器
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: $bg-panel;
+  overflow: hidden; // 内部 .drafts-panel-list 自己滚
+}
+
+.drafts-panel-filter {
+  display: flex;
+  gap: $space-2;
+  padding: $space-4 $space-6;
+  border-bottom: 1px solid $border-default;
+  background: $bg-elev;
+  flex-shrink: 0;
+}
+
+.drafts-panel-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  padding: $space-2 $space-4;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: $radius-md;
+  color: $text-body;
+  font-size: $fs-md;
+  cursor: pointer;
+
+  &:hover {
+    background: $bg-hover;
+  }
+  &.active {
+    background: $color-accent-bg-fade;
+    border-color: $color-info;
+    color: $color-info;
+  }
+}
+
+.drafts-panel-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 $space-2;
+  border-radius: $radius-pill;
+  background: $bg-white-fade;
+  color: $text-muted;
+  font-size: $fs-xs;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+
+  .drafts-panel-filter-btn.active & {
+    background: $color-info;
+    color: $text-on-accent;
+  }
+}
+
+.drafts-panel-empty {
+  padding: $space-8;
+  text-align: center;
+  font-size: $fs-md;
+  line-height: $lh-loose;
+}
+
+.drafts-panel-list {
+  list-style: none;
+  padding: $space-6;
+  margin: 0;
+  // 在 .drafts-panel (column flex) 里占满剩余高度 + 自身滚动；min-height:0 防止
+  // 内嵌长 markdown 把外层撑出去导致 .drafts-panel 整体滚
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: $space-5;
+}
+
+// 单条草稿卡片：border-left 着色按 status 区分 — 一眼区分待办 / 已发 / 已拒
+.drafts-panel-item {
+  background: $bg-surface;
+  border: 1px solid $border-muted;
+  border-left: 3px solid $border-default;
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+
+  &.drafts-panel-item-pending {
+    border-left-color: $color-warning;
+  }
+  &.drafts-panel-item-edited {
+    border-left-color: $color-info;
+  }
+  &.drafts-panel-item-posted {
+    border-left-color: $color-success;
+    opacity: 0.85;
+  }
+  &.drafts-panel-item-rejected {
+    border-left-color: $text-muted;
+    opacity: 0.7;
+  }
+}
+
+.drafts-panel-item-head {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  flex-wrap: wrap;
+  margin-bottom: $space-3;
+}
+
+.drafts-panel-item-anchor {
+  font-family: $font-mono;
+  font-size: $fs-md;
+  color: $text-primary;
+  word-break: break-all;
+}
+.drafts-panel-item-anchor-link {
+  @include anchor-link;
+  color: $color-info;
+  text-align: left;
+  font-family: $font-mono;
+  font-size: $fs-md;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.drafts-panel-item-status {
+  font-size: $fs-sm;
+  padding: 2px $space-3;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  background: $bg-panel-alt;
+  white-space: nowrap;
+
+  &.status-pending {
+    color: $color-warning;
+    background: $color-pending-fade;
+  }
+  &.status-edited {
+    color: $color-info;
+    background: $color-accent-bg-fade;
+  }
+  &.status-posted {
+    color: $color-success;
+    background: $color-posted-fade;
+  }
+  &.status-rejected {
+    color: $text-muted;
+  }
+}
+
+.drafts-panel-item-origin {
+  font-size: $fs-sm;
+  white-space: nowrap;
+}
+
+.drafts-panel-item-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+  flex-wrap: wrap;
+}
+.drafts-panel-item-remote {
+  font-size: $fs-sm;
+  font-family: $font-mono;
+}
+
+.drafts-panel-item-body {
+  font-size: $fs-md;
+  color: $text-body;
+  line-height: $lh-loose;
+  // 长 body 不撑爆面板；纵向滚动 + max-height
+  max-height: 220px;
+  overflow-y: auto;
+  word-wrap: break-word;
+}
+
+.drafts-panel-item-error {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  margin-top: $space-3;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba($color-danger, 0.10);
+  border-left: 3px solid $color-danger;
+  border-radius: $radius-sm;
+  word-break: break-word;
+}
+.drafts-panel-item-error-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: $color-danger;
+  cursor: pointer;
+  padding: 0 $space-2;
+  font-size: $fs-md;
+  line-height: 1;
+  flex-shrink: 0;
+  &:hover {
+    opacity: 0.7;
+  }
+}

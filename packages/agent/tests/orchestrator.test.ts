@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
+import { runReviewMicroflow } from '../src/orchestrator.js';
+import type { ReviewOrchestratorDeps } from '../src/orchestrator.js';
+import { DEFAULT_REVIEW_PLAN, isValidReviewPlan } from '../src/steps/review/index.js';
+import type { AgentContext } from '../src/types.js';
 import {
   extractJson,
-  runReviewMicroflow,
+  extractTrailingJson,
   salvageProse,
   stripTrailingJson,
-} from '../src/orchestrator.js';
-import type { ReviewOrchestratorDeps } from '../src/orchestrator.js';
-import type { AgentContext } from '../src/types.js';
+} from '../src/utils/index.js';
 
 const context: AgentContext = {
   files: { soul: 'soul', agents: 'agents', memory: '', user: '' },
@@ -16,19 +18,21 @@ const pr = { title: 'Fix bug', targetBranch: 'main' };
 
 /** 可编排的 fake deps：runTool 按 tool 返回固定文本；chat 顺序返回排好的回复。 */
 function makeDeps(opts: {
-  toolText?: Partial<Record<'describe' | 'review' | 'ask', string>>;
+  toolText?: Partial<Record<'describe' | 'review' | 'ask' | 'improve', string>>;
   chatReplies: string[];
 }): { deps: ReviewOrchestratorDeps; toolCalls: Array<{ tool: string; question?: string }> } {
   const toolCalls: Array<{ tool: string; question?: string }> = [];
   let chatIdx = 0;
   const deps: ReviewOrchestratorDeps = {
-    runTool: vi.fn(async (call: { tool: 'describe' | 'review' | 'ask'; question?: string }) => {
-      toolCalls.push(call);
-      return {
-        text: opts.toolText?.[call.tool] ?? `${call.tool}-result`,
-        usage: { totalTokens: 10 },
-      };
-    }),
+    runTool: vi.fn(
+      async (call: { tool: 'describe' | 'review' | 'ask' | 'improve'; question?: string }) => {
+        toolCalls.push(call);
+        return {
+          text: opts.toolText?.[call.tool] ?? `${call.tool}-result`,
+          usage: { totalTokens: 10 },
+        };
+      },
+    ),
     chat: vi.fn(async () => {
       const text = opts.chatReplies[chatIdx++] ?? '{}';
       return { text, usage: { totalTokens: 5 } };
@@ -81,6 +85,24 @@ describe('stripTrailingJson', () => {
     const code = '说明：配置形如 `{ "port": 8080 }`，按需调整。';
     expect(stripTrailingJson(code)).toBe(code);
   });
+
+  it('strips a truncated/unterminated trailing recommendation object', () => {
+    // 输出被 token 上限截断在判定 JSON 中途（无闭合 }）→ 仍把半截 JSON 从正文末尾剥掉。
+    const truncated = '## 摘要\n\n正文含"引号"也不应被腰斩。\n\n{"verdict": "needs_work", "rea';
+    expect(stripTrailingJson(truncated)).toBe('## 摘要\n\n正文含"引号"也不应被腰斩。');
+  });
+});
+
+describe('extractTrailingJson', () => {
+  it('extracts a flat trailing recommendation object', () => {
+    const text = '## 摘要\n\n结论。\n\n{"verdict": "needs_work", "reason": "有风险"}';
+    expect(extractTrailingJson(text)).toEqual({ verdict: 'needs_work', reason: '有风险' });
+  });
+
+  it('returns null when the trailing object is truncated / absent', () => {
+    expect(extractTrailingJson('## 摘要\n\n结论。')).toBeNull();
+    expect(extractTrailingJson('## 摘要\n\n{"verdict": "approve", "rea')).toBeNull();
+  });
 });
 
 describe('runReviewMicroflow', () => {
@@ -94,8 +116,7 @@ describe('runReviewMicroflow', () => {
     const r = await runReviewMicroflow(deps, { context, pr });
 
     expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
-    // 类 Claude Code：一条思考步（plan，承载 describe+review 选择）→ judge → 收尾 plan；
-    // describe/review/ask 的执行由 run 卡片代表、不再补记 tool 步。
+    // describe+review 合并步（一条 plan，两工具并行）→ judge → 收尾 plan（工具执行由 run 卡片代表）。
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'judge', 'plan']);
     expect(r.summary).toBe('all good');
     expect(r.recommendation).toEqual({ verdict: 'approve', reason: 'no issues' });
@@ -139,6 +160,31 @@ describe('runReviewMicroflow', () => {
     expect(r.recommendation.verdict).toBe('manual_review');
   });
 
+  it('parses markdown summary + a flat trailing recommendation JSON (new format)', async () => {
+    // 新格式：纯 markdown 正文（含引号，不被腰斩）+ 末尾一行扁平判定 JSON。
+    const md = '## 摘要\n\n本 PR 直接违反了 PR 的"单一职责"原则，需修改。';
+    const { deps } = makeDeps({
+      chatReplies: [
+        '{"severe": false}',
+        `${md}\n\n{"verdict": "needs_work", "reason": "违反单一职责"}`,
+      ],
+    });
+    const r = await runReviewMicroflow(deps, { context, pr });
+    expect(r.summary).toBe(md);
+    expect(r.recommendation).toEqual({ verdict: 'needs_work', reason: '违反单一职责' });
+  });
+
+  it('keeps the markdown summary intact when the trailing recommendation is truncated', async () => {
+    // 末尾判定被截断 → 正文完整保留（不腰斩）、判定回落 manual_review。
+    const md = '## 摘要\n\n结论：第 2 个问题直接违反了 PR 的约定。';
+    const { deps } = makeDeps({
+      chatReplies: ['{"severe": false}', `${md}\n\n{"verdict": "needs_w`],
+    });
+    const r = await runReviewMicroflow(deps, { context, pr });
+    expect(r.summary).toBe(md);
+    expect(r.recommendation.verdict).toBe('manual_review');
+  });
+
   it('streams every step via onStep', async () => {
     const seen: string[] = [];
     const { deps } = makeDeps({
@@ -152,5 +198,166 @@ describe('runReviewMicroflow', () => {
     };
     await runReviewMicroflow(deps, { context, pr });
     expect(seen).toEqual(['plan', 'judge', 'plan']);
+  });
+
+  it('runs a custom plan (skip judge/asks)', async () => {
+    const { deps, toolCalls } = makeDeps({
+      chatReplies: ['{"summary": "ok", "recommendation": {"verdict": "approve", "reason": "r"}}'],
+    });
+    const r = await runReviewMicroflow(deps, {
+      context,
+      pr,
+      plan: { steps: ['describe-review', 'summary'] },
+    });
+    // describe-review 步两只读工具仍并行跑；judge / asks 被跳过。
+    expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
+    expect(r.summary).toBe('ok');
+  });
+
+  it('runs a plan that includes the improve step', async () => {
+    const { deps, toolCalls } = makeDeps({
+      chatReplies: ['{"summary": "ok", "recommendation": {"verdict": "approve", "reason": "r"}}'],
+    });
+    const r = await runReviewMicroflow(deps, {
+      context,
+      pr,
+      plan: { steps: ['describe-review', 'improve', 'summary'] },
+    });
+    // describe + review（并行）→ improve → summary（chat）。
+    expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review', 'improve']);
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan', 'plan']);
+  });
+
+  it('agent re-review: judge targets a finding → ask in re-review mode → auto-closes on replace', async () => {
+    const closeCalls: Array<{
+      runId: string;
+      findingId: string;
+      byAskRunId: string;
+      verdict: string;
+    }> = [];
+    const askReferenced: boolean[] = [];
+    const chatReplies = [
+      '{"severe": true, "asks": [{"question": "still valid?", "targetFindingId": "review-000"}]}',
+      '{"summary": "s", "recommendation": {"verdict": "needs_work", "reason": "r"}}',
+    ];
+    let chatIdx = 0;
+    let askSeq = 0;
+    const deps: ReviewOrchestratorDeps = {
+      runTool: vi.fn(async (call) => {
+        if (call.tool === 'review') {
+          return {
+            text: 'review',
+            usage: { totalTokens: 1 },
+            runId: 'rev-1',
+            findings: [
+              {
+                id: 'review-000',
+                category: 'code-feedback' as const,
+                sectionKey: 'code-feedback' as const,
+                body: 'possible null deref',
+                anchor: { path: 'a.ts', startLine: 5 },
+              },
+            ],
+          };
+        }
+        if (call.tool === 'ask') {
+          askSeq += 1;
+          askReferenced.push(!!call.referencedFinding);
+          return {
+            text: 'ask',
+            usage: { totalTokens: 1 },
+            runId: `ask-${String(askSeq)}`,
+            askVerdict: call.referencedFinding ? ('replace' as const) : undefined,
+          };
+        }
+        return { text: call.tool, usage: { totalTokens: 1 } };
+      }),
+      chat: vi.fn(async () => ({
+        text: chatReplies[chatIdx++] ?? '{}',
+        usage: { totalTokens: 1 },
+      })),
+      closeFinding: vi.fn(async (call) => {
+        closeCalls.push(call);
+      }),
+    };
+    await runReviewMicroflow(deps, { context, pr });
+    expect(askReferenced).toEqual([true]); // 复评模式派发（带 referencedFinding）
+    expect(closeCalls).toEqual([
+      { runId: 'rev-1', findingId: 'review-000', byAskRunId: 'ask-1', verdict: 'replace' },
+    ]);
+  });
+
+  it('agent re-review: keep verdict (or untargeted ask) does NOT close any finding', async () => {
+    const closeCalls: unknown[] = [];
+    const chatReplies = [
+      '{"severe": true, "asks": [{"question": "still valid?", "targetFindingId": "review-000"}]}',
+      '{"summary": "s", "recommendation": {"verdict": "approve", "reason": "r"}}',
+    ];
+    let chatIdx = 0;
+    const deps: ReviewOrchestratorDeps = {
+      runTool: vi.fn(async (call) => {
+        if (call.tool === 'review') {
+          return {
+            text: 'review',
+            usage: { totalTokens: 1 },
+            runId: 'rev-1',
+            findings: [
+              {
+                id: 'review-000',
+                category: 'code-feedback' as const,
+                sectionKey: 'code-feedback' as const,
+                body: 'x',
+                anchor: { path: 'a.ts', startLine: 5 },
+              },
+            ],
+          };
+        }
+        if (call.tool === 'ask') {
+          return {
+            text: 'ask',
+            usage: { totalTokens: 1 },
+            runId: 'ask-1',
+            askVerdict: 'keep' as const,
+          };
+        }
+        return { text: call.tool, usage: { totalTokens: 1 } };
+      }),
+      chat: vi.fn(async () => ({
+        text: chatReplies[chatIdx++] ?? '{}',
+        usage: { totalTokens: 1 },
+      })),
+      closeFinding: vi.fn(async (call) => {
+        closeCalls.push(call);
+      }),
+    };
+    await runReviewMicroflow(deps, { context, pr });
+    expect(closeCalls).toEqual([]);
+  });
+
+  it('falls back to the default plan when the plan is invalid (summary without describe-review)', async () => {
+    const { deps, toolCalls } = makeDeps({
+      chatReplies: [
+        '{"severe": false, "questions": []}',
+        '{"summary": "all good", "recommendation": {"verdict": "approve", "reason": "ok"}}',
+      ],
+    });
+    const r = await runReviewMicroflow(deps, { context, pr, plan: { steps: ['summary'] } });
+    // 非法计划回落 DEFAULT：describe-review → judge → asks(空) → summary。
+    expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
+    expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'judge', 'plan']);
+  });
+});
+
+describe('isValidReviewPlan', () => {
+  it('accepts the default plan', () => {
+    expect(isValidReviewPlan(DEFAULT_REVIEW_PLAN)).toBe(true);
+  });
+  it('rejects empty / unknown-kind / judge|summary lacking describe-review', () => {
+    expect(isValidReviewPlan({ steps: [] })).toBe(false);
+    expect(isValidReviewPlan({ steps: ['nope' as never] })).toBe(false);
+    expect(isValidReviewPlan({ steps: ['judge'] })).toBe(false);
+    expect(isValidReviewPlan({ steps: ['summary'] })).toBe(false);
+    expect(isValidReviewPlan({ steps: ['describe-review', 'summary'] })).toBe(true);
   });
 });

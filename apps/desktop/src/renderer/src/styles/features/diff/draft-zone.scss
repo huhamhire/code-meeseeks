@@ -1,0 +1,295 @@
+// Monaco 行内草稿 view zone (设计见 ADR-0007)：跟 comment-zone 视觉区分 ——
+// remote 评论是黄底，草稿用蓝底 + "草稿" 标识；posted 状态切回绿底跟远端评论形态一致
+
+@use '../../tokens' as *;
+
+// **结构**：
+//   .monaco-draft-zone (= dom，monaco 控制 style.height, 不能放视觉样式)
+//     .monaco-draft-zone-inner (= 内容容器，蓝色背景 / padding / border-left 全在这)
+//
+// monaco 直接给 dom 写 inline style.height = <heightInPx>px，覆盖任何 CSS。如果把
+// 视觉样式（背景、border）放 dom 上，蓝框尺寸 = monaco wrapper 高度 ≠ 内容高度
+// → 出现"蓝框停在 textarea，按钮溢出到下方代码上"。所以 dom 只是 monaco 占位容器，
+// 视觉容器是 inner，用 ResizeObserver 测 inner.offsetHeight 同步回 zoneObj.heightInPx
+.monaco-draft-zone {
+  overflow: visible;
+  box-sizing: border-box;
+  // 防御性 z-index：万一 syncHeight 没把 monaco wrapper 撑到内容高度、按钮区溢出 dom
+  // 边界，溢出部分（按钮）在层叠上压过 monaco .view-lines 仍可点击。
+  // monaco 自己给 dom 设 position:absolute，z-index 在 absolute 上直接生效
+  z-index: 50;
+}
+
+.monaco-draft-zone-inner {
+  // 同样防御 z-index：inner 内部按钮永远在最顶层
+  position: relative;
+  z-index: 51;
+  background: rgba($color-accent, 0.12); // $color-accent fade
+  border-left: 3px solid $color-accent;
+  padding: $space-3 $space-6 $space-4 $space-6;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
+  font-size: $fs-md;
+  color: $text-primary;
+  line-height: $lh-loose;
+  box-sizing: border-box;
+
+  // CSS 兜底：inline style.width 由 DiffView applyInnerLayout 监听 editor 的
+  // onDidLayoutChange 动态设 (= contentLeft + contentWidth，对应代码区右边界)。
+  // CSS max-width:100% 防止 width 没设 / 设错值时仍不超 dom 视口宽。
+  // 注：DiffEditor 关闭了 minimap，所以不留 minimap buffer
+  max-width: 100%;
+}
+
+.draft-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+.draft-zone-item-divider {
+  border-top: 1px solid $border-muted;
+  padding-top: $space-3;
+}
+
+.draft-zone-inner {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+
+  // posted 状态：整体绿色调，跟远端评论视觉一致
+  &.draft-zone-status-posted {
+    .draft-zone-tag {
+      background: $color-approved;
+    }
+  }
+}
+
+.draft-zone-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  flex-wrap: wrap;
+}
+
+// "草稿" 标识：常驻 chip，让用户一眼区分本地草稿 vs 远端评论
+.draft-zone-tag {
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  background: $color-accent;
+  color: $text-on-accent;
+  font-size: $fs-xs;
+  font-weight: 700;
+}
+
+.draft-zone-status {
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  font-size: $fs-xs;
+  font-weight: 600;
+
+  &.draft-zone-status-chip-pending,
+  &.draft-zone-status-chip-edited {
+    background: $color-accent-bg-fade;
+    color: $color-info;
+  }
+  &.draft-zone-status-chip-posted {
+    background: rgba($color-approved, 0.18);
+    color: $color-approved;
+  }
+  &.draft-zone-status-chip-rejected {
+    background: $bg-surface;
+    color: $text-muted;
+    text-decoration: line-through;
+  }
+}
+
+.draft-zone-origin {
+  font-size: $fs-xs;
+}
+
+.draft-zone-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: $space-2;
+}
+
+.draft-zone-btn {
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  font-size: $fs-xs;
+  font-family: inherit;
+  line-height: $lh-normal;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+  &:hover:not(:disabled) {
+    background: $bg-hover;
+    border-color: $color-accent;
+    color: $color-info;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.draft-zone-btn-primary {
+  background: $color-accent;
+  border-color: $color-accent;
+  color: $text-on-accent;
+
+  &:hover:not(:disabled) {
+    background: $color-accent;
+    filter: brightness(1.15);
+    color: $text-on-accent;
+  }
+}
+
+.draft-zone-btn-danger:hover:not(:disabled) {
+  border-color: $color-danger-strong;
+  color: $color-danger-strong;
+  background: $color-danger-strong-fade;
+}
+
+// 图标按钮 (垃圾桶等)：方形紧凑，跟文字按钮高度对齐
+.draft-zone-btn-icon {
+  padding: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  svg {
+    display: block;
+  }
+}
+
+// edit 模式下的删除按钮：靠右远离保存/取消，视觉上"独立操作"
+.draft-zone-edit-delete {
+  margin-left: auto;
+}
+
+.draft-zone-edit {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+
+.draft-zone-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: $space-3 $space-4;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-body;
+  font-family: inherit;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+  resize: vertical;
+  min-height: calc(#{$fs-md} * #{$lh-normal} * 3 + #{$space-3} * 2);
+  max-height: calc(#{$fs-md} * #{$lh-normal} * 10 + #{$space-3} * 2);
+
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+
+.draft-zone-edit-actions {
+  display: flex; // 必须 block-level flex 才能让 margin-left:auto 推 [🗑] 到右端
+  align-items: center;
+  gap: $space-3;
+}
+
+.draft-zone-body {
+  word-wrap: break-word;
+  font-size: $fs-md;
+}
+
+.draft-zone-foot {
+  font-size: $fs-xs;
+  margin-top: $space-2;
+}
+
+// 单条发布失败的 inline 错误条。视觉权重比"已发布" foot 高一档 — danger 色
+// 描边 + 浅红底，user 一眼能看到；右侧 ✕ 让用户主动 dismiss (不带超时自动消失
+// 避免错过)。比弹 modal 干扰更小 — zone 仍在原位，可改 body 再次"发布"重试
+.draft-zone-publish-error {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  margin-top: $space-3;
+  padding: $space-3 $space-4;
+  font-size: $fs-sm;
+  color: $color-danger;
+  background: rgba($color-danger, 0.10);
+  border-left: 3px solid $color-danger;
+  border-radius: $radius-sm;
+  word-break: break-word;
+}
+.draft-zone-publish-error-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: $color-danger;
+  cursor: pointer;
+  padding: 0 $space-2;
+  font-size: $fs-md;
+  line-height: 1;
+  flex-shrink: 0;
+  &:hover {
+    opacity: 0.7;
+  }
+}
+
+// 行 hover 出现的 '+' 草稿创建按钮 — Monaco glyph margin 区 (editor 最左、
+// line number 左侧外列；DiffEditor options 启用了 glyphMargin:true 让那一列宽到
+// ~24px 装下 +)。decoration 元素本身 width/height 由 monaco 控制 (glyphMarginWidth
+// × lineHeight)，子 ::before 用 flex 占满 parent + 居中 '+' 字符
+.monaco-draft-add-glyph {
+  cursor: pointer;
+
+  &::before {
+    content: '+';
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: $color-accent;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    background: rgba($color-accent, 0.18);
+    border-radius: $radius-sm;
+  }
+
+  &:hover::before {
+    background: $color-accent;
+    color: $text-on-accent;
+  }
+}
+
+// nav 跳转 reveal 后短暂高亮 (0.8s 脉冲)，help 用户看清落到哪一行
+.monaco-draft-highlight-flash {
+  background: rgba($color-warning, 0.25);
+  animation: draft-nav-flash 0.8s ease-out;
+}
+@keyframes draft-nav-flash {
+  0% {
+    background: rgba($color-warning, 0.5);
+  }
+  100% {
+    background: rgba($color-warning, 0.05);
+  }
+}

@@ -1,24 +1,23 @@
 {
-  "dialog": {
-    "selectDirectory": "Select directory"
-  },
-  "drafts": {
-    "notFound": "Draft not found (it may have been deleted)",
-    "rejected": "Draft was rejected, skipping"
-  },
-  "prAgent": {
-    "askNeedsQuestion": "/ask requires a question",
-    "duplicateTask": "A /{{tool}} task for this PR is already running or queued; do not trigger it again.",
-    "notReady": "pr-agent not ready",
-    "notReadyDetail": "pr-agent not ready: neither the embedded runtime nor a local CLI was detected. See probe details in Settings."
-  },
-  "proxy": {
-    "authFailed": "Proxy authentication failed (407); check the username/password",
-    "disabled": "Proxy is disabled or its address is empty"
-  },
-  "update": {
-    "missingTag": "Release is missing tag_name",
-    "parseCurrentFailed": "Unable to parse the current version: {{version}}",
-    "parseLatestFailed": "Unable to parse the latest version: {{tag}}"
+  "agent": {
+    "steps": {
+      "describeReview": "Generate the PR description and review findings",
+      "improve": "Generate code improvement suggestions",
+      "judge": "Decide whether there are important issues needing follow-up",
+      "judgeNone": "No important issues — no follow-up",
+      "judgeSevere_one": "Important — {{count}} follow-up question",
+      "judgeSevere_other": "Important — {{count}} follow-up questions",
+      "rejectedPrefix": "Rejected: ",
+      "summary": "Synthesize the description and findings into a review summary"
+    },
+    "summarySections": {
+      "findings": "Key findings",
+      "overview": "Summary",
+      "suggestions": "Suggestions"
+    },
+    "termination": {
+      "aborted": "Paused by user",
+      "maxSteps": "Step limit reached"
+    }
   }
 }

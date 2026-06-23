@@ -3,7 +3,7 @@
 import os
 import sys
 
-from ..runtime import _debug
+from ..runtime import _debug, strip_cache_break
 from ..usage import _emit_usage_tokens
 from .specs import _CLI_SPECS
 
@@ -28,7 +28,9 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
     各命令差异（argv flags / 输出解析 / 需剥离的计费 env）集中在 _CLI_SPECS，按命令名取用：
       - prompt 经 **stdin** 喂入：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；
         system / user 拼成一段（CLI 单轮无独立 system 槽）。
-      - cwd 落到中性临时目录：避免吃到被评审仓库的上下文（CLAUDE.md / AGENTS.md 等）污染输出。
+      - cwd 默认落到中性临时目录：避免吃到被评审仓库的上下文（CLAUDE.md / AGENTS.md 等）污染输出。
+        例外：主进程仅对 /ask 经 MEEBOX_CLI_WORKDIR 下发（已净化的）worktree 路径，让自由问答能读到
+        完整文件；describe/review 不下发该 env、维持中性临时目录。净化在主进程侧做（清空仓库自带指令文件）。
       - 子进程继承父 env（PATH / HOME / 代理变量），故能找到命令、复用其登录态、出站自动走代理。
       - **凭据隔离**：剥掉对应计费 key（claude: ANTHROPIC_*；codex: OPENAI_API_KEY / CODEX_API_KEY），
         让 CLI 使用其自身登录会话，而非环境里残留的 API key。模型与额度由该 CLI 账户与用户授权决定。"""
@@ -61,6 +63,9 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
                 f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装、已登录，且 '{bin_name}' 在 PATH 中。"
             )
         argv = _build_argv()
+        # CLI 单轮无独立 system 槽：system+user 拼一段。先剥除缓存断点标记（仅 Anthropic litellm 路径用于
+        # 分块缓存；CLI 不缓存、标记不得进入 prompt）。
+        system = strip_cache_break(system) if system else system
         prompt = f"{system}\n\n\n{user}" if system else user
         # 基于 os.environ 拷贝再剔除计费 key——其余（PATH/HOME/代理变量等）原样保留。
         child_env = {k: v for k, v in os.environ.items() if k not in spec["strip_env"]}
@@ -70,7 +75,7 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=tempfile.gettempdir(),
+                cwd=(os.environ.get("MEEBOX_CLI_WORKDIR") or "").strip() or tempfile.gettempdir(),
                 env=child_env,
             )
         except Exception as exc:  # noqa: BLE001
@@ -83,13 +88,26 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
             )
         text, usage = spec["parser"]((out or b"").decode("utf-8", "replace"))
         if usage:
-            # input_tokens(+cache_*) ≈ prompt，output_tokens ≈ completion（两家 usage 同字段名）
+            # prompt_tokens ≈ 输入侧总规模，output_tokens ≈ completion（input/output_tokens 两家同名）。
+            # 缓存字段两家约定不同：
+            #   - Anthropic(claude)：input_tokens **不含**缓存，cache_read/创建需累加进总量；
+            #     cache_read 用 cache_read_input_tokens。
+            #   - OpenAI(codex)：input_tokens **已含**缓存，cached_input_tokens 仅作命中量、不再计入总量。
             prompt_tokens = usage.get("input_tokens")
             for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
                 v = usage.get(k)
                 if isinstance(v, int):
                     prompt_tokens = (prompt_tokens or 0) + v
-            _emit_usage_tokens(prompt_tokens, usage.get("output_tokens"))
+            cache_read = usage.get("cache_read_input_tokens")
+            if not isinstance(cache_read, int):
+                cache_read = usage.get("cached_input_tokens")  # codex/OpenAI 风格
+            turns = usage.get("num_turns")
+            _emit_usage_tokens(
+                prompt_tokens,
+                usage.get("output_tokens"),
+                cache_read_tokens=cache_read if isinstance(cache_read, int) else None,
+                turns=turns if isinstance(turns, int) else None,
+            )
         return text, "stop"
 
     handler_cls.chat_completion = chat_completion

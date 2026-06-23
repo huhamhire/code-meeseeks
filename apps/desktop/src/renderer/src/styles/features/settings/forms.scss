@@ -1,0 +1,287 @@
+// settings 域的表单 / 列表 / 设置项控件样式：SettingsModal 各 section + 首启向导复用。
+// 通用模态壳 (.modal / .modal-section / .modal-kv 等) 在 common/modal；这里只放 settings 专属。
+
+@use '../../tokens' as *;
+@use '../../mixins' as *;
+
+// 语言下拉：固定宽度、靠右（块定位），文本左对齐；不被 .settings-input 的 flex:1 撑满（复合选择器提权）
+.settings-input.settings-language-select {
+  flex: 0 0 auto;
+  width: 180px;
+}
+
+// 设置项启用状态 chip：复用 common chip 词汇 —— on=approved(绿)、off=neutral(灰)
+.settings-status-chip {
+  @include chip;
+  padding: 1px $space-2;
+  font-size: $fs-xs;
+
+  &.is-on {
+    @include chip-tone(approved);
+  }
+  &.is-off {
+    @include chip-tone(neutral);
+  }
+}
+
+// settings-input 在 modal-kv 值列里撑满（覆盖默认 input 宽度）
+.modal-kv-val .settings-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.connection-list {
+  list-style: none;
+  padding: 0;
+  font-size: $fs-lg;
+
+  li {
+    padding: $space-3 0;
+    border-bottom: 1px solid $border-muted;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+}
+
+.settings-edit-row {
+  display: flex;
+  gap: $space-4;
+  margin-top: $space-5;
+}
+
+// 拖拽滑块（轮询间隔等）：自定义细 track（3px）+ 蓝色填充（--range-fill 控制）+ 圆点 thumb
+.settings-range {
+  align-self: center;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px; // 给 thumb 垂直居中留空间
+  background: transparent;
+
+  &::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(
+      to right,
+      $color-accent var(--range-fill, 0%),
+      $border-default var(--range-fill, 0%)
+    );
+  }
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4.5px; // (track 3 - thumb 12)/2，使圆点垂直居中于细线
+    border-radius: 50%;
+    background: $color-accent;
+  }
+}
+
+// 档位刻度参考行：每个刻度按 thumb 停靠位置绝对定位（见组件内 left 计算），
+// translateX(-50%) 居中对齐；当前档位高亮
+.settings-range-ticks {
+  position: relative;
+  height: 16px;
+  margin-top: 4px;
+  font-size: $fs-xs;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+
+  span {
+    position: absolute;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  .active {
+    color: $color-accent;
+    font-weight: 600;
+  }
+}
+
+.settings-actions {
+  display: flex;
+  gap: $space-4;
+  flex-wrap: wrap;
+}
+// 行内结果文案（如「测试连接」结果）：去掉块级 margin-top，与同行按钮垂直居中对齐
+.settings-actions .error-text {
+  margin-top: 0;
+}
+
+// 关于 & 反馈：低频社区外链行（Star / Issue / Releases）。带 1px 分隔线 + 留白与上方运行时
+// 控件清晰分区；各链接带专属图标、加大间距，彼此可辨。克制的文字链接，不抢运行时控件。
+.settings-about-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $space-6;
+  margin-top: $space-6;
+  padding-top: $space-5;
+  border-top: 1px solid $border-default-fade;
+  font-size: $fs-sm;
+}
+.settings-about-label {
+  margin-right: $space-2;
+}
+.settings-about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  color: $text-body;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    color: $color-accent;
+    text-decoration: underline;
+  }
+}
+
+.settings-input {
+  flex: 1;
+  box-sizing: border-box;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  padding: 5px $space-4;
+  border-radius: $radius-md;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: $fs-md;
+
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+
+// 原生 <select> 默认比文本输入高：去掉原生外观、补自绘下拉箭头，盒模型与
+// .settings-input 完全一致从而等高。
+select.settings-input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23858585' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right $space-4 center;
+  background-size: 12px;
+}
+
+.settings-secret-row {
+  display: flex;
+  gap: $space-3;
+  align-items: center;
+
+  .settings-input {
+    font-family: $font-mono;
+    letter-spacing: 0.04em;
+  }
+
+  // 显隐（眼睛）按钮跟随输入框高度，不因图标小而矮一截，行视觉对齐其它单输入行
+  .btn {
+    align-self: stretch;
+  }
+}
+
+// 必填项标识 + 校验错误样式
+.settings-required {
+  color: $color-danger;
+  margin-left: $space-1;
+}
+.settings-optional {
+  color: $text-muted;
+  margin-left: $space-1;
+  font-size: 0.85em;
+}
+.settings-input-error {
+  border-color: $color-danger !important;
+
+  &:focus {
+    border-color: $color-danger !important;
+    box-shadow: 0 0 0 1px rgba($color-danger, 0.3);
+  }
+}
+.settings-field-error {
+  color: $color-danger;
+  font-size: $fs-sm;
+  margin: $space-2 0 0;
+}
+
+// LLM 模型主面板紧凑列表：active radio + 名称/概要 + 操作按钮
+.llm-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  // 最多展示约 4.5 行：露出半行提示下方还有内容、可滚动，避免漏看（4 行整高会被误以为到底）
+  max-height: 266px;
+  overflow-y: auto;
+}
+.llm-profile-row {
+  display: flex;
+  align-items: center;
+  gap: $space-5;
+  padding: $space-4 $space-6;
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+  background: $bg-panel;
+
+  &.active {
+    border-color: $color-accent;
+    box-shadow: inset 3px 0 0 $color-accent;
+  }
+}
+.llm-profile-active {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+// 卡片前缀类型图标：连接=平台品牌图标（彩色），LLM=模型/终端图标（随文字色）。固定占位
+// 让标题起点对齐，一眼区分类型、避免误判。
+.llm-profile-icon {
+  flex-shrink: 0;
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: $text-muted;
+}
+.llm-profile-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+}
+.llm-profile-title {
+  color: $text-primary;
+  font-size: $fs-md;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  min-width: 0;
+}
+.llm-profile-title-text {
+  @include ellipsis;
+  min-width: 0;
+}
+// 实验性标记：本地 CLI 类 provider 受上游 CLI 行为变更影响，标注以示风险。
+.badge-experimental {
+  flex-shrink: 0;
+  font-size: $fs-xs;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 0 $space-2;
+  border-radius: $radius-sm;
+  color: $color-warning;
+  border: 1px solid $color-warning;
+  opacity: 0.85;
+}
+.llm-profile-sub {
+  @include ellipsis;
+  font-size: $fs-sm;
+}

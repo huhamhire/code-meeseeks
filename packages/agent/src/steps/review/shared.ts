@@ -1,0 +1,137 @@
+import type { AgentRecommendation, AgentRecommendationVerdict, Finding } from '@meebox/shared';
+import { VERDICTS } from '../../constants.js';
+import type {
+  AgentStepLabels,
+  ReviewOrchestratorDeps,
+  ReviewOrchestratorInput,
+  ToolText,
+} from '../../orchestrator.js';
+import { PROMPT_TEMPLATES } from '../../prompts.js';
+import { fillTemplate } from '../../utils/index.js';
+import type { StepRecorder } from '../context.js';
+
+/**
+ * 评审微流程各 step 的共享件：跨步骤上下文 / 累加器 + 判读 / 总结的提示词与判定解析。各 *-step.ts 引用此处，
+ * 注册表见 ./index。
+ */
+
+/** verdict 合法性判定（用于收尾解析；非法 / 缺省回落 manual_review）。 */
+export function isVerdict(v: unknown): v is AgentRecommendationVerdict {
+  return typeof v === 'string' && (VERDICTS as readonly string[]).includes(v);
+}
+
+/**
+ * 给 judge / summary 瘦身的 describe 正文：剥掉低信号的「File Walkthrough」（逐文件分类 / 描述大表）与
+ * mermaid 图块，只留类型 / 总结 / 描述 / 评估等高价值文本——这两块对「是否有严重问题需追问」的判读、以及
+ * 「PR 整体结论」的总结都无实质帮助，却占大量 token。仅用于喂 judge / summary，不影响 describe 卡片展示。
+ */
+export function compactDescribe(text: string): string {
+  let out = text;
+  // File Walkthrough：pr-agent 追加在末尾的 <details><summary><h3>File Walkthrough...，含嵌套 details，取到结尾剥掉。
+  const wt = /<details[^>]*>\s*<summary>\s*<h3>\s*File Walkthrough\s*<\/h3>\s*<\/summary>/i.exec(out);
+  if (wt) out = out.slice(0, wt.index).trimEnd();
+  // mermaid 图（Diagram Walkthrough 的架构图）：判读 / 总结用不到，剥掉代码块本身。
+  out = out.replace(/```mermaid[\s\S]*?```/gi, '').replace(/\n{3,}/g, '\n\n');
+  return out.trim();
+}
+
+/**
+ * 把 review 的代码类 findings 渲染成「可按 id 点名」的清单（供 judge 决定针对哪条出复评追问）。
+ * 仅取 code-feedback / code-suggestion（可锚定、可被复评取代的代码评论），正文压一行截断控篇幅。
+ */
+function renderFindingsForJudge(findings: Finding[]): string {
+  const code = findings.filter(
+    (f) => f.sectionKey === 'code-feedback' || f.sectionKey === 'code-suggestion',
+  );
+  if (code.length === 0) return '(none)';
+  return code
+    .map((f) => {
+      const a = f.anchor;
+      const loc = a ? `${a.path}${a.startLine ? `:${String(a.startLine)}` : ''}` : '';
+      const brief = f.body.replace(/\s+/g, ' ').trim().slice(0, 160);
+      return `- id=${f.id}${loc ? ` (${loc})` : ''}: ${brief}`;
+    })
+    .join('\n');
+}
+
+/** 追问判读 user 指令外置在 resources/prompts/judge.md（占位 maxAsks/language）；describe/review 正文在此追加。
+ *  语言显式要求随会话语言出题（精简 system 不带 assembleSystemContext 的语言指令，否则默认英文）。
+ *  findings：review 解析出的结构化发现，渲染成 id 可寻址清单，供 judge 对某条出复评追问（targetFindingId）。 */
+export function judgePrompt(
+  describeText: string,
+  reviewText: string,
+  findings: Finding[],
+  maxAsks: number,
+  language: string,
+): string {
+  // 与 renderLanguage 同策略：空 / 未知回落 en-US。
+  const lang = language.trim() || 'en-US';
+  const head = fillTemplate(PROMPT_TEMPLATES.judge, { maxAsks: String(maxAsks), language: lang });
+  return [
+    head,
+    '',
+    '--- PR description ---',
+    compactDescribe(describeText),
+    '',
+    '--- Review findings ---',
+    reviewText,
+    '',
+    '--- Review findings (id-addressable, for targetFindingId) ---',
+    renderFindingsForJudge(findings),
+  ].join('\n');
+}
+
+/** 收尾总结 user 指令 + 三段骨架外置在 resources/prompts/summary.md（占位 maxChars/三段标题）；
+ *  描述 / 评审发现 / 追问 Q&A 等正文在此按需追加（条件拼接仍在 TS）。 */
+export function summaryPrompt(
+  describeText: string,
+  reviewText: string,
+  askResults: string[],
+  maxChars: number,
+  sections: readonly [string, string, string],
+): string {
+  const [overview, findings, suggestions] = sections;
+  const head = fillTemplate(PROMPT_TEMPLATES.summary, {
+    maxChars: String(maxChars),
+    overview,
+    findings,
+    suggestions,
+  });
+  return [
+    head,
+    '',
+    '--- Description ---',
+    compactDescribe(describeText),
+    '',
+    '--- Review findings ---',
+    reviewText,
+    ...(askResults.length ? ['', '--- Follow-up Q&A ---', askResults.join('\n\n')] : []),
+  ].join('\n');
+}
+
+/** 跨步骤传递的中间产物。 */
+export interface ReviewBag {
+  describe?: ToolText;
+  /** review 工具产物（含 runId / findings，供 judge 点名 + asks 复评关联）。 */
+  review?: ToolText;
+  /** judge 判出的追问（asks 步消费）；targetFindingId 在 = 对该条 review finding 的复评追问。 */
+  asks: Array<{ question: string; targetFindingId?: string }>;
+  askResults: string[];
+  summary?: string;
+  recommendation?: AgentRecommendation;
+}
+
+/** 评审步骤的运行上下文：依赖 + 输入 + 共享记录器 + 跨步骤累加器（bag）。 */
+export interface ReviewStepCtx {
+  deps: ReviewOrchestratorDeps;
+  input: ReviewOrchestratorInput;
+  rec: StepRecorder;
+  /** 用户停止：每步边界检查，已 abort 即抛 `用户暂停`（思考阶段也能立即中止）。 */
+  checkAbort: () => void;
+  maxAsks: number;
+  summaryMax: number;
+  labels: AgentStepLabels;
+  /** 微流程完整 system 上下文（summary 用；judge 另用精简 JUDGE_SYSTEM）。 */
+  system: string;
+  bag: ReviewBag;
+}

@@ -6,6 +6,7 @@ import type {
   PlatformAdapter,
   PlatformCapabilities,
   PlatformUser,
+  PrActivityEvent,
   PrComment,
   PrCommentAnchor,
   PrCommit,
@@ -177,6 +178,8 @@ export class GitLabAdapter implements PlatformAdapter {
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,
+      // GitLab 无统一活动事件源（CE 无审批、审批系统 note 解析脆弱）→ PR 标签页退化为纯评论视图。
+      activityTimeline: false,
     };
   }
 
@@ -291,6 +294,13 @@ export class GitLabAdapter implements PlatformAdapter {
     return out;
   }
 
+  async listPullRequestActivity(_repo: RepoRef, _prId: string): Promise<PrActivityEvent[]> {
+    // 差异化设计：GitLab 不参与活动时间线（capabilities.activityTimeline=false，PR 标签页退化为纯
+    // 评论视图），故无需提供决断事件。GitLab 也没有统一活动事件源——CE 无审批、审批仅以脆弱的英文
+    // 系统 note 体现，与 Bitbucket /activities、GitHub /reviews 的可靠时间戳事件不对等——返回空。
+    return [];
+  }
+
   async getUserAvatar(
     _slug: string,
     avatarUrl?: string,
@@ -329,6 +339,15 @@ export class GitLabAdapter implements PlatformAdapter {
     return null;
   }
 
+  async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
+    // summary 评论 = 不带 position 的新 discussion（顶层 note）
+    const created = await this.client.post<GlDiscussion>(
+      `/projects/${projectId(repo)}/merge_requests/${prId}/discussions`,
+      { body },
+    );
+    return mapNote(created.notes[0]!, created.id, this.cachedUser?.name);
+  }
+
   async publishInlineComment(
     repo: RepoRef,
     prId: string,
@@ -340,7 +359,7 @@ export class GitLabAdapter implements PlatformAdapter {
     const mr = await this.client.get<GlMr>(base);
     const refs = mr.diff_refs;
     if (!refs) {
-      throw new Error('无法发布行内评论：该 MR 缺少 diff_refs（diff 可能尚未生成）');
+      throw new Error('Cannot post inline comment: this MR has no diff_refs (the diff may not be generated yet)');
     }
     const position: Record<string, unknown> = {
       base_sha: refs.base_sha,
@@ -383,7 +402,7 @@ export class GitLabAdapter implements PlatformAdapter {
       `/projects/${projectId(repo)}/merge_requests/${prId}/notes/${commentId}`,
       { body },
     );
-    if (!note) throw new Error('编辑评论失败：远端空响应');
+    if (!note) throw new Error('Failed to edit comment: empty response from remote');
     // 编辑响应不带 discussion id，threadId 用 note id 兜底（UI 删改后会 force-refresh 评论树）。
     return mapNote(note, String(note.id), this.cachedUser?.name);
   }
@@ -415,7 +434,7 @@ export class GitLabAdapter implements PlatformAdapter {
     }
     // needsWork：GitLab 无 "request changes" 概念。capabilities.reviewStatuses 不含 needsWork，
     // UI 不会触发；防御性抛错。
-    throw new Error('GitLab 不支持「需修改」审批状态');
+    throw new Error('GitLab does not support the "request changes" review status');
   }
 
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {

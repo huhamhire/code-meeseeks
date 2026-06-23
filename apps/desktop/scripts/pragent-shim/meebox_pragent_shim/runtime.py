@@ -16,6 +16,25 @@ import sys
 # （assemble 脚本会校验两者一致，并据本文件抽取该常量），并重新验证 patch 行为。
 _EXPECTED_PRAGENT_VERSION = "0.36.0"
 
+# 系统上下文「缓存断点」标记：assembleSystemContext（TS, packages/agent/src/assemble.ts）在**全局稳定
+# 前缀**（SOUL/AGENTS/工具目录/记忆/用户档）与 **PR/运行相关尾部** 之间插入此串（连同两侧 --- 分隔）。
+# shim 据此把稳定前缀单独标 Anthropic 提示缓存（1h），尾部保持纯文本；消费端（litellm 分块 / CLI 拼接）
+# 分割或剥除后，标记**绝不**进入发给模型的 prompt。两处常量须逐字一致。
+CACHE_BREAK = "\n\n---\n\n[[MEEBOX:CACHE_BREAK]]\n\n---\n\n"
+
+
+def split_cache_break(system):
+    """按缓存断点切分 system → (stable_prefix, variable_tail)。无断点返回 (None, system)。"""
+    stable, sep, variable = system.partition(CACHE_BREAK)
+    if not sep:
+        return None, system
+    return stable, variable
+
+
+def strip_cache_break(system):
+    """剥除缓存断点标记（不分块的消费端用，如 CLI prompt 拼接），塌成单个 --- 分隔。"""
+    return system.replace(CACHE_BREAK, "\n\n---\n\n")
+
 
 def _debug(msg) -> None:
     if os.environ.get("MEEBOX_SHIM_DEBUG"):

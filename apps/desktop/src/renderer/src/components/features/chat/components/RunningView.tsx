@@ -1,0 +1,94 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { ReviewRunTool } from '@meebox/shared';
+import { formatElapsed, formatStartTime, inferPhase, runStatusLabel } from '../utils/format';
+import { AnsiPre, AskQuestion, Spinner } from './shared';
+
+export function RunningView({
+  tool,
+  runId,
+  question,
+  lines,
+  startedAt,
+  model,
+}: {
+  tool: ReviewRunTool;
+  runId: string;
+  /** /ask 的提问：执行中也直接展示（与排队 / 完成态一致；问题在派发时已生成）。 */
+  question?: string;
+  lines: ReadonlyArray<string>;
+  startedAt: number;
+  /** 当前 active LLM profile.model — 跟 RunMeta 同源放在 chip 行，让 running
+      跟 succeeded 视觉一致；可选 (无 active profile 时不显示) */
+  model: string | null;
+}) {
+  const { t } = useTranslation();
+  // 末行追加时自动滚到底
+  const ref = useRef<HTMLPreElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lines.length]);
+
+  // 计时器：pr-agent stdout 长间隔时让用户感知到不是卡死。1s 粒度即可
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    setElapsedMs(Date.now() - startedAt);
+    const id = setInterval(() => setElapsedMs(Date.now() - startedAt), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+
+  const phase = useMemo(() => inferPhase(lines, t), [lines, t]);
+  const text = useMemo(() => lines.join('\n'), [lines]);
+
+  // 跟 RunMeta 完全同结构的 chip 行。running 跟 succeeded/failed 共享一套视觉
+  // 骨架，用户从列表扫一眼能在固定位置看到 tool / 状态 / 模型 / 时长。strategy
+  // 运行时策略是部署细节用户不关心，撤掉；model 是真正影响 review 质量的变量
+  return (
+    <div className="chat-run-running" data-run-id={runId}>
+      <header className="chat-run-meta">
+        <span className={`chat-run-tool chat-run-tool-${tool}`}>/{tool}</span>
+        <span className="chat-chip chat-run-status chat-run-status-running">
+          <Spinner />
+          {runStatusLabel('running', t)}
+        </span>
+        {model && (
+          <span
+            className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-model"
+            title={t('chatPane.modelTitle', { model })}
+          >
+            {model}
+          </span>
+        )}
+        <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-duration">
+          {formatElapsed(elapsedMs)}
+        </span>
+        {/* 开始时间：跟 RunMeta 同模 — 纯文本右对齐，让 running 跟 succeeded
+            两态最右侧元素位置稳定 */}
+        <span
+          className="chat-run-time"
+          title={t('chatPane.startedAtTitle', { time: new Date(startedAt).toLocaleString() })}
+        >
+          {formatStartTime(startedAt)}
+        </span>
+      </header>
+      {/* /ask 的提问执行中也直接展示（问题已生成，不必等排队 / 完成才可见）。 */}
+      {tool === 'ask' && question?.trim() && <AskQuestion text={question.trim()} />}
+      {phase && (
+        <div className="chat-chip chat-chip-md chat-chip-quiet chat-chip-accent chat-run-phase">
+          {phase}
+        </div>
+      )}
+      {/* 控制台输出：执行中默认折叠收起、可手动展开（与完成态「原始输出」同款折叠效果）。 */}
+      <details className="chat-run-raw">
+        <summary>{t('chatPane.rawOutput', { n: text.length })}</summary>
+        <AnsiPre
+          className="chat-run-stdout"
+          preRef={ref}
+          text={text}
+          placeholder={t('chatPane.waitingOutput')}
+        />
+      </details>
+    </div>
+  );
+}

@@ -10,8 +10,9 @@ import type { StateStore } from '@meebox/state-store';
  *   的改动会以「倒挂/撤回」形式串进来。固化 merge-base 后，内容 / 列表 / 计数 / blame / pr-agent
  *   一律以它为 base，编辑器即真三点、对目标漂移稳定，评论 / finding 行锚点也有了固定参照。
  *
- * **失效**：`head`（`sourceRef.sha`）被 rebase 致固化 base 不再是其祖先时重算（见
- * `resolveDiffBaseSha`）；源分支正常 push（head 仅前进）不失效，base 仍锚在分叉点。
+ * **失效**：`head`（`sourceRef.sha`）被 rebase 致固化 base 不再是其祖先时重算；源分支把
+ * 当前目标分支 merge 进来时也重算，避免旧分叉点把 merge 带来的目标分支改动算进 PR diff。
+ * 源分支正常 push（head 仅前进）不失效，base 仍锚在分叉点。
  *
  * 它是**本地派生缓存**、非平台元数据，独立成文件，poller 重写 meta.json 时不触碰。
  */
@@ -23,6 +24,22 @@ export interface DiffBaseCacheFile {
   head_sha: string;
   /** 计算完成的 ISO 时间 */
   computed_at: string;
+}
+
+export interface DiffBaseCacheReuseInput {
+  cachedBaseSha: string;
+  targetSha: string;
+  headSha: string;
+  isAncestor: (ancestor: string, descendant: string) => Promise<boolean>;
+}
+
+export async function isDiffBaseCacheReusable(input: DiffBaseCacheReuseInput): Promise<boolean> {
+  const { cachedBaseSha, targetSha, headSha, isAncestor } = input;
+  if (!(await isAncestor(cachedBaseSha, headSha))) return false;
+  // 源分支 merge 目标分支后，target 会成为 head 的祖先；继续用旧分叉点会把这次 merge
+  // 带入的目标分支改动也算进 PR diff，必须重算到新的 merge-base（通常就是 target）。
+  if (targetSha !== cachedBaseSha && (await isAncestor(targetSha, headSha))) return false;
+  return true;
 }
 
 export function diffBaseCacheKey(localId: string): string {

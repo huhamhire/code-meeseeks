@@ -47,6 +47,7 @@ class FakeAdapter implements PlatformAdapter {
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,
+      activityTimeline: true,
     };
   }
   async ping() {
@@ -69,6 +70,9 @@ class FakeAdapter implements PlatformAdapter {
   async listPullRequestCommits(): Promise<never[]> {
     return [];
   }
+  async listPullRequestActivity(): Promise<never[]> {
+    return [];
+  }
   async getUserAvatar(): Promise<null> {
     return null;
   }
@@ -84,6 +88,9 @@ class FakeAdapter implements PlatformAdapter {
   }
   async replyToComment(): Promise<never> {
     throw new Error('FakeAdapter.replyToComment 未实现（poller 测试不使用）');
+  }
+  async publishSummaryComment(): Promise<never> {
+    throw new Error('FakeAdapter.publishSummaryComment 未实现（poller 测试不使用）');
   }
   async publishInlineComment(): Promise<never> {
     throw new Error('FakeAdapter.publishInlineComment 未实现（poller 测试不使用）');
@@ -253,6 +260,7 @@ describe('Poller.tick', () => {
         resolvableThreads: false,
         suggestions: false,
         reviewGrouping: false,
+        activityTimeline: true,
       }),
       async ping() {
         return { ok: true };
@@ -267,6 +275,9 @@ describe('Poller.tick', () => {
       async listPullRequestCommits() {
         return [];
       },
+      async listPullRequestActivity() {
+        return [];
+      },
       async getUserAvatar() {
         return null;
       },
@@ -277,6 +288,7 @@ describe('Poller.tick', () => {
       getAttachment: () => Promise.reject(new Error('unused')),
       mergePullRequest: () => Promise.reject(new Error('unused')),
       replyToComment: () => Promise.reject(new Error('unused')),
+      publishSummaryComment: () => Promise.reject(new Error('unused')),
       publishInlineComment: () => Promise.reject(new Error('unused')),
       deleteComment: () => Promise.reject(new Error('unused')),
       editComment: () => Promise.reject(new Error('unused')),

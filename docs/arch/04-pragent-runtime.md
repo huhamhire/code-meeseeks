@@ -72,7 +72,10 @@ inline 包 pr-agent 的 `_get_completion`，从返回的 `response.usage` 取 `p
 以哨兵行 `@@MEEBOX_USAGE@@ {json}` 打到 **stderr**；主进程逐行捕获、按前缀累加、落到 run（见 [05](05-review-workflow.md)）。
 **为什么 inline 而非 litellm callback**：litellm 的 async 回调走后台 logging worker，短命 CLI 退出过快会被丢；
 inline 在 await 链里必在退出前执行，可靠。只取 token、不取 cost → 统一设 `LITELLM_LOCAL_MODEL_COST_MAP=True`
-关掉 litellm 的远端价格表联网（弱网会 SSL 超时）。
+关掉 litellm 的远端价格表联网（弱网会 SSL 超时）。另在 patch 时置 `litellm.suppress_debug_info=True`：编排 chat
+通道以子进程 **stdout** 作模型回复，而 litellm 对未进本地 `model_cost` 表的新模型（如 `claude-opus-4-8`）在 cost/token
+计量里调 `get_llm_provider` 失败时会先 `print` 装饰性的「Provider List: …」（ANSI 红字）再抛错（错误被吞、不影响结果），
+该 print 会污染 stdout、漏进评审总结——置此开关关掉这些 print。
 
 ### 本地 CLI provider
 
@@ -85,16 +88,54 @@ litellm**。
   解析 JSON 的 `result` 文本 + `usage`」的版本，返回 `(text, "stop")`。**只依赖 `base_ai_handler` 的稳定契约，
   不受版本守卫限制**（区别于其它依赖内部实现的补丁，放在版本守卫之前）。
 - **prompt 走 stdin**：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；system/user 合并成
-  一段喂入（CLI 无独立 system 槽）。cwd 落到临时目录，避免吃到被评审仓库的 `CLAUDE.md`。
+  一段喂入（CLI 无独立 system 槽）。cwd 默认落到中性临时目录，避免吃到被评审仓库的 `CLAUDE.md`/`AGENTS.md`。
+- **`/ask` 例外（取完整文件上下文）**：自由问答需读真实文件，仅对 `/ask` 由主进程下发 env `MEEBOX_CLI_WORKDIR`
+  = 物化好的 worktree，shim 据此把子进程 cwd 落到 worktree（`describe`/`review` 不下发、维持中性临时目录）。
+  落 cwd 前主进程先**清空该 worktree 内仓库自带的 agent 指令文件**（`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor`
+  规则 / `.github/copilot-instructions.md`，见 `services/pr-agent/worktree-sanitize.ts`）——worktree 即 PR HEAD、
+  作者可控，不清空则 CLI 会自动加载这些指令、被评审 PR 可经此注入 / 污染回答；worktree 用后即弃，就地清空无副作用。
 - **沿用 CLI 自身登录态**：子进程继承 `HOME`/`USERPROFILE`，CLI 读自己的登录凭据（如 `~/.claude`）运行。
   为避免本机环境里残留的 API key 串入、覆盖 CLI 自身的登录方式，shim 显式从子进程 env **剥掉
   `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`**。使用的模型、额度与合规均由该 CLI 的账户与用户授权决定。
 - **代理自动透传**：子进程 env 由 `os.environ` 拷贝而来（仅剔除上面两个 API key），`HTTP(S)_PROXY` / `NO_PROXY`
   原样保留 → `claude` 出站自动走用户配置的代理（见 [09](09-networking-proxy.md)），无需另设。
-- **token usage**：从 claude JSON 的 `usage`（`input_tokens`(+cache_*) ≈ prompt，`output_tokens` ≈ completion）
-  构造同款 `@@MEEBOX_USAGE@@` 哨兵，主进程同一套累加。
+- **token usage**：从 claude JSON 的 `usage` 构造同款 `@@MEEBOX_USAGE@@` 哨兵，主进程同一套累加。↑输入总量取
+  `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`（模型实际处理的全部输入侧）；其中
+  `cache_read_input_tokens`（命中量）**单列上抛**供 UI 拆分展示，顶层 `num_turns`（agentic 轮次）一并上抛。详见
+  下「CLI 模式的 token 计量与提示缓存」。
 - **一期边界**：仅 `claude`（UI 校验拦下 codex 等，命令框可输入留待后续）；并发为「一次调用一个子进程」；父进程被
   超时 SIGKILL 时子 `claude` 可能短暂遗留（孤儿），后续可补 kill 传播。
+
+### CLI 模式的 token 计量与提示缓存
+
+CLI（claude / codex）模式下运行卡片的 token 数常远超模型单请求上下文窗口（如 `/ask` 出现 ↑数百万），这**不是超限、也不是计量
+错误**，而是 agentic 多轮 + 提示缓存的自然结果。要点：
+
+- **累计语义**：`claude -p` 是 agentic headless，一次 run 内部会有多个模型轮次（`num_turns`）。顶层 `usage` 是**该会话所有轮次
+  的累加**，每轮都把不断增长的对话 / 工具结果重新送进模型，故 token 随轮次叠加。单轮从不超窗口（CLI 自身做上下文压缩），累计值
+  膨胀属正常。UI 据 `num_turns` 展示轮次（单轮不显示），帮助理解「这是 N 轮的总量、非单请求规模」。
+- **`cache_read` vs `cache_creation`（命中 ≠ 写入）**：Anthropic 提示缓存把输入分三段——`input_tokens`（新内容）、
+  `cache_creation_input_tokens`（**写入**缓存，计费 1.25×/2×）、`cache_read_input_tokens`（**读取命中**，计费 0.1×）。UI 的
+  「缓存命中量（⛁）」**只取 `cache_read`**，写入不计作命中。多轮里每轮都重读已缓存前缀，`cache_read` 跨轮累加，故对多轮 run 常
+  呈现「缓存命中量 ≈ 输入总量」（绝大部分输入都是缓存读）。**codex 走 OpenAI 约定**：`input_tokens` 本身**已含**缓存、命中量字段名为
+  `cached_input_tokens`，故采集层（`cli/install.py`）两种字段名都识别——Anthropic 的 `cache_read_input_tokens` 需累加进总量、
+  codex 的 `cached_input_tokens` 仅作命中量不再计入总量。
+- **缓存暖化与任务顺序**：claude CLI 自身在缓存 TTL（5min / 1h）内对相同前缀做服务端缓存（基础 system prompt、工具定义，乃至相同
+  的 diff 段）。**先跑过 `describe` 会暖好缓存**，随后对同 PR 的 `review` 多为 `cache_read` 命中、真正新增输入很小 → 表现为「输入
+  很少、几乎全是缓存读」。这是顺序执行带来的正常优化，不是统计异常。
+- **并行启动对缓存命中的影响**：run 队列（`services/pr-agent/run-queue.ts` 的 `pump()`）在并发未达上限时同步连续起跑，故同 PR 的
+  describe / review / improve 几乎同时启动（~100ms 间隔）。Anthropic 缓存条目要等**首个请求写完**才可被后续读，并行启动时后发
+  请求读不到尚未落地的缓存 → 共享前缀各自 miss + 各自写、命中率下降。但**影响有限**：受影响的只是跨 run 的小共享前缀（基础 system
+  ~20–30k，通常已被其它 claude 活动暖好），而大额 `cache_read` 来自**单 run 内部的多轮重读**、与并行无关。故一般**不值得**为缓存复用
+  而串行化同 PR 任务；若确要最大化跨 run 复用，可考虑「describe 先行、完成后再放行其余」的轻量调度（收益有限，未实现）。
+- **litellm 路径与跨模型缓存适配**：API 模式下显式 `cache_control` 标记**仅 Anthropic 系生效**（原生 / Bedrock / Vertex Claude）。
+  `_apply_system_prompt_cache`（`patches/litellm_handler.py`）对 Anthropic 标 1h TTL 缓存，覆盖两类调用：①**编排 chat 通道**
+  （`MEEBOX_CHAT_CACHE` 置位、system 含 `CACHE_BREAK`）按断点缓存全局稳定前缀；②**pr-agent 工具 run**（`/review` `/describe`
+  `/improve` `/ask`，无 `CACHE_BREAK`）整段缓存 system——pr-agent 的指令 + 输出格式约 12k 字符、仅随配置/语言/规则变、跨 PR 稳定
+  （可变的 diff 在 user 侧不进缓存），故同配置下跨运行 1h 内命中。OpenAI / DeepSeek 走**自动前缀缓存**（无需标记，把稳定内容放前缀
+  即可命中，shim 对非 Anthropic 自动剥除标记拼回纯文本）；openai-compatible（DashScope / 火山 / vLLM）能否命中取决于后端，
+  `cache_control` 一律被忽略。两条路径（CLI / API）都采集 `cache_read`（API 取 Anthropic `cache_read_input_tokens` 或 OpenAI
+  `prompt_tokens_details.cached_tokens`），UI 展示一致。
 
 ### 注入 env
 

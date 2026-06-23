@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assembleSystemContext } from '../src/assemble.js';
+import { assembleSystemContext } from '../src/prompts.js';
 import type { ToolCatalogEntry } from '@meebox/shared';
 import type { AgentContext } from '../src/types.js';
 
@@ -52,6 +52,23 @@ describe('assembleSystemContext', () => {
 
     const def = assembleSystemContext({ context: emptyContext, pr, toolCatalog: [] });
     expect(def).toContain('Respond to the user in en-US');
+  });
+
+  it('inserts the cache-break marker between the stable prefix and the PR/variable tail', () => {
+    const out = assembleSystemContext({
+      context: { files: { soul: 'I am soul', agents: 'work rules', memory: '', user: 'terse' }, rules: [] },
+      pr,
+      toolCatalog: tools,
+      language: 'zh-CN',
+    });
+    // 标记须与 shim runtime.py 的 CACHE_BREAK 逐字一致；稳定前缀在标记前、PR/语言在标记后。
+    const marker = '\n\n---\n\n[[MEEBOX:CACHE_BREAK]]\n\n---\n\n';
+    expect(out).toContain(marker);
+    const at = out.indexOf(marker);
+    expect(out.indexOf('# Soul')).toBeLessThan(at);
+    expect(out.indexOf('# User profile')).toBeLessThan(at);
+    expect(out.indexOf('# Current PR')).toBeGreaterThan(at);
+    expect(out.indexOf('# Output & memory language')).toBeGreaterThan(at);
   });
 
   it('renders the session snapshot when provided', () => {

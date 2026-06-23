@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "この PR にはまだアクティビティがありません",
+    "loadError": "アクティビティの読み込みに失敗しました · {{title}}",
+    "loading": "アクティビティを読み込み中…",
+    "mergeCommit": "マージコミット · 親 {{parents}} 件",
+    "verb": {
+      "approved": "承認しました",
+      "commented": "コメントしました",
+      "dismissed": "レビューを取り消しました",
+      "needsWork": "変更をリクエストしました",
+      "unapproved": "承認を取り消しました"
+    }
+  },
   "app": {
     "approveActionFailed": "承認操作に失敗しました：{{msg}}",
     "loading": "読み込み中…",
@@ -34,6 +47,7 @@
     "bulletDescribe": "PR の概要 / ラベルを自動生成",
     "bulletImprove": "行単位のコード改善提案（重要度スコア付き）",
     "bulletReview": "AI レビューを実行し、結果は 指摘リストに表示されます",
+    "cacheInline": "キャッシュ {{n}}",
     "cancelQueuedTitle": "待機中のタスクをキャンセル",
     "clearConfirmLabel": "クリア",
     "clearConfirmMessage": "現在の PR の PR Agent 実行履歴をすべてクリアしますか？ この PR にのみ影響し、元に戻せません。",
@@ -51,7 +65,8 @@
     "codeExistingAria": "元のコード",
     "codeImprovedAria": "改善後のコード",
     "commandNoArgs": "{{cmd}} は引数を受け付けません",
-    "concurrencyReached": "並列実行の上限に達しました（同時に {{n}} 件まで）。この PR の新しいタスクはキューに入り、空きが出ると自動的に実行されます",
+    "deleteRunAria": "削除",
+    "deleteRunTitle": "この記録を削除",
     "draftJumpEditTitle": "コード内で編集",
     "draftJumpRestore": "復元",
     "draftJumpRestoreTitle": "復元して編集",
@@ -88,8 +103,17 @@
     "placeholderNoPr": "PR を選択すると対話を開始できます",
     "placeholderNotReady": "PR Agent が準備できていません",
     "placeholderReady": "質問を入力するか、/ でコマンドを選択（↑↓ で履歴）",
+    "planTitle": "計画",
     "queuedPosition": "待機中 · {{position}} 番目",
-    "rawOutput": "生出力 ({{n}} chars)",
+    "rawOutput": "生出力",
+    "reference": {
+      "clearTitle": "参照を解除",
+      "closedDropped": "再レビューで閉じました",
+      "closedReplaced": "再レビューで置き換え",
+      "reference": "参照",
+      "referenceTitle": "このコメントを参照して再レビューを開始",
+      "viewAsk": "再レビューを表示"
+    },
     "reject": "却下",
     "rejectFindingTitle": "この提案を却下（リモートには投稿されません）",
     "resizeInputAria": "チャット入力欄のサイズを変更",
@@ -109,6 +133,9 @@
     "runFailedReason": "実行に失敗しました ({{reason}})",
     "scoreTitle": "pr-agent による重要度スコア 1-10",
     "scrollUpForOlder": "上にスクロールして過去の履歴を読み込み…",
+    "sectionAskAnalysis": "分析",
+    "sectionAskSuggestions": "提案",
+    "sectionAskSummary": "結論",
     "sectionAssessment": "考察と提案",
     "sectionCodeFeedback": "コードフィードバック",
     "sectionCodeSuggestion": "改善提案",
@@ -122,6 +149,11 @@
     "sectionSummary": "まとめ",
     "sectionTitle": "タイトル候補",
     "sectionWalkthrough": "ファイル変更",
+    "selection": {
+      "attachedTitle": "選択行を次の質問に添付 — クリックで無視",
+      "ignoredTitle": "選択行を無視中 — クリックで次の質問に添付",
+      "linesSelected": "{{lines}} 行を選択中"
+    },
     "sendAria": "送信",
     "sendQueuedTitle": "送信（新しいタスクはキューに入ります）",
     "sendTitle": "送信 (Enter)",
@@ -132,10 +164,21 @@
     "statusSucceeded": "完了",
     "stopAria": "停止",
     "stopTitle": "実行を停止",
-    "tokensTitle": "入力(prompt) {{prompt}} · 出力(completion) {{completion}} トークン",
+    "tokensInTitle": "入力(prompt) {{n}} トークン",
+    "tokensOutTitle": "出力(completion) {{n}} トークン",
+    "turnsTitle": "モデルとのやり取りの回数（1 回につきモデル呼び出し 1 回）",
     "unknownCommand": "不明なコマンド {{head}}。サポート対象：{{cmds}}",
     "userQuestionAria": "ユーザーの質問",
     "waitingOutput": "(PR Agent の出力を待機中…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "キャンセル (Esc)",
+    "emptyTitle": "コメントを空にはできません",
+    "placeholder": "コメントを入力…",
+    "send": "コメント",
+    "sendTitle": "送信 (Cmd/Ctrl+Enter)",
+    "sending": "送信中…",
+    "textareaAria": "新規コメントエディタ"
   },
   "commentEditEditor": {
     "cancelTitle": "キャンセル (Esc)",
@@ -156,6 +199,7 @@
     "textareaAria": "コメント返信エディタ"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "Diff の該当位置へ移動",
     "anchorTitle": "{{side}} 側にアンカー · {{lineType}}",
     "daysAgo_other": "{{count}} 日前",
     "deleteConfirmMessage": "この操作はリモートのこのコメントを削除し、元に戻せません。続行しますか？",
@@ -193,6 +237,7 @@
     "close": "閉じる",
     "confirm": "OK",
     "delete": "削除",
+    "discard": "破棄",
     "edit": "編集",
     "loading": "読み込み中…",
     "save": "保存"
@@ -241,18 +286,10 @@
     "blameChangeRangeTitle": "この範囲はこの PR で変更されました",
     "blameFailed": "blame に失敗しました",
     "blameFailedNamed": "{{path}} の blame に失敗しました",
-    "deleteCommentModalMessage": "この操作はリモートのこのコメントを削除し、元に戻せません。続行しますか？",
-    "deleteCommentModalTitle": "コメントを削除",
-    "deleteCommentTitle": "自分が公開したコメントを削除（リモートと同期）",
-    "deleteFailed": "削除に失敗しました: {{error}}",
-    "deleting": "削除中…",
     "diffRenderFailed": "差分の表示に失敗しました: {{message}}",
     "diffRenderFailedHint": "ファイルを切り替えるか再試行すると通常は復旧します。元のエラーは console に記録されています。",
-    "dismissErrorAria": "エラーを閉じる",
     "dismissNotificationTitle": "この通知を閉じる",
-    "editCommentTitle": "自分が公開したコメントを編集（リモートと同期）",
     "fileCount_other": "{{count}} ファイル",
-    "gotIt": "了解",
     "loadChangedFilesFailed": "変更ファイルの読み込みに失敗しました",
     "loadCommentsFailed": "コメントの読み込みに失敗しました",
     "loadingContentHint": "ローカルミラーから git blob を読み込んでいます。大きいファイルやバイナリファイルは時間がかかる場合があります",
@@ -263,10 +300,12 @@
     "preparingSync": "同期を準備中",
     "readFileContentFailed": "ファイル内容の読み込みに失敗しました",
     "readFileContentFailedNamed": "{{path}} の内容の読み込みに失敗しました",
-    "reply": "返信",
     "resizeFileListTitle": "ドラッグしてファイルツリーの幅を調整",
     "retry": "再試行",
+    "scopeAll": "すべての変更",
+    "scopeCommitCount_other": "{{count}} 件のコミット",
     "scopeLabel": "{{scope}}: ",
+    "scopeLoading": "コミットを読み込み中…",
     "searchAria": "検索",
     "searchChanges": "変更内容を検索",
     "searchChangesTitle": "変更内容を検索 (head + base)",
@@ -342,6 +381,14 @@
     "statusRejected": "却下済み"
   },
   "errors": {
+    "EAG0001": "/ask には質問の指定が必要です",
+    "EAG0002": "この PR の /{{tool}} タスクはすでに実行中またはキュー待ちです。再度トリガーしないでください。",
+    "EAG0003": "pr-agent が準備できていません：埋め込みランタイムもローカル CLI も検出されませんでした。詳細は設定の検出結果を参照してください。",
+    "ENT0001": "プロキシが無効か、アドレスが空です",
+    "ENT0407": "プロキシ認証に失敗しました (407)。ユーザー名／パスワードを確認してください",
+    "EPR0001": "下書きが見つかりません（削除された可能性があります）",
+    "EPR0002": "下書きは却下されました。スキップします",
+    "EPR0003": "このプルリクエストはすでにマージされています。更新して最新の状態を確認してください。",
     "authHint": "Personal Access Token (PAT) の有効期限が切れているか、権限が不足している可能性があります。設定で確認してください",
     "authTitle": "認証に失敗しました",
     "dnsHint": "ホスト名を解決できませんでした。base_url / DNS / プロキシを確認してください",
@@ -362,10 +409,12 @@
     "refusedTitle": "接続が拒否されました",
     "timeoutHint": "リモートに接続できません。ネットワーク / VPN / プロキシを確認してください",
     "timeoutTitle": "接続がタイムアウトしました",
+    "unknownCode": "エラーが発生しました（{{code}}）",
     "unknownTitle": "不明なエラー"
   },
   "fileTree": {
     "commentCountTitle_other": "{{count}} 件のリモートコメント",
+    "conflictTitle": "ターゲットブランチへのマージで競合します",
     "draftCountTitle_other": "{{count}} 件の公開待ち下書き"
   },
   "inlineCodeContext": {
@@ -378,9 +427,10 @@
     "apiKeyOptionalPlaceholder": "このプロバイダーはキー不要です（空のままに）",
     "cliCommandFallback": "コマンドラインツール",
     "cliCommandLabel": "CLI コマンド",
-    "cliCommandPlaceholder": "コマンド名",
+    "cliCommandPlaceholder": "コマンド名（例：claude / codex）",
+    "cliNamePlaceholder": "例：claude / codex",
     "cliWarningPrefix": "⚠️ このプロファイルを入力して有効化すると、Code Meeseeks がローカルの",
-    "cliWarningSuffix": "ツールを呼び出して レビュー操作を実行することを許可します（ローカルのログインセッション下のサブプロセスで実行されます）。対応するコマンドがインストール済みで、サインイン済みであることを確認してください。",
+    "cliWarningSuffix": "ツールを呼び出してレビュー操作を実行することを許可します。対応するコマンドがインストール済みで、サインイン済みであることを確認してください。",
     "errorCliUnsupported": "サポートされていない CLI ツール",
     "errorLabelDuplicate": "名前はすでに存在します",
     "errorLabelSlug": "使用できるのは 英字 / 数字 / - / _ のみ、1〜32 文字",
@@ -393,7 +443,7 @@
         "hint": "公式 Anthropic API；モデル名を直接入力してください（例：claude-opus-4-8）。anthropic/ プレフィックスは自動的に付加されます"
       },
       "cli": {
-        "hint": "🧪 実験的：上流 CLI（claude / codex など）に依存し、その挙動は上流のバージョン変更で変わる可能性があります。安定性・継続的な利用は保証されません。レビューリクエストを、ローカルにインストール済みかつ認可されたコマンドラインツールに委譲してモデルを呼び出します。API に直接接続せず、キーも不要です。使用するモデルと利用枠はそのツールが自己管理します。入力して有効化すると、ローカルのログインセッション下のサブプロセスでそのコマンドラインツールを呼び出すことを許可します。",
+        "hint": "🧪 実験的：ローカルのコマンドラインツールに依存し、その挙動はツールのバージョン変更で変わる可能性があります。安定性・継続的な利用は保証されません。レビューリクエストを、ローカルにインストール済みかつ認可されたコマンドラインツールに委譲してモデルを呼び出します。",
         "label": "ローカル CLI"
       },
       "dashscope": {
@@ -439,7 +489,9 @@
     "merge": "マージ",
     "mergeTitle": "この PR をターゲットブランチにマージします",
     "merging": "マージ中…",
+    "moreReviewers": "他 {{n}} 名のレビュアー",
     "needsWork": "要修正",
+    "newComment": "コメント",
     "openInBrowser": "ブラウザで開く",
     "openInBrowserTitle": "PR のリモートページを既定のブラウザで開きます",
     "ownPrReason": "自分の PR はレビューできません",
@@ -448,6 +500,7 @@
     "showBlame": "Blame を有効化（head 側のみ）",
     "showWhitespace": "空白文字を表示（スペース / Tab）",
     "sideBySide": "並べて表示",
+    "tabActivity": "アクティビティ",
     "tabComments": "コメント",
     "tabCommits": "コミット",
     "tabDiff": "変更",
@@ -490,7 +543,6 @@
     "platformTitle": "コードプラットフォームに接続",
     "progressAria": "設定の進捗",
     "providerPickAria": "プロバイダーを選択",
-    "providerPickHint": "接続するプロバイダーを選択してください",
     "skip": "スキップ",
     "startConfig": "始める",
     "stepDone": "完了",
@@ -507,12 +559,27 @@
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
   },
+  "prInfo": {
+    "createdAt": "リモート作成",
+    "description": "説明",
+    "descriptionEmpty": "説明なし",
+    "recentUpdate": "最終更新",
+    "reviewers": "レビュアー ({{n}})",
+    "reviewersEmpty": "なし",
+    "timeline": "タイムライン",
+    "updatedAt": "リモート更新"
+  },
   "prItem": {
     "approvedCount_other": "{{count}} 人のレビュアーが承認しました",
     "executing": "Agent タスク実行中",
     "hasConflict": "マージコンフリクトがあります",
     "mergeable": "マージ可能：すべてのマージ条件を満たしています",
     "needsWorkCount_other": "{{count}} 人のレビュアーが要修正とマークしました"
+  },
+  "prStatus": {
+    "approved": "承認済み",
+    "needsWork": "要修正",
+    "pending": "保留中"
   },
   "publishReviewModal": {
     "allPublished": "すべての下書きがリモートに書き込まれました。コメント一覧はすぐに更新されます。",
@@ -557,7 +624,7 @@
     "checkUpdate": "アップデートを確認",
     "checkUpdateTitle": "GitHub で最新バージョンを確認（検出のみ、自動インストールなし）",
     "checking": "確認中…",
-    "cliExperimentalHint": "ローカル CLI プロバイダーは上流 CLI（claude / codex など）に依存し、その挙動は上流のバージョン変更で変わる可能性があります。安定性・継続的な利用は保証されません。",
+    "cliExperimentalHint": "ローカル CLI プロバイダーはローカルのコマンドラインツールに依存し、その挙動はツールのバージョン変更で変わる可能性があります。安定性・継続的な利用は保証されません。",
     "configKey": "設定",
     "configure": "設定",
     "connSaveHint": "Name / Base URL / Token を入力してください",
@@ -569,6 +636,8 @@
     "deleteConnectionConfirmTitle": "接続を削除",
     "deleteConnectionTitle": "この接続を削除",
     "deleteLlmProfileTitle": "このプロファイルを削除",
+    "discardChangesMessage": "このフォームには未保存の変更があります。保存せずに閉じますか？",
+    "discardChangesTitle": "未保存の変更を破棄しますか？",
     "editConfigYaml": "config.yaml を編集",
     "editConnectionTitle": "接続を編集",
     "editLlmTitle": "LLM モデルを編集",

@@ -1,0 +1,168 @@
+@use '../tokens' as *;
+
+.pr-info-view {
+  // 滚动容器铺满，滚动条贴在外层容器右缘
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  // 作为容器查询基准：左右布局按本面板宽度响应（而非窗口宽度），窄到阈值时侧栏落到描述下方
+  container-type: inline-size;
+}
+
+.pr-info-content {
+  // 内容行宽限制 + 居中，避免宽屏下正文铺满过散
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+// 左右布局：左侧描述（主内容）+ 右侧元信息侧栏（时间线 / 评审者）
+.pr-info-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+.pr-info-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pr-info-side {
+  flex: 0 0 260px;
+  // 宽度上限：堆叠（占满整宽）时也保持紧凑，避免时间 / 评审 chip 被拉到两端过散
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+}
+// 两列首个 section 顶部不留大间距，与对侧标题齐平
+.pr-info-main > .pr-detail-section:first-child,
+.pr-info-side > .pr-detail-section:first-child {
+  margin-top: 0;
+}
+// 响应式：面板窄到阈值时改为纵向堆叠，侧栏（时间线 / 评审者）落到描述下方、占满整宽
+@container (max-width: 680px) {
+  .pr-info-layout {
+    flex-direction: column;
+  }
+  .pr-info-side {
+    flex: none;
+    width: 100%;
+  }
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  font-size: $fs-sm;
+  font-weight: 600;
+  margin-left: $space-1;
+  text-transform: uppercase;
+}
+// pending 用 VS Code 主蓝；approved 走成功绿；needs_work 走 git-decoration 红
+.status-pending {
+  background: $color-accent;
+  color: $text-on-accent;
+}
+.status-approved {
+  background: $color-approved;
+  color: $text-on-accent;
+}
+.status-needs_work {
+  background: $color-warning;
+  color: $text-on-accent;
+}
+
+// 冲突标记：chip 效果（琥珀色 tint 底 + 警示色文字），比纯文字更突出
+.conflict-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-1;
+  padding: 1px $space-3;
+  border-radius: $radius-sm;
+  background: $color-conflict-fade;
+  color: $color-warning-bright;
+  font-weight: 600;
+  font-size: $fs-sm;
+}
+
+.pr-detail-section {
+  margin-top: 24px;
+
+  h3 {
+    font-size: $fs-xl;
+    font-weight: 600;
+    margin-bottom: $space-5;
+    color: $text-primary;
+  }
+}
+
+.pr-detail-description {
+  white-space: pre-wrap;
+  font-size: $fs-lg;
+  line-height: $lh-loose;
+  color: $text-primary;
+}
+
+.reviewer-list {
+  // 行式展示（与活动时间线一致）：前置状态图标 + 头像 + 名 + 决断 chip，不再用 disc bullet
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+.reviewer-item {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding: $space-2 0;
+}
+.reviewer-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  color: $text-muted;
+}
+.reviewer-icon-approved {
+  color: $color-approved;
+}
+.reviewer-icon-needsWork {
+  color: $color-warning-bright;
+}
+// 待评审（unapproved）：中性空心圆点
+.reviewer-pending-dot {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: $radius-full;
+  opacity: 0.6;
+}
+.reviewer-name {
+  // 侧栏较窄：名字过长时省略，给后置 chip 让位
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: $text-primary;
+}
+
+.tag-approved {
+  color: $git-added;
+  font-size: $fs-md;
+}
+
+.pr-detail-kv {
+  display: grid;
+  // key 列按内容自适应（不再固定 160px），把更多宽度留给时间值；窄侧栏下避免日期时间换行
+  grid-template-columns: auto 1fr;
+  gap: $space-2 $space-4;
+  // 侧栏较窄：时间用小字号，单行展示不换行
+  font-size: $fs-sm;
+
+  .modal-kv-val {
+    white-space: nowrap;
+    // 时间值右对齐到侧栏右缘，与左侧标签分列两端
+    text-align: right;
+  }
+}

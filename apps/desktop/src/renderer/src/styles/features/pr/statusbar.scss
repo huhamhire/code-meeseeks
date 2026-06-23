@@ -1,0 +1,53 @@
+// pr 域在底部状态栏的 chip：PR 数 / 最近同步时间 + 刷新按钮 / 当前 repo clone-fetch 进度。
+// 组件见 components/features/pr/statusbar/。基础壳在 layout/statusbar；活动脉冲点
+// .activity-dot 在 base（repo sync 与 pr-agent 跨域共用）。
+
+@use '../../tokens' as *;
+@use '../../mixins' as *;
+
+// PR 数 chip：图标 + 数字横排（gap / svg 基线由 .statusbar-chip 统一）
+.statusbar-chip-prs {
+  font-variant-numeric: tabular-nums;
+}
+
+// 同步时间 chip：时钟图标 + 相对时间文本
+// 合并刷新按钮 + 同步状态：chip 外观的可点击按钮（重置 button 默认样式）
+.statusbar-sync-btn {
+  border: none;
+  color: inherit;
+  // 只继承字体族；字号沿用 .statusbar-chip，但同步状态文案不加粗
+  font-family: inherit;
+  font-weight: 400;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: $bg-white-fade;
+  }
+  &:disabled {
+    cursor: default;
+  }
+}
+.statusbar-chip-sync {
+  font-variant-numeric: tabular-nums;
+}
+
+// 当前 repo sync (clone/fetch) chip：跟 pr-agent 活动 chip 同蓝调（chip-tone accent），
+// dot 用 .activity-dot 的脉冲语义即"在跑"。idle 时整条不渲染
+.statusbar-repo-sync-chip {
+  @include chip-tone(accent);
+  font-variant-numeric: tabular-nums;
+  max-width: 240px;
+}
+.statusbar-repo-sync-name {
+  font-family: $font-mono;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.statusbar-repo-sync-progress {
+  font-family: $font-mono;
+  font-size: $fs-xs;
+  opacity: 0.8;
+  white-space: nowrap;
+}

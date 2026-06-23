@@ -52,6 +52,8 @@ export interface StartReviewRunInput {
    * 未指定时 run.model 留空，UI 自然不展示模型 chip
    */
   model?: string;
+  /** 复评引用：本次 /ask 是对某条 finding 的复评时，记下被引用的源 finding（前向链）。 */
+  referencedFinding?: ReviewRun['referencedFinding'];
 }
 
 /** 写入初始 running 状态；调用方在 pr-agent 调用前必须先 start。 */
@@ -69,6 +71,7 @@ export async function startReviewRun(
     prAgentVersion: input.prAgentVersion,
     strategy: input.strategy,
     model: input.model,
+    referencedFinding: input.referencedFinding,
     status: 'running',
     startedAt: at.toISOString(),
   };
@@ -94,6 +97,8 @@ export interface FinishReviewRunPatch {
   summary?: string;
   /** 本次 run 的真实 LLM token 用量（累加，来自 litellm callback） */
   tokenUsage?: TokenUsage;
+  /** 复评裁决（解析自复评 /ask 输出的 `<verdict>`）；非复评 / 未给则不填 */
+  askVerdict?: ReviewRun['askVerdict'];
 }
 
 /**
@@ -150,6 +155,18 @@ export async function clearReviewRunsForPr(
   for await (const k of stateStore.list(prefix)) keys.push(k);
   for (const k of keys) await stateStore.delete(k);
   return keys.length;
+}
+
+/** Delete a single run record by id. Returns whether a record existed before deletion. */
+export async function deleteReviewRun(
+  stateStore: StateStore,
+  prLocalId: string,
+  runId: string,
+): Promise<boolean> {
+  const key = runKey(prLocalId, runId);
+  const existed = (await stateStore.read<ReviewRunFile>(key)) != null;
+  await stateStore.delete(key);
+  return existed;
 }
 
 export async function listReviewRunsForPr(

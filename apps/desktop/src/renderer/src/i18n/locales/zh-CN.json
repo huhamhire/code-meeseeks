@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "该 PR 暂无活动",
+    "loadError": "加载活动失败 · {{title}}",
+    "loading": "加载活动中…",
+    "mergeCommit": "合并提交 · {{parents}} 个父提交",
+    "verb": {
+      "approved": "批准",
+      "commented": "评论",
+      "dismissed": "驳回评审",
+      "needsWork": "要求修改",
+      "unapproved": "撤销批准"
+    }
+  },
   "app": {
     "approveActionFailed": "审批操作失败：{{msg}}",
     "loading": "加载中…",
@@ -34,6 +47,7 @@
     "bulletDescribe": "自动生成 PR 摘要 / labels",
     "bulletImprove": "逐行代码改进建议（带重要度评分）",
     "bulletReview": "跑一次 AI review，结果落到 findings 列表",
+    "cacheInline": "缓存 {{n}}",
     "cancelQueuedTitle": "取消排队任务",
     "clearConfirmLabel": "清空",
     "clearConfirmMessage": "确定清空当前 PR 的全部 PR Agent 执行历史记录？仅影响该 PR，不可恢复。",
@@ -51,7 +65,8 @@
     "codeExistingAria": "原代码",
     "codeImprovedAria": "改进代码",
     "commandNoArgs": "{{cmd}} 不接受参数",
-    "concurrencyReached": "已达并发上限（{{n}} 个同时执行）。本 PR 新提交的任务会进入排队，等空出名额后自动执行",
+    "deleteRunAria": "删除",
+    "deleteRunTitle": "删除此记录",
     "draftJumpEditTitle": "在代码中编辑",
     "draftJumpRestore": "恢复",
     "draftJumpRestoreTitle": "恢复并编辑",
@@ -88,8 +103,17 @@
     "placeholderNoPr": "选中一个 PR 后可发起对话",
     "placeholderNotReady": "PR Agent 未就绪",
     "placeholderReady": "输入问题，或用 / 选择命令 (↑↓ 翻历史)",
+    "planTitle": "计划",
     "queuedPosition": "排队中 · 第 {{position}} 位",
-    "rawOutput": "原始输出 ({{n}} chars)",
+    "rawOutput": "原始输出",
+    "reference": {
+      "clearTitle": "移除引用",
+      "closedDropped": "已被复评关闭",
+      "closedReplaced": "已被复评取代",
+      "reference": "引用",
+      "referenceTitle": "引用此条评论发起复评",
+      "viewAsk": "查看复评"
+    },
     "reject": "拒绝",
     "rejectFindingTitle": "拒绝此条建议（不会发布到远端）",
     "resizeInputAria": "调整输入框高度",
@@ -109,6 +133,9 @@
     "runFailedReason": "run 失败 ({{reason}})",
     "scoreTitle": "pr-agent 给出的重要度评分 1-10",
     "scrollUpForOlder": "向上滚动加载更早历史…",
+    "sectionAskAnalysis": "分析解读",
+    "sectionAskSuggestions": "建议",
+    "sectionAskSummary": "结论",
     "sectionAssessment": "思路建议",
     "sectionCodeFeedback": "代码反馈",
     "sectionCodeSuggestion": "改进建议",
@@ -122,6 +149,11 @@
     "sectionSummary": "总结",
     "sectionTitle": "建议标题",
     "sectionWalkthrough": "文件变更",
+    "selection": {
+      "attachedTitle": "选中行将随下一次提问发送 — 点击忽略",
+      "ignoredTitle": "已忽略选中行 — 点击随下一次提问发送",
+      "linesSelected": "已选中 {{lines}} 行"
+    },
     "sendAria": "发送",
     "sendQueuedTitle": "发送 (新任务会进队列)",
     "sendTitle": "发送 (Enter)",
@@ -132,10 +164,21 @@
     "statusSucceeded": "完成",
     "stopAria": "停止",
     "stopTitle": "停止执行",
-    "tokensTitle": "输入(prompt) {{prompt}} · 输出(completion) {{completion}} tokens",
+    "tokensInTitle": "输入(prompt) {{n}} tokens",
+    "tokensOutTitle": "输出(completion) {{n}} tokens",
+    "turnsTitle": "模型交互轮次（每轮一次模型调用）",
     "unknownCommand": "未知命令 {{head}}；支持：{{cmds}}",
     "userQuestionAria": "用户提问",
     "waitingOutput": "(等待 PR Agent 输出…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "取消 (Esc)",
+    "emptyTitle": "评论不能为空",
+    "placeholder": "写一条评论…",
+    "send": "评论",
+    "sendTitle": "发送 (Cmd/Ctrl+Enter)",
+    "sending": "发送中…",
+    "textareaAria": "新建评论编辑器"
   },
   "commentEditEditor": {
     "cancelTitle": "取消 (Esc)",
@@ -156,6 +199,7 @@
     "textareaAria": "评论回复编辑器"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "跳转到 Diff 对应位置",
     "anchorTitle": "锚定 {{side}} 侧 · {{lineType}}",
     "daysAgo_other": "{{count}} 天前",
     "deleteConfirmMessage": "此操作会删除远端的这条评论，且无法恢复。确定继续吗？",
@@ -193,6 +237,7 @@
     "close": "关闭",
     "confirm": "确定",
     "delete": "删除",
+    "discard": "放弃",
     "edit": "编辑",
     "loading": "加载中…",
     "save": "保存"
@@ -241,18 +286,10 @@
     "blameChangeRangeTitle": "此区段为本 PR 引入的改动",
     "blameFailed": "blame 失败",
     "blameFailedNamed": "{{path}} blame 失败",
-    "deleteCommentModalMessage": "此操作会删除远端的这条评论，且无法恢复。确定继续吗？",
-    "deleteCommentModalTitle": "删除评论",
-    "deleteCommentTitle": "删除自己发布的评论 (远端同步)",
-    "deleteFailed": "删除失败：{{error}}",
-    "deleting": "删除中…",
     "diffRenderFailed": "diff 渲染失败：{{message}}",
     "diffRenderFailedHint": "切换文件 / 重试通常能恢复。底层异常已记录到 console。",
-    "dismissErrorAria": "关闭错误",
     "dismissNotificationTitle": "收起此通知",
-    "editCommentTitle": "编辑自己发布的评论 (远端同步)",
     "fileCount_other": "{{count}} 个文件",
-    "gotIt": "知道了",
     "loadChangedFilesFailed": "拉取变更文件列表失败",
     "loadCommentsFailed": "拉取评论失败",
     "loadingContentHint": "从本地镜像读 git blob，大文件 / 二进制判定时可能略慢",
@@ -263,10 +300,12 @@
     "preparingSync": "准备同步",
     "readFileContentFailed": "读取文件内容失败",
     "readFileContentFailedNamed": "读取 {{path}} 内容失败",
-    "reply": "回复",
     "resizeFileListTitle": "拖动调整文件树宽度",
     "retry": "重试",
+    "scopeAll": "全部变更",
+    "scopeCommitCount_other": "{{count}} 个提交",
     "scopeLabel": "{{scope}}：",
+    "scopeLoading": "加载提交中…",
     "searchAria": "搜索",
     "searchChanges": "搜索变更内容",
     "searchChangesTitle": "搜索变更内容 (head + base)",
@@ -342,6 +381,14 @@
     "statusRejected": "已拒绝"
   },
   "errors": {
+    "EAG0001": "/ask 需要提供 question",
+    "EAG0002": "该 PR 的 /{{tool}} 任务已在执行或排队中，请勿重复触发",
+    "EAG0003": "pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节",
+    "ENT0001": "代理未启用或地址为空",
+    "ENT0407": "代理认证失败 (407)，检查用户名/密码",
+    "EPR0001": "草稿不存在 (可能已被删除)",
+    "EPR0002": "草稿已被拒绝，跳过",
+    "EPR0003": "该 PR 已被合并（可能已由他人合并）；请刷新查看最新状态。",
     "authHint": "Personal Access Token (PAT) 可能已过期或权限不足，去 Settings 检查",
     "authTitle": "鉴权失败",
     "dnsHint": "主机名无法解析，检查 base_url / DNS / 代理",
@@ -362,10 +409,12 @@
     "refusedTitle": "连接被拒绝",
     "timeoutHint": "无法连接到远端，请检查网络 / VPN / 代理",
     "timeoutTitle": "连接超时",
+    "unknownCode": "出错了（{{code}}）",
     "unknownTitle": "未知错误"
   },
   "fileTree": {
     "commentCountTitle_other": "{{count}} 条远端评论",
+    "conflictTitle": "合并到目标分支会产生冲突",
     "draftCountTitle_other": "{{count}} 条待发布草稿"
   },
   "inlineCodeContext": {
@@ -378,9 +427,10 @@
     "apiKeyOptionalPlaceholder": "该 provider 无需密钥（留空）",
     "cliCommandFallback": "命令行",
     "cliCommandLabel": "CLI 命令",
-    "cliCommandPlaceholder": "命令名",
+    "cliCommandPlaceholder": "命令名，如 claude / codex",
+    "cliNamePlaceholder": "如 claude / codex",
     "cliWarningPrefix": "⚠️ 填写并启用此预设，即代表你授权 Code Meeseeks 调用本机的",
-    "cliWarningSuffix": "工具执行评审操作（在子进程中以你的本地登录态运行）。请确认对应命令已安装并完成登录。",
+    "cliWarningSuffix": "工具执行评审操作。请确认对应命令已安装并完成登录。",
     "errorCliUnsupported": "不受支持的 CLI 工具",
     "errorLabelDuplicate": "名称已存在",
     "errorLabelSlug": "只允许 字母 / 数字 / - / _，1-32 字符",
@@ -393,7 +443,7 @@
         "hint": "官方 Anthropic API；模型直接填型号名（claude-opus-4-8 等），会自动补 anthropic/ 前缀"
       },
       "cli": {
-        "hint": "🧪 实验性：依赖上游 CLI（claude / codex 等），行为可能随其版本变更，稳定性与持续可用性不作保证。将评审请求转交本机已安装并授权的命令行工具代为调用模型，不直连 API、无需填写密钥；所用模型与额度由该工具自理。填写并启用即代表你授权在子进程中以本机登录态调用对应命令行。",
+        "hint": "🧪 实验性：依赖本机命令行工具，行为可能随其版本变更，稳定性与持续可用性不作保证。将评审请求转交本机已安装并授权的命令行工具代为调用模型。",
         "label": "本地 CLI"
       },
       "dashscope": {
@@ -439,7 +489,9 @@
     "merge": "合并",
     "mergeTitle": "合并此 PR 到目标分支",
     "merging": "合并中…",
+    "moreReviewers": "其余 {{n}} 位评审者",
     "needsWork": "需修改",
+    "newComment": "评论",
     "openInBrowser": "浏览器打开",
     "openInBrowserTitle": "在系统默认浏览器打开 PR 远端页面",
     "ownPrReason": "不能审批自己的 PR",
@@ -448,6 +500,7 @@
     "showBlame": "开启追溯显示（仅 head 侧）",
     "showWhitespace": "显示空白字符（空格 / Tab）",
     "sideBySide": "并排",
+    "tabActivity": "活动",
     "tabComments": "评论",
     "tabCommits": "提交",
     "tabDiff": "变更",
@@ -490,7 +543,6 @@
     "platformTitle": "连接代码平台",
     "progressAria": "配置进度",
     "providerPickAria": "选择 Provider",
-    "providerPickHint": "选择要对接的 Provider",
     "skip": "跳过",
     "startConfig": "开始配置",
     "stepDone": "完成",
@@ -507,12 +559,27 @@
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
   },
+  "prInfo": {
+    "createdAt": "远端创建",
+    "description": "描述",
+    "descriptionEmpty": "无描述",
+    "recentUpdate": "最近更新时间",
+    "reviewers": "评审者 ({{n}})",
+    "reviewersEmpty": "无",
+    "timeline": "时间线",
+    "updatedAt": "远端更新"
+  },
   "prItem": {
     "approvedCount_other": "{{count}} 位 reviewer 已 approve",
     "executing": "Agent 任务执行中",
     "hasConflict": "存在合并冲突",
     "mergeable": "可合并：已满足所有合并条件",
     "needsWorkCount_other": "{{count}} 位 reviewer 标记 needs work"
+  },
+  "prStatus": {
+    "approved": "已批准",
+    "needsWork": "要求修改",
+    "pending": "待评审"
   },
   "publishReviewModal": {
     "allPublished": "所有草稿已写入远端，评论列表会立即刷新。",
@@ -557,7 +624,7 @@
     "checkUpdate": "检查更新",
     "checkUpdateTitle": "查 GitHub 最新版本（仅检测，不自动安装）",
     "checking": "检查中…",
-    "cliExperimentalHint": "本地 CLI provider 依赖上游 CLI（如 claude / codex），其行为可能随上游版本变更，稳定性与持续可用性不作保证。",
+    "cliExperimentalHint": "本地 CLI provider 依赖本机命令行工具，其行为可能随工具版本变更，稳定性与持续可用性不作保证。",
     "configKey": "配置",
     "configure": "配置",
     "connSaveHint": "请填完名称 / Base URL / Token",
@@ -569,6 +636,8 @@
     "deleteConnectionConfirmTitle": "删除连接",
     "deleteConnectionTitle": "删除该连接",
     "deleteLlmProfileTitle": "删除该配置",
+    "discardChangesMessage": "当前表单有未保存的更改，确定不保存就关闭？",
+    "discardChangesTitle": "放弃未保存的更改？",
     "editConfigYaml": "编辑 config.yaml",
     "editConnectionTitle": "编辑连接",
     "editLlmTitle": "编辑 LLM 模型",

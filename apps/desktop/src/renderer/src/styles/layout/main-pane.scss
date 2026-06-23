@@ -1,0 +1,227 @@
+// 主面板布局壳：主区容器 + 加载占位 + PR 头部带（标题/元信息）+ 标签栏（tab / 角标 / 右侧操作组）
+// + tab 内容容器。各业务组件样式拆到 features/pr/（reviewer-stack / header-actions / comments /
+// activity / commits）与 features/diff/blame。
+
+@use '../tokens' as *;
+
+.main {
+  flex: 1;
+  overflow: hidden;
+  background: $bg-app;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.main-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: $text-muted;
+  padding: 24px;
+}
+
+// 重型组件 async init 期间的延迟 loading 占位（PaneLoading；Monaco Suspense fallback、
+// ChatPane 会话加载、diff 编辑器 ready 前的 overlay 共用）
+.pane-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  min-height: 120px;
+  height: 100%;
+  padding: 24px;
+  font-size: 13px;
+
+  // .spinner 默认带右 margin（inline-文字场景用），居中布局里由 gap 接管，清掉避免偏移
+  .spinner {
+    margin: 0;
+  }
+}
+
+// overlay 变体：绝对定位铺满父容器（父需 position:relative），盖在 Monaco 编辑器之上，
+// 遮住「空编辑器 → diff 计算 / 折叠跳一下」那段重排，diff 就绪后由调用方卸载。
+.pane-loading-overlay {
+  position: absolute;
+  inset: 0;
+  // 盖在 Monaco 之上：编辑器内部有自带 stacking context，z-index 取高值确保 overlay 在最上层
+  z-index: 20;
+  height: auto;
+  background: $bg-app;
+}
+
+.pr-header {
+  padding: $space-6 20px $space-5;
+  border-bottom: 1px solid $border-default;
+  flex-shrink: 0;
+}
+
+// 标题 + 元信息 band 与 reviewer 头像栈同行：头像栈靠右、相对该 band 垂直居中（位于动作按钮行之上）
+.pr-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-6;
+  margin-bottom: $space-4;
+}
+.pr-header-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.pr-header-title {
+  font-size: $fs-xl;
+  font-weight: 600;
+  margin-bottom: $space-3;
+  line-height: $lh-tight;
+}
+
+.pr-header-meta {
+  font-size: $fs-md;
+  color: $text-primary;
+}
+
+.pr-tabs {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid $border-default;
+  background: $bg-elev;
+  flex-shrink: 0;
+  padding: 0 $space-6;
+  gap: 0;
+  // 容器宽度不够时整组横向滑动，不让单个 tab 被挤压触发文字换行 (会让 tab 栏
+  // 高度从 1 行变 2 行，破坏 main-pane 上半区固定高度的预期)。
+  // overflow-y: hidden 防止纵向出现 scrollbar 影响视觉
+  overflow-x: auto;
+  overflow-y: hidden;
+  // 隐藏横向滚动条但保留滚动能力 — 用户拖也能滑，但视觉上跟原 tab 栏一致
+  scrollbar-width: none; // Firefox
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  // tab 内嵌的数字角标 (评论数 / 待办数等)。圆角胶囊紧贴文字右侧
+  .pr-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    margin-left: $space-2;
+    padding: 0 $space-2;
+    border-radius: $radius-pill;
+    background: $color-accent-bg-fade;
+    color: $color-info;
+    font-size: $fs-xs;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+
+    // warning 变体：草稿待发布 chip 用 amber，跟文件树 .tree-draft-count 同色
+    // 让用户对"待办"语义在不同位置的识别保持一致
+    &.pr-tab-badge-warning {
+      background: $color-pending-fade;
+      color: $color-warning;
+    }
+
+    // 加载占位：等宽空 chip 预留角标宽度，消除计数异步到达时 tab 的横向弹簧抖动。
+    // 底色更淡 + 轻微脉冲，提示"加载中"而非真实计数。
+    &.pr-tab-badge-loading {
+      background: $color-accent-bg-fade;
+      opacity: 0.45;
+      animation: pr-tab-badge-pulse 1.2s ease-in-out infinite;
+    }
+  }
+
+  @keyframes pr-tab-badge-pulse {
+    0%,
+    100% {
+      opacity: 0.25;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  .diff-mode-toggle {
+    margin-left: auto;
+  }
+}
+
+/* 右侧操作组：blame 开关 + 并列/合并 切换。整组顶到右边 */
+.pr-tabs-right {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-4;
+  margin-left: auto;
+  padding-right: $space-4;
+  // 整组不被 flex 压缩 — diff 区窄时靠 .pr-tabs overflow-x 横向滑动，
+  // 而不是把按钮挤窄触发文字 wrap
+  flex-shrink: 0;
+
+  .diff-mode-toggle {
+    margin-left: 0; /* 在 right 组内不需要再 margin-left:auto */
+  }
+
+  /* 操作按钮高度钉死：带图标的"空白/追溯"行盒比纯文字略高，不固定就会顶出
+     tab 栏、跟"并排/统一"参差。统一 height + box-sizing 让四个按钮严丝合缝；
+     nowrap + 不收缩 防止窄宽度下中文竖排换行撑破固定高度。 */
+  .blame-toggle,
+  .diff-mode-toggle button {
+    height: 22px;
+    box-sizing: border-box;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+.pr-tab {
+  // inline-flex + 垂直居中：tab 高度由始终存在的文字行盒决定，计数角标（inline-flex 16px）
+  // 居中放置、不超过文字行高 → 角标加载占位 / 出现 / 消失都不改变 tab 高度，消除 tab 栏
+  // 加载计数时的 1~2px 竖向抖动（默认 inline 布局下角标会按基线顶高行盒）。
+  display: inline-flex;
+  align-items: center;
+  padding: $space-4 $space-8;
+  background: transparent;
+  border: none;
+  color: $text-muted;
+  cursor: pointer;
+  font-size: $fs-lg;
+  line-height: $lh-normal;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  // 文字单行 + 不被 flex 容器挤压 — 窄宽度下保持单 tab 完整尺寸，整组靠
+  // .pr-tabs overflow-x 横向滑动而不是文字 wrap (避免 tab 栏高度变化)
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &.active {
+    color: $text-body;
+    border-bottom-color: $color-accent;
+  }
+  &:hover:not(.active) {
+    color: $text-primary;
+  }
+}
+
+.pr-tab-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+}
+// keep-alive tab 保活容器：active 时铺满 .pr-tab-content（内部面板各自 flex:1），
+// inactive 由内联 display:none 隐藏但保留挂载（见 PrPanel KeepAliveTab）。
+.pr-tab-pane {
+  flex: 1;
+  min-height: 0;
+  // 允许在窄宽度下收缩到小于内容固有宽度，让内部滚动容器接管横向滚动（否则会撑破、被 ChatPane 盖住）
+  min-width: 0;
+  display: flex;
+}

@@ -8,7 +8,7 @@ import type {
   IpcChannels,
   IpcEventName,
   IpcEvents,
-} from '@meebox/shared';
+} from '@meebox/ipc';
 
 console.log('[preload] script loaded');
 

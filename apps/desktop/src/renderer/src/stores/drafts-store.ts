@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import type { ReviewDraft } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 
@@ -78,12 +78,15 @@ export const draftsStore = {
  */
 export function useDraftsForPr(localId: string | null | undefined): ReadonlyArray<ReviewDraft> | null {
   const snap = useSyncExternalStore(draftsStore.subscribe, draftsStore.getSnapshot);
+  // 首次访问按需 hydrate。**必须放 effect、绝不在 render 阶段触发**：ensureLoaded →
+  // markLoading → notify() 会同步通知所有订阅者，render 期调用即「渲染 A 组件时更新了
+  // 同样订阅本 store 的 B 组件」，React 报 "Cannot update a component while rendering a
+  // different component"。effect 在 commit 后跑，notify 落在渲染之外，告警消除。
+  useEffect(() => {
+    if (localId) draftsStore.ensureLoaded(localId);
+  }, [localId]);
   if (!localId) return [];
-  if (!snap.byPr.has(localId)) {
-    // 副作用：触发 hydrate (内部去重)；调用方下次 render 拿到非 null
-    draftsStore.ensureLoaded(localId);
-    return null;
-  }
+  if (!snap.byPr.has(localId)) return null;
   return snap.byPr.get(localId)!;
 }
 

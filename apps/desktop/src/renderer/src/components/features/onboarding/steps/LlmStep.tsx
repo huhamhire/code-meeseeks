@@ -1,0 +1,80 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { LlmProfile } from '@meebox/shared';
+import { LLM_PROVIDERS, LlmProfileForm, LlmProviderPicker } from '../../settings';
+import { LlmProviderIcon } from '../../../common';
+
+export function LlmStep({
+  draft,
+  existing,
+  onChange,
+  onValidityChange,
+}: {
+  draft: LlmProfile;
+  existing: LlmProfile[];
+  onChange: (d: LlmProfile) => void;
+  onValidityChange: (valid: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  // 两阶段：先选 provider（居中滚动列表）→ 选定后列表收到左侧、右侧展开配置
+  const [chosen, setChosen] = useState(false);
+  const pick = (provider: LlmProfile['provider']): void => {
+    onChange({ ...draft, provider });
+    setChosen(true);
+  };
+  return (
+    <div className="onboarding-llm">
+      <h2 className="onboarding-step-title">{t('onboarding.llmTitle')}</h2>
+      <p className="muted onboarding-step-sub">{t('onboarding.llmSub')}</p>
+
+      {!chosen ? (
+        // 阶段一：居中的 provider 选择列表（滚动）
+        <div className="onboarding-provider-pick">
+          {/* 阶段一沿用中性配置选择器视觉，但每项尾随「›」提示可进入、且不预选高亮 */}
+          <div
+            className="config-pick-list"
+            role="radiogroup"
+            aria-label={t('onboarding.providerPickAria')}
+          >
+            {LLM_PROVIDERS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                className="config-pick-item"
+                onClick={() => pick(p.value)}
+              >
+                <LlmProviderIcon provider={p.value} size={24} />
+                <span className="config-pick-name config-pick-name-fill">{p.label}</span>
+                {p.value === 'cli' && (
+                  <span className="badge-experimental" title={t('settings.cliExperimentalHint')}>
+                    {t('settings.experimental')}
+                  </span>
+                )}
+                <span className="config-pick-arrow" aria-hidden="true">
+                  ›
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        // 阶段二：左侧列表（图标左移）+ 右侧配置
+        <div className="onboarding-llm-grid">
+          <LlmProviderPicker
+            value={draft.provider}
+            onChange={(provider) => onChange({ ...draft, provider })}
+          />
+          <div className="onboarding-llm-form">
+            <LlmProfileForm
+              draft={draft}
+              existing={existing}
+              onChange={onChange}
+              onValidityChange={onValidityChange}
+              hideProvider
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

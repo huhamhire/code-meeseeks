@@ -1,0 +1,351 @@
+@use '../tokens' as *;
+
+// 首启配置向导：整屏覆盖，居中卡片 + 步骤圆点 + 轮播 slide
+.onboarding {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $bg-app;
+  padding: $space-8;
+  overflow-y: auto;
+}
+
+.onboarding-card {
+  width: 100%;
+  max-width: 760px;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  overflow: hidden;
+}
+
+// ===== 顶部步骤圆点 =====
+.onboarding-dots {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  list-style: none;
+  margin: 0;
+  padding: $space-6 $space-8;
+  border-bottom: 1px solid $border-default;
+  flex-shrink: 0;
+}
+.onboarding-dot {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  color: $text-muted;
+  font-size: $fs-md;
+
+  // 圆点之间的连接线
+  &:not(:last-child)::after {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: $border-default;
+    margin-left: $space-4;
+  }
+}
+.onboarding-dot-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: $radius-full;
+  border: 1px solid $border-default;
+  font-size: $fs-sm;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.onboarding-dot-label {
+  white-space: nowrap;
+}
+.onboarding-dot.current {
+  color: $text-primary;
+
+  .onboarding-dot-mark {
+    border-color: $color-accent;
+    background: $color-accent;
+    color: $text-on-accent;
+  }
+}
+.onboarding-dot.done {
+  color: $text-body;
+
+  .onboarding-dot-mark {
+    border-color: $color-accent;
+    color: $color-info;
+  }
+}
+
+// ===== slide 主体 =====
+.onboarding-slide {
+  padding: $space-8;
+  overflow-y: auto;
+  flex: 1;
+  animation: onboarding-fade 0.18s ease-out;
+}
+@keyframes onboarding-fade {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.onboarding-step-title {
+  font-size: $fs-xl;
+  font-weight: 600;
+  margin: 0 0 $space-3;
+  color: $text-primary;
+}
+.onboarding-step-sub {
+  margin: 0 0 $space-6;
+  line-height: $lh-loose;
+}
+
+// ===== 欢迎页 =====
+.onboarding-welcome {
+  text-align: center;
+  padding: $space-6 $space-4;
+}
+.onboarding-logo {
+  color: $color-info;
+  margin-bottom: $space-5;
+}
+.onboarding-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 $space-4;
+  color: $text-primary;
+}
+.onboarding-lead {
+  max-width: 520px;
+  margin: 0 auto $space-6;
+  line-height: $lh-loose;
+  color: $text-body;
+}
+.onboarding-points {
+  list-style: none;
+  padding: 0;
+  // width:fit-content + margin auto：整组按最宽一条收窄后水平居中，
+  // 条目内部仍左对齐（圆点对齐），视觉上跟标题/介绍一条中轴
+  width: fit-content;
+  max-width: 480px;
+  margin: 0 auto $space-8;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+
+  li {
+    position: relative;
+    padding-left: $space-6;
+    color: $text-body;
+    line-height: $lh-loose;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 8px;
+      width: 6px;
+      height: 6px;
+      border-radius: $radius-full;
+      background: $color-accent;
+    }
+  }
+}
+// 欢迎页底部 nav 内的语言选择：标签 + 定宽下拉，标签与下拉之间留白。位于 nav-left /
+// nav-right（step 0 均为空）之间，靠父级 justify-content:space-between 居中。
+.onboarding-nav-language {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+}
+// 语言下拉：收窄固定宽度、左对齐；不被 .settings-input 的 flex:1 撑满（复合选择器提权）
+.settings-input.onboarding-language-select {
+  flex: 0 0 auto;
+  width: 160px;
+}
+.onboarding-start {
+  min-width: 160px;
+  justify-content: center;
+}
+
+// ===== 平台步：左右布局 =====
+// 平台选择列表 + 表单的左右两栏布局收敛到 config-picker.scss（.config-pick-grid / -list / -item …），
+// 由 PlatformStep 与设置面板「连接」子模态共用，本文件不再单独维护。
+
+// ===== 折叠的「缓存目录」高级入口 =====
+.onboarding-advanced {
+  margin-top: $space-6;
+  border-top: 1px solid $border-muted;
+  padding-top: $space-5;
+}
+.onboarding-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+  background: transparent;
+  border: none;
+  color: $text-body;
+  font-size: $fs-md;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    color: $text-primary;
+  }
+}
+.onboarding-caret {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  color: $text-muted;
+
+  &.open {
+    transform: rotate(90deg);
+  }
+}
+.onboarding-advanced-body {
+  margin-top: $space-4;
+}
+
+// ===== LLM 步：provider 选择 + 配置 =====
+// provider 品牌图标容器（SVG glyph）
+.llm-provider-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  svg {
+    display: block;
+  }
+}
+
+// provider 选择列表（两阶段共用：图标 + 名称 + 箭头/选中）收敛到 config-picker.scss
+// （.config-pick-list / -item / -name / -arrow …），由 LlmStep 与设置面板「LLM」子模态共用。
+
+// 阶段一：居中的选择列表
+.onboarding-provider-pick {
+  max-width: 360px;
+  margin: 0 auto;
+}
+// 阶段一选择列表：与阶段二网格同高（190px），两步切换不跳动；provider 增多时在内滚动
+.onboarding-provider-pick .config-pick-list {
+  height: 190px;
+  overflow-y: auto;
+}
+
+// 阶段二：左列表 + 右配置。固定高度 + 两栏各自滚动，
+// 切换 provider 时模态高度恒定、不抖动，列表后续扩展也不撑高（同设置子模态）。
+.onboarding-llm-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: $space-8;
+  align-items: stretch;
+  height: 190px;
+
+  // 左侧列表：从右侧滑入到位（视觉上「收到左边」），并在固定高度内滚动
+  .config-pick-list {
+    min-height: 0;
+    overflow-y: auto;
+    animation: onboarding-slide-left 0.28s ease both;
+  }
+}
+// 右侧配置：略微延迟后渐隐进入；固定高度内滚动，顶部留半行余白与左侧列表协调
+.onboarding-llm-form {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: $space-5;
+  animation: onboarding-form-fade 0.3s ease 0.08s both;
+}
+
+@keyframes onboarding-slide-left {
+  from {
+    opacity: 0.3;
+    transform: translateX(36px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes onboarding-form-fade {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+// ===== 完成页：成功图案 + 友好文案 =====
+.onboarding-done {
+  text-align: center;
+  padding: $space-6 $space-4;
+}
+.onboarding-done-badge {
+  color: $color-approved;
+  margin-bottom: $space-5;
+  animation: onboarding-pop 0.36s ease both;
+}
+// 对勾描边按路径长度做「书写」动画
+.onboarding-check-path {
+  stroke-dasharray: 34;
+  stroke-dashoffset: 34;
+  animation: onboarding-check 0.4s ease 0.18s forwards;
+}
+@keyframes onboarding-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes onboarding-check {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+// ===== 底部导航 =====
+.onboarding-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-5 $space-8;
+  border-top: 1px solid $border-default;
+  background: $bg-elev;
+  flex-shrink: 0;
+}
+.onboarding-nav-right {
+  display: flex;
+  gap: $space-4;
+}
+
+@media (max-width: 640px) {
+  // .config-pick-grid 的窄屏单列回退在 config-picker.scss；此处仅 LLM 步的 grid
+  .onboarding-llm-grid {
+    grid-template-columns: 1fr;
+  }
+}

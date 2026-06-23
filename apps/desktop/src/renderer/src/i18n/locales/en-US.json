@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "No activity yet",
+    "loadError": "Failed to load activity · {{title}}",
+    "loading": "Loading activity…",
+    "mergeCommit": "Merge commit · {{parents}} parents",
+    "verb": {
+      "approved": "approved",
+      "commented": "commented",
+      "dismissed": "dismissed review",
+      "needsWork": "requested changes",
+      "unapproved": "withdrew approval"
+    }
+  },
   "app": {
     "approveActionFailed": "Approval action failed: {{msg}}",
     "loading": "Loading…",
@@ -34,6 +47,7 @@
     "bulletDescribe": "auto-generate PR summary / labels",
     "bulletImprove": "line-by-line code improvement suggestions (with importance scores)",
     "bulletReview": "run an AI review; results land in the findings list",
+    "cacheInline": "cache {{n}}",
     "cancelQueuedTitle": "Cancel queued task",
     "clearConfirmLabel": "Clear",
     "clearConfirmMessage": "Clear all PR Agent run history for the current PR? This affects only this PR and cannot be undone.",
@@ -51,7 +65,8 @@
     "codeExistingAria": "Original code",
     "codeImprovedAria": "Improved code",
     "commandNoArgs": "{{cmd}} does not accept arguments",
-    "concurrencyReached": "Concurrency limit reached ({{n}} running at once). New tasks for this PR will be queued and run automatically once a slot frees up",
+    "deleteRunAria": "Delete",
+    "deleteRunTitle": "Delete this run",
     "draftJumpEditTitle": "Edit in code",
     "draftJumpRestore": "Restore",
     "draftJumpRestoreTitle": "Restore and edit",
@@ -88,8 +103,17 @@
     "placeholderNoPr": "Select a PR to start a conversation",
     "placeholderNotReady": "PR Agent not ready",
     "placeholderReady": "Type a question, or use / to pick a command (↑↓ for history)",
+    "planTitle": "Plan",
     "queuedPosition": "Queued · position {{position}}",
-    "rawOutput": "Raw output ({{n}} chars)",
+    "rawOutput": "Raw output",
+    "reference": {
+      "clearTitle": "Remove reference",
+      "closedDropped": "Closed by re-review",
+      "closedReplaced": "Superseded by re-review",
+      "reference": "Reference",
+      "referenceTitle": "Reference this comment to start a re-review",
+      "viewAsk": "View re-review"
+    },
     "reject": "Reject",
     "rejectFindingTitle": "Reject this suggestion (will not be posted to remote)",
     "resizeInputAria": "Resize chat input",
@@ -109,6 +133,9 @@
     "runFailedReason": "Run failed ({{reason}})",
     "scoreTitle": "Importance score from pr-agent, 1-10",
     "scrollUpForOlder": "Scroll up to load earlier history…",
+    "sectionAskAnalysis": "Analysis",
+    "sectionAskSuggestions": "Suggestions",
+    "sectionAskSummary": "Conclusion",
     "sectionAssessment": "Assessment",
     "sectionCodeFeedback": "Code feedback",
     "sectionCodeSuggestion": "Suggestions",
@@ -122,6 +149,11 @@
     "sectionSummary": "Summary",
     "sectionTitle": "Suggested title",
     "sectionWalkthrough": "File changes",
+    "selection": {
+      "attachedTitle": "Selected lines attached to your next question — click to ignore",
+      "ignoredTitle": "Selected lines ignored — click to attach to your next question",
+      "linesSelected": "{{lines}} lines selected"
+    },
     "sendAria": "Send",
     "sendQueuedTitle": "Send (new task will be queued)",
     "sendTitle": "Send (Enter)",
@@ -132,10 +164,21 @@
     "statusSucceeded": "Done",
     "stopAria": "Stop",
     "stopTitle": "Stop execution",
-    "tokensTitle": "Input (prompt) {{prompt}} · Output (completion) {{completion}} tokens",
+    "tokensInTitle": "Input (prompt) {{n}} tokens",
+    "tokensOutTitle": "Output (completion) {{n}} tokens",
+    "turnsTitle": "Model interaction turns (one model call per turn)",
     "unknownCommand": "Unknown command {{head}}; supported: {{cmds}}",
     "userQuestionAria": "User question",
     "waitingOutput": "(Waiting for PR Agent output…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "Cancel (Esc)",
+    "emptyTitle": "Comment can't be empty",
+    "placeholder": "Write a comment…",
+    "send": "Comment",
+    "sendTitle": "Send (Cmd/Ctrl+Enter)",
+    "sending": "Sending…",
+    "textareaAria": "New comment editor"
   },
   "commentEditEditor": {
     "cancelTitle": "Cancel (Esc)",
@@ -156,6 +199,7 @@
     "textareaAria": "Comment reply editor"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "Jump to this line in Diff",
     "anchorTitle": "Anchored to {{side}} side · {{lineType}}",
     "daysAgo_one": "{{count}} day ago",
     "daysAgo_other": "{{count}} days ago",
@@ -199,6 +243,7 @@
     "close": "Close",
     "confirm": "OK",
     "delete": "Delete",
+    "discard": "Discard",
     "edit": "Edit",
     "loading": "Loading…",
     "save": "Save"
@@ -248,19 +293,11 @@
     "blameChangeRangeTitle": "This range was changed by this PR",
     "blameFailed": "Blame failed",
     "blameFailedNamed": "Blame failed for {{path}}",
-    "deleteCommentModalMessage": "This will delete this comment on the remote and cannot be undone. Continue?",
-    "deleteCommentModalTitle": "Delete comment",
-    "deleteCommentTitle": "Delete your own published comment (synced remotely)",
-    "deleteFailed": "Delete failed: {{error}}",
-    "deleting": "Deleting…",
     "diffRenderFailed": "Diff render failed: {{message}}",
     "diffRenderFailedHint": "Switching files or retrying usually recovers. The underlying error has been logged to the console.",
-    "dismissErrorAria": "Dismiss error",
     "dismissNotificationTitle": "Dismiss this notification",
-    "editCommentTitle": "Edit your own published comment (synced remotely)",
     "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
-    "gotIt": "Got it",
     "loadChangedFilesFailed": "Failed to load changed files",
     "loadCommentsFailed": "Failed to load comments",
     "loadingContentHint": "Reading git blob from the local mirror; large or binary files may be slower",
@@ -271,10 +308,13 @@
     "preparingSync": "Preparing sync",
     "readFileContentFailed": "Failed to read file content",
     "readFileContentFailedNamed": "Failed to read content of {{path}}",
-    "reply": "Reply",
     "resizeFileListTitle": "Drag to resize file tree",
     "retry": "Retry",
+    "scopeAll": "All changes",
+    "scopeCommitCount_one": "{{count}} commit",
+    "scopeCommitCount_other": "{{count}} commits",
     "scopeLabel": "{{scope}}: ",
+    "scopeLoading": "Loading commits…",
     "searchAria": "Search",
     "searchChanges": "Search changes",
     "searchChangesTitle": "Search changes (head + base)",
@@ -350,6 +390,14 @@
     "statusRejected": "Rejected"
   },
   "errors": {
+    "EAG0001": "/ask requires a question",
+    "EAG0002": "A /{{tool}} task for this PR is already running or queued; do not trigger it again.",
+    "EAG0003": "pr-agent not ready: neither the embedded runtime nor a local CLI was detected. See probe details in Settings.",
+    "ENT0001": "Proxy is disabled or its address is empty",
+    "ENT0407": "Proxy authentication failed (407); check the username/password",
+    "EPR0001": "Draft not found (it may have been deleted)",
+    "EPR0002": "Draft was rejected, skipping",
+    "EPR0003": "This pull request has already been merged; refresh to see the latest state.",
     "authHint": "Your Personal Access Token (PAT) may be expired or lack permissions; check it in Settings",
     "authTitle": "Authentication failed",
     "dnsHint": "The hostname could not be resolved; check base_url / DNS / proxy",
@@ -370,11 +418,13 @@
     "refusedTitle": "Connection refused",
     "timeoutHint": "Unable to reach the remote; check your network / VPN / proxy",
     "timeoutTitle": "Connection timeout",
+    "unknownCode": "Something went wrong ({{code}})",
     "unknownTitle": "Unknown error"
   },
   "fileTree": {
     "commentCountTitle_one": "{{count}} remote comment",
     "commentCountTitle_other": "{{count}} remote comments",
+    "conflictTitle": "Conflicts when merged into the target branch",
     "draftCountTitle_one": "{{count}} draft pending publish",
     "draftCountTitle_other": "{{count}} drafts pending publish"
   },
@@ -388,9 +438,10 @@
     "apiKeyOptionalPlaceholder": "This provider needs no key (leave empty)",
     "cliCommandFallback": "command-line tool",
     "cliCommandLabel": "CLI Command",
-    "cliCommandPlaceholder": "Command name",
+    "cliCommandPlaceholder": "Command name, e.g. claude / codex",
+    "cliNamePlaceholder": "e.g. claude / codex",
     "cliWarningPrefix": "⚠️ Filling in and enabling this profile authorizes Code Meeseeks to invoke the local",
-    "cliWarningSuffix": "tool to perform review operations (running in a subprocess under your local login session). Make sure the command is installed and signed in.",
+    "cliWarningSuffix": "tool to perform review operations. Make sure the command is installed and signed in.",
     "errorCliUnsupported": "Unsupported CLI tool",
     "errorLabelDuplicate": "Name already exists",
     "errorLabelSlug": "Only letters / digits / - / _ allowed, 1-32 characters",
@@ -403,7 +454,7 @@
         "hint": "Official Anthropic API; enter the model name directly (e.g. claude-opus-4-8); the anthropic/ prefix is added automatically"
       },
       "cli": {
-        "hint": "🧪 Experimental: depends on the upstream CLI (e.g. claude / codex); its behavior may change with upstream releases — stability and continued availability are not guaranteed. Delegates review requests to a locally installed and authorized command-line tool to call the model, without connecting to the API directly or requiring a key; the tool manages its own model and quota. Filling in and enabling this authorizes invoking that command-line tool in a subprocess under your local login session.",
+        "hint": "🧪 Experimental: depends on a local command-line tool; its behavior may change with the tool's releases — stability and continued availability are not guaranteed. Delegates review requests to a locally installed and authorized command-line tool to call the model.",
         "label": "Local CLI"
       },
       "dashscope": {
@@ -452,7 +503,9 @@
     "merge": "Merge",
     "mergeTitle": "Merge this PR into the target branch",
     "merging": "Merging…",
+    "moreReviewers": "{{n}} more reviewers",
     "needsWork": "Needs work",
+    "newComment": "Comment",
     "openInBrowser": "Open in browser",
     "openInBrowserTitle": "Open the PR's remote page in your default browser",
     "ownPrReason": "You can't review your own PR",
@@ -461,6 +514,7 @@
     "showBlame": "Enable blame (head side only)",
     "showWhitespace": "Show whitespace (spaces / tabs)",
     "sideBySide": "Side by side",
+    "tabActivity": "Activity",
     "tabComments": "Comments",
     "tabCommits": "Commits",
     "tabDiff": "Changes",
@@ -503,7 +557,6 @@
     "platformTitle": "Connect Code Platform",
     "progressAria": "Setup progress",
     "providerPickAria": "Choose provider",
-    "providerPickHint": "Choose a provider to connect",
     "skip": "Skip",
     "startConfig": "Get Started",
     "stepDone": "Done",
@@ -520,6 +573,16 @@
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
   },
+  "prInfo": {
+    "createdAt": "Created (remote)",
+    "description": "Description",
+    "descriptionEmpty": "No description",
+    "recentUpdate": "Last updated",
+    "reviewers": "Reviewers ({{n}})",
+    "reviewersEmpty": "None",
+    "timeline": "Timeline",
+    "updatedAt": "Updated (remote)"
+  },
   "prItem": {
     "approvedCount_one": "{{count}} reviewer approved",
     "approvedCount_other": "{{count}} reviewers approved",
@@ -528,6 +591,11 @@
     "mergeable": "Mergeable: all merge conditions met",
     "needsWorkCount_one": "{{count}} reviewer marked needs work",
     "needsWorkCount_other": "{{count}} reviewers marked needs work"
+  },
+  "prStatus": {
+    "approved": "Approved",
+    "needsWork": "Needs work",
+    "pending": "Pending"
   },
   "publishReviewModal": {
     "allPublished": "All drafts were written to the remote; the comment list will refresh immediately.",
@@ -572,7 +640,7 @@
     "checkUpdate": "Check for Updates",
     "checkUpdateTitle": "Check GitHub for the latest version (detection only, no auto-install)",
     "checking": "Checking…",
-    "cliExperimentalHint": "Local CLI providers depend on upstream CLIs (e.g. claude / codex); their behavior may change with upstream releases — stability and continued availability are not guaranteed.",
+    "cliExperimentalHint": "Local CLI providers depend on a local command-line tool; its behavior may change with the tool's releases — stability and continued availability are not guaranteed.",
     "configKey": "Config",
     "configure": "Configure",
     "connSaveHint": "Please fill in Name / Base URL / Token",
@@ -584,6 +652,8 @@
     "deleteConnectionConfirmTitle": "Delete Connection",
     "deleteConnectionTitle": "Delete this connection",
     "deleteLlmProfileTitle": "Delete this profile",
+    "discardChangesMessage": "This form has unsaved changes. Close without saving?",
+    "discardChangesTitle": "Discard unsaved changes?",
     "editConfigYaml": "Edit config.yaml",
     "editConnectionTitle": "Edit Connection",
     "editLlmTitle": "Edit LLM Model",

@@ -1,5 +1,6 @@
 import type { PlatformKind, PrDiscoveryFilter, PullRequest } from './platform.js';
 import type { PrAgentStrategy } from './pr-agent-status.js';
+import type { ReviewRunTool } from './tool-registry.js';
 
 /**
  * 本地 review 判定。和 Bitbucket reviewer.status 一一对应，UI 由它驱动两个 toggle 按钮：
@@ -11,20 +12,9 @@ import type { PrAgentStrategy } from './pr-agent-status.js';
  */
 export type LocalPrStatus = 'pending' | 'approved' | 'needs_work';
 
-/**
- * pr-agent 跑的工具枚举：
- * - describe / review：生成 PR 描述 / 代码评审，输出落到工作树的 markdown 文件
- * - ask：自然语言追问，输出走 stdout (没有专属 output 文件)，request 必带 question
- * - improve：逐行代码改进建议；pr-agent local provider 不实现
- *   `publish_code_suggestions`，所以走 `publish_comment` 把汇总 markdown 写到
- *   `review.md` (跟 review / ask 共用)。每条建议形态：
- *     <details><summary>file<br>[start-end]:</summary>...```diff\nold\nnew\n```...</details>
- *   parseReviewOutput 对 tool='improve' 走专门解析路径，把每条 details 拆成
- *   带 anchor (path / startLine / endLine) 的 code-feedback finding。
- *
- * 后续 /reflect 等接进来时往这里加值
- */
-export type ReviewRunTool = 'describe' | 'review' | 'ask' | 'improve';
+// 工具枚举 ReviewRunTool 见统一注册表 tool-registry（新增工具改那里）。注：improve 的 pr-agent local
+// provider 不实现 `publish_code_suggestions`，输出走 review.md（与 review / ask 共用）；parseReviewOutput
+// 对 tool='improve' 走专门解析路径，把每条 <details> 建议拆成带 anchor 的 code-feedback finding。
 
 export type ReviewRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -59,20 +49,23 @@ export type FindingCategory = 'description' | 'general' | 'code-feedback';
  * 是否隐藏 / 后续做特化卡片。
  */
 export type PrDocSectionKey =
-  | 'title'             // 建议的 PR 标题
-  | 'pr-type'           // 类型标签 (Bug fix / Enhancement / Tests / ...)
-  | 'summary'           // /review 顶部总结
-  | 'description'       // 主描述段
-  | 'diagram'           // 架构图（changes_diagram，mermaid）
-  | 'assessment'        // 思路建议（注入字段：替代方案 + 倾向性建议，对齐 Qodo High-Level Assessment）
-  | 'walkthrough'       // 文件级走查
-  | 'relevant-tests'    // 相关测试
-  | 'security'          // 安全发现
-  | 'code-feedback'     // /review 单条 finding (带 file:line anchor)
-  | 'code-suggestion'   // /improve 单条改进建议 (带 file:line anchor + existing/improved diff)
-  | 'effort'            // 评估工作量 1-5
-  | 'score'             // 质量分
-  | 'general';          // 兜底，未识别
+  | 'title' // 建议的 PR 标题
+  | 'pr-type' // 类型标签 (Bug fix / Enhancement / Tests / ...)
+  | 'summary' // /review 顶部总结
+  | 'description' // 主描述段
+  | 'diagram' // 架构图（changes_diagram，mermaid）
+  | 'assessment' // 思路建议（注入字段：替代方案 + 倾向性建议，对齐 Qodo High-Level Assessment）
+  | 'walkthrough' // 文件级走查
+  | 'relevant-tests' // 相关测试
+  | 'security' // 安全发现
+  | 'code-feedback' // /review 单条 finding (带 file:line anchor)
+  | 'code-suggestion' // /improve 单条改进建议 (带 file:line anchor + existing/improved diff)
+  | 'ask-summary' // /ask 结构化分段：结论 / 直接回答（高亮、展开）
+  | 'ask-analysis' // /ask 结构化分段：过程性分析 / 讨论（默认收起）
+  | 'ask-suggestions' // /ask 结构化分段：可执行建议（高亮）
+  | 'effort' // 评估工作量 1-5
+  | 'score' // 质量分
+  | 'general'; // 兜底，未识别
 
 export interface FindingAnchor {
   path: string;
@@ -210,6 +203,11 @@ export interface DraftsFile {
   drafts: ReviewDraft[];
 }
 
+export interface FindingClosuresFile {
+  schema_version: 1;
+  closures: FindingClosure[];
+}
+
 /**
  * PR identity 快照：嵌进 ReviewRun (可选) 让 run 文件自描述，不依赖 `prs/index.json`
  * 也能反查所属 PR。M5 归档场景 (PR 已硬清但 run 单独导出) 会需要。
@@ -241,6 +239,13 @@ export interface TokenUsage {
   totalTokens?: number;
   /** 本次 run 捕获到的 LLM 调用次数（累加来源） */
   calls?: number;
+  /** 提示缓存读取（cache_read）token 数：promptTokens 的一部分，供 UI 拆分展示「↑总量 (cache N)」。
+   *  CLI 路径取自 claude/codex usage，API 路径取自 litellm（Anthropic cache_read / OpenAI cached_tokens）。
+   *  缺失或为 0 = 无缓存命中信息（UI 不展示该括号）。 */
+  cacheReadTokens?: number;
+  /** 模型实际交互轮次：CLI agentic 模式为本次 run 内部累计的 num_turns（可远大于 calls）；
+   *  其它情况回退为 LLM 调用次数（calls）。≤1 时 UI 不单独展示。 */
+  turns?: number;
 }
 
 export interface ReviewRun {
@@ -291,6 +296,37 @@ export interface ReviewRun {
   summary?: string;
   /** 本次 run 的真实 LLM token 用量（累加）；缺失 = 未捕获到（见 TokenUsage） */
   tokenUsage?: TokenUsage;
+  /**
+   * 复评引用：本次 /ask 是对先前 review/improve run 某条 finding 的「复评」时，记下被引用的源
+   * finding（前向链）。UI 据此在 /ask 卡片上展示「复评自 <file:line>」徽标 + 裁决动作。
+   * 仅 tool='ask' 且经「引用」触发时填。
+   */
+  referencedFinding?: { runId: string; findingId: string; anchor?: FindingAnchor };
+  /**
+   * 复评裁决：解析自复评 /ask 输出的 `<verdict>` 段——replace=给取代性新评论 / keep=原评论成立 /
+   * drop=原评论不成立。驱动 UI 的采纳 / 关闭动作。模型未给则 undefined（UI 仅展示、不出裁决动作）。
+   */
+  askVerdict?: AskVerdict;
+}
+
+/** 复评裁决：取代原评论 / 保留原评论 / 撤销原评论。 */
+export type AskVerdict = 'replace' | 'keep' | 'drop';
+
+/**
+ * finding 关闭关系：一条被复评 /ask「取代 / 撤销」而关闭的源 finding（独立于本地草稿语义，仅作用于
+ * ChatPane finding 卡片的关闭态 + 双向互链）。按 (runId, findingId) 标识源 finding。
+ */
+export interface FindingClosure {
+  /** 源 finding 所在的 review/improve run id */
+  runId: string;
+  /** 源 finding id */
+  findingId: string;
+  /** 关闭它的复评 /ask run id（用于卡片互链） */
+  byAskRunId: string;
+  /** 触发关闭的裁决（replace=被取代 / drop=被撤销） */
+  verdict: AskVerdict;
+  /** ISO 关闭时间 */
+  createdAt: string;
 }
 
 export interface ReviewRunFile {

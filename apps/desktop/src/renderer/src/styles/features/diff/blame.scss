@@ -1,0 +1,135 @@
+// DiffView 的 Bitbucket 风格 blame 列：toolbar 开关 + 左侧 blame 栏（头像/名/sha/日期 4 列 grid）。
+// 见 components/features/pr/tabs/diff/blame/BlameColumn。toolbar 内的尺寸钉死在 layout/main-pane 的 .pr-tabs-right。
+
+@use '../../tokens' as *;
+
+// blame 开关：跟 .diff-mode-toggle button 同尺寸（高度由 .pr-tabs-right 内统一 height 钉死）
+.blame-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  padding: 2px $space-4;
+  background: transparent;
+  border: 1px solid $border-default;
+  color: $text-muted;
+  cursor: pointer;
+  font-size: $fs-sm;
+  border-radius: $radius-sm;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+  &.active {
+    background: $color-accent;
+    border-color: $color-accent;
+    color: $text-on-accent;
+  }
+}
+
+// blame 列：独立 React 组件，做 diff-pane-wrapper 的左侧 flex 子项。
+// 内部 row 用 absolute 子项画，按 Monaco scrollTop 实时同步位置。
+.blame-column {
+  flex-shrink: 0;
+  background: $bg-panel-alt;
+  border-right: 1px solid $border-default;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.blame-column-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+// 4 列 grid 固定布局：头像 | 名 | sha | 日期。
+//   - 区块跨多行时，内容贴顶部（align-content: start）；下方留空给该 commit 的后续行
+//   - 顶部一行的 track 高度 = --blame-lh（Monaco 实际行高），跟第一行代码同 Y、同高
+//   - 行内三个文本 + 头像 align-items: center 共享同一垂直中线，避免错位
+.blame-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 80px 70px;
+  grid-auto-rows: var(--blame-lh, 21px);
+  gap: $space-3;
+  align-items: center;
+  align-content: start;
+  padding: 0 $space-4 0 $space-5;
+  font-size: $fs-sm;
+  line-height: var(--blame-lh, 21px);
+  color: $text-primary;
+  border-bottom: 1px solid $border-default-fade;
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
+
+  &:hover {
+    background: $bg-hover;
+  }
+
+  // 头像在 row 中也以 lineHeight 为基准居中：grid align-items: center 已经处理，
+  // 这里只统一尺寸 + 不收缩
+  .avatar {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+// 三个文本元素共享 line-height + font-size，baseline 一致
+.blame-row-name,
+.blame-row-sha,
+.blame-row-date {
+  font-size: $fs-sm;
+  line-height: var(--blame-lh, 21px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blame-row-name {
+  color: $text-primary;
+}
+
+.blame-row-sha {
+  font-family: $font-mono;
+  color: $color-info;
+  letter-spacing: 0.02em;
+}
+
+.blame-row-date {
+  color: $text-muted;
+  text-align: right;
+}
+
+// PR 改动行色带：左侧 3px 绿条，对齐 Monaco diff 的 "added" 装饰色
+.blame-row-change {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding-left: 10px;
+  border-left: 3px solid $blame-change;
+  background: rgba($blame-change, 0.08);
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+// 折叠占位行（"X hidden lines"）：斜纹背景 + 灰底，表示"非真实行 / 无 blame"
+.blame-row-fold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba($blame-fold, 0.08) 0,
+    rgba($blame-fold, 0.08) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-bottom: 1px solid $border-default-fade;
+  border-top: 1px solid $border-default-fade;
+  pointer-events: none;
+}

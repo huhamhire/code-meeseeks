@@ -1,0 +1,174 @@
+// 通用模态壳：backdrop / 外框 / header / body / 区块(section) / 键值表(kv) / 底栏(footer/
+// actions) / 嵌套子模态 / 尺寸修饰。各业务模态在此基础上组合，专属内容样式在各自域维护
+// （settings → features/settings/forms，提交评审 → features/pr/publish-review 等）。
+
+@use '../tokens' as *;
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: $z-modal;
+}
+
+.modal {
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: 6px;
+  max-width: 640px;
+  width: 92%;
+  max-height: 84vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: $space-6 $space-8;
+  border-bottom: 1px solid $border-default;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+
+  h3 {
+    font-size: $fs-xl;
+    font-weight: 600;
+  }
+}
+
+// 右上角关闭按钮：方形 X 图标（免国际化），复用 .icon-btn 的透明无边框，
+// 这里只调方形 padding + hover 浅底
+.modal-close {
+  padding: 4px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+}
+
+.modal-body {
+  padding: $space-8;
+  overflow-y: auto;
+}
+
+// ConfirmModal: 跟 SettingsModal 共用 .modal-backdrop/.modal/.modal-header，加几条
+// 小尺寸 + 底部操作行特化
+.modal-confirm {
+  max-width: 380px;
+}
+.modal-confirm-body {
+  padding: $space-6 $space-8;
+  font-size: $fs-md;
+  line-height: $lh-loose;
+  color: $text-body;
+}
+.modal-actions {
+  padding: $space-4 $space-8;
+  border-top: 1px solid $border-default;
+  display: flex;
+  justify-content: flex-end;
+  gap: $space-3;
+  flex-shrink: 0;
+}
+
+.modal-section {
+  margin-bottom: $space-8;
+
+  h4 {
+    font-size: $fs-lg;
+    font-weight: 600;
+    margin-bottom: $space-4;
+    color: $text-primary;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+}
+
+// 区块标题行：标题左、操作按钮（如"+ 添加连接"）右，省纵向空间。h4 去掉自身
+// 下边距改由本行统一控制
+.modal-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $space-4;
+
+  h4 {
+    margin-bottom: 0;
+  }
+}
+
+// 标题 + 状态 chip 成组靠左，让右侧操作按钮保持两端对齐
+.modal-section-head-title {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+}
+
+.modal-kv {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: $space-2 $space-6;
+  font-size: $fs-lg;
+}
+.modal-kv-key {
+  color: $text-muted;
+}
+.modal-kv-val {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  word-break: break-all;
+  color: $text-body;
+  min-width: 0; // 让 input width:100% 不被 grid cell 自然撑出去
+}
+
+.modal-footer {
+  margin-top: $space-4;
+}
+
+// 模态框底栏：左侧工具（编辑 config.yaml / DevTools），右侧全局保存。固定不滚动
+.modal-footer-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+  padding: $space-5 $space-8;
+  border-top: 1px solid $border-default;
+  background: $bg-elev;
+}
+
+.modal-footer-left,
+.modal-footer-right {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+}
+
+.modal-footer-right .error-text {
+  margin-top: 0;
+}
+
+.error-text {
+  color: $color-danger;
+  font-size: $fs-md;
+  margin-top: $space-4;
+}
+
+// 嵌套子模态框 + 小模态体
+.modal-backdrop-nested {
+  background: rgba(0, 0, 0, 0.4);
+  z-index: $z-modal-nested;
+}
+.modal-sm {
+  // LlmEditorModal 用：URL / 模型 ID / 自部署 endpoint 这类字段很长
+  // (dashscope 默认 endpoint 已经 ~50 chars，自定义 base URL 更长)，
+  // 拓到 720px 让输入框横向空间充裕
+  max-width: 720px;
+  width: 100%;
+}

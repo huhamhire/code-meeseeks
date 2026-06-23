@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import simpleGit, { type SimpleGit } from 'simple-git';
 import type { Logger } from 'pino';
 import type { SyncProgressEvent } from '@meebox/shared';
@@ -42,6 +44,9 @@ const GIT_UNSAFE_ENV_KEYS = new Set([
   'git_config_count',
   'prefix',
 ]);
+
+/** Promise 版 execFile：用于 simple-git 会因非零退出吞掉 stdout 的命令（如 merge-tree 冲突时退出码 1）。 */
+const execFileAsync = promisify(execFile);
 
 /** 从 env 里剔除 simple-git 会拦的危险 key（大小写不敏感）。 */
 function stripGitUnsafeEnv(env: Record<string, string>): Record<string, string> {
@@ -141,6 +146,34 @@ export class RepoMirrorManager {
   }
 
   /**
+   * 按给定 refspec best-effort fetch 进 bare 镜像（典型用法：补一道平台 PR 头引用
+   * `refs/pull/<n>/head` 等，把被删 / 强推源分支的 PR head sha 钉回本地——`refs/heads/*` 已看不到它）。
+   * 镜像不存在 / fetch 失败均**不抛**（网络 / 远端拒绝 / 该 PR 引用不存在都可能），调用方随后自行复验
+   * hasCommit。空 refspec 直接返回。前置：调用方已 await 过 syncMirror，故与全局 sync 队列无并发。
+   */
+  async fetchRefspecs(repo: RepoIdentity, refspecs: string[]): Promise<void> {
+    if (refspecs.length === 0) return;
+    const mp = this.mirrorPath(repo);
+    try {
+      await fs.access(mp);
+    } catch {
+      return;
+    }
+    try {
+      await this.withProxyEnv(simpleGit({ baseDir: mp })).raw(['fetch', 'origin', ...refspecs]);
+    } catch (err) {
+      this.opts.logger?.debug(
+        {
+          err: err instanceof Error ? err.message : String(err),
+          repo: this.repoKey(repo),
+          refspecs,
+        },
+        'fetchRefspecs failed (best-effort); sha may still be unreachable',
+      );
+    }
+  }
+
+  /**
    * 镜像是否「健康」：是有效 git 目录且 origin remote 已配置。clone/fetch 中途被打断会留下「HEAD 在、
    * 但 git 元数据残缺（常缺 origin remote）」的目录，仅判 HEAD 存在会误以为可 fetch → `git fetch origin`
    * 直接 fatal（`'origin' does not appear to be a git repository`）。用 `git config --get
@@ -157,21 +190,40 @@ export class RepoMirrorManager {
   }
 
   /**
-   * 计算 base..head 之间的 commit 数 (PR 引入的提交数)。完全走本地 bare 镜像
-   * `git rev-list --count --no-merges <base>..<head>` —— 不打远端，毫秒级返回。
+   * 计算 base..head 之间「源分支主干自产」的 commit 数 (PR 引入的提交数)。完全走本地 bare 镜像
+   * `git rev-list --count --first-parent --no-merges <base>..<head>` —— 不打远端，毫秒级返回。
    *
-   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。base 传**目标分支 sha**
-   * 时 base..head = head ^target，即「源分支不在目标分支上的提交」；`--no-merges` 略去合并提交，
-   * 与平台 PR /commits 列表口径一致（不把源分支合入目标分支带进来的提交、以及 merge 提交计入）。
+   * 用途：UI 在 PR 标签页上展示 commits 数角标，不必为了一个数字去拉远端。base 传**分叉点 sha**
+   * （merge-base）时 base..head = 源分支自分叉后引入的提交；`--first-parent` 只沿源分支主干，把
+   * 历史上 merge 其它分支带进来的他人提交一并排除，`--no-merges` 再略去 merge 提交本身——口径
+   * 与 {@link listIntroducedCommitShas}（commit 列表 / 活动时间线的过滤集）一致，避免角标与列表对不上。
    *
    * 任一 sha 不在本地镜像 (尚未 sync 到本 PR 范围) → 返回 null，调用方把它
    * 当 "暂时未知" 处理 (不显示角标 / 显示加载占位)。
    */
-  async countCommits(
+  async countCommits(repo: RepoIdentity, baseSha: string, headSha: string): Promise<number | null> {
+    const shas = await this.listIntroducedCommitShas(repo, baseSha, headSha);
+    return shas === null ? null : shas.length;
+  }
+
+  /**
+   * 列出 base..head 之间「源分支主干自产」的提交 SHA（40-char），newest-first。完全走本地 bare
+   * 镜像 `git rev-list --first-parent --no-merges <base>..<head>` —— 不打远端。
+   *
+   * `--first-parent` 只沿源分支主干遍历：历史上把别的分支 merge 进源分支带来的**他人提交**（落在
+   * merge 提交的第二父侧）不会进入结果；`--no-merges` 再剔除 merge 提交本身。最终只剩源分支上直接
+   * 产出的提交。
+   *
+   * 用途：把平台 `/commits` 端点返回的完整列表（`target..source` 全集，含 merge 及合入的他人提交）
+   * 过滤为「本 PR 真正引入的提交」，消除长期分支 / fork 同步分支反复 merge 造成的列表噪声。
+   *
+   * 任一 sha 不在本地镜像（尚未 sync 到本 PR 范围）→ 返回 null，调用方退回未过滤的平台列表。
+   */
+  async listIntroducedCommitShas(
     repo: RepoIdentity,
     baseSha: string,
     headSha: string,
-  ): Promise<number | null> {
+  ): Promise<string[] | null> {
     if (!baseSha || !headSha) return null;
     const [hasBase, hasHead] = await Promise.all([
       this.hasCommit(repo, baseSha),
@@ -182,12 +234,14 @@ export class RepoMirrorManager {
     try {
       const out = await simpleGit(mp).raw([
         'rev-list',
-        '--count',
+        '--first-parent',
         '--no-merges',
         `${baseSha}..${headSha}`,
       ]);
-      const n = Number.parseInt(out.trim(), 10);
-      return Number.isNaN(n) ? null : n;
+      return out
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
     } catch {
       return null;
     }
@@ -306,13 +360,7 @@ export class RepoMirrorManager {
     const BASE_BRANCH = 'meebox/base';
 
     const mirrorPath = this.mirrorPath(repo);
-    const wtRoot = path.join(
-      this.opts.reposDir,
-      repo.host,
-      repo.projectKey,
-      repo.repoSlug,
-      'wt',
-    );
+    const wtRoot = path.join(this.opts.reposDir, repo.host, repo.projectKey, repo.repoSlug, 'wt');
     await fs.mkdir(wtRoot, { recursive: true });
     const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const wtPath = path.join(wtRoot, `${headSha.slice(0, 12)}-${nonce}`);
@@ -402,13 +450,7 @@ export class RepoMirrorManager {
     // git 可能短暂报 'Invalid symmetric difference' / 'bad revision'。简单重试
     // 两次，间隔 200ms / 400ms 后通常就稳了。失败再向上抛由 renderer 走 banner。
     const out = await retryTransientGit(
-      () =>
-        simpleGit(mirrorPath).raw([
-          'diff',
-          '-z',
-          '--name-status',
-          `${baseSha}...${headSha}`,
-        ]),
+      () => simpleGit(mirrorPath).raw(['diff', '-z', '--name-status', `${baseSha}...${headSha}`]),
       this.opts.logger,
       { op: 'listChangedFiles', repo: this.repoKey(repo), baseSha, headSha },
     );
@@ -416,15 +458,48 @@ export class RepoMirrorManager {
   }
 
   /**
+   * 列出把源 head 合并进目标 tip 会冲突的文件路径（`git merge-tree --write-tree` 的试合并，git ≥ 2.38）。
+   * 无冲突（退出码 0）/ 无法判定（退出码 < 0 或 git 过旧）→ 返回空数组，由调用方保守不标记。
+   *
+   * merge-tree 冲突时退出码为 1 且把结果写到 stdout，simple-git 会因非零退出吞掉 stdout，故直接走
+   * execFile 自行捕获 stdout。`-z` 让输出 NUL 分隔（路径含空格/中文/引号都不破），`--name-only` 只出冲突
+   * 文件名：首字段是结果 tree OID，随后是各冲突文件名，遇空字段（段分隔的双 NUL）即冲突文件段结束。
+   */
+  async listConflictFiles(
+    repo: RepoIdentity,
+    targetSha: string,
+    sourceSha: string,
+  ): Promise<string[]> {
+    if (!targetSha || !sourceSha) return [];
+    const mirrorPath = this.mirrorPath(repo);
+    try {
+      // 退出码 0 = 干净可合并，无冲突。
+      await execFileAsync(
+        'git',
+        ['merge-tree', '--write-tree', '--name-only', '-z', targetSha, sourceSha],
+        { cwd: mirrorPath, maxBuffer: 64 * 1024 * 1024 },
+      );
+      return [];
+    } catch (err) {
+      const e = err as { code?: number | string; stdout?: string | Buffer };
+      // 退出码 1 = 存在冲突，stdout 携带冲突文件段；其余（无法完成试合并 / git 过旧）保守返回空。
+      if (e.code === 1 && e.stdout != null) {
+        return parseMergeTreeConflictsZ(e.stdout.toString());
+      }
+      this.opts.logger?.warn(
+        { err, repo: this.repoKey(repo), targetSha, sourceSha },
+        'git merge-tree conflict probe failed; treating as no conflict',
+      );
+      return [];
+    }
+  }
+
+  /**
    * 读取某文件在某 commit 的内容。完整 bare clone 下 blob 都在本地，直接 git show。
    * 文件不在该 commit (新增/删除场景) 返回空 content。
    * 简单 null-byte 启发判定二进制（前 8000 字符）。
    */
-  async getFileContent(
-    repo: RepoIdentity,
-    sha: string,
-    filePath: string,
-  ): Promise<FileContent> {
+  async getFileContent(repo: RepoIdentity, sha: string, filePath: string): Promise<FileContent> {
     const mirrorPath = this.mirrorPath(repo);
     let content: string;
     try {
@@ -488,13 +563,7 @@ export class RepoMirrorManager {
   async getBlame(repo: RepoIdentity, sha: string, filePath: string): Promise<BlameLine[]> {
     const mirrorPath = this.mirrorPath(repo);
     try {
-      const out = await simpleGit(mirrorPath).raw([
-        'blame',
-        '--porcelain',
-        sha,
-        '--',
-        filePath,
-      ]);
+      const out = await simpleGit(mirrorPath).raw(['blame', '--porcelain', sha, '--', filePath]);
       return parseBlamePorcelain(out);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -505,10 +574,7 @@ export class RepoMirrorManager {
         );
         return [];
       }
-      this.opts.logger?.warn(
-        { err, repo: this.repoKey(repo), sha, filePath },
-        'git blame failed',
-      );
+      this.opts.logger?.warn({ err, repo: this.repoKey(repo), sha, filePath }, 'git blame failed');
       throw err;
     }
   }
@@ -641,7 +707,6 @@ export class RepoMirrorManager {
     }
     return total;
   }
-
 }
 
 /**
@@ -750,6 +815,22 @@ function parseNameStatusZ(raw: string): ChangedFile[] {
 }
 
 /**
+ * 解析 `git merge-tree --write-tree --name-only -z` 在冲突时的 stdout。
+ * 格式（NUL 分隔）：`<结果 tree OID>\0<冲突文件名>\0...\0\0<提示信息段...>`——首字段是 tree OID，随后
+ * 是各冲突文件名，遇空字段（段间双 NUL）即冲突文件段结束，后续提示信息段忽略。同名去重。
+ */
+export function parseMergeTreeConflictsZ(raw: string): string[] {
+  const parts = raw.split('\0');
+  const files: string[] = [];
+  // parts[0] = 结果 tree OID；从下一字段起收集冲突文件名，遇空字段（段分隔）停止。
+  for (let i = 1; i < parts.length; i++) {
+    if (parts[i] === '') break;
+    files.push(parts[i]!);
+  }
+  return [...new Set(files)];
+}
+
+/**
  * 解析 `git blame --porcelain` 输出。每个 hunk 头形如：
  *   `<sha> <origLine> <finalLine> [<numLines>]`
  * 接着是 `key value` 元信息（author / author-mail / author-time / summary 等），
@@ -827,9 +908,7 @@ export function parseBlamePorcelain(raw: string): BlameLine[] {
       commit: sha,
       author: meta.author,
       authorEmail: meta.authorEmail,
-      authorDate: meta.authorTime
-        ? new Date(meta.authorTime * 1000).toISOString()
-        : '',
+      authorDate: meta.authorTime ? new Date(meta.authorTime * 1000).toISOString() : '',
       summary: meta.summary,
     });
   }

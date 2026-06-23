@@ -1,13 +1,23 @@
 import type { Rule } from '@meebox/rules';
 import type {
   AgentRecommendation,
-  AgentRecommendationVerdict,
   AgentStep,
+  AskVerdict,
+  Finding,
+  ReviewRun,
+  ReviewRunTool,
   TokenUsage,
   ToolCatalogEntry,
 } from '@meebox/shared';
-import { assembleSystemContext, type AssemblePrMeta } from './assemble.js';
-import { runStaggered } from './stagger.js';
+import { assembleSystemContext, type AssemblePrMeta } from './prompts.js';
+import { createStepRecorder } from './steps/context.js';
+import {
+  DEFAULT_REVIEW_PLAN,
+  assembleReviewSteps,
+  isValidReviewPlan,
+  type ReviewPlan,
+  type ReviewStepCtx,
+} from './steps/review/index.js';
 import type { AgentContext } from './types.js';
 
 /**
@@ -22,16 +32,40 @@ import type { AgentContext } from './types.js';
 export interface ToolText {
   text: string;
   usage?: TokenUsage;
+  /** 本次工具 run 的 id（PR3：judge 点名 / asks 复评关联需引用，review / ask 回填）。 */
+  runId?: string;
+  /** 解析出的结构化 findings（review 回填，供 judge 按 id 点名复评）。 */
+  findings?: Finding[];
+  /** 复评 /ask 的裁决（复评模式 ask 回填，asks 步据此自动关闭原 finding）。 */
+  askVerdict?: AskVerdict;
 }
 
 export interface ReviewOrchestratorDeps {
-  /** 分发一个只读 pr-agent 工具，返回文本结果（描述 / findings / 回答）。 */
-  runTool(call: { tool: 'describe' | 'review' | 'ask'; question?: string }): Promise<ToolText>;
-  /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。 */
-  chat(input: { system: string; user: string }): Promise<ToolText>;
+  /**
+   * 分发一个只读 pr-agent 工具，返回结果（描述 / findings / 回答 + runId / findings / askVerdict）。
+   * referencedContext / referencedFinding 仅复评模式 /ask 用：注入被复评评论上下文 + 结构化引用前向链。
+   */
+  runTool(call: {
+    tool: ReviewRunTool;
+    question?: string;
+    referencedContext?: string;
+    referencedFinding?: ReviewRun['referencedFinding'];
+  }): Promise<ToolText>;
+  /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。maxOutputTokens 可给轻量路由判读封顶输出。 */
+  chat(input: { system: string; user: string; maxOutputTokens?: number }): Promise<ToolText>;
   /** 每产生一个编排步骤即回调（持久化 / 流式推送）。 */
   onStep?(step: AgentStep): void | Promise<void>;
-  /** 用户停止：每步边界检查，已 abort 即抛 `用户暂停` 中止微流程（思考阶段也能立即终止）。 */
+  /**
+   * PR3：复评 ask 裁决 replace/drop 时自动关闭被取代的原 review finding（建立 FindingClosure）。
+   * 缺省 = 不关（单测 / 未接主进程时）。
+   */
+  closeFinding?(call: {
+    runId: string;
+    findingId: string;
+    byAskRunId: string;
+    verdict: AskVerdict;
+  }): Promise<void>;
+  /** 用户停止：每步边界检查，已 abort 即抛 `aborted` 中止微流程（思考阶段也能立即终止）。 */
   signal?: AbortSignal;
 }
 
@@ -40,12 +74,21 @@ export interface ReviewOrchestratorInput {
   pr: AssemblePrMeta;
   matchedRule?: Rule | null;
   language?: string;
+  /** 步骤展示文案（主进程 i18n 解析后注入）；省略回落 DEFAULT_STEP_LABELS（en-US）。 */
+  labels?: AgentStepLabels;
+  /** 总结三段骨架标题（主进程 i18n 注入）；省略回落 DEFAULT_SUMMARY_SECTIONS（en-US）。 */
+  summarySections?: readonly [string, string, string];
   /** 注入提示词的工具目录（含修改红线标注，见 buildToolCatalog）。 */
   toolCatalog?: ToolCatalogEntry[];
   /** 条件性追问 /ask 的硬上限（默认 2）。 */
   maxFollowupAsks?: number;
   /** 总结篇幅的**参考**上限（默认 800 字符）：仅作提示词里的软约束引导 LLM 收敛，**不**对产出做硬截断。 */
   summaryMaxChars?: number;
+  /**
+   * 执行计划（步骤序列）。省略 / 非法时用 DEFAULT_REVIEW_PLAN（即 describe-review → judge → asks →
+   * summary，与拆 plan 前一致）。仅 AutoPilot 路径会按规则注入自定义计划；手动评审恒省略走默认。
+   */
+  plan?: ReviewPlan;
 }
 
 export interface ReviewOrchestratorResult {
@@ -56,201 +99,63 @@ export interface ReviewOrchestratorResult {
   terminationReason?: string;
 }
 
-const VERDICTS: readonly AgentRecommendationVerdict[] = ['approve', 'needs_work', 'manual_review'];
-function isVerdict(v: unknown): v is AgentRecommendationVerdict {
-  return typeof v === 'string' && (VERDICTS as readonly string[]).includes(v);
-}
-
-function addUsage(acc: TokenUsage, u?: TokenUsage): TokenUsage {
-  if (!u) return acc;
-  return {
-    promptTokens: (acc.promptTokens ?? 0) + (u.promptTokens ?? 0),
-    completionTokens: (acc.completionTokens ?? 0) + (u.completionTokens ?? 0),
-    totalTokens: (acc.totalTokens ?? 0) + (u.totalTokens ?? 0),
-    calls: (acc.calls ?? 0) + (u.calls ?? 1),
-  };
-}
-
-/** 把 JSON 串字面量内部未转义的裸控制符（换行/回车/制表）补转义。LLM 常把多行 markdown 原样塞进
- *  字符串值而不转义换行，使 JSON.parse 失败——这一步修复该常见错误（不改字符串外的结构）。 */
-function escapeRawControlInStrings(s: string): string {
-  let out = '';
-  let inStr = false;
-  let escaped = false;
-  for (const ch of s) {
-    if (escaped) {
-      out += ch;
-      escaped = false;
-    } else if (ch === '\\') {
-      out += ch;
-      escaped = true;
-    } else if (ch === '"') {
-      inStr = !inStr;
-      out += ch;
-    } else if (inStr && (ch === '\n' || ch === '\r' || ch === '\t')) {
-      out += ch === '\n' ? '\\n' : ch === '\r' ? '\\r' : '\\t';
-    } else {
-      out += ch;
-    }
-  }
-  return out;
-}
-
-/** 从 LLM 文本里抽第一个 JSON 对象（容 ```json``` 围栏 + 裸文本），失败返回 null。
- *  对每个候选先按原样解析，失败再补转义裸换行重试，兜住模型多行字符串不转义的常见情况。 */
-export function extractJson<T>(text: string): T | null {
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  for (const c of [fence?.[1], text]) {
-    if (!c) continue;
-    const start = c.indexOf('{');
-    const end = c.lastIndexOf('}');
-    if (start < 0 || end <= start) continue;
-    const slice = c.slice(start, end + 1);
-    for (const candidate of [slice, escapeRawControlInStrings(slice)]) {
-      try {
-        return JSON.parse(candidate) as T;
-      } catch {
-        /* 试下一个候选 / 下一种转义 */
-      }
-    }
-  }
-  return null;
-}
+/** 评审总结三段式骨架标题的**默认值（en-US 兜底）**：顺序固定为 概述 / 关键发现 / 建议。多语言译文由
+ *  调用方（主进程 i18n 资源）解析后经 input.summarySections 注入；未注入时回落本默认。 */
+export const DEFAULT_SUMMARY_SECTIONS: readonly [string, string, string] = [
+  'Summary',
+  'Key findings',
+  'Suggestions',
+];
 
 /**
- * 去掉模型误并入 summary / final 末尾的判定 JSON（```json {...}``` 围栏或裸对象，仅当含
- * recommendation/verdict 字样才删），避免原始 JSON 暴露给用户。recommendation 走独立字段渲染为判定徽标。
+ * 编排 / 规划步骤行里**直接展示**给用户的固定文案（thought / 判读结果 / 兜底建议理由 / 拒绝前缀）。
+ * 这些串经 transcript 持久化、由渲染层逐字显示（不走 i18next key 映射），故须在**生成时**就是目标语言文本：
+ * 由调用方（主进程 i18n 资源）解析后经 input.labels 注入，agent 内仅留 en-US 兜底（DEFAULT_STEP_LABELS）。
+ * LLM 生成的自由 thought 本就跟随作答语言，不在此列；事后切 UI 语言不回改历史步骤（同总结正文）。
  */
-export function stripTrailingJson(s: string): string {
-  let out = s.trimEnd();
-  // 末尾围栏代码块（```json {...}```）
-  out = out
-    .replace(/\s*```(?:json)?\s*\{[\s\S]*?\}\s*```\s*$/i, (m) =>
-      /"(?:recommendation|verdict)"\s*:/.test(m) ? '' : m,
-    )
-    .trimEnd();
-  // 末尾裸 JSON 对象：以末尾 } 为锚按花括号配平反找到匹配的起始 {，界定整个尾部对象（非最内层 {）。
-  if (out.endsWith('}')) {
-    let depth = 0;
-    let start = -1;
-    for (let i = out.length - 1; i >= 0; i--) {
-      const ch = out[i];
-      if (ch === '}') depth++;
-      else if (ch === '{' && --depth === 0) {
-        start = i;
-        break;
-      }
-    }
-    if (start >= 0 && /"(?:recommendation|verdict)"\s*:/.test(out.slice(start))) {
-      out = out.slice(0, start).trimEnd();
-    }
-  }
-  return out;
+export interface AgentStepLabels {
+  /** 微流程「生成 PR 描述与审查发现」步思考（describe + review 合并为一行；二者并行执行）。 */
+  describeReview: string;
+  /** 微流程「生成代码改进建议」步思考（/improve；仅规则计划纳入时出现）。 */
+  improve: string;
+  /** 微流程判读步思考。 */
+  judge: string;
+  /** 判读结果：存在严重问题、将追问 n 个。 */
+  judgeSevere: (n: number) => string;
+  /** 判读结果：无严重问题、不追问。 */
+  judgeNone: string;
+  /** 收尾步思考。 */
+  summary: string;
+  /** 规划步：工具调用被红线拒绝的结果前缀（后接具体原因）。 */
+  rejectedPrefix: string;
 }
-
-/**
- * 兜底打捞人类可读散文：当 JSON 动作解析失败（截断 / 引号未转义等无法恢复时），从原始文本里用宽松
- * 正则捞出 `final` / `summary` 字段值并反转义，绝不把原始 JSON 动作丢给用户当回答。捞不到才退回原文。
- */
-export function salvageProse(raw: string): string {
-  const m = raw.match(/"(?:final|summary)"\s*:\s*"((?:\\.|[^"\\])*)"?/);
-  if (m?.[1]) {
-    try {
-      return JSON.parse(`"${m[1]}"`) as string;
-    } catch {
-      return m[1];
-    }
-  }
-  return raw.trim();
-}
-
-function judgePrompt(reviewText: string, maxAsks: number): string {
-  return [
-    'You just produced the review findings below. Decide whether any finding is a',
-    '*particularly severe* issue (e.g. likely security hole, data loss, serious logic bug)',
-    `that genuinely needs a clarifying follow-up question. Default to NO follow-up.`,
-    `Ask at most ${String(maxAsks)} questions, and only for severe issues.`,
-    '',
-    'Reply with JSON only: {"severe": boolean, "questions": string[]}.',
-    '',
-    '--- Review findings ---',
-    reviewText,
-  ].join('\n');
-}
-
-/** 评审总结的统一三段式骨架标题（按语言本地化，缺省回落英文）：固定结构 → 输出稳定、可预期。
- *  顺序固定为 概述 / 关键发现 / 建议。 */
-const SUMMARY_SECTIONS: Record<string, readonly [string, string, string]> = {
-  'zh-CN': ['摘要', '关键发现', '建议'],
-  'en-US': ['Summary', 'Key findings', 'Suggestions'],
-  'ja-JP': ['概要', '主な指摘', '提案'],
-  'de-DE': ['Zusammenfassung', 'Wichtige Erkenntnisse', 'Empfehlungen'],
+/** 步骤文案默认值（en-US 兜底）；多语言由主进程 i18n 解析后经 input.labels 注入，未注入时回落本默认。 */
+export const DEFAULT_STEP_LABELS: AgentStepLabels = {
+  describeReview: 'Generate the PR description and review findings',
+  improve: 'Generate code improvement suggestions',
+  judge: 'Decide whether there are important issues needing follow-up',
+  judgeSevere: (n) => `Important — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
+  judgeNone: 'No important issues — no follow-up',
+  summary: 'Synthesize the description and findings into a review summary',
+  rejectedPrefix: 'Rejected: ',
 };
-export function summarySections(language?: string): readonly [string, string, string] {
-  return SUMMARY_SECTIONS[language ?? 'en-US'] ?? SUMMARY_SECTIONS['en-US']!;
-}
-
-function summaryPrompt(
-  describeText: string,
-  reviewText: string,
-  askResults: string[],
-  maxChars: number,
-  sections: readonly [string, string, string],
-): string {
-  const [overview, findings, suggestions] = sections;
-  return [
-    'Write a closing review summary for the human reviewer, in the SAME LANGUAGE as the review findings',
-    `(aim for roughly ${String(maxChars)} characters — compress and prioritize; this is a soft guideline, not a hard limit, so do NOT truncate key points to fit).`,
-    'Use EXACTLY this markdown skeleton — these three "## " sections, in this order, and nothing else.',
-    'Keep each line short; put every finding / suggestion on its own "- " bullet:',
-    '',
-    `## ${overview}`,
-    '<one short paragraph: the core change and overall risk level>',
-    `## ${findings}`,
-    '<each key finding or risk on its own "- " bullet; if genuinely none, write a single line saying so>',
-    `## ${suggestions}`,
-    '<each actionable suggestion on its own "- " bullet>',
-    '',
-    'Put that markdown (with literal \\n newlines) into "summary"; give a separate non-binding recommendation.',
-    'NEVER repeat the recommendation / verdict inside "summary" itself (no trailing JSON block) — it goes',
-    'ONLY in the separate "recommendation" field.',
-    'Reply with JSON only:',
-    '{"summary": string, "recommendation": {"verdict": "approve"|"needs_work"|"manual_review", "reason": string}}',
-    '',
-    '--- Description ---',
-    describeText,
-    '',
-    '--- Review findings ---',
-    reviewText,
-    ...(askResults.length ? ['', '--- Follow-up Q&A ---', askResults.join('\n\n')] : []),
-  ].join('\n');
-}
 
 /**
- * 跑一次评审微流程。只用只读工具（describe/review/ask），不触碰修改类操作（红线见设计
- * 「工具修改红线」，由分发层 + 交互式编排另行把关）。
+ * 跑一次评审微流程：默认 describe → review →（仅严重问题）条件追问 ≤N → 收尾总结 + 建议。只用只读工具
+ * （describe/review/ask），不碰修改类操作。驱动按 input.plan（省略 / 非法回落 DEFAULT_REVIEW_PLAN）经
+ * assembleReviewSteps 顺序跑各步、与各步共享 StepRecorder。
  */
 export async function runReviewMicroflow(
   deps: ReviewOrchestratorDeps,
   input: ReviewOrchestratorInput,
 ): Promise<ReviewOrchestratorResult> {
-  const maxAsks = input.maxFollowupAsks ?? 2;
-  const summaryMax = input.summaryMaxChars ?? 800;
-  const steps: AgentStep[] = [];
-  let usage: TokenUsage = {};
-
-  const record = async (step: AgentStep): Promise<void> => {
-    const stamped = { ...step, at: step.at ?? new Date().toISOString() };
-    steps.push(stamped);
-    await deps.onStep?.(stamped);
-  };
-
-  // 用户停止：每个步骤边界检查，已 abort 即抛 `用户暂停`（思考阶段也能立即中止，不必等当前工具跑完）。
+  const labels = input.labels ?? DEFAULT_STEP_LABELS;
+  const rec = createStepRecorder(deps.onStep);
   const checkAbort = (): void => {
-    if (deps.signal?.aborted) throw new Error('用户暂停');
+    // 抛稳定 code 'aborted'（非本地化文案）：主进程据 signal.aborted / 此 code 收尾为 paused 并落本地化文案。
+    if (deps.signal?.aborted) throw new Error('aborted');
   };
-
-  // base system context（工具目录留空：微流程不暴露自由工具选择）
+  // base system context（工具目录留空：微流程不暴露自由工具选择）。
   const system = assembleSystemContext({
     context: input.context,
     pr: input.pr,
@@ -258,87 +163,28 @@ export async function runReviewMicroflow(
     matchedRule: input.matchedRule,
     language: input.language,
   });
-
-  // 1. describe + review（固定两步，并行——彼此独立、都只读 PR，无先后依赖；
-  //    实际并发度受运行队列 max_concurrency 约束，串行执行时结果同样正确）。
-  //    错开 100~200ms 起跑，避免两个工具同一瞬间齐发。
-  //    类 Claude Code：先把所选步骤作为一步流式出去（思考在前），工具执行的进度 / 计时由 run 卡片承载，
-  //    不再为每个工具补记 tool 步，避免决策被堆到结果之后。
-  checkAbort();
-  await record({
-    kind: 'plan',
-    thought: '生成 PR 描述与审查发现',
-    toolCall: { tool: 'describe、review' },
-  });
-  const [describe, review] = await runStaggered(
-    [{ tool: 'describe' as const }, { tool: 'review' as const }],
-    (c) => deps.runTool(c),
-  );
-  usage = addUsage(usage, describe.usage);
-  usage = addUsage(usage, review.usage);
-
-  // 2. 仅严重问题条件性追问
-  checkAbort();
-  const judgeStart = Date.now();
-  const judge = await deps.chat({ system, user: judgePrompt(review.text, maxAsks) });
-  const judgeMs = Date.now() - judgeStart;
-  usage = addUsage(usage, judge.usage);
-  const verdict = extractJson<{ severe?: boolean; questions?: string[] }>(judge.text);
-  const questions = verdict?.severe ? (verdict.questions ?? []).slice(0, maxAsks) : [];
-  await record({
-    kind: 'judge',
-    thought: '判断是否存在需追问的严重问题',
-    result: questions.length ? `严重，追问 ${String(questions.length)} 个` : '无严重问题，不追问',
-    thinkMs: judgeMs,
-    usage: judge.usage,
-  });
-
-  const askResults: string[] = [];
-  for (const q of questions) {
-    checkAbort();
-    const ask = await deps.runTool({ tool: 'ask', question: q });
-    usage = addUsage(usage, ask.usage);
-    askResults.push(`Q: ${q}\nA: ${ask.text}`);
-  }
-
-  // 3. 收尾总结 + 建议
-  checkAbort();
-  const sumStart = Date.now();
-  const sum = await deps.chat({
+  const ctx: ReviewStepCtx = {
+    deps,
+    input,
+    rec,
+    checkAbort,
+    maxAsks: input.maxFollowupAsks ?? 2,
+    summaryMax: input.summaryMaxChars ?? 800,
+    labels,
     system,
-    user: summaryPrompt(
-      describe.text,
-      review.text,
-      askResults,
-      summaryMax,
-      summarySections(input.language),
-    ),
-  });
-  const sumMs = Date.now() - sumStart;
-  usage = addUsage(usage, sum.usage);
-  const parsed = extractJson<{
-    summary?: string;
-    recommendation?: { verdict?: unknown; reason?: unknown };
-  }>(sum.text);
-  // 解析失败兜底：从原始文本捞 summary 散文；再剥掉模型误并入末尾的判定 JSON，绝不把原始 JSON 展示给用户。
-  // **不做硬截断**：篇幅只在提示词里作参考性约束（summaryMax，见 summaryPrompt），AI 已生成的总结完整保留，
-  // 避免「参数…」这种半句被切断。
-  const summary = stripTrailingJson(parsed?.summary ?? salvageProse(sum.text)).trim();
-  const recommendation: AgentRecommendation =
-    parsed?.recommendation && isVerdict(parsed.recommendation.verdict)
-      ? {
-          verdict: parsed.recommendation.verdict,
-          reason:
-            typeof parsed.recommendation.reason === 'string' ? parsed.recommendation.reason : '',
-        }
-      : { verdict: 'manual_review', reason: '无法解析建议，转人工复核' };
-  await record({
-    kind: 'plan',
-    thought: '综合描述与审查发现，生成评审总结',
-    result: summary,
-    thinkMs: sumMs,
-    usage: sum.usage,
-  });
+    bag: { asks: [], askResults: [] },
+  };
 
-  return { steps, summary, recommendation, tokenUsage: usage };
+  // 计划：省略 / 非法（如 judge/summary 缺前置 describe-review）一律回落默认全集，避免坏计划崩在步骤里。
+  const plan = input.plan && isValidReviewPlan(input.plan) ? input.plan : DEFAULT_REVIEW_PLAN;
+  for (const step of assembleReviewSteps(plan)) await step.run(ctx);
+
+  return {
+    steps: rec.steps,
+    summary: ctx.bag.summary ?? '',
+    // 兜底（收尾步未产出 recommendation）：转人工复核、不带理由——解析失败的兜底无用户价值，前端按
+    // 空 reason 隐藏灰字（与 summary-step 同口径）。
+    recommendation: ctx.bag.recommendation ?? { verdict: 'manual_review', reason: '' },
+    tokenUsage: rec.usage,
+  };
 }

@@ -5,7 +5,18 @@ describe('buildToolCatalog', () => {
   it('enables read tools and disables mutating tools by default', () => {
     const cat = buildToolCatalog();
     expect(cat.find((e) => e.name === '/review')).toMatchObject({ mutating: false, enabled: true });
-    expect(cat.find((e) => e.name === '/approve')).toMatchObject({ mutating: true, enabled: false });
+    expect(cat.find((e) => e.name === '/approve')).toMatchObject({
+      mutating: true,
+      enabled: false,
+    });
+  });
+
+  it('includes /improve as an enabled read tool (derived from the registry, no longer an orphan)', () => {
+    const cat = buildToolCatalog();
+    expect(cat.find((e) => e.name === '/improve')).toMatchObject({
+      mutating: false,
+      enabled: true,
+    });
   });
 
   it('enables a mutating tool only when its grant is present', () => {
@@ -24,10 +35,10 @@ describe('assertToolAllowed', () => {
   });
 
   it('rejects ungranted mutating tools (red line)', () => {
-    expect(() => assertToolAllowed('/needswork', cat)).toThrow(/红线/);
+    expect(() => assertToolAllowed('/needswork', cat)).toThrow(/guardrail/);
   });
 
   it('rejects unknown tools', () => {
-    expect(() => assertToolAllowed('/bogus', cat)).toThrow(/未知工具/);
+    expect(() => assertToolAllowed('/bogus', cat)).toThrow(/Unknown tool/);
   });
 });

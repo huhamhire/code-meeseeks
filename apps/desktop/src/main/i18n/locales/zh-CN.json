@@ -1,24 +1,22 @@
 {
-  "dialog": {
-    "selectDirectory": "选择目录"
-  },
-  "drafts": {
-    "notFound": "草稿不存在 (可能已被删除)",
-    "rejected": "草稿已被拒绝，跳过"
-  },
-  "prAgent": {
-    "askNeedsQuestion": "/ask 需要提供 question",
-    "duplicateTask": "该 PR 的 /{{tool}} 任务已在执行或排队中，请勿重复触发",
-    "notReady": "pr-agent 未就绪",
-    "notReadyDetail": "pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节"
-  },
-  "proxy": {
-    "authFailed": "代理认证失败 (407)，检查用户名/密码",
-    "disabled": "代理未启用或地址为空"
-  },
-  "update": {
-    "missingTag": "Release 缺少 tag_name",
-    "parseCurrentFailed": "无法解析当前版本号：{{version}}",
-    "parseLatestFailed": "无法解析最新版本号：{{tag}}"
+  "agent": {
+    "steps": {
+      "describeReview": "生成 PR 描述与审查发现",
+      "improve": "生成代码改进建议",
+      "judge": "判断是否存在需追问的重要问题",
+      "judgeNone": "无重要问题，不追问",
+      "judgeSevere_other": "重要，追问 {{count}} 个",
+      "rejectedPrefix": "拒绝：",
+      "summary": "综合描述与审查发现，生成评审总结"
+    },
+    "summarySections": {
+      "findings": "关键发现",
+      "overview": "摘要",
+      "suggestions": "建议"
+    },
+    "termination": {
+      "aborted": "用户暂停",
+      "maxSteps": "步数上限中止"
+    }
   }
 }

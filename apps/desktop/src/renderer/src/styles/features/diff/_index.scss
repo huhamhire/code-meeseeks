@@ -1,0 +1,8 @@
+// DiffView 样式簇入口：@forward 各 partial，App.scss 用 `@use '.../features/diff'` 一行引入。
+// 新增 diff partial 在此登记即可，无需改 App.scss。
+@forward 'view';
+@forward 'search';
+@forward 'file-tree';
+@forward 'comment-zone';
+@forward 'draft-zone';
+@forward 'blame';

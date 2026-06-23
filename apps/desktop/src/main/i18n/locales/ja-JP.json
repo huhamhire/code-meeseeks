@@ -1,24 +1,22 @@
 {
-  "dialog": {
-    "selectDirectory": "ディレクトリを選択"
-  },
-  "drafts": {
-    "notFound": "下書きが見つかりません（削除された可能性があります）",
-    "rejected": "下書きは却下されました。スキップします"
-  },
-  "prAgent": {
-    "askNeedsQuestion": "/ask には質問の指定が必要です",
-    "duplicateTask": "この PR の /{{tool}} タスクはすでに実行中またはキュー待ちです。再度トリガーしないでください。",
-    "notReady": "pr-agent が準備できていません",
-    "notReadyDetail": "pr-agent が準備できていません：埋め込みランタイムもローカル CLI も検出されませんでした。詳細は設定の検出結果を参照してください。"
-  },
-  "proxy": {
-    "authFailed": "プロキシ認証に失敗しました (407)。ユーザー名／パスワードを確認してください",
-    "disabled": "プロキシが無効か、アドレスが空です"
-  },
-  "update": {
-    "missingTag": "リリースに tag_name がありません",
-    "parseCurrentFailed": "現在のバージョンを解析できません：{{version}}",
-    "parseLatestFailed": "最新バージョンを解析できません：{{tag}}"
+  "agent": {
+    "steps": {
+      "describeReview": "PR の説明とコードレビュー指摘を生成",
+      "improve": "コード改善提案を生成",
+      "judge": "追加質問が必要な重要な問題があるか判断",
+      "judgeNone": "重要な問題なし、追加質問なし",
+      "judgeSevere_other": "重要、追加質問 {{count}} 件",
+      "rejectedPrefix": "却下：",
+      "summary": "説明とレビュー指摘を統合してレビュー要約を生成"
+    },
+    "summarySections": {
+      "findings": "主な指摘",
+      "overview": "概要",
+      "suggestions": "提案"
+    },
+    "termination": {
+      "aborted": "ユーザーが中断しました",
+      "maxSteps": "ステップ上限に到達"
+    }
   }
 }

@@ -110,7 +110,21 @@ Agent 知其存在但不可调用。
 **输入路由**（在渲染层输入解析处分流）：
 
 - `/describe`、`/review` 开头 → **直达工具**，维持既有「忽略其余文本、直接跑该 tool」语义。
-- `/ask <text>` → **直达工具**，文本作为 question 直跑 `/ask`。
+- `/ask <text>` → **直达工具**，文本作为 question 直跑 `/ask`。CLI 模式（claude/codex）下 `/ask` 会把 CLI
+  子进程 cwd 落到（已净化的）一次性 worktree，取完整文件上下文作答——而非像 describe/review 只基于 diff
+  在中性临时目录推理；机制（`MEEBOX_CLI_WORKDIR` + worktree 指令文件净化防注入）见 [04](04-pragent-runtime.md)。
+  - **结构化分段输出**：提示词约束 `/ask` 按确定性标签 `<summary>` / `<analysis>` / `<suggestions>` 输出
+    （pr-agent-bridge `prompts.ts`），解析层（poller `parseStructuredAsk`）按标签切成独立 finding：summary
+    结论高亮展开、analysis 过程默认收起、suggestions 建议高亮。模型未遵循 / 无标签时整体回退普通解析。
+  - **复评引用闭环**：review/improve 的 code finding 卡片可点「引用」→ 挂到输入栏发起复评 `/ask`（携带
+    `referencedFinding` + finding 正文上下文）。复评模式额外产出 `<verdict>`（replace / keep / drop，落
+    `ReviewRun.askVerdict`），结果卡出裁决 + **手动**采纳/关闭动作：采纳取代 → 建新评论草稿锚定原位置 +
+    关闭原 finding；关闭关系独立存于 `findingClosures`（非草稿语义），原卡转关闭态并与复评卡互链。
+  - **agent 自动评审自动关联 / 取代**：自动评审微流程里 judge 可对某条 review finding 出复评追问
+    （`asks[].targetFindingId`，judge prompt 给 id 可寻址清单），asks 步以复评模式派发该追问（携
+    `referencedFinding`），裁决 replace/drop 时**自动**建 `FindingClosure` 关闭被取代的原 finding（经
+    `ReviewOrchestratorDeps.closeFinding`）。默认开启、保守（仅点名 + replace/drop 才关，keep / 未点名不动）；
+    新评论不自动落草稿，仍由用户在复评卡手动「采纳」。
 - 其余直接的工具 / 操作指令 → 维持各自原有调用。
 - **无斜杠的自然语言** → **交给 Agent 运行时**（旧行为是等价 `/ask`，此为本模块的核心改动）。
 - 未知 `/xxx` → 报错（不变）。
@@ -233,6 +247,10 @@ flowchart TD
 LLM「越权」产出一个 `/approve` 调用，运行时也拒绝并记入 transcript。这样「提示词被绕过」
 不等于「操作被执行」。
 
+**工具清单单一真相源**：所有工具（id / 命令名 / 读改分类 / grant / 是否运行队列工具）集中声明在共享层的
+**统一注册表 `TOOLS`（tool-registry）**；运行工具枚举 `ReviewRunTool`、工具目录 `buildToolCatalog`、规划红线
+允许集均由它派生——新增 / 调整工具只改注册表一处。
+
 ### 5. 会话隔离与规则共享
 
 - **规则 / 上下文共享**：`agent.dir`（SOUL / AGENTS / MEMORY / USER / rules）是**全局单份**，所有
@@ -330,14 +348,18 @@ flowchart TD
    并 `log` 出被推迟的数量（不静默截断）。
 3. 喂入 LLM，按规则逐 PR 判「是否值得自动评审」并附原因——例如**分支合并 / 回合并类 PR 可跳过**、
    纯依赖升级可跳过等，例外规则在 `AGENTS.md` 里可扩充。
+   - **分支合并信号只是证据、不是裁决**：是否「纯分支合并」**以实际提交结构判定**（拉 commits 看是否
+     **全为 merge commit**），绝不仅凭源分支名（`classifyBranchMerge`）。源分支为主干（`main`/`dev` 等）
+     单独只作背景信号一并交给 judge，**不构成跳过理由**——避免误伤「源分支恰为主干」的 fork 原创 PR。
+     judge 综合标题/描述 + 这些信号自行选择评审 / 跳过。
 4. 判定结果落台账（含「skipped + 原因」，便于审计与 UI 展示）。
 
 **默认动作——规划与执行分层**：判为「评审」后，autopilot **不由单个 agent 串跑所有 PR**，
 而是分两层（这也是「规避超长任务」的结构性手段）：
 
 - **规划层（规划 agent / planner，跨 PR）**：上面的批量判定即其职责——逐 PR 定「评审 / 跳过」，
-  并为每个待评审 PR **拟定子任务计划**（autopilot 下子任务即下述固定微流程模板）。planner
-  **只规划与分发**，自身不跑工具、不产 PR 总结，预算极小。
+  并为每个待评审 PR **拟定子任务计划**（默认即下述微流程，亦可经 `AGENTS.md` 规则定制步骤，见下文
+  「步骤计划可经规则定制」）。planner **只规划与分发**，自身不跑工具、不产 PR 总结，预算极小。
 - **执行层（每个 PR 各自的 agent，独立）**：拿到计划后，**各 PR 的 agent 独立完成自己的子任务**，
   并**在本 PR 子任务结束后产出本 PR 的总结**。总结是**逐 PR**的、由该 PR 的 agent 收尾——**不存在跨
   PR 的全局总结**。
@@ -373,6 +395,18 @@ flowchart TD
    打回仍是评审者手动点按（红线见 §4）；结果条目可放**「采纳为 PR 状态」
    按钮**把建议一键转成手动操作，但点按始终在人。
 
+**步骤计划可经规则定制（plan）**：上述微流程是**默认序列**（`describe-review` → `judge` → `asks` →
+`summary`，由步骤注册表 `REVIEW_STEP_REGISTRY` 组装、`assembleReviewSteps` 装配），而非写死。批量判定时，
+规划 agent 可据 `AGENTS.md` 规则为单个 PR 给出**自定义计划**（一组有序步骤 id），从而**跳过 / 重排 /
+增删**步骤。可用步骤 id：`describe-review`、`improve`（生成代码改进建议，独立、默认不含、规则要时纳入）、
+`judge`、`asks`、`summary`——例如「配置类 PR 只生成描述与 findings、跳过追问」得 `["describe-review",
+"summary"]`；「需改进建议」得 `["describe-review", "improve", "summary"]`。计划**省略或非法时回落默认全集**：
+合法性校验 `isValidReviewPlan`——步骤 id 须在注册表内，且含 `judge` / `summary` 时必须先含 `describe-review`
+（后两步读其产物）；判定层与微流程驱动处**双重守卫**，坏计划不致崩在步骤里。**仅 autopilot 走计划**：手动
+评审按钮不经判定层、恒跑默认全集，不受规则影响。「跳过整篇」仍用判定的 `review:false`（计划用于「评审但裁剪 /
+增删步骤」，非整篇跳过）。新增工具步 = 在 `REVIEW_STEP_REGISTRY` 登记 + 并入 `ReviewStepKind`（工具本身见
+统一注册表 `TOOLS`）。
+
 **不自动发布**：上述全部产物——草稿、追问回答、总结——**只落本地、进待确认状态**，
 进应用即见,**不自动写远端**（除非 §4 / §6 扩展显式授权）。决策权仍在评审者。
 
@@ -380,8 +414,9 @@ flowchart TD
 
 - **规划 agent（planner）**：只做「批量判定 + 派发」，预算极小（一次 judge pass + 分发），
   不自由展开。
-- **每个 PR 的 agent**：**不自由规划**，只执行 planner 派的**固定微流程模板**（唯一可变处是 0..N
-  个条件性追问）。故步数上限**由模板形状推导**，不套用更宽的交互式 `agent.max_steps`：硬上限 ≈
+- **每个 PR 的 agent**：**不自由规划**，只执行 planner 派的微流程——默认模板，或规则定制的计划（计划在
+  注册表既有步骤内裁剪 / 重排 / 增删，最多纳入一个 `improve` 步，**不会自由展开**）；模板内另一可变处是
+  0..N 个条件性追问。故步数上限**由模板形状 + 计划推导**，不套用更宽的交互式 `agent.max_steps`：硬上限 ≈
   `2（describe + review）+ max_followup_asks + 1（summary）` + 少量判定开销，
   **唯一能推高它的可调量是 `max_followup_asks`**。另设结构化硬 backstop
   `agent.autopilot.max_steps`（默认按上式推导、运行期不超过它）兜底，防自循环把背景任务撑爆；

@@ -1,24 +1,23 @@
 {
-  "dialog": {
-    "selectDirectory": "Verzeichnis auswählen"
-  },
-  "drafts": {
-    "notFound": "Entwurf nicht gefunden (möglicherweise gelöscht)",
-    "rejected": "Entwurf wurde abgelehnt, wird übersprungen"
-  },
-  "prAgent": {
-    "askNeedsQuestion": "/ask erfordert eine Frage",
-    "duplicateTask": "Eine /{{tool}}-Aufgabe für diesen PR wird bereits ausgeführt oder steht in der Warteschlange; bitte nicht erneut auslösen.",
-    "notReady": "pr-agent ist nicht bereit",
-    "notReadyDetail": "pr-agent ist nicht bereit: Weder die eingebettete Laufzeitumgebung noch eine lokale CLI wurde erkannt. Details siehe Erkennungsergebnisse unter Einstellungen."
-  },
-  "proxy": {
-    "authFailed": "Proxy-Authentifizierung fehlgeschlagen (407); Benutzername/Passwort prüfen",
-    "disabled": "Proxy ist deaktiviert oder die Adresse ist leer"
-  },
-  "update": {
-    "missingTag": "Im Release fehlt tag_name",
-    "parseCurrentFailed": "Aktuelle Version kann nicht ausgewertet werden: {{version}}",
-    "parseLatestFailed": "Neueste Version kann nicht ausgewertet werden: {{tag}}"
+  "agent": {
+    "steps": {
+      "describeReview": "PR-Beschreibung und Review-Befunde erstellen",
+      "improve": "Code-Verbesserungsvorschläge erstellen",
+      "judge": "Entscheiden, ob wichtige Probleme eine Rückfrage erfordern",
+      "judgeNone": "Keine wichtigen Probleme — keine Rückfrage",
+      "judgeSevere_one": "Wichtig — {{count}} Rückfrage",
+      "judgeSevere_other": "Wichtig — {{count}} Rückfragen",
+      "rejectedPrefix": "Abgelehnt: ",
+      "summary": "Beschreibung und Befunde zu einer Review-Zusammenfassung zusammenfassen"
+    },
+    "summarySections": {
+      "findings": "Wichtige Erkenntnisse",
+      "overview": "Zusammenfassung",
+      "suggestions": "Empfehlungen"
+    },
+    "termination": {
+      "aborted": "Vom Benutzer abgebrochen",
+      "maxSteps": "Schrittlimit erreicht"
+    }
   }
 }

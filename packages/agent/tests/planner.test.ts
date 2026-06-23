@@ -63,7 +63,7 @@ describe('runPlanningAgent', () => {
     expect(toolCalls.map((c) => c.tool)).toEqual(['/describe', '/review']);
     // 一条思考步（plan，承载并行所选工具）+ 收尾 plan；工具执行由 run 卡片代表。
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
-    expect(r.steps[0]?.toolCall?.tool).toBe('/describe、/review');
+    expect(r.steps[0]?.toolCall?.tool).toBe('/describe + /review');
     expect(r.finalText).toBe('done');
   });
 
@@ -125,7 +125,7 @@ describe('runPlanningAgent', () => {
       userRequest: 'loop',
       maxSteps: 2,
     });
-    expect(r.terminationReason).toBe('步数上限中止');
+    expect(r.terminationReason).toBe('max_steps');
   });
 
   it('stops immediately when the signal is aborted', async () => {
@@ -136,7 +136,7 @@ describe('runPlanningAgent', () => {
       { ...deps, signal: ac.signal },
       { context, pr, toolCatalog: catalog, userRequest: 'x' },
     );
-    expect(r.terminationReason).toBe('用户暂停');
+    expect(r.terminationReason).toBe('aborted');
     expect(r.steps).toHaveLength(0);
   });
 

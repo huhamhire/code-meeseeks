@@ -1,4 +1,17 @@
 {
+  "activityPanel": {
+    "empty": "Noch keine Aktivität in diesem PR",
+    "loadError": "Aktivität konnte nicht geladen werden · {{title}}",
+    "loading": "Aktivität wird geladen…",
+    "mergeCommit": "Merge-Commit · {{parents}} Eltern",
+    "verb": {
+      "approved": "hat genehmigt",
+      "commented": "hat kommentiert",
+      "dismissed": "hat die Review verworfen",
+      "needsWork": "hat Änderungen angefordert",
+      "unapproved": "hat die Genehmigung zurückgezogen"
+    }
+  },
   "app": {
     "approveActionFailed": "Genehmigungsaktion fehlgeschlagen: {{msg}}",
     "loading": "Wird geladen…",
@@ -34,6 +47,7 @@
     "bulletDescribe": "PR-Zusammenfassung / Labels automatisch generieren",
     "bulletImprove": "zeilenweise Vorschläge zur Codeverbesserung (mit Wichtigkeitsbewertung)",
     "bulletReview": "einen KI-Review ausführen; Ergebnisse erscheinen in der Findings-Liste",
+    "cacheInline": "Cache {{n}}",
     "cancelQueuedTitle": "Eingereihte Aufgabe abbrechen",
     "clearConfirmLabel": "Leeren",
     "clearConfirmMessage": "Den gesamten PR-Agent-Ausführungsverlauf für den aktuellen PR löschen? Dies betrifft nur diesen PR und kann nicht rückgängig gemacht werden.",
@@ -51,7 +65,8 @@
     "codeExistingAria": "Originalcode",
     "codeImprovedAria": "Verbesserter Code",
     "commandNoArgs": "{{cmd}} akzeptiert keine Argumente",
-    "concurrencyReached": "Parallelitätslimit erreicht ({{n}} gleichzeitig). Neue Aufgaben für diesen PR werden eingereiht und automatisch ausgeführt, sobald ein Platz frei wird",
+    "deleteRunAria": "Löschen",
+    "deleteRunTitle": "Diesen Lauf löschen",
     "draftJumpEditTitle": "Im Code bearbeiten",
     "draftJumpRestore": "Wiederherstellen",
     "draftJumpRestoreTitle": "Wiederherstellen und bearbeiten",
@@ -88,8 +103,17 @@
     "placeholderNoPr": "Wählen Sie einen PR, um eine Unterhaltung zu starten",
     "placeholderNotReady": "PR Agent nicht bereit",
     "placeholderReady": "Geben Sie eine Frage ein oder verwenden Sie /, um einen Befehl zu wählen (↑↓ für Verlauf)",
+    "planTitle": "Plan",
     "queuedPosition": "Eingereiht · Position {{position}}",
-    "rawOutput": "Rohausgabe ({{n}} chars)",
+    "rawOutput": "Rohausgabe",
+    "reference": {
+      "clearTitle": "Referenz entfernen",
+      "closedDropped": "Durch Nachprüfung geschlossen",
+      "closedReplaced": "Durch Nachprüfung ersetzt",
+      "reference": "Referenzieren",
+      "referenceTitle": "Diesen Kommentar referenzieren, um eine Nachprüfung zu starten",
+      "viewAsk": "Nachprüfung anzeigen"
+    },
     "reject": "Ablehnen",
     "rejectFindingTitle": "Diesen Vorschlag ablehnen (wird nicht an Remote gesendet)",
     "resizeInputAria": "Chat-Eingabe-Größe ändern",
@@ -109,6 +133,9 @@
     "runFailedReason": "Ausführung fehlgeschlagen ({{reason}})",
     "scoreTitle": "Wichtigkeitsbewertung von pr-agent, 1-10",
     "scrollUpForOlder": "Nach oben scrollen, um ältere Verläufe zu laden…",
+    "sectionAskAnalysis": "Analyse",
+    "sectionAskSuggestions": "Vorschläge",
+    "sectionAskSummary": "Fazit",
     "sectionAssessment": "Einschätzung",
     "sectionCodeFeedback": "Code-Feedback",
     "sectionCodeSuggestion": "Vorschläge",
@@ -122,6 +149,11 @@
     "sectionSummary": "Zusammenfassung",
     "sectionTitle": "Titelvorschlag",
     "sectionWalkthrough": "Dateiänderungen",
+    "selection": {
+      "attachedTitle": "Ausgewählte Zeilen an die nächste Frage angehängt – zum Ignorieren klicken",
+      "ignoredTitle": "Ausgewählte Zeilen ignoriert – zum Anhängen an die nächste Frage klicken",
+      "linesSelected": "{{lines}} Zeilen ausgewählt"
+    },
     "sendAria": "Senden",
     "sendQueuedTitle": "Senden (neue Aufgabe wird eingereiht)",
     "sendTitle": "Senden (Enter)",
@@ -132,10 +164,21 @@
     "statusSucceeded": "Fertig",
     "stopAria": "Stoppen",
     "stopTitle": "Ausführung stoppen",
-    "tokensTitle": "Eingabe (prompt) {{prompt}} · Ausgabe (completion) {{completion}} Tokens",
+    "tokensInTitle": "Eingabe (prompt) {{n}} Tokens",
+    "tokensOutTitle": "Ausgabe (completion) {{n}} Tokens",
+    "turnsTitle": "Modell-Interaktionsrunden (ein Modellaufruf pro Runde)",
     "unknownCommand": "Unbekannter Befehl {{head}}; unterstützt: {{cmds}}",
     "userQuestionAria": "Benutzerfrage",
     "waitingOutput": "(Warte auf PR-Agent-Ausgabe…)"
+  },
+  "commentComposer": {
+    "cancelTitle": "Abbrechen (Esc)",
+    "emptyTitle": "Kommentar darf nicht leer sein",
+    "placeholder": "Kommentar schreiben…",
+    "send": "Kommentieren",
+    "sendTitle": "Senden (Cmd/Ctrl+Enter)",
+    "sending": "Wird gesendet…",
+    "textareaAria": "Editor für neuen Kommentar"
   },
   "commentEditEditor": {
     "cancelTitle": "Abbrechen (Esc)",
@@ -156,6 +199,7 @@
     "textareaAria": "Editor für Kommentarantworten"
   },
   "commentsPanel": {
+    "anchorJumpTitle": "Zur Stelle im Diff springen",
     "anchorTitle": "Verankert an {{side}}-Seite · {{lineType}}",
     "daysAgo_one": "vor {{count}} Tag",
     "daysAgo_other": "vor {{count}} Tagen",
@@ -199,6 +243,7 @@
     "close": "Schließen",
     "confirm": "OK",
     "delete": "Löschen",
+    "discard": "Verwerfen",
     "edit": "Bearbeiten",
     "loading": "Wird geladen…",
     "save": "Speichern"
@@ -248,19 +293,11 @@
     "blameChangeRangeTitle": "Dieser Bereich wurde durch diesen PR geändert",
     "blameFailed": "blame fehlgeschlagen",
     "blameFailedNamed": "blame für {{path}} fehlgeschlagen",
-    "deleteCommentModalMessage": "Dadurch wird dieser Kommentar im Remote gelöscht und kann nicht rückgängig gemacht werden. Fortfahren?",
-    "deleteCommentModalTitle": "Kommentar löschen",
-    "deleteCommentTitle": "Eigenen veröffentlichten Kommentar löschen (mit Remote synchronisiert)",
-    "deleteFailed": "Löschen fehlgeschlagen: {{error}}",
-    "deleting": "Löschen…",
     "diffRenderFailed": "Diff-Darstellung fehlgeschlagen: {{message}}",
     "diffRenderFailedHint": "Ein Dateiwechsel oder erneuter Versuch behebt das Problem meist. Der zugrunde liegende Fehler wurde in der console protokolliert.",
-    "dismissErrorAria": "Fehler schließen",
     "dismissNotificationTitle": "Diese Benachrichtigung schließen",
-    "editCommentTitle": "Eigenen veröffentlichten Kommentar bearbeiten (mit Remote synchronisiert)",
     "fileCount_one": "{{count}} Datei",
     "fileCount_other": "{{count}} Dateien",
-    "gotIt": "Verstanden",
     "loadChangedFilesFailed": "Geänderte Dateien konnten nicht geladen werden",
     "loadCommentsFailed": "Kommentare konnten nicht geladen werden",
     "loadingContentHint": "git blob wird aus dem lokalen Mirror gelesen; große oder binäre Dateien können langsamer sein",
@@ -271,10 +308,13 @@
     "preparingSync": "Synchronisierung wird vorbereitet",
     "readFileContentFailed": "Dateiinhalt konnte nicht gelesen werden",
     "readFileContentFailedNamed": "Inhalt von {{path}} konnte nicht gelesen werden",
-    "reply": "Antworten",
     "resizeFileListTitle": "Ziehen, um die Breite des Dateibaums anzupassen",
     "retry": "Erneut versuchen",
+    "scopeAll": "Alle Änderungen",
+    "scopeCommitCount_one": "{{count}} Commit",
+    "scopeCommitCount_other": "{{count}} Commits",
     "scopeLabel": "{{scope}}: ",
+    "scopeLoading": "Commits werden geladen…",
     "searchAria": "Suchen",
     "searchChanges": "Änderungen durchsuchen",
     "searchChangesTitle": "Änderungen durchsuchen (head + base)",
@@ -350,6 +390,14 @@
     "statusRejected": "Abgelehnt"
   },
   "errors": {
+    "EAG0001": "/ask erfordert eine Frage",
+    "EAG0002": "Eine /{{tool}}-Aufgabe für diesen PR wird bereits ausgeführt oder steht in der Warteschlange; bitte nicht erneut auslösen.",
+    "EAG0003": "pr-agent ist nicht bereit: Weder die eingebettete Laufzeitumgebung noch eine lokale CLI wurde erkannt. Details siehe Erkennungsergebnisse unter Einstellungen.",
+    "ENT0001": "Proxy ist deaktiviert oder die Adresse ist leer",
+    "ENT0407": "Proxy-Authentifizierung fehlgeschlagen (407); Benutzername/Passwort prüfen",
+    "EPR0001": "Entwurf nicht gefunden (möglicherweise gelöscht)",
+    "EPR0002": "Entwurf wurde abgelehnt, wird übersprungen",
+    "EPR0003": "Dieser Pull Request wurde bereits zusammengeführt; aktualisieren Sie, um den neuesten Stand zu sehen.",
     "authHint": "Ihr Personal Access Token (PAT) ist möglicherweise abgelaufen oder hat unzureichende Berechtigungen; prüfen Sie ihn in den Einstellungen",
     "authTitle": "Authentifizierung fehlgeschlagen",
     "dnsHint": "Der Hostname konnte nicht aufgelöst werden; prüfen Sie base_url / DNS / Proxy",
@@ -370,11 +418,13 @@
     "refusedTitle": "Verbindung abgelehnt",
     "timeoutHint": "Das Remote ist nicht erreichbar; prüfen Sie Netzwerk / VPN / Proxy",
     "timeoutTitle": "Verbindungs-Timeout",
+    "unknownCode": "Etwas ist schiefgelaufen ({{code}})",
     "unknownTitle": "Unbekannter Fehler"
   },
   "fileTree": {
     "commentCountTitle_one": "{{count}} Remote-Kommentar",
     "commentCountTitle_other": "{{count}} Remote-Kommentare",
+    "conflictTitle": "Konflikt beim Merge in den Zielbranch",
     "draftCountTitle_one": "{{count}} Entwurf zur Veröffentlichung ausstehend",
     "draftCountTitle_other": "{{count}} Entwürfe zur Veröffentlichung ausstehend"
   },
@@ -388,9 +438,10 @@
     "apiKeyOptionalPlaceholder": "Dieser Provider benötigt keinen Schlüssel (leer lassen)",
     "cliCommandFallback": "Kommandozeilen-Tool",
     "cliCommandLabel": "CLI-Befehl",
-    "cliCommandPlaceholder": "Befehlsname",
+    "cliCommandPlaceholder": "Befehlsname, z. B. claude / codex",
+    "cliNamePlaceholder": "z. B. claude / codex",
     "cliWarningPrefix": "⚠️ Das Ausfüllen und Aktivieren dieses Profils autorisiert Code Meeseeks, das lokale",
-    "cliWarningSuffix": "Tool aufzurufen, um Review-Operationen durchzuführen (läuft in einem Unterprozess unter Ihrer lokalen Anmeldesitzung). Stellen Sie sicher, dass der Befehl installiert und angemeldet ist.",
+    "cliWarningSuffix": "Tool aufzurufen, um Review-Operationen durchzuführen. Stellen Sie sicher, dass der Befehl installiert und angemeldet ist.",
     "errorCliUnsupported": "Nicht unterstütztes CLI-Tool",
     "errorLabelDuplicate": "Name existiert bereits",
     "errorLabelSlug": "Nur Buchstaben / Ziffern / - / _ erlaubt, 1-32 Zeichen",
@@ -403,7 +454,7 @@
         "hint": "Offizielle Anthropic-API; geben Sie den Modellnamen direkt ein (z. B. claude-opus-4-8); das Präfix anthropic/ wird automatisch hinzugefügt"
       },
       "cli": {
-        "hint": "🧪 Experimentell: hängt vom Upstream-CLI ab (z. B. claude / codex); sein Verhalten kann sich mit Upstream-Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert. Delegiert Review-Anfragen an ein lokal installiertes und autorisiertes Kommandozeilen-Tool, um das Modell aufzurufen, ohne sich direkt mit der API zu verbinden oder einen Schlüssel zu benötigen; das Tool verwaltet sein eigenes Modell und Kontingent. Das Ausfüllen und Aktivieren autorisiert den Aufruf dieses Kommandozeilen-Tools in einem Unterprozess unter Ihrer lokalen Anmeldesitzung.",
+        "hint": "🧪 Experimentell: hängt von einem lokalen Kommandozeilen-Tool ab; sein Verhalten kann sich mit dessen Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert. Delegiert Review-Anfragen an ein lokal installiertes und autorisiertes Kommandozeilen-Tool, um das Modell aufzurufen.",
         "label": "Lokales CLI"
       },
       "dashscope": {
@@ -452,7 +503,9 @@
     "merge": "Merge",
     "mergeTitle": "Diesen PR in den Ziel-Branch mergen",
     "merging": "Wird gemergt…",
+    "moreReviewers": "{{n}} weitere Reviewer",
     "needsWork": "Nachbesserung nötig",
+    "newComment": "Kommentieren",
     "openInBrowser": "Im Browser öffnen",
     "openInBrowserTitle": "Die entfernte Seite des PR im Standardbrowser öffnen",
     "ownPrReason": "Sie können Ihren eigenen PR nicht reviewen",
@@ -461,6 +514,7 @@
     "showBlame": "Blame aktivieren (nur head-Seite)",
     "showWhitespace": "Leerzeichen anzeigen (Leerzeichen / Tab)",
     "sideBySide": "Nebeneinander",
+    "tabActivity": "Aktivität",
     "tabComments": "Kommentare",
     "tabCommits": "Commits",
     "tabDiff": "Änderungen",
@@ -503,7 +557,6 @@
     "platformTitle": "Code-Plattform verbinden",
     "progressAria": "Einrichtungsfortschritt",
     "providerPickAria": "Provider auswählen",
-    "providerPickHint": "Wählen Sie einen Provider zum Verbinden",
     "skip": "Überspringen",
     "startConfig": "Loslegen",
     "stepDone": "Fertig",
@@ -520,6 +573,16 @@
     "githubSub": "github.com / Enterprise",
     "gitlabSub": "gitlab.com / Self-Managed"
   },
+  "prInfo": {
+    "createdAt": "Erstellt (remote)",
+    "description": "Beschreibung",
+    "descriptionEmpty": "Keine Beschreibung",
+    "recentUpdate": "Zuletzt aktualisiert",
+    "reviewers": "Reviewer ({{n}})",
+    "reviewersEmpty": "Keine",
+    "timeline": "Zeitleiste",
+    "updatedAt": "Aktualisiert (remote)"
+  },
   "prItem": {
     "approvedCount_one": "{{count}} Reviewer hat genehmigt",
     "approvedCount_other": "{{count}} Reviewer haben genehmigt",
@@ -528,6 +591,11 @@
     "mergeable": "Mergebar: alle Merge-Bedingungen erfüllt",
     "needsWorkCount_one": "{{count}} Reviewer hat „Nachbesserung nötig“ markiert",
     "needsWorkCount_other": "{{count}} Reviewer haben „Nachbesserung nötig“ markiert"
+  },
+  "prStatus": {
+    "approved": "Genehmigt",
+    "needsWork": "Änderungen nötig",
+    "pending": "Ausstehend"
   },
   "publishReviewModal": {
     "allPublished": "Alle Entwürfe wurden auf den Remote geschrieben; die Kommentarliste wird sofort aktualisiert.",
@@ -572,7 +640,7 @@
     "checkUpdate": "Nach Updates suchen",
     "checkUpdateTitle": "GitHub auf die neueste Version prüfen (nur Erkennung, keine automatische Installation)",
     "checking": "Prüfe…",
-    "cliExperimentalHint": "Lokale CLI-Provider hängen von Upstream-CLIs ab (z. B. claude / codex); ihr Verhalten kann sich mit Upstream-Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert.",
+    "cliExperimentalHint": "Lokale CLI-Provider hängen von einem lokalen Kommandozeilen-Tool ab; sein Verhalten kann sich mit dessen Releases ändern — Stabilität und dauerhafte Verfügbarkeit sind nicht garantiert.",
     "configKey": "Konfiguration",
     "configure": "Konfigurieren",
     "connSaveHint": "Bitte Name / Base URL / Token ausfüllen",
@@ -584,6 +652,8 @@
     "deleteConnectionConfirmTitle": "Verbindung löschen",
     "deleteConnectionTitle": "Diese Verbindung löschen",
     "deleteLlmProfileTitle": "Dieses Profil löschen",
+    "discardChangesMessage": "Dieses Formular enthält nicht gespeicherte Änderungen. Ohne Speichern schließen?",
+    "discardChangesTitle": "Nicht gespeicherte Änderungen verwerfen?",
     "editConfigYaml": "config.yaml bearbeiten",
     "editConnectionTitle": "Verbindung bearbeiten",
     "editLlmTitle": "LLM-Modell bearbeiten",

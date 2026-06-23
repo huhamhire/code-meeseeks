@@ -120,10 +120,11 @@ textarea {
   }
 }
 
-// 危险图标按钮（删除）：hover 变红
+// 危险图标按钮（删除连接 / LLM 配置等）：hover 变饱和红，与其它危险按钮统一
 .btn-icon-danger:hover:not(:disabled) {
-  border-color: $color-danger;
-  color: $color-danger;
+  border-color: $color-danger-strong;
+  color: $color-danger-strong;
+  background: $color-danger-strong-fade;
 }
 
 // 主操作图标按钮（编辑）：hover 变蓝
@@ -151,7 +152,7 @@ textarea {
   color: $text-on-accent;
 
   &:hover:not(:disabled) {
-    background: #1177bb;
+    background: $color-accent-hover;
   }
 }
 
@@ -201,6 +202,66 @@ textarea {
   to {
     opacity: 1;
     transform: translate(-50%, 0);
+  }
+}
+
+// 活动脉冲点：表示"正在进行"的小圆点。跨域共享（pr-agent 活动 chip + repo sync chip）。
+// idle 变体：静态灰、不脉冲。
+.activity-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $color-info;
+  flex-shrink: 0;
+  animation: activity-pulse 1.4s infinite ease-in-out;
+}
+.activity-dot-idle {
+  background: $text-muted;
+  animation: none;
+}
+@keyframes activity-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+}
+
+// 通用图标按钮：透明底无边框，hover 浅底高亮。app 多处复用（状态栏 / Modal / ChatPane /
+// 同步刷新等），故置于 base 而非某一业务域。
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: $text-primary;
+  padding: 3px $space-3;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: $radius-sm;
+  line-height: 0;
+
+  &:hover:not(:disabled) {
+    background: $bg-white-fade;
+    color: white;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+}
+.icon-btn-spinning svg {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 

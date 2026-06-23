@@ -1,4 +1,4 @@
-import type { IpcChannelName, IpcChannels, IpcEventName, IpcEvents } from '@meebox/shared';
+import type { IpcChannelName, IpcChannels, IpcEventName, IpcEvents } from '@meebox/ipc';
 
 export function invoke<K extends IpcChannelName>(
   channel: K,

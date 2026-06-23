@@ -1,0 +1,380 @@
+@use '../tokens' as *;
+
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  // width 通过 inline style 由 App 控制，min/max 由 React 端 clamp，CSS 端兜底
+  flex-shrink: 0;
+  border-right: 1px solid $border-default;
+  background: $bg-panel;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: $space-3;
+  cursor: col-resize;
+  z-index: $z-resize-handle;
+  background: transparent;
+  transition: background 0.12s;
+
+  &:hover,
+  &:active {
+    background: $color-accent-strong-fade;
+  }
+}
+
+.sidebar-toolbar {
+  padding: $space-4 $space-6;
+  border-bottom: 1px solid $border-muted;
+  display: flex;
+  gap: $space-3;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sidebar-filters {
+  flex-wrap: wrap;
+}
+
+.sidebar-search {
+  flex: 1;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  color: $text-body;
+  padding: 5px $space-4;
+  border-radius: $radius-md;
+
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+
+// GitHub 发现分类标签行（仅 GitHub 活动连接展示）
+.sidebar-discovery {
+  gap: 0;
+  padding: $space-3 $space-6 0;
+}
+
+.sidebar-discovery-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  // 非活动 tab 用可读的 muted，而非几乎不可见的 dim，提升整组可视性
+  color: $text-muted;
+  padding: $space-2 0;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.12s,
+    border-color 0.12s;
+
+  &:hover {
+    color: $text-body;
+  }
+
+  // 活动 tab 用亮蓝 $color-info（对齐 ChatPane 的明亮配色），比深蓝 $color-accent 更醒目
+  &.is-active {
+    color: $color-info;
+    border-bottom-color: $color-info;
+  }
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-empty {
+  padding: 24px $space-8;
+  color: $text-dim;
+  text-align: center;
+}
+
+.pr-group-header {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  width: 100%;
+  padding: $space-3 $space-6;
+  background: $bg-group-header;
+  border: none;
+  border-bottom: 1px solid $border-muted;
+  color: $text-primary;
+  font-size: $fs-sm;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+
+  &:hover {
+    background: $bg-panel;
+  }
+  &.expanded .pr-group-chevron {
+    transform: rotate(90deg);
+  }
+}
+
+.pr-group-chevron {
+  display: inline-block;
+  font-size: 9px;
+  width: 10px;
+  transition: transform 0.12s ease;
+  color: $text-muted;
+}
+
+.pr-group-key {
+  flex: 1;
+}
+
+// PR item
+.pr-item {
+  padding: $space-5 $space-6;
+  border-bottom: 1px solid $border-muted;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  gap: $space-5;
+  // 头像 40px 视觉锚定整行：标题 + meta 大约 36-40px 高，center 对齐看起来最稳
+  align-items: center;
+
+  &:hover {
+    background: $bg-hover;
+  }
+  &.selected {
+    background: $bg-selected;
+  }
+  &:focus {
+    outline: 1px solid $color-accent;
+    outline-offset: -1px;
+  }
+}
+
+.pr-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+// 圆形头像：img 与 initials 共用尺寸 / 圆角；initials 走 hash 色 + 白字
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: $radius-full;
+  overflow: hidden;
+}
+
+.avatar-img {
+  object-fit: cover;
+}
+
+.avatar-initials {
+  color: $text-on-accent;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  font-family: var(
+    --vscode-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif
+  );
+}
+
+.pr-item-id {
+  color: $text-muted;
+  margin-right: $space-2;
+}
+
+.pr-item-title {
+  font-size: $fs-lg;
+  font-weight: 500;
+  margin-bottom: $space-2;
+  line-height: $lh-tight;
+  word-break: break-word;
+  // 超长 PR 标题截到 2 行 + 省略号，避免单条 PR 撑爆整列高度
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pr-item-meta {
+  font-size: $fs-sm;
+  color: $text-muted;
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+}
+
+// meta 两行：row 1 = author + 状态 chip；row 2 = branch (源→目标)
+// flex-direction:row + align-items:center 让 chip 跟 author 基线居中
+.pr-item-meta-row {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  min-width: 0;
+}
+
+.pr-item-meta-author,
+.pr-item-meta-branch {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  // 图标前缀：固定列宽对齐 author/branch 两行，不随文字省略号缩没
+  svg {
+    flex: 0 0 auto;
+    margin-right: $space-2;
+    vertical-align: -2px;
+    opacity: 0.75;
+  }
+}
+
+// chip 推右贴边 + 不可缩 — 长 author 时 chip 仍可见
+.pr-item-review-chips {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+// reviewer 统计胶囊：靠右贴边，把 author/branch meta 挤左。固定带高 + 居中：让不同行无论含哪种
+// chip（文字计数 / 图标星标 / 执行中 spinner）都占同一高度，避免跨行 chip 垂直位置漂移。
+.pr-item-review-chips {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  gap: $space-2;
+  margin-left: auto;
+}
+
+// 所有 chip 统一带高（含图标类 verdict / mergeable 与文字类 approved / needs-work）：图标 chip 原本
+// 只有 ~13px、比文字 chip(~17px)矮，导致「星标 only」行与「星标+计数」行高度不一。固定 18px + 居中对齐。
+.review-chip {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 18px;
+  gap: 3px;
+  padding: 1px $space-3;
+  border-radius: $radius-pill;
+  font-size: $fs-xs;
+  font-weight: 600;
+  line-height: $lh-normal;
+
+  // 饱和背景 + 白字 — 跟 ChatPane .chat-run-status 风格对齐，hover sidebar
+  // 时一眼能扫到 reviewer 状态 (之前 git-decoration-fade 淡色背景视觉太弱)
+  &.review-chip-approved {
+    background: $color-approved;
+    color: $text-on-accent;
+  }
+  &.review-chip-needs-work {
+    background: $color-danger-bg;
+    color: $text-on-accent;
+  }
+
+  // 可合并 chip：纯分支合并图标无数值。绿底跟 approved 同色系，表"正向放行"；
+  // icon-only 收紧水平 padding 让胶囊不至于过宽
+  &.review-chip-mergeable {
+    background: $color-approved;
+    color: $text-on-accent;
+    padding: 1px $space-2;
+
+    svg {
+      display: block;
+    }
+  }
+
+  // 评审建议徽标（★，手动 / AutoPilot 一视同仁）：approve 绿 / needs_work 琥珀 / manual_review 蓝。
+  // flex 居中让 SVG 星形垂直对齐（此前 ★ 字形基线偏移、不居中）。
+  &.verdict-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px $space-2;
+
+    svg {
+      display: block;
+    }
+
+    &.verdict-chip-approve {
+      background: $color-approved;
+      color: $text-on-accent;
+    }
+    &.verdict-chip-needs_work {
+      background: $color-warning;
+      color: $text-on-accent;
+    }
+    &.verdict-chip-manual_review {
+      background: $color-accent;
+      color: $text-on-accent;
+    }
+  }
+
+}
+
+// 执行中指示：复用运行卡片同款 .spinner（中心对称的蓝色环旋转），裸图标无 chip 外框；
+// 清掉 .spinner 默认的 inline-文字外边距，在徽标行里居中对齐。
+.pr-item-spinner {
+  margin: 0;
+  vertical-align: middle;
+}
+
+.tag-needs-work {
+  color: $git-needs-work-fg;
+  font-size: $fs-md;
+}
+
+// 行级状态前缀：approved 绿勾、needs_work 红叹号；pending 不加。
+// 字符 + bold + 大号 + accent 描边底色让符号在标题文本里"跳出来"，
+// 不用 emoji 是因为不同 OS 字体渲染差异大、不可控
+.pr-item-status-approved .pr-item-title::before,
+.pr-item-status-needs_work .pr-item-title::before {
+  display: inline-block;
+  margin-right: $space-2;
+  // 固定方形尺寸 + 内容居中 — 否则 ✓ 跟 ! 字符天然宽度不同 chip 看起来一宽一扁
+  width: 18px;
+  height: 18px;
+  text-align: center;
+  border-radius: $radius-sm;
+  font-weight: 800;
+  // 字符比标题文字小一号，留出 chip 内边距视觉更精致；标题 $fs-lg ≈ 13px → 11px
+  font-size: 0.85em;
+  line-height: 18px;
+  vertical-align: 0.05em;
+}
+// 暗色 fade 背景 + 高饱和度字：底色淡而不突兀，符号本身仍醒目
+.pr-item-status-approved .pr-item-title::before {
+  content: '✓';
+  background: $git-added-bg-fade;
+  color: $color-approved;
+}
+.pr-item-status-needs_work .pr-item-title::before {
+  content: '!';
+  background: $git-needs-work-fade;
+  color: $color-danger;
+}
+
+.conflict-warn {
+  margin-right: $space-2;
+  font-size: $fs-md;
+}

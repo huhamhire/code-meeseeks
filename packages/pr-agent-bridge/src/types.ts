@@ -98,6 +98,12 @@ export interface ChatRunOptions {
   user: string;
   /** 采样温度；anthropic 经 shim 自动剔除。 */
   temperature?: number;
+  /**
+   * 输出 token 上限（litellm max_tokens）。用于轻量路由判读（如追问判读）封顶输出、避免模型
+   * 对一个 yes/no 决策吐大量 token 拖慢响应。仅嵌入式 litellm 路径生效；CLI provider 忽略。
+   * 省略 = 不封顶（总结 / 规划收尾等需完整篇幅者不传）。
+   */
+  maxOutputTokens?: number;
   /** 注入子进程的 env（LLM key / model / 代理，复用 buildPragentEnv）。 */
   env?: Record<string, string>;
   /** 子进程工作目录；建议传中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。 */

@@ -1,0 +1,438 @@
+// chat 面板内 pr-agent 结构化结果卡片 (findings)：按 sectionKey 着色的卡片、类别 chip、
+// 概览指标行、草稿状态/操作、评分、代码对比块、锚点跳转、PR Type 胶囊。
+
+@use '../../tokens' as *;
+@use '../../mixins' as *;
+
+// === Findings ===
+.chat-finding-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+.chat-finding {
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-left: 3px solid $border-default;
+  border-radius: $radius-md;
+  padding: $space-4 $space-5;
+  font-size: $fs-lg;
+  line-height: $lh-normal;
+
+  // 按 sectionKey 着不同的左条颜色，呈现"标准文档"骨架的视觉分组：
+  //   - 元信息 (建议标题 / 类型) + 架构图 + 工作量 走主蓝
+  //   - 描述 / 走查 / 总结 + 测试 / 安全（概览结论）走绿
+  //   - 评分 走中性灰
+  //   - 代码反馈 / 改进建议 走警示色 (黄/橙)
+  // general (兜底) 不着色，保留默认灰
+  &.chat-finding-title,
+  &.chat-finding-pr-type,
+  &.chat-finding-diagram,
+  &.chat-finding-assessment,
+  &.chat-finding-effort {
+    border-left-color: $color-info;
+  }
+  &.chat-finding-summary,
+  &.chat-finding-description,
+  &.chat-finding-walkthrough,
+  &.chat-finding-relevant-tests,
+  &.chat-finding-security,
+  &.chat-finding-ask-summary {
+    border-left-color: $color-approved;
+  }
+  // /ask 过程分析：中性灰（默认收起的过程性段，不抢眼）
+  &.chat-finding-score,
+  &.chat-finding-ask-analysis {
+    border-left-color: $text-muted;
+  }
+  &.chat-finding-code-feedback,
+  &.chat-finding-code-suggestion,
+  &.chat-finding-ask-suggestions {
+    border-left-color: $color-warning;
+  }
+  &.chat-finding-general {
+    border-left-color: $border-default;
+  }
+  // 已拒绝：左色条转中性灰（盖过 code-feedback / suggestion 的警示色）、整卡降饱和收起
+  &.chat-finding-rejected {
+    border-left-color: $text-muted;
+    opacity: 0.68;
+  }
+}
+
+// 点击复评引用徽标定位到原 finding 卡片时的短暂高亮：用「覆盖式高亮环 + inset 淡色填充」而非背景渐隐
+// ——finding 卡有实底 $bg-elev，背景渐隐会被洗掉看不出闪烁；覆盖式与卡片底色无关、任意底色都清晰可见，
+// 动画结束自动回落（fill-mode 默认 none）。高亮色 = 卡片左条主题色（--flash-color，按 sectionKey 取），
+// 让定位反馈与卡片类别视觉一致（如代码建议=橙黄）；已关闭/拒绝卡统一中性灰（盖过类别色）。
+.chat-finding-flash {
+  --flash-color: #{$border-default};
+  animation: chat-finding-flash-kf 1.5s ease-out;
+}
+// 类别色：与上面 .chat-finding 的 border-left-color 分组逐一对应。
+.chat-finding-title.chat-finding-flash,
+.chat-finding-pr-type.chat-finding-flash,
+.chat-finding-diagram.chat-finding-flash,
+.chat-finding-assessment.chat-finding-flash,
+.chat-finding-effort.chat-finding-flash {
+  --flash-color: #{$color-info};
+}
+.chat-finding-summary.chat-finding-flash,
+.chat-finding-description.chat-finding-flash,
+.chat-finding-walkthrough.chat-finding-flash,
+.chat-finding-relevant-tests.chat-finding-flash,
+.chat-finding-security.chat-finding-flash,
+.chat-finding-ask-summary.chat-finding-flash {
+  --flash-color: #{$color-approved};
+}
+.chat-finding-score.chat-finding-flash,
+.chat-finding-ask-analysis.chat-finding-flash {
+  --flash-color: #{$text-muted};
+}
+.chat-finding-code-feedback.chat-finding-flash,
+.chat-finding-code-suggestion.chat-finding-flash,
+.chat-finding-ask-suggestions.chat-finding-flash {
+  --flash-color: #{$color-warning};
+}
+// 已关闭/拒绝卡：统一中性灰（语义=非活跃，盖过类别色）。须置于类别规则之后以同特异性覆盖。
+.chat-finding-rejected.chat-finding-flash {
+  --flash-color: #{$text-muted};
+}
+@keyframes chat-finding-flash-kf {
+  0% {
+    box-shadow:
+      0 0 0 2px var(--flash-color),
+      inset 0 0 0 9999px color-mix(in srgb, var(--flash-color) 18%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px transparent,
+      inset 0 0 0 9999px transparent;
+  }
+}
+.chat-finding-head {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  margin-bottom: $space-3;
+}
+// 收起态：正文已隐藏，头部的下间距会让卡片上下不对称（下方多出 margin-bottom）→ 归零，使上下内边距对称。
+.chat-finding-collapsed .chat-finding-head {
+  margin-bottom: 0;
+}
+// 可折叠卡：整行标题区即展开/收起热区（扩大可点面积，不止右侧 chevron）。
+.chat-finding-head-toggle {
+  cursor: pointer;
+}
+// 折叠/展开高度动画：grid-template-rows 0fr↔1fr（可对 auto 高度做过渡）。内容始终挂载，inner
+// overflow:hidden + min-height:0 在收起时裁切——故收/展是平滑的高度过渡。仅可折叠卡会切到
+// collapsed → 0fr；其余卡恒 1fr、无动画。
+.chat-finding-collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s ease;
+}
+.chat-finding-collapsed .chat-finding-collapsible {
+  grid-template-rows: 0fr;
+}
+.chat-finding-collapsible-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+// 尊重系统「减少动效」：关掉高度过渡与 chevron 旋转过渡。
+@media (prefers-reduced-motion: reduce) {
+  .chat-finding-collapsible,
+  .chat-finding-collapse-toggle svg {
+    transition: none;
+  }
+}
+// 分析解读（ask-analysis）展开时：chip 行下加一条分割线，与下方富文本内容（表格 / 代码块）衔接更自然，
+// 避免头部 chip 直接贴正文显得突兀。仅展开态（无 chat-finding-collapsed）出现。
+.chat-finding-ask-analysis:not(.chat-finding-collapsed) .chat-finding-head {
+  padding-bottom: $space-3;
+  border-bottom: 1px solid $border-default;
+}
+// 分析解读正文：H2 作为小节标题——字号调小到正文级（靠加粗区分，不过分抢眼），且每个小节上方用分割线
+// 隔开，长解读分段清晰。首个 H2（正文起始即标题）不重复加线，避免与头部分割线叠成双线。
+.chat-finding-ask-analysis .chat-finding-body {
+  h2 {
+    font-size: $fs-lg;
+    margin-top: $space-5;
+    padding-top: $space-4;
+    border-top: 1px solid $border-default;
+  }
+  > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+}
+// 度量走 chat-chip + chat-chip-md；配色由 markup 的 chat-chip-<tone(key)> 决定
+// (元信息/图/工作量→accent，内容/测试/安全→approved，警示→warning，评分/兜底→neutral)。
+.chat-finding-cat {
+  flex-shrink: 0;
+}
+// 已拒绝卡片：类别 chip 一并置灰，盖过分类配色（与左色条置灰一致）
+.chat-finding-rejected .chat-finding-cat {
+  background: $bg-surface;
+  color: $text-muted;
+}
+// 已拒绝卡片头部的展开 / 收起切换：chevron 图标，推到头部最右，低调中性样式。
+// 图标在右侧，收起态朝左（◂，旋转 180° 指回内容），展开态朝下（▾，旋转 90°）。
+.chat-finding-collapse-toggle {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
+  // ChevronIcon 原始朝右（▸）；收起态旋转 180° 朝左
+  svg {
+    transition: transform 0.15s ease;
+    transform: rotate(180deg);
+  }
+  &.is-expanded svg {
+    transform: rotate(90deg);
+  }
+
+  &:hover {
+    color: $text-primary;
+    background: $bg-surface;
+  }
+}
+// 头部操作图标栏：编辑（评论）/ 拒绝（圆形禁止）/ 引用（转发箭头）成组贴右上角，排在折叠 chevron 之左。
+// margin-left:auto 顶到最右；与 collapse-toggle 并存时由本组吃掉左侧空白，二者贴右成一组。
+.chat-finding-head-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+
+  & + .chat-finding-collapse-toggle {
+    margin-left: 0;
+  }
+}
+// 头部图标按钮（编辑 / 拒绝）：低调中性 → hover 主色；拒绝单独 → hover 高饱和危险红。
+.chat-finding-head-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
+  &:hover {
+    color: $text-primary;
+    background: $bg-surface;
+  }
+}
+.chat-finding-head-btn-reject:hover {
+  color: $color-danger-strong;
+  background: $color-danger-strong-fade;
+}
+// 「引用」按钮：社媒「转发」箭头图标，排在编辑 / 拒绝之右。低调中性 → hover 主色。
+.chat-finding-reference-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
+  &:hover {
+    color: $color-info;
+    background: $bg-surface;
+  }
+}
+// 概览指标（工作量 / 测试 / 安全 / 评分）：值很短，chip 与值排同一行、紧凑展示，不再各占两行。
+.chat-finding-effort,
+.chat-finding-relevant-tests,
+.chat-finding-security,
+.chat-finding-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $space-3;
+
+  .chat-finding-head {
+    margin-bottom: 0;
+  }
+  .chat-finding-body {
+    margin: 0;
+
+    // 去掉 markdown 段落块级外边距，使「2 🔵🔵」之类短值与 chip 同排
+    p {
+      margin: 0;
+    }
+  }
+}
+.chat-finding-title {
+  margin: 0;
+  font-size: $fs-lg;
+  font-weight: 600;
+  color: $text-primary;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+// 草稿状态 chip + 操作按钮：anchor 行右侧，跟 score chip 共用 margin-left:auto 推到末尾
+.chat-finding-draft-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  // 不可压缩 — anchor 行 path 太长时整段 chip+按钮要么完整显示要么换行，
+  // 不允许被压扁让按钮文字 wrap (用户实测"编辑"被换成两行)
+  flex-shrink: 0;
+}
+// 度量走 chat-chip + chat-chip-tight；配色由 markup 的 chat-chip-<tone(status)> 决定
+// (pending/edited→accent，posted→approved，rejected→neutral)。rejected 额外加删除线。
+.chat-finding-draft-chip-rejected {
+  text-decoration: line-through;
+}
+.chat-finding-draft-btn {
+  @include ghost-btn;
+  padding: 1px $space-3;
+  font-size: $fs-xs;
+  font-family: inherit;
+  line-height: $lh-normal;
+  white-space: nowrap;
+}
+
+// /improve 的重要度评分 chip：右浮在 anchor 行末尾，高分 (>=8) 加 warning 调色
+.chat-finding-score {
+  margin-left: auto;
+  padding: 1px $space-2;
+  border-radius: $radius-sm;
+  background: $bg-surface;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+  font-family: $font-mono;
+
+  &.chat-finding-score-high {
+    background: $color-warning-fade;
+    color: $color-warning-bright;
+    font-weight: 600;
+  }
+}
+
+// /improve 建议的 existing → improved 代码片段对比块。两个独立 <pre>，红绿背景模拟 diff
+.chat-finding-code-change {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+  margin-top: $space-3;
+}
+.chat-finding-code-change-block {
+  margin: 0;
+  padding: $space-3 $space-4;
+  font-family: $font-mono;
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: $radius-sm;
+  border: 1px solid $border-default;
+  overflow-x: auto;
+}
+.chat-finding-code-change-existing {
+  background: $color-danger-fade;
+  border-left: 3px solid $color-danger;
+}
+.chat-finding-code-change-improved {
+  background: $color-approved-fade-soft;
+  border-left: 3px solid $color-approved;
+}
+
+.chat-finding-anchor {
+  font-size: $fs-xs;
+  margin-bottom: $space-3;
+  display: flex;
+  gap: $space-2;
+  align-items: baseline;
+  // path 长 + actions 不可缩 (flex-shrink:0) 时，整段会被推到容器外。
+  // 允许 wrap：path code 太长时 actions 换到下一行，永远在可见区内
+  flex-wrap: wrap;
+
+  code {
+    background: $bg-surface;
+    padding: 0 $space-2;
+    border-radius: $radius-sm;
+    font-family: $font-mono;
+    color: $text-body;
+    // 长路径优先按分隔符 / 连接符折断（BreakablePath 在 / . _ - 后插了 <wbr> 软断点）：
+    // word-break:normal 让浏览器只在这些软断点（及空格 / CJK）处折行，保证可读性；overflow-wrap:anywhere
+    // 仅作兜底——单个分段仍超宽时才允许任意断开，且让 code 作为 flex item 能正常收缩不撑爆容器。
+    word-break: normal;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+}
+// 可点击锚点：path + 行号整体作为「跳转到代码对应行」的链接按钮
+.chat-finding-anchor-link {
+  @include anchor-link;
+  display: inline-flex;
+  align-items: baseline;
+  gap: $space-2;
+  min-width: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+
+  &:hover {
+    color: $color-info;
+
+    code {
+      color: $color-info;
+    }
+  }
+}
+.chat-finding-body {
+  font-size: $fs-lg;
+}
+
+// PR Type 段：拆成胶囊横排。背景色 / 描边色 / 文字色 inline 由 pillStyle() 计算
+// (按标签内容 hash 出色相)，这里只管布局 + 共通排版
+.chat-finding-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-2;
+}
+// PR Type 值胶囊并入头部行时：推到「类型」标签右侧、右对齐（多个仍可换行），单行省纵向空间。
+.chat-finding-pills-inline {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+// 值胶囊已并入头部行，头部即整卡内容，去掉下外边距避免多余留白。
+.chat-finding-pr-type .chat-finding-head {
+  margin-bottom: 0;
+}
+.pr-type-pill {
+  display: inline-block;
+  padding: 2px $space-4;
+  border-radius: $radius-pill;
+  border: 1px solid transparent; // inline style 覆盖
+  font-size: $fs-sm;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: $lh-normal;
+}
+.chat-finding-empty {
+  font-size: $fs-sm;
+  line-height: $lh-loose;
+  padding: $space-4;
+  background: $bg-elev;
+  border-radius: $radius-md;
+}
