@@ -106,21 +106,9 @@
     "queuedPosition": "排队中 · 第 {{position}} 位",
     "rawOutput": "原始输出 ({{n}} chars)",
     "reference": {
-      "adoptReplace": "采纳并关闭原",
-      "applied": "已应用",
       "clearTitle": "移除引用",
-      "closeOnly": "仅关闭原",
-      "closeOriginal": "关闭原评论",
-      "closedDropped": "已被复评关闭",
-      "closedReplaced": "已被复评取代",
-      "noSuggestion": "该复评没有可采纳的评论建议",
       "reference": "引用",
-      "referenceTitle": "引用此条评论发起复评",
-      "reopen": "撤销关闭",
-      "verdict_drop": "撤销原评论",
-      "verdict_keep": "保留原评论",
-      "verdict_replace": "取代原评论",
-      "viewAsk": "查看复评"
+      "referenceTitle": "引用此条评论发起复评"
     },
     "reject": "拒绝",
     "rejectFindingTitle": "拒绝此条建议（不会发布到远端）",

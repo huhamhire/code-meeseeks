@@ -311,15 +311,6 @@
   }
 }
 
-// 复评裁决 + 手动采纳/关闭动作区（裁决 chip + 按钮）。
-.chat-run-verdict {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: $space-2;
-  margin-top: $space-3;
-}
-
 // 复评卡 ↔ 原 finding 卡互链滚动定位时的短暂高亮。
 .chat-run-flash {
   animation: chat-run-flash-kf 1.5s ease-out;

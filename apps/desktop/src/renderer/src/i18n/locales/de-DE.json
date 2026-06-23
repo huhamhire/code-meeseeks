@@ -106,21 +106,9 @@
     "queuedPosition": "Eingereiht · Position {{position}}",
     "rawOutput": "Rohausgabe ({{n}} chars)",
     "reference": {
-      "adoptReplace": "Übernehmen & Original schließen",
-      "applied": "Angewendet",
       "clearTitle": "Referenz entfernen",
-      "closeOnly": "Nur Original schließen",
-      "closeOriginal": "Originalkommentar schließen",
-      "closedDropped": "Durch Nachprüfung geschlossen",
-      "closedReplaced": "Durch Nachprüfung ersetzt",
-      "noSuggestion": "Diese Nachprüfung hat keinen übernehmbaren Kommentarvorschlag",
       "reference": "Referenzieren",
-      "referenceTitle": "Diesen Kommentar referenzieren, um eine Nachprüfung zu starten",
-      "reopen": "Wieder öffnen",
-      "verdict_drop": "Original verwerfen",
-      "verdict_keep": "Original behalten",
-      "verdict_replace": "Original ersetzen",
-      "viewAsk": "Nachprüfung anzeigen"
+      "referenceTitle": "Diesen Kommentar referenzieren, um eine Nachprüfung zu starten"
     },
     "reject": "Ablehnen",
     "rejectFindingTitle": "Diesen Vorschlag ablehnen (wird nicht an Remote gesendet)",

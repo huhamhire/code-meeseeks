@@ -10,7 +10,6 @@ import type {
 import { ChatIcon, TrashIcon, ConfirmModal, PaneLoading } from '../../common';
 import { useChatRunStore } from '../../../stores/chat-run-store';
 import { useDraftsForPr } from '../../../stores/drafts-store';
-import { useFindingClosuresForPr } from '../../../stores/finding-closures-store';
 import {
   formatReferencedContext,
   selectionStore,
@@ -130,8 +129,6 @@ export function ChatPane({
 
   // M4 草稿池：从 main 进程拉本 PR 的草稿，跟 finding 通过 source 字段反查关联
   const drafts = useDraftsForPr(prLocalId);
-  // 复评关闭关系池：FindingCard 据 (runId,findingId) 反查某条 finding 是否已被复评 /ask 关闭/取代。
-  const closures = useFindingClosuresForPr(prLocalId) ?? [];
 
   // 复评引用态：点 finding「引用」→ 仅挂到输入栏（chip）；不自动填写问题，用户自行输入。发送时携带该引用。
   const [refFinding, setRefFinding] = useState<{ finding: Finding; run: ReviewRun } | null>(null);
@@ -313,16 +310,10 @@ export function ChatPane({
                 // 避免回头再点重新插队、打乱对话顺序
                 canRetry={i === timeline.length - 1 && !hasMyActive}
                 drafts={drafts ?? []}
-                closures={closures}
                 onJumpToDraft={actions.handleJumpToDraft}
                 onRejectFinding={actions.handleRejectFinding}
                 onNavigateToFinding={actions.handleNavigateToFinding}
                 onReferenceFinding={onReferenceFinding}
-                onReopenFinding={(runId, findingId) =>
-                  void actions.handleReopenFinding(runId, findingId)
-                }
-                onAdoptAskComment={(r) => void actions.handleAdoptAskComment(r)}
-                onCloseReferencedFinding={(r, v) => void actions.handleCloseReferencedFinding(r, v)}
                 onScrollToRun={scrollToRun}
               />
             </div>
