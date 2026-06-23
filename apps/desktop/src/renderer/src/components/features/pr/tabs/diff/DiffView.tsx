@@ -18,6 +18,7 @@ import {
   useBlame,
   useChangedFiles,
   useCommentZones,
+  useConflictFiles,
   useDiffComments,
   useDiffNav,
   useDiffOverviewMarks,
@@ -96,6 +97,8 @@ export function DiffView({
   );
   const { files, filesError, retryFiles, selectedKey, setSelectedKey, selected, loadedKey } =
     useChangedFiles(pr, range, viewKey);
+  // 合并会冲突的文件路径集合（仅 pr.hasConflict 时实拉），文件树据此标三角警示。
+  const conflictPaths = useConflictFiles(pr);
   const { content, contentLoading, contentError, setContentError } = useFileContent(
     pr,
     selected,
@@ -287,6 +290,7 @@ export function DiffView({
             selectedKey={selectedKey}
             commentCountByPath={commentCountByPath}
             draftCountByPath={draftCountByPath}
+            conflictPaths={conflictPaths}
             onSelect={(f) => setSelectedKey(fileKey(f))}
           />
         )}

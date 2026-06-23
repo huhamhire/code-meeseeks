@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import simpleGit, { type SimpleGit } from 'simple-git';
 import type { Logger } from 'pino';
 import type { SyncProgressEvent } from '@meebox/shared';
@@ -42,6 +44,9 @@ const GIT_UNSAFE_ENV_KEYS = new Set([
   'git_config_count',
   'prefix',
 ]);
+
+/** Promise 版 execFile：用于 simple-git 会因非零退出吞掉 stdout 的命令（如 merge-tree 冲突时退出码 1）。 */
+const execFileAsync = promisify(execFile);
 
 /** 从 env 里剔除 simple-git 会拦的危险 key（大小写不敏感）。 */
 function stripGitUnsafeEnv(env: Record<string, string>): Record<string, string> {
@@ -453,6 +458,43 @@ export class RepoMirrorManager {
   }
 
   /**
+   * 列出把源 head 合并进目标 tip 会冲突的文件路径（`git merge-tree --write-tree` 的试合并，git ≥ 2.38）。
+   * 无冲突（退出码 0）/ 无法判定（退出码 < 0 或 git 过旧）→ 返回空数组，由调用方保守不标记。
+   *
+   * merge-tree 冲突时退出码为 1 且把结果写到 stdout，simple-git 会因非零退出吞掉 stdout，故直接走
+   * execFile 自行捕获 stdout。`-z` 让输出 NUL 分隔（路径含空格/中文/引号都不破），`--name-only` 只出冲突
+   * 文件名：首字段是结果 tree OID，随后是各冲突文件名，遇空字段（段分隔的双 NUL）即冲突文件段结束。
+   */
+  async listConflictFiles(
+    repo: RepoIdentity,
+    targetSha: string,
+    sourceSha: string,
+  ): Promise<string[]> {
+    if (!targetSha || !sourceSha) return [];
+    const mirrorPath = this.mirrorPath(repo);
+    try {
+      // 退出码 0 = 干净可合并，无冲突。
+      await execFileAsync(
+        'git',
+        ['merge-tree', '--write-tree', '--name-only', '-z', targetSha, sourceSha],
+        { cwd: mirrorPath, maxBuffer: 64 * 1024 * 1024 },
+      );
+      return [];
+    } catch (err) {
+      const e = err as { code?: number | string; stdout?: string | Buffer };
+      // 退出码 1 = 存在冲突，stdout 携带冲突文件段；其余（无法完成试合并 / git 过旧）保守返回空。
+      if (e.code === 1 && e.stdout != null) {
+        return parseMergeTreeConflictsZ(e.stdout.toString());
+      }
+      this.opts.logger?.warn(
+        { err, repo: this.repoKey(repo), targetSha, sourceSha },
+        'git merge-tree conflict probe failed; treating as no conflict',
+      );
+      return [];
+    }
+  }
+
+  /**
    * 读取某文件在某 commit 的内容。完整 bare clone 下 blob 都在本地，直接 git show。
    * 文件不在该 commit (新增/删除场景) 返回空 content。
    * 简单 null-byte 启发判定二进制（前 8000 字符）。
@@ -770,6 +812,22 @@ function parseNameStatusZ(raw: string): ChangedFile[] {
     }
   }
   return out;
+}
+
+/**
+ * 解析 `git merge-tree --write-tree --name-only -z` 在冲突时的 stdout。
+ * 格式（NUL 分隔）：`<结果 tree OID>\0<冲突文件名>\0...\0\0<提示信息段...>`——首字段是 tree OID，随后
+ * 是各冲突文件名，遇空字段（段间双 NUL）即冲突文件段结束，后续提示信息段忽略。同名去重。
+ */
+export function parseMergeTreeConflictsZ(raw: string): string[] {
+  const parts = raw.split('\0');
+  const files: string[] = [];
+  // parts[0] = 结果 tree OID；从下一字段起收集冲突文件名，遇空字段（段分隔）停止。
+  for (let i = 1; i < parts.length; i++) {
+    if (parts[i] === '') break;
+    files.push(parts[i]!);
+  }
+  return [...new Set(files)];
 }
 
 /**

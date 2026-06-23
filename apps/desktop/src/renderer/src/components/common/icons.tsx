@@ -53,6 +53,28 @@ export function CloseIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 三角警示（叹号）：合并冲突等需要用户注意的状态。文件树冲突文件行用。 */
+export function ConflictIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M8 2 L14.5 13.5 H1.5 Z" />
+      <line x1="8" y1="6.5" x2="8" y2="9.5" />
+      <line x1="8" y1="11.5" x2="8" y2="11.6" />
+    </svg>
+  );
+}
+
 /** 文件夹：选择目录按钮用 */
 export function FolderIcon({ size = 14 }: IconProps) {
   return (
