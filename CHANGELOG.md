@@ -5,106 +5,61 @@
 
 ## [Unreleased]
 
+## [0.6.0-alpha.1] - 2026-06-23
+
+> 0.6 的首个开发期预览版。本版重点：**`/ask` 复评闭环**（对评审建议发起复评、自动取代 / 关闭原评论）、
+> **`/ask` 结构化分段输出与完整文件上下文**、**Agent 会话中途输入与「计划」面板**，以及一轮
+> **Diff 体验增强**（选区引用提问、按变更范围 / 单 commit 查看、冲突文件标注、删除行评论、滚动条总览标尺）
+> 与 **PR「活动」时间线**；同时对前后端做了一轮可维护性重构（行为不变）并显著降低 Agent 编排延迟。
+
 ### Added
 
-- agent 自动评审自动「复评 / 取代」review 评论：自动评审微流程（describe→review→judge→asks→summary）里，judge 现可对某条 review 代码评论（finding）出**复评追问**（按 id 点名 `targetFindingId`），asks 步以复评模式跑该追问（携 `referencedFinding`），裁决为「取代 / 撤销」时**自动关闭**被取代的原 finding（建立 `FindingClosure`，原卡转关闭态并与复评 ask 卡互链）——无需用户手动点「引用」。默认开启、保守：仅 judge 明确点名某条 finding 且复评裁决为 replace/drop 时才关闭，keep / 未点名不动；新评论不自动落草稿，仍由用户在复评卡手动「采纳」（与手动引用路径一致）。复用 `/ask` 复评闭环的数据与渲染（`referencedFinding` / `askVerdict` / `FindingClosure`）。
-
-- `/ask` 复评引用闭环：可对先前 review/improve 在 ChatPane 生成的代码评论建议（finding 卡片）发起「复评」。finding 卡片新增「引用」按钮 → 把该条挂到输入栏（复用 diff 选区引用的 chip + 预填可编辑的默认复评问题），发送后本条 `/ask` 携带该引用走复评模式：按结构化分段额外产出裁决 `<verdict>`（取代 / 保留 / 撤销），结果卡顶部显示「复评自 <file:line>」徽标（点击回链原卡）+ 裁决 chip + **手动**动作。「采纳并关闭原」把建议作为新评论草稿锚定原位置并关闭原 finding；「关闭原评论」仅关闭；关闭后原 finding 卡转「已被复评取代/关闭」态（折叠 + 撤销关闭 + 互链到复评卡）。关闭关系独立持久化（非草稿语义），新增 `findingClosures:list/create/delete` 通道与 `findingClosures:changed` 事件、`ReviewRun.referencedFinding` / `askVerdict` 字段。仅 `/ask`；agent 自动评审里 ask 自动关联 / 取代 review 建议为后续迭代。
-
-- `/ask` 结构化分段输出：自由问答此前无结构、冗长，reviewer 难以快速获取信息。现经提示词约束模型按确定性分段输出——`<summary>`（结论 / 直接回答，绿色高亮、默认展开）、`<analysis>`（过程性分析 / 讨论，灰色、**默认收起**可展开）、`<suggestions>`（可执行建议，琥珀色高亮）。解析层按标签切段成独立卡片（模型未遵循 / 无标签时整体回退普通解析，不破坏既有行为），渲染层按段着色 + 过程段折叠，关键结论与建议一眼可见。仅 `/ask`，`/describe`、`/review` 输出不变。
-
-- CLI 模式 `/ask` 取完整文件上下文：本机 CLI（claude / codex）接管 LLM 时，`/ask` 自由问答此前只能基于 diff 推理、读不到仓库完整文件（CLI 子进程被钉在中性临时目录以隔离仓库自带指令）。现仅对 `/ask` 经 `MEEBOX_CLI_WORKDIR` 把子进程 cwd 落到一次性 worktree，能读真实文件作答（如「某函数在别处被谁调用」）；落 cwd 前清空该 worktree 内仓库自带的 agent 指令文件（`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor` 规则 / `.github/copilot-instructions.md`），避免被评审 PR（worktree 即 PR HEAD、作者可控）经指令文件注入 / 污染回答。`/describe`、`/review` 维持中性临时目录不变；API 模式不涉及（远程接口本就只有 diff）。
-
-- Agent 会话「中途输入」与「计划」：Agent 运行期间再输入消息不再被静默丢弃——即时显示用户气泡并入队，下一主 Agent 周期并入、与当前进度对比后重排后续行动（评审微流程跑完后接续处理排队消息；无在跑则直接起一轮规划）。规划 Agent 维护一份可视的「计划」(todo) 面板：每轮给出 / 更新步骤、随进展勾选、收到新输入按最新指令重排；随会话持久化，切 PR / 重启经 `agent:getSession` 恢复。新增 `agent:enqueueMessage` 通道与 `agent:planUpdated` 事件。
-
-- Diff 选中代码引用进提问：在 Diff 选中若干行后，聊天输入栏 AutoReview 按钮右侧出现「N 行已选中」角标（竖线分隔），点击可切换忽略态（eye-slash + 置灰）——忽略时本条消息不带引用。发送 `/ask` 或自然语言提问时，选中代码作为**隐式上下文**注入模型（带文件路径 + 行范围 + base/head 侧），不进入会话气泡、不落盘（`agent:ask` / `pragent:run` 增可选 `referencedContext`，经 EXTRA_INSTRUCTIONS / 规划当轮提示注入，且约束不透传给 pr-agent 工具）。引用不受「可评论区域」限制，未改动的上下文行同样可引用。统一(inline)视图下删除行无法被光标选中，但 head 选区跨到的删除 / 改动 hunk 会据 diff 映射从基线侧取出真实代码一并引用（删除内容也能像添加行一样被引用）；并排视图删除行可直接选中。切换 PR / 选区塌缩即清。
-
-- Diff 滚动条总览标尺：diff 增 / 改 / 删与「有评论的行」投影到滚动条旁的总览标尺（编辑模式风格，按 1/3 分道、中间留白，不启用 minimap），拖动滚动条即可快速定位变更与评论位置。增 / 改按行高显示；并排视图删除在左侧 original 编辑器标尺按行高标红，统一(inline)视图下删除行无 model 行号、以删除点标记。
-
-- Diff 标签支持按「变更范围」查看：文件树头部「<n> 个文件」补充范围信息，变为「<n> 个文件 · 全部变更」或「<n> 个文件 · <commit>」，整体可点击弹出下拉，选择查看「全部变更（PR base..head）」或某个 commit 的变更（该 commit 的 `parent..sha`）。提交 / 活动标签页点击 commit 不再跳浏览器，而是切到 Diff 标签本地渲染该 commit 的变更。commit 视图为只读 diff（行内评论 / 草稿锚定在 PR 全量 diff 行号上，不套用于单 commit）。`diff:listChangedFiles` / `getFileContent` / `getBlame` 增加可选 base/head 范围参数。
-
-- Diff 支持给「删除行」新增行内评论 / 草稿：此前 hover「+」只挂在 head 侧（新增行），现并排视图下 base 侧（删除 / 上下文行）也可 hover「+」创建，锚定 `side: 'old'`（发布映射 Bitbucket `lineType: removed / fileType: FROM`）。统一(inline)视图下删除行以 view zone 呈现、无可 hover 行号，仍需切并排视图创建。
-
-- Diff 文件树标注合并冲突文件：有冲突的 PR（`pr.hasConflict`）打开 Diff 时，对会冲突的文件在右侧状态圆点左侧标一个琥珀色三角警示图标（hover 提示「合并到目标分支会产生冲突」），无需逐文件试合并即可一眼定位冲突所在。冲突文件由后端就 PR 目标分支 tip ⟂ 源 head 跑本地 `git merge-tree --write-tree` 试合并解析得到（新增 `diff:listConflictFiles` 通道，仅 `hasConflict` 为真时实际试合并、失败保守不标记）。
-
-- PR 评审界面交互细节优化：合并按钮去掉「常绿填充」（易误判为已点击），改为与 approve 同款基础态 + 1s blink 突出可点击、点击后沿用 disabled 灰显；提交标签页表格行高加高、表头字号不小于正文；活动视图 inline 评论的「文件:行号」锚点可点击，直接跳到 Diff 标签对应位置；活动内容区宽度在 [480, 960] 内自适应、窄于 480 转横向滚动（修正窄宽下被 ChatPane 遮盖）；PR 头部「冲突」标记改为带色 chip 展示。
-
-- PR 详情标签页交互优化：整面板国际化（原「描述 / 时间线」写死中文、「Reviewers」写死英文，现按界面语言出文案）；reviewer 列表参照活动时间线行式展示（前置状态图标 + 头像 + 名 + 决断 chip，「评审者 / 已批准 / 要求修改 / 待评审」）；时间线精简为「远端创建 / 远端更新 / 最近更新时间」（移除「本地首次发现」）；改为左右布局（左描述、右时间线 + 评审者），面板窄到阈值时按容器查询响应式将侧栏堆叠到描述下方；侧栏限宽 400px、时间小字号右对齐，避免元素过散。
-
-- PR 详情「评论」标签页演进为「活动」时间线（GitHub / Bitbucket）：把评论、提交更新、reviewer 评审决断（approve / needs-work / unapprove / dismiss）按时间倒序归并为一条活动时间线，保留原有评论内容、排序与编辑 / 回复 / 删除 / 内联代码能力。新增统一的 `listPullRequestActivity` 平台契约——GitHub 取自 `/pulls/{n}/reviews`、Bitbucket 取自 `/activities`（带时间戳的决断事件）。提交另保留独立「提交」标签页。
-  - 视觉：各条目统一为「图标节点 + 头像 + 加粗作者名 + 动词 + 时间」，一条竖向虚线轨贯穿图标列连接相邻条目；评论标题统一为「xxx 评论」并前置评论图标，正文整体缩进成挂在轨上的卡片；作者头像 / 文本与评论主体人一致，不做差异化。评审决断动词统一为「批准 / 要求修改」并用带色 chip（绿 / 琥珀 / 中性）突出。时间标签 hover 显示精确到秒的实际时间点。
-  - 新建评论：标签栏右侧「评论」按钮可直接发一条不锚到文件的 summary 评论，编辑框作为时间线首个节点（头像在轨上、编辑框缩进）展开，发布后新评论即时出现在顶部（新增 `publishSummaryComment` 平台契约 + `comments:create` 通道）。
-  - GitLab 走差异化设计：无统一活动事件源（CE 无审批、审批系统 note 解析脆弱），标签页保持纯「评论」视图（`capabilities.activityTimeline=false`），不混入提交 / 决断。
-
-- 连接 / LLM 配置模态退出拦截：编辑配置时若存在未提交改动，关闭（背景点击 / 取消 / 关闭键）会弹确认框拦截，确认放弃才关闭，避免误丢未保存内容。
-
-- PR 头部展示 reviewer 头像栈：在标题右侧、动作按钮行之上垂直居中展示评审者头像（Bitbucket 风格略重叠、灰色细描边环），按 needsWork > approved > 待评审 优先排序并过滤掉当前用户自己；approved / needsWork 的头像右上角带决断角标（圆环内绿勾 / 琥珀叹号）。至多展示 4 个，超出则显示 3 个 + 「+n」，点击「+n」下拉展示其余评审者（头像 + 名 + 决断 chip）；直接展示的头像 hover 出名字。
-
-- run 卡片 / 思考步骤展示「模型实际交互规模」（缓存命中量 + 轮次）：本机 CLI（claude / codex）接管 LLM 时，token 用量是 agentic 多轮累加、且每轮的 `cache_read` 反复计入，累计值远超模型单请求窗口，易被误读为超限或计量出错。现采集层从 CLI 返回的 usage 补充真实的**提示缓存命中量（`cache_read`）**与**模型交互轮次（`num_turns`）**，运行卡片与思考步骤统一呈现为「↑输入 (⛁缓存命中) / ↓输出 · ↻N」——蓝色数据库柱体图标标缓存命中量（属输入的一部分，无命中则整段不显示）、循环箭头图标标多轮次（单轮不显示），输入 / 输出各自独立悬浮提示。litellm / API 路径同步补 `cache_read` 采集（Anthropic `cache_read_input_tokens` / OpenAI `prompt_tokens_details.cached_tokens`），与 CLI 路径一致；`TokenUsage` 新增 `cacheReadTokens` / `turns` 字段（缺失向后兼容）。
+- **Agent 评审与对话**
+  - `/ask` 复评闭环：对 `/review`、`/improve` 的代码评论建议（finding）发起「复评」，按裁决（取代 / 保留 / 撤销）自动取代或关闭原评论；自动评审微流程亦可由 judge 触发复评。
+  - `/ask` 结构化分段输出：自由问答按「结论 / 分析解读 / 建议」三段着色呈现，针对代码的建议可定位行号、采纳为行内评论。
+  - CLI 模式 `/ask` 取完整文件上下文：本机 CLI 接管时可读取仓库完整文件作答，读取前清空仓库自带 agent 指令文件以防注入污染。
+  - 会话「中途输入」与「计划」面板：运行期间再输入消息即时入队并重排后续行动；规划 Agent 维护可视的 todo 计划，随会话持久化、切 PR / 重启自动恢复。
+  - run 卡片展示「模型实际交互规模」：呈现提示缓存命中量与模型交互轮次，避免本机 CLI 多轮累加的 token 用量被误读为超限。
+- **Diff 阅览**
+  - 选中代码引用进提问：选中若干行后作为隐式上下文随提问注入模型、可一键忽略，删除行与未改动行同样可引用。
+  - 按「变更范围」查看：可切换查看全部变更或某个 commit 的变更，点击 commit 本地渲染只读 diff、不再跳浏览器。
+  - 文件树标注合并冲突文件：有冲突的 PR 对会冲突的文件标琥珀色三角警示图标，无需逐文件试合并即可定位。
+  - 给「删除行」新增行内评论 / 草稿：并排视图下 base 侧（删除 / 上下文行）也可 hover「+」创建。
+  - 滚动条总览标尺：把增 / 改 / 删与「有评论的行」投影到滚动条旁，拖动即可快速定位。
+- **PR 详情与协作**
+  - 「评论」标签页演进为「活动」时间线（GitHub / Bitbucket）：评论、提交更新、评审决断归并为一条时间线，并可直接发不锚定文件的 summary 评论；GitLab 保持纯评论视图。
+  - PR 头部展示 reviewer 头像栈：按评审状态排序展示评审者头像、带决断角标，超出折叠为「+n」下拉。
+  - 详情标签页国际化与左右布局：整面板按界面语言出文案，改为左描述 / 右时间线 + 评审者列表、窄宽响应式堆叠。
+- 连接 / LLM 配置模态退出拦截：有未提交改动时关闭弹确认框，避免误丢未保存内容。
 
 ### Changed
 
-- ChatPane 评审结果交互打磨（一批小优化）：
-  - 移除「已达并发上限」横幅——触达上限本就自动进排队（仍有队列卡片 + 状态栏队列 chip），强提示无实用价值。
-  - finding 卡的「编辑 / 拒绝」由 anchor 行的文字按钮改为头部右上角图标栏的图标（评论气泡 / 圆形禁止），排在「引用」转发箭头左侧，与标题同排成组；anchor 行仅保留草稿状态 / 复评关闭 chip。
-  - 删除按钮统一为高饱和危险红：单条记录删除（垃圾桶）与顶部「清空历史」hover 由偏浅鲑红改为 `$color-danger-strong`，与拒绝 finding / `.btn-icon-danger` 一致。
-  - `/review` 输出隐藏「评估工作量」（effort）段——实用价值低，不再展示。
-- 复评 `/ask` 取代 / 撤销改为静默自动关闭：引用某条 review/improve 评论发起的复评 `/ask`，裁决为「取代 / 撤销」时**自动**关闭被引用的原 finding（建立关闭关系），无需再手动点「关闭原」；裁决「取代」时把建议提升为**带代码定位**的代码反馈卡（取原评论的 anchor），渲染 / 采纳同 `/review` 代码反馈（点头部评论图标即转为锚定原位置的行内评论草稿）。裁决「保留」不动、且不再展示「保留原评论」标记（无破坏性动作，标记冗余）。关闭纯由后端裁决驱动：移除结果卡面向用户的「采纳并关闭原 / 仅关闭原 / 关闭原评论」与原 finding 卡的「撤销关闭」按钮，前端仅**只读**展示「已被复评取代/关闭」chip + 「查看复评」导航（引用发起复评、点击引用徽标定位高亮原卡仍在）。
-- `/ask` 引用展示简化与文案微调：复评结果卡顶部徽标与输入框引用 chip 不再用「复评自 / 复评 …」文案，直接显示引用定位（结果卡：转发箭头 + **完整路径:行号**，换行规则同代码建议定位、点击回链原评论；输入框 chip：只显示**文件名**），删除 `chipLabel` / `reviewedFrom` / `reviewedFromTitle` 三个 i18n key 减少维护；`/ask` 结构化「分析过程」段标签改为「分析解读」，其正文 H2 小节标题字号调小（靠加粗区分）、小节间用分割线隔开；该段展开时在 chip 行下加一条分割线，与下方富文本内容衔接更自然。
-- agent「评审总结」聚焦 PR 整体结论：`/ask` 改富文本后，追问答案（表格 / 代码块 / 逐条建议）此前被整段灌进总结输入、诱导模型照搬明细，背离「总结=控制篇幅的整体结论」初衷。现总结只吃每条追问的**结论**（ask-summary），提示词重写为「综合描述 / 评审发现 / 追问结论 → 输出 PR 整体结论，不复制明细」，并允许总结内适度用表格 / 引用 / emoji；「概述 / 发现 / 建议」三段间加分割线。
-- `/ask` 结论段标签由「概述」改为「结论」（四语言对齐：Conclusion / 結論 / Fazit），更贴合其「直接结论」定位。
-- PR 头部 reviewer 头像决断角标反色：由「白底 + 彩色勾/叹号圆环图标」改为「实心彩色圆底 + 纯白勾/叹号符号（去掉图标外圆环，只留内部符号）」+ 与头像同款灰色描边环，白色面积更小、更醒目。
-
-- **Agent 编排响应提速**（评审微流程 / 自由规划）：一批降延迟与降成本优化，对用户行为不变。
-  - 条件追问并行：判读为「严重需追问」时，多个 `/ask` 由串行改为并行派发（同 describe + review 模式，错开起跑、保序），多追问场景明显更快。
-  - 追问判读瘦身为轻量路由：判「是否需追问」不再带整份 agent 系统上下文（SOUL / 记忆 / 用户档 / 工具目录 / 规则 / PR 元数据），仅凭 describe + review 结果判断，输入 token 大降；追问问题随会话语言书写（不再固定英文）。
-  - 编排通道（判读 / 收尾 / 规划）全模式低推理 + 判读输出封顶：CLI（claude→haiku、codex→reasoning_effort=low）之外，API / litellm 路径补 `reasoning_effort=low`（仅对 reasoning 类模型生效、其余无副作用），并给判读这类轻量路由封顶输出，避免一个 yes/no 决策吐大量 token；均仅作用于编排 chat，`/review` 等工具 run 仍满档推理。
-  - 全局系统前缀走 Anthropic 1h 提示缓存：系统上下文拆为「全局稳定前缀（SOUL / AGENTS / 工具目录 / 记忆 / 用户档）」+「PR/运行相关尾部」，稳定前缀标服务端提示缓存（ephemeral, 1h），跨 PR / 运行在窗口内命中、降延迟与成本；OpenAI / DeepSeek 自带自动前缀缓存、无需额外处理。
-
-- **Agent 引擎可维护性重构**（行为不变）：① 抽出可插拔「步骤」抽象（StepRecorder / StepHandler），评审微流程拆为有序步骤（describe-review / judge / asks / summary）+ 注册表、规划 ReAct 抽为单步循环，统一此前各自重复的记步与用量累计；② 编排提示词外置到 `resources/prompts/*.md`（协议 / 判读 / 总结 / AutoPilot 判定，Vite `?raw` 内联 + `{{占位符}}` 注入、残留占位即抛错），脚手架模板归入 `resources/template/`。
-
-- **前端代码结构重构（可维护性）**：纯结构调整，对外接口与界面 / 交互行为均不变。重点：
-  - 组件按 `common/`（基础 UI）/ `layout/`（应用骨架）/ `features/`（业务领域）三层归类；样式 `styles/` 同构归并
-  - 超大组件按「容器 + 领域组件 + hooks + 工具方法」分层拆分：ChatPane、SettingsModal、MainPane、StatusBar
-  - 业务逻辑下沉所属领域：PR 列表 / 详情 / 工作区归 `features/pr`；App 主入口退化为组合根，启动 / 布局 / 更新提示等拆成 app 级 hooks
-  - 抽出通用基础组件 `Modal` / `StatusChip`；状态栏 chip 按归属下沉到各 feature
-  - DiffView 退化为组合根：数据流（变更文件 / 内容 / 评论 / blame / 范围 / 跳转）拆成 hooks，行内 view-zone 装配抽象为通用 `mountInlineZones`，行内评论渲染独立成域；评论渲染原语（`useCommentThread` / `CommentMarkdown`）与「活动」标签页共用
-  - DiffSearchPanel / DraftZone / ChatInputBar 三个单体组件拆分：搜索算法、read/edit/publish 状态机、命令解析 / 输入状态机各抽为 util / hook，组件退化为瘦渲染
-  - `components/common` 收敛 `index` barrel，跨域 import 统一走 barrel
-  - 其它整理：目录归并、工具方法去重、main 进程 splash 拆分
-
-- 设置面板「连接 / LLM 配置」模态复用首启向导的左右布局：左侧选集成平台 / LLM provider、右侧填表单（复用的 `PlatformPicker` / `LlmProviderPicker` 统一在 settings 域维护，首启向导同步复用）。LLM 模态与向导 LLM 步改为固定高度、两栏各自滚动——切换 provider 不再抖动、provider 列表后续扩展也不撑高，向导两子步等高对齐；CLI 模式补「实验性」标记、名称 / 命令占位提示 `claude / codex`、文案精简（去品牌名与内部细节）；必填校验改为只标红框（去错误文案、消除控件位置抖动）；「测试连接」按钮收窄为 `btn-sm` 并与结果文案垂直对齐。
-- 危险按钮统一为高饱和度红描边：新增 `$color-danger-strong` token，删除评论（评论 tab + 行内）/ 删除草稿 / 删除连接 / LLM、停止、拒绝 finding 等按钮 hover 由偏浅鲑红改为与模态删除按钮同色系的饱和红，警示力更强、全局一致（保留 ghost 描边风格，不改为实底）。
-
-- PR 提交列表 / 活动时间线按 first-parent 过滤合入的他人提交：平台 `/commits` 返回 `target..source` 全集，长期分支 / fork 同步分支历史上反复把别的分支 merge 进源分支，会带出大量 merge 提交与合入的他人提交、淹没本 PR 真正引入的提交。改用本地镜像 `git rev-list --first-parent --no-merges merge-base..source` 算「本 PR 自产提交」SHA 集合对平台返回做交集过滤；提交数角标同口径对齐；镜像未就位 / 算不出时回退未过滤列表、不丢信息（三平台统一收口）。
-
-- ChatPane / Diff 评审界面一批交互打磨：评审总结卡与 finding 卡同宽、加蓝色左条（与蓝色淡底成一套）；可折叠卡（分析解读 / 已拒绝 / 被复评关闭的代码反馈）整行标题区即展开 / 收起热区、收起态上下内边距对称、折叠 / 展开带高度过渡动画（尊重「减少动效」）；已有评论的行也可 hover「+」继续追加行内评论（新评论按时间序展示在已有评论下方）；点击复评引用徽标精确定位到原 finding 卡并按其类别色闪烁高亮（已关闭 / 拒绝卡用中性灰），引用徽标图标随首行、行号跟随路径末行排版修正；diff 头部 reviewer 打勾角标缩小一号并去描边环；「原始输出」折叠标题去掉「(xx chars)」字数；判定解析失败的兜底不再输出「无法解析建议，转人工复核」灰字（仅保留判定徽标）；「思路建议」折叠方案标题支持内联 markdown（`代码` / **强调**，shim 提示词同步放开标题禁用反引号的限制）；评审总结正文行距 / 字号与其它卡片统一（$fs-md → $fs-lg / $lh-normal）。
+- **前后端基于领域设计的重大重构**（可维护性，行为不变）：按领域边界重组前后端代码，划清模块职责与依赖方向。
+  - 前端：组件按 `common`（基础 UI）/ `layout`（应用骨架）/ `features`（业务领域）分层，业务逻辑下沉所属领域，超大组件（ChatPane / SettingsModal / DiffView 等）拆为「容器 + 领域组件 + hooks」。
+  - 后端：抽出 IPC 服务层、按领域分组 Agent 服务、解耦运行队列；Agent 引擎抽出可插拔「步骤」抽象统一记步与用量累计，编排提示词外置为资源文件。
+  - 对外接口、界面与交互行为均不变。
+- **Agent 编排响应提速**（对用户行为不变）：条件追问并行派发、追问判读瘦身为轻量路由、编排链路统一低推理 + 判读输出封顶，并把全局稳定系统前缀接入 Anthropic 1h 提示缓存，整体延迟与成本下降。
+- 复评 `/ask` 取代 / 撤销改为静默自动关闭原 finding，「取代」裁决把建议提升为可采纳的代码反馈卡，前端仅只读展示关闭态与「查看复评」导航。
+- agent「评审总结」聚焦 PR 整体结论：只吃每条追问的结论而非完整答案明细，输出 PR 级整体结论、不复制明细。
+- PR 提交列表 / 活动时间线按 first-parent 过滤合入的他人提交，只保留本 PR 自产提交；镜像未就位时回退不丢信息。
+- 评审 / Diff 界面交互打磨（一批小优化）：评审总结卡与 finding 卡统一样式行距、可折叠卡整行标题即展开并带过渡动画、点击复评引用徽标定位并高亮原卡、危险按钮统一为高饱和红、设置模态复用首启向导左右布局，及移除「已达并发上限」横幅、隐藏 `/review`「评估工作量」段等。
 
 ### Fixed
 
-- 复评 `/ask` 取代裁决的「改进建议」改为可直接发布的评论本身：此前 `<suggestions>` 常被写成「建议将原评论替换为…/请确认…」这类**关于评论的元讨论**（还出现「原评论」概念），无法被评审者直接采用。现提示词要求 `replace` 裁决下 `<suggestions>` **只包含替代评论本身**——以标准 review 评论的口吻直接针对代码、按问题 → 影响 → 建议分段、可原样发布，不提「原评论 / 替换 / 请确认」等元信息；被取代的原评论仍按 `replace`/`drop` 裁决自动关闭。
-- CLI 模式 `/ask` 在「仓库自带 agent 指令文件被纳入版本管理」时整体失败：为防 CLI 子进程自动加载污染回答，`/ask` 会截断 worktree 内的 `CLAUDE.md` / `AGENTS.md` / `.cursor` 规则等；若这些文件被仓库跟踪，截断即让工作区变「脏」，触发 pr-agent `LocalGitProvider._prepare_repo` 的「repository is not in a clean state」守卫 → 取 git provider 阶段就崩、不写 `review.md`、`/ask` 失败（无此类跟踪文件的仓库不受影响）。修复：shim 覆写 `_prepare_repo` 去掉脏检查、仅保留「目标分支存在」校验——diff 取自分支提交（与工作区脏无关），该守卫对这套一次性受控 worktree 是误报。
-- 失败 / 取消的任务不再做结构化采集：`/ask`（及其它工具）run 失败（含 exit 0 但 LLM 调用失败）或被取消时，此前仍会把部分 / 报错输出解析成 finding 卡，易产出无意义的结构化元素。现失败 / 取消路径**不解析 findings**，只保留原始输出（stdout/stderr）供展示；复评 `/ask` 失败时也不触发自动关闭 / 建议提升。
-- `/ask` 的结构化分段 / 引用上下文 / 复评裁决指令此前对模型无效：pr-agent 的 `pr_questions` 提示词模板**不渲染 `extra_instructions`**（与 `/describe`、`/review`、`/improve` 不同），我们经 `PR_QUESTIONS__EXTRA_INSTRUCTIONS` 注入的这些指令对 `/ask` 是死字段、被静默丢弃，导致结构化输出 / 复评取代评论的代码定位时有时无。现 `/ask` 的这些指令改为拼进「问题」本身（user turn，唯一真正到达模型的文本，与语言后缀同路）；问题回显（含字面 `<summary>` / `<verdict>` 示例标签）按 pr-agent 固定的 `### **Answer:**` 表头整段切除，避免污染结构化解析。
-  - 结构化只作「轻包装」、不削减原生表现：`<analysis>` 保留 pr-agent 原生 `/ask` 的富文本（表格 / 代码块 / 子标题 / 分段、深度照常）。此前误把面向 `/review` 的「每段末尾追加 anchor marker」指令也套给 `/ask`（指令真正送达后）→ 模型为遵守而回避表格 / 代码块、回答被压成平铺纯文本；现对 `/ask` 取消该全局逐段 marker 指令（其标记在结构化解析里本就未被使用）。
-  - `<suggestions>` 改为可定位的代码建议：每条针对具体代码的建议末尾带 `[file:…, lines:…]` 标记，解析层据此**逐条拆成 `code-suggestion` 卡**（带行号定位 + 编辑 / 拒绝 / 引用，可采纳为行内评论），非代码类建议仍为普通段落。
-
-- 本地镜像缺 PR head sha 导致 diff / 评审失败且不自愈：源分支被删 / 强推（rebase / squash 常见）后，`refs/heads/*` 已看不到 PR 的 head sha，而 GitHub `refs/pull/<n>/head` / GitLab `refs/merge-requests/<n>/head` 默认不在 ref 广播里、通配 fetch 取不到 → `git diff base...head` 报 `Invalid symmetric difference`，此前只能手动删 bare 镜像目录重 clone（且删后对已删源分支仍救不回）。现 `ensureMirrorReadyForPr` 在常规 sync 后若 head sha 仍缺失，**按平台 + PR 号精确 fetch 该 PR 的头引用**（新增 `repoMirror.fetchRefspecs` + `pullRequestHeadRefspec`）把 head sha 钉回本地，自动恢复 diff / blame / pr-agent worktree（worktree 路径也改走同一 ensure 自愈）。Bitbucket 经既有通配 PR 引用本就覆盖。
-
-- Monaco 控制台噪音报错治理：只读 diff + 着色用不到的 typescript/javascript · json · css · html 语言服务从源头关闭（对各 `*Defaults` 传空 `ModeConfiguration`，不注册任何 provider），消除其向未注册 worker 发 RPC 抛出的 `Missing requestHandler or method: …`（`getNavigationTree` / `getSyntacticDiagnostics` 等整族）；着色走 tokenizer 不受影响。剩余 Monaco 上游已知竞态（`TextModel got disposed before DiffEditorWidget model got reset`）作为已知问题默认静默，需诊断时 `localStorage.setItem('meebox.monacoDebug','1')` 再刷新可看明细——仅命中白名单消息，其它异常照常抛出。
-- PR 头部与详情页的评审状态 chip（pending / approved / needs_work、reviewer 的 approved / needs work / pending）此前为写死英文，现按界面语言出国际化文案（新增 `prStatus` 文案集，四语言）。
-- 切换不同 PR 时 diff 文件树「左栏空白 → 文件树整体弹出」的抖动：DiffView 改为 stale-while-loading——引入 `loadedPrId` 标记当前已渲染内容所属 PR，切 PR 期间保留旧树 / 旧内容渲染、上盖加载遮罩（延迟 150ms，命中缓存的快切换直接换新），并门控 content / comments / blame 拉取（避免「新 localId + 旧选中文件」错拉），新文件列表 ready 后整体替换。
-- diff 文件树首次加载时文件名被图标渲染推移的抖动：图标改用固定 16px 占位槽包裹，iconify 的 svg 晚一帧进 DOM 也不塌缩，文件名位置稳定。
-- 切换不同 PR 时评论页先闪「加载评论中」再渲新内容的空窗：改为 stale-while-loading——切 PR 期间保留旧评论渲染、上盖加载遮罩，新数据 ready 后整体替换；遮罩延迟 150ms 显示，命中本地缓存的快切换直接换新、零闪。
-- PR 主面板 tab 栏角标（评论 / 提交计数）异步加载导致的抖动：计数加载中渲染等宽占位 chip 预留宽度，消除计数到达时的横向弹簧拉伸；`.pr-tab` 改 flex 布局 + 固定行高，角标占位 / 出现 / 消失不再改变 tab 高度，消除 tab 栏 1~2px 竖向跳动。
-- PR 主面板各 tab（diff / 评论 / 草稿 / 提交 / 信息）切换抖动：此前 tab 内容按条件渲染，每次切换旧面板卸载、新面板重挂 → 重新拉数据、闪「加载中」、内嵌 Monaco 重建。改为 keep-alive——tab 首访才挂载（保留懒加载）、之后保活仅 CSS 显隐不卸载，切走再切回瞬时、无重拉、滚动位置与展开态保留；配合 Monaco `automaticLayout` 处理显隐后的重排。
-- 刷新（后台轮询 / 窗口聚焦）时编辑器渲染抖动：评论页内嵌代码片段（Monaco）与 diff 编辑器此前每次刷新都重渲染 / 重建。根因有二——其一，i18n 语言切换 effect 依赖整个 boot 对象，poll 刷新 setBoot 后对同一语言反复 `changeLanguage`，触发 `languageChanged` 致所有 `useTranslation` 的 `t` 换新引用，凡 effect 依赖 `t` 的组件（如内嵌代码片段抓取逻辑）都被无谓重跑、连带 Monaco 卸载重建；其二，DiffEditor 的 `options` 为渲染期新建对象，被 `@monaco-editor/react` 按引用判变而反复 `updateOptions`。现语言 effect 仅在语言真正变化时切换、DiffEditor options 稳定化，刷新不再抖动。
-- PR 详情页与评论页排版：正文限宽 960px 并居中，滚动条回到外层容器右缘（此前 max-width 加在滚动容器上，滚动条停在中部）；详情页 reviewers 列表按字典序固定排序，刷新不再随平台返回顺序抖动。
-- 拉取变更文件列表偶发失败（`ENOENT … diff-base.json`）：状态存储对同一 key 的并发写共用同一临时文件，先完成者 rename 后，后完成者 rename 即 ENOENT。临时文件名追加进程内自增序号去重，并发写各用独立临时文件。Windows 上并发写同一 key 还会撞 `fs.rename` 覆盖既有文件的瞬时 EPERM/EACCES/EBUSY（打开 / 切换 PR 时多 handler 同写 diff-base.json）→ rename 加退避重试自愈（并打 warn 定位日志），同时对 diff-base 解析按 PR 去重、从源头收敛并发写。
-- Agent 评审 / 规划步骤行的固定文案（如「判断是否存在需追问的严重问题」「严重，追问 N 个」）此前在 `@meebox/agent` 层写死中文、被渲染层逐字显示，日 / 英 / 德界面下漏出中文；现按会话语言落地（zh-CN / en-US / ja-JP / de-DE，缺省回落英文），与评审总结骨架同策略。
-- 设置页手动「检查更新」查到的新版此前不同步到状态栏、也不缓存：手动检查只把结果回给设置页本地，与定时检查各自为政、无共享。现 main 侧统一为单一真相源——手动 / 定时检查都缓存结果并在有新版时广播 `app:updateAvailable`，状态栏即时出现升级 chip；新增只读 `app:getUpdateStatus`，窗口 / 状态栏挂载时水合已知结果，不因重挂载而丢失。
-- 合并已合并 / 已关闭的 PR 报错不友好：Bitbucket 对已合并 PR 的合并请求回 409 + `IllegalPullRequestStateException`（本地状态滞后于远端：他人已合 / 重复点击），此前把原始 409 stack 抛给用户。归一为错误码 `EPR0003`，前端按码做 i18n 友好提示（四语言对等）；其它 409（冲突 / veto）原样冒泡。
-- 评审总结被截断 / 无法解析（回落「无法解析建议」）：原把整段 markdown 总结塞进 JSON 字符串字段，正文里的引号 / 换行 / 代码块会破坏 JSON 解析，回退打捞时又在首个内层引号处把正文腰斩、且判定一并丢失 → 回落 manual_review。改为模型直接输出纯 markdown 正文 + 末尾一行扁平判定 JSON，正文走 `stripTrailingJson`（含对被截断 dangling 判定 JSON 的兜底剥除）、判定走新增 `extractTrailingJson` 单独解析（兼容旧嵌套格式），并给收尾 chat 显式输出 token 上限避免被 provider 默认上限截断。
+- 源分支 merge 目标分支后变更页 diff 混入目标分支改动：复用固化 diff-base 前先判断目标分支是否已并入源分支，已并入则失效重算。(#107，感谢 @csj2000)
+- `/ask` 的结构化 / 引用 / 复评指令此前因 pr-agent 不渲染 `extra_instructions` 而失效，改为拼进问题本身送达模型，并恢复其原生富文本表现。
+- 复评「取代」裁决的改进建议改为可直接发布的替代评论本身，不再写成「建议替换原评论…」这类元讨论。
+- 失败 / 取消的任务不再解析出 finding 卡，只保留原始输出。
+- CLI 模式 `/ask` 在仓库自带 agent 指令文件被版本管理时整体失败——shim 去掉 pr-agent 的工作区 clean-state 守卫修复。
+- 本地镜像缺 PR head sha（源分支被删 / 强推）导致 diff 失败且不自愈，改为按 PR 号精确 fetch 头引用自动恢复。
+- 消除 PR 切换 / 刷新 / 标签页切换时的多处渲染抖动与闪烁（stale-while-loading + tab keep-alive + 稳定化 Monaco 重建）。
+- 关闭只读 diff 用不到的 Monaco 语言服务，消除控制台 `Missing requestHandler` 噪音报错。
+- 评审总结被截断 / 无法解析：改为纯 markdown 正文 + 末尾扁平判定 JSON 分别解析，并放开收尾输出 token 上限。
+- 拉取变更文件列表偶发 `ENOENT … diff-base.json`：并发写改用独立临时文件，Windows rename 瞬时占用加退避重试。
+- 合并已合并 / 已关闭的 PR 报错归一为错误码 `EPR0003`、前端按码友好提示。
+- 补齐写死文案的国际化：PR 评审状态 chip、Agent 评审 / 规划步骤行固定文案改为按界面语言出文案。
+- 设置页手动「检查更新」结果改为缓存并广播，状态栏即时出现升级 chip。
+- PR 详情 / 评论页正文限宽居中、reviewers 列表按字典序固定排序，刷新不再抖动。
 
 ## [0.5.0] - 2026-06-17
 
@@ -462,7 +417,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0-alpha.1...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0-alpha.1...HEAD
+[0.6.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0-alpha.1
 [0.5.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0
 [0.5.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0-alpha.1
 [0.4.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0
