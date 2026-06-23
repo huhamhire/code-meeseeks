@@ -252,7 +252,20 @@ export function FindingCard({
       data-finding-id={finding.id}
       className={`chat-finding chat-finding-${key}${isRejected || isClosed ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
     >
-      <header className="chat-finding-head">
+      <header
+        className={`chat-finding-head${collapsibleByDefault ? ' chat-finding-head-toggle' : ''}`}
+        // 可折叠卡（分析过程 / 已拒绝 / 被复评关闭的代码反馈）：整行标题区即展开/收起热区，扩大可点面积。
+        // 忽略来自内部按钮（编辑/拒绝/引用/chevron）的点击——它们各自处理、不应误触折叠（chevron 的
+        // 点击经此处冒泡，由它自身的 onClick 处理一次即可，故 closest('button') 命中时直接跳过）。
+        onClick={
+          collapsibleByDefault
+            ? (e) => {
+                if ((e.target as HTMLElement).closest('button')) return;
+                setExpanded((v) => !v);
+              }
+            : undefined
+        }
+      >
         {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
         {label && (
           <span className={`chat-chip chat-chip-md chat-finding-cat chat-chip-${CAT_TONE[key]}`}>

@@ -118,6 +118,14 @@
   gap: $space-3;
   margin-bottom: $space-3;
 }
+// 收起态：正文已隐藏，头部的下间距会让卡片上下不对称（下方多出 margin-bottom）→ 归零，使上下内边距对称。
+.chat-finding-collapsed .chat-finding-head {
+  margin-bottom: 0;
+}
+// 可折叠卡：整行标题区即展开/收起热区（扩大可点面积，不止右侧 chevron）。
+.chat-finding-head-toggle {
+  cursor: pointer;
+}
 // 分析解读（ask-analysis）展开时：chip 行下加一条分割线，与下方富文本内容（表格 / 代码块）衔接更自然，
 // 避免头部 chip 直接贴正文显得突兀。仅展开态（无 chat-finding-collapsed）出现。
 .chat-finding-ask-analysis:not(.chat-finding-collapsed) .chat-finding-head {
