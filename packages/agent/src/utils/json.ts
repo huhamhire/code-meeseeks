@@ -50,8 +50,44 @@ export function extractJson<T>(text: string): T | null {
 }
 
 /**
- * 去掉模型误并入 summary / final 末尾的判定 JSON（```json {...}``` 围栏或裸对象，仅当含
+ * 以末尾 `}` 为锚、按花括号配平反找到匹配的起始 `{`，返回尾部对象的起始下标（找不到返回 -1）。
+ * 字符串字面量内的花括号会干扰简单配平，但收尾判定 JSON 的 reason 一般不含裸 `{}`，够用。
+ */
+function trailingObjectStart(s: string): number {
+  if (!s.endsWith('}')) return -1;
+  let depth = 0;
+  for (let i = s.length - 1; i >= 0; i--) {
+    const ch = s[i];
+    if (ch === '}') depth++;
+    else if (ch === '{' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * 从文本末尾抽出收尾判定 JSON 对象（`{"verdict":...,"reason":...}`），失败返回 null。先按配平的完整尾部
+ * 对象解析（容裸控制符），用于 summary 把判定与正文分离：判定走此函数、正文走 {@link stripTrailingJson}。
+ */
+export function extractTrailingJson<T>(s: string): T | null {
+  const text = s.trimEnd();
+  const start = trailingObjectStart(text);
+  if (start < 0) return null;
+  const slice = text.slice(start);
+  if (!/"(?:recommendation|verdict)"\s*:/.test(slice)) return null;
+  for (const candidate of [slice, escapeRawControlInStrings(slice)]) {
+    try {
+      return JSON.parse(candidate) as T;
+    } catch {
+      /* 试下一个候选 */
+    }
+  }
+  return null;
+}
+
+/**
+ * 去掉模型误并入 / 按约定追加在 summary / final 末尾的判定 JSON（```json {...}``` 围栏或裸对象，仅当含
  * recommendation/verdict 字样才删），避免原始 JSON 暴露给用户。recommendation 走独立字段渲染为判定徽标。
+ * 末尾对象被截断（无配平闭合）时按 dangling `{"verdict"|"recommendation"` 起点兜底剥除，避免半截 JSON 残留正文。
  */
 export function stripTrailingJson(s: string): string {
   let out = s.trimEnd();
@@ -62,20 +98,13 @@ export function stripTrailingJson(s: string): string {
     )
     .trimEnd();
   // 末尾裸 JSON 对象：以末尾 } 为锚按花括号配平反找到匹配的起始 {，界定整个尾部对象（非最内层 {）。
-  if (out.endsWith('}')) {
-    let depth = 0;
-    let start = -1;
-    for (let i = out.length - 1; i >= 0; i--) {
-      const ch = out[i];
-      if (ch === '}') depth++;
-      else if (ch === '{' && --depth === 0) {
-        start = i;
-        break;
-      }
-    }
-    if (start >= 0 && /"(?:recommendation|verdict)"\s*:/.test(out.slice(start))) {
-      out = out.slice(0, start).trimEnd();
-    }
+  const start = trailingObjectStart(out);
+  if (start >= 0 && /"(?:recommendation|verdict)"\s*:/.test(out.slice(start))) {
+    out = out.slice(0, start).trimEnd();
+  } else {
+    // 截断兜底：末尾有未闭合的 dangling `{"verdict"|"recommendation" …`（输出被 token 上限截断在判定 JSON 中途）
+    // → 从该起点剥到结尾，避免半截 JSON 残留在正文末尾。正文 markdown 不会出现该字面量起点，误删风险极低。
+    out = out.replace(/\{\s*"(?:recommendation|verdict)"\s*:[\s\S]*$/, '').trimEnd();
   }
   return out;
 }

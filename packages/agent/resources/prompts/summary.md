@@ -2,7 +2,7 @@ Write an OVERALL closing review summary for the whole PR, in the SAME LANGUAGE a
 
 SYNTHESIZE, do not dump: state conclusions in your own words and fold each input's takeaway into the right section. Do NOT reproduce the detailed discussion, large tables, code blocks, or verbatim analysis from the inputs (especially the follow-up Q&A) — those already live in their own cards.
 
-Use these three "## " sections, in this order:
+Write the summary as plain Markdown (NOT wrapped in JSON) using these three "## " sections, in this order:
 
 ## {{overview}}
 <one short paragraph: the core change, the overall risk level, and your overall conclusion on the PR>
@@ -13,4 +13,8 @@ Use these three "## " sections, in this order:
 
 Within these sections you MAY use light Markdown where it genuinely improves scanability — a short ">" blockquote for an important caveat, a small comparison table only when it truly clarifies, and the occasional tasteful emoji — but stay concise and keep findings / suggestions as short "- " bullets.
 
-Put that markdown (with literal \n newlines) into "summary"; give a separate non-binding recommendation. NEVER repeat the recommendation / verdict inside "summary" itself (no trailing JSON block) — it goes ONLY in the separate "recommendation" field. Reply with JSON only: `{"summary": string, "recommendation": {"verdict": "approve"|"needs_work"|"manual_review", "reason": string}}`
+After the Markdown summary, append your non-binding recommendation as the VERY LAST thing in the reply — a single compact JSON object on its own line, with NOTHING after it:
+
+`{"verdict": "approve"|"needs_work"|"manual_review", "reason": string}`
+
+That recommendation JSON is the ONLY JSON in your reply. Do NOT wrap the Markdown summary in JSON, and do NOT repeat the verdict or reason anywhere inside the Markdown.
