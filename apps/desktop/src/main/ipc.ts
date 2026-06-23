@@ -69,6 +69,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('prs:merge', pr.mergePr); // 合并 PR
   ipcMain.handle('repo:sync', pr.syncRepo); // 同步 PR 所属 repo 本地镜像
   ipcMain.handle('diff:listChangedFiles', pr.listChangedFiles); // 变更文件列表
+  ipcMain.handle('diff:listConflictFiles', pr.listConflictFiles); // 合并冲突文件列表（文件树警示）
   ipcMain.handle('diff:getFileContent', pr.getFileContent); // 文件内容（base / head 一侧）
   ipcMain.handle('diff:commentCountCached', pr.getCommentCountCached); // 评论数角标（仅缓存）
   ipcMain.handle('diff:listComments', pr.listComments); // 拉评论（缓存 + in-flight 去重）

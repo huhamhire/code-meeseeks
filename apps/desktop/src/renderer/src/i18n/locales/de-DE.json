@@ -421,6 +421,7 @@
   "fileTree": {
     "commentCountTitle_one": "{{count}} Remote-Kommentar",
     "commentCountTitle_other": "{{count}} Remote-Kommentare",
+    "conflictTitle": "Konflikt beim Merge in den Zielbranch",
     "draftCountTitle_one": "{{count}} Entwurf zur Veröffentlichung ausstehend",
     "draftCountTitle_other": "{{count}} Entwürfe zur Veröffentlichung ausstehend"
   },

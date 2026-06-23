@@ -188,6 +188,19 @@ export const listChangedFiles: IpcController<'diff:listChangedFiles'> = async (_
 };
 
 /**
+ * 列出合并会冲突的文件（文件树据此标三角警示）。仅当远端判定 PR 有冲突（pr.hasConflict）才实际跑
+ * 本地 merge-tree 试合并——目标分支 tip ⟂ 源 head；无冲突的 PR 直接返回空，省一次试合并。
+ */
+export const listConflictFiles: IpcController<'diff:listConflictFiles'> = async (_event, req) => {
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  if (!pr.hasConflict) return [];
+  const id = ctx.pr.repoIdentityFor(pr);
+  await ctx.pr.ensureMirrorReadyForPr(pr);
+  return ctx.repoMirror.listConflictFiles(id, pr.targetRef.sha, pr.sourceRef.sha);
+};
+
+/**
  * 读 base / head 一侧文件内容。默认 PR merge-base / head；传 base/head 则按指定范围
  * （commit 视图：base=parent、head=commit）。
  */

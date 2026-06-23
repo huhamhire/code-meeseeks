@@ -411,6 +411,7 @@
   },
   "fileTree": {
     "commentCountTitle_other": "{{count}} 条远端评论",
+    "conflictTitle": "合并到目标分支会产生冲突",
     "draftCountTitle_other": "{{count}} 条待发布草稿"
   },
   "inlineCodeContext": {

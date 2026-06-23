@@ -421,6 +421,7 @@
   "fileTree": {
     "commentCountTitle_one": "{{count}} remote comment",
     "commentCountTitle_other": "{{count}} remote comments",
+    "conflictTitle": "Conflicts when merged into the target branch",
     "draftCountTitle_one": "{{count}} draft pending publish",
     "draftCountTitle_other": "{{count}} drafts pending publish"
   },

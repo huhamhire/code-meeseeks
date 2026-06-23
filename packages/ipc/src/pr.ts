@@ -92,6 +92,15 @@ export interface PrChannels {
     response: DiffChangedFile[];
   };
   /**
+   * 列出合并到目标分支会产生冲突的文件路径（PR 目标 tip ⟂ 源 head 的 `git merge-tree` 试合并）。
+   * 仅 `pr.hasConflict` 为真时才实际跑 merge-tree，否则直接返回空数组（省一次本地试合并）。
+   * 试合并失败 / 无法判定时返回空数组（保守不标冲突），文件树据此在对应行标三角警示图标。
+   */
+  'diff:listConflictFiles': {
+    request: { localId: string };
+    response: string[];
+  };
+  /**
    * 读取 base 或 head 一侧某文件的内容（二进制返回 {binary:true}）。默认取 PR base / head 一侧；
    * 传 base / head sha 则按指定范围取（commit 视图：base=parent、head=commit）。
    */

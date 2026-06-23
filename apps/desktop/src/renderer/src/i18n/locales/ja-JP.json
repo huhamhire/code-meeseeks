@@ -411,6 +411,7 @@
   },
   "fileTree": {
     "commentCountTitle_other": "{{count}} 件のリモートコメント",
+    "conflictTitle": "ターゲットブランチへのマージで競合します",
     "draftCountTitle_other": "{{count}} 件の公開待ち下書き"
   },
   "inlineCodeContext": {

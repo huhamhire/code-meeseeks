@@ -4,6 +4,7 @@ export { useFileListWidth } from './useFileListWidth';
 export { useSyncProgress } from './useSyncProgress';
 export { useDiffScope, type DiffScopeState } from './useDiffScope';
 export { useChangedFiles, type ChangedFilesState } from './useChangedFiles';
+export { useConflictFiles } from './useConflictFiles';
 export { useFileContent, type FileContentState } from './useFileContent';
 export { useDiffComments, type DiffCommentsState } from './useDiffComments';
 export { useBlame, type BlameState } from './useBlame';

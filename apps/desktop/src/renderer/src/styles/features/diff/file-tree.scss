@@ -305,6 +305,14 @@
   flex-shrink: 0;
 }
 
+// 合并冲突警示：紧贴状态点左侧的三角叹号，用 warning 色提示该文件合并会冲突。
+.tree-conflict {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: $color-warning;
+}
+
 // 评论 chip + 状态点的右侧容器；横向滚动时固定在视口右边缘，左缘渐变淡出，
 // 遮盖背后滚出来的长文件名。背景跟随 .tree-row 状态 (默认/hover/selected)。
 .tree-row-right {

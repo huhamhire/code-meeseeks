@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { Icon } from '@iconify/react';
 import type { DiffChangedFile } from '@meebox/ipc';
-import { ChevronIcon } from '../../../../common';
+import { ChevronIcon, ConflictIcon } from '../../../../common';
 
 interface FileTreeProps {
   files: DiffChangedFile[];
@@ -12,6 +12,8 @@ interface FileTreeProps {
   commentCountByPath: Map<string, number>;
   /** path → 本地待发布草稿数 (pending + edited)。跟 PR header "提交评审 (N)" 同口径 */
   draftCountByPath: Map<string, number>;
+  /** 合并会冲突的文件路径集合：命中的文件行在状态点左侧标三角警示图标。 */
+  conflictPaths: Set<string>;
   onSelect: (file: DiffChangedFile) => void;
 }
 
@@ -44,6 +46,7 @@ export function FileTree({
   selectedKey,
   commentCountByPath,
   draftCountByPath,
+  conflictPaths,
   onSelect,
 }: FileTreeProps) {
   const { t } = useTranslation();
@@ -70,6 +73,7 @@ export function FileTree({
           selectedKey,
           commentCountByPath,
           draftCountByPath,
+          conflictPaths,
           onSelect,
           collapsed,
           toggle,
@@ -84,6 +88,7 @@ interface RenderCtx {
   selectedKey: string | null;
   commentCountByPath: Map<string, number>;
   draftCountByPath: Map<string, number>;
+  conflictPaths: Set<string>;
   onSelect: (file: DiffChangedFile) => void;
   collapsed: Set<string>;
   toggle: (path: string) => void;
@@ -132,6 +137,7 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
       const selected = ctx.selectedKey === fileKey(f);
       const count = ctx.commentCountByPath.get(f.path) ?? 0;
       const draftCount = ctx.draftCountByPath.get(f.path) ?? 0;
+      const conflict = ctx.conflictPaths.has(f.path) || (!!f.oldPath && ctx.conflictPaths.has(f.oldPath));
       out.push(
         <div
           key={`f:${n.path}`}
@@ -170,6 +176,15 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
                 title={ctx.t('fileTree.commentCountTitle', { count })}
               >
                 {count}
+              </span>
+            )}
+            {conflict && (
+              <span
+                className="tree-conflict"
+                title={ctx.t('fileTree.conflictTitle')}
+                aria-label="merge conflict"
+              >
+                <ConflictIcon size={13} />
               </span>
             )}
             <span

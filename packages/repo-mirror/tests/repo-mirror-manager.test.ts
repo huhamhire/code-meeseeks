@@ -7,6 +7,7 @@ import {
   RepoMirrorManager,
   parseBlamePorcelain,
   parseHunkAddedLines,
+  parseMergeTreeConflictsZ,
 } from '../src/repo-mirror-manager.js';
 import type { RepoIdentity } from '../src/types.js';
 
@@ -358,6 +359,57 @@ describe('RepoMirrorManager diff/content', () => {
 
     const r = await mgr.getFileContent(repo, sha, 'icon.png');
     expect(r.binary).toBe(true);
+  });
+
+  it('parseMergeTreeConflictsZ 取首 OID 后到段分隔双 NUL 间的冲突文件名（去重）', () => {
+    // `git merge-tree --write-tree --name-only -z` 冲突时的 stdout：OID\0 file\0 \0(段分隔) 提示...
+    const raw =
+      '4530c9c9c26e09ddc2340fd825c09a190039d7d2\0f.txt\0src/x y.ts\0\0' +
+      '1\0f.txt\0CONFLICT (content): Merge conflict in f.txt\0';
+    expect(parseMergeTreeConflictsZ(raw)).toEqual(['f.txt', 'src/x y.ts']);
+  });
+
+  it('parseMergeTreeConflictsZ 无冲突文件（首字段后即段分隔）返回空数组', () => {
+    expect(parseMergeTreeConflictsZ('4530c9c9\0\0info')).toEqual([]);
+  });
+
+  it('listConflictFiles 列出试合并到目标分支会冲突的文件', async () => {
+    const upstream = simpleGit(upstreamPath);
+    await upstream.addConfig('commit.gpgsign', 'false', false, 'local');
+    // 目标分支名（init 默认 master / main，环境而定），后续 checkout 回它。
+    const main = (await upstream.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+    // base：两个文件
+    await fs.writeFile(path.join(upstreamPath, 'shared.txt'), 'a\nb\nc\n');
+    await fs.writeFile(path.join(upstreamPath, 'solo.txt'), 'x\n');
+    await upstream.add('.');
+    await upstream.commit('conflict base');
+    const baseSha = (await upstream.revparse(['HEAD'])).trim();
+
+    // feature 分支：改 shared.txt 第二行 + 改 solo.txt
+    await upstream.checkoutLocalBranch('feature');
+    await fs.writeFile(path.join(upstreamPath, 'shared.txt'), 'a\nb-feature\nc\n');
+    await fs.writeFile(path.join(upstreamPath, 'solo.txt'), 'x-feature\n');
+    await upstream.add('.');
+    await upstream.commit('feature edit');
+    const featureSha = (await upstream.revparse(['HEAD'])).trim();
+
+    // 回目标分支并对 shared.txt 同一行做冲突改动；solo.txt 不动 → 仅 shared.txt 冲突
+    await upstream.checkout([main]);
+    await fs.writeFile(path.join(upstreamPath, 'shared.txt'), 'a\nb-main\nc\n');
+    await upstream.add('.');
+    await upstream.commit('main edit');
+    const targetSha = (await upstream.revparse([main])).trim();
+    expect(targetSha).not.toBe(baseSha);
+
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+
+    const conflicts = await mgr.listConflictFiles(repo, targetSha, featureSha);
+    expect(conflicts).toContain('shared.txt');
+    expect(conflicts).not.toContain('solo.txt');
+
+    // 无冲突方向（同一分支与自身）→ 空
+    expect(await mgr.listConflictFiles(repo, targetSha, targetSha)).toEqual([]);
   });
 });
 
