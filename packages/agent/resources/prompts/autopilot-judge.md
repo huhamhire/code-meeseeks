@@ -1,6 +1,9 @@
 You decide, for each pull request below, whether an automated pre-review is worth running and (optionally) which review steps to run.
 
-Each PR may show `branches: <source> -> <target>`. A PR flagged `[detected branch merge]` is a same-repo integration / back-merge that brings already-reviewed changes — **skip it** (`review: false`) unless the title/description clearly indicate original work that warrants review.
+Each PR may show `branches: <source> -> <target>` and a `signals:` line listing observations. Treat signals as **evidence to weigh, not a verdict**:
+
+- `all commits are merge commits` — the PR carries no original (non-merge) commits, so it is almost certainly a branch sync / back-merge bringing already-reviewed changes: usually skip it (`review: false`), unless the title/description clearly indicate original work.
+- `source is a long-lived / integration branch` — by itself this is NOT a reason to skip. Many real PRs (e.g. fork contributions whose default branch is `main`/`dev`) legitimately originate from such a branch. Judge by the actual changes (title/description and the commit-structure signal above), not the branch name alone.
 
 For each PR return:
 

@@ -1,4 +1,5 @@
 import {
+  type BranchMergeVerdict,
   classifyBranchMerge,
   judgeAutopilotBatch,
   loadAgentContext,
@@ -10,7 +11,7 @@ import {
   listStoredPullRequests,
   writeAutopilotLedger,
 } from '@meebox/poller';
-import type { StoredPullRequest } from '@meebox/shared';
+import type { PrCommit, StoredPullRequest } from '@meebox/shared';
 import type { OrchestratorRuntime } from '../runtime.js';
 import { runReviewForPr } from './review.js';
 
@@ -58,42 +59,44 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
     const agentContext = await loadAgentContext(effectiveAgentDir(), {
       onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
     });
-    // 第一步 judge 的背景输入：逐候选用元数据判「纯分支合并」——(c) 分支约定零成本先判，拿不准再 (b)
-    // 调一次 commits API 看「提交是否全为 merge」。并行跑，整体约一轮 round-trip。失败不阻断（按非合并处理）。
-    const branchMergeByPr = new Map<string, boolean>();
+    // 第一步 judge 的背景输入：逐候选判「纯分支合并」。判定**以实际提交结构为准**——拉一次 commits API
+    // 看「提交是否全为 merge」；分支名只作 sourceMainline 背景信号、不单独定论。并行跑，整体约一轮 round-trip。
+    // 失败不阻断（无 commits → inconclusive、按非合并处理，仍带 sourceMainline 信号交 judge 权衡）。
+    const branchMergeByPr = new Map<string, BranchMergeVerdict>();
     await Promise.all(
       candidates.map(async (p) => {
         const sourceBranch = p.sourceRef.displayId;
         const targetBranch = p.targetRef.displayId;
-        let verdict = classifyBranchMerge({ sourceBranch, targetBranch });
-        if (verdict.basis === 'inconclusive') {
-          try {
-            const commits = await runtime.ctx.pr
-              .adapterFor(p)
-              ?.listPullRequestCommits(p.repo, p.remoteId);
-            if (commits) verdict = classifyBranchMerge({ sourceBranch, targetBranch, commits });
-          } catch (err) {
-            logger.debug(
-              { err, prLocalId: p.localId },
-              'branch-merge commits check failed (ignored)',
-            );
-          }
+        let commits: PrCommit[] | undefined;
+        try {
+          commits = await runtime.ctx.pr
+            .adapterFor(p)
+            ?.listPullRequestCommits(p.repo, p.remoteId);
+        } catch (err) {
+          logger.debug({ err, prLocalId: p.localId }, 'branch-merge commits check failed (ignored)');
         }
-        branchMergeByPr.set(p.localId, verdict.isBranchMerge);
+        branchMergeByPr.set(
+          p.localId,
+          classifyBranchMerge({ sourceBranch, targetBranch, commits: commits ?? undefined }),
+        );
       }),
     );
 
     await runtime.withAgentChat(async (chat) => {
       // 批量判定（例外规则来自 AGENTS.md；分支信息 + 分支合并信号作背景输入）。
       const { decisions } = await judgeAutopilotBatch(chat, {
-        candidates: candidates.map((p) => ({
-          prLocalId: p.localId,
-          title: p.title,
-          description: p.description,
-          sourceBranch: p.sourceRef.displayId,
-          targetBranch: p.targetRef.displayId,
-          branchMerge: branchMergeByPr.get(p.localId),
-        })),
+        candidates: candidates.map((p) => {
+          const v = branchMergeByPr.get(p.localId);
+          return {
+            prLocalId: p.localId,
+            title: p.title,
+            description: p.description,
+            sourceBranch: p.sourceRef.displayId,
+            targetBranch: p.targetRef.displayId,
+            branchMerge: v?.isBranchMerge,
+            sourceMainline: v?.sourceMainline,
+          };
+        }),
         agentsRules: agentContext.files.agents,
       });
       const byId = new Map(candidates.map((p) => [p.localId, p] as const));
@@ -109,7 +112,7 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
             review: d.review,
             reason: d.reason,
             plan: d.plan?.steps,
-            branchMerge: branchMergeByPr.get(pr.localId) ?? false,
+            branchMerge: branchMergeByPr.get(pr.localId)?.isBranchMerge ?? false,
           },
           'autopilot judge decision',
         );
