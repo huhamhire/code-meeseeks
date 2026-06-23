@@ -72,7 +72,10 @@ inline 包 pr-agent 的 `_get_completion`，从返回的 `response.usage` 取 `p
 以哨兵行 `@@MEEBOX_USAGE@@ {json}` 打到 **stderr**；主进程逐行捕获、按前缀累加、落到 run（见 [05](05-review-workflow.md)）。
 **为什么 inline 而非 litellm callback**：litellm 的 async 回调走后台 logging worker，短命 CLI 退出过快会被丢；
 inline 在 await 链里必在退出前执行，可靠。只取 token、不取 cost → 统一设 `LITELLM_LOCAL_MODEL_COST_MAP=True`
-关掉 litellm 的远端价格表联网（弱网会 SSL 超时）。
+关掉 litellm 的远端价格表联网（弱网会 SSL 超时）。另在 patch 时置 `litellm.suppress_debug_info=True`：编排 chat
+通道以子进程 **stdout** 作模型回复，而 litellm 对未进本地 `model_cost` 表的新模型（如 `claude-opus-4-8`）在 cost/token
+计量里调 `get_llm_provider` 失败时会先 `print` 装饰性的「Provider List: …」（ANSI 红字）再抛错（错误被吞、不影响结果），
+该 print 会污染 stdout、漏进评审总结——置此开关关掉这些 print。
 
 ### 本地 CLI provider
 

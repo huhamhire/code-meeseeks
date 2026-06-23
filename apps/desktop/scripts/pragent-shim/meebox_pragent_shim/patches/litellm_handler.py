@@ -100,6 +100,17 @@ def patch(module) -> None:
     容器：凡走 anthropic 原厂的模型一律不发 temperature。LiteLLMAIHandler.__init__ 里
     `self.no_support_temperature_models = NO_SUPPORT_TEMPERATURE_MODELS` 取的是模块全局名，故重绑
     全局即对之后创建的 handler 生效；只动成员判定、不碰 system/user 合并。"""
+    # 抑制 litellm 往 **stdout** 打的「Provider List: …」等装饰性提示（ANSI 红字）。编排 chat 通道以子进程
+    # stdout 作模型回复：litellm 在 cost/token 计量里对未进本地 model_cost 表的新模型（如 claude-opus-4-8）
+    # 调 get_llm_provider 失败时会先 print 该提示再抛错（错误被上游吞掉、不影响最终结果），但 print 已污染
+    # stdout、漏进评审总结。置 suppress_debug_info=True 关掉这些 print（真实 usage 由我们自己的 hook 采集，
+    # 不依赖这些输出）。全局生效、与 pr-agent 版本无关，故放在版本守卫与 CLI 分支之前。
+    try:
+        import litellm
+
+        litellm.suppress_debug_info = True
+    except Exception:  # noqa: BLE001 - litellm 未就绪等，纯装饰性抑制失败不致命
+        pass
     # (0) CLI 模式：换 chat_completion 直接调本机 CLI，绕过 litellm。放在版本守卫之前，
     # 因为它只依赖 base_ai_handler 的稳定契约，跟 pr-agent 内部实现无关。装好即 return。
     if os.environ.get("MEEBOX_CLI_MODE"):
