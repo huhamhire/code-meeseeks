@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import { QuestionIcon, mermaidComponents } from '../../../common';
+import { DatabaseIcon, QuestionIcon, mermaidComponents } from '../../../common';
+import { formatTokens } from '../utils/format';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { parseAnsi, segmentStyle } from '../../../../utils/ansi';
 
@@ -119,6 +120,52 @@ export function AnsiPre({
         </span>
       ))}
     </pre>
+  );
+}
+
+/**
+ * Token 用量内联展示：↑输入(绿) [⛁缓存命中] / ↓输出(红)。输入、输出**各自独立 hover 提示**；
+ * 缓存命中(cache_read)为输入的一部分，柱体图标拆分展示（间距在 cache 前，无命中时整段不渲染、不留空），
+ * 悬浮另给说明。run 卡片(RunMeta) 与思考步骤(AgentStep) 共用；分隔符按上下文传入（chip 内 ` / `、步骤行空格）。
+ */
+export function TokenStat({
+  prompt,
+  completion,
+  cacheRead,
+  separator = ' / ',
+}: {
+  prompt?: number;
+  completion?: number;
+  cacheRead?: number;
+  separator?: string;
+}) {
+  const { t } = useTranslation();
+  if (prompt === undefined && completion === undefined) return null;
+  return (
+    <>
+      {prompt !== undefined && (
+        <span className="chat-token-grp" title={t('chatPane.tokensInTitle', { n: prompt })}>
+          <span className="chat-token-in">↑</span>
+          {formatTokens(prompt)}
+          {cacheRead !== undefined && cacheRead > 0 && (
+            <span
+              className="chat-token-cache"
+              title={t('chatPane.cacheInline', { n: formatTokens(cacheRead) })}
+            >
+              <DatabaseIcon />
+              {formatTokens(cacheRead)}
+            </span>
+          )}
+        </span>
+      )}
+      {prompt !== undefined && completion !== undefined ? separator : ''}
+      {completion !== undefined && (
+        <span className="chat-token-grp" title={t('chatPane.tokensOutTitle', { n: completion })}>
+          <span className="chat-token-out">↓</span>
+          {formatTokens(completion)}
+        </span>
+      )}
+    </>
   );
 }
 

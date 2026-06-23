@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
-import { DatabaseIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
+import { RepeatIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
 import { orderFindings } from '../utils/findings';
-import { formatStartTime, formatTokens, runStatusLabel } from '../utils/format';
+import { formatStartTime, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
-import { AnsiPre, AskQuestion, BreakablePath } from './shared';
+import { AnsiPre, AskQuestion, BreakablePath, TokenStat } from './shared';
 import { FindingCard } from './FindingCard';
 
 function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
@@ -40,48 +40,24 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
           {run.model}
         </span>
       )}
-      {/* 只分别展示输入(↑prompt,绿) / 输出(↓completion,红)，不显示总数。旧 run 可能只有 prompt */}
+      {/* 输入(↑绿)[⛁缓存]/输出(↓红)：输入输出各自独立 hover；缓存为输入一部分、无命中不显示。旧 run 可能只有 prompt */}
       {usage.prompt !== undefined || usage.completion !== undefined ? (
-        <span
-          className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-tokens"
-          title={t('chatPane.tokensTitle', {
-            prompt: usage.prompt ?? '—',
-            completion: usage.completion ?? '—',
-          })}
-        >
-          {usage.prompt !== undefined && (
-            <>
-              <span className="chat-token-in">↑</span>
-              {formatTokens(usage.prompt)}
-              {/* cache_read 是 prompt 的一部分，柱体图标 + 命中量拆分展示；无命中(缺/0)则不展示。
-                  悬浮 title 仍给出「缓存 N」文字说明。 */}
-              {usage.cacheRead !== undefined && usage.cacheRead > 0 && (
-                <span
-                  className="chat-token-cache"
-                  title={t('chatPane.cacheInline', { n: formatTokens(usage.cacheRead) })}
-                >
-                  <DatabaseIcon />
-                  {formatTokens(usage.cacheRead)}
-                </span>
-              )}
-            </>
-          )}
-          {usage.prompt !== undefined && usage.completion !== undefined ? ' / ' : ''}
-          {usage.completion !== undefined && (
-            <>
-              <span className="chat-token-out">↓</span>
-              {formatTokens(usage.completion)}
-            </>
-          )}
+        <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-tokens">
+          <TokenStat
+            prompt={usage.prompt}
+            completion={usage.completion}
+            cacheRead={usage.cacheRead}
+          />
         </span>
       ) : null}
-      {/* 模型交互轮次：仅多轮(agentic) 时展示；单轮无信息量 */}
+      {/* 模型交互轮次：循环箭头图标 + 次数（取代「N 轮」文案，省空间 / 免复数）；仅多轮(agentic) 时展示 */}
       {usage.turns !== undefined && usage.turns > 1 ? (
         <span
           className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-turns"
           title={t('chatPane.turnsTitle')}
         >
-          {t('chatPane.turns', { count: usage.turns })}
+          <RepeatIcon />
+          {usage.turns}
         </span>
       ) : null}
       <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-duration">

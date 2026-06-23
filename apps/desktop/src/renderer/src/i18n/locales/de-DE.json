@@ -164,10 +164,9 @@
     "statusSucceeded": "Fertig",
     "stopAria": "Stoppen",
     "stopTitle": "Ausführung stoppen",
-    "tokensTitle": "Eingabe (prompt) {{prompt}} · Ausgabe (completion) {{completion}} Tokens",
+    "tokensInTitle": "Eingabe (prompt) {{n}} Tokens",
+    "tokensOutTitle": "Ausgabe (completion) {{n}} Tokens",
     "turnsTitle": "Modell-Interaktionsrunden (ein Modellaufruf pro Runde)",
-    "turns_one": "{{count}} Runde",
-    "turns_other": "{{count}} Runden",
     "unknownCommand": "Unbekannter Befehl {{head}}; unterstützt: {{cmds}}",
     "userQuestionAria": "Benutzerfrage",
     "waitingOutput": "(Warte auf PR-Agent-Ausgabe…)"

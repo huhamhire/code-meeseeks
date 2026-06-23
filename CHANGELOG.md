@@ -40,6 +40,8 @@
 
 - PR 头部展示 reviewer 头像栈：在标题右侧、动作按钮行之上垂直居中展示评审者头像（Bitbucket 风格略重叠、灰色细描边环），按 needsWork > approved > 待评审 优先排序并过滤掉当前用户自己；approved / needsWork 的头像右上角带决断角标（圆环内绿勾 / 琥珀叹号）。至多展示 4 个，超出则显示 3 个 + 「+n」，点击「+n」下拉展示其余评审者（头像 + 名 + 决断 chip）；直接展示的头像 hover 出名字。
 
+- run 卡片 / 思考步骤展示「模型实际交互规模」（缓存命中量 + 轮次）：本机 CLI（claude / codex）接管 LLM 时，token 用量是 agentic 多轮累加、且每轮的 `cache_read` 反复计入，累计值远超模型单请求窗口，易被误读为超限或计量出错。现采集层从 CLI 返回的 usage 补充真实的**提示缓存命中量（`cache_read`）**与**模型交互轮次（`num_turns`）**，运行卡片与思考步骤统一呈现为「↑输入 (⛁缓存命中) / ↓输出 · ↻N」——蓝色数据库柱体图标标缓存命中量（属输入的一部分，无命中则整段不显示）、循环箭头图标标多轮次（单轮不显示），输入 / 输出各自独立悬浮提示。litellm / API 路径同步补 `cache_read` 采集（Anthropic `cache_read_input_tokens` / OpenAI `prompt_tokens_details.cached_tokens`），与 CLI 路径一致；`TokenUsage` 新增 `cacheReadTokens` / `turns` 字段（缺失向后兼容）。
+
 ### Changed
 
 - ChatPane 评审结果交互打磨（一批小优化）：

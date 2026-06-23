@@ -164,9 +164,9 @@
     "statusSucceeded": "完了",
     "stopAria": "停止",
     "stopTitle": "実行を停止",
-    "tokensTitle": "入力(prompt) {{prompt}} · 出力(completion) {{completion}} トークン",
+    "tokensInTitle": "入力(prompt) {{n}} トークン",
+    "tokensOutTitle": "出力(completion) {{n}} トークン",
     "turnsTitle": "モデルとのやり取りの回数（1 回につきモデル呼び出し 1 回）",
-    "turns_other": "{{count}} ターン",
     "unknownCommand": "不明なコマンド {{head}}。サポート対象：{{cmds}}",
     "userQuestionAria": "ユーザーの質問",
     "waitingOutput": "(PR Agent の出力を待機中…)"

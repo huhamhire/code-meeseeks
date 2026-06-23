@@ -164,9 +164,9 @@
     "statusSucceeded": "完成",
     "stopAria": "停止",
     "stopTitle": "停止执行",
-    "tokensTitle": "输入(prompt) {{prompt}} · 输出(completion) {{completion}} tokens",
+    "tokensInTitle": "输入(prompt) {{n}} tokens",
+    "tokensOutTitle": "输出(completion) {{n}} tokens",
     "turnsTitle": "模型交互轮次（每轮一次模型调用）",
-    "turns_other": "{{count}} 轮",
     "unknownCommand": "未知命令 {{head}}；支持：{{cmds}}",
     "userQuestionAria": "用户提问",
     "waitingOutput": "(等待 PR Agent 输出…)"

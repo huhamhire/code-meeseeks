@@ -654,6 +654,29 @@ export function DatabaseIcon({ size = 12, className }: IconProps) {
   );
 }
 
+/** 循环箭头（Lucide repeat，viewBox 24）：表示模型交互轮次（agentic 多轮） */
+export function RepeatIcon({ size = 12, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <polyline points="17 1 21 5 17 9" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <polyline points="7 23 3 19 7 15" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+    </svg>
+  );
+}
+
 /** 齿轮（Lucide settings，viewBox 24）：设置按钮 */
 export function SettingsIcon({ size = 14 }: IconProps) {
   return (
