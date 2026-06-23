@@ -6,6 +6,10 @@ export interface TokenUsage {
   completion?: number;
   /** 总 token；优先用 litellm 给的，缺时算 prompt+completion */
   total?: number;
+  /** 提示缓存读取量（cache_read），是 prompt 的一部分；缺/0 时不展示「(cache N)」括号 */
+  cacheRead?: number;
+  /** 模型交互轮次；≤1 时不单独展示 */
+  turns?: number;
 }
 
 /**

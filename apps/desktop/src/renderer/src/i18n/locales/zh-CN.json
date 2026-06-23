@@ -47,6 +47,7 @@
     "bulletDescribe": "自动生成 PR 摘要 / labels",
     "bulletImprove": "逐行代码改进建议（带重要度评分）",
     "bulletReview": "跑一次 AI review，结果落到 findings 列表",
+    "cacheInline": "缓存 {{n}}",
     "cancelQueuedTitle": "取消排队任务",
     "clearConfirmLabel": "清空",
     "clearConfirmMessage": "确定清空当前 PR 的全部 PR Agent 执行历史记录？仅影响该 PR，不可恢复。",
@@ -164,6 +165,8 @@
     "stopAria": "停止",
     "stopTitle": "停止执行",
     "tokensTitle": "输入(prompt) {{prompt}} · 输出(completion) {{completion}} tokens",
+    "turnsTitle": "模型交互轮次（每轮一次模型调用）",
+    "turns_other": "{{count}} 轮",
     "unknownCommand": "未知命令 {{head}}；支持：{{cmds}}",
     "userQuestionAria": "用户提问",
     "waitingOutput": "(等待 PR Agent 输出…)"

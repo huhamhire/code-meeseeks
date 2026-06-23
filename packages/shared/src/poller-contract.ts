@@ -239,6 +239,13 @@ export interface TokenUsage {
   totalTokens?: number;
   /** 本次 run 捕获到的 LLM 调用次数（累加来源） */
   calls?: number;
+  /** 提示缓存读取（cache_read）token 数：promptTokens 的一部分，供 UI 拆分展示「↑总量 (cache N)」。
+   *  CLI 路径取自 claude/codex usage，API 路径取自 litellm（Anthropic cache_read / OpenAI cached_tokens）。
+   *  缺失或为 0 = 无缓存命中信息（UI 不展示该括号）。 */
+  cacheReadTokens?: number;
+  /** 模型实际交互轮次：CLI agentic 模式为本次 run 内部累计的 num_turns（可远大于 calls）；
+   *  其它情况回退为 LLM 调用次数（calls）。≤1 时 UI 不单独展示。 */
+  turns?: number;
 }
 
 export interface ReviewRun {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
-import { RetryIcon, ShareIcon, TrashIcon } from '../../../common';
+import { DatabaseIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
 import { orderFindings } from '../utils/findings';
 import { formatStartTime, formatTokens, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
@@ -18,6 +18,8 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
         prompt: run.tokenUsage.promptTokens,
         completion: run.tokenUsage.completionTokens,
         total: run.tokenUsage.totalTokens,
+        cacheRead: run.tokenUsage.cacheReadTokens,
+        turns: run.tokenUsage.turns,
       }
     : run.stdout
       ? extractTokenUsage(run.stdout)
@@ -51,6 +53,17 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
             <>
               <span className="chat-token-in">↑</span>
               {formatTokens(usage.prompt)}
+              {/* cache_read 是 prompt 的一部分，柱体图标 + 命中量拆分展示；无命中(缺/0)则不展示。
+                  悬浮 title 仍给出「缓存 N」文字说明。 */}
+              {usage.cacheRead !== undefined && usage.cacheRead > 0 && (
+                <span
+                  className="chat-token-cache"
+                  title={t('chatPane.cacheInline', { n: formatTokens(usage.cacheRead) })}
+                >
+                  <DatabaseIcon />
+                  {formatTokens(usage.cacheRead)}
+                </span>
+              )}
             </>
           )}
           {usage.prompt !== undefined && usage.completion !== undefined ? ' / ' : ''}
@@ -60,6 +73,15 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
               {formatTokens(usage.completion)}
             </>
           )}
+        </span>
+      ) : null}
+      {/* 模型交互轮次：仅多轮(agentic) 时展示；单轮无信息量 */}
+      {usage.turns !== undefined && usage.turns > 1 ? (
+        <span
+          className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-turns"
+          title={t('chatPane.turnsTitle')}
+        >
+          {t('chatPane.turns', { count: usage.turns })}
         </span>
       ) : null}
       <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-duration">

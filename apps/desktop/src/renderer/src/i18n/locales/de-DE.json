@@ -47,6 +47,7 @@
     "bulletDescribe": "PR-Zusammenfassung / Labels automatisch generieren",
     "bulletImprove": "zeilenweise Vorschläge zur Codeverbesserung (mit Wichtigkeitsbewertung)",
     "bulletReview": "einen KI-Review ausführen; Ergebnisse erscheinen in der Findings-Liste",
+    "cacheInline": "Cache {{n}}",
     "cancelQueuedTitle": "Eingereihte Aufgabe abbrechen",
     "clearConfirmLabel": "Leeren",
     "clearConfirmMessage": "Den gesamten PR-Agent-Ausführungsverlauf für den aktuellen PR löschen? Dies betrifft nur diesen PR und kann nicht rückgängig gemacht werden.",
@@ -164,6 +165,9 @@
     "stopAria": "Stoppen",
     "stopTitle": "Ausführung stoppen",
     "tokensTitle": "Eingabe (prompt) {{prompt}} · Ausgabe (completion) {{completion}} Tokens",
+    "turnsTitle": "Modell-Interaktionsrunden (ein Modellaufruf pro Runde)",
+    "turns_one": "{{count}} Runde",
+    "turns_other": "{{count}} Runden",
     "unknownCommand": "Unbekannter Befehl {{head}}; unterstützt: {{cmds}}",
     "userQuestionAria": "Benutzerfrage",
     "waitingOutput": "(Warte auf PR-Agent-Ausgabe…)"
