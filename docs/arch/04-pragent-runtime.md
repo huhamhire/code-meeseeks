@@ -96,10 +96,38 @@ litellm**。
   `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`**。使用的模型、额度与合规均由该 CLI 的账户与用户授权决定。
 - **代理自动透传**：子进程 env 由 `os.environ` 拷贝而来（仅剔除上面两个 API key），`HTTP(S)_PROXY` / `NO_PROXY`
   原样保留 → `claude` 出站自动走用户配置的代理（见 [09](09-networking-proxy.md)），无需另设。
-- **token usage**：从 claude JSON 的 `usage`（`input_tokens`(+cache_*) ≈ prompt，`output_tokens` ≈ completion）
-  构造同款 `@@MEEBOX_USAGE@@` 哨兵，主进程同一套累加。
+- **token usage**：从 claude JSON 的 `usage` 构造同款 `@@MEEBOX_USAGE@@` 哨兵，主进程同一套累加。↑输入总量取
+  `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`（模型实际处理的全部输入侧）；其中
+  `cache_read_input_tokens`（命中量）**单列上抛**供 UI 拆分展示，顶层 `num_turns`（agentic 轮次）一并上抛。详见
+  下「CLI 模式的 token 计量与提示缓存」。
 - **一期边界**：仅 `claude`（UI 校验拦下 codex 等，命令框可输入留待后续）；并发为「一次调用一个子进程」；父进程被
   超时 SIGKILL 时子 `claude` 可能短暂遗留（孤儿），后续可补 kill 传播。
+
+### CLI 模式的 token 计量与提示缓存
+
+CLI（claude / codex）模式下运行卡片的 token 数常远超模型单请求上下文窗口（如 `/ask` 出现 ↑数百万），这**不是超限、也不是计量
+错误**，而是 agentic 多轮 + 提示缓存的自然结果。要点：
+
+- **累计语义**：`claude -p` 是 agentic headless，一次 run 内部会有多个模型轮次（`num_turns`）。顶层 `usage` 是**该会话所有轮次
+  的累加**，每轮都把不断增长的对话 / 工具结果重新送进模型，故 token 随轮次叠加。单轮从不超窗口（CLI 自身做上下文压缩），累计值
+  膨胀属正常。UI 据 `num_turns` 展示轮次（单轮不显示），帮助理解「这是 N 轮的总量、非单请求规模」。
+- **`cache_read` vs `cache_creation`（命中 ≠ 写入）**：Anthropic 提示缓存把输入分三段——`input_tokens`（新内容）、
+  `cache_creation_input_tokens`（**写入**缓存，计费 1.25×/2×）、`cache_read_input_tokens`（**读取命中**，计费 0.1×）。UI 的
+  「缓存命中量（⛁）」**只取 `cache_read`**，写入不计作命中。多轮里每轮都重读已缓存前缀，`cache_read` 跨轮累加，故对多轮 run 常
+  呈现「缓存命中量 ≈ 输入总量」（绝大部分输入都是缓存读）。
+- **缓存暖化与任务顺序**：claude CLI 自身在缓存 TTL（5min / 1h）内对相同前缀做服务端缓存（基础 system prompt、工具定义，乃至相同
+  的 diff 段）。**先跑过 `describe` 会暖好缓存**，随后对同 PR 的 `review` 多为 `cache_read` 命中、真正新增输入很小 → 表现为「输入
+  很少、几乎全是缓存读」。这是顺序执行带来的正常优化，不是统计异常。
+- **并行启动对缓存命中的影响**：run 队列（`services/pr-agent/run-queue.ts` 的 `pump()`）在并发未达上限时同步连续起跑，故同 PR 的
+  describe / review / improve 几乎同时启动（~100ms 间隔）。Anthropic 缓存条目要等**首个请求写完**才可被后续读，并行启动时后发
+  请求读不到尚未落地的缓存 → 共享前缀各自 miss + 各自写、命中率下降。但**影响有限**：受影响的只是跨 run 的小共享前缀（基础 system
+  ~20–30k，通常已被其它 claude 活动暖好），而大额 `cache_read` 来自**单 run 内部的多轮重读**、与并行无关。故一般**不值得**为缓存复用
+  而串行化同 PR 任务；若确要最大化跨 run 复用，可考虑「describe 先行、完成后再放行其余」的轻量调度（收益有限，未实现）。
+- **litellm 路径与跨模型缓存适配**：API 模式下显式 `cache_control` 标记**仅 Anthropic 系生效**（原生 / Bedrock / Vertex Claude，
+  本项目对编排 chat 的稳定前缀标 1h TTL，见 `patches/litellm_handler.py`）；OpenAI / DeepSeek 走**自动前缀缓存**（无需标记，把稳定
+  内容放前缀即可命中，shim 对非 Anthropic 自动剥除标记拼回纯文本）；openai-compatible（DashScope / 火山 / vLLM）能否命中取决于后端，
+  `cache_control` 一律被忽略。两条路径（CLI / API）都采集 `cache_read`（API 取 Anthropic `cache_read_input_tokens` 或 OpenAI
+  `prompt_tokens_details.cached_tokens`），UI 展示一致。
 
 ### 注入 env
 
