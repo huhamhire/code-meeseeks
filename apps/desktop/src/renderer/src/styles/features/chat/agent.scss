@@ -6,9 +6,12 @@
 
 // === Agent 自动评审：触发条 + 收尾总结卡 ===
 .chat-agent-summary {
-  margin: $space-4 $space-6;
+  // 横向不再额外内缩（去掉原 $space-6）——与 finding 卡同宽（二者同处 .chat-pane-body 的 $space-6 内边距内）。
+  margin: $space-4 0;
   padding: $space-4 $space-5;
   border: 1px solid $border-muted;
+  // 左侧主题色条：统一用蓝色，与卡片蓝色淡底（$color-accent-bg-fade）成一套（不随判定变色）。
+  border-left: 3px solid $color-accent;
   border-radius: $radius-md;
   background: $color-accent-bg-fade;
   flex-shrink: 0;
@@ -48,7 +51,9 @@
 }
 .chat-agent-summary-text {
   margin: 0 0 $space-3;
-  font-size: $fs-md;
+  // 与 finding 卡正文统一字号 / 行高（此前 $fs-md + 默认行高显得比其它卡片更窄）。
+  font-size: $fs-lg;
+  line-height: $lh-normal;
   color: $text-body;
 }
 // 评审总结 / 对话回复内的 markdown 章节标题（## 摘要 等）压到不超过卡片标题（评审总结）字号，
@@ -59,7 +64,8 @@
   h2,
   h3,
   h4 {
-    font-size: $fs-md;
+    // 与正文同字号（靠加粗区分层级），不小于正文、也不放大成 markdown 默认大标题。
+    font-size: $fs-lg;
     margin: $space-3 0 $space-1;
   }
   > :first-child {

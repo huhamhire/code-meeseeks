@@ -297,11 +297,9 @@
     margin-top: 2px;
   }
   .chat-run-ref-loc {
-    display: inline-flex;
-    // 路径过长在定位文本内部换行（首行仍与图标同排），而非整体掉到图标下一行。
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: $space-1;
+    // 行内文本流（非 flex）：路径与行号作为连续行内内容换行——行号紧跟路径末行，而非作为独立 flex
+    // 项掉到新行。作为徽标 flex 子项 display 被 blockify 为块、占余宽并在内部换行（首行仍与图标同排）。
+    display: block;
     min-width: 0;
     flex: 1 1 auto;
   }

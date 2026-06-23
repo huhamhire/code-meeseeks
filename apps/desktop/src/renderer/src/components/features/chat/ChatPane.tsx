@@ -212,23 +212,26 @@ export function ChatPane({
 
   const { runs, error, loadingSession, matchedRule, bodyRef, hasMoreOlder, loadingOlder } = session;
 
-  // 复评卡 ↔ 原 finding 卡互链：按 data-run-id 在时间线里滚动定位 + 短暂高亮。
-  const flash = (el: Element): void => {
+  // 复评卡 ↔ 原 finding 卡互链：滚动定位 + 短暂高亮。flash class 因目标而异：run 卡用 chat-run-flash
+  // （背景渐隐，run 卡本身透明底可见）；finding 卡用 chat-finding-flash（覆盖式高亮环——finding 卡有
+  // 实底 $bg-elev，背景渐隐会被洗掉、看不出闪烁）。
+  const flash = (el: Element, cls: 'chat-run-flash' | 'chat-finding-flash'): void => {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add('chat-run-flash');
-    window.setTimeout(() => el.classList.remove('chat-run-flash'), 1500);
+    el.classList.add(cls);
+    window.setTimeout(() => el.classList.remove(cls), 1600);
   };
   const scrollToRun = (runId: string): void => {
     const el = bodyRef.current?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
-    if (el) flash(el);
+    if (el) flash(el, 'chat-run-flash');
   };
   // 点击复评卡顶部引用徽标：精确定位到原 run 内被引用的那条 finding 卡片并闪烁高亮（找不到该卡片——
   // 如已分页移出 / 折叠——回退到整条 run 高亮，至少给出定位反馈）。
   const scrollToFinding = (runId: string, findingId: string): void => {
     const runEl = bodyRef.current?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
     if (!runEl) return;
-    const el = runEl.querySelector(`[data-finding-id="${CSS.escape(findingId)}"]`) ?? runEl;
-    flash(el);
+    const findingEl = runEl.querySelector(`[data-finding-id="${CSS.escape(findingId)}"]`);
+    if (findingEl) flash(findingEl, 'chat-finding-flash');
+    else flash(runEl, 'chat-run-flash');
   };
 
   return (

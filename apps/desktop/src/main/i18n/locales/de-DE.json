@@ -7,7 +7,6 @@
       "judgeNone": "Keine wichtigen Probleme — keine Rückfrage",
       "judgeSevere_one": "Wichtig — {{count}} Rückfrage",
       "judgeSevere_other": "Wichtig — {{count}} Rückfragen",
-      "parseFail": "Empfehlung konnte nicht geparst werden — manuelle Prüfung",
       "rejectedPrefix": "Abgelehnt: ",
       "summary": "Beschreibung und Befunde zu einer Review-Zusammenfassung zusammenfassen"
     },

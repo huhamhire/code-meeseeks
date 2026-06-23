@@ -21,7 +21,12 @@ import {
   stripEffortScoreNumber,
   stripFindingMarker,
 } from '../utils/findings';
-import { BreakablePath, MdInline } from './shared';
+import { BreakablePath, MdInline, withInlineSummary } from './shared';
+
+// 折叠标题（<details><summary>）支持内联 markdown：思路建议各方案标题里的 `代码` / **强调** 等生效。
+// 预算在模块级，避免每次渲染重建 components 对象。
+const DEFAULT_MD_COMPONENTS = withInlineSummary(mermaidComponents);
+const WALKTHROUGH_MD_COMPONENTS = withInlineSummary(walkthroughMdComponents);
 
 // chip 配色 tone → chat-chip-<tone>（色板见 styles/features/chat/chip.scss）。
 // finding 类别：元信息/图/工作量→accent，内容/测试/安全→approved，代码反馈/建议→warning，评分/兜底→neutral。
@@ -252,7 +257,20 @@ export function FindingCard({
       data-finding-id={finding.id}
       className={`chat-finding chat-finding-${key}${isRejected || isClosed ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
     >
-      <header className="chat-finding-head">
+      <header
+        className={`chat-finding-head${collapsibleByDefault ? ' chat-finding-head-toggle' : ''}`}
+        // 可折叠卡（分析过程 / 已拒绝 / 被复评关闭的代码反馈）：整行标题区即展开/收起热区，扩大可点面积。
+        // 忽略来自内部按钮（编辑/拒绝/引用/chevron）的点击——它们各自处理、不应误触折叠（chevron 的
+        // 点击经此处冒泡，由它自身的 onClick 处理一次即可，故 closest('button') 命中时直接跳过）。
+        onClick={
+          collapsibleByDefault
+            ? (e) => {
+                if ((e.target as HTMLElement).closest('button')) return;
+                setExpanded((v) => !v);
+              }
+            : undefined
+        }
+      >
         {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
         {label && (
           <span className={`chat-chip chat-chip-md chat-finding-cat chat-chip-${CAT_TONE[key]}`}>
@@ -351,43 +369,51 @@ export function FindingCard({
           )}
         </div>
       )}
-      {/* 已拒绝折叠态隐藏正文与代码对比，只留头部 chip + 锚点行 + 撤销入口。
-          pr-type 的值胶囊已并入头部行（见上），此处不再单独成段。 */}
-      {!collapsed && key !== 'pr-type' && (
-        <div className="chat-finding-body markdown">
-          {/* remarkBreaks 把 finding body 里的单换行也当成 <br>。pr-agent 的 trace、
-              或一般段落里 reviewer 习惯按软换行折行，不加 remarkBreaks 会被 markdown
-              合并成长一行。Findings 主要是富文本说明，不存在"故意软换行连接"的场景 */}
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkBreaks]}
-            rehypePlugins={REMOTE_REHYPE_PLUGINS}
-            // 「文件变更」walkthrough 用去掉 <details open> 的覆盖，使各文件分类默认折叠收起。
-            components={key === 'walkthrough' ? walkthroughMdComponents : mermaidComponents}
-          >
-            {translatedBody}
-          </ReactMarkdown>
-        </div>
-      )}
-      {/* /improve 给的 existing → improved 代码对比。两段都是片段，独立 <pre> 块
-          + 红/绿背景 模拟 diff 视觉 (不用 Monaco DiffEditor 节省开销) */}
-      {!collapsed && finding.codeChange && (
-        <div className="chat-finding-code-change">
-          {finding.codeChange.existing && (
-            <pre
-              className="chat-finding-code-change-block chat-finding-code-change-existing"
-              aria-label={t('chatPane.codeExistingAria')}
-            >
-              {finding.codeChange.existing}
-            </pre>
-          )}
-          {finding.codeChange.improved && (
-            <pre
-              className="chat-finding-code-change-block chat-finding-code-change-improved"
-              aria-label={t('chatPane.codeImprovedAria')}
-            >
-              {finding.codeChange.improved}
-            </pre>
-          )}
+      {/* 可折叠内容（正文 + 代码对比）：grid-rows 0fr↔1fr 平滑收展（auto 高度可动画）。内容始终挂载，
+          由 CSS 按 .chat-finding-collapsed 收起、inner overflow:hidden 裁切——故折叠/展开有高度过渡动画。
+          pr-type 的值胶囊已并入头部行、无正文段；无 codeChange 时整体不渲染。 */}
+      {(key !== 'pr-type' || finding.codeChange) && (
+        <div className="chat-finding-collapsible">
+          <div className="chat-finding-collapsible-inner">
+            {key !== 'pr-type' && (
+              <div className="chat-finding-body markdown">
+                {/* remarkBreaks 把 finding body 里的单换行也当成 <br>。pr-agent 的 trace、
+                    或一般段落里 reviewer 习惯按软换行折行，不加 remarkBreaks 会被 markdown
+                    合并成长一行。Findings 主要是富文本说明，不存在"故意软换行连接"的场景 */}
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  rehypePlugins={REMOTE_REHYPE_PLUGINS}
+                  // 「文件变更」walkthrough 用去掉 <details open> 的覆盖，使各文件分类默认折叠收起。
+                  // 两套均叠加「<summary> 内联 markdown」（折叠标题支持 `代码` 等预格式化）。
+                  components={key === 'walkthrough' ? WALKTHROUGH_MD_COMPONENTS : DEFAULT_MD_COMPONENTS}
+                >
+                  {translatedBody}
+                </ReactMarkdown>
+              </div>
+            )}
+            {/* /improve 给的 existing → improved 代码对比。两段都是片段，独立 <pre> 块
+                + 红/绿背景 模拟 diff 视觉 (不用 Monaco DiffEditor 节省开销) */}
+            {finding.codeChange && (
+              <div className="chat-finding-code-change">
+                {finding.codeChange.existing && (
+                  <pre
+                    className="chat-finding-code-change-block chat-finding-code-change-existing"
+                    aria-label={t('chatPane.codeExistingAria')}
+                  >
+                    {finding.codeChange.existing}
+                  </pre>
+                )}
+                {finding.codeChange.improved && (
+                  <pre
+                    className="chat-finding-code-change-block chat-finding-code-change-improved"
+                    aria-label={t('chatPane.codeImprovedAria')}
+                  >
+                    {finding.codeChange.improved}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </li>

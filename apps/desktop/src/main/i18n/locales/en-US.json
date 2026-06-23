@@ -7,7 +7,6 @@
       "judgeNone": "No important issues — no follow-up",
       "judgeSevere_one": "Important — {{count}} follow-up question",
       "judgeSevere_other": "Important — {{count}} follow-up questions",
-      "parseFail": "Could not parse a recommendation — routing to manual review",
       "rejectedPrefix": "Rejected: ",
       "summary": "Synthesize the description and findings into a review summary"
     },

@@ -213,7 +213,6 @@ export function DiffView({
     content,
     selected,
     drafts,
-    comments,
     prLocalId: pr.localId,
     platform: pr.platform,
     scopeKind: scope.kind,

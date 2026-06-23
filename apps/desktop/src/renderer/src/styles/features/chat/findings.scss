@@ -62,11 +62,91 @@
     opacity: 0.68;
   }
 }
+
+// 点击复评引用徽标定位到原 finding 卡片时的短暂高亮：用「覆盖式高亮环 + inset 淡色填充」而非背景渐隐
+// ——finding 卡有实底 $bg-elev，背景渐隐会被洗掉看不出闪烁；覆盖式与卡片底色无关、任意底色都清晰可见，
+// 动画结束自动回落（fill-mode 默认 none）。高亮色 = 卡片左条主题色（--flash-color，按 sectionKey 取），
+// 让定位反馈与卡片类别视觉一致（如代码建议=橙黄）；已关闭/拒绝卡统一中性灰（盖过类别色）。
+.chat-finding-flash {
+  --flash-color: #{$border-default};
+  animation: chat-finding-flash-kf 1.5s ease-out;
+}
+// 类别色：与上面 .chat-finding 的 border-left-color 分组逐一对应。
+.chat-finding-title.chat-finding-flash,
+.chat-finding-pr-type.chat-finding-flash,
+.chat-finding-diagram.chat-finding-flash,
+.chat-finding-assessment.chat-finding-flash,
+.chat-finding-effort.chat-finding-flash {
+  --flash-color: #{$color-info};
+}
+.chat-finding-summary.chat-finding-flash,
+.chat-finding-description.chat-finding-flash,
+.chat-finding-walkthrough.chat-finding-flash,
+.chat-finding-relevant-tests.chat-finding-flash,
+.chat-finding-security.chat-finding-flash,
+.chat-finding-ask-summary.chat-finding-flash {
+  --flash-color: #{$color-approved};
+}
+.chat-finding-score.chat-finding-flash,
+.chat-finding-ask-analysis.chat-finding-flash {
+  --flash-color: #{$text-muted};
+}
+.chat-finding-code-feedback.chat-finding-flash,
+.chat-finding-code-suggestion.chat-finding-flash,
+.chat-finding-ask-suggestions.chat-finding-flash {
+  --flash-color: #{$color-warning};
+}
+// 已关闭/拒绝卡：统一中性灰（语义=非活跃，盖过类别色）。须置于类别规则之后以同特异性覆盖。
+.chat-finding-rejected.chat-finding-flash {
+  --flash-color: #{$text-muted};
+}
+@keyframes chat-finding-flash-kf {
+  0% {
+    box-shadow:
+      0 0 0 2px var(--flash-color),
+      inset 0 0 0 9999px color-mix(in srgb, var(--flash-color) 18%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px transparent,
+      inset 0 0 0 9999px transparent;
+  }
+}
 .chat-finding-head {
   display: flex;
   align-items: center;
   gap: $space-3;
   margin-bottom: $space-3;
+}
+// 收起态：正文已隐藏，头部的下间距会让卡片上下不对称（下方多出 margin-bottom）→ 归零，使上下内边距对称。
+.chat-finding-collapsed .chat-finding-head {
+  margin-bottom: 0;
+}
+// 可折叠卡：整行标题区即展开/收起热区（扩大可点面积，不止右侧 chevron）。
+.chat-finding-head-toggle {
+  cursor: pointer;
+}
+// 折叠/展开高度动画：grid-template-rows 0fr↔1fr（可对 auto 高度做过渡）。内容始终挂载，inner
+// overflow:hidden + min-height:0 在收起时裁切——故收/展是平滑的高度过渡。仅可折叠卡会切到
+// collapsed → 0fr；其余卡恒 1fr、无动画。
+.chat-finding-collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s ease;
+}
+.chat-finding-collapsed .chat-finding-collapsible {
+  grid-template-rows: 0fr;
+}
+.chat-finding-collapsible-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+// 尊重系统「减少动效」：关掉高度过渡与 chevron 旋转过渡。
+@media (prefers-reduced-motion: reduce) {
+  .chat-finding-collapsible,
+  .chat-finding-collapse-toggle svg {
+    transition: none;
+  }
 }
 // 分析解读（ask-analysis）展开时：chip 行下加一条分割线，与下方富文本内容（表格 / 代码块）衔接更自然，
 // 避免头部 chip 直接贴正文显得突兀。仅展开态（无 chat-finding-collapsed）出现。
