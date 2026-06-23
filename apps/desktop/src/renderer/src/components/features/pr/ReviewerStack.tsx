@@ -91,7 +91,7 @@ export function ReviewerStack({
               className={`reviewer-stack-badge reviewer-stack-badge-${r.status}`}
               aria-hidden="true"
             >
-              <ReviewerBadgeGlyph status={r.status} size={16} />
+              <ReviewerBadgeGlyph status={r.status} size={14} />
             </span>
           )}
         </span>

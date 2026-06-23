@@ -21,25 +21,24 @@
   display: inline-flex;
 }
 // 角标：钉在头像右上角（待评审无角标）。反色处理——实心彩色圆底 + 白色勾/叹号符号（此前是白底彩符，
-// 白色面积过大不够醒目）；外加与头像同款的灰色描边环（$border-default 1px），与头像分隔且视觉一致。
+// 白色面积过大不够醒目）。无描边环（纯彩底，靠颜色与头像区分）。
 .reviewer-stack-badge {
   position: absolute;
   top: -1px;
   right: -1px;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 
-  // 实心彩色圆底（按状态着色，撑满角标）+ 头部底色外环分隔。
+  // 实心彩色圆底（按状态着色，撑满角标）。
   &::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: $radius-full;
     background: var(--reviewer-badge-color);
-    box-shadow: 0 0 0 1px $border-default;
   }
   svg {
     display: block;
