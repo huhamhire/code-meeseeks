@@ -277,8 +277,10 @@
   align-self: flex-start;
   max-width: 100%;
   display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
+  // 图标对齐定位文本首行（不随多行路径垂直居中而单独成行）；图标与定位文本不在徽标层换行——
+  // 换行交给定位文本内部，否则定位文本整体掉到图标下一行、图标被孤立成单独一行。
+  align-items: flex-start;
+  flex-wrap: nowrap;
   gap: $space-1 $space-2;
   margin: $space-1 0;
   padding: $space-1 $space-2;
@@ -291,13 +293,17 @@
 
   svg {
     flex-shrink: 0;
-    align-self: center;
+    // 12px 图标在首行内与文字光学对齐（align-items:flex-start 顶对齐后略微下压）。
+    margin-top: 2px;
   }
   .chat-run-ref-loc {
     display: inline-flex;
+    // 路径过长在定位文本内部换行（首行仍与图标同排），而非整体掉到图标下一行。
+    flex-wrap: wrap;
     align-items: baseline;
     gap: $space-1;
     min-width: 0;
+    flex: 1 1 auto;
   }
   code {
     font-family: $font-mono;
