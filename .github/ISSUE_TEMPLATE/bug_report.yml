@@ -1,0 +1,38 @@
+name: 缺陷报告（Bug report）
+description: 报告一个问题或异常行为
+labels: [bug]
+assignees:
+  - huhamhire
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述（What happened）
+      description: 发生了什么、预期是什么，以及复现步骤。
+      placeholder: 简要描述问题与复现步骤。
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本（Version）
+      placeholder: 如 0.6.0-alpha.1
+    validations:
+      required: false
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统（OS）
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图（Logs / screenshots）
+      description: 相关日志（`~/.code-meeseeks/`）或截图，便于定位。
+    validations:
+      required: false

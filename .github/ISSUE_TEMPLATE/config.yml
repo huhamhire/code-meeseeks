@@ -1,0 +1,6 @@
+# 关掉空白 issue，强制走下方模板——模板带 assignees，确保新 issue 默认有处理人。
+blank_issues_enabled: false
+contact_links:
+  - name: 使用文档（Documentation）
+    url: https://github.com/huhamhire/code-meeseeks/tree/master/docs/guide
+    about: 安装、代码平台 / LLM / 代理配置与使用说明，先看这里。
