@@ -25,8 +25,10 @@ export interface JudgeCandidate {
   /** 源 / 目标分支名（背景输入，助判分支合并 / 回合并）。 */
   sourceBranch?: string;
   targetBranch?: string;
-  /** 调用方据元数据判出的「纯分支合并」信号（见 classifyBranchMerge）；true 时强烈倾向 skip。 */
+  /** 据**实际提交结构**判出的「纯分支合并」（提交全为 merge commit，见 classifyBranchMerge）。 */
   branchMerge?: boolean;
+  /** 源分支为长期 / 集成分支（背景信号；不单独构成跳过理由，交 judge 权衡）。 */
+  sourceMainline?: boolean;
 }
 
 export interface JudgeDecision {
@@ -69,9 +71,13 @@ export async function judgeAutopilotBatch(
 
   const list = input.candidates
     .map((c, i) => {
+      // 分支合并信号作为**证据**列出（非定论）：judge 据此 + 标题/描述自行权衡是否值得评审。
+      const signals: string[] = [];
+      if (c.branchMerge) signals.push('all commits are merge commits (likely a branch sync / back-merge)');
+      if (c.sourceMainline) signals.push('source is a long-lived / integration branch');
       const branch =
         c.sourceBranch && c.targetBranch
-          ? `\nbranches: ${c.sourceBranch} -> ${c.targetBranch}${c.branchMerge ? '  [detected branch merge — prefer skip]' : ''}`
+          ? `\nbranches: ${c.sourceBranch} -> ${c.targetBranch}${signals.length ? `\nsignals: ${signals.join('; ')}` : ''}`
           : '';
       return `${String(i + 1)}. [id:${c.prLocalId}] ${c.title}${branch}\n${(c.description ?? '').trim().slice(0, DESC_CLAMP)}`;
     })

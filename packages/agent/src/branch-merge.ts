@@ -1,12 +1,14 @@
 /**
  * 「纯分支合并」判定（AutoPilot 第一步 judge 的背景输入，见 docs/arch/06-agent.md）：分支合并 / 回合并
- * 把已评审过的分支改动同步到另一分支，无原创工作，自动预评审无意义。判定**只用元数据**，分两级：
- * - (c) 分支约定：源分支是长期 / 集成分支（main / develop / release/* 等）→ 把它合进别处即回合并 / 同步。
- *   纯元数据、零成本、零网络。
- * - (b) 提交结构（(c) 拿不准时）：PR 提交**全为 merge commit**（无原创非 merge 提交）→ 纯合并。需调用方
- *   先经 commits API 拉取提交（远端元数据，不碰本地 git）后传入。
+ * 把已评审过的分支改动同步到另一分支，无原创工作，自动预评审无意义。
  *
- * 个人仓库 / fork 贡献 PR 的源分支通常是 feature 分支、不命中 (c)，且含原创提交、不命中 (b)，故天然不误判。
+ * **判定以实际提交结构为准**：PR 提交**全为 merge commit**（无原创非 merge 提交）→ 纯合并。需调用方先经
+ * commits API 拉取提交（远端元数据，不碰本地 git）后传入；未提供 commits 则无法定论（`isBranchMerge:false`、
+ * basis `inconclusive`），绝不仅凭分支名定论。
+ *
+ * 源分支是否为长期 / 集成分支（main / develop / release/* 等）单独以 `sourceMainline` 给出——它**只是背景
+ * 信号**（疑似回合并 / 同步的线索），不单独判定是否分支合并；调用方可据此决定是否值得拉 commits 复核，并
+ * 把该信号一并交给 LLM judge 由其权衡，而非据此直接跳过。
  */
 
 const MAINLINE_EXACT = new Set(['main', 'master', 'develop', 'dev', 'trunk']);
@@ -26,22 +28,24 @@ export interface BranchMergeInput {
 }
 
 export interface BranchMergeVerdict {
+  /** 「纯分支合并」：提交全为 merge commit（无原创非 merge 提交）。仅在提供 commits 时可定论。 */
   isBranchMerge: boolean;
-  /** 判定依据：分支约定 (c) / 提交结构 (b) / 无法判断（未提供 commits 且不命中 (c)）。 */
-  basis: 'branch-convention' | 'commits' | 'inconclusive';
+  /** 判定依据：提交结构 / 未提供 commits 无法定论。 */
+  basis: 'commits' | 'inconclusive';
+  /** 源分支是否为长期 / 集成分支（背景信号，供 judge 参考，不单独定论是否分支合并）。 */
+  sourceMainline: boolean;
 }
 
 /**
- * 判定一个 PR 是否「纯分支合并」。(c) 优先（零成本）；不命中且给了 commits 才走 (b)；都不命中 → inconclusive
- * （调用方据此决定是否拉 commits 再判一次，或交给 LLM judge）。
+ * 判定一个 PR 是否「纯分支合并」。给了 commits 才能定论（全 merge commit → true）；未给则 inconclusive
+ * （调用方据 `sourceMainline` 等决定是否拉 commits 复核，或交给 LLM judge）。分支名只填 `sourceMainline`
+ * 背景信号，不参与 isBranchMerge 定论。
  */
 export function classifyBranchMerge(input: BranchMergeInput): BranchMergeVerdict {
-  if (isMainlineBranch(input.sourceBranch)) {
-    return { isBranchMerge: true, basis: 'branch-convention' };
-  }
+  const sourceMainline = isMainlineBranch(input.sourceBranch);
   if (input.commits) {
     const allMerges = input.commits.length > 0 && input.commits.every((c) => c.parents.length > 1);
-    return { isBranchMerge: allMerges, basis: 'commits' };
+    return { isBranchMerge: allMerges, basis: 'commits', sourceMainline };
   }
-  return { isBranchMerge: false, basis: 'inconclusive' };
+  return { isBranchMerge: false, basis: 'inconclusive', sourceMainline };
 }
