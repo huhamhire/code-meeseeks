@@ -35,39 +35,55 @@ def _add_cache_beta_header(kwargs: dict) -> None:
     kwargs["extra_headers"] = headers
 
 
-def _apply_chat_system_cache(kwargs: dict) -> None:
-    """编排 chat 通道为 Anthropic 缓存「全局稳定前缀」(1h)；并在任何情况下剥除缓存断点标记。
+def _apply_system_prompt_cache(kwargs: dict) -> None:
+    """为 Anthropic 给 system 的稳定前缀标 cache_control(1h 扩展 TTL)；并在任何情况下剥除 CACHE_BREAK 标记。
+    Anthropic 提示缓存按**前缀**、**服务端**生效（不依赖暖会话），跨所有 PR/运行在 1h 内命中（写入 2× 由命中摊薄）。
+    覆盖两类 Anthropic 调用：
 
-    assembleSystemContext 在全局稳定段（SOUL/AGENTS/工具/记忆/用户）与 PR/运行相关尾部之间插了 CACHE_BREAK。
-    Anthropic 提示缓存按**前缀**生效、**服务端**缓存（不依赖暖会话）：把稳定前缀单独标 cache_control(1h)，
-    则跨所有 PR/运行在 1h 内命中（写入 2× 由大量命中摊薄），尾部（每 PR 不同）保持纯文本。仅作用于编排
-    chat（MEEBOX_CHAT_CACHE 置位）；OpenAI/DeepSeek 自带自动前缀缓存、无需此标，但仍须剥除标记。
-    无断点的 system（如精简判读 system）原样放过。
+    1) 编排 chat 通道（MEEBOX_CHAT_CACHE 置位、system 含 assembleSystemContext 插入的 CACHE_BREAK）：按断点把
+       全局稳定前缀（SOUL/AGENTS/工具/记忆/用户）单独标缓存、PR/运行相关尾部保持纯文本。
+    2) pr-agent 工具 run（/review /describe /improve /ask，**无** CACHE_BREAK）：system 即 pr-agent 的指令 +
+       输出格式（约 12k 字符，仅随配置/语言/规则变、跨 PR 稳定；可变的 diff 在 user 侧），整段标缓存 → 同配置下
+       跨运行 1h 内命中。
+
+    非 Anthropic（OpenAI/DeepSeek 等）：自带自动前缀缓存、无需显式标，仅剥除 CACHE_BREAK 标记拼回纯文本；前缀
+    过小（< _CACHE_MIN_CHARS，如精简判读 system）也不标。
     """
     msgs = kwargs.get("messages")
     if not isinstance(msgs, list):
         return
     is_anthropic = (kwargs.get("model") or "").lower().startswith("anthropic/")
-    cache_on = bool(os.environ.get("MEEBOX_CHAT_CACHE"))
+    chat_cache_on = bool(os.environ.get("MEEBOX_CHAT_CACHE"))
     for m in msgs:
         if m.get("role") != "system" or not isinstance(m.get("content"), str):
             continue
         stable, variable = split_cache_break(m["content"])
-        if stable is None:
-            return  # 无断点：不缓存、原样
-        if cache_on and is_anthropic and len(stable) >= _CACHE_MIN_CHARS:
+        if stable is not None:
+            # 含 CACHE_BREAK（编排 chat）：稳定前缀标缓存、尾部纯文本
+            if chat_cache_on and is_anthropic and len(stable) >= _CACHE_MIN_CHARS:
+                m["content"] = [
+                    {
+                        "type": "text",
+                        "text": stable,
+                        "cache_control": {"type": "ephemeral", "ttl": _CACHE_TTL},
+                    },
+                    {"type": "text", "text": variable},
+                ]
+                _add_cache_beta_header(kwargs)
+            else:
+                # 非 anthropic / 未开缓存 / 前缀过小：去标记拼回纯文本（自动前缀缓存仍可命中）。
+                m["content"] = f"{stable}\n\n---\n\n{variable}"
+            return
+        # 无 CACHE_BREAK（pr-agent 工具 run）：Anthropic 把整段稳定 system 标缓存（diff 在 user 侧、不进缓存）。
+        if is_anthropic and len(m["content"]) >= _CACHE_MIN_CHARS:
             m["content"] = [
                 {
                     "type": "text",
-                    "text": stable,
+                    "text": m["content"],
                     "cache_control": {"type": "ephemeral", "ttl": _CACHE_TTL},
                 },
-                {"type": "text", "text": variable},
             ]
             _add_cache_beta_header(kwargs)
-        else:
-            # 非 anthropic / 未开缓存 / 前缀过小：去标记拼回纯文本（自动前缀缓存仍可命中）。
-            m["content"] = f"{stable}\n\n---\n\n{variable}"
         return
 
 
@@ -130,7 +146,7 @@ def patch(module) -> None:
                     kwargs["max_tokens"] = int(mt)
                 except (TypeError, ValueError):
                     _debug(f"ignore invalid MEEBOX_CHAT_MAX_TOKENS={mt!r}")
-            _apply_chat_system_cache(kwargs)
+            _apply_system_prompt_cache(kwargs)
             result = await _orig_get_completion(self, **kwargs)
             try:
                 if isinstance(result, tuple) and len(result) >= 3:
