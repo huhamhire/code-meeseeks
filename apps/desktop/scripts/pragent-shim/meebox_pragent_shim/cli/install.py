@@ -88,14 +88,19 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
             )
         text, usage = spec["parser"]((out or b"").decode("utf-8", "replace"))
         if usage:
-            # input_tokens(+cache_*) ≈ prompt（输入侧总规模），output_tokens ≈ completion（两家 usage
-            # 同字段名）。cache_read 既计入 prompt 总量、又单列上抛供 UI 拆分展示「↑总量 (cache N)」。
+            # prompt_tokens ≈ 输入侧总规模，output_tokens ≈ completion（input/output_tokens 两家同名）。
+            # 缓存字段两家约定不同：
+            #   - Anthropic(claude)：input_tokens **不含**缓存，cache_read/创建需累加进总量；
+            #     cache_read 用 cache_read_input_tokens。
+            #   - OpenAI(codex)：input_tokens **已含**缓存，cached_input_tokens 仅作命中量、不再计入总量。
             prompt_tokens = usage.get("input_tokens")
             for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
                 v = usage.get(k)
                 if isinstance(v, int):
                     prompt_tokens = (prompt_tokens or 0) + v
             cache_read = usage.get("cache_read_input_tokens")
+            if not isinstance(cache_read, int):
+                cache_read = usage.get("cached_input_tokens")  # codex/OpenAI 风格
             turns = usage.get("num_turns")
             _emit_usage_tokens(
                 prompt_tokens,
