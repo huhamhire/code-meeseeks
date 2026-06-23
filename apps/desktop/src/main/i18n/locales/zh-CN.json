@@ -6,7 +6,6 @@
       "judge": "判断是否存在需追问的重要问题",
       "judgeNone": "无重要问题，不追问",
       "judgeSevere_other": "重要，追问 {{count}} 个",
-      "parseFail": "无法解析建议，转人工复核",
       "rejectedPrefix": "拒绝：",
       "summary": "综合描述与审查发现，生成评审总结"
     },

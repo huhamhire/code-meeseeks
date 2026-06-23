@@ -126,8 +126,6 @@ export interface AgentStepLabels {
   judgeNone: string;
   /** 收尾步思考。 */
   summary: string;
-  /** 收尾建议解析失败、转人工复核的兜底理由。 */
-  parseFail: string;
   /** 规划步：工具调用被红线拒绝的结果前缀（后接具体原因）。 */
   rejectedPrefix: string;
 }
@@ -139,7 +137,6 @@ export const DEFAULT_STEP_LABELS: AgentStepLabels = {
   judgeSevere: (n) => `Important — ${String(n)} follow-up question${n === 1 ? '' : 's'}`,
   judgeNone: 'No important issues — no follow-up',
   summary: 'Synthesize the description and findings into a review summary',
-  parseFail: 'Could not parse a recommendation — routing to manual review',
   rejectedPrefix: 'Rejected: ',
 };
 
@@ -185,10 +182,9 @@ export async function runReviewMicroflow(
   return {
     steps: rec.steps,
     summary: ctx.bag.summary ?? '',
-    recommendation: ctx.bag.recommendation ?? {
-      verdict: 'manual_review',
-      reason: labels.parseFail,
-    },
+    // 兜底（收尾步未产出 recommendation）：转人工复核、不带理由——解析失败的兜底无用户价值，前端按
+    // 空 reason 隐藏灰字（与 summary-step 同口径）。
+    recommendation: ctx.bag.recommendation ?? { verdict: 'manual_review', reason: '' },
     tokenUsage: rec.usage,
   };
 }

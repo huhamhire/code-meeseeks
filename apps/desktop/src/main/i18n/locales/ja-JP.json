@@ -6,7 +6,6 @@
       "judge": "追加質問が必要な重要な問題があるか判断",
       "judgeNone": "重要な問題なし、追加質問なし",
       "judgeSevere_other": "重要、追加質問 {{count}} 件",
-      "parseFail": "提案を解析できないため、手動レビューに回します",
       "rejectedPrefix": "却下：",
       "summary": "説明とレビュー指摘を統合してレビュー要約を生成"
     },

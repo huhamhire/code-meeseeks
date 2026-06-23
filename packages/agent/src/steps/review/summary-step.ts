@@ -40,10 +40,12 @@ export class SummaryStep extends Step<ReviewStepCtx> {
       recommendation?: { verdict?: unknown; reason?: unknown };
     }>(sum.text);
     const rec = obj?.recommendation ?? obj;
+    // 判定解析失败 → 转人工复核、不带理由：该兜底对用户无价值，前端按空 reason 隐藏灰字（不再输出
+    // 「无法解析建议，转人工复核」）。模型给出的合法 manual_review 理由仍照常展示。
     const recommendation: AgentRecommendation =
       rec && isVerdict(rec.verdict)
         ? { verdict: rec.verdict, reason: typeof rec.reason === 'string' ? rec.reason : '' }
-        : { verdict: 'manual_review', reason: ctx.labels.parseFail };
+        : { verdict: 'manual_review', reason: '' };
     ctx.bag.summary = summary;
     ctx.bag.recommendation = recommendation;
     await ctx.rec.record({

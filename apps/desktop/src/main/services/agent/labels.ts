@@ -16,7 +16,6 @@ export function buildStepLabels(): AgentStepLabels {
     judgeSevere: (n) => t('agent.steps.judgeSevere', { count: n }),
     judgeNone: t('agent.steps.judgeNone'),
     summary: t('agent.steps.summary'),
-    parseFail: t('agent.steps.parseFail'),
     rejectedPrefix: t('agent.steps.rejectedPrefix'),
   };
 }
