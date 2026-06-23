@@ -254,16 +254,37 @@ export const listComments: IpcController<'diff:listComments'> = async (_event, r
 };
 
 /**
- * 拉 commits（不缓存，量少 + 进 commits 标签页才拉）。
+ * 拉 commits（不缓存，量少 + 进 commits 标签页 / 活动时间线才拉）。
+ *
+ * 平台 `/commits` 端点返回 `target..source` 全集——长期分支 / fork 同步分支历史上反复把别的分支
+ * merge 进源分支，会把大量 merge 提交与合入的他人提交一并带出，淹没本 PR 真正引入的提交。这里用本地
+ * 镜像按 first-parent 主干算出「本 PR 自产提交」SHA 集合做交集过滤（与提交数角标同口径，见
+ * {@link RepoMirrorManager.listIntroducedCommitShas}）。镜像未就位 / 算不出 → 退回未过滤的平台列表，
+ * 至少不丢信息。
  */
 export const listCommits: IpcController<'diff:listCommits'> = async (_event, req) => {
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
-  return adapter.listPullRequestCommits(
+  const remote = await adapter.listPullRequestCommits(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
   );
+  try {
+    const id = ctx.pr.repoIdentityFor(pr);
+    await ctx.pr.ensureMirrorReadyForPr(pr);
+    const base = await ctx.pr.resolveDiffBaseSha(pr);
+    const introduced = await ctx.repoMirror.listIntroducedCommitShas(id, base, pr.sourceRef.sha);
+    if (introduced === null) return remote;
+    const keep = new Set(introduced);
+    return remote.filter((c) => keep.has(c.sha));
+  } catch (err) {
+    ctx.logger.warn(
+      { err, localId: pr.localId },
+      'listCommits: first-parent filter failed; returning unfiltered platform list',
+    );
+    return remote;
+  }
 };
 
 /**
@@ -281,13 +302,15 @@ export const listActivity: IpcController<'diff:listActivity'> = async (_event, r
 };
 
 /**
- * 本地 git 算 PR 引入提交数（base=targetRef.sha 排除合入的目标提交）；镜像未齐返回 null。
+ * 本地 git 算 PR 引入提交数（base=merge-base，first-parent 主干口径，与 listCommits 过滤集一致，
+ * 排除合入的目标提交与历史 merge 带进的他人提交）；镜像未齐返回 null。
  */
 export const getCommitCount: IpcController<'diff:commitCount'> = async (_event, req) => {
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const id = ctx.pr.repoIdentityFor(pr);
-  const n = await ctx.repoMirror.countCommits(id, pr.targetRef.sha, pr.sourceRef.sha);
+  const base = await ctx.pr.resolveDiffBaseSha(pr);
+  const n = await ctx.repoMirror.countCommits(id, base, pr.sourceRef.sha);
   return n === null ? null : { count: n };
 };
 
