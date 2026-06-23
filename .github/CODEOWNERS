@@ -1,0 +1,6 @@
+# 代码所有者 / 默认评审人（Code owners / default reviewers）
+# 语法见 https://docs.github.com/articles/about-code-owners
+# 匹配规则后者覆盖前者；PR 触及对应路径时自动请求其所有者评审。
+
+# 默认：所有改动请求 @huhamhire 评审
+* @huhamhire

@@ -1,0 +1,20 @@
+name: 功能建议（Feature request）
+description: 提出新功能或改进建议
+labels: [enhancement]
+assignees:
+  - huhamhire
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 需求 / 痛点（Problem）
+      description: 你希望解决什么问题、当前有何不便。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望方案（Proposed solution）
+      description: 期望的功能形态或交互；有备选方案也可一并说明。
+    validations:
+      required: false
