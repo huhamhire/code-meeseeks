@@ -47,6 +47,7 @@
     "bulletDescribe": "auto-generate PR summary / labels",
     "bulletImprove": "line-by-line code improvement suggestions (with importance scores)",
     "bulletReview": "run an AI review; results land in the findings list",
+    "cacheInline": "cache {{n}}",
     "cancelQueuedTitle": "Cancel queued task",
     "clearConfirmLabel": "Clear",
     "clearConfirmMessage": "Clear all PR Agent run history for the current PR? This affects only this PR and cannot be undone.",
@@ -163,7 +164,9 @@
     "statusSucceeded": "Done",
     "stopAria": "Stop",
     "stopTitle": "Stop execution",
-    "tokensTitle": "Input (prompt) {{prompt}} · Output (completion) {{completion}} tokens",
+    "tokensInTitle": "Input (prompt) {{n}} tokens",
+    "tokensOutTitle": "Output (completion) {{n}} tokens",
+    "turnsTitle": "Model interaction turns (one model call per turn)",
     "unknownCommand": "Unknown command {{head}}; supported: {{cmds}}",
     "userQuestionAria": "User question",
     "waitingOutput": "(Waiting for PR Agent output…)"

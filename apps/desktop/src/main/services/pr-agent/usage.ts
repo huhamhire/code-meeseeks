@@ -8,12 +8,16 @@ export interface UsageAcc {
   completion: number;
   total: number;
   calls: number;
+  /** 累计提示缓存读取 token（cache_read），是 prompt 的一部分 */
+  cacheRead: number;
+  /** 累计模型交互轮次：CLI agentic 模式来自各次哨兵的 num_turns（一次 run 内可累加多段） */
+  turns: number;
   any: boolean;
 }
 
 /** 新建一个空 usage 累加器。 */
 export function newUsageAcc(): UsageAcc {
-  return { prompt: 0, completion: 0, total: 0, calls: 0, any: false };
+  return { prompt: 0, completion: 0, total: 0, calls: 0, cacheRead: 0, turns: 0, any: false };
 }
 
 /**
@@ -29,6 +33,8 @@ export function accumulateUsageSentinel(line: string, acc: UsageAcc): boolean {
       prompt_tokens?: number;
       completion_tokens?: number;
       total_tokens?: number;
+      cache_read_tokens?: number;
+      turns?: number;
     };
     acc.calls += 1;
     if (typeof r.prompt_tokens === 'number') {
@@ -43,6 +49,8 @@ export function accumulateUsageSentinel(line: string, acc: UsageAcc): boolean {
       acc.total += r.total_tokens;
       acc.any = true;
     }
+    if (typeof r.cache_read_tokens === 'number') acc.cacheRead += r.cache_read_tokens;
+    if (typeof r.turns === 'number') acc.turns += r.turns;
   } catch {
     // 坏哨兵行：仍吞掉，不计数
   }
@@ -58,6 +66,9 @@ export function finalizeUsage(acc: UsageAcc): TokenUsage | undefined {
     // 优先各次 total 累加；个别次缺 total 时用 prompt+completion 兜底
     totalTokens: acc.total || acc.prompt + acc.completion,
     calls: acc.calls,
+    // cache_read 无命中（0）则不带；turns 优先 CLI 上报的轮次，缺失回退为调用次数
+    cacheReadTokens: acc.cacheRead || undefined,
+    turns: acc.turns || acc.calls,
   };
 }
 

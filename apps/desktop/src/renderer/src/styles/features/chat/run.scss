@@ -146,9 +146,21 @@
 // 中性胶囊：模型 / token 用量 / 耗时共用 chat-chip + chat-chip-quiet + chat-chip-neutral；
 // 各自只补字体差异（下方 mono / 截断）。
 .chat-run-tokens,
+.chat-run-turns,
 .chat-run-duration {
   font-family: $font-mono;
   font-variant-numeric: tabular-nums;
+}
+// 轮次胶囊：循环箭头图标 + 次数，图标与数字对齐
+.chat-run-turns {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+// 输入 / 输出各自一组（箭头 + 数字[+ 缓存]）：独立 hover 提示的悬浮目标，内部行内对齐
+.chat-token-grp {
+  display: inline-flex;
+  align-items: center;
 }
 // token 用量箭头：↑输入(绿) / ↓输出(红)，run 卡片与思考步骤共用
 .chat-token-in {
@@ -156,6 +168,17 @@
 }
 .chat-token-out {
   color: $color-token-out;
+}
+// cache_read 拆分（↑总量 后的缓存命中量）：与输入数字拉开间隔，数字同色、柱体图标浅蓝并与数字对齐
+.chat-token-cache {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 5px;
+
+  svg {
+    color: $color-token-cache;
+  }
 }
 // 模型名可能很长：单行截断 + 省略号，避免一个 chip 撑爆整行
 .chat-run-model {

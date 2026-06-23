@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
-import { RetryIcon, ShareIcon, TrashIcon } from '../../../common';
+import { RepeatIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
 import { orderFindings } from '../utils/findings';
-import { formatStartTime, formatTokens, runStatusLabel } from '../utils/format';
+import { formatStartTime, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
-import { AnsiPre, AskQuestion, BreakablePath } from './shared';
+import { AnsiPre, AskQuestion, BreakablePath, TokenStat } from './shared';
 import { FindingCard } from './FindingCard';
 
 function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
@@ -18,6 +18,8 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
         prompt: run.tokenUsage.promptTokens,
         completion: run.tokenUsage.completionTokens,
         total: run.tokenUsage.totalTokens,
+        cacheRead: run.tokenUsage.cacheReadTokens,
+        turns: run.tokenUsage.turns,
       }
     : run.stdout
       ? extractTokenUsage(run.stdout)
@@ -38,28 +40,24 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
           {run.model}
         </span>
       )}
-      {/* 只分别展示输入(↑prompt,绿) / 输出(↓completion,红)，不显示总数。旧 run 可能只有 prompt */}
+      {/* 输入(↑绿)[⛁缓存]/输出(↓红)：输入输出各自独立 hover；缓存为输入一部分、无命中不显示。旧 run 可能只有 prompt */}
       {usage.prompt !== undefined || usage.completion !== undefined ? (
+        <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-tokens">
+          <TokenStat
+            prompt={usage.prompt}
+            completion={usage.completion}
+            cacheRead={usage.cacheRead}
+          />
+        </span>
+      ) : null}
+      {/* 模型交互轮次：循环箭头图标 + 次数（取代「N 轮」文案，省空间 / 免复数）；仅多轮(agentic) 时展示 */}
+      {usage.turns !== undefined && usage.turns > 1 ? (
         <span
-          className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-tokens"
-          title={t('chatPane.tokensTitle', {
-            prompt: usage.prompt ?? '—',
-            completion: usage.completion ?? '—',
-          })}
+          className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-turns"
+          title={t('chatPane.turnsTitle')}
         >
-          {usage.prompt !== undefined && (
-            <>
-              <span className="chat-token-in">↑</span>
-              {formatTokens(usage.prompt)}
-            </>
-          )}
-          {usage.prompt !== undefined && usage.completion !== undefined ? ' / ' : ''}
-          {usage.completion !== undefined && (
-            <>
-              <span className="chat-token-out">↓</span>
-              {formatTokens(usage.completion)}
-            </>
-          )}
+          <RepeatIcon />
+          {usage.turns}
         </span>
       ) : null}
       <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-duration">

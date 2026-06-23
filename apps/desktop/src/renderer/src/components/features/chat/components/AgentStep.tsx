@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentStep } from '@meebox/shared';
 import { RobotIcon } from '../../../common';
-import { formatElapsed, formatTokens } from '../utils/format';
-import { Spinner } from './shared';
+import { formatElapsed } from '../utils/format';
+import { Spinner, TokenStat } from './shared';
 
 /**
  * 内联思考步骤（类 Claude Code「先思考→定步骤→执行步骤」）：穿插在时间线里、排在所选工具的 run
@@ -33,31 +33,17 @@ export function AgentStepRow({ step }: { step: AgentStep }) {
         )}
         {headText && <span>{headText}</span>}
         {/* 本步**单独**的 token 用量（不累计）：judge / 总结 / 规划等经独立 LLM 通道的推理步带值；
-            与 run 卡片同款 ↑输入(绿) / ↓输出(红) 计法，靠行尾对齐。describe/review/ask 的开销在各自 run 卡片上。 */}
+            与 run 卡片同款 ↑输入(绿)[⛁缓存]/↓输出(红)，输入输出各自独立 hover、靠行尾对齐。
+            describe/review/ask 的开销在各自 run 卡片上。 */}
         {step.usage &&
         (step.usage.promptTokens !== undefined || step.usage.completionTokens !== undefined) ? (
-          <span
-            className="chat-agent-step-tokens"
-            title={t('chatPane.tokensTitle', {
-              prompt: step.usage.promptTokens ?? '—',
-              completion: step.usage.completionTokens ?? '—',
-            })}
-          >
-            {step.usage.promptTokens !== undefined && (
-              <>
-                <span className="chat-token-in">↑</span>
-                {formatTokens(step.usage.promptTokens)}
-              </>
-            )}
-            {step.usage.promptTokens !== undefined && step.usage.completionTokens !== undefined
-              ? ' '
-              : ''}
-            {step.usage.completionTokens !== undefined && (
-              <>
-                <span className="chat-token-out">↓</span>
-                {formatTokens(step.usage.completionTokens)}
-              </>
-            )}
+          <span className="chat-agent-step-tokens">
+            <TokenStat
+              prompt={step.usage.promptTokens}
+              completion={step.usage.completionTokens}
+              cacheRead={step.usage.cacheReadTokens}
+              separator=" "
+            />
           </span>
         ) : null}
       </div>

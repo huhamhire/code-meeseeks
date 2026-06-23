@@ -47,6 +47,7 @@
     "bulletDescribe": "PR の概要 / ラベルを自動生成",
     "bulletImprove": "行単位のコード改善提案（重要度スコア付き）",
     "bulletReview": "AI レビューを実行し、結果は 指摘リストに表示されます",
+    "cacheInline": "キャッシュ {{n}}",
     "cancelQueuedTitle": "待機中のタスクをキャンセル",
     "clearConfirmLabel": "クリア",
     "clearConfirmMessage": "現在の PR の PR Agent 実行履歴をすべてクリアしますか？ この PR にのみ影響し、元に戻せません。",
@@ -163,7 +164,9 @@
     "statusSucceeded": "完了",
     "stopAria": "停止",
     "stopTitle": "実行を停止",
-    "tokensTitle": "入力(prompt) {{prompt}} · 出力(completion) {{completion}} トークン",
+    "tokensInTitle": "入力(prompt) {{n}} トークン",
+    "tokensOutTitle": "出力(completion) {{n}} トークン",
+    "turnsTitle": "モデルとのやり取りの回数（1 回につきモデル呼び出し 1 回）",
     "unknownCommand": "不明なコマンド {{head}}。サポート対象：{{cmds}}",
     "userQuestionAria": "ユーザーの質問",
     "waitingOutput": "(PR Agent の出力を待機中…)"

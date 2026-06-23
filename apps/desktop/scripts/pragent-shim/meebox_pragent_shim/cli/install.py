@@ -88,13 +88,21 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
             )
         text, usage = spec["parser"]((out or b"").decode("utf-8", "replace"))
         if usage:
-            # input_tokens(+cache_*) ≈ prompt，output_tokens ≈ completion（两家 usage 同字段名）
+            # input_tokens(+cache_*) ≈ prompt（输入侧总规模），output_tokens ≈ completion（两家 usage
+            # 同字段名）。cache_read 既计入 prompt 总量、又单列上抛供 UI 拆分展示「↑总量 (cache N)」。
             prompt_tokens = usage.get("input_tokens")
             for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
                 v = usage.get(k)
                 if isinstance(v, int):
                     prompt_tokens = (prompt_tokens or 0) + v
-            _emit_usage_tokens(prompt_tokens, usage.get("output_tokens"))
+            cache_read = usage.get("cache_read_input_tokens")
+            turns = usage.get("num_turns")
+            _emit_usage_tokens(
+                prompt_tokens,
+                usage.get("output_tokens"),
+                cache_read_tokens=cache_read if isinstance(cache_read, int) else None,
+                turns=turns if isinstance(turns, int) else None,
+            )
         return text, "stop"
 
     handler_cls.chat_completion = chat_completion

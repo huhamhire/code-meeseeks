@@ -48,6 +48,7 @@ $color-danger-strong:      #e8512e;
 $color-danger-strong-fade: rgba(232, 81, 46, 0.12); // ghost 危险按钮 hover 浅红底
 $color-token-in:       #22c55e; // token 用量 ↑输入 (Tailwind green-500)
 $color-token-out:      #ef4444; // token 用量 ↓输出 (Tailwind red-500)
+$color-token-cache:    #6cb6ff; // token 用量 缓存命中(cache_read) 柱体图标，浅蓝
 
 // 语义色浅底 (chip / banner 背景，与对应主色同色相；chat 卡片大量复用)
 $color-accent-bg-hover:    rgba(14, 99, 156, 0.28);  // 蓝调 chip hover 加深 (rule-chip)
