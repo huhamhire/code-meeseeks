@@ -74,6 +74,7 @@
 
 ### Fixed
 
+- 复评 `/ask` 取代裁决的「改进建议」改为可直接发布的评论本身：此前 `<suggestions>` 常被写成「建议将原评论替换为…/请确认…」这类**关于评论的元讨论**（还出现「原评论」概念），无法被评审者直接采用。现提示词要求 `replace` 裁决下 `<suggestions>` **只包含替代评论本身**——以标准 review 评论的口吻直接针对代码、按问题 → 影响 → 建议分段、可原样发布，不提「原评论 / 替换 / 请确认」等元信息；被取代的原评论仍按 `replace`/`drop` 裁决自动关闭。
 - CLI 模式 `/ask` 在「仓库自带 agent 指令文件被纳入版本管理」时整体失败：为防 CLI 子进程自动加载污染回答，`/ask` 会截断 worktree 内的 `CLAUDE.md` / `AGENTS.md` / `.cursor` 规则等；若这些文件被仓库跟踪，截断即让工作区变「脏」，触发 pr-agent `LocalGitProvider._prepare_repo` 的「repository is not in a clean state」守卫 → 取 git provider 阶段就崩、不写 `review.md`、`/ask` 失败（无此类跟踪文件的仓库不受影响）。修复：shim 覆写 `_prepare_repo` 去掉脏检查、仅保留「目标分支存在」校验——diff 取自分支提交（与工作区脏无关），该守卫对这套一次性受控 worktree 是误报。
 - 失败 / 取消的任务不再做结构化采集：`/ask`（及其它工具）run 失败（含 exit 0 但 LLM 调用失败）或被取消时，此前仍会把部分 / 报错输出解析成 finding 卡，易产出无意义的结构化元素。现失败 / 取消路径**不解析 findings**，只保留原始输出（stdout/stderr）供展示；复评 `/ask` 失败时也不触发自动关闭 / 建议提升。
 - `/ask` 的结构化分段 / 引用上下文 / 复评裁决指令此前对模型无效：pr-agent 的 `pr_questions` 提示词模板**不渲染 `extra_instructions`**（与 `/describe`、`/review`、`/improve` 不同），我们经 `PR_QUESTIONS__EXTRA_INSTRUCTIONS` 注入的这些指令对 `/ask` 是死字段、被静默丢弃，导致结构化输出 / 复评取代评论的代码定位时有时无。现 `/ask` 的这些指令改为拼进「问题」本身（user turn，唯一真正到达模型的文本，与语言后缀同路）；问题回显（含字面 `<summary>` / `<verdict>` 示例标签）按 pr-agent 固定的 `### **Answer:**` 表头整段切除，避免污染结构化解析。
