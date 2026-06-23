@@ -107,8 +107,11 @@
     "rawOutput": "Rohausgabe ({{n}} chars)",
     "reference": {
       "clearTitle": "Referenz entfernen",
+      "closedDropped": "Durch Nachprüfung geschlossen",
+      "closedReplaced": "Durch Nachprüfung ersetzt",
       "reference": "Referenzieren",
-      "referenceTitle": "Diesen Kommentar referenzieren, um eine Nachprüfung zu starten"
+      "referenceTitle": "Diesen Kommentar referenzieren, um eine Nachprüfung zu starten",
+      "viewAsk": "Nachprüfung anzeigen"
     },
     "reject": "Ablehnen",
     "rejectFindingTitle": "Diesen Vorschlag ablehnen (wird nicht an Remote gesendet)",

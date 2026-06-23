@@ -107,8 +107,11 @@
     "rawOutput": "生出力 ({{n}} chars)",
     "reference": {
       "clearTitle": "参照を解除",
+      "closedDropped": "再レビューで閉じました",
+      "closedReplaced": "再レビューで置き換え",
       "reference": "参照",
-      "referenceTitle": "このコメントを参照して再レビューを開始"
+      "referenceTitle": "このコメントを参照して再レビューを開始",
+      "viewAsk": "再レビューを表示"
     },
     "reject": "却下",
     "rejectFindingTitle": "この提案を却下（リモートには投稿されません）",

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Finding, ReviewDraft, ReviewRun } from '@meebox/shared';
+import type { Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
 import { RetryIcon, ShareIcon, TrashIcon } from '../../../common';
 import { orderFindings } from '../utils/findings';
 import { formatStartTime, formatTokens, runStatusLabel } from '../utils/format';
@@ -93,6 +93,7 @@ export function RunResultView({
   onDelete,
   canRetry,
   drafts,
+  closures,
   onJumpToDraft,
   onRejectFinding,
   onNavigateToFinding,
@@ -107,6 +108,8 @@ export function RunResultView({
   canRetry: boolean;
   /** 本 PR 当前草稿池快照；FindingCard 据此显示 status chip + 决定 reject 行为 */
   drafts: ReadonlyArray<ReviewDraft>;
+  /** 本 PR 的 finding 关闭关系快照（只读）；据 (run.id,finding.id) 反查复评关闭态，标注只读 chip。 */
+  closures: ReadonlyArray<FindingClosure>;
   /** 点击 finding card 上"→ 跳到代码编辑"时触发。父组件做懒创建 + 跳转 */
   onJumpToDraft: (finding: Finding, run: ReviewRun) => void;
   /** 拒绝某条 finding：创建 / 更新草稿到 status='rejected' */
@@ -231,6 +234,8 @@ export function RunResultView({
                   d.source.runId === run.id &&
                   d.source.findingId === f.id,
               );
+              // 复评关闭态（只读）：该 finding 被复评 /ask 裁决 replace/drop 自动关闭时反查到。
+              const closure = closures.find((c) => c.runId === run.id && c.findingId === f.id);
               // 「引用」仅对可锚定的 code 类 finding（review/improve）提供——它们才是可被复评的代码评论。
               const canReference =
                 (f.sectionKey === 'code-feedback' || f.sectionKey === 'code-suggestion') &&
@@ -240,10 +245,12 @@ export function RunResultView({
                   key={f.id}
                   finding={f}
                   relatedDraft={relatedDraft}
+                  closure={closure}
                   onJump={() => onJumpToDraft(f, run)}
                   onReject={() => onRejectFinding(f, run)}
                   onNavigate={() => onNavigateToFinding(f)}
                   onReference={canReference ? () => onReferenceFinding(f, run) : undefined}
+                  onViewAsk={closure ? () => onScrollToRun(closure.byAskRunId) : undefined}
                 />
               );
             })}

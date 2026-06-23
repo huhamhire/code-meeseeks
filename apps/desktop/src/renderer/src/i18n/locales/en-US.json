@@ -107,8 +107,11 @@
     "rawOutput": "Raw output ({{n}} chars)",
     "reference": {
       "clearTitle": "Remove reference",
+      "closedDropped": "Closed by re-review",
+      "closedReplaced": "Superseded by re-review",
       "reference": "Reference",
-      "referenceTitle": "Reference this comment to start a re-review"
+      "referenceTitle": "Reference this comment to start a re-review",
+      "viewAsk": "View re-review"
     },
     "reject": "Reject",
     "rejectFindingTitle": "Reject this suggestion (will not be posted to remote)",
