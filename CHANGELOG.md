@@ -5,9 +5,9 @@
 
 ## [Unreleased]
 
-## [0.6.0-alpha.1] - 2026-06-23
+## [0.6.0] - 2026-06-23
 
-> 0.6 的首个开发期预览版。本版重点：
+> 首个 0.6 正式版。本版重点：
 >
 > - **`/ask` 复评闭环**：对评审建议发起复评、自动取代 / 关闭原评论
 > - **`/ask` 结构化分段输出**与**完整文件上下文**
@@ -116,7 +116,7 @@
 > - **连接 Base URL 放宽**
 > - **Windows 升级安装健壮性**（per-machine 提权 + 绕过旧卸载器）
 >
-> ⚠️ **Windows 安装说明**：本版为 per-machine 安装（所有用户 / Program Files），安装器双击即弹 UAC 提权运行；从旧版升级会自动清理旧安装，无需手动卸载。
+> ⚠️ **Windows 安装说明**：本版为 **per-machine 安装**（所有用户 / Program Files），安装器双击即弹 UAC 提权运行；安装后的应用以普通权限启动。从旧版升级会自动清理旧安装，无需手动卸载。
 
 ### Added
 
@@ -154,7 +154,7 @@
 > - `/improve` 与 `/describe` 思路建议段等 pr-agent 能力扩展
 > - 修复首启同步、子进程树清理与安装 / 升级健壮性
 >
-> ⚠️ **Windows 用户升级注意**：若已安装早期版本（含 `0.3.0-alpha.1` 及更早），升级前请**先手动卸载旧版**再运行新安装器，否则覆盖安装可能卡住或弹出「无法关闭」。本版起不再写入大量 `.pyc` 缓存文件，之后的升级可正常覆盖、无需手动卸载。
+> ⚠️ **Windows 用户升级注意**：若已安装**早期版本**（含 `0.3.0-alpha.1` 及更早），升级到本版前请**先手动卸载旧版**（设置 → 应用 → Code Meeseeks → 卸载，或安装目录下的 `Uninstall Code Meeseeks.exe`），完成后再运行新安装器；否则覆盖安装可能长时间卡住或弹出「Code Meeseeks 无法关闭」。原因：早期版本运行时会在安装目录写入上万个 Python 字节码（`.pyc`）缓存文件，使覆盖升级时「卸载旧版」一步需逐个删除海量小文件、极慢甚至卡死。本版起运行时不再写入这些缓存，**之后的升级可正常覆盖、无需手动卸载**。
 
 ### Added
 
@@ -269,8 +269,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0-alpha.1...HEAD
-[0.6.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0-alpha.1
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.0...v0.3.1
