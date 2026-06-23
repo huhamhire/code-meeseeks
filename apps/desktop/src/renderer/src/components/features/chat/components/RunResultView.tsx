@@ -181,7 +181,7 @@ export function RunResultView({
             if (e.currentTarget.open !== showRawStdout) setShowRawStdout(e.currentTarget.open);
           }}
         >
-          <summary>{t('chatPane.rawOutput', { n: stdout.length })}</summary>
+          <summary>{t('chatPane.rawOutput')}</summary>
           <AnsiPre className="chat-run-stdout" text={stdout} />
         </details>
       )}

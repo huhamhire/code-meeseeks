@@ -104,7 +104,7 @@
     "placeholderReady": "Geben Sie eine Frage ein oder verwenden Sie /, um einen Befehl zu wählen (↑↓ für Verlauf)",
     "planTitle": "Plan",
     "queuedPosition": "Eingereiht · Position {{position}}",
-    "rawOutput": "Rohausgabe ({{n}} chars)",
+    "rawOutput": "Rohausgabe",
     "reference": {
       "clearTitle": "Referenz entfernen",
       "closedDropped": "Durch Nachprüfung geschlossen",

@@ -104,7 +104,7 @@
     "placeholderReady": "Type a question, or use / to pick a command (↑↓ for history)",
     "planTitle": "Plan",
     "queuedPosition": "Queued · position {{position}}",
-    "rawOutput": "Raw output ({{n}} chars)",
+    "rawOutput": "Raw output",
     "reference": {
       "clearTitle": "Remove reference",
       "closedDropped": "Closed by re-review",

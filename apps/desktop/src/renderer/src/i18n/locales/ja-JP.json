@@ -104,7 +104,7 @@
     "placeholderReady": "質問を入力するか、/ でコマンドを選択（↑↓ で履歴）",
     "planTitle": "計画",
     "queuedPosition": "待機中 · {{position}} 番目",
-    "rawOutput": "生出力 ({{n}} chars)",
+    "rawOutput": "生出力",
     "reference": {
       "clearTitle": "参照を解除",
       "closedDropped": "再レビューで閉じました",
