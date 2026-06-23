@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
 import type { TFunction } from 'i18next';
-import type { DiffHunkRange, PlatformKind, PrComment, ReviewDraft } from '@meebox/shared';
+import type { DiffHunkRange, PlatformKind, ReviewDraft } from '@meebox/shared';
 import { policyForPlatform } from '@meebox/shared';
 import type { DiffChangedFile } from '@meebox/ipc';
 import { invoke } from '../../../../../../api';
@@ -9,8 +9,9 @@ import type { LoadedContent } from '../diff-types';
 
 /**
  * 行 hover '+' 新建 manual 草稿：modifiedEditor (head 侧) + 并排视图下 originalEditor (base 侧)
- * 上加 mousemove + mousedown 监听。已有评论 / 草稿的行不重复出 + glyph。点击 → drafts:create +
- * autoEdit 立即进入编辑。
+ * 上加 mousemove + mousedown 监听。**已有评论的行仍可继续追加**（hover 照常出 +，新草稿 zone 挂在评论
+ * zone 之下、按时间序在已有评论下方）；仅「已有未发布草稿」的行不重复出 +（避免同行两个编辑器）。点击 →
+ * drafts:create + autoEdit 立即进入编辑。
  *
  * Platform policy 过滤：Bitbucket 只允许 hunk 内的行加 inline comment；GitHub/GitLab 宽松。从
  * diffEditor.getLineChanges() 拿 hunks，不允许的行不画 glyph、点击也不创建草稿。commit 只读视图
@@ -21,7 +22,6 @@ export function useLineCommentAdder(opts: {
   content: LoadedContent | null;
   selected: DiffChangedFile | null;
   drafts: readonly ReviewDraft[] | null;
-  comments: PrComment[];
   prLocalId: string;
   platform: PlatformKind;
   scopeKind: 'all' | 'commit';
@@ -34,7 +34,6 @@ export function useLineCommentAdder(opts: {
     content,
     selected,
     drafts,
-    comments,
     prLocalId,
     platform,
     scopeKind,
@@ -49,13 +48,10 @@ export function useLineCommentAdder(opts: {
     if (scopeKind !== 'all') return;
     const modifiedEditor = diffEditor.getModifiedEditor();
     const originalEditor = diffEditor.getOriginalEditor();
-    // 已有评论 / 草稿占用的行，按侧分别记（避免在这些行额外显示 +）
+    // 仅「已有未发布草稿」的行算占用、不重复出 +（避免同行两个编辑器）；已有远端评论的行不算占用——
+    // 允许继续追加新评论（新草稿 zone 会挂在评论 zone 之下，按时间序展示在已有评论下方）。
     const occupiedNew = new Set<number>();
     const occupiedOld = new Set<number>();
-    for (const c of comments) {
-      if (!c.anchor) continue;
-      (c.anchor.side === 'old' ? occupiedOld : occupiedNew).add(c.anchor.line);
-    }
     for (const d of drafts ?? []) {
       if (d.status === 'rejected') continue;
       // 跟 zone 创建时一致用 startLine — 之前用 endLine 会让 hover '+' 把行 403
@@ -208,7 +204,6 @@ export function useLineCommentAdder(opts: {
     content,
     selected,
     drafts,
-    comments,
     prLocalId,
     platform,
     t,
