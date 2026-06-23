@@ -213,13 +213,22 @@ export function ChatPane({
   const { runs, error, loadingSession, matchedRule, bodyRef, hasMoreOlder, loadingOlder } = session;
 
   // 复评卡 ↔ 原 finding 卡互链：按 data-run-id 在时间线里滚动定位 + 短暂高亮。
-  const scrollToRun = (runId: string): void => {
-    const root = bodyRef.current;
-    const el = root?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
-    if (!el) return;
+  const flash = (el: Element): void => {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el.classList.add('chat-run-flash');
     window.setTimeout(() => el.classList.remove('chat-run-flash'), 1500);
+  };
+  const scrollToRun = (runId: string): void => {
+    const el = bodyRef.current?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
+    if (el) flash(el);
+  };
+  // 点击复评卡顶部引用徽标：精确定位到原 run 内被引用的那条 finding 卡片并闪烁高亮（找不到该卡片——
+  // 如已分页移出 / 折叠——回退到整条 run 高亮，至少给出定位反馈）。
+  const scrollToFinding = (runId: string, findingId: string): void => {
+    const runEl = bodyRef.current?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
+    if (!runEl) return;
+    const el = runEl.querySelector(`[data-finding-id="${CSS.escape(findingId)}"]`) ?? runEl;
+    flash(el);
   };
 
   return (
@@ -320,6 +329,7 @@ export function ChatPane({
                 onNavigateToFinding={actions.handleNavigateToFinding}
                 onReferenceFinding={onReferenceFinding}
                 onScrollToRun={scrollToRun}
+                onScrollToFinding={scrollToFinding}
               />
             </div>
           ) : entry.active ? (

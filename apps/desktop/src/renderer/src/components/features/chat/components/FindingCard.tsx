@@ -248,6 +248,8 @@ export function FindingCard({
     : undefined;
   return (
     <li
+      // data-finding-id：供复评卡顶部引用徽标点击后在原 run 内精确定位到这条原 finding 卡片并闪烁高亮。
+      data-finding-id={finding.id}
       className={`chat-finding chat-finding-${key}${isRejected || isClosed ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
     >
       <header className="chat-finding-head">

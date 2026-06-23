@@ -99,6 +99,7 @@ export function RunResultView({
   onNavigateToFinding,
   onReferenceFinding,
   onScrollToRun,
+  onScrollToFinding,
 }: {
   run: ReviewRun;
   onRetry: (run: ReviewRun) => void;
@@ -118,8 +119,10 @@ export function RunResultView({
   onNavigateToFinding: (finding: Finding) => void;
   /** 「引用」一条 code finding 发起复评 /ask（挂到输入栏）。 */
   onReferenceFinding: (finding: Finding, run: ReviewRun) => void;
-  /** 滚动定位到指定 run 卡片（复评卡顶部引用徽标 → 原 finding 卡）。 */
+  /** 滚动定位到指定 run 卡片（复评关闭态「查看复评」→ 关闭它的 ask run）。 */
   onScrollToRun: (runId: string) => void;
+  /** 滚动定位到指定 run 内的某条 finding 卡片并闪烁高亮（复评卡顶部引用徽标 → 原 finding 卡）。 */
+  onScrollToFinding: (runId: string, findingId: string) => void;
 }) {
   const { t } = useTranslation();
   const findings = run.findings ?? [];
@@ -143,7 +146,9 @@ export function RunResultView({
         <button
           type="button"
           className="chat-run-ref-badge"
-          onClick={() => onScrollToRun(run.referencedFinding!.runId)}
+          onClick={() =>
+            onScrollToFinding(run.referencedFinding!.runId, run.referencedFinding!.findingId)
+          }
           title={run.referencedFinding.anchor?.path}
         >
           <ShareIcon size={12} />
