@@ -62,6 +62,40 @@
     opacity: 0.68;
   }
 }
+
+// 点击复评引用徽标定位到原 finding 卡片时的短暂高亮：用「覆盖式高亮环 + inset 淡色填充」而非背景渐隐
+// ——finding 卡有实底 $bg-elev，背景渐隐会被洗掉看不出闪烁；覆盖式与卡片底色无关、任意底色都清晰可见，
+// 动画结束自动回落（fill-mode 默认 none）。启用卡用主蓝、已关闭/拒绝卡用中性灰，色相区分两类状态。
+.chat-finding-flash {
+  animation: chat-finding-flash-kf 1.5s ease-out;
+}
+@keyframes chat-finding-flash-kf {
+  0% {
+    box-shadow:
+      0 0 0 2px $color-accent,
+      inset 0 0 0 9999px $color-accent-bg-fade;
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px transparent,
+      inset 0 0 0 9999px transparent;
+  }
+}
+.chat-finding-rejected.chat-finding-flash {
+  animation-name: chat-finding-flash-closed-kf;
+}
+@keyframes chat-finding-flash-closed-kf {
+  0% {
+    box-shadow:
+      0 0 0 2px $text-muted,
+      inset 0 0 0 9999px rgba($text-muted, 0.18);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px transparent,
+      inset 0 0 0 9999px transparent;
+  }
+}
 .chat-finding-head {
   display: flex;
   align-items: center;
