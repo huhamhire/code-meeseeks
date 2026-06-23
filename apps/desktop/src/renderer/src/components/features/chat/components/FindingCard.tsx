@@ -21,7 +21,12 @@ import {
   stripEffortScoreNumber,
   stripFindingMarker,
 } from '../utils/findings';
-import { BreakablePath, MdInline } from './shared';
+import { BreakablePath, MdInline, withInlineSummary } from './shared';
+
+// 折叠标题（<details><summary>）支持内联 markdown：思路建议各方案标题里的 `代码` / **强调** 等生效。
+// 预算在模块级，避免每次渲染重建 components 对象。
+const DEFAULT_MD_COMPONENTS = withInlineSummary(mermaidComponents);
+const WALKTHROUGH_MD_COMPONENTS = withInlineSummary(walkthroughMdComponents);
 
 // chip 配色 tone → chat-chip-<tone>（色板见 styles/features/chat/chip.scss）。
 // finding 类别：元信息/图/工作量→accent，内容/测试/安全→approved，代码反馈/建议→warning，评分/兜底→neutral。
@@ -379,7 +384,8 @@ export function FindingCard({
                   remarkPlugins={[remarkGfm, remarkBreaks]}
                   rehypePlugins={REMOTE_REHYPE_PLUGINS}
                   // 「文件变更」walkthrough 用去掉 <details open> 的覆盖，使各文件分类默认折叠收起。
-                  components={key === 'walkthrough' ? walkthroughMdComponents : mermaidComponents}
+                  // 两套均叠加「<summary> 内联 markdown」（折叠标题支持 `代码` 等预格式化）。
+                  components={key === 'walkthrough' ? WALKTHROUGH_MD_COMPONENTS : DEFAULT_MD_COMPONENTS}
                 >
                   {translatedBody}
                 </ReactMarkdown>

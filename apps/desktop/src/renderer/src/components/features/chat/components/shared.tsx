@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { QuestionIcon, mermaidComponents } from '../../../common';
@@ -49,6 +49,32 @@ export function MdInline({ children }: { children: string }) {
       {inlineSafe}
     </ReactMarkdown>
   );
+}
+
+/**
+ * `<summary>` 内联 markdown 渲染：raw HTML 的折叠标题（如「思路建议」各方案的 <details><summary>）内的
+ * 文本不会被 markdown 二次解析，反引号 / 强调等会原样漏出。这里把其纯文本走 {@link MdInline}，让标题里的
+ * `代码` / **强调** 生效。children 多为纯文本串；含非文本节点时原样渲染兜底。
+ */
+const SummaryInlineMd: Components['summary'] = ({ children }) => {
+  const text =
+    typeof children === 'string'
+      ? children
+      : Array.isArray(children) && children.every((c) => typeof c === 'string')
+        ? children.join('')
+        : null;
+  return text != null ? (
+    <summary>
+      <MdInline>{text}</MdInline>
+    </summary>
+  ) : (
+    <summary>{children}</summary>
+  );
+};
+
+/** 在给定 markdown components 之上叠加「<summary> 内联 markdown」渲染（折叠标题支持 md 预格式化）。 */
+export function withInlineSummary(base: Components): Components {
+  return { ...base, summary: SummaryInlineMd };
 }
 
 /**
