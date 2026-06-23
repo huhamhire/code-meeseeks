@@ -32,6 +32,14 @@ export interface PrServiceDeps {
  * 应以实例方法形式调用（勿解构方法，否则丢失 this 绑定）。
  */
 export class PrService {
+  /**
+   * 按 localId 索引正在跑的 resolveDiffBaseSha。打开 PR 时 listChangedFiles / getFileContent /
+   * getBlame / listCommits / getCommitCount 等多个 handler 会并发解析同一 PR 的 diff-base：去重后
+   * 只算一次 merge-base、只写一次 diff-base.json，避免对同一 key 的并发写（Windows 上会触发 rename
+   * EPERM，见 JsonFileStateStore 自愈）。
+   */
+  private readonly diffBaseInFlight = new Map<string, Promise<string>>();
+
   constructor(private readonly deps: PrServiceDeps) {}
 
   /** 按 localId 在状态库定位 PR，找不到抛错（统一错误文案）。 */
@@ -117,6 +125,17 @@ export class PrService {
    * 前置：mirror 已含 head + targetRef.sha（diff 入口已 ensureMirrorReadyForPr / syncMirror）。
    */
   async resolveDiffBaseSha(pr: StoredPullRequest): Promise<string> {
+    // 并发去重：同一 PR 的多路并发解析复用同一 in-flight Promise，只算一次、只写一次 diff-base.json。
+    const existing = this.diffBaseInFlight.get(pr.localId);
+    if (existing) return existing;
+    const promise = this.computeDiffBaseSha(pr).finally(() => {
+      this.diffBaseInFlight.delete(pr.localId);
+    });
+    this.diffBaseInFlight.set(pr.localId, promise);
+    return promise;
+  }
+
+  private async computeDiffBaseSha(pr: StoredPullRequest): Promise<string> {
     const id = this.repoIdentityFor(pr);
     const head = pr.sourceRef.sha;
     const cached = await readDiffBaseCache(this.deps.stateStore, pr.localId);
