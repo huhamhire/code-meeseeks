@@ -126,6 +126,28 @@
 .chat-finding-head-toggle {
   cursor: pointer;
 }
+// 折叠/展开高度动画：grid-template-rows 0fr↔1fr（可对 auto 高度做过渡）。内容始终挂载，inner
+// overflow:hidden + min-height:0 在收起时裁切——故收/展是平滑的高度过渡。仅可折叠卡会切到
+// collapsed → 0fr；其余卡恒 1fr、无动画。
+.chat-finding-collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s ease;
+}
+.chat-finding-collapsed .chat-finding-collapsible {
+  grid-template-rows: 0fr;
+}
+.chat-finding-collapsible-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+// 尊重系统「减少动效」：关掉高度过渡与 chevron 旋转过渡。
+@media (prefers-reduced-motion: reduce) {
+  .chat-finding-collapsible,
+  .chat-finding-collapse-toggle svg {
+    transition: none;
+  }
+}
 // 分析解读（ask-analysis）展开时：chip 行下加一条分割线，与下方富文本内容（表格 / 代码块）衔接更自然，
 // 避免头部 chip 直接贴正文显得突兀。仅展开态（无 chat-finding-collapsed）出现。
 .chat-finding-ask-analysis:not(.chat-finding-collapsed) .chat-finding-head {
