@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next';
 import type { CSSProperties, ReactNode } from 'react';
 import { CloseIcon } from './icons';
 
-type ModalSize = 'md' | 'sm' | 'confirm';
+type ModalSize = 'lg' | 'md' | 'sm' | 'confirm';
 
 const SIZE_CLASS: Record<ModalSize, string> = {
+  lg: 'modal modal-lg',
   md: 'modal',
   sm: 'modal modal-sm',
   confirm: 'modal modal-confirm',

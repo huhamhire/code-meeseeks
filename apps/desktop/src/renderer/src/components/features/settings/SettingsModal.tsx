@@ -1,6 +1,14 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppInfo, AppPaths, Config, SupportedLanguage } from '@meebox/shared';
-import { ConfirmModal, Modal } from '../../common';
+import {
+  ConfirmModal,
+  GlobeIcon,
+  Modal,
+  QuestionIcon,
+  RobotIcon,
+  SettingsIcon,
+} from '../../common';
 import { useSettingsDraft } from './hooks/useSettingsDraft';
 import { ConnectionEditorModal } from './editors/ConnectionEditorModal';
 import { LlmEditorModal } from './editors/LlmEditorModal';
@@ -14,6 +22,23 @@ import { AgentDirSection } from './sections/AgentDirSection';
 import { WorkDirSection } from './sections/WorkDirSection';
 import { CacheDirSection } from './sections/CacheDirSection';
 import { RuntimeSection } from './sections/RuntimeSection';
+
+type SettingsCategory = 'general' | 'connection' | 'ai' | 'about';
+
+/**
+ * 配置分区导航元数据（左侧栏）。新增配置分区在此登记一项，并在右侧面板的 switch
+ * 中渲染对应 section —— 分区结构为后续扩展（主题 / 编辑器 / 上下文窗口等）预留。
+ */
+const SETTINGS_CATEGORIES: ReadonlyArray<{
+  id: SettingsCategory;
+  labelKey: string;
+  Icon: typeof SettingsIcon;
+}> = [
+  { id: 'general', labelKey: 'settings.catGeneral', Icon: SettingsIcon },
+  { id: 'connection', labelKey: 'settings.catConnection', Icon: GlobeIcon },
+  { id: 'ai', labelKey: 'settings.catAi', Icon: RobotIcon },
+  { id: 'about', labelKey: 'settings.catAbout', Icon: QuestionIcon },
+];
 
 interface SettingsModalProps {
   info: AppInfo;
@@ -48,6 +73,7 @@ export function SettingsModal({
   onClose,
 }: SettingsModalProps) {
   const { t } = useTranslation();
+  const [category, setCategory] = useState<SettingsCategory>('general');
   const s = useSettingsDraft({
     config,
     paths,
@@ -61,10 +87,11 @@ export function SettingsModal({
   return (
     <>
       <Modal
-        size="md"
+        size="lg"
         onClose={onClose}
         title={t('settings.title')}
         headerClose="icon"
+        bodyClassName="settings-modal-body"
         footer={
           <>
             <div className="modal-footer-left">
@@ -94,38 +121,70 @@ export function SettingsModal({
           </>
         }
       >
-        <LanguageSection language={s.language} onChange={s.handleLanguageChange} />
-        <ConnectionsSection
-          connections={s.connections}
-          activeConnId={s.activeConnId}
-          onAdd={s.openAddConn}
-          onEdit={s.openEditConn}
-          onSetActive={s.setActiveConn}
-          onRequestDelete={s.setConnDeleteId}
-        />
-        <PollerSection value={s.pollerInput} onChange={s.setPoller} />
-        <LlmSection
-          llm={s.llm}
-          onAdd={s.openAddProfile}
-          onEdit={s.openEditProfile}
-          onSetActive={s.setActiveLlm}
-          onDelete={s.deleteProfile}
-        />
-        <ProxySection proxy={s.proxy} onConfigure={() => s.setProxyEditor(s.proxy)} />
-        <AgentDirSection
-          value={s.agentDirInput}
-          onChange={s.setAgentDir}
-          onPick={() => void s.pickAgentDir()}
-        />
-        <WorkDirSection paths={paths} />
-        <CacheDirSection
-          paths={paths}
-          value={s.reposDirInput}
-          onChange={s.setReposDir}
-          onPick={() => void s.pickReposDir()}
-          totalBytes={s.totalBytes}
-        />
-        <RuntimeSection info={info} updateEnabled={config.update.check_enabled} />
+        <div className="settings-layout">
+          <nav className="settings-nav" aria-label={t('settings.title')}>
+            {SETTINGS_CATEGORIES.map(({ id, labelKey, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                className={`settings-nav-item${category === id ? ' active' : ''}`}
+                aria-current={category === id ? 'page' : undefined}
+                onClick={() => setCategory(id)}
+              >
+                <Icon size={16} />
+                <span>{t(labelKey)}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="settings-panel">
+            {category === 'general' && (
+              <LanguageSection language={s.language} onChange={s.handleLanguageChange} />
+            )}
+            {category === 'connection' && (
+              <>
+                <ConnectionsSection
+                  connections={s.connections}
+                  activeConnId={s.activeConnId}
+                  onAdd={s.openAddConn}
+                  onEdit={s.openEditConn}
+                  onSetActive={s.setActiveConn}
+                  onRequestDelete={s.setConnDeleteId}
+                />
+                <PollerSection value={s.pollerInput} onChange={s.setPoller} />
+                <ProxySection proxy={s.proxy} onConfigure={() => s.setProxyEditor(s.proxy)} />
+                <CacheDirSection
+                  paths={paths}
+                  value={s.reposDirInput}
+                  onChange={s.setReposDir}
+                  onPick={() => void s.pickReposDir()}
+                  totalBytes={s.totalBytes}
+                />
+              </>
+            )}
+            {category === 'ai' && (
+              <>
+                <LlmSection
+                  llm={s.llm}
+                  onAdd={s.openAddProfile}
+                  onEdit={s.openEditProfile}
+                  onSetActive={s.setActiveLlm}
+                  onDelete={s.deleteProfile}
+                />
+                <AgentDirSection
+                  value={s.agentDirInput}
+                  onChange={s.setAgentDir}
+                  onPick={() => void s.pickAgentDir()}
+                />
+              </>
+            )}
+            {category === 'about' && (
+              <>
+                <WorkDirSection paths={paths} />
+                <RuntimeSection info={info} updateEnabled={config.update.check_enabled} />
+              </>
+            )}
+          </div>
+        </div>
       </Modal>
 
       {s.llmEditor && (

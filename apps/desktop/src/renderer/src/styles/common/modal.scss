@@ -58,6 +58,14 @@
   overflow-y: auto;
 }
 
+// 宽尺寸：左右分区类模态（如 SettingsModal 分区导航 + 内容）需要更宽横向空间，
+// 让左导航与右侧内容各得其所。定高（受 .modal 的 max-height: 84vh 上限约束），
+// 使切换分区时模态尺寸恒定、右侧内容区独立滚动而非整体撑高。
+.modal-lg {
+  max-width: 880px;
+  height: 720px;
+}
+
 // ConfirmModal: 跟 SettingsModal 共用 .modal-backdrop/.modal/.modal-header，加几条
 // 小尺寸 + 底部操作行特化
 .modal-confirm {
