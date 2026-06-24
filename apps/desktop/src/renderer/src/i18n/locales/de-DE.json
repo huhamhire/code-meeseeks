@@ -525,6 +525,19 @@
     "unified": "Vereinheitlicht",
     "whitespace": "Leerzeichen"
   },
+  "mergeVeto": {
+    "behind": "Hinter dem Zielbranch",
+    "blockedByDependency": "Durch einen anderen Merge Request blockiert",
+    "branchProtected": "Durch Branch-Schutz blockiert",
+    "checking": "Mergebarkeit wird geprüft…",
+    "checksFailed": "Erforderliche Prüfungen nicht bestanden",
+    "conflict": "Merge-Konflikte",
+    "discussionsUnresolved": "Ungelöste Diskussionen",
+    "draft": "Entwurf – als merge-bereit markieren",
+    "notApproved": "Genehmigungen nicht erfüllt",
+    "notMergeable": "Nicht mergefähig",
+    "notOpen": "Nicht offen"
+  },
   "mermaidDiagram": {
     "closeEsc": "Schließen (Esc)",
     "fitWindow": "An Fenster anpassen",

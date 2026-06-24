@@ -525,6 +525,19 @@
     "unified": "Unified",
     "whitespace": "Whitespace"
   },
+  "mergeVeto": {
+    "behind": "Behind the target branch",
+    "blockedByDependency": "Blocked by another merge request",
+    "branchProtected": "Blocked by branch protection",
+    "checking": "Checking mergeability…",
+    "checksFailed": "Required checks not passing",
+    "conflict": "Merge conflicts",
+    "discussionsUnresolved": "Unresolved discussions",
+    "draft": "Draft — mark ready to merge",
+    "notApproved": "Approvals not satisfied",
+    "notMergeable": "Not mergeable",
+    "notOpen": "Not open"
+  },
   "mermaidDiagram": {
     "closeEsc": "Close (Esc)",
     "fitWindow": "Fit to window",

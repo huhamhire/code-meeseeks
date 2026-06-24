@@ -16,6 +16,7 @@ import type {
   Reviewer,
   ReviewerStatus,
 } from '@meebox/shared';
+import type { MergeVetoCode } from '@meebox/platform-core';
 import { GitLabClient, type GitLabClientOptions } from './client.js';
 
 // ---- GitLab REST v4 响应形状（仅取用到的字段）----
@@ -330,9 +331,7 @@ export class GitLabAdapter implements PlatformAdapter {
     const m = url.match(/\/uploads\/([0-9a-f]+)\/([^/?#]+)/i);
     if (m && repo && sameHost) {
       const [, secret, filename] = m;
-      return this.client.getApiBinary(
-        `/projects/${projectId(repo)}/uploads/${secret}/${filename}`,
-      );
+      return this.client.getApiBinary(`/projects/${projectId(repo)}/uploads/${secret}/${filename}`);
     }
     // 其它本实例绝对 URL（非 /uploads 的图）仍直接代理；非本实例 / 解析不出 → null 让上层 fallback。
     if (/^https?:\/\//.test(url)) return this.client.getBinary(url);
@@ -359,7 +358,9 @@ export class GitLabAdapter implements PlatformAdapter {
     const mr = await this.client.get<GlMr>(base);
     const refs = mr.diff_refs;
     if (!refs) {
-      throw new Error('Cannot post inline comment: this MR has no diff_refs (the diff may not be generated yet)');
+      throw new Error(
+        'Cannot post inline comment: this MR has no diff_refs (the diff may not be generated yet)',
+      );
     }
     const position: Record<string, unknown> = {
       base_sha: refs.base_sha,
@@ -413,9 +414,7 @@ export class GitLabAdapter implements PlatformAdapter {
     commentId: string,
     _version: number,
   ): Promise<void> {
-    await this.client.del(
-      `/projects/${projectId(repo)}/merge_requests/${prId}/notes/${commentId}`,
-    );
+    await this.client.del(`/projects/${projectId(repo)}/merge_requests/${prId}/notes/${commentId}`);
   }
 
   async setPullRequestReviewStatus(
@@ -492,53 +491,56 @@ function mapUser(u: GlUser): PlatformUser {
   };
 }
 
-function mergeStatusReason(dms: string): string {
+/** GitLab detailed_merge_status → 统一否决原因码（后台不拼本地化文案，前端按码 i18n）。 */
+function mergeStatusCode(dms: string): MergeVetoCode {
   switch (dms) {
     case 'broken_status':
     case 'conflict':
-      return '存在合并冲突';
+      return 'conflict';
     case 'draft_status':
-      return '草稿状态，需标记为可合并';
+      return 'draft';
     case 'discussions_not_resolved':
-      return '存在未解决的讨论';
+      return 'discussionsUnresolved';
     case 'ci_must_pass':
     case 'ci_still_running':
-      return '流水线未通过 / 进行中';
+      return 'checksFailed';
     case 'not_approved':
     case 'requested_changes':
-      return '审批未满足要求';
+      return 'notApproved';
     case 'need_rebase':
-      return '需先 rebase 目标分支';
+      return 'behind';
     case 'not_open':
-      return 'MR 非打开状态';
+      return 'notOpen';
     case 'blocked_status':
-      return '被其它 MR 阻塞';
+      return 'blockedByDependency';
     case 'preparing':
     case 'checking':
     case 'unchecked':
-      return '可合并状态计算中…';
+      return 'checking';
     default:
-      return `暂不可合并（${dms}）`;
+      return 'notMergeable';
   }
 }
 
 function mapMergeStatus(mr: GlMr): MergeStatus {
   const dms = mr.detailed_merge_status;
-  const conflicted =
-    mr.has_conflicts === true || dms === 'broken_status' || dms === 'conflict';
+  const conflicted = mr.has_conflicts === true || dms === 'broken_status' || dms === 'conflict';
   const vetoes: MergeVeto[] = [];
   let canMerge: boolean;
   if (dms) {
     canMerge = dms === 'mergeable';
-    if (!canMerge) vetoes.push({ summary: mergeStatusReason(dms) });
+    if (!canMerge) {
+      const code = mergeStatusCode(dms);
+      // 未细分原因（default）保留原始 dms 到 detail，便于排障
+      vetoes.push(code === 'notMergeable' ? { code, detail: dms } : { code });
+    }
   } else {
     // 旧实例无 detailed_merge_status：退 merge_status。
     canMerge = mr.merge_status === 'can_be_merged' && !conflicted;
-    if (conflicted) vetoes.push({ summary: '存在合并冲突' });
-    else if (mr.merge_status === 'cannot_be_merged')
-      vetoes.push({ summary: '远端判定当前不可合并' });
+    if (conflicted) vetoes.push({ code: 'conflict' });
+    else if (mr.merge_status === 'cannot_be_merged') vetoes.push({ code: 'notMergeable' });
     else if (mr.merge_status === 'checking' || mr.merge_status === 'unchecked')
-      vetoes.push({ summary: '可合并状态计算中…' });
+      vetoes.push({ code: 'checking' });
   }
   return { canMerge, conflicted, vetoes };
 }
@@ -604,12 +606,7 @@ function mapNote(n: GlNote, discussionId: string, me: string | undefined): PrCom
           line: pos.new_line ?? pos.old_line ?? 0,
           side: pos.new_line != null ? 'new' : 'old',
           // new_line + old_line 同在 = context；仅 new = added；仅 old = removed。
-          lineType:
-            pos.new_line != null
-              ? pos.old_line != null
-                ? 'context'
-                : 'added'
-              : 'removed',
+          lineType: pos.new_line != null ? (pos.old_line != null ? 'context' : 'added') : 'removed',
         }
       : null;
   const isMine = me != null && n.author.username === me;

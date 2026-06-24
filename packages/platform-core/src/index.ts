@@ -28,3 +28,4 @@ export type { MediaService } from './features/media.js';
 export { BaseMediaService } from './features/media.js';
 export type { PlatformAdapter, PlatformServices } from './adapter.js';
 export { composePlatformAdapter } from './adapter.js';
+export { MERGE_VETO_CODES, type MergeVetoCode } from './codes.js';

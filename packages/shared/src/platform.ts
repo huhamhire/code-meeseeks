@@ -60,8 +60,14 @@ export interface Reviewer extends PlatformUser {
  * - GitLab: detailed_merge_status 的具体阻塞原因
  */
 export interface MergeVeto {
-  /** 简短原因，UI 一行展示（Bitbucket summaryMessage） */
-  summary: string;
+  /**
+   * 稳定否决原因码（中性、不本地化）。GitHub / GitLab 等把派生原因归一到 `@meebox/platform-core`
+   * 的 `MergeVetoCode`，前端按码 i18n（`mergeVeto.<code>`）。后台不拼面向用户的中文/本地化文案。
+   * 服务端直给人读文案（如 Bitbucket）时可不带 code、改用 `summary`。
+   */
+  code?: string;
+  /** 服务端直给的人读原因（如 Bitbucket summaryMessage）；无 `code` 时展示用。 */
+  summary?: string;
   /** 详细原因，hover / 展开展示，可能缺省（Bitbucket detailedMessage） */
   detail?: string;
 }

@@ -511,6 +511,19 @@
     "unified": "統合表示",
     "whitespace": "空白"
   },
+  "mergeVeto": {
+    "behind": "ターゲットブランチに遅れています",
+    "blockedByDependency": "他のマージリクエストによりブロックされています",
+    "branchProtected": "ブランチ保護によりブロックされています",
+    "checking": "マージ可否を確認中…",
+    "checksFailed": "必須チェックが未通過です",
+    "conflict": "マージ競合があります",
+    "discussionsUnresolved": "未解決のディスカッションがあります",
+    "draft": "下書き状態です。マージ可能としてマークしてください",
+    "notApproved": "承認要件を満たしていません",
+    "notMergeable": "現在マージできません",
+    "notOpen": "オープン状態ではありません"
+  },
   "mermaidDiagram": {
     "closeEsc": "閉じる（Esc）",
     "fitWindow": "ウィンドウに合わせる",

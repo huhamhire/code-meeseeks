@@ -1,7 +1,6 @@
 import type {
   ListPendingOptions,
   MergeStatus,
-  MergeVeto,
   PrActivityEvent,
   PrActivityKind,
   PrCommit,
@@ -11,7 +10,12 @@ import type {
   Reviewer,
   ReviewerStatus,
 } from '@meebox/shared';
-import { BasePullRequestService, collect, type ConnectionContext } from '@meebox/platform-core';
+import {
+  BasePullRequestService,
+  collect,
+  type ConnectionContext,
+  type MergeVetoCode,
+} from '@meebox/platform-core';
 import type { GitHubClient } from '../client.js';
 import { mapUser } from '../mappers.js';
 import type { GhCommit, GhPull, GhReview, GhSearchItem } from '../types.js';
@@ -108,10 +112,10 @@ export class GitHubPullRequestService extends BasePullRequestService {
       return;
     }
     if (status === 'needsWork') {
-      // GitHub 要求 REQUEST_CHANGES 带 body
+      // GitHub 要求 REQUEST_CHANGES 带 body（发往 GitHub 的内容，用英语中性文案）
       await this.client.post(`${prefix}/pulls/${prId}/reviews`, {
         event: 'REQUEST_CHANGES',
-        body: '需修改',
+        body: 'Changes requested',
       });
       return;
     }
@@ -127,7 +131,7 @@ export class GitHubPullRequestService extends BasePullRequestService {
     const latest = mine[mine.length - 1];
     if (latest) {
       await this.client.put(`${prefix}/pulls/${prId}/reviews/${String(latest.id)}/dismissals`, {
-        message: '撤销评审意见',
+        message: 'Dismissing review',
       });
     }
   }
@@ -155,22 +159,16 @@ export class GitHubPullRequestService extends BasePullRequestService {
   private mapMergeStatus(p: GhPull): MergeStatus {
     const state = p.mergeable_state ?? 'unknown';
     const conflicted = p.mergeable === false || state === 'dirty';
-    const vetoes: MergeVeto[] = [];
-    if (conflicted) {
-      vetoes.push({ summary: '存在合并冲突' });
-    } else if (state === 'blocked') {
-      vetoes.push({ summary: '被分支保护阻止（必需评审 / 检查未通过）' });
-    } else if (state === 'behind') {
-      vetoes.push({ summary: '落后于目标分支，需先更新分支' });
-    } else if (state === 'unstable') {
-      vetoes.push({ summary: '部分检查未通过' });
-    } else if (p.mergeable == null || state === 'unknown') {
-      vetoes.push({ summary: '可合并状态计算中…' });
-    }
+    let code: MergeVetoCode | null = null;
+    if (conflicted) code = 'conflict';
+    else if (state === 'blocked') code = 'branchProtected';
+    else if (state === 'behind') code = 'behind';
+    else if (state === 'unstable') code = 'checksFailed';
+    else if (p.mergeable == null || state === 'unknown') code = 'checking';
     return {
       canMerge: p.mergeable === true && state === 'clean',
       conflicted,
-      vetoes,
+      vetoes: code ? [{ code }] : [],
     };
   }
 
