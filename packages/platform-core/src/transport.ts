@@ -28,8 +28,13 @@ export interface PlatformConnectionConfig {
   token: string;
   /** 单请求超时（默认 30s）。 */
   timeoutMs?: number;
-  /** 统一代理配置；连接层据此 + `baseUrl` host 解析有效 fetch。 */
+  /** 统一代理配置；连接层据此 + `baseUrl` host 经 `proxyFetch` 解析有效 fetch。 */
   proxy?: ProxyConfig;
+  /**
+   * 代理 fetch 工厂（注入口）。由组合根（desktop）提供 undici 实现；连接层据 `proxy` + `baseUrl` host
+   * 调用它解析代理感知 fetch。未提供则不挂代理（即便 `proxy` 存在也直连）。
+   */
+  proxyFetch?: ProxyFetchFactory;
   /** 显式 fetch 覆盖（测试桩 / 已自行解析代理）；给定则优先于 `proxy` 解析。 */
   fetch?: FetchLike;
 }

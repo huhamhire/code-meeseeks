@@ -26,18 +26,10 @@ export interface ConnectionRuntime {
   adapterByHost: Map<string, PlatformAdapter>;
 }
 
-/** 从 base_url 取 host；解析失败返回空串（proxyFetchForHost 对空 host 视为外部、按代理配置处理）。 */
-function hostOf(baseUrl: string): string {
-  try {
-    return new URL(baseUrl).hostname;
-  } catch {
-    return '';
-  }
-}
-
 /**
  * 用草稿 base_url + token 临时起一个 adapter，仅供设置页 ping 测试用。kind 默认
- * bitbucket-server（向后兼容旧调用）。proxy 透传：开关开且目标非 loopback 时，REST 经代理。
+ * bitbucket-server（向后兼容旧调用）。proxy 统一进连接层：把代理配置与工厂透传给 adapter，由连接层
+ * 据 baseUrl host 一次解析（开关开且目标非 loopback 时 REST 经代理）。
  */
 export function buildDraftAdapter(
   baseUrl: string,
@@ -48,17 +40,14 @@ export function buildDraftAdapter(
   if (kind === 'github') {
     // GitHub 草稿 base_url 可留空 → 默认官方 api.github.com
     const ghBase = baseUrl.trim() || GITHUB_DOTCOM_API_BASE;
-    const fetchFn = proxyFetchForHost(proxy, hostOf(ghBase));
-    return new GitHubAdapter({ baseUrl: ghBase, token, cloneProtocol: 'pat', fetch: fetchFn });
+    return new GitHubAdapter({ baseUrl: ghBase, token, cloneProtocol: 'pat', proxy, proxyFetch: proxyFetchForHost });
   }
   if (kind === 'gitlab') {
     // GitLab 草稿 base_url 可留空 → 默认官方 gitlab.com/api/v4
     const glBase = baseUrl.trim() || GITLAB_DOTCOM_API_BASE;
-    const fetchFn = proxyFetchForHost(proxy, hostOf(glBase));
-    return new GitLabAdapter({ baseUrl: glBase, token, cloneProtocol: 'pat', fetch: fetchFn });
+    return new GitLabAdapter({ baseUrl: glBase, token, cloneProtocol: 'pat', proxy, proxyFetch: proxyFetchForHost });
   }
-  const fetchFn = proxyFetchForHost(proxy, hostOf(baseUrl));
-  return new BitbucketServerAdapter({ baseUrl, token, cloneProtocol: 'pat', fetch: fetchFn });
+  return new BitbucketServerAdapter({ baseUrl, token, cloneProtocol: 'pat', proxy, proxyFetch: proxyFetchForHost });
 }
 
 /**
@@ -77,30 +66,22 @@ export function buildAdapters(
 }
 
 function buildOne(conn: Connection, proxy: ProxyConfig): PlatformAdapter {
-  // 开关开 + 目标非 loopback → 带 ProxyAgent 的 fetch；否则 undefined（默认直连）。
-  const fetchFn = proxyFetchForHost(proxy, hostOf(conn.base_url));
+  // 代理统一进连接层：透传 proxy 配置与工厂，由连接层据 baseUrl host 解析（开关开 + 目标非
+  // loopback → 带 ProxyAgent 的 fetch；否则直连）。
+  const common = {
+    baseUrl: conn.base_url,
+    token: conn.auth.token,
+    cloneProtocol: conn.clone.protocol,
+    proxy,
+    proxyFetch: proxyFetchForHost,
+  };
   switch (conn.kind) {
     case 'bitbucket-server':
-      return new BitbucketServerAdapter({
-        baseUrl: conn.base_url,
-        token: conn.auth.token,
-        cloneProtocol: conn.clone.protocol,
-        fetch: fetchFn,
-      });
+      return new BitbucketServerAdapter(common);
     case 'github':
-      return new GitHubAdapter({
-        baseUrl: conn.base_url,
-        token: conn.auth.token,
-        cloneProtocol: conn.clone.protocol,
-        fetch: fetchFn,
-      });
+      return new GitHubAdapter(common);
     case 'gitlab':
-      return new GitLabAdapter({
-        baseUrl: conn.base_url,
-        token: conn.auth.token,
-        cloneProtocol: conn.clone.protocol,
-        fetch: fetchFn,
-      });
+      return new GitLabAdapter(common);
     default: {
       const exhaustive: never = conn;
       throw new Error(`unsupported connection kind: ${JSON.stringify(exhaustive)}`);

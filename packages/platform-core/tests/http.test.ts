@@ -101,13 +101,18 @@ describe('resolveConnectionFetch', () => {
   it('uses proxy factory keyed by baseUrl host', () => {
     const proxied: FetchLikeStub = async () => new Response();
     const factory = vi.fn().mockReturnValue(proxied);
-    expect(resolveConnectionFetch(cfg({ proxy }), factory)).toBe(proxied);
+    expect(resolveConnectionFetch(cfg({ proxy, proxyFetch: factory }))).toBe(proxied);
     expect(factory).toHaveBeenCalledWith(proxy, 'api.example.com');
   });
 
   it('falls back to global fetch when factory returns undefined (loopback / off)', () => {
     const factory = vi.fn().mockReturnValue(undefined);
-    const resolved = resolveConnectionFetch(cfg({ proxy }), factory);
+    const resolved = resolveConnectionFetch(cfg({ proxy, proxyFetch: factory }));
+    expect(typeof resolved).toBe('function');
+  });
+
+  it('ignores proxy when no factory injected (direct)', () => {
+    const resolved = resolveConnectionFetch(cfg({ proxy }));
     expect(typeof resolved).toBe('function');
   });
 

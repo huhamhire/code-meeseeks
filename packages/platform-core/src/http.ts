@@ -1,4 +1,4 @@
-import type { FetchLike, PlatformConnectionConfig, ProxyFetchFactory } from './transport.js';
+import type { FetchLike, PlatformConnectionConfig } from './transport.js';
 
 /** 连接层默认单请求超时。 */
 export const DEFAULT_TIMEOUT_MS = 30_000;
@@ -85,17 +85,14 @@ export function extractApiMessage(text: string): string {
 /**
  * 解析连接层有效 fetch，把代理解析统一收口到连接层（替代各调用点手拼 `proxyFetchForHost`）：
  * - 显式 `config.fetch` 覆盖优先（测试桩 / 已自行解析代理）；
- * - 否则按统一 `config.proxy` + `baseUrl` host 经注入的工厂解析；工厂返回 undefined（loopback / 代理
- *   关闭）时退回直连全局 fetch；
+ * - 否则按统一 `config.proxy` + `baseUrl` host 经注入的 `config.proxyFetch` 工厂解析；工厂返回 undefined
+ *   （loopback / 代理关闭）时退回直连全局 fetch；
  * - 无 proxy / 无工厂 → 直连全局 fetch。
  */
-export function resolveConnectionFetch(
-  config: PlatformConnectionConfig,
-  proxyFetchFor?: ProxyFetchFactory,
-): FetchLike {
+export function resolveConnectionFetch(config: PlatformConnectionConfig): FetchLike {
   if (config.fetch) return config.fetch;
-  if (config.proxy && proxyFetchFor) {
-    return proxyFetchFor(config.proxy, hostOf(config.baseUrl)) ?? globalFetch;
+  if (config.proxy && config.proxyFetch) {
+    return config.proxyFetch(config.proxy, hostOf(config.baseUrl)) ?? globalFetch;
   }
   return globalFetch;
 }
