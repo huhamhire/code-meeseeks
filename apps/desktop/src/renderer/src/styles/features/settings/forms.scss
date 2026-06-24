@@ -4,6 +4,76 @@
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
+// 配置面板左右分区：模态 body 去内边距、由本布局接管；左侧分区导航固定不滚，
+// 右侧分区内容独立滚动。分区结构为后续扩展（主题 / 编辑器 / 上下文窗口等）预留。
+.modal-body.settings-modal-body {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.settings-layout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  // 撑满定高模态（.modal-lg）：左导航固定、右面板独立滚动，不随分区内容增减高度
+  min-height: 0;
+}
+.settings-nav {
+  flex: 0 0 168px;
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+  padding: $space-5 $space-4;
+  // 与模态主体同色（$bg-elev），仅以右侧分隔线区分导航区，避免色块割裂
+  border-right: 1px solid $border-default;
+  overflow-y: auto;
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  padding: $space-3 $space-4;
+  border: none;
+  border-radius: $radius-md;
+  background: transparent;
+  color: $text-body;
+  font-size: $fs-lg;
+  text-align: left;
+  cursor: pointer;
+
+  svg {
+    flex-shrink: 0;
+    color: $text-muted;
+  }
+
+  &:hover {
+    background: $bg-hover;
+  }
+
+  &.active {
+    background: $color-accent-bg-fade;
+    color: $text-primary;
+    font-weight: 500;
+
+    svg {
+      color: $color-accent;
+    }
+  }
+}
+.settings-panel {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: $space-8;
+
+  // 分区内末个 section 去掉多余底部留白
+  .modal-section:last-child {
+    margin-bottom: 0;
+  }
+}
+
 // 语言下拉：固定宽度、靠右（块定位），文本左对齐；不被 .settings-input 的 flex:1 撑满（复合选择器提权）
 .settings-input.settings-language-select {
   flex: 0 0 auto;
