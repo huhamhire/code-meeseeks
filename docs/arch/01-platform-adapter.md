@@ -16,7 +16,83 @@
 
 ### 分层
 
-三层，契约与传输实现解耦（见 [设计草案](../design/platform-layer-refactor.md)）：
+三层，契约与传输实现解耦：
+
+```mermaid
+classDiagram
+  direction LR
+
+  class PlatformConnection {
+    <<interface>>
+  }
+  class PullRequestService {
+    <<interface>>
+  }
+  class CommentService {
+    <<interface>>
+  }
+  class MediaService {
+    <<interface>>
+  }
+  class PlatformDomainService {
+    <<abstract>>
+  }
+  class BaseConnection {
+    <<abstract>>
+  }
+  class BasePullRequestService {
+    <<abstract>>
+  }
+  class BaseCommentService {
+    <<abstract>>
+  }
+  class BaseMediaService {
+    <<abstract>>
+  }
+  class PlatformAdapter {
+    <<interface>>
+    +connection
+    +prs
+    +comments
+    +media
+  }
+  class PlatformTransport {
+    <<interface>>
+  }
+
+  PlatformConnection <|.. BaseConnection
+  PullRequestService <|.. BasePullRequestService
+  CommentService <|.. BaseCommentService
+  MediaService <|.. BaseMediaService
+  PlatformDomainService <|-- BaseConnection
+  PlatformDomainService <|-- BasePullRequestService
+  PlatformDomainService <|-- BaseCommentService
+  PlatformDomainService <|-- BaseMediaService
+  PlatformAdapter o-- PlatformConnection
+  PlatformAdapter o-- PullRequestService
+  PlatformAdapter o-- CommentService
+  PlatformAdapter o-- MediaService
+
+  class GitHubAdapter
+  class GitLabAdapter
+  class BitbucketServerAdapter
+  PlatformAdapter <|.. GitHubAdapter
+  PlatformAdapter <|.. GitLabAdapter
+  PlatformAdapter <|.. BitbucketServerAdapter
+
+  class GitHubClient
+  class GitLabClient
+  class BitbucketClient
+  PlatformTransport <|.. GitHubClient
+  PlatformTransport <|.. GitLabClient
+  PlatformTransport <|.. BitbucketClient
+```
+
+> **图说**（`<|..` 实现 / `<|--` 继承 / `o--` 持有组合）：
+>
+> - **契约层** `@meebox/platform-core`：每个领域接口由对应 `Base*` 实现、承载跨平台逻辑；`Base*` 共同继承 `PlatformDomainService`；容器接口 `PlatformAdapter` 持有四个领域接口。
+> - **平台扩展**（**GitHub / GitLab / Bitbucket** 同构）：`*Adapter` 实现容器接口 `PlatformAdapter`、`*Client` 实现传输端口 `PlatformTransport`。
+> - 每个 `*Adapter` 组合该平台四个领域服务（分别 `extends` 对应 `Base*`）、各服务经 `ConnectionContext` 共享同一 `*Client`——为免图杂未展开。
 
 - **契约层 `@meebox/platform-core`**：只声明业务契约，零 HTTP 实现。含四个**领域接口**与对应**领域基类**
   （`BaseConnection` / `BasePullRequestService` / `BaseCommentService` / `BaseMediaService`，承载跨平台业务

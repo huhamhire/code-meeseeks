@@ -1,5 +1,5 @@
 // 平台层统一后台状态码：后台只发**稳定中性码**、不拼面向用户的本地化文案，本地化由前端按码做
-// （见 docs/design/platform-layer-refactor.md §3.3 与 docs/arch/12-error-codes.md）。
+// （见 docs/arch/01-platform-adapter.md §2 与 docs/arch/12-error-codes.md）。
 // 各平台适配器把自身原生状态归一到这些码；前端按码 i18n（renderer locales 的 `mergeVeto.<code>`）。
 
 /** 合并否决原因码（GitHub mergeable_state / GitLab detailed_merge_status 等归一到此）。 */
