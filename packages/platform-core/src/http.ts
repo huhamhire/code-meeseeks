@@ -23,11 +23,7 @@ export function hostOf(url: string): string {
  * 拼请求 URL：`path` 以 http(s) 开头时原样请求（分页 next / 绝对资源 URL）；否则拼到 `baseUrl` 之后。
  * 可选 query 写进 searchParams。
  */
-export function buildUrl(
-  baseUrl: string,
-  path: string,
-  params?: Record<string, string>,
-): string {
+export function buildUrl(baseUrl: string, path: string, params?: Record<string, string>): string {
   const u = /^https?:\/\//.test(path) ? new URL(path) : new URL(`${baseUrl}${path}`);
   if (params) for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
   return u.toString();

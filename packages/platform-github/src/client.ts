@@ -1,3 +1,4 @@
+import type { RepoRef } from '@meebox/shared';
 import {
   buildUrl,
   extractApiMessage,
@@ -11,8 +12,14 @@ import {
   type PlatformTransport,
 } from '@meebox/platform-core';
 
-/** GitHub 连接配置 = 统一连接配置（baseUrl / token / timeoutMs / proxy / fetch）。 */
-export type GitHubClientOptions = PlatformConnectionConfig;
+/** GitHub 连接配置 = 统一连接配置 + clone 协议（连接层自管的连接配置，非 HTTP 传输细节）。 */
+export interface GitHubClientOptions extends PlatformConnectionConfig {
+  /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
+  cloneProtocol?: 'pat' | 'ssh';
+}
+
+/** 适配器构造选项与连接配置同形。 */
+export type GitHubAdapterOptions = GitHubClientOptions;
 
 export class GitHubClientError extends Error {
   constructor(
@@ -29,10 +36,31 @@ const API_VERSION = '2022-11-28';
 const ACCEPT = 'application/vnd.github+json';
 
 /**
- * 极薄的 GitHub REST 客户端，实现 {@link PlatformTransport}：Bearer PAT 鉴权、`Link` 头分页迭代器、
- * 二进制拉取、错误抛 GitHubClientError。通用传输样板（超时 / URL 拼接 / 错误消息提取 / Link 分页）
- * 复用 `@meebox/platform-core` helper；GitHub 特有部分（鉴权头 / 限流提示 / 可信资产域 / search /
- * patch）留在本类。业务语义留给 GitHubAdapter。
+ * 容错归一 GitHub API base：用户可只填实例地址或完整 API base。
+ * - `github.com` / `www.github.com`（或留空场景的官方域）→ 官方 API host `https://api.github.com`；
+ * - GitHub Enterprise Server 实例根 `https://ghe.example.com` → 补 `/api/v3`（已带 `/api/vN` 则原样）。
+ */
+export function normalizeGitHubApiBase(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, '');
+  if (!trimmed) return trimmed;
+  let u: URL;
+  try {
+    u = new URL(trimmed);
+  } catch {
+    return trimmed;
+  }
+  if (u.hostname === 'api.github.com') return trimmed;
+  if (u.hostname === 'github.com' || u.hostname === 'www.github.com')
+    return 'https://api.github.com';
+  if (/\/api\/v\d+$/.test(u.pathname.replace(/\/+$/, ''))) return trimmed;
+  return `${trimmed}/api/v3`;
+}
+
+/**
+ * GitHub REST 客户端 = 统一连接封装实例，实现 {@link PlatformTransport}：自管连接 / 鉴权配置（base
+ * URL 归一、PAT、超时、代理解析）与 GitHub 连接派生态（web/git host、clone 协议、clone URL 构造）。
+ * 通用传输样板复用 `@meebox/platform-core` helper；GitHub 特有部分（鉴权头 / 限流提示 / 可信资产域 /
+ * search / patch / clone）留在本类。业务语义留给各领域服务。
  *
  * path 以 `/` 开头时拼 baseUrl；传入完整 http(s) URL 时原样请求（分页 next / 头像等用）。
  */
@@ -41,13 +69,24 @@ export class GitHubClient implements PlatformTransport {
   private readonly token: string;
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;
+  private readonly cloneProtocol: 'pat' | 'ssh';
+  /** web / git host base（api.github.com → https://github.com；GHE → 实例 host）。 */
+  readonly webBase: string;
+  private readonly gitHost: string;
 
   constructor(opts: GitHubClientOptions) {
-    this.baseUrl = stripTrailingSlash(opts.baseUrl);
+    const apiBase = normalizeGitHubApiBase(opts.baseUrl);
+    this.baseUrl = stripTrailingSlash(apiBase);
     this.token = opts.token;
     // 连接层统一解析有效 fetch（显式 fetch 覆盖 > 代理 > 直连）。
-    this.fetchFn = resolveConnectionFetch(opts);
+    this.fetchFn = resolveConnectionFetch({ ...opts, baseUrl: apiBase });
     this.timeoutMs = opts.timeoutMs ?? 30_000;
+    this.cloneProtocol = opts.cloneProtocol ?? 'pat';
+    const api = new URL(apiBase);
+    // github.com 的 API 在 api.github.com，但 clone/web 在 github.com；GHE 同 host。
+    this.webBase =
+      api.hostname === 'api.github.com' ? 'https://github.com' : `${api.protocol}//${api.host}`;
+    this.gitHost = new URL(this.webBase).host;
   }
 
   private authHeaders(accept = ACCEPT): Record<string, string> {
@@ -164,6 +203,26 @@ export class GitHubClient implements PlatformTransport {
       for (const it of page.items) yield it;
       url = parseNextLink(res.headers.get('link'));
     }
+  }
+
+  /**
+   * 构造 git clone URL：ssh → `git@<gitHost>:<proj>/<repo>.git`；pat → 在 web host 内嵌
+   * `<currentUser>:<PAT>`。pat 需 ping() 已落地当前用户（由调用方经连接上下文传入），否则抛错。
+   */
+  getCloneUrl(repo: RepoRef, currentUserName?: string): string {
+    if (this.cloneProtocol === 'ssh') {
+      return `git@${this.gitHost}:${repo.projectKey}/${repo.repoSlug}.git`;
+    }
+    if (!currentUserName) {
+      throw new Error(
+        'cannot construct PAT clone URL: current user unknown — ping() not called or failed',
+      );
+    }
+    const u = new URL(this.webBase);
+    u.pathname = `/${repo.projectKey}/${repo.repoSlug}.git`;
+    u.username = currentUserName;
+    u.password = this.token;
+    return u.toString();
   }
 
   /**
