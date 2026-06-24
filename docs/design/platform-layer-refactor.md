@@ -1,7 +1,7 @@
 # 平台连接层抽象重构设计（草案）
 
-> **状态**：草案，待评审。对应里程碑 [#6 平台连接层抽象重构统一](https://github.com/huhamhire/code-meeseeks/milestone/6)。
-> 落地后将把结论沉淀回 [01 · 代码平台适配](../arch/01-platform-adapter.md)，本草案随之归档。
+> **状态**：已落地（归档）。对应里程碑 [#6 平台连接层抽象重构统一](https://github.com/huhamhire/code-meeseeks/milestone/6)。
+> 设计已实现并沉淀为当前结论，见 [01 · 代码平台适配](../arch/01-platform-adapter.md)；本文作为设计过程记录归档保留。
 >
 > 本文是**重构提案**（面向「应当变成怎样」），区别于 `docs/arch/` 的**当前结论**。
 
