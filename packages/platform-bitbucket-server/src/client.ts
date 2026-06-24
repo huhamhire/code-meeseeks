@@ -1,3 +1,4 @@
+import type { RepoRef } from '@meebox/shared';
 import {
   buildUrl,
   fetchWithTimeout,
@@ -9,8 +10,14 @@ import {
   type PlatformTransport,
 } from '@meebox/platform-core';
 
-/** Bitbucket 连接配置 = 统一连接配置（baseUrl / token / timeoutMs / proxy / fetch）。 */
-export type BitbucketClientOptions = PlatformConnectionConfig;
+/** Bitbucket 连接配置 = 统一连接配置 + clone 协议（连接层自管的连接配置，非 HTTP 传输细节）。 */
+export interface BitbucketClientOptions extends PlatformConnectionConfig {
+  /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
+  cloneProtocol?: 'pat' | 'ssh';
+}
+
+/** 适配器构造选项与连接配置同形。 */
+export type BitbucketServerAdapterOptions = BitbucketClientOptions;
 
 export type { FetchLike } from '@meebox/platform-core';
 
@@ -45,6 +52,7 @@ export class BitbucketClient implements PlatformTransport {
   private readonly token: string;
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;
+  private readonly cloneProtocol: 'pat' | 'ssh';
 
   constructor(opts: BitbucketClientOptions) {
     this.baseUrl = stripTrailingSlash(opts.baseUrl);
@@ -52,6 +60,36 @@ export class BitbucketClient implements PlatformTransport {
     // 连接层统一解析有效 fetch（显式 fetch 覆盖 > 代理 > 直连）。
     this.fetchFn = resolveConnectionFetch(opts);
     this.timeoutMs = opts.timeoutMs ?? 30_000;
+    this.cloneProtocol = opts.cloneProtocol ?? 'pat';
+  }
+
+  /** 实例 web/git base（Bitbucket 的 API 与网页同 host），commit 详情页 URL 等用。 */
+  get webBase(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * 构造 git clone URL。
+   *
+   * ssh → `git@<host>:<proj>/<repo>.git`（端口 / 私钥 / username 交系统 ssh config，Bitbucket
+   * 默认 SSH 端口 7999 需自行配 Port）。pat → `https://<currentUser>:<PAT>@<host>/scm/<proj>/<repo>.git`
+   * （Bitbucket Server 的 PAT 鉴权要求真实用户名作 username，PAT 作 password；需 ping() 已落地当前
+   * 用户，由调用方经连接上下文传入，否则抛错）。
+   */
+  getCloneUrl(repo: RepoRef, currentUserName?: string): string {
+    const u = new URL(this.baseUrl);
+    if (this.cloneProtocol === 'ssh') {
+      return `git@${u.hostname}:${repo.projectKey}/${repo.repoSlug}.git`;
+    }
+    if (!currentUserName) {
+      throw new Error(
+        'cannot construct PAT clone URL: current user unknown — ping() not called or failed',
+      );
+    }
+    u.pathname = `/scm/${repo.projectKey}/${repo.repoSlug}.git`;
+    u.username = currentUserName;
+    u.password = this.token;
+    return u.toString();
   }
 
   private headers(accept = 'application/json', withJsonBody = false): Record<string, string> {
@@ -73,7 +111,11 @@ export class BitbucketClient implements PlatformTransport {
     );
   }
 
-  private async err(res: Response, method: string, location: string): Promise<BitbucketClientError> {
+  private async err(
+    res: Response,
+    method: string,
+    location: string,
+  ): Promise<BitbucketClientError> {
     const body = await res.text().catch(() => '');
     return new BitbucketClientError(
       `${String(res.status)} ${res.statusText} on ${method} ${location}`,
