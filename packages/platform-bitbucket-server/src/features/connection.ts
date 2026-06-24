@@ -1,4 +1,10 @@
-import type { PingResult, PlatformCapabilities, RepoRef } from '@meebox/shared';
+import {
+  ERROR_CODES,
+  errorCodeMessage,
+  type PingResult,
+  type PlatformCapabilities,
+  type RepoRef,
+} from '@meebox/shared';
 import { BaseConnection, type ConnectionContext } from '@meebox/platform-core';
 import type { BitbucketClient } from '../client.js';
 import type { BitbucketApplicationProperties, BitbucketUser } from '../types.js';
@@ -78,7 +84,11 @@ export class BitbucketServerConnection extends BaseConnection {
       ok: false,
       serverVersion: props.version,
       user,
-      reason: `未支持的 Bitbucket Server 版本：${props.version}；最低要求 ${MIN_VERSION.join('.')}`,
+      // 后台不拼面向用户的本地化文案：以错误码 + meta 承载，前端按码 i18n（errors.ECF0001）。
+      reason: errorCodeMessage(ERROR_CODES.CF_UNSUPPORTED_VERSION, {
+        version: props.version,
+        min: MIN_VERSION.join('.'),
+      }),
     };
   }
 

@@ -393,6 +393,7 @@
     "EAG0001": "/ask erfordert eine Frage",
     "EAG0002": "Eine /{{tool}}-Aufgabe für diesen PR wird bereits ausgeführt oder steht in der Warteschlange; bitte nicht erneut auslösen.",
     "EAG0003": "pr-agent ist nicht bereit: Weder die eingebettete Laufzeitumgebung noch eine lokale CLI wurde erkannt. Details siehe Erkennungsergebnisse unter Einstellungen.",
+    "ECF0001": "Nicht unterstützte Bitbucket-Server-Version {{version}}; mindestens {{min}} erforderlich",
     "ENT0001": "Proxy ist deaktiviert oder die Adresse ist leer",
     "ENT0407": "Proxy-Authentifizierung fehlgeschlagen (407); Benutzername/Passwort prüfen",
     "EPR0001": "Entwurf nicht gefunden (möglicherweise gelöscht)",

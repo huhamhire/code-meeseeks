@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { GITHUB_DOTCOM_API_BASE, GITLAB_DOTCOM_API_BASE, type Config } from '@meebox/shared';
 import { invoke } from '../../../api';
+import { formatBackendError } from '../../../errors';
 import { EyeIcon, EyeOffIcon } from '../../common';
 
 // 连接编辑用的扁平草稿（Connection 是嵌套的 auth/clone，拍平后表单好写），存盘前还原。
@@ -133,7 +134,10 @@ export function ConnectionForm({
                 r.serverVersion ? ` · v${r.serverVersion}` : ''
               }`,
             }
-          : { ok: false, text: r.reason ?? t('connectionForm.testFailed') },
+          : {
+              ok: false,
+              text: r.reason ? formatBackendError(r.reason).title : t('connectionForm.testFailed'),
+            },
       );
     } catch (e) {
       setTestResult({ ok: false, text: e instanceof Error ? e.message : String(e) });
