@@ -158,6 +158,18 @@ export const ConfigSchema = z.object({
    * 非空则按显式选择。透传到容器 `CONFIG__RESPONSE_LANGUAGE`（经解析后的有效值）。
    */
   language: z.string().default(''),
+  /**
+   * 外观偏好（GUI 主题等纯前端展示项；主进程不消费）。预留分组，后续编辑器主题 / 字体等并入此处。
+   */
+  appearance: z
+    .object({
+      /**
+       * GUI 主题偏好：'system' 跟随操作系统深 / 浅色，'light' / 'dark' 固定。**默认 'dark'**
+       * （与历史一致，升级不改变现有用户外观）；解析与生效在 renderer（见 renderer/src/theme）。
+       */
+      theme: z.enum(['system', 'light', 'dark']).default('dark'),
+    })
+    .default({}),
   workspace: z
     .object({
       repos_dir: z.string().default('~/.code-meeseeks/repos'),

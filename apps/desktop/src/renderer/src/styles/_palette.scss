@@ -61,3 +61,39 @@ $red-300: #f48771; // 错误文案 / 红边框（salmon）
 
 // ===== 紫（purple）=====
 $purple-400: #a78bfa; // 文件 renamed 状态点（Tailwind violet-400）
+
+// ============================================================================
+// 浅色主题补充原色（Light theme additions）
+// 浅色主题在白底上需要更深 / 更饱和的品牌色以保证对比度，单设这些步级；浅色中性「纸面」自成一段
+// 由亮到暗续在灰阶里（数字越大越深，故均小于上面暗色段的最浅一档 $gray-160）。深色文字直接复用
+// 上面的近黑灰（$gray-840 / $gray-820）。VS Code Light+ 取色对齐。
+// ============================================================================
+
+// 浅色中性「纸面」灰阶（亮 → 暗）
+$gray-0:   #ffffff; // 最亮：编辑器 / 浮层底
+$gray-30:  #f8f8f8; // 浅色 app shell
+$gray-60:  #f3f3f3; // 浅色侧栏 / 列表底
+$gray-90:  #ececec; // 浅色更深一档（输入区）
+$gray-120: #e8e8e8; // 浅色 hover / 分组头
+$gray-150: #e0e0e0; // 浅色弱边框 / avatar 底
+$gray-220: #cfcfcf; // 浅色默认边框
+$gray-260: #c1c1c1; // 浅色滚动条滑块
+$gray-340: #a8a8a8; // 浅色滚动条 hover / 极弱文字
+$gray-380: #909090; // 浅色滚动条 active / 折叠灰
+
+// 浅色品牌步级（白底高对比）
+$blue-800: #005fb8; // 浅色 accent / primary
+$blue-750: #0a4f9e; // 浅色 primary hover（压暗一档）
+$blue-650: #0a66c2; // 浅色链接 / info / cache
+$blue-500: #2563eb; // 浅色文件 copied 状态点
+$blue-100: #cfe3fb; // 浅色列表选中底（承深色文字）
+$green-650: #15803d; // 浅色 approved / token ↑输入
+$green-550: #1a7f37; // 浅色 git added 装饰
+$green-480: #2e9e4f; // 浅色文件 added 状态点
+$amber-700: #b45309; // 浅色 warning / 纯文字告警
+$amber-650: #9a6700; // 浅色 git modified 装饰
+$amber-550: #d18616; // 浅色文件 modified 状态点
+$red-680: #b31d28; // 浅色 git deleted 装饰
+$red-650: #cd3131; // 浅色 danger / needs-work 文字（VS Code Light error）
+$red-620: #c0392b; // 浅色 ghost 危险按钮描边 / 文字
+$purple-500: #8b5cf6; // 浅色文件 renamed 状态点

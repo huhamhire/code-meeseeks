@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { editorFontSize } from '../../../../../lib/editor-font';
+import { useResolvedTheme } from '../../../../../hooks/useTheme';
 import { languageFor } from '../../../../../utils/language';
 
 interface InlineCodeContextProps {
@@ -141,6 +142,8 @@ const CodeSnippet = memo(function CodeSnippet({
   snippet: Snippet;
   language: string;
 }) {
+  // Monaco 内置主题不走 CSS 自定义属性，须随应用主题显式切换（浅色 'vs' / 深色 'vs-dark'）。
+  const monacoTheme = useResolvedTheme() === 'light' ? 'vs' : 'vs-dark';
   const lineCount = snippet.text.split('\n').length;
   const height = lineCount * SNIPPET_LINE_HEIGHT + 12;
 
@@ -188,7 +191,7 @@ const CodeSnippet = memo(function CodeSnippet({
         height={`${String(height)}px`}
         language={language}
         value={snippet.text}
-        theme="vs-dark"
+        theme={monacoTheme}
         onMount={handleMount}
         options={READONLY_OPTIONS}
       />

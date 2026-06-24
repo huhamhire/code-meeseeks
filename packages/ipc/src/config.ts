@@ -1,4 +1,10 @@
-import type { Config, PingResult, PlatformKind, SupportedLanguage } from '@meebox/shared';
+import type {
+  Config,
+  PingResult,
+  PlatformKind,
+  SupportedLanguage,
+  ThemePreference,
+} from '@meebox/shared';
 
 /** 配置操作域：读 / 写 config.yaml（含热生效与草稿暂存）及连接 / 代理试连。 */
 export interface ConfigChannels {
@@ -11,6 +17,11 @@ export interface ConfigChannels {
    * 与代理/连接同属热生效项，无需依赖设置页全局保存。
    */
   'config:setLanguage': { request: { language: SupportedLanguage }; response: void };
+  /**
+   * 写入 GUI 主题偏好到 config.yaml。主题为纯前端展示项：实际切换由 renderer 即时完成（写
+   * documentElement data-theme），此通道仅持久化偏好，无主进程副作用。
+   */
+  'config:setTheme': { request: { theme: ThemePreference }; response: void };
   /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
   /** 写入 agent.dir 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */

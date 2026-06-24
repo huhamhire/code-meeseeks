@@ -109,3 +109,97 @@
   --rgb-blame-change: #{rgb-channels($lime-700)};
   --rgb-blame-fold: #{rgb-channels($slate-500)};
 }
+
+// ============================================================================
+// 浅色主题：覆盖同名语义变量。偏好解析为 light 时 renderer 写 documentElement[data-theme='light']
+// 触发本块。白底需更深 / 更饱和的品牌色保对比；半透明叠加（白雾 hover / 分隔线）翻成黑雾，否则白底看不见。
+// ============================================================================
+:root[data-theme='light'] {
+  // ===== 背景 =====
+  --bg-app: #{$gray-30};
+  --bg-white-fade: rgba(0, 0, 0, 0.06); // icon-btn hover：白底改黑雾
+  --bg-panel: #{$gray-60};
+  --bg-panel-alt: #{$gray-90};
+  --bg-elev: #{$gray-0};
+  --bg-surface: #{$gray-0};
+  --bg-hover: #{$gray-120};
+  --bg-selected: #{$blue-100};
+  --bg-group-header: #{$gray-120};
+
+  // ===== 边框 =====
+  --border-default: #{$gray-220};
+  --border-default-fade: rgba(0, 0, 0, 0.08);
+  --border-muted: #{$gray-150};
+
+  // ===== 文字 =====
+  --text-primary: #{$gray-840};
+  --text-body: #{$gray-820};
+  --text-muted: #{$gray-500};
+  --text-subtle: #{$gray-420};
+  --text-dim: #{$gray-340};
+  --text-on-accent: #{$white};
+
+  // ===== 语义色（动作 / 状态）=====
+  --color-accent: #{$blue-800};
+  --color-accent-hover: #{$blue-750};
+  --color-accent-bg-fade: rgba(0, 95, 184, 0.1);
+  --color-accent-strong-fade: rgba(0, 95, 184, 0.4);
+  --color-info: #{$blue-650};
+  --color-success: #{$green-700};
+  --color-approved: #{$green-650};
+  --color-warning: #{$amber-700};
+  --color-warning-bright: #{$amber-700};
+  --color-danger: #{$red-650};
+  --color-danger-bg: #{$red-700};
+  --color-danger-strong: #{$red-620};
+  --color-danger-strong-fade: rgba(192, 57, 43, 0.1);
+  --color-token-in: #{$green-650};
+  --color-token-out: #{$red-550};
+  --color-token-cache: #{$blue-650};
+
+  --color-accent-bg-hover: rgba(0, 95, 184, 0.16);
+  --color-approved-fade: rgba(21, 128, 61, 0.12);
+  --color-approved-fade-soft: rgba(21, 128, 61, 0.08);
+  --color-warning-fade: rgba(180, 83, 9, 0.12);
+  --color-danger-fade: rgba(205, 49, 49, 0.08);
+  --color-danger-border: rgba(205, 49, 49, 0.35);
+
+  --color-conflict-fade: rgba(180, 83, 9, 0.14);
+  --color-pending-fade: rgba(180, 83, 9, 0.12);
+  --color-posted-fade: rgba(21, 128, 61, 0.12);
+  --color-search-hit: rgba(250, 204, 21, 0.55);
+
+  // ===== Git decoration =====
+  --git-added: #{$green-550};
+  --git-added-bg-fade: rgba(26, 127, 55, 0.12);
+  --git-modified: #{$amber-650};
+  --git-deleted: #{$red-680};
+  --git-needs-work-fade: rgba(179, 29, 40, 0.12);
+  --git-needs-work-fg: #{$red-650};
+  --blame-change: #{$lime-700};
+  --blame-fold: #{$gray-380};
+
+  // ===== 文件改动状态点 =====
+  --file-status-added: #{$green-480};
+  --file-status-modified: #{$amber-550};
+  --file-status-deleted: #{$red-550};
+  --file-status-renamed: #{$purple-500};
+  --file-status-copied: #{$blue-500};
+
+  // ===== Avatar / 装饰 =====
+  --avatar-bg-default: #{$gray-150};
+
+  // ===== 滚动条 =====
+  --scrollbar-thumb: #{$gray-260};
+  --scrollbar-thumb-hover: #{$gray-340};
+  --scrollbar-thumb-active: #{$gray-380};
+
+  // ===== RGB 通道三元组（随浅色品牌基色重置）=====
+  --rgb-accent: #{rgb-channels($blue-800)};
+  --rgb-danger: #{rgb-channels($red-650)};
+  --rgb-warning: #{rgb-channels($amber-700)};
+  --rgb-approved: #{rgb-channels($green-650)};
+  --rgb-git-modified: #{rgb-channels($amber-650)};
+  --rgb-blame-change: #{rgb-channels($lime-700)};
+  --rgb-blame-fold: #{rgb-channels($gray-380)};
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppInfo, AppPaths, Config, SupportedLanguage } from '@meebox/shared';
+import type { AppInfo, AppPaths, Config, SupportedLanguage, ThemePreference } from '@meebox/shared';
 import {
   ConfirmModal,
   GlobeIcon,
@@ -14,6 +14,7 @@ import { ConnectionEditorModal } from './editors/ConnectionEditorModal';
 import { LlmEditorModal } from './editors/LlmEditorModal';
 import { ProxyEditorModal } from './editors/ProxyEditorModal';
 import { LanguageSection } from './sections/LanguageSection';
+import { ThemeSection } from './sections/ThemeSection';
 import { ConnectionsSection } from './sections/ConnectionsSection';
 import { PollerSection } from './sections/PollerSection';
 import { LlmSection } from './sections/LlmSection';
@@ -49,6 +50,8 @@ interface SettingsModalProps {
   onProxyChange?: (proxy: Config['proxy']) => void;
   /** UI 语言即时切换后通知父级同步 boot.config.language（与写盘/实时切换解耦的状态同步） */
   onLanguageChange?: (language: SupportedLanguage) => void;
+  /** GUI 主题即时切换后通知父级同步 boot.config.appearance.theme（同语言，解耦状态同步） */
+  onThemeChange?: (theme: ThemePreference) => void;
   /**
    * 连接改动（含切换活动连接）保存成功后通知父级。父级需重拉 config + 连接摘要 + PR 列表：
    * 活动连接变化后，main 端 app:connections 只返回新活动连接的摘要、prs:list 只返回其 PR，
@@ -69,6 +72,7 @@ export function SettingsModal({
   onLlmChange,
   onProxyChange,
   onLanguageChange,
+  onThemeChange,
   onConnectionsChange,
   onClose,
 }: SettingsModalProps) {
@@ -80,6 +84,7 @@ export function SettingsModal({
     onLlmChange,
     onProxyChange,
     onLanguageChange,
+    onThemeChange,
     onConnectionsChange,
     onClose,
   });
@@ -138,7 +143,10 @@ export function SettingsModal({
           </nav>
           <div className="settings-panel">
             {category === 'general' && (
-              <LanguageSection language={s.language} onChange={s.handleLanguageChange} />
+              <>
+                <LanguageSection language={s.language} onChange={s.handleLanguageChange} />
+                <ThemeSection theme={s.themePreference} onChange={s.handleThemeChange} />
+              </>
             )}
             {category === 'connection' && (
               <>

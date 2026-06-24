@@ -16,6 +16,7 @@ import { usePanelLayout } from './hooks/usePanelLayout';
 import { useUpdateNotice } from './hooks/useUpdateNotice';
 import { useAppStores } from './hooks/useAppStores';
 import { useExternalLinkGuard } from './hooks/useExternalLinkGuard';
+import { useTheme } from './hooks/useTheme';
 
 export default function App() {
   const { t } = useTranslation();
@@ -51,6 +52,9 @@ export default function App() {
   const updateInfo = useUpdateNotice();
   useAppStores();
   useExternalLinkGuard();
+  // GUI 主题：跟随 config 偏好生效（'system' 下还跟随 OS 切换）。boot 前用默认深色，模块导入时已按
+  // localStorage 缓存定下首帧主题，boot 到达后切到 config 偏好。
+  useTheme(boot?.config.appearance.theme ?? 'dark');
 
   const [showSettings, setShowSettings] = useState(false);
   /**
@@ -195,6 +199,9 @@ export default function App() {
           onLlmChange={(llm) => patchConfig((c) => ({ ...c, llm }))}
           onProxyChange={(proxy) => patchConfig((c) => ({ ...c, proxy }))}
           onLanguageChange={(language) => patchConfig((c) => ({ ...c, language }))}
+          onThemeChange={(theme) =>
+            patchConfig((c) => ({ ...c, appearance: { ...c.appearance, theme } }))
+          }
           onConnectionsChange={refreshBootAndPrs}
           onClose={() => setShowSettings(false)}
         />

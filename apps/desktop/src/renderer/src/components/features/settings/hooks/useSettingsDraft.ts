@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppPaths, Config, LlmProfile, SupportedLanguage } from '@meebox/shared';
+import type { AppPaths, Config, LlmProfile, SupportedLanguage, ThemePreference } from '@meebox/shared';
 import { invoke } from '../../../../api';
 import i18n, { persistLanguage, resolveUiLanguage } from '../../../../i18n';
+import { applyThemePreference, persistThemePreference } from '../../../../theme';
 import { fromConnDraft, toConnDraft, type ConnDraft } from '../ConnectionForm';
 import { newProfileId } from '../LlmProfileForm';
 
@@ -12,6 +13,7 @@ interface UseSettingsDraftParams {
   onLlmChange?: (llm: Config['llm']) => void;
   onProxyChange?: (proxy: Config['proxy']) => void;
   onLanguageChange?: (language: SupportedLanguage) => void;
+  onThemeChange?: (theme: ThemePreference) => void;
   onConnectionsChange?: () => void | Promise<void>;
   onClose: () => void;
 }
@@ -27,6 +29,7 @@ export function useSettingsDraft({
   onLlmChange,
   onProxyChange,
   onLanguageChange,
+  onThemeChange,
   onConnectionsChange,
   onClose,
 }: UseSettingsDraftParams) {
@@ -83,6 +86,20 @@ export function useSettingsDraft({
     onLanguageChange?.(next); // 同步父级 boot.config.language
     invoke('config:setLanguage', { language: next }).catch((e: unknown) => {
       // 写盘 / 主进程切换失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
+      setSaveError(e instanceof Error ? e.message : String(e));
+    });
+  };
+
+  // GUI 主题：与语言同属即时生效项（不走全局保存）。改即写 data-theme + 持久化 + 同步父级 + 写盘。
+  const [themePreference, setThemePreference] = useState<ThemePreference>(config.appearance.theme);
+  const handleThemeChange = (next: ThemePreference): void => {
+    if (next === themePreference) return;
+    setThemePreference(next);
+    applyThemePreference(next); // 渲染层实时切换（写 documentElement data-theme）
+    persistThemePreference(next); // localStorage 缓存，下次启动同步命中
+    onThemeChange?.(next); // 同步父级 boot.config.appearance.theme
+    invoke('config:setTheme', { theme: next }).catch((e: unknown) => {
+      // 写盘失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
       setSaveError(e instanceof Error ? e.message : String(e));
     });
   };
@@ -320,6 +337,9 @@ export function useSettingsDraft({
     // 语言
     language,
     handleLanguageChange,
+    // 主题
+    themePreference,
+    handleThemeChange,
     // 连接
     connections,
     activeConnId,
