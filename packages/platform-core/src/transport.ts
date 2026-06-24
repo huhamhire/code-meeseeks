@@ -38,8 +38,9 @@ export interface PlatformConnectionConfig {
  * 平台连接传输端口（port）。领域基类只依赖此接口发起调用，不感知底层 fetch / 鉴权 / 分页 / 错误解析
  * 实现。各平台包提供「统一连接封装实例」实现本端口（见 docs/design/platform-layer-refactor.md §3.1）。
  *
- * 仅声明三平台同构的**最小连接能力**；平台特有方法（GitHub PATCH / search、各平台 API 二进制变体等）
- * 由各自传输实现作为端口之外的扩展提供，不污染通用契约。
+ * 仅声明三平台同构的**最小连接能力**——纯 JSON 读写 + 分页。平台特有方法（GitHub PATCH / search、各平台
+ * 信任模型迥异的二进制拉取等）由各自传输实现作为端口之外的扩展提供，不污染通用契约；二进制资源由
+ * MediaService 领域基类按平台抽象（见 §3.2），故不进本端口。
  */
 export interface PlatformTransport {
   /** GET，返回 JSON 体。 */
@@ -57,9 +58,4 @@ export interface PlatformTransport {
   del(path: string): Promise<void>;
   /** 列表分页迭代器（平台各自的分页风格在实现内收口为统一异步迭代）。 */
   paginate<T>(path: string, params?: Record<string, string>): AsyncIterable<T>;
-  /**
-   * 拉绝对 URL 的二进制资源；不可信 host / 失败 → null。信任模型（带凭据的白名单）由平台实现内部
-   * 判定，防 PAT 外发 / SSRF。
-   */
-  getBinary(url: string): Promise<BinaryResource | null>;
 }

@@ -28,6 +28,7 @@
     }
   },
   "dependencies": {
+    "@meebox/platform-core": "*",
     "@meebox/shared": "*"
   }
 }
