@@ -9,10 +9,12 @@ export interface CommentService {
    * reply 经 comment.replies 嵌套返回，调用方拿到的是已成树的评论列表。
    */
   listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]>;
+
   /**
    * 在 PR 上发一条 summary 评论（顶层、不锚到文件）。
    */
   publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment>;
+
   /**
    * 在 PR diff 上发一条 inline 评论，锚到具体文件 + 行号。
    */
@@ -22,6 +24,7 @@ export interface CommentService {
     anchor: PrCommentAnchor,
     body: string,
   ): Promise<PrComment>;
+
   /**
    * 在已有评论下回复。
    */
@@ -31,6 +34,7 @@ export interface CommentService {
     parentCommentId: string,
     body: string,
   ): Promise<PrComment>;
+
   /**
    * 编辑 PR 上的一条评论（改 body 文本）。
    *
@@ -43,6 +47,7 @@ export interface CommentService {
     version: number,
     body: string,
   ): Promise<PrComment>;
+
   /**
    * 删除 PR 上的一条评论。
    *
@@ -59,10 +64,12 @@ export abstract class BaseCommentService extends PlatformDomainService implement
    * 由平台子类实现：拉取 PR 的全部评论并归一为统一评论树。
    */
   abstract listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]>;
+
   /**
    * 由平台子类实现：发表一条顶层 summary 评论。
    */
   abstract publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment>;
+
   /**
    * 由平台子类实现：在 diff 上发表锚到文件 + 行号的 inline 评论。
    */
@@ -72,6 +79,7 @@ export abstract class BaseCommentService extends PlatformDomainService implement
     anchor: PrCommentAnchor,
     body: string,
   ): Promise<PrComment>;
+
   /**
    * 由平台子类实现：在指定父评论下回复。
    */
@@ -81,6 +89,7 @@ export abstract class BaseCommentService extends PlatformDomainService implement
     parentCommentId: string,
     body: string,
   ): Promise<PrComment>;
+
   /**
    * 由平台子类实现：编辑评论 body（version 乐观锁按平台决定是否校验）。
    */
@@ -91,6 +100,7 @@ export abstract class BaseCommentService extends PlatformDomainService implement
     version: number,
     body: string,
   ): Promise<PrComment>;
+
   /**
    * 由平台子类实现：删除评论（version 乐观锁按平台决定是否校验）。
    */

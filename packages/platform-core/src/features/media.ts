@@ -10,6 +10,7 @@ export interface MediaService {
    * 平台不支持或失败返回 null，调用方走 initials 回退。
    */
   getUserAvatar(slug: string, avatarUrl?: string): Promise<BinaryResource | null>;
+
   /**
    * 代理拉取评论 body 内嵌图片。
    *
@@ -26,6 +27,7 @@ export abstract class BaseMediaService extends PlatformDomainService implements 
    * 由平台子类实现：拉取用户头像，失败或不支持返回 null。
    */
   abstract getUserAvatar(slug: string, avatarUrl?: string): Promise<BinaryResource | null>;
+
   /**
    * 由平台子类实现：代理拉取评论内嵌附件，非本平台或失败返回 null。
    */
