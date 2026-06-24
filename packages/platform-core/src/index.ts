@@ -16,3 +16,21 @@ export {
   extractApiMessage,
   resolveConnectionFetch,
 } from './http.js';
+export type {
+  PlatformConnection,
+  PullRequestService,
+  CommentService,
+  MediaService,
+  PlatformAdapter,
+  ConnectionContext,
+  PlatformServices,
+} from './domains.js';
+export {
+  MutableConnectionContext,
+  PlatformDomainService,
+  BaseConnection,
+  BasePullRequestService,
+  BaseCommentService,
+  BaseMediaService,
+  composePlatformAdapter,
+} from './domains.js';
