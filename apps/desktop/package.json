@@ -66,6 +66,7 @@
     "@meebox/config": "*",
     "@meebox/ipc": "*",
     "@meebox/logger": "*",
+    "@meebox/platform-core": "*",
     "@meebox/platform-bitbucket-server": "*",
     "@meebox/platform-github": "*",
     "@meebox/platform-gitlab": "*",
