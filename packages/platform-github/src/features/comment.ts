@@ -1,7 +1,7 @@
 import type { PrComment, PrCommentAnchor, RepoRef } from '@meebox/shared';
 import { BaseCommentService, collect, type ConnectionContext } from '@meebox/platform-core';
 import { GitHubClientError, type GitHubClient } from '../client.js';
-import { mapUser } from '../mappers.js';
+import { mapUser } from '../utils.js';
 import type { GhIssueComment, GhPull, GhReviewComment } from '../types.js';
 
 /** GitHub 评论领域：issue（summary）+ review（inline）两套端点归一为统一评论树。 */

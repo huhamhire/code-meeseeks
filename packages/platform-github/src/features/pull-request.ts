@@ -17,7 +17,7 @@ import {
   type MergeVetoCode,
 } from '@meebox/platform-core';
 import type { GitHubClient } from '../client.js';
-import { mapUser } from '../mappers.js';
+import { mapUser } from '../utils.js';
 import type { GhCommit, GhPull, GhReview, GhSearchItem } from '../types.js';
 
 /** 发现筛选分类 → GitHub search 主体限定词（对齐仪表盘四类）。 */
@@ -26,6 +26,20 @@ const FILTER_QUALIFIER: Record<PrDiscoveryFilter, string> = {
   created: 'author:@me',
   assigned: 'assignee:@me',
   mentioned: 'mentions:@me',
+};
+
+/** review 决断态 → 活动事件类型（COMMENTED / PENDING 非决断，不在表中 → 跳过）。 */
+const ACTIVITY_KIND_BY_STATE: Partial<Record<GhReview['state'], PrActivityKind>> = {
+  APPROVED: 'approved',
+  CHANGES_REQUESTED: 'needsWork',
+  DISMISSED: 'dismissed',
+};
+
+/** review 决断态 → reviewer 状态（COMMENTED / PENDING 不改变决断态，不在表中）。 */
+const REVIEWER_STATUS_BY_STATE: Partial<Record<GhReview['state'], ReviewerStatus>> = {
+  APPROVED: 'approved',
+  CHANGES_REQUESTED: 'needsWork',
+  DISMISSED: 'unapproved',
 };
 
 /** GitHub PR 操作领域：发现（search 两段取数）、提交、活动决断、审批、合并。 */
@@ -82,14 +96,7 @@ export class GitHubPullRequestService extends BasePullRequestService {
     for (const r of reviews) {
       // COMMENTED / PENDING 不是决断；submitted_at 缺失（草稿态）跳过
       if (!r.user || !r.submitted_at) continue;
-      const kind: PrActivityKind | null =
-        r.state === 'APPROVED'
-          ? 'approved'
-          : r.state === 'CHANGES_REQUESTED'
-            ? 'needsWork'
-            : r.state === 'DISMISSED'
-              ? 'dismissed'
-              : null;
+      const kind = ACTIVITY_KIND_BY_STATE[r.state];
       if (!kind) continue;
       out.push({
         remoteId: String(r.id),
@@ -184,11 +191,7 @@ export class GitHubPullRequestService extends BasePullRequestService {
     );
     for (const r of sorted) {
       if (!r.user) continue;
-      let status: ReviewerStatus | null = null;
-      if (r.state === 'APPROVED') status = 'approved';
-      else if (r.state === 'CHANGES_REQUESTED') status = 'needsWork';
-      else if (r.state === 'DISMISSED') status = 'unapproved';
-      // COMMENTED / PENDING 不改变决断状态
+      const status = REVIEWER_STATUS_BY_STATE[r.state];
       if (status) byLogin.set(r.user.login, { ...mapUser(r.user), status });
     }
     return [...byLogin.values()];
