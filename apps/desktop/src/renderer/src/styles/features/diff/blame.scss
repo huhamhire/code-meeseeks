@@ -112,7 +112,7 @@
   right: 0;
   padding-left: 10px;
   border-left: 3px solid $blame-change;
-  background: rgba($blame-change, 0.08);
+  background: rgb(var(--rgb-blame-change) / 0.08);
   pointer-events: auto;
   box-sizing: border-box;
 }
@@ -124,8 +124,8 @@
   right: 0;
   background: repeating-linear-gradient(
     -45deg,
-    rgba($blame-fold, 0.08) 0,
-    rgba($blame-fold, 0.08) 4px,
+    rgb(var(--rgb-blame-fold) / 0.08) 0,
+    rgb(var(--rgb-blame-fold) / 0.08) 4px,
     transparent 4px,
     transparent 8px
   );

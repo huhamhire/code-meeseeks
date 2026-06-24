@@ -105,7 +105,7 @@
   font-weight: 600;
 }
 .pr-activity-chip-approved {
-  background: rgba($color-approved, 0.16);
+  background: rgb(var(--rgb-approved) / 0.16);
   color: $color-approved;
 }
 .pr-activity-chip-needsWork {

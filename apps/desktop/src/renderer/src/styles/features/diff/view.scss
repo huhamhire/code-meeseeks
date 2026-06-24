@@ -178,16 +178,16 @@
   align-items: center;
   gap: $space-5;
   padding: $space-3 $space-6;
-  background: rgba($color-danger, 0.08);
-  border-bottom: 1px solid rgba($color-danger, 0.35);
+  background: rgb(var(--rgb-danger) / 0.08);
+  border-bottom: 1px solid rgb(var(--rgb-danger) / 0.35);
   color: $text-primary;
   font-size: $fs-sm;
   flex-shrink: 0;
 
   &.backend-error-banner-auth,
   &.backend-error-banner-not-found {
-    background: rgba($git-modified, 0.1);
-    border-bottom-color: rgba($git-modified, 0.4);
+    background: rgb(var(--rgb-git-modified) / 0.1);
+    border-bottom-color: rgb(var(--rgb-git-modified) / 0.4);
   }
 }
 .backend-error-banner-icon {

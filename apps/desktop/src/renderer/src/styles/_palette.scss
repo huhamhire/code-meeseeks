@@ -1,0 +1,63 @@
+// 原始调色板（标准色层 / Tier 1）：按色相family 组织的「标准色」，是全应用配色的唯一色值真相源。
+// 上层语义 token（_theme.scss）只引用这里的原色，绝不再写裸 hex —— 主题切换时换的是「语义 → 原色」
+// 的映射，而非散落各处的色值。
+//
+// 命名：`$<family>-<step>`，step 越大越深（与 Tailwind 习惯一致，仅作 family 内排序，非统一感知刻度）。
+// 取色沿用 VS Code Dark+ / Tailwind / Material 既有标准值，重构期严格保持暗色主题像素级一致。
+// 纯变量、无 CSS 输出；经 `@use './palette' as *;` 拉取。
+
+// ===== 中性灰阶（gray / slate）=====
+// 暗色主题的底 / 边 / 字面。深 → 浅。slate 一档带轻微蓝灰，单列出以区分纯灰。
+$gray-900: #181818; // 最深：侧栏分组头
+$gray-880: #1a1a1b; // 输入区等更深一档
+$gray-850: #1e1e1e; // app shell / body
+$gray-840: #1f1f20; // 侧栏 / 列表底
+$gray-820: #252526; // 浮层 / 弹出菜单
+$gray-780: #2a2d2e; // hover 高亮 / avatar 底
+$gray-760: #2d2d30; // 输入框 / chip 默认底 / 弱边框
+$gray-680: #3e3e42; // 默认边框
+$gray-600: #4d4d4d; // 滚动条滑块
+$gray-540: #5e5e5e; // 滚动条 hover
+$gray-500: #6e6e6e; // 极弱 placeholder 字
+$gray-480: #707070; // 滚动条 active
+$gray-420: #858585; // 次级文字
+$gray-200: #cccccc; // 主文字
+$gray-160: #d4d4d4; // body 文字
+$slate-500: #6e7681; // 更弱文字（blame / footer）/ 折叠斜纹
+$white: #ffffff;
+$black: #000000;
+
+// ===== 蓝（blue）=====
+$blue-900: #094771; // 列表项选中底（VS Code activeList）
+$blue-700: #0e639c; // 主蓝 accent / primary
+$blue-600: #1177bb; // primary hover（提亮一档）
+$blue-400: #60a5fa; // 文件 copied 状态点
+$blue-300: #6cb6ff; // 链接 / 提示 / cache 命中
+
+// ===== 绿（green / lime）=====
+$green-700: #16825d; // 状态栏 system OK 深绿
+$green-600: #16a34a; // PR approved 绿（Tailwind green-600）
+$green-500: #4caf50; // 文件 added 状态点（Material green-500）
+$green-450: #22c55e; // token ↑输入（Tailwind green-500）
+$green-400: #5fa56d; // 草稿已发布底（仅作浅底基色）
+$green-300: #73c991; // git added 装饰绿
+$lime-700: #487e02; // blame 改动行绿条（偏橄榄）
+
+// ===== 琥珀 / 黄（amber / yellow）=====
+$amber-600: #d97706; // warning 饱和琥珀（Tailwind amber-600）
+$amber-500: #f59e0b; // 文件 modified 状态点 / 冲突底基色（Tailwind amber-500）
+$amber-450: #e59e1e; // 待办 / pending 底基色
+$amber-400: #fbbf24; // 亮琥珀，纯文字告警
+$amber-300: #e2c08d; // git modified 装饰（tan）
+$yellow-300: #ffd54f; // diff 搜索命中高亮基色（Material amber）
+
+// ===== 红 / 橙（red）=====
+$red-700: #c72e0f; // 错误实底 / 删除按钮（高饱和）
+$red-600: #c74e39; // git deleted 装饰
+$red-550: #dc2626; // 文件 deleted 状态点（Tailwind red-600）
+$red-500: #e8512e; // ghost 危险按钮描边 / 文字
+$red-450: #ef4444; // token ↓输出（Tailwind red-500）
+$red-300: #f48771; // 错误文案 / 红边框（salmon）
+
+// ===== 紫（purple）=====
+$purple-400: #a78bfa; // 文件 renamed 状态点（Tailwind violet-400）

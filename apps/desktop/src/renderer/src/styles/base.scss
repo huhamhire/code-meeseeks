@@ -1,4 +1,5 @@
 @use './tokens' as *;
+@use './theme'; // 发射 :root 主题变量块（语义 → 标准色）；本文件经 App.scss 首位引入，确保只发射一次
 
 * {
   box-sizing: border-box;

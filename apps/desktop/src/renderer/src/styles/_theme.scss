@@ -1,0 +1,111 @@
+// 主题层（语义层 / Tier 2）：把语义 token 映射到 _palette.scss 的标准色，发射为 CSS 自定义属性
+// （CSS custom properties），使「语义 → 色值」可在运行期整体切换 —— 这是深色 / 浅色主题切换的基座。
+//
+// - 默认（:root）即当前**暗色**主题，重构期与旧 SCSS 像素级一致。
+// - 后续浅色主题在此追加 `:root[data-theme='light'] { ... }` 覆盖同名变量即可，无需触碰任何使用处。
+// - 业务样式不直接引用本文件的变量名，而经 _tokens.scss 的 `$token: var(--token)` 桥接（使用处零改动）。
+//
+// 半透明叠加：少数语义色需在使用处按不同 alpha 叠加（`rgb(var(--rgb-x) / a)`），故额外发射其 RGB 通道
+// 三元组（`--rgb-*`）。预先算好的固定 alpha 浅底仍以字面 rgba() 保留语义 token，求暗色精确还原。
+
+@use 'sass:color';
+@use './palette' as *;
+
+// 取色的 RGB 通道三元组（空格分隔，供 `rgb(<triple> / <alpha>)`）。以 palette 原色为唯一来源。
+@function rgb-channels($c) {
+  @return #{color.channel($c, 'red', $space: rgb)}
+    #{color.channel($c, 'green', $space: rgb)}
+    #{color.channel($c, 'blue', $space: rgb)};
+}
+
+:root {
+  // ===== 背景 =====
+  --bg-app: #{$gray-850};
+  --bg-white-fade: rgba(255, 255, 255, 0.12); // icon-btn hover / count-pill 底
+  --bg-panel: #{$gray-840};
+  --bg-panel-alt: #{$gray-880};
+  --bg-elev: #{$gray-820};
+  --bg-surface: #{$gray-760};
+  --bg-hover: #{$gray-780};
+  --bg-selected: #{$blue-900};
+  --bg-group-header: #{$gray-900};
+
+  // ===== 边框 =====
+  --border-default: #{$gray-680};
+  --border-default-fade: rgba(62, 62, 66, 0.5); // blame row 内分隔线
+  --border-muted: #{$gray-760};
+
+  // ===== 文字 =====
+  --text-primary: #{$gray-200};
+  --text-body: #{$gray-160};
+  --text-muted: #{$gray-420};
+  --text-subtle: #{$slate-500};
+  --text-dim: #{$gray-500};
+  --text-on-accent: #{$white};
+
+  // ===== 语义色（动作 / 状态）=====
+  --color-accent: #{$blue-700};
+  --color-accent-hover: #{$blue-600};
+  --color-accent-bg-fade: rgba(14, 99, 156, 0.18);
+  --color-accent-strong-fade: rgba(14, 99, 156, 0.5); // resize handle hover/active
+  --color-info: #{$blue-300};
+  --color-success: #{$green-700};
+  --color-approved: #{$green-600};
+  --color-warning: #{$amber-600};
+  --color-warning-bright: #{$amber-400};
+  --color-danger: #{$red-300};
+  --color-danger-bg: #{$red-700};
+  --color-danger-strong: #{$red-500};
+  --color-danger-strong-fade: rgba(232, 81, 46, 0.12); // ghost 危险按钮 hover 浅红底
+  --color-token-in: #{$green-450};
+  --color-token-out: #{$red-450};
+  --color-token-cache: #{$blue-300};
+
+  // 语义色浅底（chip / banner 背景，与对应主色同色相）
+  --color-accent-bg-hover: rgba(14, 99, 156, 0.28);
+  --color-approved-fade: rgba(22, 163, 74, 0.18);
+  --color-approved-fade-soft: rgba(22, 163, 74, 0.1);
+  --color-warning-fade: rgba(217, 119, 6, 0.18);
+  --color-danger-fade: rgba(244, 135, 113, 0.08);
+  --color-danger-border: rgba(244, 135, 113, 0.35);
+
+  // off-palette 状态浅底（与主色略有出入，暂各自具名，待后续与主色收敛）
+  --color-conflict-fade: rgba(245, 158, 11, 0.18); // 冲突 / needsWork chip 填充
+  --color-pending-fade: rgba(229, 158, 30, 0.15); // 待办 / 草稿 pending 填充
+  --color-posted-fade: rgba(95, 165, 109, 0.15); // 草稿已发布填充
+  --color-search-hit: rgba(255, 213, 79, 0.42); // diff 搜索命中高亮
+
+  // ===== Git decoration 配色（跟 Monaco / VS Code 一致）=====
+  --git-added: #{$green-300};
+  --git-added-bg-fade: rgba(115, 199, 145, 0.16);
+  --git-modified: #{$amber-300};
+  --git-deleted: #{$red-600};
+  --git-needs-work-fade: rgba(199, 78, 57, 0.18);
+  --git-needs-work-fg: #{$red-300};
+  --blame-change: #{$lime-700}; // PR 改动行绿条
+  --blame-fold: #{$slate-500}; // 折叠占位斜纹灰
+
+  // ===== 文件改动状态点 =====
+  --file-status-added: #{$green-500};
+  --file-status-modified: #{$amber-500};
+  --file-status-deleted: #{$red-550};
+  --file-status-renamed: #{$purple-400};
+  --file-status-copied: #{$blue-400};
+
+  // ===== Avatar / 装饰 =====
+  --avatar-bg-default: #{$gray-780};
+
+  // ===== 滚动条（webkit）=====
+  --scrollbar-thumb: #{$gray-600};
+  --scrollbar-thumb-hover: #{$gray-540};
+  --scrollbar-thumb-active: #{$gray-480};
+
+  // ===== RGB 通道三元组（供使用处 `rgb(var(--rgb-x) / <alpha>)` 半透明叠加）=====
+  --rgb-accent: #{rgb-channels($blue-700)};
+  --rgb-danger: #{rgb-channels($red-300)};
+  --rgb-warning: #{rgb-channels($amber-600)};
+  --rgb-approved: #{rgb-channels($green-600)};
+  --rgb-git-modified: #{rgb-channels($amber-300)};
+  --rgb-blame-change: #{rgb-channels($lime-700)};
+  --rgb-blame-fold: #{rgb-channels($slate-500)};
+}

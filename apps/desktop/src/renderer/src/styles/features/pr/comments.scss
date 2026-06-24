@@ -107,7 +107,7 @@
 
   // base 侧 (old) 用红调，head 侧 (new) 用绿调，跟 diff 视觉一致
   &.pr-comment-anchor-old {
-    background: rgba($color-danger, 0.15);
+    background: rgb(var(--rgb-danger) / 0.15);
     color: $color-danger;
   }
   &.pr-comment-anchor-new {
@@ -173,7 +173,7 @@
   &:hover:not(:disabled) {
     border-color: $color-info;
     color: $color-info;
-    background: rgba($color-accent, 0.08);
+    background: rgb(var(--rgb-accent) / 0.08);
   }
 }
 // 删除按钮：跟回复按钮同尺寸，主色用 danger 让用户一眼识别为破坏性操作。
@@ -205,7 +205,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba($color-danger, 0.1);
+  background: rgb(var(--rgb-danger) / 0.1);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;
@@ -345,7 +345,7 @@
 // Monaco decoration：锚定行整行底色 + 左侧色带 (margin gutter)，跟 inline 锚点
 // chip 颜色保持一组语义 (warning amber 区分于 added 绿 / removed 红)
 .comment-code-context-anchor-line {
-  background: rgba($color-warning, 0.18);
+  background: rgb(var(--rgb-warning) / 0.18);
 }
 .comment-code-context-anchor-gutter {
   background: $color-warning;
