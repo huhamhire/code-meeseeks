@@ -13,6 +13,11 @@ export class GitLabCommentService extends BaseCommentService {
     super(ctx);
   }
 
+  /**
+   * 拉取 MR discussions 并归一为统一评论树：每个 discussion 首 note 为顶层、其余为 reply。
+   *
+   * 过滤 system note（状态变更 / 指派等自动事件）；全为 system note 的 discussion 跳过。
+   */
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
     const me = this.ctx.getCurrentUser()?.name;
     const out: PrComment[] = [];
@@ -30,6 +35,9 @@ export class GitLabCommentService extends BaseCommentService {
     return out;
   }
 
+  /**
+   * 发表 summary 评论：创建一个不带 position 的新 discussion（顶层 note）后归一返回。
+   */
   async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
     // summary 评论 = 不带 position 的新 discussion（顶层 note）
     const created = await this.client.post<GlDiscussion>(
@@ -39,6 +47,11 @@ export class GitLabCommentService extends BaseCommentService {
     return this.mapNote(created.notes[0]!, created.id, this.ctx.getCurrentUser()?.name);
   }
 
+  /**
+   * 发表 inline 评论：创建带 position 的 discussion。
+   *
+   * position 需 base/start/head 三 sha，先拉 MR 取 diff_refs（缺失则抛错）；按 side 锚到 new_line / old_line。
+   */
   async publishInlineComment(
     repo: RepoRef,
     prId: string,
@@ -69,6 +82,11 @@ export class GitLabCommentService extends BaseCommentService {
     return this.mapNote(created.notes[0]!, created.id, this.ctx.getCurrentUser()?.name);
   }
 
+  /**
+   * 在指定 discussion 下追加一条 note 作为回复。
+   *
+   * parentCommentId 即 discussion_id（threadId），renderer 已统一传 threadId ?? remoteId。
+   */
   async replyToComment(
     repo: RepoRef,
     prId: string,
@@ -83,6 +101,11 @@ export class GitLabCommentService extends BaseCommentService {
     return this.mapNote(note, parentCommentId, this.ctx.getCurrentUser()?.name);
   }
 
+  /**
+   * 编辑评论 body：经 /notes/:id 覆盖 discussion 内 note。
+   *
+   * GitLab 无乐观锁，version 忽略；编辑响应不带 discussion id，threadId 用 note id 兜底。
+   */
   async editComment(
     repo: RepoRef,
     prId: string,
@@ -100,6 +123,9 @@ export class GitLabCommentService extends BaseCommentService {
     return this.mapNote(note, String(note.id), this.ctx.getCurrentUser()?.name);
   }
 
+  /**
+   * 删除一条评论 note。GitLab 无乐观锁，version 忽略。
+   */
   async deleteComment(
     repo: RepoRef,
     prId: string,
@@ -111,6 +137,12 @@ export class GitLabCommentService extends BaseCommentService {
 
   // ---- 映射（领域私有）----
 
+  /**
+   * 把 GitLab note 归一为 PrComment。
+   *
+   * 有 text position 时推导锚点（按 new_line / old_line 判侧与行类型）、记为 inline，否则记为 summary；
+   * 按作者是否为当前用户标记 canEdit / canDelete；GitLab 无乐观锁，version 置 0 作哨兵。
+   */
   private mapNote(n: GlNote, discussionId: string, me: string | undefined): PrComment {
     const pos = n.position;
     const anchor: PrCommentAnchor | null =

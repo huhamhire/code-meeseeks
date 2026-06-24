@@ -16,6 +16,9 @@ export class GitLabMediaService extends BaseMediaService {
     super(ctx);
   }
 
+  /**
+   * 拉取用户头像：GitLab 无按用户名拼直链的形式，仅在给出 avatar_url 时拉取，否则返回 null 走 initials 回退。
+   */
   async getUserAvatar(_slug: string, avatarUrl?: string): Promise<BinaryResource | null> {
     // GitLab 无 <host>/<username>.png 直链；只有 avatar_url 直链时才拉（本实例 host 才带 PAT），
     // 否则退 initials。
@@ -23,6 +26,12 @@ export class GitLabMediaService extends BaseMediaService {
     return null;
   }
 
+  /**
+   * 代理拉取评论内嵌附件。
+   *
+   * 本实例的 `/uploads/<secret>/<file>` 改走带 PAT 的 API 下载端点（web 路由对 PAT 一律 302 到登录页）；
+   * 其它本实例绝对 URL 直接代理；非本实例 / 解析不出则返回 null 让上层回退。
+   */
   async getAttachment(url: string, repo?: RepoRef): Promise<BinaryResource | null> {
     // 项目 markdown 上传 `/uploads/<secret>/<file>`（绝对或相对皆可）：其 web 路由对 PAT 一律 302
     // 到登录页（私有项目仅认浏览器 session），故改走 API 下载端点 `GET /projects/:id/uploads/

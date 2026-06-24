@@ -51,6 +51,11 @@ export class GitHubPullRequestService extends BasePullRequestService {
     super(ctx);
   }
 
+  /**
+   * 发现待处理 PR：先经 search/issues 命中候选，再逐条取详情归一。
+   *
+   * 仅保留确为 PR 的命中；逐条详情请求并发执行，单条失败丢弃该条而不拖垮整体。
+   */
   async listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]> {
     const items: GhSearchItem[] = [];
     for await (const it of this.client.searchItems<GhSearchItem>('/search/issues', {
@@ -65,6 +70,9 @@ export class GitHubPullRequestService extends BasePullRequestService {
       .map((r) => r.value);
   }
 
+  /**
+   * 按一条 search 命中加载完整 PR：并发取 PR 详情与 reviews，组装审批人与合并状态后归一。
+   */
   private async loadPull(item: GhSearchItem): Promise<PullRequest> {
     const { owner, repo } = this.parseRepositoryUrl(item.repository_url);
     const base = `/repos/${owner}/${repo}/pulls/${String(item.number)}`;
@@ -75,6 +83,9 @@ export class GitHubPullRequestService extends BasePullRequestService {
     return this.mapPull(pull, this.buildReviewers(pull, reviews), this.mapMergeStatus(pull));
   }
 
+  /**
+   * 列出 PR 提交：GitHub 端点为 oldest-first，按契约反转为 newest-first 返回。
+   */
   async listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]> {
     const out: PrCommit[] = [];
     for await (const c of this.client.paginate<GhCommit>(
@@ -86,6 +97,11 @@ export class GitHubPullRequestService extends BasePullRequestService {
     return out.reverse();
   }
 
+  /**
+   * 把 PR 的 reviews 提炼为评审决断活动事件。
+   *
+   * 仅保留有提交时间的决断态（APPROVED / CHANGES_REQUESTED / DISMISSED），COMMENTED / PENDING 跳过。
+   */
   async listPullRequestActivity(repo: RepoRef, prId: string): Promise<PrActivityEvent[]> {
     const reviews = await collect(
       this.client.paginate<GhReview>(
@@ -108,6 +124,12 @@ export class GitHubPullRequestService extends BasePullRequestService {
     return out;
   }
 
+  /**
+   * 写当前用户在 PR 上的 review 状态。
+   *
+   * approved / needsWork 各提交一条 review（REQUEST_CHANGES 需带 body）；unapproved 则撤销本人最近一条
+   * 决断性评审（dismiss）。
+   */
   async setPullRequestReviewStatus(
     repo: RepoRef,
     prId: string,
@@ -143,6 +165,12 @@ export class GitHubPullRequestService extends BasePullRequestService {
     }
   }
 
+  /**
+   * 合并 PR（仅用 merge commit、不回退 squash/rebase）。
+   *
+   * 不可合并（禁用 merge commit / 冲突 / 必评必检未过 / 落后 / 无权限）时，GitHub 返回 405 或 403，
+   * 错误经 client 携带响应体 message 冒泡给上层。
+   */
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {
     // 仅用 merge commit（空 body = 默认 merge_method=merge），不回退 squash/rebase。
     // 失败（仓库禁用 merge commit / 冲突 / 必评未过 / 必检未过 / 分支落后 / 无权限）→ GitHub 返回
@@ -152,10 +180,16 @@ export class GitHubPullRequestService extends BasePullRequestService {
 
   // ---- 映射（领域私有）----
 
+  /**
+   * 按发现筛选分类拼出 search/issues 查询串（限定开放、非归档、PR 类型）。
+   */
   private discoveryQuery(filter: PrDiscoveryFilter): string {
     return `is:open is:pr ${FILTER_QUALIFIER[filter]} archived:false`;
   }
 
+  /**
+   * 从 search 命中的 repository_url 解析出 owner / repo；无法解析则抛错。
+   */
   private parseRepositoryUrl(repositoryUrl: string): { owner: string; repo: string } {
     // https://api.github.com/repos/{owner}/{repo}
     const m = /\/repos\/([^/]+)\/([^/]+)$/.exec(repositoryUrl);
@@ -163,6 +197,12 @@ export class GitHubPullRequestService extends BasePullRequestService {
     return { owner: m[1]!, repo: m[2]! };
   }
 
+  /**
+   * 把 GitHub 的 mergeable / mergeable_state 映射为统一合并状态。
+   *
+   * GitHub 否决信息仅 partial 保真，按 state 近似归类到单一否决码（冲突 / 受保护 / 落后 / 必检失败 /
+   * 检测中）；canMerge 仅在 mergeable=true 且 state=clean 时为真。
+   */
   private mapMergeStatus(p: GhPull): MergeStatus {
     const state = p.mergeable_state ?? 'unknown';
     const conflicted = p.mergeable === false || state === 'dirty';
@@ -179,6 +219,9 @@ export class GitHubPullRequestService extends BasePullRequestService {
     };
   }
 
+  /**
+   * 组装审批人列表：先以「已请求但未评审」者占位（unapproved），再按时间升序用每人最近一条决断态覆盖。
+   */
   private buildReviewers(pull: GhPull, reviews: GhReview[]): Reviewer[] {
     const byLogin = new Map<string, Reviewer>();
     // 先放「已请求但未评审」的 reviewer（pending = unapproved）
@@ -197,6 +240,11 @@ export class GitHubPullRequestService extends BasePullRequestService {
     return [...byLogin.values()];
   }
 
+  /**
+   * 把 GitHub PR 详情（含已组装的审批人与合并状态）归一为中性 PullRequest。
+   *
+   * 状态按 merged / closed / 其余映射为 merged / declined / open。
+   */
   private mapPull(p: GhPull, reviewers: Reviewer[], mergeStatus: MergeStatus): PullRequest {
     const state: PullRequest['state'] = p.merged
       ? 'merged'
@@ -225,6 +273,9 @@ export class GitHubPullRequestService extends BasePullRequestService {
     };
   }
 
+  /**
+   * 把 GitHub 提交归一为中性 PrCommit；作者 / 提交者信息缺失时按 git 名→登录名→兜底逐级回退。
+   */
   private mapCommit(c: GhCommit): PrCommit {
     const authorName = c.commit.author?.name ?? c.author?.login ?? 'unknown';
     const committerName = c.commit.committer?.name ?? c.committer?.login ?? authorName;

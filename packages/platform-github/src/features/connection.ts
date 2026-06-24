@@ -36,6 +36,11 @@ export class GitHubConnection extends BaseConnection {
     };
   }
 
+  /**
+   * 探测连接：取当前用户落地缓存，并从响应头读取 GHE 版本号。
+   *
+   * 公有 github.com 无版本头时 serverVersion 记为 'github.com'。
+   */
   async ping(): Promise<PingResult> {
     const { body: me, headers } = await this.client.getWithHeaders<GhUser>('/user');
     const user = { name: me.login, displayName: me.name ?? me.login, slug: me.login };
@@ -48,6 +53,9 @@ export class GitHubConnection extends BaseConnection {
     };
   }
 
+  /**
+   * 构造仓库的 git clone URL，按当前用户名内嵌 PAT 凭据（无用户时退无凭据形式）。
+   */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     return this.client.getCloneUrl(repo, this.getCurrentUser()?.name);
   }

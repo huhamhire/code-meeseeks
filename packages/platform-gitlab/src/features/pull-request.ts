@@ -28,6 +28,11 @@ export class GitLabPullRequestService extends BasePullRequestService {
     super(ctx);
   }
 
+  /**
+   * 发现待处理 MR：scope=all 全局跨项目分页命中后逐条取详情归一。
+   *
+   * 未 ping（无当前用户）则无法构造查询，直接返回空；逐条详情并发执行，单条失败丢弃该条。
+   */
   async listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]> {
     const me = this.ctx.getCurrentUser()?.name;
     // scope=all 全局跨项目；按 filter 切换 reviewer/author/assignee 限定（默认待我评审）。
@@ -47,6 +52,11 @@ export class GitLabPullRequestService extends BasePullRequestService {
       .map((r) => r.value);
   }
 
+  /**
+   * 按一条 MR 列表项加载完整 MR：取详情，审批可用时再取 approved_by，组装审批人后归一。
+   *
+   * 审批端点因 tier / 权限不可用时按无人 approve 处理。
+   */
   private async loadMr(listItem: GlMr): Promise<PullRequest> {
     const repo = this.parseProjectPath(listItem.web_url);
     const base = `/projects/${String(listItem.project_id)}/merge_requests/${String(listItem.iid)}`;
@@ -63,6 +73,9 @@ export class GitLabPullRequestService extends BasePullRequestService {
     return this.mapMr(detail, repo, this.buildReviewers(detail, approvedUsers));
   }
 
+  /**
+   * 列出 MR 提交：GitLab 端点已是 newest-first，与契约一致，无需反转。
+   */
   async listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]> {
     const out: PrCommit[] = [];
     for await (const c of this.client.paginate<GlCommit>(
@@ -74,6 +87,9 @@ export class GitLabPullRequestService extends BasePullRequestService {
     return out;
   }
 
+  /**
+   * GitLab 不参与活动时间线（capabilities.activityTimeline=false）：无可靠的统一决断事件源，恒返回空。
+   */
   async listPullRequestActivity(_repo: RepoRef, _prId: string): Promise<PrActivityEvent[]> {
     // 差异化设计：GitLab 不参与活动时间线（capabilities.activityTimeline=false，PR 标签页退化为纯
     // 评论视图），故无需提供决断事件。GitLab 也没有统一活动事件源——CE 无审批、审批仅以脆弱的英文
@@ -81,6 +97,11 @@ export class GitLabPullRequestService extends BasePullRequestService {
     return [];
   }
 
+  /**
+   * 写当前用户的 review 状态：approved / unapproved 分别打 approve / unapprove 端点。
+   *
+   * GitLab 无 "request changes" 概念，needsWork 不会被 UI 触发，防御性抛错。
+   */
   async setPullRequestReviewStatus(
     repo: RepoRef,
     prId: string,
@@ -100,6 +121,11 @@ export class GitLabPullRequestService extends BasePullRequestService {
     throw new Error('GitLab does not support the "request changes" review status');
   }
 
+  /**
+   * 合并 MR（squash / ff 由仓库设置决定）。
+   *
+   * 不可合并（冲突 / 未批 / 流水线未过 / 无权限）时 GitLab 返回 405/406/409，错误携带 message 冒泡。
+   */
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {
     // PUT /merge：squash/ff 由仓库设置决定。失败（冲突 / 未批 / 流水线未过 / 权限）→ 405/406/409 带 message。
     await this.client.put(`/projects/${projectId(repo)}/merge_requests/${prId}/merge`, {});
@@ -107,7 +133,11 @@ export class GitLabPullRequestService extends BasePullRequestService {
 
   // ---- 映射（领域私有）----
 
-  /** 发现分类 → /merge_requests 查询参数（scope=all 全局，按角色限定）。mentioned 无对应 → 退待我评审。 */
+  /**
+   * 把发现筛选分类映射为 /merge_requests 查询参数（scope=all 全局，按角色限定）。
+   *
+   * GitLab 无 "mentioned" 概念，该分类退化为「待我评审」。
+   */
   private discoveryParams(filter: PrDiscoveryFilter, me: string): Record<string, string> {
     const base = { scope: 'all', state: 'opened' };
     switch (filter) {
@@ -140,7 +170,11 @@ export class GitLabPullRequestService extends BasePullRequestService {
     return { projectKey: segs.join('/'), repoSlug };
   }
 
-  /** GitLab detailed_merge_status → 统一否决原因码（后台不拼本地化文案，前端按码 i18n）。 */
+  /**
+   * 把 GitLab detailed_merge_status 映射为统一否决原因码。
+   *
+   * 后台不拼本地化文案，由前端按码做 i18n；未识别的状态归为 notMergeable。
+   */
   private mergeStatusCode(dms: string): MergeVetoCode {
     switch (dms) {
       case 'broken_status':
@@ -171,6 +205,12 @@ export class GitLabPullRequestService extends BasePullRequestService {
     }
   }
 
+  /**
+   * 把 GitLab MR 的合并状态映射为统一 MergeStatus（full 保真）。
+   *
+   * 有 detailed_merge_status 时按其判定 canMerge 与否决码（未细分原因保留原始串到 detail 便于排障）；
+   * 旧实例缺该字段时退回 merge_status 近似。
+   */
   private mapMergeStatus(mr: GlMr): MergeStatus {
     const dms = mr.detailed_merge_status;
     const conflicted = mr.has_conflicts === true || dms === 'broken_status' || dms === 'conflict';
@@ -194,6 +234,9 @@ export class GitLabPullRequestService extends BasePullRequestService {
     return { canMerge, conflicted, vetoes };
   }
 
+  /**
+   * 组装审批人列表：先以指派的 reviewer 占位（unapproved），再用 approved_by 覆盖 / 补充为 approved。
+   */
   private buildReviewers(mr: GlMr, approvedUsers: GlUser[]): Reviewer[] {
     const byUser = new Map<string, Reviewer>();
     // 先放指派的 reviewer（默认未批）。
@@ -207,6 +250,11 @@ export class GitLabPullRequestService extends BasePullRequestService {
     return [...byUser.values()];
   }
 
+  /**
+   * 把 GitLab MR 详情（含已组装的审批人）归一为中性 PullRequest。
+   *
+   * 状态按 merged / opened / 其余映射为 merged / open / declined；source/target sha 优先取 diff_refs。
+   */
   private mapMr(mr: GlMr, repo: RepoRef, reviewers: Reviewer[]): PullRequest {
     const state: PullRequest['state'] =
       mr.state === 'merged' ? 'merged' : mr.state === 'opened' ? 'open' : 'declined';
@@ -230,6 +278,9 @@ export class GitLabPullRequestService extends BasePullRequestService {
     };
   }
 
+  /**
+   * 把 GitLab 提交归一为中性 PrCommit；缺字段时按 git 名 / 短 sha / 标题等逐级回退。
+   */
   private mapCommit(c: GlCommit): PrCommit {
     const authorName = c.author_name ?? 'unknown';
     const committerName = c.committer_name ?? authorName;

@@ -13,6 +13,11 @@ export class GitHubCommentService extends BaseCommentService {
     super(ctx);
   }
 
+  /**
+   * 并发拉取 issue 评论与 review 评论并归一为统一评论树。
+   *
+   * issue 评论作为无线程的 summary；review 评论按 in_reply_to_id 还原为顶层 + 嵌套 replies。
+   */
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
     const prefix = `/repos/${repo.projectKey}/${repo.repoSlug}`;
     const [issueComments, reviewComments] = await Promise.all([
@@ -44,6 +49,9 @@ export class GitHubCommentService extends BaseCommentService {
     return [...summary, ...inline];
   }
 
+  /**
+   * 发表 summary 评论：经 issue 评论端点创建（无线程、无锚点）后归一返回。
+   */
   async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
     // summary 评论 = issue 评论（无线程、无锚点）
     const created = await this.client.post<GhIssueComment>(
@@ -53,6 +61,9 @@ export class GitHubCommentService extends BaseCommentService {
     return this.mapIssueComment(created);
   }
 
+  /**
+   * 发表 inline 评论：先拉 PR 取 head sha 作 commit_id，再按锚点（路径 / 行 / 侧）创建 review 评论。
+   */
   async publishInlineComment(
     repo: RepoRef,
     prId: string,
@@ -72,6 +83,11 @@ export class GitHubCommentService extends BaseCommentService {
     return this.mapReviewComment(created);
   }
 
+  /**
+   * 回复评论：优先按 inline review-comment 的 replies 端点回复。
+   *
+   * 父评论实为 summary（issue 评论、无线程）时端点返回 404/422，退化为新建一条 issue 评论。
+   */
   async replyToComment(
     repo: RepoRef,
     prId: string,
@@ -99,6 +115,11 @@ export class GitHubCommentService extends BaseCommentService {
     }
   }
 
+  /**
+   * 编辑评论 body：先按 review 评论端点尝试，404 时回退到 issue 评论端点。
+   *
+   * GitHub 无乐观锁，version 参数被忽略。
+   */
   async editComment(
     repo: RepoRef,
     _prId: string,
@@ -125,6 +146,11 @@ export class GitHubCommentService extends BaseCommentService {
     }
   }
 
+  /**
+   * 删除评论：先按 review 评论端点尝试，404 时回退到 issue 评论端点。
+   *
+   * GitHub 无乐观锁，version 参数被忽略。
+   */
   async deleteComment(
     repo: RepoRef,
     _prId: string,
@@ -145,6 +171,9 @@ export class GitHubCommentService extends BaseCommentService {
 
   // ---- 映射（领域私有）----
 
+  /**
+   * 把 GitHub issue 评论归一为 summary 类 PrComment；无锚点、无线程，version 置 0 作无锁哨兵。
+   */
   private mapIssueComment(c: GhIssueComment): PrComment {
     return {
       remoteId: String(c.id),
@@ -162,6 +191,11 @@ export class GitHubCommentService extends BaseCommentService {
     };
   }
 
+  /**
+   * 把 GitHub review 评论归一为 inline 类 PrComment。
+   *
+   * 锚点按 line / original_line 与 side 推导；GitHub 不直接给行类型，按 side 取保守默认（仅展示用）。
+   */
   private mapReviewComment(c: GhReviewComment): PrComment {
     const line = c.line ?? c.original_line ?? null;
     const anchor: PrCommentAnchor | null =

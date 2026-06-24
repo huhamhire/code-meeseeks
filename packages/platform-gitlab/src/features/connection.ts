@@ -44,6 +44,11 @@ export class GitLabConnection extends BaseConnection {
     };
   }
 
+  /**
+   * 探测连接：取当前用户落地缓存，并经 /metadata 探测 edition 以决定审批可用性。
+   *
+   * /metadata 不可用（旧实例）时退 /version 并保守置为 CE（无审批）。
+   */
   async ping(): Promise<PingResult> {
     const me = await this.client.get<GlUser>('/user');
     this.setCurrentUser(mapUser(me));
@@ -66,6 +71,9 @@ export class GitLabConnection extends BaseConnection {
     return { ok: true, serverVersion, user: this.getCurrentUser() ?? undefined };
   }
 
+  /**
+   * 构造仓库的 git clone URL，按当前用户名内嵌 PAT 凭据（无用户时退无凭据形式）。
+   */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     return this.client.getCloneUrl(repo, this.getCurrentUser()?.name);
   }

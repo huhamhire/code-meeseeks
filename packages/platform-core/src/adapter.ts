@@ -16,7 +16,9 @@ export interface PlatformAdapter {
   readonly media: MediaService;
 }
 
-/** 领域服务集合，喂给 {@link composePlatformAdapter}。 */
+/**
+ * 领域服务集合：四个领域服务的入参容器，喂给 {@link composePlatformAdapter} 组装为根适配器。
+ */
 export interface PlatformServices {
   connection: PlatformConnection;
   pulls: PullRequestService;
