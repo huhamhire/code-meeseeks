@@ -1,3 +1,4 @@
+import type { RepoRef } from '@meebox/shared';
 import {
   buildUrl,
   extractApiMessage,
@@ -11,8 +12,14 @@ import {
   type PlatformTransport,
 } from '@meebox/platform-core';
 
-/** GitLab 连接配置 = 统一连接配置（baseUrl / token / timeoutMs / proxy / fetch）。 */
-export type GitLabClientOptions = PlatformConnectionConfig;
+/** GitLab 连接配置 = 统一连接配置 + clone 协议（连接层自管的连接配置，非 HTTP 传输细节）。 */
+export interface GitLabClientOptions extends PlatformConnectionConfig {
+  /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
+  cloneProtocol?: 'pat' | 'ssh';
+}
+
+/** 适配器构造选项与连接配置同形。 */
+export type GitLabAdapterOptions = GitLabClientOptions;
 
 export class GitLabClientError extends Error {
   constructor(
@@ -28,6 +35,16 @@ export class GitLabClientError extends Error {
 const ACCEPT = 'application/json';
 
 /**
+ * 容错归一 GitLab API base：用户可只填实例地址（`https://gitlab.example.com`）或完整
+ * `.../api/v4`；统一补足 `/api/v4`（已带 `/api/vN` 则原样）。免去用户记忆 API 路径。
+ */
+export function normalizeGitLabApiBase(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, '');
+  if (!trimmed) return trimmed;
+  return /\/api\/v\d+$/.test(trimmed) ? trimmed : `${trimmed}/api/v4`;
+}
+
+/**
  * 极薄的 GitLab REST v4 客户端，实现 {@link PlatformTransport}：`PRIVATE-TOKEN` PAT 鉴权、`Link` 头
  * 分页迭代器、二进制拉取、错误抛 GitLabClientError。通用传输样板（超时 / URL 拼接 / 错误消息提取 /
  * Link 分页 / 有效 fetch 解析）复用 `@meebox/platform-core` helper；GitLab 特有部分（PRIVATE-TOKEN /
@@ -40,18 +57,54 @@ export class GitLabClient implements PlatformTransport {
   private readonly token: string;
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;
+  private readonly cloneProtocol: 'pat' | 'ssh';
+  /** 实例 web/git host（去掉 /api/v4），clone / 附件 / 网页用。 */
+  private readonly webBase: string;
+  readonly gitHost: string;
+  /**
+   * MR 审批 API（approve/unapprove）是否可用：自 13.9 起为 Premium/Ultimate，CE / EE-Free 无。
+   * 由连接层 ping() 经 /metadata.enterprise 探测后写入；探测前保守置 false（CE）。是该平台连接
+   * 探测得到的连接态，故落在连接封装实例上，供连接（capabilities）与 PR（审批拉取）领域共读。
+   */
+  approvalsAvailable = false;
 
   constructor(opts: GitLabClientOptions) {
-    this.baseUrl = stripTrailingSlash(opts.baseUrl);
+    const apiBase = normalizeGitLabApiBase(opts.baseUrl);
+    this.baseUrl = stripTrailingSlash(apiBase);
     this.token = opts.token;
     // 连接层统一解析有效 fetch（显式 fetch 覆盖 > 代理 > 直连）。
-    this.fetchFn = resolveConnectionFetch(opts);
+    this.fetchFn = resolveConnectionFetch({ ...opts, baseUrl: apiBase });
+    this.cloneProtocol = opts.cloneProtocol ?? 'pat';
+    const api = new URL(apiBase);
+    this.webBase = `${api.protocol}//${api.host}`;
+    this.gitHost = api.host;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
   }
 
   private authHeaders(): Record<string, string> {
     // GitLab PAT 走 PRIVATE-TOKEN 头（OAuth token 才用 Authorization: Bearer）。
     return { 'PRIVATE-TOKEN': this.token, Accept: ACCEPT };
+  }
+
+  /**
+   * 构造 git clone URL：ssh → `git@<gitHost>:<group>/<repo>.git`；pat → 在 web host 内嵌
+   * `<currentUser>:<PAT>`。pat 需 ping() 已落地当前用户（由调用方经连接上下文传入），否则抛错。
+   */
+  getCloneUrl(repo: RepoRef, currentUserName?: string): string {
+    const path = `${repo.projectKey}/${repo.repoSlug}`;
+    if (this.cloneProtocol === 'ssh') {
+      return `git@${this.gitHost}:${path}.git`;
+    }
+    if (!currentUserName) {
+      throw new Error(
+        'cannot construct PAT clone URL: current user unknown — ping() not called or failed',
+      );
+    }
+    const u = new URL(this.webBase);
+    u.pathname = `/${path}.git`;
+    u.username = currentUserName;
+    u.password = this.token;
+    return u.toString();
   }
 
   private async raw(method: string, url: string, body?: unknown): Promise<Response> {
