@@ -1,4 +1,5 @@
-import type { PlatformAdapter, PrComment, StoredPullRequest } from '@meebox/shared';
+import type { PrComment, StoredPullRequest } from '@meebox/shared';
+import type { PlatformAdapter } from '@meebox/platform-core';
 import type { Logger } from 'pino';
 
 interface BuildPrContextOpts {
@@ -44,7 +45,7 @@ export async function buildPrContext({
 
   let comments: PrComment[] = [];
   try {
-    comments = await adapter.listPullRequestComments(
+    comments = await adapter.comments.listPullRequestComments(
       { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
       pr.remoteId,
     );

@@ -11,7 +11,7 @@ import type { MediaService } from './features/media.js';
 export interface PlatformAdapter {
   readonly kind: PlatformKind;
   readonly connection: PlatformConnection;
-  readonly pulls: PullRequestService;
+  readonly prs: PullRequestService;
   readonly comments: CommentService;
   readonly media: MediaService;
 }
@@ -21,7 +21,7 @@ export interface PlatformAdapter {
  */
 export interface PlatformServices {
   connection: PlatformConnection;
-  pulls: PullRequestService;
+  prs: PullRequestService;
   comments: CommentService;
   media: MediaService;
 }
@@ -31,7 +31,7 @@ export function composePlatformAdapter(services: PlatformServices): PlatformAdap
   return {
     kind: services.connection.kind,
     connection: services.connection,
-    pulls: services.pulls,
+    prs: services.prs,
     comments: services.comments,
     media: services.media,
   };

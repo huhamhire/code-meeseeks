@@ -79,7 +79,9 @@ class App {
     this.bootstrap = await ensureWorkspace();
     // 主进程 i18n 定档（dialog 标题、错误消息等面向用户文本）。config.language 为空时
     // 按操作系统偏好语言解析、无合适项回落英语；结果同时供 pr-agent 响应语言复用，与 UI 一致。
-    initMainI18n(resolveLanguage(this.bootstrap.config.language, app.getPreferredSystemLanguages()));
+    initMainI18n(
+      resolveLanguage(this.bootstrap.config.language, app.getPreferredSystemLanguages()),
+    );
     // pretty 仅非打包态开：dev 控制台单行 + ISO8601 + 上色；打包态保持原始 JSON。
     this.logger = await createLogger({
       logsDir: this.bootstrap.paths.logsDir,
@@ -234,7 +236,7 @@ class App {
     const activeHasIdentity = this.conns.runtime.adapters.some(
       (a) =>
         a.connectionId === this.bootstrap.config.active_connection_id &&
-        a.adapter.getCurrentUser() != null,
+        a.adapter.connection.getCurrentUser() != null,
     );
     this.poller.start(activeHasIdentity);
     this.logger.info(

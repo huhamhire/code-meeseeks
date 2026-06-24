@@ -91,7 +91,7 @@ platform-github / -bitbucket-server / -gitlab   实现层（连接层自负）
   └ 各领域能力声明块
         ▲ composePlatformAdapter(ctx, {...})
         │
-PlatformAdapter（根 client）   领域服务容器：connection / pulls / comments / media
+PlatformAdapter（根 client）   领域服务容器：connection / prs / comments / media
 ```
 
 ### 3.1 Core 只声明业务契约，连接层归平台包自负
@@ -164,14 +164,14 @@ core 只声明 `(proxy, host) => fetch | undefined` 这一类型与 `resolveConn
 > 审批 / 合并（`setPullRequestReviewStatus` / `mergePullRequest`）归在 PR 操作下。若后续评审写路径继续膨胀，
 > 可再裂出独立 `ReviewService` / `BaseReview`——领域基类本就为这种分步演进而设。
 
-**组装到根 client**：`composePlatformAdapter(ctx, { connection, pulls, comments, media })` 把四个领域服务
+**组装到根 client**：`composePlatformAdapter(ctx, { connection, prs, comments, media })` 把四个领域服务
 实例组装成根 `PlatformAdapter`（领域服务容器）。根即「总的 client」——它**不含业务逻辑**，只持有并暴露各领域：
 
 ```ts
 interface PlatformAdapter {
   readonly kind: PlatformKind;
   readonly connection: PlatformConnection;
-  readonly pulls: PullRequestService;
+  readonly prs: PullRequestService;
   readonly comments: CommentService;
   readonly media: MediaService;
 }
@@ -240,7 +240,7 @@ static readonly capabilities = {
 | 消费方 | 现状 | 迁移后 |
 | --- | --- | --- |
 | `adapters.ts` 工厂 | `new XxxAdapter(...)` 返回巨类 | `composePlatformAdapter(ctx, {...})` 组装根 |
-| 轮询器 `poller` | `adapter.listPendingPullRequests` / `capabilities().discoveryFilters` | `adapter.pulls.listPending` / `adapter.connection.capabilities()` |
+| 轮询器 `poller` | `adapter.listPendingPullRequests` / `capabilities().discoveryFilters` | `adapter.prs.listPending` / `adapter.connection.capabilities()` |
 | 评论服务 | `adapter.capabilities().commentOptimisticLock` | `adapter.connection.capabilities()`（聚合自 CommentService 声明） |
 | app 服务 | `adapter.capabilities()` → `ConnectionSummary` | `adapter.connection.capabilities()`（形状不变） |
 | `pr-service` | `adapterForOrThrow(pr)` 返回根 | 不变（返回根，调用处取子领域） |

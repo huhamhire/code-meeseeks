@@ -5,10 +5,10 @@ import {
   GITHUB_DOTCOM_API_BASE,
   GITLAB_DOTCOM_API_BASE,
   type Connection,
-  type PlatformAdapter,
   type PlatformKind,
   type ProxyConfig,
 } from '@meebox/shared';
+import type { PlatformAdapter } from '@meebox/platform-core';
 import { proxyFetchForHost } from './utils/proxy.js';
 
 export interface BuiltAdapter {
@@ -40,14 +40,32 @@ export function buildDraftAdapter(
   if (kind === 'github') {
     // GitHub 草稿 base_url 可留空 → 默认官方 api.github.com
     const ghBase = baseUrl.trim() || GITHUB_DOTCOM_API_BASE;
-    return new GitHubAdapter({ baseUrl: ghBase, token, cloneProtocol: 'pat', proxy, proxyFetch: proxyFetchForHost });
+    return new GitHubAdapter({
+      baseUrl: ghBase,
+      token,
+      cloneProtocol: 'pat',
+      proxy,
+      proxyFetch: proxyFetchForHost,
+    });
   }
   if (kind === 'gitlab') {
     // GitLab 草稿 base_url 可留空 → 默认官方 gitlab.com/api/v4
     const glBase = baseUrl.trim() || GITLAB_DOTCOM_API_BASE;
-    return new GitLabAdapter({ baseUrl: glBase, token, cloneProtocol: 'pat', proxy, proxyFetch: proxyFetchForHost });
+    return new GitLabAdapter({
+      baseUrl: glBase,
+      token,
+      cloneProtocol: 'pat',
+      proxy,
+      proxyFetch: proxyFetchForHost,
+    });
   }
-  return new BitbucketServerAdapter({ baseUrl, token, cloneProtocol: 'pat', proxy, proxyFetch: proxyFetchForHost });
+  return new BitbucketServerAdapter({
+    baseUrl,
+    token,
+    cloneProtocol: 'pat',
+    proxy,
+    proxyFetch: proxyFetchForHost,
+  });
 }
 
 /**

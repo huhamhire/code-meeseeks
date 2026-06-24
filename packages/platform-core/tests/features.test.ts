@@ -47,13 +47,13 @@ describe('composePlatformAdapter', () => {
   it('wires the four domain services and derives kind from connection', () => {
     const ctx = new MutableConnectionContext(fakeTransport);
     const connection = new FakeConnection(ctx);
-    const pulls = {} as PullRequestService;
+    const prs = {} as PullRequestService;
     const comments = {} as CommentService;
     const media = {} as MediaService;
-    const adapter = composePlatformAdapter({ connection, pulls, comments, media });
+    const adapter = composePlatformAdapter({ connection, prs, comments, media });
     expect(adapter.kind).toBe('github');
     expect(adapter.connection).toBe(connection);
-    expect(adapter.pulls).toBe(pulls);
+    expect(adapter.prs).toBe(prs);
     expect(adapter.comments).toBe(comments);
     expect(adapter.media).toBe(media);
   });

@@ -1,13 +1,13 @@
 import type { Logger } from 'pino';
 import type {
   LocalPrStatus,
-  PlatformAdapter,
   PlatformKind,
   PollResult,
   PrDiscoveryFilter,
   PullRequest,
   ReviewerStatus,
 } from '@meebox/shared';
+import type { PlatformAdapter } from '@meebox/platform-core';
 import type { StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
 import {
@@ -206,9 +206,7 @@ export class Poller {
     const nowMs = Date.parse(now);
     const indexFile = await readPrIndex(this.opts.stateStore);
     // 索引拷一份到 mutable Map 方便增删；条目缺失时退回到空 Map (首次 poll)
-    const indexByLocalId = new Map<string, PrIndexEntry>(
-      Object.entries(indexFile?.prs ?? {}),
-    );
+    const indexByLocalId = new Map<string, PrIndexEntry>(Object.entries(indexFile?.prs ?? {}));
 
     let fetched = 0;
     let changed = 0;
@@ -226,14 +224,14 @@ export class Poller {
     const seenByConnection = new Map<string, Set<string>>();
 
     for (const { connectionId, adapter } of this.connections) {
-      const me = adapter.getCurrentUser();
+      const me = adapter.connection.getCurrentUser();
       try {
         // 发现分类：平台提供多类（GitHub 四类）→ 逐类轮询并 union 打标，让 renderer 切标签
         // 走本地缓存而非每次拉远端；无分类的平台（Bitbucket）单轮询、标记为空数组。
-        const filters = adapter.capabilities().discoveryFilters ?? [];
+        const filters = adapter.connection.capabilities().discoveryFilters ?? [];
         const merged = new Map<string, { pr: PullRequest; matched: PrDiscoveryFilter[] }>();
         const collect = async (filter?: PrDiscoveryFilter): Promise<void> => {
-          const remote = await adapter.listPendingPullRequests(filter ? { filter } : undefined);
+          const remote = await adapter.prs.listPendingPullRequests(filter ? { filter } : undefined);
           for (const pr of remote) {
             const k = `${pr.repo.projectKey}|${pr.repo.repoSlug}|${pr.remoteId}`;
             const e = merged.get(k);
