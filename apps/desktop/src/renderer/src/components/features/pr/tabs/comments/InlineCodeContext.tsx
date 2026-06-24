@@ -3,12 +3,14 @@
 import '../../../../../lib/monaco-setup';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { editorFontSize } from '../../../../../lib/editor-font';
-import { useResolvedTheme } from '../../../../../hooks/useTheme';
+import { useMonacoEditorTheme } from '../../../../../hooks/useTheme';
+import { useEditorAppearance } from '../../../../../stores/editor-appearance-store';
+import { resolveEditorFontFamily } from '../../../../../theme';
 import { languageFor } from '../../../../../utils/language';
 
 interface InlineCodeContextProps {
@@ -142,8 +144,14 @@ const CodeSnippet = memo(function CodeSnippet({
   snippet: Snippet;
   language: string;
 }) {
-  // Monaco 内置主题不走 CSS 自定义属性，须随应用主题显式切换（浅色 'vs' / 深色 'vs-dark'）。
-  const monacoTheme = useResolvedTheme() === 'light' ? 'vs' : 'vs-dark';
+  // Monaco 内置主题不走 CSS 自定义属性，须显式切换：按编辑器主题偏好（'auto' 跟随 GUI 深浅）解析。
+  const monacoTheme = useMonacoEditorTheme();
+  // 等宽字体随配置切换；并进 options（@monaco-editor/react 按引用比对，故 useMemo 稳定 + 仅字体变时重建）。
+  const fontFamily = resolveEditorFontFamily(useEditorAppearance().fontFamily);
+  const options = useMemo<editor.IStandaloneEditorConstructionOptions>(
+    () => ({ ...READONLY_OPTIONS, fontFamily }),
+    [fontFamily],
+  );
   const lineCount = snippet.text.split('\n').length;
   const height = lineCount * SNIPPET_LINE_HEIGHT + 12;
 
@@ -193,7 +201,7 @@ const CodeSnippet = memo(function CodeSnippet({
         value={snippet.text}
         theme={monacoTheme}
         onMount={handleMount}
-        options={READONLY_OPTIONS}
+        options={options}
       />
     </div>
   );

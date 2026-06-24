@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppPaths, Config, LlmProfile, SupportedLanguage, ThemePreference } from '@meebox/shared';
+import type {
+  AppPaths,
+  Config,
+  EditorTheme,
+  LlmProfile,
+  SupportedLanguage,
+  ThemePreference,
+} from '@meebox/shared';
 import { invoke } from '../../../../api';
 import i18n, { persistLanguage, resolveUiLanguage } from '../../../../i18n';
-import { applyThemePreference, persistThemePreference } from '../../../../theme';
+import { applyEditorFontFamily, applyThemePreference, persistThemePreference } from '../../../../theme';
+import { setEditorAppearance } from '../../../../stores/editor-appearance-store';
 import { fromConnDraft, toConnDraft, type ConnDraft } from '../ConnectionForm';
 import { newProfileId } from '../LlmProfileForm';
 
@@ -14,6 +22,10 @@ interface UseSettingsDraftParams {
   onProxyChange?: (proxy: Config['proxy']) => void;
   onLanguageChange?: (language: SupportedLanguage) => void;
   onThemeChange?: (theme: ThemePreference) => void;
+  onEditorAppearanceChange?: (appearance: {
+    editor_theme: EditorTheme;
+    editor_font_family: string;
+  }) => void;
   onConnectionsChange?: () => void | Promise<void>;
   onClose: () => void;
 }
@@ -30,6 +42,7 @@ export function useSettingsDraft({
   onProxyChange,
   onLanguageChange,
   onThemeChange,
+  onEditorAppearanceChange,
   onConnectionsChange,
   onClose,
 }: UseSettingsDraftParams) {
@@ -102,6 +115,38 @@ export function useSettingsDraft({
       // 写盘失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
       setSaveError(e instanceof Error ? e.message : String(e));
     });
+  };
+
+  // 编辑器外观（Monaco 主题 + 等宽字体）：即时生效项。主题为离散选择 → 改即写盘；字体为文本输入 →
+  // onChange 仅实时预览（写 store + CSS + 同步父级），onBlur 才写盘，避免逐字符落盘。
+  const [editorTheme, setEditorTheme] = useState<EditorTheme>(config.appearance.editor_theme);
+  const [editorFontFamily, setEditorFontFamily] = useState<string>(
+    config.appearance.editor_font_family,
+  );
+  // 实时应用到运行时：写共享 store（Monaco 组件读）+ 字体 CSS 变量（全应用 $font-mono）+ 同步父级。
+  const applyEditorAppearance = (nextTheme: EditorTheme, nextFont: string): void => {
+    setEditorAppearance({ editorTheme: nextTheme, fontFamily: nextFont });
+    applyEditorFontFamily(nextFont);
+    onEditorAppearanceChange?.({ editor_theme: nextTheme, editor_font_family: nextFont });
+  };
+  const persistEditorAppearance = (nextTheme: EditorTheme, nextFont: string): void => {
+    invoke('config:setEditorAppearance', {
+      editor_theme: nextTheme,
+      editor_font_family: nextFont,
+    }).catch((e: unknown) => setSaveError(e instanceof Error ? e.message : String(e)));
+  };
+  const handleEditorThemeChange = (next: EditorTheme): void => {
+    if (next === editorTheme) return;
+    setEditorTheme(next);
+    applyEditorAppearance(next, editorFontFamily);
+    persistEditorAppearance(next, editorFontFamily);
+  };
+  const handleEditorFontChange = (next: string): void => {
+    setEditorFontFamily(next);
+    applyEditorAppearance(editorTheme, next); // 实时预览，不写盘
+  };
+  const commitEditorFont = (): void => {
+    persistEditorAppearance(editorTheme, editorFontFamily); // 失焦才写盘
   };
 
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
@@ -340,6 +385,12 @@ export function useSettingsDraft({
     // 主题
     themePreference,
     handleThemeChange,
+    // 编辑器外观
+    editorTheme,
+    editorFontFamily,
+    handleEditorThemeChange,
+    handleEditorFontChange,
+    commitEditorFont,
     // 连接
     connections,
     activeConnId,

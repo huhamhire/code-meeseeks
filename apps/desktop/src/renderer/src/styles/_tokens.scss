@@ -132,4 +132,6 @@ $z-modal:         1000;
 $z-modal-nested:  1100;
 
 // ===== 字体族 =====
-$font-mono: var(--vscode-editor-font-family, 'Consolas', monospace);
+// 等宽字体优先取用户配置（--editor-font-family，由 renderer 按 config 写入 documentElement），
+// 未配置时回落 Monaco 注入的 --vscode-editor-font-family，再回落内置 Consolas / monospace。
+$font-mono: var(--editor-font-family, var(--vscode-editor-font-family, 'Consolas', monospace));

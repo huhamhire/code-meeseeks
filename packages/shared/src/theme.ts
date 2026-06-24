@@ -19,3 +19,11 @@ export function matchThemePreference(value: string | null | undefined): ThemePre
     ? (value as ThemePreference)
     : null;
 }
+
+/**
+ * 代码编辑器（Monaco）配色主题选项。
+ * - `'auto'`：跟随 GUI 主题（浅色用 `vs`、深色用 `vs-dark`），默认。
+ * - 其余为 Monaco 内置主题名：`vs`（浅）/ `vs-dark`（深）/ `hc-black`（高对比深）/ `hc-light`（高对比浅）。
+ */
+export const EDITOR_THEMES = ['auto', 'vs', 'vs-dark', 'hc-black', 'hc-light'] as const;
+export type EditorTheme = (typeof EDITOR_THEMES)[number];

@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { ResolvedTheme, ThemePreference } from '@meebox/shared';
-import { applyThemePreference, persistThemePreference, watchSystemTheme } from '../theme';
+import type { Config, ResolvedTheme, ThemePreference } from '@meebox/shared';
+import { applyEditorFontFamily, applyThemePreference, persistThemePreference, watchSystemTheme } from '../theme';
+import { setEditorAppearance, useEditorAppearance } from '../stores/editor-appearance-store';
 
 /**
  * 跟随主题偏好生效：偏好变化时把它解析后写到 documentElement.data-theme + 持久化到 localStorage
@@ -34,4 +35,27 @@ function getResolvedThemeSnapshot(): ResolvedTheme {
  */
 export function useResolvedTheme(): ResolvedTheme {
   return useSyncExternalStore(subscribeResolvedTheme, getResolvedThemeSnapshot);
+}
+
+/**
+ * 把 config.appearance 的编辑器外观同步到运行时：写入共享 store（供 Monaco 组件读）+ 应用等宽字体
+ * CSS 变量（供全应用 $font-mono）。源为 config（启动注入、设置页即时改动经 patchConfig 同步）。
+ */
+export function useEditorAppearanceSync(appearance: Config['appearance']): void {
+  const { editor_theme, editor_font_family } = appearance;
+  useEffect(() => {
+    setEditorAppearance({ editorTheme: editor_theme, fontFamily: editor_font_family });
+    applyEditorFontFamily(editor_font_family);
+  }, [editor_theme, editor_font_family]);
+}
+
+/**
+ * 当前生效的 Monaco 编辑器主题名：编辑器主题偏好为 'auto' 时跟随 GUI 解析主题（浅 'vs' / 深 'vs-dark'），
+ * 否则用所选 Monaco 内置主题（vs / vs-dark / hc-black / hc-light）。
+ */
+export function useMonacoEditorTheme(): string {
+  const { editorTheme } = useEditorAppearance();
+  const resolved = useResolvedTheme();
+  if (editorTheme === 'auto') return resolved === 'light' ? 'vs' : 'vs-dark';
+  return editorTheme;
 }

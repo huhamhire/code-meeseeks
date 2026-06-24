@@ -4,7 +4,9 @@ import { DiffEditor } from '@monaco-editor/react';
 import { type editor as MonacoEditor } from 'monaco-editor';
 import type { DiffChangedFile } from '@meebox/ipc';
 import { editorFontSize } from '../../../../../lib/editor-font';
-import { useResolvedTheme } from '../../../../../hooks/useTheme';
+import { useMonacoEditorTheme } from '../../../../../hooks/useTheme';
+import { useEditorAppearance } from '../../../../../stores/editor-appearance-store';
+import { resolveEditorFontFamily } from '../../../../../theme';
 import { languageFor } from '../../../../../utils/language';
 import { PaneLoading } from '../../../../common';
 import { Spinner } from './DiffStatus';
@@ -28,8 +30,10 @@ export function DiffPane({
   onMount: (editor: MonacoEditor.IStandaloneDiffEditor) => void;
 }) {
   const { t } = useTranslation();
-  // Monaco 内置主题不走 CSS 自定义属性，须随应用主题显式切换（浅色 'vs' / 深色 'vs-dark'）。
-  const monacoTheme = useResolvedTheme() === 'light' ? 'vs' : 'vs-dark';
+  // Monaco 内置主题不走 CSS 自定义属性，须显式切换：按编辑器主题偏好（'auto' 跟随 GUI 深浅）解析。
+  const monacoTheme = useMonacoEditorTheme();
+  // 编辑器等宽字体：随配置切换（空 = Monaco 默认）。
+  const fontFamily = resolveEditorFontFamily(useEditorAppearance().fontFamily);
   // Monaco 挂载后 diff 还要异步计算 + hideUnchangedRegions 折叠才稳定（见上文 reveal 逻辑），
   // 期间编辑器是「空 → 跳一下」的重排。在它之上盖一层 overlay loading，首次 onDidUpdateDiff
   // （或挂载即已算完）后卸载，遮住这段抖动一次性 reveal。DiffPane 按 file path keyed →
@@ -49,6 +53,7 @@ export function DiffPane({
       automaticLayout: true,
       minimap: { enabled: false },
       fontSize,
+      fontFamily,
       scrollBeyondLastLine: false,
       // 关掉 diff 专属的合并总览列（renderOverviewRuler=true 会在两侧滚动条之外再加一条宽列，
       // 跟 VS Code 编辑模式「滚动条内打标」不一致）。改走编辑模式效果：内层 modified 编辑器自带的
@@ -78,7 +83,7 @@ export function DiffPane({
       stickyScroll: { enabled: false },
       occurrencesHighlight: 'off',
     }),
-    [renderSideBySide, showWhitespace, fontSize],
+    [renderSideBySide, showWhitespace, fontSize, fontFamily],
   );
   const handleMount = useCallback(
     (editor: MonacoEditor.IStandaloneDiffEditor) => {

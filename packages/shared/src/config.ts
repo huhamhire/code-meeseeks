@@ -168,6 +168,16 @@ export const ConfigSchema = z.object({
        * （与历史一致，升级不改变现有用户外观）；解析与生效在 renderer（见 renderer/src/theme）。
        */
       theme: z.enum(['system', 'light', 'dark']).default('dark'),
+      /**
+       * 代码编辑器（Monaco）配色主题：'auto' 跟随 GUI 深 / 浅色（默认），其余为 Monaco 内置主题名
+       * （vs / vs-dark / hc-black / hc-light）。
+       */
+      editor_theme: z.enum(['auto', 'vs', 'vs-dark', 'hc-black', 'hc-light']).default('auto'),
+      /**
+       * 编辑器等宽字体族（CSS font-family，可逗号分隔多候选）。**默认空** = 用内置 mono 字体栈；
+       * 非空则覆盖编辑器与全应用等宽文本字体。
+       */
+      editor_font_family: z.string().default(''),
     })
     .default({}),
   workspace: z

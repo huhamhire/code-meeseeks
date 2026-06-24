@@ -1,5 +1,6 @@
 import type {
   Config,
+  EditorTheme,
   PingResult,
   PlatformKind,
   SupportedLanguage,
@@ -22,6 +23,14 @@ export interface ConfigChannels {
    * documentElement data-theme），此通道仅持久化偏好，无主进程副作用。
    */
   'config:setTheme': { request: { theme: ThemePreference }; response: void };
+  /**
+   * 写入编辑器外观（Monaco 配色主题 + 等宽字体族）到 config.yaml。纯前端展示项：实际切换由 renderer
+   * 即时完成（Monaco theme 切换 + 字体 CSS 变量），此通道仅持久化偏好，无主进程副作用。
+   */
+  'config:setEditorAppearance': {
+    request: { editor_theme: EditorTheme; editor_font_family: string };
+    response: void;
+  };
   /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
   /** 写入 agent.dir 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */

@@ -75,5 +75,25 @@ export function watchSystemTheme(preference: ThemePreference): () => void {
   return () => mq.removeEventListener('change', onChange);
 }
 
+// 内置等宽字体兜底栈：用户自定义字体后置于其后，保证缺字时仍回落到合理 mono 字体。
+const MONO_FALLBACK = "'Cascadia Code', 'Consolas', ui-monospace, monospace";
+
+/** 把用户配置的字体族解析为完整 font-family 串（追加兜底栈）；空配置返回 undefined（用默认）。 */
+export function resolveEditorFontFamily(font: string): string | undefined {
+  const f = font.trim();
+  return f ? `${f}, ${MONO_FALLBACK}` : undefined;
+}
+
+/**
+ * 应用编辑器等宽字体到全应用：写 documentElement 的 `--editor-font-family` 自定义属性（$font-mono 经
+ * 它取值，覆盖 diff / 评论 / 代码块等所有等宽文本）。空配置时移除该属性，回落内置 mono 字体栈。
+ * Monaco 编辑器内容字体另经其 fontFamily option 设置（见 DiffPane / InlineCodeContext）。
+ */
+export function applyEditorFontFamily(font: string): void {
+  const resolved = resolveEditorFontFamily(font);
+  if (resolved) document.documentElement.style.setProperty('--editor-font-family', resolved);
+  else document.documentElement.style.removeProperty('--editor-font-family');
+}
+
 // 副作用：模块导入即按 localStorage 缓存定下首帧主题（在 React 渲染前），避免浅色用户启动闪深色。
 applyThemePreference(readInitialThemePreference());
