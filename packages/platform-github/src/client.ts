@@ -1,18 +1,25 @@
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+import type { RepoRef } from '@meebox/shared';
+import {
+  buildUrl,
+  extractApiMessage,
+  fetchWithTimeout,
+  parseNextLink,
+  resolveConnectionFetch,
+  stripTrailingSlash,
+  type BinaryResource,
+  type FetchLike,
+  type PlatformConnectionConfig,
+  type PlatformTransport,
+} from '@meebox/platform-core';
 
-export interface GitHubClientOptions {
-  /**
-   * GitHub REST API base，无尾斜杠。github.com: `https://api.github.com`；
-   * GHE Server: `https://<host>/api/v3`。
-   */
-  baseUrl: string;
-  /** GitHub Personal Access Token（classic 或 fine-grained） */
-  token: string;
-  /** 测试 / 注入用；默认使用全局 fetch */
-  fetch?: FetchLike;
-  /** 单请求超时（默认 30s） */
-  timeoutMs?: number;
+/** GitHub 连接配置 = 统一连接配置 + clone 协议（连接层自管的连接配置，非 HTTP 传输细节）。 */
+export interface GitHubClientOptions extends PlatformConnectionConfig {
+  /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
+  cloneProtocol?: 'pat' | 'ssh';
 }
+
+/** 适配器构造选项与连接配置同形。 */
+export type GitHubAdapterOptions = GitHubClientOptions;
 
 export class GitHubClientError extends Error {
   constructor(
@@ -29,28 +36,57 @@ const API_VERSION = '2022-11-28';
 const ACCEPT = 'application/vnd.github+json';
 
 /**
- * 极薄的 GitHub REST 客户端：Bearer PAT 鉴权、`Link` 头分页迭代器、二进制拉取、
- * 错误抛 GitHubClientError。业务语义留给 GitHubAdapter。
+ * 容错归一 GitHub API base：用户可只填实例地址或完整 API base。
+ * - `github.com` / `www.github.com`（或留空场景的官方域）→ 官方 API host `https://api.github.com`；
+ * - GitHub Enterprise Server 实例根 `https://ghe.example.com` → 补 `/api/v3`（已带 `/api/vN` 则原样）。
+ */
+export function normalizeGitHubApiBase(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, '');
+  if (!trimmed) return trimmed;
+  let u: URL;
+  try {
+    u = new URL(trimmed);
+  } catch {
+    return trimmed;
+  }
+  if (u.hostname === 'api.github.com') return trimmed;
+  if (u.hostname === 'github.com' || u.hostname === 'www.github.com')
+    return 'https://api.github.com';
+  if (/\/api\/v\d+$/.test(u.pathname.replace(/\/+$/, ''))) return trimmed;
+  return `${trimmed}/api/v3`;
+}
+
+/**
+ * GitHub REST 客户端 = 统一连接封装实例，实现 {@link PlatformTransport}：自管连接 / 鉴权配置（base
+ * URL 归一、PAT、超时、代理解析）与 GitHub 连接派生态（web/git host、clone 协议、clone URL 构造）。
+ * 通用传输样板复用 `@meebox/platform-core` helper；GitHub 特有部分（鉴权头 / 限流提示 / 可信资产域 /
+ * search / patch / clone）留在本类。业务语义留给各领域服务。
  *
  * path 以 `/` 开头时拼 baseUrl；传入完整 http(s) URL 时原样请求（分页 next / 头像等用）。
  */
-export class GitHubClient {
+export class GitHubClient implements PlatformTransport {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;
+  private readonly cloneProtocol: 'pat' | 'ssh';
+  /** web / git host base（api.github.com → https://github.com；GHE → 实例 host）。 */
+  readonly webBase: string;
+  private readonly gitHost: string;
 
   constructor(opts: GitHubClientOptions) {
-    this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
+    const apiBase = normalizeGitHubApiBase(opts.baseUrl);
+    this.baseUrl = stripTrailingSlash(apiBase);
     this.token = opts.token;
-    this.fetchFn = opts.fetch ?? ((input, init) => fetch(input, init));
+    // 连接层统一解析有效 fetch（显式 fetch 覆盖 > 代理 > 直连）。
+    this.fetchFn = resolveConnectionFetch({ ...opts, baseUrl: apiBase });
     this.timeoutMs = opts.timeoutMs ?? 30_000;
-  }
-
-  private buildUrl(path: string, params?: Record<string, string>): string {
-    const u = /^https?:\/\//.test(path) ? new URL(path) : new URL(`${this.baseUrl}${path}`);
-    if (params) for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
-    return u.toString();
+    this.cloneProtocol = opts.cloneProtocol ?? 'pat';
+    const api = new URL(apiBase);
+    // github.com 的 API 在 api.github.com，但 clone/web 在 github.com；GHE 同 host。
+    this.webBase =
+      api.hostname === 'api.github.com' ? 'https://github.com' : `${api.protocol}//${api.host}`;
+    this.gitHost = new URL(this.webBase).host;
   }
 
   private authHeaders(accept = ACCEPT): Record<string, string> {
@@ -62,36 +98,27 @@ export class GitHubClient {
   }
 
   private async raw(method: string, url: string, body?: unknown): Promise<Response> {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
-    try {
-      return await this.fetchFn(url, {
+    return fetchWithTimeout(
+      this.fetchFn,
+      url,
+      {
         method,
         headers:
           body === undefined
             ? this.authHeaders()
             : { ...this.authHeaders(), 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: ctl.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+      },
+      this.timeoutMs,
+    );
   }
 
   private async err(res: Response, method: string, urlOrPath: string): Promise<GitHubClientError> {
     const txt = await res.text().catch(() => '');
-    // GitHub 错误体是 JSON，message 才是真因（如合并 405「Merge commits are not allowed on
-    // this repository」/「Pull Request is not mergeable」）。带进错误信息，否则只剩状态码看不出原因。
-    let apiMsg = '';
-    try {
-      const parsed = JSON.parse(txt) as { message?: unknown };
-      if (typeof parsed.message === 'string') apiMsg = parsed.message;
-    } catch {
-      /* 非 JSON 响应体，忽略 */
-    }
+    // GitHub 错误体是 JSON，message 才是真因（如合并 405「Pull Request is not mergeable」）。
+    const apiMsg = extractApiMessage(txt);
     const detail = apiMsg ? `：${apiMsg}` : '';
-    // 限流（403/429 + X-RateLimit-Remaining: 0）给更可读的提示，便于上层节流
+    // 限流（403/429 + X-RateLimit-Remaining: 0）给更可读的提示，便于上层节流。
     const remaining = res.headers.get('x-ratelimit-remaining');
     const rateLimited = (res.status === 403 || res.status === 429) && remaining === '0';
     const hint = rateLimited ? '（GitHub API 限流，请稍后重试）' : '';
@@ -112,7 +139,7 @@ export class GitHubClient {
     path: string,
     params?: Record<string, string>,
   ): Promise<{ body: T; headers: Headers }> {
-    const url = this.buildUrl(path, params);
+    const url = buildUrl(this.baseUrl, path, params);
     const res = await this.raw('GET', url);
     if (!res.ok) throw await this.err(res, 'GET', new URL(url).pathname);
     const body = (await res.json()) as T;
@@ -120,23 +147,20 @@ export class GitHubClient {
   }
 
   async post<T>(path: string, body: unknown): Promise<T> {
-    const url = this.buildUrl(path);
-    const res = await this.raw('POST', url, body);
+    const res = await this.raw('POST', buildUrl(this.baseUrl, path), body);
     if (!res.ok) throw await this.err(res, 'POST', path);
     return (await res.json()) as T;
   }
 
   async patch<T>(path: string, body: unknown): Promise<T> {
-    const url = this.buildUrl(path);
-    const res = await this.raw('PATCH', url, body);
+    const res = await this.raw('PATCH', buildUrl(this.baseUrl, path), body);
     if (!res.ok) throw await this.err(res, 'PATCH', path);
     return (await res.json()) as T;
   }
 
   /** PUT；部分端点（merge / dismissals）返回 JSON，留空时返回 null。 */
   async put<T>(path: string, body: unknown): Promise<T | null> {
-    const url = this.buildUrl(path);
-    const res = await this.raw('PUT', url, body);
+    const res = await this.raw('PUT', buildUrl(this.baseUrl, path), body);
     if (!res.ok) throw await this.err(res, 'PUT', path);
     if (res.status === 204) return null;
     try {
@@ -147,8 +171,7 @@ export class GitHubClient {
   }
 
   async del(path: string): Promise<void> {
-    const url = this.buildUrl(path);
-    const res = await this.raw('DELETE', url);
+    const res = await this.raw('DELETE', buildUrl(this.baseUrl, path));
     if (!res.ok) throw await this.err(res, 'DELETE', path);
   }
 
@@ -157,7 +180,7 @@ export class GitHubClient {
    * 逐页跟 next 直到没有。per_page=100。
    */
   async *paginate<T>(path: string, params: Record<string, string> = {}): AsyncIterable<T> {
-    let url: string | null = this.buildUrl(path, { per_page: '100', ...params });
+    let url: string | null = buildUrl(this.baseUrl, path, { per_page: '100', ...params });
     while (url) {
       const res = await this.raw('GET', url);
       if (!res.ok) throw await this.err(res, 'GET', new URL(url).pathname);
@@ -172,7 +195,7 @@ export class GitHubClient {
    * 注意搜索 30 次/分限流；调用方应节流。
    */
   async *searchItems<T>(path: string, params: Record<string, string>): AsyncIterable<T> {
-    let url: string | null = this.buildUrl(path, { per_page: '100', ...params });
+    let url: string | null = buildUrl(this.baseUrl, path, { per_page: '100', ...params });
     while (url) {
       const res = await this.raw('GET', url);
       if (!res.ok) throw await this.err(res, 'GET', new URL(url).pathname);
@@ -180,6 +203,26 @@ export class GitHubClient {
       for (const it of page.items) yield it;
       url = parseNextLink(res.headers.get('link'));
     }
+  }
+
+  /**
+   * 构造 git clone URL：ssh → `git@<gitHost>:<proj>/<repo>.git`；pat → 在 web host 内嵌
+   * `<currentUser>:<PAT>`。pat 需 ping() 已落地当前用户（由调用方经连接上下文传入），否则抛错。
+   */
+  getCloneUrl(repo: RepoRef, currentUserName?: string): string {
+    if (this.cloneProtocol === 'ssh') {
+      return `git@${this.gitHost}:${repo.projectKey}/${repo.repoSlug}.git`;
+    }
+    if (!currentUserName) {
+      throw new Error(
+        'cannot construct PAT clone URL: current user unknown — ping() not called or failed',
+      );
+    }
+    const u = new URL(this.webBase);
+    u.pathname = `/${repo.projectKey}/${repo.repoSlug}.git`;
+    u.username = currentUserName;
+    u.password = this.token;
+    return u.toString();
   }
 
   /**
@@ -192,7 +235,11 @@ export class GitHubClient {
     const apiHost = new URL(this.baseUrl).host;
     if (host === apiHost) return true;
     if (apiHost === 'api.github.com') {
-      return host === 'github.com' || host === 'githubusercontent.com' || host.endsWith('.githubusercontent.com');
+      return (
+        host === 'github.com' ||
+        host === 'githubusercontent.com' ||
+        host.endsWith('.githubusercontent.com')
+      );
     }
     // GHE：实例同 host 或其子域
     return host === apiHost || host.endsWith(`.${apiHost}`);
@@ -204,7 +251,7 @@ export class GitHubClient {
    * 外发 PAT（防泄露），也不让主进程去代拉任意外部 URL（防 SSRF），交渲染层退回原生 <img> 加载。
    * 非 2xx / 异常 → 同样返回 null 让上层 fallback。
    */
-  async getBinary(url: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  async getBinary(url: string): Promise<BinaryResource | null> {
     if (!/^https?:\/\//.test(url)) return null;
     let host: string;
     try {
@@ -213,24 +260,20 @@ export class GitHubClient {
       return null;
     }
     if (!this.isTrustedAssetHost(host)) return null;
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.token}`,
-      Accept: 'image/*,*/*;q=0.5',
-    };
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
     let res: Response;
     try {
-      res = await this.fetchFn(url, {
-        method: 'GET',
-        headers,
-        signal: ctl.signal,
-      });
+      res = await fetchWithTimeout(
+        this.fetchFn,
+        url,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${this.token}`, Accept: 'image/*,*/*;q=0.5' },
+        },
+        this.timeoutMs,
+      );
     } catch {
-      clearTimeout(timer);
       return null;
     }
-    clearTimeout(timer);
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();
     return {
@@ -238,14 +281,4 @@ export class GitHubClient {
       contentType: res.headers.get('content-type') ?? 'application/octet-stream',
     };
   }
-}
-
-/** 从 `Link` 头解析 `rel="next"` 的 URL；无则 null。 */
-export function parseNextLink(link: string | null): string | null {
-  if (!link) return null;
-  for (const part of link.split(',')) {
-    const m = /<([^>]+)>\s*;\s*rel="next"/.exec(part.trim());
-    if (m) return m[1] ?? null;
-  }
-  return null;
 }

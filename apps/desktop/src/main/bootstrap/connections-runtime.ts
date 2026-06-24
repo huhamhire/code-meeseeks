@@ -1,6 +1,7 @@
 import type { BootstrapResult } from '@meebox/config';
 import type { Poller } from '@meebox/poller';
-import type { PlatformAdapter, PlatformUser } from '@meebox/shared';
+import type { PlatformUser } from '@meebox/shared';
+import type { PlatformAdapter } from '@meebox/platform-core';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { Logger } from 'pino';
 import { buildAdapters, type ConnectionRuntime } from '../adapters.js';
@@ -37,7 +38,7 @@ export class ConnectionRuntimeController {
     for (const { connectionId, adapter } of adapters) {
       // 预热 currentUser：有本地记录就先填上（无记录则保持 null，由 ping 兜底）。
       const cachedUser = this.connectionStates[connectionId]?.user;
-      if (cachedUser) adapter.setCurrentUser?.(cachedUser);
+      if (cachedUser) adapter.connection.setCurrentUser?.(cachedUser);
       const conn = this.bootstrap.config.connections.find((c) => c.id === connectionId);
       if (!conn) continue;
       try {
@@ -59,17 +60,17 @@ export class ConnectionRuntimeController {
     const activeId = this.bootstrap.config.active_connection_id;
     for (const { connectionId, adapter } of this.runtime.adapters) {
       const isActive = connectionId === activeId;
-      const beforeName = adapter.getCurrentUser()?.name ?? null;
+      const beforeName = adapter.connection.getCurrentUser()?.name ?? null;
       // 活动连接启动时无缓存身份 → poller.start(immediate=false) 没跑首轮；此处 ping settle 后必须触发
       // **首次同步**（无论 ping 成功与否）：「先确认身份，再立即同步一次」。
       const hadIdentity = beforeName !== null;
-      void adapter.ping().then(
+      void adapter.connection.ping().then(
         async (r) => {
           this.logger.info(
             { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
             'adapter ping',
           );
-          const user = adapter.getCurrentUser();
+          const user = adapter.connection.getCurrentUser();
           await this.persistConnectionUser(connectionId, user);
           // 触发重分类/首次同步：活动连接且（身份变化 含首次取得/换号，或本就无身份需补首轮）。
           if (isActive && (!hadIdentity || (user?.name ?? null) !== beforeName)) {

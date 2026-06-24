@@ -4,7 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Logger } from 'pino';
 import { JsonFileStateStore } from '@meebox/state-store';
-import type { PlatformAdapter, PullRequest } from '@meebox/shared';
+import type { PullRequest } from '@meebox/shared';
+import type {
+  PlatformAdapter,
+  PlatformConnection,
+  PullRequestService,
+  CommentService,
+  MediaService,
+} from '@meebox/platform-core';
 import { Poller } from '../src/poller.js';
 import { prHashId } from '../src/pr-hash-id.js';
 import {
@@ -14,92 +21,93 @@ import {
   type PrIndexFile,
 } from '../src/pr-state.js';
 
+// 仅在 IPC 层被调用、poller 不触发的领域方法补桩；满足容器接口契约。
+const unusedComments: CommentService = {
+  listPullRequestComments: async () => [],
+  publishSummaryComment: () =>
+    Promise.reject(new Error('FakeAdapter.publishSummaryComment 未实现（poller 测试不使用）')),
+  publishInlineComment: () =>
+    Promise.reject(new Error('FakeAdapter.publishInlineComment 未实现（poller 测试不使用）')),
+  replyToComment: () =>
+    Promise.reject(new Error('FakeAdapter.replyToComment 未实现（poller 测试不使用）')),
+  editComment: () =>
+    Promise.reject(new Error('FakeAdapter.editComment 未实现（poller 测试不使用）')),
+  deleteComment: () =>
+    Promise.reject(new Error('FakeAdapter.deleteComment 未实现（poller 测试不使用）')),
+};
+const unusedMedia: MediaService = {
+  getUserAvatar: async () => null,
+  getAttachment: () =>
+    Promise.reject(new Error('FakeAdapter.getAttachment 未实现（poller 测试不使用）')),
+};
+
+/**
+ * 容器形状的测试替身：poller 只读 kind / connection.getCurrentUser /
+ * connection.capabilities / prs.listPendingPullRequests，其余领域补最小桩。
+ * 真测试逻辑（用户、能力、待处理 PR 行为）落在对应子对象里；测试辅助（setPrs /
+ * failNextList / seedUser）仍挂在 adapter 上，子对象闭包读同一实例状态。
+ */
 class FakeAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
   private currentUser: { name: string; displayName: string } | null = null;
+  readonly connection: PlatformConnection;
+  readonly prs: PullRequestService;
+  readonly comments: CommentService = unusedComments;
+  readonly media: MediaService = unusedMedia;
+
   constructor(
-    private prs: PullRequest[] = [],
+    private prList: PullRequest[] = [],
     private failPing = false,
     private failList = false,
-  ) {}
+  ) {
+    this.connection = {
+      kind: 'bitbucket-server',
+      getCurrentUser: () => this.currentUser,
+      capabilities: () => ({
+        reviewStatuses: ['approved', 'needsWork', 'unapproved'] as const,
+        inlineComments: true,
+        inlineMultiline: true,
+        commentOptimisticLock: true,
+        commentHardBreaks: true,
+        mergeVetoFidelity: 'full' as const,
+        discoveryRateLimited: false,
+        resolvableThreads: false,
+        suggestions: false,
+        reviewGrouping: false,
+        activityTimeline: true,
+      }),
+      ping: async () => {
+        if (this.failPing) throw new Error('ping fail');
+        return { ok: true, serverVersion: 'fake' };
+      },
+      getCloneUrl: async () => 'https://fake.example.com/repo.git',
+    };
+    this.prs = {
+      listPendingPullRequests: async (): Promise<PullRequest[]> => {
+        if (this.failList) {
+          this.failList = false;
+          throw new Error('list fail');
+        }
+        return this.prList;
+      },
+      listPullRequestCommits: async () => [],
+      listPullRequestActivity: async () => [],
+      setPullRequestReviewStatus: async () => {
+        // 测试只关心 poller 自身行为；setReviewStatus 在 IPC 层调用，poller 不触发
+      },
+      mergePullRequest: () =>
+        Promise.reject(new Error('FakeAdapter.mergePullRequest 未实现（poller 测试不使用）')),
+    };
+  }
   setPrs(prs: PullRequest[]): void {
-    this.prs = prs;
+    this.prList = prs;
   }
   failNextList(): void {
     this.failList = true;
   }
-  // 测试辅助：直接灌入当前用户（区别于 PlatformAdapter 的 setCurrentUser(user) 契约方法）。
+  // 测试辅助：直接灌入当前用户（区别于 PlatformConnection 的 setCurrentUser(user) 契约方法）。
   seedUser(name: string, displayName = name): void {
     this.currentUser = { name, displayName };
-  }
-  getCurrentUser() {
-    return this.currentUser;
-  }
-  capabilities() {
-    return {
-      reviewStatuses: ['approved', 'needsWork', 'unapproved'] as const,
-      inlineComments: true,
-      inlineMultiline: true,
-      commentOptimisticLock: true,
-      commentHardBreaks: true,
-      mergeVetoFidelity: 'full' as const,
-      discoveryRateLimited: false,
-      resolvableThreads: false,
-      suggestions: false,
-      reviewGrouping: false,
-      activityTimeline: true,
-    };
-  }
-  async ping() {
-    if (this.failPing) throw new Error('ping fail');
-    return { ok: true, serverVersion: 'fake' };
-  }
-  async listPendingPullRequests(): Promise<PullRequest[]> {
-    if (this.failList) {
-      this.failList = false;
-      throw new Error('list fail');
-    }
-    return this.prs;
-  }
-  async getCloneUrl(): Promise<string> {
-    return 'https://fake.example.com/repo.git';
-  }
-  async listPullRequestComments(): Promise<never[]> {
-    return [];
-  }
-  async listPullRequestCommits(): Promise<never[]> {
-    return [];
-  }
-  async listPullRequestActivity(): Promise<never[]> {
-    return [];
-  }
-  async getUserAvatar(): Promise<null> {
-    return null;
-  }
-  async setPullRequestReviewStatus(): Promise<void> {
-    // 测试只关心 poller 自身行为；setReviewStatus 在 IPC 层调用，poller 不触发
-  }
-  // 以下方法仅在 IPC 层被调用，poller 不触发；补桩满足 PlatformAdapter 契约。
-  async getAttachment(): Promise<never> {
-    throw new Error('FakeAdapter.getAttachment 未实现（poller 测试不使用）');
-  }
-  async mergePullRequest(): Promise<never> {
-    throw new Error('FakeAdapter.mergePullRequest 未实现（poller 测试不使用）');
-  }
-  async replyToComment(): Promise<never> {
-    throw new Error('FakeAdapter.replyToComment 未实现（poller 测试不使用）');
-  }
-  async publishSummaryComment(): Promise<never> {
-    throw new Error('FakeAdapter.publishSummaryComment 未实现（poller 测试不使用）');
-  }
-  async publishInlineComment(): Promise<never> {
-    throw new Error('FakeAdapter.publishInlineComment 未实现（poller 测试不使用）');
-  }
-  async deleteComment(): Promise<never> {
-    throw new Error('FakeAdapter.deleteComment 未实现（poller 测试不使用）');
-  }
-  async editComment(): Promise<never> {
-    throw new Error('FakeAdapter.editComment 未实现（poller 测试不使用）');
   }
 }
 
@@ -247,7 +255,7 @@ describe('Poller.tick', () => {
   it('tick re-entrancy: a second tick while one is in flight returns immediately (并登记补跑)', async () => {
     let resolveList: ((v: PullRequest[]) => void) | undefined;
     let listCalls = 0;
-    const slow: PlatformAdapter = {
+    const slowConnection: PlatformConnection = {
       kind: 'bitbucket-server',
       capabilities: () => ({
         reviewStatuses: ['approved', 'needsWork', 'unapproved'],
@@ -262,36 +270,17 @@ describe('Poller.tick', () => {
         reviewGrouping: false,
         activityTimeline: true,
       }),
-      async ping() {
-        return { ok: true };
-      },
+      ping: async () => ({ ok: true }),
       getCurrentUser: () => null,
-      async getCloneUrl() {
-        return 'https://stub';
-      },
-      async listPullRequestComments() {
-        return [];
-      },
-      async listPullRequestCommits() {
-        return [];
-      },
-      async listPullRequestActivity() {
-        return [];
-      },
-      async getUserAvatar() {
-        return null;
-      },
-      async setPullRequestReviewStatus() {
+      getCloneUrl: async () => 'https://stub',
+    };
+    const slowPulls: PullRequestService = {
+      listPullRequestCommits: async () => [],
+      listPullRequestActivity: async () => [],
+      setPullRequestReviewStatus: async () => {
         // unused in this test
       },
-      // 以下方法本测试不触发；补桩满足 PlatformAdapter 契约。
-      getAttachment: () => Promise.reject(new Error('unused')),
       mergePullRequest: () => Promise.reject(new Error('unused')),
-      replyToComment: () => Promise.reject(new Error('unused')),
-      publishSummaryComment: () => Promise.reject(new Error('unused')),
-      publishInlineComment: () => Promise.reject(new Error('unused')),
-      deleteComment: () => Promise.reject(new Error('unused')),
-      editComment: () => Promise.reject(new Error('unused')),
       // 首次返回受 resolveList 控制的挂起 promise；后续（in-flight 期间第二次 tick 登记的
       // 「补跑」）立即返回，避免测试悬挂。补跑是新语义：第二次 tick 虽即时返回 EMPTY，但当前轮
       // 结束后会紧接着再 poll 一轮（保证 ping 异步补到 currentUser 后的重分类请求不丢）。
@@ -300,6 +289,24 @@ describe('Poller.tick', () => {
         return listCalls === 1
           ? new Promise<PullRequest[]>((r) => (resolveList = r))
           : Promise.resolve([makePr('1', '2026-05-28T01:00:00.000Z')]);
+      },
+    };
+    const slow: PlatformAdapter = {
+      kind: 'bitbucket-server',
+      connection: slowConnection,
+      prs: slowPulls,
+      // 以下领域本测试不触发；补最小桩满足容器接口契约。
+      comments: {
+        listPullRequestComments: async () => [],
+        publishSummaryComment: () => Promise.reject(new Error('unused')),
+        publishInlineComment: () => Promise.reject(new Error('unused')),
+        replyToComment: () => Promise.reject(new Error('unused')),
+        editComment: () => Promise.reject(new Error('unused')),
+        deleteComment: () => Promise.reject(new Error('unused')),
+      },
+      media: {
+        getUserAvatar: async () => null,
+        getAttachment: () => Promise.reject(new Error('unused')),
       },
     };
     const poller = new Poller({
@@ -728,9 +735,7 @@ describe('Poller.archiveConnectionsExcept', () => {
     });
     await poller2.archiveConnectionsExcept(['bb1']);
     const index2 = await store.read<PrIndexFile>(PR_INDEX_KEY);
-    const bb2After = Object.values(index2!.prs).find(
-      (e) => e.identity.connectionId === 'bb2',
-    )!;
+    const bb2After = Object.values(index2!.prs).find((e) => e.identity.connectionId === 'bb2')!;
     expect(bb2After.archivedAt).toBe(now.toISOString()); // 仍是首次归档时间
   });
 });

@@ -29,8 +29,8 @@ export function buildConnectionSummaries(
       return {
         connectionId,
         displayName: conn?.display_name ?? connectionId,
-        user: adapter.getCurrentUser(),
-        capabilities: adapter.capabilities(),
+        user: adapter.connection.getCurrentUser(),
+        capabilities: adapter.connection.capabilities(),
       };
     });
 }

@@ -393,6 +393,7 @@
     "EAG0001": "/ask requires a question",
     "EAG0002": "A /{{tool}} task for this PR is already running or queued; do not trigger it again.",
     "EAG0003": "pr-agent not ready: neither the embedded runtime nor a local CLI was detected. See probe details in Settings.",
+    "ECF0001": "Unsupported Bitbucket Server version {{version}}; {{min}} or newer is required",
     "ENT0001": "Proxy is disabled or its address is empty",
     "ENT0407": "Proxy authentication failed (407); check the username/password",
     "EPR0001": "Draft not found (it may have been deleted)",
@@ -524,6 +525,19 @@
     "undoNeedsWork": "Undo \"needs work\"",
     "unified": "Unified",
     "whitespace": "Whitespace"
+  },
+  "mergeVeto": {
+    "behind": "Behind the target branch",
+    "blockedByDependency": "Blocked by another merge request",
+    "branchProtected": "Blocked by branch protection",
+    "checking": "Checking mergeability…",
+    "checksFailed": "Required checks not passing",
+    "conflict": "Merge conflicts",
+    "discussionsUnresolved": "Unresolved discussions",
+    "draft": "Draft — mark ready to merge",
+    "notApproved": "Approvals not satisfied",
+    "notMergeable": "Not mergeable",
+    "notOpen": "Not open"
   },
   "mermaidDiagram": {
     "closeEsc": "Close (Esc)",

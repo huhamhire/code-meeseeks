@@ -20,7 +20,10 @@ export function createRepoMirror(deps: {
     getCloneUrl: async (repo) => {
       const adapter = connectionRuntime.adapterByHost.get(repo.host);
       if (!adapter) throw new Error(`no adapter for host ${repo.host}`);
-      return adapter.getCloneUrl({ projectKey: repo.projectKey, repoSlug: repo.repoSlug });
+      return adapter.connection.getCloneUrl({
+        projectKey: repo.projectKey,
+        repoSlug: repo.repoSlug,
+      });
     },
     logger: logger.child({ scope: 'repo-mirror' }),
     onProgress: (event) => broadcast('sync:progress', event),

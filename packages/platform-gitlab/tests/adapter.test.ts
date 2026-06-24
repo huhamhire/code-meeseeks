@@ -63,13 +63,13 @@ describe('GitLabAdapter ping / edition / capabilities', () => {
       { match: '/user', body: ME },
       { match: '/metadata', body: { version: '16.5.0-ee', enterprise: true } },
     ]);
-    const res = await adapter.ping();
+    const res = await adapter.connection.ping();
     expect(res.ok).toBe(true);
     expect(res.user?.name).toBe('alice');
     expect(res.serverVersion).toBe('16.5.0-ee');
-    expect(adapter.capabilities().reviewStatuses).toEqual(['approved', 'unapproved']);
+    expect(adapter.connection.capabilities().reviewStatuses).toEqual(['approved', 'unapproved']);
     // GitLab 无 needsWork
-    expect(adapter.capabilities().reviewStatuses).not.toContain('needsWork');
+    expect(adapter.connection.capabilities().reviewStatuses).not.toContain('needsWork');
   });
 
   it('CE 实例（enterprise=false）审批降级为空', async () => {
@@ -77,8 +77,8 @@ describe('GitLabAdapter ping / edition / capabilities', () => {
       { match: '/user', body: ME },
       { match: '/metadata', body: { version: '16.5.0', enterprise: false } },
     ]);
-    await adapter.ping();
-    expect(adapter.capabilities().reviewStatuses).toEqual([]);
+    await adapter.connection.ping();
+    expect(adapter.connection.capabilities().reviewStatuses).toEqual([]);
   });
 
   it('/metadata 不可用（旧实例）退 /version，保守按 CE', async () => {
@@ -87,14 +87,14 @@ describe('GitLabAdapter ping / edition / capabilities', () => {
       { match: '/metadata', status: 404, body: { message: '404' } },
       { match: '/version', body: { version: '14.0.0' } },
     ]);
-    const res = await adapter.ping();
+    const res = await adapter.connection.ping();
     expect(res.serverVersion).toBe('14.0.0');
-    expect(adapter.capabilities().reviewStatuses).toEqual([]);
+    expect(adapter.connection.capabilities().reviewStatuses).toEqual([]);
   });
 
   it('capabilities：full 保真 / 无乐观锁 / 不限流', () => {
     const { adapter } = makeAdapter([]);
-    const c = adapter.capabilities();
+    const c = adapter.connection.capabilities();
     expect(c.mergeVetoFidelity).toBe('full');
     expect(c.commentOptimisticLock).toBe(false);
     // GitLab 走标准 CommonMark 换行（单 \n = 空格），非 hard-break
@@ -141,8 +141,8 @@ describe('GitLabAdapter 发现', () => {
       { match: '/projects/42/merge_requests/3', body: MR_DETAIL },
       { match: '/merge_requests', body: [MR_LIST_ITEM] },
     ]);
-    await adapter.ping();
-    const prs = await adapter.listPendingPullRequests();
+    await adapter.connection.ping();
+    const prs = await adapter.prs.listPendingPullRequests();
     expect(prs).toHaveLength(1);
     const pr = prs[0]!;
     expect(pr.remoteId).toBe('3');
@@ -167,15 +167,15 @@ describe('GitLabAdapter 发现', () => {
         { match: '/merge_requests', body: [] },
       ]);
     const a = mk();
-    await a.adapter.ping();
-    await a.adapter.listPendingPullRequests({ filter: 'created' });
+    await a.adapter.connection.ping();
+    await a.adapter.prs.listPendingPullRequests({ filter: 'created' });
     expect(a.captured.find((c) => c.url.includes('/merge_requests?'))?.url).toContain(
       'author_username=alice',
     );
 
     const b = mk();
-    await b.adapter.ping();
-    await b.adapter.listPendingPullRequests({ filter: 'assigned' });
+    await b.adapter.connection.ping();
+    await b.adapter.prs.listPendingPullRequests({ filter: 'assigned' });
     expect(b.captured.find((c) => c.url.includes('/merge_requests?'))?.url).toContain(
       'assignee_username=alice',
     );
@@ -196,7 +196,14 @@ describe('GitLabAdapter 评论树（discussions/notes）', () => {
             created_at: 't1',
             updated_at: 't1',
             system: false,
-            position: { position_type: 'text', new_path: 'a.ts', new_line: 5, base_sha: 'b', head_sha: 'h', start_sha: 's' },
+            position: {
+              position_type: 'text',
+              new_path: 'a.ts',
+              new_line: 5,
+              base_sha: 'b',
+              head_sha: 'h',
+              start_sha: 's',
+            },
           },
           {
             id: 12,
@@ -209,15 +216,23 @@ describe('GitLabAdapter 评论树（discussions/notes）', () => {
           },
         ],
       },
-      { id: 'disc2', notes: [{ id: 99, body: 'merged', author: ME, created_at: 't', updated_at: 't', system: true }] },
+      {
+        id: 'disc2',
+        notes: [
+          { id: 99, body: 'merged', author: ME, created_at: 't', updated_at: 't', system: true },
+        ],
+      },
     ];
     const { adapter } = makeAdapter([
       { match: '/user', body: ME },
       { match: '/metadata', body: { version: '16.0.0', enterprise: false } },
       { match: '/discussions', body: discussions },
     ]);
-    await adapter.ping();
-    const comments = await adapter.listPullRequestComments({ projectKey: 'group', repoSlug: 'proj' }, '3');
+    await adapter.connection.ping();
+    const comments = await adapter.comments.listPullRequestComments(
+      { projectKey: 'group', repoSlug: 'proj' },
+      '3',
+    );
     // system-only discussion 被过滤
     expect(comments).toHaveLength(1);
     const top = comments[0]!;
@@ -236,15 +251,21 @@ describe('GitLabAdapter 评论树（discussions/notes）', () => {
 
 describe('GitLabAdapter 写路径 + clone', () => {
   it('clone url：pat 嵌用户:token；ssh 走 git@host', async () => {
-    const pat = makeAdapter([{ match: '/user', body: ME }, { match: '/metadata', body: { version: '16', enterprise: false } }]);
-    await pat.adapter.ping();
-    const url = await pat.adapter.getCloneUrl({ projectKey: 'group/sub', repoSlug: 'proj' });
+    const pat = makeAdapter([
+      { match: '/user', body: ME },
+      { match: '/metadata', body: { version: '16', enterprise: false } },
+    ]);
+    await pat.adapter.connection.ping();
+    const url = await pat.adapter.connection.getCloneUrl({
+      projectKey: 'group/sub',
+      repoSlug: 'proj',
+    });
     expect(url).toBe('https://alice:tok@gitlab.com/group/sub/proj.git');
 
     const ssh = makeAdapter([], { cloneProtocol: 'ssh' });
-    expect(await ssh.adapter.getCloneUrl({ projectKey: 'group', repoSlug: 'proj' })).toBe(
-      'git@gitlab.com:group/proj.git',
-    );
+    expect(
+      await ssh.adapter.connection.getCloneUrl({ projectKey: 'group', repoSlug: 'proj' }),
+    ).toBe('git@gitlab.com:group/proj.git');
   });
 
   it('approve → POST /approve；unapprove → POST /unapprove', async () => {
@@ -252,8 +273,16 @@ describe('GitLabAdapter 写路径 + clone', () => {
       { method: 'POST', match: '/approve', body: {} },
       { method: 'POST', match: '/unapprove', body: {} },
     ]);
-    await adapter.setPullRequestReviewStatus({ projectKey: 'g', repoSlug: 'p' }, '3', 'approved');
-    await adapter.setPullRequestReviewStatus({ projectKey: 'g', repoSlug: 'p' }, '3', 'unapproved');
+    await adapter.prs.setPullRequestReviewStatus(
+      { projectKey: 'g', repoSlug: 'p' },
+      '3',
+      'approved',
+    );
+    await adapter.prs.setPullRequestReviewStatus(
+      { projectKey: 'g', repoSlug: 'p' },
+      '3',
+      'unapproved',
+    );
     expect(captured.some((c) => c.method === 'POST' && c.url.endsWith('/approve'))).toBe(true);
     expect(captured.some((c) => c.method === 'POST' && c.url.endsWith('/unapprove'))).toBe(true);
   });
@@ -261,18 +290,34 @@ describe('GitLabAdapter 写路径 + clone', () => {
   it('needsWork 抛错（GitLab 无此概念）', async () => {
     const { adapter } = makeAdapter([]);
     await expect(
-      adapter.setPullRequestReviewStatus({ projectKey: 'g', repoSlug: 'p' }, '3', 'needsWork'),
+      adapter.prs.setPullRequestReviewStatus({ projectKey: 'g', repoSlug: 'p' }, '3', 'needsWork'),
     ).rejects.toThrow();
   });
 
   it('publishInlineComment：先拉 diff_refs，position 带三 sha + new_line', async () => {
     const { adapter, captured } = makeAdapter([
       { match: '/user', body: ME },
-      { method: 'POST', match: '/discussions', body: { id: 'd9', notes: [{ id: 77, body: 'x', author: ME, created_at: 't', updated_at: 't', position: { position_type: 'text', new_path: 'a.ts', new_line: 5 } }] } },
+      {
+        method: 'POST',
+        match: '/discussions',
+        body: {
+          id: 'd9',
+          notes: [
+            {
+              id: 77,
+              body: 'x',
+              author: ME,
+              created_at: 't',
+              updated_at: 't',
+              position: { position_type: 'text', new_path: 'a.ts', new_line: 5 },
+            },
+          ],
+        },
+      },
       { method: 'GET', match: '/merge_requests/3', body: MR_DETAIL },
     ]);
-    await adapter.ping();
-    const created = await adapter.publishInlineComment(
+    await adapter.connection.ping();
+    const created = await adapter.comments.publishInlineComment(
       { projectKey: 'g', repoSlug: 'p' },
       '3',
       { path: 'a.ts', line: 5, side: 'new', lineType: 'added' },
@@ -319,7 +364,7 @@ describe('GitLabAdapter 头像代理', () => {
     const { adapter, captured } = makeAdapter([
       { match: '/uploads/', body: 'PNG', headers: { 'content-type': 'image/png' } },
     ]);
-    const res = await adapter.getUserAvatar(
+    const res = await adapter.media.getUserAvatar(
       'alice',
       'https://gitlab.com/uploads/-/system/user/avatar/2/avatar.png',
     );
@@ -332,7 +377,10 @@ describe('GitLabAdapter 头像代理', () => {
     const { adapter, captured } = makeAdapter([
       { match: 'gravatar.com', body: 'PNG', headers: { 'content-type': 'image/png' } },
     ]);
-    const res = await adapter.getUserAvatar('alice', 'https://www.gravatar.com/avatar/abc?s=80');
+    const res = await adapter.media.getUserAvatar(
+      'alice',
+      'https://www.gravatar.com/avatar/abc?s=80',
+    );
     expect(res).not.toBeNull();
     const req = captured.find((c) => c.url.includes('gravatar.com'));
     expect(req).toBeDefined();
@@ -341,7 +389,7 @@ describe('GitLabAdapter 头像代理', () => {
 
   it('其它外部 host：不代拉（防 SSRF）', async () => {
     const { adapter } = makeAdapter([{ match: 'evil.example.com', body: 'x' }]);
-    const res = await adapter.getUserAvatar('alice', 'https://evil.example.com/x.png');
+    const res = await adapter.media.getUserAvatar('alice', 'https://evil.example.com/x.png');
     expect(res).toBeNull();
   });
 });
@@ -353,7 +401,7 @@ describe('GitLabAdapter 附件代理', () => {
     const { adapter, captured } = makeAdapter([
       { match: '/api/v4/projects/', body: 'PNG', headers: { 'content-type': 'image/png' } },
     ]);
-    const res = await adapter.getAttachment(
+    const res = await adapter.media.getAttachment(
       `https://gitlab.com/group/proj/uploads/${SECRET}/image.png`,
       { projectKey: 'group', repoSlug: 'proj' },
     );
@@ -367,7 +415,7 @@ describe('GitLabAdapter 附件代理', () => {
     const { adapter, captured } = makeAdapter([
       { match: '/api/v4/projects/', body: 'PNG', headers: { 'content-type': 'image/png' } },
     ]);
-    await adapter.getAttachment(`/uploads/${SECRET}/image.png`, {
+    await adapter.media.getAttachment(`/uploads/${SECRET}/image.png`, {
       projectKey: 'group/sub',
       repoSlug: 'proj',
     });
@@ -383,7 +431,7 @@ describe('GitLabAdapter 附件代理', () => {
         headers: { 'content-type': 'text/html; charset=utf-8' },
       },
     ]);
-    const res = await adapter.getAttachment(`/uploads/${SECRET}/image.png`, {
+    const res = await adapter.media.getAttachment(`/uploads/${SECRET}/image.png`, {
       projectKey: 'group',
       repoSlug: 'proj',
     });

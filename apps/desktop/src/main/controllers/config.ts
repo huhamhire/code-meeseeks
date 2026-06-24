@@ -137,7 +137,7 @@ export const testConnection: IpcController<'config:testConnection'> = async (_ev
       req.token,
       getContext().bootstrap.config.proxy,
       req.kind,
-    ).ping();
+    ).connection.ping();
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }

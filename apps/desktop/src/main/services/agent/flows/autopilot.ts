@@ -71,9 +71,12 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
         try {
           commits = await runtime.ctx.pr
             .adapterFor(p)
-            ?.listPullRequestCommits(p.repo, p.remoteId);
+            ?.prs.listPullRequestCommits(p.repo, p.remoteId);
         } catch (err) {
-          logger.debug({ err, prLocalId: p.localId }, 'branch-merge commits check failed (ignored)');
+          logger.debug(
+            { err, prLocalId: p.localId },
+            'branch-merge commits check failed (ignored)',
+          );
         }
         branchMergeByPr.set(
           p.localId,

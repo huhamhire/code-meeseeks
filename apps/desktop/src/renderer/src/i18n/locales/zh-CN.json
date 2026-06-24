@@ -384,6 +384,7 @@
     "EAG0001": "/ask 需要提供 question",
     "EAG0002": "该 PR 的 /{{tool}} 任务已在执行或排队中，请勿重复触发",
     "EAG0003": "pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节",
+    "ECF0001": "未支持的 Bitbucket Server 版本 {{version}}；最低要求 {{min}}",
     "ENT0001": "代理未启用或地址为空",
     "ENT0407": "代理认证失败 (407)，检查用户名/密码",
     "EPR0001": "草稿不存在 (可能已被删除)",
@@ -510,6 +511,19 @@
     "undoNeedsWork": "撤销\"需修改\"",
     "unified": "统一",
     "whitespace": "空白"
+  },
+  "mergeVeto": {
+    "behind": "落后于目标分支，需先更新",
+    "blockedByDependency": "被其它合并请求阻塞",
+    "branchProtected": "被分支保护阻止（必需评审 / 检查未通过）",
+    "checking": "可合并状态计算中…",
+    "checksFailed": "必需检查未通过",
+    "conflict": "存在合并冲突",
+    "discussionsUnresolved": "存在未解决的讨论",
+    "draft": "草稿状态，需标记为可合并",
+    "notApproved": "审批未满足要求",
+    "notMergeable": "远端判定当前不可合并",
+    "notOpen": "非打开状态"
   },
   "mermaidDiagram": {
     "closeEsc": "关闭（Esc）",

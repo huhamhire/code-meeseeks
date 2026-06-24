@@ -1,15 +1,25 @@
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+import type { RepoRef } from '@meebox/shared';
+import {
+  buildUrl,
+  fetchWithTimeout,
+  resolveConnectionFetch,
+  stripTrailingSlash,
+  type BinaryResource,
+  type FetchLike,
+  type PlatformConnectionConfig,
+  type PlatformTransport,
+} from '@meebox/platform-core';
 
-export interface BitbucketClientOptions {
-  /** 含 scheme + 主机，无尾斜杠。例：https://bb.internal.corp */
-  baseUrl: string;
-  /** Bitbucket Server Personal Access Token */
-  token: string;
-  /** 测试 / 注入用；默认使用全局 fetch */
-  fetch?: FetchLike;
-  /** 单请求超时（默认 30s） */
-  timeoutMs?: number;
+/** Bitbucket 连接配置 = 统一连接配置 + clone 协议（连接层自管的连接配置，非 HTTP 传输细节）。 */
+export interface BitbucketClientOptions extends PlatformConnectionConfig {
+  /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
+  cloneProtocol?: 'pat' | 'ssh';
 }
+
+/** 适配器构造选项与连接配置同形。 */
+export type BitbucketServerAdapterOptions = BitbucketClientOptions;
+
+export type { FetchLike } from '@meebox/platform-core';
 
 interface BitbucketPagedResponse<T> {
   values: T[];
@@ -32,20 +42,86 @@ export class BitbucketClientError extends Error {
 }
 
 /**
- * 极薄的 Bitbucket Server REST 客户端：Bearer PAT 鉴权、查询参数、分页迭代器、HTTP 错误抛 BitbucketClientError。
- * 业务语义留给 BitbucketServerAdapter。
+ * 极薄的 Bitbucket Server REST 客户端，实现 {@link PlatformTransport}：Bearer PAT 鉴权、start/limit
+ * 分页迭代器、HTTP 错误抛 BitbucketClientError。通用传输样板（超时 / URL 拼接 / 有效 fetch 解析）复用
+ * `@meebox/platform-core` helper；Bitbucket 特有部分（start/limit 分页、avatar 路径二进制、附件协议
+ * 解析）留在本类。业务语义留给 BitbucketServerAdapter。
  */
-export class BitbucketClient {
+export class BitbucketClient implements PlatformTransport {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;
+  private readonly cloneProtocol: 'pat' | 'ssh';
 
   constructor(opts: BitbucketClientOptions) {
-    this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
+    this.baseUrl = stripTrailingSlash(opts.baseUrl);
     this.token = opts.token;
-    this.fetchFn = opts.fetch ?? ((input, init) => fetch(input, init));
+    // 连接层统一解析有效 fetch（显式 fetch 覆盖 > 代理 > 直连）。
+    this.fetchFn = resolveConnectionFetch(opts);
     this.timeoutMs = opts.timeoutMs ?? 30_000;
+    this.cloneProtocol = opts.cloneProtocol ?? 'pat';
+  }
+
+  /** 实例 web/git base（Bitbucket 的 API 与网页同 host），commit 详情页 URL 等用。 */
+  get webBase(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * 构造 git clone URL。
+   *
+   * ssh → `git@<host>:<proj>/<repo>.git`（端口 / 私钥 / username 交系统 ssh config，Bitbucket
+   * 默认 SSH 端口 7999 需自行配 Port）。pat → `https://<currentUser>:<PAT>@<host>/scm/<proj>/<repo>.git`
+   * （Bitbucket Server 的 PAT 鉴权要求真实用户名作 username，PAT 作 password；需 ping() 已落地当前
+   * 用户，由调用方经连接上下文传入，否则抛错）。
+   */
+  getCloneUrl(repo: RepoRef, currentUserName?: string): string {
+    const u = new URL(this.baseUrl);
+    if (this.cloneProtocol === 'ssh') {
+      return `git@${u.hostname}:${repo.projectKey}/${repo.repoSlug}.git`;
+    }
+    if (!currentUserName) {
+      throw new Error(
+        'cannot construct PAT clone URL: current user unknown — ping() not called or failed',
+      );
+    }
+    u.pathname = `/scm/${repo.projectKey}/${repo.repoSlug}.git`;
+    u.username = currentUserName;
+    u.password = this.token;
+    return u.toString();
+  }
+
+  private headers(accept = 'application/json', withJsonBody = false): Record<string, string> {
+    const h: Record<string, string> = { Authorization: `Bearer ${this.token}`, Accept: accept };
+    if (withJsonBody) h['Content-Type'] = 'application/json';
+    return h;
+  }
+
+  private async raw(method: string, url: string, body?: unknown): Promise<Response> {
+    return fetchWithTimeout(
+      this.fetchFn,
+      url,
+      {
+        method,
+        headers: this.headers('application/json', body !== undefined),
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      this.timeoutMs,
+    );
+  }
+
+  private async err(
+    res: Response,
+    method: string,
+    location: string,
+  ): Promise<BitbucketClientError> {
+    const body = await res.text().catch(() => '');
+    return new BitbucketClientError(
+      `${String(res.status)} ${res.statusText} on ${method} ${location}`,
+      res.status,
+      body,
+    );
   }
 
   async get<T>(path: string, params?: Record<string, string>): Promise<T> {
@@ -58,29 +134,16 @@ export class BitbucketClient {
    * body，方便调用方区分 404（用户无头像）vs 401（鉴权失败）vs 其他。content-type
    * 透传，方便 renderer 拼 data URL。
    */
-  async getBinary(
-    path: string,
-    params?: Record<string, string>,
-  ): Promise<{ bytes: Uint8Array; contentType: string }> {
-    const url = new URL(`${this.baseUrl}${path}`);
-    if (params) for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
-    let res: Response;
-    try {
-      res = await this.fetchFn(url.toString(), {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'image/*,*/*;q=0.5',
-        },
-        signal: ctl.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+  async getBinary(path: string, params?: Record<string, string>): Promise<BinaryResource> {
+    const url = buildUrl(this.baseUrl, path, params);
+    const res = await fetchWithTimeout(
+      this.fetchFn,
+      url,
+      { method: 'GET', headers: this.headers('image/*,*/*;q=0.5') },
+      this.timeoutMs,
+    );
     if (!res.ok) {
-      // 错误响应通常很短（HTML / JSON），尽量带 100 字便于诊断
+      // 错误响应通常很短（HTML / JSON），尽量带 200 字便于诊断
       let body = '';
       try {
         body = (await res.text()).slice(0, 200);
@@ -88,7 +151,7 @@ export class BitbucketClient {
         /* ignore */
       }
       throw new BitbucketClientError(
-        `${String(res.status)} ${res.statusText} on GET ${url.pathname}`,
+        `${String(res.status)} ${res.statusText} on GET ${new URL(url).pathname}`,
         res.status,
         body,
       );
@@ -112,7 +175,7 @@ export class BitbucketClient {
   async getAttachmentBinary(
     url: string,
     repo?: { projectKey: string; repoSlug: string },
-  ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  ): Promise<BinaryResource | null> {
     let absoluteUrl: string;
     try {
       const myHost = new URL(this.baseUrl).host;
@@ -140,24 +203,18 @@ export class BitbucketClient {
       return null;
     }
 
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
     let res: Response;
     try {
-      res = await this.fetchFn(absoluteUrl, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'image/*,*/*;q=0.5',
-        },
-        signal: ctl.signal,
-      });
+      res = await fetchWithTimeout(
+        this.fetchFn,
+        absoluteUrl,
+        { method: 'GET', headers: this.headers('image/*,*/*;q=0.5') },
+        this.timeoutMs,
+      );
     } catch (e) {
-      clearTimeout(timer);
       console.warn(`[bb-attachment] fetch threw src=${url} url=${absoluteUrl}:`, e);
       return null;
     }
-    clearTimeout(timer);
     if (!res.ok) {
       // 非 2xx 不再静默吞掉（原先直接 return null，无任何线索）。记 status / 是否重定向 /
       // 重定向后最终 URL / content-type —— 跨源重定向会丢 Authorization 头（fetch 规范）、
@@ -182,33 +239,9 @@ export class BitbucketClient {
     path: string,
     params?: Record<string, string>,
   ): Promise<{ body: T; headers: Headers }> {
-    const url = new URL(`${this.baseUrl}${path}`);
-    if (params) for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
-    let res: Response;
-    try {
-      res = await this.fetchFn(url.toString(), {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'application/json',
-        },
-        signal: ctl.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new BitbucketClientError(
-        `${String(res.status)} ${res.statusText} on GET ${url.pathname}`,
-        res.status,
-        body,
-      );
-    }
+    const url = buildUrl(this.baseUrl, path, params);
+    const res = await this.raw('GET', url);
+    if (!res.ok) throw await this.err(res, 'GET', new URL(url).pathname);
     const body = (await res.json()) as T;
     return { body, headers: res.headers };
   }
@@ -218,67 +251,19 @@ export class BitbucketClient {
    * 抛 BitbucketClientError 附 status + body
    */
   async post<T>(path: string, body: unknown): Promise<T> {
-    const url = `${this.baseUrl}${path}`;
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
-    let res: Response;
-    try {
-      res = await this.fetchFn(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: ctl.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new BitbucketClientError(
-        `${String(res.status)} ${res.statusText} on POST ${path}`,
-        res.status,
-        txt,
-      );
-    }
+    const res = await this.raw('POST', buildUrl(this.baseUrl, path), body);
+    if (!res.ok) throw await this.err(res, 'POST', path);
     return (await res.json()) as T;
   }
 
   /**
    * 带 JSON body 的 PUT。Bitbucket 的 PR 参与者 status 用 PUT participants/{slug} 写入，
    * 404 / 401 / 409 等错误抛 BitbucketClientError 并附 status + body，调用方决定降级或抛出。
-   * 响应体 JSON 解析失败时返回 unknown（部分端点返回 204 No Content）。
+   * 响应体 JSON 解析失败时返回 null（部分端点返回 204 No Content）。
    */
   async put<T>(path: string, body: unknown): Promise<T | null> {
-    const url = `${this.baseUrl}${path}`;
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
-    let res: Response;
-    try {
-      res = await this.fetchFn(url, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: ctl.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new BitbucketClientError(
-        `${String(res.status)} ${res.statusText} on PUT ${path}`,
-        res.status,
-        txt,
-      );
-    }
+    const res = await this.raw('PUT', buildUrl(this.baseUrl, path), body);
+    if (!res.ok) throw await this.err(res, 'PUT', path);
     if (res.status === 204) return null;
     try {
       return (await res.json()) as T;
@@ -293,30 +278,8 @@ export class BitbucketClient {
    * 直接 return，不需要响应体
    */
   async del(path: string): Promise<void> {
-    const url = `${this.baseUrl}${path}`;
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
-    let res: Response;
-    try {
-      res = await this.fetchFn(url, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'application/json',
-        },
-        signal: ctl.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new BitbucketClientError(
-        `${String(res.status)} ${res.statusText} on DELETE ${path}`,
-        res.status,
-        txt,
-      );
-    }
+    const res = await this.raw('DELETE', buildUrl(this.baseUrl, path));
+    if (!res.ok) throw await this.err(res, 'DELETE', path);
   }
 
   /**

@@ -6,11 +6,8 @@ import {
   writeDiffBaseCache,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
-import {
-  pullRequestHeadRefspec,
-  type PlatformAdapter,
-  type StoredPullRequest,
-} from '@meebox/shared';
+import { pullRequestHeadRefspec, type StoredPullRequest } from '@meebox/shared';
+import type { PlatformAdapter } from '@meebox/platform-core';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { ConnectionRuntime } from '../adapters.js';
 import { broadcast } from './broadcast.js';
