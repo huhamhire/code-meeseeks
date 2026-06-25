@@ -37,10 +37,13 @@ export interface EditorThemeOption {
 
 export const EDITOR_THEME_OPTIONS = [
   { id: 'auto', label: 'Auto' },
-  { id: 'vs', label: 'Light' },
-  { id: 'vs-dark', label: 'Dark' },
-  { id: 'hc-light', label: 'High Contrast Light' },
+  { id: 'dark-2026', label: 'Dark 2026' },
+  { id: 'light-2026', label: 'Light 2026' },
+  // Monaco 内置 vs / vs-dark 作为 Modern 默认（无需另引 VS Code Dark/Light Modern）。
+  { id: 'vs-dark', label: 'Dark Modern' },
+  { id: 'vs', label: 'Light Modern' },
   { id: 'hc-black', label: 'High Contrast Dark' },
+  { id: 'hc-light', label: 'High Contrast Light' },
   { id: 'github-light', label: 'GitHub Light' },
   { id: 'github-dark', label: 'GitHub Dark' },
   { id: 'monokai', label: 'Monokai' },

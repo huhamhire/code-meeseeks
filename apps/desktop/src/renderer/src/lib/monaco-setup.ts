@@ -30,6 +30,9 @@ import solarizedLight from './editor-themes/solarized-light.json';
 import solarizedDark from './editor-themes/solarized-dark.json';
 import cobalt2 from './editor-themes/cobalt2.json';
 import oceanicNext from './editor-themes/oceanic-next.json';
+// VS Code 内置 2026 默认主题（转换自 microsoft/vscode theme-defaults，已解析 include 链并转为 Monaco 形状）。
+import dark2026 from './editor-themes/dark-2026.json';
+import light2026 from './editor-themes/light-2026.json';
 
 // Vite 的 ?worker import 返回一个可 new 的 Worker 构造类。
 self.MonacoEnvironment = {
@@ -55,6 +58,8 @@ const CUSTOM_EDITOR_THEMES: ReadonlyArray<readonly [string, unknown]> = [
   ['solarized-dark', solarizedDark],
   ['cobalt2', cobalt2],
   ['oceanic-next', oceanicNext],
+  ['dark-2026', dark2026],
+  ['light-2026', light2026],
 ];
 for (const [id, data] of CUSTOM_EDITOR_THEMES) {
   monaco.editor.defineTheme(id, data as unknown as monaco.editor.IStandaloneThemeData);
