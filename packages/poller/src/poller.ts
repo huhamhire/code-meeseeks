@@ -10,6 +10,7 @@ import type {
 import type { PlatformAdapter } from '@meebox/platform-core';
 import type { StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
+import { latestCommentToMeAt } from './unread.js';
 import {
   PURGE_GRACE_MS,
   prDirKey,
@@ -307,6 +308,28 @@ export class Poller {
           });
           dirty = true;
 
+          // 未读 mention 游标（见 pr-state computeUnread）：仅当 PR 内容变更（updatedAt 跳变 → 可能有新评论）且
+          // me 已知时拉评论扫「@我 / 回复我」，与历史游标取较大值。新到达 / 新 commit 未读无需在此处理（读取时分别按
+          // 发现时间 vs 未读纪元、head sha 比对派生）。read-state 仅由 markRead（用户打开 PR）写，poll 一概不碰。
+          let lastMentionAt = prev?.lastMentionAt;
+          if (isChanged && me) {
+            try {
+              const comments = await adapter.comments.listPullRequestComments(
+                { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+                pr.remoteId,
+              );
+              const latest = latestCommentToMeAt(comments, me);
+              if (latest && (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt))) {
+                lastMentionAt = latest;
+              }
+            } catch (err) {
+              this.opts.logger.warn(
+                { err, connectionId, localId },
+                'unread scan: failed to list comments',
+              );
+            }
+          }
+
           // 索引条目：仅 lookup/退场判定需要的字段；archivedAt 反向恢复 (远端回来了)
           indexByLocalId.set(localId, {
             identity,
@@ -314,6 +337,7 @@ export class Poller {
             discoveredAt: prev?.discoveredAt ?? now,
             lastSeenAt: now,
             archivedAt: null,
+            lastMentionAt,
           });
         }
       } catch (err) {

@@ -28,7 +28,7 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
   const canMerge = pr.mergeStatus?.canMerge ?? false;
   return (
     <div
-      className={`pr-item ${selected ? 'selected' : ''} pr-item-status-${pr.localStatus}`}
+      className={`pr-item ${selected ? 'selected' : ''} pr-item-status-${pr.localStatus} ${pr.unread ? 'pr-item-unread' : ''}`}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -48,6 +48,9 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
       />
       <div className="pr-item-body">
         <div className="pr-item-title">
+          {pr.unread && (
+            <span className="pr-item-unread-dot" title={t('prItem.unread')} aria-label="unread" />
+          )}
           {pr.hasConflict && (
             <span className="conflict-warn" title={t('prItem.hasConflict')} aria-label="conflict">
               ⚠️

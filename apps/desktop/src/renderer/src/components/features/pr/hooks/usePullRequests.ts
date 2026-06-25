@@ -35,6 +35,25 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     }
   }, [refreshing, reloadPrs]);
 
+  // 标记 PR 已读：用户打开 PR 时调用。先乐观清掉本地未读圆点（即时反馈），再持久化已读水位——
+  // 下一轮 poll 不会因旧事件把它标回。仅对当前未读的 PR 发 IPC，避免每次选中都写盘。
+  const markRead = useCallback(async (localId: string): Promise<void> => {
+    let wasUnread = false;
+    setPrs((prev) =>
+      prev.map((p) => {
+        if (p.localId !== localId || !p.unread) return p;
+        wasUnread = true;
+        return { ...p, unread: false };
+      }),
+    );
+    if (!wasUnread) return;
+    try {
+      await invoke('prs:markRead', { localId });
+    } catch (e) {
+      console.error('markRead failed', e);
+    }
+  }, []);
+
   const selected = prs.find((p) => p.localId === selectedId) ?? null;
 
   const setSelectedPrStatus = useCallback(
@@ -88,5 +107,6 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     triggerRefresh,
     setSelectedPrStatus,
     mergeSelectedPr,
+    markRead,
   };
 }
