@@ -77,6 +77,8 @@ interface SettingsModalProps {
    * 不刷新的话 App 的 boot.connections / 列表会过期（丢 capabilities/user、PR 对不上）。
    */
   onConnectionsChange?: () => void | Promise<void>;
+  /** 整体保存成功后回传写盘后的权威 config，父级据此同步 boot.config（再次打开设置页显示最新值）。 */
+  onConfigPersisted?: (config: Config) => void;
   onClose: () => void;
 }
 
@@ -94,6 +96,7 @@ export function SettingsModal({
   onThemeChange,
   onEditorAppearanceChange,
   onConnectionsChange,
+  onConfigPersisted,
   onClose,
 }: SettingsModalProps) {
   const { t } = useTranslation();
@@ -107,6 +110,7 @@ export function SettingsModal({
     onThemeChange,
     onEditorAppearanceChange,
     onConnectionsChange,
+    onConfigPersisted,
     onClose,
   });
 

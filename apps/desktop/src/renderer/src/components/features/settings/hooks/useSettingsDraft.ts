@@ -29,6 +29,8 @@ interface UseSettingsDraftParams {
     editor_font_size: number;
   }) => void;
   onConnectionsChange?: () => void | Promise<void>;
+  /** 整体保存成功后回传写盘后的权威 config，供父级同步 boot.config（再次打开设置页显示最新值）。 */
+  onConfigPersisted?: (config: Config) => void;
   onClose: () => void;
 }
 
@@ -46,6 +48,7 @@ export function useSettingsDraft({
   onThemeChange,
   onEditorAppearanceChange,
   onConnectionsChange,
+  onConfigPersisted,
   onClose,
 }: UseSettingsDraftParams) {
   const { t } = useTranslation();
@@ -407,6 +410,9 @@ export function useSettingsDraft({
       if (reposDirChanged && reposDirInput.trim()) {
         await invoke('config:setReposDir', { reposDir: reposDirInput.trim() });
       }
+      // 回读写盘后的权威配置同步父级 boot.config：否则 agent / poller / 并发 等无即时回调的项，
+      // 再次打开设置页仍读旧的 boot.config（行为已生效但 UI 显示陈旧）。含 main 端 clamp 后的值。
+      onConfigPersisted?.(await invoke('config:read', undefined));
       setBase({
         reposDir: reposDirInput.trim(),
         agentDir: agentDirInput.trim(),

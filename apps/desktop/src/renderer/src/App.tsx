@@ -216,6 +216,7 @@ export default function App() {
             patchConfig((c) => ({ ...c, appearance: { ...c.appearance, ...appearance } }))
           }
           onConnectionsChange={refreshBootAndPrs}
+          onConfigPersisted={(config) => patchConfig(() => config)}
           onClose={() => setShowSettings(false)}
         />
       )}
