@@ -174,11 +174,12 @@ textarea {
   color: $text-on-accent;
 }
 
-// 操作级 toast：底部居中浮层，自动消失 / 点击关闭。用于审批 / 合并等远端动作失败提示
+// 操作级 toast：顶部居中浮层，自动消失 / 点击关闭。用于审批 / 合并等远端动作失败提示
+// （放顶部避免在 diff 视图下与底部状态栏 / 横向滚动条叠压）。
 .app-toast {
   position: fixed;
   left: 50%;
-  bottom: 48px;
+  top: 48px;
   transform: translateX(-50%);
   max-width: 70%;
   padding: $space-4 $space-6;
@@ -198,7 +199,7 @@ textarea {
 @keyframes app-toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 8px);
+    transform: translate(-50%, -8px); // 顶部浮层：自上方滑入
   }
   to {
     opacity: 1;
