@@ -66,6 +66,59 @@ for (const [id, data] of CUSTOM_EDITOR_THEMES) {
 }
 
 /**
+ * 【SPIKE】按主题 id 取其 base + colors，供「GUI chrome 跟随编辑器主题」验证从中提取 background /
+ * foreground / selection 等 base 色。第三方 monaco-themes 仅带极少数 colors（editor.* 几个键），
+ * 内置 vs / vs-dark / hc-* 无 JSON、在此补最小已知色。验证完毕若不采纳可整体移除。
+ */
+export interface EditorThemeColorData {
+  base: string;
+  colors: Record<string, string>;
+}
+const BUILTIN_THEME_COLORS: Record<string, EditorThemeColorData> = {
+  vs: {
+    base: 'vs',
+    colors: {
+      'editor.background': '#ffffff',
+      'editor.foreground': '#000000',
+      'editor.selectionBackground': '#add6ff',
+    },
+  },
+  'vs-dark': {
+    base: 'vs-dark',
+    colors: {
+      'editor.background': '#1e1e1e',
+      'editor.foreground': '#d4d4d4',
+      'editor.selectionBackground': '#264f78',
+    },
+  },
+  'hc-black': {
+    base: 'hc-black',
+    colors: {
+      'editor.background': '#000000',
+      'editor.foreground': '#ffffff',
+      'editor.selectionBackground': '#264f78',
+    },
+  },
+  'hc-light': {
+    base: 'hc-light',
+    colors: {
+      'editor.background': '#ffffff',
+      'editor.foreground': '#292929',
+      'editor.selectionBackground': '#add6ff',
+    },
+  },
+};
+const CUSTOM_THEME_COLORS: Record<string, EditorThemeColorData> = Object.fromEntries(
+  CUSTOM_EDITOR_THEMES.map(([id, data]) => {
+    const d = data as { base?: string; colors?: Record<string, string> };
+    return [id, { base: d.base ?? 'vs-dark', colors: d.colors ?? {} }];
+  }),
+);
+export function getEditorThemeColors(id: string): EditorThemeColorData | null {
+  return CUSTOM_THEME_COLORS[id] ?? BUILTIN_THEME_COLORS[id] ?? null;
+}
+
+/**
  * 关掉 4 个「带 worker 后端语言服务」的语言族的全部特性：typescript/javascript（ts.worker）、
  * json（json.worker）、css/scss/less（css.worker）、html/handlebars/razor（html.worker）。
  *

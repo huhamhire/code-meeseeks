@@ -1,21 +1,34 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { Config, ResolvedTheme, ThemePreference } from '@meebox/shared';
-import { applyEditorFontFamily, applyThemePreference, persistThemePreference, watchSystemTheme } from '../theme';
+import type { Config, ResolvedTheme } from '@meebox/shared';
+import {
+  applyEditorFontFamily,
+  applyGlobalTheme,
+  persistEditorTheme,
+  resolveGlobalTheme,
+  watchSystemThemeForAuto,
+} from '../theme';
+import { applyChromeFromEditorTheme } from '../theme/editor-chrome-sync';
 import { setEditorAppearance, useEditorAppearance } from '../stores/editor-appearance-store';
 
 /**
- * 跟随主题偏好生效：偏好变化时把它解析后写到 documentElement.data-theme + 持久化到 localStorage
- * （供下次启动同步命中）；'system' 偏好下还监听 OS 深 / 浅色切换、实时重解析跟随。
+ * 全局主题生效：主题变化时把它反推浅 / 深写到 documentElement.data-theme（驱动语义色板）+ 派生结构性
+ * chrome 色覆盖 + 持久化到 localStorage（供下次启动同步命中）；'auto' 主题下还监听 OS 深 / 浅色切换、
+ * 实时重解析跟随。
  *
- * 偏好源为 config.appearance.theme（启动 boot.config 注入，设置页即时改动经 patchConfig 同步），
- * 故主题切换与语言切换走同一条「config 驱动 + 即时生效」路径。
+ * 主题源为共享 store（由 useEditorAppearanceSync 从 config.appearance.editor_theme 注入，设置页即时
+ * 改动经 setEditorAppearance 同步），故主题切换与语言切换走同一条「config 驱动 + 即时生效」路径。
  */
-export function useTheme(preference: ThemePreference): void {
+export function useGlobalTheme(): void {
+  const { editorTheme } = useEditorAppearance();
   useEffect(() => {
-    applyThemePreference(preference);
-    persistThemePreference(preference);
-    return watchSystemTheme(preference);
-  }, [preference]);
+    applyGlobalTheme(editorTheme);
+    persistEditorTheme(editorTheme);
+    applyChromeFromEditorTheme(editorTheme, resolveGlobalTheme(editorTheme));
+    // 'auto' 主题：OS 深浅切换时重写 data-theme（watch 内部已做）并重派生 chrome
+    return watchSystemThemeForAuto(editorTheme, () => {
+      applyChromeFromEditorTheme(editorTheme, resolveGlobalTheme(editorTheme));
+    });
+  }, [editorTheme]);
 }
 
 /** 订阅 documentElement.data-theme 变化（含 system 偏好下 OS 切换）。 */

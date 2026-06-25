@@ -1,4 +1,5 @@
 import { nativeTheme } from 'electron';
+import { editorThemeNativeSource } from '@meebox/shared';
 import { writeConfig } from '@meebox/config';
 import { buildDraftAdapter } from '../adapters.js';
 import { setMainLanguage } from '../i18n/index.js';
@@ -41,21 +42,9 @@ export const setLanguage: IpcController<'config:setLanguage'> = async (_event, r
 };
 
 /**
- * 写 GUI 主题偏好；内存同步。前端展示由 renderer 即时切换；主进程同步 nativeTheme.themeSource，让原生
- * 窗口 chrome（Windows 细边框 / 窗控按钮深浅）跟随——窗控按钮配色由 WindowManager 监听 nativeTheme
- * 'updated' 重置（见 window-manager）。'system' 则交回 OS 跟随。
- */
-export const setTheme: IpcController<'config:setTheme'> = async (_event, req) => {
-  const { bootstrap, logger } = getContext();
-  const appearance = { ...bootstrap.config.appearance, theme: req.theme };
-  await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, appearance });
-  bootstrap.config.appearance = appearance;
-  nativeTheme.themeSource = req.theme;
-  logger.info({ theme: req.theme }, 'theme preference updated');
-};
-
-/**
- * 写编辑器外观（Monaco 主题 + 等宽字体）；内存同步。纯前端展示项，主进程无副作用。
+ * 写外观（全局主题 = Monaco 主题 + 等宽字体 + 字号）；内存同步。主题切换由 renderer 即时完成；主进程据
+ * 主题设 nativeTheme.themeSource，让原生窗口 chrome（Windows 细边框 / 窗控按钮深浅）跟随——'auto' 主题
+ * 交回 OS（'system'），其余固定浅 / 深。窗控按钮配色由 WindowManager 监听 nativeTheme 'updated' 重置。
  */
 export const setEditorAppearance: IpcController<'config:setEditorAppearance'> = async (
   _event,
@@ -70,6 +59,7 @@ export const setEditorAppearance: IpcController<'config:setEditorAppearance'> = 
   };
   await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, appearance });
   bootstrap.config.appearance = appearance;
+  nativeTheme.themeSource = editorThemeNativeSource(req.editor_theme);
   logger.info(
     {
       editorTheme: req.editor_theme,

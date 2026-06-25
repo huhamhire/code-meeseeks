@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
 import { scaffoldAgentDir } from '@meebox/agent';
-import { resolveLanguage } from '@meebox/shared';
+import { editorThemeNativeSource, resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
 import type { Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
@@ -201,10 +201,10 @@ class App {
       app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
     }
 
-    // 原生窗口 chrome 跟随主题偏好：Windows 据 nativeTheme 设 DWMWA_USE_IMMERSIVE_DARK_MODE（原生
-    // 细边框 / 窗控按钮深浅），'system' 跟随 OS。窗控按钮配色由 WindowManager 监听 nativeTheme 'updated'
-    // 同步（见 window-manager）。themeSource 取值与 appearance.theme（'system'|'light'|'dark'）一致。
-    nativeTheme.themeSource = this.bootstrap.config.appearance.theme;
+    // 原生窗口 chrome 跟随全局主题：Windows 据 nativeTheme 设 DWMWA_USE_IMMERSIVE_DARK_MODE（原生
+    // 细边框 / 窗控按钮深浅）。themeSource 由主题反推——'auto' 主题交回 OS（'system'），其余固定浅 / 深。
+    // 窗控按钮配色由 WindowManager 监听 nativeTheme 'updated' 同步（见 window-manager）。
+    nativeTheme.themeSource = editorThemeNativeSource(this.bootstrap.config.appearance.editor_theme);
 
     // 主窗口管理（载入窗口状态 + 建窗 + 尺寸回写）。
     this.windowManager = await loadWindowManager({

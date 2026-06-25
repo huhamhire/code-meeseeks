@@ -101,6 +101,8 @@
 
   // ===== Avatar / 装饰 =====
   --avatar-bg-default: #{$vscode-gray-780};
+  // GitHub octocat 单色 logo：暗底用官方反白（invertocat），浅底翻成官方近黑（见浅色块覆盖）。
+  --github-logo: #{$white};
 
   // ===== 滚动条（webkit）=====
   --scrollbar-thumb: #{$vscode-gray-600};
@@ -198,6 +200,8 @@
 
   // ===== Avatar / 装饰 =====
   --avatar-bg-default: #{$vscode-gray-150};
+  // GitHub octocat 浅底用官方近黑（$vscode-gray-900 ≈ 品牌 #181717），白底反白 logo 不可见。
+  --github-logo: #{$vscode-gray-900};
 
   // ===== 滚动条 =====
   --scrollbar-thumb: #{$vscode-gray-260};
