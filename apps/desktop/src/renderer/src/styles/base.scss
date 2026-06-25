@@ -248,7 +248,8 @@ textarea {
 
   &:hover:not(:disabled) {
     background: $bg-white-fade;
-    color: white;
+    // 主文字色（随主题）——勿写死 white：浅色模式下白图标会消失在浅底 hover 上。
+    color: $text-primary;
   }
   &:disabled {
     opacity: 0.5;

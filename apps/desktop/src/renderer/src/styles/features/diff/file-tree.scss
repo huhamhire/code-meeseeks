@@ -162,7 +162,7 @@
   }
   &.active {
     background: $bg-selected;
-    color: $text-on-accent;
+    color: $text-on-selected;
   }
 }
 .diff-scope-option-icon {
@@ -174,7 +174,7 @@
   color: $text-muted;
 }
 .diff-scope-option.active .diff-scope-option-icon {
-  color: $text-on-accent;
+  color: $text-on-selected;
 }
 .diff-scope-option-body {
   display: flex;
@@ -201,7 +201,7 @@
   color: $text-muted;
 }
 .diff-scope-option.active .diff-scope-option-sub {
-  color: $text-on-accent;
+  color: $text-on-selected;
 }
 .diff-scope-author {
   overflow: hidden;
@@ -369,9 +369,9 @@
   text-decoration: line-through;
 }
 
-// 选中行：保留高亮蓝底，文字 fallback 白色以保持对比
+// 选中行：保留高亮蓝底，文字用选中态前景（暗色底白、浅色底深字），覆盖 git 状态色以保证对比
 .tree-file.selected .tree-name {
-  color: $text-on-accent;
+  color: $text-on-selected;
 }
 
 .tree-chevron {

@@ -36,7 +36,7 @@ button.statusbar-pragent-chip {
 }
 // Idle 形态：去掉主蓝色调，换成中性灰底白字，区分"在跑"和"空闲"两种语义
 .statusbar-pragent-chip-idle {
-  background: $border-default;
+  background: $chip-neutral;
   color: $text-muted;
 }
 .statusbar-pragent-elapsed {

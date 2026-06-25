@@ -30,6 +30,8 @@
   --bg-hover: #{$vscode-gray-780};
   --bg-selected: #{$vscode-blue-900};
   --bg-group-header: #{$vscode-gray-900};
+  // 状态栏「未启用 / idle」中性胶囊底：独立于边框色，暗色沿用旧 border-default 灰（#3e3e42）。
+  --chip-neutral: #{$vscode-gray-680};
 
   // ===== 边框 =====
   --border-default: #{$vscode-gray-680};
@@ -42,7 +44,10 @@
   --text-muted: #{$vscode-gray-420};
   --text-subtle: #{$vscode-slate-500};
   --text-dim: #{$vscode-gray-500};
-  --text-on-accent: #{$white};
+  --text-on-accent: #{$white}; // 饱和色实底（accent / warning / danger 等）上的文字，深浅皆白
+  // 选中高亮底（--bg-selected）上的文字：暗色底深蓝 → 白；浅色底浅蓝 → 深字。与 --text-on-accent
+  // 分开，避免浅色下选中项沿用白字成「反色」。
+  --text-on-selected: #{$white};
 
   // ===== 语义色（动作 / 状态）=====
   --color-accent: #{$vscode-blue-700};
@@ -87,6 +92,7 @@
   --blame-fold: #{$vscode-slate-500}; // 折叠占位斜纹灰
 
   // ===== 文件改动状态点（目录树 Material 图标集）=====
+  // 鲜明的 Material 饱和色：圆点小、需「跳」出来，深浅主题都用亮色更醒目（区别于文件名的 git 装饰色）。
   --file-status-added: #{$material-green-500};
   --file-status-modified: #{$material-amber-500};
   --file-status-deleted: #{$material-red-550};
@@ -126,6 +132,8 @@
   --bg-hover: #{$vscode-gray-120};
   --bg-selected: #{$vscode-blue-100};
   --bg-group-header: #{$vscode-gray-120};
+  // 浅色用更浅的灰：边框级灰（#cfcfcf）作胶囊填充在白底状态栏上偏深，改用 #e0e0e0 更轻。
+  --chip-neutral: #{$vscode-gray-150};
 
   // ===== 边框 =====
   --border-default: #{$vscode-gray-220};
@@ -139,6 +147,7 @@
   --text-subtle: #{$vscode-gray-420};
   --text-dim: #{$vscode-gray-340};
   --text-on-accent: #{$white};
+  --text-on-selected: #{$vscode-gray-840}; // 浅色选中底（浅蓝）承深字
 
   // ===== 语义色（动作 / 状态）=====
   --color-accent: #{$vscode-blue-800};

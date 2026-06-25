@@ -22,6 +22,7 @@ $bg-surface:      var(--bg-surface);
 $bg-hover:        var(--bg-hover);
 $bg-selected:     var(--bg-selected);
 $bg-group-header: var(--bg-group-header);
+$chip-neutral:    var(--chip-neutral);
 
 // ===== 边框 =====
 $border-default:      var(--border-default);
@@ -35,6 +36,7 @@ $text-muted:     var(--text-muted);
 $text-subtle:    var(--text-subtle);
 $text-dim:       var(--text-dim);
 $text-on-accent: var(--text-on-accent);
+$text-on-selected: var(--text-on-selected);
 
 // ===== 语义色 (动作 / 状态) =====
 $color-accent:             var(--color-accent);
