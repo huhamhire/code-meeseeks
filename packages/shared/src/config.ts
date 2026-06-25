@@ -251,6 +251,13 @@ export const ConfigSchema = z.object({
       strategy: z
         .object({
           auto_followup: z.boolean().default(true),
+          /**
+           * 单次任务生成的代码建议 / 评审发现数量上限（2~8，默认 4）。统一约束三处：
+           * - /review：pr-agent `pr_reviewer.num_max_findings`（硬上限）；
+           * - /improve：pr-agent `pr_code_suggestions.num_code_suggestions`（硬上限）；
+           * - /ask：结构化分段 `<suggestions>` 的提示层软约束（模型一般遵守，极少数可能超）。
+           */
+          max_code_suggestions: z.number().int().min(2).max(8).default(4),
         })
         .default({}),
     })

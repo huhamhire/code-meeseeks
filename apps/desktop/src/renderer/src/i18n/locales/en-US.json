@@ -711,6 +711,8 @@
     "llmHint": "The active profile determines which model PR Agent calls.",
     "llmProfileFallback": "Profile {{id}}",
     "llmTitle": "LLM Models",
+    "maxCodeSuggestionsHint": "Max code suggestions per /review, /improve, or /ask.",
+    "maxCodeSuggestionsLabel": "Code suggestions",
     "openAgentDir": "Open current directory",
     "openDevTools": "Open DevTools",
     "openDevToolsTitle": "Open Electron DevTools (detached window)",

@@ -298,6 +298,7 @@ export class RunExecutor {
         tool: req.tool,
         responseLanguage: getMainLanguage(),
         maxModelTokens: bootstrap.config.llm.context_tokens,
+        maxCodeSuggestions: bootstrap.config.agent.strategy.max_code_suggestions,
       }),
     };
 
@@ -348,6 +349,9 @@ export class RunExecutor {
       referencedContext: req.tool === 'ask' ? req.referencedContext : undefined,
       // /ask 复评模式：引用了某条 finding 时注入裁决（replace/keep/drop）指示。
       referencedFinding: req.tool === 'ask' ? !!req.referencedFinding : undefined,
+      // /ask 代码建议数量软约束（与 /review /improve 共用同一设置）。
+      maxCodeSuggestions:
+        req.tool === 'ask' ? bootstrap.config.agent.strategy.max_code_suggestions : undefined,
     });
     // /ask 的 pr_questions prompt **不渲染 extra_instructions**（与 describe/review/improve 不同），
     // 经 env 注入对 /ask 是死字段。故 /ask 的指令改为拼进「问题」（user turn，见下方 askQuestion），

@@ -211,6 +211,12 @@ export interface ToolEnvOptions {
   responseLanguage?: string;
   /** 裁剪输入内容的上下文长度上限（token，CONFIG__MAX_MODEL_TOKENS）；空则用默认 128000。CLI 模式忽略。 */
   maxModelTokens?: number;
+  /**
+   * 代码建议 / 评审发现数量上限（2~8）：/review → PR_REVIEWER__NUM_MAX_FINDINGS、
+   * /improve → PR_CODE_SUGGESTIONS__NUM_CODE_SUGGESTIONS（均硬上限）。空则用 pr-agent 默认。
+   * /ask 的软约束走提示词（见 buildExtraInstructions），不经此。
+   */
+  maxCodeSuggestions?: number;
 }
 
 /**
@@ -238,6 +244,14 @@ export function buildToolEnv(
     env['PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS'] = 'false';
     env['PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT'] = 'false';
     env['LOCAL__REVIEW_PATH'] = PRAGENT_LOCAL_OUTPUT.improve;
+    // 代码建议数量上限（用户「代码建议数量」设置）；空则用 pr-agent 默认（num_code_suggestions=4）。
+    if (opts.maxCodeSuggestions !== undefined) {
+      env['PR_CODE_SUGGESTIONS__NUM_CODE_SUGGESTIONS'] = String(opts.maxCodeSuggestions);
+    }
+  }
+  // 评审发现数量上限（与 /improve 共用同一设置）；空则用 pr-agent 默认（num_max_findings=3）。
+  if (opts.tool === 'review' && opts.maxCodeSuggestions !== undefined) {
+    env['PR_REVIEWER__NUM_MAX_FINDINGS'] = String(opts.maxCodeSuggestions);
   }
   return env;
 }

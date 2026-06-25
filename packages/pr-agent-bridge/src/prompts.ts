@@ -95,8 +95,17 @@ function reviewLayoutDirective(tool: ReviewRunTool): string {
  * 可省（完整过程分析，GUI 默认收起）、suggestions 可省（可执行建议，**逐条带代码定位标记** → GUI 解析成
  * 可采纳的「代码建议」卡）。仅 /ask 注入；模型未遵循时 parse-output 整体回退普通解析（见 packages/poller）。
  */
-function structuredAskDirective(tool: ReviewRunTool): string {
+function structuredAskDirective(tool: ReviewRunTool, maxCodeSuggestions?: number): string {
   if (tool !== 'ask') return '';
+  // 代码建议数量软约束：/ask 无 pr-agent 原生上限，仅能在此提示层封顶（与 /improve /review 共用同一设置）。
+  const capRule =
+    maxCodeSuggestions !== undefined
+      ? [
+          `- Provide AT MOST ${String(maxCodeSuggestions)} code-anchored suggestions (items that end`,
+          '  with a [file: …] marker) in <suggestions>; if more come to mind, keep only the most',
+          '  important ones. General (non-code) advice is not counted toward this limit.',
+        ]
+      : [];
   return [
     'Answer the question with the SAME depth, structure, and rich GitHub-flavored Markdown',
     'you normally would — multiple paragraphs, sub-headings, bullet/numbered lists, TABLES,',
@@ -134,6 +143,7 @@ function structuredAskDirective(tool: ReviewRunTool): string {
     '- Use the literal lowercase tags exactly as shown; do not nest them or invent other tags.',
     '  Write the content (in the requested response language) between the tags; avoid stray',
     '  prose outside the tags.',
+    ...capRule,
   ].join('\n');
 }
 
@@ -185,11 +195,13 @@ export function buildExtraInstructions(input: {
   referencedContext?: string;
   /** 本次 /ask 是否为对某条既有评论的「复评」；为真则注入复评裁决指示（仅 /ask）。 */
   referencedFinding?: boolean;
+  /** 代码建议数量上限（2~8）：/ask 的 <suggestions> 软约束（仅 /ask 用到）。空则不封顶。 */
+  maxCodeSuggestions?: number;
 }): string | undefined {
   const parts = [
     languageDirectiveFor(input.language),
     anchorMarkerDirective(input.tool),
-    structuredAskDirective(input.tool),
+    structuredAskDirective(input.tool, input.maxCodeSuggestions),
     referencedAskDirective(input.tool, !!input.referencedFinding),
     reviewLayoutDirective(input.tool),
     input.prContext,

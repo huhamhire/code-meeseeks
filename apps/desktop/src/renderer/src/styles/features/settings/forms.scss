@@ -409,3 +409,10 @@ select.settings-input {
   font-size: $fs-sm;
   line-height: $lh-normal;
 }
+// 子项右侧下拉：与其他主配置下拉（settings-language-select）同宽 180px，不被 .settings-input
+// 的 flex:1 撑满（复合选择器提权覆盖）。纯数值选项右对齐，避免在宽框内孤零零靠左。
+.settings-input.settings-sublist-select {
+  flex: 0 0 auto;
+  width: 180px;
+  text-align: right;
+}

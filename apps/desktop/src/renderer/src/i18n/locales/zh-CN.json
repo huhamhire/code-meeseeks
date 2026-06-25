@@ -695,6 +695,8 @@
     "llmHint": "选择活跃配置决定 PR Agent 调用哪个模型。",
     "llmProfileFallback": "配置 {{id}}",
     "llmTitle": "LLM 模型",
+    "maxCodeSuggestionsHint": "单次 /review、/improve、/ask 生成的代码建议数量上限。",
+    "maxCodeSuggestionsLabel": "代码建议数量",
     "openAgentDir": "打开当前目录",
     "openDevTools": "打开 DevTools",
     "openDevToolsTitle": "打开 Electron 开发者工具（分离窗口）",

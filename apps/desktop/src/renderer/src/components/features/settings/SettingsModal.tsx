@@ -230,6 +230,8 @@ export function SettingsModal({
                 <AgentStrategySection
                   autoFollowup={s.autoFollowup}
                   onAutoFollowupChange={s.setAutoFollowup}
+                  maxCodeSuggestions={s.maxCodeSuggestions}
+                  onMaxCodeSuggestionsChange={s.setMaxCodeSuggestions}
                 />
                 <ConcurrencySection
                   value={s.maxConcurrencyInput}

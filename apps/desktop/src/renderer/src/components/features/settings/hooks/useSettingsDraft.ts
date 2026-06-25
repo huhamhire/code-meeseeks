@@ -61,8 +61,11 @@ export function useSettingsDraft({
   // 原样回传、不被覆盖成默认值；目录经 agentDirInput、策略开关经 autoFollowup 可编辑。
   const [agent] = useState<Config['agent']>(config.agent);
   const [agentDirInput, setAgentDirInput] = useState(config.agent.dir);
-  // Agent 策略开关（本期：自动追问）。随 config:setAgent 一并保存。
+  // Agent 策略（自动追问 + 代码建议数量上限）。随 config:setAgent 一并保存。
   const [autoFollowup, setAutoFollowupState] = useState(config.agent.strategy.auto_followup);
+  const [maxCodeSuggestions, setMaxCodeSuggestionsState] = useState(
+    config.agent.strategy.max_code_suggestions,
+  );
   const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState(config.pr_agent.max_concurrency);
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
@@ -86,6 +89,7 @@ export function useSettingsDraft({
     reposDir: config.workspace.repos_dir,
     agentDir: config.agent.dir,
     autoFollowup: config.agent.strategy.auto_followup,
+    maxCodeSuggestions: config.agent.strategy.max_code_suggestions,
     poller: config.poller.interval_seconds,
     concurrency: config.pr_agent.max_concurrency,
     llm: config.llm,
@@ -332,6 +336,10 @@ export function useSettingsDraft({
     setAutoFollowupState(v);
     setSaved(false);
   };
+  const setMaxCodeSuggestions = (n: number): void => {
+    setMaxCodeSuggestionsState(n);
+    setSaved(false);
+  };
   const setReposDir = (v: string): void => {
     setReposDirInput(v);
     setSaved(false);
@@ -354,7 +362,9 @@ export function useSettingsDraft({
   // ── 变更检测（对比基线）+ 整体保存 ──
   const reposDirChanged = reposDirInput.trim() !== base.reposDir;
   const agentChanged =
-    agentDirInput.trim() !== base.agentDir || autoFollowup !== base.autoFollowup;
+    agentDirInput.trim() !== base.agentDir ||
+    autoFollowup !== base.autoFollowup ||
+    maxCodeSuggestions !== base.maxCodeSuggestions;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const concurrencyChanged = maxConcurrencyInput !== base.concurrency;
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
@@ -391,7 +401,11 @@ export function useSettingsDraft({
           agent: {
             ...agent,
             dir: agentDirInput.trim(),
-            strategy: { ...agent.strategy, auto_followup: autoFollowup },
+            strategy: {
+              ...agent.strategy,
+              auto_followup: autoFollowup,
+              max_code_suggestions: maxCodeSuggestions,
+            },
           },
         });
       }
@@ -417,6 +431,7 @@ export function useSettingsDraft({
         reposDir: reposDirInput.trim(),
         agentDir: agentDirInput.trim(),
         autoFollowup,
+        maxCodeSuggestions,
         poller: Number.parseInt(pollerInput, 10),
         concurrency: maxConcurrencyInput,
         llm,
@@ -487,6 +502,8 @@ export function useSettingsDraft({
     pickAgentDir,
     autoFollowup,
     setAutoFollowup,
+    maxCodeSuggestions,
+    setMaxCodeSuggestions,
     reposDirInput,
     setReposDir,
     pickReposDir,
