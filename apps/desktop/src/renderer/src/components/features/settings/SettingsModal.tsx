@@ -18,6 +18,7 @@ import {
   SettingsIcon,
 } from '../../common';
 import { useSettingsDraft } from './hooks/useSettingsDraft';
+import { useAppearanceDraft } from './hooks/useAppearanceDraft';
 import { ConnectionEditorModal } from './editors/ConnectionEditorModal';
 import { LlmEditorModal } from './editors/LlmEditorModal';
 import { ProxyEditorModal } from './editors/ProxyEditorModal';
@@ -106,12 +107,16 @@ export function SettingsModal({
     paths,
     onLlmChange,
     onProxyChange,
-    onLanguageChange,
-    onThemeChange,
-    onEditorAppearanceChange,
     onConnectionsChange,
     onConfigPersisted,
     onClose,
+  });
+  // 外观类即时生效设置（语言 / 主题 / 编辑器外观）：与整体保存事务正交，独立 hook 管理。
+  const a = useAppearanceDraft({
+    config,
+    onLanguageChange,
+    onThemeChange,
+    onEditorAppearanceChange,
   });
 
   return (
@@ -135,8 +140,8 @@ export function SettingsModal({
               </button>
             </div>
             <div className="modal-footer-right">
-              {(s.saveError ?? s.openError) && (
-                <span className="error-text">{s.saveError ?? s.openError}</span>
+              {(s.saveError ?? s.openError ?? a.error) && (
+                <span className="error-text">{s.saveError ?? s.openError ?? a.error}</span>
               )}
               {s.saved && !s.anyChanged && <span className="muted">{t('settings.saved')}</span>}
               <button
@@ -169,16 +174,16 @@ export function SettingsModal({
           <div className="settings-panel">
             {category === 'general' && (
               <>
-                <LanguageSection language={s.language} onChange={s.handleLanguageChange} />
-                <ThemeSection theme={s.themePreference} onChange={s.handleThemeChange} />
+                <LanguageSection language={a.language} onChange={a.handleLanguageChange} />
+                <ThemeSection theme={a.themePreference} onChange={a.handleThemeChange} />
                 <EditorSection
-                  theme={s.editorTheme}
-                  fontFamily={s.editorFontFamily}
-                  fontSize={s.editorFontSize}
-                  onThemeChange={s.handleEditorThemeChange}
-                  onFontChange={s.handleEditorFontChange}
-                  onFontCommit={s.commitEditorFont}
-                  onFontSizeChange={s.handleEditorFontSizeChange}
+                  theme={a.editorTheme}
+                  fontFamily={a.editorFontFamily}
+                  fontSize={a.editorFontSize}
+                  onThemeChange={a.handleEditorThemeChange}
+                  onFontChange={a.handleEditorFontChange}
+                  onFontCommit={a.commitEditorFont}
+                  onFontSizeChange={a.handleEditorFontSizeChange}
                 />
               </>
             )}

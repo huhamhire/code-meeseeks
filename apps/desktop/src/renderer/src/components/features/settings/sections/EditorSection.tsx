@@ -3,7 +3,7 @@ import { EDITOR_FONT_SIZE_PRESETS, EDITOR_THEME_OPTIONS, type EditorTheme } from
 
 /**
  * 编辑器外观分区：代码编辑器（Monaco）配色主题选择 + 等宽字体 + 字号配置。三项均即时生效（字体输入失焦才
- * 写盘，onChange 实时预览），由 useSettingsDraft 编排。本分区在「常规」内以分隔线与语言 / 主题分组。
+ * 写盘，onChange 实时预览），由 useAppearanceDraft 编排。本分区在「常规」内以分隔线与语言 / 主题分组。
  *
  * 字体仿 VS Code `editor.fontFamily`：自由输入、可逗号分隔多个候选（按序优先），整体作为 font-family
  * 前缀拼到内置 mono 字体栈之前（拼接见 theme/resolveEditorFontFamily）。不做本机字体枚举（枚举会阻塞 UI
