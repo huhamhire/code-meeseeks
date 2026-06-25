@@ -97,7 +97,10 @@
 .chat-user-row {
   margin: $space-3 $space-6;
   display: flex;
-  justify-content: flex-end;
+  // 纵向堆叠并右对齐：气泡在上，引用上下文（若有）折叠块在其下方。
+  flex-direction: column;
+  align-items: flex-end;
+  gap: $space-2;
 }
 .chat-user-bubble {
   max-width: 85%;
@@ -109,6 +112,26 @@
   line-height: $lh-normal;
   white-space: pre-wrap;
   word-break: break-word;
+}
+// 提问气泡下方的引用上下文（Diff 选区代码）：折叠块，默认收起，轻量底色区别于气泡。
+.chat-user-ref {
+  max-width: 85%;
+  padding: $space-2 $space-3;
+  border: 1px solid $border-muted;
+  border-radius: $radius-md;
+  background: $bg-elev;
+  font-size: $fs-sm;
+  color: $text-muted;
+
+  > summary {
+    cursor: pointer;
+    user-select: none;
+    color: $text-muted;
+  }
+  // 展开后标题与下方代码围栏留点距离
+  &[open] > summary {
+    margin-bottom: $space-2;
+  }
 }
 
 // 过程化跟踪（类 Claude Code）：思考步骤按时间穿插进时间线。两行——带 bullet 标记的「已思考 xx s」

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { AgentStep } from '@meebox/shared';
 import { RobotIcon } from '../../../common';
 import { formatElapsed } from '../utils/format';
-import { Spinner, TokenStat } from './shared';
+import { Md, Spinner, TokenStat } from './shared';
 
 /**
  * 内联思考步骤（类 Claude Code「先思考→定步骤→执行步骤」）：穿插在时间线里、排在所选工具的 run
@@ -47,9 +47,17 @@ export function AgentStepRow({ step }: { step: AgentStep }) {
           </span>
         ) : null}
       </div>
-      {hasTime && step.thought && <div className="chat-agent-step-body">{step.thought}</div>}
+      {/* 思考 / 判读正文走 markdown：保留换行并渲染预格式化内容（代码块 / 列表 / 内联代码），
+          与助手回复一致；纯文本内容渲染结果不变。 */}
+      {hasTime && step.thought && (
+        <div className="chat-agent-step-body markdown">
+          <Md>{step.thought}</Md>
+        </div>
+      )}
       {step.kind === 'judge' && step.result && (
-        <div className="chat-agent-step-body muted">{step.result}</div>
+        <div className="chat-agent-step-body markdown muted">
+          <Md>{step.result}</Md>
+        </div>
       )}
     </div>
   );
