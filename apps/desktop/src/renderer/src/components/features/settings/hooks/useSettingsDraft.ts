@@ -41,8 +41,11 @@ export function useSettingsDraft({
   // 原样回传、不被覆盖成默认值；目录经 agentDirInput、策略开关经 autoFollowup 可编辑。
   const [agent] = useState<Config['agent']>(config.agent);
   const [agentDirInput, setAgentDirInput] = useState(config.agent.dir);
-  // Agent 策略（自动追问 + 代码建议数量上限）。随 config:setAgent 一并保存。
+  // Agent 策略（自动追问开关 + 追问数量上限 + 代码建议数量上限）。随 config:setAgent 一并保存。
   const [autoFollowup, setAutoFollowupState] = useState(config.agent.strategy.auto_followup);
+  const [maxFollowupAsks, setMaxFollowupAsksState] = useState(
+    config.agent.strategy.max_followup_asks,
+  );
   const [maxCodeSuggestions, setMaxCodeSuggestionsState] = useState(
     config.agent.strategy.max_code_suggestions,
   );
@@ -69,6 +72,7 @@ export function useSettingsDraft({
     reposDir: config.workspace.repos_dir,
     agentDir: config.agent.dir,
     autoFollowup: config.agent.strategy.auto_followup,
+    maxFollowupAsks: config.agent.strategy.max_followup_asks,
     maxCodeSuggestions: config.agent.strategy.max_code_suggestions,
     poller: config.poller.interval_seconds,
     concurrency: config.pr_agent.max_concurrency,
@@ -238,6 +242,10 @@ export function useSettingsDraft({
     setAutoFollowupState(v);
     setSaved(false);
   };
+  const setMaxFollowupAsks = (n: number): void => {
+    setMaxFollowupAsksState(n);
+    setSaved(false);
+  };
   const setMaxCodeSuggestions = (n: number): void => {
     setMaxCodeSuggestionsState(n);
     setSaved(false);
@@ -266,6 +274,7 @@ export function useSettingsDraft({
   const agentChanged =
     agentDirInput.trim() !== base.agentDir ||
     autoFollowup !== base.autoFollowup ||
+    maxFollowupAsks !== base.maxFollowupAsks ||
     maxCodeSuggestions !== base.maxCodeSuggestions;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const concurrencyChanged = maxConcurrencyInput !== base.concurrency;
@@ -306,6 +315,7 @@ export function useSettingsDraft({
             strategy: {
               ...agent.strategy,
               auto_followup: autoFollowup,
+              max_followup_asks: maxFollowupAsks,
               max_code_suggestions: maxCodeSuggestions,
             },
           },
@@ -333,6 +343,7 @@ export function useSettingsDraft({
         reposDir: reposDirInput.trim(),
         agentDir: agentDirInput.trim(),
         autoFollowup,
+        maxFollowupAsks,
         maxCodeSuggestions,
         poller: Number.parseInt(pollerInput, 10),
         concurrency: maxConcurrencyInput,
@@ -390,6 +401,8 @@ export function useSettingsDraft({
     pickAgentDir,
     autoFollowup,
     setAutoFollowup,
+    maxFollowupAsks,
+    setMaxFollowupAsks,
     maxCodeSuggestions,
     setMaxCodeSuggestions,
     reposDirInput,

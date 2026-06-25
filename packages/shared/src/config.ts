@@ -229,8 +229,6 @@ export const ConfigSchema = z.object({
           // 评估节奏对齐轮询（每个 poller tick 评估一遍），不再单设最小间隔；准入门控 + 台账去重防重复。
           /** 单批 LLM 判定的 PR 上限。 */
           batch_size: z.number().int().min(1).max(50).default(10),
-          /** 自动评审微流程中条件性追问 /ask 的硬上限。 */
-          max_followup_asks: z.number().int().min(0).max(5).default(2),
           /**
            * 逐项写权限授权（默认空 = 全拒）。如 'approve' / 'needs_work' /
            * 'publish_comment'；运行期按红线硬校验放行（见「工具修改红线」）。
@@ -239,14 +237,21 @@ export const ConfigSchema = z.object({
         })
         .default({}),
       /**
-       * Agent 行为策略开关（扩展位，后续行为开关并入此处）。当前一项：
+       * Agent 行为策略（扩展位，后续行为开关并入此处）。作用于自动评审微流程（手动自动评审 +
+       * AutoPilot 共用），非 AutoPilot 专属。当前各项：
        * - auto_followup：评审运行阶段是否启用**自动追问**（条件性 /ask）。关闭则评审微流程跳过
        *   judge + asks 两步、直接总结，省一次 judge LLM 调用与潜在追问开销（省 token）。默认开，
        *   与历史行为一致。
+       * - max_followup_asks：自动追问数量上限（条件性 /ask 的硬上限）。
        */
       strategy: z
         .object({
           auto_followup: z.boolean().default(true),
+          /**
+           * 自动追问数量上限（条件性 /ask 的硬上限，0~5，默认 2）。仅 auto_followup 开启时生效；
+           * 0 等同关闭（开关已独立控制启停，故 UI 下拉只提供 1~5、不给 0 以免歧义）。
+           */
+          max_followup_asks: z.number().int().min(0).max(5).default(2),
           /**
            * 单次任务生成的代码建议 / 评审发现数量上限（2~8，默认 4）。统一约束三处：
            * - /review：pr-agent `pr_reviewer.num_max_findings`（硬上限）；

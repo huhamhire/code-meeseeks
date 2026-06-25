@@ -712,6 +712,8 @@
     "llmTitle": "LLM-Modelle",
     "maxCodeSuggestionsHint": "Max. Code-Vorschläge pro /review, /improve oder /ask.",
     "maxCodeSuggestionsLabel": "Code-Vorschläge",
+    "maxFollowupAsksHint": "Maximale Anzahl bedingter Rückfragen pro Review, wenn die automatische Rückfrage aktiv ist.",
+    "maxFollowupAsksLabel": "Rückfragen",
     "openAgentDir": "Aktuelles Verzeichnis öffnen",
     "openDevTools": "DevTools öffnen",
     "openDevToolsTitle": "Electron DevTools öffnen (separates Fenster)",

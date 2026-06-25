@@ -222,6 +222,8 @@ export function SettingsModal({
                 <AgentStrategySection
                   autoFollowup={s.autoFollowup}
                   onAutoFollowupChange={s.setAutoFollowup}
+                  maxFollowupAsks={s.maxFollowupAsks}
+                  onMaxFollowupAsksChange={s.setMaxFollowupAsks}
                   maxCodeSuggestions={s.maxCodeSuggestions}
                   onMaxCodeSuggestionsChange={s.setMaxCodeSuggestions}
                 />

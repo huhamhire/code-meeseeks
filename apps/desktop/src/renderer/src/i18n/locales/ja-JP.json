@@ -696,6 +696,8 @@
     "llmTitle": "LLM モデル",
     "maxCodeSuggestionsHint": "/review・/improve・/ask が一度に生成するコード提案数の上限。",
     "maxCodeSuggestionsLabel": "コード提案数",
+    "maxFollowupAsksHint": "自動追問が有効なとき、1 回のレビューで行う条件付き追問の数の上限。",
+    "maxFollowupAsksLabel": "追問の数",
     "openAgentDir": "現在のディレクトリを開く",
     "openDevTools": "DevTools を開く",
     "openDevToolsTitle": "Electron DevTools を開く（分離ウィンドウ）",
