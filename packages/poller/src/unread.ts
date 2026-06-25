@@ -1,0 +1,59 @@
+import type { PlatformUser, PrComment } from '@meebox/shared';
+
+/**
+ * 「未读」检测的纯逻辑：在 PR 评论树里找出**与当前用户相关**的最新一条他人评论的时间戳。
+ * 相关 = ① 正文 @我（按 name / slug 任一 handle 匹配），或 ② 回复我（父评论作者是我）。自己写的评论不计。
+ *
+ * 返回最新相关评论的 createdAt（ISO）；无则 null。调用方（poll）把它与历史 `lastMentionAt` 取较大值维护成
+ * 单调游标；是否「未读」由读取时与已读水位 `lastReadAt` 比较决定（见 pr-state.computeUnread）——故此处不关心水位。
+ *
+ * 仅在 poll 识别到 PR 内容变更（updatedAt 跳变）时调用——避免对每个跟踪 PR 每轮都拉评论，成本与活动量成正比。
+ */
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 正文是否 @ 了任一 handle。要求 `@` 前不是单词字符（排除邮箱 `a@h` 之类），`@handle` 后不接单词字符 / `.` / `-`
+ * （排除 `@handle2` 误命中 `@handle`）。大小写不敏感。
+ */
+function mentionsAnyHandle(body: string, handles: readonly string[]): boolean {
+  for (const h of handles) {
+    if (!h) continue;
+    const re = new RegExp(`(?<![\\w])@${escapeRegExp(h)}(?![\\w.-])`, 'i');
+    if (re.test(body)) return true;
+  }
+  return false;
+}
+
+/**
+ * 评论树里「@我 / 回复我」的最新他人评论的 createdAt（ISO）；无则 null。
+ *
+ * - `me`：当前用户（poll 时从 adapter 缓存身份取）。handle 取 name + slug（去重、非空）。
+ */
+export function latestCommentToMeAt(
+  comments: readonly PrComment[],
+  me: PlatformUser,
+): string | null {
+  const handles = [me.name, me.slug].filter((x): x is string => !!x);
+  const lowered = new Set(handles.map((h) => h.toLowerCase()));
+  const isMe = (u: PlatformUser): boolean =>
+    lowered.has(u.name.toLowerCase()) || (u.slug ? lowered.has(u.slug.toLowerCase()) : false);
+
+  let latest: string | null = null;
+  const consider = (iso: string): void => {
+    if (latest === null || Date.parse(iso) > Date.parse(latest)) latest = iso;
+  };
+  const walk = (list: readonly PrComment[], parentIsMe: boolean): void => {
+    for (const c of list) {
+      const authoredByMe = isMe(c.author);
+      if (!authoredByMe && (parentIsMe || mentionsAnyHandle(c.body, handles))) {
+        consider(c.createdAt);
+      }
+      if (c.replies?.length) walk(c.replies, authoredByMe);
+    }
+  };
+  walk(comments, false);
+  return latest;
+}

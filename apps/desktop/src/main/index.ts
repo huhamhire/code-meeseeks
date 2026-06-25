@@ -62,6 +62,11 @@ class App {
     try {
       await this.bootstrapCore();
       this.initRuntimes();
+      // 清扫上次会话残留的原子写临时文件（进程在 write↔rename 之间退出留下的孤儿 tmp）。
+      // 启动早期、任何写入之前清扫，单写者前提下安全（见 JsonFileStateStore.sweepStaleTmpFiles）。
+      await this.stateStore
+        .sweepStaleTmpFiles()
+        .catch((err: unknown) => this.logger.warn({ err }, 'state-store: tmp sweep failed'));
       await this.initConnectionsAndIpc();
       await this.initWindow();
       await this.startPolling();

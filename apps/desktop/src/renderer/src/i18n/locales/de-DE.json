@@ -611,7 +611,8 @@
     "hasConflict": "Merge-Konflikt vorhanden",
     "mergeable": "Mergebar: alle Merge-Bedingungen erfüllt",
     "needsWorkCount_one": "{{count}} Reviewer hat „Nachbesserung nötig“ markiert",
-    "needsWorkCount_other": "{{count}} Reviewer haben „Nachbesserung nötig“ markiert"
+    "needsWorkCount_other": "{{count}} Reviewer haben „Nachbesserung nötig“ markiert",
+    "unread": "Ungelesen: dir neu zugewiesen, neue Commits gepusht oder jemand hat dich erwähnt/dir geantwortet"
   },
   "prStatus": {
     "approved": "Genehmigt",

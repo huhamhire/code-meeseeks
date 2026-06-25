@@ -34,6 +34,7 @@ export default function App() {
     triggerRefresh,
     setSelectedPrStatus,
     mergeSelectedPr,
+    markRead,
   } = usePullRequests({ notifyError });
   // 应用启动 / 全局生命周期（boot 加载、语言、poll / focus 刷新、向导完成、连接热生效）
   const { boot, fatalError, lastSyncAt, needsOnboarding, completeOnboarding, refreshBootAndPrs, patchConfig } =
@@ -128,7 +129,10 @@ export default function App() {
           <Sidebar
             prs={prs}
             selectedId={selectedId}
-            onSelect={(pr) => setSelectedId(pr.localId)}
+            onSelect={(pr) => {
+              setSelectedId(pr.localId);
+              void markRead(pr.localId);
+            }}
             width={sidebarWidth}
             onResize={setSidebarWidth}
             availableFilters={showDiscoveryFilter ? availableDiscoveryFilters : undefined}

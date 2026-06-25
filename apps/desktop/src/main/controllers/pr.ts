@@ -6,6 +6,7 @@ import {
   listDrafts,
   listFindingClosures,
   listStoredPullRequests,
+  markPrRead,
   readCommentsCache,
   removeFindingClosure,
   setLocalStatus,
@@ -150,6 +151,12 @@ export const setPrStatus: IpcController<'prs:setLocalStatus'> = async (_event, r
   );
   return setLocalStatus(ctx.stateStore, req.localId, req.status);
 };
+
+/**
+ * 标记 PR 已读：推进已读水位 + 清未读标记（纯本地状态，无远端调用）。
+ */
+export const markRead: IpcController<'prs:markRead'> = (_event, req) =>
+  markPrRead(getContext().stateStore, req.localId);
 
 /**
  * 合并 PR；不在此落本地，靠 renderer refresh → poll 软删收尾，避免本地与远端各执一词。

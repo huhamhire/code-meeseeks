@@ -367,6 +367,12 @@ export interface StoredPullRequest extends PullRequest {
   discoveredAt: string;
   /** 最近一次 poll 仍能看到的时间，ISO */
   lastSeenAt: string;
+  /**
+   * 「未读」标记（派生值，由 `listStoredPullRequests` 据索引里的已读水位计算后填上；持久化的 meta.json
+   * 不含此字段）。为真表示自用户上次查看该 PR 后发生了**与我相关**的新事件：源分支推了新 commit、或出现
+   * 了 @我 / 回复我的新评论。UI 据此在列表项上点一个未读圆点。用户打开 PR 即清除（推进已读水位）。
+   */
+  unread?: boolean;
 }
 
 export interface PollResult {

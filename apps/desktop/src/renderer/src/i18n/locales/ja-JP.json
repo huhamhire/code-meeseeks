@@ -595,7 +595,8 @@
     "executing": "Agent タスク実行中",
     "hasConflict": "マージコンフリクトがあります",
     "mergeable": "マージ可能：すべてのマージ条件を満たしています",
-    "needsWorkCount_other": "{{count}} 人のレビュアーが要修正とマークしました"
+    "needsWorkCount_other": "{{count}} 人のレビュアーが要修正とマークしました",
+    "unread": "未読：新しく割り当てられた、新しいコミットがプッシュされた、またはメンション／返信があります"
   },
   "prStatus": {
     "approved": "承認済み",

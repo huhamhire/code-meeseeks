@@ -378,3 +378,19 @@
   margin-right: $space-2;
   font-size: $fs-md;
 }
+
+// 未读圆点：自上次查看后该 PR 有「与我相关」的新事件（新到达 / 新 commit 推送 / @我 / 回复我）。
+// 标题前一个亮蓝实心小圆点（沿用未读消息惯例，取较亮的 info 蓝以在列表里醒目），并把标题字重提到 600 更跳。
+.pr-item-unread-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: $space-2;
+  border-radius: 50%;
+  background: $color-info;
+  vertical-align: 0.1em;
+  flex: 0 0 auto;
+}
+.pr-item-unread .pr-item-title {
+  font-weight: 600;
+}

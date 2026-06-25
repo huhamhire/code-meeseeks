@@ -66,6 +66,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('prs:refresh', pr.refreshPrs); // 立即轮询刷新
   ipcMain.handle('prs:lastSync', pr.getLastSync); // 最近一次同步时间
   ipcMain.handle('prs:setLocalStatus', pr.setPrStatus); // 设置审阅状态（先远端后本地）
+  ipcMain.handle('prs:markRead', pr.markRead); // 标记 PR 已读（推进未读水位）
   ipcMain.handle('prs:merge', pr.mergePr); // 合并 PR
   ipcMain.handle('repo:sync', pr.syncRepo); // 同步 PR 所属 repo 本地镜像
   ipcMain.handle('diff:listChangedFiles', pr.listChangedFiles); // 变更文件列表
