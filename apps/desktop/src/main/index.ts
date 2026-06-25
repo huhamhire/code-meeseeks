@@ -201,10 +201,10 @@ class App {
       app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
     }
 
-    // 强制原生窗口 chrome 走深色：Windows 据此设 DWMWA_USE_IMMERSIVE_DARK_MODE，原生标题栏 +
-    // 那条细边框渲染成深色，与 #1e1e1e 应用一致，不再跟随系统浅色主题（splash + 主窗口都受益）。
-    // macOS/Linux 无副作用；只影响原生 chrome，应用本身已是自绘深色样式。
-    nativeTheme.themeSource = 'dark';
+    // 原生窗口 chrome 跟随主题偏好：Windows 据 nativeTheme 设 DWMWA_USE_IMMERSIVE_DARK_MODE（原生
+    // 细边框 / 窗控按钮深浅），'system' 跟随 OS。窗控按钮配色由 WindowManager 监听 nativeTheme 'updated'
+    // 同步（见 window-manager）。themeSource 取值与 appearance.theme（'system'|'light'|'dark'）一致。
+    nativeTheme.themeSource = this.bootstrap.config.appearance.theme;
 
     // 主窗口管理（载入窗口状态 + 建窗 + 尺寸回写）。
     this.windowManager = await loadWindowManager({
@@ -214,9 +214,9 @@ class App {
       startMs: this.startMs,
     });
 
-    // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。
-    // 主窗口 ready-to-show 时关闭它。
-    const splash = createSplash();
+    // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。主窗口 ready-to-show
+    // 时关闭它。配色跟随有效主题（shouldUseDarkColors 已据上面的 themeSource 解析 'system'）。
+    const splash = createSplash(nativeTheme.shouldUseDarkColors);
     this.windowManager.create(splash);
 
     app.on('activate', () => {

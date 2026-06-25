@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, shell } from 'electron';
+import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JsonFileStateStore } from '@meebox/state-store';
@@ -16,6 +16,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // chat-pane 折叠态下仍可用；高度兜住 pr-header + tabs + diff + statusbar。单位均为 DIP（设备无关像素）。
 const DEFAULT_SIZE = { width: 1280, height: 800 };
 const MIN_SIZE = { width: 960, height: 600 };
+
+// 自绘标题栏右侧的系统窗控按钮（Windows titleBarOverlay）配色：与 .app-titlebar 背景（--bg-app）同色，
+// 接缝无感；symbol 取主文字色。明暗两套，跟随有效主题（nativeTheme.shouldUseDarkColors）。值对齐 palette
+// 暗/浅 bg-app（$vscode-gray-850 / $vscode-gray-30）与主文字（$vscode-gray-200 / $vscode-gray-840）。
+const TITLE_BAR_OVERLAY = {
+  dark: { color: '#1e1e1e', symbolColor: '#cccccc' },
+  light: { color: '#f8f8f8', symbolColor: '#1f1f20' },
+};
+/** 按当前有效主题取窗控按钮配色（含高度，供建窗与 setTitleBarOverlay 共用）。 */
+function overlayOptions(): { color: string; symbolColor: string; height: number } {
+  const c = nativeTheme.shouldUseDarkColors ? TITLE_BAR_OVERLAY.dark : TITLE_BAR_OVERLAY.light;
+  return { ...c, height: 36 };
+}
 
 /**
  * 解析建窗尺寸/位置：把期望尺寸（本地记录优先，回退默认）clamp 进**当前显示器工作区**，并据此压低最小
@@ -76,7 +89,7 @@ export class WindowManager {
       titleBarStyle: 'hidden',
       ...(process.platform === 'darwin'
         ? { trafficLightPosition: { x: 12, y: 11 } }
-        : { titleBarOverlay: { color: '#1e1e1e', symbolColor: '#cccccc', height: 36 } }),
+        : { titleBarOverlay: overlayOptions() }),
       // dev 下显式给窗口图标；打包态窗口/任务栏图标走 exe 内嵌（electron-builder），故仅 dev 设置。
       icon: app.isPackaged
         ? undefined
@@ -135,6 +148,21 @@ export class WindowManager {
         'main window first paint (ready-to-show)',
       );
     });
+
+    // 主题切换（config:setTheme 改 nativeTheme.themeSource）或 'system' 模式下 OS 深浅变化时，
+    // nativeTheme 发 'updated'：重置 Windows 窗控按钮配色跟随主题（macOS 无 titleBarOverlay，不注册）。
+    if (process.platform !== 'darwin') {
+      const onThemeUpdated = (): void => {
+        if (win.isDestroyed()) return;
+        try {
+          win.setTitleBarOverlay(overlayOptions());
+        } catch {
+          /* 平台不支持 setTitleBarOverlay → 忽略 */
+        }
+      };
+      nativeTheme.on('updated', onThemeUpdated);
+      win.on('closed', () => nativeTheme.off('updated', onThemeUpdated));
+    }
 
     // 把 <a target="_blank"> / window.open 都路由到 OS 默认浏览器，不在 Electron 内开新窗口。
     win.webContents.setWindowOpenHandler(({ url }) => {
