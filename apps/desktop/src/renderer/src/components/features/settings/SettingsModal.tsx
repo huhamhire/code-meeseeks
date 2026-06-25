@@ -1,13 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type {
-  AppInfo,
-  AppPaths,
-  Config,
-  EditorTheme,
-  SupportedLanguage,
-  ThemePreference,
-} from '@meebox/shared';
+import type { AppInfo, AppPaths, Config, EditorTheme, SupportedLanguage } from '@meebox/shared';
 import {
   ConfirmModal,
   CpuIcon,
@@ -64,9 +57,7 @@ interface SettingsModalProps {
   onProxyChange?: (proxy: Config['proxy']) => void;
   /** UI 语言即时切换后通知父级同步 boot.config.language（与写盘/实时切换解耦的状态同步） */
   onLanguageChange?: (language: SupportedLanguage) => void;
-  /** GUI 主题即时切换后通知父级同步 boot.config.appearance.theme（同语言，解耦状态同步） */
-  onThemeChange?: (theme: ThemePreference) => void;
-  /** 编辑器外观（Monaco 主题 + 等宽字体 + 字号）即时改动后通知父级同步 boot.config.appearance */
+  /** 外观（全局主题 + 等宽字体 + 字号）即时改动后通知父级同步 boot.config.appearance */
   onEditorAppearanceChange?: (appearance: {
     editor_theme: EditorTheme;
     editor_font_family: string;
@@ -94,7 +85,6 @@ export function SettingsModal({
   onLlmChange,
   onProxyChange,
   onLanguageChange,
-  onThemeChange,
   onEditorAppearanceChange,
   onConnectionsChange,
   onConfigPersisted,
@@ -115,7 +105,6 @@ export function SettingsModal({
   const a = useAppearanceDraft({
     config,
     onLanguageChange,
-    onThemeChange,
     onEditorAppearanceChange,
   });
 
@@ -175,12 +164,10 @@ export function SettingsModal({
             {category === 'general' && (
               <>
                 <LanguageSection language={a.language} onChange={a.handleLanguageChange} />
-                <ThemeSection theme={a.themePreference} onChange={a.handleThemeChange} />
+                <ThemeSection theme={a.editorTheme} onChange={a.handleEditorThemeChange} />
                 <EditorSection
-                  theme={a.editorTheme}
                   fontFamily={a.editorFontFamily}
                   fontSize={a.editorFontSize}
-                  onThemeChange={a.handleEditorThemeChange}
                   onFontChange={a.handleEditorFontChange}
                   onFontCommit={a.commitEditorFont}
                   onFontSizeChange={a.handleEditorFontSizeChange}

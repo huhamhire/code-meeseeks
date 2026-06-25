@@ -149,8 +149,8 @@ export class WindowManager {
       );
     });
 
-    // 主题切换（config:setTheme 改 nativeTheme.themeSource）或 'system' 模式下 OS 深浅变化时，
-    // nativeTheme 发 'updated'：重置 Windows 窗控按钮配色跟随主题（macOS 无 titleBarOverlay，不注册）。
+    // 全局主题切换（config:setEditorAppearance 据主题改 nativeTheme.themeSource）或 'auto' 主题下 OS
+    // 深浅变化时，nativeTheme 发 'updated'：重置 Windows 窗控按钮配色跟随主题（macOS 无 titleBarOverlay，不注册）。
     if (process.platform !== 'darwin') {
       const onThemeUpdated = (): void => {
         if (win.isDestroyed()) return;

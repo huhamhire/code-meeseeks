@@ -1,26 +1,23 @@
-import {
-  matchThemePreference,
-  type ResolvedTheme,
-  type ThemePreference,
-} from '@meebox/shared';
+import { resolveEditorThemeMode, editorThemeMode, type ResolvedTheme } from '@meebox/shared';
 
 /**
  * 渲染层主题运行时。
  *
- * 主题偏好（system / light / dark）解析为实际视觉主题（light / dark），写到 `documentElement`
- * 的 `data-theme`；配色经 CSS 自定义属性整体切换（默认 :root = 暗色，`[data-theme='light']`
- * 覆盖为浅色，见 styles/_theme.scss）。
+ * 全局主题（Monaco 编辑器 + 整个 GUI chrome 共用同一主题，见 @meebox/shared EDITOR_THEME_OPTIONS）反推
+ * 浅 / 深，写到 `documentElement` 的 `data-theme`；语义配色经 CSS 自定义属性整体切换（默认 :root = 暗色，
+ * `[data-theme='light']` 覆盖为浅色，见 styles/_theme.scss）。结构性 chrome 色另由主题派生覆盖（见
+ * editor-chrome-sync）。本模块只管 data-theme + 字体，不引 Monaco（保持首帧轻量）。
  *
- * - 偏好经 IPC 异步到达（config.appearance.theme），启动时拿不到；localStorage 可同步读，故用它做
- *   首帧初始主题，避免浅色用户启动先闪一帧深色。App 拿到 config 后会 persist 回写，下次启动直接命中。
- * - 偏好为 'system' 时跟随 `prefers-color-scheme`，并由 watchSystemTheme 在 OS 切换时实时重解析。
- * - 默认偏好取 **dark**（与历史一致）：localStorage 无记录、解析失败时回落深色。
+ * - 主题经 IPC 异步到达（config.appearance.editor_theme），启动时拿不到；localStorage 可同步读，故用它做
+ *   首帧初始主题，避免启动闪错主题。App 拿到 config 后会 persist 回写，下次启动直接命中。
+ * - 主题 mode 为 'auto' 时跟随 `prefers-color-scheme`，并由 watchSystemThemeForAuto 在 OS 切换时实时重解析。
+ * - 默认主题取 **auto**（自动适应系统）：localStorage 无记录 / 不可用时回落 'auto'。
  */
 
-const THEME_STORAGE_KEY = 'meebox.theme';
-const DEFAULT_PREFERENCE: ThemePreference = 'dark';
+const EDITOR_THEME_STORAGE_KEY = 'meebox.editorTheme';
+const DEFAULT_EDITOR_THEME = 'auto';
 
-/** OS 是否偏好深色（'system' 偏好据此解析）。matchMedia 不可用时保守按深色。 */
+/** OS 是否偏好深色（'auto' 主题据此解析）。matchMedia 不可用时保守按深色。 */
 function systemPrefersDark(): boolean {
   try {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -29,50 +26,52 @@ function systemPrefersDark(): boolean {
   }
 }
 
-/** 把主题偏好解析为实际视觉主题。 */
-export function resolveTheme(preference: ThemePreference): ResolvedTheme {
-  if (preference === 'system') return systemPrefersDark() ? 'dark' : 'light';
-  return preference;
+/** 把全局主题 id 解析为实际视觉主题（'auto' 按 OS 深 / 浅落地）。 */
+export function resolveGlobalTheme(editorTheme: string): ResolvedTheme {
+  return resolveEditorThemeMode(editorTheme, systemPrefersDark());
 }
 
-/** 读 localStorage 缓存的偏好作首帧初始值；无记录 / 不可用时回落默认（dark）。 */
-export function readInitialThemePreference(): ThemePreference {
+/** 读 localStorage 缓存的主题作首帧初始值；无记录 / 不可用时回落默认（auto）。 */
+export function readInitialEditorTheme(): string {
   try {
-    return matchThemePreference(localStorage.getItem(THEME_STORAGE_KEY)) ?? DEFAULT_PREFERENCE;
+    return localStorage.getItem(EDITOR_THEME_STORAGE_KEY) ?? DEFAULT_EDITOR_THEME;
   } catch {
-    return DEFAULT_PREFERENCE;
+    return DEFAULT_EDITOR_THEME;
   }
 }
 
-/** 持久化偏好到 localStorage，供下次启动同步读取作初始主题。 */
-export function persistThemePreference(preference: ThemePreference): void {
+/** 持久化主题到 localStorage，供下次启动同步读取作初始主题。 */
+export function persistEditorTheme(editorTheme: string): void {
   try {
-    localStorage.setItem(THEME_STORAGE_KEY, preference);
+    localStorage.setItem(EDITOR_THEME_STORAGE_KEY, editorTheme);
   } catch {
     // localStorage 不可用时忽略：仅影响下次启动的初始主题命中，不影响功能。
   }
 }
 
-/** 把偏好解析后写到 documentElement.data-theme，触发 CSS 自定义属性整体切换。 */
-export function applyThemePreference(preference: ThemePreference): void {
-  document.documentElement.dataset.theme = resolveTheme(preference);
+/** 把全局主题反推浅 / 深后写到 documentElement.data-theme，触发语义色板整体切换。 */
+export function applyGlobalTheme(editorTheme: string): void {
+  document.documentElement.dataset.theme = resolveGlobalTheme(editorTheme);
 }
 
 /**
- * 监听 OS 深 / 浅色变化。仅 'system' 偏好需要：OS 切换时实时重解析并重写 data-theme。
- * 返回取消订阅函数；非 'system' 偏好直接返回空 cleanup（无监听）。
+ * 监听 OS 深 / 浅色变化。仅 'auto' 主题需要：OS 切换时实时重解析并重写 data-theme。
+ * 返回取消订阅函数；非 'auto' 主题直接返回空 cleanup（无监听）。
  */
-export function watchSystemTheme(preference: ThemePreference): () => void {
-  if (preference !== 'system') return () => {};
+export function watchSystemThemeForAuto(editorTheme: string, onChange: () => void): () => void {
+  if (editorThemeMode(editorTheme) !== 'auto') return () => {};
   let mq: MediaQueryList;
   try {
     mq = window.matchMedia('(prefers-color-scheme: dark)');
   } catch {
     return () => {};
   }
-  const onChange = (): void => applyThemePreference('system');
-  mq.addEventListener('change', onChange);
-  return () => mq.removeEventListener('change', onChange);
+  const handler = (): void => {
+    applyGlobalTheme(editorTheme);
+    onChange();
+  };
+  mq.addEventListener('change', handler);
+  return () => mq.removeEventListener('change', handler);
 }
 
 // 内置等宽字体兜底栈：用户自定义字体后置于其后，保证缺字时仍回落到合理 mono 字体。
@@ -95,5 +94,5 @@ export function applyEditorFontFamily(font: string): void {
   else document.documentElement.style.removeProperty('--editor-font-family');
 }
 
-// 副作用：模块导入即按 localStorage 缓存定下首帧主题（在 React 渲染前），避免浅色用户启动闪深色。
-applyThemePreference(readInitialThemePreference());
+// 副作用：模块导入即按 localStorage 缓存定下首帧主题（在 React 渲染前），避免启动闪错主题。
+applyGlobalTheme(readInitialEditorTheme());

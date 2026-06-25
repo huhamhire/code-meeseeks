@@ -4,7 +4,6 @@ import type {
   PingResult,
   PlatformKind,
   SupportedLanguage,
-  ThemePreference,
 } from '@meebox/shared';
 
 /** 配置操作域：读 / 写 config.yaml（含热生效与草稿暂存）及连接 / 代理试连。 */
@@ -19,13 +18,8 @@ export interface ConfigChannels {
    */
   'config:setLanguage': { request: { language: SupportedLanguage }; response: void };
   /**
-   * 写入 GUI 主题偏好到 config.yaml。主题为纯前端展示项：实际切换由 renderer 即时完成（写
-   * documentElement data-theme），此通道仅持久化偏好，无主进程副作用。
-   */
-  'config:setTheme': { request: { theme: ThemePreference }; response: void };
-  /**
-   * 写入编辑器外观（Monaco 配色主题 + 等宽字体族）到 config.yaml。纯前端展示项：实际切换由 renderer
-   * 即时完成（Monaco theme 切换 + 字体 CSS 变量），此通道仅持久化偏好，无主进程副作用。
+   * 写入外观（全局主题 = Monaco 配色主题 + 等宽字体族 + 字号）到 config.yaml。主题切换由 renderer 即时
+   * 完成（Monaco theme + data-theme + chrome 派生 + 字体 CSS 变量）；主进程据主题设原生窗口 themeSource。
    */
   'config:setEditorAppearance': {
     request: { editor_theme: EditorTheme; editor_font_family: string; editor_font_size: number };

@@ -174,18 +174,14 @@ export const ConfigSchema = z.object({
    */
   language: z.string().default(''),
   /**
-   * 外观偏好（GUI 主题等纯前端展示项；主进程不消费）。预留分组，后续编辑器主题 / 字体等并入此处。
+   * 外观偏好（全局主题 / 编辑器字体等纯前端展示项；主进程仅据主题设原生窗口 themeSource）。
    */
   appearance: z
     .object({
       /**
-       * GUI 主题偏好：'system' 跟随操作系统深 / 浅色，'light' / 'dark' 固定。**默认 'dark'**
-       * （与历史一致，升级不改变现有用户外观）；解析与生效在 renderer（见 renderer/src/theme）。
-       */
-      theme: z.enum(['system', 'light', 'dark']).default('dark'),
-      /**
-       * 代码编辑器（Monaco）配色主题：'auto' 跟随 GUI 深 / 浅色（默认），其余为内置 / 第三方主题 id
-       * （见 @meebox/shared EDITOR_THEME_OPTIONS）。
+       * 全局主题（Monaco 编辑器 + 整个 GUI chrome 共用）：'auto' 跟随系统深 / 浅色（默认，深 → Dark
+       * Modern、浅 → Light Modern），其余为内置 / 第三方主题 id（见 @meebox/shared EDITOR_THEME_OPTIONS）。
+       * 主题反推浅 / 深写入 data-theme 驱动语义色板，并派生 chrome 结构色；解析见 renderer/src/theme。
        */
       editor_theme: z.enum(EDITOR_THEME_IDS).default('auto'),
       /**

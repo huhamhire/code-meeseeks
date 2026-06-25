@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import type { Config, EditorTheme, SupportedLanguage, ThemePreference } from '@meebox/shared';
+import type { Config, EditorTheme, SupportedLanguage } from '@meebox/shared';
 import { EDITOR_FONT_SIZE_MAX, EDITOR_FONT_SIZE_MIN } from '@meebox/shared';
 import { invoke } from '../../../../api';
 import i18n, { persistLanguage, resolveUiLanguage } from '../../../../i18n';
-import { applyEditorFontFamily, applyThemePreference, persistThemePreference } from '../../../../theme';
+import { applyEditorFontFamily } from '../../../../theme';
 import { setEditorAppearance } from '../../../../stores/editor-appearance-store';
 
 interface UseAppearanceDraftParams {
   config: Config;
   onLanguageChange?: (language: SupportedLanguage) => void;
-  onThemeChange?: (theme: ThemePreference) => void;
   onEditorAppearanceChange?: (appearance: {
     editor_theme: EditorTheme;
     editor_font_family: string;
@@ -18,15 +17,15 @@ interface UseAppearanceDraftParams {
 }
 
 /**
- * 外观类「即时生效」设置：UI 语言 / GUI 主题 / 编辑器外观（Monaco 主题 + 等宽字体 + 字号）。
+ * 外观类「即时生效」设置：UI 语言 / 全局主题 + 编辑器字体（Monaco 主题即全局主题，另含等宽字体 + 字号）。
  * 与 useSettingsDraft 的「草稿 → 整体保存」事务相互正交 —— 这里每项改即生效：实时应用到运行时
- * （data-theme / store / CSS 变量）+ 持久化（localStorage + 写盘）+ 同步父级，不进 base/saveAll。
- * 写盘失败不回滚 UI（已切），仅经 error 提示；下次启动按 localStorage 兜底。
+ * （store / data-theme / chrome / CSS 变量）+ 持久化（localStorage + 写盘）+ 同步父级，不进 base/saveAll。
+ * 写盘失败不回滚 UI（已切），仅经 error 提示；下次启动按 localStorage 兜底。主题切换的 data-theme /
+ * chrome 派生由 App 的 useGlobalTheme 订阅 store 变化驱动（见 hooks/useTheme）。
  */
 export function useAppearanceDraft({
   config,
   onLanguageChange,
-  onThemeChange,
   onEditorAppearanceChange,
 }: UseAppearanceDraftParams) {
   // 即时生效项写盘失败的错误（与整体保存的 saveError 分开，由 SettingsModal 合并展示）
@@ -46,21 +45,7 @@ export function useAppearanceDraft({
     });
   };
 
-  // GUI 主题：与语言同属即时生效项（不走全局保存）。改即写 data-theme + 持久化 + 同步父级 + 写盘。
-  const [themePreference, setThemePreference] = useState<ThemePreference>(config.appearance.theme);
-  const handleThemeChange = (next: ThemePreference): void => {
-    if (next === themePreference) return;
-    setThemePreference(next);
-    applyThemePreference(next); // 渲染层实时切换（写 documentElement data-theme）
-    persistThemePreference(next); // localStorage 缓存，下次启动同步命中
-    onThemeChange?.(next); // 同步父级 boot.config.appearance.theme
-    invoke('config:setTheme', { theme: next }).catch((e: unknown) => {
-      // 写盘失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
-      setError(e instanceof Error ? e.message : String(e));
-    });
-  };
-
-  // 编辑器外观（Monaco 主题 + 等宽字体）：即时生效项。主题为离散选择 → 改即写盘；字体为文本输入 →
+  // 全局主题（Monaco 主题 + 等宽字体）：即时生效项。主题为离散选择 → 改即写盘；字体为文本输入 →
   // onChange 仅实时预览（写 store + CSS + 同步父级），onBlur 才写盘，避免逐字符落盘。
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(config.appearance.editor_theme);
   const [editorFontFamily, setEditorFontFamily] = useState<string>(
@@ -112,10 +97,7 @@ export function useAppearanceDraft({
     // 语言
     language,
     handleLanguageChange,
-    // 主题
-    themePreference,
-    handleThemeChange,
-    // 编辑器外观
+    // 全局主题 + 编辑器字体
     editorTheme,
     editorFontFamily,
     editorFontSize,
