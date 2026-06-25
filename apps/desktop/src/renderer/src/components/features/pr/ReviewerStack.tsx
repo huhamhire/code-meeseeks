@@ -6,6 +6,26 @@ import { Avatar } from '../../common';
 import { REVIEWER_STATUS_META, ReviewerBadgeGlyph } from './reviewer-status';
 
 const STACK_AVATAR_SIZE = 32;
+
+/** 单个头像 + 右上角决断角标（approved 绿勾 / needsWork 琥珀叹号；待评审无角标）。栈内项与「我」项共用。 */
+function StackAvatar({ r, connectionId }: { r: Reviewer; connectionId: string }) {
+  return (
+    <>
+      <Avatar
+        connectionId={connectionId}
+        slug={r.slug ?? r.name}
+        displayName={r.displayName}
+        avatarUrl={r.avatarUrl}
+        size={STACK_AVATAR_SIZE}
+      />
+      {(r.status === 'approved' || r.status === 'needsWork') && (
+        <span className={`reviewer-stack-badge reviewer-stack-badge-${r.status}`} aria-hidden="true">
+          <ReviewerBadgeGlyph status={r.status} size={14} />
+        </span>
+      )}
+    </>
+  );
+}
 // 总数 ≤ MAX_VISIBLE 全显；超出则显示 (MAX_VISIBLE-1) 个头像 + 一个「+n」溢出项
 const MAX_VISIBLE = 4;
 // 排序优先级：needsWork（待处理，最该被看到）> approved > 待评审
@@ -17,16 +37,20 @@ const STATUS_RANK: Record<ReviewerStatus, number> = { needsWork: 0, approved: 1,
  * - approved 右上角绿勾、needsWork 右上角琥珀叹号角标（待评审无角标）
  * - 至多展示 4 个；超出显示 3 个 + 「+n」，点击「+n」下拉展示其余 reviewer（头像 + 名 + 决断 chip）
  * - 直接展示的头像 hover 出名字（走 Avatar 自带 title）
- * 过滤后无人则不渲染。
+ * - `self`（当前用户的「我的评审」）非空时，在栈右侧分隔展示其头像 + 当前评审角标
+ * 栈内无他人且无 self 则不渲染。
  */
 export function ReviewerStack({
   reviewers,
   connectionId,
   currentUserName,
+  self,
 }: {
   reviewers: Reviewer[];
   connectionId: string;
   currentUserName?: string | null;
+  /** 当前用户的「我的评审」：头像 + 当前评审角标，分隔展示在他人头像栈右侧。 */
+  self?: Reviewer | null;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -67,7 +91,7 @@ export function ReviewerStack({
         a.name.localeCompare(b.name),
     );
 
-  if (sorted.length === 0) return null;
+  if (sorted.length === 0 && !self) return null;
 
   const overflow = sorted.length > MAX_VISIBLE;
   const visible = overflow ? sorted.slice(0, MAX_VISIBLE - 1) : sorted;
@@ -78,22 +102,13 @@ export function ReviewerStack({
   return (
     <div className="reviewer-stack">
       {visible.map((r, i) => (
-        <span key={r.name} className="reviewer-stack-item" style={{ zIndex: topZ - i }}>
-          <Avatar
-            connectionId={connectionId}
-            slug={r.slug ?? r.name}
-            displayName={r.displayName}
-            avatarUrl={r.avatarUrl}
-            size={STACK_AVATAR_SIZE}
-          />
-          {(r.status === 'approved' || r.status === 'needsWork') && (
-            <span
-              className={`reviewer-stack-badge reviewer-stack-badge-${r.status}`}
-              aria-hidden="true"
-            >
-              <ReviewerBadgeGlyph status={r.status} size={14} />
-            </span>
-          )}
+        <span
+          key={r.name}
+          className="reviewer-stack-item"
+          style={{ zIndex: topZ - i }}
+          title={r.displayName}
+        >
+          <StackAvatar r={r} connectionId={connectionId} />
         </span>
       ))}
       {overflow && (
@@ -109,6 +124,15 @@ export function ReviewerStack({
         >
           +{hidden.length}
         </button>
+      )}
+      {/* 「我的评审」：与他人头像栈分隔（左侧细分隔线 + 间距），展示当前用户头像 + 当前评审角标。 */}
+      {self && (
+        <span
+          className="reviewer-stack-item reviewer-stack-self"
+          title={t('mainPane.myReviewTitle', { name: self.displayName })}
+        >
+          <StackAvatar r={self} connectionId={connectionId} />
+        </span>
       )}
       {open &&
         pos &&

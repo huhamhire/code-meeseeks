@@ -511,6 +511,7 @@
     "mergeTitle": "Diesen PR in den Ziel-Branch mergen",
     "merging": "Wird gemergt…",
     "moreReviewers": "{{n}} weitere Reviewer",
+    "myReviewTitle": "Meine Review · {{name}}",
     "needsWork": "Nachbesserung nötig",
     "newComment": "Kommentieren",
     "openInBrowser": "Im Browser öffnen",

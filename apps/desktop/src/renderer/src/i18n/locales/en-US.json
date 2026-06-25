@@ -511,6 +511,7 @@
     "mergeTitle": "Merge this PR into the target branch",
     "merging": "Merging…",
     "moreReviewers": "{{n}} more reviewers",
+    "myReviewTitle": "My review · {{name}}",
     "needsWork": "Needs work",
     "newComment": "Comment",
     "openInBrowser": "Open in browser",

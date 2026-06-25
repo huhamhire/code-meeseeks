@@ -497,6 +497,7 @@
     "mergeTitle": "この PR をターゲットブランチにマージします",
     "merging": "マージ中…",
     "moreReviewers": "他 {{n}} 名のレビュアー",
+    "myReviewTitle": "自分のレビュー · {{name}}",
     "needsWork": "要修正",
     "newComment": "コメント",
     "openInBrowser": "ブラウザで開く",
