@@ -157,6 +157,15 @@ export const ProxySchema = z.object({
 });
 export type ProxyConfig = z.infer<typeof ProxySchema>;
 
+/**
+ * LLM 上下文长度（token）：裁剪输入内容的全局上限，透传 pr-agent `CONFIG__MAX_MODEL_TOKENS` /
+ * `CONFIG__CUSTOM_MODEL_MAX_TOKENS`。默认 128000（与现代主流模型上下文匹配）；**对本地 CLI 模式
+ * 不生效**（CLI 工具自管上下文，见 @meebox/pr-agent-bridge）。范围 32k~1M。
+ */
+export const LLM_CONTEXT_TOKENS_MIN = 32000;
+export const LLM_CONTEXT_TOKENS_MAX = 1000000;
+export const LLM_CONTEXT_TOKENS_DEFAULT = 128000;
+
 export const ConfigSchema = z.object({
   /**
    * UI 与 pr-agent 输出使用的语言 (ISO locale，如 'zh-CN' / 'en-US' / 'ja-JP' / 'de-DE')。
@@ -233,6 +242,24 @@ export const ConfigSchema = z.object({
           grants: z.array(z.string()).default([]),
         })
         .default({}),
+      /**
+       * Agent 行为策略开关（扩展位，后续行为开关并入此处）。当前一项：
+       * - auto_followup：评审运行阶段是否启用**自动追问**（条件性 /ask）。关闭则评审微流程跳过
+       *   judge + asks 两步、直接总结，省一次 judge LLM 调用与潜在追问开销（省 token）。默认开，
+       *   与历史行为一致。
+       */
+      strategy: z
+        .object({
+          auto_followup: z.boolean().default(true),
+          /**
+           * 单次任务生成的代码建议 / 评审发现数量上限（2~8，默认 4）。统一约束三处：
+           * - /review：pr-agent `pr_reviewer.num_max_findings`（硬上限）；
+           * - /improve：pr-agent `pr_code_suggestions.num_code_suggestions`（硬上限）；
+           * - /ask：结构化分段 `<suggestions>` 的提示层软约束（模型一般遵守，极少数可能超）。
+           */
+          max_code_suggestions: z.number().int().min(2).max(8).default(4),
+        })
+        .default({}),
     })
     .default({}),
   poller: z
@@ -262,8 +289,8 @@ export const ConfigSchema = z.object({
       strategy: z.enum(['auto', 'embedded', 'local-cli']).default('auto'),
       /**
        * 评审任务并发数（1~8，默认 2）。嵌入式 / local-cli 下每个 run 独立 worktree +
-       * 独立子进程，并发安全；上限节流 LLM 限流 / 本机资源。**高级参数，不在设置页暴露**，
-       * 仅 config.yaml 手改。
+       * 独立子进程，并发安全；上限节流 LLM 限流 / 本机资源。设置页可调（config:setMaxConcurrency
+       * 热替换队列上限），亦可 config.yaml 手改。
        */
       max_concurrency: z.number().int().min(1).max(8).default(2),
     })
@@ -332,6 +359,17 @@ export const ConfigSchema = z.object({
          * 不注入任何 LLM env，pr-agent 退到读 shell 环境变量。
          */
         active_id: z.string().default(''),
+        /**
+         * 裁剪输入内容的上下文长度上限（token）。透传 pr-agent CONFIG__MAX_MODEL_TOKENS /
+         * CONFIG__CUSTOM_MODEL_MAX_TOKENS；超长改动按此截断以适配模型。**本地 CLI 模式不生效**
+         * （CLI 工具自管上下文）。默认 128000，范围 32k~1M（见 @meebox/pr-agent-bridge）。
+         */
+        context_tokens: z
+          .number()
+          .int()
+          .min(LLM_CONTEXT_TOKENS_MIN)
+          .max(LLM_CONTEXT_TOKENS_MAX)
+          .default(LLM_CONTEXT_TOKENS_DEFAULT),
       })
       .default({}),
   ),

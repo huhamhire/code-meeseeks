@@ -20,6 +20,12 @@
   position: relative;
   display: inline-flex;
 }
+// 「我的评审」：与他人头像栈拉开间距并加细分隔线，不重叠（覆盖 `> * + *` 的 -6px 重叠，复合选择器提权）。
+.reviewer-stack > .reviewer-stack-self {
+  margin-left: $space-4;
+  padding-left: $space-4;
+  border-left: 1px solid $border-muted;
+}
 // 角标：钉在头像右上角（待评审无角标）。反色处理——实心彩色圆底 + 白色勾/叹号符号（此前是白底彩符，
 // 白色面积过大不够醒目）。无描边环（纯彩底，靠颜色与头像区分）。
 .reviewer-stack-badge {

@@ -76,6 +76,12 @@ export interface AgentMessage {
   content: string;
   /** assistant 评审类回合的非约束性判定；对话 / 用户消息不填。 */
   recommendation?: AgentRecommendation;
+  /**
+   * 用户消息携带的引用上下文（自描述 markdown：路径 + 行范围 + 代码围栏，见
+   * renderer formatReferencedContext）。发起提问时若带 Diff 选区则填，UI 在气泡下方折叠展示；
+   * 无选区 / 助手消息不填。（finding 引用走 /ask run 卡片，不经本字段。）
+   */
+  referencedContext?: string;
   /** 产生时间（ISO），用于时间线排序。 */
   at: string;
 }

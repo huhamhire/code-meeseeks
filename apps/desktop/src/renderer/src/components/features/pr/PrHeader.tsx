@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type {
   LocalPrStatus,
   PlatformCapabilities,
+  Reviewer,
   ReviewerStatus,
   StoredPullRequest,
 } from '@meebox/shared';
@@ -37,6 +38,19 @@ export function PrHeader({
     !capabilities || capabilities.reviewStatuses.includes(s);
   const isOwnPr = !!currentUserName && pr.author.name === currentUserName;
   const ownPrReason = isOwnPr ? t('mainPane.ownPrReason') : undefined;
+  // 「我的评审」：取当前用户的 reviewer 条目（头像），角标状态用本地决断 localStatus（审批按钮即时更新，
+  // 比远端 reviewer.status 更跟手）。自己作者的 PR 不可评审 → 不展示。
+  const selfReviewer =
+    !isOwnPr && currentUserName ? pr.reviewers.find((r) => r.name === currentUserName) : undefined;
+  const selfReviewStatus: ReviewerStatus =
+    pr.localStatus === 'approved'
+      ? 'approved'
+      : pr.localStatus === 'needs_work'
+        ? 'needsWork'
+        : 'unapproved';
+  const self: Reviewer | undefined = selfReviewer
+    ? { ...selfReviewer, status: selfReviewStatus }
+    : undefined;
 
   return (
     <header className="pr-header">
@@ -73,6 +87,7 @@ export function PrHeader({
           reviewers={pr.reviewers}
           connectionId={pr.connectionId}
           currentUserName={currentUserName}
+          self={self}
         />
       </div>
       <div className="pr-header-actions">

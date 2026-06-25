@@ -29,6 +29,8 @@ interface UseSettingsDraftParams {
     editor_font_size: number;
   }) => void;
   onConnectionsChange?: () => void | Promise<void>;
+  /** 整体保存成功后回传写盘后的权威 config，供父级同步 boot.config（再次打开设置页显示最新值）。 */
+  onConfigPersisted?: (config: Config) => void;
   onClose: () => void;
 }
 
@@ -46,6 +48,7 @@ export function useSettingsDraft({
   onThemeChange,
   onEditorAppearanceChange,
   onConnectionsChange,
+  onConfigPersisted,
   onClose,
 }: UseSettingsDraftParams) {
   const { t } = useTranslation();
@@ -55,10 +58,16 @@ export function useSettingsDraft({
   // 草稿 → 整体保存：所有编辑只改本地 state，点底栏"保存"才整体写盘 + 生效
   const [reposDirInput, setReposDirInput] = useState(config.workspace.repos_dir);
   // Agent 其余字段（max_steps / summary_max_chars / autopilot）在 UI 不编辑，仅持有以便保存时
-  // 原样回传、不被覆盖成默认值；只有目录经 agentDirInput 可编辑。
+  // 原样回传、不被覆盖成默认值；目录经 agentDirInput、策略开关经 autoFollowup 可编辑。
   const [agent] = useState<Config['agent']>(config.agent);
   const [agentDirInput, setAgentDirInput] = useState(config.agent.dir);
+  // Agent 策略（自动追问 + 代码建议数量上限）。随 config:setAgent 一并保存。
+  const [autoFollowup, setAutoFollowupState] = useState(config.agent.strategy.auto_followup);
+  const [maxCodeSuggestions, setMaxCodeSuggestionsState] = useState(
+    config.agent.strategy.max_code_suggestions,
+  );
   const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
+  const [maxConcurrencyInput, setMaxConcurrencyInput] = useState(config.pr_agent.max_concurrency);
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
   const [llmEditor, setLlmEditor] = useState<{ mode: 'add' | 'edit'; draft: LlmProfile } | null>(
     null,
@@ -79,7 +88,10 @@ export function useSettingsDraft({
   const [base, setBase] = useState(() => ({
     reposDir: config.workspace.repos_dir,
     agentDir: config.agent.dir,
+    autoFollowup: config.agent.strategy.auto_followup,
+    maxCodeSuggestions: config.agent.strategy.max_code_suggestions,
     poller: config.poller.interval_seconds,
+    concurrency: config.pr_agent.max_concurrency,
     llm: config.llm,
     proxy: config.proxy,
     connections: config.connections,
@@ -235,17 +247,22 @@ export function useSettingsDraft({
         ? [...llm.profiles, draft]
         : llm.profiles.map((p) => (p.id === draft.id ? draft : p));
     const active_id = mode === 'add' && !llm.active_id ? draft.id : llm.active_id;
-    persistLlm({ profiles, active_id });
+    persistLlm({ ...llm, profiles, active_id });
     setLlmEditor(null);
   };
   const deleteProfile = (id: string): void => {
     const profiles = llm.profiles.filter((p) => p.id !== id);
     const active_id = llm.active_id === id ? (profiles[0]?.id ?? '') : llm.active_id;
-    persistLlm({ profiles, active_id });
+    persistLlm({ ...llm, profiles, active_id });
   };
   const setActiveLlm = (id: string): void => {
     if (llm.active_id === id) return;
     persistLlm({ ...llm, active_id: id });
+  };
+  // 上下文长度归属 llm（随 config:setLlm 一并保存）；编辑即走 persistLlm（标脏 + 草稿写盘）。
+  const setLlmContextTokens = (tokens: number): void => {
+    if (llm.context_tokens === tokens) return;
+    persistLlm({ ...llm, context_tokens: tokens });
   };
 
   // ── 连接 ──
@@ -307,8 +324,20 @@ export function useSettingsDraft({
     setPollerInput(String(seconds));
     setSaved(false);
   };
+  const setMaxConcurrency = (max: number): void => {
+    setMaxConcurrencyInput(max);
+    setSaved(false);
+  };
   const setAgentDir = (v: string): void => {
     setAgentDirInput(v);
+    setSaved(false);
+  };
+  const setAutoFollowup = (v: boolean): void => {
+    setAutoFollowupState(v);
+    setSaved(false);
+  };
+  const setMaxCodeSuggestions = (n: number): void => {
+    setMaxCodeSuggestionsState(n);
     setSaved(false);
   };
   const setReposDir = (v: string): void => {
@@ -332,8 +361,12 @@ export function useSettingsDraft({
 
   // ── 变更检测（对比基线）+ 整体保存 ──
   const reposDirChanged = reposDirInput.trim() !== base.reposDir;
-  const agentChanged = agentDirInput.trim() !== base.agentDir;
+  const agentChanged =
+    agentDirInput.trim() !== base.agentDir ||
+    autoFollowup !== base.autoFollowup ||
+    maxCodeSuggestions !== base.maxCodeSuggestions;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
+  const concurrencyChanged = maxConcurrencyInput !== base.concurrency;
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
   const proxyChanged = JSON.stringify(proxy) !== JSON.stringify(base.proxy);
   const connectionsChanged =
@@ -343,6 +376,7 @@ export function useSettingsDraft({
     reposDirChanged ||
     agentChanged ||
     pollerChanged ||
+    concurrencyChanged ||
     llmChanged ||
     proxyChanged ||
     connectionsChanged;
@@ -358,9 +392,22 @@ export function useSettingsDraft({
         if (!Number.isFinite(n) || n < 60 || n > 900) throw new Error(t('settings.pollerRangeError'));
         await invoke('config:setPoller', { interval_seconds: n });
       }
+      if (concurrencyChanged) {
+        await invoke('config:setMaxConcurrency', { max_concurrency: maxConcurrencyInput });
+      }
       if (agentChanged) {
-        // 仅 UI 编辑 dir；其余字段从已加载的 config 原样保留，避免被覆盖成默认值。
-        await invoke('config:setAgent', { agent: { ...agent, dir: agentDirInput.trim() } });
+        // UI 编辑 dir + 策略开关；其余字段从已加载的 config 原样保留，避免被覆盖成默认值。
+        await invoke('config:setAgent', {
+          agent: {
+            ...agent,
+            dir: agentDirInput.trim(),
+            strategy: {
+              ...agent.strategy,
+              auto_followup: autoFollowup,
+              max_code_suggestions: maxCodeSuggestions,
+            },
+          },
+        });
       }
       if (llmChanged) {
         await invoke('config:setLlm', { llm });
@@ -377,10 +424,16 @@ export function useSettingsDraft({
       if (reposDirChanged && reposDirInput.trim()) {
         await invoke('config:setReposDir', { reposDir: reposDirInput.trim() });
       }
+      // 回读写盘后的权威配置同步父级 boot.config：否则 agent / poller / 并发 等无即时回调的项，
+      // 再次打开设置页仍读旧的 boot.config（行为已生效但 UI 显示陈旧）。含 main 端 clamp 后的值。
+      onConfigPersisted?.(await invoke('config:read', undefined));
       setBase({
         reposDir: reposDirInput.trim(),
         agentDir: agentDirInput.trim(),
+        autoFollowup,
+        maxCodeSuggestions,
         poller: Number.parseInt(pollerInput, 10),
+        concurrency: maxConcurrencyInput,
         llm,
         proxy,
         connections,
@@ -433,17 +486,24 @@ export function useSettingsDraft({
     saveLlmEditor,
     deleteProfile,
     setActiveLlm,
+    setLlmContextTokens,
     // 代理
     proxy,
     proxyEditor,
     setProxyEditor,
     saveProxyEditor,
-    // 轮询 / 目录
+    // 轮询 / 并发 / 目录
     pollerInput,
     setPoller,
+    maxConcurrencyInput,
+    setMaxConcurrency,
     agentDirInput,
     setAgentDir,
     pickAgentDir,
+    autoFollowup,
+    setAutoFollowup,
+    maxCodeSuggestions,
+    setMaxCodeSuggestions,
     reposDirInput,
     setReposDir,
     pickReposDir,

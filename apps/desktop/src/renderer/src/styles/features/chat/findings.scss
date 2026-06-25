@@ -423,11 +423,20 @@
   display: inline-block;
   padding: 2px $space-4;
   border-radius: $radius-pill;
-  border: 1px solid transparent; // inline style 覆盖
   font-size: $fs-sm;
   font-weight: 500;
   letter-spacing: 0.02em;
   line-height: $lh-normal;
+  // 按标签 hue 自动上色（--pill-hue 由 pillStyle 注入；缺省回退中性蓝）。暗色主题：深底 + 亮字；
+  // 浅色主题在下方覆写为浅底 + 深字，避免沿用暗色深胶囊在浅背景上过重。
+  border: 1px solid hsl(var(--pill-hue, 210) 50% 32%);
+  background: hsl(var(--pill-hue, 210) 55% 22%);
+  color: hsl(var(--pill-hue, 210) 85% 78%);
+}
+:root[data-theme='light'] .pr-type-pill {
+  border-color: hsl(var(--pill-hue, 210) 45% 78%);
+  background: hsl(var(--pill-hue, 210) 70% 90%);
+  color: hsl(var(--pill-hue, 210) 50% 30%);
 }
 .chat-finding-empty {
   font-size: $fs-sm;

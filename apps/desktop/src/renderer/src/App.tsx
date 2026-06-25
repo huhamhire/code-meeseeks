@@ -165,6 +165,7 @@ export default function App() {
           onJumpToDraftEditor={(target) => setPendingDiffNav(target)}
           onNavigateToAnchor={(anchor) => setPendingDiffNav({ anchor })}
           onSetReviewStatus={(s) => void setSelectedPrStatus(s)}
+          onMerge={() => void mergeSelectedPr()}
           currentLlmModel={
             boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
           }
@@ -215,6 +216,7 @@ export default function App() {
             patchConfig((c) => ({ ...c, appearance: { ...c.appearance, ...appearance } }))
           }
           onConnectionsChange={refreshBootAndPrs}
+          onConfigPersisted={(config) => patchConfig(() => config)}
           onClose={() => setShowSettings(false)}
         />
       )}

@@ -10,6 +10,7 @@ import type {
 } from '@meebox/shared';
 import {
   ConfirmModal,
+  CpuIcon,
   GlobeIcon,
   Modal,
   QuestionIcon,
@@ -26,13 +27,16 @@ import { EditorSection } from './sections/EditorSection';
 import { ConnectionsSection } from './sections/ConnectionsSection';
 import { PollerSection } from './sections/PollerSection';
 import { LlmSection } from './sections/LlmSection';
+import { LlmContextSection } from './sections/LlmContextSection';
+import { ConcurrencySection } from './sections/ConcurrencySection';
+import { AgentStrategySection } from './sections/AgentStrategySection';
 import { ProxySection } from './sections/ProxySection';
 import { AgentDirSection } from './sections/AgentDirSection';
 import { WorkDirSection } from './sections/WorkDirSection';
 import { CacheDirSection } from './sections/CacheDirSection';
 import { RuntimeSection } from './sections/RuntimeSection';
 
-type SettingsCategory = 'general' | 'connection' | 'ai' | 'about';
+type SettingsCategory = 'general' | 'connection' | 'model' | 'agent' | 'about';
 
 /**
  * 配置分区导航元数据（左侧栏）。新增配置分区在此登记一项，并在右侧面板的 switch
@@ -45,7 +49,8 @@ const SETTINGS_CATEGORIES: ReadonlyArray<{
 }> = [
   { id: 'general', labelKey: 'settings.catGeneral', Icon: SettingsIcon },
   { id: 'connection', labelKey: 'settings.catConnection', Icon: GlobeIcon },
-  { id: 'ai', labelKey: 'settings.catAi', Icon: RobotIcon },
+  { id: 'model', labelKey: 'settings.catModel', Icon: CpuIcon },
+  { id: 'agent', labelKey: 'settings.catAgent', Icon: RobotIcon },
   { id: 'about', labelKey: 'settings.catAbout', Icon: QuestionIcon },
 ];
 
@@ -72,6 +77,8 @@ interface SettingsModalProps {
    * 不刷新的话 App 的 boot.connections / 列表会过期（丢 capabilities/user、PR 对不上）。
    */
   onConnectionsChange?: () => void | Promise<void>;
+  /** 整体保存成功后回传写盘后的权威 config，父级据此同步 boot.config（再次打开设置页显示最新值）。 */
+  onConfigPersisted?: (config: Config) => void;
   onClose: () => void;
 }
 
@@ -89,6 +96,7 @@ export function SettingsModal({
   onThemeChange,
   onEditorAppearanceChange,
   onConnectionsChange,
+  onConfigPersisted,
   onClose,
 }: SettingsModalProps) {
   const { t } = useTranslation();
@@ -102,6 +110,7 @@ export function SettingsModal({
     onThemeChange,
     onEditorAppearanceChange,
     onConnectionsChange,
+    onConfigPersisted,
     onClose,
   });
 
@@ -194,7 +203,8 @@ export function SettingsModal({
                 />
               </>
             )}
-            {category === 'ai' && (
+            {/* 模型：仅 LLM 连接 + 上下文长度。 */}
+            {category === 'model' && (
               <>
                 <LlmSection
                   llm={s.llm}
@@ -203,10 +213,29 @@ export function SettingsModal({
                   onSetActive={s.setActiveLlm}
                   onDelete={s.deleteProfile}
                 />
+                <LlmContextSection
+                  value={s.llm.context_tokens}
+                  onChange={s.setLlmContextTokens}
+                />
+              </>
+            )}
+            {/* 智能体：记忆目录 + 策略 + 评审并发。 */}
+            {category === 'agent' && (
+              <>
                 <AgentDirSection
                   value={s.agentDirInput}
                   onChange={s.setAgentDir}
                   onPick={() => void s.pickAgentDir()}
+                />
+                <AgentStrategySection
+                  autoFollowup={s.autoFollowup}
+                  onAutoFollowupChange={s.setAutoFollowup}
+                  maxCodeSuggestions={s.maxCodeSuggestions}
+                  onMaxCodeSuggestionsChange={s.setMaxCodeSuggestions}
+                />
+                <ConcurrencySection
+                  value={s.maxConcurrencyInput}
+                  onChange={s.setMaxConcurrency}
                 />
               </>
             )}

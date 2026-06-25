@@ -174,11 +174,12 @@ textarea {
   color: $text-on-accent;
 }
 
-// 操作级 toast：底部居中浮层，自动消失 / 点击关闭。用于审批 / 合并等远端动作失败提示
+// 操作级 toast：顶部居中浮层，自动消失 / 点击关闭。用于审批 / 合并等远端动作失败提示
+// （放顶部避免在 diff 视图下与底部状态栏 / 横向滚动条叠压）。
 .app-toast {
   position: fixed;
   left: 50%;
-  bottom: 48px;
+  top: 48px;
   transform: translateX(-50%);
   max-width: 70%;
   padding: $space-4 $space-6;
@@ -198,7 +199,7 @@ textarea {
 @keyframes app-toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 8px);
+    transform: translate(-50%, -8px); // 顶部浮层：自上方滑入
   }
   to {
     opacity: 1;
@@ -247,7 +248,8 @@ textarea {
 
   &:hover:not(:disabled) {
     background: $bg-white-fade;
-    color: white;
+    // 主文字色（随主题）——勿写死 white：浅色模式下白图标会消失在浅底 hover 上。
+    color: $text-primary;
   }
   &:disabled {
     opacity: 0.5;
@@ -263,6 +265,44 @@ textarea {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+// 通用开关（Switch 组件）：轨道 + 滑块。off 走中性灰底，on 走 accent 底，滑块右移；白色滑块带轻阴影
+// 在深浅轨道上都可辨。
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: $border-default;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &.switch-on {
+    background: $color-accent;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+
+  .switch-on & {
+    transform: translateX(16px);
   }
 }
 

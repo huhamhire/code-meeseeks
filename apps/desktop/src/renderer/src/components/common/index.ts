@@ -12,5 +12,6 @@ export * from './MermaidDiagram';
 export * from './Modal';
 export * from './PlatformIcon';
 export * from './StatusChip';
+export * from './Switch';
 export * from './icons';
 export * from './markdownMermaid';

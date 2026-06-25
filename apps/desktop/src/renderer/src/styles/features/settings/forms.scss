@@ -370,3 +370,49 @@ select.settings-input {
   @include ellipsis;
   font-size: $fs-sm;
 }
+
+// 分区下的「下一级功能列表」（如「策略」的子项）：左缩进 + 行首圆点体现从属关系；每行左侧
+// 标题 + 说明，右侧放控件——控件不限于开关，后续可为下拉 / 滑块等，故命名与结构保持通用。
+.settings-sublist {
+  list-style: none;
+  margin: $space-1 0 0;
+  padding-left: $space-3; // 整体内缩，与分区标题拉开层级
+}
+.settings-sublist-row {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  padding: $space-3 0;
+
+  // 行首圆点：列表标记，体现子项从属
+  &::before {
+    content: '•';
+    flex-shrink: 0;
+    color: $text-dim;
+    line-height: 1;
+  }
+  & + & {
+    border-top: 1px solid $border-muted;
+  }
+}
+.settings-sublist-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1; // 撑开，把右侧控件顶到行末
+  min-width: 0;
+}
+.settings-sublist-label {
+  font-size: $fs-md;
+}
+.settings-sublist-desc {
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+}
+// 子项右侧下拉：与其他主配置下拉（settings-language-select）同宽 180px，不被 .settings-input
+// 的 flex:1 撑满（复合选择器提权覆盖）。纯数值选项右对齐，避免在宽框内孤零零靠左。
+.settings-input.settings-sublist-select {
+  flex: 0 0 auto;
+  width: 180px;
+  text-align: right;
+}

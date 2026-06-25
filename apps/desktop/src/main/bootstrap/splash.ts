@@ -27,12 +27,21 @@ function resolveSplashLogo(): string | null {
   return null;
 }
 
+// 闪屏明暗两套配色，跟随有效主题（与 palette bg-app / 文字 / accent 同源）：
+// 暗 = $vscode-gray-850 底 + 主文字白 + $vscode-blue-700 accent；浅 = $vscode-gray-30 底 + 深文字 + $vscode-blue-800。
+const SPLASH_COLORS = {
+  dark: { bg: '#1e1e1e', text: '#ffffff', sub: '#9d9d9d', ring: 'rgba(255,255,255,.16)', accent: '#0e639c' },
+  light: { bg: '#f8f8f8', text: '#1f1f20', sub: '#6e6e6e', ring: 'rgba(0,0,0,.14)', accent: '#005fb8' },
+};
+
 /**
  * 启动闪屏：独立的无边框轻量窗口，加载内联 data URL（品牌 logo + 纯 CSS spinner），
  * 几十 ms 即可呈现，遮住主窗口首帧前的渲染层加载空窗。主窗口 ready-to-show 时关闭。
  * logo 经 base64 内联（见 resolveSplashLogo），data URL 自包含、dev/打包行为一致。
+ * 配色随有效主题（`dark`）切换，避免浅色主题下启动闪屏仍是深色。
  */
-export function createSplash(): BrowserWindow {
+export function createSplash(dark: boolean): BrowserWindow {
+  const c = dark ? SPLASH_COLORS.dark : SPLASH_COLORS.light;
   const splash = new BrowserWindow({
     width: 280,
     height: 240,
@@ -43,21 +52,21 @@ export function createSplash(): BrowserWindow {
     show: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: c.bg,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   const logo = resolveSplashLogo();
   const logoEl = logo ? `<img class="logo" src="${logo}" alt="" />` : '';
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     html,body{margin:0;height:100%;}
-    body{background:#1e1e1e;color:#fff;-webkit-user-select:none;user-select:none;
+    body{background:${c.bg};color:${c.text};-webkit-user-select:none;user-select:none;
       font-family:system-ui,'Segoe UI',Roboto,sans-serif;
       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
     .logo{width:72px;height:72px;border-radius:16px;}
     .name{font-size:17px;font-weight:600;letter-spacing:.3px;}
-    .row{display:flex;align-items:center;gap:8px;color:#9d9d9d;font-size:12px;}
-    .ring{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.16);
-      border-top-color:#0e639c;animation:spin .8s linear infinite;}
+    .row{display:flex;align-items:center;gap:8px;color:${c.sub};font-size:12px;}
+    .ring{width:14px;height:14px;border-radius:50%;border:2px solid ${c.ring};
+      border-top-color:${c.accent};animation:spin .8s linear infinite;}
     @keyframes spin{to{transform:rotate(360deg);}}
   </style></head><body>
     ${logoEl}<div class="name">Code Meeseeks</div>

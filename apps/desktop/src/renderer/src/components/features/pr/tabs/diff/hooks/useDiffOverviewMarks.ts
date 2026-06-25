@@ -15,7 +15,14 @@ const REMOVED_COLOR = '#f85149';
  * - modified 编辑器：增 / 改行绿色；纯删在删除点打一条红 tick
  * - 并排视图下 original 编辑器：删 / 改行红色
  *
- * diff 异步算完后 getLineChanges() 才有值；首帧已算完直接刷，否则等 onDidUpdateDiff。
+ * 注意：`renderSideBySide` 是用户在工具栏选的「并排 / 统一」**意向**，而 Monaco 在宽度不足时会
+ * 自动把并排降级成 inline/unified 布局（useInlineViewWhenSpaceIsLimited 默认开），此时意向仍为
+ * 并排但实际渲染是统一。若按意向把删除红标画到 original 编辑器，降级后 original 不可见 → 红标全丢、
+ * 滚动条只剩绿色。故按 **实际渲染模式** 决定红标去向：Monaco 把实际模式反映在 `.monaco-diff-editor`
+ * 根节点的 `side-by-side` class 上（降级 inline 时去掉），据此判定，而非用户意向 prop。
+ *
+ * diff 异步算完后 getLineChanges() 才有值；首帧已算完直接刷，否则等 onDidUpdateDiff。布局在断点处
+ * 切换并排 ↔ 统一时（onDidLayoutChange）按新模式重画红标（rAF 合并、待 class 切换稳定后再读）。
  */
 export function useDiffOverviewMarks(opts: {
   diffEditor: MonacoEditor.IStandaloneDiffEditor | null;
@@ -31,6 +38,14 @@ export function useDiffOverviewMarks(opts: {
     const modCol = modifiedEditor.createDecorationsCollection([]);
     const origCol = originalEditor.createDecorationsCollection([]);
 
+    // 实际是否并排：读 Monaco 反映实际渲染模式的 `.monaco-diff-editor.side-by-side` class
+    // （宽度不足自动降级 inline 时去掉该 class）；取不到时回退用户意向 prop。
+    const isSideBySide = (): boolean => {
+      if (!renderSideBySide) return false;
+      const el = diffEditor.getContainerDomNode().querySelector('.monaco-diff-editor');
+      return el ? el.classList.contains('side-by-side') : true;
+    };
+
     const Lane = MonacoEditorNs.OverviewRulerLane;
     const deco = (
       startLine: number,
@@ -44,6 +59,7 @@ export function useDiffOverviewMarks(opts: {
 
     const refresh = (): void => {
       const changes = diffEditor.getLineChanges() ?? [];
+      const sideBySide = isSideBySide();
       const modDecos: MonacoEditor.IModelDeltaDecoration[] = [];
       const origDecos: MonacoEditor.IModelDeltaDecoration[] = [];
       for (const c of changes) {
@@ -57,13 +73,13 @@ export function useDiffOverviewMarks(opts: {
         }
         // 删 / 改的「移除部分」标红：
         if (!isInsert) {
-          if (renderSideBySide) {
+          if (sideBySide) {
             // 并排：红画在左侧 original 编辑器自带 ruler（左道），与右侧绿互不干扰
             origDecos.push(
               deco(c.originalStartLineNumber, c.originalEndLineNumber, REMOVED_COLOR, Lane.Left),
             );
           } else {
-            // 统一视图：original 编辑器不可见，红 tick 与绿同画在左道（同一条 diff 泳道）。
+            // 统一视图（含并排降级而来）：original 编辑器不可见，红 tick 与绿同画在 modified 左道。
             // 被删行在 unified 下是 view zone（无 model 行号），只能标在删除点 modifiedStartLineNumber；
             // 改块同一行既绿又红时绿覆盖红 → 改块呈绿、纯删那行（无绿）呈红。
             const line = Math.max(1, c.modifiedStartLineNumber);
@@ -77,8 +93,21 @@ export function useDiffOverviewMarks(opts: {
 
     if (diffEditor.getLineChanges() != null) refresh();
     const disp = diffEditor.onDidUpdateDiff(refresh);
+    // 宽度跨断点导致并排 ↔ 统一切换时，红标去向随之改变 → 重画。layout 事件可能早于 Monaco 切
+    // `side-by-side` class，故用 rAF 推迟到本帧末再读 class；rAF 同时合并 resize 期间的高频事件。
+    let raf = 0;
+    const scheduleRefresh = (): void => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        refresh();
+      });
+    };
+    const layoutDisp = originalEditor.onDidLayoutChange(scheduleRefresh);
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       disp.dispose();
+      layoutDisp.dispose();
       try {
         modCol.clear();
         origCol.clear();

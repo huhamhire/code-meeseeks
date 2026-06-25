@@ -1,99 +1,105 @@
-// 原始调色板（标准色层 / Tier 1）：按色相family 组织的「标准色」，是全应用配色的唯一色值真相源。
-// 上层语义 token（_theme.scss）只引用这里的原色，绝不再写裸 hex —— 主题切换时换的是「语义 → 原色」
-// 的映射，而非散落各处的色值。
-//
-// 命名：`$<family>-<step>`，step 越大越深（与 Tailwind 习惯一致，仅作 family 内排序，非统一感知刻度）。
-// 取色沿用 VS Code Dark+ / Tailwind / Material 既有标准值，重构期严格保持暗色主题像素级一致。
+// 原始调色板（标准色层 / Tier 1）：全应用配色的唯一色值真相源。上层语义 token（_theme.scss）
+// 只引用这里的原色，绝不再写裸 hex —— 主题切换换的是「语义 → 原色」映射，而非散落各处的色值。
 // 纯变量、无 CSS 输出；经 `@use './palette' as *;` 拉取。
+//
+// 按**来源系列**分区命名，让混源显式而非隐性（命名前缀即来源）：
+//   $vscode-*    VS Code Dark+/Light+：编辑器 chrome / 中性灰阶 / accent 蓝 / 列表选中 /
+//                git 装饰 / blame / 错误红族。与内嵌 Monaco 一致，**勿擅自换源**。
+//   $tw-*        Tailwind：通用语义状态色（approved / warning / danger token / info 等），
+//                chip · banner · badge 用。是通用 UI 的单一来源刻度。
+//   $material-*  Material：**目录树文件状态图标**配色（单独保留的一套）+ diff 搜索命中黄。
+//                与 $tw-* 偶有同值（已注明），但语义独立、自成一组，不与之合并。
+// 命名 `$<series>-<family>-<step>`，step 越大越深（family 内排序，非跨 family 感知刻度）。
+// brand / 平台 / 模型厂商 logo 配色不在此（随各 icon 组件，按品牌保真，亦不参与收敛）。
 
-// ===== 中性灰阶（gray / slate）=====
-// 暗色主题的底 / 边 / 字面。深 → 浅。slate 一档带轻微蓝灰，单列出以区分纯灰。
-$gray-900: #181818; // 最深：侧栏分组头
-$gray-880: #1a1a1b; // 输入区等更深一档
-$gray-850: #1e1e1e; // app shell / body
-$gray-840: #1f1f20; // 侧栏 / 列表底
-$gray-820: #252526; // 浮层 / 弹出菜单
-$gray-780: #2a2d2e; // hover 高亮 / avatar 底
-$gray-760: #2d2d30; // 输入框 / chip 默认底 / 弱边框
-$gray-680: #3e3e42; // 默认边框
-$gray-600: #4d4d4d; // 滚动条滑块
-$gray-540: #5e5e5e; // 滚动条 hover
-$gray-500: #6e6e6e; // 极弱 placeholder 字
-$gray-480: #707070; // 滚动条 active
-$gray-420: #858585; // 次级文字
-$gray-200: #cccccc; // 主文字
-$gray-160: #d4d4d4; // body 文字
-$slate-500: #6e7681; // 更弱文字（blame / footer）/ 折叠斜纹
+// ===== 通用黑白（无来源属性）=====
 $white: #ffffff;
 $black: #000000;
 
-// ===== 蓝（blue）=====
-$blue-900: #094771; // 列表项选中底（VS Code activeList）
-$blue-700: #0e639c; // 主蓝 accent / primary
-$blue-600: #1177bb; // primary hover（提亮一档）
-$blue-400: #60a5fa; // 文件 copied 状态点
-$blue-300: #6cb6ff; // 链接 / 提示 / cache 命中
-
-// ===== 绿（green / lime）=====
-$green-700: #16825d; // 状态栏 system OK 深绿
-$green-600: #16a34a; // PR approved 绿（Tailwind green-600）
-$green-500: #4caf50; // 文件 added 状态点（Material green-500）
-$green-450: #22c55e; // token ↑输入（Tailwind green-500）
-$green-400: #5fa56d; // 草稿已发布底（仅作浅底基色）
-$green-300: #73c991; // git added 装饰绿
-$lime-700: #487e02; // blame 改动行绿条（偏橄榄）
-
-// ===== 琥珀 / 黄（amber / yellow）=====
-$amber-600: #d97706; // warning 饱和琥珀（Tailwind amber-600）
-$amber-500: #f59e0b; // 文件 modified 状态点 / 冲突底基色（Tailwind amber-500）
-$amber-450: #e59e1e; // 待办 / pending 底基色
-$amber-400: #fbbf24; // 亮琥珀，纯文字告警
-$amber-300: #e2c08d; // git modified 装饰（tan）
-$yellow-300: #ffd54f; // diff 搜索命中高亮基色（Material amber）
-
-// ===== 红 / 橙（red）=====
-$red-700: #c72e0f; // 错误实底 / 删除按钮（高饱和）
-$red-600: #c74e39; // git deleted 装饰
-$red-550: #dc2626; // 文件 deleted 状态点（Tailwind red-600）
-$red-500: #e8512e; // ghost 危险按钮描边 / 文字
-$red-450: #ef4444; // token ↓输出（Tailwind red-500）
-$red-300: #f48771; // 错误文案 / 红边框（salmon）
-
-// ===== 紫（purple）=====
-$purple-400: #a78bfa; // 文件 renamed 状态点（Tailwind violet-400）
-
 // ============================================================================
-// 浅色主题补充原色（Light theme additions）
-// 浅色主题在白底上需要更深 / 更饱和的品牌色以保证对比度，单设这些步级；浅色中性「纸面」自成一段
-// 由亮到暗续在灰阶里（数字越大越深，故均小于上面暗色段的最浅一档 $gray-160）。深色文字直接复用
-// 上面的近黑灰（$gray-840 / $gray-820）。VS Code Light+ 取色对齐。
+// VS Code 系（$vscode-*）
 // ============================================================================
 
-// 浅色中性「纸面」灰阶（亮 → 暗）
-$gray-0:   #ffffff; // 最亮：编辑器 / 浮层底
-$gray-30:  #f8f8f8; // 浅色 app shell
-$gray-60:  #f3f3f3; // 浅色侧栏 / 列表底
-$gray-90:  #ececec; // 浅色更深一档（输入区）
-$gray-120: #e8e8e8; // 浅色 hover / 分组头
-$gray-150: #e0e0e0; // 浅色弱边框 / avatar 底
-$gray-220: #cfcfcf; // 浅色默认边框
-$gray-260: #c1c1c1; // 浅色滚动条滑块
-$gray-340: #a8a8a8; // 浅色滚动条 hover / 极弱文字
-$gray-380: #909090; // 浅色滚动条 active / 折叠灰
+// ----- 中性灰阶（暗色）：底 / 边 / 字面，深 → 浅。slate 带轻微蓝灰，单列区分纯灰。
+$vscode-gray-900: #181818; // 最深：侧栏分组头
+$vscode-gray-880: #1a1a1b; // 输入区等更深一档
+$vscode-gray-850: #1e1e1e; // app shell / body
+$vscode-gray-840: #1f1f20; // 侧栏 / 列表底
+$vscode-gray-820: #252526; // 浮层 / 弹出菜单
+$vscode-gray-780: #2a2d2e; // hover 高亮 / avatar 底
+$vscode-gray-760: #2d2d30; // 输入框 / chip 默认底 / 弱边框
+$vscode-gray-680: #3e3e42; // 默认边框
+$vscode-gray-600: #4d4d4d; // 滚动条滑块
+$vscode-gray-540: #5e5e5e; // 滚动条 hover
+$vscode-gray-500: #6e6e6e; // 极弱 placeholder 字 / 滚动条 active（原 #707070 收敛至此）
+$vscode-gray-420: #858585; // 次级文字
+$vscode-gray-200: #cccccc; // 主文字
+$vscode-gray-160: #d4d4d4; // body 文字
+$vscode-slate-500: #6e7681; // 更弱文字（blame / footer）/ 折叠斜纹
 
-// 浅色品牌步级（白底高对比）
-$blue-800: #005fb8; // 浅色 accent / primary
-$blue-750: #0a4f9e; // 浅色 primary hover（压暗一档）
-$blue-650: #0a66c2; // 浅色链接 / info / cache
-$blue-500: #2563eb; // 浅色文件 copied 状态点
-$blue-100: #cfe3fb; // 浅色列表选中底（承深色文字）
-$green-650: #15803d; // 浅色 approved / token ↑输入
-$green-550: #1a7f37; // 浅色 git added 装饰
-$green-480: #2e9e4f; // 浅色文件 added 状态点
-$amber-700: #b45309; // 浅色 warning / 纯文字告警
-$amber-650: #9a6700; // 浅色 git modified 装饰
-$amber-550: #d18616; // 浅色文件 modified 状态点
-$red-680: #b31d28; // 浅色 git deleted 装饰
-$red-650: #cd3131; // 浅色 danger / needs-work 文字（VS Code Light error）
-$red-620: #c0392b; // 浅色 ghost 危险按钮描边 / 文字
-$purple-500: #8b5cf6; // 浅色文件 renamed 状态点
+// ----- 中性灰阶（浅色「纸面」，亮 → 暗）：最亮的纯白直接用 $white。
+$vscode-gray-30:  #f8f8f8; // 浅色 app shell
+$vscode-gray-60:  #f3f3f3; // 浅色侧栏 / 列表底
+$vscode-gray-90:  #ececec; // 浅色更深一档（输入区）
+$vscode-gray-120: #e8e8e8; // 浅色 hover / 分组头
+$vscode-gray-150: #e0e0e0; // 浅色弱边框 / avatar 底
+$vscode-gray-220: #cfcfcf; // 浅色默认边框
+$vscode-gray-260: #c1c1c1; // 浅色滚动条滑块
+$vscode-gray-340: #a8a8a8; // 浅色滚动条 hover / 极弱文字
+$vscode-gray-380: #909090; // 浅色滚动条 active / 折叠灰
+
+// ----- 蓝：accent / 列表选中 / info·链接（VS Code 按钮蓝系）
+$vscode-blue-900: #094771; // 暗色列表项选中底（activeList）
+$vscode-blue-700: #0e639c; // 暗色主蓝 accent / primary
+$vscode-blue-600: #1177bb; // 暗色 primary hover（提亮一档）
+$vscode-blue-300: #6cb6ff; // 暗色链接 / info / cache 命中
+$vscode-blue-800: #005fb8; // 浅色 accent / primary
+$vscode-blue-750: #0a4f9e; // 浅色 primary hover（压暗一档）
+$vscode-blue-650: #0a66c2; // 浅色链接 / info / cache
+$vscode-blue-100: #cfe3fb; // 浅色列表选中底（承深色文字）
+
+// ----- 错误红族（VS Code error 系）：danger 实底 / 强调 / 文字
+$vscode-red-700: #c72e0f; // 错误实底 / 删除按钮（高饱和）
+$vscode-red-500: #e8512e; // 暗色 ghost 危险按钮描边 / 文字
+$vscode-red-620: #c0392b; // 浅色 ghost 危险按钮描边 / 文字
+$vscode-red-300: #f48771; // 暗色错误文案 / 红边框（salmon）
+$vscode-red-650: #cd3131; // 浅色 danger / needs-work 文字（VS Code Light error）
+
+// ----- git 装饰 / blame（与 Monaco 行内 / 装订线一致，**carve-out：不收敛、不换源**）
+$vscode-green-300: #73c991; // 暗色 git added 装饰
+$vscode-green-550: #1a7f37; // 浅色 git added 装饰
+$vscode-amber-300: #e2c08d; // 暗色 git modified 装饰（tan）
+$vscode-amber-650: #9a6700; // 浅色 git modified 装饰
+$vscode-red-600:   #c74e39; // 暗色 git deleted 装饰
+$vscode-red-680:   #b31d28; // 浅色 git deleted 装饰
+$vscode-lime-700:  #487e02; // blame 改动行绿条（偏橄榄）
+
+// ============================================================================
+// Tailwind 系（$tw-*）：通用语义状态色（chip / banner / badge）
+// ============================================================================
+$tw-green-700: #15803d; // approved / success / token↑输入（浅色）
+$tw-green-600: #16a34a; // PR approved 绿（暗色）
+$tw-green-500: #22c55e; // token ↑输入（暗色）
+$tw-amber-700: #b45309; // warning / 纯文字告警 / 冲突·待办浅底（浅色）
+$tw-amber-600: #d97706; // warning 饱和琥珀 / 待办 pending 浅底（暗色）
+$tw-amber-500: #f59e0b; // 冲突 / needsWork chip 浅底基色
+$tw-amber-400: #fbbf24; // 亮琥珀，纯文字告警（暗色）
+$tw-red-600:   #dc2626; // token ↓输出（浅色）
+$tw-red-500:   #ef4444; // token ↓输出（暗色）
+
+// ============================================================================
+// Material 系（$material-*）：目录树文件状态图标（单独一套，鲜明饱和色）+ diff 搜索命中黄
+// 注：modified #f59e0b / deleted #dc2626 与 $tw-amber-500 / $tw-red-600 同值，但属树图标
+// 独立集合，故单列不合并——后续可整组换色而不波及通用语义。
+// ============================================================================
+$material-green-500:  #4caf50; // 文件 added 状态点（暗色，Material green-500）
+$material-green-480:  #2e9e4f; // 文件 added 状态点（浅色）
+$material-amber-500:  #f59e0b; // 文件 modified 状态点（暗色）
+$material-amber-550:  #d18616; // 文件 modified 状态点（浅色）
+$material-red-550:    #dc2626; // 文件 deleted 状态点（深浅共用）
+$material-purple-400: #a78bfa; // 文件 renamed 状态点（暗色）
+$material-purple-500: #8b5cf6; // 文件 renamed 状态点（浅色）
+$material-blue-400:   #60a5fa; // 文件 copied 状态点（暗色）
+$material-blue-500:   #2563eb; // 文件 copied 状态点（浅色）
+$material-yellow-300: #ffd54f; // diff 搜索命中高亮（暗色，Material amber）
+$material-yellow-400: #facc15; // diff 搜索命中高亮（浅色）

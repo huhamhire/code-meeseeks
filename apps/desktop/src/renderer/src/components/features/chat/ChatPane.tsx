@@ -51,6 +51,8 @@ interface ChatPaneProps {
   }) => void;
   /** /approve /needswork 命令触发的 PR review 决断；由 MainPane 接到 prs:setLocalStatus */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
+  /** /merge 命令触发的合并（弹二次确认后调用，跟 PR header 合并按钮共用 prs:merge）；仅 canMerge 时可用。 */
+  onMerge?: () => void;
   /**
    * 点击 finding 的文件行锚点 → 仅跳转到 Diff 对应行（scroll+highlight，不进编辑态）。
    * 跟 onJumpToDraftEditor 的区别：不带 runId/findingId，不创建 / 打开草稿。
@@ -87,6 +89,7 @@ export function ChatPane({
   collapsed,
   onJumpToDraftEditor,
   onSetReviewStatus,
+  onMerge,
   onNavigateToAnchor,
   currentLlmModel,
   llmConfigured = true,
@@ -206,9 +209,10 @@ export function ChatPane({
     prLocalId,
   });
 
-  // 纯 UI 态：规则预览弹窗 / 清空确认弹窗
+  // 纯 UI 态：规则预览弹窗 / 清空确认弹窗 / 合并确认弹窗
   const [showRulePreview, setShowRulePreview] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
 
   const { runs, error, loadingSession, matchedRule, bodyRef, hasMoreOlder, loadingOlder } = session;
 
@@ -406,6 +410,9 @@ export function ChatPane({
         }}
         onCancel={hasMyActive || agentRunningHere ? actions.handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
+        // /merge：仅远端可直接合并时在命令菜单出现；触发先弹二次确认，确认后才实际合并。
+        canMerge={pr?.mergeStatus?.canMerge ?? false}
+        onMerge={onMerge ? () => setShowMergeConfirm(true) : undefined}
         // 一键自动评审：图标按钮置于 `/` 命令触发器右侧。runningHere=跑在当前 PR（高亮 / 运行中文案 +
         // 禁用重复发起）；其它 PR 在跑不禁用本 PR 的触发（可并发 / 排队）。
         agentRunningHere={agentRunningHere}
@@ -441,6 +448,18 @@ export function ChatPane({
             void actions.handleClearRuns();
           }}
           onCancel={() => setShowClearConfirm(false)}
+        />
+      )}
+      {showMergeConfirm && (
+        <ConfirmModal
+          title={t('chatPane.mergeConfirmTitle')}
+          message={t('chatPane.mergeConfirmMessage', { title: pr?.title ?? '' })}
+          confirmLabel={t('chatPane.mergeConfirmLabel')}
+          onConfirm={() => {
+            setShowMergeConfirm(false);
+            onMerge?.();
+          }}
+          onCancel={() => setShowMergeConfirm(false)}
         />
       )}
     </aside>
