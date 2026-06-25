@@ -55,9 +55,11 @@ export function useSettingsDraft({
   // 草稿 → 整体保存：所有编辑只改本地 state，点底栏"保存"才整体写盘 + 生效
   const [reposDirInput, setReposDirInput] = useState(config.workspace.repos_dir);
   // Agent 其余字段（max_steps / summary_max_chars / autopilot）在 UI 不编辑，仅持有以便保存时
-  // 原样回传、不被覆盖成默认值；只有目录经 agentDirInput 可编辑。
+  // 原样回传、不被覆盖成默认值；目录经 agentDirInput、策略开关经 autoFollowup 可编辑。
   const [agent] = useState<Config['agent']>(config.agent);
   const [agentDirInput, setAgentDirInput] = useState(config.agent.dir);
+  // Agent 策略开关（本期：自动追问）。随 config:setAgent 一并保存。
+  const [autoFollowup, setAutoFollowupState] = useState(config.agent.strategy.auto_followup);
   const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState(config.pr_agent.max_concurrency);
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
@@ -80,6 +82,7 @@ export function useSettingsDraft({
   const [base, setBase] = useState(() => ({
     reposDir: config.workspace.repos_dir,
     agentDir: config.agent.dir,
+    autoFollowup: config.agent.strategy.auto_followup,
     poller: config.poller.interval_seconds,
     concurrency: config.pr_agent.max_concurrency,
     llm: config.llm,
@@ -322,6 +325,10 @@ export function useSettingsDraft({
     setAgentDirInput(v);
     setSaved(false);
   };
+  const setAutoFollowup = (v: boolean): void => {
+    setAutoFollowupState(v);
+    setSaved(false);
+  };
   const setReposDir = (v: string): void => {
     setReposDirInput(v);
     setSaved(false);
@@ -343,7 +350,8 @@ export function useSettingsDraft({
 
   // ── 变更检测（对比基线）+ 整体保存 ──
   const reposDirChanged = reposDirInput.trim() !== base.reposDir;
-  const agentChanged = agentDirInput.trim() !== base.agentDir;
+  const agentChanged =
+    agentDirInput.trim() !== base.agentDir || autoFollowup !== base.autoFollowup;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const concurrencyChanged = maxConcurrencyInput !== base.concurrency;
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
@@ -375,8 +383,14 @@ export function useSettingsDraft({
         await invoke('config:setMaxConcurrency', { max_concurrency: maxConcurrencyInput });
       }
       if (agentChanged) {
-        // 仅 UI 编辑 dir；其余字段从已加载的 config 原样保留，避免被覆盖成默认值。
-        await invoke('config:setAgent', { agent: { ...agent, dir: agentDirInput.trim() } });
+        // UI 编辑 dir + 策略开关；其余字段从已加载的 config 原样保留，避免被覆盖成默认值。
+        await invoke('config:setAgent', {
+          agent: {
+            ...agent,
+            dir: agentDirInput.trim(),
+            strategy: { ...agent.strategy, auto_followup: autoFollowup },
+          },
+        });
       }
       if (llmChanged) {
         await invoke('config:setLlm', { llm });
@@ -396,6 +410,7 @@ export function useSettingsDraft({
       setBase({
         reposDir: reposDirInput.trim(),
         agentDir: agentDirInput.trim(),
+        autoFollowup,
         poller: Number.parseInt(pollerInput, 10),
         concurrency: maxConcurrencyInput,
         llm,
@@ -464,6 +479,8 @@ export function useSettingsDraft({
     agentDirInput,
     setAgentDir,
     pickAgentDir,
+    autoFollowup,
+    setAutoFollowup,
     reposDirInput,
     setReposDir,
     pickReposDir,

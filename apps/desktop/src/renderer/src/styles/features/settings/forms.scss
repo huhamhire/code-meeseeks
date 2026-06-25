@@ -370,3 +370,34 @@ select.settings-input {
   @include ellipsis;
   font-size: $fs-sm;
 }
+
+// Agent 策略：行为开关的「功能列表」。每行左侧标题 + 说明，右侧 Switch；行间细分隔。
+.settings-toggle-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-6;
+  padding: $space-3 0;
+
+  & + & {
+    border-top: 1px solid $border-muted;
+  }
+}
+.settings-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.settings-toggle-label {
+  font-size: $fs-md;
+}
+.settings-toggle-desc {
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+}

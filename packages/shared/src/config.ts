@@ -242,6 +242,17 @@ export const ConfigSchema = z.object({
           grants: z.array(z.string()).default([]),
         })
         .default({}),
+      /**
+       * Agent 行为策略开关（扩展位，后续行为开关并入此处）。当前一项：
+       * - auto_followup：评审运行阶段是否启用**自动追问**（条件性 /ask）。关闭则评审微流程跳过
+       *   judge + asks 两步、直接总结，省一次 judge LLM 调用与潜在追问开销（省 token）。默认开，
+       *   与历史行为一致。
+       */
+      strategy: z
+        .object({
+          auto_followup: z.boolean().default(true),
+        })
+        .default({}),
     })
     .default({}),
   poller: z

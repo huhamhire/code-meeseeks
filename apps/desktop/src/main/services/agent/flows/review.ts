@@ -1,4 +1,4 @@
-import { buildToolCatalog, loadAgentContext } from '@meebox/agent';
+import { buildToolCatalog, DEFAULT_REVIEW_PLAN, loadAgentContext } from '@meebox/agent';
 import type { AgentContext, ReviewPlan } from '@meebox/agent';
 import { addFindingClosure } from '@meebox/poller';
 import { pickMatchingRule } from '@meebox/rules';
@@ -69,6 +69,13 @@ export function runReviewForPr(
   plan?: ReviewPlan,
 ): Promise<AgentSession> {
   const agentCfg = runtime.ctx.bootstrap.config.agent;
+  // 自动追问关闭：评审微流程跳过 judge + asks（不判读、不条件追问），直接总结——省一次 judge LLM
+  // 调用与潜在追问开销。覆盖默认计划与 AutoPilot 规则注入计划两种来源。
+  const effectivePlan: ReviewPlan | undefined = agentCfg.strategy.auto_followup
+    ? plan
+    : {
+        steps: (plan ?? DEFAULT_REVIEW_PLAN).steps.filter((k) => k !== 'judge' && k !== 'asks'),
+      };
   const matchedRule = pickMatchingRule(agentContext.rules, {
     projectKey: pr.repo.projectKey,
     repoSlug: pr.repo.repoSlug,
@@ -87,7 +94,7 @@ export function runReviewForPr(
         referencedContext,
         referencedFinding,
       ),
-    // PR3：复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播刷新卡片）。
+    // 复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播刷新卡片）。
     closeFinding: async (p, call) => {
       await addFindingClosure(runtime.ctx.stateStore, p.localId, call);
       runtime.ctx.broadcast('findingClosures:changed', { localId: p.localId });
@@ -97,7 +104,7 @@ export function runReviewForPr(
     matchedRule,
     language: getMainLanguage(),
     toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
-    plan,
+    plan: effectivePlan,
     maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
     summaryMaxChars: agentCfg.summary_max_chars,
     onStep: (sessionId, step) => runtime.emitStep(pr, sessionId, step),

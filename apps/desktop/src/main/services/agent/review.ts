@@ -39,7 +39,7 @@ export interface ReviewDeps {
     referencedContext?: string,
     referencedFinding?: ReviewRun['referencedFinding'],
   ) => Promise<ReviewRun>;
-  /** PR3：复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播）。缺省 = 不关。 */
+  /** 复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播）。缺省 = 不关。 */
   closeFinding?: (
     pr: StoredPullRequest,
     call: { runId: string; findingId: string; byAskRunId: string; verdict: AskVerdict },

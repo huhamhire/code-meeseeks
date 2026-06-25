@@ -28,6 +28,7 @@ import { PollerSection } from './sections/PollerSection';
 import { LlmSection } from './sections/LlmSection';
 import { LlmContextSection } from './sections/LlmContextSection';
 import { ConcurrencySection } from './sections/ConcurrencySection';
+import { AgentStrategySection } from './sections/AgentStrategySection';
 import { ProxySection } from './sections/ProxySection';
 import { AgentDirSection } from './sections/AgentDirSection';
 import { WorkDirSection } from './sections/WorkDirSection';
@@ -213,6 +214,10 @@ export function SettingsModal({
                   value={s.agentDirInput}
                   onChange={s.setAgentDir}
                   onPick={() => void s.pickAgentDir()}
+                />
+                <AgentStrategySection
+                  autoFollowup={s.autoFollowup}
+                  onAutoFollowupChange={s.setAutoFollowup}
                 />
                 <ConcurrencySection
                   value={s.maxConcurrencyInput}

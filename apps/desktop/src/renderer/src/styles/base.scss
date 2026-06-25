@@ -268,3 +268,41 @@ textarea {
   }
 }
 
+// 通用开关（Switch 组件）：轨道 + 滑块。off 走中性灰底，on 走 accent 底，滑块右移；白色滑块带轻阴影
+// 在深浅轨道上都可辨。
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: $border-default;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &.switch-on {
+    background: $color-accent;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+
+  .switch-on & {
+    transform: translateX(16px);
+  }
+}
+
