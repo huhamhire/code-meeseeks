@@ -1,13 +1,20 @@
 """编排器「独立 LLM 对话通道」的运行入口（见 docs/arch/06-agent.md §3 + packages/pr-agent-bridge）。
 
-由嵌入式运行时以 `python -m meebox_pragent_shim.chat` 启动：复用 pr-agent **已被本 shim 补丁**的
-`LiteLLMAIHandler.chat_completion`——provider 路由、CLI 模式（MEEBOX_CLI_MODE）、Anthropic 去
-temperature、token usage 哨兵全部继承，无需在此重复实现。
+由嵌入式运行时以 `python -m meebox_pragent_shim.chat` 启动，按 provider 分两条路：
+
+  - **CLI 模式**（MEEBOX_CLI_MODE 置位，本机 claude / codex）：直接调 `cli.run_cli_chat`，**不 import
+    pr_agent / litellm**。CLI 路径的真实调用本就绕过 litellm（见 cli/install.py），此处避免每次 chat 子进程
+    为拿一个用不到的 LiteLLMAIHandler 而白白付整套 pr_agent + litellm import 开销——编排自有步骤（路由 /
+    judge / summary）每流程调多次，累计可观。
+
+  - **API 模式**（anthropic / openai / deepseek …）：litellm 即 HTTP 客户端、无法绕开，复用 pr-agent
+    **已被本 shim 补丁**的 `LiteLLMAIHandler.chat_completion`——provider 路由、Anthropic 去 temperature、
+    提示缓存、token usage 哨兵全部继承，无需在此重复实现。
 
 约定：stdin 收一段 JSON `{"system": ..., "user": ..., "temperature"?: ..., "max_output_tokens"?: ...}`，
 回复正文写 stdout，token 用量经 `@@MEEBOX_USAGE@@` 哨兵打到 stderr（主进程与 pr-agent run 同一套累加，
 见 ipc.ts）。max_output_tokens 封顶输出（轻量路由判读用），经 env 中转给 litellm_handler 补丁注入 litellm
-max_tokens——仅嵌入式 litellm 路径生效，CLI provider 忽略。
+max_tokens——仅嵌入式 litellm 路径生效，CLI provider 忽略（其算力档由 MEEBOX_CLI_REASONING 控制）。
 """
 import asyncio
 import json
@@ -29,13 +36,22 @@ def _read_payload() -> dict:
 
 
 async def _run(payload: dict) -> str:
+    # CLI 模式短路：直接调本机 CLI，绕过 litellm，且不 import pr_agent——省去整套 import 开销。
+    # model / temperature / max_output_tokens 在 CLI 路径用不到（命令与算力档由 spec + MEEBOX_CLI_*
+    # env 决定），忽略即可。
+    if os.environ.get("MEEBOX_CLI_MODE"):
+        from .cli.install import run_cli_chat
+
+        bin_name = (os.environ.get("MEEBOX_CLI_BIN") or "claude").strip() or "claude"
+        return await run_cli_chat(bin_name, payload["system"], payload["user"])
+
     # 输出封顶：每次 chat 独立子进程，故置环境变量即「本次调用」级别——litellm_handler 补丁里
     # 的 _get_completion 包装读它注入 litellm max_tokens（见 patches/litellm_handler）。
     mot = payload.get("max_output_tokens")
     if isinstance(mot, int) and mot > 0:
         os.environ["MEEBOX_CHAT_MAX_TOKENS"] = str(mot)
 
-    # 惰性 import：触发 shim 注册的 post-import 补丁（CLI 模式替换 / _get_completion usage 包装）。
+    # 惰性 import：触发 shim 注册的 post-import 补丁（_get_completion usage 包装 / 提示缓存 / 去 temperature）。
     from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
     from pr_agent.config_loader import get_settings
 

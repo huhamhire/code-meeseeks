@@ -177,8 +177,9 @@ export class EmbeddedRuntimeBridge extends BaseBridge {
     env?: Record<string, string>;
     cwd?: string;
   } {
-    // 跑随运行时打包的 chat helper：复用 pr-agent 已被 shim 补丁的 LiteLLMAIHandler
-    // （provider 路由 / CLI 模式 / 去 temperature / usage 哨兵全继承）。
+    // 跑随运行时打包的 chat helper：API 模式复用 pr-agent 已被 shim 补丁的 LiteLLMAIHandler
+    // （provider 路由 / 去 temperature / 提示缓存 / usage 哨兵全继承）；CLI 模式（MEEBOX_CLI_MODE）
+    // 在 helper 内直接调本机 CLI、不 import pr_agent / litellm，省每次启动的 import 开销。
     return {
       cmd: this.pythonPath,
       args: ['-m', 'meebox_pragent_shim.chat'],

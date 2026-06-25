@@ -86,7 +86,14 @@ litellm**。
 - **接入点**：env `MEEBOX_CLI_MODE=1` + `MEEBOX_CLI_BIN=claude`（由 `buildPragentEnv` 注入）→ shim 把
   `LiteLLMAIHandler.chat_completion` 整体换成「起 `claude -p --output-format json` 子进程、prompt 走 stdin、
   解析 JSON 的 `result` 文本 + `usage`」的版本，返回 `(text, "stop")`。**只依赖 `base_ai_handler` 的稳定契约，
-  不受版本守卫限制**（区别于其它依赖内部实现的补丁，放在版本守卫之前）。
+  不受版本守卫限制**（区别于其它依赖内部实现的补丁，放在版本守卫之前）。子进程调用逻辑抽在 `cli/install.py`
+  的 `run_cli_chat`，`_install_cli_chat_completion`（服务 pr-agent 工具 run）与编排 chat 通道共用它。
+- **编排 chat 通道 CLI 短路**：上一条服务的是 **pr-agent 工具 run**（`/describe` `/review` `/ask` 经 `pr_agent.cli`，
+  必经 `chat_completion`）。**编排自有步骤**（路由 / judge / summary 经 `meebox_pragent_shim.chat`）则在 CLI 模式
+  **直接调 `run_cli_chat`、不 import pr_agent / litellm**——CLI 路径本就不用 litellm，无谓地拉起整套 pr_agent +
+  litellm import 会给每次 chat 子进程白增数百 ms~1s+ 启动开销，而编排一个流程要调多次。API 模式无此短路（litellm
+  即 HTTP 客户端、不可绕），仍复用被补丁的 `LiteLLMAIHandler` 以继承 provider 路由 / 去 temperature / 提示缓存 /
+  usage 哨兵。
 - **prompt 走 stdin**：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；system/user 合并成
   一段喂入（CLI 无独立 system 槽）。cwd 默认落到中性临时目录，避免吃到被评审仓库的 `CLAUDE.md`/`AGENTS.md`。
 - **`/ask` 例外（取完整文件上下文）**：自由问答需读真实文件，仅对 `/ask` 由主进程下发 env `MEEBOX_CLI_WORKDIR`
