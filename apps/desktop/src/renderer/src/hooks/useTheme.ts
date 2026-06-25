@@ -42,11 +42,15 @@ export function useResolvedTheme(): ResolvedTheme {
  * CSS 变量（供全应用 $font-mono）。源为 config（启动注入、设置页即时改动经 patchConfig 同步）。
  */
 export function useEditorAppearanceSync(appearance: Config['appearance']): void {
-  const { editor_theme, editor_font_family } = appearance;
+  const { editor_theme, editor_font_family, editor_font_size } = appearance;
   useEffect(() => {
-    setEditorAppearance({ editorTheme: editor_theme, fontFamily: editor_font_family });
+    setEditorAppearance({
+      editorTheme: editor_theme,
+      fontFamily: editor_font_family,
+      fontSize: editor_font_size,
+    });
     applyEditorFontFamily(editor_font_family);
-  }, [editor_theme, editor_font_family]);
+  }, [editor_theme, editor_font_family, editor_font_size]);
 }
 
 /**

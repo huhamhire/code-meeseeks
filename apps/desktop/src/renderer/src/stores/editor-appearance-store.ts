@@ -13,9 +13,11 @@ export interface EditorAppearanceState {
   editorTheme: EditorTheme;
   /** 等宽字体族（空 = 用内置 mono 字体栈）。 */
   fontFamily: string;
+  /** 字号（px，未做平台微调的基准值）。 */
+  fontSize: number;
 }
 
-let state: EditorAppearanceState = { editorTheme: 'auto', fontFamily: '' };
+let state: EditorAppearanceState = { editorTheme: 'auto', fontFamily: '', fontSize: 14 };
 const subscribers = new Set<() => void>();
 
 function notify(): void {
@@ -32,9 +34,15 @@ const store = {
   },
 };
 
-/** 写入当前编辑器外观（App 在 config 变化时调用）。引用相等则跳过，避免无谓重渲。 */
+/** 写入当前编辑器外观（App 在 config 变化时调用）。各字段相等则跳过，避免无谓重渲。 */
 export function setEditorAppearance(next: EditorAppearanceState): void {
-  if (next.editorTheme === state.editorTheme && next.fontFamily === state.fontFamily) return;
+  if (
+    next.editorTheme === state.editorTheme &&
+    next.fontFamily === state.fontFamily &&
+    next.fontSize === state.fontSize
+  ) {
+    return;
+  }
   state = next;
   notify();
 }

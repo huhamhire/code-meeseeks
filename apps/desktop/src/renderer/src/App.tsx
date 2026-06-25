@@ -57,7 +57,12 @@ export default function App() {
   useTheme(boot?.config.appearance.theme ?? 'dark');
   // 编辑器外观（Monaco 主题 + 等宽字体）：跟随 config 同步到运行时 store + 字体 CSS 变量。
   useEditorAppearanceSync(
-    boot?.config.appearance ?? { theme: 'dark', editor_theme: 'auto', editor_font_family: '' },
+    boot?.config.appearance ?? {
+      theme: 'dark',
+      editor_theme: 'auto',
+      editor_font_family: '',
+      editor_font_size: 14,
+    },
   );
 
   const [showSettings, setShowSettings] = useState(false);

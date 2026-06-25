@@ -62,11 +62,16 @@ export const setEditorAppearance: IpcController<'config:setEditorAppearance'> = 
     ...bootstrap.config.appearance,
     editor_theme: req.editor_theme,
     editor_font_family: req.editor_font_family,
+    editor_font_size: req.editor_font_size,
   };
   await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, appearance });
   bootstrap.config.appearance = appearance;
   logger.info(
-    { editorTheme: req.editor_theme, editorFontFamily: req.editor_font_family },
+    {
+      editorTheme: req.editor_theme,
+      editorFontFamily: req.editor_font_family,
+      editorFontSize: req.editor_font_size,
+    },
     'editor appearance updated',
   );
 };

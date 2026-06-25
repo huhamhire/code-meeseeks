@@ -28,7 +28,7 @@ export interface ConfigChannels {
    * 即时完成（Monaco theme 切换 + 字体 CSS 变量），此通道仅持久化偏好，无主进程副作用。
    */
   'config:setEditorAppearance': {
-    request: { editor_theme: EditorTheme; editor_font_family: string };
+    request: { editor_theme: EditorTheme; editor_font_family: string; editor_font_size: number };
     response: void;
   };
   /** 写入 LLM Provider 配置到 config.yaml；下次 pragent:run 自动用新值 */

@@ -6,6 +6,7 @@ import type { editor } from 'monaco-editor';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
+import { EDITOR_FONT_SIZE_MIN } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { editorFontSize } from '../../../../../lib/editor-font';
 import { useMonacoEditorTheme } from '../../../../../hooks/useTheme';
@@ -114,8 +115,8 @@ function InlineCodeContextImpl({
   return <CodeSnippet snippet={snippet} language={languageFor(anchor.path)} />;
 }
 
-/** Monaco fs=12 时近似行高；上下各 6px padding */
-const SNIPPET_LINE_HEIGHT = 19;
+/** 行内片段行高 / 字号比（源自 fs=12 时行高 19）；按配置字号等比缩放行高。 */
+const SNIPPET_LINE_HEIGHT_RATIO = 19 / 12;
 
 const READONLY_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   readOnly: true,
@@ -146,14 +147,23 @@ const CodeSnippet = memo(function CodeSnippet({
 }) {
   // Monaco 内置主题不走 CSS 自定义属性，须显式切换：按编辑器主题偏好（'auto' 跟随 GUI 深浅）解析。
   const monacoTheme = useMonacoEditorTheme();
-  // 等宽字体随配置切换；并进 options（@monaco-editor/react 按引用比对，故 useMemo 稳定 + 仅字体变时重建）。
-  const fontFamily = resolveEditorFontFamily(useEditorAppearance().fontFamily);
+  // 等宽字体 + 字号随配置切换。行内片段比主编辑器小 2px（保留历史观感）、随配置字号联动，下限受 MIN 约束；
+  // 行高按字号等比缩放。字号 / 行高 / 字体一并进 options（@monaco-editor/react 按引用比对，useMemo 稳定）。
+  const appearance = useEditorAppearance();
+  const fontFamily = resolveEditorFontFamily(appearance.fontFamily);
+  const snippetFontSize = Math.max(EDITOR_FONT_SIZE_MIN, appearance.fontSize - 2);
+  const lineHeight = Math.round(snippetFontSize * SNIPPET_LINE_HEIGHT_RATIO);
   const options = useMemo<editor.IStandaloneEditorConstructionOptions>(
-    () => ({ ...READONLY_OPTIONS, fontFamily }),
-    [fontFamily],
+    () => ({
+      ...READONLY_OPTIONS,
+      fontFamily,
+      fontSize: editorFontSize(snippetFontSize),
+      lineHeight,
+    }),
+    [fontFamily, snippetFontSize, lineHeight],
   );
   const lineCount = snippet.text.split('\n').length;
-  const height = lineCount * SNIPPET_LINE_HEIGHT + 12;
+  const height = lineCount * lineHeight + 12;
 
   const handleMount = useCallback(
     (ed: editor.IStandaloneCodeEditor, monaco: Monaco): void => {
@@ -172,8 +182,7 @@ const CodeSnippet = memo(function CodeSnippet({
         contextmenu: false,
         folding: false,
         glyphMargin: false,
-        fontSize: editorFontSize(12),
-        lineHeight: SNIPPET_LINE_HEIGHT,
+        // 字号 / 行高 / 字体由 options 统一驱动（随配置实时更新），不在此固定。
         padding: { top: 6, bottom: 6 },
         // 行宽自适应，长行用 word wrap 而不是横向滚动条 (滚动条已禁)
         wordWrap: 'on',

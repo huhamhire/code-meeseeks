@@ -60,10 +60,11 @@ interface SettingsModalProps {
   onLanguageChange?: (language: SupportedLanguage) => void;
   /** GUI 主题即时切换后通知父级同步 boot.config.appearance.theme（同语言，解耦状态同步） */
   onThemeChange?: (theme: ThemePreference) => void;
-  /** 编辑器外观（Monaco 主题 + 等宽字体）即时改动后通知父级同步 boot.config.appearance */
+  /** 编辑器外观（Monaco 主题 + 等宽字体 + 字号）即时改动后通知父级同步 boot.config.appearance */
   onEditorAppearanceChange?: (appearance: {
     editor_theme: EditorTheme;
     editor_font_family: string;
+    editor_font_size: number;
   }) => void;
   /**
    * 连接改动（含切换活动连接）保存成功后通知父级。父级需重拉 config + 连接摘要 + PR 列表：
@@ -164,9 +165,11 @@ export function SettingsModal({
                 <EditorSection
                   theme={s.editorTheme}
                   fontFamily={s.editorFontFamily}
+                  fontSize={s.editorFontSize}
                   onThemeChange={s.handleEditorThemeChange}
                   onFontChange={s.handleEditorFontChange}
                   onFontCommit={s.commitEditorFont}
+                  onFontSizeChange={s.handleEditorFontSizeChange}
                 />
               </>
             )}
