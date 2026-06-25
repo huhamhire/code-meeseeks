@@ -123,7 +123,7 @@
     "reject": "拒绝",
     "rejectFindingTitle": "拒绝此条建议（不会发布到远端）",
     "resizeInputAria": "调整输入框高度",
-    "resizeInputTitle": "拖动调整输入框高度 (2-5 行)",
+    "resizeInputTitle": "拖动调整输入框高度 (2-8 行)",
     "resizeWidthAria": "调整 chat 宽度",
     "resizeWidthTitle": "拖动调整 chat 宽度",
     "retryAria": "重试",

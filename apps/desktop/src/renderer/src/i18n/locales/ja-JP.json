@@ -123,7 +123,7 @@
     "reject": "却下",
     "rejectFindingTitle": "この提案を却下（リモートには投稿されません）",
     "resizeInputAria": "チャット入力欄のサイズを変更",
-    "resizeInputTitle": "ドラッグして入力欄の高さを調整（2～5 行）",
+    "resizeInputTitle": "ドラッグして入力欄の高さを調整（2～8 行）",
     "resizeWidthAria": "チャットの幅を変更",
     "resizeWidthTitle": "ドラッグしてチャットの幅を調整",
     "retryAria": "再試行",

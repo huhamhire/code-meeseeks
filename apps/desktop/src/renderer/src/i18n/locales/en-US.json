@@ -123,7 +123,7 @@
     "reject": "Reject",
     "rejectFindingTitle": "Reject this suggestion (will not be posted to remote)",
     "resizeInputAria": "Resize chat input",
-    "resizeInputTitle": "Drag to resize input height (2-5 lines)",
+    "resizeInputTitle": "Drag to resize input height (2-8 lines)",
     "resizeWidthAria": "Resize chat",
     "resizeWidthTitle": "Drag to resize chat width",
     "retryAria": "Retry",
