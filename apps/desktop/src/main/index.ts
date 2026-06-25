@@ -209,6 +209,7 @@ class App {
     // 主窗口管理（载入窗口状态 + 建窗 + 尺寸回写）。
     this.windowManager = await loadWindowManager({
       stateStore: this.stateStore,
+      stateDir: this.bootstrap.paths.stateDir,
       logger: this.logger,
       startMs: this.startMs,
     });
