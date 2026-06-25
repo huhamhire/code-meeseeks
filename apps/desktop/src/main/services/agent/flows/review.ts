@@ -105,7 +105,7 @@ export function runReviewForPr(
     language: getMainLanguage(),
     toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
     plan: effectivePlan,
-    maxFollowupAsks: agentCfg.autopilot.max_followup_asks,
+    maxFollowupAsks: agentCfg.strategy.max_followup_asks,
     summaryMaxChars: agentCfg.summary_max_chars,
     onStep: (sessionId, step) => runtime.emitStep(pr, sessionId, step),
     signal,

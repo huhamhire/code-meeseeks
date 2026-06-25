@@ -696,6 +696,8 @@
     "llmTitle": "LLM 模型",
     "maxCodeSuggestionsHint": "单次 /review、/improve、/ask 生成的代码建议数量上限。",
     "maxCodeSuggestionsLabel": "代码建议数量",
+    "maxFollowupAsksHint": "自动追问启用时，单次评审条件性追问的数量上限。",
+    "maxFollowupAsksLabel": "追问数量",
     "openAgentDir": "打开当前目录",
     "openDevTools": "打开 DevTools",
     "openDevToolsTitle": "打开 Electron 开发者工具（分离窗口）",

@@ -712,6 +712,8 @@
     "llmTitle": "LLM Models",
     "maxCodeSuggestionsHint": "Max code suggestions per /review, /improve, or /ask.",
     "maxCodeSuggestionsLabel": "Code suggestions",
+    "maxFollowupAsksHint": "Maximum conditional follow-up questions per review when auto follow-up is on.",
+    "maxFollowupAsksLabel": "Follow-up questions",
     "openAgentDir": "Open current directory",
     "openDevTools": "Open DevTools",
     "openDevToolsTitle": "Open Electron DevTools (detached window)",
