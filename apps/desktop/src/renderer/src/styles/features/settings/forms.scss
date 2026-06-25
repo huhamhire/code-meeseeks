@@ -371,33 +371,41 @@ select.settings-input {
   font-size: $fs-sm;
 }
 
-// Agent 策略：行为开关的「功能列表」。每行左侧标题 + 说明，右侧 Switch；行间细分隔。
-.settings-toggle-list {
+// 分区下的「下一级功能列表」（如「策略」的子项）：左缩进 + 行首圆点体现从属关系；每行左侧
+// 标题 + 说明，右侧放控件——控件不限于开关，后续可为下拉 / 滑块等，故命名与结构保持通用。
+.settings-sublist {
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: $space-1 0 0;
+  padding-left: $space-3; // 整体内缩，与分区标题拉开层级
 }
-.settings-toggle-row {
+.settings-sublist-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: $space-6;
+  gap: $space-4;
   padding: $space-3 0;
 
+  // 行首圆点：列表标记，体现子项从属
+  &::before {
+    content: '•';
+    flex-shrink: 0;
+    color: $text-dim;
+    line-height: 1;
+  }
   & + & {
     border-top: 1px solid $border-muted;
   }
 }
-.settings-toggle-text {
+.settings-sublist-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1; // 撑开，把右侧控件顶到行末
   min-width: 0;
 }
-.settings-toggle-label {
+.settings-sublist-label {
   font-size: $fs-md;
 }
-.settings-toggle-desc {
+.settings-sublist-desc {
   font-size: $fs-sm;
   line-height: $lh-normal;
 }

@@ -22,12 +22,12 @@ export function ConcurrencySection({
       <p className="muted" style={{ margin: '0 0 8px' }}>
         {t('settings.concurrencyHint')}
       </p>
+      {/* 并发数为纯数字、无单位，且刻度已标 1~8 并高亮当前档 → 省去右侧重复读数。 */}
       <TierSlider
         tiers={CONCURRENCY_TIERS}
         value={value}
         onChange={onChange}
         ariaLabel={t('settings.concurrencySliderAria')}
-        formatValue={String}
       />
     </section>
   );

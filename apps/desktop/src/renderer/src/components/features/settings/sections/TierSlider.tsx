@@ -23,8 +23,8 @@ export function TierSlider({
   ariaLabel: string;
   /** 刻度文案（默认直接显示数值）。 */
   formatTick?: (tier: number) => string;
-  /** 右侧读数文案。 */
-  formatValue: (value: number) => string;
+  /** 右侧读数文案；省略则不渲染右侧读数（纯数字无单位、与刻度重复时可隐藏）。 */
+  formatValue?: (value: number) => string;
 }) {
   const idx = nearestTierIdx(tiers, value);
   const fillPct = (idx / (tiers.length - 1)) * 100;
@@ -59,12 +59,14 @@ export function TierSlider({
           })}
         </div>
       </div>
-      <span
-        className="muted"
-        style={{ minWidth: 56, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
-      >
-        {formatValue(value)}
-      </span>
+      {formatValue && (
+        <span
+          className="muted"
+          style={{ minWidth: 56, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+        >
+          {formatValue(value)}
+        </span>
+      )}
     </div>
   );
 }

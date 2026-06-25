@@ -10,6 +10,7 @@ import type {
 } from '@meebox/shared';
 import {
   ConfirmModal,
+  CpuIcon,
   GlobeIcon,
   Modal,
   QuestionIcon,
@@ -35,7 +36,7 @@ import { WorkDirSection } from './sections/WorkDirSection';
 import { CacheDirSection } from './sections/CacheDirSection';
 import { RuntimeSection } from './sections/RuntimeSection';
 
-type SettingsCategory = 'general' | 'connection' | 'ai' | 'about';
+type SettingsCategory = 'general' | 'connection' | 'model' | 'agent' | 'about';
 
 /**
  * 配置分区导航元数据（左侧栏）。新增配置分区在此登记一项，并在右侧面板的 switch
@@ -48,7 +49,8 @@ const SETTINGS_CATEGORIES: ReadonlyArray<{
 }> = [
   { id: 'general', labelKey: 'settings.catGeneral', Icon: SettingsIcon },
   { id: 'connection', labelKey: 'settings.catConnection', Icon: GlobeIcon },
-  { id: 'ai', labelKey: 'settings.catAi', Icon: RobotIcon },
+  { id: 'model', labelKey: 'settings.catModel', Icon: CpuIcon },
+  { id: 'agent', labelKey: 'settings.catAgent', Icon: RobotIcon },
   { id: 'about', labelKey: 'settings.catAbout', Icon: QuestionIcon },
 ];
 
@@ -197,7 +199,8 @@ export function SettingsModal({
                 />
               </>
             )}
-            {category === 'ai' && (
+            {/* 模型：仅 LLM 连接 + 上下文长度。 */}
+            {category === 'model' && (
               <>
                 <LlmSection
                   llm={s.llm}
@@ -210,6 +213,11 @@ export function SettingsModal({
                   value={s.llm.context_tokens}
                   onChange={s.setLlmContextTokens}
                 />
+              </>
+            )}
+            {/* 智能体：记忆目录 + 策略 + 评审并发。 */}
+            {category === 'agent' && (
+              <>
                 <AgentDirSection
                   value={s.agentDirInput}
                   onChange={s.setAgentDir}
