@@ -39,6 +39,8 @@ export interface ConfigChannels {
   'agent:setAutopilotEnabled': { request: { enabled: boolean }; response: void };
   /** 写入轮询间隔 (秒，60~900 整数) 到 config.yaml，并热替换 poller 定时器，无需重启 */
   'config:setPoller': { request: { interval_seconds: number }; response: void };
+  /** 写入评审任务并发数 (1~8 整数, pr_agent.max_concurrency) 到 config.yaml，并热替换 run 队列上限，无需重启 */
+  'config:setMaxConcurrency': { request: { max_concurrency: number }; response: void };
   /**
    * 写入网络代理配置到 config.yaml，并**热重建** adapter（REST 经代理即时生效）。
    * pr-agent / git 出口下次操作读最新配置，无需重启。

@@ -213,3 +213,19 @@ export const setPoller: IpcController<'config:setPoller'> = async (_event, req) 
   poller.setIntervalSeconds(seconds);
   logger.info({ intervalSeconds: seconds }, 'poller interval updated (hot-reloaded)');
 };
+
+/**
+ * 写评审任务并发数（clamp 1~8）并热替换 run 队列上限，无需重启。
+ */
+export const setMaxConcurrency: IpcController<'config:setMaxConcurrency'> = async (_event, req) => {
+  const { bootstrap, logger, runQueue } = getContext();
+  const max = Math.min(8, Math.max(1, Math.round(req.max_concurrency)));
+  const next = {
+    ...bootstrap.config,
+    pr_agent: { ...bootstrap.config.pr_agent, max_concurrency: max },
+  };
+  await writeConfig(bootstrap.paths.configFile, next);
+  bootstrap.config.pr_agent.max_concurrency = max;
+  runQueue.setMaxConcurrency(max);
+  logger.info({ maxConcurrency: max }, 'pr-agent max_concurrency updated (hot-reloaded)');
+};

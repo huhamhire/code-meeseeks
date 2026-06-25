@@ -105,6 +105,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('config:testConnection', config.testConnection); // 试连连接（不写配置）
   ipcMain.handle('config:autosaveDraft', config.autosaveDraft); // 连接 / LLM 草稿存盘（不生效）
   ipcMain.handle('config:setPoller', config.setPoller); // 设轮询间隔（热替换定时器）
+  ipcMain.handle('config:setMaxConcurrency', config.setMaxConcurrency); // 设评审并发数（热替换队列上限）
 
   /*
    * Agent 交互

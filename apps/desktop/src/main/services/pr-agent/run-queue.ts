@@ -55,7 +55,8 @@ export class RunQueue {
   private readonly waiting: QueueItem[] = [];
   /** 并发运行中的 run（runId → item）；上限 maxConcurrency。 */
   private readonly active = new Map<string, QueueItem>();
-  private readonly maxConcurrency: number;
+  /** 并发上限；可经 setMaxConcurrency 热替换（config:setMaxConcurrency）。 */
+  private maxConcurrency: number;
   /** run 执行器（落盘 / worktree / spawn / 解析收尾）；调度与执行分离，本类只负责并发 / 优先级 / 取消。 */
   private readonly executor: RunExecutor;
 
@@ -126,6 +127,15 @@ export class RunQueue {
       );
       this.pump();
     });
+  }
+
+  /**
+   * 热替换并发上限（config:setMaxConcurrency）。调大后立即泵队列填满新名额；调小不打断在跑的 run，
+   * 自然随其完成收敛（pump 仅在 active 降到新上限以下才起跑后续）。
+   */
+  setMaxConcurrency(max: number): void {
+    this.maxConcurrency = max;
+    this.pump();
   }
 
   /** 取消一个 run（pragent:cancel）：active→SIGKILL；waiting→出队 + reject；都不匹配→ok:false。 */

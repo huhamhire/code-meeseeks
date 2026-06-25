@@ -294,7 +294,11 @@ export class RunExecutor {
     // 由 bridge 的 buildToolEnv 按意图组装——契约 key 收口在 @meebox/pr-agent-bridge。
     const env: Record<string, string> = {
       ...buildProxyEnv(bootstrap.config.proxy),
-      ...buildToolEnv(activeLlm, { tool: req.tool, responseLanguage: getMainLanguage() }),
+      ...buildToolEnv(activeLlm, {
+        tool: req.tool,
+        responseLanguage: getMainLanguage(),
+        maxModelTokens: bootstrap.config.llm.context_tokens,
+      }),
     };
 
     // CLI 模式 /ask：把子进程 cwd 落到（待净化的）worktree，让自由问答能读完整文件（shim cli/install.py

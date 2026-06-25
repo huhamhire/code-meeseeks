@@ -26,6 +26,8 @@ import { EditorSection } from './sections/EditorSection';
 import { ConnectionsSection } from './sections/ConnectionsSection';
 import { PollerSection } from './sections/PollerSection';
 import { LlmSection } from './sections/LlmSection';
+import { LlmContextSection } from './sections/LlmContextSection';
+import { ConcurrencySection } from './sections/ConcurrencySection';
 import { ProxySection } from './sections/ProxySection';
 import { AgentDirSection } from './sections/AgentDirSection';
 import { WorkDirSection } from './sections/WorkDirSection';
@@ -203,10 +205,18 @@ export function SettingsModal({
                   onSetActive={s.setActiveLlm}
                   onDelete={s.deleteProfile}
                 />
+                <LlmContextSection
+                  value={s.llm.context_tokens}
+                  onChange={s.setLlmContextTokens}
+                />
                 <AgentDirSection
                   value={s.agentDirInput}
                   onChange={s.setAgentDir}
                   onPick={() => void s.pickAgentDir()}
+                />
+                <ConcurrencySection
+                  value={s.maxConcurrencyInput}
+                  onChange={s.setMaxConcurrency}
                 />
               </>
             )}
