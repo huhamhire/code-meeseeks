@@ -37,6 +37,9 @@ export function ConfirmModal({
   const resolvedCancelLabel = cancelLabel ?? t('common.cancel');
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // 忽略 OS 按键自动重复：若本模态由「按 Enter」打开（如 chat /merge 提交），按住 Enter 期间的
+      // 重复 keydown 会在监听器挂载后触发 → 立即 onConfirm、模态一闪而过。仅响应全新按下（repeat=false）。
+      if (e.repeat) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         onCancel();
