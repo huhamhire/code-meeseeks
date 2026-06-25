@@ -24,7 +24,7 @@
   // 同样防御 z-index：inner 内部按钮永远在最顶层
   position: relative;
   z-index: 51;
-  background: rgba($color-accent, 0.12); // $color-accent fade
+  background: rgb(var(--rgb-accent) / 0.12); // $color-accent fade
   border-left: 3px solid $color-accent;
   padding: $space-3 $space-6 $space-4 $space-6;
   font-family:
@@ -98,7 +98,7 @@
     color: $color-info;
   }
   &.draft-zone-status-chip-posted {
-    background: rgba($color-approved, 0.18);
+    background: rgb(var(--rgb-approved) / 0.18);
     color: $color-approved;
   }
   &.draft-zone-status-chip-rejected {
@@ -232,7 +232,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba($color-danger, 0.10);
+  background: rgb(var(--rgb-danger) / 0.10);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;
@@ -270,7 +270,7 @@
     font-size: 14px;
     font-weight: 700;
     line-height: 1;
-    background: rgba($color-accent, 0.18);
+    background: rgb(var(--rgb-accent) / 0.18);
     border-radius: $radius-sm;
   }
 
@@ -282,14 +282,14 @@
 
 // nav 跳转 reveal 后短暂高亮 (0.8s 脉冲)，help 用户看清落到哪一行
 .monaco-draft-highlight-flash {
-  background: rgba($color-warning, 0.25);
+  background: rgb(var(--rgb-warning) / 0.25);
   animation: draft-nav-flash 0.8s ease-out;
 }
 @keyframes draft-nav-flash {
   0% {
-    background: rgba($color-warning, 0.5);
+    background: rgb(var(--rgb-warning) / 0.5);
   }
   100% {
-    background: rgba($color-warning, 0.05);
+    background: rgb(var(--rgb-warning) / 0.05);
   }
 }

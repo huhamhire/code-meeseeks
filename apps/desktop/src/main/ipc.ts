@@ -94,6 +94,8 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('config:read', config.readConfig); // 读当前内存配置
   ipcMain.handle('config:setReposDir', config.setReposDir); // 设仓库目录（重启生效）
   ipcMain.handle('config:setLanguage', config.setLanguage); // 设 UI 语言（热生效）
+  ipcMain.handle('config:setTheme', config.setTheme); // 设 GUI 主题偏好（前端即时生效）
+  ipcMain.handle('config:setEditorAppearance', config.setEditorAppearance); // 设编辑器主题 + 字体（前端即时生效）
   ipcMain.handle('config:setLlm', config.setLlm); // 设 LLM Provider 配置
   ipcMain.handle('config:setAgent', config.setAgent); // 设 Agent 配置（含 agent.dir）
   ipcMain.handle('agent:setAutopilotEnabled', config.setAutopilotEnabled); // AutoPilot 开关

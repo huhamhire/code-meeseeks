@@ -33,7 +33,7 @@
   &:hover:not(:disabled) {
     // hover 给确定反馈：停闪 + 实心绿描边 + 浅绿填充
     animation: none;
-    background: rgba($color-approved, 0.14);
+    background: rgb(var(--rgb-approved) / 0.14);
     border-color: $color-approved;
   }
   &:disabled {
@@ -47,7 +47,7 @@
   }
   50% {
     border-color: $color-approved;
-    background: rgba($color-approved, 0.14);
+    background: rgb(var(--rgb-approved) / 0.14);
   }
 }
 // 降低动态偏好：不闪烁，保留绿描边以示可合并
@@ -75,7 +75,7 @@
 
     &:hover {
       // 用极浅的主色填充 (~10% 透明)；border 同时加深一档强化可点感
-      background: rgba($color-accent, 0.12);
+      background: rgb(var(--rgb-accent) / 0.12);
     }
   }
 }

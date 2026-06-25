@@ -33,8 +33,9 @@
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: $space-3;
-  padding: $space-3 $space-4;
+  // 图标与文案间距放宽：原 $space-3 视觉上偏挤、偏左，拉到 $space-5 让二者更舒展
+  gap: $space-5;
+  padding: $space-3 $space-5;
   border: none;
   border-radius: $radius-md;
   background: transparent;
@@ -68,6 +69,11 @@
   overflow-y: auto;
   padding: $space-8;
 
+  // 设置页配置项上下间距放宽一档（比通用 modal 的 $space-8 更舒展），避免堆叠拥挤
+  .modal-section {
+    margin-bottom: 20px;
+  }
+
   // 分区内末个 section 去掉多余底部留白
   .modal-section:last-child {
     margin-bottom: 0;
@@ -78,6 +84,15 @@
 .settings-input.settings-language-select {
   flex: 0 0 auto;
   width: 180px;
+}
+// 整行铺满的输入（编辑器字体：自由输入、可能较长的逗号分隔列表，单独成行铺满、不靠右压缩）
+.settings-input.settings-input-block {
+  flex: none;
+  width: 100%;
+}
+// 单独成行的字段：标题在上、控件在下；收紧标题与控件间距
+.settings-field-stacked h4 {
+  margin-bottom: $space-3;
 }
 
 // 设置项启用状态 chip：复用 common chip 词汇 —— on=approved(绿)、off=neutral(灰)
@@ -272,7 +287,7 @@ select.settings-input {
 
   &:focus {
     border-color: $color-danger !important;
-    box-shadow: 0 0 0 1px rgba($color-danger, 0.3);
+    box-shadow: 0 0 0 1px rgb(var(--rgb-danger) / 0.3);
   }
 }
 .settings-field-error {

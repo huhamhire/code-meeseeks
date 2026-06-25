@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  EDITOR_FONT_SIZE_DEFAULT,
+  EDITOR_FONT_SIZE_MAX,
+  EDITOR_FONT_SIZE_MIN,
+  EDITOR_THEME_IDS,
+} from './theme.js';
 
 export const CloneSettingsSchema = z
   .object({
@@ -158,6 +164,35 @@ export const ConfigSchema = z.object({
    * 非空则按显式选择。透传到容器 `CONFIG__RESPONSE_LANGUAGE`（经解析后的有效值）。
    */
   language: z.string().default(''),
+  /**
+   * 外观偏好（GUI 主题等纯前端展示项；主进程不消费）。预留分组，后续编辑器主题 / 字体等并入此处。
+   */
+  appearance: z
+    .object({
+      /**
+       * GUI 主题偏好：'system' 跟随操作系统深 / 浅色，'light' / 'dark' 固定。**默认 'dark'**
+       * （与历史一致，升级不改变现有用户外观）；解析与生效在 renderer（见 renderer/src/theme）。
+       */
+      theme: z.enum(['system', 'light', 'dark']).default('dark'),
+      /**
+       * 代码编辑器（Monaco）配色主题：'auto' 跟随 GUI 深 / 浅色（默认），其余为内置 / 第三方主题 id
+       * （见 @meebox/shared EDITOR_THEME_OPTIONS）。
+       */
+      editor_theme: z.enum(EDITOR_THEME_IDS).default('auto'),
+      /**
+       * 编辑器等宽字体族（CSS font-family，可逗号分隔多候选）。**默认空** = 用内置 mono 字体栈；
+       * 非空则覆盖编辑器与全应用等宽文本字体。
+       */
+      editor_font_family: z.string().default(''),
+      /** 编辑器字号（px）。限合理范围（见 EDITOR_FONT_SIZE_MIN/MAX），默认 14；按平台再做微调。 */
+      editor_font_size: z
+        .number()
+        .int()
+        .min(EDITOR_FONT_SIZE_MIN)
+        .max(EDITOR_FONT_SIZE_MAX)
+        .default(EDITOR_FONT_SIZE_DEFAULT),
+    })
+    .default({}),
   workspace: z
     .object({
       repos_dir: z.string().default('~/.code-meeseeks/repos'),

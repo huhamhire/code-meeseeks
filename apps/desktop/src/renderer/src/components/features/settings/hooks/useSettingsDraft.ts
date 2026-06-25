@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppPaths, Config, LlmProfile, SupportedLanguage } from '@meebox/shared';
+import type {
+  AppPaths,
+  Config,
+  EditorTheme,
+  LlmProfile,
+  SupportedLanguage,
+  ThemePreference,
+} from '@meebox/shared';
+import { EDITOR_FONT_SIZE_MAX, EDITOR_FONT_SIZE_MIN } from '@meebox/shared';
 import { invoke } from '../../../../api';
 import i18n, { persistLanguage, resolveUiLanguage } from '../../../../i18n';
+import { applyEditorFontFamily, applyThemePreference, persistThemePreference } from '../../../../theme';
+import { setEditorAppearance } from '../../../../stores/editor-appearance-store';
 import { fromConnDraft, toConnDraft, type ConnDraft } from '../ConnectionForm';
 import { newProfileId } from '../LlmProfileForm';
 
@@ -12,6 +22,12 @@ interface UseSettingsDraftParams {
   onLlmChange?: (llm: Config['llm']) => void;
   onProxyChange?: (proxy: Config['proxy']) => void;
   onLanguageChange?: (language: SupportedLanguage) => void;
+  onThemeChange?: (theme: ThemePreference) => void;
+  onEditorAppearanceChange?: (appearance: {
+    editor_theme: EditorTheme;
+    editor_font_family: string;
+    editor_font_size: number;
+  }) => void;
   onConnectionsChange?: () => void | Promise<void>;
   onClose: () => void;
 }
@@ -27,6 +43,8 @@ export function useSettingsDraft({
   onLlmChange,
   onProxyChange,
   onLanguageChange,
+  onThemeChange,
+  onEditorAppearanceChange,
   onConnectionsChange,
   onClose,
 }: UseSettingsDraftParams) {
@@ -85,6 +103,68 @@ export function useSettingsDraft({
       // 写盘 / 主进程切换失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
       setSaveError(e instanceof Error ? e.message : String(e));
     });
+  };
+
+  // GUI 主题：与语言同属即时生效项（不走全局保存）。改即写 data-theme + 持久化 + 同步父级 + 写盘。
+  const [themePreference, setThemePreference] = useState<ThemePreference>(config.appearance.theme);
+  const handleThemeChange = (next: ThemePreference): void => {
+    if (next === themePreference) return;
+    setThemePreference(next);
+    applyThemePreference(next); // 渲染层实时切换（写 documentElement data-theme）
+    persistThemePreference(next); // localStorage 缓存，下次启动同步命中
+    onThemeChange?.(next); // 同步父级 boot.config.appearance.theme
+    invoke('config:setTheme', { theme: next }).catch((e: unknown) => {
+      // 写盘失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
+      setSaveError(e instanceof Error ? e.message : String(e));
+    });
+  };
+
+  // 编辑器外观（Monaco 主题 + 等宽字体）：即时生效项。主题为离散选择 → 改即写盘；字体为文本输入 →
+  // onChange 仅实时预览（写 store + CSS + 同步父级），onBlur 才写盘，避免逐字符落盘。
+  const [editorTheme, setEditorTheme] = useState<EditorTheme>(config.appearance.editor_theme);
+  const [editorFontFamily, setEditorFontFamily] = useState<string>(
+    config.appearance.editor_font_family,
+  );
+  const [editorFontSize, setEditorFontSizeState] = useState<number>(
+    config.appearance.editor_font_size,
+  );
+  // 实时应用到运行时：写共享 store（Monaco 组件读）+ 字体 CSS 变量（全应用 $font-mono）+ 同步父级。
+  const applyEditorAppearance = (nextTheme: EditorTheme, nextFont: string, nextSize: number): void => {
+    setEditorAppearance({ editorTheme: nextTheme, fontFamily: nextFont, fontSize: nextSize });
+    applyEditorFontFamily(nextFont);
+    onEditorAppearanceChange?.({
+      editor_theme: nextTheme,
+      editor_font_family: nextFont,
+      editor_font_size: nextSize,
+    });
+  };
+  const persistEditorAppearance = (nextTheme: EditorTheme, nextFont: string, nextSize: number): void => {
+    invoke('config:setEditorAppearance', {
+      editor_theme: nextTheme,
+      editor_font_family: nextFont,
+      editor_font_size: nextSize,
+    }).catch((e: unknown) => setSaveError(e instanceof Error ? e.message : String(e)));
+  };
+  const handleEditorThemeChange = (next: EditorTheme): void => {
+    if (next === editorTheme) return;
+    setEditorTheme(next);
+    applyEditorAppearance(next, editorFontFamily, editorFontSize);
+    persistEditorAppearance(next, editorFontFamily, editorFontSize);
+  };
+  const handleEditorFontChange = (next: string): void => {
+    setEditorFontFamily(next);
+    applyEditorAppearance(editorTheme, next, editorFontSize); // 实时预览，不写盘
+  };
+  const commitEditorFont = (): void => {
+    persistEditorAppearance(editorTheme, editorFontFamily, editorFontSize); // 失焦才写盘
+  };
+  // 字号为离散下拉 → 改即生效并写盘；clamp 防越界（异常 / config 手改超范围）。
+  const handleEditorFontSizeChange = (next: number): void => {
+    const clamped = Math.min(EDITOR_FONT_SIZE_MAX, Math.max(EDITOR_FONT_SIZE_MIN, Math.round(next)));
+    if (clamped === editorFontSize) return;
+    setEditorFontSizeState(clamped);
+    applyEditorAppearance(editorTheme, editorFontFamily, clamped);
+    persistEditorAppearance(editorTheme, editorFontFamily, clamped);
   };
 
   const [totalBytes, setTotalBytes] = useState<number | null>(null);
@@ -320,6 +400,17 @@ export function useSettingsDraft({
     // 语言
     language,
     handleLanguageChange,
+    // 主题
+    themePreference,
+    handleThemeChange,
+    // 编辑器外观
+    editorTheme,
+    editorFontFamily,
+    editorFontSize,
+    handleEditorThemeChange,
+    handleEditorFontChange,
+    commitEditorFont,
+    handleEditorFontSizeChange,
     // 连接
     connections,
     activeConnId,

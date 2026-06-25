@@ -199,7 +199,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgba($color-danger, 0.10);
+  background: rgb(var(--rgb-danger) / 0.10);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;
