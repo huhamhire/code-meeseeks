@@ -27,7 +27,8 @@ export function matchThemePreference(value: string | null | undefined): ThemePre
  * - 其余为内置注册的第三方主题（见 renderer monaco-setup，取色自 monaco-themes）。
  *
  * **label 不做 i18n**：主题为专有名（GitHub Dark / Monokai…），与语言 endonym 同理，各 UI 语言下
- * 展示一致、不翻译。
+ * 展示一致、不翻译。**例外**：`'auto'` 非具体主题、而是「跟随应用」模式，其展示文案走 i18n
+ * （见 settings.editorThemeOptionAuto），本 label 仅作兜底。
  */
 export interface EditorThemeOption {
   id: string;
@@ -35,7 +36,7 @@ export interface EditorThemeOption {
 }
 
 export const EDITOR_THEME_OPTIONS = [
-  { id: 'auto', label: 'Auto (Follow App)' },
+  { id: 'auto', label: 'Auto' },
   { id: 'vs', label: 'Light' },
   { id: 'vs-dark', label: 'Dark' },
   { id: 'hc-light', label: 'High Contrast Light' },

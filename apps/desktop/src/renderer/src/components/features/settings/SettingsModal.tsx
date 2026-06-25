@@ -152,7 +152,7 @@ export function SettingsModal({
                 aria-current={category === id ? 'page' : undefined}
                 onClick={() => setCategory(id)}
               >
-                <Icon size={16} />
+                <Icon size={18} />
                 <span>{t(labelKey)}</span>
               </button>
             ))}
