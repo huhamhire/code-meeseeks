@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.7.0-alpha.1] - 2026-06-26
+
 ### Added
 
 - **主题与外观**
@@ -302,7 +304,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0-alpha.1...HEAD
+[0.7.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0-alpha.1
 [0.6.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0
