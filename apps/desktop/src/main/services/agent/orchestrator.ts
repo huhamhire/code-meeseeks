@@ -186,6 +186,7 @@ export class Orchestrator implements OrchestratorRuntime {
         responseLanguage: getMainLanguage(),
         lowReasoning: true,
         promptCache: true,
+        maxModelTokens: bootstrap.config.llm.context_tokens,
       }),
     };
     // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。

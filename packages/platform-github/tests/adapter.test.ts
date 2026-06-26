@@ -73,7 +73,7 @@ const PULL_7 = {
 describe('GitHubAdapter capabilities', () => {
   it('declares partial merge veto fidelity + no optimistic lock + rate-limited discovery', () => {
     const { adapter } = makeAdapter([]);
-    const caps = adapter.capabilities();
+    const caps = adapter.connection.capabilities();
     expect(caps.reviewStatuses).toEqual(['approved', 'needsWork', 'unapproved']);
     expect(caps.commentOptimisticLock).toBe(false);
     expect(caps.mergeVetoFidelity).toBe('partial');
@@ -84,17 +84,25 @@ describe('GitHubAdapter capabilities', () => {
 describe('GitHubAdapter ping', () => {
   it('caches current user from /user and reports github.com', async () => {
     const { adapter } = makeAdapter([{ match: '/user', body: { login: 'me', id: 9, name: 'Me' } }]);
-    const r = await adapter.ping();
+    const r = await adapter.connection.ping();
     expect(r.ok).toBe(true);
     expect(r.serverVersion).toBe('github.com');
-    expect(adapter.getCurrentUser()).toEqual({ name: 'me', displayName: 'Me', slug: 'me' });
+    expect(adapter.connection.getCurrentUser()).toEqual({
+      name: 'me',
+      displayName: 'Me',
+      slug: 'me',
+    });
   });
 
   it('reports GHE version from response header', async () => {
     const { adapter } = makeAdapter([
-      { match: '/user', body: { login: 'me', id: 9 }, headers: { 'x-github-enterprise-version': '3.12.0' } },
+      {
+        match: '/user',
+        body: { login: 'me', id: 9 },
+        headers: { 'x-github-enterprise-version': '3.12.0' },
+      },
     ]);
-    const r = await adapter.ping();
+    const r = await adapter.connection.ping();
     expect(r.serverVersion).toBe('3.12.0');
   });
 });
@@ -105,13 +113,29 @@ describe('GitHubAdapter listPendingPullRequests', () => {
       {
         match: '/search/issues',
         body: {
-          items: [{ number: 7, repository_url: 'https://api.github.com/repos/acme/web', pull_request: {} }],
+          items: [
+            {
+              number: 7,
+              repository_url: 'https://api.github.com/repos/acme/web',
+              pull_request: {},
+            },
+          ],
         },
       },
-      { match: '/repos/acme/web/pulls/7/reviews', body: [{ id: 1, user: { login: 'rev', id: 3 }, state: 'APPROVED', submitted_at: '2026-06-02T01:00:00Z' }] },
+      {
+        match: '/repos/acme/web/pulls/7/reviews',
+        body: [
+          {
+            id: 1,
+            user: { login: 'rev', id: 3 },
+            state: 'APPROVED',
+            submitted_at: '2026-06-02T01:00:00Z',
+          },
+        ],
+      },
       { match: '/repos/acme/web/pulls/7', body: PULL_7 },
     ]);
-    const prs = await adapter.listPendingPullRequests();
+    const prs = await adapter.prs.listPendingPullRequests();
     expect(prs).toHaveLength(1);
     const pr = prs[0]!;
     expect(pr.remoteId).toBe('7');
@@ -126,7 +150,7 @@ describe('GitHubAdapter listPendingPullRequests', () => {
 
   it('默认 filter = review-requested，查询带 is:open（排除已合并/已关闭）', async () => {
     const { adapter, captured } = makeAdapter([{ match: '/search/issues', body: { items: [] } }]);
-    await adapter.listPendingPullRequests();
+    await adapter.prs.listPendingPullRequests();
     const q = new URL(captured[0]!.url).searchParams.get('q') ?? '';
     expect(q).toContain('is:open');
     expect(q).toContain('is:pr');
@@ -141,10 +165,8 @@ describe('GitHubAdapter listPendingPullRequests', () => {
       ['mentioned', 'mentions:@me'],
     ];
     for (const [filter, qualifier] of cases) {
-      const { adapter, captured } = makeAdapter([
-        { match: '/search/issues', body: { items: [] } },
-      ]);
-      await adapter.listPendingPullRequests({ filter });
+      const { adapter, captured } = makeAdapter([{ match: '/search/issues', body: { items: [] } }]);
+      await adapter.prs.listPendingPullRequests({ filter });
       const q = new URL(captured[0]!.url).searchParams.get('q') ?? '';
       expect(q).toContain(qualifier);
       expect(q).toContain('is:open'); // 已合并/已关闭 PR 不应出现在任一分类
@@ -155,16 +177,43 @@ describe('GitHubAdapter listPendingPullRequests', () => {
 describe('GitHubAdapter listPullRequestComments', () => {
   it('merges issue (summary) + review (inline, threaded) comments', async () => {
     const { adapter } = makeAdapter([
-      { match: '/issues/7/comments', body: [{ id: 1, user: { login: 'a', id: 1 }, body: 'summary', created_at: 'c', updated_at: 'u' }] },
+      {
+        match: '/issues/7/comments',
+        body: [
+          { id: 1, user: { login: 'a', id: 1 }, body: 'summary', created_at: 'c', updated_at: 'u' },
+        ],
+      },
       {
         match: '/pulls/7/comments',
         body: [
-          { id: 10, user: { login: 'b', id: 2 }, body: 'inline top', path: 'x.ts', line: 5, side: 'RIGHT', created_at: 'c', updated_at: 'u' },
-          { id: 11, in_reply_to_id: 10, user: { login: 'c', id: 3 }, body: 'reply', path: 'x.ts', line: 5, side: 'RIGHT', created_at: 'c', updated_at: 'u' },
+          {
+            id: 10,
+            user: { login: 'b', id: 2 },
+            body: 'inline top',
+            path: 'x.ts',
+            line: 5,
+            side: 'RIGHT',
+            created_at: 'c',
+            updated_at: 'u',
+          },
+          {
+            id: 11,
+            in_reply_to_id: 10,
+            user: { login: 'c', id: 3 },
+            body: 'reply',
+            path: 'x.ts',
+            line: 5,
+            side: 'RIGHT',
+            created_at: 'c',
+            updated_at: 'u',
+          },
         ],
       },
     ]);
-    const comments = await adapter.listPullRequestComments({ projectKey: 'acme', repoSlug: 'web' }, '7');
+    const comments = await adapter.comments.listPullRequestComments(
+      { projectKey: 'acme', repoSlug: 'web' },
+      '7',
+    );
     expect(comments).toHaveLength(2); // 1 summary + 1 inline top-level
     const summary = comments.find((c) => c.kind === 'summary')!;
     expect(summary.anchor).toBeNull();
@@ -181,12 +230,35 @@ describe('GitHubAdapter listPullRequestCommits', () => {
       {
         match: '/pulls/7/commits',
         body: [
-          { sha: 'aaa', commit: { message: 'first', author: { name: 'A', date: 'c1' }, committer: { name: 'A', date: 'c1' } }, parents: [], author: null, committer: null },
-          { sha: 'bbb', commit: { message: 'second', author: { name: 'B', date: 'c2' }, committer: { name: 'B', date: 'c2' } }, parents: [{ sha: 'aaa' }], author: null, committer: null },
+          {
+            sha: 'aaa',
+            commit: {
+              message: 'first',
+              author: { name: 'A', date: 'c1' },
+              committer: { name: 'A', date: 'c1' },
+            },
+            parents: [],
+            author: null,
+            committer: null,
+          },
+          {
+            sha: 'bbb',
+            commit: {
+              message: 'second',
+              author: { name: 'B', date: 'c2' },
+              committer: { name: 'B', date: 'c2' },
+            },
+            parents: [{ sha: 'aaa' }],
+            author: null,
+            committer: null,
+          },
         ],
       },
     ]);
-    const commits = await adapter.listPullRequestCommits({ projectKey: 'acme', repoSlug: 'web' }, '7');
+    const commits = await adapter.prs.listPullRequestCommits(
+      { projectKey: 'acme', repoSlug: 'web' },
+      '7',
+    );
     expect(commits.map((c) => c.sha)).toEqual(['bbb', 'aaa']);
     expect(commits[0]!.abbreviatedSha).toBe('bbb');
   });
@@ -196,9 +268,22 @@ describe('GitHubAdapter publishInlineComment', () => {
   it('posts with commit_id = head sha and mapped side', async () => {
     const { adapter, captured } = makeAdapter([
       { match: '/repos/acme/web/pulls/7', body: PULL_7 },
-      { method: 'POST', match: '/pulls/7/comments', body: { id: 99, user: { login: 'me', id: 1 }, body: 'hi', path: 'x.ts', line: 3, side: 'RIGHT', created_at: 'c', updated_at: 'u' } },
+      {
+        method: 'POST',
+        match: '/pulls/7/comments',
+        body: {
+          id: 99,
+          user: { login: 'me', id: 1 },
+          body: 'hi',
+          path: 'x.ts',
+          line: 3,
+          side: 'RIGHT',
+          created_at: 'c',
+          updated_at: 'u',
+        },
+      },
     ]);
-    const created = await adapter.publishInlineComment(
+    const created = await adapter.comments.publishInlineComment(
       { projectKey: 'acme', repoSlug: 'web' },
       '7',
       { path: 'x.ts', line: 3, side: 'new', lineType: 'added' },
@@ -215,7 +300,11 @@ describe('GitHubAdapter setPullRequestReviewStatus', () => {
     const { adapter, captured } = makeAdapter([
       { method: 'POST', match: '/pulls/7/reviews', body: { id: 1 } },
     ]);
-    await adapter.setPullRequestReviewStatus({ projectKey: 'acme', repoSlug: 'web' }, '7', 'approved');
+    await adapter.prs.setPullRequestReviewStatus(
+      { projectKey: 'acme', repoSlug: 'web' },
+      '7',
+      'approved',
+    );
     const post = captured.find((c) => c.method === 'POST')!;
     expect(post.body).toEqual({ event: 'APPROVE' });
   });
@@ -224,7 +313,11 @@ describe('GitHubAdapter setPullRequestReviewStatus', () => {
     const { adapter, captured } = makeAdapter([
       { method: 'POST', match: '/pulls/7/reviews', body: { id: 1 } },
     ]);
-    await adapter.setPullRequestReviewStatus({ projectKey: 'acme', repoSlug: 'web' }, '7', 'needsWork');
+    await adapter.prs.setPullRequestReviewStatus(
+      { projectKey: 'acme', repoSlug: 'web' },
+      '7',
+      'needsWork',
+    );
     const post = captured.find((c) => c.method === 'POST')!;
     expect(post.body).toMatchObject({ event: 'REQUEST_CHANGES' });
   });
@@ -234,11 +327,22 @@ describe('GitHubAdapter mergeStatus mapping', () => {
   it('dirty mergeable_state → conflicted + cannot merge', async () => {
     const dirty = { ...PULL_7, mergeable: false, mergeable_state: 'dirty' };
     const { adapter } = makeAdapter([
-      { match: '/search/issues', body: { items: [{ number: 7, repository_url: 'https://api.github.com/repos/acme/web', pull_request: {} }] } },
+      {
+        match: '/search/issues',
+        body: {
+          items: [
+            {
+              number: 7,
+              repository_url: 'https://api.github.com/repos/acme/web',
+              pull_request: {},
+            },
+          ],
+        },
+      },
       { match: '/repos/acme/web/pulls/7/reviews', body: [] },
       { match: '/repos/acme/web/pulls/7', body: dirty },
     ]);
-    const pr = (await adapter.listPendingPullRequests())[0]!;
+    const pr = (await adapter.prs.listPendingPullRequests())[0]!;
     expect(pr.mergeStatus.conflicted).toBe(true);
     expect(pr.mergeStatus.canMerge).toBe(false);
     expect(pr.hasConflict).toBe(true);
@@ -251,8 +355,10 @@ describe('GitHubAdapter getAttachment（PAT 仅发可信域）', () => {
       { match: 'evil.example.com', body: '' },
       { match: 'githubusercontent.com', body: '' },
     ]);
-    const external = await adapter.getAttachment('https://evil.example.com/leak.png');
-    const asset = await adapter.getAttachment('https://avatars.githubusercontent.com/u/1?v=4');
+    const external = await adapter.media.getAttachment('https://evil.example.com/leak.png');
+    const asset = await adapter.media.getAttachment(
+      'https://avatars.githubusercontent.com/u/1?v=4',
+    );
     // 外部 host：不代理、不请求（无 captured）、返回 null → 渲染层退回原生 <img>
     expect(external).toBeNull();
     expect(captured.some((c) => c.url.includes('evil.example.com'))).toBe(false);
@@ -274,7 +380,9 @@ describe('normalizeGitHubApiBase', () => {
   });
 
   it('GHE 实例根自动补 /api/v3', () => {
-    expect(normalizeGitHubApiBase('https://ghe.example.com')).toBe('https://ghe.example.com/api/v3');
+    expect(normalizeGitHubApiBase('https://ghe.example.com')).toBe(
+      'https://ghe.example.com/api/v3',
+    );
     expect(normalizeGitHubApiBase('https://ghe.example.com/')).toBe(
       'https://ghe.example.com/api/v3',
     );

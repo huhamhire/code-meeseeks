@@ -71,6 +71,14 @@ export interface PrChannels {
     response: StoredPullRequest | null;
   };
   /**
+   * 标记 PR 为已读：推进已读水位（当前 head sha + 时间）并清未读标记。用户打开 PR 时调用。
+   * 返回带 `unread:false` 的最新 PR（找不到返回 null）。下一轮 poll 不会因旧事件再把它标回未读。
+   */
+  'prs:markRead': {
+    request: { localId: string };
+    response: StoredPullRequest | null;
+  };
+  /**
    * 合并 PR 到目标分支（仅对 canMerge=true 的 PR 暴露入口）。成功后远端 PR 转
    * MERGED，调用方应自行刷新列表（下一轮 poll 会软删该 PR）。失败抛错冒泡到 renderer。
    */

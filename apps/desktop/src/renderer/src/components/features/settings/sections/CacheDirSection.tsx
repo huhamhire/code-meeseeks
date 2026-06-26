@@ -18,7 +18,7 @@ export function CacheDirSection({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="modal-section">
+    <section className="modal-section modal-section-divider">
       <h4>{t('settings.cacheDirTitle')}</h4>
       <p className="muted" style={{ margin: '0 0 8px' }}>
         {t('settings.cacheDirHint')}

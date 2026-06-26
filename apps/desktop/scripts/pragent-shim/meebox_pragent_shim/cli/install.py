@@ -1,5 +1,12 @@
-"""CLI 模式：把 LiteLLMAIHandler.chat_completion 整体替换成「调本机 CLI 子进程」版本，
-完全绕过 litellm / 直连 API。由 patches.litellm_handler 在 MEEBOX_CLI_MODE 置位时调用。"""
+"""CLI 模式：调本机 CLI 子进程跑一轮对话，完全绕过 litellm / 直连 API。
+
+两个入口共用同一份子进程逻辑 `run_cli_chat`：
+  - `_install_cli_chat_completion`：把 LiteLLMAIHandler.chat_completion 整体替换为调 CLI 的版本，
+    由 patches.litellm_handler 在 MEEBOX_CLI_MODE 置位时调用——服务 **pr-agent 工具 run**（/describe
+    /review /ask 经 `python -m pr_agent.cli`，其内部 LLM 调用必经 chat_completion）。
+  - `run_cli_chat`：编排 **chat 通道**（`python -m meebox_pragent_shim.chat`）在 CLI 模式下直接调它，
+    无需 import pr_agent / litellm（CLI 路径根本不用 litellm），省去每次 chat 子进程的整套 import 开销。
+"""
 import os
 import sys
 
@@ -20,10 +27,12 @@ def _resolve_cli_exe(bin_name):
     return exe, needs_cmd
 
 
-def _install_cli_chat_completion(handler_cls, bin_name) -> None:
-    """把 chat_completion 换成调本机 CLI 子进程的版本。pr-agent 只依赖 chat_completion 返回
-    (text, finish_reason) 这个稳定契约（base_ai_handler 定义），故本替换与 pr-agent 具体版本
-    无关，**不受版本守卫限制**（区别于依赖内部实现的其它 patch）。
+async def run_cli_chat(bin_name, system, user) -> str:
+    """调本机 CLI 子进程跑一轮 system+user 对话，返回回复正文（usage 经哨兵打 stderr）。
+
+    pr-agent 只依赖 chat_completion 返回 (text, finish_reason) 这个稳定契约（base_ai_handler 定义），
+    故 CLI 接管与 pr-agent 具体版本无关，**不受版本守卫限制**（区别于依赖内部实现的其它 patch）。本函数
+    自包含、不 import pr_agent / litellm，编排 chat 通道在 CLI 模式可直接调用以省去整套 import 开销。
 
     各命令差异（argv flags / 输出解析 / 需剥离的计费 env）集中在 _CLI_SPECS，按命令名取用：
       - prompt 经 **stdin** 喂入：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；
@@ -33,81 +42,89 @@ def _install_cli_chat_completion(handler_cls, bin_name) -> None:
         完整文件；describe/review 不下发该 env、维持中性临时目录。净化在主进程侧做（清空仓库自带指令文件）。
       - 子进程继承父 env（PATH / HOME / 代理变量），故能找到命令、复用其登录态、出站自动走代理。
       - **凭据隔离**：剥掉对应计费 key（claude: ANTHROPIC_*；codex: OPENAI_API_KEY / CODEX_API_KEY），
-        让 CLI 使用其自身登录会话，而非环境里残留的 API key。模型与额度由该 CLI 账户与用户授权决定。"""
+        让 CLI 使用其自身登录会话，而非环境里残留的 API key。模型与额度由该 CLI 账户与用户授权决定。
+    """
     import asyncio
     import tempfile
 
     name = (bin_name or "").strip().lower()
     spec = _CLI_SPECS.get(name)
-    exe, needs_cmd = _resolve_cli_exe(bin_name) if spec else (None, False)
-    # 命令前缀（cmd 包装 + exe）；exe 解析失败为 None。flags 每次调用按 env 组装（低算力档）。
-    cmd_prefix = (["cmd", "/c", exe] if needs_cmd else [exe]) if (spec and exe) else None
+    if spec is None:
+        raise RuntimeError(
+            f"不支持的本地 CLI 命令 '{bin_name}'（当前已适配 claude / codex）。"
+        )
+    exe, needs_cmd = _resolve_cli_exe(bin_name)
+    # 命令前缀（cmd 包装 + exe）；exe 解析失败为 None。
+    cmd_prefix = (["cmd", "/c", exe] if needs_cmd else [exe]) if exe else None
+    if cmd_prefix is None:
+        raise RuntimeError(
+            f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装、已登录，且 '{bin_name}' 在 PATH 中。"
+        )
 
-    def _build_argv():
-        flags = list(spec["flags"])
-        # 低算力档：仅 Agent 编排通道经 MEEBOX_CLI_REASONING=low/minimal 开启；把 low_effort_flags
-        # 插到尾部 `-`（stdin 占位）之前、保持 `-` 在末位；无尾部 `-` 则直接追加。
-        if os.environ.get("MEEBOX_CLI_REASONING", "").strip().lower() in ("low", "minimal"):
-            extra = list(spec.get("low_effort_flags") or [])
-            if extra:
-                flags = flags[:-1] + extra + ["-"] if flags and flags[-1] == "-" else flags + extra
-        return cmd_prefix + flags
+    # 低算力档：仅 Agent 编排通道经 MEEBOX_CLI_REASONING=low/minimal 开启；把 low_effort_flags
+    # 插到尾部 `-`（stdin 占位）之前、保持 `-` 在末位；无尾部 `-` 则直接追加。
+    flags = list(spec["flags"])
+    if os.environ.get("MEEBOX_CLI_REASONING", "").strip().lower() in ("low", "minimal"):
+        extra = list(spec.get("low_effort_flags") or [])
+        if extra:
+            flags = flags[:-1] + extra + ["-"] if flags and flags[-1] == "-" else flags + extra
+    argv = cmd_prefix + flags
+
+    # CLI 单轮无独立 system 槽：system+user 拼一段。先剥除缓存断点标记（仅 Anthropic litellm 路径用于
+    # 分块缓存；CLI 不缓存、标记不得进入 prompt）。
+    system = strip_cache_break(system) if system else system
+    prompt = f"{system}\n\n\n{user}" if system else user
+    # 基于 os.environ 拷贝再剔除计费 key——其余（PATH/HOME/代理变量等）原样保留。
+    child_env = {k: v for k, v in os.environ.items() if k not in spec["strip_env"]}
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=(os.environ.get("MEEBOX_CLI_WORKDIR") or "").strip() or tempfile.gettempdir(),
+            env=child_env,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"启动 CLI '{bin_name}' 失败: {exc}") from exc
+    out, err = await proc.communicate(prompt.encode("utf-8"))
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"CLI '{bin_name}' 退出码 {proc.returncode}: "
+            f"{(err or b'').decode('utf-8', 'replace')[:500]}"
+        )
+    text, usage = spec["parser"]((out or b"").decode("utf-8", "replace"))
+    if usage:
+        # prompt_tokens ≈ 输入侧总规模，output_tokens ≈ completion（input/output_tokens 两家同名）。
+        # 缓存字段两家约定不同：
+        #   - Anthropic(claude)：input_tokens **不含**缓存，cache_read/创建需累加进总量；
+        #     cache_read 用 cache_read_input_tokens。
+        #   - OpenAI(codex)：input_tokens **已含**缓存，cached_input_tokens 仅作命中量、不再计入总量。
+        prompt_tokens = usage.get("input_tokens")
+        for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
+            v = usage.get(k)
+            if isinstance(v, int):
+                prompt_tokens = (prompt_tokens or 0) + v
+        cache_read = usage.get("cache_read_input_tokens")
+        if not isinstance(cache_read, int):
+            cache_read = usage.get("cached_input_tokens")  # codex/OpenAI 风格
+        turns = usage.get("num_turns")
+        _emit_usage_tokens(
+            prompt_tokens,
+            usage.get("output_tokens"),
+            cache_read_tokens=cache_read if isinstance(cache_read, int) else None,
+            turns=turns if isinstance(turns, int) else None,
+        )
+    return text
+
+
+def _install_cli_chat_completion(handler_cls, bin_name) -> None:
+    """把 chat_completion 换成调本机 CLI 子进程的版本（委托 run_cli_chat），服务 pr-agent 工具 run。
+    chat_completion 的 model / temperature / img_path 在 CLI 路径里用不到（命令与算力档由 spec + env 决定），
+    仅为满足 base_ai_handler 的方法签名而保留。"""
 
     async def chat_completion(self, model, system, user, temperature=0.2, img_path=None):
-        if spec is None:
-            raise RuntimeError(
-                f"不支持的本地 CLI 命令 '{bin_name}'（当前已适配 claude / codex）。"
-            )
-        if cmd_prefix is None:
-            raise RuntimeError(
-                f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装、已登录，且 '{bin_name}' 在 PATH 中。"
-            )
-        argv = _build_argv()
-        # CLI 单轮无独立 system 槽：system+user 拼一段。先剥除缓存断点标记（仅 Anthropic litellm 路径用于
-        # 分块缓存；CLI 不缓存、标记不得进入 prompt）。
-        system = strip_cache_break(system) if system else system
-        prompt = f"{system}\n\n\n{user}" if system else user
-        # 基于 os.environ 拷贝再剔除计费 key——其余（PATH/HOME/代理变量等）原样保留。
-        child_env = {k: v for k, v in os.environ.items() if k not in spec["strip_env"]}
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *argv,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=(os.environ.get("MEEBOX_CLI_WORKDIR") or "").strip() or tempfile.gettempdir(),
-                env=child_env,
-            )
-        except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(f"启动 CLI '{bin_name}' 失败: {exc}") from exc
-        out, err = await proc.communicate(prompt.encode("utf-8"))
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"CLI '{bin_name}' 退出码 {proc.returncode}: "
-                f"{(err or b'').decode('utf-8', 'replace')[:500]}"
-            )
-        text, usage = spec["parser"]((out or b"").decode("utf-8", "replace"))
-        if usage:
-            # prompt_tokens ≈ 输入侧总规模，output_tokens ≈ completion（input/output_tokens 两家同名）。
-            # 缓存字段两家约定不同：
-            #   - Anthropic(claude)：input_tokens **不含**缓存，cache_read/创建需累加进总量；
-            #     cache_read 用 cache_read_input_tokens。
-            #   - OpenAI(codex)：input_tokens **已含**缓存，cached_input_tokens 仅作命中量、不再计入总量。
-            prompt_tokens = usage.get("input_tokens")
-            for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
-                v = usage.get(k)
-                if isinstance(v, int):
-                    prompt_tokens = (prompt_tokens or 0) + v
-            cache_read = usage.get("cache_read_input_tokens")
-            if not isinstance(cache_read, int):
-                cache_read = usage.get("cached_input_tokens")  # codex/OpenAI 风格
-            turns = usage.get("num_turns")
-            _emit_usage_tokens(
-                prompt_tokens,
-                usage.get("output_tokens"),
-                cache_read_tokens=cache_read if isinstance(cache_read, int) else None,
-                turns=turns if isinstance(turns, int) else None,
-            )
+        text = await run_cli_chat(bin_name, system, user)
         return text, "stop"
 
     handler_cls.chat_completion = chat_completion

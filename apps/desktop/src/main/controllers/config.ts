@@ -1,3 +1,5 @@
+import { nativeTheme } from 'electron';
+import { editorThemeNativeSource } from '@meebox/shared';
 import { writeConfig } from '@meebox/config';
 import { buildDraftAdapter } from '../adapters.js';
 import { setMainLanguage } from '../i18n/index.js';
@@ -37,6 +39,35 @@ export const setLanguage: IpcController<'config:setLanguage'> = async (_event, r
   bootstrap.config.language = req.language;
   setMainLanguage(req.language);
   logger.info({ language: req.language }, 'language config updated');
+};
+
+/**
+ * 写外观（全局主题 = Monaco 主题 + 等宽字体 + 字号）；内存同步。主题切换由 renderer 即时完成；主进程据
+ * 主题设 nativeTheme.themeSource，让原生窗口 chrome（Windows 细边框 / 窗控按钮深浅）跟随——'auto' 主题
+ * 交回 OS（'system'），其余固定浅 / 深。窗控按钮配色由 WindowManager 监听 nativeTheme 'updated' 重置。
+ */
+export const setEditorAppearance: IpcController<'config:setEditorAppearance'> = async (
+  _event,
+  req,
+) => {
+  const { bootstrap, logger } = getContext();
+  const appearance = {
+    ...bootstrap.config.appearance,
+    editor_theme: req.editor_theme,
+    editor_font_family: req.editor_font_family,
+    editor_font_size: req.editor_font_size,
+  };
+  await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, appearance });
+  bootstrap.config.appearance = appearance;
+  nativeTheme.themeSource = editorThemeNativeSource(req.editor_theme);
+  logger.info(
+    {
+      editorTheme: req.editor_theme,
+      editorFontFamily: req.editor_font_family,
+      editorFontSize: req.editor_font_size,
+    },
+    'editor appearance updated',
+  );
 };
 
 /**
@@ -137,7 +168,7 @@ export const testConnection: IpcController<'config:testConnection'> = async (_ev
       req.token,
       getContext().bootstrap.config.proxy,
       req.kind,
-    ).ping();
+    ).connection.ping();
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
@@ -175,4 +206,20 @@ export const setPoller: IpcController<'config:setPoller'> = async (_event, req) 
   bootstrap.config.poller.interval_seconds = seconds;
   poller.setIntervalSeconds(seconds);
   logger.info({ intervalSeconds: seconds }, 'poller interval updated (hot-reloaded)');
+};
+
+/**
+ * 写评审任务并发数（clamp 1~8）并热替换 run 队列上限，无需重启。
+ */
+export const setMaxConcurrency: IpcController<'config:setMaxConcurrency'> = async (_event, req) => {
+  const { bootstrap, logger, runQueue } = getContext();
+  const max = Math.min(8, Math.max(1, Math.round(req.max_concurrency)));
+  const next = {
+    ...bootstrap.config,
+    pr_agent: { ...bootstrap.config.pr_agent, max_concurrency: max },
+  };
+  await writeConfig(bootstrap.paths.configFile, next);
+  bootstrap.config.pr_agent.max_concurrency = max;
+  runQueue.setMaxConcurrency(max);
+  logger.info({ maxConcurrency: max }, 'pr-agent max_concurrency updated (hot-reloaded)');
 };

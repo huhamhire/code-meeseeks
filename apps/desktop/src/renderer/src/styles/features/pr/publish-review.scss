@@ -94,7 +94,7 @@
 
   &.status-edited {
     color: $color-info;
-    background: rgba($color-accent, 0.15);
+    background: rgb(var(--rgb-accent) / 0.15);
   }
 }
 .publish-review-item-body {

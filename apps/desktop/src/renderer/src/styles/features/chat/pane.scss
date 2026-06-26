@@ -236,9 +236,9 @@
   padding: $space-3 $space-4;
   border-radius: $radius-md;
   overflow-y: auto; // 内容超过当前高度时内部滚动
-  // 默认 2 行；JS 端 handle 拖动可调到 5 行；继续输入超过当前高度走内部滚动
+  // 默认 2 行；JS 端 handle 拖动可调到 8 行；继续输入超过当前高度走内部滚动
   min-height: calc(#{$fs-lg} * #{$lh-normal} * 2 + #{$space-3} * 2);
-  max-height: calc(#{$fs-lg} * #{$lh-normal} * 5 + #{$space-3} * 2);
+  max-height: calc(#{$fs-lg} * #{$lh-normal} * 8 + #{$space-3} * 2);
   box-sizing: border-box;
 
   &:disabled {

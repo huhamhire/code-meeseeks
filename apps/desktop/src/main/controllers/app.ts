@@ -103,9 +103,12 @@ export const getUserAvatar: IpcController<'app:userAvatar'> = async (_event, req
     return null;
   }
   try {
-    const img = await adapter.getUserAvatar(req.slug, req.avatarUrl);
+    const img = await adapter.media.getUserAvatar(req.slug, req.avatarUrl);
     if (!img) {
-      logger.debug({ connectionId: req.connectionId, slug: req.slug }, 'avatar fetch returned null');
+      logger.debug(
+        { connectionId: req.connectionId, slug: req.slug },
+        'avatar fetch returned null',
+      );
       avatarMem.set(memKey, null);
       return null;
     }

@@ -173,13 +173,21 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   const handleAgentAsk = async (question: string, referencedContext?: string): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured) return;
     const startedId = pr.localId;
+    // 中途输入（已有 Agent 在跑）走 enqueueMessage，后端不持久化引用上下文 → 该路径不带 ref，
+    // 避免重载对齐时引用块闪烁消失；仅新一轮提问的气泡附带引用上下文。
+    const enqueueing = runningPrs.has(startedId);
     // 即时 optimistic 回显用户气泡（运行中 / 新轮都先冒泡，不再静默丢弃中途输入）。
     setMessages((prev) => [
       ...prev,
-      { role: 'user', content: question, at: new Date().toISOString() },
+      {
+        role: 'user',
+        content: question,
+        referencedContext: enqueueing ? undefined : referencedContext,
+        at: new Date().toISOString(),
+      },
     ]);
     // 本 PR 已有 Agent 在跑：不另起一轮，入队到下一主 Agent 周期并入、据最新指令重排（中途输入转向）。
-    if (runningPrs.has(startedId)) {
+    if (enqueueing) {
       try {
         await invoke('agent:enqueueMessage', { localId: startedId, message: question });
       } catch (e) {

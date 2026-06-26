@@ -374,7 +374,7 @@ flowchart TD
 2. **仅对严重问题条件性追问** —— **默认不追问**。该 PR 的 agent 读 §1 工具输出（findings 及其
    `severity`，见 [05](05-review-workflow.md)），仅当出现**特别恶性 /
    高严重度**的疑点（例如疑似安全漏洞、数据损坏、严重逻辑缺陷且需核实上下文）才考虑就该点补跑
-   `/ask`。**硬上限 ≤2 个问题**（`agent.autopilot.max_followup_asks`，默认 2）：
+   `/ask`。**硬上限 ≤2 个问题**（`agent.strategy.max_followup_asks`，默认 2）：
    没有严重问题就一个都不问，绝不为追问而追问。`/ask` 是只读工具，属红线放行范围（见 §4）。
 3. **逐 PR 收尾总结（严格限长）** —— **由该 PR 的 agent 在本 PR 子任务（describe / review / 追问）
    全部结束后**产出一段**严格限长**的总结（综合本 PR 的产出，受 `agent.summary_max_chars` 约束，
@@ -479,7 +479,8 @@ AutoPilot 可执行自动发布 comment、自动 `approve` / `needswork`。**默
 - `agent.autopilot.enabled`：AutoPilot 开关（默认 `false`）。评估节奏对齐轮询（每个 poller tick 一遍），
   不再单设最小间隔配置。
 - `agent.autopilot.batch_size`：单批判定的 PR 上限（默认 10）。
-- `agent.autopilot.max_followup_asks`：自动评审微流程中条件性追问 `/ask` 的硬上限（默认 2）。
+- `agent.strategy.max_followup_asks`：自动评审微流程中条件性追问 `/ask` 的硬上限（默认 2；手动自动评审与
+  AutoPilot 共用，故归 `strategy` 而非 `autopilot`）。
 - `agent.autopilot.max_steps`：每个 PR 的子 agent 的结构化步数 backstop（默认按微流程模板推导：≈
   `3 + max_followup_asks` + 少量开销）。
 - `agent.autopilot.grants`：逐项写权限授权（默认全空 = 全拒）。

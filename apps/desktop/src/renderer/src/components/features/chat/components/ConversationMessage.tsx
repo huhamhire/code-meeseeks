@@ -14,6 +14,14 @@ export function ConversationMessage({ message }: { message: AgentMessage }) {
     return (
       <div className="chat-user-row">
         <div className="chat-user-bubble">{message.content}</div>
+        {/* 提问携带的引用上下文（Diff 选区代码）：气泡下方折叠展示，默认收起保持紧凑。
+            referencedContext 自带路径 / 行范围 / 代码围栏，走 markdown 渲染。 */}
+        {message.referencedContext && (
+          <details className="chat-user-ref markdown">
+            <summary>{t('chatPane.referencedContextLabel')}</summary>
+            <Md>{message.referencedContext}</Md>
+          </details>
+        )}
       </div>
     );
   }

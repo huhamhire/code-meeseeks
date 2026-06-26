@@ -66,6 +66,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('prs:refresh', pr.refreshPrs); // 立即轮询刷新
   ipcMain.handle('prs:lastSync', pr.getLastSync); // 最近一次同步时间
   ipcMain.handle('prs:setLocalStatus', pr.setPrStatus); // 设置审阅状态（先远端后本地）
+  ipcMain.handle('prs:markRead', pr.markRead); // 标记 PR 已读（推进未读水位）
   ipcMain.handle('prs:merge', pr.mergePr); // 合并 PR
   ipcMain.handle('repo:sync', pr.syncRepo); // 同步 PR 所属 repo 本地镜像
   ipcMain.handle('diff:listChangedFiles', pr.listChangedFiles); // 变更文件列表
@@ -94,6 +95,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('config:read', config.readConfig); // 读当前内存配置
   ipcMain.handle('config:setReposDir', config.setReposDir); // 设仓库目录（重启生效）
   ipcMain.handle('config:setLanguage', config.setLanguage); // 设 UI 语言（热生效）
+  ipcMain.handle('config:setEditorAppearance', config.setEditorAppearance); // 设全局主题 + 字体（前端即时生效，主进程据主题设原生 themeSource）
   ipcMain.handle('config:setLlm', config.setLlm); // 设 LLM Provider 配置
   ipcMain.handle('config:setAgent', config.setAgent); // 设 Agent 配置（含 agent.dir）
   ipcMain.handle('agent:setAutopilotEnabled', config.setAutopilotEnabled); // AutoPilot 开关
@@ -103,6 +105,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('config:testConnection', config.testConnection); // 试连连接（不写配置）
   ipcMain.handle('config:autosaveDraft', config.autosaveDraft); // 连接 / LLM 草稿存盘（不生效）
   ipcMain.handle('config:setPoller', config.setPoller); // 设轮询间隔（热替换定时器）
+  ipcMain.handle('config:setMaxConcurrency', config.setMaxConcurrency); // 设评审并发数（热替换队列上限）
 
   /*
    * Agent 交互

@@ -39,7 +39,7 @@ function makeAdapter(fetchFn: FetchLike): BitbucketServerAdapter {
 
 describe('BitbucketServerAdapter capabilities contract', () => {
   it('declares full Bitbucket capabilities (3 状态审批 / 乐观锁 / full veto)', () => {
-    const caps = makeAdapter(mockFetch({})).capabilities();
+    const caps = makeAdapter(mockFetch({})).connection.capabilities();
     expect(caps.reviewStatuses).toEqual(['approved', 'needsWork', 'unapproved']);
     expect(caps.commentOptimisticLock).toBe(true);
     expect(caps.inlineMultiline).toBe(true);
@@ -111,7 +111,7 @@ describe('BitbucketServerAdapter.ping', () => {
         }),
       }),
     );
-    const r = await adapter.ping();
+    const r = await adapter.connection.ping();
     expect(r.ok).toBe(true);
     expect(r.serverVersion).toBe('7.17.10');
     expect(r.reason).toBeUndefined();
@@ -127,7 +127,7 @@ describe('BitbucketServerAdapter.ping', () => {
         }),
       }),
     );
-    const r = await adapter.ping();
+    const r = await adapter.connection.ping();
     expect(r.ok).toBe(false);
     expect(r.serverVersion).toBe('6.10.0');
     expect(r.reason).toMatch(/6\.10\.0/);
@@ -143,7 +143,7 @@ describe('BitbucketServerAdapter.ping', () => {
         }),
       }),
     );
-    const r = await adapter.ping();
+    const r = await adapter.connection.ping();
     expect(r.ok).toBe(false);
   });
 });
@@ -169,15 +169,15 @@ describe('BitbucketServerAdapter.getCloneUrl (default PAT)', () => {
         { 'x-ausername': 'kyle' },
       ),
     );
-    await adapter.ping();
-    const url = await adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
+    await adapter.connection.ping();
+    const url = await adapter.connection.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
     expect(url).toBe('https://kyle:pat@bb.example.com/scm/FX/fx-help.git');
   });
 
   it('throws when ping has not populated cachedUser', async () => {
     const adapter = makeAdapter(mockFetch({}));
     await expect(
-      adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' }),
+      adapter.connection.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' }),
     ).rejects.toThrow(/current user unknown/);
   });
 });
@@ -190,7 +190,7 @@ describe('BitbucketServerAdapter.getCloneUrl with cloneProtocol="ssh"', () => {
       fetch: mockFetch({}),
       cloneProtocol: 'ssh',
     });
-    const url = await adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
+    const url = await adapter.connection.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
     expect(url).toBe('git@bb.example.com:FX/fx-help.git');
   });
 
@@ -201,7 +201,7 @@ describe('BitbucketServerAdapter.getCloneUrl with cloneProtocol="ssh"', () => {
       fetch: mockFetch({}),
       cloneProtocol: 'ssh',
     });
-    const url = await adapter.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
+    const url = await adapter.connection.getCloneUrl({ projectKey: 'FX', repoSlug: 'fx-help' });
     expect(url).toBe('git@bb.example.com:FX/fx-help.git');
   });
 });
@@ -209,7 +209,7 @@ describe('BitbucketServerAdapter.getCloneUrl with cloneProtocol="ssh"', () => {
 describe('BitbucketServerAdapter whoami / getCurrentUser', () => {
   it('returns null before ping is called', () => {
     const adapter = makeAdapter(mockFetch({}));
-    expect(adapter.getCurrentUser()).toBeNull();
+    expect(adapter.connection.getCurrentUser()).toBeNull();
   });
 
   it('reads X-AUSERNAME from headers then fetches /users/{slug} for displayName', async () => {
@@ -232,9 +232,13 @@ describe('BitbucketServerAdapter whoami / getCurrentUser', () => {
         { 'x-ausername': 'kyle' },
       ),
     );
-    const r = await adapter.ping();
+    const r = await adapter.connection.ping();
     expect(r.user).toEqual({ name: 'kyle', displayName: 'Kyle Smith', slug: 'kyle' });
-    expect(adapter.getCurrentUser()).toEqual({ name: 'kyle', displayName: 'Kyle Smith', slug: 'kyle' });
+    expect(adapter.connection.getCurrentUser()).toEqual({
+      name: 'kyle',
+      displayName: 'Kyle Smith',
+      slug: 'kyle',
+    });
   });
 
   it('falls back to slug as displayName when /users/{slug} 404s', async () => {
@@ -252,7 +256,7 @@ describe('BitbucketServerAdapter whoami / getCurrentUser', () => {
         { 'x-ausername': 'kyle' },
       ),
     );
-    const r = await adapter.ping();
+    const r = await adapter.connection.ping();
     expect(r.user).toEqual({ name: 'kyle', displayName: 'kyle', slug: 'kyle' });
   });
 
@@ -266,9 +270,9 @@ describe('BitbucketServerAdapter whoami / getCurrentUser', () => {
         }),
       }),
     );
-    const r = await adapter.ping();
+    const r = await adapter.connection.ping();
     expect(r.user).toBeUndefined();
-    expect(adapter.getCurrentUser()).toBeNull();
+    expect(adapter.connection.getCurrentUser()).toBeNull();
   });
 });
 
@@ -290,7 +294,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         }),
       }),
     );
-    const prs = await adapter.listPendingPullRequests();
+    const prs = await adapter.prs.listPendingPullRequests();
     expect(prs).toHaveLength(1);
     expect(prs[0]).toEqual({
       remoteId: '1022',
@@ -323,9 +327,9 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         },
       }),
     );
-    await adapter.listPendingPullRequests();
-    await adapter.listPendingPullRequests({ filter: 'review-requested' });
-    await adapter.listPendingPullRequests({ filter: 'created' });
+    await adapter.prs.listPendingPullRequests();
+    await adapter.prs.listPendingPullRequests({ filter: 'review-requested' });
+    await adapter.prs.listPendingPullRequests({ filter: 'created' });
     expect(roles).toEqual(['REVIEWER', 'REVIEWER', 'AUTHOR']);
   });
 
@@ -353,7 +357,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         }),
       }),
     );
-    const prs = await adapter.listPendingPullRequests();
+    const prs = await adapter.prs.listPendingPullRequests();
     expect(prs[0]!.mergeStatus).toEqual({
       canMerge: false,
       conflicted: false,
@@ -386,7 +390,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         }),
       }),
     );
-    const prs = await adapter.listPendingPullRequests();
+    const prs = await adapter.prs.listPendingPullRequests();
     expect(prs[0]!.hasConflict).toBe(true);
   });
 
@@ -403,7 +407,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         // /merge 端点缺失 → mockFetch 默认 404
       }),
     );
-    const prs = await adapter.listPendingPullRequests();
+    const prs = await adapter.prs.listPendingPullRequests();
     expect(prs[0]!.hasConflict).toBe(false);
   });
 
@@ -434,7 +438,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         },
       }),
     );
-    const prs = await adapter.listPendingPullRequests();
+    const prs = await adapter.prs.listPendingPullRequests();
     expect(prs.map((p) => p.remoteId)).toEqual(['1022', '1023']);
     expect(calls).toBe(2);
   });
@@ -449,7 +453,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         },
       }),
     );
-    await adapter.listPendingPullRequests();
+    await adapter.prs.listPendingPullRequests();
     expect(seen).toHaveLength(1);
     expect(seen[0]!.searchParams.get('role')).toBe('REVIEWER');
     expect(seen[0]!.searchParams.get('state')).toBe('OPEN');
@@ -466,7 +470,9 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         401,
       ),
     );
-    await expect(adapter.listPendingPullRequests()).rejects.toBeInstanceOf(BitbucketClientError);
+    await expect(adapter.prs.listPendingPullRequests()).rejects.toBeInstanceOf(
+      BitbucketClientError,
+    );
   });
 });
 
@@ -504,7 +510,10 @@ describe('BitbucketServerAdapter.listPullRequestComments anchor 映射', () => {
         ]),
       ),
     );
-    const cs = await adapter.listPullRequestComments({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
+    const cs = await adapter.comments.listPullRequestComments(
+      { projectKey: 'FX', repoSlug: 'fx-help' },
+      '1022',
+    );
     expect(cs[0]!.anchor).toEqual({ path: 'src/a.ts', line: 42, side: 'new', lineType: 'added' });
   });
 
@@ -522,7 +531,10 @@ describe('BitbucketServerAdapter.listPullRequestComments anchor 映射', () => {
         ]),
       ),
     );
-    const cs = await adapter.listPullRequestComments({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
+    const cs = await adapter.comments.listPullRequestComments(
+      { projectKey: 'FX', repoSlug: 'fx-help' },
+      '1022',
+    );
     expect(cs).toHaveLength(1);
     expect(cs[0]!.anchor).toBeNull();
   });
@@ -541,7 +553,10 @@ describe('BitbucketServerAdapter.listPullRequestComments anchor 映射', () => {
         ]),
       ),
     );
-    const cs = await adapter.listPullRequestComments({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
+    const cs = await adapter.comments.listPullRequestComments(
+      { projectKey: 'FX', repoSlug: 'fx-help' },
+      '1022',
+    );
     expect(cs[0]!.anchor).toEqual({ path: 'src/b.ts', line: 10, side: 'old', lineType: 'context' });
   });
 });
@@ -560,7 +575,7 @@ describe('BitbucketServerAdapter.mergePullRequest', () => {
         },
       }),
     );
-    await adapter.mergePullRequest({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
+    await adapter.prs.mergePullRequest({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
     // 用的是 GET 回来的最新 version (samplePR.version=5)，不是任何缓存值
     expect(mergeVersion).toBe('5');
   });
@@ -616,8 +631,8 @@ describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
   it('PUT /participants/<slug> with APPROVED + user.name', async () => {
     const { fetchFn, calls } = captureFetch();
     const adapter = makeAdapter(fetchFn);
-    await adapter.ping();
-    await adapter.setPullRequestReviewStatus(
+    await adapter.connection.ping();
+    await adapter.prs.setPullRequestReviewStatus(
       { projectKey: 'FX', repoSlug: 'fx-help' },
       '1022',
       'approved',
@@ -636,8 +651,8 @@ describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
   it('maps needsWork → NEEDS_WORK in body', async () => {
     const { fetchFn, calls } = captureFetch();
     const adapter = makeAdapter(fetchFn);
-    await adapter.ping();
-    await adapter.setPullRequestReviewStatus(
+    await adapter.connection.ping();
+    await adapter.prs.setPullRequestReviewStatus(
       { projectKey: 'FX', repoSlug: 'fx-help' },
       '1022',
       'needsWork',
@@ -649,8 +664,8 @@ describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
   it('maps unapproved → UNAPPROVED (撤销之前的标记)', async () => {
     const { fetchFn, calls } = captureFetch();
     const adapter = makeAdapter(fetchFn);
-    await adapter.ping();
-    await adapter.setPullRequestReviewStatus(
+    await adapter.connection.ping();
+    await adapter.prs.setPullRequestReviewStatus(
       { projectKey: 'FX', repoSlug: 'fx-help' },
       '1022',
       'unapproved',
@@ -663,7 +678,7 @@ describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
     const { fetchFn } = captureFetch();
     const adapter = makeAdapter(fetchFn);
     await expect(
-      adapter.setPullRequestReviewStatus(
+      adapter.prs.setPullRequestReviewStatus(
         { projectKey: 'FX', repoSlug: 'fx-help' },
         '1022',
         'approved',

@@ -148,13 +148,9 @@ function labelHue(s: string): number {
   return Math.abs(h) % 360;
 }
 export function pillStyle(s: string): CSSProperties {
-  const hue = labelHue(s);
-  // 暗色 UI 上：底色饱和 + 偏暗，文字同色相 + 偏亮，保证对比度
-  return {
-    backgroundColor: `hsl(${String(hue)}, 55%, 22%)`,
-    color: `hsl(${String(hue)}, 85%, 78%)`,
-    borderColor: `hsl(${String(hue)}, 50%, 32%)`,
-  };
+  // 仅注入标签 hue（--pill-hue）；明暗两套的饱和 / 明度由 CSS 按主题定（见 .pr-type-pill）——
+  // 避免在 JS 里写死暗色 HSL（底色 L=22%）导致浅色主题下胶囊过深、不协调。
+  return { ['--pill-hue']: labelHue(s) } as CSSProperties;
 }
 /**
  * 把 "Bug fix, Enhancement\nTests" 拆成 ["Bug fix", "Enhancement", "Tests"]。

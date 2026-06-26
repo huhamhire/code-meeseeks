@@ -25,6 +25,7 @@
   └── <hash>/
       ├── meta.json           # 完整 PR 元数据 StoredPullRequest（自带 platform 字段）
       ├── comments.json       # 评论快照 + cache key
+      ├── read-state.json     # 用户已读水位（未读标记派生用，仅 markRead 写）
       └── runs/<runId>.json   # 评审会话（跟 PR 同寿命）
   ```
   另有 `connections.json` / `watched-repos.json` / `posted-comments.json`（横向幂等记录，与 PR 目录解耦）。
@@ -32,17 +33,28 @@
   不一致即 stale → 重拉。Bitbucket 任何 PR 变更都跳 `updatedAt`，是足够保险的 cache key。
 - **软删 + 1 周 grace**：PR 从远端 reviewer 列表消失（merged/declined/不再是 reviewer）→ 标 `archivedAt`，
   不立即删盘；窗口内 UI 隐藏但数据保留、远端复现自动复活；过期下轮 poll 整目录清掉。便于事后回看。
+- **未读标记**：`listStoredPullRequests` 派生 `StoredPullRequest.unread`（不持久化）。规则：**从未打开过**（无 read-state）即
+  未读——覆盖新分配 / 请求评审的新到达，以及清空目录 / 全新安装后涌入的 PR；**打开过之后**则看源 head 又变（新 commit）或已读
+  时间后有「@我 / 回复我」评论（`index.lastMentionAt > read-state.lastReadAt`）。两类状态**分文件、分写者**以避开竞态：**已读水位**
+  `read-state.json`（`lastReadHeadSha`+`lastReadAt`）**仅** `prs:markRead`（用户打开 PR）写、poll 一概不碰；**mention 游标**
+  `index.lastMentionAt` 由 poll 独占维护（poll 整体重写 index.json，不会覆盖用户水位），仅在 PR `updatedAt` 跳变时拉评论扫描、与
+  历史取较大值，成本与活动量成正比。commit 检测对各平台通用、不依赖 `updatedAt`。早期开发版不做升级兼容（不抑制旧存量泛红，清库 / 重装即可）。
 - **安全 invariant**：
   - **拉取失败不动本地**：某连接 `listPendingPullRequests` 抛错 → 不写其名下 PR、不软删、不剔索引；
     全失败则索引零写入、mtime 不变（避免误触 watcher/备份）。poll 是唯一权威，远端是最终 truth。
   - **路径越界屏障**：所有 fs 操作过 `subpathInside` 检查（拒 `..` / 绝对路径 / 清空根），因为 key 由调用方
     拼接（含 PR localId / runId），必须防未净化输入越界读写。
 - **读宽容、写幂等**：状态文件被外部删/坏时，读返回 null/skip、下一轮 poll 重建；不做启动 reconcile / 自动备份。
+- **启动清扫孤儿 tmp**：原子写「tmp → rename」中，进程在两步之间被强杀 / 退出（如关窗瞬间的 in-flight 异步写）会留下 `*.tmp`
+  孤儿、跨会话累积。`sweepStaleTmpFiles` 在启动早期、任何写入之前删掉全部 `*.tmp`——单写者前提下此刻无 in-flight 写，凡 tmp 皆为
+  上次会话孤儿，可放心删；**绝不在运行期清扫**，以免误删并发写 / rename 重试正在用的 tmp（冲突场景不误删多余文件）。
 
 ## 数据 / 接口契约
 
 - `StateStore`：`read<T>(key)` / `write<T>(key,data)` / `delete(key)` / `deleteDir(prefix)` / `list(prefix)`。
-- `PrIndexEntry`：`identity`(PrIdentity) / `updatedAt` / `discoveredAt` / `lastSeenAt` / `archivedAt|null`。
+- `PrIndexEntry`：`identity`(PrIdentity) / `updatedAt` / `discoveredAt` / `lastSeenAt` / `archivedAt|null` /
+  mention 游标 `lastMentionAt?`。
+- `PrReadStateFile`（`read-state.json`）：`lastReadHeadSha` / `lastReadAt`（用户已读水位）。
 - `StoredPullRequest`：完整 PR 元数据 + `platform`（自描述）。
 - `ReviewRun`：见 [05](05-review-workflow.md)（含 `findings` / `tokenUsage` / `model` / 状态机字段）。
 - 所有文件含 `schema_version`。

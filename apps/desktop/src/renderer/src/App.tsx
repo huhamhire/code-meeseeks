@@ -16,6 +16,7 @@ import { usePanelLayout } from './hooks/usePanelLayout';
 import { useUpdateNotice } from './hooks/useUpdateNotice';
 import { useAppStores } from './hooks/useAppStores';
 import { useExternalLinkGuard } from './hooks/useExternalLinkGuard';
+import { useGlobalTheme, useEditorAppearanceSync } from './hooks/useTheme';
 
 export default function App() {
   const { t } = useTranslation();
@@ -33,6 +34,7 @@ export default function App() {
     triggerRefresh,
     setSelectedPrStatus,
     mergeSelectedPr,
+    markRead,
   } = usePullRequests({ notifyError });
   // 应用启动 / 全局生命周期（boot 加载、语言、poll / focus 刷新、向导完成、连接热生效）
   const { boot, fatalError, lastSyncAt, needsOnboarding, completeOnboarding, refreshBootAndPrs, patchConfig } =
@@ -51,6 +53,18 @@ export default function App() {
   const updateInfo = useUpdateNotice();
   useAppStores();
   useExternalLinkGuard();
+  // 外观（全局主题 + 编辑器字体）：跟随 config 同步到运行时 store + 字体 CSS 变量。boot 前用默认值，
+  // 模块导入时已按 localStorage 缓存定下首帧主题，boot 到达后切到 config 主题。
+  useEditorAppearanceSync(
+    boot?.config.appearance ?? {
+      editor_theme: 'auto',
+      editor_font_family: '',
+      editor_font_size: 14,
+    },
+  );
+  // 全局主题：订阅 store 的主题，反推浅 / 深写 data-theme（驱动语义色板）+ 派生 chrome 结构色 +
+  // 持久化 localStorage；'auto' 主题下跟随 OS 深浅切换。
+  useGlobalTheme();
 
   const [showSettings, setShowSettings] = useState(false);
   /**
@@ -115,7 +129,10 @@ export default function App() {
           <Sidebar
             prs={prs}
             selectedId={selectedId}
-            onSelect={(pr) => setSelectedId(pr.localId)}
+            onSelect={(pr) => {
+              setSelectedId(pr.localId);
+              void markRead(pr.localId);
+            }}
             width={sidebarWidth}
             onResize={setSidebarWidth}
             availableFilters={showDiscoveryFilter ? availableDiscoveryFilters : undefined}
@@ -152,6 +169,7 @@ export default function App() {
           onJumpToDraftEditor={(target) => setPendingDiffNav(target)}
           onNavigateToAnchor={(anchor) => setPendingDiffNav({ anchor })}
           onSetReviewStatus={(s) => void setSelectedPrStatus(s)}
+          onMerge={() => void mergeSelectedPr()}
           currentLlmModel={
             boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
           }
@@ -195,7 +213,11 @@ export default function App() {
           onLlmChange={(llm) => patchConfig((c) => ({ ...c, llm }))}
           onProxyChange={(proxy) => patchConfig((c) => ({ ...c, proxy }))}
           onLanguageChange={(language) => patchConfig((c) => ({ ...c, language }))}
+          onEditorAppearanceChange={(appearance) =>
+            patchConfig((c) => ({ ...c, appearance: { ...c.appearance, ...appearance } }))
+          }
           onConnectionsChange={refreshBootAndPrs}
+          onConfigPersisted={(config) => patchConfig(() => config)}
           onClose={() => setShowSettings(false)}
         />
       )}

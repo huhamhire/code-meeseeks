@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  EDITOR_FONT_SIZE_DEFAULT,
+  EDITOR_FONT_SIZE_MAX,
+  EDITOR_FONT_SIZE_MIN,
+  EDITOR_THEME_IDS,
+} from './theme.js';
 
 export const CloneSettingsSchema = z
   .object({
@@ -151,6 +157,15 @@ export const ProxySchema = z.object({
 });
 export type ProxyConfig = z.infer<typeof ProxySchema>;
 
+/**
+ * LLM 上下文长度（token）：裁剪输入内容的全局上限，透传 pr-agent `CONFIG__MAX_MODEL_TOKENS` /
+ * `CONFIG__CUSTOM_MODEL_MAX_TOKENS`。默认 128000（与现代主流模型上下文匹配）；**对本地 CLI 模式
+ * 不生效**（CLI 工具自管上下文，见 @meebox/pr-agent-bridge）。范围 32k~1M。
+ */
+export const LLM_CONTEXT_TOKENS_MIN = 32000;
+export const LLM_CONTEXT_TOKENS_MAX = 1000000;
+export const LLM_CONTEXT_TOKENS_DEFAULT = 128000;
+
 export const ConfigSchema = z.object({
   /**
    * UI 与 pr-agent 输出使用的语言 (ISO locale，如 'zh-CN' / 'en-US' / 'ja-JP' / 'de-DE')。
@@ -158,6 +173,31 @@ export const ConfigSchema = z.object({
    * 非空则按显式选择。透传到容器 `CONFIG__RESPONSE_LANGUAGE`（经解析后的有效值）。
    */
   language: z.string().default(''),
+  /**
+   * 外观偏好（全局主题 / 编辑器字体等纯前端展示项；主进程仅据主题设原生窗口 themeSource）。
+   */
+  appearance: z
+    .object({
+      /**
+       * 全局主题（Monaco 编辑器 + 整个 GUI chrome 共用）：'auto' 跟随系统深 / 浅色（默认，深 → Dark
+       * Modern、浅 → Light Modern），其余为内置 / 第三方主题 id（见 @meebox/shared EDITOR_THEME_OPTIONS）。
+       * 主题反推浅 / 深写入 data-theme 驱动语义色板，并派生 chrome 结构色；解析见 renderer/src/theme。
+       */
+      editor_theme: z.enum(EDITOR_THEME_IDS).default('auto'),
+      /**
+       * 编辑器等宽字体族（CSS font-family，可逗号分隔多候选）。**默认空** = 用内置 mono 字体栈；
+       * 非空则覆盖编辑器与全应用等宽文本字体。
+       */
+      editor_font_family: z.string().default(''),
+      /** 编辑器字号（px）。限合理范围（见 EDITOR_FONT_SIZE_MIN/MAX），默认 14；按平台再做微调。 */
+      editor_font_size: z
+        .number()
+        .int()
+        .min(EDITOR_FONT_SIZE_MIN)
+        .max(EDITOR_FONT_SIZE_MAX)
+        .default(EDITOR_FONT_SIZE_DEFAULT),
+    })
+    .default({}),
   workspace: z
     .object({
       repos_dir: z.string().default('~/.code-meeseeks/repos'),
@@ -189,13 +229,36 @@ export const ConfigSchema = z.object({
           // 评估节奏对齐轮询（每个 poller tick 评估一遍），不再单设最小间隔；准入门控 + 台账去重防重复。
           /** 单批 LLM 判定的 PR 上限。 */
           batch_size: z.number().int().min(1).max(50).default(10),
-          /** 自动评审微流程中条件性追问 /ask 的硬上限。 */
-          max_followup_asks: z.number().int().min(0).max(5).default(2),
           /**
            * 逐项写权限授权（默认空 = 全拒）。如 'approve' / 'needs_work' /
            * 'publish_comment'；运行期按红线硬校验放行（见「工具修改红线」）。
            */
           grants: z.array(z.string()).default([]),
+        })
+        .default({}),
+      /**
+       * Agent 行为策略（扩展位，后续行为开关并入此处）。作用于自动评审微流程（手动自动评审 +
+       * AutoPilot 共用），非 AutoPilot 专属。当前各项：
+       * - auto_followup：评审运行阶段是否启用**自动追问**（条件性 /ask）。关闭则评审微流程跳过
+       *   judge + asks 两步、直接总结，省一次 judge LLM 调用与潜在追问开销（省 token）。默认开，
+       *   与历史行为一致。
+       * - max_followup_asks：自动追问数量上限（条件性 /ask 的硬上限）。
+       */
+      strategy: z
+        .object({
+          auto_followup: z.boolean().default(true),
+          /**
+           * 自动追问数量上限（条件性 /ask 的硬上限，0~5，默认 2）。仅 auto_followup 开启时生效；
+           * 0 等同关闭（开关已独立控制启停，故 UI 下拉只提供 1~5、不给 0 以免歧义）。
+           */
+          max_followup_asks: z.number().int().min(0).max(5).default(2),
+          /**
+           * 单次任务生成的代码建议 / 评审发现数量上限（2~8，默认 4）。统一约束三处：
+           * - /review：pr-agent `pr_reviewer.num_max_findings`（硬上限）；
+           * - /improve：pr-agent `pr_code_suggestions.num_code_suggestions`（硬上限）；
+           * - /ask：结构化分段 `<suggestions>` 的提示层软约束（模型一般遵守，极少数可能超）。
+           */
+          max_code_suggestions: z.number().int().min(2).max(8).default(4),
         })
         .default({}),
     })
@@ -227,8 +290,8 @@ export const ConfigSchema = z.object({
       strategy: z.enum(['auto', 'embedded', 'local-cli']).default('auto'),
       /**
        * 评审任务并发数（1~8，默认 2）。嵌入式 / local-cli 下每个 run 独立 worktree +
-       * 独立子进程，并发安全；上限节流 LLM 限流 / 本机资源。**高级参数，不在设置页暴露**，
-       * 仅 config.yaml 手改。
+       * 独立子进程，并发安全；上限节流 LLM 限流 / 本机资源。设置页可调（config:setMaxConcurrency
+       * 热替换队列上限），亦可 config.yaml 手改。
        */
       max_concurrency: z.number().int().min(1).max(8).default(2),
     })
@@ -297,6 +360,17 @@ export const ConfigSchema = z.object({
          * 不注入任何 LLM env，pr-agent 退到读 shell 环境变量。
          */
         active_id: z.string().default(''),
+        /**
+         * 裁剪输入内容的上下文长度上限（token）。透传 pr-agent CONFIG__MAX_MODEL_TOKENS /
+         * CONFIG__CUSTOM_MODEL_MAX_TOKENS；超长改动按此截断以适配模型。**本地 CLI 模式不生效**
+         * （CLI 工具自管上下文）。默认 128000，范围 32k~1M（见 @meebox/pr-agent-bridge）。
+         */
+        context_tokens: z
+          .number()
+          .int()
+          .min(LLM_CONTEXT_TOKENS_MIN)
+          .max(LLM_CONTEXT_TOKENS_MAX)
+          .default(LLM_CONTEXT_TOKENS_DEFAULT),
       })
       .default({}),
   ),

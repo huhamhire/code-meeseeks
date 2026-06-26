@@ -1,0 +1,219 @@
+// 主题层（语义层 / Tier 2）：把语义 token 映射到 _palette.scss 的标准色，发射为 CSS 自定义属性
+// （CSS custom properties），使「语义 → 色值」可在运行期整体切换 —— 这是深色 / 浅色主题切换的基座。
+//
+// - 默认（:root）即当前**暗色**主题。
+// - 浅色主题在 `:root[data-theme='light'] { ... }` 覆盖同名变量即可，无需触碰任何使用处。
+// - 业务样式不直接引用本文件的变量名，而经 _tokens.scss 的 `$token: var(--token)` 桥接（使用处零改动）。
+//
+// 半透明叠加一律**从 palette 原色派生**（`#{rgba($palette-var, a)}` 编译期出固定 rgba；或使用处
+// 按多档 alpha 叠加时用 `rgb(var(--rgb-x) / a)`，三元组见底部）—— 绝不再手抄十进制通道字面量，
+// 否则改原色时浅底不跟随、悄悄脱节（单一真相源原则）。
+
+@use 'sass:color';
+@use './palette' as *;
+
+// 取色的 RGB 通道三元组（空格分隔，供 `rgb(<triple> / <alpha>)`）。以 palette 原色为唯一来源。
+@function rgb-channels($c) {
+  @return #{color.channel($c, 'red', $space: rgb)}
+    #{color.channel($c, 'green', $space: rgb)}
+    #{color.channel($c, 'blue', $space: rgb)};
+}
+
+:root {
+  // ===== 背景 =====
+  --bg-app: #{$vscode-gray-850};
+  --bg-white-fade: #{rgba($white, 0.12)}; // icon-btn hover / count-pill 底
+  --bg-panel: #{$vscode-gray-840};
+  --bg-panel-alt: #{$vscode-gray-880};
+  --bg-elev: #{$vscode-gray-820};
+  --bg-surface: #{$vscode-gray-760};
+  --bg-hover: #{$vscode-gray-780};
+  --bg-selected: #{$vscode-blue-900};
+  --bg-group-header: #{$vscode-gray-900};
+  // 状态栏「未启用 / idle」中性胶囊底：独立于边框色，暗色沿用旧 border-default 灰（#3e3e42）。
+  --chip-neutral: #{$vscode-gray-680};
+
+  // ===== 边框 =====
+  --border-default: #{$vscode-gray-680};
+  --border-default-fade: #{rgba($vscode-gray-680, 0.5)}; // blame row 内分隔线
+  --border-muted: #{$vscode-gray-760};
+
+  // ===== 文字 =====
+  --text-primary: #{$vscode-gray-200};
+  --text-body: #{$vscode-gray-160};
+  --text-muted: #{$vscode-gray-420};
+  --text-subtle: #{$vscode-slate-500};
+  --text-dim: #{$vscode-gray-500};
+  --text-on-accent: #{$white}; // 饱和色实底（accent / warning / danger 等）上的文字，深浅皆白
+  // 选中高亮底（--bg-selected）上的文字：暗色底深蓝 → 白；浅色底浅蓝 → 深字。与 --text-on-accent
+  // 分开，避免浅色下选中项沿用白字成「反色」。
+  --text-on-selected: #{$white};
+
+  // ===== 语义色（动作 / 状态）=====
+  --color-accent: #{$vscode-blue-700};
+  --color-accent-hover: #{$vscode-blue-600};
+  --color-accent-bg-fade: #{rgba($vscode-blue-700, 0.18)};
+  --color-accent-strong-fade: #{rgba($vscode-blue-700, 0.5)}; // resize handle hover/active
+  --color-info: #{$vscode-blue-300};
+  --color-success: #{$tw-green-700};
+  --color-approved: #{$tw-green-600};
+  --color-warning: #{$tw-amber-600};
+  --color-warning-bright: #{$tw-amber-400};
+  --color-danger: #{$vscode-red-300};
+  --color-danger-bg: #{$vscode-red-700};
+  --color-danger-strong: #{$vscode-red-500};
+  --color-danger-strong-fade: #{rgba($vscode-red-500, 0.12)}; // ghost 危险按钮 hover 浅红底
+  --color-token-in: #{$tw-green-500};
+  --color-token-out: #{$tw-red-500};
+  --color-token-cache: #{$vscode-blue-300};
+
+  // 语义色浅底（chip / banner 背景，与对应主色同色相）
+  --color-accent-bg-hover: #{rgba($vscode-blue-700, 0.28)};
+  --color-approved-fade: #{rgba($tw-green-600, 0.18)};
+  --color-approved-fade-soft: #{rgba($tw-green-600, 0.1)};
+  --color-warning-fade: #{rgba($tw-amber-600, 0.18)};
+  --color-danger-fade: #{rgba($vscode-red-300, 0.08)};
+  --color-danger-border: #{rgba($vscode-red-300, 0.35)};
+
+  // 状态浅底（pending / posted 原 off-palette 一次性色，已收敛到对应主色相）
+  --color-conflict-fade: #{rgba($tw-amber-500, 0.18)}; // 冲突 / needsWork chip 填充
+  --color-pending-fade: #{rgba($tw-amber-600, 0.15)}; // 待办 / 草稿 pending 填充
+  --color-posted-fade: #{rgba($tw-green-600, 0.15)}; // 草稿已发布填充
+  --color-search-hit: #{rgba($material-yellow-300, 0.42)}; // diff 搜索命中高亮
+
+  // ===== Git decoration 配色（跟 Monaco / VS Code 一致）=====
+  --git-added: #{$vscode-green-300};
+  --git-added-bg-fade: #{rgba($vscode-green-300, 0.16)};
+  --git-modified: #{$vscode-amber-300};
+  --git-deleted: #{$vscode-red-600};
+  --git-needs-work-fade: #{rgba($vscode-red-600, 0.18)};
+  --git-needs-work-fg: #{$vscode-red-300};
+  --blame-change: #{$vscode-lime-700}; // PR 改动行绿条
+  --blame-fold: #{$vscode-slate-500}; // 折叠占位斜纹灰
+
+  // ===== 文件改动状态点（目录树 Material 图标集）=====
+  // 鲜明的 Material 饱和色：圆点小、需「跳」出来，深浅主题都用亮色更醒目（区别于文件名的 git 装饰色）。
+  --file-status-added: #{$material-green-500};
+  --file-status-modified: #{$material-amber-500};
+  --file-status-deleted: #{$material-red-550};
+  --file-status-renamed: #{$material-purple-400};
+  --file-status-copied: #{$material-blue-400};
+
+  // ===== Avatar / 装饰 =====
+  --avatar-bg-default: #{$vscode-gray-780};
+  // GitHub octocat 单色 logo：暗底用官方反白（invertocat），浅底翻成官方近黑（见浅色块覆盖）。
+  --github-logo: #{$white};
+
+  // ===== 滚动条（webkit）=====
+  --scrollbar-thumb: #{$vscode-gray-600};
+  --scrollbar-thumb-hover: #{$vscode-gray-540};
+  --scrollbar-thumb-active: #{$vscode-gray-500};
+
+  // ===== RGB 通道三元组（供使用处 `rgb(var(--rgb-x) / <alpha>)` 半透明叠加）=====
+  --rgb-accent: #{rgb-channels($vscode-blue-700)};
+  --rgb-danger: #{rgb-channels($vscode-red-300)};
+  --rgb-warning: #{rgb-channels($tw-amber-600)};
+  --rgb-approved: #{rgb-channels($tw-green-600)};
+  --rgb-git-modified: #{rgb-channels($vscode-amber-300)};
+  --rgb-blame-change: #{rgb-channels($vscode-lime-700)};
+  --rgb-blame-fold: #{rgb-channels($vscode-slate-500)};
+}
+
+// ============================================================================
+// 浅色主题：覆盖同名语义变量。偏好解析为 light 时 renderer 写 documentElement[data-theme='light']
+// 触发本块。白底需更深 / 更饱和的品牌色保对比；半透明叠加（白雾 hover / 分隔线）翻成黑雾，否则白底看不见。
+// ============================================================================
+:root[data-theme='light'] {
+  // ===== 背景 =====
+  --bg-app: #{$vscode-gray-30};
+  --bg-white-fade: #{rgba($black, 0.06)}; // icon-btn hover：白底改黑雾
+  --bg-panel: #{$vscode-gray-60};
+  --bg-panel-alt: #{$vscode-gray-90};
+  --bg-elev: #{$white};
+  --bg-surface: #{$white};
+  --bg-hover: #{$vscode-gray-120};
+  --bg-selected: #{$vscode-blue-100};
+  --bg-group-header: #{$vscode-gray-120};
+  // 浅色用更浅的灰：边框级灰（#cfcfcf）作胶囊填充在白底状态栏上偏深，改用 #e0e0e0 更轻。
+  --chip-neutral: #{$vscode-gray-150};
+
+  // ===== 边框 =====
+  --border-default: #{$vscode-gray-220};
+  --border-default-fade: #{rgba($black, 0.08)};
+  --border-muted: #{$vscode-gray-150};
+
+  // ===== 文字 =====
+  --text-primary: #{$vscode-gray-840};
+  --text-body: #{$vscode-gray-820};
+  --text-muted: #{$vscode-gray-500};
+  --text-subtle: #{$vscode-gray-420};
+  --text-dim: #{$vscode-gray-340};
+  --text-on-accent: #{$white};
+  --text-on-selected: #{$vscode-gray-840}; // 浅色选中底（浅蓝）承深字
+
+  // ===== 语义色（动作 / 状态）=====
+  --color-accent: #{$vscode-blue-800};
+  --color-accent-hover: #{$vscode-blue-750};
+  --color-accent-bg-fade: #{rgba($vscode-blue-800, 0.1)};
+  --color-accent-strong-fade: #{rgba($vscode-blue-800, 0.4)};
+  --color-info: #{$vscode-blue-650};
+  --color-success: #{$tw-green-700};
+  --color-approved: #{$tw-green-700};
+  --color-warning: #{$tw-amber-700};
+  --color-warning-bright: #{$tw-amber-700};
+  --color-danger: #{$vscode-red-650};
+  --color-danger-bg: #{$vscode-red-700};
+  --color-danger-strong: #{$vscode-red-620};
+  --color-danger-strong-fade: #{rgba($vscode-red-620, 0.1)};
+  --color-token-in: #{$tw-green-700};
+  --color-token-out: #{$tw-red-600};
+  --color-token-cache: #{$vscode-blue-650};
+
+  --color-accent-bg-hover: #{rgba($vscode-blue-800, 0.16)};
+  --color-approved-fade: #{rgba($tw-green-700, 0.12)};
+  --color-approved-fade-soft: #{rgba($tw-green-700, 0.08)};
+  --color-warning-fade: #{rgba($tw-amber-700, 0.12)};
+  --color-danger-fade: #{rgba($vscode-red-650, 0.08)};
+  --color-danger-border: #{rgba($vscode-red-650, 0.35)};
+
+  --color-conflict-fade: #{rgba($tw-amber-700, 0.14)};
+  --color-pending-fade: #{rgba($tw-amber-700, 0.12)};
+  --color-posted-fade: #{rgba($tw-green-700, 0.12)};
+  --color-search-hit: #{rgba($material-yellow-400, 0.55)};
+
+  // ===== Git decoration =====
+  --git-added: #{$vscode-green-550};
+  --git-added-bg-fade: #{rgba($vscode-green-550, 0.12)};
+  --git-modified: #{$vscode-amber-650};
+  --git-deleted: #{$vscode-red-680};
+  --git-needs-work-fade: #{rgba($vscode-red-680, 0.12)};
+  --git-needs-work-fg: #{$vscode-red-650};
+  --blame-change: #{$vscode-lime-700};
+  --blame-fold: #{$vscode-gray-380};
+
+  // ===== 文件改动状态点（目录树 Material 图标集）=====
+  --file-status-added: #{$material-green-480};
+  --file-status-modified: #{$material-amber-550};
+  --file-status-deleted: #{$material-red-550};
+  --file-status-renamed: #{$material-purple-500};
+  --file-status-copied: #{$material-blue-500};
+
+  // ===== Avatar / 装饰 =====
+  --avatar-bg-default: #{$vscode-gray-150};
+  // GitHub octocat 浅底用官方近黑（$vscode-gray-900 ≈ 品牌 #181717），白底反白 logo 不可见。
+  --github-logo: #{$vscode-gray-900};
+
+  // ===== 滚动条 =====
+  --scrollbar-thumb: #{$vscode-gray-260};
+  --scrollbar-thumb-hover: #{$vscode-gray-340};
+  --scrollbar-thumb-active: #{$vscode-gray-380};
+
+  // ===== RGB 通道三元组（随浅色品牌基色重置）=====
+  --rgb-accent: #{rgb-channels($vscode-blue-800)};
+  --rgb-danger: #{rgb-channels($vscode-red-650)};
+  --rgb-warning: #{rgb-channels($tw-amber-700)};
+  --rgb-approved: #{rgb-channels($tw-green-700)};
+  --rgb-git-modified: #{rgb-channels($vscode-amber-650)};
+  --rgb-blame-change: #{rgb-channels($vscode-lime-700)};
+  --rgb-blame-fold: #{rgb-channels($vscode-gray-380)};
+}

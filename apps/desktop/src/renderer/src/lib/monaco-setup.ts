@@ -15,6 +15,24 @@ import * as tsLang from 'monaco-editor/esm/vs/language/typescript/monaco.contrib
 import * as jsonLang from 'monaco-editor/esm/vs/language/json/monaco.contribution.js';
 import * as cssLang from 'monaco-editor/esm/vs/language/css/monaco.contribution.js';
 import * as htmlLang from 'monaco-editor/esm/vs/language/html/monaco.contribution.js';
+// 第三方编辑器主题（IStandaloneThemeData 形状，vendored 自 monaco-themes，见 editor-themes/NOTICE.md），
+// 下方经 defineTheme 注册供选择。id 与 @meebox/shared EDITOR_THEME_OPTIONS 对齐；vs / vs-dark / hc-*
+// 为 Monaco 内置、无需注册。就地内置而非 npm 依赖：monaco-themes 的 exports 未暴露 ./themes/* 子路径。
+import githubLight from './editor-themes/github-light.json';
+import githubDark from './editor-themes/github-dark.json';
+import monokai from './editor-themes/monokai.json';
+import dracula from './editor-themes/dracula.json';
+import nord from './editor-themes/nord.json';
+import nightOwl from './editor-themes/night-owl.json';
+import tomorrow from './editor-themes/tomorrow.json';
+import tomorrowNight from './editor-themes/tomorrow-night.json';
+import solarizedLight from './editor-themes/solarized-light.json';
+import solarizedDark from './editor-themes/solarized-dark.json';
+import cobalt2 from './editor-themes/cobalt2.json';
+import oceanicNext from './editor-themes/oceanic-next.json';
+// VS Code 内置 2026 默认主题（转换自 microsoft/vscode theme-defaults，已解析 include 链并转为 Monaco 形状）。
+import dark2026 from './editor-themes/dark-2026.json';
+import light2026 from './editor-themes/light-2026.json';
 
 // Vite 的 ?worker import 返回一个可 new 的 Worker 构造类。
 self.MonacoEnvironment = {
@@ -24,6 +42,81 @@ self.MonacoEnvironment = {
 };
 
 loader.config({ monaco });
+
+// 注册第三方编辑器主题（id → 主题数据）。Monaco 内置 vs / vs-dark / hc-* 不在此列。JSON 的 base
+// 字段类型为 string，与 IStandaloneThemeData 的字面量联合不完全兼容，经 unknown 转换取用。
+const CUSTOM_EDITOR_THEMES: ReadonlyArray<readonly [string, unknown]> = [
+  ['github-light', githubLight],
+  ['github-dark', githubDark],
+  ['monokai', monokai],
+  ['dracula', dracula],
+  ['nord', nord],
+  ['night-owl', nightOwl],
+  ['tomorrow', tomorrow],
+  ['tomorrow-night', tomorrowNight],
+  ['solarized-light', solarizedLight],
+  ['solarized-dark', solarizedDark],
+  ['cobalt2', cobalt2],
+  ['oceanic-next', oceanicNext],
+  ['dark-2026', dark2026],
+  ['light-2026', light2026],
+];
+for (const [id, data] of CUSTOM_EDITOR_THEMES) {
+  monaco.editor.defineTheme(id, data as unknown as monaco.editor.IStandaloneThemeData);
+}
+
+/**
+ * 【SPIKE】按主题 id 取其 base + colors，供「GUI chrome 跟随编辑器主题」验证从中提取 background /
+ * foreground / selection 等 base 色。第三方 monaco-themes 仅带极少数 colors（editor.* 几个键），
+ * 内置 vs / vs-dark / hc-* 无 JSON、在此补最小已知色。验证完毕若不采纳可整体移除。
+ */
+export interface EditorThemeColorData {
+  base: string;
+  colors: Record<string, string>;
+}
+const BUILTIN_THEME_COLORS: Record<string, EditorThemeColorData> = {
+  vs: {
+    base: 'vs',
+    colors: {
+      'editor.background': '#ffffff',
+      'editor.foreground': '#000000',
+      'editor.selectionBackground': '#add6ff',
+    },
+  },
+  'vs-dark': {
+    base: 'vs-dark',
+    colors: {
+      'editor.background': '#1e1e1e',
+      'editor.foreground': '#d4d4d4',
+      'editor.selectionBackground': '#264f78',
+    },
+  },
+  'hc-black': {
+    base: 'hc-black',
+    colors: {
+      'editor.background': '#000000',
+      'editor.foreground': '#ffffff',
+      'editor.selectionBackground': '#264f78',
+    },
+  },
+  'hc-light': {
+    base: 'hc-light',
+    colors: {
+      'editor.background': '#ffffff',
+      'editor.foreground': '#292929',
+      'editor.selectionBackground': '#add6ff',
+    },
+  },
+};
+const CUSTOM_THEME_COLORS: Record<string, EditorThemeColorData> = Object.fromEntries(
+  CUSTOM_EDITOR_THEMES.map(([id, data]) => {
+    const d = data as { base?: string; colors?: Record<string, string> };
+    return [id, { base: d.base ?? 'vs-dark', colors: d.colors ?? {} }];
+  }),
+);
+export function getEditorThemeColors(id: string): EditorThemeColorData | null {
+  return CUSTOM_THEME_COLORS[id] ?? BUILTIN_THEME_COLORS[id] ?? null;
+}
 
 /**
  * 关掉 4 个「带 worker 后端语言服务」的语言族的全部特性：typescript/javascript（ts.worker）、

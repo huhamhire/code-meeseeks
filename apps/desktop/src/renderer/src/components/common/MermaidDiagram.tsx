@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useResolvedTheme } from '../../hooks/useTheme';
 
 /**
  * Mermaid 渲染：把 ```mermaid 代码块渲染成 SVG 图（Qodo `/describe` 常生成架构图）。
@@ -10,7 +11,8 @@ import { useTranslation } from 'react-i18next';
  * - **securityLevel: 'strict'**：内容来自 AI / 远端 PR 描述，strict 下 mermaid 转义
  *   标签文本、禁用点击脚本，产出的 SVG 可安全注入。
  * - **失败回退**：语法错 / 渲染异常时回退展示原始代码块，图画错也能看源码。
- * - 主题 `dark`，与应用深色界面一致。
+ * - 主题随应用深 / 浅色切换（`dark` / `default`）：mermaid 主题为全局态、不走 CSS 自定义属性，
+ *   故每次渲染前按当前解析主题 re-initialize，并把主题纳入渲染 effect 依赖、切换时重绘。
  */
 
 // 仅声明本组件用到的最小接口，避免 import() 类型注解（且与 mermaid 内部类型解耦）。
@@ -26,7 +28,8 @@ function loadMermaid(): Promise<MermaidApi> {
   mermaidLoader ??= import('mermaid')
     .then((m) => {
       const mermaid = m.default as unknown as MermaidApi;
-      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+      // 主题不在此固定：每次渲染前按当前应用主题 re-initialize（见组件渲染 effect）。
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
       return mermaid;
     })
     .catch((e: unknown) => {
@@ -38,6 +41,8 @@ function loadMermaid(): Promise<MermaidApi> {
 
 export function MermaidDiagram({ source }: { source: string }) {
   const { t } = useTranslation();
+  // mermaid 主题为全局态、不走 CSS 自定义属性：随应用解析主题切换（深 'dark' / 浅 'default'）。
+  const mermaidTheme = useResolvedTheme() === 'light' ? 'default' : 'dark';
   // mermaid.render 需要唯一 id（内部建临时 DOM 节点）；useId 保证每个实例稳定唯一，
   // 去掉 `:`（mermaid 用作 DOM id / CSS 选择器，冒号非法）
   const renderId = `mmd-${useId().replace(/:/g, '')}`;
@@ -52,6 +57,8 @@ export function MermaidDiagram({ source }: { source: string }) {
     void (async () => {
       try {
         const mermaid = await loadMermaid();
+        // 渲染前按当前主题 re-initialize（全局态，幂等）：主题切换后重渲即换配色。
+        mermaid.initialize({ startOnLoad: false, theme: mermaidTheme, securityLevel: 'strict' });
         const out = await mermaid.render(renderId, source);
         if (!cancelled) setSvg(out.svg);
       } catch (e) {
@@ -63,7 +70,7 @@ export function MermaidDiagram({ source }: { source: string }) {
     return () => {
       cancelled = true;
     };
-  }, [source, renderId]);
+  }, [source, renderId, mermaidTheme]);
 
   if (failed) {
     // 回退：保留原始 mermaid 源码，至少可读

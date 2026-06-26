@@ -1,4 +1,5 @@
-import type { PlatformAdapter, PrComment } from '@meebox/shared';
+import type { PrComment } from '@meebox/shared';
+import type { PlatformAdapter } from '@meebox/platform-core';
 
 /**
  * 给每条评论 (含 replies 子树) 打 canDelete / canEdit 标志。不依赖 controller 上下文。
@@ -12,13 +13,13 @@ import type { PlatformAdapter, PrComment } from '@meebox/shared';
  * 自己比对 author / version / replies，链路最短最稳。
  */
 export function annotateOwnership(comments: PrComment[], adapter: PlatformAdapter): PrComment[] {
-  const me = adapter.getCurrentUser();
+  const me = adapter.connection.getCurrentUser();
   if (!me) {
     return setOwnershipRecursive(comments, () => ({ canDelete: false, canEdit: false }));
   }
   // 「带 reply 的评论不可删」是 Bitbucket 限制（删父评论会孤立子评论）；GitHub / GitLab 允许删
   // 自己的评论（含有 reply 的）。用乐观锁能力位作 Bitbucket 代理。
-  const noDeleteWithReplies = adapter.capabilities().commentOptimisticLock;
+  const noDeleteWithReplies = adapter.connection.capabilities().commentOptimisticLock;
   return setOwnershipRecursive(comments, (c) => {
     const isMine = c.author.name === me.name;
     const hasVersion = typeof c.version === 'number';

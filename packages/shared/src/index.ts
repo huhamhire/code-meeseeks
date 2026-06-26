@@ -8,4 +8,5 @@ export * from './platform.js';
 export * from './poller-contract.js';
 export * from './pr-agent-status.js';
 export * from './sync-progress.js';
+export * from './theme.js';
 export * from './tool-registry.js';

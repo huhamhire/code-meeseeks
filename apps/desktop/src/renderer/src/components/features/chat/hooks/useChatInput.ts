@@ -20,6 +20,10 @@ export interface UseChatInputParams {
   onAgentAsk: (question: string) => void;
   onCancel?: () => void;
   onSetReviewStatus?: (status: LocalPrStatus) => void;
+  /** PR 远端可直接合并（mergeStatus.canMerge）：false 时 /merge 不出现在补全/命令菜单，误输入也拒绝。 */
+  canMerge?: boolean;
+  /** /merge 触发：交由 ChatPane 弹二次确认后再实际合并。 */
+  onMerge?: () => void;
 }
 
 /**
@@ -36,6 +40,8 @@ export function useChatInput({
   onAgentAsk,
   onCancel,
   onSetReviewStatus,
+  canMerge = false,
+  onMerge,
 }: UseChatInputParams) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -73,11 +79,13 @@ export function useChatInput({
     if (!running) setStopRequested(false);
   }, [running]);
   const trimmed = input.trim();
+  // 可见命令集合：PR 不可直接合并时隐去 /merge（不在补全 / 命令菜单提示不可用的动作）。
+  const visibleCommands = canMerge ? COMMANDS : COMMANDS.filter((c) => c.kind !== 'pr-action');
   // `/` 开头 + 命令名还没敲完整 (没空格) → 显示候选；已为当前 input dismiss 过则隐藏
   const showAutocomplete =
     !disabled && dismissedFor !== input && input.startsWith('/') && !input.includes(' ');
   const filtered = showAutocomplete
-    ? COMMANDS.filter((c) => c.label.startsWith(input.split(' ')[0] ?? ''))
+    ? visibleCommands.filter((c) => c.label.startsWith(input.split(' ')[0] ?? ''))
     : [];
 
   // 输入变化时重置选中项到首条 (候选集变了)
@@ -157,6 +165,16 @@ export function useChatInput({
         if (!onSetReviewStatus) return; // 没装回调直接忽略 (保护性)
         pushHistoryAndReset();
         onSetReviewStatus(parsed.status);
+        return;
+      case 'mergeAction':
+        if (!onMerge) return; // 没装回调直接忽略 (保护性)
+        // canMerge 门控：不可直接合并时拒绝并提示（输入框已不补全 /merge，此处兜底手输）。
+        if (!canMerge) {
+          setParseError(t('chatPane.notMergeable'));
+          return;
+        }
+        pushHistoryAndReset();
+        onMerge(); // 交由 ChatPane 弹确认后实际合并
         return;
       case 'run':
         pushHistoryAndReset();
@@ -266,6 +284,7 @@ export function useChatInput({
     requestStop,
     showAutocomplete,
     filtered,
+    visibleCommands,
     autocompleteIdx,
     setAutocompleteIdx,
     cmdMenuOpen,

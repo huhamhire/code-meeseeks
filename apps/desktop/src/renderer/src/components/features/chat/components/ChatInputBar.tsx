@@ -6,7 +6,6 @@ import type {
   StoredPullRequest,
 } from '@meebox/shared';
 import { AutoReviewIcon, EyeOffIcon, FileTreeIcon, SendIcon, StopIcon } from '../../../common';
-import { COMMANDS } from '../commands';
 import { useChatInput } from '../hooks/useChatInput';
 import { useTextareaAutosizeDrag } from '../hooks/useTextareaAutosizeDrag';
 
@@ -30,6 +29,10 @@ interface ChatInputBarProps {
   onCancel?: () => void;
   /** /approve /needswork 命令触发的 review 决断，跟 PR header 按钮共用 prs:setLocalStatus */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
+  /** PR 远端可直接合并（mergeStatus.canMerge）：决定 /merge 是否在命令菜单 / 补全出现。 */
+  canMerge: boolean;
+  /** /merge 命令触发（弹二次确认后实际合并，跟 PR header 合并按钮共用 prs:merge）。 */
+  onMerge?: () => void;
   /** Agent 是否跑在当前 PR：决定图标按钮高亮 + 运行中文案 + 禁用重复发起（其它 PR 在跑不禁用本 PR）。 */
   agentRunningHere: boolean;
   /** 触发一键自动评审微流程（describe→review→条件追问→总结）。 */
@@ -63,6 +66,8 @@ export function ChatInputBar({
   onAgentAsk,
   onCancel,
   onSetReviewStatus,
+  canMerge,
+  onMerge,
   agentRunningHere,
   onAgentReview,
   selectionLineCount,
@@ -81,6 +86,7 @@ export function ChatInputBar({
     requestStop,
     showAutocomplete,
     filtered,
+    visibleCommands,
     autocompleteIdx,
     setAutocompleteIdx,
     cmdMenuOpen,
@@ -101,6 +107,8 @@ export function ChatInputBar({
     onAgentAsk,
     onCancel,
     onSetReviewStatus,
+    canMerge,
+    onMerge,
   });
   const { textareaHeightPx, handleTextareaResizeStart } = useTextareaAutosizeDrag(textareaRef);
 
@@ -180,8 +188,8 @@ export function ChatInputBar({
             </button>
             {cmdMenuOpen && (
               <ul className="chat-cmd-menu" role="menu">
-                {COMMANDS.map((c, i) => {
-                  const prev = COMMANDS[i - 1];
+                {visibleCommands.map((c, i) => {
+                  const prev = visibleCommands[i - 1];
                   // pragent → review-action 边界插一道分隔线
                   const needDivider = prev !== undefined && prev.kind !== c.kind;
                   return (

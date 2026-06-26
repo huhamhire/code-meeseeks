@@ -111,7 +111,8 @@ export async function runPlanning(
   await appendAgentMessage(
     deps.stateStore,
     pr.localId,
-    { role: 'user', content: userRequest },
+    // 带 Diff 选区引用时一并持久化，供 UI 在气泡下方折叠展示「引用的代码」。
+    { role: 'user', content: userRequest, referencedContext: deps.referencedContext },
     now,
   );
 

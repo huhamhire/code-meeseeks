@@ -4,10 +4,95 @@
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
+// 配置面板左右分区：模态 body 去内边距、由本布局接管；左侧分区导航固定不滚，
+// 右侧分区内容独立滚动。分区结构为后续扩展（主题 / 编辑器 / 上下文窗口等）预留。
+.modal-body.settings-modal-body {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.settings-layout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  // 撑满定高模态（.modal-lg）：左导航固定、右面板独立滚动，不随分区内容增减高度
+  min-height: 0;
+}
+.settings-nav {
+  flex: 0 0 168px;
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+  padding: $space-5 $space-4;
+  // 与模态主体同色（$bg-elev），仅以右侧分隔线区分导航区，避免色块割裂
+  border-right: 1px solid $border-default;
+  overflow-y: auto;
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  // 图标与文案间距放宽：原 $space-3 视觉上偏挤、偏左，拉到 $space-5 让二者更舒展
+  gap: $space-5;
+  padding: $space-3 $space-5;
+  border: none;
+  border-radius: $radius-md;
+  background: transparent;
+  color: $text-body;
+  font-size: $fs-lg;
+  text-align: left;
+  cursor: pointer;
+
+  svg {
+    flex-shrink: 0;
+    color: $text-muted;
+  }
+
+  &:hover {
+    background: $bg-hover;
+  }
+
+  &.active {
+    background: $color-accent-bg-fade;
+    color: $text-primary;
+    font-weight: 500;
+
+    svg {
+      color: $color-accent;
+    }
+  }
+}
+.settings-panel {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: $space-8;
+
+  // 设置页配置项上下间距放宽一档（比通用 modal 的 $space-8 更舒展），避免堆叠拥挤
+  .modal-section {
+    margin-bottom: 20px;
+  }
+
+  // 分区内末个 section 去掉多余底部留白
+  .modal-section:last-child {
+    margin-bottom: 0;
+  }
+}
+
 // 语言下拉：固定宽度、靠右（块定位），文本左对齐；不被 .settings-input 的 flex:1 撑满（复合选择器提权）
 .settings-input.settings-language-select {
   flex: 0 0 auto;
   width: 180px;
+}
+// 整行铺满的输入（编辑器字体：自由输入、可能较长的逗号分隔列表，单独成行铺满、不靠右压缩）
+.settings-input.settings-input-block {
+  flex: none;
+  width: 100%;
+}
+// 单独成行的字段：标题在上、控件在下；收紧标题与控件间距
+.settings-field-stacked h4 {
+  margin-bottom: $space-3;
 }
 
 // 设置项启用状态 chip：复用 common chip 词汇 —— on=approved(绿)、off=neutral(灰)
@@ -202,7 +287,7 @@ select.settings-input {
 
   &:focus {
     border-color: $color-danger !important;
-    box-shadow: 0 0 0 1px rgba($color-danger, 0.3);
+    box-shadow: 0 0 0 1px rgb(var(--rgb-danger) / 0.3);
   }
 }
 .settings-field-error {
@@ -284,4 +369,50 @@ select.settings-input {
 .llm-profile-sub {
   @include ellipsis;
   font-size: $fs-sm;
+}
+
+// 分区下的「下一级功能列表」（如「策略」的子项）：左缩进 + 行首圆点体现从属关系；每行左侧
+// 标题 + 说明，右侧放控件——控件不限于开关，后续可为下拉 / 滑块等，故命名与结构保持通用。
+.settings-sublist {
+  list-style: none;
+  margin: $space-1 0 0;
+  padding-left: $space-3; // 整体内缩，与分区标题拉开层级
+}
+.settings-sublist-row {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  padding: $space-3 0;
+
+  // 行首圆点：列表标记，体现子项从属
+  &::before {
+    content: '•';
+    flex-shrink: 0;
+    color: $text-dim;
+    line-height: 1;
+  }
+  & + & {
+    border-top: 1px solid $border-muted;
+  }
+}
+.settings-sublist-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1; // 撑开，把右侧控件顶到行末
+  min-width: 0;
+}
+.settings-sublist-label {
+  font-size: $fs-md;
+}
+.settings-sublist-desc {
+  font-size: $fs-sm;
+  line-height: $lh-normal;
+}
+// 子项右侧下拉：与其他主配置下拉（settings-language-select）同宽 180px，不被 .settings-input
+// 的 flex:1 撑满（复合选择器提权覆盖）。纯数值选项右对齐，避免在宽框内孤零零靠左。
+.settings-input.settings-sublist-select {
+  flex: 0 0 auto;
+  width: 180px;
+  text-align: right;
 }

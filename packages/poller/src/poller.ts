@@ -1,15 +1,16 @@
 import type { Logger } from 'pino';
 import type {
   LocalPrStatus,
-  PlatformAdapter,
   PlatformKind,
   PollResult,
   PrDiscoveryFilter,
   PullRequest,
   ReviewerStatus,
 } from '@meebox/shared';
+import type { PlatformAdapter } from '@meebox/platform-core';
 import type { StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
+import { latestCommentToMeAt } from './unread.js';
 import {
   PURGE_GRACE_MS,
   prDirKey,
@@ -206,9 +207,7 @@ export class Poller {
     const nowMs = Date.parse(now);
     const indexFile = await readPrIndex(this.opts.stateStore);
     // 索引拷一份到 mutable Map 方便增删；条目缺失时退回到空 Map (首次 poll)
-    const indexByLocalId = new Map<string, PrIndexEntry>(
-      Object.entries(indexFile?.prs ?? {}),
-    );
+    const indexByLocalId = new Map<string, PrIndexEntry>(Object.entries(indexFile?.prs ?? {}));
 
     let fetched = 0;
     let changed = 0;
@@ -226,14 +225,14 @@ export class Poller {
     const seenByConnection = new Map<string, Set<string>>();
 
     for (const { connectionId, adapter } of this.connections) {
-      const me = adapter.getCurrentUser();
+      const me = adapter.connection.getCurrentUser();
       try {
         // 发现分类：平台提供多类（GitHub 四类）→ 逐类轮询并 union 打标，让 renderer 切标签
         // 走本地缓存而非每次拉远端；无分类的平台（Bitbucket）单轮询、标记为空数组。
-        const filters = adapter.capabilities().discoveryFilters ?? [];
+        const filters = adapter.connection.capabilities().discoveryFilters ?? [];
         const merged = new Map<string, { pr: PullRequest; matched: PrDiscoveryFilter[] }>();
         const collect = async (filter?: PrDiscoveryFilter): Promise<void> => {
-          const remote = await adapter.listPendingPullRequests(filter ? { filter } : undefined);
+          const remote = await adapter.prs.listPendingPullRequests(filter ? { filter } : undefined);
           for (const pr of remote) {
             const k = `${pr.repo.projectKey}|${pr.repo.repoSlug}|${pr.remoteId}`;
             const e = merged.get(k);
@@ -309,6 +308,28 @@ export class Poller {
           });
           dirty = true;
 
+          // 未读 mention 游标（见 pr-state computeUnread）：仅当 PR 内容变更（updatedAt 跳变 → 可能有新评论）且
+          // me 已知时拉评论扫「@我 / 回复我」，与历史游标取较大值。新到达 / 新 commit 未读无需在此处理（读取时分别按
+          // 发现时间 vs 未读纪元、head sha 比对派生）。read-state 仅由 markRead（用户打开 PR）写，poll 一概不碰。
+          let lastMentionAt = prev?.lastMentionAt;
+          if (isChanged && me) {
+            try {
+              const comments = await adapter.comments.listPullRequestComments(
+                { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+                pr.remoteId,
+              );
+              const latest = latestCommentToMeAt(comments, me);
+              if (latest && (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt))) {
+                lastMentionAt = latest;
+              }
+            } catch (err) {
+              this.opts.logger.warn(
+                { err, connectionId, localId },
+                'unread scan: failed to list comments',
+              );
+            }
+          }
+
           // 索引条目：仅 lookup/退场判定需要的字段；archivedAt 反向恢复 (远端回来了)
           indexByLocalId.set(localId, {
             identity,
@@ -316,6 +337,7 @@ export class Poller {
             discoveredAt: prev?.discoveredAt ?? now,
             lastSeenAt: now,
             archivedAt: null,
+            lastMentionAt,
           });
         }
       } catch (err) {

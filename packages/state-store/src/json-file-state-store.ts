@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import type { Logger } from 'pino';
 import type { StateStore } from './types.js';
@@ -84,6 +85,43 @@ export class JsonFileStateStore implements StateStore {
         await new Promise<void>((r) => setTimeout(r, delay));
       }
     }
+  }
+
+  /**
+   * 清扫残留的原子写临时文件（`*.tmp`）。正常写成功即 rename 走 tmp、失败（含 rename 重试用尽）也会主动 rm；
+   * 但进程在「write tmp」与「rename」之间被强杀 / 退出（如关窗瞬间仍有 in-flight 的异步写）会留下孤儿 tmp，
+   * 跨会话长期累积。
+   *
+   * **仅在启动、任何写入之前调用**才安全：单写者前提（Electron Main 独占）下，此刻不存在 in-flight 写，凡 `*.tmp`
+   * 皆为上次会话的孤儿，可放心删；**绝不在运行期清扫**——否则会误删并发写 / rename 重试正在用的 tmp（冲突场景下
+   * 不生成、也不误删多余文件）。best-effort：单个删除失败仅记日志、不抛。返回清掉的文件数。
+   */
+  async sweepStaleTmpFiles(): Promise<number> {
+    let removed = 0;
+    const walk = async (dir: string): Promise<void> => {
+      let entries: Dirent[];
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+      } catch {
+        return; // 目录不存在 / 不可读：忽略
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (entry.isFile() && entry.name.endsWith('.tmp')) {
+          try {
+            await fs.unlink(full);
+            removed++;
+          } catch (e) {
+            this.logger?.warn({ err: e, file: full }, 'state-store: failed to sweep stale tmp file');
+          }
+        }
+      }
+    };
+    await walk(this.rootResolved);
+    if (removed > 0) this.logger?.info({ removed }, 'state-store: swept stale tmp files at startup');
+    return removed;
   }
 
   async delete(key: string): Promise<void> {

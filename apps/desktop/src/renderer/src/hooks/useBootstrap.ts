@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ConnectionSummary } from '@meebox/ipc';
 import type { AppInfo, AppPaths, Config, PrAgentStatus, StoredPullRequest } from '@meebox/shared';
+import { LLM_CONTEXT_TOKENS_DEFAULT } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 import i18n, { persistLanguage, resolveUiLanguage } from '../i18n';
 import type { OnboardingResult } from '../components/features/onboarding';
@@ -144,7 +145,11 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
       });
       if (result.llm) {
         await invoke('config:setLlm', {
-          llm: { profiles: [result.llm], active_id: result.llm.id },
+          llm: {
+            profiles: [result.llm],
+            active_id: result.llm.id,
+            context_tokens: LLM_CONTEXT_TOKENS_DEFAULT,
+          },
         });
       }
       const trimmedRepos = result.reposDir.trim();

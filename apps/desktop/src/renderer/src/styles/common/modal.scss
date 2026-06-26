@@ -58,6 +58,14 @@
   overflow-y: auto;
 }
 
+// 宽尺寸：左右分区类模态（如 SettingsModal 分区导航 + 内容）需要更宽横向空间，
+// 让左导航与右侧内容各得其所。定高（受 .modal 的 max-height: 84vh 上限约束），
+// 使切换分区时模态尺寸恒定、右侧内容区独立滚动而非整体撑高。
+.modal-lg {
+  max-width: 760px;
+  height: 600px;
+}
+
 // ConfirmModal: 跟 SettingsModal 共用 .modal-backdrop/.modal/.modal-header，加几条
 // 小尺寸 + 底部操作行特化
 .modal-confirm {
@@ -89,6 +97,13 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
+}
+
+// 分区分隔线：在分区上方画一条细线 + 留白，把它与上方分区视觉分组（如设置「常规」里编辑器配置与
+// 语言 / 主题分隔）。
+.modal-section-divider {
+  border-top: 1px solid $border-default;
+  padding-top: $space-8;
 }
 
 // 区块标题行：标题左、操作按钮（如"+ 添加连接"）右，省纵向空间。h4 去掉自身

@@ -6,6 +6,7 @@ import {
   listDrafts,
   listFindingClosures,
   listStoredPullRequests,
+  markPrRead,
   readCommentsCache,
   removeFindingClosure,
   setLocalStatus,
@@ -29,7 +30,7 @@ export const replyComment: IpcController<'comments:reply'> = async (_event, req)
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
-  const reply = await adapter.replyToComment(
+  const reply = await adapter.comments.replyToComment(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
     req.parentCommentId,
@@ -46,7 +47,7 @@ export const createComment: IpcController<'comments:create'> = async (_event, re
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
-  const created = await adapter.publishSummaryComment(
+  const created = await adapter.comments.publishSummaryComment(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
     req.body,
@@ -62,7 +63,7 @@ export const deleteComment: IpcController<'comments:delete'> = async (_event, re
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
-  await adapter.deleteComment(
+  await adapter.comments.deleteComment(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
     req.commentId,
@@ -78,7 +79,7 @@ export const editComment: IpcController<'comments:edit'> = async (_event, req) =
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
-  const updated = await adapter.editComment(
+  const updated = await adapter.comments.editComment(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
     req.commentId,
@@ -99,7 +100,7 @@ export const fetchAttachment: IpcController<'comments:fetchAttachment'> = async 
     const adapter = ctx.pr.adapterFor(pr);
     if (!adapter) return null;
     // 传 pr.repo 给 adapter — Bitbucket 的 attachment: 协议需要 repo 上下文拼 URL
-    const res = await adapter.getAttachment(req.url, pr.repo);
+    const res = await adapter.media.getAttachment(req.url, pr.repo);
     if (!res) return null;
     const base64 = Buffer.from(res.bytes).toString('base64');
     return { dataUrl: `data:${res.contentType};base64,${base64}` };
@@ -143,7 +144,7 @@ export const setPrStatus: IpcController<'prs:setLocalStatus'> = async (_event, r
       : req.status === 'needs_work'
         ? 'needsWork'
         : 'unapproved';
-  await adapter.setPullRequestReviewStatus(
+  await adapter.prs.setPullRequestReviewStatus(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
     remoteStatus,
@@ -152,13 +153,19 @@ export const setPrStatus: IpcController<'prs:setLocalStatus'> = async (_event, r
 };
 
 /**
+ * 标记 PR 已读：推进已读水位 + 清未读标记（纯本地状态，无远端调用）。
+ */
+export const markRead: IpcController<'prs:markRead'> = (_event, req) =>
+  markPrRead(getContext().stateStore, req.localId);
+
+/**
  * 合并 PR；不在此落本地，靠 renderer refresh → poll 软删收尾，避免本地与远端各执一词。
  */
 export const mergePr: IpcController<'prs:merge'> = async (_event, req) => {
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
-  await adapter.mergePullRequest(
+  await adapter.prs.mergePullRequest(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
   );
@@ -248,7 +255,7 @@ export const listComments: IpcController<'diff:listComments'> = async (_event, r
   // Promise 还没注册进 map，落在这窗口内的并发请求就会各自再打一次远端。.finally 绑在 Promise 上做
   // 清理（与具体 await 方无关，成功 / 失败都摘除 map 项）。
   const fetchPromise = (async () => {
-    const raw = await adapter.listPullRequestComments(
+    const raw = await adapter.comments.listPullRequestComments(
       { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
       pr.remoteId,
     );
@@ -279,7 +286,7 @@ export const listCommits: IpcController<'diff:listCommits'> = async (_event, req
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
-  const remote = await adapter.listPullRequestCommits(
+  const remote = await adapter.prs.listPullRequestCommits(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
   );
@@ -308,7 +315,7 @@ export const listActivity: IpcController<'diff:listActivity'> = async (_event, r
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
-  return adapter.listPullRequestActivity(
+  return adapter.prs.listPullRequestActivity(
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
   );
@@ -466,7 +473,7 @@ export const publishDraftBatch: IpcController<'drafts:publishBatch'> = async (_e
       // ReviewDraftAnchor → PrCommentAnchor：side 保守映射 new→added / old→removed；
       // 多行落 endLine（评论出现在标注范围下方，不打断从上往下阅读）。命中 context 行
       // Bitbucket 回 400，错误收进 results 给用户看。
-      const posted = await adapter.publishInlineComment(
+      const posted = await adapter.comments.publishInlineComment(
         { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
         pr.remoteId,
         {

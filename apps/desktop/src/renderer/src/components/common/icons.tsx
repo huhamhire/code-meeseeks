@@ -564,6 +564,27 @@ export function RobotIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** CPU / 芯片：设置页「模型」分区图标（LLM 模型）。外框 + 内核 + 四边引脚。 */
+export function CpuIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="4" width="8" height="8" rx="1.2" />
+      <rect x="6.3" y="6.3" width="3.4" height="3.4" rx="0.6" />
+      <path d="M6 4V2M10 4V2M6 14v-2M10 14v-2M4 6H2M4 10H2M14 6h-2M14 10h-2" />
+    </svg>
+  );
+}
+
 /** 实心四角星（AI 常见 sparkle）：评审建议徽标（手动 / AutoPilot 一视同仁）。四条边向中心内凹，
  *  四个尖角居中对称，SVG 保证字形居中、跨平台一致。 */
 export function StarIcon({ size = 11 }: IconProps) {

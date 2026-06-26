@@ -22,7 +22,7 @@
 // 注意：`font: inherit` 须在 @include chip 之前 —— 简写会重置 font-weight，需让 chip 的
 // 600 落在其后生效（按钮型 chip 默认不继承字体，靠这条统一字体 + 等高）。
 .statusbar-chip {
-  background: $border-default;
+  background: $chip-neutral;
   color: $text-primary;
   font: inherit;
   @include chip;

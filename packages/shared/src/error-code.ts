@@ -21,6 +21,8 @@ export const ERROR_CODES = {
   AG_PR_AGENT_NOT_READY: 'EAG0003',
   /** 未分类配置错误（兜底）。 */
   CF_UNCLASSIFIED: 'ECF0000',
+  /** 平台版本低于支持下限（meta.version 实际版本、meta.min 最低要求）。 */
+  CF_UNSUPPORTED_VERSION: 'ECF0001',
   /** 未分类网络错误（兜底）。 */
   NT_UNCLASSIFIED: 'ENT0000',
   /** 代理未启用或地址为空。 */

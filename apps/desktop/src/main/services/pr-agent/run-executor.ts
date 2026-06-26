@@ -294,7 +294,12 @@ export class RunExecutor {
     // 由 bridge 的 buildToolEnv 按意图组装——契约 key 收口在 @meebox/pr-agent-bridge。
     const env: Record<string, string> = {
       ...buildProxyEnv(bootstrap.config.proxy),
-      ...buildToolEnv(activeLlm, { tool: req.tool, responseLanguage: getMainLanguage() }),
+      ...buildToolEnv(activeLlm, {
+        tool: req.tool,
+        responseLanguage: getMainLanguage(),
+        maxModelTokens: bootstrap.config.llm.context_tokens,
+        maxCodeSuggestions: bootstrap.config.agent.strategy.max_code_suggestions,
+      }),
     };
 
     // CLI 模式 /ask：把子进程 cwd 落到（待净化的）worktree，让自由问答能读完整文件（shim cli/install.py
@@ -344,6 +349,9 @@ export class RunExecutor {
       referencedContext: req.tool === 'ask' ? req.referencedContext : undefined,
       // /ask 复评模式：引用了某条 finding 时注入裁决（replace/keep/drop）指示。
       referencedFinding: req.tool === 'ask' ? !!req.referencedFinding : undefined,
+      // /ask 代码建议数量软约束（与 /review /improve 共用同一设置）。
+      maxCodeSuggestions:
+        req.tool === 'ask' ? bootstrap.config.agent.strategy.max_code_suggestions : undefined,
     });
     // /ask 的 pr_questions prompt **不渲染 extra_instructions**（与 describe/review/improve 不同），
     // 经 env 注入对 /ask 是死字段。故 /ask 的指令改为拼进「问题」（user turn，见下方 askQuestion），

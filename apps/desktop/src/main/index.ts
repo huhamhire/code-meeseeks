@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Logger } from 'pino';
 import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
 import { scaffoldAgentDir } from '@meebox/agent';
-import { resolveLanguage } from '@meebox/shared';
+import { editorThemeNativeSource, resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
 import type { Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
@@ -62,6 +62,11 @@ class App {
     try {
       await this.bootstrapCore();
       this.initRuntimes();
+      // 清扫上次会话残留的原子写临时文件（进程在 write↔rename 之间退出留下的孤儿 tmp）。
+      // 启动早期、任何写入之前清扫，单写者前提下安全（见 JsonFileStateStore.sweepStaleTmpFiles）。
+      await this.stateStore
+        .sweepStaleTmpFiles()
+        .catch((err: unknown) => this.logger.warn({ err }, 'state-store: tmp sweep failed'));
       await this.initConnectionsAndIpc();
       await this.initWindow();
       await this.startPolling();
@@ -79,7 +84,9 @@ class App {
     this.bootstrap = await ensureWorkspace();
     // 主进程 i18n 定档（dialog 标题、错误消息等面向用户文本）。config.language 为空时
     // 按操作系统偏好语言解析、无合适项回落英语；结果同时供 pr-agent 响应语言复用，与 UI 一致。
-    initMainI18n(resolveLanguage(this.bootstrap.config.language, app.getPreferredSystemLanguages()));
+    initMainI18n(
+      resolveLanguage(this.bootstrap.config.language, app.getPreferredSystemLanguages()),
+    );
     // pretty 仅非打包态开：dev 控制台单行 + ISO8601 + 上色；打包态保持原始 JSON。
     this.logger = await createLogger({
       logsDir: this.bootstrap.paths.logsDir,
@@ -199,21 +206,22 @@ class App {
       app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
     }
 
-    // 强制原生窗口 chrome 走深色：Windows 据此设 DWMWA_USE_IMMERSIVE_DARK_MODE，原生标题栏 +
-    // 那条细边框渲染成深色，与 #1e1e1e 应用一致，不再跟随系统浅色主题（splash + 主窗口都受益）。
-    // macOS/Linux 无副作用；只影响原生 chrome，应用本身已是自绘深色样式。
-    nativeTheme.themeSource = 'dark';
+    // 原生窗口 chrome 跟随全局主题：Windows 据 nativeTheme 设 DWMWA_USE_IMMERSIVE_DARK_MODE（原生
+    // 细边框 / 窗控按钮深浅）。themeSource 由主题反推——'auto' 主题交回 OS（'system'），其余固定浅 / 深。
+    // 窗控按钮配色由 WindowManager 监听 nativeTheme 'updated' 同步（见 window-manager）。
+    nativeTheme.themeSource = editorThemeNativeSource(this.bootstrap.config.appearance.editor_theme);
 
     // 主窗口管理（载入窗口状态 + 建窗 + 尺寸回写）。
     this.windowManager = await loadWindowManager({
       stateStore: this.stateStore,
+      stateDir: this.bootstrap.paths.stateDir,
       logger: this.logger,
       startMs: this.startMs,
     });
 
-    // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。
-    // 主窗口 ready-to-show 时关闭它。
-    const splash = createSplash();
+    // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。主窗口 ready-to-show
+    // 时关闭它。配色跟随有效主题（shouldUseDarkColors 已据上面的 themeSource 解析 'system'）。
+    const splash = createSplash(nativeTheme.shouldUseDarkColors);
     this.windowManager.create(splash);
 
     app.on('activate', () => {
@@ -234,7 +242,7 @@ class App {
     const activeHasIdentity = this.conns.runtime.adapters.some(
       (a) =>
         a.connectionId === this.bootstrap.config.active_connection_id &&
-        a.adapter.getCurrentUser() != null,
+        a.adapter.connection.getCurrentUser() != null,
     );
     this.poller.start(activeHasIdentity);
     this.logger.info(

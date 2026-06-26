@@ -1,4 +1,5 @@
 import type { LlmProfile, ReviewRunTool } from '@meebox/shared';
+import { LLM_CONTEXT_TOKENS_DEFAULT } from '@meebox/shared';
 import { PRAGENT_LOCAL_OUTPUT } from './constants.js';
 
 /**
@@ -65,21 +66,25 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
  * 空字符串字段一律跳过——别覆盖 pr-agent 默认值或用户 shell 里已有的 env。
  *
  * 此外三条防御性默认：
- * - `CONFIG__MAX_MODEL_TOKENS=128000`：pr-agent **全局 input 上限**，默认 32000；
- *   日志里 "tokens under limit: 32000" 来自这条。DeepSeek-v4 / 现代 Claude / GPT-4
- *   都是 128k 上下文，没必要被 pr-agent 强行截到 32k。设到 128k 让长 PR 能完整入 prompt
- * - `CONFIG__CUSTOM_MODEL_MAX_TOKENS=128000`：pr-agent 的 MAX_TOKENS 内置表只覆盖少
+ * - `CONFIG__MAX_MODEL_TOKENS`：pr-agent **全局 input 上限**，默认 32000；日志里
+ *   "tokens under limit: 32000" 来自这条。DeepSeek-v4 / 现代 Claude / GPT-4 都是 128k+
+ *   上下文，没必要被 pr-agent 强行截到 32k。由 `maxModelTokens`（用户「上下文长度」设置）控制、
+ *   默认 128000，让长 PR 能完整入 prompt。**CLI 模式忽略该设置**（CLI 工具自管上下文）、固定默认值。
+ * - `CONFIG__CUSTOM_MODEL_MAX_TOKENS`（同上取值）：pr-agent 的 MAX_TOKENS 内置表只覆盖少
  *   数主流模型，DeepSeek / 新 Claude / 自部署 / openai-compatible 都不在表里，跑起来
  *   报 "model not defined in MAX_TOKENS"。这条是 unknown 模型的兜底
  * - `CONFIG__FALLBACK_MODELS=[]`：pr-agent 默认配了 fallback (一般指向 OpenAI 系列)，
  *   主模型失败后会自动用 dummy key 试 OpenAI，污染日志且容易被误读成"配错了 OpenAI"。
  *   我们已经显式指定 provider，没有 fallback 的必要
  */
-export function buildPragentEnv(profile: LlmProfile): Record<string, string> {
+export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): Record<string, string> {
   const env: Record<string, string> = {};
   if (profile.model) env['CONFIG__MODEL'] = normalizeModel(profile.provider, profile.model);
-  env['CONFIG__MAX_MODEL_TOKENS'] = '128000';
-  env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = '128000';
+  // 上下文长度：用户「上下文长度」设置控制 input 裁剪上限；CLI 模式忽略（工具自管上下文）→ 固定默认值。
+  const contextTokens =
+    profile.provider === 'cli' ? LLM_CONTEXT_TOKENS_DEFAULT : (maxModelTokens ?? LLM_CONTEXT_TOKENS_DEFAULT);
+  env['CONFIG__MAX_MODEL_TOKENS'] = String(contextTokens);
+  env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = String(contextTokens);
   env['CONFIG__FALLBACK_MODELS'] = '[]';
   // litellm import 时会联网拉远端模型价格表（raw.githubusercontent.com），内网/弱网
   // 下 SSL 超时拖慢启动且刷警告。我们只取真实 token 数（来自 API response.usage），
@@ -176,6 +181,8 @@ export interface ChatEnvOptions {
    * 过小不达缓存粒度自动跳过（见 litellm_handler）。
    */
   promptCache?: boolean;
+  /** 裁剪输入内容的上下文长度上限（token，CONFIG__MAX_MODEL_TOKENS）；空则用默认 128000。CLI 模式忽略。 */
+  maxModelTokens?: number;
 }
 
 /**
@@ -187,7 +194,7 @@ export function buildChatEnv(
   profile: LlmProfile | null,
   opts: ChatEnvOptions = {},
 ): Record<string, string> {
-  const env: Record<string, string> = profile ? buildPragentEnv(profile) : {};
+  const env: Record<string, string> = profile ? buildPragentEnv(profile, opts.maxModelTokens) : {};
   if (opts.responseLanguage) env['CONFIG__RESPONSE_LANGUAGE'] = opts.responseLanguage;
   if (opts.lowReasoning) {
     env['MEEBOX_CLI_REASONING'] = 'low';
@@ -202,6 +209,14 @@ export interface ToolEnvOptions {
   tool: ReviewRunTool;
   /** pr-agent 响应语言（CONFIG__RESPONSE_LANGUAGE）；空则不设。 */
   responseLanguage?: string;
+  /** 裁剪输入内容的上下文长度上限（token，CONFIG__MAX_MODEL_TOKENS）；空则用默认 128000。CLI 模式忽略。 */
+  maxModelTokens?: number;
+  /**
+   * 代码建议 / 评审发现数量上限（2~8）：/review → PR_REVIEWER__NUM_MAX_FINDINGS、
+   * /improve → PR_CODE_SUGGESTIONS__NUM_CODE_SUGGESTIONS（均硬上限）。空则用 pr-agent 默认。
+   * /ask 的软约束走提示词（见 buildExtraInstructions），不经此。
+   */
+  maxCodeSuggestions?: number;
 }
 
 /**
@@ -223,12 +238,20 @@ export function buildToolEnv(
   profile: LlmProfile | null,
   opts: ToolEnvOptions,
 ): Record<string, string> {
-  const env: Record<string, string> = profile ? buildPragentEnv(profile) : {};
+  const env: Record<string, string> = profile ? buildPragentEnv(profile, opts.maxModelTokens) : {};
   if (opts.responseLanguage) env['CONFIG__RESPONSE_LANGUAGE'] = opts.responseLanguage;
   if (opts.tool === 'improve') {
     env['PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS'] = 'false';
     env['PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT'] = 'false';
     env['LOCAL__REVIEW_PATH'] = PRAGENT_LOCAL_OUTPUT.improve;
+    // 代码建议数量上限（用户「代码建议数量」设置）；空则用 pr-agent 默认（num_code_suggestions=4）。
+    if (opts.maxCodeSuggestions !== undefined) {
+      env['PR_CODE_SUGGESTIONS__NUM_CODE_SUGGESTIONS'] = String(opts.maxCodeSuggestions);
+    }
+  }
+  // 评审发现数量上限（与 /improve 共用同一设置）；空则用 pr-agent 默认（num_max_findings=3）。
+  if (opts.tool === 'review' && opts.maxCodeSuggestions !== undefined) {
+    env['PR_REVIEWER__NUM_MAX_FINDINGS'] = String(opts.maxCodeSuggestions);
   }
   return env;
 }

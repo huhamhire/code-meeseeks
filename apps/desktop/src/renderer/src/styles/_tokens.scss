@@ -1,95 +1,99 @@
-// 设计 token 中心：颜色 / 字号 / 圆角 / 间距 / 行高 / z-index 阶梯
+// 设计 token 桥接层：颜色 / 字号 / 圆角 / 间距 / 行高 / z-index 阶梯
 // 各 .scss 文件用 `@use './tokens' as *;` 拉到本地作用域。
 //
+// 颜色三层结构（见 _palette.scss / _theme.scss）：
+// - _palette.scss  原始标准色（Tier 1，唯一色值真相源）
+// - _theme.scss    语义 → 原色，发射为 CSS 自定义属性（Tier 2，运行期可整体换主题）
+// - 本文件          把语义 SCSS 变量桥接到对应 CSS 自定义属性（`$token: var(--token)`），
+//                  使用处保持 `background: $bg-app` 等旧写法不变，编译即输出 `var(--bg-app)`。
+//
 // 规则：
-// - 颜色按语义分组 (bg / border / text / accent / git-decoration)，不按色值命名
-// - 字号 / 间距用 t-shirt 尺寸 (xs/sm/md/lg)
-// - 命名跟 VS Code Dark+ 主题对齐，方便日后增加 light 主题做映射
+// - 颜色一律桥接到 var(--*)，绝不在此写裸 hex —— 改色去 _palette.scss / _theme.scss。
+// - 需在使用处按 alpha 叠加的少数色，用 `rgb(var(--rgb-*) / <alpha>)`（通道三元组见 _theme.scss）。
+// - 字号 / 间距 / 圆角 / z-index 等非颜色 token 仍为编译期常量（不参与主题切换），留在本文件。
 
 // ===== 背景色 =====
-$bg-app:         #1e1e1e; // body / app shell
-$bg-white-fade:  rgba(255, 255, 255, 0.12); // icon-btn hover / count-pill 底
-$bg-panel:       #1f1f20; // 侧栏 / 文件列表 / blame 列底
-$bg-panel-alt:   #1a1a1b; // chat-pane 输入区等更深一档
-$bg-elev:        #252526; // 浮层 / 弹出菜单
-$bg-surface:     #2d2d30; // 输入框 / chip 默认底 / 代码块底
-$bg-hover:       #2a2d2e; // hover 高亮
-$bg-selected:    #094771; // 列表项选中（VS Code activeList）
-$bg-group-header: #181818; // 侧栏 PR 分组头，比 panel 更深一档
+$bg-app:          var(--bg-app);
+$bg-white-fade:   var(--bg-white-fade);
+$bg-panel:        var(--bg-panel);
+$bg-panel-alt:    var(--bg-panel-alt);
+$bg-elev:         var(--bg-elev);
+$bg-surface:      var(--bg-surface);
+$bg-hover:        var(--bg-hover);
+$bg-selected:     var(--bg-selected);
+$bg-group-header: var(--bg-group-header);
+$chip-neutral:    var(--chip-neutral);
 
 // ===== 边框 =====
-$border-default:      #3e3e42;
-$border-default-fade: rgba(62, 62, 66, 0.5); // blame row 内分隔线
-$border-muted:        #2d2d30;
+$border-default:      var(--border-default);
+$border-default-fade: var(--border-default-fade);
+$border-muted:        var(--border-muted);
 
 // ===== 文字 =====
-$text-primary:   #cccccc;
-$text-body:      #d4d4d4; // body 默认
-$text-muted:     #858585;
-$text-subtle:    #6e7681; // 更弱：blame / footer hint
-$text-dim:       #6e6e6e; // 几乎不可见的 placeholder 风
-$text-on-accent: #ffffff;
+$text-primary:   var(--text-primary);
+$text-body:      var(--text-body);
+$text-muted:     var(--text-muted);
+$text-subtle:    var(--text-subtle);
+$text-dim:       var(--text-dim);
+$text-on-accent: var(--text-on-accent);
+$text-on-selected: var(--text-on-selected);
 
 // ===== 语义色 (动作 / 状态) =====
-$color-accent:        #0e639c; // VS Code 主蓝，active / primary
-$color-accent-hover:  #1177bb; // primary 按钮 hover（比 accent 提亮一档）
-$color-accent-bg-fade: rgba(14, 99, 156, 0.18);
-$color-accent-strong-fade: rgba(14, 99, 156, 0.5); // resize handle hover/active
-$color-info:          #6cb6ff; // 浅蓝，链接 / 提示
-$color-success:        #16825d; // 状态栏 remote 风格深绿 (system OK)
-$color-approved:       #16a34a; // PR review "approved/通过" 专用绿 (Tailwind green-600)
-$color-warning:        #d97706; // PR review "needs work / 需修改" 饱和琥珀 (Tailwind amber-600，对齐 $color-approved 重量)
-$color-warning-bright: #fbbf24; // 亮琥珀，只用于纯文字告警 (conflict-tag / diff-binary)，无背景
-$color-danger:        #f48771; // 错误文案 / 红边框
-$color-danger-bg:     #c72e0f; // 错误 chip / 模态删除按钮实底（高饱和）
-// ghost 危险按钮（删除评论 / 草稿 / 连接 / LLM、停止、拒绝等）的描边 + 文字饱和红：
-// 与实底 $color-danger-bg(#c72e0f) 同色相、提亮以保暗底可读，比 $color-danger 更饱和、警示力更强
-$color-danger-strong:      #e8512e;
-$color-danger-strong-fade: rgba(232, 81, 46, 0.12); // ghost 危险按钮 hover 浅红底
-$color-token-in:       #22c55e; // token 用量 ↑输入 (Tailwind green-500)
-$color-token-out:      #ef4444; // token 用量 ↓输出 (Tailwind red-500)
-$color-token-cache:    #6cb6ff; // token 用量 缓存命中(cache_read) 柱体图标，浅蓝
+$color-accent:             var(--color-accent);
+$color-accent-hover:       var(--color-accent-hover);
+$color-accent-bg-fade:     var(--color-accent-bg-fade);
+$color-accent-strong-fade: var(--color-accent-strong-fade);
+$color-info:               var(--color-info);
+$color-success:            var(--color-success);
+$color-approved:           var(--color-approved);
+$color-warning:            var(--color-warning);
+$color-warning-bright:     var(--color-warning-bright);
+$color-danger:             var(--color-danger);
+$color-danger-bg:          var(--color-danger-bg);
+$color-danger-strong:      var(--color-danger-strong);
+$color-danger-strong-fade: var(--color-danger-strong-fade);
+$color-token-in:           var(--color-token-in);
+$color-token-out:          var(--color-token-out);
+$color-token-cache:        var(--color-token-cache);
 
-// 语义色浅底 (chip / banner 背景，与对应主色同色相；chat 卡片大量复用)
-$color-accent-bg-hover:    rgba(14, 99, 156, 0.28);  // 蓝调 chip hover 加深 (rule-chip)
-$color-approved-fade:      rgba(22, 163, 74, 0.18);  // approved chip 浅绿底
-$color-approved-fade-soft: rgba(22, 163, 74, 0.1);   // 代码 diff improved 块浅绿底 (比 chip 更淡)
-$color-warning-fade:       rgba(217, 119, 6, 0.18);  // warning chip 浅琥珀底
-$color-danger-fade:        rgba(244, 135, 113, 0.08); // 错误 banner / existing 代码块 浅红底
-$color-danger-border:      rgba(244, 135, 113, 0.35); // 错误 banner 描边
+// 语义色浅底 (chip / banner 背景)
+$color-accent-bg-hover:    var(--color-accent-bg-hover);
+$color-approved-fade:      var(--color-approved-fade);
+$color-approved-fade-soft: var(--color-approved-fade-soft);
+$color-warning-fade:       var(--color-warning-fade);
+$color-danger-fade:        var(--color-danger-fade);
+$color-danger-border:      var(--color-danger-border);
 
-// off-palette 状态浅底（amber/green/yellow 与主色略有出入，暂各自具名以消除硬编码，待后续与主色收敛）
-$color-conflict-fade:      rgba(245, 158, 11, 0.18); // 冲突 / needsWork chip 填充 (conflict-tag / pr-activity needsWork)
-$color-pending-fade:       rgba(229, 158, 30, 0.15); // 待办 / 草稿 pending 填充 (tab badge / drafts pending)
-$color-posted-fade:        rgba(95, 165, 109, 0.15); // 草稿已发布填充
-$color-search-hit:         rgba(255, 213, 79, 0.42); // diff 搜索命中高亮
+// off-palette 状态浅底
+$color-conflict-fade:      var(--color-conflict-fade);
+$color-pending-fade:       var(--color-pending-fade);
+$color-posted-fade:        var(--color-posted-fade);
+$color-search-hit:         var(--color-search-hit);
 
-// ===== Git decoration 配色 (跟 Monaco / VS Code 一致) =====
-$git-added:           #73c991;
-$git-added-bg-fade:   rgba(115, 199, 145, 0.16);
-$git-modified:        #e2c08d;
-$git-deleted:         #c74e39;
-$git-needs-work-fade: rgba(199, 78, 57, 0.18);
-$git-needs-work-fg:   #f48771;
-// blame 列专属（off-palette）：PR 改动行绿条（对齐 Monaco diff added 装饰绿）+ 折叠占位斜纹灰
-$blame-change:        #487e02;
-$blame-fold:          #6e7681;
+// ===== Git decoration 配色 =====
+$git-added:           var(--git-added);
+$git-added-bg-fade:   var(--git-added-bg-fade);
+$git-modified:        var(--git-modified);
+$git-deleted:         var(--git-deleted);
+$git-needs-work-fade: var(--git-needs-work-fade);
+$git-needs-work-fg:   var(--git-needs-work-fg);
+$blame-change:        var(--blame-change);
+$blame-fold:          var(--blame-fold);
 
-// ===== 文件改动状态点 (文件树右栏 8px 圆点) =====
-// 比 $git-* 装饰色更亮的 Material 系：小圆点上比装饰色更易辨认。typechange 用 $text-muted
-$file-status-added:    #4caf50;
-$file-status-modified: #f59e0b;
-$file-status-deleted:  #dc2626;
-$file-status-renamed:  #a78bfa;
-$file-status-copied:   #60a5fa;
+// ===== 文件改动状态点 =====
+$file-status-added:    var(--file-status-added);
+$file-status-modified: var(--file-status-modified);
+$file-status-deleted:  var(--file-status-deleted);
+$file-status-renamed:  var(--file-status-renamed);
+$file-status-copied:   var(--file-status-copied);
 
 // ===== Avatar / Initials 等装饰 =====
-$avatar-bg-default:   #2a2d2e;
+$avatar-bg-default:   var(--avatar-bg-default);
 
 // ===== 滚动条 (webkit) =====
-$scrollbar-thumb:        #4d4d4d;
-$scrollbar-thumb-hover:  #5e5e5e;
-$scrollbar-thumb-active: #707070;
+$scrollbar-thumb:        var(--scrollbar-thumb);
+$scrollbar-thumb-hover:  var(--scrollbar-thumb-hover);
+$scrollbar-thumb-active: var(--scrollbar-thumb-active);
 
 // ===== 字号 =====
 // 整体设计基线在 14px：body 默认 / Monaco 编辑器都走 $fs-lg=14。
@@ -130,4 +134,6 @@ $z-modal:         1000;
 $z-modal-nested:  1100;
 
 // ===== 字体族 =====
-$font-mono: var(--vscode-editor-font-family, 'Consolas', monospace);
+// 等宽字体优先取用户配置（--editor-font-family，由 renderer 按 config 写入 documentElement），
+// 未配置时回落 Monaco 注入的 --vscode-editor-font-family，再回落内置 Consolas / monospace。
+$font-mono: var(--editor-font-family, var(--vscode-editor-font-family, 'Consolas', monospace));
