@@ -3,9 +3,9 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.7.0-alpha.1] - 2026-06-26
+## [0.7.0] - 2026-06-27
 
-> 0.7 首个预发布（alpha）。本版重点：
+> 首个 0.7 正式版。本版重点：
 >
 > - **深色 / 浅色主题与外观体系**：主题切换、编辑器配色主题、自定义等宽字体与字号
 > - **AI 评审运行参数**：评审任务并发、上下文长度、Agent 策略（自动追问 / 代码建议数量）
@@ -311,7 +311,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[0.7.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0-alpha.1
+[0.7.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.3.1...v0.4.0
