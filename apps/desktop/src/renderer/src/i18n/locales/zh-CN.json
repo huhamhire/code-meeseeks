@@ -692,7 +692,7 @@
     "llmContextSliderAria": "上下文长度档位",
     "llmContextTitle": "上下文长度",
     "llmEmpty": "尚未配置；添加一条以启用 PR Agent。",
-    "llmHint": "选择活跃配置决定 PR Agent 调用哪个模型。",
+    "llmHint": "选择活跃配置决定 Agent 调用哪个模型。",
     "llmProfileFallback": "配置 {{id}}",
     "llmTitle": "LLM 模型",
     "maxCodeSuggestionsHint": "单次 /review、/improve、/ask 生成的代码建议数量上限。",
