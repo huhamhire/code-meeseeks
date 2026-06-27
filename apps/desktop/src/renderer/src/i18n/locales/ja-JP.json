@@ -692,7 +692,7 @@
     "llmContextSliderAria": "コンテキスト長のレベル",
     "llmContextTitle": "コンテキスト長",
     "llmEmpty": "まだ設定されていません。PR Agent を有効にするには 1 つ追加してください。",
-    "llmHint": "アクティブなプロファイルが、PR Agent の呼び出すモデルを決定します。",
+    "llmHint": "アクティブなプロファイルが、Agent の呼び出すモデルを決定します。",
     "llmProfileFallback": "プロファイル {{id}}",
     "llmTitle": "LLM モデル",
     "maxCodeSuggestionsHint": "/review・/improve・/ask が一度に生成するコード提案数の上限。",

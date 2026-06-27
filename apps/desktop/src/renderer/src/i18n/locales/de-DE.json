@@ -708,7 +708,7 @@
     "llmContextSliderAria": "Stufe der Kontextlänge",
     "llmContextTitle": "Kontextlänge",
     "llmEmpty": "Noch nicht konfiguriert. Fügen Sie eines hinzu, um PR Agent zu aktivieren.",
-    "llmHint": "Das aktive Profil bestimmt, welches Modell PR Agent aufruft.",
+    "llmHint": "Das aktive Profil bestimmt, welches Modell der Agent aufruft.",
     "llmProfileFallback": "Profil {{id}}",
     "llmTitle": "LLM-Modelle",
     "maxCodeSuggestionsHint": "Max. Code-Vorschläge pro /review, /improve oder /ask.",
