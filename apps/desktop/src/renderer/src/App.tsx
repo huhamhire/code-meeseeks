@@ -7,7 +7,12 @@ import { MainPane } from './components/layout/MainPane';
 import { PrPanel, PrEmpty, usePullRequests } from './components/features/pr';
 import { OnboardingWizard } from './components/features/onboarding';
 import { SettingsModal, type SettingsCategory } from './components/features/settings';
-import { Sidebar } from './components/layout/Sidebar';
+import {
+  Sidebar,
+  FILTERS as PR_STATUS_FILTERS,
+  DECISION_STATUS_FILTERS,
+  type FilterKey,
+} from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
 import { TitleBar } from './components/layout/TitleBar';
 import { useToast } from './hooks/useToast';
@@ -84,6 +89,8 @@ export default function App() {
   } | null>(null);
   // GitHub 发现分类（运行时筛选，不持久化）；仅活动连接支持时在 PR 列表展示。
   const [discoveryFilter, setDiscoveryFilter] = useState<PrDiscoveryFilter>('review-requested');
+  // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
+  const [statusFilter, setStatusFilter] = useState<FilterKey>('pending');
 
   if (fatalError) {
     return (
@@ -126,6 +133,10 @@ export default function App() {
   const effectiveDiscoveryFilter = availableDiscoveryFilters.includes(discoveryFilter)
     ? discoveryFilter
     : availableDiscoveryFilters[0];
+  // 命令面板「分类筛选」可选的状态项：与侧栏一致——有发现分类时隐藏决断类（通过 / 需修改）。
+  const visibleStatusFilters = showDiscoveryFilter
+    ? PR_STATUS_FILTERS.filter((f) => !DECISION_STATUS_FILTERS.has(f.value))
+    : PR_STATUS_FILTERS;
 
   return (
     <div className="app">
@@ -133,8 +144,15 @@ export default function App() {
         platform={boot.info.platform}
         title={selected?.title}
         config={boot.config}
+        selectedPrId={selectedId}
         patchConfig={patchConfig}
         openSettings={openSettings}
+        toggleChatPanel={() => setChatCollapsed((c) => !c)}
+        togglePrList={() => setSidebarCollapsed((c) => !c)}
+        discoveryFilters={availableDiscoveryFilters}
+        setDiscoveryFilter={setDiscoveryFilter}
+        prStatusFilters={visibleStatusFilters}
+        setPrStatusFilter={setStatusFilter}
       />
       <div className="app-body">
         {!sidebarCollapsed && (
@@ -150,6 +168,8 @@ export default function App() {
             availableFilters={showDiscoveryFilter ? availableDiscoveryFilters : undefined}
             discoveryFilter={showDiscoveryFilter ? effectiveDiscoveryFilter : undefined}
             onDiscoveryFilterChange={showDiscoveryFilter ? setDiscoveryFilter : undefined}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
           />
         )}
         <MainPane>

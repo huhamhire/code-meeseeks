@@ -107,8 +107,8 @@ export function buildSettingsCommands(ctx: CommandContext): RootCommand[] {
     },
     {
       id: 'toggle-proxy',
-      // 标题随当前态翻转：已开 → 关闭代理 / 已关 → 开启代理
-      ...cmd(config.proxy.enabled ? 'commandPalette.cmdDisableProxy' : 'commandPalette.cmdEnableProxy'),
+      // 切换型命令用单一文案（不随状态翻转）；当前开关状态在设置页查看
+      ...cmd('commandPalette.cmdToggleProxy'),
       run: () => toggleProxy(ctx),
     },
     {

@@ -1,15 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Config, Platform } from '@meebox/shared';
+import type { Config, Platform, PrDiscoveryFilter } from '@meebox/shared';
 import { buildRootCommands, type RootCommand } from './commands';
+import { chatRunStore } from '../../../stores/chat-run-store';
+import type { FilterKey } from '../../layout/Sidebar';
 import type { SettingsCategory } from '../settings';
 
 interface CommandPaletteProps {
   /** 运行平台：决定打开快捷键修饰键（mac = Cmd+Shift+P，其余 = Ctrl+Shift+P）。 */
   platform: Platform;
   config: Config;
+  /** 当前选中 PR 的 localId（上下文相关命令用，如运行自动评审）。 */
+  selectedPrId: string | null;
   patchConfig: (updater: (c: Config) => Config) => void;
   openSettings: (category?: SettingsCategory) => void;
+  /** 切换对话面板折叠（评审域命令用）。 */
+  toggleChatPanel: () => void;
+  /** 切换 PR 列表（侧栏）折叠（PR 域命令用）。 */
+  togglePrList: () => void;
+  /** 当前平台支持的发现分类（PR 域「一级分类」命令门控用）。 */
+  discoveryFilters: readonly PrDiscoveryFilter[];
+  setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
+  /** 可选的 PR 状态筛选项（PR 域「分类筛选」二级选项用）。 */
+  prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
+  setPrStatusFilter: (filter: FilterKey) => void;
 }
 
 /** 当前层（顶层 / 二级）展开后用于渲染的扁平项。 */
@@ -29,8 +43,25 @@ interface FlatItem {
  * 其余 Ctrl+Shift+P 打开聚焦。**最多两级**——顶层命令选中后若有二级选项则原地替换为选项列表，
  * 不支持返回上级（Esc 退出后重进）。搜索按当前界面语言匹配命令文案。设计见 docs/arch/13。
  */
-export function CommandPalette({ platform, config, patchConfig, openSettings }: CommandPaletteProps) {
+export function CommandPalette({
+  platform,
+  config,
+  selectedPrId,
+  patchConfig,
+  openSettings,
+  toggleChatPanel,
+  togglePrList,
+  discoveryFilters,
+  setDiscoveryFilter,
+  prStatusFilters,
+  setPrStatusFilter,
+}: CommandPaletteProps) {
   const { t, i18n } = useTranslation();
+  // 重入保护：调用时取实时运行中 PR 集合（编排 Agent），稳定引用避免命令清单频繁重建
+  const isPrRunning = useCallback(
+    (id: string) => chatRunStore.getSnapshot().agentPrs.includes(id),
+    [],
+  );
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState<RootCommand | null>(null);
   const [query, setQuery] = useState('');
@@ -46,9 +77,38 @@ export function CommandPalette({ platform, config, patchConfig, openSettings }: 
     () => {
       // 显式引用 i18n.language：t 引用在切语言后不变，需以语言为 key 重建命令文案（搜索按当前语言匹配）
       void i18n.language;
-      return buildRootCommands({ config, patchConfig, openSettings, t, tEn });
+      return buildRootCommands({
+        config,
+        selectedPrId,
+        isPrRunning,
+        toggleChatPanel,
+        togglePrList,
+        discoveryFilters,
+        setDiscoveryFilter,
+        prStatusFilters,
+        setPrStatusFilter,
+        patchConfig,
+        openSettings,
+        t,
+        tEn,
+      });
     },
-    [config, patchConfig, openSettings, t, tEn, i18n.language],
+    [
+      config,
+      selectedPrId,
+      isPrRunning,
+      toggleChatPanel,
+      togglePrList,
+      discoveryFilters,
+      setDiscoveryFilter,
+      prStatusFilters,
+      setPrStatusFilter,
+      patchConfig,
+      openSettings,
+      t,
+      tEn,
+      i18n.language,
+    ],
   );
 
   const close = (): void => {
