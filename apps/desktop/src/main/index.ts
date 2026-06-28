@@ -5,7 +5,7 @@ import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
 import { scaffoldAgentDir } from '@meebox/agent';
 import { editorThemeNativeSource, resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
-import type { Poller } from '@meebox/poller';
+import { sweepOrphanedArchivedPrs, type Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import { JsonFileStateStore } from '@meebox/state-store';
 import {
@@ -43,6 +43,8 @@ class App {
   private bootstrap!: BootstrapResult;
   private logger!: Logger;
   private stateStore!: JsonFileStateStore;
+  /** 归档 PR 冷存储（`archived/` 根，与 state/ 平级）；退场 PR 整树搬入、按 grace 期清理。 */
+  private archiveStore!: JsonFileStateStore;
   private poller!: Poller;
   private repoMirror!: RepoMirrorManager;
   private prAgent!: PrAgentRuntime;
@@ -67,6 +69,17 @@ class App {
       await this.stateStore
         .sweepStaleTmpFiles()
         .catch((err: unknown) => this.logger.warn({ err }, 'state-store: tmp sweep failed'));
+      // 归档冷存储同样清扫上次会话残留的原子写 tmp（搬迁中途退出可能留下孤儿）。
+      await this.archiveStore
+        .sweepStaleTmpFiles()
+        .catch((err: unknown) => this.logger.warn({ err }, 'archive-store: tmp sweep failed'));
+      // 归档孤儿清扫：统一索引丢失 / 重建后，归档数据失去索引条目、按索引遍历的硬清够不到 → 永久孤儿。
+      // 启动期（任何写入之前）按「索引无条目 + 目录 mtime 超 grace」无索引兜底回收（见 docs/arch/03）。
+      await sweepOrphanedArchivedPrs({
+        stateStore: this.stateStore,
+        archiveStore: this.archiveStore,
+        logger: this.logger,
+      }).catch((err: unknown) => this.logger.warn({ err }, 'archive housekeeping: orphan sweep failed'));
       await this.initConnectionsAndIpc();
       await this.initWindow();
       await this.startPolling();
@@ -126,6 +139,7 @@ class App {
     // 版本更新器：由 poller tick 顺带调 runIfDue（至多每小时一次，复用 poller 周期、不另起定时器）。
     this.updater = new Updater(this.bootstrap, this.logger);
     this.stateStore = new JsonFileStateStore(this.bootstrap.paths.stateDir, this.logger);
+    this.archiveStore = new JsonFileStateStore(this.bootstrap.paths.archivedDir, this.logger);
   }
 
   /**
@@ -145,6 +159,7 @@ class App {
     this.poller = createPoller({
       bootstrap: this.bootstrap,
       stateStore: this.stateStore,
+      archiveStore: this.archiveStore,
       logger: this.logger,
       onTickExtras: () => {
         // 本轮已被移除 / purge 的 PR：终止其上仍在执行的 agent 操作（先于 AutoPilot，避免给已消失的 PR 起新评审）。

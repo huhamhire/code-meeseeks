@@ -2,6 +2,7 @@ export * from './types.js';
 export * from './poller.js';
 export * from './pr-hash-id.js';
 export * from './pr-state.js';
+export * from './archive-housekeeping.js';
 export * from './comments-cache.js';
 export * from './unread.js';
 export * from './diff-base-cache.js';

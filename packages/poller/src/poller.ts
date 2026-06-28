@@ -8,7 +8,7 @@ import type {
   ReviewerStatus,
 } from '@meebox/shared';
 import type { PlatformAdapter } from '@meebox/platform-core';
-import type { StateStore } from '@meebox/state-store';
+import { relocateTree, type StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
 import { latestCommentToMeAt } from './unread.js';
 import {
@@ -36,7 +36,13 @@ export interface PollerConnection {
 
 export interface PollerOptions {
   connections: ReadonlyArray<PollerConnection>;
+  /** 活跃 PR 存储（`state/` 根）：索引 + 在场 PR 的 meta / 评论 / runs 等。 */
   stateStore: StateStore;
+  /**
+   * 归档 PR 冷存储（`archived/` 根，与 state/ 平级）。PR 退场（软删）时其 `prs/<hash>/` 整树从
+   * stateStore 搬入此处、复活时搬回；硬清按同一 grace 策略从此处删除。索引仍只在 stateStore 维护。
+   */
+  archiveStore: StateStore;
   intervalSeconds: number;
   logger: Logger;
   /** 用于测试注入；默认 Date.now() */
@@ -118,6 +124,8 @@ export class Poller {
     let dirty = false;
     for (const [localId, entry] of Object.entries(prs)) {
       if (!active.has(entry.identity.connectionId) && !entry.archivedAt) {
+        // 整树搬入归档冷存储后再标 archivedAt（搬迁先于索引落盘，崩溃可幂等重来）。
+        await relocateTree(this.opts.stateStore, this.opts.archiveStore, prDirKey(localId));
         prs[localId] = { ...entry, archivedAt: now };
         dirty = true;
       }
@@ -295,6 +303,12 @@ export class Poller {
             localStatus = prevMeta?.pr.localStatus ?? 'pending';
           }
 
+          // 复活：上一轮处于归档态（数据已搬入 archived/）→ 先把整树搬回活跃存储，再写 meta，
+          // 让 runs / 评论 / 已读水位等历史与新 meta 同处活跃目录（搬回先于 writePrMeta，避免 split）。
+          if (prev?.archivedAt) {
+            await relocateTree(this.opts.archiveStore, this.opts.stateStore, prDirKey(localId));
+          }
+
           // 完整 PR 元数据落到 per-PR meta.json。platform 字段让 meta 自描述
           await writePrMeta(this.opts.stateStore, localId, {
             ...pr,
@@ -356,6 +370,8 @@ export class Poller {
           !seen.has(localId) &&
           !entry.archivedAt
         ) {
+          // 整树搬入归档冷存储后再标 archivedAt（搬迁先于索引落盘，崩溃可幂等重来）。
+          await relocateTree(this.opts.stateStore, this.opts.archiveStore, prDirKey(localId));
           indexByLocalId.set(localId, { ...entry, archivedAt: now });
           removed++;
           dirty = true;
@@ -365,12 +381,26 @@ export class Poller {
 
     // 硬清：archived 超过 grace 期 (默认 1 周) → rm -r 整个 PR 目录 + 索引删除
     let purged = 0;
+    let reconciled = 0;
     for (const [localId, entry] of [...indexByLocalId.entries()]) {
-      if (entry.archivedAt && nowMs - Date.parse(entry.archivedAt) > PURGE_GRACE_MS) {
+      if (!entry.archivedAt) continue;
+      if (nowMs - Date.parse(entry.archivedAt) > PURGE_GRACE_MS) {
+        // 硬清：grace 期满 → 两端整目录清（archiveStore 主存 + stateStore 兜旧布局 / split-brain 残留）。
+        await this.opts.archiveStore.deleteDir(prDirKey(localId));
         await this.opts.stateStore.deleteDir(prDirKey(localId));
         indexByLocalId.delete(localId);
         purged++;
         dirty = true;
+      } else {
+        // 对账（最终一致）：凡 archived 条目其数据都应在 archiveStore。把仍滞留活跃存储的整树搬入归档——
+        // 涵盖旧布局存量、异常 split-brain 残留、中断的搬迁。已就位者源缺失即 no-op、近零成本。
+        // 仅搬数据、不改索引（archivedAt 不变），故不置 dirty——保持「全失败 poll 零索引写」不变式。
+        const moved = await relocateTree(
+          this.opts.stateStore,
+          this.opts.archiveStore,
+          prDirKey(localId),
+        );
+        if (moved > 0) reconciled++;
       }
     }
 
@@ -386,7 +416,7 @@ export class Poller {
 
     const result: PollResult = { fetched, changed, added, removed, errors };
     this._lastPollAt = now;
-    this.opts.logger.info({ ...result, purged, dirty }, 'poll complete');
+    this.opts.logger.info({ ...result, purged, reconciled, dirty }, 'poll complete');
     // 通知调用方有哪些 repo 需要 sync mirror。空集合不调，避免无谓 noop
     if (changedReposByKey.size > 0) {
       this.opts.onPrsChanged?.(Array.from(changedReposByKey.values()));
