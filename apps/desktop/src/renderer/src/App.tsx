@@ -154,6 +154,17 @@ export default function App() {
         }
         return;
       }
+      // 查看已关闭（history）：mac ⌘⇧H（避开系统「隐藏应用」⌘H）/ 其余 Ctrl+H（浏览器历史惯例）
+      if (k === 'h') {
+        const wantArchived = isMac
+          ? e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey
+          : e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+        if (wantArchived) {
+          e.preventDefault();
+          viewArchived();
+        }
+        return;
+      }
       // 单修饰键布局开关：Ctrl/Cmd+B（PR 列表）、Ctrl/Cmd+J（对话面板）
       const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (!mod || e.shiftKey || e.altKey) return;
@@ -167,7 +178,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [boot?.info.platform, setSidebarCollapsed, setChatCollapsed]);
+  }, [boot?.info.platform, setSidebarCollapsed, setChatCollapsed, viewArchived]);
 
   if (fatalError) {
     return (

@@ -100,6 +100,7 @@ export function CommandPalette({
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const activeItemRef = useRef<HTMLButtonElement>(null);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 固定英文翻译器（en-US 静态打包、恒可用）：非英语界面作次行 + 恒按英文检索
@@ -226,6 +227,11 @@ export function CommandPalette({
     setActiveIndex((i) => Math.min(Math.max(0, i), Math.max(0, items.length - 1)));
   }, [items.length]);
 
+  // 高亮项滚入可视区：打开时默认选中的是 MRU 项（可能在列表中段），需自动滚到；方向键导航同理。
+  useEffect(() => {
+    if (open) activeItemRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [open, activeIndex, items.length]);
+
   // 全局快捷键：mac Cmd+Shift+P / 其余 Ctrl+Shift+P 打开
   useEffect(() => {
     const isMac = platform === 'darwin';
@@ -295,6 +301,7 @@ export function CommandPalette({
               return (
                 <button
                   key={it.id}
+                  ref={i === activeIndex ? activeItemRef : undefined}
                   type="button"
                   role="option"
                   aria-selected={i === activeIndex}

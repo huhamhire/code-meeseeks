@@ -37,13 +37,15 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
     });
   }
 
-  // 查看已关闭：切到归档（已关闭）范围浏览
+  // 查看已关闭：切到归档（已关闭）范围浏览。快捷键取 H（history）；mac 用 ⌘⇧H 避开系统「隐藏应用」(⌘H)，
+  // 其余平台 Ctrl+H（浏览器历史惯例）。见 App 窗口级快捷键。
   out.push({
     id: 'view-archived',
     category,
     categoryEn,
     title: t('commandPalette.cmdViewArchived'),
     titleEn: tEn('commandPalette.cmdViewArchived'),
+    shortcut: formatChord(ctx.platform, 'H', ctx.platform === 'darwin' ? { shift: true } : undefined),
     run: () => ctx.viewArchived(),
   });
 
