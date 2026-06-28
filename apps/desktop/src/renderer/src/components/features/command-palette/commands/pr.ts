@@ -73,6 +73,10 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
     categoryEn,
     title: t('commandPalette.cmdOpenPrUrl'),
     titleEn: tEn('commandPalette.cmdOpenPrUrl'),
+    // 快捷键直达输入层（U = URL）；mac ⌘⇧U / 其余 Ctrl+Shift+U，见 CommandPalette 窗口级监听
+    shortcut: formatChord(ctx.platform, 'U', { shift: true }),
+    // 输入层前缀只用简短「URL」（通用、免 i18n），不占整条命令标题
+    prefixLabel: 'URL',
     input: {
       placeholder: t('commandPalette.openPrUrlPlaceholder'),
       run: (text) => ctx.openPrByUrl(text),

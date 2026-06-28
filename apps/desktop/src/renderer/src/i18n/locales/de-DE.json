@@ -198,7 +198,6 @@
     "cmdViewArchived": "Geschlossene anzeigen",
     "cmdViewDiscovery": "{{label}} anzeigen",
     "empty": "Keine passenden Befehle",
-    "inputHint": "Zum Öffnen Enter drücken",
     "openPrUrlPlaceholder": "PR-Link der aktuellen Plattform einfügen, Enter drücken",
     "pickLanguage": "Anzeigesprache wählen…",
     "pickModel": "Modell wählen…",

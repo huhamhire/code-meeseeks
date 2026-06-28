@@ -198,7 +198,6 @@
     "cmdViewArchived": "查看「已关闭」",
     "cmdViewDiscovery": "查看「{{label}}」",
     "empty": "无匹配命令",
-    "inputHint": "回车打开",
     "openPrUrlPlaceholder": "粘贴 / 输入当前平台的 PR 链接，回车打开",
     "pickLanguage": "选择显示语言…",
     "pickModel": "选择模型…",

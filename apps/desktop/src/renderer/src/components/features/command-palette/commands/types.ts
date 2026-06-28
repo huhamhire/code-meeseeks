@@ -68,6 +68,8 @@ export interface RootCommand {
   shortcut?: string[];
   /** 进入二级后的输入框占位提示 */
   optionsPlaceholder?: string;
+  /** 进入二级后输入框左侧的简短前缀提示符（如「URL」）；缺省回退到命令标题。 */
+  prefixLabel?: string;
   /** 二级选项（惰性求值，读当前 config 标注 active）；与 run / input 三选一 */
   options?: () => CommandOption[];
   /**
