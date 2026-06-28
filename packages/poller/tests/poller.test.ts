@@ -90,6 +90,8 @@ class FakeAdapter implements PlatformAdapter {
         }
         return this.prList;
       },
+      getSinglePullRequest: () =>
+        Promise.reject(new Error('FakeAdapter.getSinglePullRequest 未实现（poller 测试不使用）')),
       listPullRequestCommits: async () => [],
       listPullRequestActivity: async () => [],
       setPullRequestReviewStatus: async () => {
@@ -282,6 +284,7 @@ describe('Poller.tick', () => {
       getCloneUrl: async () => 'https://stub',
     };
     const slowPulls: PullRequestService = {
+      getSinglePullRequest: () => Promise.reject(new Error('unused')),
       listPullRequestCommits: async () => [],
       listPullRequestActivity: async () => [],
       setPullRequestReviewStatus: async () => {
