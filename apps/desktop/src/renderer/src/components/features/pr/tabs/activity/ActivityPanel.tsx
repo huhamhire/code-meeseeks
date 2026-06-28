@@ -34,6 +34,8 @@ interface ActivityPanelProps {
   onCommentsLoaded?: (count: number) => void;
   /** 活动连接能力位；此处用 commentHardBreaks 决定评论是否启用 remark-breaks。 */
   capabilities?: PlatformCapabilities;
+  /** 内容只读（decline / 不可参与归档 PR）：隐藏评论回复 / 编辑 / 删除及新建编辑框。 */
+  readOnly?: boolean;
   /** 是否展开「新建评论」编辑框（由标签栏「评论」按钮控制，出现在时间线顶部） */
   composing?: boolean;
   /** 新建评论编辑框收起（取消 / 发布成功）回调 */
@@ -80,6 +82,7 @@ export function ActivityPanel({
   pr,
   onCommentsLoaded,
   capabilities,
+  readOnly = false,
   composing = false,
   onComposeClose,
   currentUserName,
@@ -181,6 +184,7 @@ export function ActivityPanel({
             autoExpandCode={autoExpandSet.has(c.remoteId)}
             hardBreaks={hardBreaks}
             timeline={showTimeline}
+            readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
           />
         ),
@@ -205,7 +209,7 @@ export function ActivityPanel({
     // newest first；稳定排序下同刻条目按 评论→提交→决断 入队序排列
     rows.sort((a, b) => b.at - a.at);
     return rows.map((r) => r.node);
-  }, [view, viewPr, autoExpandSet, hardBreaks, showTimeline, onViewCommit, onJumpToAnchor]);
+  }, [view, viewPr, autoExpandSet, hardBreaks, showTimeline, readOnly, onViewCommit, onJumpToAnchor]);
 
   // 首载失败 / 切 PR 失败（无可信展示内容，或现有 view 属于旧 PR）：整块错误，不拿旧 PR 内容冒充新的。
   if (error && (!view || view.pr.localId !== pr.localId)) {
@@ -227,7 +231,7 @@ export function ActivityPanel({
         {(composing || (view && timeline.length > 0)) && (
           <ul className="pr-comments-list pr-activity-list">
             {/* 新建评论编辑框作为时间线首个节点：与其它条目同款图标节点 + 头像，编辑框缩进挂在轨上。 */}
-            {composing && (
+            {composing && !readOnly && (
               <li className="pr-comment pr-comment-timeline pr-comment-depth-0">
                 <div className="pr-activity-item pr-activity-comment-head">
                   <span className="pr-activity-icon pr-activity-icon-comment" aria-hidden="true">

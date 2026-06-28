@@ -17,6 +17,12 @@ const DOMAIN_BUILDERS: ReadonlyArray<(ctx: CommandContext) => RootCommand[]> = [
 ];
 
 export function buildRootCommands(ctx: CommandContext): RootCommand[] {
+  // 领域按 DOMAIN_BUILDERS 固定顺序（PR < Review < Settings）；**域内统一按英文标题字典序**排序，
+  // 使「查看 X / 分类筛选 / 切换…」等不依赖各域手工排列、动态生成的命令（如随平台能力的发现分类）也自动归位。
   // 统一门控：命令声明 when 谓词，注册表在此统一过滤（各领域不再各写 if）。
-  return DOMAIN_BUILDERS.flatMap((build) => build(ctx)).filter((c) => !c.when || c.when());
+  return DOMAIN_BUILDERS.flatMap((build) =>
+    build(ctx)
+      .filter((c) => !c.when || c.when())
+      .sort((a, b) => a.titleEn.localeCompare(b.titleEn, 'en')),
+  );
 }

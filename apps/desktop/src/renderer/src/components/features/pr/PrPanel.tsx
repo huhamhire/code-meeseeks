@@ -29,6 +29,10 @@ export interface PrPanelProps {
   merging?: boolean;
   capabilities?: PlatformCapabilities;
   currentUserName?: string | null;
+  /** 隐藏 PR 生命周期操作（合并 / 审批）：已关闭范围恒置（退场 PR 不再做评审决断 / 合并）。 */
+  hideLifecycle?: boolean;
+  /** 内容只读（decline / 不可参与）：隐藏评论 / 草稿等写入入口，仅供浏览。合并 / 仍开放的归档 PR 为 false。 */
+  readOnly?: boolean;
   pendingDiffNav?: {
     runId?: string;
     findingId?: string;
@@ -54,6 +58,8 @@ export function PrPanel({
   merging = false,
   capabilities,
   currentUserName,
+  hideLifecycle = false,
+  readOnly = false,
   pendingDiffNav,
   onDiffNavConsumed,
   onRequestDiffNav,
@@ -156,6 +162,8 @@ export function PrPanel({
         merging={merging}
         onMerge={onMerge}
         onSetStatus={onSetStatus}
+        hideLifecycle={hideLifecycle}
+        readOnly={readOnly}
         publishableCount={publishableCount}
         onPublish={() => setPublishModalOpen(true)}
       />
@@ -167,6 +175,7 @@ export function PrPanel({
         totalDraftCount={totalDraftCount}
         publishableCount={publishableCount}
         activityTimeline={capabilities?.activityTimeline ?? false}
+        readOnly={readOnly}
         onNewComment={() => setComposingComment(true)}
         showWhitespace={showWhitespace}
         onToggleWhitespace={() => setShowWhitespace((b) => !b)}
@@ -186,6 +195,7 @@ export function PrPanel({
               showBlame={showBlame}
               showWhitespace={showWhitespace}
               capabilities={capabilities}
+              readOnly={readOnly}
               pendingNav={pendingDiffNav ?? null}
               onNavConsumed={onDiffNavConsumed}
               pendingCommitView={pendingCommitView}
@@ -198,6 +208,7 @@ export function PrPanel({
             pr={pr}
             onCommentsLoaded={(n) => setCommentCount(n)}
             capabilities={capabilities}
+            readOnly={readOnly}
             composing={composingComment}
             onComposeClose={() => setComposingComment(false)}
             currentUserName={currentUserName}
@@ -213,6 +224,7 @@ export function PrPanel({
           <DraftsPanel
             pr={pr}
             capabilities={capabilities}
+            readOnly={readOnly}
             onJumpToAnchor={(draftId) => {
               const d = (drafts ?? []).find((x) => x.id === draftId);
               if (!d) return;

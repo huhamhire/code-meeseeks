@@ -26,6 +26,8 @@ export function useLineCommentAdder(opts: {
   platform: PlatformKind;
   scopeKind: 'all' | 'commit';
   renderSideBySide: boolean;
+  /** 内容只读（decline / 不可参与归档 PR）：不挂行 hover '+' 新建评论草稿。 */
+  readOnly?: boolean;
   triggerAutoEdit: (draftId: string) => void;
   t: TFunction;
 }): void {
@@ -38,6 +40,7 @@ export function useLineCommentAdder(opts: {
     platform,
     scopeKind,
     renderSideBySide,
+    readOnly = false,
     triggerAutoEdit,
     t,
   } = opts;
@@ -45,7 +48,8 @@ export function useLineCommentAdder(opts: {
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
     // commit 只读视图：不挂行 hover '+' 新建草稿（草稿锚点属于 PR 全量 diff，不在单 commit 上创建）。
-    if (scopeKind !== 'all') return;
+    // 内容只读（decline / 不可参与归档 PR）：同样不挂 '+'。
+    if (scopeKind !== 'all' || readOnly) return;
     const modifiedEditor = diffEditor.getModifiedEditor();
     const originalEditor = diffEditor.getOriginalEditor();
     // 仅「已有未发布草稿」的行算占用、不重复出 +（避免同行两个编辑器）；已有远端评论的行不算占用——
@@ -209,5 +213,6 @@ export function useLineCommentAdder(opts: {
     t,
     scopeKind,
     renderSideBySide,
+    readOnly,
   ]);
 }

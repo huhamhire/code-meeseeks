@@ -190,10 +190,12 @@
     "cmdSwitchLanguage": "切换显示语言",
     "cmdSwitchModel": "切换模型",
     "cmdSwitchTheme": "切换主题",
-    "cmdToggleAutopilot": "切换 AutoPilot",
-    "cmdToggleChatPanel": "切换对话面板",
-    "cmdTogglePrList": "切换 PR 列表",
-    "cmdToggleProxy": "切换代理",
+    "cmdToggleAutopilot": "打开 / 关闭 AutoPilot",
+    "cmdToggleChatPanel": "打开 / 关闭对话面板",
+    "cmdTogglePrList": "打开 / 关闭 PR 列表",
+    "cmdToggleProxy": "打开 / 关闭代理",
+    "cmdViewArchived": "查看「已关闭」",
+    "cmdViewDiscovery": "查看「{{label}}」",
     "empty": "无匹配命令",
     "pickLanguage": "选择显示语言…",
     "pickModel": "选择模型…",
@@ -777,6 +779,7 @@
     "workDirTitle": "工作目录"
   },
   "sidebar": {
+    "archivedEmpty": "暂无已关闭 PR",
     "discoveryAssigned": "指派给我",
     "discoveryCreated": "我创建的",
     "discoveryMentioned": "提及我",
@@ -790,6 +793,8 @@
     "filterNeedsWork": "需修改",
     "filterPending": "待处理",
     "resizeTitle": "拖动调整侧栏宽度",
+    "scopeActive": "进行中",
+    "scopeArchived": "已关闭",
     "searchPlaceholder": "搜索标题 / 仓库 / 作者 / ID"
   },
   "statusBar": {

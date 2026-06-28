@@ -194,6 +194,8 @@
     "cmdToggleChatPanel": "Toggle Chat Panel",
     "cmdTogglePrList": "Toggle PR List",
     "cmdToggleProxy": "Toggle Proxy",
+    "cmdViewArchived": "View Closed",
+    "cmdViewDiscovery": "View {{label}}",
     "empty": "No matching commands",
     "pickLanguage": "Select display language…",
     "pickModel": "Select model…",
@@ -793,6 +795,7 @@
     "workDirTitle": "Working Directory"
   },
   "sidebar": {
+    "archivedEmpty": "No closed PRs",
     "discoveryAssigned": "Assigned",
     "discoveryCreated": "Created",
     "discoveryMentioned": "Mentioned",
@@ -806,6 +809,8 @@
     "filterNeedsWork": "Needs work",
     "filterPending": "Pending",
     "resizeTitle": "Drag to resize sidebar",
+    "scopeActive": "In Progress",
+    "scopeArchived": "Closed",
     "searchPlaceholder": "Search title / repo / author / ID"
   },
   "statusBar": {

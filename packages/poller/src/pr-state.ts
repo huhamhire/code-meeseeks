@@ -154,6 +154,29 @@ export async function listStoredPullRequests(
 }
 
 /**
+ * 列出**已归档**（退场 / 软删）的 PR，供「已关闭」视图浏览。
+ *
+ * 索引仍只在 `stateStore` 维护（archivedAt 非空即归档）；PR 实体目录在退场时整树搬入 `archiveStore`
+ * 冷存储，故逐个 meta 从 archiveStore 读。索引有条目但 archiveStore 无 meta（搬迁中途 / 旧布局）即跳过。
+ * 归档 PR 一律视为已读（不参与未读派生）。
+ */
+export async function listArchivedPullRequests(
+  stateStore: StateStore,
+  archiveStore: StateStore,
+): Promise<StoredPullRequest[]> {
+  const index = await readPrIndex(stateStore);
+  if (!index) return [];
+  const out: StoredPullRequest[] = [];
+  for (const [localId, entry] of Object.entries(index.prs)) {
+    if (!entry.archivedAt) continue;
+    const meta = await readPrMeta(archiveStore, localId);
+    if (!meta) continue;
+    out.push({ ...meta.pr, unread: false });
+  }
+  return out;
+}
+
+/**
  * 标记 PR 为已读：把已读水位推进到当前 head sha + now。用户打开 PR 时由 IPC 调用。仅写 read-state.json
  * （不碰 index.json），故与周期性 poll 的索引重写互不干扰。找不到 meta 返回 null；否则返回带 `unread:false` 的最新 PR。
  */

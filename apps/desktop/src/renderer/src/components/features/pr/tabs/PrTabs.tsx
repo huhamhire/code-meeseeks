@@ -15,6 +15,7 @@ export function PrTabs({
   totalDraftCount,
   publishableCount,
   activityTimeline,
+  readOnly = false,
   onNewComment,
   showWhitespace,
   onToggleWhitespace,
@@ -31,6 +32,8 @@ export function PrTabs({
   publishableCount: number;
   /** 该平台是否提供活动时间线（见 capabilities.activityTimeline）；否则该 tab 标题退化为「评论」 */
   activityTimeline: boolean;
+  /** 内容只读（decline / 不可参与归档 PR）：隐藏「新建评论」入口。 */
+  readOnly?: boolean;
   /** 活动标签页右侧「评论」按钮：新建一条不锚到文件的评论 */
   onNewComment: () => void;
   showWhitespace: boolean;
@@ -111,7 +114,7 @@ export function PrTabs({
       >
         {t('mainPane.tabInfo')}
       </button>
-      {tab === 'activity' && (
+      {tab === 'activity' && !readOnly && (
         <div className="pr-tabs-right">
           <button type="button" className="pr-tab-action-btn" onClick={onNewComment}>
             <ChatIcon /> {t('mainPane.newComment')}

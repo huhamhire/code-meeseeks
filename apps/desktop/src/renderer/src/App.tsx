@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PrDiscoveryFilter } from '@meebox/shared';
+import type { PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
 import { invoke } from './api';
 import { chatRunStore } from './stores/chat-run-store';
 import { ChatPane } from './components/features/chat';
@@ -33,7 +33,6 @@ export default function App() {
     setPrs,
     selectedId,
     setSelectedId,
-    selected,
     refreshing,
     merging,
     reloadPrs,
@@ -92,10 +91,42 @@ export default function App() {
   const [discoveryFilter, setDiscoveryFilter] = useState<PrDiscoveryFilter>('review-requested');
   // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
   const [statusFilter, setStatusFilter] = useState<FilterKey>('pending');
+  // PR 列表范围：进行中（活跃）/ 已关闭（归档冷存储，懒加载、只读）。命令面板「查看已关闭」亦可驱动。
+  const [scope, setScope] = useState<'active' | 'archived'>('active');
+  const [archivedPrs, setArchivedPrs] = useState<StoredPullRequest[]>([]);
+  // 进入「已关闭」范围时懒加载归档冷存储（每次进入重取，纳入此后新归档的 PR）；离开不清，便于来回切。
+  useEffect(() => {
+    if (scope !== 'archived') return;
+    let cancelled = false;
+    void invoke('prs:listArchived', undefined).then((list) => {
+      if (!cancelled) setArchivedPrs(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scope]);
+  // 选发现分类（侧栏 tab / 命令面板）即回到「进行中」范围；「查看已关闭」切到归档范围。
+  const selectDiscovery = useCallback((f: PrDiscoveryFilter) => {
+    setScope('active');
+    setDiscoveryFilter(f);
+  }, []);
+  const viewActive = useCallback(() => setScope('active'), []);
+  const viewArchived = useCallback(() => setScope('archived'), []);
+
+  // 列表 / 详情数据源随范围切换：已关闭范围用归档列表，其余用活跃列表。选中 PR 从当前展示列表解析——
+  // 切到归档范围时若原选中是活跃 PR 则解析不到、详情区回落空态，选归档项后再展示其详情。
+  const archived = scope === 'archived';
+  const displayedPrs = archived ? archivedPrs : prs;
+  const selectedPr = displayedPrs.find((p) => p.localId === selectedId) ?? null;
+  // 已关闭范围的「可参与」判定：合并 / 仍开放的 PR 可补充评论 + AI 评审；decline 仅浏览。活跃范围恒可参与。
+  const canEngage = !archived || (selectedPr ? selectedPr.state !== 'declined' : false);
 
   // 选中 PR 的 ref：供 F5 快捷键在稳定监听里读最新值，免得每次切 PR 重订阅。
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
+  // 不可参与（decline / 无选中）时 F5 自动评审等写操作一律忽略；ref 供稳定监听读实时值。
+  const canEngageRef = useRef(canEngage);
+  canEngageRef.current = canEngage;
 
   // 布局快捷键（窗口级，VS Code 风）：Ctrl/Cmd+B 切 PR 列表（左侧栏）、Ctrl/Cmd+J 切对话面板（右侧）、
   // F5 运行自动评审、DevTools。仅单修饰键的 B/J 排除 Shift/Alt（避开 Cmd+Shift+P）；preventDefault 压过默认。
@@ -106,7 +137,7 @@ export default function App() {
       // F5：对当前选中 PR 运行自动评审（与命令面板同逻辑：有选中 PR、且未在跑才触发——重入保护）
       if (k === 'f5') {
         const id = selectedIdRef.current;
-        if (id && !chatRunStore.getSnapshot().agentPrs.includes(id)) {
+        if (id && canEngageRef.current && !chatRunStore.getSnapshot().agentPrs.includes(id)) {
           e.preventDefault();
           void invoke('agent:run', { localId: id });
         }
@@ -164,8 +195,8 @@ export default function App() {
   }
 
   // 选中 PR 所属连接：能力位（审批按钮降级）+ 当前 PAT 用户（判「是否自己的 PR」）。
-  const selectedConn = selected
-    ? boot.connections.find((c) => c.connectionId === selected.connectionId)
+  const selectedConn = selectedPr
+    ? boot.connections.find((c) => c.connectionId === selectedPr.connectionId)
     : undefined;
   // 有 active 连接但 LLM 未配置 → ChatPane 给出「需配置才能启用」提示并禁用输入
   const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
@@ -188,45 +219,54 @@ export default function App() {
     <div className="app">
       <TitleBar
         platform={boot.info.platform}
-        title={selected?.title}
+        title={selectedPr?.title}
         config={boot.config}
-        selectedPrId={selectedId}
+        // 不可参与（decline / 无选中）时「运行自动评审」命令应隐藏：以 null 关掉其 when 门控。
+        selectedPrId={canEngage ? selectedId : null}
         patchConfig={patchConfig}
         openSettings={openSettings}
         toggleChatPanel={() => setChatCollapsed((c) => !c)}
         togglePrList={() => setSidebarCollapsed((c) => !c)}
         discoveryFilters={availableDiscoveryFilters}
-        setDiscoveryFilter={setDiscoveryFilter}
+        setDiscoveryFilter={selectDiscovery}
         prStatusFilters={visibleStatusFilters}
         setPrStatusFilter={setStatusFilter}
+        viewArchived={viewArchived}
       />
       <div className="app-body">
         {!sidebarCollapsed && (
           <Sidebar
-            prs={prs}
+            prs={displayedPrs}
             selectedId={selectedId}
             onSelect={(pr) => {
               setSelectedId(pr.localId);
-              void markRead(pr.localId);
+              // 已关闭范围无未读概念，无需推进已读水位。
+              if (!archived) void markRead(pr.localId);
             }}
             width={sidebarWidth}
             onResize={setSidebarWidth}
             availableFilters={showDiscoveryFilter ? availableDiscoveryFilters : undefined}
             discoveryFilter={showDiscoveryFilter ? effectiveDiscoveryFilter : undefined}
-            onDiscoveryFilterChange={showDiscoveryFilter ? setDiscoveryFilter : undefined}
+            onDiscoveryFilterChange={showDiscoveryFilter ? selectDiscovery : undefined}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
+            scope={scope}
+            onViewActive={viewActive}
+            onViewArchived={viewArchived}
           />
         )}
         <MainPane>
-          {selected ? (
+          {selectedPr ? (
             <PrPanel
-              pr={selected}
+              pr={selectedPr}
               onSetStatus={(s) => void setSelectedPrStatus(s)}
               onMerge={() => void mergeSelectedPr()}
               merging={merging}
               capabilities={selectedConn?.capabilities}
               currentUserName={selectedConn?.user?.name ?? null}
+              // 已关闭范围隐藏 PR 生命周期操作（合并 / 审批）；decline / 不可参与再隐藏评论 / 草稿写入。
+              hideLifecycle={archived}
+              readOnly={!canEngage}
               pendingDiffNav={pendingDiffNav}
               onDiffNavConsumed={() => setPendingDiffNav(null)}
               onRequestDiffNav={(target) => setPendingDiffNav(target)}
@@ -237,11 +277,12 @@ export default function App() {
         </MainPane>
         {/* ChatPane 始终挂载，折叠只是 CSS 隐藏：保住运行中的 run 生命周期（计时器 / runProgress 订阅）。 */}
         <ChatPane
-          pr={selected}
+          pr={selectedPr}
           prAgent={boot.prAgent}
           width={chatWidth}
           onResize={setChatWidth}
-          collapsed={chatCollapsed}
+          // 不可参与（decline / 无选中）时强制折叠对话面板、隐去 AI 评审入口；合并 / 仍开放 PR 仍可补评审。
+          collapsed={chatCollapsed || !canEngage}
           llmConfigured={llmConfigured}
           onOpenSettings={() => setShowSettings(true)}
           onJumpToDraftEditor={(target) => setPendingDiffNav(target)}

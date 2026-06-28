@@ -3,6 +3,7 @@ import {
   createDraft,
   deleteDraft,
   isCommentsCacheStale,
+  listArchivedPullRequests,
   listDrafts,
   listFindingClosures,
   listStoredPullRequests,
@@ -120,6 +121,16 @@ export const listPrs: IpcController<'prs:list'> = async () => {
 };
 
 /**
+ * 列已归档（退场）PR：「已关闭」视图用，只读浏览。同样仅展示当前活动连接的条目。
+ */
+export const listArchivedPrs: IpcController<'prs:listArchived'> = async () => {
+  const ctx = getContext();
+  const activeId = ctx.bootstrap.config.active_connection_id;
+  const all = await listArchivedPullRequests(ctx.stateStore, ctx.archiveStore);
+  return activeId ? all.filter((pr) => pr.connectionId === activeId) : all;
+};
+
+/**
  * 立即跑一轮 poll。
  */
 export const refreshPrs: IpcController<'prs:refresh'> = () => getContext().poller.tick();
@@ -229,7 +240,8 @@ export const getCommentCountCached: IpcController<'diff:commentCountCached'> = a
   _event,
   req,
 ) => {
-  const cache = await readCommentsCache(getContext().stateStore, req.localId);
+  const ctx = getContext();
+  const cache = await readCommentsCache(await ctx.pr.storeForPr(req.localId), req.localId);
   if (!cache) return null;
   return { count: cache.comments.length };
 };
@@ -243,7 +255,9 @@ const listCommentsInFlight = new Map<string, Promise<PrComment[]>>();
 export const listComments: IpcController<'diff:listComments'> = async (_event, req) => {
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
-  const cache = await readCommentsCache(ctx.stateStore, pr.localId);
+  // per-PR 缓存按归档状态路由（已关闭 PR 的缓存落归档存储，不写活跃存储以免被对账误删）。
+  const store = await ctx.pr.storeForPr(pr.localId);
+  const cache = await readCommentsCache(store, pr.localId);
   if (!req.force && cache && !isCommentsCacheStale(cache, pr.updatedAt)) {
     return cache.comments;
   }
@@ -260,7 +274,7 @@ export const listComments: IpcController<'diff:listComments'> = async (_event, r
       pr.remoteId,
     );
     const fresh = annotateOwnership(raw, adapter);
-    await writeCommentsCache(ctx.stateStore, pr.localId, {
+    await writeCommentsCache(store, pr.localId, {
       comments: fresh,
       pr_updated_at: pr.updatedAt,
       fetched_at: new Date().toISOString(),
@@ -380,8 +394,10 @@ export const getTotalSize: IpcController<'repo:getTotalSize'> = async () => {
 /**
  * 列某 PR 全部草稿。
  */
-export const getDrafts: IpcController<'drafts:list'> = (_event, req) =>
-  listDrafts(getContext().stateStore, req.localId);
+export const getDrafts: IpcController<'drafts:list'> = async (_event, req) => {
+  const ctx = getContext();
+  return listDrafts(await ctx.pr.storeForPr(req.localId), req.localId);
+};
 
 /**
  * 创建草稿；IPC 边界再挡一道 origin/source 约束避免脏数据进盘。
@@ -395,7 +411,7 @@ export const addDraft: IpcController<'drafts:create'> = async (_event, req) => {
   if (draft.origin === 'manual' && draft.source) {
     throw new Error('drafts:create: origin=manual 不应该传 source');
   }
-  const created = await createDraft(ctx.stateStore, localId, draft);
+  const created = await createDraft(await ctx.pr.storeForPr(localId), localId, draft);
   ctx.broadcast('drafts:changed', { localId });
   return created;
 };
@@ -405,7 +421,8 @@ export const addDraft: IpcController<'drafts:create'> = async (_event, req) => {
  */
 export const patchDraft: IpcController<'drafts:update'> = async (_event, req) => {
   const ctx = getContext();
-  const updated = await updateDraft(ctx.stateStore, req.localId, req.draftId, req.patch);
+  const store = await ctx.pr.storeForPr(req.localId);
+  const updated = await updateDraft(store, req.localId, req.draftId, req.patch);
   if (updated) ctx.broadcast('drafts:changed', { localId: req.localId });
   return updated;
 };
@@ -415,18 +432,20 @@ export const patchDraft: IpcController<'drafts:update'> = async (_event, req) =>
  */
 export const removeDraft: IpcController<'drafts:delete'> = async (_event, req) => {
   const ctx = getContext();
-  await deleteDraft(ctx.stateStore, req.localId, req.draftId);
+  await deleteDraft(await ctx.pr.storeForPr(req.localId), req.localId, req.draftId);
   ctx.broadcast('drafts:changed', { localId: req.localId });
 };
 
 /** finding 关闭关系：列出本 PR 全部（复评 /ask 取代/撤销原 finding 的关闭记录）。 */
-export const getFindingClosures: IpcController<'findingClosures:list'> = (_event, req) =>
-  listFindingClosures(getContext().stateStore, req.localId);
+export const getFindingClosures: IpcController<'findingClosures:list'> = async (_event, req) => {
+  const ctx = getContext();
+  return listFindingClosures(await ctx.pr.storeForPr(req.localId), req.localId);
+};
 
 /** 记一条关闭关系（复评卡片的「采纳并关闭原 / 关闭原」动作）；广播让 finding 卡片重拉换关闭态。 */
 export const addClosure: IpcController<'findingClosures:create'> = async (_event, req) => {
   const ctx = getContext();
-  const created = await addFindingClosure(ctx.stateStore, req.localId, {
+  const created = await addFindingClosure(await ctx.pr.storeForPr(req.localId), req.localId, {
     runId: req.runId,
     findingId: req.findingId,
     byAskRunId: req.byAskRunId,
@@ -439,7 +458,12 @@ export const addClosure: IpcController<'findingClosures:create'> = async (_event
 /** 撤销关闭（finding 卡片的「撤销关闭」动作）。 */
 export const removeClosure: IpcController<'findingClosures:delete'> = async (_event, req) => {
   const ctx = getContext();
-  await removeFindingClosure(ctx.stateStore, req.localId, req.runId, req.findingId);
+  await removeFindingClosure(
+    await ctx.pr.storeForPr(req.localId),
+    req.localId,
+    req.runId,
+    req.findingId,
+  );
   ctx.broadcast('findingClosures:changed', { localId: req.localId });
 };
 
@@ -451,9 +475,10 @@ export const publishDraftBatch: IpcController<'drafts:publishBatch'> = async (_e
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const adapter = ctx.pr.adapterForOrThrow(pr);
+  const store = await ctx.pr.storeForPr(req.localId);
 
   // 拉一次当前草稿池：localId → id → draft，避免循环里反复 listDrafts 的 O(N²) IO
-  const allDrafts = await listDrafts(ctx.stateStore, req.localId);
+  const allDrafts = await listDrafts(store, req.localId);
   const draftById = new Map(allDrafts.map((d) => [d.id, d]));
 
   const results: { draftId: string; ok: boolean; postedRemoteId?: string; error?: string }[] = [];
@@ -485,7 +510,7 @@ export const publishDraftBatch: IpcController<'drafts:publishBatch'> = async (_e
         draft.body,
       );
       // 发布成功 = 本地草稿使命完成，直接删掉（远端评论由下面 force-refresh 拉回承接显示）。
-      await deleteDraft(ctx.stateStore, req.localId, draftId);
+      await deleteDraft(store, req.localId, draftId);
       anyPublished = true;
       results.push({ draftId, ok: true, postedRemoteId: posted.remoteId });
     } catch (e) {

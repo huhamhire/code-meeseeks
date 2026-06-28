@@ -20,6 +20,8 @@ export function PrHeader({
   merging,
   onMerge,
   onSetStatus,
+  hideLifecycle = false,
+  readOnly = false,
   publishableCount,
   onPublish,
 }: {
@@ -29,6 +31,10 @@ export function PrHeader({
   merging: boolean;
   onMerge: () => void;
   onSetStatus: (status: LocalPrStatus) => void;
+  /** 隐藏 PR 生命周期操作（合并 + 评审决断）：已关闭范围恒置。 */
+  hideLifecycle?: boolean;
+  /** 内容只读（decline / 不可参与）：隐藏「提交评论 (N)」发布入口。 */
+  readOnly?: boolean;
   publishableCount: number;
   onPublish: () => void;
 }) {
@@ -104,7 +110,7 @@ export function PrHeader({
             「提交评论 (N)」放在决断按钮左边 — 评审动作分两步：先发评论 (左)，再下决断 (右)。 */}
         <div className="pr-header-actions-right">
           {/* "提交评论" 仅在有待发布草稿时渲染：N=0 时整按钮隐藏，减少 header 视觉噪音。 */}
-          {publishableCount > 0 && (
+          {!readOnly && publishableCount > 0 && (
             <button
               type="button"
               className="btn btn-sm pr-header-publish"
@@ -114,8 +120,8 @@ export function PrHeader({
               {t('mainPane.publishComments', { n: publishableCount })}
             </button>
           )}
-          {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现。点击直接合并（无二次确认）。 */}
-          {pr.mergeStatus?.canMerge && (
+          {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现。点击直接合并（无二次确认）。只读隐藏。 */}
+          {!hideLifecycle && pr.mergeStatus?.canMerge && (
             <button
               type="button"
               className="btn btn-sm pr-header-merge"
@@ -127,7 +133,7 @@ export function PrHeader({
               <PullRequestIcon size={14} /> {merging ? t('mainPane.merging') : t('mainPane.merge')}
             </button>
           )}
-          {reviewAllowed('approved') && (
+          {!hideLifecycle && reviewAllowed('approved') && (
             <button
               className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
               type="button"
@@ -144,7 +150,7 @@ export function PrHeader({
               <ApproveIcon /> {t('mainPane.approve')}
             </button>
           )}
-          {reviewAllowed('needsWork') && (
+          {!hideLifecycle && reviewAllowed('needsWork') && (
             <button
               className={`btn btn-sm review-action review-action-needs-work ${pr.localStatus === 'needs_work' ? 'active' : ''}`}
               type="button"

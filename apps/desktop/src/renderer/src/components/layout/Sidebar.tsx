@@ -8,10 +8,14 @@ import type {
 } from '@meebox/shared';
 import { invoke, subscribe } from '../../api';
 import { useChatRunStore } from '../../stores/chat-run-store';
+import { HistoryIcon } from '../common';
 import { PrItem } from '../features/pr';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
 export type FilterKey = 'all' | LocalPrStatus | 'conflict' | 'mergeable';
+
+/** PR 列表范围：进行中（活跃，按发现分类 + 状态细分）/ 已关闭（归档冷存储，扁平只读浏览）。 */
+export type SidebarScope = 'active' | 'archived';
 
 interface SidebarProps {
   prs: StoredPullRequest[];
@@ -27,6 +31,12 @@ interface SidebarProps {
   /** 状态筛选（待处理 / 全部 / 冲突 / 可合并等），由 App 持有以便命令面板亦可驱动。 */
   statusFilter: FilterKey;
   onStatusFilterChange: (filter: FilterKey) => void;
+  /** 当前范围：进行中 / 已关闭。 */
+  scope: SidebarScope;
+  /** 切回「进行中」（无发现分类的平台用单一锚点；有发现分类则点 tab 经 onDiscoveryFilterChange 切回）。 */
+  onViewActive: () => void;
+  /** 切到「已关闭」（归档）范围。 */
+  onViewArchived: () => void;
 }
 
 export const SIDEBAR_MIN_WIDTH = 240;
@@ -69,8 +79,13 @@ export function Sidebar({
   onDiscoveryFilterChange,
   statusFilter,
   onStatusFilterChange,
+  scope,
+  onViewActive,
+  onViewArchived,
 }: SidebarProps) {
   const { t } = useTranslation();
+  // 已关闭范围：扁平浏览（不分发现分类、不分状态、强制「全部」）；进行中范围维持原细分行为。
+  const isArchived = scope === 'archived';
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
@@ -172,8 +187,10 @@ export function Sidebar({
   // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。
   const scopedPrs = useMemo(
     () =>
-      discoveryFilter ? prs.filter((p) => p.discoveryFilters?.includes(discoveryFilter)) : prs,
-    [prs, discoveryFilter],
+      !isArchived && discoveryFilter
+        ? prs.filter((p) => p.discoveryFilters?.includes(discoveryFilter))
+        : prs,
+    [prs, discoveryFilter, isArchived],
   );
 
   const counts = useMemo(() => {
@@ -195,12 +212,14 @@ export function Sidebar({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    // 已关闭范围强制「全部」（不应用状态筛选）；进行中范围按当前状态筛选。
+    const effFilter: FilterKey = isArchived ? 'all' : filter;
     return scopedPrs.filter((p) => {
-      if (filter === 'conflict') {
+      if (effFilter === 'conflict') {
         if (!p.hasConflict) return false;
-      } else if (filter === 'mergeable') {
+      } else if (effFilter === 'mergeable') {
         if (!p.mergeStatus?.canMerge) return false;
-      } else if (filter !== 'all' && p.localStatus !== filter) {
+      } else if (effFilter !== 'all' && p.localStatus !== effFilter) {
         return false;
       }
       if (!q) return true;
@@ -216,7 +235,7 @@ export function Sidebar({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [scopedPrs, query, filter]);
+  }, [scopedPrs, query, filter, isArchived]);
 
   const groups = useMemo<PrGroup[]>(() => {
     const m = new Map<string, StoredPullRequest[]>();
@@ -255,22 +274,47 @@ export function Sidebar({
         title={t('sidebar.resizeTitle')}
         aria-label="resize sidebar"
       />
-      {hasDiscoveryTabs && availableFilters && onDiscoveryFilterChange && (
-        <div className="sidebar-toolbar sidebar-discovery" role="tablist" aria-label={t('sidebar.discoveryTablistAria')}>
-          {availableFilters.map((f) => (
+      {/* 范围行（常驻）：左组 = 进行中（发现分类细分，或无分类平台的单一锚点）、右组 = 已关闭辅助切换。
+          左组始终有锚点，使「已关闭」恒为旁侧的次要项、不致被误读为唯一分类。 */}
+      <div className="sidebar-toolbar sidebar-scope" role="tablist" aria-label={t('sidebar.discoveryTablistAria')}>
+        <div className="sidebar-scope-primary">
+          {hasDiscoveryTabs && availableFilters && onDiscoveryFilterChange ? (
+            availableFilters.map((f) => (
+              <button
+                key={f}
+                role="tab"
+                aria-selected={!isArchived && discoveryFilter === f}
+                className={`sidebar-discovery-tab ${!isArchived && discoveryFilter === f ? 'is-active' : ''}`}
+                onClick={() => onDiscoveryFilterChange(f)}
+                type="button"
+              >
+                {t(DISCOVERY_LABEL_KEYS[f])}
+              </button>
+            ))
+          ) : (
             <button
-              key={f}
               role="tab"
-              aria-selected={discoveryFilter === f}
-              className={`sidebar-discovery-tab ${discoveryFilter === f ? 'is-active' : ''}`}
-              onClick={() => onDiscoveryFilterChange(f)}
+              aria-selected={!isArchived}
+              className={`sidebar-discovery-tab ${!isArchived ? 'is-active' : ''}`}
+              onClick={onViewActive}
               type="button"
             >
-              {t(DISCOVERY_LABEL_KEYS[f])}
+              {t('sidebar.scopeActive')}
             </button>
-          ))}
+          )}
         </div>
-      )}
+        {/* 非 tab：独立图标按钮（切换到已关闭范围），toggle 语义用 aria-pressed */}
+        <button
+          type="button"
+          aria-pressed={isArchived}
+          className={`sidebar-scope-history ${isArchived ? 'is-active' : ''}`}
+          onClick={onViewArchived}
+          title={t('sidebar.scopeArchived')}
+          aria-label={t('sidebar.scopeArchived')}
+        >
+          <HistoryIcon size={14} />
+        </button>
+      </div>
       <div className="sidebar-toolbar">
         <input
           type="text"
@@ -280,6 +324,7 @@ export function Sidebar({
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+      {!isArchived && (
       <div className="sidebar-toolbar sidebar-filters">
         {visibleFilters.map((f) => (
           <button
@@ -299,9 +344,12 @@ export function Sidebar({
           </button>
         ))}
       </div>
+      )}
       <div className="sidebar-list">
         {groups.length === 0 ? (
-          <div className="sidebar-empty">{t('sidebar.empty')}</div>
+          <div className="sidebar-empty">
+            {t(isArchived ? 'sidebar.archivedEmpty' : 'sidebar.empty')}
+          </div>
         ) : (
           groups.map((g) => {
             const expanded = searching || !collapsed.has(g.key);

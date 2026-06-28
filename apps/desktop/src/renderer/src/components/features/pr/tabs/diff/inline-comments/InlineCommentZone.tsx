@@ -32,6 +32,7 @@ export function CommentZone({
   prLocalId,
   prWebUrl,
   hardBreaks,
+  readOnly = false,
 }: {
   comments: PrComment[];
   connectionId: string;
@@ -39,6 +40,8 @@ export function CommentZone({
   prLocalId: string;
   prWebUrl: string;
   hardBreaks: boolean;
+  /** 内容只读（decline / 不可参与归档 PR）：隐藏行内评论的回复 / 编辑 / 删除操作。 */
+  readOnly?: boolean;
 }) {
   return (
     <div className="comment-zone-inner">
@@ -55,6 +58,7 @@ export function CommentZone({
             prLocalId={prLocalId}
             prWebUrl={prWebUrl}
             hardBreaks={hardBreaks}
+            readOnly={readOnly}
           />
         </div>
       ))}
@@ -122,6 +126,7 @@ function CommentNode({
   prLocalId,
   prWebUrl,
   hardBreaks,
+  readOnly = false,
 }: {
   comment: PrComment;
   connectionId: string;
@@ -130,6 +135,7 @@ function CommentNode({
   prLocalId: string;
   prWebUrl: string;
   hardBreaks: boolean;
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const components = useMemo(
@@ -182,8 +188,8 @@ function CommentNode({
           />
         )}
         {/* 回复 / 编辑 / 删除按钮：默认 hidden，hover comment-zone-item-body 显示 (CSS)。
-            编辑态隐藏全部按钮 (避免跟编辑器底部按钮组重复) */}
-        {!replyOpen && !editOpen && (
+            编辑态隐藏全部按钮 (避免跟编辑器底部按钮组重复)；只读（decline / 不可参与）整组隐藏。 */}
+        {!readOnly && !replyOpen && !editOpen && (
           <div className="comment-zone-foot">
             <button
               type="button"
@@ -249,6 +255,7 @@ function CommentNode({
           prLocalId={prLocalId}
           prWebUrl={prWebUrl}
           hardBreaks={hardBreaks}
+          readOnly={readOnly}
         />
       ))}
       {confirmDelete && (

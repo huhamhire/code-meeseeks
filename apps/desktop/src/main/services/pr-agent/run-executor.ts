@@ -64,10 +64,13 @@ export class RunExecutor {
    * notifyStarted：startedAt 落定后回调调度层广播队列变化（执行器不持队列态）。
    */
   async execute(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {
-    const { getPrAgentBridge, embeddedPythonPath, stateStore, broadcast } = this.ctx;
+    const { getPrAgentBridge, embeddedPythonPath, broadcast } = this.ctx;
     const bridge = getPrAgentBridge();
     if (!bridge) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
     const { req, pr } = item;
+    // per-PR 存储路由：对已归档（已关闭范围）的合并 / 仍开放 PR 补跑评审时，run 数据落归档冷存储，
+    // 不写活跃存储（否则被下轮 poll 对账连同归档数据误删，见 PrService.storeForPr）。
+    const stateStore = await this.ctx.pr.storeForPr(pr.localId);
 
     const run = await this.startRun(item, bridge, notifyStarted);
     const t0 = Date.now();
@@ -234,8 +237,9 @@ export class RunExecutor {
     bridge: PrAgentBridge,
     notifyStarted: () => void,
   ): Promise<ReviewRun> {
-    const { bootstrap, logger, stateStore } = this.ctx;
+    const { bootstrap, logger } = this.ctx;
     const { req, pr } = item;
+    const stateStore = await this.ctx.pr.storeForPr(pr.localId);
     // 提前 resolve active LLM profile — model 字段要随 startReviewRun 一起落盘，让 UI 在 meta 行展示
     // "这次 run 用的什么模型"（持久化用 profile.model 原文，不做 normalizeModel 前缀处理，跟 Settings 一致）。
     const activeLlmForRecord = resolveActiveLlmProfile(bootstrap.config.llm);
@@ -399,7 +403,8 @@ export class RunExecutor {
     runId: string,
     askLangSuffix: string,
   ): Promise<{ parsed: ReturnType<typeof parseReviewOutput>; fileContent: string }> {
-    const { logger, stateStore, broadcast } = this.ctx;
+    const { logger, broadcast } = this.ctx;
+    const stateStore = await this.ctx.pr.storeForPr(req.localId);
     // cleanup 前必须先把文件读出来（与 buildToolEnv 的 LOCAL__REVIEW_PATH 同源）。
     const outFile = PRAGENT_LOCAL_OUTPUT[req.tool];
     let fileContent = '';

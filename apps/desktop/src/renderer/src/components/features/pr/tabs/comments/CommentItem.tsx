@@ -65,6 +65,7 @@ export function CommentItem({
   autoExpandCode = false,
   hardBreaks,
   timeline = false,
+  readOnly = false,
   onJumpToAnchor,
 }: {
   comment: PrComment;
@@ -75,6 +76,8 @@ export function CommentItem({
   hardBreaks: boolean;
   /** 是否处于活动时间线模式（仅影响顶层评论版式，见上方说明） */
   timeline?: boolean;
+  /** 内容只读（decline / 不可参与归档 PR）：隐藏回复 / 编辑 / 删除操作，仅供浏览。 */
+  readOnly?: boolean;
   /** inline 评论锚点 chip 点击 → 跳到 Diff 对应文件/行。提供时 chip 变可点击。 */
   onJumpToAnchor?: (anchor: PrCommentAnchor) => void;
 }) {
@@ -156,8 +159,8 @@ export function CommentItem({
       />
     );
 
-  // 操作行：编辑态隐藏所有按钮（避免跟编辑器底部按钮组重复）
-  const foot = !editOpen ? (
+  // 操作行：编辑态隐藏所有按钮（避免跟编辑器底部按钮组重复）；只读（decline / 不可参与）整行隐藏。
+  const foot = !editOpen && !readOnly ? (
     <div className="pr-comment-foot">
       {!replyOpen && (
         <button type="button" className="pr-comment-reply-btn" onClick={() => setReplyOpen(true)}>
@@ -228,6 +231,7 @@ export function CommentItem({
             pr={pr}
             depth={depth + 1}
             hardBreaks={hardBreaks}
+            readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
           />
         ))}

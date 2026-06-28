@@ -42,6 +42,8 @@ interface DiffViewProps {
   showWhitespace: boolean;
   /** 活动连接能力位；此处用 commentHardBreaks 决定评论是否启用 remark-breaks。 */
   capabilities?: PlatformCapabilities;
+  /** 内容只读（decline / 不可参与归档 PR）：不挂行内「+」新建评论、隐藏行内评论的回复 / 编辑 / 删除。 */
+  readOnly?: boolean;
   /**
    * 跳转目标：来自 ChatPane finding card → App pendingDiffNav。
    * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + (带 runId/findingId
@@ -74,6 +76,7 @@ export function DiffView({
   showBlame,
   showWhitespace,
   capabilities,
+  readOnly = false,
   pendingNav,
   onNavConsumed,
   pendingCommitView,
@@ -197,6 +200,7 @@ export function DiffView({
     prWebUrl: pr.url,
     renderSideBySide,
     commentHardBreaks,
+    readOnly,
   });
   // 内联草稿 view zone（commit 只读视图不渲染）
   useDraftZones({
@@ -220,6 +224,7 @@ export function DiffView({
     platform: pr.platform,
     scopeKind: scope.kind,
     renderSideBySide,
+    readOnly,
     triggerAutoEdit,
     t,
   });
