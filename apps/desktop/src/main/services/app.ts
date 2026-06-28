@@ -11,6 +11,8 @@ export function buildAppInfo(bootstrap: BootstrapResult): AppInfo {
     electronVersion: process.versions.electron ?? '',
     nodeVersion: process.versions.node,
     platform: process.platform,
+    osVersion: process.getSystemVersion(),
+    arch: process.arch,
     firstRun: bootstrap.firstRun,
   };
 }

@@ -37,6 +37,10 @@ export interface AppInfo {
   electronVersion: string;
   nodeVersion: string;
   platform: Platform;
+  /** OS marketing version (e.g. macOS "15.5", Windows "10.0.22631") via Electron process.getSystemVersion() */
+  osVersion: string;
+  /** CPU architecture (process.arch, e.g. "arm64" / "x64") */
+  arch: string;
   /** ~/.code-meeseeks was newly created on this run */
   firstRun: boolean;
 }
