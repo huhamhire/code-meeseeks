@@ -4,14 +4,14 @@ export type ResolvedTheme = 'light' | 'dark';
 /**
  * 全局主题（Monaco 编辑器 + 整个 GUI chrome 共用同一主题）的浅 / 深归属。
  * - `'light'` / `'dark'`：主题恒定浅 / 深。
- * - `'auto'`：跟随操作系统深 / 浅色（系统深色用 Dark Modern、浅色用 Light Modern）。
+ * - `'auto'`：跟随操作系统深 / 浅色（系统深色用 Dark 2026、浅色用 Light 2026）。
  */
 export type EditorThemeMode = 'light' | 'dark' | 'auto';
 
 /**
  * 全局主题选项（Monaco 配色主题，亦驱动整个 GUI chrome）。`id` 为生效的 Monaco 主题名，`label` 为展示名，
  * `mode` 为浅 / 深归属（决定 `data-theme` 与原生窗口 themeSource）。
- * - `'auto'`：特殊值，跟随系统深 / 浅色（深 → `vs-dark`、浅 → `vs`），默认。
+ * - `'auto'`：特殊值，跟随系统深 / 浅色（深 → `dark-2026`、浅 → `light-2026`），默认。
  * - `vs` / `vs-dark` / `hc-light` / `hc-black`：Monaco 内置主题。
  * - 其余为内置注册的第三方主题（见 renderer monaco-setup，取色自 monaco-themes）。
  *
