@@ -194,6 +194,8 @@
     "cmdToggleChatPanel": "Chat-Panel umschalten",
     "cmdTogglePrList": "PR-Liste umschalten",
     "cmdToggleProxy": "Proxy umschalten",
+    "cmdViewArchived": "Geschlossene anzeigen",
+    "cmdViewDiscovery": "{{label}} anzeigen",
     "empty": "Keine passenden Befehle",
     "pickLanguage": "Anzeigesprache wählen…",
     "pickModel": "Modell wählen…",
@@ -793,6 +795,7 @@
     "workDirTitle": "Arbeitsverzeichnis"
   },
   "sidebar": {
+    "archivedEmpty": "Keine geschlossenen PRs",
     "discoveryAssigned": "Zugewiesen",
     "discoveryCreated": "Erstellt",
     "discoveryMentioned": "Erwähnt",
@@ -806,6 +809,8 @@
     "filterNeedsWork": "Nacharbeit nötig",
     "filterPending": "Ausstehend",
     "resizeTitle": "Ziehen, um die Seitenleiste zu skalieren",
+    "scopeActive": "In Bearbeitung",
+    "scopeArchived": "Geschlossen",
     "searchPlaceholder": "Titel / Repo / Autor / ID suchen"
   },
   "statusBar": {

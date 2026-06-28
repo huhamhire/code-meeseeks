@@ -63,6 +63,8 @@ export interface PrChannels {
     response: PrComment;
   };
   'prs:list': { request: void; response: StoredPullRequest[] };
+  /** 列出已归档（退场）PR：从冷存储读取，供「已关闭」视图浏览（只读）。 */
+  'prs:listArchived': { request: void; response: StoredPullRequest[] };
   'prs:refresh': { request: void; response: PollResult };
   /** Poller 最近一次完成时间（ISO 或 null）；启动时初始化用 */
   'prs:lastSync': { request: void; response: { at: string | null } };

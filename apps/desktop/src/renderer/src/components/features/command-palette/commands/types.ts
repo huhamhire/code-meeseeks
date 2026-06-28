@@ -22,8 +22,10 @@ export interface CommandContext {
   togglePrList: () => void;
   /** 当前 platform 能力支持的 PR 发现分类（空=该平台无分类，对应一级命令不提供）。 */
   discoveryFilters: readonly PrDiscoveryFilter[];
-  /** 跳到某发现分类（PR 域「一级分类」命令用，如「待我评审」）。 */
+  /** 跳到某发现分类（PR 域「查看 X」命令用，如「待我评审」）；隐含切回「进行中」范围。 */
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
+  /** 切到「已关闭」（归档）范围（PR 域「查看已关闭」命令用）。 */
+  viewArchived: () => void;
   /** 可选的 PR 状态筛选项（待处理 / 全部 / 冲突 / 可合并等，已按平台门控）。 */
   prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
   /** 设置 PR 状态筛选（PR 域「分类筛选」二级选项用）。 */

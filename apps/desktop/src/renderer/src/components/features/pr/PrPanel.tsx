@@ -29,6 +29,8 @@ export interface PrPanelProps {
   merging?: boolean;
   capabilities?: PlatformCapabilities;
   currentUserName?: string | null;
+  /** 只读模式（已关闭 / 归档 PR）：隐藏评审决断 / 合并等写操作入口，仅供浏览。 */
+  readOnly?: boolean;
   pendingDiffNav?: {
     runId?: string;
     findingId?: string;
@@ -54,6 +56,7 @@ export function PrPanel({
   merging = false,
   capabilities,
   currentUserName,
+  readOnly = false,
   pendingDiffNav,
   onDiffNavConsumed,
   onRequestDiffNav,
@@ -156,6 +159,7 @@ export function PrPanel({
         merging={merging}
         onMerge={onMerge}
         onSetStatus={onSetStatus}
+        readOnly={readOnly}
         publishableCount={publishableCount}
         onPublish={() => setPublishModalOpen(true)}
       />

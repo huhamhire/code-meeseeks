@@ -194,6 +194,8 @@
     "cmdToggleChatPanel": "チャットパネルを切り替え",
     "cmdTogglePrList": "PR 一覧を切り替え",
     "cmdToggleProxy": "プロキシを切り替え",
+    "cmdViewArchived": "クローズ済みを表示",
+    "cmdViewDiscovery": "「{{label}}」を表示",
     "empty": "一致するコマンドがありません",
     "pickLanguage": "表示言語を選択…",
     "pickModel": "モデルを選択…",
@@ -777,6 +779,7 @@
     "workDirTitle": "作業ディレクトリ"
   },
   "sidebar": {
+    "archivedEmpty": "クローズ済みの PR はありません",
     "discoveryAssigned": "担当",
     "discoveryCreated": "作成済み",
     "discoveryMentioned": "メンション",
@@ -790,6 +793,8 @@
     "filterNeedsWork": "要修正",
     "filterPending": "保留中",
     "resizeTitle": "ドラッグでサイドバーの幅を調整",
+    "scopeActive": "進行中",
+    "scopeArchived": "クローズ済み",
     "searchPlaceholder": "タイトル / リポジトリ / 作成者 / ID を検索"
   },
   "statusBar": {

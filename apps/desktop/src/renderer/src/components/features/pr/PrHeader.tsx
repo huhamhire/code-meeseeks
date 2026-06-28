@@ -20,6 +20,7 @@ export function PrHeader({
   merging,
   onMerge,
   onSetStatus,
+  readOnly = false,
   publishableCount,
   onPublish,
 }: {
@@ -29,6 +30,8 @@ export function PrHeader({
   merging: boolean;
   onMerge: () => void;
   onSetStatus: (status: LocalPrStatus) => void;
+  /** 只读模式（已关闭 / 归档 PR）：隐藏合并 + 评审决断按钮，仅留「浏览器打开」。 */
+  readOnly?: boolean;
   publishableCount: number;
   onPublish: () => void;
 }) {
@@ -114,8 +117,8 @@ export function PrHeader({
               {t('mainPane.publishComments', { n: publishableCount })}
             </button>
           )}
-          {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现。点击直接合并（无二次确认）。 */}
-          {pr.mergeStatus?.canMerge && (
+          {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现。点击直接合并（无二次确认）。只读隐藏。 */}
+          {!readOnly && pr.mergeStatus?.canMerge && (
             <button
               type="button"
               className="btn btn-sm pr-header-merge"
@@ -127,7 +130,7 @@ export function PrHeader({
               <PullRequestIcon size={14} /> {merging ? t('mainPane.merging') : t('mainPane.merge')}
             </button>
           )}
-          {reviewAllowed('approved') && (
+          {!readOnly && reviewAllowed('approved') && (
             <button
               className={`btn btn-sm review-action review-action-approve ${pr.localStatus === 'approved' ? 'active' : ''}`}
               type="button"
@@ -144,7 +147,7 @@ export function PrHeader({
               <ApproveIcon /> {t('mainPane.approve')}
             </button>
           )}
-          {reviewAllowed('needsWork') && (
+          {!readOnly && reviewAllowed('needsWork') && (
             <button
               className={`btn btn-sm review-action review-action-needs-work ${pr.localStatus === 'needs_work' ? 'active' : ''}`}
               type="button"

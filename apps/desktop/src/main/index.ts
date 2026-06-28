@@ -199,6 +199,7 @@ class App {
       getPrAgentBridge: () => this.prAgent.getBridge(),
       embeddedPythonPath: this.prAgent.embeddedPythonPath,
       stateStore: this.stateStore,
+      archiveStore: this.archiveStore,
       poller: this.poller,
       connectionRuntime: this.conns.runtime,
       reconfigureConnections: () => this.conns.reconfigure(),

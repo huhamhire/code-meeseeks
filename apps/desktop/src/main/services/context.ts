@@ -22,6 +22,8 @@ export interface RegisterDeps {
   /** 嵌入式运行时解释器路径（embedded 策略下执行期补 .secrets.toml 用），非 embedded 可空 */
   embeddedPythonPath?: string;
   stateStore: JsonFileStateStore;
+  /** 归档 PR 冷存储（archived/ 根，与 state/ 平级）：「已关闭」视图列表 + 打开已归档 PR 详情时读。 */
+  archiveStore: JsonFileStateStore;
   poller: Poller;
   /** 可变连接运行时（全量 adapters + adapterByHost）；设置页改连接后被 reconfigure 原地替换 */
   connectionRuntime: ConnectionRuntime;
@@ -61,6 +63,7 @@ export function createServiceContext(deps: RegisterDeps): ServiceContext {
     pr: new PrService({
       bootstrap: deps.bootstrap,
       stateStore: deps.stateStore,
+      archiveStore: deps.archiveStore,
       connectionRuntime: deps.connectionRuntime,
       repoMirror: deps.repoMirror,
     }),

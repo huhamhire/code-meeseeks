@@ -3,6 +3,7 @@ import {
   isDiffBaseCacheReusable,
   listStoredPullRequests,
   readDiffBaseCache,
+  readPrMeta,
   writeDiffBaseCache,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
@@ -16,6 +17,8 @@ import { broadcast } from './broadcast.js';
 export interface PrServiceDeps {
   bootstrap: BootstrapResult;
   stateStore: JsonFileStateStore;
+  /** 归档 PR 冷存储：定位 PR 时活跃库未命中后兜底（「已关闭」视图打开已归档 PR 详情）。 */
+  archiveStore: JsonFileStateStore;
   /** 可变连接运行时；reconfigure 原地替换内容，本服务经引用读到最新 adapters。 */
   connectionRuntime: ConnectionRuntime;
   repoMirror: RepoMirrorManager;
@@ -39,12 +42,17 @@ export class PrService {
 
   constructor(private readonly deps: PrServiceDeps) {}
 
-  /** 按 localId 在状态库定位 PR，找不到抛错（统一错误文案）。 */
+  /**
+   * 按 localId 在状态库定位 PR，找不到抛错（统一错误文案）。先查活跃库；未命中再兜底归档冷存储，
+   * 使「已关闭」视图打开已归档 PR 时其 diff / 评论等路径仍可解析。
+   */
   async findPrOrThrow(localId: string): Promise<StoredPullRequest> {
     const prs = await listStoredPullRequests(this.deps.stateStore);
     const pr = prs.find((p) => p.localId === localId);
-    if (!pr) throw new Error(`PR not found in local state: ${localId}`);
-    return pr;
+    if (pr) return pr;
+    const archived = await readPrMeta(this.deps.archiveStore, localId);
+    if (archived) return archived.pr;
+    throw new Error(`PR not found in local state: ${localId}`);
   }
 
   /** PR → RepoIdentity（host / projectKey / repoSlug）；connection 缺失抛错。 */

@@ -32,7 +32,9 @@
   ```
   - **活跃 / 归档物理分离**：`state/` 与 `archived/` 是两个平级的 `StateStore` 根。活跃存储只装在场 PR；
     PR 退场时其 `prs/<hash>/` 整树经 `relocateTree(state → archived)` 搬入冷存储，复活时反向搬回。
-    交互 / IPC 层只读活跃存储（`listStoredPullRequests` 天然不含归档），归档仅供生命周期清理。
+    默认列表只读活跃存储（`listStoredPullRequests` 天然不含归档）；归档除供生命周期清理外，另由「已关闭」
+    视图按需读取——`listArchivedPullRequests(state, archived)`（按索引 `archivedAt` 非空筛、逐个 meta 从归档存储读）
+    出列表，打开某条时 `findPrOrThrow` 在活跃库未命中后兜底归档存储，使其 diff / 评论等路径仍可解析（只读浏览）。
   - **索引仍单点**：`index.json` 只在活跃存储维护，是「哪些 hash 存在 + archivedAt」的唯一真相，覆盖活跃 + 归档全部条目；
     数据所在根由 `archivedAt` 是否为空隐含决定（空=活跃存储 / 非空=归档存储）。
   - 另有 `connections.json` / `watched-repos.json` / `posted-comments.json`（横向幂等记录，与 PR 目录解耦）。

@@ -3,6 +3,7 @@ import {
   createDraft,
   deleteDraft,
   isCommentsCacheStale,
+  listArchivedPullRequests,
   listDrafts,
   listFindingClosures,
   listStoredPullRequests,
@@ -116,6 +117,16 @@ export const listPrs: IpcController<'prs:list'> = async () => {
   const ctx = getContext();
   const activeId = ctx.bootstrap.config.active_connection_id;
   const all = await listStoredPullRequests(ctx.stateStore);
+  return activeId ? all.filter((pr) => pr.connectionId === activeId) : all;
+};
+
+/**
+ * 列已归档（退场）PR：「已关闭」视图用，只读浏览。同样仅展示当前活动连接的条目。
+ */
+export const listArchivedPrs: IpcController<'prs:listArchived'> = async () => {
+  const ctx = getContext();
+  const activeId = ctx.bootstrap.config.active_connection_id;
+  const all = await listArchivedPullRequests(ctx.stateStore, ctx.archiveStore);
   return activeId ? all.filter((pr) => pr.connectionId === activeId) : all;
 };
 

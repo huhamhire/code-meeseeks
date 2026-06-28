@@ -23,17 +23,29 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
   const categoryEn = tEn('commandPalette.categoryPr');
   const out: RootCommand[] = [];
 
-  // 一级分类：按平台能力提供的顺序各成一条一级命令（与 Sidebar 发现 tabs 同序），不显示选中态
+  // 一级分类：按平台能力提供的顺序各成一条「查看「XXX」」命令（与 Sidebar 发现 tabs 同序），不显示选中态
   for (const f of discoveryFilters) {
+    const label = t(DISCOVERY_LABEL_KEYS[f]);
+    const labelEn = tEn(DISCOVERY_LABEL_KEYS[f]);
     out.push({
       id: `pr-discovery-${f}`,
       category,
       categoryEn,
-      title: t(DISCOVERY_LABEL_KEYS[f]),
-      titleEn: tEn(DISCOVERY_LABEL_KEYS[f]),
+      title: t('commandPalette.cmdViewDiscovery', { label }),
+      titleEn: tEn('commandPalette.cmdViewDiscovery', { label: labelEn }),
       run: () => setDiscoveryFilter(f),
     });
   }
+
+  // 查看已关闭：切到归档（已关闭）范围浏览
+  out.push({
+    id: 'view-archived',
+    category,
+    categoryEn,
+    title: t('commandPalette.cmdViewArchived'),
+    titleEn: tEn('commandPalette.cmdViewArchived'),
+    run: () => ctx.viewArchived(),
+  });
 
   // 分类筛选：二级选择 PR 状态
   out.push({

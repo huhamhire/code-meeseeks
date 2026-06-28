@@ -788,6 +788,28 @@ export function IssueIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 历史字形：时钟 + 逆时针回溯箭头。用于「已关闭 / 历史」PR 范围切换。 */
+export function HistoryIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M2.4 8a5.6 5.6 0 1 1 1.7 4" />
+      <polyline points="1.4 9.6 4.1 12 6.4 11" />
+      <path d="M8 5.2V8l2 1.4" />
+    </svg>
+  );
+}
+
 /** 标签 / 发布字形：带孔的 tag。用于「发布记录」入口。 */
 export function TagIcon({ size = 14 }: IconProps) {
   return (

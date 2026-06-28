@@ -63,6 +63,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('comments:edit', pr.editComment); // 编辑自己的评论
   ipcMain.handle('comments:fetchAttachment', pr.fetchAttachment); // 拉评论内嵌图片（代理带 PAT）
   ipcMain.handle('prs:list', pr.listPrs); // PR 列表（仅活动连接）
+  ipcMain.handle('prs:listArchived', pr.listArchivedPrs); // 已关闭（归档）PR 列表（只读浏览）
   ipcMain.handle('prs:refresh', pr.refreshPrs); // 立即轮询刷新
   ipcMain.handle('prs:lastSync', pr.getLastSync); // 最近一次同步时间
   ipcMain.handle('prs:setLocalStatus', pr.setPrStatus); // 设置审阅状态（先远端后本地）

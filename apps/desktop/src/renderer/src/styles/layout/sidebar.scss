@@ -61,10 +61,45 @@
   }
 }
 
-// GitHub 发现分类标签行（仅 GitHub 活动连接展示）
-.sidebar-discovery {
-  gap: 0;
+// 范围行（常驻）：左组发现分类 / 进行中锚点 + 右组「已关闭」辅助切换。两组间距分隔，右组靠右。
+.sidebar-scope {
+  gap: $space-3;
   padding: $space-3 $space-6 0;
+  align-items: stretch;
+}
+
+// 左组：发现分类 tabs 等分（或无分类平台的单一「进行中」锚点）
+.sidebar-scope-primary {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 0;
+  min-width: 0;
+}
+
+// 右组：「已关闭」时钟图标切换，作次要辅助项靠右、与左组留出分隔
+.sidebar-scope-history {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: $text-muted;
+  padding: $space-2 $space-3;
+  cursor: pointer;
+  transition:
+    color 0.12s,
+    border-color 0.12s;
+
+  &:hover {
+    color: $text-body;
+  }
+
+  &.is-active {
+    color: $color-info;
+    border-bottom-color: $color-info;
+  }
 }
 
 .sidebar-discovery-tab {

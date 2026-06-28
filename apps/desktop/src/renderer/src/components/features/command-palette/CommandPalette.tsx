@@ -22,6 +22,8 @@ interface CommandPaletteProps {
   /** 当前平台支持的发现分类（PR 域「一级分类」命令门控用）。 */
   discoveryFilters: readonly PrDiscoveryFilter[];
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
+  /** 切到「已关闭」（归档）范围（PR 域「查看已关闭」命令用）。 */
+  viewArchived: () => void;
   /** 可选的 PR 状态筛选项（PR 域「分类筛选」二级选项用）。 */
   prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
   setPrStatusFilter: (filter: FilterKey) => void;
@@ -83,6 +85,7 @@ export function CommandPalette({
   togglePrList,
   discoveryFilters,
   setDiscoveryFilter,
+  viewArchived,
   prStatusFilters,
   setPrStatusFilter,
 }: CommandPaletteProps) {
@@ -116,6 +119,7 @@ export function CommandPalette({
         togglePrList,
         discoveryFilters,
         setDiscoveryFilter,
+        viewArchived,
         prStatusFilters,
         setPrStatusFilter,
         patchConfig,
@@ -133,6 +137,7 @@ export function CommandPalette({
       togglePrList,
       discoveryFilters,
       setDiscoveryFilter,
+      viewArchived,
       prStatusFilters,
       setPrStatusFilter,
       patchConfig,

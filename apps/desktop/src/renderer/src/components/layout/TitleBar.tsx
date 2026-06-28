@@ -18,6 +18,7 @@ interface TitleBarProps {
   togglePrList: () => void;
   discoveryFilters: readonly PrDiscoveryFilter[];
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
+  viewArchived: () => void;
   prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
   setPrStatusFilter: (filter: FilterKey) => void;
 }
@@ -43,6 +44,7 @@ export function TitleBar({
   togglePrList,
   discoveryFilters,
   setDiscoveryFilter,
+  viewArchived,
   prStatusFilters,
   setPrStatusFilter,
 }: TitleBarProps) {
@@ -65,6 +67,7 @@ export function TitleBar({
           togglePrList={togglePrList}
           discoveryFilters={discoveryFilters}
           setDiscoveryFilter={setDiscoveryFilter}
+          viewArchived={viewArchived}
           prStatusFilters={prStatusFilters}
           setPrStatusFilter={setPrStatusFilter}
         />
