@@ -1,15 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Config, Platform } from '@meebox/shared';
+import type { Config, Platform, PrDiscoveryFilter } from '@meebox/shared';
 import { buildRootCommands, type RootCommand } from './commands';
+import { readMru, pushMru } from './mru';
+import { chatRunStore } from '../../../stores/chat-run-store';
+import type { FilterKey } from '../../layout/Sidebar';
 import type { SettingsCategory } from '../settings';
 
 interface CommandPaletteProps {
   /** 运行平台：决定打开快捷键修饰键（mac = Cmd+Shift+P，其余 = Ctrl+Shift+P）。 */
   platform: Platform;
   config: Config;
+  /** 当前选中 PR 的 localId（上下文相关命令用，如运行自动评审）。 */
+  selectedPrId: string | null;
   patchConfig: (updater: (c: Config) => Config) => void;
   openSettings: (category?: SettingsCategory) => void;
+  /** 切换对话面板折叠（评审域命令用）。 */
+  toggleChatPanel: () => void;
+  /** 切换 PR 列表（侧栏）折叠（PR 域命令用）。 */
+  togglePrList: () => void;
+  /** 当前平台支持的发现分类（PR 域「一级分类」命令门控用）。 */
+  discoveryFilters: readonly PrDiscoveryFilter[];
+  setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
+  /** 可选的 PR 状态筛选项（PR 域「分类筛选」二级选项用）。 */
+  prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
+  setPrStatusFilter: (filter: FilterKey) => void;
 }
 
 /** 当前层（顶层 / 二级）展开后用于渲染的扁平项。 */
@@ -25,12 +40,56 @@ interface FlatItem {
 }
 
 /**
+ * 把文本里匹配查询的（连续）子串包成高亮 `<mark>`，与列表的 `includes` 子串过滤一致。
+ * 空查询原样返回；大小写不敏感；同一文本里多处命中都高亮。
+ */
+function highlight(text: string, query: string): React.ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  const lower = text.toLowerCase();
+  const ql = q.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let from = 0;
+  let hit = lower.indexOf(ql);
+  let key = 0;
+  while (hit !== -1) {
+    if (hit > from) parts.push(text.slice(from, hit));
+    parts.push(
+      <mark key={key++} className="cmdk-hl">
+        {text.slice(hit, hit + q.length)}
+      </mark>,
+    );
+    from = hit + q.length;
+    hit = lower.indexOf(ql, from);
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return parts;
+}
+
+/**
  * 标题栏命令面板（VS Code 风）：标题栏内嵌输入框 + 下拉结果。快捷键 mac Cmd+Shift+P /
  * 其余 Ctrl+Shift+P 打开聚焦。**最多两级**——顶层命令选中后若有二级选项则原地替换为选项列表，
  * 不支持返回上级（Esc 退出后重进）。搜索按当前界面语言匹配命令文案。设计见 docs/arch/13。
  */
-export function CommandPalette({ platform, config, patchConfig, openSettings }: CommandPaletteProps) {
+export function CommandPalette({
+  platform,
+  config,
+  selectedPrId,
+  patchConfig,
+  openSettings,
+  toggleChatPanel,
+  togglePrList,
+  discoveryFilters,
+  setDiscoveryFilter,
+  prStatusFilters,
+  setPrStatusFilter,
+}: CommandPaletteProps) {
   const { t, i18n } = useTranslation();
+  // 重入保护：调用时取实时运行中 PR 集合（编排 Agent），稳定引用避免命令清单频繁重建
+  const isPrRunning = useCallback(
+    (id: string) => chatRunStore.getSnapshot().agentPrs.includes(id),
+    [],
+  );
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState<RootCommand | null>(null);
   const [query, setQuery] = useState('');
@@ -46,9 +105,38 @@ export function CommandPalette({ platform, config, patchConfig, openSettings }: 
     () => {
       // 显式引用 i18n.language：t 引用在切语言后不变，需以语言为 key 重建命令文案（搜索按当前语言匹配）
       void i18n.language;
-      return buildRootCommands({ config, patchConfig, openSettings, t, tEn });
+      return buildRootCommands({
+        config,
+        selectedPrId,
+        isPrRunning,
+        toggleChatPanel,
+        togglePrList,
+        discoveryFilters,
+        setDiscoveryFilter,
+        prStatusFilters,
+        setPrStatusFilter,
+        patchConfig,
+        openSettings,
+        t,
+        tEn,
+      });
     },
-    [config, patchConfig, openSettings, t, tEn, i18n.language],
+    [
+      config,
+      selectedPrId,
+      isPrRunning,
+      toggleChatPanel,
+      togglePrList,
+      discoveryFilters,
+      setDiscoveryFilter,
+      prStatusFilters,
+      setPrStatusFilter,
+      patchConfig,
+      openSettings,
+      t,
+      tEn,
+      i18n.language,
+    ],
   );
 
   const close = (): void => {
@@ -59,13 +147,26 @@ export function CommandPalette({ platform, config, patchConfig, openSettings }: 
     inputRef.current?.blur();
   };
 
-  const openPalette = (): void => {
+  // 经 ref 取最新 roots，让 mruActiveIndex / openPalette 保持稳定引用（供快捷键 effect 依赖、不反复重订阅）
+  const rootsRef = useRef(roots);
+  rootsRef.current = roots;
+
+  // 打开（空查询、顶层）时默认选中「最近用过且当前仍存在」的命令，回车即重复上次；查无回落第一条。
+  const mruActiveIndex = useCallback((): number => {
+    for (const id of readMru()) {
+      const i = rootsRef.current.findIndex((r) => r.id === id);
+      if (i !== -1) return i;
+    }
+    return 0;
+  }, []);
+
+  const openPalette = useCallback((): void => {
     setLevel(null);
     setQuery('');
-    setActiveIndex(0);
+    setActiveIndex(mruActiveIndex());
     setOpen(true);
     inputRef.current?.focus();
-  };
+  }, [mruActiveIndex]);
 
   const items: FlatItem[] = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -94,6 +195,7 @@ export function CommandPalette({ platform, config, patchConfig, openSettings }: 
         category: r.category,
         categoryEn: r.categoryEn,
         onSelect: () => {
+          pushMru(r.id); // 记最近使用（顶层命令；进容器 / 叶子执行都记）
           if (r.options) {
             setLevel(r);
             setQuery('');
@@ -126,7 +228,7 @@ export function CommandPalette({ platform, config, patchConfig, openSettings }: 
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [platform]);
+  }, [platform, openPalette]);
 
   const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Escape') {
@@ -159,6 +261,8 @@ export function CommandPalette({ platform, config, patchConfig, openSettings }: 
         }}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current);
+          // 点击聚焦打开（空查询、顶层）时同样预选最近用过的命令
+          if (query === '' && level === null) setActiveIndex(mruActiveIndex());
           setOpen(true);
         }}
         onBlur={() => {
@@ -191,13 +295,17 @@ export function CommandPalette({ platform, config, patchConfig, openSettings }: 
                 >
                   <span className="cmdk-item-main">
                     <span className="cmdk-item-line">
-                      {it.category && <span className="cmdk-item-cat">{it.category}</span>}
-                      <span className="cmdk-item-title">{it.title}</span>
+                      {it.category && (
+                        <span className="cmdk-item-cat">{highlight(it.category, query)}</span>
+                      )}
+                      <span className="cmdk-item-title">{highlight(it.title, query)}</span>
                     </span>
                     {showEn && (
                       <span className="cmdk-item-line cmdk-item-sub">
-                        {it.categoryEn && <span className="cmdk-item-cat">{it.categoryEn}</span>}
-                        <span className="cmdk-item-title">{it.titleEn}</span>
+                        {it.categoryEn && (
+                          <span className="cmdk-item-cat">{highlight(it.categoryEn, query)}</span>
+                        )}
+                        <span className="cmdk-item-title">{highlight(it.titleEn, query)}</span>
                       </span>
                     )}
                   </span>

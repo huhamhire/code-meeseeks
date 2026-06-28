@@ -118,7 +118,8 @@
   left: 0;
   right: 0;
   z-index: 1000;
-  max-height: 60vh;
+  // 最高高度：取 60vh 与 460px 较小值——高屏不喧宾夺主（约 10 行两行项 / 16 行单行项），超出滚动
+  max-height: min(60vh, 460px);
   overflow-y: auto;
   padding: $space-2;
   background: $bg-elev;
@@ -175,14 +176,19 @@
 }
 
 // 领域前缀（如「设置」），置于命令名前，便于检索归类。与命令名间距收紧。
+// 主行前缀用亮中性色（选中行深蓝底上仍可读，accent 蓝字会撞底故不用）；英文次行前缀跟随次行弱化色。
 .cmdk-item-cat {
   flex: 0 0 auto;
   margin-right: $space-2;
-  color: $text-muted;
+  color: $text-primary;
 
   &::after {
     content: ':';
   }
+}
+
+.cmdk-item-sub .cmdk-item-cat {
+  color: inherit;
 }
 
 .cmdk-item-check {
@@ -195,4 +201,11 @@
   padding: $space-4 $space-6;
   color: $text-muted;
   font-size: $fs-lg;
+}
+
+// 搜索命中高亮（覆盖 <mark> 默认黄底黑字）：用统一的搜索命中色，文字色继承不变
+.cmdk-hl {
+  background: $color-search-hit;
+  color: inherit;
+  border-radius: 2px;
 }

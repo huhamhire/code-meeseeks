@@ -11,7 +11,7 @@ import { useChatRunStore } from '../../stores/chat-run-store';
 import { PrItem } from '../features/pr';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
-type FilterKey = 'all' | LocalPrStatus | 'conflict' | 'mergeable';
+export type FilterKey = 'all' | LocalPrStatus | 'conflict' | 'mergeable';
 
 interface SidebarProps {
   prs: StoredPullRequest[];
@@ -24,6 +24,9 @@ interface SidebarProps {
   /** 当前选中的发现分类。 */
   discoveryFilter?: PrDiscoveryFilter;
   onDiscoveryFilterChange?: (filter: PrDiscoveryFilter) => void;
+  /** 状态筛选（待处理 / 全部 / 冲突 / 可合并等），由 App 持有以便命令面板亦可驱动。 */
+  statusFilter: FilterKey;
+  onStatusFilterChange: (filter: FilterKey) => void;
 }
 
 export const SIDEBAR_MIN_WIDTH = 240;
@@ -37,7 +40,7 @@ const DISCOVERY_LABEL_KEYS: Record<PrDiscoveryFilter, string> = {
   mentioned: 'sidebar.discoveryMentioned',
 };
 
-const FILTERS: ReadonlyArray<{ value: FilterKey; labelKey: string }> = [
+export const FILTERS: ReadonlyArray<{ value: FilterKey; labelKey: string }> = [
   { value: 'pending', labelKey: 'sidebar.filterPending' },
   { value: 'all', labelKey: 'sidebar.filterAll' },
   { value: 'approved', labelKey: 'sidebar.filterApproved' },
@@ -48,7 +51,7 @@ const FILTERS: ReadonlyArray<{ value: FilterKey; labelKey: string }> = [
 
 // reviewer 决断类（通过/需修改）：有发现分类标签时只对「待我评审」有意义，其余标签下恒空，
 // 故隐藏；无发现分类的场景仍展示全部六项状态筛选。
-const DECISION_STATUS_FILTERS: ReadonlySet<FilterKey> = new Set(['approved', 'needs_work']);
+export const DECISION_STATUS_FILTERS: ReadonlySet<FilterKey> = new Set(['approved', 'needs_work']);
 
 interface PrGroup {
   key: string;
@@ -64,6 +67,8 @@ export function Sidebar({
   availableFilters,
   discoveryFilter,
   onDiscoveryFilterChange,
+  statusFilter,
+  onStatusFilterChange,
 }: SidebarProps) {
   const { t } = useTranslation();
   const startResize = (e: React.MouseEvent): void => {
@@ -88,7 +93,9 @@ export function Sidebar({
   };
 
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<FilterKey>('pending');
+  // 状态筛选改由 App 持有（受控）：命令面板的「分类筛选」亦可驱动；折叠侧栏也不丢选择。
+  const filter = statusFilter;
+  const setFilter = onStatusFilterChange;
   // 哪些组当前折叠了。默认空集合 = 全部展开。
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // 评审建议台账 recommendation（per localId，手动 / AutoPilot 一视同仁），PR 列表 ★ 徽标用；
@@ -115,7 +122,7 @@ export function Sidebar({
   // 进入精简模式时若当前选中的是被隐藏的决断类，回落到「待处理」，避免按不可见筛选过滤。
   useEffect(() => {
     if (hasDiscoveryTabs && DECISION_STATUS_FILTERS.has(filter)) setFilter('pending');
-  }, [hasDiscoveryTabs, filter]);
+  }, [hasDiscoveryTabs, filter, setFilter]);
 
   // AutoPilot 徽标：批量取当前 PR 的台账建议（prs 变化时刷新；ledger 在下次 poll 更新 prs 后体现）。
   useEffect(() => {
