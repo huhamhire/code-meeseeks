@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Config, Platform, PrDiscoveryFilter } from '@meebox/shared';
 import { buildRootCommands, type RootCommand } from './commands';
+import { readMru, pushMru } from './mru';
 import { chatRunStore } from '../../../stores/chat-run-store';
 import type { FilterKey } from '../../layout/Sidebar';
 import type { SettingsCategory } from '../settings';
@@ -146,13 +147,26 @@ export function CommandPalette({
     inputRef.current?.blur();
   };
 
-  const openPalette = (): void => {
+  // 经 ref 取最新 roots，让 mruActiveIndex / openPalette 保持稳定引用（供快捷键 effect 依赖、不反复重订阅）
+  const rootsRef = useRef(roots);
+  rootsRef.current = roots;
+
+  // 打开（空查询、顶层）时默认选中「最近用过且当前仍存在」的命令，回车即重复上次；查无回落第一条。
+  const mruActiveIndex = useCallback((): number => {
+    for (const id of readMru()) {
+      const i = rootsRef.current.findIndex((r) => r.id === id);
+      if (i !== -1) return i;
+    }
+    return 0;
+  }, []);
+
+  const openPalette = useCallback((): void => {
     setLevel(null);
     setQuery('');
-    setActiveIndex(0);
+    setActiveIndex(mruActiveIndex());
     setOpen(true);
     inputRef.current?.focus();
-  };
+  }, [mruActiveIndex]);
 
   const items: FlatItem[] = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -181,6 +195,7 @@ export function CommandPalette({
         category: r.category,
         categoryEn: r.categoryEn,
         onSelect: () => {
+          pushMru(r.id); // 记最近使用（顶层命令；进容器 / 叶子执行都记）
           if (r.options) {
             setLevel(r);
             setQuery('');
@@ -213,7 +228,7 @@ export function CommandPalette({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [platform]);
+  }, [platform, openPalette]);
 
   const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Escape') {
@@ -246,6 +261,8 @@ export function CommandPalette({
         }}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current);
+          // 点击聚焦打开（空查询、顶层）时同样预选最近用过的命令
+          if (query === '' && level === null) setActiveIndex(mruActiveIndex());
           setOpen(true);
         }}
         onBlur={() => {
