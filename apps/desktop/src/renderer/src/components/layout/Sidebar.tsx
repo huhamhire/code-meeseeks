@@ -303,10 +303,10 @@ export function Sidebar({
             </button>
           )}
         </div>
+        {/* 非 tab：独立图标按钮（切换到已关闭范围），toggle 语义用 aria-pressed */}
         <button
           type="button"
-          role="tab"
-          aria-selected={isArchived}
+          aria-pressed={isArchived}
           className={`sidebar-scope-history ${isArchived ? 'is-active' : ''}`}
           onClick={onViewArchived}
           title={t('sidebar.scopeArchived')}

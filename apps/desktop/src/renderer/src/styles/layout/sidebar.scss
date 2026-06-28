@@ -76,34 +76,44 @@
   min-width: 0;
 }
 
-// 右组：「已关闭」时钟图标切换，作次要辅助项靠右、与左组留出分隔
+// 右组：「已关闭」切换 —— **非 tab**，做成靠右的独立图标按钮（类似工具栏「⋯」），不随 tabs 拉伸、
+// 不带下划线指示；选中态用填充底 + 高亮色，区别于左组 tab 的下划线指示。
 .sidebar-scope-history {
   flex: 0 0 auto;
-  display: flex;
+  align-self: center;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: $radius-md;
   color: $text-muted;
-  padding: $space-2 $space-3;
   cursor: pointer;
   transition:
-    color 0.12s,
-    border-color 0.12s;
+    background-color 0.12s,
+    color 0.12s;
 
   &:hover {
+    background: $bg-hover;
     color: $text-body;
   }
 
+  // 选中（已关闭范围激活）：填充底 + 高亮色（图标按钮式按下态，非 tab 下划线）
   &.is-active {
+    background: $bg-selected;
     color: $color-info;
-    border-bottom-color: $color-info;
   }
 }
 
 .sidebar-discovery-tab {
   flex: 1;
+  // 文字在 tab 高度内垂直 + 水平居中
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
