@@ -177,6 +177,23 @@
     "userQuestionAria": "Benutzerfrage",
     "waitingOutput": "(Warte auf PR-Agent-Ausgabe…)"
   },
+  "commandPalette": {
+    "addModel": "Modell hinzufügen…",
+    "categorySettings": "Einstellungen",
+    "cmdDisableProxy": "Proxy deaktivieren",
+    "cmdEnableProxy": "Proxy aktivieren",
+    "cmdOpenAbout": "Über öffnen",
+    "cmdOpenDevtools": "DevTools öffnen",
+    "cmdOpenSettings": "Einstellungen öffnen",
+    "cmdSwitchLanguage": "Anzeigesprache wechseln",
+    "cmdSwitchModel": "Modell wechseln",
+    "cmdSwitchTheme": "Design wechseln",
+    "empty": "Keine passenden Befehle",
+    "pickLanguage": "Anzeigesprache wählen…",
+    "pickModel": "Modell wählen…",
+    "pickTheme": "Design wählen…",
+    "placeholder": "Befehl eingeben…"
+  },
   "commentComposer": {
     "cancelTitle": "Abbrechen (Esc)",
     "emptyTitle": "Kommentar darf nicht leer sein",

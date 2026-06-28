@@ -177,6 +177,23 @@
     "userQuestionAria": "用户提问",
     "waitingOutput": "(等待 PR Agent 输出…)"
   },
+  "commandPalette": {
+    "addModel": "添加模型…",
+    "categorySettings": "设置",
+    "cmdDisableProxy": "关闭代理",
+    "cmdEnableProxy": "开启代理",
+    "cmdOpenAbout": "打开关于",
+    "cmdOpenDevtools": "打开 DevTools",
+    "cmdOpenSettings": "打开设置",
+    "cmdSwitchLanguage": "切换显示语言",
+    "cmdSwitchModel": "切换模型",
+    "cmdSwitchTheme": "切换主题",
+    "empty": "无匹配命令",
+    "pickLanguage": "选择显示语言…",
+    "pickModel": "选择模型…",
+    "pickTheme": "选择主题…",
+    "placeholder": "输入命令…"
+  },
   "commentComposer": {
     "cancelTitle": "取消 (Esc)",
     "emptyTitle": "评论不能为空",

@@ -1,11 +1,17 @@
-import type { Platform } from '@meebox/shared';
+import type { Config, Platform } from '@meebox/shared';
 import brandIcon from '@assets/icons/icon.png';
+import { CommandPalette } from '../features/command-palette';
+import type { SettingsCategory } from '../features/settings';
 
 interface TitleBarProps {
   /** 运行平台：macOS 需为红绿灯留出左侧占位；Windows/Linux 窗控由系统 overlay 画在右上。 */
   platform: Platform;
-  /** 标题区中间展示的上下文文案（如当前 PR 标题）；缺省仅显示品牌名。 */
+  /** 标题区展示的上下文文案（如当前 PR 标题）；非必要、窄屏让位给命令面板，可省略隐藏。 */
   title?: string;
+  /** 命令面板上下文：当前配置 + 同步父级状态 + 打开设置面板。 */
+  config: Config;
+  patchConfig: (updater: (c: Config) => Config) => void;
+  openSettings: (category?: SettingsCategory) => void;
 }
 
 /**
@@ -18,13 +24,23 @@ interface TitleBarProps {
  * - Windows/Linux：`titleBarOverlay` 让系统在右上画最小化/最大化/关闭，故右侧留白，
  *   勿在右上角放可点元素（会被 overlay 覆盖）；左侧空闲，开头展示应用图标。
  */
-export function TitleBar({ platform, title }: TitleBarProps) {
+export function TitleBar({ platform, title, config, patchConfig, openSettings }: TitleBarProps) {
   const isMac = platform === 'darwin';
   return (
     <header className={`app-titlebar${isMac ? ' app-titlebar--mac' : ''}`}>
       {!isMac && <img className="app-titlebar-icon" src={brandIcon} alt="" />}
       <div className="app-titlebar-brand">Code Meeseeks</div>
+      {/* PR 标题留在左侧原位（避开右上 Windows 窗控）；窄屏时右缘渐隐、被居中的命令面板浮层遮盖。 */}
       {title && <div className="app-titlebar-title">{title}</div>}
+      {/* 命令面板：居中绝对浮层（DOM 置后→绘制在标题之上，输入框不透明底覆盖其下标题）。 */}
+      <div className="app-titlebar-center">
+        <CommandPalette
+          platform={platform}
+          config={config}
+          patchConfig={patchConfig}
+          openSettings={openSettings}
+        />
+      </div>
     </header>
   );
 }
