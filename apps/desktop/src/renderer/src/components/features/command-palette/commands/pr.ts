@@ -66,6 +66,23 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
       })),
   });
 
+  // 打开 URL（当前平台）：自由文本二级层，粘贴 / 输入 PR 链接回车打开（审查未正式被请求参与的他人 PR）
+  out.push({
+    id: 'open-pr-url',
+    category,
+    categoryEn,
+    title: t('commandPalette.cmdOpenPrUrl'),
+    titleEn: tEn('commandPalette.cmdOpenPrUrl'),
+    // 快捷键直达输入层（U = URL）；mac ⌘⇧U / 其余 Ctrl+Shift+U，见 CommandPalette 窗口级监听
+    shortcut: formatChord(ctx.platform, 'U', { shift: true }),
+    // 输入层前缀只用简短「URL」（通用、免 i18n），不占整条命令标题
+    prefixLabel: 'URL',
+    input: {
+      placeholder: t('commandPalette.openPrUrlPlaceholder'),
+      run: (text) => ctx.openPrByUrl(text),
+    },
+  });
+
   out.push({
     id: 'toggle-pr-list',
     category,

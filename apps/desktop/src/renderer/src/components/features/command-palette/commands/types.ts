@@ -26,6 +26,8 @@ export interface CommandContext {
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
   /** 切到「已关闭」（归档）范围（PR 域「查看已关闭」命令用）。 */
   viewArchived: () => void;
+  /** 按 URL 打开当前平台的 PR（PR 域「打开 URL」自由文本命令用）：定位本地或拉取存档后跳转，失败弹 toast。 */
+  openPrByUrl: (url: string) => void | Promise<void>;
   /** 可选的 PR 状态筛选项（待处理 / 全部 / 冲突 / 可合并等，已按平台门控）。 */
   prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
   /** 设置 PR 状态筛选（PR 域「分类筛选」二级选项用）。 */
@@ -66,8 +68,15 @@ export interface RootCommand {
   shortcut?: string[];
   /** 进入二级后的输入框占位提示 */
   optionsPlaceholder?: string;
-  /** 二级选项（惰性求值，读当前 config 标注 active）；与 run 二选一 */
+  /** 进入二级后输入框左侧的简短前缀提示符（如「URL」）；缺省回退到命令标题。 */
+  prefixLabel?: string;
+  /** 二级选项（惰性求值，读当前 config 标注 active）；与 run / input 三选一 */
   options?: () => CommandOption[];
-  /** 叶子命令的执行；与 options 二选一 */
+  /**
+   * 自由文本输入（二级）：选中后二级层不是选项列表，而是把输入框转为接受任意文本，回车提交给 `run`。
+   * 用于「按 URL 打开 PR」这类需用户粘贴 / 输入的命令。与 options / 顶层 run 互斥。
+   */
+  input?: { placeholder: string; run: (text: string) => void | Promise<void> };
+  /** 叶子命令的执行；与 options / input 二选一 */
   run?: () => void;
 }

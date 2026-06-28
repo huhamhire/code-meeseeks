@@ -24,6 +24,8 @@ interface CommandPaletteProps {
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
   /** 切到「已关闭」（归档）范围（PR 域「查看已关闭」命令用）。 */
   viewArchived: () => void;
+  /** 按 URL 打开当前平台 PR（PR 域「打开 URL」自由文本命令用）。 */
+  openPrByUrl: (url: string) => void | Promise<void>;
   /** 可选的 PR 状态筛选项（PR 域「分类筛选」二级选项用）。 */
   prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
   setPrStatusFilter: (filter: FilterKey) => void;
@@ -86,6 +88,7 @@ export function CommandPalette({
   discoveryFilters,
   setDiscoveryFilter,
   viewArchived,
+  openPrByUrl,
   prStatusFilters,
   setPrStatusFilter,
 }: CommandPaletteProps) {
@@ -101,6 +104,8 @@ export function CommandPalette({
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const activeItemRef = useRef<HTMLButtonElement>(null);
+  // 上次指针坐标：用于区分「真实鼠标移动」与「面板在静止光标下出现 / 滚动产生的合成 hover」。
+  const pointerRef = useRef({ x: -1, y: -1 });
   const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 固定英文翻译器（en-US 静态打包、恒可用）：非英语界面作次行 + 恒按英文检索
@@ -121,6 +126,7 @@ export function CommandPalette({
         discoveryFilters,
         setDiscoveryFilter,
         viewArchived,
+        openPrByUrl,
         prStatusFilters,
         setPrStatusFilter,
         patchConfig,
@@ -139,6 +145,7 @@ export function CommandPalette({
       discoveryFilters,
       setDiscoveryFilter,
       viewArchived,
+      openPrByUrl,
       prStatusFilters,
       setPrStatusFilter,
       patchConfig,
@@ -178,13 +185,26 @@ export function CommandPalette({
     inputRef.current?.focus();
   }, [mruActiveIndex]);
 
+  // 直接打开并进入某条「自由文本输入」命令的输入层（供「打开 URL」快捷键直达，省去先开面板再选）。
+  const openInputCommand = useCallback((id: string): void => {
+    const cmd = rootsRef.current.find((r) => r.id === id);
+    if (!cmd?.input) return;
+    setLevel(cmd);
+    setQuery('');
+    setActiveIndex(0);
+    setOpen(true);
+    inputRef.current?.focus();
+  }, []);
+
   const items: FlatItem[] = useMemo(() => {
     const q = query.trim().toLowerCase();
     // haystack 恒含英文（本地化 + 英文一起匹配）：非英语界面下也始终支持英文检索
     const has = (hay: string): boolean => !q || hay.toLowerCase().includes(q);
     if (level) {
+      // 自由文本输入模式（如「打开 URL」）：二级无选项列表，输入框接受任意文本、回车提交。
+      if (!level.options) return [];
       return level
-        .options!()
+        .options()
         .map((o) => ({
           id: o.id,
           title: o.title,
@@ -207,7 +227,8 @@ export function CommandPalette({
         shortcut: r.shortcut,
         onSelect: () => {
           pushMru(r.id); // 记最近使用（顶层命令；进容器 / 叶子执行都记）
-          if (r.options) {
+          if (r.options || r.input) {
+            // 容器（二级选项）或自由文本输入：原地进入二级层
             setLevel(r);
             setQuery('');
             setActiveIndex(0);
@@ -237,19 +258,35 @@ export function CommandPalette({
     const isMac = platform === 'darwin';
     const onKey = (e: KeyboardEvent): void => {
       const mod = isMac ? e.metaKey : e.ctrlKey;
-      if (mod && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+      if (!mod || !e.shiftKey) return;
+      const k = e.key.toLowerCase();
+      if (k === 'p') {
         e.preventDefault();
         openPalette();
+      } else if (k === 'u') {
+        // ⌘⇧U / Ctrl+Shift+U：直达「打开 URL」输入层（U = URL）
+        e.preventDefault();
+        openInputCommand('open-pr-url');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [platform, openPalette]);
+  }, [platform, openPalette, openInputCommand]);
 
   const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    // 输入法合成中（IME 候选未确认）：该次按键（尤其 Enter）只用于确认候选词，不触发命令选择 / 导航。
+    // 否则中文等输入时，确认候选的 Enter 会同时选中命令进二级层，而 compositionend 的 onChange 又把候选词
+    // 写回 query → 二级层被残留词过滤（预期外的筛选）。确认后用户再按一次才动作，与各通用搜索框一致。
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       close();
+    } else if (e.key === 'Backspace' && level && query === '') {
+      // 二级层（提示符状态）下空查询按 Backspace 回退到上一级（顶层命令列表）
+      e.preventDefault();
+      setLevel(null);
+      setQuery('');
+      setActiveIndex(mruActiveIndex());
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIndex((i) => Math.min(i + 1, items.length - 1));
@@ -258,37 +295,55 @@ export function CommandPalette({
       setActiveIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      // 自由文本输入模式：回车把当前文本提交给命令（非空才提交）。
+      if (level?.input) {
+        const text = query.trim();
+        if (text) {
+          void level.input.run(text);
+          close();
+        }
+        return;
+      }
       items[activeIndex]?.onSelect();
     }
   };
 
   return (
     <div className="cmdk">
-      <input
-        ref={inputRef}
-        className="cmdk-input"
-        type="text"
-        spellCheck={false}
-        placeholder={level ? level.optionsPlaceholder : t('commandPalette.placeholder')}
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setActiveIndex(0);
-        }}
-        onFocus={() => {
-          if (blurTimer.current) clearTimeout(blurTimer.current);
-          // 点击聚焦打开（空查询、顶层）时同样预选最近用过的命令
-          if (query === '' && level === null) setActiveIndex(mruActiveIndex());
-          setOpen(true);
-        }}
-        onBlur={() => {
-          // 延迟关闭：让下拉项的 click 先于 blur 生效（项的 onMouseDown 已 preventDefault 保住焦点）
-          blurTimer.current = setTimeout(close, 120);
-        }}
-        onKeyDown={onInputKeyDown}
-        aria-label={t('commandPalette.placeholder')}
-      />
-      {open && (
+      <div className="cmdk-field">
+        {/* 二级层前缀提示符：进入子层后显示简短前缀（prefixLabel，如「URL」）或回退命令名，稳住语境 */}
+        {level && <span className="cmdk-field-prefix">{level.prefixLabel ?? level.title}</span>}
+        <input
+          ref={inputRef}
+          className="cmdk-input"
+          type="text"
+          spellCheck={false}
+          placeholder={
+            level
+              ? (level.input?.placeholder ?? level.optionsPlaceholder)
+              : t('commandPalette.placeholder')
+          }
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActiveIndex(0);
+          }}
+          onFocus={() => {
+            if (blurTimer.current) clearTimeout(blurTimer.current);
+            // 点击聚焦打开（空查询、顶层）时同样预选最近用过的命令
+            if (query === '' && level === null) setActiveIndex(mruActiveIndex());
+            setOpen(true);
+          }}
+          onBlur={() => {
+            // 延迟关闭：让下拉项的 click 先于 blur 生效（项的 onMouseDown 已 preventDefault 保住焦点）
+            blurTimer.current = setTimeout(close, 120);
+          }}
+          onKeyDown={onInputKeyDown}
+          aria-label={t('commandPalette.placeholder')}
+        />
+      </div>
+      {/* 自由文本输入模式（如「打开 URL」）不出下拉层——没有可选项，纯输入 + 回车（占位已说明） */}
+      {open && !level?.input && (
         <div className="cmdk-panel" role="listbox">
           {items.length === 0 ? (
             <div className="cmdk-empty">{t('commandPalette.empty')}</div>
@@ -307,7 +362,15 @@ export function CommandPalette({
                   aria-selected={i === activeIndex}
                   className={`cmdk-item${i === activeIndex ? ' is-active' : ''}`}
                   onMouseDown={(e) => e.preventDefault()}
-                  onMouseEnter={() => setActiveIndex(i)}
+                  // 只认真实的鼠标移动来改高亮：面板在静止光标下弹出（mouseenter）、或键盘导航滚动把项
+                  // 移到光标下（合成事件、坐标不变），都不应抢走 MRU 默认选中 / 键盘选中。坐标真正变了才接管。
+                  onMouseMove={(e) => {
+                    if (e.clientX === pointerRef.current.x && e.clientY === pointerRef.current.y) {
+                      return;
+                    }
+                    pointerRef.current = { x: e.clientX, y: e.clientY };
+                    setActiveIndex(i);
+                  }}
                   onClick={it.onSelect}
                 >
                   <span className="cmdk-item-main">

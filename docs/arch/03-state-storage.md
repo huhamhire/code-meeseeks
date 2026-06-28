@@ -49,6 +49,10 @@
   `archived/` 冷存储、再标 `archivedAt`（搬迁先于索引落盘，崩溃可幂等重来），不立即删盘；窗口内 UI 隐藏但数据保留，
   远端复现时整树搬回活跃存储、自动复活；grace 期满下轮 poll 从**归档 + 活跃两端**整目录清掉（两端清以兜旧布局 /
   异常 split-brain 残留）。便于事后回看。
+- **按 URL 打开的 PR 直接入归档**：命令面板「打开 URL」拉取的他人 PR（未正式请求你评审）由 IPC `prs:openByUrl`
+  鉴权拉取后**直接 `writePrMeta(archiveStore)` + 写一条 `archivedAt=now` 的索引条目**——既不在远端 reviewer 列表、
+  也无需先经活跃态，故一开始就当归档对待，**复用同一 grace 清理与对账**（grace 期满即被两端清扫）。写索引时紧邻重读
+  做 read-modify-write 以缩小与 poll 重写索引的竞态窗口。镜像沿用打开详情时的懒拉取（含源分支已删按 PR 头引用定位）。
 - **对账（最终一致）**：每轮 poll 遍历 archived 条目时，未到 grace 的若数据仍滞留活跃存储 → 整树搬入归档存储
   （`relocateTree(state → archived)`，已就位者源缺失即 no-op）。覆盖升级前旧布局的存量、异常 split-brain 残留、
   中断的搬迁，使「凡 archived 必在 archived/」自动收敛——无需迁移脚本。对账只搬数据、不改索引，不破「全失败 poll 零索引写」不变式。

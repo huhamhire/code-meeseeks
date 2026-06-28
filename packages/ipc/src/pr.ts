@@ -6,6 +6,7 @@ import type {
   PrActivityEvent,
   PrComment,
   PrCommit,
+  PrDiscoveryFilter,
   ReviewDraft,
   StoredPullRequest,
 } from '@meebox/shared';
@@ -65,6 +66,19 @@ export interface PrChannels {
   'prs:list': { request: void; response: StoredPullRequest[] };
   /** 列出已归档（退场）PR：从冷存储读取，供「已关闭」视图浏览（只读）。 */
   'prs:listArchived': { request: void; response: StoredPullRequest[] };
+  /**
+   * 按 URL 打开当前平台的 PR：解析链接 → 若本地已存在（活跃 / 归档）直接定位；否则远端拉取（鉴权）后
+   * 存入归档冷存储再定位。返回其 localId 与所在范围；解析失败 / 无权限 / 不存在抛 AppError 错误码。
+   */
+  'prs:openByUrl': {
+    request: { url: string };
+    /** discoveryFilters：活跃 PR 所属发现分类（前端据此落到能展示它的 tab）；归档 PR 为空。 */
+    response: {
+      localId: string;
+      location: 'active' | 'archived';
+      discoveryFilters: PrDiscoveryFilter[];
+    };
+  };
   'prs:refresh': { request: void; response: PollResult };
   /** Poller 最近一次完成时间（ISO 或 null）；启动时初始化用 */
   'prs:lastSync': { request: void; response: { at: string | null } };

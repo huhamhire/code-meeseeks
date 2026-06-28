@@ -18,6 +18,12 @@ export interface PullRequestService {
   listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]>;
 
   /**
+   * 按 repo + id **从远端拉取单个 PR**（不经发现列表 / 缓存），用于「按 URL 打开 PR」。
+   * 无权限 / 不存在时由底层 client 抛带 HTTP status 的错误（403 / 404），上层据此归一成错误码。
+   */
+  getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest>;
+
+  /**
    * 列出 PR 全部提交，按 **newest first** 排序。
    */
   listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]>;
@@ -51,6 +57,11 @@ export abstract class BasePullRequestService
    * 由平台子类实现：跨项目发现待处理 PR 并归一为中性类型。
    */
   abstract listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]>;
+
+  /**
+   * 由平台子类实现：按 repo + id 从远端拉取单个 PR（「按 URL 打开 PR」）。
+   */
+  abstract getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest>;
 
   /**
    * 由平台子类实现：列出 PR 提交，按 newest first 返回。

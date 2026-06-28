@@ -23,6 +23,52 @@ export function pullRequestHeadRefspec(platform: PlatformKind, remoteId: string)
   }
 }
 
+/**
+ * 从一条 PR / MR 网页链接解析出 `{ group, repo, remoteId }`（用于「按 URL 打开当前平台 PR」）。
+ * 仅按 **path 形态** 判定（忽略 host / query / hash / 尾缀如 `/files`、`/commits`），从而兼容自建实例、
+ * 企业版与带上下文路径的部署；解析不出对应平台的 PR 形态返回 null（调用方据此报「不是该平台的 PR 链接」）。
+ *
+ * 各平台 path 形态：
+ * - GitHub：`/{owner}/{repo}/pull/{n}`
+ * - Bitbucket Server：`/projects/{KEY}/repos/{slug}/pull-requests/{n}`，个人仓库 `/users/{user}/repos/{slug}/pull-requests/{n}`（group=`~user`）
+ * - GitLab：`/{namespace…}/{project}/-/merge_requests/{n}`（namespace 可多级）
+ */
+export function parsePullRequestUrl(
+  platform: PlatformKind,
+  url: string,
+): { group: string; repo: string; remoteId: string } | null {
+  let path: string;
+  try {
+    path = new URL(url.trim()).pathname;
+  } catch {
+    return null;
+  }
+  switch (platform) {
+    case 'github': {
+      const m = path.match(/\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+      return m ? { group: m[1]!, repo: m[2]!, remoteId: m[3]! } : null;
+    }
+    case 'bitbucket-server': {
+      const proj = path.match(/\/projects\/([^/]+)\/repos\/([^/]+)\/pull-requests\/(\d+)/);
+      if (proj) return { group: proj[1]!, repo: proj[2]!, remoteId: proj[3]! };
+      const user = path.match(/\/users\/([^/]+)\/repos\/([^/]+)\/pull-requests\/(\d+)/);
+      return user ? { group: `~${user[1]!}`, repo: user[2]!, remoteId: user[3]! } : null;
+    }
+    case 'gitlab': {
+      const marker = '/-/merge_requests/';
+      const idx = path.indexOf(marker);
+      if (idx < 0) return null;
+      const idMatch = path.slice(idx + marker.length).match(/^(\d+)/);
+      const left = path.slice(0, idx).replace(/^\/+|\/+$/g, '');
+      if (!idMatch || !left) return null;
+      const segs = left.split('/');
+      const repo = segs.pop()!;
+      if (segs.length === 0 || !repo) return null;
+      return { group: segs.join('/'), repo, remoteId: idMatch[1]! };
+    }
+  }
+}
+
 export interface RepoRef {
   /** Bitbucket: project key; GitHub: org/user; GitLab: namespace */
   projectKey: string;

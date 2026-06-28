@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
 import { invoke } from './api';
+import { formatBackendError } from './errors';
 import { chatRunStore } from './stores/chat-run-store';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
@@ -112,6 +113,33 @@ export default function App() {
   }, []);
   const viewActive = useCallback(() => setScope('active'), []);
   const viewArchived = useCallback(() => setScope('archived'), []);
+  // 当前发现分类的 ref：供 openPrByUrl 在稳定回调里读最新值，免得把 discoveryFilter 进依赖、频繁重建命令。
+  const discoveryFilterRef = useRef(discoveryFilter);
+  discoveryFilterRef.current = discoveryFilter;
+  // 按 URL 打开当前平台 PR（命令面板「打开 URL」）：定位本地或拉取存档后切到对应范围并选中；失败弹 toast。
+  const openPrByUrl = useCallback(
+    async (url: string) => {
+      try {
+        const res = await invoke('prs:openByUrl', { url });
+        setScope(res.location);
+        if (res.location === 'archived') {
+          // 归档范围（已存在归档 / 新拉取存档）需重载列表纳入目标 PR。
+          setArchivedPrs(await invoke('prs:listArchived', undefined));
+        } else if (
+          // 活跃 PR：若当前发现分类不含它，落到包含它的分类，确保侧栏能展示并高亮（否则只剩详情显示、列表无选中）。
+          res.discoveryFilters.length > 0 &&
+          !res.discoveryFilters.includes(discoveryFilterRef.current)
+        ) {
+          setDiscoveryFilter(res.discoveryFilters[0]!);
+        }
+        setSelectedId(res.localId);
+        if (res.location === 'active') void markRead(res.localId);
+      } catch (e) {
+        notifyError(formatBackendError(e).title);
+      }
+    },
+    [setSelectedId, markRead, notifyError],
+  );
 
   // 列表 / 详情数据源随范围切换：已关闭范围用归档列表，其余用活跃列表。选中 PR 从当前展示列表解析——
   // 切到归档范围时若原选中是活跃 PR 则解析不到、详情区回落空态，选归档项后再展示其详情。
@@ -243,6 +271,7 @@ export default function App() {
         prStatusFilters={visibleStatusFilters}
         setPrStatusFilter={setStatusFilter}
         viewArchived={viewArchived}
+        openPrByUrl={openPrByUrl}
       />
       <div className="app-body">
         {!sidebarCollapsed && (

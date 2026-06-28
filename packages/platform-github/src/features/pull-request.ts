@@ -83,6 +83,16 @@ export class GitHubPullRequestService extends BasePullRequestService {
     return this.mapPull(pull, this.buildReviewers(pull, reviews), this.mapMergeStatus(pull));
   }
 
+  /** 按 repo + 号从远端拉单个 PR（复用 loadPull 同款组装）；404 / 403 由 client 抛出供上层归一。 */
+  async getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest> {
+    const base = `/repos/${repo.projectKey}/${repo.repoSlug}/pulls/${prId}`;
+    const [pull, reviews] = await Promise.all([
+      this.client.get<GhPull>(base),
+      collect(this.client.paginate<GhReview>(`${base}/reviews`)),
+    ]);
+    return this.mapPull(pull, this.buildReviewers(pull, reviews), this.mapMergeStatus(pull));
+  }
+
   /**
    * 列出 PR 提交：GitHub 端点为 oldest-first，按契约反转为 newest-first 返回。
    */

@@ -37,6 +37,14 @@ export const ERROR_CODES = {
   PR_DRAFT_REJECTED: 'EPR0002',
   /** PR 已被合并（本地状态滞后，合并时远端已是 merged）。 */
   PR_ALREADY_MERGED: 'EPR0003',
+  /** 提供的链接不是当前平台的 PR / MR 链接（无法解析）。 */
+  PR_URL_INVALID: 'EPR0004',
+  /** 远端找不到该 PR（不存在，或无权限因而对你不可见）。 */
+  PR_NOT_FOUND: 'EPR0005',
+  /** 无权限访问该 PR / 仓库（403）。 */
+  PR_FORBIDDEN: 'EPR0006',
+  /** 没有活动连接，无法按链接打开 PR。 */
+  PR_NO_ACTIVE_CONNECTION: 'EPR0007',
 } as const;
 
 /** 已登记的错误码字面量联合（抛错时只能用注册过的码，防笔误）。 */
