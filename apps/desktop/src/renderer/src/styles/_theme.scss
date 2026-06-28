@@ -56,6 +56,7 @@
   --color-accent-strong-fade: #{rgba($vscode-blue-700, 0.5)}; // resize handle hover/active
   --color-info: #{$vscode-blue-300};
   --color-success: #{$tw-green-700};
+  --color-success-strong: #{$tw-green-500}; // 高饱和成功绿（复制成功打勾等强反馈）
   --color-approved: #{$tw-green-600};
   --color-warning: #{$tw-amber-600};
   --color-warning-bright: #{$tw-amber-400};
@@ -158,6 +159,7 @@
   --color-accent-strong-fade: #{rgba($vscode-blue-800, 0.4)};
   --color-info: #{$vscode-blue-650};
   --color-success: #{$tw-green-700};
+  --color-success-strong: #{$tw-green-600}; // 高饱和成功绿（浅色下取 green-600 兼顾可读）
   --color-approved: #{$tw-green-700};
   --color-warning: #{$tw-amber-700};
   --color-warning-bright: #{$tw-amber-700};

@@ -498,6 +498,26 @@ export function CheckGlyphIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 复制字形：前景方片 + 左上后衬纸，标准「复制到剪贴板」语义。 */
+export function CopyIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="6" y="6" width="8" height="8" rx="1.5" />
+      <path d="M10.5 3.5H4A1.5 1.5 0 0 0 2.5 5v6.5" />
+    </svg>
+  );
+}
+
 /** 纯感叹号字形（无外圆环）：用于实心彩底角标，只留内部符号。 */
 export function AlertGlyphIcon({ size = 14 }: IconProps) {
   return (

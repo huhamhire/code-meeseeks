@@ -244,6 +244,19 @@
   }
 }
 
+// 关于页「复制运行环境信息」按钮：紧跟运行时标题的图标按钮；复制成功后短暂切到打勾的高饱和
+// 绿色态（is-copied）作反馈。两态均为同尺寸图标、不改内边距，避免点击后高度抖动。
+.settings-copy-info {
+  display: inline-flex;
+  align-items: center;
+  margin-left: $space-3; // 与标题拉开间距
+
+  &.is-copied {
+    border-color: $color-success-strong;
+    color: $color-success-strong;
+  }
+}
+
 // 原生 <select> 默认比文本输入高：去掉原生外观、补自绘下拉箭头，盒模型与
 // .settings-input 完全一致从而等高。
 select.settings-input {
