@@ -85,6 +85,13 @@ export class BitbucketPullRequestService extends BasePullRequestService {
     });
   }
 
+  /** 按 repo + 号从远端拉单个 PR（详情 + /merge 状态，复用映射）；404 / 403 由 client 抛出供上层归一。 */
+  async getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest> {
+    const base = `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}`;
+    const pr = await this.client.get<BitbucketPullRequest>(base);
+    return this.mapPullRequest(pr, this.mapMergeStatus(await this.fetchMergeStatus(pr)));
+  }
+
   /**
    * 列出 PR 全部提交（newest-first，与 git log 一致）。
    *

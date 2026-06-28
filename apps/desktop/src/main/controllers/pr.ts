@@ -8,14 +8,26 @@ import {
   listFindingClosures,
   listStoredPullRequests,
   markPrRead,
+  prHashId,
   readCommentsCache,
+  readPrIndex,
   removeFindingClosure,
   setLocalStatus,
   updateDraft,
   writeCommentsCache,
+  writePrIndex,
+  writePrMeta,
+  type PrIndexFile,
 } from '@meebox/poller';
 import type { RepoIdentity } from '@meebox/repo-mirror';
-import { ERROR_CODES, errorCodeMessage, type PrComment } from '@meebox/shared';
+import {
+  AppError,
+  ERROR_CODES,
+  errorCodeMessage,
+  parsePullRequestUrl,
+  type PrComment,
+  type StoredPullRequest,
+} from '@meebox/shared';
 import { annotateOwnership } from '../services/comments.js';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
@@ -128,6 +140,88 @@ export const listArchivedPrs: IpcController<'prs:listArchived'> = async () => {
   const activeId = ctx.bootstrap.config.active_connection_id;
   const all = await listArchivedPullRequests(ctx.stateStore, ctx.archiveStore);
   return activeId ? all.filter((pr) => pr.connectionId === activeId) : all;
+};
+
+/**
+ * 按 URL 打开当前平台的 PR（审查未正式被请求参与的他人 PR）：
+ * ① 解析链接为 {group,repo,remoteId}，对不上当前平台形态 → PR_URL_INVALID；
+ * ② 用确定性 localId 查索引：已存在则直接返回其所在范围（活跃 / 归档）让前端定位；
+ * ③ 否则远端拉取单个 PR（鉴权：403 → PR_FORBIDDEN、404 → PR_NOT_FOUND），存入归档冷存储 +
+ *    写索引条目（archivedAt=now，随归档生命周期 grace 到期清理），仓库镜像沿用打开详情时的懒拉取。
+ */
+export const openPrByUrl: IpcController<'prs:openByUrl'> = async (_event, req) => {
+  const ctx = getContext();
+  const activeId = ctx.bootstrap.config.active_connection_id;
+  const built = activeId
+    ? ctx.connectionRuntime.adapters.find((a) => a.connectionId === activeId)
+    : undefined;
+  if (!activeId || !built) {
+    throw new AppError(ERROR_CODES.PR_NO_ACTIVE_CONNECTION, undefined, 'no active connection');
+  }
+  const adapter = built.adapter;
+  const parsed = parsePullRequestUrl(adapter.kind, req.url);
+  if (!parsed) {
+    throw new AppError(ERROR_CODES.PR_URL_INVALID, undefined, 'not a PR url of active platform');
+  }
+  const identity = {
+    platform: adapter.kind,
+    connectionId: activeId,
+    group: parsed.group,
+    repo: parsed.repo,
+    remoteId: parsed.remoteId,
+  };
+  const localId = prHashId(identity);
+
+  // 已知则直接定位（不重复拉取）：活跃 → 'active'，归档 → 'archived'。
+  const existing = (await readPrIndex(ctx.stateStore))?.prs[localId];
+  if (existing) {
+    return { localId, location: existing.archivedAt ? 'archived' : 'active' } as const;
+  }
+
+  // 远端拉取（鉴权）。403/404 归一成错误码；其它错误（网络 / 5xx）原样冒泡由前端兜底展示。
+  let pr;
+  try {
+    pr = await adapter.prs.getSinglePullRequest(
+      { projectKey: parsed.group, repoSlug: parsed.repo },
+      parsed.remoteId,
+    );
+  } catch (err) {
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 403) throw new AppError(ERROR_CODES.PR_FORBIDDEN, undefined, 'forbidden');
+    if (status === 404) throw new AppError(ERROR_CODES.PR_NOT_FOUND, undefined, 'not found');
+    throw err;
+  }
+
+  // 存入归档冷存储（与「已关闭」同管理 / 同生命周期）。索引条目 archivedAt=now → grace 到期自动清理。
+  const now = new Date().toISOString();
+  const stored: StoredPullRequest = {
+    ...pr,
+    localId,
+    platform: adapter.kind,
+    connectionId: activeId,
+    localStatus: 'pending',
+    discoveryFilters: [],
+    discoveredAt: now,
+    lastSeenAt: now,
+  };
+  await writePrMeta(ctx.archiveStore, localId, stored);
+  // 紧邻写前重读索引做 read-modify-write，尽量缩小与 poll 重写索引的竞态窗口。
+  const fresh = (await readPrIndex(ctx.stateStore)) ?? { schema_version: 1, prs: {} };
+  const next: PrIndexFile = {
+    schema_version: 1,
+    prs: {
+      ...fresh.prs,
+      [localId]: {
+        identity: { ...identity, url: pr.url },
+        updatedAt: pr.updatedAt,
+        discoveredAt: now,
+        lastSeenAt: now,
+        archivedAt: now,
+      },
+    },
+  };
+  await writePrIndex(ctx.stateStore, next);
+  return { localId, location: 'archived' } as const;
 };
 
 /**

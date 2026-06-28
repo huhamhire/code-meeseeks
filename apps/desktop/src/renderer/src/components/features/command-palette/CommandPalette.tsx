@@ -24,6 +24,8 @@ interface CommandPaletteProps {
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
   /** 切到「已关闭」（归档）范围（PR 域「查看已关闭」命令用）。 */
   viewArchived: () => void;
+  /** 按 URL 打开当前平台 PR（PR 域「打开 URL」自由文本命令用）。 */
+  openPrByUrl: (url: string) => void | Promise<void>;
   /** 可选的 PR 状态筛选项（PR 域「分类筛选」二级选项用）。 */
   prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
   setPrStatusFilter: (filter: FilterKey) => void;
@@ -86,6 +88,7 @@ export function CommandPalette({
   discoveryFilters,
   setDiscoveryFilter,
   viewArchived,
+  openPrByUrl,
   prStatusFilters,
   setPrStatusFilter,
 }: CommandPaletteProps) {
@@ -121,6 +124,7 @@ export function CommandPalette({
         discoveryFilters,
         setDiscoveryFilter,
         viewArchived,
+        openPrByUrl,
         prStatusFilters,
         setPrStatusFilter,
         patchConfig,
@@ -139,6 +143,7 @@ export function CommandPalette({
       discoveryFilters,
       setDiscoveryFilter,
       viewArchived,
+      openPrByUrl,
       prStatusFilters,
       setPrStatusFilter,
       patchConfig,
@@ -183,8 +188,10 @@ export function CommandPalette({
     // haystack 恒含英文（本地化 + 英文一起匹配）：非英语界面下也始终支持英文检索
     const has = (hay: string): boolean => !q || hay.toLowerCase().includes(q);
     if (level) {
+      // 自由文本输入模式（如「打开 URL」）：二级无选项列表，输入框接受任意文本、回车提交。
+      if (!level.options) return [];
       return level
-        .options!()
+        .options()
         .map((o) => ({
           id: o.id,
           title: o.title,
@@ -207,7 +214,8 @@ export function CommandPalette({
         shortcut: r.shortcut,
         onSelect: () => {
           pushMru(r.id); // 记最近使用（顶层命令；进容器 / 叶子执行都记）
-          if (r.options) {
+          if (r.options || r.input) {
+            // 容器（二级选项）或自由文本输入：原地进入二级层
             setLevel(r);
             setQuery('');
             setActiveIndex(0);
@@ -258,6 +266,15 @@ export function CommandPalette({
       setActiveIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      // 自由文本输入模式：回车把当前文本提交给命令（非空才提交）。
+      if (level?.input) {
+        const text = query.trim();
+        if (text) {
+          void level.input.run(text);
+          close();
+        }
+        return;
+      }
       items[activeIndex]?.onSelect();
     }
   };
@@ -269,7 +286,11 @@ export function CommandPalette({
         className="cmdk-input"
         type="text"
         spellCheck={false}
-        placeholder={level ? level.optionsPlaceholder : t('commandPalette.placeholder')}
+        placeholder={
+          level
+            ? (level.input?.placeholder ?? level.optionsPlaceholder)
+            : t('commandPalette.placeholder')
+        }
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -291,7 +312,9 @@ export function CommandPalette({
       {open && (
         <div className="cmdk-panel" role="listbox">
           {items.length === 0 ? (
-            <div className="cmdk-empty">{t('commandPalette.empty')}</div>
+            <div className="cmdk-empty">
+              {level?.input ? t('commandPalette.inputHint') : t('commandPalette.empty')}
+            </div>
           ) : (
             items.map((it, i) => {
               // 非英语界面且英文与本地化不同 → 次行显示英文（对齐 VS Code 显示语言）

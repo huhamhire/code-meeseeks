@@ -66,6 +66,19 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
       })),
   });
 
+  // 打开 URL（当前平台）：自由文本二级层，粘贴 / 输入 PR 链接回车打开（审查未正式被请求参与的他人 PR）
+  out.push({
+    id: 'open-pr-url',
+    category,
+    categoryEn,
+    title: t('commandPalette.cmdOpenPrUrl'),
+    titleEn: tEn('commandPalette.cmdOpenPrUrl'),
+    input: {
+      placeholder: t('commandPalette.openPrUrlPlaceholder'),
+      run: (text) => ctx.openPrByUrl(text),
+    },
+  });
+
   out.push({
     id: 'toggle-pr-list',
     category,
