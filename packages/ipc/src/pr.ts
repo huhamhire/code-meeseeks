@@ -6,6 +6,7 @@ import type {
   PrActivityEvent,
   PrComment,
   PrCommit,
+  PrDiscoveryFilter,
   ReviewDraft,
   StoredPullRequest,
 } from '@meebox/shared';
@@ -71,7 +72,12 @@ export interface PrChannels {
    */
   'prs:openByUrl': {
     request: { url: string };
-    response: { localId: string; location: 'active' | 'archived' };
+    /** discoveryFilters：活跃 PR 所属发现分类（前端据此落到能展示它的 tab）；归档 PR 为空。 */
+    response: {
+      localId: string;
+      location: 'active' | 'archived';
+      discoveryFilters: PrDiscoveryFilter[];
+    };
   };
   'prs:refresh': { request: void; response: PollResult };
   /** Poller 最近一次完成时间（ISO 或 null）；启动时初始化用 */

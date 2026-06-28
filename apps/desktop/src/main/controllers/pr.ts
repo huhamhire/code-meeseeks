@@ -11,6 +11,7 @@ import {
   prHashId,
   readCommentsCache,
   readPrIndex,
+  readPrMeta,
   removeFindingClosure,
   setLocalStatus,
   updateDraft,
@@ -172,10 +173,12 @@ export const openPrByUrl: IpcController<'prs:openByUrl'> = async (_event, req) =
   };
   const localId = prHashId(identity);
 
-  // 已知则直接定位（不重复拉取）：活跃 → 'active'，归档 → 'archived'。
+  // 已知则直接定位（不重复拉取）：活跃 → 'active'（带其发现分类，供前端落到能展示它的 tab）、归档 → 'archived'。
   const existing = (await readPrIndex(ctx.stateStore))?.prs[localId];
   if (existing) {
-    return { localId, location: existing.archivedAt ? 'archived' : 'active' } as const;
+    if (existing.archivedAt) return { localId, location: 'archived', discoveryFilters: [] } as const;
+    const meta = await readPrMeta(ctx.stateStore, localId);
+    return { localId, location: 'active', discoveryFilters: meta?.pr.discoveryFilters ?? [] } as const;
   }
 
   // 远端拉取（鉴权）。403/404 归一成错误码；其它错误（网络 / 5xx）原样冒泡由前端兜底展示。
@@ -221,7 +224,7 @@ export const openPrByUrl: IpcController<'prs:openByUrl'> = async (_event, req) =
     },
   };
   await writePrIndex(ctx.stateStore, next);
-  return { localId, location: 'archived' } as const;
+  return { localId, location: 'archived', discoveryFilters: [] } as const;
 };
 
 /**
