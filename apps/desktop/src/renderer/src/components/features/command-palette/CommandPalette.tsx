@@ -104,6 +104,8 @@ export function CommandPalette({
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const activeItemRef = useRef<HTMLButtonElement>(null);
+  // 上次指针坐标：用于区分「真实鼠标移动」与「面板在静止光标下出现 / 滚动产生的合成 hover」。
+  const pointerRef = useRef({ x: -1, y: -1 });
   const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 固定英文翻译器（en-US 静态打包、恒可用）：非英语界面作次行 + 恒按英文检索
@@ -360,7 +362,15 @@ export function CommandPalette({
                   aria-selected={i === activeIndex}
                   className={`cmdk-item${i === activeIndex ? ' is-active' : ''}`}
                   onMouseDown={(e) => e.preventDefault()}
-                  onMouseEnter={() => setActiveIndex(i)}
+                  // 只认真实的鼠标移动来改高亮：面板在静止光标下弹出（mouseenter）、或键盘导航滚动把项
+                  // 移到光标下（合成事件、坐标不变），都不应抢走 MRU 默认选中 / 键盘选中。坐标真正变了才接管。
+                  onMouseMove={(e) => {
+                    if (e.clientX === pointerRef.current.x && e.clientY === pointerRef.current.y) {
+                      return;
+                    }
+                    pointerRef.current = { x: e.clientX, y: e.clientY };
+                    setActiveIndex(i);
+                  }}
                   onClick={it.onSelect}
                 >
                   <span className="cmdk-item-main">
