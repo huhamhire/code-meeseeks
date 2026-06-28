@@ -85,11 +85,21 @@ export class BitbucketPullRequestService extends BasePullRequestService {
     });
   }
 
-  /** 按 repo + 号从远端拉单个 PR（详情 + /merge 状态，复用映射）；404 / 403 由 client 抛出供上层归一。 */
+  /**
+   * 按 repo + 号从远端拉单个 PR（详情 + 可合并性，复用映射）；404 / 403 由 client 抛出供上层归一。
+   *
+   * `/merge` 仅对 **OPEN** PR 有意义——对已合并 / 已拒绝的 PR 调用会回 409
+   * IllegalPullRequestStateException，故非 OPEN 退化为中性合并态（不可合并 / 无冲突）。
+   * 发现列表只列 OPEN PR、不经此路径，本退化只影响「按 URL 打开」已退场 PR 的场景。
+   */
   async getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest> {
     const base = `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}`;
     const pr = await this.client.get<BitbucketPullRequest>(base);
-    return this.mapPullRequest(pr, this.mapMergeStatus(await this.fetchMergeStatus(pr)));
+    const mergeStatus: MergeStatus =
+      pr.state === 'OPEN'
+        ? this.mapMergeStatus(await this.fetchMergeStatus(pr))
+        : { canMerge: false, conflicted: false, vetoes: [] };
+    return this.mapPullRequest(pr, mergeStatus);
   }
 
   /**
