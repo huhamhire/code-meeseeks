@@ -58,7 +58,7 @@ export async function reviewFlow(
  * 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。手动评审与 AutoPilot 背景评审共用。
  * 编排派发的 run 走 agent 低优先级泳道；修改类工具按 grants 门控（红线见 buildToolCatalog）。
  */
-export function runReviewForPr(
+export async function runReviewForPr(
   runtime: OrchestratorRuntime,
   pr: StoredPullRequest,
   agentContext: AgentContext,
@@ -69,6 +69,8 @@ export function runReviewForPr(
   plan?: ReviewPlan,
 ): Promise<AgentSession> {
   const agentCfg = runtime.ctx.bootstrap.config.agent;
+  // per-PR 存储路由：已归档（已关闭范围）PR 补跑评审时，会话 / run / 关闭关系都落归档冷存储。
+  const store = await runtime.ctx.pr.storeForPr(pr.localId);
   // 自动追问关闭：评审微流程跳过 judge + asks（不判读、不条件追问），直接总结——省一次 judge LLM
   // 调用与潜在追问开销。覆盖默认计划与 AutoPilot 规则注入计划两种来源。
   const effectivePlan: ReviewPlan | undefined = agentCfg.strategy.auto_followup
@@ -83,7 +85,7 @@ export function runReviewForPr(
     tool: 'review',
   });
   return runReview(pr, {
-    stateStore: runtime.ctx.stateStore,
+    stateStore: store,
     // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。复评 /ask 携引用上下文 + 前向链。
     enqueueRun: (p, tool, question, referencedContext, referencedFinding) =>
       runtime.runQueue.enqueuePragentRun(
@@ -96,7 +98,7 @@ export function runReviewForPr(
       ),
     // 复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播刷新卡片）。
     closeFinding: async (p, call) => {
-      await addFindingClosure(runtime.ctx.stateStore, p.localId, call);
+      await addFindingClosure(store, p.localId, call);
       runtime.ctx.broadcast('findingClosures:changed', { localId: p.localId });
     },
     chat,

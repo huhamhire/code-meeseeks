@@ -83,29 +83,36 @@ export const stopAgent: IpcController<'agent:stop'> = (_event, req) =>
 /**
  * 读指定 PR 已落盘的 Agent 会话（跨 PR 切换、重启后恢复）。
  */
-export const getSession: IpcController<'agent:getSession'> = (_event, req) =>
-  getAgentSession(getContext().stateStore, req.localId);
+export const getSession: IpcController<'agent:getSession'> = async (_event, req) => {
+  const ctx = getContext();
+  return getAgentSession(await ctx.pr.storeForPr(req.localId), req.localId);
+};
 
 /**
  * 读指定 PR 的多轮对话消息。
  */
-export const getConversation: IpcController<'agent:getConversation'> = (_event, req) =>
-  getAgentConversation(getContext().stateStore, req.localId);
+export const getConversation: IpcController<'agent:getConversation'> = async (_event, req) => {
+  const ctx = getContext();
+  return getAgentConversation(await ctx.pr.storeForPr(req.localId), req.localId);
+};
 
 /**
  * 读指定 PR 的 Agent 过程步骤（transcript）。
  */
-export const getTranscript: IpcController<'agent:getTranscript'> = (_event, req) =>
-  getAgentTranscript(getContext().stateStore, req.localId);
+export const getTranscript: IpcController<'agent:getTranscript'> = async (_event, req) => {
+  const ctx = getContext();
+  return getAgentTranscript(await ctx.pr.storeForPr(req.localId), req.localId);
+};
 
 /**
  * 批量读 AutoPilot 台账：仅返回 decision=review 且有建议者的 recommendation（PR 列表徽标用）。
  */
 export const getAutopilotLedgers: IpcController<'agent:autopilotLedgers'> = async (_event, req) => {
-  const { stateStore } = getContext();
+  const ctx = getContext();
   const out: Record<string, AgentRecommendationVerdict> = {};
   for (const id of req.localIds) {
-    const ledger = await getAutopilotLedger(stateStore, id);
+    // 已关闭 PR 列表的台账徽标须从归档存储读（其台账随 PR 树搬入冷存储）。
+    const ledger = await getAutopilotLedger(await ctx.pr.storeForPr(id), id);
     if (ledger?.decision === 'review' && ledger.recommendation) {
       out[id] = ledger.recommendation;
     }
@@ -153,32 +160,38 @@ export const getQueue: IpcController<'pragent:queue'> = () => getContext().runQu
 /**
  * 列某 PR 历史 run（游标分页）。
  */
-export const listRuns: IpcController<'pragent:listRuns'> = (_event, req) =>
-  listReviewRunsForPr(getContext().stateStore, req.localId, {
+export const listRuns: IpcController<'pragent:listRuns'> = async (_event, req) => {
+  const ctx = getContext();
+  return listReviewRunsForPr(await ctx.pr.storeForPr(req.localId), req.localId, {
     limit: req.limit,
     beforeId: req.beforeId,
   });
+};
 
 /**
  * 单条 run 查询。
  */
-export const getRun: IpcController<'pragent:getRun'> = (_event, req) =>
-  getReviewRun(getContext().stateStore, req.localId, req.runId);
+export const getRun: IpcController<'pragent:getRun'> = async (_event, req) => {
+  const ctx = getContext();
+  return getReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId);
+};
 
 /**
  * 清某 PR 全部 run 历史，并一并清 Agent 会话 + AutoPilot 台账（广播 ★ 徽标即时消失）。
  */
 export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req) => {
   const ctx = getContext();
-  await clearAgentSession(ctx.stateStore, req.localId);
-  await clearAutopilotLedger(ctx.stateStore, req.localId);
+  const store = await ctx.pr.storeForPr(req.localId);
+  await clearAgentSession(store, req.localId);
+  await clearAutopilotLedger(store, req.localId);
   ctx.broadcast('agent:reviewStatusCleared', { prLocalId: req.localId });
-  return { cleared: await clearReviewRunsForPr(ctx.stateStore, req.localId) };
+  return { cleared: await clearReviewRunsForPr(store, req.localId) };
 };
 
 /**
  * 删除单条 run 记录（仅该 run，不动 Agent 会话 / 台账 / ★ 徽标）。renderer 乐观从列表移除。
  */
 export const deleteRun: IpcController<'pragent:deleteRun'> = async (_event, req) => {
-  return { ok: await deleteReviewRun(getContext().stateStore, req.localId, req.runId) };
+  const ctx = getContext();
+  return { ok: await deleteReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId) };
 };

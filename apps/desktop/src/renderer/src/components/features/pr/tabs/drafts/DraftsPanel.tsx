@@ -18,6 +18,8 @@ interface DraftsPanelProps {
   onJumpToAnchor?: (draftId: string) => void;
   /** 活动连接能力位；此处用 commentHardBreaks 决定草稿预览是否启用 remark-breaks。 */
   capabilities?: PlatformCapabilities;
+  /** 内容只读（decline / 不可参与归档 PR）：隐藏草稿的发布 / 删除操作，仅供浏览。 */
+  readOnly?: boolean;
 }
 
 /**
@@ -32,7 +34,7 @@ interface DraftsPanelProps {
  * status 筛选默认落在"待发布" — 用户最关心还没发的那批；筛选切到"已发布"可
  * 检视本 PR 自己发出去的评论历史，"已拒绝"可恢复 (M4 暂未做 unreject UI)
  */
-export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelProps) {
+export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false }: DraftsPanelProps) {
   // 草稿预览换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
   const { t } = useTranslation();
@@ -194,7 +196,7 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelPro
                       : t('draftsPanel.originMine')}
                   </span>
                   <div className="drafts-panel-item-actions">
-                    {publishable && (
+                    {!readOnly && publishable && (
                       <button
                         type="button"
                         className="btn btn-sm btn-primary"
@@ -209,7 +211,7 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities }: DraftsPanelPro
                         {isPublishing ? t('draftsPanel.publishing') : t('draftsPanel.publish')}
                       </button>
                     )}
-                    {d.status !== 'posted' && (
+                    {!readOnly && d.status !== 'posted' && (
                       <button
                         type="button"
                         className="btn btn-sm"

@@ -113,12 +113,20 @@ export default function App() {
   const viewActive = useCallback(() => setScope('active'), []);
   const viewArchived = useCallback(() => setScope('archived'), []);
 
+  // 列表 / 详情数据源随范围切换：已关闭范围用归档列表，其余用活跃列表。选中 PR 从当前展示列表解析——
+  // 切到归档范围时若原选中是活跃 PR 则解析不到、详情区回落空态，选归档项后再展示其详情。
+  const archived = scope === 'archived';
+  const displayedPrs = archived ? archivedPrs : prs;
+  const selectedPr = displayedPrs.find((p) => p.localId === selectedId) ?? null;
+  // 已关闭范围的「可参与」判定：合并 / 仍开放的 PR 可补充评论 + AI 评审；decline 仅浏览。活跃范围恒可参与。
+  const canEngage = !archived || (selectedPr ? selectedPr.state !== 'declined' : false);
+
   // 选中 PR 的 ref：供 F5 快捷键在稳定监听里读最新值，免得每次切 PR 重订阅。
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
-  // 已关闭（归档）范围为只读：F5 自动评审等写操作在此范围下一律忽略；ref 供稳定监听读实时值。
-  const readOnlyRef = useRef(scope === 'archived');
-  readOnlyRef.current = scope === 'archived';
+  // 不可参与（decline / 无选中）时 F5 自动评审等写操作一律忽略；ref 供稳定监听读实时值。
+  const canEngageRef = useRef(canEngage);
+  canEngageRef.current = canEngage;
 
   // 布局快捷键（窗口级，VS Code 风）：Ctrl/Cmd+B 切 PR 列表（左侧栏）、Ctrl/Cmd+J 切对话面板（右侧）、
   // F5 运行自动评审、DevTools。仅单修饰键的 B/J 排除 Shift/Alt（避开 Cmd+Shift+P）；preventDefault 压过默认。
@@ -129,7 +137,7 @@ export default function App() {
       // F5：对当前选中 PR 运行自动评审（与命令面板同逻辑：有选中 PR、且未在跑才触发——重入保护）
       if (k === 'f5') {
         const id = selectedIdRef.current;
-        if (id && !readOnlyRef.current && !chatRunStore.getSnapshot().agentPrs.includes(id)) {
+        if (id && canEngageRef.current && !chatRunStore.getSnapshot().agentPrs.includes(id)) {
           e.preventDefault();
           void invoke('agent:run', { localId: id });
         }
@@ -186,11 +194,6 @@ export default function App() {
     );
   }
 
-  // 列表 / 详情数据源随范围切换：已关闭范围用归档列表（只读），其余用活跃列表。选中 PR 从当前展示
-  // 列表解析——切到归档范围时若原选中是活跃 PR 则解析不到、详情区回落空态，选归档项后再展示其详情。
-  const readOnly = scope === 'archived';
-  const displayedPrs = readOnly ? archivedPrs : prs;
-  const selectedPr = displayedPrs.find((p) => p.localId === selectedId) ?? null;
   // 选中 PR 所属连接：能力位（审批按钮降级）+ 当前 PAT 用户（判「是否自己的 PR」）。
   const selectedConn = selectedPr
     ? boot.connections.find((c) => c.connectionId === selectedPr.connectionId)
@@ -218,8 +221,8 @@ export default function App() {
         platform={boot.info.platform}
         title={selectedPr?.title}
         config={boot.config}
-        // 已关闭范围下「运行自动评审」命令应隐藏（只读）：以 null 关掉其 when 门控。
-        selectedPrId={readOnly ? null : selectedId}
+        // 不可参与（decline / 无选中）时「运行自动评审」命令应隐藏：以 null 关掉其 when 门控。
+        selectedPrId={canEngage ? selectedId : null}
         patchConfig={patchConfig}
         openSettings={openSettings}
         toggleChatPanel={() => setChatCollapsed((c) => !c)}
@@ -237,8 +240,8 @@ export default function App() {
             selectedId={selectedId}
             onSelect={(pr) => {
               setSelectedId(pr.localId);
-              // 已关闭范围只读、无未读概念，无需推进已读水位。
-              if (!readOnly) void markRead(pr.localId);
+              // 已关闭范围无未读概念，无需推进已读水位。
+              if (!archived) void markRead(pr.localId);
             }}
             width={sidebarWidth}
             onResize={setSidebarWidth}
@@ -261,7 +264,9 @@ export default function App() {
               merging={merging}
               capabilities={selectedConn?.capabilities}
               currentUserName={selectedConn?.user?.name ?? null}
-              readOnly={readOnly}
+              // 已关闭范围隐藏 PR 生命周期操作（合并 / 审批）；decline / 不可参与再隐藏评论 / 草稿写入。
+              hideLifecycle={archived}
+              readOnly={!canEngage}
               pendingDiffNav={pendingDiffNav}
               onDiffNavConsumed={() => setPendingDiffNav(null)}
               onRequestDiffNav={(target) => setPendingDiffNav(target)}
@@ -276,8 +281,8 @@ export default function App() {
           prAgent={boot.prAgent}
           width={chatWidth}
           onResize={setChatWidth}
-          // 已关闭范围为只读：强制折叠对话面板（评审工具对已完成 PR 无意义），运行入口一并隐去。
-          collapsed={chatCollapsed || readOnly}
+          // 不可参与（decline / 无选中）时强制折叠对话面板、隐去 AI 评审入口；合并 / 仍开放 PR 仍可补评审。
+          collapsed={chatCollapsed || !canEngage}
           llmConfigured={llmConfigured}
           onOpenSettings={() => setShowSettings(true)}
           onJumpToDraftEditor={(target) => setPendingDiffNav(target)}

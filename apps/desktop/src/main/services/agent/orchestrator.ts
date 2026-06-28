@@ -211,12 +211,14 @@ export class Orchestrator implements OrchestratorRuntime {
    */
   async recordReviewSummaryMessage(pr: StoredPullRequest, session: AgentSession): Promise<void> {
     if (session.status !== 'done' || !session.summary) return;
-    await appendAgentMessage(this.ctx.stateStore, pr.localId, {
+    // per-PR 存储路由：已归档（已关闭范围）PR 补跑评审的总结消息 / 台账落归档冷存储。
+    const store = await this.ctx.pr.storeForPr(pr.localId);
+    await appendAgentMessage(store, pr.localId, {
       role: 'assistant',
       content: session.summary,
       recommendation: session.recommendation,
     });
-    await writeAutopilotLedger(this.ctx.stateStore, {
+    await writeAutopilotLedger(store, {
       prLocalId: pr.localId,
       autoReviewedUpdatedAt: pr.updatedAt,
       decision: 'review',

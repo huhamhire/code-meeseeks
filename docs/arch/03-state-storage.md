@@ -34,7 +34,12 @@
     PR 退场时其 `prs/<hash>/` 整树经 `relocateTree(state → archived)` 搬入冷存储，复活时反向搬回。
     默认列表只读活跃存储（`listStoredPullRequests` 天然不含归档）；归档除供生命周期清理外，另由「已关闭」
     视图按需读取——`listArchivedPullRequests(state, archived)`（按索引 `archivedAt` 非空筛、逐个 meta 从归档存储读）
-    出列表，打开某条时 `findPrOrThrow` 在活跃库未命中后兜底归档存储，使其 diff / 评论等路径仍可解析（只读浏览）。
+    出列表，打开某条时 `findPrOrThrow` 在活跃库未命中后兜底归档存储，使其 diff / 评论等路径仍可解析。
+  - **per-PR 存储按归档状态路由（写安全 + 补充评审）**：已关闭范围对**已合并 / 仍开放**的 PR 仍允许补充评论 +
+    补跑 AI 评审（仅不提供合并 / 审批）。这要求 per-PR 子树读写（评论缓存 / 草稿 / 关闭关系 / 评审 run / 会话 /
+    台账 / diff-base 缓存）经 `PrService.storeForPr(localId)`（据索引 `archivedAt` 解析）落到正确的根——否则对归档 PR
+    的写会进活跃存储，被下轮 poll 对账（`relocateTree` 源覆盖目的、**先清空目的**）连同归档数据一并误删。**仅浏览（declined）
+    的写入由前端按 PR 状态门控**（不渲染评论 / 评审入口），但存储路由仍是兜底正确性的前提。
   - **索引仍单点**：`index.json` 只在活跃存储维护，是「哪些 hash 存在 + archivedAt」的唯一真相，覆盖活跃 + 归档全部条目；
     数据所在根由 `archivedAt` 是否为空隐含决定（空=活跃存储 / 非空=归档存储）。
   - 另有 `connections.json` / `watched-repos.json` / `posted-comments.json`（横向幂等记录，与 PR 目录解耦）。

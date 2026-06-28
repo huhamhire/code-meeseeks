@@ -3,6 +3,7 @@ import {
   isDiffBaseCacheReusable,
   listStoredPullRequests,
   readDiffBaseCache,
+  readPrIndex,
   readPrMeta,
   writeDiffBaseCache,
 } from '@meebox/poller';
@@ -53,6 +54,18 @@ export class PrService {
     const archived = await readPrMeta(this.deps.archiveStore, localId);
     if (archived) return archived.pr;
     throw new Error(`PR not found in local state: ${localId}`);
+  }
+
+  /**
+   * 解析某 PR 的 per-PR 存储根：已归档（索引 `archivedAt` 非空）→ 归档冷存储，否则活跃存储。
+   *
+   * 所有 per-PR 子树读写（评论缓存 / 草稿 / 关闭关系 / 评审 run / 会话 / 台账 / diff-base 缓存）都应
+   * 经此解析后落到正确的根——否则对已归档 PR 的写会落进活跃存储，被下轮 poll 对账（`relocateTree` 源覆盖
+   * 目的、先清空目的）连同归档数据一并误删（见 docs/arch/03）。索引始终只在活跃存储维护，故据它判定。
+   */
+  async storeForPr(localId: string): Promise<JsonFileStateStore> {
+    const index = await readPrIndex(this.deps.stateStore);
+    return index?.prs[localId]?.archivedAt ? this.deps.archiveStore : this.deps.stateStore;
   }
 
   /** PR → RepoIdentity（host / projectKey / repoSlug）；connection 缺失抛错。 */
@@ -143,7 +156,9 @@ export class PrService {
   private async computeDiffBaseSha(pr: StoredPullRequest): Promise<string> {
     const id = this.repoIdentityFor(pr);
     const head = pr.sourceRef.sha;
-    const cached = await readDiffBaseCache(this.deps.stateStore, pr.localId);
+    // 已归档 PR（已关闭范围打开看 diff）其 diff-base 缓存须落归档存储，避免写活跃存储被对账误删。
+    const store = await this.storeForPr(pr.localId);
+    const cached = await readDiffBaseCache(store, pr.localId);
     if (
       cached?.base_sha &&
       (await isDiffBaseCacheReusable({
@@ -158,7 +173,7 @@ export class PrService {
     }
     const mb = await this.deps.repoMirror.mergeBase(id, pr.targetRef.sha, head);
     if (!mb) return pr.targetRef.sha;
-    await writeDiffBaseCache(this.deps.stateStore, pr.localId, {
+    await writeDiffBaseCache(store, pr.localId, {
       base_sha: mb,
       head_sha: head,
       computed_at: new Date().toISOString(),
@@ -173,7 +188,8 @@ export class PrService {
    */
   async invalidateCommentsCache(localId: string): Promise<void> {
     try {
-      await this.deps.stateStore.delete(`prs/${localId}/comments`);
+      const store = await this.storeForPr(localId);
+      await store.delete(`prs/${localId}/comments`);
     } catch {
       /* cache miss 也无所谓 */
     }

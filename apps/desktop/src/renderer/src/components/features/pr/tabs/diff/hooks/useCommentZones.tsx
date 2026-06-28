@@ -25,6 +25,8 @@ export function useCommentZones(opts: {
   prWebUrl: string;
   renderSideBySide: boolean;
   commentHardBreaks: boolean;
+  /** 内容只读（decline / 不可参与归档 PR）：行内评论 zone 隐藏回复 / 编辑 / 删除。 */
+  readOnly?: boolean;
 }): void {
   const {
     diffEditor,
@@ -37,6 +39,7 @@ export function useCommentZones(opts: {
     prWebUrl,
     renderSideBySide,
     commentHardBreaks,
+    readOnly = false,
   } = opts;
 
   useEffect(() => {
@@ -105,6 +108,7 @@ export function useCommentZones(opts: {
           prLocalId={prLocalId}
           prWebUrl={prWebUrl}
           hardBreaks={commentHardBreaks}
+          readOnly={readOnly}
         />
       ),
     });
@@ -129,5 +133,6 @@ export function useCommentZones(opts: {
     prWebUrl,
     renderSideBySide,
     commentHardBreaks,
+    readOnly,
   ]);
 }
