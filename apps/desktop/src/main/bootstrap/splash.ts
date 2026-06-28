@@ -27,11 +27,12 @@ function resolveSplashLogo(): string | null {
   return null;
 }
 
-// 闪屏明暗两套配色，跟随有效主题（与 palette bg-app / 文字 / accent 同源）：
-// 暗 = $vscode-gray-850 底 + 主文字白 + $vscode-blue-700 accent；浅 = $vscode-gray-30 底 + 深文字 + $vscode-blue-800。
+// 闪屏明暗两套配色，跟随有效主题、对齐默认的 2026 主题（底 / 文字取 2026 editor background / foreground，
+// accent 仍用语义 accent —— chrome-sync 不覆盖 accent）：
+// 暗 = dark-2026 底 #121314 + 文字 #BBBEBF + $vscode-blue-700 accent；浅 = light-2026 底 #FFFFFF + 深文字 + $vscode-blue-800。
 const SPLASH_COLORS = {
-  dark: { bg: '#1e1e1e', text: '#ffffff', sub: '#9d9d9d', ring: 'rgba(255,255,255,.16)', accent: '#0e639c' },
-  light: { bg: '#f8f8f8', text: '#1f1f20', sub: '#6e6e6e', ring: 'rgba(0,0,0,.14)', accent: '#005fb8' },
+  dark: { bg: '#121314', text: '#BBBEBF', sub: '#6f7172', ring: 'rgba(255,255,255,.16)', accent: '#0e639c' },
+  light: { bg: '#FFFFFF', text: '#202020', sub: '#6e6e6e', ring: 'rgba(0,0,0,.14)', accent: '#005fb8' },
 };
 
 /**

@@ -67,12 +67,12 @@ export function useEditorAppearanceSync(appearance: Config['appearance']): void 
 }
 
 /**
- * 当前生效的 Monaco 编辑器主题名：编辑器主题偏好为 'auto' 时跟随 GUI 解析主题（浅 'vs' / 深 'vs-dark'），
- * 否则用所选 Monaco 内置主题（vs / vs-dark / hc-black / hc-light）。
+ * 当前生效的 Monaco 编辑器主题名：编辑器主题偏好为 'auto' 时跟随 GUI 解析主题（浅 'light-2026' / 深
+ * 'dark-2026'，即默认的 2026 配色），否则用所选主题 id。
  */
 export function useMonacoEditorTheme(): string {
   const { editorTheme } = useEditorAppearance();
   const resolved = useResolvedTheme();
-  if (editorTheme === 'auto') return resolved === 'light' ? 'vs' : 'vs-dark';
+  if (editorTheme === 'auto') return resolved === 'light' ? 'light-2026' : 'dark-2026';
   return editorTheme;
 }

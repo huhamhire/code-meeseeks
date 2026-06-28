@@ -118,8 +118,9 @@ function clearChromeOverrides(): void {
  * 取不到色 / 缺 bg·fg 时清空覆盖、回退语义色板（仍随 data-theme 浅 / 深正常显示）。
  */
 export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiTheme: 'light' | 'dark'): void {
-  // 'auto' 跟随解析主题 → 取 Monaco 内置 vs / vs-dark 的 base 色
-  const effectiveId = editorThemeId === 'auto' ? (resolvedGuiTheme === 'dark' ? 'vs-dark' : 'vs') : editorThemeId;
+  // 'auto' 跟随解析主题 → 取默认 2026 主题（dark-2026 / light-2026）的 base 色
+  const effectiveId =
+    editorThemeId === 'auto' ? (resolvedGuiTheme === 'dark' ? 'dark-2026' : 'light-2026') : editorThemeId;
   const data = getEditorThemeColors(effectiveId);
   const bg = data && parseHex(data.colors['editor.background'] ?? '');
   const fg = data && parseHex(data.colors['editor.foreground'] ?? '');
