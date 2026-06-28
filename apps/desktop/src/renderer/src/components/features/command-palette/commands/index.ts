@@ -17,5 +17,6 @@ const DOMAIN_BUILDERS: ReadonlyArray<(ctx: CommandContext) => RootCommand[]> = [
 ];
 
 export function buildRootCommands(ctx: CommandContext): RootCommand[] {
-  return DOMAIN_BUILDERS.flatMap((build) => build(ctx));
+  // 统一门控：命令声明 when 谓词，注册表在此统一过滤（各领域不再各写 if）。
+  return DOMAIN_BUILDERS.flatMap((build) => build(ctx)).filter((c) => !c.when || c.when());
 }

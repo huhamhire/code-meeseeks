@@ -197,6 +197,28 @@
   color: $color-accent;
 }
 
+// 快捷键提示（命令项右侧）：一键一框（VS Code 风），每个 token 一个淡键帽
+.cmdk-item-kbd {
+  flex: 0 0 auto;
+  margin-left: $space-4;
+  display: flex;
+  align-items: center;
+  gap: $space-1;
+}
+
+.cmdk-key {
+  padding: 0 $space-2;
+  min-width: 18px;
+  font-family: inherit;
+  font-size: $fs-sm;
+  line-height: 18px;
+  text-align: center;
+  color: $text-muted;
+  background: $bg-surface;
+  border: 1px solid $border-muted;
+  border-radius: $radius-sm;
+}
+
 .cmdk-empty {
   padding: $space-4 $space-6;
   color: $text-muted;

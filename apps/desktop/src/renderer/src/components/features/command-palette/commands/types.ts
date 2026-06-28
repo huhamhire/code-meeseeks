@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import type { Config, PrDiscoveryFilter } from '@meebox/shared';
+import type { Config, Platform, PrDiscoveryFilter } from '@meebox/shared';
 import type { SettingsCategory } from '../../settings';
 import type { FilterKey } from '../../../layout/Sidebar';
 
@@ -9,6 +9,8 @@ import type { FilterKey } from '../../../layout/Sidebar';
  * 不另起一套，保证与设置页行为一致。各领域命令构建器都接收它。
  */
 export interface CommandContext {
+  /** 运行平台：命令格式化快捷键提示（mac ⌘ / 其余 Ctrl）等用。 */
+  platform: Platform;
   config: Config;
   /** 当前选中 PR 的 localId（无选中为 null）；上下文相关命令（如运行自动评审）据此裁剪 / 取目标。 */
   selectedPrId: string | null;
@@ -50,12 +52,16 @@ export interface CommandOption {
  */
 export interface RootCommand {
   id: string;
+  /** 上下文门控（可选）：返回 false 则该命令不出现在列表。缺省=恒可见。由注册表统一过滤，各领域只需声明。 */
+  when?: () => boolean;
   title: string;
   /** 英文标题：非英语界面作次行展示，并恒参与检索（对齐 VS Code 显示语言 + 英文检索） */
   titleEn: string;
   category: string;
   /** 英文领域前缀：同 titleEn，用于次行展示与英文检索 */
   categoryEn: string;
+  /** 快捷键按键 token 列表（一键一框，如 `['⌘','B']` / `['Ctrl','B']`），在命令项右侧展示；缺省=无 */
+  shortcut?: string[];
   /** 进入二级后的输入框占位提示 */
   optionsPlaceholder?: string;
   /** 二级选项（惰性求值，读当前 config 标注 active）；与 run 二选一 */

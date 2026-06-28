@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrDiscoveryFilter } from '@meebox/shared';
 import { invoke } from './api';
+import { chatRunStore } from './stores/chat-run-store';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
 import { PrPanel, PrEmpty, usePullRequests } from './components/features/pr';
@@ -91,6 +92,51 @@ export default function App() {
   const [discoveryFilter, setDiscoveryFilter] = useState<PrDiscoveryFilter>('review-requested');
   // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
   const [statusFilter, setStatusFilter] = useState<FilterKey>('pending');
+
+  // 选中 PR 的 ref：供 F5 快捷键在稳定监听里读最新值，免得每次切 PR 重订阅。
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+
+  // 布局快捷键（窗口级，VS Code 风）：Ctrl/Cmd+B 切 PR 列表（左侧栏）、Ctrl/Cmd+J 切对话面板（右侧）、
+  // F5 运行自动评审、DevTools。仅单修饰键的 B/J 排除 Shift/Alt（避开 Cmd+Shift+P）；preventDefault 压过默认。
+  useEffect(() => {
+    const isMac = boot?.info.platform === 'darwin';
+    const onKey = (e: KeyboardEvent): void => {
+      const k = e.key.toLowerCase();
+      // F5：对当前选中 PR 运行自动评审（与命令面板同逻辑：有选中 PR、且未在跑才触发——重入保护）
+      if (k === 'f5') {
+        const id = selectedIdRef.current;
+        if (id && !chatRunStore.getSnapshot().agentPrs.includes(id)) {
+          e.preventDefault();
+          void invoke('agent:run', { localId: id });
+        }
+        return;
+      }
+      // DevTools：mac ⌥⌘I / 其余 Ctrl+Shift+I（带 Shift/Alt，与下面单修饰键的 B/J 区分）
+      if (k === 'i') {
+        const devtools = isMac
+          ? e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey
+          : e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey;
+        if (devtools) {
+          e.preventDefault();
+          void invoke('app:openDevTools', undefined);
+        }
+        return;
+      }
+      // 单修饰键布局开关：Ctrl/Cmd+B（PR 列表）、Ctrl/Cmd+J（对话面板）
+      const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (!mod || e.shiftKey || e.altKey) return;
+      if (k === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed((c) => !c);
+      } else if (k === 'j') {
+        e.preventDefault();
+        setChatCollapsed((c) => !c);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [boot?.info.platform, setSidebarCollapsed, setChatCollapsed]);
 
   if (fatalError) {
     return (
