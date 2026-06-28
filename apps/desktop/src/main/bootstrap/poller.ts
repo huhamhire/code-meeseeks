@@ -13,16 +13,19 @@ import { broadcast } from '../services/broadcast.js';
 export function createPoller(deps: {
   bootstrap: BootstrapResult;
   stateStore: JsonFileStateStore;
+  /** 归档 PR 冷存储（`archived/` 根，与 state/ 平级）；退场 PR 整树搬入此处。 */
+  archiveStore: JsonFileStateStore;
   logger: Logger;
   /** poll tick 顺带的副作用（清理消失 PR 的 agent 操作 / 版本检测 / AutoPilot 准入），由 index 绑定。 */
   onTickExtras: () => void;
   /** 延迟取 repoMirror（它在 poller 之后才建好）。 */
   getRepoMirror: () => RepoMirrorManager;
 }): Poller {
-  const { bootstrap, stateStore, logger } = deps;
+  const { bootstrap, stateStore, archiveStore, logger } = deps;
   return new Poller({
     connections: [],
     stateStore,
+    archiveStore,
     intervalSeconds: bootstrap.config.poller.interval_seconds,
     logger: logger.child({ scope: 'poller' }),
     onTick: (info) => {

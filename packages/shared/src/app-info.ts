@@ -5,6 +5,8 @@ export interface AppPaths {
   configFile: string;
   /** state/ subdir */
   stateDir: string;
+  /** archived/ subdir — cold store for retired PRs (sibling of state/); archived PR trees relocate here and follow the same purge lifecycle */
+  archivedDir: string;
   /** logs/ subdir */
   logsDir: string;
   /** agent/ subdir — 默认 Agent 目录位置（SOUL/AGENTS/MEMORY/USER + rules/） */

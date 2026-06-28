@@ -3,6 +3,12 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### ♻️ 变更
+
+- 退场（已合并 / 关闭 / 不再需你评审）的 PR 数据迁出活跃目录、独立归档存放，归档保留与到期自动清理策略保持不变。
+
 ## [0.7.0] - 2026-06-27
 
 > 本版重点：
@@ -311,6 +317,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...HEAD
 [0.7.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0

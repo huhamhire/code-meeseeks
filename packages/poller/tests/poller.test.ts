@@ -145,10 +145,13 @@ function makePr(id: string, updatedAt: string, title = `PR ${id}`): PullRequest 
 
 let tmpDir: string;
 let store: JsonFileStateStore;
+// 归档冷存储：与 store 物理分离（store 根 = tmpDir，archived 根 = tmpDir/archived）。
+let archiveStore: JsonFileStateStore;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-poller-test-'));
   store = new JsonFileStateStore(tmpDir);
+  archiveStore = new JsonFileStateStore(path.join(tmpDir, 'archived'));
 });
 
 afterEach(async () => {
@@ -162,6 +165,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => fixedNow,
@@ -197,6 +201,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => now,
@@ -219,6 +224,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -241,6 +247,7 @@ describe('Poller.tick', () => {
         { connectionId: 'bad', adapter: broken },
       ],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -312,6 +319,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter: slow }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -333,6 +341,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -356,6 +365,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -386,6 +396,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -409,6 +420,7 @@ describe('Poller.tick', () => {
         { connectionId: 'broken', adapter: broken },
       ],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -436,6 +448,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -456,6 +469,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -471,6 +485,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -486,6 +501,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -512,6 +528,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -536,6 +553,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -553,11 +571,13 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(2);
+    const goneHash = (await listStoredPullRequests(store)).find((p) => p.remoteId === '2')!.localId;
 
     // PR #2 关单 → soft archive (archivedAt set in index)，list 自动过滤掉
     adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
@@ -566,10 +586,12 @@ describe('Poller.tick', () => {
     expect(visible).toHaveLength(1);
     expect(visible[0]!.remoteId).toBe('1');
 
-    // 但 meta.json + 索引条目仍在 (待 grace 期满才硬删)
+    // 索引条目仍在 (待 grace 期满才硬删)；数据已从活跃存储搬入归档冷存储
     const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
     const archivedEntries = Object.values(index!.prs).filter((e) => e.archivedAt);
     expect(archivedEntries).toHaveLength(1);
+    expect(await store.read(`prs/${goneHash}/meta`)).toBeNull(); // 活跃存储已搬空
+    expect(await archiveStore.read(`prs/${goneHash}/meta`)).not.toBeNull(); // 落到归档存储
   });
 
   it('archived PR re-appearing on remote becomes active again', async () => {
@@ -577,20 +599,25 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
     await poller.tick();
+    const hash = (await listStoredPullRequests(store))[0]!.localId;
 
-    // 远端关单 → soft archive
+    // 远端关单 → soft archive：数据搬入归档存储
     adapter.setPrs([]);
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(0);
+    expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull();
 
-    // 复活：远端又出现 (例如 reviewer 被重新加回) → archivedAt 清零
+    // 复活：远端又出现 (例如 reviewer 被重新加回) → archivedAt 清零、整树搬回活跃存储
     adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(1);
+    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull(); // 搬回活跃存储
+    expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull(); // 归档存储已腾空
   });
 
   it('外部删除 prs/index.json: 下一轮 poll 自动重建', async () => {
@@ -598,6 +625,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -618,6 +646,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -641,6 +670,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => now,
@@ -648,17 +678,49 @@ describe('Poller.tick', () => {
     await poller.tick();
     const hash = (await listStoredPullRequests(store))[0]!.localId;
 
-    // T+0: 关单 → soft archive
+    // T+0: 关单 → soft archive：数据搬入归档存储（仍在 grace 期内保留）
     adapter.setPrs([]);
     await poller.tick();
-    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull();
+    expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull();
 
-    // T+8 天: 超过 1 周 grace → 硬清掉整目录
+    // T+8 天: 超过 1 周 grace → 硬清掉整目录（归档存储 + 活跃存储两端都清）
     now = new Date('2026-06-09T00:00:00.000Z');
     await poller.tick();
+    expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull();
     expect(await store.read(`prs/${hash}/meta`)).toBeNull();
     const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
     expect(Object.keys(index!.prs)).toHaveLength(0);
+  });
+
+  it('对账：把滞留活跃存储的归档数据搬入归档存储（旧布局 / split-brain 最终一致）', async () => {
+    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+    });
+    await poller.tick();
+    const hash = (await listStoredPullRequests(store))[0]!.localId;
+
+    // 模拟旧布局存量：手工把索引条目标 archived，但数据**仍留在活跃存储**（未搬迁）
+    const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    index!.prs[hash]!.archivedAt = now.toISOString();
+    await store.write(PR_INDEX_KEY, index!);
+    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull();
+    expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull();
+
+    // 远端仍无该 PR → 下一轮 poll 的对账步（未到 grace、不清）把整树搬入归档存储
+    adapter.setPrs([]);
+    await poller.tick();
+    expect(await store.read(`prs/${hash}/meta`)).toBeNull(); // 搬出活跃存储
+    expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull(); // 落到归档存储
+    // 仍在索引、仍 archived（对账只搬数据、不动索引）
+    const after = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    expect(after!.prs[hash]!.archivedAt).toBe(now.toISOString());
   });
 });
 
@@ -668,6 +730,7 @@ describe('setLocalStatus', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -683,6 +746,7 @@ describe('setLocalStatus', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -708,6 +772,7 @@ describe('Poller.archiveConnectionsExcept', () => {
         { connectionId: 'bb2', adapter: a2 },
       ],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => now,
@@ -723,12 +788,19 @@ describe('Poller.archiveConnectionsExcept', () => {
     const bb2 = entries.find((e) => e.identity.connectionId === 'bb2')!;
     expect(bb1.archivedAt).toBeNull(); // 活动连接不动
     expect(bb2.archivedAt).toBe(now.toISOString()); // 非活动连接被归档
+    // bb1 数据留在活跃存储；bb2 数据搬入归档存储
+    const bb1Hash = Object.entries(index!.prs).find(([, e]) => e === bb1)![0];
+    const bb2Hash = Object.entries(index!.prs).find(([, e]) => e === bb2)![0];
+    expect(await store.read(`prs/${bb1Hash}/meta`)).not.toBeNull();
+    expect(await store.read(`prs/${bb2Hash}/meta`)).toBeNull();
+    expect(await archiveStore.read(`prs/${bb2Hash}/meta`)).not.toBeNull();
 
     // 幂等：再调一次不改已归档的时间戳
     const later = new Date('2026-06-02T00:00:00.000Z');
     const poller2 = new Poller({
       connections: [{ connectionId: 'bb1', adapter: a1 }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => later,
