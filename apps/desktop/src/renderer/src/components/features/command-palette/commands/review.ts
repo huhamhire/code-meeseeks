@@ -1,5 +1,6 @@
 import { invoke } from '../../../../api';
 import type { CommandContext, RootCommand } from './types';
+import { formatChord } from './shortcuts';
 
 function toggleAutopilot(ctx: CommandContext): void {
   const enabled = !ctx.config.agent.autopilot.enabled;
@@ -30,8 +31,10 @@ export function buildReviewCommands(ctx: CommandContext): RootCommand[] {
     {
       id: 'run-auto-review',
       ...cmd('commandPalette.cmdRunAutoReview'),
-      // 始终可见、便于发现；执行时判定：无选中 PR 忽略、同一 PR 已在跑则忽略（重入保护）。走与 ChatPane
+      // 门控：有选中 PR 才出现（无 PR 无意义）。执行时再做重入保护：同一 PR 已在跑则忽略。走与 ChatPane
       // 一键评审同通道，运行态 / 会话经事件 + store 反映；LLM 未配置 / pr-agent 未就绪由后端按失败回流到会话。
+      when: () => Boolean(selectedPrId),
+      shortcut: ['F5'], // 运行（IDE 惯例）；单键避开组合冲突，见 App 窗口级快捷键
       run: () => {
         if (selectedPrId && !isPrRunning(selectedPrId)) {
           void invoke('agent:run', { localId: selectedPrId });
@@ -46,6 +49,7 @@ export function buildReviewCommands(ctx: CommandContext): RootCommand[] {
     {
       id: 'toggle-chat-panel',
       ...cmd('commandPalette.cmdToggleChatPanel'),
+      shortcut: formatChord(ctx.platform, 'J'),
       run: () => ctx.toggleChatPanel(),
     },
   ];

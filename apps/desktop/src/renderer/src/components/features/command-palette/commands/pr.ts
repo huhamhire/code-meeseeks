@@ -1,5 +1,6 @@
 import type { PrDiscoveryFilter } from '@meebox/shared';
 import type { CommandContext, RootCommand } from './types';
+import { formatChord } from './shortcuts';
 
 /** 发现分类标签 i18n key（与 Sidebar 发现 tabs 同源；具体可用哪几类由 platform 能力决定）。 */
 const DISCOVERY_LABEL_KEYS: Record<PrDiscoveryFilter, string> = {
@@ -57,6 +58,7 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
     categoryEn,
     title: t('commandPalette.cmdTogglePrList'),
     titleEn: tEn('commandPalette.cmdTogglePrList'),
+    shortcut: formatChord(ctx.platform, 'B'),
     run: () => ctx.togglePrList(),
   });
 

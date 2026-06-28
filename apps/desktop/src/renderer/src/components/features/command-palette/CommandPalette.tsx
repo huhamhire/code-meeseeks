@@ -36,6 +36,8 @@ interface FlatItem {
   category?: string;
   categoryEn?: string;
   active?: boolean;
+  /** 快捷键按键 token（一键一框，如 ['⌘','B']），右侧展示 */
+  shortcut?: string[];
   onSelect: () => void;
 }
 
@@ -106,6 +108,7 @@ export function CommandPalette({
       // 显式引用 i18n.language：t 引用在切语言后不变，需以语言为 key 重建命令文案（搜索按当前语言匹配）
       void i18n.language;
       return buildRootCommands({
+        platform,
         config,
         selectedPrId,
         isPrRunning,
@@ -122,6 +125,7 @@ export function CommandPalette({
       });
     },
     [
+      platform,
       config,
       selectedPrId,
       isPrRunning,
@@ -194,6 +198,7 @@ export function CommandPalette({
         titleEn: r.titleEn,
         category: r.category,
         categoryEn: r.categoryEn,
+        shortcut: r.shortcut,
         onSelect: () => {
           pushMru(r.id); // 记最近使用（顶层命令；进容器 / 叶子执行都记）
           if (r.options) {
@@ -309,6 +314,15 @@ export function CommandPalette({
                       </span>
                     )}
                   </span>
+                  {it.shortcut && (
+                    <span className="cmdk-item-kbd">
+                      {it.shortcut.map((k, ki) => (
+                        <kbd key={ki} className="cmdk-key">
+                          {k}
+                        </kbd>
+                      ))}
+                    </span>
+                  )}
                   {it.active && (
                     <span className="cmdk-item-check" aria-hidden>
                       ✓

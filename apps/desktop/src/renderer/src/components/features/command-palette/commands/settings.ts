@@ -4,6 +4,7 @@ import { invoke } from '../../../../api';
 import i18n, { persistLanguage, resolveUiLanguage } from '../../../../i18n';
 import { setEditorAppearance } from '../../../../stores/editor-appearance-store';
 import type { CommandContext, CommandOption, RootCommand } from './types';
+import { formatChord } from './shortcuts';
 
 function switchLanguage(ctx: CommandContext, next: SupportedLanguage): void {
   void i18n.changeLanguage(next); // 渲染层实时切换
@@ -124,6 +125,8 @@ export function buildSettingsCommands(ctx: CommandContext): RootCommand[] {
     {
       id: 'open-devtools',
       ...cmd('commandPalette.cmdOpenDevtools'),
+      // DevTools 惯例：mac ⌥⌘I / 其余 Ctrl+Shift+I（见 App 窗口级快捷键）
+      shortcut: formatChord(ctx.platform, 'I', ctx.platform === 'darwin' ? { alt: true } : { shift: true }),
       run: () => {
         void invoke('app:openDevTools', undefined);
       },
