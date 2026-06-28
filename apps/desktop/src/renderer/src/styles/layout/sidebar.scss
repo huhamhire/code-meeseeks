@@ -62,9 +62,11 @@
 }
 
 // 范围行（常驻）：左组发现分类 / 进行中锚点 + 右组「已关闭」辅助切换。两组间距分隔，右组靠右。
+// **行本身不设上下 padding**（垂直留白下放到 tab 内）：这样行内容盒 = 可见区，靠右图标按钮 align-self
+// center 才真正落在可见区垂直中心（上下留白一致）；同时 tab 的下划线指示仍贴住行底（紧邻 1px 分隔线）。
 .sidebar-scope {
   gap: $space-3;
-  padding: $space-3 $space-6 0;
+  padding: 0 $space-6;
   align-items: stretch;
 }
 
@@ -119,7 +121,8 @@
   border-bottom: 2px solid transparent;
   // 非活动 tab 用可读的 muted，而非几乎不可见的 dim，提升整组可视性
   color: $text-muted;
-  padding: $space-2 0;
+  // 垂直留白下放到 tab：上 $space-3、下 $space-2 + 2px 下划线 ≈ 上下对称，文字居中；下划线贴住行底
+  padding: $space-3 0 $space-2;
   font-size: 12px;
   cursor: pointer;
   transition:

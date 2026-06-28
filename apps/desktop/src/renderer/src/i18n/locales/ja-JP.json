@@ -194,7 +194,7 @@
     "cmdToggleChatPanel": "チャットパネルを切り替え",
     "cmdTogglePrList": "PR 一覧を切り替え",
     "cmdToggleProxy": "プロキシを切り替え",
-    "cmdViewArchived": "クローズ済みを表示",
+    "cmdViewArchived": "「クローズ済み」を表示",
     "cmdViewDiscovery": "「{{label}}」を表示",
     "empty": "一致するコマンドがありません",
     "pickLanguage": "表示言語を選択…",
