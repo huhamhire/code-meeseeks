@@ -202,3 +202,10 @@
   color: $text-muted;
   font-size: $fs-lg;
 }
+
+// 搜索命中高亮（覆盖 <mark> 默认黄底黑字）：用统一的搜索命中色，文字色继承不变
+.cmdk-hl {
+  background: $color-search-hit;
+  color: inherit;
+  border-radius: 2px;
+}

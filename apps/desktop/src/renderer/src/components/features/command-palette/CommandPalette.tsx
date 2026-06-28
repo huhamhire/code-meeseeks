@@ -39,6 +39,33 @@ interface FlatItem {
 }
 
 /**
+ * 把文本里匹配查询的（连续）子串包成高亮 `<mark>`，与列表的 `includes` 子串过滤一致。
+ * 空查询原样返回；大小写不敏感；同一文本里多处命中都高亮。
+ */
+function highlight(text: string, query: string): React.ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  const lower = text.toLowerCase();
+  const ql = q.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let from = 0;
+  let hit = lower.indexOf(ql);
+  let key = 0;
+  while (hit !== -1) {
+    if (hit > from) parts.push(text.slice(from, hit));
+    parts.push(
+      <mark key={key++} className="cmdk-hl">
+        {text.slice(hit, hit + q.length)}
+      </mark>,
+    );
+    from = hit + q.length;
+    hit = lower.indexOf(ql, from);
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return parts;
+}
+
+/**
  * 标题栏命令面板（VS Code 风）：标题栏内嵌输入框 + 下拉结果。快捷键 mac Cmd+Shift+P /
  * 其余 Ctrl+Shift+P 打开聚焦。**最多两级**——顶层命令选中后若有二级选项则原地替换为选项列表，
  * 不支持返回上级（Esc 退出后重进）。搜索按当前界面语言匹配命令文案。设计见 docs/arch/13。
@@ -251,13 +278,17 @@ export function CommandPalette({
                 >
                   <span className="cmdk-item-main">
                     <span className="cmdk-item-line">
-                      {it.category && <span className="cmdk-item-cat">{it.category}</span>}
-                      <span className="cmdk-item-title">{it.title}</span>
+                      {it.category && (
+                        <span className="cmdk-item-cat">{highlight(it.category, query)}</span>
+                      )}
+                      <span className="cmdk-item-title">{highlight(it.title, query)}</span>
                     </span>
                     {showEn && (
                       <span className="cmdk-item-line cmdk-item-sub">
-                        {it.categoryEn && <span className="cmdk-item-cat">{it.categoryEn}</span>}
-                        <span className="cmdk-item-title">{it.titleEn}</span>
+                        {it.categoryEn && (
+                          <span className="cmdk-item-cat">{highlight(it.categoryEn, query)}</span>
+                        )}
+                        <span className="cmdk-item-title">{highlight(it.titleEn, query)}</span>
                       </span>
                     )}
                   </span>
