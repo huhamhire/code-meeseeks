@@ -177,6 +177,23 @@
     "userQuestionAria": "User question",
     "waitingOutput": "(Waiting for PR Agent output…)"
   },
+  "commandPalette": {
+    "addModel": "Add model…",
+    "categorySettings": "Settings",
+    "cmdDisableProxy": "Disable Proxy",
+    "cmdEnableProxy": "Enable Proxy",
+    "cmdOpenAbout": "Open About",
+    "cmdOpenDevtools": "Open DevTools",
+    "cmdOpenSettings": "Open Settings",
+    "cmdSwitchLanguage": "Switch Display Language",
+    "cmdSwitchModel": "Switch Model",
+    "cmdSwitchTheme": "Switch Theme",
+    "empty": "No matching commands",
+    "pickLanguage": "Select display language…",
+    "pickModel": "Select model…",
+    "pickTheme": "Select theme…",
+    "placeholder": "Type a command…"
+  },
   "commentComposer": {
     "cancelTitle": "Cancel (Esc)",
     "emptyTitle": "Comment can't be empty",

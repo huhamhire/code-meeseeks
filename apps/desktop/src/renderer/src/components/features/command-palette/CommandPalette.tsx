@@ -1,0 +1,217 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { Config, Platform } from '@meebox/shared';
+import { buildRootCommands, type RootCommand } from './commands';
+import type { SettingsCategory } from '../settings';
+
+interface CommandPaletteProps {
+  /** 运行平台：决定打开快捷键修饰键（mac = Cmd+Shift+P，其余 = Ctrl+Shift+P）。 */
+  platform: Platform;
+  config: Config;
+  patchConfig: (updater: (c: Config) => Config) => void;
+  openSettings: (category?: SettingsCategory) => void;
+}
+
+/** 当前层（顶层 / 二级）展开后用于渲染的扁平项。 */
+interface FlatItem {
+  id: string;
+  title: string;
+  /** 英文标题（缺省=title）：非英语界面作次行展示，并恒参与检索 */
+  titleEn: string;
+  category?: string;
+  categoryEn?: string;
+  active?: boolean;
+  onSelect: () => void;
+}
+
+/**
+ * 标题栏命令面板（VS Code 风）：标题栏内嵌输入框 + 下拉结果。快捷键 mac Cmd+Shift+P /
+ * 其余 Ctrl+Shift+P 打开聚焦。**最多两级**——顶层命令选中后若有二级选项则原地替换为选项列表，
+ * 不支持返回上级（Esc 退出后重进）。搜索按当前界面语言匹配命令文案。设计见 docs/arch/13。
+ */
+export function CommandPalette({ platform, config, patchConfig, openSettings }: CommandPaletteProps) {
+  const { t, i18n } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [level, setLevel] = useState<RootCommand | null>(null);
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // 固定英文翻译器（en-US 静态打包、恒可用）：非英语界面作次行 + 恒按英文检索
+  const tEn = useMemo(() => i18n.getFixedT('en-US'), [i18n]);
+  const isEnglish = i18n.language === 'en-US';
+
+  const roots = useMemo(
+    () => {
+      // 显式引用 i18n.language：t 引用在切语言后不变，需以语言为 key 重建命令文案（搜索按当前语言匹配）
+      void i18n.language;
+      return buildRootCommands({ config, patchConfig, openSettings, t, tEn });
+    },
+    [config, patchConfig, openSettings, t, tEn, i18n.language],
+  );
+
+  const close = (): void => {
+    setOpen(false);
+    setLevel(null);
+    setQuery('');
+    setActiveIndex(0);
+    inputRef.current?.blur();
+  };
+
+  const openPalette = (): void => {
+    setLevel(null);
+    setQuery('');
+    setActiveIndex(0);
+    setOpen(true);
+    inputRef.current?.focus();
+  };
+
+  const items: FlatItem[] = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    // haystack 恒含英文（本地化 + 英文一起匹配）：非英语界面下也始终支持英文检索
+    const has = (hay: string): boolean => !q || hay.toLowerCase().includes(q);
+    if (level) {
+      return level
+        .options!()
+        .map((o) => ({
+          id: o.id,
+          title: o.title,
+          titleEn: o.titleEn ?? o.title,
+          active: o.active,
+          onSelect: () => {
+            o.run();
+            close();
+          },
+        }))
+        .filter((it) => has(`${it.title} ${it.titleEn}`));
+    }
+    return roots
+      .map((r) => ({
+        id: r.id,
+        title: r.title,
+        titleEn: r.titleEn,
+        category: r.category,
+        categoryEn: r.categoryEn,
+        onSelect: () => {
+          if (r.options) {
+            setLevel(r);
+            setQuery('');
+            setActiveIndex(0);
+            inputRef.current?.focus();
+          } else {
+            r.run?.();
+            close();
+          }
+        },
+      }))
+      // 顶层按「领域前缀 + 命令名」（中英一起）匹配：搜领域名（如「设置」/「Settings」）可归类筛出该域全部命令
+      .filter((it) => has(`${it.category} ${it.title} ${it.categoryEn} ${it.titleEn}`));
+  }, [level, query, roots]);
+
+  // 列表变化后把高亮项夹在范围内
+  useEffect(() => {
+    setActiveIndex((i) => Math.min(Math.max(0, i), Math.max(0, items.length - 1)));
+  }, [items.length]);
+
+  // 全局快捷键：mac Cmd+Shift+P / 其余 Ctrl+Shift+P 打开
+  useEffect(() => {
+    const isMac = platform === 'darwin';
+    const onKey = (e: KeyboardEvent): void => {
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (mod && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        openPalette();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [platform]);
+
+  const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, items.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      items[activeIndex]?.onSelect();
+    }
+  };
+
+  return (
+    <div className="cmdk">
+      <input
+        ref={inputRef}
+        className="cmdk-input"
+        type="text"
+        spellCheck={false}
+        placeholder={level ? level.optionsPlaceholder : t('commandPalette.placeholder')}
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setActiveIndex(0);
+        }}
+        onFocus={() => {
+          if (blurTimer.current) clearTimeout(blurTimer.current);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          // 延迟关闭：让下拉项的 click 先于 blur 生效（项的 onMouseDown 已 preventDefault 保住焦点）
+          blurTimer.current = setTimeout(close, 120);
+        }}
+        onKeyDown={onInputKeyDown}
+        aria-label={t('commandPalette.placeholder')}
+      />
+      {open && (
+        <div className="cmdk-panel" role="listbox">
+          {items.length === 0 ? (
+            <div className="cmdk-empty">{t('commandPalette.empty')}</div>
+          ) : (
+            items.map((it, i) => {
+              // 非英语界面且英文与本地化不同 → 次行显示英文（对齐 VS Code 显示语言）
+              const showEn =
+                !isEnglish &&
+                (it.titleEn !== it.title || (it.categoryEn ?? '') !== (it.category ?? ''));
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  className={`cmdk-item${i === activeIndex ? ' is-active' : ''}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onClick={it.onSelect}
+                >
+                  <span className="cmdk-item-main">
+                    <span className="cmdk-item-line">
+                      {it.category && <span className="cmdk-item-cat">{it.category}</span>}
+                      <span className="cmdk-item-title">{it.title}</span>
+                    </span>
+                    {showEn && (
+                      <span className="cmdk-item-line cmdk-item-sub">
+                        {it.categoryEn && <span className="cmdk-item-cat">{it.categoryEn}</span>}
+                        <span className="cmdk-item-title">{it.titleEn}</span>
+                      </span>
+                    )}
+                  </span>
+                  {it.active && (
+                    <span className="cmdk-item-check" aria-hidden>
+                      ✓
+                    </span>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

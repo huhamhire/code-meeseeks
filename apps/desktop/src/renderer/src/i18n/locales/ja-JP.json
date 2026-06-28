@@ -177,6 +177,23 @@
     "userQuestionAria": "ユーザーの質問",
     "waitingOutput": "(PR Agent の出力を待機中…)"
   },
+  "commandPalette": {
+    "addModel": "モデルを追加…",
+    "categorySettings": "設定",
+    "cmdDisableProxy": "プロキシを無効化",
+    "cmdEnableProxy": "プロキシを有効化",
+    "cmdOpenAbout": "情報を開く",
+    "cmdOpenDevtools": "DevTools を開く",
+    "cmdOpenSettings": "設定を開く",
+    "cmdSwitchLanguage": "表示言語を切り替え",
+    "cmdSwitchModel": "モデルを切り替え",
+    "cmdSwitchTheme": "テーマを切り替え",
+    "empty": "一致するコマンドがありません",
+    "pickLanguage": "表示言語を選択…",
+    "pickModel": "モデルを選択…",
+    "pickTheme": "テーマを選択…",
+    "placeholder": "コマンドを入力…"
+  },
   "commentComposer": {
     "cancelTitle": "キャンセル (Esc)",
     "emptyTitle": "コメントを空にはできません",

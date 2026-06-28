@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrDiscoveryFilter } from '@meebox/shared';
 import { invoke } from './api';
@@ -6,7 +6,7 @@ import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
 import { PrPanel, PrEmpty, usePullRequests } from './components/features/pr';
 import { OnboardingWizard } from './components/features/onboarding';
-import { SettingsModal } from './components/features/settings';
+import { SettingsModal, type SettingsCategory } from './components/features/settings';
 import { Sidebar } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
 import { TitleBar } from './components/layout/TitleBar';
@@ -67,6 +67,12 @@ export default function App() {
   useGlobalTheme();
 
   const [showSettings, setShowSettings] = useState(false);
+  // 设置面板初始分区（命令面板「打开关于 / 模型」等深链用）；缺省由 SettingsModal 落 'general'。
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory | undefined>(undefined);
+  const openSettings = useCallback((category?: SettingsCategory) => {
+    setSettingsCategory(category);
+    setShowSettings(true);
+  }, []);
   /**
    * M4 跨组件跳转：ChatPane finding card 点"编辑" / PublishReviewModal anchor 点击 → 这里 set →
    * PrPanel 切到 Diff tab + 透传给 DiffView 做 scroll/highlight/(可选)open edit zone，消费完清空。
@@ -123,7 +129,13 @@ export default function App() {
 
   return (
     <div className="app">
-      <TitleBar platform={boot.info.platform} title={selected?.title} />
+      <TitleBar
+        platform={boot.info.platform}
+        title={selected?.title}
+        config={boot.config}
+        patchConfig={patchConfig}
+        openSettings={openSettings}
+      />
       <div className="app-body">
         {!sidebarCollapsed && (
           <Sidebar
@@ -218,6 +230,7 @@ export default function App() {
           }
           onConnectionsChange={refreshBootAndPrs}
           onConfigPersisted={(config) => patchConfig(() => config)}
+          initialCategory={settingsCategory}
           onClose={() => setShowSettings(false)}
         />
       )}

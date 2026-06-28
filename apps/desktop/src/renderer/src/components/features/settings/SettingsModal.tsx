@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppInfo, AppPaths, Config, EditorTheme, SupportedLanguage } from '@meebox/shared';
 import {
@@ -30,7 +30,7 @@ import { WorkDirSection } from './sections/WorkDirSection';
 import { CacheDirSection } from './sections/CacheDirSection';
 import { RuntimeSection } from './sections/RuntimeSection';
 
-type SettingsCategory = 'general' | 'connection' | 'model' | 'agent' | 'about';
+export type SettingsCategory = 'general' | 'connection' | 'model' | 'agent' | 'about';
 
 /**
  * 配置分区导航元数据（左侧栏）。新增配置分区在此登记一项，并在右侧面板的 switch
@@ -71,6 +71,8 @@ interface SettingsModalProps {
   onConnectionsChange?: () => void | Promise<void>;
   /** 整体保存成功后回传写盘后的权威 config，父级据此同步 boot.config（再次打开设置页显示最新值）。 */
   onConfigPersisted?: (config: Config) => void;
+  /** 打开时的初始分区（命令面板「打开关于」等深链用）；缺省 'general'。 */
+  initialCategory?: SettingsCategory;
   onClose: () => void;
 }
 
@@ -88,10 +90,15 @@ export function SettingsModal({
   onEditorAppearanceChange,
   onConnectionsChange,
   onConfigPersisted,
+  initialCategory,
   onClose,
 }: SettingsModalProps) {
   const { t } = useTranslation();
-  const [category, setCategory] = useState<SettingsCategory>('general');
+  const [category, setCategory] = useState<SettingsCategory>(initialCategory ?? 'general');
+  // 已挂载时再次以新初始分区打开（命令面板深链）：切到目标分区；用户在面板内手动导航仍走 setCategory。
+  useEffect(() => {
+    if (initialCategory) setCategory(initialCategory);
+  }, [initialCategory]);
   const s = useSettingsDraft({
     config,
     paths,
