@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 
@@ -42,13 +42,21 @@ const SPLASH_COLORS = {
  */
 export function createSplash(dark: boolean): BrowserWindow {
   const c = dark ? SPLASH_COLORS.dark : SPLASH_COLORS.light;
+  const width = 280;
+  const height = 240;
+  // 与主窗口同源：按光标所在显示器的 workArea 居中（workArea 已扣掉 mac 菜单栏 / 刘海）。不用
+  // Electron 的 center:true——它按整屏 bounds（含顶部不可用区）算中点、且固定主显示器，会让 splash 偏高、多屏错位。
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const x = Math.round(area.x + (area.width - width) / 2);
+  const y = Math.round(area.y + (area.height - height) / 2);
   const splash = new BrowserWindow({
-    width: 280,
-    height: 240,
+    width,
+    height,
+    x,
+    y,
     frame: false,
     resizable: false,
     movable: false,
-    center: true,
     show: false,
     alwaysOnTop: true,
     skipTaskbar: true,
