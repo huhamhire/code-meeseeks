@@ -65,12 +65,14 @@
 // **行本身不设上下 padding**（垂直留白下放到 tab 内）：这样行内容盒 = 可见区，靠右图标按钮 align-self
 // center 才真正落在可见区垂直中心（上下留白一致）；同时 tab 的下划线指示仍贴住行底（紧邻 1px 分隔线）。
 .sidebar-scope {
-  gap: $space-3;
-  padding: 0 $space-6;
+  // 组间仅留极小间隔（$space-2）：把多余留白让给左侧 tab 组，使 tabs 尽量铺满、延伸到贴近图标按钮
+  gap: $space-2;
+  // 左缘对齐其余 toolbar（$space-6）；右缘收紧（$space-4）让「已关闭」图标按钮更靠右、贴近面板边
+  padding: 0 $space-4 0 $space-6;
   align-items: stretch;
 }
 
-// 左组：发现分类 tabs 等分（或无分类平台的单一「进行中」锚点）
+// 左组：发现分类 tabs 等分（或无分类平台的单一「进行中」锚点）；flex-grow 吃掉行内多余空间
 .sidebar-scope-primary {
   flex: 1 1 auto;
   display: flex;
@@ -121,8 +123,8 @@
   border-bottom: 2px solid transparent;
   // 非活动 tab 用可读的 muted，而非几乎不可见的 dim，提升整组可视性
   color: $text-muted;
-  // 垂直留白下放到 tab：上 $space-3、下 $space-2 + 2px 下划线 ≈ 上下对称，文字居中；下划线贴住行底
-  padding: $space-3 0 $space-2;
+  // 垂直留白下放到 tab：上 $space-4、下 $space-3 + 2px 下划线 ≈ 上下对称（行更高些），文字居中；下划线贴住行底
+  padding: $space-4 0 $space-3;
   font-size: 12px;
   cursor: pointer;
   transition:
