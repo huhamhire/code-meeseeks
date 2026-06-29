@@ -3,6 +3,7 @@ import { app, BrowserWindow, Notification } from 'electron';
 import type { Logger } from 'pino';
 import type { Config, PollNotificationEvent } from '@meebox/shared';
 import { t } from '../i18n/index.js';
+import { broadcast } from './broadcast.js';
 import { ensureAvatarFile, type AvatarFileDeps } from './avatar.js';
 
 /**
@@ -41,10 +42,27 @@ function focusMainWindow(): void {
   win.focus();
 }
 
-function showNotification(options: Electron.NotificationConstructorOptions): void {
+function showNotification(
+  options: Electron.NotificationConstructorOptions,
+  onClick: () => void = focusMainWindow,
+): void {
   const n = new Notification(options);
-  n.on('click', focusMainWindow);
+  n.on('click', onClick);
   n.show();
+}
+
+/** 点击通知 → 聚焦窗口 + 推导航意图给 renderer（选中 PR / 跳 diff 行 / 开活动标签，见 IpcEvents['notification:activate']）。 */
+function activateOnClick(e: PollNotificationEvent): () => void {
+  return () => {
+    focusMainWindow();
+    broadcast('notification:activate', {
+      localId: e.localId,
+      kind: e.kind,
+      anchor: e.comment?.anchor
+        ? { path: e.comment.anchor.path, line: e.comment.anchor.line }
+        : null,
+    });
+  };
 }
 
 function escapeXml(s: string): string {
@@ -82,6 +100,7 @@ async function showOne(
   const body = t(`notifications.${group}.body`, { id: e.remoteId, title: e.title });
   const repo = `${e.repo.projectKey}/${e.repo.repoSlug}`;
 
+  const onClick = activateOnClick(e);
   if (process.platform === 'win32') {
     try {
       const avatarPath = await ensureAvatarFile(
@@ -90,15 +109,16 @@ async function showOne(
         e.actor.slug ?? e.actor.name,
         e.actor.avatarUrl,
       );
-      showNotification({
-        toastXml: buildToastXml(`${TYPE_EMOJI[e.kind]} ${title}`, body, repo, avatarPath),
-      });
+      showNotification(
+        { toastXml: buildToastXml(`${TYPE_EMOJI[e.kind]} ${title}`, body, repo, avatarPath) },
+        onClick,
+      );
       return;
     } catch (err) {
       logger.warn({ err }, 'failed to build rich toast; falling back to plain notification');
     }
   }
-  showNotification({ title, body: `${body}\n${repo}` });
+  showNotification({ title, body: `${body}\n${repo}` }, onClick);
 }
 
 /**

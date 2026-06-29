@@ -1,4 +1,4 @@
-import type { PlatformUser, PrComment } from '@meebox/shared';
+import type { PlatformUser, PrComment, PrCommentAnchor } from '@meebox/shared';
 
 /**
  * 「未读」检测的纯逻辑：在 PR 评论树里找出**与当前用户相关**的最新一条他人评论的时间戳。
@@ -30,11 +30,16 @@ function mentionsAnyHandle(body: string, handles: readonly string[]): boolean {
 /** 与我相关的评论命中：被回复（父评论作者是我）优先于被 @（reply 是更强的相关关系）。 */
 export type MentionKind = 'mention' | 'reply';
 
-/** 评论树里一条「@我 / 回复我」他人评论的命中：时间 + 类型 + 作者（供系统通知头像 / 发起人展示）。 */
+/**
+ * 评论树里一条「@我 / 回复我」他人评论的命中：时间 + 类型 + 作者（系统通知头像 / 发起人）+ 评论定位
+ * （`commentRemoteId` 与 `anchor`：通知点击跳转用——inline 评论 anchor 非空可跳 diff 行，summary 评论 anchor 为 null）。
+ */
 export interface MentionHit {
   at: string;
   kind: MentionKind;
   author: PlatformUser;
+  commentRemoteId: string;
+  anchor: PrCommentAnchor | null;
 }
 
 /**
@@ -60,9 +65,9 @@ export function collectMentionsToMe(
     for (const c of list) {
       const authoredByMe = isMe(c.author);
       if (!authoredByMe) {
-        if (parentIsMe) hits.push({ at: c.createdAt, kind: 'reply', author: c.author });
-        else if (mentionsAnyHandle(c.body, handles))
-          hits.push({ at: c.createdAt, kind: 'mention', author: c.author });
+        const base = { at: c.createdAt, author: c.author, commentRemoteId: c.remoteId, anchor: c.anchor };
+        if (parentIsMe) hits.push({ ...base, kind: 'reply' });
+        else if (mentionsAnyHandle(c.body, handles)) hits.push({ ...base, kind: 'mention' });
       }
       if (c.replies?.length) walk(c.replies, authoredByMe);
     }

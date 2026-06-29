@@ -884,5 +884,40 @@ describe('Poller onNotify (system notification projection)', () => {
     expect(newPr.actor.name).toBe('u'); // makePr 的作者
     const mention = events.find((e) => e.kind === 'mention')!;
     expect(mention.actor.name).toBe('bob'); // 评论作者
+    expect(mention.comment?.anchor).toBeNull(); // summary 评论 → 点击打开活动标签
+  });
+
+  it('suppresses notifications for non-pending PRs (already approved / needs_work)', async () => {
+    // PR1 当前用户已 approve → localStatus 非 pending；即便有新 @ 评论也不弹通知。
+    const approved = makePr('1', '2026-05-28T01:00:00.000Z');
+    approved.reviewers = [{ name: 'alice', displayName: 'Alice', status: 'approved' as const }];
+    const adapter = new FakeAdapter([approved]);
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线
+    now = new Date('2026-06-02T00:00:00.000Z');
+    const changed = makePr('1', '2026-05-29T01:00:00.000Z');
+    changed.reviewers = [{ name: 'alice', displayName: 'Alice', status: 'approved' as const }];
+    adapter.setPrs([changed]);
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'ping @alice',
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }),
+    ]);
+    await poller.tick();
+    expect(events).toEqual([]); // 非 pending → 不投影
   });
 });

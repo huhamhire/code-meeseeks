@@ -1,6 +1,7 @@
 import type {
   PlatformKind,
   PlatformUser,
+  PrCommentAnchor,
   PrDiscoveryFilter,
   PullRequest,
   RepoRef,
@@ -423,4 +424,9 @@ export interface PollNotificationEvent {
   actor: PlatformUser;
   /** mention / reply：本轮新增条数；new_pr 省略 */
   count?: number;
+  /**
+   * mention / reply：触发事件的最新一条评论的定位信息（通知点击跳转用）。`anchor` 非空=inline 评论（可跳 diff 行），
+   * 为 null=summary 评论（打开「活动」对话标签）。new_pr 无此字段。
+   */
+  comment?: { remoteId: string; anchor: PrCommentAnchor | null };
 }

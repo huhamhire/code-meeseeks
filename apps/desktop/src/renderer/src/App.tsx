@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
-import { invoke } from './api';
+import { invoke, subscribe } from './api';
 import { formatBackendError } from './errors';
 import { chatRunStore } from './stores/chat-run-store';
 import { ChatPane } from './components/features/chat';
@@ -89,6 +89,8 @@ export default function App() {
     findingId?: string;
     anchor: { path: string; startLine: number; endLine: number };
   } | null>(null);
+  // 通知点击 summary 评论 → 请求 PrPanel 切到「活动」对话标签（inline 评论走 pendingDiffNav）。
+  const [pendingTab, setPendingTab] = useState<'activity' | null>(null);
   // GitHub 发现分类（运行时筛选，不持久化）；仅活动连接支持时在 PR 列表展示。
   const [discoveryFilter, setDiscoveryFilter] = useState<PrDiscoveryFilter>('review-requested');
   // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
@@ -147,6 +149,32 @@ export default function App() {
     },
     [setSelectedId, markRead, notifyError],
   );
+
+  // 活跃 PR 列表 ref：供通知点击在稳定订阅里读最新值，免得把 prs 进依赖、频繁重订阅。
+  const prsRef = useRef(prs);
+  prsRef.current = prs;
+  // 系统通知点击 → 导航：选中目标 PR（必要时切回活跃范围 + 切到含它的发现分类）并标已读；inline 评论跳 Diff 行，
+  // summary 评论开「活动」标签，new_pr 仅选中。目标不在活跃列表（已归档 / 退场）则忽略。
+  useEffect(() => {
+    return subscribe('notification:activate', ({ localId, kind, anchor }) => {
+      const target = prsRef.current.find((p) => p.localId === localId);
+      if (!target) return;
+      setScope('active');
+      if (
+        target.discoveryFilters.length > 0 &&
+        !target.discoveryFilters.includes(discoveryFilterRef.current)
+      ) {
+        setDiscoveryFilter(target.discoveryFilters[0]!);
+      }
+      setSelectedId(localId);
+      void markRead(localId);
+      if (anchor) {
+        setPendingDiffNav({ anchor: { path: anchor.path, startLine: anchor.line, endLine: anchor.line } });
+      } else if (kind === 'mention' || kind === 'reply') {
+        setPendingTab('activity');
+      }
+    });
+  }, [markRead, setSelectedId]);
 
   // 列表 / 详情数据源随范围切换：已关闭范围用归档列表，其余用活跃列表。选中 PR 从当前展示列表解析——
   // 切到归档范围时若原选中是活跃 PR 则解析不到、详情区回落空态，选归档项后再展示其详情。
@@ -317,6 +345,8 @@ export default function App() {
               pendingDiffNav={pendingDiffNav}
               onDiffNavConsumed={() => setPendingDiffNav(null)}
               onRequestDiffNav={(target) => setPendingDiffNav(target)}
+              pendingTab={pendingTab}
+              onPendingTabConsumed={() => setPendingTab(null)}
             />
           ) : (
             <PrEmpty hasConnections={boot.config.connections.length > 0} />
