@@ -159,6 +159,22 @@ export class GitLabClient implements PlatformTransport {
     return (await res.json()) as T;
   }
 
+  /**
+   * multipart/form-data POST（附件上传用）。不手动设 Content-Type——交给 fetch 按 FormData 自动加
+   * boundary，否则边界缺失服务端无法解析。
+   */
+  async postForm<T>(path: string, form: FormData): Promise<T> {
+    const url = buildUrl(this.baseUrl, path);
+    const res = await fetchWithTimeout(
+      this.fetchFn,
+      url,
+      { method: 'POST', headers: this.authHeaders(), body: form },
+      this.timeoutMs,
+    );
+    if (!res.ok) throw await this.err(res, 'POST', path);
+    return (await res.json()) as T;
+  }
+
   async put<T>(path: string, body: unknown): Promise<T | null> {
     const res = await this.raw('PUT', buildUrl(this.baseUrl, path), body);
     if (!res.ok) throw await this.err(res, 'PUT', path);

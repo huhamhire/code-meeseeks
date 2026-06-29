@@ -208,6 +208,292 @@ export interface PrCommit {
   url?: string;
 }
 
+/**
+ * 评论上一种 emoji 反应的聚合（跨平台中性）。各平台原生反应标识不一（GitHub 固定 8 种
+ * content、GitLab award_emoji 名、Bitbucket emoticon shortname），统一归一为 **Unicode emoji
+ * 字符**作 key —— UI 直接渲染、跨平台一致。原生名 ↔ emoji 的映射由各平台 adapter 私有持有
+ * （它最了解自己的 API），shared 只认 emoji 字符 + {@link REACTION_PICKER} 候选集。
+ */
+export interface PrReaction {
+  /** 规范化 Unicode emoji 字符（如 `👍`）。 */
+  emoji: string;
+  /** 该 emoji 的反应总数。 */
+  count: number;
+  /** 当前 PAT 用户是否已用该 emoji 反应（决定 UI 高亮 + 点击切换方向）。 */
+  mine: boolean;
+}
+
+/**
+ * GitHub 固定支持的 8 种反应 emoji（展示顺序即此序）。GitHub Reactions API 仅这 8 种，故 `fixed`
+ * 模式的选择器用它。各 adapter 负责把字符翻成自家原生名。
+ */
+export const REACTION_PICKER = ['👍', '👎', '😄', '🎉', '😕', '❤️', '🚀', '👀'] as const;
+
+/** 反应选择器一项：emoji 字符 + 平台原生 shortcode（gemoji 风格名，GitLab award 名 / Bitbucket
+ *  emoticon shortname 通用）+ 检索关键词（小写英文，空格分隔）。 */
+export interface ReactionEmoji {
+  emoji: string;
+  /** gemoji 风格 shortcode（无冒号）；free 模式下 adapter 据此映射 char→原生名。 */
+  code: string;
+  /** 检索关键词（小写英文，空格分隔；含 code 同义词）。 */
+  keywords: string;
+}
+
+/**
+ * free 模式（GitLab / Bitbucket）反应的**内置精选大集**：~150 个高频 emoji，code 用 gemoji 风格
+ * shortcode（GitLab award 名 / Bitbucket emoticon shortname 同源），写入可靠。刻意为内置精选而非全量
+ * Unicode —— 既避免第三方大词表的打包冗余与「比实例 Twemoji 版本新的 emoji 写入失败」问题，又覆盖常用
+ * （含 alien 等）。读取归一不依赖本表（Bitbucket 走 twemoji url 码点、GitLab 走 award 名回查）。
+ * 前 {@link REACTION_POPULAR} 个为默认展示集；其余靠搜索命中。扩展：在对应分组追加一行即可。
+ */
+export const REACTION_EMOJIS: readonly ReactionEmoji[] = [
+  // —— 高频反应（默认展示）——
+  { emoji: '👍', code: 'thumbsup', keywords: 'thumbsup +1 yes like approve good up' },
+  { emoji: '👎', code: 'thumbsdown', keywords: 'thumbsdown -1 no dislike bad down' },
+  { emoji: '😄', code: 'smile', keywords: 'smile happy joy' },
+  { emoji: '😆', code: 'laughing', keywords: 'laughing lol haha satisfied' },
+  { emoji: '😂', code: 'joy', keywords: 'joy tears laugh funny lol' },
+  { emoji: '🤣', code: 'rofl', keywords: 'rofl rolling laugh floor' },
+  { emoji: '🙂', code: 'slightly_smiling_face', keywords: 'slightly smiling face' },
+  { emoji: '😉', code: 'wink', keywords: 'wink' },
+  { emoji: '😍', code: 'heart_eyes', keywords: 'heart eyes love adore' },
+  { emoji: '🥰', code: 'smiling_face_with_three_hearts', keywords: 'love hearts adore' },
+  { emoji: '😎', code: 'sunglasses', keywords: 'sunglasses cool' },
+  { emoji: '🤔', code: 'thinking', keywords: 'thinking hmm consider' },
+  { emoji: '😕', code: 'confused', keywords: 'confused unsure' },
+  { emoji: '😢', code: 'cry', keywords: 'cry sad tear' },
+  { emoji: '😭', code: 'sob', keywords: 'sob cry sad bawling' },
+  { emoji: '😡', code: 'rage', keywords: 'rage angry mad' },
+  { emoji: '😱', code: 'scream', keywords: 'scream shock fear' },
+  { emoji: '🤯', code: 'exploding_head', keywords: 'mind blown exploding head' },
+  { emoji: '🥳', code: 'partying_face', keywords: 'party celebrate' },
+  { emoji: '🤩', code: 'star_struck', keywords: 'star struck amazed excited' },
+  { emoji: '😴', code: 'sleeping', keywords: 'sleeping tired zzz' },
+  { emoji: '❤️', code: 'heart', keywords: 'heart love red' },
+  { emoji: '🧡', code: 'orange_heart', keywords: 'orange heart' },
+  { emoji: '💛', code: 'yellow_heart', keywords: 'yellow heart' },
+  { emoji: '💚', code: 'green_heart', keywords: 'green heart' },
+  { emoji: '💙', code: 'blue_heart', keywords: 'blue heart' },
+  { emoji: '💜', code: 'purple_heart', keywords: 'purple heart' },
+  { emoji: '💔', code: 'broken_heart', keywords: 'broken heart' },
+  { emoji: '🔥', code: 'fire', keywords: 'fire lit hot flame' },
+  { emoji: '⭐', code: 'star', keywords: 'star favorite' },
+  { emoji: '✨', code: 'sparkles', keywords: 'sparkles shiny clean' },
+  { emoji: '🎉', code: 'tada', keywords: 'tada party celebrate hooray' },
+  { emoji: '🎊', code: 'confetti_ball', keywords: 'confetti celebrate' },
+  { emoji: '🚀', code: 'rocket', keywords: 'rocket ship launch fast' },
+  { emoji: '👀', code: 'eyes', keywords: 'eyes look watch see' },
+  { emoji: '🙏', code: 'pray', keywords: 'pray thanks please' },
+  { emoji: '👏', code: 'clap', keywords: 'clap applause bravo' },
+  { emoji: '🙌', code: 'raised_hands', keywords: 'raised hands hooray celebrate' },
+  { emoji: '🤝', code: 'handshake', keywords: 'handshake deal agree' },
+  { emoji: '💪', code: 'muscle', keywords: 'muscle strong flex' },
+  { emoji: '👌', code: 'ok_hand', keywords: 'ok perfect okay' },
+  { emoji: '✅', code: 'white_check_mark', keywords: 'check done yes complete approve' },
+  { emoji: '❌', code: 'x', keywords: 'x no cross wrong fail' },
+  { emoji: '⚠️', code: 'warning', keywords: 'warning caution alert' },
+  // —— 更多表情 ——
+  { emoji: '😀', code: 'grinning', keywords: 'grinning happy smile' },
+  { emoji: '😅', code: 'sweat_smile', keywords: 'sweat smile relief nervous' },
+  { emoji: '😊', code: 'blush', keywords: 'blush shy happy' },
+  { emoji: '😇', code: 'innocent', keywords: 'innocent angel halo' },
+  { emoji: '😘', code: 'kissing_heart', keywords: 'kiss love' },
+  { emoji: '😋', code: 'yum', keywords: 'yum tasty delicious' },
+  { emoji: '😛', code: 'stuck_out_tongue', keywords: 'tongue playful' },
+  { emoji: '🤪', code: 'zany_face', keywords: 'zany goofy crazy' },
+  { emoji: '😐', code: 'neutral_face', keywords: 'neutral meh' },
+  { emoji: '😏', code: 'smirk', keywords: 'smirk smug' },
+  { emoji: '🙄', code: 'roll_eyes', keywords: 'roll eyes whatever' },
+  { emoji: '😬', code: 'grimacing', keywords: 'grimace awkward' },
+  { emoji: '😌', code: 'relieved', keywords: 'relieved calm' },
+  { emoji: '😔', code: 'pensive', keywords: 'pensive sad down' },
+  { emoji: '🤤', code: 'drooling_face', keywords: 'drool want' },
+  { emoji: '😷', code: 'mask', keywords: 'mask sick' },
+  { emoji: '🤢', code: 'nauseated_face', keywords: 'nausea sick gross' },
+  { emoji: '🥵', code: 'hot_face', keywords: 'hot overheated' },
+  { emoji: '🥶', code: 'cold_face', keywords: 'cold freezing' },
+  { emoji: '😵', code: 'dizzy_face', keywords: 'dizzy stunned' },
+  { emoji: '🤠', code: 'cowboy_hat_face', keywords: 'cowboy howdy' },
+  { emoji: '🤡', code: 'clown_face', keywords: 'clown joker' },
+  { emoji: '👽', code: 'alien', keywords: 'alien ufo extraterrestrial' },
+  { emoji: '👾', code: 'space_invader', keywords: 'space invader game alien' },
+  { emoji: '🤖', code: 'robot', keywords: 'robot bot ai' },
+  { emoji: '👻', code: 'ghost', keywords: 'ghost boo spooky' },
+  { emoji: '💀', code: 'skull', keywords: 'skull dead' },
+  { emoji: '💩', code: 'hankey', keywords: 'poop crap shit' },
+  { emoji: '🎃', code: 'jack_o_lantern', keywords: 'pumpkin halloween' },
+  // —— 手势 ——
+  { emoji: '🤞', code: 'crossed_fingers', keywords: 'crossed fingers luck hope' },
+  { emoji: '✌️', code: 'v', keywords: 'victory peace v' },
+  { emoji: '🤟', code: 'love_you_gesture', keywords: 'love you ily' },
+  { emoji: '🤘', code: 'metal', keywords: 'metal rock horns' },
+  { emoji: '🤙', code: 'call_me_hand', keywords: 'call me shaka' },
+  { emoji: '👈', code: 'point_left', keywords: 'point left' },
+  { emoji: '👉', code: 'point_right', keywords: 'point right' },
+  { emoji: '👆', code: 'point_up_2', keywords: 'point up' },
+  { emoji: '👇', code: 'point_down', keywords: 'point down' },
+  { emoji: '✋', code: 'raised_hand', keywords: 'raised hand stop high five' },
+  { emoji: '🖖', code: 'vulcan_salute', keywords: 'vulcan spock live long' },
+  { emoji: '👊', code: 'fist_oncoming', keywords: 'fist bump punch' },
+  { emoji: '✊', code: 'fist_raised', keywords: 'fist raised power' },
+  { emoji: '🤲', code: 'palms_up_together', keywords: 'palms up beg pray' },
+  { emoji: '🤳', code: 'selfie', keywords: 'selfie photo' },
+  // —— 动物 ——
+  { emoji: '🐶', code: 'dog', keywords: 'dog puppy' },
+  { emoji: '🐱', code: 'cat', keywords: 'cat kitten' },
+  { emoji: '🐭', code: 'mouse', keywords: 'mouse' },
+  { emoji: '🐰', code: 'rabbit', keywords: 'rabbit bunny' },
+  { emoji: '🦊', code: 'fox_face', keywords: 'fox' },
+  { emoji: '🐻', code: 'bear', keywords: 'bear' },
+  { emoji: '🐼', code: 'panda_face', keywords: 'panda' },
+  { emoji: '🐨', code: 'koala', keywords: 'koala' },
+  { emoji: '🐯', code: 'tiger', keywords: 'tiger' },
+  { emoji: '🦁', code: 'lion', keywords: 'lion' },
+  { emoji: '🐷', code: 'pig', keywords: 'pig' },
+  { emoji: '🐸', code: 'frog', keywords: 'frog' },
+  { emoji: '🐵', code: 'monkey_face', keywords: 'monkey' },
+  { emoji: '🐔', code: 'chicken', keywords: 'chicken' },
+  { emoji: '🐧', code: 'penguin', keywords: 'penguin' },
+  { emoji: '🦄', code: 'unicorn', keywords: 'unicorn' },
+  { emoji: '🐝', code: 'bee', keywords: 'bee honeybee' },
+  { emoji: '🐢', code: 'turtle', keywords: 'turtle' },
+  { emoji: '🐙', code: 'octopus', keywords: 'octopus' },
+  { emoji: '🐳', code: 'whale', keywords: 'whale' },
+  { emoji: '🐟', code: 'fish', keywords: 'fish' },
+  // —— 食物 ——
+  { emoji: '🍎', code: 'apple', keywords: 'apple fruit' },
+  { emoji: '🍌', code: 'banana', keywords: 'banana fruit' },
+  { emoji: '🍉', code: 'watermelon', keywords: 'watermelon fruit' },
+  { emoji: '🍓', code: 'strawberry', keywords: 'strawberry fruit' },
+  { emoji: '🍑', code: 'peach', keywords: 'peach fruit butt' },
+  { emoji: '🍒', code: 'cherries', keywords: 'cherry fruit' },
+  { emoji: '🥑', code: 'avocado', keywords: 'avocado' },
+  { emoji: '🍕', code: 'pizza', keywords: 'pizza food' },
+  { emoji: '🍔', code: 'hamburger', keywords: 'burger food' },
+  { emoji: '🍟', code: 'fries', keywords: 'fries food' },
+  { emoji: '🍿', code: 'popcorn', keywords: 'popcorn movie' },
+  { emoji: '🍩', code: 'doughnut', keywords: 'donut food sweet' },
+  { emoji: '🍪', code: 'cookie', keywords: 'cookie food sweet' },
+  { emoji: '🎂', code: 'birthday', keywords: 'cake birthday' },
+  { emoji: '🍰', code: 'cake', keywords: 'cake dessert' },
+  { emoji: '🍫', code: 'chocolate_bar', keywords: 'chocolate sweet' },
+  { emoji: '☕', code: 'coffee', keywords: 'coffee tea drink' },
+  { emoji: '🍺', code: 'beer', keywords: 'beer drink' },
+  { emoji: '🍻', code: 'beers', keywords: 'beers cheers drink' },
+  { emoji: '🍷', code: 'wine_glass', keywords: 'wine drink' },
+  // —— 自然 ——
+  { emoji: '☀️', code: 'sunny', keywords: 'sun sunny weather' },
+  { emoji: '🌙', code: 'crescent_moon', keywords: 'moon night' },
+  { emoji: '🌈', code: 'rainbow', keywords: 'rainbow' },
+  { emoji: '⚡', code: 'zap', keywords: 'zap lightning bolt fast' },
+  { emoji: '❄️', code: 'snowflake', keywords: 'snow cold winter' },
+  { emoji: '🌊', code: 'ocean', keywords: 'wave ocean water' },
+  { emoji: '🌍', code: 'earth_africa', keywords: 'earth world globe' },
+  { emoji: '🌳', code: 'deciduous_tree', keywords: 'tree nature' },
+  { emoji: '🌵', code: 'cactus', keywords: 'cactus' },
+  { emoji: '🌹', code: 'rose', keywords: 'rose flower' },
+  { emoji: '🌻', code: 'sunflower', keywords: 'sunflower flower' },
+  { emoji: '🌸', code: 'cherry_blossom', keywords: 'blossom flower sakura' },
+  { emoji: '🍀', code: 'four_leaf_clover', keywords: 'clover luck' },
+  // —— 活动 / 物品 ——
+  { emoji: '⚽', code: 'soccer', keywords: 'soccer football ball' },
+  { emoji: '🏀', code: 'basketball', keywords: 'basketball ball' },
+  { emoji: '🎯', code: 'dart', keywords: 'dart target bullseye' },
+  { emoji: '🎮', code: 'video_game', keywords: 'game controller' },
+  { emoji: '🎸', code: 'guitar', keywords: 'guitar music' },
+  { emoji: '🎤', code: 'microphone', keywords: 'mic sing' },
+  { emoji: '🎨', code: 'art', keywords: 'art paint palette' },
+  { emoji: '📱', code: 'iphone', keywords: 'phone mobile' },
+  { emoji: '💻', code: 'computer', keywords: 'laptop computer' },
+  { emoji: '⌨️', code: 'keyboard', keywords: 'keyboard' },
+  { emoji: '🖥️', code: 'desktop_computer', keywords: 'desktop computer monitor' },
+  { emoji: '💾', code: 'floppy_disk', keywords: 'save floppy disk' },
+  { emoji: '📷', code: 'camera', keywords: 'camera photo' },
+  { emoji: '🔋', code: 'battery', keywords: 'battery power' },
+  { emoji: '💡', code: 'bulb', keywords: 'bulb idea light' },
+  { emoji: '🔍', code: 'mag', keywords: 'search magnify find' },
+  { emoji: '🔒', code: 'lock', keywords: 'lock secure' },
+  { emoji: '🔑', code: 'key', keywords: 'key' },
+  { emoji: '🔨', code: 'hammer', keywords: 'hammer build fix' },
+  { emoji: '🔧', code: 'wrench', keywords: 'wrench fix tool' },
+  { emoji: '⚙️', code: 'gear', keywords: 'gear settings config' },
+  { emoji: '🧪', code: 'test_tube', keywords: 'test tube experiment' },
+  { emoji: '🔬', code: 'microscope', keywords: 'microscope science' },
+  { emoji: '💉', code: 'syringe', keywords: 'syringe shot vaccine' },
+  { emoji: '💊', code: 'pill', keywords: 'pill medicine' },
+  { emoji: '📝', code: 'memo', keywords: 'memo note write' },
+  { emoji: '📌', code: 'pushpin', keywords: 'pin pushpin' },
+  { emoji: '📎', code: 'paperclip', keywords: 'paperclip attach' },
+  { emoji: '✂️', code: 'scissors', keywords: 'scissors cut' },
+  { emoji: '🗑️', code: 'wastebasket', keywords: 'trash delete bin' },
+  { emoji: '📦', code: 'package', keywords: 'package box ship' },
+  { emoji: '📚', code: 'books', keywords: 'books read library' },
+  { emoji: '💰', code: 'moneybag', keywords: 'money bag cash' },
+  { emoji: '💎', code: 'gem', keywords: 'gem diamond jewel' },
+  { emoji: '🚗', code: 'car', keywords: 'car auto' },
+  { emoji: '✈️', code: 'airplane', keywords: 'plane airplane fly travel' },
+  { emoji: '🛸', code: 'flying_saucer', keywords: 'ufo flying saucer alien' },
+  { emoji: '⚓', code: 'anchor', keywords: 'anchor boat' },
+  { emoji: '🐛', code: 'bug', keywords: 'bug defect insect' },
+  { emoji: '💯', code: '100', keywords: '100 hundred score perfect' },
+  { emoji: '👋', code: 'wave', keywords: 'wave hello hi bye' },
+  { emoji: '🤷', code: 'shrug', keywords: 'shrug whatever idk' },
+];
+
+/** 默认展示集大小（REACTION_EMOJIS 前 N 个，按高频排序在前）。 */
+const REACTION_POPULAR_COUNT = 44;
+
+const _codeByEmoji = new Map(REACTION_EMOJIS.map((e) => [e.emoji, e.code]));
+const _emojiByCode = new Map(REACTION_EMOJIS.map((e) => [e.code, e.emoji]));
+// 读取兼容别名：GitLab/Bitbucket 偶用 +1 / -1 作 award/emoticon 名。
+_emojiByCode.set('+1', '👍');
+_emojiByCode.set('-1', '👎');
+
+/** emoji 字符 → 平台写入用 shortcode（GitLab award 名 / Bitbucket emoticon），未知返回 undefined。 */
+export function emojiToReactionCode(emoji: string): string | undefined {
+  return _codeByEmoji.get(emoji);
+}
+
+/** shortcode（含 +1/-1 别名）→ emoji 字符，未知返回 undefined（读取归一回退用）。 */
+export function reactionCodeToEmoji(code: string): string | undefined {
+  return _emojiByCode.get(code);
+}
+
+/** free 模式选择器默认展示的高频反应（无搜索词时）。 */
+export const REACTION_POPULAR: readonly ReactionEmoji[] = REACTION_EMOJIS.slice(
+  0,
+  REACTION_POPULAR_COUNT,
+);
+
+/**
+ * free 模式选择器的搜索：空查询回 {@link REACTION_POPULAR}；否则在内置精选集里按关键词子串匹配，
+ * 截断到 limit（默认 60）。
+ */
+export function searchReactionEmojis(query: string, limit = 60): ReactionEmoji[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...REACTION_POPULAR];
+  const out: ReactionEmoji[] = [];
+  for (const e of REACTION_EMOJIS) {
+    if (e.keywords.includes(q)) {
+      out.push(e);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+/** 评论图片附件上传的输入（main 端从 IPC 的 ArrayBuffer 转 Uint8Array 后传给 adapter）。 */
+export interface CommentAttachmentUpload {
+  fileName: string;
+  contentType: string;
+  bytes: Uint8Array;
+}
+
+/** 评论附件上传结果：可直接插入评论正文的 markdown 片段（如 `![name](url)` / `attachment:` 形式）。 */
+export interface CommentAttachmentResult {
+  markdown: string;
+}
+
 export interface PrComment {
   remoteId: string;
   author: PlatformUser;
@@ -256,6 +542,11 @@ export interface PrComment {
   threadId?: string;
   /** 平台原生 id（回写 / 幂等用，与 remoteId 同源但语义独立保留扩展空间）。 */
   nativeId?: string;
+  /**
+   * 评论上的 emoji 反应聚合（见 {@link PrReaction}）。平台不支持 / 该评论无反应时省略或为空数组。
+   * 仅平台 `commentReactions` 能力为真时填充；renderer 据此在评论气泡下渲染反应条。
+   */
+  reactions?: PrReaction[];
 }
 
 /**
@@ -313,6 +604,21 @@ export interface PlatformCapabilities {
   inlineMultiline: boolean;
   /** 评论删改是否需要 version 乐观锁（仅 Bitbucket） */
   commentOptimisticLock: boolean;
+  /**
+   * 评论是否支持上传图片附件（粘贴 / 选取）。GitLab（/uploads）、Bitbucket（attachments）为真；
+   * GitHub 无公开附件上传 API → 为假（UI 隐藏粘贴上传入口、提示不支持）。为真时渲染层拦截图片粘贴
+   * → 经 adapter 上传 → 回填 markdown 到正文。
+   */
+  commentAttachments: boolean;
+  /**
+   * 评论 emoji 反应支持模式：
+   * - `false`：不支持，UI 整块隐藏。
+   * - `'fixed'`：仅固定集（GitHub Reactions 的 8 种）→ 选择器用 {@link REACTION_PICKER}，无搜索。
+   * - `'free'`：支持任意 emoji（GitLab Award Emoji / Bitbucket emoticon）→ 选择器用内置精选集
+   *   （{@link searchReactionEmojis} 搜索 + {@link REACTION_POPULAR} 默认）。
+   * 各 adapter 据自家 API 把 emoji 字符翻成原生名（fixed 内置 8 映射；free 用 {@link emojiToReactionCode}）。
+   */
+  commentReactions: false | 'fixed' | 'free';
   /**
    * 评论正文单换行是否按 hard-break 渲染（单 `\n` → `<br>`）。GitHub / Bitbucket 评论上下文
    * 是（`true`）；GitLab 走标准 CommonMark（单 `\n` 作软换行 = 空格，`false`）。renderer 据此

@@ -1,4 +1,8 @@
-import type { RepoRef } from '@meebox/shared';
+import type {
+  CommentAttachmentResult,
+  CommentAttachmentUpload,
+  RepoRef,
+} from '@meebox/shared';
 import type { BinaryResource } from '../transport.js';
 import { PlatformDomainService } from '../context.js';
 
@@ -17,6 +21,18 @@ export interface MediaService {
    * host 不属当前平台、协议无法解析或拉取失败时返回 null。
    */
   getAttachment(url: string, repo?: RepoRef): Promise<BinaryResource | null>;
+
+  /**
+   * 上传一张图片作为评论附件，返回可插入评论正文的 markdown 片段。
+   *
+   * 仅 `commentAttachments` 能力为真的平台实现（GitLab /uploads、Bitbucket attachments）；
+   * 不支持的平台返回 null（GitHub 无公开上传 API）。
+   */
+  uploadAttachment(
+    repo: RepoRef,
+    prId: string,
+    file: CommentAttachmentUpload,
+  ): Promise<CommentAttachmentResult | null>;
 }
 
 /**
@@ -32,4 +48,15 @@ export abstract class BaseMediaService extends PlatformDomainService implements 
    * 由平台子类实现：代理拉取评论内嵌附件，非本平台或失败返回 null。
    */
   abstract getAttachment(url: string, repo?: RepoRef): Promise<BinaryResource | null>;
+
+  /**
+   * 由平台子类覆写：上传评论附件并回 markdown。默认不支持（返回 null）。
+   */
+  uploadAttachment(
+    _repo: RepoRef,
+    _prId: string,
+    _file: CommentAttachmentUpload,
+  ): Promise<CommentAttachmentResult | null> {
+    return Promise.resolve(null);
+  }
 }

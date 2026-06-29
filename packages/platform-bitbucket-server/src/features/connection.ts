@@ -37,6 +37,9 @@ export class BitbucketServerConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: true,
+      // 评论 emoji 反应自 7.x 起（最低支持版即 7.0）；emoticon 支持任意 emoji → free。
+      commentReactions: 'free',
+      commentAttachments: true,
       commentHardBreaks: true,
       mergeVetoFidelity: 'full',
       discoveryRateLimited: false,

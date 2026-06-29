@@ -1,6 +1,6 @@
 import { lazy, Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
+import type { PlatformUser, PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import i18n from '../../../../../i18n';
 import {
   Avatar,
@@ -12,6 +12,7 @@ import {
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { CommentMarkdown } from '../shared/CommentMarkdown';
+import { ReactionAddButton, ReactionChips, useReactions } from '../shared/ReactionBar';
 import { useCommentThread } from '../shared/useCommentThread';
 // 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
 const InlineCodeContext = lazy(() =>
@@ -34,8 +35,22 @@ export function sameCommentList(a: readonly PrComment[], b: readonly PrComment[]
       x.version !== y.version ||
       x.canEdit !== y.canEdit ||
       x.canDelete !== y.canDelete ||
+      !sameReactions(x.reactions, y.reactions) ||
       !sameCommentList(x.replies, y.replies)
     ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** 反应数组相等比较（emoji + count + mine 三元组逐项一致）：让 toggle 后的反应变化能触发重渲染。 */
+function sameReactions(a: PrComment['reactions'], b: PrComment['reactions']): boolean {
+  const x = a ?? [];
+  const y = b ?? [];
+  if (x.length !== y.length) return false;
+  for (let i = 0; i < x.length; i++) {
+    if (x[i]!.emoji !== y[i]!.emoji || x[i]!.count !== y[i]!.count || x[i]!.mine !== y[i]!.mine) {
       return false;
     }
   }
@@ -64,6 +79,9 @@ export function CommentItem({
   depth,
   autoExpandCode = false,
   hardBreaks,
+  reactionsMode,
+  mentionCandidates,
+  attachmentsEnabled = false,
   timeline = false,
   readOnly = false,
   onJumpToAnchor,
@@ -74,6 +92,12 @@ export function CommentItem({
   /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
   autoExpandCode?: boolean;
   hardBreaks: boolean;
+  /** 评论 emoji 反应模式（capabilities.commentReactions）：'fixed'/'free' 才渲染；缺省 = 不支持。 */
+  reactionsMode?: 'fixed' | 'free';
+  /** `@提及` 自动补全候选（PR 参与者 + 评论作者）；透传给回复编辑框。 */
+  mentionCandidates?: PlatformUser[];
+  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给回复编辑框启用粘贴上传。 */
+  attachmentsEnabled?: boolean;
   /** 是否处于活动时间线模式（仅影响顶层评论版式，见上方说明） */
   timeline?: boolean;
   /** 内容只读（decline / 不可参与归档 PR）：隐藏回复 / 编辑 / 删除操作，仅供浏览。 */
@@ -102,6 +126,13 @@ export function CommentItem({
     canDelete,
     handleDelete,
   } = useCommentThread(pr.localId, comment);
+
+  // 反应状态 + 切换（hook 无条件调用；输出仅在 reactionsMode 存在时渲染）。
+  const { reactions, busy: reactionBusy, toggle: toggleReaction } = useReactions(
+    pr.localId,
+    comment,
+    readOnly,
+  );
 
   // inline 评论锚点 chip：path:line + 侧别 (old=base / new=head)，让用户在评论里定位到代码位置。
   // 提供 onJumpToAnchor 时（活动视图）chip 变可点击 → 跳到 Diff 对应文件/行。
@@ -189,6 +220,15 @@ export function CommentItem({
           {deleting ? t('commentsPanel.deleting') : t('common.delete')}
         </button>
       )}
+      {/* 「加反应」按钮放在操作按钮之后；回复编辑态下隐藏避免拥挤 */}
+      {reactionsMode && !replyOpen && (
+        <ReactionAddButton
+          reactions={reactions}
+          busy={reactionBusy}
+          mode={reactionsMode}
+          onToggle={toggleReaction}
+        />
+      )}
     </div>
   ) : null;
 
@@ -207,11 +247,24 @@ export function CommentItem({
     </div>
   ) : null;
 
+  // 已有反应：单独成行，渲染在操作按钮行下方（编辑态隐藏）。readOnly 下只展示、不可切换。
+  const reactionChipsEl =
+    reactionsMode && !editOpen ? (
+      <ReactionChips
+        reactions={reactions}
+        busy={reactionBusy}
+        readOnly={readOnly}
+        onToggle={toggleReaction}
+      />
+    ) : null;
+
   const replyEditor = replyOpen ? (
     <CommentReplyEditor
       prLocalId={pr.localId}
       // 回复目标抽象（threadId）：GitLab=discussion id（reply 必需）；Bitbucket 空 / GitHub=remoteId → 回退 remoteId。
       parentCommentId={comment.threadId ?? comment.remoteId}
+      mentionCandidates={mentionCandidates}
+      attachmentsEnabled={attachmentsEnabled}
       onCancel={() => setReplyOpen(false)}
       onPosted={() => setReplyOpen(false)}
     />
@@ -231,6 +284,9 @@ export function CommentItem({
             pr={pr}
             depth={depth + 1}
             hardBreaks={hardBreaks}
+            reactionsMode={reactionsMode}
+            mentionCandidates={mentionCandidates}
+            attachmentsEnabled={attachmentsEnabled}
             readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
           />
@@ -282,6 +338,7 @@ export function CommentItem({
           {inlineCode}
           {bodyOrEdit}
           {foot}
+          {reactionChipsEl}
           {deleteErrorEl}
           {replyEditor}
           {repliesEl}
@@ -314,6 +371,7 @@ export function CommentItem({
       {inlineCode}
       {bodyOrEdit}
       {foot}
+      {reactionChipsEl}
       {deleteErrorEl}
       {replyEditor}
       {repliesEl}

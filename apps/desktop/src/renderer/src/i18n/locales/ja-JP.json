@@ -18,6 +18,9 @@
     "mergeFailed": "マージに失敗しました：{{msg}}",
     "toastCloseTitle": "クリックで閉じる"
   },
+  "attachments": {
+    "uploading": "画像をアップロード中…"
+  },
   "bitbucketImage": {
     "attachment": "添付ファイル",
     "attachmentFailed": "{{name}} (読み込みに失敗しました)",
@@ -658,6 +661,13 @@
     "summaryFail": "✗ {{n}} 件失敗",
     "summaryOk": "✓ {{n}} 件成功",
     "title": "コメントを投稿"
+  },
+  "reactions": {
+    "addTitle": "{{emoji}} でリアクション",
+    "noMatch": "絵文字が見つかりません",
+    "pickTitle": "リアクションを追加",
+    "removeTitle": "{{emoji}} を取り消す",
+    "searchPlaceholder": "絵文字を検索…"
   },
   "settings": {
     "aboutFeedback": "情報 & フィードバック",

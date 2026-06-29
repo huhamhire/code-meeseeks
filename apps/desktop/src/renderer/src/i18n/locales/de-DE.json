@@ -18,6 +18,9 @@
     "mergeFailed": "Merge fehlgeschlagen: {{msg}}",
     "toastCloseTitle": "Zum Schließen klicken"
   },
+  "attachments": {
+    "uploading": "Bild wird hochgeladen…"
+  },
   "bitbucketImage": {
     "attachment": "Anhang",
     "attachmentFailed": "{{name}} (Laden fehlgeschlagen)",
@@ -675,6 +678,13 @@
     "summaryFail": "✗ {{n}} fehlgeschlagen",
     "summaryOk": "✓ {{n}} erfolgreich",
     "title": "Kommentare absenden"
+  },
+  "reactions": {
+    "addTitle": "Mit {{emoji}} reagieren",
+    "noMatch": "Kein Emoji gefunden",
+    "pickTitle": "Reaktion hinzufügen",
+    "removeTitle": "{{emoji}} entfernen",
+    "searchPlaceholder": "Emoji suchen…"
   },
   "settings": {
     "aboutFeedback": "Info & Feedback",

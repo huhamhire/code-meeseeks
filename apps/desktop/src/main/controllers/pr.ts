@@ -105,6 +105,40 @@ export const editComment: IpcController<'comments:edit'> = async (_event, req) =
 };
 
 /**
+ * 切换当前用户对一条评论的 emoji 反应（add 加 / 取下）。成功后清评论缓存 + 广播 comments:changed。
+ */
+export const toggleReaction: IpcController<'comments:toggleReaction'> = async (_event, req) => {
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  const adapter = ctx.pr.adapterForOrThrow(pr);
+  await adapter.comments.toggleReaction(
+    { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+    pr.remoteId,
+    req.commentId,
+    req.kind,
+    req.emoji,
+    req.add,
+  );
+  await ctx.pr.invalidateCommentsCache(pr.localId);
+};
+
+/**
+ * 上传图片作为评论附件，返回可插入正文的 markdown；不支持的平台（GitHub）返回 null。
+ * bytes 由 renderer 经 IPC 传 ArrayBuffer，这里转 Uint8Array 交 adapter 上传。不清缓存（仅产出 markdown，
+ * 评论尚未发布）。
+ */
+export const uploadAttachment: IpcController<'comments:uploadAttachment'> = async (_event, req) => {
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  const adapter = ctx.pr.adapterForOrThrow(pr);
+  return adapter.media.uploadAttachment(
+    { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+    pr.remoteId,
+    { fileName: req.fileName, contentType: req.contentType, bytes: new Uint8Array(req.bytes) },
+  );
+};
+
+/**
  * 拉评论内嵌图片（私有实例需带 PAT，renderer 无法直接 fetch）→ 经 main 代理回 dataUrl。不缓存。
  */
 export const fetchAttachment: IpcController<'comments:fetchAttachment'> = async (_event, req) => {

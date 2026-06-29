@@ -18,6 +18,9 @@
     "mergeFailed": "Merge failed: {{msg}}",
     "toastCloseTitle": "Click to dismiss"
   },
+  "attachments": {
+    "uploading": "Uploading image…"
+  },
   "bitbucketImage": {
     "attachment": "Attachment",
     "attachmentFailed": "{{name}} (failed to load)",
@@ -675,6 +678,13 @@
     "summaryFail": "✗ {{n}} failed",
     "summaryOk": "✓ {{n}} succeeded",
     "title": "Submit comments"
+  },
+  "reactions": {
+    "addTitle": "React with {{emoji}}",
+    "noMatch": "No emoji found",
+    "pickTitle": "Add reaction",
+    "removeTitle": "Remove {{emoji}}",
+    "searchPlaceholder": "Search emoji…"
   },
   "settings": {
     "aboutFeedback": "About & feedback",

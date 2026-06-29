@@ -34,11 +34,14 @@ const unusedComments: CommentService = {
     Promise.reject(new Error('FakeAdapter.editComment 未实现（poller 测试不使用）')),
   deleteComment: () =>
     Promise.reject(new Error('FakeAdapter.deleteComment 未实现（poller 测试不使用）')),
+  toggleReaction: () =>
+    Promise.reject(new Error('FakeAdapter.toggleReaction 未实现（poller 测试不使用）')),
 };
 const unusedMedia: MediaService = {
   getUserAvatar: async () => null,
   getAttachment: () =>
     Promise.reject(new Error('FakeAdapter.getAttachment 未实现（poller 测试不使用）')),
+  uploadAttachment: async () => null,
 };
 
 /**
@@ -72,6 +75,8 @@ class FakeAdapter implements PlatformAdapter {
         inlineComments: true,
         inlineMultiline: true,
         commentOptimisticLock: true,
+        commentReactions: 'free' as const,
+        commentAttachments: true,
         commentHardBreaks: true,
         mergeVetoFidelity: 'full' as const,
         discoveryRateLimited: false,
@@ -279,6 +284,8 @@ describe('Poller.tick', () => {
         inlineComments: true,
         inlineMultiline: true,
         commentOptimisticLock: true,
+        commentReactions: 'free',
+        commentAttachments: true,
         commentHardBreaks: true,
         mergeVetoFidelity: 'full',
         discoveryRateLimited: false,
@@ -321,10 +328,12 @@ describe('Poller.tick', () => {
         replyToComment: () => Promise.reject(new Error('unused')),
         editComment: () => Promise.reject(new Error('unused')),
         deleteComment: () => Promise.reject(new Error('unused')),
+        toggleReaction: () => Promise.reject(new Error('unused')),
       },
       media: {
         getUserAvatar: async () => null,
         getAttachment: () => Promise.reject(new Error('unused')),
+        uploadAttachment: async () => null,
       },
     };
     const poller = new Poller({

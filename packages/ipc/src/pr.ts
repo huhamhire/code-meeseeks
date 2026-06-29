@@ -63,6 +63,30 @@ export interface PrChannels {
     };
     response: PrComment;
   };
+  /**
+   * 切换当前用户对一条评论的 emoji 反应（add=true 加 / false 取下）。emoji 为规范化 Unicode 字符
+   * （见 shared REACTION_PICKER）；kind 区分 summary / inline（GitHub 据此选反应端点）。成功后 main
+   * 端清评论缓存 + 广播 comments:changed，UI 重拉刷新反应条。仅 commentReactions 能力为真的平台暴露。
+   */
+  'comments:toggleReaction': {
+    request: {
+      localId: string;
+      commentId: string;
+      kind: 'summary' | 'inline';
+      emoji: string;
+      add: boolean;
+    };
+    response: void;
+  };
+  /**
+   * 上传图片作为评论附件（粘贴 / 选取触发），返回可插入正文的 markdown 片段；不支持的平台
+   * （GitHub）返回 null。bytes 走 ArrayBuffer 经 IPC 传输，main 端转 Uint8Array 交 adapter 上传。
+   * 仅 commentAttachments 能力为真的平台暴露入口。
+   */
+  'comments:uploadAttachment': {
+    request: { localId: string; fileName: string; contentType: string; bytes: ArrayBuffer };
+    response: { markdown: string } | null;
+  };
   'prs:list': { request: void; response: StoredPullRequest[] };
   /** 列出已归档（退场）PR：从冷存储读取，供「已关闭」视图浏览（只读）。 */
   'prs:listArchived': { request: void; response: StoredPullRequest[] };
