@@ -19,7 +19,7 @@
 - **防风暴**：仅在**已有基线**（本轮之前索引非空）时产出事件——首启 / 清库后的首轮只建基线、不弹通知；新发现 PR 的历史评论不投影为 mention/reply（`prev` 不存在则跳过）。
 - **仅「待处理」**：事件只对 `localStatus === 'pending'` 的 PR 产出（投影处 `notifiable = hadBaseline && localStatus === 'pending'` 门控）——已 approve / 标记 needs_work 的 PR 不再打扰。
 - **点击定位**：mention/reply 事件带 `comment`（最新一条命中评论的 `remoteId` + `anchor`），供点击跳转。
-- **落地（main）**：[`services/notifications.ts`](../../apps/desktop/src/main/services/notifications.ts) 的 `showPollNotifications` 经 `bootstrap/poller.ts` 的 `onNotify` 接线。按通知配置（总开关 + 分类型）过滤后：不超过阈值逐条弹，超出聚合为一条「N 条新动态」摘要。点击通知唤起并聚焦主窗口。文案走主进程 i18n（`notifications.*`）。
+- **落地（main）**：[`services/notifications.ts`](../../apps/desktop/src/main/services/notifications.ts) 的 `showPollNotifications` 经 `bootstrap/poller.ts` 的 `onNotify` 接线。按通知配置（总开关 + 分类型）过滤后：最多前 `INDIVIDUAL_LIMIT`（5）条逐条弹（各带头像富样式 + 点击定位）；溢出部分（第 6 条起）折叠为一条「查看更多最新动态」提示，点击仅打开主界面、不定位。文案走主进程 i18n（`notifications.*`）。
 - **样式**：
   - **Windows** 走 `toastXml` 富样式（ToastGeneric）：圆形发起人头像（`appLogoOverride` + `hint-crop="circle"`）+ 标题行带类型 emoji（🔀 PR / 💬 @ / ↩️ 回复）+ 正文 `#编号 标题` + 归属行仓库 `项目/仓库`。toast 仅一个小图标槽，故头像占槽、类型用 emoji 标记。
   - **头像**：[`services/avatar.ts`](../../apps/desktop/src/main/services/avatar.ts) 的 `ensureAvatarFile` 按 `(connectionId, slug)` 复用头像磁盘缓存（与 `app:userAvatar` 同约定），缺失则经 adapter 拉取落盘；因 toast `<image src>` 需本地文件 + 可识别扩展名，在裸字节 `.bin` 之外按嗅探的 content-type 旁挂一份 `.png`/`.jpg`。svg / 未知格式或拉取失败时降级为无头像。
