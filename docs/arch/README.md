@@ -41,6 +41,7 @@
 | [`11-i18n`](11-i18n.md) | 国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / pr-agent 输出模板翻译） |
 | [`12-error-codes`](12-error-codes.md) | 错误码与错误传递（统一 AppError + meta / 跨 IPC 编码 / 前端按码 i18n / 领域标签与注册表） |
 | [`13-command-palette`](13-command-palette.md) | 命令面板（标题栏入口 / 两级选择 / 领域前缀与按语言搜索 / 注册表 + 分域 / 即时生效复用） |
+| [`14-notifications`](14-notifications.md) | 消息通知（poll 事件投影 / 系统通知 toast / macOS dock 角标 / 分类型开关 / OS 权限降级） |
 
 > 打包 / 构建 / 签名 / CI 不属于产品子系统，已移到开发专题：[`../development/packaging-release.md`](../development/packaging-release.md)。
 

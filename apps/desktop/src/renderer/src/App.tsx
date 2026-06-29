@@ -19,6 +19,7 @@ import { StatusBar } from './components/layout/StatusBar';
 import { TitleBar } from './components/layout/TitleBar';
 import { useToast } from './hooks/useToast';
 import { useBootstrap } from './hooks/useBootstrap';
+import { useDockBadge } from './hooks/useDockBadge';
 import { usePanelLayout } from './hooks/usePanelLayout';
 import { useUpdateNotice } from './hooks/useUpdateNotice';
 import { useAppStores } from './hooks/useAppStores';
@@ -106,6 +107,12 @@ export default function App() {
       cancelled = true;
     };
   }, [scope]);
+  // macOS dock 角标：活跃 PR「@我 / 回复我」待回应总数 → 主进程落到 dock 图标（系统行为，逻辑见 useDockBadge）。
+  useDockBadge({
+    prs,
+    platform: boot?.info.platform,
+    notifications: boot?.config.notifications,
+  });
   // 选发现分类（侧栏 tab / 命令面板）即回到「进行中」范围；「查看已关闭」切到归档范围。
   const selectDiscovery = useCallback((f: PrDiscoveryFilter) => {
     setScope('active');

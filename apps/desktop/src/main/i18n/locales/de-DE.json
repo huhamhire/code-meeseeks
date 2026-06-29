@@ -19,5 +19,24 @@
       "aborted": "Vom Benutzer abgebrochen",
       "maxSteps": "Schrittlimit erreicht"
     }
+  },
+  "notifications": {
+    "mention": {
+      "body": "#{{id}} {{title}}",
+      "title": "Du wurdest erwähnt"
+    },
+    "newPr": {
+      "body": "#{{id}} {{title}}",
+      "title": "Neuer Pull Request"
+    },
+    "reply": {
+      "body": "#{{id}} {{title}}",
+      "title": "Neue Antwort"
+    },
+    "summary": {
+      "body_one": "Du hast {{count}} neue Aktualisierung",
+      "body_other": "Du hast {{count}} neue Aktualisierungen",
+      "title": "Neue Benachrichtigungen"
+    }
   }
 }

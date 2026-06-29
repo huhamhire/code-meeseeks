@@ -48,6 +48,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('app:openConfigFile', app.openConfigFile); // 打开 config.yaml
   ipcMain.handle('app:openAgentDir', app.openAgentDir); // 打开 Agent 目录
   ipcMain.handle('app:openDevTools', app.openDevTools); // 打开 DevTools（分离窗口）
+  ipcMain.handle('app:setBadgeCount', app.setBadgeCount); // 设应用角标计数（macOS dock）
   ipcMain.handle('app:checkUpdate', app.checkUpdate); // 手动检查更新
   ipcMain.handle('app:getUpdateStatus', app.getUpdateStatus); // 读缓存的更新检测结果（水合）
   ipcMain.handle('app:openExternal', app.openExternal); // 系统浏览器打开外链
@@ -100,6 +101,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('config:setEditorAppearance', config.setEditorAppearance); // 设全局主题 + 字体（前端即时生效，主进程据主题设原生 themeSource）
   ipcMain.handle('config:setLlm', config.setLlm); // 设 LLM Provider 配置
   ipcMain.handle('config:setAgent', config.setAgent); // 设 Agent 配置（含 agent.dir）
+  ipcMain.handle('config:setNotifications', config.setNotifications); // 设消息通知配置（系统通知 + dock 角标）
   ipcMain.handle('agent:setAutopilotEnabled', config.setAutopilotEnabled); // AutoPilot 开关
   ipcMain.handle('config:setConnections', config.setConnections); // 设连接（热重建 adapter/poller）
   ipcMain.handle('config:setProxy', config.setProxy); // 设代理（热重建 adapter）

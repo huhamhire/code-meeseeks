@@ -18,5 +18,23 @@
       "aborted": "ユーザーが中断しました",
       "maxSteps": "ステップ上限に到達"
     }
+  },
+  "notifications": {
+    "mention": {
+      "body": "#{{id}} {{title}}",
+      "title": "あなたへのメンションがあります"
+    },
+    "newPr": {
+      "body": "#{{id}} {{title}}",
+      "title": "新しいプルリクエスト"
+    },
+    "reply": {
+      "body": "#{{id}} {{title}}",
+      "title": "新しい返信があります"
+    },
+    "summary": {
+      "body_other": "{{count}} 件の新着があります",
+      "title": "新着通知"
+    }
   }
 }
