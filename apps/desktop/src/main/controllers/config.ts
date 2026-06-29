@@ -96,6 +96,17 @@ export const setAgent: IpcController<'config:setAgent'> = async (_event, req) =>
 };
 
 /**
+ * 写消息通知配置（总开关 + 分类型系统通知 + dock 角标）；内存同步，下轮 poll 弹通知 / renderer 推角标即用新值。
+ */
+export const setNotifications: IpcController<'config:setNotifications'> = async (_event, req) => {
+  const { bootstrap, logger } = getContext();
+  const next = { ...bootstrap.config, notifications: req.notifications };
+  await writeConfig(bootstrap.paths.configFile, next);
+  bootstrap.config.notifications = req.notifications;
+  logger.info({ notifications: req.notifications }, 'notifications config updated');
+};
+
+/**
  * 翻转 AutoPilot 开关；关→开时立即 poll 一轮按准入规则评估。
  */
 export const setAutopilotEnabled: IpcController<'agent:setAutopilotEnabled'> = async (

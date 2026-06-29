@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlatformUser, PrComment, StoredPullRequest } from '@meebox/shared';
-import { collectCommentsToMeAt, latestCommentToMeAt } from '../src/unread.js';
+import { collectCommentsToMeAt, collectMentionsToMe, latestCommentToMeAt } from '../src/unread.js';
 import {
   computeUnread,
   computeUnreadMentionCount,
@@ -101,6 +101,44 @@ describe('collectCommentsToMeAt', () => {
   it('returns an empty array when nothing is related', () => {
     const comments = [comment({ author: bob, body: 'general chatter' })];
     expect(collectCommentsToMeAt(comments, me)).toEqual([]);
+  });
+});
+
+describe('collectMentionsToMe (kind classification)', () => {
+  it('tags an @mention as mention and a reply-to-me as reply', () => {
+    const comments = [
+      comment({ author: bob, body: 'ping @alice', createdAt: T1 }),
+      comment({
+        author: me,
+        body: 'my thread',
+        createdAt: T1,
+        replies: [comment({ author: bob, body: 'replying', createdAt: T2 })],
+      }),
+    ];
+    expect(collectMentionsToMe(comments, me)).toEqual([
+      { at: T1, kind: 'mention' },
+      { at: T2, kind: 'reply' },
+    ]);
+  });
+
+  it('classifies a reply that also @mentions me as a reply (reply is the stronger relation)', () => {
+    const comments = [
+      comment({
+        author: me,
+        body: 'my thread',
+        createdAt: T1,
+        replies: [comment({ author: bob, body: 'thanks @alice', createdAt: T2 })],
+      }),
+    ];
+    expect(collectMentionsToMe(comments, me)).toEqual([{ at: T2, kind: 'reply' }]);
+  });
+
+  it('excludes my own comments and unrelated comments', () => {
+    const comments = [
+      comment({ author: me, body: 'self @alice' }),
+      comment({ author: bob, body: 'general chatter' }),
+    ];
+    expect(collectMentionsToMe(comments, me)).toEqual([]);
   });
 });
 

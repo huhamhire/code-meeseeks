@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppInfo, AppPaths, Config, EditorTheme, SupportedLanguage } from '@meebox/shared';
 import {
+  BellIcon,
   ConfirmModal,
   CpuIcon,
   GlobeIcon,
@@ -28,9 +29,16 @@ import { ProxySection } from './sections/ProxySection';
 import { AgentDirSection } from './sections/AgentDirSection';
 import { WorkDirSection } from './sections/WorkDirSection';
 import { CacheDirSection } from './sections/CacheDirSection';
+import { NotificationSection } from './sections/NotificationSection';
 import { RuntimeSection } from './sections/RuntimeSection';
 
-export type SettingsCategory = 'general' | 'connection' | 'model' | 'agent' | 'about';
+export type SettingsCategory =
+  | 'general'
+  | 'connection'
+  | 'model'
+  | 'agent'
+  | 'notifications'
+  | 'about';
 
 /**
  * 配置分区导航元数据（左侧栏）。新增配置分区在此登记一项，并在右侧面板的 switch
@@ -45,6 +53,7 @@ const SETTINGS_CATEGORIES: ReadonlyArray<{
   { id: 'connection', labelKey: 'settings.catConnection', Icon: GlobeIcon },
   { id: 'model', labelKey: 'settings.catModel', Icon: CpuIcon },
   { id: 'agent', labelKey: 'settings.catAgent', Icon: RobotIcon },
+  { id: 'notifications', labelKey: 'settings.catNotifications', Icon: BellIcon },
   { id: 'about', labelKey: 'settings.catAbout', Icon: QuestionIcon },
 ];
 
@@ -239,6 +248,9 @@ export function SettingsModal({
                   onChange={s.setMaxConcurrency}
                 />
               </>
+            )}
+            {category === 'notifications' && (
+              <NotificationSection value={s.notifications} onChange={s.setNotifications} />
             )}
             {category === 'about' && (
               <>

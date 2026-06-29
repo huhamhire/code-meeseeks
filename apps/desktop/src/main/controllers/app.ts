@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron';
 import type { Logger } from 'pino';
 import { buildAppInfo, buildConnectionSummaries } from '../services/app.js';
 import { getContext } from '../services/context.js';
+import { applyBadgeCount } from '../services/notifications.js';
 import { sniffImageContentType } from '../utils/image.js';
 import { checkForUpdate } from '../utils/update-check.js';
 import { getLastUpdateResult, publishUpdateResult } from '../utils/update-state.js';
@@ -157,6 +158,13 @@ export const openAgentDir: IpcController<'app:openAgentDir'> = async () => {
  */
 export const openDevTools: IpcController<'app:openDevTools'> = (event) => {
   event.sender.openDevTools({ mode: 'detach' });
+};
+
+/**
+ * 设置应用角标计数（本期仅 macOS dock）。renderer 已据 PR 列表 + 通知配置派生「待回应」计数，主进程仅落地。
+ */
+export const setBadgeCount: IpcController<'app:setBadgeCount'> = (_event, req) => {
+  applyBadgeCount(req.count);
 };
 
 /**

@@ -393,3 +393,22 @@ export interface PollResult {
   /** poll 失败的连接数 */
   errors: number;
 }
+
+/** 系统通知事件类型：新 PR / 被 @ / 被回复（与设置页三个开关一一对应）。 */
+export type PollNotificationKind = 'new_pr' | 'mention' | 'reply';
+
+/**
+ * Poll 本轮新发生的「值得提醒」事件，由 poller 经 onNotify 投影给主进程（用于弹系统通知）。仅在**已有基线**
+ * （非首轮 / PR 此前已知）时产出，避免首启 / 批量涌入时通知风暴；mention/reply 仅当评论时间晚于历史游标才计。
+ */
+export interface PollNotificationEvent {
+  kind: PollNotificationKind;
+  /** 事件所属 PR 的本地 id */
+  localId: string;
+  /** 远端 PR 编号（如 #123），用于通知正文 */
+  remoteId: string;
+  /** PR 标题，用于通知正文 */
+  title: string;
+  /** mention / reply：本轮新增条数；new_pr 省略 */
+  count?: number;
+}

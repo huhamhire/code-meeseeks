@@ -29,6 +29,8 @@ export interface ConfigChannels {
   'config:setLlm': { request: { llm: Config['llm'] }; response: void };
   /** 写入 agent.dir 到 config.yaml；下次 pragent:run 立即生效 (现读规则) */
   'config:setAgent': { request: { agent: Config['agent'] }; response: void };
+  /** 写入消息通知配置（总开关 + 分类型系统通知 + dock 角标）到 config.yaml；内存同步，下次 poll/角标即用新值。 */
+  'config:setNotifications': { request: { notifications: Config['notifications'] }; response: void };
   /** 翻转 AutoPilot 开关 (agent.autopilot.enabled) 并写 config.yaml；下次 poll tick 生效。 */
   'agent:setAutopilotEnabled': { request: { enabled: boolean }; response: void };
   /** 写入轮询间隔 (秒，60~900 整数) 到 config.yaml，并热替换 poller 定时器，无需重启 */

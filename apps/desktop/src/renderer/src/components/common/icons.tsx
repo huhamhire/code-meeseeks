@@ -584,6 +584,27 @@ export function RobotIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 铃铛：设置页「通知」分区图标。钟体 + 顶钮 + 底部摆锤。 */
+export function BellIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 2.2v1.1" />
+      <path d="M4 7c0-2.2 1.8-3.8 4-3.8s4 1.6 4 3.8c0 2.6.6 3.6 1.2 4.3H2.8C3.4 10.6 4 9.6 4 7Z" />
+      <path d="M6.6 13.4a1.6 1.6 0 0 0 2.8 0" />
+    </svg>
+  );
+}
+
 /** CPU / 芯片：设置页「模型」分区图标（LLM 模型）。外框 + 内核 + 四边引脚。 */
 export function CpuIcon({ size = 14 }: IconProps) {
   return (
