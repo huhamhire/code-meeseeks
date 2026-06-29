@@ -24,6 +24,10 @@
       "body": "#{{id}} {{title}}",
       "title": "あなたへのメンションがあります"
     },
+    "more": {
+      "body_other": "他に {{count}} 件の新着 — クリックで表示",
+      "title": "他にも新着があります"
+    },
     "newPr": {
       "body": "#{{id}} {{title}}",
       "title": "新しいプルリクエスト"
@@ -31,10 +35,6 @@
     "reply": {
       "body": "#{{id}} {{title}}",
       "title": "新しい返信があります"
-    },
-    "summary": {
-      "body_other": "{{count}} 件の新着があります",
-      "title": "新着通知"
     }
   }
 }

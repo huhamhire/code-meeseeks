@@ -16,8 +16,8 @@ import { ensureAvatarFile, type AvatarFileDeps } from './avatar.js';
  * 文案走主进程 i18n（与 dialog / pr-agent 同一实例，语言随启动配置定档）。
  */
 
-/** 一轮最多单独弹的通知条数；超出聚合为一条「N 条新动态」摘要，避免涌入时的通知风暴。 */
-const MAX_INDIVIDUAL_NOTIFICATIONS = 3;
+/** 一轮最多单独弹的通知条数（各带定位）；超出部分折叠为一条「查看更多」提示，避免涌入时的通知风暴。 */
+const INDIVIDUAL_LIMIT = 5;
 
 /** 通知事件类型 → i18n 文案分组名（new_pr 的 key 为 newPr，其余同名）。 */
 const I18N_GROUP: Record<PollNotificationEvent['kind'], string> = {
@@ -123,7 +123,8 @@ async function showOne(
 
 /**
  * 按通知配置弹系统通知。总开关关 / 平台不支持通知 → 直接返回（静默降级）。按类型开关过滤后：
- * 不超过 {@link MAX_INDIVIDUAL_NOTIFICATIONS} 条逐条弹（Windows 带头像富样式），超出聚合成一条摘要。
+ * 最多前 {@link INDIVIDUAL_LIMIT} 条逐条弹（各带头像富样式 + 点击定位）；超出部分（第 6 条起）折叠为一条
+ * 「查看更多最新动态」提示，点击仅打开主界面、不做定位。
  */
 export async function showPollNotifications(
   events: ReadonlyArray<PollNotificationEvent>,
@@ -142,15 +143,17 @@ export async function showPollNotifications(
   if (filtered.length === 0) return;
   logger.info({ count: filtered.length }, 'showing system notifications');
   try {
-    if (filtered.length > MAX_INDIVIDUAL_NOTIFICATIONS) {
-      showNotification({
-        title: t('notifications.summary.title'),
-        body: t('notifications.summary.body', { count: filtered.length }),
-      });
-      return;
-    }
-    for (const e of filtered) {
+    const shown = filtered.slice(0, INDIVIDUAL_LIMIT);
+    for (const e of shown) {
       await showOne(e, avatarDeps, logger);
+    }
+    const overflow = filtered.length - shown.length;
+    if (overflow > 0) {
+      // 溢出提示：点击走默认 focusMainWindow（仅打开主界面、不定位），让用户自行查看更多最新动态。
+      showNotification({
+        title: t('notifications.more.title'),
+        body: t('notifications.more.body', { count: overflow }),
+      });
     }
   } catch (err) {
     logger.warn({ err }, 'failed to show system notification');

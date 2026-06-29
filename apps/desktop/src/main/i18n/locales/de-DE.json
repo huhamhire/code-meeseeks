@@ -25,6 +25,11 @@
       "body": "#{{id}} {{title}}",
       "title": "Du wurdest erwähnt"
     },
+    "more": {
+      "body_one": "{{count}} weitere Aktualisierung — zum Ansehen klicken",
+      "body_other": "{{count}} weitere Aktualisierungen — zum Ansehen klicken",
+      "title": "Weitere Aktivität"
+    },
     "newPr": {
       "body": "#{{id}} {{title}}",
       "title": "Neuer Pull Request"
@@ -32,11 +37,6 @@
     "reply": {
       "body": "#{{id}} {{title}}",
       "title": "Neue Antwort"
-    },
-    "summary": {
-      "body_one": "Du hast {{count}} neue Aktualisierung",
-      "body_other": "Du hast {{count}} neue Aktualisierungen",
-      "title": "Neue Benachrichtigungen"
     }
   }
 }
