@@ -444,3 +444,24 @@
 .pr-item-unread .pr-item-title {
   font-weight: 600;
 }
+// 未读点名计数：有「@我 / 回复我」未读时，圆点升级为标题前的中性数字胶囊（封顶 10 → 「10+」）。
+// 中性色（$chip-neutral 灰底 + $text-body 文字），不抢评审状态 chip（绿/红/蓝）的语义；无图标，纯数字省空间。
+// 固定带高 + 居中、min-width 容双字符，单/双位数不致左右跳动。
+.pr-item-unread-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 16px;
+  min-width: 16px;
+  margin-right: $space-2;
+  padding: 0 $space-2;
+  border-radius: $radius-pill;
+  background: $chip-neutral;
+  color: $text-body;
+  font-size: $fs-xs;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: 0.08em;
+}
