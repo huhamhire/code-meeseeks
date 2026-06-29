@@ -41,6 +41,7 @@
 | [`11-i18n`](11-i18n.md) | 国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / pr-agent 输出模板翻译） |
 | [`12-error-codes`](12-error-codes.md) | 错误码与错误传递（统一 AppError + meta / 跨 IPC 编码 / 前端按码 i18n / 领域标签与注册表） |
 | [`13-command-palette`](13-command-palette.md) | 命令面板（标题栏入口 / 两级选择 / 领域前缀与按语言搜索 / 注册表 + 分域 / 即时生效复用） |
+| [`14-comment-interactions`](14-comment-interactions.md) | 评论互动（emoji 反应 / @提及补全 / 图片附件上传；能力位降级 / 三平台差异 / 中性 emoji 归一） |
 
 > 打包 / 构建 / 签名 / CI 不属于产品子系统，已移到开发专题：[`../development/packaging-release.md`](../development/packaging-release.md)。
 
