@@ -19,6 +19,8 @@
     "toastCloseTitle": "クリックで閉じる"
   },
   "attachments": {
+    "attachTitle": "画像を添付",
+    "uploadFailed": "画像のアップロードに失敗しました：{{msg}}",
     "uploading": "画像をアップロード中…"
   },
   "bitbucketImage": {

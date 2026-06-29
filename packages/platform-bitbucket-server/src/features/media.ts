@@ -49,6 +49,9 @@ export class BitbucketMediaService extends BaseMediaService {
    * 上传图片到仓库 attachments 端点（multipart 字段 `files`），返回可嵌入评论的 markdown。
    * 优先用响应 `links.attachment.href`（形如 `attachment:<repoId>/<id>`，getAttachmentBinary 据此渲染），
    * 兜底用 `attachment:<id>`。attachments 是仓库级、非 PR 级，prId 忽略。
+   *
+   * 端点是**私有 servlet**，路径在 `/projects/{key}/repos/{slug}/attachments`（**不带** `/rest/api/1.0`
+   * 前缀——带前缀会 405；实测该裸路径 Allow: POST）。下载仍走 `/rest/api/1.0/.../attachments/{id}`。
    */
   override async uploadAttachment(
     repo: RepoRef,
@@ -62,7 +65,7 @@ export class BitbucketMediaService extends BaseMediaService {
       file.fileName,
     );
     const res = await this.client.postForm<BitbucketAttachmentUploadResponse>(
-      `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/attachments`,
+      `/projects/${repo.projectKey}/repos/${repo.repoSlug}/attachments`,
       form,
     );
     const a = res.attachments?.[0];

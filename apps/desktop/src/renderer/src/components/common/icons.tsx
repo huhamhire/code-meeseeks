@@ -315,6 +315,27 @@ export function ChatIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 图片占位（相框 + 山峦 + 太阳）：评论「上传图片附件」按钮。 */
+export function ImageIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+      <circle cx="5.5" cy="6" r="1.1" />
+      <path d="M2.25 12 L6 8.25 L8.5 10.75 L10.75 8.5 L13.75 11.5" />
+    </svg>
+  );
+}
+
 /** 笑脸 + 加号：评论「添加表情反应」按钮（viewBox 24 以对齐 lucide 笔形比例）。 */
 export function SmilePlusIcon({ size = 14 }: IconProps) {
   return (

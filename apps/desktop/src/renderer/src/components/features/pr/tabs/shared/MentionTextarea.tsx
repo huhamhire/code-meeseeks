@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PlatformUser } from '@meebox/shared';
+import { ImageIcon } from '../../../../common';
 
 /** 弹出候选最多展示条数（候选源本就是 PR 参与者的有界集合，再截断以免列表过长）。 */
 const MAX_SUGGESTIONS = 8;
@@ -67,8 +68,10 @@ export function MentionTextarea({
 }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [menu, setMenu] = useState<MentionMenu | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // 候选去重（按 name），保序：调用方可能混入重复参与者 / 评论作者。
   const pool = useMemo(() => {
@@ -149,16 +152,12 @@ export function MentionTextarea({
     onKeyDown?.(e);
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+  // 上传一张图片并把返回的 markdown 插入当前光标处（无焦点时插到末尾）。粘贴 / 点附件按钮共用。
+  const uploadAndInsert = (file: File): void => {
     if (!onUpload || uploading) return;
-    const item = Array.from(e.clipboardData.items).find(
-      (it) => it.kind === 'file' && it.type.startsWith('image/'),
-    );
-    const file = item?.getAsFile();
-    if (!file) return;
-    e.preventDefault();
-    const at = e.currentTarget.selectionStart ?? value.length;
+    const at = ref.current?.selectionStart ?? value.length;
     setUploading(true);
+    setUploadError(null);
     void onUpload(file)
       .then((md) => {
         if (!md) return;
@@ -173,7 +172,28 @@ export function MentionTextarea({
           }
         });
       })
+      .catch((e: unknown) => {
+        // 上传失败（平台拒绝 / 网络等）：就地提示，不让 rejection 逃逸成未处理异常。
+        setUploadError(e instanceof Error ? e.message : String(e));
+      })
       .finally(() => setUploading(false));
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+    if (!onUpload || uploading) return;
+    const item = Array.from(e.clipboardData.items).find(
+      (it) => it.kind === 'file' && it.type.startsWith('image/'),
+    );
+    const file = item?.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    uploadAndInsert(file);
+  };
+
+  const pickFile = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0];
+    if (file) uploadAndInsert(file);
+    e.target.value = ''; // 复位：同一文件可再次选取触发 change
   };
 
   return (
@@ -199,7 +219,42 @@ export function MentionTextarea({
         disabled={disabled || uploading}
         aria-label={ariaLabel}
       />
+      {onUpload && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={pickFile}
+          />
+          <button
+            type="button"
+            className="mention-attach"
+            disabled={disabled || uploading}
+            onClick={() => fileInputRef.current?.click()}
+            title={t('attachments.attachTitle')}
+            aria-label={t('attachments.attachTitle')}
+          >
+            <ImageIcon size={15} />
+          </button>
+        </>
+      )}
       {uploading && <div className="mention-upload-status muted">{t('attachments.uploading')}</div>}
+      {uploadError && (
+        <div className="mention-upload-error" role="alert">
+          {t('attachments.uploadFailed', { msg: uploadError })}
+          <button
+            type="button"
+            className="mention-upload-error-dismiss"
+            onClick={() => setUploadError(null)}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {menu && (
         <ul className="mention-menu" role="listbox">
           {menu.items.map((u, i) => (
