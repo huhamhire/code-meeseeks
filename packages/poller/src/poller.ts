@@ -288,18 +288,6 @@ export class Poller {
           const isChanged = Boolean(prev && prev.updatedAt !== pr.updatedAt);
           if (isChanged) changed++;
           if (isAdded) added++;
-          // 通知：新 PR（仅已有基线时，避免首启涌入风暴）。mention/reply 事件在下方评论扫描处投影。
-          if (isAdded && hadBaseline) {
-            notifyEvents.push({
-              kind: 'new_pr',
-              localId,
-              connectionId,
-              remoteId: pr.remoteId,
-              title: pr.title,
-              repo: pr.repo,
-              actor: pr.author,
-            });
-          }
           if (isAdded || isChanged) {
             const repoKey = `${connectionId}|${identity.group}|${identity.repo}`;
             if (!changedReposByKey.has(repoKey)) {
@@ -324,6 +312,21 @@ export class Poller {
           } else {
             const prevMeta = prev ? await readPrMeta(this.opts.stateStore, localId) : null;
             localStatus = prevMeta?.pr.localStatus ?? 'pending';
+          }
+
+          // 通知仅针对「待处理」(localStatus==='pending') 的 PR：已 approve / 标记 needs_work 的不再打扰。
+          // 新 PR（仅已有基线时，避免首启涌入风暴）。mention/reply 事件在下方评论扫描处投影（同样受 pending 门控）。
+          const notifiable = hadBaseline && localStatus === 'pending';
+          if (isAdded && notifiable) {
+            notifyEvents.push({
+              kind: 'new_pr',
+              localId,
+              connectionId,
+              remoteId: pr.remoteId,
+              title: pr.title,
+              repo: pr.repo,
+              actor: pr.author,
+            });
           }
 
           // 复活：上一轮处于归档态（数据已搬入 archived/）→ 先把整树搬回活跃存储，再写 meta，
@@ -368,12 +371,12 @@ export class Poller {
                 if (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt)) {
                   lastMentionAt = latest;
                 }
-                // 通知：仅对**已知 PR**（prev 存在）且晚于历史游标的命中投影，按类型聚合本轮新增条数；
-                // 新 PR 此前历史评论不计（prev 不存在则跳过），避免新发现 PR 触发其旧评论的提醒风暴。
-                if (prev && hadBaseline) {
+                // 通知：仅对**已知 PR**（prev 存在）、已有基线、且「待处理」(pending) 的 PR 投影；取晚于历史游标的命中
+                // 按类型聚合条数。新 PR 此前历史评论不计（prev 不存在则跳过），避免新发现 PR 触发其旧评论的提醒风暴。
+                if (prev && notifiable) {
                   const sinceMs = prevCursor ? Date.parse(prevCursor) : 0;
                   const fresh = hits.filter((h) => Date.parse(h.at) > sinceMs);
-                  // 按类型聚合本轮新增条数；发起人取该类最新一条命中的作者（通知头像 / 发起人展示）。
+                  // 按类型聚合本轮新增条数；发起人与点击定位取该类最新一条命中（通知头像 + 跳转目标）。
                   const project = (kind: 'reply' | 'mention'): void => {
                     const subset = fresh.filter((h) => h.kind === kind);
                     if (subset.length === 0) return;
@@ -389,6 +392,7 @@ export class Poller {
                       repo: pr.repo,
                       actor: latestHit.author,
                       count: subset.length,
+                      comment: { remoteId: latestHit.commentRemoteId, anchor: latestHit.anchor },
                     });
                   };
                   project('reply');

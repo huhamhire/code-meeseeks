@@ -116,8 +116,8 @@ describe('collectMentionsToMe (kind classification)', () => {
       }),
     ];
     expect(collectMentionsToMe(comments, me)).toEqual([
-      { at: T1, kind: 'mention', author: bob },
-      { at: T2, kind: 'reply', author: bob },
+      { at: T1, kind: 'mention', author: bob, commentRemoteId: 'c1', anchor: null },
+      { at: T2, kind: 'reply', author: bob, commentRemoteId: 'c1', anchor: null },
     ]);
   });
 
@@ -130,7 +130,9 @@ describe('collectMentionsToMe (kind classification)', () => {
         replies: [comment({ author: bob, body: 'thanks @alice', createdAt: T2 })],
       }),
     ];
-    expect(collectMentionsToMe(comments, me)).toEqual([{ at: T2, kind: 'reply', author: bob }]);
+    expect(collectMentionsToMe(comments, me)).toEqual([
+      { at: T2, kind: 'reply', author: bob, commentRemoteId: 'c1', anchor: null },
+    ]);
   });
 
   it('excludes my own comments and unrelated comments', () => {

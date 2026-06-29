@@ -17,12 +17,22 @@
   - **@ / 回复**：评论扫描用 [`collectMentionsToMe`](../../packages/poller/src/unread.ts)（按「父评论作者是我=reply / 正文 @我=mention」分类，每条命中带评论作者），取**晚于历史游标 `lastMentionAt`** 的命中、按类型聚合条数。
   - 事件还带 `repo` / `connectionId` / `actor`（发起人：new_pr=PR 作者，mention/reply=该类最新一条命中的评论作者），供富样式通知用。
 - **防风暴**：仅在**已有基线**（本轮之前索引非空）时产出事件——首启 / 清库后的首轮只建基线、不弹通知；新发现 PR 的历史评论不投影为 mention/reply（`prev` 不存在则跳过）。
+- **仅「待处理」**：事件只对 `localStatus === 'pending'` 的 PR 产出（投影处 `notifiable = hadBaseline && localStatus === 'pending'` 门控）——已 approve / 标记 needs_work 的 PR 不再打扰。
+- **点击定位**：mention/reply 事件带 `comment`（最新一条命中评论的 `remoteId` + `anchor`），供点击跳转。
 - **落地（main）**：[`services/notifications.ts`](../../apps/desktop/src/main/services/notifications.ts) 的 `showPollNotifications` 经 `bootstrap/poller.ts` 的 `onNotify` 接线。按通知配置（总开关 + 分类型）过滤后：不超过阈值逐条弹，超出聚合为一条「N 条新动态」摘要。点击通知唤起并聚焦主窗口。文案走主进程 i18n（`notifications.*`）。
 - **样式**：
   - **Windows** 走 `toastXml` 富样式（ToastGeneric）：圆形发起人头像（`appLogoOverride` + `hint-crop="circle"`）+ 标题行带类型 emoji（🔀 PR / 💬 @ / ↩️ 回复）+ 正文 `#编号 标题` + 归属行仓库 `项目/仓库`。toast 仅一个小图标槽，故头像占槽、类型用 emoji 标记。
   - **头像**：[`services/avatar.ts`](../../apps/desktop/src/main/services/avatar.ts) 的 `ensureAvatarFile` 按 `(connectionId, slug)` 复用头像磁盘缓存（与 `app:userAvatar` 同约定），缺失则经 adapter 拉取落盘；因 toast `<image src>` 需本地文件 + 可识别扩展名，在裸字节 `.bin` 之外按嗅探的 content-type 旁挂一份 `.png`/`.jpg`。svg / 未知格式或拉取失败时降级为无头像。
   - **其他平台**：用 `title` / `body` 文本（body 附带仓库行），不含头像——Electron 在 macOS 固定显示应用图标、不支持 per-notification 头像。Windows toastXml 构造失败也回退到此文本路径。
 - **头像接线**：`onNotify` 经 `createPoller` 的 `getConnectionRuntime`（惰性 getter，poller 早于连接运行时构建）按 `connectionId` 取 adapter 拉头像。
+
+### 点击导航
+
+通知点击除聚焦窗口外，主进程经 `broadcast('notification:activate', { localId, kind, anchor })` 推导航意图（`anchor` = inline 评论的 `{path,line}`，否则 null）。renderer（App.tsx 订阅）据此：定位目标 PR（不在活跃列表则忽略）→ 切回活跃范围 + 必要时切到含它的发现分类 → 选中并标已读 → 再按类型定位：
+
+- **new_pr**：仅选中该 PR；
+- **inline 评论**（anchor 非空）：经 `pendingDiffNav` 切 Diff 标签并跳到该文件行（复用 finding/草稿跳转通道）；
+- **summary 评论**（anchor 为 null）：经 PrPanel 的 `pendingTab` 切到「活动」对话标签（不做评论级精确滚动）。
 
 ### 2. dock 角标：renderer 派生 → 主进程落地
 

@@ -44,6 +44,9 @@ export interface PrPanelProps {
     findingId?: string;
     anchor: { path: string; startLine: number; endLine: number };
   }) => void;
+  /** 外部请求切到指定标签（如通知点击 summary 评论 → 'activity'）；消费后经 onPendingTabConsumed 清空。 */
+  pendingTab?: PrTab | null;
+  onPendingTabConsumed?: () => void;
 }
 
 /**
@@ -63,6 +66,8 @@ export function PrPanel({
   pendingDiffNav,
   onDiffNavConsumed,
   onRequestDiffNav,
+  pendingTab,
+  onPendingTabConsumed,
 }: PrPanelProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<PrTab>('diff');
@@ -83,6 +88,12 @@ export function PrPanel({
   useEffect(() => {
     if (pendingDiffNav) setTab('diff');
   }, [pendingDiffNav]);
+  // 外部请求切标签（通知点击 summary 评论 → 活动标签）：切换后即清空请求。
+  useEffect(() => {
+    if (!pendingTab) return;
+    setTab(pendingTab);
+    onPendingTabConsumed?.();
+  }, [pendingTab, onPendingTabConsumed]);
   const [renderSideBySide, setRenderSideBySide] = useState<boolean>(() => {
     const v = localStorage.getItem('meebox.diffMode');
     return v === null ? true : v === 'side-by-side';
