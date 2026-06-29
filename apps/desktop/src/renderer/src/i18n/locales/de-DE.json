@@ -19,6 +19,8 @@
     "toastCloseTitle": "Zum Schließen klicken"
   },
   "attachments": {
+    "attachTitle": "Bild anhängen",
+    "uploadFailed": "Bild-Upload fehlgeschlagen: {{msg}}",
     "uploading": "Bild wird hochgeladen…"
   },
   "bitbucketImage": {

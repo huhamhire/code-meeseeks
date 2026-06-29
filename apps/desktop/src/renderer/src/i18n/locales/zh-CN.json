@@ -19,6 +19,8 @@
     "toastCloseTitle": "点击关闭"
   },
   "attachments": {
+    "attachTitle": "上传图片",
+    "uploadFailed": "图片上传失败：{{msg}}",
     "uploading": "正在上传图片…"
   },
   "bitbucketImage": {

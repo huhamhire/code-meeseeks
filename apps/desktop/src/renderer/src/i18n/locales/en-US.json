@@ -19,6 +19,8 @@
     "toastCloseTitle": "Click to dismiss"
   },
   "attachments": {
+    "attachTitle": "Attach image",
+    "uploadFailed": "Image upload failed: {{msg}}",
     "uploading": "Uploading image…"
   },
   "bitbucketImage": {
