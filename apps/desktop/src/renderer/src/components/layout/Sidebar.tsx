@@ -108,6 +108,10 @@ export function Sidebar({
   };
 
   const [query, setQuery] = useState('');
+  // 切换 PR 类型（发现分类标签 / 进行中⇄已关闭范围）后清空搜索框，避免上一类型遗留的过滤条件连带到新类型。
+  useEffect(() => {
+    setQuery('');
+  }, [discoveryFilter, scope]);
   // 状态筛选改由 App 持有（受控）：命令面板的「分类筛选」亦可驱动；折叠侧栏也不丢选择。
   const filter = statusFilter;
   const setFilter = onStatusFilterChange;

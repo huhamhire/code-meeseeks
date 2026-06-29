@@ -259,6 +259,10 @@ export class BitbucketClient implements PlatformTransport {
   /**
    * multipart/form-data POST（附件上传用）。不手动设 Content-Type（交给 fetch 按 FormData 加 boundary）；
    * 附件上传须带 `X-Atlassian-Token: no-check` 绕过 XSRF 校验（Atlassian 文件上传端点通用要求）。
+   *
+   * Accept 必须用通配（星/斜杠/星），**不能**显式写 `application/json`：附件 servlet（nginx 前置）对该
+   * 端点做内容协商，显式请求 `application/json` 会被判 405（`Allow: OPTIONS`）——尽管它本就以 JSON 应答。
+   * 响应仍按 JSON 解析。（curl 默认用通配 Accept 故能成功，曾掩盖此坑。）
    */
   async postForm<T>(path: string, form: FormData): Promise<T> {
     const url = buildUrl(this.baseUrl, path);
@@ -269,7 +273,7 @@ export class BitbucketClient implements PlatformTransport {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.token}`,
-          Accept: 'application/json',
+          Accept: '*/*',
           'X-Atlassian-Token': 'no-check',
         },
         body: form,
