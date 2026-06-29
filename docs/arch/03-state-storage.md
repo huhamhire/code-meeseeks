@@ -62,6 +62,10 @@
   `read-state.json`（`lastReadHeadSha`+`lastReadAt`）**仅** `prs:markRead`（用户打开 PR）写、poll 一概不碰；**mention 游标**
   `index.lastMentionAt` 由 poll 独占维护（poll 整体重写 index.json，不会覆盖用户水位），仅在 PR `updatedAt` 跳变时拉评论扫描、与
   历史取较大值，成本与活动量成正比。commit 检测对各平台通用、不依赖 `updatedAt`。早期开发版不做升级兼容（不抑制旧存量泛红，清库 / 重装即可）。
+- **未读点名计数**：同一次评论扫描里，除游标外还把「@我 / 回复我」评论的 `createdAt` 累积进 `index.mentionAts`（与历史并集去重、
+  按时间降序留最近 10 条）。`listStoredPullRequests` 据此派生 `StoredPullRequest.unreadMentionCount`（不持久化）：数其中晚于
+  `read-state.lastReadAt` 的条数（从未打开过则全计）。与 `unread` **并存、互不替代**——计数封顶 10（UI 满额显示「10+」），UI 在有计数时
+  以数字标记替换未读圆点、否则仍显示圆点。同属 poll 独占维护、与已读水位解耦。
 - **安全 invariant**：
   - **拉取失败不动本地**：某连接 `listPendingPullRequests` 抛错 → 不写其名下 PR、不软删、不剔索引；
     全失败则索引零写入、mtime 不变（避免误触 watcher/备份）。poll 是唯一权威，远端是最终 truth。
@@ -82,7 +86,7 @@
 - `relocateTree(from, to, prefix)`：跨 store 整树搬迁（list→read→write→deleteDir），用于活跃⇄归档存储间搬 PR 子树。
   目标先清空（源为权威）、源末删（幂等 / 崩溃可重来）、源缺失即 no-op；不破 `StateStore` 抽象、无需暴露文件系统根。
 - `PrIndexEntry`：`identity`(PrIdentity) / `updatedAt` / `discoveredAt` / `lastSeenAt` / `archivedAt|null` /
-  mention 游标 `lastMentionAt?`。
+  mention 游标 `lastMentionAt?` / mention 时间戳列表 `mentionAts?`（最近 10 条，未读计数据此派生）。
 - `PrReadStateFile`（`read-state.json`）：`lastReadHeadSha` / `lastReadAt`（用户已读水位）。
 - `StoredPullRequest`：完整 PR 元数据 + `platform`（自描述）。
 - `ReviewRun`：见 [05](05-review-workflow.md)（含 `findings` / `tokenUsage` / `model` / 状态机字段）。

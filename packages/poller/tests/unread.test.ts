@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { PlatformUser, PrComment, StoredPullRequest } from '@meebox/shared';
-import { latestCommentToMeAt } from '../src/unread.js';
-import { computeUnread, type PrIndexEntry, type PrReadStateFile } from '../src/pr-state.js';
+import { collectCommentsToMeAt, latestCommentToMeAt } from '../src/unread.js';
+import {
+  computeUnread,
+  computeUnreadMentionCount,
+  type PrIndexEntry,
+  type PrReadStateFile,
+} from '../src/pr-state.js';
 
 const me: PlatformUser = { name: 'alice', displayName: 'Alice', slug: 'alice-slug' };
 const bob: PlatformUser = { name: 'bob', displayName: 'Bob' };
@@ -77,6 +82,28 @@ describe('latestCommentToMeAt', () => {
   });
 });
 
+describe('collectCommentsToMeAt', () => {
+  it('collects every @mention / reply-to-me timestamp, excluding my own and unrelated', () => {
+    const comments = [
+      comment({ author: bob, body: 'ping @alice', createdAt: T1 }),
+      comment({ author: bob, body: 'general chatter', createdAt: T2 }), // unrelated
+      comment({ author: me, body: 'self @alice', createdAt: T2 }), // mine, excluded
+      comment({
+        author: me,
+        body: 'my thread',
+        createdAt: T1,
+        replies: [comment({ author: bob, body: 'reply to me', createdAt: T2 })],
+      }),
+    ];
+    expect(collectCommentsToMeAt(comments, me).sort()).toEqual([T1, T2]);
+  });
+
+  it('returns an empty array when nothing is related', () => {
+    const comments = [comment({ author: bob, body: 'general chatter' })];
+    expect(collectCommentsToMeAt(comments, me)).toEqual([]);
+  });
+});
+
 function entry(over: Partial<PrIndexEntry> = {}): PrIndexEntry {
   return {
     identity: {} as PrIndexEntry['identity'],
@@ -119,5 +146,27 @@ describe('computeUnread', () => {
   it('does not flag a mention older than the read watermark', () => {
     const rs = read({ lastReadHeadSha: 'h1', lastReadAt: T2 });
     expect(computeUnread(entry({ lastMentionAt: T1 }), rs, pr('h1'))).toBe(false);
+  });
+});
+
+describe('computeUnreadMentionCount', () => {
+  const T0 = '2025-12-31T00:00:00.000Z';
+
+  it('returns 0 when there are no mention timestamps', () => {
+    expect(computeUnreadMentionCount(entry(), read({ lastReadAt: T1 }))).toBe(0);
+  });
+
+  it('counts every mention when the PR was never opened (no read-state)', () => {
+    expect(computeUnreadMentionCount(entry({ mentionAts: [T1, T2] }), null)).toBe(2);
+  });
+
+  it('counts only mentions newer than the read watermark', () => {
+    const rs = read({ lastReadAt: T1 });
+    expect(computeUnreadMentionCount(entry({ mentionAts: [T0, T1, T2] }), rs)).toBe(1);
+  });
+
+  it('returns 0 once all mentions are at or below the watermark', () => {
+    const rs = read({ lastReadAt: T2 });
+    expect(computeUnreadMentionCount(entry({ mentionAts: [T0, T1, T2] }), rs)).toBe(0);
   });
 });

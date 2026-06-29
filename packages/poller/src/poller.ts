@@ -10,8 +10,9 @@ import type {
 import type { PlatformAdapter } from '@meebox/platform-core';
 import { relocateTree, type StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
-import { latestCommentToMeAt } from './unread.js';
+import { collectCommentsToMeAt } from './unread.js';
 import {
+  MENTION_ATS_CAP,
   PURGE_GRACE_MS,
   prDirKey,
   readPrIndex,
@@ -322,19 +323,27 @@ export class Poller {
           });
           dirty = true;
 
-          // 未读 mention 游标（见 pr-state computeUnread）：仅当 PR 内容变更（updatedAt 跳变 → 可能有新评论）且
-          // me 已知时拉评论扫「@我 / 回复我」，与历史游标取较大值。新到达 / 新 commit 未读无需在此处理（读取时分别按
-          // 发现时间 vs 未读纪元、head sha 比对派生）。read-state 仅由 markRead（用户打开 PR）写，poll 一概不碰。
+          // 未读 mention（见 pr-state computeUnread / computeUnreadMentionCount）：仅当 PR 内容变更（updatedAt
+          // 跳变 → 可能有新评论）且 me 已知时拉评论扫「@我 / 回复我」。游标 lastMentionAt 取较大值（驱动未读点）；
+          // mentionAts 与历史并集去重、按时间降序留最近 MENTION_ATS_CAP 条（驱动未读点旁的计数）。新到达 / 新 commit
+          // 未读无需在此处理（读取时分别按发现时间 vs 未读纪元、head sha 比对派生）。read-state 仅由 markRead 写，poll 不碰。
           let lastMentionAt = prev?.lastMentionAt;
+          let mentionAts = prev?.mentionAts;
           if (isChanged && me) {
             try {
               const comments = await adapter.comments.listPullRequestComments(
                 { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
                 pr.remoteId,
               );
-              const latest = latestCommentToMeAt(comments, me);
-              if (latest && (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt))) {
-                lastMentionAt = latest;
+              const scanned = collectCommentsToMeAt(comments, me);
+              if (scanned.length) {
+                const merged = [...new Set([...(prev?.mentionAts ?? []), ...scanned])];
+                merged.sort((a, b) => Date.parse(b) - Date.parse(a));
+                mentionAts = merged.slice(0, MENTION_ATS_CAP);
+                const latest = mentionAts[0];
+                if (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt)) {
+                  lastMentionAt = latest;
+                }
               }
             } catch (err) {
               this.opts.logger.warn(
@@ -352,6 +361,7 @@ export class Poller {
             lastSeenAt: now,
             archivedAt: null,
             lastMentionAt,
+            mentionAts,
           });
         }
       } catch (err) {

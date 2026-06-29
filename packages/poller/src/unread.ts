@@ -28,32 +28,46 @@ function mentionsAnyHandle(body: string, handles: readonly string[]): boolean {
 }
 
 /**
- * 评论树里「@我 / 回复我」的最新他人评论的 createdAt（ISO）；无则 null。
+ * 评论树里所有「@我 / 回复我」他人评论的 createdAt（ISO）列表，深度优先、自然到达顺序（未排序）。
+ * 相关判定同 {@link latestCommentToMeAt}：① 正文 @我，或 ② 父评论作者是我；自己写的不计。
  *
  * - `me`：当前用户（poll 时从 adapter 缓存身份取）。handle 取 name + slug（去重、非空）。
+ *
+ * 调用方（poll）据此既能取最新游标，也能据已读水位计数未读条数（见 pr-state.computeUnreadMentionCount）。
  */
-export function latestCommentToMeAt(
+export function collectCommentsToMeAt(
   comments: readonly PrComment[],
   me: PlatformUser,
-): string | null {
+): string[] {
   const handles = [me.name, me.slug].filter((x): x is string => !!x);
   const lowered = new Set(handles.map((h) => h.toLowerCase()));
   const isMe = (u: PlatformUser): boolean =>
     lowered.has(u.name.toLowerCase()) || (u.slug ? lowered.has(u.slug.toLowerCase()) : false);
 
-  let latest: string | null = null;
-  const consider = (iso: string): void => {
-    if (latest === null || Date.parse(iso) > Date.parse(latest)) latest = iso;
-  };
+  const ats: string[] = [];
   const walk = (list: readonly PrComment[], parentIsMe: boolean): void => {
     for (const c of list) {
       const authoredByMe = isMe(c.author);
       if (!authoredByMe && (parentIsMe || mentionsAnyHandle(c.body, handles))) {
-        consider(c.createdAt);
+        ats.push(c.createdAt);
       }
       if (c.replies?.length) walk(c.replies, authoredByMe);
     }
   };
   walk(comments, false);
+  return ats;
+}
+
+/**
+ * 评论树里「@我 / 回复我」的最新他人评论的 createdAt（ISO）；无则 null。基于 {@link collectCommentsToMeAt}。
+ */
+export function latestCommentToMeAt(
+  comments: readonly PrComment[],
+  me: PlatformUser,
+): string | null {
+  let latest: string | null = null;
+  for (const iso of collectCommentsToMeAt(comments, me)) {
+    if (latest === null || Date.parse(iso) > Date.parse(latest)) latest = iso;
+  }
   return latest;
 }

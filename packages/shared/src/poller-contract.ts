@@ -373,6 +373,12 @@ export interface StoredPullRequest extends PullRequest {
    * 了 @我 / 回复我的新评论。UI 据此在列表项上点一个未读圆点。用户打开 PR 即清除（推进已读水位）。
    */
   unread?: boolean;
+  /**
+   * 「@我 / 回复我」未读评论条数（派生值，同 `unread` 由 `listStoredPullRequests` 据已读水位计算填上，meta.json
+   * 不含）。与未读圆点**并存、互不替代**：圆点照常按新到达 / 新 commit / 点名回复亮，本计数仅额外给出点名/回复你
+   * 的未读条数。已在 poll 端封顶 10，故 ≤ 10；UI 满额显示「10+」。0 表示无此类未读（不渲染计数）。
+   */
+  unreadMentionCount?: number;
 }
 
 export interface PollResult {
