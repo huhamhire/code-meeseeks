@@ -1,29 +1,47 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { PlatformUser } from '@meebox/shared';
 import { invoke } from '../../../../../api';
+import { MentionTextarea } from '../shared/MentionTextarea';
 
 interface CommentComposerProps {
   prLocalId: string;
+  /** `@提及` 自动补全候选（PR 参与者 + 评论作者，由父组件从已加载数据派生）。 */
+  mentionCandidates?: PlatformUser[];
+  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；为真才启用粘贴上传。 */
+  attachmentsEnabled?: boolean;
   onCancel: () => void;
   /** 发布成功后调用（收起编辑框；时间线通过 comments:changed 事件自动刷新，新评论出现在顶部） */
   onPosted: () => void;
+}
+
+/** 把粘贴的图片 File 经 IPC 上传、返回可插入的 markdown（上传失败 / 不支持回 null）。 */
+async function uploadImage(prLocalId: string, file: File): Promise<string | null> {
+  const bytes = await file.arrayBuffer();
+  const res = await invoke('comments:uploadAttachment', {
+    localId: prLocalId,
+    fileName: file.name || 'image.png',
+    contentType: file.type || 'image/png',
+    bytes,
+  });
+  return res?.markdown ?? null;
 }
 
 /**
  * 新建 summary（不锚到文件）评论的编辑框：textarea + 发送/取消。出现在活动时间线最上方。
  * Cmd/Ctrl+Enter 发送，Esc 取消；空 body disabled 发送。版式复用回复编辑框样式。
  */
-export function CommentComposer({ prLocalId, onCancel, onPosted }: CommentComposerProps) {
+export function CommentComposer({
+  prLocalId,
+  mentionCandidates = [],
+  attachmentsEnabled = false,
+  onCancel,
+  onPosted,
+}: CommentComposerProps) {
   const { t } = useTranslation();
   const [body, setBody] = useState('');
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // mount 自动 focus，提升输入体感
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
 
   const canSave = body.trim().length > 0 && !posting;
 
@@ -54,16 +72,18 @@ export function CommentComposer({ prLocalId, onCancel, onPosted }: CommentCompos
 
   return (
     <div className="comment-reply-editor">
-      <textarea
-        ref={textareaRef}
+      <MentionTextarea
         className="comment-reply-textarea"
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={setBody}
+        candidates={mentionCandidates}
         onKeyDown={onKeyDown}
+        onUpload={attachmentsEnabled ? (f) => uploadImage(prLocalId, f) : undefined}
         placeholder={t('commentComposer.placeholder')}
         rows={3}
         disabled={posting}
-        aria-label={t('commentComposer.textareaAria')}
+        autoFocus
+        ariaLabel={t('commentComposer.textareaAria')}
       />
       <div className="comment-reply-actions">
         <button

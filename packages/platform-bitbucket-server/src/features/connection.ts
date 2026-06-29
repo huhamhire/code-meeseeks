@@ -39,6 +39,7 @@ export class BitbucketServerConnection extends BaseConnection {
       commentOptimisticLock: true,
       // 评论 emoji 反应自 7.x 起（最低支持版即 7.0），故无条件声明。
       commentReactions: true,
+      commentAttachments: true,
       commentHardBreaks: true,
       mergeVetoFidelity: 'full',
       discoveryRateLimited: false,

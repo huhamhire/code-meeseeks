@@ -1,6 +1,6 @@
 import { lazy, Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
+import type { PlatformUser, PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import i18n from '../../../../../i18n';
 import {
   Avatar,
@@ -80,6 +80,8 @@ export function CommentItem({
   autoExpandCode = false,
   hardBreaks,
   reactionsEnabled = false,
+  mentionCandidates,
+  attachmentsEnabled = false,
   timeline = false,
   readOnly = false,
   onJumpToAnchor,
@@ -92,6 +94,10 @@ export function CommentItem({
   hardBreaks: boolean;
   /** 平台是否支持评论 emoji 反应（capabilities.commentReactions）；为真才渲染反应条。 */
   reactionsEnabled?: boolean;
+  /** `@提及` 自动补全候选（PR 参与者 + 评论作者）；透传给回复编辑框。 */
+  mentionCandidates?: PlatformUser[];
+  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给回复编辑框启用粘贴上传。 */
+  attachmentsEnabled?: boolean;
   /** 是否处于活动时间线模式（仅影响顶层评论版式，见上方说明） */
   timeline?: boolean;
   /** 内容只读（decline / 不可参与归档 PR）：隐藏回复 / 编辑 / 删除操作，仅供浏览。 */
@@ -236,6 +242,8 @@ export function CommentItem({
       prLocalId={pr.localId}
       // 回复目标抽象（threadId）：GitLab=discussion id（reply 必需）；Bitbucket 空 / GitHub=remoteId → 回退 remoteId。
       parentCommentId={comment.threadId ?? comment.remoteId}
+      mentionCandidates={mentionCandidates}
+      attachmentsEnabled={attachmentsEnabled}
       onCancel={() => setReplyOpen(false)}
       onPosted={() => setReplyOpen(false)}
     />
@@ -256,6 +264,8 @@ export function CommentItem({
             depth={depth + 1}
             hardBreaks={hardBreaks}
             reactionsEnabled={reactionsEnabled}
+            mentionCandidates={mentionCandidates}
+            attachmentsEnabled={attachmentsEnabled}
             readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
           />

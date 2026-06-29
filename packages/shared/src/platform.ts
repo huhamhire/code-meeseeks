@@ -231,6 +231,18 @@ export interface PrReaction {
  */
 export const REACTION_PICKER = ['👍', '👎', '😄', '🎉', '😕', '❤️', '🚀', '👀'] as const;
 
+/** 评论图片附件上传的输入（main 端从 IPC 的 ArrayBuffer 转 Uint8Array 后传给 adapter）。 */
+export interface CommentAttachmentUpload {
+  fileName: string;
+  contentType: string;
+  bytes: Uint8Array;
+}
+
+/** 评论附件上传结果：可直接插入评论正文的 markdown 片段（如 `![name](url)` / `attachment:` 形式）。 */
+export interface CommentAttachmentResult {
+  markdown: string;
+}
+
 export interface PrComment {
   remoteId: string;
   author: PlatformUser;
@@ -341,6 +353,12 @@ export interface PlatformCapabilities {
   inlineMultiline: boolean;
   /** 评论删改是否需要 version 乐观锁（仅 Bitbucket） */
   commentOptimisticLock: boolean;
+  /**
+   * 评论是否支持上传图片附件（粘贴 / 选取）。GitLab（/uploads）、Bitbucket（attachments）为真；
+   * GitHub 无公开附件上传 API → 为假（UI 隐藏粘贴上传入口、提示不支持）。为真时渲染层拦截图片粘贴
+   * → 经 adapter 上传 → 回填 markdown 到正文。
+   */
+  commentAttachments: boolean;
   /**
    * 评论是否支持 emoji 反应（GitHub Reactions / GitLab Award Emoji / Bitbucket 7.x+ 反应）。
    * 为真则 UI 在评论气泡下渲染反应条 + 提供 {@link REACTION_PICKER} 选择器；为假整块隐藏。

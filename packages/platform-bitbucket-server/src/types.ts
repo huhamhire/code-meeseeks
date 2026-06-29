@@ -83,6 +83,18 @@ export interface BitbucketComment {
   properties?: { reactions?: BitbucketReactionProperty[] };
 }
 
+/**
+ * 附件上传响应（POST .../attachments，multipart 字段 `files`）。`links.attachment.href` 为
+ * `attachment:<repoId>/<id>` 形式，可直接嵌入评论 markdown。字段按实测响应取用，容错可选。
+ */
+export interface BitbucketAttachmentUploadResponse {
+  attachments?: Array<{
+    id?: string | number;
+    url?: string;
+    links?: { attachment?: { href?: string } };
+  }>;
+}
+
 export interface BitbucketCommentAnchor {
   diffType?: 'EFFECTIVE' | 'COMMIT' | 'RANGE';
   // line / lineType 对文件级评论（挂在文件而非具体行）或孤儿 anchor（锚定行已不存在）

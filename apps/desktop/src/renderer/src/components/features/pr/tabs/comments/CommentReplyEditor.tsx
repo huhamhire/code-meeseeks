@@ -1,13 +1,31 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { PlatformUser } from '@meebox/shared';
 import { invoke } from '../../../../../api';
+import { MentionTextarea } from '../shared/MentionTextarea';
 
 interface CommentReplyEditorProps {
   prLocalId: string;
   parentCommentId: string;
+  /** `@提及` 自动补全候选（PR 参与者 + 评论作者）。 */
+  mentionCandidates?: PlatformUser[];
+  /** 平台是否支持图片附件上传；为真才启用粘贴上传。 */
+  attachmentsEnabled?: boolean;
   onCancel: () => void;
   /** reply 创建成功后调用 (UI 收起编辑框；评论列表通过 comments:changed 事件自动刷新) */
   onPosted: () => void;
+}
+
+/** 把粘贴的图片 File 经 IPC 上传、返回可插入的 markdown（上传失败 / 不支持回 null）。 */
+async function uploadImage(prLocalId: string, file: File): Promise<string | null> {
+  const bytes = await file.arrayBuffer();
+  const res = await invoke('comments:uploadAttachment', {
+    localId: prLocalId,
+    fileName: file.name || 'image.png',
+    contentType: file.type || 'image/png',
+    bytes,
+  });
+  return res?.markdown ?? null;
 }
 
 /**
@@ -17,6 +35,8 @@ interface CommentReplyEditorProps {
 export function CommentReplyEditor({
   prLocalId,
   parentCommentId,
+  mentionCandidates = [],
+  attachmentsEnabled = false,
   onCancel,
   onPosted,
 }: CommentReplyEditorProps) {
@@ -24,12 +44,6 @@ export function CommentReplyEditor({
   const [body, setBody] = useState('');
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // mount 自动 focus，提升用户输入体感
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
 
   const canSave = body.trim().length > 0 && !posting;
 
@@ -60,16 +74,18 @@ export function CommentReplyEditor({
 
   return (
     <div className="comment-reply-editor">
-      <textarea
-        ref={textareaRef}
+      <MentionTextarea
         className="comment-reply-textarea"
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={setBody}
+        candidates={mentionCandidates}
         onKeyDown={onKeyDown}
+        onUpload={attachmentsEnabled ? (f) => uploadImage(prLocalId, f) : undefined}
         placeholder={t('commentReplyEditor.placeholder')}
         rows={3}
         disabled={posting}
-        aria-label={t('commentReplyEditor.textareaAria')}
+        autoFocus
+        ariaLabel={t('commentReplyEditor.textareaAria')}
       />
       <div className="comment-reply-actions">
         <button

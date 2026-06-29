@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   PlatformCapabilities,
+  PlatformUser,
   PrActivityEvent,
   PrActivityKind,
   PrComment,
@@ -93,6 +94,8 @@ export function ActivityPanel({
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
   // 评论 emoji 反应：平台支持时在评论下渲染反应条 + 选择器。缺省（capabilities 未到）保守关闭。
   const reactionsEnabled = capabilities?.commentReactions ?? false;
+  // 图片附件上传：平台支持时启用评论粘贴上传。缺省保守关闭（GitHub 无上传 API 亦为 false）。
+  const attachmentsEnabled = capabilities?.commentAttachments ?? false;
   // 差异化：GitHub/Bitbucket 渲染评论+提交+决断的活动时间线；GitLab（activityTimeline=false）退化为
   // 纯评论视图（不拉提交/决断、沿用「评论」文案）。缺省（capabilities 未到）保守按纯评论。
   const showTimeline = capabilities?.activityTimeline ?? false;
@@ -167,6 +170,13 @@ export function ActivityPanel({
     return out;
   }, [view]);
 
+  // @提及候选：从已加载的评论作者（含 replies）+ 提交作者派生——有界、零额外取数、安全（仅本 PR 参与者，
+  // 不向远端枚举全员）。仅平台支持反应/提及类增强时无关，纯增益；用户仍可自由手打任意 @name。
+  const mentionCandidates = useMemo<PlatformUser[]>(
+    () => collectMentionCandidates(view?.comments ?? [], view?.commits ?? []),
+    [view],
+  );
+
   // 归并三路为时间线条目并按时间倒序。deps 全是稳定引用（view 经上面三路相等比对跳过后不变、
   // autoExpandSet 随 view）→ poll 无变化时整条时间线（含内联 Monaco）元素身份不变，React 跳过重渲。
   const timeline = useMemo<ReactElement[]>(() => {
@@ -186,6 +196,8 @@ export function ActivityPanel({
             autoExpandCode={autoExpandSet.has(c.remoteId)}
             hardBreaks={hardBreaks}
             reactionsEnabled={reactionsEnabled}
+            mentionCandidates={mentionCandidates}
+            attachmentsEnabled={attachmentsEnabled}
             timeline={showTimeline}
             readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
@@ -218,6 +230,8 @@ export function ActivityPanel({
     autoExpandSet,
     hardBreaks,
     reactionsEnabled,
+    mentionCandidates,
+    attachmentsEnabled,
     showTimeline,
     readOnly,
     onViewCommit,
@@ -260,6 +274,8 @@ export function ActivityPanel({
                 <div className="pr-activity-compose-card">
                   <CommentComposer
                     prLocalId={pr.localId}
+                    mentionCandidates={mentionCandidates}
+                    attachmentsEnabled={attachmentsEnabled}
                     onCancel={() => onComposeClose?.()}
                     onPosted={() => onComposeClose?.()}
                   />
@@ -278,6 +294,32 @@ export function ActivityPanel({
       {loading && <PaneLoading overlay label={t(`${ns}.loading`)} />}
     </div>
   );
+}
+
+/**
+ * 从已加载的评论（含 replies 递归）+ 提交派生 @提及候选用户：按 name 去重、保序。候选源刻意只取
+ * 本 PR 已出现的参与者（有界、零额外取数、不向远端枚举全员），是安全的 @ 自动补全数据来源。
+ */
+function collectMentionCandidates(comments: PrComment[], commits: PrCommit[]): PlatformUser[] {
+  const seen = new Set<string>();
+  const out: PlatformUser[] = [];
+  const push = (u: PlatformUser | undefined): void => {
+    if (!u?.name || seen.has(u.name)) return;
+    seen.add(u.name);
+    out.push(u);
+  };
+  const walk = (list: PrComment[]): void => {
+    for (const c of list) {
+      push(c.author);
+      if (c.replies.length > 0) walk(c.replies);
+    }
+  };
+  walk(comments);
+  for (const cm of commits) {
+    push(cm.author);
+    push(cm.committer);
+  }
+  return out;
 }
 
 /** 时间线上的提交事件：commit 图标 + 短 SHA + 主题 + 作者 + 时间；可点击跳远端 commit 页。 */

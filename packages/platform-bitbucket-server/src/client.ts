@@ -257,6 +257,30 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
+   * multipart/form-data POST（附件上传用）。不手动设 Content-Type（交给 fetch 按 FormData 加 boundary）；
+   * 附件上传须带 `X-Atlassian-Token: no-check` 绕过 XSRF 校验（Atlassian 文件上传端点通用要求）。
+   */
+  async postForm<T>(path: string, form: FormData): Promise<T> {
+    const url = buildUrl(this.baseUrl, path);
+    const res = await fetchWithTimeout(
+      this.fetchFn,
+      url,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: 'application/json',
+          'X-Atlassian-Token': 'no-check',
+        },
+        body: form,
+      },
+      this.timeoutMs,
+    );
+    if (!res.ok) throw await this.err(res, 'POST', path);
+    return (await res.json()) as T;
+  }
+
+  /**
    * 带 JSON body 的 PUT。Bitbucket 的 PR 参与者 status 用 PUT participants/{slug} 写入，
    * 404 / 401 / 409 等错误抛 BitbucketClientError 并附 status + body，调用方决定降级或抛出。
    * 响应体 JSON 解析失败时返回 null（部分端点返回 204 No Content）。

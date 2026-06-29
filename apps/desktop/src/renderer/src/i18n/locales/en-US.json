@@ -18,6 +18,9 @@
     "mergeFailed": "Merge failed: {{msg}}",
     "toastCloseTitle": "Click to dismiss"
   },
+  "attachments": {
+    "uploading": "Uploading image…"
+  },
   "bitbucketImage": {
     "attachment": "Attachment",
     "attachmentFailed": "{{name}} (failed to load)",

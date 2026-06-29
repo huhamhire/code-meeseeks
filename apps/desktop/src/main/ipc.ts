@@ -62,6 +62,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('comments:delete', pr.deleteComment); // 删除自己的评论
   ipcMain.handle('comments:edit', pr.editComment); // 编辑自己的评论
   ipcMain.handle('comments:toggleReaction', pr.toggleReaction); // 切换评论 emoji 反应
+  ipcMain.handle('comments:uploadAttachment', pr.uploadAttachment); // 上传评论图片附件
   ipcMain.handle('comments:fetchAttachment', pr.fetchAttachment); // 拉评论内嵌图片（代理带 PAT）
   ipcMain.handle('prs:list', pr.listPrs); // PR 列表（仅活动连接）
   ipcMain.handle('prs:listArchived', pr.listArchivedPrs); // 已关闭（归档）PR 列表（只读浏览）

@@ -78,6 +78,15 @@ export interface PrChannels {
     };
     response: void;
   };
+  /**
+   * 上传图片作为评论附件（粘贴 / 选取触发），返回可插入正文的 markdown 片段；不支持的平台
+   * （GitHub）返回 null。bytes 走 ArrayBuffer 经 IPC 传输，main 端转 Uint8Array 交 adapter 上传。
+   * 仅 commentAttachments 能力为真的平台暴露入口。
+   */
+  'comments:uploadAttachment': {
+    request: { localId: string; fileName: string; contentType: string; bytes: ArrayBuffer };
+    response: { markdown: string } | null;
+  };
   'prs:list': { request: void; response: StoredPullRequest[] };
   /** 列出已归档（退场）PR：从冷存储读取，供「已关闭」视图浏览（只读）。 */
   'prs:listArchived': { request: void; response: StoredPullRequest[] };

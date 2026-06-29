@@ -18,6 +18,9 @@
     "mergeFailed": "Merge fehlgeschlagen: {{msg}}",
     "toastCloseTitle": "Zum Schließen klicken"
   },
+  "attachments": {
+    "uploading": "Bild wird hochgeladen…"
+  },
   "bitbucketImage": {
     "attachment": "Anhang",
     "attachmentFailed": "{{name}} (Laden fehlgeschlagen)",

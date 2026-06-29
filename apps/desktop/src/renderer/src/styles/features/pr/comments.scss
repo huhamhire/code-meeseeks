@@ -347,6 +347,56 @@
     border-color: $color-accent;
   }
 }
+// @提及自动补全（见 tabs/shared/MentionTextarea）：textarea 包一层定位锚，候选浮层覆盖在其下方。
+.mention-textarea-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.mention-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 6;
+  margin: $space-1 0 0;
+  padding: $space-1;
+  list-style: none;
+  min-width: 200px;
+  max-width: 320px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.mention-option {
+  display: flex;
+  align-items: baseline;
+  gap: $space-3;
+  width: 100%;
+  padding: $space-2 $space-3;
+  background: transparent;
+  border: none;
+  border-radius: $radius-sm;
+  text-align: left;
+  cursor: pointer;
+  color: $text-body;
+  &.mention-option-active {
+    background: $bg-hover;
+  }
+}
+.mention-option-name {
+  font-weight: 600;
+}
+.mention-option-display {
+  font-size: $fs-sm;
+}
+.mention-upload-status {
+  font-size: $fs-sm;
+  padding: $space-1 0;
+}
+
 .comment-reply-actions {
   display: inline-flex;
   align-items: center;

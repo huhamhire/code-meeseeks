@@ -18,6 +18,9 @@
     "mergeFailed": "合并失败：{{msg}}",
     "toastCloseTitle": "点击关闭"
   },
+  "attachments": {
+    "uploading": "正在上传图片…"
+  },
   "bitbucketImage": {
     "attachment": "附件",
     "attachmentFailed": "{{name}} (加载失败)",

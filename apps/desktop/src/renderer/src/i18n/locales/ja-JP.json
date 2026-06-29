@@ -18,6 +18,9 @@
     "mergeFailed": "マージに失敗しました：{{msg}}",
     "toastCloseTitle": "クリックで閉じる"
   },
+  "attachments": {
+    "uploading": "画像をアップロード中…"
+  },
   "bitbucketImage": {
     "attachment": "添付ファイル",
     "attachmentFailed": "{{name}} (読み込みに失敗しました)",
