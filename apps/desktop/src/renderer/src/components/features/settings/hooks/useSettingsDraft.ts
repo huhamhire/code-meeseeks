@@ -55,6 +55,10 @@ export function useSettingsDraft({
   const [llmEditor, setLlmEditor] = useState<{ mode: 'add' | 'edit'; draft: LlmProfile } | null>(
     null,
   );
+  // 消息通知（总开关 + 分类型系统通知 + dock 角标）。随 config:setNotifications 保存。
+  const [notifications, setNotificationsState] = useState<Config['notifications']>(
+    config.notifications,
+  );
   const [proxy, setProxy] = useState<Config['proxy']>(config.proxy);
   // 代理在独立模态框里编辑：null=关闭，非 null=正在编辑的草稿；保存回 proxy，底栏「保存」才写盘。
   const [proxyEditor, setProxyEditor] = useState<Config['proxy'] | null>(null);
@@ -78,6 +82,7 @@ export function useSettingsDraft({
     concurrency: config.pr_agent.max_concurrency,
     llm: config.llm,
     proxy: config.proxy,
+    notifications: config.notifications,
     connections: config.connections,
     activeConnId: config.active_connection_id,
   }));
@@ -234,6 +239,10 @@ export function useSettingsDraft({
     setMaxConcurrencyInput(max);
     setSaved(false);
   };
+  const setNotifications = (next: Config['notifications']): void => {
+    setNotificationsState(next);
+    setSaved(false);
+  };
   const setAgentDir = (v: string): void => {
     setAgentDirInput(v);
     setSaved(false);
@@ -280,6 +289,8 @@ export function useSettingsDraft({
   const concurrencyChanged = maxConcurrencyInput !== base.concurrency;
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
   const proxyChanged = JSON.stringify(proxy) !== JSON.stringify(base.proxy);
+  const notificationsChanged =
+    JSON.stringify(notifications) !== JSON.stringify(base.notifications);
   const connectionsChanged =
     activeConnId !== base.activeConnId ||
     JSON.stringify(connections) !== JSON.stringify(base.connections);
@@ -290,6 +301,7 @@ export function useSettingsDraft({
     concurrencyChanged ||
     llmChanged ||
     proxyChanged ||
+    notificationsChanged ||
     connectionsChanged;
 
   const saveAll = async (): Promise<void> => {
@@ -329,6 +341,9 @@ export function useSettingsDraft({
         await invoke('config:setProxy', { proxy });
         onProxyChange?.(proxy);
       }
+      if (notificationsChanged) {
+        await invoke('config:setNotifications', { notifications });
+      }
       if (connectionsChanged) {
         await invoke('config:setConnections', { connections, active_connection_id: activeConnId });
         await onConnectionsChange?.();
@@ -349,6 +364,7 @@ export function useSettingsDraft({
         concurrency: maxConcurrencyInput,
         llm,
         proxy,
+        notifications,
         connections,
         activeConnId,
       });
@@ -391,6 +407,9 @@ export function useSettingsDraft({
     proxyEditor,
     setProxyEditor,
     saveProxyEditor,
+    // 通知
+    notifications,
+    setNotifications,
     // 轮询 / 并发 / 目录
     pollerInput,
     setPoller,

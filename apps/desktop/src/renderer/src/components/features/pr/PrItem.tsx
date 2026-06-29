@@ -23,6 +23,9 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
   const { t } = useTranslation();
   const approvedCount = pr.reviewers.filter((r) => r.status === 'approved').length;
   const needsWorkCount = pr.reviewers.filter((r) => r.status === 'needsWork').length;
+  // 「@我 / 回复我」未读条数：>0 时标题左的未读圆点替换为中性数字 chip（封顶 10 → 显示「10+」）；
+  // 仅新到达 / 新 commit 的未读（计数为 0）仍显示圆点。二者在该槽位互斥。
+  const mentionCount = pr.unreadMentionCount ?? 0;
   // 服务端判定可直接合并：列表里用分支合并图标 chip 标注（纯状态，无数值）。
   // 可选链兜底：升级前持久化的 meta.json 可能尚无 mergeStatus，下一轮 poll 会补齐
   const canMerge = pr.mergeStatus?.canMerge ?? false;
@@ -48,8 +51,18 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
       />
       <div className="pr-item-body">
         <div className="pr-item-title">
-          {pr.unread && (
-            <span className="pr-item-unread-dot" title={t('prItem.unread')} aria-label="unread" />
+          {mentionCount > 0 ? (
+            <span
+              className="pr-item-unread-count"
+              title={t('prItem.unreadMentionCount', { count: mentionCount })}
+              aria-label={t('prItem.unreadMentionCount', { count: mentionCount })}
+            >
+              {mentionCount > 9 ? '10+' : mentionCount}
+            </span>
+          ) : (
+            pr.unread && (
+              <span className="pr-item-unread-dot" title={t('prItem.unread')} aria-label="unread" />
+            )
           )}
           {pr.hasConflict && (
             <span className="conflict-warn" title={t('prItem.hasConflict')} aria-label="conflict">

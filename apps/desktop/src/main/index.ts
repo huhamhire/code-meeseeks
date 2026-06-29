@@ -222,6 +222,11 @@ class App {
       app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
     }
 
+    // Windows toast 通知需 AppUserModelId 与安装包 appId 一致，否则系统可能不显示 / 归属错乱。
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('com.huhamhire.code-meeseeks');
+    }
+
     // 原生窗口 chrome 跟随全局主题：Windows 据 nativeTheme 设 DWMWA_USE_IMMERSIVE_DARK_MODE（原生
     // 细边框 / 窗控按钮深浅）。themeSource 由主题反推——'auto' 主题交回 OS（'system'），其余固定浅 / 深。
     // 窗控按钮配色由 WindowManager 监听 nativeTheme 'updated' 同步（见 window-manager）。

@@ -2,6 +2,7 @@ import type { Logger } from 'pino';
 import type {
   LocalPrStatus,
   PlatformKind,
+  PollNotificationEvent,
   PollResult,
   PrDiscoveryFilter,
   PullRequest,
@@ -10,8 +11,9 @@ import type {
 import type { PlatformAdapter } from '@meebox/platform-core';
 import { relocateTree, type StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
-import { latestCommentToMeAt } from './unread.js';
+import { collectMentionsToMe } from './unread.js';
 import {
+  MENTION_ATS_CAP,
   PURGE_GRACE_MS,
   prDirKey,
   readPrIndex,
@@ -58,6 +60,11 @@ export interface PollerOptions {
    * (updatedAt 跳变)。removed 不算 (PR 关单一般不影响 commit 范围)。
    */
   onPrsChanged?: (repos: ReadonlyArray<ChangedRepo>) => void;
+  /**
+   * 本轮 poll 新发生的「值得提醒」事件（新 PR / 被 @ / 被回复）。main 据通知配置弹系统通知。仅在**已有基线**
+   * （索引此前非空）时产出，避免首启 / 批量涌入时通知风暴；空数组不回调。详见 PollNotificationEvent。
+   */
+  onNotify?: (events: ReadonlyArray<PollNotificationEvent>) => void;
 }
 
 /**
@@ -216,6 +223,10 @@ export class Poller {
     const indexFile = await readPrIndex(this.opts.stateStore);
     // 索引拷一份到 mutable Map 方便增删；条目缺失时退回到空 Map (首次 poll)
     const indexByLocalId = new Map<string, PrIndexEntry>(Object.entries(indexFile?.prs ?? {}));
+    // 已有基线 = 本轮之前索引已非空。首轮 / 清库后的首 poll 不产出通知事件（仅建基线），避免涌入风暴。
+    const hadBaseline = indexByLocalId.size > 0;
+    // 本轮新发生的通知事件（新 PR / 被 @ / 被回复）；poll 末投影给 main 弹系统通知。
+    const notifyEvents: PollNotificationEvent[] = [];
 
     let fetched = 0;
     let changed = 0;
@@ -277,6 +288,15 @@ export class Poller {
           const isChanged = Boolean(prev && prev.updatedAt !== pr.updatedAt);
           if (isChanged) changed++;
           if (isAdded) added++;
+          // 通知：新 PR（仅已有基线时，避免首启涌入风暴）。mention/reply 事件在下方评论扫描处投影。
+          if (isAdded && hadBaseline) {
+            notifyEvents.push({
+              kind: 'new_pr',
+              localId,
+              remoteId: pr.remoteId,
+              title: pr.title,
+            });
+          }
           if (isAdded || isChanged) {
             const repoKey = `${connectionId}|${identity.group}|${identity.repo}`;
             if (!changedReposByKey.has(repoKey)) {
@@ -322,19 +342,55 @@ export class Poller {
           });
           dirty = true;
 
-          // 未读 mention 游标（见 pr-state computeUnread）：仅当 PR 内容变更（updatedAt 跳变 → 可能有新评论）且
-          // me 已知时拉评论扫「@我 / 回复我」，与历史游标取较大值。新到达 / 新 commit 未读无需在此处理（读取时分别按
-          // 发现时间 vs 未读纪元、head sha 比对派生）。read-state 仅由 markRead（用户打开 PR）写，poll 一概不碰。
+          // 未读 mention（见 pr-state computeUnread / computeUnreadMentionCount）：仅当 PR 内容变更（updatedAt
+          // 跳变 → 可能有新评论）且 me 已知时拉评论扫「@我 / 回复我」。游标 lastMentionAt 取较大值（驱动未读点）；
+          // mentionAts 与历史并集去重、按时间降序留最近 MENTION_ATS_CAP 条（驱动未读点旁的计数）。新到达 / 新 commit
+          // 未读无需在此处理（读取时分别按发现时间 vs 未读纪元、head sha 比对派生）。read-state 仅由 markRead 写，poll 不碰。
           let lastMentionAt = prev?.lastMentionAt;
+          let mentionAts = prev?.mentionAts;
           if (isChanged && me) {
             try {
               const comments = await adapter.comments.listPullRequestComments(
                 { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
                 pr.remoteId,
               );
-              const latest = latestCommentToMeAt(comments, me);
-              if (latest && (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt))) {
-                lastMentionAt = latest;
+              const hits = collectMentionsToMe(comments, me);
+              if (hits.length) {
+                const scanned = hits.map((h) => h.at);
+                const merged = [...new Set([...(prev?.mentionAts ?? []), ...scanned])];
+                merged.sort((a, b) => Date.parse(b) - Date.parse(a));
+                mentionAts = merged.slice(0, MENTION_ATS_CAP);
+                const prevCursor = prev?.lastMentionAt;
+                const latest = mentionAts[0];
+                if (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt)) {
+                  lastMentionAt = latest;
+                }
+                // 通知：仅对**已知 PR**（prev 存在）且晚于历史游标的命中投影，按类型聚合本轮新增条数；
+                // 新 PR 此前历史评论不计（prev 不存在则跳过），避免新发现 PR 触发其旧评论的提醒风暴。
+                if (prev && hadBaseline) {
+                  const sinceMs = prevCursor ? Date.parse(prevCursor) : 0;
+                  const fresh = hits.filter((h) => Date.parse(h.at) > sinceMs);
+                  const replyN = fresh.filter((h) => h.kind === 'reply').length;
+                  const mentionN = fresh.filter((h) => h.kind === 'mention').length;
+                  if (replyN > 0) {
+                    notifyEvents.push({
+                      kind: 'reply',
+                      localId,
+                      remoteId: pr.remoteId,
+                      title: pr.title,
+                      count: replyN,
+                    });
+                  }
+                  if (mentionN > 0) {
+                    notifyEvents.push({
+                      kind: 'mention',
+                      localId,
+                      remoteId: pr.remoteId,
+                      title: pr.title,
+                      count: mentionN,
+                    });
+                  }
+                }
               }
             } catch (err) {
               this.opts.logger.warn(
@@ -352,6 +408,7 @@ export class Poller {
             lastSeenAt: now,
             archivedAt: null,
             lastMentionAt,
+            mentionAts,
           });
         }
       } catch (err) {
@@ -420,6 +477,10 @@ export class Poller {
     // 通知调用方有哪些 repo 需要 sync mirror。空集合不调，避免无谓 noop
     if (changedReposByKey.size > 0) {
       this.opts.onPrsChanged?.(Array.from(changedReposByKey.values()));
+    }
+    // 本轮通知事件投影给 main（弹系统通知）。空数组不调。
+    if (notifyEvents.length > 0) {
+      this.opts.onNotify?.(notifyEvents);
     }
     this.opts.onTick?.({ at: now, result });
     return result;

@@ -4,6 +4,7 @@ import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { Logger } from 'pino';
 import { broadcast } from '../services/broadcast.js';
+import { showPollNotifications } from '../services/notifications.js';
 
 /**
  * 构造轮询器：tick 广播 poll:tick + 触发顺带副作用（onTickExtras）；PR 变更顺手 syncMirror 跟本地镜像。
@@ -31,6 +32,10 @@ export function createPoller(deps: {
     onTick: (info) => {
       broadcast('poll:tick', info);
       deps.onTickExtras();
+    },
+    // 本轮新发生的提醒事件（新 PR / 被 @ / 被回复）→ 按通知配置弹系统通知（现读 bootstrap.config，与设置页热生效）。
+    onNotify: (events) => {
+      showPollNotifications(events, bootstrap.config, logger);
     },
     // PR 新增 / 内容变更时顺手 syncMirror 跟上本地镜像，让用户随后点开 PR 省一趟 fetch。失败不阻断 poll
     //（mirror 有自己的全局队列 + 错误隔离）。identity 字段映射：poller 用 group/repo，repo-mirror 仍保留

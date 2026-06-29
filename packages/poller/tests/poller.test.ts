@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Logger } from 'pino';
 import { JsonFileStateStore } from '@meebox/state-store';
-import type { PullRequest } from '@meebox/shared';
+import type { PollNotificationEvent, PrComment, PullRequest } from '@meebox/shared';
 import type {
   PlatformAdapter,
   PlatformConnection,
@@ -34,11 +34,14 @@ const unusedComments: CommentService = {
     Promise.reject(new Error('FakeAdapter.editComment 未实现（poller 测试不使用）')),
   deleteComment: () =>
     Promise.reject(new Error('FakeAdapter.deleteComment 未实现（poller 测试不使用）')),
+  toggleReaction: () =>
+    Promise.reject(new Error('FakeAdapter.toggleReaction 未实现（poller 测试不使用）')),
 };
 const unusedMedia: MediaService = {
   getUserAvatar: async () => null,
   getAttachment: () =>
     Promise.reject(new Error('FakeAdapter.getAttachment 未实现（poller 测试不使用）')),
+  uploadAttachment: async () => null,
 };
 
 /**
@@ -50,9 +53,13 @@ const unusedMedia: MediaService = {
 class FakeAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
   private currentUser: { name: string; displayName: string } | null = null;
+  private commentList: PrComment[] = [];
   readonly connection: PlatformConnection;
   readonly prs: PullRequestService;
-  readonly comments: CommentService = unusedComments;
+  readonly comments: CommentService = {
+    ...unusedComments,
+    listPullRequestComments: async () => this.commentList,
+  };
   readonly media: MediaService = unusedMedia;
 
   constructor(
@@ -68,6 +75,8 @@ class FakeAdapter implements PlatformAdapter {
         inlineComments: true,
         inlineMultiline: true,
         commentOptimisticLock: true,
+        commentReactions: 'free' as const,
+        commentAttachments: true,
         commentHardBreaks: true,
         mergeVetoFidelity: 'full' as const,
         discoveryRateLimited: false,
@@ -110,6 +119,10 @@ class FakeAdapter implements PlatformAdapter {
   // 测试辅助：直接灌入当前用户（区别于 PlatformConnection 的 setCurrentUser(user) 契约方法）。
   seedUser(name: string, displayName = name): void {
     this.currentUser = { name, displayName };
+  }
+  // 测试辅助：灌入 listPullRequestComments 返回的评论（未读 mention / 通知投影用）。
+  seedComments(list: PrComment[]): void {
+    this.commentList = list;
   }
 }
 
@@ -271,6 +284,8 @@ describe('Poller.tick', () => {
         inlineComments: true,
         inlineMultiline: true,
         commentOptimisticLock: true,
+        commentReactions: 'free',
+        commentAttachments: true,
         commentHardBreaks: true,
         mergeVetoFidelity: 'full',
         discoveryRateLimited: false,
@@ -313,10 +328,12 @@ describe('Poller.tick', () => {
         replyToComment: () => Promise.reject(new Error('unused')),
         editComment: () => Promise.reject(new Error('unused')),
         deleteComment: () => Promise.reject(new Error('unused')),
+        toggleReaction: () => Promise.reject(new Error('unused')),
       },
       media: {
         getUserAvatar: async () => null,
         getAttachment: () => Promise.reject(new Error('unused')),
+        uploadAttachment: async () => null,
       },
     };
     const poller = new Poller({
@@ -812,5 +829,52 @@ describe('Poller.archiveConnectionsExcept', () => {
     const index2 = await store.read<PrIndexFile>(PR_INDEX_KEY);
     const bb2After = Object.values(index2!.prs).find((e) => e.identity.connectionId === 'bb2')!;
     expect(bb2After.archivedAt).toBe(now.toISOString()); // 仍是首次归档时间
+  });
+});
+
+function makeComment(over: Partial<PrComment> & Pick<PrComment, 'author' | 'body' | 'createdAt'>): PrComment {
+  return { remoteId: 'c', updatedAt: over.createdAt, anchor: null, replies: [], ...over };
+}
+
+describe('Poller onNotify (system notification projection)', () => {
+  it('emits no events on the first (baseline) poll, then new_pr + mention on later polls', async () => {
+    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    // 首轮：建基线，不产出任何事件（避免首启涌入风暴）。
+    await poller.tick();
+    expect(events).toEqual([]);
+
+    // 次轮：PR1 内容变更 + 一条 @alice 的新评论；同时来一个全新 PR2。
+    now = new Date('2026-06-02T00:00:00.000Z');
+    adapter.setPrs([
+      makePr('1', '2026-05-29T01:00:00.000Z'),
+      makePr('2', '2026-05-29T02:00:00.000Z'),
+    ]);
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'please look @alice',
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }),
+    ]);
+    await poller.tick();
+
+    const kinds = events.map((e) => ({ kind: e.kind, remoteId: e.remoteId, count: e.count }));
+    expect(kinds).toContainEqual({ kind: 'new_pr', remoteId: '2', count: undefined });
+    expect(kinds).toContainEqual({ kind: 'mention', remoteId: '1', count: 1 });
+    // 仅这两条（PR2 是新发现、其自身评论不投影 mention；PR1 仅 mention 一条）。
+    expect(events).toHaveLength(2);
   });
 });

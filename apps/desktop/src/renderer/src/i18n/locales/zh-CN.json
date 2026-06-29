@@ -631,7 +631,8 @@
     "hasConflict": "存在合并冲突",
     "mergeable": "可合并：已满足所有合并条件",
     "needsWorkCount_other": "{{count}} 位 reviewer 标记 needs work",
-    "unread": "未读：新分配给你、有新 commit 推送，或有人 @ 你 / 回复你"
+    "unread": "未读：新分配给你、有新 commit 推送，或有人 @ 你 / 回复你",
+    "unreadMentionCount_other": "{{count}} 条 @ 你 / 回复你的未读评论"
   },
   "prStatus": {
     "approved": "已批准",
@@ -694,6 +695,7 @@
     "catConnection": "连接",
     "catGeneral": "常规",
     "catModel": "模型",
+    "catNotifications": "通知",
     "checkFailed": "检查失败：{{error}}",
     "checkUpdate": "检查更新",
     "checkUpdateTitle": "查 GitHub 最新版本（仅检测，不自动安装）",
@@ -744,6 +746,15 @@
     "maxCodeSuggestionsLabel": "代码建议数量",
     "maxFollowupAsksHint": "自动追问启用时，单次评审条件性追问的数量上限。",
     "maxFollowupAsksLabel": "追问数量",
+    "notificationsEnableLabel": "启用通知",
+    "notificationsHint": "在有新的 PR 或与你相关的评论时收到提醒。系统通知是否弹出取决于操作系统的通知设置。",
+    "notificationsTitle": "通知",
+    "notifyMentionHint": "评论中有人 @ 你时提醒",
+    "notifyMentionLabel": "评论提及",
+    "notifyNewPrHint": "有需要你评审的新 PR 时提醒",
+    "notifyNewPrLabel": "新的 PR",
+    "notifyReplyHint": "有人回复你的评论时提醒",
+    "notifyReplyLabel": "评论回复",
     "openAgentDir": "打开当前目录",
     "openDevTools": "打开 DevTools",
     "openDevToolsTitle": "打开 Electron 开发者工具（分离窗口）",

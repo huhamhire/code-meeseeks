@@ -18,7 +18,7 @@ import type {
 
 // emoji ↔ Bitbucket emoticon shortcut（= gemoji shortcode）经共享 gemoji 词表换算：写入（toggle）用
 // emojiToReactionCode；读取展示优先从 twemoji url 码点解（emojiFromTwemojiUrl），shortcut 经
-// reactionCodeToEmoji 回退。实测确认形如 `eyes` 的 shortcode 可用（见 docs/arch/14）。
+// reactionCodeToEmoji 回退。实测确认形如 `eyes` 的 shortcode 可用（见 docs/arch/15）。
 
 /**
  * 从 Bitbucket emoticon 的 twemoji 资源 URL 解出 emoji 字符：文件名是 Unicode 码点（连字符分隔多码点，

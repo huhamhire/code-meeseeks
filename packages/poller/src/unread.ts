@@ -27,33 +27,68 @@ function mentionsAnyHandle(body: string, handles: readonly string[]): boolean {
   return false;
 }
 
+/** 与我相关的评论命中：被回复（父评论作者是我）优先于被 @（reply 是更强的相关关系）。 */
+export type MentionKind = 'mention' | 'reply';
+
+/** 评论树里一条「@我 / 回复我」他人评论的命中：时间 + 类型。 */
+export interface MentionHit {
+  at: string;
+  kind: MentionKind;
+}
+
 /**
- * 评论树里「@我 / 回复我」的最新他人评论的 createdAt（ISO）；无则 null。
+ * 评论树里所有「@我 / 回复我」他人评论的命中（时间 + 类型），深度优先、自然到达顺序（未排序）。
+ * 相关判定：① 父评论作者是我（reply），或 ② 正文 @我（mention）；自己写的不计。两者都满足时记为 reply。
  *
  * - `me`：当前用户（poll 时从 adapter 缓存身份取）。handle 取 name + slug（去重、非空）。
+ *
+ * 调用方（poll）据此取最新游标、据已读水位计未读条数（见 pr-state.computeUnreadMentionCount），
+ * 并按类型投影系统通知事件。
  */
-export function latestCommentToMeAt(
+export function collectMentionsToMe(
   comments: readonly PrComment[],
   me: PlatformUser,
-): string | null {
+): MentionHit[] {
   const handles = [me.name, me.slug].filter((x): x is string => !!x);
   const lowered = new Set(handles.map((h) => h.toLowerCase()));
   const isMe = (u: PlatformUser): boolean =>
     lowered.has(u.name.toLowerCase()) || (u.slug ? lowered.has(u.slug.toLowerCase()) : false);
 
-  let latest: string | null = null;
-  const consider = (iso: string): void => {
-    if (latest === null || Date.parse(iso) > Date.parse(latest)) latest = iso;
-  };
+  const hits: MentionHit[] = [];
   const walk = (list: readonly PrComment[], parentIsMe: boolean): void => {
     for (const c of list) {
       const authoredByMe = isMe(c.author);
-      if (!authoredByMe && (parentIsMe || mentionsAnyHandle(c.body, handles))) {
-        consider(c.createdAt);
+      if (!authoredByMe) {
+        if (parentIsMe) hits.push({ at: c.createdAt, kind: 'reply' });
+        else if (mentionsAnyHandle(c.body, handles)) hits.push({ at: c.createdAt, kind: 'mention' });
       }
       if (c.replies?.length) walk(c.replies, authoredByMe);
     }
   };
   walk(comments, false);
+  return hits;
+}
+
+/**
+ * 评论树里所有「@我 / 回复我」他人评论的 createdAt（ISO）列表。基于 {@link collectMentionsToMe}。
+ */
+export function collectCommentsToMeAt(
+  comments: readonly PrComment[],
+  me: PlatformUser,
+): string[] {
+  return collectMentionsToMe(comments, me).map((h) => h.at);
+}
+
+/**
+ * 评论树里「@我 / 回复我」的最新他人评论的 createdAt（ISO）；无则 null。基于 {@link collectCommentsToMeAt}。
+ */
+export function latestCommentToMeAt(
+  comments: readonly PrComment[],
+  me: PlatformUser,
+): string | null {
+  let latest: string | null = null;
+  for (const iso of collectCommentsToMeAt(comments, me)) {
+    if (latest === null || Date.parse(iso) > Date.parse(latest)) latest = iso;
+  }
   return latest;
 }

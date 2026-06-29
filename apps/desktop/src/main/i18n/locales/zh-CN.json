@@ -18,5 +18,23 @@
       "aborted": "用户暂停",
       "maxSteps": "步数上限中止"
     }
+  },
+  "notifications": {
+    "mention": {
+      "body": "#{{id}} {{title}}",
+      "title": "有人提到了你"
+    },
+    "newPr": {
+      "body": "#{{id}} {{title}}",
+      "title": "新的 Pull Request"
+    },
+    "reply": {
+      "body": "#{{id}} {{title}}",
+      "title": "收到新回复"
+    },
+    "summary": {
+      "body_other": "你有 {{count}} 条新动态",
+      "title": "新消息提醒"
+    }
   }
 }
