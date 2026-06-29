@@ -293,8 +293,11 @@ export class Poller {
             notifyEvents.push({
               kind: 'new_pr',
               localId,
+              connectionId,
               remoteId: pr.remoteId,
               title: pr.title,
+              repo: pr.repo,
+              actor: pr.author,
             });
           }
           if (isAdded || isChanged) {
@@ -370,26 +373,26 @@ export class Poller {
                 if (prev && hadBaseline) {
                   const sinceMs = prevCursor ? Date.parse(prevCursor) : 0;
                   const fresh = hits.filter((h) => Date.parse(h.at) > sinceMs);
-                  const replyN = fresh.filter((h) => h.kind === 'reply').length;
-                  const mentionN = fresh.filter((h) => h.kind === 'mention').length;
-                  if (replyN > 0) {
+                  // 按类型聚合本轮新增条数；发起人取该类最新一条命中的作者（通知头像 / 发起人展示）。
+                  const project = (kind: 'reply' | 'mention'): void => {
+                    const subset = fresh.filter((h) => h.kind === kind);
+                    if (subset.length === 0) return;
+                    const latestHit = subset.reduce((a, b) =>
+                      Date.parse(b.at) > Date.parse(a.at) ? b : a,
+                    );
                     notifyEvents.push({
-                      kind: 'reply',
+                      kind,
                       localId,
+                      connectionId,
                       remoteId: pr.remoteId,
                       title: pr.title,
-                      count: replyN,
+                      repo: pr.repo,
+                      actor: latestHit.author,
+                      count: subset.length,
                     });
-                  }
-                  if (mentionN > 0) {
-                    notifyEvents.push({
-                      kind: 'mention',
-                      localId,
-                      remoteId: pr.remoteId,
-                      title: pr.title,
-                      count: mentionN,
-                    });
-                  }
+                  };
+                  project('reply');
+                  project('mention');
                 }
               }
             } catch (err) {

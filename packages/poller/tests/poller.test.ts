@@ -876,5 +876,13 @@ describe('Poller onNotify (system notification projection)', () => {
     expect(kinds).toContainEqual({ kind: 'mention', remoteId: '1', count: 1 });
     // 仅这两条（PR2 是新发现、其自身评论不投影 mention；PR1 仅 mention 一条）。
     expect(events).toHaveLength(2);
+
+    // 富字段：仓库 + 连接 + 发起人（new_pr=PR 作者；mention=评论作者）一并投影。
+    const newPr = events.find((e) => e.kind === 'new_pr')!;
+    expect(newPr.repo).toEqual({ projectKey: 'P', repoSlug: 'r' });
+    expect(newPr.connectionId).toBe('bb1');
+    expect(newPr.actor.name).toBe('u'); // makePr 的作者
+    const mention = events.find((e) => e.kind === 'mention')!;
+    expect(mention.actor.name).toBe('bob'); // 评论作者
   });
 });

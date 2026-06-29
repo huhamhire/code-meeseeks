@@ -1,4 +1,10 @@
-import type { PlatformKind, PrDiscoveryFilter, PullRequest } from './platform.js';
+import type {
+  PlatformKind,
+  PlatformUser,
+  PrDiscoveryFilter,
+  PullRequest,
+  RepoRef,
+} from './platform.js';
 import type { PrAgentStrategy } from './pr-agent-status.js';
 import type { ReviewRunTool } from './tool-registry.js';
 
@@ -405,10 +411,16 @@ export interface PollNotificationEvent {
   kind: PollNotificationKind;
   /** 事件所属 PR 的本地 id */
   localId: string;
+  /** 事件所属连接 id（头像缓存键 + 取 adapter 拉头像用） */
+  connectionId: string;
   /** 远端 PR 编号（如 #123），用于通知正文 */
   remoteId: string;
   /** PR 标题，用于通知正文 */
   title: string;
+  /** PR 所在仓库，用于通知正文展示「项目 / 仓库」 */
+  repo: RepoRef;
+  /** 发起人：new_pr=PR 作者；mention/reply=触发本轮该类事件的最新一条评论作者。用于通知头像。 */
+  actor: PlatformUser;
   /** mention / reply：本轮新增条数；new_pr 省略 */
   count?: number;
 }

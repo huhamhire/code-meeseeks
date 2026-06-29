@@ -170,6 +170,7 @@ class App {
         this.ipcControl?.runAutopilotIfDue();
       },
       getRepoMirror: () => this.repoMirror,
+      getConnectionRuntime: () => this.conns.runtime,
     });
 
     // 连接运行时（接线 / ping / 热重配）：依赖已建好的 poller；repoMirror 经 conns.runtime 读 adapterByHost。

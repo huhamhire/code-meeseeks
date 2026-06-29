@@ -30,10 +30,11 @@ function mentionsAnyHandle(body: string, handles: readonly string[]): boolean {
 /** 与我相关的评论命中：被回复（父评论作者是我）优先于被 @（reply 是更强的相关关系）。 */
 export type MentionKind = 'mention' | 'reply';
 
-/** 评论树里一条「@我 / 回复我」他人评论的命中：时间 + 类型。 */
+/** 评论树里一条「@我 / 回复我」他人评论的命中：时间 + 类型 + 作者（供系统通知头像 / 发起人展示）。 */
 export interface MentionHit {
   at: string;
   kind: MentionKind;
+  author: PlatformUser;
 }
 
 /**
@@ -59,8 +60,9 @@ export function collectMentionsToMe(
     for (const c of list) {
       const authoredByMe = isMe(c.author);
       if (!authoredByMe) {
-        if (parentIsMe) hits.push({ at: c.createdAt, kind: 'reply' });
-        else if (mentionsAnyHandle(c.body, handles)) hits.push({ at: c.createdAt, kind: 'mention' });
+        if (parentIsMe) hits.push({ at: c.createdAt, kind: 'reply', author: c.author });
+        else if (mentionsAnyHandle(c.body, handles))
+          hits.push({ at: c.createdAt, kind: 'mention', author: c.author });
       }
       if (c.replies?.length) walk(c.replies, authoredByMe);
     }

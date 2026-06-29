@@ -3,6 +3,7 @@ import { Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { Logger } from 'pino';
+import type { ConnectionRuntime } from '../adapters.js';
 import { broadcast } from '../services/broadcast.js';
 import { showPollNotifications } from '../services/notifications.js';
 
@@ -21,6 +22,8 @@ export function createPoller(deps: {
   onTickExtras: () => void;
   /** 延迟取 repoMirror（它在 poller 之后才建好）。 */
   getRepoMirror: () => RepoMirrorManager;
+  /** 延迟取连接运行时（它在 poller 之后才建好）：通知服务据此按 connectionId 取 adapter 拉发起人头像。 */
+  getConnectionRuntime: () => ConnectionRuntime;
 }): Poller {
   const { bootstrap, stateStore, archiveStore, logger } = deps;
   return new Poller({
@@ -34,8 +37,14 @@ export function createPoller(deps: {
       deps.onTickExtras();
     },
     // 本轮新发生的提醒事件（新 PR / 被 @ / 被回复）→ 按通知配置弹系统通知（现读 bootstrap.config，与设置页热生效）。
+    // 头像经连接运行时按 connectionId 取 adapter 拉取并落盘（Windows 富 toast 用）。
     onNotify: (events) => {
-      showPollNotifications(events, bootstrap.config, logger);
+      void showPollNotifications(events, bootstrap.config, logger, {
+        cacheDir: bootstrap.paths.cacheDir,
+        getAdapter: (id) =>
+          deps.getConnectionRuntime().adapters.find((a) => a.connectionId === id)?.adapter ?? null,
+        logger,
+      });
     },
     // PR 新增 / 内容变更时顺手 syncMirror 跟上本地镜像，让用户随后点开 PR 省一趟 fetch。失败不阻断 poll
     //（mirror 有自己的全局队列 + 错误隔离）。identity 字段映射：poller 用 group/repo，repo-mirror 仍保留
