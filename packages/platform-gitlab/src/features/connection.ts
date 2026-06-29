@@ -29,6 +29,7 @@ export class GitLabConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: false,
       commentOptimisticLock: false,
+      commentReactions: true,
       // GitLab 评论走标准 CommonMark（单 \n = 软换行/空格），不按 hard-break。
       commentHardBreaks: false,
       mergeVetoFidelity: 'full',

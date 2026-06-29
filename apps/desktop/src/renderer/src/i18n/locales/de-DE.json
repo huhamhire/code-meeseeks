@@ -674,6 +674,11 @@
     "summaryOk": "✓ {{n}} erfolgreich",
     "title": "Kommentare absenden"
   },
+  "reactions": {
+    "addTitle": "Mit {{emoji}} reagieren",
+    "pickTitle": "Reaktion hinzufügen",
+    "removeTitle": "{{emoji}} entfernen"
+  },
   "settings": {
     "aboutFeedback": "Info & Feedback",
     "addConnection": "+ Verbindung hinzufügen",

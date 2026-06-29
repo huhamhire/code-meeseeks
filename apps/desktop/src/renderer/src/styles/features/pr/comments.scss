@@ -141,6 +141,105 @@
   font-size: $fs-md;
   line-height: $lh-normal;
 }
+// 评论 emoji 反应条（见 tabs/shared/ReactionBar）：已有反应 pill + 「加反应」按钮 + 就地候选行。
+.pr-reactions {
+  margin-top: $space-3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $space-2;
+}
+.pr-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-2;
+  padding: 1px $space-3;
+  font-size: $fs-sm;
+  line-height: 1.6;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-pill;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-accent;
+    background: $bg-hover;
+  }
+  &:disabled {
+    cursor: default;
+    opacity: 0.75;
+  }
+}
+// 自己反应过：主色描边 + 淡主色底 + 计数主色，呼应「已选中」语义。
+.pr-reaction-mine {
+  border-color: $color-accent;
+  background: $color-accent-bg-fade;
+  .pr-reaction-count {
+    color: $color-accent;
+    font-weight: 600;
+  }
+}
+.pr-reaction-emoji {
+  font-size: $fs-md;
+}
+.pr-reaction-count {
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+}
+.pr-reaction-add-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.pr-reaction-add {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px $space-3;
+  font-size: $fs-sm;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-pill;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: $color-accent;
+    color: $color-accent;
+    background: $bg-hover;
+  }
+}
+.pr-reaction-add-plus {
+  font-size: $fs-xs;
+  margin-left: 1px;
+}
+// 候选行：就地弹出（非绝对定位浮层），避免被滚动容器 / 时间线裁切。
+.pr-reaction-picker {
+  position: absolute;
+  bottom: calc(100% + #{$space-2});
+  left: 0;
+  z-index: 5;
+  display: flex;
+  gap: $space-1;
+  padding: $space-2;
+  background: $bg-surface;
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.pr-reaction-pick {
+  padding: $space-1 $space-2;
+  font-size: $fs-md;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: $radius-sm;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    background: $bg-hover;
+  }
+  &.pr-reaction-mine {
+    border-color: $color-accent;
+    background: $color-accent-bg-fade;
+  }
+}
+
 .pr-comment-foot {
   margin-top: $space-3;
   display: flex;

@@ -63,6 +63,21 @@ export interface PrChannels {
     };
     response: PrComment;
   };
+  /**
+   * 切换当前用户对一条评论的 emoji 反应（add=true 加 / false 取下）。emoji 为规范化 Unicode 字符
+   * （见 shared REACTION_PICKER）；kind 区分 summary / inline（GitHub 据此选反应端点）。成功后 main
+   * 端清评论缓存 + 广播 comments:changed，UI 重拉刷新反应条。仅 commentReactions 能力为真的平台暴露。
+   */
+  'comments:toggleReaction': {
+    request: {
+      localId: string;
+      commentId: string;
+      kind: 'summary' | 'inline';
+      emoji: string;
+      add: boolean;
+    };
+    response: void;
+  };
   'prs:list': { request: void; response: StoredPullRequest[] };
   /** 列出已归档（退场）PR：从冷存储读取，供「已关闭」视图浏览（只读）。 */
   'prs:listArchived': { request: void; response: StoredPullRequest[] };

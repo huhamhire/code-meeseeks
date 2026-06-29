@@ -12,6 +12,7 @@ import {
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { CommentMarkdown } from '../shared/CommentMarkdown';
+import { ReactionBar } from '../shared/ReactionBar';
 import { useCommentThread } from '../shared/useCommentThread';
 // 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
 const InlineCodeContext = lazy(() =>
@@ -34,8 +35,22 @@ export function sameCommentList(a: readonly PrComment[], b: readonly PrComment[]
       x.version !== y.version ||
       x.canEdit !== y.canEdit ||
       x.canDelete !== y.canDelete ||
+      !sameReactions(x.reactions, y.reactions) ||
       !sameCommentList(x.replies, y.replies)
     ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** 反应数组相等比较（emoji + count + mine 三元组逐项一致）：让 toggle 后的反应变化能触发重渲染。 */
+function sameReactions(a: PrComment['reactions'], b: PrComment['reactions']): boolean {
+  const x = a ?? [];
+  const y = b ?? [];
+  if (x.length !== y.length) return false;
+  for (let i = 0; i < x.length; i++) {
+    if (x[i]!.emoji !== y[i]!.emoji || x[i]!.count !== y[i]!.count || x[i]!.mine !== y[i]!.mine) {
       return false;
     }
   }
@@ -64,6 +79,7 @@ export function CommentItem({
   depth,
   autoExpandCode = false,
   hardBreaks,
+  reactionsEnabled = false,
   timeline = false,
   readOnly = false,
   onJumpToAnchor,
@@ -74,6 +90,8 @@ export function CommentItem({
   /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
   autoExpandCode?: boolean;
   hardBreaks: boolean;
+  /** 平台是否支持评论 emoji 反应（capabilities.commentReactions）；为真才渲染反应条。 */
+  reactionsEnabled?: boolean;
   /** 是否处于活动时间线模式（仅影响顶层评论版式，见上方说明） */
   timeline?: boolean;
   /** 内容只读（decline / 不可参与归档 PR）：隐藏回复 / 编辑 / 删除操作，仅供浏览。 */
@@ -207,6 +225,12 @@ export function CommentItem({
     </div>
   ) : null;
 
+  // 反应条：平台支持时渲染在正文下方；编辑态隐藏（避免与编辑器拥挤）。readOnly 下 ReactionBar 自身降级为只读展示。
+  const reactionsEl =
+    reactionsEnabled && !editOpen ? (
+      <ReactionBar prLocalId={pr.localId} comment={comment} readOnly={readOnly} />
+    ) : null;
+
   const replyEditor = replyOpen ? (
     <CommentReplyEditor
       prLocalId={pr.localId}
@@ -231,6 +255,7 @@ export function CommentItem({
             pr={pr}
             depth={depth + 1}
             hardBreaks={hardBreaks}
+            reactionsEnabled={reactionsEnabled}
             readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
           />
@@ -281,6 +306,7 @@ export function CommentItem({
         <div className="pr-comment-card">
           {inlineCode}
           {bodyOrEdit}
+          {reactionsEl}
           {foot}
           {deleteErrorEl}
           {replyEditor}
@@ -313,6 +339,7 @@ export function CommentItem({
       </div>
       {inlineCode}
       {bodyOrEdit}
+      {reactionsEl}
       {foot}
       {deleteErrorEl}
       {replyEditor}

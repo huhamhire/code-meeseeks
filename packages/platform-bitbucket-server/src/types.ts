@@ -58,6 +58,18 @@ export interface BitbucketMergeStatus {
   vetoes?: Array<{ summaryMessage: string; detailedMessage?: string }>;
 }
 
+/**
+ * Bitbucket 评论上一种 emoji 反应（comment-likes 插件经评论 `properties.reactions` 注入）。
+ *
+ * 注意：该读取形状**未在官方 REST 文档中明确**，字段按实际实例响应推定、故全部可选并容错解析。
+ * `emoticon.value` 若为 Unicode 字符则直接用作展示 key（绕开 shortcut 名映射）；否则回退 shortcut。
+ */
+export interface BitbucketReactionProperty {
+  emoticon?: { shortcut?: string; value?: string };
+  count?: number;
+  users?: BitbucketUser[];
+}
+
 export interface BitbucketComment {
   id: number;
   version: number;
@@ -67,6 +79,8 @@ export interface BitbucketComment {
   updatedDate: number;
   comments?: BitbucketComment[];
   parent?: { id: number };
+  /** 反应等扩展属性（comment-likes 插件注入 `reactions`）。形状未文档化，容错读取。 */
+  properties?: { reactions?: BitbucketReactionProperty[] };
 }
 
 export interface BitbucketCommentAnchor {

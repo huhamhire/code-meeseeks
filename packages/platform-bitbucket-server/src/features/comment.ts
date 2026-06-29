@@ -1,8 +1,34 @@
-import type { PrComment, PrCommentAnchor, RepoRef } from '@meebox/shared';
+import type { PrComment, PrCommentAnchor, PrReaction, RepoRef } from '@meebox/shared';
 import { BaseCommentService, type ConnectionContext } from '@meebox/platform-core';
 import type { BitbucketClient } from '../client.js';
 import { mapUser } from '../utils.js';
-import type { BitbucketActivity, BitbucketComment, BitbucketCommentAnchor } from '../types.js';
+import type {
+  BitbucketActivity,
+  BitbucketComment,
+  BitbucketCommentAnchor,
+  BitbucketReactionProperty,
+} from '../types.js';
+
+/**
+ * 规范化 emoji ↔ Bitbucket emoticon shortcut（写反应的 URL 段）。
+ *
+ * ⚠️ Bitbucket 的 emoticon shortcut 命名既不规范也未文档化（社区实测 `smile` / `laughing` /
+ * `heart` 等，无完整清单）；下表为**最佳推定**，需对接真实实例校正（react 一次后 GET 评论看
+ * `properties.reactions[].emoticon.shortcut`）。**读取展示**优先用 `emoticon.value`（Unicode），
+ * 故下表主要服务**写入**（toggle）；写入用到错误 shortcut 时仅该 emoji 失败，不影响其余。
+ */
+const BB_REACTIONS: ReadonlyArray<readonly [string, string]> = [
+  ['👍', 'thumbsup'],
+  ['👎', 'thumbsdown'],
+  ['😄', 'smile'],
+  ['🎉', 'tada'],
+  ['😕', 'confused'],
+  ['❤️', 'heart'],
+  ['🚀', 'rocket'],
+  ['👀', 'eyes'],
+];
+const BB_SHORTCUT_BY_EMOJI = new Map(BB_REACTIONS.map(([emoji, sc]) => [emoji, sc]));
+const BB_EMOJI_BY_SHORTCUT = new Map(BB_REACTIONS.map(([emoji, sc]) => [sc, emoji]));
 
 /** Bitbucket 评论领域：经 /activities 流归一评论树，发布 / 回复 / 删改走 comments 端点（带乐观锁）。 */
 export class BitbucketCommentService extends BaseCommentService {
@@ -120,6 +146,25 @@ export class BitbucketCommentService extends BaseCommentService {
     );
   }
 
+  /**
+   * 切换当前用户对评论的 emoji 反应（comment-likes 插件）：add=PUT、remove=DELETE 同一 reactions 端点。
+   * 端点幂等（重复 PUT / 不存在时 DELETE 均 200），故无需先查状态。
+   */
+  override async toggleReaction(
+    repo: RepoRef,
+    prId: string,
+    commentId: string,
+    _kind: 'summary' | 'inline',
+    emoji: string,
+    add: boolean,
+  ): Promise<void> {
+    const shortcut = BB_SHORTCUT_BY_EMOJI.get(emoji);
+    if (!shortcut) throw new Error(`Unsupported reaction emoji: ${emoji}`);
+    const url = `/rest/comment-likes/latest/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}/comments/${commentId}/reactions/${shortcut}`;
+    if (add) await this.client.put(url, {});
+    else await this.client.del(url);
+  }
+
   // ---- 映射（领域私有）----
 
   /**
@@ -136,8 +181,34 @@ export class BitbucketCommentService extends BaseCommentService {
       updatedAt: new Date(c.updatedDate).toISOString(),
       anchor: anchor ? this.mapBitbucketAnchor(anchor) : null,
       replies: (c.comments ?? []).map((r) => this.mapBitbucketComment(r)),
+      reactions: this.mapReactions(c.properties?.reactions),
       version: c.version,
     };
+  }
+
+  /**
+   * Bitbucket `properties.reactions` → 中性 PrReaction[]（容错：形状未文档化）。
+   *
+   * 展示 emoji 优先取 `emoticon.value`（Unicode），否则按 shortcut 查映射；都缺则跳过该项。
+   * `mine` 按 `users[]` 是否含当前用户（slug / name 任一匹配）判定；count 取字段值或 users 长度兜底。
+   */
+  private mapReactions(reactions: BitbucketReactionProperty[] | undefined): PrReaction[] {
+    if (!reactions || reactions.length === 0) return [];
+    const me = this.ctx.getCurrentUser();
+    const out: PrReaction[] = [];
+    for (const r of reactions) {
+      const value = r.emoticon?.value;
+      const emoji =
+        value && !/^:.*:$/.test(value)
+          ? value
+          : BB_EMOJI_BY_SHORTCUT.get(r.emoticon?.shortcut ?? '');
+      if (!emoji) continue;
+      const users = r.users ?? [];
+      const mine =
+        me != null && users.some((u) => u.slug === me.slug || u.name === me.name);
+      out.push({ emoji, count: r.count ?? users.length, mine });
+    }
+    return out;
   }
 
   /**

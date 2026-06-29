@@ -25,6 +25,7 @@ export class GitHubConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: false,
+      commentReactions: true,
       commentHardBreaks: true,
       mergeVetoFidelity: 'partial',
       discoveryRateLimited: true,

@@ -84,6 +84,13 @@ export interface GlDiscussion {
   notes: GlNote[];
 }
 
+/** GitLab note 上的一条 award emoji（反应）。`name` 为 GitLab emoji 名（如 `thumbsup`）。 */
+export interface GlAwardEmoji {
+  id: number;
+  name: string;
+  user: GlUser;
+}
+
 export interface GlMetadata {
   version: string;
   enterprise?: boolean;

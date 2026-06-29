@@ -91,6 +91,8 @@ export function ActivityPanel({
 }: ActivityPanelProps) {
   // 评论换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
+  // 评论 emoji 反应：平台支持时在评论下渲染反应条 + 选择器。缺省（capabilities 未到）保守关闭。
+  const reactionsEnabled = capabilities?.commentReactions ?? false;
   // 差异化：GitHub/Bitbucket 渲染评论+提交+决断的活动时间线；GitLab（activityTimeline=false）退化为
   // 纯评论视图（不拉提交/决断、沿用「评论」文案）。缺省（capabilities 未到）保守按纯评论。
   const showTimeline = capabilities?.activityTimeline ?? false;
@@ -183,6 +185,7 @@ export function ActivityPanel({
             depth={0}
             autoExpandCode={autoExpandSet.has(c.remoteId)}
             hardBreaks={hardBreaks}
+            reactionsEnabled={reactionsEnabled}
             timeline={showTimeline}
             readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
@@ -209,7 +212,17 @@ export function ActivityPanel({
     // newest first；稳定排序下同刻条目按 评论→提交→决断 入队序排列
     rows.sort((a, b) => b.at - a.at);
     return rows.map((r) => r.node);
-  }, [view, viewPr, autoExpandSet, hardBreaks, showTimeline, readOnly, onViewCommit, onJumpToAnchor]);
+  }, [
+    view,
+    viewPr,
+    autoExpandSet,
+    hardBreaks,
+    reactionsEnabled,
+    showTimeline,
+    readOnly,
+    onViewCommit,
+    onJumpToAnchor,
+  ]);
 
   // 首载失败 / 切 PR 失败（无可信展示内容，或现有 view 属于旧 PR）：整块错误，不拿旧 PR 内容冒充新的。
   if (error && (!view || view.pr.localId !== pr.localId)) {

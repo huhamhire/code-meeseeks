@@ -208,6 +208,29 @@ export interface PrCommit {
   url?: string;
 }
 
+/**
+ * 评论上一种 emoji 反应的聚合（跨平台中性）。各平台原生反应标识不一（GitHub 固定 8 种
+ * content、GitLab award_emoji 名、Bitbucket emoticon shortname），统一归一为 **Unicode emoji
+ * 字符**作 key —— UI 直接渲染、跨平台一致。原生名 ↔ emoji 的映射由各平台 adapter 私有持有
+ * （它最了解自己的 API），shared 只认 emoji 字符 + {@link REACTION_PICKER} 候选集。
+ */
+export interface PrReaction {
+  /** 规范化 Unicode emoji 字符（如 `👍`）。 */
+  emoji: string;
+  /** 该 emoji 的反应总数。 */
+  count: number;
+  /** 当前 PAT 用户是否已用该 emoji 反应（决定 UI 高亮 + 点击切换方向）。 */
+  mine: boolean;
+}
+
+/**
+ * 评论反应选择器的候选 emoji（展示顺序即此序）。取 GitHub 固定的 8 种—— 它是三家的最小公共集
+ * （GitHub 仅支持这 8 种），故 picker 用它即可跨平台一致落地。各 adapter 负责把这些字符翻成自家
+ * 原生名；GitLab / Bitbucket 用户经 web 用集外 emoji 反应的，仍按字符**显示**（best-effort），
+ * 仅 picker 不提供。扩展时在此追加 + 三个 adapter 的映射表同步加一行即可（后向扩展点）。
+ */
+export const REACTION_PICKER = ['👍', '👎', '😄', '🎉', '😕', '❤️', '🚀', '👀'] as const;
+
 export interface PrComment {
   remoteId: string;
   author: PlatformUser;
@@ -256,6 +279,11 @@ export interface PrComment {
   threadId?: string;
   /** 平台原生 id（回写 / 幂等用，与 remoteId 同源但语义独立保留扩展空间）。 */
   nativeId?: string;
+  /**
+   * 评论上的 emoji 反应聚合（见 {@link PrReaction}）。平台不支持 / 该评论无反应时省略或为空数组。
+   * 仅平台 `commentReactions` 能力为真时填充；renderer 据此在评论气泡下渲染反应条。
+   */
+  reactions?: PrReaction[];
 }
 
 /**
@@ -313,6 +341,13 @@ export interface PlatformCapabilities {
   inlineMultiline: boolean;
   /** 评论删改是否需要 version 乐观锁（仅 Bitbucket） */
   commentOptimisticLock: boolean;
+  /**
+   * 评论是否支持 emoji 反应（GitHub Reactions / GitLab Award Emoji / Bitbucket 7.x+ 反应）。
+   * 为真则 UI 在评论气泡下渲染反应条 + 提供 {@link REACTION_PICKER} 选择器；为假整块隐藏。
+   * 这是一个简单布尔——picker 用统一的固定候选集（GitHub 最小公共集），故无需按平台带可选集，
+   * 各 adapter 自行把候选 emoji 翻成原生名；将来若要按平台开放更大集，可平滑升级为对象描述符。
+   */
+  commentReactions: boolean;
   /**
    * 评论正文单换行是否按 hard-break 渲染（单 `\n` → `<br>`）。GitHub / Bitbucket 评论上下文
    * 是（`true`）；GitLab 走标准 CommonMark（单 `\n` 作软换行 = 空格，`false`）。renderer 据此
