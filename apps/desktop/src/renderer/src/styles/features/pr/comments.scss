@@ -193,29 +193,30 @@
 .pr-reaction-add {
   display: inline-flex;
   align-items: center;
-  padding: 1px $space-3;
-  font-size: $fs-sm;
+  justify-content: center;
+  padding: 2px $space-3;
   background: transparent;
   border: 1px solid $border-default;
   border-radius: $radius-pill;
   color: $text-muted;
   cursor: pointer;
+  // SVG 图标基线规整，line-height:0 去掉行盒带来的额外高度，确保与相邻文字按钮垂直居中。
+  line-height: 0;
+  // hover 配色对齐相邻的评论操作按钮（编辑/回复）：用 info 色系，避免与 accent 色系混用。
   &:hover:not(:disabled) {
-    border-color: $color-accent;
-    color: $color-accent;
+    border-color: $color-info;
+    color: $color-info;
     background: $bg-hover;
   }
 }
-.pr-reaction-add-plus {
-  font-size: $fs-xs;
-  margin-left: 1px;
+// 候选浮层经 portal 渲染到 body、fixed 定位（坐标由 JS 按触发按钮位置 + 视口空间自适应算出，
+// 上下翻转、视口夹取），从而不被评论滚动容器裁切、也不与其它层级 z-index 干涉。
+.pr-reaction-portal {
+  position: fixed;
+  z-index: 1000;
 }
-// 候选行：就地弹出（非绝对定位浮层），避免被滚动容器 / 时间线裁切。
+// 候选面板外观（定位交给 .pr-reaction-portal）。fixed 模式为单行 8 键；free 模式为搜索框 + 网格。
 .pr-reaction-picker {
-  position: absolute;
-  bottom: calc(100% + #{$space-2});
-  left: 0;
-  z-index: 5;
   display: flex;
   gap: $space-1;
   padding: $space-2;
@@ -223,6 +224,37 @@
   border: 1px solid $border-default;
   border-radius: $radius-lg;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.pr-reaction-picker-free {
+  flex-direction: column;
+  gap: $space-2;
+  width: 244px;
+}
+.pr-reaction-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: $space-2 $space-3;
+  font-size: $fs-sm;
+  background: $bg-app;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-body;
+  &:focus {
+    outline: none;
+    border-color: $color-accent;
+  }
+}
+.pr-reaction-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: $space-1;
+  max-height: 168px;
+  overflow-y: auto;
+}
+.pr-reaction-empty {
+  padding: $space-3 0;
+  font-size: $fs-sm;
+  text-align: center;
 }
 .pr-reaction-pick {
   padding: $space-1 $space-2;

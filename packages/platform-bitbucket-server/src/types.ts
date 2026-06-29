@@ -61,12 +61,12 @@ export interface BitbucketMergeStatus {
 /**
  * Bitbucket 评论上一种 emoji 反应（comment-likes 插件经评论 `properties.reactions` 注入）。
  *
- * 注意：该读取形状**未在官方 REST 文档中明确**，字段按实际实例响应推定、故全部可选并容错解析。
- * `emoticon.value` 若为 Unicode 字符则直接用作展示 key（绕开 shortcut 名映射）；否则回退 shortcut。
+ * 形状按真实实例响应核定（官方 REST 文档未明确）：`emoticon` 给 `shortcut`（如 `eyes`）+ `url`
+ * （twemoji SVG，文件名即 Unicode 码点如 `1f440.svg`）；`users[]` 为反应者列表；**无 `count` 字段**
+ * （计数取 `users.length`）。展示 emoji 优先从 `url` 解码点，回退 shortcut 名映射。字段仍标可选容错。
  */
 export interface BitbucketReactionProperty {
-  emoticon?: { shortcut?: string; value?: string };
-  count?: number;
+  emoticon?: { shortcut?: string; url?: string };
   users?: BitbucketUser[];
 }
 

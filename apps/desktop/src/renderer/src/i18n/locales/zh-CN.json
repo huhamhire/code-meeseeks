@@ -663,8 +663,10 @@
   },
   "reactions": {
     "addTitle": "用 {{emoji}} 回应",
+    "noMatch": "未找到表情",
     "pickTitle": "添加回应",
-    "removeTitle": "取消 {{emoji}}"
+    "removeTitle": "取消 {{emoji}}",
+    "searchPlaceholder": "搜索表情…"
   },
   "settings": {
     "aboutFeedback": "关于 & 反馈",

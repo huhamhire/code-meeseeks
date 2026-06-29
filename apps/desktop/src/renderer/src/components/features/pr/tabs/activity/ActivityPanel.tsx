@@ -92,8 +92,8 @@ export function ActivityPanel({
 }: ActivityPanelProps) {
   // 评论换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
-  // 评论 emoji 反应：平台支持时在评论下渲染反应条 + 选择器。缺省（capabilities 未到）保守关闭。
-  const reactionsEnabled = capabilities?.commentReactions ?? false;
+  // 评论 emoji 反应模式：'fixed'（GitHub 8 种）/ 'free'（GitLab/Bitbucket 精选集+搜索）；false/缺省 = 关闭。
+  const reactionsMode = capabilities?.commentReactions || undefined;
   // 图片附件上传：平台支持时启用评论粘贴上传。缺省保守关闭（GitHub 无上传 API 亦为 false）。
   const attachmentsEnabled = capabilities?.commentAttachments ?? false;
   // 差异化：GitHub/Bitbucket 渲染评论+提交+决断的活动时间线；GitLab（activityTimeline=false）退化为
@@ -195,7 +195,7 @@ export function ActivityPanel({
             depth={0}
             autoExpandCode={autoExpandSet.has(c.remoteId)}
             hardBreaks={hardBreaks}
-            reactionsEnabled={reactionsEnabled}
+            reactionsMode={reactionsMode}
             mentionCandidates={mentionCandidates}
             attachmentsEnabled={attachmentsEnabled}
             timeline={showTimeline}
@@ -229,7 +229,7 @@ export function ActivityPanel({
     viewPr,
     autoExpandSet,
     hardBreaks,
-    reactionsEnabled,
+    reactionsMode,
     mentionCandidates,
     attachmentsEnabled,
     showTimeline,

@@ -62,7 +62,7 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
           <div className="pr-item-meta-row">
             <span className="pr-item-meta-author">
               <PersonIcon />
-              {pr.author.displayName}
+              <span className="pr-item-meta-text">{pr.author.displayName}</span>
             </span>
             {(approvedCount > 0 ||
               needsWorkCount > 0 ||
@@ -120,7 +120,9 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
           <div className="pr-item-meta-row">
             <span className="pr-item-meta-branch">
               <PullRequestIcon />
-              {pr.sourceRef.displayId} → {pr.targetRef.displayId}
+              <span className="pr-item-meta-text">
+                {pr.sourceRef.displayId} → {pr.targetRef.displayId}
+              </span>
             </span>
           </div>
         </div>

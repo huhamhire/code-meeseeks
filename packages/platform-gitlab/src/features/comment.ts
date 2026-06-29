@@ -1,22 +1,15 @@
-import type { PrComment, PrCommentAnchor, PrReaction, RepoRef } from '@meebox/shared';
+import {
+  emojiToReactionCode,
+  reactionCodeToEmoji,
+  type PrComment,
+  type PrCommentAnchor,
+  type PrReaction,
+  type RepoRef,
+} from '@meebox/shared';
 import { BaseCommentService, collect, type ConnectionContext } from '@meebox/platform-core';
 import { GitLabClientError, type GitLabClient } from '../client.js';
 import { mapUser, projectId } from '../utils.js';
 import type { GlAwardEmoji, GlDiscussion, GlMr, GlNote } from '../types.js';
-
-/** GitLab award emoji 名 ↔ 规范化 emoji 字符（与 REACTION_PICKER 同序）。 */
-const GL_AWARDS: ReadonlyArray<readonly [string, string]> = [
-  ['thumbsup', '👍'],
-  ['thumbsdown', '👎'],
-  ['smile', '😄'],
-  ['tada', '🎉'],
-  ['confused', '😕'],
-  ['heart', '❤️'],
-  ['rocket', '🚀'],
-  ['eyes', '👀'],
-];
-const GL_EMOJI_BY_NAME = new Map(GL_AWARDS.map(([name, emoji]) => [name, emoji]));
-const GL_NAME_BY_EMOJI = new Map(GL_AWARDS.map(([name, emoji]) => [emoji, name]));
 
 /** GitLab 评论领域：discussions + notes 归一为统一评论树（首 note 顶层、其余 reply）。 */
 export class GitLabCommentService extends BaseCommentService {
@@ -87,7 +80,7 @@ export class GitLabCommentService extends BaseCommentService {
     emoji: string,
     add: boolean,
   ): Promise<void> {
-    const name = GL_NAME_BY_EMOJI.get(emoji);
+    const name = emojiToReactionCode(emoji);
     if (!name) throw new Error(`Unsupported reaction emoji: ${emoji}`);
     const awardBase = `/projects/${projectId(repo)}/merge_requests/${prId}/notes/${commentId}/award_emoji`;
     if (add) {
@@ -106,20 +99,20 @@ export class GitLabCommentService extends BaseCommentService {
     await this.client.del(`${awardBase}/${mineOne.id}`);
   }
 
-  /** GitLab award 列表 + 当前用户名 → 中性 PrReaction[]（按固定 8 序聚合；集外 emoji 名跳过显示）。 */
+  /** GitLab award 列表 + 当前用户名 → 中性 PrReaction[]（按首次出现序聚合；集外 emoji 名跳过显示）。 */
   private buildReactions(awards: GlAwardEmoji[] | undefined, me: string | undefined): PrReaction[] {
     if (!awards || awards.length === 0) return [];
     const byEmoji = new Map<string, PrReaction>();
     for (const a of awards) {
-      const emoji = GL_EMOJI_BY_NAME.get(a.name);
-      if (!emoji) continue; // 候选集外（web 端用的其它 emoji）→ 暂不显示
+      const emoji = reactionCodeToEmoji(a.name);
+      if (!emoji) continue; // gemoji 词表外的 award 名 → 暂不显示（best-effort）
       const r = byEmoji.get(emoji) ?? { emoji, count: 0, mine: false };
       r.count += 1;
       if (me != null && a.user.username === me) r.mine = true;
       byEmoji.set(emoji, r);
     }
-    // 按 REACTION_PICKER 顺序输出
-    return GL_AWARDS.map(([, emoji]) => byEmoji.get(emoji)).filter((r): r is PrReaction => !!r);
+    // Map 保留首次插入序（≈ award 出现序），直接输出。
+    return [...byEmoji.values()];
   }
 
   /**

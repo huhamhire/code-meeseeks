@@ -12,7 +12,7 @@ import {
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { CommentMarkdown } from '../shared/CommentMarkdown';
-import { ReactionBar } from '../shared/ReactionBar';
+import { ReactionAddButton, ReactionChips, useReactions } from '../shared/ReactionBar';
 import { useCommentThread } from '../shared/useCommentThread';
 // 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
 const InlineCodeContext = lazy(() =>
@@ -79,7 +79,7 @@ export function CommentItem({
   depth,
   autoExpandCode = false,
   hardBreaks,
-  reactionsEnabled = false,
+  reactionsMode,
   mentionCandidates,
   attachmentsEnabled = false,
   timeline = false,
@@ -92,8 +92,8 @@ export function CommentItem({
   /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
   autoExpandCode?: boolean;
   hardBreaks: boolean;
-  /** 平台是否支持评论 emoji 反应（capabilities.commentReactions）；为真才渲染反应条。 */
-  reactionsEnabled?: boolean;
+  /** 评论 emoji 反应模式（capabilities.commentReactions）：'fixed'/'free' 才渲染；缺省 = 不支持。 */
+  reactionsMode?: 'fixed' | 'free';
   /** `@提及` 自动补全候选（PR 参与者 + 评论作者）；透传给回复编辑框。 */
   mentionCandidates?: PlatformUser[];
   /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给回复编辑框启用粘贴上传。 */
@@ -126,6 +126,13 @@ export function CommentItem({
     canDelete,
     handleDelete,
   } = useCommentThread(pr.localId, comment);
+
+  // 反应状态 + 切换（hook 无条件调用；输出仅在 reactionsMode 存在时渲染）。
+  const { reactions, busy: reactionBusy, toggle: toggleReaction } = useReactions(
+    pr.localId,
+    comment,
+    readOnly,
+  );
 
   // inline 评论锚点 chip：path:line + 侧别 (old=base / new=head)，让用户在评论里定位到代码位置。
   // 提供 onJumpToAnchor 时（活动视图）chip 变可点击 → 跳到 Diff 对应文件/行。
@@ -213,6 +220,15 @@ export function CommentItem({
           {deleting ? t('commentsPanel.deleting') : t('common.delete')}
         </button>
       )}
+      {/* 「加反应」按钮放在操作按钮之后；回复编辑态下隐藏避免拥挤 */}
+      {reactionsMode && !replyOpen && (
+        <ReactionAddButton
+          reactions={reactions}
+          busy={reactionBusy}
+          mode={reactionsMode}
+          onToggle={toggleReaction}
+        />
+      )}
     </div>
   ) : null;
 
@@ -231,10 +247,15 @@ export function CommentItem({
     </div>
   ) : null;
 
-  // 反应条：平台支持时渲染在正文下方；编辑态隐藏（避免与编辑器拥挤）。readOnly 下 ReactionBar 自身降级为只读展示。
-  const reactionsEl =
-    reactionsEnabled && !editOpen ? (
-      <ReactionBar prLocalId={pr.localId} comment={comment} readOnly={readOnly} />
+  // 已有反应：单独成行，渲染在操作按钮行下方（编辑态隐藏）。readOnly 下只展示、不可切换。
+  const reactionChipsEl =
+    reactionsMode && !editOpen ? (
+      <ReactionChips
+        reactions={reactions}
+        busy={reactionBusy}
+        readOnly={readOnly}
+        onToggle={toggleReaction}
+      />
     ) : null;
 
   const replyEditor = replyOpen ? (
@@ -263,7 +284,7 @@ export function CommentItem({
             pr={pr}
             depth={depth + 1}
             hardBreaks={hardBreaks}
-            reactionsEnabled={reactionsEnabled}
+            reactionsMode={reactionsMode}
             mentionCandidates={mentionCandidates}
             attachmentsEnabled={attachmentsEnabled}
             readOnly={readOnly}
@@ -316,8 +337,8 @@ export function CommentItem({
         <div className="pr-comment-card">
           {inlineCode}
           {bodyOrEdit}
-          {reactionsEl}
           {foot}
+          {reactionChipsEl}
           {deleteErrorEl}
           {replyEditor}
           {repliesEl}
@@ -349,8 +370,8 @@ export function CommentItem({
       </div>
       {inlineCode}
       {bodyOrEdit}
-      {reactionsEl}
       {foot}
+      {reactionChipsEl}
       {deleteErrorEl}
       {replyEditor}
       {repliesEl}

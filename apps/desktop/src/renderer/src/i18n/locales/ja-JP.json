@@ -663,8 +663,10 @@
   },
   "reactions": {
     "addTitle": "{{emoji}} でリアクション",
+    "noMatch": "絵文字が見つかりません",
     "pickTitle": "リアクションを追加",
-    "removeTitle": "{{emoji}} を取り消す"
+    "removeTitle": "{{emoji}} を取り消す",
+    "searchPlaceholder": "絵文字を検索…"
   },
   "settings": {
     "aboutFeedback": "情報 & フィードバック",

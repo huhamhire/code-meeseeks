@@ -25,7 +25,8 @@ export class GitHubConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: false,
-      commentReactions: true,
+      // GitHub Reactions API 仅固定 8 种 → fixed。
+      commentReactions: 'fixed',
       // GitHub 无公开评论附件上传 API（web 端走未文档化的私有端点）→ 关闭，UI 隐藏粘贴上传。
       commentAttachments: false,
       commentHardBreaks: true,

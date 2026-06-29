@@ -679,8 +679,10 @@
   },
   "reactions": {
     "addTitle": "Mit {{emoji}} reagieren",
+    "noMatch": "Kein Emoji gefunden",
     "pickTitle": "Reaktion hinzufügen",
-    "removeTitle": "{{emoji}} entfernen"
+    "removeTitle": "{{emoji}} entfernen",
+    "searchPlaceholder": "Emoji suchen…"
   },
   "settings": {
     "aboutFeedback": "Info & Feedback",
