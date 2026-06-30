@@ -1,0 +1,5 @@
+# Build output
+/bin/
+/dist/
+/meebox
+/meebox.exe
