@@ -37,11 +37,12 @@
 
 ## 数据 / 接口契约
 
-- `Finding`：`title` / `body` / `anchor{path,startLine?,endLine?}` / `sectionKey` / 状态机字段
-  （`severity` / `status` / `draft_body` / `posted_remote_id`）。
-- `ReviewRun`：`tool` / `status` / `model` / `findings[]` / `tokenUsage{promptTokens,completionTokens,totalTokens,calls}` /
-  `stdout`(LLM 产出 + 日志) / `summary` / 计时与错误字段。
-- 评审 run 持久化于 per-PR 目录（见 [03](03-state-storage.md)）。
+仅列承载设计含义的关键字段，完整字段见各类型定义：
+
+| 实体 | 用途 | 关键字段 |
+| --- | --- | --- |
+| `Finding` | 单条评审发现（草稿 / 发布的最小单元） | `anchor{path,startLine?,endLine?}`（行内锚点）· `sectionKey`（归类）· 状态机 `severity` / `status` / `draft_body` / `posted_remote_id`（幂等发布凭据） |
+| `ReviewRun` | 一次评审会话（持久化于 per-PR 目录，见 [03](03-state-storage.md)） | `tool` · `status` · `model` · `findings[]` · `tokenUsage{promptTokens,completionTokens,totalTokens,calls}` · `summary` |
 
 ## 扩展与注意事项
 

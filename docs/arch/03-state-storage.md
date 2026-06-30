@@ -10,6 +10,8 @@
 
 ## 核心设计
 
+### 存储模型
+
 - **JSON 文件 + `StateStore` 抽象**：`read/write/delete/deleteDir/list`。一期实现 `JsonFileStateStore`，
   每个 key 一个文件（相对 `state/` 根）。**原子写**：tmp → fsync → rename，避免崩溃留半截文件。
   单写者（Main 进程独占），无文件锁。所有文件带 `schema_version`。
@@ -45,6 +47,38 @@
   - 另有 `connections.json` / `watched-repos.json` / `posted-comments.json`（横向幂等记录，与 PR 目录解耦）。
 - **评论缓存按 PR `updatedAt` 失效**：`comments.json` 存写入时的 `pr_updated_at`；与当前 PR meta 的 `updatedAt`
   不一致即 stale → 重拉。Bitbucket 任何 PR 变更都跳 `updatedAt`，是足够保险的 cache key。
+- **安全 invariant**：
+  - **拉取失败不动本地**：某连接 `listPendingPullRequests` 抛错 → 不写其名下 PR、不软删、不剔索引；
+    全失败则索引零写入、mtime 不变（避免误触 watcher/备份）。poll 是唯一权威，远端是最终 truth。
+  - **路径越界屏障**：所有 fs 操作过 `subpathInside` 检查（拒 `..` / 绝对路径 / 清空根），因为 key 由调用方
+    拼接（含 PR localId / runId），必须防未净化输入越界读写。
+- **读宽容、写幂等**：状态文件被外部删/坏时，读返回 null/skip、下一轮 poll 重建；不做启动 reconcile / 自动备份。
+- **启动清扫孤儿 tmp**：原子写「tmp → rename」中，进程在两步之间被强杀 / 退出（如关窗瞬间的 in-flight 异步写）会留下 `*.tmp`
+  孤儿、跨会话累积。`sweepStaleTmpFiles` 在启动早期、任何写入之前删掉全部 `*.tmp`——单写者前提下此刻无 in-flight 写，凡 tmp 皆为
+  上次会话孤儿，可放心删；**绝不在运行期清扫**，以免误删并发写 / rename 重试正在用的 tmp（冲突场景不误删多余文件）。
+- **启动清扫归档孤儿**：按索引遍历的硬清够不到「索引丢失 / 重建后失去条目」的归档数据（poll 只从远端补回活跃 PR），
+  会在 `archived/prs/` 永久滞留。`sweepOrphanedArchivedPrs`（启动期、写入前）以无索引方式兜底：walk `archived/prs/*`，
+  对「统一索引无对应条目 **且** 目录 mtime 超 grace」的整树删掉（mtime 作 archivedAt 的代理）。双重保守避免误删暂时
+  不在索引里的目录；机制为 `JsonFileStateStore.sweepOrphanDirs`。**正常清理仍走统一索引的到期硬清，此处仅补索引丢失的缺口。**
+
+### 业务生命周期
+
+PR 在存储中的**在场状态**随其远端生命周期流转——由 `index.json` 的 `archivedAt` 是否为空界定（空 = 活跃存储 / 非空 = 归档冷存储），跨存储迁移一律经 `relocateTree`（先清空目的、源末删、幂等可重来）：
+
+```mermaid
+stateDiagram-v2
+  state "活跃存储 state/" as Active
+  state "归档冷存储 archived/" as Archived
+  [*] --> Active: poll 发现（待评审 / 我创建）
+  [*] --> Archived: 按 URL 打开（直接入归档）
+  Active --> Archived: 退场软删（merged / declined / 非 reviewer）
+  Archived --> Active: 远端复现 → 复活
+  Archived --> [*]: grace 期满 → 两端整树清除
+  note right of Archived
+    对账每轮收敛：凡 archivedAt 非空必在 archived/
+  end note
+```
+
 - **软删 + 1 周 grace + 冷存储搬迁**：PR 从远端 reviewer 列表消失（merged/declined/不再是 reviewer）→ 把整树搬入
   `archived/` 冷存储、再标 `archivedAt`（搬迁先于索引落盘，崩溃可幂等重来），不立即删盘；窗口内 UI 隐藏但数据保留，
   远端复现时整树搬回活跃存储、自动复活；grace 期满下轮 poll 从**归档 + 活跃两端**整目录清掉（两端清以兜旧布局 /
@@ -66,31 +100,24 @@
   按时间降序留最近 10 条）。`listStoredPullRequests` 据此派生 `StoredPullRequest.unreadMentionCount`（不持久化）：数其中晚于
   `read-state.lastReadAt` 的条数（从未打开过则全计）。与 `unread` **并存、互不替代**——计数封顶 10（UI 满额显示「10+」），UI 在有计数时
   以数字标记替换未读圆点、否则仍显示圆点。同属 poll 独占维护、与已读水位解耦。
-- **安全 invariant**：
-  - **拉取失败不动本地**：某连接 `listPendingPullRequests` 抛错 → 不写其名下 PR、不软删、不剔索引；
-    全失败则索引零写入、mtime 不变（避免误触 watcher/备份）。poll 是唯一权威，远端是最终 truth。
-  - **路径越界屏障**：所有 fs 操作过 `subpathInside` 检查（拒 `..` / 绝对路径 / 清空根），因为 key 由调用方
-    拼接（含 PR localId / runId），必须防未净化输入越界读写。
-- **读宽容、写幂等**：状态文件被外部删/坏时，读返回 null/skip、下一轮 poll 重建；不做启动 reconcile / 自动备份。
-- **启动清扫孤儿 tmp**：原子写「tmp → rename」中，进程在两步之间被强杀 / 退出（如关窗瞬间的 in-flight 异步写）会留下 `*.tmp`
-  孤儿、跨会话累积。`sweepStaleTmpFiles` 在启动早期、任何写入之前删掉全部 `*.tmp`——单写者前提下此刻无 in-flight 写，凡 tmp 皆为
-  上次会话孤儿，可放心删；**绝不在运行期清扫**，以免误删并发写 / rename 重试正在用的 tmp（冲突场景不误删多余文件）。
-- **启动清扫归档孤儿**：按索引遍历的硬清够不到「索引丢失 / 重建后失去条目」的归档数据（poll 只从远端补回活跃 PR），
-  会在 `archived/prs/` 永久滞留。`sweepOrphanedArchivedPrs`（启动期、写入前）以无索引方式兜底：walk `archived/prs/*`，
-  对「统一索引无对应条目 **且** 目录 mtime 超 grace」的整树删掉（mtime 作 archivedAt 的代理）。双重保守避免误删暂时
-  不在索引里的目录；机制为 `JsonFileStateStore.sweepOrphanDirs`。**正常清理仍走统一索引的到期硬清，此处仅补索引丢失的缺口。**
 
 ## 数据 / 接口契约
 
-- `StateStore`：`read<T>(key)` / `write<T>(key,data)` / `delete(key)` / `deleteDir(prefix)` / `list(prefix)`。
-- `relocateTree(from, to, prefix)`：跨 store 整树搬迁（list→read→write→deleteDir），用于活跃⇄归档存储间搬 PR 子树。
-  目标先清空（源为权威）、源末删（幂等 / 崩溃可重来）、源缺失即 no-op；不破 `StateStore` 抽象、无需暴露文件系统根。
-- `PrIndexEntry`：`identity`(PrIdentity) / `updatedAt` / `discoveredAt` / `lastSeenAt` / `archivedAt|null` /
-  mention 游标 `lastMentionAt?` / mention 时间戳列表 `mentionAts?`（最近 10 条，未读计数据此派生）。
-- `PrReadStateFile`（`read-state.json`）：`lastReadHeadSha` / `lastReadAt`（用户已读水位）。
-- `StoredPullRequest`：完整 PR 元数据 + `platform`（自描述）。
-- `ReviewRun`：见 [05](05-review-workflow.md)（含 `findings` / `tokenUsage` / `model` / 状态机字段）。
-- 所有文件含 `schema_version`。
+**抽象接口**
+
+- `StateStore`：键值式状态读写抽象——`read` / `write` / `delete` / `deleteDir` / `list`（key 为相对 `state/` 根的路径，`deleteDir` / `list` 按前缀批量）。
+- `relocateTree`：跨 store 整树搬迁（list→read→write→deleteDir），活跃⇄归档间搬 PR 子树；目标先清空（源为权威）、源末删（幂等可重来）、源缺失即 no-op，不破 `StateStore` 抽象。
+
+**核心实体**（仅列承载设计含义的关键字段，完整字段见各类型定义；所有持久化文件含 `schema_version`）
+
+| 实体（文件） | 用途 | 关键字段 |
+| --- | --- | --- |
+| `PrIndexEntry`（`index.json`） | lookup + 退场判定的单一来源（含活跃 + 归档全部条目） | `identity` · `updatedAt` · `archivedAt\|null`（空 = 活跃 / 非空 = 归档）· mention 游标 `lastMentionAt?` · `mentionAts?`（最近 10 条，未读点名计数据此派生） |
+| `StoredPullRequest`（`meta.json`） | 完整 PR 元数据，`platform` 自描述 | 派生态 `unread` / `unreadMentionCount` 不持久化 |
+| `PrReadStateFile`（`read-state.json`） | 用户已读水位，仅 `prs:markRead` 写 | `lastReadHeadSha` · `lastReadAt` |
+| `ReviewRun`（`runs/<runId>.json`） | 评审会话（详见 [05](05-review-workflow.md)） | `findings` · `tokenUsage` · `model` · 状态机字段 |
+
+横向幂等记录（与 PR 目录解耦）：`connections.json` / `watched-repos.json` / `posted-comments.json`。
 
 ## 扩展与注意事项
 

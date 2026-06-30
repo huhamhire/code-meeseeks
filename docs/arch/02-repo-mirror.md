@@ -27,9 +27,8 @@
 ## 数据 / 接口契约
 
 - **镜像路径**：`<repos_dir>/<host>/<projectKey>/<repoSlug>/bare`。
-- 主要能力（对主进程）：`syncMirror(repo)`（建/增量）、`materializeWorktree(repo, headSha, baseSha)`、
-  `hasCommit(repo, sha)`（预检，决定是否要 fetch）、`listChangedFiles` / `getFileContent` / `getSize` / blame。
-- **进度事件**：clone/fetch 分阶段发 `start/progress/done/error`，经 IPC 推给渲染层显示同步进度。
+- **主要能力**（对主进程，按名 + 语义）：`syncMirror`（建 / 增量 fetch）· `materializeWorktree`（按 head / base 物化工作树）· `hasCommit`（预检是否需 fetch）· `listChangedFiles` · `getFileContent` · `getSize` · blame。
+- **进度事件**：clone / fetch 分阶段发 `start` / `progress` / `done` / `error`，经 IPC 推渲染层显示同步进度。
 
 ## 扩展与注意事项
 
