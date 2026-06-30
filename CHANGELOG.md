@@ -3,7 +3,16 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.8.0-alpha.1] - 2026-06-30
+
+> 本版重点：
+>
+> - **消息通知**：系统通知（新 PR / 评论回复 / 被 @）+ macOS dock 角标 + 授权引导
+> - **评论体验优化**：emoji 反应、@ 提及补全、图片附件、表情代码渲染——评论 / 回复 / 行内 / 草稿一致
+> - **命令面板**：`Ctrl/Cmd+Shift+P` 归口常用操作
+> - **已关闭 PR 浏览与按 URL 打开**：查看历史 PR、补充评论 / 补跑评审
+> - **评审规则增强**：规则目录递归、多规则按 `Ruleset` 分段注入
+> - **2026 主题配色** 与 **PR 列表点名计数**
 
 ### ✨ 新增
 
@@ -359,7 +368,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...HEAD
+[0.8.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0-alpha.1
 [0.7.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.4.0...v0.5.0
