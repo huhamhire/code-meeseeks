@@ -27,8 +27,9 @@ Agent 目录是 Agent 的**完整人格与知识来源**，挂载于配置 `agen
 ├── AGENTS.md    # 工作规范：评审流程、AutoPilot 触发策略、工具使用红线（人写）
 ├── MEMORY.md    # 长期记忆：跨 PR / 跨会话的事实沉淀（Agent 可追加，人可编辑）
 ├── USER.md      # 用户画像：评审偏好与个人习惯（Agent 可追加，人可编辑）
+├── README.md    # 目录说明：各文件用途与项目地址引导（人用第三方 IDE 维护，非 Agent 上下文）
 └── rules/       # 规则化注入：「一文件一规则 + frontmatter」（人写，见 04-rules）
-    └── *.md
+    └── example.md  # 首次播种的禁用示例规则，删除后不补
 ```
 
 关键取舍：
@@ -122,16 +123,21 @@ LLM「越权」产出一个 `/approve` 调用，运行时也拒绝并记入 tran
 
 ### 提示词模版与资源目录
 
-- **工程内预建模版**：仓库内置一套默认 `SOUL.md` / `AGENTS.md` / `MEMORY.md` / `USER.md` 与示例
-  `rules/`，作为 Agent 目录的**初始化骨架**。
+- **工程内预建模版**：仓库内置一套默认 `SOUL.md` / `AGENTS.md` / `MEMORY.md` / `USER.md` / `README.md`
+  与示例 `rules/`，作为 Agent 目录的**初始化骨架**。`README.md` 是面向用户的目录说明（各文件用途 + 指向项目
+  GitHub 的引导），供用户用第三方 IDE 阅读 / 维护，不作为 Agent 上下文注入。
 - **模版统一 en-US 单份、不做 i18n**：模版是用户的**著作内容**而非产品 UI，故不提供多语变体——一律以
   **en-US** 落地（与项目 en-US 兜底一致）。用户初始化后可自由改写成目标语言（中文 / 日文 …）；
   改的是自己的上下文文件，与 AI 输出语言互不绑定（输出语言由上「上下文注入」第 8 项的执行时国际化规则单点控制）。
 - **统一资源目录管理**：模版集中放在桌面应用的**单一资源目录**下，
   随应用打包（与嵌入式运行时等资源同级管理），由初始化逻辑按清单拷贝；不散落在各处。
-- **初始化时机**：用户首次启用 Agent（指定空的 `agent.dir`、或首启向导引导）时，从模版目录 scaffold
-  出上述文件；已存在则不覆盖（幂等）。`AGENTS.md` / `MEMORY.md` / `USER.md` / `rules/` 是可编辑
-  Markdown，用户与 Agent 后续按各自权限改写。
+- **初始化时机与三类所有权**：「用时初始化」——每次加载前都先 scaffold 一次（不依赖首启 / 设置交互这类一次性时机），
+  按文件所有权分三类处理：
+  - **用户所有（缺失即创建、不覆盖）**：`AGENTS.md` / `MEMORY.md` / `USER.md` / `README.md`——可编辑 Markdown，
+    用户与 Agent 后续按各自权限改写；删除后下次 scaffold 会补回（保证基础骨架与目录说明长在）。
+  - **应用所有（强制对齐模版）**：`SOUL.md`——见下条。
+  - **首次播种（仅首次落地、删后不补）**：`rules/example.md`——示例规则**非必需**，仅在 Agent 目录**首次脚手架**
+    （以 `rules/` 子目录尚不存在判定）时播一份；用户删掉即永久消失，不会每次启动被「复活」。
 - **`SOUL.md` 默认由模版规定**：灵魂的内容**默认完全来自预制模版**（初始化落地的就是模版正文），
   Agent 全程无权改写（见上「Agent 目录」）。这把「Agent 是谁、边界在哪」的定义权牢牢留在模版 / 维护者侧；
   个人或团队若要定制，仍由人去改 `agent.dir` 里的 `SOUL.md`（或在团队 git repo 中统一维护），
@@ -146,7 +152,8 @@ LLM「越权」产出一个 `/approve` 调用，运行时也拒绝并记入 tran
 - `autopilot.grants` 为逐项写权限授权（默认全空 = 全拒）。
 
 **Agent 目录文件清单**：`SOUL.md` / `AGENTS.md` / `MEMORY.md` / `USER.md` / `rules/*.md`（rules 的
-frontmatter schema 见 [规则](04-rules.md)）。
+frontmatter schema 见 [规则](04-rules.md)）；另含 `README.md`（用户向目录说明，非注入上下文）与首次播种的
+`rules/example.md`（禁用示例，删后不补）。注入上下文仅取前者中的 `SOUL/AGENTS/MEMORY/USER` + 命中规则正文。
 
 **`ToolCatalogEntry`**：`name` / `semantics` / `params` / `mutating`(bool) / `enabled`(按授权)——工具目录注入用，红线据 `mutating` + `enabled` 落地。
 
