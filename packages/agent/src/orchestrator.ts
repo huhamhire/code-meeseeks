@@ -20,7 +20,7 @@ import {
 import type { AgentContext } from './types.js';
 
 /**
- * 结构化「评审微流程」编排器（见 docs/arch/02-agent/01-agent.md「AutoPilot」的有界微流程）：
+ * 结构化「评审微流程」编排器（见 docs/arch/02-agent/03-autopilot.md「AutoPilot」的有界微流程）：
  * describe → review →（仅严重问题）条件性追问 ≤N → 收尾总结 + 建议。
  *
  * 这是**固定模板**而非自由 ReAct：流程由代码确定，LLM 只在两处做受限判断

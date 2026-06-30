@@ -1,4 +1,4 @@
-# 01 · 代码平台适配
+# 代码平台适配
 
 把「代码托管平台」的差异收口到一个统一抽象 `PlatformAdapter`，业务层（轮询、镜像、评审发布）
 只依赖该抽象、不感知具体平台。`PlatformAdapter` 不是单一巨接口，而是**按业务领域拆分的服务容器**
@@ -8,7 +8,7 @@
 
 已实现：**Bitbucket Server / Data Center**、**GitHub（github.com + GitHub Enterprise Server）**、
 **GitLab（gitlab.com + Self-Managed，CE/EE，REST API v4）**。不负责：git 本地操作（见
-[仓库镜像](02-repo-mirror.md)）、pr-agent 调用（见 [pr-agent 运行时](../02-agent/03-pragent-runtime.md)）。
+[仓库镜像](02-repo-mirror.md)）、pr-agent 调用（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。
 
 ---
 

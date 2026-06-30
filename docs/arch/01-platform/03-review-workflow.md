@@ -1,11 +1,11 @@
-# 05 · 评审 → 发布闭环
+# 评审 → 发布闭环
 
 ## 职责与边界
 
 从「跑一次评审」到「评论落到远端」的完整链路：命令执行 → 输出解析为结构化 findings → 草稿池 →
 用户逐条确认/编辑/拒绝/手动追加 → 批量发布为 inline 评论；以及评论的 reply/edit/delete 与 PR 合并。
 
-负责：评审命令编排、输出解析、草稿状态机、发布。不负责：跑 pr-agent 本身（见 [pr-agent 运行时](../02-agent/03-pragent-runtime.md)）、
+负责：评审命令编排、输出解析、草稿状态机、发布。不负责：跑 pr-agent 本身（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）、
 平台评论 API（见 [平台适配](01-adapter.md)）。
 
 ## 核心设计
@@ -30,7 +30,7 @@
 - **发布走平台 inline 评论**：批量 `publishInlineComment`，内部 finding 锚点映射成平台锚点（见 [平台适配](01-adapter.md)）。
 - **评论二次操作**：reply / edit / delete（带 can-edit/can-delete 预判：只允许操作自己作者的评论，远端再校验）；
   PR 合并按 `mergeStatus.canMerge` 控制入口，合并不可逆、远端二次校验。
-- **token 用量落 run**：主进程逐行捕获子进程 stderr 的 `@@MEEBOX_USAGE@@` 哨兵累加（见 [pr-agent 运行时](../02-agent/03-pragent-runtime.md)），
+- **token 用量落 run**：主进程逐行捕获子进程 stderr 的 `@@MEEBOX_USAGE@@` 哨兵累加（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)），
   写入 `ReviewRun.tokenUsage`；UI run meta 展示 ↑输入 / ↓输出。
 - **LLM 失败识别**：pr-agent 可能 exit 0 但 stdout 其实是 LLM 全失败（认证错 / 无可用模型）→ 解析层标 llmFailure，
   落 failed 而非「完成」。

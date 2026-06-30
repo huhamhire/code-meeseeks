@@ -3,7 +3,7 @@ import type { StateStore } from '@meebox/state-store';
 
 /**
  * AutoPilot 台账落 `prs/<localId>/agent/autopilot.json`，与 session / transcript 同处该
- * PR 目录，PR 退场时 deleteDir 一并清掉（见 docs/arch/02-agent/01-agent.md「AutoPilot」）。
+ * PR 目录，PR 退场时 deleteDir 一并清掉（见 docs/arch/02-agent/03-autopilot.md「AutoPilot」）。
  */
 function ledgerKey(prLocalId: string): string {
   return `prs/${prLocalId}/agent/autopilot`;

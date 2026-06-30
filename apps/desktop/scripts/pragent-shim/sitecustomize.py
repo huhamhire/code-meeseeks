@@ -7,7 +7,7 @@
 # 探测 --version / find_spec / pip 装包等，eager import 会拖慢甚至在 pr-agent 未装好时报错）。
 #
 # 由 assemble-pragent-runtime.mjs 把本文件 + meebox_pragent_shim/ 整体拷进 site-packages。
-# 详见 docs/arch/02-agent/03-pragent-runtime.md。
+# 详见 docs/arch/02-agent/05-pragent-runtime.md。
 try:
     from meebox_pragent_shim import apply
 

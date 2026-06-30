@@ -30,7 +30,7 @@ export const AGENT_FILES = {
   user: 'USER.md',
 } as const;
 
-/** rules/ 子目录名：规则正文存放处，匹配语义见 @meebox/rules（docs/arch/02-agent/02-rules.md）。 */
+/** rules/ 子目录名：规则正文存放处，匹配语义见 @meebox/rules（docs/arch/02-agent/04-rules.md）。 */
 export const AGENT_RULES_SUBDIR = 'rules';
 
 /** 全空上下文文件集：空 agentDir / 读失败时的失败安全回退（Agent 退化为原生）。 */

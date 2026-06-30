@@ -1,4 +1,4 @@
-# 02 · 仓库镜像与 Diff
+# 仓库镜像与 Diff
 
 ## 职责与边界
 
@@ -19,7 +19,7 @@
   不并发打远端、不抢 git 带宽，进度更稳；同一仓库的并发请求复用同一 in-flight Promise。读操作不走队列。
 - **worktree 物化**：从本地 bare **`git clone --local --no-checkout`** 派生独立 repo（同盘 objects 走 hardlink，
   磁盘 ~0、跨 mount 边界也成立），再建两个内部分支 `meebox/head` / `meebox/base` 指向 PR 的 head/base sha。
-  pr-agent 的 LocalGitProvider 在这个 worktree 上算 diff（见 [pr-agent 运行时](../02-agent/03-pragent-runtime.md)）。
+  pr-agent 的 LocalGitProvider 在这个 worktree 上算 diff（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。
 - **Diff 不 checkout 文件**：展示 diff 只需按 sha 读 blob（`git show <sha>:<path>`）+ 改动文件列表，
   不把文件 checkout 到磁盘，省 IO。Monaco 侧按文件懒加载，二进制/超大文件跳过。
 - **出站代理**：打远端的 clone/fetch 按代理配置注入 env（见 [网络与代理](../99-core/03-networking-proxy.md)）；本地只读操作不注入。
@@ -37,4 +37,4 @@
 - **fresh clone 后 FS 可能未 flush**（Windows 尤甚）：物化后等 git 能稳定 `rev-parse HEAD` 几次再返回，避免
   紧接着的 diff 撞上 refs/packs 不一致。
 - **磁盘是大头**：仓库镜像 GB 级，`repos_dir` 可改到大盘；设置页展示总占用，提供清理。
-- **二进制文件**：diff/读取要对非 UTF-8 内容安全跳过（pr-agent 侧也有对应处理，见 [pr-agent 运行时](../02-agent/03-pragent-runtime.md)）。
+- **二进制文件**：diff/读取要对非 UTF-8 内容安全跳过（pr-agent 侧也有对应处理，见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。

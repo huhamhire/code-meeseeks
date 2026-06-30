@@ -107,4 +107,4 @@ applies_to:
 - **单文件解析失败不影响整体**：某个文件 frontmatter YAML 写坏 / 字段类型不对，应用会跳过该文件并继续加载其余规则。
 - **当前命中提示**：选中 PR 后，chat 面板会显示本次命中的规则条数，点击可预览全部命中规则（按 Ruleset 分段列出），便于确认本次评审受哪些规则约束。
 
-> 设计与实现细节见架构文档 [docs/arch/02-agent/02-rules.md](../arch/07-rules.md)。
+> 设计与实现细节见架构文档 [docs/arch/02-agent/04-rules.md](../arch/07-rules.md)。

@@ -215,12 +215,12 @@ export const ConfigSchema = z.object({
   agent: z
     .object({
       dir: z.string().default(''),
-      /** 单会话步数上限（默认取小值；见 docs/arch/02-agent/01-agent.md「会话 Agent 化」）。 */
+      /** 单会话步数上限（默认取小值；见 docs/arch/02-agent/02-session.md「会话 Agent 化」）。 */
       max_steps: z.number().int().min(1).max(50).default(8),
       /** 收尾总结严格篇幅上限（字符）。 */
       summary_max_chars: z.number().int().min(100).max(4000).default(800),
       /**
-       * AutoPilot 预评审（见 docs/arch/02-agent/01-agent.md「AutoPilot」）。默认关闭，状态栏可启用。
+       * AutoPilot 预评审（见 docs/arch/02-agent/03-autopilot.md「AutoPilot」）。默认关闭，状态栏可启用。
        * enabled=false 时调度逻辑完全不跑。
        */
       autopilot: z

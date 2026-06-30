@@ -1,4 +1,4 @@
-# 00 · 架构总览
+# 架构总览
 
 ## 职责与边界
 
@@ -52,9 +52,11 @@ flowchart TB
   - [评审→发布闭环](01-platform/03-review-workflow.md) —— `poller`(输出解析) + 主进程草稿 / 发布
   - [评论互动](01-platform/04-comment-interactions.md) —— 渲染层评论 UI + Adapter 反应 / 附件能力
 - **`02-agent/`** —— Agent 与规则
-  - [高阶 Agent 与 AutoPilot](02-agent/01-agent.md) —— Agent 运行时（编排）+ `rules` 注入
-  - [规则系统](02-agent/02-rules.md) —— `rules`
-  - [pr-agent 集成与运行时](02-agent/03-pragent-runtime.md) —— `pr-agent-bridge` + 嵌入式运行时
+  - [Agent 与上下文](02-agent/01-agent.md) —— Agent 目录 / 上下文注入 / 工具红线
+  - [会话 Agent 化](02-agent/02-session.md) —— 自然语言委派 + 规划循环
+  - [AutoPilot 与调度](02-agent/03-autopilot.md) —— 自动预评审 + 优先级队列
+  - [规则系统](02-agent/04-rules.md) —— `rules`
+  - [pr-agent 集成与运行时](02-agent/05-pragent-runtime.md) —— `pr-agent-bridge` + 嵌入式运行时
 - **`03-gui/`** —— GUI 与交互
   - [GUI 与交互](03-gui/01-ui-interaction.md) —— 渲染层 React（布局 / 面板 / 跨 PR 保活）
   - [命令面板](03-gui/02-command-palette.md) —— 渲染层标题栏入口 + 分域命令注册表

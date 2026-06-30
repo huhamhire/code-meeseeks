@@ -37,9 +37,11 @@ docs/arch/
 │   ├── 03-review-workflow.md         评审→发布闭环（命令 / findings 解析 / 草稿池 / 发布 / merge）
 │   └── 04-comment-interactions.md    评论互动（emoji 反应 / @提及补全 / 图片附件；能力位降级 / 三平台差异）
 ├── 02-agent/                       Agent 与规则
-│   ├── 01-agent.md                   Agent 设计（目录 / 上下文注入 / 会话 Agent 化 / 工具红线 / AutoPilot / 调度）
-│   ├── 02-rules.md                   规则系统（frontmatter / 匹配优先级；正文存 `<agent.dir>/rules/`）
-│   └── 03-pragent-runtime.md         pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage）
+│   ├── 01-agent.md                   Agent 与上下文（目录分层 / 上下文注入 / 工具红线 / 会话隔离 / 模版）
+│   ├── 02-session.md                 会话 Agent 化（输入路由 / 规划循环 / 过程留存 / 交互控制）
+│   ├── 03-autopilot.md               AutoPilot 与调度（自动预评审 / 准入闸 / 批量判定 / 微流程 / 优先级队列）
+│   ├── 04-rules.md                   规则系统（frontmatter / 匹配优先级；正文存 `<agent.dir>/rules/`）
+│   └── 05-pragent-runtime.md         pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage）
 ├── 03-gui/                         GUI 与交互
 │   ├── 01-ui-interaction.md          渲染层布局 / 面板 / 跨 PR 保活 / 交互约定
 │   ├── 02-command-palette.md         命令面板（标题栏入口 / 两级选择 / 按语言搜索 / 注册表 + 分域）

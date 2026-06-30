@@ -1,11 +1,11 @@
-# 07 · 规则系统
+# 规则系统
 
 ## 职责与边界
 
 让评审带上团队/仓库的编码规约：存储用户写的规则、按 PR 上下文匹配、把命中规则注入 pr-agent 的
 `extra_instructions`。
 
-负责：规则加载/匹配/注入。不负责：pr-agent 调用（见 [pr-agent 运行时](03-pragent-runtime.md)）、规则正文怎么写（用户的事）。
+负责：规则加载/匹配/注入。不负责：pr-agent 调用（见 [pr-agent 运行时](05-pragent-runtime.md)）、规则正文怎么写（用户的事）。
 
 ## 核心设计
 
