@@ -52,6 +52,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('app:checkUpdate', app.checkUpdate); // 手动检查更新
   ipcMain.handle('app:getUpdateStatus', app.getUpdateStatus); // 读缓存的更新检测结果（水合）
   ipcMain.handle('app:openExternal', app.openExternal); // 系统浏览器打开外链
+  ipcMain.handle('app:openNotificationSettings', app.openNotificationSettings); // macOS 打开系统通知设置
   ipcMain.handle('dialog:pickDirectory', app.pickDirectory); // 原生目录选择对话框
 
   /*

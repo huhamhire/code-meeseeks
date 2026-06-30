@@ -1,6 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import type { Config } from '@meebox/shared';
 import { Switch } from '../../../common';
+import { invoke } from '../../../../api';
+
+// macOS 在系统层管控通知授权（应用无法代为开启）→ 仅 macOS 展示「打开系统通知设置」引导按钮。
+const IS_MAC = navigator.platform.toLowerCase().includes('mac');
 
 /**
  * 通知分区：总开关 + 分类型系统通知（新 PR / 评论回复 / 评论 @）。总开关关闭时下属各项禁用（灰显但保留各自
@@ -70,6 +74,22 @@ export function NotificationSection({
           />
         </li>
       </ul>
+      {IS_MAC && (
+        // macOS 授权引导：系统层未授权时通知会被静默丢弃，应用无法代为开启 → 提供按钮跳转系统设置由用户开启。
+        <div className="settings-edit-row" style={{ marginTop: 8 }}>
+          <span className="muted settings-sublist-desc" style={{ flex: 1 }}>
+            {t('settings.notifyMacPermissionHint')}
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => void invoke('app:openNotificationSettings', undefined)}
+            title={t('settings.openNotificationSettings')}
+          >
+            {t('settings.openNotificationSettings')}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

@@ -42,6 +42,11 @@ export interface AppChannels {
    */
   'app:openExternal': { request: { url: string }; response: void };
   /**
+   * 打开 macOS「系统设置 → 通知」面板，引导用户授予 / 开启通知权限（macOS 在系统层管控通知授权，
+   * 应用无法代为开启）。仅 macOS 有效，其他平台为 no-op。
+   */
+  'app:openNotificationSettings': { request: void; response: void };
+  /**
    * 调起系统原生目录选择对话框；用户取消返回 path: null。
    * defaultPath 可空，作为初始定位目录。
    */
