@@ -23,8 +23,8 @@
 [03](03-state-storage.md)）、平台写操作 API（见 [01](01-platform-adapter.md)）。
 
 > 与 [07 规则系统](07-rules.md) 的关系：规则正文存于 Agent 目录的 `rules/` 子目录
-> （`<agent.dir>/rules/`）；其「一文件一规则 + frontmatter 匹配 + 取首条命中 + per-tool 注入
-> `EXTRA_INSTRUCTIONS`」的匹配语义由 [07](07-rules.md) 定义，本模块只负责加载与注入。
+> （`<agent.dir>/rules/`）；其「一文件一规则 + frontmatter 匹配 + 取全部命中（封顶 N 条）按 Ruleset 分段拼接 +
+> per-tool 注入 `EXTRA_INSTRUCTIONS`」的匹配语义由 [07](07-rules.md) 定义，本模块只负责加载与注入。
 
 ## 核心设计
 

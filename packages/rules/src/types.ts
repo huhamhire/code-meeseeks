@@ -12,6 +12,18 @@
  */
 export type RuleTool = 'describe' | 'review' | 'improve';
 
+/**
+ * 单次评审注入的命中规则上限：超出按排序（priority desc + id asc）取前 N、其余丢弃，避免 prompt 膨胀。
+ * 安全兜底，非硬约束语义。
+ */
+export const DEFAULT_MAX_MATCHED_RULES = 20;
+
+/**
+ * 单个 rules 目录递归收集的 .md 文件数上限：遍历到达即停并告警，避免规则目录被误指向超大目录树时
+ * 拖垮加载（性能兜底拦截）。设得远高于命中上限，给非命中规则留足余量。
+ */
+export const MAX_RULE_FILES = 200;
+
 export interface RuleApplies {
   /** Bitbucket projectKey 正则，例如 "^FX$" 或 "^FX-.*" */
   project?: RegExp;

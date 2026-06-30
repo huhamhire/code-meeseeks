@@ -1,4 +1,3 @@
-import type { Rule } from '@meebox/rules';
 import type { AgentTodoItem, ToolCatalogEntry } from '@meebox/shared';
 import autopilotJudge from '../resources/prompts/autopilot-judge.md?raw';
 import judge from '../resources/prompts/judge.md?raw';
@@ -52,8 +51,8 @@ export interface AssembleInput {
   context: AgentContext;
   pr: AssemblePrMeta;
   toolCatalog: ToolCatalogEntry[];
-  /** 命中的规则（按「上下文注入」次序注入正文）；无命中传 null。 */
-  matchedRule?: Rule | null;
+  /** 命中规则的已拼接正文（多条经 combineRuleInstructions 拼成、含 Ruleset 分段）；无命中传空 / null。 */
+  matchedRuleInstructions?: string | null;
   /** 输出 / 记忆写入语言（解析后的 locale code；空 = 默认 en-US，见「语言行为指令」）。 */
   language?: string;
   session?: AssembleSessionSnapshot;
@@ -111,7 +110,7 @@ function renderLanguage(language: string | undefined): string {
  * 两段间插 CACHE_BREAK；任一段为空则不插标记。空段跳过。
  */
 export function assembleSystemContext(input: AssembleInput): string {
-  const { context, pr, toolCatalog, matchedRule, language, session } = input;
+  const { context, pr, toolCatalog, matchedRuleInstructions, language, session } = input;
   const { files } = context;
 
   const stable: Array<string | null> = [
@@ -122,7 +121,7 @@ export function assembleSystemContext(input: AssembleInput): string {
     section('User profile', files.user),
   ];
   const variable: Array<string | null> = [
-    matchedRule ? section('Matched rule', matchedRule.instructions) : null,
+    matchedRuleInstructions ? section('Matched rules', matchedRuleInstructions) : null,
     renderPr(pr),
     session ? renderSession(session) : null,
     renderLanguage(language),

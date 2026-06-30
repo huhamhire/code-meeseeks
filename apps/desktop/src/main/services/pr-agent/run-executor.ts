@@ -20,7 +20,7 @@ import {
   parseReviewOutput,
   startReviewRun,
 } from '@meebox/poller';
-import { pickMatchingRule } from '@meebox/rules';
+import { combineRuleInstructions, pickMatchingRules } from '@meebox/rules';
 import {
   AppError,
   ERROR_CODES,
@@ -314,7 +314,7 @@ export class RunExecutor {
 
     let prContext = '';
     let matchedRuleInstructions = '';
-    let matchedRuleId: string | undefined;
+    let matchedRuleIds: string[] = [];
     if (req.tool !== 'ask') {
       const adapter = prService.adapterFor(pr);
       if (adapter) {
@@ -331,16 +331,21 @@ export class RunExecutor {
       const rules = await loadAgentRules(await ensureAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
       });
-      const matched = pickMatchingRule(rules, {
+      const matched = pickMatchingRules(rules, {
         projectKey: pr.repo.projectKey,
         repoSlug: pr.repo.repoSlug,
         targetBranch: pr.targetRef.displayId,
         tool: req.tool,
       });
-      if (matched) {
-        matchedRuleInstructions = matched.instructions;
-        matchedRuleId = matched.id;
+      if (matched.length) {
+        matchedRuleInstructions = combineRuleInstructions(matched);
+        matchedRuleIds = matched.map((r) => r.id);
       }
+      // 始终记一条：让用户从日志确认规则加载/命中情况（0 命中也输出，便于排查「为何规则没生效」）。
+      logger.info(
+        { runId, tool: req.tool, rulesLoaded: rules.length, rulesMatched: matched.length, ruleIds: matchedRuleIds },
+        'pragent run: rules',
+      );
     }
 
     // 提示词组装收口到 @meebox/pr-agent-bridge 的 prompts：语言指示 / anchor marker / 排版 / PR 上下文 / 命中规则。
@@ -362,9 +367,6 @@ export class RunExecutor {
     // env 注入仅用于其它三个工具。
     if (extraInstructions && req.tool !== 'ask') {
       env[extraInstructionsEnvKey(req.tool)] = extraInstructions;
-    }
-    if (matchedRuleId) {
-      logger.info({ runId, ruleId: matchedRuleId, tool: req.tool }, 'pragent run: matched rule');
     }
     if (prContext) {
       logger.debug(

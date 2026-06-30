@@ -1,7 +1,7 @@
 import { appendAgentNotes, buildToolCatalog, loadAgentContext } from '@meebox/agent';
 import type { AgentContext } from '@meebox/agent';
 import { appendAgentMessage, updateAgentSession } from '@meebox/poller';
-import { pickMatchingRule } from '@meebox/rules';
+import { combineRuleInstructions, pickMatchingRules } from '@meebox/rules';
 import { AppError, ERROR_CODES, type AgentSession, type StoredPullRequest } from '@meebox/shared';
 import { getMainLanguage } from '../../../i18n/index.js';
 import { runPlanning } from '../planning.js';
@@ -59,12 +59,21 @@ export async function runPlanningForPr(
   const agentCfg = bootstrap.config.agent;
   // per-PR 存储路由：已归档（已关闭范围）PR 上的对话 / 计划落归档冷存储，不污染活跃存储。
   const store = await runtime.ctx.pr.storeForPr(pr.localId);
-  const matchedRule = pickMatchingRule(agentContext.rules, {
+  const matchedRules = pickMatchingRules(agentContext.rules, {
     projectKey: pr.repo.projectKey,
     repoSlug: pr.repo.repoSlug,
     targetBranch: pr.targetRef.displayId,
     tool: 'review',
   });
+  logger.info(
+    {
+      localId: pr.localId,
+      rulesLoaded: agentContext.rules.length,
+      rulesMatched: matchedRules.length,
+      ruleIds: matchedRules.map((r) => r.id),
+    },
+    'agent planning: rules',
+  );
   return runPlanning(pr, userRequest, {
     stateStore: store,
     enqueueRun: (p, tool, question) => runtime.runQueue.enqueuePragentRun(p, tool, question, 'agent'),
@@ -72,7 +81,7 @@ export async function runPlanningForPr(
     chat,
     agentContext,
     toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
-    matchedRule,
+    matchedRuleInstructions: combineRuleInstructions(matchedRules),
     language: getMainLanguage(),
     maxSteps: agentCfg.max_steps,
     signal,

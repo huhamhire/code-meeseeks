@@ -1,7 +1,7 @@
 import { buildToolCatalog, DEFAULT_REVIEW_PLAN, loadAgentContext } from '@meebox/agent';
 import type { AgentContext, ReviewPlan } from '@meebox/agent';
 import { addFindingClosure } from '@meebox/poller';
-import { pickMatchingRule } from '@meebox/rules';
+import { combineRuleInstructions, pickMatchingRules } from '@meebox/rules';
 import { AppError, ERROR_CODES, type AgentSession, type StoredPullRequest } from '@meebox/shared';
 import { getMainLanguage } from '../../../i18n/index.js';
 import { runReview } from '../review.js';
@@ -78,12 +78,21 @@ export async function runReviewForPr(
     : {
         steps: (plan ?? DEFAULT_REVIEW_PLAN).steps.filter((k) => k !== 'judge' && k !== 'asks'),
       };
-  const matchedRule = pickMatchingRule(agentContext.rules, {
+  const matchedRules = pickMatchingRules(agentContext.rules, {
     projectKey: pr.repo.projectKey,
     repoSlug: pr.repo.repoSlug,
     targetBranch: pr.targetRef.displayId,
     tool: 'review',
   });
+  runtime.ctx.logger.info(
+    {
+      localId: pr.localId,
+      rulesLoaded: agentContext.rules.length,
+      rulesMatched: matchedRules.length,
+      ruleIds: matchedRules.map((r) => r.id),
+    },
+    'agent review: rules',
+  );
   return runReview(pr, {
     stateStore: store,
     // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。复评 /ask 携引用上下文 + 前向链。
@@ -103,7 +112,7 @@ export async function runReviewForPr(
     },
     chat,
     agentContext,
-    matchedRule,
+    matchedRuleInstructions: combineRuleInstructions(matchedRules),
     language: getMainLanguage(),
     toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
     plan: effectivePlan,

@@ -140,6 +140,7 @@
     "ruleFilePath": "File path",
     "rulePreviewAria": "Rule preview",
     "rulePreviewTitle": "Rule: {{id}}",
+    "rulePreviewTitleMulti": "Matched rules ({{n}})",
     "runCancelled": "Cancelled",
     "runFailed": "Run failed",
     "runFailedReason": "Run failed ({{reason}})",

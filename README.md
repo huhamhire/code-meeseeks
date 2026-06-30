@@ -81,7 +81,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 #### ⚙️ 模型与规则
 
 - **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / 通义千问 / 火山方舟等（本地 Ollama 经 openai-compatible 的 `/v1` 接入）；也可通过本机已授权的本地 CLI 工具（如 claude / codex）调用第三方模型。
-- **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter），按项目 / 仓库 / 目标分支命中后注入评审。
+- **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter，支持子目录递归组织），按项目 / 仓库 / 目标分支命中；命中的多条规则按 Ruleset 分段一并注入评审，`priority` 控制排序。
 - **运行参数可调** —— 评审任务并发、输入上下文长度、Agent 策略（自动追问开关、代码建议数量）均可在设置页调整。
 
 #### 🎨 界面与体验

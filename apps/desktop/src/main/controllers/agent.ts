@@ -11,7 +11,7 @@ import {
   getReviewRun,
   listReviewRunsForPr,
 } from '@meebox/poller';
-import { pickMatchingRule } from '@meebox/rules';
+import { pickMatchingRules } from '@meebox/rules';
 import { AppError, ERROR_CODES, type AgentRecommendationVerdict } from '@meebox/shared';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
@@ -24,26 +24,25 @@ import type { IpcController } from './types.js';
  * 查 PR 当前命中的规则（ask 工具不接规则；无命中回 null）。
  */
 export const matchRuleForPr: IpcController<'rules:matchForPr'> = async (_event, req) => {
-  if (req.tool === 'ask') return null;
+  if (req.tool === 'ask') return [];
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
   const rules = await loadAgentRules(await ctx.ensureAgentDir(), {
     onWarn: (msg, file) => ctx.logger.warn({ file }, `rules: ${msg}`),
   });
-  const matched = pickMatchingRule(rules, {
+  const matched = pickMatchingRules(rules, {
     projectKey: pr.repo.projectKey,
     repoSlug: pr.repo.repoSlug,
     targetBranch: pr.targetRef.displayId,
     tool: req.tool,
   });
-  if (!matched) return null;
-  return {
-    id: matched.id,
-    filePath: matched.filePath,
-    priority: matched.priority,
-    tools: [...matched.tools],
-    instructions: matched.instructions,
-  };
+  return matched.map((m) => ({
+    id: m.id,
+    filePath: m.filePath,
+    priority: m.priority,
+    tools: [...m.tools],
+    instructions: m.instructions,
+  }));
 };
 
 /**
