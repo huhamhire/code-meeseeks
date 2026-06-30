@@ -25,6 +25,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   abortAllActiveRuns: () => number;
   runAutopilotIfDue: () => void;
   terminateAgentsForGonePrs: () => void;
+  invalidateCommentsCache: (localId: string) => void;
 } {
   const base = createServiceContext(deps);
   // run 队列：pragent:run（PR 域）、Agent 编排、AutoPilot 三方共用。
@@ -148,5 +149,10 @@ export function registerIpcHandlers(deps: RegisterDeps): {
     runAutopilotIfDue: () => orchestrator.runAutopilotIfDue(),
     /** 每次 poll tick 由 index.ts 调用：终止已被移除 / purge 的 PR 上仍在执行的 agent 操作。 */
     terminateAgentsForGonePrs: () => void orchestrator.terminateAgentsForGonePrs(),
+    /**
+     * 轮询发现某 PR 评论变更（回复 / 提及）时由 index.ts 调用：清该 PR 评论缓存 + 广播 comments:changed，
+     * 让正打开该 PR 的 Diff 内嵌评论 / 活动时间线即时重拉（轮询期评论变更此前只弹通知、不刷新已打开视图）。
+     */
+    invalidateCommentsCache: (localId: string) => void ctx.pr.invalidateCommentsCache(localId),
   };
 }
