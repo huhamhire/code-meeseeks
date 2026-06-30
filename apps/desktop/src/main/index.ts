@@ -32,6 +32,7 @@ type IpcControl = {
   abortAllActiveRuns: () => number;
   runAutopilotIfDue: () => void;
   terminateAgentsForGonePrs: () => void;
+  invalidateCommentsCache: (localId: string) => void;
 };
 
 /**
@@ -173,6 +174,8 @@ class App {
       },
       getRepoMirror: () => this.repoMirror,
       getConnectionRuntime: () => this.conns.runtime,
+      // 评论类提醒（回复 / 提及）顺手失效该 PR 评论缓存 + 广播 comments:changed，让正打开它的视图即时重拉。
+      invalidateCommentsCache: (localId) => this.ipcControl?.invalidateCommentsCache(localId),
     });
 
     // 连接运行时（接线 / ping / 热重配）：依赖已建好的 poller；repoMirror 经 conns.runtime 读 adapterByHost。
