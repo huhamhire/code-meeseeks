@@ -91,7 +91,26 @@
   color: $text-primary;
 }
 .pr-activity-verb {
+  flex-shrink: 0;
+  white-space: nowrap;
   color: $text-muted;
+}
+
+// 评论事件标题行：长文件路径锚点 chip 吸收宽度压力——路径过长时截断、保留尾部（文件名）与 `:行号`，
+// 避免把『评论』动词（及头像左的固定项）挤压换行。
+.pr-activity-comment-head .pr-comment-anchor {
+  min-width: 0;
+  overflow: hidden;
+
+  // 路径段截断保留文件名：direction: rtl 让省略号落在左侧（首部），:行号在 code 外不受影响。
+  code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+  }
 }
 // reviewer 决断动词用带色 chip 突出：approve 绿、needs-work 琥珀、unapproved/dismissed 中性
 .pr-activity-chip {
