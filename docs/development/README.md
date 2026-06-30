@@ -1,6 +1,6 @@
 # 开发指南
 
-面向贡献者 / 自行构建的开发者。产品介绍见根 [README](../../README.md)，架构与里程碑见 [ROADMAP](../ROADMAP.md)。
+面向贡献者 / 自行构建的开发者。产品介绍见根 [README](../../README.md)，路线与进展见 [ROADMAP](../ROADMAP.md)。
 
 > 本目录（`docs/development/`）是**开发专题**：本指南为入口，另含 [打包与发布](./packaging-release.md)（含 CI）与 [macOS 构建与发布](./mac-build.md)。模块/子系统设计见 [`../modules/`](../modules/)。
 

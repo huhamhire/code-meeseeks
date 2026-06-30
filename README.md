@@ -172,7 +172,10 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 - **工程**：npm workspaces + Nx 单仓多包
 - **pr-agent 集成**：内嵌 Python 运行时子进程（缺失时回退系统 pr-agent CLI）
 
-> 📚 **延伸阅读**：规划进度、里程碑与未决项见 **[Roadmap](docs/ROADMAP.md)**；详细架构与各模块设计见 **[模块文档](docs/arch/README.md)**。
+> 📚 **延伸阅读**
+>
+> - 已交付能力、规划与未决项见 **[Roadmap](docs/ROADMAP.md)**
+> - 详细架构与各模块设计见 **[模块文档](docs/arch/README.md)**
 
 ---
 
