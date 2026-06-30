@@ -312,6 +312,9 @@ export default function App() {
   );
   const availableDiscoveryFilters = activeConnSummary?.capabilities.discoveryFilters ?? [];
   const showDiscoveryFilter = availableDiscoveryFilters.length > 0;
+  // 平台是否支持 needs_work（「需修改」）评审态：GitHub / Bitbucket 支持、GitLab（二元审批）不支持。
+  // 决定非「待我评审」发现分类下是否保留「待处理」状态筛选（见 Sidebar.visibleFilters）。
+  const supportsNeedsWork = activeConnSummary?.capabilities.reviewStatuses.includes('needsWork') ?? false;
   // 选中的分类可能因切换连接而对当前平台无效 → 回落首个可用。
   const effectiveDiscoveryFilter = availableDiscoveryFilters.includes(discoveryFilter)
     ? discoveryFilter
@@ -361,6 +364,7 @@ export default function App() {
             onViewActive={viewActive}
             onViewArchived={viewArchived}
             loading={archived && archivedLoading}
+            supportsNeedsWork={supportsNeedsWork}
           />
         )}
         <MainPane>

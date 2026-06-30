@@ -39,6 +39,8 @@ interface SidebarProps {
   onViewArchived: () => void;
   /** 列表数据加载中（如归档冷存储懒加载）：列表区显示 loading 占位，替代「无 PR」空态。 */
   loading?: boolean;
+  /** 活动连接是否支持 needs_work（「需修改」）评审态：决定非「待我评审」分类下是否保留「待处理」状态筛选。 */
+  supportsNeedsWork?: boolean;
 }
 
 export const SIDEBAR_MIN_WIDTH = 240;
@@ -85,6 +87,7 @@ export function Sidebar({
   onViewActive,
   onViewArchived,
   loading = false,
+  supportsNeedsWork = false,
 }: SidebarProps) {
   const { t } = useTranslation();
   // 已关闭范围：扁平浏览（不分发现分类、不分状态、强制「全部」）；进行中范围维持原细分行为。
@@ -134,17 +137,27 @@ export function Sidebar({
     [active, waiting, agentPrs],
   );
 
-  // 有发现分类标签时（GitHub / Bitbucket 均含「我创建的」），reviewer 决断类（通过/需修改）
-  // 只对「待我评审」有意义、其余标签下恒空，故精简隐藏；无分类的场景保持全部六项。
+  // 状态筛选可见性随发现分类细化（localStatus = 本人的 reviewer 决断）：
+  // - 无发现分类（单一「待我评审」平台）：六项全展示。
+  // - 有发现分类：reviewer 决断类（通过 / 需修改）恒隐藏。「待处理」在「待我评审」恒有意义；其余分类
+  //   （我创建的 / 指派给我 / 提及我）下仅当平台支持 needs_work（GitHub / Bitbucket，可表达「需修改」语义）
+  //   时保留，GitLab（二元审批、无 needs_work）下「待处理」无意义、隐藏，只留 全部 / 冲突 / 可合并。
   const hasDiscoveryTabs = Boolean(availableFilters && availableFilters.length > 0);
-  const visibleFilters = useMemo(
-    () => (hasDiscoveryTabs ? FILTERS.filter((f) => !DECISION_STATUS_FILTERS.has(f.value)) : FILTERS),
-    [hasDiscoveryTabs],
-  );
-  // 进入精简模式时若当前选中的是被隐藏的决断类，回落到「待处理」，避免按不可见筛选过滤。
+  const visibleFilters = useMemo(() => {
+    if (!hasDiscoveryTabs) return FILTERS;
+    const reviewerContext = discoveryFilter === 'review-requested';
+    return FILTERS.filter((f) => {
+      if (DECISION_STATUS_FILTERS.has(f.value)) return false;
+      if (f.value === 'pending' && !reviewerContext && !supportsNeedsWork) return false;
+      return true;
+    });
+  }, [hasDiscoveryTabs, discoveryFilter, supportsNeedsWork]);
+  // 当前选中的状态筛选在本分类下不可见时，回落到首个可见项（待我评审 → 待处理；其余 → 全部），避免按不可见筛选过滤。
   useEffect(() => {
-    if (hasDiscoveryTabs && DECISION_STATUS_FILTERS.has(filter)) setFilter('pending');
-  }, [hasDiscoveryTabs, filter, setFilter]);
+    if (!visibleFilters.some((f) => f.value === filter)) {
+      setFilter(visibleFilters[0]?.value ?? 'all');
+    }
+  }, [visibleFilters, filter, setFilter]);
 
   // AutoPilot 徽标：批量取当前 PR 的台账建议（prs 变化时刷新；ledger 在下次 poll 更新 prs 后体现）。
   useEffect(() => {
