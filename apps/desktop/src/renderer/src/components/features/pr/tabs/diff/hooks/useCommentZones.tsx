@@ -25,6 +25,10 @@ export function useCommentZones(opts: {
   prWebUrl: string;
   renderSideBySide: boolean;
   commentHardBreaks: boolean;
+  /** 评论 emoji 反应模式（capabilities.commentReactions）：'fixed'/'free' 才渲染加反应按钮；缺省 = 不支持。 */
+  reactionsMode?: 'fixed' | 'free';
+  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给行内回复编辑框启用粘贴上传。 */
+  attachmentsEnabled?: boolean;
   /** 内容只读（decline / 不可参与归档 PR）：行内评论 zone 隐藏回复 / 编辑 / 删除。 */
   readOnly?: boolean;
 }): void {
@@ -39,6 +43,8 @@ export function useCommentZones(opts: {
     prWebUrl,
     renderSideBySide,
     commentHardBreaks,
+    reactionsMode,
+    attachmentsEnabled = false,
     readOnly = false,
   } = opts;
 
@@ -108,6 +114,8 @@ export function useCommentZones(opts: {
           prLocalId={prLocalId}
           prWebUrl={prWebUrl}
           hardBreaks={commentHardBreaks}
+          reactionsMode={reactionsMode}
+          attachmentsEnabled={attachmentsEnabled}
           readOnly={readOnly}
         />
       ),
@@ -133,6 +141,8 @@ export function useCommentZones(opts: {
     prWebUrl,
     renderSideBySide,
     commentHardBreaks,
+    reactionsMode,
+    attachmentsEnabled,
     readOnly,
   ]);
 }

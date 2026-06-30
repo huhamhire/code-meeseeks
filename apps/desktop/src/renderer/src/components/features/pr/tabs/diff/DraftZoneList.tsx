@@ -15,11 +15,14 @@ export function DraftZoneList({
   prLocalId,
   registerEditTrigger,
   hardBreaks,
+  attachmentsEnabled = false,
 }: {
   drafts: ReviewDraft[];
   prLocalId: string;
   registerEditTrigger: (draftId: string, fn: (() => void) | null) => void;
   hardBreaks: boolean;
+  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给草稿编辑框启用粘贴 / 选取上传。 */
+  attachmentsEnabled?: boolean;
 }) {
   const { t } = useTranslation();
   const onSave = async (draftId: string, body: string): Promise<void> => {
@@ -52,6 +55,8 @@ export function DraftZoneList({
         <div key={d.id} className={`draft-zone-item${i > 0 ? ' draft-zone-item-divider' : ''}`}>
           <DraftZone
             draft={d}
+            prLocalId={prLocalId}
+            attachmentsEnabled={attachmentsEnabled}
             hardBreaks={hardBreaks}
             registerEditTrigger={registerEditTrigger}
             onSave={(body) => onSave(d.id, body)}
