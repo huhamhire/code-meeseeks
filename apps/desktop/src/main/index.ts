@@ -21,6 +21,7 @@ import {
 } from './bootstrap/index.js';
 import { initMainI18n } from './i18n/index.js';
 import { registerIpcHandlers } from './ipc.js';
+import { ApiServer } from './services/api-server/index.js';
 import { readConnectionStates } from './utils/connection-state.js';
 
 // 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
@@ -53,6 +54,8 @@ class App {
   private conns!: ConnectionRuntimeController;
   private windowManager!: WindowManager;
   private ipcControl?: IpcControl;
+  /** 本地 API 服务监听器（默认关闭；按 config.service 决定是否 listen）。 */
+  private apiServer?: ApiServer;
   private quitCleanupDone = false;
 
   constructor(private readonly startMs: number) {}
@@ -210,7 +213,15 @@ class App {
       connectionRuntime: this.conns.runtime,
       reconfigureConnections: () => this.conns.reconfigure(),
       repoMirror: this.repoMirror,
+      // 惰性引用：ApiServer 在 registerIpcHandlers 之后才构造（其请求处理依赖此刻才安装的
+      // ControllerContext 单例）；闭包在 config:setService 调用时才取最新实例。
+      reconfigureApiServer: () => this.apiServer?.reconfigure() ?? Promise.resolve(),
     });
+
+    // 本地 API 服务监听器：ControllerContext 已由 registerIpcHandlers 安装，可安全处理请求。
+    // 按 config.service 决定是否实际 listen（默认关闭）；监听失败为非致命（内部已兜底记录）。
+    this.apiServer = new ApiServer({ bootstrap: this.bootstrap, logger: this.logger });
+    await this.apiServer.start();
   }
 
   /**
@@ -293,6 +304,8 @@ class App {
     // 不清理会留孤儿进程锁住安装目录 → 升级时 NSIS 报「应用无法关闭」。
     app.on('before-quit', (event) => {
       if (this.poller) this.poller.stop();
+      // 停本地 API 监听（停止接收新连接）；fire-and-forget，关闭很快、不阻塞退出。
+      void this.apiServer?.stop();
       if (this.quitCleanupDone) return;
       const aborted = this.ipcControl?.abortAllActiveRuns() ?? 0;
       if (aborted === 0) return; // 无进行中 run，直接退出

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { nativeTheme } from 'electron';
 import { editorThemeNativeSource } from '@meebox/shared';
 import { writeConfig } from '@meebox/config';
@@ -185,6 +186,36 @@ export const testConnection: IpcController<'config:testConnection'> = async (_ev
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
+};
+
+/**
+ * 写本地 API 服务监听配置（开关 / host / port / token）；内存同步后热重建监听器（停旧起新）。
+ * token 由请求体携带（设置页保存当前值）；单独「重新生成 token」走 generateServiceToken。
+ */
+export const setService: IpcController<'config:setService'> = async (_event, req) => {
+  const { bootstrap, logger, reconfigureApiServer } = getContext();
+  const next = { ...bootstrap.config, service: req.service };
+  await writeConfig(bootstrap.paths.configFile, next);
+  bootstrap.config.service = req.service;
+  await reconfigureApiServer();
+  logger.info(
+    { enabled: req.service.enabled, host: req.service.host, port: req.service.port },
+    'service listener config updated (hot-reloaded)',
+  );
+};
+
+/**
+ * 重新生成 bearer token（高强度随机），写盘 + 内存同步。监听器每次请求实时读内存 token，故新 token
+ * 即时生效、旧 token 立刻失效，无需重启监听器。返回新 token 供设置页展示 / 复制。
+ */
+export const generateServiceToken: IpcController<'config:generateServiceToken'> = async () => {
+  const { bootstrap, logger } = getContext();
+  const token = randomBytes(32).toString('base64url');
+  const service = { ...bootstrap.config.service, token };
+  await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, service });
+  bootstrap.config.service = service;
+  logger.info('service listener token regenerated');
+  return { token };
 };
 
 /**
