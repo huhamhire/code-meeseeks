@@ -140,6 +140,7 @@
     "ruleFilePath": "Dateipfad",
     "rulePreviewAria": "Regelvorschau",
     "rulePreviewTitle": "Regel: {{id}}",
+    "rulePreviewTitleMulti": "Übereinstimmende Regeln ({{n}})",
     "runCancelled": "Abgebrochen",
     "runFailed": "Ausführung fehlgeschlagen",
     "runFailedReason": "Ausführung fehlgeschlagen ({{reason}})",

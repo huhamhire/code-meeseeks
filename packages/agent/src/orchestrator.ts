@@ -1,4 +1,3 @@
-import type { Rule } from '@meebox/rules';
 import type {
   AgentRecommendation,
   AgentStep,
@@ -72,7 +71,8 @@ export interface ReviewOrchestratorDeps {
 export interface ReviewOrchestratorInput {
   context: AgentContext;
   pr: AssemblePrMeta;
-  matchedRule?: Rule | null;
+  /** 命中规则的已拼接正文（多条经 combineRuleInstructions 拼成）；无命中传空 / null。 */
+  matchedRuleInstructions?: string | null;
   language?: string;
   /** 步骤展示文案（主进程 i18n 解析后注入）；省略回落 DEFAULT_STEP_LABELS（en-US）。 */
   labels?: AgentStepLabels;
@@ -160,7 +160,7 @@ export async function runReviewMicroflow(
     context: input.context,
     pr: input.pr,
     toolCatalog: input.toolCatalog ?? [],
-    matchedRule: input.matchedRule,
+    matchedRuleInstructions: input.matchedRuleInstructions,
     language: input.language,
   });
   const ctx: ReviewStepCtx = {

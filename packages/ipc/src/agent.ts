@@ -11,19 +11,19 @@ import type { PragentRunInfo } from './common.js';
 /** Agent 交互域：规则匹配 / 评审编排 / 自由规划 / 会话与台账 / pr-agent run 队列。 */
 export interface AgentChannels {
   /**
-   * 给指定 PR 查 `<agent.dir>/rules` 当前命中的规则 (按 priority desc + path asc 取首条)。
-   * 调用方传 tool 区分 /describe / /review (规则可能只对其中一个 tool 生效)。
-   * agent.dir 未配置 / 整体禁用 / 无命中 → 返回 null。
+   * 给指定 PR 查 `<agent.dir>/rules` 当前命中的**全部规则**（按 priority desc + path asc，封顶前若干条，
+   * 与评审注入同口径）。调用方传 tool 区分 /describe / /review（规则可能只对其中一个 tool 生效）。
+   * agent.dir 未配置 / 整体禁用 / 无命中 → 返回空数组。
    */
   'rules:matchForPr': {
     request: { localId: string; tool: ReviewRunTool };
-    response: {
+    response: Array<{
       id: string;
       filePath: string;
       priority: number;
       tools: ReviewRunTool[];
       instructions: string;
-    } | null;
+    }>;
   };
   /**
    * 对指定 PR 跑一次 Agent 评审微流程（describe→review→条件追问→总结）。同步等待，

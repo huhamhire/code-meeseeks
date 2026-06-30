@@ -1,6 +1,5 @@
 import { runReviewMicroflow, type AgentContext, type ReviewPlan } from '@meebox/agent';
 import { appendAgentStep, startAgentSession, updateAgentSession } from '@meebox/poller';
-import type { Rule } from '@meebox/rules';
 import type {
   AgentSession,
   AgentStep,
@@ -47,7 +46,8 @@ export interface ReviewDeps {
   /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。 */
   chat: (input: { system: string; user: string }) => Promise<{ text: string; usage?: TokenUsage }>;
   agentContext: AgentContext;
-  matchedRule?: Rule | null;
+  /** 命中规则的已拼接正文（多条经 combineRuleInstructions 拼成）；无命中传空 / null。 */
+  matchedRuleInstructions?: string | null;
   language: string;
   /** 工具目录（含修改红线标注）；注入编排器系统上下文。 */
   toolCatalog?: ToolCatalogEntry[];
@@ -117,7 +117,7 @@ export async function runReview(
       {
         context: deps.agentContext,
         pr: { title: pr.title, description: pr.description, targetBranch: pr.targetRef.displayId },
-        matchedRule: deps.matchedRule,
+        matchedRuleInstructions: deps.matchedRuleInstructions,
         language: deps.language,
         labels: buildStepLabels(),
         summarySections: buildSummarySections(),

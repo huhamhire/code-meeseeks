@@ -13,7 +13,6 @@ import {
   writeAgentConversation,
 } from '@meebox/poller';
 import { READ_RUN_TOOL_IDS, type AgentMessage } from '@meebox/shared';
-import type { Rule } from '@meebox/rules';
 import type {
   AgentSession,
   AgentStep,
@@ -82,7 +81,8 @@ export interface PlanningDeps {
   chat: (input: { system: string; user: string }) => Promise<PlanningToolResult>;
   agentContext: AgentContext;
   toolCatalog: ToolCatalogEntry[];
-  matchedRule?: Rule | null;
+  /** 命中规则的已拼接正文（多条经 combineRuleInstructions 拼成）；无命中传空 / null。 */
+  matchedRuleInstructions?: string | null;
   language: string;
   maxSteps: number;
   /** 用户选中的代码引用（隐式上下文）：注入规划 LLM 当轮提示，不进持久化用户消息。 */
@@ -147,7 +147,7 @@ export async function runPlanning(
         context: deps.agentContext,
         pr: { title: pr.title, description: pr.description, targetBranch: pr.targetRef.displayId },
         toolCatalog: deps.toolCatalog,
-        matchedRule: deps.matchedRule,
+        matchedRuleInstructions: deps.matchedRuleInstructions,
         language: deps.language,
         labels: buildStepLabels(),
         summarySections: buildSummarySections(),

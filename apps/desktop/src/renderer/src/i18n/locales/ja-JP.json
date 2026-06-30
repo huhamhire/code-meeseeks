@@ -140,6 +140,7 @@
     "ruleFilePath": "ファイルパス",
     "rulePreviewAria": "ルールのプレビュー",
     "rulePreviewTitle": "ルール: {{id}}",
+    "rulePreviewTitleMulti": "一致したルール（{{n}} 件）",
     "runCancelled": "キャンセル済み",
     "runFailed": "実行に失敗しました",
     "runFailedReason": "実行に失敗しました ({{reason}})",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickMatchingRule, ruleMatches } from '../src/match.js';
+import { combineRuleInstructions, pickMatchingRule, pickMatchingRules, ruleMatches } from '../src/match.js';
 import type { Rule, RuleMatchContext } from '../src/types.js';
 
 function mkRule(over: Partial<Rule> = {}): Rule {
@@ -96,5 +96,40 @@ describe('pickMatchingRule', () => {
       mkRule({ id: 'review-ok.md', tools: ['review'] }),
     ];
     expect(pickMatchingRule(rules, ctx)?.id).toBe('review-ok.md');
+  });
+});
+
+describe('pickMatchingRules', () => {
+  it('返回全部命中（保序），过滤掉不匹配 / 禁用的', () => {
+    const rules = [
+      mkRule({ id: 'a.md' }),
+      mkRule({ id: 'b.md', enabled: false }),
+      mkRule({ id: 'c.md', tools: ['describe'] }),
+      mkRule({ id: 'd.md' }),
+    ];
+    expect(pickMatchingRules(rules, ctx).map((r) => r.id)).toEqual(['a.md', 'd.md']);
+  });
+
+  it('封顶 limit 条（按列表顺序取前 N）', () => {
+    const rules = [mkRule({ id: '1.md' }), mkRule({ id: '2.md' }), mkRule({ id: '3.md' })];
+    expect(pickMatchingRules(rules, ctx, 2).map((r) => r.id)).toEqual(['1.md', '2.md']);
+  });
+
+  it('全不命中返回空数组', () => {
+    expect(pickMatchingRules([mkRule({ applies_to: { project: /^OTHER$/ } })], ctx)).toEqual([]);
+  });
+});
+
+describe('combineRuleInstructions', () => {
+  it('按 Ruleset N 分段拼接各规则正文（frontmatter 已在加载期剥离）', () => {
+    const out = combineRuleInstructions([
+      mkRule({ instructions: 'first body' }),
+      mkRule({ instructions: 'second body' }),
+    ]);
+    expect(out).toBe('## Ruleset 1\n\nfirst body\n\n## Ruleset 2\n\nsecond body');
+  });
+
+  it('空输入 → 空串', () => {
+    expect(combineRuleInstructions([])).toBe('');
   });
 });

@@ -140,6 +140,7 @@
     "ruleFilePath": "文件路径",
     "rulePreviewAria": "规则预览",
     "rulePreviewTitle": "规则: {{id}}",
+    "rulePreviewTitleMulti": "命中规则（{{n}} 条）",
     "runCancelled": "已取消",
     "runFailed": "run 失败",
     "runFailedReason": "run 失败 ({{reason}})",
