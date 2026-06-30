@@ -47,6 +47,9 @@ docs/arch/
 │   ├── 02-command-palette.md         命令面板（标题栏入口 / 两级选择 / 按语言搜索 / 注册表 + 分域）
 │   ├── 03-notifications.md           消息通知（poll 事件投影 / 系统通知 toast / macOS dock 角标 / OS 权限降级）
 │   └── 04-i18n.md                    国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / 模板翻译）
+├── 04-integration/                 外部集成扩展与 CLI
+│   ├── 01-service-api.md             服务监听与本地 API（loopback 默认 / 强制 token / 只读边界 / 路由复用 service）
+│   └── 02-cli.md                     CLI 工具（Go 独立二进制 / 命令树 / 本机自动发现 / 跨平台分发）
 └── 99-core/                        基础设施
     ├── 01-state-storage.md           状态存储与数据模型（StateStore / per-PR 目录 / 存储模型 + 业务生命周期）
     ├── 02-config-and-secrets.md      配置与凭据（config.yaml / SecretStore / 设置页 / 首启向导）
