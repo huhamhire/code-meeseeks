@@ -39,6 +39,16 @@ pr-agent run 的实时状态、仓库同步、草稿都用**模块级 store**（
 启动时把主进程的事件流（run 进度 / 队列变化 / 同步进度 / 草稿变化）接入。这样切换 PR 时运行中的状态、
 实时 stdout、草稿列表不随组件卸载丢失。
 
+### 组件分层：App = 组合根，领域逻辑归 hooks
+
+`App.tsx` 是**组合根（composition root）**——只做三件事：调用各领域 hook、装配视图模型（廉价派生）、把数据与回调透传给 TitleBar / Sidebar / MainPane / ChatPane / StatusBar 等子组件。**不在 App 内堆领域逻辑**（状态机、effect、IPC 调用、ref 同步等），这些下沉到 `renderer/src/hooks/use*.ts` 各自的领域 hook：
+
+- `usePullRequests`（列表 / 选中 / 审批 / 合并 / 刷新 / 已读）、`useBootstrap`（启动 + 全局生命周期）、`usePrNavigation`（发现分类 / 活跃·归档范围 / 归档懒加载 / 按 URL 打开 / 定位跳转 / 通知点击导航 / 跨组件 Diff·Tab 跳转意图）、`useGlobalShortcuts`（窗口级快捷键）、`usePanelLayout`、`useDockBadge`、`useTheme`、`useToast`、`useUpdateNotice`、`useExternalLinkGuard`、`useAppStores`。
+- **判据**：一段逻辑若含自身的 state/effect/ref 同步、或可独立测试，就该是一个 hook；若只是「把 A 的输出接到 B 的入参」的装配与廉价派生（如按能力位过滤可见筛选项），留在组合根。
+- **避免反向臃肿**：相互依赖的状态（如 scope / selectedId / discoveryFilter）收在**同一个** hook，别拆成多个靠参数互穿 setter 的小 hook。hook 之间有依赖时按「数据源 → 派生」单向组合（如 `usePrNavigation` 组合在 `usePullRequests` 之上）。
+
+历史上 App 会随特性迭代「长回来」（通知、快捷键等细分领域内联堆积）——发现 App 又变臃肿时，按上述判据把成形的领域抽成 hook、回归组合根。
+
 ### 无边框窗口
 
 主窗口去掉系统原生标题栏（`titleBarStyle: 'hidden'`），由渲染层自绘一条 36px 标题栏（VS Code 风），
@@ -72,6 +82,7 @@ pr-agent run 的实时状态、仓库同步、草稿都用**模块级 store**（
 
 - **新交互一律走 IPC + 类型映射**：渲染层不直接碰 Node / 文件 / 网络。
 - **跨 PR 需存活的状态进模块级 store**，不要塞组件 useState（切 PR 即丢）。
+- **App.tsx 保持组合根**：新交互的领域逻辑下沉到 `hooks/use*.ts`，App 只装配（见「组件分层」）；发现 App 又变臃肿即按域抽 hook。
 - **安全基线**：`contextIsolation` 开、无 `nodeIntegration`、CSP；preload 只暴露白名单能力。
 - **二层模态**新增时记得 backdrop `stopPropagation`，否则会连带关掉外层。
 - **无边框标题栏高度**改动时，渲染层 `.app-titlebar` 与主进程 `titleBarOverlay.height` 两处须同步，否则 Windows 窗控与标题区错位；标题栏内新增交互元素记得标 `no-drag`。
