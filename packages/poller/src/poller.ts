@@ -246,9 +246,13 @@ export class Poller {
     for (const { connectionId, adapter } of this.connections) {
       const me = adapter.connection.getCurrentUser();
       try {
+        const caps = adapter.connection.capabilities();
+        // 评论计数是否「含回复」：true（GitHub/GitLab）→ 计数/updatedAt 变化才扫；false（Bitbucket，
+        // 计数仅顶层、updatedDate 也不随评论跳变）→ 对待处理 PR 每轮兜底扫，否则漏「回复」类通知。
+        const commentCountIncludesReplies = caps.commentCountIncludesReplies;
         // 发现分类：平台提供多类（GitHub 四类）→ 逐类轮询并 union 打标，让 renderer 切标签
         // 走本地缓存而非每次拉远端；无分类的平台（Bitbucket）单轮询、标记为空数组。
-        const filters = adapter.connection.capabilities().discoveryFilters ?? [];
+        const filters = caps.discoveryFilters ?? [];
         const merged = new Map<string, { pr: PullRequest; matched: PrDiscoveryFilter[] }>();
         const collect = async (filter?: PrDiscoveryFilter): Promise<void> => {
           const remote = await adapter.prs.listPendingPullRequests(filter ? { filter } : undefined);
@@ -348,13 +352,27 @@ export class Poller {
           });
           dirty = true;
 
-          // 未读 mention（见 pr-state computeUnread / computeUnreadMentionCount）：仅当 PR 内容变更（updatedAt
-          // 跳变 → 可能有新评论）且 me 已知时拉评论扫「@我 / 回复我」。游标 lastMentionAt 取较大值（驱动未读点）；
-          // mentionAts 与历史并集去重、按时间降序留最近 MENTION_ATS_CAP 条（驱动未读点旁的计数）。新到达 / 新 commit
-          // 未读无需在此处理（读取时分别按发现时间 vs 未读纪元、head sha 比对派生）。read-state 仅由 markRead 写，poll 不碰。
+          // 未读 mention（见 pr-state computeUnread / computeUnreadMentionCount）：拉评论扫「@我 / 回复我」。
+          // 游标 lastMentionAt 取较大值（驱动未读点）；mentionAts 与历史并集去重、按时间降序留最近 MENTION_ATS_CAP
+          // 条（驱动未读点旁的计数）。新到达 / 新 commit 未读无需在此处理（读取时分别按发现时间 vs 未读纪元、head sha
+          // 比对派生）。read-state 仅由 markRead 写，poll 不碰。
+          //
+          // 评论跟踪**仅针对「待处理」(notifiable=pending) PR**（含「待我评审」与「我创建的」），且需 me 已知。
+          // 是否拉评论：
+          //   - 含回复的平台（commentCountIncludesReplies）：仅当 updatedAt 跳变或 commentCount 变化（可能有新评论）
+          //     才扫——省请求。
+          //   - 不含回复的平台（Bitbucket：updatedDate 不随评论跳、commentCount 仅顶层不含回复）：无任何免费的
+          //     「含回复」信号 → 对待处理 PR 每轮兜底扫一次，否则漏「回复」类通知。
+          const commentCountChanged =
+            prev?.commentCount !== undefined &&
+            pr.commentCount !== undefined &&
+            prev.commentCount !== pr.commentCount;
+          const shouldScanComments = commentCountIncludesReplies
+            ? isChanged || commentCountChanged
+            : true;
           let lastMentionAt = prev?.lastMentionAt;
           let mentionAts = prev?.mentionAts;
-          if (isChanged && me) {
+          if (notifiable && me && shouldScanComments) {
             try {
               const comments = await adapter.comments.listPullRequestComments(
                 { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
@@ -371,9 +389,9 @@ export class Poller {
                 if (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt)) {
                   lastMentionAt = latest;
                 }
-                // 通知：仅对**已知 PR**（prev 存在）、已有基线、且「待处理」(pending) 的 PR 投影；取晚于历史游标的命中
-                // 按类型聚合条数。新 PR 此前历史评论不计（prev 不存在则跳过），避免新发现 PR 触发其旧评论的提醒风暴。
-                if (prev && notifiable) {
+                // 通知：仅对**已知 PR**（prev 存在）投影（外层已保证 notifiable=已有基线 + 待处理）；取晚于历史游标
+                // 的命中按类型聚合条数。新 PR 此前历史评论不计（prev 不存在则跳过），避免新发现 PR 触发其旧评论的提醒风暴。
+                if (prev) {
                   const sinceMs = prevCursor ? Date.parse(prevCursor) : 0;
                   const fresh = hits.filter((h) => Date.parse(h.at) > sinceMs);
                   // 按类型聚合本轮新增条数；发起人与点击定位取该类最新一条命中（通知头像 + 跳转目标）。
@@ -411,6 +429,7 @@ export class Poller {
           indexByLocalId.set(localId, {
             identity,
             updatedAt: pr.updatedAt,
+            commentCount: pr.commentCount,
             discoveredAt: prev?.discoveredAt ?? now,
             lastSeenAt: now,
             archivedAt: null,

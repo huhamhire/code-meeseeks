@@ -162,6 +162,14 @@ export interface PullRequest {
    * `mergeStatus`。adapter 写入时两者必须保持一致。
    */
   hasConflict: boolean;
+  /**
+   * 远端评论总数（含 / 不含回复视平台而定，见 {@link PlatformCapabilities.commentCountIncludesReplies}）。
+   * 随 PR 发现列表免费返回（无额外请求）：Bitbucket = `properties.commentCount`（仅顶层）、
+   * GitHub = `comments + review_comments`（含行内回复）、GitLab = `user_notes_count`（含回复）。
+   * poller 据此（与 `updatedAt` 并用）判定 PR 是否可能有新评论 → 决定是否拉评论扫描未读 / 通知。
+   * 平台不提供时省略（poller 退回仅按 `updatedAt` 判定）。
+   */
+  commentCount?: number;
 }
 
 export interface PingResult {
@@ -647,6 +655,15 @@ export interface PlatformCapabilities {
    * 标签页退化为纯「评论」视图（沿用原行为与文案），不混入提交 / 决断。
    */
   activityTimeline: boolean;
+  /**
+   * {@link PullRequest.commentCount} 是否「含回复」——即新增一条回复是否会让该计数变化。决定 poller 评论
+   * 跟踪策略：
+   * - `true`（GitHub `comments + review_comments`、GitLab `user_notes_count`）：计数是可靠的「含回复」增量
+   *   信号；poller 仅在 `commentCount` 或 `updatedAt` 变化时才拉评论扫描——省请求。
+   * - `false`（Bitbucket `properties.commentCount` 仅数顶层评论，回复不计、且 `updatedDate` 也不随评论跳变）：
+   *   无任何免费的「含回复」信号；poller 对**待处理 PR** 每轮兜底拉一次评论扫描，否则会漏掉「回复」类通知。
+   */
+  commentCountIncludesReplies: boolean;
 }
 
 /**

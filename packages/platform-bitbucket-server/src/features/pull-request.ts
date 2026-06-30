@@ -231,6 +231,8 @@ export class BitbucketPullRequestService extends BasePullRequestService {
       reviewers: bb.reviewers.map((r) => this.mapReviewer(r)),
       mergeStatus,
       hasConflict: mergeStatus.conflicted,
+      // 仅顶层评论数（回复不计）；capabilities.commentCountIncludesReplies=false 标记其粗粒度。
+      commentCount: bb.properties?.commentCount,
     };
   }
 

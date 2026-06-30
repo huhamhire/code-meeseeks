@@ -280,6 +280,8 @@ export class GitHubPullRequestService extends BasePullRequestService {
       reviewers,
       mergeStatus,
       hasConflict: mergeStatus.conflicted,
+      // 会话评论 + 行内评审评论；行内回复本身即 review_comment → 含回复（capabilities 标 true）。
+      commentCount: (p.comments ?? 0) + (p.review_comments ?? 0),
     };
   }
 

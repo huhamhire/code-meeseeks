@@ -291,6 +291,8 @@ export class GitLabPullRequestService extends BasePullRequestService {
       reviewers,
       mergeStatus,
       hasConflict: mergeStatus.conflicted,
+      // 用户 note 数（系统 note 不计、回复也是 note）→ 含回复（capabilities 标 true）。
+      commentCount: mr.user_notes_count,
     };
   }
 

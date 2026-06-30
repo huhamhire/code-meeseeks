@@ -37,6 +37,8 @@ export class GitHubConnection extends BaseConnection {
       suggestions: false,
       reviewGrouping: false,
       activityTimeline: true,
+      // comments + review_comments 含行内回复 → 计数变化可靠反映回复，poller 仅在计数/更新时间变化时扫。
+      commentCountIncludesReplies: true,
     };
   }
 

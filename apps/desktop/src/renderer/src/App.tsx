@@ -185,28 +185,20 @@ export default function App() {
     },
     [markRead, setSelectedId],
   );
-  // 系统通知点击 → 导航：选中目标 PR（必要时切回活跃范围 + 切到含它的发现分类）并标已读；inline 评论跳 Diff 行，
-  // summary 评论开「活动」标签，new_pr 仅选中。目标不在活跃列表（已归档 / 退场）则忽略。
+  // 系统通知点击 → 导航：复用 jumpToPr 选中目标（活跃命中切活跃范围 + 必要时切到含它的发现分类 + 标已读；
+  // 否则视为已归档 → 切归档范围、加载归档列表后选中），再按类型定位——inline 评论跳 Diff 行，summary 评论
+  // （mention / reply）开「活动」标签，new_pr 仅选中。此前仅在活跃列表查找、找不到即忽略，会漏掉已归档 PR 的
+  // 通知（如运行中任务的 PR 本 tick 刚被归档）；改走 jumpToPr 与状态栏跳转同一套活跃 / 归档定位逻辑。
   useEffect(() => {
     return subscribe('notification:activate', ({ localId, kind, anchor }) => {
-      const target = prsRef.current.find((p) => p.localId === localId);
-      if (!target) return;
-      setScope('active');
-      if (
-        target.discoveryFilters.length > 0 &&
-        !target.discoveryFilters.includes(discoveryFilterRef.current)
-      ) {
-        setDiscoveryFilter(target.discoveryFilters[0]!);
-      }
-      setSelectedId(localId);
-      void markRead(localId);
+      void jumpToPr(localId);
       if (anchor) {
         setPendingDiffNav({ anchor: { path: anchor.path, startLine: anchor.line, endLine: anchor.line } });
       } else if (kind === 'mention' || kind === 'reply') {
         setPendingTab('activity');
       }
     });
-  }, [markRead, setSelectedId]);
+  }, [jumpToPr]);
 
   // 列表 / 详情数据源随范围切换：已关闭范围用归档列表，其余用活跃列表。选中 PR 从当前展示列表解析——
   // 切到归档范围时若原选中是活跃 PR 则解析不到、详情区回落空态，选归档项后再展示其详情。

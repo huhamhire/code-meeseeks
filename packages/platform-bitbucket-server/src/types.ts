@@ -43,6 +43,15 @@ export interface BitbucketPullRequest {
   author: BitbucketParticipant;
   reviewers: BitbucketParticipant[];
   links: { self: Array<{ href: string }> };
+  /**
+   * 仪表盘 / 列表 PR 附带的统计属性。`commentCount` 仅数**顶层**评论（回复不计）——
+   * 故只能作「新增顶层评论」的粗信号，无法感知回复（见 poller 评论跟踪）。字段可选容错。
+   */
+  properties?: {
+    commentCount?: number;
+    openTaskCount?: number;
+    resolvedTaskCount?: number;
+  };
 }
 
 export interface BitbucketApplicationProperties {

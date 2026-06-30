@@ -199,6 +199,30 @@ export const openExternal: IpcController<'app:openExternal'> = async (_event, re
 };
 
 /**
+ * 打开 macOS「系统设置 → 通知」面板，引导用户授予 / 开启通知权限（macOS 在系统层管控通知授权、应用无法
+ * 代为开启）。非 macOS 为 no-op。通知面板的 pane id 随系统版本不同（Ventura+ 改名），逐个回退；全失败则
+ * 退到系统设置根。
+ */
+export const openNotificationSettings: IpcController<
+  'app:openNotificationSettings'
+> = async () => {
+  if (process.platform !== 'darwin') return;
+  const panes = [
+    'x-apple.systempreferences:com.apple.Notifications-Settings.extension', // Ventura(13)+
+    'x-apple.systempreferences:com.apple.preference.notifications', // 旧版
+    'x-apple.systempreferences:', // 兜底：系统设置根
+  ];
+  for (const url of panes) {
+    try {
+      await shell.openExternal(url);
+      return;
+    } catch {
+      // 该 pane id 在当前系统版本不识别 → 尝试下一个
+    }
+  }
+};
+
+/**
  * 系统原生目录选择对话框——需绑定到发起调用的窗口。
  */
 export const pickDirectory: IpcController<'dialog:pickDirectory'> = async (event, req) => {
