@@ -48,6 +48,8 @@ export class BitbucketServerConnection extends BaseConnection {
       suggestions: false,
       reviewGrouping: false,
       activityTimeline: true,
+      // properties.commentCount 仅数顶层评论、updatedDate 也不随评论跳变 → 无「含回复」信号，poller 兜底每轮扫待处理 PR。
+      commentCountIncludesReplies: false,
     };
   }
 

@@ -11,6 +11,12 @@ export interface PrIndexEntry {
   identity: PrIdentity;
   /** 远端 PR.updatedAt 镜像，poll 比对用 */
   updatedAt: string;
+  /**
+   * 远端评论计数镜像（{@link PullRequest.commentCount}）。poll 与上轮比对：含回复的平台（GitHub/GitLab）
+   * 据此判定「可能有新评论」以决定是否扫描；Bitbucket（仅顶层、不含回复）此值仅作辅助、不足以判定回复。
+   * 平台不提供时为 undefined（poll 退回仅按 `updatedAt` 判定）。
+   */
+  commentCount?: number;
   /** 首次被本机 poll 发现时间 */
   discoveredAt: string;
   /** 最近一次仍在远端列表里出现的时间 */

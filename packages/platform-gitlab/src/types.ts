@@ -38,6 +38,8 @@ export interface GlMr {
   has_conflicts?: boolean;
   /** 仅单 MR 详情带；行内评论 position 与 base/head sha 需要它 */
   diff_refs?: GlDiffRefs | null;
+  /** 用户评论（note）数，含回复、不含系统 note；列表与详情都带 */
+  user_notes_count?: number;
 }
 
 export interface GlApprovals {

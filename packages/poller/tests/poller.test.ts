@@ -54,11 +54,18 @@ class FakeAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
   private currentUser: { name: string; displayName: string } | null = null;
   private commentList: PrComment[] = [];
+  // 能力开关：模拟「含回复的计数信号」平台（GitHub/GitLab）；默认 false（Bitbucket 粗信号、每轮兜底扫）。
+  private replyAware = false;
+  // listPullRequestComments 调用计数：验证 reliable 平台未变化时不扫 / coarse 平台每轮扫。
+  commentCalls = 0;
   readonly connection: PlatformConnection;
   readonly prs: PullRequestService;
   readonly comments: CommentService = {
     ...unusedComments,
-    listPullRequestComments: async () => this.commentList,
+    listPullRequestComments: async () => {
+      this.commentCalls += 1;
+      return this.commentList;
+    },
   };
   readonly media: MediaService = unusedMedia;
 
@@ -84,6 +91,7 @@ class FakeAdapter implements PlatformAdapter {
         suggestions: false,
         reviewGrouping: false,
         activityTimeline: true,
+        commentCountIncludesReplies: this.replyAware,
       }),
       ping: async () => {
         if (this.failPing) throw new Error('ping fail');
@@ -123,6 +131,10 @@ class FakeAdapter implements PlatformAdapter {
   // 测试辅助：灌入 listPullRequestComments 返回的评论（未读 mention / 通知投影用）。
   seedComments(list: PrComment[]): void {
     this.commentList = list;
+  }
+  // 测试辅助：切到「含回复计数信号」平台语义（GitHub/GitLab）；默认 false 模拟 Bitbucket 粗信号。
+  setReplyAware(v: boolean): void {
+    this.replyAware = v;
   }
 }
 
@@ -293,6 +305,7 @@ describe('Poller.tick', () => {
         suggestions: false,
         reviewGrouping: false,
         activityTimeline: true,
+        commentCountIncludesReplies: false,
       }),
       ping: async () => ({ ok: true }),
       getCurrentUser: () => null,
@@ -919,5 +932,99 @@ describe('Poller onNotify (system notification projection)', () => {
     ]);
     await poller.tick();
     expect(events).toEqual([]); // 非 pending → 不投影
+  });
+
+  it('coarse-signal platform (Bitbucket) catches a reply with no updatedAt / commentCount change', async () => {
+    // 核心修复：Bitbucket 回复既不顶 updatedDate、也不计入顶层 commentCount → 唯有对待处理 PR 每轮兜底扫才不漏。
+    const pr1 = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr1.commentCount = 5; // 顶层评论数；新增回复不会改变它
+    const adapter = new FakeAdapter([pr1]); // FakeAdapter 默认 commentCountIncludesReplies=false（粗信号）
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线
+    expect(events).toEqual([]);
+
+    // 次轮：updatedAt 与 commentCount 都不变，仅在 alice 的评论下新增一条 bob 的回复。
+    now = new Date('2026-06-02T00:00:00.000Z');
+    adapter.setPrs([pr1]); // 同一 PR，updatedAt / commentCount 原样
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'alice', displayName: 'Alice' }, // 我的顶层评论
+        body: 'my comment',
+        createdAt: '2026-05-28T02:00:00.000Z',
+        replies: [
+          makeComment({
+            author: { name: 'bob', displayName: 'Bob' },
+            body: 'replying to you',
+            createdAt: '2026-06-02T00:00:00.000Z',
+          }),
+        ],
+      }),
+    ]);
+    await poller.tick();
+
+    const reply = events.find((e) => e.kind === 'reply');
+    expect(reply).toBeDefined();
+    expect(reply!.remoteId).toBe('1');
+    expect(reply!.actor.name).toBe('bob');
+  });
+
+  it('reply-aware platform skips the comment fetch when neither updatedAt nor commentCount changed', async () => {
+    const pr1 = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr1.commentCount = 0;
+    const adapter = new FakeAdapter([pr1]);
+    adapter.setReplyAware(true); // 模拟 GitHub/GitLab：含回复的计数信号
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'gh1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线：reliable 平台基线轮不扫
+    expect(adapter.commentCalls).toBe(0);
+
+    // 次轮：commentCount 0→1（含回复信号变化）→ 扫一次并投影 mention（updatedAt 故意不变，证明靠计数触发）。
+    now = new Date('2026-06-02T00:00:00.000Z');
+    const pr1b = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr1b.commentCount = 1;
+    adapter.setPrs([pr1b]);
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'ping @alice',
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }),
+    ]);
+    await poller.tick();
+    expect(adapter.commentCalls).toBe(1); // 计数变化 → 扫了一次
+    expect(events.some((e) => e.kind === 'mention')).toBe(true);
+
+    // 第三轮：updatedAt 与 commentCount 都不变 → 不再扫，无新事件。
+    now = new Date('2026-06-03T00:00:00.000Z');
+    const pr1c = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr1c.commentCount = 1;
+    adapter.setPrs([pr1c]);
+    const eventsLen = events.length;
+    await poller.tick();
+    expect(adapter.commentCalls).toBe(1); // 未变化 → 未扫
+    expect(events.length).toBe(eventsLen); // 无新事件
   });
 });

@@ -44,6 +44,8 @@ export class GitLabConnection extends BaseConnection {
       reviewGrouping: false,
       // GitLab 无统一活动事件源（CE 无审批、审批系统 note 解析脆弱）→ PR 标签页退化为纯评论视图。
       activityTimeline: false,
+      // user_notes_count 含回复（回复也是 note）→ 计数变化可靠反映回复，poller 仅在计数/更新时间变化时扫。
+      commentCountIncludesReplies: true,
     };
   }
 

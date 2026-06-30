@@ -30,6 +30,10 @@ export interface GhPull {
   requested_reviewers?: GhUser[];
   mergeable?: boolean | null;
   mergeable_state?: string;
+  /** 会话（issue）评论数；仅 `/pulls/{n}` 详情带 */
+  comments?: number;
+  /** 行内评审评论数（含回复，回复本身即 review comment）；仅 `/pulls/{n}` 详情带 */
+  review_comments?: number;
 }
 
 export interface GhReview {
