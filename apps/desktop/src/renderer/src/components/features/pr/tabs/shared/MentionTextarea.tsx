@@ -49,6 +49,7 @@ export function MentionTextarea({
   className,
   autoFocus = false,
   ariaLabel,
+  textareaRef,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -65,6 +66,11 @@ export function MentionTextarea({
   className?: string;
   autoFocus?: boolean;
   ariaLabel?: string;
+  /**
+   * 可选：把内部 textarea 元素回传给调用方 ref（与组件内部 ref 并存）。供调用方做外部 focus /
+   * 焦点判定（如 DraftZone 进入编辑态聚焦、Esc 命中判定）。不传则仅组件内部使用。
+   */
+  textareaRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
 }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLTextAreaElement | null>(null);
@@ -201,6 +207,7 @@ export function MentionTextarea({
       <textarea
         ref={(el) => {
           ref.current = el;
+          if (textareaRef) textareaRef.current = el;
           if (el && autoFocus && document.activeElement !== el && value === '') el.focus();
         }}
         className={className}

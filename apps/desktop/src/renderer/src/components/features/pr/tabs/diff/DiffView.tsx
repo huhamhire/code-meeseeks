@@ -85,6 +85,9 @@ export function DiffView({
   // 评论换行策略：GitHub/Bitbucket hard-break（单 \n → <br>）；GitLab CommonMark 软换行。
   // 能力位缺省（旧数据/无连接）回退 true，保持既有行为。
   const commentHardBreaks = capabilities?.commentHardBreaks ?? true;
+  // 行内评论 emoji 反应 / 图片附件能力（与评论 / 活动 tab 同源能力位）：缺省 = 不支持（不渲染加反应按钮 / 不启用粘贴上传）。
+  const reactionsMode = capabilities?.commentReactions || undefined;
+  const attachmentsEnabled = capabilities?.commentAttachments ?? false;
   const { t } = useTranslation();
   // 草稿池：跨 ChatPane / DiffView 共享 store；本组件需要它来渲染 inline zones
   const drafts = useDraftsForPr(pr.localId);
@@ -200,6 +203,8 @@ export function DiffView({
     prWebUrl: pr.url,
     renderSideBySide,
     commentHardBreaks,
+    reactionsMode,
+    attachmentsEnabled,
     readOnly,
   });
   // 内联草稿 view zone（commit 只读视图不渲染）
@@ -212,6 +217,7 @@ export function DiffView({
     registerEditTrigger,
     renderSideBySide,
     commentHardBreaks,
+    attachmentsEnabled,
     scopeKind: scope.kind,
   });
   // 行 hover '+' 新建草稿（commit 只读视图不挂）

@@ -4,10 +4,16 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { ReviewDraft } from '@meebox/shared';
 import { ConfirmModal, TrashIcon } from '../../../../common';
+import { MentionTextarea } from '../shared/MentionTextarea';
+import { uploadCommentImage } from '../shared/uploadCommentImage';
 import { useDraftZone } from './useDraftZone';
 
 interface DraftZoneProps {
   draft: ReviewDraft;
+  /** 所属 PR 的 localId；草稿编辑框图片上传（attachmentsEnabled 时）需用它定位 PR 附件存储。 */
+  prLocalId: string;
+  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；为真才在草稿编辑框启用粘贴 / 选取上传。 */
+  attachmentsEnabled?: boolean;
   /** 评论换行策略（活动平台 commentHardBreaks）：决定预览是否启用 remark-breaks，使草稿预览 WYSIWYG。 */
   hardBreaks: boolean;
   /**
@@ -38,6 +44,8 @@ interface DraftZoneProps {
  */
 export function DraftZone({
   draft,
+  prLocalId,
+  attachmentsEnabled = false,
   hardBreaks,
   registerEditTrigger,
   onSave,
@@ -136,16 +144,20 @@ export function DraftZone({
       </div>
       {isEditing ? (
         <div className="draft-zone-edit">
-          <textarea
-            ref={textareaRef}
+          <MentionTextarea
             className="draft-zone-textarea"
             value={editingBody}
-            onChange={(e) => setEditingBody(e.target.value)}
+            onChange={setEditingBody}
+            candidates={[]}
             onKeyDown={onKeyDown}
+            onUpload={
+              attachmentsEnabled ? (f) => uploadCommentImage(prLocalId, f) : undefined
+            }
             placeholder={t('draftZone.textareaPlaceholder')}
             rows={4}
             disabled={saving || publishing}
-            aria-label={t('draftZone.textareaAria')}
+            ariaLabel={t('draftZone.textareaAria')}
+            textareaRef={textareaRef}
           />
           <div className="draft-zone-edit-actions">
             {/* 主按钮：有 onPublish 时是"发布" (先 auto-save 再 POST，跟取消的
