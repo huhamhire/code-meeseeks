@@ -35,17 +35,20 @@ PR 评论之上的三类人工互动：**emoji 反应**、**@提及自动补全*
 平台 adapter 私有持有**（它最了解自家 API）。
 
 选择器按模式取候选：`fixed`（GitHub）用 `REACTION_PICKER`（固定 8 种，无搜索，对齐 GitHub Reactions
-API 上限）；`free`（GitLab / Bitbucket）用**内置精选大集** `REACTION_EMOJIS`（~150 个高频 emoji + gemoji
-风格 shortcode + 检索关键词）+ 搜索框。GitLab award 名 / Bitbucket emoticon shortname 同为 gemoji 风格
+API 上限）；`free`（GitLab / Bitbucket）用**内置精选大集** `REACTION_EMOJIS`（~150 个高频 emoji + 标准
+shortcode + 检索关键词）+ 搜索框。GitLab award 名 / Bitbucket emoticon shortname 同为标准 emoji
 shortcode，故 free 两端的 char↔原生名映射（`emojiToReactionCode` / `reactionCodeToEmoji`）统一从该集
 派生。用户经 web 用集外 emoji 反应的，仍按字符**显示**（best-effort：Bitbucket 从 twemoji url 码点解、
 GitLab 按 award 名回查），仅 picker 不提供。**后向扩展点**：要加一种反应，在 `REACTION_EMOJIS` 追加一行
 （emoji + 正确 shortcode + 关键词）即可，free 两端 adapter 自动生效；fixed 集另在 `REACTION_PICKER` +
 GitHub content 映射维护。
 
-刻意用**内置精选集**而非全量 Unicode / 第三方大词表：① 避免打包冗余与「比实例 Twemoji 版本新的 emoji
-写入静默失败」（如 Bitbucket 实测自带 Twemoji 12.1.2、~1180 个，全量 gemoji ~1870 是其超集）；② 精选集
-shortcode 可控、写入可靠。代价是长尾 emoji 搜不到——经评估对评审场景足够（含 alien 等常用项）。
+刻意用**内置精选集**而非全量 Unicode / 第三方大词表，原因有二：
+
+- 避免打包冗余与「比实例 Twemoji 版本新的 emoji 写入静默失败」（如 Bitbucket 实测自带 Twemoji 12.1.2、~1180 个，全量词表是其超集）；
+- 精选集 shortcode 可控、写入可靠。
+
+代价是长尾 emoji 搜不到——经评估对评审场景足够（含 alien 等常用项）。
 
 选择器为避免被评论滚动容器裁切 / 与其它层级 z-index 干涉，经 **portal 渲染到 body + fixed 定位**，坐标
 由触发按钮位置 + 视口空间算出（上下自适应翻转、水平夹取），并随滚动 / 缩放重算；点击弹层外部 / Esc 收起。

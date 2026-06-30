@@ -58,6 +58,11 @@ flowchart TB
 | 配置与凭据 | `config` + 设置页 | [08](08-config-and-secrets.md) |
 | 出站网络与代理 | 主进程 proxy plumbing | [09](09-networking-proxy.md) |
 | GUI 与交互 | 渲染层 React（布局 / 面板 / 跨 PR 保活） | [10](10-ui-interaction.md) |
+| 国际化 | react-i18next + 主/渲染双运行时 locale | [11](11-i18n.md) |
+| 错误码与传递 | `shared` 的 `AppError` + 跨 IPC 编码 | [12](12-error-codes.md) |
+| 命令面板 | 渲染层标题栏入口 + 分域命令注册表 | [13](13-command-palette.md) |
+| 消息通知 | `poller` 事件投影 + 主进程系统通知 / dock 角标 | [14](14-notifications.md) |
+| 评论互动 | 渲染层评论 UI + Adapter 反应 / 附件能力 | [15](15-comment-interactions.md) |
 
 > 打包 / 构建 / 签名 / CI 见开发专题 [`../development/packaging-release.md`](../development/packaging-release.md)（非产品子系统）。
 
@@ -72,8 +77,9 @@ flowchart TB
 
 - **本地优先**：仓库副本、PR 元数据、评论缓存、草稿、配置全部留在本地工作目录 `~/.code-meeseeks/`
   （仓库镜像可改到 `repos_dir`）。无服务端、不做多用户同步。
-- **出站只有两类**：① 评审者自配的 **LLM API**（经 pr-agent / litellm）；② 所配置的**代码平台**
-  （PR / 评论 REST + git 拉取）。除此不向任何第三方上报数据。两类出站都可经统一 HTTP 代理管控（见 [09](09-networking-proxy.md)）。
+- **出站只有两类**（除此不向任何第三方上报数据；两类都可经统一 HTTP 代理管控，见 [09](09-networking-proxy.md)）：
+  - 评审者自配的 **LLM API**（经 pr-agent / litellm）；
+  - 所配置的**代码平台**（PR / 评论 REST + git 拉取）。
 - **发给 LLM 的内容**：pr-agent 评审时只把 **PR diff + 命中的规则**（extra_instructions）发给 LLM，不发其它本地数据。
 - **凭据**：平台 token / LLM API key / 代理密码**明文**存 `config.yaml`（文件权限收紧），属已知风险；
   抽象层预留 keytar 升级（见 [08](08-config-and-secrets.md)）。

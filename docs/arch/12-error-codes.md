@@ -42,7 +42,9 @@ E + <两字母领域标签> + <四位数字>      共 7 位，正则 ^E[A-Z]{2}\
 业务领域统一封装为单一错误类型 **`AppError`**（继承 `Error`）：
 
 - `code`：错误码（上述格式），决定语义与前端 i18n key。
-- `meta?`：**扩展参数对象**，承载 ① i18n 插值参数（如 `{ tool: 'review' }`）；② 诊断字段（如 `{ status: 407 }`）。仅放**可序列化的标量**（string / number / boolean），不放大对象、不放敏感值。
+- `meta?`：**扩展参数对象**，承载两类内容（仅放**可序列化的标量** string / number / boolean，不放大对象、不放敏感值）：
+  - i18n 插值参数（如 `{ tool: 'review' }`）；
+  - 诊断字段（如 `{ status: 407 }`）。
 - `message`（开发者向）：英文短描 + 含 code，供后台日志与 stack 阅读（后台日志仍英语，不影响用户文案）。
 
 业务侧抛错统一 `throw new AppError(code, meta?)`，不再各自拼本地化字符串。`AppError` 的构造与编解码集中在**共享层**（main / renderer / 内部库共用同一份），保证两端对码与 wire 形态的认知一致。

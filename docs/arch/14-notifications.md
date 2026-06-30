@@ -2,11 +2,11 @@
 
 把「与我相关」的事件从应用内提示扩展到操作系统层：被 @、被回复、有新 PR 时弹原生系统通知（toast），并在 macOS dock 图标上显示「待回应」计数角标。用户向使用说明见 [docs/guide/](../guide/README.md)；列表内的未读点名计数见 [03-state-storage](03-state-storage.md) 的「未读点名计数」。
 
-## 范围（本期）
+## 范围
 
 - **系统通知（toast）**：Windows + macOS 原生通知，按事件类型（新 PR / 评论回复 / 评论 @）分别开关。
 - **macOS dock 角标**：dock 图标上显示「@我 / 回复我」待回应总数。
-- 常驻状态栏 / Windows 任务栏 overlay 与闪烁本期不做（成本偏重，留待后续）。
+- 不纳入常驻状态栏 / Windows 任务栏 overlay 与闪烁（成本偏重，收益有限）。
 
 ## 两条数据路径
 

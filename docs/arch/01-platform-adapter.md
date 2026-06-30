@@ -291,11 +291,13 @@ UI 据此 显/隐/灰，业务层据此调策略——**绝不在调用处 `try/
 
 ## 5. 扩展与注意事项
 
-- **加新平台 = 新 `@meebox/platform-<name>` 包**：① 一个实现 `PlatformTransport` 的连接 client（自管鉴权 /
-  分页 / host 推导 / clone）；② 四个领域服务，分别 `extends` `BaseConnection` / `BasePullRequestService` /
-  `BaseCommentService` / `BaseMediaService`，补平台端点与映射（映射作各服务私有方法，响应类型放 `types.ts`、
-  跨领域工具放 `utils.ts`）；③ 用 `composePlatformAdapter` 组装成容器适配器；④ adapters.ts 加 case +
-  config schema（discriminatedUnion）+ 配置 UI 放开平台选项；⑤ 内部包两步登记（见 [AGENTS.md](../../AGENTS.md)）。
+- **加新平台 = 新 `@meebox/platform-<name>` 包**：
+  - 一个实现 `PlatformTransport` 的连接 client（自管鉴权 / 分页 / host 推导 / clone）；
+  - 四个领域服务，分别 `extends` `BaseConnection` / `BasePullRequestService` / `BaseCommentService` / `BaseMediaService`，补平台端点与映射（映射作各服务私有方法，响应类型放 `types.ts`、跨领域工具放 `utils.ts`）；
+  - 用 `composePlatformAdapter` 组装成容器适配器；
+  - adapters.ts 加 case + config schema（discriminatedUnion）+ 配置 UI 放开平台选项；
+  - 内部包两步登记（见 [AGENTS.md](../../AGENTS.md)）。
+
   建议先用既有平台的 **adapter 契约测试**作基线，新平台过套件再开。可只实现 / 测试单个领域，不必一次补齐全部。
 - **能力位驱动 UI**：审批/合并/评论交互一律读 `capabilities` + PR 状态分支，**不出现 `if (platform === ...)`**（守住接缝）。
 - **写路径有副作用**：合并不可逆；评论发布要幂等（成功落远端 id 防重发，见 [05](05-review-workflow.md)）；
