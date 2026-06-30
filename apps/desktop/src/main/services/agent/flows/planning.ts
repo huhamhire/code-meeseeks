@@ -14,9 +14,9 @@ export async function planningFlow(
   question: string,
   referencedContext?: string,
 ): Promise<AgentSession> {
-  const { getPrAgentBridge, effectiveAgentDir, logger } = runtime.ctx;
+  const { getPrAgentBridge, ensureAgentDir, logger } = runtime.ctx;
   if (!getPrAgentBridge()) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
-  const agentContext = await loadAgentContext(effectiveAgentDir(), {
+  const agentContext = await loadAgentContext(await ensureAgentDir(), {
     onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
   });
   const ac = new AbortController();

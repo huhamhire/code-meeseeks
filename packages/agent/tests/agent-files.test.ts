@@ -29,11 +29,21 @@ describe('scaffoldAgentDir', () => {
     expect(again).toEqual([]);
   });
 
-  it('does not overwrite an existing file', async () => {
-    await writeFile(path.join(dir, 'SOUL.md'), '# custom', 'utf8');
+  it('does not overwrite a user-owned file', async () => {
+    await writeFile(path.join(dir, 'USER.md'), '# custom', 'utf8');
     const created = await scaffoldAgentDir(dir);
-    expect(created).not.toContain('SOUL.md');
-    expect(await readFile(path.join(dir, 'SOUL.md'), 'utf8')).toBe('# custom');
+    expect(created).not.toContain('USER.md');
+    expect(await readFile(path.join(dir, 'USER.md'), 'utf8')).toBe('# custom');
+  });
+
+  it('realigns the managed SOUL.md back to the built-in template', async () => {
+    await scaffoldAgentDir(dir);
+    const template = await readFile(path.join(dir, 'SOUL.md'), 'utf8');
+    // 用户本地改动 SOUL.md —— 不被认可，下次脚手架对齐回模版。
+    await writeFile(path.join(dir, 'SOUL.md'), '# locally edited', 'utf8');
+    const written = await scaffoldAgentDir(dir);
+    expect(written).toContain('SOUL.md');
+    expect(await readFile(path.join(dir, 'SOUL.md'), 'utf8')).toBe(template);
   });
 });
 
