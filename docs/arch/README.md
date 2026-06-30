@@ -47,17 +47,17 @@ docs/arch/
 │   ├── 02-command-palette.md         命令面板（标题栏入口 / 两级选择 / 按语言搜索 / 注册表 + 分域）
 │   ├── 03-notifications.md           消息通知（poll 事件投影 / 系统通知 toast / macOS dock 角标 / OS 权限降级）
 │   └── 04-i18n.md                    国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / 模板翻译）
-└── 99-core/                        基础设施 / 横切
+└── 99-core/                        基础设施
     ├── 01-state-storage.md           状态存储与数据模型（StateStore / per-PR 目录 / 存储模型 + 业务生命周期）
     ├── 02-config-and-secrets.md      配置与凭据（config.yaml / SecretStore / 设置页 / 首启向导）
     ├── 03-networking-proxy.md        出站网络与代理（HTTP 代理统一 / loopback 直连 / SSH）
     └── 04-error-codes.md             错误码与错误传递（AppError + meta / 跨 IPC 编码 / 前端按码 i18n / 注册表）
 ```
 
-> 打包 / 构建 / 签名 / CI 不属于产品子系统，已移到开发专题：[`../development/packaging-release.md`](../development/packaging-release.md)。
+> 打包 / 构建 / 签名 不属于产品子系统，已移到开发专题：[`../development/packaging-release.md`](../development/packaging-release.md)。
 
 ## 编号规则
 
 - **两级编号**：专题目录两位前缀（`01-platform` / `02-agent` / `03-gui` / `99-core`），目录内文档再两位前缀、从 `01` 起；`00-overview.md` 与本 README 留在根。
 - 编号只为排序与稳定引用，不代表强依赖；新增文档取所属目录的下一个空号。
-- **`99-core` 取末位 `99`**：基础设施 / 横切专题恒置末尾，新增功能专题依次取 `04`、`05`… 插在它之前，无需为其腾挪编号。
+- **`99-core` 取末位 `99`**：基础设施专题恒置末尾，新增功能专题依次取 `04`、`05`… 插在它之前，无需为其腾挪编号。

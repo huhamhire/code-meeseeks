@@ -62,13 +62,13 @@ flowchart TB
   - [命令面板](03-gui/02-command-palette.md) —— 渲染层标题栏入口 + 分域命令注册表
   - [消息通知](03-gui/03-notifications.md) —— `poller` 事件投影 + 主进程系统通知 / dock 角标
   - [国际化](03-gui/04-i18n.md) —— react-i18next + 主 / 渲染双运行时 locale
-- **`99-core/`** —— 基础设施 / 横切
+- **`99-core/`** —— 基础设施
   - [状态存储与数据模型](99-core/01-state-storage.md) —— `state-store` + `poller` 的 pr-state
   - [配置与凭据](99-core/02-config-and-secrets.md) —— `config` + 设置页
   - [出站网络与代理](99-core/03-networking-proxy.md) —— 主进程 proxy plumbing
   - [错误码与传递](99-core/04-error-codes.md) —— `shared` 的 `AppError` + 跨 IPC 编码
 
-> 打包 / 构建 / 签名 / CI 见开发专题 [`../development/packaging-release.md`](../development/packaging-release.md)（非产品子系统）。
+> 打包 / 构建 / 签名 见开发专题 [`../development/packaging-release.md`](../development/packaging-release.md)（非产品子系统）。
 
 `shared` 是跨包共享类型（含 `IpcChannels` 契约、PR/Finding/Run 等领域类型）；`logger` 是统一日志。
 

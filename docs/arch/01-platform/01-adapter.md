@@ -144,12 +144,12 @@ classDiagram
 各领域服务方法：
 
 - `connection`：`capabilities()`（静态能力描述符，见 §2）、`ping()`（版本 + 用户）、`getCurrentUser()`
-  （同步读 ping 缓存，判 approved 用）、`getCloneUrl(repo)`。
+  （同步读 ping 缓存，判 approved 用）、`getCloneUrl()`。
 - `prs`：`listPendingPullRequests()`（reviewer 待处理，跨仓）、`listPullRequestCommits()`（**newest-first**）、
   `listPullRequestActivity()`、`setPullRequestReviewStatus()`、`mergePullRequest()`。
 - `comments`：`listPullRequestComments()`、`publishSummaryComment()`、`publishInlineComment()`、
   `replyToComment()`、`editComment()`、`deleteComment()`。
-- `media`：`getUserAvatar(slug, avatarUrl?)`、`getAttachment(url, repo?)`。
+- `media`：`getUserAvatar()`、`getAttachment()`。
 
 中性类型要点：
 

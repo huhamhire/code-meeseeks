@@ -14,6 +14,27 @@
 根组件挂载后做一次 bootstrap（并行拉 app 信息 / 配置 / PR 列表 / pr-agent 状态 / 连接 / 上次同步），
 之后是自绘标题栏 + 三栏 + 状态栏的主界面，外加按需浮层：
 
+```mermaid
+flowchart TB
+  subgraph APP["主界面（无边框自绘）"]
+    direction TB
+    TBAR["TitleBar：品牌名 · 选中 PR 标题 · 系统窗控（整条可拖拽）"]
+    subgraph BODY["三栏（宽度可拖拽 / 可收起）"]
+      direction LR
+      SB["Sidebar · 左<br/>待评审 PR 列表<br/>分组折叠 · 过滤 · 搜索"]
+      MP["MainPane · 中<br/>变更 / 评论 / 提交 / 详情<br/>「变更」= DiffView"]
+      CP["ChatPane · 右<br/>对话驱动 pr-agent<br/>/describe · /review · /ask"]
+    end
+    SBAR["StatusBar：pr-agent 状态/队列 · 同步进度 · 最近同步 · LLM"]
+    TBAR --- BODY
+    BODY --- SBAR
+  end
+  OV["浮层（按需）：SettingsModal · OnboardingWizard · 二层模态 · toast"]
+  APP -. 覆盖 .-> OV
+```
+
+各区职责：
+
 - **TitleBar（顶）**：无边框窗口的自绘标题栏（见下「无边框窗口」），展示品牌名 + 选中 PR 标题，整条可拖拽窗口。
 - **Sidebar（左）**：待评审 PR 列表，按 `项目/仓库` 分组 + 手风琴折叠，updatedAt 倒序，状态过滤 + 搜索；
   宽度可拖拽、可整体收起。
