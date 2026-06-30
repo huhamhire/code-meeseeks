@@ -1,7 +1,7 @@
 # 评论互动（Comment Interactions）
 
 PR 评论之上的三类人工互动：**emoji 反应**、**@提及自动补全**、**图片附件上传**。三者都建立在既有评论
-读写闭环（见 [`05-review-workflow`](05-review-workflow.md)）与平台适配层（见 [`01-platform-adapter`](01-platform-adapter.md)）之上，按平台能力位显隐降级。
+读写闭环（见 [评审闭环](03-review-workflow.md)）与平台适配层（见 [平台适配](01-adapter.md)）之上，按平台能力位显隐降级。
 
 ## 1. 职责与边界
 

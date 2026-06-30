@@ -93,7 +93,7 @@ export class Orchestrator implements OrchestratorRuntime {
 
   /**
    * poll tick：满足开关 + 未在跑 + bridge 就绪时跑一遍 AutoPilot pass（准入门控 + 台账去重在 autopilotPass
-   * 内）。busy 锁防止上一遍未完又叠跑。见 docs/arch/06-agent.md「AutoPilot」。
+   * 内）。busy 锁防止上一遍未完又叠跑。见 docs/arch/02-agent/01-agent.md「AutoPilot」。
    */
   runAutopilotIfDue(): void {
     const ap = this.ctx.bootstrap.config.agent.autopilot;

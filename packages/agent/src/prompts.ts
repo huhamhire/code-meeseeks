@@ -7,7 +7,7 @@ import { CACHE_BREAK } from './constants.js';
 import type { AgentContext } from './types.js';
 
 /**
- * 提示词组装域（见 docs/arch/06-agent.md「提示词模版」「上下文注入」）：静态 user-turn 模板（PROMPT_TEMPLATES）
+ * 提示词组装域（见 docs/arch/02-agent/01-agent.md「提示词模版」「上下文注入」）：静态 user-turn 模板（PROMPT_TEMPLATES）
  * 与动态 system 上下文装配（assembleSystemContext）都属「构造发给模型的 prompt」，收口于此。占位符填充 / 截断
  * 等域无关字符串工具见 utils。
  */

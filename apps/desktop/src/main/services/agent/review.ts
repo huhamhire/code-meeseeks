@@ -14,7 +14,7 @@ import type { StateStore } from '@meebox/state-store';
 import { buildStepLabels, buildSummarySections, mapTerminationReason } from './labels.js';
 
 /**
- * 把纯逻辑的 `runReviewMicroflow` 接到主进程能力上（见 docs/arch/06-agent.md
+ * 把纯逻辑的 `runReviewMicroflow` 接到主进程能力上（见 docs/arch/02-agent/01-agent.md
  * 「AutoPilot」有界微流程）：
  * - runTool：经既有 pr-agent 运行队列跑 describe/review/ask，取产物文本回喂；
  * - chat：经嵌入式运行时的独立 LLM 通道做受限判断 / 总结；

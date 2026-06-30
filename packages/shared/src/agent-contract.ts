@@ -1,5 +1,5 @@
 /**
- * 高阶 Agent 的会话与工具契约类型（见 docs/arch/06-agent.md「会话 Agent 化」与「数据契约」）。
+ * 高阶 Agent 的会话与工具契约类型（见 docs/arch/02-agent/01-agent.md「会话 Agent 化」与「数据契约」）。
  * 这些类型被**持久化**（@meebox/poller）、**经 IPC 传输**（ipc.ts）、并在渲染层呈现，
  * 故置于 shared（与 ReviewRun / Finding 同处）。@meebox/agent 的纯逻辑从此引用。
  */
@@ -130,7 +130,7 @@ export interface AgentTranscriptFile {
 export type AutopilotDecision = 'review' | 'skipped';
 
 /**
- * AutoPilot 每 PR 一条台账：去重 + 审计（见 docs/arch/06-agent.md「AutoPilot」）。
+ * AutoPilot 每 PR 一条台账：去重 + 审计（见 docs/arch/02-agent/01-agent.md「AutoPilot」）。
  * 是否「未自动评审过当前版本」据 `autoReviewedUpdatedAt` 与当前 PR `updatedAt` 是否一致判定，
  * 故 PR 推新 commit 后能再次进入候选、内容未变则不重复跑。
  */

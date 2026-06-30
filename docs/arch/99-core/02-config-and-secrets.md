@@ -11,16 +11,16 @@
 
 - **单一 `config.yaml`（含敏感字段）**：配置与凭据合并在一个文件，不拆 `secrets.yaml`（减心智）。文件权限
   收紧（Unix 600 / Windows ACL）。**应用数据目录固定** `~/.code-meeseeks/`（config/state/logs/），仅
-  `workspace.repos_dir` 可改（见 [03](03-state-storage.md)）。
+  `workspace.repos_dir` 可改（见 [状态存储](01-state-storage.md)）。
 - **schema 用 zod 定义 + 全字段默认值**：解析时缺字段补默认，老配置自动兼容、新增字段非破坏性。顶层含：
   `connections[]` + `active_connection_id`、`llm{profiles[], active_id}`、`rules{dir,enabled}`、`poller{interval_seconds}`、
-  `proxy{...}`（见 [09](09-networking-proxy.md)）、`pr_agent{strategy}`（见 [04](04-pragent-runtime.md)）、
+  `proxy{...}`（见 [网络与代理](03-networking-proxy.md)）、`pr_agent{strategy}`（见 [pr-agent 运行时](../02-agent/03-pragent-runtime.md)）、
   `workspace{repos_dir}`、`language`。
 - **凭据抽象 `SecretStore`**：所有 token / API key 读写经它，不直接 `fs`。一期实现把凭据存在 `config.yaml`
   （`ConfigFileSecretStore`）；预留 keytar/OS Keychain 实现，将来只换注入、业务零改动。凭据**绝不进日志/异常栈**。
 - **多套 LLM 预设（profiles）**：`llm.profiles[]` 每条独立 `provider / model / base_url / api_key`，`active_id`
   切当前生效。内置 provider 选项（openai / openai-compatible / deepseek / anthropic / dashscope /
-  volcengine-ark / cli）；按 provider 决定注入哪族 env（见 [04](04-pragent-runtime.md)）。本地 Ollama
+  volcengine-ark / cli）；按 provider 决定注入哪族 env（见 [pr-agent 运行时](../02-agent/03-pragent-runtime.md)）。本地 Ollama
   经 openai-compatible 的 `/v1` 端点接入（旧 `ollama` 值自动迁移）。
 - **热更新（写盘 + 内存同步）**：每个设置项保存时写 `config.yaml` **并**更新内存中的 config，必要时热重建
   受影响运行时（如连接/代理变更重建 adapter、轮询间隔热替换定时器），无需重启。

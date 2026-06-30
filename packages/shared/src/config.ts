@@ -204,7 +204,7 @@ export const ConfigSchema = z.object({
     })
     .default({}),
   /**
-   * 高阶 Agent（见 docs/arch/06-agent.md）。Agent 目录是 Agent 的完整人格与知识来源：
+   * 高阶 Agent（见 docs/arch/02-agent/01-agent.md）。Agent 目录是 Agent 的完整人格与知识来源：
    * `<agent.dir>/` 下含 SOUL.md / AGENTS.md / MEMORY.md / USER.md 与 rules/ 子目录
    * （规则正文，匹配语义见 @meebox/rules）。
    *
@@ -215,12 +215,12 @@ export const ConfigSchema = z.object({
   agent: z
     .object({
       dir: z.string().default(''),
-      /** 单会话步数上限（默认取小值；见 docs/arch/06-agent.md「会话 Agent 化」）。 */
+      /** 单会话步数上限（默认取小值；见 docs/arch/02-agent/01-agent.md「会话 Agent 化」）。 */
       max_steps: z.number().int().min(1).max(50).default(8),
       /** 收尾总结严格篇幅上限（字符）。 */
       summary_max_chars: z.number().int().min(100).max(4000).default(800),
       /**
-       * AutoPilot 预评审（见 docs/arch/06-agent.md「AutoPilot」）。默认关闭，状态栏可启用。
+       * AutoPilot 预评审（见 docs/arch/02-agent/01-agent.md「AutoPilot」）。默认关闭，状态栏可启用。
        * enabled=false 时调度逻辑完全不跑。
        */
       autopilot: z
@@ -280,7 +280,7 @@ export const ConfigSchema = z.object({
     })
     .default({}),
   /**
-   * 消息通知（见 docs/arch/14-notifications.md）。enabled 为总开关；关闭后既不弹系统通知也不亮 dock 角标。
+   * 消息通知（见 docs/arch/03-gui/03-notifications.md）。enabled 为总开关；关闭后既不弹系统通知也不亮 dock 角标。
    * new_pr / reply / mention 按事件类型分别控制系统通知（toast）是否弹出。macOS dock「待回应」计数角标无独立
    * 开关——随总开关默认启用。系统通知受 OS 权限约束——用户在系统设置关闭后应用静默降级。
    */

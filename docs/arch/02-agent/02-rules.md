@@ -5,12 +5,12 @@
 让评审带上团队/仓库的编码规约：存储用户写的规则、按 PR 上下文匹配、把命中规则注入 pr-agent 的
 `extra_instructions`。
 
-负责：规则加载/匹配/注入。不负责：pr-agent 调用（见 [04](04-pragent-runtime.md)）、规则正文怎么写（用户的事）。
+负责：规则加载/匹配/注入。不负责：pr-agent 调用（见 [pr-agent 运行时](03-pragent-runtime.md)）、规则正文怎么写（用户的事）。
 
 ## 核心设计
 
 - **规则目录归于 Agent 目录 `<agent.dir>/rules/`**：规则正文是 Agent 知识来源的一部分，随 Agent 目录统一管理
-  （见 [06](06-agent.md)「Agent 目录」），不再单设顶层 `rules.*` 配置。`agent.dir` 留空时默认 `~/.code-meeseeks/agent`；
+  （见 [Agent](01-agent.md)「Agent 目录」），不再单设顶层 `rules.*` 配置。`agent.dir` 留空时默认 `~/.code-meeseeks/agent`；
   团队把 `agent.dir` 指向一个 git repo，所有人 clone 即同一套规则与上下文。规则纯「读」，跟可变状态隔离。
 - **Markdown + YAML frontmatter，一文件一规则**：递归扫 `<agent.dir>/rules/` 下所有 `.md`（**目录层级不参与匹配**，纯组织，
   跳过隐藏目录）。frontmatter 是结构化元数据，**markdown 正文就是注入给 pr-agent 的 `extra_instructions`**——人能读、
@@ -48,7 +48,7 @@ enabled: true
 # 正文即 extra_instructions（给 pr-agent 的规约）
 ```
 
-配置：规则目录固定为 `<agent.dir>/rules/`（`agent.dir` 见 [08](08-config-and-secrets.md)，空 = 默认 `~/.code-meeseeks/agent`）。
+配置：规则目录固定为 `<agent.dir>/rules/`（`agent.dir` 见 [配置与凭据](../99-core/02-config-and-secrets.md)，空 = 默认 `~/.code-meeseeks/agent`）。
 
 ## 扩展与注意事项
 

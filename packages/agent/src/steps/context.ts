@@ -1,7 +1,7 @@
 import type { AgentStep, TokenUsage } from '@meebox/shared';
 
 /**
- * Agent 步骤抽象的共享基座（见 docs/arch/06-agent.md）：把此前 planner（ReAct 循环）与 orchestrator
+ * Agent 步骤抽象的共享基座（见 docs/arch/02-agent/01-agent.md）：把此前 planner（ReAct 循环）与 orchestrator
  * （评审微流程）各自重复的「记一步 + 累计用量」收口为可复用的 StepRecorder，并给出统一的 StepHandler
  * 形状——每条流程即一组按序执行的步骤（评审）或单步循环（规划），新流程 = 新的步骤组合，符合复用/扩展路线。
  */

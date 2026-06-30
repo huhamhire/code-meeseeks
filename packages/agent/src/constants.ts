@@ -17,7 +17,7 @@ export const VERDICTS: readonly AgentRecommendationVerdict[] = [
 
 // ── Agent 目录布局 ──
 /**
- * Agent 目录的固定文件布局（见 docs/arch/06-agent.md「Agent 目录」）。
+ * Agent 目录的固定文件布局（见 docs/arch/02-agent/01-agent.md「Agent 目录」）。
  * - SOUL.md  灵魂：核心职责与边界（Agent 只读，默认由模版规定）
  * - AGENTS.md 工作规范与红线
  * - MEMORY.md 长期记忆（可写）
@@ -30,7 +30,7 @@ export const AGENT_FILES = {
   user: 'USER.md',
 } as const;
 
-/** rules/ 子目录名：规则正文存放处，匹配语义见 @meebox/rules（docs/arch/07-rules.md）。 */
+/** rules/ 子目录名：规则正文存放处，匹配语义见 @meebox/rules（docs/arch/02-agent/02-rules.md）。 */
 export const AGENT_RULES_SUBDIR = 'rules';
 
 /** 全空上下文文件集：空 agentDir / 读失败时的失败安全回退（Agent 退化为原生）。 */

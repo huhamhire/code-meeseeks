@@ -3,7 +3,7 @@
 ## 职责与边界
 
 渲染层（React）的整体布局、各面板职责、跨 PR 状态保活与关键交互约定。渲染层只做展示与交互，
-所有数据/IO 经 IPC 调主进程（见 [00 · 架构总览](00-overview.md)）。
+所有数据/IO 经 IPC 调主进程（见 [架构总览](../00-overview.md)）。
 
 负责：UI 结构、面板交互、前端状态保活、外链/模态/本地偏好等交互规范。不负责：业务逻辑与 IO（在主进程各模块）。
 
@@ -75,7 +75,7 @@ pr-agent run 的实时状态、仓库同步、草稿都用**模块级 store**（
 ## 数据 / 接口契约
 
 - 渲染层经 preload 暴露的泛型 `invoke<K>(channel, req)` 调主进程；事件订阅经 `subscribe(event, cb)`。
-  全部由 `IpcChannels` 类型映射约束（见 [00](00-overview.md)）。
+  全部由 `IpcChannels` 类型映射约束（见 [总览](../00-overview.md)）。
 - 领域类型（PR / Finding / ReviewRun / Draft / 配置）来自 `shared`，前后端共享。
 
 ## 扩展与注意事项

@@ -5,8 +5,8 @@
 持久化 PR 元数据、评论缓存、评审 run、连接/已观察仓库等。一期用 **JSON 文件**（非 SQLite），
 封装在 `StateStore` 接口后，将来可平滑换实现。
 
-负责：状态读写、PR 目录布局、软删与清理、路径安全。不负责：配置/凭据（见 [08](08-config-and-secrets.md)）、
-仓库镜像（见 [02](02-repo-mirror.md)）。
+负责：状态读写、PR 目录布局、软删与清理、路径安全。不负责：配置/凭据（见 [配置与凭据](02-config-and-secrets.md)）、
+仓库镜像（见 [仓库镜像](../01-platform/02-repo-mirror.md)）。
 
 ## 核心设计
 
@@ -115,7 +115,7 @@ stateDiagram-v2
 | `PrIndexEntry`（`index.json`） | lookup + 退场判定的单一来源（含活跃 + 归档全部条目） | `identity` · `updatedAt` · `archivedAt\|null`（空 = 活跃 / 非空 = 归档）· mention 游标 `lastMentionAt?` · `mentionAts?`（最近 10 条，未读点名计数据此派生） |
 | `StoredPullRequest`（`meta.json`） | 完整 PR 元数据，`platform` 自描述 | 派生态 `unread` / `unreadMentionCount` 不持久化 |
 | `PrReadStateFile`（`read-state.json`） | 用户已读水位，仅 `prs:markRead` 写 | `lastReadHeadSha` · `lastReadAt` |
-| `ReviewRun`（`runs/<runId>.json`） | 评审会话（详见 [05](05-review-workflow.md)） | `findings` · `tokenUsage` · `model` · 状态机字段 |
+| `ReviewRun`（`runs/<runId>.json`） | 评审会话（详见 [评审闭环](../01-platform/03-review-workflow.md)） | `findings` · `tokenUsage` · `model` · 状态机字段 |
 
 横向幂等记录（与 PR 目录解耦）：`connections.json` / `watched-repos.json` / `posted-comments.json`。
 

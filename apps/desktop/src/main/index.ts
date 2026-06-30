@@ -74,7 +74,7 @@ class App {
         .sweepStaleTmpFiles()
         .catch((err: unknown) => this.logger.warn({ err }, 'archive-store: tmp sweep failed'));
       // 归档孤儿清扫：统一索引丢失 / 重建后，归档数据失去索引条目、按索引遍历的硬清够不到 → 永久孤儿。
-      // 启动期（任何写入之前）按「索引无条目 + 目录 mtime 超 grace」无索引兜底回收（见 docs/arch/03）。
+      // 启动期（任何写入之前）按「索引无条目 + 目录 mtime 超 grace」无索引兜底回收（见 docs/arch/99-core/01-state-storage）。
       await sweepOrphanedArchivedPrs({
         stateStore: this.stateStore,
         archiveStore: this.archiveStore,
