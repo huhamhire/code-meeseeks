@@ -3,6 +3,19 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> 本版重点：
+>
+> - **外部集成（本地 API 服务）**：开启本机 API，把 PR 浏览与评审 Agent 操作开放给外部 agent / 工具 / 脚本集成
+
+### ✨ 新增
+
+- **外部集成 · 本地 API 服务**：设置新增「集成」分区，可开启一个本机 API 服务，将 PR 浏览与评审 Agent 操作以接口形式开放给外部 agent / 工具 / 脚本集成。
+  - 默认关闭；开启即强制访问令牌鉴权，令牌可一键生成 / 显示 / 复制 / 重新生成。
+  - 监听地址可自定义：默认仅本机可达，按需可开放到局域网（开放时给出安全提示）。
+  - 仅开放浏览与评审操作（PR 列表 / 详情 / diff / 动态 / 提交 / 评审人审批，以及评审 Agent 的状态 / 历史 / 自动评审 / 指令 / 对话），不提供评论发送等写操作。
+
 ## [0.8.0] - 2026-06-30
 
 > 本版重点：
@@ -371,6 +384,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...HEAD
 [0.8.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0
