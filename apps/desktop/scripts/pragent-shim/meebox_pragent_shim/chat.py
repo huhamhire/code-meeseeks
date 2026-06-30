@@ -1,4 +1,4 @@
-"""编排器「独立 LLM 对话通道」的运行入口（见 docs/arch/06-agent.md §3 + packages/pr-agent-bridge）。
+"""编排器「独立 LLM 对话通道」的运行入口（见 docs/arch/02-agent/01-agent.md §3 + packages/pr-agent-bridge）。
 
 由嵌入式运行时以 `python -m meebox_pragent_shim.chat` 启动，按 provider 分两条路：
 

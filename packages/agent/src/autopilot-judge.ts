@@ -13,7 +13,7 @@ function parseReviewPlan(raw: unknown): ReviewPlan | undefined {
 }
 
 /**
- * AutoPilot 批量判定（见 docs/arch/06-agent.md「AutoPilot」的例外规则）：把一批候选 PR 的
+ * AutoPilot 批量判定（见 docs/arch/02-agent/03-autopilot.md「AutoPilot」的例外规则）：把一批候选 PR 的
  * 标题 + 描述喂给 LLM，逐 PR 判「是否值得自动评审」并附原因（例如分支合并 / 回合并类、
  * 纯依赖升级可跳过）。纯逻辑：LLM 通道注入，可单测。
  */

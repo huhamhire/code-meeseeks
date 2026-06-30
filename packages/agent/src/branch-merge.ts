@@ -1,5 +1,5 @@
 /**
- * 「纯分支合并」判定（AutoPilot 第一步 judge 的背景输入，见 docs/arch/06-agent.md）：分支合并 / 回合并
+ * 「纯分支合并」判定（AutoPilot 第一步 judge 的背景输入，见 docs/arch/02-agent/01-agent.md）：分支合并 / 回合并
  * 把已评审过的分支改动同步到另一分支，无原创工作，自动预评审无意义。
  *
  * **判定以实际提交结构为准**：PR 提交**全为 merge commit**（无原创非 merge 提交）→ 纯合并。需调用方先经

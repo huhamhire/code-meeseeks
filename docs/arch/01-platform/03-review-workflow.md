@@ -1,12 +1,12 @@
-# 05 · 评审 → 发布闭环
+# 评审 → 发布闭环
 
 ## 职责与边界
 
 从「跑一次评审」到「评论落到远端」的完整链路：命令执行 → 输出解析为结构化 findings → 草稿池 →
 用户逐条确认/编辑/拒绝/手动追加 → 批量发布为 inline 评论；以及评论的 reply/edit/delete 与 PR 合并。
 
-负责：评审命令编排、输出解析、草稿状态机、发布。不负责：跑 pr-agent 本身（见 [04](04-pragent-runtime.md)）、
-平台评论 API（见 [01](01-platform-adapter.md)）。
+负责：评审命令编排、输出解析、草稿状态机、发布。不负责：跑 pr-agent 本身（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）、
+平台评论 API（见 [平台适配](01-adapter.md)）。
 
 ## 核心设计
 
@@ -27,21 +27,22 @@
   草稿、用新结果作候选（edited/posted/rejected/manual 保留）。
 - **finding 状态机**：`pending → accepted/edited/rejected/posted`；发布成功落 `posted_remote_id` 作幂等 key，
   防重发。
-- **发布走平台 inline 评论**：批量 `publishInlineComment`，内部 finding 锚点映射成平台锚点（见 [01](01-platform-adapter.md)）。
+- **发布走平台 inline 评论**：批量 `publishInlineComment`，内部 finding 锚点映射成平台锚点（见 [平台适配](01-adapter.md)）。
 - **评论二次操作**：reply / edit / delete（带 can-edit/can-delete 预判：只允许操作自己作者的评论，远端再校验）；
   PR 合并按 `mergeStatus.canMerge` 控制入口，合并不可逆、远端二次校验。
-- **token 用量落 run**：主进程逐行捕获子进程 stderr 的 `@@MEEBOX_USAGE@@` 哨兵累加（见 [04](04-pragent-runtime.md)），
+- **token 用量落 run**：主进程逐行捕获子进程 stderr 的 `@@MEEBOX_USAGE@@` 哨兵累加（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)），
   写入 `ReviewRun.tokenUsage`；UI run meta 展示 ↑输入 / ↓输出。
 - **LLM 失败识别**：pr-agent 可能 exit 0 但 stdout 其实是 LLM 全失败（认证错 / 无可用模型）→ 解析层标 llmFailure，
   落 failed 而非「完成」。
 
 ## 数据 / 接口契约
 
-- `Finding`：`title` / `body` / `anchor{path,startLine?,endLine?}` / `sectionKey` / 状态机字段
-  （`severity` / `status` / `draft_body` / `posted_remote_id`）。
-- `ReviewRun`：`tool` / `status` / `model` / `findings[]` / `tokenUsage{promptTokens,completionTokens,totalTokens,calls}` /
-  `stdout`(LLM 产出 + 日志) / `summary` / 计时与错误字段。
-- 评审 run 持久化于 per-PR 目录（见 [03](03-state-storage.md)）。
+仅列承载设计含义的关键字段，完整字段见各类型定义：
+
+| 实体 | 用途 | 关键字段 |
+| --- | --- | --- |
+| `Finding` | 单条评审发现（草稿 / 发布的最小单元） | `anchor{path,startLine?,endLine?}`（行内锚点）· `sectionKey`（归类）· 状态机 `severity` / `status` / `draft_body` / `posted_remote_id`（幂等发布凭据） |
+| `ReviewRun` | 一次评审会话（持久化于 per-PR 目录，见 [状态存储](../99-core/01-state-storage.md)） | `tool` · `status` · `model` · `findings[]` · `tokenUsage{promptTokens,completionTokens,totalTokens,calls}` · `summary` |
 
 ## 扩展与注意事项
 

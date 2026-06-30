@@ -11,7 +11,7 @@ import { AGENT_FILES, AGENT_RULES_SUBDIR, EMPTY_FILES } from './constants.js';
 import type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
 
 /**
- * Agent 目录域（见 docs/arch/06-agent.md「Agent 目录」）：把同属「on-disk agent 文件」职责的
+ * Agent 目录域（见 docs/arch/02-agent/01-agent.md「Agent 目录」）：把同属「on-disk agent 文件」职责的
  * 布局解析 / 初始化模版 / 脚手架 / 现读装配（上下文 + 规则）收口到一处。文件清单常量（AGENT_FILES /
  * AGENT_RULES_SUBDIR）见 constants.ts；记忆**写入**侧（appendAgentNotes）在 memory.ts。
  */
@@ -40,7 +40,7 @@ export function resolveAgentPaths(agentDir: string): {
 // ── 初始化模版 ──
 
 /**
- * Agent 目录初始化模版（统一 **en-US**、不做 i18n，见 docs/arch/06-agent.md「提示词模版」）。
+ * Agent 目录初始化模版（统一 **en-US**、不做 i18n，见 docs/arch/02-agent/01-agent.md「提示词模版」）。
  * 模版正文是 `resources/` 下的独立 `.md` 资源文件，构建期经 Vite `?raw` 内联；本文件只保留**加载/清单逻辑**。
  *
  * 两类所有权：
@@ -83,7 +83,7 @@ async function exists(p: string): Promise<boolean> {
  * - 应用所有（managed，如 SOUL.md）：强制对齐内置模版——缺失则创建，已存在但内容漂移则覆盖回模版。
  *
  * 返回**本次实际写入**（新建或对齐）的文件相对路径列表；无写入返回空数组。已对齐的 managed 文件不重复写。
- * 见 docs/arch/06-agent.md「提示词模版」。
+ * 见 docs/arch/02-agent/01-agent.md「提示词模版」。
  */
 export async function scaffoldAgentDir(agentDir: string): Promise<string[]> {
   if (!agentDir) throw new Error('scaffoldAgentDir: agentDir must not be empty');
@@ -124,7 +124,7 @@ async function readOptional(
 
 /**
  * 现读现装配：每次执行重新读 Agent 目录的 SOUL / AGENTS / MEMORY / USER 与 rules/，
- * **无缓存**（见 docs/arch/06-agent.md「上下文注入」）。空 agentDir → 全空上下文（Agent 退化为原生）。
+ * **无缓存**（见 docs/arch/02-agent/01-agent.md「上下文注入」）。空 agentDir → 全空上下文（Agent 退化为原生）。
  */
 export async function loadAgentContext(
   agentDir: string,

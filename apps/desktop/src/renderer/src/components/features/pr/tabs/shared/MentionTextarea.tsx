@@ -31,7 +31,7 @@ function parseMention(value: string, caret: number): { at: number; query: string
 
 /**
  * 评论编辑用 textarea，叠加 `@提及` 自动补全。候选由调用方传入（PR 参与者 + 评论作者等**已加载**的
- * 有界集合，不向远端枚举全员，见 docs/arch/01）；输入 `@` 后按查询串就地过滤、↑↓ 选择、Enter/Tab 确认、
+ * 有界集合，不向远端枚举全员，见 docs/arch/01-platform/01-adapter）；输入 `@` 后按查询串就地过滤、↑↓ 选择、Enter/Tab 确认、
  * Esc 关闭。补全仅为便利——用户仍可自由手打任意 `@name`，平台据文本自行解析通知。
  *
  * 弹层打开时拦截 ↑↓/Enter/Tab/Esc 用于候选导航，其余按键（含 Cmd/Ctrl+Enter 发送、Esc 取消）冒泡给

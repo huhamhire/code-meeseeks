@@ -127,7 +127,7 @@ export class JsonFileStateStore implements StateStore {
   /**
    * 清扫 `<prefix>/<child>/` 下的孤儿子目录：`child` 不在 `keep` 集**且**目录 mtime 早于 `nowMs - olderThanMs`
    * 的整树删掉。用于启动期回收归档冷存储里的孤儿——统一索引丢失 / 被重建后，归档条目失去目录索引，
-   * 按索引遍历的硬清够不到它（见 docs/arch/03）。无索引可依，故以目录 mtime 作 archivedAt 的代理（索引一并丢了）。
+   * 按索引遍历的硬清够不到它（见 docs/arch/99-core/01-state-storage）。无索引可依，故以目录 mtime 作 archivedAt 的代理（索引一并丢了）。
    *
    * **双重保守**：必须同时「不在 keep」+「mtime 超期」才删——避免误删一个只是暂时不在索引里的目录（如中断的搬迁）。
    * **仅启动期、任何写入之前调用**才安全（单写者前提下此刻无 in-flight 搬迁会被误判为孤儿）。子目录直接子级遍历、

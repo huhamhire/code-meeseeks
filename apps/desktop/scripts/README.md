@@ -1,7 +1,7 @@
 # 嵌入式 pr-agent 运行时（开发环境准备）
 
 把一份**可重定位的 CPython + 预装好的 pr-agent** 组装到 `apps/desktop/vendor/pragent/`，
-让应用无需用户预装 Python / Docker 即可跑 pr-agent（见 [docs/arch/04](../../../docs/arch/04-pragent-runtime.md)）。
+让应用无需用户预装 Python / Docker 即可跑 pr-agent（见 [docs/arch/02-agent/03-pragent-runtime](../../../docs/arch/02-agent/05-pragent-runtime.md)）。
 
 ## 用法
 
@@ -23,7 +23,7 @@ apps/desktop/vendor/pragent/         # gitignore，不入库
 │   └── .../site-packages/
 │       ├── pr_agent/ ...            # pip install pr-agent==<manifest 版本>
 │       ├── sitecustomize.py         # 薄加载器（CPython 启动经 site 自动 import）
-│       └── meebox_pragent_shim/     # monkeypatch shim 包（无侵入补丁，见 docs/arch/04-pragent-runtime.md）
+│       └── meebox_pragent_shim/     # monkeypatch shim 包（无侵入补丁，见 docs/arch/02-agent/05-pragent-runtime.md）
 └── VERSION                          # 组装指纹（幂等判定 + 记录 sha256）
 ```
 

@@ -1,9 +1,9 @@
-# 10 · GUI 与交互
+# GUI 与交互
 
 ## 职责与边界
 
 渲染层（React）的整体布局、各面板职责、跨 PR 状态保活与关键交互约定。渲染层只做展示与交互，
-所有数据/IO 经 IPC 调主进程（见 [00 · 架构总览](00-overview.md)）。
+所有数据/IO 经 IPC 调主进程（见 [架构总览](../00-overview.md)）。
 
 负责：UI 结构、面板交互、前端状态保活、外链/模态/本地偏好等交互规范。不负责：业务逻辑与 IO（在主进程各模块）。
 
@@ -13,6 +13,27 @@
 
 根组件挂载后做一次 bootstrap（并行拉 app 信息 / 配置 / PR 列表 / pr-agent 状态 / 连接 / 上次同步），
 之后是自绘标题栏 + 三栏 + 状态栏的主界面，外加按需浮层：
+
+```mermaid
+flowchart TB
+  subgraph APP["主界面（无边框自绘）"]
+    direction TB
+    TBAR["TitleBar：品牌名 · 选中 PR 标题 · 系统窗控（整条可拖拽）"]
+    subgraph BODY["三栏（宽度可拖拽 / 可收起）"]
+      direction LR
+      SB["Sidebar · 左<br/>待评审 PR 列表<br/>分组折叠 · 过滤 · 搜索"]
+      MP["MainPane · 中<br/>变更 / 评论 / 提交 / 详情<br/>「变更」= DiffView"]
+      CP["ChatPane · 右<br/>对话驱动 pr-agent<br/>/describe · /review · /ask"]
+    end
+    SBAR["StatusBar：pr-agent 状态/队列 · 同步进度 · 最近同步 · LLM"]
+    TBAR --- BODY
+    BODY --- SBAR
+  end
+  OV["浮层（按需）：SettingsModal · OnboardingWizard · 二层模态 · toast"]
+  APP -. 覆盖 .-> OV
+```
+
+各区职责：
 
 - **TitleBar（顶）**：无边框窗口的自绘标题栏（见下「无边框窗口」），展示品牌名 + 选中 PR 标题，整条可拖拽窗口。
 - **Sidebar（左）**：待评审 PR 列表，按 `项目/仓库` 分组 + 手风琴折叠，updatedAt 倒序，状态过滤 + 搜索；
@@ -75,7 +96,7 @@ pr-agent run 的实时状态、仓库同步、草稿都用**模块级 store**（
 ## 数据 / 接口契约
 
 - 渲染层经 preload 暴露的泛型 `invoke<K>(channel, req)` 调主进程；事件订阅经 `subscribe(event, cb)`。
-  全部由 `IpcChannels` 类型映射约束（见 [00](00-overview.md)）。
+  全部由 `IpcChannels` 类型映射约束（见 [总览](../00-overview.md)）。
 - 领域类型（PR / Finding / ReviewRun / Draft / 配置）来自 `shared`，前后端共享。
 
 ## 扩展与注意事项

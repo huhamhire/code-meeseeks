@@ -75,7 +75,7 @@ function highlight(text: string, query: string): React.ReactNode {
 /**
  * 标题栏命令面板（VS Code 风）：标题栏内嵌输入框 + 下拉结果。快捷键 mac Cmd+Shift+P /
  * 其余 Ctrl+Shift+P 打开聚焦。**最多两级**——顶层命令选中后若有二级选项则原地替换为选项列表，
- * 不支持返回上级（Esc 退出后重进）。搜索按当前界面语言匹配命令文案。设计见 docs/arch/13。
+ * 不支持返回上级（Esc 退出后重进）。搜索按当前界面语言匹配命令文案。设计见 docs/arch/03-gui/02-command-palette。
  */
 export function CommandPalette({
   platform,
