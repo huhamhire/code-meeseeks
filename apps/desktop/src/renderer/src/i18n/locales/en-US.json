@@ -538,7 +538,7 @@
     "emptyNoConnections": "No connections configured yet",
     "emptyNoConnectionsHint": "Bottom-right \"Settings\" → \"Edit config.yaml\" to add a code platform connection",
     "emptySelectPr": "← Select a PR from the left",
-    "emptySelectPrHint": "Selecting one will auto-sync the local mirror and show a side-by-side diff",
+    "emptySelectPrHint": "Once selected, the local mirror is synced automatically and the diff is shown",
     "hideBlame": "Disable blame",
     "hideWhitespace": "Hide whitespace",
     "loadingEditor": "Loading editor…",

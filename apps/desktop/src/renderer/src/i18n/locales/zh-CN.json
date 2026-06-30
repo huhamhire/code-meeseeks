@@ -524,7 +524,7 @@
     "emptyNoConnections": "尚未配置任何连接",
     "emptyNoConnectionsHint": "右下\"设置\"→\"编辑 config.yaml\"添加代码平台连接",
     "emptySelectPr": "← 从左侧选择一个 PR",
-    "emptySelectPrHint": "选中后会自动 sync 本地镜像并显示 side-by-side diff",
+    "emptySelectPrHint": "选中后将自动同步本地镜像并展示代码差异",
     "hideBlame": "关闭追溯显示",
     "hideWhitespace": "隐藏空白字符",
     "loadingEditor": "加载编辑器…",

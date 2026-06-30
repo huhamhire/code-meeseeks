@@ -538,7 +538,7 @@
     "emptyNoConnections": "Noch keine Verbindungen konfiguriert",
     "emptyNoConnectionsHint": "Unten rechts \"Einstellungen\" → \"config.yaml bearbeiten\", um eine Codeplattform-Verbindung hinzuzufügen",
     "emptySelectPr": "← Wählen Sie links einen PR aus",
-    "emptySelectPrHint": "Bei Auswahl wird der lokale Mirror automatisch synchronisiert und ein Side-by-Side-Diff angezeigt",
+    "emptySelectPrHint": "Bei Auswahl wird der lokale Mirror automatisch synchronisiert und der Diff angezeigt",
     "hideBlame": "Blame deaktivieren",
     "hideWhitespace": "Leerzeichen ausblenden",
     "loadingEditor": "Editor wird geladen…",

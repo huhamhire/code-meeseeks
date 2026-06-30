@@ -524,7 +524,7 @@
     "emptyNoConnections": "接続がまだ設定されていません",
     "emptyNoConnectionsHint": "右下の「設定」→「config.yaml を編集」からコードプラットフォーム接続を追加してください",
     "emptySelectPr": "← 左から PR を選択してください",
-    "emptySelectPrHint": "選択するとローカルミラーが自動的に同期され、横並びの差分が表示されます",
+    "emptySelectPrHint": "選択するとローカルミラーが自動的に同期され、差分が表示されます",
     "hideBlame": "Blame を無効化",
     "hideWhitespace": "空白文字を非表示",
     "loadingEditor": "エディタを読み込み中…",
