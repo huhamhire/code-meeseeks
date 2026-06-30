@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
-import { invoke, subscribe } from './api';
-import { formatBackendError } from './errors';
+import { invoke } from './api';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
 import { PrPanel, PrEmpty, usePullRequests } from './components/features/pr';
@@ -24,6 +22,7 @@ import { useUpdateNotice } from './hooks/useUpdateNotice';
 import { useAppStores } from './hooks/useAppStores';
 import { useExternalLinkGuard } from './hooks/useExternalLinkGuard';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { usePrNavigation } from './hooks/usePrNavigation';
 import { useGlobalTheme, useEditorAppearanceSync } from './hooks/useTheme';
 
 export default function App() {
@@ -80,131 +79,33 @@ export default function App() {
     setSettingsCategory(category);
     setShowSettings(true);
   }, []);
-  /**
-   * M4 跨组件跳转：ChatPane finding card 点"编辑" / PublishReviewModal anchor 点击 → 这里 set →
-   * PrPanel 切到 Diff tab + 透传给 DiffView 做 scroll/highlight/(可选)open edit zone，消费完清空。
-   */
-  const [pendingDiffNav, setPendingDiffNav] = useState<{
-    runId?: string;
-    findingId?: string;
-    anchor: { path: string; startLine: number; endLine: number };
-  } | null>(null);
-  // 通知点击 summary 评论 → 请求 PrPanel 切到「活动」对话标签（inline 评论走 pendingDiffNav）。
-  const [pendingTab, setPendingTab] = useState<'activity' | null>(null);
-  // GitHub 发现分类（运行时筛选，不持久化）；仅活动连接支持时在 PR 列表展示。
-  const [discoveryFilter, setDiscoveryFilter] = useState<PrDiscoveryFilter>('review-requested');
   // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
   const [statusFilter, setStatusFilter] = useState<FilterKey>('pending');
-  // PR 列表范围：进行中（活跃）/ 已关闭（归档冷存储，懒加载、只读）。命令面板「查看已关闭」亦可驱动。
-  const [scope, setScope] = useState<'active' | 'archived'>('active');
-  const [archivedPrs, setArchivedPrs] = useState<StoredPullRequest[]>([]);
-  // 归档冷存储拉取中：列表区据此显示 loading（归档规模大、可能慢；PaneLoading 自带 150ms 延迟，快路径不闪）。
-  const [archivedLoading, setArchivedLoading] = useState(false);
-  // 进入「已关闭」范围时懒加载归档冷存储（每次进入重取，纳入此后新归档的 PR）；离开不清，便于来回切。
-  useEffect(() => {
-    if (scope !== 'archived') return;
-    let cancelled = false;
-    setArchivedLoading(true);
-    void invoke('prs:listArchived', undefined)
-      .then((list) => {
-        if (!cancelled) setArchivedPrs(list);
-      })
-      .finally(() => {
-        if (!cancelled) setArchivedLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [scope]);
+  // PR 导航 / 范围领域（发现分类 / 活跃·归档切换 / 归档懒加载 / 按 URL 打开 / 定位跳转 / 通知点击导航 +
+  // 跨组件 Diff·Tab 跳转意图）——领域逻辑归 usePrNavigation；选中态 / 已读仍由 usePullRequests 拥有。
+  const {
+    scope,
+    discoveryFilter,
+    displayedPrs,
+    selectedPr,
+    archivedLoading,
+    selectDiscovery,
+    viewActive,
+    viewArchived,
+    openPrByUrl,
+    jumpToPr,
+    pendingDiffNav,
+    setPendingDiffNav,
+    pendingTab,
+    setPendingTab,
+  } = usePrNavigation({ prs, selectedId, setSelectedId, markRead, notifyError });
   // macOS dock 角标：活跃 PR「@我 / 回复我」待回应总数 → 主进程落到 dock 图标（系统行为，逻辑见 useDockBadge）。
   useDockBadge({
     prs,
     platform: boot?.info.platform,
     notifications: boot?.config.notifications,
   });
-  // 选发现分类（侧栏 tab / 命令面板）即回到「进行中」范围；「查看已关闭」切到归档范围。
-  const selectDiscovery = useCallback((f: PrDiscoveryFilter) => {
-    setScope('active');
-    setDiscoveryFilter(f);
-  }, []);
-  const viewActive = useCallback(() => setScope('active'), []);
-  const viewArchived = useCallback(() => setScope('archived'), []);
-  // 当前发现分类的 ref：供 openPrByUrl 在稳定回调里读最新值，免得把 discoveryFilter 进依赖、频繁重建命令。
-  const discoveryFilterRef = useRef(discoveryFilter);
-  discoveryFilterRef.current = discoveryFilter;
-  // 按 URL 打开当前平台 PR（命令面板「打开 URL」）：定位本地或拉取存档后切到对应范围并选中；失败弹 toast。
-  const openPrByUrl = useCallback(
-    async (url: string) => {
-      try {
-        const res = await invoke('prs:openByUrl', { url });
-        setScope(res.location);
-        if (res.location === 'archived') {
-          // 归档范围（已存在归档 / 新拉取存档）需重载列表纳入目标 PR。
-          setArchivedPrs(await invoke('prs:listArchived', undefined));
-        } else if (
-          // 活跃 PR：若当前发现分类不含它，落到包含它的分类，确保侧栏能展示并高亮（否则只剩详情显示、列表无选中）。
-          res.discoveryFilters.length > 0 &&
-          !res.discoveryFilters.includes(discoveryFilterRef.current)
-        ) {
-          setDiscoveryFilter(res.discoveryFilters[0]!);
-        }
-        setSelectedId(res.localId);
-        if (res.location === 'active') void markRead(res.localId);
-      } catch (e) {
-        notifyError(formatBackendError(e).title);
-      }
-    },
-    [setSelectedId, markRead, notifyError],
-  );
-
-  // 活跃 PR 列表 ref：供通知点击在稳定订阅里读最新值，免得把 prs 进依赖、频繁重订阅。
-  const prsRef = useRef(prs);
-  prsRef.current = prs;
-  // 状态栏运行指示点击 → 定位该 agent 任务所属 PR 并打开会话。任务运行期间该 PR 可能已被 poll 归档（任务不取消、
-  // 仍在跑），故活跃列表里找不到时视为已归档：切归档范围 + 重载归档列表（覆盖「本 tick 刚归档、缓存未含」与
-  // 「已在归档范围、setScope 同值不触发懒加载」两种情况）再选中。活跃命中则切活跃范围 + 必要时切到含它的发现分类
-  // （确保侧栏展示并高亮）+ 标已读。
-  const jumpToPr = useCallback(
-    async (localId: string) => {
-      const active = prsRef.current.find((p) => p.localId === localId);
-      if (active) {
-        setScope('active');
-        if (
-          active.discoveryFilters.length > 0 &&
-          !active.discoveryFilters.includes(discoveryFilterRef.current)
-        ) {
-          setDiscoveryFilter(active.discoveryFilters[0]!);
-        }
-        setSelectedId(localId);
-        void markRead(localId);
-        return;
-      }
-      setScope('archived');
-      setArchivedPrs(await invoke('prs:listArchived', undefined));
-      setSelectedId(localId);
-    },
-    [markRead, setSelectedId],
-  );
-  // 系统通知点击 → 导航：复用 jumpToPr 选中目标（活跃命中切活跃范围 + 必要时切到含它的发现分类 + 标已读；
-  // 否则视为已归档 → 切归档范围、加载归档列表后选中），再按类型定位——inline 评论跳 Diff 行，summary 评论
-  // （mention / reply）开「活动」标签，new_pr 仅选中。此前仅在活跃列表查找、找不到即忽略，会漏掉已归档 PR 的
-  // 通知（如运行中任务的 PR 本 tick 刚被归档）；改走 jumpToPr 与状态栏跳转同一套活跃 / 归档定位逻辑。
-  useEffect(() => {
-    return subscribe('notification:activate', ({ localId, kind, anchor }) => {
-      void jumpToPr(localId);
-      if (anchor) {
-        setPendingDiffNav({ anchor: { path: anchor.path, startLine: anchor.line, endLine: anchor.line } });
-      } else if (kind === 'mention' || kind === 'reply') {
-        setPendingTab('activity');
-      }
-    });
-  }, [jumpToPr]);
-
-  // 列表 / 详情数据源随范围切换：已关闭范围用归档列表，其余用活跃列表。选中 PR 从当前展示列表解析——
-  // 切到归档范围时若原选中是活跃 PR 则解析不到、详情区回落空态，选归档项后再展示其详情。
   const archived = scope === 'archived';
-  const displayedPrs = archived ? archivedPrs : prs;
-  const selectedPr = displayedPrs.find((p) => p.localId === selectedId) ?? null;
   // 状态栏「待审 PR」计数：仅计**需我评审且本人尚未评审**的 PR（discovery=review-requested 且 localStatus=pending）。
   // 不能简单数 localStatus==='pending'——「我创建的」等分类的 PR 本人非评审人、localStatus 恒为 pending，会把计数撑大。
   // 无发现分类的平台（单一「待我评审」发现）discoveryFilters 为空，视作 review-requested。
