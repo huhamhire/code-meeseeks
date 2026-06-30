@@ -98,7 +98,7 @@ llm:
 
 ## `agent` — 高阶 Agent 与 AutoPilot
 
-高阶 Agent 把自然语言请求转成自主规划 + 多工具编排（设计见 [docs/arch/06-agent.md](../arch/06-agent.md)）。**Agent 目录** `<agent.dir>/` 是 Agent 的完整人格与知识来源，其固定布局为：
+高阶 Agent 把自然语言请求转成自主规划 + 多工具编排（设计见 [docs/arch/02-agent/01-agent.md](../arch/06-agent.md)）。**Agent 目录** `<agent.dir>/` 是 Agent 的完整人格与知识来源，其固定布局为：
 
 ```
 <agent.dir>/

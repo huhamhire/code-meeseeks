@@ -1,7 +1,7 @@
 # 评论互动（Comment Interactions）
 
 PR 评论之上的三类人工互动：**emoji 反应**、**@提及自动补全**、**图片附件上传**。三者都建立在既有评论
-读写闭环（见 [`05-review-workflow`](05-review-workflow.md)）与平台适配层（见 [`01-platform-adapter`](01-platform-adapter.md)）之上，按平台能力位显隐降级。
+读写闭环（见 [评审闭环](03-review-workflow.md)）与平台适配层（见 [平台适配](01-adapter.md)）之上，按平台能力位显隐降级。
 
 ## 1. 职责与边界
 
@@ -34,18 +34,20 @@ PR 评论之上的三类人工互动：**emoji 反应**、**@提及自动补全*
 字符**为 key（`{ emoji, count, mine }`），渲染层直接绘制、跨平台一致；**原生名 ↔ emoji 的映射由各
 平台 adapter 私有持有**（它最了解自家 API）。
 
-选择器按模式取候选：`fixed`（GitHub）用 `REACTION_PICKER`（固定 8 种，无搜索，对齐 GitHub Reactions
-API 上限）；`free`（GitLab / Bitbucket）用**内置精选大集** `REACTION_EMOJIS`（~150 个高频 emoji + gemoji
-风格 shortcode + 检索关键词）+ 搜索框。GitLab award 名 / Bitbucket emoticon shortname 同为 gemoji 风格
-shortcode，故 free 两端的 char↔原生名映射（`emojiToReactionCode` / `reactionCodeToEmoji`）统一从该集
-派生。用户经 web 用集外 emoji 反应的，仍按字符**显示**（best-effort：Bitbucket 从 twemoji url 码点解、
-GitLab 按 award 名回查），仅 picker 不提供。**后向扩展点**：要加一种反应，在 `REACTION_EMOJIS` 追加一行
-（emoji + 正确 shortcode + 关键词）即可，free 两端 adapter 自动生效；fixed 集另在 `REACTION_PICKER` +
-GitHub content 映射维护。
+选择器按模式取候选：
 
-刻意用**内置精选集**而非全量 Unicode / 第三方大词表：① 避免打包冗余与「比实例 Twemoji 版本新的 emoji
-写入静默失败」（如 Bitbucket 实测自带 Twemoji 12.1.2、~1180 个，全量 gemoji ~1870 是其超集）；② 精选集
-shortcode 可控、写入可靠。代价是长尾 emoji 搜不到——经评估对评审场景足够（含 alien 等常用项）。
+- **`fixed`（GitHub）**：用 `REACTION_PICKER`——固定 8 种、无搜索（对齐 GitHub Reactions API 上限）。
+- **`free`（GitLab / Bitbucket）**：用**内置精选大集** `REACTION_EMOJIS`（~150 个高频 emoji + 标准 shortcode + 检索关键词）+ 搜索框。
+- **原生名映射**：GitLab award 名 / Bitbucket emoticon shortname 同为标准 emoji shortcode，故 free 两端的 char↔原生名映射（`emojiToReactionCode` / `reactionCodeToEmoji`）统一从该集派生。
+- **集外 emoji**：用户经 web 用集外 emoji 反应的仍按字符**显示**（best-effort：Bitbucket 从 twemoji url 码点解、GitLab 按 award 名回查），仅 picker 不提供。
+- **后向扩展点**：要加一种反应，在 `REACTION_EMOJIS` 追加一行（emoji + 正确 shortcode + 关键词）即可，free 两端 adapter 自动生效；fixed 集另在 `REACTION_PICKER` + GitHub content 映射维护。
+
+刻意用**内置精选集**而非全量 Unicode / 第三方大词表，原因有二：
+
+- 避免打包冗余与「比实例 Twemoji 版本新的 emoji 写入静默失败」（如 Bitbucket 实测自带 Twemoji 12.1.2、~1180 个，全量词表是其超集）；
+- 精选集 shortcode 可控、写入可靠。
+
+代价是长尾 emoji 搜不到——经评估对评审场景足够（含 alien 等常用项）。
 
 选择器为避免被评论滚动容器裁切 / 与其它层级 z-index 干涉，经 **portal 渲染到 body + fixed 定位**，坐标
 由触发按钮位置 + 视口空间算出（上下自适应翻转、水平夹取），并随滚动 / 缩放重算；点击弹层外部 / Esc 收起。
@@ -87,18 +89,27 @@ shortcode 可控、写入可靠。代价是长尾 emoji 搜不到——经评估
 
 ## 3. 数据 / 接口契约
 
-- **`PrReaction`**：`{ emoji: string; count: number; mine: boolean }`，挂在 `PrComment.reactions?`。
-- **`REACTION_PICKER`**：共享常量，`fixed` 模式候选 emoji 字符（固定 8 种）。
-- **`REACTION_EMOJIS`**：共享精选集 `{ emoji, code, keywords }[]`，`free` 模式候选 + 搜索源 + char↔code 映射来源。
-- **能力位**：`commentReactions: false | 'fixed' | 'free'`；`commentAttachments`（布尔）。
-- **`CommentService.toggleReaction(repo, prId, commentId, kind, emoji, add)`**：切换反应；`kind`
-  （summary / inline）供 GitHub 选 issue / review 反应端点，其余平台忽略；不支持的平台默认抛错。
-- **`MediaService.uploadAttachment(repo, prId, file)`**：`file` 为 `CommentAttachmentUpload`
-  （`{ fileName, contentType, bytes }`），返回 `CommentAttachmentResult`（`{ markdown }`）或 null
-  （不支持）。
-- **IPC 通道**：`comments:toggleReaction`（成功后广播 `comments:changed`）；`comments:uploadAttachment`
-  （字节走 `ArrayBuffer` 传输，main 端转 `Uint8Array` 交 adapter；仅产出 markdown、不动评论缓存）。
-- **i18n**：反应入口走 `reactions.*`，上传状态走 `attachments.*`。
+**核心实体 / 常量**（仅列关键形状，完整定义见类型）：
+
+| 实体 | 用途 | 形状 / 关键字段 |
+| --- | --- | --- |
+| `PrReaction` | 中性反应模型，挂 `PrComment.reactions?` | `{ emoji, count, mine }`（emoji 字符为 key） |
+| `REACTION_PICKER` | `fixed` 模式候选（共享常量） | 固定 8 种 emoji 字符 |
+| `REACTION_EMOJIS` | `free` 模式候选 + 搜索源 + char↔code 映射来源（共享精选集） | `{ emoji, code, keywords }[]`（~150 条） |
+
+**能力位**：`commentReactions: false | 'fixed' | 'free'`；`commentAttachments`（布尔）。
+
+**服务接口**（方法名 + 语义，不列伪签名）：
+
+- `CommentService.toggleReaction`：切换某评论的某 emoji 反应（幂等）；`kind`（summary / inline）供 GitHub 选 issue / review 反应端点，其余平台忽略；不支持的平台抛错。
+- `MediaService.uploadAttachment`：上传图片附件并回填 markdown——入参 `CommentAttachmentUpload`（`{ fileName, contentType, bytes }`），返回 `CommentAttachmentResult`（`{ markdown }`）或 `null`（不支持）。
+
+**IPC 通道**：
+
+- `comments:toggleReaction`：切换反应，成功后广播 `comments:changed`。
+- `comments:uploadAttachment`：字节走 `ArrayBuffer` 传输，main 端转 `Uint8Array` 交 adapter；仅产出 markdown、不动评论缓存。
+
+**i18n**：反应入口走 `reactions.*`，上传状态走 `attachments.*`。
 
 ## 4. 扩展与注意事项
 

@@ -19,7 +19,7 @@ import {
 import type { AgentContext } from './types.js';
 
 /**
- * 自由规划（ReAct）编排器（见 docs/arch/06-agent.md「会话 Agent 化」）：交互式入口的自然语言请求由它
+ * 自由规划（ReAct）编排器（见 docs/arch/02-agent/02-session.md「会话 Agent 化」）：交互式入口的自然语言请求由它
  * 处理——驱动反复跑 plan-cycle 步骤（每轮 chat 规划下一动作、调工具 / 收尾），到 final 或步数上限。与固定
  * 微流程（runReviewMicroflow）互补。本文件只留**公共类型 + 驱动**，单步逻辑见 steps/planning。
  *

@@ -1,5 +1,5 @@
 /**
- * 统一工具注册表（唯一真相源，见 docs/arch/06-agent.md「工具修改红线」）。新增 / 调整工具只改这里，
+ * 统一工具注册表（唯一真相源，见 docs/arch/02-agent/01-agent.md「工具修改红线」）。新增 / 调整工具只改这里，
  * 下列派生物自动跟随：
  * - `ReviewRunTool`：pr-agent 运行队列工具 id（`isRun`）。
  * - agent 工具目录 `buildToolCatalog`：按 `kind` 标读 / 改、按 `grant` 放行修改类（红线策略在 agent 层）。

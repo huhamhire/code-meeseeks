@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -19,6 +19,7 @@ describe('scaffoldAgentDir', () => {
     const created = await scaffoldAgentDir(dir);
     expect(created).toContain('SOUL.md');
     expect(created).toContain('AGENTS.md');
+    expect(created).toContain('README.md');
     expect(created).toContain('rules/example.md');
 
     const soul = await readFile(path.join(dir, 'SOUL.md'), 'utf8');
@@ -27,6 +28,23 @@ describe('scaffoldAgentDir', () => {
     // 第二次脚手架不重复创建（幂等）
     const again = await scaffoldAgentDir(dir);
     expect(again).toEqual([]);
+  });
+
+  it('does not recreate the seed-once example rule after deletion', async () => {
+    await scaffoldAgentDir(dir);
+    // 用户删掉示例规则——首次播种文件，删除后不应被复活。
+    await unlink(path.join(dir, 'rules/example.md'));
+    const again = await scaffoldAgentDir(dir);
+    expect(again).not.toContain('rules/example.md');
+    await expect(readFile(path.join(dir, 'rules/example.md'), 'utf8')).rejects.toThrow();
+  });
+
+  it('recreates a deleted user-owned README (create-if-missing)', async () => {
+    await scaffoldAgentDir(dir);
+    // README 属用户所有的「缺失即创建」，删除后下次脚手架补回（与首次播种的示例规则相区别）。
+    await unlink(path.join(dir, 'README.md'));
+    const again = await scaffoldAgentDir(dir);
+    expect(again).toContain('README.md');
   });
 
   it('does not overwrite a user-owned file', async () => {

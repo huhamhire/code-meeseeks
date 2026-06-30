@@ -52,7 +52,7 @@ export interface CommandOption {
 
 /**
  * 顶层命令：要么直接执行（`run`），要么进入二级选项（`options`）。**最多两级**、不支持返回上级
- * （Esc 退出后重进，见 docs/arch/13）。`title` / `category` 已按当前界面语言本地化，供按当前语言搜索。
+ * （Esc 退出后重进，见 docs/arch/03-gui/02-command-palette）。`title` / `category` 已按当前界面语言本地化，供按当前语言搜索。
  */
 export interface RootCommand {
   id: string;

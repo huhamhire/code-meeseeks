@@ -19,7 +19,7 @@ export type ProxyFetchFactory = (proxy: ProxyConfig, host: string) => FetchLike 
 /**
  * 平台连接的统一配置。连接层（统一连接封装实例）据此构造——含连接参数、鉴权 token 与**统一的代理
  * 配置**。代理解析（loopback 直连 / 否则挂代理）由连接层据 `baseUrl` host 一次完成，不再由各调用点
- * 预拼 fetch（见 docs/arch/01-platform-adapter.md §1）。
+ * 预拼 fetch（见 docs/arch/01-platform/01-adapter.md §1）。
  */
 export interface PlatformConnectionConfig {
   /** 平台 REST API base，无尾斜杠。 */
@@ -41,7 +41,7 @@ export interface PlatformConnectionConfig {
 
 /**
  * 平台连接传输端口（port）。领域基类只依赖此接口发起调用，不感知底层 fetch / 鉴权 / 分页 / 错误解析
- * 实现。各平台包提供「统一连接封装实例」实现本端口（见 docs/arch/01-platform-adapter.md §1）。
+ * 实现。各平台包提供「统一连接封装实例」实现本端口（见 docs/arch/01-platform/01-adapter.md §1）。
  *
  * 仅声明三平台同构的**最小连接能力**——纯 JSON 读写 + 分页。平台特有方法（GitHub PATCH / search、各平台
  * 信任模型迥异的二进制拉取等）由各自传输实现作为端口之外的扩展提供，不污染通用契约；二进制资源由

@@ -1,7 +1,7 @@
 import { TOOLS, type ToolCatalogEntry } from '@meebox/shared';
 
 /**
- * 工具目录与修改红线（见 docs/arch/06-agent.md「工具修改红线」）。读 / 分析类工具 Agent 始终可自主调用；
+ * 工具目录与修改红线（见 docs/arch/02-agent/01-agent.md「工具修改红线」）。读 / 分析类工具 Agent 始终可自主调用；
  * 修改类（对远端有副作用）**默认禁止**，仅在 `grants` 显式授权时放行——以**禁用态**注入目录（Agent 知其
  * 存在但不可调用），并由 `assertToolAllowed` 在分发入口**运行时硬校验**：即便 LLM 越权产出修改类调用也被拒。
  * 工具清单（读 / 改 / grant）来自 @meebox/shared 的统一注册表 `TOOLS`（tool-registry）。

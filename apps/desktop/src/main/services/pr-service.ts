@@ -61,7 +61,7 @@ export class PrService {
    *
    * 所有 per-PR 子树读写（评论缓存 / 草稿 / 关闭关系 / 评审 run / 会话 / 台账 / diff-base 缓存）都应
    * 经此解析后落到正确的根——否则对已归档 PR 的写会落进活跃存储，被下轮 poll 对账（`relocateTree` 源覆盖
-   * 目的、先清空目的）连同归档数据一并误删（见 docs/arch/03）。索引始终只在活跃存储维护，故据它判定。
+   * 目的、先清空目的）连同归档数据一并误删（见 docs/arch/99-core/01-state-storage）。索引始终只在活跃存储维护，故据它判定。
    */
   async storeForPr(localId: string): Promise<JsonFileStateStore> {
     const index = await readPrIndex(this.deps.stateStore);

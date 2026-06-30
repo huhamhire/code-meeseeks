@@ -1,4 +1,4 @@
-# 09 · 出站网络与代理
+# 出站网络与代理
 
 ## 职责与边界
 
@@ -28,10 +28,13 @@
   - **进程内 fetch 出口**（代码平台 REST 走 Node 的 undici fetch）**默认不认** proxy 环境变量，必须
     显式给 dispatcher（代理 Agent）→ 在构造平台客户端时，对**非 loopback** 目标包一个带代理
     dispatcher 的 fetch 注入进去；loopback / 关闭时不注入（走默认直连）。
-  - 由此统一到一个中心组件，按代理配置产出：①子进程 env、②undici 代理 dispatcher/fetch、
-    ③loopback 判断、④连通性自检。各出口只消费，不各自实现。
+  - 由此统一到一个中心组件，按代理配置产出以下各项，各出口只消费、不各自实现：
+    - 子进程 env；
+    - undici 代理 dispatcher / fetch；
+    - loopback 判断；
+    - 连通性自检。
 - **不取费用、不联网拉价格表**：token 用量只取 API 返回值，故底层 LLM 库的远端价格表无用且会在
-  弱网超时——强制只用本地价格表、彻底不联网（详见 [04 · pr-agent 集成与运行时](04-pragent-runtime.md)）。
+  弱网超时——强制只用本地价格表、彻底不联网（详见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。
 - **热生效**：改代理配置 → 写盘 + 更新内存配置 + 重建平台 adapter（REST 即时生效）；pr-agent / git
   出口在下次操作时读最新配置，无需重启。
 

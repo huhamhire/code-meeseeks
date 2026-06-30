@@ -86,7 +86,7 @@ export interface ExecOptions {
 }
 
 /**
- * 编排器「独立 LLM 通道」的一次原始对话调用（见 docs/arch/06-agent.md「会话 Agent 化」）。
+ * 编排器「独立 LLM 通道」的一次原始对话调用（见 docs/arch/02-agent/02-session.md「会话 Agent 化」）。
  * 复用嵌入式运行时的 litellm（provider 路由 / 代理 / token 采集已解决）：
  * 子进程跑 `meebox_pragent_shim.chat`，prompt 经 stdin 传入，结果走 stdout，
  * token 用量经 `@@MEEBOX_USAGE@@` 哨兵打到 stderr（与 pr-agent run 同一套）。

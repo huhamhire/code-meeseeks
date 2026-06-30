@@ -5,8 +5,10 @@ import type { StateStore } from '@meebox/state-store';
  * PR 评论快照文件。落在 `prs/<localId>/comments.json`。
  *
  * 失效判定：`pr_updated_at` 跟当前 PR meta 的 updatedAt 不一致即视为 stale，
- * 需要重新从远端拉 + 覆写本文件。pr.updatedAt 在 Bitbucket 任何变更 (新评论 / 状态 /
- * 描述等) 都会跳，所以这是一条够保险的 cache key。
+ * 需要重新从远端拉 + 覆写本文件。**注意 updatedAt 并非对所有平台都随评论跳**——含回复的平台
+ * （GitHub 等）新评论会跳，但 Bitbucket 的 updatedDate 不随评论 / 回复变化（见 poller.ts 的
+ * `commentCountIncludesReplies` 逻辑）。故轮询发现评论变更时由主进程显式失效本缓存 + 广播
+ * comments:changed（见 apps/desktop main 的 invalidateCommentsCache），不依赖 updatedAt 自失效。
  */
 export interface CommentsCacheFile {
   schema_version: 1;

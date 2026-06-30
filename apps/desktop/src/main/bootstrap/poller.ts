@@ -24,6 +24,8 @@ export function createPoller(deps: {
   getRepoMirror: () => RepoMirrorManager;
   /** 延迟取连接运行时（它在 poller 之后才建好）：通知服务据此按 connectionId 取 adapter 拉发起人头像。 */
   getConnectionRuntime: () => ConnectionRuntime;
+  /** 评论变更（回复 / 提及）顺手失效该 PR 评论缓存 + 广播 comments:changed（延迟经 ipcControl）。 */
+  invalidateCommentsCache: (localId: string) => void;
 }): Poller {
   const { bootstrap, stateStore, archiveStore, logger } = deps;
   return new Poller({
@@ -45,6 +47,12 @@ export function createPoller(deps: {
           deps.getConnectionRuntime().adapters.find((a) => a.connectionId === id)?.adapter ?? null,
         logger,
       });
+      // 评论类事件（回复 / 提及）= 该 PR 评论已变 → 失效缓存 + 广播 comments:changed，刷新已打开视图。
+      // 与系统通知是否真正弹出无关（通知设置可能关）：只要轮询发现评论变更就刷新当前打开的 Diff / 活动时间线。
+      const commentPrIds = new Set(
+        events.filter((e) => e.kind !== 'new_pr').map((e) => e.localId),
+      );
+      for (const localId of commentPrIds) deps.invalidateCommentsCache(localId);
     },
     // PR 新增 / 内容变更时顺手 syncMirror 跟上本地镜像，让用户随后点开 PR 省一趟 fetch。失败不阻断 poll
     //（mirror 有自己的全局队列 + 错误隔离）。identity 字段映射：poller 用 group/repo，repo-mirror 仍保留
