@@ -110,10 +110,12 @@ class App {
       'meebox main process started',
     );
 
-    // Agent 目录脚手架：未配置自定义目录时，Agent 上下文默认落在工作目录下的 agent/（见 ipc.ts
-    // effectiveAgentDir）。启动期幂等补齐默认目录的模版（已存在不覆盖），使首次使用即有 SOUL/AGENTS
-    // 等上下文文件可读。失败不阻断启动（运行期 loadAgentContext 仍会按缺失文件降级 + warn）。
-    void scaffoldAgentDir(this.bootstrap.paths.agentDir)
+    // Agent 目录脚手架：补齐**生效目录**的模版（用户配置的 agent.dir 优先，未配置回落默认 agent/——与
+    // ipc.ts effectiveAgentDir 同口径）。此前误用默认目录，配置了自定义目录时该目录不会被初始化、启动加载
+    // 到空目录。幂等（已存在不覆盖），使首次使用即有 SOUL/AGENTS 等上下文文件可读。失败不阻断启动
+    // （运行期 loadAgentContext 仍会按缺失文件降级 + warn）。改 agent.dir 后的补齐见 config.setAgent。
+    const agentDir = this.bootstrap.config.agent.dir || this.bootstrap.paths.agentDir;
+    void scaffoldAgentDir(agentDir)
       .then((created) => {
         if (created.length) this.logger.info({ created }, 'agent dir scaffolded');
       })

@@ -27,7 +27,7 @@ export const matchRuleForPr: IpcController<'rules:matchForPr'> = async (_event, 
   if (req.tool === 'ask') return null;
   const ctx = getContext();
   const pr = await ctx.pr.findPrOrThrow(req.localId);
-  const rules = await loadAgentRules(ctx.effectiveAgentDir(), {
+  const rules = await loadAgentRules(await ctx.ensureAgentDir(), {
     onWarn: (msg, file) => ctx.logger.warn({ file }, `rules: ${msg}`),
   });
   const matched = pickMatchingRule(rules, {

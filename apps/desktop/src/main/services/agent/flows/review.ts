@@ -17,10 +17,10 @@ export async function reviewFlow(
   runtime: OrchestratorRuntime,
   pr: StoredPullRequest,
 ): Promise<AgentSession> {
-  const { getPrAgentBridge, effectiveAgentDir, logger } = runtime.ctx;
+  const { getPrAgentBridge, ensureAgentDir, logger } = runtime.ctx;
   if (!getPrAgentBridge()) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
-  // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存。
-  const agentContext = await loadAgentContext(effectiveAgentDir(), {
+  // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存；加载前先确保目录已初始化。
+  const agentContext = await loadAgentContext(await ensureAgentDir(), {
     onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
   });
   // 注册 AbortController，让停止按钮（agent:stop）能在思考 / 执行任意阶段即时中止本次评审。

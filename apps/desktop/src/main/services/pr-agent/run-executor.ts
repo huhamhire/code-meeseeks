@@ -292,7 +292,7 @@ export class RunExecutor {
     extraArgs: string[] | undefined;
     askLangSuffix: string;
   }> {
-    const { bootstrap, logger, effectiveAgentDir, pr: prService } = this.ctx;
+    const { bootstrap, logger, ensureAgentDir, pr: prService } = this.ctx;
     const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
     // 代理 env 先铺底（非 pr-agent 范畴，仅 HTTP(S)_PROXY 类）；LLM 凭据/模型 + 响应语言 + per-tool 配置
     // 由 bridge 的 buildToolEnv 按意图组装——契约 key 收口在 @meebox/pr-agent-bridge。
@@ -328,7 +328,7 @@ export class RunExecutor {
         }
       }
 
-      const rules = await loadAgentRules(effectiveAgentDir(), {
+      const rules = await loadAgentRules(await ensureAgentDir(), {
         onWarn: (msg, file) => logger.warn({ file }, `rules: ${msg}`),
       });
       const matched = pickMatchingRule(rules, {

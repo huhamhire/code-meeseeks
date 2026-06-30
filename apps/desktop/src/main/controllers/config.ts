@@ -85,7 +85,9 @@ export const setLlm: IpcController<'config:setLlm'> = async (_event, req) => {
 };
 
 /**
- * 写 agent 配置（含 agent.dir）；内存同步，下次 pragent:run 现读生效。
+ * 写 agent 配置（含 agent.dir）；内存同步即热生效——effectiveAgentDir 现读 in-memory 配置，下次
+ * 加载上下文即用新目录（无资源绑定，无需重建）。新目录的模版初始化不在此做，交由「用时补齐」
+ * （ensureAgentDir，见 context.ts）保证，避免把初始化绑死在设置交互这一条路径上。
  */
 export const setAgent: IpcController<'config:setAgent'> = async (_event, req) => {
   const { bootstrap, logger } = getContext();

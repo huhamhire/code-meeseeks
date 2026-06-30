@@ -144,11 +144,11 @@ export const openConfigFile: IpcController<'app:openConfigFile'> = async () => {
 };
 
 /**
- * 文件管理器打开当前生效的 Agent 目录（不存在则先建）。
+ * 文件管理器打开当前生效的 Agent 目录。先「用时补齐」上下文模版（ensureAgentDir 幂等、含建目录），
+ * 这样直接打开（未跑过任何评审时）也能看到 SOUL/AGENTS 等文件，而非空目录。
  */
 export const openAgentDir: IpcController<'app:openAgentDir'> = async () => {
-  const dir = getContext().effectiveAgentDir();
-  await fs.mkdir(dir, { recursive: true }).catch(() => undefined);
+  const dir = await getContext().ensureAgentDir();
   const err = await shell.openPath(dir);
   if (err) throw new Error(`failed to open agent dir: ${err}`);
 };
