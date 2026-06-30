@@ -825,6 +825,7 @@
     "filterMergeable": "可合并",
     "filterNeedsWork": "需修改",
     "filterPending": "待处理",
+    "loading": "加载中…",
     "resizeTitle": "拖动调整侧栏宽度",
     "scopeActive": "进行中",
     "scopeArchived": "已关闭",

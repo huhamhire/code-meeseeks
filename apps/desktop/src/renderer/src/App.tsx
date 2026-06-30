@@ -98,13 +98,20 @@ export default function App() {
   // PR 列表范围：进行中（活跃）/ 已关闭（归档冷存储，懒加载、只读）。命令面板「查看已关闭」亦可驱动。
   const [scope, setScope] = useState<'active' | 'archived'>('active');
   const [archivedPrs, setArchivedPrs] = useState<StoredPullRequest[]>([]);
+  // 归档冷存储拉取中：列表区据此显示 loading（归档规模大、可能慢；PaneLoading 自带 150ms 延迟，快路径不闪）。
+  const [archivedLoading, setArchivedLoading] = useState(false);
   // 进入「已关闭」范围时懒加载归档冷存储（每次进入重取，纳入此后新归档的 PR）；离开不清，便于来回切。
   useEffect(() => {
     if (scope !== 'archived') return;
     let cancelled = false;
-    void invoke('prs:listArchived', undefined).then((list) => {
-      if (!cancelled) setArchivedPrs(list);
-    });
+    setArchivedLoading(true);
+    void invoke('prs:listArchived', undefined)
+      .then((list) => {
+        if (!cancelled) setArchivedPrs(list);
+      })
+      .finally(() => {
+        if (!cancelled) setArchivedLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -328,6 +335,7 @@ export default function App() {
             scope={scope}
             onViewActive={viewActive}
             onViewArchived={viewArchived}
+            loading={archived && archivedLoading}
           />
         )}
         <MainPane>

@@ -842,6 +842,7 @@
     "filterMergeable": "Mergebar",
     "filterNeedsWork": "Nacharbeit nötig",
     "filterPending": "Ausstehend",
+    "loading": "Wird geladen…",
     "resizeTitle": "Ziehen, um die Seitenleiste zu skalieren",
     "scopeActive": "In Bearbeitung",
     "scopeArchived": "Geschlossen",

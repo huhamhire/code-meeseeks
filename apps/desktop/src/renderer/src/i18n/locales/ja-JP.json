@@ -825,6 +825,7 @@
     "filterMergeable": "マージ可能",
     "filterNeedsWork": "要修正",
     "filterPending": "保留中",
+    "loading": "読み込み中…",
     "resizeTitle": "ドラッグでサイドバーの幅を調整",
     "scopeActive": "進行中",
     "scopeArchived": "クローズ済み",

@@ -842,6 +842,7 @@
     "filterMergeable": "Mergeable",
     "filterNeedsWork": "Needs work",
     "filterPending": "Pending",
+    "loading": "Loading…",
     "resizeTitle": "Drag to resize sidebar",
     "scopeActive": "In Progress",
     "scopeArchived": "Closed",

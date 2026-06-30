@@ -8,7 +8,7 @@ import type {
 } from '@meebox/shared';
 import { invoke, subscribe } from '../../api';
 import { useChatRunStore } from '../../stores/chat-run-store';
-import { HistoryIcon } from '../common';
+import { HistoryIcon, PaneLoading } from '../common';
 import { PrItem } from '../features/pr';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
@@ -37,6 +37,8 @@ interface SidebarProps {
   onViewActive: () => void;
   /** 切到「已关闭」（归档）范围。 */
   onViewArchived: () => void;
+  /** 列表数据加载中（如归档冷存储懒加载）：列表区显示 loading 占位，替代「无 PR」空态。 */
+  loading?: boolean;
 }
 
 export const SIDEBAR_MIN_WIDTH = 240;
@@ -82,6 +84,7 @@ export function Sidebar({
   scope,
   onViewActive,
   onViewArchived,
+  loading = false,
 }: SidebarProps) {
   const { t } = useTranslation();
   // 已关闭范围：扁平浏览（不分发现分类、不分状态、强制「全部」）；进行中范围维持原细分行为。
@@ -350,7 +353,9 @@ export function Sidebar({
       </div>
       )}
       <div className="sidebar-list">
-        {groups.length === 0 ? (
+        {loading ? (
+          <PaneLoading label={t('sidebar.loading')} />
+        ) : groups.length === 0 ? (
           <div className="sidebar-empty">
             {t(isArchived ? 'sidebar.archivedEmpty' : 'sidebar.empty')}
           </div>
