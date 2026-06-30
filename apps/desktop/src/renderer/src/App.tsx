@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from './api';
@@ -213,6 +213,18 @@ export default function App() {
   const archived = scope === 'archived';
   const displayedPrs = archived ? archivedPrs : prs;
   const selectedPr = displayedPrs.find((p) => p.localId === selectedId) ?? null;
+  // 状态栏「待审 PR」计数：仅计**需我评审且本人尚未评审**的 PR（discovery=review-requested 且 localStatus=pending）。
+  // 不能简单数 localStatus==='pending'——「我创建的」等分类的 PR 本人非评审人、localStatus 恒为 pending，会把计数撑大。
+  // 无发现分类的平台（单一「待我评审」发现）discoveryFilters 为空，视作 review-requested。
+  const pendingReviewCount = useMemo(
+    () =>
+      prs.filter(
+        (p) =>
+          p.localStatus === 'pending' &&
+          (p.discoveryFilters.length === 0 || p.discoveryFilters.includes('review-requested')),
+      ).length,
+    [prs],
+  );
   // 已关闭范围的「可参与」判定：合并 / 仍开放的 PR 可补充评论 + AI 评审；decline 仅浏览。活跃范围恒可参与。
   const canEngage = !archived || (selectedPr ? selectedPr.state !== 'declined' : false);
 
@@ -409,7 +421,7 @@ export default function App() {
         />
       </div>
       <StatusBar
-        prsCount={prs.length}
+        prsCount={pendingReviewCount}
         prAgent={boot.prAgent}
         connections={boot.connections}
         llm={boot.config.llm}
