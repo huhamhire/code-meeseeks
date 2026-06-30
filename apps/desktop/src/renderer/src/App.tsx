@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import type { PrDiscoveryFilter, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from './api';
 import { formatBackendError } from './errors';
-import { chatRunStore } from './stores/chat-run-store';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
 import { PrPanel, PrEmpty, usePullRequests } from './components/features/pr';
@@ -24,6 +23,7 @@ import { usePanelLayout } from './hooks/usePanelLayout';
 import { useUpdateNotice } from './hooks/useUpdateNotice';
 import { useAppStores } from './hooks/useAppStores';
 import { useExternalLinkGuard } from './hooks/useExternalLinkGuard';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useGlobalTheme, useEditorAppearanceSync } from './hooks/useTheme';
 
 export default function App() {
@@ -220,64 +220,15 @@ export default function App() {
   // 已关闭范围的「可参与」判定：合并 / 仍开放的 PR 可补充评论 + AI 评审；decline 仅浏览。活跃范围恒可参与。
   const canEngage = !archived || (selectedPr ? selectedPr.state !== 'declined' : false);
 
-  // 选中 PR 的 ref：供 F5 快捷键在稳定监听里读最新值，免得每次切 PR 重订阅。
-  const selectedIdRef = useRef(selectedId);
-  selectedIdRef.current = selectedId;
-  // 不可参与（decline / 无选中）时 F5 自动评审等写操作一律忽略；ref 供稳定监听读实时值。
-  const canEngageRef = useRef(canEngage);
-  canEngageRef.current = canEngage;
-
-  // 布局快捷键（窗口级，VS Code 风）：Ctrl/Cmd+B 切 PR 列表（左侧栏）、Ctrl/Cmd+J 切对话面板（右侧）、
-  // F5 运行自动评审、DevTools。仅单修饰键的 B/J 排除 Shift/Alt（避开 Cmd+Shift+P）；preventDefault 压过默认。
-  useEffect(() => {
-    const isMac = boot?.info.platform === 'darwin';
-    const onKey = (e: KeyboardEvent): void => {
-      const k = e.key.toLowerCase();
-      // F5：对当前选中 PR 运行自动评审（与命令面板同逻辑：有选中 PR、且未在跑才触发——重入保护）
-      if (k === 'f5') {
-        const id = selectedIdRef.current;
-        if (id && canEngageRef.current && !chatRunStore.getSnapshot().agentPrs.includes(id)) {
-          e.preventDefault();
-          void invoke('agent:run', { localId: id });
-        }
-        return;
-      }
-      // DevTools：mac ⌥⌘I / 其余 Ctrl+Shift+I（带 Shift/Alt，与下面单修饰键的 B/J 区分）
-      if (k === 'i') {
-        const devtools = isMac
-          ? e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey
-          : e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey;
-        if (devtools) {
-          e.preventDefault();
-          void invoke('app:openDevTools', undefined);
-        }
-        return;
-      }
-      // 查看已关闭（history）：mac ⌘⇧H（避开系统「隐藏应用」⌘H）/ 其余 Ctrl+H（浏览器历史惯例）
-      if (k === 'h') {
-        const wantArchived = isMac
-          ? e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey
-          : e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
-        if (wantArchived) {
-          e.preventDefault();
-          viewArchived();
-        }
-        return;
-      }
-      // 单修饰键布局开关：Ctrl/Cmd+B（PR 列表）、Ctrl/Cmd+J（对话面板）
-      const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (!mod || e.shiftKey || e.altKey) return;
-      if (k === 'b') {
-        e.preventDefault();
-        setSidebarCollapsed((c) => !c);
-      } else if (k === 'j') {
-        e.preventDefault();
-        setChatCollapsed((c) => !c);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [boot?.info.platform, setSidebarCollapsed, setChatCollapsed, viewArchived]);
+  // 窗口级全局快捷键（F5 自动评审 / DevTools / 查看已关闭 / Ctrl-Cmd+B·J 布局开关）——领域逻辑归 useGlobalShortcuts。
+  useGlobalShortcuts({
+    platform: boot?.info.platform,
+    selectedId,
+    canEngage,
+    viewArchived,
+    setSidebarCollapsed,
+    setChatCollapsed,
+  });
 
   if (fatalError) {
     return (
