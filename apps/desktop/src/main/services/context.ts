@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import { scaffoldAgentDir } from '@meebox/agent';
 import type { BootstrapResult } from '@meebox/config';
 import type { PrAgentBridge } from '@meebox/pr-agent-bridge';
 import type { Poller } from '@meebox/poller';
@@ -22,6 +23,8 @@ export interface RegisterDeps {
   /** 嵌入式运行时解释器路径（embedded 策略下执行期补 .secrets.toml 用），非 embedded 可空 */
   embeddedPythonPath?: string;
   stateStore: JsonFileStateStore;
+  /** 归档 PR 冷存储（archived/ 根，与 state/ 平级）：「已关闭」视图列表 + 打开已归档 PR 详情时读。 */
+  archiveStore: JsonFileStateStore;
   poller: Poller;
   /** 可变连接运行时（全量 adapters + adapterByHost）；设置页改连接后被 reconfigure 原地替换 */
   connectionRuntime: ConnectionRuntime;
@@ -39,6 +42,13 @@ export interface ServiceContext extends RegisterDeps {
   broadcast: typeof broadcast;
   /** 生效的 Agent 目录：用户配置优先，未配置则回落默认位置（~/.code-meeseeks/agent）。 */
   effectiveAgentDir(): string;
+  /**
+   * 取生效 Agent 目录并**幂等补齐**上下文模版（SOUL/AGENTS/MEMORY/USER + rules/）后返回其路径。
+   * 「用时初始化」：与现读现装配同口径——无论目录经启动默认 / 应用内热切换 / 直改配置文件后重启而来，
+   * 每次加载前都先确保已初始化，不依赖首启或设置交互这类一次性时机。幂等（已存在不覆盖）；失败仅告警、
+   * 不抛（loadAgentContext / loadAgentRules 仍会按缺失文件降级）。
+   */
+  ensureAgentDir(): Promise<string>;
   /** PR 领域服务：PR 定位 / adapter / 镜像 / diff base / 评论缓存。 */
   pr: PrService;
 }
@@ -54,13 +64,26 @@ export interface ControllerContext extends ServiceContext {
 }
 
 export function createServiceContext(deps: RegisterDeps): ServiceContext {
+  const effectiveAgentDir = (): string =>
+    deps.bootstrap.config.agent.dir || deps.bootstrap.paths.agentDir;
   return {
     ...deps,
     broadcast,
-    effectiveAgentDir: () => deps.bootstrap.config.agent.dir || deps.bootstrap.paths.agentDir,
+    effectiveAgentDir,
+    ensureAgentDir: async () => {
+      const dir = effectiveAgentDir();
+      try {
+        const created = await scaffoldAgentDir(dir);
+        if (created.length) deps.logger.info({ agentDir: dir, created }, 'agent dir scaffolded');
+      } catch (err) {
+        deps.logger.warn({ err, agentDir: dir }, 'ensure agent dir scaffold failed');
+      }
+      return dir;
+    },
     pr: new PrService({
       bootstrap: deps.bootstrap,
       stateStore: deps.stateStore,
+      archiveStore: deps.archiveStore,
       connectionRuntime: deps.connectionRuntime,
       repoMirror: deps.repoMirror,
     }),

@@ -43,6 +43,15 @@ export interface BitbucketPullRequest {
   author: BitbucketParticipant;
   reviewers: BitbucketParticipant[];
   links: { self: Array<{ href: string }> };
+  /**
+   * 仪表盘 / 列表 PR 附带的统计属性。`commentCount` 仅数**顶层**评论（回复不计）——
+   * 故只能作「新增顶层评论」的粗信号，无法感知回复（见 poller 评论跟踪）。字段可选容错。
+   */
+  properties?: {
+    commentCount?: number;
+    openTaskCount?: number;
+    resolvedTaskCount?: number;
+  };
 }
 
 export interface BitbucketApplicationProperties {
@@ -58,6 +67,18 @@ export interface BitbucketMergeStatus {
   vetoes?: Array<{ summaryMessage: string; detailedMessage?: string }>;
 }
 
+/**
+ * Bitbucket 评论上一种 emoji 反应（comment-likes 插件经评论 `properties.reactions` 注入）。
+ *
+ * 形状按真实实例响应核定（官方 REST 文档未明确）：`emoticon` 给 `shortcut`（如 `eyes`）+ `url`
+ * （twemoji SVG，文件名即 Unicode 码点如 `1f440.svg`）；`users[]` 为反应者列表；**无 `count` 字段**
+ * （计数取 `users.length`）。展示 emoji 优先从 `url` 解码点，回退 shortcut 名映射。字段仍标可选容错。
+ */
+export interface BitbucketReactionProperty {
+  emoticon?: { shortcut?: string; url?: string };
+  users?: BitbucketUser[];
+}
+
 export interface BitbucketComment {
   id: number;
   version: number;
@@ -67,6 +88,20 @@ export interface BitbucketComment {
   updatedDate: number;
   comments?: BitbucketComment[];
   parent?: { id: number };
+  /** 反应等扩展属性（comment-likes 插件注入 `reactions`）。形状未文档化，容错读取。 */
+  properties?: { reactions?: BitbucketReactionProperty[] };
+}
+
+/**
+ * 附件上传响应（POST .../attachments，multipart 字段 `files`）。`links.attachment.href` 为
+ * `attachment:<repoId>/<id>` 形式，可直接嵌入评论 markdown。字段按实测响应取用，容错可选。
+ */
+export interface BitbucketAttachmentUploadResponse {
+  attachments?: Array<{
+    id?: string | number;
+    url?: string;
+    links?: { attachment?: { href?: string } };
+  }>;
 }
 
 export interface BitbucketCommentAnchor {

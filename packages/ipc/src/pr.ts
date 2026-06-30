@@ -6,6 +6,7 @@ import type {
   PrActivityEvent,
   PrComment,
   PrCommit,
+  PrDiscoveryFilter,
   ReviewDraft,
   StoredPullRequest,
 } from '@meebox/shared';
@@ -62,7 +63,46 @@ export interface PrChannels {
     };
     response: PrComment;
   };
+  /**
+   * 切换当前用户对一条评论的 emoji 反应（add=true 加 / false 取下）。emoji 为规范化 Unicode 字符
+   * （见 shared REACTION_PICKER）；kind 区分 summary / inline（GitHub 据此选反应端点）。成功后 main
+   * 端清评论缓存 + 广播 comments:changed，UI 重拉刷新反应条。仅 commentReactions 能力为真的平台暴露。
+   */
+  'comments:toggleReaction': {
+    request: {
+      localId: string;
+      commentId: string;
+      kind: 'summary' | 'inline';
+      emoji: string;
+      add: boolean;
+    };
+    response: void;
+  };
+  /**
+   * 上传图片作为评论附件（粘贴 / 选取触发），返回可插入正文的 markdown 片段；不支持的平台
+   * （GitHub）返回 null。bytes 走 ArrayBuffer 经 IPC 传输，main 端转 Uint8Array 交 adapter 上传。
+   * 仅 commentAttachments 能力为真的平台暴露入口。
+   */
+  'comments:uploadAttachment': {
+    request: { localId: string; fileName: string; contentType: string; bytes: ArrayBuffer };
+    response: { markdown: string } | null;
+  };
   'prs:list': { request: void; response: StoredPullRequest[] };
+  /** 列出已归档（退场）PR：从冷存储读取，供「已关闭」视图浏览（只读）。 */
+  'prs:listArchived': { request: void; response: StoredPullRequest[] };
+  /**
+   * 按 URL 打开当前平台的 PR：解析链接 → 若本地已存在（活跃 / 归档）直接定位；否则远端拉取（鉴权）后
+   * 存入归档冷存储再定位。返回其 localId 与所在范围；解析失败 / 无权限 / 不存在抛 AppError 错误码。
+   */
+  'prs:openByUrl': {
+    request: { url: string };
+    /** discoveryFilters：活跃 PR 所属发现分类（前端据此落到能展示它的 tab）；归档 PR 为空。 */
+    response: {
+      localId: string;
+      location: 'active' | 'archived';
+      discoveryFilters: PrDiscoveryFilter[];
+    };
+  };
   'prs:refresh': { request: void; response: PollResult };
   /** Poller 最近一次完成时间（ISO 或 null）；启动时初始化用 */
   'prs:lastSync': { request: void; response: { at: string | null } };

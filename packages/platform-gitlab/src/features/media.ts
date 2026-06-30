@@ -1,4 +1,4 @@
-import type { RepoRef } from '@meebox/shared';
+import type { CommentAttachmentResult, CommentAttachmentUpload, RepoRef } from '@meebox/shared';
 import {
   BaseMediaService,
   type BinaryResource,
@@ -52,6 +52,30 @@ export class GitLabMediaService extends BaseMediaService {
     }
     // 其它本实例绝对 URL（非 /uploads 的图）仍直接代理；非本实例 / 解析不出 → null 让上层 fallback。
     if (/^https?:\/\//.test(url)) return this.client.getBinary(url);
+    return null;
+  }
+
+  /**
+   * 上传图片到项目 `/uploads`（项目级，非 PR 级，prId 忽略），返回 GitLab 给出的 markdown
+   * （`![file](/uploads/<secret>/<file>)`）。该相对 URL 经 getAttachment 走 API 下载端点渲染。
+   */
+  override async uploadAttachment(
+    repo: RepoRef,
+    _prId: string,
+    file: CommentAttachmentUpload,
+  ): Promise<CommentAttachmentResult | null> {
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([file.bytes as BlobPart], { type: file.contentType }),
+      file.fileName,
+    );
+    const res = await this.client.postForm<{ markdown?: string; url?: string }>(
+      `/projects/${projectId(repo)}/uploads`,
+      form,
+    );
+    if (res.markdown) return { markdown: res.markdown };
+    if (res.url) return { markdown: `![${file.fileName}](${res.url})` };
     return null;
   }
 }

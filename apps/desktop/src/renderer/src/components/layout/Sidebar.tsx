@@ -8,10 +8,14 @@ import type {
 } from '@meebox/shared';
 import { invoke, subscribe } from '../../api';
 import { useChatRunStore } from '../../stores/chat-run-store';
+import { HistoryIcon, PaneLoading } from '../common';
 import { PrItem } from '../features/pr';
 
 // 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
-type FilterKey = 'all' | LocalPrStatus | 'conflict' | 'mergeable';
+export type FilterKey = 'all' | LocalPrStatus | 'conflict' | 'mergeable';
+
+/** PR 列表范围：进行中（活跃，按发现分类 + 状态细分）/ 已关闭（归档冷存储，扁平只读浏览）。 */
+export type SidebarScope = 'active' | 'archived';
 
 interface SidebarProps {
   prs: StoredPullRequest[];
@@ -24,6 +28,19 @@ interface SidebarProps {
   /** 当前选中的发现分类。 */
   discoveryFilter?: PrDiscoveryFilter;
   onDiscoveryFilterChange?: (filter: PrDiscoveryFilter) => void;
+  /** 状态筛选（待处理 / 全部 / 冲突 / 可合并等），由 App 持有以便命令面板亦可驱动。 */
+  statusFilter: FilterKey;
+  onStatusFilterChange: (filter: FilterKey) => void;
+  /** 当前范围：进行中 / 已关闭。 */
+  scope: SidebarScope;
+  /** 切回「进行中」（无发现分类的平台用单一锚点；有发现分类则点 tab 经 onDiscoveryFilterChange 切回）。 */
+  onViewActive: () => void;
+  /** 切到「已关闭」（归档）范围。 */
+  onViewArchived: () => void;
+  /** 列表数据加载中（如归档冷存储懒加载）：列表区显示 loading 占位，替代「无 PR」空态。 */
+  loading?: boolean;
+  /** 活动连接是否支持 needs_work（「需修改」）评审态：决定非「待我评审」分类下是否保留「待处理」状态筛选。 */
+  supportsNeedsWork?: boolean;
 }
 
 export const SIDEBAR_MIN_WIDTH = 240;
@@ -37,7 +54,7 @@ const DISCOVERY_LABEL_KEYS: Record<PrDiscoveryFilter, string> = {
   mentioned: 'sidebar.discoveryMentioned',
 };
 
-const FILTERS: ReadonlyArray<{ value: FilterKey; labelKey: string }> = [
+export const FILTERS: ReadonlyArray<{ value: FilterKey; labelKey: string }> = [
   { value: 'pending', labelKey: 'sidebar.filterPending' },
   { value: 'all', labelKey: 'sidebar.filterAll' },
   { value: 'approved', labelKey: 'sidebar.filterApproved' },
@@ -48,7 +65,7 @@ const FILTERS: ReadonlyArray<{ value: FilterKey; labelKey: string }> = [
 
 // reviewer 决断类（通过/需修改）：有发现分类标签时只对「待我评审」有意义，其余标签下恒空，
 // 故隐藏；无发现分类的场景仍展示全部六项状态筛选。
-const DECISION_STATUS_FILTERS: ReadonlySet<FilterKey> = new Set(['approved', 'needs_work']);
+export const DECISION_STATUS_FILTERS: ReadonlySet<FilterKey> = new Set(['approved', 'needs_work']);
 
 interface PrGroup {
   key: string;
@@ -64,8 +81,17 @@ export function Sidebar({
   availableFilters,
   discoveryFilter,
   onDiscoveryFilterChange,
+  statusFilter,
+  onStatusFilterChange,
+  scope,
+  onViewActive,
+  onViewArchived,
+  loading = false,
+  supportsNeedsWork = false,
 }: SidebarProps) {
   const { t } = useTranslation();
+  // 已关闭范围：扁平浏览（不分发现分类、不分状态、强制「全部」）；进行中范围维持原细分行为。
+  const isArchived = scope === 'archived';
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
@@ -88,7 +114,13 @@ export function Sidebar({
   };
 
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<FilterKey>('pending');
+  // 切换 PR 类型（发现分类标签 / 进行中⇄已关闭范围）后清空搜索框，避免上一类型遗留的过滤条件连带到新类型。
+  useEffect(() => {
+    setQuery('');
+  }, [discoveryFilter, scope]);
+  // 状态筛选改由 App 持有（受控）：命令面板的「分类筛选」亦可驱动；折叠侧栏也不丢选择。
+  const filter = statusFilter;
+  const setFilter = onStatusFilterChange;
   // 哪些组当前折叠了。默认空集合 = 全部展开。
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // 评审建议台账 recommendation（per localId，手动 / AutoPilot 一视同仁），PR 列表 ★ 徽标用；
@@ -105,17 +137,27 @@ export function Sidebar({
     [active, waiting, agentPrs],
   );
 
-  // 有发现分类标签时（GitHub / Bitbucket 均含「我创建的」），reviewer 决断类（通过/需修改）
-  // 只对「待我评审」有意义、其余标签下恒空，故精简隐藏；无分类的场景保持全部六项。
+  // 状态筛选可见性随发现分类细化（localStatus = 本人的 reviewer 决断）：
+  // - 无发现分类（单一「待我评审」平台）：六项全展示。
+  // - 有发现分类：reviewer 决断类（通过 / 需修改）恒隐藏。「待处理」在「待我评审」恒有意义；其余分类
+  //   （我创建的 / 指派给我 / 提及我）下仅当平台支持 needs_work（GitHub / Bitbucket，可表达「需修改」语义）
+  //   时保留，GitLab（二元审批、无 needs_work）下「待处理」无意义、隐藏，只留 全部 / 冲突 / 可合并。
   const hasDiscoveryTabs = Boolean(availableFilters && availableFilters.length > 0);
-  const visibleFilters = useMemo(
-    () => (hasDiscoveryTabs ? FILTERS.filter((f) => !DECISION_STATUS_FILTERS.has(f.value)) : FILTERS),
-    [hasDiscoveryTabs],
-  );
-  // 进入精简模式时若当前选中的是被隐藏的决断类，回落到「待处理」，避免按不可见筛选过滤。
+  const visibleFilters = useMemo(() => {
+    if (!hasDiscoveryTabs) return FILTERS;
+    const reviewerContext = discoveryFilter === 'review-requested';
+    return FILTERS.filter((f) => {
+      if (DECISION_STATUS_FILTERS.has(f.value)) return false;
+      if (f.value === 'pending' && !reviewerContext && !supportsNeedsWork) return false;
+      return true;
+    });
+  }, [hasDiscoveryTabs, discoveryFilter, supportsNeedsWork]);
+  // 当前选中的状态筛选在本分类下不可见时，回落到首个可见项（待我评审 → 待处理；其余 → 全部），避免按不可见筛选过滤。
   useEffect(() => {
-    if (hasDiscoveryTabs && DECISION_STATUS_FILTERS.has(filter)) setFilter('pending');
-  }, [hasDiscoveryTabs, filter]);
+    if (!visibleFilters.some((f) => f.value === filter)) {
+      setFilter(visibleFilters[0]?.value ?? 'all');
+    }
+  }, [visibleFilters, filter, setFilter]);
 
   // AutoPilot 徽标：批量取当前 PR 的台账建议（prs 变化时刷新；ledger 在下次 poll 更新 prs 后体现）。
   useEffect(() => {
@@ -165,8 +207,10 @@ export function Sidebar({
   // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。
   const scopedPrs = useMemo(
     () =>
-      discoveryFilter ? prs.filter((p) => p.discoveryFilters?.includes(discoveryFilter)) : prs,
-    [prs, discoveryFilter],
+      !isArchived && discoveryFilter
+        ? prs.filter((p) => p.discoveryFilters?.includes(discoveryFilter))
+        : prs,
+    [prs, discoveryFilter, isArchived],
   );
 
   const counts = useMemo(() => {
@@ -188,12 +232,14 @@ export function Sidebar({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    // 已关闭范围强制「全部」（不应用状态筛选）；进行中范围按当前状态筛选。
+    const effFilter: FilterKey = isArchived ? 'all' : filter;
     return scopedPrs.filter((p) => {
-      if (filter === 'conflict') {
+      if (effFilter === 'conflict') {
         if (!p.hasConflict) return false;
-      } else if (filter === 'mergeable') {
+      } else if (effFilter === 'mergeable') {
         if (!p.mergeStatus?.canMerge) return false;
-      } else if (filter !== 'all' && p.localStatus !== filter) {
+      } else if (effFilter !== 'all' && p.localStatus !== effFilter) {
         return false;
       }
       if (!q) return true;
@@ -209,7 +255,7 @@ export function Sidebar({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [scopedPrs, query, filter]);
+  }, [scopedPrs, query, filter, isArchived]);
 
   const groups = useMemo<PrGroup[]>(() => {
     const m = new Map<string, StoredPullRequest[]>();
@@ -248,22 +294,47 @@ export function Sidebar({
         title={t('sidebar.resizeTitle')}
         aria-label="resize sidebar"
       />
-      {hasDiscoveryTabs && availableFilters && onDiscoveryFilterChange && (
-        <div className="sidebar-toolbar sidebar-discovery" role="tablist" aria-label={t('sidebar.discoveryTablistAria')}>
-          {availableFilters.map((f) => (
+      {/* 范围行（常驻）：左组 = 进行中（发现分类细分，或无分类平台的单一锚点）、右组 = 已关闭辅助切换。
+          左组始终有锚点，使「已关闭」恒为旁侧的次要项、不致被误读为唯一分类。 */}
+      <div className="sidebar-toolbar sidebar-scope" role="tablist" aria-label={t('sidebar.discoveryTablistAria')}>
+        <div className="sidebar-scope-primary">
+          {hasDiscoveryTabs && availableFilters && onDiscoveryFilterChange ? (
+            availableFilters.map((f) => (
+              <button
+                key={f}
+                role="tab"
+                aria-selected={!isArchived && discoveryFilter === f}
+                className={`sidebar-discovery-tab ${!isArchived && discoveryFilter === f ? 'is-active' : ''}`}
+                onClick={() => onDiscoveryFilterChange(f)}
+                type="button"
+              >
+                {t(DISCOVERY_LABEL_KEYS[f])}
+              </button>
+            ))
+          ) : (
             <button
-              key={f}
               role="tab"
-              aria-selected={discoveryFilter === f}
-              className={`sidebar-discovery-tab ${discoveryFilter === f ? 'is-active' : ''}`}
-              onClick={() => onDiscoveryFilterChange(f)}
+              aria-selected={!isArchived}
+              className={`sidebar-discovery-tab ${!isArchived ? 'is-active' : ''}`}
+              onClick={onViewActive}
               type="button"
             >
-              {t(DISCOVERY_LABEL_KEYS[f])}
+              {t('sidebar.scopeActive')}
             </button>
-          ))}
+          )}
         </div>
-      )}
+        {/* 非 tab：独立图标按钮（切换到已关闭范围），toggle 语义用 aria-pressed */}
+        <button
+          type="button"
+          aria-pressed={isArchived}
+          className={`sidebar-scope-history ${isArchived ? 'is-active' : ''}`}
+          onClick={onViewArchived}
+          title={t('sidebar.scopeArchived')}
+          aria-label={t('sidebar.scopeArchived')}
+        >
+          <HistoryIcon size={14} />
+        </button>
+      </div>
       <div className="sidebar-toolbar">
         <input
           type="text"
@@ -273,6 +344,7 @@ export function Sidebar({
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+      {!isArchived && (
       <div className="sidebar-toolbar sidebar-filters">
         {visibleFilters.map((f) => (
           <button
@@ -292,9 +364,14 @@ export function Sidebar({
           </button>
         ))}
       </div>
+      )}
       <div className="sidebar-list">
-        {groups.length === 0 ? (
-          <div className="sidebar-empty">{t('sidebar.empty')}</div>
+        {loading ? (
+          <PaneLoading label={t('sidebar.loading')} />
+        ) : groups.length === 0 ? (
+          <div className="sidebar-empty">
+            {t(isArchived ? 'sidebar.archivedEmpty' : 'sidebar.empty')}
+          </div>
         ) : (
           groups.map((g) => {
             const expanded = searching || !collapsed.has(g.key);

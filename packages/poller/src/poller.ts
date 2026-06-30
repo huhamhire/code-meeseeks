@@ -2,16 +2,18 @@ import type { Logger } from 'pino';
 import type {
   LocalPrStatus,
   PlatformKind,
+  PollNotificationEvent,
   PollResult,
   PrDiscoveryFilter,
   PullRequest,
   ReviewerStatus,
 } from '@meebox/shared';
 import type { PlatformAdapter } from '@meebox/platform-core';
-import type { StateStore } from '@meebox/state-store';
+import { relocateTree, type StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
-import { latestCommentToMeAt } from './unread.js';
+import { collectMentionsToMe } from './unread.js';
 import {
+  MENTION_ATS_CAP,
   PURGE_GRACE_MS,
   prDirKey,
   readPrIndex,
@@ -36,7 +38,13 @@ export interface PollerConnection {
 
 export interface PollerOptions {
   connections: ReadonlyArray<PollerConnection>;
+  /** 活跃 PR 存储（`state/` 根）：索引 + 在场 PR 的 meta / 评论 / runs 等。 */
   stateStore: StateStore;
+  /**
+   * 归档 PR 冷存储（`archived/` 根，与 state/ 平级）。PR 退场（软删）时其 `prs/<hash>/` 整树从
+   * stateStore 搬入此处、复活时搬回；硬清按同一 grace 策略从此处删除。索引仍只在 stateStore 维护。
+   */
+  archiveStore: StateStore;
   intervalSeconds: number;
   logger: Logger;
   /** 用于测试注入；默认 Date.now() */
@@ -52,6 +60,11 @@ export interface PollerOptions {
    * (updatedAt 跳变)。removed 不算 (PR 关单一般不影响 commit 范围)。
    */
   onPrsChanged?: (repos: ReadonlyArray<ChangedRepo>) => void;
+  /**
+   * 本轮 poll 新发生的「值得提醒」事件（新 PR / 被 @ / 被回复）。main 据通知配置弹系统通知。仅在**已有基线**
+   * （索引此前非空）时产出，避免首启 / 批量涌入时通知风暴；空数组不回调。详见 PollNotificationEvent。
+   */
+  onNotify?: (events: ReadonlyArray<PollNotificationEvent>) => void;
 }
 
 /**
@@ -118,6 +131,8 @@ export class Poller {
     let dirty = false;
     for (const [localId, entry] of Object.entries(prs)) {
       if (!active.has(entry.identity.connectionId) && !entry.archivedAt) {
+        // 整树搬入归档冷存储后再标 archivedAt（搬迁先于索引落盘，崩溃可幂等重来）。
+        await relocateTree(this.opts.stateStore, this.opts.archiveStore, prDirKey(localId));
         prs[localId] = { ...entry, archivedAt: now };
         dirty = true;
       }
@@ -208,6 +223,10 @@ export class Poller {
     const indexFile = await readPrIndex(this.opts.stateStore);
     // 索引拷一份到 mutable Map 方便增删；条目缺失时退回到空 Map (首次 poll)
     const indexByLocalId = new Map<string, PrIndexEntry>(Object.entries(indexFile?.prs ?? {}));
+    // 已有基线 = 本轮之前索引已非空。首轮 / 清库后的首 poll 不产出通知事件（仅建基线），避免涌入风暴。
+    const hadBaseline = indexByLocalId.size > 0;
+    // 本轮新发生的通知事件（新 PR / 被 @ / 被回复）；poll 末投影给 main 弹系统通知。
+    const notifyEvents: PollNotificationEvent[] = [];
 
     let fetched = 0;
     let changed = 0;
@@ -227,9 +246,13 @@ export class Poller {
     for (const { connectionId, adapter } of this.connections) {
       const me = adapter.connection.getCurrentUser();
       try {
+        const caps = adapter.connection.capabilities();
+        // 评论计数是否「含回复」：true（GitHub/GitLab）→ 计数/updatedAt 变化才扫；false（Bitbucket，
+        // 计数仅顶层、updatedDate 也不随评论跳变）→ 对待处理 PR 每轮兜底扫，否则漏「回复」类通知。
+        const commentCountIncludesReplies = caps.commentCountIncludesReplies;
         // 发现分类：平台提供多类（GitHub 四类）→ 逐类轮询并 union 打标，让 renderer 切标签
         // 走本地缓存而非每次拉远端；无分类的平台（Bitbucket）单轮询、标记为空数组。
-        const filters = adapter.connection.capabilities().discoveryFilters ?? [];
+        const filters = caps.discoveryFilters ?? [];
         const merged = new Map<string, { pr: PullRequest; matched: PrDiscoveryFilter[] }>();
         const collect = async (filter?: PrDiscoveryFilter): Promise<void> => {
           const remote = await adapter.prs.listPendingPullRequests(filter ? { filter } : undefined);
@@ -295,6 +318,27 @@ export class Poller {
             localStatus = prevMeta?.pr.localStatus ?? 'pending';
           }
 
+          // 通知仅针对「待处理」(localStatus==='pending') 的 PR：已 approve / 标记 needs_work 的不再打扰。
+          // 新 PR（仅已有基线时，避免首启涌入风暴）。mention/reply 事件在下方评论扫描处投影（同样受 pending 门控）。
+          const notifiable = hadBaseline && localStatus === 'pending';
+          if (isAdded && notifiable) {
+            notifyEvents.push({
+              kind: 'new_pr',
+              localId,
+              connectionId,
+              remoteId: pr.remoteId,
+              title: pr.title,
+              repo: pr.repo,
+              actor: pr.author,
+            });
+          }
+
+          // 复活：上一轮处于归档态（数据已搬入 archived/）→ 先把整树搬回活跃存储，再写 meta，
+          // 让 runs / 评论 / 已读水位等历史与新 meta 同处活跃目录（搬回先于 writePrMeta，避免 split）。
+          if (prev?.archivedAt) {
+            await relocateTree(this.opts.archiveStore, this.opts.stateStore, prDirKey(localId));
+          }
+
           // 完整 PR 元数据落到 per-PR meta.json。platform 字段让 meta 自描述
           await writePrMeta(this.opts.stateStore, localId, {
             ...pr,
@@ -308,19 +352,70 @@ export class Poller {
           });
           dirty = true;
 
-          // 未读 mention 游标（见 pr-state computeUnread）：仅当 PR 内容变更（updatedAt 跳变 → 可能有新评论）且
-          // me 已知时拉评论扫「@我 / 回复我」，与历史游标取较大值。新到达 / 新 commit 未读无需在此处理（读取时分别按
-          // 发现时间 vs 未读纪元、head sha 比对派生）。read-state 仅由 markRead（用户打开 PR）写，poll 一概不碰。
+          // 未读 mention（见 pr-state computeUnread / computeUnreadMentionCount）：拉评论扫「@我 / 回复我」。
+          // 游标 lastMentionAt 取较大值（驱动未读点）；mentionAts 与历史并集去重、按时间降序留最近 MENTION_ATS_CAP
+          // 条（驱动未读点旁的计数）。新到达 / 新 commit 未读无需在此处理（读取时分别按发现时间 vs 未读纪元、head sha
+          // 比对派生）。read-state 仅由 markRead 写，poll 不碰。
+          //
+          // 评论跟踪**仅针对「待处理」(notifiable=pending) PR**（含「待我评审」与「我创建的」），且需 me 已知。
+          // 是否拉评论：
+          //   - 含回复的平台（commentCountIncludesReplies）：仅当 updatedAt 跳变或 commentCount 变化（可能有新评论）
+          //     才扫——省请求。
+          //   - 不含回复的平台（Bitbucket：updatedDate 不随评论跳、commentCount 仅顶层不含回复）：无任何免费的
+          //     「含回复」信号 → 对待处理 PR 每轮兜底扫一次，否则漏「回复」类通知。
+          const commentCountChanged =
+            prev?.commentCount !== undefined &&
+            pr.commentCount !== undefined &&
+            prev.commentCount !== pr.commentCount;
+          const shouldScanComments = commentCountIncludesReplies
+            ? isChanged || commentCountChanged
+            : true;
           let lastMentionAt = prev?.lastMentionAt;
-          if (isChanged && me) {
+          let mentionAts = prev?.mentionAts;
+          if (notifiable && me && shouldScanComments) {
             try {
               const comments = await adapter.comments.listPullRequestComments(
                 { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
                 pr.remoteId,
               );
-              const latest = latestCommentToMeAt(comments, me);
-              if (latest && (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt))) {
-                lastMentionAt = latest;
+              const hits = collectMentionsToMe(comments, me);
+              if (hits.length) {
+                const scanned = hits.map((h) => h.at);
+                const merged = [...new Set([...(prev?.mentionAts ?? []), ...scanned])];
+                merged.sort((a, b) => Date.parse(b) - Date.parse(a));
+                mentionAts = merged.slice(0, MENTION_ATS_CAP);
+                const prevCursor = prev?.lastMentionAt;
+                const latest = mentionAts[0];
+                if (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt)) {
+                  lastMentionAt = latest;
+                }
+                // 通知：仅对**已知 PR**（prev 存在）投影（外层已保证 notifiable=已有基线 + 待处理）；取晚于历史游标
+                // 的命中按类型聚合条数。新 PR 此前历史评论不计（prev 不存在则跳过），避免新发现 PR 触发其旧评论的提醒风暴。
+                if (prev) {
+                  const sinceMs = prevCursor ? Date.parse(prevCursor) : 0;
+                  const fresh = hits.filter((h) => Date.parse(h.at) > sinceMs);
+                  // 按类型聚合本轮新增条数；发起人与点击定位取该类最新一条命中（通知头像 + 跳转目标）。
+                  const project = (kind: 'reply' | 'mention'): void => {
+                    const subset = fresh.filter((h) => h.kind === kind);
+                    if (subset.length === 0) return;
+                    const latestHit = subset.reduce((a, b) =>
+                      Date.parse(b.at) > Date.parse(a.at) ? b : a,
+                    );
+                    notifyEvents.push({
+                      kind,
+                      localId,
+                      connectionId,
+                      remoteId: pr.remoteId,
+                      title: pr.title,
+                      repo: pr.repo,
+                      actor: latestHit.author,
+                      count: subset.length,
+                      comment: { remoteId: latestHit.commentRemoteId, anchor: latestHit.anchor },
+                    });
+                  };
+                  project('reply');
+                  project('mention');
+                }
               }
             } catch (err) {
               this.opts.logger.warn(
@@ -334,10 +429,12 @@ export class Poller {
           indexByLocalId.set(localId, {
             identity,
             updatedAt: pr.updatedAt,
+            commentCount: pr.commentCount,
             discoveredAt: prev?.discoveredAt ?? now,
             lastSeenAt: now,
             archivedAt: null,
             lastMentionAt,
+            mentionAts,
           });
         }
       } catch (err) {
@@ -356,6 +453,8 @@ export class Poller {
           !seen.has(localId) &&
           !entry.archivedAt
         ) {
+          // 整树搬入归档冷存储后再标 archivedAt（搬迁先于索引落盘，崩溃可幂等重来）。
+          await relocateTree(this.opts.stateStore, this.opts.archiveStore, prDirKey(localId));
           indexByLocalId.set(localId, { ...entry, archivedAt: now });
           removed++;
           dirty = true;
@@ -365,12 +464,26 @@ export class Poller {
 
     // 硬清：archived 超过 grace 期 (默认 1 周) → rm -r 整个 PR 目录 + 索引删除
     let purged = 0;
+    let reconciled = 0;
     for (const [localId, entry] of [...indexByLocalId.entries()]) {
-      if (entry.archivedAt && nowMs - Date.parse(entry.archivedAt) > PURGE_GRACE_MS) {
+      if (!entry.archivedAt) continue;
+      if (nowMs - Date.parse(entry.archivedAt) > PURGE_GRACE_MS) {
+        // 硬清：grace 期满 → 两端整目录清（archiveStore 主存 + stateStore 兜旧布局 / split-brain 残留）。
+        await this.opts.archiveStore.deleteDir(prDirKey(localId));
         await this.opts.stateStore.deleteDir(prDirKey(localId));
         indexByLocalId.delete(localId);
         purged++;
         dirty = true;
+      } else {
+        // 对账（最终一致）：凡 archived 条目其数据都应在 archiveStore。把仍滞留活跃存储的整树搬入归档——
+        // 涵盖旧布局存量、异常 split-brain 残留、中断的搬迁。已就位者源缺失即 no-op、近零成本。
+        // 仅搬数据、不改索引（archivedAt 不变），故不置 dirty——保持「全失败 poll 零索引写」不变式。
+        const moved = await relocateTree(
+          this.opts.stateStore,
+          this.opts.archiveStore,
+          prDirKey(localId),
+        );
+        if (moved > 0) reconciled++;
       }
     }
 
@@ -386,10 +499,14 @@ export class Poller {
 
     const result: PollResult = { fetched, changed, added, removed, errors };
     this._lastPollAt = now;
-    this.opts.logger.info({ ...result, purged, dirty }, 'poll complete');
+    this.opts.logger.info({ ...result, purged, reconciled, dirty }, 'poll complete');
     // 通知调用方有哪些 repo 需要 sync mirror。空集合不调，避免无谓 noop
     if (changedReposByKey.size > 0) {
       this.opts.onPrsChanged?.(Array.from(changedReposByKey.values()));
+    }
+    // 本轮通知事件投影给 main（弹系统通知）。空数组不调。
+    if (notifyEvents.length > 0) {
+      this.opts.onNotify?.(notifyEvents);
     }
     this.opts.onTick?.({ at: now, result });
     return result;

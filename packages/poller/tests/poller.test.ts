@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Logger } from 'pino';
 import { JsonFileStateStore } from '@meebox/state-store';
-import type { PullRequest } from '@meebox/shared';
+import type { PollNotificationEvent, PrComment, PullRequest } from '@meebox/shared';
 import type {
   PlatformAdapter,
   PlatformConnection,
@@ -34,11 +34,14 @@ const unusedComments: CommentService = {
     Promise.reject(new Error('FakeAdapter.editComment 未实现（poller 测试不使用）')),
   deleteComment: () =>
     Promise.reject(new Error('FakeAdapter.deleteComment 未实现（poller 测试不使用）')),
+  toggleReaction: () =>
+    Promise.reject(new Error('FakeAdapter.toggleReaction 未实现（poller 测试不使用）')),
 };
 const unusedMedia: MediaService = {
   getUserAvatar: async () => null,
   getAttachment: () =>
     Promise.reject(new Error('FakeAdapter.getAttachment 未实现（poller 测试不使用）')),
+  uploadAttachment: async () => null,
 };
 
 /**
@@ -50,9 +53,20 @@ const unusedMedia: MediaService = {
 class FakeAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
   private currentUser: { name: string; displayName: string } | null = null;
+  private commentList: PrComment[] = [];
+  // 能力开关：模拟「含回复的计数信号」平台（GitHub/GitLab）；默认 false（Bitbucket 粗信号、每轮兜底扫）。
+  private replyAware = false;
+  // listPullRequestComments 调用计数：验证 reliable 平台未变化时不扫 / coarse 平台每轮扫。
+  commentCalls = 0;
   readonly connection: PlatformConnection;
   readonly prs: PullRequestService;
-  readonly comments: CommentService = unusedComments;
+  readonly comments: CommentService = {
+    ...unusedComments,
+    listPullRequestComments: async () => {
+      this.commentCalls += 1;
+      return this.commentList;
+    },
+  };
   readonly media: MediaService = unusedMedia;
 
   constructor(
@@ -68,6 +82,8 @@ class FakeAdapter implements PlatformAdapter {
         inlineComments: true,
         inlineMultiline: true,
         commentOptimisticLock: true,
+        commentReactions: 'free' as const,
+        commentAttachments: true,
         commentHardBreaks: true,
         mergeVetoFidelity: 'full' as const,
         discoveryRateLimited: false,
@@ -75,6 +91,7 @@ class FakeAdapter implements PlatformAdapter {
         suggestions: false,
         reviewGrouping: false,
         activityTimeline: true,
+        commentCountIncludesReplies: this.replyAware,
       }),
       ping: async () => {
         if (this.failPing) throw new Error('ping fail');
@@ -90,6 +107,8 @@ class FakeAdapter implements PlatformAdapter {
         }
         return this.prList;
       },
+      getSinglePullRequest: () =>
+        Promise.reject(new Error('FakeAdapter.getSinglePullRequest 未实现（poller 测试不使用）')),
       listPullRequestCommits: async () => [],
       listPullRequestActivity: async () => [],
       setPullRequestReviewStatus: async () => {
@@ -108,6 +127,14 @@ class FakeAdapter implements PlatformAdapter {
   // 测试辅助：直接灌入当前用户（区别于 PlatformConnection 的 setCurrentUser(user) 契约方法）。
   seedUser(name: string, displayName = name): void {
     this.currentUser = { name, displayName };
+  }
+  // 测试辅助：灌入 listPullRequestComments 返回的评论（未读 mention / 通知投影用）。
+  seedComments(list: PrComment[]): void {
+    this.commentList = list;
+  }
+  // 测试辅助：切到「含回复计数信号」平台语义（GitHub/GitLab）；默认 false 模拟 Bitbucket 粗信号。
+  setReplyAware(v: boolean): void {
+    this.replyAware = v;
   }
 }
 
@@ -145,10 +172,13 @@ function makePr(id: string, updatedAt: string, title = `PR ${id}`): PullRequest 
 
 let tmpDir: string;
 let store: JsonFileStateStore;
+// 归档冷存储：与 store 物理分离（store 根 = tmpDir，archived 根 = tmpDir/archived）。
+let archiveStore: JsonFileStateStore;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-poller-test-'));
   store = new JsonFileStateStore(tmpDir);
+  archiveStore = new JsonFileStateStore(path.join(tmpDir, 'archived'));
 });
 
 afterEach(async () => {
@@ -162,6 +192,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => fixedNow,
@@ -197,6 +228,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => now,
@@ -219,6 +251,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -241,6 +274,7 @@ describe('Poller.tick', () => {
         { connectionId: 'bad', adapter: broken },
       ],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -262,6 +296,8 @@ describe('Poller.tick', () => {
         inlineComments: true,
         inlineMultiline: true,
         commentOptimisticLock: true,
+        commentReactions: 'free',
+        commentAttachments: true,
         commentHardBreaks: true,
         mergeVetoFidelity: 'full',
         discoveryRateLimited: false,
@@ -269,12 +305,14 @@ describe('Poller.tick', () => {
         suggestions: false,
         reviewGrouping: false,
         activityTimeline: true,
+        commentCountIncludesReplies: false,
       }),
       ping: async () => ({ ok: true }),
       getCurrentUser: () => null,
       getCloneUrl: async () => 'https://stub',
     };
     const slowPulls: PullRequestService = {
+      getSinglePullRequest: () => Promise.reject(new Error('unused')),
       listPullRequestCommits: async () => [],
       listPullRequestActivity: async () => [],
       setPullRequestReviewStatus: async () => {
@@ -303,15 +341,18 @@ describe('Poller.tick', () => {
         replyToComment: () => Promise.reject(new Error('unused')),
         editComment: () => Promise.reject(new Error('unused')),
         deleteComment: () => Promise.reject(new Error('unused')),
+        toggleReaction: () => Promise.reject(new Error('unused')),
       },
       media: {
         getUserAvatar: async () => null,
         getAttachment: () => Promise.reject(new Error('unused')),
+        uploadAttachment: async () => null,
       },
     };
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter: slow }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -333,6 +374,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -356,6 +398,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -386,6 +429,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -409,6 +453,7 @@ describe('Poller.tick', () => {
         { connectionId: 'broken', adapter: broken },
       ],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -436,6 +481,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -456,6 +502,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -471,6 +518,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -486,6 +534,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -512,6 +561,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -536,6 +586,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -553,11 +604,13 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(2);
+    const goneHash = (await listStoredPullRequests(store)).find((p) => p.remoteId === '2')!.localId;
 
     // PR #2 关单 → soft archive (archivedAt set in index)，list 自动过滤掉
     adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
@@ -566,10 +619,12 @@ describe('Poller.tick', () => {
     expect(visible).toHaveLength(1);
     expect(visible[0]!.remoteId).toBe('1');
 
-    // 但 meta.json + 索引条目仍在 (待 grace 期满才硬删)
+    // 索引条目仍在 (待 grace 期满才硬删)；数据已从活跃存储搬入归档冷存储
     const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
     const archivedEntries = Object.values(index!.prs).filter((e) => e.archivedAt);
     expect(archivedEntries).toHaveLength(1);
+    expect(await store.read(`prs/${goneHash}/meta`)).toBeNull(); // 活跃存储已搬空
+    expect(await archiveStore.read(`prs/${goneHash}/meta`)).not.toBeNull(); // 落到归档存储
   });
 
   it('archived PR re-appearing on remote becomes active again', async () => {
@@ -577,20 +632,25 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
     await poller.tick();
+    const hash = (await listStoredPullRequests(store))[0]!.localId;
 
-    // 远端关单 → soft archive
+    // 远端关单 → soft archive：数据搬入归档存储
     adapter.setPrs([]);
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(0);
+    expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull();
 
-    // 复活：远端又出现 (例如 reviewer 被重新加回) → archivedAt 清零
+    // 复活：远端又出现 (例如 reviewer 被重新加回) → archivedAt 清零、整树搬回活跃存储
     adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(1);
+    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull(); // 搬回活跃存储
+    expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull(); // 归档存储已腾空
   });
 
   it('外部删除 prs/index.json: 下一轮 poll 自动重建', async () => {
@@ -598,6 +658,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -618,6 +679,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -641,6 +703,7 @@ describe('Poller.tick', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => now,
@@ -648,17 +711,49 @@ describe('Poller.tick', () => {
     await poller.tick();
     const hash = (await listStoredPullRequests(store))[0]!.localId;
 
-    // T+0: 关单 → soft archive
+    // T+0: 关单 → soft archive：数据搬入归档存储（仍在 grace 期内保留）
     adapter.setPrs([]);
     await poller.tick();
-    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull();
+    expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull();
 
-    // T+8 天: 超过 1 周 grace → 硬清掉整目录
+    // T+8 天: 超过 1 周 grace → 硬清掉整目录（归档存储 + 活跃存储两端都清）
     now = new Date('2026-06-09T00:00:00.000Z');
     await poller.tick();
+    expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull();
     expect(await store.read(`prs/${hash}/meta`)).toBeNull();
     const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
     expect(Object.keys(index!.prs)).toHaveLength(0);
+  });
+
+  it('对账：把滞留活跃存储的归档数据搬入归档存储（旧布局 / split-brain 最终一致）', async () => {
+    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    const now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+    });
+    await poller.tick();
+    const hash = (await listStoredPullRequests(store))[0]!.localId;
+
+    // 模拟旧布局存量：手工把索引条目标 archived，但数据**仍留在活跃存储**（未搬迁）
+    const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    index!.prs[hash]!.archivedAt = now.toISOString();
+    await store.write(PR_INDEX_KEY, index!);
+    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull();
+    expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull();
+
+    // 远端仍无该 PR → 下一轮 poll 的对账步（未到 grace、不清）把整树搬入归档存储
+    adapter.setPrs([]);
+    await poller.tick();
+    expect(await store.read(`prs/${hash}/meta`)).toBeNull(); // 搬出活跃存储
+    expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull(); // 落到归档存储
+    // 仍在索引、仍 archived（对账只搬数据、不动索引）
+    const after = await store.read<PrIndexFile>(PR_INDEX_KEY);
+    expect(after!.prs[hash]!.archivedAt).toBe(now.toISOString());
   });
 });
 
@@ -668,6 +763,7 @@ describe('setLocalStatus', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -683,6 +779,7 @@ describe('setLocalStatus', () => {
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
     });
@@ -708,6 +805,7 @@ describe('Poller.archiveConnectionsExcept', () => {
         { connectionId: 'bb2', adapter: a2 },
       ],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => now,
@@ -723,12 +821,19 @@ describe('Poller.archiveConnectionsExcept', () => {
     const bb2 = entries.find((e) => e.identity.connectionId === 'bb2')!;
     expect(bb1.archivedAt).toBeNull(); // 活动连接不动
     expect(bb2.archivedAt).toBe(now.toISOString()); // 非活动连接被归档
+    // bb1 数据留在活跃存储；bb2 数据搬入归档存储
+    const bb1Hash = Object.entries(index!.prs).find(([, e]) => e === bb1)![0];
+    const bb2Hash = Object.entries(index!.prs).find(([, e]) => e === bb2)![0];
+    expect(await store.read(`prs/${bb1Hash}/meta`)).not.toBeNull();
+    expect(await store.read(`prs/${bb2Hash}/meta`)).toBeNull();
+    expect(await archiveStore.read(`prs/${bb2Hash}/meta`)).not.toBeNull();
 
     // 幂等：再调一次不改已归档的时间戳
     const later = new Date('2026-06-02T00:00:00.000Z');
     const poller2 = new Poller({
       connections: [{ connectionId: 'bb1', adapter: a1 }],
       stateStore: store,
+      archiveStore,
       intervalSeconds: 60,
       logger: noopLogger,
       now: () => later,
@@ -737,5 +842,189 @@ describe('Poller.archiveConnectionsExcept', () => {
     const index2 = await store.read<PrIndexFile>(PR_INDEX_KEY);
     const bb2After = Object.values(index2!.prs).find((e) => e.identity.connectionId === 'bb2')!;
     expect(bb2After.archivedAt).toBe(now.toISOString()); // 仍是首次归档时间
+  });
+});
+
+function makeComment(over: Partial<PrComment> & Pick<PrComment, 'author' | 'body' | 'createdAt'>): PrComment {
+  return { remoteId: 'c', updatedAt: over.createdAt, anchor: null, replies: [], ...over };
+}
+
+describe('Poller onNotify (system notification projection)', () => {
+  it('emits no events on the first (baseline) poll, then new_pr + mention on later polls', async () => {
+    const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    // 首轮：建基线，不产出任何事件（避免首启涌入风暴）。
+    await poller.tick();
+    expect(events).toEqual([]);
+
+    // 次轮：PR1 内容变更 + 一条 @alice 的新评论；同时来一个全新 PR2。
+    now = new Date('2026-06-02T00:00:00.000Z');
+    adapter.setPrs([
+      makePr('1', '2026-05-29T01:00:00.000Z'),
+      makePr('2', '2026-05-29T02:00:00.000Z'),
+    ]);
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'please look @alice',
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }),
+    ]);
+    await poller.tick();
+
+    const kinds = events.map((e) => ({ kind: e.kind, remoteId: e.remoteId, count: e.count }));
+    expect(kinds).toContainEqual({ kind: 'new_pr', remoteId: '2', count: undefined });
+    expect(kinds).toContainEqual({ kind: 'mention', remoteId: '1', count: 1 });
+    // 仅这两条（PR2 是新发现、其自身评论不投影 mention；PR1 仅 mention 一条）。
+    expect(events).toHaveLength(2);
+
+    // 富字段：仓库 + 连接 + 发起人（new_pr=PR 作者；mention=评论作者）一并投影。
+    const newPr = events.find((e) => e.kind === 'new_pr')!;
+    expect(newPr.repo).toEqual({ projectKey: 'P', repoSlug: 'r' });
+    expect(newPr.connectionId).toBe('bb1');
+    expect(newPr.actor.name).toBe('u'); // makePr 的作者
+    const mention = events.find((e) => e.kind === 'mention')!;
+    expect(mention.actor.name).toBe('bob'); // 评论作者
+    expect(mention.comment?.anchor).toBeNull(); // summary 评论 → 点击打开活动标签
+  });
+
+  it('suppresses notifications for non-pending PRs (already approved / needs_work)', async () => {
+    // PR1 当前用户已 approve → localStatus 非 pending；即便有新 @ 评论也不弹通知。
+    const approved = makePr('1', '2026-05-28T01:00:00.000Z');
+    approved.reviewers = [{ name: 'alice', displayName: 'Alice', status: 'approved' as const }];
+    const adapter = new FakeAdapter([approved]);
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线
+    now = new Date('2026-06-02T00:00:00.000Z');
+    const changed = makePr('1', '2026-05-29T01:00:00.000Z');
+    changed.reviewers = [{ name: 'alice', displayName: 'Alice', status: 'approved' as const }];
+    adapter.setPrs([changed]);
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'ping @alice',
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }),
+    ]);
+    await poller.tick();
+    expect(events).toEqual([]); // 非 pending → 不投影
+  });
+
+  it('coarse-signal platform (Bitbucket) catches a reply with no updatedAt / commentCount change', async () => {
+    // 核心修复：Bitbucket 回复既不顶 updatedDate、也不计入顶层 commentCount → 唯有对待处理 PR 每轮兜底扫才不漏。
+    const pr1 = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr1.commentCount = 5; // 顶层评论数；新增回复不会改变它
+    const adapter = new FakeAdapter([pr1]); // FakeAdapter 默认 commentCountIncludesReplies=false（粗信号）
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线
+    expect(events).toEqual([]);
+
+    // 次轮：updatedAt 与 commentCount 都不变，仅在 alice 的评论下新增一条 bob 的回复。
+    now = new Date('2026-06-02T00:00:00.000Z');
+    adapter.setPrs([pr1]); // 同一 PR，updatedAt / commentCount 原样
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'alice', displayName: 'Alice' }, // 我的顶层评论
+        body: 'my comment',
+        createdAt: '2026-05-28T02:00:00.000Z',
+        replies: [
+          makeComment({
+            author: { name: 'bob', displayName: 'Bob' },
+            body: 'replying to you',
+            createdAt: '2026-06-02T00:00:00.000Z',
+          }),
+        ],
+      }),
+    ]);
+    await poller.tick();
+
+    const reply = events.find((e) => e.kind === 'reply');
+    expect(reply).toBeDefined();
+    expect(reply!.remoteId).toBe('1');
+    expect(reply!.actor.name).toBe('bob');
+  });
+
+  it('reply-aware platform skips the comment fetch when neither updatedAt nor commentCount changed', async () => {
+    const pr1 = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr1.commentCount = 0;
+    const adapter = new FakeAdapter([pr1]);
+    adapter.setReplyAware(true); // 模拟 GitHub/GitLab：含回复的计数信号
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'gh1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线：reliable 平台基线轮不扫
+    expect(adapter.commentCalls).toBe(0);
+
+    // 次轮：commentCount 0→1（含回复信号变化）→ 扫一次并投影 mention（updatedAt 故意不变，证明靠计数触发）。
+    now = new Date('2026-06-02T00:00:00.000Z');
+    const pr1b = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr1b.commentCount = 1;
+    adapter.setPrs([pr1b]);
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'ping @alice',
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }),
+    ]);
+    await poller.tick();
+    expect(adapter.commentCalls).toBe(1); // 计数变化 → 扫了一次
+    expect(events.some((e) => e.kind === 'mention')).toBe(true);
+
+    // 第三轮：updatedAt 与 commentCount 都不变 → 不再扫，无新事件。
+    now = new Date('2026-06-03T00:00:00.000Z');
+    const pr1c = makePr('1', '2026-05-28T01:00:00.000Z');
+    pr1c.commentCount = 1;
+    adapter.setPrs([pr1c]);
+    const eventsLen = events.length;
+    await poller.tick();
+    expect(adapter.commentCalls).toBe(1); // 未变化 → 未扫
+    expect(events.length).toBe(eventsLen); // 无新事件
   });
 });

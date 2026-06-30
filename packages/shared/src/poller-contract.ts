@@ -1,4 +1,11 @@
-import type { PlatformKind, PrDiscoveryFilter, PullRequest } from './platform.js';
+import type {
+  PlatformKind,
+  PlatformUser,
+  PrCommentAnchor,
+  PrDiscoveryFilter,
+  PullRequest,
+  RepoRef,
+} from './platform.js';
 import type { PrAgentStrategy } from './pr-agent-status.js';
 import type { ReviewRunTool } from './tool-registry.js';
 
@@ -373,6 +380,12 @@ export interface StoredPullRequest extends PullRequest {
    * 了 @我 / 回复我的新评论。UI 据此在列表项上点一个未读圆点。用户打开 PR 即清除（推进已读水位）。
    */
   unread?: boolean;
+  /**
+   * 「@我 / 回复我」未读评论条数（派生值，同 `unread` 由 `listStoredPullRequests` 据已读水位计算填上，meta.json
+   * 不含）。与未读圆点**并存、互不替代**：圆点照常按新到达 / 新 commit / 点名回复亮，本计数仅额外给出点名/回复你
+   * 的未读条数。已在 poll 端封顶 10，故 ≤ 10；UI 满额显示「10+」。0 表示无此类未读（不渲染计数）。
+   */
+  unreadMentionCount?: number;
 }
 
 export interface PollResult {
@@ -386,4 +399,34 @@ export interface PollResult {
   removed: number;
   /** poll 失败的连接数 */
   errors: number;
+}
+
+/** 系统通知事件类型：新 PR / 被 @ / 被回复（与设置页三个开关一一对应）。 */
+export type PollNotificationKind = 'new_pr' | 'mention' | 'reply';
+
+/**
+ * Poll 本轮新发生的「值得提醒」事件，由 poller 经 onNotify 投影给主进程（用于弹系统通知）。仅在**已有基线**
+ * （非首轮 / PR 此前已知）时产出，避免首启 / 批量涌入时通知风暴；mention/reply 仅当评论时间晚于历史游标才计。
+ */
+export interface PollNotificationEvent {
+  kind: PollNotificationKind;
+  /** 事件所属 PR 的本地 id */
+  localId: string;
+  /** 事件所属连接 id（头像缓存键 + 取 adapter 拉头像用） */
+  connectionId: string;
+  /** 远端 PR 编号（如 #123），用于通知正文 */
+  remoteId: string;
+  /** PR 标题，用于通知正文 */
+  title: string;
+  /** PR 所在仓库，用于通知正文展示「项目 / 仓库」 */
+  repo: RepoRef;
+  /** 发起人：new_pr=PR 作者；mention/reply=触发本轮该类事件的最新一条评论作者。用于通知头像。 */
+  actor: PlatformUser;
+  /** mention / reply：本轮新增条数；new_pr 省略 */
+  count?: number;
+  /**
+   * mention / reply：触发事件的最新一条评论的定位信息（通知点击跳转用）。`anchor` 非空=inline 评论（可跳 diff 行），
+   * 为 null=summary 评论（打开「活动」对话标签）。new_pr 无此字段。
+   */
+  comment?: { remoteId: string; anchor: PrCommentAnchor | null };
 }

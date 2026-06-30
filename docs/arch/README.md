@@ -6,7 +6,7 @@
 ## 与其它文档的关系
 
 - **本目录（arch/）= 当前结论**：随实现演进持续更新，是某模块的「事实来源」。
-- **ROADMAP = 高层视角**：项目定位、里程碑进度、风险与下一步；不放实现细节（细节在这里）。
+- **ROADMAP = 高层视角**：项目定位、已交付能力、风险与下一步；不放实现细节（细节在这里）。
 - **ADR（已废弃）**：早期的设计思考曾以过程性方式留在 `docs/adr/`，与最终实现也多有出入。其结论
   已按领域沉淀进本目录、`docs/adr/` 已移除。决策的「取舍」若有长期价值，直接写进各篇的「核心设计」。
 
@@ -40,6 +40,9 @@
 | [`10-ui-interaction`](10-ui-interaction.md) | GUI 与交互（渲染层布局 / 面板 / 跨 PR 保活 / 交互约定） |
 | [`11-i18n`](11-i18n.md) | 国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / pr-agent 输出模板翻译） |
 | [`12-error-codes`](12-error-codes.md) | 错误码与错误传递（统一 AppError + meta / 跨 IPC 编码 / 前端按码 i18n / 领域标签与注册表） |
+| [`13-command-palette`](13-command-palette.md) | 命令面板（标题栏入口 / 两级选择 / 领域前缀与按语言搜索 / 注册表 + 分域 / 即时生效复用） |
+| [`14-notifications`](14-notifications.md) | 消息通知（poll 事件投影 / 系统通知 toast / macOS dock 角标 / 分类型开关 / OS 权限降级） |
+| [`15-comment-interactions`](15-comment-interactions.md) | 评论互动（emoji 反应 / @提及补全 / 图片附件上传；能力位降级 / 三平台差异 / 中性 emoji 归一） |
 
 > 打包 / 构建 / 签名 / CI 不属于产品子系统，已移到开发专题：[`../development/packaging-release.md`](../development/packaging-release.md)。
 

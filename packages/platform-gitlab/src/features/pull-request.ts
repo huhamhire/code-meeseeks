@@ -73,6 +73,22 @@ export class GitLabPullRequestService extends BasePullRequestService {
     return this.mapMr(detail, repo, this.buildReviewers(detail, approvedUsers));
   }
 
+  /** 按 repo + iid 从远端拉单个 MR（复用 loadMr 同款组装）；404 / 403 由 client 抛出供上层归一。 */
+  async getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest> {
+    const base = `/projects/${projectId(repo)}/merge_requests/${prId}`;
+    const detail = await this.client.get<GlMr>(base);
+    let approvedUsers: GlUser[] = [];
+    if (this.client.approvalsAvailable) {
+      try {
+        const approvals = await this.client.get<GlApprovals>(`${base}/approvals`);
+        approvedUsers = (approvals.approved_by ?? []).map((a) => a.user);
+      } catch {
+        /* 审批不可用（tier/权限）→ 视作无人 approve */
+      }
+    }
+    return this.mapMr(detail, repo, this.buildReviewers(detail, approvedUsers));
+  }
+
   /**
    * 列出 MR 提交：GitLab 端点已是 newest-first，与契约一致，无需反转。
    */
@@ -275,6 +291,8 @@ export class GitLabPullRequestService extends BasePullRequestService {
       reviewers,
       mergeStatus,
       hasConflict: mergeStatus.conflicted,
+      // 用户 note 数（系统 note 不计、回复也是 note）→ 含回复（capabilities 标 true）。
+      commentCount: mr.user_notes_count,
     };
   }
 

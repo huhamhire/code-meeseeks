@@ -37,6 +37,9 @@ export class BitbucketServerConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: true,
+      // 评论 emoji 反应自 7.x 起（最低支持版即 7.0）；emoticon 支持任意 emoji → free。
+      commentReactions: 'free',
+      commentAttachments: true,
       commentHardBreaks: true,
       mergeVetoFidelity: 'full',
       discoveryRateLimited: false,
@@ -45,6 +48,8 @@ export class BitbucketServerConnection extends BaseConnection {
       suggestions: false,
       reviewGrouping: false,
       activityTimeline: true,
+      // properties.commentCount 仅数顶层评论、updatedDate 也不随评论跳变 → 无「含回复」信号，poller 兜底每轮扫待处理 PR。
+      commentCountIncludesReplies: false,
     };
   }
 

@@ -19,5 +19,24 @@
       "aborted": "Paused by user",
       "maxSteps": "Step limit reached"
     }
+  },
+  "notifications": {
+    "mention": {
+      "body": "#{{id}} {{title}}",
+      "title": "You were mentioned"
+    },
+    "more": {
+      "body_one": "{{count}} more update — click to view",
+      "body_other": "{{count}} more updates — click to view",
+      "title": "More activity"
+    },
+    "newPr": {
+      "body": "#{{id}} {{title}}",
+      "title": "New pull request"
+    },
+    "reply": {
+      "body": "#{{id}} {{title}}",
+      "title": "New reply"
+    }
   }
 }

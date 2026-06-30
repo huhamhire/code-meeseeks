@@ -30,6 +30,10 @@ export interface GhPull {
   requested_reviewers?: GhUser[];
   mergeable?: boolean | null;
   mergeable_state?: string;
+  /** 会话（issue）评论数；仅 `/pulls/{n}` 详情带 */
+  comments?: number;
+  /** 行内评审评论数（含回复，回复本身即 review comment）；仅 `/pulls/{n}` 详情带 */
+  review_comments?: number;
 }
 
 export interface GhReview {
@@ -39,6 +43,29 @@ export interface GhReview {
   submitted_at?: string;
 }
 
+/**
+ * GitHub 评论响应内嵌的反应聚合（counts-only，无 per-user）。每种 content 一个计数 + total_count。
+ * `mine`（当前用户是否已反应）需另查 `.../reactions` 列表端点——见 GitHubCommentService。
+ */
+export interface GhReactionRollup {
+  total_count: number;
+  '+1': number;
+  '-1': number;
+  laugh: number;
+  hooray: number;
+  confused: number;
+  heart: number;
+  rocket: number;
+  eyes: number;
+}
+
+/** GitHub 单条反应（列表 / 创建端点返回）。 */
+export interface GhReaction {
+  id: number;
+  user: GhUser | null;
+  content: string;
+}
+
 export interface GhIssueComment {
   id: number;
   user: GhUser;
@@ -46,6 +73,7 @@ export interface GhIssueComment {
   created_at: string;
   updated_at: string;
   html_url?: string;
+  reactions?: GhReactionRollup;
 }
 
 export interface GhReviewComment {
@@ -61,6 +89,7 @@ export interface GhReviewComment {
   start_line?: number | null;
   in_reply_to_id?: number;
   html_url?: string;
+  reactions?: GhReactionRollup;
 }
 
 export interface GhCommit {

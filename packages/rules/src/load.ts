@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import matter from 'gray-matter';
-import type { Rule, RuleTool } from './types.js';
+import { MAX_RULE_FILES, type Rule, type RuleTool } from './types.js';
 
 const VALID_TOOLS: ReadonlyArray<RuleTool> = ['describe', 'review'];
 
@@ -23,7 +23,7 @@ export async function loadRules(
     opts?.onWarn?.(`rules.dir not found: ${dir}`);
     return [];
   }
-  const files = await listMdFiles(dir);
+  const files = await listMdFiles(dir, opts?.onWarn);
   const rules: Rule[] = [];
   for (const filePath of files) {
     try {
@@ -50,11 +50,26 @@ async function dirExists(p: string): Promise<boolean> {
   }
 }
 
-async function listMdFiles(dir: string): Promise<string[]> {
+/**
+ * 递归收集 dir 下所有 .md（跳过隐藏目录）。收集数到达 {@link MAX_RULE_FILES} 即停止遍历并告警——
+ * 规则目录被误指向超大目录树时的性能兜底拦截，避免一次加载扫穿海量文件。返回顺序为目录遍历序，
+ * 优先级排序在 loadRules 内统一做（sortRules），故此处截断丢弃的是「遍历靠后」的文件，与优先级无关
+ * （命中上限另由 pickMatchingRules 把关）。
+ */
+async function listMdFiles(
+  dir: string,
+  onWarn?: (msg: string, file?: string) => void,
+): Promise<string[]> {
   const out: string[] = [];
+  let truncated = false;
   async function walk(d: string): Promise<void> {
+    if (out.length >= MAX_RULE_FILES) return;
     const entries = await fs.readdir(d, { withFileTypes: true });
     for (const e of entries) {
+      if (out.length >= MAX_RULE_FILES) {
+        truncated = true;
+        return;
+      }
       const full = path.join(d, e.name);
       if (e.isDirectory()) {
         // 跳过隐藏目录 (.git / .vscode 等)
@@ -66,6 +81,9 @@ async function listMdFiles(dir: string): Promise<string[]> {
     }
   }
   await walk(dir);
+  if (truncated) {
+    onWarn?.(`rules dir has more than ${String(MAX_RULE_FILES)} .md files; only the first scanned are loaded`);
+  }
   return out;
 }
 

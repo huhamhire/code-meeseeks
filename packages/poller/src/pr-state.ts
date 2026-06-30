@@ -11,6 +11,12 @@ export interface PrIndexEntry {
   identity: PrIdentity;
   /** 远端 PR.updatedAt 镜像，poll 比对用 */
   updatedAt: string;
+  /**
+   * 远端评论计数镜像（{@link PullRequest.commentCount}）。poll 与上轮比对：含回复的平台（GitHub/GitLab）
+   * 据此判定「可能有新评论」以决定是否扫描；Bitbucket（仅顶层、不含回复）此值仅作辅助、不足以判定回复。
+   * 平台不提供时为 undefined（poll 退回仅按 `updatedAt` 判定）。
+   */
+  commentCount?: number;
   /** 首次被本机 poll 发现时间 */
   discoveredAt: string;
   /** 最近一次仍在远端列表里出现的时间 */
@@ -30,7 +36,16 @@ export interface PrIndexEntry {
    * 与用户的已读水位（另存 read-state.json）解耦，避免 poll 重写索引时把用户操作覆盖掉。
    */
   lastMentionAt?: string;
+  /**
+   * 「@我 / 回复我」评论的 createdAt 列表（ISO），保留最近 {@link MENTION_ATS_CAP} 条（按时间降序截断）。
+   * poll 扫评论时与历史并集去重；读取时按已读水位计未读条数（见 computeUnreadMentionCount）—— 与布尔未读点
+   * 并存、互不替代。同 `lastMentionAt` 由 poll 独占维护，与已读水位解耦。
+   */
+  mentionAts?: string[];
 }
+
+/** mentionAts 保留上限：仅留最近 10 条。未读计数据此封顶，UI 满额显示「10+」。 */
+export const MENTION_ATS_CAP = 10;
 
 /**
  * 用户对单个 PR 的「已读水位」。独立成 `prs/<localId>/read-state.json` —— **仅** markRead（用户打开 PR）写；
@@ -130,6 +145,27 @@ export function computeUnread(
 }
 
 /**
+ * 计算「@我 / 回复我」未读条数（派生，不持久化）。与布尔未读点（computeUnread）**并存**：未读点照常按
+ * 新到达 / 新 commit / 点名回复亮，本计数仅在此之上**额外**给出点名/回复你的未读条数。
+ *
+ * 规则：取索引里累积的 mention 时间戳，数其中晚于已读水位 `lastReadAt` 的条数；从未打开过（无 read-state）→
+ * 全部计入。条数已在 poll 端按 {@link MENTION_ATS_CAP} 封顶（最多 10），故返回值天然 ≤ 10，UI 满额显示「10+」。
+ */
+export function computeUnreadMentionCount(
+  entry: PrIndexEntry,
+  readState: PrReadStateFile | null,
+): number {
+  const ats = entry.mentionAts;
+  if (!ats?.length) return 0;
+  const water = readState ? Date.parse(readState.lastReadAt) : Number.NEGATIVE_INFINITY;
+  let n = 0;
+  for (const iso of ats) {
+    if (Date.parse(iso) > water) n++;
+  }
+  return n;
+}
+
+/**
  * 列出当前**活跃** (非软删) 的 PR。
  *
  * 实现：先读索引 → 过滤掉 archivedAt 非空的 → 逐个读 meta.json + read-state.json。索引里没有但目录
@@ -148,7 +184,34 @@ export async function listStoredPullRequests(
     const meta = await readPrMeta(store, localId);
     if (!meta) continue;
     const readState = await readPrReadState(store, localId);
-    out.push({ ...meta.pr, unread: computeUnread(entry, readState, meta.pr) });
+    out.push({
+      ...meta.pr,
+      unread: computeUnread(entry, readState, meta.pr),
+      unreadMentionCount: computeUnreadMentionCount(entry, readState),
+    });
+  }
+  return out;
+}
+
+/**
+ * 列出**已归档**（退场 / 软删）的 PR，供「已关闭」视图浏览。
+ *
+ * 索引仍只在 `stateStore` 维护（archivedAt 非空即归档）；PR 实体目录在退场时整树搬入 `archiveStore`
+ * 冷存储，故逐个 meta 从 archiveStore 读。索引有条目但 archiveStore 无 meta（搬迁中途 / 旧布局）即跳过。
+ * 归档 PR 一律视为已读（不参与未读派生）。
+ */
+export async function listArchivedPullRequests(
+  stateStore: StateStore,
+  archiveStore: StateStore,
+): Promise<StoredPullRequest[]> {
+  const index = await readPrIndex(stateStore);
+  if (!index) return [];
+  const out: StoredPullRequest[] = [];
+  for (const [localId, entry] of Object.entries(index.prs)) {
+    if (!entry.archivedAt) continue;
+    const meta = await readPrMeta(archiveStore, localId);
+    if (!meta) continue;
+    out.push({ ...meta.pr, unread: false, unreadMentionCount: 0 });
   }
   return out;
 }
@@ -168,7 +231,7 @@ export async function markPrRead(
     lastReadHeadSha: meta.pr.sourceRef.sha,
     lastReadAt: now,
   });
-  return { ...meta.pr, unread: false };
+  return { ...meta.pr, unread: false, unreadMentionCount: 0 };
 }
 
 /**

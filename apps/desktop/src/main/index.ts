@@ -5,7 +5,7 @@ import { ensureWorkspace, type BootstrapResult } from '@meebox/config';
 import { scaffoldAgentDir } from '@meebox/agent';
 import { editorThemeNativeSource, resolveLanguage } from '@meebox/shared';
 import { createLogger } from '@meebox/logger';
-import type { Poller } from '@meebox/poller';
+import { sweepOrphanedArchivedPrs, type Poller } from '@meebox/poller';
 import type { RepoMirrorManager } from '@meebox/repo-mirror';
 import { JsonFileStateStore } from '@meebox/state-store';
 import {
@@ -43,6 +43,8 @@ class App {
   private bootstrap!: BootstrapResult;
   private logger!: Logger;
   private stateStore!: JsonFileStateStore;
+  /** 归档 PR 冷存储（`archived/` 根，与 state/ 平级）；退场 PR 整树搬入、按 grace 期清理。 */
+  private archiveStore!: JsonFileStateStore;
   private poller!: Poller;
   private repoMirror!: RepoMirrorManager;
   private prAgent!: PrAgentRuntime;
@@ -67,6 +69,17 @@ class App {
       await this.stateStore
         .sweepStaleTmpFiles()
         .catch((err: unknown) => this.logger.warn({ err }, 'state-store: tmp sweep failed'));
+      // 归档冷存储同样清扫上次会话残留的原子写 tmp（搬迁中途退出可能留下孤儿）。
+      await this.archiveStore
+        .sweepStaleTmpFiles()
+        .catch((err: unknown) => this.logger.warn({ err }, 'archive-store: tmp sweep failed'));
+      // 归档孤儿清扫：统一索引丢失 / 重建后，归档数据失去索引条目、按索引遍历的硬清够不到 → 永久孤儿。
+      // 启动期（任何写入之前）按「索引无条目 + 目录 mtime 超 grace」无索引兜底回收（见 docs/arch/03）。
+      await sweepOrphanedArchivedPrs({
+        stateStore: this.stateStore,
+        archiveStore: this.archiveStore,
+        logger: this.logger,
+      }).catch((err: unknown) => this.logger.warn({ err }, 'archive housekeeping: orphan sweep failed'));
       await this.initConnectionsAndIpc();
       await this.initWindow();
       await this.startPolling();
@@ -97,10 +110,12 @@ class App {
       'meebox main process started',
     );
 
-    // Agent 目录脚手架：未配置自定义目录时，Agent 上下文默认落在工作目录下的 agent/（见 ipc.ts
-    // effectiveAgentDir）。启动期幂等补齐默认目录的模版（已存在不覆盖），使首次使用即有 SOUL/AGENTS
-    // 等上下文文件可读。失败不阻断启动（运行期 loadAgentContext 仍会按缺失文件降级 + warn）。
-    void scaffoldAgentDir(this.bootstrap.paths.agentDir)
+    // Agent 目录脚手架：补齐**生效目录**的模版（用户配置的 agent.dir 优先，未配置回落默认 agent/——与
+    // ipc.ts effectiveAgentDir 同口径）。此前误用默认目录，配置了自定义目录时该目录不会被初始化、启动加载
+    // 到空目录。幂等（已存在不覆盖），使首次使用即有 SOUL/AGENTS 等上下文文件可读。失败不阻断启动
+    // （运行期 loadAgentContext 仍会按缺失文件降级 + warn）。改 agent.dir 后的补齐见 config.setAgent。
+    const agentDir = this.bootstrap.config.agent.dir || this.bootstrap.paths.agentDir;
+    void scaffoldAgentDir(agentDir)
       .then((created) => {
         if (created.length) this.logger.info({ created }, 'agent dir scaffolded');
       })
@@ -126,6 +141,7 @@ class App {
     // 版本更新器：由 poller tick 顺带调 runIfDue（至多每小时一次，复用 poller 周期、不另起定时器）。
     this.updater = new Updater(this.bootstrap, this.logger);
     this.stateStore = new JsonFileStateStore(this.bootstrap.paths.stateDir, this.logger);
+    this.archiveStore = new JsonFileStateStore(this.bootstrap.paths.archivedDir, this.logger);
   }
 
   /**
@@ -145,6 +161,7 @@ class App {
     this.poller = createPoller({
       bootstrap: this.bootstrap,
       stateStore: this.stateStore,
+      archiveStore: this.archiveStore,
       logger: this.logger,
       onTickExtras: () => {
         // 本轮已被移除 / purge 的 PR：终止其上仍在执行的 agent 操作（先于 AutoPilot，避免给已消失的 PR 起新评审）。
@@ -155,6 +172,7 @@ class App {
         this.ipcControl?.runAutopilotIfDue();
       },
       getRepoMirror: () => this.repoMirror,
+      getConnectionRuntime: () => this.conns.runtime,
     });
 
     // 连接运行时（接线 / ping / 热重配）：依赖已建好的 poller；repoMirror 经 conns.runtime 读 adapterByHost。
@@ -184,6 +202,7 @@ class App {
       getPrAgentBridge: () => this.prAgent.getBridge(),
       embeddedPythonPath: this.prAgent.embeddedPythonPath,
       stateStore: this.stateStore,
+      archiveStore: this.archiveStore,
       poller: this.poller,
       connectionRuntime: this.conns.runtime,
       reconfigureConnections: () => this.conns.reconfigure(),
@@ -204,6 +223,11 @@ class App {
     // 打包态 Dock 图标由 bundle 的 icns 决定，无需且不应在此覆盖。仅 mac 有 app.dock。
     if (process.platform === 'darwin' && !app.isPackaged) {
       app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
+    }
+
+    // Windows toast 通知需 AppUserModelId 与安装包 appId 一致，否则系统可能不显示 / 归属错乱。
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('com.huhamhire.code-meeseeks');
     }
 
     // 原生窗口 chrome 跟随全局主题：Windows 据 nativeTheme 设 DWMWA_USE_IMMERSIVE_DARK_MODE（原生

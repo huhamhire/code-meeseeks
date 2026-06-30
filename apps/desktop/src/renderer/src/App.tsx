@@ -1,21 +1,28 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PrDiscoveryFilter } from '@meebox/shared';
 import { invoke } from './api';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
 import { PrPanel, PrEmpty, usePullRequests } from './components/features/pr';
 import { OnboardingWizard } from './components/features/onboarding';
-import { SettingsModal } from './components/features/settings';
-import { Sidebar } from './components/layout/Sidebar';
+import { SettingsModal, type SettingsCategory } from './components/features/settings';
+import {
+  Sidebar,
+  FILTERS as PR_STATUS_FILTERS,
+  DECISION_STATUS_FILTERS,
+  type FilterKey,
+} from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
 import { TitleBar } from './components/layout/TitleBar';
 import { useToast } from './hooks/useToast';
 import { useBootstrap } from './hooks/useBootstrap';
+import { useDockBadge } from './hooks/useDockBadge';
 import { usePanelLayout } from './hooks/usePanelLayout';
 import { useUpdateNotice } from './hooks/useUpdateNotice';
 import { useAppStores } from './hooks/useAppStores';
 import { useExternalLinkGuard } from './hooks/useExternalLinkGuard';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { usePrNavigation } from './hooks/usePrNavigation';
 import { useGlobalTheme, useEditorAppearanceSync } from './hooks/useTheme';
 
 export default function App() {
@@ -27,7 +34,6 @@ export default function App() {
     setPrs,
     selectedId,
     setSelectedId,
-    selected,
     refreshing,
     merging,
     reloadPrs,
@@ -67,17 +73,63 @@ export default function App() {
   useGlobalTheme();
 
   const [showSettings, setShowSettings] = useState(false);
-  /**
-   * M4 跨组件跳转：ChatPane finding card 点"编辑" / PublishReviewModal anchor 点击 → 这里 set →
-   * PrPanel 切到 Diff tab + 透传给 DiffView 做 scroll/highlight/(可选)open edit zone，消费完清空。
-   */
-  const [pendingDiffNav, setPendingDiffNav] = useState<{
-    runId?: string;
-    findingId?: string;
-    anchor: { path: string; startLine: number; endLine: number };
-  } | null>(null);
-  // GitHub 发现分类（运行时筛选，不持久化）；仅活动连接支持时在 PR 列表展示。
-  const [discoveryFilter, setDiscoveryFilter] = useState<PrDiscoveryFilter>('review-requested');
+  // 设置面板初始分区（命令面板「打开关于 / 模型」等深链用）；缺省由 SettingsModal 落 'general'。
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory | undefined>(undefined);
+  const openSettings = useCallback((category?: SettingsCategory) => {
+    setSettingsCategory(category);
+    setShowSettings(true);
+  }, []);
+  // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
+  const [statusFilter, setStatusFilter] = useState<FilterKey>('pending');
+  // PR 导航 / 范围领域（发现分类 / 活跃·归档切换 / 归档懒加载 / 按 URL 打开 / 定位跳转 / 通知点击导航 +
+  // 跨组件 Diff·Tab 跳转意图）——领域逻辑归 usePrNavigation；选中态 / 已读仍由 usePullRequests 拥有。
+  const {
+    scope,
+    discoveryFilter,
+    displayedPrs,
+    selectedPr,
+    archivedLoading,
+    selectDiscovery,
+    viewActive,
+    viewArchived,
+    openPrByUrl,
+    jumpToPr,
+    pendingDiffNav,
+    setPendingDiffNav,
+    pendingTab,
+    setPendingTab,
+  } = usePrNavigation({ prs, selectedId, setSelectedId, markRead, notifyError });
+  // macOS dock 角标：活跃 PR「@我 / 回复我」待回应总数 → 主进程落到 dock 图标（系统行为，逻辑见 useDockBadge）。
+  useDockBadge({
+    prs,
+    platform: boot?.info.platform,
+    notifications: boot?.config.notifications,
+  });
+  const archived = scope === 'archived';
+  // 状态栏「待审 PR」计数：仅计**需我评审且本人尚未评审**的 PR（discovery=review-requested 且 localStatus=pending）。
+  // 不能简单数 localStatus==='pending'——「我创建的」等分类的 PR 本人非评审人、localStatus 恒为 pending，会把计数撑大。
+  // 无发现分类的平台（单一「待我评审」发现）discoveryFilters 为空，视作 review-requested。
+  const pendingReviewCount = useMemo(
+    () =>
+      prs.filter(
+        (p) =>
+          p.localStatus === 'pending' &&
+          (p.discoveryFilters.length === 0 || p.discoveryFilters.includes('review-requested')),
+      ).length,
+    [prs],
+  );
+  // 已关闭范围的「可参与」判定：合并 / 仍开放的 PR 可补充评论 + AI 评审；decline 仅浏览。活跃范围恒可参与。
+  const canEngage = !archived || (selectedPr ? selectedPr.state !== 'declined' : false);
+
+  // 窗口级全局快捷键（F5 自动评审 / DevTools / 查看已关闭 / Ctrl-Cmd+B·J 布局开关）——领域逻辑归 useGlobalShortcuts。
+  useGlobalShortcuts({
+    platform: boot?.info.platform,
+    selectedId,
+    canEngage,
+    viewArchived,
+    setSidebarCollapsed,
+    setChatCollapsed,
+  });
 
   if (fatalError) {
     return (
@@ -105,8 +157,8 @@ export default function App() {
   }
 
   // 选中 PR 所属连接：能力位（审批按钮降级）+ 当前 PAT 用户（判「是否自己的 PR」）。
-  const selectedConn = selected
-    ? boot.connections.find((c) => c.connectionId === selected.connectionId)
+  const selectedConn = selectedPr
+    ? boot.connections.find((c) => c.connectionId === selectedPr.connectionId)
     : undefined;
   // 有 active 连接但 LLM 未配置 → ChatPane 给出「需配置才能启用」提示并禁用输入
   const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
@@ -116,42 +168,78 @@ export default function App() {
   );
   const availableDiscoveryFilters = activeConnSummary?.capabilities.discoveryFilters ?? [];
   const showDiscoveryFilter = availableDiscoveryFilters.length > 0;
+  // 平台是否支持 needs_work（「需修改」）评审态：GitHub / Bitbucket 支持、GitLab（二元审批）不支持。
+  // 决定非「待我评审」发现分类下是否保留「待处理」状态筛选（见 Sidebar.visibleFilters）。
+  const supportsNeedsWork = activeConnSummary?.capabilities.reviewStatuses.includes('needsWork') ?? false;
   // 选中的分类可能因切换连接而对当前平台无效 → 回落首个可用。
   const effectiveDiscoveryFilter = availableDiscoveryFilters.includes(discoveryFilter)
     ? discoveryFilter
     : availableDiscoveryFilters[0];
+  // 命令面板「分类筛选」可选的状态项：与侧栏一致——有发现分类时隐藏决断类（通过 / 需修改）。
+  const visibleStatusFilters = showDiscoveryFilter
+    ? PR_STATUS_FILTERS.filter((f) => !DECISION_STATUS_FILTERS.has(f.value))
+    : PR_STATUS_FILTERS;
 
   return (
     <div className="app">
-      <TitleBar platform={boot.info.platform} title={selected?.title} />
+      <TitleBar
+        platform={boot.info.platform}
+        title={selectedPr?.title}
+        config={boot.config}
+        // 不可参与（decline / 无选中）时「运行自动评审」命令应隐藏：以 null 关掉其 when 门控。
+        selectedPrId={canEngage ? selectedId : null}
+        patchConfig={patchConfig}
+        openSettings={openSettings}
+        toggleChatPanel={() => setChatCollapsed((c) => !c)}
+        togglePrList={() => setSidebarCollapsed((c) => !c)}
+        discoveryFilters={availableDiscoveryFilters}
+        setDiscoveryFilter={selectDiscovery}
+        prStatusFilters={visibleStatusFilters}
+        setPrStatusFilter={setStatusFilter}
+        viewArchived={viewArchived}
+        openPrByUrl={openPrByUrl}
+      />
       <div className="app-body">
         {!sidebarCollapsed && (
           <Sidebar
-            prs={prs}
+            prs={displayedPrs}
             selectedId={selectedId}
             onSelect={(pr) => {
               setSelectedId(pr.localId);
-              void markRead(pr.localId);
+              // 已关闭范围无未读概念，无需推进已读水位。
+              if (!archived) void markRead(pr.localId);
             }}
             width={sidebarWidth}
             onResize={setSidebarWidth}
             availableFilters={showDiscoveryFilter ? availableDiscoveryFilters : undefined}
             discoveryFilter={showDiscoveryFilter ? effectiveDiscoveryFilter : undefined}
-            onDiscoveryFilterChange={showDiscoveryFilter ? setDiscoveryFilter : undefined}
+            onDiscoveryFilterChange={showDiscoveryFilter ? selectDiscovery : undefined}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            scope={scope}
+            onViewActive={viewActive}
+            onViewArchived={viewArchived}
+            loading={archived && archivedLoading}
+            supportsNeedsWork={supportsNeedsWork}
           />
         )}
         <MainPane>
-          {selected ? (
+          {selectedPr ? (
             <PrPanel
-              pr={selected}
+              pr={selectedPr}
               onSetStatus={(s) => void setSelectedPrStatus(s)}
               onMerge={() => void mergeSelectedPr()}
               merging={merging}
               capabilities={selectedConn?.capabilities}
               currentUserName={selectedConn?.user?.name ?? null}
+              // 已关闭范围隐藏 PR 生命周期操作（合并 / 审批）；decline / 不可参与再隐藏评论 / 草稿写入。
+              hideLifecycle={archived}
+              readOnly={!canEngage}
               pendingDiffNav={pendingDiffNav}
               onDiffNavConsumed={() => setPendingDiffNav(null)}
               onRequestDiffNav={(target) => setPendingDiffNav(target)}
+              pendingTab={pendingTab}
+              onPendingTabConsumed={() => setPendingTab(null)}
             />
           ) : (
             <PrEmpty hasConnections={boot.config.connections.length > 0} />
@@ -159,11 +247,12 @@ export default function App() {
         </MainPane>
         {/* ChatPane 始终挂载，折叠只是 CSS 隐藏：保住运行中的 run 生命周期（计时器 / runProgress 订阅）。 */}
         <ChatPane
-          pr={selected}
+          pr={selectedPr}
           prAgent={boot.prAgent}
           width={chatWidth}
           onResize={setChatWidth}
-          collapsed={chatCollapsed}
+          // 不可参与（decline / 无选中）时强制折叠对话面板、隐去 AI 评审入口；合并 / 仍开放 PR 仍可补评审。
+          collapsed={chatCollapsed || !canEngage}
           llmConfigured={llmConfigured}
           onOpenSettings={() => setShowSettings(true)}
           onJumpToDraftEditor={(target) => setPendingDiffNav(target)}
@@ -176,7 +265,7 @@ export default function App() {
         />
       </div>
       <StatusBar
-        prsCount={prs.length}
+        prsCount={pendingReviewCount}
         prAgent={boot.prAgent}
         connections={boot.connections}
         llm={boot.config.llm}
@@ -193,7 +282,7 @@ export default function App() {
           void invoke('config:setLlm', { llm: next });
           patchConfig((c) => ({ ...c, llm: next }));
         }}
-        onJumpToPr={setSelectedId}
+        onJumpToPr={(id) => void jumpToPr(id)}
         updateInfo={updateInfo}
         autopilotEnabled={boot.config.agent.autopilot.enabled}
         onToggleAutopilot={() => {
@@ -218,6 +307,7 @@ export default function App() {
           }
           onConnectionsChange={refreshBootAndPrs}
           onConfigPersisted={(config) => patchConfig(() => config)}
+          initialCategory={settingsCategory}
           onClose={() => setShowSettings(false)}
         />
       )}

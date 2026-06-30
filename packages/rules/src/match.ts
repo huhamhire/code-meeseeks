@@ -1,4 +1,4 @@
-import type { Rule, RuleMatchContext } from './types.js';
+import { DEFAULT_MAX_MATCHED_RULES, type Rule, type RuleMatchContext } from './types.js';
 
 /**
  * 判断单条规则是否匹配 PR 上下文。语义：
@@ -19,12 +19,35 @@ export function ruleMatches(rule: Rule, ctx: RuleMatchContext): boolean {
 }
 
 /**
- * 同一 PR 多条规则命中时，按 priority desc + filePath asc 取**第一条**。
- * 这是用户明确选择的语义：rules 之间不拼接，避免 prompt 膨胀 + 互相矛盾。
- * 如果想生效更具体的规则，让作者把它 priority 调高（或 id 排在前面）。
- *
- * 调用方：loadRules() 已经按相同顺序排过，直接 .find() 即可，无需再排。
+ * 取同一 PR 命中的全部规则，按 priority desc + filePath asc（loadRules 已预排序，故保序），
+ * 封顶 `limit` 条（默认 {@link DEFAULT_MAX_MATCHED_RULES}）作安全兜底，超出按排序丢弃靠后者。
+ * 多条规则的正文由调用方经 {@link combineRuleInstructions} 拼接注入。
+ */
+export function pickMatchingRules(
+  rules: ReadonlyArray<Rule>,
+  ctx: RuleMatchContext,
+  limit: number = DEFAULT_MAX_MATCHED_RULES,
+): Rule[] {
+  const matched = rules.filter((r) => ruleMatches(r, ctx));
+  return limit >= 0 ? matched.slice(0, limit) : matched;
+}
+
+/**
+ * 取命中规则的**首条**（priority desc + filePath asc）。UI 单条预览等仍用得到；评审注入走
+ * {@link pickMatchingRules} 取多条。
  */
 export function pickMatchingRule(rules: ReadonlyArray<Rule>, ctx: RuleMatchContext): Rule | null {
   return rules.find((r) => ruleMatches(r, ctx)) ?? null;
+}
+
+/**
+ * 把多条命中规则的正文拼成单段注入文本。各规则只取 body（frontmatter 在加载期已被 gray-matter 剥离，
+ * 不会泄漏进 instructions）；规则间以 `## Ruleset N` 分段标题分隔，便于模型区分不同规约、互不串味。
+ * 单条时也加 `## Ruleset 1` 头以保持一致。空输入 → 空串。
+ */
+export function combineRuleInstructions(rules: ReadonlyArray<Rule>): string {
+  return rules
+    .map((r, i) => `## Ruleset ${String(i + 1)}\n\n${r.instructions.trim()}`)
+    .join('\n\n')
+    .trim();
 }

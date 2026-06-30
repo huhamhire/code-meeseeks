@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 
@@ -27,11 +27,12 @@ function resolveSplashLogo(): string | null {
   return null;
 }
 
-// 闪屏明暗两套配色，跟随有效主题（与 palette bg-app / 文字 / accent 同源）：
-// 暗 = $vscode-gray-850 底 + 主文字白 + $vscode-blue-700 accent；浅 = $vscode-gray-30 底 + 深文字 + $vscode-blue-800。
+// 闪屏明暗两套配色，跟随有效主题、对齐默认的 2026 主题（底 / 文字取 2026 editor background / foreground，
+// accent 仍用语义 accent —— chrome-sync 不覆盖 accent）：
+// 暗 = dark-2026 底 #121314 + 文字 #BBBEBF + $vscode-blue-700 accent；浅 = light-2026 底 #FFFFFF + 深文字 + $vscode-blue-800。
 const SPLASH_COLORS = {
-  dark: { bg: '#1e1e1e', text: '#ffffff', sub: '#9d9d9d', ring: 'rgba(255,255,255,.16)', accent: '#0e639c' },
-  light: { bg: '#f8f8f8', text: '#1f1f20', sub: '#6e6e6e', ring: 'rgba(0,0,0,.14)', accent: '#005fb8' },
+  dark: { bg: '#121314', text: '#BBBEBF', sub: '#6f7172', ring: 'rgba(255,255,255,.16)', accent: '#0e639c' },
+  light: { bg: '#FFFFFF', text: '#202020', sub: '#6e6e6e', ring: 'rgba(0,0,0,.14)', accent: '#005fb8' },
 };
 
 /**
@@ -42,13 +43,21 @@ const SPLASH_COLORS = {
  */
 export function createSplash(dark: boolean): BrowserWindow {
   const c = dark ? SPLASH_COLORS.dark : SPLASH_COLORS.light;
+  const width = 280;
+  const height = 240;
+  // 与主窗口同源：按光标所在显示器的 workArea 居中（workArea 已扣掉 mac 菜单栏 / 刘海）。不用
+  // Electron 的 center:true——它按整屏 bounds（含顶部不可用区）算中点、且固定主显示器，会让 splash 偏高、多屏错位。
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const x = Math.round(area.x + (area.width - width) / 2);
+  const y = Math.round(area.y + (area.height - height) / 2);
   const splash = new BrowserWindow({
-    width: 280,
-    height: 240,
+    width,
+    height,
+    x,
+    y,
     frame: false,
     resizable: false,
     movable: false,
-    center: true,
     show: false,
     alwaysOnTop: true,
     skipTaskbar: true,

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { appendAgentMessage, listStoredPullRequests, writeAutopilotLedger } from '@meebox/poller';
+import { appendAgentMessage, readPrIndex, writeAutopilotLedger } from '@meebox/poller';
 import { buildChatEnv } from '@meebox/pr-agent-bridge';
 import {
   AppError,
@@ -103,8 +103,12 @@ export class Orchestrator implements OrchestratorRuntime {
   }
 
   /**
-   * poll tick 后调用：把已被移除 / purge（不再在 listStoredPullRequests 里）的 PR 上仍在执行的
-   * agent 操作一律直接终止——PR 都没了，继续评审无意义且浪费 LLM / 占用 worktree。
+   * poll tick 后调用：把已被 purge（彻底从索引移除）的 PR 上仍在执行的 agent 操作一律终止——PR 都没了，
+   * 继续评审无意义且浪费 LLM / 占用 worktree。
+   *
+   * 「在场」判定用**索引全集**（活跃 + 归档，readPrIndex 覆盖二者）、而非仅活跃集——否则对**已归档**（已关闭范围）
+   * PR 补跑 AI 评审时，下轮 poll 会把它误判为「已移除」而中途掐断（归档 PR 仍在索引、只是 archivedAt 非空）。
+   * 仅当条目彻底不在索引里（grace 期满硬清）才终止。
    */
   async terminateAgentsForGonePrs(): Promise<void> {
     const { stateStore, logger } = this.ctx;
@@ -112,7 +116,8 @@ export class Orchestrator implements OrchestratorRuntime {
     for (const id of this.agentControllers.keys()) opPrIds.add(id);
     for (const id of this.runQueue.queuedPrLocalIds()) opPrIds.add(id);
     if (opPrIds.size === 0) return;
-    const live = new Set((await listStoredPullRequests(stateStore)).map((p) => p.localId));
+    const index = await readPrIndex(stateStore);
+    const live = new Set(Object.keys(index?.prs ?? {}));
     for (const id of opPrIds) {
       if (!live.has(id)) {
         logger.info({ prLocalId: id }, 'agent ops terminated: pr removed/purged');
@@ -211,12 +216,14 @@ export class Orchestrator implements OrchestratorRuntime {
    */
   async recordReviewSummaryMessage(pr: StoredPullRequest, session: AgentSession): Promise<void> {
     if (session.status !== 'done' || !session.summary) return;
-    await appendAgentMessage(this.ctx.stateStore, pr.localId, {
+    // per-PR 存储路由：已归档（已关闭范围）PR 补跑评审的总结消息 / 台账落归档冷存储。
+    const store = await this.ctx.pr.storeForPr(pr.localId);
+    await appendAgentMessage(store, pr.localId, {
       role: 'assistant',
       content: session.summary,
       recommendation: session.recommendation,
     });
-    await writeAutopilotLedger(this.ctx.stateStore, {
+    await writeAutopilotLedger(store, {
       prLocalId: pr.localId,
       autoReviewedUpdatedAt: pr.updatedAt,
       decision: 'review',

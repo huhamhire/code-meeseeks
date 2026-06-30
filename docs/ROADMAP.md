@@ -1,69 +1,84 @@
 # Code Meeseeks Roadmap
 
-> 最后更新：2026-06-16
-> 状态：**M0–M4 已交付**；**M5（打磨 + 多平台扩展）持续中**。GitHub / Bitbucket / **GitLab** Adapter 均已交付（GitLab：CE / EE，gitlab.com + Self-Managed）。**高阶 Agent 评审 + AutoPilot 预评审已交付**。
->
-> **命名约定**：对外品牌 **Code Meeseeks**（灵感来自 Rick and Morty 的 Mr. Meeseeks）；代码内部
-> 统一用中性代号 **meebox**（npm 作用域 `@meebox/*`，数据目录 `~/.code-meeseeks`）。pr-agent 为
-> 第三方依赖，不在重命名范围内。
+> 最后更新：2026-06-30
 
-本文件只保留**高层视角**：里程碑状态、风险、下一步。各模块的**设计与实现细节**见
-**[模块设计文档 docs/arch/](arch/README.md)**。
+本文件只保留**高层视角**：已交付能力全景、持续演进、风险与下一步。面向用户的**特性详述**见
+**[README](../README.md)**；各模块的**设计与实现细节**见 **[模块设计文档 docs/arch/](arch/README.md)**。
 
 ## 1. 项目定位
 
 面向 Reviewer **个人**的本地化、半自动化代码评审 GUI 客户端，基于社区版
 [pr-agent](https://docs.pr-agent.ai/) 构建，核心立场是**决策权在人、规则在本地、数据在本地**。
 
-> 完整定位、适用 / 不适用场景、核心特性见 **[README](../README.md)**，此处不再重复。
+> 完整定位、适用 / 不适用场景见 **[README](../README.md)**，此处不再重复。
 
 ---
 
-## 2. 里程碑进度
+## 2. 已交付能力
 
-每一期都设计为**可独立交付**的里程碑。实现细节见对应模块文档。
+> 按 README「核心特性」的领域划分组织，此处为**交付全景**（高层）；面向用户的特性详述见 README。
 
-| 里程碑                    | 状态 | 交付摘要                                                                   |
-| ------------------------- | ---- | -------------------------------------------------------------------------- |
-| **M0** 工程基线           | ✅   | 单仓多包（npm + Nx）+ Electron 壳 + 类型化 IPC + 工作目录 bootstrap + CI   |
-| **M1** 平台接入 + PR 发现 | ✅   | Bitbucket Server adapter + 轮询发现 + PR 列表 / 分组 / 过滤 UI             |
-| **M2** 仓库镜像 + Diff    | ✅   | bare 镜像 + Monaco 并排 diff + 文件树 + 行内评论 + blame                   |
-| **M3** pr-agent 集成      | ✅   | bridge + `/describe`·`/review`·`/ask` + 输出解析 + rules 注入 + 对话式队列 |
-| **M4** 评审 → 发布闭环    | ✅   | findings → 草稿池 → 内联编辑 → 批量发布 + 评论 reply/edit/delete + 合并    |
-| **M5** 打磨 + 多平台      | 🔄   | 持续，见 §3                                                                |
+#### 🌍 多平台接入
 
-> 详细设计：平台适配见 [01](arch/01-platform-adapter.md)、仓库镜像见 [02](arch/02-repo-mirror.md)、
-> 状态存储见 [03](arch/03-state-storage.md)、pr-agent 运行时见 [04](arch/04-pragent-runtime.md)、
-> 评审闭环见 [05](arch/05-review-workflow.md)、规则见 [07](arch/07-rules.md)、配置见 [08](arch/08-config-and-secrets.md)。
+- [x] 统一接入 GitHub / Bitbucket / GitLab（含 GitHub Enterprise / GitLab Self-Managed，按平台能力自适应降级）
+- [x] 本地优先：仓库副本 / PR 元数据 / 草稿存本机；内嵌 pr-agent 运行时，免装 Python / Docker
+- [x] 出站 HTTP 代理（本地地址自动直连）
+
+#### 📥 PR 发现与浏览
+
+- [x] 轮询自动发现 + 分类（待我评审 / 我创建 / 指派 / 提及）+ 仓库分组 + 状态过滤 + 搜索
+- [x] 未读与点名标记（新分配 / 新提交 / 被 @ / 被回复；被点名条数单独计数）
+- [x] 历史归档浏览 + 按 URL 打开任意 PR（含补充评论、补跑评审）
+
+#### 🔍 本地 Diff 阅读
+
+- [x] 并排 / 内联 diff、文件树（合并冲突标注）、按变更范围 / 单 commit、总览标尺、blame、跨文件搜索
+- [x] 行内评论（新增行与删除行均可）+ 选中代码作上下文引用
+
+#### 🤖 AI / Agentic 评审
+
+- [x] 指令驱动 pr-agent（`/describe`·`/review`·`/improve`·`/ask`），结果结构化成可操作的评审发现
+- [x] 复评闭环：对评审发现发起 `/ask` 复评，按裁决（取代 / 保留 / 撤销）自动处理原评论
+- [x] Agentic 自主规划 + 多工具编排 + 长期 Memory + 过程可观测，可中途追加输入、随时停止
+- [x] AutoPilot 预评审：对待我评审·待处理的新 PR 自动预跑，准入控制 + 逐项授权 + 红线校验（默认仅只读工具）
+- [x] CLI 模式 `/ask` 仓库文件访问：一次性 worktree 取完整上下文 + 落 cwd 前清洗仓库自带 agent 指令文件防注入（见 [06](arch/06-agent.md)）
+
+#### ✍️ 评审闭环与协作
+
+- [x] 评审发现 → 草稿池 → 内联编辑 → 单条 / 批量发布；远端可合并状态可视 + 一键合并（亦可 `/merge`）
+- [x] 评论互动：回复 / 编辑 / 删除 + emoji 反应 + @ 提及补全 + 图片附件 + `:shortcode:` 表情渲染（随平台能力）
+- [x] 活动时间线：评论 / 提交更新 / 评审决断归并为一条（GitHub / Bitbucket）
+- [x] 消息通知：新 PR / 评论回复 / 被 @ 分类系统通知（仅待处理 PR）+ 点击直达 PR / 代码行 + macOS dock 角标 + macOS 授权引导
+
+#### ⚙️ 模型与规则
+
+- [x] 多 LLM Provider（OpenAI / openai-compatible / DeepSeek / Anthropic / 通义千问 / 火山方舟等；本地 CLI claude·codex）+ token 用量采集
+- [x] 个性化规则目录（markdown + frontmatter，子目录递归；命中多条按 Ruleset 分段注入、`priority` 排序）
+- [x] 运行参数可调：评审任务并发、输入上下文长度、Agent 策略（自动追问开关、代码建议数量）
+
+#### 🎨 界面与体验
+
+- [x] 主题与外观：深色 / 浅色 / 跟随系统 + 多款编辑器配色 + 自定义等宽字体字号
+- [x] 命令面板（`Ctrl/Cmd+Shift+P`）归口分散功能 + 全局快捷键
+- [x] 四语界面（简体中文 / English / 日本語 / Deutsch），AI 回复语言随界面语言
+- [x] 无边框自绘标题栏 + 首启配置向导 + 设置页可视化 CRUD
+
+#### 📦 工程与发布
+
+- [x] 单仓多包（npm + Nx）+ Electron + 类型化 IPC + CI（lint / typecheck / test / build）
+- [x] 桌面安装包 Windows x64 + macOS arm64；CI 按 `v*` tag 自动出包并发 GitHub Release（暂不出 Linux）
+- [x] 开源发布（Apache-2.0 + NOTICE）
 
 ---
 
-## 3. M5 · 打磨与多平台扩展（持续）
+## 3. 持续演进
 
 开放的持续阶段，不设单一 Done when。
 
-### 已交付 ✅（截至 2026-06-16）
-
-- [x] 多平台接入：GitHub / Bitbucket / GitLab（含企业自建）
-- [x] PR 发现与分类（待我评审 / 我创建 / 指派 / 提及）
-- [x] 嵌入式 pr-agent 运行时（免装 Python / Docker）
-- [x] 桌面安装包：Windows x64 + macOS arm64
-- [x] 出站 HTTP 代理
-- [x] 多 LLM Provider 适配 + token 用量采集
-- [x] 首启配置向导 + 设置页可视化 CRUD
-- [x] 国际化：四语界面（简体中文 / English / 日本語 / Deutsch）
-- [x] 高阶 Agent 评审：自主规划 + 多工具编排 + 长期记忆 + 过程可观测
-- [x] AutoPilot 预评审：自动预跑评审、准入控制、进应用即见待确认草稿
-- [x] 开源发布（Apache-2.0 + NOTICE）
-- [x] CLI 模式下 /ask 仓库文件访问（设计见 [06](arch/06-agent.md)）：CLI 模式（claude/codex）仅对 /ask 经 `MEEBOX_CLI_WORKDIR` 把子进程 cwd 落到一次性 worktree，取完整文件上下文；落 cwd 前清空该 worktree 内仓库自带的 agent 指令文件（`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor` 等），防被评审 PR（worktree 即 PR HEAD、作者可控）经指令文件注入 / 污染回答。describe/review 维持中性临时目录；API 模式不涉及（远程接口本就只有 diff）。
-
 ### 进行中 / 待办 ⏭️
 
-- [ ] **规则市场**：导入 / 导出规则片段（`<agent.dir>/rules/`）。
 - [ ] **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
-- [ ] **大 PR 性能验证**：等真实大样本实测。
-- [ ] **凭据存储升级 keytar** / **状态存储按需升级 SQLite**（替换抽象实现，业务不变）。
-- [ ] **CI 自动出包（Win + mac）**：当前手工触发；仅计划 Windows + macOS，暂不出 Linux。
+- [ ] **外部集成扩展与 CLI**：下个版本方向——扩展与外部系统 / 工具的集成，并提供 CLI 能力。
 
 ---
 
@@ -71,18 +86,9 @@
 
 | 风险 / 议题               | 应对                                                                                               |
 | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| pr-agent 升级破坏输出格式 | 输出解析层独立 + shim 版本守卫（见 [04](arch/04-pragent-runtime.md)）；CI 跑兼容测试               |
+| pr-agent 升级破坏输出格式 | 输出解析层独立（parse-output 单测进 CI）+ shim 构建期 / 运行期版本守卫（见 [04](arch/04-pragent-runtime.md)）+ 构建期冒烟（import / 补丁 / litellm，release）；升级 pin 时人工刷样本重验 |
 | 大型 PR 性能 / diff 截断  | Diff 走本地 git（不用平台截断端点）+ Monaco 懒加载 + 大文件跳过（见 [02](arch/02-repo-mirror.md)） |
 | 大型仓库挤爆磁盘          | `repos_dir` 可配置 + 设置页显示体积 + 清理                                                         |
-| 明文凭据（config.yaml）   | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留 keytar（见 [08](arch/08-config-and-secrets.md)）  |
-| JSON 状态文件膨胀         | 监控单文件大小；触发条件达成切 SQLite（见 [03](arch/03-state-storage.md)）                         |
+| 明文凭据（config.yaml）   | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留（keytar 升级暂无计划，见 [08](arch/08-config-and-secrets.md)）  |
+| JSON 状态文件膨胀         | 监控单文件大小；评估后维持 JSON（SQLite 为备选，暂不切，见 [03](arch/03-state-storage.md)）        |
 | LLM 调用成本              | token 用量统计已做；规则层可控 max_tokens / 模型分级                                               |
-
----
-
-## 5. 相关文档
-
-- **[模块设计文档](modules/README.md)** —— 各模块的当前设计与实现（首选入口）
-- [开发指南](development/README.md) —— 环境、启动、构建（开发专题入口）
-- [打包与发布](development/packaging-release.md) —— 构建 / 签名 / CI
-- [macOS 构建与发布](development/mac-build.md) —— ad-hoc 签名路线

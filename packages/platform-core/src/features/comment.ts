@@ -54,6 +54,21 @@ export interface CommentService {
    * version 为乐观锁，仅 Bitbucket 校验，其余平台忽略。
    */
   deleteComment(repo: RepoRef, prId: string, commentId: string, version: number): Promise<void>;
+
+  /**
+   * 切换当前用户对一条评论的某个 emoji 反应（add=true 加上、false 取下）。emoji 为规范化
+   * Unicode 字符，由 adapter 翻成自家原生名。kind 区分 summary / inline（GitHub 据此选 issue /
+   * review 反应端点；其余平台忽略）。幂等：重复 add / 不存在时 remove 均按成功处理。
+   * 仅 `commentReactions` 能力为真的平台实现；不支持的平台抛错。
+   */
+  toggleReaction(
+    repo: RepoRef,
+    prId: string,
+    commentId: string,
+    kind: 'summary' | 'inline',
+    emoji: string,
+    add: boolean,
+  ): Promise<void>;
 }
 
 /**
@@ -110,4 +125,18 @@ export abstract class BaseCommentService extends PlatformDomainService implement
     commentId: string,
     version: number,
   ): Promise<void>;
+
+  /**
+   * 由平台子类实现：切换当前用户对评论的 emoji 反应。不支持反应的平台可不覆写（默认抛错）。
+   */
+  toggleReaction(
+    _repo: RepoRef,
+    _prId: string,
+    _commentId: string,
+    _kind: 'summary' | 'inline',
+    _emoji: string,
+    _add: boolean,
+  ): Promise<void> {
+    throw new Error('toggleReaction is not supported by this platform');
+  }
 }

@@ -124,6 +124,53 @@ export class JsonFileStateStore implements StateStore {
     return removed;
   }
 
+  /**
+   * 清扫 `<prefix>/<child>/` 下的孤儿子目录：`child` 不在 `keep` 集**且**目录 mtime 早于 `nowMs - olderThanMs`
+   * 的整树删掉。用于启动期回收归档冷存储里的孤儿——统一索引丢失 / 被重建后，归档条目失去目录索引，
+   * 按索引遍历的硬清够不到它（见 docs/arch/03）。无索引可依，故以目录 mtime 作 archivedAt 的代理（索引一并丢了）。
+   *
+   * **双重保守**：必须同时「不在 keep」+「mtime 超期」才删——避免误删一个只是暂时不在索引里的目录（如中断的搬迁）。
+   * **仅启动期、任何写入之前调用**才安全（单写者前提下此刻无 in-flight 搬迁会被误判为孤儿）。子目录直接子级遍历、
+   * 不递归判定；非目录项跳过。best-effort：单个失败仅记日志、不抛。返回删除的孤儿目录数。
+   */
+  async sweepOrphanDirs(
+    prefix: string,
+    keep: ReadonlySet<string>,
+    olderThanMs: number,
+    nowMs: number,
+  ): Promise<number> {
+    const root = this.subpathInside(prefix);
+    let entries: Dirent[];
+    try {
+      entries = await fs.readdir(root, { withFileTypes: true });
+    } catch {
+      return 0; // prefix 目录不存在 / 不可读
+    }
+    let removed = 0;
+    for (const entry of entries) {
+      if (!entry.isDirectory() || keep.has(entry.name)) continue;
+      const dir = path.join(root, entry.name);
+      let mtimeMs: number;
+      try {
+        mtimeMs = (await fs.stat(dir)).mtimeMs;
+      } catch {
+        continue;
+      }
+      if (nowMs - mtimeMs <= olderThanMs) continue; // 太新：暂不动（保守）
+      try {
+        await fs.rm(dir, { recursive: true, force: true });
+        removed++;
+        this.logger?.info(
+          { dir: `${prefix}/${entry.name}`, ageMs: nowMs - mtimeMs },
+          'state-store: swept orphaned dir (no index entry, aged past grace)',
+        );
+      } catch (e) {
+        this.logger?.warn({ err: e, dir }, 'state-store: failed to sweep orphaned dir');
+      }
+    }
+    return removed;
+  }
+
   async delete(key: string): Promise<void> {
     const filePath = this.keyToPath(key);
     try {

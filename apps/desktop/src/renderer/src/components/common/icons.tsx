@@ -315,6 +315,51 @@ export function ChatIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 图片占位（相框 + 山峦 + 太阳）：评论「上传图片附件」按钮。 */
+export function ImageIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+      <circle cx="5.5" cy="6" r="1.1" />
+      <path d="M2.25 12 L6 8.25 L8.5 10.75 L10.75 8.5 L13.75 11.5" />
+    </svg>
+  );
+}
+
+/** 笑脸 + 加号：评论「添加表情反应」按钮（viewBox 24 以对齐 lucide 笔形比例）。 */
+export function SmilePlusIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M22 11v1a10 10 0 1 1-9-10" />
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <line x1="9" y1="9" x2="9.01" y2="9" />
+      <line x1="15" y1="9" x2="15.01" y2="9" />
+      <path d="M16 5h6" />
+      <path d="M19 2v6" />
+    </svg>
+  );
+}
+
 /** 文件树（三横线带项目符号）：DiffView 退出搜索 / tree 模式指示 */
 export function FileTreeIcon({ size = 12 }: IconProps) {
   return (
@@ -498,6 +543,26 @@ export function CheckGlyphIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** 复制字形：前景方片 + 左上后衬纸，标准「复制到剪贴板」语义。 */
+export function CopyIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="6" y="6" width="8" height="8" rx="1.5" />
+      <path d="M10.5 3.5H4A1.5 1.5 0 0 0 2.5 5v6.5" />
+    </svg>
+  );
+}
+
 /** 纯感叹号字形（无外圆环）：用于实心彩底角标，只留内部符号。 */
 export function AlertGlyphIcon({ size = 14 }: IconProps) {
   return (
@@ -560,6 +625,27 @@ export function RobotIcon({ size = 14 }: IconProps) {
       <circle cx="10" cy="9" r="0.85" fill="currentColor" stroke="none" />
       <path d="M1.6 8.5v2" />
       <path d="M14.4 8.5v2" />
+    </svg>
+  );
+}
+
+/** 铃铛：设置页「通知」分区图标。钟体 + 顶钮 + 底部摆锤。 */
+export function BellIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 2.2v1.1" />
+      <path d="M4 7c0-2.2 1.8-3.8 4-3.8s4 1.6 4 3.8c0 2.6.6 3.6 1.2 4.3H2.8C3.4 10.6 4 9.6 4 7Z" />
+      <path d="M6.6 13.4a1.6 1.6 0 0 0 2.8 0" />
     </svg>
   );
 }
@@ -784,6 +870,28 @@ export function IssueIcon({ size = 14 }: IconProps) {
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.5" />
       <circle cx="8" cy="8" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** 历史字形：时钟 + 逆时针回溯箭头。用于「已关闭 / 历史」PR 范围切换。 */
+export function HistoryIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M2.4 8a5.6 5.6 0 1 1 1.7 4" />
+      <polyline points="1.4 9.6 4.1 12 6.4 11" />
+      <path d="M8 5.2V8l2 1.4" />
     </svg>
   );
 }

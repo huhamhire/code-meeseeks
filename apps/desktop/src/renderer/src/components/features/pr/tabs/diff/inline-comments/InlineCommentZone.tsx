@@ -6,6 +6,7 @@ import { Avatar, makeBitbucketImageFor, ConfirmModal } from '../../../../../comm
 import { CommentEditEditor } from '../../comments/CommentEditEditor';
 import { CommentReplyEditor } from '../../comments/CommentReplyEditor';
 import { CommentMarkdown } from '../../shared/CommentMarkdown';
+import { ReactionAddButton, ReactionChips, useReactions } from '../../shared/ReactionBar';
 import { useCommentThread } from '../../shared/useCommentThread';
 
 /**
@@ -32,6 +33,9 @@ export function CommentZone({
   prLocalId,
   prWebUrl,
   hardBreaks,
+  reactionsMode,
+  attachmentsEnabled = false,
+  readOnly = false,
 }: {
   comments: PrComment[];
   connectionId: string;
@@ -39,6 +43,12 @@ export function CommentZone({
   prLocalId: string;
   prWebUrl: string;
   hardBreaks: boolean;
+  /** 评论 emoji 反应模式（capabilities.commentReactions）：'fixed'/'free' 才渲染加反应按钮；缺省 = 不支持。 */
+  reactionsMode?: 'fixed' | 'free';
+  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给回复编辑框启用粘贴上传。 */
+  attachmentsEnabled?: boolean;
+  /** 内容只读（decline / 不可参与归档 PR）：隐藏行内评论的回复 / 编辑 / 删除操作。 */
+  readOnly?: boolean;
 }) {
   return (
     <div className="comment-zone-inner">
@@ -55,6 +65,9 @@ export function CommentZone({
             prLocalId={prLocalId}
             prWebUrl={prWebUrl}
             hardBreaks={hardBreaks}
+            reactionsMode={reactionsMode}
+            attachmentsEnabled={attachmentsEnabled}
+            readOnly={readOnly}
           />
         </div>
       ))}
@@ -122,6 +135,9 @@ function CommentNode({
   prLocalId,
   prWebUrl,
   hardBreaks,
+  reactionsMode,
+  attachmentsEnabled = false,
+  readOnly = false,
 }: {
   comment: PrComment;
   connectionId: string;
@@ -130,11 +146,21 @@ function CommentNode({
   prLocalId: string;
   prWebUrl: string;
   hardBreaks: boolean;
+  reactionsMode?: 'fixed' | 'free';
+  attachmentsEnabled?: boolean;
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const components = useMemo(
     () => makeCommentMarkdownComponents(attachmentBase, prLocalId, prWebUrl),
     [attachmentBase, prLocalId, prWebUrl],
+  );
+  // 反应状态 + 切换（与评论 / 活动 tab 的 CommentItem 共用 useReactions；hook 无条件调用，
+  // 输出仅在 reactionsMode 存在时渲染）。kind 由 comment.anchor 推断为 'inline'。
+  const { reactions, busy: reactionBusy, toggle: toggleReaction } = useReactions(
+    prLocalId,
+    comment,
+    readOnly,
   );
   // 回复 / 编辑 / 删除 交互状态机（与评论/活动 tab 的 CommentItem 共用，见 shared/useCommentThread）
   const {
@@ -182,8 +208,8 @@ function CommentNode({
           />
         )}
         {/* 回复 / 编辑 / 删除按钮：默认 hidden，hover comment-zone-item-body 显示 (CSS)。
-            编辑态隐藏全部按钮 (避免跟编辑器底部按钮组重复) */}
-        {!replyOpen && !editOpen && (
+            编辑态隐藏全部按钮 (避免跟编辑器底部按钮组重复)；只读（decline / 不可参与）整组隐藏。 */}
+        {!readOnly && !replyOpen && !editOpen && (
           <div className="comment-zone-foot">
             <button
               type="button"
@@ -213,6 +239,15 @@ function CommentNode({
                 {deleting ? t('commentsPanel.deleting') : t('common.delete')}
               </button>
             )}
+            {/* 「加反应」按钮放在操作按钮之后（与评论 tab 一致）；回复 / 编辑态下整组 foot 已隐藏。 */}
+            {reactionsMode && (
+              <ReactionAddButton
+                reactions={reactions}
+                busy={reactionBusy}
+                mode={reactionsMode}
+                onToggle={toggleReaction}
+              />
+            )}
           </div>
         )}
         {replyOpen && (
@@ -220,8 +255,18 @@ function CommentNode({
             prLocalId={prLocalId}
             // 回复目标抽象（threadId）：GitLab=discussion id（reply 必需）；Bitbucket 空 / GitHub=remoteId → 回退 remoteId。
             parentCommentId={comment.threadId ?? comment.remoteId}
+            attachmentsEnabled={attachmentsEnabled}
             onCancel={() => setReplyOpen(false)}
             onPosted={() => setReplyOpen(false)}
+          />
+        )}
+        {/* 已有反应：单独成行，渲染在操作按钮下方（编辑态隐藏）。readOnly 下只展示、不可切换。 */}
+        {reactionsMode && !editOpen && (
+          <ReactionChips
+            reactions={reactions}
+            busy={reactionBusy}
+            readOnly={readOnly}
+            onToggle={toggleReaction}
           />
         )}
         {deleteError && (
@@ -249,6 +294,9 @@ function CommentNode({
           prLocalId={prLocalId}
           prWebUrl={prWebUrl}
           hardBreaks={hardBreaks}
+          reactionsMode={reactionsMode}
+          attachmentsEnabled={attachmentsEnabled}
+          readOnly={readOnly}
         />
       ))}
       {confirmDelete && (

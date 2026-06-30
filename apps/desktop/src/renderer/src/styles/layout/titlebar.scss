@@ -2,6 +2,10 @@
 
 // 无边框窗口的自绘标题栏。高度必须与 main 进程 titleBarOverlay.height 一致（36px）。
 .app-titlebar {
+  position: relative; // 命令面板浮层（app-titlebar-center）以此为定位上下文居中
+  // 整条抬到「菜单/弹层」层级：否则命令面板下拉会被 app-body 的 diff 内容遮盖——app-titlebar-center
+  // 的 transform 自建层叠上下文，把面板 z-index 困在标题栏内部，需在标题栏这一层抬到内容之上（低于模态 1000）。
+  z-index: $z-statusbar-menu;
   flex: 0 0 36px;
   height: 36px;
   display: flex;
@@ -43,11 +47,218 @@
   color: $text-muted;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   min-width: 0;
+  // 留在左侧原位；上限不越过中线、避免漫到右侧撞 Windows 窗控（浮层 DOM 置后绘制在上、输入框不透明底遮盖）。
+  // 渐隐由命令面板左缘的渐变罩负责（见 .app-titlebar-center::before），锚定输入框位置，故此处不自带 mask。
+  flex: 1 1 auto;
+  max-width: 42%;
 }
 
 // 标题栏内的可点元素需关闭拖拽，否则点击会被当成拖窗
 .app-titlebar :is(button, a, input, select) {
   -webkit-app-region: no-drag;
+}
+
+// 命令面板（VS Code 风）：标题栏居中的输入框 + 下拉结果。绝对浮层居中，不占流、不挤压标题，
+// 绘制在标题之上以遮盖（输入框不透明底）。
+.app-titlebar-center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  height: 100%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+
+  // 输入框左缘的渐变罩：透明 → 标题栏底色，锚定在输入框左侧。标题漫到这里时隐入底色，
+  // 形成「逼近命令框即渐隐」的过渡（不论标题多长、窗口多宽都与输入框对齐）。不拦截点击。
+  &::before {
+    content: '';
+    position: absolute;
+    right: 100%;
+    top: 0;
+    height: 100%;
+    width: 48px;
+    background: linear-gradient(to right, transparent, $bg-app);
+    pointer-events: none;
+  }
+}
+
+.cmdk {
+  position: relative;
+  width: 38vw;
+  min-width: 220px;
+  max-width: 420px;
+  // 整块关闭拖拽：下拉面板是 div（非 button/input），不关会被当拖窗区
+  -webkit-app-region: no-drag;
+}
+
+// 输入框外框：承载边框 / 底色，内含可选的「当前子层」前缀标签 + 实际 input。
+.cmdk-field {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  width: 100%;
+  height: 24px;
+  padding: 0 $space-6;
+  background: $bg-surface;
+  border: 1px solid $border-muted;
+  border-radius: $radius-md;
+
+  &:focus-within {
+    border-color: $color-accent;
+  }
+}
+
+// 二级层前缀提示符（如「URL ›」/「切换主题 ›」）：提示符样式（非标签框）+ 尾部 chevron，
+// 读作「进入此层输入」，呼应 shell / VS Code 子模式提示。chevron 由样式统一加，prefixLabel 数据保持简洁。
+.cmdk-field-prefix {
+  flex: 0 0 auto;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: $fs-sm;
+  color: $text-muted;
+
+  &::after {
+    content: '›';
+    margin-left: $space-2;
+  }
+}
+
+.cmdk-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  font-size: $fs-sm;
+  color: $text-primary;
+  background: transparent;
+  border: none;
+  outline: none;
+
+  &::placeholder {
+    color: $text-muted;
+  }
+}
+
+.cmdk-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  // 最高高度：取 60vh 与 460px 较小值——高屏不喧宾夺主（约 10 行两行项 / 16 行单行项），超出滚动
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  padding: $space-2;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: $space-3 $space-6;
+  border: 0;
+  background: transparent;
+  color: $text-primary;
+  font-size: $fs-lg;
+  text-align: left;
+  border-radius: $radius-sm;
+  cursor: pointer;
+
+  &.is-active {
+    background: $bg-selected;
+  }
+}
+
+// 命令项主体（占满除右侧勾选外的宽度）：可叠主行 + 英文次行
+.cmdk-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+// 单行（领域前缀 + 命令名）
+.cmdk-item-line {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+// 英文次行：弱化（更小、更淡），仅非英语界面展示
+.cmdk-item-sub {
+  font-size: $fs-sm;
+  color: $text-muted;
+}
+
+.cmdk-item-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 领域前缀（如「设置」），置于命令名前，便于检索归类。与命令名间距收紧。
+// 主行前缀用亮中性色（选中行深蓝底上仍可读，accent 蓝字会撞底故不用）；英文次行前缀跟随次行弱化色。
+.cmdk-item-cat {
+  flex: 0 0 auto;
+  margin-right: $space-2;
+  color: $text-primary;
+
+  &::after {
+    content: ':';
+  }
+}
+
+.cmdk-item-sub .cmdk-item-cat {
+  color: inherit;
+}
+
+.cmdk-item-check {
+  flex: 0 0 auto;
+  margin-left: $space-4;
+  color: $color-accent;
+}
+
+// 快捷键提示（命令项右侧）：一键一框（VS Code 风），每个 token 一个淡键帽
+.cmdk-item-kbd {
+  flex: 0 0 auto;
+  margin-left: $space-4;
+  display: flex;
+  align-items: center;
+  gap: $space-1;
+}
+
+.cmdk-key {
+  padding: 0 $space-2;
+  min-width: 18px;
+  font-family: inherit;
+  font-size: $fs-sm;
+  line-height: 18px;
+  text-align: center;
+  color: $text-muted;
+  background: $bg-surface;
+  border: 1px solid $border-muted;
+  border-radius: $radius-sm;
+}
+
+.cmdk-empty {
+  padding: $space-4 $space-6;
+  color: $text-muted;
+  font-size: $fs-lg;
+}
+
+// 搜索命中高亮（覆盖 <mark> 默认黄底黑字）：用统一的搜索命中色，文字色继承不变
+.cmdk-hl {
+  background: $color-search-hit;
+  color: inherit;
+  border-radius: 2px;
 }

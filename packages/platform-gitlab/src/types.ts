@@ -38,6 +38,8 @@ export interface GlMr {
   has_conflicts?: boolean;
   /** 仅单 MR 详情带；行内评论 position 与 base/head sha 需要它 */
   diff_refs?: GlDiffRefs | null;
+  /** 用户评论（note）数，含回复、不含系统 note；列表与详情都带 */
+  user_notes_count?: number;
 }
 
 export interface GlApprovals {
@@ -82,6 +84,13 @@ export interface GlNote {
 export interface GlDiscussion {
   id: string;
   notes: GlNote[];
+}
+
+/** GitLab note 上的一条 award emoji（反应）。`name` 为 GitLab emoji 名（如 `thumbsup`）。 */
+export interface GlAwardEmoji {
+  id: number;
+  name: string;
+  user: GlUser;
 }
 
 export interface GlMetadata {

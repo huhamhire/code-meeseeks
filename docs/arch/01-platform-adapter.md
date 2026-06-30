@@ -169,7 +169,8 @@ UI 据此 显/隐/灰，业务层据此调策略——**绝不在调用处 `try/
 `PlatformCapabilities` 字段：`reviewStatuses`（支持的审批决断）、`inlineComments`、`inlineMultiline`、
 `commentOptimisticLock`、`commentHardBreaks`（单 `\n` 是否按 hard-break 渲染）、`mergeVetoFidelity`
 （'full' | 'partial'）、`discoveryRateLimited`、`discoveryFilters`（PR 发现分类）、`resolvableThreads`、
-`suggestions`、`reviewGrouping`、`activityTimeline`（是否提供决断活动事件流）。
+`suggestions`、`reviewGrouping`、`activityTimeline`（是否提供决断活动事件流）、`commentCountIncludesReplies`
+（`PullRequest.commentCount` 是否含回复——决定 poller 评论跟踪触发策略，见 [14](14-notifications.md)；GitHub/GitLab 为真、Bitbucket 为假）。
 
 **合并否决原因走中性码**：`MergeVeto` 不在后台拼面向用户的本地化文案。GitHub / GitLab 把派生原因归一到
 `@meebox/platform-core` 的稳定码 `MergeVetoCode`（`conflict` / `branchProtected` / `behind` / `checksFailed`

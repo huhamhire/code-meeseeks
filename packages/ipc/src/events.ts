@@ -1,6 +1,7 @@
 import type {
   AgentStep,
   AgentTodoItem,
+  PollNotificationKind,
   PollResult,
   SyncProgressEvent,
   UpdateCheckResult,
@@ -72,6 +73,18 @@ export interface IpcEvents {
    * 该 PR 的评审建议 ★ 徽标，避免清空后仍残留陈旧评审状态（不必等下个 poll 重取台账）。
    */
   'agent:reviewStatusCleared': { prLocalId: string };
+  /**
+   * 用户点击系统通知后 main 推送的导航意图，renderer 据此选中目标 PR 并定位：
+   * - `anchor` 非空（inline 评论）→ 切 Diff 标签并跳到该文件行；
+   * - `anchor` 为 null 且 kind 为 mention/reply（summary 评论）→ 切「活动」对话标签；
+   * - kind 为 new_pr → 仅选中该 PR。
+   * 目标不在当前活跃列表（已归档 / 已退场）时 renderer 忽略。
+   */
+  'notification:activate': {
+    localId: string;
+    kind: PollNotificationKind;
+    anchor: { path: string; line: number } | null;
+  };
 }
 
 export type IpcEventName = keyof IpcEvents;

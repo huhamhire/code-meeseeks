@@ -57,6 +57,7 @@ export function ChatEmpty({
         {pr ? t('chatPane.emptyReadyTitle') : t('chatPane.emptySelectPrTitle')}
       </p>
       <p className="chat-empty-sub">{t('chatPane.emptyInputHint')}</p>
+      <p className="chat-empty-sub">{t('chatPane.emptyAutoReviewHint')}</p>
       <p className="chat-empty-sub">{t('chatPane.emptyCmdHint')}</p>
       <ul className="chat-empty-list">
         <Bullet>

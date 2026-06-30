@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../../lib/markdown';
+import { remarkEmojiShortcodes } from '../../../../../lib/remark-emoji';
 import { transformBitbucketUrl } from '../../../../common';
 
 /**
@@ -26,7 +27,11 @@ export function CommentMarkdown({
   return (
     <div className={className}>
       <ReactMarkdown
-        remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}
+        remarkPlugins={
+          hardBreaks
+            ? [remarkGfm, remarkBreaks, remarkEmojiShortcodes]
+            : [remarkGfm, remarkEmojiShortcodes]
+        }
         rehypePlugins={REMOTE_REHYPE_PLUGINS}
         components={components}
         urlTransform={transformBitbucketUrl}

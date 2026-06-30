@@ -130,4 +130,41 @@ describe('JsonFileStateStore', () => {
     await expect(store.read(outside)).rejects.toThrow(/path traversal/);
     await expect(store.write(outside, { v: 1 })).rejects.toThrow(/path traversal/);
   });
+
+  describe('sweepOrphanDirs', () => {
+    const GRACE = 7 * 24 * 60 * 60 * 1000;
+    const NOW = Date.parse('2026-06-10T00:00:00.000Z');
+    // 把某个 <prefix>/<child> 目录的 mtime 回拨到 N 毫秒之前
+    const backdateDir = async (rel: string, ageMs: number): Promise<void> => {
+      const t = new Date(NOW - ageMs);
+      await fs.utimes(path.join(tmpDir, rel), t, t);
+    };
+
+    it('删「不在 keep + mtime 超 grace」的孤儿，保留 keep 内 / 仍年轻的目录', async () => {
+      await store.write('prs/orphan/meta', { v: 1 }); // 不在 keep、且回拨到超期 → 删
+      await store.write('prs/known/meta', { v: 1 }); // 在 keep → 留
+      await store.write('prs/young/meta', { v: 1 }); // 不在 keep 但还年轻 → 留
+      await backdateDir('prs/orphan', GRACE + 60_000);
+      await backdateDir('prs/known', GRACE + 60_000);
+      await backdateDir('prs/young', GRACE - 60_000);
+
+      const removed = await store.sweepOrphanDirs('prs', new Set(['known']), GRACE, NOW);
+      expect(removed).toBe(1);
+      expect(await store.read('prs/orphan/meta')).toBeNull();
+      expect(await store.read('prs/known/meta')).toEqual({ v: 1 });
+      expect(await store.read('prs/young/meta')).toEqual({ v: 1 });
+    });
+
+    it('prefix 目录不存在 → 返回 0、不抛', async () => {
+      expect(await store.sweepOrphanDirs('archived/prs', new Set(), GRACE, NOW)).toBe(0);
+    });
+
+    it('跳过非目录项（如散落的 .json 文件）', async () => {
+      await store.write('prs/index', { schema_version: 1 }); // prs/index.json 是文件，非目录
+      await backdateDir('prs', GRACE + 60_000);
+      const removed = await store.sweepOrphanDirs('prs', new Set(), GRACE, NOW);
+      expect(removed).toBe(0);
+      expect(await store.read('prs/index')).not.toBeNull();
+    });
+  });
 });

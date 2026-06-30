@@ -22,6 +22,8 @@ export function useDraftZones(opts: {
   registerEditTrigger: (draftId: string, fn: (() => void) | null) => void;
   renderSideBySide: boolean;
   commentHardBreaks: boolean;
+  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给草稿编辑框启用粘贴 / 选取上传。 */
+  attachmentsEnabled?: boolean;
   scopeKind: 'all' | 'commit';
 }): void {
   const {
@@ -33,6 +35,7 @@ export function useDraftZones(opts: {
     registerEditTrigger,
     renderSideBySide,
     commentHardBreaks,
+    attachmentsEnabled = false,
     scopeKind,
   } = opts;
 
@@ -82,6 +85,7 @@ export function useDraftZones(opts: {
           prLocalId={prLocalId}
           registerEditTrigger={registerEditTrigger}
           hardBreaks={commentHardBreaks}
+          attachmentsEnabled={attachmentsEnabled}
         />
       ),
     });
@@ -96,6 +100,7 @@ export function useDraftZones(opts: {
     registerEditTrigger,
     renderSideBySide,
     commentHardBreaks,
+    attachmentsEnabled,
     scopeKind,
   ]);
 }

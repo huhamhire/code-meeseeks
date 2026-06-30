@@ -86,13 +86,20 @@
   opacity: 0.4;
   cursor: not-allowed !important;
 }
-// hover comment body 区时显示 foot 里的所有按钮
+// 「加反应」按钮跟 foot 其它按钮一样默认隐藏、hover / focus 才显（已有反应 chips 常驻可见、不在此列）。
+.comment-zone-foot .pr-reaction-add-wrap {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+// hover comment body 区时显示 foot 里的所有按钮（含加反应）；focus-within 覆盖键盘 / 反应弹层打开态
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-reply-btn,
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-edit-btn,
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-delete-btn,
+.comment-zone-item-body:hover > .comment-zone-foot .pr-reaction-add-wrap,
 .comment-zone-foot:focus-within .comment-zone-reply-btn,
 .comment-zone-foot:focus-within .comment-zone-edit-btn,
 .comment-zone-foot:focus-within .comment-zone-delete-btn,
+.comment-zone-foot:focus-within .pr-reaction-add-wrap,
 .comment-zone-reply-btn:focus,
 .comment-zone-edit-btn:focus,
 .comment-zone-delete-btn:focus {

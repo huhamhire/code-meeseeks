@@ -315,9 +315,16 @@
 
 // 评论 chip + 状态点的右侧容器；横向滚动时固定在视口右边缘，左缘渐变淡出，
 // 遮盖背后滚出来的长文件名。背景跟随 .tree-row 状态 (默认/hover/selected)。
+//
+// 渐变起点用「同色零透明」(rgb(from … / 0)) 而非 transparent：transparent 等价 rgba(0,0,0,0)
+// （透明黑），渐变中段会掺入半透明灰 → 在选中蓝底上呈现一道发灰的「阴影」带。同色零透明则纯按
+// 该底色淡入、无杂色。
+// align-self: stretch 让背景撑满整行高度（行用 align-items:center，默认子项不拉伸 → 背景盒只有
+// 圆点那么高、未撑满整行）；内部仍 align-items:center 居中圆点/chip。
 .tree-row-right {
   position: sticky;
   right: 0;
+  align-self: stretch;
   display: inline-flex;
   align-items: center;
   gap: $space-3;
@@ -327,13 +334,15 @@
   // auto margin 仍能保证间距
   margin-left: auto;
   z-index: 2;
-  background: linear-gradient(to right, transparent 0, $bg-panel 14px);
+  background: linear-gradient(to right, rgb(from #{$bg-panel} r g b / 0) 0, $bg-panel 14px);
 
   .tree-row:hover & {
-    background: linear-gradient(to right, transparent 0, $bg-hover 14px);
+    background: linear-gradient(to right, rgb(from #{$bg-hover} r g b / 0) 0, $bg-hover 14px);
   }
+  // 选中态行底已是实色高亮，不再铺遮罩渐变 —— 圆点直接落在选中底色上更干净（避免任何叠色 / 边界感）。
+  // 代价：文件名长到触发横向滚动时会从圆点下方穿过、不再被遮住（窄面板 / 深层级才会遇到）。
   .tree-row.selected & {
-    background: linear-gradient(to right, transparent 0, $bg-selected 14px);
+    background: none;
   }
 }
 

@@ -21,7 +21,7 @@ import { runReviewForPr } from './review.js';
  * → 已评审过 / 评审中，排除；③ 本版本已被判 skip 的台账去重。再按 batch_size 截断，批量判定后并行编排评审。
  */
 export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void> {
-  const { bootstrap, stateStore, effectiveAgentDir, logger } = runtime.ctx;
+  const { bootstrap, stateStore, ensureAgentDir, logger } = runtime.ctx;
   const ap = bootstrap.config.agent.autopilot;
   runtime.setAutopilotBusy(true);
   try {
@@ -56,7 +56,7 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
       return;
     }
 
-    const agentContext = await loadAgentContext(effectiveAgentDir(), {
+    const agentContext = await loadAgentContext(await ensureAgentDir(), {
       onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
     });
     // 第一步 judge 的背景输入：逐候选判「纯分支合并」。判定**以实际提交结构为准**——拉一次 commits API

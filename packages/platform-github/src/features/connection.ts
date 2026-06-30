@@ -25,6 +25,10 @@ export class GitHubConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: false,
+      // GitHub Reactions API 仅固定 8 种 → fixed。
+      commentReactions: 'fixed',
+      // GitHub 无公开评论附件上传 API（web 端走未文档化的私有端点）→ 关闭，UI 隐藏粘贴上传。
+      commentAttachments: false,
       commentHardBreaks: true,
       mergeVetoFidelity: 'partial',
       discoveryRateLimited: true,
@@ -33,6 +37,8 @@ export class GitHubConnection extends BaseConnection {
       suggestions: false,
       reviewGrouping: false,
       activityTimeline: true,
+      // comments + review_comments 含行内回复 → 计数变化可靠反映回复，poller 仅在计数/更新时间变化时扫。
+      commentCountIncludesReplies: true,
     };
   }
 

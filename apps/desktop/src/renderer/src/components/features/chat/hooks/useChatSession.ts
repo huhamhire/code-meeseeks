@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import type { AgentMessage, AgentStep, AgentTodoItem, ReviewRun } from '@meebox/shared';
 import { invoke, subscribe } from '../../../../api';
 import { RUNS_PAGE_SIZE } from '../constants';
-import type { MatchedRule } from '../types';
+import type { MatchedRules } from '../types';
 
 export interface ChatSession {
   runs: ReviewRun[];
@@ -13,7 +13,7 @@ export interface ChatSession {
   loadingSession: boolean;
   error: string | null;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
-  matchedRule: MatchedRule;
+  matchedRules: MatchedRules;
   agentSteps: AgentStep[];
   setAgentSteps: React.Dispatch<React.SetStateAction<AgentStep[]>>;
   messages: AgentMessage[];
@@ -48,8 +48,8 @@ export function useChatSession(
   // 避免「清空 → 空白 → 内容 pop-in」的抖动。延迟显示让快路径（缓存命中）零闪烁。
   const [loadingSession, setLoadingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 当前 PR 命中的规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
-  const [matchedRule, setMatchedRule] = useState<MatchedRule>(null);
+  // 当前 PR 命中的全部规则 (针对 /review 工具；缺省 tools=[review] 是规则最常生效的场景)
+  const [matchedRules, setMatchedRules] = useState<MatchedRules>([]);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   // 多轮对话消息（用户输入 + Agent 回答），跨回合保留、由 main 落盘 conversation.json，
   // 切回该 PR 恢复。用户消息含临时 optimistic 项（提交即回显），收尾后整体以落盘版重载对齐。
@@ -70,7 +70,7 @@ export function useChatSession(
     setHasMoreOlder(false);
     setLoadingOlder(false);
     setError(null);
-    setMatchedRule(null);
+    setMatchedRules([]);
     setAgentSteps([]);
     setMessages([]);
     setTodo([]);
@@ -83,7 +83,7 @@ export function useChatSession(
         // listRuns 默认返回 newest-first；这里只拉最新一页 (RUNS_PAGE_SIZE)。
         // 同时拉已落盘的多轮对话 + 过程步骤（transcript）：把会话恢复到其 PR，跨切换 / 重启不丢失，
         // 过程化跟踪的思考步骤也随之恢复（步骤随产生增量落盘）。
-        const [list, rule, conversation, transcript, session] = await Promise.all([
+        const [list, rules, conversation, transcript, session] = await Promise.all([
           invoke('pragent:listRuns', { localId: prLocalId, limit: RUNS_PAGE_SIZE }),
           invoke('rules:matchForPr', { localId: prLocalId, tool: 'review' }),
           invoke('agent:getConversation', { localId: prLocalId }),
@@ -94,7 +94,7 @@ export function useChatSession(
         // 反转为升序 (chat 习惯)，UI 直接读 runs 即可
         setRuns([...list].reverse());
         setHasMoreOlder(list.length === RUNS_PAGE_SIZE);
-        setMatchedRule(rule);
+        setMatchedRules(rules);
         setMessages(conversation);
         setAgentSteps(transcript);
         setTodo(session?.todo ?? []);
@@ -251,7 +251,7 @@ export function useChatSession(
     loadingSession,
     error,
     setError,
-    matchedRule,
+    matchedRules,
     agentSteps,
     setAgentSteps,
     messages,

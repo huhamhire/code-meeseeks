@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron';
 import type { Logger } from 'pino';
 import { buildAppInfo, buildConnectionSummaries } from '../services/app.js';
 import { getContext } from '../services/context.js';
+import { applyBadgeCount } from '../services/notifications.js';
 import { sniffImageContentType } from '../utils/image.js';
 import { checkForUpdate } from '../utils/update-check.js';
 import { getLastUpdateResult, publishUpdateResult } from '../utils/update-state.js';
@@ -143,11 +144,11 @@ export const openConfigFile: IpcController<'app:openConfigFile'> = async () => {
 };
 
 /**
- * 文件管理器打开当前生效的 Agent 目录（不存在则先建）。
+ * 文件管理器打开当前生效的 Agent 目录。先「用时补齐」上下文模版（ensureAgentDir 幂等、含建目录），
+ * 这样直接打开（未跑过任何评审时）也能看到 SOUL/AGENTS 等文件，而非空目录。
  */
 export const openAgentDir: IpcController<'app:openAgentDir'> = async () => {
-  const dir = getContext().effectiveAgentDir();
-  await fs.mkdir(dir, { recursive: true }).catch(() => undefined);
+  const dir = await getContext().ensureAgentDir();
   const err = await shell.openPath(dir);
   if (err) throw new Error(`failed to open agent dir: ${err}`);
 };
@@ -157,6 +158,13 @@ export const openAgentDir: IpcController<'app:openAgentDir'> = async () => {
  */
 export const openDevTools: IpcController<'app:openDevTools'> = (event) => {
   event.sender.openDevTools({ mode: 'detach' });
+};
+
+/**
+ * 设置应用角标计数（本期仅 macOS dock）。renderer 已据 PR 列表 + 通知配置派生「待回应」计数，主进程仅落地。
+ */
+export const setBadgeCount: IpcController<'app:setBadgeCount'> = (_event, req) => {
+  applyBadgeCount(req.count);
 };
 
 /**
@@ -188,6 +196,30 @@ export const getUpdateStatus: IpcController<'app:getUpdateStatus'> = () => getLa
 export const openExternal: IpcController<'app:openExternal'> = async (_event, req) => {
   if (!/^https?:\/\//.test(req.url)) return;
   await shell.openExternal(req.url);
+};
+
+/**
+ * 打开 macOS「系统设置 → 通知」面板，引导用户授予 / 开启通知权限（macOS 在系统层管控通知授权、应用无法
+ * 代为开启）。非 macOS 为 no-op。通知面板的 pane id 随系统版本不同（Ventura+ 改名），逐个回退；全失败则
+ * 退到系统设置根。
+ */
+export const openNotificationSettings: IpcController<
+  'app:openNotificationSettings'
+> = async () => {
+  if (process.platform !== 'darwin') return;
+  const panes = [
+    'x-apple.systempreferences:com.apple.Notifications-Settings.extension', // Ventura(13)+
+    'x-apple.systempreferences:com.apple.preference.notifications', // 旧版
+    'x-apple.systempreferences:', // 兜底：系统设置根
+  ];
+  for (const url of panes) {
+    try {
+      await shell.openExternal(url);
+      return;
+    } catch {
+      // 该 pane id 在当前系统版本不识别 → 尝试下一个
+    }
+  }
 };
 
 /**

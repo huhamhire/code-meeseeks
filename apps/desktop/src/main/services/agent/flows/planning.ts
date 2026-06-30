@@ -1,7 +1,7 @@
 import { appendAgentNotes, buildToolCatalog, loadAgentContext } from '@meebox/agent';
 import type { AgentContext } from '@meebox/agent';
 import { appendAgentMessage, updateAgentSession } from '@meebox/poller';
-import { pickMatchingRule } from '@meebox/rules';
+import { combineRuleInstructions, pickMatchingRules } from '@meebox/rules';
 import { AppError, ERROR_CODES, type AgentSession, type StoredPullRequest } from '@meebox/shared';
 import { getMainLanguage } from '../../../i18n/index.js';
 import { runPlanning } from '../planning.js';
@@ -14,9 +14,9 @@ export async function planningFlow(
   question: string,
   referencedContext?: string,
 ): Promise<AgentSession> {
-  const { getPrAgentBridge, effectiveAgentDir, logger } = runtime.ctx;
+  const { getPrAgentBridge, ensureAgentDir, logger } = runtime.ctx;
   if (!getPrAgentBridge()) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
-  const agentContext = await loadAgentContext(effectiveAgentDir(), {
+  const agentContext = await loadAgentContext(await ensureAgentDir(), {
     onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
   });
   const ac = new AbortController();
@@ -46,7 +46,7 @@ export async function planningFlow(
 }
 
 /** 对一个 PR 跑自由规划（组装 PlanningDeps + 调 runner）：含中途输入 drain、计划持久化、主动记忆落盘。 */
-export function runPlanningForPr(
+export async function runPlanningForPr(
   runtime: OrchestratorRuntime,
   pr: StoredPullRequest,
   userRequest: string,
@@ -57,20 +57,31 @@ export function runPlanningForPr(
 ): Promise<AgentSession> {
   const { bootstrap, effectiveAgentDir, logger } = runtime.ctx;
   const agentCfg = bootstrap.config.agent;
-  const matchedRule = pickMatchingRule(agentContext.rules, {
+  // per-PR 存储路由：已归档（已关闭范围）PR 上的对话 / 计划落归档冷存储，不污染活跃存储。
+  const store = await runtime.ctx.pr.storeForPr(pr.localId);
+  const matchedRules = pickMatchingRules(agentContext.rules, {
     projectKey: pr.repo.projectKey,
     repoSlug: pr.repo.repoSlug,
     targetBranch: pr.targetRef.displayId,
     tool: 'review',
   });
+  logger.info(
+    {
+      localId: pr.localId,
+      rulesLoaded: agentContext.rules.length,
+      rulesMatched: matchedRules.length,
+      ruleIds: matchedRules.map((r) => r.id),
+    },
+    'agent planning: rules',
+  );
   return runPlanning(pr, userRequest, {
-    stateStore: runtime.ctx.stateStore,
+    stateStore: store,
     enqueueRun: (p, tool, question) => runtime.runQueue.enqueuePragentRun(p, tool, question, 'agent'),
     referencedContext,
     chat,
     agentContext,
     toolCatalog: buildToolCatalog(agentCfg.autopilot.grants),
-    matchedRule,
+    matchedRuleInstructions: combineRuleInstructions(matchedRules),
     language: getMainLanguage(),
     maxSteps: agentCfg.max_steps,
     signal,
@@ -80,7 +91,7 @@ export function runPlanningForPr(
     drainPendingInput: async () => {
       const msgs = runtime.takePending(pr.localId);
       for (const m of msgs) {
-        await appendAgentMessage(runtime.ctx.stateStore, pr.localId, { role: 'user', content: m });
+        await appendAgentMessage(store, pr.localId, { role: 'user', content: m });
       }
       if (msgs.length) runtime.ctx.broadcast('agent:conversationChanged', { prLocalId: pr.localId });
       return msgs;
@@ -88,7 +99,7 @@ export function runPlanningForPr(
     // 计划（todo）更新：planner 给出 plan 即持久化进会话 + 广播刷新计划面板；切 PR / 重启经
     // agent:getSession 水合。
     recordPlan: async (todo) => {
-      await updateAgentSession(runtime.ctx.stateStore, pr.localId, { todo });
+      await updateAgentSession(store, pr.localId, { todo });
       runtime.ctx.broadcast('agent:planUpdated', { prLocalId: pr.localId, todo });
     },
     // 持久化 Agent 主动记下的非隐私条目到当前 Agent 目录的各可写文件（USER/MEMORY/AGENTS）；

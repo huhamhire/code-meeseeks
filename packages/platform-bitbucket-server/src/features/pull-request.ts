@@ -86,6 +86,23 @@ export class BitbucketPullRequestService extends BasePullRequestService {
   }
 
   /**
+   * 按 repo + 号从远端拉单个 PR（详情 + 可合并性，复用映射）；404 / 403 由 client 抛出供上层归一。
+   *
+   * `/merge` 仅对 **OPEN** PR 有意义——对已合并 / 已拒绝的 PR 调用会回 409
+   * IllegalPullRequestStateException，故非 OPEN 退化为中性合并态（不可合并 / 无冲突）。
+   * 发现列表只列 OPEN PR、不经此路径，本退化只影响「按 URL 打开」已退场 PR 的场景。
+   */
+  async getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest> {
+    const base = `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}`;
+    const pr = await this.client.get<BitbucketPullRequest>(base);
+    const mergeStatus: MergeStatus =
+      pr.state === 'OPEN'
+        ? this.mapMergeStatus(await this.fetchMergeStatus(pr))
+        : { canMerge: false, conflicted: false, vetoes: [] };
+    return this.mapPullRequest(pr, mergeStatus);
+  }
+
+  /**
    * 列出 PR 全部提交（newest-first，与 git log 一致）。
    *
    * 一次性收集分页结果——PR 通常仅数十个 commit，不分页问题不大。
@@ -214,6 +231,8 @@ export class BitbucketPullRequestService extends BasePullRequestService {
       reviewers: bb.reviewers.map((r) => this.mapReviewer(r)),
       mergeStatus,
       hasConflict: mergeStatus.conflicted,
+      // 仅顶层评论数（回复不计）；capabilities.commentCountIncludesReplies=false 标记其粗粒度。
+      commentCount: bb.properties?.commentCount,
     };
   }
 

@@ -1,10 +1,11 @@
-import type { RepoRef } from '@meebox/shared';
+import type { CommentAttachmentResult, CommentAttachmentUpload, RepoRef } from '@meebox/shared';
 import {
   BaseMediaService,
   type BinaryResource,
   type ConnectionContext,
 } from '@meebox/platform-core';
 import type { BitbucketClient } from '../client.js';
+import type { BitbucketAttachmentUploadResponse } from '../types.js';
 
 /** Bitbucket 用户与媒体领域：头像（avatar.png 路径端点）与评论内嵌附件（attachment 协议解析）。 */
 export class BitbucketMediaService extends BaseMediaService {
@@ -42,5 +43,35 @@ export class BitbucketMediaService extends BaseMediaService {
    */
   async getAttachment(url: string, repo?: RepoRef): Promise<BinaryResource | null> {
     return this.client.getAttachmentBinary(url, repo);
+  }
+
+  /**
+   * 上传图片到仓库 attachments 端点（multipart 字段 `files`），返回可嵌入评论的 markdown。
+   * 优先用响应 `links.attachment.href`（形如 `attachment:<repoId>/<id>`，getAttachmentBinary 据此渲染），
+   * 兜底用 `attachment:<id>`。attachments 是仓库级、非 PR 级，prId 忽略。
+   *
+   * 端点是**私有 servlet**，路径在 `/projects/{key}/repos/{slug}/attachments`（**不带** `/rest/api/1.0`
+   * 前缀——带前缀会 405；实测该裸路径 Allow: POST）。下载仍走 `/rest/api/1.0/.../attachments/{id}`。
+   */
+  override async uploadAttachment(
+    repo: RepoRef,
+    _prId: string,
+    file: CommentAttachmentUpload,
+  ): Promise<CommentAttachmentResult | null> {
+    const form = new FormData();
+    form.append(
+      'files',
+      new Blob([file.bytes as BlobPart], { type: file.contentType }),
+      file.fileName,
+    );
+    const res = await this.client.postForm<BitbucketAttachmentUploadResponse>(
+      `/projects/${repo.projectKey}/repos/${repo.repoSlug}/attachments`,
+      form,
+    );
+    const a = res.attachments?.[0];
+    if (!a) return null;
+    const href = a.links?.attachment?.href ?? (a.id != null ? `attachment:${String(a.id)}` : null);
+    if (!href) return null;
+    return { markdown: `![${file.fileName}](${href})` };
   }
 }

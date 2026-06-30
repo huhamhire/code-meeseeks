@@ -12,6 +12,11 @@ export interface AppChannels {
   'app:openAgentDir': { request: void; response: void };
   /** 打开 Electron DevTools（分离窗口） */
   'app:openDevTools': { request: void; response: void };
+  /**
+   * 设置应用角标计数（macOS dock）。renderer 据 PR 列表派生「@我 / 回复我」待回应总数后推送；主进程按
+   * 通知配置与平台决定是否真正显示（本期仅 macOS）。count=0 清除角标。
+   */
+  'app:setBadgeCount': { request: { count: number }; response: void };
   /** 手动检测版本更新（设置页「检查更新」）。仅检测 + 返回结果，不下载 / 安装；
    *  结果同时缓存进 main 单一真相源并在有新版时广播 app:updateAvailable，使状态栏同步。 */
   'app:checkUpdate': { request: void; response: UpdateCheckResult };
@@ -36,6 +41,11 @@ export interface AppChannels {
    * 外部打开，避免 Electron 在 app window 内跳转覆盖整个界面
    */
   'app:openExternal': { request: { url: string }; response: void };
+  /**
+   * 打开 macOS「系统设置 → 通知」面板，引导用户授予 / 开启通知权限（macOS 在系统层管控通知授权，
+   * 应用无法代为开启）。仅 macOS 有效，其他平台为 no-op。
+   */
+  'app:openNotificationSettings': { request: void; response: void };
   /**
    * 调起系统原生目录选择对话框；用户取消返回 path: null。
    * defaultPath 可空，作为初始定位目录。

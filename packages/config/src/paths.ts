@@ -28,6 +28,7 @@ export function buildAppPaths(reposDirRaw: string): AppPaths {
     appDir,
     configFile: path.join(appDir, 'config.yaml'),
     stateDir: path.join(appDir, 'state'),
+    archivedDir: path.join(appDir, 'archived'),
     logsDir: path.join(appDir, 'logs'),
     agentDir: path.join(appDir, 'agent'),
     cacheDir: path.join(appDir, 'cache'),

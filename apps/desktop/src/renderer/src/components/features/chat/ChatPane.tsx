@@ -214,7 +214,7 @@ export function ChatPane({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
 
-  const { runs, error, loadingSession, matchedRule, bodyRef, hasMoreOlder, loadingOlder } = session;
+  const { runs, error, loadingSession, matchedRules, bodyRef, hasMoreOlder, loadingOlder } = session;
 
   // 复评卡 ↔ 原 finding 卡互链：滚动定位 + 短暂高亮。flash class 因目标而异：run 卡用 chat-run-flash
   // （背景渐隐，run 卡本身透明底可见）；finding 卡用 chat-finding-flash（覆盖式高亮环——finding 卡有
@@ -275,7 +275,7 @@ export function ChatPane({
 
       {/* 当前 PR 命中的规则 chip：rules.dir 未配置 / 整体禁用 / 无命中 → 不显示。
           点击展开正文预览，让用户能确认本次 review 会被哪条规则约束 */}
-      {matchedRule && (
+      {matchedRules.length > 0 && (
         <button
           type="button"
           className="chat-rule-chip"
@@ -283,7 +283,11 @@ export function ChatPane({
           title={t('chatPane.ruleChipTitle')}
         >
           <span className="chat-rule-chip-label">{t('chatPane.ruleChipLabel')}</span>
-          <span className="chat-rule-chip-id">{matchedRule.id}</span>
+          <span className="chat-rule-chip-id">
+            {matchedRules.length === 1
+              ? matchedRules[0]!.id
+              : `${matchedRules[0]!.id} +${String(matchedRules.length - 1)}`}
+          </span>
         </button>
       )}
 
@@ -434,8 +438,8 @@ export function ChatPane({
         }
       />
 
-      {showRulePreview && matchedRule && (
-        <RulePreviewModal rule={matchedRule} onClose={() => setShowRulePreview(false)} />
+      {showRulePreview && matchedRules.length > 0 && (
+        <RulePreviewModal rules={matchedRules} onClose={() => setShowRulePreview(false)} />
       )}
       {showClearConfirm && (
         <ConfirmModal

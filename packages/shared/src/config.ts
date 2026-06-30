@@ -280,6 +280,22 @@ export const ConfigSchema = z.object({
     })
     .default({}),
   /**
+   * 消息通知（见 docs/arch/14-notifications.md）。enabled 为总开关；关闭后既不弹系统通知也不亮 dock 角标。
+   * new_pr / reply / mention 按事件类型分别控制系统通知（toast）是否弹出。macOS dock「待回应」计数角标无独立
+   * 开关——随总开关默认启用。系统通知受 OS 权限约束——用户在系统设置关闭后应用静默降级。
+   */
+  notifications: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** 收到新的 PR 时弹系统通知 */
+      new_pr: z.boolean().default(true),
+      /** 收到评论回复时弹系统通知 */
+      reply: z.boolean().default(true),
+      /** 评论中被 @ 提及时弹系统通知 */
+      mention: z.boolean().default(true),
+    })
+    .default({}),
+  /**
    * pr-agent 运行时策略选择。
    * - 'auto'（默认）：优先嵌入式运行时（随 app 打包，正常安装恒可用），缺失则
    *   回退探测系统 local-cli；
