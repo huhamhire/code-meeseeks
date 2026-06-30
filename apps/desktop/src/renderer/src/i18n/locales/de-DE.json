@@ -83,6 +83,7 @@
     "draftStatusPosted": "Veröffentlicht",
     "draftStatusRejected": "Abgelehnt",
     "duplicateRun": "/{{tool}} läuft bereits oder ist für diesen PR eingereiht; nicht erneut auslösen",
+    "emptyAutoReviewHint": "Klicken Sie auf „Auto-Review“, um den Ablauf „Beschreiben → Review → Zusammenfassen“ automatisch auszuführen",
     "emptyCmdHint": "Oder / für einen Befehl:",
     "emptyFootNoPr": "Kein PR ausgewählt: Wählen Sie zuerst einen aus der Liste links",
     "emptyFootWithPr": "Geben Sie / im Eingabefeld für die Befehlsvervollständigung ein; Shift+Enter für eine neue Zeile",

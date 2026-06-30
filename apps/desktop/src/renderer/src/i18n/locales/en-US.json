@@ -83,6 +83,7 @@
     "draftStatusPosted": "Posted",
     "draftStatusRejected": "Rejected",
     "duplicateRun": "/{{tool}} is already running or queued for this PR; do not trigger it again",
+    "emptyAutoReviewHint": "Click \"Auto Review\" to run the \"describe → review → summarize\" flow automatically",
     "emptyCmdHint": "Or use / to pick a command:",
     "emptyFootNoPr": "No PR selected: pick one from the list on the left first",
     "emptyFootWithPr": "Type / in the input for command completion; Shift+Enter for a new line",

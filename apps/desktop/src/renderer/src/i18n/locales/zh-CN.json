@@ -83,6 +83,7 @@
     "draftStatusPosted": "已发布",
     "draftStatusRejected": "已拒绝",
     "duplicateRun": "该 PR 的 /{{tool}} 正在执行或排队中，请勿重复触发",
+    "emptyAutoReviewHint": "点击「自动评审」，自动跑完「描述 → 评审 → 总结」流程",
     "emptyCmdHint": "也可用 / 选择指令：",
     "emptyFootNoPr": "未选中 PR：先在左侧列表里挑一条",
     "emptyFootWithPr": "输入框打 / 看命令补全；Shift+Enter 换行",
