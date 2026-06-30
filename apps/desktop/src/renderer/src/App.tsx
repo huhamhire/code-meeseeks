@@ -160,6 +160,31 @@ export default function App() {
   // 活跃 PR 列表 ref：供通知点击在稳定订阅里读最新值，免得把 prs 进依赖、频繁重订阅。
   const prsRef = useRef(prs);
   prsRef.current = prs;
+  // 状态栏运行指示点击 → 定位该 agent 任务所属 PR 并打开会话。任务运行期间该 PR 可能已被 poll 归档（任务不取消、
+  // 仍在跑），故活跃列表里找不到时视为已归档：切归档范围 + 重载归档列表（覆盖「本 tick 刚归档、缓存未含」与
+  // 「已在归档范围、setScope 同值不触发懒加载」两种情况）再选中。活跃命中则切活跃范围 + 必要时切到含它的发现分类
+  // （确保侧栏展示并高亮）+ 标已读。
+  const jumpToPr = useCallback(
+    async (localId: string) => {
+      const active = prsRef.current.find((p) => p.localId === localId);
+      if (active) {
+        setScope('active');
+        if (
+          active.discoveryFilters.length > 0 &&
+          !active.discoveryFilters.includes(discoveryFilterRef.current)
+        ) {
+          setDiscoveryFilter(active.discoveryFilters[0]!);
+        }
+        setSelectedId(localId);
+        void markRead(localId);
+        return;
+      }
+      setScope('archived');
+      setArchivedPrs(await invoke('prs:listArchived', undefined));
+      setSelectedId(localId);
+    },
+    [markRead, setSelectedId],
+  );
   // 系统通知点击 → 导航：选中目标 PR（必要时切回活跃范围 + 切到含它的发现分类）并标已读；inline 评论跳 Diff 行，
   // summary 评论开「活动」标签，new_pr 仅选中。目标不在活跃列表（已归档 / 退场）则忽略。
   useEffect(() => {
@@ -397,7 +422,7 @@ export default function App() {
           void invoke('config:setLlm', { llm: next });
           patchConfig((c) => ({ ...c, llm: next }));
         }}
-        onJumpToPr={setSelectedId}
+        onJumpToPr={(id) => void jumpToPr(id)}
         updateInfo={updateInfo}
         autopilotEnabled={boot.config.agent.autopilot.enabled}
         onToggleAutopilot={() => {
