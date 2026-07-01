@@ -55,8 +55,11 @@ interface ChatInputBarProps {
   onToggleSelection: () => void;
   /** 复评引用 chip：引用了某条 finding 时展示「复评 <file:line>」+ 清除；null = 不渲染。 */
   referenceChip?: { label: string; onClear: () => void } | null;
-  /** 单 commit 提问范围 chip：挂了 commit 范围时展示「短 SHA · 主题」+ 清除；下一条 /ask 限定该 commit。 */
-  commitScopeChip?: { label: string; onClear: () => void } | null;
+  /**
+   * 单 commit 范围 chip：跟随 Diff 视图选中的 commit 展示「短 SHA · 主题」。存在选中即显示，点击**切换启用/禁用**
+   * （禁用不删除 chip，本会话命令回到 PR 全量；禁用态置灰 + eye-slash）——选中态源自视图，可手动禁用。
+   */
+  commitScopeChip?: { label: string; disabled: boolean; onToggle: () => void } | null;
 }
 
 /**
@@ -278,27 +281,24 @@ export function ChatInputBar({
               </span>
             </>
           )}
-          {/* 单 commit 提问范围 chip：挂了某 commit 范围时展示「短 SHA · 主题」，点 ✕ 清除。
-              发送时本条 /ask 限定该 commit 的 diff（parent..sha）。 */}
+          {/* 单 commit 范围 chip：跟随视图选中的 commit 展示「短 SHA · 主题」。点击切换启用/禁用（不删除）——
+              启用时命令限定在该 commit（parent..sha），禁用则回到 PR 全量、置灰 + eye-slash。 */}
           {commitScopeChip && (
             <>
               <span className="chat-cmd-divider" aria-hidden="true" />
-              <span
-                className="chat-selection-chip chat-reference-chip"
-                title={commitScopeChip.label}
+              <button
+                type="button"
+                className={`chat-selection-chip chat-reference-chip${commitScopeChip.disabled ? ' ignored' : ''}`}
+                onClick={commitScopeChip.onToggle}
+                title={
+                  commitScopeChip.disabled
+                    ? t('chatPane.scopeDisabledTitle')
+                    : t('chatPane.scopeActiveTitle')
+                }
               >
-                <CommitIcon size={14} />
+                {commitScopeChip.disabled ? <EyeOffIcon /> : <CommitIcon size={14} />}
                 <span>{commitScopeChip.label}</span>
-                <button
-                  type="button"
-                  className="chat-reference-chip-clear"
-                  onClick={commitScopeChip.onClear}
-                  title={t('chatPane.reference.clearTitle')}
-                  aria-label={t('chatPane.reference.clearTitle')}
-                >
-                  ✕
-                </button>
-              </span>
+              </button>
             </>
           )}
         </div>

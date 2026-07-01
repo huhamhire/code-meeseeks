@@ -477,14 +477,15 @@ export function ChatPane({
               }
             : null
         }
-        // 单 commit 范围 chip：跟随 Diff 视图选中的 commit 展示「短 SHA · 主题」；命令即限定在该 commit。
-        // ✕ 脱离 → 本会话命令回到 PR 全量（切到别的 commit 或切 PR 才复位跟随）。
+        // 单 commit 范围 chip：只要视图选中了某 commit 就显示（选中态源自视图）；点击切换启用/禁用——
+        // 禁用（scopeDetached）时命令回到 PR 全量、chip 置灰，切到别的 commit 或切 PR 复位为启用。
         commitScopeChip={
-          effectiveScope
+          viewCommitScope
             ? {
-                label: `${effectiveScope.abbreviatedSha} · ${effectiveScope.subject}`,
-                onClear: () => {
-                  setScopeDetached(true);
+                label: `${viewCommitScope.abbreviatedSha} · ${viewCommitScope.subject}`,
+                disabled: scopeDetached,
+                onToggle: () => {
+                  setScopeDetached((d) => !d);
                 },
               }
             : null
