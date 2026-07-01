@@ -1,6 +1,7 @@
 import type {
   PlatformCapabilities,
   PlatformUser,
+  ReviewRunCommitScope,
   ReviewRunOrigin,
   ReviewRunTool,
 } from '@meebox/shared';
@@ -59,6 +60,8 @@ export interface PragentRunInfo {
   question?: string;
   /** 触发来源：user（手动发起）/ agent（编排派发）。ChatPane 据此为 user 来源的运行中 run 补命令回显气泡。 */
   origin: ReviewRunOrigin;
+  /** 单 commit 评审范围（parent..sha）；限定在某 commit 时填，运行中卡片据此展示范围徽标。缺省 = PR 全量。 */
+  scope?: ReviewRunCommitScope;
   /** 入队时间，ISO */
   enqueuedAt: string;
   /** 开始执行时间，ISO；waiting 状态为 null */

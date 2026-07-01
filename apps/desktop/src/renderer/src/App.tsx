@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ReviewRunCommitScope, ReviewRunTool } from '@meebox/shared';
+import type { ReviewRunCommitScope } from '@meebox/shared';
 import { invoke } from './api';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
@@ -82,19 +82,12 @@ export default function App() {
   }, []);
   // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
   const [statusFilter, setStatusFilter] = useState<FilterKey>('pending');
-  // 就某 commit 发起单 commit 范围的评审 Agent 动作：Diff 提交选择器请求 → 展开对话面板 → 交 ChatPane
-  // 消费（review/improve 立即发起、ask 挂 chip）。消费后置 null。
-  const [pendingScopedRun, setPendingScopedRun] = useState<{
-    tool: ReviewRunTool;
-    scope: ReviewRunCommitScope;
-  } | null>(null);
-  const requestScopedRun = useCallback(
-    (tool: ReviewRunTool, scope: ReviewRunCommitScope) => {
-      setChatCollapsed(false);
-      setPendingScopedRun({ tool, scope });
-    },
-    [setChatCollapsed],
-  );
+  // 当前 Diff 视图选中的单 commit 范围（DiffView 上报）：作为聊天区命令的隐式范围（见 ChatPane）。
+  // 按 sha 去重，避免 DiffView 每次 render 传新对象引发的重渲染回环。
+  const [viewCommitScope, setViewCommitScope] = useState<ReviewRunCommitScope | null>(null);
+  const handleViewCommitScope = useCallback((s: ReviewRunCommitScope | null) => {
+    setViewCommitScope((prev) => (prev?.sha === s?.sha ? prev : s));
+  }, []);
   // PR 导航 / 范围领域（发现分类 / 活跃·归档切换 / 归档懒加载 / 按 URL 打开 / 定位跳转 / 通知点击导航 +
   // 跨组件 Diff·Tab 跳转意图）——领域逻辑归 usePrNavigation；选中态 / 已读仍由 usePullRequests 拥有。
   const {
@@ -255,7 +248,7 @@ export default function App() {
               onRequestDiffNav={(target) => setPendingDiffNav(target)}
               pendingTab={pendingTab}
               onPendingTabConsumed={() => setPendingTab(null)}
-              onRequestScopedRun={requestScopedRun}
+              onViewCommitScopeChange={handleViewCommitScope}
             />
           ) : (
             <PrEmpty hasConnections={boot.config.connections.length > 0} />
@@ -278,8 +271,7 @@ export default function App() {
           currentLlmModel={
             boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
           }
-          pendingScopedRun={pendingScopedRun}
-          onScopedRunConsumed={() => setPendingScopedRun(null)}
+          viewCommitScope={viewCommitScope}
         />
       </div>
       <StatusBar

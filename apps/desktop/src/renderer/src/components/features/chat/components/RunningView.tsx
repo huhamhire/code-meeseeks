@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ReviewRunTool } from '@meebox/shared';
+import type { ReviewRunCommitScope, ReviewRunTool } from '@meebox/shared';
+import { CommitIcon } from '../../../common';
 import { formatElapsed, formatStartTime, inferPhase, runStatusLabel } from '../utils/format';
 import { AnsiPre, AskQuestion, Spinner } from './shared';
 
@@ -8,6 +9,7 @@ export function RunningView({
   tool,
   runId,
   question,
+  scope,
   lines,
   startedAt,
   model,
@@ -16,6 +18,8 @@ export function RunningView({
   runId: string;
   /** /ask 的提问：执行中也直接展示（与排队 / 完成态一致；问题在派发时已生成）。 */
   question?: string;
+  /** 单 commit 评审范围（parent..sha）；限定在某 commit 时展示范围徽标，与完成态卡片一致。 */
+  scope?: ReviewRunCommitScope;
   lines: ReadonlyArray<string>;
   startedAt: number;
   /** 当前 active LLM profile.model — 跟 RunMeta 同源放在 chip 行，让 running
@@ -52,6 +56,16 @@ export function RunningView({
           <Spinner />
           {runStatusLabel('running', t)}
         </span>
+        {/* 单 commit 范围徽标：与完成态 RunMeta 一致，让运行中也能看到本次限定的提交。 */}
+        {scope && (
+          <span
+            className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-scope"
+            title={t('chatPane.scopeCommitTitle', { subject: scope.subject })}
+          >
+            <CommitIcon size={12} />
+            {scope.abbreviatedSha}
+          </span>
+        )}
         {model && (
           <span
             className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-model"

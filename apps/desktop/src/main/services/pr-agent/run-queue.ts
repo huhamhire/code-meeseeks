@@ -101,6 +101,7 @@ export class RunQueue {
           tool,
           question: tool === 'ask' ? question : undefined,
           origin: priority,
+          scope,
           enqueuedAt: new Date().toISOString(),
           startedAt: null,
         },

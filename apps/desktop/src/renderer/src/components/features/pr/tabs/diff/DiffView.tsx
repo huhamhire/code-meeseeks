@@ -7,7 +7,6 @@ import { type editor as MonacoEditor } from 'monaco-editor';
 import type {
   PlatformCapabilities,
   ReviewRunCommitScope,
-  ReviewRunTool,
   StoredPullRequest,
 } from '@meebox/shared';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
@@ -69,10 +68,10 @@ interface DiffViewProps {
   pendingCommitView?: PendingCommitView | null;
   onCommitViewConsumed?: () => void;
   /**
-   * 就某个 commit 发起单 commit 范围的评审 Agent 动作（来自范围选择器的 commit 行动作）：
-   * review/improve 立即发起、ask 挂到输入栏待输入问题。由上层（App）转交 ChatPane 处理。
+   * 当前变更范围切到 / 离开单 commit 时上报（commit 有父 → 传该 commit 范围，全部变更 / root commit → null）。
+   * 上层（App）据此把「正在查看的 commit」作为聊天区命令的隐式范围（见 ChatPane viewCommitScope）。
    */
-  onScopedAction?: (tool: ReviewRunTool, scope: ReviewRunCommitScope) => void;
+  onViewCommitScopeChange?: (scope: ReviewRunCommitScope | null) => void;
 }
 
 /**
@@ -91,7 +90,7 @@ export function DiffView({
   onNavConsumed,
   pendingCommitView,
   onCommitViewConsumed,
-  onScopedAction,
+  onViewCommitScopeChange,
 }: DiffViewProps) {
   // 评论换行策略：GitHub/Bitbucket hard-break（单 \n → <br>）；GitLab CommonMark 软换行。
   // 能力位缺省（旧数据/无连接）回退 true，保持既有行为。
@@ -112,6 +111,21 @@ export function DiffView({
     pendingCommitView,
     onCommitViewConsumed,
   );
+  // 把「正在查看的单 commit」上报给上层，作为聊天区命令的隐式范围。commit 有父才可 parent..sha 定界；
+  // 全部变更 / root commit（无父）上报 null。
+  useEffect(() => {
+    if (!onViewCommitScopeChange) return;
+    onViewCommitScopeChange(
+      scope.kind === 'commit' && scope.parent
+        ? {
+            sha: scope.sha,
+            parent: scope.parent,
+            abbreviatedSha: scope.abbreviatedSha,
+            subject: scope.subject,
+          }
+        : null,
+    );
+  }, [scope, onViewCommitScopeChange]);
   const { files, filesError, retryFiles, selectedKey, setSelectedKey, selected, loadedKey } =
     useChangedFiles(pr, range, viewKey);
   // 合并会冲突的文件路径集合（仅 pr.hasConflict 时实拉），文件树据此标三角警示。
@@ -288,7 +302,6 @@ export function DiffView({
               connectionId={pr.connectionId}
               onOpen={loadScopeCommits}
               onPick={setScope}
-              onScopedAction={onScopedAction}
             />
           )}
           <button

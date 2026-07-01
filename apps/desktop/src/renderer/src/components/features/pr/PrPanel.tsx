@@ -6,7 +6,6 @@ import type {
   PrCommentAnchor,
   PrCommit,
   ReviewRunCommitScope,
-  ReviewRunTool,
   StoredPullRequest,
 } from '@meebox/shared';
 import { invoke } from '../../../api';
@@ -49,8 +48,8 @@ export interface PrPanelProps {
   /** 外部请求切到指定标签（如通知点击 summary 评论 → 'activity'）；消费后经 onPendingTabConsumed 清空。 */
   pendingTab?: PrTab | null;
   onPendingTabConsumed?: () => void;
-  /** 就某 commit 发起单 commit 范围的评审 Agent 动作（Diff 提交选择器 → App → ChatPane）。 */
-  onRequestScopedRun?: (tool: ReviewRunTool, scope: ReviewRunCommitScope) => void;
+  /** Diff 视图当前查看的单 commit 范围变化上报（→ App → ChatPane 隐式范围）；全部变更 / root commit 为 null。 */
+  onViewCommitScopeChange?: (scope: ReviewRunCommitScope | null) => void;
 }
 
 /**
@@ -72,7 +71,7 @@ export function PrPanel({
   onRequestDiffNav,
   pendingTab,
   onPendingTabConsumed,
-  onRequestScopedRun,
+  onViewCommitScopeChange,
 }: PrPanelProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<PrTab>('diff');
@@ -216,7 +215,7 @@ export function PrPanel({
               onNavConsumed={onDiffNavConsumed}
               pendingCommitView={pendingCommitView}
               onCommitViewConsumed={() => setPendingCommitView(null)}
-              onScopedAction={onRequestScopedRun}
+              onViewCommitScopeChange={onViewCommitScopeChange}
             />
           </Suspense>
         </KeepAliveTab>
