@@ -30,6 +30,7 @@ const OVERRIDDEN_VARS = [
   '--border-default-fade',
   '--border-muted',
   '--bg-selected',
+  '--bg-group-header',
 ] as const;
 
 interface Rgb {
@@ -147,6 +148,8 @@ export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiThe
   const borderDefault = mix(fg, bg, 0.8);
   const borderMuted = mix(fg, bg, 0.88);
   const borderFade = { ...borderDefault, a: 0.5 };
+  // 分组头：向黑轻微下沉（比 bg-app 略暗的「凹陷」标题带，hover 走 --bg-panel 上浮），随主题派生。
+  const bgGroupHeader = mix(bg, BLACK, 0.12);
 
   const set = (name: string, c: Rgb): void => document.documentElement.style.setProperty(name, toRgbString(c));
   set('--bg-app', bg);
@@ -164,6 +167,7 @@ export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiThe
   set('--border-muted', borderMuted);
   set('--border-default-fade', borderFade);
   set('--bg-selected', sel);
+  set('--bg-group-header', bgGroupHeader);
 
   // 可读性体检：muted 文字 / 弱边框对背景的对比度（AA 正文≥4.5、次要文本/非文本≥3）
   const mutedCr = contrastRatio(textMuted, bg);
