@@ -486,7 +486,8 @@ export function ChatPane({
         commitScopeChip={
           viewCommitScope && !diffSelection
             ? {
-                label: `${viewCommitScope.abbreviatedSha} · ${viewCommitScope.subject}`,
+                // 仅展示短 hash，不带主题（避免 chip 内容过长）；主题在 Diff 视图与结果卡徽标已可见。
+                label: viewCommitScope.abbreviatedSha,
                 disabled: scopeDetached,
                 onToggle: () => {
                   setScopeDetached((d) => !d);
