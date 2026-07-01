@@ -3,3 +3,12 @@
 /dist/
 /meebox
 /meebox.exe
+
+# Test binaries (go test -c), coverage / profiling output
+*.test
+*.out
+*.prof
+
+# Go workspace files (local dev only)
+go.work
+go.work.sum
