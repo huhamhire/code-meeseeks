@@ -7,9 +7,10 @@ import { invoke } from '../../../../api';
 const IS_MAC = navigator.platform.toLowerCase().includes('mac');
 
 /**
- * 通知分区：总开关 + 分类型系统通知（新 PR / 评论回复 / 评论 @）。总开关关闭时下属各项禁用（灰显但保留各自
- * 值）。系统通知受 OS 权限约束——用户在系统设置关闭后应用静默降级，此处仅控制应用侧意图。macOS dock「待回应」
- * 计数角标随总开关默认启用、无独立开关，故此处不列。
+ * 通知分区：总开关 + 分类型系统通知——面向评审的（新 PR / 评论回复 / 评论 @）与面向「我创建的」PR 的
+ * （新评论 / 被标记需修改 / 出现冲突）。总开关关闭时下属各项禁用（灰显但保留各自值）。系统通知受 OS 权限
+ * 约束——用户在系统设置关闭后应用静默降级，此处仅控制应用侧意图。macOS dock「待回应」计数角标随总开关默认
+ * 启用、无独立开关，故此处不列。
  */
 export function NotificationSection({
   value,
@@ -71,6 +72,52 @@ export function NotificationSection({
             disabled={!on}
             onChange={(v) => set({ mention: v })}
             ariaLabel={t('settings.notifyMentionLabel')}
+          />
+        </li>
+        <li className="settings-sublist-row">
+          <div className="settings-sublist-text">
+            <span className="settings-sublist-label">{t('settings.notifyAuthoredCommentLabel')}</span>
+            <span className="muted settings-sublist-desc">
+              {t('settings.notifyAuthoredCommentHint')}
+            </span>
+          </div>
+          <Switch
+            checked={value.authored_comment}
+            disabled={!on}
+            onChange={(v) => set({ authored_comment: v })}
+            ariaLabel={t('settings.notifyAuthoredCommentLabel')}
+          />
+        </li>
+        <li className="settings-sublist-row">
+          <div className="settings-sublist-text">
+            <span className="settings-sublist-label">
+              {t('settings.notifyAuthoredNeedsWorkLabel')}
+            </span>
+            <span className="muted settings-sublist-desc">
+              {t('settings.notifyAuthoredNeedsWorkHint')}
+            </span>
+          </div>
+          <Switch
+            checked={value.authored_needs_work}
+            disabled={!on}
+            onChange={(v) => set({ authored_needs_work: v })}
+            ariaLabel={t('settings.notifyAuthoredNeedsWorkLabel')}
+          />
+        </li>
+        <li className="settings-sublist-row">
+          <div className="settings-sublist-text">
+            <span className="settings-sublist-label">
+              {t('settings.notifyAuthoredConflictLabel')}
+            </span>
+            <span className="muted settings-sublist-desc">
+              {t('settings.notifyAuthoredConflictHint')}
+            </span>
+          </div>
+          <Switch
+            checked={value.authored_conflict}
+            disabled={!on}
+            onChange={(v) => set({ authored_conflict: v })}
+            ariaLabel={t('settings.notifyAuthoredConflictLabel')}
           />
         </li>
       </ul>

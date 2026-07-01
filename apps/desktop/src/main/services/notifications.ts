@@ -19,11 +19,14 @@ import { ensureAvatarFile, type AvatarFileDeps } from './avatar.js';
 /** 一轮最多单独弹的通知条数（各带定位）；超出部分折叠为一条「查看更多」提示，避免涌入时的通知风暴。 */
 const INDIVIDUAL_LIMIT = 5;
 
-/** 通知事件类型 → i18n 文案分组名（new_pr 的 key 为 newPr，其余同名）。 */
+/** 通知事件类型 → i18n 文案分组名（new_pr 的 key 为 newPr，authored_* 转驼峰，其余同名）。 */
 const I18N_GROUP: Record<PollNotificationEvent['kind'], string> = {
   new_pr: 'newPr',
   mention: 'mention',
   reply: 'reply',
+  authored_comment: 'authoredComment',
+  authored_needs_work: 'authoredNeedsWork',
+  authored_conflict: 'authoredConflict',
 };
 
 /** 类型 emoji（Windows toast 单图标槽给了头像，故类型用 emoji 在标题前标记）。 */
@@ -31,6 +34,9 @@ const TYPE_EMOJI: Record<PollNotificationEvent['kind'], string> = {
   new_pr: '🔀',
   mention: '💬',
   reply: '↩️',
+  authored_comment: '💬',
+  authored_needs_work: '📝',
+  authored_conflict: '⚠️',
 };
 
 /** 点击通知：唤起并聚焦主窗口（最小化则先还原）。 */
@@ -138,6 +144,9 @@ export async function showPollNotifications(
     new_pr: cfg.new_pr,
     reply: cfg.reply,
     mention: cfg.mention,
+    authored_comment: cfg.authored_comment,
+    authored_needs_work: cfg.authored_needs_work,
+    authored_conflict: cfg.authored_conflict,
   };
   const filtered = events.filter((e) => allow[e.kind]);
   if (filtered.length === 0) return;

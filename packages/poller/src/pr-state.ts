@@ -42,6 +42,16 @@ export interface PrIndexEntry {
    * 并存、互不替代。同 `lastMentionAt` 由 poll 独占维护，与已读水位解耦。
    */
   mentionAts?: string[];
+  /**
+   * 「我创建的」PR 通知用的上一轮快照（poll 独占维护）。仅当 PR 作者为本人时才据此产出 authored_* 通知；
+   * 字段缺失（升级前的旧索引）时对应事件按「基线」处理——只播种、不补发，避免升级后一次性涌入历史事件。
+   */
+  /** 上一轮的合并冲突态（== PullRequest.hasConflict）；用于探测 false→true 的新增冲突。 */
+  hasConflict?: boolean;
+  /** 上一轮处于「需修改」状态的评审人 name 列表；用于探测新出现的 needs-work 评审人。 */
+  needsWorkReviewers?: string[];
+  /** 上一轮已知的最新「他人评论」createdAt（ISO）游标；晚于它的他人评论计为新评论。 */
+  lastCommentAt?: string;
 }
 
 /** mentionAts 保留上限：仅留最近 10 条。未读计数据此封顶，UI 满额显示「10+」。 */

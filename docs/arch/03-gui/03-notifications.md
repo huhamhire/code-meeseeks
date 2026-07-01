@@ -4,7 +4,7 @@
 
 ## 范围
 
-- **系统通知（toast）**：Windows + macOS 原生通知，按事件类型（新 PR / 评论回复 / 评论 @）分别开关。
+- **系统通知（toast）**：Windows + macOS 原生通知，按事件类型分别开关——面向评审的（新 PR / 评论回复 / 评论 @）与面向「我创建的」PR 的（新评论 / 被标记需修改 / 出现冲突）。
 - **macOS dock 角标**：dock 图标上显示「@我 / 回复我」待回应总数。
 - 不纳入常驻状态栏 / Windows 任务栏 overlay 与闪烁（成本偏重，收益有限）。
 
@@ -12,10 +12,15 @@
 
 ### 1. 系统通知：poll 事件投影 → 主进程 toast
 
-- **投影（poller）**：`pollOnce` 在常规扫描中顺带产出本轮「值得提醒」事件 `PollNotificationEvent[]`（`kind: new_pr | mention | reply` + PR 标识/标题 + 条数），经 `onNotify` 回调交主进程。复用既有评论拉取，按下文「评论跟踪触发」决定何时扫。
+- **投影（poller）**：`pollOnce` 在常规扫描中顺带产出本轮「值得提醒」事件 `PollNotificationEvent[]`（`kind: new_pr | mention | reply | authored_comment | authored_needs_work | authored_conflict` + PR 标识/标题 + 条数），经 `onNotify` 回调交主进程。复用既有评论拉取，按下文「评论跟踪触发」决定何时扫。
   - **新 PR**：`isAdded` 的 PR。
   - **@ / 回复**：评论扫描用 [`collectMentionsToMe`](../../../packages/poller/src/unread.ts)（按「父评论作者是我=reply / 正文 @我=mention」分类，每条命中带评论作者），取**晚于历史游标 `lastMentionAt`** 的命中、按类型聚合条数。
-  - 事件还带 `repo` / `connectionId` / `actor`（发起人：new_pr=PR 作者，mention/reply=该类最新一条命中的评论作者），供富样式通知用。
+  - **「我创建的」PR（作者为本人，`pr.author` == 当前用户）**——仅对这类 PR 额外产出：
+    - `authored_comment`：他人新评论（用 [`collectCommentsFromOthers`](../../../packages/poller/src/unread.ts) 收全部非本人评论，取晚于独立游标 `lastCommentAt` 的；自己的评论不计，故不会因自评误报）。
+    - `authored_needs_work`：新出现的「需修改」评审人（本轮在 needsWork、上一轮 `needsWorkReviewers` 不在）。
+    - `authored_conflict`：合并冲突 `hasConflict` false→true。
+    - 三者的「上一轮快照」（`lastCommentAt` / `needsWorkReviewers` / `hasConflict`）存于索引条目；快照字段缺失（升级前旧索引）时按基线只播种、不补发。
+  - 事件还带 `repo` / `connectionId` / `actor`（发起人：new_pr=PR 作者，mention/reply/authored_comment=该类最新一条命中的评论作者，authored_needs_work=新标记需修改的评审人，authored_conflict=PR 作者）。
 - **防风暴**：仅在**已有基线**（本轮之前索引非空）时产出事件——首启 / 清库后的首轮只建基线、不弹通知；新发现 PR 的历史评论不投影为 mention/reply（`prev` 不存在则跳过）。
 - **仅「待处理」**：事件只对 `localStatus === 'pending'` 的 PR 产出（投影处 `notifiable = hadBaseline && localStatus === 'pending'` 门控）——已 approve / 标记 needs_work 的 PR 不再打扰。「待处理」天然覆盖「待我评审」（未决断）与「我创建的」（作者非评审人 → 恒 pending）两类。
 - **点击定位**：mention/reply 事件带 `comment`（最新一条命中评论的 `remoteId` + `anchor`），供点击跳转。
@@ -60,7 +65,8 @@
 | 字段 | 含义 |
 | --- | --- |
 | `enabled` | 总开关；关闭后既不弹系统通知也不亮 dock 角标 |
-| `new_pr` / `reply` / `mention` | 分类型系统通知开关 |
+| `new_pr` / `reply` / `mention` | 面向评审的分类型系统通知开关 |
+| `authored_comment` / `authored_needs_work` / `authored_conflict` | 面向「我创建的」PR 的分类型开关（新评论 / 被标记需修改 / 出现冲突）；默认开 |
 
 macOS dock「待回应」计数角标随总开关默认启用，无独立配置项。
 
