@@ -149,7 +149,7 @@ jobs:
       matrix:
         include:
           - { goos: windows, goarch: amd64, ext: '.exe', archive: zip }
-          - { goos: darwin, goarch: arm64, ext: '', archive: tar.gz }
+          - { goos: darwin, goarch: arm64, ext: '', archive: zip }
           - { goos: linux, goarch: amd64, ext: '', archive: tar.gz }
           - { goos: linux, goarch: arm64, ext: '', archive: tar.gz }
     steps:
