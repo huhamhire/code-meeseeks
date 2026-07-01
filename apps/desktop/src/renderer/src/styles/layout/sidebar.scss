@@ -142,6 +142,17 @@
   }
 }
 
+// 一级发现分类标签的未读圆点：该分类下有未读 PR 时，跟在标签文字后（复用 PR 项未读点的亮蓝）。
+.sidebar-discovery-tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: $space-2;
+  border-radius: 50%;
+  background: $color-info;
+  flex: 0 0 auto;
+}
+
 .sidebar-list {
   flex: 1;
   overflow-y: auto;
