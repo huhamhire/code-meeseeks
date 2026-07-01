@@ -159,8 +159,6 @@ export function ChatPane({
   useEffect(() => {
     setScopeDetached(false);
   }, [viewCommitScope?.sha]);
-  // 本 PR 聊天区命令的生效范围：跟随 Diff 视图选中的 commit，除非用户已 ✕ 脱离。
-  const effectiveScope = scopeDetached ? null : (viewCommitScope ?? null);
   const onReferenceFinding = (finding: Finding, run: ReviewRun): void => {
     setRefFinding({ finding, run });
   };
@@ -170,6 +168,11 @@ export function ChatPane({
   // 未忽略时把选区拼成引用串；/ask 与自然语言提问共用。忽略 / 无选区 → undefined（本条不带引用）。
   const referencedContext =
     diffSelection && !selectionIgnored ? formatReferencedContext(diffSelection) : undefined;
+
+  // 本 PR 聊天区命令的生效范围：跟随 Diff 视图选中的 commit，除非用户已脱离（scopeDetached）。
+  // 同一时刻只允许一个 scope 生效——存在 Diff 选区时以选区为准（更细粒度），commit 范围暂挂起、其 chip
+  // 亦隐藏（见 commitScopeChip），取消选区后自动还原。
+  const effectiveScope = diffSelection || scopeDetached ? null : (viewCommitScope ?? null);
 
   // 会话态 + 生命周期（切 PR 重载 / 流式步骤 / 分页 / 自动滚动）
   const session = useChatSession(prLocalId, myActiveIds);
@@ -477,10 +480,11 @@ export function ChatPane({
               }
             : null
         }
-        // 单 commit 范围 chip：只要视图选中了某 commit 就显示（选中态源自视图）；点击切换启用/禁用——
+        // 单 commit 范围 chip：视图选中某 commit 时显示（选中态源自视图）；点击切换启用/禁用——
         // 禁用（scopeDetached）时命令回到 PR 全量、chip 置灰，切到别的 commit 或切 PR 复位为启用。
+        // 同一时刻只允许一个 scope：存在 Diff 选区时让位于选区 chip（隐藏本 chip），取消选区后自动还原。
         commitScopeChip={
-          viewCommitScope
+          viewCommitScope && !diffSelection
             ? {
                 label: `${viewCommitScope.abbreviatedSha} · ${viewCommitScope.subject}`,
                 disabled: scopeDetached,
