@@ -12,6 +12,7 @@ import * as agentCtl from '../../controllers/agent.js';
 import * as prCtl from '../../controllers/pr.js';
 import { getContext } from '../context.js';
 import { HttpError } from './http.js';
+import { toPrListItem } from './views.js';
 
 /**
  * 本地 API 的路由表与处理器。处理器**复用 IPC controller 同源逻辑**——controller 形态为
@@ -48,7 +49,10 @@ function seg(path: string): string[] {
   return path.split('/').filter(Boolean);
 }
 
-/** 当前启用平台下可用的分类标签：一级（平台发现分类）+ 二级（状态 / 合并态筛选）。 */
+/** 列表分页默认页大小（`limit` 缺省 / 非法 / ≤0 时取此值）。 */
+const DEFAULT_LIMIT = 100;
+
+/** 当前启用平台下可用的分类标签：`categories`（平台发现分类）+ `statuses`（状态 / 合并态筛选）。 */
 const categories: RouteHandler = () => {
   const ctx = getContext();
   const activeId = ctx.bootstrap.config.active_connection_id;
@@ -56,27 +60,32 @@ const categories: RouteHandler = () => {
     ? ctx.connectionRuntime.adapters.find((a) => a.connectionId === activeId)
     : undefined;
   const caps = built?.adapter.connection.capabilities();
-  const primary: PrDiscoveryFilter[] = caps?.discoveryFilters
+  const categoryList: PrDiscoveryFilter[] = caps?.discoveryFilters
     ? [...caps.discoveryFilters]
     : ['review-requested'];
   return {
     platform: built?.adapter.kind ?? null,
-    primary,
-    secondary: [...PR_SECONDARY_FILTERS],
+    categories: categoryList,
+    statuses: [...PR_SECONDARY_FILTERS],
   };
 };
 
 /**
- * PR 列表（不分页）+ 一级 / 二级分类过滤 + 检索。过滤语义复用 @meebox/shared 的纯谓词
- * （与渲染层侧栏同源），此处仅做查询参数解析 + 委派。
+ * PR 列表：`category`（一级发现分类）+ `status`（二级状态 / 合并态）过滤 + `q` 检索 +
+ * `skip`/`limit` 分页（默认 limit 100）。过滤语义复用 @meebox/shared 的纯谓词（与渲染层侧栏同源）；
+ * 返回**精简列表投影**（{@link toPrListItem}，去 description 明细、人员仅 slug），此处仅解析参数 + 委派。
  */
 const listPrs: RouteHandler = async ({ query }) => {
   const all = await prCtl.listPrs(NO_EVENT, undefined);
-  return filterPullRequests(all, {
-    primary: (query.get('primary') as PrDiscoveryFilter) || undefined,
-    secondary: (query.get('secondary') as PrSecondaryFilter) || undefined,
+  const filtered = filterPullRequests(all, {
+    primary: (query.get('category') as PrDiscoveryFilter) || undefined,
+    secondary: (query.get('status') as PrSecondaryFilter) || undefined,
     query: query.get('q') ?? undefined,
   });
+  const skip = Math.max(0, Number.parseInt(query.get('skip') ?? '', 10) || 0);
+  const limitRaw = Number.parseInt(query.get('limit') ?? '', 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_LIMIT;
+  return filtered.slice(skip, skip + limit).map(toPrListItem);
 };
 
 const showPr: RouteHandler = ({ params }) => getContext().pr.findPrOrThrow(params.id);

@@ -69,7 +69,7 @@ func base(srvURL string, rest ...string) []string {
 
 func TestCategories(t *testing.T) {
 	var rec capturedReq
-	srv := mockServer(&rec, 200, `{"platform":"github","primary":["review-requested"],"secondary":["all"]}`)
+	srv := mockServer(&rec, 200, `{"platform":"github","categories":["review-requested"],"statuses":["all"]}`)
 	defer srv.Close()
 
 	out, err := runCmd(base(srv.URL, "categories")...)
@@ -92,13 +92,13 @@ func TestPrListFilters(t *testing.T) {
 	srv := mockServer(&rec, 200, `[]`)
 	defer srv.Close()
 
-	if _, err := runCmd(base(srv.URL, "pr", "list", "--primary", "created", "--secondary", "approved", "--query", "foo")...); err != nil {
+	if _, err := runCmd(base(srv.URL, "pr", "list", "--category", "created", "--status", "approved", "--query", "foo", "--skip", "5", "--limit", "20")...); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if rec.path != "/api/v1/prs" {
 		t.Errorf("wrong path: %s", rec.path)
 	}
-	for _, want := range []string{"primary=created", "secondary=approved", "q=foo"} {
+	for _, want := range []string{"category=created", "status=approved", "q=foo", "skip=5", "limit=20"} {
 		if !strings.Contains(rec.query, want) {
 			t.Errorf("query %q missing %q", rec.query, want)
 		}

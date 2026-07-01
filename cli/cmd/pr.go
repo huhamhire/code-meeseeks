@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -23,10 +24,11 @@ func newPrCmd() *cobra.Command {
 }
 
 func newPrListCmd() *cobra.Command {
-	var primary, secondary, query string
+	var category, status, query string
+	var skip, limit int
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List PRs (no pagination) with optional category and search filters",
+		Short: "List PRs with category / status filters and skip+limit pagination",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			c, err := resolveClient()
@@ -34,14 +36,20 @@ func newPrListCmd() *cobra.Command {
 				return err
 			}
 			q := url.Values{}
-			if primary != "" {
-				q.Set("primary", primary)
+			if category != "" {
+				q.Set("category", category)
 			}
-			if secondary != "" {
-				q.Set("secondary", secondary)
+			if status != "" {
+				q.Set("status", status)
 			}
 			if query != "" {
 				q.Set("q", query)
+			}
+			if skip > 0 {
+				q.Set("skip", strconv.Itoa(skip))
+			}
+			if limit > 0 {
+				q.Set("limit", strconv.Itoa(limit))
 			}
 			data, err := c.Get("/api/v1/prs", q)
 			if err != nil {
@@ -51,9 +59,11 @@ func newPrListCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&primary, "primary", "", "primary category (platform discovery filter)")
-	f.StringVar(&secondary, "secondary", "", "secondary filter (review status / merge state)")
+	f.StringVar(&category, "category", "", "discovery category (review-requested|created|assigned|mentioned)")
+	f.StringVar(&status, "status", "", "status filter (pending|approved|needs_work|conflict|mergeable)")
 	f.StringVar(&query, "query", "", "search text (title / repo / author / number)")
+	f.IntVar(&skip, "skip", 0, "skip the first N results (pagination offset)")
+	f.IntVar(&limit, "limit", 0, "max results to return (default 100 when unset)")
 	return cmd
 }
 
