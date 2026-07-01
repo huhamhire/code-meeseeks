@@ -237,6 +237,19 @@ func TestPrCommentPost(t *testing.T) {
 	}
 }
 
+func TestAgentStopPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"ok":true}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "agent", "stop", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/stop" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
 func TestAuthFailureExitCode(t *testing.T) {
 	var rec capturedReq
 	srv := mockServer(&rec, 401, "")

@@ -141,6 +141,10 @@ const agentChat: RouteHandler = ({ params, body }) => {
   return agentCtl.enqueueMessage(NO_EVENT, { localId: params.id, message: b.message });
 };
 
+/** 中断该 PR 正在运行的 Agent（思考 / 执行任意阶段即时停）。PR 级停，非按单个工具 run。 */
+const agentStop: RouteHandler = ({ params }) =>
+  agentCtl.stopAgent(NO_EVENT, { localId: params.id });
+
 /** 评审决断「通过」：先写远端评审状态、再落本地（复用 GUI 同源 setPrStatus）。 */
 const approve: RouteHandler = ({ params }) =>
   prCtl.setPrStatus(NO_EVENT, { localId: params.id, status: 'approved' });
@@ -171,6 +175,7 @@ export const routes: Route[] = [
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/review'), handler: agentReview },
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/instruct'), handler: agentInstruct },
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/chat'), handler: agentChat },
+  { method: 'POST', segments: seg('/api/v1/prs/:id/agent/stop'), handler: agentStop },
   { method: 'POST', segments: seg('/api/v1/prs/:id/approve'), handler: approve },
   { method: 'POST', segments: seg('/api/v1/prs/:id/needswork'), handler: needswork },
   { method: 'POST', segments: seg('/api/v1/prs/:id/comment'), handler: comment },

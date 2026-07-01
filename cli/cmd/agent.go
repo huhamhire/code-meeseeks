@@ -32,6 +32,7 @@ func newAgentCmd() *cobra.Command {
 		newAgentReviewCmd(),
 		newAgentInstructCmd(),
 		newAgentChatCmd(),
+		newAgentStopCmd(),
 	)
 	return a
 }
@@ -144,6 +145,23 @@ func newAgentChatCmd() *cobra.Command {
 				return err
 			}
 			return renderData(data)
+		},
+	}
+	prIDFlag(cmd, &pr)
+	return cmd
+}
+
+// newAgentStopCmd builds `pr agent stop --pr <id>`: interrupts the PR's running agent in
+// any phase (thinking / executing) (POST /prs/{id}/agent/stop). PR-level stop — it halts
+// the whole agent for that PR, not one specific tool run.
+func newAgentStopCmd() *cobra.Command {
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the PR's running agent (interrupts any in-progress phase)",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return postAndRender("/api/v1/prs/"+url.PathEscape(pr)+"/agent/stop", nil)
 		},
 	}
 	prIDFlag(cmd, &pr)
