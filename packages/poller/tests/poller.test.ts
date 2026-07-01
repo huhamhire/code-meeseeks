@@ -170,6 +170,13 @@ function makePr(id: string, updatedAt: string, title = `PR ${id}`): PullRequest 
   };
 }
 
+/** 「我创建的」PR：作者即当前用户（默认 alice）。用于 authored_* 通知测试。 */
+function makeAuthoredPr(id: string, updatedAt: string, author = 'alice'): PullRequest {
+  const pr = makePr(id, updatedAt);
+  pr.author = { name: author, displayName: author };
+  return pr;
+}
+
 let tmpDir: string;
 let store: JsonFileStateStore;
 // 归档冷存储：与 store 物理分离（store 根 = tmpDir，archived 根 = tmpDir/archived）。
@@ -1026,5 +1033,119 @@ describe('Poller onNotify (system notification projection)', () => {
     await poller.tick();
     expect(adapter.commentCalls).toBe(1); // 未变化 → 未扫
     expect(events.length).toBe(eventsLen); // 无新事件
+  });
+
+  it('authored PR: fires authored_needs_work when a reviewer newly marks needs-work', async () => {
+    const adapter = new FakeAdapter([makeAuthoredPr('1', '2026-05-28T01:00:00.000Z')]);
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线：无 needsWork 评审人
+    expect(events).toEqual([]);
+
+    now = new Date('2026-06-02T00:00:00.000Z');
+    const changed = makeAuthoredPr('1', '2026-05-29T01:00:00.000Z');
+    changed.reviewers = [{ name: 'bob', displayName: 'Bob', status: 'needsWork' as const }];
+    adapter.setPrs([changed]);
+    await poller.tick();
+
+    const e = events.find((x) => x.kind === 'authored_needs_work');
+    expect(e).toBeDefined();
+    expect(e!.remoteId).toBe('1');
+    expect(e!.actor.name).toBe('bob'); // 标记需修改的评审人
+  });
+
+  it('authored PR: fires authored_conflict on a false→true merge-conflict transition', async () => {
+    const adapter = new FakeAdapter([makeAuthoredPr('1', '2026-05-28T01:00:00.000Z')]);
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线：无冲突
+    expect(events).toEqual([]);
+
+    now = new Date('2026-06-02T00:00:00.000Z');
+    const conflicted = makeAuthoredPr('1', '2026-05-29T01:00:00.000Z');
+    conflicted.hasConflict = true;
+    conflicted.mergeStatus = { canMerge: false, conflicted: true, vetoes: [] };
+    adapter.setPrs([conflicted]);
+    await poller.tick();
+
+    const e = events.find((x) => x.kind === 'authored_conflict');
+    expect(e).toBeDefined();
+    expect(e!.remoteId).toBe('1');
+  });
+
+  it('authored PR: seeds the comment cursor silently, then fires authored_comment on a later new comment', async () => {
+    const adapter = new FakeAdapter([makeAuthoredPr('1', '2026-05-28T01:00:00.000Z')]);
+    adapter.seedUser('alice');
+    const events: PollNotificationEvent[] = [];
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+      onNotify: (e) => events.push(...e),
+    });
+
+    await poller.tick(); // 基线：首轮不 notifiable、不扫评论
+
+    // 第二轮：出现一条他人评论 → 仅播种游标、不补发历史评论。
+    now = new Date('2026-06-02T00:00:00.000Z');
+    adapter.setPrs([makeAuthoredPr('1', '2026-05-29T01:00:00.000Z')]);
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'looks good',
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }),
+    ]);
+    await poller.tick();
+    expect(events.some((e) => e.kind === 'authored_comment')).toBe(false);
+
+    // 第三轮：又来一条更晚的他人评论（晚于游标）→ 触发 authored_comment。
+    now = new Date('2026-06-03T00:00:00.000Z');
+    adapter.setPrs([makeAuthoredPr('1', '2026-05-30T01:00:00.000Z')]);
+    adapter.seedComments([
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'looks good',
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }),
+      makeComment({
+        author: { name: 'bob', displayName: 'Bob' },
+        body: 'one more thing',
+        createdAt: '2026-06-03T00:00:00.000Z',
+      }),
+    ]);
+    await poller.tick();
+
+    const e = events.find((x) => x.kind === 'authored_comment');
+    expect(e).toBeDefined();
+    expect(e!.remoteId).toBe('1');
+    expect(e!.count).toBe(1);
+    expect(e!.actor.name).toBe('bob');
   });
 });

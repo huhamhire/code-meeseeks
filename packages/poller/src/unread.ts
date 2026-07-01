@@ -76,6 +76,46 @@ export function collectMentionsToMe(
   return hits;
 }
 
+/** 评论树里一条**他人**评论（不限是否 @我 / 回复我）：时间 + 作者 + 定位。用于「我创建的」PR 的新评论通知。 */
+export interface CommentHit {
+  at: string;
+  author: PlatformUser;
+  commentRemoteId: string;
+  anchor: PrCommentAnchor | null;
+}
+
+/**
+ * 评论树里**所有他人评论**（作者非当前用户）的命中，深度优先、自然到达顺序（未排序）。与
+ * {@link collectMentionsToMe} 不同：不筛 @我 / 回复我，收全部他人评论——供「我创建的」PR 的「收到新评论」通知
+ * 用（作者本人的评论不计，故不会因自己评论而误报）。
+ */
+export function collectCommentsFromOthers(
+  comments: readonly PrComment[],
+  me: PlatformUser,
+): CommentHit[] {
+  const handles = [me.name, me.slug].filter((x): x is string => !!x);
+  const lowered = new Set(handles.map((h) => h.toLowerCase()));
+  const isMe = (u: PlatformUser): boolean =>
+    lowered.has(u.name.toLowerCase()) || (u.slug ? lowered.has(u.slug.toLowerCase()) : false);
+
+  const hits: CommentHit[] = [];
+  const walk = (list: readonly PrComment[]): void => {
+    for (const c of list) {
+      if (!isMe(c.author)) {
+        hits.push({
+          at: c.createdAt,
+          author: c.author,
+          commentRemoteId: c.remoteId,
+          anchor: c.anchor,
+        });
+      }
+      if (c.replies?.length) walk(c.replies);
+    }
+  };
+  walk(comments);
+  return hits;
+}
+
 /**
  * 评论树里所有「@我 / 回复我」他人评论的 createdAt（ISO）列表。基于 {@link collectMentionsToMe}。
  */

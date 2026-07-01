@@ -297,8 +297,9 @@ export const ConfigSchema = z.object({
   service: ServiceSchema.default({}),
   /**
    * 消息通知（见 docs/arch/03-gui/03-notifications.md）。enabled 为总开关；关闭后既不弹系统通知也不亮 dock 角标。
-   * new_pr / reply / mention 按事件类型分别控制系统通知（toast）是否弹出。macOS dock「待回应」计数角标无独立
-   * 开关——随总开关默认启用。系统通知受 OS 权限约束——用户在系统设置关闭后应用静默降级。
+   * 其余各项按事件类型分别控制系统通知（toast）是否弹出：new_pr / reply / mention 面向「待我评审」等场景；
+   * authored_* 面向「我创建的」PR（作者为本人）——新评论 / 被标记需修改 / 出现冲突。macOS dock「待回应」计数
+   * 角标无独立开关——随总开关默认启用。系统通知受 OS 权限约束——用户在系统设置关闭后应用静默降级。
    */
   notifications: z
     .object({
@@ -309,6 +310,12 @@ export const ConfigSchema = z.object({
       reply: z.boolean().default(true),
       /** 评论中被 @ 提及时弹系统通知 */
       mention: z.boolean().default(true),
+      /** 我创建的 PR 收到他人新评论时弹系统通知 */
+      authored_comment: z.boolean().default(true),
+      /** 我创建的 PR 被评审标记「需修改」时弹系统通知 */
+      authored_needs_work: z.boolean().default(true),
+      /** 我创建的 PR 出现合并冲突时弹系统通知 */
+      authored_conflict: z.boolean().default(true),
     })
     .default({}),
   /**

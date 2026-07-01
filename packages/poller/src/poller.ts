@@ -11,7 +11,7 @@ import type {
 import type { PlatformAdapter } from '@meebox/platform-core';
 import { relocateTree, type StateStore } from '@meebox/state-store';
 import { prHashId } from './pr-hash-id.js';
-import { collectMentionsToMe } from './unread.js';
+import { collectCommentsFromOthers, collectMentionsToMe } from './unread.js';
 import {
   MENTION_ATS_CAP,
   PURGE_GRACE_MS,
@@ -333,6 +333,44 @@ export class Poller {
             });
           }
 
+          // 「我创建的」PR（作者为本人）通知：被标记需修改 / 出现冲突。仅在已有基线 + 已知 PR（prev）时探测；
+          // 各自的上一轮快照字段缺失（升级前旧索引）时按「基线」处理——只在下方索引写入处播种、不补发历史事件。
+          const authoredByMe = !!me && pr.author.name === me.name;
+          const needsWorkReviewers = pr.reviewers
+            .filter((r) => r.status === 'needsWork')
+            .map((r) => r.name);
+          if (authoredByMe && hadBaseline && prev) {
+            // 新出现的「需修改」评审人（本轮在 needsWork、上一轮不在）→ authored_needs_work。
+            const prevNW = prev.needsWorkReviewers;
+            if (prevNW !== undefined) {
+              const fresh = needsWorkReviewers.filter((n) => !prevNW.includes(n));
+              if (fresh.length > 0) {
+                const reviewer = pr.reviewers.find((r) => r.name === fresh[0]) ?? pr.author;
+                notifyEvents.push({
+                  kind: 'authored_needs_work',
+                  localId,
+                  connectionId,
+                  remoteId: pr.remoteId,
+                  title: pr.title,
+                  repo: pr.repo,
+                  actor: reviewer,
+                });
+              }
+            }
+            // 合并冲突 false→true → authored_conflict（无具体发起人，actor 取 PR 作者本人）。
+            if (prev.hasConflict === false && pr.hasConflict === true) {
+              notifyEvents.push({
+                kind: 'authored_conflict',
+                localId,
+                connectionId,
+                remoteId: pr.remoteId,
+                title: pr.title,
+                repo: pr.repo,
+                actor: pr.author,
+              });
+            }
+          }
+
           // 复活：上一轮处于归档态（数据已搬入 archived/）→ 先把整树搬回活跃存储，再写 meta，
           // 让 runs / 评论 / 已读水位等历史与新 meta 同处活跃目录（搬回先于 writePrMeta，避免 split）。
           if (prev?.archivedAt) {
@@ -372,6 +410,7 @@ export class Poller {
             : true;
           let lastMentionAt = prev?.lastMentionAt;
           let mentionAts = prev?.mentionAts;
+          let lastCommentAt = prev?.lastCommentAt;
           if (notifiable && me && shouldScanComments) {
             try {
               const comments = await adapter.comments.listPullRequestComments(
@@ -417,6 +456,40 @@ export class Poller {
                   project('mention');
                 }
               }
+              // 「我创建的」PR：他人新评论（不限是否 @我 / 回复我，自己的评论不计）→ authored_comment。
+              // 独立游标 lastCommentAt：晚于它的他人评论计为新；游标缺失（升级前）时仅播种、不补发历史评论。
+              if (authoredByMe) {
+                const others = collectCommentsFromOthers(comments, me);
+                if (others.length) {
+                  const newest = others.reduce((a, b) =>
+                    Date.parse(b.at) > Date.parse(a.at) ? b : a,
+                  );
+                  const prevCursor = prev?.lastCommentAt;
+                  if (prevCursor !== undefined) {
+                    const sinceMs = Date.parse(prevCursor);
+                    const fresh = others.filter((o) => Date.parse(o.at) > sinceMs);
+                    if (fresh.length > 0) {
+                      const latest = fresh.reduce((a, b) =>
+                        Date.parse(b.at) > Date.parse(a.at) ? b : a,
+                      );
+                      notifyEvents.push({
+                        kind: 'authored_comment',
+                        localId,
+                        connectionId,
+                        remoteId: pr.remoteId,
+                        title: pr.title,
+                        repo: pr.repo,
+                        actor: latest.author,
+                        count: fresh.length,
+                        comment: { remoteId: latest.commentRemoteId, anchor: latest.anchor },
+                      });
+                    }
+                  }
+                  if (!lastCommentAt || Date.parse(newest.at) > Date.parse(lastCommentAt)) {
+                    lastCommentAt = newest.at;
+                  }
+                }
+              }
             } catch (err) {
               this.opts.logger.warn(
                 { err, connectionId, localId },
@@ -435,6 +508,9 @@ export class Poller {
             archivedAt: null,
             lastMentionAt,
             mentionAts,
+            hasConflict: pr.hasConflict,
+            needsWorkReviewers,
+            lastCommentAt,
           });
         }
       } catch (err) {
