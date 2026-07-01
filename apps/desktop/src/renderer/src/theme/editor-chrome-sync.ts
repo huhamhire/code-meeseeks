@@ -74,6 +74,12 @@ function toRgbString({ r, g, b, a }: Rgb): string {
   return a >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgb(${r} ${g} ${b} / ${a.toFixed(3)})`;
 }
 
+/** 转 #rrggbb（忽略 alpha）；供 Windows titleBarOverlay 用（其 color 取 hex）。 */
+function toHex({ r, g, b }: Rgb): string {
+  const h = (v: number): string => v.toString(16).padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
 /** 相对亮度（WCAG）。 */
 function luminance({ r, g, b }: Rgb): number {
   const ch = (v: number): number => {
@@ -118,7 +124,10 @@ function clearChromeOverrides(): void {
  * 把当前全局主题的 base 色派生为 GUI chrome 的结构性 token，写到 documentElement（覆盖 _theme.scss）。
  * 取不到色 / 缺 bg·fg 时清空覆盖、回退语义色板（仍随 data-theme 浅 / 深正常显示）。
  */
-export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiTheme: 'light' | 'dark'): void {
+export function applyChromeFromEditorTheme(
+  editorThemeId: string,
+  resolvedGuiTheme: 'light' | 'dark',
+): { color: string; symbolColor: string } | null {
   // 'auto' 跟随解析主题 → 取默认 2026 主题（dark-2026 / light-2026）的 base 色
   const effectiveId =
     editorThemeId === 'auto' ? (resolvedGuiTheme === 'dark' ? 'dark-2026' : 'light-2026') : editorThemeId;
@@ -128,7 +137,7 @@ export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiThe
   if (!bg || !fg) {
     clearChromeOverrides();
     console.warn('[chrome-sync] no usable bg/fg for theme, fell back to semantic palette:', effectiveId);
-    return;
+    return null;
   }
   const isDark = luminance(bg) < 0.5;
   const edge = isDark ? WHITE : BLACK; // 提升层（背景越「浮」越靠该边）/ 边框混合方向
@@ -175,4 +184,6 @@ export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiThe
   console.info(
     `[chrome-sync] "${effectiveId}" (${isDark ? 'dark' : 'light'}) → muted/bg contrast ${mutedCr.toFixed(2)} (AA≥4.5), border/bg ${borderCr.toFixed(2)} (≥3)`,
   );
+  // 窗控按钮同色：把主题 base 背景 / 前景（hex）交回主进程更新 Windows titleBarOverlay（见 useGlobalTheme）。
+  return { color: toHex(bg), symbolColor: toHex(fg) };
 }

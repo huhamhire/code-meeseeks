@@ -24,10 +24,31 @@ const TITLE_BAR_OVERLAY = {
   dark: { color: '#1e1e1e', symbolColor: '#cccccc' },
   light: { color: '#f8f8f8', symbolColor: '#1f1f20' },
 };
-/** 按当前有效主题取窗控按钮配色（含高度，供建窗与 setTitleBarOverlay 共用）。 */
-function overlayOptions(): { color: string; symbolColor: string; height: number } {
-  const c = nativeTheme.shouldUseDarkColors ? TITLE_BAR_OVERLAY.dark : TITLE_BAR_OVERLAY.light;
-  return { ...c, height: 36 };
+// 渲染层派生的窗控配色（跟随具体主题的 --bg-app/--text-primary，hex）；null 时按 nativeTheme 深浅取通用色兜底。
+let overlayColors: { color: string; symbolColor: string } | null = null;
+/** 通用深/浅窗控配色（无渲染层派生色时的兜底，按 nativeTheme 有效深浅）。 */
+function genericOverlayColors(): { color: string; symbolColor: string } {
+  return nativeTheme.shouldUseDarkColors ? TITLE_BAR_OVERLAY.dark : TITLE_BAR_OVERLAY.light;
+}
+/** 当前窗控 overlay（渲染层派生色优先，否则通用色）+ 高度（与 .app-titlebar 一致 36px）。 */
+function currentOverlay(): { color: string; symbolColor: string; height: number } {
+  return { ...(overlayColors ?? genericOverlayColors()), height: 36 };
+}
+/**
+ * 由渲染层在主题应用后经 IPC 调用：把当前主题派生的窗控配色（color=--bg-app、symbolColor=--text-primary）
+ * 设给所有窗口；传 null 回退通用深/浅色。使窗控按钮与具体主题的标题栏底色精确同色，而非仅通用深/浅。
+ */
+export function setWindowControlColors(colors: { color: string; symbolColor: string } | null): void {
+  overlayColors = colors;
+  if (process.platform === 'darwin') return; // macOS 无 titleBarOverlay
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    try {
+      win.setTitleBarOverlay(currentOverlay());
+    } catch {
+      /* 平台不支持 setTitleBarOverlay → 忽略 */
+    }
+  }
 }
 
 /**
@@ -89,7 +110,7 @@ export class WindowManager {
       titleBarStyle: 'hidden',
       ...(process.platform === 'darwin'
         ? { trafficLightPosition: { x: 12, y: 11 } }
-        : { titleBarOverlay: overlayOptions() }),
+        : { titleBarOverlay: currentOverlay() }),
       // dev 下显式给窗口图标；打包态窗口/任务栏图标走 exe 内嵌（electron-builder），故仅 dev 设置。
       icon: app.isPackaged
         ? undefined
@@ -149,13 +170,14 @@ export class WindowManager {
       );
     });
 
-    // 全局主题切换（config:setEditorAppearance 据主题改 nativeTheme.themeSource）或 'auto' 主题下 OS
-    // 深浅变化时，nativeTheme 发 'updated'：重置 Windows 窗控按钮配色跟随主题（macOS 无 titleBarOverlay，不注册）。
+    // 'auto' 主题下 OS 深浅变化时 nativeTheme 发 'updated'：按当前 overlay（渲染层派生色优先，否则通用色）
+    // 重置窗控配色兜底（macOS 无 titleBarOverlay，不注册）。具体主题的精确配色由渲染层经 setWindowControlColors
+    // 主动推送（见 useGlobalTheme），此处仅在渲染层未推送时按 nativeTheme 深浅回退。
     if (process.platform !== 'darwin') {
       const onThemeUpdated = (): void => {
         if (win.isDestroyed()) return;
         try {
-          win.setTitleBarOverlay(overlayOptions());
+          win.setTitleBarOverlay(currentOverlay());
         } catch {
           /* 平台不支持 setTitleBarOverlay → 忽略 */
         }
