@@ -88,3 +88,17 @@ func getAndRender(path string) error {
 	}
 	return renderData(data)
 }
+
+// postAndRender is the common POST-then-render path used by action commands
+// (agent triggers, review write actions). body may be nil for parameterless POSTs.
+func postAndRender(path string, body any) error {
+	c, err := resolveClient()
+	if err != nil {
+		return err
+	}
+	data, err := c.Post(path, body)
+	if err != nil {
+		return err
+	}
+	return renderData(data)
+}

@@ -16,8 +16,11 @@ import { toPrListItem } from './views.js';
 
 /**
  * 本地 API 的路由表与处理器。处理器**复用 IPC controller 同源逻辑**——controller 形态为
- * `(event, req)` 且只读路径不触碰 event，故以 NO_EVENT 占位调用，避免在 HTTP 侧另起一套实现。
- * 只读边界：写工具一律不暴露（见 agent/instruct）。见 docs/arch/04-integration/01-service-api.md。
+ * `(event, req)` 且这些路径不触碰 event，故以 NO_EVENT 占位调用，避免在 HTTP 侧另起一套实现。
+ *
+ * 写边界：开放**评审写操作**——approve / needswork（远端评审决断）与顶层 comment（发评论），
+ * 均复用 GUI 同源 controller。仍**不**暴露：merge（合并）、pr-agent 的变更类工具（publish 等，
+ * 见 agent/instruct 的只读白名单）。见 docs/arch/04-integration/01-service-api.md。
  */
 
 // controller 形参 event 在被复用的只读 / 队列路径中均未使用，占位即可。
@@ -138,6 +141,23 @@ const agentChat: RouteHandler = ({ params, body }) => {
   return agentCtl.enqueueMessage(NO_EVENT, { localId: params.id, message: b.message });
 };
 
+/** 评审决断「通过」：先写远端评审状态、再落本地（复用 GUI 同源 setPrStatus）。 */
+const approve: RouteHandler = ({ params }) =>
+  prCtl.setPrStatus(NO_EVENT, { localId: params.id, status: 'approved' });
+
+/** 评审决断「需修改」：先写远端评审状态、再落本地。 */
+const needswork: RouteHandler = ({ params }) =>
+  prCtl.setPrStatus(NO_EVENT, { localId: params.id, status: 'needs_work' });
+
+/** 发一条顶层（不锚文件）评论到远端 PR。body.body 为评论正文，空则 400。 */
+const comment: RouteHandler = ({ params, body }) => {
+  const b = (body ?? {}) as { body?: string };
+  if (!b.body?.trim()) {
+    throw new HttpError(400, ERROR_CODES.SV_BAD_REQUEST, { reason: 'comment body required' });
+  }
+  return prCtl.createComment(NO_EVENT, { localId: params.id, body: b.body });
+};
+
 export const routes: Route[] = [
   { method: 'GET', segments: seg('/api/v1/categories'), handler: categories },
   { method: 'GET', segments: seg('/api/v1/prs'), handler: listPrs },
@@ -151,6 +171,9 @@ export const routes: Route[] = [
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/review'), handler: agentReview },
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/instruct'), handler: agentInstruct },
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/chat'), handler: agentChat },
+  { method: 'POST', segments: seg('/api/v1/prs/:id/approve'), handler: approve },
+  { method: 'POST', segments: seg('/api/v1/prs/:id/needswork'), handler: needswork },
+  { method: 'POST', segments: seg('/api/v1/prs/:id/comment'), handler: comment },
 ];
 
 /** 按方法 + 路径匹配路由，提取 `:param` 路径参数；无匹配返回 null。 */

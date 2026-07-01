@@ -195,6 +195,48 @@ func TestAgentChatPost(t *testing.T) {
 	}
 }
 
+func TestPrApprovePost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"localStatus":"approved"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "approve", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/approve" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestPrNeedsworkPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"localStatus":"needs_work"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "needswork", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/needswork" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestPrCommentPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"remoteId":"c1"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "comment", "--pr", "abc123", "please", "fix")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/comment" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(rec.body, "please fix") {
+		t.Errorf("body missing comment text: %q", rec.body)
+	}
+}
+
 func TestAuthFailureExitCode(t *testing.T) {
 	var rec capturedReq
 	srv := mockServer(&rec, 401, "")

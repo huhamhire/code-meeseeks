@@ -3,6 +3,7 @@ package cmd
 import (
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,9 @@ func newPrCmd() *cobra.Command {
 		newPrActivityCmd(),
 		newPrCommitsCmd(),
 		newPrReviewersCmd(),
+		newPrApproveCmd(),
+		newPrNeedsworkCmd(),
+		newPrCommentCmd(),
 		// Agent is PR-scoped (every agent op requires a PR id), so it nests under `pr`.
 		newAgentCmd(),
 	)
@@ -170,6 +174,55 @@ func newPrReviewersCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return getAndRender("/api/v1/prs/" + url.PathEscape(pr) + "/reviewers")
+		},
+	}
+	prIDFlag(cmd, &pr)
+	return cmd
+}
+
+// newPrApproveCmd builds `pr approve --pr <id>`: records an Approve review decision on
+// the platform, i.e. a real remote write (POST /prs/{id}/approve).
+func newPrApproveCmd() *cobra.Command {
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "approve",
+		Short: "Approve the PR (posts a real review decision to the platform)",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return postAndRender("/api/v1/prs/"+url.PathEscape(pr)+"/approve", nil)
+		},
+	}
+	prIDFlag(cmd, &pr)
+	return cmd
+}
+
+// newPrNeedsworkCmd builds `pr needswork --pr <id>`: records a Needs-Work review decision
+// on the platform, i.e. a real remote write (POST /prs/{id}/needswork).
+func newPrNeedsworkCmd() *cobra.Command {
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "needswork",
+		Short: "Mark the PR as needs-work (posts a real review decision to the platform)",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return postAndRender("/api/v1/prs/"+url.PathEscape(pr)+"/needswork", nil)
+		},
+	}
+	prIDFlag(cmd, &pr)
+	return cmd
+}
+
+// newPrCommentCmd builds `pr comment --pr <id> <message...>`: posts a top-level comment
+// to the PR on the platform (POST /prs/{id}/comment).
+func newPrCommentCmd() *cobra.Command {
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "comment <message>",
+		Short: "Post a top-level comment on the PR",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return postAndRender("/api/v1/prs/"+url.PathEscape(pr)+"/comment",
+				map[string]any{"body": strings.Join(args, " ")})
 		},
 	}
 	prIDFlag(cmd, &pr)
