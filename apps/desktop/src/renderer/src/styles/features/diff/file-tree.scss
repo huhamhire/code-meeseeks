@@ -217,6 +217,43 @@
   flex-shrink: 0;
   margin-left: auto;
 }
+// 提交行容器：相对定位，供右侧 hover 动作浮层绝对定位。
+.diff-scope-commit-li {
+  position: relative;
+}
+// 单 commit 范围动作（评审 / 改进 / 提问）：默认隐藏，hover 行或聚焦其内按钮时浮现在行右侧。
+.diff-scope-commit-actions {
+  position: absolute;
+  top: 50%;
+  right: $space-3;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  gap: $space-1;
+}
+.diff-scope-commit-li:hover .diff-scope-commit-actions,
+.diff-scope-commit-actions:focus-within {
+  display: inline-flex;
+}
+.diff-scope-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+
+  &:hover {
+    color: $color-accent;
+    background: $bg-hover;
+    border-color: $color-accent;
+  }
+}
 
 // 文件树容器
 .diff-file-tree {

@@ -4,7 +4,12 @@ import '../../../../../lib/monaco-setup';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type editor as MonacoEditor } from 'monaco-editor';
-import type { PlatformCapabilities, StoredPullRequest } from '@meebox/shared';
+import type {
+  PlatformCapabilities,
+  ReviewRunCommitScope,
+  ReviewRunTool,
+  StoredPullRequest,
+} from '@meebox/shared';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
 import { ErrorBoundary, PaneLoading, FileTreeIcon, SearchIcon } from '../../../../common';
 import { DiffSearchPanel } from './DiffSearchPanel';
@@ -63,6 +68,11 @@ interface DiffViewProps {
    */
   pendingCommitView?: PendingCommitView | null;
   onCommitViewConsumed?: () => void;
+  /**
+   * 就某个 commit 发起单 commit 范围的评审 Agent 动作（来自范围选择器的 commit 行动作）：
+   * review/improve 立即发起、ask 挂到输入栏待输入问题。由上层（App）转交 ChatPane 处理。
+   */
+  onScopedAction?: (tool: ReviewRunTool, scope: ReviewRunCommitScope) => void;
 }
 
 /**
@@ -81,6 +91,7 @@ export function DiffView({
   onNavConsumed,
   pendingCommitView,
   onCommitViewConsumed,
+  onScopedAction,
 }: DiffViewProps) {
   // 评论换行策略：GitHub/Bitbucket hard-break（单 \n → <br>）；GitLab CommonMark 软换行。
   // 能力位缺省（旧数据/无连接）回退 true，保持既有行为。
@@ -277,6 +288,7 @@ export function DiffView({
               connectionId={pr.connectionId}
               onOpen={loadScopeCommits}
               onPick={setScope}
+              onScopedAction={onScopedAction}
             />
           )}
           <button

@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import type { PrCommit } from '@meebox/shared';
-import { Avatar, ChevronIcon, CommitIcon, PullRequestIcon } from '../../../../common';
+import type { PrCommit, ReviewRunCommitScope, ReviewRunTool } from '@meebox/shared';
+import {
+  Avatar,
+  AutoReviewIcon,
+  ChevronIcon,
+  CommitIcon,
+  PencilIcon,
+  PullRequestIcon,
+  QuestionIcon,
+} from '../../../../common';
 import { formatRelativeTime } from '../comments/CommentItem';
 import type { DiffScope } from './diff-types';
 
@@ -18,6 +26,7 @@ export function DiffScopeSelect({
   connectionId,
   onOpen,
   onPick,
+  onScopedAction,
 }: {
   fileCount: number;
   scope: DiffScope;
@@ -25,6 +34,8 @@ export function DiffScopeSelect({
   connectionId: string;
   onOpen: () => void;
   onPick: (scope: DiffScope) => void;
+  /** 就某 commit 发起单 commit 范围的评审 Agent 动作（review/improve/ask）；缺省则不渲染 commit 行动作。 */
+  onScopedAction?: (tool: ReviewRunTool, scope: ReviewRunCommitScope) => void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -61,6 +72,14 @@ export function DiffScopeSelect({
   }, [open, computePos]);
 
   const scopeLabel = scope.kind === 'all' ? t('diffView.scopeAll') : scope.abbreviatedSha;
+  // 就某 commit 发起单 commit 范围的评审 Agent 动作：无父 commit（root）无法单 commit 定界，调用方已按
+  // c.parents[0] 存在才渲染动作，此处再兜底。发起后收起下拉。
+  const runScoped = (tool: ReviewRunTool, c: PrCommit, subject: string): void => {
+    const parent = c.parents[0];
+    if (!parent) return;
+    onScopedAction?.(tool, { sha: c.sha, parent, abbreviatedSha: c.abbreviatedSha, subject });
+    setOpen(false);
+  };
   const toggle = (): void => {
     setOpen((o) => {
       const next = !o;
@@ -119,8 +138,10 @@ export function DiffScopeSelect({
             {(commits ?? []).map((c) => {
               const subject = c.message.split('\n', 1)[0]!;
               const active = scope.kind === 'commit' && scope.sha === c.sha;
+              // 单 commit 范围动作仅对有父 commit 的行提供（root commit 无法 parent..sha 定界）。
+              const canScope = onScopedAction !== undefined && !!c.parents[0];
               return (
-                <li key={c.sha}>
+                <li key={c.sha} className="diff-scope-commit-li">
                   <button
                     type="button"
                     className={`diff-scope-option diff-scope-option-commit ${active ? 'active' : ''}`}
@@ -157,6 +178,39 @@ export function DiffScopeSelect({
                       </span>
                     </span>
                   </button>
+                  {/* 就此提交发起单 commit 范围的评审 Agent 动作：hover 时浮现在行右侧。review/improve
+                      立即发起、ask 挂到输入栏待输入问题（由上层转交 ChatPane）。 */}
+                  {canScope && (
+                    <span className="diff-scope-commit-actions">
+                      <button
+                        type="button"
+                        className="diff-scope-action"
+                        title={t('diffView.scopeReviewCommit')}
+                        aria-label={t('diffView.scopeReviewCommit')}
+                        onClick={() => runScoped('review', c, subject)}
+                      >
+                        <AutoReviewIcon size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="diff-scope-action"
+                        title={t('diffView.scopeImproveCommit')}
+                        aria-label={t('diffView.scopeImproveCommit')}
+                        onClick={() => runScoped('improve', c, subject)}
+                      >
+                        <PencilIcon size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="diff-scope-action"
+                        title={t('diffView.scopeAskCommit')}
+                        aria-label={t('diffView.scopeAskCommit')}
+                        onClick={() => runScoped('ask', c, subject)}
+                      >
+                        <QuestionIcon size={14} />
+                      </button>
+                    </span>
+                  )}
                 </li>
               );
             })}

@@ -56,6 +56,8 @@ export interface StartReviewRunInput {
   referencedFinding?: ReviewRun['referencedFinding'];
   /** 触发来源：user（手动）/ agent（编排派发）。用于 ChatPane 命令回显气泡；缺省不回显。 */
   origin?: ReviewRun['origin'];
+  /** 单 commit 评审范围（parent..sha）；缺省 = PR 全量范围。落盘供结果卡展示范围徽标。 */
+  scope?: ReviewRun['scope'];
 }
 
 /** 写入初始 running 状态；调用方在 pr-agent 调用前必须先 start。 */
@@ -75,6 +77,7 @@ export async function startReviewRun(
     model: input.model,
     referencedFinding: input.referencedFinding,
     origin: input.origin,
+    scope: input.scope,
     status: 'running',
     startedAt: at.toISOString(),
   };

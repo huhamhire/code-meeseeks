@@ -5,7 +5,14 @@ import type {
   ReviewRunTool,
   StoredPullRequest,
 } from '@meebox/shared';
-import { AutoReviewIcon, EyeOffIcon, FileTreeIcon, SendIcon, StopIcon } from '../../../common';
+import {
+  AutoReviewIcon,
+  CommitIcon,
+  EyeOffIcon,
+  FileTreeIcon,
+  SendIcon,
+  StopIcon,
+} from '../../../common';
 import { useChatInput } from '../hooks/useChatInput';
 import { useTextareaAutosizeDrag } from '../hooks/useTextareaAutosizeDrag';
 
@@ -48,6 +55,8 @@ interface ChatInputBarProps {
   onToggleSelection: () => void;
   /** 复评引用 chip：引用了某条 finding 时展示「复评 <file:line>」+ 清除；null = 不渲染。 */
   referenceChip?: { label: string; onClear: () => void } | null;
+  /** 单 commit 提问范围 chip：挂了 commit 范围时展示「短 SHA · 主题」+ 清除；下一条 /ask 限定该 commit。 */
+  commitScopeChip?: { label: string; onClear: () => void } | null;
 }
 
 /**
@@ -74,6 +83,7 @@ export function ChatInputBar({
   selectionIgnored,
   onToggleSelection,
   referenceChip,
+  commitScopeChip,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
   const {
@@ -260,6 +270,29 @@ export function ChatInputBar({
                   type="button"
                   className="chat-reference-chip-clear"
                   onClick={referenceChip.onClear}
+                  title={t('chatPane.reference.clearTitle')}
+                  aria-label={t('chatPane.reference.clearTitle')}
+                >
+                  ✕
+                </button>
+              </span>
+            </>
+          )}
+          {/* 单 commit 提问范围 chip：挂了某 commit 范围时展示「短 SHA · 主题」，点 ✕ 清除。
+              发送时本条 /ask 限定该 commit 的 diff（parent..sha）。 */}
+          {commitScopeChip && (
+            <>
+              <span className="chat-cmd-divider" aria-hidden="true" />
+              <span
+                className="chat-selection-chip chat-reference-chip"
+                title={commitScopeChip.label}
+              >
+                <CommitIcon size={14} />
+                <span>{commitScopeChip.label}</span>
+                <button
+                  type="button"
+                  className="chat-reference-chip-clear"
+                  onClick={commitScopeChip.onClear}
                   title={t('chatPane.reference.clearTitle')}
                   aria-label={t('chatPane.reference.clearTitle')}
                 >

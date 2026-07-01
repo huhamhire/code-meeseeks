@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
-import { RepeatIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
+import { CommitIcon, RepeatIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
 import { orderFindings } from '../utils/findings';
 import { formatStartTime, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
@@ -30,6 +30,17 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
       <span className={`chat-chip chat-run-status chat-run-status-${run.status}`}>
         {runStatusLabel(run.status, t)}
       </span>
+      {/* 单 commit 评审范围徽标：本次 run 限定在某 commit 自身改动（parent..sha）时展示短 SHA；
+          全量 PR 范围（无 scope）不渲染。 */}
+      {run.scope && (
+        <span
+          className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-scope"
+          title={t('chatPane.scopeCommitTitle', { subject: run.scope.subject })}
+        >
+          <CommitIcon size={12} />
+          {run.scope.abbreviatedSha}
+        </span>
+      )}
       {/* 模型 chip 取代运行时策略 chip — strategy 是部署细节用户不
           关心，model 是真正影响 review 质量的变量 */}
       {run.model && (

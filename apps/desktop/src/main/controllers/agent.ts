@@ -142,6 +142,7 @@ export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
     'user',
     req.referencedContext,
     req.referencedFinding,
+    req.scope,
   );
 };
 
