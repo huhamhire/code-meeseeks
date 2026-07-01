@@ -8,7 +8,12 @@ import {
   writeDiffBaseCache,
 } from '@meebox/poller';
 import type { RepoIdentity, RepoMirrorManager } from '@meebox/repo-mirror';
-import { pullRequestHeadRefspec, type StoredPullRequest } from '@meebox/shared';
+import {
+  AppError,
+  ERROR_CODES,
+  pullRequestHeadRefspec,
+  type StoredPullRequest,
+} from '@meebox/shared';
 import type { PlatformAdapter } from '@meebox/platform-core';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { ConnectionRuntime } from '../adapters.js';
@@ -53,7 +58,7 @@ export class PrService {
     if (pr) return pr;
     const archived = await readPrMeta(this.deps.archiveStore, localId);
     if (archived) return archived.pr;
-    throw new Error(`PR not found in local state: ${localId}`);
+    throw new AppError(ERROR_CODES.PR_NOT_FOUND, { localId }, `PR not found in local state: ${localId}`);
   }
 
   /**

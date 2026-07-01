@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type {
-  AgentRecommendationVerdict,
-  LocalPrStatus,
-  PrDiscoveryFilter,
-  StoredPullRequest,
+import {
+  matchesDiscoveryFilter,
+  matchesPrQuery,
+  matchesSecondaryFilter,
+  type AgentRecommendationVerdict,
+  type PrDiscoveryFilter,
+  type PrSecondaryFilter,
+  type StoredPullRequest,
 } from '@meebox/shared';
 import { invoke, subscribe } from '../../api';
 import { useChatRunStore } from '../../stores/chat-run-store';
 import { HistoryIcon, PaneLoading } from '../common';
 import { PrItem } from '../features/pr';
 
-// 'conflict' / 'mergeable' 是按远端 merge 状态跨 localStatus 横切的筛选；'all' 不限定
-export type FilterKey = 'all' | LocalPrStatus | 'conflict' | 'mergeable';
+// 二级筛选键复用 @meebox/shared 的 PrSecondaryFilter（与本地 API 同源）：
+// 'conflict' / 'mergeable' 按远端 merge 状态跨 localStatus 横切；'all' 不限定。
+export type FilterKey = PrSecondaryFilter;
 
 /** PR 列表范围：进行中（活跃，按发现分类 + 状态细分）/ 已关闭（归档冷存储，扁平只读浏览）。 */
 export type SidebarScope = 'active' | 'archived';
@@ -206,10 +210,7 @@ export function Sidebar({
   // GitHub 发现分类：按 PR 上的 discoveryFilters 标记本地过滤（poller 已把四类都抓回来缓存），
   // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。
   const scopedPrs = useMemo(
-    () =>
-      !isArchived && discoveryFilter
-        ? prs.filter((p) => p.discoveryFilters?.includes(discoveryFilter))
-        : prs,
+    () => prs.filter((p) => matchesDiscoveryFilter(p, !isArchived ? discoveryFilter : undefined)),
     [prs, discoveryFilter, isArchived],
   );
 
@@ -231,30 +232,12 @@ export function Sidebar({
   }, [scopedPrs]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    // 已关闭范围强制「全部」（不应用状态筛选）；进行中范围按当前状态筛选。
+    // 已关闭范围强制「全部」（不应用状态筛选）；进行中范围按当前状态筛选。过滤 / 检索语义复用
+    // @meebox/shared 纯谓词（与本地 API 同源）。
     const effFilter: FilterKey = isArchived ? 'all' : filter;
-    return scopedPrs.filter((p) => {
-      if (effFilter === 'conflict') {
-        if (!p.hasConflict) return false;
-      } else if (effFilter === 'mergeable') {
-        if (!p.mergeStatus?.canMerge) return false;
-      } else if (effFilter !== 'all' && p.localStatus !== effFilter) {
-        return false;
-      }
-      if (!q) return true;
-      const hay = [
-        p.title,
-        p.repo.projectKey,
-        p.repo.repoSlug,
-        p.author.displayName,
-        p.author.name,
-        p.remoteId,
-      ]
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(q);
-    });
+    return scopedPrs.filter(
+      (p) => matchesSecondaryFilter(p, effFilter) && matchesPrQuery(p, query),
+    );
   }, [scopedPrs, query, filter, isArchived]);
 
   const groups = useMemo<PrGroup[]>(() => {

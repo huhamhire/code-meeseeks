@@ -10,6 +10,7 @@ import {
   QuestionIcon,
   RobotIcon,
   SettingsIcon,
+  ShareIcon,
 } from '../../common';
 import { useSettingsDraft } from './hooks/useSettingsDraft';
 import { useAppearanceDraft } from './hooks/useAppearanceDraft';
@@ -26,6 +27,7 @@ import { LlmContextSection } from './sections/LlmContextSection';
 import { ConcurrencySection } from './sections/ConcurrencySection';
 import { AgentStrategySection } from './sections/AgentStrategySection';
 import { ProxySection } from './sections/ProxySection';
+import { ServiceSection } from './sections/ServiceSection';
 import { AgentDirSection } from './sections/AgentDirSection';
 import { WorkDirSection } from './sections/WorkDirSection';
 import { CacheDirSection } from './sections/CacheDirSection';
@@ -38,6 +40,7 @@ export type SettingsCategory =
   | 'model'
   | 'agent'
   | 'notifications'
+  | 'integration'
   | 'about';
 
 /**
@@ -54,6 +57,7 @@ const SETTINGS_CATEGORIES: ReadonlyArray<{
   { id: 'model', labelKey: 'settings.catModel', Icon: CpuIcon },
   { id: 'agent', labelKey: 'settings.catAgent', Icon: RobotIcon },
   { id: 'notifications', labelKey: 'settings.catNotifications', Icon: BellIcon },
+  { id: 'integration', labelKey: 'settings.catIntegration', Icon: ShareIcon },
   { id: 'about', labelKey: 'settings.catAbout', Icon: QuestionIcon },
 ];
 
@@ -251,6 +255,13 @@ export function SettingsModal({
             )}
             {category === 'notifications' && (
               <NotificationSection value={s.notifications} onChange={s.setNotifications} />
+            )}
+            {category === 'integration' && (
+              <ServiceSection
+                value={s.service}
+                onChange={s.setService}
+                onRegenerateToken={() => void s.regenerateServiceToken()}
+              />
             )}
             {category === 'about' && (
               <>

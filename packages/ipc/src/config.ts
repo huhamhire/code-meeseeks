@@ -61,6 +61,13 @@ export interface ConfigChannels {
     response: PingResult;
   };
   /**
+   * 写入本地 API 服务监听配置（开关 / host / port / token）到 config.yaml，并**热重建**监听器
+   * （开关 / 地址 / 端口变更停旧起新；token 变更下次请求即生效）。见 docs/arch/04-integration/01-service-api.md。
+   */
+  'config:setService': { request: { service: Config['service'] }; response: void };
+  /** 重新生成 bearer token 并写盘（旧 token 即时失效），返回新 token 供设置页展示 / 复制。 */
+  'config:generateServiceToken': { request: void; response: { token: string } };
+  /**
    * 配置过程中自动把连接 + LLM 草稿写入 config.yaml（防丢失），但**不应用到运行时**
    * （不 reconfigure adapter/poller、不更新内存 config）——重启或点底栏「保存」才生效。
    */

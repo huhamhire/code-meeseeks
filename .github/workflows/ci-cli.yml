@@ -1,0 +1,46 @@
+name: CLI
+
+# meebox CLI（cli/，独立 Go module）的门禁，与 Node/Nx 的 CI 分开：
+# 路径过滤只能加在 workflow 的 on 层（不能按 job 过滤），故独立成一条流水线——仅当 cli/ 变更时才跑，
+# 既隔离 Go 工具链、又省 CI 分钟。发布期的交叉编译 / 出包见 release.yml 的 cli job。
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'cli/**'
+      - '.github/workflows/ci-cli.yml'
+  pull_request:
+    paths:
+      - 'cli/**'
+      - '.github/workflows/ci-cli.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  cli:
+    name: Vet + Test + Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: go build
+        run: go build ./...

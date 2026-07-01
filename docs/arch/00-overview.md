@@ -62,6 +62,9 @@ flowchart TB
   - [命令面板](03-gui/02-command-palette.md) —— 渲染层标题栏入口 + 分域命令注册表
   - [消息通知](03-gui/03-notifications.md) —— `poller` 事件投影 + 主进程系统通知 / dock 角标
   - [国际化](03-gui/04-i18n.md) —— react-i18next + 主 / 渲染双运行时 locale
+- **`04-integration/`** —— 外部集成扩展与 CLI
+  - [服务监听与本地 API](04-integration/01-service-api.md) —— 主进程内置 HTTP API（IPC 之外的第二前端）
+  - [CLI 工具](04-integration/02-cli.md) —— Go 独立二进制，经本地 API 消费应用能力
 - **`99-core/`** —— 基础设施
   - [状态存储与数据模型](99-core/01-state-storage.md) —— `state-store` + `poller` 的 pr-state
   - [配置与凭据](99-core/02-config-and-secrets.md) —— `config` + 设置页
