@@ -54,7 +54,7 @@ CLI 需 API base URL + token。来源优先级（高 → 低）：
 ```text
 meebox [全局 flag] <组> <命令> [参数]
 
-全局 flag：--api-url · --token · --output (text|json) · --quiet
+全局 flag：--api-url · --token · --output (yaml|json) · --quiet
 ```
 
 | 命令 | 用途 | 对应 API |
@@ -77,8 +77,10 @@ meebox [全局 flag] <组> <命令> [参数]
 
 ### 输出与退出码
 
-- **`--output text`（默认）**：人类可读（表格 / 文本），便于交互式查看。
-- **`--output json`**：原样输出 API `data`，供外部 agent / 脚本机器消费——这是 CLI 服务自动化的主要形态。
+- **`--output yaml`（默认）**：把响应渲染为 YAML（类 k8s `-o yaml`）——结构化又可读，便于人交互式查看。
+  与 JSON 一样是对响应数据的**通用转换**，不做逐命令表格 / formatter（省去手写 struct 的契约同步负担）。
+- **`--output json`**：原样输出 API `data`，供外部 agent / 脚本机器消费。agent 传参无门槛，故默认面向人优化（YAML）、
+  机器集成显式取 `json`；两者字段形状同源、皆稳定。
 - **退出码约定**：`0` 成功；非 0 表错误并按类别区分（如 `2` 鉴权失败、`3` 资源不存在、`1` 通用错误）；
   错误信息打 `stderr`，携带服务端返回的错误码（`ESV*` 等），便于脚本分支处理。
 
@@ -91,7 +93,7 @@ meebox [全局 flag] <组> <命令> [参数]
 
 - **配置来源优先级**：flag > env（`MEEBOX_API_URL` / `MEEBOX_TOKEN`）> CLI 配置文件 > 本机
   `~/.code-meeseeks/config.yaml` 自动发现。
-- **输出模式**：`text`（人）/ `json`（机，输出 API `data`）。
+- **输出模式**：`yaml`（默认，人，类 k8s `-o yaml`）/ `json`（机，输出 API `data`）；均为响应数据的通用转换。
 - **退出码**：`0` 成功 / `1` 通用 / `2` 鉴权 / `3` not found（按需扩展）。
 - **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（unix `.tar.gz`、windows `.zip`），
   附 `.sha256` 校验和。`<version>` 与应用版本对齐（同一 `v*` tag）。

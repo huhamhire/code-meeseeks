@@ -10,13 +10,19 @@ import (
 
 	"github.com/huhamhire/code-meeseeks/cli/internal/apiclient"
 	"github.com/huhamhire/code-meeseeks/cli/internal/settings"
+	"gopkg.in/yaml.v3"
 )
 
 // Mode selects the output format.
 type Mode int
 
 const (
-	ModeText Mode = iota
+	// ModeYAML renders responses as YAML — the default, human-friendly view
+	// (k8s `-o yaml` style): structured yet readable, and derived generically
+	// from any response without per-command formatters.
+	ModeYAML Mode = iota
+	// ModeJSON renders responses as JSON — the stable machine contract for
+	// third-party agents / tooling.
 	ModeJSON
 )
 
@@ -28,13 +34,14 @@ const (
 	ExitNotFound = 3
 )
 
-// Output writes API data to stdout per the selected mode.
-//
-// NOTE: text mode currently mirrors JSON pretty-printing. Per-command,
-// human-friendly table rendering is a deliberate follow-up — the scaffold
-// keeps a single code path so the wiring is verifiable end to end first.
-func Output(_ Mode, data json.RawMessage) error {
-	return writeJSON(data)
+// Output writes API data to stdout per the selected mode: YAML (default,
+// human-friendly) or JSON (machine contract). Both are generic transforms of
+// the response data — no per-command formatting.
+func Output(mode Mode, data json.RawMessage) error {
+	if mode == ModeJSON {
+		return writeJSON(data)
+	}
+	return writeYAML(data)
 }
 
 func writeJSON(data json.RawMessage) error {
@@ -51,6 +58,25 @@ func writeJSON(data json.RawMessage) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+func writeYAML(data json.RawMessage) error {
+	if len(data) == 0 {
+		fmt.Println("null")
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		// Not decodable as JSON — fall back to the raw payload.
+		fmt.Println(string(data))
+		return nil
+	}
+	out, err := yaml.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(out)
+	return err
 }
 
 // Errorln prints an error to stderr.

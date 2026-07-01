@@ -63,4 +63,8 @@ meebox agent instruct <id> <command> [args...]   # read-only: describe|review|as
 meebox agent chat <id> <message>
 ```
 
-Global flags: `--api-url`, `--token`, `--output text|json`, `--quiet`.
+Global flags: `--api-url`, `--token`, `--output yaml|json`, `--quiet`.
+
+Output defaults to **YAML** (human-friendly, k8s `-o yaml` style); pass
+`--output json` for the machine-readable form used by third-party integrations.
+Both are generic transforms of the response — no per-command formatting.

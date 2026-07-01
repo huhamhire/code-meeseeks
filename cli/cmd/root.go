@@ -34,7 +34,7 @@ func newRootCmd() *cobra.Command {
 	pf := root.PersistentFlags()
 	pf.StringVar(&gflags.apiURL, "api-url", "", "API base URL (overrides env and local auto-discovery)")
 	pf.StringVar(&gflags.token, "token", "", "bearer token (overrides env and local auto-discovery)")
-	pf.StringVar(&gflags.output, "output", "text", "output format: text|json")
+	pf.StringVar(&gflags.output, "output", "yaml", "output format: yaml|json")
 	pf.BoolVar(&gflags.quiet, "quiet", false, "suppress non-essential output")
 
 	root.AddCommand(
@@ -70,7 +70,7 @@ func outputMode() render.Mode {
 	if gflags.output == "json" {
 		return render.ModeJSON
 	}
-	return render.ModeText
+	return render.ModeYAML
 }
 
 func renderData(data json.RawMessage) error {
