@@ -19,8 +19,9 @@ var readOnlyInstructions = map[string]bool{
 	"improve":  true,
 }
 
-// newAgentCmd builds the `pr agent` subgroup: review-agent operations, all PR-scoped
-// (each requires `--pr <id>`). Wiring only; nested under `pr`.
+// newAgentCmd builds the top-level `agent` command group: review-agent operations, all
+// PR-scoped (each requires `--pr <id>`). A sibling of `pr` rather than nested under it —
+// the uniform --pr flag already carries the PR id, so nesting would only repeat `pr`.
 func newAgentCmd() *cobra.Command {
 	a := &cobra.Command{
 		Use:   "agent",
@@ -49,7 +50,7 @@ func newAgentRunCmd() *cobra.Command {
 	return r
 }
 
-// newAgentRunListCmd builds `pr agent run list --pr <id>`: the PR's active + waiting
+// newAgentRunListCmd builds `agent run list --pr <id>`: the PR's active + waiting
 // pr-agent runs (runId / tool / state), the source of run ids to cancel
 // (GET /prs/{id}/agent/runs).
 func newAgentRunListCmd() *cobra.Command {
@@ -66,7 +67,7 @@ func newAgentRunListCmd() *cobra.Command {
 	return cmd
 }
 
-// newAgentRunCancelCmd builds `pr agent run cancel --pr <id> --run <runId>`: cancels one
+// newAgentRunCancelCmd builds `agent run cancel --pr <id> --run <runId>`: cancels one
 // pr-agent run (active SIGKILL / waiting dequeue) (POST /prs/{id}/agent/runs/{runId}/cancel).
 // Unlike `agent stop` (halts the whole PR agent), this targets a single tool-call run.
 func newAgentRunCancelCmd() *cobra.Command {
@@ -86,7 +87,7 @@ func newAgentRunCancelCmd() *cobra.Command {
 	return cmd
 }
 
-// newAgentStatusCmd builds `pr agent status --pr <id>`: the agent's current run state
+// newAgentStatusCmd builds `agent status --pr <id>`: the agent's current run state
 // snapshot (GET /prs/{id}/agent).
 func newAgentStatusCmd() *cobra.Command {
 	var pr string
@@ -102,7 +103,7 @@ func newAgentStatusCmd() *cobra.Command {
 	return cmd
 }
 
-// newAgentHistoryCmd builds `pr agent history --pr <id>`: the multi-turn conversation
+// newAgentHistoryCmd builds `agent history --pr <id>`: the multi-turn conversation
 // history (GET /prs/{id}/agent/conversation).
 func newAgentHistoryCmd() *cobra.Command {
 	var pr string
@@ -118,7 +119,7 @@ func newAgentHistoryCmd() *cobra.Command {
 	return cmd
 }
 
-// newAgentReviewCmd builds `pr agent review --pr <id>`: kicks off the review micro-flow
+// newAgentReviewCmd builds `agent review --pr <id>`: kicks off the review micro-flow
 // (describe→review→ask→summary) (POST /prs/{id}/agent/review).
 func newAgentReviewCmd() *cobra.Command {
 	var pr string
@@ -142,7 +143,7 @@ func newAgentReviewCmd() *cobra.Command {
 	return cmd
 }
 
-// newAgentInstructCmd builds `pr agent instruct --pr <id> <command> [args...]`: sends a
+// newAgentInstructCmd builds `agent instruct --pr <id> <command> [args...]`: sends a
 // single read-only pr-agent instruction (POST /prs/{id}/agent/instruct). Write tools are
 // rejected up front (and again by the server).
 func newAgentInstructCmd() *cobra.Command {
@@ -175,7 +176,7 @@ func newAgentInstructCmd() *cobra.Command {
 	return cmd
 }
 
-// newAgentChatCmd builds `pr agent chat --pr <id> <message>`: sends a natural-language
+// newAgentChatCmd builds `agent chat --pr <id> <message>`: sends a natural-language
 // message that may trigger agent tasks (POST /prs/{id}/agent/chat).
 func newAgentChatCmd() *cobra.Command {
 	var pr string
@@ -200,7 +201,7 @@ func newAgentChatCmd() *cobra.Command {
 	return cmd
 }
 
-// newAgentStopCmd builds `pr agent stop --pr <id>`: interrupts the PR's running agent in
+// newAgentStopCmd builds `agent stop --pr <id>`: interrupts the PR's running agent in
 // any phase (thinking / executing) (POST /prs/{id}/agent/stop). PR-level stop — it halts
 // the whole agent for that PR, not one specific tool run.
 func newAgentStopCmd() *cobra.Command {

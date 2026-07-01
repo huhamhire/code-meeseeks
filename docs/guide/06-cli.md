@@ -51,7 +51,8 @@ meebox --api-url http://<主机>:18765 --token <令牌> pr list
 meebox [全局参数] <组> <命令> [参数]
 ```
 
-PR 关联命令统一用**必填参数 `--pr <id>`** 指定 PR（`id` 由 `meebox pr list` 输出获得）；agent 命令归在 `pr agent` 下。
+命令分 `pr`（直接的 PR 操作）与 `agent`（评审 Agent 操作）两个领域组，均用**必填参数 `--pr <id>`** 指定 PR
+（`id` 由 `meebox pr list` 输出获得）。
 
 | 命令 | 用途 |
 | --- | --- |
@@ -66,12 +67,14 @@ PR 关联命令统一用**必填参数 `--pr <id>`** 指定 PR（`id` 由 `meebo
 | `meebox pr approve --pr <id>` | 将 PR 标记为「通过」（发送真实评审决断到平台） |
 | `meebox pr needswork --pr <id>` | 将 PR 标记为「需修改」（发送真实评审决断到平台） |
 | `meebox pr comment --pr <id> <消息>` | 发一条顶层评论到平台 |
-| `meebox pr agent status --pr <id>` | 评审 Agent 当前执行状态 |
-| `meebox pr agent history --pr <id>` | 历史会话 |
-| `meebox pr agent review --pr <id>` | 执行一次自动评审 |
-| `meebox pr agent instruct --pr <id> <指令> [参数]` | 发送评审指令（`describe` / `review` / `ask` / `improve`） |
-| `meebox pr agent chat --pr <id> <消息>` | 发送自然语言消息（可触发 Agent 任务） |
-| `meebox pr agent stop --pr <id>` | 中断该 PR 运行中的评审 Agent |
+| `meebox agent status --pr <id>` | 评审 Agent 当前执行状态 |
+| `meebox agent history --pr <id>` | 历史会话 |
+| `meebox agent review --pr <id>` | 执行一次自动评审 |
+| `meebox agent instruct --pr <id> <指令> [参数]` | 发送评审指令（`describe` / `review` / `ask` / `improve`） |
+| `meebox agent chat --pr <id> <消息>` | 发送自然语言消息（可触发 Agent 任务） |
+| `meebox agent stop --pr <id>` | 中断该 PR 运行中的评审 Agent（整体停） |
+| `meebox agent run list --pr <id>` | 列出该 PR 运行中 / 排队中的 pr-agent runs |
+| `meebox agent run cancel --pr <id> --run <runId>` | 按 run id 取消单个 pr-agent 工具调用 |
 
 其中 `<id>` 为 PR 的本地标识（列表里的 `id` 字段），由 `meebox pr list` 输出获得。
 

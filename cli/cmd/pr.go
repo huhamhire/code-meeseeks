@@ -16,8 +16,10 @@ func prIDFlag(cmd *cobra.Command, target *string) {
 	_ = cmd.MarkFlagRequired("pr")
 }
 
-// newPrCmd builds the `pr` command group: PR browsing / write actions plus the
-// PR-scoped `agent` subgroup. It carries no logic itself, only wiring subcommands.
+// newPrCmd builds the `pr` command group: direct PR-entity operations — browsing plus
+// review write actions (approve / needswork / comment). The review agent is its own
+// top-level `agent` group (see newAgentCmd), not nested here: since every command is
+// PR-scoped via --pr, nesting agent under pr would only add a redundant `pr` segment.
 func newPrCmd() *cobra.Command {
 	pr := &cobra.Command{
 		Use:   "pr",
@@ -33,8 +35,6 @@ func newPrCmd() *cobra.Command {
 		newPrApproveCmd(),
 		newPrNeedsworkCmd(),
 		newPrCommentCmd(),
-		// Agent is PR-scoped (every agent op requires a PR id), so it nests under `pr`.
-		newAgentCmd(),
 	)
 	return pr
 }

@@ -41,6 +41,7 @@ func newRootCmd() *cobra.Command {
 		newWhoamiCmd(),
 		newCategoriesCmd(),
 		newPrCmd(),
+		newAgentCmd(),
 	)
 	return root
 }

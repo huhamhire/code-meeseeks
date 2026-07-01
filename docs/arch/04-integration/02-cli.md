@@ -59,8 +59,9 @@ meebox [全局 flag] <组> <命令> [参数]
 全局 flag：--api-url · --token · --output (yaml|json) · --quiet
 ```
 
-PR 关联命令统一用**必填 flag `--pr <id>`** 传 PR 标识（`id` 由 `pr list` 输出获得）；agent 命令与 PR
-强绑定、必带 id，故整组归入 `pr agent …`。
+命令分两个领域组：`pr`（直接的 PR 实体操作）与 `agent`（评审 Agent 操作）。二者都用**必填 flag
+`--pr <id>`** 传 PR 标识（`id` 由 `pr list` 输出获得）——meebox 只管理 PR，故 agent **不再嵌进 `pr`**
+（避免 `pr agent … --pr` 里 `pr` 重复），而与 `pr` 平级。
 
 | 命令 | 用途 | 对应 API |
 | --- | --- | --- |
@@ -75,16 +76,19 @@ PR 关联命令统一用**必填 flag `--pr <id>`** 传 PR 标识（`id` 由 `pr
 | `meebox pr approve --pr <id>` | 评审决断「通过」（真实远端写） | `POST /prs/{id}/approve` |
 | `meebox pr needswork --pr <id>` | 评审决断「需修改」（真实远端写） | `POST /prs/{id}/needswork` |
 | `meebox pr comment --pr <id> <message>` | 发一条顶层评论（真实远端写） | `POST /prs/{id}/comment` |
-| `meebox pr agent status --pr <id>` | Agent 当前执行状态 | `GET /prs/{id}/agent` |
-| `meebox pr agent history --pr <id>` | 历史会话 | `GET /prs/{id}/agent/conversation` |
-| `meebox pr agent review --pr <id>` | 执行 auto review | `POST /prs/{id}/agent/review` |
-| `meebox pr agent instruct --pr <id> <command> [args]` | 发送 Agent 指令（仅只读：describe / review / ask / improve） | `POST /prs/{id}/agent/instruct` |
-| `meebox pr agent chat --pr <id> <message>` | 自然语言聊天（可触发任务执行） | `POST /prs/{id}/agent/chat` |
-| `meebox pr agent stop --pr <id>` | 中断该 PR 运行中的 Agent（PR 级） | `POST /prs/{id}/agent/stop` |
+| `meebox agent status --pr <id>` | Agent 当前执行状态 | `GET /prs/{id}/agent` |
+| `meebox agent history --pr <id>` | 历史会话 | `GET /prs/{id}/agent/conversation` |
+| `meebox agent review --pr <id>` | 执行 auto review | `POST /prs/{id}/agent/review` |
+| `meebox agent instruct --pr <id> <command> [args]` | 发送 Agent 指令（仅只读：describe / review / ask / improve） | `POST /prs/{id}/agent/instruct` |
+| `meebox agent chat --pr <id> <message>` | 自然语言聊天（可触发任务执行） | `POST /prs/{id}/agent/chat` |
+| `meebox agent stop --pr <id>` | 中断该 PR 运行中的 Agent（PR 级） | `POST /prs/{id}/agent/stop` |
+| `meebox agent run list --pr <id>` | 该 PR 运行队列中的 pr-agent runs（active + waiting） | `GET /prs/{id}/agent/runs` |
+| `meebox agent run cancel --pr <id> --run <runId>` | 按 run 取消一个 pr-agent 工具调用 | `POST /prs/{id}/agent/runs/{runId}/cancel` |
 
 - `<id>` 为 PR 的 `localId`（列表投影里对外命名为 `id`，由 `pr list` 输出获得）。
 - 评审写动作走 `pr approve` / `pr needswork` / `pr comment` 专用命令；变更类工具（publish 等）不在 `instruct`
   白名单内，传入即被服务端拒绝（CLI 亦前置友好报错）。merge（合并）不提供。
+- 中断粒度：`agent stop` 停整个 PR 的 Agent；`agent run cancel` 只取消指定的单个 pr-agent run。
 
 ### 输出与退出码
 
