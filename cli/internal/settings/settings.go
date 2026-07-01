@@ -94,12 +94,22 @@ type appConfig struct {
 // discoverFromAppConfig reads the app's main config at ~/.code-meeseeks/config.yaml
 // and, when the service listener is enabled with a token, derives settings from
 // it — giving same-machine, same-user integrations a zero-config experience.
-func discoverFromAppConfig() (Settings, bool) {
+// appHome returns the app's fixed data directory (~/.code-meeseeks), shared by the GUI
+// and CLI. Both meebox configs live here (GUI: config.yaml, CLI: cli.yaml).
+func appHome() (string, bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {
+		return "", false
+	}
+	return filepath.Join(home, ".code-meeseeks"), true
+}
+
+func discoverFromAppConfig() (Settings, bool) {
+	home, ok := appHome()
+	if !ok {
 		return Settings{}, false
 	}
-	data, err := os.ReadFile(filepath.Join(home, ".code-meeseeks", "config.yaml"))
+	data, err := os.ReadFile(filepath.Join(home, "config.yaml"))
 	if err != nil {
 		return Settings{}, false
 	}
@@ -132,13 +142,14 @@ type cliConfig struct {
 	Token  string `yaml:"token"`
 }
 
-// loadCLIConfig reads the CLI config at <user-config-dir>/meebox/cli.yaml.
+// loadCLIConfig reads the CLI config at ~/.code-meeseeks/cli.yaml — co-located with the
+// GUI config but a separate file, isolating CLI settings from the GUI's config.yaml.
 func loadCLIConfig() (cliConfig, bool) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
+	home, ok := appHome()
+	if !ok {
 		return cliConfig{}, false
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "meebox", "cli.yaml"))
+	data, err := os.ReadFile(filepath.Join(home, "cli.yaml"))
 	if err != nil {
 		return cliConfig{}, false
 	}

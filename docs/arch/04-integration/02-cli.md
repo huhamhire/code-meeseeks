@@ -43,7 +43,7 @@ CLI 需 API base URL + token。来源优先级（高 → 低）：
 
 1. 命令行 flag：`--api-url` / `--token`；
 2. 环境变量：`MEEBOX_API_URL` / `MEEBOX_TOKEN`；
-3. CLI 自身配置文件（如 `~/.config/meebox/cli.yaml`）；
+3. CLI 自身配置文件 `~/.code-meeseeks/cli.yaml`（与 GUI 的 `config.yaml` 同目录、独立文件，隔离二者配置）；
 4. **本机自动发现**：同机同用户时，读用户主目录下的应用主配置 `~/.code-meeseeks/config.yaml` 的 `service`
    段，自动取 `host`/`port`/`token`——本机集成**零配置**开箱即用。
 
@@ -91,8 +91,8 @@ meebox [全局 flag] <组> <命令> [参数]
 
 ## 数据 / 接口契约
 
-- **配置来源优先级**：flag > env（`MEEBOX_API_URL` / `MEEBOX_TOKEN`）> CLI 配置文件 > 本机
-  `~/.code-meeseeks/config.yaml` 自动发现。
+- **配置来源优先级**：flag > env（`MEEBOX_API_URL` / `MEEBOX_TOKEN`）> CLI 配置文件
+  （`~/.code-meeseeks/cli.yaml`）> 本机 `~/.code-meeseeks/config.yaml` 自动发现。
 - **输出模式**：`yaml`（默认，人，类 k8s `-o yaml`）/ `json`（机，输出 API `data`）；均为响应数据的通用转换。
 - **退出码**：`0` 成功 / `1` 通用 / `2` 鉴权 / `3` not found（按需扩展）。
 - **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（unix `.tar.gz`、windows `.zip`），

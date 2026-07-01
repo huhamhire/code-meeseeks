@@ -42,7 +42,7 @@ The CLI resolves the API base URL and bearer token in this order (highest first)
 
 1. flags — `--api-url`, `--token`
 2. env — `MEEBOX_API_URL`, `MEEBOX_TOKEN`
-3. CLI config — `<user-config-dir>/meebox/cli.yaml` (`api_url`, `token`)
+3. CLI config — `~/.code-meeseeks/cli.yaml` (`api_url`, `token`)
 4. local auto-discovery — the app's `~/.code-meeseeks/config.yaml` `service`
    section (same machine, same user; zero-config)
 
