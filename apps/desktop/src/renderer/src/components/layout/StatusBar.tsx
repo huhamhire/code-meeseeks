@@ -39,22 +39,13 @@ interface StatusBarProps {
   onToggleAutopilot: () => void;
 }
 
-/** pr-agent 运行时 chip：只显示版本（可用）/「不可用」（错误态），属应用运行时级，留在 layout。 */
+/**
+ * pr-agent 运行时 chip：仅在**不可用**（错误态）时显示红色「不可用」告警（可操作信息）。可用时的版本
+ * 号已从状态栏弱化下沉到「关于」页展示（见 RuntimeSection），此处不再渲染，减少常态噪声。
+ */
 function PrAgentRuntimeChip({ status }: { status: PrAgentStatus }) {
   const { t } = useTranslation();
-  if (status.available) {
-    // chip 只显示 pr-agent 版本，不显示 strategy（embedded/local-cli 对用户无意义）；
-    // embedded → `pr-agent 0.36.0` → 取 `0.36.0`；local-cli → help 首行截到首个空白前。
-    const ver =
-      status.strategy === 'embedded'
-        ? status.version.replace(/^pr-agent\s+/, '')
-        : status.version.split(/\s+/)[0] || status.version;
-    return (
-      <StatusChip tone="ok" title={`${status.strategy} · ${status.version}`}>
-        {t('statusBar.prAgentVersion', { ver })}
-      </StatusChip>
-    );
-  }
+  if (status.available) return null;
   return (
     <StatusChip tone="err" title={status.attempts.map((a) => a.error).join('\n')}>
       {t('statusBar.prAgentUnavailable')}
