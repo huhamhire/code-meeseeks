@@ -1,7 +1,8 @@
 # CLI 命令行工具（meebox）
 
 `meebox` 是随发布提供的跨平台命令行工具，经本机的「本地 API 服务」访问应用能力，便于把 PR 浏览与
-评审 Agent 操作接入脚本、CI 或外部 agent。命令行只做**浏览与评审操作**，不含评论发送等写操作。
+评审 Agent 操作接入脚本、CI 或外部 agent。命令行提供**浏览与评审操作**，含评审决断（approve / needswork）
+与发评论；不含合并（merge）等高影响写操作。
 
 ## 1. 开启本地 API 服务
 
@@ -50,22 +51,29 @@ meebox --api-url http://<主机>:18765 --token <令牌> pr list
 meebox [全局参数] <组> <命令> [参数]
 ```
 
+PR 关联命令统一用**必填参数 `--pr <id>`** 指定 PR（`id` 由 `meebox pr list` 输出获得）；agent 命令归在 `pr agent` 下。
+
 | 命令 | 用途 |
 | --- | --- |
+| `meebox whoami` | 当前登录身份与集成平台（用户 + 平台 + 连接名） |
 | `meebox categories` | 列出当前平台可用的分类标签（一级发现分类 + 二级状态 / 合并态筛选） |
-| `meebox pr list [--primary <一级>] [--secondary <二级>] [--query <检索>]` | PR 列表（不分页），支持按分类与关键字过滤 |
-| `meebox pr show <id>` | PR 描述详情 |
-| `meebox pr diff <id> [--file <路径>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 |
-| `meebox pr activity <id>` | 活动时间线（评论 / 提交 / 评审决断） |
-| `meebox pr commits <id>` | 提交列表 |
-| `meebox pr reviewers <id>` | 评审人审批状态 |
-| `meebox agent status <id>` | 评审 Agent 当前执行状态 |
-| `meebox agent history <id>` | 历史会话 |
-| `meebox agent review <id>` | 执行一次自动评审 |
-| `meebox agent instruct <id> <指令> [参数]` | 发送评审指令（`describe` / `review` / `ask` / `improve`） |
-| `meebox agent chat <id> <消息>` | 发送自然语言消息（可触发 Agent 任务） |
+| `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简字段 + 分页，默认 limit 100） |
+| `meebox pr show --pr <id>` | PR 描述详情 |
+| `meebox pr diff --pr <id> [--file <路径>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 |
+| `meebox pr activity --pr <id>` | 活动时间线（评论 / 提交 / 评审决断） |
+| `meebox pr commits --pr <id>` | 提交列表 |
+| `meebox pr reviewers --pr <id>` | 评审人审批状态 |
+| `meebox pr approve --pr <id>` | 将 PR 标记为「通过」（发送真实评审决断到平台） |
+| `meebox pr needswork --pr <id>` | 将 PR 标记为「需修改」（发送真实评审决断到平台） |
+| `meebox pr comment --pr <id> <消息>` | 发一条顶层评论到平台 |
+| `meebox pr agent status --pr <id>` | 评审 Agent 当前执行状态 |
+| `meebox pr agent history --pr <id>` | 历史会话 |
+| `meebox pr agent review --pr <id>` | 执行一次自动评审 |
+| `meebox pr agent instruct --pr <id> <指令> [参数]` | 发送评审指令（`describe` / `review` / `ask` / `improve`） |
+| `meebox pr agent chat --pr <id> <消息>` | 发送自然语言消息（可触发 Agent 任务） |
+| `meebox pr agent stop --pr <id>` | 中断该 PR 运行中的评审 Agent |
 
-其中 `<id>` 为 PR 的本地标识，由 `meebox pr list` 输出获得。
+其中 `<id>` 为 PR 的本地标识（列表里的 `id` 字段），由 `meebox pr list` 输出获得。
 
 ## 5. 输出格式
 
@@ -89,6 +97,7 @@ meebox pr list --output json | jq '.[].title'
 
 ## 注意事项
 
-- **只读取向**：CLI 不提供评论发送、审批、合并等写操作；有此需求请自行对接代码平台。
-- **令牌安全**：令牌明文存于 `~/.code-meeseeks/config.yaml`（同其他凭据）；监听 `0.0.0.0` 暴露到局域网时尤需保密，
-  并及时通过「重新生成」吊销泄露的令牌。
+- **写能力范围**：CLI 提供评审写动作——`pr approve` / `pr needswork`（发送真实评审决断）与 `pr comment`
+  （发顶层评论）；但**不提供合并（merge）与变更类 Agent 工具（publish 等）**，有此需求请自行对接代码平台。
+- **令牌安全**：服务令牌在 GUI 的 `~/.code-meeseeks/config.yaml` 明文存储；若写入 CLI 的 `~/.code-meeseeks/cli.yaml`
+  同为明文。监听 `0.0.0.0` 暴露到局域网时尤需保密，并及时通过「重新生成」吊销泄露的令牌。

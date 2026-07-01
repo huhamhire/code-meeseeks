@@ -6,12 +6,12 @@
 agent / 脚本 / CI 把 meebox 的 PR 发现、浏览与 Agent 操作纳入自动化流程。命令名 **`meebox`**。
 
 负责：把 API 端点封装成顺手的命令树、解析连接 / 鉴权配置、按人 / 机两种消费方式输出（文本 / JSON）、
-约定退出码。
+约定退出码。提供浏览与**评审写动作**（approve / needswork / comment）——与服务端写边界一致。
 
 **不负责**：
 
 - 业务逻辑 —— CLI 是 API 的瘦客户端，不内置任何评审 / 平台逻辑。
-- **写操作**（发评论、审批、发布等）—— 不提供对应命令；API 本就不开放（见 [服务端的只读边界](01-service-api.md)）。
+- **合并与变更类 Agent 工具**（merge / publish 等）—— 不提供对应命令；API 本就不开放（见 [服务端写边界](01-service-api.md)）。
 - 桌面应用本体 —— CLI **不内嵌进安装包**，是独立可分发物（见下「分发」）。
 
 ## 核心设计
@@ -59,23 +59,32 @@ meebox [全局 flag] <组> <命令> [参数]
 全局 flag：--api-url · --token · --output (yaml|json) · --quiet
 ```
 
+PR 关联命令统一用**必填 flag `--pr <id>`** 传 PR 标识（`id` 由 `pr list` 输出获得）；agent 命令与 PR
+强绑定、必带 id，故整组归入 `pr agent …`。
+
 | 命令 | 用途 | 对应 API |
 | --- | --- | --- |
-| `meebox categories` | 列当前启用平台下可用的分类标签（一级 + 二级） | `GET /categories` |
-| `meebox pr list [--primary <一级>] [--secondary <二级>] [--query <检索>]` | PR 列表（不分页、全部基础信息） | `GET /prs` |
-| `meebox pr show <id>` | 描述详情 | `GET /prs/{id}` |
-| `meebox pr diff <id> [--file <path>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 | `GET /prs/{id}/diff` |
-| `meebox pr activity <id>` | 动态（时间线） | `GET /prs/{id}/activity` |
-| `meebox pr commits <id>` | 提交列表 | `GET /prs/{id}/commits` |
-| `meebox pr reviewers <id>` | 评审人审批状态 | `GET /prs/{id}/reviewers` |
-| `meebox agent status <id>` | Agent 当前执行状态 | `GET /prs/{id}/agent` |
-| `meebox agent history <id>` | 历史会话 | `GET /prs/{id}/agent/conversation` |
-| `meebox agent review <id>` | 执行 auto review | `POST /prs/{id}/agent/review` |
-| `meebox agent instruct <id> <command> [args]` | 发送 Agent 指令（仅只读：describe / review / ask / improve） | `POST /prs/{id}/agent/instruct` |
-| `meebox agent chat <id> <message>` | 自然语言聊天（可触发任务执行） | `POST /prs/{id}/agent/chat` |
+| `meebox whoami` | 当前身份（用户 + 平台 + 连接名） | `GET /whoami` |
+| `meebox categories` | 列当前启用平台的分类标签（`categories` 一级 + `statuses` 二级） | `GET /categories` |
+| `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简投影 + 分页，默认 limit 100） | `GET /prs` |
+| `meebox pr show --pr <id>` | 描述详情 | `GET /prs/{id}` |
+| `meebox pr diff --pr <id> [--file <path>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 | `GET /prs/{id}/diff` |
+| `meebox pr activity --pr <id>` | 动态（时间线） | `GET /prs/{id}/activity` |
+| `meebox pr commits --pr <id>` | 提交列表 | `GET /prs/{id}/commits` |
+| `meebox pr reviewers --pr <id>` | 评审人审批状态 | `GET /prs/{id}/reviewers` |
+| `meebox pr approve --pr <id>` | 评审决断「通过」（真实远端写） | `POST /prs/{id}/approve` |
+| `meebox pr needswork --pr <id>` | 评审决断「需修改」（真实远端写） | `POST /prs/{id}/needswork` |
+| `meebox pr comment --pr <id> <message>` | 发一条顶层评论（真实远端写） | `POST /prs/{id}/comment` |
+| `meebox pr agent status --pr <id>` | Agent 当前执行状态 | `GET /prs/{id}/agent` |
+| `meebox pr agent history --pr <id>` | 历史会话 | `GET /prs/{id}/agent/conversation` |
+| `meebox pr agent review --pr <id>` | 执行 auto review | `POST /prs/{id}/agent/review` |
+| `meebox pr agent instruct --pr <id> <command> [args]` | 发送 Agent 指令（仅只读：describe / review / ask / improve） | `POST /prs/{id}/agent/instruct` |
+| `meebox pr agent chat --pr <id> <message>` | 自然语言聊天（可触发任务执行） | `POST /prs/{id}/agent/chat` |
+| `meebox pr agent stop --pr <id>` | 中断该 PR 运行中的 Agent（PR 级） | `POST /prs/{id}/agent/stop` |
 
-- `<id>` 为 PR 的 `localId`（由 `pr list` 输出获得）。
-- 写工具不在 `instruct` 白名单内；传入即被服务端拒绝（CLI 也可前置友好报错）。
+- `<id>` 为 PR 的 `localId`（列表投影里对外命名为 `id`，由 `pr list` 输出获得）。
+- 评审写动作走 `pr approve` / `pr needswork` / `pr comment` 专用命令；变更类工具（publish 等）不在 `instruct`
+  白名单内，传入即被服务端拒绝（CLI 亦前置友好报错）。merge（合并）不提供。
 
 ### 输出与退出码
 
@@ -110,7 +119,8 @@ meebox [全局 flag] <组> <命令> [参数]
 
 ## 扩展与注意事项
 
-- **只读边界**：写操作显式不提供；新增命令前先确认对应 API 端点已存在且为只读。
+- **写边界与服务端一致**：仅提供评审写动作（approve / needswork / comment）；合并与变更类 Agent 工具不提供。
+  新增命令前先确认对应 API 端点已存在，写端点须与服务端写边界对齐。
 - **加新命令先加端点**：CLI 不得绕过 API 直连应用内部；能力缺口先在[服务端](01-service-api.md)补端点。
 - **不触碰 GUI 机密**：CLI 不读应用主配置 `~/.code-meeseeks/config.yaml`（含各平台访问令牌等连接层机密）；服务令牌须经 flag / 环境变量 / `cli.yaml` 显式提供，避免越权触达预期外凭据。
 - **契约漂移防护**：初期手写 struct 务必随服务端契约同步更新；契约增长后转 OpenAPI / Schema 代码生成。
