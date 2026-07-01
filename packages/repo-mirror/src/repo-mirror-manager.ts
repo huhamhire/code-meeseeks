@@ -427,30 +427,6 @@ export class RepoMirrorManager {
     };
   }
 
-  /**
-   * 从已物化 worktree 取 `base...head` 的统一 diff，供 CLI 模式 /ask 前置注入（让 agentic CLI 开局即知
-   * 改了什么、在哪，省掉大量冷启动发现类轮次）。返回变更文件摘要（`--stat`，体量小、始终全量）+ 统一 diff
-   * 正文（按 `maxPatchChars` 截断，超限置 `truncated`）。失败返回 null，调用方降级为不注入、不阻断 run。
-   */
-  async unifiedDiffFromWorktree(
-    wtPath: string,
-    baseBranch: string,
-    headBranch: string,
-    maxPatchChars = 24000,
-  ): Promise<{ stat: string; patch: string; truncated: boolean } | null> {
-    const range = `${baseBranch}...${headBranch}`;
-    try {
-      const git = simpleGit(wtPath);
-      const stat = (await git.raw(['diff', '--stat', range])).trim();
-      const full = await git.raw(['diff', range]);
-      const truncated = full.length > maxPatchChars;
-      return { stat, patch: truncated ? full.slice(0, maxPatchChars) : full, truncated };
-    } catch (err) {
-      this.opts.logger?.warn({ err, wtPath, range }, 'unifiedDiffFromWorktree failed');
-      return null;
-    }
-  }
-
   /** 镜像大小（字节）。不存在返回 0。 */
   async getSize(repo: RepoIdentity): Promise<RepoSize> {
     const dir = this.mirrorPath(repo);
