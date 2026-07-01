@@ -157,6 +157,13 @@
   align-items: center;
   gap: 3px;
 }
+// 单 commit 范围徽标：提交图标 + 短 SHA，图标与 SHA 对齐（等宽字体）
+.chat-run-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: $font-mono;
+}
 // 输入 / 输出各自一组（箭头 + 数字[+ 缓存]）：独立 hover 提示的悬浮目标，内部行内对齐
 .chat-token-grp {
   display: inline-flex;

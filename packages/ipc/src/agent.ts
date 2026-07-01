@@ -4,6 +4,7 @@ import type {
   AgentSession,
   AgentStep,
   ReviewRun,
+  ReviewRunCommitScope,
   ReviewRunTool,
 } from '@meebox/shared';
 import type { PragentRunInfo } from './common.js';
@@ -93,6 +94,8 @@ export interface AgentChannels {
      * EXTRA_INSTRUCTIONS 注入，不进入问题位置参数（故不污染回答 echo / 会话气泡）。
      * referencedFinding：复评引用——本次 /ask 是对先前 review/improve 某条 finding 的复评（前向链，
      * 落到 ReviewRun.referencedFinding），驱动复评模式提示词 + 结果卡的裁决动作。仅 tool='ask' 生效。
+     * scope：单 commit 评审范围（parent..sha）——由 Diff 视图提交选择器发起，把本次 run 的 diff 限定在
+     * 该 commit 自身改动而非 PR 全量。对 describe/review/ask/improve 均生效；缺省 = PR 全量范围。
      */
     request: {
       localId: string;
@@ -100,6 +103,7 @@ export interface AgentChannels {
       question?: string;
       referencedContext?: string;
       referencedFinding?: ReviewRun['referencedFinding'];
+      scope?: ReviewRunCommitScope;
     };
     response: ReviewRun;
   };

@@ -55,6 +55,7 @@ export interface ChatActions {
     question?: string,
     referencedContext?: string,
     referencedFinding?: ReviewRun['referencedFinding'],
+    scope?: ReviewRun['scope'],
   ) => Promise<void>;
   handleAgentReview: () => Promise<void>;
   handleAgentAsk: (question: string, referencedContext?: string) => Promise<void>;
@@ -115,12 +116,14 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     question?: string,
     referencedContext?: string,
     referencedFinding?: ReviewRun['referencedFinding'],
+    scope?: ReviewRun['scope'],
   ): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured) return;
     // 去重（即时反馈）：同一 PR 同一工具已在执行 / 排队 → 阻止重复触发（main 端亦有
-    // 权威校验兜底）。/ask 每次问题不同，不限制。
+    // 权威校验兜底）。/ask 每次问题不同、单 commit 范围（scope）是定向动作，均不限制（与后端 dedup 同口径）。
     if (
       tool !== 'ask' &&
+      !scope &&
       (myActiveRuns.some((r) => r.tool === tool) || myWaiting.some((w) => w.tool === tool))
     ) {
       setError(t('chatPane.duplicateRun', { tool }));
@@ -134,6 +137,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
         question,
         referencedContext,
         referencedFinding,
+        scope,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -267,7 +271,8 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     if (agentRunningHere && prLocalId) void invoke('agent:stop', { localId: prLocalId });
   };
   const handleRetry = (run: ReviewRun): void => {
-    void handleRun(run.tool, run.question);
+    // 重试沿用原 run 的单 commit 范围（若有），保证复跑仍限定同一 commit。
+    void handleRun(run.tool, run.question, undefined, undefined, run.scope);
   };
 
   /**

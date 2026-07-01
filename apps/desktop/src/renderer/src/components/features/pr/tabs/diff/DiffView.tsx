@@ -4,7 +4,11 @@ import '../../../../../lib/monaco-setup';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type editor as MonacoEditor } from 'monaco-editor';
-import type { PlatformCapabilities, StoredPullRequest } from '@meebox/shared';
+import type {
+  PlatformCapabilities,
+  ReviewRunCommitScope,
+  StoredPullRequest,
+} from '@meebox/shared';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
 import { ErrorBoundary, PaneLoading, FileTreeIcon, SearchIcon } from '../../../../common';
 import { DiffSearchPanel } from './DiffSearchPanel';
@@ -63,6 +67,11 @@ interface DiffViewProps {
    */
   pendingCommitView?: PendingCommitView | null;
   onCommitViewConsumed?: () => void;
+  /**
+   * 当前变更范围切到 / 离开单 commit 时上报（commit 有父 → 传该 commit 范围，全部变更 / root commit → null）。
+   * 上层（App）据此把「正在查看的 commit」作为聊天区命令的隐式范围（见 ChatPane viewCommitScope）。
+   */
+  onViewCommitScopeChange?: (scope: ReviewRunCommitScope | null) => void;
 }
 
 /**
@@ -81,6 +90,7 @@ export function DiffView({
   onNavConsumed,
   pendingCommitView,
   onCommitViewConsumed,
+  onViewCommitScopeChange,
 }: DiffViewProps) {
   // 评论换行策略：GitHub/Bitbucket hard-break（单 \n → <br>）；GitLab CommonMark 软换行。
   // 能力位缺省（旧数据/无连接）回退 true，保持既有行为。
@@ -101,6 +111,21 @@ export function DiffView({
     pendingCommitView,
     onCommitViewConsumed,
   );
+  // 把「正在查看的单 commit」上报给上层，作为聊天区命令的隐式范围。commit 有父才可 parent..sha 定界；
+  // 全部变更 / root commit（无父）上报 null。
+  useEffect(() => {
+    if (!onViewCommitScopeChange) return;
+    onViewCommitScopeChange(
+      scope.kind === 'commit' && scope.parent
+        ? {
+            sha: scope.sha,
+            parent: scope.parent,
+            abbreviatedSha: scope.abbreviatedSha,
+            subject: scope.subject,
+          }
+        : null,
+    );
+  }, [scope, onViewCommitScopeChange]);
   const { files, filesError, retryFiles, selectedKey, setSelectedKey, selected, loadedKey } =
     useChangedFiles(pr, range, viewKey);
   // 合并会冲突的文件路径集合（仅 pr.hasConflict 时实拉），文件树据此标三角警示。

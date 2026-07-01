@@ -255,6 +255,25 @@ export interface TokenUsage {
   turns?: number;
 }
 
+/** pr-agent run 触发来源：user（用户手动发起）/ agent（编排 / AutoPilot 派发）。 */
+export type ReviewRunOrigin = 'user' | 'agent';
+
+/**
+ * 单 commit 评审范围：把一次 run 的 diff 限定在某个 commit 自身的改动（`parent..sha`），
+ * 而非 PR 全量。由 Diff 视图的提交选择器发起，落盘到 ReviewRun 供结果卡展示范围徽标。
+ * 无父 commit（root）无法单 commit 定界，不提供该范围。
+ */
+export interface ReviewRunCommitScope {
+  /** 目标 commit 完整 SHA（worktree head）。 */
+  sha: string;
+  /** 目标 commit 首个父 commit SHA（worktree base；单 commit diff = parent..sha）。 */
+  parent: string;
+  /** 展示用短 SHA。 */
+  abbreviatedSha: string;
+  /** 展示用 commit 主题（首行 message）。 */
+  subject: string;
+}
+
 export interface ReviewRun {
   /** yyyymmdd-HHmmss-ms 时序 id，便于按文件名倒序列出 */
   id: string;
@@ -269,6 +288,17 @@ export interface ReviewRun {
   tool: ReviewRunTool;
   /** /ask 工具的问题内容；其他 tool 不填。UI 把它当用户发言渲染在 run 卡片之上 */
   question?: string;
+  /**
+   * 触发来源：user（用户在 ChatPane 直接发起的斜杠命令）/ agent（编排 / AutoPilot 派发的子 run）。
+   * ChatPane 据此为 user 来源的 run 在其卡片之上补一条命令回显气泡（对话习惯）；agent 子 run 不回显
+   * （其用户输入已由编排会话的用户消息承载，避免重复冒泡）。历史 run 无此字段（undefined），不回显。
+   */
+  origin?: ReviewRunOrigin;
+  /**
+   * 单 commit 评审范围：本次 run 限定在该 commit 自身改动（`parent..sha`）而非 PR 全量时填。
+   * 缺省 = PR 全量范围。结果卡据此展示范围徽标。
+   */
+  scope?: ReviewRunCommitScope;
   /** 探测时拿到的 pr-agent 版本（CLI 首行 / 嵌入式查出的 pr-agent 版本） */
   prAgentVersion: string;
   strategy: PrAgentStrategy;

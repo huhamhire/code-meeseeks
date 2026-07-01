@@ -5,7 +5,14 @@ import type {
   ReviewRunTool,
   StoredPullRequest,
 } from '@meebox/shared';
-import { AutoReviewIcon, EyeOffIcon, FileTreeIcon, SendIcon, StopIcon } from '../../../common';
+import {
+  AutoReviewIcon,
+  CommitIcon,
+  EyeOffIcon,
+  FileTreeIcon,
+  SendIcon,
+  StopIcon,
+} from '../../../common';
 import { useChatInput } from '../hooks/useChatInput';
 import { useTextareaAutosizeDrag } from '../hooks/useTextareaAutosizeDrag';
 
@@ -48,6 +55,11 @@ interface ChatInputBarProps {
   onToggleSelection: () => void;
   /** 复评引用 chip：引用了某条 finding 时展示「复评 <file:line>」+ 清除；null = 不渲染。 */
   referenceChip?: { label: string; onClear: () => void } | null;
+  /**
+   * 单 commit 范围 chip：跟随 Diff 视图选中的 commit 展示「短 SHA · 主题」。存在选中即显示，点击**切换启用/禁用**
+   * （禁用不删除 chip，本会话命令回到 PR 全量；禁用态置灰 + eye-slash）——选中态源自视图，可手动禁用。
+   */
+  commitScopeChip?: { label: string; disabled: boolean; onToggle: () => void } | null;
 }
 
 /**
@@ -74,6 +86,7 @@ export function ChatInputBar({
   selectionIgnored,
   onToggleSelection,
   referenceChip,
+  commitScopeChip,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
   const {
@@ -266,6 +279,26 @@ export function ChatInputBar({
                   ✕
                 </button>
               </span>
+            </>
+          )}
+          {/* 单 commit 范围 chip：跟随视图选中的 commit 展示「短 SHA · 主题」。点击切换启用/禁用（不删除）——
+              启用时命令限定在该 commit（parent..sha），禁用则回到 PR 全量、置灰 + eye-slash。 */}
+          {commitScopeChip && (
+            <>
+              <span className="chat-cmd-divider" aria-hidden="true" />
+              <button
+                type="button"
+                className={`chat-selection-chip${commitScopeChip.disabled ? ' ignored' : ''}`}
+                onClick={commitScopeChip.onToggle}
+                title={
+                  commitScopeChip.disabled
+                    ? t('chatPane.scopeDisabledTitle')
+                    : t('chatPane.scopeActiveTitle')
+                }
+              >
+                {commitScopeChip.disabled ? <EyeOffIcon /> : <CommitIcon size={14} />}
+                <span>{commitScopeChip.label}</span>
+              </button>
             </>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { ReviewRunCommitScope } from '@meebox/shared';
 import { invoke } from './api';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
@@ -81,6 +82,12 @@ export default function App() {
   }, []);
   // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
   const [statusFilter, setStatusFilter] = useState<FilterKey>('pending');
+  // 当前 Diff 视图选中的单 commit 范围（DiffView 上报）：作为聊天区命令的隐式范围（见 ChatPane）。
+  // 按 sha 去重，避免 DiffView 每次 render 传新对象引发的重渲染回环。
+  const [viewCommitScope, setViewCommitScope] = useState<ReviewRunCommitScope | null>(null);
+  const handleViewCommitScope = useCallback((s: ReviewRunCommitScope | null) => {
+    setViewCommitScope((prev) => (prev?.sha === s?.sha ? prev : s));
+  }, []);
   // PR 导航 / 范围领域（发现分类 / 活跃·归档切换 / 归档懒加载 / 按 URL 打开 / 定位跳转 / 通知点击导航 +
   // 跨组件 Diff·Tab 跳转意图）——领域逻辑归 usePrNavigation；选中态 / 已读仍由 usePullRequests 拥有。
   const {
@@ -241,6 +248,7 @@ export default function App() {
               onRequestDiffNav={(target) => setPendingDiffNav(target)}
               pendingTab={pendingTab}
               onPendingTabConsumed={() => setPendingTab(null)}
+              onViewCommitScopeChange={handleViewCommitScope}
             />
           ) : (
             <PrEmpty hasConnections={boot.config.connections.length > 0} />
@@ -263,6 +271,7 @@ export default function App() {
           currentLlmModel={
             boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
           }
+          viewCommitScope={viewCommitScope}
         />
       </div>
       <StatusBar

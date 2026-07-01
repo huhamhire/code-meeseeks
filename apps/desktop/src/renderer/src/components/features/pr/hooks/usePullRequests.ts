@@ -35,12 +35,19 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     }
   }, [refreshing, reloadPrs]);
 
-  // 标记 PR 已读：用户打开 PR 时调用。先乐观清掉本地未读圆点（即时反馈），再持久化已读水位——
+  // 标记 PR 已读：用户打开 PR 时调用。先乐观清掉本地未读标志（即时反馈），再持久化已读水位——
   // 下一轮 poll 不会因旧事件把它标回。每次选中都发 IPC：打开 PR 非高频，且推进已读水位本就是对的；
   // 不靠 setState 更新器的副作用判断「是否未读」——更新器在渲染阶段才跑，同步读其副作用拿不到结果。
+  // 未读标志有两处：`unread` 圆点与 `unreadMentionCount`「@我/回复我」计数 chip（二者在标题槽位互斥、
+  // 计数优先）。两者都要乐观清零 —— 否则计数 chip 会残留到下一轮 poll 重算 lastReadAt 才消失，
+  // 表现为「点开 PR 后未读计数不消除」（与后端 markPrRead 落盘的 unread:false / unreadMentionCount:0 对齐）。
   const markRead = useCallback(async (localId: string): Promise<void> => {
     setPrs((prev) =>
-      prev.map((p) => (p.localId === localId && p.unread ? { ...p, unread: false } : p)),
+      prev.map((p) =>
+        p.localId === localId && (p.unread || (p.unreadMentionCount ?? 0) > 0)
+          ? { ...p, unread: false, unreadMentionCount: 0 }
+          : p,
+      ),
     );
     try {
       await invoke('prs:markRead', { localId });
