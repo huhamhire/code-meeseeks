@@ -7,10 +7,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// prIDFlag registers the required `--pr <id>` flag (the `id` field from `pr list`)
+// on cmd and binds it to target. Making the PR id an explicit named flag (rather than
+// a positional arg) keeps every PR-scoped command's invocation self-describing.
+func prIDFlag(cmd *cobra.Command, target *string) {
+	cmd.Flags().StringVar(target, "pr", "", "PR id (the `id` field from `pr list`)")
+	_ = cmd.MarkFlagRequired("pr")
+}
+
+// newPrCmd builds the `pr` command group: PR browsing / write actions plus the
+// PR-scoped `agent` subgroup. It carries no logic itself, only wiring subcommands.
 func newPrCmd() *cobra.Command {
 	pr := &cobra.Command{
 		Use:   "pr",
-		Short: "Browse pull requests",
+		Short: "Browse and act on pull requests",
 	}
 	pr.AddCommand(
 		newPrListCmd(),
@@ -19,10 +29,15 @@ func newPrCmd() *cobra.Command {
 		newPrActivityCmd(),
 		newPrCommitsCmd(),
 		newPrReviewersCmd(),
+		// Agent is PR-scoped (every agent op requires a PR id), so it nests under `pr`.
+		newAgentCmd(),
 	)
 	return pr
 }
 
+// newPrListCmd builds `pr list`: the paginated, filtered PR list (GET /prs). Returns
+// the slim list projection (id / title / author / createdAt first); category/status
+// map to the discovery + review/merge filters, skip/limit drive pagination.
 func newPrListCmd() *cobra.Command {
 	var category, status, query string
 	var skip, limit int
@@ -67,24 +82,30 @@ func newPrListCmd() *cobra.Command {
 	return cmd
 }
 
+// newPrShowCmd builds `pr show --pr <id>`: the full PR detail incl. description (GET /prs/{id}).
 func newPrShowCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "show <id>",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "show",
 		Short: "Show PR description detail",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return getAndRender("/api/v1/prs/" + url.PathEscape(args[0]))
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return getAndRender("/api/v1/prs/" + url.PathEscape(pr))
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }
 
+// newPrDiffCmd builds `pr diff --pr <id>`: the changed-file list, or (with --file) one
+// file's content on the given --side (GET /prs/{id}/diff[?path=&side=]).
 func newPrDiffCmd() *cobra.Command {
-	var file, side string
+	var pr, file, side string
 	cmd := &cobra.Command{
-		Use:   "diff <id>",
+		Use:   "diff",
 		Short: "List changed files, or fetch one file's content with --file",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
 			c, err := resolveClient()
 			if err != nil {
 				return err
@@ -96,47 +117,61 @@ func newPrDiffCmd() *cobra.Command {
 			if side != "" {
 				q.Set("side", side)
 			}
-			data, err := c.Get("/api/v1/prs/"+url.PathEscape(args[0])+"/diff", q)
+			data, err := c.Get("/api/v1/prs/"+url.PathEscape(pr)+"/diff", q)
 			if err != nil {
 				return err
 			}
 			return renderData(data)
 		},
 	}
+	prIDFlag(cmd, &pr)
 	cmd.Flags().StringVar(&file, "file", "", "fetch this file's content instead of the changed-file list")
 	cmd.Flags().StringVar(&side, "side", "", "file side when --file is set: base|head")
 	return cmd
 }
 
+// newPrActivityCmd builds `pr activity --pr <id>`: the merged activity timeline
+// (comments / commits / review decisions) (GET /prs/{id}/activity).
 func newPrActivityCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "activity <id>",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "activity",
 		Short: "Show the PR activity timeline (comments / commits / review decisions)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return getAndRender("/api/v1/prs/" + url.PathEscape(args[0]) + "/activity")
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return getAndRender("/api/v1/prs/" + url.PathEscape(pr) + "/activity")
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }
 
+// newPrCommitsCmd builds `pr commits --pr <id>`: the PR's own commits (GET /prs/{id}/commits).
 func newPrCommitsCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "commits <id>",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "commits",
 		Short: "List the PR commits",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return getAndRender("/api/v1/prs/" + url.PathEscape(args[0]) + "/commits")
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return getAndRender("/api/v1/prs/" + url.PathEscape(pr) + "/commits")
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }
 
+// newPrReviewersCmd builds `pr reviewers --pr <id>`: reviewer approval status (GET /prs/{id}/reviewers).
 func newPrReviewersCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "reviewers <id>",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "reviewers",
 		Short: "Show reviewer approval status",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return getAndRender("/api/v1/prs/" + url.PathEscape(args[0]) + "/reviewers")
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return getAndRender("/api/v1/prs/" + url.PathEscape(pr) + "/reviewers")
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }

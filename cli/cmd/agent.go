@@ -8,9 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// readOnlyInstructions is the set of agent instructions the CLI may send.
-// Write tools (approve / needswork / publish …) are intentionally excluded —
-// the server also hard-refuses them, this is a friendly front-line check.
+// readOnlyInstructions is the set of agent instructions the CLI may send via
+// `pr agent instruct`. These are the read-only pr-agent tools; write review actions
+// have dedicated commands (`pr approve` / `pr needswork` / `pr comment`) and are not
+// routed through instruct. The server independently enforces the same whitelist.
 var readOnlyInstructions = map[string]bool{
 	"describe": true,
 	"review":   true,
@@ -18,6 +19,8 @@ var readOnlyInstructions = map[string]bool{
 	"improve":  true,
 }
 
+// newAgentCmd builds the `pr agent` subgroup: review-agent operations, all PR-scoped
+// (each requires `--pr <id>`). Wiring only; nested under `pr`.
 func newAgentCmd() *cobra.Command {
 	a := &cobra.Command{
 		Use:   "agent",
@@ -33,90 +36,116 @@ func newAgentCmd() *cobra.Command {
 	return a
 }
 
+// newAgentStatusCmd builds `pr agent status --pr <id>`: the agent's current run state
+// snapshot (GET /prs/{id}/agent).
 func newAgentStatusCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status <id>",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "status",
 		Short: "Show the agent's current execution status",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return getAndRender("/api/v1/prs/" + url.PathEscape(args[0]) + "/agent")
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return getAndRender("/api/v1/prs/" + url.PathEscape(pr) + "/agent")
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }
 
+// newAgentHistoryCmd builds `pr agent history --pr <id>`: the multi-turn conversation
+// history (GET /prs/{id}/agent/conversation).
 func newAgentHistoryCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "history <id>",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "history",
 		Short: "Show the agent conversation history",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return getAndRender("/api/v1/prs/" + url.PathEscape(args[0]) + "/agent/conversation")
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return getAndRender("/api/v1/prs/" + url.PathEscape(pr) + "/agent/conversation")
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }
 
+// newAgentReviewCmd builds `pr agent review --pr <id>`: kicks off the review micro-flow
+// (describe→review→ask→summary) (POST /prs/{id}/agent/review).
 func newAgentReviewCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "review <id>",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "review",
 		Short: "Run auto review on a PR",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
 			c, err := resolveClient()
 			if err != nil {
 				return err
 			}
-			data, err := c.Post("/api/v1/prs/"+url.PathEscape(args[0])+"/agent/review", nil)
+			data, err := c.Post("/api/v1/prs/"+url.PathEscape(pr)+"/agent/review", nil)
 			if err != nil {
 				return err
 			}
 			return renderData(data)
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }
 
+// newAgentInstructCmd builds `pr agent instruct --pr <id> <command> [args...]`: sends a
+// single read-only pr-agent instruction (POST /prs/{id}/agent/instruct). Write tools are
+// rejected up front (and again by the server).
 func newAgentInstructCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "instruct <id> <command> [args...]",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "instruct <command> [args...]",
 		Short: "Send a read-only agent instruction (describe|review|ask|improve)",
-		Args:  cobra.MinimumNArgs(2),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			instruction := strings.TrimPrefix(args[1], "/")
+			instruction := strings.TrimPrefix(args[0], "/")
 			if !readOnlyInstructions[instruction] {
-				return fmt.Errorf("instruction %q is not a read-only command; write operations are not supported via the CLI", args[1])
+				return fmt.Errorf("instruction %q is not a read-only command; use `pr approve` / `pr needswork` / `pr comment` for write actions", args[0])
 			}
 			c, err := resolveClient()
 			if err != nil {
 				return err
 			}
 			body := map[string]any{"command": instruction}
-			if len(args) > 2 {
-				body["args"] = strings.Join(args[2:], " ")
+			if len(args) > 1 {
+				body["args"] = strings.Join(args[1:], " ")
 			}
-			data, err := c.Post("/api/v1/prs/"+url.PathEscape(args[0])+"/agent/instruct", body)
+			data, err := c.Post("/api/v1/prs/"+url.PathEscape(pr)+"/agent/instruct", body)
 			if err != nil {
 				return err
 			}
 			return renderData(data)
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }
 
+// newAgentChatCmd builds `pr agent chat --pr <id> <message>`: sends a natural-language
+// message that may trigger agent tasks (POST /prs/{id}/agent/chat).
 func newAgentChatCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "chat <id> <message>",
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "chat <message>",
 		Short: "Send a natural-language chat message (may trigger agent tasks)",
-		Args:  cobra.MinimumNArgs(2),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			c, err := resolveClient()
 			if err != nil {
 				return err
 			}
-			body := map[string]any{"message": strings.Join(args[1:], " ")}
-			data, err := c.Post("/api/v1/prs/"+url.PathEscape(args[0])+"/agent/chat", body)
+			body := map[string]any{"message": strings.Join(args, " ")}
+			data, err := c.Post("/api/v1/prs/"+url.PathEscape(pr)+"/agent/chat", body)
 			if err != nil {
 				return err
 			}
 			return renderData(data)
 		},
 	}
+	prIDFlag(cmd, &pr)
+	return cmd
 }

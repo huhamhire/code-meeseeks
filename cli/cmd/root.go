@@ -40,7 +40,6 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(
 		newCategoriesCmd(),
 		newPrCmd(),
-		newAgentCmd(),
 	)
 	return root
 }
