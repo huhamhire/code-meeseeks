@@ -361,6 +361,17 @@
   }
 }
 
+// 单 commit 范围 chip：复用选区 chip 全部交互（可点切换 / hover 反馈 / .ignored 置灰删除线），
+// 放宽宽度以容纳「短 SHA · 主题」，并沿用蓝色（info）着色以示「范围」语义（hover 保持蓝、光标为手型）。
+.chat-scope-chip {
+  max-width: 240px;
+  color: $color-info;
+
+  &:hover {
+    color: $color-info;
+  }
+}
+
 // 复评引用 chip：复用选区 chip 视觉，着 info 色以区分；末尾带 ✕ 清除按钮（chip 本身不可点）。
 .chat-reference-chip {
   max-width: 220px;

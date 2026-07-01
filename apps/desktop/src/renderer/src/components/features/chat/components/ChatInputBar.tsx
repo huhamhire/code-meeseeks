@@ -288,7 +288,7 @@ export function ChatInputBar({
               <span className="chat-cmd-divider" aria-hidden="true" />
               <button
                 type="button"
-                className={`chat-selection-chip chat-reference-chip${commitScopeChip.disabled ? ' ignored' : ''}`}
+                className={`chat-selection-chip chat-scope-chip${commitScopeChip.disabled ? ' ignored' : ''}`}
                 onClick={commitScopeChip.onToggle}
                 title={
                   commitScopeChip.disabled
