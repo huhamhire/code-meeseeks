@@ -28,6 +28,8 @@ interface ModalProps {
   titleId?: string;
   /** header 右侧关闭按钮样式：图标按钮 / 文案按钮（不传则无） */
   headerClose?: 'icon' | 'text';
+  /** header 右侧、关闭键左侧的自定义动作（如「打开目录」按钮）；与关闭键同组右对齐。 */
+  headerActions?: ReactNode;
   /** modal-body 追加类名（如 confirm-body） */
   bodyClassName?: string;
   /** 底部 footer 区内容（作为 modal-body 的兄弟渲染）；不传则无 footer 区 */
@@ -54,6 +56,7 @@ export function Modal({
   title,
   titleId,
   headerClose,
+  headerActions,
   bodyClassName,
   footer,
   footerClassName = 'modal-footer-bar',
@@ -86,21 +89,26 @@ export function Modal({
         {title !== undefined && (
           <div className="modal-header">
             <h3 id={titleId}>{title}</h3>
-            {headerClose === 'icon' && (
-              <button
-                className="icon-btn modal-close"
-                type="button"
-                onClick={onClose}
-                aria-label={t('common.close')}
-                title={t('common.close')}
-              >
-                <CloseIcon />
-              </button>
-            )}
-            {headerClose === 'text' && (
-              <button className="btn" type="button" onClick={onClose}>
-                {t('common.close')}
-              </button>
+            {(headerActions !== undefined || headerClose) && (
+              <div className="modal-header-right">
+                {headerActions}
+                {headerClose === 'icon' && (
+                  <button
+                    className="icon-btn modal-close"
+                    type="button"
+                    onClick={onClose}
+                    aria-label={t('common.close')}
+                    title={t('common.close')}
+                  >
+                    <CloseIcon />
+                  </button>
+                )}
+                {headerClose === 'text' && (
+                  <button className="btn" type="button" onClick={onClose}>
+                    {t('common.close')}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

@@ -205,17 +205,12 @@ export const setService: IpcController<'config:setService'> = async (_event, req
 };
 
 /**
- * 重新生成 bearer token（高强度随机），写盘 + 内存同步。监听器每次请求实时读内存 token，故新 token
- * 即时生效、旧 token 立刻失效，无需重启监听器。返回新 token 供设置页展示 / 复制。
+ * 生成一枚高强度随机 bearer token（32 字节 → base64url，43 字符，字符集 [A-Za-z0-9-_]，URL / 请求头安全）
+ * 并返回，**不落盘**——由前端置入设置草稿，随底栏「保存」经 config:setService 生效；不保存则丢弃
+ * （与 host / port 同为草稿制）。
  */
-export const generateServiceToken: IpcController<'config:generateServiceToken'> = async () => {
-  const { bootstrap, logger } = getContext();
-  const token = randomBytes(32).toString('base64url');
-  const service = { ...bootstrap.config.service, token };
-  await writeConfig(bootstrap.paths.configFile, { ...bootstrap.config, service });
-  bootstrap.config.service = service;
-  logger.info('service listener token regenerated');
-  return { token };
+export const generateServiceToken: IpcController<'config:generateServiceToken'> = () => {
+  return { token: randomBytes(32).toString('base64url') };
 };
 
 /**

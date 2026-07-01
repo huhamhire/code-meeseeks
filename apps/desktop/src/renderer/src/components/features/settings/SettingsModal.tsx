@@ -7,10 +7,10 @@ import {
   CpuIcon,
   GlobeIcon,
   Modal,
+  PuzzleIcon,
   QuestionIcon,
   RobotIcon,
   SettingsIcon,
-  ShareIcon,
 } from '../../common';
 import { useSettingsDraft } from './hooks/useSettingsDraft';
 import { useAppearanceDraft } from './hooks/useAppearanceDraft';
@@ -57,7 +57,7 @@ const SETTINGS_CATEGORIES: ReadonlyArray<{
   { id: 'model', labelKey: 'settings.catModel', Icon: CpuIcon },
   { id: 'agent', labelKey: 'settings.catAgent', Icon: RobotIcon },
   { id: 'notifications', labelKey: 'settings.catNotifications', Icon: BellIcon },
-  { id: 'integration', labelKey: 'settings.catIntegration', Icon: ShareIcon },
+  { id: 'integration', labelKey: 'settings.catIntegration', Icon: PuzzleIcon },
   { id: 'about', labelKey: 'settings.catAbout', Icon: QuestionIcon },
 ];
 
@@ -133,6 +133,8 @@ export function SettingsModal({
       <Modal
         size="lg"
         onClose={onClose}
+        // 有未保存草稿时点背景误关会丢配置：设置页禁用背景点击关闭，仅右上角关闭键（或保存成功）退出。
+        closeOnBackdrop={false}
         title={t('settings.title')}
         headerClose="icon"
         bodyClassName="settings-modal-body"
