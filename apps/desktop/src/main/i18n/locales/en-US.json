@@ -21,6 +21,18 @@
     }
   },
   "notifications": {
+    "authoredComment": {
+      "body": "#{{id}} {{title}}",
+      "title": "New comment on your PR"
+    },
+    "authoredConflict": {
+      "body": "#{{id}} {{title}}",
+      "title": "Your PR has a merge conflict"
+    },
+    "authoredNeedsWork": {
+      "body": "#{{id}} {{title}}",
+      "title": "Your PR was marked needs-work"
+    },
     "mention": {
       "body": "#{{id}} {{title}}",
       "title": "You were mentioned"
