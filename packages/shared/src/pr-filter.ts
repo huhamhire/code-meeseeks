@@ -28,10 +28,15 @@ export function matchesDiscoveryFilter(
   return !primary || (pr.discoveryFilters?.includes(primary) ?? false);
 }
 
-/** 二级筛选匹配（状态 / 合并态）。 */
+/**
+ * 二级筛选匹配（状态 / 合并态）。`primary` 为当前一级发现分类（可空），用于分类相关的语义细化：
+ * 「我创建的」（`created`）下「待处理」= 需作者跟进 —— 除本人评审决断 pending 外，还并入存在合并冲突的
+ * PR（作者需解决冲突方能推进，即便评审已通过）。
+ */
 export function matchesSecondaryFilter(
   pr: StoredPullRequest,
   secondary: PrSecondaryFilter,
+  primary?: PrDiscoveryFilter,
 ): boolean {
   switch (secondary) {
     case 'all':
@@ -40,6 +45,9 @@ export function matchesSecondaryFilter(
       return pr.hasConflict === true;
     case 'mergeable':
       return pr.mergeStatus?.canMerge === true;
+    case 'pending':
+      if (primary === 'created') return pr.localStatus === 'pending' || pr.hasConflict === true;
+      return pr.localStatus === 'pending';
     default:
       return pr.localStatus === secondary;
   }
@@ -77,7 +85,7 @@ export function filterPullRequests(
   return prs.filter(
     (p) =>
       matchesDiscoveryFilter(p, criteria.primary) &&
-      matchesSecondaryFilter(p, criteria.secondary ?? 'all') &&
+      matchesSecondaryFilter(p, criteria.secondary ?? 'all', criteria.primary) &&
       matchesPrQuery(p, criteria.query ?? ''),
   );
 }

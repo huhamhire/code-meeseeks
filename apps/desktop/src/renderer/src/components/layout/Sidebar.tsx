@@ -248,17 +248,22 @@ export function Sidebar({
       if (p.hasConflict) out.conflict += 1;
       if (p.mergeStatus?.canMerge) out.mergeable += 1;
     }
+    // 「我创建的」下「待处理」并入冲突 PR（作者需跟进），复用同源谓词重算、避免与冲突计数重复叠加。
+    if (!isArchived && discoveryFilter === 'created') {
+      out.pending = scopedPrs.filter((p) => matchesSecondaryFilter(p, 'pending', 'created')).length;
+    }
     return out;
-  }, [scopedPrs]);
+  }, [scopedPrs, isArchived, discoveryFilter]);
 
   const filtered = useMemo(() => {
     // 已关闭范围强制「全部」（不应用状态筛选）；进行中范围按当前状态筛选。过滤 / 检索语义复用
-    // @meebox/shared 纯谓词（与本地 API 同源）。
+    // @meebox/shared 纯谓词（与本地 API 同源），并传入一级发现分类以启用分类相关的语义细化。
     const effFilter: FilterKey = isArchived ? 'all' : filter;
+    const effPrimary = !isArchived ? discoveryFilter : undefined;
     return scopedPrs.filter(
-      (p) => matchesSecondaryFilter(p, effFilter) && matchesPrQuery(p, query),
+      (p) => matchesSecondaryFilter(p, effFilter, effPrimary) && matchesPrQuery(p, query),
     );
-  }, [scopedPrs, query, filter, isArchived]);
+  }, [scopedPrs, query, filter, isArchived, discoveryFilter]);
 
   const groups = useMemo<PrGroup[]>(() => {
     const m = new Map<string, StoredPullRequest[]>();
