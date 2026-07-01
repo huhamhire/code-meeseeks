@@ -133,6 +133,8 @@ export function SettingsModal({
       <Modal
         size="lg"
         onClose={onClose}
+        // 有未保存草稿时点背景误关会丢配置：设置页禁用背景点击关闭，仅右上角关闭键（或保存成功）退出。
+        closeOnBackdrop={false}
         title={t('settings.title')}
         headerClose="icon"
         bodyClassName="settings-modal-body"
