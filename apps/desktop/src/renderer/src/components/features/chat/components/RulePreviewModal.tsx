@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import { Modal, mermaidComponents } from '../../../common';
+import { FolderIcon, Modal, mermaidComponents } from '../../../common';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
+import { invoke } from '../../../../api';
 import type { MatchedRules } from '../types';
 
 /**
@@ -27,9 +28,20 @@ export function RulePreviewModal({
       title={
         multi
           ? t('chatPane.rulePreviewTitleMulti', { n: rules.length })
-          : t('chatPane.rulePreviewTitle', { id: rules[0]?.id ?? '' })
+          : t('chatPane.rulePreviewTitle')
       }
       headerClose="text"
+      headerActions={
+        <button
+          type="button"
+          className="btn btn-icon"
+          onClick={() => void invoke('app:openAgentDir', undefined)}
+          title={t('chatPane.ruleOpenAgentDir')}
+          aria-label={t('chatPane.ruleOpenAgentDir')}
+        >
+          <FolderIcon />
+        </button>
+      }
       ariaLabel={t('chatPane.rulePreviewAria')}
     >
       {rules.map((rule, i) => (
@@ -41,10 +53,13 @@ export function RulePreviewModal({
           )}
           <div className="modal-kv">
             <div className="modal-kv-key">{t('chatPane.ruleFilePath')}</div>
-            <div className="modal-kv-val">{rule.filePath}</div>
-            <div className="modal-kv-key">priority</div>
+            {/* 相对 Agent 目录展示（`rules/<id>`），避免暴露冗长的机器绝对路径；打开目录按钮在标题栏统一提供。 */}
+            <div className="modal-kv-val">
+              <code>rules/{rule.id}</code>
+            </div>
+            <div className="modal-kv-key">{t('chatPane.rulePriority')}</div>
             <div className="modal-kv-val">{rule.priority}</div>
-            <div className="modal-kv-key">tools</div>
+            <div className="modal-kv-key">{t('chatPane.ruleTools')}</div>
             <div className="modal-kv-val">{rule.tools.join(', ')}</div>
           </div>
           <div className="markdown" style={{ marginTop: 12 }}>
