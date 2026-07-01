@@ -32,8 +32,8 @@ func newRootCmd() *cobra.Command {
 		Version:       version,
 	}
 	pf := root.PersistentFlags()
-	pf.StringVar(&gflags.apiURL, "api-url", "", "API base URL (overrides env and local auto-discovery)")
-	pf.StringVar(&gflags.token, "token", "", "bearer token (overrides env and local auto-discovery)")
+	pf.StringVar(&gflags.apiURL, "api-url", "", "API base URL (overrides "+settings.EnvAPIURL+" and cli.yaml)")
+	pf.StringVar(&gflags.token, "token", "", "bearer token (overrides "+settings.EnvToken+" and cli.yaml)")
 	pf.StringVar(&gflags.output, "output", "yaml", "output format: yaml|json")
 	pf.BoolVar(&gflags.quiet, "quiet", false, "suppress non-essential output")
 

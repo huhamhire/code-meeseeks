@@ -26,23 +26,23 @@ CLI 依赖应用内的本地 API 服务，默认关闭，需先在 **设置 → 
 1. 命令行参数：`--api-url` / `--token`
 2. 环境变量：`MEEBOX_API_URL` / `MEEBOX_TOKEN`
 3. CLI 配置文件：`~/.code-meeseeks/cli.yaml`（字段 `api_url` / `token`）
-4. **本机自动发现**：同机同用户时，自动读应用配置 `~/.code-meeseeks/config.yaml` 的服务监听设置
 
-因此**在开启服务的本机上零配置即可用**——直接运行命令，自动读取本机地址与令牌：
-
-```bash
-meebox pr list
-```
-
-远端访问（服务监听 `0.0.0.0`）需显式提供地址与令牌：
+连接信息须**显式提供**其一。令牌在设置页「集成」分区查看 / 复制。本机免逐次传参推荐用环境变量：
 
 ```bash
-meebox --api-url http://<主机>:18765 --token <令牌> pr list
-# 或经环境变量
-export MEEBOX_API_URL=http://<主机>:18765
+export MEEBOX_API_URL=http://127.0.0.1:18765
 export MEEBOX_TOKEN=<令牌>
 meebox pr list
 ```
+
+远端访问（服务监听 `0.0.0.0`）同样显式提供地址与令牌：
+
+```bash
+meebox --api-url http://<主机>:18765 --token <令牌> pr list
+```
+
+> CLI **不读取** GUI 主配置 `~/.code-meeseeks/config.yaml`：该文件含代码平台访问令牌等连接层机密，
+> 不从中取服务令牌，避免越权触达预期外的凭据。API 地址默认 `http://127.0.0.1:18765`（未显式指定时）。
 
 ## 4. 命令
 

@@ -43,11 +43,13 @@ CLI 需 API base URL + token。来源优先级（高 → 低）：
 
 1. 命令行 flag：`--api-url` / `--token`；
 2. 环境变量：`MEEBOX_API_URL` / `MEEBOX_TOKEN`；
-3. CLI 自身配置文件 `~/.code-meeseeks/cli.yaml`（与 GUI 的 `config.yaml` 同目录、独立文件，隔离二者配置）；
-4. **本机自动发现**：同机同用户时，读用户主目录下的应用主配置 `~/.code-meeseeks/config.yaml` 的 `service`
-   段，自动取 `host`/`port`/`token`——本机集成**零配置**开箱即用。
+3. CLI 自身配置文件 `~/.code-meeseeks/cli.yaml`（与 GUI 的 `config.yaml` 同目录、独立文件，隔离二者配置）。
 
-远端（服务端绑 `0.0.0.0`）场景无法自动发现，须显式给 `--api-url` + `--token`。token 缺失即报鉴权错误。
+连接信息须**显式提供**（flag / 环境变量 / `cli.yaml` 三者之一），token 缺失即报鉴权错误。
+
+**不读取 GUI 主配置**：CLI 刻意**不**读应用主配置 `~/.code-meeseeks/config.yaml`。该文件承载连接层机密
+（各代码平台的访问令牌等），若从中静默取服务令牌，等于让 CLI 触达其本不应接触的凭据——属预期外的越权访问，
+故移除此前的「本机自动发现」设计。环境变量 `MEEBOX_TOKEN` 是本机免逐次传参的推荐方式（配合 shell / CI 环境注入）。
 
 ### 命令结构
 
@@ -92,7 +94,7 @@ meebox [全局 flag] <组> <命令> [参数]
 ## 数据 / 接口契约
 
 - **配置来源优先级**：flag > env（`MEEBOX_API_URL` / `MEEBOX_TOKEN`）> CLI 配置文件
-  （`~/.code-meeseeks/cli.yaml`）> 本机 `~/.code-meeseeks/config.yaml` 自动发现。
+  （`~/.code-meeseeks/cli.yaml`）。连接信息须显式提供；CLI 不读 GUI 主配置 `config.yaml`（含连接层机密）。
 - **输出模式**：`yaml`（默认，人，类 k8s `-o yaml`）/ `json`（机，输出 API `data`）；均为响应数据的通用转换。
 - **退出码**：`0` 成功 / `1` 通用 / `2` 鉴权 / `3` not found（按需扩展）。
 - **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（Windows / macOS 用 `.zip`、Linux 用 `.tar.gz`），
@@ -110,7 +112,7 @@ meebox [全局 flag] <组> <命令> [参数]
 
 - **只读边界**：写操作显式不提供；新增命令前先确认对应 API 端点已存在且为只读。
 - **加新命令先加端点**：CLI 不得绕过 API 直连应用内部；能力缺口先在[服务端](01-service-api.md)补端点。
-- **本机自动发现的边界**：仅同机同用户可读主目录下的 `~/.code-meeseeks/config.yaml`；远端 / 跨用户必须显式配 URL + token。
+- **不触碰 GUI 机密**：CLI 不读应用主配置 `~/.code-meeseeks/config.yaml`（含各平台访问令牌等连接层机密）；服务令牌须经 flag / 环境变量 / `cli.yaml` 显式提供，避免越权触达预期外凭据。
 - **契约漂移防护**：初期手写 struct 务必随服务端契约同步更新；契约增长后转 OpenAPI / Schema 代码生成。
 - **JSON 优先稳定**：`--output json` 是自动化主路径，其字段形状视为对外契约，演进需保持兼容。
 - **代理走环境变量**：HTTP client 用 Go `net/http` 默认 transport，天然遵循标准 `HTTP(S)_PROXY` /
