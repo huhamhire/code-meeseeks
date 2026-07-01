@@ -5,8 +5,10 @@
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
-// PR 数 chip：图标 + 数字横排（gap / svg 基线由 .statusbar-chip 统一）
+// PR 数 chip：图标 + 数字横排（gap / svg 基线由 .statusbar-chip 统一）。用与 pr-agent 活动 /
+// repo sync 同一蓝调（chip-tone accent），与主题强调色一致。
 .statusbar-chip-prs {
+  @include chip-tone(accent);
   font-variant-numeric: tabular-nums;
 }
 
