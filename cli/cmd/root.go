@@ -38,6 +38,7 @@ func newRootCmd() *cobra.Command {
 	pf.BoolVar(&gflags.quiet, "quiet", false, "suppress non-essential output")
 
 	root.AddCommand(
+		newWhoamiCmd(),
 		newCategoriesCmd(),
 		newPrCmd(),
 	)

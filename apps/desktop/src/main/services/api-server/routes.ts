@@ -74,6 +74,29 @@ const categories: RouteHandler = () => {
 };
 
 /**
+ * 当前身份与集成平台：活动连接的 PAT 所属用户（name / displayName / slug）+ 平台种类 +
+ * 连接显示名。无活动连接时各项为 null。刻意收窄——不带 capabilities（那是 GUI 降级用的大对象）。
+ */
+const whoami: RouteHandler = () => {
+  const ctx = getContext();
+  const activeId = ctx.bootstrap.config.active_connection_id;
+  const built = activeId
+    ? ctx.connectionRuntime.adapters.find((a) => a.connectionId === activeId)
+    : undefined;
+  if (!activeId || !built) {
+    return { platform: null, connectionId: null, displayName: null, user: null };
+  }
+  const conn = ctx.bootstrap.config.connections.find((c) => c.id === activeId);
+  const user = built.adapter.connection.getCurrentUser();
+  return {
+    platform: built.adapter.kind,
+    connectionId: activeId,
+    displayName: conn?.display_name ?? activeId,
+    user: user ? { name: user.name, displayName: user.displayName, slug: user.slug ?? null } : null,
+  };
+};
+
+/**
  * PR 列表：`category`（一级发现分类）+ `status`（二级状态 / 合并态）过滤 + `q` 检索 +
  * `skip`/`limit` 分页（默认 limit 100）。过滤语义复用 @meebox/shared 的纯谓词（与渲染层侧栏同源）；
  * 返回**精简列表投影**（{@link toPrListItem}，去 description 明细、人员仅 slug），此处仅解析参数 + 委派。
@@ -164,6 +187,7 @@ const comment: RouteHandler = ({ params, body }) => {
 
 export const routes: Route[] = [
   { method: 'GET', segments: seg('/api/v1/categories'), handler: categories },
+  { method: 'GET', segments: seg('/api/v1/whoami'), handler: whoami },
   { method: 'GET', segments: seg('/api/v1/prs'), handler: listPrs },
   { method: 'GET', segments: seg('/api/v1/prs/:id'), handler: showPr },
   { method: 'GET', segments: seg('/api/v1/prs/:id/diff'), handler: diff },

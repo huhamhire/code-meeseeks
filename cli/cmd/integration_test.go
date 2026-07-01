@@ -87,6 +87,23 @@ func TestCategories(t *testing.T) {
 	}
 }
 
+func TestWhoami(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"platform":"github","user":{"slug":"alice"}}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "whoami")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/whoami" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(out, "platform: github") {
+		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
 func TestPrListFilters(t *testing.T) {
 	var rec capturedReq
 	srv := mockServer(&rec, 200, `[]`)
