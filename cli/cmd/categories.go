@@ -2,6 +2,8 @@ package cmd
 
 import "github.com/spf13/cobra"
 
+// newCategoriesCmd builds `meebox categories`: lists the enabled platform's available
+// filter labels — `categories` (discovery) and `statuses` (review/merge) (GET /categories).
 func newCategoriesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "categories",

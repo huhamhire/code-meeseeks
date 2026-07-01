@@ -1,6 +1,11 @@
 // Package settings resolves the API base URL and bearer token used by the CLI,
 // following the precedence documented in docs/arch/04-integration/02-cli.md:
-// flag > env > CLI config file > local auto-discovery of the app config.
+// flag > env > CLI config file (~/.code-meeseeks/cli.yaml).
+//
+// The CLI deliberately does NOT read the GUI's config.yaml: that file holds
+// connection-layer secrets (platform tokens etc.), and silently sourcing the
+// service token from it would let the CLI reach into credentials it has no
+// business touching. Connection details must be provided explicitly.
 package settings
 
 import (
@@ -37,18 +42,14 @@ type Settings struct {
 
 // ErrNoToken indicates no bearer token could be resolved from any source.
 var ErrNoToken = errors.New("no API token: pass --token, set " + EnvToken +
-	", or enable the service listener in the app")
+	", or add `token` to ~/.code-meeseeks/cli.yaml")
 
 // Resolve applies the documented precedence (lowest first, overwritten by
 // higher sources) and returns the final connection settings.
 func Resolve(ov Overrides) (Settings, error) {
 	var s Settings
 
-	// 4) lowest precedence: local auto-discovery from the app config.
-	if disc, ok := discoverFromAppConfig(); ok {
-		s = disc
-	}
-	// 3) CLI config file.
+	// 3) lowest precedence: CLI config file.
 	if cfg, ok := loadCLIConfig(); ok {
 		if cfg.APIURL != "" {
 			s.APIURL = cfg.APIURL
@@ -81,59 +82,15 @@ func Resolve(ov Overrides) (Settings, error) {
 	return s, nil
 }
 
-// appConfig is the slice of the app's main config we care about.
-type appConfig struct {
-	Service struct {
-		Enabled bool   `yaml:"enabled"`
-		Host    string `yaml:"host"`
-		Port    int    `yaml:"port"`
-		Token   string `yaml:"token"`
-	} `yaml:"service"`
-}
-
-// discoverFromAppConfig reads the app's main config at ~/.code-meeseeks/config.yaml
-// and, when the service listener is enabled with a token, derives settings from
-// it — giving same-machine, same-user integrations a zero-config experience.
 // appHome returns the app's fixed data directory (~/.code-meeseeks), shared by the GUI
-// and CLI. Both meebox configs live here (GUI: config.yaml, CLI: cli.yaml).
+// and CLI. The CLI's own config (cli.yaml) lives here; the GUI's config.yaml also lives
+// here but the CLI never reads it (see package doc).
 func appHome() (string, bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", false
 	}
 	return filepath.Join(home, ".code-meeseeks"), true
-}
-
-func discoverFromAppConfig() (Settings, bool) {
-	home, ok := appHome()
-	if !ok {
-		return Settings{}, false
-	}
-	data, err := os.ReadFile(filepath.Join(home, "config.yaml"))
-	if err != nil {
-		return Settings{}, false
-	}
-	var cfg appConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return Settings{}, false
-	}
-	svc := cfg.Service
-	if !svc.Enabled || svc.Token == "" {
-		return Settings{}, false
-	}
-	host := svc.Host
-	if host == "" || host == "0.0.0.0" {
-		// 0.0.0.0 is a bind address, not a dial target — assume loopback locally.
-		host = defaultHost
-	}
-	port := svc.Port
-	if port == 0 {
-		port = defaultPort
-	}
-	return Settings{
-		APIURL: fmt.Sprintf("http://%s:%d", host, port),
-		Token:  svc.Token,
-	}, true
 }
 
 // cliConfig is the CLI's own optional config file.

@@ -6,12 +6,12 @@
 agent / 脚本 / CI 把 meebox 的 PR 发现、浏览与 Agent 操作纳入自动化流程。命令名 **`meebox`**。
 
 负责：把 API 端点封装成顺手的命令树、解析连接 / 鉴权配置、按人 / 机两种消费方式输出（文本 / JSON）、
-约定退出码。
+约定退出码。提供浏览与**评审写动作**（approve / needswork / comment）——与服务端写边界一致。
 
 **不负责**：
 
 - 业务逻辑 —— CLI 是 API 的瘦客户端，不内置任何评审 / 平台逻辑。
-- **写操作**（发评论、审批、发布等）—— 不提供对应命令；API 本就不开放（见 [服务端的只读边界](01-service-api.md)）。
+- **合并与变更类 Agent 工具**（merge / publish 等）—— 不提供对应命令；API 本就不开放（见 [服务端写边界](01-service-api.md)）。
 - 桌面应用本体 —— CLI **不内嵌进安装包**，是独立可分发物（见下「分发」）。
 
 ## 核心设计
@@ -43,11 +43,13 @@ CLI 需 API base URL + token。来源优先级（高 → 低）：
 
 1. 命令行 flag：`--api-url` / `--token`；
 2. 环境变量：`MEEBOX_API_URL` / `MEEBOX_TOKEN`；
-3. CLI 自身配置文件 `~/.code-meeseeks/cli.yaml`（与 GUI 的 `config.yaml` 同目录、独立文件，隔离二者配置）；
-4. **本机自动发现**：同机同用户时，读用户主目录下的应用主配置 `~/.code-meeseeks/config.yaml` 的 `service`
-   段，自动取 `host`/`port`/`token`——本机集成**零配置**开箱即用。
+3. CLI 自身配置文件 `~/.code-meeseeks/cli.yaml`（与 GUI 的 `config.yaml` 同目录、独立文件，隔离二者配置）。
 
-远端（服务端绑 `0.0.0.0`）场景无法自动发现，须显式给 `--api-url` + `--token`。token 缺失即报鉴权错误。
+连接信息须**显式提供**（flag / 环境变量 / `cli.yaml` 三者之一），token 缺失即报鉴权错误。
+
+**不读取 GUI 主配置**：CLI 刻意**不**读应用主配置 `~/.code-meeseeks/config.yaml`。该文件承载连接层机密
+（各代码平台的访问令牌等），若从中静默取服务令牌，等于让 CLI 触达其本不应接触的凭据——属预期外的越权访问，
+故移除此前的「本机自动发现」设计。环境变量 `MEEBOX_TOKEN` 是本机免逐次传参的推荐方式（配合 shell / CI 环境注入）。
 
 ### 命令结构
 
@@ -57,23 +59,36 @@ meebox [全局 flag] <组> <命令> [参数]
 全局 flag：--api-url · --token · --output (yaml|json) · --quiet
 ```
 
+命令分两个领域组：`pr`（直接的 PR 实体操作）与 `agent`（评审 Agent 操作）。二者都用**必填 flag
+`--pr <id>`** 传 PR 标识（`id` 由 `pr list` 输出获得）——meebox 只管理 PR，故 agent **不再嵌进 `pr`**
+（避免 `pr agent … --pr` 里 `pr` 重复），而与 `pr` 平级。
+
 | 命令 | 用途 | 对应 API |
 | --- | --- | --- |
-| `meebox categories` | 列当前启用平台下可用的分类标签（一级 + 二级） | `GET /categories` |
-| `meebox pr list [--primary <一级>] [--secondary <二级>] [--query <检索>]` | PR 列表（不分页、全部基础信息） | `GET /prs` |
-| `meebox pr show <id>` | 描述详情 | `GET /prs/{id}` |
-| `meebox pr diff <id> [--file <path>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 | `GET /prs/{id}/diff` |
-| `meebox pr activity <id>` | 动态（时间线） | `GET /prs/{id}/activity` |
-| `meebox pr commits <id>` | 提交列表 | `GET /prs/{id}/commits` |
-| `meebox pr reviewers <id>` | 评审人审批状态 | `GET /prs/{id}/reviewers` |
-| `meebox agent status <id>` | Agent 当前执行状态 | `GET /prs/{id}/agent` |
-| `meebox agent history <id>` | 历史会话 | `GET /prs/{id}/agent/conversation` |
-| `meebox agent review <id>` | 执行 auto review | `POST /prs/{id}/agent/review` |
-| `meebox agent instruct <id> <command> [args]` | 发送 Agent 指令（仅只读：describe / review / ask / improve） | `POST /prs/{id}/agent/instruct` |
-| `meebox agent chat <id> <message>` | 自然语言聊天（可触发任务执行） | `POST /prs/{id}/agent/chat` |
+| `meebox whoami` | 当前身份（用户 + 平台 + 连接名） | `GET /whoami` |
+| `meebox categories` | 列当前启用平台的分类标签（`categories` 一级 + `statuses` 二级） | `GET /categories` |
+| `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简投影 + 分页，默认 limit 100） | `GET /prs` |
+| `meebox pr show --pr <id>` | 描述详情 | `GET /prs/{id}` |
+| `meebox pr diff --pr <id> [--file <path>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 | `GET /prs/{id}/diff` |
+| `meebox pr activity --pr <id>` | 动态（时间线） | `GET /prs/{id}/activity` |
+| `meebox pr commits --pr <id>` | 提交列表 | `GET /prs/{id}/commits` |
+| `meebox pr reviewers --pr <id>` | 评审人审批状态 | `GET /prs/{id}/reviewers` |
+| `meebox pr approve --pr <id>` | 评审决断「通过」（真实远端写） | `POST /prs/{id}/approve` |
+| `meebox pr needswork --pr <id>` | 评审决断「需修改」（真实远端写） | `POST /prs/{id}/needswork` |
+| `meebox pr comment --pr <id> <message>` | 发一条顶层评论（真实远端写） | `POST /prs/{id}/comment` |
+| `meebox agent status --pr <id>` | Agent 当前执行状态 | `GET /prs/{id}/agent` |
+| `meebox agent history --pr <id>` | 历史会话 | `GET /prs/{id}/agent/conversation` |
+| `meebox agent review --pr <id>` | 执行 auto review | `POST /prs/{id}/agent/review` |
+| `meebox agent instruct --pr <id> <command> [args]` | 发送 Agent 指令（仅只读：describe / review / ask / improve） | `POST /prs/{id}/agent/instruct` |
+| `meebox agent chat --pr <id> <message>` | 自然语言聊天（可触发任务执行） | `POST /prs/{id}/agent/chat` |
+| `meebox agent stop --pr <id>` | 中断该 PR 运行中的 Agent（PR 级） | `POST /prs/{id}/agent/stop` |
+| `meebox agent run list --pr <id>` | 该 PR 运行队列中的 pr-agent runs（active + waiting） | `GET /prs/{id}/agent/runs` |
+| `meebox agent run cancel --pr <id> --run <runId>` | 按 run 取消一个 pr-agent 工具调用 | `POST /prs/{id}/agent/runs/{runId}/cancel` |
 
-- `<id>` 为 PR 的 `localId`（由 `pr list` 输出获得）。
-- 写工具不在 `instruct` 白名单内；传入即被服务端拒绝（CLI 也可前置友好报错）。
+- `<id>` 为 PR 的 `localId`（列表投影里对外命名为 `id`，由 `pr list` 输出获得）。
+- 评审写动作走 `pr approve` / `pr needswork` / `pr comment` 专用命令；变更类工具（publish 等）不在 `instruct`
+  白名单内，传入即被服务端拒绝（CLI 亦前置友好报错）。merge（合并）不提供。
+- 中断粒度：`agent stop` 停整个 PR 的 Agent；`agent run cancel` 只取消指定的单个 pr-agent run。
 
 ### 输出与退出码
 
@@ -92,25 +107,29 @@ meebox [全局 flag] <组> <命令> [参数]
 ## 数据 / 接口契约
 
 - **配置来源优先级**：flag > env（`MEEBOX_API_URL` / `MEEBOX_TOKEN`）> CLI 配置文件
-  （`~/.code-meeseeks/cli.yaml`）> 本机 `~/.code-meeseeks/config.yaml` 自动发现。
+  （`~/.code-meeseeks/cli.yaml`）。连接信息须显式提供；CLI 不读 GUI 主配置 `config.yaml`（含连接层机密）。
 - **输出模式**：`yaml`（默认，人，类 k8s `-o yaml`）/ `json`（机，输出 API `data`）；均为响应数据的通用转换。
 - **退出码**：`0` 成功 / `1` 通用 / `2` 鉴权 / `3` not found（按需扩展）。
 - **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（Windows / macOS 用 `.zip`、Linux 用 `.tar.gz`），
   附 `.sha256` 校验和。`<version>` 与应用版本对齐（同一 `v*` tag）。
+- **压缩包内容 = 可直接投放的 skill 目录**：除二进制外一并打包 `LICENSE` + `README.md` + `SKILL.md`。解压到
+  agent 的 skills 目录即得一个可用 skill——`SKILL.md`（frontmatter `name: meebox`）教 agent 用法，紧邻其驱动
+  的二进制。这是 CLI「面向 agent 交付」的主形态。
 
 ## 分发与 CI
 
 - **覆盖平台**：Windows x64、macOS arm64、Linux x64 / arm64。
-- **随主工程一起发布**：在发布流程中增加一个 **Go 构建 job**（`actions/setup-go` + `GOOS`/`GOARCH` 交叉编译
-  矩阵；可选 GoReleaser 简化），产出四平台压缩包 + 校验和，与桌面安装包一并上传到**同一个 GitHub Release**
-  （由现有 `v*` tag 触发，见 [发布流程](../../../AGENTS.md)）。
+- **随主工程一起发布**：发布流程的 **Go 构建 job**（`actions/setup-go` + `GOOS`/`GOARCH` 交叉编译矩阵）产出
+  四平台压缩包（含二进制 + `LICENSE` + `README.md` + `SKILL.md`）+ 校验和，与桌面安装包一并上传到**同一个
+  GitHub Release**（由现有 `v*` tag 触发，见 [发布流程](../../../AGENTS.md)）。
 - 版本号与应用同源（同 tag），确保 CLI 与服务端 API 契约版本可对应。
 
 ## 扩展与注意事项
 
-- **只读边界**：写操作显式不提供；新增命令前先确认对应 API 端点已存在且为只读。
+- **写边界与服务端一致**：仅提供评审写动作（approve / needswork / comment）；合并与变更类 Agent 工具不提供。
+  新增命令前先确认对应 API 端点已存在，写端点须与服务端写边界对齐。
 - **加新命令先加端点**：CLI 不得绕过 API 直连应用内部；能力缺口先在[服务端](01-service-api.md)补端点。
-- **本机自动发现的边界**：仅同机同用户可读主目录下的 `~/.code-meeseeks/config.yaml`；远端 / 跨用户必须显式配 URL + token。
+- **不触碰 GUI 机密**：CLI 不读应用主配置 `~/.code-meeseeks/config.yaml`（含各平台访问令牌等连接层机密）；服务令牌须经 flag / 环境变量 / `cli.yaml` 显式提供，避免越权触达预期外凭据。
 - **契约漂移防护**：初期手写 struct 务必随服务端契约同步更新；契约增长后转 OpenAPI / Schema 代码生成。
 - **JSON 优先稳定**：`--output json` 是自动化主路径，其字段形状视为对外契约，演进需保持兼容。
 - **代理走环境变量**：HTTP client 用 Go `net/http` 默认 transport，天然遵循标准 `HTTP(S)_PROXY` /

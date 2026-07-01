@@ -8,10 +8,13 @@
 
 负责：服务监听开关与生命周期、bearer token 鉴权、请求路由与响应封装、把内部能力映射成稳定的 HTTP 契约。
 
+开放的**写操作**限定为评审动作：approve / needswork（远端评审决断）与顶层 comment（发评论），复用
+GUI 同源 controller（见下「写边界」）。
+
 **不负责**：
 
-- **写操作**（发评论、审批、发布草稿等对远端有副作用的动作）—— API 一律不开放；有集成需求由调用方
-  自行用平台 API 实现（见下「只读边界」）。
+- **合并与 pr-agent 变更类工具** —— merge（合并 PR）、pr-agent 的 publish 等变更工具不开放；有此需求由
+  调用方自行用平台 API 实现（见下「写边界」）。
 - **多用户 / 远端服务形态** —— 仍是单用户本地应用，API 只是本机（或可选局域网）的入站通道，不引入账户体系。
 - 业务逻辑本身 —— 复用 IPC controller 同源的 service 层，不在 HTTP 侧另起一套实现。
 
@@ -52,13 +55,17 @@
 - 原则：核心能力沉在 service 层，IPC 与 HTTP 各自只做**薄封装 + 协议适配**。新增 API 端点前，先确保对应能力
   在 service 层有可复用方法（必要时把 controller 内联逻辑下沉到 service）。
 
-### 只读边界（写操作的硬拒绝）
+### 写边界（放开评审动作，拒绝合并与变更类 Agent 工具）
 
-- API 暴露的 Agent 操作**仅限只读工具**（`/describe`·`/review`·`/ask`·`/improve` 一族）。修改类工具
-  （`/approve`·`/needswork`·`/publish` 等，见工具注册表 `kind: 'mutating'`）**在 API 层即被硬拒绝**——
-  与 Agent 自身的 grant 授权闸**相互独立**：即便某 PR 的 AutoPilot grants 授予了写权限，经 API 发起的指令
-  仍不得触发写工具。
-- 由此「**不支持二次确认**」自然成立：API 无交互确认通道，只读指令直接执行、无需确认；需确认的写操作干脆不开放。
+- 开放的写操作**限定评审动作**：`POST …/approve`·`…/needswork`（远端评审决断，复用 `prs:setLocalStatus`——
+  先写远端评审状态、再落本地）与 `POST …/comment`（发顶层评论，复用 `comments:create`）。均为真实远端写。
+- Agent 指令（`…/agent/instruct`）**仍限只读工具**（`/describe`·`/review`·`/ask`·`/improve`）；变更类工具
+  （`/publish` 等，见工具注册表 `kind: 'mutating'`）**在 API 层即被硬拒绝**——与 Agent 自身 grant 授权闸
+  **相互独立**：即便某 PR 的 AutoPilot grants 授予了写权限，经 API 的 instruct 仍不得触发写工具。评审写动作
+  改走上面的 approve / needswork / comment 专用端点，不经 instruct。
+- **不开放合并（merge）**：对远端影响大且不可逆，暂不纳入 API。
+- **无二次确认**：API 无交互确认通道；已开放的写端点直接执行（调用方自负授权），需交互确认的动作（如合并）
+  干脆不开放。
 
 ### 生命周期与热生效
 
@@ -100,29 +107,36 @@ service:
 { "ok": false, "error": { "code": "ESV0001", "meta": { /* ... */ } } }
 ```
 
-- HTTP 状态码与语义对齐：`400` 校验失败 / `401` 未授权 / `403` 写操作不开放 / `404` 资源不存在 /
+- HTTP 状态码与语义对齐：`400` 校验失败 / `401` 未授权 / `403` 写工具被拒（未开放的写操作）/ `404` 资源不存在 /
   `409` 冲突 / `500` 内部错误。
 - 新增 **`SV`（service）错误码领域**（`E`+`SV`+四位，见 [错误码规范](../99-core/04-error-codes.md)）：
   如 token 无效、写操作被拒、监听未就绪等；与既有 `AG`/`PR`/`NT` 等领域并列。
 
 ### 端点（`/api/v1`，逐条对应 [CLI](02-cli.md) 命令）
 
+读端点用 `GET`、写端点用 `POST`。列表返回**精简投影**，其余读端点返回同源结构。
+
 | Method & Path | 用途 | 复用的内部能力 |
 | --- | --- | --- |
-| `GET /api/v1/categories` | 当前启用平台下可用的分类标签：一级（`PrDiscoveryFilter`）+ 二级（状态 / 合并态筛选），按平台能力裁剪 | 平台能力位 + 列表筛选语义 |
-| `GET /api/v1/prs` | PR 列表（**不分页**、返回全部基础信息）；query：`primary`（一级）/`secondary`（二级）/`q`（检索：标题 / 仓库 / 作者 / 编号） | `prs:list` 同源（`StoredPullRequest[]`） |
-| `GET /api/v1/prs/{localId}` | 描述详情（标题 / 描述 / 作者 / 分支 / 时间 / 状态 / 合并态） | `StoredPullRequest` 概要 |
-| `GET /api/v1/prs/{localId}/diff` | 变更文件列表；带 `?path=&side=base\|head` 时取单文件内容 | `diff:listChangedFiles` / `diff:getFileContent` 同源 |
-| `GET /api/v1/prs/{localId}/activity` | 动态（评论 / 提交更新 / 评审决断归并的时间线） | `diff:listActivity` 同源 |
-| `GET /api/v1/prs/{localId}/commits` | 提交列表（`PrCommit[]`） | `diff:listCommits` 同源 |
-| `GET /api/v1/prs/{localId}/reviewers` | 评审人审批状态（`Reviewer[]`，含各人 `status`） | `StoredPullRequest.reviewers` |
-| `GET /api/v1/prs/{localId}/agent` | Agent 当前执行状态（`AgentSession`：status / 进度 / 总结 / 建议） | `agent:getSession` 同源 |
-| `GET /api/v1/prs/{localId}/agent/conversation` | 历史会话（`AgentMessage[]`） | `agent:getConversation` 同源 |
-| `POST /api/v1/prs/{localId}/agent/review` | 执行 auto review（固定评审微流程 describe→review→[追问]→总结） | `agent:run` 同源 |
-| `POST /api/v1/prs/{localId}/agent/instruct` | 发送 Agent 指令（**仅只读工具**：describe / review / ask / improve；写工具硬拒绝、无二次确认） | 只读工具派发（复用 run 队列） |
-| `POST /api/v1/prs/{localId}/agent/chat` | 发送自然语言聊天（可触发 Agent 规划与任务执行） | `agent:ask` / `agent:enqueueMessage` 同源 |
+| `GET /api/v1/whoami` | 当前身份：活动连接 PAT 所属用户（`name`/`displayName`/`slug`）+ 集成平台 + 连接显示名；无活动连接各项 null | 连接摘要（当前用户 + 平台） |
+| `GET /api/v1/categories` | 当前启用平台下可用的分类标签：`categories`（`PrDiscoveryFilter`）+ `statuses`（状态 / 合并态筛选），按平台能力裁剪 | 平台能力位 + 列表筛选语义 |
+| `GET /api/v1/prs` | PR 列表（**精简投影** `PrListItem`：字段序 id/title/author/createdAt 优先，去 description、人员仅 slug）；query：`category`（一级）/`status`（二级）/`q`（检索）/`skip`+`limit`（分页，默认 limit 100） | `prs:list` + 列表筛选谓词 + 视图投影 |
+| `GET /api/v1/prs/{id}` | 描述详情（完整 `StoredPullRequest`：标题 / 描述 / 作者 / 分支 / 时间 / 状态 / 合并态） | `StoredPullRequest` |
+| `GET /api/v1/prs/{id}/diff` | 变更文件列表；带 `?path=&side=base\|head` 时取单文件内容 | `diff:listChangedFiles` / `diff:getFileContent` 同源 |
+| `GET /api/v1/prs/{id}/activity` | 动态（评论 / 提交更新 / 评审决断归并的时间线） | `diff:listActivity` 同源 |
+| `GET /api/v1/prs/{id}/commits` | 提交列表（`PrCommit[]`） | `diff:listCommits` 同源 |
+| `GET /api/v1/prs/{id}/reviewers` | 评审人审批状态（`Reviewer[]`，含各人 `status`） | `StoredPullRequest.reviewers` |
+| `GET /api/v1/prs/{id}/agent` | Agent 当前执行状态（`AgentSession`：status / 进度 / 总结 / 建议） | `agent:getSession` 同源 |
+| `GET /api/v1/prs/{id}/agent/conversation` | 历史会话（`AgentMessage[]`） | `agent:getConversation` 同源 |
+| `POST /api/v1/prs/{id}/agent/review` | 执行 auto review（固定评审微流程 describe→review→[追问]→总结） | `agent:run` 同源 |
+| `POST /api/v1/prs/{id}/agent/instruct` | 发送 Agent 指令（**仅只读工具**：describe / review / ask / improve；写工具硬拒绝） | 只读工具派发（复用 run 队列） |
+| `POST /api/v1/prs/{id}/agent/chat` | 发送自然语言聊天（可触发 Agent 规划与任务执行） | `agent:ask` / `agent:enqueueMessage` 同源 |
+| `POST /api/v1/prs/{id}/agent/stop` | 中断该 PR 运行中的 Agent（思考 / 执行任意阶段即时停；PR 级，非按单个 run） | `agent:stop` 同源 |
+| `POST /api/v1/prs/{id}/approve` | 评审决断「通过」（写远端评审状态 + 落本地） | `prs:setLocalStatus` 同源 |
+| `POST /api/v1/prs/{id}/needswork` | 评审决断「需修改」（写远端评审状态 + 落本地） | `prs:setLocalStatus` 同源 |
+| `POST /api/v1/prs/{id}/comment` | 发一条顶层评论（body 为正文，空则 400） | `comments:create` 同源 |
 
-- `localId` 为跨平台稳定 PR 标识（内部哈希，非平台 `remoteId`）；所有 PR 维度端点以它定位。
+- `{id}` 即 PR 的 `localId`——跨平台稳定 PR 标识（内部哈希，非平台 `remoteId`）；列表投影里对外命名为 `id`，所有 PR 维度端点以它定位。
 - 过程步骤（transcript）暂不在初版 API 内开放，作为将来扩展位（见下）。
 
 ### 新增 IPC（设置页驱动）
@@ -133,8 +147,9 @@ service:
 ## 扩展与注意事项
 
 - **加新端点先下沉 service**：HTTP 与 IPC 必须共用 service 方法，避免逻辑分叉；端点是 service 能力的薄投影。
-- **写操作边界是硬约束**：只读工具白名单在 API 层强校验，独立于 Agent grant 闸；新增工具时同步确认其
-  `kind` 与是否纳入 API 白名单，默认排除一切 `mutating`。
+- **写边界是硬约束**：评审写动作仅经 approve / needswork / comment 专用端点；Agent `instruct` 的只读工具
+  白名单在 API 层强校验、独立于 Agent grant 闸——新增 Agent 工具时同步确认其 `kind` 与是否纳入 instruct
+  白名单，默认排除一切 `mutating`。放开新的写端点须显式评估远端副作用（合并等高影响动作暂不开放）。
 - **`0.0.0.0` 安全警示不可省**：设置页与使用文档须明确暴露范围与风险；token 是唯一防线。
 - **端口冲突**：监听失败以非致命方式提示，不拖垮应用启动；提示用户改端口。
 - **进度推送是将来扩展位**：初版以「轮询 `GET .../agent` 拉状态」为主；如需实时进度，可在同一监听器上加

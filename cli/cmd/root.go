@@ -32,12 +32,13 @@ func newRootCmd() *cobra.Command {
 		Version:       version,
 	}
 	pf := root.PersistentFlags()
-	pf.StringVar(&gflags.apiURL, "api-url", "", "API base URL (overrides env and local auto-discovery)")
-	pf.StringVar(&gflags.token, "token", "", "bearer token (overrides env and local auto-discovery)")
+	pf.StringVar(&gflags.apiURL, "api-url", "", "API base URL (overrides "+settings.EnvAPIURL+" and cli.yaml)")
+	pf.StringVar(&gflags.token, "token", "", "bearer token (overrides "+settings.EnvToken+" and cli.yaml)")
 	pf.StringVar(&gflags.output, "output", "yaml", "output format: yaml|json")
 	pf.BoolVar(&gflags.quiet, "quiet", false, "suppress non-essential output")
 
 	root.AddCommand(
+		newWhoamiCmd(),
 		newCategoriesCmd(),
 		newPrCmd(),
 		newAgentCmd(),
@@ -84,6 +85,20 @@ func getAndRender(path string) error {
 		return err
 	}
 	data, err := c.Get(path, nil)
+	if err != nil {
+		return err
+	}
+	return renderData(data)
+}
+
+// postAndRender is the common POST-then-render path used by action commands
+// (agent triggers, review write actions). body may be nil for parameterless POSTs.
+func postAndRender(path string, body any) error {
+	c, err := resolveClient()
+	if err != nil {
+		return err
+	}
+	data, err := c.Post(path, body)
 	if err != nil {
 		return err
 	}

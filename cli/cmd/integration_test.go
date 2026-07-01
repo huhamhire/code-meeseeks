@@ -69,7 +69,7 @@ func base(srvURL string, rest ...string) []string {
 
 func TestCategories(t *testing.T) {
 	var rec capturedReq
-	srv := mockServer(&rec, 200, `{"platform":"github","primary":["review-requested"],"secondary":["all"]}`)
+	srv := mockServer(&rec, 200, `{"platform":"github","categories":["review-requested"],"statuses":["all"]}`)
 	defer srv.Close()
 
 	out, err := runCmd(base(srv.URL, "categories")...)
@@ -87,18 +87,35 @@ func TestCategories(t *testing.T) {
 	}
 }
 
+func TestWhoami(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"platform":"github","user":{"slug":"alice"}}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "whoami")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/whoami" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(out, "platform: github") {
+		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
 func TestPrListFilters(t *testing.T) {
 	var rec capturedReq
 	srv := mockServer(&rec, 200, `[]`)
 	defer srv.Close()
 
-	if _, err := runCmd(base(srv.URL, "pr", "list", "--primary", "created", "--secondary", "approved", "--query", "foo")...); err != nil {
+	if _, err := runCmd(base(srv.URL, "pr", "list", "--category", "created", "--status", "approved", "--query", "foo", "--skip", "5", "--limit", "20")...); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if rec.path != "/api/v1/prs" {
 		t.Errorf("wrong path: %s", rec.path)
 	}
-	for _, want := range []string{"primary=created", "secondary=approved", "q=foo"} {
+	for _, want := range []string{"category=created", "status=approved", "q=foo", "skip=5", "limit=20"} {
 		if !strings.Contains(rec.query, want) {
 			t.Errorf("query %q missing %q", rec.query, want)
 		}
@@ -110,7 +127,7 @@ func TestPrShow(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"localId":"abc123","title":"t"}`)
 	defer srv.Close()
 
-	if _, err := runCmd(base(srv.URL, "pr", "show", "abc123")...); err != nil {
+	if _, err := runCmd(base(srv.URL, "pr", "show", "--pr", "abc123")...); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if rec.method != http.MethodGet || rec.path != "/api/v1/prs/abc123" {
@@ -123,7 +140,7 @@ func TestPrDiffFile(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"binary":false,"content":"x"}`)
 	defer srv.Close()
 
-	if _, err := runCmd(base(srv.URL, "pr", "diff", "abc123", "--file", "src/a.go", "--side", "head")...); err != nil {
+	if _, err := runCmd(base(srv.URL, "pr", "diff", "--pr", "abc123", "--file", "src/a.go", "--side", "head")...); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if rec.path != "/api/v1/prs/abc123/diff" {
@@ -141,7 +158,7 @@ func TestAgentReviewPost(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"status":"succeeded"}`)
 	defer srv.Close()
 
-	if _, err := runCmd(base(srv.URL, "agent", "review", "abc123")...); err != nil {
+	if _, err := runCmd(base(srv.URL, "agent", "review", "--pr", "abc123")...); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/review" {
@@ -154,7 +171,7 @@ func TestAgentInstructBody(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"status":"queued"}`)
 	defer srv.Close()
 
-	if _, err := runCmd(base(srv.URL, "agent", "instruct", "abc123", "describe", "extra", "ctx")...); err != nil {
+	if _, err := runCmd(base(srv.URL, "agent", "instruct", "--pr", "abc123", "describe", "extra", "ctx")...); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/instruct" {
@@ -170,7 +187,7 @@ func TestAgentInstructWriteToolRejected(t *testing.T) {
 	srv := mockServer(&rec, 200, `null`)
 	defer srv.Close()
 
-	_, err := runCmd(base(srv.URL, "agent", "instruct", "abc123", "approve")...)
+	_, err := runCmd(base(srv.URL, "agent", "instruct", "--pr", "abc123", "approve")...)
 	if err == nil {
 		t.Fatal("expected write tool to be rejected")
 	}
@@ -184,7 +201,7 @@ func TestAgentChatPost(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"queued":true}`)
 	defer srv.Close()
 
-	if _, err := runCmd(base(srv.URL, "agent", "chat", "abc123", "hello", "world")...); err != nil {
+	if _, err := runCmd(base(srv.URL, "agent", "chat", "--pr", "abc123", "hello", "world")...); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/chat" {
@@ -192,6 +209,87 @@ func TestAgentChatPost(t *testing.T) {
 	}
 	if !strings.Contains(rec.body, "hello world") {
 		t.Errorf("body missing message: %q", rec.body)
+	}
+}
+
+func TestPrApprovePost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"localStatus":"approved"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "approve", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/approve" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestPrNeedsworkPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"localStatus":"needs_work"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "needswork", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/needswork" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestPrCommentPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"remoteId":"c1"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "comment", "--pr", "abc123", "please", "fix")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/comment" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(rec.body, "please fix") {
+		t.Errorf("body missing comment text: %q", rec.body)
+	}
+}
+
+func TestAgentStopPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"ok":true}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "stop", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/stop" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestAgentRunList(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `[{"runId":"r1","tool":"review","state":"active"}]`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "run", "list", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/prs/abc123/agent/runs" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestAgentRunCancel(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"ok":true}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "run", "cancel", "--pr", "abc123", "--run", "r1")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/runs/r1/cancel" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
 	}
 }
 
@@ -214,7 +312,7 @@ func TestNotFoundExitCode(t *testing.T) {
 	srv := mockServer(&rec, 404, "")
 	defer srv.Close()
 
-	_, err := runCmd(base(srv.URL, "pr", "show", "missing")...)
+	_, err := runCmd(base(srv.URL, "pr", "show", "--pr", "missing")...)
 	if err == nil {
 		t.Fatal("expected not-found error")
 	}

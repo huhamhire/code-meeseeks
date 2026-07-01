@@ -6,8 +6,8 @@ import (
 )
 
 // isolateHome points HOME / USERPROFILE at an empty temp dir so os.UserHomeDir
-// resolves there — keeping Resolve's local auto-discovery (~/.code-meeseeks/*) from
-// reading the developer's real app config and making these tests non-hermetic.
+// resolves there — keeping Resolve's CLI config lookup (~/.code-meeseeks/cli.yaml)
+// from reading the developer's real file and making these tests non-hermetic.
 func isolateHome(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()

@@ -157,6 +157,25 @@ textarea {
   }
 }
 
+// 文本型按钮：无底 / 无边框的链接态动作（工具栏里的轻量操作，如「全选 / 取消全选」），
+// 强调蓝、hover 加下划线；不占按钮实底，读作行内链接。
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: $color-accent;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
 .count-pill {
   background: $bg-white-fade;
   padding: 0 $space-3;

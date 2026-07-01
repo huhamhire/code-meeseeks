@@ -3,11 +3,13 @@
 package render
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/huhamhire/code-meeseeks/cli/internal/apiclient"
 	"github.com/huhamhire/code-meeseeks/cli/internal/settings"
@@ -57,15 +59,17 @@ func writeJSON(data json.RawMessage) error {
 		fmt.Fprintln(Stdout, "null")
 		return nil
 	}
-	var v any
-	if err := json.Unmarshal(data, &v); err != nil {
-		// Valid JSON we can't re-decode into `any` is unlikely; print verbatim.
+	// Indent the raw bytes rather than unmarshal→marshal: json.Indent preserves the
+	// server's object key order (the view-layer field order), which decoding into a
+	// Go map would lose.
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, data, "", "  "); err != nil {
 		fmt.Fprintln(Stdout, string(data))
 		return nil
 	}
-	enc := json.NewEncoder(Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
+	buf.WriteByte('\n')
+	_, err := Stdout.Write(buf.Bytes())
+	return err
 }
 
 func writeYAML(data json.RawMessage) error {
@@ -73,18 +77,93 @@ func writeYAML(data json.RawMessage) error {
 		fmt.Fprintln(Stdout, "null")
 		return nil
 	}
-	var v any
-	if err := json.Unmarshal(data, &v); err != nil {
+	// Build the YAML tree from the JSON token stream so object key order is preserved
+	// (a Go map would sort keys and drop the server's intended field order).
+	node, err := jsonToYAMLNode(data)
+	if err != nil {
 		// Not decodable as JSON — fall back to the raw payload.
 		fmt.Fprintln(Stdout, string(data))
 		return nil
 	}
-	out, err := yaml.Marshal(v)
+	out, err := yaml.Marshal(node)
 	if err != nil {
 		return err
 	}
 	_, err = Stdout.Write(out)
 	return err
+}
+
+// jsonToYAMLNode decodes JSON into a *yaml.Node tree, preserving object key order
+// (unlike decoding into map[string]any, which loses insertion order).
+func jsonToYAMLNode(data []byte) (*yaml.Node, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	return buildYAMLValue(dec)
+}
+
+func buildYAMLValue(dec *json.Decoder) (*yaml.Node, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	if delim, ok := tok.(json.Delim); ok {
+		switch delim {
+		case '{':
+			m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			for dec.More() {
+				keyTok, err := dec.Token()
+				if err != nil {
+					return nil, err
+				}
+				key, _ := keyTok.(string)
+				val, err := buildYAMLValue(dec)
+				if err != nil {
+					return nil, err
+				}
+				m.Content = append(m.Content,
+					&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, val)
+			}
+			if _, err := dec.Token(); err != nil { // consume '}'
+				return nil, err
+			}
+			return m, nil
+		case '[':
+			s := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+			for dec.More() {
+				val, err := buildYAMLValue(dec)
+				if err != nil {
+					return nil, err
+				}
+				s.Content = append(s.Content, val)
+			}
+			if _, err := dec.Token(); err != nil { // consume ']'
+				return nil, err
+			}
+			return s, nil
+		}
+	}
+	return scalarYAMLNode(tok), nil
+}
+
+func scalarYAMLNode(tok json.Token) *yaml.Node {
+	switch t := tok.(type) {
+	case string:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: t}
+	case json.Number:
+		tag := "!!int"
+		if strings.ContainsAny(t.String(), ".eE") {
+			tag = "!!float"
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: t.String()}
+	case bool:
+		v := "false"
+		if t {
+			v = "true"
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: v}
+	default: // nil
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+	}
 }
 
 // Errorln prints an error to stderr.

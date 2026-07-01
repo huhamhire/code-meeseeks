@@ -182,11 +182,14 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           BIN="meebox${{ matrix.ext }}"
           ARCHIVE="meebox-cli-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          cp ../../LICENSE .
+          # Bundle LICENSE + README + SKILL.md so the archive is a drop-in agent skill
+          # directory (unzip into a skills dir → SKILL.md beside the binary it drives).
+          cp ../../LICENSE ../README.md ../SKILL.md .
+          FILES=("${BIN}" LICENSE README.md SKILL.md)
           if [ "${{ matrix.archive }}" = "zip" ]; then
-            zip -q "${ARCHIVE}.zip" "${BIN}" LICENSE
+            zip -q "${ARCHIVE}.zip" "${FILES[@]}"
           else
-            tar -czf "${ARCHIVE}.tar.gz" "${BIN}" LICENSE
+            tar -czf "${ARCHIVE}.tar.gz" "${FILES[@]}"
           fi
           for f in "${ARCHIVE}".zip "${ARCHIVE}".tar.gz; do
             [ -e "$f" ] && sha256sum "$f" > "$f.sha256"

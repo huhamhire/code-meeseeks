@@ -1,7 +1,8 @@
 # CLI 命令行工具（meebox）
 
 `meebox` 是随发布提供的跨平台命令行工具，经本机的「本地 API 服务」访问应用能力，便于把 PR 浏览与
-评审 Agent 操作接入脚本、CI 或外部 agent。命令行只做**浏览与评审操作**，不含评论发送等写操作。
+评审 Agent 操作接入脚本、CI 或外部 agent。命令行提供**浏览与评审操作**，含评审决断（approve / needswork）
+与发评论；不含合并（merge）等高影响写操作。
 
 ## 1. 开启本地 API 服务
 
@@ -19,6 +20,9 @@ CLI 依赖应用内的本地 API 服务，默认关闭，需先在 **设置 → 
 
 覆盖平台：Windows x64、macOS arm64、Linux x64 / arm64。
 
+压缩包内含 `meebox` 二进制、`LICENSE`、`README.md` 与 `SKILL.md`。**作为 agent skill 使用**：把解压目录直接
+放入 agent 的 skills 目录（如 `~/.claude/skills/meebox/`）即可——`SKILL.md` 会告诉 agent 如何驱动其旁的 `meebox`。
+
 ## 3. 连接方式
 
 `meebox` 按以下优先级解析 API 地址与令牌（高 → 低）：
@@ -26,23 +30,23 @@ CLI 依赖应用内的本地 API 服务，默认关闭，需先在 **设置 → 
 1. 命令行参数：`--api-url` / `--token`
 2. 环境变量：`MEEBOX_API_URL` / `MEEBOX_TOKEN`
 3. CLI 配置文件：`~/.code-meeseeks/cli.yaml`（字段 `api_url` / `token`）
-4. **本机自动发现**：同机同用户时，自动读应用配置 `~/.code-meeseeks/config.yaml` 的服务监听设置
 
-因此**在开启服务的本机上零配置即可用**——直接运行命令，自动读取本机地址与令牌：
-
-```bash
-meebox pr list
-```
-
-远端访问（服务监听 `0.0.0.0`）需显式提供地址与令牌：
+连接信息须**显式提供**其一。令牌在设置页「集成」分区查看 / 复制。本机免逐次传参推荐用环境变量：
 
 ```bash
-meebox --api-url http://<主机>:18765 --token <令牌> pr list
-# 或经环境变量
-export MEEBOX_API_URL=http://<主机>:18765
+export MEEBOX_API_URL=http://127.0.0.1:18765
 export MEEBOX_TOKEN=<令牌>
 meebox pr list
 ```
+
+远端访问（服务监听 `0.0.0.0`）同样显式提供地址与令牌：
+
+```bash
+meebox --api-url http://<主机>:18765 --token <令牌> pr list
+```
+
+> CLI **不读取** GUI 主配置 `~/.code-meeseeks/config.yaml`：该文件含代码平台访问令牌等连接层机密，
+> 不从中取服务令牌，避免越权触达预期外的凭据。API 地址默认 `http://127.0.0.1:18765`（未显式指定时）。
 
 ## 4. 命令
 
@@ -50,22 +54,32 @@ meebox pr list
 meebox [全局参数] <组> <命令> [参数]
 ```
 
+命令分 `pr`（直接的 PR 操作）与 `agent`（评审 Agent 操作）两个领域组，均用**必填参数 `--pr <id>`** 指定 PR
+（`id` 由 `meebox pr list` 输出获得）。
+
 | 命令 | 用途 |
 | --- | --- |
+| `meebox whoami` | 当前登录身份与集成平台（用户 + 平台 + 连接名） |
 | `meebox categories` | 列出当前平台可用的分类标签（一级发现分类 + 二级状态 / 合并态筛选） |
-| `meebox pr list [--primary <一级>] [--secondary <二级>] [--query <检索>]` | PR 列表（不分页），支持按分类与关键字过滤 |
-| `meebox pr show <id>` | PR 描述详情 |
-| `meebox pr diff <id> [--file <路径>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 |
-| `meebox pr activity <id>` | 活动时间线（评论 / 提交 / 评审决断） |
-| `meebox pr commits <id>` | 提交列表 |
-| `meebox pr reviewers <id>` | 评审人审批状态 |
-| `meebox agent status <id>` | 评审 Agent 当前执行状态 |
-| `meebox agent history <id>` | 历史会话 |
-| `meebox agent review <id>` | 执行一次自动评审 |
-| `meebox agent instruct <id> <指令> [参数]` | 发送评审指令（`describe` / `review` / `ask` / `improve`） |
-| `meebox agent chat <id> <消息>` | 发送自然语言消息（可触发 Agent 任务） |
+| `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简字段 + 分页，默认 limit 100） |
+| `meebox pr show --pr <id>` | PR 描述详情 |
+| `meebox pr diff --pr <id> [--file <路径>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 |
+| `meebox pr activity --pr <id>` | 活动时间线（评论 / 提交 / 评审决断） |
+| `meebox pr commits --pr <id>` | 提交列表 |
+| `meebox pr reviewers --pr <id>` | 评审人审批状态 |
+| `meebox pr approve --pr <id>` | 将 PR 标记为「通过」（发送真实评审决断到平台） |
+| `meebox pr needswork --pr <id>` | 将 PR 标记为「需修改」（发送真实评审决断到平台） |
+| `meebox pr comment --pr <id> <消息>` | 发一条顶层评论到平台 |
+| `meebox agent status --pr <id>` | 评审 Agent 当前执行状态 |
+| `meebox agent history --pr <id>` | 历史会话 |
+| `meebox agent review --pr <id>` | 执行一次自动评审 |
+| `meebox agent instruct --pr <id> <指令> [参数]` | 发送评审指令（`describe` / `review` / `ask` / `improve`） |
+| `meebox agent chat --pr <id> <消息>` | 发送自然语言消息（可触发 Agent 任务） |
+| `meebox agent stop --pr <id>` | 中断该 PR 运行中的评审 Agent（整体停） |
+| `meebox agent run list --pr <id>` | 列出该 PR 运行中 / 排队中的 pr-agent runs |
+| `meebox agent run cancel --pr <id> --run <runId>` | 按 run id 取消单个 pr-agent 工具调用 |
 
-其中 `<id>` 为 PR 的本地标识，由 `meebox pr list` 输出获得。
+其中 `<id>` 为 PR 的本地标识（列表里的 `id` 字段），由 `meebox pr list` 输出获得。
 
 ## 5. 输出格式
 
@@ -89,6 +103,7 @@ meebox pr list --output json | jq '.[].title'
 
 ## 注意事项
 
-- **只读取向**：CLI 不提供评论发送、审批、合并等写操作；有此需求请自行对接代码平台。
-- **令牌安全**：令牌明文存于 `~/.code-meeseeks/config.yaml`（同其他凭据）；监听 `0.0.0.0` 暴露到局域网时尤需保密，
-  并及时通过「重新生成」吊销泄露的令牌。
+- **写能力范围**：CLI 提供评审写动作——`pr approve` / `pr needswork`（发送真实评审决断）与 `pr comment`
+  （发顶层评论）；但**不提供合并（merge）与变更类 Agent 工具（publish 等）**，有此需求请自行对接代码平台。
+- **令牌安全**：服务令牌在 GUI 的 `~/.code-meeseeks/config.yaml` 明文存储；若写入 CLI 的 `~/.code-meeseeks/cli.yaml`
+  同为明文。监听 `0.0.0.0` 暴露到局域网时尤需保密，并及时通过「重新生成」吊销泄露的令牌。

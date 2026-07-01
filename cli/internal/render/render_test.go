@@ -63,6 +63,48 @@ func TestOutputYAMLAndJSON(t *testing.T) {
 	}
 }
 
+// TestOutputPreservesKeyOrder locks in that both renderers keep the server's object
+// key order (the view-layer field order) rather than sorting keys alphabetically.
+func TestOutputPreservesKeyOrder(t *testing.T) {
+	orig := Stdout
+	defer func() { Stdout = orig }()
+	var buf bytes.Buffer
+	Stdout = &buf
+
+	// Keys deliberately out of alphabetical order; also exercises int / bool / array scalars.
+	data := json.RawMessage(
+		`{"id":"abc","title":"fix","author":"alice","createdAt":"2026-01-01",` +
+			`"unreadMentionCount":0,"mergeable":true,"categories":["created"]}`)
+
+	assertKeyOrder := func(mode Mode, keys []string) {
+		buf.Reset()
+		if err := Output(mode, data); err != nil {
+			t.Fatalf("output: %v", err)
+		}
+		s := buf.String()
+		last := -1
+		for _, k := range keys {
+			idx := strings.Index(s, k)
+			if idx < 0 {
+				t.Fatalf("missing %q in %q", k, s)
+			}
+			if idx < last {
+				t.Fatalf("key %q out of order in %q", k, s)
+			}
+			last = idx
+		}
+	}
+	assertKeyOrder(ModeYAML, []string{"id:", "title:", "author:", "createdAt:"})
+	assertKeyOrder(ModeJSON, []string{`"id"`, `"title"`, `"author"`, `"createdAt"`})
+
+	// int / bool scalars render unquoted (not as strings)
+	buf.Reset()
+	_ = Output(ModeYAML, data)
+	if y := buf.String(); !strings.Contains(y, "unreadMentionCount: 0") || !strings.Contains(y, "mergeable: true") {
+		t.Errorf("scalar typing lost in yaml: %q", y)
+	}
+}
+
 func TestOutputEmptyData(t *testing.T) {
 	orig := Stdout
 	defer func() { Stdout = orig }()
