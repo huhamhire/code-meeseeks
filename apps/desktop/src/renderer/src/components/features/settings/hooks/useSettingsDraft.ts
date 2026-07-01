@@ -251,13 +251,13 @@ export function useSettingsDraft({
     setServiceState(next);
     setSaved(false);
   };
-  // token 重新生成是即时副作用（写盘 + 即时生效），不随整体保存：更新草稿 token 的同时同步基线，
-  // 使「重新生成」本身不被算作待保存改动（仅开关 / host / port 的未保存编辑才标脏）。
+  // token 重新生成只更新草稿并标脏（不落盘、不同步基线）：与 host / port 一致走草稿制，随底栏「保存」
+  // 经 config:setService 生效；不保存则丢弃、保留原 token。functional update 避开与开关切换的竞态。
   const regenerateServiceToken = async (): Promise<void> => {
     try {
       const { token } = await invoke('config:generateServiceToken', undefined);
       setServiceState((prev) => ({ ...prev, token }));
-      setBase((b) => ({ ...b, service: { ...b.service, token } }));
+      setSaved(false);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e));
     }
