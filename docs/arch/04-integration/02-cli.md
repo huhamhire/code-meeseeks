@@ -112,13 +112,16 @@ meebox [全局 flag] <组> <命令> [参数]
 - **退出码**：`0` 成功 / `1` 通用 / `2` 鉴权 / `3` not found（按需扩展）。
 - **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（Windows / macOS 用 `.zip`、Linux 用 `.tar.gz`），
   附 `.sha256` 校验和。`<version>` 与应用版本对齐（同一 `v*` tag）。
+- **压缩包内容 = 可直接投放的 skill 目录**：除二进制外一并打包 `LICENSE` + `README.md` + `SKILL.md`。解压到
+  agent 的 skills 目录即得一个可用 skill——`SKILL.md`（frontmatter `name: meebox`）教 agent 用法，紧邻其驱动
+  的二进制。这是 CLI「面向 agent 交付」的主形态。
 
 ## 分发与 CI
 
 - **覆盖平台**：Windows x64、macOS arm64、Linux x64 / arm64。
-- **随主工程一起发布**：在发布流程中增加一个 **Go 构建 job**（`actions/setup-go` + `GOOS`/`GOARCH` 交叉编译
-  矩阵；可选 GoReleaser 简化），产出四平台压缩包 + 校验和，与桌面安装包一并上传到**同一个 GitHub Release**
-  （由现有 `v*` tag 触发，见 [发布流程](../../../AGENTS.md)）。
+- **随主工程一起发布**：发布流程的 **Go 构建 job**（`actions/setup-go` + `GOOS`/`GOARCH` 交叉编译矩阵）产出
+  四平台压缩包（含二进制 + `LICENSE` + `README.md` + `SKILL.md`）+ 校验和，与桌面安装包一并上传到**同一个
+  GitHub Release**（由现有 `v*` tag 触发，见 [发布流程](../../../AGENTS.md)）。
 - 版本号与应用同源（同 tag），确保 CLI 与服务端 API 契约版本可对应。
 
 ## 扩展与注意事项

@@ -20,6 +20,9 @@ CLI 依赖应用内的本地 API 服务，默认关闭，需先在 **设置 → 
 
 覆盖平台：Windows x64、macOS arm64、Linux x64 / arm64。
 
+压缩包内含 `meebox` 二进制、`LICENSE`、`README.md` 与 `SKILL.md`。**作为 agent skill 使用**：把解压目录直接
+放入 agent 的 skills 目录（如 `~/.claude/skills/meebox/`）即可——`SKILL.md` 会告诉 agent 如何驱动其旁的 `meebox`。
+
 ## 3. 连接方式
 
 `meebox` 按以下优先级解析 API 地址与令牌（高 → 低）：
