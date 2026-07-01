@@ -45,6 +45,14 @@
 
 .sidebar-filters {
   flex-wrap: wrap;
+
+  // 胶囊宽度自适应：basis 取内容宽（auto）→ 一行挤得下就用一行；容纳不下时按内容宽换行（窄侧栏下
+  // 自然落为每行两个）。flex-grow 让每行按项数均分撑满整行，消除定宽按钮换行后右侧留白参差。
+  // 内容居中，读作对称胶囊。
+  .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
 }
 
 .sidebar-search {
