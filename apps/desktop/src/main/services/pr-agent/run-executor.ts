@@ -254,6 +254,8 @@ export class RunExecutor {
       model: activeLlmForRecord?.model || undefined,
       // 复评引用前向链：随 run 落盘，UI 据此在 /ask 卡上展示「复评自…」徽标 + 裁决动作。
       referencedFinding: req.tool === 'ask' ? req.referencedFinding : undefined,
+      // 触发来源随 run 落盘：user 来源的 run 由 ChatPane 补命令回显气泡；agent 子 run 不回显。
+      origin: item.priority,
     });
     // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播（经调度层）。
     item.info = { ...item.info, startedAt: run.startedAt };

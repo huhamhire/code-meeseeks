@@ -96,6 +96,7 @@ export class RunQueue {
           prNumber: pr.remoteId,
           tool,
           question: tool === 'ask' ? question : undefined,
+          origin: priority,
           enqueuedAt: new Date().toISOString(),
           startedAt: null,
         },

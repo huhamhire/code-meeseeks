@@ -255,6 +255,9 @@ export interface TokenUsage {
   turns?: number;
 }
 
+/** pr-agent run 触发来源：user（用户手动发起）/ agent（编排 / AutoPilot 派发）。 */
+export type ReviewRunOrigin = 'user' | 'agent';
+
 export interface ReviewRun {
   /** yyyymmdd-HHmmss-ms 时序 id，便于按文件名倒序列出 */
   id: string;
@@ -269,6 +272,12 @@ export interface ReviewRun {
   tool: ReviewRunTool;
   /** /ask 工具的问题内容；其他 tool 不填。UI 把它当用户发言渲染在 run 卡片之上 */
   question?: string;
+  /**
+   * 触发来源：user（用户在 ChatPane 直接发起的斜杠命令）/ agent（编排 / AutoPilot 派发的子 run）。
+   * ChatPane 据此为 user 来源的 run 在其卡片之上补一条命令回显气泡（对话习惯）；agent 子 run 不回显
+   * （其用户输入已由编排会话的用户消息承载，避免重复冒泡）。历史 run 无此字段（undefined），不回显。
+   */
+  origin?: ReviewRunOrigin;
   /** 探测时拿到的 pr-agent 版本（CLI 首行 / 嵌入式查出的 pr-agent 版本） */
   prAgentVersion: string;
   strategy: PrAgentStrategy;

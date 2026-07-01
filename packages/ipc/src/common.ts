@@ -1,6 +1,7 @@
 import type {
   PlatformCapabilities,
   PlatformUser,
+  ReviewRunOrigin,
   ReviewRunTool,
 } from '@meebox/shared';
 
@@ -56,6 +57,8 @@ export interface PragentRunInfo {
   prNumber: string;
   tool: ReviewRunTool;
   question?: string;
+  /** 触发来源：user（手动发起）/ agent（编排派发）。ChatPane 据此为 user 来源的运行中 run 补命令回显气泡。 */
+  origin: ReviewRunOrigin;
   /** 入队时间，ISO */
   enqueuedAt: string;
   /** 开始执行时间，ISO；waiting 状态为 null */
