@@ -97,7 +97,7 @@ meebox [全局 flag] <组> <命令> [参数]
   （`~/.code-meeseeks/cli.yaml`）> 本机 `~/.code-meeseeks/config.yaml` 自动发现。
 - **输出模式**：`yaml`（默认，人，类 k8s `-o yaml`）/ `json`（机，输出 API `data`）；均为响应数据的通用转换。
 - **退出码**：`0` 成功 / `1` 通用 / `2` 鉴权 / `3` not found（按需扩展）。
-- **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（unix `.tar.gz`、windows `.zip`），
+- **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（Windows / macOS 用 `.zip`、Linux 用 `.tar.gz`），
   附 `.sha256` 校验和。`<version>` 与应用版本对齐（同一 `v*` tag）。
 
 ## 分发与 CI
@@ -115,3 +115,5 @@ meebox [全局 flag] <组> <命令> [参数]
 - **本机自动发现的边界**：仅同机同用户可读主目录下的 `~/.code-meeseeks/config.yaml`；远端 / 跨用户必须显式配 URL + token。
 - **契约漂移防护**：初期手写 struct 务必随服务端契约同步更新；契约增长后转 OpenAPI / Schema 代码生成。
 - **JSON 优先稳定**：`--output json` 是自动化主路径，其字段形状视为对外契约，演进需保持兼容。
+- **代理走环境变量**：HTTP client 用 Go `net/http` 默认 transport，天然遵循标准 `HTTP(S)_PROXY` /
+  `NO_PROXY`；loopback（`127.0.0.1` / `localhost`）默认直连不走代理——无需自实现代理逻辑。
