@@ -5,7 +5,18 @@ import (
 	"testing"
 )
 
+// isolateHome points HOME / USERPROFILE at an empty temp dir so os.UserHomeDir
+// resolves there — keeping Resolve's local auto-discovery (~/.code-meeseeks/*) from
+// reading the developer's real app config and making these tests non-hermetic.
+func isolateHome(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+}
+
 func TestResolveFlagsWinOverEnv(t *testing.T) {
+	isolateHome(t)
 	t.Setenv(EnvAPIURL, "http://env:1")
 	t.Setenv(EnvToken, "env-token")
 
@@ -19,6 +30,7 @@ func TestResolveFlagsWinOverEnv(t *testing.T) {
 }
 
 func TestResolveDefaultsURLWhenOnlyTokenGiven(t *testing.T) {
+	isolateHome(t)
 	t.Setenv(EnvAPIURL, "")
 	t.Setenv(EnvToken, "env-token")
 
@@ -35,6 +47,7 @@ func TestResolveDefaultsURLWhenOnlyTokenGiven(t *testing.T) {
 }
 
 func TestResolveNoTokenErrors(t *testing.T) {
+	isolateHome(t)
 	t.Setenv(EnvAPIURL, "http://x:1")
 	t.Setenv(EnvToken, "")
 

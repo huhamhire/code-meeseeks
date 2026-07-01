@@ -11,11 +11,13 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --max-warnings=0"
+    "test": "vitest run",
+    "lint": "eslint src tests --max-warnings=0"
   },
   "nx": {
     "targets": {
       "typecheck": { "cache": true },
+      "test": { "cache": true },
       "lint": { "cache": true }
     }
   }

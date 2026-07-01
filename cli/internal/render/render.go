@@ -6,11 +6,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/huhamhire/code-meeseeks/cli/internal/apiclient"
 	"github.com/huhamhire/code-meeseeks/cli/internal/settings"
 	"gopkg.in/yaml.v3"
+)
+
+// Stdout / Stderr are the sinks for rendered output and errors. They default to
+// the process streams and are overridable in tests to capture output.
+var (
+	Stdout io.Writer = os.Stdout
+	Stderr io.Writer = os.Stderr
 )
 
 // Mode selects the output format.
@@ -46,42 +54,42 @@ func Output(mode Mode, data json.RawMessage) error {
 
 func writeJSON(data json.RawMessage) error {
 	if len(data) == 0 {
-		fmt.Println("null")
+		fmt.Fprintln(Stdout, "null")
 		return nil
 	}
 	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
 		// Valid JSON we can't re-decode into `any` is unlikely; print verbatim.
-		fmt.Println(string(data))
+		fmt.Fprintln(Stdout, string(data))
 		return nil
 	}
-	enc := json.NewEncoder(os.Stdout)
+	enc := json.NewEncoder(Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
 
 func writeYAML(data json.RawMessage) error {
 	if len(data) == 0 {
-		fmt.Println("null")
+		fmt.Fprintln(Stdout, "null")
 		return nil
 	}
 	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
 		// Not decodable as JSON — fall back to the raw payload.
-		fmt.Println(string(data))
+		fmt.Fprintln(Stdout, string(data))
 		return nil
 	}
 	out, err := yaml.Marshal(v)
 	if err != nil {
 		return err
 	}
-	_, err = os.Stdout.Write(out)
+	_, err = Stdout.Write(out)
 	return err
 }
 
 // Errorln prints an error to stderr.
 func Errorln(err error) {
-	fmt.Fprintln(os.Stderr, "error:", err)
+	fmt.Fprintln(Stderr, "error:", err)
 }
 
 // ExitCodeFor maps an error to a process exit code.
