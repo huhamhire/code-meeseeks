@@ -55,6 +55,14 @@ export interface AppChannels {
     request: { defaultPath?: string; title: string };
     response: { path: string | null };
   };
+  /**
+   * 由渲染层在主题应用后推送当前主题派生的窗控按钮配色（Windows titleBarOverlay：color=--bg-app、
+   * symbolColor=--text-primary），使系统窗控按钮与具体主题的标题栏底色精确同色；null 回退通用深 / 浅色。
+   */
+  'window:setControlColors': {
+    request: { color: string; symbolColor: string } | null;
+    response: void;
+  };
   /** 各连接的 ping 后缓存：当前用户 + display_name，Header 用 */
   'app:connections': { request: void; response: ConnectionSummary[] };
   /**

@@ -203,6 +203,7 @@ export default function App() {
         {!sidebarCollapsed && (
           <Sidebar
             prs={displayedPrs}
+            activePrs={prs}
             selectedId={selectedId}
             onSelect={(pr) => {
               setSelectedId(pr.localId);

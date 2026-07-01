@@ -23,6 +23,11 @@ export type SidebarScope = 'active' | 'archived';
 
 interface SidebarProps {
   prs: StoredPullRequest[];
+  /**
+   * 活跃范围 PR（始终传入，与当前 scope 无关）：供一级发现分类标签的未读圆点计算——即便处在
+   * 「已关闭」视图，标签仍反映活跃分类的未读。缺省回退到 prs。
+   */
+  activePrs?: StoredPullRequest[];
   selectedId: string | null;
   onSelect: (pr: StoredPullRequest) => void;
   width: number;
@@ -78,6 +83,7 @@ interface PrGroup {
 
 export function Sidebar({
   prs,
+  activePrs,
   selectedId,
   onSelect,
   width,
@@ -214,6 +220,20 @@ export function Sidebar({
     [prs, discoveryFilter, isArchived],
   );
 
+  // 未读圆点始终基于**活跃** PR（缺省回退 prs）：即便当前在「已关闭」视图，一级标签仍反映活跃分类的未读。
+  const unreadSourcePrs = activePrs ?? prs;
+  // 各一级发现分类下是否有未读 PR → 在标签文字后加未读圆点，提示该分类有新的待处理。
+  const unreadFilters = useMemo(() => {
+    const s = new Set<PrDiscoveryFilter>();
+    for (const p of unreadSourcePrs) {
+      if (!p.unread) continue;
+      for (const f of p.discoveryFilters ?? []) s.add(f);
+    }
+    return s;
+  }, [unreadSourcePrs]);
+  // 无发现分类平台的单一「进行中」锚点：任一活动 PR 未读即标圆点。
+  const anyUnread = useMemo(() => unreadSourcePrs.some((p) => p.unread), [unreadSourcePrs]);
+
   const counts = useMemo(() => {
     const out: Record<FilterKey, number> = {
       all: scopedPrs.length,
@@ -228,17 +248,22 @@ export function Sidebar({
       if (p.hasConflict) out.conflict += 1;
       if (p.mergeStatus?.canMerge) out.mergeable += 1;
     }
+    // 「我创建的」下「待处理」并入冲突 PR（作者需跟进），复用同源谓词重算、避免与冲突计数重复叠加。
+    if (!isArchived && discoveryFilter === 'created') {
+      out.pending = scopedPrs.filter((p) => matchesSecondaryFilter(p, 'pending', 'created')).length;
+    }
     return out;
-  }, [scopedPrs]);
+  }, [scopedPrs, isArchived, discoveryFilter]);
 
   const filtered = useMemo(() => {
     // 已关闭范围强制「全部」（不应用状态筛选）；进行中范围按当前状态筛选。过滤 / 检索语义复用
-    // @meebox/shared 纯谓词（与本地 API 同源）。
+    // @meebox/shared 纯谓词（与本地 API 同源），并传入一级发现分类以启用分类相关的语义细化。
     const effFilter: FilterKey = isArchived ? 'all' : filter;
+    const effPrimary = !isArchived ? discoveryFilter : undefined;
     return scopedPrs.filter(
-      (p) => matchesSecondaryFilter(p, effFilter) && matchesPrQuery(p, query),
+      (p) => matchesSecondaryFilter(p, effFilter, effPrimary) && matchesPrQuery(p, query),
     );
-  }, [scopedPrs, query, filter, isArchived]);
+  }, [scopedPrs, query, filter, isArchived, discoveryFilter]);
 
   const groups = useMemo<PrGroup[]>(() => {
     const m = new Map<string, StoredPullRequest[]>();
@@ -292,6 +317,9 @@ export function Sidebar({
                 type="button"
               >
                 {t(DISCOVERY_LABEL_KEYS[f])}
+                {unreadFilters.has(f) && (
+                  <span className="sidebar-discovery-tab-dot" aria-label="unread" />
+                )}
               </button>
             ))
           ) : (
@@ -303,6 +331,7 @@ export function Sidebar({
               type="button"
             >
               {t('sidebar.scopeActive')}
+              {anyUnread && <span className="sidebar-discovery-tab-dot" aria-label="unread" />}
             </button>
           )}
         </div>

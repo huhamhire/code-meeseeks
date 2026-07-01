@@ -70,6 +70,38 @@ describe('matchesSecondaryFilter', () => {
       ),
     ).toBe(false);
   });
+  it("'pending' 默认按 localStatus，不含冲突", () => {
+    expect(matchesSecondaryFilter(mkPr({ localStatus: 'pending' }), 'pending')).toBe(true);
+    expect(
+      matchesSecondaryFilter(mkPr({ localStatus: 'approved', hasConflict: true }), 'pending'),
+    ).toBe(false);
+  });
+  it("'created' 分类下 'pending' 并入冲突 PR（作者需跟进）", () => {
+    // 评审已通过但存在冲突 → created 下计入待处理
+    expect(
+      matchesSecondaryFilter(
+        mkPr({ localStatus: 'approved', hasConflict: true }),
+        'pending',
+        'created',
+      ),
+    ).toBe(true);
+    // 无冲突且非 pending → 仍不计入
+    expect(
+      matchesSecondaryFilter(
+        mkPr({ localStatus: 'approved', hasConflict: false }),
+        'pending',
+        'created',
+      ),
+    ).toBe(false);
+    // localStatus pending 本就计入
+    expect(
+      matchesSecondaryFilter(
+        mkPr({ localStatus: 'pending', hasConflict: false }),
+        'pending',
+        'created',
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('matchesPrQuery', () => {
@@ -136,6 +168,20 @@ describe('filterPullRequests', () => {
   });
   it('conflict 横切筛选', () => {
     expect(filterPullRequests(prs, { secondary: 'conflict' }).map((p) => p.remoteId)).toEqual(['3']);
+  });
+  it("'created' + 'pending' 并入冲突的已通过 PR", () => {
+    const createdPrs = [
+      mkPr({ remoteId: '10', localStatus: 'pending', discoveryFilters: ['created'] }),
+      mkPr({
+        remoteId: '11',
+        localStatus: 'approved',
+        hasConflict: true,
+        discoveryFilters: ['created'],
+      }),
+      mkPr({ remoteId: '12', localStatus: 'approved', discoveryFilters: ['created'] }),
+    ];
+    const out = filterPullRequests(createdPrs, { primary: 'created', secondary: 'pending' });
+    expect(out.map((p) => p.remoteId)).toEqual(['10', '11']);
   });
 });
 

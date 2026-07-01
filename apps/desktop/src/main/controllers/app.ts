@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import type { Logger } from 'pino';
+import { setWindowControlColors as applyWindowControlColors } from '../bootstrap/window-manager.js';
 import { buildAppInfo, buildConnectionSummaries } from '../services/app.js';
 import { getContext } from '../services/context.js';
 import { applyBadgeCount } from '../services/notifications.js';
@@ -24,6 +25,13 @@ export const readAppInfo: IpcController<'app:info'> = () => buildAppInfo(getCont
  * 关键目录路径（config / agent / 日志）。
  */
 export const readAppPaths: IpcController<'app:paths'> = () => getContext().bootstrap.paths;
+
+/**
+ * 渲染层在主题应用后推送窗控按钮配色（跟随具体主题的 --bg-app/--text-primary）；null 回退通用深/浅。
+ */
+export const setWindowControlColors: IpcController<'window:setControlColors'> = (_event, req) => {
+  applyWindowControlColors(req);
+};
 
 /**
  * pr-agent 探测状态（是否就绪）。

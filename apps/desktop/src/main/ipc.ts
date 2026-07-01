@@ -44,6 +44,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('app:paths', app.readAppPaths); // 关键目录路径（config / agent / 日志）
   ipcMain.handle('app:prAgentStatus', app.readPrAgentStatus); // pr-agent 探测状态（是否就绪）
   ipcMain.handle('log:write', app.writeRendererLog); // 渲染层日志回传落盘
+  ipcMain.handle('window:setControlColors', app.setWindowControlColors); // 渲染层推送主题派生窗控配色
   ipcMain.handle('app:connections', app.listConnections); // 当前活动连接摘要（Header / 状态栏）
   ipcMain.handle('app:userAvatar', app.getUserAvatar); // 用户头像（内存 + 磁盘两级缓存）
   ipcMain.handle('app:openConfigFile', app.openConfigFile); // 打开 config.yaml
