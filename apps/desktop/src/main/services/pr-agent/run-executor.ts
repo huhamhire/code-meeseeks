@@ -45,6 +45,20 @@ import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 type FinishPatch = Parameters<typeof finishReviewRun>[3];
 
 /**
+ * 把 worktree 统一 diff 组织成 CLI 模式 /ask 的前置上下文段（背景）：变更文件摘要 + 统一 diff（可能已截断）。
+ * 目的是让 agentic CLI 开局即掌握「改了什么、在哪」，省掉冷启动的发现类探索轮次（见 06-tool-token-cost）。
+ */
+function formatAskDiffContext(diff: { stat: string; patch: string; truncated: boolean }): string {
+  const lines = [
+    '以下是本次评审范围的变更概览（base...head 统一 diff），用于快速定位改动、无需再自行检索改了哪些文件；如需更多上下文可按需读取具体文件。',
+  ];
+  if (diff.stat) lines.push('', '## 变更文件', diff.stat);
+  if (diff.patch.trim()) lines.push('', '## 统一 diff', '```diff', diff.patch, '```');
+  if (diff.truncated) lines.push('', '（diff 过大已按预算截断、未列全，其余改动请按需读取对应文件确认。）');
+  return lines.join('\n');
+}
+
+/**
  * pr-agent run 的**执行器**（与队列调度 RunQueue 分离）：给定一个已 dequeue 的队列项，跑完一个 run。
  * 调度（并发 / 优先级 / 取消 / 泵）归 RunQueue；本类只管「怎么跑一个 run」，无队列状态。
  *
@@ -89,12 +103,7 @@ export class RunExecutor {
 
     const wt = await this.prepareWorkspace(pr, req.scope);
     try {
-      const { env, extraArgs, askLangSuffix } = await this.buildInvocation(
-        req,
-        pr,
-        run.id,
-        wt.path,
-      );
+      const { env, extraArgs, askLangSuffix } = await this.buildInvocation(req, pr, run.id, wt);
 
       // CLI 模式 /ask 把子进程 cwd 落到 worktree（取完整文件上下文，buildInvocation 已设 MEEBOX_CLI_WORKDIR）。
       // 落 cwd 前先清空仓库自带的 agent 指令文件，避免被 CLI 自动加载污染回答。env key 在 = 走此路径。
@@ -299,7 +308,7 @@ export class RunExecutor {
     req: QueueItem['req'],
     pr: QueueItem['pr'],
     runId: string,
-    wtPath: string,
+    wt: { path: string; headBranchName: string; targetBranchName?: string },
   ): Promise<{
     env: Record<string, string>;
     extraArgs: string[] | undefined;
@@ -321,8 +330,21 @@ export class RunExecutor {
 
     // CLI 模式 /ask：把子进程 cwd 落到（待净化的）worktree，让自由问答能读完整文件（shim cli/install.py
     // 据此 env 切 cwd）。describe/review 不下发、维持中性临时目录；API 模式不涉及（远程接口只有 diff）。
-    if (req.tool === 'ask' && activeLlm?.provider === 'cli') {
-      env['MEEBOX_CLI_WORKDIR'] = wtPath;
+    const cliAsk = req.tool === 'ask' && activeLlm?.provider === 'cli';
+    if (cliAsk) {
+      env['MEEBOX_CLI_WORKDIR'] = wt.path;
+    }
+    // CLI 模式 /ask 的前置上下文（#1 成本优化，见 docs/arch/02-agent/06-tool-token-cost）：把本次 PR / 所选
+    // commit 的 base...head 统一 diff 前置注入「问题」，让 agentic CLI 开局即知改了什么、在哪，省掉大量冷启动
+    // 发现类轮次。仅 cli /ask 需要（API 模式的 diff 由 pr-agent 模板预置）；有界（stat 全量 + patch 截断）。
+    let askContext = '';
+    if (cliAsk && wt.targetBranchName) {
+      const diff = await this.ctx.repoMirror.unifiedDiffFromWorktree(
+        wt.path,
+        wt.targetBranchName,
+        wt.headBranchName,
+      );
+      if (diff) askContext = formatAskDiffContext(diff);
     }
 
     let prContext = '';
@@ -397,7 +419,10 @@ export class RunExecutor {
       // /ask 的指令（结构化分段 / anchor marker / 复评裁决 / 引用上下文）拼进 user turn——pr_questions
       // 不读 extra_instructions，唯有问题文本真正到达模型。语言后缀放最末（近因位置最促使按目标语言作答）。
       // 回显（pr-agent 把问题原样写进产物）由 collectOutput 的 stripAskQuestionEcho 整段剥掉。
-      const parts = [req.question];
+      // 前置变更上下文（cli /ask）置于最前作背景，问题其后，指令 / 语言后缀依次在后（语言后缀最末、近因位置）。
+      const parts = [];
+      if (askContext) parts.push(askContext);
+      parts.push(req.question);
       if (extraInstructions) parts.push(extraInstructions);
       if (askLangSuffix) parts.push(askLangSuffix);
       askQuestion = parts.join('\n\n');
