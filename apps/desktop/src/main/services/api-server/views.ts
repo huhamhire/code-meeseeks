@@ -1,7 +1,9 @@
+import type { PragentRunInfo } from '@meebox/ipc';
 import type {
   LocalPrStatus,
   PlatformKind,
   PrDiscoveryFilter,
+  ReviewRunTool,
   ReviewerStatus,
   StoredPullRequest,
 } from '@meebox/shared';
@@ -42,6 +44,40 @@ export interface PrListItem {
   reviewers: Array<{ slug: string; status: ReviewerStatus }>;
   unread: boolean;
   unreadMentionCount: number;
+}
+
+/**
+ * 某 PR 在运行队列里的一个 pr-agent run 视图项：`GET /prs/{id}/agent/runs` 的投影。用于让调用方
+ * 发现可取消的 run（runId + tool + 运行 / 排队态），配合 `…/runs/{runId}/cancel` 做按 run 取消。
+ */
+export interface PrAgentRunItem {
+  runId: string;
+  tool: ReviewRunTool;
+  /** active = 正在执行；waiting = 排队中。 */
+  state: 'active' | 'waiting';
+  /** 开始执行时间（ISO）；waiting 为 null。 */
+  startedAt: string | null;
+  enqueuedAt: string;
+  question?: string;
+}
+
+/** 从队列快照筛出属于该 PR 的 run（active 在前、waiting 在后），投影为精简项。 */
+export function toPrAgentRuns(
+  queue: { active: PragentRunInfo[]; waiting: PragentRunInfo[] },
+  prId: string,
+): PrAgentRunItem[] {
+  const pick = (r: PragentRunInfo, state: 'active' | 'waiting'): PrAgentRunItem => ({
+    runId: r.runId,
+    tool: r.tool,
+    state,
+    startedAt: r.startedAt,
+    enqueuedAt: r.enqueuedAt,
+    ...(r.question ? { question: r.question } : {}),
+  });
+  return [
+    ...queue.active.filter((r) => r.prLocalId === prId).map((r) => pick(r, 'active')),
+    ...queue.waiting.filter((r) => r.prLocalId === prId).map((r) => pick(r, 'waiting')),
+  ];
 }
 
 /** 把存储态 PR 投影为列表视图项。对象字面量的键序即 JSON 输出顺序（CLI 视图层据此渲染）。 */

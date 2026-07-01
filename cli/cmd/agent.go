@@ -33,8 +33,57 @@ func newAgentCmd() *cobra.Command {
 		newAgentInstructCmd(),
 		newAgentChatCmd(),
 		newAgentStopCmd(),
+		newAgentRunCmd(),
 	)
 	return a
+}
+
+// newAgentRunCmd builds the `pr agent run` subgroup: inspect / cancel individual pr-agent
+// tool-call runs in the queue — finer-grained than the PR-level `agent stop`.
+func newAgentRunCmd() *cobra.Command {
+	r := &cobra.Command{
+		Use:   "run",
+		Short: "Inspect or cancel individual pr-agent runs",
+	}
+	r.AddCommand(newAgentRunListCmd(), newAgentRunCancelCmd())
+	return r
+}
+
+// newAgentRunListCmd builds `pr agent run list --pr <id>`: the PR's active + waiting
+// pr-agent runs (runId / tool / state), the source of run ids to cancel
+// (GET /prs/{id}/agent/runs).
+func newAgentRunListCmd() *cobra.Command {
+	var pr string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List the PR's active and queued pr-agent runs",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return getAndRender("/api/v1/prs/" + url.PathEscape(pr) + "/agent/runs")
+		},
+	}
+	prIDFlag(cmd, &pr)
+	return cmd
+}
+
+// newAgentRunCancelCmd builds `pr agent run cancel --pr <id> --run <runId>`: cancels one
+// pr-agent run (active SIGKILL / waiting dequeue) (POST /prs/{id}/agent/runs/{runId}/cancel).
+// Unlike `agent stop` (halts the whole PR agent), this targets a single tool-call run.
+func newAgentRunCancelCmd() *cobra.Command {
+	var pr, run string
+	cmd := &cobra.Command{
+		Use:   "cancel",
+		Short: "Cancel one pr-agent run by id (see `run list`)",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return postAndRender(
+				"/api/v1/prs/"+url.PathEscape(pr)+"/agent/runs/"+url.PathEscape(run)+"/cancel", nil)
+		},
+	}
+	prIDFlag(cmd, &pr)
+	cmd.Flags().StringVar(&run, "run", "", "run id to cancel (from `pr agent run list`)")
+	_ = cmd.MarkFlagRequired("run")
+	return cmd
 }
 
 // newAgentStatusCmd builds `pr agent status --pr <id>`: the agent's current run state

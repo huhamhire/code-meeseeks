@@ -12,7 +12,7 @@ import * as agentCtl from '../../controllers/agent.js';
 import * as prCtl from '../../controllers/pr.js';
 import { getContext } from '../context.js';
 import { HttpError } from './http.js';
-import { toPrListItem } from './views.js';
+import { toPrAgentRuns, toPrListItem } from './views.js';
 
 /**
  * 本地 API 的路由表与处理器。处理器**复用 IPC controller 同源逻辑**——controller 形态为
@@ -168,6 +168,24 @@ const agentChat: RouteHandler = ({ params, body }) => {
 const agentStop: RouteHandler = ({ params }) =>
   agentCtl.stopAgent(NO_EVENT, { localId: params.id });
 
+/** 该 PR 在运行队列里的 pr-agent runs（active + waiting），供按 run 取消前的发现。 */
+const agentRuns: RouteHandler = async ({ params }) => {
+  const snapshot = await agentCtl.getQueue(NO_EVENT, undefined);
+  return toPrAgentRuns(snapshot, params.id);
+};
+
+/** 取消该 PR 的某个 pr-agent run（active SIGKILL / waiting 出队）。先校验 run 归属该 PR。 */
+const agentRunCancel: RouteHandler = async ({ params }) => {
+  const snapshot = await agentCtl.getQueue(NO_EVENT, undefined);
+  const belongs = [...snapshot.active, ...snapshot.waiting].some(
+    (r) => r.runId === params.runId && r.prLocalId === params.id,
+  );
+  if (!belongs) {
+    throw new HttpError(404, ERROR_CODES.SV_NOT_FOUND, { runId: params.runId, localId: params.id });
+  }
+  return agentCtl.cancelPragent(NO_EVENT, { runId: params.runId });
+};
+
 /** 评审决断「通过」：先写远端评审状态、再落本地（复用 GUI 同源 setPrStatus）。 */
 const approve: RouteHandler = ({ params }) =>
   prCtl.setPrStatus(NO_EVENT, { localId: params.id, status: 'approved' });
@@ -200,6 +218,8 @@ export const routes: Route[] = [
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/instruct'), handler: agentInstruct },
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/chat'), handler: agentChat },
   { method: 'POST', segments: seg('/api/v1/prs/:id/agent/stop'), handler: agentStop },
+  { method: 'GET', segments: seg('/api/v1/prs/:id/agent/runs'), handler: agentRuns },
+  { method: 'POST', segments: seg('/api/v1/prs/:id/agent/runs/:runId/cancel'), handler: agentRunCancel },
   { method: 'POST', segments: seg('/api/v1/prs/:id/approve'), handler: approve },
   { method: 'POST', segments: seg('/api/v1/prs/:id/needswork'), handler: needswork },
   { method: 'POST', segments: seg('/api/v1/prs/:id/comment'), handler: comment },

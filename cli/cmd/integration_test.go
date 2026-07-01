@@ -267,6 +267,32 @@ func TestAgentStopPost(t *testing.T) {
 	}
 }
 
+func TestAgentRunList(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `[{"runId":"r1","tool":"review","state":"active"}]`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "agent", "run", "list", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/prs/abc123/agent/runs" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestAgentRunCancel(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"ok":true}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "agent", "run", "cancel", "--pr", "abc123", "--run", "r1")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/runs/r1/cancel" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
 func TestAuthFailureExitCode(t *testing.T) {
 	var rec capturedReq
 	srv := mockServer(&rec, 401, "")
