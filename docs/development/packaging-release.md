@@ -42,3 +42,26 @@
   或提供 Homebrew Cask。
 - **升级公证**：见上；同时 mac 段需加回 hardenedRuntime + entitlements + notarize（entitlements 已备好
   `disable-library-validation` 让嵌入式 python 在 hardened runtime 下能加载第三方 dylib）。
+
+## 发布前置清单（打 tag 前必做）
+
+在**同一批改动**里完成，随发版经 `dev` → `master`——漏任一步 CI 不报错（仅 `::warning::`）但会产出错误的 Release：
+
+1. **版本号** —— 把 [apps/desktop/package.json](../../apps/desktop/package.json) 的 `version` 改成目标版本（去 `v` 前缀，预发布带后缀如 `0.5.0-alpha.1`）。electron-builder 的 `artifactName: code-meeseeks-${version}-...` 直取此值——不改则安装包文件名与 tag 不符。改完 `npm install` 同步 lockfile。
+2. **CHANGELOG** —— 把 [CHANGELOG.md](../../CHANGELOG.md) 的 `## [Unreleased]` 改名为 `## [<版本>] - <YYYY-MM-DD>`，并在文件底部补 `[<版本>]: …/compare/…` 链接引用。**发布即消费掉 Unreleased、不留空段**；下一笔开发期 changelog 改动时再新建。release.yml 按 `## [<版本>]` 字面抽段注入 Release 正文——缺段则正文回退、无变更说明。**若正式版内容来自此前的 alpha/预发布**：开发期通常无独立 Unreleased（内容已在预发布段），直接把该预发布段改名为正式版段、删去对应 `[<x>-alpha.N]:` 链接引用（内容并入正式版段，不留空壳 stub）；尚无对应正式版的其它预发布段保留。
+3. **校对** —— 确认 `## [<版本>]` 段已覆盖自上版本以来合入 `dev` 的全部要点（新增 / 变更 / 修复）。
+
+tag 名与 package.json 版本必须一致（`v<版本>`）。名含 `-` 的预发布 tag（如 `-alpha.N`）由 release.yml 自动标 prerelease 且不抢占 Latest。
+
+**版本号规则（`-dev`）**：每次正式发版后，`dev` 立即把 [apps/desktop/package.json](../../apps/desktop/package.json) 切到**下一版的 `-dev` 预发布号**（如发完 `0.6.0` 即切 `0.7.0-dev`，`npm install` 同步 lockfile），标记开发态。`-dev` 仅作开发标记——**不打 tag、不发版**；发版时按上面改成目标号（`0.7.0-alpha.N` 或 `0.7.0`）。`-dev` 是合法 semver（`0.6.0` < `0.7.0-dev` < `0.7.0`），不影响更新检测（[update-check.ts](../../apps/desktop/src/main/utils/update-check.ts) 用 `semver.gt` 比对、不用 range）与构建。
+
+## CHANGELOG 撰写风格（面向用户、求简）
+
+- 版本引言 `>` 区直接进入「本版重点」、要点用**无序列表**排版，不堆成长句，**不写「首个 / 第 N 个正式版」之类的版本序数引言**；
+- 新增 按**功能场景**分类、用缩进的二级列表表达，每个小点一句话点到即止；
+- 重构类任务**前后端合并**为一条总结、不展开实现细节；
+- 修复 **不写「怎么修的」机制**，每条一句话只述修复的现象/影响；
+- 通篇不写 IPC 通道名、函数名、文件路径、字段名等实现细节，优先突出新增特性与改良；
+- **安装 / 升级注意事项**（版本引言里的 ⚠️ 警示，如先卸载旧版、per-machine 提权等）属安全关键信息，**保留完整、不参与精简**——这些会随 release.yml 注入 GitHub Release 正文，删减会让用户漏看升级风险；
+- **分段标题用中文 + emoji**：`### ✨ 新增 / ♻️ 变更 / 🔧 修复 / 🗑️ 移除 / 🔒 安全`（对应 Keep a Changelog 的 Added / Changed / Deprecated / Removed / Fixed / Security）；
+- 外部贡献者的 PR 习惯性致谢（仿 `(#65，感谢 @user)`）。
