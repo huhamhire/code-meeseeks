@@ -374,6 +374,10 @@ export class RunExecutor {
       // /ask 代码建议数量软约束（与 /review /improve 共用同一设置）。
       maxCodeSuggestions:
         req.tool === 'ask' ? bootstrap.config.agent.strategy.max_code_suggestions : undefined,
+      // /ask 代码检索指引：仅 CLI 提供方（子进程 cwd 落在完整 worktree、可用文件工具）注入，引导定向检索
+      // （内置只读搜索 / grep 查符号 · 只读所需行段）替代整文件通读，降低 agentic 探索成本。刻意只用只读工具集
+      // （headless default 模式下非只读工具会中止会话，故不诱导 rg）。API 提供方无文件访问、不注入。
+      worktreeRetrieval: req.tool === 'ask' && activeLlm?.provider === 'cli',
     });
     // /ask 的 pr_questions prompt **不渲染 extra_instructions**（与 describe/review/improve 不同），
     // 经 env 注入对 /ask 是死字段。故 /ask 的指令改为拼进「问题」（user turn，见下方 askQuestion），
