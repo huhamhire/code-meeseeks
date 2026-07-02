@@ -3,7 +3,7 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.9.0-alpha.1] - 2026-07-02
+## [0.9.0] - 2026-07-02
 
 > 本版重点：
 >
@@ -34,6 +34,7 @@
 
 - 修复 PR 列表分组标题背景色、Windows 窗口右上角控制按钮此前不随主题（编辑器配色主题）变化的问题；现二者均跟随当前主题派生配色，深浅 / 主题切换实时生效。
 - 修复点开带「@我 / 回复我」未读计数的 PR 后，标题处的未读计数 chip 不立即消除、需等下一轮轮询才清零的问题：标为已读时同步乐观清零该计数（此前仅清未读圆点，遗漏了计数 chip）。
+- 修复德语等界面下设置页左侧导航的长标签（如「通知」）溢出被裁切的问题；现长标签自动换行完整显示。
 
 ## [0.8.0] - 2026-06-30
 
@@ -403,7 +404,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[0.9.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0-alpha.1
+[0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0
