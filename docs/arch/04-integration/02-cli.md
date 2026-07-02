@@ -45,7 +45,9 @@ CLI 需 API base URL + token。来源优先级（高 → 低）：
 2. 环境变量：`MEEBOX_API_URL` / `MEEBOX_TOKEN`；
 3. CLI 自身配置文件 `~/.code-meeseeks/cli.yaml`（与 GUI 的 `config.yaml` 同目录、独立文件，隔离二者配置）。
 
-连接信息须**显式提供**（flag / 环境变量 / `cli.yaml` 三者之一），token 缺失即报鉴权错误。
+连接信息须**显式提供**（flag / 环境变量 / `cli.yaml` 三者之一），token 缺失即报鉴权错误。`meebox login
+--token <token> [--server <url>]` 把 token（与可选 server，默认 loopback）写入 `cli.yaml`，免去后续每次传参——
+它是 CLI 唯一的配置**写入**命令，与 `cli.yaml` 的读取（上述优先级）配对，使配置管理自洽。
 
 **不读取 GUI 主配置**：CLI 刻意**不**读应用主配置 `~/.code-meeseeks/config.yaml`。该文件承载连接层机密
 （各代码平台的访问令牌等），若从中静默取服务令牌，等于让 CLI 触达其本不应接触的凭据——属预期外的越权访问，
@@ -61,8 +63,9 @@ meebox [全局 flag] <组> <命令> [参数]
 
 命令分两类——**根层级系统性命令** 与 **两个领域组**：
 
-- **系统性命令（根层级）** —— `whoami`（身份）、`version`（客户端 + 服务端版本）：与具体 PR / Agent 无关的
-  工具 / 会话层信息，直接置于根层级、不套领域组（符合 `kubectl version` / `gh` 等惯例）。
+- **系统性命令（根层级）** —— `login`（保存凭据到 `cli.yaml`）、`whoami`（身份）、`version`（客户端 +
+  服务端版本）：与具体 PR / Agent 无关的工具 / 会话层操作，直接置于根层级、不套领域组（符合 `kubectl version`
+  / `gh auth` 等惯例）。
 - **`pr`** —— PR 相关操作：浏览 + 评审写动作，并含 `categories`（`pr list` 的筛选词表）与 `refresh`
   （触发一次拉取、刷新 PR 列表）。
 - **`agent`** —— 评审 Agent 操作。
@@ -73,6 +76,7 @@ agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `
 
 | 命令 | 用途 | 对应 API |
 | --- | --- | --- |
+| `meebox login --token <token> [--server <url>]` | 保存 token（与可选 server，默认 loopback）到 `cli.yaml`，供后续命令免传参 | —（本地写，无 API） |
 | `meebox whoami` | 当前身份（用户 + 平台 + 连接名） | `GET /whoami` |
 | `meebox version` | 客户端（CLI）+ 服务端（应用）版本；服务端不可达时仅客户端、退出码仍 0 | `GET /version` |
 | `meebox pr categories` | 列当前启用平台的分类标签（`categories` 一级 + `statuses` 二级）——`pr list` 的筛选词表 | `GET /categories` |

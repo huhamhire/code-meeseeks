@@ -31,7 +31,16 @@ CLI 依赖应用内的本地 API 服务，默认关闭，需先在 **设置 → 
 2. 环境变量：`MEEBOX_API_URL` / `MEEBOX_TOKEN`
 3. CLI 配置文件：`~/.code-meeseeks/cli.yaml`（字段 `api_url` / `token`）
 
-连接信息须**显式提供**其一。令牌在设置页「集成」分区查看 / 复制。本机免逐次传参推荐用环境变量：
+连接信息须**显式提供**其一。令牌在设置页「集成」分区查看 / 复制。最省事的方式是用 `meebox login` 存一次令牌
+（写入 `cli.yaml`），之后所有命令免传参：
+
+```bash
+meebox login --token <令牌>            # 默认连本机 http://127.0.0.1:18765
+meebox login --token <令牌> --server http://<主机>:18765   # 指定远端服务
+meebox pr list                          # 后续命令直接用已存的凭据
+```
+
+或用环境变量（适合 CI / shell 注入）：
 
 ```bash
 export MEEBOX_API_URL=http://127.0.0.1:18765
@@ -60,6 +69,7 @@ PR（`id` 由 `meebox pr list` 输出获得）。
 
 | 命令 | 用途 |
 | --- | --- |
+| `meebox login --token <令牌> [--server <地址>]` | 保存令牌（与可选服务地址）到 `cli.yaml`，后续命令免传参 |
 | `meebox whoami` | 当前登录身份与集成平台（用户 + 平台 + 连接名） |
 | `meebox version` | 客户端（CLI）+ 服务端（应用）版本；未连接服务端时仅显示客户端版本 |
 | `meebox pr categories` | 列出当前平台可用的分类标签（一级发现分类 + 二级状态 / 合并态筛选）——`pr list` 的筛选词表 |
