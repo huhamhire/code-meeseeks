@@ -41,7 +41,8 @@ docs/arch/
 │   ├── 02-session.md                 会话 Agent 化（输入路由 / 规划循环 / 过程留存 / 交互控制）
 │   ├── 03-autopilot.md               AutoPilot 与调度（自动预评审 / 准入闸 / 批量判定 / 微流程 / 优先级队列）
 │   ├── 04-rules.md                   规则系统（frontmatter / 匹配优先级；正文存 `<agent.dir>/rules/`）
-│   └── 05-pragent-runtime.md         pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage）
+│   ├── 05-pragent-runtime.md         pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage）
+│   └── 06-tool-token-cost.md         工具 token 成本与上下文分层（三层上下文模型 / 成本放量根因 / 只读检索指引 · /ask 预算 · codegraph 评估）
 ├── 03-gui/                         GUI 与交互
 │   ├── 01-ui-interaction.md          渲染层布局 / 面板 / 跨 PR 保活 / 交互约定
 │   ├── 02-command-palette.md         命令面板（标题栏入口 / 两级选择 / 按语言搜索 / 注册表 + 分域）
