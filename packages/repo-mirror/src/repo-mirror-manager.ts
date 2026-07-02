@@ -318,15 +318,17 @@ export class RepoMirrorManager {
   }
 
   /**
-   * 从 bare mirror 派生一个**自含**的临时工作树，HEAD 在命名分支 `meebox/head`
-   * 上指向 headSha；可选再建个 `meebox/base` 指向 baseSha。
+   * 从 bare mirror 派生一个**自含**的临时工作树，HEAD 在命名分支 `pr-<localId>/head`
+   * 上指向 headSha；可选再建个 `pr-<localId>/base` 指向 baseSha。
    *
    * 为什么需要这样：pr-agent 社区版 `LocalGitProvider.__init__` 做两件强约束的事：
    *   - `self.head_branch_name = self.repo.head.ref.name` —— HEAD 必须在命名分支
    *     上（不能 detached），否则 GitPython 抛 TypeError
    *   - `LOCAL__TARGET_BRANCH` 必须是 `self.repo.heads` 里存在的**分支名**
    *     （不接受 sha），否则 `branches[target_name]` KeyError
-   * 我们用 `meebox/<head|base>` 这种带前缀的临时分支名避开跟仓库真实分支的冲突。
+   * 分支名用 `pr-<localId>/<head|base>`（localId = 每-PR 稳定主键）：与 PR 关联便于追溯，
+   * 又避开跟仓库真实分支的冲突；不带工具品牌前缀，不留固定可辨识特征。未提供 localId
+   * （包级直调）时回退到本次随机 nonce，保持每次不同。
    *
    * 为什么不用 `git worktree add`：worktree 的 `.git` 是个 file，内容是
    *   `gitdir: <bare-host-path>/worktrees/<name>`
@@ -339,7 +341,7 @@ export class RepoMirrorManager {
    * refspec 不拉它，否则 PR 源分支被删 / 强推后 checkout 会失败)。
    *
    * 返回 `{ path, headBranchName, targetBranchName?, cleanup }`：
-   *   - `headBranchName`：HEAD 当前在的分支名（恒为 `meebox/head`），调用方一般
+   *   - `headBranchName`：HEAD 当前在的分支名（`pr-<localId>/head`），调用方一般
    *     用不上但留作接口对称
    *   - `targetBranchName`：baseSha 传了才有，pr-agent `LOCAL__TARGET_BRANCH` 填它
    *   - `cleanup()`：清理临时目录
@@ -350,20 +352,25 @@ export class RepoMirrorManager {
     repo: RepoIdentity,
     headSha: string,
     baseSha?: string,
+    prLocalId?: string,
   ): Promise<{
     path: string;
     headBranchName: string;
     targetBranchName?: string;
     cleanup: () => Promise<void>;
   }> {
-    const HEAD_BRANCH = 'meebox/head';
-    const BASE_BRANCH = 'meebox/base';
-
     const mirrorPath = this.mirrorPath(repo);
     const wtRoot = path.join(this.opts.reposDir, repo.host, repo.projectKey, repo.repoSlug, 'wt');
     await fs.mkdir(wtRoot, { recursive: true });
     const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const wtPath = path.join(wtRoot, `${headSha.slice(0, 12)}-${nonce}`);
+
+    // 分支名与 PR 关联（localId = 每-PR 稳定主键）便于追溯，不带工具品牌前缀；无 localId
+    // （包级直调）时回退到本次随机 nonce。用 `<ns>/head`、`<ns>/base` 分层命名（贴合平台
+    // PR ref 惯例如 refs/pull/N/head）；不单独建裸 `<ns>` 分支，故无 git dir/file ref 冲突。
+    const branchNs = prLocalId ? `pr-${prLocalId}` : `pr-${nonce}`;
+    const HEAD_BRANCH = `${branchNs}/head`;
+    const BASE_BRANCH = `${branchNs}/base`;
 
     // --local + 默认 hardlinks：同盘 inode 共享，无 alternates 文件 (避免跨 mount 断链)
     // --no-checkout：先不落文件，等分支建好再 checkout

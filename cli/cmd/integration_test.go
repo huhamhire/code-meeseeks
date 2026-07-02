@@ -1,0 +1,405 @@
+package cmd
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/huhamhire/code-meeseeks/cli/internal/render"
+)
+
+// capturedReq records what the mock server received, for request-shape assertions.
+type capturedReq struct {
+	called bool
+	method string
+	path   string
+	query  string
+	auth   string
+	body   string
+}
+
+// mockServer stands in for the local API: it records the request and returns the
+// documented envelope ({ok:true,data} on 2xx, {ok:false,error} on >=400).
+func mockServer(rec *capturedReq, status int, dataJSON string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		rec.called = true
+		rec.method = r.Method
+		rec.path = r.URL.Path
+		rec.query = r.URL.RawQuery
+		rec.auth = r.Header.Get("Authorization")
+		rec.body = string(body)
+
+		w.Header().Set("Content-Type", "application/json")
+		code := status
+		if code == 0 {
+			code = http.StatusOK
+		}
+		w.WriteHeader(code)
+		if code >= 400 {
+			_, _ = io.WriteString(w, `{"ok":false,"error":{"code":"ESV0001"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"ok":true,"data":`+dataJSON+`}`)
+	}))
+}
+
+// testSkillDoc stands in for the embedded SKILL.md (main injects the real one at build).
+const testSkillDoc = "# meebox (test skill doc)\n"
+
+// runCmd runs the root command with captured output, returning stdout + the error
+// (Execute()'s os.Exit wrapper is bypassed so tests can assert on the error).
+func runCmd(args ...string) (string, error) {
+	var buf bytes.Buffer
+	origOut, origErr := render.Stdout, render.Stderr
+	render.Stdout, render.Stderr = &buf, io.Discard
+	defer func() { render.Stdout, render.Stderr = origOut, origErr }()
+
+	root := newRootCmd(testSkillDoc)
+	root.SetArgs(args)
+	err := root.Execute()
+	return buf.String(), err
+}
+
+// base flags force explicit connection settings so tests are hermetic (no env /
+// local config auto-discovery interference).
+func base(srvURL string, rest ...string) []string {
+	return append([]string{"--api-url", srvURL, "--token", "tk"}, rest...)
+}
+
+func TestCategories(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"platform":"github","categories":["review-requested"],"statuses":["all"]}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "pr", "categories")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/categories" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if rec.auth != "Bearer tk" {
+		t.Errorf("wrong auth header: %q", rec.auth)
+	}
+	if !strings.Contains(out, "platform: github") {
+		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
+func TestWhoami(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"platform":"github","user":{"slug":"alice"}}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "whoami")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/whoami" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(out, "platform: github") {
+		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
+func TestPrRefreshPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"fetched":3,"changed":1,"added":1,"removed":0,"errors":0}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "pr", "refresh")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/refresh" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(out, "added: 1") {
+		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
+func TestVersion(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"version":"9.9.9"}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "version")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/version" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	// Both client (build-time "dev" in tests) and server versions render.
+	if !strings.Contains(out, "client:") || !strings.Contains(out, "server: 9.9.9") {
+		t.Errorf("version output missing client/server: %q", out)
+	}
+}
+
+func TestLoginWritesConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("MEEBOX_API_URL", "")
+	t.Setenv("MEEBOX_TOKEN", "")
+
+	if _, err := runCmd("login", "--token", "tok123", "--server", "http://saved:9"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".code-meeseeks", "cli.yaml"))
+	if err != nil {
+		t.Fatalf("cli.yaml not written: %v", err)
+	}
+	if !strings.Contains(string(data), "tok123") || !strings.Contains(string(data), "http://saved:9") {
+		t.Errorf("cli.yaml missing token/server: %q", string(data))
+	}
+}
+
+func TestSkillPrintsEmbeddedDoc(t *testing.T) {
+	out, err := runCmd("skill")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != testSkillDoc {
+		t.Errorf("skill output = %q, want embedded doc %q", out, testSkillDoc)
+	}
+}
+
+func TestPrListFilters(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `[]`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "list", "--category", "created", "--status", "approved", "--query", "foo", "--skip", "5", "--limit", "20")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.path != "/api/v1/prs" {
+		t.Errorf("wrong path: %s", rec.path)
+	}
+	for _, want := range []string{"category=created", "status=approved", "q=foo", "skip=5", "limit=20"} {
+		if !strings.Contains(rec.query, want) {
+			t.Errorf("query %q missing %q", rec.query, want)
+		}
+	}
+}
+
+func TestPrShow(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"localId":"abc123","title":"t"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "show", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/prs/abc123" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestPrDiffFile(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"binary":false,"content":"x"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "diff", "--pr", "abc123", "--file", "src/a.go", "--side", "head")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.path != "/api/v1/prs/abc123/diff" {
+		t.Errorf("wrong path: %s", rec.path)
+	}
+	for _, want := range []string{"path=src", "side=head"} {
+		if !strings.Contains(rec.query, want) {
+			t.Errorf("query %q missing %q", rec.query, want)
+		}
+	}
+}
+
+func TestAgentReviewPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"status":"succeeded"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "review", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/review" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestAgentInstructBody(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"status":"queued"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "instruct", "--pr", "abc123", "describe", "extra", "ctx")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/instruct" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(rec.body, "describe") || !strings.Contains(rec.body, "extra ctx") {
+		t.Errorf("body missing command/args: %q", rec.body)
+	}
+}
+
+func TestAgentInstructWriteToolRejected(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `null`)
+	defer srv.Close()
+
+	_, err := runCmd(base(srv.URL, "agent", "instruct", "--pr", "abc123", "approve")...)
+	if err == nil {
+		t.Fatal("expected write tool to be rejected")
+	}
+	if rec.called {
+		t.Error("server must not be called for a rejected write tool")
+	}
+}
+
+func TestAgentChatPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"queued":true}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "chat", "--pr", "abc123", "hello", "world")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/chat" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(rec.body, "hello world") {
+		t.Errorf("body missing message: %q", rec.body)
+	}
+}
+
+func TestPrApprovePost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"localStatus":"approved"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "approve", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/approve" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestPrNeedsworkPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"localStatus":"needs_work"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "needswork", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/needswork" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestPrCommentPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"remoteId":"c1"}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "pr", "comment", "--pr", "abc123", "please", "fix")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/comment" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(rec.body, "please fix") {
+		t.Errorf("body missing comment text: %q", rec.body)
+	}
+}
+
+func TestAgentStopPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"ok":true}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "stop", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/stop" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestAgentRunList(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `[{"runId":"r1","tool":"review","state":"active"}]`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "run", "list", "--pr", "abc123")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/prs/abc123/agent/runs" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestAgentRunCancel(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"ok":true}`)
+	defer srv.Close()
+
+	if _, err := runCmd(base(srv.URL, "agent", "run", "cancel", "--pr", "abc123", "--run", "r1")...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/prs/abc123/agent/runs/r1/cancel" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+}
+
+func TestAuthFailureExitCode(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 401, "")
+	defer srv.Close()
+
+	_, err := runCmd(base(srv.URL, "pr", "categories")...)
+	if err == nil {
+		t.Fatal("expected auth error")
+	}
+	if got := render.ExitCodeFor(err); got != render.ExitAuth {
+		t.Errorf("auth failure exit code = %d, want %d", got, render.ExitAuth)
+	}
+}
+
+func TestNotFoundExitCode(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 404, "")
+	defer srv.Close()
+
+	_, err := runCmd(base(srv.URL, "pr", "show", "--pr", "missing")...)
+	if err == nil {
+		t.Fatal("expected not-found error")
+	}
+	if got := render.ExitCodeFor(err); got != render.ExitNotFound {
+		t.Errorf("not-found exit code = %d, want %d", got, render.ExitNotFound)
+	}
+}
+
+func TestOutputJSON(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"platform":"github"}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "--output", "json", "pr", "categories")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, `"platform": "github"`) {
+		t.Errorf("json output not indented JSON: %q", out)
+	}
+}

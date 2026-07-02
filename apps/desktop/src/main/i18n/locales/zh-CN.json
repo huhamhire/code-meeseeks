@@ -20,6 +20,18 @@
     }
   },
   "notifications": {
+    "authoredComment": {
+      "body": "#{{id}} {{title}}",
+      "title": "你的 PR 有新评论"
+    },
+    "authoredConflict": {
+      "body": "#{{id}} {{title}}",
+      "title": "你的 PR 出现合并冲突"
+    },
+    "authoredNeedsWork": {
+      "body": "#{{id}} {{title}}",
+      "title": "你的 PR 被标记需修改"
+    },
     "mention": {
       "body": "#{{id}} {{title}}",
       "title": "有人提到了你"

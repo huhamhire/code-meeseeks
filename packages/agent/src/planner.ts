@@ -76,6 +76,11 @@ export interface PlanningInput {
   referencedContext?: string;
   /** 步数上限（默认 8）。 */
   maxSteps?: number;
+  /**
+   * 本会话 /ask 数量上限（遵循配置的「追问数量」max_followup_asks，默认 2）：连续 /ask 各为一次 agentic
+   * 探索、成本高，按此封顶；与「自动追问」开关无关（开关仅约束评审微流程）。
+   */
+  maxFollowupAsks?: number;
 }
 
 export interface PlanningResult {
@@ -126,7 +131,19 @@ export async function runPlanningAgent(
   // 既往多轮对话注入规划上下文（按预算裁剪），让 Agent 跨轮记住交流；仅供规划 LLM 参考，
   // 绝不透传给 pr-agent 工具。
   const convo = buildConversationContext(input.history ?? []);
-  const ctx: PlanStepCtx = { deps, input, rec, system, convo, labels, history, memories, plan: [] };
+  const ctx: PlanStepCtx = {
+    deps,
+    input,
+    rec,
+    system,
+    convo,
+    labels,
+    history,
+    memories,
+    plan: [],
+    maxAsks: input.maxFollowupAsks ?? 2,
+    asksUsed: 0,
+  };
 
   // 规划是单步循环：重复跑 plan-cycle 直至收尾 / 暂停 / 步数上限。
   for (let i = 0; i < maxSteps; i++) {

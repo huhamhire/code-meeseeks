@@ -255,6 +255,25 @@ export interface TokenUsage {
   turns?: number;
 }
 
+/** pr-agent run 触发来源：user（用户手动发起）/ agent（编排 / AutoPilot 派发）。 */
+export type ReviewRunOrigin = 'user' | 'agent';
+
+/**
+ * 单 commit 评审范围：把一次 run 的 diff 限定在某个 commit 自身的改动（`parent..sha`），
+ * 而非 PR 全量。由 Diff 视图的提交选择器发起，落盘到 ReviewRun 供结果卡展示范围徽标。
+ * 无父 commit（root）无法单 commit 定界，不提供该范围。
+ */
+export interface ReviewRunCommitScope {
+  /** 目标 commit 完整 SHA（worktree head）。 */
+  sha: string;
+  /** 目标 commit 首个父 commit SHA（worktree base；单 commit diff = parent..sha）。 */
+  parent: string;
+  /** 展示用短 SHA。 */
+  abbreviatedSha: string;
+  /** 展示用 commit 主题（首行 message）。 */
+  subject: string;
+}
+
 export interface ReviewRun {
   /** yyyymmdd-HHmmss-ms 时序 id，便于按文件名倒序列出 */
   id: string;
@@ -269,6 +288,17 @@ export interface ReviewRun {
   tool: ReviewRunTool;
   /** /ask 工具的问题内容；其他 tool 不填。UI 把它当用户发言渲染在 run 卡片之上 */
   question?: string;
+  /**
+   * 触发来源：user（用户在 ChatPane 直接发起的斜杠命令）/ agent（编排 / AutoPilot 派发的子 run）。
+   * ChatPane 据此为 user 来源的 run 在其卡片之上补一条命令回显气泡（对话习惯）；agent 子 run 不回显
+   * （其用户输入已由编排会话的用户消息承载，避免重复冒泡）。历史 run 无此字段（undefined），不回显。
+   */
+  origin?: ReviewRunOrigin;
+  /**
+   * 单 commit 评审范围：本次 run 限定在该 commit 自身改动（`parent..sha`）而非 PR 全量时填。
+   * 缺省 = PR 全量范围。结果卡据此展示范围徽标。
+   */
+  scope?: ReviewRunCommitScope;
   /** 探测时拿到的 pr-agent 版本（CLI 首行 / 嵌入式查出的 pr-agent 版本） */
   prAgentVersion: string;
   strategy: PrAgentStrategy;
@@ -401,12 +431,24 @@ export interface PollResult {
   errors: number;
 }
 
-/** 系统通知事件类型：新 PR / 被 @ / 被回复（与设置页三个开关一一对应）。 */
-export type PollNotificationKind = 'new_pr' | 'mention' | 'reply';
+/**
+ * 系统通知事件类型（与设置页开关一一对应）：
+ * - `new_pr` / `mention` / `reply`：面向「待我评审」等——新 PR / 被 @ / 被回复。
+ * - `authored_comment` / `authored_needs_work` / `authored_conflict`：面向「我创建的」PR（作者为本人）——
+ *   收到他人新评论 / 被评审标记需修改 / 出现合并冲突。
+ */
+export type PollNotificationKind =
+  | 'new_pr'
+  | 'mention'
+  | 'reply'
+  | 'authored_comment'
+  | 'authored_needs_work'
+  | 'authored_conflict';
 
 /**
  * Poll 本轮新发生的「值得提醒」事件，由 poller 经 onNotify 投影给主进程（用于弹系统通知）。仅在**已有基线**
- * （非首轮 / PR 此前已知）时产出，避免首启 / 批量涌入时通知风暴；mention/reply 仅当评论时间晚于历史游标才计。
+ * （非首轮 / PR 此前已知）时产出，避免首启 / 批量涌入时通知风暴；带游标的事件（mention/reply/authored_comment）
+ * 仅当评论时间晚于历史游标才计；authored_needs_work / authored_conflict 仅在对应状态发生新迁移时才产出。
  */
 export interface PollNotificationEvent {
   kind: PollNotificationKind;
@@ -420,13 +462,16 @@ export interface PollNotificationEvent {
   title: string;
   /** PR 所在仓库，用于通知正文展示「项目 / 仓库」 */
   repo: RepoRef;
-  /** 发起人：new_pr=PR 作者；mention/reply=触发本轮该类事件的最新一条评论作者。用于通知头像。 */
+  /**
+   * 发起人（通知头像）：new_pr=PR 作者；mention/reply/authored_comment=触发本轮该类事件的最新一条评论作者；
+   * authored_needs_work=新标记需修改的评审人；authored_conflict=PR 作者（无具体发起人）。
+   */
   actor: PlatformUser;
-  /** mention / reply：本轮新增条数；new_pr 省略 */
+  /** mention / reply / authored_comment：本轮新增条数；其余省略 */
   count?: number;
   /**
-   * mention / reply：触发事件的最新一条评论的定位信息（通知点击跳转用）。`anchor` 非空=inline 评论（可跳 diff 行），
-   * 为 null=summary 评论（打开「活动」对话标签）。new_pr 无此字段。
+   * 触发事件的最新一条评论的定位信息（通知点击跳转用）。`anchor` 非空=inline 评论（可跳 diff 行），
+   * 为 null=summary 评论（打开「活动」对话标签）。仅 mention / reply / authored_comment 带此字段。
    */
   comment?: { remoteId: string; anchor: PrCommentAnchor | null };
 }

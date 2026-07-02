@@ -25,6 +25,7 @@ export interface QueueItem {
     question?: string;
     referencedContext?: string;
     referencedFinding?: ReviewRun['referencedFinding'];
+    scope?: ReviewRun['scope'];
   };
   pr: StoredPullRequest;
   resolve: (run: ReviewRun) => void;
@@ -76,9 +77,12 @@ export class RunQueue {
     priority: RunPriority = 'user',
     referencedContext?: string,
     referencedFinding?: ReviewRun['referencedFinding'],
+    scope?: ReviewRun['scope'],
   ): Promise<ReviewRun> {
     const { logger } = this.ctx;
-    if (tool !== 'ask') {
+    // dedup 仅约束「PR 全量」的同工具重复；/ask 每次问题不同、单 commit 范围（scope）是定向动作，均放行
+    // （允许全量 review 之外再对某 commit 单独 review，互不视作重复）。
+    if (tool !== 'ask' && !scope) {
       const sameTask = (q: QueueItem): boolean =>
         q.info.prLocalId === pr.localId && q.info.tool === tool;
       if ([...this.active.values()].some(sameTask) || this.waiting.some(sameTask)) {
@@ -96,6 +100,8 @@ export class RunQueue {
           prNumber: pr.remoteId,
           tool,
           question: tool === 'ask' ? question : undefined,
+          origin: priority,
+          scope,
           enqueuedAt: new Date().toISOString(),
           startedAt: null,
         },
@@ -107,6 +113,8 @@ export class RunQueue {
           question,
           referencedContext: tool === 'ask' ? referencedContext : undefined,
           referencedFinding: tool === 'ask' ? referencedFinding : undefined,
+          // 单 commit 范围对所有工具生效（不限 ask）：executor 据此物化 parent..sha 的 worktree。
+          scope,
         },
         pr,
         priority,

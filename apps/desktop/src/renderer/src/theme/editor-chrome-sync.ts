@@ -30,6 +30,7 @@ const OVERRIDDEN_VARS = [
   '--border-default-fade',
   '--border-muted',
   '--bg-selected',
+  '--bg-group-header',
 ] as const;
 
 interface Rgb {
@@ -71,6 +72,12 @@ function mix(c1: Rgb, c2: Rgb, t: number): Rgb {
 
 function toRgbString({ r, g, b, a }: Rgb): string {
   return a >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgb(${r} ${g} ${b} / ${a.toFixed(3)})`;
+}
+
+/** 转 #rrggbb（忽略 alpha）；供 Windows titleBarOverlay 用（其 color 取 hex）。 */
+function toHex({ r, g, b }: Rgb): string {
+  const h = (v: number): string => v.toString(16).padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`;
 }
 
 /** 相对亮度（WCAG）。 */
@@ -117,7 +124,10 @@ function clearChromeOverrides(): void {
  * 把当前全局主题的 base 色派生为 GUI chrome 的结构性 token，写到 documentElement（覆盖 _theme.scss）。
  * 取不到色 / 缺 bg·fg 时清空覆盖、回退语义色板（仍随 data-theme 浅 / 深正常显示）。
  */
-export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiTheme: 'light' | 'dark'): void {
+export function applyChromeFromEditorTheme(
+  editorThemeId: string,
+  resolvedGuiTheme: 'light' | 'dark',
+): { color: string; symbolColor: string } | null {
   // 'auto' 跟随解析主题 → 取默认 2026 主题（dark-2026 / light-2026）的 base 色
   const effectiveId =
     editorThemeId === 'auto' ? (resolvedGuiTheme === 'dark' ? 'dark-2026' : 'light-2026') : editorThemeId;
@@ -127,7 +137,7 @@ export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiThe
   if (!bg || !fg) {
     clearChromeOverrides();
     console.warn('[chrome-sync] no usable bg/fg for theme, fell back to semantic palette:', effectiveId);
-    return;
+    return null;
   }
   const isDark = luminance(bg) < 0.5;
   const edge = isDark ? WHITE : BLACK; // 提升层（背景越「浮」越靠该边）/ 边框混合方向
@@ -147,6 +157,8 @@ export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiThe
   const borderDefault = mix(fg, bg, 0.8);
   const borderMuted = mix(fg, bg, 0.88);
   const borderFade = { ...borderDefault, a: 0.5 };
+  // 分组头：向黑轻微下沉（比 bg-app 略暗的「凹陷」标题带，hover 走 --bg-panel 上浮），随主题派生。
+  const bgGroupHeader = mix(bg, BLACK, 0.12);
 
   const set = (name: string, c: Rgb): void => document.documentElement.style.setProperty(name, toRgbString(c));
   set('--bg-app', bg);
@@ -164,6 +176,7 @@ export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiThe
   set('--border-muted', borderMuted);
   set('--border-default-fade', borderFade);
   set('--bg-selected', sel);
+  set('--bg-group-header', bgGroupHeader);
 
   // 可读性体检：muted 文字 / 弱边框对背景的对比度（AA 正文≥4.5、次要文本/非文本≥3）
   const mutedCr = contrastRatio(textMuted, bg);
@@ -171,4 +184,6 @@ export function applyChromeFromEditorTheme(editorThemeId: string, resolvedGuiThe
   console.info(
     `[chrome-sync] "${effectiveId}" (${isDark ? 'dark' : 'light'}) → muted/bg contrast ${mutedCr.toFixed(2)} (AA≥4.5), border/bg ${borderCr.toFixed(2)} (≥3)`,
   );
+  // 窗控按钮同色：把主题 base 背景 / 前景（hex）交回主进程更新 Windows titleBarOverlay（见 useGlobalTheme）。
+  return { color: toHex(bg), symbolColor: toHex(fg) };
 }

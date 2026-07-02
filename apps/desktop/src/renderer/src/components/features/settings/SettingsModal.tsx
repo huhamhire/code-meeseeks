@@ -7,6 +7,7 @@ import {
   CpuIcon,
   GlobeIcon,
   Modal,
+  PuzzleIcon,
   QuestionIcon,
   RobotIcon,
   SettingsIcon,
@@ -26,6 +27,7 @@ import { LlmContextSection } from './sections/LlmContextSection';
 import { ConcurrencySection } from './sections/ConcurrencySection';
 import { AgentStrategySection } from './sections/AgentStrategySection';
 import { ProxySection } from './sections/ProxySection';
+import { ServiceSection } from './sections/ServiceSection';
 import { AgentDirSection } from './sections/AgentDirSection';
 import { WorkDirSection } from './sections/WorkDirSection';
 import { CacheDirSection } from './sections/CacheDirSection';
@@ -38,6 +40,7 @@ export type SettingsCategory =
   | 'model'
   | 'agent'
   | 'notifications'
+  | 'integration'
   | 'about';
 
 /**
@@ -54,6 +57,7 @@ const SETTINGS_CATEGORIES: ReadonlyArray<{
   { id: 'model', labelKey: 'settings.catModel', Icon: CpuIcon },
   { id: 'agent', labelKey: 'settings.catAgent', Icon: RobotIcon },
   { id: 'notifications', labelKey: 'settings.catNotifications', Icon: BellIcon },
+  { id: 'integration', labelKey: 'settings.catIntegration', Icon: PuzzleIcon },
   { id: 'about', labelKey: 'settings.catAbout', Icon: QuestionIcon },
 ];
 
@@ -129,6 +133,8 @@ export function SettingsModal({
       <Modal
         size="lg"
         onClose={onClose}
+        // 有未保存草稿时点背景误关会丢配置：设置页禁用背景点击关闭，仅右上角关闭键（或保存成功）退出。
+        closeOnBackdrop={false}
         title={t('settings.title')}
         headerClose="icon"
         bodyClassName="settings-modal-body"
@@ -251,6 +257,13 @@ export function SettingsModal({
             )}
             {category === 'notifications' && (
               <NotificationSection value={s.notifications} onChange={s.setNotifications} />
+            )}
+            {category === 'integration' && (
+              <ServiceSection
+                value={s.service}
+                onChange={s.setService}
+                onRegenerateToken={() => void s.regenerateServiceToken()}
+              />
             )}
             {category === 'about' && (
               <>

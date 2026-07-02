@@ -40,6 +40,14 @@
   }
 }
 
+// header 右侧组：自定义动作（headerActions）+ 关闭键，右对齐并排。
+// align-items: stretch 让图标动作按钮拉伸到与关闭键等高（图标内容比文字矮，否则会短一截）。
+.modal-header-right {
+  display: flex;
+  align-items: stretch;
+  gap: $space-3;
+}
+
 // 右上角关闭按钮：方形 X 图标（免国际化），复用 .icon-btn 的透明无边框，
 // 这里只调方形 padding + hover 浅底
 .modal-close {

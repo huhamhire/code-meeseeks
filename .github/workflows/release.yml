@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  gui:
     strategy:
       fail-fast: false
       matrix:
@@ -137,3 +137,72 @@ jobs:
           make_latest: ${{ !contains(github.ref_name, '-') }}
           # 正文 = RELEASE_NOTES（安装 / 首次打开 / 校验和）+ 注入的本版 CHANGELOG 段
           body_path: RELEASE_BODY.md
+
+  # meebox CLI（cli/，独立 Go module）：纯 Go、无 CGO → 单 runner 交叉编译全平台。出四平台压缩包 +
+  # 校验和，随桌面安装包挂到同一个 GitHub Release（不打进安装包，是独立可分发物）。仅 tag 触发上传；
+  # workflow_dispatch 仍构建做编译冒烟、不上传。本 job 不设 Release 正文（由 build job 注入），仅追加产物。
+  cli:
+    name: CLI (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64, ext: '.exe', archive: zip }
+          - { goos: darwin, goarch: arm64, ext: '', archive: zip }
+          - { goos: linux, goarch: amd64, ext: '', archive: tar.gz }
+          - { goos: linux, goarch: arm64, ext: '', archive: tar.gz }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: 交叉编译 meebox CLI
+        shell: bash
+        working-directory: cli
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          # 版本与 app 同源：取自 apps/desktop/package.json（app 运行期版本的唯一真相源），
+          # 而非独立依赖 git tag——发布前置已校验 tag == 该版本，故二者一致但只有一个来源。
+          VERSION="$(node -p "require('$GITHUB_WORKSPACE/apps/desktop/package.json').version")"
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/huhamhire/code-meeseeks/cli/cmd.version=${VERSION}" \
+            -o "dist/meebox${{ matrix.ext }}" .
+
+      - name: 打包压缩包 + 校验和
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        working-directory: cli/dist
+        run: |
+          VERSION="$(node -p "require('$GITHUB_WORKSPACE/apps/desktop/package.json').version")"  # 与 app 同源
+          BIN="meebox${{ matrix.ext }}"
+          ARCHIVE="meebox-cli-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          # Bundle LICENSE + README + SKILL.md so the archive is a drop-in agent skill
+          # directory (unzip into a skills dir → SKILL.md beside the binary it drives).
+          cp ../../LICENSE ../README.md ../SKILL.md .
+          FILES=("${BIN}" LICENSE README.md SKILL.md)
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            zip -q "${ARCHIVE}.zip" "${FILES[@]}"
+          else
+            tar -czf "${ARCHIVE}.tar.gz" "${FILES[@]}"
+          fi
+          for f in "${ARCHIVE}".zip "${ARCHIVE}".tar.gz; do
+            [ -e "$f" ] && sha256sum "$f" > "$f.sha256"
+          done
+
+      - name: 上传到 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          # 本 matrix 项仅产出自身的压缩包 + .sha256（fresh runner）；不设 body_path 以免覆盖 build job 注入的正文
+          files: cli/dist/meebox-cli-*
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}

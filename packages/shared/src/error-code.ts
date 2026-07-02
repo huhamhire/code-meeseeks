@@ -4,7 +4,7 @@
  */
 
 /** 领域标签（两字母大写）。新增领域追加在末尾。 */
-export type ErrorDomain = 'AG' | 'UI' | 'CF' | 'NT' | 'PR';
+export type ErrorDomain = 'AG' | 'UI' | 'CF' | 'NT' | 'PR' | 'SV';
 
 /**
  * 错误码注册表（唯一真相源）：`E` + 两字母领域 + 四位数字。新增码在此登记，并在渲染层各 locale 补
@@ -45,6 +45,23 @@ export const ERROR_CODES = {
   PR_FORBIDDEN: 'EPR0006',
   /** 没有活动连接，无法按链接打开 PR。 */
   PR_NO_ACTIVE_CONNECTION: 'EPR0007',
+  /**
+   * 本地 API 服务（service listener）域错误码。**经 HTTP 返回给外部 CLI / 客户端**，不经渲染层 i18n
+   * （故暂不在 renderer locale 登记；如未来在 GUI 展示再补 `errors.<CODE>`，formatBackendError 已有兜底）。
+   * 见 docs/arch/04-integration/01-service-api.md。
+   */
+  /** 未分类服务错误（兜底）。 */
+  SV_UNCLASSIFIED: 'ESV0000',
+  /** 鉴权失败：缺失 / 不匹配 bearer token（→ HTTP 401）。 */
+  SV_UNAUTHORIZED: 'ESV0001',
+  /** 写操作不经本地 API 开放（→ HTTP 403）。 */
+  SV_WRITE_NOT_ALLOWED: 'ESV0002',
+  /** 路由 / 资源不存在（→ HTTP 404）。 */
+  SV_NOT_FOUND: 'ESV0003',
+  /** 请求体校验失败（→ HTTP 400）。 */
+  SV_BAD_REQUEST: 'ESV0004',
+  /** CLI 版本低于服务端可兼容下限（→ HTTP 426；meta.minVersion 最低要求、meta.clientVersion 实际版本）。 */
+  SV_CLIENT_TOO_OLD: 'ESV0005',
 } as const;
 
 /** 已登记的错误码字面量联合（抛错时只能用注册过的码，防笔误）。 */

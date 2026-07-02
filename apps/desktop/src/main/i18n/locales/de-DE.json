@@ -21,6 +21,18 @@
     }
   },
   "notifications": {
+    "authoredComment": {
+      "body": "#{{id}} {{title}}",
+      "title": "Neuer Kommentar zu deinem PR"
+    },
+    "authoredConflict": {
+      "body": "#{{id}} {{title}}",
+      "title": "Dein PR hat einen Merge-Konflikt"
+    },
+    "authoredNeedsWork": {
+      "body": "#{{id}} {{title}}",
+      "title": "Dein PR wurde als überarbeitungsbedürftig markiert"
+    },
     "mention": {
       "body": "#{{id}} {{title}}",
       "title": "Du wurdest erwähnt"

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { nativeTheme } from 'electron';
 import { editorThemeNativeSource } from '@meebox/shared';
 import { writeConfig } from '@meebox/config';
@@ -185,6 +186,31 @@ export const testConnection: IpcController<'config:testConnection'> = async (_ev
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
+};
+
+/**
+ * 写本地 API 服务监听配置（开关 / host / port / token）；内存同步后热重建监听器（停旧起新）。
+ * token 由请求体携带（设置页保存当前值）；单独「重新生成 token」走 generateServiceToken。
+ */
+export const setService: IpcController<'config:setService'> = async (_event, req) => {
+  const { bootstrap, logger, reconfigureApiServer } = getContext();
+  const next = { ...bootstrap.config, service: req.service };
+  await writeConfig(bootstrap.paths.configFile, next);
+  bootstrap.config.service = req.service;
+  await reconfigureApiServer();
+  logger.info(
+    { enabled: req.service.enabled, host: req.service.host, port: req.service.port },
+    'service listener config updated (hot-reloaded)',
+  );
+};
+
+/**
+ * 生成一枚高强度随机 bearer token（32 字节 → base64url，43 字符，字符集 [A-Za-z0-9-_]，URL / 请求头安全）
+ * 并返回，**不落盘**——由前端置入设置草稿，随底栏「保存」经 config:setService 生效；不保存则丢弃
+ * （与 host / port 同为草稿制）。
+ */
+export const generateServiceToken: IpcController<'config:generateServiceToken'> = () => {
+  return { token: randomBytes(32).toString('base64url') };
 };
 
 /**

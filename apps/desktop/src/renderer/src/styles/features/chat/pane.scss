@@ -257,18 +257,21 @@
   gap: $space-4;
 }
 // stop + send 包在一个 group 里，让 space-between 只对"/ 按钮 vs 这一组"生效，
-// stop 跟 send 之间用 group 自己的 gap 控制贴近距离
+// stop 跟 send 之间用 group 自己的 gap 控制贴近距离。发送区不参与压缩：窄宽度时挤压的是左侧 chip 而非发送键。
 .chat-pane-send-group {
   display: inline-flex;
   align-items: center;
   gap: $space-2;
+  flex-shrink: 0;
 }
 
-// 命令触发器组：`/` 命令按钮 + 自动评审图标按钮，左对齐成一组（两者间距略放宽）
+// 命令触发器组：`/` 命令按钮 + 自动评审图标按钮，左对齐成一组（两者间距略放宽）。
+// min-width:0 允许本组在窄宽度下收窄（由内部可伸缩的范围 / 选区 chip 让位、省略号截断），不推挤右侧发送区。
 .chat-cmd-group {
   display: inline-flex;
   align-items: center;
   gap: $space-3;
+  min-width: 0;
 }
 
 // 命令触发器：单 `/` 按钮 + 弹出菜单 (替代之前 3 个并列按钮)
@@ -331,6 +334,8 @@
   align-items: center;
   gap: $space-2;
   max-width: 180px;
+  // 窄宽度时自身收窄（span 省略号截断），把空间让给右侧发送区，而非撑破布局。
+  min-width: 0;
   padding: $space-2 $space-2;
   background: transparent;
   border: none;

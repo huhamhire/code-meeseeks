@@ -5,6 +5,7 @@ import type {
   LocalPrStatus,
   PrAgentStatus,
   ReviewRun,
+  ReviewRunCommitScope,
   StoredPullRequest,
 } from '@meebox/shared';
 import { ChatIcon, TrashIcon, ConfirmModal, PaneLoading } from '../../common';
@@ -70,6 +71,12 @@ interface ChatPaneProps {
   llmConfigured?: boolean;
   /** 打开设置面板（LLM 未配置提示里的「去设置」按钮用） */
   onOpenSettings?: () => void;
+  /**
+   * 当前 Diff 视图选中的单 commit 范围（无 / root commit 为 null）：作为本 PR 聊天区命令的**隐式范围**——
+   * 直接键入的 /describe /review /improve /ask 自动限定在该 commit（输入栏显示可撤销范围 chip）。撤销该 chip
+   * 后本会话不再随视图范围（直到切换到别的 commit）。auto review 微流程不受此影响、恒作用于 PR 全量。
+   */
+  viewCommitScope?: ReviewRunCommitScope | null;
 }
 
 /**
@@ -94,6 +101,7 @@ export function ChatPane({
   currentLlmModel,
   llmConfigured = true,
   onOpenSettings,
+  viewCommitScope,
 }: ChatPaneProps) {
   const { t } = useTranslation();
   const startResize = (e: React.MouseEvent): void => {
@@ -139,10 +147,18 @@ export function ChatPane({
 
   // 复评引用态：点 finding「引用」→ 仅挂到输入栏（chip）；不自动填写问题，用户自行输入。发送时携带该引用。
   const [refFinding, setRefFinding] = useState<{ finding: Finding; run: ReviewRun } | null>(null);
-  // PR 切换清掉引用态，避免跨 PR 残留。
+  // 「脱离视图范围」态：用户 ✕ 掉范围 chip 后，本会话命令不再随 Diff 视图选中的 commit（直到切到别的 commit
+  // 或切 PR 才复位）。默认跟随视图范围。
+  const [scopeDetached, setScopeDetached] = useState(false);
+  // PR 切换清掉引用态、复位脱离态，避免跨 PR 残留。
   useEffect(() => {
     setRefFinding(null);
+    setScopeDetached(false);
   }, [prLocalId]);
+  // 切到别的 commit（或清空视图范围）时复位脱离态：新选中的 commit 重新作为隐式范围生效。
+  useEffect(() => {
+    setScopeDetached(false);
+  }, [viewCommitScope?.sha]);
   const onReferenceFinding = (finding: Finding, run: ReviewRun): void => {
     setRefFinding({ finding, run });
   };
@@ -152,6 +168,11 @@ export function ChatPane({
   // 未忽略时把选区拼成引用串；/ask 与自然语言提问共用。忽略 / 无选区 → undefined（本条不带引用）。
   const referencedContext =
     diffSelection && !selectionIgnored ? formatReferencedContext(diffSelection) : undefined;
+
+  // 本 PR 聊天区命令的生效范围：跟随 Diff 视图选中的 commit，除非用户已脱离（scopeDetached）。
+  // 同一时刻只允许一个 scope 生效——存在 Diff 选区时以选区为准（更细粒度），commit 范围暂挂起、其 chip
+  // 亦隐藏（见 commitScopeChip），取消选区后自动还原。
+  const effectiveScope = diffSelection || scopeDetached ? null : (viewCommitScope ?? null);
 
   // 会话态 + 生命周期（切 PR 重载 / 流式步骤 / 分页 / 自动滚动）
   const session = useChatSession(prLocalId, myActiveIds);
@@ -197,6 +218,12 @@ export function ChatPane({
       anchor: finding.anchor,
     });
     setRefFinding(null);
+  };
+
+  // 发送一条限定在当前视图 commit 的 /ask：把生效范围随问题带下去（限定 parent..sha 的 diff）。
+  const sendScopedAsk = (q: string): void => {
+    if (!effectiveScope) return;
+    void actions.handleRun('ask', q, undefined, undefined, effectiveScope);
   };
 
   // 历史时间线归并 + 「思考中」实时计时锚点
@@ -352,6 +379,7 @@ export function ChatPane({
                 tool={entry.active.tool}
                 runId={entry.active.runId}
                 question={entry.active.question}
+                scope={entry.active.scope}
                 lines={linesByRunId.get(entry.active.runId) ?? []}
                 startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
                 model={currentLlmModel ?? null}
@@ -403,11 +431,27 @@ export function ChatPane({
             sendReferencedAsk(q ?? '');
             return;
           }
-          void actions.handleRun(tool, q, tool === 'ask' ? referencedContext : undefined);
+          if (tool === 'ask' && effectiveScope) {
+            sendScopedAsk(q ?? '');
+            return;
+          }
+          // describe/review/improve 亦跟随视图 commit 范围（effectiveScope）；无范围时为 PR 全量。
+          void actions.handleRun(
+            tool,
+            q,
+            tool === 'ask' ? referencedContext : undefined,
+            undefined,
+            tool === 'ask' ? undefined : (effectiveScope ?? undefined),
+          );
         }}
         onAgentAsk={(q) => {
           if (refFinding) {
             sendReferencedAsk(q);
+            return;
+          }
+          // 视图选中某 commit 时，自然语言提问也走该 commit 范围的 /ask（限定该 commit 的 diff）。
+          if (effectiveScope) {
+            sendScopedAsk(q);
             return;
           }
           void actions.handleAgentAsk(q, referencedContext);
@@ -432,6 +476,21 @@ export function ChatPane({
                 label: anchorShortLabel(refFinding.finding.anchor),
                 onClear: () => {
                   setRefFinding(null);
+                },
+              }
+            : null
+        }
+        // 单 commit 范围 chip：视图选中某 commit 时显示（选中态源自视图）；点击切换启用/禁用——
+        // 禁用（scopeDetached）时命令回到 PR 全量、chip 置灰，切到别的 commit 或切 PR 复位为启用。
+        // 同一时刻只允许一个 scope：存在 Diff 选区时让位于选区 chip（隐藏本 chip），取消选区后自动还原。
+        commitScopeChip={
+          viewCommitScope && !diffSelection
+            ? {
+                // 仅展示短 hash，不带主题（避免 chip 内容过长）；主题在 Diff 视图与结果卡徽标已可见。
+                label: viewCommitScope.abbreviatedSha,
+                disabled: scopeDetached,
+                onToggle: () => {
+                  setScopeDetached((d) => !d);
                 },
               }
             : null

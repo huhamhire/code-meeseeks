@@ -20,6 +20,18 @@
     }
   },
   "notifications": {
+    "authoredComment": {
+      "body": "#{{id}} {{title}}",
+      "title": "あなたの PR に新しいコメント"
+    },
+    "authoredConflict": {
+      "body": "#{{id}} {{title}}",
+      "title": "あなたの PR にマージ競合が発生"
+    },
+    "authoredNeedsWork": {
+      "body": "#{{id}} {{title}}",
+      "title": "あなたの PR が要修正に設定されました"
+    },
     "mention": {
       "body": "#{{id}} {{title}}",
       "title": "あなたへのメンションがあります"

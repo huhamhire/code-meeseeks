@@ -180,6 +180,28 @@ function referencedAskDirective(tool: ReviewRunTool, hasReferencedFinding: boole
 }
 
 /**
+ * /ask 代码检索指引（仅 CLI 提供方：子进程 cwd 落在完整 worktree、具备文件工具时注入）。引导 agentic CLI 以
+ * **定向检索**（内置只读搜索 / `grep` 查符号 · 只读所需行段）替代整文件通读与全仓扫描，压掉冷启动探索的浪费性
+ * token，同时保留读真实文件的深度。刻意只用**只读**工具集：headless（无 TTY）下 default 权限模式对非只读工具
+ * （写 / `rg` 等不在内置只读白名单的命令）不是拒绝而是**直接中止会话**，故不得诱导 `rg` 等命令。API 提供方无
+ * 文件访问、不注入（enabled=false）。
+ */
+function worktreeRetrievalDirective(tool: ReviewRunTool, enabled: boolean): string {
+  if (tool !== 'ask' || !enabled) return '';
+  return [
+    'CODE RETRIEVAL: the full repository worktree is your working directory. Answer efficiently',
+    'using your READ-ONLY file tools — do NOT read whole files or scan the whole repo:',
+    '- Treat the PR diff above as the source of truth for what changed.',
+    '- Locate the specific symbols, definitions, and call sites you need with your built-in file',
+    '  search (or the `grep` command); then read only the narrow file ranges the question requires.',
+    '- Do NOT run commands that modify files or the system, and avoid non-read-only shell tools',
+    '  (e.g. use `grep`, not `rg`); a read-only search plus a targeted read is enough.',
+    '- Stop once you have enough context to answer; avoid speculative browsing.',
+    'If you have no file tools, just answer from the diff and context above.',
+  ].join('\n');
+}
+
+/**
  * 组装注入 pr-agent 的 EXTRA_INSTRUCTIONS：按序拼接 语言指示 / anchor marker / 结构化分段 / 复评裁决 /
  * 排版 / PR 上下文 / 命中规则，空段跳过；全空返回 undefined（调用方据此决定是否设 env）。
  * - 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但 /ask 走 [pr_questions] 不严格
@@ -197,12 +219,15 @@ export function buildExtraInstructions(input: {
   referencedFinding?: boolean;
   /** 代码建议数量上限（2~8）：/ask 的 <suggestions> 软约束（仅 /ask 用到）。空则不封顶。 */
   maxCodeSuggestions?: number;
+  /** 是否注入 /ask 代码检索指引（仅 CLI 提供方：子进程可在完整 worktree 里用 shell/文件工具时为真）。 */
+  worktreeRetrieval?: boolean;
 }): string | undefined {
   const parts = [
     languageDirectiveFor(input.language),
     anchorMarkerDirective(input.tool),
     structuredAskDirective(input.tool, input.maxCodeSuggestions),
     referencedAskDirective(input.tool, !!input.referencedFinding),
+    worktreeRetrievalDirective(input.tool, !!input.worktreeRetrieval),
     reviewLayoutDirective(input.tool),
     input.prContext,
     input.referencedContext ?? '',

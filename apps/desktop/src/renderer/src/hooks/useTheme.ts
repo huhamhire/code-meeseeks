@@ -9,6 +9,14 @@ import {
 } from '../theme';
 import { applyChromeFromEditorTheme } from '../theme/editor-chrome-sync';
 import { setEditorAppearance, useEditorAppearance } from '../stores/editor-appearance-store';
+import { invoke } from '../api';
+
+/** 主题应用后把派生的窗控配色（Windows titleBarOverlay）推给主进程；null 回退通用深/浅。失败静默。 */
+function syncWindowControls(colors: { color: string; symbolColor: string } | null): void {
+  void invoke('window:setControlColors', colors).catch(() => {
+    /* 平台不支持 / 主进程未就绪 → 忽略 */
+  });
+}
 
 /**
  * 全局主题生效：主题变化时把它反推浅 / 深写到 documentElement.data-theme（驱动语义色板）+ 派生结构性
@@ -23,10 +31,10 @@ export function useGlobalTheme(): void {
   useEffect(() => {
     applyGlobalTheme(editorTheme);
     persistEditorTheme(editorTheme);
-    applyChromeFromEditorTheme(editorTheme, resolveGlobalTheme(editorTheme));
-    // 'auto' 主题：OS 深浅切换时重写 data-theme（watch 内部已做）并重派生 chrome
+    syncWindowControls(applyChromeFromEditorTheme(editorTheme, resolveGlobalTheme(editorTheme)));
+    // 'auto' 主题：OS 深浅切换时重写 data-theme（watch 内部已做）并重派生 chrome + 同步窗控配色
     return watchSystemThemeForAuto(editorTheme, () => {
-      applyChromeFromEditorTheme(editorTheme, resolveGlobalTheme(editorTheme));
+      syncWindowControls(applyChromeFromEditorTheme(editorTheme, resolveGlobalTheme(editorTheme)));
     });
   }, [editorTheme]);
 }

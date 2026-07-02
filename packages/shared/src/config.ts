@@ -158,6 +158,20 @@ export const ProxySchema = z.object({
 export type ProxyConfig = z.infer<typeof ProxySchema>;
 
 /**
+ * 本地 API 服务监听（见 docs/arch/04-integration/01-service-api.md）。默认关闭、零暴露面；开启即**强制**
+ * bearer token 鉴权（token 为空时由主进程在启用时自动生成）。`host` 默认仅 loopback（127.0.0.1），可设
+ * `0.0.0.0` 暴露到局域网——高风险、需安全警示。`port` 固定安全默认 18765（10000+，避开常见开发端口且低于
+ * 临时端口范围）。token 明文落盘（同既有凭据策略，经 SecretStore 抽象、绝不进日志）。
+ */
+export const ServiceSchema = z.object({
+  enabled: z.boolean().default(false),
+  host: z.string().default('127.0.0.1'),
+  port: z.number().int().min(1).max(65535).default(18765),
+  token: z.string().default(''),
+});
+export type ServiceConfig = z.infer<typeof ServiceSchema>;
+
+/**
  * LLM 上下文长度（token）：裁剪输入内容的全局上限，透传 pr-agent `CONFIG__MAX_MODEL_TOKENS` /
  * `CONFIG__CUSTOM_MODEL_MAX_TOKENS`。默认 128000（与现代主流模型上下文匹配）；**对本地 CLI 模式
  * 不生效**（CLI 工具自管上下文，见 @meebox/pr-agent-bridge）。范围 32k~1M。
@@ -279,10 +293,13 @@ export const ConfigSchema = z.object({
       check_enabled: z.boolean().default(true),
     })
     .default({}),
+  /** 本地 API 服务监听（默认关闭）。见上 {@link ServiceSchema}。 */
+  service: ServiceSchema.default({}),
   /**
    * 消息通知（见 docs/arch/03-gui/03-notifications.md）。enabled 为总开关；关闭后既不弹系统通知也不亮 dock 角标。
-   * new_pr / reply / mention 按事件类型分别控制系统通知（toast）是否弹出。macOS dock「待回应」计数角标无独立
-   * 开关——随总开关默认启用。系统通知受 OS 权限约束——用户在系统设置关闭后应用静默降级。
+   * 其余各项按事件类型分别控制系统通知（toast）是否弹出：new_pr / reply / mention 面向「待我评审」等场景；
+   * authored_* 面向「我创建的」PR（作者为本人）——新评论 / 被标记需修改 / 出现冲突。macOS dock「待回应」计数
+   * 角标无独立开关——随总开关默认启用。系统通知受 OS 权限约束——用户在系统设置关闭后应用静默降级。
    */
   notifications: z
     .object({
@@ -293,6 +310,12 @@ export const ConfigSchema = z.object({
       reply: z.boolean().default(true),
       /** 评论中被 @ 提及时弹系统通知 */
       mention: z.boolean().default(true),
+      /** 我创建的 PR 收到他人新评论时弹系统通知 */
+      authored_comment: z.boolean().default(true),
+      /** 我创建的 PR 被评审标记「需修改」时弹系统通知 */
+      authored_needs_work: z.boolean().default(true),
+      /** 我创建的 PR 出现合并冲突时弹系统通知 */
+      authored_conflict: z.boolean().default(true),
     })
     .default({}),
   /**

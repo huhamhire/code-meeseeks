@@ -31,6 +31,8 @@ export interface RegisterDeps {
   /** 重建 adapters/poller 使连接变更热生效（config:setConnections 写盘后调用） */
   reconfigureConnections: () => Promise<void>;
   repoMirror: RepoMirrorManager;
+  /** 重建本地 API 监听器使 service 配置（开关 / host / port）变更热生效（config:setService 写盘后调用）。 */
+  reconfigureApiServer: () => Promise<void>;
 }
 
 /**

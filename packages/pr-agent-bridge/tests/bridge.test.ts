@@ -92,10 +92,10 @@ describe('LocalCliBridge', () => {
     await bridge.review({
       prUrl: 'https://x/pr/1', // 本地模式下 prUrl 不会被用到
       cwd: '/tmp/wt/abc',
-      targetBranch: 'meebox/base',
+      targetBranch: 'pr-abc123/base',
       env: { OPENAI_KEY: 'sk' },
     });
-    expect(calls[0]!.args).toEqual(['--pr_url', 'meebox/base', 'review']);
+    expect(calls[0]!.args).toEqual(['--pr_url', 'pr-abc123/base', 'review']);
     expect(calls[0]!.opts.cwd).toBe('/tmp/wt/abc');
     expect(calls[0]!.opts.env).toEqual({
       OPENAI_KEY: 'sk',
@@ -126,7 +126,7 @@ describe('EmbeddedRuntimeBridge', () => {
     await bridge.review({
       prUrl: 'unused',
       cwd: '/tmp/wt/abc',
-      targetBranch: 'meebox/base',
+      targetBranch: 'pr-abc123/base',
       env: { OPENAI__KEY: 'sk' },
     });
     expect(calls[0]!.cmd).toBe(PY);
@@ -134,7 +134,7 @@ describe('EmbeddedRuntimeBridge', () => {
       '-m',
       'pr_agent.cli',
       '--pr_url',
-      'meebox/base',
+      'pr-abc123/base',
       'review',
     ]);
     expect(calls[0]!.opts.cwd).toBe('/tmp/wt/abc');

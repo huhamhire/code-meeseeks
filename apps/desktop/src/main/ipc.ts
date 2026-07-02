@@ -44,6 +44,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('app:paths', app.readAppPaths); // 关键目录路径（config / agent / 日志）
   ipcMain.handle('app:prAgentStatus', app.readPrAgentStatus); // pr-agent 探测状态（是否就绪）
   ipcMain.handle('log:write', app.writeRendererLog); // 渲染层日志回传落盘
+  ipcMain.handle('window:setControlColors', app.setWindowControlColors); // 渲染层推送主题派生窗控配色
   ipcMain.handle('app:connections', app.listConnections); // 当前活动连接摘要（Header / 状态栏）
   ipcMain.handle('app:userAvatar', app.getUserAvatar); // 用户头像（内存 + 磁盘两级缓存）
   ipcMain.handle('app:openConfigFile', app.openConfigFile); // 打开 config.yaml
@@ -114,6 +115,8 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('config:autosaveDraft', config.autosaveDraft); // 连接 / LLM 草稿存盘（不生效）
   ipcMain.handle('config:setPoller', config.setPoller); // 设轮询间隔（热替换定时器）
   ipcMain.handle('config:setMaxConcurrency', config.setMaxConcurrency); // 设评审并发数（热替换队列上限）
+  ipcMain.handle('config:setService', config.setService); // 设本地 API 服务监听（热重建监听器）
+  ipcMain.handle('config:generateServiceToken', config.generateServiceToken); // 重新生成 API bearer token
 
   /*
    * Agent 交互

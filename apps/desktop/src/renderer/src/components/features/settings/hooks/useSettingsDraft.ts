@@ -63,6 +63,9 @@ export function useSettingsDraft({
   // 代理在独立模态框里编辑：null=关闭，非 null=正在编辑的草稿；保存回 proxy，底栏「保存」才写盘。
   const [proxyEditor, setProxyEditor] = useState<Config['proxy'] | null>(null);
 
+  // 本地 API 服务监听（开关 / host / port 随整体保存；token 经 generateServiceToken 立即写盘）。
+  const [service, setServiceState] = useState<Config['service']>(config.service);
+
   // 连接：多条可配置 + 单选启用；编辑只改本地 state，整体保存才写盘 + 热重建
   const [connections, setConnections] = useState<Config['connections']>(config.connections);
   const [activeConnId, setActiveConnId] = useState<string>(config.active_connection_id);
@@ -83,6 +86,7 @@ export function useSettingsDraft({
     llm: config.llm,
     proxy: config.proxy,
     notifications: config.notifications,
+    service: config.service,
     connections: config.connections,
     activeConnId: config.active_connection_id,
   }));
@@ -243,6 +247,21 @@ export function useSettingsDraft({
     setNotificationsState(next);
     setSaved(false);
   };
+  const setService = (next: Config['service']): void => {
+    setServiceState(next);
+    setSaved(false);
+  };
+  // token 重新生成只更新草稿并标脏（不落盘、不同步基线）：与 host / port 一致走草稿制，随底栏「保存」
+  // 经 config:setService 生效；不保存则丢弃、保留原 token。functional update 避开与开关切换的竞态。
+  const regenerateServiceToken = async (): Promise<void> => {
+    try {
+      const { token } = await invoke('config:generateServiceToken', undefined);
+      setServiceState((prev) => ({ ...prev, token }));
+      setSaved(false);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    }
+  };
   const setAgentDir = (v: string): void => {
     setAgentDirInput(v);
     setSaved(false);
@@ -291,6 +310,7 @@ export function useSettingsDraft({
   const proxyChanged = JSON.stringify(proxy) !== JSON.stringify(base.proxy);
   const notificationsChanged =
     JSON.stringify(notifications) !== JSON.stringify(base.notifications);
+  const serviceChanged = JSON.stringify(service) !== JSON.stringify(base.service);
   const connectionsChanged =
     activeConnId !== base.activeConnId ||
     JSON.stringify(connections) !== JSON.stringify(base.connections);
@@ -302,6 +322,7 @@ export function useSettingsDraft({
     llmChanged ||
     proxyChanged ||
     notificationsChanged ||
+    serviceChanged ||
     connectionsChanged;
 
   const saveAll = async (): Promise<void> => {
@@ -344,6 +365,17 @@ export function useSettingsDraft({
       if (notificationsChanged) {
         await invoke('config:setNotifications', { notifications });
       }
+      if (serviceChanged) {
+        const host = service.host.trim();
+        // 简单合法性校验：非空、无空白 / 协议 / 斜杠（端口单列）；放过 IPv4 / 主机名 / 0.0.0.0 / ::1。
+        if (!host || !/^[A-Za-z0-9.:-]+$/.test(host)) {
+          throw new Error(t('settings.serviceHostInvalidError'));
+        }
+        if (!Number.isInteger(service.port) || service.port < 1 || service.port > 65535) {
+          throw new Error(t('settings.servicePortRangeError'));
+        }
+        await invoke('config:setService', { service: { ...service, host } });
+      }
       if (connectionsChanged) {
         await invoke('config:setConnections', { connections, active_connection_id: activeConnId });
         await onConnectionsChange?.();
@@ -365,6 +397,7 @@ export function useSettingsDraft({
         llm,
         proxy,
         notifications,
+        service,
         connections,
         activeConnId,
       });
@@ -410,6 +443,10 @@ export function useSettingsDraft({
     // 通知
     notifications,
     setNotifications,
+    // 本地 API 服务监听
+    service,
+    setService,
+    regenerateServiceToken,
     // 轮询 / 并发 / 目录
     pollerInput,
     setPoller,

@@ -87,7 +87,7 @@ export class RunExecutor {
       return updated ?? { ...run, ...patch };
     };
 
-    const wt = await this.prepareWorkspace(pr);
+    const wt = await this.prepareWorkspace(pr, req.scope);
     try {
       const { env, extraArgs, askLangSuffix } = await this.buildInvocation(
         req,
@@ -254,6 +254,10 @@ export class RunExecutor {
       model: activeLlmForRecord?.model || undefined,
       // 复评引用前向链：随 run 落盘，UI 据此在 /ask 卡上展示「复评自…」徽标 + 裁决动作。
       referencedFinding: req.tool === 'ask' ? req.referencedFinding : undefined,
+      // 触发来源随 run 落盘：user 来源的 run 由 ChatPane 补命令回显气泡；agent 子 run 不回显。
+      origin: item.priority,
+      // 单 commit 评审范围随 run 落盘：结果卡据此展示范围徽标。
+      scope: req.scope,
     });
     // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播（经调度层）。
     item.info = { ...item.info, startedAt: run.startedAt };
@@ -265,16 +269,25 @@ export class RunExecutor {
     return run;
   }
 
-  /** 阶段②：同步镜像 + 按固定 merge-base 物化 worktree（与 UI diff 同源，评审基于 PR 自分叉的改动）。 */
-  private async prepareWorkspace(pr: QueueItem['pr']) {
+  /**
+   * 阶段②：同步镜像 + 物化 worktree（与 UI diff 同源，评审基于 PR 自分叉的改动）。
+   * 缺省按固定 merge-base 定界 PR 全量（head=PR 源 sha，base=merge-base）；传入单 commit 范围（scope）时
+   * 改按该 commit 自身改动定界（head=scope.sha，base=scope.parent），pr-agent 只见 parent..sha 的 diff。
+   */
+  private async prepareWorkspace(pr: QueueItem['pr'], scope?: QueueItem['req']['scope']) {
     const { repoMirror, pr: prService } = this.ctx;
     const repoId = prService.repoIdentityFor(pr);
     // 走 ensureMirrorReadyForPr（而非裸 syncMirror）：与 UI diff 同源，且复用其自愈——源分支被删 / 强推后
-    // 按平台精确 fetch PR 头引用补齐 head sha，否则 materializeWorktree 建 meebox/head 会因对象缺失失败。
+    // 按平台精确 fetch PR 头引用补齐 head sha，否则 materializeWorktree 建 head 分支会因对象缺失失败。
     await prService.ensureMirrorReadyForPr(pr);
+    if (scope) {
+      // 单 commit 范围：head=目标 commit，base=其父 commit → LOCAL__TARGET_BRANCH 指向 parent，
+      // pr-agent 只见该 commit 自身改动。parent 是 head 的祖先、随镜像同步而在，无需另取。
+      return repoMirror.materializeWorktree(repoId, scope.sha, scope.parent, pr.localId);
+    }
     // pr-agent 的 LOCAL__TARGET_BRANCH 用固定 merge-base，而非 targetRef.sha 漂移后混入别的 PR 的两点对比。
     const diffBase = await prService.resolveDiffBaseSha(pr);
-    return repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase);
+    return repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase, pr.localId);
   }
 
   /**
@@ -361,6 +374,10 @@ export class RunExecutor {
       // /ask 代码建议数量软约束（与 /review /improve 共用同一设置）。
       maxCodeSuggestions:
         req.tool === 'ask' ? bootstrap.config.agent.strategy.max_code_suggestions : undefined,
+      // /ask 代码检索指引：仅 CLI 提供方（子进程 cwd 落在完整 worktree、可用文件工具）注入，引导定向检索
+      // （内置只读搜索 / grep 查符号 · 只读所需行段）替代整文件通读，降低 agentic 探索成本。刻意只用只读工具集
+      // （headless default 模式下非只读工具会中止会话，故不诱导 rg）。API 提供方无文件访问、不注入。
+      worktreeRetrieval: req.tool === 'ask' && activeLlm?.provider === 'cli',
     });
     // /ask 的 pr_questions prompt **不渲染 extra_instructions**（与 describe/review/improve 不同），
     // 经 env 注入对 /ask 是死字段。故 /ask 的指令改为拼进「问题」（user turn，见下方 askQuestion），

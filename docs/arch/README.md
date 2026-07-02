@@ -41,12 +41,16 @@ docs/arch/
 │   ├── 02-session.md                 会话 Agent 化（输入路由 / 规划循环 / 过程留存 / 交互控制）
 │   ├── 03-autopilot.md               AutoPilot 与调度（自动预评审 / 准入闸 / 批量判定 / 微流程 / 优先级队列）
 │   ├── 04-rules.md                   规则系统（frontmatter / 匹配优先级；正文存 `<agent.dir>/rules/`）
-│   └── 05-pragent-runtime.md         pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage）
+│   ├── 05-pragent-runtime.md         pr-agent 集成与运行时（bridge / 嵌入式 Python / sitecustomize / token usage）
+│   └── 06-tool-token-cost.md         工具 token 成本与上下文分层（三层上下文模型 / 成本放量根因 / 只读检索指引 · /ask 预算 · codegraph 评估）
 ├── 03-gui/                         GUI 与交互
 │   ├── 01-ui-interaction.md          渲染层布局 / 面板 / 跨 PR 保活 / 交互约定
 │   ├── 02-command-palette.md         命令面板（标题栏入口 / 两级选择 / 按语言搜索 / 注册表 + 分域）
 │   ├── 03-notifications.md           消息通知（poll 事件投影 / 系统通知 toast / macOS dock 角标 / OS 权限降级）
 │   └── 04-i18n.md                    国际化（react-i18next / 双运行时 / key 命名 / 翻译规范 / 模板翻译）
+├── 04-integration/                 外部集成扩展与 CLI
+│   ├── 01-service-api.md             服务监听与本地 API（loopback 默认 / 强制 token / 读+评审写边界 / 路由复用 service）
+│   └── 02-cli.md                     CLI 工具（Go 独立二进制 / 命令树 / 显式连接配置 / 跨平台分发）
 └── 99-core/                        基础设施
     ├── 01-state-storage.md           状态存储与数据模型（StateStore / per-PR 目录 / 存储模型 + 业务生命周期）
     ├── 02-config-and-secrets.md      配置与凭据（config.yaml / SecretStore / 设置页 / 首启向导）
