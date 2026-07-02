@@ -157,3 +157,5 @@ meebox pr list --output json | jq '.[].title'
   （发顶层评论）；但**不提供合并（merge）与变更类 Agent 工具（publish 等）**，有此需求请自行对接代码平台。
 - **令牌安全**：服务令牌在 GUI 的 `~/.code-meeseeks/config.yaml` 明文存储；若写入 CLI 的 `~/.code-meeseeks/cli.yaml`
   同为明文。监听 `0.0.0.0` 暴露到局域网时尤需保密，并及时通过「重新生成」吊销泄露的令牌。
+- **版本兼容**：若 `meebox` 版本低于应用要求的下限，任意命令都会收到「CLI 过旧、请升级」提示（含双方版本）；
+  按上文「获取 CLI」重装最新版即可。CLI 与应用版本同源发布，正常同步升级不会遇到。
