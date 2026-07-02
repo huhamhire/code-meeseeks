@@ -10,6 +10,7 @@ import {
 } from '@meebox/shared';
 import * as agentCtl from '../../controllers/agent.js';
 import * as prCtl from '../../controllers/pr.js';
+import { buildAppInfo } from '../app.js';
 import { getContext } from '../context.js';
 import { HttpError } from './http.js';
 import { toPrAgentRuns, toPrListItem } from './views.js';
@@ -95,6 +96,16 @@ const whoami: RouteHandler = () => {
     user: user ? { name: user.name, displayName: user.displayName, slug: user.slug ?? null } : null,
   };
 };
+
+/**
+ * 触发一次立即轮询刷新（等价 GUI 的手动刷新 / 窗口聚焦刷新）：拉取所有连接的最新 PR、落本地，
+ * 返回本轮计数汇总（fetched / changed / added / removed / errors）。复用 GUI 同源 poller.tick
+ * （`prs:refresh`）。无远端写副作用（纯读远端 + 落本地），列为安全的开放动作。
+ */
+const refresh: RouteHandler = () => prCtl.refreshPrs(NO_EVENT, undefined);
+
+/** 服务端（桌面应用）版本，供 CLI `system version` 同时展示客户端 + 服务端版本。 */
+const version: RouteHandler = () => ({ version: buildAppInfo(getContext().bootstrap).appVersion });
 
 /**
  * PR 列表：`category`（一级发现分类）+ `status`（二级状态 / 合并态）过滤 + `q` 检索 +
@@ -206,6 +217,8 @@ const comment: RouteHandler = ({ params, body }) => {
 export const routes: Route[] = [
   { method: 'GET', segments: seg('/api/v1/categories'), handler: categories },
   { method: 'GET', segments: seg('/api/v1/whoami'), handler: whoami },
+  { method: 'POST', segments: seg('/api/v1/refresh'), handler: refresh },
+  { method: 'GET', segments: seg('/api/v1/version'), handler: version },
   { method: 'GET', segments: seg('/api/v1/prs'), handler: listPrs },
   { method: 'GET', segments: seg('/api/v1/prs/:id'), handler: showPr },
   { method: 'GET', segments: seg('/api/v1/prs/:id/diff'), handler: diff },
