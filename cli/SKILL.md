@@ -63,6 +63,7 @@ Root-level (no PR):
 - `meebox login --token <token> [--server <url>]` — save credentials to `cli.yaml` (default server is loopback); later commands need no flags/env.
 - `meebox whoami` — current user + platform + connection (confirm your token resolves).
 - `meebox version` — CLI (client) + app (server) versions; client-only when the server is unreachable.
+- `meebox skill` — print this doc (SKILL.md is embedded in the binary), so usage is retrievable even without the file.
 
 ## Typical loop
 

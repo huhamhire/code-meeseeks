@@ -65,6 +65,7 @@ and `refresh`) and `agent` — carry PR-scoped commands via the required `--pr <
 meebox login --token <token> [--server <url>]   # save credentials to cli.yaml
 meebox whoami
 meebox version                          # CLI (client) + app (server) versions
+meebox skill                            # print the embedded agent usage doc (SKILL.md)
 meebox pr categories
 meebox pr refresh                       # trigger one immediate poll for the latest PRs
 meebox pr list [--category <filter>] [--status <key>] [--query <text>] [--skip N] [--limit N]

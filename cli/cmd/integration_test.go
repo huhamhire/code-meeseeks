@@ -49,6 +49,9 @@ func mockServer(rec *capturedReq, status int, dataJSON string) *httptest.Server 
 	}))
 }
 
+// testSkillDoc stands in for the embedded SKILL.md (main injects the real one at build).
+const testSkillDoc = "# meebox (test skill doc)\n"
+
 // runCmd runs the root command with captured output, returning stdout + the error
 // (Execute()'s os.Exit wrapper is bypassed so tests can assert on the error).
 func runCmd(args ...string) (string, error) {
@@ -57,7 +60,7 @@ func runCmd(args ...string) (string, error) {
 	render.Stdout, render.Stderr = &buf, io.Discard
 	defer func() { render.Stdout, render.Stderr = origOut, origErr }()
 
-	root := newRootCmd()
+	root := newRootCmd(testSkillDoc)
 	root.SetArgs(args)
 	err := root.Execute()
 	return buf.String(), err
@@ -157,6 +160,16 @@ func TestLoginWritesConfig(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "tok123") || !strings.Contains(string(data), "http://saved:9") {
 		t.Errorf("cli.yaml missing token/server: %q", string(data))
+	}
+}
+
+func TestSkillPrintsEmbeddedDoc(t *testing.T) {
+	out, err := runCmd("skill")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != testSkillDoc {
+		t.Errorf("skill output = %q, want embedded doc %q", out, testSkillDoc)
 	}
 }
 
