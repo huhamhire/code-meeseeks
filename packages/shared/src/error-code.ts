@@ -60,6 +60,8 @@ export const ERROR_CODES = {
   SV_NOT_FOUND: 'ESV0003',
   /** 请求体校验失败（→ HTTP 400）。 */
   SV_BAD_REQUEST: 'ESV0004',
+  /** CLI 版本低于服务端可兼容下限（→ HTTP 426；meta.minVersion 最低要求、meta.clientVersion 实际版本）。 */
+  SV_CLIENT_TOO_OLD: 'ESV0005',
 } as const;
 
 /** 已登记的错误码字面量联合（抛错时只能用注册过的码，防笔误）。 */
