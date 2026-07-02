@@ -67,7 +67,7 @@ func resolveClient() (*apiclient.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return apiclient.New(s.APIURL, s.Token), nil
+	return apiclient.New(s.APIURL, s.Token, version), nil
 }
 
 func outputMode() render.Mode {

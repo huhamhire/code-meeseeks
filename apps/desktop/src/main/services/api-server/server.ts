@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { BootstrapResult } from '@meebox/config';
 import { ERROR_CODES } from '@meebox/shared';
 import type { Logger } from 'pino';
+import { CLI_VERSION_HEADER, MIN_CLI_VERSION, isClientTooOld } from './compat.js';
 import { HttpError, readJsonBody, sendError, sendOk } from './http.js';
 import { matchRoute } from './routes/index.js';
 
@@ -96,6 +97,13 @@ export class ApiServer {
     let outcome: { status: number; code?: string };
     try {
       if (!this.authorized(req)) throw new HttpError(401, ERROR_CODES.SV_UNAUTHORIZED);
+      // 兼容性门控：对所有 API 调用统一拦截过旧的 CLI（缺版本头 / 不可解析 → 放行）。
+      if (isClientTooOld(req.headers[CLI_VERSION_HEADER])) {
+        throw new HttpError(426, ERROR_CODES.SV_CLIENT_TOO_OLD, {
+          minVersion: MIN_CLI_VERSION,
+          clientVersion: String(req.headers[CLI_VERSION_HEADER] ?? ''),
+        });
+      }
       const matched = matchRoute(method, pathname);
       if (!matched) throw new HttpError(404, ERROR_CODES.SV_NOT_FOUND);
       const body = method === 'POST' ? await readJsonBody(req) : undefined;

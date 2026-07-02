@@ -15,18 +15,29 @@ import (
 	"time"
 )
 
+// CLIVersionHeader announces the CLI version so the server can gate incompatible
+// (too-old) clients. Kept in sync with the server-side constant by convention.
+const CLIVersionHeader = "X-Meebox-CLI-Version"
+
+// CodeClientTooOld is the server error code (ESV0005) returned when this CLI is older
+// than the server's minimum supported version. Kept in sync with the shared registry.
+const CodeClientTooOld = "ESV0005"
+
 // Client talks to the local API with a bearer token.
 type Client struct {
 	baseURL string
 	token   string
+	version string
 	http    *http.Client
 }
 
-// New builds a client for the given base URL and bearer token.
-func New(baseURL, token string) *Client {
+// New builds a client for the given base URL, bearer token, and CLI version (sent as a
+// header for server-side compatibility gating; empty is fine and simply omits the header).
+func New(baseURL, token, version string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		token:   token,
+		version: version,
 		http:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
@@ -40,10 +51,32 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
+	if e.Code == CodeClientTooOld {
+		got := metaString(e.Meta, "clientVersion")
+		min := metaString(e.Meta, "minVersion")
+		return fmt.Sprintf(
+			"incompatible CLI: this meebox (%s) is older than the app requires (minimum %s); "+
+				"upgrade the CLI — re-run the install script or download the latest release",
+			orUnknown(got), orUnknown(min))
+	}
 	if e.Code != "" {
 		return fmt.Sprintf("API error %s (HTTP %d)", e.Code, e.Status)
 	}
 	return fmt.Sprintf("API error (HTTP %d)", e.Status)
+}
+
+func metaString(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
 }
 
 type envelope struct {
@@ -90,6 +123,9 @@ func (c *Client) Post(path string, body any) (json.RawMessage, error) {
 func (c *Client) do(req *http.Request) (json.RawMessage, error) {
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
+	if c.version != "" {
+		req.Header.Set(CLIVersionHeader, c.version)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {

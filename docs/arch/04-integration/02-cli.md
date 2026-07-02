@@ -126,7 +126,7 @@ agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `
 - **输出模式**：`yaml`（默认，人，类 k8s `-o yaml`）/ `json`（机，输出 API `data`）；均为响应数据的通用转换。
 - **退出码**：`0` 成功 / `1` 通用 / `2` 鉴权 / `3` not found（按需扩展）。
 - **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（Windows / macOS 用 `.zip`、Linux 用 `.tar.gz`），
-  附 `.sha256` 校验和。`<version>` 与应用版本对齐（同一 `v*` tag）。
+  附 `.sha256` 校验和。`<version>` 取自 `apps/desktop/package.json`（与 app 同源，唯一真相源），发布前置校验其与 `v*` tag 一致。
 - **压缩包内容 = 可直接投放的 skill 目录**：除二进制外一并打包 `LICENSE` + `README.md` + `SKILL.md`。解压到
   agent 的 skills 目录即得一个可用 skill——`SKILL.md`（frontmatter `name: meebox`）教 agent 用法，紧邻其驱动
   的二进制。这是 CLI「面向 agent 交付」的主形态。
@@ -141,7 +141,11 @@ agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `
 - **随主工程一起发布**：发布流程的 **Go 构建 job**（`actions/setup-go` + `GOOS`/`GOARCH` 交叉编译矩阵）产出
   四平台压缩包（含二进制 + `LICENSE` + `README.md` + `SKILL.md`）+ 校验和，与桌面安装包一并上传到**同一个
   GitHub Release**（由现有 `v*` tag 触发，见 [发布流程](../../../AGENTS.md)）。
-- 版本号与应用同源（同 tag），确保 CLI 与服务端 API 契约版本可对应。
+- 版本号**取自 `apps/desktop/package.json`（与 app 同源）**，经 `-ldflags` 注入 `cmd.version`——不独立依赖 git tag（发布前置校验 tag 与之一致），确保 CLI 与服务端 API 契约版本可对应。
+- **一键安装脚本（macOS / Linux）**：`tools/cli/install.sh` 经 `curl … | bash` 一条命令完成安装——探测系统 /
+  架构 → 取匹配的 Release 压缩包 → 校验 SHA-256 → 解出 `meebox` 装入 `PATH`（默认 `/usr/local/bin`，不可写回退
+  `~/.local/bin`；`MEEBOX_VERSION` / `MEEBOX_BIN_DIR` 可覆盖）。刻意**不落地 `SKILL.md`**（已内嵌、`meebox skill`
+  可导出）。Windows 不在脚本覆盖内，走手动下载。
 
 ## 扩展与注意事项
 
@@ -150,6 +154,9 @@ agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `
 - **加新命令先加端点**：CLI 不得绕过 API 直连应用内部；能力缺口先在[服务端](01-service-api.md)补端点。
 - **不触碰 GUI 机密**：CLI 不读应用主配置 `~/.code-meeseeks/config.yaml`（含各平台访问令牌等连接层机密）；服务令牌须经 flag / 环境变量 / `cli.yaml` 显式提供，避免越权触达预期外凭据。
 - **契约漂移防护**：初期手写 struct 务必随服务端契约同步更新；契约增长后转 OpenAPI / Schema 代码生成。
+- **版本兼容门控**：CLI 每次请求带 `X-Meebox-CLI-Version` 头声明自身版本（与 app 同源）；服务端据集中管理的
+  最低可兼容版本统一门控，CLI 收到 `SV_CLIENT_TOO_OLD`（HTTP 426）即输出「过旧、请升级」提示。见
+  [服务端契约](01-service-api.md) 的「CLI 版本兼容门控」。
 - **JSON 优先稳定**：`--output json` 是自动化主路径，其字段形状视为对外契约，演进需保持兼容。
 - **代理走环境变量**：HTTP client 用 Go `net/http` 默认 transport，天然遵循标准 `HTTP(S)_PROXY` /
   `NO_PROXY`；loopback（`127.0.0.1` / `localhost`）默认直连不走代理——无需自实现代理逻辑。
