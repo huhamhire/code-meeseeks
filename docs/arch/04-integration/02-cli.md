@@ -64,8 +64,8 @@ meebox [全局 flag] <组> <命令> [参数]
 命令分两类——**根层级系统性命令** 与 **两个领域组**：
 
 - **系统性命令（根层级）** —— `login`（保存凭据到 `cli.yaml`）、`whoami`（身份）、`version`（客户端 +
-  服务端版本）：与具体 PR / Agent 无关的工具 / 会话层操作，直接置于根层级、不套领域组（符合 `kubectl version`
-  / `gh auth` 等惯例）。
+  服务端版本）、`skill`（打印内嵌的 SKILL.md）：与具体 PR / Agent 无关的工具 / 会话层操作，直接置于根层级、
+  不套领域组（符合 `kubectl version` / `gh auth` 等惯例）。
 - **`pr`** —— PR 相关操作：浏览 + 评审写动作，并含 `categories`（`pr list` 的筛选词表）与 `refresh`
   （触发一次拉取、刷新 PR 列表）。
 - **`agent`** —— 评审 Agent 操作。
@@ -79,6 +79,7 @@ agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `
 | `meebox login --token <token> [--server <url>]` | 保存 token（与可选 server，默认 loopback）到 `cli.yaml`，供后续命令免传参 | —（本地写，无 API） |
 | `meebox whoami` | 当前身份（用户 + 平台 + 连接名） | `GET /whoami` |
 | `meebox version` | 客户端（CLI）+ 服务端（应用）版本；服务端不可达时仅客户端、退出码仍 0 | `GET /version` |
+| `meebox skill` | 打印构建时 `go:embed` 内嵌的 agent 使用说明（SKILL.md） | —（本地，无 API） |
 | `meebox pr categories` | 列当前启用平台的分类标签（`categories` 一级 + `statuses` 二级）——`pr list` 的筛选词表 | `GET /categories` |
 | `meebox pr refresh` | 触发一次立即轮询刷新（拉取最新 PR、落本地），返回本轮计数汇总（fetched / changed / added / removed / errors）；等价 GUI 手动刷新 | `POST /refresh` |
 | `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简投影 + 分页，默认 limit 100） | `GET /prs` |
@@ -129,6 +130,10 @@ agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `
 - **压缩包内容 = 可直接投放的 skill 目录**：除二进制外一并打包 `LICENSE` + `README.md` + `SKILL.md`。解压到
   agent 的 skills 目录即得一个可用 skill——`SKILL.md`（frontmatter `name: meebox`）教 agent 用法，紧邻其驱动
   的二进制。这是 CLI「面向 agent 交付」的主形态。
+- **二进制自述（`go:embed`）**：同一份 `SKILL.md` 经 `go:embed` 于构建期内嵌进二进制，`meebox skill` 打印之。
+  即便二进制脱离压缩包（如 `go install` 或裸放 `PATH`）也能自述用法，且内嵌内容与随包 `SKILL.md` 构建期一致。
+  刻意**不做** `--manifest` 之类的 function-calling JSON——skill 的消费形态是 markdown，非工具 schema 注入；
+  真有此需求应从命令树生成、而非另手维护一份 JSON。
 
 ## 分发与 CI
 

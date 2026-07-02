@@ -72,6 +72,7 @@ PR（`id` 由 `meebox pr list` 输出获得）。
 | `meebox login --token <令牌> [--server <地址>]` | 保存令牌（与可选服务地址）到 `cli.yaml`，后续命令免传参 |
 | `meebox whoami` | 当前登录身份与集成平台（用户 + 平台 + 连接名） |
 | `meebox version` | 客户端（CLI）+ 服务端（应用）版本；未连接服务端时仅显示客户端版本 |
+| `meebox skill` | 打印内嵌的使用说明（SKILL.md），便于二进制脱离压缩包时自述用法 |
 | `meebox pr categories` | 列出当前平台可用的分类标签（一级发现分类 + 二级状态 / 合并态筛选）——`pr list` 的筛选词表 |
 | `meebox pr refresh` | 触发一次立即刷新（拉取最新 PR），返回本轮变化计数（新增 / 变更 / 移除等）；等同 GUI 里的手动刷新 |
 | `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简字段 + 分页，默认 limit 100） |
@@ -106,6 +107,24 @@ meebox pr list --output json | jq '.[].title'
 ```
 
 **退出码**：`0` 成功；非 0 表错误（`2` 鉴权失败、`3` 资源不存在、`1` 其他）；错误信息打到 `stderr`。
+
+## 6. 作为 Agent Skill 集成
+
+`meebox` 的主要交付形态是**可直接投放的 agent skill**：发布压缩包除二进制外一并含 `SKILL.md` /
+`README.md` / `LICENSE`，整个解压目录即是一个可用 skill。
+
+- **投放即用**：把解压目录放进 agent 的 skills 目录（如 `~/.claude/skills/meebox/`）。`SKILL.md`
+  （frontmatter `name: meebox`）向 agent 说明命令树、连接方式与写边界，紧邻其驱动的二进制。
+- **二进制自述**：同一份 `SKILL.md` 于构建期经 `go:embed` 内嵌进二进制，`meebox skill` 可打印之——
+  二进制即便脱离压缩包（如单独放入 `PATH`）也能取回用法，且内容与随包文档构建期一致。
+- **集成流程**：读 `SKILL.md` 了解能力 → `meebox login` 存一次凭据 → 以 `meebox pr list` / `pr show` /
+  `agent review` 等浏览与驱动评审 → 用 `meebox pr approve` / `needswork` / `comment` 记录结论；机器消费统一
+  取 `--output json`（其字段形状为稳定契约）。
+- **边界内建**：仅开放浏览 + 评审写动作，不含合并与变更类工具（详见下「注意事项」），agent 集成天然不会触发
+  高影响远端操作。
+- **框架无关的接入**：`SKILL.md` 的自动发现是 Claude Code 的 skill 约定，并非跨框架标准。其它 agent / 脚本
+  无需依赖该约定即可集成——直接以 shell 调用 `meebox`、用 `meebox skill` 或 `--help` 取用法、`--output json`
+  取结构化结果。真正可移植的接口是「命令行 + JSON」，`SKILL.md` 自动发现只是 Claude 生态的锦上添花。
 
 ## 网络代理
 
