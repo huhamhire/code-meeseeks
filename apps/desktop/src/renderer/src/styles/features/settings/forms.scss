@@ -49,6 +49,15 @@
     color: $text-muted;
   }
 
+  // 标签允许换行 + 断词：德语等长复合词（如 Benachrichtigungen）在固定宽导航里一行放不下，
+  // 靠 hyphens 正确断词（依赖 <html lang>，见 i18n），overflow-wrap 兜底——绝不裁切。
+  span {
+    min-width: 0;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    line-height: 1.25;
+  }
+
   &:hover {
     background: $bg-hover;
   }
