@@ -142,6 +142,10 @@ agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `
   四平台压缩包（含二进制 + `LICENSE` + `README.md` + `SKILL.md`）+ 校验和，与桌面安装包一并上传到**同一个
   GitHub Release**（由现有 `v*` tag 触发，见 [发布流程](../../../AGENTS.md)）。
 - 版本号与应用同源（同 tag），确保 CLI 与服务端 API 契约版本可对应。
+- **一键安装脚本（macOS / Linux）**：`tools/cli/install.sh` 经 `curl … | bash` 一条命令完成安装——探测系统 /
+  架构 → 取匹配的 Release 压缩包 → 校验 SHA-256 → 解出 `meebox` 装入 `PATH`（默认 `/usr/local/bin`，不可写回退
+  `~/.local/bin`；`MEEBOX_VERSION` / `MEEBOX_BIN_DIR` 可覆盖）。刻意**不落地 `SKILL.md`**（已内嵌、`meebox skill`
+  可导出）。Windows 不在脚本覆盖内，走手动下载。
 
 ## 扩展与注意事项
 

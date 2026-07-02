@@ -16,6 +16,18 @@ directory yields a working skill. `SKILL.md` is also embedded in the binary: if 
 only the binary, `meebox skill > SKILL.md` reconstructs the doc (a fallback for rebuilding
 the skill directory without the archive).
 
+## Install
+
+macOS / Linux one-liner — downloads the latest release, verifies its SHA-256, installs `meebox` to PATH:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/huhamhire/code-meeseeks/main/tools/cli/install.sh | bash
+```
+
+`MEEBOX_VERSION` / `MEEBOX_BIN_DIR` env vars (or `--version` / `--bin-dir` flags) override the release
+and install dir. Windows: download the `.zip` from Releases. No separate `SKILL.md` needed — it is
+embedded in the binary (`meebox skill` prints it).
+
 ## Build & run
 
 This is an independent Go module (`go.mod`), not part of the npm/Nx workspace.

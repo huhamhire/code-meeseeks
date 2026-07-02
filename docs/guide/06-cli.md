@@ -15,13 +15,21 @@ CLI 依赖应用内的本地 API 服务，默认关闭，需先在 **设置 → 
 
 ## 2. 获取 CLI
 
-从 [GitHub Release](https://github.com/huhamhire/code-meeseeks/releases) 下载对应平台的压缩包
-（`meebox-cli-<版本>-<系统>-<架构>.zip` / `.tar.gz`），解压后把 `meebox` 可执行文件放到 `PATH` 中。
+**macOS / Linux 一键安装**——自动下载最新版、校验 SHA-256、装到 `PATH`：
 
-覆盖平台：Windows x64、macOS arm64、Linux x64 / arm64。
+```bash
+curl -fsSL https://raw.githubusercontent.com/huhamhire/code-meeseeks/main/tools/cli/install.sh | bash
+```
 
-压缩包内含 `meebox` 二进制、`LICENSE`、`README.md` 与 `SKILL.md`。**作为 agent skill 使用**：把解压目录直接
-放入 agent 的 skills 目录（如 `~/.claude/skills/meebox/`）即可——`SKILL.md` 会告诉 agent 如何驱动其旁的 `meebox`。
+脚本自动探测系统 / 架构并拉取匹配的 Release 压缩包，把 `meebox` 装到 `/usr/local/bin`（不可写则回退
+`~/.local/bin`）。可用环境变量 `MEEBOX_VERSION`（装指定版本）、`MEEBOX_BIN_DIR`（指定安装目录）调整。
+无需单独安装 `SKILL.md`——它已内嵌进二进制（`meebox skill` 可打印）。
+
+**手动下载**（Windows，或不便用脚本时）：从 [GitHub Release](https://github.com/huhamhire/code-meeseeks/releases)
+下载对应平台压缩包（`meebox-cli-<版本>-<系统>-<架构>.zip` / `.tar.gz`），解压后把 `meebox` 放到 `PATH`。
+
+覆盖平台：Windows x64、macOS arm64、Linux x64 / arm64。压缩包内含 `meebox` 二进制、`LICENSE`、`README.md`
+与 `SKILL.md`（作为 agent skill 投放见 [第 6 节](#6-作为-agent-skill-集成)）。
 
 ## 3. 连接方式
 
