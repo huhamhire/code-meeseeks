@@ -72,7 +72,7 @@ func TestCategories(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"platform":"github","categories":["review-requested"],"statuses":["all"]}`)
 	defer srv.Close()
 
-	out, err := runCmd(base(srv.URL, "categories")...)
+	out, err := runCmd(base(srv.URL, "pr", "categories")...)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,6 +101,41 @@ func TestWhoami(t *testing.T) {
 	}
 	if !strings.Contains(out, "platform: github") {
 		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
+func TestPrRefreshPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"fetched":3,"changed":1,"added":1,"removed":0,"errors":0}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "pr", "refresh")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/refresh" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(out, "added: 1") {
+		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
+func TestVersion(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"version":"9.9.9"}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "version")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/version" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	// Both client (build-time "dev" in tests) and server versions render.
+	if !strings.Contains(out, "client:") || !strings.Contains(out, "server: 9.9.9") {
+		t.Errorf("version output missing client/server: %q", out)
 	}
 }
 
@@ -298,7 +333,7 @@ func TestAuthFailureExitCode(t *testing.T) {
 	srv := mockServer(&rec, 401, "")
 	defer srv.Close()
 
-	_, err := runCmd(base(srv.URL, "categories")...)
+	_, err := runCmd(base(srv.URL, "pr", "categories")...)
 	if err == nil {
 		t.Fatal("expected auth error")
 	}
@@ -326,7 +361,7 @@ func TestOutputJSON(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"platform":"github"}`)
 	defer srv.Close()
 
-	out, err := runCmd(base(srv.URL, "--output", "json", "categories")...)
+	out, err := runCmd(base(srv.URL, "--output", "json", "pr", "categories")...)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

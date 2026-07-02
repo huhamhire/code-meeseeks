@@ -48,12 +48,15 @@ defaults to `http://127.0.0.1:18765` when unset.
 
 ## Commands
 
-Two domains, `pr` and `agent`, both PR-scoped via the required `--pr <id>` flag
+Root-level `whoami` / `version` need no PR. Two domains — `pr` (also holds `categories`
+and `refresh`) and `agent` — carry PR-scoped commands via the required `--pr <id>` flag
 (`id` comes from `pr list`):
 
 ```text
 meebox whoami
-meebox categories
+meebox version                          # CLI (client) + app (server) versions
+meebox pr categories
+meebox pr refresh                       # trigger one immediate poll for the latest PRs
 meebox pr list [--category <filter>] [--status <key>] [--query <text>] [--skip N] [--limit N]
 meebox pr show     --pr <id>
 meebox pr diff     --pr <id> [--file <path>] [--side base|head]

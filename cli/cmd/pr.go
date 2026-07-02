@@ -26,6 +26,8 @@ func newPrCmd() *cobra.Command {
 		Short: "Browse and act on pull requests",
 	}
 	pr.AddCommand(
+		newCategoriesCmd(),
+		newRefreshCmd(),
 		newPrListCmd(),
 		newPrShowCmd(),
 		newPrDiffCmd(),

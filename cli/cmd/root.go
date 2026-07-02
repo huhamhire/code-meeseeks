@@ -39,7 +39,7 @@ func newRootCmd() *cobra.Command {
 
 	root.AddCommand(
 		newWhoamiCmd(),
-		newCategoriesCmd(),
+		newVersionCmd(),
 		newPrCmd(),
 		newAgentCmd(),
 	)
