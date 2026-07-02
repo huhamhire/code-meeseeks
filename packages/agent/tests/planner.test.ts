@@ -67,6 +67,26 @@ describe('runPlanningAgent', () => {
     expect(r.finalText).toBe('done');
   });
 
+  it('caps /ask calls at maxFollowupAsks (refuses over-budget asks, keeps other tools)', async () => {
+    const { deps, toolCalls } = makeDeps([
+      '{"thought":"ask 1","tool":"/ask","question":"q1"}',
+      '{"thought":"ask 2","tool":"/ask","question":"q2"}',
+      '{"thought":"ask 3 (over budget)","tool":"/ask","question":"q3"}',
+      '{"thought":"fall back to review","tool":"/review"}',
+      '{"final":"answer"}',
+    ]);
+    const r = await runPlanningAgent(deps, {
+      context,
+      pr,
+      toolCatalog: catalog,
+      userRequest: 'explore deeply',
+      maxFollowupAsks: 2,
+    });
+    // 前两次 /ask 执行；第三次超预算被拒（不进 runTool）；/review 不受 /ask 预算约束仍可执行。
+    expect(toolCalls.map((c) => c.tool)).toEqual(['/ask', '/ask', '/review']);
+    expect(r.finalText).toBe('answer');
+  });
+
   it('runs allowed tools and refuses disallowed ones within the same multi-tool turn', async () => {
     const { deps, toolCalls } = makeDeps([
       '{"tools":["/review","/approve"]}',

@@ -87,14 +87,13 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
           .map((tl) => (typeof tl === 'string' ? { tool: tl } : { tool: tl.tool ?? '', question: tl.question }))
       : [{ tool: action.tool ?? '', question: action.question }];
 
-    // 红线硬校验逐个把关：未授权 / 未知即拒并回喂；允许的留待并行执行。
+    // 红线硬校验逐个把关：未授权 / 未知即拒并回喂；/ask 另按配置的追问上限封顶（连续 agentic 探索成本高）；
+    // 允许的留待并行执行。
+    const isAsk = (tool: string): boolean => tool.replace(/^\//, '') === 'ask';
     const allowed: Array<{ tool: string; question?: string }> = [];
+    let asksAccepted = 0;
     for (const c of requested) {
-      try {
-        assertToolAllowed(c.tool, input.toolCatalog);
-        allowed.push(c);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+      const reject = async (msg: string): Promise<void> => {
         await rec.record({
           kind: 'judge',
           thought: action.thought,
@@ -102,7 +101,22 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
           result: `${labels.rejectedPrefix}${msg}`,
         });
         history.push(`Refused ${c.tool}: ${msg}`);
+      };
+      try {
+        assertToolAllowed(c.tool, input.toolCatalog);
+      } catch (err) {
+        await reject(err instanceof Error ? err.message : String(err));
+        continue;
       }
+      // /ask 预算：达上限即拒并回喂，促使模型据现有上下文收尾或改用只读工具（本会话累计计数，跨轮生效）。
+      if (isAsk(c.tool) && ctx.asksUsed + asksAccepted >= ctx.maxAsks) {
+        await reject(
+          `Follow-up /ask budget exhausted (${ctx.maxAsks}). Do not call /ask again — answer with the context you already have, or use read-only file tools.`,
+        );
+        continue;
+      }
+      allowed.push(c);
+      if (isAsk(c.tool)) asksAccepted++;
     }
     if (!allowed.length) return { kind: 'continue' }; // 全被拒 → 回喂后下一轮重选
 
@@ -122,6 +136,8 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
       rec.track(res.usage);
       history.push(`Called ${c.tool}${c.question ? ` ("${c.question}")` : ''} → ${clamp(res.text, 600)}`);
     }
+    // 累加本轮已发起的 /ask 计数（跨轮生效，达 maxAsks 后新的 /ask 会被上面的预算闸拒绝）。
+    ctx.asksUsed += asksAccepted;
     return { kind: 'continue' };
   }
 }

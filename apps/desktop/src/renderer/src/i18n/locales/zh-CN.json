@@ -755,7 +755,7 @@
     "llmTitle": "LLM 模型",
     "maxCodeSuggestionsHint": "单次 /review、/improve、/ask 生成的代码建议数量上限。",
     "maxCodeSuggestionsLabel": "代码建议数量",
-    "maxFollowupAsksHint": "自动追问启用时，单次评审条件性追问的数量上限。",
+    "maxFollowupAsksHint": "追问 /ask 数量上限：评审条件性追问（需开启自动追问）与自由对话 Agent 的自动 /ask 均受此约束。",
     "maxFollowupAsksLabel": "追问数量",
     "notificationsEnableLabel": "启用通知",
     "notificationsHint": "在有新的 PR 或与你相关的评论时收到提醒。系统通知是否弹出取决于操作系统的通知设置。",

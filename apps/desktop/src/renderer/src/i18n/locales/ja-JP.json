@@ -755,7 +755,7 @@
     "llmTitle": "LLM モデル",
     "maxCodeSuggestionsHint": "/review・/improve・/ask が一度に生成するコード提案数の上限。",
     "maxCodeSuggestionsLabel": "コード提案数",
-    "maxFollowupAsksHint": "自動追問が有効なとき、1 回のレビューで行う条件付き追問の数の上限。",
+    "maxFollowupAsksHint": "追問 /ask の数の上限：レビューの条件付き追問（自動追問が有効なとき）と、自由対話エージェントの自動 /ask の両方に適用。",
     "maxFollowupAsksLabel": "追問の数",
     "notificationsEnableLabel": "通知を有効化",
     "notificationsHint": "新しい PR やあなた宛てのコメントがあると通知します。システム通知が表示されるかは OS の通知設定に従います。",
