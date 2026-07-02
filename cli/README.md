@@ -12,7 +12,9 @@ merging and the agent's publish/mutating tools are intentionally not exposed.
 
 `meebox` is also shipped as a drop-in agent **skill** — each release archive bundles
 [`SKILL.md`](SKILL.md) beside the binary, so unzipping it into an agent's skills
-directory yields a working skill.
+directory yields a working skill. `SKILL.md` is also embedded in the binary: if you have
+only the binary, `meebox skill > SKILL.md` reconstructs the doc (a fallback for rebuilding
+the skill directory without the archive).
 
 ## Build & run
 

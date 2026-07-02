@@ -117,6 +117,16 @@ meebox pr list --output json | jq '.[].title'
   （frontmatter `name: meebox`）向 agent 说明命令树、连接方式与写边界，紧邻其驱动的二进制。
 - **二进制自述**：同一份 `SKILL.md` 于构建期经 `go:embed` 内嵌进二进制，`meebox skill` 可打印之——
   二进制即便脱离压缩包（如单独放入 `PATH`）也能取回用法，且内容与随包文档构建期一致。
+- **仅有二进制的 fallback**：若手头只有 `meebox` 二进制（缺压缩包 / `SKILL.md` 文件），用 `meebox skill`
+  即可从二进制导出说明、就地重建 skill 目录，无需另找原始文件：
+
+  ```bash
+  mkdir -p ~/.claude/skills/meebox
+  cp "$(command -v meebox)" ~/.claude/skills/meebox/      # 二进制放入 skill 目录
+  meebox skill > ~/.claude/skills/meebox/SKILL.md          # 从内嵌副本导出说明
+  ```
+
+  导出的内容与该二进制同源，天然匹配当前版本。
 - **集成流程**：读 `SKILL.md` 了解能力 → `meebox login` 存一次凭据 → 以 `meebox pr list` / `pr show` /
   `agent review` 等浏览与驱动评审 → 用 `meebox pr approve` / `needswork` / `comment` 记录结论；机器消费统一
   取 `--output json`（其字段形状为稳定契约）。
