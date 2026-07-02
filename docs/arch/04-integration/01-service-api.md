@@ -55,6 +55,8 @@ GUI 同源 controller（见下「写边界」）。另有 `POST …/refresh` 触
   （`ctx.pr` / `ctx.orchestrator` / `ctx.poller` / `ctx.connectionRuntime` 等），**不重复业务逻辑**。
 - 原则：核心能力沉在 service 层，IPC 与 HTTP 各自只做**薄封装 + 协议适配**。新增 API 端点前，先确保对应能力
   在 service 层有可复用方法（必要时把 controller 内联逻辑下沉到 service）。
+- **路由按领域分模块**：HTTP 路由处理器按业务领域（系统性 / PR / Agent）分置于独立模块，聚合层只做**注册与路径
+  匹配**、不含业务逻辑——与 [CLI](02-cli.md) 命令树的领域划分对称，新增端点归入对应域、便于定位与扩展。
 
 ### 写边界（放开评审动作，拒绝合并与变更类 Agent 工具）
 

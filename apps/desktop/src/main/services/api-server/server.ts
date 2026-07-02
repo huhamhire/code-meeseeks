@@ -4,7 +4,7 @@ import type { BootstrapResult } from '@meebox/config';
 import { ERROR_CODES } from '@meebox/shared';
 import type { Logger } from 'pino';
 import { HttpError, readJsonBody, sendError, sendOk } from './http.js';
-import { matchRoute } from './routes.js';
+import { matchRoute } from './routes/index.js';
 
 /**
  * 本地 API 服务监听器（见 docs/arch/04-integration/01-service-api.md）。
