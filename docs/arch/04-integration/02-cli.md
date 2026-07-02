@@ -59,14 +59,24 @@ meebox [全局 flag] <组> <命令> [参数]
 全局 flag：--api-url · --token · --output (yaml|json) · --quiet
 ```
 
-命令分两个领域组：`pr`（直接的 PR 实体操作）与 `agent`（评审 Agent 操作）。二者都用**必填 flag
-`--pr <id>`** 传 PR 标识（`id` 由 `pr list` 输出获得）——meebox 只管理 PR，故 agent **不再嵌进 `pr`**
-（避免 `pr agent … --pr` 里 `pr` 重复），而与 `pr` 平级。
+命令分两类——**根层级系统性命令** 与 **两个领域组**：
+
+- **系统性命令（根层级）** —— `whoami`（身份）、`version`（客户端 + 服务端版本）：与具体 PR / Agent 无关的
+  工具 / 会话层信息，直接置于根层级、不套领域组（符合 `kubectl version` / `gh` 等惯例）。
+- **`pr`** —— PR 相关操作：浏览 + 评审写动作，并含 `categories`（`pr list` 的筛选词表）与 `refresh`
+  （触发一次拉取、刷新 PR 列表）。
+- **`agent`** —— 评审 Agent 操作。
+
+`pr` / `agent` 下的 PR 维度子命令用**必填 flag `--pr <id>`** 传 PR 标识（`id` 由 `pr list` 输出获得）——
+agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `pr` 平级；根层级系统性命令与
+`pr categories` / `pr refresh` / `pr list` 非 PR 维度，无需 `--pr`。
 
 | 命令 | 用途 | 对应 API |
 | --- | --- | --- |
 | `meebox whoami` | 当前身份（用户 + 平台 + 连接名） | `GET /whoami` |
-| `meebox categories` | 列当前启用平台的分类标签（`categories` 一级 + `statuses` 二级） | `GET /categories` |
+| `meebox version` | 客户端（CLI）+ 服务端（应用）版本；服务端不可达时仅客户端、退出码仍 0 | `GET /version` |
+| `meebox pr categories` | 列当前启用平台的分类标签（`categories` 一级 + `statuses` 二级）——`pr list` 的筛选词表 | `GET /categories` |
+| `meebox pr refresh` | 触发一次立即轮询刷新（拉取最新 PR、落本地），返回本轮计数汇总（fetched / changed / added / removed / errors）；等价 GUI 手动刷新 | `POST /refresh` |
 | `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简投影 + 分页，默认 limit 100） | `GET /prs` |
 | `meebox pr show --pr <id>` | 描述详情 | `GET /prs/{id}` |
 | `meebox pr diff --pr <id> [--file <path>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 | `GET /prs/{id}/diff` |

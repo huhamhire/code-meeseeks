@@ -54,13 +54,16 @@ meebox --api-url http://<主机>:18765 --token <令牌> pr list
 meebox [全局参数] <组> <命令> [参数]
 ```
 
-命令分 `pr`（直接的 PR 操作）与 `agent`（评审 Agent 操作）两个领域组，均用**必填参数 `--pr <id>`** 指定 PR
-（`id` 由 `meebox pr list` 输出获得）。
+根层级的系统性命令 `whoami` / `version` 与具体 PR 无关；其余命令分 `pr`（PR 操作，含 `categories` 筛选词表
+与 `refresh` 刷新）与 `agent`（评审 Agent 操作）两个领域组，其 PR 维度子命令用**必填参数 `--pr <id>`** 指定
+PR（`id` 由 `meebox pr list` 输出获得）。
 
 | 命令 | 用途 |
 | --- | --- |
 | `meebox whoami` | 当前登录身份与集成平台（用户 + 平台 + 连接名） |
-| `meebox categories` | 列出当前平台可用的分类标签（一级发现分类 + 二级状态 / 合并态筛选） |
+| `meebox version` | 客户端（CLI）+ 服务端（应用）版本；未连接服务端时仅显示客户端版本 |
+| `meebox pr categories` | 列出当前平台可用的分类标签（一级发现分类 + 二级状态 / 合并态筛选）——`pr list` 的筛选词表 |
+| `meebox pr refresh` | 触发一次立即刷新（拉取最新 PR），返回本轮变化计数（新增 / 变更 / 移除等）；等同 GUI 里的手动刷新 |
 | `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简字段 + 分页，默认 limit 100） |
 | `meebox pr show --pr <id>` | PR 描述详情 |
 | `meebox pr diff --pr <id> [--file <路径>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 |
