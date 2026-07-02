@@ -414,12 +414,12 @@ describe('RepoMirrorManager diff/content', () => {
 });
 
 describe('RepoMirrorManager.materializeWorktree', () => {
-  it('从 bare mirror 派生 self-contained worktree, HEAD 在 meebox/head 命名分支上', async () => {
+  it('从 bare mirror 派生 self-contained worktree, HEAD 在 pr-<localId>/head 命名分支上', async () => {
     const mgr = makeManager();
     await mgr.syncMirror(repo);
     const headSha = (await simpleGit(upstreamPath).revparse(['HEAD'])).trim();
 
-    const wt = await mgr.materializeWorktree(repo, headSha);
+    const wt = await mgr.materializeWorktree(repo, headSha, undefined, 'pr01hash');
     try {
       // worktree 路径在 <reposDir>/<host>/<project>/<repo>/wt/ 下
       expect(wt.path.startsWith(path.join(reposDir, 'bb.example.com', 'FX', 'fx-help', 'wt'))).toBe(
@@ -431,13 +431,13 @@ describe('RepoMirrorManager.materializeWorktree', () => {
       // README.md (upstream 初始 commit 的文件) 应该被 checkout 到工作树
       const readme = await fs.readFile(path.join(wt.path, 'README.md'), 'utf8');
       expect(readme).toBe('hello');
-      // HEAD 必须在命名分支 meebox/head 上 (pr-agent 要求，不能 detached)
+      // HEAD 必须在命名分支 pr-<localId>/head 上 (pr-agent 要求，不能 detached)
       const headRef = (await simpleGit(wt.path).raw(['symbolic-ref', 'HEAD'])).trim();
-      expect(headRef).toBe('refs/heads/meebox/head');
-      expect(wt.headBranchName).toBe('meebox/head');
+      expect(headRef).toBe('refs/heads/pr-pr01hash/head');
+      expect(wt.headBranchName).toBe('pr-pr01hash/head');
       // 该分支应该指向 headSha
       const branchSha = (
-        await simpleGit(wt.path).revparse(['refs/heads/meebox/head'])
+        await simpleGit(wt.path).revparse(['refs/heads/pr-pr01hash/head'])
       ).trim();
       expect(branchSha).toBe(headSha);
       // 没传 baseSha → 没有 target branch
@@ -447,7 +447,7 @@ describe('RepoMirrorManager.materializeWorktree', () => {
     }
   });
 
-  it('baseSha 传入后建 meebox/base 分支，targetBranchName 返回该名字', async () => {
+  it('baseSha 传入后建 pr-<localId>/base 分支，targetBranchName 返回该名字', async () => {
     const mgr = makeManager();
     await mgr.syncMirror(repo);
     // upstream 加一个新 commit；用初始 commit 当 base，新 commit 当 head
@@ -459,16 +459,16 @@ describe('RepoMirrorManager.materializeWorktree', () => {
     const headSha = (await upstreamGit.revparse(['HEAD'])).trim();
     await mgr.syncMirror(repo); // fetch new ref into mirror
 
-    const wt = await mgr.materializeWorktree(repo, headSha, baseSha);
+    const wt = await mgr.materializeWorktree(repo, headSha, baseSha, 'pr01hash');
     try {
-      expect(wt.targetBranchName).toBe('meebox/base');
+      expect(wt.targetBranchName).toBe('pr-pr01hash/base');
       const baseBranchSha = (
-        await simpleGit(wt.path).revparse(['refs/heads/meebox/base'])
+        await simpleGit(wt.path).revparse(['refs/heads/pr-pr01hash/base'])
       ).trim();
       expect(baseBranchSha).toBe(baseSha);
-      // head 仍在 meebox/head
+      // head 仍在 pr-<localId>/head
       const headBranchSha = (
-        await simpleGit(wt.path).revparse(['refs/heads/meebox/head'])
+        await simpleGit(wt.path).revparse(['refs/heads/pr-pr01hash/head'])
       ).trim();
       expect(headBranchSha).toBe(headSha);
     } finally {

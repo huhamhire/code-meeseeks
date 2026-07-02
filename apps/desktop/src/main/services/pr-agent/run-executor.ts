@@ -278,16 +278,16 @@ export class RunExecutor {
     const { repoMirror, pr: prService } = this.ctx;
     const repoId = prService.repoIdentityFor(pr);
     // 走 ensureMirrorReadyForPr（而非裸 syncMirror）：与 UI diff 同源，且复用其自愈——源分支被删 / 强推后
-    // 按平台精确 fetch PR 头引用补齐 head sha，否则 materializeWorktree 建 meebox/head 会因对象缺失失败。
+    // 按平台精确 fetch PR 头引用补齐 head sha，否则 materializeWorktree 建 head 分支会因对象缺失失败。
     await prService.ensureMirrorReadyForPr(pr);
     if (scope) {
       // 单 commit 范围：head=目标 commit，base=其父 commit → LOCAL__TARGET_BRANCH 指向 parent，
       // pr-agent 只见该 commit 自身改动。parent 是 head 的祖先、随镜像同步而在，无需另取。
-      return repoMirror.materializeWorktree(repoId, scope.sha, scope.parent);
+      return repoMirror.materializeWorktree(repoId, scope.sha, scope.parent, pr.localId);
     }
     // pr-agent 的 LOCAL__TARGET_BRANCH 用固定 merge-base，而非 targetRef.sha 漂移后混入别的 PR 的两点对比。
     const diffBase = await prService.resolveDiffBaseSha(pr);
-    return repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase);
+    return repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase, pr.localId);
   }
 
   /**
