@@ -168,7 +168,9 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"   # tag 去 v 前缀；非 tag（dispatch）取 ref 名，仅用于编译冒烟
+          # 版本与 app 同源：取自 apps/desktop/package.json（app 运行期版本的唯一真相源），
+          # 而非独立依赖 git tag——发布前置已校验 tag == 该版本，故二者一致但只有一个来源。
+          VERSION="$(node -p "require('$GITHUB_WORKSPACE/apps/desktop/package.json').version")"
           mkdir -p dist
           go build -trimpath \
             -ldflags "-s -w -X github.com/huhamhire/code-meeseeks/cli/cmd.version=${VERSION}" \
@@ -179,7 +181,7 @@ jobs:
         shell: bash
         working-directory: cli/dist
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="$(node -p "require('$GITHUB_WORKSPACE/apps/desktop/package.json').version")"  # 与 app 同源
           BIN="meebox${{ matrix.ext }}"
           ARCHIVE="meebox-cli-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
           # Bundle LICENSE + README + SKILL.md so the archive is a drop-in agent skill
