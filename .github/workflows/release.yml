@@ -160,6 +160,11 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
 
+      # 显式声明 node：版本号取自 apps/desktop/package.json（`node -p` 读取），不依赖 runner 隐式自带 node。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: 交叉编译 meebox CLI
         shell: bash
         working-directory: cli
@@ -183,19 +188,20 @@ jobs:
         run: |
           VERSION="$(node -p "require('$GITHUB_WORKSPACE/apps/desktop/package.json').version")"  # 与 app 同源
           BIN="meebox${{ matrix.ext }}"
-          ARCHIVE="meebox-cli-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          ARCHIVE="meebox-cli-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.archive }}"
           # Bundle LICENSE + README + SKILL.md so the archive is a drop-in agent skill
           # directory (unzip into a skills dir → SKILL.md beside the binary it drives).
           cp ../../LICENSE ../README.md ../SKILL.md .
           FILES=("${BIN}" LICENSE README.md SKILL.md)
           if [ "${{ matrix.archive }}" = "zip" ]; then
-            zip -q "${ARCHIVE}.zip" "${FILES[@]}"
+            zip -q "${ARCHIVE}" "${FILES[@]}"
           else
-            tar -czf "${ARCHIVE}.tar.gz" "${FILES[@]}"
+            tar -czf "${ARCHIVE}" "${FILES[@]}"
           fi
-          for f in "${ARCHIVE}".zip "${ARCHIVE}".tar.gz; do
-            [ -e "$f" ] && sha256sum "$f" > "$f.sha256"
-          done
+          # 只对本 matrix 实际产出的那个压缩包做校验和。此前遍历 .zip/.tar.gz 两种扩展名：zip 变体
+          # （windows/mac）最后一轮 `[ -e X.tar.gz ]` 为假、返回 1，恰是步骤末命令 → 整步以 1 退出而挂；
+          # linux（.tar.gz 末轮命中）才幸免。直接对已知文件名求 sha256，去掉这个脆弱循环。
+          sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
 
       - name: 上传到 Release
         if: startsWith(github.ref, 'refs/tags/')
