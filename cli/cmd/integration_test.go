@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -47,6 +49,9 @@ func mockServer(rec *capturedReq, status int, dataJSON string) *httptest.Server 
 	}))
 }
 
+// testSkillDoc stands in for the embedded SKILL.md (main injects the real one at build).
+const testSkillDoc = "# meebox (test skill doc)\n"
+
 // runCmd runs the root command with captured output, returning stdout + the error
 // (Execute()'s os.Exit wrapper is bypassed so tests can assert on the error).
 func runCmd(args ...string) (string, error) {
@@ -55,7 +60,7 @@ func runCmd(args ...string) (string, error) {
 	render.Stdout, render.Stderr = &buf, io.Discard
 	defer func() { render.Stdout, render.Stderr = origOut, origErr }()
 
-	root := newRootCmd()
+	root := newRootCmd(testSkillDoc)
 	root.SetArgs(args)
 	err := root.Execute()
 	return buf.String(), err
@@ -72,7 +77,7 @@ func TestCategories(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"platform":"github","categories":["review-requested"],"statuses":["all"]}`)
 	defer srv.Close()
 
-	out, err := runCmd(base(srv.URL, "categories")...)
+	out, err := runCmd(base(srv.URL, "pr", "categories")...)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,6 +106,70 @@ func TestWhoami(t *testing.T) {
 	}
 	if !strings.Contains(out, "platform: github") {
 		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
+func TestPrRefreshPost(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"fetched":3,"changed":1,"added":1,"removed":0,"errors":0}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "pr", "refresh")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/api/v1/refresh" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	if !strings.Contains(out, "added: 1") {
+		t.Errorf("output missing rendered field: %q", out)
+	}
+}
+
+func TestVersion(t *testing.T) {
+	var rec capturedReq
+	srv := mockServer(&rec, 200, `{"version":"9.9.9"}`)
+	defer srv.Close()
+
+	out, err := runCmd(base(srv.URL, "version")...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.method != http.MethodGet || rec.path != "/api/v1/version" {
+		t.Errorf("wrong request: %s %s", rec.method, rec.path)
+	}
+	// Both client (build-time "dev" in tests) and server versions render.
+	if !strings.Contains(out, "client:") || !strings.Contains(out, "server: 9.9.9") {
+		t.Errorf("version output missing client/server: %q", out)
+	}
+}
+
+func TestLoginWritesConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("MEEBOX_API_URL", "")
+	t.Setenv("MEEBOX_TOKEN", "")
+
+	if _, err := runCmd("login", "--token", "tok123", "--server", "http://saved:9"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".code-meeseeks", "cli.yaml"))
+	if err != nil {
+		t.Fatalf("cli.yaml not written: %v", err)
+	}
+	if !strings.Contains(string(data), "tok123") || !strings.Contains(string(data), "http://saved:9") {
+		t.Errorf("cli.yaml missing token/server: %q", string(data))
+	}
+}
+
+func TestSkillPrintsEmbeddedDoc(t *testing.T) {
+	out, err := runCmd("skill")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != testSkillDoc {
+		t.Errorf("skill output = %q, want embedded doc %q", out, testSkillDoc)
 	}
 }
 
@@ -298,7 +367,7 @@ func TestAuthFailureExitCode(t *testing.T) {
 	srv := mockServer(&rec, 401, "")
 	defer srv.Close()
 
-	_, err := runCmd(base(srv.URL, "categories")...)
+	_, err := runCmd(base(srv.URL, "pr", "categories")...)
 	if err == nil {
 		t.Fatal("expected auth error")
 	}
@@ -326,7 +395,7 @@ func TestOutputJSON(t *testing.T) {
 	srv := mockServer(&rec, 200, `{"platform":"github"}`)
 	defer srv.Close()
 
-	out, err := runCmd(base(srv.URL, "--output", "json", "categories")...)
+	out, err := runCmd(base(srv.URL, "--output", "json", "pr", "categories")...)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

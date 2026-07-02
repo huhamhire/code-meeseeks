@@ -12,7 +12,9 @@ merging and the agent's publish/mutating tools are intentionally not exposed.
 
 `meebox` is also shipped as a drop-in agent **skill** — each release archive bundles
 [`SKILL.md`](SKILL.md) beside the binary, so unzipping it into an agent's skills
-directory yields a working skill.
+directory yields a working skill. `SKILL.md` is also embedded in the binary: if you have
+only the binary, `meebox skill > SKILL.md` reconstructs the doc (a fallback for rebuilding
+the skill directory without the archive).
 
 ## Build & run
 
@@ -46,14 +48,28 @@ Connection details must be provided explicitly; the CLI does **not** read the ap
 `~/.code-meeseeks/config.yaml` (which holds connection-layer secrets). The API URL
 defaults to `http://127.0.0.1:18765` when unset.
 
+`meebox login --token <token> [--server <url>]` persists the token (and optional server
+URL) to `cli.yaml` so later commands need no flags/env — the write counterpart to the
+`cli.yaml` read above:
+
+```bash
+meebox login --token <token>                        # default server http://127.0.0.1:18765
+meebox login --token <token> --server http://host:18765
+```
+
 ## Commands
 
-Two domains, `pr` and `agent`, both PR-scoped via the required `--pr <id>` flag
+Root-level `whoami` / `version` need no PR. Two domains — `pr` (also holds `categories`
+and `refresh`) and `agent` — carry PR-scoped commands via the required `--pr <id>` flag
 (`id` comes from `pr list`):
 
 ```text
+meebox login --token <token> [--server <url>]   # save credentials to cli.yaml
 meebox whoami
-meebox categories
+meebox version                          # CLI (client) + app (server) versions
+meebox skill                            # print the embedded agent usage doc (SKILL.md)
+meebox pr categories
+meebox pr refresh                       # trigger one immediate poll for the latest PRs
 meebox pr list [--category <filter>] [--status <key>] [--query <text>] [--skip N] [--limit N]
 meebox pr show     --pr <id>
 meebox pr diff     --pr <id> [--file <path>] [--side base|head]

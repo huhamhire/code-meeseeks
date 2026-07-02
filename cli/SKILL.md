@@ -19,20 +19,29 @@ review outcomes. Output defaults to YAML; pass `--output json` when parsing resu
 
 ## Connect
 
-Provide the API base URL + token explicitly — the CLI never reads the app's `config.yaml`:
+Provide the API base URL + token explicitly — the CLI never reads the app's `config.yaml`.
+Easiest is `meebox login` (persists to `~/.code-meeseeks/cli.yaml`); or use env vars:
 
 ```bash
-export MEEBOX_API_URL=http://127.0.0.1:18765   # default port; override for remote hosts
-export MEEBOX_TOKEN=<token>                     # from Settings → Integration
-meebox whoami                                    # confirm the resolved user + platform
-meebox --output json pr list | jq '.[].id'       # JSON for scripting
+meebox login --token <token>                     # save token (default server http://127.0.0.1:18765)
+meebox login --token <token> --server http://host:18765   # remote server
+# — or, instead of login —
+export MEEBOX_API_URL=http://127.0.0.1:18765     # default port; override for remote hosts
+export MEEBOX_TOKEN=<token>                       # from Settings → Integration
+
+meebox whoami                                     # confirm the resolved user + platform
+meebox --output json pr list | jq '.[].id'        # JSON for scripting
 ```
 
 ## Command map
 
-Two domains, both PR-scoped via the **required `--pr <id>`** flag (`id` comes from `pr list`):
+Root-level `meebox whoami` and `meebox version` need no PR. The rest split into two domains —
+`pr` and `agent`; PR-scoped subcommands take the **required `--pr <id>`** flag (`id` from `pr list`),
+while `pr categories` / `pr refresh` / `pr list` are collection-level (no `--pr`).
 
 **Browse / inspect — `pr`**
+- `meebox pr categories` — the active platform's `categories` / `statuses` filter vocabulary for `pr list`.
+- `meebox pr refresh` — trigger one immediate poll for the latest PRs (same as the app's manual refresh); returns change counts (fetched / changed / added / removed / errors). Run before `pr list` for fresh data.
 - `meebox pr list [--category review-requested|created|assigned|mentioned] [--status pending|approved|needs_work|conflict|mergeable] [--query <text>] [--skip N] [--limit N]` — paginated (default limit 100), slim fields (id / title / author / createdAt first).
 - `meebox pr show --pr <id>` — full detail incl. description.
 - `meebox pr diff --pr <id> [--file <path> --side base|head]` — changed files, or one file's content.
@@ -50,7 +59,11 @@ Two domains, both PR-scoped via the **required `--pr <id>`** flag (`id` comes fr
 - `meebox pr approve --pr <id>` · `meebox pr needswork --pr <id>` — post a review decision.
 - `meebox pr comment --pr <id> <message>` — post a top-level comment.
 
-Filter vocabulary: `meebox categories` lists the active platform's available `categories` / `statuses`.
+Root-level (no PR):
+- `meebox login --token <token> [--server <url>]` — save credentials to `cli.yaml` (default server is loopback); later commands need no flags/env.
+- `meebox whoami` — current user + platform + connection (confirm your token resolves).
+- `meebox version` — CLI (client) + app (server) versions; client-only when the server is unreachable.
+- `meebox skill` — print this doc (SKILL.md is embedded in the binary), so usage is retrievable even without the file.
 
 ## Typical loop
 

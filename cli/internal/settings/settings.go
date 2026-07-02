@@ -74,12 +74,40 @@ func Resolve(ov Overrides) (Settings, error) {
 	}
 
 	if s.APIURL == "" {
-		s.APIURL = fmt.Sprintf("http://%s:%d", defaultHost, defaultPort)
+		s.APIURL = DefaultAPIURL()
 	}
 	if s.Token == "" {
 		return Settings{}, ErrNoToken
 	}
 	return s, nil
+}
+
+// DefaultAPIURL is the loopback API base URL used when none is provided.
+func DefaultAPIURL() string {
+	return fmt.Sprintf("http://%s:%d", defaultHost, defaultPort)
+}
+
+// Save writes the connection settings to ~/.code-meeseeks/cli.yaml (creating the directory
+// if needed) with owner-only file permissions, since the token is a secret. It overwrites
+// any existing CLI config. Returns the path written. This is the write counterpart to the
+// cli.yaml read in Resolve — the CLI's `login` command uses it to persist credentials.
+func Save(s Settings) (string, error) {
+	home, ok := appHome()
+	if !ok {
+		return "", errors.New("cannot resolve home directory")
+	}
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		return "", err
+	}
+	path := filepath.Join(home, "cli.yaml")
+	data, err := yaml.Marshal(cliConfig{APIURL: s.APIURL, Token: s.Token})
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // appHome returns the app's fixed data directory (~/.code-meeseeks), shared by the GUI

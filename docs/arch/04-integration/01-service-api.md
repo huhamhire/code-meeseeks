@@ -9,7 +9,8 @@
 负责：服务监听开关与生命周期、bearer token 鉴权、请求路由与响应封装、把内部能力映射成稳定的 HTTP 契约。
 
 开放的**写操作**限定为评审动作：approve / needswork（远端评审决断）与顶层 comment（发评论），复用
-GUI 同源 controller（见下「写边界」）。
+GUI 同源 controller（见下「写边界」）。另有 `POST …/refresh` 触发一次本地轮询刷新——虽用 POST，但
+**无远端写副作用**（纯读远端 + 落本地），不属评审写动作范畴，与合并 / 变更类工具的禁令无关。
 
 **不负责**：
 
@@ -54,6 +55,8 @@ GUI 同源 controller（见下「写边界」）。
   （`ctx.pr` / `ctx.orchestrator` / `ctx.poller` / `ctx.connectionRuntime` 等），**不重复业务逻辑**。
 - 原则：核心能力沉在 service 层，IPC 与 HTTP 各自只做**薄封装 + 协议适配**。新增 API 端点前，先确保对应能力
   在 service 层有可复用方法（必要时把 controller 内联逻辑下沉到 service）。
+- **路由按领域分模块**：HTTP 路由处理器按业务领域（系统性 / PR / Agent）分置于独立模块，聚合层只做**注册与路径
+  匹配**、不含业务逻辑——与 [CLI](02-cli.md) 命令树的领域划分对称，新增端点归入对应域、便于定位与扩展。
 
 ### 写边界（放开评审动作，拒绝合并与变更类 Agent 工具）
 
@@ -120,6 +123,8 @@ service:
 | --- | --- | --- |
 | `GET /api/v1/whoami` | 当前身份：活动连接 PAT 所属用户（`name`/`displayName`/`slug`）+ 集成平台 + 连接显示名；无活动连接各项 null | 连接摘要（当前用户 + 平台） |
 | `GET /api/v1/categories` | 当前启用平台下可用的分类标签：`categories`（`PrDiscoveryFilter`）+ `statuses`（状态 / 合并态筛选），按平台能力裁剪 | 平台能力位 + 列表筛选语义 |
+| `POST /api/v1/refresh` | 触发一次立即轮询刷新（拉取所有连接的最新 PR、落本地），返回本轮计数汇总（`PollResult`：fetched / changed / added / removed / errors）；等价 GUI 手动刷新，无远端写副作用 | `poller.tick`（`prs:refresh` 同源） |
+| `GET /api/v1/version` | 服务端（桌面应用）版本（`{ version }`），供 CLI `version` 命令同时展示客户端 + 服务端版本 | `buildAppInfo().appVersion`（`app:info` 同源） |
 | `GET /api/v1/prs` | PR 列表（**精简投影** `PrListItem`：字段序 id/title/author/createdAt 优先，去 description、人员仅 slug）；query：`category`（一级）/`status`（二级）/`q`（检索）/`skip`+`limit`（分页，默认 limit 100） | `prs:list` + 列表筛选谓词 + 视图投影 |
 | `GET /api/v1/prs/{id}` | 描述详情（完整 `StoredPullRequest`：标题 / 描述 / 作者 / 分支 / 时间 / 状态 / 合并态） | `StoredPullRequest` |
 | `GET /api/v1/prs/{id}/diff` | 变更文件列表；带 `?path=&side=base\|head` 时取单文件内容 | `diff:listChangedFiles` / `diff:getFileContent` 同源 |

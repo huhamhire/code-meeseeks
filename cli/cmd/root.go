@@ -23,7 +23,7 @@ type globalFlags struct {
 
 var gflags globalFlags
 
-func newRootCmd() *cobra.Command {
+func newRootCmd(skillDoc string) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "meebox",
 		Short:         "Code Meeseeks CLI — integrate PR review capabilities over the local API",
@@ -38,8 +38,10 @@ func newRootCmd() *cobra.Command {
 	pf.BoolVar(&gflags.quiet, "quiet", false, "suppress non-essential output")
 
 	root.AddCommand(
+		newLoginCmd(),
 		newWhoamiCmd(),
-		newCategoriesCmd(),
+		newVersionCmd(),
+		newSkillCmd(skillDoc),
 		newPrCmd(),
 		newAgentCmd(),
 	)
@@ -47,9 +49,10 @@ func newRootCmd() *cobra.Command {
 }
 
 // Execute runs the root command, printing errors to stderr and mapping them
-// to process exit codes per docs/arch/04-integration/02-cli.md.
-func Execute() {
-	if err := newRootCmd().Execute(); err != nil {
+// to process exit codes per docs/arch/04-integration/02-cli.md. skillDoc is the
+// SKILL.md embedded into the binary (see main), surfaced by `meebox skill`.
+func Execute(skillDoc string) {
+	if err := newRootCmd(skillDoc).Execute(); err != nil {
 		render.Errorln(err)
 		os.Exit(render.ExitCodeFor(err))
 	}
