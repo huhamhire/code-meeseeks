@@ -3,7 +3,7 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.9.0-alpha.1] - 2026-07-02
 
 > 本版重点：
 >
@@ -403,7 +403,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...HEAD
+[0.9.0-alpha.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0-alpha.1
 [0.8.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.5.0...v0.6.0
