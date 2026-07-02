@@ -55,3 +55,21 @@ func TestResolveNoTokenErrors(t *testing.T) {
 		t.Fatalf("expected ErrNoToken, got %v", err)
 	}
 }
+
+func TestSaveThenResolveRoundTrips(t *testing.T) {
+	isolateHome(t)
+	t.Setenv(EnvAPIURL, "")
+	t.Setenv(EnvToken, "")
+
+	if _, err := Save(Settings{APIURL: "http://saved:9", Token: "saved-token"}); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+	// With no flags/env, Resolve must read back exactly what Save wrote.
+	got, err := Resolve(Overrides{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.APIURL != "http://saved:9" || got.Token != "saved-token" {
+		t.Fatalf("round-trip mismatch, got %+v", got)
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -136,6 +138,25 @@ func TestVersion(t *testing.T) {
 	// Both client (build-time "dev" in tests) and server versions render.
 	if !strings.Contains(out, "client:") || !strings.Contains(out, "server: 9.9.9") {
 		t.Errorf("version output missing client/server: %q", out)
+	}
+}
+
+func TestLoginWritesConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("MEEBOX_API_URL", "")
+	t.Setenv("MEEBOX_TOKEN", "")
+
+	if _, err := runCmd("login", "--token", "tok123", "--server", "http://saved:9"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".code-meeseeks", "cli.yaml"))
+	if err != nil {
+		t.Fatalf("cli.yaml not written: %v", err)
+	}
+	if !strings.Contains(string(data), "tok123") || !strings.Contains(string(data), "http://saved:9") {
+		t.Errorf("cli.yaml missing token/server: %q", string(data))
 	}
 }
 

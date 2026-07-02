@@ -19,13 +19,18 @@ review outcomes. Output defaults to YAML; pass `--output json` when parsing resu
 
 ## Connect
 
-Provide the API base URL + token explicitly — the CLI never reads the app's `config.yaml`:
+Provide the API base URL + token explicitly — the CLI never reads the app's `config.yaml`.
+Easiest is `meebox login` (persists to `~/.code-meeseeks/cli.yaml`); or use env vars:
 
 ```bash
-export MEEBOX_API_URL=http://127.0.0.1:18765   # default port; override for remote hosts
-export MEEBOX_TOKEN=<token>                     # from Settings → Integration
-meebox whoami                                    # confirm the resolved user + platform
-meebox --output json pr list | jq '.[].id'       # JSON for scripting
+meebox login --token <token>                     # save token (default server http://127.0.0.1:18765)
+meebox login --token <token> --server http://host:18765   # remote server
+# — or, instead of login —
+export MEEBOX_API_URL=http://127.0.0.1:18765     # default port; override for remote hosts
+export MEEBOX_TOKEN=<token>                       # from Settings → Integration
+
+meebox whoami                                     # confirm the resolved user + platform
+meebox --output json pr list | jq '.[].id'        # JSON for scripting
 ```
 
 ## Command map
@@ -55,6 +60,7 @@ while `pr categories` / `pr refresh` / `pr list` are collection-level (no `--pr`
 - `meebox pr comment --pr <id> <message>` — post a top-level comment.
 
 Root-level (no PR):
+- `meebox login --token <token> [--server <url>]` — save credentials to `cli.yaml` (default server is loopback); later commands need no flags/env.
 - `meebox whoami` — current user + platform + connection (confirm your token resolves).
 - `meebox version` — CLI (client) + app (server) versions; client-only when the server is unreachable.
 

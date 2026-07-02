@@ -46,6 +46,15 @@ Connection details must be provided explicitly; the CLI does **not** read the ap
 `~/.code-meeseeks/config.yaml` (which holds connection-layer secrets). The API URL
 defaults to `http://127.0.0.1:18765` when unset.
 
+`meebox login --token <token> [--server <url>]` persists the token (and optional server
+URL) to `cli.yaml` so later commands need no flags/env — the write counterpart to the
+`cli.yaml` read above:
+
+```bash
+meebox login --token <token>                        # default server http://127.0.0.1:18765
+meebox login --token <token> --server http://host:18765
+```
+
 ## Commands
 
 Root-level `whoami` / `version` need no PR. Two domains — `pr` (also holds `categories`
@@ -53,6 +62,7 @@ and `refresh`) and `agent` — carry PR-scoped commands via the required `--pr <
 (`id` comes from `pr list`):
 
 ```text
+meebox login --token <token> [--server <url>]   # save credentials to cli.yaml
 meebox whoami
 meebox version                          # CLI (client) + app (server) versions
 meebox pr categories
