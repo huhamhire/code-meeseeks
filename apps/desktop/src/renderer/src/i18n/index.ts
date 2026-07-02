@@ -66,6 +66,23 @@ export function persistLanguage(lang: string): void {
   }
 }
 
+/**
+ * 让 `<html lang>` 跟随当前 UI 语言（初始 + 每次切换）。index.html 静态写死 `zh-CN`、切语言时不更新，
+ * 会误导 CSS `hyphens:auto` 断词（用错语言的断词词典）、屏幕阅读器与字体选择。i18n 的 languageChanged
+ * 覆盖所有切换来源（启动 / 设置页 / 首启向导 / 命令面板），在此一处同步即可。
+ */
+function syncDocumentLang(lng: string): void {
+  try {
+    document.documentElement.lang = lng;
+  } catch {
+    // document 不可用（非常规宿主）时忽略：仅影响断词 / 可达性提示，不影响功能。
+  }
+}
+
+const initialLanguage = readInitialLanguage();
+syncDocumentLang(initialLanguage);
+i18n.on('languageChanged', syncDocumentLang);
+
 void i18n
   .use(
     // zh-CN 已静态打包，backend 只为其余语言按需拉取对应 chunk。
@@ -82,7 +99,7 @@ void i18n
     },
     partialBundledLanguages: true,
     // 初始语言取持久化值 / OS 偏好（默认按 OS 回落英语）：直接以用户语言启动。
-    lng: readInitialLanguage(),
+    lng: initialLanguage,
     // 兜底取 en-US（国际化标准：英文最通用）：任何 locale 缺 key 回退英文而非中文。
     // 各 locale 满覆盖，单层兜底足够；en-US 已静态打包，作 fallback 也不必再拉 chunk。
     fallbackLng: 'en-US',
