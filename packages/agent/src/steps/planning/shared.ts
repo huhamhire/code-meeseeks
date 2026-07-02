@@ -138,6 +138,13 @@ export interface PlanStepCtx {
   memories: AgentMemoryNotes;
   /** 当前计划（todo），逐轮回喂提示；模型给出 plan 即更新（重排 / 勾选 / 增删）。 */
   plan: AgentTodoItem[];
+  /**
+   * 本会话 /ask 数量上限（遵循配置的「追问数量」max_followup_asks）：自由规划里连续 /ask（各为一次
+   * agentic 探索）成本高，按此封顶——与「自动追问」开关无关（开关仅约束评审微流程）。
+   */
+  maxAsks: number;
+  /** 本会话已发起的 /ask 计数，逐轮累加；达 maxAsks 后拒绝新的 /ask 并回喂促收尾。 */
+  asksUsed: number;
 }
 
 /** plan-cycle 的产出：继续下一轮 / 收尾（带 final + 可选建议）/ 用户暂停。 */

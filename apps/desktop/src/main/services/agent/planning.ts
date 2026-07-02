@@ -85,6 +85,8 @@ export interface PlanningDeps {
   matchedRuleInstructions?: string | null;
   language: string;
   maxSteps: number;
+  /** 本会话 /ask 数量上限（配置「追问数量」max_followup_asks）：连续 agentic 探索成本高，按此封顶。 */
+  maxFollowupAsks: number;
   /** 用户选中的代码引用（隐式上下文）：注入规划 LLM 当轮提示，不进持久化用户消息。 */
   referencedContext?: string;
   signal?: AbortSignal;
@@ -155,6 +157,7 @@ export async function runPlanning(
         history,
         referencedContext: deps.referencedContext,
         maxSteps: deps.maxSteps,
+        maxFollowupAsks: deps.maxFollowupAsks,
       },
     );
 

@@ -84,6 +84,9 @@ export async function runPlanningForPr(
     matchedRuleInstructions: combineRuleInstructions(matchedRules),
     language: getMainLanguage(),
     maxSteps: agentCfg.max_steps,
+    // /ask 预算：自由规划里连续 /ask 各为一次 agentic 探索、成本高，按配置「追问数量」封顶（与「自动追问」
+    // 开关无关——开关仅约束评审微流程；此处始终生效，遵循配置的追问数量上限）。
+    maxFollowupAsks: agentCfg.strategy.max_followup_asks,
     signal,
     onStep: (sessionId, step) => runtime.emitStep(pr, sessionId, step),
     // 中途输入转向：planner 每轮取出排队消息时在此落盘进会话 + 广播刷新（即时显示为用户气泡），

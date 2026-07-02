@@ -772,7 +772,7 @@
     "llmTitle": "LLM-Modelle",
     "maxCodeSuggestionsHint": "Max. Code-Vorschläge pro /review, /improve oder /ask.",
     "maxCodeSuggestionsLabel": "Code-Vorschläge",
-    "maxFollowupAsksHint": "Maximale Anzahl bedingter Rückfragen pro Review, wenn die automatische Rückfrage aktiv ist.",
+    "maxFollowupAsksHint": "Max. Anzahl an /ask-Rückfragen – gilt für bedingte Review-Rückfragen (bei aktiver automatischer Rückfrage) und für die automatischen /ask-Aufrufe des freien Agenten.",
     "maxFollowupAsksLabel": "Rückfragen",
     "notificationsEnableLabel": "Benachrichtigungen aktivieren",
     "notificationsHint": "Werde benachrichtigt, wenn es neue Pull Requests oder an dich gerichtete Kommentare gibt. Ob Systembenachrichtigungen erscheinen, hängt von den Benachrichtigungseinstellungen deines Betriebssystems ab.",

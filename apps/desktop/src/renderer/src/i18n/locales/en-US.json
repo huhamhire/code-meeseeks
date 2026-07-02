@@ -772,7 +772,7 @@
     "llmTitle": "LLM Models",
     "maxCodeSuggestionsHint": "Max code suggestions per /review, /improve, or /ask.",
     "maxCodeSuggestionsLabel": "Code suggestions",
-    "maxFollowupAsksHint": "Maximum conditional follow-up questions per review when auto follow-up is on.",
+    "maxFollowupAsksHint": "Max follow-up /ask calls — applies to conditional review follow-ups (when auto follow-up is on) and to the free-form agent's automatic /ask calls.",
     "maxFollowupAsksLabel": "Follow-up questions",
     "notificationsEnableLabel": "Enable notifications",
     "notificationsHint": "Get notified when there are new pull requests or comments addressed to you. System notifications follow your OS notification settings.",
