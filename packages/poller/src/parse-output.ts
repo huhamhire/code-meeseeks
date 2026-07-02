@@ -111,14 +111,14 @@ function normalizeTitle(t: string): string {
   return t.replace(/[*_]+/g, '').trim();
 }
 
-/** 我们 materializeWorktree 临时建的内部分支名，pr-agent 把它当 PR 标识漏出来 */
-const INTERNAL_BRANCH_RE = /meebox\/(head|base)/i;
+/** 我们 materializeWorktree 临时建的内部分支名（`pr-<localId>/head|base`），pr-agent 把它当 PR 标识漏出来 */
+const INTERNAL_BRANCH_RE = /pr-[\w-]+\/(head|base)\b/i;
 
 /**
  * 剥 body 首尾的"噪音行"：连续 markdown HR (`---` / `***` / `___`)、空行、
- * 整行就是 `meebox/head|base` 的内部分支名 leak。pr-agent 在段落间用 `---`
+ * 整行就是 `pr-<localId>/head|base` 的内部分支名 leak。pr-agent 在段落间用 `---`
  * 分隔，splitMarkdownSections 切完后这条 HR 会黏在上一个 section 的 body 末尾；
- * 类似地 meebox/head 这种 PR identifier leak 也可能停在 body 首或尾。
+ * 类似地 pr-<localId>/head 这种 PR identifier leak 也可能停在 body 首或尾。
  * 全部在 parser 层清掉，下游 / 渲染 / 胶囊拆分都不用关心。
  */
 function trimNoise(body: string): string {
@@ -178,7 +178,7 @@ function mapSectionKey(displayTitle: string): PrDocSectionKey | undefined {
 /**
  * 噪音段落，直接从 findings 里剔除：
  * - `user description`：纯粹回显用户已写的 PR 描述，UI 上已有 PrInfoView 显示
- * - title 含 `meebox/head|base`：我们临时建的分支名，pr-agent 把它当 PR 标识
+ * - title 含 `pr-<localId>/head|base`：我们临时建的分支名，pr-agent 把它当 PR 标识
  *   作为各级 heading leak 出来（含 emoji / 修饰也照样匹配，子串就行）
  * - 空 title + 经 trimNoise 后空 body：纯分支名 leak 的独立 section
  * - /ask 工具下的 `question` / `questions` 段：UI 上方 chat-user-msg 已展示用户提问，
@@ -210,7 +210,7 @@ function shouldSkipSection(sec: Section, tool: ReviewRunTool): boolean {
     if (kind === 'question') return true;
     if (kind === 'answer' && !trimNoise(sec.body).trim()) return true;
   }
-  // title 含内部分支名 (e.g., "meebox/head" / "meebox/head 🔍" / "## meebox/head")
+  // title 含内部分支名 (e.g., "pr-<id>/head" / "pr-<id>/head 🔍" / "## pr-<id>/base")
   if (INTERNAL_BRANCH_RE.test(t)) return true;
   // trimNoise 把首尾的 HR / 分支名 leak 剥掉后，body 空 = 整段都是噪音
   const cleanedBody = trimNoise(sec.body).trim();

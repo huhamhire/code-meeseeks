@@ -18,7 +18,8 @@
 - **全局串行 sync 队列**：任意时刻只有一个仓库在 clone/fetch——多个调用方（切 PR / 定时）共用同一队列，
   不并发打远端、不抢 git 带宽，进度更稳；同一仓库的并发请求复用同一 in-flight Promise。读操作不走队列。
 - **worktree 物化**：从本地 bare **`git clone --local --no-checkout`** 派生独立 repo（同盘 objects 走 hardlink，
-  磁盘 ~0、跨 mount 边界也成立），再建两个内部分支 `meebox/head` / `meebox/base` 指向 PR 的 head/base sha。
+  磁盘 ~0、跨 mount 边界也成立），再建两个内部分支 `pr-<localId>/head` / `pr-<localId>/base` 指向 PR 的 head/base sha
+  （localId = 每-PR 稳定主键，与 PR 关联便于追溯、不带工具品牌前缀；无 localId 时回退随机 nonce）。
   pr-agent 的 LocalGitProvider 在这个 worktree 上算 diff（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。
 - **Diff 不 checkout 文件**：展示 diff 只需按 sha 读 blob（`git show <sha>:<path>`）+ 改动文件列表，
   不把文件 checkout 到磁盘，省 IO。Monaco 侧按文件懒加载，二进制/超大文件跳过。
