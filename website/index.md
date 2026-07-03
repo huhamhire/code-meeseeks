@@ -5,7 +5,7 @@ pageClass: mb-grid
 hero:
   name: Code Meeseeks
   text: AI code review, on your terms
-  tagline: 'A local, semi-automated AI code-review desktop client for the individual reviewer — built on <span style="white-space:nowrap">pr-agent</span>. The human decides, rules stay local, data stays local.'
+  tagline: 'A local, semi-automated AI code-review desktop client for the individual reviewer — built on <span style="white-space:nowrap">pr-agent</span>.<br>The human decides, rules stay local, data stays local.'
   image:
     src: /logo.png
     alt: Code Meeseeks

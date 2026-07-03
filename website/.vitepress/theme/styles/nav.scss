@@ -1,13 +1,9 @@
-// Top nav layout: page links on the left (next to the logo), search on the
-// right. VitePress default right-aligns the whole content-body and lets the
-// search box grow to fill the middle; we start it from the left, move the menu
-// first, and pin a compact search to the right. Desktop only (≥768px, where the
-// nav menu is visible) so the mobile search + hamburger layout is untouched.
+// Top nav: keep everything right-aligned (VitePress default), but put the page
+// links (menu) to the LEFT of the search box, and keep the search compact
+// instead of letting it fill the middle. Desktop only (≥768px, where the nav
+// menu is visible) so the mobile search + hamburger layout is untouched.
+// Right-side order becomes: [Guide · Download · FAQ] [Search] [theme · social].
 @media (min-width: 768px) {
-  .VPNavBar .content-body {
-    justify-content: flex-start;
-  }
-
   .VPNavBar .menu {
     order: -1;
     margin-right: 24px;
@@ -15,7 +11,6 @@
 
   .VPNavBar .search {
     flex-grow: 0;
-    margin-left: auto;
     padding-left: 0;
   }
 }
