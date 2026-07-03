@@ -56,7 +56,8 @@ export default defineConfig({
         ],
         footer: {
           message: 'Released under the Apache License 2.0.',
-          copyright: `An unofficial, independent open-source tool. Not affiliated with Rick and Morty.`,
+          copyright:
+            'Built on the community edition of <a href="https://docs.pr-agent.ai/" target="_blank" rel="noreferrer">PR-Agent</a> (Qodo), bundled under its own license.<br>An unofficial, independent open-source tool — not affiliated with Rick and Morty.',
         },
       },
     },
@@ -88,8 +89,9 @@ export default defineConfig({
           ],
         },
         footer: {
-          message: '基于 Apache License 2.0 发布。',
-          copyright: '非官方、独立的开源工具，与 Rick and Morty 无任何关联。',
+          message: '采用 Apache License 2.0 发布。',
+          copyright:
+            '基于 <a href="https://docs.pr-agent.ai/" target="_blank" rel="noreferrer">PR-Agent</a> 社区版（Qodo）构建，按其自身许可证分发。<br>非官方、独立的开源工具，与 Rick and Morty 无任何关联。',
         },
         docFooter: { prev: '上一页', next: '下一页' },
         outline: { label: '本页目录' },
