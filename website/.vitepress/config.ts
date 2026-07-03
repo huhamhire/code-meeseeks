@@ -52,6 +52,7 @@ export default defineConfig({
         nav: [
           { text: 'Guide', link: `${REPO}/tree/master/docs/guide` },
           { text: 'Download', link: '/download' },
+          { text: 'FAQ', link: '/faq' },
         ],
         footer: {
           message: 'Released under the Apache License 2.0.',
@@ -67,6 +68,7 @@ export default defineConfig({
         nav: [
           { text: '使用说明', link: '/zh/guide/' },
           { text: '下载', link: '/zh/download' },
+          { text: '常见问题', link: '/zh/faq' },
         ],
         sidebar: {
           '/zh/guide/': [

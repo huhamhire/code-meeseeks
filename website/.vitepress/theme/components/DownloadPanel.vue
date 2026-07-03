@@ -1,11 +1,18 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useData } from 'vitepress'
+import { detectOS } from '../os'
 
 const REPO = 'huhamhire/code-meeseeks'
 const RELEASES_URL = `https://github.com/${REPO}/releases`
 const CLI_GUIDE_URL = `https://github.com/${REPO}/tree/master/cli`
 const API = `https://api.github.com/repos/${REPO}/releases/latest`
+const CLI_INSTALL = 'curl -fsSL https://raw.githubusercontent.com/huhamhire/code-meeseeks/main/tools/cli/install.sh | bash'
+
+// UI glyphs for the copy button.
+const CLIPBOARD_ICON =
+  'M16 1H4a2 2 0 00-2 2v14h2V3h12V1zm3 4H8a2 2 0 00-2 2v14a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H8V7h11v14z'
+const CHECK_ICON = 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'
 
 // Platform glyphs (24×24, currentColor). Apple / Linux from simple-icons (CC0);
 // Windows is the four-pane mark.
@@ -31,6 +38,18 @@ const t = computed(() => (zh.value ? STR.zh : STR.en))
 const state = ref('loading') // loading | ok | error
 const release = ref(null)
 const os = ref('unknown')
+const tab = ref('gui') // gui | cli
+const copied = ref(false)
+
+async function copyInstall() {
+  try {
+    await navigator.clipboard.writeText(CLI_INSTALL)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 1600)
+  } catch {
+    /* clipboard unavailable — ignore */
+  }
+}
 
 const desktop = computed(() => {
   const a = release.value?.assets ?? []
@@ -69,18 +88,6 @@ const osName = computed(
   () => ({ windows: 'Windows', macos: 'macOS', linux: 'Linux', ios: 'iOS', android: 'Android' })[os.value] ?? '',
 )
 
-function detectOS() {
-  if (typeof navigator === 'undefined') return 'unknown'
-  const ua = navigator.userAgent || ''
-  const plat = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase()
-  if (plat.includes('win') || /Windows/i.test(ua)) return 'windows'
-  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios'
-  if (plat.includes('mac') || /Mac OS X/i.test(ua)) return 'macos'
-  if (/Android/i.test(ua)) return 'android'
-  if (plat.includes('linux') || /Linux|X11/i.test(ua)) return 'linux'
-  return 'unknown'
-}
-
 function fmtSize(bytes) {
   if (!bytes && bytes !== 0) return ''
   const mb = bytes / 1024 / 1024
@@ -96,6 +103,7 @@ function osLabel(goos, goarch) {
 
 onMounted(async () => {
   os.value = detectOS()
+  tab.value = os.value === 'linux' ? 'cli' : 'gui'
   try {
     const res = await fetch(API, { headers: { Accept: 'application/vnd.github+json' } })
     if (!res.ok) throw new Error(String(res.status))
@@ -120,11 +128,24 @@ const STR = {
     cliIntro:
       'Cross-platform CLI to browse PRs and drive review agents via the local API. The archive doubles as a drop-in agent skill.',
     cliGuide: 'CLI guide',
+    cliQuick: 'One-line install (macOS / Linux)',
+    cliQuickNote: 'Auto-detects OS/arch, verifies SHA-256, installs meebox to your PATH. On Windows, download the archive below.',
+    copy: 'Copy',
+    copied: 'Copied',
     download: 'Download',
     linuxNoDesktop: 'No desktop build for Linux yet — use the meebox CLI below.',
     unknown: 'Pick your platform below.',
-    winHint: 'Run the .exe (NSIS). If SmartScreen warns, click “More info → Run anyway” — see First launch below.',
-    macHint: 'Open the .dmg → drag to Applications. First launch: right-click → Open (Gatekeeper) — see First launch below.',
+    firstLaunch: 'First launch',
+    winHint: [
+      'SmartScreen may warn “Windows protected your PC”.',
+      'Click “More info” → “Run anyway”.',
+      'One-time — this is an unsigned free / open-source build.',
+    ],
+    macHint: [
+      'Gatekeeper blocks the first launch.',
+      'Right-click the app → Open, or System Settings → Privacy & Security → Open Anyway.',
+      'One-time — ad-hoc signed, not notarized.',
+    ],
     cliHint: 'Unzip and put meebox on your PATH, or drop the folder into your agent’s skills directory.',
   },
   zh: {
@@ -140,11 +161,24 @@ const STR = {
     cliIntro:
       '跨平台 CLI，经本地 API 浏览 PR、驱动评审 Agent；压缩包同时即 agent skill 目录，可直接投放。',
     cliGuide: 'CLI 使用说明',
+    cliQuick: '一键安装（macOS / Linux）',
+    cliQuickNote: '自动探测系统 / 架构、校验 SHA-256，将 meebox 装入 PATH。Windows 请下载下方压缩包。',
+    copy: '复制',
+    copied: '已复制',
     download: '下载',
     linuxNoDesktop: '暂未提供 Linux 桌面版——请使用下方 meebox CLI。',
     unknown: '请在下方选择你的平台。',
-    winHint: '运行 .exe（NSIS）。若 SmartScreen 拦截，点「更多信息 → 仍要运行」——详见下方「首次启动」。',
-    macHint: '打开 .dmg 拖入「应用程序」。首次打开：右键 → 打开（Gatekeeper）——详见下方「首次启动」。',
+    firstLaunch: '首次启动',
+    winHint: [
+      'SmartScreen 可能弹「Windows 已保护你的电脑」。',
+      '点「更多信息」→「仍要运行」。',
+      '一次即可——这是未签名的免费 / 开源构建。',
+    ],
+    macHint: [
+      'Gatekeeper 会拦下首次启动。',
+      '右键点应用 → 打开，或 系统设置 → 隐私与安全性 → 仍要打开。',
+      '一次即可——ad-hoc 签名、未公证。',
+    ],
     cliHint: '解压后把 meebox 加入 PATH，或将整个目录投放到 agent 的 skills 目录。',
   },
 }
@@ -179,7 +213,12 @@ const STR = {
             {{ t.download }} · {{ os === 'windows' ? 'Windows x64' : 'macOS (Apple silicon)' }}
             <span class="dl-size">{{ fmtSize(recommendedDesktop.size) }}</span>
           </a>
-          <p class="dl-muted dl-hint">{{ os === 'windows' ? t.winHint : t.macHint }}</p>
+          <div class="custom-block info dl-note">
+            <p class="custom-block-title">ℹ️ {{ t.firstLaunch }}</p>
+            <ul>
+              <li v-for="line in os === 'windows' ? t.winHint : t.macHint" :key="line">{{ line }}</li>
+            </ul>
+          </div>
         </template>
 
         <template v-else-if="os === 'linux' && recommendedCli">
@@ -194,50 +233,75 @@ const STR = {
         <p v-else class="dl-muted">{{ t.unknown }}</p>
       </div>
 
+      <!-- GUI / CLI tabs -->
+      <div class="dl-tabs" role="tablist">
+        <button class="dl-tab" role="tab" :class="{ active: tab === 'gui' }" :aria-selected="tab === 'gui'" @click="tab = 'gui'">
+          {{ t.desktop }}
+        </button>
+        <button class="dl-tab" role="tab" :class="{ active: tab === 'cli' }" :aria-selected="tab === 'cli'" @click="tab = 'cli'">
+          {{ t.cliTitle }}
+        </button>
+      </div>
+
       <!-- Desktop app -->
-      <h3>{{ t.desktop }}</h3>
-      <ul class="dl-list">
-        <li v-if="desktop.windows">
-          <span class="dl-plat">
-            <svg class="dl-ico" viewBox="0 0 24 24" aria-hidden="true"><path :d="ICON.windows" /></svg>
-            Windows · x64
-          </span>
-          <span class="dl-file">{{ desktop.windows.name }}</span>
-          <a class="dl-btn" :href="desktop.windows.browser_download_url">
-            {{ t.download }} <span class="dl-size">{{ fmtSize(desktop.windows.size) }}</span>
-          </a>
-        </li>
-        <li v-if="desktop.macos">
-          <span class="dl-plat">
-            <svg class="dl-ico" viewBox="0 0 24 24" aria-hidden="true"><path :d="ICON.apple" /></svg>
-            macOS · Apple silicon
-          </span>
-          <span class="dl-file">{{ desktop.macos.name }}</span>
-          <a class="dl-btn" :href="desktop.macos.browser_download_url">
-            {{ t.download }} <span class="dl-size">{{ fmtSize(desktop.macos.size) }}</span>
-          </a>
-        </li>
-      </ul>
+      <div v-show="tab === 'gui'" role="tabpanel">
+        <ul class="dl-list">
+          <li v-if="desktop.windows">
+            <span class="dl-plat">
+              <svg class="dl-ico" viewBox="0 0 24 24" aria-hidden="true"><path :d="ICON.windows" /></svg>
+              Windows · x64
+            </span>
+            <span class="dl-file">{{ desktop.windows.name }}</span>
+            <a class="dl-btn" :href="desktop.windows.browser_download_url">
+              {{ t.download }} <span class="dl-size">{{ fmtSize(desktop.windows.size) }}</span>
+            </a>
+          </li>
+          <li v-if="desktop.macos">
+            <span class="dl-plat">
+              <svg class="dl-ico" viewBox="0 0 24 24" aria-hidden="true"><path :d="ICON.apple" /></svg>
+              macOS · Apple silicon
+            </span>
+            <span class="dl-file">{{ desktop.macos.name }}</span>
+            <a class="dl-btn" :href="desktop.macos.browser_download_url">
+              {{ t.download }} <span class="dl-size">{{ fmtSize(desktop.macos.size) }}</span>
+            </a>
+          </li>
+        </ul>
+      </div>
 
       <!-- CLI -->
-      <h3>{{ t.cliTitle }}</h3>
-      <p class="dl-muted">
-        {{ t.cliIntro }}
-        <a class="dl-link" :href="CLI_GUIDE_URL" target="_blank" rel="noreferrer">{{ t.cliGuide }} →</a>
-      </p>
-      <ul class="dl-list" v-if="cli.length">
-        <li v-for="a in cli" :key="a.name">
-          <span class="dl-plat">
-            <svg class="dl-ico" viewBox="0 0 24 24" aria-hidden="true"><path :d="iconFor(a.goos)" /></svg>
-            {{ osLabel(a.goos, a.goarch) }}
-          </span>
-          <span class="dl-file">{{ a.name }}</span>
-          <a class="dl-btn" :href="a.browser_download_url">
-            {{ t.download }} <span class="dl-size">{{ fmtSize(a.size) }}</span>
-          </a>
-        </li>
-      </ul>
-      <p class="dl-muted dl-hint">{{ t.cliHint }}</p>
+      <div v-show="tab === 'cli'" role="tabpanel">
+        <p class="dl-muted">
+          {{ t.cliIntro }}
+          <a class="dl-link" :href="CLI_GUIDE_URL" target="_blank" rel="noreferrer">{{ t.cliGuide }} →</a>
+        </p>
+
+        <div class="dl-cmd">
+          <div class="dl-cmd-label">{{ t.cliQuick }}</div>
+          <div class="dl-cmd-row">
+            <code>{{ CLI_INSTALL }}</code>
+            <button class="dl-copy" @click="copyInstall" :aria-label="copied ? t.copied : t.copy">
+              <svg class="dl-ico" viewBox="0 0 24 24" aria-hidden="true"><path :d="copied ? CHECK_ICON : CLIPBOARD_ICON" /></svg>
+              <span>{{ copied ? t.copied : t.copy }}</span>
+            </button>
+          </div>
+          <p class="dl-muted dl-hint">{{ t.cliQuickNote }}</p>
+        </div>
+
+        <ul class="dl-list" v-if="cli.length">
+          <li v-for="a in cli" :key="a.name">
+            <span class="dl-plat">
+              <svg class="dl-ico" viewBox="0 0 24 24" aria-hidden="true"><path :d="iconFor(a.goos)" /></svg>
+              {{ osLabel(a.goos, a.goarch) }}
+            </span>
+            <span class="dl-file">{{ a.name }}</span>
+            <a class="dl-btn" :href="a.browser_download_url">
+              {{ t.download }} <span class="dl-size">{{ fmtSize(a.size) }}</span>
+            </a>
+          </li>
+        </ul>
+        <p class="dl-muted dl-hint">{{ t.cliHint }}</p>
+      </div>
     </template>
   </div>
 </template>
