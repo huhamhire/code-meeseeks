@@ -13,11 +13,9 @@ $icon-github: "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20
 }
 
 // Balance the hero headline / tagline line breaks so no lone word dangles.
-.VPHero .text {
-  text-wrap: balance;
-}
+.VPHero .text,
 .VPHero .tagline {
-  text-wrap: pretty;
+  text-wrap: balance;
 }
 
 .VPHero .actions .VPButton {
