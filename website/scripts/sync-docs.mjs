@@ -1,28 +1,44 @@
-// Sync the user guide from docs/guide/ into the VitePress site (zh locale).
+// Sync the user guide from docs/guide/ into the VitePress site (both locales).
 //
-// The repo `docs/guide/` is the single source of truth; this copies it into
-// `zh/guide/` at dev/build time (that dir is gitignored — never edit it by hand).
+// The repo `docs/guide/` is the single source of truth; this copies it into the
+// site at dev/build time (those dirs are gitignored — never edit them by hand):
+//   docs/guide/*.md        (English, canonical) → guide/     (EN root locale)
+//   docs/guide/zh-CN/*.md  (Chinese)            → zh/guide/  (zh locale)
 // Links that escape the guide (e.g. ../arch/, ../../README) point at pages the
 // site does not host, so they are rewritten to absolute GitHub URLs; intra-guide
-// links stay relative for VitePress to resolve.
+// links stay relative for VitePress to resolve. The per-file language switcher
+// (a "**English** · [简体中文]" line) is stripped — the site has its own locale
+// menu, and the switcher's cross-locale relative links don't map onto the site.
 
 import { readdir, readFile, writeFile, rm, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 
 const CWD = process.cwd() // website/
-const SRC = path.resolve(CWD, '../docs/guide')
-const DEST = path.resolve(CWD, 'zh/guide')
 const REPO_BLOB = 'https://github.com/huhamhire/code-meeseeks/blob/master'
 
-// Rewrite a single markdown link target.
-function rewriteTarget(target) {
+// One sync unit: source guide dir, where it lives in the repo (for resolving
+// escaping links), and the destination dir under the site.
+const LOCALES = [
+  { src: path.resolve(CWD, '../docs/guide'), repoDir: 'docs/guide', dest: path.resolve(CWD, 'guide') },
+  {
+    src: path.resolve(CWD, '../docs/guide/zh-CN'),
+    repoDir: 'docs/guide/zh-CN',
+    dest: path.resolve(CWD, 'zh/guide'),
+  },
+]
+
+// Matches the per-file language switcher line, both directions.
+const SWITCHER_RE = /^(?:\*\*English\*\*|\[English\]\()[^\n]*(?:简体中文)[^\n]*$/
+
+// Rewrite a single markdown link target, resolving relative links against the
+// guide's location in the repo (repoDir).
+function rewriteTarget(target, repoDir) {
   if (/^(https?:)?\/\//.test(target) || target.startsWith('#') || target.startsWith('/')) {
     return target
   }
   const [rel, hash] = target.split('#')
   if (!rel) return target // pure anchor
-  // Resolve relative to docs/guide/ within the repo.
-  const resolved = path.posix.normalize(path.posix.join('docs/guide', rel))
+  const resolved = path.posix.normalize(path.posix.join(repoDir, rel))
   if (resolved.startsWith('docs/guide/')) {
     return target // stays inside the guide → keep relative
   }
@@ -30,25 +46,41 @@ function rewriteTarget(target) {
   return `${REPO_BLOB}/${resolved}${hash ? '#' + hash : ''}`
 }
 
-function rewriteLinks(md) {
-  return md.replace(/\]\(([^)]+)\)/g, (_m, target) => `](${rewriteTarget(target)})`)
+function rewriteLinks(md, repoDir) {
+  return md.replace(/\]\(([^)]+)\)/g, (_m, target) => `](${rewriteTarget(target, repoDir)})`)
+}
+
+// Drop the language-switcher line (and a single adjacent blank line so we don't
+// leave a stray gap under the H1).
+function stripSwitcher(md) {
+  const lines = md.split('\n')
+  const i = lines.findIndex((l) => SWITCHER_RE.test(l.trim()))
+  if (i === -1) return md
+  lines.splice(i, 1)
+  if (lines[i] === '' && lines[i - 1] === '') lines.splice(i, 1)
+  return lines.join('\n')
+}
+
+async function syncLocale({ src, repoDir, dest }) {
+  await rm(dest, { recursive: true, force: true })
+  await mkdir(dest, { recursive: true })
+
+  const entries = await readdir(src, { withFileTypes: true })
+  let count = 0
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue // skip zh-CN/ subdir on the EN pass
+    const raw = await readFile(path.join(src, entry.name), 'utf8')
+    const md = rewriteLinks(stripSwitcher(raw), repoDir)
+    // README.md is the guide index → index.md
+    const outName = entry.name === 'README.md' ? 'index.md' : entry.name
+    await writeFile(path.join(dest, outName), md, 'utf8')
+    count++
+  }
+  console.log(`[sync-docs] copied ${count} guide file(s) → ${path.relative(CWD, dest)}/`)
 }
 
 async function main() {
-  await rm(DEST, { recursive: true, force: true })
-  await mkdir(DEST, { recursive: true })
-
-  const entries = await readdir(SRC, { withFileTypes: true })
-  let count = 0
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
-    const md = rewriteLinks(await readFile(path.join(SRC, entry.name), 'utf8'))
-    // README.md is the guide index → index.md
-    const outName = entry.name === 'README.md' ? 'index.md' : entry.name
-    await writeFile(path.join(DEST, outName), md, 'utf8')
-    count++
-  }
-  console.log(`[sync-docs] copied ${count} guide file(s) → zh/guide/`)
+  for (const locale of LOCALES) await syncLocale(locale)
 }
 
 main().catch((err) => {
