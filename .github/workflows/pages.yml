@@ -44,6 +44,15 @@ jobs:
       - name: Install
         run: npm install
 
+      # CI-only prep stage: snapshot the latest release with the authenticated
+      # Actions token (1000 req/h) so the deployed download page has a static
+      # fallback when a visitor's live API call is rate-limited. Kept out of
+      # `npm run build` so local / PR builds stay network-free.
+      - name: Snapshot latest release
+        run: npm run fetch-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build
         run: npm run build
 
