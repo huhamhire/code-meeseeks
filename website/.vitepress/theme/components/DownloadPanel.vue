@@ -281,9 +281,14 @@ const STR = {
           <div class="dl-cmd-label">{{ t.cliQuick }}</div>
           <div class="dl-cmd-row">
             <code>{{ CLI_INSTALL }}</code>
-            <button class="dl-copy" @click="copyInstall" :aria-label="copied ? t.copied : t.copy">
+            <button
+              class="dl-copy"
+              :class="{ 'is-copied': copied }"
+              :title="copied ? t.copied : t.copy"
+              :aria-label="copied ? t.copied : t.copy"
+              @click="copyInstall"
+            >
               <svg class="dl-ico" viewBox="0 0 24 24" aria-hidden="true"><path :d="copied ? CHECK_ICON : CLIPBOARD_ICON" /></svg>
-              <span>{{ copied ? t.copied : t.copy }}</span>
             </button>
           </div>
           <p class="dl-muted dl-hint">{{ t.cliQuickNote }}</p>

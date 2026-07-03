@@ -1,6 +1,7 @@
 // Theme style entry — brand vars first, then background + hero + component styles.
 @use 'vars';
 @use 'background';
+@use 'nav';
 @use 'hero';
 @use 'features';
 @use 'components';

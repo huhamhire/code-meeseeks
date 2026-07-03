@@ -155,15 +155,13 @@
   &-copy {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
     flex: none;
-    padding: 0 14px;
+    padding: 0 12px;
     border-radius: 8px;
     border: 1px solid var(--vp-c-brand-2);
     background: none;
     color: var(--vp-c-brand-1);
-    font-weight: 600;
-    font-size: 13px;
     cursor: pointer;
     transition: all 0.2s;
 

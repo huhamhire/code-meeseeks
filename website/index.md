@@ -25,8 +25,8 @@ features:
     title: Data stays local
     details: "<ul><li>Repo mirrors, PR metadata & drafts stay on your machine</li><li>Wire up a local model and nothing ever leaves it</li></ul>"
   - icon: 🌍
-    title: GitHub · Bitbucket · GitLab
-    details: "<ul><li>Unified access, incl. self-hosted Enterprise / Self-Managed</li><li>Adapts to each platform's capabilities</li></ul>"
+    title: Multi-platform access
+    details: "<ul><li>GitHub · Bitbucket · GitLab, incl. self-hosted Enterprise / Self-Managed</li><li>Adapts to each platform's capabilities</li></ul>"
   - icon: 🤖
     title: Agentic review
     details: "<ul><li>Command-driven pr-agent + autonomous orchestration</li><li>AutoPilot pre-review & re-review loop</li><li>Observable, interruptible process</li></ul>"

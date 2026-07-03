@@ -25,8 +25,8 @@ features:
     title: 数据在本地
     details: "<ul><li>仓库副本、PR 元数据、草稿都存本机</li><li>接入本地模型即可全程不出本机</li></ul>"
   - icon: 🌍
-    title: GitHub · Bitbucket · GitLab
-    details: "<ul><li>统一接入，含自建 Enterprise / Self-Managed</li><li>按平台能力自适应降级</li></ul>"
+    title: 多平台接入
+    details: "<ul><li>GitHub · Bitbucket · GitLab，含自建 Enterprise / Self-Managed</li><li>按平台能力自适应降级</li></ul>"
   - icon: 🤖
     title: Agentic 评审
     details: "<ul><li>指令驱动 pr-agent + 自主编排</li><li>AutoPilot 预评审 + 复评闭环</li><li>过程可观测，可中途追加、随时停止</li></ul>"
