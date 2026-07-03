@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "sync": "node scripts/sync-docs.mjs",
+    "sync": "node scripts/sync-docs.mjs && node scripts/sync-assets.mjs",
     "fetch-release": "node scripts/fetch-release.mjs",
     "dev": "npm run sync && vitepress dev",
     "build": "npm run sync && vitepress build",

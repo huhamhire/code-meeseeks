@@ -5,7 +5,7 @@ pageClass: mb-grid
 hero:
   name: Code Meeseeks
   text: AI 代码评审，决策权在你
-  tagline: '面向 Reviewer 个人的本地化、半自动 AI 代码评审桌面客户端，基于 <span style="white-space:nowrap">pr-agent</span> 构建。<br>决策权在人、规则在本地、数据在本地。'
+  tagline: '面向 Reviewer 个人的本地化、半自动 AI 代码评审桌面客户端。<br>决策权在人、规则在本地、数据在本地。'
   image:
     src: /logo.png
     alt: Code Meeseeks
@@ -39,7 +39,6 @@ features:
 ---
 
 <figure class="screenshot-frame">
-  <img class="mb-shot mb-shot-light" src="/screenshot-placeholder-light.svg" alt="Code Meeseeks 界面预览" />
-  <img class="mb-shot mb-shot-dark" src="/screenshot-placeholder-dark.svg" alt="Code Meeseeks 界面预览" />
-  <figcaption>界面预览 —— 正式截图即将上线。</figcaption>
+  <img class="mb-shot mb-shot-light" src="/screenshot.light.png" alt="Code Meeseeks 界面预览" />
+  <img class="mb-shot mb-shot-dark" src="/screenshot.dark.png" alt="Code Meeseeks 界面预览" />
 </figure>

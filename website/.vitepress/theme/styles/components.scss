@@ -4,15 +4,21 @@
 
 // ── Screenshot frame (landing hero) ─────────────────────────────
 .screenshot-frame {
-  max-width: 1152px;
-  margin: 64px auto 0;
-  padding: 0 24px;
+  // The mac-window capture bakes in its own outer frame margin. Break out of the
+  // content column (viewport-centered) so it can run wider than the text width.
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94vw, 1600px);
+  margin: 40px 0 0;
 
   img {
     width: 100%;
     height: auto;
-    border-radius: 12px;
-    box-shadow: 0 18px 56px -12px rgba(0, 0, 0, 0.35);
+    // The PNG carries its own window chrome and a transparent (alpha) margin.
+    // drop-shadow follows the opaque pixels so the shadow hugs the window,
+    // instead of box-shadow ringing the padded bounds. No border/radius of ours.
+    filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.3));
   }
 
   figcaption {

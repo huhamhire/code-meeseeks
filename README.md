@@ -103,7 +103,10 @@ Core design stance:
 
 <div align="center">
 
-<img src="assets/images/screenshot.zh-CN.png" alt="Code Meeseeks UI preview" width="900" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/images/screenshot.dark.png" />
+  <img src="assets/images/screenshot.light.png" alt="Code Meeseeks UI preview" width="900" />
+</picture>
 
 </div>
 

@@ -103,7 +103,10 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 <div align="center">
 
-<img src="assets/images/screenshot.zh-CN.png" alt="Code Meeseeks 界面预览" width="900" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/images/screenshot.dark.png" />
+  <img src="assets/images/screenshot.light.png" alt="Code Meeseeks 界面预览" width="900" />
+</picture>
 
 </div>
 

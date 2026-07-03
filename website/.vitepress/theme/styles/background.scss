@@ -24,8 +24,15 @@
       linear-gradient(to right, var(--mb-grid-line) 1px, transparent 1px),
       linear-gradient(to bottom, var(--mb-grid-line) 1px, transparent 1px);
     background-size: 44px 44px;
-    // Strongest under the hero, faded out toward the middle/bottom.
-    --mb-grid-fade: radial-gradient(130% 55% at 50% -5%, #000 0%, #000 35%, transparent 78%);
+    // Crisp under the hero (top), faint through the middle, then deepening again
+    // toward the bottom so the grid never fully vanishes into the footer.
+    --mb-grid-fade: linear-gradient(
+      to bottom,
+      #000 0%,
+      #000 18%,
+      rgba(0, 0, 0, 0.07) 50%,
+      rgba(0, 0, 0, 0.4) 100%
+    );
     mask-image: var(--mb-grid-fade);
     -webkit-mask-image: var(--mb-grid-fade);
   }

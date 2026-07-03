@@ -5,7 +5,7 @@ pageClass: mb-grid
 hero:
   name: Code Meeseeks
   text: AI code review, on your terms
-  tagline: 'A local, semi-automated AI code-review desktop client for the individual reviewer — built on <span style="white-space:nowrap">pr-agent</span>.<br>The human decides, rules stay local, data stays local.'
+  tagline: 'A local, semi-automated AI code-review desktop client for the individual reviewer.<br>The human decides, rules stay local, data stays local.'
   image:
     src: /logo.png
     alt: Code Meeseeks
@@ -39,7 +39,6 @@ features:
 ---
 
 <figure class="screenshot-frame">
-  <img class="mb-shot mb-shot-light" src="/screenshot-placeholder-light.svg" alt="Code Meeseeks UI preview" />
-  <img class="mb-shot mb-shot-dark" src="/screenshot-placeholder-dark.svg" alt="Code Meeseeks UI preview" />
-  <figcaption>Interface preview — a polished screenshot is on the way.</figcaption>
+  <img class="mb-shot mb-shot-light" src="/screenshot.light.png" alt="Code Meeseeks — reviewing a pull request" />
+  <img class="mb-shot mb-shot-dark" src="/screenshot.dark.png" alt="Code Meeseeks — reviewing a pull request" />
 </figure>
