@@ -47,7 +47,7 @@ export default defineConfig({
         nav: [
           { text: 'Guide', link: `${REPO}/tree/master/docs/guide` },
           { text: 'Roadmap', link: `${REPO}/blob/master/docs/ROADMAP.md` },
-          { text: 'Download', link: `${REPO}/releases` },
+          { text: 'Download', link: '/download' },
         ],
         footer: {
           message: 'Released under the Apache License 2.0.',
@@ -63,7 +63,7 @@ export default defineConfig({
         nav: [
           { text: '使用说明', link: '/zh/guide/' },
           { text: '路线图', link: `${REPO}/blob/master/docs/ROADMAP.md` },
-          { text: '下载', link: `${REPO}/releases` },
+          { text: '下载', link: '/zh/download' },
         ],
         sidebar: {
           '/zh/guide/': [

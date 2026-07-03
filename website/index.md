@@ -11,7 +11,7 @@ hero:
   actions:
     - theme: brand
       text: Download
-      link: https://github.com/huhamhire/code-meeseeks/releases
+      link: /download
     - theme: alt
       text: View on GitHub
       link: https://github.com/huhamhire/code-meeseeks
@@ -41,42 +41,3 @@ features:
   <img src="/screenshot-placeholder.svg" alt="Code Meeseeks UI preview" />
   <figcaption>Interface preview — a polished screenshot is on the way.</figcaption>
 </figure>
-
-## Download
-
-Grab the installer for your platform from the [Releases page](https://github.com/huhamhire/code-meeseeks/releases). pr-agent is embedded — there is no extra runtime to install.
-
-| Platform    | Installer                                     | Status      |
-| ----------- | --------------------------------------------- | ----------- |
-| Windows x64 | `code-meeseeks-<version>-win-x64.exe` (NSIS)  | ✅ Available |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg`       | ✅ Available |
-
-::: tip macOS first launch
-The installer is ad-hoc signed and not Apple-notarized (this is free, open-source software without a paid Apple Developer account). On first open, right-click the app → **Open**, or go to **System Settings → Privacy & Security → Open Anyway**. Confirm once and it launches normally.
-:::
-
-## FAQ
-
-::: details Does my code leave my machine?
-Only what you configure: the PR diff and your rules go to the LLM provider you set up, and Code Meeseeks talks to the Git platform you connect. Nothing else is reported. Wire up a local model (e.g. local Ollama) and nothing ever leaves your machine.
-:::
-
-::: details Do I need to install Python or Docker?
-No. pr-agent and its Python runtime are embedded in the installer — it works right after installation.
-:::
-
-::: details Which platforms and models are supported?
-Platforms: GitHub (incl. Enterprise Server), Bitbucket Server / Data Center, and GitLab (incl. Self-Managed). Models: any OpenAI-compatible / litellm-supported provider — OpenAI, Anthropic, DeepSeek, and more — or a local model.
-:::
-
-::: details Is this a CI review bot?
-No. Code Meeseeks is a desktop tool for the individual reviewer — every comment is confirmed or edited by you before it is published. Automated in-CI review is what pr-agent itself is for.
-:::
-
-::: details What about token cost?
-Agentic review and AutoPilot chain several model calls per PR, so token use is higher than a single manual review. Per-step usage is shown on the review timeline so you can watch it, whether you use a pay-as-you-go API or a local CLI / subscription account.
-:::
-
-::: details Is it free and open source?
-Yes — licensed under Apache-2.0. The source is public, auditable, and buildable yourself.
-:::
