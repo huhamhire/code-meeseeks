@@ -1,6 +1,8 @@
 ---
 title: FAQ
-outline: [2, 2]
+aside: false
+outline: false
+pageClass: mb-grid
 ---
 
 # FAQ
@@ -38,5 +40,11 @@ Per-step usage is shown on the review timeline so you can watch it, whether you 
 ### ⚖️ Is it free and open source?
 
 Yes — licensed under Apache-2.0. The source is public, auditable, and buildable yourself.
+
+### 🎬 Is this affiliated with Rick and Morty?
+
+No. Code Meeseeks is an unofficial, independent open-source tool — not affiliated with, authorized by, or endorsed by _Rick and Morty_ or its rights holders.
+
+Names and characters such as "Rick and Morty" and "Mr. Meeseeks" are trademarks of their respective owners (Adult Swim / Warner Bros. Discovery). The project's name and icon are an homage only.
 
 </div>

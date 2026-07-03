@@ -1,5 +1,6 @@
 ---
 layout: home
+pageClass: mb-grid
 
 hero:
   name: Code Meeseeks

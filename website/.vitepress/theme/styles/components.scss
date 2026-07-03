@@ -5,7 +5,7 @@
 // ── Screenshot frame (landing hero) ─────────────────────────────
 .screenshot-frame {
   max-width: 1152px;
-  margin: 8px auto 0;
+  margin: 64px auto 0;
   padding: 0 24px;
 
   img {
@@ -247,10 +247,13 @@
       border-color: var(--vp-c-brand-3);
       color: #fff;
 
+      // Keep the solid brand fill on hover (brand-2 is a light text-link shade —
+      // using it as a button bg makes white text unreadable in dark mode); just brighten.
       &:hover {
-        background: var(--vp-c-brand-2);
-        border-color: var(--vp-c-brand-2);
+        background: var(--vp-c-brand-3);
+        border-color: var(--vp-c-brand-3);
         color: #fff;
+        filter: brightness(1.12);
       }
     }
   }
@@ -282,6 +285,21 @@
     margin: 12px 0;
     line-height: 1.75;
     color: var(--vp-c-text-2);
+  }
+}
+
+// ── Override .vp-doc <a> defaults for panel buttons/links ────────
+// The panel renders inside .vp-doc, whose `a` rule (0,1,1) would otherwise
+// win over our button classes — tinting the solid brand button's text blue
+// (blue-on-blue) and underlining buttons. Out-specify it.
+.vp-doc .dl {
+  a {
+    text-decoration: none;
+  }
+
+  .dl-btn-brand,
+  .dl-btn-brand:hover {
+    color: #fff;
   }
 }
 

@@ -1,6 +1,8 @@
 ---
 title: 常见问题
-outline: [2, 2]
+aside: false
+outline: false
+pageClass: mb-grid
 ---
 
 # 常见问题
@@ -38,5 +40,11 @@ Agentic 评审与 AutoPilot 会对每个 PR 串联多次模型调用，token 消
 ### ⚖️ 是免费开源的吗？
 
 是，采用 Apache-2.0 许可。源码完全公开、可自行审计与构建。
+
+### 🎬 与《瑞克和莫蒂》有关联吗？
+
+没有。Code Meeseeks 是非官方、独立的开源工具——与《_Rick and Morty_》及其权利方无任何关联，亦未获授权或认可。
+
+「Rick and Morty」「Mr. Meeseeks」等名称与角色的商标归各自权利人所有（Adult Swim / Warner Bros. Discovery）。本项目名称与图标仅为致敬。
 
 </div>

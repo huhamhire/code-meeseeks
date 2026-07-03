@@ -5,6 +5,7 @@ import { detectOS } from '../os'
 
 const REPO = 'huhamhire/code-meeseeks'
 const RELEASES_URL = `https://github.com/${REPO}/releases`
+const GUIDE_URL = `https://github.com/${REPO}/tree/master/docs/guide`
 const CLI_GUIDE_URL = `https://github.com/${REPO}/tree/master/cli`
 const API = `https://api.github.com/repos/${REPO}/releases/latest`
 const CLI_INSTALL = 'curl -fsSL https://raw.githubusercontent.com/huhamhire/code-meeseeks/main/tools/cli/install.sh | bash'
@@ -124,6 +125,8 @@ const STR = {
     notes: 'Release notes',
     recommended: 'Recommended for your system',
     desktop: 'Desktop app',
+    desktopIntro: 'The full graphical client — discover, read, review, and publish PRs, all on your machine.',
+    guideLink: 'User guide',
     cliTitle: 'Command-line tool (meebox)',
     cliIntro:
       'Cross-platform CLI to browse PRs and drive review agents via the local API. The archive doubles as a drop-in agent skill.',
@@ -157,6 +160,8 @@ const STR = {
     notes: '更新说明',
     recommended: '为你的系统推荐',
     desktop: '桌面应用',
+    desktopIntro: '完整图形客户端——在本机发现、阅读、评审并发布 PR。',
+    guideLink: '使用说明',
     cliTitle: '命令行工具（meebox）',
     cliIntro:
       '跨平台 CLI，经本地 API 浏览 PR、驱动评审 Agent；压缩包同时即 agent skill 目录，可直接投放。',
@@ -245,6 +250,10 @@ const STR = {
 
       <!-- Desktop app -->
       <div v-show="tab === 'gui'" role="tabpanel">
+        <p class="dl-muted">
+          {{ t.desktopIntro }}
+          <a class="dl-link" :href="GUIDE_URL" target="_blank" rel="noreferrer">{{ t.guideLink }} →</a>
+        </p>
         <ul class="dl-list">
           <li v-if="desktop.windows">
             <span class="dl-plat">

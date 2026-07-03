@@ -1,0 +1,32 @@
+// Subtle brand-tinted grid texture behind marketing pages (home / download /
+// faq — those carry `pageClass: mb-grid`), so they aren't a flat fill. Masked
+// with a radial fade: crisp near the top, gone lower down — never competes
+// with body text.
+
+:root {
+  --mb-grid-line: rgba(60, 90, 150, 0.06);
+}
+.dark {
+  --mb-grid-line: rgba(160, 190, 255, 0.05);
+}
+
+.mb-grid {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, var(--mb-grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--mb-grid-line) 1px, transparent 1px);
+    background-size: 44px 44px;
+    // Strongest under the hero, faded out toward the middle/bottom.
+    --mb-grid-fade: radial-gradient(130% 55% at 50% -5%, #000 0%, #000 35%, transparent 78%);
+    mask-image: var(--mb-grid-fade);
+    -webkit-mask-image: var(--mb-grid-fade);
+  }
+}
