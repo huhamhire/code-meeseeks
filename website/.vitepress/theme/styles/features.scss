@@ -25,24 +25,22 @@
 .hf-head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
+// Bare line icon (no filled box) — larger, brand-colored, aligned with the title.
 .hf-icon {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
   flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 9px;
-  background: var(--vp-c-brand-soft);
   color: var(--vp-c-brand-1);
 
   svg {
-    width: 22px;
-    height: 22px;
+    // block removes the inline baseline gap that otherwise pushes the icon up,
+    // so it centers true against the title.
+    display: block;
+    width: 26px;
+    height: 26px;
   }
 }
 
