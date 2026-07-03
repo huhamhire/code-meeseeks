@@ -33,6 +33,11 @@ export default defineConfig({
     ['link', { rel: 'apple-touch-icon', href: `${base}logo.png` }],
   ],
 
+  // Use Dart Sass's modern API (silences the legacy-js-api deprecation warning).
+  vite: {
+    css: { preprocessorOptions: { scss: { api: 'modern-compiler' } } },
+  },
+
   themeConfig: {
     logo: '/logo.png',
     socialLinks: [{ icon: 'github', link: REPO }],
@@ -46,7 +51,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: `${REPO}/tree/master/docs/guide` },
-          { text: 'Roadmap', link: `${REPO}/blob/master/docs/ROADMAP.md` },
           { text: 'Download', link: '/download' },
         ],
         footer: {
@@ -62,7 +66,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '使用说明', link: '/zh/guide/' },
-          { text: '路线图', link: `${REPO}/blob/master/docs/ROADMAP.md` },
           { text: '下载', link: '/zh/download' },
         ],
         sidebar: {

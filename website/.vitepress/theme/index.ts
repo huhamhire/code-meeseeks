@@ -1,6 +1,6 @@
 import DefaultTheme from 'vitepress/theme'
 import DownloadPanel from './components/DownloadPanel.vue'
-import './custom.css'
+import './styles/index.scss'
 
 export default {
   extends: DefaultTheme,

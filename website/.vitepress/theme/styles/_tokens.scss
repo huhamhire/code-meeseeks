@@ -1,0 +1,14 @@
+// Brand color tokens — the single source of truth for the site's palette.
+// VS Code blue, matching the desktop app's default theme
+// (apps/desktop/src/renderer/src/styles/_palette.scss, $vscode-blue-*).
+// Everything else (VitePress CSS vars, component styles) derives from these.
+
+// Light
+$brand-primary-light: #005fb8; // vscode-blue-800 — solid buttons / badges
+$brand-accent-light: #0e639c; // vscode-blue-700 — accent text / links
+$brand-hover-light: #1177bb; // vscode-blue-600 — hover
+
+// Dark
+$brand-primary-dark: #6cb6ff; // vscode-blue-300 — accent text / links on dark
+$brand-accent-dark: #0e639c; // vscode-blue-700 — solid buttons on dark
+$brand-hover-dark: #8cc6ff; // hover on dark
