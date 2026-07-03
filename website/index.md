@@ -5,6 +5,9 @@ hero:
   name: Code Meeseeks
   text: AI code review, on your terms
   tagline: A local, semi-automated AI code-review desktop client for the individual reviewer — built on pr-agent. The human decides, rules stay local, data stays local.
+  image:
+    src: /logo.png
+    alt: Code Meeseeks
   actions:
     - theme: brand
       text: Download
@@ -33,3 +36,8 @@ features:
     title: CLI & integration
     details: A local API and the cross-platform meebox CLI let external agents, scripts, and CI fold PR review into automated workflows.
 ---
+
+<figure class="screenshot-frame">
+  <img src="/screenshot-placeholder.svg" alt="Code Meeseeks UI preview" />
+  <figcaption>Interface preview — a polished screenshot is on the way.</figcaption>
+</figure>

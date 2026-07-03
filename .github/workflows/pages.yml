@@ -34,6 +34,8 @@ jobs:
         working-directory: website
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true # brand icon/favicon are Git LFS assets — fetch real bytes, not pointers
 
       - uses: actions/setup-node@v4
         with:

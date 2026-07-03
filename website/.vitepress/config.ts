@@ -26,7 +26,15 @@ export default defineConfig({
   // anchor fragments — landing/nav links are still checked.
   ignoreDeadLinks: [/^\/zh\/guide\//, /#/],
 
+  // base-aware so favicons resolve on the GitHub Pages project sub-path too.
+  head: [
+    ['link', { rel: 'icon', href: `${base}favicon.ico`, sizes: '48x48' }],
+    ['link', { rel: 'icon', type: 'image/png', href: `${base}logo.png` }],
+    ['link', { rel: 'apple-touch-icon', href: `${base}logo.png` }],
+  ],
+
   themeConfig: {
+    logo: '/logo.png',
     socialLinks: [{ icon: 'github', link: REPO }],
     search: { provider: 'local' },
   },

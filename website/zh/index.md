@@ -5,6 +5,9 @@ hero:
   name: Code Meeseeks
   text: AI 代码评审，决策权在你
   tagline: 面向 Reviewer 个人的本地化、半自动 AI 代码评审桌面客户端，基于 pr-agent 构建。决策权在人、规则在本地、数据在本地。
+  image:
+    src: /logo.png
+    alt: Code Meeseeks
   actions:
     - theme: brand
       text: 下载
@@ -33,3 +36,8 @@ features:
     title: CLI 与外部集成
     details: 本地 API + 跨平台 meebox CLI，让外部 agent、脚本、CI 把 PR 评审纳入自动化流程。
 ---
+
+<figure class="screenshot-frame">
+  <img src="/screenshot-placeholder.svg" alt="Code Meeseeks 界面预览" />
+  <figcaption>界面预览 —— 正式截图即将上线。</figcaption>
+</figure>
