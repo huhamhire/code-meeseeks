@@ -7,6 +7,23 @@ outline: [2, 2]
 
 <DownloadPanel />
 
+## First launch
+
+The installers are not signed with a paid code-signing certificate (this is free, open-source software), so the OS shows a one-time security prompt on first launch. This is expected — the source is public and auditable.
+
+::: tip 🪟 Windows — SmartScreen
+Running the `.exe` may trigger **“Windows protected your PC”** (Microsoft Defender SmartScreen) for an unrecognized publisher. Click **More info**, then **Run anyway**. You only need to do this once.
+:::
+
+::: tip 🍎 macOS — Gatekeeper
+The app is ad-hoc signed and not Apple-notarized (no paid Apple Developer account), so Gatekeeper blocks the first launch. Fix it once, either way:
+
+- **Right-click** the app in Applications → **Open** → **Open** in the dialog; or
+- **System Settings → Privacy & Security** → scroll to the blocked-app notice → **Open Anyway**.
+
+After confirming once, it launches normally from then on.
+:::
+
 ## FAQ
 
 ::: details 🔒 Does my code leave my machine?

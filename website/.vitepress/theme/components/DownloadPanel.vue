@@ -123,8 +123,8 @@ const STR = {
     download: 'Download',
     linuxNoDesktop: 'No desktop build for Linux yet — use the meebox CLI below.',
     unknown: 'Pick your platform below.',
-    winHint: 'Run the .exe installer (NSIS).',
-    macHint: 'Open the .dmg → drag to Applications. First launch: right-click → Open (ad-hoc signed, not notarized).',
+    winHint: 'Run the .exe (NSIS). If SmartScreen warns, click “More info → Run anyway” — see First launch below.',
+    macHint: 'Open the .dmg → drag to Applications. First launch: right-click → Open (Gatekeeper) — see First launch below.',
     cliHint: 'Unzip and put meebox on your PATH, or drop the folder into your agent’s skills directory.',
   },
   zh: {
@@ -143,8 +143,8 @@ const STR = {
     download: '下载',
     linuxNoDesktop: '暂未提供 Linux 桌面版——请使用下方 meebox CLI。',
     unknown: '请在下方选择你的平台。',
-    winHint: '运行 .exe 安装程序（NSIS）。',
-    macHint: '打开 .dmg 拖入「应用程序」。首次打开：右键 → 打开（ad-hoc 签名、未公证）。',
+    winHint: '运行 .exe（NSIS）。若 SmartScreen 拦截，点「更多信息 → 仍要运行」——详见下方「首次启动」。',
+    macHint: '打开 .dmg 拖入「应用程序」。首次打开：右键 → 打开（Gatekeeper）——详见下方「首次启动」。',
     cliHint: '解压后把 meebox 加入 PATH，或将整个目录投放到 agent 的 skills 目录。',
   },
 }
