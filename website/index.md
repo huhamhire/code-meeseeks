@@ -24,3 +24,5 @@ hero:
   <img class="mb-shot mb-shot-light" src="/screenshot.light.png" alt="Code Meeseeks — reviewing a pull request" />
   <img class="mb-shot mb-shot-dark" src="/screenshot.dark.png" alt="Code Meeseeks — reviewing a pull request" />
 </figure>
+
+<ModelStrip />
