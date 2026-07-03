@@ -1,0 +1,19 @@
+{
+  "name": "code-meeseeks-website",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Code Meeseeks brand website (VitePress). Standalone sub-project, not part of the npm workspace / Nx.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs && node scripts/sync-assets.mjs",
+    "fetch-release": "node scripts/fetch-release.mjs",
+    "dev": "npm run sync && vitepress dev",
+    "build": "npm run sync && vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "sass": "^1.83.4",
+    "vitepress": "^1.6.4"
+  }
+}
