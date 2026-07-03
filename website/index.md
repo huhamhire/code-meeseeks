@@ -39,6 +39,7 @@ features:
 ---
 
 <figure class="screenshot-frame">
-  <img src="/screenshot-placeholder.svg" alt="Code Meeseeks UI preview" />
+  <img class="mb-shot mb-shot-light" src="/screenshot-placeholder-light.svg" alt="Code Meeseeks UI preview" />
+  <img class="mb-shot mb-shot-dark" src="/screenshot-placeholder-dark.svg" alt="Code Meeseeks UI preview" />
   <figcaption>Interface preview — a polished screenshot is on the way.</figcaption>
 </figure>

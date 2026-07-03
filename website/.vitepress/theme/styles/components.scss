@@ -23,6 +23,17 @@
   }
 }
 
+// Light/dark screenshot swap (default light; .dark on <html> flips it).
+.mb-shot-dark {
+  display: none;
+}
+.dark .mb-shot-dark {
+  display: block;
+}
+.dark .mb-shot-light {
+  display: none;
+}
+
 // ── Download panel ──────────────────────────────────────────────
 .dl {
   margin: 8px 0 4px;

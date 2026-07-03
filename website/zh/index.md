@@ -39,6 +39,7 @@ features:
 ---
 
 <figure class="screenshot-frame">
-  <img src="/screenshot-placeholder.svg" alt="Code Meeseeks 界面预览" />
+  <img class="mb-shot mb-shot-light" src="/screenshot-placeholder-light.svg" alt="Code Meeseeks 界面预览" />
+  <img class="mb-shot mb-shot-dark" src="/screenshot-placeholder-dark.svg" alt="Code Meeseeks 界面预览" />
   <figcaption>界面预览 —— 正式截图即将上线。</figcaption>
 </figure>
