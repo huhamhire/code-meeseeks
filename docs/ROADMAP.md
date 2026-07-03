@@ -1,6 +1,6 @@
 # Code Meeseeks Roadmap
 
-> 最后更新：2026-06-30
+> 最后更新：2026-07-03
 
 本文件只保留**高层视角**：已交付能力全景、持续演进、风险与下一步。面向用户的**特性详述**见
 **[README](../README.md)**；各模块的**设计与实现细节**见 **[模块设计文档 docs/arch/](arch/README.md)**。
@@ -56,6 +56,11 @@
 - [x] 个性化规则目录（markdown + frontmatter，子目录递归；命中多条按 Ruleset 分段注入、`priority` 排序）
 - [x] 运行参数可调：评审任务并发、输入上下文长度、Agent 策略（自动追问开关、代码建议数量）
 
+#### 🔌 外部集成与 CLI
+
+- [x] 本机本地 API（仅本机可达 + 令牌鉴权）开放 PR 发现 / 浏览 / diff / 评审 Agent / 评审写动作，供外部 agent · 脚本 · CI 集成
+- [x] 跨平台 CLI `meebox`（Windows / macOS / Linux）：浏览 PR + 驱动评审 Agent + 评审写动作（approve / needswork / comment）；压缩包即 agent skill 目录
+
 #### 🎨 界面与体验
 
 - [x] 主题与外观：深色 / 浅色 / 跟随系统 + 多款编辑器配色 + 自定义等宽字体字号
@@ -78,8 +83,30 @@
 ### 进行中 / 待办 ⏭️
 
 - [ ] **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
-- [ ] **外部集成扩展与 CLI**：下个版本（0.9.0）方向——主进程内置本地 API + 独立 CLI，使外部 agent / 工具
-  可集成应用能力（设计见 [服务监听与本地 API](arch/04-integration/01-service-api.md) · [CLI 工具](arch/04-integration/02-cli.md)）。
+
+### 0.10.0：项目国际化与品牌官网 🌐
+
+本轮聚焦「项目自身」的对外呈现（区别于**应用界面** i18n，后者已四语交付），分**品牌官网**与**文档国际化**两条线。
+
+**A. 品牌官网**（技术栈 **VitePress**；英文默认 + 中文；源码置主仓 `website/`）
+
+- [ ] 落地页：定位一句话 + 截图 / 演示 + 核心特性（镜像 README 领域划分，营销化改写）+ 下载 CTA（跳 Releases）+ FAQ
+- [ ] 托管使用文档：官网从仓库 `docs/guide/` 构建渲染（**不另起一份**），i18n 走 VitePress `locales`（EN 根 + `/zh/`）
+- [ ] 部署：GitHub Pages（source 选 GitHub Actions），新增独立 `pages.yml`（路径过滤 `website/**` + `docs/**`，push `master` 触发），**与 `release.yml` 的 `v*` 发版流水线解耦**
+- [ ] 自定义域名（可选，后续 `CNAME`）
+
+**B. 文档国际化**（英文默认 + 中文；`arch/` 与 `ROADMAP` 维持中文、不纳入本轮）
+
+- [ ] **阶段 1（本轮）**：README 拆分 —— `README.md`（英文，默认）+ `README.zh-CN.md`（中文），两份顶部各置语言切换行；现有中文 README 迁至 `README.zh-CN.md`
+- [ ] **阶段 2（后续）**：`docs/guide/` 用户向文档 EN + ZH，目录结构镜像应用 locales
+
+**内容同步规范**（防 README / docs / 官网三处漂移，每类内容单一真相源）：
+
+| 内容 | 真相源 (SoT) | 其余处理 |
+| --- | --- | --- |
+| 定位 / 核心特性 | README | 官网落地页在营销高度改写，细节链回 README/docs，不逐字复制 |
+| 使用文档 | 仓库 `docs/guide/` | 官网从其构建渲染，不另存一份 |
+| arch 设计文档 | 仓库 `docs/arch/`（中文） | 不进官网、不翻译（与「设计文档中文、异常/日志英语」约定一致） |
 
 ---
 

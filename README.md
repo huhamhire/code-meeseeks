@@ -4,9 +4,9 @@
 
 # Code Meeseeks
 
-**PR Agent 的桌面 GUI · 面向 Reviewer 个人的本地化、半自动 AI 代码评审客户端**
+**A desktop GUI for PR-Agent · A local, semi-automated AI code-review client for the individual reviewer**
 
-社区版 [PR-Agent](https://docs.pr-agent.ai/) 的图形界面 (GUI) · Electron 桌面应用 · 数据全部留在本地
+Graphical interface (GUI) for the community [PR-Agent](https://docs.pr-agent.ai/) · Electron desktop app · All data stays on your machine
 
 [![Electron](https://img.shields.io/badge/Electron-2B2E3A?logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -17,205 +17,205 @@
 [![Bitbucket](https://img.shields.io/badge/Bitbucket-0052CC?logo=bitbucket&logoColor=white)](https://bitbucket.org/)
 [![GitLab](https://img.shields.io/badge/GitLab-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/)
 
-<sub>关键词 / Keywords：PR-Agent GUI · pr-agent desktop client · AI 代码评审 / AI code review · Pull Request &amp; Merge Request review · Bitbucket / GitHub reviewer 工具 · 本地化 / 私有部署 / self-hosted</sub>
+<sub>Keywords：PR-Agent GUI · pr-agent desktop client · AI code review · Pull Request &amp; Merge Request review · Bitbucket / GitHub reviewer tool · local / self-hosted / private deployment</sub>
+
+**English** · [简体中文](README.zh-CN.md)
 
 </div>
 
 ---
 
-> ⚠️ **早期预览版（0.x）**：项目仍在快速迭代，功能、配置与数据格式可能发生不兼容变更，稳定性未经充分验证。请勿用于关键的生产评审流程，使用前请自行评估风险并做好数据备份。
+Code Meeseeks (internal codename `meebox`) is a **desktop graphical interface (GUI)** for the command-line tool [pr-agent](https://docs.pr-agent.ai/): it packages AI-assisted code review into a desktop client — it fetches the PRs (Pull Requests / Merge Requests) awaiting your review, runs pr-agent locally to generate review comments, and lets the reviewer **confirm / edit each one** before publishing it back to the code hosting platform (GitHub / Bitbucket / GitLab).
 
-Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](https://docs.pr-agent.ai/) 的**桌面图形界面 (GUI)**：把 AI 辅助的代码评审装进一个桌面客户端 —— 拉取评审者待评审的 PR（Pull Request / Merge Request），本地跑 pr-agent 生成评审意见，由评审者**逐条确认 / 编辑后**再发布到代码托管平台（GitHub / Bitbucket / GitLab）。
+Core design stance:
 
-核心设计立场：
+- **The human decides** — every comment must be confirmed / edited by the reviewer before it reaches the remote; the AI only drafts.
+- **Rules stay local** — the reviewer configures their own check rules, style preferences, and LLM provider.
+- **Data stays local** — repository mirrors, PR metadata, and comment drafts all live in a local working directory; friendly to corporate intranets.
 
-- **决策权在人** —— 所有评论必须经评审者二次确认 / 编辑才会发到远端，AI 只做草稿。
-- **规则在本地** —— 评审者自行配置检查规则、风格偏好、LLM Provider。
-- **数据在本地** —— 仓库副本、PR 元数据、评论草稿都存在本机工作目录，企业内网友好。
+> Inspired by Mr. Meeseeks from _Rick and Morty_: summoned on demand, does exactly one thing, and vanishes once it's done.
 
-> 灵感来自 _Rick and Morty_ 里的 Mr. Meeseeks：召之即来、专做一件事、做完即走。
+## Where it fits
 
-## 适用场景
+- ✅ Engineers / Tech Leads who take on code-review duties
+- ✅ Those who want AI to speed up review while keeping the final decision, rather than handing judgment entirely to a bot
+- ✅ Teams running self-hosted Bitbucket / GitLab inside a corporate intranet
 
-- ✅ 承担 code review 职责的工程师 / Tech Lead
-- ✅ 希望借助 AI 提升评审效率，同时保留最终决策权、不将判断完全交由 bot
-- ✅ 在企业内网环境中使用自建 Bitbucket / GitLab 的团队
+## Where it doesn't
 
-## 不适用场景
-
-- ❌ 不是在 CI 中自动运行的 review bot（该定位属于 pr-agent 本身）
-- ❌ 不是团队协同评审平台（无服务端，不提供多用户同步）
-- ❌ 不替代代码托管平台原生的评审界面
+- ❌ Not a review bot that runs automatically in CI (that role belongs to pr-agent itself)
+- ❌ Not a collaborative team review platform (no server, no multi-user sync)
+- ❌ Not a replacement for the code platform's native review interface
 
 ---
 
-## 核心特性
+## Core features
 
-#### 🌍 多平台接入
+#### 🌍 Multi-platform access
 
-- **统一接入 GitHub / Bitbucket / GitLab** —— 自建 GitHub Enterprise / GitLab Self-Managed 直接填实例地址，按平台能力自适应（如 GitLab CE/EE 审批降级）。
-- **本地优先，开箱即用** —— 仓库副本、PR 元数据、评论草稿都存本机工作目录，企业内网友好；安装包内嵌 pr-agent，零外部依赖。
-- **网络代理** —— LLM 调用、代码平台、git 拉取统一经 HTTP 代理，本地地址自动直连。
+- **Unified access to GitHub / Bitbucket / GitLab** — for self-hosted GitHub Enterprise / GitLab Self-Managed, just enter the instance URL; capabilities adapt per platform (e.g. graceful degradation of GitLab CE/EE approvals).
+- **Local-first, works out of the box** — repository mirrors, PR metadata, and comment drafts all live in a local working directory, friendly to corporate intranets; pr-agent is embedded in the installer, with zero external dependencies.
+- **HTTP proxy** — LLM calls, code platforms, and git fetches all go through an HTTP proxy, with local addresses connecting directly.
 
-#### 📥 PR 发现与浏览
+#### 📥 PR discovery and browsing
 
-- **自动发现** —— 轮询拉取待评审 PR，按「待我评审 / 我创建」等分类与仓库分组，支持状态过滤与搜索。
-- **未读与点名标记** —— 新分配 / 新提交 / 被 @ / 被回复标未读，其中被点名的条数单独计数。
-- **历史与按需打开** —— 浏览已合并 / 已关闭的 PR，或按 URL 直接打开任意 PR（含补充评论、补跑评审）。
+- **Automatic discovery** — polls for PRs awaiting review, categorized ("to review / created by me", etc.) and grouped by repository, with status filtering and search.
+- **Unread and mention markers** — new assignments / new commits / @-mentions / replies are marked unread, with mentions counted separately.
+- **History and open-on-demand** — browse merged / closed PRs, or open any PR directly by URL (including adding comments and re-running review).
 
-#### 🔍 本地 Diff 阅读
+#### 🔍 Local diff reading
 
-- **并排 / 内联 diff** —— 编辑器级代码阅读体验：文件树（合并冲突标注）、按变更范围 / 单 commit 查看、滚动条总览标尺、blame、跨文件代码搜索。
-- **行内评论** —— 新增行与删除行均可评论；选中代码可作为上下文引用进提问。
+- **Side-by-side / inline diff** — an editor-grade reading experience: file tree (with merge-conflict markers), view by change range / single commit, scrollbar overview ruler, blame, and cross-file code search.
+- **Inline comments** — comment on both added and removed lines; selected code can be referenced as context in a question.
 
-#### 🤖 AI / Agentic 评审
+#### 🤖 AI / Agentic review
 
-- **指令驱动 pr-agent** —— `/describe`、`/review`、`/improve`、`/ask` 对话式驱动，结果结构化成可操作的评审发现。
-- **复评闭环** —— 对评审建议发起 `/ask` 复评，按裁决（取代 / 保留 / 撤销）自动取代或关闭原评论。
-- **Agentic 自主编排** —— 自然语言驱动的规划 + 多工具编排 + 长期 Memory，过程可观测（think → tool → think 时间线），可中途追加输入、随时停止，让评审走向可累积上下文的协作。
-- **AutoPilot 预评审** —— 对待我评审·待处理的新 PR 自动预跑评审，进应用即见待确认草稿；写操作经逐项授权 + 红线校验把关（默认仅开放只读工具）。
+- **Command-driven pr-agent** — drive it conversationally with `/describe`, `/review`, `/improve`, `/ask`; results are structured into actionable review findings.
+- **Re-review loop** — raise an `/ask` re-review on a review suggestion, and per the verdict (supersede / keep / withdraw) the original comment is automatically superseded or closed.
+- **Agentic orchestration** — natural-language-driven planning + multi-tool orchestration + long-term Memory, with an observable process (a think → tool → think timeline); you can add input mid-run and stop at any time, turning review into collaboration with accumulating context.
+- **AutoPilot pre-review** — automatically pre-runs review on new PRs pending your review, so drafts are ready for confirmation the moment you open the app; write actions are gated by per-item authorization + red-line checks (read-only tools only by default).
 
-#### ✍️ 评审闭环与协作
+#### ✍️ Review loop and collaboration
 
-- **确认 → 发布** —— 评审发现转草稿、行内编辑、单条 / 批量发布到远端；远端可合并状态可视、满足条件一键合并（亦可对话 `/merge`）。
-- **评论互动** —— 自己的评论可回复 / 编辑 / 删除；支持 emoji 反应、@ 提及补全、图片附件（粘贴 / 选取上传）、`:shortcode:` 表情渲染（随平台能力提供）。
-- **活动时间线** —— 评论 / 提交更新 / 评审决断归并为一条时间线（GitHub / Bitbucket）。
-- **消息通知** —— 新 PR、评论回复、被 @ 分类弹系统通知，仅对待处理 PR 提醒、不打扰已决断项；点击直达对应 PR 或代码行，macOS dock 角标显示待你回应的评论数。
+- **Confirm → publish** — turn findings into drafts, edit inline, and publish to the remote one by one or in bulk; the remote mergeable state is visible, and you can merge with one click when conditions are met (or via `/merge`).
+- **Comment interaction** — reply to / edit / delete your own comments; supports emoji reactions, @-mention completion, image attachments (paste / pick to upload), and `:shortcode:` emoji rendering (as each platform allows).
+- **Activity timeline** — comments / commit updates / review verdicts are merged into a single timeline (GitHub / Bitbucket).
+- **Notifications** — categorized system notifications for new PRs, comment replies, and @-mentions, only for pending PRs and never for already-decided items; click to jump straight to the PR or code line, with a macOS dock badge showing how many comments await your response.
 
-#### ⚙️ 模型与规则
+#### ⚙️ Models and rules
 
-- **多 LLM Provider** —— OpenAI / openai-compatible / DeepSeek / Anthropic / 通义千问 / 火山方舟等（本地 Ollama 经 openai-compatible 的 `/v1` 接入）；也可通过本机已授权的本地 CLI 工具（如 claude / codex）调用第三方模型。
-- **个性化规则** —— 每位 Reviewer 维护自己的规则目录（markdown + frontmatter，支持子目录递归组织），按项目 / 仓库 / 目标分支命中；命中的多条规则按 Ruleset 分段一并注入评审，`priority` 控制排序。
-- **运行参数可调** —— 评审任务并发、输入上下文长度、Agent 策略（自动追问开关、追问 / 代码建议数量）均可在设置页调整。
+- **Multiple LLM providers** — OpenAI / openai-compatible / DeepSeek / Anthropic / Tongyi Qianwen / Volcengine Ark, and more (local Ollama connects via the openai-compatible `/v1` endpoint); you can also call third-party models through an authorized local CLI tool (e.g. claude / codex).
+- **Personalized rules** — each reviewer maintains their own rules directory (markdown + frontmatter, organized recursively into subdirectories), matched by project / repository / target branch; matched rules are injected into the review in Ruleset sections, ordered by `priority`.
+- **Tunable runtime parameters** — review task concurrency, input context length, and agent strategy (auto follow-up toggle, number of follow-ups / code suggestions) are all adjustable on the settings page.
 
-#### 🔌 外部集成与 CLI
+#### 🔌 External integration and CLI
 
-- **可供外部 Agent 集成** —— PR 评审能力经本机 HTTP 接口 + 跨平台 CLI 对外开放，让本机 agentic 工具（如 claude / codex）、脚本、CI 把 PR 发现 / 浏览 / 评审 Agent 操作纳入自动化流程。
-- **本地 API 服务** —— 可选开启一个本机 API，将 PR 发现 / 浏览 / diff / 评审 Agent 操作 / 评审写动作以语言无关的 HTTP 契约开放出来；默认仅本机可达、强制访问令牌鉴权，不开放合并与变更类工具。
-- **跨平台命令行工具 `meebox`** —— 随发布提供 Windows / macOS / Linux 客户端，经本地 API 浏览 PR、驱动评审 Agent 并执行评审写动作（approve / needswork / comment）；`meebox login` 一次存好凭据即可免传参，**压缩包即 agent skill 目录、可直接投放到 agent 的 skills 目录**。用法见 **[CLI 命令行工具](docs/guide/06-cli.md)**。
+- **Integrable by external agents** — PR review capabilities are exposed via a local HTTP interface + a cross-platform CLI, letting local agentic tools (e.g. claude / codex), scripts, and CI fold PR discovery / browsing / review-agent operations into automated workflows.
+- **Local API service** — optionally enable a local API that exposes PR discovery / browsing / diff / review-agent operations / review write actions over a language-agnostic HTTP contract; reachable only from localhost by default, with mandatory access-token auth, and no merge or mutating tools exposed.
+- **Cross-platform CLI `meebox`** — Windows / macOS / Linux clients ship with each release to browse PRs, drive the review agent, and perform review write actions (approve / needswork / comment) via the local API; `meebox login` stores credentials once so you never pass them again, and **the archive is itself an agent skill directory that drops straight into an agent's skills folder**. See **[CLI tool](docs/guide/06-cli.md)** for usage.
 
-#### 🎨 界面与体验
+#### 🎨 Interface and experience
 
-- **主题与外观** —— 深色 / 浅色 / 跟随系统，多款编辑器配色主题，自定义等宽字体与字号。
-- **命令面板** —— `Ctrl/Cmd+Shift+P` 唤起，快速执行常用操作并归口分散功能。
-- **多语言界面** —— 简体中文 / English / 日本語 / Deutsch，AI 回复语言随界面语言。
-- **无边框窗口** —— 自绘标题栏（VS Code 风），展示品牌名与当前 PR 标题。
+- **Themes and appearance** — dark / light / follow system, several editor color themes, and a custom monospace font and size.
+- **Command palette** — invoke with `Ctrl/Cmd+Shift+P` to quickly run common actions and centralize scattered features.
+- **Multilingual UI** — Simplified Chinese / English / 日本語 / Deutsch, with the AI's reply language following the UI language.
+- **Frameless window** — a custom-drawn title bar (VS Code style) showing the brand name and current PR title.
 
 <div align="center">
 
-<img src="assets/images/screenshot.zh-CN.png" alt="Code Meeseeks 界面预览" width="900" />
+<img src="assets/images/screenshot.zh-CN.png" alt="Code Meeseeks UI preview" width="900" />
 
 </div>
 
 ---
 
-## 安装
+## Installation
 
-到 [Releases](../../releases) 下载对应平台安装包：
+Download the installer for your platform from [Releases](../../releases):
 
-| 平台        | 产物                                                 | 状态    |
-| ----------- | ---------------------------------------------------- | ------- |
-| Windows x64 | `code-meeseeks-<version>-win-x64.exe`（NSIS 安装包） | ✅ 可用 |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg`              | ✅ 可用 |
+| Platform    | Artifact                                             | Status      |
+| ----------- | ---------------------------------------------------- | ----------- |
+| Windows x64 | `code-meeseeks-<version>-win-x64.exe` (NSIS installer) | ✅ Available |
+| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg`              | ✅ Available |
 
-安装包已内嵌 pr-agent，安装后即可使用，无需额外环境。
+pr-agent is embedded in the installer, so it works right after installation with no extra environment setup.
 
-> **macOS 首次打开**：安装包为 ad-hoc 签名、未做 Apple 公证（notarization），Gatekeeper 会拦下未知开发者的 App。首次使用请右键点击 App 选「打开」，或到「系统设置 → 隐私与安全性」点「仍要打开」，确认一次后即可正常启动。
+> **First launch on macOS**: the installer is ad-hoc signed and not Apple-notarized, so Gatekeeper will block the app from an unknown developer. On first use, right-click the app and choose "Open", or go to "System Settings → Privacy & Security" and click "Open Anyway"; after confirming once it launches normally.
 >
-> 之所以未公证：本项目是**免费开源软件**，未购置 Apple Developer 付费账号（公证依赖该账号）。源码完全公开、可自行审计与构建，ad-hoc 签名不影响功能与安全。
+> Why it isn't notarized: this project is **free and open-source software** without a paid Apple Developer account (which notarization requires). The source is fully public, auditable, and buildable yourself; ad-hoc signing does not affect functionality or security.
 
 ---
 
-## 快速上手
+## Quick start
 
-1. **配置连接** —— 设置页填入代码平台地址 + 鉴权信息。
-2. **配置 LLM** —— 选择 Provider，填 API Key / base_url / 模型名。
-3. **发现 PR** —— 应用自动轮询拉取评审者待评审的 PR，左侧列表按仓库分组。
-4. **阅读 + 评审** —— 选中 PR 看 diff，点击自动评审按钮让 AI 生成评审发现；也可在对话框输入固定指令（如 `/describe`）或自然语言请求。
-5. **确认 + 发布** —— 把评审发现转成草稿、编辑措辞，单条或批量发布到远端。
+1. **Configure the connection** — enter the code platform URL + credentials on the settings page.
+2. **Configure the LLM** — pick a provider and fill in the API key / base_url / model name.
+3. **Discover PRs** — the app automatically polls for PRs awaiting your review, grouped by repository in the left list.
+4. **Read + review** — select a PR to view the diff, and click the auto-review button to have the AI generate findings; you can also enter fixed commands (e.g. `/describe`) or a natural-language request in the dialog box.
+5. **Confirm + publish** — turn findings into drafts, edit the wording, and publish to the remote one by one or in bulk.
 
-配置存放在 `~/.code-meeseeks/config.yaml`；仓库镜像默认在 `~/.code-meeseeks/repos/`，可在设置页改到其他目录。
+Configuration lives in `~/.code-meeseeks/config.yaml`; repository mirrors default to `~/.code-meeseeks/repos/` and can be moved elsewhere on the settings page.
 
-> **网络代理**（可选，内网用户）：设置页「网络代理」填 HTTP 代理地址 / 端口 / Basic Auth，开启后 LLM 调用、代码平台、git 拉取统一经代理，本地地址自动直连（含「测试连通」按钮）。
+> **HTTP proxy** (optional, for intranet users): under "Network proxy" on the settings page, enter the HTTP proxy host / port / Basic Auth; once enabled, LLM calls, code platforms, and git fetches all go through the proxy, with local addresses connecting directly (includes a "Test connection" button).
 >
-> **SSH 方式的 git 拉取**不走此配置，请在 `~/.ssh/config` 为对应 host 自配 `ProxyCommand`。
+> **Git fetches over SSH** do not use this setting; configure `ProxyCommand` for the relevant host in `~/.ssh/config` yourself.
 
-各步的详细说明（安装与首次使用、PAT 权限与 Clone 协议、LLM 模型选择、网络代理）见 **[使用说明](docs/guide/README.md)**。
+For details on each step (installation and first use, PAT permissions and clone protocols, LLM model selection, HTTP proxy) see the **[User guide](docs/guide/README.md)**.
 
 ---
 
-## 平台支持
+## Platform support
 
-| 平台                           | 状态                                                            |
+| Platform                       | Status                                                          |
 | ------------------------------ | --------------------------------------------------------------- |
-| GitHub                         | ✅ 已验证（github.com + GitHub Enterprise Server，REST API v3） |
-| Bitbucket Server / Data Center | ✅ 已支持（REST API v1，>= 7.0）                                |
-| GitLab                         | ✅ 已支持（gitlab.com + Self-Managed，CE / EE，REST API v4，>= 13.8，推荐 15.6+） |
+| GitHub                         | ✅ Verified (github.com + GitHub Enterprise Server, REST API v3) |
+| Bitbucket Server / Data Center | ✅ Supported (REST API v1, >= 7.0)                              |
+| GitLab                         | ✅ Supported (gitlab.com + Self-Managed, CE / EE, REST API v4, >= 13.8, 15.6+ recommended) |
 
 ---
 
-## 模型支持
+## Model support
 
-评审能力经 pr-agent（底层 litellm）接入，**理论上兼容任意 OpenAI 兼容 / litellm 支持的模型供应商**（在设置页选模型供应商，填 API Key、base_url、模型名即可）。下表为设置页内置的厂商选项及实测状态：
+Review capabilities connect through pr-agent (backed by litellm), so it is **in principle compatible with any OpenAI-compatible / litellm-supported model provider** (pick the provider on the settings page and fill in the API key, base_url, and model name). The table below lists the built-in provider options on the settings page and their tested status:
 
-| 模型供应商（厂商）  | 说明                                        | 状态                |
-| ------------------- | ------------------------------------------- | ------------------- |
-| `openai`            | OpenAI（GPT 系）                            | ✅ 已验证           |
-| `anthropic`         | Anthropic（Claude 系）                      | ✅ 已验证           |
-| `deepseek`          | DeepSeek                                    | ✅ 已验证           |
-| `dashscope`         | 阿里百炼（DashScope，通义千问）             | ✅ 已验证           |
-| `volcengine-ark`    | 火山方舟（Volcengine Ark，豆包）            | ✅ 已验证           |
-| `openai-compatible` | OpenAI 协议兼容（vLLM / 中转 / 自建 / 本地 Ollama 的 `/v1`） | ✅ 已验证           |
-| `cli`               | 通过本地 CLI 工具调用第三方模型             | ✅ 已验证           |
+| Provider            | Notes                                       | Status       |
+| ------------------- | ------------------------------------------- | ------------ |
+| `openai`            | OpenAI (GPT family)                         | ✅ Verified  |
+| `anthropic`         | Anthropic (Claude family)                   | ✅ Verified  |
+| `deepseek`          | DeepSeek                                    | ✅ Verified  |
+| `dashscope`         | Alibaba Bailian (DashScope, Tongyi Qianwen) | ✅ Verified  |
+| `volcengine-ark`    | Volcengine Ark (Doubao)                     | ✅ Verified  |
+| `openai-compatible` | OpenAI-protocol compatible (vLLM / gateway / self-hosted / local Ollama `/v1`) | ✅ Verified  |
+| `cli`               | Call a third-party model via a local CLI tool | ✅ Verified  |
 
-> **本地 CLI 模式说明**：该模式不直连模型 API，而是把评审请求转交给使用者**自行安装并授权**的本地命令行工具，由其代为调用背后的第三方模型。需先在本机完成对应 CLI 工具的安装与登录授权，应用本身不负责其凭据管理与计费。
+> **About local CLI mode**: this mode does not call a model API directly; instead it hands the review request to a local command-line tool that you **install and authorize yourself**, which in turn calls the third-party model behind it. You must first install and log in to the corresponding CLI tool on your machine; the app itself does not manage its credentials or billing.
 
-> 💸 **成本提示**：Agentic 评审与 AutoPilot 预评审会对每个 PR 串联多次模型调用（描述、评审、必要时追问、汇总），token 消耗显著高于单次手动评审。无论使用按量计费的 API、还是有额度上限的订阅 / 本地 CLI 账户，都请留意用量节奏，自行评估成本投入；每步的 token 用量已在评审时间线上分步展示，便于观察消耗。
+> 💸 **Cost note**: Agentic review and AutoPilot pre-review chain multiple model calls per PR (describe, review, follow-ups when needed, summarize), so token consumption is noticeably higher than a single manual review. Whether you use a pay-as-you-go API or a subscription / local CLI account with a quota cap, watch your usage pace and assess the cost yourself; per-step token usage is shown step by step on the review timeline for easy monitoring.
 
 ---
 
-## 技术栈
+## Tech stack
 
-- **桌面壳**：Electron + Vite（electron-vite）
-- **渲染层**：React + TypeScript（strict）
-- **编辑器**：Monaco（并排 / 内联 diff）
-- **工程**：npm workspaces + Nx 单仓多包
-- **pr-agent 集成**：内嵌 Python 运行时子进程（缺失时回退系统 pr-agent CLI）
+- **Desktop shell**: Electron + Vite (electron-vite)
+- **Renderer**: React + TypeScript (strict)
+- **Editor**: Monaco (side-by-side / inline diff)
+- **Engineering**: npm workspaces + Nx monorepo
+- **pr-agent integration**: an embedded Python-runtime subprocess (falls back to the system pr-agent CLI when absent)
 
-> 📚 **延伸阅读**
+> 📚 **Further reading**
 >
-> - 已交付能力、规划与未决项见 **[Roadmap](docs/ROADMAP.md)**
-> - 详细架构与各模块设计见 **[模块文档](docs/arch/README.md)**
+> - Delivered capabilities, roadmap, and open items: **[Roadmap](docs/ROADMAP.md)**
+> - Detailed architecture and per-module design: **[Module docs](docs/arch/README.md)**
 
 ---
 
-## 开发
+## Development
 
-环境准备、启动调试、构建打包步骤见 **[开发指南](docs/development/README.md)**。
-
----
-
-## 隐私与数据
-
-- **本地优先**：除调用 LLM API 与访问所配置的 Git 平台外，不向任何第三方上报数据。
-- **工作目录**：应用数据固定在 `~/.code-meeseeks/`，仓库镜像目录可配置。
-- pr-agent 评审时仅把 PR diff + 评审者的规则发给评审者自行配置的 LLM；接入本地模型（如本地 Ollama）即可全程不出本机。
+For environment setup, running in dev, and building / packaging, see the **[Development guide](docs/development/README.md)**.
 
 ---
 
-## 致谢
+## Privacy and data
 
-构建于 [PR-Agent](https://github.com/The-PR-Agent/pr-agent) 之上 —— Qodo 贡献给社区的开源版本（官网 [docs.pr-agent.ai](https://docs.pr-agent.ai/)）。作为第三方依赖打包，按其自身许可证分发，**不在本项目重命名 / 改动范围内**。
+- **Local-first**: apart from calling the LLM API and accessing the configured Git platform, no data is reported to any third party.
+- **Working directory**: app data lives at `~/.code-meeseeks/`, with a configurable repository mirror directory.
+- During review, pr-agent sends only the PR diff + the reviewer's rules to the reviewer's own configured LLM; wire up a local model (e.g. local Ollama) and nothing ever leaves your machine.
 
-## 许可证
+---
 
-本项目采用 [Apache License 2.0](LICENSE)。
+## Acknowledgements
 
-打包分发的安装包内含第三方组件（PR-Agent、Electron 等），各按其自身许可证分发，归集见 [NOTICE](NOTICE)；完整第三方许可（THIRD-PARTY-NOTICES）出包时自动生成并随安装包内置（位于 App 资源目录）。
+Built on top of [PR-Agent](https://github.com/The-PR-Agent/pr-agent) — the open-source version Qodo contributes to the community (site: [docs.pr-agent.ai](https://docs.pr-agent.ai/)). It is bundled as a third-party dependency, distributed under its own license, and **outside the renaming / modification scope of this project**.
 
-## 商标与免责声明
+## License
 
-本项目为非官方、独立的开源工具，**与 _Rick and Morty_ 及其权利方无任何关联，亦未获其授权或认可**。「Rick and Morty」「Mr. Meeseeks」等名称、角色及相关元素的版权与商标归其各自权利人所有（Adult Swim / Warner Bros. Discovery 等）。本项目名称与图标仅出于致敬目的进行借用，不主张任何相关权利；如权利方有异议，将配合调整。
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+The distributed installers bundle third-party components (PR-Agent, Electron, etc.), each distributed under its own license, aggregated in [NOTICE](NOTICE); the full third-party license set (THIRD-PARTY-NOTICES) is generated automatically at build time and bundled into the installer (in the app's resources directory).
+
+## Trademarks and disclaimer
+
+This project is an unofficial, independent open-source tool, **not affiliated with, authorized by, or endorsed by _Rick and Morty_ or its rights holders in any way**. Names, characters, and related elements such as "Rick and Morty" and "Mr. Meeseeks" are the copyrights and trademarks of their respective owners (Adult Swim / Warner Bros. Discovery, etc.). This project's name and icon are borrowed purely as an homage and assert no related rights; should the rights holders object, we will adjust accordingly.
 
 ---
 
