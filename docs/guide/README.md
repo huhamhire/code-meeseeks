@@ -1,24 +1,26 @@
-# 使用说明
+# User Guide
 
-Code Meeseeks 是本地运行的 PR 评审客户端：连上你的代码平台 → 拉取待评审的 PR → 用 LLM（pr-agent）做 `/describe` `/review`，评论 / 审批 / 合并都在本地客户端完成。
+**English** · [简体中文](zh-CN/README.md)
 
-本目录是**面向用户**的安装与配置说明（开发/架构文档见 [../arch/](../arch/README.md)）。各项配置都在应用内 **设置** 页可视化编辑，首次启动也有配置向导引导最快进入可用状态。
+Code Meeseeks is a locally-run PR review client: connect to your code platform → pull the PRs awaiting your review → run `/describe` and `/review` with an LLM (pr-agent), and do all commenting / approving / merging right in the local client.
 
-## 篇目
+This directory is the **user-facing** installation and configuration guide (for development / architecture docs see [../arch/](../arch/README.md)). Every setting is visually editable on the in-app **Settings** page, and a first-launch setup wizard guides you to a working state as quickly as possible.
 
-| 文档 | 内容 |
+## Contents
+
+| Document | Covers |
 | --- | --- |
-| [00 · 安装与首次使用](00-getting-started.md) | 系统要求、下载安装、首次启动配置向导 |
-| [01 · 代码平台配置](01-code-platform.md) | 接入 GitHub / Bitbucket Server / GitLab：Base URL、访问令牌（PAT）权限、Clone 协议 |
-| [02 · LLM 配置](02-llm.md) | 选 LLM 服务商与模型；含进阶的本地 CLI 模式（经授权调用本机 agentic CLI，以本机登录态执行评审） |
-| [03 · 网络代理配置](03-proxy.md) | 内网 / 受限网络下统一走 HTTP 代理出网 |
-| [04 · 配置文件参考](04-config-reference.md) | `config.yaml` 完整结构与各配置项功能说明（含高级参数） |
-| [05 · 自定义评审规则](05-rules.md) | 编写规则 `.md` 文件：frontmatter 命中条件 + 正文注入 AI 的评审指令 |
-| [06 · CLI 命令行工具](06-cli.md) | 开启本地 API 服务 + 用 `meebox` 命令行浏览 PR / 操作评审 Agent（供脚本 / 外部 agent 集成） |
+| [00 · Installation & first use](00-getting-started.md) | System requirements, download & install, first-launch setup wizard |
+| [01 · Code platform setup](01-code-platform.md) | Connecting GitHub / Bitbucket Server / GitLab: Base URL, access token (PAT) permissions, clone protocol |
+| [02 · LLM setup](02-llm.md) | Choosing an LLM provider and model; includes the advanced local CLI mode (invoke your machine's agentic CLI, with your authorization, to run reviews under its local session) |
+| [03 · Network proxy setup](03-proxy.md) | Route all outbound traffic through an HTTP proxy on intranet / restricted networks |
+| [04 · Config file reference](04-config-reference.md) | Full structure of `config.yaml` and every field's purpose (including advanced parameters) |
+| [05 · Custom review rules](05-rules.md) | Writing rule `.md` files: frontmatter match conditions + body instructions injected into the AI |
+| [06 · CLI tool](06-cli.md) | Enable the local API service + use the `meebox` CLI to browse PRs / drive the review agent (for scripts / external agent integration) |
 
-## 通用须知
+## General notes
 
-- **数据目录固定** `~/.code-meeseeks/`：配置、状态、日志都在这里；`config.yaml` 是唯一配置文件，含连接 / LLM / 代理等全部设置。
-- **凭据安全**：访问令牌、API Key、代理密码等请按最小授权配置，及时吊销泄露的令牌。
-- **保存即生效**：设置页每项保存后写盘并热更新，无需重启；连接 / 代理变更会即时重建生效。
-- **高级编辑**：设置页提供「用系统关联程序打开 config.yaml」，可直接改文件（适合批量 / 高级配置）。
+- **Fixed data directory** `~/.code-meeseeks/`: config, state, and logs all live here; `config.yaml` is the sole config file, holding all connection / LLM / proxy settings.
+- **Credential safety**: configure access tokens, API keys, proxy passwords, etc. with least privilege, and revoke leaked tokens promptly.
+- **Save takes effect immediately**: each setting is written to disk and hot-reloaded on save, no restart needed; connection / proxy changes are rebuilt and applied instantly.
+- **Advanced editing**: the Settings page offers "Open config.yaml with the system default app" so you can edit the file directly (handy for bulk / advanced configuration).

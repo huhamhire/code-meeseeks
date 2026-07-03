@@ -38,4 +38,4 @@ The site serves under `/code-meeseeks/` by default (GitHub Pages project site). 
 Per the [Roadmap](../docs/ROADMAP.md) content-sync convention, each kind of content has a single source of truth:
 
 - **Positioning / features** — source of truth is the repo README; the landing page paraphrases at marketing altitude, it does not copy verbatim.
-- **User guide** — source of truth is `docs/guide/`; when the site hosts docs it builds from there rather than keeping a second copy.
+- **User guide** — source of truth is `docs/guide/` (bilingual: English canonical at the root, Chinese mirror under `zh-CN/`). The site builds both locales from there via `scripts/sync-docs.mjs` (EN → `/guide/`, ZH → `/zh/guide/`) rather than keeping a second copy.

@@ -20,11 +20,11 @@ export default defineConfig({
   // README.md is the dev-facing readme (repo-relative links), not a site page.
   srcExclude: ['README.md'],
 
-  // The guide under /zh/guide/ is generated from docs/guide/ (single source of
-  // truth, not maintained here). Its cross-links may carry anchor slugs that
-  // don't match VitePress's, so scope dead-link tolerance to that subtree and to
-  // anchor fragments — landing/nav links are still checked.
-  ignoreDeadLinks: [/^\/zh\/guide\//, /#/],
+  // The guide under /guide/ and /zh/guide/ is generated from docs/guide/ (single
+  // source of truth, not maintained here). Its cross-links may carry anchor slugs
+  // that don't match VitePress's, so scope dead-link tolerance to those subtrees
+  // and to anchor fragments — landing/nav links are still checked.
+  ignoreDeadLinks: [/^\/guide\//, /^\/zh\/guide\//, /#/],
 
   // base-aware so favicons resolve on the GitHub Pages project sub-path too.
   head: [
@@ -41,7 +41,37 @@ export default defineConfig({
   themeConfig: {
     logo: '/logo.png',
     socialLinks: [{ icon: 'github', link: REPO }],
-    search: { provider: 'local' },
+    // Local search: the root (English) locale uses the built-in defaults; the zh
+    // locale needs its own UI-chrome translations (placeholder, no-results,
+    // keyboard hints) — the search index is per-locale, but the modal text isn't
+    // localized unless declared here (key must match the `locales` key: `zh`).
+    search: {
+      provider: 'local',
+      options: {
+        locales: {
+          zh: {
+            translations: {
+              button: { buttonText: '搜索', buttonAriaLabel: '搜索' },
+              modal: {
+                displayDetails: '显示详细列表',
+                resetButtonTitle: '清除查询条件',
+                backButtonTitle: '关闭搜索',
+                noResultsText: '无法找到相关结果',
+                footer: {
+                  selectText: '选择',
+                  selectKeyAriaLabel: '回车',
+                  navigateText: '切换',
+                  navigateUpKeyAriaLabel: '上箭头',
+                  navigateDownKeyAriaLabel: '下箭头',
+                  closeText: '关闭',
+                  closeKeyAriaLabel: 'esc',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 
   locales: {
@@ -50,10 +80,27 @@ export default defineConfig({
       lang: 'en-US',
       themeConfig: {
         nav: [
-          { text: 'Guide', link: `${REPO}/tree/master/docs/guide` },
+          { text: 'Guide', link: '/guide/' },
           { text: 'Download', link: '/download' },
           { text: 'FAQ', link: '/faq' },
         ],
+        sidebar: {
+          '/guide/': [
+            {
+              text: 'User Guide',
+              items: [
+                { text: 'Overview', link: '/guide/' },
+                { text: 'Installation & first use', link: '/guide/00-getting-started' },
+                { text: 'Code platform setup', link: '/guide/01-code-platform' },
+                { text: 'LLM setup', link: '/guide/02-llm' },
+                { text: 'Network proxy setup', link: '/guide/03-proxy' },
+                { text: 'Config file reference', link: '/guide/04-config-reference' },
+                { text: 'Custom review rules', link: '/guide/05-rules' },
+                { text: 'CLI tool', link: '/guide/06-cli' },
+              ],
+            },
+          ],
+        },
         footer: {
           message: 'Released under the Apache License 2.0.',
           copyright:

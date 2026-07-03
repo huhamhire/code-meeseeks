@@ -92,7 +92,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 - **可供外部 Agent 集成** —— PR 评审能力经本机 HTTP 接口 + 跨平台 CLI 对外开放，让本机 agentic 工具（如 claude / codex）、脚本、CI 把 PR 发现 / 浏览 / 评审 Agent 操作纳入自动化流程。
 - **本地 API 服务** —— 可选开启一个本机 API，将 PR 发现 / 浏览 / diff / 评审 Agent 操作 / 评审写动作以语言无关的 HTTP 契约开放出来；默认仅本机可达、强制访问令牌鉴权，不开放合并与变更类工具。
-- **跨平台命令行工具 `meebox`** —— 随发布提供 Windows / macOS / Linux 客户端，经本地 API 浏览 PR、驱动评审 Agent 并执行评审写动作（approve / needswork / comment）；`meebox login` 一次存好凭据即可免传参，**压缩包即 agent skill 目录、可直接投放到 agent 的 skills 目录**。用法见 **[CLI 命令行工具](docs/guide/06-cli.md)**。
+- **跨平台命令行工具 `meebox`** —— 随发布提供 Windows / macOS / Linux 客户端，经本地 API 浏览 PR、驱动评审 Agent 并执行评审写动作（approve / needswork / comment）；`meebox login` 一次存好凭据即可免传参，**压缩包即 agent skill 目录、可直接投放到 agent 的 skills 目录**。用法见 **[CLI 命令行工具](docs/guide/zh-CN/06-cli.md)**。
 
 #### 🎨 界面与体验
 
@@ -143,7 +143,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 >
 > **SSH 方式的 git 拉取**不走此配置，请在 `~/.ssh/config` 为对应 host 自配 `ProxyCommand`。
 
-各步的详细说明（安装与首次使用、PAT 权限与 Clone 协议、LLM 模型选择、网络代理）见 **[使用说明](docs/guide/README.md)**。
+各步的详细说明（安装与首次使用、PAT 权限与 Clone 协议、LLM 模型选择、网络代理）见 **[使用说明](docs/guide/zh-CN/README.md)**。
 
 ---
 

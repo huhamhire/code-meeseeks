@@ -91,14 +91,14 @@
 **A. 品牌官网**（技术栈 **VitePress**；英文默认 + 中文；源码置主仓 `website/`）
 
 - [ ] 落地页：定位一句话 + 截图 / 演示 + 核心特性（镜像 README 领域划分，营销化改写）+ 下载 CTA（跳 Releases）+ FAQ
-- [ ] 托管使用文档：官网从仓库 `docs/guide/` 构建渲染（**不另起一份**），i18n 走 VitePress `locales`（EN 根 + `/zh/`）
+- [x] 托管使用文档：官网从仓库 `docs/guide/` 构建渲染（**不另起一份**），i18n 走 VitePress `locales`（EN 根 + `/zh/`）
 - [ ] 部署：GitHub Pages（source 选 GitHub Actions），新增独立 `pages.yml`（路径过滤 `website/**` + `docs/**`，push `master` 触发），**与 `release.yml` 的 `v*` 发版流水线解耦**
 - [ ] 自定义域名（可选，后续 `CNAME`）
 
 **B. 文档国际化**（英文默认 + 中文；`arch/` 与 `ROADMAP` 维持中文、不纳入本轮）
 
 - [ ] **阶段 1（本轮）**：README 拆分 —— `README.md`（英文，默认）+ `README.zh-CN.md`（中文），两份顶部各置语言切换行；现有中文 README 迁至 `README.zh-CN.md`
-- [ ] **阶段 2（后续）**：`docs/guide/` 用户向文档 EN + ZH，目录结构镜像应用 locales
+- [x] **阶段 2**：`docs/guide/` 用户向文档 EN + ZH——英文占根（规范正本），中文镜像于 `zh-CN/`，每篇置语言切换行；官网 `sync-docs.mjs` 双 locale 构建（EN→`/guide/`、ZH→`/zh/guide/`）
 
 **内容同步规范**（防 README / docs / 官网三处漂移，每类内容单一真相源）：
 

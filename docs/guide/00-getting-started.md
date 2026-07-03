@@ -1,37 +1,39 @@
-# 安装与首次使用
+# Installation & First Use
 
-## 系统要求
+**English** · [简体中文](zh-CN/00-getting-started.md)
 
-- **操作系统**：Windows 10 / 11（x64）或 macOS（Apple Silicon / arm64）。当前不提供 Intel Mac 与 Linux 安装包。
-- **git**：本机需已安装 git，并在 PATH 中。客户端克隆仓库、读取本地 diff 都依赖系统 git。
-- 评审与生成内容需要一个可用的 LLM（见 [LLM 配置](02-llm.md)）；嵌入式运行时已随应用打包，无需另装 Python 或 Docker。
+## System requirements
 
-## 安装
+- **Operating system**: Windows 10 / 11 (x64) or macOS (Apple Silicon / arm64). Intel Mac and Linux installers are not currently provided.
+- **git**: git must be installed on your machine and on your PATH. The client relies on system git to clone repositories and read local diffs.
+- Reviewing and generating content requires a working LLM (see [LLM setup](02-llm.md)); the embedded runtime is bundled with the app, so no separate Python or Docker install is needed.
 
-从项目的 GitHub Releases 页面下载对应平台的安装包：
+## Installation
 
-- **Windows**：`code-meeseeks-<版本>-win-x64.exe`（NSIS 安装程序），双击按提示安装。
-- **macOS**：`code-meeseeks-<版本>-mac-arm64.dmg`，打开后将应用拖入「应用程序」。
+Download the installer for your platform from the project's GitHub Releases page:
 
-### macOS 首次打开
+- **Windows**: `code-meeseeks-<version>-win-x64.exe` (NSIS installer) — double-click and follow the prompts.
+- **macOS**: `code-meeseeks-<version>-mac-arm64.dmg` — open it and drag the app into "Applications".
 
-当前 macOS 包为 ad-hoc 签名、未做公证，首次打开会被系统拦下。任选一种方式放行：
+### First launch on macOS
 
-- 在「应用程序」中**右键点击应用 → 打开 → 仍要打开**；
-- 或 **系统设置 → 隐私与安全性**，在拦截提示处点「仍要打开」；
-- 或在终端执行 `xattr -dr com.apple.quarantine "/Applications/Code Meeseeks.app"`。
+The current macOS package is ad-hoc signed and not notarized, so the first launch is blocked by the system. Allow it with any one of these:
 
-## 首次使用
+- In "Applications", **right-click the app → Open → Open anyway**;
+- Or **System Settings → Privacy & Security**, and click "Open Anyway" at the block prompt;
+- Or run in a terminal: `xattr -dr com.apple.quarantine "/Applications/Code Meeseeks.app"`.
 
-首次启动会自动创建数据目录并打开**配置向导**，按引导最快进入可用状态：
+## First use
 
-1. 配置一条**代码平台连接**——详见 [代码平台配置](01-code-platform.md)。
-2. （可选）配置 **LLM**——详见 [LLM 配置](02-llm.md)。不配也能浏览 PR，但 `/describe`、`/review` 需要可用的 LLM。
+The first launch automatically creates the data directory and opens the **setup wizard**, guiding you to a working state as quickly as possible:
 
-完成向导后，客户端开始轮询，列出待你评审的 PR。
+1. Configure a **code platform connection** — see [Code platform setup](01-code-platform.md).
+2. (Optional) Configure an **LLM** — see [LLM setup](02-llm.md). You can browse PRs without one, but `/describe` and `/review` require a working LLM.
 
-## 接下来
+Once the wizard is done, the client starts polling and lists the PRs awaiting your review.
 
-- 选中一个 PR：查看 diff，运行 `/describe`、`/review`，并进行评论 / 审批 / 合并。
-- 处于内网 / 受限网络：先配置[网络代理](03-proxy.md)。
-- 已有 Claude / Codex 等订阅：可用[本地 CLI 模式](02-llm.md#本地-cli-模式)以本机登录态执行评审。
+## Next steps
+
+- Select a PR: view the diff, run `/describe` and `/review`, and comment / approve / merge.
+- On an intranet / restricted network: configure the [network proxy](03-proxy.md) first.
+- Already have a Claude / Codex subscription: use [local CLI mode](02-llm.md#local-cli-mode) to run reviews under your machine's login session.

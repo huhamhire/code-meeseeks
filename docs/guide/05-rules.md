@@ -1,23 +1,25 @@
-# 自定义评审规则
+# Custom Review Rules
 
-评审规则让你把团队规约、风格偏好、关注点注入 AI 评审：命中的规则正文会作为 `extra_instructions` 传给 pr-agent，影响 `/review`（及可选的 `/describe`）的产出。
+**English** · [简体中文](zh-CN/05-rules.md)
 
-规则是**纯文件**：一个规则目录下，每个 `.md` 文件就是一条规则。`frontmatter`（文件顶部的 YAML）声明这条规则**何时命中**，正文（markdown）是命中后**注入给 AI 的指令**。
+Review rules let you inject your team's conventions, style preferences, and areas of concern into the AI review: the body of a matched rule is passed to pr-agent as `extra_instructions`, shaping the output of `/review` (and, optionally, `/describe`).
 
-## 规则目录
+Rules are **plain files**: within a rules directory, each `.md` file is one rule. The `frontmatter` (the YAML at the top of the file) declares **when the rule matches**, and the body (markdown) is the **instruction injected into the AI** once it matches.
 
-规则目录是 **Agent 目录下的 `rules/` 子目录**：`<agent.dir>/rules/`（见 [配置文件参考 · agent](04-config-reference.md#agent--高阶-agent-与-autopilot)）。无需单独配置规则路径——只要把规则文件放进该目录即可生效。
+## Rules directory
+
+The rules directory is the **`rules/` subdirectory under the Agent directory**: `<agent.dir>/rules/` (see [Config file reference · agent](04-config-reference.md#agent--advanced-agent--autopilot)). There's no separate rules path to configure — just drop rule files into that directory and they take effect.
 
 ```
-<agent.dir>/            # 默认 ~/.code-meeseeks/agent，可由 agent.dir 指向自定义 / git 仓库
-└── rules/              # 规则目录：放入 .md 规则文件
+<agent.dir>/            # defaults to ~/.code-meeseeks/agent; agent.dir can point at a custom / git repo
+└── rules/              # rules directory: put .md rule files here
     ├── fx-amount.md
     └── api-breaking.md
 ```
 
-`agent.dir` 留空时默认 `~/.code-meeseeks/agent`；指向一个 git 仓库即可让团队共享与版本化规则。目录下可按子目录组织，应用会递归扫描所有 `.md`。
+When `agent.dir` is empty it defaults to `~/.code-meeseeks/agent`; pointing it at a git repo lets a team share and version their rules. You can organize files into subdirectories — the app recursively scans all `.md` files.
 
-## 规则文件结构
+## Rule file structure
 
 ```markdown
 ---
@@ -30,53 +32,53 @@ priority: 10
 enabled: true
 ---
 
-- 公共方法必须有 JSDoc，说明参数与返回值。
-- 金额一律用整数分存储，禁止浮点。
-- 对外接口变更需在 PR 描述里标注「Breaking」。
+- Public methods must have JSDoc describing parameters and return values.
+- Always store amounts as integer cents; floating point is forbidden.
+- Changes to external interfaces must be flagged "Breaking" in the PR description.
 ```
 
-- `---` 之间是 **frontmatter（YAML）**，声明命中条件；可整段省略。
-- `---` 之后是**正文（markdown）**，作为命中后注入 AI 的指令，用清晰的祈使句逐条写效果最好。
+- Between the `---` markers is the **frontmatter (YAML)**, declaring match conditions; the whole block may be omitted.
+- After the `---` is the **body (markdown)**, injected as the AI's instruction once matched — clear, imperative, item-by-item statements work best.
 
-### frontmatter 字段
+### frontmatter fields
 
-| 字段 | 类型 | 默认 | 说明 |
+| Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `applies_to.project` | 正则源串 | 省略 = 匹配任意 | 命中项目标识：Bitbucket 为 project key，GitHub 为组织 / 用户名。 |
-| `applies_to.repo` | 正则源串 | 省略 = 匹配任意 | 命中仓库 slug。 |
-| `applies_to.target_branch` | 正则源串 | 省略 = 匹配任意 | 命中 PR 的**目标分支**名。 |
-| `tools` | 数组 | `[review]` | 规则作用的工具，可取 `review` / `describe`。默认只作用于 `/review`（评审规约注入 `/describe` 会让描述偏题）。 |
-| `priority` | 数字 | `0` | 多条规则同时命中时的取舍权重，越大越优先（见下「命中与取舍」）。 |
-| `enabled` | 布尔 | `true` | 单条规则开关；`false` 时跳过该文件。 |
-| `custom_labels` | 数组 | `[]` | 预留字段，当前版本解析但尚未注入 pr-agent。 |
+| `applies_to.project` | regex source string | omitted = matches any | Matches the project identifier: for Bitbucket the project key, for GitHub the org / username. |
+| `applies_to.repo` | regex source string | omitted = matches any | Matches the repo slug. |
+| `applies_to.target_branch` | regex source string | omitted = matches any | Matches the PR's **target branch** name. |
+| `tools` | array | `[review]` | The tools the rule applies to; may be `review` / `describe`. Defaults to `/review` only (injecting review conventions into `/describe` makes the description drift off-topic). |
+| `priority` | number | `0` | Weight for tie-breaking when multiple rules match at once — higher is more preferred (see "Matching & tie-breaking" below). |
+| `enabled` | boolean | `true` | Per-rule toggle; when `false`, the file is skipped. |
+| `custom_labels` | array | `[]` | Reserved field; parsed in the current version but not yet injected into pr-agent. |
 
-> **正则说明**：`applies_to.*` 的值是正则**源串**，**不自动加锚点** `^`/`$`，是否精确匹配由你自己写。例如 `fx` 会匹配任何含 `fx` 的名字；要精确匹配写 `^fx$`。非法正则会被忽略（视为该字段未配置）。
+> **About regex**: the values of `applies_to.*` are regex **source strings**, **not auto-anchored** with `^`/`$` — whether the match is exact is up to you. For example, `fx` matches any name containing `fx`; for an exact match write `^fx$`. An invalid regex is ignored (treated as if the field were unset).
 
-## 命中与取舍
+## Matching & tie-breaking
 
-对某个 PR 执行某个工具时，规则按以下逻辑筛选：
+When running a given tool on a given PR, rules are filtered by this logic:
 
-1. **工具过滤**：规则的 `tools` 不含当前工具 → 不命中。**注意 `tools` 缺省为 `[review]`，并非「对所有工具生效」**——不写 `tools` 的规则只作用于 `/review`，不会影响 `/describe`；要同时约束 `/describe`，须显式写 `tools: [describe, review]`。
-2. **范围匹配**：`applies_to` 的每个字段——省略即匹配任意；配置了则该字段值需通过其正则 `.test()`。三项是 **AND** 关系（都要满足）。
+1. **Tool filter**: if the rule's `tools` does not include the current tool → no match. **Note that `tools` defaults to `[review]`, not "applies to all tools"** — a rule without `tools` applies only to `/review` and does not affect `/describe`; to also constrain `/describe`, write `tools: [describe, review]` explicitly.
+2. **Scope match**: for each `applies_to` field — omitted means match any; if set, the field value must pass its regex `.test()`. The three are combined with **AND** (all must hold).
 
-> 与 `applies_to` 的「省略 = 匹配任意」相反，`tools` 的缺省是一个**具体默认值** `[review]`，不是「任意工具」——这点容易混淆，记住「不写 = 仅 review」。
+> Unlike `applies_to`'s "omitted = matches any", the default of `tools` is a **concrete default value** `[review]`, not "any tool" — this is an easy point of confusion, so remember "unset = review only".
 
-> **多条规则一并生效**：同一 PR + 工具命中的多条规则会**全部注入**评审——按 `priority` 降序、再按文件路径升序排列，各规则正文以 `Ruleset 1 / 2 / …` 分段拼接传给 AI，互不串味。`priority` 决定排列先后（越大越靠前）。为安全起见单次最多注入 **20** 条命中规则，超出按排序丢弃靠后者。
+> **Multiple rules apply together**: all rules matching the same PR + tool are **injected together** — sorted by `priority` descending, then by file path ascending, with each rule's body concatenated as `Ruleset 1 / 2 / …` segments and passed to the AI, so they don't bleed into one another. `priority` determines the ordering (higher goes first). As a safeguard, at most **20** matched rules are injected per run; any beyond that are dropped from the tail of the sort order.
 
-## 全局基础规约
+## Global base conventions
 
-不写 frontmatter（或留空）的规则文件 = **匹配任意 PR** 的基础规约（`tools` 默认 `[review]`）。适合放一份团队通用约定：
+A rule file without frontmatter (or with it empty) = base conventions that **match any PR** (`tools` defaults to `[review]`). Good for a shared set of team-wide conventions:
 
 ```markdown
-评审时请重点关注：
-- 错误处理是否完整，是否吞掉异常。
-- 是否有重复代码可抽取复用。
-- 命名是否清晰、与周边代码风格一致。
+When reviewing, focus on:
+- Whether error handling is complete and no exceptions are swallowed.
+- Whether there's duplicated code that could be extracted and reused.
+- Whether naming is clear and consistent with the surrounding code style.
 ```
 
-## 示例
+## Examples
 
-**按目标分支收紧**：只对合并到 `release/*` 的 PR 强化检查。
+**Tighten by target branch**: harden checks only for PRs merging into `release/*`.
 
 ```markdown
 ---
@@ -86,11 +88,11 @@ tools: [review]
 priority: 20
 ---
 
-- 这是发布分支，禁止引入新依赖。
-- 任何行为变更必须有对应测试覆盖。
+- This is a release branch; introducing new dependencies is forbidden.
+- Any behavior change must have corresponding test coverage.
 ```
 
-**按仓库定制**：只对某仓库生效。
+**Customize by repo**: apply only to a specific repo.
 
 ```markdown
 ---
@@ -98,13 +100,13 @@ applies_to:
   repo: '^payment-service$'
 ---
 
-- 涉及金额计算的改动需双人复核，评审中标注风险点。
+- Changes involving amount calculations need two-person review; flag risk points in the review.
 ```
 
-## 注意事项
+## Notes
 
-- **改动即生效**：规则文件增删改后，下次触发评审即按最新内容加载，无需重启。
-- **单文件解析失败不影响整体**：某个文件 frontmatter YAML 写坏 / 字段类型不对，应用会跳过该文件并继续加载其余规则。
-- **当前命中提示**：选中 PR 后，chat 面板会显示本次命中的规则条数，点击可预览全部命中规则（按 Ruleset 分段列出），便于确认本次评审受哪些规则约束。
+- **Changes take effect immediately**: after adding / removing / editing rule files, the next review loads the latest content, no restart needed.
+- **A single parse failure doesn't affect the rest**: if one file's frontmatter YAML is malformed or a field has the wrong type, the app skips that file and continues loading the others.
+- **Current-match hint**: after selecting a PR, the chat panel shows how many rules matched this run; click to preview all matched rules (listed by Ruleset segment), so you can confirm which rules constrain this review.
 
-> 设计与实现细节见架构文档 [docs/arch/02-agent/04-rules.md](../arch/02-agent/04-rules.md)。
+> For design and implementation details, see the architecture doc [docs/arch/02-agent/04-rules.md](../arch/02-agent/04-rules.md).
