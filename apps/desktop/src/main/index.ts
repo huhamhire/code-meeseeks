@@ -240,8 +240,13 @@ class App {
     }
 
     // Windows toast 通知需 AppUserModelId 与安装包 appId 一致，否则系统可能不显示 / 归属错乱。
+    // dev 另用 .dev 后缀：AUMID 是 Windows 任务栏图标/分组/固定的持久缓存键，dev 跑的是自带
+    // 默认图标的 electron.exe，若与打包态共用同一 AUMID，会把 Electron 图标缓存到该键上 →
+    // 正式版安装后仍复用旧缓存、任务栏显示 Electron 图标。分开即互不污染。
     if (process.platform === 'win32') {
-      app.setAppUserModelId('com.huhamhire.code-meeseeks');
+      app.setAppUserModelId(
+        app.isPackaged ? 'com.huhamhire.code-meeseeks' : 'com.huhamhire.code-meeseeks.dev',
+      );
     }
 
     // 原生窗口 chrome 跟随全局主题：Windows 据 nativeTheme 设 DWMWA_USE_IMMERSIVE_DARK_MODE（原生
