@@ -20,22 +20,22 @@ hero:
 features:
   - icon: 🧑‍⚖️
     title: The human decides
-    details: Every comment is confirmed or edited by you before it reaches the remote. The AI only drafts — you keep the final call.
+    details: "<ul><li>You confirm or edit every comment before it's published</li><li>The AI only drafts — you keep the final call</li></ul>"
   - icon: 🔒
     title: Data stays local
-    details: Repository mirrors, PR metadata, and comment drafts all live on your machine. Wire up a local model and nothing ever leaves it.
+    details: "<ul><li>Repo mirrors, PR metadata & drafts stay on your machine</li><li>Wire up a local model and nothing ever leaves it</li></ul>"
   - icon: 🌍
     title: GitHub · Bitbucket · GitLab
-    details: Unified access across platforms, including self-hosted GitHub Enterprise and GitLab Self-Managed, adapting to each platform's capabilities.
+    details: "<ul><li>Unified access, incl. self-hosted Enterprise / Self-Managed</li><li>Adapts to each platform's capabilities</li></ul>"
   - icon: 🤖
     title: Agentic review
-    details: Command-driven pr-agent plus autonomous orchestration, AutoPilot pre-review, and a re-review loop — with an observable, interruptible process.
+    details: "<ul><li>Command-driven pr-agent + autonomous orchestration</li><li>AutoPilot pre-review & re-review loop</li><li>Observable, interruptible process</li></ul>"
   - icon: ⚙️
     title: Your models, your rules
-    details: Multiple LLM providers (OpenAI, Anthropic, DeepSeek, and any OpenAI-compatible endpoint) and a personalized rules directory you fully control.
+    details: "<ul><li>Many LLM providers (OpenAI, Anthropic, DeepSeek…)</li><li>A personalized rules directory you fully control</li></ul>"
   - icon: 🔌
     title: CLI & integration
-    details: A local API and the cross-platform meebox CLI let external agents, scripts, and CI fold PR review into automated workflows.
+    details: "<ul><li>Local API + cross-platform meebox CLI</li><li>Fold PR review into agents, scripts & CI</li></ul>"
 ---
 
 <figure class="screenshot-frame">

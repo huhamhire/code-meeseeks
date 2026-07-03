@@ -66,6 +66,10 @@
     font-weight: 500;
   }
 
+  &-links {
+    margin: 6px 0 0;
+  }
+
   &-card {
     border: 1px solid var(--vp-c-divider);
     border-radius: 12px;
@@ -81,6 +85,9 @@
   }
 
   &-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     padding: 8px 2px;
     font-weight: 600;
     font-size: 15px;
@@ -300,6 +307,74 @@
   .dl-btn-brand,
   .dl-btn-brand:hover {
     color: #fff;
+  }
+}
+
+// ── Loading skeleton (mirrors the loaded layout) ────────────────
+@keyframes dl-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.dl-skel {
+  .dl-skel-tabs {
+    display: flex;
+    gap: 24px;
+    margin: 24px 0 12px;
+  }
+
+  .sk {
+    display: block;
+    border-radius: 6px;
+    background: linear-gradient(
+      90deg,
+      var(--vp-c-bg-soft) 25%,
+      var(--vp-c-bg-alt) 40%,
+      var(--vp-c-bg-soft) 55%
+    );
+    background-size: 200% 100%;
+    animation: dl-shimmer 1.4s ease-in-out infinite;
+  }
+
+  .sk-tag {
+    width: 150px;
+    height: 26px;
+    border-radius: 13px;
+  }
+  .sk-link {
+    width: 96px;
+    height: 18px;
+  }
+  .sk-label {
+    width: 200px;
+    height: 12px;
+    margin-bottom: 16px;
+  }
+  .sk-btn {
+    width: 260px;
+    max-width: 100%;
+    height: 40px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+  }
+  .sk-note {
+    width: 100%;
+    height: 68px;
+    border-radius: 8px;
+  }
+  .sk-tab {
+    width: 130px;
+    height: 22px;
+  }
+  .sk-row {
+    width: 100%;
+    height: 66px;
+    border-radius: 10px;
+    margin-top: 8px;
   }
 }
 

@@ -1,0 +1,41 @@
+// Landing feature cards: icon on the left, title to its right, and the
+// description as a scannable bullet list underneath (VitePress renders
+// `details` via v-html, so the markdown can carry a real <ul>).
+
+.VPFeature .box {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'icon title'
+    'details details';
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 12px;
+}
+
+.VPFeature .box .icon {
+  grid-area: icon;
+  margin: 0;
+}
+
+.VPFeature .box .title {
+  grid-area: title;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.VPFeature .box .details {
+  grid-area: details;
+  margin: 0;
+
+  ul {
+    margin: 0;
+    padding-left: 18px;
+    list-style: disc;
+  }
+
+  li {
+    margin: 5px 0;
+    line-height: 1.6;
+  }
+}
