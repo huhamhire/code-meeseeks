@@ -1,25 +1,25 @@
 /**
- * 统一工具注册表（唯一真相源，见 docs/arch/02-agent/01-agent.md「工具修改红线」）。新增 / 调整工具只改这里，
- * 下列派生物自动跟随：
- * - `ReviewRunTool`：pr-agent 运行队列工具 id（`isRun`）。
- * - agent 工具目录 `buildToolCatalog`：按 `kind` 标读 / 改、按 `grant` 放行修改类（红线策略在 agent 层）。
- * - 规划红线允许集：`READ_RUN_TOOL_IDS`。
+ * Unified tool registry (single source of truth, see docs/arch/02-agent/01-agent.md "tool mutation red line"). Add / adjust tools only here,
+ * and the following derivations follow automatically:
+ * - `ReviewRunTool`: pr-agent run-queue tool ids (`isRun`).
+ * - agent tool catalog `buildToolCatalog`: marks read / mutating by `kind`, allows mutating ones by `grant` (red-line policy lives in the agent layer).
+ * - planning red-line allowed set: `READ_RUN_TOOL_IDS`.
  */
 
-/** 工具读 / 改分类。read 始终可用；mutating 对远端有副作用、默认禁止，仅 grant 放行。 */
+/** Tool read / mutate classification. read is always available; mutating has remote side effects, disabled by default, allowed only by grant. */
 export type ToolKind = 'read' | 'mutating';
 
 export interface ToolSpec {
-  /** 规范 id（无斜杠），如 `describe`。 */
+  /** Canonical id (no slash), e.g. `describe`. */
   id: string;
-  /** 展示 / 调用名（带斜杠），如 `/describe`。 */
+  /** Display / invocation name (with slash), e.g. `/describe`. */
   command: string;
-  /** 一句话说明（注入工具目录提示词；面向 LLM，英语）。 */
+  /** One-line description (injected into the tool-catalog prompt; LLM-facing, English). */
   summary: string;
   kind: ToolKind;
-  /** 修改类放行所需的 grant 键；读类省略。 */
+  /** grant key required to allow a mutating tool; omitted for read tools. */
   grant?: string;
-  /** 是否为 pr-agent 运行队列工具（经 run-queue 产出 ReviewRun）。 */
+  /** Whether this is a pr-agent run-queue tool (produces a ReviewRun via the run-queue). */
   isRun: boolean;
 }
 
@@ -78,10 +78,10 @@ export const TOOLS = [
   },
 ] as const satisfies readonly ToolSpec[];
 
-/** pr-agent 运行队列工具 id（注册表中 `isRun` 的项）。 */
+/** pr-agent run-queue tool ids (the `isRun` entries in the registry). */
 export type ReviewRunTool = Extract<(typeof TOOLS)[number], { isRun: true }>['id'];
 
-/** 读类运行工具 id 集合：规划（ReAct）红线只放行这些工具自主调用，校验用。 */
+/** Set of read run-tool ids: the planning (ReAct) red line only allows these tools to be invoked autonomously, used for validation. */
 export const READ_RUN_TOOL_IDS: ReadonlySet<string> = new Set(
   TOOLS.filter((t) => t.isRun && t.kind === 'read').map((t) => t.id),
 );

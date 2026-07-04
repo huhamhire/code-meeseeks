@@ -3,9 +3,9 @@ export type PrAgentStrategy = 'embedded' | 'local-cli';
 export interface PrAgentAvailable {
   available: true;
   strategy: PrAgentStrategy;
-  /** 探测命令返回的版本/帮助首行，未必规范 */
+  /** Version/help first line returned by the probe command, not necessarily well-formed */
   version: string;
-  /** 探测耗时（ms） */
+  /** Probe duration (ms) */
   probeMs: number;
 }
 
