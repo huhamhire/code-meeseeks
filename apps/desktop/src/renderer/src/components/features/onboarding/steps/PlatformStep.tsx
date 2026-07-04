@@ -24,14 +24,14 @@ export function PlatformStep({
       <h2 className="onboarding-step-title">{t('onboarding.platformTitle')}</h2>
       <p className="muted onboarding-step-sub">{t('onboarding.platformSub')}</p>
       <div className="config-pick-grid">
-        {/* 左：平台方案选择 */}
+        {/* Left: platform choice */}
         <PlatformPicker
           value={connDraft.kind}
           onChange={(kind) => onConnChange({ ...connDraft, kind })}
           ariaLabel={t('onboarding.platformGroupAria')}
         />
 
-        {/* 右：连接表单 + 折叠缓存目录 */}
+        {/* Right: connection form + collapsible cache directory */}
         <div className="config-pick-form">
           <ConnectionForm draft={connDraft} onChange={onConnChange} autoFocus={false} />
 

@@ -6,9 +6,9 @@ import { buildSettingsCommands } from './settings';
 export * from './types';
 
 /**
- * 命令注册表：聚合各领域命令构建器。**新增领域 = 加一个 `<domain>.ts` 文件 + 在此登记**，
- * 上层（CommandPalette）只认 `buildRootCommands`。命令在面板里按此数组顺序、各自的 category 前缀分组；
- * 领域按**英文名字典序**固定排列（PR < Review < Settings），新增领域按此序插入对应位置。
+ * Command registry: aggregates each domain's command builder. **Adding a domain = add one `<domain>.ts` file + register it here**;
+ * the upper layer (CommandPalette) only knows `buildRootCommands`. Commands are grouped in the palette by this array's order, each under its own category prefix;
+ * domains are fixed in **English-name lexicographic order** (PR < Review < Settings), and new domains are inserted at the corresponding position by this order.
  */
 const DOMAIN_BUILDERS: ReadonlyArray<(ctx: CommandContext) => RootCommand[]> = [
   buildPrCommands,
@@ -17,9 +17,9 @@ const DOMAIN_BUILDERS: ReadonlyArray<(ctx: CommandContext) => RootCommand[]> = [
 ];
 
 export function buildRootCommands(ctx: CommandContext): RootCommand[] {
-  // 领域按 DOMAIN_BUILDERS 固定顺序（PR < Review < Settings）；**域内统一按英文标题字典序**排序，
-  // 使「查看 X / 分类筛选 / 切换…」等不依赖各域手工排列、动态生成的命令（如随平台能力的发现分类）也自动归位。
-  // 统一门控：命令声明 when 谓词，注册表在此统一过滤（各领域不再各写 if）。
+  // Domains follow DOMAIN_BUILDERS' fixed order (PR < Review < Settings); **within a domain, sort uniformly by English-title lexicographic order**,
+  // so dynamically generated commands (like discovery filters that vary by platform capability) such as "view X / filter by category / toggle…" also fall into place without per-domain manual ordering.
+  // Unified gating: commands declare a when predicate, and the registry filters here uniformly (domains no longer each write their own if).
   return DOMAIN_BUILDERS.flatMap((build) =>
     build(ctx)
       .filter((c) => !c.when || c.when())

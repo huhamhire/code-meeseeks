@@ -2,7 +2,7 @@ import type { PrDiscoveryFilter } from '@meebox/shared';
 import type { CommandContext, RootCommand } from './types';
 import { formatChord } from './shortcuts';
 
-/** 发现分类标签 i18n key（与 Sidebar 发现 tabs 同源；具体可用哪几类由 platform 能力决定）。 */
+/** i18n keys for discovery filter labels (same source as the Sidebar discovery tabs; which ones are available is decided by platform capability). */
 const DISCOVERY_LABEL_KEYS: Record<PrDiscoveryFilter, string> = {
   'review-requested': 'sidebar.discoveryReviewRequested',
   created: 'sidebar.discoveryCreated',
@@ -11,11 +11,11 @@ const DISCOVERY_LABEL_KEYS: Record<PrDiscoveryFilter, string> = {
 };
 
 /**
- * 「PR」领域命令：
- * - **一级分类**：每个发现分类（待我评审 / 我创建 / 指派我 / 提及我）各成一条一级命令，直接跳转；选项随
- *   当前 platform 能力门控，无分类的平台不提供。不显示当前选中态。
- * - **分类筛选（二级）**：筛选 PR 状态（待处理 / 全部 / 冲突 / 可合并等，与侧栏一致、随平台门控）。
- * - **切换 PR 列表**：折叠 / 展开侧栏。
+ * "PR" domain commands:
+ * - **Top-level filters**: each discovery filter (review requested / created / assigned / mentioned) becomes one top-level command that jumps directly; options are
+ *   gated by the current platform's capability, and platforms without a filter don't offer it. No current-selection state shown.
+ * - **Filter by category (second level)**: filter PR status (pending / all / conflict / mergeable etc., consistent with the sidebar, gated by platform).
+ * - **Toggle PR list**: collapse / expand the sidebar.
  */
 export function buildPrCommands(ctx: CommandContext): RootCommand[] {
   const { t, tEn, discoveryFilters, setDiscoveryFilter, prStatusFilters, setPrStatusFilter } = ctx;
@@ -23,7 +23,7 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
   const categoryEn = tEn('commandPalette.categoryPr');
   const out: RootCommand[] = [];
 
-  // 一级分类：按平台能力提供的顺序各成一条「查看「XXX」」命令（与 Sidebar 发现 tabs 同序），不显示选中态
+  // Top-level filters: in the order the platform capability provides, each becomes a "view «XXX»" command (same order as the Sidebar discovery tabs), no selection state shown
   for (const f of discoveryFilters) {
     const label = t(DISCOVERY_LABEL_KEYS[f]);
     const labelEn = tEn(DISCOVERY_LABEL_KEYS[f]);
@@ -37,8 +37,8 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
     });
   }
 
-  // 查看已关闭：切到归档（已关闭）范围浏览。快捷键取 H（history）；mac 用 ⌘⇧H 避开系统「隐藏应用」(⌘H)，
-  // 其余平台 Ctrl+H（浏览器历史惯例）。见 App 窗口级快捷键。
+  // View closed: switch to the archived (closed) scope to browse. Shortcut uses H (history); mac uses ⌘⇧H to avoid the system "Hide App" (⌘H),
+  // other platforms Ctrl+H (browser history convention). See App window-level shortcuts.
   out.push({
     id: 'view-archived',
     category,
@@ -49,7 +49,7 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
     run: () => ctx.viewArchived(),
   });
 
-  // 分类筛选：二级选择 PR 状态
+  // Filter by category: second level selects PR status
   out.push({
     id: 'filter-pr',
     category,
@@ -66,16 +66,16 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
       })),
   });
 
-  // 打开 URL（当前平台）：自由文本二级层，粘贴 / 输入 PR 链接回车打开（审查未正式被请求参与的他人 PR）
+  // Open URL (current platform): free-text second level, paste / type a PR link and Enter to open (review others' PRs you weren't formally requested on)
   out.push({
     id: 'open-pr-url',
     category,
     categoryEn,
     title: t('commandPalette.cmdOpenPrUrl'),
     titleEn: tEn('commandPalette.cmdOpenPrUrl'),
-    // 快捷键直达输入层（U = URL）；mac ⌘⇧U / 其余 Ctrl+Shift+U，见 CommandPalette 窗口级监听
+    // Shortcut jumps straight to the input level (U = URL); mac ⌘⇧U / others Ctrl+Shift+U, see CommandPalette window-level listener
     shortcut: formatChord(ctx.platform, 'U', { shift: true }),
-    // 输入层前缀只用简短「URL」（通用、免 i18n），不占整条命令标题
+    // The input-level prefix uses just a short "URL" (generic, no i18n), not the full command title
     prefixLabel: 'URL',
     input: {
       placeholder: t('commandPalette.openPrUrlPlaceholder'),

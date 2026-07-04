@@ -7,15 +7,15 @@ import type { CommandContext, CommandOption, RootCommand } from './types';
 import { formatChord } from './shortcuts';
 
 function switchLanguage(ctx: CommandContext, next: SupportedLanguage): void {
-  void i18n.changeLanguage(next); // 渲染层实时切换
-  persistLanguage(next); // localStorage 缓存，下次启动命中
-  ctx.patchConfig((c) => ({ ...c, language: next })); // 同步 boot.config
-  void invoke('config:setLanguage', { language: next }); // 写盘 + 主进程 i18n
+  void i18n.changeLanguage(next); // live switch in the render layer
+  persistLanguage(next); // localStorage cache, hit on next launch
+  ctx.patchConfig((c) => ({ ...c, language: next })); // sync boot.config
+  void invoke('config:setLanguage', { language: next }); // write to disk + main-process i18n
 }
 
 function switchTheme(ctx: CommandContext, next: EditorTheme): void {
   const ap = ctx.config.appearance;
-  // 实时应用：写共享 store → App 的 useGlobalTheme 派生 data-theme / chrome / 持久化；字体不变沿用现值。
+  // Apply live: write the shared store → App's useGlobalTheme derives data-theme / chrome / persistence; font unchanged, keeps current value.
   setEditorAppearance({
     editorTheme: next,
     fontFamily: ap.editor_font_family,
@@ -42,15 +42,15 @@ function toggleProxy(ctx: CommandContext): void {
 }
 
 /**
- * 「设置」领域命令（P1）：切换语言 / 主题 / 模型、开关代理、打开设置 / 关于 / DevTools。
- * title 经当前语言本地化（搜索按当前语言匹配）；二级选项惰性求值、读当前 config 标注生效项。
+ * "Settings" domain commands (P1): switch language / theme / model, toggle proxy, open settings / about / DevTools.
+ * title is localized in the current language (search matches the current language); second-level options are lazily evaluated, reading the current config to mark the active item.
  */
 export function buildSettingsCommands(ctx: CommandContext): RootCommand[] {
   const { t, tEn, config } = ctx;
   const category = t('commandPalette.categorySettings');
   const categoryEn = tEn('commandPalette.categorySettings');
   const currentLang = resolveUiLanguage(config.language);
-  // 本地化 + 英文双标题（含领域前缀），供两行展示 + 恒按英文检索
+  // Dual title, localized + English (including domain prefix), for two-line display + always searchable in English
   const cmd = (key: string): Pick<RootCommand, 'title' | 'titleEn' | 'category' | 'categoryEn'> => ({
     category,
     categoryEn,
@@ -62,7 +62,7 @@ export function buildSettingsCommands(ctx: CommandContext): RootCommand[] {
       id: 'switch-language',
       ...cmd('commandPalette.cmdSwitchLanguage'),
       optionsPlaceholder: t('commandPalette.pickLanguage'),
-      // 语言展示用 endonym（各 UI 语言下一致、不翻译）→ 无需 titleEn
+      // Languages display by endonym (consistent across all UI languages, not translated) → no titleEn needed
       options: () =>
         LANGUAGE_OPTIONS.map((o) => ({
           id: o.code,
@@ -75,7 +75,7 @@ export function buildSettingsCommands(ctx: CommandContext): RootCommand[] {
       id: 'switch-theme',
       ...cmd('commandPalette.cmdSwitchTheme'),
       optionsPlaceholder: t('commandPalette.pickTheme'),
-      // 主题用专名（GitHub Dark / Monokai…，不翻译）；仅 'auto' 走 i18n（与设置页一致）
+      // Themes use proper names (GitHub Dark / Monokai…, not translated); only 'auto' goes through i18n (consistent with the settings page)
       options: () =>
         EDITOR_THEME_OPTIONS.map((o) => ({
           id: o.id,
@@ -96,7 +96,7 @@ export function buildSettingsCommands(ctx: CommandContext): RootCommand[] {
           active: p.id === config.llm.active_id,
           run: () => switchModel(ctx, p.id),
         }));
-        // 末尾固定「添加模型…」入口：打开设置的「模型」分区新建预设（无预设时即唯一项）
+        // Fixed "add model…" entry at the end: opens the settings "model" section to create a new profile (the only item when there are no profiles)
         items.push({
           id: '__add_model__',
           title: t('commandPalette.addModel'),
@@ -108,7 +108,7 @@ export function buildSettingsCommands(ctx: CommandContext): RootCommand[] {
     },
     {
       id: 'toggle-proxy',
-      // 切换型命令用单一文案（不随状态翻转）；当前开关状态在设置页查看
+      // Toggle commands use a single label (not flipped by state); check the current toggle state on the settings page
       ...cmd('commandPalette.cmdToggleProxy'),
       run: () => toggleProxy(ctx),
     },
@@ -125,7 +125,7 @@ export function buildSettingsCommands(ctx: CommandContext): RootCommand[] {
     {
       id: 'open-devtools',
       ...cmd('commandPalette.cmdOpenDevtools'),
-      // DevTools 惯例：mac ⌥⌘I / 其余 Ctrl+Shift+I（见 App 窗口级快捷键）
+      // DevTools convention: mac ⌥⌘I / others Ctrl+Shift+I (see App window-level shortcuts)
       shortcut: formatChord(ctx.platform, 'I', ctx.platform === 'darwin' ? { alt: true } : { shift: true }),
       run: () => {
         void invoke('app:openDevTools', undefined);

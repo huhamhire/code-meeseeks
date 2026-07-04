@@ -19,29 +19,30 @@ interface StatusBarProps {
   refreshing: boolean;
   sidebarCollapsed: boolean;
   chatCollapsed: boolean;
-  /** Poller 最近一次完成时间（ISO 字符串）；null 表示从未同步 */
+  /** Poller's most recent completion time (ISO string); null means never synced */
   lastSyncAt: string | null;
   onToggleSidebar: () => void;
   onToggleChat: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
-  /** 切换 active LLM profile，由父组件做实际持久化 */
+  /** Switch the active LLM profile; the parent component does the actual persistence */
   onSwitchActiveLlm: (profileId: string) => void;
   /**
-   * 跳到指定 PR (供"pr-agent 运行中"chip 点击使用)。可空 —— 不传时 chip 仍展示但
-   * 不可点击。父组件传 `setSelectedId` 即可
+   * Jump to a given PR (used by the "pr-agent running" chip click). Nullable — when omitted the chip still
+   * shows but is not clickable. The parent component can just pass `setSelectedId`
    */
   onJumpToPr?: (localId: string) => void;
-  /** 启动检测到的新版本；非空且 hasUpdate 时展示「新版本」chip，点击跳转下载页。 */
+  /** New version detected at startup; when non-null and hasUpdate, show the "new version" chip, clicking jumps to the download page. */
   updateInfo?: UpdateCheckResult | null;
-  /** AutoPilot 是否启用（agent.autopilot.enabled）；点击切换，由父组件持久化。 */
+  /** Whether AutoPilot is enabled (agent.autopilot.enabled); click to toggle, persisted by the parent component. */
   autopilotEnabled: boolean;
   onToggleAutopilot: () => void;
 }
 
 /**
- * pr-agent 运行时 chip：仅在**不可用**（错误态）时显示红色「不可用」告警（可操作信息）。可用时的版本
- * 号已从状态栏弱化下沉到「关于」页展示（见 RuntimeSection），此处不再渲染，减少常态噪声。
+ * pr-agent runtime chip: shows a red "unavailable" warning (actionable info) only when **unavailable** (error state).
+ * The version number for the available case has been de-emphasized off the status bar and moved down to the "About"
+ * page (see RuntimeSection), and is no longer rendered here, reducing steady-state noise.
  */
 function PrAgentRuntimeChip({ status }: { status: PrAgentStatus }) {
   const { t } = useTranslation();
@@ -54,9 +55,9 @@ function PrAgentRuntimeChip({ status }: { status: PrAgentStatus }) {
 }
 
 /**
- * 应用状态栏（薄壳）：左侧折叠按钮 + 同步 / 仓库镜像 / pr-agent 运行时 / PR 计数 / 用户，
- * 右侧 pr-agent 活动 / AutoPilot / LLM / 更新，末尾 chat 折叠 + 设置。各业务 chip 由其所属
- * feature 提供（features/<x>/statusbar/），本组件只做组合与布局。
+ * App status bar (thin shell): left side collapse button + sync / repo mirror / pr-agent runtime / PR count / user,
+ * right side pr-agent activity / AutoPilot / LLM / update, and at the end chat collapse + settings. Each business chip
+ * is provided by its owning feature (features/<x>/statusbar/); this component only does composition and layout.
  */
 export function StatusBar({
   prsCount,
@@ -93,13 +94,13 @@ export function StatusBar({
         <PanelToggleIcon side="left" collapsed={sidebarCollapsed} />
       </button>
       <LastSyncChip at={lastSyncAt} refreshing={refreshing} onRefresh={onRefresh} />
-      {/* 当前正在 sync 的 repo (clone/fetch 中)。idle 不渲染 */}
+      {/* The repo currently being synced (cloning/fetching). Not rendered when idle */}
       <RepoSyncChip />
       {prAgent && <PrAgentRuntimeChip status={prAgent} />}
       <PrsCountChip count={prsCount} />
       <UserChip connections={connections} />
       <div className="statusbar-spacer" />
-      {/* pr-agent 活动 / 空闲指示。pr-agent 不可用时不显示（上方运行时 chip 已红色提示）。 */}
+      {/* pr-agent activity / idle indicator. Hidden when pr-agent is unavailable (the runtime chip above already shows a red warning). */}
       {prAgent?.available && <PrAgentActiveChip onJumpToPr={onJumpToPr} />}
       <AutopilotChip enabled={autopilotEnabled} onToggle={onToggleAutopilot} />
       <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />

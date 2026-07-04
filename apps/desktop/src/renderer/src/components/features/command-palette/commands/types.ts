@@ -4,79 +4,79 @@ import type { SettingsCategory } from '../../settings';
 import type { FilterKey } from '../../../layout/Sidebar';
 
 /**
- * 命令面板的执行上下文：当前配置 + 同步父级状态的钩子 + 打开设置面板 + 当前语言的 t。
- * 命令的「即时生效」复用设置页同一套原语（i18n.changeLanguage / editor-appearance store / config:* IPC），
- * 不另起一套，保证与设置页行为一致。各领域命令构建器都接收它。
+ * The command palette's execution context: current config + hooks to sync parent state + open settings panel + current-language t.
+ * The command's "instant effect" reuses the same primitives as the settings page (i18n.changeLanguage / editor-appearance store / config:* IPC),
+ * without spinning up a separate set, ensuring behavior consistent with the settings page. Every domain's command builder receives it.
  */
 export interface CommandContext {
-  /** 运行平台：命令格式化快捷键提示（mac ⌘ / 其余 Ctrl）等用。 */
+  /** Running platform: used by commands to format shortcut hints (mac ⌘ / others Ctrl), etc. */
   platform: Platform;
   config: Config;
-  /** 当前选中 PR 的 localId（无选中为 null）；上下文相关命令（如运行自动评审）据此裁剪 / 取目标。 */
+  /** localId of the currently selected PR (null if none selected); context-relevant commands (such as running auto review) use it to trim / pick the target. */
   selectedPrId: string | null;
-  /** 某 PR 是否有编排 Agent 运行中（重入保护用，调用时取实时态）。 */
+  /** Whether a PR has an orchestration Agent running (for re-entry protection; reads the live state at call time). */
   isPrRunning: (localId: string) => boolean;
-  /** 切换对话面板折叠（命令面板的「切换对话面板」用）。 */
+  /** Toggle chat panel collapse (used by the command palette's "toggle chat panel"). */
   toggleChatPanel: () => void;
-  /** 切换 PR 列表（侧栏）折叠（命令面板的「切换 PR 列表」用）。 */
+  /** Toggle PR list (sidebar) collapse (used by the command palette's "toggle PR list"). */
   togglePrList: () => void;
-  /** 当前 platform 能力支持的 PR 发现分类（空=该平台无分类，对应一级命令不提供）。 */
+  /** PR discovery categories supported by the current platform's capabilities (empty = the platform has no categories, the corresponding top-level command is not provided). */
   discoveryFilters: readonly PrDiscoveryFilter[];
-  /** 跳到某发现分类（PR 域「查看 X」命令用，如「待我评审」）；隐含切回「进行中」范围。 */
+  /** Jump to a discovery category (used by PR-domain "view X" commands, such as "awaiting my review"); implicitly switches back to the "in progress" scope. */
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
-  /** 切到「已关闭」（归档）范围（PR 域「查看已关闭」命令用）。 */
+  /** Switch to the "closed" (archived) scope (used by the PR-domain "view closed" command). */
   viewArchived: () => void;
-  /** 按 URL 打开当前平台的 PR（PR 域「打开 URL」自由文本命令用）：定位本地或拉取存档后跳转，失败弹 toast。 */
+  /** Open a PR of the current platform by URL (used by the PR-domain "open URL" free-text command): locate locally or fetch the archive then jump, popping a toast on failure. */
   openPrByUrl: (url: string) => void | Promise<void>;
-  /** 可选的 PR 状态筛选项（待处理 / 全部 / 冲突 / 可合并等，已按平台门控）。 */
+  /** Optional PR status filter items (pending / all / conflict / mergeable, etc., already gated by platform). */
   prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
-  /** 设置 PR 状态筛选（PR 域「分类筛选」二级选项用）。 */
+  /** Set the PR status filter (used by the PR-domain "category filter" second-level options). */
   setPrStatusFilter: (filter: FilterKey) => void;
   patchConfig: (updater: (c: Config) => Config) => void;
   openSettings: (category?: SettingsCategory) => void;
-  /** 当前界面语言的翻译函数 */
+  /** Translation function for the current UI language */
   t: TFunction;
-  /** 固定英文（en-US）翻译函数：非英语界面下作次行展示，并恒参与检索（对齐 VS Code） */
+  /** Fixed English (en-US) translation function: shown as a secondary line under a non-English UI, and always participates in search (aligning with VS Code) */
   tEn: TFunction;
 }
 
-/** 二级选项（叶子，直接执行）。`active` 标注当前生效项（打勾）。 */
+/** Second-level option (leaf, executes directly). `active` marks the currently effective item (checked). */
 export interface CommandOption {
   id: string;
   title: string;
-  /** 英文名（缺省=title，即各语言一致的专名/数据项）；非英语界面作次行 + 恒参与检索 */
+  /** English name (default = title, i.e. a proper name / data item consistent across languages); shown as a secondary line under a non-English UI + always participates in search */
   titleEn?: string;
   active?: boolean;
   run: () => void;
 }
 
 /**
- * 顶层命令：要么直接执行（`run`），要么进入二级选项（`options`）。**最多两级**、不支持返回上级
- * （Esc 退出后重进，见 docs/arch/03-gui/02-command-palette）。`title` / `category` 已按当前界面语言本地化，供按当前语言搜索。
+ * Top-level command: either executes directly (`run`), or enters second-level options (`options`). **At most two levels**, going back up is not supported
+ * (exit with Esc then re-enter, see docs/arch/03-gui/02-command-palette). `title` / `category` are already localized to the current UI language, for searching in the current language.
  */
 export interface RootCommand {
   id: string;
-  /** 上下文门控（可选）：返回 false 则该命令不出现在列表。缺省=恒可见。由注册表统一过滤，各领域只需声明。 */
+  /** Context gating (optional): returning false hides this command from the list. Default = always visible. Filtered uniformly by the registry; each domain only needs to declare it. */
   when?: () => boolean;
   title: string;
-  /** 英文标题：非英语界面作次行展示，并恒参与检索（对齐 VS Code 显示语言 + 英文检索） */
+  /** English title: shown as a secondary line under a non-English UI, and always participates in search (aligning with VS Code display language + English search) */
   titleEn: string;
   category: string;
-  /** 英文领域前缀：同 titleEn，用于次行展示与英文检索 */
+  /** English domain prefix: same as titleEn, used for secondary-line display and English search */
   categoryEn: string;
-  /** 快捷键按键 token 列表（一键一框，如 `['⌘','B']` / `['Ctrl','B']`），在命令项右侧展示；缺省=无 */
+  /** Shortcut key token list (one box per key, e.g. `['⌘','B']` / `['Ctrl','B']`), shown on the right side of the command item; default = none */
   shortcut?: string[];
-  /** 进入二级后的输入框占位提示 */
+  /** Input placeholder hint after entering the second level */
   optionsPlaceholder?: string;
-  /** 进入二级后输入框左侧的简短前缀提示符（如「URL」）；缺省回退到命令标题。 */
+  /** Short prefix indicator to the left of the input after entering the second level (e.g. "URL"); default falls back to the command title. */
   prefixLabel?: string;
-  /** 二级选项（惰性求值，读当前 config 标注 active）；与 run / input 三选一 */
+  /** Second-level options (lazily evaluated, reads current config to mark active); one of run / input / this three */
   options?: () => CommandOption[];
   /**
-   * 自由文本输入（二级）：选中后二级层不是选项列表，而是把输入框转为接受任意文本，回车提交给 `run`。
-   * 用于「按 URL 打开 PR」这类需用户粘贴 / 输入的命令。与 options / 顶层 run 互斥。
+   * Free-text input (second level): once selected, the second level is not an option list but turns the input box into one that accepts arbitrary text, submitting to `run` on Enter.
+   * Used for commands like "open PR by URL" that require the user to paste / type. Mutually exclusive with options / top-level run.
    */
   input?: { placeholder: string; run: (text: string) => void | Promise<void> };
-  /** 叶子命令的执行；与 options / input 二选一 */
+  /** Execution of a leaf command; one of options / input two */
   run?: () => void;
 }

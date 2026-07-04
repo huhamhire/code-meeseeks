@@ -15,27 +15,27 @@ import { PlatformStep } from './steps/PlatformStep';
 import { LlmStep } from './steps/LlmStep';
 import { DoneStep } from './steps/DoneStep';
 
-/** 向导收集到的配置，交由 App 落盘（config:setConnections 等）后切入主界面 */
+/** Config collected by the wizard, handed to App to persist (config:setConnections etc.) before switching into the main UI */
 export interface OnboardingResult {
   connection: ConnEntry;
-  /** 用户填了并通过校验的 LLM 预设；跳过时为 null */
+  /** LLM profile the user filled in and that passed validation; null when skipped */
   llm: LlmProfile | null;
-  /** 缓存目录原始输入（含 `~`）；App 与初值比较后决定是否 config:setReposDir */
+  /** Raw cache directory input (may contain `~`); App compares against the initial value to decide whether to config:setReposDir */
   reposDir: string;
 }
 
 interface OnboardingWizardProps {
-  /** 唯一性校验用（首启通常为空） */
+  /** For uniqueness validation (usually empty on first launch) */
   existingLlmProfiles: LlmProfile[];
-  /** 缓存目录初值（config.workspace.repos_dir，未展开的 `~/...` 形态） */
+  /** Initial cache directory (config.workspace.repos_dir, unexpanded `~/...` form) */
   initialReposDir: string;
-  /** UI 语言初值（config.language 原始值，空串=自动）；欢迎页据此回显，空则按 OS 偏好 */
+  /** Initial UI language (config.language raw value, empty string = auto); the welcome page echoes it back, falling back to OS preference when empty */
   initialLanguage: string;
-  /** 全部配置完成 → App 落盘 + 切主界面。reject 时向导展示错误允许重试 */
+  /** All config done → App persists + switches to main UI. On reject the wizard shows the error and allows a retry */
   onComplete: (result: OnboardingResult) => Promise<void>;
 }
 
-// 步骤：欢迎 → 平台（必填）→ LLM（可跳过）→ 完成
+// Steps: welcome → platform (required) → LLM (skippable) → done
 const STEP_KEYS = [
   'onboarding.stepWelcome',
   'onboarding.stepPlatform',
@@ -52,8 +52,8 @@ export function OnboardingWizard({
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
 
-  // 界面语言：即时生效（写盘 + 渲染层切换）。初值取当前生效语言——无配置时按 OS 偏好匹配。
-  // 选择项放在欢迎页底部 nav（复用其分割线），仅 step 0 显示。
+  // UI language: takes effect immediately (persist + renderer switch). Initial value is the currently effective language — falls back to matching OS preference when unconfigured.
+  // The picker sits in the welcome page's bottom nav (reusing its divider), shown only on step 0.
   const [language, setLanguage] = useState<SupportedLanguage>(() =>
     resolveUiLanguage(initialLanguage),
   );
@@ -63,7 +63,7 @@ export function OnboardingWizard({
     void i18n.changeLanguage(next);
     persistLanguage(next);
     void invoke('config:setLanguage', { language: next }).catch(() => {
-      /* 写盘失败不阻断向导：渲染层已切、localStorage 已存，完成向导后随整体落盘兜底 */
+      /* A persist failure does not block the wizard: the renderer already switched, localStorage is already stored, and the overall persist on wizard completion is the fallback */
     });
   };
 
@@ -87,7 +87,7 @@ export function OnboardingWizard({
     api_key: '',
   }));
   const [llmValid, setLlmValid] = useState(false);
-  // null = 还没决定；true = 带 LLM 进入；false = 跳过。Done 页据此显示摘要
+  // null = not yet decided; true = enter with LLM; false = skip. The Done page shows the summary based on this
   const [includeLlm, setIncludeLlm] = useState<boolean | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
@@ -105,7 +105,7 @@ export function OnboardingWizard({
         llm: includeLlm ? llmDraft : null,
         reposDir,
       });
-      // 成功后由 App 卸载本组件，无需复位本地状态
+      // On success App unmounts this component, so no need to reset local state
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : String(e));
       setSubmitting(false);
@@ -161,8 +161,8 @@ export function OnboardingWizard({
               </button>
             )}
           </div>
-          {/* 欢迎页：语言选择放在底部 nav（复用其分割线），居于两端（空）之间 → 居中显示。
-              选项用各语言自身 endonym，不随 UI 翻译；选择即时生效。 */}
+          {/* Welcome page: the language picker sits in the bottom nav (reusing its divider), between the two (empty) ends → centered.
+              Options use each language's own endonym, not the UI translation; selection takes effect immediately. */}
           {step === 0 && (
             <div className="onboarding-nav-language">
               <span className="muted">{t('onboarding.languageLabel')}</span>
