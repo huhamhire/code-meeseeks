@@ -15,11 +15,13 @@ import { RunQueue } from './services/pr-agent/index.js';
 export type { RegisterDeps } from './services/context.js';
 
 /**
- * 注册全部 IPC handler。薄入口：构建共享上下文 → 建两个跨域 service（run 队列 / Agent 编排）
- * → 合成 controller 上下文并安装为进程级单例 → 按业务领域逐个绑定通道 → 返回运行时控制句柄。
+ * Register all IPC handlers. Thin entry: build the shared context → create two cross-domain services (run queue / Agent
+ * orchestration) → compose the controller context and install it as a process-level singleton → bind channels one by
+ * one per business domain → return the runtime control handle.
  *
- * controller 是原生 ipcMain.handle 监听器（具名函数 `(event, req) => …`，见 controllers/<域>.ts），
- * 依赖经 getContext() 取用、不带 ctx 参数；下方直接 `ipcMain.handle('channel', controller)` 注册，无包装层。
+ * A controller is a native ipcMain.handle listener (named function `(event, req) => …`, see controllers/<domain>.ts),
+ * with dependencies taken via getContext() and no ctx parameter; below they're registered directly as
+ * `ipcMain.handle('channel', controller)`, with no wrapper layer.
  */
 export function registerIpcHandlers(deps: RegisterDeps): {
   abortAllActiveRuns: () => number;
@@ -28,133 +30,135 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   invalidateCommentsCache: (localId: string) => void;
 } {
   const base = createServiceContext(deps);
-  // run 队列：pragent:run（PR 域）、Agent 编排、AutoPilot 三方共用。
+  // run queue: shared by pragent:run (PR domain), Agent orchestration, and AutoPilot.
   const runQueue = new RunQueue(base);
-  // Agent 编排：复用 run 队列派发工具 run（agent 低优先级泳道）。
+  // Agent orchestration: reuses the run queue to dispatch tool runs (agent low-priority lane).
   const orchestrator = new Orchestrator(base, runQueue);
-  // controller 层统一上下文：基础上下文 + 两个跨域 service，安装为进程级单例（controller 经 getContext() 取用）。
+  // Controller-layer unified context: base context + two cross-domain services, installed as a process-level singleton (controllers take it via getContext()).
   const ctx: ControllerContext = { ...base, runQueue, orchestrator };
   setControllerContext(ctx);
 
   /*
-   * GUI 框架交互
-   * 应用信息 / 窗口 / 外部打开 / 对话框 / 日志回传 / 连接与头像
+   * GUI framework interaction
+   * App info / window / external open / dialog / log relay / connections and avatars
    */
-  ipcMain.handle('app:info', app.readAppInfo); // 应用 / 运行时版本信息（关于页）
-  ipcMain.handle('app:paths', app.readAppPaths); // 关键目录路径（config / agent / 日志）
-  ipcMain.handle('app:prAgentStatus', app.readPrAgentStatus); // pr-agent 探测状态（是否就绪）
-  ipcMain.handle('log:write', app.writeRendererLog); // 渲染层日志回传落盘
-  ipcMain.handle('window:setControlColors', app.setWindowControlColors); // 渲染层推送主题派生窗控配色
-  ipcMain.handle('app:connections', app.listConnections); // 当前活动连接摘要（Header / 状态栏）
-  ipcMain.handle('app:userAvatar', app.getUserAvatar); // 用户头像（内存 + 磁盘两级缓存）
-  ipcMain.handle('app:openConfigFile', app.openConfigFile); // 打开 config.yaml
-  ipcMain.handle('app:openAgentDir', app.openAgentDir); // 打开 Agent 目录
-  ipcMain.handle('app:openDevTools', app.openDevTools); // 打开 DevTools（分离窗口）
-  ipcMain.handle('app:setBadgeCount', app.setBadgeCount); // 设应用角标计数（macOS dock）
-  ipcMain.handle('app:checkUpdate', app.checkUpdate); // 手动检查更新
-  ipcMain.handle('app:getUpdateStatus', app.getUpdateStatus); // 读缓存的更新检测结果（水合）
-  ipcMain.handle('app:openExternal', app.openExternal); // 系统浏览器打开外链
-  ipcMain.handle('app:openNotificationSettings', app.openNotificationSettings); // macOS 打开系统通知设置
-  ipcMain.handle('dialog:pickDirectory', app.pickDirectory); // 原生目录选择对话框
+  ipcMain.handle('app:info', app.readAppInfo); // App / runtime version info (About page)
+  ipcMain.handle('app:paths', app.readAppPaths); // Key directory paths (config / agent / logs)
+  ipcMain.handle('app:prAgentStatus', app.readPrAgentStatus); // pr-agent probe status (whether ready)
+  ipcMain.handle('log:write', app.writeRendererLog); // Relay renderer logs to disk
+  ipcMain.handle('window:setControlColors', app.setWindowControlColors); // Renderer pushes theme-derived window-control colors
+  ipcMain.handle('app:connections', app.listConnections); // Current active connection summary (Header / status bar)
+  ipcMain.handle('app:userAvatar', app.getUserAvatar); // User avatar (two-level memory + disk cache)
+  ipcMain.handle('app:openConfigFile', app.openConfigFile); // Open config.yaml
+  ipcMain.handle('app:openAgentDir', app.openAgentDir); // Open Agent directory
+  ipcMain.handle('app:openDevTools', app.openDevTools); // Open DevTools (detached window)
+  ipcMain.handle('app:setBadgeCount', app.setBadgeCount); // Set app badge count (macOS dock)
+  ipcMain.handle('app:checkUpdate', app.checkUpdate); // Manually check for updates
+  ipcMain.handle('app:getUpdateStatus', app.getUpdateStatus); // Read cached update-check result (hydration)
+  ipcMain.handle('app:openExternal', app.openExternal); // Open external link in system browser
+  ipcMain.handle('app:openNotificationSettings', app.openNotificationSettings); // macOS open system notification settings
+  ipcMain.handle('dialog:pickDirectory', app.pickDirectory); // Native directory picker dialog
 
   /*
-   * PR 操作
-   * 评论 / 列表 / 状态 / 合并 / 镜像 / diff / 草稿 / pr-agent run 队列
+   * PR operations
+   * Comments / list / status / merge / mirror / diff / drafts / pr-agent run queue
    */
-  ipcMain.handle('comments:reply', pr.replyComment); // 回复评论
-  ipcMain.handle('comments:create', pr.createComment); // 新建 summary 评论
-  ipcMain.handle('comments:delete', pr.deleteComment); // 删除自己的评论
-  ipcMain.handle('comments:edit', pr.editComment); // 编辑自己的评论
-  ipcMain.handle('comments:toggleReaction', pr.toggleReaction); // 切换评论 emoji 反应
-  ipcMain.handle('comments:uploadAttachment', pr.uploadAttachment); // 上传评论图片附件
-  ipcMain.handle('comments:fetchAttachment', pr.fetchAttachment); // 拉评论内嵌图片（代理带 PAT）
-  ipcMain.handle('prs:list', pr.listPrs); // PR 列表（仅活动连接）
-  ipcMain.handle('prs:listArchived', pr.listArchivedPrs); // 已关闭（归档）PR 列表（只读浏览）
-  ipcMain.handle('prs:openByUrl', pr.openPrByUrl); // 按 URL 打开当前平台 PR（定位 / 拉取存档）
-  ipcMain.handle('prs:refresh', pr.refreshPrs); // 立即轮询刷新
-  ipcMain.handle('prs:lastSync', pr.getLastSync); // 最近一次同步时间
-  ipcMain.handle('prs:setLocalStatus', pr.setPrStatus); // 设置审阅状态（先远端后本地）
-  ipcMain.handle('prs:markRead', pr.markRead); // 标记 PR 已读（推进未读水位）
-  ipcMain.handle('prs:merge', pr.mergePr); // 合并 PR
-  ipcMain.handle('repo:sync', pr.syncRepo); // 同步 PR 所属 repo 本地镜像
-  ipcMain.handle('diff:listChangedFiles', pr.listChangedFiles); // 变更文件列表
-  ipcMain.handle('diff:listConflictFiles', pr.listConflictFiles); // 合并冲突文件列表（文件树警示）
-  ipcMain.handle('diff:getFileContent', pr.getFileContent); // 文件内容（base / head 一侧）
-  ipcMain.handle('diff:commentCountCached', pr.getCommentCountCached); // 评论数角标（仅缓存）
-  ipcMain.handle('diff:listComments', pr.listComments); // 拉评论（缓存 + in-flight 去重）
-  ipcMain.handle('diff:listCommits', pr.listCommits); // 提交列表
-  ipcMain.handle('diff:listActivity', pr.listActivity); // 评审决断活动事件（时间线）
-  ipcMain.handle('diff:commitCount', pr.getCommitCount); // 提交数角标（本地 git）
-  ipcMain.handle('diff:getBlame', pr.getBlame); // blame + PR 引入行
-  ipcMain.handle('repo:getTotalSize', pr.getTotalSize); // 本地镜像总占用（设置页）
-  ipcMain.handle('drafts:list', pr.getDrafts); // 草稿列表
-  ipcMain.handle('drafts:create', pr.addDraft); // 新建草稿
-  ipcMain.handle('drafts:update', pr.patchDraft); // 更新草稿
-  ipcMain.handle('drafts:delete', pr.removeDraft); // 删除草稿
-  ipcMain.handle('drafts:publishBatch', pr.publishDraftBatch); // 批量发布草稿到远端
-  ipcMain.handle('findingClosures:list', pr.getFindingClosures); // finding 关闭关系列表
-  ipcMain.handle('findingClosures:create', pr.addClosure); // 复评取代/撤销 → 关闭原 finding
-  ipcMain.handle('findingClosures:delete', pr.removeClosure); // 撤销关闭
+  ipcMain.handle('comments:reply', pr.replyComment); // Reply to a comment
+  ipcMain.handle('comments:create', pr.createComment); // Create a summary comment
+  ipcMain.handle('comments:delete', pr.deleteComment); // Delete your own comment
+  ipcMain.handle('comments:edit', pr.editComment); // Edit your own comment
+  ipcMain.handle('comments:toggleReaction', pr.toggleReaction); // Toggle a comment emoji reaction
+  ipcMain.handle('comments:uploadAttachment', pr.uploadAttachment); // Upload a comment image attachment
+  ipcMain.handle('comments:fetchAttachment', pr.fetchAttachment); // Fetch a comment inline image (proxied with PAT)
+  ipcMain.handle('prs:list', pr.listPrs); // PR list (active connection only)
+  ipcMain.handle('prs:listArchived', pr.listArchivedPrs); // Closed (archived) PR list (read-only browsing)
+  ipcMain.handle('prs:openByUrl', pr.openPrByUrl); // Open a current-platform PR by URL (locate / fetch archive)
+  ipcMain.handle('prs:refresh', pr.refreshPrs); // Poll and refresh immediately
+  ipcMain.handle('prs:lastSync', pr.getLastSync); // Most recent sync time
+  ipcMain.handle('prs:setLocalStatus', pr.setPrStatus); // Set review status (remote first, then local)
+  ipcMain.handle('prs:markRead', pr.markRead); // Mark PR read (advance unread watermark)
+  ipcMain.handle('prs:merge', pr.mergePr); // Merge PR
+  ipcMain.handle('repo:sync', pr.syncRepo); // Sync the local mirror of the PR's repo
+  ipcMain.handle('diff:listChangedFiles', pr.listChangedFiles); // Changed files list
+  ipcMain.handle('diff:listConflictFiles', pr.listConflictFiles); // Merge conflict files list (file tree warning)
+  ipcMain.handle('diff:getFileContent', pr.getFileContent); // File content (base / head side)
+  ipcMain.handle('diff:commentCountCached', pr.getCommentCountCached); // Comment count badge (cache only)
+  ipcMain.handle('diff:listComments', pr.listComments); // Fetch comments (cache + in-flight dedup)
+  ipcMain.handle('diff:listCommits', pr.listCommits); // Commit list
+  ipcMain.handle('diff:listActivity', pr.listActivity); // Review-decision activity events (timeline)
+  ipcMain.handle('diff:commitCount', pr.getCommitCount); // Commit count badge (local git)
+  ipcMain.handle('diff:getBlame', pr.getBlame); // blame + PR-introduced lines
+  ipcMain.handle('repo:getTotalSize', pr.getTotalSize); // Total local mirror usage (settings page)
+  ipcMain.handle('drafts:list', pr.getDrafts); // Draft list
+  ipcMain.handle('drafts:create', pr.addDraft); // Create a draft
+  ipcMain.handle('drafts:update', pr.patchDraft); // Update a draft
+  ipcMain.handle('drafts:delete', pr.removeDraft); // Delete a draft
+  ipcMain.handle('drafts:publishBatch', pr.publishDraftBatch); // Batch publish drafts to remote
+  ipcMain.handle('findingClosures:list', pr.getFindingClosures); // finding closure relations list
+  ipcMain.handle('findingClosures:create', pr.addClosure); // Re-review supersede/revoke → close the original finding
+  ipcMain.handle('findingClosures:delete', pr.removeClosure); // Undo closure
 
   /*
-   * 配置操作
-   * 读写 config.yaml（热生效 / 草稿暂存）及连接 / 代理试连
+   * Config operations
+   * Read/write config.yaml (hot effect / draft staging) and connection / proxy test connections
    */
-  ipcMain.handle('config:read', config.readConfig); // 读当前内存配置
-  ipcMain.handle('config:setReposDir', config.setReposDir); // 设仓库目录（重启生效）
-  ipcMain.handle('config:setLanguage', config.setLanguage); // 设 UI 语言（热生效）
-  ipcMain.handle('config:setEditorAppearance', config.setEditorAppearance); // 设全局主题 + 字体（前端即时生效，主进程据主题设原生 themeSource）
-  ipcMain.handle('config:setLlm', config.setLlm); // 设 LLM Provider 配置
-  ipcMain.handle('config:setAgent', config.setAgent); // 设 Agent 配置（含 agent.dir）
-  ipcMain.handle('config:setNotifications', config.setNotifications); // 设消息通知配置（系统通知 + dock 角标）
-  ipcMain.handle('agent:setAutopilotEnabled', config.setAutopilotEnabled); // AutoPilot 开关
-  ipcMain.handle('config:setConnections', config.setConnections); // 设连接（热重建 adapter/poller）
-  ipcMain.handle('config:setProxy', config.setProxy); // 设代理（热重建 adapter）
-  ipcMain.handle('config:testProxy', config.testProxy); // 试连代理（不写配置）
-  ipcMain.handle('config:testConnection', config.testConnection); // 试连连接（不写配置）
-  ipcMain.handle('config:autosaveDraft', config.autosaveDraft); // 连接 / LLM 草稿存盘（不生效）
-  ipcMain.handle('config:setPoller', config.setPoller); // 设轮询间隔（热替换定时器）
-  ipcMain.handle('config:setMaxConcurrency', config.setMaxConcurrency); // 设评审并发数（热替换队列上限）
-  ipcMain.handle('config:setService', config.setService); // 设本地 API 服务监听（热重建监听器）
-  ipcMain.handle('config:generateServiceToken', config.generateServiceToken); // 重新生成 API bearer token
+  ipcMain.handle('config:read', config.readConfig); // Read current in-memory config
+  ipcMain.handle('config:setReposDir', config.setReposDir); // Set repos directory (takes effect on restart)
+  ipcMain.handle('config:setLanguage', config.setLanguage); // Set UI language (hot effect)
+  ipcMain.handle('config:setEditorAppearance', config.setEditorAppearance); // Set global theme + font (frontend takes effect immediately, main process sets native themeSource per theme)
+  ipcMain.handle('config:setLlm', config.setLlm); // Set LLM Provider config
+  ipcMain.handle('config:setAgent', config.setAgent); // Set Agent config (including agent.dir)
+  ipcMain.handle('config:setNotifications', config.setNotifications); // Set notification config (system notifications + dock badge)
+  ipcMain.handle('agent:setAutopilotEnabled', config.setAutopilotEnabled); // AutoPilot switch
+  ipcMain.handle('config:setConnections', config.setConnections); // Set connections (hot-rebuild adapter/poller)
+  ipcMain.handle('config:setProxy', config.setProxy); // Set proxy (hot-rebuild adapter)
+  ipcMain.handle('config:testProxy', config.testProxy); // Test proxy connection (doesn't write config)
+  ipcMain.handle('config:testConnection', config.testConnection); // Test connection (doesn't write config)
+  ipcMain.handle('config:autosaveDraft', config.autosaveDraft); // Save connection / LLM draft to disk (doesn't take effect)
+  ipcMain.handle('config:setPoller', config.setPoller); // Set poll interval (hot-swap timer)
+  ipcMain.handle('config:setMaxConcurrency', config.setMaxConcurrency); // Set review concurrency (hot-swap queue cap)
+  ipcMain.handle('config:setService', config.setService); // Set local API service listening (hot-rebuild listener)
+  ipcMain.handle('config:generateServiceToken', config.generateServiceToken); // Regenerate API bearer token
 
   /*
-   * Agent 交互
-   * 规则匹配 / 评审编排 / 自由规划 / 会话与台账读取 / pr-agent run 队列
+   * Agent interaction
+   * Rule matching / review orchestration / free planning / session and ledger reads / pr-agent run queue
    */
-  ipcMain.handle('rules:matchForPr', agent.matchRuleForPr); // 查 PR 命中的规则
-  ipcMain.handle('agent:run', agent.runReview); // 一键评审编排（describe→review→总结）
-  ipcMain.handle('agent:ask', agent.runPlanning); // 自由规划 Agent（对话即委派）
-  ipcMain.handle('agent:enqueueMessage', agent.enqueueMessage); // 运行中追加用户消息（入队 / 起新轮）
-  ipcMain.handle('agent:stop', agent.stopAgent); // 停止某 PR 的 Agent 运行
-  ipcMain.handle('agent:getSession', agent.getSession); // 读已落盘评审会话
-  ipcMain.handle('agent:getConversation', agent.getConversation); // 读多轮对话消息
-  ipcMain.handle('agent:getTranscript', agent.getTranscript); // 读 Agent 过程步骤
-  ipcMain.handle('agent:autopilotLedgers', agent.getAutopilotLedgers); // 批量读 AutoPilot 评审台账
-  ipcMain.handle('pragent:run', agent.runPragent); // 触发一次 pr-agent run（入队）
-  ipcMain.handle('pragent:cancel', agent.cancelPragent); // 取消一个 run
-  ipcMain.handle('pragent:queue', agent.getQueue); // 队列快照（active + waiting）
-  ipcMain.handle('pragent:listRuns', agent.listRuns); // 历史 run 列表（游标分页）
-  ipcMain.handle('pragent:getRun', agent.getRun); // 单条 run 查询
-  ipcMain.handle('pragent:clearRuns', agent.clearRuns); // 清空 run 历史 + Agent 会话 / 台账
-  ipcMain.handle('pragent:deleteRun', agent.deleteRun); // 删除单条 run 记录
+  ipcMain.handle('rules:matchForPr', agent.matchRuleForPr); // Look up rules a PR matches
+  ipcMain.handle('agent:run', agent.runReview); // One-click review orchestration (describe→review→summarize)
+  ipcMain.handle('agent:ask', agent.runPlanning); // Free-planning Agent (conversation is delegation)
+  ipcMain.handle('agent:enqueueMessage', agent.enqueueMessage); // Append a user message while running (enqueue / start a new round)
+  ipcMain.handle('agent:stop', agent.stopAgent); // Stop the Agent run for a PR
+  ipcMain.handle('agent:getSession', agent.getSession); // Read a persisted review session
+  ipcMain.handle('agent:getConversation', agent.getConversation); // Read multi-round conversation messages
+  ipcMain.handle('agent:getTranscript', agent.getTranscript); // Read Agent process steps
+  ipcMain.handle('agent:autopilotLedgers', agent.getAutopilotLedgers); // Batch read AutoPilot review ledgers
+  ipcMain.handle('pragent:run', agent.runPragent); // Trigger one pr-agent run (enqueue)
+  ipcMain.handle('pragent:cancel', agent.cancelPragent); // Cancel a run
+  ipcMain.handle('pragent:queue', agent.getQueue); // Queue snapshot (active + waiting)
+  ipcMain.handle('pragent:listRuns', agent.listRuns); // Historical run list (cursor pagination)
+  ipcMain.handle('pragent:getRun', agent.getRun); // Query a single run
+  ipcMain.handle('pragent:clearRuns', agent.clearRuns); // Clear run history + Agent sessions / ledgers
+  ipcMain.handle('pragent:deleteRun', agent.deleteRun); // Delete a single run record
 
   base.logger.debug('IPC handlers registered');
 
   return {
     /**
-     * 应用退出时调用：中止所有进行中的 run。每个 run 的 AbortController.abort() 会触发 exec 的
-     * onAbort → killTree（进程树级杀），连带终止 python 及其 litellm 等孙进程，避免孤儿进程锁住
-     * 安装目录导致升级安装失败。返回被中止的 run 数，供调用方决定是否需要短暂等待 taskkill 跑完。
+     * Called on app exit: abort all in-progress runs. Each run's AbortController.abort() triggers exec's
+     * onAbort → killTree (process-tree-level kill), also terminating python and its grandchild processes like litellm,
+     * avoiding orphan processes locking the install directory and causing upgrade install failures. Returns the number
+     * of aborted runs, so the caller can decide whether it needs to wait briefly for taskkill to finish.
      */
     abortAllActiveRuns: () => runQueue.abortAllActiveRuns(),
-    /** 每次 poll tick 由 index.ts 调用：满足开关 + 候选时跑一遍 AutoPilot pass。 */
+    /** Called by index.ts on each poll tick: when switch + candidates are met, run one AutoPilot pass. */
     runAutopilotIfDue: () => orchestrator.runAutopilotIfDue(),
-    /** 每次 poll tick 由 index.ts 调用：终止已被移除 / purge 的 PR 上仍在执行的 agent 操作。 */
+    /** Called by index.ts on each poll tick: terminate agent operations still running on PRs that were removed / purged. */
     terminateAgentsForGonePrs: () => void orchestrator.terminateAgentsForGonePrs(),
     /**
-     * 轮询发现某 PR 评论变更（回复 / 提及）时由 index.ts 调用：清该 PR 评论缓存 + 广播 comments:changed，
-     * 让正打开该 PR 的 Diff 内嵌评论 / 活动时间线即时重拉（轮询期评论变更此前只弹通知、不刷新已打开视图）。
+     * Called by index.ts when polling finds a PR's comments changed (reply / mention): clear that PR's comment cache +
+     * broadcast comments:changed, so the Diff inline comments / activity timeline currently showing that PR refetch
+     * immediately (comment changes during polling previously only popped a notification, without refreshing the open view).
      */
     invalidateCommentsCache: (localId: string) => void ctx.pr.invalidateCommentsCache(localId),
   };

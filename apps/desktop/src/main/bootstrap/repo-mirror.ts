@@ -6,8 +6,10 @@ import { broadcast } from '../services/broadcast.js';
 import { buildProxyEnv } from '../utils/proxy.js';
 
 /**
- * 构造本地仓库镜像管理器：clone url 经连接运行时按 host 取 adapter 求得（设置页改连接热生效，读 runtime 引用）；
- * 进度广播 sync:progress；出站代理 getter 每次远端 clone/fetch 求值（改代理即生效）。
+ * Constructs the local repo mirror manager: the clone url is resolved via the connection runtime by
+ * looking up the adapter by host (connection changes in settings take effect live, by reading the
+ * runtime reference); progress is broadcast on sync:progress; the outbound proxy getter is evaluated
+ * on every remote clone/fetch (proxy changes take effect immediately).
  */
 export function createRepoMirror(deps: {
   bootstrap: BootstrapResult;

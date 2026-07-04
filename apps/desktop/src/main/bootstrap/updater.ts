@@ -4,13 +4,16 @@ import type { Logger } from 'pino';
 import { checkForUpdate } from '../utils/update-check.js';
 import { publishUpdateResult } from '../utils/update-state.js';
 
-// 至多每小时一次（复用 poller 周期，不另起定时器）。
+// At most once per hour (reuses the poller cycle, no separate timer).
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
- * 版本更新检测节流器：由 poller tick 顺带调 runIfDue，内部时间戳门控至多每小时一次。lastCheckMs 初值取
- * 构造时刻 → 首次检测落在启动后约 1h，刻意不在启动瞬间检测（避免占冷启动网络 / 打断启动）。仅检测 + 提示：
- * 有新版才广播给所有窗口；失败静默（绝不推任何 IPC，对用户零打扰）。节流状态是实例字段，故以 class 封装。
+ * Version-update check throttler: the poller tick incidentally calls runIfDue, and an internal
+ * timestamp gates it to at most once per hour. lastCheckMs is initialized to the construction moment →
+ * the first check lands about 1h after startup, deliberately not checking at the startup instant (to
+ * avoid taking cold-start network / interrupting startup). Detect + prompt only: broadcasts to all
+ * windows only when a new version exists; failures are silent (never pushes any IPC, zero user
+ * disturbance). The throttle state is an instance field, so it is wrapped in a class.
  */
 export class Updater {
   private lastCheckMs = Date.now();
@@ -20,19 +23,19 @@ export class Updater {
     private readonly logger: Logger,
   ) {}
 
-  /** 满足开关 + 距上次满 1h 时发起一次检测。时间戳在 await 前更新，避免窗口内下一次 tick 重复发起。 */
+  /** Fires a check when the toggle is on and 1h has elapsed since the last one. The timestamp is updated before the await, to avoid the next tick within the window firing again. */
   async runIfDue(): Promise<void> {
     if (!this.bootstrap.config.update.check_enabled) return;
     if (Date.now() - this.lastCheckMs < UPDATE_CHECK_INTERVAL_MS) return;
     this.lastCheckMs = Date.now();
     try {
       const result = await checkForUpdate(app.getVersion(), this.bootstrap.config.proxy);
-      // 获取失败（网络 / 解析 / 超时 / 限流，ok=false）：只记 debug，**绝不推任何 IPC** → 用户无感。
+      // Fetch failure (network / parse / timeout / rate-limit, ok=false): only log debug, **never push any IPC** → user unaware.
       if (!result.ok) {
         this.logger.debug({ error: result.error }, 'update check failed (silent, no prompt)');
         return;
       }
-      // 交给单一真相源：缓存结果，仅在确有新版时广播（与设置页手动检查共用同一路径）。
+      // Hand off to the single source of truth: cache the result, broadcast only when a new version truly exists (shares the same path as the settings-page manual check).
       publishUpdateResult(result);
       if (result.hasUpdate) {
         this.logger.info(
@@ -41,7 +44,7 @@ export class Updater {
         );
       }
     } catch (err) {
-      // 兜底：checkForUpdate 约定不抛；万一抛了也吞掉，绝不冒泡成任何用户可见行为。
+      // Fallback: checkForUpdate is contracted not to throw; swallow it even if it does, never bubbling into any user-visible behavior.
       this.logger.debug({ err }, 'update check threw (silent, no prompt)');
     }
   }

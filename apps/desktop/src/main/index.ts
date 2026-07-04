@@ -24,11 +24,12 @@ import { registerIpcHandlers } from './ipc.js';
 import { ApiServer } from './services/api-server/index.js';
 import { readConnectionStates } from './utils/connection-state.js';
 
-// 进程（模块加载）起点：用于度量到主窗口首帧（ready-to-show）的启动耗时。
+// Process (module load) start point: used to measure startup time to the main window's first frame (ready-to-show).
 const PROCESS_START_MS = Date.now();
 
-// registerIpcHandlers 返回的运行时控制句柄：退出时据此中止所有进行中的 pr-agent run（触发其
-// 子进程树清理，见 before-quit）；poll tick 顺带做 AutoPilot 准入与清理已消失 PR 的在跑操作。
+// Runtime control handle returned by registerIpcHandlers: on exit, used to abort all in-progress pr-agent runs
+// (triggering their child process tree cleanup, see before-quit); the poll tick also does AutoPilot admission and
+// cleanup of in-flight operations on PRs that have disappeared.
 type IpcControl = {
   abortAllActiveRuns: () => number;
   runAutopilotIfDue: () => void;
@@ -37,15 +38,16 @@ type IpcControl = {
 };
 
 /**
- * 应用组合根：持有各子系统实例（fields），分域初始化（workspace/日志 → 各 runtime → 连接/poller/IPC →
- * 窗口 → 启动轮询）并挂接 app 生命周期。唯一入口 main()：进程微调 → 单例锁 → new App().run()。
- * 各 runtime 的构造/工厂均在 bootstrap/ 域内，本类只负责装配与生命周期编排。
+ * Application composition root: holds each subsystem instance (fields), initializes by domain (workspace/logging →
+ * each runtime → connections/poller/IPC → window → start polling) and hooks into the app lifecycle. Single entry
+ * main(): process tweaks → single-instance lock → new App().run(). Each runtime's construction/factory lives within
+ * the bootstrap/ domain; this class only handles assembly and lifecycle orchestration.
  */
 class App {
   private bootstrap!: BootstrapResult;
   private logger!: Logger;
   private stateStore!: JsonFileStateStore;
-  /** 归档 PR 冷存储（`archived/` 根，与 state/ 平级）；退场 PR 整树搬入、按 grace 期清理。 */
+  /** Archived PR cold storage (`archived/` root, sibling of state/); exiting PRs are moved in as a whole tree, cleaned by grace period. */
   private archiveStore!: JsonFileStateStore;
   private poller!: Poller;
   private repoMirror!: RepoMirrorManager;
@@ -54,31 +56,33 @@ class App {
   private conns!: ConnectionRuntimeController;
   private windowManager!: WindowManager;
   private ipcControl?: IpcControl;
-  /** 本地 API 服务监听器（默认关闭；按 config.service 决定是否 listen）。 */
+  /** Local API service listener (off by default; config.service decides whether to listen). */
   private apiServer?: ApiServer;
   private quitCleanupDone = false;
 
   constructor(private readonly startMs: number) {}
 
   /**
-   * 唯一启动序列：挂接生命周期 → 分域初始化；任一阶段抛错则记 fatal 并退出。
+   * The single startup sequence: hook into the lifecycle → initialize by domain; if any stage throws, log fatal and exit.
    */
   async run(): Promise<void> {
     this.registerLifecycle();
     try {
       await this.bootstrapCore();
       this.initRuntimes();
-      // 清扫上次会话残留的原子写临时文件（进程在 write↔rename 之间退出留下的孤儿 tmp）。
-      // 启动早期、任何写入之前清扫，单写者前提下安全（见 JsonFileStateStore.sweepStaleTmpFiles）。
+      // Sweep atomic-write temp files left over from the last session (orphan tmp left when the process exited
+      // between write↔rename). Swept early at startup, before any write, safe under the single-writer premise
+      // (see JsonFileStateStore.sweepStaleTmpFiles).
       await this.stateStore
         .sweepStaleTmpFiles()
         .catch((err: unknown) => this.logger.warn({ err }, 'state-store: tmp sweep failed'));
-      // 归档冷存储同样清扫上次会话残留的原子写 tmp（搬迁中途退出可能留下孤儿）。
+      // Archive cold storage likewise sweeps atomic-write tmp left over from the last session (exiting mid-migration may leave orphans).
       await this.archiveStore
         .sweepStaleTmpFiles()
         .catch((err: unknown) => this.logger.warn({ err }, 'archive-store: tmp sweep failed'));
-      // 归档孤儿清扫：统一索引丢失 / 重建后，归档数据失去索引条目、按索引遍历的硬清够不到 → 永久孤儿。
-      // 启动期（任何写入之前）按「索引无条目 + 目录 mtime 超 grace」无索引兜底回收（见 docs/arch/99-core/01-state-storage）。
+      // Archive orphan sweep: after the unified index is lost / rebuilt, archived data loses its index entries and the
+      // index-driven hard cleanup can't reach it → permanent orphans. At startup (before any write), reclaim via an
+      // index-less fallback keyed on "no index entry + directory mtime past grace" (see docs/arch/99-core/01-state-storage).
       await sweepOrphanedArchivedPrs({
         stateStore: this.stateStore,
         archiveStore: this.archiveStore,
@@ -95,16 +99,17 @@ class App {
   }
 
   /**
-   * ① workspace 落定 + i18n 定档 + 日志就绪 + Agent 目录脚手架 + macOS PATH 补全 + 全局兜底。
+   * ① Settle workspace + fix i18n + ready logging + scaffold Agent dir + macOS PATH completion + global fallback.
    */
   private async bootstrapCore(): Promise<void> {
     this.bootstrap = await ensureWorkspace();
-    // 主进程 i18n 定档（dialog 标题、错误消息等面向用户文本）。config.language 为空时
-    // 按操作系统偏好语言解析、无合适项回落英语；结果同时供 pr-agent 响应语言复用，与 UI 一致。
+    // Fix main process i18n (user-facing text such as dialog titles, error messages). When config.language is empty,
+    // resolve by the OS preferred language and fall back to English if there's no match; the result is also reused for
+    // the pr-agent response language, consistent with the UI.
     initMainI18n(
       resolveLanguage(this.bootstrap.config.language, app.getPreferredSystemLanguages()),
     );
-    // pretty 仅非打包态开：dev 控制台单行 + ISO8601 + 上色；打包态保持原始 JSON。
+    // pretty only on in non-packaged mode: dev console single-line + ISO8601 + colored; packaged mode keeps raw JSON.
     this.logger = await createLogger({
       logsDir: this.bootstrap.paths.logsDir,
       pretty: !app.isPackaged,
@@ -114,10 +119,12 @@ class App {
       'meebox main process started',
     );
 
-    // Agent 目录脚手架：补齐**生效目录**的模版（用户配置的 agent.dir 优先，未配置回落默认 agent/——与
-    // ipc.ts effectiveAgentDir 同口径）。此前误用默认目录，配置了自定义目录时该目录不会被初始化、启动加载
-    // 到空目录。幂等（已存在不覆盖），使首次使用即有 SOUL/AGENTS 等上下文文件可读。失败不阻断启动
-    // （运行期 loadAgentContext 仍会按缺失文件降级 + warn）。改 agent.dir 后的补齐见 config.setAgent。
+    // Agent dir scaffold: fill in the template for the **effective directory** (user-configured agent.dir takes
+    // priority, falls back to the default agent/ when unconfigured—same basis as ipc.ts effectiveAgentDir). Previously
+    // the default directory was mistakenly used, so a configured custom directory wouldn't be initialized and startup
+    // would load an empty directory. Idempotent (won't overwrite what exists), so context files like SOUL/AGENTS are
+    // readable on first use. Failure doesn't block startup (at runtime loadAgentContext still degrades on missing files
+    // + warns). For filling in after changing agent.dir, see config.setAgent.
     const agentDir = this.bootstrap.config.agent.dir || this.bootstrap.paths.agentDir;
     void scaffoldAgentDir(agentDir)
       .then((created) => {
@@ -127,7 +134,7 @@ class App {
         this.logger.warn({ err }, 'scaffold agent dir failed');
       });
 
-    // main 进程全局兜底：未捕获异常 / 未处理 rejection 至少留一条日志，不静默崩溃。
+    // Main process global fallback: leave at least one log for uncaught exceptions / unhandled rejections, no silent crash.
     process.on('uncaughtException', (err) => {
       this.logger.fatal({ err }, 'uncaughtException');
     });
@@ -137,23 +144,24 @@ class App {
   }
 
   /**
-   * ② pr-agent 运行时（解释器 + kick-off 探测）+ 版本更新器 + 状态存储。
+   * ② pr-agent runtime (interpreter + kick-off probe) + version updater + state store.
    */
   private initRuntimes(): void {
-    // pr-agent 运行时：解析嵌入式解释器 + kick-off 探测（不 await，不阻塞建窗首帧），结果异步回填。
+    // pr-agent runtime: resolve embedded interpreter + kick-off probe (not awaited, doesn't block the window's first frame), result backfilled asynchronously.
     this.prAgent = new PrAgentRuntime(this.bootstrap, this.logger);
-    // 版本更新器：由 poller tick 顺带调 runIfDue（至多每小时一次，复用 poller 周期、不另起定时器）。
+    // Version updater: runIfDue is called along with the poller tick (at most once per hour, reusing the poller cycle, no separate timer).
     this.updater = new Updater(this.bootstrap, this.logger);
     this.stateStore = new JsonFileStateStore(this.bootstrap.paths.stateDir, this.logger);
     this.archiveStore = new JsonFileStateStore(this.bootstrap.paths.archivedDir, this.logger);
   }
 
   /**
-   * ③ 连接级本地状态 → poller → 连接运行时（接线）→ repoMirror → IPC handlers。
+   * ③ Connection-level local state → poller → connection runtime (wiring) → repoMirror → IPC handlers.
    */
   private async initConnectionsAndIpc(): Promise<void> {
-    // 载入连接级本地状态（含上次 ping 的 currentUser）。缺失（首跑）/ 损坏 → 降级空表 + warn；后果仅首轮
-    // poll 无预热身份，待异步 ping 补到 currentUser 后自动重分类，功能不受损（接线 / ping 见 connections-runtime）。
+    // Load connection-level local state (including currentUser from the last ping). Missing (first run) / corrupt →
+    // degrade to an empty table + warn; the only consequence is the first poll has no pre-warmed identity, which is
+    // auto-reclassified once the async ping fills in currentUser, without loss of function (wiring / ping see connections-runtime).
     const connectionStates = await readConnectionStates(this.stateStore).catch((err: unknown) => {
       this.logger.warn(
         { err },
@@ -168,20 +176,20 @@ class App {
       archiveStore: this.archiveStore,
       logger: this.logger,
       onTickExtras: () => {
-        // 本轮已被移除 / purge 的 PR：终止其上仍在执行的 agent 操作（先于 AutoPilot，避免给已消失的 PR 起新评审）。
+        // PRs removed / purged this round: terminate agent operations still running on them (before AutoPilot, to avoid starting new reviews for disappeared PRs).
         this.ipcControl?.terminateAgentsForGonePrs();
-        // 顺带做版本更新检测：内部时间戳门控成每小时至多一次，复用 poller 周期、不另起定时器。
+        // Also do version update detection: internally timestamp-gated to at most once per hour, reusing the poller cycle, no separate timer.
         void this.updater.runIfDue();
-        // AutoPilot 预评审：满足开关 + 最小间隔 + 候选时跑一遍 pass（内部门控，复用 poller 周期）。
+        // AutoPilot pre-review: when switch + minimum interval + candidates are met, run a pass (internally gated, reusing the poller cycle).
         this.ipcControl?.runAutopilotIfDue();
       },
       getRepoMirror: () => this.repoMirror,
       getConnectionRuntime: () => this.conns.runtime,
-      // 评论类提醒（回复 / 提及）顺手失效该 PR 评论缓存 + 广播 comments:changed，让正打开它的视图即时重拉。
+      // Comment-type alerts (reply / mention) also invalidate that PR's comment cache + broadcast comments:changed, so a view currently showing it refetches immediately.
       invalidateCommentsCache: (localId) => this.ipcControl?.invalidateCommentsCache(localId),
     });
 
-    // 连接运行时（接线 / ping / 热重配）：依赖已建好的 poller；repoMirror 经 conns.runtime 读 adapterByHost。
+    // Connection runtime (wiring / ping / hot reconfigure): depends on the already-built poller; repoMirror reads adapterByHost via conns.runtime.
     this.conns = new ConnectionRuntimeController(
       this.bootstrap,
       this.stateStore,
@@ -196,14 +204,15 @@ class App {
       connectionRuntime: this.conns.runtime,
     });
 
-    // 建窗前同步把连接接好（无网络）：构建 adapters、用本地持久化身份预热 currentUser、喂 poller。
-    // 这样 app:connections 与首轮判 approved 都不依赖网络；ping 留到建窗后全异步刷新。
+    // Wire connections synchronously before creating the window (no network): build adapters, pre-warm currentUser with
+    // locally persisted identity, feed the poller. This way app:connections and the first-round approved check don't
+    // depend on network; ping is left to refresh fully asynchronously after the window is created.
     this.conns.wire();
 
     this.ipcControl = registerIpcHandlers({
       bootstrap: this.bootstrap,
       logger: this.logger,
-      // 惰性读取：探测异步回填后，handler 调用时才取到最新值（注册时探测可能尚未完成）
+      // Lazy read: after the probe backfills asynchronously, the handler picks up the latest value only when called (the probe may not be done at registration time)
       getPrAgentStatus: () => this.prAgent.probe,
       getPrAgentBridge: () => this.prAgent.getBridge(),
       embeddedPythonPath: this.prAgent.embeddedPythonPath,
@@ -213,48 +222,50 @@ class App {
       connectionRuntime: this.conns.runtime,
       reconfigureConnections: () => this.conns.reconfigure(),
       repoMirror: this.repoMirror,
-      // 惰性引用：ApiServer 在 registerIpcHandlers 之后才构造（其请求处理依赖此刻才安装的
-      // ControllerContext 单例）；闭包在 config:setService 调用时才取最新实例。
+      // Lazy reference: ApiServer is constructed only after registerIpcHandlers (its request handling depends on the
+      // ControllerContext singleton installed only at this moment); the closure picks up the latest instance only when config:setService is called.
       reconfigureApiServer: () => this.apiServer?.reconfigure() ?? Promise.resolve(),
     });
 
-    // 本地 API 服务监听器：ControllerContext 已由 registerIpcHandlers 安装，可安全处理请求。
-    // 按 config.service 决定是否实际 listen（默认关闭）；监听失败为非致命（内部已兜底记录）。
+    // Local API service listener: ControllerContext is already installed by registerIpcHandlers, so requests can be handled safely.
+    // config.service decides whether to actually listen (off by default); a listen failure is non-fatal (internally logged as a fallback).
     this.apiServer = new ApiServer({ bootstrap: this.bootstrap, logger: this.logger });
     await this.apiServer.start();
   }
 
   /**
-   * ④ whenReady 后的原生 chrome（菜单/Dock 图标/深色）+ splash + 主窗口 + activate 重建。
+   * ④ Native chrome after whenReady (menu/Dock icon/dark) + splash + main window + activate rebuild.
    */
   private async initWindow(): Promise<void> {
-    // 不要 Electron 默认菜单栏（File/Edit/View/...），meebox 自己提供工具栏
+    // No Electron default menu bar (File/Edit/View/...), meebox provides its own toolbar
     Menu.setApplicationMenu(null);
 
     await app.whenReady();
 
-    // dev 下 Dock 图标走通用 Electron.app（未经 electron-builder 烤 icns）→ 手动设成 mac 专用图标。
-    // 打包态 Dock 图标由 bundle 的 icns 决定，无需且不应在此覆盖。仅 mac 有 app.dock。
+    // In dev the Dock icon uses the generic Electron.app (not baked into icns by electron-builder) → manually set the mac-specific icon.
+    // In packaged mode the Dock icon is decided by the bundle's icns, no need and should not override here. Only mac has app.dock.
     if (process.platform === 'darwin' && !app.isPackaged) {
       app.dock?.setIcon(path.join(app.getAppPath(), '../../assets/icons/icon-mac.png'));
     }
 
-    // Windows toast 通知需 AppUserModelId 与安装包 appId 一致，否则系统可能不显示 / 归属错乱。
-    // dev 另用 .dev 后缀：AUMID 是 Windows 任务栏图标/分组/固定的持久缓存键，dev 跑的是自带
-    // 默认图标的 electron.exe，若与打包态共用同一 AUMID，会把 Electron 图标缓存到该键上 →
-    // 正式版安装后仍复用旧缓存、任务栏显示 Electron 图标。分开即互不污染。
+    // Windows toast notifications require AppUserModelId to match the installer's appId, otherwise the system may not
+    // show them / attribute them wrongly. dev uses a .dev suffix: AUMID is Windows's persistent cache key for taskbar
+    // icon/grouping/pinning, and dev runs electron.exe with its own default icon; sharing the same AUMID with packaged
+    // mode would cache the Electron icon under that key → the released build after install still reuses the old cache
+    // and shows the Electron icon in the taskbar. Separating them keeps them from polluting each other.
     if (process.platform === 'win32') {
       app.setAppUserModelId(
         app.isPackaged ? 'com.huhamhire.code-meeseeks' : 'com.huhamhire.code-meeseeks.dev',
       );
     }
 
-    // 原生窗口 chrome 跟随全局主题：Windows 据 nativeTheme 设 DWMWA_USE_IMMERSIVE_DARK_MODE（原生
-    // 细边框 / 窗控按钮深浅）。themeSource 由主题反推——'auto' 主题交回 OS（'system'），其余固定浅 / 深。
-    // 窗控按钮配色由 WindowManager 监听 nativeTheme 'updated' 同步（见 window-manager）。
+    // Native window chrome follows the global theme: Windows sets DWMWA_USE_IMMERSIVE_DARK_MODE based on nativeTheme
+    // (native thin border / window-control button light-dark). themeSource is inferred back from the theme—the 'auto'
+    // theme hands it back to the OS ('system'), the rest are fixed light / dark. Window-control button colors are synced
+    // by WindowManager listening to nativeTheme 'updated' (see window-manager).
     nativeTheme.themeSource = editorThemeNativeSource(this.bootstrap.config.appearance.editor_theme);
 
-    // 主窗口管理（载入窗口状态 + 建窗 + 尺寸回写）。
+    // Main window management (load window state + create window + write back size).
     this.windowManager = await loadWindowManager({
       stateStore: this.stateStore,
       stateDir: this.bootstrap.paths.stateDir,
@@ -262,8 +273,9 @@ class App {
       startMs: this.startMs,
     });
 
-    // 先弹轻量 splash（data URL，几十 ms 即可见），遮住主窗口首帧前的 ~2s 加载空窗。主窗口 ready-to-show
-    // 时关闭它。配色跟随有效主题（shouldUseDarkColors 已据上面的 themeSource 解析 'system'）。
+    // Pop a lightweight splash first (data URL, visible within tens of ms) to cover the ~2s loading blank before the main
+    // window's first frame. Close it when the main window is ready-to-show. Colors follow the effective theme
+    // (shouldUseDarkColors already resolves 'system' based on the themeSource above).
     const splash = createSplash(nativeTheme.shouldUseDarkColors);
     this.windowManager.create(splash);
 
@@ -273,15 +285,15 @@ class App {
   }
 
   /**
-   * ⑤ 启动关键路径已无网络：归档（本地 IO）后启动 poller，再异步 ping 刷新远端身份。
+   * ⑤ The startup critical path is already network-free: after archiving (local IO), start the poller, then async ping to refresh remote identity.
    */
   private async startPolling(): Promise<void> {
     await this.poller.archiveConnectionsExcept(this.conns.activeConnectionIds());
-    // 活动连接是否已有缓存身份（conns.wire 已用本地持久化身份预热）：
-    // - 有 → poller 立即跑首轮（me 就绪，分类正确）；
-    // - 无 → **不跑 me=null 的半成品首轮**，只装定时器；首次同步改由下面 conns.ping 在 ping
-    //   确认身份后立即触发（无身份的活动连接 ping settle 后必 tick 一次）。
-    // 这样「首次启动 / state 缺失」时也是「先确认身份，再同步一次」，避免首轮全标 pending 或看似没同步。
+    // Whether the active connection already has a cached identity (conns.wire pre-warmed with locally persisted identity):
+    // - Yes → poller runs the first round immediately (me is ready, classification correct);
+    // - No → **don't run a half-baked first round with me=null**, only install the timer; the first sync is instead
+    //   triggered by conns.ping below right after ping confirms identity (an active connection with no identity must tick once after ping settles).
+    // This way "first startup / missing state" is also "confirm identity first, then sync once", avoiding a first round that marks everything pending or looks like it didn't sync.
     const activeHasIdentity = this.conns.runtime.adapters.some(
       (a) =>
         a.connectionId === this.bootstrap.config.active_connection_id &&
@@ -296,26 +308,27 @@ class App {
       },
       'poller started',
     );
-    // ping 全异步刷新远端身份（不在启动关键路径）：刷新/持久化 currentUser，身份变化则补一轮 poll。
-    // 这是「本地无身份记录」（首跑 / state 缺失）时的兜底来源；ping 慢或不可达都不影响已启动的 UI。
+    // ping refreshes remote identity fully asynchronously (not on the startup critical path): refreshes/persists
+    // currentUser, and does an extra poll round if identity changes. This is the fallback source when there's "no local
+    // identity record" (first run / missing state); a slow or unreachable ping doesn't affect the already-started UI.
     this.conns.ping();
   }
 
   /**
-   * app 级生命周期：退出清理（停轮询 + 终止在跑 run 的子进程树）、关窗退出、二次启动聚焦。
+   * App-level lifecycle: exit cleanup (stop polling + terminate the child process tree of running runs), quit on window close, focus on second launch.
    */
   private registerLifecycle(): void {
-    // 退出清理：停轮询 + 终止所有进行中的 pr-agent run 的子进程树（python + litellm 等孙进程）。
-    // 不清理会留孤儿进程锁住安装目录 → 升级时 NSIS 报「应用无法关闭」。
+    // Exit cleanup: stop polling + terminate the child process tree of all in-progress pr-agent runs (python + litellm and other grandchild processes).
+    // Not cleaning up leaves orphan processes locking the install directory → NSIS reports "the app cannot be closed" during upgrade.
     app.on('before-quit', (event) => {
       if (this.poller) this.poller.stop();
-      // 停本地 API 监听（停止接收新连接）；fire-and-forget，关闭很快、不阻塞退出。
+      // Stop the local API listener (stop accepting new connections); fire-and-forget, closes quickly, doesn't block exit.
       void this.apiServer?.stop();
       if (this.quitCleanupDone) return;
       const aborted = this.ipcControl?.abortAllActiveRuns() ?? 0;
-      if (aborted === 0) return; // 无进行中 run，直接退出
-      // 有 run 在跑：abort 已触发各自 exec 的 killTree（win32=taskkill /T /F，异步）。延后真正退出，
-      // 给 taskkill 跑完，避免主进程先退出、孙进程没杀干净。
+      if (aborted === 0) return; // No in-progress run, exit directly
+      // Runs are in progress: abort has triggered each exec's killTree (win32=taskkill /T /F, async). Defer the actual
+      // exit to let taskkill finish, avoiding the main process exiting first while grandchild processes aren't fully killed.
       event.preventDefault();
       this.quitCleanupDone = true;
       if (this.logger) {
@@ -328,7 +341,7 @@ class App {
       if (process.platform !== 'darwin') app.quit();
     });
 
-    // 二次启动（用户再点图标 / 命令行再拉起）→ 聚焦已有窗口，最小化则先还原。
+    // Second launch (user clicks the icon again / relaunches from command line) → focus the existing window, restore first if minimized.
     app.on('second-instance', () => {
       const win = BrowserWindow.getAllWindows()[0];
       if (win) {
@@ -340,11 +353,12 @@ class App {
 }
 
 /**
- * 进程入口：
- * ① OS/平台启动微调（须在 whenReady 前；含 Windows 控制台编码 / macOS keychain + PATH 补全）。
- * ② 单例锁——同一时刻只允许一个实例，多实例会共享同一份 config.yaml / repos 镜像 / state store
- *    导致写竞争，拿不到锁者直接退出（由已有实例的 second-instance 回调聚焦窗口）。
- * ③ 拿到锁则构造 App 并启动。
+ * Process entry:
+ * ① OS/platform startup tweaks (must be before whenReady; includes Windows console encoding / macOS keychain + PATH completion).
+ * ② Single-instance lock—only one instance allowed at a time; multiple instances would share the same config.yaml /
+ *    repos mirror / state store causing write contention, so whoever fails to get the lock exits directly (the existing
+ *    instance's second-instance callback focuses the window).
+ * ③ If the lock is acquired, construct App and start.
  */
 function main(): void {
   applyOsStartupTweaks();

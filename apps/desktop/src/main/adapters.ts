@@ -17,9 +17,10 @@ export interface BuiltAdapter {
 }
 
 /**
- * 可变的连接运行时持有：adapters（全量，IPC 按 id 查任意连接）+ adapterByHost
- * （repo-mirror 按 host 找 adapter 取 clone url）。设置页改连接时 reconfigure 原地替换
- * 内容，IPC handler / repoMirror 经引用读到新值，无需重启。
+ * Mutable connections runtime holding: adapters (full set, IPC looks up any connection by id) +
+ * adapterByHost (repo-mirror finds an adapter by host to get its clone url). When the settings page
+ * changes connections, reconfigure replaces the contents in place; IPC handler / repoMirror read the
+ * new values through the reference, no restart needed.
  */
 export interface ConnectionRuntime {
   adapters: BuiltAdapter[];
@@ -27,9 +28,11 @@ export interface ConnectionRuntime {
 }
 
 /**
- * 用草稿 base_url + token 临时起一个 adapter，仅供设置页 ping 测试用。kind 默认
- * bitbucket-server（向后兼容旧调用）。proxy 统一进连接层：把代理配置与工厂透传给 adapter，由连接层
- * 据 baseUrl host 一次解析（开关开且目标非 loopback 时 REST 经代理）。
+ * Spin up a temporary adapter from a draft base_url + token, only for the settings page ping test.
+ * kind defaults to bitbucket-server (backward compatible with old calls). proxy is unified into the
+ * connection layer: pass the proxy config and factory through to the adapter, and the connection layer
+ * resolves once by the baseUrl host (REST goes through the proxy when the switch is on and the target
+ * is non-loopback).
  */
 export function buildDraftAdapter(
   baseUrl: string,
@@ -38,7 +41,7 @@ export function buildDraftAdapter(
   kind: PlatformKind = 'bitbucket-server',
 ): PlatformAdapter {
   if (kind === 'github') {
-    // GitHub 草稿 base_url 可留空 → 默认官方 api.github.com
+    // GitHub draft base_url can be left empty → defaults to the official api.github.com
     const ghBase = baseUrl.trim() || GITHUB_DOTCOM_API_BASE;
     return new GitHubAdapter({
       baseUrl: ghBase,
@@ -49,7 +52,7 @@ export function buildDraftAdapter(
     });
   }
   if (kind === 'gitlab') {
-    // GitLab 草稿 base_url 可留空 → 默认官方 gitlab.com/api/v4
+    // GitLab draft base_url can be left empty → defaults to the official gitlab.com/api/v4
     const glBase = baseUrl.trim() || GITLAB_DOTCOM_API_BASE;
     return new GitLabAdapter({
       baseUrl: glBase,
@@ -69,9 +72,9 @@ export function buildDraftAdapter(
 }
 
 /**
- * 把 config.connections 映射成可用的 Adapter 列表。M1 只支持 bitbucket-server kind；
- * 未来扩 GitHub / GitLab 时在 switch 里加 case 即可。
- * proxy 透传到每个 adapter 的 REST fetch。
+ * Map config.connections into a list of usable Adapters. M1 only supports the bitbucket-server kind;
+ * to extend to GitHub / GitLab later, just add a case in the switch.
+ * proxy is passed through to each adapter's REST fetch.
  */
 export function buildAdapters(
   connections: readonly Connection[],
@@ -84,8 +87,9 @@ export function buildAdapters(
 }
 
 function buildOne(conn: Connection, proxy: ProxyConfig): PlatformAdapter {
-  // 代理统一进连接层：透传 proxy 配置与工厂，由连接层据 baseUrl host 解析（开关开 + 目标非
-  // loopback → 带 ProxyAgent 的 fetch；否则直连）。
+  // proxy is unified into the connection layer: pass the proxy config and factory through, and the
+  // connection layer resolves by the baseUrl host (switch on + target non-loopback → fetch with a
+  // ProxyAgent; otherwise direct).
   const common = {
     baseUrl: conn.base_url,
     token: conn.auth.token,

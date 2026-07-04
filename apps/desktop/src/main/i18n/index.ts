@@ -6,27 +6,30 @@ import jaJP from './locales/ja-JP.json';
 import deDE from './locales/de-DE.json';
 
 /**
- * 主进程国际化（独立的 i18next 实例，纯 Node，无 React）。
+ * Main process i18n (standalone i18next instance, pure Node, no React).
  *
- * - 与渲染层各持一份资源：main 的面向用户文本（dialog 标题、抛给渲染层并最终在
- *   toast/界面展示的错误消息）走这里。
- * - 语言在启动时由 `bootstrap.config.language` 一次性定下（`initMainI18n`）。
- *   main 进程的文案不随设置实时切换——改语言后重启生效，符合主进程文案的性质。
- * - key 命名沿用「区域命名空间」：dialog / prAgent / drafts / proxy / update。
+ * - Holds its own copy of resources separate from the renderer: main's user-facing text
+ *   (dialog titles, error messages thrown to the renderer and ultimately shown in toast/UI)
+ *   goes through here.
+ * - Language is fixed once at startup by `bootstrap.config.language` (`initMainI18n`).
+ *   Main process text does not switch live with settings—changing the language takes effect
+ *   after restart, fitting the nature of main process text.
+ * - key naming follows the "area namespace" convention: dialog / prAgent / drafts / proxy / update.
  */
 
 const instance: I18n = createInstance();
 
-// 当前生效语言：由 initMainI18n 定档（传入的已是 resolveLanguage 解析后的有效值）。
-// 供 pr-agent 响应语言（CONFIG__RESPONSE_LANGUAGE）等与 UI 保持一致地复用。
+// Currently effective language: fixed by initMainI18n (the passed value is already the effective
+// result resolved by resolveLanguage). Reused to keep pr-agent response language
+// (CONFIG__RESPONSE_LANGUAGE) etc. consistent with the UI.
 let currentLanguage: SupportedLanguage = 'en-US';
 
-/** 主进程当前生效语言，供 pr-agent 响应语言等复用，保证与 UI 一致。 */
+/** Main process currently effective language, reused for pr-agent response language etc., kept consistent with the UI. */
 export function getMainLanguage(): SupportedLanguage {
   return currentLanguage;
 }
 
-/** 启动时调用一次：按已解析的有效语言（resolveLanguage 的结果）初始化主进程 i18n。 */
+/** Called once at startup: initialize main process i18n with the resolved effective language (result of resolveLanguage). */
 export function initMainI18n(language: string): void {
   currentLanguage = matchSupportedLanguage(language) ?? 'en-US';
   void instance.init({
@@ -37,7 +40,7 @@ export function initMainI18n(language: string): void {
       'de-DE': { translation: deDE },
     },
     lng: currentLanguage,
-    // 兜底取 en-US（国际化标准，与渲染层一致）：缺 key 回退英文而非中文。
+    // Fallback to en-US (i18n standard, consistent with the renderer): missing key falls back to English rather than Chinese.
     fallbackLng: 'en-US',
     load: 'currentOnly',
     interpolation: { escapeValue: false },
@@ -46,16 +49,17 @@ export function initMainI18n(language: string): void {
 }
 
 /**
- * 运行时切换主进程语言（设置页 / 首启向导即时改语言时调用）。所有 locale 已静态打包，
- * changeLanguage 同步生效；同步更新 currentLanguage，使 getMainLanguage()（pr-agent 响应
- * 语言）随之。已弹出的 dialog 不回溯，新产生的文案与下次 run 用新语言。
+ * Switch the main process language at runtime (called when changing language live from settings /
+ * first-run wizard). All locales are statically bundled, so changeLanguage takes effect synchronously;
+ * updates currentLanguage in sync so getMainLanguage() (pr-agent response language) follows.
+ * Already-shown dialogs are not retroactively updated; newly produced text and the next run use the new language.
  */
 export function setMainLanguage(language: string): void {
   currentLanguage = matchSupportedLanguage(language) ?? 'en-US';
   void instance.changeLanguage(currentLanguage);
 }
 
-/** 主进程翻译函数。未 init 时退化为返回 key（不抛错，保证健壮）。 */
+/** Main process translation function. Degrades to returning the key before init (no throw, keeps it robust). */
 export const t: TFunction = ((key: string, options?: Record<string, unknown>) =>
   instance.isInitialized ? instance.t(key, options) : key) as TFunction;
 

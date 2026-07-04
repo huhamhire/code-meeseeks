@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { app } from 'electron';
 
-// 常见 CLI 安装目录：覆盖 pip --user / npm global / homebrew(Apple Silicon + Intel)。
+// Common CLI install dirs: covers pip --user / npm global / homebrew (Apple Silicon + Intel).
 const COMMON_CLI_DIRS = [
   path.join(os.homedir(), '.local', 'bin'),
   '/usr/local/bin',
@@ -12,15 +12,19 @@ const COMMON_CLI_DIRS = [
 ];
 
 /**
- * macOS GUI（Finder / Dock / LaunchServices）启动的 app 由 launchd 给出**最小 PATH**
- * （`/usr/bin:/bin:/usr/sbin:/sbin`），**不读用户 shell 配置**（`.zshrc` / `.zprofile`）。
- * 而本机 CLI（claude / codex）常装在 `~/.local/bin`、homebrew 等**只由 shell 往 PATH 里加**的
- * 目录——于是嵌入式 python 的 `shutil.which(...)` 找不到命令、本地 CLI provider 失效，但从终端
- * `npm run dev` 启动却正常（继承了已加载配置的终端 PATH）。Windows 不受影响（GUI 进程继承用户 PATH）。
+ * An app launched by the macOS GUI (Finder / Dock / LaunchServices) is given a **minimal PATH** by
+ * launchd (`/usr/bin:/bin:/usr/sbin:/sbin`) and **does not read the user's shell config** (`.zshrc` /
+ * `.zprofile`). But local CLIs (claude / codex) are often installed in `~/.local/bin`, homebrew, and
+ * other dirs that **only the shell adds to PATH** — so the embedded python's `shutil.which(...)` can't
+ * find the command and the local CLI provider fails, yet launching via `npm run dev` from a terminal
+ * works fine (it inherits the terminal PATH with config already loaded). Windows is unaffected (GUI
+ * processes inherit the user PATH).
  *
- * 把常见目录前置进 `process.env.PATH`（去重，只补原 PATH 缺失的，保持原有顺序在后）；之后所有子进程
- * （嵌入式 python 及其 spawn 的 CLI）都经 `{ ...process.env }` 继承到。静态目录已覆盖最常见的安装位置；
- * 不跑登录 shell 解析（避免启动期子进程 / 超时 / 噪声）。仅由 applyMacStartupTweaks 调用。
+ * Prepend the common dirs into `process.env.PATH` (deduplicated, only filling in what the original PATH
+ * lacks, keeping the original order after); afterward all child processes (the embedded python and the
+ * CLIs it spawns) inherit them via `{ ...process.env }`. The static dirs already cover the most common
+ * install locations; no login-shell resolution is run (avoiding startup-time child processes / timeouts
+ * / noise). Only called by applyMacStartupTweaks.
  */
 function augmentMacPath(): void {
   const existing = (process.env.PATH ?? '').split(':').filter(Boolean);
@@ -32,24 +36,27 @@ function augmentMacPath(): void {
 }
 
 /**
- * Windows 专属启动微调：附着控制台默认本地化 OEM 页（简中 cp936/GBK），与 pino 的 UTF-8 字节对不上 →
- * dev 终端中文日志乱码；chcp 65001 把输出代码页切到 UTF-8 对齐。无控制台（打包态）chcp 静默失败、已吞，
- * 无副作用。
+ * Windows-specific startup tweak: an attached console defaults to the localized OEM page (Simplified
+ * Chinese cp936/GBK), which doesn't line up with pino's UTF-8 bytes → garbled Chinese logs in the dev
+ * terminal; chcp 65001 switches the output code page to UTF-8 to align. Without a console (packaged),
+ * chcp silently fails and is swallowed, no side effects.
  */
 function applyWindowsStartupTweaks(): void {
   try {
     execSync('chcp 65001', { stdio: 'ignore' });
   } catch {
-    /* 无控制台 / chcp 不可用：忽略，日志仍按 UTF-8 字节写出 */
+    /* no console / chcp unavailable: ignore, logs are still written as UTF-8 bytes */
   }
 }
 
 /**
- * macOS 专属启动微调：
- * - use-mock-keychain：ad-hoc 签名身份不稳定（cdhash 每次构建变），os_crypt 每次启动弹「访问钥匙串」；
- *   mock 让其走内存不碰真钥匙串。代价：cookie 加密退化为静态 key，但密钥本就明文落盘，无实质损失。
- *   有正式 Developer ID 签名后可移除。须在 app.whenReady() 之前。
- * - PATH 前置常见 CLI 目录（见 augmentMacPath）：须在 pr-agent 探测 / 运行前。
+ * macOS-specific startup tweaks:
+ * - use-mock-keychain: the ad-hoc signing identity is unstable (cdhash changes every build), so
+ *   os_crypt pops up "access keychain" on every launch; mock makes it use memory without touching the
+ *   real keychain. Cost: cookie encryption degrades to a static key, but the key was already stored in
+ *   plaintext, so no real loss. Removable once there's a proper Developer ID signature. Must be before
+ *   app.whenReady().
+ * - Prepend common CLI dirs to PATH (see augmentMacPath): must be before pr-agent probing / running.
  */
 function applyMacStartupTweaks(): void {
   app.commandLine.appendSwitch('use-mock-keychain');
@@ -57,12 +64,14 @@ function applyMacStartupTweaks(): void {
 }
 
 /**
- * 进程 / 平台启动微调（须在模块加载期、app.whenReady() 之前跑一次）：先做跨平台的进程 env 调整，再按
- * 当前平台委托各自的专属初始化（见 applyWindowsStartupTweaks / applyMacStartupTweaks）。
+ * Process / platform startup tweaks (must run once during module load, before app.whenReady()): first
+ * do cross-platform process env adjustments, then delegate to each platform's specific init based on
+ * the current platform (see applyWindowsStartupTweaks / applyMacStartupTweaks).
  *
- * 跨平台：PYTHONDONTWRITEBYTECODE=1——嵌入式 python 子进程不落 .pyc（安装目录 per-user 可写，运行期会
- * 积累上万 __pycache__/.pyc 拖慢升级卸载）；子进程经 spawn 继承本进程 env。代价：每次启动重编译（略慢），
- * 影响有限。
+ * Cross-platform: PYTHONDONTWRITEBYTECODE=1 — the embedded python child processes don't drop .pyc (the
+ * install dir is per-user writable, and at runtime it would accumulate tens of thousands of
+ * __pycache__/.pyc slowing down upgrades/uninstalls); child processes inherit this process's env via
+ * spawn. Cost: recompiles on every launch (slightly slower), limited impact.
  */
 export function applyOsStartupTweaks(): void {
   process.env.PYTHONDONTWRITEBYTECODE = '1';
