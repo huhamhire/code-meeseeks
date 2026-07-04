@@ -7,19 +7,19 @@ export interface DraftAutoEdit {
 }
 
 /**
- * autoEdit 触发器表：draft.id → "进入编辑模式" fn。供两个来源用：
- *   1. ChatPane → App.pendingDiffNav 跳转完后，目标 draft 自动 enter edit
- *   2. 行 hover '+' 创建 manual draft 后立即 enter edit (新草稿空 body 必须能输入)
+ * autoEdit trigger table: draft.id → "enter edit mode" fn. Used by two sources:
+ *   1. ChatPane → after App.pendingDiffNav navigation completes, the target draft auto-enters edit
+ *   2. after a line hover '+' creates a manual draft, immediately enter edit (a new draft with empty body must be typeable)
  *
- * 用 ref-based fn 而不是 state token。token 方案曾导致 bug：用户取消 → auto save → drafts store
- * 变 → DiffView re-render → DraftZone unmount/mount → 新 instance 看到 props token 仍非 undefined
- * 又 setIsEditing(true) → 用户看似"取消没生效"。ref-fn 调用纯副作用，不引发 re-render。
+ * Uses a ref-based fn rather than a state token. The token approach once caused a bug: user cancels → auto save → drafts store
+ * changes → DiffView re-renders → DraftZone unmount/mount → the new instance sees the props token still non-undefined
+ * and calls setIsEditing(true) again → user perceives "cancel didn't take effect". A ref-fn call is a pure side effect, triggering no re-render.
  */
 export function useDraftAutoEdit(pr: StoredPullRequest): DraftAutoEdit {
   const editTriggerFnsRef = useRef<Map<string, () => void>>(new Map());
-  // pending trigger 兜底：triggerAutoEdit 调用时 DraftZone 还没 mount + register
-  // (典型场景：hover '+' 创建后立即 trigger，drafts store 异步更新)。fn 不在 map
-  // 时把 id 加 pending；registerEditTrigger 时如果发现自己 pending 立即 fire
+  // pending trigger fallback: when triggerAutoEdit is called, the DraftZone has not yet mounted + registered
+  // (typical scenario: trigger immediately after a hover '+' creation, while the drafts store updates asynchronously). When fn is not in the map,
+  // add the id to pending; on registerEditTrigger, if it finds itself pending, fire immediately
   const pendingTriggersRef = useRef<Set<string>>(new Set());
   const registerEditTrigger = useCallback((draftId: string, fn: (() => void) | null): void => {
     if (fn) {
@@ -41,7 +41,7 @@ export function useDraftAutoEdit(pr: StoredPullRequest): DraftAutoEdit {
     }
   };
 
-  // PR 切换清掉所有 trigger fn 引用 + pending (新 PR 的 DraftZone 会重新注册)
+  // PR switch clears all trigger fn references + pending (the new PR's DraftZone will re-register)
   useEffect(() => {
     editTriggerFnsRef.current.clear();
     pendingTriggersRef.current.clear();

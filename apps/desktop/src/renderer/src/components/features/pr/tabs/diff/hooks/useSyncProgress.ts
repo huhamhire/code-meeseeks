@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { StoredPullRequest, SyncProgressEvent } from '@meebox/shared';
 
-/** 订阅 sync:progress 并按当前 PR 所属 repo 过滤；切 PR 清旧进度。 */
+/** Subscribes to sync:progress and filters by the repo the current PR belongs to; clears old progress on PR switch. */
 export function useSyncProgress(pr: StoredPullRequest): SyncProgressEvent | null {
   const [progress, setProgress] = useState<SyncProgressEvent | null>(null);
   const repoKeySuffix = `/${pr.repo.projectKey}/${pr.repo.repoSlug}`;
@@ -11,7 +11,7 @@ export function useSyncProgress(pr: StoredPullRequest): SyncProgressEvent | null
     });
     return unsubscribe;
   }, [repoKeySuffix]);
-  // 切 PR 只清瞬态进度（不清 files/content 等，保留 stale-while-loading 旧视图）
+  // PR switch only clears transient progress (does not clear files/content etc., keeping the stale-while-loading old view)
   useEffect(() => {
     setProgress(null);
   }, [pr.localId]);

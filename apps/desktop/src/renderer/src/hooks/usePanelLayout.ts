@@ -8,8 +8,8 @@ function clampWidth(raw: string | null, min: number, max: number): number {
 }
 
 /**
- * 左右两栏（PR 列表 / chat）的宽度与折叠态：初值从 localStorage 读（夹到各自 min/max），
- * 变化即回写。纯 UI 布局态，不涉及业务。
+ * Width and collapsed state of the two side panels (PR list / chat): initial values read from localStorage (clamped
+ * to each one's min/max), written back on change. Pure UI layout state, no business logic involved.
  */
 export function usePanelLayout(): {
   sidebarWidth: number;
@@ -31,7 +31,7 @@ export function usePanelLayout(): {
     clampWidth(localStorage.getItem('meebox.chatWidth'), CHAT_MIN_WIDTH, CHAT_MAX_WIDTH),
   );
   const [chatCollapsed, setChatCollapsed] = useState<boolean>(
-    // 默认收起：chat 早期是空壳，避免空占地方
+    // Collapsed by default: chat was an empty shell early on, avoid taking up space for nothing
     () => (localStorage.getItem('meebox.chatCollapsed') ?? '1') === '1',
   );
   useEffect(() => {

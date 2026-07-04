@@ -14,48 +14,49 @@ import { useChatRunStore } from '../../stores/chat-run-store';
 import { HistoryIcon, PaneLoading } from '../common';
 import { PrItem } from '../features/pr';
 
-// 二级筛选键复用 @meebox/shared 的 PrSecondaryFilter（与本地 API 同源）：
-// 'conflict' / 'mergeable' 按远端 merge 状态跨 localStatus 横切；'all' 不限定。
+// Secondary filter key reuses @meebox/shared's PrSecondaryFilter (same source as the local API):
+// 'conflict' / 'mergeable' cut across localStatus by remote merge status; 'all' is unrestricted.
 export type FilterKey = PrSecondaryFilter;
 
-/** PR 列表范围：进行中（活跃，按发现分类 + 状态细分）/ 已关闭（归档冷存储，扁平只读浏览）。 */
+/** PR list scope: active (in-progress, subdivided by discovery category + status) / archived (cold-storage archive, flat read-only browsing). */
 export type SidebarScope = 'active' | 'archived';
 
 interface SidebarProps {
   prs: StoredPullRequest[];
   /**
-   * 活跃范围 PR（始终传入，与当前 scope 无关）：供一级发现分类标签的未读圆点计算——即便处在
-   * 「已关闭」视图，标签仍反映活跃分类的未读。缺省回退到 prs。
+   * Active-scope PRs (always passed, independent of the current scope): feeds the unread-dot
+   * computation for primary discovery-category tabs—even in the "archived" view, the tabs still
+   * reflect unread of active categories. Falls back to prs when omitted.
    */
   activePrs?: StoredPullRequest[];
   selectedId: string | null;
   onSelect: (pr: StoredPullRequest) => void;
   width: number;
   onResize: (next: number) => void;
-  /** 活动连接支持的发现分类（来自 capabilities）；为空 / undefined 时不渲染分类标签行。 */
+  /** Discovery categories supported by the active connection (from capabilities); when empty / undefined, the category tab row is not rendered. */
   availableFilters?: readonly PrDiscoveryFilter[];
-  /** 当前选中的发现分类。 */
+  /** Currently selected discovery category. */
   discoveryFilter?: PrDiscoveryFilter;
   onDiscoveryFilterChange?: (filter: PrDiscoveryFilter) => void;
-  /** 状态筛选（待处理 / 全部 / 冲突 / 可合并等），由 App 持有以便命令面板亦可驱动。 */
+  /** Status filter (pending / all / conflict / mergeable etc.), held by App so the command palette can drive it too. */
   statusFilter: FilterKey;
   onStatusFilterChange: (filter: FilterKey) => void;
-  /** 当前范围：进行中 / 已关闭。 */
+  /** Current scope: in-progress / archived. */
   scope: SidebarScope;
-  /** 切回「进行中」（无发现分类的平台用单一锚点；有发现分类则点 tab 经 onDiscoveryFilterChange 切回）。 */
+  /** Switch back to "in-progress" (platforms without discovery categories use a single anchor; with categories, clicking a tab goes back via onDiscoveryFilterChange). */
   onViewActive: () => void;
-  /** 切到「已关闭」（归档）范围。 */
+  /** Switch to the "archived" scope. */
   onViewArchived: () => void;
-  /** 列表数据加载中（如归档冷存储懒加载）：列表区显示 loading 占位，替代「无 PR」空态。 */
+  /** List data loading (e.g. archive cold-storage lazy load): the list area shows a loading placeholder in place of the "no PR" empty state. */
   loading?: boolean;
-  /** 活动连接是否支持 needs_work（「需修改」）评审态：决定非「待我评审」分类下是否保留「待处理」状态筛选。 */
+  /** Whether the active connection supports the needs_work ("needs work") review state: decides whether the "pending" status filter is kept under categories other than "review requested". */
   supportsNeedsWork?: boolean;
 }
 
 export const SIDEBAR_MIN_WIDTH = 240;
 export const SIDEBAR_MAX_WIDTH = 720;
 
-/** 发现分类标签 i18n key；实际展示哪几类由活动连接的 capabilities.discoveryFilters 决定。 */
+/** Discovery-category tab i18n keys; which categories actually show is decided by the active connection's capabilities.discoveryFilters. */
 const DISCOVERY_LABEL_KEYS: Record<PrDiscoveryFilter, string> = {
   'review-requested': 'sidebar.discoveryReviewRequested',
   created: 'sidebar.discoveryCreated',
@@ -72,8 +73,9 @@ export const FILTERS: ReadonlyArray<{ value: FilterKey; labelKey: string }> = [
   { value: 'mergeable', labelKey: 'sidebar.filterMergeable' },
 ];
 
-// reviewer 决断类（通过/需修改）：有发现分类标签时只对「待我评审」有意义，其余标签下恒空，
-// 故隐藏；无发现分类的场景仍展示全部六项状态筛选。
+// Reviewer-decision filters (approved/needs work): with discovery-category tabs they only make sense
+// under "review requested", being always empty under other tabs, so they are hidden; without
+// discovery categories, all six status filters are still shown.
 export const DECISION_STATUS_FILTERS: ReadonlySet<FilterKey> = new Set(['approved', 'needs_work']);
 
 interface PrGroup {
@@ -100,7 +102,7 @@ export function Sidebar({
   supportsNeedsWork = false,
 }: SidebarProps) {
   const { t } = useTranslation();
-  // 已关闭范围：扁平浏览（不分发现分类、不分状态、强制「全部」）；进行中范围维持原细分行为。
+  // Archived scope: flat browsing (no discovery categories, no status split, forced "all"); the in-progress scope keeps the original subdivided behavior.
   const isArchived = scope === 'archived';
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
@@ -124,34 +126,35 @@ export function Sidebar({
   };
 
   const [query, setQuery] = useState('');
-  // 切换 PR 类型（发现分类标签 / 进行中⇄已关闭范围）后清空搜索框，避免上一类型遗留的过滤条件连带到新类型。
+  // Clear the search box after switching PR type (discovery-category tab / in-progress⇄archived scope), to avoid the previous type's filter carrying over into the new type.
   useEffect(() => {
     setQuery('');
   }, [discoveryFilter, scope]);
-  // 状态筛选改由 App 持有（受控）：命令面板的「分类筛选」亦可驱动；折叠侧栏也不丢选择。
+  // Status filter is now held by App (controlled): the command palette's "category filter" can drive it too; collapsing the sidebar doesn't lose the selection.
   const filter = statusFilter;
   const setFilter = onStatusFilterChange;
-  // 哪些组当前折叠了。默认空集合 = 全部展开。
+  // Which groups are currently collapsed. Default empty set = all expanded.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  // 评审建议台账 recommendation（per localId，手动 / AutoPilot 一视同仁），PR 列表 ★ 徽标用；
-  // prs 变化时批量重取。
+  // Review recommendation ledger (per localId, manual / AutoPilot treated alike), used for the ★ badge in the PR list;
+  // batch-refetched when prs changes.
   const [reviewVerdicts, setReviewVerdicts] = useState<
     Record<string, AgentRecommendationVerdict>
   >({});
 
-  // 「执行中」指示数据源：运行队列里有在跑 / 排队 run 的 PR（active + waiting），**并上**有编排 Agent
-  // 运行中的 PR（agentPrs，含纯思考阶段、无活跃工具 run 时）——补齐 agent 思考态下列表项缺执行中标记的空档。
+  // Data source for the "executing" indicator: PRs with a running / queued run in the run queue (active + waiting),
+  // **unioned with** PRs that have an orchestrating Agent running (agentPrs, including the pure-thinking phase with no active tool run)—filling the gap where list items lack an executing marker during the agent's thinking state.
   const { active, waiting, agentPrs } = useChatRunStore();
   const executingPrIds = useMemo(
     () => new Set([...active.map((r) => r.prLocalId), ...waiting.map((r) => r.prLocalId), ...agentPrs]),
     [active, waiting, agentPrs],
   );
 
-  // 状态筛选可见性随发现分类细化（localStatus = 本人的 reviewer 决断）：
-  // - 无发现分类（单一「待我评审」平台）：六项全展示。
-  // - 有发现分类：reviewer 决断类（通过 / 需修改）恒隐藏。「待处理」在「待我评审」恒有意义；其余分类
-  //   （我创建的 / 指派给我 / 提及我）下仅当平台支持 needs_work（GitHub / Bitbucket，可表达「需修改」语义）
-  //   时保留，GitLab（二元审批、无 needs_work）下「待处理」无意义、隐藏，只留 全部 / 冲突 / 可合并。
+  // Status-filter visibility refines with discovery category (localStatus = the user's own reviewer decision):
+  // - No discovery categories (single "review requested" platform): all six shown.
+  // - With discovery categories: reviewer-decision filters (approved / needs work) always hidden. "pending" is always
+  //   meaningful under "review requested"; under the other categories (created / assigned / mentioned) it is kept only
+  //   when the platform supports needs_work (GitHub / Bitbucket, which can express the "needs work" semantics),
+  //   while on GitLab (binary approval, no needs_work) "pending" is meaningless and hidden, leaving only all / conflict / mergeable.
   const hasDiscoveryTabs = Boolean(availableFilters && availableFilters.length > 0);
   const visibleFilters = useMemo(() => {
     if (!hasDiscoveryTabs) return FILTERS;
@@ -162,14 +165,14 @@ export function Sidebar({
       return true;
     });
   }, [hasDiscoveryTabs, discoveryFilter, supportsNeedsWork]);
-  // 当前选中的状态筛选在本分类下不可见时，回落到首个可见项（待我评审 → 待处理；其余 → 全部），避免按不可见筛选过滤。
+  // When the currently selected status filter is not visible under this category, fall back to the first visible item (review requested → pending; others → all), to avoid filtering by an invisible filter.
   useEffect(() => {
     if (!visibleFilters.some((f) => f.value === filter)) {
       setFilter(visibleFilters[0]?.value ?? 'all');
     }
   }, [visibleFilters, filter, setFilter]);
 
-  // AutoPilot 徽标：批量取当前 PR 的台账建议（prs 变化时刷新；ledger 在下次 poll 更新 prs 后体现）。
+  // AutoPilot badge: batch-fetch the ledger recommendations for the current PRs (refresh when prs changes; the ledger is reflected after the next poll updates prs).
   useEffect(() => {
     const localIds = prs.map((p) => p.localId);
     if (localIds.length === 0) {
@@ -185,7 +188,7 @@ export function Sidebar({
     };
   }, [prs]);
 
-  // 清空某 PR 执行历史会一并清掉其 AutoPilot 台账 → 即时清掉该 PR 的评审建议 ★（不必等下个 poll 重取）。
+  // Clearing a PR's execution history also clears its AutoPilot ledger → immediately clear that PR's review-recommendation ★ (no need to wait for the next poll to refetch).
   useEffect(() => {
     const unsub = subscribe('agent:reviewStatusCleared', (ev) => {
       setReviewVerdicts((prev) => {
@@ -198,8 +201,8 @@ export function Sidebar({
     return unsub;
   }, []);
 
-  // 评审完成（手动 / AutoPilot 都经 recordReviewSummaryMessage 写台账 + 广播 agent:conversationChanged）→
-  // 即时重取该 PR 的评审建议，让 ★ 立刻出现在 PR 列表，不必等下个 poll 刷新 prs 才体现。
+  // Review completion (both manual / AutoPilot write the ledger via recordReviewSummaryMessage + broadcast agent:conversationChanged) →
+  // immediately refetch that PR's review recommendation, so the ★ appears in the PR list at once, without waiting for the next poll to refresh prs.
   useEffect(() => {
     const unsub = subscribe('agent:conversationChanged', (ev) => {
       void invoke('agent:autopilotLedgers', { localIds: [ev.prLocalId] }).then((v) => {
@@ -213,16 +216,16 @@ export function Sidebar({
     return unsub;
   }, []);
 
-  // GitHub 发现分类：按 PR 上的 discoveryFilters 标记本地过滤（poller 已把四类都抓回来缓存），
-  // 切标签纯本地、瞬时、零远端请求。非 GitHub（discoveryFilter 未设）时用全量。
+  // GitHub discovery categories: filter locally by the discoveryFilters marked on each PR (the poller has already fetched and cached all four categories),
+  // so switching tabs is purely local, instantaneous, zero remote requests. For non-GitHub (discoveryFilter unset), use the full set.
   const scopedPrs = useMemo(
     () => prs.filter((p) => matchesDiscoveryFilter(p, !isArchived ? discoveryFilter : undefined)),
     [prs, discoveryFilter, isArchived],
   );
 
-  // 未读圆点始终基于**活跃** PR（缺省回退 prs）：即便当前在「已关闭」视图，一级标签仍反映活跃分类的未读。
+  // Unread dots are always based on **active** PRs (falls back to prs): even in the "archived" view, primary tabs still reflect unread of active categories.
   const unreadSourcePrs = activePrs ?? prs;
-  // 各一级发现分类下是否有未读 PR → 在标签文字后加未读圆点，提示该分类有新的待处理。
+  // Whether each primary discovery category has any unread PR → add an unread dot after the tab text, hinting the category has new items to handle.
   const unreadFilters = useMemo(() => {
     const s = new Set<PrDiscoveryFilter>();
     for (const p of unreadSourcePrs) {
@@ -231,7 +234,7 @@ export function Sidebar({
     }
     return s;
   }, [unreadSourcePrs]);
-  // 无发现分类平台的单一「进行中」锚点：任一活动 PR 未读即标圆点。
+  // Single "in-progress" anchor for platforms without discovery categories: mark the dot if any active PR is unread.
   const anyUnread = useMemo(() => unreadSourcePrs.some((p) => p.unread), [unreadSourcePrs]);
 
   const counts = useMemo(() => {
@@ -248,7 +251,7 @@ export function Sidebar({
       if (p.hasConflict) out.conflict += 1;
       if (p.mergeStatus?.canMerge) out.mergeable += 1;
     }
-    // 「我创建的」下「待处理」并入冲突 PR（作者需跟进），复用同源谓词重算、避免与冲突计数重复叠加。
+    // Under "created", "pending" folds in conflicting PRs (the author needs to follow up); recompute via the same-source predicate to avoid double-counting with the conflict count.
     if (!isArchived && discoveryFilter === 'created') {
       out.pending = scopedPrs.filter((p) => matchesSecondaryFilter(p, 'pending', 'created')).length;
     }
@@ -256,8 +259,8 @@ export function Sidebar({
   }, [scopedPrs, isArchived, discoveryFilter]);
 
   const filtered = useMemo(() => {
-    // 已关闭范围强制「全部」（不应用状态筛选）；进行中范围按当前状态筛选。过滤 / 检索语义复用
-    // @meebox/shared 纯谓词（与本地 API 同源），并传入一级发现分类以启用分类相关的语义细化。
+    // Archived scope forces "all" (no status filter applied); in-progress scope filters by the current status. Filter / search
+    // semantics reuse @meebox/shared's pure predicates (same source as the local API), passing in the primary discovery category to enable category-specific semantic refinement.
     const effFilter: FilterKey = isArchived ? 'all' : filter;
     const effPrimary = !isArchived ? discoveryFilter : undefined;
     return scopedPrs.filter(
@@ -273,7 +276,7 @@ export function Sidebar({
       if (list) list.push(pr);
       else m.set(key, [pr]);
     }
-    // 组按 repo 路径字母序；组内 PR 按远端 updatedAt 倒序（最新修改在上）
+    // Groups sorted alphabetically by repo path; PRs within a group sorted by remote updatedAt descending (most recently modified on top)
     return Array.from(m.entries())
       .map(([key, items]) => ({
         key,
@@ -282,7 +285,7 @@ export function Sidebar({
       .sort((a, b) => a.key.localeCompare(b.key));
   }, [filtered]);
 
-  // 搜索时强制展开（否则用户在折叠组里看不到匹配的 PR）
+  // Force expand while searching (otherwise the user won't see matching PRs inside collapsed groups)
   const searching = query.trim().length > 0;
 
   const toggleGroup = (key: string): void => {
@@ -302,8 +305,8 @@ export function Sidebar({
         title={t('sidebar.resizeTitle')}
         aria-label="resize sidebar"
       />
-      {/* 范围行（常驻）：左组 = 进行中（发现分类细分，或无分类平台的单一锚点）、右组 = 已关闭辅助切换。
-          左组始终有锚点，使「已关闭」恒为旁侧的次要项、不致被误读为唯一分类。 */}
+      {/* Scope row (always present): left group = in-progress (subdivided by discovery category, or a single anchor for platforms without categories), right group = archived auxiliary toggle.
+          The left group always has an anchor, keeping "archived" a secondary item to the side and not misread as the only category. */}
       <div className="sidebar-toolbar sidebar-scope" role="tablist" aria-label={t('sidebar.discoveryTablistAria')}>
         <div className="sidebar-scope-primary">
           {hasDiscoveryTabs && availableFilters && onDiscoveryFilterChange ? (
@@ -335,7 +338,7 @@ export function Sidebar({
             </button>
           )}
         </div>
-        {/* 非 tab：独立图标按钮（切换到已关闭范围），toggle 语义用 aria-pressed */}
+        {/* Not a tab: standalone icon button (switch to archived scope), toggle semantics via aria-pressed */}
         <button
           type="button"
           aria-pressed={isArchived}

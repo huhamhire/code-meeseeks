@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { AgentRecommendationVerdict, StoredPullRequest } from '@meebox/shared';
 import { Avatar, PersonIcon, PullRequestIcon, StarIcon } from '../../common';
 
-/** 评审建议 verdict → 复用 chatPane.agent.* 文案（不另加 i18n）。 */
+/** Review recommendation verdict → reuse chatPane.agent.* strings (no extra i18n). */
 const VERDICT_TITLE: Record<string, string> = {
   approve: 'chatPane.agent.verdictApprove',
   needs_work: 'chatPane.agent.verdictNeedsWork',
@@ -13,9 +13,9 @@ interface PrItemProps {
   pr: StoredPullRequest;
   selected: boolean;
   onClick: () => void;
-  /** 评审建议倾向（手动 / AutoPilot 评审写入的台账，一视同仁）；无则不显示 ★ 徽标。 */
+  /** Review recommendation leaning (ledger written by manual / AutoPilot review, treated alike); absent → no ★ badge. */
   reviewVerdict?: AgentRecommendationVerdict | null;
-  /** 该 PR 当前有在执行的 agent 任务（工具 run 在跑 / 排队）：同位置显示蓝色「执行中」动画指示。 */
+  /** This PR currently has a running agent task (tool run running / queued): shows a blue "executing" animated indicator in the same spot. */
   executing?: boolean;
 }
 
@@ -23,11 +23,11 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
   const { t } = useTranslation();
   const approvedCount = pr.reviewers.filter((r) => r.status === 'approved').length;
   const needsWorkCount = pr.reviewers.filter((r) => r.status === 'needsWork').length;
-  // 「@我 / 回复我」未读条数：>0 时标题左的未读圆点替换为中性数字 chip（封顶 10 → 显示「10+」）；
-  // 仅新到达 / 新 commit 的未读（计数为 0）仍显示圆点。二者在该槽位互斥。
+  // "@me / replied to me" unread count: when >0, the unread dot left of the title is replaced by a neutral number chip (capped at 10 → shows "10+");
+  // unread from only new arrivals / new commits (count 0) still shows the dot. The two are mutually exclusive in that slot.
   const mentionCount = pr.unreadMentionCount ?? 0;
-  // 服务端判定可直接合并：列表里用分支合并图标 chip 标注（纯状态，无数值）。
-  // 可选链兜底：升级前持久化的 meta.json 可能尚无 mergeStatus，下一轮 poll 会补齐
+  // Server deems it directly mergeable: marked in the list with a branch-merge icon chip (pure status, no number).
+  // Optional-chaining fallback: meta.json persisted before the upgrade may not yet have mergeStatus; the next poll fills it in
   const canMerge = pr.mergeStatus?.canMerge ?? false;
   return (
     <div
@@ -83,8 +83,8 @@ export function PrItem({ pr, selected, onClick, reviewVerdict, executing }: PrIt
               reviewVerdict ||
               executing) && (
               <span className="pr-item-review-chips">
-                {/* 执行中优先占位（同 ★ 位置）：复用运行卡片同款 .spinner（蓝色环旋转、中心对称），
-                    裸图标无 chip 外框，表示该 PR 有在跑的 agent 任务。 */}
+                {/* Executing takes priority in the slot (same ★ position): reuses the run card's .spinner (blue rotating ring, centrally symmetric),
+                    a bare icon with no chip frame, indicating this PR has a running agent task. */}
                 {executing && (
                   <span
                     className="spinner pr-item-spinner"

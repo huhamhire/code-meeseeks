@@ -10,15 +10,15 @@ import {
 } from './diff-search';
 
 /**
- * 跨文件搜索状态机：query / 大小写敏感(localStorage 持久化) / 结果 / loading / error /
- * 文件折叠态 + 去抖搜索 + 异步着色 + 内容缓存（PR 切换清）。mount 自动聚焦输入框。
- * 纯算法见 ./diff-search；着色见 ./colorize。
+ * Cross-file search state machine: query / case sensitivity (localStorage-persisted) / results / loading / error /
+ * file collapse state + debounced search + async colorize + content cache (cleared on PR switch). Auto-focuses the input on mount.
+ * Pure algorithm see ./diff-search; colorize see ./colorize.
  */
 export function useDiffSearch(files: DiffChangedFile[], prLocalId: string) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
-  // 大小写敏感跨 session 持久化 — 用户习惯一旦定下来 (一般是关或开)，每次
-  // 进搜索面板都得重新切一次很烦。localStorage 写一次就记住
+  // Case sensitivity persisted across sessions — once the user's habit settles (usually off or on), having to
+  // toggle it again every time they open the search panel is annoying. Write to localStorage once and remember it
   const [caseSensitive, setCaseSensitive] = useState<boolean>(() => {
     try {
       return localStorage.getItem(CASE_SENSITIVE_LS_KEY) === '1';
@@ -30,26 +30,26 @@ export function useDiffSearch(files: DiffChangedFile[], prLocalId: string) {
     try {
       localStorage.setItem(CASE_SENSITIVE_LS_KEY, caseSensitive ? '1' : '0');
     } catch {
-      // 隐私模式 / 配额满 等失败静默，不影响搜索功能
+      // Silently ignore failures like private mode / quota full, doesn't affect search functionality
     }
   }, [caseSensitive]);
   const [results, setResults] = useState<FileResults[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 默认全部展开 — 用户已经主动搜索，不需要再点一次才看结果
+  // Expanded by default — the user already actively searched, no need for another click to see results
   const [collapsedFiles, setCollapsedFiles] = useState<ReadonlySet<string>>(new Set());
 
-  // 当前 search session 的 token，让旧的异步任务发现自己被取消
+  // Token for the current search session, letting old async tasks discover they've been cancelled
   const sessionRef = useRef(0);
-  // 内容缓存：同一个 PR 搜不同关键字时 invoke diff:getFileContent 拿过的不重复拉
+  // Content cache: when searching different keywords in the same PR, don't re-fetch what invoke diff:getFileContent already got
   // key: `${side}:${path}` → text content
   const contentCacheRef = useRef<Map<string, string | null>>(new Map());
-  // PR 切换时清缓存
+  // Clear the cache on PR switch
   useEffect(() => {
     contentCacheRef.current = new Map();
   }, [prLocalId]);
 
-  // mount 时自动聚焦输入框，省一次点击
+  // Auto-focus the input on mount, saving a click
   const inputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     inputRef.current?.focus();
@@ -70,11 +70,11 @@ export function useDiffSearch(files: DiffChangedFile[], prLocalId: string) {
       void runSearch(token, q, caseSensitive, files, prLocalId, contentCacheRef.current, t)
         .then(({ results: r, partialError }) => {
           if (token !== sessionRef.current) return;
-          // 先显示带 <mark> 关键词高亮的纯文本结果 — 用户立刻能看到命中
+          // First show plain-text results with <mark> keyword highlight — the user sees matches immediately
           setResults(r);
           setError(partialError);
-          // 异步着色：Monaco colorize 按文件 language 串行执行；token 跟 session
-          // 关联，过期 session 不再 update state
+          // Async colorize: Monaco colorize runs serially per file language; token is tied to the session,
+          // a stale session no longer updates state
           void colorizeAll(r, token, sessionRef).then((colorized) => {
             if (token === sessionRef.current) setResults(colorized);
           });

@@ -4,18 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { useResolvedTheme } from '../../hooks/useTheme';
 
 /**
- * Mermaid 渲染：把 ```mermaid 代码块渲染成 SVG 图（Qodo `/describe` 常生成架构图）。
+ * Mermaid rendering: renders ```mermaid code blocks into SVG diagrams (Qodo `/describe` often generates architecture diagrams).
  *
- * - **懒加载**：mermaid 体积大（含 d3 等），仅当真正出现 mermaid 块、组件挂载时才
- *   `import('mermaid')`，不进入口包、不增加启动成本（与 Monaco 懒加载同思路）。
- * - **securityLevel: 'strict'**：内容来自 AI / 远端 PR 描述，strict 下 mermaid 转义
- *   标签文本、禁用点击脚本，产出的 SVG 可安全注入。
- * - **失败回退**：语法错 / 渲染异常时回退展示原始代码块，图画错也能看源码。
- * - 主题随应用深 / 浅色切换（`dark` / `default`）：mermaid 主题为全局态、不走 CSS 自定义属性，
- *   故每次渲染前按当前解析主题 re-initialize，并把主题纳入渲染 effect 依赖、切换时重绘。
+ * - **Lazy load**: mermaid is large (includes d3 etc.), only `import('mermaid')` when a mermaid block actually
+ *   appears and the component mounts, keeping it out of the entry bundle and adding no startup cost (same idea as Monaco lazy loading).
+ * - **securityLevel: 'strict'**: content comes from AI / remote PR descriptions; under strict, mermaid escapes
+ *   label text and disables click scripts, so the produced SVG is safe to inject.
+ * - **Failure fallback**: on syntax errors / render exceptions, fall back to showing the original code block, so the source is readable even when the diagram fails.
+ * - Theme follows the app dark / light switch (`dark` / `default`): mermaid theme is global state and does not go through CSS custom properties,
+ *   so re-initialize with the current resolved theme before each render, and include the theme in the render effect deps to redraw on switch.
  */
 
-// 仅声明本组件用到的最小接口，避免 import() 类型注解（且与 mermaid 内部类型解耦）。
+// Declare only the minimal interface this component uses, avoiding import() type annotations (and decoupling from mermaid's internal types).
 interface MermaidApi {
   initialize(config: Record<string, unknown>): void;
   render(id: string, text: string): Promise<{ svg: string }>;
@@ -23,12 +23,12 @@ interface MermaidApi {
 
 let mermaidLoader: Promise<MermaidApi> | null = null;
 function loadMermaid(): Promise<MermaidApi> {
-  // 失败时重置缓存：否则 rejected promise 被永久缓存，后续调用永远拿到同一个失败结果、
-  // 无法重试（典型「缓存 Promise」陷阱）。
+  // Reset the cache on failure: otherwise the rejected promise is cached forever, and later calls always get the same
+  // failed result with no retry (the classic "cached Promise" trap).
   mermaidLoader ??= import('mermaid')
     .then((m) => {
       const mermaid = m.default as unknown as MermaidApi;
-      // 主题不在此固定：每次渲染前按当前应用主题 re-initialize（见组件渲染 effect）。
+      // Theme is not fixed here: re-initialize with the current app theme before each render (see the component render effect).
       mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
       return mermaid;
     })
@@ -41,10 +41,10 @@ function loadMermaid(): Promise<MermaidApi> {
 
 export function MermaidDiagram({ source }: { source: string }) {
   const { t } = useTranslation();
-  // mermaid 主题为全局态、不走 CSS 自定义属性：随应用解析主题切换（深 'dark' / 浅 'default'）。
+  // mermaid theme is global state and does not go through CSS custom properties: switches with the app resolved theme (dark 'dark' / light 'default').
   const mermaidTheme = useResolvedTheme() === 'light' ? 'default' : 'dark';
-  // mermaid.render 需要唯一 id（内部建临时 DOM 节点）；useId 保证每个实例稳定唯一，
-  // 去掉 `:`（mermaid 用作 DOM id / CSS 选择器，冒号非法）
+  // mermaid.render needs a unique id (it creates temporary DOM nodes internally); useId guarantees each instance is stably unique,
+  // strip `:` (mermaid uses it as a DOM id / CSS selector, where the colon is invalid)
   const renderId = `mmd-${useId().replace(/:/g, '')}`;
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -57,12 +57,12 @@ export function MermaidDiagram({ source }: { source: string }) {
     void (async () => {
       try {
         const mermaid = await loadMermaid();
-        // 渲染前按当前主题 re-initialize（全局态，幂等）：主题切换后重渲即换配色。
+        // Re-initialize with the current theme before rendering (global state, idempotent): re-rendering after a theme switch swaps the color scheme.
         mermaid.initialize({ startOnLoad: false, theme: mermaidTheme, securityLevel: 'strict' });
         const out = await mermaid.render(renderId, source);
         if (!cancelled) setSvg(out.svg);
       } catch (e) {
-        // 记一次日志便于排查（语法错 / 加载失败）；UI 回退到原始代码块
+        // Log once to aid debugging (syntax error / load failure); UI falls back to the original code block
         console.error('[mermaid] render failed', e);
         if (!cancelled) setFailed(true);
       }
@@ -73,7 +73,7 @@ export function MermaidDiagram({ source }: { source: string }) {
   }, [source, renderId, mermaidTheme]);
 
   if (failed) {
-    // 回退：保留原始 mermaid 源码，至少可读
+    // Fallback: keep the original mermaid source, at least it stays readable
     return (
       <pre className="mermaid-fallback">
         <code>{source}</code>
@@ -83,7 +83,7 @@ export function MermaidDiagram({ source }: { source: string }) {
   if (svg === null) {
     return <div className="mermaid-loading muted">{t('mermaidDiagram.rendering')}</div>;
   }
-  // mermaid strict 模式产出的 SVG 已转义不可信内容，可安全注入。点击图表 → 模态预览。
+  // SVG produced by mermaid strict mode has escaped untrusted content and is safe to inject. Click the diagram → modal preview.
   return (
     <>
       <div
@@ -103,7 +103,7 @@ export function MermaidDiagram({ source }: { source: string }) {
       {zoomed &&
         createPortal(
           <MermaidZoomModal
-            // 重写 id（含 <style> 选择器 / 箭头 marker 引用），避免与内联副本同 id 冲突
+            // Rewrite the id (which appears in <style> selectors / arrow marker references) to avoid id collisions with the inline copy
             svgHtml={svg.replaceAll(renderId, `${renderId}-zoom`)}
             onClose={() => setZoomed(false)}
           />,
@@ -118,20 +118,21 @@ const MAX_SCALE = 8;
 const clampScale = (s: number): number => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
 /**
- * mermaid 模态预览：固定纯色背景的预览区 + 可缩放/拖拽视图。
+ * mermaid modal preview: a preview area with a fixed solid background + a zoomable/draggable view.
  *
- * 不再手动测量 svg 内容并算缩放 —— mermaid 的 svg 在「width:100% / 内联 max-width / 绝对定位
- * 容器 / transform」相互作用下，渲染像素尺寸在「测量时」与「绘制后」并不一致，手算 fit 必然偏差。
- * 改为让浏览器原生处理「适应」：svg `width/height:100%` 充满预览区 + `preserveAspectRatio`
- * （默认 xMidYMid meet）自动等比缩放并居中；缩放/拖拽只是在其上叠加一层 transform。
- * - 默认（scale=1）：图自动适应窗口、居中（原生）。
- * - 滚轮缩放（锚定光标）、左键拖拽平移、工具栏放大/缩小/复位、Esc / 点遮罩关闭。
+ * No longer manually measures the svg content and computes the scale — under the interaction of mermaid's svg
+ * "width:100% / inline max-width / absolutely positioned container / transform", the rendered pixel size differs
+ * between "at measurement" and "after paint", so a hand-computed fit is bound to be off. Instead let the browser
+ * natively handle "fit": svg `width/height:100%` fills the preview area + `preserveAspectRatio`
+ * (default xMidYMid meet) auto-scales proportionally and centers; zoom/drag just layer a transform on top.
+ * - Default (scale=1): the diagram auto-fits the window and centers (native).
+ * - Wheel zoom (anchored to the cursor), left-button drag pan, toolbar zoom in/out/reset, Esc / click backdrop to close.
  */
 function MermaidZoomModal({ svgHtml, onClose }: { svgHtml: string; onClose: () => void }) {
   const { t } = useTranslation();
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
-  // scale=1 即「原生适应窗口」基准；缩放/平移在其上叠加。
+  // scale=1 is the "native fit-to-window" baseline; zoom/pan layer on top of it.
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
@@ -142,7 +143,7 @@ function MermaidZoomModal({ svgHtml, onClose }: { svgHtml: string; onClose: () =
     setTy(0);
   };
 
-  // Esc 关闭
+  // Esc to close
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose();
@@ -151,7 +152,7 @@ function MermaidZoomModal({ svgHtml, onClose }: { svgHtml: string; onClose: () =
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // 以预览区内 (px,py) 为锚点缩放：保持光标下的点不动。
+  // Zoom anchored at (px,py) within the preview area: keep the point under the cursor fixed.
   const zoomAt = (px: number, py: number, factor: number): void => {
     const ns = clampScale(scale * factor);
     const k = ns / scale;

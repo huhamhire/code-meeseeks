@@ -1,9 +1,9 @@
 import type { JSX } from 'react';
 import type { LlmProvider } from '@meebox/shared';
 
-// LLM provider 品牌图标。OpenAI / Anthropic 用官方几何标记；其余几家无干净的
-// 官方单色 SVG 资源，按品牌意象手绘为简洁可辨的彩色图标（鲸鱼 / 云 / 火山 /
-// 通用 API 字形）。后续如放入正式 logo 资源，替换这里对应分支即可。
+// LLM provider brand icons. OpenAI / Anthropic use official geometric marks; the others have no clean
+// official monochrome SVG assets, so they are hand-drawn per brand imagery into concise, recognizable color icons (whale / cloud / volcano /
+// generic API glyph). If official logo assets are added later, just replace the corresponding branch here.
 
 function OpenAiGlyph({ size }: { size: number }) {
   return (
@@ -16,7 +16,7 @@ function OpenAiGlyph({ size }: { size: number }) {
   );
 }
 
-// Anthropic → Claude：放射状 burst 标记（12 道花瓣自中心向外辐射）
+// Anthropic → Claude: radial burst mark (12 petals radiating outward from the center)
 function ClaudeGlyph({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="#D97757" aria-hidden="true">
@@ -35,7 +35,7 @@ function ClaudeGlyph({ size }: { size: number }) {
   );
 }
 
-// OpenAI 兼容：通用 API 字形（< / >，代表「任何兼容协议」）
+// OpenAI-compatible: generic API glyph (< / >, representing「any compatible protocol」)
 function CompatibleGlyph({ size }: { size: number }) {
   return (
     <svg
@@ -56,29 +56,29 @@ function CompatibleGlyph({ size }: { size: number }) {
   );
 }
 
-// DeepSeek：鲸鱼吉祥物（圆身 + 白肚 + 右上分叉尾鳍 + 眼睛，手绘简化）
+// DeepSeek: whale mascot (round body + white belly + top-right forked tail fin + eye, hand-drawn simplified)
 function DeepSeekGlyph({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      {/* 圆形身体 */}
+      {/* Round body */}
       <circle cx="10.4" cy="13.8" r="8" fill="#4D6BFE" />
-      {/* 上翘的分叉尾鳍 */}
+      {/* Upturned forked tail fin */}
       <path
         fill="#4D6BFE"
         d="M15.8 9.4c2-1.5 3.5-3.9 4.3-6.3.3 1.5.4 2.8-.2 4 .9-.4 1.9-.3 2.8.1-1.1 1.5-2.7 2.5-4.5 2.9-.8.2-1.6.1-2.4-.7Z"
       />
-      {/* 白色肚腩月牙 */}
+      {/* White belly crescent */}
       <path
         fill="#fff"
         d="M4.6 14.6c0 3.4 2.7 6 6 6 .5 0 1-.1 1.4-.2-1.8-.5-3.3-1.7-4-3.6-.5-1.3-.3-2.6.4-3.6-.5-.3-1.1-.5-1.8-.5-1.1 0-2 .9-2 1.9Z"
       />
-      {/* 眼睛 */}
+      {/* Eye */}
       <circle cx="12.6" cy="11.2" r="1" fill="#fff" />
     </svg>
   );
 }
 
-// 阿里百炼（DashScope）→ 千问（Qwen）：紫色「Q」标记
+// Alibaba Bailian (DashScope) → Qwen: purple「Q」mark
 function QwenGlyph({ size }: { size: number }) {
   return (
     <svg
@@ -97,7 +97,7 @@ function QwenGlyph({ size }: { size: number }) {
   );
 }
 
-// 火山方舟（Volcengine Ark）：火山意象（山体 + 顶部火苗）
+// Volcengine Ark: volcano imagery (mountain body + flame at the top)
 function VolcengineGlyph({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
@@ -110,7 +110,7 @@ function VolcengineGlyph({ size }: { size: number }) {
   );
 }
 
-// 本地 CLI：终端窗口 + 提示符（>_），代表「调本机命令行工具」
+// Local CLI: terminal window + prompt (>_), representing「invoking a local command-line tool」
 function CliGlyph({ size }: { size: number }) {
   return (
     <svg

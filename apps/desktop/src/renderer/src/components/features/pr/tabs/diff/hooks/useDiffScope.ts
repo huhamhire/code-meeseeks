@@ -6,27 +6,27 @@ import type { DiffScope, PendingCommitView } from '../diff-types';
 export interface DiffScopeState {
   scope: DiffScope;
   setScope: (scope: DiffScope) => void;
-  /** 范围下拉用的 commit 列表（懒加载：首次展开下拉才拉） */
+  /** Commit list for the scope dropdown (lazy-loaded: fetched only on first dropdown expand) */
   scopeCommits: PrCommit[] | null;
   loadScopeCommits: () => void;
-  /** 当前视图标识 = PR + 范围。切 PR 或切范围都视为内容换新，驱动 stale-while-loading。 */
+  /** Current view identifier = PR + scope. Switching PR or scope is both treated as content refresh, driving stale-while-loading. */
   viewKey: string;
-  /** commit 视图的 diff 范围（parent..sha）；'all' 或 root commit（无 parent）为 null → 走 PR 默认范围。 */
+  /** commit view's diff range (parent..sha); 'all' or root commit (no parent) is null → uses the PR default range. */
   range: { base: string; head: string } | null;
 }
 
 /**
- * diff 变更范围状态：全部变更 / 单个 commit。含切 PR 复位、消费外部「查看特定 commit」请求、
- * 懒加载范围下拉的 commit 列表。
+ * diff change scope state: all changes / a single commit. Includes PR-switch reset, consuming external "view a specific commit" requests,
+ * and lazy-loading the commit list for the scope dropdown.
  */
 export function useDiffScope(
   pr: StoredPullRequest,
   pendingCommitView: PendingCommitView | null | undefined,
   onCommitViewConsumed: (() => void) | undefined,
 ): DiffScopeState {
-  // 变更范围：全部变更 / 单个 commit。commit 视图为只读 diff（见 DiffScope）。
+  // Change scope: all changes / a single commit. commit view is a read-only diff (see DiffScope).
   const [scope, setScope] = useState<DiffScope>({ kind: 'all' });
-  // 范围下拉用的 commit 列表（懒加载：首次展开下拉才拉）。
+  // Commit list for the scope dropdown (lazy-loaded: fetched only on first dropdown expand).
   const [scopeCommits, setScopeCommits] = useState<PrCommit[] | null>(null);
   const viewKey = useMemo(
     () => (scope.kind === 'all' ? `${pr.localId}|all` : `${pr.localId}|c:${scope.sha}`),
@@ -47,13 +47,13 @@ export function useDiffScope(
     });
   }, [pr.localId]);
 
-  // 切 PR 回到「全部变更」范围，并丢弃旧 PR 的范围下拉 commit 列表
+  // On PR switch return to the "all changes" scope, and discard the old PR's scope-dropdown commit list
   useEffect(() => {
     setScope({ kind: 'all' });
     setScopeCommits(null);
   }, [pr.localId]);
 
-  // 消费外部「查看特定 commit」请求（提交 / 活动标签页点击 commit）→ 切到该 commit 范围。
+  // Consume external "view a specific commit" requests (commit / activity tab clicking a commit) → switch to that commit's scope.
   useEffect(() => {
     if (!pendingCommitView) return;
     setScope({

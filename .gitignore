@@ -11,6 +11,10 @@ out-tsc/
 *.tsbuildinfo
 .cache/
 
+# Python bytecode (tools/ scripts, etc.)
+__pycache__/
+*.pyc
+
 # Electron / packaged binaries
 release/
 

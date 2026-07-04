@@ -8,18 +8,18 @@ import { uploadCommentImage } from '../shared/uploadCommentImage';
 interface CommentReplyEditorProps {
   prLocalId: string;
   parentCommentId: string;
-  /** `@提及` 自动补全候选（PR 参与者 + 评论作者）。 */
+  /** `@mention` autocomplete candidates (PR participants + comment authors). */
   mentionCandidates?: PlatformUser[];
-  /** 平台是否支持图片附件上传；为真才启用粘贴上传。 */
+  /** Whether the platform supports image attachment upload; paste upload is enabled only when true. */
   attachmentsEnabled?: boolean;
   onCancel: () => void;
-  /** reply 创建成功后调用 (UI 收起编辑框；评论列表通过 comments:changed 事件自动刷新) */
+  /** Called after a reply is created successfully (UI collapses the editor; the comment list auto-refreshes via the comments:changed event) */
   onPosted: () => void;
 }
 
 /**
- * 已有评论的人工回复编辑框：textarea + 保存/取消。展开在被回复评论的下方。
- * Cmd/Ctrl+Enter 保存，Esc 取消；空 body disabled 保存
+ * Manual reply editor for an existing comment: textarea + save/cancel. Expands below the comment being replied to.
+ * Cmd/Ctrl+Enter to save, Esc to cancel; empty body disables save
  */
 export function CommentReplyEditor({
   prLocalId,

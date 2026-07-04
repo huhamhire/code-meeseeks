@@ -10,13 +10,13 @@ import { ReactionAddButton, ReactionChips, useReactions } from '../../shared/Rea
 import { useCommentThread } from '../../shared/useCommentThread';
 
 /**
- * 估算 view zone 高度（行数）。每段评论 = header(avatar+name+date, 1.3 行) + body
- * 字数 / 80 行向上取整。回复递归计算，每条 reply 多 0.3 行 (margin/border)。
- * 同行多评论叠加，最后顶天 32 行避免独吞屏幕。
+ * Estimate view zone height (in lines). Each comment = header(avatar+name+date, 1.3 lines) + body
+ * length / 80 rounded up. Replies computed recursively, each reply adds 0.3 line (margin/border).
+ * Multiple comments on the same line stack, capped at 32 lines to avoid hogging the screen.
  */
 export function estimateZoneHeight(comments: PrComment[]): number {
-  let h = 1; // 上下 padding
-  for (const c of comments) h += commentHeight(c) + 0.3; // item 间分隔
+  let h = 1; // top/bottom padding
+  for (const c of comments) h += commentHeight(c) + 0.3; // separator between items
   return Math.min(Math.ceil(h), 32);
 }
 
@@ -43,11 +43,11 @@ export function CommentZone({
   prLocalId: string;
   prWebUrl: string;
   hardBreaks: boolean;
-  /** 评论 emoji 反应模式（capabilities.commentReactions）：'fixed'/'free' 才渲染加反应按钮；缺省 = 不支持。 */
+  /** Comment emoji reaction mode (capabilities.commentReactions): only 'fixed'/'free' render the add-reaction button; absent = unsupported. */
   reactionsMode?: 'fixed' | 'free';
-  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给回复编辑框启用粘贴上传。 */
+  /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the reply editor to enable paste upload. */
   attachmentsEnabled?: boolean;
-  /** 内容只读（decline / 不可参与归档 PR）：隐藏行内评论的回复 / 编辑 / 删除操作。 */
+  /** Content read-only (decline / archived PR that can't be participated in): hide the inline comment reply / edit / delete actions. */
   readOnly?: boolean;
 }) {
   return (
@@ -76,8 +76,8 @@ export function CommentZone({
 }
 
 /**
- * 把 Bitbucket 评论 markdown 里 `attachment:HASH` 形态的 URL 改写为可点击的 Bitbucket 链接。
- * 返回 null = 不是附件 URL，调用方按原样处理。
+ * Rewrite `attachment:HASH` style URLs in Bitbucket comment markdown into clickable Bitbucket links.
+ * Returns null = not an attachment URL, caller handles it as-is.
  */
 function resolveAttachmentUrl(href: string, base: string | null): string | null {
   if (!base || !href.startsWith('attachment:')) return null;
@@ -87,10 +87,10 @@ function resolveAttachmentUrl(href: string, base: string | null): string | null 
 }
 
 /**
- * react-markdown components 覆盖：a/img 检测 attachment: 协议，改写到 Bitbucket URL。
- * 图片附件因为 Bitbucket 需要会话鉴权，渲染器 fetch 不到，统一退化为可点击链接
- * （📎 alt 文本），点击走 setWindowOpenHandler → shell.openExternal 在系统
- * 浏览器打开，用户的 Bitbucket 登录 session 能正常加载。
+ * react-markdown components override: a/img detect the attachment: protocol and rewrite to a Bitbucket URL.
+ * Image attachments require Bitbucket session auth so the renderer can't fetch them; they fall back to a
+ * clickable link (📎 alt text). Clicking goes through setWindowOpenHandler → shell.openExternal to open in
+ * the system browser, where the user's Bitbucket login session can load them normally.
  */
 function makeCommentMarkdownComponents(
   attachmentBase: string | null,
@@ -111,20 +111,21 @@ function makeCommentMarkdownComponents(
     },
     img: ({ src, alt }) => {
       if (typeof src !== 'string' || !src) return null;
-      // 把 src 原样传 IPC — main 端 adapter 懂 Bitbucket `attachment:HASH` 协议 + 绝对/
-      // 相对 URL，renderer 不需要前置 resolve。外部公网 URL 在 main 端会被认为
-      // 跨 host 返回 null，BitbucketImage 内部 fallback 到原生 <img>
+      // Pass src through to IPC as-is — the main-side adapter understands the Bitbucket `attachment:HASH`
+      // protocol + absolute/relative URLs, so the renderer needn't resolve up front. An external public URL
+      // is treated as cross-host on the main side and returns null; BitbucketImage falls back internally to a native <img>
       return <BitbucketImage src={src} alt={alt} />;
     },
   };
 }
 
 /**
- * 递归渲染单条评论 + 它的回复子树。comment.replies 是任意层级的；这里递归到底。每往下一层
- * 步进缩进 + 一道左竖线（缩进量 / 边框色与评论 tab 的 .pr-comments-replies 对齐，见 comment-zone.scss）。
+ * Recursively render a single comment + its reply subtree. comment.replies is arbitrarily deep; recurse all
+ * the way down. Each level down adds a step of indent + a left vertical line (indent amount / border color
+ * aligned with the comments tab's .pr-comments-replies, see comment-zone.scss).
  */
-/** 嵌套缩进最大 5 层；超过此层级的更深回复**拉平**（comment-zone-reply-flat：去步进 / 边框 / 左 padding），
- *  平铺在第 5 层缩进上、上下排列，避免无限嵌套一直右滑。 */
+/** Nested indent maxes out at 5 levels; deeper replies beyond this level are **flattened** (comment-zone-reply-flat:
+ *  drop step / border / left padding), laid out on the level-5 indent stacked vertically, to avoid infinite nesting sliding ever rightward. */
 const MAX_REPLY_INDENT_DEPTH = 5;
 
 function CommentNode({
@@ -155,14 +156,14 @@ function CommentNode({
     () => makeCommentMarkdownComponents(attachmentBase, prLocalId, prWebUrl),
     [attachmentBase, prLocalId, prWebUrl],
   );
-  // 反应状态 + 切换（与评论 / 活动 tab 的 CommentItem 共用 useReactions；hook 无条件调用，
-  // 输出仅在 reactionsMode 存在时渲染）。kind 由 comment.anchor 推断为 'inline'。
+  // Reaction state + toggle (shares useReactions with the comments / activity tab's CommentItem; the hook is
+  // called unconditionally, output only rendered when reactionsMode is present). kind inferred from comment.anchor as 'inline'.
   const { reactions, busy: reactionBusy, toggle: toggleReaction } = useReactions(
     prLocalId,
     comment,
     readOnly,
   );
-  // 回复 / 编辑 / 删除 交互状态机（与评论/活动 tab 的 CommentItem 共用，见 shared/useCommentThread）
+  // Reply / edit / delete interaction state machine (shared with the comments/activity tab's CommentItem, see shared/useCommentThread)
   const {
     replyOpen,
     setReplyOpen,
@@ -178,8 +179,8 @@ function CommentNode({
     handleDelete,
   } = useCommentThread(prLocalId, comment);
 
-  // body 只包 author + 正文 + 回复按钮 / 编辑器；replies 作为 sibling 放外面 —
-  // 不让 hover 内层 replies 冒泡触发外层 :hover 导致所有祖先 reply 按钮一齐显示
+  // body wraps only author + content + reply button / editor; replies live outside as siblings —
+  // so hovering inner replies doesn't bubble up to trigger the outer :hover and reveal all ancestor reply buttons at once
   const inner = (
     <>
       <div className="comment-zone-item-body">
@@ -207,8 +208,8 @@ function CommentNode({
             className="comment-zone-body markdown"
           />
         )}
-        {/* 回复 / 编辑 / 删除按钮：默认 hidden，hover comment-zone-item-body 显示 (CSS)。
-            编辑态隐藏全部按钮 (避免跟编辑器底部按钮组重复)；只读（decline / 不可参与）整组隐藏。 */}
+        {/* Reply / edit / delete buttons: hidden by default, shown on hover of comment-zone-item-body (CSS).
+            Edit mode hides all buttons (to avoid duplicating the editor's bottom button group); read-only (decline / can't participate) hides the whole group. */}
         {!readOnly && !replyOpen && !editOpen && (
           <div className="comment-zone-foot">
             <button
@@ -239,7 +240,7 @@ function CommentNode({
                 {deleting ? t('commentsPanel.deleting') : t('common.delete')}
               </button>
             )}
-            {/* 「加反应」按钮放在操作按钮之后（与评论 tab 一致）；回复 / 编辑态下整组 foot 已隐藏。 */}
+            {/* The "add reaction" button goes after the action buttons (consistent with the comments tab); the whole foot group is already hidden in reply / edit mode. */}
             {reactionsMode && (
               <ReactionAddButton
                 reactions={reactions}
@@ -253,14 +254,14 @@ function CommentNode({
         {replyOpen && (
           <CommentReplyEditor
             prLocalId={prLocalId}
-            // 回复目标抽象（threadId）：GitLab=discussion id（reply 必需）；Bitbucket 空 / GitHub=remoteId → 回退 remoteId。
+            // Reply target abstraction (threadId): GitLab=discussion id (required for reply); Bitbucket empty / GitHub=remoteId → fall back to remoteId.
             parentCommentId={comment.threadId ?? comment.remoteId}
             attachmentsEnabled={attachmentsEnabled}
             onCancel={() => setReplyOpen(false)}
             onPosted={() => setReplyOpen(false)}
           />
         )}
-        {/* 已有反应：单独成行，渲染在操作按钮下方（编辑态隐藏）。readOnly 下只展示、不可切换。 */}
+        {/* Existing reactions: on their own line, rendered below the action buttons (hidden in edit mode). Under readOnly, display only, not toggleable. */}
         {reactionsMode && !editOpen && (
           <ReactionChips
             reactions={reactions}
@@ -313,9 +314,10 @@ function CommentNode({
     </>
   );
   if (depth === 0) return inner;
-  // 满 MAX_REPLY_INDENT_DEPTH 层后**拉平**：去掉步进缩进与左竖线，更深回复平铺在上限层级上
-  // （与评论 tab 设计一致）。关键：必须同时去掉 padding-left 与 border —— 仅去步进、保留每层的
-  // padding/border 会逐级累加仍右移（之前"还是有缩进"的根因）。
+  // Past MAX_REPLY_INDENT_DEPTH levels, **flatten**: drop the step indent and left vertical line, laying deeper
+  // replies out on the max level (consistent with the comments tab design). Key: must drop both padding-left AND
+  // border — dropping only the step while keeping each level's padding/border still accumulates and shifts right
+  // (the root cause of the earlier "still indented" bug).
   const flat = depth > MAX_REPLY_INDENT_DEPTH;
   return (
     <div className={`comment-zone-reply${flat ? ' comment-zone-reply-flat' : ''}`}>{inner}</div>
@@ -350,7 +352,7 @@ function CommentAuthorRow({
   );
 }
 
-/** 把多条同行评论合成 markdown hover 文本（含回复嵌套） */
+/** Combine multiple same-line comments into markdown hover text (including nested replies) */
 export function renderHoverMd(comments: PrComment[]): string {
   return comments
     .map((c) => {

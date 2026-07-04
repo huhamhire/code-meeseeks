@@ -5,10 +5,10 @@ import { wireFindingClosuresStore } from '../stores/finding-closures-store';
 import { wireRepoSyncStore } from '../stores/repo-sync-store';
 
 /**
- * 把 IPC 事件流接到各全局 store（挂载到 React 树根，效果等价于「应用级 hook」）：
- * - chatRunStore：pr-agent 活动 run + 实时 stdout，ChatPane 跨 PR 切换可读回运行态
- * - repoSyncStore：repo 镜像 clone/fetch 进度，StatusBar 任意时刻可读当前同步任务
- * - draftsStore：草稿写盘后 drafts:changed 触发指定 PR 的草稿列表自动刷新
+ * Wire the IPC event streams to each global store (mounted at the React tree root, effectively an "app-level hook"):
+ * - chatRunStore: pr-agent active run + real-time stdout, ChatPane can read back the run state when switching across PRs
+ * - repoSyncStore: repo mirror clone/fetch progress, StatusBar can read the current sync task at any time
+ * - draftsStore: after a draft is written to disk, drafts:changed triggers an auto-refresh of the given PR's draft list
  */
 export function useAppStores(): void {
   useEffect(() => wireChatRunStore(), []);

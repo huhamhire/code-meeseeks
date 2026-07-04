@@ -1,5 +1,5 @@
-// features/pr 对外公共 API。内部模块（PrHeader / PrTabs / tabs/* 等）相互引用走相对路径，
-// 不经此 barrel，避免循环依赖。状态栏 chip 走 features/pr/statusbar/* 子路径，不并入此处。
+// Public API of features/pr. Internal modules (PrHeader / PrTabs / tabs/* etc.) reference each other via relative paths,
+// not through this barrel, to avoid circular dependencies. Status bar chips go through the features/pr/statusbar/* subpath and are not merged in here.
 export { PrPanel } from './PrPanel';
 export { PrEmpty } from './PrEmpty';
 export { PrItem } from './PrItem';

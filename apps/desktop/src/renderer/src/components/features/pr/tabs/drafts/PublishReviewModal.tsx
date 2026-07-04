@@ -5,17 +5,17 @@ import { invoke } from '../../../../../api';
 import { formatBackendError } from '../../../../../errors';
 
 /**
- * 批量发布草稿到 Bitbucket 的确认 modal。M4 发布闭环最后一公里。
+ * Confirmation modal for batch-publishing drafts to Bitbucket. The last mile of the M4 publish loop.
  *
- * 流程：
- *   1. confirm: 列出本 PR 所有可发布草稿 (pending + edited)，用户可勾选 / 取消
- *   2. publishing: 调 drafts:publishBatch，main 端串行 POST 到 Bitbucket
- *   3. done: 显示成功 N 条 / 失败 M 条 + 每条失败明细
+ * Flow:
+ *   1. confirm: list all publishable drafts of this PR (pending + edited), user can check / uncheck
+ *   2. publishing: call drafts:publishBatch, main side serially POSTs to Bitbucket
+ *   3. done: show N succeeded / M failed + per-failure details
  *
- * - rejected 草稿不在列表里 (用户决断不发)
- * - posted 草稿不在列表里 (远端已经有，避免重复)
- * - 默认全部勾选 — 用户进 modal 已经表达"想发评论"的意图，全选符合多数场景；
- *   不想发的单条可取消
+ * - rejected drafts are not in the list (user decided not to publish)
+ * - posted drafts are not in the list (already on remote, avoid duplicates)
+ * - all checked by default — entering the modal already expresses the intent "want to publish comments", select-all fits most cases;
+ *   uncheck individual ones you don't want to publish
  */
 type Phase = 'confirm' | 'publishing' | 'done';
 
@@ -33,17 +33,17 @@ export function PublishReviewModal({
   onJumpToAnchor,
 }: {
   localId: string;
-  /** 本 PR 全部草稿；modal 自己过滤出 publishable (pending + edited) */
+  /** All drafts of this PR; the modal itself filters out publishable ones (pending + edited) */
   drafts: ReadonlyArray<ReviewDraft>;
   onClose: () => void;
   /**
-   * 用户点 anchor (path:line) 时调用。父端通常实现为：关闭 modal + 触发 Diff
-   * 跳转到该草稿位置 (复用 pendingDiffNav 链路)。不传则 anchor 不可点
+   * Called when the user clicks an anchor (path:line). Parent typically implements: close the modal + trigger Diff
+   * jump to that draft's position (reusing the pendingDiffNav link). Absent means the anchor is not clickable
    */
   onJumpToAnchor?: (draftId: string) => void;
 }) {
   const { t } = useTranslation();
-  // 列表用快照：进入 modal 时定下，避免 drafts 变动 (其它窗口编辑) 把当前选择洗掉
+  // List snapshot: fixed on entering the modal, to avoid drafts changes (edits from other windows) washing out the current selection
   const candidates = useMemo<ReviewDraft[]>(
     () => drafts.filter((d) => d.status === 'pending' || d.status === 'edited'),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -54,7 +54,7 @@ export function PublishReviewModal({
   const [results, setResults] = useState<PublishResult[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Esc 关闭 (publishing 阶段禁用避免误中断；done 阶段允许)
+  // Esc to close (disabled during publishing phase to avoid accidental interruption; allowed in done phase)
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && phase !== 'publishing') onClose();
@@ -97,8 +97,8 @@ export function PublishReviewModal({
   const okCount = results.filter((r) => r.ok).length;
   const failCount = results.length - okCount;
 
-  // 进入时本 PR 没有 publishable 草稿 → 直接显示空态 (理论上 header 按钮 disabled
-  // 时不会触发开 modal，但作 fallback)
+  // On entry this PR has no publishable drafts → show the empty state directly (in theory the header button is disabled
+  // so it won't trigger opening the modal, but kept as a fallback)
   if (candidates.length === 0) {
     return (
       <div className="modal-backdrop" onClick={onClose}>
@@ -170,8 +170,8 @@ export function PublishReviewModal({
                           onChange={() => toggle(d.id)}
                         />
                         <div className="publish-review-item-meta">
-                          {/* anchor 可点 → 关 modal + 跳 Diff；checkbox label 是 outer，
-                              这里 stopPropagation 防 click 触发勾选切换 */}
+                          {/* anchor is clickable → close modal + jump to Diff; the checkbox label is outer,
+                              stopPropagation here prevents the click from triggering a check toggle */}
                           {onJumpToAnchor ? (
                             <button
                               type="button"

@@ -1,6 +1,6 @@
 import type { IpcChannels } from '@meebox/ipc';
 
-/** 当前 PR 命中的全部规则（针对 /review 工具）；空数组 = 未配置 / 无命中。 */
+/** All rules matched by the current PR (for the /review tool); empty array = unconfigured / no match. */
 export type MatchedRules = IpcChannels['rules:matchForPr']['response'];
-/** 单条命中规则。 */
+/** A single matched rule. */
 export type MatchedRule = MatchedRules[number];

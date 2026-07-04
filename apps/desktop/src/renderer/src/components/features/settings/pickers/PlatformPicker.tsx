@@ -3,11 +3,11 @@ import { PLATFORM_META } from '../../../common';
 import type { ConnKind } from '../ConnectionForm';
 
 /**
- * 集成平台选择列表（左侧栏）：图标 + 名称 + 副标题，单选高亮。
- * 首启向导平台步与设置面板「连接」子模态共用同一视觉（配置选择器左右布局，见 config-picker.scss）。
+ * Integration platform picker list (left column): icon + name + subtitle, single-select highlight.
+ * The first-run wizard's platform step and the settings panel's "connections" sub-modal share the same visuals (config picker left/right layout, see config-picker.scss).
  *
- * readOnly：编辑既有连接时不允许切平台（base_url / token 语义随平台而异）——当前项保持高亮、
- * 其余置灰，整列禁用交互。
+ * readOnly: switching platform is not allowed when editing an existing connection (base_url / token semantics vary by platform) —— the current item stays highlighted,
+ * the rest are dimmed, and the whole list disables interaction.
  */
 export function PlatformPicker({
   value,
@@ -25,7 +25,7 @@ export function PlatformPicker({
     <div className="config-pick-list" role="radiogroup" aria-label={ariaLabel}>
       {PLATFORM_META.map((p) => {
         const selected = p.kind === value;
-        // 可点选：平台已实现且非只读。置灰：未实现平台，或只读态下的非当前项。
+        // Clickable: platform is implemented and not read-only. Dimmed: unimplemented platform, or non-current item in read-only state.
         const interactive = p.available && !readOnly;
         const dim = !p.available || (readOnly && !selected);
         return (

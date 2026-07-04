@@ -20,15 +20,15 @@ export interface UseChatInputParams {
   onAgentAsk: (question: string) => void;
   onCancel?: () => void;
   onSetReviewStatus?: (status: LocalPrStatus) => void;
-  /** PR 远端可直接合并（mergeStatus.canMerge）：false 时 /merge 不出现在补全/命令菜单，误输入也拒绝。 */
+  /** PR is directly mergeable on the remote (mergeStatus.canMerge): when false, /merge does not appear in autocomplete/command menu, and mistyped input is also rejected. */
   canMerge?: boolean;
-  /** /merge 触发：交由 ChatPane 弹二次确认后再实际合并。 */
+  /** /merge trigger: hand off to ChatPane to pop a second confirmation before actually merging. */
   onMerge?: () => void;
 }
 
 /**
- * 输入栏状态机：输入 / `/` 命令解析与提交 / 自动补全浮层 / 历史回放（shell 式 Up/Down）/ 停止请求。
- * 命令解析纯逻辑见 ../utils/parse-command；历史栈见 ../utils/chat-history。ChatInputBar 只消费返回值渲染。
+ * Input bar state machine: input / `/` command parsing and submission / autocomplete overlay / history replay (shell-style Up/Down) / stop request.
+ * Pure command-parsing logic in ../utils/parse-command; history stack in ../utils/chat-history. ChatInputBar only consumes the return value to render.
  */
 export function useChatInput({
   pr,
@@ -46,54 +46,54 @@ export function useChatInput({
   const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
-  // PR 切换时清掉异常提示 + 输入框残留 (避免跨 PR 显示陈旧的错误"未知命令" 等)
+  // On PR switch, clear the error hint + leftover input (to avoid showing a stale error "unknown command" etc. across PRs)
   useEffect(() => {
     setParseError(null);
     setInput('');
   }, [pr?.localId]);
   const [cmdMenuOpen, setCmdMenuOpen] = useState(false);
-  // 自动补全菜单选中项索引 (textarea 输入 / 时显示的浮层)
+  // Selected-item index of the autocomplete menu (the overlay shown when the textarea contains /)
   const [autocompleteIdx, setAutocompleteIdx] = useState(0);
-  // 已经为某个特定输入值关闭过菜单 (Esc / 选中后插入)。input 一变就失效
-  // → 用户继续打字时菜单会自然重新出现，但选中 / Esc 后不会立刻重弹
+  // Menu was already dismissed for a specific input value (Esc / inserted after selecting). Invalidated as soon as input changes
+  // → the menu naturally reappears as the user keeps typing, but does not immediately re-pop right after selecting / Esc
   const [dismissedFor, setDismissedFor] = useState<string | null>(null);
-  // 历史回放：从最新到最老的栈；historyIdx 表示当前正在浏览的位置 (-1 = 不在浏览态)
+  // History replay: stack from newest to oldest; historyIdx indicates the position currently being browsed (-1 = not in browsing state)
   const [history, setHistory] = useState<string[]>(() => loadChatHistory());
   const [historyIdx, setHistoryIdx] = useState(-1);
-  // 进入历史浏览前用户正在编辑的内容；按 Down 回到底端时还原回去，模仿 shell 行为
+  // The content the user was editing before entering history browsing; restored when pressing Down back to the bottom, mimicking shell behavior
   const draftBeforeHistoryRef = useRef<string>('');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const cmdMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // 队列模型：仅 !pr / pr-agent 未就绪 时禁用 input。activeRun / busyOnOtherPr
-  // 不再阻塞新提交 (会排队 by main)。running 决定是否渲染 stop 按钮：除活动工具 run 外，
-  // Agent 自身执行阶段（思考 / 编排，无工具 run 占用）也算「运行中」，以便随时取消。
+  // Queue model: disable input only when !pr / pr-agent not ready. activeRun / busyOnOtherPr
+  // no longer block new submissions (queued by main). running decides whether to render the stop button: besides an active tool run,
+  // the Agent's own execution phase (thinking / orchestration, with no tool run occupied) also counts as "running", so it can be cancelled anytime.
   const running = runningTool !== null || agentRunningHere;
-  // LLM 未配置时一并禁用：即便 pr-agent 运行时就绪，没有模型也无法发起调用
+  // Also disable when the LLM is not configured: even if the pr-agent runtime is ready, without a model no call can be made
   const disabled = !pr || !prAgent.available || !llmConfigured;
-  // stop 按钮点过后等 main 回 queueChanged 才会改变状态；中间这段时间二次点击
-  // 应失效，避免反复 spam abort
+  // After the stop button is clicked, the state only changes once main returns queueChanged; a second click during this interval
+  // should be a no-op, to avoid repeatedly spamming abort
   const [stopRequested, setStopRequested] = useState(false);
-  // running → false 时 (run 结束了) 重置 stopRequested，下次起 run 又能取消
+  // When running → false (the run has finished), reset stopRequested so the next run can be cancelled again
   useEffect(() => {
     if (!running) setStopRequested(false);
   }, [running]);
   const trimmed = input.trim();
-  // 可见命令集合：PR 不可直接合并时隐去 /merge（不在补全 / 命令菜单提示不可用的动作）。
+  // Visible command set: hide /merge when the PR is not directly mergeable (don't hint an unavailable action in autocomplete / command menu).
   const visibleCommands = canMerge ? COMMANDS : COMMANDS.filter((c) => c.kind !== 'pr-action');
-  // `/` 开头 + 命令名还没敲完整 (没空格) → 显示候选；已为当前 input dismiss 过则隐藏
+  // Starts with `/` + command name not fully typed yet (no space) → show candidates; hidden if already dismissed for the current input
   const showAutocomplete =
     !disabled && dismissedFor !== input && input.startsWith('/') && !input.includes(' ');
   const filtered = showAutocomplete
     ? visibleCommands.filter((c) => c.label.startsWith(input.split(' ')[0] ?? ''))
     : [];
 
-  // 输入变化时重置选中项到首条 (候选集变了)
+  // Reset the selected item to the first when input changes (the candidate set changed)
   useEffect(() => {
     setAutocompleteIdx(0);
   }, [input]);
 
-  // `/` 命令按钮触发的弹出菜单：点击外部 / Esc / 选中命令时关闭
+  // Popup menu triggered by the `/` command button: closes on outside click / Esc / selecting a command
   useEffect(() => {
     if (!cmdMenuOpen) return;
     const onDown = (e: MouseEvent): void => {
@@ -122,8 +122,8 @@ export function useChatInput({
     setInput(cmd.insertAs);
     setParseError(null);
     setCmdMenuOpen(false);
-    // 选中后立即关掉补全菜单 (insertAs 可能 "/describe" 没空格，否则会一直撑着)。
-    // dismissedFor 绑当前 input 值，用户继续打字 input 变了菜单会重新打开
+    // Close the autocomplete menu immediately after selecting (insertAs may be "/describe" with no space, otherwise it would keep it propped open).
+    // dismissedFor is bound to the current input value; as the user keeps typing and input changes, the menu reopens
     setDismissedFor(cmd.insertAs);
     const el = textareaRef.current;
     if (el) {
@@ -134,7 +134,7 @@ export function useChatInput({
     }
   };
 
-  // 提交成功路径共用：写历史栈 + 退出浏览态 + 清空输入
+  // Shared by the successful-submit path: write the history stack + exit browsing state + clear input
   const pushHistoryAndReset = (): void => {
     setHistory(pushChatHistory(input));
     setHistoryIdx(-1);
@@ -162,19 +162,19 @@ export function useChatInput({
         setParseError(t('chatPane.askNeedsQuestion'));
         return;
       case 'reviewAction':
-        if (!onSetReviewStatus) return; // 没装回调直接忽略 (保护性)
+        if (!onSetReviewStatus) return; // No callback wired → just ignore (protective)
         pushHistoryAndReset();
         onSetReviewStatus(parsed.status);
         return;
       case 'mergeAction':
-        if (!onMerge) return; // 没装回调直接忽略 (保护性)
-        // canMerge 门控：不可直接合并时拒绝并提示（输入框已不补全 /merge，此处兜底手输）。
+        if (!onMerge) return; // No callback wired → just ignore (protective)
+        // canMerge gate: reject and hint when not directly mergeable (the input no longer autocompletes /merge; this is the fallback for manual typing).
         if (!canMerge) {
           setParseError(t('chatPane.notMergeable'));
           return;
         }
         pushHistoryAndReset();
-        onMerge(); // 交由 ChatPane 弹确认后实际合并
+        onMerge(); // Hand off to ChatPane to pop confirmation before actually merging
         return;
       case 'run':
         pushHistoryAndReset();
@@ -187,11 +187,11 @@ export function useChatInput({
     }
   };
 
-  // 历史回放工具：根据 idx 设 textarea 内容；idx = -1 表示退出浏览态，恢复 draft
+  // History replay helper: set textarea content by idx; idx = -1 means exit browsing state, restore draft
   const applyHistoryIdx = (nextIdx: number): void => {
     setHistoryIdx(nextIdx);
     setInput(nextIdx < 0 ? draftBeforeHistoryRef.current : (history[nextIdx] ?? ''));
-    // 光标移到末尾，下一次 Up/Down 行为可预期
+    // Move the cursor to the end so the next Up/Down behavior is predictable
     const el = textareaRef.current;
     if (el) {
       requestAnimationFrame(() => {
@@ -202,8 +202,8 @@ export function useChatInput({
     }
   };
 
-  // 判断是否应让 Up/Down 触发历史回放：textarea 光标必须在首行 / 末行边缘，
-  // 否则让 Up/Down 走原生光标移动 (多行编辑时还在行内导航不能被劫持)
+  // Decide whether Up/Down should trigger history replay: the textarea cursor must be at the first-line / last-line edge,
+  // otherwise let Up/Down do native cursor movement (in multi-line editing, in-line navigation must not be hijacked)
   const atFirstLine = (): boolean => {
     const el = textareaRef.current;
     if (!el) return false;
@@ -216,10 +216,10 @@ export function useChatInput({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-    // 输入法 composing 中：所有快捷键都不拦截，交给 IME 处理
+    // During IME composing: intercept no shortcuts, hand off to the IME
     if (e.nativeEvent.isComposing) return;
 
-    // 自动补全菜单打开时：拦截 Up/Down/Enter/Tab/Esc 用于菜单导航，避免落到 textarea
+    // When the autocomplete menu is open: intercept Up/Down/Enter/Tab/Esc for menu navigation, to avoid falling through to the textarea
     if (showAutocomplete && filtered.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -244,11 +244,11 @@ export function useChatInput({
       }
     }
 
-    // 历史回放：菜单未打开时，Up/Down 在边缘行 → 翻历史。中间行让原生光标移动接管
+    // History replay: when the menu is closed, Up/Down on an edge line → page through history. Middle lines let native cursor movement take over
     if (e.key === 'ArrowUp' && history.length > 0 && atFirstLine()) {
       e.preventDefault();
       if (historyIdx < 0) {
-        // 首次进浏览态：把当前编辑内容存为 draft，方便 Down 回到底端时复原
+        // First entering browsing state: save the current editing content as draft, so Down can restore it back at the bottom
         draftBeforeHistoryRef.current = input;
       }
       applyHistoryIdx(Math.min(historyIdx + 1, history.length - 1));

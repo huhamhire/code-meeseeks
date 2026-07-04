@@ -8,14 +8,14 @@ import { invoke } from '../../../../../../api';
 import type { LoadedContent } from '../diff-types';
 
 /**
- * 行 hover '+' 新建 manual 草稿：modifiedEditor (head 侧) + 并排视图下 originalEditor (base 侧)
- * 上加 mousemove + mousedown 监听。**已有评论的行仍可继续追加**（hover 照常出 +，新草稿 zone 挂在评论
- * zone 之下、按时间序在已有评论下方）；仅「已有未发布草稿」的行不重复出 +（避免同行两个编辑器）。点击 →
- * drafts:create + autoEdit 立即进入编辑。
+ * Line hover '+' to create a manual draft: attaches mousemove + mousedown listeners on modifiedEditor (head side)
+ * and, in side-by-side view, originalEditor (base side). **Lines that already have comments can still be appended to** (hover still shows +, the new draft zone mounts below the comment
+ * zone, in time order beneath existing comments); only lines that "already have an unpublished draft" do not show + again (to avoid two editors on the same line). Click →
+ * drafts:create + autoEdit immediately enters edit.
  *
- * Platform policy 过滤：Bitbucket 只允许 hunk 内的行加 inline comment；GitHub/GitLab 宽松。从
- * diffEditor.getLineChanges() 拿 hunks，不允许的行不画 glyph、点击也不创建草稿。commit 只读视图
- * （scopeKind !== 'all'）不挂。
+ * Platform policy filter: Bitbucket only allows lines inside a hunk to have an inline comment; GitHub/GitLab are lenient. Gets
+ * hunks from diffEditor.getLineChanges(); disallowed lines get no glyph, and clicking creates no draft. The commit read-only view
+ * (scopeKind !== 'all') is not wired.
  */
 export function useLineCommentAdder(opts: {
   diffEditor: MonacoEditor.IStandaloneDiffEditor | null;
@@ -26,7 +26,7 @@ export function useLineCommentAdder(opts: {
   platform: PlatformKind;
   scopeKind: 'all' | 'commit';
   renderSideBySide: boolean;
-  /** 内容只读（decline / 不可参与归档 PR）：不挂行 hover '+' 新建评论草稿。 */
+  /** Content read-only (declined / non-participable archived PR): does not wire line hover '+' to create comment drafts. */
   readOnly?: boolean;
   triggerAutoEdit: (draftId: string) => void;
   t: TFunction;
@@ -47,29 +47,29 @@ export function useLineCommentAdder(opts: {
 
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
-    // commit 只读视图：不挂行 hover '+' 新建草稿（草稿锚点属于 PR 全量 diff，不在单 commit 上创建）。
-    // 内容只读（decline / 不可参与归档 PR）：同样不挂 '+'。
+    // commit read-only view: does not wire line hover '+' to create drafts (draft anchors belong to the PR full diff, not created on a single commit).
+    // Content read-only (declined / non-participable archived PR): likewise does not wire '+'.
     if (scopeKind !== 'all' || readOnly) return;
     const modifiedEditor = diffEditor.getModifiedEditor();
     const originalEditor = diffEditor.getOriginalEditor();
-    // 仅「已有未发布草稿」的行算占用、不重复出 +（避免同行两个编辑器）；已有远端评论的行不算占用——
-    // 允许继续追加新评论（新草稿 zone 会挂在评论 zone 之下，按时间序展示在已有评论下方）。
+    // Only lines that "already have an unpublished draft" count as occupied and do not show + again (to avoid two editors on the same line); lines with existing remote comments do not count as occupied —
+    // allowing new comments to be appended (the new draft zone mounts below the comment zone, shown in time order beneath existing comments).
     const occupiedNew = new Set<number>();
     const occupiedOld = new Set<number>();
     for (const d of drafts ?? []) {
       if (d.status === 'rejected') continue;
-      // 跟 zone 创建时一致用 startLine — 之前用 endLine 会让 hover '+' 把行 403
-      // (finding 起始) 当未占用错画 +；finding 跨多行场景下两个 + 同时出现
+      // Use startLine consistently with zone creation — previously using endLine would make hover '+' treat line 403
+      // (finding start) as unoccupied and wrongly draw +; in a multi-line finding scenario two + would appear at once
       (d.anchor.side === 'old' ? occupiedOld : occupiedNew).add(d.anchor.startLine);
     }
 
-    // 把 monaco ILineChange[] 翻成 DiffHunkRange[]。LineChange 的 EndLineNumber=0
-    // 表示该侧无对应（纯增/纯删），翻成 null range。
+    // Translate monaco ILineChange[] into DiffHunkRange[]. A LineChange EndLineNumber=0
+    // means that side has no counterpart (pure add / pure delete), translated into a null range.
     //
-    // **关键**：useEffect 首次执行时 monaco diff 还在异步计算，getLineChanges() 可能
-    // 返回 null/[] → 用 Bitbucket policy 严格判会让"所有行都不允许" → 用户看不到任何 +。
-    // 监听 onDidUpdateDiff 在 diff 算完后刷新 hunks (mutable let，闭包引用最新值)。
-    // 同时：hunks 为空时**兜底允许**（视为 policy 暂不可用），等 update 事件来再收紧
+    // **Key**: on the first useEffect run, the monaco diff is still computing asynchronously, and getLineChanges() may
+    // return null/[] → a strict Bitbucket policy check would make "all lines disallowed" → the user sees no + at all.
+    // Listen to onDidUpdateDiff to refresh hunks after the diff finishes (mutable let, closure references the latest value).
+    // Meanwhile: when hunks is empty, **fall back to allowing** (treated as policy temporarily unavailable), tightening once the update event arrives
     const policy = policyForPlatform(platform);
     const computeHunks = (): DiffHunkRange[] => {
       const lineChanges = diffEditor.getLineChanges() ?? [];
@@ -91,15 +91,15 @@ export function useLineCommentAdder(opts: {
 
     const disposers: Array<() => void> = [];
 
-    // 在指定编辑器 + 侧别上挂「hover 出 + / 点击建草稿」。modified=new（新增/上下文行），
-    // original=old（删除/上下文行，仅并排视图可点 —— 统一视图下原始编辑器隐藏、删除行是 view zone 无行号可 hover）。
+    // Wire "hover shows + / click creates draft" on a given editor + side. modified=new (added/context lines),
+    // original=old (deleted/context lines, clickable only in side-by-side view — in unified view the original editor is hidden, and deleted lines are view zones with no line number to hover).
     const wireAdder = (
       editorInst: MonacoEditor.ICodeEditor,
       side: 'old' | 'new',
       occupied: Set<number>,
     ): void => {
-      /** 兜底允许：hunks 还没算完（空数组）就一律允许，避免初始"什么都点不出来"。
-       *  正常加载完 hunks 非空后才走 policy 严格判 */
+      /** Fallback allow: while hunks are not yet computed (empty array), allow everything, avoiding the initial "nothing is clickable".
+       *  Only after normal loading, when hunks is non-empty, does it run the strict policy check */
       const isAllowed = (line: number): boolean =>
         hunks.length === 0 || policy.isLineAllowed(hunks, side, line);
 
@@ -121,8 +121,8 @@ export function useLineCommentAdder(opts: {
                   },
                   options: {
                     isWholeLine: false,
-                    // 用 glyphMarginClassName 跟 commentZone (远端评论) 一致 —— 渲染在
-                    // editor 最左 glyph margin 列 (跟 GitHub 评论 "+" 位置惯例一致)。
+                    // Use glyphMarginClassName consistent with commentZone (remote comments) — rendered in
+                    // the editor's leftmost glyph margin column (matching the GitHub comment "+" position convention).
                     glyphMarginClassName: 'monaco-draft-add-glyph',
                     glyphMarginHoverMessage: { value: t('diffView.addCommentHint') },
                   },
@@ -169,10 +169,10 @@ export function useLineCommentAdder(opts: {
                   status: 'pending',
                 },
               });
-              // 新建后立即触发 auto edit，让用户能马上输入
+              // Trigger auto edit immediately after creation, so the user can type right away
               triggerAutoEdit(created.id);
             } catch {
-              // 静默；UI 上没出 zone 就视为没创建成功
+              // Silent; if no zone appears in the UI, treat it as a failed creation
             }
           })();
         }
@@ -190,8 +190,8 @@ export function useLineCommentAdder(opts: {
       });
     };
 
-    // 新增 / 上下文行（head 侧）始终可点；删除 / 上下文行（base 侧）仅并排视图可点
-    // （统一视图原始编辑器隐藏，删除行以 view zone 呈现、无可 hover 的行号）。
+    // Added / context lines (head side) are always clickable; deleted / context lines (base side) are clickable only in side-by-side view
+    // (in unified view the original editor is hidden, and deleted lines are presented as view zones with no hoverable line number).
     wireAdder(modifiedEditor, 'new', occupiedNew);
     if (renderSideBySide) {
       wireAdder(originalEditor, 'old', occupiedOld);
@@ -201,7 +201,7 @@ export function useLineCommentAdder(opts: {
       diffUpdateDisp.dispose();
       for (const dispose of disposers) dispose();
     };
-    // triggerAutoEdit 不入 deps —— 它每次 render 换新引用，列进去会让本 effect 每帧重挂监听
+    // triggerAutoEdit is not in deps — it changes reference every render, so listing it would make this effect re-attach listeners every frame
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     diffEditor,

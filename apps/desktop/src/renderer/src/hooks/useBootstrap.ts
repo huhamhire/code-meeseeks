@@ -16,17 +16,18 @@ export interface BootstrapState {
 }
 
 interface UseBootstrapParams {
-  /** PR 列表 store 的写入口（usePullRequests）：启动 / 热刷新时注入最新列表。 */
+  /** Write entry point for the PR list store (usePullRequests): injects the latest list on bootstrap / hot refresh. */
   setPrs: Dispatch<SetStateAction<StoredPullRequest[]>>;
-  /** 读缓存重拉 PR 列表（usePullRequests）：poll tick / 窗口聚焦时调用。 */
+  /** Re-fetch the PR list from cache (usePullRequests): called on poll tick / window focus. */
   reloadPrs: () => Promise<void>;
 }
 
 /**
- * 应用启动与全局生命周期：首帧前加载 boot（info/paths/config/prAgent + 初始 PR 列表 + 连接摘要 +
- * 最近同步）并定档 UI 语言；运行时跟随 config.language 切换；订阅 poll tick（刷新最近同步 + 重拉
- * 列表 + 补连接摘要）与窗口聚焦刷新；并提供首启向导完成 / 连接热生效后的整体重载。派生 needsOnboarding
- * 供 App 决定是否进向导。
+ * App bootstrap and global lifecycle: before the first frame, loads boot (info/paths/config/prAgent + initial
+ * PR list + connection summary + last sync) and locks in the UI language; switches at runtime following
+ * config.language; subscribes to poll tick (refresh last sync + reload list + top up connection summary) and
+ * window focus refresh; and provides a full reload after onboarding completes / connections take effect hot.
+ * Derives needsOnboarding for App to decide whether to enter the wizard.
  */
 export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
   boot: BootstrapState | null;
@@ -35,19 +36,20 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
   needsOnboarding: boolean;
   completeOnboarding: (result: OnboardingResult) => Promise<void>;
   refreshBootAndPrs: () => Promise<void>;
-  /** 乐观更新 boot.config（IPC 写盘后本地同步，如切 LLM / 切 AutoPilot / 设置页改动）。 */
+  /** Optimistically update boot.config (local sync after IPC persists, e.g. switching LLM / AutoPilot / settings page edits). */
   patchConfig: (fn: (config: Config) => Config) => void;
 } {
   const [boot, setBoot] = useState<BootstrapState | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  // 仅调试用：localStorage 里 meebox.forceOnboarding='1' 时强制进首启向导，不必动 config.yaml。
+  // Debug only: when localStorage meebox.forceOnboarding='1', force entry into the onboarding wizard without touching config.yaml.
   const [forceOnboarding, setForceOnboarding] = useState(
     () => localStorage.getItem('meebox.forceOnboarding') === '1',
   );
 
-  // 连接改动（尤其切换活动连接）后整体刷新 boot：活动连接变化后 main 端 app:connections /
-  // prs:list 都随之变，必须重拉，否则 boot.connections、PR 列表会过期。
+  // Full boot refresh after connection changes (especially switching the active connection): after the active
+  // connection changes, main's app:connections / prs:list both change, so a re-fetch is mandatory or boot.connections
+  // and the PR list go stale.
   const refreshBootAndPrs = useCallback(async (): Promise<void> => {
     const [config, connections, freshPrs, lastSync] = await Promise.all([
       invoke('config:read', undefined),
@@ -60,7 +62,7 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
     setLastSyncAt(lastSync.at);
   }, [setPrs]);
 
-  // 启动加载：拉齐 boot 数据 + 初始列表，并先把 UI 语言切到目标并等资源加载完，再 setBoot 渲染主界面。
+  // Bootstrap load: fetch all boot data + initial list, first switch the UI language to the target and wait for resources to load, then setBoot to render the main UI.
   useEffect(() => {
     void (async () => {
       try {
@@ -88,11 +90,12 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
     })();
   }, [setPrs]);
 
-  // 运行时语言切换（如设置页改 config.language）：仅依赖 config.language。
-  // **不能依赖整个 boot**——poll:tick 会 setBoot 刷新 connections 等字段，boot 频繁换新引用；
-  // 若依赖 boot，每次 poll 都会 i18n.changeLanguage(同一语言) → react-i18next 发 languageChanged
-  // → 所有 useTranslation 的 t 换新引用 → 凡是 effect 依赖 t 的组件（如 InlineCodeContext 抓取代码
-  // 片段的 effect）都被无谓重跑，内嵌 Monaco 随之 setSnippet(null)→重建 → 刷新抖动。
+  // Runtime language switch (e.g. settings page changes config.language): depends only on config.language.
+  // **Must not depend on the whole boot** — poll:tick calls setBoot to refresh fields like connections, so boot
+  // frequently gets a new reference; if it depended on boot, every poll would call i18n.changeLanguage(same language)
+  // → react-i18next emits languageChanged → t for every useTranslation gets a new reference → any component whose
+  // effect depends on t (e.g. InlineCodeContext's effect that grabs code snippets) reruns needlessly, and the embedded
+  // Monaco then setSnippet(null)→rebuilds → refresh jitter.
   const configLanguage = boot?.config.language;
   useEffect(() => {
     if (configLanguage === undefined) return;
@@ -101,8 +104,9 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
     void i18n.changeLanguage(lang);
   }, [configLanguage]);
 
-  // poll tick：刷新「最近同步」+ 重拉列表（后台轮询新增/删除即时反映）+ 补连接摘要
-  // （启动 ping 在建窗后才完成，借首轮 tick 把状态栏用户/能力位补上）。
+  // poll tick: refresh "last sync" + reload list (background polling reflects additions/deletions immediately) + top up
+  // connection summary (the startup ping only completes after the window is built, so use the first tick to fill in the
+  // status bar user/capability bits).
   useEffect(() => {
     if (!window.api) return;
     return subscribe('poll:tick', (info) => {
@@ -111,14 +115,14 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
       void invoke('app:connections', undefined).then(
         (connections) => setBoot((b) => (b ? { ...b, connections } : b)),
         () => {
-          /* 摘要刷新失败不影响主流程 */
+          /* summary refresh failure does not affect the main flow */
         },
       );
     });
   }, [reloadPrs]);
 
-  // 窗口重新获得焦点时主动 refresh 远端：拉 PR meta，Bitbucket 上加 comment / 改状态后
-  // PR.updatedAt 跳变 → PrPanel 的 prUpdatedAt dep 触发 → force listComments 拉新评论。
+  // Proactively refresh the remote when the window regains focus: fetch PR meta; on Bitbucket, after adding a comment /
+  // changing status, PR.updatedAt jumps → PrPanel's prUpdatedAt dep fires → force listComments to fetch new comments.
   useEffect(() => {
     if (!boot) return;
     const onFocus = (): void => {
@@ -127,7 +131,7 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
           await invoke('prs:refresh', undefined);
           await reloadPrs();
         } catch {
-          // 静默：focus 触发的刷新失败不该弹错给用户
+          // Silent: a focus-triggered refresh failure should not surface an error to the user
         }
       })();
     };
@@ -135,8 +139,8 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
     return () => window.removeEventListener('focus', onFocus);
   }, [boot, reloadPrs]);
 
-  // 首启向导完成：落盘连接（必）+ LLM / 缓存目录（按需），再整体重载 boot；boot.config 拿到有效
-  // active 连接后 needsOnboarding 派生为 false，向导自然卸载、切入主界面。
+  // Onboarding complete: persist connection (required) + LLM / cache dir (as needed), then fully reload boot; once
+  // boot.config has a valid active connection, needsOnboarding derives to false, the wizard unmounts, and we cut into the main UI.
   const completeOnboarding = useCallback(
     async (result: OnboardingResult): Promise<void> => {
       await invoke('config:setConnections', {
@@ -153,7 +157,7 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
         });
       }
       const trimmedRepos = result.reposDir.trim();
-      // 注意：与初值不同才写盘 —— 这里用最新一次 read 比对（boot 闭包可能旧），交给 main 幂等即可。
+      // Note: only persist when different from the initial value — compare against the latest read here (the boot closure may be stale), leaving idempotency to main.
       if (trimmedRepos) {
         const cur = await invoke('config:read', undefined);
         if (trimmedRepos !== (cur.workspace.repos_dir ?? '')) {
@@ -161,7 +165,7 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
         }
       }
       await refreshBootAndPrs();
-      // 走完向导清掉调试 flag，避免强制模式下完成后仍被困在向导
+      // Clear the debug flag after finishing the wizard, to avoid staying stuck in the wizard after completing in forced mode
       if (forceOnboarding) {
         localStorage.removeItem('meebox.forceOnboarding');
         setForceOnboarding(false);
@@ -170,8 +174,8 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
     [forceOnboarding, refreshBootAndPrs],
   );
 
-  // gate 条件 = 有无「有效的 active 连接」：连接为空 / active 悬空都触发首启向导。
-  // 不依赖一次性 firstRun 标记 —— 用户清空连接后下次进入仍会回到向导。
+  // Gate condition = whether there is a "valid active connection": empty connections / dangling active both trigger the onboarding wizard.
+  // Does not rely on a one-time firstRun flag — after the user clears connections, the next entry still returns to the wizard.
   const needsOnboarding =
     !!boot &&
     (forceOnboarding ||

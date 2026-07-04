@@ -14,29 +14,29 @@ const SIZE_CLASS: Record<ModalSize, string> = {
 
 interface ModalProps {
   onClose: () => void;
-  /** 弹窗尺寸 → 容器类名：md=modal · sm=modal-sm · confirm=modal-confirm */
+  /** Modal size → container class name: md=modal · sm=modal-sm · confirm=modal-confirm */
   size?: ModalSize;
-  /** 二层嵌套模态：加 modal-backdrop-nested，背景点击 stopPropagation 防冒泡关掉外层模态 */
+  /** Second-level nested modal: adds modal-backdrop-nested, backdrop-click stopPropagation prevents bubbling that would close the outer modal */
   nested?: boolean;
-  /** 经 createPortal 渲染到 body：避开调用者所在层级（如 Monaco view zone 内 z-index 偏低） */
+  /** Rendered to body via createPortal: avoids the caller's stacking context (e.g. low z-index inside a Monaco view zone) */
   portal?: boolean;
-  /** 点背景是否关闭（默认 true） */
+  /** Whether clicking the backdrop closes (default true) */
   closeOnBackdrop?: boolean;
-  /** 标题（不传则不渲染 header） */
+  /** Title (header is not rendered if omitted) */
   title?: ReactNode;
-  /** 标题元素 id，配合 aria-labelledby */
+  /** Title element id, paired with aria-labelledby */
   titleId?: string;
-  /** header 右侧关闭按钮样式：图标按钮 / 文案按钮（不传则无） */
+  /** Close button style on the right of the header: icon button / text button (none if omitted) */
   headerClose?: 'icon' | 'text';
-  /** header 右侧、关闭键左侧的自定义动作（如「打开目录」按钮）；与关闭键同组右对齐。 */
+  /** Custom actions on the right of the header, left of the close button (e.g. an "open directory" button); right-aligned in the same group as the close button. */
   headerActions?: ReactNode;
-  /** modal-body 追加类名（如 confirm-body） */
+  /** Extra class name appended to modal-body (e.g. confirm-body) */
   bodyClassName?: string;
-  /** 底部 footer 区内容（作为 modal-body 的兄弟渲染）；不传则无 footer 区 */
+  /** Bottom footer area content (rendered as a sibling of modal-body); no footer area if omitted */
   footer?: ReactNode;
-  /** footer 容器类名（默认 modal-footer-bar；确认框用 modal-actions） */
+  /** Footer container class name (default modal-footer-bar; confirm dialogs use modal-actions) */
   footerClassName?: string;
-  /** 容器内联样式（个别弹窗自定宽度用） */
+  /** Container inline style (used by individual modals with custom widths) */
   style?: CSSProperties;
   ariaLabel?: string;
   ariaLabelledby?: string;
@@ -44,8 +44,8 @@ interface ModalProps {
 }
 
 /**
- * 通用模态壳：统一 backdrop（点外关闭 + 嵌套防冒泡）、dialog 容器、可选 header（标题 + 关闭键）、
- * modal-body 包裹、可选 footer 区。键盘交互（Esc / Enter）由各调用方按需自管——壳只负责结构与样式语言。
+ * Generic modal shell: unified backdrop (click-outside to close + nested bubbling guard), dialog container, optional header (title + close button),
+ * modal-body wrapper, optional footer area. Keyboard interaction (Esc / Enter) is managed by each caller as needed — the shell only handles structure and the styling language.
  */
 export function Modal({
   onClose,
@@ -69,8 +69,8 @@ export function Modal({
   const tree = (
     <div
       className={`modal-backdrop${nested ? ' modal-backdrop-nested' : ''}`}
-      // 背景点击只关本层：stopPropagation 防止冒泡到外层模态 backdrop（嵌套时不拦会连外层一起关）。
-      // 顶层用法下 stopPropagation 无副作用。
+      // Backdrop click closes only this layer: stopPropagation prevents bubbling to the outer modal backdrop (without it, nesting would close the outer one too).
+      // In top-level usage stopPropagation has no side effect.
       onClick={(e) => {
         e.stopPropagation();
         if (closeOnBackdrop) onClose();

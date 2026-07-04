@@ -6,9 +6,9 @@ export function PollerSection({
   value,
   onChange,
 }: {
-  /** 当前轮询秒数（字符串形态，与底层 pollerInput 一致） */
+  /** Current polling seconds (string form, consistent with the underlying pollerInput) */
   value: string;
-  /** 选定档位 → 回传该档秒数 */
+  /** Selected tier → return that tier's seconds */
   onChange: (seconds: number) => void;
 }) {
   const { t } = useTranslation();

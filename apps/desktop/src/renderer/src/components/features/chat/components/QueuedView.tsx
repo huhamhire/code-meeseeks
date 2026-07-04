@@ -5,8 +5,8 @@ import { CloseIcon } from '../../../common';
 import { AskQuestion } from './shared';
 
 /**
- * 排队中的任务卡片：贴在运行中之后，按队列顺序展示 tool / 位置 / (ask 的提问)，
- * 提供单条取消。跟 RunningView / RunMeta 共用 chat-run-meta 骨架，视觉一致。
+ * Queued task card: sits after the running one, showing tool / position / (ask's question) in queue order,
+ * with per-item cancel. Shares the chat-run-meta skeleton with RunningView / RunMeta for visual consistency.
  */
 export function QueuedView({
   tool,

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { PullRequestIcon, StatusChip } from '../../../common';
 
-/** 待处理 PR 计数 chip。 */
+/** Pending PR count chip. */
 export function PrsCountChip({ count }: { count: number }) {
   const { t } = useTranslation();
   return (

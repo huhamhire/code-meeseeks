@@ -7,19 +7,19 @@ interface ConfirmModalProps {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  /** 危险操作（删除等）时确认按钮显红色 */
+  /** Confirm button shows red for dangerous operations (delete, etc.) */
   danger?: boolean;
-  /** 从二层嵌套子模态弹出时置 true：用嵌套 backdrop（z-index 抬到 nested 层），叠在子模态之上 */
+  /** Set true when popping from a second-level nested child modal: uses a nested backdrop (z-index raised to the nested layer), stacked above the child modal */
   nested?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 /**
- * 通用确认模态框，基于 Modal 壳。经 portal 渲染到 body 避开调用者层级（特别是 Monaco view
- * zone 内的 React tree，那一层 z-index 比 modal 低）。
+ * Generic confirm modal, based on the Modal shell. Renders into body via portal to avoid the caller's layering (especially the React tree inside a Monaco view
+ * zone, whose z-index is lower than the modal).
  *
- * 键盘：Esc 取消，Enter 确认（焦点默认在取消按钮，避免误触）
+ * Keyboard: Esc to cancel, Enter to confirm (focus defaults to the cancel button to avoid mis-clicks)
  */
 export function ConfirmModal({
   title,
@@ -37,8 +37,8 @@ export function ConfirmModal({
   const resolvedCancelLabel = cancelLabel ?? t('common.cancel');
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      // 忽略 OS 按键自动重复：若本模态由「按 Enter」打开（如 chat /merge 提交），按住 Enter 期间的
-      // 重复 keydown 会在监听器挂载后触发 → 立即 onConfirm、模态一闪而过。仅响应全新按下（repeat=false）。
+      // Ignore OS key auto-repeat: if this modal was opened by「pressing Enter」(e.g. chat /merge submit), the
+      // repeated keydown while holding Enter fires after the listener mounts → immediate onConfirm, modal flashes past. Only respond to a fresh press (repeat=false).
       if (e.repeat) return;
       if (e.key === 'Escape') {
         e.preventDefault();

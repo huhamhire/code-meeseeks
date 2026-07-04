@@ -1,15 +1,17 @@
 import { useTranslation } from 'react-i18next';
 import { Switch } from '../../../common';
 
-// 自动追问数量上限可选档位（1~5）。开关已独立控制启停，故不给 0（0 在 schema 等同关闭，仅手改 config 可达）。
+// Selectable tiers for the max follow-up asks (1~5). The switch controls enable/disable independently, so 0 is not offered (0 equals off in the schema, reachable only by hand-editing config).
 const MAX_FOLLOWUP_ASKS_OPTIONS = [1, 2, 3, 4, 5];
-// 代码建议数量上限可选档位（2~8）。
+// Selectable tiers for the max code suggestions (2~8).
 const MAX_CODE_SUGGESTIONS_OPTIONS = [2, 3, 4, 5, 6, 7, 8];
 
 /**
- * Agent 策略：扩展 Agent 行为控制的分区，子项以缩进的「功能列表」逐行展示（行首圆点 + 标题 + 说明，
- * 右侧控件）。右侧控件不限于开关——自动追问用 Switch，追问数量 / 代码建议数量用下拉（同一通用
- * .settings-sublist-*）。追问数量仅在自动追问开启时可调（关闭时下拉禁用）。后续策略项在此追加一行即可。
+ * Agent strategy: a section extending Agent behavior controls, with sub-items shown row by row as an indented
+ * "feature list" (leading dot + title + description, control on the right). Right-side controls aren't limited to
+ * switches—auto follow-up ask uses a Switch, follow-up ask count / code suggestion count use dropdowns (the same
+ * generic .settings-sublist-*). The follow-up ask count is only adjustable when auto follow-up ask is on (the dropdown
+ * is disabled when off). Append later strategy items as one more row here.
  */
 export function AgentStrategySection({
   autoFollowup,
@@ -52,7 +54,7 @@ export function AgentStrategySection({
               {t('settings.maxFollowupAsksHint')}
             </span>
           </div>
-          {/* 追问数量仅在自动追问开启时生效 → 关闭时禁用，避免「开关关、数量却可调」的歧义。 */}
+          {/* The follow-up ask count only takes effect when auto follow-up ask is on → disabled when off, avoiding the ambiguity of "switch off, yet count adjustable". */}
           <select
             className="settings-input settings-sublist-select"
             value={maxFollowupAsks}

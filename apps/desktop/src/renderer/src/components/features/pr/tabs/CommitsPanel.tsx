@@ -9,17 +9,17 @@ import { formatExactTime } from './comments/CommentItem';
 
 interface CommitsPanelProps {
   pr: StoredPullRequest;
-  /** 点击某 commit → 在 Diff 标签页本地渲染该 commit 的变更（不再跳浏览器） */
+  /** Click a commit → render that commit's changes locally in the Diff tab (no longer opens browser) */
   onViewCommit?: (commit: PrCommit) => void;
 }
 
 /**
- * PR commits 列表，表格布局。来源 `diff:listCommits` (无缓存，进入面板时拉一次)。
+ * PR commits list, table layout. Source `diff:listCommits` (no cache, fetched once on entering the panel).
  *
- * 列：短 SHA / 提交主题 (commit message 首行) / 作者 / 时间。merge commit 用
- * 标记 chip 区分。点击行 → 在 Diff 标签页本地渲染该 commit 的变更。
+ * Columns: short SHA / commit subject (first line of commit message) / author / time. Merge commits are
+ * distinguished with a marker chip. Click a row → render that commit's changes locally in the Diff tab.
  *
- * 列表默认按平台返回顺序 (newest first)，跟 git log 习惯一致。
+ * List defaults to the platform's return order (newest first), matching git log convention.
  */
 export function CommitsPanel({ pr, onViewCommit }: CommitsPanelProps) {
   const { t } = useTranslation();
@@ -105,7 +105,7 @@ function CommitRow({
     <tr
       className={`pr-commits-row ${onView ? 'pr-commits-row-clickable' : ''}`}
       onClick={() => onView?.(commit)}
-      title={commit.message /* 完整 commit body hover 可见 */}
+      title={commit.message /* full commit body visible on hover */}
     >
       <td className="pr-commits-col-sha">
         <code>{commit.abbreviatedSha}</code>
@@ -150,7 +150,7 @@ function formatCommitTime(iso: string, t: TFunction): string {
   if (diffSec < 3600) return t('commitsPanel.minutesAgo', { count: Math.round(diffSec / 60) });
   if (diffSec < 86400) return t('commitsPanel.hoursAgo', { count: Math.round(diffSec / 3600) });
   if (diffSec < 86400 * 7) return t('commitsPanel.daysAgo', { count: Math.round(diffSec / 86400) });
-  // 一周以上展示 yyyy-mm-dd，避免"X 周前"模糊
+  // Older than a week shows yyyy-mm-dd, avoiding the vagueness of "X weeks ago"
   const d = new Date(parsed);
   const pad = (n: number): string => String(n).padStart(2, '0');
   return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

@@ -8,25 +8,25 @@ export interface ProviderMeta {
   value: LlmProvider;
   label: string;
   hint: string;
-  /** Model 字段示例值 / placeholder */
+  /** Example value / placeholder for the Model field */
   modelExample: string;
-  /** Base URL 字段的默认 endpoint：作占位提示；用户填了即透传给 pr-agent，留空则由下游回落到等同此处的默认 endpoint */
+  /** Default endpoint for the Base URL field: used as a placeholder hint; if the user fills it in it's passed through to pr-agent, if left empty the downstream falls back to a default endpoint equivalent to this one */
   defaultBaseUrl: string;
-  /** API Key 字段是否必填 */
+  /** Whether the API Key field is required */
   needsKey: boolean;
 }
 
-// 顺序：海外通用 (OpenAI / OpenAI 兼容 / Anthropic) → 国内三家 (DeepSeek / 阿里
-// 百炼 / 火山方舟) → 兜底 (OpenAI 兼容) → 本地 CLI，方便用户按主流程扫读
+// Order: overseas general (OpenAI / OpenAI-compatible / Anthropic) → three domestic providers (DeepSeek / Alibaba
+// DashScope / Volcengine Ark) → fallback (OpenAI-compatible) → local CLI, so users can scan along the main flow
 //
-// label / hint 用 getter 经 i18n.t 惰性取值：保持数组形状不变（消费方直接读 .label 等），
-// 同时让文案随当前语言解析（品牌名等无对应 key 时退回字面量）。modelExample 是纯模型名示例
-// （各语言相同、不翻译），作静态字面量、不进 i18n。
+// label / hint use getters that resolve lazily via i18n.t: keeps the array shape unchanged (consumers read .label etc. directly),
+// while letting the copy resolve with the current language (fall back to the literal when a brand name etc. has no matching key). modelExample is a plain model-name example
+// (same across languages, not translated), a static literal, not in i18n.
 function provider(
-  // modelExample 是纯模型名示例（各语言相同、不翻译），作静态字面量传入、**不进 i18n**；
-  // label / hint 才走 i18n（label 为品牌名时给字面量、省略 key）。
+  // modelExample is a plain model-name example (same across languages, not translated), passed in as a static literal, **not in i18n**;
+  // only label / hint go through i18n (give a literal for label when it's a brand name, omitting the key).
   meta: Omit<ProviderMeta, 'label' | 'hint'> & {
-    /** label 无 i18n key（品牌名）时给字面量；有 key 时省略 */
+    /** Give a literal for label when there's no i18n key (brand name); omit when a key exists */
     label?: string;
   },
 ): ProviderMeta {
@@ -76,16 +76,16 @@ export const LLM_PROVIDERS: ReadonlyArray<ProviderMeta> = [
     needsKey: true,
     modelExample: 'ep-20240xxxxxx-xxxxx / doubao-pro-32k / doubao-1-5-pro-256k',
   }),
-  // 「OpenAI 兼容」：兜底通用项，主流程让用户先扫读具名 provider；本地 Ollama 也走它
-  // （Base URL 填 http://localhost:11434/v1，密钥留空）。
+  // "OpenAI-compatible": the fallback general option; the main flow lets users scan the named providers first; local Ollama also uses it
+  // (fill Base URL with http://localhost:11434/v1, leave the key empty).
   provider({
     value: 'openai-compatible',
     defaultBaseUrl: '',
     needsKey: true,
     modelExample: 'gpt-4o-mini / qwen2.5-72b-instruct',
   }),
-  // 「本地 CLI」放最后：进阶项，转交本机命令行工具代调模型，不直连 API。
-  // modelExample 不展示（model 输入框对 cli 用 cliCommandPlaceholder），置空。
+  // "Local CLI" goes last: an advanced option that delegates model calls to a local command-line tool instead of connecting to the API directly.
+  // modelExample is not shown (the model input uses cliCommandPlaceholder for cli), left empty.
   provider({
     value: 'cli',
     defaultBaseUrl: '',
@@ -110,19 +110,19 @@ export interface ProfileErrors {
 }
 
 /**
- * 名称 slug 规则：1-32 字符，首位字母数字，其余可含 `-` / `_`。
- * 避免空格 / 中文符号 / 大写形态差异 / 路径分隔符造成日志或文件命中歧义。
+ * Name slug rule: 1-32 chars, first char alphanumeric, the rest may contain `-` / `_`.
+ * Avoids ambiguity in logs or file matching from spaces / CJK symbols / case-form differences / path separators.
  */
 const LABEL_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
 
 /**
- * 按 provider 元信息判定 profile 哪些字段必填：
- *   - label 必填，且必须符合 slug 规则
- *   - model 永远必填（pr-agent 必须知道用哪个模型）
- *   - api_key：needsKey=true 的 provider 必填（本地 CLI / 本地服务不需要）
- *   - base_url：没有默认值的 provider 必填（仅 openai-compatible）
+ * Determine which profile fields are required based on provider metadata:
+ *   - label required, and must conform to the slug rule
+ *   - model always required (pr-agent must know which model to use)
+ *   - api_key: required for providers with needsKey=true (local CLI / local services don't need it)
+ *   - base_url: required for providers without a default value (only openai-compatible)
  *
- * existing 传入用于唯一性校验（编辑时排除自身 id）。
+ * existing is passed in for uniqueness validation (excludes its own id when editing).
  */
 export function validateProfile(p: LlmProfile, existing: LlmProfile[]): ProfileErrors {
   const errors: ProfileErrors = {};
@@ -138,9 +138,9 @@ export function validateProfile(p: LlmProfile, existing: LlmProfile[]): ProfileE
     if (dup) errors.label = i18n.t('llmProfileForm.errorLabelDuplicate');
   }
 
-  // cli：model 字段填的是本机命令名，无 base_url / api_key 概念。隐藏校验——只放行已适配的
-  // 命令（claude / codex，与 sitecustomize 的 _CLI_SPECS 同步），其余命令运行时无对应规格、跑不通。
-  // 提示不点名受支持的命令（保持隐晦），仅给通用的「不受支持」反馈。
+  // cli: the model field holds a local command name, with no base_url / api_key concept. Hidden validation—only allows
+  // adapted commands (claude / codex, kept in sync with sitecustomize's _CLI_SPECS); other commands have no matching spec at runtime and won't run.
+  // The hint doesn't name the supported commands (keeps it opaque), only gives generic "unsupported" feedback.
   if (p.provider === 'cli') {
     const cmd = p.model.trim().toLowerCase();
     if (!cmd) errors.model = i18n.t('llmProfileForm.errorRequired');
@@ -165,11 +165,11 @@ export function newProfileId(): string {
 }
 
 /**
- * LLM 预设受控表单（名称 / Provider / Model / Base URL / API Key + provider 提示）。
- * 字段级 touched 校验：只对碰过（失焦）的字段亮错，避免刚打开一片红。
+ * Controlled LLM profile form (name / Provider / Model / Base URL / API Key + provider hint).
+ * Field-level touched validation: only shows errors on fields that have been touched (blurred), avoiding an all-red state right after opening.
  *
- * 外层（设置页子模态 / 向导 LLM 步）通过 `forceShowErrors` 在点保存时一次性暴露
- * 所有必填项；通过 onValidityChange 上报当前是否全部合法。
+ * The outer layer (settings-page sub-modal / wizard LLM step) uses `forceShowErrors` to expose
+ * all required fields at once when Save is clicked; reports whether everything is currently valid via onValidityChange.
  */
 export function LlmProfileForm({
   draft,
@@ -184,7 +184,7 @@ export function LlmProfileForm({
   onChange: (draft: LlmProfile) => void;
   forceShowErrors?: boolean;
   onValidityChange?: (valid: boolean) => void;
-  /** 由外部（如向导左侧列表）控制 provider 时，隐藏表单内的 Provider 下拉 */
+  /** When provider is controlled externally (e.g. the wizard's left-side list), hide the in-form Provider dropdown */
   hideProvider?: boolean;
 }) {
   const { t } = useTranslation();
@@ -208,7 +208,7 @@ export function LlmProfileForm({
     onChange(next);
     onValidityChange?.(Object.keys(validateProfile(next, existing)).length === 0);
   };
-  // Base URL placeholder：有默认 endpoint 时直接展示该 URL；没有默认值时给示例 + 必填提示
+  // Base URL placeholder: show the URL directly when there's a default endpoint; give an example + required hint when there's no default
   const baseUrlPlaceholder = providerMeta.defaultBaseUrl || 'https://your-endpoint.example.com/v1';
 
   return (
@@ -265,7 +265,7 @@ export function LlmProfileForm({
             }
           />
         </div>
-        {/* cli 模式不直连 API：没有 Base URL / API Key 概念，整组隐藏 */}
+        {/* cli mode doesn't connect to the API directly: no Base URL / API Key concept, hide the whole group */}
         {!isCli && (
           <>
             <div className="modal-kv-key">

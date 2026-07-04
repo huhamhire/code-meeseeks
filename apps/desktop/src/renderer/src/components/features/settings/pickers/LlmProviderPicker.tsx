@@ -4,8 +4,8 @@ import { LlmProviderIcon } from '../../../common';
 import { LLM_PROVIDERS } from '../LlmProfileForm';
 
 /**
- * LLM provider 选择列表（左侧栏）：品牌图标 + 名称，单选高亮。
- * 首启向导 LLM 步与设置面板「LLM」子模态共用同一视觉（配置选择器左右布局，见 config-picker.scss）。
+ * LLM provider picker list (left column): brand icon + name, single-select highlight.
+ * The first-run wizard's LLM step and the settings panel's "LLM" sub-modal share the same visuals (config picker left/right layout, see config-picker.scss).
  */
 export function LlmProviderPicker({
   value,

@@ -4,7 +4,7 @@ const DIFF_FILE_LIST_MIN = 180;
 const DIFF_FILE_LIST_MAX = 560;
 const DIFF_FILE_LIST_DEFAULT = 280;
 
-/** 左侧文件列表宽度：localStorage 持久化 + 拖拽柄 resize（夹在 MIN/MAX 之间）。 */
+/** Left file list width: localStorage-persisted + drag handle resize (clamped between MIN/MAX). */
 export function useFileListWidth(): {
   fileListWidth: number;
   startFileListResize: (e: ReactMouseEvent) => void;

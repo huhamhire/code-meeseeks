@@ -7,9 +7,9 @@ import { formatRelativeTime } from '../comments/CommentItem';
 import type { DiffScope } from './diff-types';
 
 /**
- * 变更范围选择器：文件树头部「<n> 个文件 · 全部变更 / <commit>」，点击展开下拉切换查看范围。
- * commit 列表懒加载（首次展开才拉）。选「全部变更」= PR 全量 diff；选某 commit = 该 commit
- * 的 parent..sha 只读 diff。
+ * Diff scope selector: file-tree header "<n> files · All changes / <commit>", click to expand a dropdown to switch the view scope.
+ * Commit list is lazy-loaded (fetched only on first expand). Picking "All changes" = full PR diff; picking a commit = that
+ * commit's parent..sha read-only diff.
  */
 export function DiffScopeSelect({
   fileCount,
@@ -31,13 +31,13 @@ export function DiffScopeSelect({
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
-  // 下拉用 fixed 定位 + portal 挂到 body：否则会被 .diff-file-list 的 overflow 裁切、被右侧 Monaco 盖住。
+  // Dropdown uses fixed positioning + portal mounted to body: otherwise it gets clipped by .diff-file-list overflow and covered by the Monaco editor on the right.
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const computePos = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    // 菜单整体拉宽：不小于触发器宽度，且给 commit 主题留足空间
+    // Widen the whole menu: no smaller than the trigger width, and leave enough room for the commit subject
     setMenuPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 440) });
   }, []);
   useEffect(() => {
@@ -48,7 +48,7 @@ export function DiffScopeSelect({
       if (ref.current?.contains(target) || menuRef.current?.contains(target)) return;
       setOpen(false);
     };
-    // 触发器在文件树头部（不随文件列表滚动），但窗口缩放 / 外层滚动时重算位置
+    // Trigger sits in the file-tree header (doesn't scroll with the file list), but recompute position on window resize / outer scroll
     const onReflow = (): void => computePos();
     document.addEventListener('mousedown', onDoc);
     window.addEventListener('resize', onReflow);
@@ -92,7 +92,7 @@ export function DiffScopeSelect({
             role="listbox"
             style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
           >
-            {/* 「全部变更」：标题 + 提交数副行（参考 Bitbucket 两行布局） */}
+            {/* "All changes": title + commit-count subrow (mirrors the Bitbucket two-line layout) */}
             <li>
               <button
                 type="button"
@@ -115,7 +115,7 @@ export function DiffScopeSelect({
                 </span>
               </button>
             </li>
-            {/* 每个 commit：标题（首行 message）+ 作者 / 短 SHA / 时间副行 */}
+            {/* Each commit: title (first line of message) + author / short SHA / time subrow */}
             {(commits ?? []).map((c) => {
               const subject = c.message.split('\n', 1)[0]!;
               const active = scope.kind === 'commit' && scope.sha === c.sha;

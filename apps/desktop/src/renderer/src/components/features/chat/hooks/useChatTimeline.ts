@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { PragentRunInfo } from '@meebox/ipc';
 import type { AgentMessage, AgentStep, ReviewRun } from '@meebox/shared';
 
-/** 时间线一项：四类内容（run 卡片 / 运行中 run / 思考步骤 / 对话消息）按启动时间归并后的承载体。 */
+/** One timeline entry: the carrier for the four content kinds (run card / in-progress run / thinking step / conversation message) merged by start time. */
 export interface TimelineEntry {
   key: string;
   sortTime: number;
@@ -18,8 +18,8 @@ function ms(iso: string | null | undefined): number {
 }
 
 /**
- * 用户直接发起的斜杠命令的回显文案：/ask 显示问题正文（更贴近对话；空问题回退 `/ask`），
- * describe/review/improve 显示 `/工具名`。仅用于命令回显气泡，不做 i18n（就是用户键入的命令）。
+ * Echo text for slash commands directly triggered by the user: /ask shows the question body (closer to conversation; empty question falls back to `/ask`),
+ * describe/review/improve show `/toolName`. Used only for the command echo bubble, no i18n (it's literally the command the user typed).
  */
 function echoContent(tool: string, question: string | undefined): string {
   if (tool === 'ask') {
@@ -30,16 +30,16 @@ function echoContent(tool: string, question: string | undefined): string {
 }
 
 /**
- * 历史时间线 + 实时「思考中」计时锚点。
+ * History timeline + real-time "thinking" timing anchor.
  *
- * timeline：把已完成 run、正在执行的 run、Agent 思考步骤、对话消息统一按**启动时间**归并排序，
- * 顺序固定——即便后启动的任务先完成，也排在先启动（仍在执行）的任务下方，不因完成先后跳序。
- * 类 Claude Code「先思考→定步骤→执行步骤」：思考步骤（plan/judge）是工具选择的前因，排在所选工具的
- * run 卡片之前；工具执行的进度 / 计时由 run 卡片承载，不重复。排队中（未启动）的任务不入此列，另置末尾。
+ * timeline: merge-sorts completed runs, in-progress runs, Agent thinking steps, and conversation messages uniformly by **start time**,
+ * with a fixed order — even if a later-started task finishes first, it still sits below the earlier-started (still-executing) task, never jumping order by completion.
+ * Like Claude Code's "think first → decide steps → execute steps": thinking steps (plan/judge) are the antecedent of tool selection, placed before the chosen tool's
+ * run card; the tool execution's progress / timing is carried by the run card, not duplicated. Queued (not-yet-started) tasks are not in this list, placed separately at the end.
  *
- * thinkingSince：「思考中」实时计时的锚点，取「最近一次活动结束」——{本 PR run 起点, 末个思考步 at,
- * 末个完成 run 的结束时刻} 三者最晚者。锚到持久数据（runningPrs 跨 PR 切换不清、run 历史会重载）而非
- * 组件挂载，故切走再切回不清零；用 run 结束而非步骤记录时刻，避免把工具执行时间算进当前思考。
+ * thinkingSince: the anchor for real-time "thinking" timing, taking "the most recent activity end" — the latest of {this PR's run start, last thinking step at,
+ * last completed run's finish time}. Anchored to persistent data (runningPrs is not cleared across PR switch, run history is reloaded) rather than
+ * component mount, so switching away and back does not reset it; uses run end rather than the step record time, to avoid counting tool execution time into the current thinking.
  */
 export function useChatTimeline(params: {
   visibleRuns: ReviewRun[];
@@ -82,10 +82,10 @@ export function useChatTimeline(params: {
       sortTime: ms(m.at),
       message: m as AgentMessage | null,
     }));
-    // 命令回显气泡：仅对**用户直接发起**（origin==='user'）的 run 补一条 user 消息，紧贴其卡片之上
-    // （sortTime 取起跑时刻 -1ms）。编排 / AutoPilot 子 run（origin==='agent'）不回显——其用户输入已由
-    // 编排会话的用户消息承载。历史 run 无 origin（undefined）→ 不回显。active 与完成态同一 runId 互斥，
-    // key 统一为 `echo-<runId>`，运行中→完成的切换平滑不重挂。
+    // Command echo bubble: only for runs **directly triggered by the user** (origin==='user'), add a user message right above its card
+    // (sortTime takes the start time -1ms). Orchestration / AutoPilot sub-runs (origin==='agent') are not echoed — their user input is already
+    // carried by the orchestration session's user message. Historical runs have no origin (undefined) → not echoed. active and completed states are mutually exclusive on the same runId,
+    // key uniformly `echo-<runId>`, so the running→completed switch is smooth without remounting.
     const echoOf = (
       runId: string,
       tool: string,

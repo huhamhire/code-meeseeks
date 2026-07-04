@@ -2,8 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { EDITOR_THEME_OPTIONS, type EditorTheme } from '@meebox/shared';
 
 /**
- * 全局主题分区：选择应用主题（Monaco 配色主题，亦驱动整个 GUI chrome 与浅 / 深语义色板）。
- * 'auto'（自动适应系统）走 i18n、其余主题用专名（GitHub Dark / Monokai…，各 UI 语言一致不翻译）。
+ * Global theme section: pick the app theme (Monaco color theme, also drives the whole GUI chrome and light / dark semantic palette).
+ * 'auto' (auto-adapt to system) goes through i18n; other themes use proper names (GitHub Dark / Monokai…, consistent across UI languages, not translated).
  */
 export function ThemeSection({
   theme,

@@ -7,7 +7,7 @@ import { REVIEWER_STATUS_META, ReviewerBadgeGlyph } from './reviewer-status';
 
 const STACK_AVATAR_SIZE = 32;
 
-/** 单个头像 + 右上角决断角标（approved 绿勾 / needsWork 琥珀叹号；待评审无角标）。栈内项与「我」项共用。 */
+/** A single avatar + top-right decision badge (approved green check / needsWork amber exclamation; no badge when pending review). Shared by stack items and the "me" item. */
 function StackAvatar({ r, connectionId }: { r: Reviewer; connectionId: string }) {
   return (
     <>
@@ -26,19 +26,19 @@ function StackAvatar({ r, connectionId }: { r: Reviewer; connectionId: string })
     </>
   );
 }
-// 总数 ≤ MAX_VISIBLE 全显；超出则显示 (MAX_VISIBLE-1) 个头像 + 一个「+n」溢出项
+// Total ≤ MAX_VISIBLE shows all; beyond that shows (MAX_VISIBLE-1) avatars + one "+n" overflow item
 const MAX_VISIBLE = 4;
-// 排序优先级：needsWork（待处理，最该被看到）> approved > 待评审
+// Sort priority: needsWork (pending, most in need of attention) > approved > pending review
 const STATUS_RANK: Record<ReviewerStatus, number> = { needsWork: 0, approved: 1, unapproved: 2 };
 
 /**
- * PR 头部右上角的 reviewer 头像栈（Bitbucket 风格，略重叠）：
- * - 过滤掉当前用户自己；needsWork > approved > 待评审 优先排序，同级按 displayName 稳定排序
- * - approved 右上角绿勾、needsWork 右上角琥珀叹号角标（待评审无角标）
- * - 至多展示 4 个；超出显示 3 个 + 「+n」，点击「+n」下拉展示其余 reviewer（头像 + 名 + 决断 chip）
- * - 直接展示的头像 hover 出名字（走 Avatar 自带 title）
- * - `self`（当前用户的「我的评审」）非空时，在栈右侧分隔展示其头像 + 当前评审角标
- * 栈内无他人且无 self 则不渲染。
+ * Reviewer avatar stack at the top-right of the PR header (Bitbucket style, slightly overlapping):
+ * - Filters out the current user; sorted by priority needsWork > approved > pending review, same-rank by stable displayName sort
+ * - approved gets a top-right green check, needsWork a top-right amber exclamation badge (no badge for pending review)
+ * - Shows at most 4; beyond that shows 3 + "+n", clicking "+n" drops down the remaining reviewers (avatar + name + decision chip)
+ * - Directly shown avatars reveal the name on hover (via Avatar's built-in title)
+ * - When `self` (the current user's "my review") is non-null, shows its avatar + current review badge separated on the stack's right
+ * Not rendered when the stack has no others and no self.
  */
 export function ReviewerStack({
   reviewers,
@@ -49,7 +49,7 @@ export function ReviewerStack({
   reviewers: Reviewer[];
   connectionId: string;
   currentUserName?: string | null;
-  /** 当前用户的「我的评审」：头像 + 当前评审角标，分隔展示在他人头像栈右侧。 */
+  /** The current user's "my review": avatar + current review badge, shown separated to the right of the others' avatar stack. */
   self?: Reviewer | null;
 }) {
   const { t } = useTranslation();
@@ -58,7 +58,7 @@ export function ReviewerStack({
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
 
-  // 下拉定位 + 外点关闭 + 窗口变化重算（与 DiffScopeSelect 同套，fixed + portal 避免被裁切）
+  // Dropdown positioning + outside-click close + recompute on window changes (same setup as DiffScopeSelect, fixed + portal to avoid clipping)
   useEffect(() => {
     if (!open) return;
     const compute = (): void => {
@@ -96,7 +96,7 @@ export function ReviewerStack({
   const overflow = sorted.length > MAX_VISIBLE;
   const visible = overflow ? sorted.slice(0, MAX_VISIBLE - 1) : sorted;
   const hidden = overflow ? sorted.slice(MAX_VISIBLE - 1) : [];
-  // 重叠下让左侧头像压住右侧（z 递减），使各自的右上角角标不被相邻头像遮挡
+  // Under overlap, let the left avatar sit over the right (decreasing z), so each one's top-right badge isn't occluded by the adjacent avatar
   const topZ = sorted.length + 1;
 
   return (
@@ -125,7 +125,7 @@ export function ReviewerStack({
           +{hidden.length}
         </button>
       )}
-      {/* 「我的评审」：与他人头像栈分隔（左侧细分隔线 + 间距），展示当前用户头像 + 当前评审角标。 */}
+      {/* "My review": separated from the others' avatar stack (thin divider line + spacing on the left), shows the current user's avatar + current review badge. */}
       {self && (
         <span
           className="reviewer-stack-item reviewer-stack-self"

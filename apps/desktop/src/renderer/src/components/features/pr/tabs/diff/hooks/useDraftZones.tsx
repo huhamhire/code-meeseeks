@@ -7,11 +7,11 @@ import { mountInlineZones } from '../zones/mountInlineZones';
 import type { LoadedContent } from '../diff-types';
 
 /**
- * 内联草稿 view zones（蓝底、editable）。跟评论 zone 同套 mountInlineZones 机制，按 anchor.side
- * 分桶、用 endLine 作 zone 行号（跟发布锚点对齐，WYSIWYG）。
+ * Inline draft view zones (blue background, editable). Uses the same mountInlineZones mechanism as comment zones, bucketed by anchor.side,
+ * with endLine as the zone line number (aligned with the publish anchor, WYSIWYG).
  *
- * 不渲染 rejected（用户决断不发）/ posted（远端评论已由 CommentZone 接管，再渲染视觉重复）。
- * commit 只读视图（scopeKind !== 'all'）不渲染草稿（锚定在 PR 全量 diff 行号上，不套用于单 commit）。
+ * Does not render rejected (user decided not to send) / posted (the remote comment is already taken over by CommentZone; re-rendering would be visually duplicate).
+ * The commit read-only view (scopeKind !== 'all') does not render drafts (anchored on the PR full-diff line numbers, not applicable to a single commit).
  */
 export function useDraftZones(opts: {
   diffEditor: MonacoEditor.IStandaloneDiffEditor | null;
@@ -22,7 +22,7 @@ export function useDraftZones(opts: {
   registerEditTrigger: (draftId: string, fn: (() => void) | null) => void;
   renderSideBySide: boolean;
   commentHardBreaks: boolean;
-  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给草稿编辑框启用粘贴 / 选取上传。 */
+  /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the draft editor to enable paste / picker upload. */
   attachmentsEnabled?: boolean;
   scopeKind: 'all' | 'commit';
 }): void {
@@ -41,7 +41,7 @@ export function useDraftZones(opts: {
 
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
-    // commit 只读视图：不渲染本地草稿 zone（草稿锚定在 PR 全量 diff 行号上，不套用于单 commit）。
+    // commit read-only view: does not render local draft zones (drafts are anchored on the PR full-diff line numbers, not applicable to a single commit).
     if (scopeKind !== 'all') return;
     const fileDrafts = (drafts ?? []).filter((d) => {
       if (d.status === 'rejected' || d.status === 'posted') return false;
@@ -53,9 +53,9 @@ export function useDraftZones(opts: {
     const newByLine = new Map<number, ReviewDraft[]>();
     for (const d of fileDrafts) {
       const target = d.anchor.side === 'old' ? oldByLine : newByLine;
-      // 用 endLine 作为 zone 行号，跟发布锚点对齐 —— publishInlineComment 用 anchor.endLine 发到
-      // 远端，草稿区也落 endLine 即「预览位置 = 最终发布位置」(WYSIWYG)。nav reveal 高亮行同样取
-      // endLine，二者视觉一致，跨多行 finding (startLine=403, endLine=425) 也不会起止错位。
+      // Use endLine as the zone line number, aligned with the publish anchor — publishInlineComment sends to
+      // the remote using anchor.endLine, and the draft zone also lands on endLine, so "preview position = final publish position" (WYSIWYG). nav reveal highlights the same
+      // endLine, so the two are visually consistent, and a multi-line finding (startLine=403, endLine=425) won't have its start/end misplaced.
       const arr = target.get(d.anchor.endLine) ?? [];
       arr.push(d);
       target.set(d.anchor.endLine, arr);
@@ -89,8 +89,8 @@ export function useDraftZones(opts: {
         />
       ),
     });
-    // 不依赖 autoEditTokens / registerEditTrigger 引发的 zone 重建（registerEditTrigger 是稳定的
-    // useCallback）——避免 trigger 引发 DraftZone unmount/mount，根除取消后重入 edit 模式的 race。
+    // Does not depend on zone rebuilds triggered by autoEditTokens / registerEditTrigger (registerEditTrigger is a stable
+    // useCallback) — avoids trigger-induced DraftZone unmount/mount, eliminating the race of re-entering edit mode after cancel.
   }, [
     diffEditor,
     drafts,

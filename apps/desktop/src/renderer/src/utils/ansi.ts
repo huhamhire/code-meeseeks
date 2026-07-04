@@ -1,13 +1,13 @@
 /**
- * 把含 ANSI SGR 转义的字符串切成可渲染的 segment 列表。
+ * Slice a string containing ANSI SGR escapes into a renderable segment list.
  *
- * 底层用 [anser](https://github.com/IonicaBizau/anser)（事实标准 ANSI → JSON 解析器，
- * 7KB 体积，Sentry / Storybook / Jest 都在用）。它正确处理 SGR / OSC / CSI 全谱、
- * 16/256/truecolor、bold/italic/underline/dim 装饰，不踩自卷边角案的坑（之前自实现
- * 时撞过 `\x1b.` 贪心吃掉 CSI 起头的 bug）。
+ * Backed by [anser](https://github.com/IonicaBizau/anser) (de-facto standard ANSI → JSON parser,
+ * 7KB, used by Sentry / Storybook / Jest). It correctly handles the full SGR / OSC / CSI spectrum,
+ * 16/256/truecolor, bold/italic/underline/dim decorations, and avoids the pitfalls of a hand-rolled
+ * edge case (a prior self-implementation hit a `\x1b.` greedy bug that ate the CSI head).
  *
- * Anser 返回的 fg / bg 是 `"rgb(r, g, b)"` 字符串 (默认配色为标准 ANSI 16 色 + 256
- * 色 cube 算法)，直接塞进 React style 即可。
+ * Anser returns fg / bg as `"rgb(r, g, b)"` strings (default palette is standard ANSI 16 colors + 256
+ * color cube algorithm), which can be dropped straight into a React style.
  */
 
 import Anser from 'anser';
@@ -40,7 +40,7 @@ export function parseAnsi(input: string): AnsiSegment[] {
     });
 }
 
-/** AnsiSegment → React inline style；给 <span style={...}> 用 */
+/** AnsiSegment → React inline style; for use with <span style={...}> */
 export function segmentStyle(seg: AnsiSegment): React.CSSProperties {
   const style: React.CSSProperties = {};
   if (seg.fg) style.color = seg.fg;

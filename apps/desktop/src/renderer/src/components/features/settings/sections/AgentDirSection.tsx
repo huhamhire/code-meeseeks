@@ -14,11 +14,12 @@ export function AgentDirSection({
   const { t } = useTranslation();
   return (
     <section className="modal-section">
-      {/* 标题行：左侧标题 + 右侧蓝色「打开当前目录」按钮（在系统文件管理器打开生效的 Agent 目录，
-          便于直接查看 / 编辑文件）。放在标题行而非配置行，避免与下方的目录选择按钮混淆。 */}
+      {/* Header row: title on the left + blue "open current directory" button on the right (opens the
+          active Agent directory in the system file manager for direct viewing / editing). Placed in the
+          header row rather than the config row to avoid confusion with the directory picker button below. */}
       <div className="modal-section-head">
         <h4>{t('settings.agentDirTitle')}</h4>
-        {/* 文案按钮（非图标）：与下方的目录「选择」图标按钮区分开，避免混淆。 */}
+        {/* Text button (not an icon): distinguished from the directory "pick" icon button below to avoid confusion. */}
         <button
           type="button"
           className="btn btn-primary btn-sm"

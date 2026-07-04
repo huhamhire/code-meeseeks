@@ -1,8 +1,8 @@
 import type { DiffChangedFile, DiffFileContent } from '@meebox/ipc';
 
 /**
- * diff 变更范围：'all' = PR 全部变更（merge-base..head）；'commit' = 单个 commit 的 parent..sha。
- * commit 视图为只读 diff（行内评论 / 草稿锚定在 PR 全量 diff 行号上，不套用于单 commit 版本）。
+ * diff change scope: 'all' = all PR changes (merge-base..head); 'commit' = a single commit's parent..sha.
+ * commit view is a read-only diff (inline comments / drafts are anchored to the full-PR diff line numbers, not applied to the single-commit version).
  */
 export type DiffScope =
   | { kind: 'all' }
@@ -19,7 +19,7 @@ export interface LoadedContent {
   head: DiffFileContent;
 }
 
-/** 「查看特定 commit」请求载荷（parent 来自 PrCommit.parents[0]，root commit 无 parent 为 null）。 */
+/** "View specific commit" request payload (parent comes from PrCommit.parents[0]; a root commit has no parent, so null). */
 export interface PendingCommitView {
   sha: string;
   parent: string | null;

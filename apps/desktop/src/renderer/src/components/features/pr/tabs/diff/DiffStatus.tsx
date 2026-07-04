@@ -22,7 +22,7 @@ export function SyncProgress({ progress }: { progress: SyncProgressEvent | null 
       </span>
     );
   }
-  // sync 完成后 IPC handler 还在跑 git diff 算变更文件列表，显示对应阶段提示
+  // After sync completes the IPC handler is still running git diff to compute the changed files list; show the matching phase hint
   if (progress.phase === 'done') {
     return (
       <span className="muted">
@@ -54,7 +54,7 @@ export function SyncProgress({ progress }: { progress: SyncProgressEvent | null 
   );
 }
 
-/** 整块替代 diff 区的硬错误展示（如变更文件列表本身拉不下来） */
+/** Hard-error display that replaces the whole diff area (e.g. the changed files list itself can't be fetched) */
 export function BackendErrorView({
   err,
   scope,
@@ -81,7 +81,7 @@ export function BackendErrorView({
   );
 }
 
-/** 顶部细 banner，部分功能拉不下来但 diff 主体仍可用时显示 */
+/** Thin top banner, shown when some features can't be fetched but the diff body is still usable */
 export function BackendErrorBanner({
   err,
   scope,

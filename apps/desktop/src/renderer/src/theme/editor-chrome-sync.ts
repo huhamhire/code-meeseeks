@@ -1,19 +1,23 @@
-// GUI chrome 跟随全局主题：从当前 Monaco 主题派生「结构性中性 token」（背景 / 前景 / 边框 / 选区）覆盖
-// 到 documentElement，使整个 chrome 与编辑器同主题。
+// GUI chrome follows the global theme: derive "structural neutral tokens" (background / foreground / border /
+// selection) from the current Monaco theme and override them on documentElement, so the whole chrome shares the
+// editor's theme.
 //
-// 混合方案（非「完全消除浅深色板」）：只派生结构性中性色；语义色（accent / approved / warning / danger /
-// chip / 文件状态点等）仍由 _theme.scss 的语义层按 data-theme 浅 / 深自管 —— 编辑器主题里没有这些产品
-// 语义色、且需对比度保证。
+// Hybrid approach (not "fully eliminate the light/dark palette"): only derive structural neutral colors; semantic
+// colors (accent / approved / warning / danger / chip / file status dots, etc.) are still self-managed by
+// _theme.scss's semantic layer per data-theme light / dark — the editor theme has no such product semantic colors
+// and they need contrast guarantees.
 //
-// 数据现实：第三方 monaco-themes 仅带 editor.background / foreground / selectionBackground 等极少数键
-// （见 monaco-setup getEditorThemeColors）。故 muted 文字 / 各级背景 / 边框全部从 fg↔bg 混合派生，
-// 并对次级文字加对比度地板（fadeWithFloor），防低对比主题（如 Solarized）击穿可读性。
+// Data reality: third-party monaco-themes carry only a handful of keys such as editor.background / foreground /
+// selectionBackground (see monaco-setup getEditorThemeColors). So muted text / each background level / borders are
+// all derived from fg↔bg mixing, with a contrast floor added to secondary text (fadeWithFloor) to keep low-contrast
+// themes (like Solarized) from breaking readability.
 //
-// 取不到色 / 缺 bg·fg 时清空覆盖，回退到纯语义色板（仍随 data-theme 浅 / 深正常显示）。
+// When no color is available / bg·fg is missing, clear the overrides and fall back to the pure semantic palette
+// (still displays normally per data-theme light / dark).
 
 import { getEditorThemeColors } from '../lib/monaco-setup';
 
-/** 本模块覆盖的全部 CSS 自定义属性（清理时逐个 remove，回退到 _theme.scss 的语义色板）。 */
+/** All CSS custom properties this module overrides (removed one by one on cleanup, falling back to _theme.scss's semantic palette). */
 const OVERRIDDEN_VARS = [
   '--bg-app',
   '--bg-panel',
@@ -40,7 +44,7 @@ interface Rgb {
   a: number;
 }
 
-/** 解析 #rgb / #rgba / #rrggbb / #rrggbbaa；失败返回 null。 */
+/** Parse #rgb / #rgba / #rrggbb / #rrggbbaa; return null on failure. */
 function parseHex(hex: string): Rgb | null {
   const h = hex.trim().replace(/^#/, '');
   const expand = (s: string): string =>
@@ -60,7 +64,7 @@ function parseHex(hex: string): Rgb | null {
   return { r, g, b, a };
 }
 
-/** 在 c1 → c2 间按 t（0..1）线性插值（忽略 alpha，结果不透明）。 */
+/** Linearly interpolate between c1 → c2 by t (0..1) (alpha ignored, result opaque). */
 function mix(c1: Rgb, c2: Rgb, t: number): Rgb {
   return {
     r: Math.round(c1.r + (c2.r - c1.r) * t),
@@ -74,13 +78,13 @@ function toRgbString({ r, g, b, a }: Rgb): string {
   return a >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgb(${r} ${g} ${b} / ${a.toFixed(3)})`;
 }
 
-/** 转 #rrggbb（忽略 alpha）；供 Windows titleBarOverlay 用（其 color 取 hex）。 */
+/** Convert to #rrggbb (alpha ignored); for Windows titleBarOverlay (its color takes hex). */
 function toHex({ r, g, b }: Rgb): string {
   const h = (v: number): string => v.toString(16).padStart(2, '0');
   return `#${h(r)}${h(g)}${h(b)}`;
 }
 
-/** 相对亮度（WCAG）。 */
+/** Relative luminance (WCAG). */
 function luminance({ r, g, b }: Rgb): number {
   const ch = (v: number): number => {
     const s = v / 255;
@@ -89,7 +93,7 @@ function luminance({ r, g, b }: Rgb): number {
   return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
 }
 
-/** 对比度比值（WCAG，1..21）。 */
+/** Contrast ratio (WCAG, 1..21). */
 function contrastRatio(c1: Rgb, c2: Rgb): number {
   const l1 = luminance(c1);
   const l2 = luminance(c2);
@@ -98,9 +102,10 @@ function contrastRatio(c1: Rgb, c2: Rgb): number {
 }
 
 /**
- * 带对比度地板的「文字衰减」：本想把 fg 向 bg 混 desiredT（越大越淡），但从 desiredT 往 0 回收，
- * 直到结果对 bg 的对比度 ≥ floor 才停 —— 保证次级文字在低对比主题（如 Solarized）下不被衰减到不可读。
- * 代价是低对比主题里 muted 会塌回 ≈fg（与主文字同权重），是可读性优先的诚实取舍。
+ * "Text fade" with a contrast floor: intends to mix fg toward bg by desiredT (larger = fainter), but walks
+ * desiredT back toward 0 until the result's contrast against bg is ≥ floor — ensuring secondary text isn't faded
+ * to unreadable under low-contrast themes (like Solarized). The cost is that in low-contrast themes muted collapses
+ * back to ≈fg (same weight as primary text), an honest readability-first tradeoff.
  */
 function fadeWithFloor(fg: Rgb, bg: Rgb, desiredT: number, floor: number): Rgb {
   const steps = 24;
@@ -121,14 +126,15 @@ function clearChromeOverrides(): void {
 }
 
 /**
- * 把当前全局主题的 base 色派生为 GUI chrome 的结构性 token，写到 documentElement（覆盖 _theme.scss）。
- * 取不到色 / 缺 bg·fg 时清空覆盖、回退语义色板（仍随 data-theme 浅 / 深正常显示）。
+ * Derive the current global theme's base colors into structural tokens for the GUI chrome and write them to
+ * documentElement (overriding _theme.scss). When no color is available / bg·fg is missing, clear the overrides and
+ * fall back to the semantic palette (still displays normally per data-theme light / dark).
  */
 export function applyChromeFromEditorTheme(
   editorThemeId: string,
   resolvedGuiTheme: 'light' | 'dark',
 ): { color: string; symbolColor: string } | null {
-  // 'auto' 跟随解析主题 → 取默认 2026 主题（dark-2026 / light-2026）的 base 色
+  // 'auto' follows the resolved theme → take the default 2026 theme's (dark-2026 / light-2026) base color
   const effectiveId =
     editorThemeId === 'auto' ? (resolvedGuiTheme === 'dark' ? 'dark-2026' : 'light-2026') : editorThemeId;
   const data = getEditorThemeColors(effectiveId);
@@ -140,24 +146,24 @@ export function applyChromeFromEditorTheme(
     return null;
   }
   const isDark = luminance(bg) < 0.5;
-  const edge = isDark ? WHITE : BLACK; // 提升层（背景越「浮」越靠该边）/ 边框混合方向
+  const edge = isDark ? WHITE : BLACK; // elevation layer (the more a background "floats" the closer to this edge) / border mix direction
   const sel = parseHex(data?.colors['editor.selectionBackground'] ?? '') ?? mix(bg, edge, 0.16);
 
-  // 各级背景：editor.background 为基准，按 elevation 轻微向 edge 提
+  // Each background level: editor.background as baseline, lifted slightly toward edge by elevation
   const bgPanel = mix(bg, edge, 0.03);
   const bgPanelAlt = mix(bg, edge, 0.06);
   const bgElev = mix(bg, edge, 0.05);
   const bgSurface = mix(bg, edge, 0.08);
   const bgHover = mix(bg, edge, 0.1);
-  // 各级文字：editor.foreground 向 bg 衰减出 muted / subtle / dim，各带对比度地板防低对比主题击穿
+  // Each text level: fade editor.foreground toward bg into muted / subtle / dim, each with a contrast floor to keep low-contrast themes from breaking through
   const textMuted = fadeWithFloor(fg, bg, 0.45, 4.5);
   const textSubtle = fadeWithFloor(fg, bg, 0.52, 4.0);
   const textDim = fadeWithFloor(fg, bg, 0.6, 3.0);
-  // 边框：fg 大幅向 bg 衰减，留极淡轮廓
+  // Border: fade fg heavily toward bg, leaving a very faint outline
   const borderDefault = mix(fg, bg, 0.8);
   const borderMuted = mix(fg, bg, 0.88);
   const borderFade = { ...borderDefault, a: 0.5 };
-  // 分组头：向黑轻微下沉（比 bg-app 略暗的「凹陷」标题带，hover 走 --bg-panel 上浮），随主题派生。
+  // Group header: sink slightly toward black (a "recessed" title band slightly darker than bg-app, hover lifts up via --bg-panel), derived per theme.
   const bgGroupHeader = mix(bg, BLACK, 0.12);
 
   const set = (name: string, c: Rgb): void => document.documentElement.style.setProperty(name, toRgbString(c));
@@ -178,12 +184,12 @@ export function applyChromeFromEditorTheme(
   set('--bg-selected', sel);
   set('--bg-group-header', bgGroupHeader);
 
-  // 可读性体检：muted 文字 / 弱边框对背景的对比度（AA 正文≥4.5、次要文本/非文本≥3）
+  // Readability check: contrast of muted text / weak border against background (AA body text ≥4.5, secondary/non-text ≥3)
   const mutedCr = contrastRatio(textMuted, bg);
   const borderCr = contrastRatio(borderDefault, bg);
   console.info(
     `[chrome-sync] "${effectiveId}" (${isDark ? 'dark' : 'light'}) → muted/bg contrast ${mutedCr.toFixed(2)} (AA≥4.5), border/bg ${borderCr.toFixed(2)} (≥3)`,
   );
-  // 窗控按钮同色：把主题 base 背景 / 前景（hex）交回主进程更新 Windows titleBarOverlay（见 useGlobalTheme）。
+  // Match window control buttons: hand the theme base background / foreground (hex) back to the main process to update Windows titleBarOverlay (see useGlobalTheme).
   return { color: toHex(bg), symbolColor: toHex(fg) };
 }

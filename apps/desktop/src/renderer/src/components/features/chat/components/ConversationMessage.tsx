@@ -5,8 +5,9 @@ import { VERDICT_LABEL_KEY } from '../constants';
 import { Md } from './shared';
 
 /**
- * 一条多轮对话消息的展示：用户 → 右对齐气泡；助手评审类（带 recommendation）→「评审总结」卡片 +
- * 判定徽标；助手对话类（无 recommendation）→ 左对齐专属对话回复包装。
+ * Display of a single multi-turn conversation message: user → right-aligned bubble; assistant review type
+ * (with recommendation) → "review summary" card + verdict badge; assistant conversation type (no
+ * recommendation) → left-aligned dedicated conversation reply wrapper.
  */
 export function ConversationMessage({ message }: { message: AgentMessage }) {
   const { t } = useTranslation();
@@ -14,8 +15,8 @@ export function ConversationMessage({ message }: { message: AgentMessage }) {
     return (
       <div className="chat-user-row">
         <div className="chat-user-bubble">{message.content}</div>
-        {/* 提问携带的引用上下文（Diff 选区代码）：气泡下方折叠展示，默认收起保持紧凑。
-            referencedContext 自带路径 / 行范围 / 代码围栏，走 markdown 渲染。 */}
+        {/* Reference context carried by the question (Diff selection code): collapsed display below the bubble, collapsed by default to stay compact.
+            referencedContext comes with its own path / line range / code fence, rendered via markdown. */}
         {message.referencedContext && (
           <details className="chat-user-ref markdown">
             <summary>{t('chatPane.referencedContextLabel')}</summary>

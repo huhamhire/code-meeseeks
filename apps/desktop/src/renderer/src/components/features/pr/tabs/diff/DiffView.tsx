@@ -1,5 +1,5 @@
-// 必须在用到 @monaco-editor/react 之前执行（loader.config 指向本地 monaco）。
-// 本文件经 React.lazy 动态加载，故 Monaco 随本 chunk 按需拉取，不进入口包。
+// Must run before @monaco-editor/react is used (loader.config points to the local monaco).
+// This file is dynamically loaded via React.lazy, so Monaco is fetched on demand with this chunk and stays out of the entry bundle.
 import '../../../../../lib/monaco-setup';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -36,7 +36,7 @@ import {
   useSyncProgress,
 } from './hooks';
 
-// commit「查看特定 commit」请求载荷类型（PrPanel 引用）；定义在 diff-types，此处 re-export 保持入口稳定。
+// Payload type for the "view specific commit" request (referenced by PrPanel); defined in diff-types, re-exported here to keep the entry stable.
 export type { PendingCommitView } from './diff-types';
 
 interface DiffViewProps {
@@ -44,16 +44,16 @@ interface DiffViewProps {
   renderSideBySide: boolean;
   showBlame: boolean;
   showWhitespace: boolean;
-  /** 活动连接能力位；此处用 commentHardBreaks 决定评论是否启用 remark-breaks。 */
+  /** Active connection capability bits; here commentHardBreaks decides whether comments enable remark-breaks. */
   capabilities?: PlatformCapabilities;
-  /** 内容只读（decline / 不可参与归档 PR）：不挂行内「+」新建评论、隐藏行内评论的回复 / 编辑 / 删除。 */
+  /** Content read-only (declined / non-participatable archived PR): don't mount the inline "+" new-comment affordance, hide reply / edit / delete on inline comments. */
   readOnly?: boolean;
   /**
-   * 跳转目标：来自 ChatPane finding card → App pendingDiffNav。
-   * 非 null 时 DiffView 切到该文件 + 滚到 anchor 行 + 短暂高亮 + (带 runId/findingId
-   * 时) 打开 inline 草稿编辑 zone (草稿已由 ChatPane 端懒创建)。
-   * runId/findingId 缺省 (PublishReviewModal anchor 点击) → 仅 navigate 不 enter edit。
-   * 消费完调 onNavConsumed 清空 token
+   * Navigation target: from a ChatPane finding card → App pendingDiffNav.
+   * When non-null, DiffView switches to that file + scrolls to the anchor line + briefly highlights + (when runId/findingId
+   * are present) opens the inline draft edit zone (the draft is already lazily created on the ChatPane side).
+   * When runId/findingId are absent (PublishReviewModal anchor click) → navigate only, don't enter edit.
+   * Once consumed, call onNavConsumed to clear the token
    */
   pendingNav?: {
     runId?: string;
@@ -62,22 +62,22 @@ interface DiffViewProps {
   } | null;
   onNavConsumed?: () => void;
   /**
-   * 外部请求切到「查看特定 commit」视图（来自 提交 / 活动 标签页点击某 commit）。
-   * 非 null 时 DiffView 把变更范围切到该 commit 的 `parent..sha`；消费完调 onCommitViewConsumed。
+   * External request to switch to the "view specific commit" view (from clicking a commit on the Commits / Activity tab).
+   * When non-null, DiffView switches the scope to that commit's `parent..sha`; once consumed, calls onCommitViewConsumed.
    */
   pendingCommitView?: PendingCommitView | null;
   onCommitViewConsumed?: () => void;
   /**
-   * 当前变更范围切到 / 离开单 commit 时上报（commit 有父 → 传该 commit 范围，全部变更 / root commit → null）。
-   * 上层（App）据此把「正在查看的 commit」作为聊天区命令的隐式范围（见 ChatPane viewCommitScope）。
+   * Reported when the current scope switches to / leaves a single commit (commit has a parent → pass that commit's scope, all changes / root commit → null).
+   * The parent (App) uses this to treat the "currently viewed commit" as the implicit scope for chat-pane commands (see ChatPane viewCommitScope).
    */
   onViewCommitScopeChange?: (scope: ReviewRunCommitScope | null) => void;
 }
 
 /**
- * PR diff 视图（组合根）：左侧文件树 / 范围选择 / 跨文件搜索，右侧 Monaco DiffEditor + blame 列 +
- * 行内评论 / 草稿 view zone。数据流（变更文件 / 内容 / 评论 / blame / 范围 / 跳转）拆到 ./hooks/*；
- * 行内 view-zone 挂载走 ./zones/mountInlineZones；行内评论渲染见 ./inline-comments/。
+ * PR diff view (composition root): file tree / scope select / cross-file search on the left, Monaco DiffEditor + blame column +
+ * inline comment / draft view zones on the right. Data flow (changed files / content / comments / blame / scope / navigation) is split into ./hooks/*;
+ * inline view-zone mounting goes through ./zones/mountInlineZones; inline comment rendering is in ./inline-comments/.
  */
 export function DiffView({
   pr,
@@ -92,16 +92,16 @@ export function DiffView({
   onCommitViewConsumed,
   onViewCommitScopeChange,
 }: DiffViewProps) {
-  // 评论换行策略：GitHub/Bitbucket hard-break（单 \n → <br>）；GitLab CommonMark 软换行。
-  // 能力位缺省（旧数据/无连接）回退 true，保持既有行为。
+  // Comment line-break policy: GitHub/Bitbucket hard-break (single \n → <br>); GitLab CommonMark soft-wrap.
+  // When the capability bit is absent (old data / no connection), fall back to true to preserve existing behavior.
   const commentHardBreaks = capabilities?.commentHardBreaks ?? true;
-  // 行内评论 emoji 反应 / 图片附件能力（与评论 / 活动 tab 同源能力位）：缺省 = 不支持（不渲染加反应按钮 / 不启用粘贴上传）。
+  // Inline comment emoji reaction / image attachment capabilities (same capability bits as the comments / activity tab): absent = unsupported (don't render the add-reaction button / don't enable paste upload).
   const reactionsMode = capabilities?.commentReactions || undefined;
   const attachmentsEnabled = capabilities?.commentAttachments ?? false;
   const { t } = useTranslation();
-  // 草稿池：跨 ChatPane / DiffView 共享 store；本组件需要它来渲染 inline zones
+  // Draft pool: store shared across ChatPane / DiffView; this component needs it to render inline zones
   const drafts = useDraftsForPr(pr.localId);
-  // 用 state 而非 ref：onMount 异步触发，必须靠 state 变更触发后续 useEffect 重新运行装饰逻辑。
+  // Use state, not a ref: onMount fires asynchronously, so a state change is required to re-run the subsequent useEffect decoration logic.
   const [diffEditor, setDiffEditor] = useState<MonacoEditor.IStandaloneDiffEditor | null>(null);
 
   const progress = useSyncProgress(pr);
@@ -111,8 +111,8 @@ export function DiffView({
     pendingCommitView,
     onCommitViewConsumed,
   );
-  // 把「正在查看的单 commit」上报给上层，作为聊天区命令的隐式范围。commit 有父才可 parent..sha 定界；
-  // 全部变更 / root commit（无父）上报 null。
+  // Report the "currently viewed single commit" to the parent as the implicit scope for chat-pane commands. Only a commit with a parent can be bounded as parent..sha;
+  // all changes / root commit (no parent) reports null.
   useEffect(() => {
     if (!onViewCommitScopeChange) return;
     onViewCommitScopeChange(
@@ -128,7 +128,7 @@ export function DiffView({
   }, [scope, onViewCommitScopeChange]);
   const { files, filesError, retryFiles, selectedKey, setSelectedKey, selected, loadedKey } =
     useChangedFiles(pr, range, viewKey);
-  // 合并会冲突的文件路径集合（仅 pr.hasConflict 时实拉），文件树据此标三角警示。
+  // Set of file paths that would conflict on merge (only fetched when pr.hasConflict), the file tree marks a triangle warning based on this.
   const conflictPaths = useConflictFiles(pr);
   const { content, contentLoading, contentError, setContentError } = useFileContent(
     pr,
@@ -165,18 +165,18 @@ export function DiffView({
     onNavConsumed,
     triggerAutoEdit,
   });
-  // 捕获 Diff 选区 → selectionStore，供 ChatPane 把选中代码作为隐式上下文带进 agent/ask 提问。
+  // Capture the Diff selection → selectionStore, so ChatPane can carry the selected code as implicit context into agent/ask questions.
   useSelectionCapture({ diffEditor, selected, prLocalId: pr.localId, renderSideBySide });
 
-  // sidebar 模式：'tree' (文件树) / 'search' (跨文件搜索)，默认进文件树。PR 切换时回到 'tree'。
+  // sidebar mode: 'tree' (file tree) / 'search' (cross-file search), defaults to the file tree. Returns to 'tree' on PR switch.
   const [sidebarMode, setSidebarMode] = useState<'tree' | 'search'>('tree');
   useEffect(() => {
     setSidebarMode('tree');
   }, [pr.localId]);
 
-  // Bitbucket 评论附件 markdown 形如 `![alt](attachment:HASH)`；CommentNode 里把
-  // `attachment:` 协议改写成此基址 + `/HASH`，让 <a> 能打开（点击走 Electron
-  // setWindowOpenHandler 转 shell.openExternal，用户在系统浏览器看附件）。
+  // Bitbucket comment attachment markdown looks like `![alt](attachment:HASH)`; CommentNode rewrites
+  // the `attachment:` protocol to this base + `/HASH` so the <a> can open (clicking goes through Electron's
+  // setWindowOpenHandler to shell.openExternal, and the user views the attachment in the system browser).
   const attachmentBase = useMemo(() => {
     try {
       const u = new URL(pr.url);
@@ -186,7 +186,7 @@ export function DiffView({
     }
   }, [pr.url, pr.repo.projectKey, pr.repo.repoSlug]);
 
-  // 给文件树用：path → 锚到该文件的评论数（含双 path 别名 + renamed 的 oldPath）
+  // For the file tree: path → number of comments anchored to that file (including dual-path aliases + renamed oldPath)
   const commentCountByPath = useMemo(() => {
     const m = new Map<string, number>();
     if (!files) return m;
@@ -199,8 +199,8 @@ export function DiffView({
     return m;
   }, [files, comments]);
 
-  // 给文件树用：path → 该文件下的待发布草稿数 (pending + edited)。
-  // rejected (用户决断不发) / posted (已发，已在 comments chip 算了) 都排除。
+  // For the file tree: path → number of unpublished drafts under that file (pending + edited).
+  // Both rejected (user decided not to post) and posted (already posted, already counted in the comments chip) are excluded.
   const draftCountByPath = useMemo(() => {
     const m = new Map<string, number>();
     if (!files || !drafts) return m;
@@ -214,9 +214,9 @@ export function DiffView({
     return m;
   }, [files, drafts]);
 
-  // diff 增/删/改投影到滚动条总览标尺左道（编辑模式风格；评论锚点走右道，见下）
+  // diff add/delete/modify projected onto the left lane of the scrollbar overview ruler (edit-mode style; comment anchors take the right lane, see below)
   useDiffOverviewMarks({ diffEditor, content, selected, renderSideBySide });
-  // 行内评论标记 + view zone
+  // Inline comment marks + view zone
   useCommentZones({
     diffEditor,
     comments,
@@ -232,7 +232,7 @@ export function DiffView({
     attachmentsEnabled,
     readOnly,
   });
-  // 内联草稿 view zone（commit 只读视图不渲染）
+  // Inline draft view zone (not rendered in the commit read-only view)
   useDraftZones({
     diffEditor,
     drafts,
@@ -245,7 +245,7 @@ export function DiffView({
     attachmentsEnabled,
     scopeKind: scope.kind,
   });
-  // 行 hover '+' 新建草稿（commit 只读视图不挂）
+  // Line hover '+' to create a new draft (not mounted in the commit read-only view)
   useLineCommentAdder({
     diffEditor,
     content,
@@ -260,9 +260,9 @@ export function DiffView({
     t,
   });
 
-  // 切 PR 进行中：仍渲染旧 PR 的树/内容（stale），由下方遮罩盖住，待新 files 到位再整体替换。
+  // PR switch in progress: still render the old PR's tree/content (stale), covered by the overlay below, replaced wholesale once the new files arrive.
   const switching = files !== null && loadedKey !== viewKey;
-  // 错误仅在「无可信内容可展示」时整块呈现：首载失败（无 files）或切 PR 失败（现有 files 属于旧 PR）。
+  // The error is shown as a full block only when "there's no trustworthy content to display": initial load failed (no files) or PR switch failed (existing files belong to the old PR).
   if (filesError && (!files || loadedKey !== viewKey)) {
     return (
       <BackendErrorView
@@ -285,12 +285,12 @@ export function DiffView({
 
   return (
     <div className="diff-view">
-      {/* 切 PR 加载遮罩：盖住旧树/内容，新数据 ready（loadedKey 推进）后自动消失整体换新。
-          PaneLoading 默认 delayMs=150：命中缓存的快切换遮罩不出现、直接换新（零闪）。 */}
+      {/* PR-switch loading overlay: covers the old tree/content, disappears automatically and swaps in the new one once the new data is ready (loadedKey advances).
+          PaneLoading defaults to delayMs=150: cache-hit fast switches don't show the overlay and swap directly (zero flash). */}
       {switching && <PaneLoading overlay label={t('mainPane.loadingEditor')} />}
       <aside className="diff-file-list" style={{ width: `${String(fileListWidth)}px` }}>
-        {/* header 一直显示。tree 模式右侧是"搜索"图标 (进搜索)；search 模式
-            换"文件树"图标 (明示这是回到文件树的入口) */}
+        {/* header is always shown. In tree mode the right side is the "search" icon (enter search); in search mode
+            it becomes the "file tree" icon (making clear this is the entry back to the file tree) */}
         <div className="diff-file-list-header">
           {sidebarMode === 'search' ? (
             <span>{t('diffView.searchChanges')}</span>
@@ -336,7 +336,7 @@ export function DiffView({
             prLocalId={pr.localId}
             onJumpToMatch={(f, line, side) => {
               setSelectedKey(fileKey(f));
-              // 复用现有 pendingScroll 机制定位行 — 不带 draftId 仅 navigate
+              // Reuse the existing pendingScroll mechanism to locate the line — no draftId, navigate only
               setPendingScroll({ line, side });
             }}
             onExit={() => setSidebarMode('tree')}

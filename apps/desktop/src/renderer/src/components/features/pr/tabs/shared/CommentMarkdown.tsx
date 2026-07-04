@@ -6,12 +6,12 @@ import { remarkEmojiShortcodes } from '../../../../../lib/remark-emoji';
 import { transformBitbucketUrl } from '../../../../common';
 
 /**
- * 评论正文 markdown 渲染样板：评论/活动 tab 与 diff 行内评论 zone 共用同一套
- * remark / rehype / urlTransform 配置，仅 `components`（各自的 img / a / mermaid 覆盖）与外层
- * `className`（`pr-comment-body` / `comment-zone-body`）由调用方传入，互不收敛。
+ * Comment body markdown rendering boilerplate: the comments/activity tab and the diff inline comment zone share the same
+ * remark / rehype / urlTransform config, only `components` (each's img / a / mermaid overrides) and the outer
+ * `className` (`pr-comment-body` / `comment-zone-body`) are passed in by the caller, kept independent.
  *
- * hardBreaks（Bitbucket / GitHub）挂 remarkBreaks 让单 `\n` → `<br>`；GitLab 走标准 CommonMark
- * （单 `\n` = 空格）不挂，与各自 web 渲染对齐。
+ * hardBreaks (Bitbucket / GitHub) attaches remarkBreaks to turn a single `\n` → `<br>`; GitLab uses standard CommonMark
+ * (single `\n` = space) and doesn't attach it, aligned with each's web rendering.
  */
 export function CommentMarkdown({
   body,

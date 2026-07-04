@@ -2,13 +2,14 @@ import { useTranslation } from 'react-i18next';
 import { EDITOR_FONT_SIZE_PRESETS } from '@meebox/shared';
 
 /**
- * 编辑器字体分区：代码编辑器（Monaco）等宽字体 + 字号配置。两项均即时生效（字体输入失焦才写盘，
- * onChange 实时预览），由 useAppearanceDraft 编排。本分区在「常规」内以分隔线与语言 / 主题分组。
- * 编辑器配色主题已升格为全局「主题」分区（见 ThemeSection），不在此处。
+ * Editor font section: code editor (Monaco) monospace font + font size config. Both take effect immediately (the font
+ * input only writes to disk on blur, onChange live-previews), orchestrated by useAppearanceDraft. This section is grouped
+ * under "General" with a divider alongside language / theme.
+ * The editor color theme has been promoted to the global "theme" section (see ThemeSection), not here.
  *
- * 字体仿 VS Code `editor.fontFamily`：自由输入、可逗号分隔多个候选（按序优先），整体作为 font-family
- * 前缀拼到内置 mono 字体栈之前（拼接见 theme/resolveEditorFontFamily）。不做本机字体枚举（枚举会阻塞 UI
- * 1~2s）。
+ * The font mimics VS Code `editor.fontFamily`: free input, comma-separated multiple candidates (prioritized in order), the
+ * whole thing prepended as a font-family prefix before the built-in mono font stack (see theme/resolveEditorFontFamily for
+ * the concatenation). No local font enumeration (enumeration would block the UI for 1~2s).
  */
 export function EditorSection({
   fontFamily,
@@ -24,14 +25,14 @@ export function EditorSection({
   onFontSizeChange: (next: number) => void;
 }) {
   const { t } = useTranslation();
-  // 当前字号若不在预设档位（config 手改），并入下拉、按数值排序，保证选中态可见。
+  // If the current font size isn't among the preset tiers (hand-edited config), merge it into the dropdown and sort by value, ensuring the selected state is visible.
   const sizeOptions = [...new Set<number>([...EDITOR_FONT_SIZE_PRESETS, fontSize])].sort(
     (a, b) => a - b,
   );
 
   return (
     <section className="modal-section modal-section-divider">
-      {/* 字体为自由输入（可能较长的逗号分隔列表）→ 单独成行、输入框铺满，不与标题挤在一行。 */}
+      {/* The font is free input (possibly a long comma-separated list) → on its own row with the input filling the width, not crammed onto the title row. */}
       <div className="settings-field-stacked">
         <h4>{t('settings.editorFontTitle')}</h4>
         <input
