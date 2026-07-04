@@ -11,19 +11,21 @@ import type { PrAgentStrategy } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
 
 /**
- * runs 落在 `prs/<localId>/runs/<runId>.json`：跟 meta.json / comments.json 一起
- * 在同一个 PR 目录下，PR 退场时 deleteDir 整棵清掉。
+ * runs land at `prs/<localId>/runs/<runId>.json`: together with meta.json /
+ * comments.json under the same PR directory; when the PR leaves, deleteDir wipes
+ * the whole tree.
  *
- * localId 现是 prHashId 出来的 12 位 hex (`pr-hash-id.ts`)，无路径不安全字符，
- * 不需要再 sanitize。
+ * localId is now the 12-hex from prHashId (`pr-hash-id.ts`), with no path-unsafe
+ * characters, so no further sanitize is needed.
  */
 function runKey(prLocalId: string, runId: string): string {
   return `prs/${prLocalId}/runs/${runId}`;
 }
 
 /**
- * 时序 id，格式 `yyyymmdd-HHmmss-mmm`。按文件名字典序即时间序，列出时直接
- * 倒序排即可拿到 newest first，无需读所有文件内容。
+ * Chronological id, format `yyyymmdd-HHmmss-mmm`. Lexicographic filename order is
+ * time order, so listing just reverses to get newest first without reading any
+ * file content.
  */
 export function makeRunId(now: Date = new Date()): string {
   const pad = (n: number, w = 2): string => String(n).padStart(w, '0');
@@ -39,28 +41,29 @@ export interface StartReviewRunInput {
   tool: ReviewRunTool;
   prAgentVersion: string;
   strategy: PrAgentStrategy;
-  /** /ask 工具的问题；其他 tool 留空 */
+  /** The question for the /ask tool; leave empty for other tools */
   question?: string;
   /**
-   * 外部预分配的 runId (可选)。pr-agent run queue 在入队时就分配 id (用于
-   * cancel(runId) 引用)，到真正 start 时把同一 id 沿用下来，避免入队 id 跟
-   * 落盘 id 不一致。
+   * Externally pre-allocated runId (optional). The pr-agent run queue assigns the
+   * id at enqueue time (used for cancel(runId) references), and carries the same id
+   * through to the actual start, avoiding a mismatch between the enqueue id and the
+   * persisted id.
    */
   id?: string;
   /**
-   * 本次 run 使用的 LLM model id (含 provider 前缀，如 `openai/qwen-plus`)。
-   * 未指定时 run.model 留空，UI 自然不展示模型 chip
+   * The LLM model id used by this run (with provider prefix, e.g. `openai/qwen-plus`).
+   * When unspecified, run.model is left empty and the UI naturally shows no model chip
    */
   model?: string;
-  /** 复评引用：本次 /ask 是对某条 finding 的复评时，记下被引用的源 finding（前向链）。 */
+  /** Re-review reference: when this /ask is a re-review of a finding, record the referenced source finding (forward link). */
   referencedFinding?: ReviewRun['referencedFinding'];
-  /** 触发来源：user（手动）/ agent（编排派发）。用于 ChatPane 命令回显气泡；缺省不回显。 */
+  /** Trigger origin: user (manual) / agent (orchestration dispatch). Used for the ChatPane command echo bubble; omitted means no echo. */
   origin?: ReviewRun['origin'];
-  /** 单 commit 评审范围（parent..sha）；缺省 = PR 全量范围。落盘供结果卡展示范围徽标。 */
+  /** Single-commit review scope (parent..sha); omitted = full PR scope. Persisted for the result card's scope badge. */
   scope?: ReviewRun['scope'];
 }
 
-/** 写入初始 running 状态；调用方在 pr-agent 调用前必须先 start。 */
+/** Write the initial running state; callers must start before invoking pr-agent. */
 export async function startReviewRun(
   stateStore: StateStore,
   input: StartReviewRunInput,
@@ -97,19 +100,20 @@ export interface FinishReviewRunPatch {
   errorMessage?: string;
   stdout?: string;
   stderr?: string;
-  /** M3-B2 解析得到的结构化 findings */
+  /** Structured findings parsed in M3-B2 */
   findings?: Finding[];
-  /** UI 列表展示用的概要 */
+  /** Summary for the UI list display */
   summary?: string;
-  /** 本次 run 的真实 LLM token 用量（累加，来自 litellm callback） */
+  /** Actual LLM token usage for this run (accumulated, from litellm callback) */
   tokenUsage?: TokenUsage;
-  /** 复评裁决（解析自复评 /ask 输出的 `<verdict>`）；非复评 / 未给则不填 */
+  /** Re-review verdict (parsed from the `<verdict>` in re-review /ask output); left empty when not a re-review / not given */
   askVerdict?: ReviewRun['askVerdict'];
 }
 
 /**
- * Merge patch 到已存在的 run，重写文件。文件不存在返回 null（不重建空记录，
- * 避免 startReviewRun 失败后 finishReviewRun 静默成功）。
+ * Merge the patch into an existing run and rewrite the file. Returns null when the
+ * file does not exist (does not rebuild an empty record, to avoid finishReviewRun
+ * silently succeeding after startReviewRun failed).
  */
 export async function finishReviewRun(
   stateStore: StateStore,
@@ -137,20 +141,21 @@ export async function getReviewRun(
 }
 
 /**
- * 列出一个 PR 的 run 历史。按 startedAt **倒序** (newest first) 返回。
+ * List a PR's run history. Returns in **reverse** startedAt order (newest first).
  *
- * runId 本身是时序字典序 (`yyyymmdd-HHmmss-mmm`)，所以文件名升序排 = 时间升序排，
- * 不必读 file body 拿 startedAt 字段。
+ * runId is itself a chronological lexicographic id (`yyyymmdd-HHmmss-mmm`), so
+ * ascending filename order = ascending time order, no need to read the file body
+ * for the startedAt field.
  *
- * 分页（用于 ChatPane 向上滚动懒加载）：
- * - `opts.beforeId` 仅返回**更早**于此 runId 的条目（严格小于）；省略 = 不限上界
- * - `opts.limit` 截到 N 条；省略 = 不限
- * - 不读文件就能定位 page：先按 key 字典序排序 + 过滤 + 切片，再批量读，避免大库
- *   全表扫描
+ * Pagination (for ChatPane scroll-up lazy loading):
+ * - `opts.beforeId` returns only entries **earlier** than this runId (strictly less than); omitted = no upper bound
+ * - `opts.limit` truncates to N entries; omitted = no limit
+ * - locate the page without reading files: first sort keys lexicographically +
+ *   filter + slice, then batch read, avoiding a full-table scan on a large store
  */
 /**
- * 清空某 PR 的全部 run 历史记录（仅该 PR；删 `prs/<localId>/runs/*`）。返回删除条数。
- * 正在跑的 run 其落盘记录也会被删，但跑完时 finishReviewRun 会重新落盘 → 不影响进行中的 run。
+ * Clear all run history records for a PR (only that PR; deletes `prs/<localId>/runs/*`). Returns the number deleted.
+ * A running run's persisted record is deleted too, but finishReviewRun rewrites it on completion → does not affect the in-progress run.
  */
 export async function clearReviewRunsForPr(
   stateStore: StateStore,
@@ -186,7 +191,7 @@ export async function listReviewRunsForPr(
   keys.sort().reverse(); // newest first by runId
   let filtered = keys;
   if (opts.beforeId) {
-    // key 形如 `prs/<localId>/runs/<runId>`，取末段比较
+    // key looks like `prs/<localId>/runs/<runId>`, compare the last segment
     const before = opts.beforeId;
     filtered = keys.filter((k) => {
       const last = k.slice(k.lastIndexOf('/') + 1);
@@ -203,9 +208,9 @@ export async function listReviewRunsForPr(
 }
 
 /**
- * 该 PR 是否已有 /describe 或 /review 的有效产出（已成功，或正在跑）。用于 AutoPilot 准入：
- * 会话中一旦有 describe/review 输出（手动或自动）即判定已评审过，不再自动触发，避免重复评审。
- * 失败 / 取消的 run 不算（未产出有效结果），仍可触发。
+ * Whether the PR already has valid /describe or /review output (succeeded, or running). Used for AutoPilot admission:
+ * once a session has describe/review output (manual or automatic), it is deemed already reviewed and not auto-triggered again, avoiding duplicate review.
+ * Failed / cancelled runs do not count (no valid result produced), and can still trigger.
  */
 export async function hasReviewOutput(stateStore: StateStore, prLocalId: string): Promise<boolean> {
   const runs = await listReviewRunsForPr(stateStore, prLocalId);

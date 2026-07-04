@@ -2,51 +2,53 @@ import crypto from 'node:crypto';
 import type { PlatformKind } from '@meebox/shared';
 
 /**
- * PR 在 meebox 状态体系里的稳定身份。多平台中性化字段，方便 M5 接入 GitHub /
- * GitLab 时直接复用同一份 schema，不必各家自己造名:
+ * A PR's stable identity within meebox's state system. Platform-neutral fields, so that when M5 adds
+ * GitHub / GitLab the same schema is reused directly, without each platform inventing its own names:
  *
  *   platform × connection × group × repo × remoteId
  *
- * 字段语义映射 (各平台对齐到同一抽象):
- * | 抽象      | Bitbucket Server | GitHub             | GitLab          |
+ * Field semantics mapping (each platform aligned to the same abstraction):
+ * | abstract  | Bitbucket Server | GitHub             | GitLab          |
  * |-----------|------------------|--------------------|-----------------|
  * | platform  | bitbucket-server | github             | gitlab          |
  * | group     | projectKey       | owner (org/user)   | namespace       |
  * | repo      | repoSlug         | name               | name            |
- * | remoteId  | PR id (数字)     | PR number          | MR iid          |
+ * | remoteId  | PR id (numeric)  | PR number          | MR iid          |
  *
- * `connectionId` 是 meebox 本地标识，跟用户在 config.yaml 里给某个连接起的 id
- * 一致；它的角色是"分账户/分凭据" (用户可能有两个 Bitbucket 内网账号)，跟 platform 维度
- * 互补 (Bitbucket 跨账户的同 host 不撞 id 也是靠 connectionId 区分)。
+ * `connectionId` is a meebox-local identifier, matching the id the user gave a connection in config.yaml;
+ * its role is "per-account/per-credential" (a user may have two internal Bitbucket accounts), complementing
+ * the platform dimension (Bitbucket's same host across accounts also avoids id collisions via connectionId).
  *
- * 仅 `<connectionId>:<remoteId>` 不够 —— Bitbucket PR id 在仓库维度递增，同一 connection
- * 下两个不同 repo 完全可能撞 id (例如 proj-A/repo-x#42 和 proj-A/repo-y#42)。
+ * `<connectionId>:<remoteId>` alone is not enough — Bitbucket PR ids increment per repository, so two
+ * different repos under the same connection can readily collide on id (e.g. proj-A/repo-x#42 and proj-A/repo-y#42).
  *
- * `url` 是远端 PR 完整 URL 快照 (可选)，便于离线场景仍能直接跳转 / 调试；不参与哈希。
+ * `url` is a snapshot of the remote PR's full URL (optional), so offline scenarios can still jump / debug directly;
+ * it does not participate in the hash.
  */
 export interface PrIdentity {
   platform: PlatformKind;
   connectionId: string;
   group: string;
   repo: string;
-  /** 字符串形态，跟 remote API 取回的形状一致 (Bitbucket 是数字 PR id 字符串化) */
+  /** String form, matching the shape returned by the remote API (Bitbucket is a numeric PR id stringified) */
   remoteId: string;
-  /** 远端 PR URL 快照；仅作信息字段，不参与 hash */
+  /** Remote PR URL snapshot; informational field only, does not participate in the hash */
   url?: string;
 }
 
 /**
- * 把 PR 身份信息哈希为定长 12 位 hex 字符串，用作 localId / state 目录名。
+ * Hash the PR identity into a fixed-length 12-char hex string, used as the localId / state directory name.
  *
- * 选择 12 hex (~48 bit)：单用户使用量远低于 2^24，碰撞概率仍可忽略；又比
- * 完整 sha1 (40 chars) 短得多，目录列表 / 日志可读。
+ * Choosing 12 hex (~48 bit): a single user's usage is far below 2^24, so collision probability is still
+ * negligible; yet much shorter than a full sha1 (40 chars), keeping directory listings / logs readable.
  *
- * 输入规范化：用 `|` 当分隔符 (URL-safe + 不会出现在 connection id / group / repo
- * / remote id 里)。任何字段含 `|` 视为输入异常 (上层应该挡)，这里不做兜底替换以免
- * 引入碰撞。`url` 不进哈希源 (URL 在不同 Bitbucket 路径下可能变化但 PR 还是同一个)。
+ * Input normalization: use `|` as the separator (URL-safe + never appears in connection id / group / repo
+ * / remote id). Any field containing `|` is treated as invalid input (the upper layer should block it); no
+ * fallback substitution is done here, to avoid introducing collisions. `url` is not part of the hash source
+ * (the URL may vary across different Bitbucket paths while the PR is still the same one).
  *
- * 哈希源顺序：platform / connection / group / repo / remoteId —— 最稳定字段在前
- * 让前缀有判别力 (debug 时 prefix-match 也能命中)。
+ * Hash source order: platform / connection / group / repo / remoteId — most stable fields first so the
+ * prefix has discriminating power (prefix-match can still hit when debugging).
  */
 export function prHashId(identity: PrIdentity): string {
   const canonical = [
