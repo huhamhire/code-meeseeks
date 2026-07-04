@@ -3,6 +3,27 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> 本版重点：
+>
+> - **品牌官网上线**：基于 VitePress 的项目官网，含落地页 / 下载页 / 常见问题与托管的双语使用文档，经 GitHub Pages 自动部署。
+> - **项目国际化**：README 与使用文档全面双语化（英文默认 + 中文）。
+>
+> 本版聚焦项目对外呈现，桌面应用与 CLI 的功能行为较 0.9.0 无变化。
+
+### ✨ 新增
+
+- **品牌官网**：面向用户的项目官网正式上线（<https://huhamhire.github.io/code-meeseeks/>）。
+  - 落地页：一句话定位 + 深浅自适应的产品截图 + 核心特性 + 模型生态展示 + 跳转 Releases 的下载入口。
+  - 下载页：按访问者操作系统自动推荐对应安装包，GUI 与 CLI 分栏；CLI 提供 macOS / Linux 一键安装脚本；下载信息运行期取最新 Release，并有构建期静态兜底以抵御接口限流。
+  - 常见问题（FAQ）独立成页。
+  - 托管使用文档：官网直接从仓库使用文档构建渲染，中英文双语、随文档更新同步，且站内搜索支持中文界面。
+  - 部署与发版解耦：官网经独立流水线部署到 GitHub Pages，不占用应用 / CLI 的发版流程。
+- **项目文档国际化**：对外文档全面双语化（英文为默认 / 兜底、中文对照）。
+  - README 拆分为英文（默认）与中文两份，顶部可互相切换。
+  - 使用文档双语化——英文为正本、中文为对照镜像，官网按语言分别渲染。
+
 ## [0.9.0] - 2026-07-02
 
 > 本版重点：
@@ -404,6 +425,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...HEAD
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0
