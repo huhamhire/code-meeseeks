@@ -1,4 +1,4 @@
-// GitHub REST 响应形状（仅取用到的字段）。跨领域共享的数据类型，单独抽取于此。
+// GitHub REST response shapes (only the fields we use). Cross-domain shared data types, extracted here.
 
 export interface GhUser {
   login: string;
@@ -30,9 +30,9 @@ export interface GhPull {
   requested_reviewers?: GhUser[];
   mergeable?: boolean | null;
   mergeable_state?: string;
-  /** 会话（issue）评论数；仅 `/pulls/{n}` 详情带 */
+  /** Conversation (issue) comment count; only present on `/pulls/{n}` detail */
   comments?: number;
-  /** 行内评审评论数（含回复，回复本身即 review comment）；仅 `/pulls/{n}` 详情带 */
+  /** Inline review comment count (incl. replies, a reply is itself a review comment); only present on `/pulls/{n}` detail */
   review_comments?: number;
 }
 
@@ -44,8 +44,8 @@ export interface GhReview {
 }
 
 /**
- * GitHub 评论响应内嵌的反应聚合（counts-only，无 per-user）。每种 content 一个计数 + total_count。
- * `mine`（当前用户是否已反应）需另查 `.../reactions` 列表端点——见 GitHubCommentService。
+ * Reaction rollup embedded in GitHub comment responses (counts-only, no per-user). One count per content + total_count.
+ * `mine` (whether the current user has reacted) requires querying the `.../reactions` list endpoint separately — see GitHubCommentService.
  */
 export interface GhReactionRollup {
   total_count: number;
@@ -59,7 +59,7 @@ export interface GhReactionRollup {
   eyes: number;
 }
 
-/** GitHub 单条反应（列表 / 创建端点返回）。 */
+/** A single GitHub reaction (returned by list / create endpoints). */
 export interface GhReaction {
   id: number;
   user: GhUser | null;
@@ -105,7 +105,7 @@ export interface GhCommit {
   committer: GhUser | null;
 }
 
-/** search/issues 命中项（PR 形态）；repository_url 形如 https://api.github.com/repos/{o}/{r} */
+/** search/issues hit (PR form); repository_url looks like https://api.github.com/repos/{o}/{r} */
 export interface GhSearchItem {
   number: number;
   repository_url: string;

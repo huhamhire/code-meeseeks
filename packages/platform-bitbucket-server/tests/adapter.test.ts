@@ -38,7 +38,7 @@ function makeAdapter(fetchFn: FetchLike): BitbucketServerAdapter {
 }
 
 describe('BitbucketServerAdapter capabilities contract', () => {
-  it('declares full Bitbucket capabilities (3 状态审批 / 乐观锁 / full veto)', () => {
+  it('declares full Bitbucket capabilities (3-status approval / optimistic lock / full veto)', () => {
     const caps = makeAdapter(mockFetch({})).connection.capabilities();
     expect(caps.reviewStatuses).toEqual(['approved', 'needsWork', 'unapproved']);
     expect(caps.commentOptimisticLock).toBe(true);
@@ -194,7 +194,7 @@ describe('BitbucketServerAdapter.getCloneUrl with cloneProtocol="ssh"', () => {
     expect(url).toBe('git@bb.example.com:FX/fx-help.git');
   });
 
-  it('drops baseUrl port from SSH URL (端口由 ssh config 负责)', async () => {
+  it('drops baseUrl port from SSH URL (port handled by ssh config)', async () => {
     const adapter = new BitbucketServerAdapter({
       baseUrl: 'https://bb.example.com:8443',
       token: 'pat',
@@ -317,7 +317,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
     });
   });
 
-  it('按发现分类映射 dashboard role：默认 REVIEWER，created → AUTHOR', async () => {
+  it('maps dashboard role by discovery category: default REVIEWER, created → AUTHOR', async () => {
     const roles: string[] = [];
     const adapter = makeAdapter(
       mockFetch({
@@ -333,7 +333,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
     expect(roles).toEqual(['REVIEWER', 'REVIEWER', 'AUTHOR']);
   });
 
-  it('maps /merge vetoes into mergeStatus (canMerge=false + 逐条原因)', async () => {
+  it('maps /merge vetoes into mergeStatus (canMerge=false + per-item reason)', async () => {
     const adapter = makeAdapter(
       mockFetch({
         '/rest/api/1.0/dashboard/pull-requests': () => ({
@@ -369,7 +369,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
         { summary: 'Requires successful build', detail: undefined },
       ],
     });
-    // 无冲突但有 veto：hasConflict 仍为 false，阻塞原因只在 mergeStatus 里
+    // no conflict but has veto: hasConflict is still false, the blocking reason lives only in mergeStatus
     expect(prs[0]!.hasConflict).toBe(false);
   });
 
@@ -394,7 +394,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
     expect(prs[0]!.hasConflict).toBe(true);
   });
 
-  it('treats /merge fetch failure as no conflict (保守, 不误标 ignored)', async () => {
+  it('treats /merge fetch failure as no conflict (conservative, does not mislabel as ignored)', async () => {
     const adapter = makeAdapter(
       mockFetch({
         '/rest/api/1.0/dashboard/pull-requests': () => ({
@@ -404,7 +404,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
           start: 0,
           values: [samplePR],
         }),
-        // /merge 端点缺失 → mockFetch 默认 404
+        // /merge endpoint missing → mockFetch default 404
       }),
     );
     const prs = await adapter.prs.listPendingPullRequests();
@@ -476,7 +476,7 @@ describe('BitbucketServerAdapter.listPendingPullRequests', () => {
   });
 });
 
-describe('BitbucketServerAdapter.listPullRequestComments anchor 映射', () => {
+describe('BitbucketServerAdapter.listPullRequestComments anchor mapping', () => {
   const user = { name: 'u1', displayName: 'User One', slug: 'u1', active: true };
   const mkComment = (id: number, text: string) => ({
     id,
@@ -496,7 +496,7 @@ describe('BitbucketServerAdapter.listPullRequestComments anchor 映射', () => {
     }),
   });
 
-  it('行级 anchor → 映射 path/line/side/lineType', async () => {
+  it('line-level anchor → maps path/line/side/lineType', async () => {
     const adapter = makeAdapter(
       mockFetch(
         activities([
@@ -517,7 +517,7 @@ describe('BitbucketServerAdapter.listPullRequestComments anchor 映射', () => {
     expect(cs[0]!.anchor).toEqual({ path: 'src/a.ts', line: 42, side: 'new', lineType: 'added' });
   });
 
-  it('二进制 / 文件级评论 anchor 无 line/lineType → 降级 anchor=null（不崩）', async () => {
+  it('binary / file-level comment anchor with no line/lineType → degrades to anchor=null (no crash)', async () => {
     const adapter = makeAdapter(
       mockFetch(
         activities([
@@ -539,7 +539,7 @@ describe('BitbucketServerAdapter.listPullRequestComments anchor 映射', () => {
     expect(cs[0]!.anchor).toBeNull();
   });
 
-  it('有 line 缺 lineType → lineType 兜底 context', async () => {
+  it('has line but missing lineType → lineType falls back to context', async () => {
     const adapter = makeAdapter(
       mockFetch(
         activities([
@@ -566,9 +566,9 @@ describe('BitbucketServerAdapter.mergePullRequest', () => {
     let mergeVersion: string | null = 'unset';
     const adapter = makeAdapter(
       mockFetch({
-        // GET 单个 PR 拿 version
+        // GET single PR to get version
         '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022': () => samplePR,
-        // POST 合并：捕获 version query
+        // POST merge: capture version query
         '/rest/api/1.0/projects/FX/repos/fx-help/pull-requests/1022/merge': (url) => {
           mergeVersion = url.searchParams.get('version');
           return { ...samplePR, state: 'MERGED' };
@@ -576,13 +576,13 @@ describe('BitbucketServerAdapter.mergePullRequest', () => {
       }),
     );
     await adapter.prs.mergePullRequest({ projectKey: 'FX', repoSlug: 'fx-help' }, '1022');
-    // 用的是 GET 回来的最新 version (samplePR.version=5)，不是任何缓存值
+    // uses the latest version returned by GET (samplePR.version=5), not any cached value
     expect(mergeVersion).toBe('5');
   });
 });
 
 describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
-  // approve / needs work / unapproved (撤销) 三个状态映射到 Bitbucket PUT participants 端点
+  // approve / needs work / unapproved (dismiss) three statuses map to the Bitbucket PUT participants endpoint
   function captureFetch(): {
     fetchFn: FetchLike;
     calls: { method: string; url: string; body: string | undefined }[];
@@ -595,7 +595,7 @@ describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
         url: url.pathname,
         body: typeof init?.body === 'string' ? init.body : undefined,
       });
-      // ping 第一阶段：application-properties
+      // ping first stage: application-properties
       if (url.pathname === '/rest/api/1.0/application-properties') {
         return new Response(
           JSON.stringify({ version: '8.0.0', buildNumber: '8000', displayName: 'Bitbucket' }),
@@ -616,7 +616,7 @@ describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      // PUT participants：返回 200 + 模拟 Bitbucket 响应体（实际不读，但需要解析成功）
+      // PUT participants: return 200 + a mock Bitbucket response body (not actually read, but must parse successfully)
       if (url.pathname.includes('/participants/')) {
         return new Response(JSON.stringify({ approved: true }), {
           status: 200,
@@ -661,7 +661,7 @@ describe('BitbucketServerAdapter.setPullRequestReviewStatus', () => {
     expect(JSON.parse(put.body!).status).toBe('NEEDS_WORK');
   });
 
-  it('maps unapproved → UNAPPROVED (撤销之前的标记)', async () => {
+  it('maps unapproved → UNAPPROVED (dismisses the prior mark)', async () => {
     const { fetchFn, calls } = captureFetch();
     const adapter = makeAdapter(fetchFn);
     await adapter.connection.ping();

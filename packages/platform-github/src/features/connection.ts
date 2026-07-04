@@ -3,7 +3,7 @@ import { BaseConnection, type ConnectionContext } from '@meebox/platform-core';
 import type { GitHubClient } from '../client.js';
 import type { GhUser } from '../types.js';
 
-/** GitHub 连接领域：能力声明、ping（含 GHE 版本）、PAT/SSH clone URL。 */
+/** GitHub connection domain: capability declaration, ping (including GHE version), PAT/SSH clone URL. */
 export class GitHubConnection extends BaseConnection {
   readonly kind = 'github' as const;
 
@@ -15,9 +15,9 @@ export class GitHubConnection extends BaseConnection {
   }
 
   /**
-   * GitHub 能力：三态审批（APPROVE / REQUEST_CHANGES / dismiss）、行内多行评论；无评论乐观锁；
-   * 合并否决项只能近似（mergeable_state，partial）；发现走 search 强限流。
-   * 「解决线程 / suggestion 应用 / pending-review 成组」当前未实现 → 置 false（Phase 4 再开）。
+   * GitHub capabilities: three-state approval (APPROVE / REQUEST_CHANGES / dismiss), inline multi-line comments; no comment optimistic lock;
+   * merge vetoes can only be approximated (mergeable_state, partial); discovery goes through search with a hard rate limit.
+   * "resolvable threads / suggestion apply / pending-review grouping" are currently unimplemented → set to false (to be enabled in Phase 4).
    */
   capabilities(): PlatformCapabilities {
     return {
@@ -25,9 +25,9 @@ export class GitHubConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: false,
-      // GitHub Reactions API 仅固定 8 种 → fixed。
+      // GitHub Reactions API has only a fixed 8 kinds → fixed.
       commentReactions: 'fixed',
-      // GitHub 无公开评论附件上传 API（web 端走未文档化的私有端点）→ 关闭，UI 隐藏粘贴上传。
+      // GitHub has no public comment attachment upload API (the web uses an undocumented private endpoint) → off, UI hides paste-upload.
       commentAttachments: false,
       commentHardBreaks: true,
       mergeVetoFidelity: 'partial',
@@ -37,15 +37,15 @@ export class GitHubConnection extends BaseConnection {
       suggestions: false,
       reviewGrouping: false,
       activityTimeline: true,
-      // comments + review_comments 含行内回复 → 计数变化可靠反映回复，poller 仅在计数/更新时间变化时扫。
+      // comments + review_comments include inline replies → count changes reliably reflect replies, the poller only scans when count/update time changes.
       commentCountIncludesReplies: true,
     };
   }
 
   /**
-   * 探测连接：取当前用户落地缓存，并从响应头读取 GHE 版本号。
+   * Probe the connection: fetch the current user to land the cache, and read the GHE version number from the response headers.
    *
-   * 公有 github.com 无版本头时 serverVersion 记为 'github.com'。
+   * On public github.com with no version header, serverVersion is recorded as 'github.com'.
    */
   async ping(): Promise<PingResult> {
     const { body: me, headers } = await this.client.getWithHeaders<GhUser>('/user');
@@ -60,7 +60,7 @@ export class GitHubConnection extends BaseConnection {
   }
 
   /**
-   * 构造仓库的 git clone URL，按当前用户名内嵌 PAT 凭据（无用户时退无凭据形式）。
+   * Construct the repository's git clone URL, embedding PAT credentials by the current username (falls back to a credential-less form when there is no user).
    */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     return this.client.getCloneUrl(repo, this.getCurrentUser()?.name);

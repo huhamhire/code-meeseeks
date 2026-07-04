@@ -12,13 +12,13 @@ import {
   type PlatformTransport,
 } from '@meebox/platform-core';
 
-/** GitLab 连接配置 = 统一连接配置 + clone 协议（连接层自管的连接配置，非 HTTP 传输细节）。 */
+/** GitLab connection config = unified connection config + clone protocol (connection-layer-managed connection config, not HTTP transport details). */
 export interface GitLabClientOptions extends PlatformConnectionConfig {
-  /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
+  /** clone protocol: 'pat' (default) uses HTTPS + username:PAT; 'ssh' uses the system ssh config */
   cloneProtocol?: 'pat' | 'ssh';
 }
 
-/** 适配器构造选项与连接配置同形。 */
+/** Adapter constructor options share the shape of the connection config. */
 export type GitLabAdapterOptions = GitLabClientOptions;
 
 export class GitLabClientError extends Error {
@@ -35,8 +35,9 @@ export class GitLabClientError extends Error {
 const ACCEPT = 'application/json';
 
 /**
- * 容错归一 GitLab API base：用户可只填实例地址（`https://gitlab.example.com`）或完整
- * `.../api/v4`；统一补足 `/api/v4`（已带 `/api/vN` 则原样）。免去用户记忆 API 路径。
+ * Fault-tolerant normalization of the GitLab API base: users may enter just the instance address
+ * (`https://gitlab.example.com`) or the full `.../api/v4`; uniformly append `/api/v4` (leave as-is if it
+ * already carries `/api/vN`). Frees users from memorizing the API path.
  */
 export function normalizeGitLabApiBase(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, '');
@@ -45,12 +46,13 @@ export function normalizeGitLabApiBase(input: string): string {
 }
 
 /**
- * 极薄的 GitLab REST v4 客户端，实现 {@link PlatformTransport}：`PRIVATE-TOKEN` PAT 鉴权、`Link` 头
- * 分页迭代器、二进制拉取、错误抛 GitLabClientError。通用传输样板（超时 / URL 拼接 / 错误消息提取 /
- * Link 分页 / 有效 fetch 解析）复用 `@meebox/platform-core` helper；GitLab 特有部分（PRIVATE-TOKEN /
- * 资产 host 鉴权模式 / API 二进制端点）留在本类。业务语义留给 GitLabAdapter。
+ * Ultra-thin GitLab REST v4 client implementing {@link PlatformTransport}: `PRIVATE-TOKEN` PAT auth, `Link`-header
+ * pagination iterator, binary fetch, errors thrown as GitLabClientError. Generic transport boilerplate (timeout / URL
+ * building / error-message extraction / Link pagination / effective fetch resolution) reuses `@meebox/platform-core`
+ * helpers; GitLab-specific parts (PRIVATE-TOKEN / asset-host auth mode / API binary endpoints) stay in this class.
+ * Business semantics are left to GitLabAdapter.
  *
- * path 以 `/` 开头时拼 baseUrl；传入完整 http(s) URL 时原样请求（分页 next / 头像 / 附件等用）。
+ * When path starts with `/`, it is joined onto baseUrl; when a full http(s) URL is passed, it is requested as-is (used for pagination next / avatars / attachments etc.).
  */
 export class GitLabClient implements PlatformTransport {
   private readonly baseUrl: string;
@@ -58,13 +60,14 @@ export class GitLabClient implements PlatformTransport {
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;
   private readonly cloneProtocol: 'pat' | 'ssh';
-  /** 实例 web/git host（去掉 /api/v4），clone / 附件 / 网页用。 */
+  /** Instance web/git host (with /api/v4 stripped), used for clone / attachments / web pages. */
   private readonly webBase: string;
   readonly gitHost: string;
   /**
-   * MR 审批 API（approve/unapprove）是否可用：自 13.9 起为 Premium/Ultimate，CE / EE-Free 无。
-   * 由连接层 ping() 经 /metadata.enterprise 探测后写入；探测前保守置 false（CE）。是该平台连接
-   * 探测得到的连接态，故落在连接封装实例上，供连接（capabilities）与 PR（审批拉取）领域共读。
+   * Whether the MR approval API (approve/unapprove) is available: since 13.9 it is Premium/Ultimate, absent on CE / EE-Free.
+   * Written by the connection layer's ping() after edition detection via /metadata.enterprise; conservatively set to false (CE)
+   * before detection. This is connection state obtained by this platform's connection probe, so it lives on the connection
+   * wrapper instance, read by both the connection (capabilities) and PR (approval fetch) domains.
    */
   approvalsAvailable = false;
 
@@ -72,7 +75,7 @@ export class GitLabClient implements PlatformTransport {
     const apiBase = normalizeGitLabApiBase(opts.baseUrl);
     this.baseUrl = stripTrailingSlash(apiBase);
     this.token = opts.token;
-    // 连接层统一解析有效 fetch（显式 fetch 覆盖 > 代理 > 直连）。
+    // Connection layer uniformly resolves the effective fetch (explicit fetch override > proxy > direct).
     this.fetchFn = resolveConnectionFetch({ ...opts, baseUrl: apiBase });
     this.cloneProtocol = opts.cloneProtocol ?? 'pat';
     const api = new URL(apiBase);
@@ -82,13 +85,14 @@ export class GitLabClient implements PlatformTransport {
   }
 
   private authHeaders(): Record<string, string> {
-    // GitLab PAT 走 PRIVATE-TOKEN 头（OAuth token 才用 Authorization: Bearer）。
+    // GitLab PAT uses the PRIVATE-TOKEN header (only OAuth tokens use Authorization: Bearer).
     return { 'PRIVATE-TOKEN': this.token, Accept: ACCEPT };
   }
 
   /**
-   * 构造 git clone URL：ssh → `git@<gitHost>:<group>/<repo>.git`；pat → 在 web host 内嵌
-   * `<currentUser>:<PAT>`。pat 需 ping() 已落地当前用户（由调用方经连接上下文传入），否则抛错。
+   * Build the git clone URL: ssh → `git@<gitHost>:<group>/<repo>.git`; pat → embed `<currentUser>:<PAT>`
+   * in the web host. pat requires ping() to have already landed the current user (passed in by the caller via the
+   * connection context), otherwise throws.
    */
   getCloneUrl(repo: RepoRef, currentUserName?: string): string {
     const path = `${repo.projectKey}/${repo.repoSlug}`;
@@ -125,8 +129,8 @@ export class GitLabClient implements PlatformTransport {
 
   private async err(res: Response, method: string, urlOrPath: string): Promise<GitLabClientError> {
     const txt = await res.text().catch(() => '');
-    // GitLab 错误体是 JSON：`{message}` 或 `{error}`（部分端点）。带进错误信息便于上层定位
-    // （如合并 405「Method Not Allowed」/ 审批 403「approval ... not available」）。
+    // GitLab error bodies are JSON: `{message}` or `{error}` (some endpoints). Including it in the error message helps
+    // the upper layers localize the issue (e.g. merge 405 "Method Not Allowed" / approval 403 "approval ... not available").
     const apiMsg = extractApiMessage(txt);
     const detail = apiMsg ? `：${apiMsg}` : '';
     return new GitLabClientError(
@@ -141,7 +145,7 @@ export class GitLabClient implements PlatformTransport {
     return body;
   }
 
-  /** 同 get，但同时返回响应头（分页读 Link / X-Next-Page 用）。 */
+  /** Same as get, but also returns the response headers (used to read Link / X-Next-Page for pagination). */
   async getWithHeaders<T>(
     path: string,
     params?: Record<string, string>,
@@ -160,8 +164,8 @@ export class GitLabClient implements PlatformTransport {
   }
 
   /**
-   * multipart/form-data POST（附件上传用）。不手动设 Content-Type——交给 fetch 按 FormData 自动加
-   * boundary，否则边界缺失服务端无法解析。
+   * multipart/form-data POST (for attachment upload). Do not set Content-Type manually — let fetch auto-add the
+   * boundary from the FormData, otherwise a missing boundary leaves the server unable to parse it.
    */
   async postForm<T>(path: string, form: FormData): Promise<T> {
     const url = buildUrl(this.baseUrl, path);
@@ -192,8 +196,8 @@ export class GitLabClient implements PlatformTransport {
   }
 
   /**
-   * GitLab `Link` 头分页：列表端点返回 JSON 数组，下一页地址在 `Link: <url>; rel="next"`
-   * （keyset / offset 分页都带）。逐页跟 next 直到没有。per_page=100。
+   * GitLab `Link`-header pagination: list endpoints return a JSON array, the next-page address is in `Link: <url>; rel="next"`
+   * (carried by both keyset / offset pagination). Follow next page by page until none remains. per_page=100.
    */
   async *paginate<T>(path: string, params: Record<string, string> = {}): AsyncIterable<T> {
     let url: string | null = buildUrl(this.baseUrl, path, { per_page: '100', ...params });
@@ -207,12 +211,12 @@ export class GitLabClient implements PlatformTransport {
   }
 
   /**
-   * 资产 host 鉴权模式：
-   * - `'pat'`：本连接所属 GitLab 实例 host —— 带 PAT 取（私有资产需鉴权）；
-   * - `'public'`：公共头像 CDN（gravatar）—— GitLab 用户未设自定义头像时 `avatar_url` 即指向
-   *   此，是公开图片，按公网直取且**绝不带 PAT**（防令牌泄露给第三方）；
-   * - `null`：其它外部 host —— 不代拉（防 SSRF）、不带凭据。
-   * 评论里攻击者放的任意外部图片 URL 落到 `null` 分支，既不取也不带凭据。
+   * Asset-host auth mode:
+   * - `'pat'`: the GitLab instance host this connection belongs to — fetch with PAT (private assets need auth);
+   * - `'public'`: public avatar CDN (gravatar) — when a GitLab user has not set a custom avatar, `avatar_url` points
+   *   here; it is a public image, fetched directly over the public internet and **never with PAT** (prevents token leak to third parties);
+   * - `null`: any other external host — not proxy-fetched (prevents SSRF), no credentials.
+   * An arbitrary external image URL planted by an attacker in a comment falls into the `null` branch — neither fetched nor credentialed.
    */
   private assetHostMode(host: string): 'pat' | 'public' | null {
     if (host === new URL(this.baseUrl).host) return 'pat';
@@ -223,9 +227,9 @@ export class GitLabClient implements PlatformTransport {
   }
 
   /**
-   * 拉二进制资源（头像 / 评论内嵌附件）。url 为完整 http(s)。**只代理本实例 host**（带 PAT 取私有
-   * 资源）；公共 CDN（gravatar）公网直取不带 PAT；非白名单 host 直接返回 null（不外发 PAT、不代拉
-   * 任意 URL）。非 2xx / 异常 → null 让上层 fallback。
+   * Fetch a binary resource (avatar / comment-embedded attachment). url is a full http(s). **Only proxy this instance's host**
+   * (fetch private resources with PAT); public CDN (gravatar) is fetched directly over the public internet without PAT;
+   * non-allowlisted hosts return null directly (do not send out PAT, do not proxy-fetch arbitrary URLs). non-2xx / exception → null to let the upper layer fall back.
    */
   async getBinary(url: string): Promise<BinaryResource | null> {
     if (!/^https?:\/\//.test(url)) return null;
@@ -241,16 +245,16 @@ export class GitLabClient implements PlatformTransport {
   }
 
   /**
-   * 拉 API 相对路径的二进制（始终本实例 + PAT）。用于私有项目 markdown 上传的 API 下载端点
-   * `GET /projects/:id/uploads/:secret/:filename`（GitLab 17.4+；旧版无此路由 → 404 → null）。
-   * 上传的 web 路由 `/<ns>/<proj>/uploads/...` 对 PAT 一律 302 到登录页，故私有上传只能走 API。
+   * Fetch a binary from an API-relative path (always this instance + PAT). Used for the API download endpoint of
+   * private-project markdown uploads `GET /projects/:id/uploads/:secret/:filename` (GitLab 17.4+; older versions lack this route → 404 → null).
+   * The upload web route `/<ns>/<proj>/uploads/...` always 302s a PAT to the sign-in page, so private uploads can only go through the API.
    */
   async getApiBinary(path: string): Promise<BinaryResource | null> {
     return this.fetchBinary(buildUrl(this.baseUrl, path), true);
   }
 
   private async fetchBinary(url: string, withPat: boolean): Promise<BinaryResource | null> {
-    // 本实例 / API 资产带 PAT；公共 CDN（gravatar）绝不带 PAT，避免把令牌发给第三方。
+    // This instance / API assets carry PAT; public CDN (gravatar) never carries PAT, avoiding sending the token to third parties.
     const headers: Record<string, string> = { Accept: 'image/*,*/*;q=0.5' };
     if (withPat) headers['PRIVATE-TOKEN'] = this.token;
     let res: Response;
@@ -261,8 +265,8 @@ export class GitLabClient implements PlatformTransport {
     }
     if (!res.ok) return null;
     const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
-    // text/html = 登录重定向 / 错误页（如私有上传 web 路由 302→sign_in），不是资产 → null，
-    // 避免把 HTML 当图片塞进 data URL 显示成损坏图标。
+    // text/html = login redirect / error page (e.g. private-upload web route 302→sign_in), not an asset → null,
+    // avoiding stuffing HTML into a data URL as an image that renders as a broken icon.
     if (contentType.toLowerCase().startsWith('text/html')) return null;
     const buf = await res.arrayBuffer();
     return { bytes: new Uint8Array(buf), contentType };

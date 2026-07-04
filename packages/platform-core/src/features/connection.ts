@@ -7,76 +7,76 @@ import type {
 } from '@meebox/shared';
 import { PlatformDomainService } from '../context.js';
 
-/** 连接 / 身份 / 克隆（根领域）：连接探测、当前用户缓存、能力聚合入口、git 克隆 URL。 */
+/** Connection / identity / clone (root domain): connection probe, current-user cache, capability aggregation entry, git clone URL. */
 export interface PlatformConnection {
   readonly kind: PlatformKind;
 
   /**
-   * 平台能力描述符（静态，按平台/版本/套餐固定）。
+   * Platform capability descriptor (static, fixed per platform/version/plan).
    *
-   * 聚合自各领域能力声明，并由连接探测结果细化。
+   * Aggregated from each domain's capability declarations, and refined by connection probe results.
    */
   capabilities(): PlatformCapabilities;
 
   /**
-   * 连接探测：返回服务端版本号与当前用户。
+   * Connection probe: returns the server version number and current user.
    *
-   * 版本低于硬下限时 ok=false 并给出 reason。
+   * When the version is below the hard minimum, ok=false with a reason.
    */
   ping(): Promise<PingResult>;
 
   /**
-   * 返回 ping 期间缓存的当前 PAT 所属用户；未就绪返回 null。
+   * Return the user owning the current PAT, cached during ping; returns null if not ready.
    *
-   * 同步方法，仅读缓存、不发请求。
+   * Synchronous method, only reads the cache, makes no request.
    */
   getCurrentUser(): PlatformUser | null;
 
   /**
-   * 注入 / 恢复当前用户缓存。
+   * Inject / restore the current-user cache.
    *
-   * main 建连接时用本地持久化身份预热，ping 完成后被远端结果覆盖。
+   * main pre-warms with locally persisted identity when establishing the connection, overwritten by the remote result after ping completes.
    */
   setCurrentUser?(user: PlatformUser | null): void;
 
   /**
-   * 返回 git clone URL（PAT 内嵌 user:PAT 或 ssh scp-like 形式）。
+   * Return the git clone URL (with PAT embedded as user:PAT or ssh scp-like form).
    */
   getCloneUrl(repo: RepoRef): Promise<string>;
 }
 
 /**
- * 连接领域基类：当前用户缓存读写为跨平台共享实现；ping / capabilities / clone 由平台子类实现。
+ * Connection domain base class: current-user cache read/write is a cross-platform shared implementation; ping / capabilities / clone are implemented by platform subclasses.
  */
 export abstract class BaseConnection extends PlatformDomainService implements PlatformConnection {
   abstract readonly kind: PlatformKind;
 
   /**
-   * 由平台子类声明本平台的能力描述符（审批模型、行内评论、合并否决保真度等）。
+   * Declared by platform subclasses: this platform's capability descriptor (approval model, inline comments, merge-veto fidelity, etc.).
    */
   abstract capabilities(): PlatformCapabilities;
 
   /**
-   * 由平台子类实现连接探测：取服务端版本与当前用户，并落地用户缓存。
+   * Connection probe implemented by platform subclasses: fetch the server version and current user, and populate the user cache.
    */
   abstract ping(): Promise<PingResult>;
 
   /**
-   * 读取共享上下文缓存的当前用户；未就绪返回 null。
+   * Read the current user cached in the shared context; returns null if not ready.
    */
   getCurrentUser(): PlatformUser | null {
     return this.ctx.getCurrentUser();
   }
 
   /**
-   * 写入共享上下文的当前用户缓存。
+   * Write the current-user cache in the shared context.
    */
   setCurrentUser(user: PlatformUser | null): void {
     this.ctx.setCurrentUser(user);
   }
 
   /**
-   * 由平台子类实现：按仓库引用构造可直接克隆的 git URL。
+   * Implemented by platform subclasses: construct a directly cloneable git URL from a repo reference.
    */
   abstract getCloneUrl(repo: RepoRef): Promise<string>;
 }

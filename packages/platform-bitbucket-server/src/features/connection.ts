@@ -9,11 +9,11 @@ import { BaseConnection, type ConnectionContext } from '@meebox/platform-core';
 import type { BitbucketClient } from '../client.js';
 import type { BitbucketApplicationProperties, BitbucketUser } from '../types.js';
 
-/** 支持的 Bitbucket Server 最低版本（multilineMarker 等关键能力 7.0 起）。 */
+/** Minimum supported Bitbucket Server version (key capabilities like multilineMarker start at 7.0). */
 const MIN_VERSION: readonly [number, number, number] = [7, 0, 0];
 
 /**
- * Bitbucket Server 连接领域：能力声明、连接探测（版本下限 + 当前用户）、PAT/SSH clone URL。
+ * Bitbucket Server connection domain: capability declaration, connection probe (version floor + current user), PAT/SSH clone URL.
  */
 export class BitbucketServerConnection extends BaseConnection {
   readonly kind = 'bitbucket-server' as const;
@@ -26,10 +26,10 @@ export class BitbucketServerConnection extends BaseConnection {
   }
 
   /**
-   * Bitbucket Server 能力：三态审批、行内多行评论、删改乐观锁、否决项逐条（/merge vetoes）。
+   * Bitbucket Server capabilities: tri-state approval, inline multiline comments, edit/delete optimistic lock, per-item vetoes (/merge vetoes).
    *
-   * 无「解决线程 / 代码 suggestion / pending-review 成组」概念；dashboard 发现不强限流；
-   * dashboard 支持 role=REVIEWER/AUTHOR → 提供「待我评审 / 我创建的」两类发现。
+   * No concept of "resolvable thread / code suggestion / pending-review grouping"; dashboard discovery is not hard rate-limited;
+   * dashboard supports role=REVIEWER/AUTHOR → provides two discovery kinds: "review requested / created by me".
    */
   capabilities(): PlatformCapabilities {
     return {
@@ -37,7 +37,7 @@ export class BitbucketServerConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: true,
       commentOptimisticLock: true,
-      // 评论 emoji 反应自 7.x 起（最低支持版即 7.0）；emoticon 支持任意 emoji → free。
+      // Comment emoji reactions since 7.x (minimum supported version is 7.0); emoticon supports any emoji → free.
       commentReactions: 'free',
       commentAttachments: true,
       commentHardBreaks: true,
@@ -48,17 +48,17 @@ export class BitbucketServerConnection extends BaseConnection {
       suggestions: false,
       reviewGrouping: false,
       activityTimeline: true,
-      // properties.commentCount 仅数顶层评论、updatedDate 也不随评论跳变 → 无「含回复」信号，poller 兜底每轮扫待处理 PR。
+      // properties.commentCount only counts top-level comments, and updatedDate does not change with comments → no "includes replies" signal, so the poller falls back to scanning pending PRs every round.
       commentCountIncludesReplies: false,
     };
   }
 
   /**
-   * 连接探测：读 application-properties 取版本，从响应头 X-AUSERNAME 取当前用户 slug 再查
-   * displayName 落地缓存。
+   * Connection probe: read application-properties for the version, get the current user slug from the
+   * X-AUSERNAME response header, then query displayName and cache it.
    *
-   * 版本低于硬下限（{@link MIN_VERSION}）时 ok=false 并给出 reason；/users/{slug} 失败时退而用
-   * slug 充当 displayName。
+   * When the version is below the hard floor ({@link MIN_VERSION}), ok=false with a reason; when /users/{slug}
+   * fails, fall back to using the slug as displayName.
    */
   async ping(): Promise<PingResult> {
     const { body: props, headers } =
@@ -66,7 +66,7 @@ export class BitbucketServerConnection extends BaseConnection {
         '/rest/api/1.0/application-properties',
       );
 
-    // 当前用户从响应头 X-AUSERNAME (slug) 拿，再查 /users/{slug} 拿 displayName
+    // Get the current user from the X-AUSERNAME (slug) response header, then query /users/{slug} for displayName
     const slug = headers.get('x-ausername');
     if (slug) {
       try {
@@ -75,7 +75,7 @@ export class BitbucketServerConnection extends BaseConnection {
         );
         this.setCurrentUser({ name: u.name, displayName: u.displayName, slug: u.slug });
       } catch {
-        // /users/{slug} 失败时退而求其次，slug 当 displayName
+        // When /users/{slug} fails, fall back to using the slug as displayName
         this.setCurrentUser({ name: slug, displayName: slug, slug });
       }
     }
@@ -89,7 +89,7 @@ export class BitbucketServerConnection extends BaseConnection {
       ok: false,
       serverVersion: props.version,
       user,
-      // 后台不拼面向用户的本地化文案：以错误码 + meta 承载，前端按码 i18n（errors.ECF0001）。
+      // The backend does not assemble user-facing localized text: carry it as an error code + meta, and the frontend does i18n by code (errors.ECF0001).
       reason: errorCodeMessage(ERROR_CODES.CF_UNSUPPORTED_VERSION, {
         version: props.version,
         min: MIN_VERSION.join('.'),
@@ -98,16 +98,16 @@ export class BitbucketServerConnection extends BaseConnection {
   }
 
   /**
-   * 构造仓库的 git clone URL（PAT 内嵌当前用户名 / ssh scp-like，按连接 clone 协议切分）。
+   * Construct the repository's git clone URL (PAT embeds the current username / ssh scp-like, split by the connection's clone protocol).
    */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     return this.client.getCloneUrl(repo, this.getCurrentUser()?.name);
   }
 
   /**
-   * 比较版本号：逐段数值比较 `actual` 与最低要求，返回正/零/负表示 ≥ / = / <。
+   * Compare version numbers: segment-by-segment numeric comparison of `actual` against the minimum requirement, returning positive/zero/negative for ≥ / = / <.
    *
-   * 非数字段按 0 处理，容错形如 `7.21.0-build` 的尾缀。
+   * Non-numeric segments are treated as 0, tolerating suffixes like `7.21.0-build`.
    */
   private compareVersion(actual: string, min: readonly [number, number, number]): number {
     const parts = actual.split('.').map((s) => Number.parseInt(s, 10));

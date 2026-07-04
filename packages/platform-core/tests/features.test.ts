@@ -33,7 +33,7 @@ describe('MutableConnectionContext + BaseConnection', () => {
     const user: PlatformUser = { name: 'me', displayName: 'Me' };
     conn.setCurrentUser(user);
     expect(conn.getCurrentUser()).toBe(user);
-    // 写到 connection 即写进共享 ctx —— 其它领域服务读同一份。
+    // writing to the connection writes into the shared ctx — other domain services read the same copy.
     expect(ctx.getCurrentUser()).toBe(user);
   });
 

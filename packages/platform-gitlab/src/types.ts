@@ -1,4 +1,4 @@
-// GitLab REST v4 响应形状（仅取用到的字段）。跨领域共享的数据类型，单独抽取于此。
+// GitLab REST v4 response shapes (only the fields used). Data types shared across domains, extracted separately here.
 
 export interface GlUser {
   id: number;
@@ -29,16 +29,16 @@ export interface GlMr {
   author: GlUser;
   source_branch: string;
   target_branch: string;
-  /** head（源分支最新）sha；详情与列表都带 */
+  /** head (source branch latest) sha; present in both detail and list */
   sha?: string;
   reviewers?: GlUser[];
-  /** 15.6+ 的丰富可合并枚举；旧实例可能缺，退 merge_status */
+  /** 15.6+ rich mergeability enum; old instances may lack it, fall back to merge_status */
   detailed_merge_status?: string;
   merge_status?: 'can_be_merged' | 'cannot_be_merged' | 'unchecked' | 'checking';
   has_conflicts?: boolean;
-  /** 仅单 MR 详情带；行内评论 position 与 base/head sha 需要它 */
+  /** only present in single-MR detail; inline comment position and base/head sha need it */
   diff_refs?: GlDiffRefs | null;
-  /** 用户评论（note）数，含回复、不含系统 note；列表与详情都带 */
+  /** user comment (note) count, includes replies, excludes system notes; present in both list and detail */
   user_notes_count?: number;
 }
 
@@ -86,7 +86,7 @@ export interface GlDiscussion {
   notes: GlNote[];
 }
 
-/** GitLab note 上的一条 award emoji（反应）。`name` 为 GitLab emoji 名（如 `thumbsup`）。 */
+/** An award emoji (reaction) on a GitLab note. `name` is the GitLab emoji name (e.g. `thumbsup`). */
 export interface GlAwardEmoji {
   id: number;
   name: string;

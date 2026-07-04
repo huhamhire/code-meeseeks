@@ -23,14 +23,14 @@ import type {
   BitbucketPullRequest,
 } from '../types.js';
 
-/** Bitbucket 活动 action → 评审决断事件类型（仅决断类，其余 action 不在表中 → 跳过）。 */
+/** Bitbucket activity action → review verdict event kind (verdicts only; other actions absent from the table → skipped). */
 const ACTIVITY_KIND_BY_ACTION: Record<string, PrActivityKind> = {
   APPROVED: 'approved',
   UNAPPROVED: 'unapproved',
   REVIEWED: 'needsWork',
 };
 
-/** Bitbucket participant.status → 中性 reviewer 状态（缺省时退回 approved 布尔，见 mapReviewer）。 */
+/** Bitbucket participant.status → neutral reviewer status (falls back to the approved boolean when absent, see mapReviewer). */
 const REVIEWER_STATUS_BY_STATUS: Partial<
   Record<NonNullable<BitbucketParticipant['status']>, ReviewerStatus>
 > = {
@@ -39,14 +39,14 @@ const REVIEWER_STATUS_BY_STATUS: Partial<
   UNAPPROVED: 'unapproved',
 };
 
-/** 中性 review 状态 → Bitbucket participant status（写审批用）。 */
+/** Neutral review status → Bitbucket participant status (used to write approval). */
 const BB_STATUS_BY_REVIEW: Record<ReviewerStatus, string> = {
   approved: 'APPROVED',
   needsWork: 'NEEDS_WORK',
   unapproved: 'UNAPPROVED',
 };
 
-/** Bitbucket PR 操作领域：dashboard 发现、提交、活动决断、审批、合并。 */
+/** Bitbucket PR operations domain: dashboard discovery, commits, activity verdicts, approval, merge. */
 export class BitbucketPullRequestService extends BasePullRequestService {
   constructor(
     ctx: ConnectionContext,
@@ -56,10 +56,10 @@ export class BitbucketPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * dashboard 聚合发现待处理 PR，并并行拉每个 PR 的 /merge 状态归一可合并性。
+   * Discover pending PRs via dashboard aggregation, fetching each PR's /merge status in parallel to normalize mergeability.
    *
-   * 发现分类 → dashboard role：created=我创建(AUTHOR)，其余(待我评审)=REVIEWER。单个 /merge 失败
-   * 降级为「无已知阻塞」（canMerge=true / 无冲突 / 无 vetoes），与原 hasConflict 失败降级语义一致。
+   * Discovery category → dashboard role: created=authored by me (AUTHOR), rest (awaiting my review)=REVIEWER. A single /merge
+   * failure degrades to "no known blockers" (canMerge=true / no conflict / no vetoes), matching the original hasConflict failure degradation.
    */
   async listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]> {
     const role = opts?.filter === 'created' ? 'AUTHOR' : 'REVIEWER';
@@ -86,11 +86,11 @@ export class BitbucketPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 按 repo + 号从远端拉单个 PR（详情 + 可合并性，复用映射）；404 / 403 由 client 抛出供上层归一。
+   * Fetch a single PR from the remote by repo + number (details + mergeability, reusing the mapping); 404 / 403 thrown by the client for upstream normalization.
    *
-   * `/merge` 仅对 **OPEN** PR 有意义——对已合并 / 已拒绝的 PR 调用会回 409
-   * IllegalPullRequestStateException，故非 OPEN 退化为中性合并态（不可合并 / 无冲突）。
-   * 发现列表只列 OPEN PR、不经此路径，本退化只影响「按 URL 打开」已退场 PR 的场景。
+   * `/merge` is only meaningful for **OPEN** PRs — calling it on a merged / declined PR returns 409
+   * IllegalPullRequestStateException, so a non-OPEN PR degrades to a neutral merge state (not mergeable / no conflict).
+   * The discovery list only lists OPEN PRs and does not take this path; this degradation only affects the "open by URL" case for retired PRs.
    */
   async getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest> {
     const base = `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}`;
@@ -103,9 +103,9 @@ export class BitbucketPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 列出 PR 全部提交（newest-first，与 git log 一致）。
+   * List all commits of a PR (newest-first, consistent with git log).
    *
-   * 一次性收集分页结果——PR 通常仅数十个 commit，不分页问题不大。
+   * Collects paginated results all at once — a PR usually has only dozens of commits, so not paginating is fine.
    */
   async listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]> {
     const out: PrCommit[] = [];
@@ -118,9 +118,9 @@ export class BitbucketPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 从 /activities 流里挑出评审决断事件（APPROVED / UNAPPROVED / REVIEWED=标记 Needs Work）。
+   * Pick review verdict events out of the /activities stream (APPROVED / UNAPPROVED / REVIEWED=marks Needs Work).
    *
-   * 评论（COMMENTED）走评论领域，这里只取决断；非决断 action 跳过。
+   * Comments (COMMENTED) go through the comment domain; here only verdicts are taken; non-verdict actions are skipped.
    */
   async listPullRequestActivity(repo: RepoRef, prId: string): Promise<PrActivityEvent[]> {
     const out: PrActivityEvent[] = [];
@@ -140,9 +140,9 @@ export class BitbucketPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 把当前 PAT 用户在 PR 上的 review 状态写到远端（PUT participants/{userSlug}）。
+   * Write the current PAT user's review status on the PR to the remote (PUT participants/{userSlug}).
    *
-   * 需 ping() 已落地当前用户（取 slug + name 构造端点与 body），否则抛错。
+   * Requires ping() to have populated the current user (takes slug + name to build the endpoint and body), otherwise throws.
    */
   async setPullRequestReviewStatus(
     repo: RepoRef,
@@ -163,10 +163,10 @@ export class BitbucketPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 合并 PR：先拉最新 PR 取 version（乐观锁）再 POST /merge?version=N。
+   * Merge a PR: first fetch the latest PR to get version (optimistic lock), then POST /merge?version=N.
    *
-   * 已合并（他人已合 / 重复点击）回 409 + IllegalPullRequestStateException → 归一成
-   * PR_ALREADY_MERGED 错误码供前端 i18n；其它 409（冲突 / veto / 无权限）原样冒泡。
+   * Already merged (merged by someone else / double click) returns 409 + IllegalPullRequestStateException → normalized to the
+   * PR_ALREADY_MERGED error code for frontend i18n; other 409s (conflict / veto / no permission) bubble up as-is.
    */
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {
     const base = `/rest/api/1.0/projects/${repo.projectKey}/repos/${repo.repoSlug}/pull-requests/${prId}`;
@@ -181,9 +181,9 @@ export class BitbucketPullRequestService extends BasePullRequestService {
     }
   }
 
-  // ---- 映射（领域私有）----
+  // ---- mapping (domain-private) ----
 
-  /** 拉单个 PR 的 /merge 状态（canMerge / conflicted / vetoes 同源一次拉全）。 */
+  /** Fetch a single PR's /merge status (canMerge / conflicted / vetoes fetched together from one source). */
   private async fetchMergeStatus(pr: BitbucketPullRequest): Promise<BitbucketMergeStatus> {
     const project = pr.toRef.repository.project.key;
     const repo = pr.toRef.repository.slug;
@@ -192,7 +192,7 @@ export class BitbucketPullRequestService extends BasePullRequestService {
     );
   }
 
-  /** Bitbucket `/merge` 响应 → 中性 MergeStatus；vetoes 由服务端直给文案，缺省归一成空数组。 */
+  /** Bitbucket `/merge` response → neutral MergeStatus; vetoes come straight from the server as text, normalized to an empty array when absent. */
   private mapMergeStatus(bb: BitbucketMergeStatus): MergeStatus {
     return {
       canMerge: bb.canMerge,
@@ -204,14 +204,14 @@ export class BitbucketPullRequestService extends BasePullRequestService {
     };
   }
 
-  /** Bitbucket participant → 中性 Reviewer；status（7.x+）缺省时退回 approved 布尔。 */
+  /** Bitbucket participant → neutral Reviewer; falls back to the approved boolean when status (7.x+) is absent. */
   private mapReviewer(p: BitbucketParticipant): Reviewer {
     const mapped = p.status ? REVIEWER_STATUS_BY_STATUS[p.status] : undefined;
     const status: ReviewerStatus = mapped ?? (p.approved ? 'approved' : 'unapproved');
     return { ...mapUser(p.user), status };
   }
 
-  /** Bitbucket PR → 中性 PullRequest；hasConflict 为 mergeStatus.conflicted 的派生镜像。 */
+  /** Bitbucket PR → neutral PullRequest; hasConflict is a derived mirror of mergeStatus.conflicted. */
   private mapPullRequest(bb: BitbucketPullRequest, mergeStatus: MergeStatus): PullRequest {
     const url = bb.links.self[0]?.href ?? '';
     const targetRepo = bb.toRef.repository;
@@ -231,12 +231,12 @@ export class BitbucketPullRequestService extends BasePullRequestService {
       reviewers: bb.reviewers.map((r) => this.mapReviewer(r)),
       mergeStatus,
       hasConflict: mergeStatus.conflicted,
-      // 仅顶层评论数（回复不计）；capabilities.commentCountIncludesReplies=false 标记其粗粒度。
+      // Top-level comment count only (replies not counted); capabilities.commentCountIncludesReplies=false marks its coarse granularity.
       commentCount: bb.properties?.commentCount,
     };
   }
 
-  /** Bitbucket commit → 中性 PrCommit，附 commit 详情页 URL。 */
+  /** Bitbucket commit → neutral PrCommit, with the commit details page URL attached. */
   private mapBitbucketCommit(c: BitbucketCommit, repo: RepoRef): PrCommit {
     const url = `${this.client.webBase}/projects/${repo.projectKey}/repos/${repo.repoSlug}/commits/${c.id}`;
     return {
@@ -253,17 +253,17 @@ export class BitbucketPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * Bitbucket commit 的 author/committer 只给 name（含 email），无 slug / displayName。
+   * A Bitbucket commit's author/committer only gives name (including email), no slug / displayName.
    *
-   * 这里把 name 同时当 name + displayName，slug 留空（UI 头像 fallback 到 initials），email 暂丢弃。
+   * Here name is used as both name + displayName, slug is left empty (UI avatar falls back to initials), email is dropped for now.
    */
   private committerToUser(c: { name: string; emailAddress?: string }): PlatformUser {
     return { name: c.name, displayName: c.name };
   }
 
   /**
-   * 判断错误是否为「PR 已被合并」：Bitbucket 对已合并 / 已关闭 PR 的合并请求回 409 +
-   * IllegalPullRequestStateException，错误体含「already … merged」。其它 409（冲突 / veto / 无权限）不在此列。
+   * Determine whether the error is "PR already merged": Bitbucket returns 409 +
+   * IllegalPullRequestStateException for a merge request on a merged / closed PR, with the error body containing "already … merged". Other 409s (conflict / veto / no permission) are not included.
    */
   private isAlreadyMergedError(err: unknown): boolean {
     if (!(err instanceof BitbucketClientError) || err.status !== 409) return false;

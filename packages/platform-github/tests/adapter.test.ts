@@ -2,7 +2,7 @@ import type { PrDiscoveryFilter } from '@meebox/shared';
 import { describe, expect, it } from 'vitest';
 import { GitHubAdapter, normalizeGitHubApiBase } from '../src/adapter.js';
 
-// ---- 路由式 mock fetch：按 method + URL 子串匹配，返回 JSON Response，并记录请求 ----
+// ---- Route-based mock fetch: match by method + URL substring, return a JSON Response, and record the request ----
 interface Route {
   method?: string;
   match: string;
@@ -142,13 +142,13 @@ describe('GitHubAdapter listPendingPullRequests', () => {
     expect(pr.repo).toEqual({ projectKey: 'acme', repoSlug: 'web' });
     expect(pr.sourceRef.sha).toBe('headsha');
     expect(pr.mergeStatus.canMerge).toBe(true);
-    // reviewer：已请求未评审(pending=unapproved) + 已 APPROVED 的 rev
+    // reviewer: requested-but-not-reviewed (pending=unapproved) + the already-APPROVED rev
     const byName = Object.fromEntries(pr.reviewers.map((r) => [r.name, r.status]));
     expect(byName.rev).toBe('approved');
     expect(byName.pending).toBe('unapproved');
   });
 
-  it('默认 filter = review-requested，查询带 is:open（排除已合并/已关闭）', async () => {
+  it('default filter = review-requested, query carries is:open (excludes merged/closed)', async () => {
     const { adapter, captured } = makeAdapter([{ match: '/search/issues', body: { items: [] } }]);
     await adapter.prs.listPendingPullRequests();
     const q = new URL(captured[0]!.url).searchParams.get('q') ?? '';
@@ -157,7 +157,7 @@ describe('GitHubAdapter listPendingPullRequests', () => {
     expect(q).toContain('review-requested:@me');
   });
 
-  it('四类发现分类映射到对应 search 限定词，均含 is:open', async () => {
+  it('four discovery categories map to their search qualifiers, all carrying is:open', async () => {
     const cases: Array<[PrDiscoveryFilter, string]> = [
       ['review-requested', 'review-requested:@me'],
       ['created', 'author:@me'],
@@ -169,7 +169,7 @@ describe('GitHubAdapter listPendingPullRequests', () => {
       await adapter.prs.listPendingPullRequests({ filter });
       const q = new URL(captured[0]!.url).searchParams.get('q') ?? '';
       expect(q).toContain(qualifier);
-      expect(q).toContain('is:open'); // 已合并/已关闭 PR 不应出现在任一分类
+      expect(q).toContain('is:open'); // merged/closed PRs should not appear in any category
     }
   });
 });
@@ -349,8 +349,8 @@ describe('GitHubAdapter mergeStatus mapping', () => {
   });
 });
 
-describe('GitHubAdapter getAttachment（PAT 仅发可信域）', () => {
-  it('外部 host 直接 null 且不发起请求；githubusercontent 资产带 PAT 代理', async () => {
+describe('GitHubAdapter getAttachment (PAT only sent to trusted domains)', () => {
+  it('external host returns null without a request; githubusercontent assets proxied with PAT', async () => {
     const { adapter, captured } = makeAdapter([
       { match: 'evil.example.com', body: '' },
       { match: 'githubusercontent.com', body: '' },
@@ -359,10 +359,10 @@ describe('GitHubAdapter getAttachment（PAT 仅发可信域）', () => {
     const asset = await adapter.media.getAttachment(
       'https://avatars.githubusercontent.com/u/1?v=4',
     );
-    // 外部 host：不代理、不请求（无 captured）、返回 null → 渲染层退回原生 <img>
+    // external host: not proxied, not requested (no captured), returns null → renderer falls back to native <img>
     expect(external).toBeNull();
     expect(captured.some((c) => c.url.includes('evil.example.com'))).toBe(false);
-    // 可信资产域：代理并带 PAT
+    // trusted asset domain: proxied and carries PAT
     expect(asset).not.toBeNull();
     const gh = captured.find((c) => c.url.includes('githubusercontent.com'))!;
     expect(gh.headers.Authorization).toMatch(/^Bearer /);
@@ -370,16 +370,16 @@ describe('GitHubAdapter getAttachment（PAT 仅发可信域）', () => {
 });
 
 describe('normalizeGitHubApiBase', () => {
-  it('github.com SaaS：官方 API host 原样保留（不破坏公共 SaaS 对接）', () => {
+  it('github.com SaaS: official API host preserved as-is (does not break public SaaS integration)', () => {
     expect(normalizeGitHubApiBase('https://api.github.com')).toBe('https://api.github.com');
   });
 
-  it('github.com web host → 官方 API host', () => {
+  it('github.com web host → official API host', () => {
     expect(normalizeGitHubApiBase('https://github.com')).toBe('https://api.github.com');
     expect(normalizeGitHubApiBase('https://www.github.com/')).toBe('https://api.github.com');
   });
 
-  it('GHE 实例根自动补 /api/v3', () => {
+  it('GHE instance root auto-appends /api/v3', () => {
     expect(normalizeGitHubApiBase('https://ghe.example.com')).toBe(
       'https://ghe.example.com/api/v3',
     );
@@ -388,7 +388,7 @@ describe('normalizeGitHubApiBase', () => {
     );
   });
 
-  it('GHE 已带 /api/v3 原样（含尾斜杠归一）', () => {
+  it('GHE already carrying /api/v3 preserved (with trailing-slash normalization)', () => {
     expect(normalizeGitHubApiBase('https://ghe.example.com/api/v3/')).toBe(
       'https://ghe.example.com/api/v3',
     );
