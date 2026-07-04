@@ -2,7 +2,7 @@ import { spawn, type SpawnOptions } from 'node:child_process';
 import treeKill from 'tree-kill';
 import { PrAgentRunError, type ExecFn, type PrAgentRunResult } from './types.js';
 
-/** spawn 函数的最小依赖切片，便于测试注入 fake */
+/** Minimal dependency slice of the spawn function, to ease injecting a fake in tests */
 export type SpawnFn = (cmd: string, args: readonly string[], opts: SpawnOptions) => SpawnedChild;
 
 interface DataEmitter {
@@ -15,11 +15,11 @@ interface WritableLike {
 }
 
 interface SpawnedChild {
-  /** 子进程 pid；spawn 失败时为 undefined。用于调用方做进程树级清理。 */
+  /** Subprocess pid; undefined when spawn fails. Used by the caller for process-tree-level cleanup. */
   pid?: number;
   stdout: DataEmitter | null;
   stderr: DataEmitter | null;
-  /** 子进程 stdin；opts.input 时写入后 end。spawn 失败 / fake child 可为空。 */
+  /** Subprocess stdin; written then ended when opts.input is set. May be null on spawn failure / fake child. */
   stdin?: WritableLike | null;
   on(event: 'error', cb: (err: Error) => void): void;
   on(event: 'close', cb: (code: number | null, signal: NodeJS.Signals | null) => void): void;
@@ -27,11 +27,12 @@ interface SpawnedChild {
 }
 
 /**
- * 杀掉子进程的**整棵进程树**。pr-agent 的 python 会再 spawn litellm/网络库等孙进程，
- * Windows 下 `child.kill` 不级联——只杀 python 主进程，孙进程变孤儿继续占着 vendor/python
- * 等文件句柄，导致升级时 NSIS 安装器报「应用无法关闭」。tree-kill 在 win32 即原生
- * `taskkill /pid X /T /F`（级联、不依赖已被 Win11 移除的 wmic）；posix 走 ps 遍历进程树。
- * 无 pid（spawn 失败 / 测试 fake child）时回退直接 kill。
+ * Kill the **entire process tree** of the subprocess. pr-agent's python further spawns grandchildren
+ * like litellm / network libraries; on Windows `child.kill` does not cascade — it only kills the python
+ * main process, leaving grandchildren orphaned and still holding file handles on vendor/python etc.,
+ * causing the NSIS installer to report "application cannot close" during upgrade. tree-kill on win32 is
+ * native `taskkill /pid X /T /F` (cascades, no dependency on wmic which Win11 removed); posix walks the
+ * process tree via ps. When there is no pid (spawn failure / test fake child), fall back to a direct kill.
  */
 function killTree(child: SpawnedChild): void {
   const pid = child.pid;
@@ -44,7 +45,7 @@ function killTree(child: SpawnedChild): void {
     return;
   }
   treeKill(pid, 'SIGKILL', () => {
-    // tree-kill 失败兜底：至少杀掉直接子进程
+    // tree-kill failure fallback: at least kill the direct subprocess
     try {
       child.kill('SIGKILL');
     } catch {
@@ -54,14 +55,14 @@ function killTree(child: SpawnedChild): void {
 }
 
 /**
- * 构造一个 ExecFn。spawnFn 默认 node:child_process.spawn；测试时注入 fake。
+ * Construct an ExecFn. spawnFn defaults to node:child_process.spawn; inject a fake in tests.
  *
- * 行为：
- * - 启动失败 (ENOENT 等) → reject(PrAgentRunError 'spawn-failed')
- * - 超时 → SIGKILL 子进程 + reject(PrAgentRunError 'timeout')，已收集的 stdout / stderr
- *   随 result 一起返回
- * - 退出码非 0 / 被信号杀 → reject(PrAgentRunError 'non-zero-exit' / 'killed')
- * - onLine 按 \n 切片实时回调；进程结束时残留 partial line 也补一次
+ * Behavior:
+ * - Launch failure (ENOENT etc.) → reject(PrAgentRunError 'spawn-failed')
+ * - Timeout → SIGKILL subprocess + reject(PrAgentRunError 'timeout'); the collected stdout / stderr
+ *   are returned along with the result
+ * - Non-zero exit code / killed by signal → reject(PrAgentRunError 'non-zero-exit' / 'killed')
+ * - onLine fires in real time split by \n; any leftover partial line is also emitted once at process end
  */
 export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): ExecFn {
   return (cmd, args, opts) => {
@@ -96,13 +97,14 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         return;
       }
 
-      // 把 prompt 等输入写进子进程 stdin（chat 通道用），写完即 end 触发 EOF。
+      // Write input such as the prompt into the subprocess stdin (used by the chat channel); end after
+      // writing to trigger EOF.
       if (opts.input != null) {
         try {
           child.stdin?.write(opts.input);
           child.stdin?.end();
         } catch {
-          /* stdin 已关闭 / 子进程已退出，忽略 */
+          /* stdin already closed / subprocess already exited, ignore */
         }
       }
 
@@ -111,7 +113,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         killTree(child);
       }, opts.timeoutMs);
 
-      // 用户取消：监听 AbortSignal，触发 SIGKILL；signal 在我们入参前就 aborted 也兜住
+      // User cancellation: listen on AbortSignal, trigger SIGKILL; also handle a signal already aborted before we received it
       const onAbort = (): void => {
         if (settled) return;
         cancelled = true;
@@ -119,7 +121,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
       };
       if (opts.signal) {
         if (opts.signal.aborted) {
-          // 防御：调用方传进来已经 abort 的 signal → 立即杀
+          // Defensive: caller passed in an already-aborted signal → kill immediately
           queueMicrotask(onAbort);
         } else {
           opts.signal.addEventListener('abort', onAbort, { once: true });
@@ -134,7 +136,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         let buf = stream === 'stdout' ? stdoutBuf + s : stderrBuf + s;
         let nl: number;
         while ((nl = buf.indexOf('\n')) >= 0) {
-          // 去掉行尾可能的 \r
+          // Strip a possible trailing \r
           let line = buf.slice(0, nl);
           if (line.endsWith('\r')) line = line.slice(0, -1);
           opts.onLine(line, stream);
@@ -166,7 +168,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         settled = true;
         clearTimeout(timer);
         opts.signal?.removeEventListener('abort', onAbort);
-        // 把残留的 partial line 也吐出来
+        // Emit any leftover partial line as well
         if (opts.onLine) {
           if (stdoutBuf) opts.onLine(stdoutBuf, 'stdout');
           if (stderrBuf) opts.onLine(stderrBuf, 'stderr');
@@ -177,7 +179,7 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
           exitCode: code ?? -1,
           durationMs: elapsed(),
         };
-        // 取消优先级最高：取消导致的信号杀掉，不算 timeout / killed / non-zero-exit
+        // Cancellation has highest priority: a signal kill caused by cancellation is not counted as timeout / killed / non-zero-exit
         if (cancelled) {
           reject(new PrAgentRunError('pr-agent cancelled by user', 'cancelled', result));
           return;
@@ -214,5 +216,5 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
   };
 }
 
-/** 默认 ExecFn：走 node:child_process.spawn */
+/** Default ExecFn: goes through node:child_process.spawn */
 export const defaultExec: ExecFn = createExec();

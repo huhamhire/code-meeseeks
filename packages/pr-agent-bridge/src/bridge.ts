@@ -10,7 +10,7 @@ import type {
   PrAgentRunResult,
 } from './types.js';
 
-/** 各策略共享的骨架：把 RunOptions 翻成 (cmd, args, env) 后委派给 ExecFn */
+/** Skeleton shared by all strategies: translate RunOptions into (cmd, args, env) then delegate to ExecFn */
 abstract class BaseBridge implements PrAgentBridge {
   abstract readonly strategy: PrAgentStrategy;
 
@@ -62,7 +62,7 @@ abstract class BaseBridge implements PrAgentBridge {
     cwd?: string;
   };
 
-  /** chat 通道的 (cmd, args, env, cwd)；仅嵌入式支持，其余策略抛错。 */
+  /** (cmd, args, env, cwd) for the chat channel; only the embedded strategy supports it, others throw. */
   protected abstract buildChatInvocation(opts: ChatRunOptions): {
     cmd: string;
     args: string[];
@@ -72,11 +72,11 @@ abstract class BaseBridge implements PrAgentBridge {
 }
 
 /**
- * 走系统 PATH 的 pr-agent CLI（pipx / pip / brew 安装）。
+ * pr-agent CLI on the system PATH (installed via pipx / pip / brew).
  *
- * 远端模式 (opts.cwd 未配置)：`pr-agent --pr_url <url> <tool>`
- * 本地模式 (opts.cwd 已配置)：子进程 cwd 落到 worktree；env 注入
- *   `CONFIG__GIT_PROVIDER=local`，命令变为
+ * Remote mode (opts.cwd not set): `pr-agent --pr_url <url> <tool>`
+ * Local mode (opts.cwd set): subprocess cwd points at the worktree; env injects
+ *   `CONFIG__GIT_PROVIDER=local`, the command becomes
  *   `pr-agent --pr_url <cwd> [--target_branch <base>] <tool>`
  */
 export class LocalCliBridge extends BaseBridge {
@@ -89,13 +89,13 @@ export class LocalCliBridge extends BaseBridge {
     cwd?: string;
   } {
     if (opts.cwd) {
-      // 反直觉但是 pr-agent 社区版 LocalGitProvider 的真实行为：
-      // get_git_provider_with_context 把 --pr_url 的值作为第一个位置参数传给
-      // LocalGitProvider(target_branch_name)，**--pr_url 在 local 模式下就是
-      // target branch 的名字**，不是 PR URL 或路径。仓库根靠容器 cwd 自己走 .git
-      // 父目录查找定位，跟 --pr_url 无关。
-      // 所以这里把 opts.targetBranch (= materializeWorktree 建好的 pr-<localId>/base)
-      // 直接填到 --pr_url 槽位。
+      // Counterintuitive but the real behavior of the pr-agent community edition LocalGitProvider:
+      // get_git_provider_with_context passes the --pr_url value as the first positional argument to
+      // LocalGitProvider(target_branch_name), so **in local mode --pr_url is the name of the
+      // target branch**, not a PR URL or path. The repo root is located by the container cwd itself
+      // walking up parent directories looking for .git, unrelated to --pr_url.
+      // So here we put opts.targetBranch (= the pr-<localId>/base built by materializeWorktree)
+      // directly into the --pr_url slot.
       return {
         cmd: 'pr-agent',
         args: [
@@ -129,13 +129,14 @@ export class LocalCliBridge extends BaseBridge {
 }
 
 /**
- * 走随 app 打包的嵌入式 Python 运行时：用 `<vendor>/python -m
- * pr_agent.cli` 跑 pr-agent，免除用户预装 Python / Docker。
+ * Uses the embedded Python runtime bundled with the app: runs pr-agent via
+ * `<vendor>/python -m pr_agent.cli`, sparing the user from pre-installing Python / Docker.
  *
- * 形态与 LocalCli 的 local 模式一致（local provider，cwd=worktree，
- * CONFIG__GIT_PROVIDER=local），区别仅在 cmd 指向嵌入式解释器绝对路径 +
- * `-m pr_agent.cli`。嵌入式运行时只用于本地 worktree，所以 cwd 恒被设置；
- * 万一未设也兜底走远端 `--pr_url <prUrl>`（与 LocalCli 对齐）。
+ * Shape is identical to LocalCli's local mode (local provider, cwd=worktree,
+ * CONFIG__GIT_PROVIDER=local); the only difference is cmd points at the embedded
+ * interpreter's absolute path + `-m pr_agent.cli`. The embedded runtime is only used for
+ * local worktrees, so cwd is always set; should it be unset, it falls back to remote
+ * `--pr_url <prUrl>` (aligned with LocalCli).
  */
 export class EmbeddedRuntimeBridge extends BaseBridge {
   readonly strategy = 'embedded' as const;
@@ -155,7 +156,7 @@ export class EmbeddedRuntimeBridge extends BaseBridge {
     cwd?: string;
   } {
     const cli = ['-m', 'pr_agent.cli'];
-    // 强制 UTF-8（UTF8_ENV）：嵌入式 Python 在中文 Windows 上默认系统码页会让含 emoji 的输出崩，见 constants。
+    // Force UTF-8 (UTF8_ENV): on Chinese Windows the embedded Python defaults to the system code page, which crashes output containing emoji, see constants.
     if (opts.cwd) {
       return {
         cmd: this.pythonPath,
@@ -177,9 +178,10 @@ export class EmbeddedRuntimeBridge extends BaseBridge {
     env?: Record<string, string>;
     cwd?: string;
   } {
-    // 跑随运行时打包的 chat helper：API 模式复用 pr-agent 已被 shim 补丁的 LiteLLMAIHandler
-    // （provider 路由 / 去 temperature / 提示缓存 / usage 哨兵全继承）；CLI 模式（MEEBOX_CLI_MODE）
-    // 在 helper 内直接调本机 CLI、不 import pr_agent / litellm，省每次启动的 import 开销。
+    // Runs the chat helper bundled with the runtime: in API mode it reuses pr-agent's shim-patched
+    // LiteLLMAIHandler (inheriting provider routing / temperature removal / prompt cache / usage sentinel);
+    // in CLI mode (MEEBOX_CLI_MODE) the helper calls the local CLI directly, without importing
+    // pr_agent / litellm, saving the import cost on every startup.
     return {
       cmd: this.pythonPath,
       args: ['-m', 'meebox_pragent_shim.chat'],

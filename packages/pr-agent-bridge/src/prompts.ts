@@ -1,16 +1,19 @@
 import type { ReviewRunTool } from '@meebox/shared';
 
 /**
- * pr-agent 提示词组装：把注入各 tool 的 EXTRA_INSTRUCTIONS、/ask 语言后缀、以及输出回显去重
- * 收口到本模块，避免散落在 run 队列执行逻辑里。纯字符串构造，不含 I/O / 运行时依赖。
+ * pr-agent prompt assembly: funnels the EXTRA_INSTRUCTIONS injected per tool, the /ask language suffix,
+ * and output-echo deduplication into this module, avoiding their scattering across the run-queue exec logic.
+ * Pure string construction, with no I/O / runtime dependencies.
  */
 
 /**
- * 把 config.language (ISO locale) 翻成自然语言 prompt directive。
+ * Translate config.language (ISO locale) into a natural-language prompt directive.
  *
- * CONFIG__RESPONSE_LANGUAGE 对 /describe /review 已经够用 (内嵌在它们的 prompt template)，但
- * /ask 不严格遵守；显式 prompt 强化所有 tool，尤其覆盖 /ask + 表格类输出的标题 / 列名 / 段落标记。
- * 英文 (en-US) 返回空串，避免给 LLM 加不必要的提示。其他未知 locale 返回空保留 pr-agent 原行为。
+ * CONFIG__RESPONSE_LANGUAGE already suffices for /describe /review (it is embedded in their prompt
+ * template), but /ask does not strictly obey it; the explicit prompt reinforces all tools, especially
+ * covering the headings / column names / section markers of /ask + table-style output. English (en-US)
+ * returns an empty string to avoid adding an unnecessary hint to the LLM. Other unknown locales return
+ * empty to preserve pr-agent's original behavior.
  */
 function languageDirectiveFor(lang: string): string {
   const norm = lang.toLowerCase();
@@ -30,20 +33,25 @@ function languageDirectiveFor(lang: string): string {
 }
 
 /**
- * anchor marker 指令：让 model 在涉及代码位置的内容末尾显式追加
+ * anchor marker directive: make the model explicitly append, at the end of content involving a code location,
  *   [file: <path>, lines: <start_line>-<end_line>]
  *
- * 主路径已改为 sitecustomize 注入 LocalGitProvider.get_line_link → key_issues 渲染成
- * `[**header**](meebox:///<file>#L<s>-L<e>)`，parse-output 取结构化 anchor（path 来自
- * provider 同源、最可靠）。但 #L 行号仍依赖 model 填了 pr-agent 原生 start_line/end_line YAML
- * 字段；实测部分模型只填这条 marker、留空结构化字段 → 链接只有 path。故这条 marker 作为**行号
- * 兜底**保留：parse-output 合并时链接给 path、缺行号则用 marker 的行号补（resolveIssueAnchor）。
+ * The main path has switched to sitecustomize injecting LocalGitProvider.get_line_link → key_issues rendered
+ * as `[**header**](meebox:///<file>#L<s>-L<e>)`, and parse-output takes the structured anchor (path comes from
+ * the provider, same source, most reliable). But the #L line numbers still depend on the model filling in
+ * pr-agent's native start_line/end_line YAML fields; in practice some models fill only this marker and leave the
+ * structured fields empty → the link has only a path. So this marker is kept as a **line-number fallback**: when
+ * parse-output merges, it gives the path to the link and fills missing line numbers from the marker's line numbers
+ * (resolveIssueAnchor).
  *
- * - /review: 每条 key_issue 末尾 **必加** marker
- * - /ask: **不注入**——/ask 走结构化分段（见 structuredAskDirective），其建议定位走「被引用 finding 的
- *   anchor」（复评取代场景），无需逐段 marker；而强制逐段 marker 会把回答压成纯文本逐段、回避表格 / 代码块，
- *   削弱 pr-agent 原生 /ask 的富文本表现（实测）。故对 /ask 取消该指令，保留 pr-agent 原生作答风格。
- * - /describe / /improve 不注入：前者不出 issue，后者走 marker 行 `[file [start-end]](url)` 自带 anchor
+ * - /review: **always append** a marker at the end of each key_issue
+ * - /ask: **not injected** — /ask uses structured sectioning (see structuredAskDirective), and its suggestion
+ *   locations use "the anchor of the referenced finding" (re-evaluation/replacement scenario), so no per-section
+ *   marker is needed; forcing per-section markers would flatten the answer into plain-text sections and avoid
+ *   tables / code blocks, weakening pr-agent's native /ask rich-text presentation (observed). So this directive
+ *   is dropped for /ask, preserving pr-agent's native answering style.
+ * - /describe / /improve: not injected — the former produces no issues, the latter uses the marker line
+ *   `[file [start-end]](url)` which carries its own anchor
  */
 function anchorMarkerDirective(tool: ReviewRunTool): string {
   if (tool === 'review') {
@@ -67,11 +75,13 @@ function anchorMarkerDirective(tool: ReviewRunTool): string {
 }
 
 /**
- * 排版指令：只改 /review 每条 key_issue 的断行排版，提升 GUI 可读性，不增加篇幅。
- * pr-agent 原 prompt 要 "short and concise summary"，模型默认堆成单段长跑文；渲染层
- * (ReactMarkdown + remarkBreaks) 忠实呈现，空行分段即成独立 <p>。关键是「保持简洁」——只在
- * 现象/影响/建议的语义边界换行，不得借分段扩写内容。须与 anchor marker 协同：分段在正文内部，
- * marker 仍独占最末行。
+ * Layout directive: only changes the line-break layout of each /review key_issue to improve GUI readability,
+ * without adding length. pr-agent's original prompt asks for a "short and concise summary", and the model
+ * defaults to piling it into a single long run-on paragraph; the render layer (ReactMarkdown + remarkBreaks)
+ * faithfully presents it, and a blank-line-separated section becomes an independent <p>. The key is "stay
+ * concise" — break only at the semantic boundaries of symptom/impact/suggestion, and do not use sectioning as
+ * a pretext to expand the content. Must cooperate with the anchor marker: sectioning stays inside the body,
+ * and the marker still occupies the very last line alone.
  */
 function reviewLayoutDirective(tool: ReviewRunTool): string {
   if (tool !== 'review') return '';
@@ -89,15 +99,18 @@ function reviewLayoutDirective(tool: ReviewRunTool): string {
 }
 
 /**
- * /ask 结构化分段指令：结构化只是**在 pr-agent 原生 /ask 富文本回答之上加一层轻包装**——把回答包进
- * 字面 `<summary>` / `<analysis>` / `<suggestions>` 三段，便于 GUI 归纳；段内内容保持 pr-agent 原生
- * 表现（表格 / 代码块 / 子标题 / 列表、深度照常），不削减。summary 必填（结论，GUI 高亮展开）、analysis
- * 可省（完整过程分析，GUI 默认收起）、suggestions 可省（可执行建议，**逐条带代码定位标记** → GUI 解析成
- * 可采纳的「代码建议」卡）。仅 /ask 注入；模型未遵循时 parse-output 整体回退普通解析（见 packages/poller）。
+ * /ask structured-sectioning directive: structuring is just **a light wrapper on top of pr-agent's native
+ * /ask rich-text answer** — wrapping the answer into the literal three sections `<summary>` / `<analysis>` /
+ * `<suggestions>` to help the GUI summarize; the content within each section keeps pr-agent's native
+ * presentation (tables / code blocks / sub-headings / lists, depth as usual), without cutting anything down.
+ * summary is required (the conclusion, highlighted and expanded in the GUI), analysis is optional (the full
+ * process analysis, collapsed by default in the GUI), suggestions is optional (actionable suggestions, **each
+ * with a code-location marker** → parsed by the GUI into adoptable "code suggestion" cards). Injected only for
+ * /ask; when the model does not comply, parse-output falls back entirely to ordinary parsing (see packages/poller).
  */
 function structuredAskDirective(tool: ReviewRunTool, maxCodeSuggestions?: number): string {
   if (tool !== 'ask') return '';
-  // 代码建议数量软约束：/ask 无 pr-agent 原生上限，仅能在此提示层封顶（与 /improve /review 共用同一设置）。
+  // Soft constraint on the number of code suggestions: /ask has no pr-agent native cap, so it can only be capped at this prompt layer (shares the same setting with /improve /review).
   const capRule =
     maxCodeSuggestions !== undefined
       ? [
@@ -148,9 +161,11 @@ function structuredAskDirective(tool: ReviewRunTool, maxCodeSuggestions?: number
 }
 
 /**
- * /ask 复评模式指令：本次 /ask 是对一条既有评审评论（正文随 referencedContext 给出）的复评时注入。
- * 在结构化三段基础上，要求模型额外给出 `<verdict>` 裁决——replace（取代：<suggestions> 写一条可直接发布的
- * 替代评论本身）/ keep（原评论成立）/ drop（原评论不成立、无需评论）。驱动结果卡的采纳 / 关闭动作。
+ * /ask re-evaluation-mode directive: injected when this /ask re-evaluates an existing review comment (its body
+ * is given via referencedContext). On top of the structured three sections, the model is additionally required
+ * to give a `<verdict>` decision — replace (replace: <suggestions> writes a directly publishable replacement
+ * comment itself) / keep (the original comment stands) / drop (the original comment does not hold, no comment
+ * needed). Drives the adopt / dismiss actions of the result card.
  */
 function referencedAskDirective(tool: ReviewRunTool, hasReferencedFinding: boolean): string {
   if (tool !== 'ask' || !hasReferencedFinding) return '';
@@ -180,11 +195,14 @@ function referencedAskDirective(tool: ReviewRunTool, hasReferencedFinding: boole
 }
 
 /**
- * /ask 代码检索指引（仅 CLI 提供方：子进程 cwd 落在完整 worktree、具备文件工具时注入）。引导 agentic CLI 以
- * **定向检索**（内置只读搜索 / `grep` 查符号 · 只读所需行段）替代整文件通读与全仓扫描，压掉冷启动探索的浪费性
- * token，同时保留读真实文件的深度。刻意只用**只读**工具集：headless（无 TTY）下 default 权限模式对非只读工具
- * （写 / `rg` 等不在内置只读白名单的命令）不是拒绝而是**直接中止会话**，故不得诱导 `rg` 等命令。API 提供方无
- * 文件访问、不注入（enabled=false）。
+ * /ask code-retrieval guidance (CLI provider only: injected when the subprocess cwd lands in the full worktree
+ * and file tools are available). Guides the agentic CLI to use **targeted retrieval** (built-in read-only search
+ * / `grep` for symbols · read-only of the needed line ranges) instead of reading whole files and scanning the
+ * whole repo, cutting the wasteful cold-start exploration tokens while keeping the depth of reading real files.
+ * Deliberately uses a **read-only** tool set only: in headless (no TTY) mode, the default permission mode does
+ * not reject non-read-only tools (writes / commands like `rg` not on the built-in read-only allowlist) but
+ * **directly aborts the session**, so commands like `rg` must not be induced. The API provider has no file
+ * access and is not injected (enabled=false).
  */
 function worktreeRetrievalDirective(tool: ReviewRunTool, enabled: boolean): string {
   if (tool !== 'ask' || !enabled) return '';
@@ -202,24 +220,26 @@ function worktreeRetrievalDirective(tool: ReviewRunTool, enabled: boolean): stri
 }
 
 /**
- * 组装注入 pr-agent 的 EXTRA_INSTRUCTIONS：按序拼接 语言指示 / anchor marker / 结构化分段 / 复评裁决 /
- * 排版 / PR 上下文 / 命中规则，空段跳过；全空返回 undefined（调用方据此决定是否设 env）。
- * - 语言指示：CONFIG__RESPONSE_LANGUAGE 对 /describe /review 够用，但 /ask 走 [pr_questions] 不严格
- *   遵守，必须显式强化
- * - PR 上下文 / 规则由调用方现读传入（local provider 不自己去远端拉这些）
+ * Assemble the EXTRA_INSTRUCTIONS injected into pr-agent: concatenate in order the language directive / anchor
+ * marker / structured sectioning / re-evaluation verdict / layout / PR context / matched rules, skipping empty
+ * sections; return undefined when all empty (the caller decides whether to set the env accordingly).
+ * - Language directive: CONFIG__RESPONSE_LANGUAGE suffices for /describe /review, but /ask goes through
+ *   [pr_questions] and does not strictly obey it, so it must be explicitly reinforced
+ * - PR context / rules are read and passed in by the caller (the local provider does not fetch these from the
+ *   remote itself)
  */
 export function buildExtraInstructions(input: {
   tool: ReviewRunTool;
   language: string;
   prContext: string;
   matchedRuleInstructions: string;
-  /** 用户在 Diff 里选中的代码片段（自描述引用块，渲染层已拼好），仅 /ask 注入。 */
+  /** Code snippet the user selected in the Diff (self-describing quote block, already assembled by the render layer), injected only for /ask. */
   referencedContext?: string;
-  /** 本次 /ask 是否为对某条既有评论的「复评」；为真则注入复评裁决指示（仅 /ask）。 */
+  /** Whether this /ask is a "re-evaluation" of an existing comment; when true, inject the re-evaluation verdict directive (/ask only). */
   referencedFinding?: boolean;
-  /** 代码建议数量上限（2~8）：/ask 的 <suggestions> 软约束（仅 /ask 用到）。空则不封顶。 */
+  /** Upper bound on the number of code suggestions (2~8): soft constraint for /ask's <suggestions> (used by /ask only). Empty means no cap. */
   maxCodeSuggestions?: number;
-  /** 是否注入 /ask 代码检索指引（仅 CLI 提供方：子进程可在完整 worktree 里用 shell/文件工具时为真）。 */
+  /** Whether to inject the /ask code-retrieval guidance (CLI provider only: true when the subprocess can use shell/file tools in the full worktree). */
   worktreeRetrieval?: boolean;
 }): string | undefined {
   const parts = [
@@ -236,7 +256,7 @@ export function buildExtraInstructions(input: {
   return parts.length > 0 ? parts.join('\n\n---\n\n') : undefined;
 }
 
-/** EXTRA_INSTRUCTIONS 对应的 pr-agent env key（按 tool）。 */
+/** The pr-agent env key corresponding to EXTRA_INSTRUCTIONS (by tool). */
 export function extraInstructionsEnvKey(tool: ReviewRunTool): string {
   switch (tool) {
     case 'describe':
@@ -251,9 +271,11 @@ export function extraInstructionsEnvKey(tool: ReviewRunTool): string {
 }
 
 /**
- * /ask 专用：把语言要求作为「问题末尾」的硬性指令，**用目标语言书写本身**（最能促使模型切换到该
- * 语言作答）。系统侧 CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS 对自由问答常被大量英文 diff
- * 盖过，故在 user turn 末尾（近因位置）再要求一次。en-US / 未知 locale 返回空串（默认即英文）。
+ * /ask-specific: put the language requirement as a hard directive at the "end of the question", **written in the
+ * target language itself** (which best prompts the model to switch to answering in that language). On the system
+ * side, CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS are often drowned out by large amounts of English diff for
+ * free-form Q&A, so require it once more at the end of the user turn (the recency position). en-US / unknown
+ * locale returns an empty string (English by default).
  */
 export function askLanguageSuffixFor(lang: string): string {
   const norm = lang.toLowerCase();
@@ -273,22 +295,24 @@ export function askLanguageSuffixFor(lang: string): string {
 }
 
 /**
- * /ask 输出去问题回显。pr-agent 把答案产物写成
- *   `### **Ask**❓\n<question>\n\n### **Answer:**\n<answer>`，
- * 其中 `<question>` 含我们追加到问题末尾的格式指令（结构化分段 / anchor / 复评裁决——内含字面
- * `<summary>` / `<verdict>` 等**示例标签**），若不剔除会污染下游结构化解析（parseStructuredAsk 会误把
- * 示例标签当答案）。
+ * Strip the question echo from /ask output. pr-agent writes the answer artifact as
+ *   `### **Ask**❓\n<question>\n\n### **Answer:**\n<answer>`,
+ * where `<question>` contains the formatting directives we appended to the end of the question (structured
+ * sectioning / anchor / re-evaluation verdict — containing literal **example tags** such as `<summary>` /
+ * `<verdict>`); if not stripped, they would pollute downstream structured parsing (parseStructuredAsk would
+ * mistake the example tags for the answer).
  *
- * 策略：优先按 pr-agent 固定的英文「Answer」表头切，只取其后的答案（连同问题回显 + 注入指令一并丢弃）；
- * 表头缺失（版本漂移）时回退到逐行精确匹配删掉回显的问题 / 语言后缀行。
+ * Strategy: preferentially cut at pr-agent's fixed English "Answer" header, taking only the answer after it
+ * (discarding the question echo + injected directives together); when the header is missing (version drift),
+ * fall back to per-line exact matching to delete the echoed question / language suffix lines.
  */
 export function stripAskQuestionEcho(md: string, ...echoed: string[]): string {
   if (!md) return md;
-  // pr_questions.py `_prepare_pr_answer` 硬编码英文 `### **Answer:**`（不随响应语言本地化）。
+  // pr_questions.py `_prepare_pr_answer` hardcodes the English `### **Answer:**` (not localized by response language).
   const answerRe = /^#{1,6}\s*\*\*\s*Answer\s*:?\s*\*\*\s*$/im;
   const m = answerRe.exec(md);
   if (m) return md.slice(m.index + m[0].length).replace(/^\s+/, '');
-  // 回退：逐行精确匹配（trim 后整行 == 任一给定串）删掉，保留其余正文。
+  // Fallback: per-line exact matching (whole line after trim == any given string) to delete, keeping the rest of the body.
   const qs = new Set(echoed.map((q) => q.trim()).filter(Boolean));
   if (!qs.size) return md;
   return md
