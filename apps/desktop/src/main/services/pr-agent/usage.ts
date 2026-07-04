@@ -1,6 +1,6 @@
 import type { TokenUsage } from '@meebox/shared';
 
-// litellm usage 哨兵行前缀（与 sitecustomize.py 的 _emit 保持一致）。
+// litellm usage sentinel-line prefix (kept consistent with sitecustomize.py's _emit).
 export const USAGE_SENTINEL = '@@MEEBOX_USAGE@@';
 
 export interface UsageAcc {
@@ -8,22 +8,22 @@ export interface UsageAcc {
   completion: number;
   total: number;
   calls: number;
-  /** 累计提示缓存读取 token（cache_read），是 prompt 的一部分 */
+  /** Cumulative prompt-cache read tokens (cache_read), part of prompt */
   cacheRead: number;
-  /** 累计模型交互轮次：CLI agentic 模式来自各次哨兵的 num_turns（一次 run 内可累加多段） */
+  /** Cumulative model interaction turns: in CLI agentic mode comes from each sentinel's num_turns (can accumulate multiple segments within one run) */
   turns: number;
   any: boolean;
 }
 
-/** 新建一个空 usage 累加器。 */
+/** Create a new empty usage accumulator. */
 export function newUsageAcc(): UsageAcc {
   return { prompt: 0, completion: 0, total: 0, calls: 0, cacheRead: 0, turns: 0, any: false };
 }
 
 /**
- * 解析一行 stderr：若含 usage 哨兵（`@@MEEBOX_USAGE@@ {json}`，sitecustomize 注入）则累加到
- * acc 并返回 true（调用方据此吞掉该行、不转发给 renderer / 不入日志）。普通行返回 false。
- * 坏 JSON 也返回 true（仍吞掉，避免漏进实时日志），只是不计数。容错优先。
+ * Parse one stderr line: if it contains a usage sentinel (`@@MEEBOX_USAGE@@ {json}`, injected by sitecustomize), accumulate into
+ * acc and return true (the caller thus swallows the line, not forwarding to the renderer / not logging). Normal lines return false.
+ * Bad JSON also returns true (still swallowed, to avoid leaking into live logs), just not counted. Fault-tolerance first.
  */
 export function accumulateUsageSentinel(line: string, acc: UsageAcc): boolean {
   const i = line.indexOf(USAGE_SENTINEL);
@@ -52,29 +52,29 @@ export function accumulateUsageSentinel(line: string, acc: UsageAcc): boolean {
     if (typeof r.cache_read_tokens === 'number') acc.cacheRead += r.cache_read_tokens;
     if (typeof r.turns === 'number') acc.turns += r.turns;
   } catch {
-    // 坏哨兵行：仍吞掉，不计数
+    // Bad sentinel line: still swallowed, not counted
   }
   return true;
 }
 
-/** 累加器 → TokenUsage；无任何有效数据返回 undefined（未捕获到，如非 embedded / 流式 / 未调 LLM）。 */
+/** Accumulator → TokenUsage; returns undefined if there's no valid data (nothing captured, e.g. non-embedded / streaming / LLM never called). */
 export function finalizeUsage(acc: UsageAcc): TokenUsage | undefined {
   if (!acc.any) return undefined;
   return {
     promptTokens: acc.prompt,
     completionTokens: acc.completion,
-    // 优先各次 total 累加；个别次缺 total 时用 prompt+completion 兜底
+    // Prefer accumulating each call's total; fall back to prompt+completion when an individual call lacks total
     totalTokens: acc.total || acc.prompt + acc.completion,
     calls: acc.calls,
-    // cache_read 无命中（0）则不带；turns 优先 CLI 上报的轮次，缺失回退为调用次数
+    // Omit cache_read when there's no hit (0); turns prefers the CLI-reported turns, falling back to the call count when missing
     cacheReadTokens: acc.cacheRead || undefined,
     turns: acc.turns || acc.calls,
   };
 }
 
 /**
- * 持久化前从 stderr 去掉 usage 哨兵行：onLine 实时已拦截不转发，但 exec 内部把全量 stderr
- * 累加进 result.stderr（含哨兵），落盘前清掉这些噪声行。
+ * Strip usage sentinel lines from stderr before persistence: onLine already intercepts them in real time without forwarding, but exec internally
+ * accumulates all stderr into result.stderr (including sentinels), so clear these noise lines before persisting.
  */
 export function stripUsageSentinels(stderr: string | undefined): string | undefined {
   if (!stderr) return stderr;
