@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// 生成 THIRD-PARTY-NOTICES.md —— 汇总分发产物里的第三方组件许可。
+// Generate THIRD-PARTY-NOTICES.md —— aggregate third-party component licenses in the distribution artifacts.
 //
-// 覆盖三类：
-//   1. npm 生产依赖闭包（`npm ls --omit=dev --all`，即打包进安装包的 node 依赖）
-//   2. 嵌入式 Python 运行时（vendor/pragent）里的 pip 包（pr-agent + 其依赖）
-//   3. 运行时载体（CPython / Electron / pr-agent）——手工 curated 头部
+// Covers three categories:
+//   1. npm production dependency closure (`npm ls --omit=dev --all`, i.e. node deps bundled into the installer)
+//   2. pip packages in the embedded Python runtime (vendor/pragent) (pr-agent + its dependencies)
+//   3. Runtime carriers (CPython / Electron / pr-agent) —— manually curated header
 //
-// 每个组件给出 名称@版本 + 许可标识 + 源地址，并尽量附上 LICENSE 正文（<details> 折叠）。
-// 用法：node tools/gen-third-party-notices.mjs  → 写到仓库根 THIRD-PARTY-NOTICES.md
-// 需要先 `npm ci` + `npm --prefix apps/desktop run prepare:pragent`（否则 python 段为空）。
+// Each component lists name@version + license identifier + source URL, and where possible attaches the LICENSE text (<details> collapsible).
+// Usage: node tools/gen-third-party-notices.mjs  → writes to repo root THIRD-PARTY-NOTICES.md
+// Requires `npm ci` + `npm --prefix apps/desktop run prepare:pragent` first (otherwise the python section is empty).
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -46,10 +46,10 @@ function repoUrl(pkg) {
   return (u || pkg.homepage || '').replace(/^git\+/, '').replace(/\.git$/, '') || '';
 }
 
-// ── 1. npm 生产依赖 ───────────────────────────────────────────────
+// ── 1. npm production dependencies ────────────────────────────────
 function collectNpm() {
   let json;
-  // Windows 上可执行是 npm.cmd；execFileSync 不会自动补后缀
+  // On Windows the executable is npm.cmd; execFileSync won't auto-append the suffix
   const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   try {
     const out = execFileSync(NPM, ['ls', '--omit=dev', '--all', '--json'], {
@@ -59,7 +59,7 @@ function collectNpm() {
     });
     json = JSON.parse(out);
   } catch (e) {
-    // npm ls 对 peer/extraneous 警告会非零退出，但 stdout 仍是有效 JSON
+    // npm ls exits non-zero on peer/extraneous warnings, but stdout is still valid JSON
     try {
       json = JSON.parse(e.stdout || '{}');
     } catch {
@@ -81,7 +81,7 @@ function collectNpm() {
         try {
           pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
         } catch {
-          /* 嵌套去重的包根目录可能取不到，仅列名 */
+          /* nested-dedup package root dir may be unavailable, list name only */
         }
         seen.set(key, {
           name,
@@ -98,7 +98,7 @@ function collectNpm() {
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// ── 2. 嵌入式 Python（vendor/pragent）pip 包 ──────────────────────
+// ── 2. Embedded Python (vendor/pragent) pip packages ──────────────
 function collectPython() {
   const base = join(ROOT, 'apps/desktop/vendor/pragent/python/lib');
   if (!existsSync(base)) return [];
@@ -122,7 +122,7 @@ function collectPython() {
         else if (line.startsWith('License:') && license === 'UNKNOWN') license = line.slice(8).trim();
         else if (line.startsWith('Classifier: License ::')) license = line.split('::').pop().trim();
         else if (/^(Home-page|Project-URL):/.test(line) && !url) url = line.split(':').slice(1).join(':').trim();
-        if (line.trim() === '') break; // METADATA 头部到空行结束
+        if (line.trim() === '') break; // METADATA header ends at the blank line
       }
     } catch {
       /* ignore */

@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 // Bitbucket Server REST v1 only-read probe.
 //
-// 用法:
+// Usage:
 //   $env:BB_URL='https://code.fineres.com'
 //   $env:BB_TOKEN='<pat>'
 //   node tools/probes/bitbucket-server-probe.mjs [--verbose]
 //
-// 覆盖端点:
-//   GET /application-properties                                  ← ping + 版本
-//   GET /dashboard/pull-requests?role=REVIEWER&state=OPEN        ← 当前用户待 review PR
-//   GET /projects/{p}/repos/{r}/pull-requests/{prId}             ← PR 详情
+// Covered endpoints:
+//   GET /application-properties                                  ← ping + version
+//   GET /dashboard/pull-requests?role=REVIEWER&state=OPEN        ← PRs pending review for the current user
+//   GET /projects/{p}/repos/{r}/pull-requests/{prId}             ← PR details
 //   GET .../pull-requests/{prId}/diff                            ← diff
-//   GET .../pull-requests/{prId}/changes                         ← 改动文件列表
-//   GET .../pull-requests/{prId}/activities                      ← 活动 (含 comments)
-//   "whoami" 嗅探：检查响应头 X-AUSERNAME / X-AUSERID 等推测当前用户
+//   GET .../pull-requests/{prId}/changes                         ← changed files list
+//   GET .../pull-requests/{prId}/activities                      ← activities (incl. comments)
+//   "whoami" sniff: inspect response headers X-AUSERNAME / X-AUSERID etc. to infer the current user
 //
-// 不做任何写入。token 仅从环境变量读取，绝不写入日志或文件。
+// Does not perform any writes. The token is read only from environment variables, never written to logs or files.
 
 const BB_URL = process.env.BB_URL;
 const BB_TOKEN = process.env.BB_TOKEN;
@@ -97,7 +97,7 @@ async function main() {
   );
   if (!ping) process.exit(1);
 
-  // 1.5 whoami 嗅探：枚举常见 Atlassian header + 候选端点
+  // 1.5 whoami sniff: enumerate common Atlassian headers + candidate endpoints
   console.log('\n--- whoami 嗅探 ---');
   const headerCandidates = [
     'x-ausername',
@@ -117,7 +117,7 @@ async function main() {
   } else {
     console.log('  ping 响应头无标准 whoami 信号');
   }
-  // 打印所有响应头便于人眼审计
+  // print all response headers for human audit
   if (VERBOSE && pingRaw.headers) {
     console.log('  全部响应头:');
     for (const [k, v] of pingRaw.headers.entries()) {
@@ -125,7 +125,7 @@ async function main() {
     }
   }
 
-  // 候选 whoami 端点
+  // candidate whoami endpoints
   const whoamiEndpoints = [
     '/rest/api/1.0/users/me',
     '/rest/api/1.0/users/-',
@@ -138,7 +138,7 @@ async function main() {
     const tag = r.status >= 200 && r.status < 300 ? 'OK ' : 'ERR';
     let extract = '';
     if (r.status === 200 && r.body && typeof r.body === 'object') {
-      // 看看 body 里有没有用户字段
+      // check whether the body has user fields
       const userish = r.body.user ?? r.body.author ?? r.body;
       const u = userish?.user ?? userish;
       if (u?.name && u?.displayName) {
@@ -222,7 +222,7 @@ async function main() {
     return `activities: total=${b.size} commented=${commented.length} (inline=${inline.length}, summary=${summary})  actions=[${types}]`;
   });
 
-  // 7. merge 状态 (用来判 conflict)
+  // 7. merge status (used to determine conflict)
   summarize(`GET ${base}/merge`, await call(`${base}/merge`), (b) => {
     const fields = Object.keys(b ?? {}).join(',');
     return `canMerge=${b?.canMerge} conflicted=${b?.conflicted} outcome=${b?.outcome} vetoes=${b?.vetoes?.length ?? 0}  fields=[${fields}]`;
