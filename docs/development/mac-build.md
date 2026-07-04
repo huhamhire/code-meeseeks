@@ -1,127 +1,128 @@
-# macOS 构建与发布（Code Meeseeks · arm64）
+# macOS Build & Release (Code Meeseeks · arm64)
 
-> 状态：**已在 macOS arm64 验证通过**（2026-06，macOS 26.5 / Apple Silicon）——
-> 本机走完 `prepare:pragent` → `electron-vite build` → `electron-builder` 全链路，出 dmg、
-> ad-hoc 签名、装 dmg 后 GUI 正常启动，嵌入式 python 实际 exec + `import pr_agent` 通过。
-> 关联 [pr-agent 集成与运行时](../arch/04-pragent-runtime.md)。
+> Status: **verified on macOS arm64** (2026-06, macOS 26.5 / Apple Silicon) —
+> the full `prepare:pragent` → `electron-vite build` → `electron-builder` chain was run locally, producing a dmg,
+> ad-hoc signed; after installing the dmg the GUI launches normally and the embedded Python actually execs +
+> `import pr_agent` passes. Related: [pr-agent integration & runtime](../arch/02-agent/05-pragent-runtime.md).
 
-作为开源项目，**不申请 Apple Developer ID（$99/年）**，走**免费 ad-hoc 路线**：
+As an open-source project, we **do not enroll in the Apple Developer ID ($99/yr)** and take the **free ad-hoc route**:
 
-- **本地开发**：在你自己的 mac 上 ad-hoc 出包即可跑。
-- **发布**：GitHub Actions（公开仓库 macOS runner 免费）自动出包、ad-hoc 签名、挂 Release。
-- **代价**：包**未公证**，用户首次打开需手动"仍要打开"（或走 Homebrew）。这是免费路线唯一的体验损失。
+- **Local development**: an ad-hoc build on your own Mac runs fine.
+- **Release**: GitHub Actions (macOS runners are free for public repos) builds, ad-hoc signs, and attaches to the Release automatically.
+- **Trade-off**: the package is **not notarized**, so first-launch requires the user to manually "Open Anyway" (or use Homebrew). This is the only UX cost of the free route.
 
-> 关键认知：Apple Silicon 上**任何 Mach-O 必须有签名才能运行**——ad-hoc 签名（`codesign -s -`，
-> 免费、无需账号）满足"能跑"，公证（需 Developer ID + Apple 公证服务）只负责"去掉 Gatekeeper 警告"。
-> 两者独立。我们做前者，跳过后者。
+> Key insight: on Apple Silicon, **any Mach-O must be signed to run** — ad-hoc signing (`codesign -s -`,
+> free, no account needed) satisfies "can run", while notarization (needs a Developer ID + Apple's notary service) only
+> handles "remove the Gatekeeper warning". The two are independent. We do the former and skip the latter.
 
 ---
 
-## 1. 本地开发
+## 1. Local development
 
 ```bash
-# 仅运行（不签名，dev electron 直接跑）
+# Run only (no signing; dev electron runs directly)
 npm --prefix apps/desktop run dev
 
-# 本地出包测试（在 mac 上）：dist 会跑 prepare:pragent + build + electron-builder
-#   afterPack 钩子自动 ad-hoc 递归签名（含嵌入式 python），arm64 上即可启动
+# Local build test (on a Mac): dist runs prepare:pragent + build + electron-builder
+#   the afterPack hook auto ad-hoc recursively signs (including the embedded Python), so it launches on arm64
 npm --prefix apps/desktop run dist
-# 产物：apps/desktop/release/code-meeseeks-<version>-mac-arm64.dmg
+# Output: apps/desktop/release/code-meeseeks-<version>-mac-arm64.dmg
 ```
 
-`prepare:pragent` 会组装 `aarch64-apple-darwin` 的 CPython + pr-agent 到
-`apps/desktop/vendor/pragent/`（解释器 `python/bin/python3`，main 的 `resolveEmbeddedPython`
-已按平台分支）。
+`prepare:pragent` assembles the `aarch64-apple-darwin` CPython + pr-agent into
+`apps/desktop/vendor/pragent/` (interpreter at `python/bin/python3`; the main process's `resolveEmbeddedPython`
+already branches per platform).
 
-## 2. 发布（GitHub Actions）
+## 2. Release (GitHub Actions)
 
-[.github/workflows/release.yml](../../.github/workflows/release.yml)：推 `v*` tag 触发，矩阵
-`windows-latest` + `macos-14`(arm64) 各自出包，挂到该 tag 的 Release。
+[.github/workflows/release.yml](../../.github/workflows/release.yml): pushing a `v*` tag triggers a matrix of
+`windows-latest` + `macos-14` (arm64), each building its own package and attaching to that tag's Release.
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-mac job 在 arm64 runner 上原生构建，afterPack 做 ad-hoc 签名。**全程不需要 Apple 账号 / 凭据。**
+The mac job builds natively on an arm64 runner, with afterPack doing the ad-hoc signing. **No Apple account / credentials needed at any point.**
 
-## 3. ad-hoc 签名机制
+## 3. Ad-hoc signing mechanism
 
-[build-resources/after-pack.cjs](../../apps/desktop/build-resources/after-pack.cjs)（electron-builder
-`afterPack` 钩子）：
+[build-resources/after-pack.cjs](../../apps/desktop/build-resources/after-pack.cjs) (the electron-builder
+`afterPack` hook):
 
-- 仅 mac 动作；win/linux 跳过。
-- 无 Apple 凭据 env → 对 `.app` 递归 `codesign --force --deep --sign -`（ad-hoc）。
-- 有凭据 env → 跳过，交回 electron-builder 走正式签名 + 公证（见 §6）。
+- Mac-only action; skipped on win/linux.
+- No Apple credential env → recursively `codesign --force --deep --sign -` (ad-hoc) the `.app`.
+- With credential env → skipped, handing back to electron-builder for proper signing + notarization (see §6).
 
-## 4. 嵌入式 Python 签名（已验证：`--deep` 足够）
+## 4. Embedded Python signing (verified: `--deep` is sufficient)
 
-`vendor/pragent` 经 `extraResources` 进 `<App>.app/Contents/Resources/pragent/`，内含
-python 二进制 + 上千个 `.dylib/.so`。担心点是 `codesign --deep` 是否真能递归签到所有
-Resources 下的散装 Mach-O（漏签 → 运行时 `code signature invalid` / python 子进程崩）。
+`vendor/pragent` goes into `<App>.app/Contents/Resources/pragent/` via `extraResources`, containing the
+Python binary + thousands of `.dylib/.so`. The concern was whether `codesign --deep` really recurses into every
+loose Mach-O under Resources (a missed signature → runtime `code signature invalid` / the Python subprocess crashes).
 
-**arm64 实测结论：`after-pack.cjs` 的 `--force --deep --sign -` 已完整覆盖。** 验证：
-对 `Contents/Resources/pragent` 下全部 Mach-O（python3.12 解释器 + 散装 `.so/.dylib`，
-本次 43 个）逐个 `codesign --verify --strict` → 0 失败；包内嵌入式 python 直接 exec +
-`import pr_agent` → exit 0。**无需 sweep 补签**，保持现配置。
+**Empirical conclusion on arm64: `after-pack.cjs`'s `--force --deep --sign -` covers everything.** Verified by:
+running `codesign --verify --strict` on every Mach-O under `Contents/Resources/pragent` (the python3.12 interpreter +
+loose `.so/.dylib`, 43 this time) → 0 failures; and the bundled embedded Python execs +
+`import pr_agent` → exit 0. **No sweep re-signing needed** — keep the current config.
 
-> 兜底（若将来某发布遇到个别 `.so` 漏签）：在 `after-pack.cjs` 改成"先 sweep 后整签"——
-> 遍历 `Contents/Resources/pragent` 下所有 Mach-O 逐个 `codesign --force --sign -`，再签整个
-> `.app`。目前不需要。
+> Fallback (if a future release hits a missed `.so` signature): change `after-pack.cjs` to "sweep first, then sign the whole" —
+> iterate over every Mach-O under `Contents/Resources/pragent`, `codesign --force --sign -` each, then sign the whole
+> `.app`. Not needed today.
 
-## 5. 用户首次打开（未公证 → 绕过 Gatekeeper）
+## 5. First launch for users (not notarized → bypass Gatekeeper)
 
-Release 说明里需写明（任选其一）：
+State this in the Release notes (any one of):
 
-- **右键 → 打开 → 仍要打开**（首次）；或
-- **系统设置 → 隐私与安全性 → 仍要打开**（macOS Sequoia 起右键方式部分场景失效，走这里）；或
-- 终端去隔离属性：
+- **Right-click → Open → Open Anyway** (first time); or
+- **System Settings → Privacy & Security → Open Anyway** (since macOS Sequoia the right-click path fails in some cases — use this); or
+- Remove the quarantine attribute in a terminal:
   ```bash
   xattr -dr com.apple.quarantine "/Applications/Code Meeseeks.app"
   ```
 
-**Homebrew Cask**（面向技术用户，体验更顺）：发一个 cask 指向 GitHub Release 的 dmg，
-`brew install --cask code-meeseeks` 安装时自动处理隔离属性。后续可加。
+**Homebrew Cask** (for technical users, a smoother experience): publish a cask pointing at the GitHub Release dmg;
+`brew install --cask code-meeseeks` handles the quarantine attribute automatically on install. Can be added later.
 
-## 6. 升级到公证（将来若申请 Developer ID，可选）
+## 6. Upgrading to notarization (optional, if a Developer ID is obtained later)
 
-workflow **无需改结构**，只需：
+The workflow **needs no structural change**, only:
 
-1. 仓库配 secrets：`MAC_CSC_LINK`(证书 .p12 base64) / `MAC_CSC_KEY_PASSWORD` /
-   `APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER`。
-2. electron-builder.yml `mac:` 加回 `hardenedRuntime: true` + `entitlements` /
-   `entitlementsInherit: build-resources/entitlements.mac.plist` + `notarize: true`。
-   （[entitlements.mac.plist](../../apps/desktop/build-resources/entitlements.mac.plist) 已备好：
-   `disable-library-validation` 让嵌入式 python 在 hardened runtime 下能加载第三方 dylib。）
+1. Configure repo secrets: `MAC_CSC_LINK` (cert .p12, base64) / `MAC_CSC_KEY_PASSWORD` /
+   `APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER`.
+2. In electron-builder.yml `mac:`, add back `hardenedRuntime: true` + `entitlements` /
+   `entitlementsInherit: build-resources/entitlements.mac.plist` + `notarize: true`.
+   ([entitlements.mac.plist](../../apps/desktop/build-resources/entitlements.mac.plist) is ready:
+   `disable-library-validation` lets the embedded Python load third-party dylibs under the hardened runtime.)
 
-afterPack 检测到凭据 env 会自动让位，electron-builder 接管正式签名 + 公证，产出双击即开的 dmg。
+When afterPack detects the credential env it steps aside automatically, electron-builder takes over proper signing +
+notarization, and the result is a double-click-to-open dmg.
 
-## 7. 验证清单（mac 上）
+## 7. Verification checklist (on a Mac)
 
 ```bash
 APP="apps/desktop/release/mac-arm64/Code Meeseeks.app"
-codesign -dv --verbose=4 "$APP"            # ad-hoc 路线：Signature=adhoc
-codesign --verify --deep --strict "$APP"   # 递归校验（含嵌入 python）通过
+codesign -dv --verbose=4 "$APP"            # ad-hoc route: Signature=adhoc
+codesign --verify --deep --strict "$APP"   # recursive verification (incl. embedded Python) passes
 ```
 
-装 dmg → 首次按 §5 绕过 → 启动应用：
-- 窗口/Dock 显示新图标。
-- 状态栏 `PR Agent: <ver>`（embedded 绿）。
-- 跑一次 `/review` → 确认嵌入式 python 子进程**没崩**（这是 ad-hoc 签名是否覆盖到 python 的真正判据）。
+Install the dmg → bypass on first launch per §5 → start the app:
+- The new icon shows in the window/Dock.
+- The status bar shows `PR Agent: <ver>` (embedded, green).
+- Run one `/review` → confirm the embedded Python subprocess **does not crash** (the real test of whether ad-hoc signing reached Python).
 
-## 8. 风险 / 待办
+## 8. Risks / TODO
 
-- 嵌入式运行时体积大 → 签名耗时；CI 上 mac runner 对公开仓库免费，私有仓库分钟数贵 10x。
-- ~~嵌入式 python 是否需要 sweep 补签~~ —— **已验证 `--deep` 足够，无需 sweep**（§4）。
-- 未公证 → 依赖用户绕过 / Homebrew，对非技术用户有门槛（§5）。
-- Intel(x64) 暂不出（仅 arm64）；需要时 electron-builder.yml mac.arch 加 x64。
+- The embedded runtime is large → signing takes time; mac runners are free for public repos, ~10x more expensive in minutes for private ones.
+- ~~Whether the embedded Python needs sweep re-signing~~ — **verified `--deep` is sufficient, no sweep needed** (§4).
+- Not notarized → relies on the user bypassing / Homebrew, a barrier for non-technical users (§5).
+- Intel (x64) not shipped for now (arm64 only); add `x64` to electron-builder.yml `mac.arch` when needed.
 
-### 本地复现踩坑（仅本机，CI 不受影响）
+### Local-repro gotchas (local only, CI unaffected)
 
-CI 用 `actions/checkout` 的 `lfs: true` + GitHub runner 网络，下列两点不会触发；在自己 mac
-上手动 `electron-builder` 时可能遇到：
+CI uses `actions/checkout` with `lfs: true` + the GitHub runner network, so the two below don't trigger there; you may hit them
+when running `electron-builder` manually on your own Mac:
 
-- **图标 LFS 指针**：`assets/icons/icon.png` 走 Git LFS。本机若没装 git-lfs，checkout 得到的是
-  131 字节指针文件 → electron-builder 转图标 `LoadImage` 崩。解：`brew install git-lfs && git lfs pull`。
-- **pip 连 pypi 超时**：`prepare:pragent` 用嵌入式解释器 `pip install pr-agent`，pip 默认 15s
-  超时，内网/慢网下 `aiohttp` 等会报 `from versions: none`（实为连不上索引，非版本不存在）。
-  解：`PIP_DEFAULT_TIMEOUT=120 npm run prepare:pragent`（或配 pip 镜像）。
+- **Icon LFS pointer**: `assets/icons/icon.png` is a Git LFS asset. Without git-lfs installed locally, checkout yields a
+  131-byte pointer file → electron-builder's icon conversion `LoadImage` crashes. Fix: `brew install git-lfs && git lfs pull`.
+- **pip pypi timeout**: `prepare:pragent` uses the embedded interpreter to `pip install pr-agent`; pip's default 15s
+  timeout means `aiohttp` etc. report `from versions: none` on an intranet/slow network (actually "can't reach the index",
+  not "version doesn't exist"). Fix: `PIP_DEFAULT_TIMEOUT=120 npm run prepare:pragent` (or configure a pip mirror).

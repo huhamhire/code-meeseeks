@@ -99,6 +99,7 @@
 
 - [ ] **阶段 1（本轮）**：README 拆分 —— `README.md`（英文，默认）+ `README.zh-CN.md`（中文），两份顶部各置语言切换行；现有中文 README 迁至 `README.zh-CN.md`
 - [x] **阶段 2**：`docs/guide/` 用户向文档 EN + ZH——英文占根（规范正本），中文镜像于 `zh-CN/`，每篇置语言切换行；官网 `sync-docs.mjs` 双 locale 构建（EN→`/guide/`、ZH→`/zh/guide/`）
+- [x] **阶段 3**：开发/贡献者向英文化——`docs/development/` 转英文单语 + 新增英文 `CONTRIBUTING.md`（贡献者入口）；commit / PR 约定改用英文（见 [AGENTS](../AGENTS.md)）。`docs/arch/` 与本 ROADMAP 仍维持中文（设计推演工作稿、随代码高频变动，成本高 / 外部读到概率低，等外部贡献者信号出现再单独评估）
 
 **内容同步规范**（防 README / docs / 官网三处漂移，每类内容单一真相源）：
 
