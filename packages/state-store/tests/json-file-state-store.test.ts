@@ -41,11 +41,12 @@ describe('JsonFileStateStore', () => {
   });
 
   it('handles concurrent writes to the same key without ENOENT', async () => {
-    // 回归：tmp 文件名仅带 pid 时，同 key 的并发写共用同一 tmp，先完成者 rename 走文件后
-    // 后完成者 rename 即 ENOENT。各并发写须各用唯一 tmp。
+    // regression: when the tmp filename carries only the pid, concurrent writes of the same key share
+    // one tmp, and after the first to finish renames the file away, the later one's rename hits ENOENT.
+    // Each concurrent write must use its own unique tmp.
     await Promise.all(Array.from({ length: 20 }, (_, i) => store.write('hot', { v: i })));
     const entries = await fs.readdir(tmpDir);
-    expect(entries).toEqual(['hot.json']); // 无遗留 .tmp
+    expect(entries).toEqual(['hot.json']); // no leftover .tmp
     expect(await store.read<{ v: number }>('hot')).toMatchObject({ v: expect.any(Number) });
   });
 
@@ -89,33 +90,33 @@ describe('JsonFileStateStore', () => {
     expect(JSON.parse(text)).toEqual({ hello: 'world' });
   });
 
-  it('deleteDir removes the whole subtree (含子目录 + 非 .json 文件)', async () => {
+  it('deleteDir removes the whole subtree (including subdirectories + non-.json files)', async () => {
     await store.write('prs/abc/meta', { v: 1 });
     await store.write('prs/abc/runs/run-1', { v: 1 });
-    // 模拟非 .json 文件，确保也被一并清掉
+    // simulate a non-.json file, ensuring it is cleared along with the rest
     await fs.writeFile(path.join(tmpDir, 'prs', 'abc', 'extra.txt'), 'hi');
     await store.deleteDir('prs/abc');
     await expect(fs.access(path.join(tmpDir, 'prs', 'abc'))).rejects.toThrow();
-    // 兄弟目录不受影响
+    // sibling directory is unaffected
     await store.write('prs/xyz/meta', { v: 1 });
     expect(await store.read('prs/xyz/meta')).toEqual({ v: 1 });
   });
 
-  it('deleteDir 是 no-op 当目标不存在', async () => {
+  it('deleteDir is a no-op when the target does not exist', async () => {
     await expect(store.deleteDir('prs/nowhere')).resolves.toBeUndefined();
   });
 
-  it('deleteDir 拒绝清空 stateDir 自身 (空串 / "." 都视作 root)', async () => {
+  it('deleteDir refuses to clear stateDir itself (empty string / "." both treated as root)', async () => {
     await store.write('keep', { v: 1 });
     await expect(store.deleteDir('')).rejects.toThrow(/stateDir root/);
     await expect(store.deleteDir('.')).rejects.toThrow(/stateDir root/);
-    // root 没被毁，原文件还在
+    // root was not destroyed, the original file is still there
     expect(await store.read('keep')).toEqual({ v: 1 });
   });
 
-  // 路径越界保护：所有 fs 操作必须落在 stateDir 内部，
-  // `..` 跳出 / 绝对路径都得被挡，以防 key 拼接里混入未净化的用户输入
-  it('read / write / delete / deleteDir / list 全都挡 ".." path traversal', async () => {
+  // path traversal protection: all fs operations must land inside stateDir,
+  // `..` escapes / absolute paths must be blocked, to guard against unsanitized user input spliced into key assembly
+  it('read / write / delete / deleteDir / list all block ".." path traversal', async () => {
     await expect(store.read('../escape')).rejects.toThrow(/path traversal/);
     await expect(store.write('../escape', { v: 1 })).rejects.toThrow(/path traversal/);
     await expect(store.delete('../escape')).rejects.toThrow(/path traversal/);
@@ -125,7 +126,7 @@ describe('JsonFileStateStore', () => {
     }).rejects.toThrow(/path traversal/);
   });
 
-  it('挡绝对路径 key（即使指向 stateDir 之外）', async () => {
+  it('blocks absolute-path keys (even ones pointing outside stateDir)', async () => {
     const outside = path.join(os.tmpdir(), 'meebox-outside');
     await expect(store.read(outside)).rejects.toThrow(/path traversal/);
     await expect(store.write(outside, { v: 1 })).rejects.toThrow(/path traversal/);
@@ -134,16 +135,16 @@ describe('JsonFileStateStore', () => {
   describe('sweepOrphanDirs', () => {
     const GRACE = 7 * 24 * 60 * 60 * 1000;
     const NOW = Date.parse('2026-06-10T00:00:00.000Z');
-    // 把某个 <prefix>/<child> 目录的 mtime 回拨到 N 毫秒之前
+    // backdate the mtime of some <prefix>/<child> directory to N milliseconds ago
     const backdateDir = async (rel: string, ageMs: number): Promise<void> => {
       const t = new Date(NOW - ageMs);
       await fs.utimes(path.join(tmpDir, rel), t, t);
     };
 
-    it('删「不在 keep + mtime 超 grace」的孤儿，保留 keep 内 / 仍年轻的目录', async () => {
-      await store.write('prs/orphan/meta', { v: 1 }); // 不在 keep、且回拨到超期 → 删
-      await store.write('prs/known/meta', { v: 1 }); // 在 keep → 留
-      await store.write('prs/young/meta', { v: 1 }); // 不在 keep 但还年轻 → 留
+    it('deletes orphans "not in keep + mtime past grace", keeps directories in keep / still young', async () => {
+      await store.write('prs/orphan/meta', { v: 1 }); // not in keep, and backdated past grace → delete
+      await store.write('prs/known/meta', { v: 1 }); // in keep → keep
+      await store.write('prs/young/meta', { v: 1 }); // not in keep but still young → keep
       await backdateDir('prs/orphan', GRACE + 60_000);
       await backdateDir('prs/known', GRACE + 60_000);
       await backdateDir('prs/young', GRACE - 60_000);
@@ -155,12 +156,12 @@ describe('JsonFileStateStore', () => {
       expect(await store.read('prs/young/meta')).toEqual({ v: 1 });
     });
 
-    it('prefix 目录不存在 → 返回 0、不抛', async () => {
+    it('prefix directory does not exist → returns 0, does not throw', async () => {
       expect(await store.sweepOrphanDirs('archived/prs', new Set(), GRACE, NOW)).toBe(0);
     });
 
-    it('跳过非目录项（如散落的 .json 文件）', async () => {
-      await store.write('prs/index', { schema_version: 1 }); // prs/index.json 是文件，非目录
+    it('skips non-directory entries (e.g. stray .json files)', async () => {
+      await store.write('prs/index', { schema_version: 1 }); // prs/index.json is a file, not a directory
       await backdateDir('prs', GRACE + 60_000);
       const removed = await store.sweepOrphanDirs('prs', new Set(), GRACE, NOW);
       expect(removed).toBe(0);

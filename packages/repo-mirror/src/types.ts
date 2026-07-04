@@ -1,19 +1,19 @@
 export interface RepoIdentity {
-  /** 来自 connection.base_url 的 host（不含 scheme），用于按主机分目录 */
+  /** host from connection.base_url (no scheme), used to split directories by host */
   host: string;
   projectKey: string;
   repoSlug: string;
 }
 
 export interface MirrorResult {
-  /** bare 镜像的绝对路径，<reposDir>/<host>/<projectKey>/<repoSlug>/bare */
+  /** absolute path of the bare mirror, <reposDir>/<host>/<projectKey>/<repoSlug>/bare */
   mirrorPath: string;
-  /** 本次是否做了首次 clone（vs 后续 fetch） */
+  /** whether this call did a first-time clone (vs a subsequent fetch) */
   freshClone: boolean;
 }
 
 export interface RepoSize {
-  /** 字节，包含 bare repo 全部内容 */
+  /** bytes, covering the entire contents of the bare repo */
   totalBytes: number;
 }
 
@@ -26,26 +26,26 @@ export type ChangedFileStatus =
   | 'typechange';
 
 export interface ChangedFile {
-  /** 新路径（A/M/T）；R/C 时为目标 path */
+  /** new path (A/M/T); the target path for R/C */
   path: string;
-  /** 仅 R/C 时存在，源 path */
+  /** present only for R/C, the source path */
   oldPath?: string;
   status: ChangedFileStatus;
-  /** R/C 时的相似度百分比 (0-100) */
+  /** similarity percentage for R/C (0-100) */
   similarity?: number;
 }
 
 export type FileContent = { binary: false; content: string } | { binary: true };
 
-/** 单行 blame 信息。从 `git blame --porcelain <sha> -- <path>` 解析。 */
+/** Single-line blame info. Parsed from `git blame --porcelain <sha> -- <path>`. */
 export interface BlameLine {
-  /** 该行在 head 侧的行号（1-based） */
+  /** line number on the head side (1-based) */
   line: number;
-  /** 该行所属 commit 的完整 sha */
+  /** full sha of the commit this line belongs to */
   commit: string;
   author: string;
   authorEmail: string;
-  /** 作者时间 ISO */
+  /** author time, ISO */
   authorDate: string;
   summary: string;
 }

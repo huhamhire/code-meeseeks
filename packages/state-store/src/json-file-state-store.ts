@@ -4,23 +4,26 @@ import path from 'node:path';
 import type { Logger } from 'pino';
 import type { StateStore } from './types.js';
 
-/** rename 自愈重试的退避梯度（ms）；用尽仍失败则抛。 */
+/** Backoff gradient (ms) for rename self-healing retries; throws if exhausted and still failing. */
 const RENAME_RETRY_DELAYS = [10, 25, 50, 100, 200];
 
 /**
- * 把 key 映射到 `<stateDir>/<key>.json`，写入走 "tmp → fsync → rename" 原子模式。
+ * Maps a key to `<stateDir>/<key>.json`; writes go through the "tmp → fsync → rename" atomic pattern.
  *
- * 假设单写者（Electron Main 进程独占），不做文件锁。多进程并发写同一 key 时，
- * 最后一个 rename 胜出但中间不会出现半截文件。
+ * Assumes a single writer (Electron Main process exclusive), no file locking. When multiple
+ * processes write the same key concurrently, the last rename wins but no half-written file
+ * ever appears in between.
  *
- * Windows 自愈：同一 key 被并发写（多个 IPC handler 同时落同一份缓存，如打开 PR 时
- * 多路并发算 diff-base）时，`fs.rename` 覆盖既有文件可能撞上瞬时 EPERM/EACCES/EBUSY
- * （目标正被另一并发 rename / 杀软 / 其它句柄短暂占用——POSIX 原子替换不会，Windows 会）。
- * 这是瞬时锁而非真实权限问题，小退避重试即自愈；用尽重试才抛。
+ * Windows self-healing: when the same key is written concurrently (multiple IPC handlers
+ * flushing the same cache, e.g. multi-path parallel diff-base computation when opening a PR),
+ * `fs.rename` overwriting an existing file may hit transient EPERM/EACCES/EBUSY (the target
+ * is briefly held by another concurrent rename / antivirus / another handle — POSIX atomic
+ * replace won't, Windows will). This is a transient lock rather than a real permission problem;
+ * a small backoff retry self-heals; only throws once retries are exhausted.
  */
 export class JsonFileStateStore implements StateStore {
   private readonly rootResolved: string;
-  /** tmp 文件名去重计数器：避免同进程内对同一 key 的并发写撞用同一 tmp 路径 */
+  /** tmp filename dedup counter: avoids concurrent writes of the same key within one process colliding on the same tmp path */
   private tmpSeq = 0;
 
   constructor(
@@ -46,8 +49,9 @@ export class JsonFileStateStore implements StateStore {
     const filePath = this.keyToPath(key);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
 
-    // pid 隔离多进程、tmpSeq 隔离同进程内对同一 key 的并发写——否则两次并发写
-    // 共用同一 tmp，先完成者 rename 走文件后，后完成者 rename 即 ENOENT。
+    // pid isolates across processes, tmpSeq isolates concurrent writes of the same key within one
+    // process — otherwise two concurrent writes share one tmp, and after the first to finish renames
+    // the file away, the second's rename hits ENOENT.
     const tmp = `${filePath}.${String(process.pid)}.${String(this.tmpSeq++)}.tmp`;
     const handle = await fs.open(tmp, 'w');
     try {
@@ -60,9 +64,10 @@ export class JsonFileStateStore implements StateStore {
   }
 
   /**
-   * `fs.rename(tmp → dest)`，对 Windows 并发写的瞬时 EPERM/EACCES/EBUSY 做退避重试自愈。
-   * rename 失败时 tmp 仍在原地，直接重试同一次 rename 即可。重试用尽 / 非瞬时错误：清理 tmp 后抛。
-   * 每次自愈重试打 warn 级定位日志（key / dest / errno code / 第几次）。
+   * `fs.rename(tmp → dest)`, self-heals transient EPERM/EACCES/EBUSY from Windows concurrent writes
+   * via backoff retry. When rename fails the tmp is still in place, so just retry the same rename.
+   * Retries exhausted / non-transient error: clean up tmp then throw.
+   * Each self-healing retry logs a warn-level diagnostic (key / dest / errno code / which attempt).
    */
   private async renameWithRetry(tmp: string, dest: string, key: string): Promise<void> {
     for (let attempt = 0; ; attempt++) {
@@ -73,7 +78,7 @@ export class JsonFileStateStore implements StateStore {
         const code = (e as NodeJS.ErrnoException).code;
         const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
         if (!transient || attempt >= RENAME_RETRY_DELAYS.length) {
-          // 用尽重试 / 非瞬时错误：清掉残留 tmp（best-effort）后抛原始错误
+          // retries exhausted / non-transient error: remove leftover tmp (best-effort) then throw the original error
           await fs.rm(tmp, { force: true }).catch(() => undefined);
           throw e;
         }
@@ -88,13 +93,17 @@ export class JsonFileStateStore implements StateStore {
   }
 
   /**
-   * 清扫残留的原子写临时文件（`*.tmp`）。正常写成功即 rename 走 tmp、失败（含 rename 重试用尽）也会主动 rm；
-   * 但进程在「write tmp」与「rename」之间被强杀 / 退出（如关窗瞬间仍有 in-flight 的异步写）会留下孤儿 tmp，
-   * 跨会话长期累积。
+   * Sweeps leftover atomic-write temp files (`*.tmp`). A normal successful write renames the tmp away,
+   * and a failure (including exhausted rename retries) actively rm's it; but a process force-killed /
+   * exited between "write tmp" and "rename" (e.g. an in-flight async write still pending at window close)
+   * leaves an orphan tmp that accumulates across sessions over time.
    *
-   * **仅在启动、任何写入之前调用**才安全：单写者前提（Electron Main 独占）下，此刻不存在 in-flight 写，凡 `*.tmp`
-   * 皆为上次会话的孤儿，可放心删；**绝不在运行期清扫**——否则会误删并发写 / rename 重试正在用的 tmp（冲突场景下
-   * 不生成、也不误删多余文件）。best-effort：单个删除失败仅记日志、不抛。返回清掉的文件数。
+   * **Only safe to call at startup, before any write**: under the single-writer premise (Electron Main
+   * exclusive) there is no in-flight write at this moment, so every `*.tmp` is an orphan from the last
+   * session and safe to delete; **never sweep at runtime** — that would wrongly delete a tmp in use by a
+   * concurrent write / rename retry (in the conflict scenario no extra file is generated, nor wrongly
+   * deleted). best-effort: a single deletion failure only logs, does not throw. Returns the number of
+   * files swept.
    */
   async sweepStaleTmpFiles(): Promise<number> {
     let removed = 0;
@@ -103,7 +112,7 @@ export class JsonFileStateStore implements StateStore {
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
       } catch {
-        return; // 目录不存在 / 不可读：忽略
+        return; // directory does not exist / not readable: ignore
       }
       for (const entry of entries) {
         const full = path.join(dir, entry.name);
@@ -125,13 +134,19 @@ export class JsonFileStateStore implements StateStore {
   }
 
   /**
-   * 清扫 `<prefix>/<child>/` 下的孤儿子目录：`child` 不在 `keep` 集**且**目录 mtime 早于 `nowMs - olderThanMs`
-   * 的整树删掉。用于启动期回收归档冷存储里的孤儿——统一索引丢失 / 被重建后，归档条目失去目录索引，
-   * 按索引遍历的硬清够不到它（见 docs/arch/99-core/01-state-storage）。无索引可依，故以目录 mtime 作 archivedAt 的代理（索引一并丢了）。
+   * Sweeps orphan child directories under `<prefix>/<child>/`: deletes the whole tree of any `child`
+   * that is not in the `keep` set **and** whose directory mtime is earlier than `nowMs - olderThanMs`.
+   * Used at startup to reclaim orphans in archived cold storage — after the unified index is lost /
+   * rebuilt, archived entries lose their directory index and the index-driven hard cleanup can't reach
+   * them (see docs/arch/99-core/01-state-storage). With no index to rely on, directory mtime serves as
+   * a proxy for archivedAt (the index was lost along with it).
    *
-   * **双重保守**：必须同时「不在 keep」+「mtime 超期」才删——避免误删一个只是暂时不在索引里的目录（如中断的搬迁）。
-   * **仅启动期、任何写入之前调用**才安全（单写者前提下此刻无 in-flight 搬迁会被误判为孤儿）。子目录直接子级遍历、
-   * 不递归判定；非目录项跳过。best-effort：单个失败仅记日志、不抛。返回删除的孤儿目录数。
+   * **Doubly conservative**: only deletes when both "not in keep" + "mtime past grace" hold — avoids
+   * wrongly deleting a directory that is merely temporarily absent from the index (e.g. an interrupted
+   * relocation). **Only safe to call at startup, before any write** (under the single-writer premise no
+   * in-flight relocation would be misjudged as an orphan). Traverses direct children of the subdirectory,
+   * no recursive judgement; non-directory entries are skipped. best-effort: a single failure only logs,
+   * does not throw. Returns the number of orphan directories deleted.
    */
   async sweepOrphanDirs(
     prefix: string,
@@ -144,7 +159,7 @@ export class JsonFileStateStore implements StateStore {
     try {
       entries = await fs.readdir(root, { withFileTypes: true });
     } catch {
-      return 0; // prefix 目录不存在 / 不可读
+      return 0; // prefix directory does not exist / not readable
     }
     let removed = 0;
     for (const entry of entries) {
@@ -156,7 +171,7 @@ export class JsonFileStateStore implements StateStore {
       } catch {
         continue;
       }
-      if (nowMs - mtimeMs <= olderThanMs) continue; // 太新：暂不动（保守）
+      if (nowMs - mtimeMs <= olderThanMs) continue; // too new: leave it for now (conservative)
       try {
         await fs.rm(dir, { recursive: true, force: true });
         removed++;
@@ -182,11 +197,11 @@ export class JsonFileStateStore implements StateStore {
 
   async deleteDir(prefix: string): Promise<void> {
     const fullPath = this.subpathInside(prefix);
-    // 双重保险：subpathInside 已经挡了越界，但避免误传空串 ('') 一刀清掉 stateDir 自身
+    // double safeguard: subpathInside already blocks traversal, but guard against a stray empty string ('') wiping stateDir itself
     if (fullPath === this.rootResolved) {
       throw new Error('state-store: refused to deleteDir on stateDir root');
     }
-    // recursive + force：不存在 / 是空目录 / 含子目录都接住，对应需求是"清掉整棵子树"
+    // recursive + force: handles nonexistent / empty directory / with subdirectories alike, matching the need to "clear the whole subtree"
     await fs.rm(fullPath, { recursive: true, force: true });
   }
 
@@ -218,13 +233,14 @@ export class JsonFileStateStore implements StateStore {
   }
 
   /**
-   * 安全屏障：所有文件系统操作必须落到 stateDir 内部。`..` 跳出 / 绝对路径 / 符号
-   * 链接构造出的越界 key 都在此被拦截。
+   * Safety barrier: every filesystem operation must land inside stateDir. Out-of-bounds keys
+   * constructed via `..` escapes / absolute paths / symbolic links are all intercepted here.
    *
-   * 为什么必须：StateStore key 由调用方拼接 (含 PR localId / runId / 评论缓存等)，
-   * 一旦 key 在某个分支拼了未净化的用户输入 (比如远端 PR slug 含 `../`)，没有这层
-   * 屏障就能在用户工作目录之外读写文件。meebox 写过 user-controlled 字段进 key
-   * 的路径 (rules.dir id / repo slug / 远端 url 派生的 connectionId) 必须挡住。
+   * Why required: StateStore keys are assembled by callers (containing PR localId / runId /
+   * comment cache etc.), and once a key on some branch splices in unsanitized user input (e.g.
+   * a remote PR slug containing `../`), without this barrier it could read/write files outside
+   * the user's working directory. Paths where meebox writes user-controlled fields into keys
+   * (rules.dir id / repo slug / connectionId derived from remote url) must be blocked.
    */
   private subpathInside(rel: string): string {
     const joined = path.resolve(this.stateDir, rel);

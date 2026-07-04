@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { AppPaths } from '@meebox/shared';
 
 /**
- * 展开路径里的 `~` 为用户 home 目录。仅支持开头 `~/...` 或 `~`，不处理 `~user/...`。
+ * Expand a leading `~` in a path to the user's home directory. Only supports a leading `~/...` or `~`, not `~user/...`.
  */
 export function expandHome(p: string): string {
   if (p === '~') return os.homedir();
@@ -13,14 +13,14 @@ export function expandHome(p: string): string {
   return p;
 }
 
-/** 应用数据根目录（固定）：`~/.code-meeseeks/`。 */
+/** Application data root directory (fixed): `~/.code-meeseeks/`. */
 export function getAppDir(): string {
   return path.join(os.homedir(), '.code-meeseeks');
 }
 
 /**
- * 根据已加载的 reposDir 配置值，组装 AppPaths。
- * `reposDirRaw` 来自 config.yaml，可能含 `~`，会在此处展开为绝对路径。
+ * Assemble AppPaths from the loaded reposDir config value.
+ * `reposDirRaw` comes from config.yaml, may contain `~`, and is expanded to an absolute path here.
  */
 export function buildAppPaths(reposDirRaw: string): AppPaths {
   const appDir = getAppDir();
