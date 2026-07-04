@@ -3,16 +3,16 @@ import { CONCURRENCY_TIERS } from '../utils';
 import { TierSlider } from './TierSlider';
 
 /**
- * 评审任务并发（pr_agent.max_concurrency，1~8）：同时执行的评审 run 数。
- * 复用轮询配置的数值拖拽组件（TierSlider）。
+ * Review task concurrency (pr_agent.max_concurrency, 1~8): the number of review runs executed simultaneously.
+ * Reuses the numeric drag component (TierSlider) from the polling config.
  */
 export function ConcurrencySection({
   value,
   onChange,
 }: {
-  /** 当前并发数 */
+  /** Current concurrency count */
   value: number;
-  /** 选定档位 → 回传该档并发数 */
+  /** Selected tier → pass back that tier's concurrency count */
   onChange: (max: number) => void;
 }) {
   const { t } = useTranslation();
@@ -22,7 +22,7 @@ export function ConcurrencySection({
       <p className="muted" style={{ margin: '0 0 8px' }}>
         {t('settings.concurrencyHint')}
       </p>
-      {/* 并发数为纯数字、无单位，且刻度已标 1~8 并高亮当前档 → 省去右侧重复读数。 */}
+      {/* The concurrency count is a plain number with no unit, and the scale already marks 1~8 and highlights the current tier → omit the redundant readout on the right. */}
       <TierSlider
         tiers={CONCURRENCY_TIERS}
         value={value}

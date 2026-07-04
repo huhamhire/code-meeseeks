@@ -18,11 +18,11 @@ export function ConnectionEditorModal({
   const { t } = useTranslation();
   const { mode, draft } = state;
   const canSave = connDraftCanSave(draft);
-  // 退出校验：记下打开时的草稿快照，与当前比对判断是否有未提交改动
+  // Exit validation: snapshot the draft on open, compare against current to detect uncommitted changes
   const initialDraft = useRef(JSON.stringify(draft));
   const dirty = JSON.stringify(draft) !== initialDraft.current;
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  // 关闭（背景点击 / 关闭键 / 取消按钮）统一走这里：有改动则先拦截确认
+  // Closing (backdrop click / close key / cancel button) all routes through here: intercept with a confirm if dirty
   const requestClose = (): void => {
     if (dirty) setConfirmDiscard(true);
     else onCancel();
@@ -37,8 +37,8 @@ export function ConnectionEditorModal({
           mode === 'add' ? t('settings.addConnectionTitle') : t('settings.editConnectionTitle')
         }
       >
-        {/* 左右两栏：左选集成平台（复用向导布局），右填连接表单。
-          平台选择仅新增时可改；编辑既有连接只读（base_url / token 语义随平台而异）。 */}
+        {/* Two columns: left picks the integration platform (reuses wizard layout), right fills the connection form.
+          Platform selection is editable only when adding; editing an existing connection is read-only (base_url / token semantics vary by platform). */}
         <div className="config-pick-grid">
           <PlatformPicker
             value={draft.kind}

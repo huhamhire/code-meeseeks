@@ -3,14 +3,17 @@ import type { Config } from '@meebox/shared';
 import { Switch } from '../../../common';
 import { invoke } from '../../../../api';
 
-// macOS 在系统层管控通知授权（应用无法代为开启）→ 仅 macOS 展示「打开系统通知设置」引导按钮。
+// macOS gates notification authorization at the system level (the app can't enable it on the user's behalf) → only macOS shows the "Open system notification settings" guidance button.
 const IS_MAC = navigator.platform.toLowerCase().includes('mac');
 
 /**
- * 通知分区：总开关 + 分类型系统通知——面向评审的（新 PR / 评论回复 / 评论 @）与面向「我创建的」PR 的
- * （新评论 / 被标记需修改 / 出现冲突）。总开关关闭时下属各项禁用（灰显但保留各自值）。系统通知受 OS 权限
- * 约束——用户在系统设置关闭后应用静默降级，此处仅控制应用侧意图。macOS dock「待回应」计数角标随总开关默认
- * 启用、无独立开关，故此处不列。
+ * Notification section: master switch + per-type system notifications — review-facing ones (new PR /
+ * comment reply / comment @) and "my authored" PR ones (new comment / marked needs-work / conflict
+ * appeared). When the master switch is off the sub-items are disabled (grayed out but keep their own
+ * values). System notifications are subject to OS permission — once the user disables them in system
+ * settings the app silently degrades; this only controls the app-side intent. The macOS dock
+ * "awaiting response" count badge is enabled by default with the master switch, has no independent
+ * switch, and so is not listed here.
  */
 export function NotificationSection({
   value,
@@ -122,7 +125,7 @@ export function NotificationSection({
         </li>
       </ul>
       {IS_MAC && (
-        // macOS 授权引导：系统层未授权时通知会被静默丢弃，应用无法代为开启 → 提供按钮跳转系统设置由用户开启。
+        // macOS authorization guidance: when unauthorized at the system level notifications are silently dropped and the app can't enable it on the user's behalf → provide a button to jump to system settings for the user to enable.
         <div className="settings-edit-row" style={{ marginTop: 8 }}>
           <span className="muted settings-sublist-desc" style={{ flex: 1 }}>
             {t('settings.notifyMacPermissionHint')}

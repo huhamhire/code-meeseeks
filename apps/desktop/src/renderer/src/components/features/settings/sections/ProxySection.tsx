@@ -15,8 +15,8 @@ export function ProxySection({
       <div className="modal-section-head">
         <div className="modal-section-head-title">
           <h4>{t('settings.proxyTitle')}</h4>
-          {/* 启用状态用 chip 表达（绿=已启用/灰=未启用），与应用其它状态视觉一致；
-              地址不在此展示，详情见「配置」弹窗。 */}
+          {/* Enabled state shown as a chip (green=enabled / gray=disabled), visually consistent with
+              other app states; the address isn't shown here, see the "Configure" dialog for details. */}
           <span className={`settings-status-chip ${on ? 'is-on' : 'is-off'}`}>
             {on ? t('settings.proxyEnabledStatus') : t('settings.proxyDisabledStatus')}
           </span>

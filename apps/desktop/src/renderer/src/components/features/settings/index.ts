@@ -1,5 +1,5 @@
-// features/settings 对外公共 API：设置面板 + 连接 / LLM 表单（onboarding 复用）。
-// 内部模块（sections / editors / hooks 等）相互引用走相对路径。状态栏 chip 走 statusbar/* 子路径。
+// features/settings public API: settings panel + connection / LLM forms (reused by onboarding).
+// Internal modules (sections / editors / hooks etc.) reference each other via relative paths. Status-bar chips go through the statusbar/* subpath.
 export { SettingsModal, type SettingsCategory } from './SettingsModal';
 export {
   ConnectionForm,
