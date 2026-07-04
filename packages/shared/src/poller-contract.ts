@@ -10,29 +10,29 @@ import type { PrAgentStrategy } from './pr-agent-status.js';
 import type { ReviewRunTool } from './tool-registry.js';
 
 /**
- * 本地 review 判定。和 Bitbucket reviewer.status 一一对应，UI 由它驱动两个 toggle 按钮：
- * - pending: 默认（UNAPPROVED），尚未给出 review 判定
- * - approved: 已 approve
- * - needs_work: 已标记 NEEDS_WORK
+ * Local review verdict. One-to-one with Bitbucket reviewer.status; the UI drives two toggle buttons from it:
+ * - pending: default (UNAPPROVED), no review verdict given yet
+ * - approved: approved
+ * - needs_work: marked NEEDS_WORK
  *
- * 用户在 UI 上点击会同步到远端 Bitbucket（参与者 status），下一轮 poll 再次取回保持一致。
+ * Clicking in the UI syncs to remote Bitbucket (participant status), and the next poll round fetches it back to stay consistent.
  */
 export type LocalPrStatus = 'pending' | 'approved' | 'needs_work';
 
-// 工具枚举 ReviewRunTool 见统一注册表 tool-registry（新增工具改那里）。注：improve 的 pr-agent local
-// provider 不实现 `publish_code_suggestions`，输出走 review.md（与 review / ask 共用）；parseReviewOutput
-// 对 tool='improve' 走专门解析路径，把每条 <details> 建议拆成带 anchor 的 code-feedback finding。
+// The tool enum ReviewRunTool is in the unified registry tool-registry (add new tools there). Note: improve's pr-agent local
+// provider doesn't implement `publish_code_suggestions`, so its output goes through review.md (shared with review / ask); parseReviewOutput
+// takes a dedicated parse path for tool='improve', splitting each <details> suggestion into an anchored code-feedback finding.
 
 export type ReviewRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /**
- * pr-agent 单次调用失败时的归类。
+ * The failure classification for a single pr-agent invocation.
  *
- * 'llm-error' 跟其他 reason 不同 —— pr-agent CLI 本身可能 exit 0 (它内部 catch
- * 了 LLM 错误只 logger.warning 一下)，但 stdout 里能看到 "Failed to generate
- * prediction with any model" / "Error during LLM inference" 之类 marker。
- * parseReviewOutput 检测到这种 marker 时把 status 升格为 'failed' +
- * reason='llm-error'，避免 UI 把 LLM 调用全失败的 run 当"成功完成"展示
+ * 'llm-error' differs from other reasons — the pr-agent CLI itself may exit 0 (it internally catches
+ * LLM errors and only logger.warning's about them), but stdout shows a marker like "Failed to generate
+ * prediction with any model" / "Error during LLM inference".
+ * When parseReviewOutput detects such a marker it upgrades status to 'failed' +
+ * reason='llm-error', so the UI doesn't present a run where all LLM calls failed as "successfully completed"
  */
 export type ReviewRunFailureReason =
   | 'timeout'
@@ -43,36 +43,36 @@ export type ReviewRunFailureReason =
   | 'llm-error';
 
 /**
- * 解析 pr-agent stdout 后得到的单条 finding。category 反映来源：
- * - description: /describe 输出的描述段
- * - code-feedback: 锚到具体文件 / 行的代码建议（有 anchor）
- * - general: 其它 markdown 段（如 estimated effort / score / relevant tests）
+ * A single finding obtained after parsing pr-agent stdout. category reflects the source:
+ * - description: the description section from /describe output
+ * - code-feedback: a code suggestion anchored to a specific file / line (has anchor)
+ * - general: other markdown sections (such as estimated effort / score / relevant tests)
  */
 export type FindingCategory = 'description' | 'general' | 'code-feedback';
 
 /**
- * 标准化的 pr-agent 输出段落键名。把不同版本 pr-agent 的 section title (可能带
- * **bold** / 大小写不同 / 中英变体) 归一到稳定标识，UI 按 key 决定排序 / 着色 /
- * 是否隐藏 / 后续做特化卡片。
+ * Standardized pr-agent output section key. Normalizes section titles across pr-agent versions (which may carry
+ * **bold** / differ in case / have Chinese-English variants) to a stable identifier; the UI decides sorting / coloring /
+ * whether to hide / later specialized cards by key.
  */
 export type PrDocSectionKey =
-  | 'title' // 建议的 PR 标题
-  | 'pr-type' // 类型标签 (Bug fix / Enhancement / Tests / ...)
-  | 'summary' // /review 顶部总结
-  | 'description' // 主描述段
-  | 'diagram' // 架构图（changes_diagram，mermaid）
-  | 'assessment' // 思路建议（注入字段：替代方案 + 倾向性建议，对齐 Qodo High-Level Assessment）
-  | 'walkthrough' // 文件级走查
-  | 'relevant-tests' // 相关测试
-  | 'security' // 安全发现
-  | 'code-feedback' // /review 单条 finding (带 file:line anchor)
-  | 'code-suggestion' // /improve 单条改进建议 (带 file:line anchor + existing/improved diff)
-  | 'ask-summary' // /ask 结构化分段：结论 / 直接回答（高亮、展开）
-  | 'ask-analysis' // /ask 结构化分段：过程性分析 / 讨论（默认收起）
-  | 'ask-suggestions' // /ask 结构化分段：可执行建议（高亮）
-  | 'effort' // 评估工作量 1-5
-  | 'score' // 质量分
-  | 'general'; // 兜底，未识别
+  | 'title' // Suggested PR title
+  | 'pr-type' // Type label (Bug fix / Enhancement / Tests / ...)
+  | 'summary' // /review top summary
+  | 'description' // Main description section
+  | 'diagram' // Architecture diagram (changes_diagram, mermaid)
+  | 'assessment' // Approach suggestions (injected field: alternatives + preference recommendation, aligned with Qodo High-Level Assessment)
+  | 'walkthrough' // File-level walkthrough
+  | 'relevant-tests' // Relevant tests
+  | 'security' // Security findings
+  | 'code-feedback' // /review single finding (with file:line anchor)
+  | 'code-suggestion' // /improve single improvement suggestion (with file:line anchor + existing/improved diff)
+  | 'ask-summary' // /ask structured section: conclusion / direct answer (highlighted, expanded)
+  | 'ask-analysis' // /ask structured section: procedural analysis / discussion (collapsed by default)
+  | 'ask-suggestions' // /ask structured section: actionable suggestions (highlighted)
+  | 'effort' // Estimated effort 1-5
+  | 'score' // Quality score
+  | 'general'; // Fallback, unrecognized
 
 export interface FindingAnchor {
   path: string;
@@ -80,23 +80,23 @@ export interface FindingAnchor {
   endLine?: number;
 }
 
-/** Finding 严重度：M4 评审发布闭环用，UI 决定 chip 着色 / 排序优先级 */
+/** Finding severity: used by the M4 review publish loop; the UI decides chip coloring / sort priority */
 export type FindingSeverity = 'info' | 'warning' | 'error';
 
 /**
- * Finding 在评审 → 发布闭环中的状态机:
- *   pending  : 默认值，待用户决断
- *   accepted : 用户勾选采纳 (将作为 inline / summary 评论发布)
- *   edited   : 用户改写了内容 (draft_body 含编辑后版本)
- *   rejected : 用户拒绝；不发布
- *   posted   : 已发布到远端 (posted_remote_id 含远端评论 id 用作幂等)
+ * The Finding's state machine in the review → publish loop:
+ *   pending  : default, awaiting the user's decision
+ *   accepted : user checked to accept (will be published as an inline / summary comment)
+ *   edited   : user rewrote the content (draft_body holds the edited version)
+ *   rejected : user rejected; not published
+ *   posted   : published to the remote (posted_remote_id holds the remote comment id, used for idempotency)
  */
 export type FindingStatus = 'pending' | 'accepted' | 'edited' | 'rejected' | 'posted';
 
 /**
- * /improve 单条建议的"前后代码"对比。pr-agent 在 markdown 里用 `diff` 代码块同时
- * 给出 existing + improved 两段内容；解析后我们拆成两份字符串，UI 用单语言 syntax
- * highlight 渲染 (anchor.path 给文件类型)。两边都是片段，不一定能独立运行/编译。
+ * The "before/after code" comparison of a single /improve suggestion. pr-agent gives both existing + improved
+ * content in a `diff` code block in the markdown; after parsing we split into two strings, and the UI renders
+ * with single-language syntax highlight (anchor.path gives the file type). Both sides are fragments, not necessarily independently runnable/compilable.
  */
 export interface FindingCodeChange {
   existing: string;
@@ -104,104 +104,104 @@ export interface FindingCodeChange {
 }
 
 export interface Finding {
-  /** 同一 run 内稳定的 id，便于 UI list-key + 后续 "改为评论草稿" 引用 */
+  /** Id stable within the same run, convenient for UI list-key + later "turn into comment draft" references */
   id: string;
   category: FindingCategory;
   /**
-   * 段落归一键。新解析的 finding 都会带；旧持久化的 run 没有此字段 (回退到 category)。
-   * UI 按 sectionKey 决定排序 + 视觉分层
+   * Section normalization key. Every newly parsed finding carries it; old persisted runs lack this field (fall back to category).
+   * The UI decides sorting + visual layering by sectionKey
    */
   sectionKey?: PrDocSectionKey;
-  /** 来自 markdown header (已剥除 **__ 强调符号)；可能为空 */
+  /** From the markdown header (with **__ emphasis symbols stripped); may be empty */
   title?: string;
-  /** 原始 markdown body（含格式），UI 用 react-markdown 渲染 */
+  /** Raw markdown body (with formatting), rendered by the UI with react-markdown */
   body: string;
-  /** category='code-feedback' / 'code-suggestion' 时有值 */
+  /** Present when category='code-feedback' / 'code-suggestion' */
   anchor?: FindingAnchor;
   /**
-   * /improve 建议带的"原代码 → 改进代码"对比。仅 sectionKey='code-suggestion' 时填。
-   * UI 用单语言 syntax highlight 渲染前后两个片段
+   * The "original code → improved code" comparison carried by an /improve suggestion. Filled only when sectionKey='code-suggestion'.
+   * The UI renders the before/after fragments with single-language syntax highlight
    */
   codeChange?: FindingCodeChange;
   /**
-   * /improve 给的重要度评分 1-10。仅 sectionKey='code-suggestion' 时填。
-   * 配合 severity (M4 评审决断) 做排序 / 着色：分数 ≥ 8 默认 'warning'，< 5 默认 'info'
+   * The importance score 1-10 given by /improve. Filled only when sectionKey='code-suggestion'.
+   * Combined with severity (M4 review decision) for sorting / coloring: score ≥ 8 defaults to 'warning', < 5 defaults to 'info'
    */
   score?: number;
   /**
-   * 严重度 (M4)；当前 parser 不填，M4 接 /improve 时按 pr-agent 输出 / rules 补
-   * 推断逻辑。UI 默认按 'info' 渲染
+   * Severity (M4); the current parser doesn't fill it; M4 will add the inference logic per pr-agent output / rules when wiring up /improve.
+   * The UI renders as 'info' by default
    */
   severity?: FindingSeverity;
   /**
-   * 发布闭环状态 (M4)；缺省视为 'pending'。所有 finding 默认是 pending，用户在
-   * Findings Drawer 上勾选后转 accepted / edited / rejected；发布成功转 posted
+   * Publish loop status (M4); defaults to 'pending'. All findings default to pending; after the user checks them in
+   * the Findings Drawer they become accepted / edited / rejected; a successful publish turns them to posted
    */
   status?: FindingStatus;
   /**
-   * 用户编辑后的评论正文。仅 status='edited' 时填；其他状态 UI 直接读 body
+   * The comment body after user editing. Filled only when status='edited'; for other states the UI reads body directly
    */
   draft_body?: string;
   /**
-   * 发布成功后远端评论 id (e.g., Bitbucket comment id)。用作幂等 key，防止同一 finding
-   * 被重复发布；跟 state/posted-comments.json 互为冗余但前者按 finding 维度，
-   * 后者按 (finding_id, remote_id) 维度全局索引，用途互补
+   * The remote comment id after a successful publish (e.g., Bitbucket comment id). Used as an idempotency key to prevent the same finding
+   * from being published twice; redundant with state/posted-comments.json, but the former is by finding dimension and
+   * the latter is a global index by (finding_id, remote_id) dimension — complementary uses
    */
   posted_remote_id?: string;
 }
 
 /**
- * M4 评审 → 发布闭环的"草稿"。
+ * The "draft" of the M4 review → publish loop.
  *
- * 草稿的生命周期跟 Finding 解耦：
- * - Finding 是 /review 的不可变快照 (跑过什么 AI 说了什么)
- * - Draft 是用户工作中的可变态 (用户编辑 / 拒绝 / 发布的对象)
+ * A draft's lifecycle is decoupled from Finding:
+ * - Finding is the immutable snapshot of /review (what ran, what the AI said)
+ * - Draft is the mutable state in the user's work (the object the user edits / rejects / publishes)
  *
- * 落盘到 `state/prs/<localId>/drafts.json`，per-PR 目录；PR 退场
- * 时 deleteDir 整树清掉。
+ * Persisted to `state/prs/<localId>/drafts.json`, a per-PR directory; when the PR leaves,
+ * deleteDir clears the whole tree.
  *
- * 状态机：
- *   pending  ──(用户编辑 body)──► edited
- *   pending  ──(用户拒绝)──────► rejected
- *   edited   ──(用户拒绝)──────► rejected
- *   pending / edited  ──(批量发布成功)──► posted
- *   posted   ──► (终态，本地不变；要改远端走 Bitbucket API)
+ * State machine:
+ *   pending  ──(user edits body)──► edited
+ *   pending  ──(user rejects)──────► rejected
+ *   edited   ──(user rejects)──────► rejected
+ *   pending / edited  ──(batch publish succeeds)──► posted
+ *   posted   ──► (terminal, unchanged locally; to change the remote use the Bitbucket API)
  */
 export interface ReviewDraft {
-  /** 唯一稳定 id (uuid 或 runId+findingId 派生)，UI list-key + 持久化引用 */
+  /** Unique stable id (uuid or derived from runId+findingId), for UI list-key + persistence references */
   id: string;
-  /** PR hash localId，跟父目录一致 */
+  /** PR hash localId, consistent with the parent directory */
   prLocalId: string;
-  /** 锚点：跟 FindingAnchor 一致但 startLine/endLine 必填 (草稿必须 anchor 到具体行) */
+  /** Anchor: same as FindingAnchor but startLine/endLine required (a draft must anchor to a specific line) */
   anchor: ReviewDraftAnchor;
-  /** 当前评论正文。pending 时 = AI 建议原文；edited 时 = 用户编辑后 */
+  /** Current comment body. When pending = the AI suggestion's original text; when edited = after user editing */
   body: string;
   /**
-   * 来源：AI 建议 (`finding`) vs 用户手动添加 (`manual`)。
-   * 用户从 DiffView 行 hover '+' 创建的草稿是 manual；从 ChatPane 跳转的是 finding。
+   * Origin: AI suggestion (`finding`) vs user-added manually (`manual`).
+   * A draft created by the user from a DiffView line hover '+' is manual; one navigated from ChatPane is finding.
    */
   origin: 'finding' | 'manual';
   /**
-   * 仅 origin='finding' 时填，指回源 finding。UI 用它在 ChatPane finding card
-   * 上反查关联 Draft 的 status chip 显示
+   * Filled only when origin='finding', pointing back to the source finding. The UI uses it on the ChatPane finding card
+   * to look up the associated Draft's status chip display
    */
   source?: { runId: string; findingId: string };
   status: 'pending' | 'edited' | 'posted' | 'rejected';
-  /** 发布成功后远端 comment id，幂等 key + 跳转链接 */
+  /** The remote comment id after a successful publish, idempotency key + navigation link */
   posted_remote_id?: string;
   /** ISO */
   createdAt: string;
-  /** ISO，每次 update 都刷新 */
+  /** ISO, refreshed on every update */
   updatedAt: string;
 }
 
 export interface ReviewDraftAnchor {
   path: string;
-  /** 锚点起始行 (从 1 开始) */
+  /** Anchor start line (1-based) */
   startLine: number;
-  /** 锚点结束行；单行评论 = startLine */
+  /** Anchor end line; single-line comment = startLine */
   endLine: number;
-  /** 锚到 base (old) 还是 head (new) 侧 */
+  /** Anchor to the base (old) or head (new) side */
   side: 'old' | 'new';
 }
 
@@ -216,11 +216,11 @@ export interface FindingClosuresFile {
 }
 
 /**
- * PR identity 快照：嵌进 ReviewRun (可选) 让 run 文件自描述，不依赖 `prs/index.json`
- * 也能反查所属 PR。M5 归档场景 (PR 已硬清但 run 单独导出) 会需要。
+ * PR identity snapshot: embedded into ReviewRun (optional) so the run file is self-describing, able to look up its owning PR
+ * without depending on `prs/index.json`. Needed by the M5 archive scenario (PR already hard-cleared but the run exported separately).
  *
- * 这里复制 `@meebox/poller` 的 PrIdentity 形状到 shared，避免 shared 反向依赖
- * poller (循环依赖)。两边字段一一对应。
+ * This copies `@meebox/poller`'s PrIdentity shape into shared, to avoid shared reverse-depending on
+ * poller (circular dependency). Fields correspond one-to-one on both sides.
  */
 export interface PrIdentitySnapshot {
   platform: PlatformKind;
@@ -232,137 +232,137 @@ export interface PrIdentitySnapshot {
 }
 
 /**
- * 一次 pr-agent 调用的完整记录。落地为 `state/prs/<localId>/runs/<runId>.json`，
- * 与 PR 的 meta.json / comments.json 同目录，PR 退场时一并清理。
+ * The complete record of one pr-agent invocation. Persisted as `state/prs/<localId>/runs/<runId>.json`,
+ * in the same directory as the PR's meta.json / comments.json, cleaned up together when the PR leaves.
  */
 /**
- * 本次 run 的 LLM token 用量（真实值，来自 API response.usage，经 litellm callback
- * 捕获，见 sitecustomize.py）。一次 run 可能多次调用 LLM（retry / 多 tool），这里是
- * **累加**值，calls 记录调用次数。历史 run / 非 embedded / 流式模型可能缺失 → 全可选。
+ * This run's LLM token usage (real values, from API response.usage, captured via a litellm callback,
+ * see sitecustomize.py). One run may call the LLM multiple times (retry / multiple tools), so this is the
+ * **cumulative** value, with calls recording the number of invocations. May be missing for historical runs / non-embedded / streaming models → all optional.
  */
 export interface TokenUsage {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
-  /** 本次 run 捕获到的 LLM 调用次数（累加来源） */
+  /** The number of LLM invocations captured in this run (the cumulative source) */
   calls?: number;
-  /** 提示缓存读取（cache_read）token 数：promptTokens 的一部分，供 UI 拆分展示「↑总量 (cache N)」。
-   *  CLI 路径取自 claude/codex usage，API 路径取自 litellm（Anthropic cache_read / OpenAI cached_tokens）。
-   *  缺失或为 0 = 无缓存命中信息（UI 不展示该括号）。 */
+  /** Prompt cache read (cache_read) token count: part of promptTokens, for the UI to split-display "↑total (cache N)".
+   *  The CLI path takes it from claude/codex usage, the API path from litellm (Anthropic cache_read / OpenAI cached_tokens).
+   *  Missing or 0 = no cache-hit info (the UI doesn't show that parenthetical). */
   cacheReadTokens?: number;
-  /** 模型实际交互轮次：CLI agentic 模式为本次 run 内部累计的 num_turns（可远大于 calls）；
-   *  其它情况回退为 LLM 调用次数（calls）。≤1 时 UI 不单独展示。 */
+  /** The model's actual interaction turns: in CLI agentic mode, the num_turns accumulated inside this run (may be far greater than calls);
+   *  otherwise falls back to the LLM invocation count (calls). ≤1 the UI doesn't show separately. */
   turns?: number;
 }
 
-/** pr-agent run 触发来源：user（用户手动发起）/ agent（编排 / AutoPilot 派发）。 */
+/** pr-agent run trigger origin: user (manually initiated by the user) / agent (dispatched by orchestration / AutoPilot). */
 export type ReviewRunOrigin = 'user' | 'agent';
 
 /**
- * 单 commit 评审范围：把一次 run 的 diff 限定在某个 commit 自身的改动（`parent..sha`），
- * 而非 PR 全量。由 Diff 视图的提交选择器发起，落盘到 ReviewRun 供结果卡展示范围徽标。
- * 无父 commit（root）无法单 commit 定界，不提供该范围。
+ * Single-commit review scope: limiting a run's diff to a specific commit's own changes (`parent..sha`),
+ * rather than the whole PR. Initiated from the Diff view's commit selector, persisted to ReviewRun for the result card to show a scope badge.
+ * A commit with no parent (root) can't be single-commit-bounded, so this scope is not provided.
  */
 export interface ReviewRunCommitScope {
-  /** 目标 commit 完整 SHA（worktree head）。 */
+  /** Target commit full SHA (worktree head). */
   sha: string;
-  /** 目标 commit 首个父 commit SHA（worktree base；单 commit diff = parent..sha）。 */
+  /** Target commit's first parent commit SHA (worktree base; single-commit diff = parent..sha). */
   parent: string;
-  /** 展示用短 SHA。 */
+  /** Short SHA for display. */
   abbreviatedSha: string;
-  /** 展示用 commit 主题（首行 message）。 */
+  /** Commit subject for display (first line of message). */
   subject: string;
 }
 
 export interface ReviewRun {
-  /** yyyymmdd-HHmmss-ms 时序 id，便于按文件名倒序列出 */
+  /** yyyymmdd-HHmmss-ms sequential id, convenient for listing in reverse filename order */
   id: string;
-  /** PR hash localId (12 hex chars)，跟 StoredPullRequest.localId 对齐 */
+  /** PR hash localId (12 hex chars), aligned with StoredPullRequest.localId */
   prLocalId: string;
   /**
-   * PR identity 快照 (可选)；目前 M3 默认不填，UI 始终从 meta.json 读 PR 信息。
-   * 留 schema 位给 M5 归档：导出单个 run 文件时能凭此快照反查远端 PR / 跳转 URL，
-   * 即使本地 `prs/<hash>/` 已经被硬清
+   * PR identity snapshot (optional); currently M3 doesn't fill it by default, the UI always reads PR info from meta.json.
+   * A schema slot reserved for M5 archive: when exporting a single run file, this snapshot lets it look up the remote PR / navigation URL,
+   * even after the local `prs/<hash>/` has been hard-cleared
    */
   prIdentitySnapshot?: PrIdentitySnapshot;
   tool: ReviewRunTool;
-  /** /ask 工具的问题内容；其他 tool 不填。UI 把它当用户发言渲染在 run 卡片之上 */
+  /** The question content for the /ask tool; other tools don't fill it. The UI renders it as user speech above the run card */
   question?: string;
   /**
-   * 触发来源：user（用户在 ChatPane 直接发起的斜杠命令）/ agent（编排 / AutoPilot 派发的子 run）。
-   * ChatPane 据此为 user 来源的 run 在其卡片之上补一条命令回显气泡（对话习惯）；agent 子 run 不回显
-   * （其用户输入已由编排会话的用户消息承载，避免重复冒泡）。历史 run 无此字段（undefined），不回显。
+   * Trigger origin: user (a slash command initiated directly by the user in ChatPane) / agent (a sub-run dispatched by orchestration / AutoPilot).
+   * ChatPane accordingly adds a command echo bubble above the card for user-origin runs (conversational habit); agent sub-runs are not echoed
+   * (their user input is already carried by the orchestration session's user message, avoiding duplicate bubbling). Historical runs lack this field (undefined), not echoed.
    */
   origin?: ReviewRunOrigin;
   /**
-   * 单 commit 评审范围：本次 run 限定在该 commit 自身改动（`parent..sha`）而非 PR 全量时填。
-   * 缺省 = PR 全量范围。结果卡据此展示范围徽标。
+   * Single-commit review scope: filled when this run is limited to that commit's own changes (`parent..sha`) rather than the whole PR.
+   * Default = whole-PR scope. The result card shows a scope badge accordingly.
    */
   scope?: ReviewRunCommitScope;
-  /** 探测时拿到的 pr-agent 版本（CLI 首行 / 嵌入式查出的 pr-agent 版本） */
+  /** The pr-agent version obtained at probe time (CLI first line / the pr-agent version found by the embedded runtime) */
   prAgentVersion: string;
   strategy: PrAgentStrategy;
   /**
-   * 本次 run 使用的 LLM 模型 ID — 取自启动时 active LlmProfile.model (经过
-   * normalizeModel 加 provider 前缀的形态，e.g., `openai/qwen-plus` /
-   * `deepseek/deepseek-chat`)。
+   * The LLM model ID used by this run — taken from the active LlmProfile.model at startup (in the form after
+   * normalizeModel adds the provider prefix, e.g., `openai/qwen-plus` /
+   * `deepseek/deepseek-chat`).
    *
-   * 历史 run 没存这字段 (undefined)，UI 应能 graceful 处理。新 run 在 startReviewRun
-   * 入口填上，让 ChatPane 在 meta 行展示"哪一次 review 用的哪个模型"，方便回看
-   * 不同 profile 出的结果差异
+   * Historical runs didn't store this field (undefined), so the UI should handle it gracefully. New runs fill it at the startReviewRun
+   * entry, so ChatPane shows in the meta row "which model each review used", making it convenient to review
+   * result differences across profiles
    */
   model?: string;
   status: ReviewRunStatus;
-  /** ISO 启动时间 */
+  /** ISO start time */
   startedAt: string;
-  /** ISO 结束时间，running 状态下为 undefined */
+  /** ISO finish time, undefined in the running state */
   finishedAt?: string;
-  /** 运行墙钟 (ms) */
+  /** Wall-clock runtime (ms) */
   durationMs?: number;
-  /** 进程退出码；超时 / 信号杀 / 启动失败时可能为 -1 或 undefined */
+  /** Process exit code; may be -1 or undefined on timeout / signal kill / spawn failure */
   exitCode?: number;
   errorReason?: ReviewRunFailureReason;
   errorMessage?: string;
-  /** 原始 stdout 文本；M3-B2 解析成 findings 后仍保留供"看原文"调试 */
+  /** Raw stdout text; still kept after M3-B2 parses it into findings, for "see original" debugging */
   stdout?: string;
-  /** 原始 stderr 文本 */
+  /** Raw stderr text */
   stderr?: string;
-  /** 解析后的 findings；succeeded run 才填，failed 也可能部分有 */
+  /** Parsed findings; filled only for a succeeded run, a failed one may also have some partially */
   findings?: Finding[];
-  /** 概要 (取首个 ## section 标题 / 描述首行)，UI list 上显示 */
+  /** Summary (takes the first ## section title / first description line), shown in the UI list */
   summary?: string;
-  /** 本次 run 的真实 LLM token 用量（累加）；缺失 = 未捕获到（见 TokenUsage） */
+  /** This run's real LLM token usage (cumulative); missing = not captured (see TokenUsage) */
   tokenUsage?: TokenUsage;
   /**
-   * 复评引用：本次 /ask 是对先前 review/improve run 某条 finding 的「复评」时，记下被引用的源
-   * finding（前向链）。UI 据此在 /ask 卡片上展示「复评自 <file:line>」徽标 + 裁决动作。
-   * 仅 tool='ask' 且经「引用」触发时填。
+   * Re-review reference: when this /ask is a "re-review" of a finding from a prior review/improve run, record the referenced source
+   * finding (forward link). The UI shows a "re-reviewed from <file:line>" badge + verdict actions on the /ask card accordingly.
+   * Filled only when tool='ask' and triggered via "reference".
    */
   referencedFinding?: { runId: string; findingId: string; anchor?: FindingAnchor };
   /**
-   * 复评裁决：解析自复评 /ask 输出的 `<verdict>` 段——replace=给取代性新评论 / keep=原评论成立 /
-   * drop=原评论不成立。驱动 UI 的采纳 / 关闭动作。模型未给则 undefined（UI 仅展示、不出裁决动作）。
+   * Re-review verdict: parsed from the `<verdict>` section of the re-review /ask output — replace=give a superseding new comment / keep=the original comment holds /
+   * drop=the original comment doesn't hold. Drives the UI's accept / close actions. undefined when the model doesn't give one (the UI only displays, no verdict action).
    */
   askVerdict?: AskVerdict;
 }
 
-/** 复评裁决：取代原评论 / 保留原评论 / 撤销原评论。 */
+/** Re-review verdict: supersede the original comment / keep the original comment / revoke the original comment. */
 export type AskVerdict = 'replace' | 'keep' | 'drop';
 
 /**
- * finding 关闭关系：一条被复评 /ask「取代 / 撤销」而关闭的源 finding（独立于本地草稿语义，仅作用于
- * ChatPane finding 卡片的关闭态 + 双向互链）。按 (runId, findingId) 标识源 finding。
+ * Finding closure relation: a source finding closed by a re-review /ask "supersede / revoke" (independent of local draft semantics, affecting only
+ * the closed state + bidirectional cross-linking of the ChatPane finding card). Identifies the source finding by (runId, findingId).
  */
 export interface FindingClosure {
-  /** 源 finding 所在的 review/improve run id */
+  /** The review/improve run id where the source finding resides */
   runId: string;
-  /** 源 finding id */
+  /** The source finding id */
   findingId: string;
-  /** 关闭它的复评 /ask run id（用于卡片互链） */
+  /** The re-review /ask run id that closed it (for card cross-linking) */
   byAskRunId: string;
-  /** 触发关闭的裁决（replace=被取代 / drop=被撤销） */
+  /** The verdict that triggered closure (replace=superseded / drop=revoked) */
   verdict: AskVerdict;
-  /** ISO 关闭时间 */
+  /** ISO closure time */
   createdAt: string;
 }
 
@@ -372,70 +372,70 @@ export interface ReviewRunFile {
 }
 
 /**
- * 状态库里存的 PR：在远端字段之上叠加本地维度（归属连接、本地状态、发现/最后看到时间）。
- * 既在主进程持久化用，也是 renderer 经由 IPC 拿到的形状。
+ * The PR as stored in the state store: local dimensions (owning connection, local status, discovery/last-seen time) layered on top of the remote fields.
+ * Used both for main-process persistence and as the shape the renderer receives via IPC.
  */
 export interface StoredPullRequest extends PullRequest {
   /**
-   * PR 在本地状态体系的唯一标识：sha1(platform|connectionId|group|repo|remoteId)
-   * 取前 12 hex chars。详见 `@meebox/poller` 的 `prHashId`。
+   * The PR's unique identifier in the local state system: sha1(platform|connectionId|group|repo|remoteId)
+   * taking the first 12 hex chars. See `@meebox/poller`'s `prHashId` for details.
    *
-   * 用 hash 而不是拼字符串：
-   * - 路径友好 (无 `:` `/` 需要转义，跨平台一致)
-   * - 定长 (12 chars)
-   * - 不同 platform / repo 同 PR id 不会撞 (platform + group + repo + remote 都纳入哈希源)
+   * Using a hash instead of concatenating strings:
+   * - path-friendly (no `:` `/` needing escaping, consistent across platforms)
+   * - fixed length (12 chars)
+   * - the same PR id across different platform / repo won't collide (platform + group + repo + remote are all in the hash source)
    */
   localId: string;
   /**
-   * 远端平台类型。让单个 meta.json 自描述，不依赖 prs/index.json 也能知道这条 PR
-   * 来自什么平台 —— 跨存储迁移 / 备份 / 离线分析时友好。M3 起 Bitbucket only；M5 接入
-   * GitHub / GitLab 时无需改 schema
+   * The remote platform type. Makes a single meta.json self-describing, able to know which platform this PR
+   * comes from without depending on prs/index.json — friendly for cross-storage migration / backup / offline analysis. Bitbucket only since M3; no schema change needed when integrating
+   * GitHub / GitLab in M5
    */
   platform: PlatformKind;
   connectionId: string;
   localStatus: LocalPrStatus;
   /**
-   * 该 PR 命中的发现分类（GitHub：review-requested/created/assigned/mentioned 的子集）。
-   * poller 一轮把各分类都抓回来并 union 打标；renderer 据此本地过滤标签页，切换不再拉远端。
-   * 不支持分类的平台（Bitbucket）为空数组。
+   * The discovery categories this PR matched (GitHub: a subset of review-requested/created/assigned/mentioned).
+   * In one round the poller fetches all categories and union-tags them; the renderer filters tabs locally accordingly, and switching no longer hits the remote.
+   * An empty array for platforms that don't support categories (Bitbucket).
    */
   discoveryFilters: PrDiscoveryFilter[];
-  /** 首次被 poll 发现的时间，ISO */
+  /** Time first discovered by poll, ISO */
   discoveredAt: string;
-  /** 最近一次 poll 仍能看到的时间，ISO */
+  /** Time most recently still seen by a poll, ISO */
   lastSeenAt: string;
   /**
-   * 「未读」标记（派生值，由 `listStoredPullRequests` 据索引里的已读水位计算后填上；持久化的 meta.json
-   * 不含此字段）。为真表示自用户上次查看该 PR 后发生了**与我相关**的新事件：源分支推了新 commit、或出现
-   * 了 @我 / 回复我的新评论。UI 据此在列表项上点一个未读圆点。用户打开 PR 即清除（推进已读水位）。
+   * "Unread" marker (derived value, filled by `listStoredPullRequests` after computing against the read watermark in the index; the persisted meta.json
+   * doesn't contain this field). True means a new event **relevant to me** has occurred since the user last viewed this PR: the source branch pushed a new commit, or
+   * new comments @-ing me / replying to me appeared. The UI shows an unread dot on the list item accordingly. Opening the PR clears it (advancing the read watermark).
    */
   unread?: boolean;
   /**
-   * 「@我 / 回复我」未读评论条数（派生值，同 `unread` 由 `listStoredPullRequests` 据已读水位计算填上，meta.json
-   * 不含）。与未读圆点**并存、互不替代**：圆点照常按新到达 / 新 commit / 点名回复亮，本计数仅额外给出点名/回复你
-   * 的未读条数。已在 poll 端封顶 10，故 ≤ 10；UI 满额显示「10+」。0 表示无此类未读（不渲染计数）。
+   * "@me / reply to me" unread comment count (derived value, like `unread` filled by `listStoredPullRequests` computing against the read watermark, not in meta.json).
+   * **Coexists with, does not replace** the unread dot: the dot still lights up on new arrival / new commit / named reply as usual; this count only additionally gives the count of unread comments naming/replying to you.
+   * Already capped at 10 on the poll side, so ≤ 10; the UI shows "10+" when full. 0 means no such unread (the count isn't rendered).
    */
   unreadMentionCount?: number;
 }
 
 export interface PollResult {
-  /** 本轮所有连接合并返回的 PR 总数 */
+  /** Total number of PRs returned across all connections in this round */
   fetched: number;
-  /** 比上次 updatedAt 有变化的 PR 数 */
+  /** Number of PRs changed vs the last updatedAt */
   changed: number;
-  /** 本轮新增的 PR 数 */
+  /** Number of PRs added this round */
   added: number;
-  /** 本轮被剪除的 PR 数（远端已 merge/decline，或当前用户不再是 reviewer） */
+  /** Number of PRs pruned this round (already merged/declined on the remote, or the current user is no longer a reviewer) */
   removed: number;
-  /** poll 失败的连接数 */
+  /** Number of connections that failed to poll */
   errors: number;
 }
 
 /**
- * 系统通知事件类型（与设置页开关一一对应）：
- * - `new_pr` / `mention` / `reply`：面向「待我评审」等——新 PR / 被 @ / 被回复。
- * - `authored_comment` / `authored_needs_work` / `authored_conflict`：面向「我创建的」PR（作者为本人）——
- *   收到他人新评论 / 被评审标记需修改 / 出现合并冲突。
+ * System notification event types (one-to-one with the settings page toggles):
+ * - `new_pr` / `mention` / `reply`: for "review-requested" etc. — new PR / being @-ed / being replied to.
+ * - `authored_comment` / `authored_needs_work` / `authored_conflict`: for "authored by me" PRs (self is the author) —
+ *   receiving a new comment from others / being marked needs-work by a reviewer / a merge conflict appearing.
  */
 export type PollNotificationKind =
   | 'new_pr'
@@ -446,32 +446,32 @@ export type PollNotificationKind =
   | 'authored_conflict';
 
 /**
- * Poll 本轮新发生的「值得提醒」事件，由 poller 经 onNotify 投影给主进程（用于弹系统通知）。仅在**已有基线**
- * （非首轮 / PR 此前已知）时产出，避免首启 / 批量涌入时通知风暴；带游标的事件（mention/reply/authored_comment）
- * 仅当评论时间晚于历史游标才计；authored_needs_work / authored_conflict 仅在对应状态发生新迁移时才产出。
+ * A "worth notifying" event newly occurring in this poll round, projected by the poller to the main process via onNotify (for popping system notifications). Produced only when there is **an existing baseline**
+ * (not the first round / the PR was previously known), to avoid a notification storm on first launch / batch influx; cursor-bearing events (mention/reply/authored_comment)
+ * count only when the comment time is later than the historical cursor; authored_needs_work / authored_conflict are produced only on a new transition of the corresponding status.
  */
 export interface PollNotificationEvent {
   kind: PollNotificationKind;
-  /** 事件所属 PR 的本地 id */
+  /** The local id of the PR the event belongs to */
   localId: string;
-  /** 事件所属连接 id（头像缓存键 + 取 adapter 拉头像用） */
+  /** The connection id the event belongs to (avatar cache key + for taking the adapter to fetch the avatar) */
   connectionId: string;
-  /** 远端 PR 编号（如 #123），用于通知正文 */
+  /** Remote PR number (such as #123), for the notification body */
   remoteId: string;
-  /** PR 标题，用于通知正文 */
+  /** PR title, for the notification body */
   title: string;
-  /** PR 所在仓库，用于通知正文展示「项目 / 仓库」 */
+  /** The repo the PR is in, for the notification body to show "project / repo" */
   repo: RepoRef;
   /**
-   * 发起人（通知头像）：new_pr=PR 作者；mention/reply/authored_comment=触发本轮该类事件的最新一条评论作者；
-   * authored_needs_work=新标记需修改的评审人；authored_conflict=PR 作者（无具体发起人）。
+   * Initiator (notification avatar): new_pr=PR author; mention/reply/authored_comment=the author of the latest comment triggering this round's event of that type;
+   * authored_needs_work=the reviewer who newly marked needs-work; authored_conflict=PR author (no specific initiator).
    */
   actor: PlatformUser;
-  /** mention / reply / authored_comment：本轮新增条数；其余省略 */
+  /** mention / reply / authored_comment: the count added this round; omitted otherwise */
   count?: number;
   /**
-   * 触发事件的最新一条评论的定位信息（通知点击跳转用）。`anchor` 非空=inline 评论（可跳 diff 行），
-   * 为 null=summary 评论（打开「活动」对话标签）。仅 mention / reply / authored_comment 带此字段。
+   * Locating info of the latest comment that triggered the event (for notification click navigation). `anchor` non-null=inline comment (can jump to a diff line),
+   * null=summary comment (opens the "activity" conversation tab). Only mention / reply / authored_comment carry this field.
    */
   comment?: { remoteId: string; anchor: PrCommentAnchor | null };
 }

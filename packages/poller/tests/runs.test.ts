@@ -25,12 +25,12 @@ afterEach(async () => {
 });
 
 describe('makeRunId', () => {
-  it('格式 yyyymmdd-HHmmss-mmm', () => {
+  it('format yyyymmdd-HHmmss-mmm', () => {
     const id = makeRunId(new Date('2026-05-29T10:20:30.045Z'));
-    // 转换到本地时区会影响 HH，但是字符长度和分隔符稳定
+    // converting to local timezone affects HH, but character length and separators stay stable
     expect(id).toMatch(/^\d{8}-\d{6}-\d{3}$/);
   });
-  it('字典序 = 时间序，便于列名倒排出最新', () => {
+  it('lexical order = time order, so reverse-sorting names surfaces the latest', () => {
     const a = makeRunId(new Date('2026-05-29T10:00:00.000Z'));
     const b = makeRunId(new Date('2026-05-29T11:00:00.000Z'));
     expect(a < b).toBe(true);
@@ -38,7 +38,7 @@ describe('makeRunId', () => {
 });
 
 describe('startReviewRun', () => {
-  it('落地 running 状态 + 必备字段', async () => {
+  it('persists running status + required fields', async () => {
     const now = new Date('2026-05-29T10:00:00.000Z');
     const run = await startReviewRun(
       store,
@@ -57,7 +57,7 @@ describe('startReviewRun', () => {
     expect(run.strategy).toBe('local-cli');
     expect(run.finishedAt).toBeUndefined();
 
-    // 文件确实落到 prs/<localId>/runs/<runId>.json
+    // file actually lands at prs/<localId>/runs/<runId>.json
     const fp = path.join(tmpRoot, 'prs', 'abc123def456', 'runs', `${run.id}.json`);
     const txt = await fs.readFile(fp, 'utf8');
     expect(JSON.parse(txt).run.id).toBe(run.id);
@@ -65,7 +65,7 @@ describe('startReviewRun', () => {
 });
 
 describe('finishReviewRun', () => {
-  it('merge patch 到已有 run，保留 startedAt 等字段', async () => {
+  it('merge patches into an existing run, preserving startedAt and other fields', async () => {
     const start = new Date('2026-05-29T10:00:00.000Z');
     const run = await startReviewRun(
       store,
@@ -90,7 +90,7 @@ describe('finishReviewRun', () => {
     expect(finished?.stdout).toContain('Review');
   });
 
-  it('文件不存在返回 null（不会静默重建）', async () => {
+  it('returns null when the file does not exist (no silent recreate)', async () => {
     const r = await finishReviewRun(store, 'abc123def456', 'nonexistent', {
       status: 'succeeded',
       finishedAt: 'x',
@@ -99,7 +99,7 @@ describe('finishReviewRun', () => {
     expect(r).toBeNull();
   });
 
-  it('失败原因 + exitCode + stderr 都能写入', async () => {
+  it('writes error reason + exitCode + stderr', async () => {
     const run = await startReviewRun(store, {
       prLocalId: 'abc123def456',
       tool: 'review',
@@ -121,7 +121,7 @@ describe('finishReviewRun', () => {
 });
 
 describe('getReviewRun', () => {
-  it('找不到时返回 null', async () => {
+  it('returns null when not found', async () => {
     const r = await getReviewRun(store, 'abc123def456', 'nope');
     expect(r).toBeNull();
   });
@@ -132,22 +132,22 @@ describe('hasReviewOutput', () => {
   const startWith = (tool: 'describe' | 'review' | 'ask', at: Date) =>
     startReviewRun(store, { prLocalId: pr, tool, prAgentVersion: 'v', strategy: 'embedded' }, () => at);
 
-  it('无 run → false', async () => {
+  it('no run → false', async () => {
     expect(await hasReviewOutput(store, pr)).toBe(false);
   });
 
-  it('describe / review 成功 → true', async () => {
+  it('describe / review succeeded → true', async () => {
     const r = await startWith('describe', new Date('2026-05-29T10:00:00.000Z'));
     await finishReviewRun(store, pr, r.id, { status: 'succeeded', finishedAt: 'x', durationMs: 1 });
     expect(await hasReviewOutput(store, pr)).toBe(true);
   });
 
-  it('review 正在跑（running）→ true', async () => {
+  it('review in progress (running) → true', async () => {
     await startWith('review', new Date('2026-05-29T10:00:00.000Z'));
     expect(await hasReviewOutput(store, pr)).toBe(true);
   });
 
-  it('describe/review 失败 / 取消不算，仍可触发 → false', async () => {
+  it('describe/review failed / cancelled does not count, still triggerable → false', async () => {
     const a = await startWith('describe', new Date('2026-05-29T10:00:00.000Z'));
     await finishReviewRun(store, pr, a.id, { status: 'failed', finishedAt: 'x', durationMs: 1 });
     const b = await startWith('review', new Date('2026-05-29T10:01:00.000Z'));
@@ -155,7 +155,7 @@ describe('hasReviewOutput', () => {
     expect(await hasReviewOutput(store, pr)).toBe(false);
   });
 
-  it('仅 /ask 成功不算「已评审」→ false', async () => {
+  it('/ask succeeding alone does not count as "reviewed" → false', async () => {
     const r = await startWith('ask', new Date('2026-05-29T10:00:00.000Z'));
     await finishReviewRun(store, pr, r.id, { status: 'succeeded', finishedAt: 'x', durationMs: 1 });
     expect(await hasReviewOutput(store, pr)).toBe(false);
@@ -163,7 +163,7 @@ describe('hasReviewOutput', () => {
 });
 
 describe('listReviewRunsForPr', () => {
-  it('newest first，跨 PR 不串扰', async () => {
+  it('newest first, no cross-PR bleed', async () => {
     const oldA = await startReviewRun(
       store,
       { prLocalId: 'abc123def456', tool: 'review', prAgentVersion: 'v', strategy: 'embedded' },
@@ -174,7 +174,7 @@ describe('listReviewRunsForPr', () => {
       { prLocalId: 'abc123def456', tool: 'describe', prAgentVersion: 'v', strategy: 'embedded' },
       () => new Date('2026-05-29T11:00:00.000Z'),
     );
-    // 另一个 PR 的 run 不应出现在 42 的列表里
+    // another PR's run should not appear in 42's list
     await startReviewRun(
       store,
       { prLocalId: 'def789abc012', tool: 'review', prAgentVersion: 'v', strategy: 'embedded' },
@@ -185,7 +185,7 @@ describe('listReviewRunsForPr', () => {
     expect(list.map((r) => r.tool)).toEqual(['describe', 'review']);
   });
 
-  it('无 run 时返回空数组', async () => {
+  it('returns an empty array when there is no run', async () => {
     const list = await listReviewRunsForPr(store, 'abc123def456');
     expect(list).toEqual([]);
   });

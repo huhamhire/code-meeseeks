@@ -1,22 +1,22 @@
 /**
- * 持久化 KV 抽象。一期 JSON 文件实现；满足触发条件后可换 SQLite。
+ * Persistent KV abstraction. Phase-one JSON file implementation; can switch to SQLite once trigger conditions are met.
  *
- * key 形如 `connections` / `runs/pr-42/run-xyz`，由调用者保证结构。
- * 实现负责把 key 映射到具体存储位置，并保证写入原子性。
+ * Keys look like `connections` / `runs/pr-42/run-xyz`, with structure guaranteed by the caller.
+ * The implementation is responsible for mapping keys to concrete storage locations and guaranteeing write atomicity.
  */
 export interface StateStore {
-  /** 读取 key；不存在返回 null。 */
+  /** Reads a key; returns null if it does not exist. */
   read<T>(key: string): Promise<T | null>;
-  /** 原子写入 key；自动创建父目录。 */
+  /** Atomically writes a key; creates parent directories automatically. */
   write<T>(key: string, data: T): Promise<void>;
-  /** 删除 key；不存在 nop。 */
+  /** Deletes a key; nop if it does not exist. */
   delete(key: string): Promise<void>;
-  /** 列出指定前缀下的所有 key（不含值）。 */
+  /** Lists all keys under the given prefix (without values). */
   list(prefix: string): AsyncIterable<string>;
   /**
-   * 递归删除某个前缀下的整个目录树（含子目录 / 非 .json 文件 / 整个 prefix dir 自身）。
-   * 用于 PR 退场时一次清掉 `prs/<hash>/` 下的 meta / comments / runs 等所有子文件。
-   * 不存在 / 不是目录都 no-op。
+   * Recursively deletes the entire directory tree under a prefix (including subdirectories / non-.json files / the whole prefix dir itself).
+   * Used to clear all sub-files under `prs/<hash>/` — meta / comments / runs etc. — in one shot when a PR exits.
+   * no-op if it does not exist / is not a directory.
    */
   deleteDir(prefix: string): Promise<void>;
 }

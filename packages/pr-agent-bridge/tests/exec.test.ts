@@ -4,8 +4,8 @@ import { createExec, type SpawnFn } from '../src/exec.js';
 import { PrAgentRunError } from '../src/types.js';
 
 /**
- * 极薄 fake spawn：返回一个 EventEmitter-like child，测试主动 emit data/close/error。
- * stdout/stderr 是分开的 emitter，子进程层只听 'data'。
+ * Ultra-thin fake spawn: returns an EventEmitter-like child; the test actively emits data/close/error.
+ * stdout/stderr are separate emitters, the subprocess layer only listens on 'data'.
  */
 function fakeChild(): {
   stdout: EventEmitter;
@@ -48,7 +48,7 @@ function buildSpawn(child: ReturnType<typeof fakeChild>): SpawnFn {
 }
 
 describe('createExec', () => {
-  it('正常 exit 0 → resolve 带 stdout / stderr / exitCode / durationMs', async () => {
+  it('normal exit 0 → resolve with stdout / stderr / exitCode / durationMs', async () => {
     const child = fakeChild();
     const exec = createExec(buildSpawn(child));
     const promise = exec('pr-agent', ['--help'], { timeoutMs: 1000 });
@@ -62,7 +62,7 @@ describe('createExec', () => {
     expect(r.durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('非零 exit → reject(PrAgentRunError "non-zero-exit") 携带已收集输出', async () => {
+  it('non-zero exit → reject(PrAgentRunError "non-zero-exit") carrying collected output', async () => {
     const child = fakeChild();
     const exec = createExec(buildSpawn(child));
     const promise = exec('pr-agent', [], { timeoutMs: 1000 });
@@ -75,7 +75,7 @@ describe('createExec', () => {
     });
   });
 
-  it('信号杀（非超时）→ reason "killed"', async () => {
+  it('killed by signal (not a timeout) → reason "killed"', async () => {
     const child = fakeChild();
     const exec = createExec(buildSpawn(child));
     const promise = exec('pr-agent', [], { timeoutMs: 5000 });
@@ -86,14 +86,14 @@ describe('createExec', () => {
     });
   });
 
-  it('超时触发 SIGKILL 并 reject reason "timeout"', async () => {
+  it('timeout triggers SIGKILL and rejects with reason "timeout"', async () => {
     vi.useFakeTimers();
     const child = fakeChild();
     const exec = createExec(buildSpawn(child));
     const promise = exec('pr-agent', [], { timeoutMs: 100 });
     vi.advanceTimersByTime(101);
     expect(child.kill).toHaveBeenCalledWith('SIGKILL');
-    // exec 在 close 之后才 settle；模拟内核响应 SIGKILL 后 close
+    // exec only settles after close; simulate the kernel responding to SIGKILL then closing
     child.emitClose(null, 'SIGKILL');
     await expect(promise).rejects.toMatchObject({
       name: 'PrAgentRunError',
@@ -102,7 +102,7 @@ describe('createExec', () => {
     vi.useRealTimers();
   });
 
-  it("'error' 事件 (spawn ENOENT) → reason \"spawn-failed\"", async () => {
+  it("'error' event (spawn ENOENT) → reason \"spawn-failed\"", async () => {
     const child = fakeChild();
     const exec = createExec(buildSpawn(child));
     const promise = exec('not-exists', [], { timeoutMs: 1000 });
@@ -113,7 +113,7 @@ describe('createExec', () => {
     });
   });
 
-  it('spawnFn throw → 立即 reject reason "spawn-failed"', async () => {
+  it('spawnFn throw → immediately reject with reason "spawn-failed"', async () => {
     const exec = createExec(() => {
       throw new Error('boom');
     });
@@ -122,7 +122,7 @@ describe('createExec', () => {
     });
   });
 
-  it('onLine 按 \\n 切片实时回调；尾部 partial 在 close 时补一次', async () => {
+  it('onLine slices on \\n with realtime callbacks; trailing partial flushed once at close', async () => {
     const child = fakeChild();
     const exec = createExec(buildSpawn(child));
     const lines: Array<[string, string]> = [];
@@ -142,7 +142,7 @@ describe('createExec', () => {
     ]);
   });
 
-  it('onLine 兼容 \\r\\n 行尾（Windows 输出）', async () => {
+  it('onLine handles \\r\\n line endings (Windows output)', async () => {
     const child = fakeChild();
     const exec = createExec(buildSpawn(child));
     const lines: string[] = [];
@@ -156,7 +156,7 @@ describe('createExec', () => {
     expect(lines).toEqual(['win line', 'next']);
   });
 
-  it('PrAgentRunError 是 Error 子类', () => {
+  it('PrAgentRunError is an Error subclass', () => {
     const e = new PrAgentRunError('x', 'timeout');
     expect(e).toBeInstanceOf(Error);
     expect(e.name).toBe('PrAgentRunError');

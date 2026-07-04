@@ -3,7 +3,7 @@ import { extractJson } from '../../utils/index.js';
 import { Step } from '../context.js';
 import { judgePrompt, type ReviewStepCtx } from './shared.js';
 
-/** 仅严重问题条件性追问的判读（精简 system 轻量路由 + 输出封顶）。 */
+/** Judge that conditionally follows up only on severe issues (lean system, lightweight routing + output cap). */
 export class JudgeStep extends Step<ReviewStepCtx> {
   readonly name = 'judge';
 
@@ -19,12 +19,12 @@ export class JudgeStep extends Step<ReviewStepCtx> {
         ctx.maxAsks,
         ctx.input.language ?? '',
       ),
-      // 判读产物只是极小 JSON（severe + 至多数条追问，可带 targetFindingId），封顶输出避免狂吐 token。
+      // The judge output is tiny JSON (severe + at most a few follow-up asks, optionally with targetFindingId); cap output to avoid runaway token spend.
       maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
     });
     const judgeMs = Date.now() - judgeStart;
     ctx.rec.track(judge.usage);
-    // 新结构：asks:[{question, targetFindingId?}]；向后兼容旧 questions:string[]（映射为无 target）。
+    // New shape: asks:[{question, targetFindingId?}]; backward-compatible with legacy questions:string[] (mapped to no target).
     const verdict = extractJson<{
       severe?: boolean;
       asks?: Array<{ question?: string; targetFindingId?: string }>;

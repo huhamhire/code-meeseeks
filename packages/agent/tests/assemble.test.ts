@@ -61,7 +61,7 @@ describe('assembleSystemContext', () => {
       toolCatalog: tools,
       language: 'zh-CN',
     });
-    // 标记须与 shim runtime.py 的 CACHE_BREAK 逐字一致；稳定前缀在标记前、PR/语言在标记后。
+    // marker must be byte-for-byte identical to the shim runtime.py's CACHE_BREAK; stable prefix before the marker, PR/language after.
     const marker = '\n\n---\n\n[[MEEBOX:CACHE_BREAK]]\n\n---\n\n';
     expect(out).toContain(marker);
     const at = out.indexOf(marker);

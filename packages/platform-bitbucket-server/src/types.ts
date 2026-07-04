@@ -1,4 +1,4 @@
-// Bitbucket Server REST 响应形状（仅取用到的字段）。跨领域共享的数据类型，单独抽取于此。
+// Bitbucket Server REST response shapes (only the fields used). Data types shared across domains, extracted here separately.
 
 export interface BitbucketUser {
   name: string;
@@ -44,8 +44,8 @@ export interface BitbucketPullRequest {
   reviewers: BitbucketParticipant[];
   links: { self: Array<{ href: string }> };
   /**
-   * 仪表盘 / 列表 PR 附带的统计属性。`commentCount` 仅数**顶层**评论（回复不计）——
-   * 故只能作「新增顶层评论」的粗信号，无法感知回复（见 poller 评论跟踪）。字段可选容错。
+   * Statistical properties attached to dashboard / list PRs. `commentCount` counts **top-level** comments only (replies not counted) —
+   * so it can only serve as a coarse signal for "new top-level comment", unable to sense replies (see poller comment tracking). Field optional for tolerance.
    */
   properties?: {
     commentCount?: number;
@@ -68,11 +68,11 @@ export interface BitbucketMergeStatus {
 }
 
 /**
- * Bitbucket 评论上一种 emoji 反应（comment-likes 插件经评论 `properties.reactions` 注入）。
+ * An emoji reaction on a Bitbucket comment (injected by the comment-likes plugin via the comment's `properties.reactions`).
  *
- * 形状按真实实例响应核定（官方 REST 文档未明确）：`emoticon` 给 `shortcut`（如 `eyes`）+ `url`
- * （twemoji SVG，文件名即 Unicode 码点如 `1f440.svg`）；`users[]` 为反应者列表；**无 `count` 字段**
- * （计数取 `users.length`）。展示 emoji 优先从 `url` 解码点，回退 shortcut 名映射。字段仍标可选容错。
+ * Shape verified against real instance responses (official REST docs unclear): `emoticon` gives `shortcut` (e.g. `eyes`) + `url`
+ * (twemoji SVG, the filename being the Unicode code point such as `1f440.svg`); `users[]` is the list of reactors; **no `count` field**
+ * (count taken from `users.length`). Displaying the emoji decodes the code point from `url` first, falling back to the shortcut name mapping. Fields still marked optional for tolerance.
  */
 export interface BitbucketReactionProperty {
   emoticon?: { shortcut?: string; url?: string };
@@ -88,13 +88,13 @@ export interface BitbucketComment {
   updatedDate: number;
   comments?: BitbucketComment[];
   parent?: { id: number };
-  /** 反应等扩展属性（comment-likes 插件注入 `reactions`）。形状未文档化，容错读取。 */
+  /** Extended properties such as reactions (comment-likes plugin injects `reactions`). Shape undocumented, read tolerantly. */
   properties?: { reactions?: BitbucketReactionProperty[] };
 }
 
 /**
- * 附件上传响应（POST .../attachments，multipart 字段 `files`）。`links.attachment.href` 为
- * `attachment:<repoId>/<id>` 形式，可直接嵌入评论 markdown。字段按实测响应取用，容错可选。
+ * Attachment upload response (POST .../attachments, multipart field `files`). `links.attachment.href` is of the
+ * `attachment:<repoId>/<id>` form, which can be embedded directly into comment markdown. Fields taken from observed responses, optional for tolerance.
  */
 export interface BitbucketAttachmentUploadResponse {
   attachments?: Array<{
@@ -106,8 +106,8 @@ export interface BitbucketAttachmentUploadResponse {
 
 export interface BitbucketCommentAnchor {
   diffType?: 'EFFECTIVE' | 'COMMIT' | 'RANGE';
-  // line / lineType 对文件级评论（挂在文件而非具体行）或孤儿 anchor（锚定行已不存在）
-  // 可能缺省 —— 标可选，mapBitbucketAnchor 据此降级，避免读 undefined.toLowerCase 崩
+  // line / lineType may be absent for file-level comments (attached to the file rather than a specific line)
+  // or orphaned anchors (the anchored line no longer exists) — marked optional; mapBitbucketAnchor degrades accordingly, avoiding a crash from reading undefined.toLowerCase
   line?: number;
   lineType?: 'ADDED' | 'REMOVED' | 'CONTEXT';
   fileType?: 'FROM' | 'TO';
@@ -117,8 +117,8 @@ export interface BitbucketCommentAnchor {
 
 export interface BitbucketCommit {
   id: string; // 40-char SHA
-  displayId: string; // 短 SHA (Bitbucket 默认 7-12 chars)
-  message: string; // 完整 commit message
+  displayId: string; // short SHA (Bitbucket default 7-12 chars)
+  message: string; // full commit message
   author: { name: string; emailAddress?: string };
   authorTimestamp: number; // epoch ms
   committer: { name: string; emailAddress?: string };

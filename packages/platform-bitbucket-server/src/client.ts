@@ -10,13 +10,13 @@ import {
   type PlatformTransport,
 } from '@meebox/platform-core';
 
-/** Bitbucket 连接配置 = 统一连接配置 + clone 协议（连接层自管的连接配置，非 HTTP 传输细节）。 */
+/** Bitbucket connection config = unified connection config + clone protocol (connection-layer config managed by the connection layer, not HTTP transport details). */
 export interface BitbucketClientOptions extends PlatformConnectionConfig {
-  /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
+  /** clone protocol: 'pat' (default) uses HTTPS + username:PAT; 'ssh' uses the system ssh config */
   cloneProtocol?: 'pat' | 'ssh';
 }
 
-/** 适配器构造选项与连接配置同形。 */
+/** Adapter constructor options have the same shape as the connection config. */
 export type BitbucketServerAdapterOptions = BitbucketClientOptions;
 
 export type { FetchLike } from '@meebox/platform-core';
@@ -42,10 +42,11 @@ export class BitbucketClientError extends Error {
 }
 
 /**
- * 极薄的 Bitbucket Server REST 客户端，实现 {@link PlatformTransport}：Bearer PAT 鉴权、start/limit
- * 分页迭代器、HTTP 错误抛 BitbucketClientError。通用传输样板（超时 / URL 拼接 / 有效 fetch 解析）复用
- * `@meebox/platform-core` helper；Bitbucket 特有部分（start/limit 分页、avatar 路径二进制、附件协议
- * 解析）留在本类。业务语义留给 BitbucketServerAdapter。
+ * Ultra-thin Bitbucket Server REST client implementing {@link PlatformTransport}: Bearer PAT auth,
+ * start/limit pagination iterator, throws BitbucketClientError on HTTP errors. Generic transport
+ * boilerplate (timeout / URL joining / effective fetch resolution) reuses `@meebox/platform-core`
+ * helpers; Bitbucket-specific parts (start/limit pagination, avatar path binary, attachment protocol
+ * parsing) stay in this class. Business semantics are left to BitbucketServerAdapter.
  */
 export class BitbucketClient implements PlatformTransport {
   private readonly baseUrl: string;
@@ -57,24 +58,25 @@ export class BitbucketClient implements PlatformTransport {
   constructor(opts: BitbucketClientOptions) {
     this.baseUrl = stripTrailingSlash(opts.baseUrl);
     this.token = opts.token;
-    // 连接层统一解析有效 fetch（显式 fetch 覆盖 > 代理 > 直连）。
+    // Connection layer uniformly resolves the effective fetch (explicit fetch override > proxy > direct).
     this.fetchFn = resolveConnectionFetch(opts);
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.cloneProtocol = opts.cloneProtocol ?? 'pat';
   }
 
-  /** 实例 web/git base（Bitbucket 的 API 与网页同 host），commit 详情页 URL 等用。 */
+  /** Instance web/git base (Bitbucket's API and web share the same host); used for commit detail page URLs etc. */
   get webBase(): string {
     return this.baseUrl;
   }
 
   /**
-   * 构造 git clone URL。
+   * Construct the git clone URL.
    *
-   * ssh → `git@<host>:<proj>/<repo>.git`（端口 / 私钥 / username 交系统 ssh config，Bitbucket
-   * 默认 SSH 端口 7999 需自行配 Port）。pat → `https://<currentUser>:<PAT>@<host>/scm/<proj>/<repo>.git`
-   * （Bitbucket Server 的 PAT 鉴权要求真实用户名作 username，PAT 作 password；需 ping() 已落地当前
-   * 用户，由调用方经连接上下文传入，否则抛错）。
+   * ssh → `git@<host>:<proj>/<repo>.git` (port / private key / username handled by the system ssh config;
+   * Bitbucket's default SSH port 7999 requires configuring Port yourself). pat →
+   * `https://<currentUser>:<PAT>@<host>/scm/<proj>/<repo>.git` (Bitbucket Server's PAT auth requires the
+   * real username as username and the PAT as password; requires ping() to have already resolved the current
+   * user, passed in by the caller via the connection context, otherwise throws).
    */
   getCloneUrl(repo: RepoRef, currentUserName?: string): string {
     const u = new URL(this.baseUrl);
@@ -130,9 +132,9 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
-   * 拉二进制资源（avatar.png 等）。非 2xx 时抛 BitbucketClientError 携带 status / 简短
-   * body，方便调用方区分 404（用户无头像）vs 401（鉴权失败）vs 其他。content-type
-   * 透传，方便 renderer 拼 data URL。
+   * Fetch a binary resource (avatar.png etc.). On non-2xx, throws BitbucketClientError carrying status /
+   * short body, so the caller can distinguish 404 (user has no avatar) vs 401 (auth failure) vs other.
+   * content-type is passed through so the renderer can build a data URL.
    */
   async getBinary(path: string, params?: Record<string, string>): Promise<BinaryResource> {
     const url = buildUrl(this.baseUrl, path, params);
@@ -143,7 +145,7 @@ export class BitbucketClient implements PlatformTransport {
       this.timeoutMs,
     );
     if (!res.ok) {
-      // 错误响应通常很短（HTML / JSON），尽量带 200 字便于诊断
+      // Error responses are usually short (HTML / JSON); include up to 200 chars to aid diagnosis
       let body = '';
       try {
         body = (await res.text()).slice(0, 200);
@@ -164,13 +166,13 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
-   * 拉评论 attachment 图片：处理三种 url 形态
-   *  - `attachment:HASH` (Bitbucket markdown 内部协议) → 用 repo 拼成
+   * Fetch a comment attachment image: handles three url shapes
+   *  - `attachment:HASH` (Bitbucket markdown internal protocol) → join with repo into
    *    `<baseUrl>/projects/<key>/repos/<slug>/attachments/<HASH>`
-   *  - 绝对 url (http/https) → 校验 host 跟 baseUrl 一致才走代理
-   *  - 相对 url → 拼 baseUrl
-   * 跨 host 公网图 / 协议无法解析 / 失败 / 非 2xx → 返回 null 让上层 fallback。
-   * 所有 Bitbucket-specific 解析逻辑都在 client 内部完成，adapter 不暴露细节
+   *  - absolute url (http/https) → validate host matches baseUrl before proxying
+   *  - relative url → join with baseUrl
+   * Cross-host public image / protocol unparseable / failure / non-2xx → return null so the caller can fall back.
+   * All Bitbucket-specific parsing logic is done inside the client; the adapter does not expose the details
    */
   async getAttachmentBinary(
     url: string,
@@ -180,11 +182,11 @@ export class BitbucketClient implements PlatformTransport {
     try {
       const myHost = new URL(this.baseUrl).host;
       if (url.startsWith('attachment:')) {
-        // Bitbucket markdown 附件协议 `attachment:<repoId>/<attachmentId>` (e.g.,
-        // `attachment:9/16854`)。Bitbucket 实际 attachment endpoint:
+        // Bitbucket markdown attachment protocol `attachment:<repoId>/<attachmentId>` (e.g.,
+        // `attachment:9/16854`). Bitbucket's actual attachment endpoint:
         //   /rest/api/1.0/projects/<key>/repos/<slug>/attachments/<attachmentId>
-        // (从 Bitbucket Web UI <img src> 反推；用 1.0 而非 latest，无 /contents 后缀)
-        // 末段才是 attachmentId，前缀 repoId 用 repo ref 取代
+        // (reverse-engineered from Bitbucket Web UI <img src>; uses 1.0 not latest, no /contents suffix)
+        // Only the last segment is the attachmentId; the repoId prefix is replaced by the repo ref
         if (!repo) return null;
         const hash = url.slice('attachment:'.length).trim();
         if (!hash) return null;
@@ -195,7 +197,7 @@ export class BitbucketClient implements PlatformTransport {
         if (parsed.host !== myHost) return null;
         absoluteUrl = url;
       } else {
-        // 相对路径 (e.g., /projects/.../attachments/xxx) 拼当前 baseUrl
+        // Relative path (e.g., /projects/.../attachments/xxx) joined with the current baseUrl
         absoluteUrl = new URL(url, `https://${myHost}`).toString();
       }
     } catch (e) {
@@ -216,9 +218,10 @@ export class BitbucketClient implements PlatformTransport {
       return null;
     }
     if (!res.ok) {
-      // 非 2xx 不再静默吞掉（原先直接 return null，无任何线索）。记 status / 是否重定向 /
-      // 重定向后最终 URL / content-type —— 跨源重定向会丢 Authorization 头（fetch 规范）、
-      // PAT 未被认可常返回 200 登录页等失败模式，都靠这行定位。
+      // No longer silently swallow non-2xx (previously just returned null with no clue). Log status /
+      // whether redirected / final URL after redirect / content-type — cross-origin redirects drop the
+      // Authorization header (fetch spec), and an unrecognized PAT often returns a 200 login page; this
+      // line pinpoints those failure modes.
       console.warn(
         `[bb-attachment] 取附件失败 src=${url} url=${absoluteUrl} status=${String(res.status)} redirected=${String(res.redirected)} finalUrl=${res.url} contentType=${res.headers.get('content-type') ?? '(none)'}`,
       );
@@ -232,8 +235,8 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
-   * 同 get，但同时返回响应头。Bitbucket 的 `X-AUSERNAME` / `X-AUSERID` 在每个鉴权
-   * 请求的响应头里，是 ping 时拿当前用户的可靠路径。
+   * Same as get, but also returns the response headers. Bitbucket's `X-AUSERNAME` / `X-AUSERID` are in
+   * the response headers of every authenticated request, a reliable path for getting the current user during ping.
    */
   async getWithHeaders<T>(
     path: string,
@@ -247,8 +250,8 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
-   * 带 JSON body 的 POST。Bitbucket 评论 reply / 新建评论用 POST /comments。错误同 PUT
-   * 抛 BitbucketClientError 附 status + body
+   * POST with a JSON body. Bitbucket comment reply / new comment use POST /comments. On error, like PUT,
+   * throws BitbucketClientError with status + body
    */
   async post<T>(path: string, body: unknown): Promise<T> {
     const res = await this.raw('POST', buildUrl(this.baseUrl, path), body);
@@ -257,12 +260,14 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
-   * multipart/form-data POST（附件上传用）。不手动设 Content-Type（交给 fetch 按 FormData 加 boundary）；
-   * 附件上传须带 `X-Atlassian-Token: no-check` 绕过 XSRF 校验（Atlassian 文件上传端点通用要求）。
+   * multipart/form-data POST (for attachment upload). Do not set Content-Type manually (let fetch add the
+   * boundary from FormData); attachment upload must carry `X-Atlassian-Token: no-check` to bypass XSRF
+   * validation (a general requirement of Atlassian file-upload endpoints).
    *
-   * Accept 必须用通配（星/斜杠/星），**不能**显式写 `application/json`：附件 servlet（nginx 前置）对该
-   * 端点做内容协商，显式请求 `application/json` 会被判 405（`Allow: OPTIONS`）——尽管它本就以 JSON 应答。
-   * 响应仍按 JSON 解析。（curl 默认用通配 Accept 故能成功，曾掩盖此坑。）
+   * Accept must use the wildcard (star/slash/star), **not** an explicit `application/json`: the attachment
+   * servlet (behind nginx) does content negotiation on this endpoint, and an explicit `application/json`
+   * request gets a 405 (`Allow: OPTIONS`) — even though it responds with JSON anyway. The response is still
+   * parsed as JSON. (curl uses a wildcard Accept by default and thus succeeds, which once masked this pitfall.)
    */
   async postForm<T>(path: string, form: FormData): Promise<T> {
     const url = buildUrl(this.baseUrl, path);
@@ -285,9 +290,10 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
-   * 带 JSON body 的 PUT。Bitbucket 的 PR 参与者 status 用 PUT participants/{slug} 写入，
-   * 404 / 401 / 409 等错误抛 BitbucketClientError 并附 status + body，调用方决定降级或抛出。
-   * 响应体 JSON 解析失败时返回 null（部分端点返回 204 No Content）。
+   * PUT with a JSON body. Bitbucket's PR participant status is written via PUT participants/{slug};
+   * errors like 404 / 401 / 409 throw BitbucketClientError with status + body, and the caller decides
+   * whether to degrade or rethrow. Returns null when the response body fails JSON parsing (some endpoints
+   * return 204 No Content).
    */
   async put<T>(path: string, body: unknown): Promise<T | null> {
     const res = await this.raw('PUT', buildUrl(this.baseUrl, path), body);
@@ -301,9 +307,9 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
-   * 无 body 的 DELETE。Bitbucket 删评论 / 删 reviewer 等 mutations 用。query 通过 path
-   * 直接拼 (e.g., `?version=3`)，跟 GET 一致。错误抛 BitbucketClientError；成功 (204)
-   * 直接 return，不需要响应体
+   * DELETE without a body. Used for Bitbucket mutations like deleting a comment / removing a reviewer.
+   * Query is joined directly onto the path (e.g., `?version=3`), consistent with GET. On error throws
+   * BitbucketClientError; on success (204) just returns, no response body needed
    */
   async del(path: string): Promise<void> {
     const res = await this.raw('DELETE', buildUrl(this.baseUrl, path));
@@ -311,8 +317,8 @@ export class BitbucketClient implements PlatformTransport {
   }
 
   /**
-   * Bitbucket Server 标准分页：start / limit / isLastPage / nextPageStart。
-   * 默认 limit=50；遍历直至 isLastPage。
+   * Bitbucket Server standard pagination: start / limit / isLastPage / nextPageStart.
+   * Default limit=50; iterates until isLastPage.
    */
   async *paginate<T>(
     path: string,

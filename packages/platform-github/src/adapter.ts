@@ -8,8 +8,8 @@ import { GitHubMediaService } from './features/media.js';
 export { normalizeGitHubApiBase, type GitHubAdapterOptions } from './client.js';
 
 /**
- * GitHub 适配器：领域服务容器（connection / prs / comments / media），四个领域共享一份连接上下文
- * （统一连接封装实例 + 当前用户缓存）。
+ * GitHub adapter: domain service container (connection / prs / comments / media); the four domains share one connection context
+ * (unified connection wrapper instance + current user cache).
  */
 export class GitHubAdapter implements PlatformAdapter {
   readonly kind = 'github' as const;

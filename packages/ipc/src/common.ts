@@ -6,7 +6,7 @@ import type {
   ReviewRunTool,
 } from '@meebox/shared';
 
-/** ChangedFile / FileContent 跨 IPC 边界用，与 @meebox/repo-mirror 类型同形。 */
+/** ChangedFile / FileContent for use across the IPC boundary, same shape as the @meebox/repo-mirror types. */
 export type DiffFileStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'typechange';
 
 export interface DiffChangedFile {
@@ -20,7 +20,7 @@ export type DiffFileContent = { binary: false; content: string } | { binary: tru
 
 export type DiffSide = 'base' | 'head';
 
-/** 单行 blame 信息（main 跑 git blame --porcelain，renderer 渲染左侧列）。 */
+/** Single-line blame info (main runs git blame --porcelain, the renderer renders the left column). */
 export interface DiffBlameLine {
   line: number;
   commit: string;
@@ -32,41 +32,41 @@ export interface DiffBlameLine {
 
 export interface ConnectionSummary {
   connectionId: string;
-  /** 来自 config 的 display_name */
+  /** display_name from config */
   displayName: string;
-  /** ping 后缓存的当前 PAT 所属用户；ping 未完成或失败时为 null */
+  /** the user owning the current PAT, cached after ping; null when ping is incomplete or failed */
   user: PlatformUser | null;
-  /** 该连接所属平台的能力描述符；渲染层据此 显/隐/灰（多平台降级，见 platform.ts） */
+  /** the capability descriptor of the platform this connection belongs to; the renderer shows/hides/grays out accordingly (multi-platform degradation, see platform.ts) */
   capabilities: PlatformCapabilities;
 }
 
 /**
- * 一个 pr-agent run 的元信息，覆盖"正在跑 (active)"和"排队中 (waiting)"两种状态。
+ * Metadata for one pr-agent run, covering both "running (active)" and "queued (waiting)" states.
  *
- * - active：`startedAt` 是 ISO 启动时间，UI 计时器起点
- * - waiting：`startedAt` 为 null，UI 显示"排队中"+ enqueuedAt
+ * - active: `startedAt` is the ISO start time, the UI timer's origin
+ * - waiting: `startedAt` is null, the UI shows "queued" + enqueuedAt
  *
- * 入队即生成 runId (跟最终落盘的 ReviewRun.id 一致；queued 状态不写盘，等真正
- * 开始时 startReviewRun 才落 disk)。这让 `pragent:cancel(runId)` 在 queued/active
- * 两种状态下都能用同一个 id 引用。
+ * runId is generated at enqueue (matching the eventually-persisted ReviewRun.id; the queued state is not written to disk, only when actually
+ * starting does startReviewRun land it on disk). This lets `pragent:cancel(runId)` reference the same id in both queued/active
+ * states.
  */
 export interface PragentRunInfo {
   runId: string;
   prLocalId: string;
-  /** 仓库 slug 与 PR 号（队列展示用，避免只显示 localId hash）。 */
+  /** Repo slug and PR number (for queue display, avoiding showing only the localId hash). */
   repoSlug: string;
   prNumber: string;
   tool: ReviewRunTool;
   question?: string;
-  /** 触发来源：user（手动发起）/ agent（编排派发）。ChatPane 据此为 user 来源的运行中 run 补命令回显气泡。 */
+  /** Trigger origin: user (manually initiated) / agent (dispatched by orchestration). ChatPane uses this to add a command echo bubble for running runs of user origin. */
   origin: ReviewRunOrigin;
-  /** 单 commit 评审范围（parent..sha）；限定在某 commit 时填，运行中卡片据此展示范围徽标。缺省 = PR 全量。 */
+  /** Single-commit review range (parent..sha); filled when limited to a commit, and the running card shows a range badge from it. Default = whole PR. */
   scope?: ReviewRunCommitScope;
-  /** 入队时间，ISO */
+  /** Enqueue time, ISO */
   enqueuedAt: string;
-  /** 开始执行时间，ISO；waiting 状态为 null */
+  /** Execution start time, ISO; null in the waiting state */
   startedAt: string | null;
 }
 
-/** 兼容旧引用：active 状态本质就是 startedAt 非空的 PragentRunInfo */
+/** Compatibility for legacy references: the active state is essentially a PragentRunInfo with non-null startedAt */
 export type ActiveRunInfo = PragentRunInfo;

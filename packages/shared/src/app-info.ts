@@ -9,16 +9,16 @@ export interface AppPaths {
   archivedDir: string;
   /** logs/ subdir */
   logsDir: string;
-  /** agent/ subdir — 默认 Agent 目录位置（SOUL/AGENTS/MEMORY/USER + rules/） */
+  /** agent/ subdir — default Agent directory location (SOUL/AGENTS/MEMORY/USER + rules/) */
   agentDir: string;
-  /** cache/ subdir — 临时性可重建数据 (avatars 等)，可被外部清空 */
+  /** cache/ subdir — transient rebuildable data (avatars etc.), may be cleared externally */
   cacheDir: string;
   /** repos_dir resolved from config (may differ from default) */
   reposDir: string;
 }
 
-/** 与 Node.js 的 process.platform 字面量完全匹配，但不引入 NodeJS 命名空间，
- * 这样 renderer (不挂 @types/node) 也能消费 shared 类型。 */
+/** Matches Node.js's process.platform literals exactly, but without pulling in the NodeJS namespace,
+ * so the renderer (which does not include @types/node) can also consume the shared type. */
 export type Platform =
   | 'aix'
   | 'android'
@@ -46,20 +46,20 @@ export interface AppInfo {
 }
 
 /**
- * 版本更新检测结果。仅检测 + 提示，不自动下载 / 安装。
- * - ok=false：检测未完成（网络 / 解析失败），error 给原因；hasUpdate 恒 false。
- * - ok=true：检测完成；hasUpdate 表示是否有更新版本。
+ * Version update check result. Detects + notifies only, does not auto download / install.
+ * - ok=false: the check did not complete (network / parse failure), error gives the reason; hasUpdate is always false.
+ * - ok=true: the check completed; hasUpdate indicates whether a newer version exists.
  */
 export interface UpdateCheckResult {
   ok: boolean;
   hasUpdate: boolean;
   currentVersion: string;
-  /** 最新稳定版版本号（ok=true 时给出） */
+  /** Latest stable version number (given when ok=true) */
   latestVersion?: string;
-  /** 最新版 Release 页 URL（hasUpdate=true 时给出，供用户手动下载） */
+  /** Release page URL of the latest version (given when hasUpdate=true, for the user to download manually) */
   url?: string;
-  /** 最新版发布时间 ISO（可选） */
+  /** Release time of the latest version, ISO (optional) */
   publishedAt?: string;
-  /** ok=false 时的失败原因 */
+  /** Failure reason when ok=false */
   error?: string;
 }

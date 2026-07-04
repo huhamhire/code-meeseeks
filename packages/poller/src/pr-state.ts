@@ -3,75 +3,82 @@ import type { StateStore } from '@meebox/state-store';
 import type { PrIdentity } from './pr-hash-id.js';
 
 /**
- * `state/prs/index.json` 唯一负责"哪些 hash localId 当前已知 + 状态字段"，
- * 用作快速列表 / 退场判定 / 软删跟踪。完整 PR 元数据 (title / refs / reviewers
- * 等) 落在 `prs/<localId>/meta.json`。
+ * `state/prs/index.json` is solely responsible for "which hash localIds are currently known + status fields",
+ * used for fast listing / departure decisions / soft-delete tracking. Full PR metadata (title / refs / reviewers
+ * etc.) lives in `prs/<localId>/meta.json`.
  */
 export interface PrIndexEntry {
   identity: PrIdentity;
-  /** 远端 PR.updatedAt 镜像，poll 比对用 */
+  /** Mirror of remote PR.updatedAt, used for poll comparison */
   updatedAt: string;
   /**
-   * 远端评论计数镜像（{@link PullRequest.commentCount}）。poll 与上轮比对：含回复的平台（GitHub/GitLab）
-   * 据此判定「可能有新评论」以决定是否扫描；Bitbucket（仅顶层、不含回复）此值仅作辅助、不足以判定回复。
-   * 平台不提供时为 undefined（poll 退回仅按 `updatedAt` 判定）。
+   * Mirror of the remote comment count ({@link PullRequest.commentCount}). poll compares against the prior round:
+   * platforms whose count includes replies (GitHub/GitLab) use it to decide "there may be new comments" and thus
+   * whether to scan; on Bitbucket (top-level only, excludes replies) this value is only auxiliary and insufficient
+   * to determine replies. undefined when the platform does not provide it (poll falls back to judging by `updatedAt` alone).
    */
   commentCount?: number;
-  /** 首次被本机 poll 发现时间 */
+  /** Time first discovered by this machine's poll */
   discoveredAt: string;
-  /** 最近一次仍在远端列表里出现的时间 */
+  /** Time it most recently still appeared in the remote list */
   lastSeenAt: string;
   /**
-   * 软删时间戳：PR 在远端从 reviewer pending 列表消失 (merged / declined / 自己
-   * 不再是 reviewer) → 设为本次 poll 的 now。重新出现时清回 null (反向恢复)。
-   * 距 archivedAt 超过 PURGE_GRACE_MS 后才真正 rm -r 目录。
+   * Soft-delete timestamp: when a PR disappears from the remote reviewer pending list (merged / declined / you
+   * are no longer a reviewer) → set to this poll's now. Cleared back to null when it reappears (reverse recovery).
+   * The directory is only actually rm -r'd once archivedAt is older than PURGE_GRACE_MS.
    *
-   * 软删窗口期内 UI 不展示 (listStoredPullRequests 过滤掉)，但 runs 历史 / 缓存
-   * 都保留 —— 用户万一回头查可以恢复。
+   * During the soft-delete window the UI does not display it (listStoredPullRequests filters it out), but runs
+   * history / cache are all kept — in case the user looks back and wants to recover it.
    */
   archivedAt: string | null;
   /**
-   * 「@我 / 回复我」最新评论时间的单调游标（ISO）。poll 在 PR 内容变更（updatedAt 跳变）时拉评论扫描后
-   * 取较大值更新；读取时与已读水位 `lastReadAt` 比较得出 mention 未读。由 poll 独占维护（poll 整体重写索引），
-   * 与用户的已读水位（另存 read-state.json）解耦，避免 poll 重写索引时把用户操作覆盖掉。
+   * Monotonic cursor (ISO) of the latest "@me / reply-to-me" comment time. poll updates it to the larger value
+   * after scanning comments when a PR's content changes (updatedAt jumps); on read it is compared against the read
+   * watermark `lastReadAt` to derive mention unread. Maintained exclusively by poll (poll rewrites the whole index),
+   * decoupled from the user's read watermark (stored separately in read-state.json), so poll's index rewrite does not
+   * overwrite user actions.
    */
   lastMentionAt?: string;
   /**
-   * 「@我 / 回复我」评论的 createdAt 列表（ISO），保留最近 {@link MENTION_ATS_CAP} 条（按时间降序截断）。
-   * poll 扫评论时与历史并集去重；读取时按已读水位计未读条数（见 computeUnreadMentionCount）—— 与布尔未读点
-   * 并存、互不替代。同 `lastMentionAt` 由 poll 独占维护，与已读水位解耦。
+   * List of createdAt (ISO) of "@me / reply-to-me" comments, keeping the most recent {@link MENTION_ATS_CAP} entries
+   * (truncated in descending time order). poll dedupes against the historical union when scanning comments; on read
+   * the unread count is computed by the read watermark (see computeUnreadMentionCount) — coexisting with the boolean
+   * unread dot, not replacing it. Like `lastMentionAt`, maintained exclusively by poll, decoupled from the read watermark.
    */
   mentionAts?: string[];
   /**
-   * 「我创建的」PR 通知用的上一轮快照（poll 独占维护）。仅当 PR 作者为本人时才据此产出 authored_* 通知；
-   * 字段缺失（升级前的旧索引）时对应事件按「基线」处理——只播种、不补发，避免升级后一次性涌入历史事件。
+   * Prior-round snapshots used for "PRs I authored" notifications (maintained exclusively by poll). Only when the PR
+   * author is yourself are authored_* notifications produced from these; when the fields are missing (old index from
+   * before the upgrade) the corresponding event is treated as "baseline" — only seeded, not backfilled, avoiding a
+   * one-time flood of historical events after upgrade.
    */
-  /** 上一轮的合并冲突态（== PullRequest.hasConflict）；用于探测 false→true 的新增冲突。 */
+  /** Prior round's merge-conflict state (== PullRequest.hasConflict); used to detect a false→true new conflict. */
   hasConflict?: boolean;
-  /** 上一轮处于「需修改」状态的评审人 name 列表；用于探测新出现的 needs-work 评审人。 */
+  /** Prior round's list of reviewer names in "needs work" state; used to detect newly appearing needs-work reviewers. */
   needsWorkReviewers?: string[];
-  /** 上一轮已知的最新「他人评论」createdAt（ISO）游标；晚于它的他人评论计为新评论。 */
+  /** Prior round's known latest "others' comment" createdAt (ISO) cursor; others' comments later than it count as new. */
   lastCommentAt?: string;
 }
 
-/** mentionAts 保留上限：仅留最近 10 条。未读计数据此封顶，UI 满额显示「10+」。 */
+/** mentionAts retention cap: keep only the most recent 10. The unread count is capped by this; UI shows "10+" when full. */
 export const MENTION_ATS_CAP = 10;
 
 /**
- * 用户对单个 PR 的「已读水位」。独立成 `prs/<localId>/read-state.json` —— **仅** markRead（用户打开 PR）写；
- * poll 周期性重写 index.json 时完全不碰它，从而不会把用户刚推进的水位覆盖回去。未写过 = 用户从未打开该 PR。
+ * The user's "read watermark" for a single PR. Kept separately as `prs/<localId>/read-state.json` — written **only** by
+ * markRead (the user opening the PR); poll's periodic rewrite of index.json never touches it, so the watermark the user
+ * just advanced is not overwritten. Never written = the user has never opened that PR.
  */
 export interface PrReadStateFile {
   schema_version: 1;
-  /** 用户上次查看时的源分支 head sha；当前 head 与之不同 = 有新 commit = 未读 */
+  /** Source branch head sha at the user's last view; a current head differing from it = new commit = unread */
   lastReadHeadSha: string;
-  /** 用户上次查看时间（ISO）；晚于此的 @我 / 回复我评论 = 未读 */
+  /** The user's last view time (ISO); @me / reply-to-me comments later than this = unread */
   lastReadAt: string;
 }
 
 export interface PrIndexFile {
   schema_version: 1;
-  /** hash localId → entry。Object 而非 Array：lookup O(1) + JSON 体积更小 */
+  /** hash localId → entry. Object rather than Array: O(1) lookup + smaller JSON size */
   prs: Record<string, PrIndexEntry>;
 }
 
@@ -80,7 +87,7 @@ export interface PrMetaFile {
   pr: StoredPullRequest;
 }
 
-/** 软删保留期：1 周。超过此时长的 archived 条目下一次 poll 时被 hard purge */
+/** Soft-delete retention period: 1 week. archived entries older than this are hard purged on the next poll */
 export const PURGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const PR_INDEX_KEY = 'prs/index';
@@ -136,11 +143,11 @@ export async function writePrMeta(
 }
 
 /**
- * 计算 PR 的「未读」标记（派生，不持久化）。规则：
- * - **从未打开过**（无 read-state）→ 未读：覆盖「新分配 / 请求评审给你」的新到达，以及清空目录 / 全新安装后涌入的 PR。
- * - 打开过之后：源 head 又变（新 commit），或已读时间之后出现「@我 / 回复我」评论（`lastMentionAt > lastReadAt`）→ 未读。
+ * Compute a PR's "unread" mark (derived, not persisted). Rules:
+ * - **Never opened** (no read-state) → unread: covers new arrivals of "newly assigned / review requested of you", as well as PRs flooding in after clearing the directory / a fresh install.
+ * - After being opened: the source head changed again (new commit), or an "@me / reply-to-me" comment appeared after the read time (`lastMentionAt > lastReadAt`) → unread.
  *
- * 已读水位（read-state）由用户打开 PR 写入。早期开发版不做升级兼容——不抑制旧存量泛红（清库 / 重装即可）。
+ * The read watermark (read-state) is written when the user opens the PR. Early dev builds do no upgrade compatibility — old backlog turning red is not suppressed (just clear the store / reinstall).
  */
 export function computeUnread(
   entry: PrIndexEntry,
@@ -155,11 +162,13 @@ export function computeUnread(
 }
 
 /**
- * 计算「@我 / 回复我」未读条数（派生，不持久化）。与布尔未读点（computeUnread）**并存**：未读点照常按
- * 新到达 / 新 commit / 点名回复亮，本计数仅在此之上**额外**给出点名/回复你的未读条数。
+ * Compute the "@me / reply-to-me" unread count (derived, not persisted). **Coexists** with the boolean unread dot
+ * (computeUnread): the unread dot still lights by new arrival / new commit / mention-reply, and this count only adds,
+ * on top of that, the count of mentions/replies to you that are unread.
  *
- * 规则：取索引里累积的 mention 时间戳，数其中晚于已读水位 `lastReadAt` 的条数；从未打开过（无 read-state）→
- * 全部计入。条数已在 poll 端按 {@link MENTION_ATS_CAP} 封顶（最多 10），故返回值天然 ≤ 10，UI 满额显示「10+」。
+ * Rules: take the mention timestamps accumulated in the index and count those later than the read watermark `lastReadAt`;
+ * never opened (no read-state) → all are counted. The count is already capped on the poll side by {@link MENTION_ATS_CAP}
+ * (at most 10), so the return value is naturally ≤ 10, and the UI shows "10+" when full.
  */
 export function computeUnreadMentionCount(
   entry: PrIndexEntry,
@@ -176,12 +185,13 @@ export function computeUnreadMentionCount(
 }
 
 /**
- * 列出当前**活跃** (非软删) 的 PR。
+ * List currently **active** (non-soft-deleted) PRs.
  *
- * 实现：先读索引 → 过滤掉 archivedAt 非空的 → 逐个读 meta.json + read-state.json。索引里没有但目录
- * 还在的 meta 视为孤儿，跳过 (poll 阶段会清掉)。
+ * Implementation: read the index first → filter out those with a non-null archivedAt → read meta.json + read-state.json
+ * one by one. meta not in the index but whose directory still exists is treated as an orphan and skipped (the poll
+ * phase will clean it up).
  *
- * 返回时据已读水位派生 `unread` 标记叠加到每条 PR 上（meta.json 本身不存此字段）。
+ * On return, an `unread` mark derived from the read watermark is layered onto each PR (meta.json itself does not store this field).
  */
 export async function listStoredPullRequests(
   store: StateStore,
@@ -204,11 +214,12 @@ export async function listStoredPullRequests(
 }
 
 /**
- * 列出**已归档**（退场 / 软删）的 PR，供「已关闭」视图浏览。
+ * List **archived** (departed / soft-deleted) PRs, for browsing in the "Closed" view.
  *
- * 索引仍只在 `stateStore` 维护（archivedAt 非空即归档）；PR 实体目录在退场时整树搬入 `archiveStore`
- * 冷存储，故逐个 meta 从 archiveStore 读。索引有条目但 archiveStore 无 meta（搬迁中途 / 旧布局）即跳过。
- * 归档 PR 一律视为已读（不参与未读派生）。
+ * The index is still maintained only in `stateStore` (a non-null archivedAt means archived); the PR entity directory is
+ * moved as a whole tree into `archiveStore` cold storage on departure, so each meta is read from archiveStore. Entries
+ * present in the index but with no meta in archiveStore (mid-migration / old layout) are skipped. Archived PRs are
+ * always treated as read (not participating in unread derivation).
  */
 export async function listArchivedPullRequests(
   stateStore: StateStore,
@@ -227,8 +238,9 @@ export async function listArchivedPullRequests(
 }
 
 /**
- * 标记 PR 为已读：把已读水位推进到当前 head sha + now。用户打开 PR 时由 IPC 调用。仅写 read-state.json
- * （不碰 index.json），故与周期性 poll 的索引重写互不干扰。找不到 meta 返回 null；否则返回带 `unread:false` 的最新 PR。
+ * Mark a PR as read: advance the read watermark to the current head sha + now. Called via IPC when the user opens a PR.
+ * Writes only read-state.json (not index.json), so it does not interfere with periodic poll's index rewrite. Returns null
+ * when meta is not found; otherwise returns the latest PR with `unread:false`.
  */
 export async function markPrRead(
   store: StateStore,
@@ -245,10 +257,11 @@ export async function markPrRead(
 }
 
 /**
- * 覆写指定 PR 的 localStatus。调用方 (IPC) 通常先 PUT 到 Bitbucket 成功后再调本函数，
- * 让本地立即反映新状态；下一轮 poll 会从 Bitbucket 拿到同样的值，不会产生抖动。
+ * Overwrite the localStatus of the given PR. The caller (IPC) usually PUTs to Bitbucket successfully first, then calls
+ * this function so the local state reflects the new status immediately; the next poll will fetch the same value from
+ * Bitbucket, producing no flicker.
  *
- * 找不到 meta 返回 null (PR 已退场 / 从未存在)。
+ * Returns null when meta is not found (the PR has departed / never existed).
  */
 export async function setLocalStatus(
   store: StateStore,

@@ -3,21 +3,22 @@ import { LLM_CONTEXT_TOKENS_DEFAULT } from '@meebox/shared';
 import { PRAGENT_LOCAL_OUTPUT } from './constants.js';
 
 /**
- * pr-agent 环境变量构造：把一条 LLM Profile 翻成 pr-agent / 嵌入式 shim 认的 env（provider 凭据 /
- * 模型 / litellm 路由前缀 / 编排 chat 的推理档与缓存）。这层是 pr-agent 运行时契约（双下划线 env key、
- * litellm 前缀路由、shim 哨兵 env），归属 pr-agent 适配包；主服务只传 LlmProfile + 高层意图，不直接
- * 拼 CONFIG__* / MEEBOX_* key。纯函数、无 I/O。
+ * pr-agent environment variable construction: translate one LLM Profile into the env pr-agent / the embedded shim
+ * recognize (provider credentials / model / litellm routing prefix / reasoning profile and cache for orchestration chat).
+ * This layer is the pr-agent runtime contract (double-underscore env keys, litellm prefix routing, shim sentinel env),
+ * belonging to the pr-agent adapter package; the main service only passes LlmProfile + high-level intent, not directly
+ * assembling CONFIG__* / MEEBOX_* keys. Pure function, no I/O.
  */
 
 /**
- * 把 provider + 用户输入的 model 字符串规整成 litellm 期望的形式。
+ * Normalize the provider + user-input model string into the form litellm expects.
  *
- * litellm 通过 model 字符串的前缀路由到对应 provider（`deepseek/...` → DeepSeek
- * SDK，`anthropic/...` / `claude-*` → Anthropic，`openai/...` → OpenAI 兼容客户端，
- * 无前缀 → 默认走 OpenAI）。用户在 LLM Profile 里只填模型名（如 `deepseek-v4-pro`），
- * 这里按 provider 自动补前缀，避免 litellm 路由错到 OpenAI 用 `dummy_key` 报错。
+ * litellm routes to the corresponding provider by the model string's prefix (`deepseek/...` → DeepSeek
+ * SDK, `anthropic/...` / `claude-*` → Anthropic, `openai/...` → OpenAI-compatible client,
+ * no prefix → defaults to OpenAI). In an LLM Profile the user fills in only the model name (e.g. `deepseek-v4-pro`),
+ * and here we auto-add the prefix by provider, to avoid litellm misrouting to OpenAI and erroring with `dummy_key`.
  *
- * 用户若手动写了带前缀的形式（兼容多 provider 用户 / 高级用户），不重复加。
+ * If the user manually wrote the prefixed form (for multi-provider / advanced users), we don't add it again.
  */
 function normalizeModel(provider: LlmProfile['provider'], model: string): string {
   if (!model) return model;
@@ -26,30 +27,31 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
     case 'deepseek':
       return m.startsWith('deepseek/') ? m : `deepseek/${m}`;
     case 'anthropic':
-      // 一律补 `anthropic/` 前缀让 litellm 按前缀直接路由到 Anthropic。
-      // 不能靠裸 `claude-*` 名字——litellm 只对**内置 model_cost 表里**的 claude
-      // 型号才能从名字反推 provider；新型号 (如 claude-opus-4-8) 不在表里，裸名传
-      // 过去第一道 provider 路由就抛 "LLM Provider NOT provided"。带前缀则无需查表，
-      // 厂商原厂模型只填型号名即可直接用。用户手写带前缀的不重复加。
+      // Always add the `anthropic/` prefix so litellm routes directly to Anthropic by prefix.
+      // Can't rely on a bare `claude-*` name — litellm can only infer the provider from the name for
+      // claude models **in the built-in model_cost table**; new models (e.g. claude-opus-4-8) aren't in
+      // the table, and a bare name throws "LLM Provider NOT provided" at the first provider routing step.
+      // With the prefix no table lookup is needed, and a vendor's first-party models work by filling in
+      // just the model name. If the user hand-wrote the prefix, we don't add it again.
       return m.startsWith('anthropic/') ? m : `anthropic/${m}`;
     case 'openai':
-      // 真 OpenAI：litellm 认 gpt-* / o1-* 等内置模型名；带 openai/ 前缀也直认。
-      // 用户写的就是 litellm 内置表里的名字，不主动加前缀避免重复 (`openai/openai/...`)
+      // Real OpenAI: litellm recognizes built-in model names like gpt-* / o1-*; the openai/ prefix is also accepted directly.
+      // What the user writes is a name in litellm's built-in table, so we don't proactively add a prefix to avoid duplication (`openai/openai/...`)
       return m;
     case 'openai-compatible':
     case 'dashscope':
     case 'volcengine-ark':
-      // OpenAI 兼容协议（DashScope / 火山方舟 / 自部署 vLLM / 中转）— 模型 ID
-      // 是平台特定 (qwen-plus / doubao-pro-32k / ep-xxx endpoint id 等)，**不在
-      // litellm 内置 MAX_TOKENS 表里**，裸名传过去 litellm 第一道 provider 路由
-      // 就报 "LLM Provider NOT provided"。
-      // 必须显式 `openai/` 前缀让 litellm 走 "custom OpenAI client + 用 OPENAI_API_BASE
-      // 作为 endpoint" 分支，model 字段去前缀后透传给平台
+      // OpenAI-compatible protocol (DashScope / Volcengine Ark / self-hosted vLLM / relay) — the model ID
+      // is platform-specific (qwen-plus / doubao-pro-32k / ep-xxx endpoint id, etc.), **not in
+      // litellm's built-in MAX_TOKENS table**, so a bare name throws "LLM Provider NOT provided" at
+      // litellm's first provider routing step.
+      // The explicit `openai/` prefix is required so litellm takes the "custom OpenAI client + use OPENAI_API_BASE
+      // as endpoint" branch; the model field is passed through to the platform after the prefix is stripped
       return m.startsWith('openai/') ? m : `openai/${m}`;
     case 'cli':
-      // cli 模式完全绕过 litellm（shim 替换 chat_completion 直接调本机 CLI），model
-      // 字段是命令名 (claude) 不是 litellm 模型名，原样透传。CONFIG__MODEL 仅供
-      // pr-agent 内部 token 估算用（未知名 → 走 custom_model_max_tokens 兜底）。
+      // cli mode fully bypasses litellm (the shim replaces chat_completion to call the local CLI directly), the model
+      // field is a command name (claude) not a litellm model name, passed through as-is. CONFIG__MODEL is only for
+      // pr-agent's internal token estimation (unknown name → falls back to custom_model_max_tokens).
       return m;
     default:
       return m;
@@ -57,70 +59,70 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
 }
 
 /**
- * 把单条 LLM Profile 翻成 pr-agent 认的环境变量。pr-agent 内部 TOML 配置 +
- * 双下划线 env var 覆盖：`[openai] key = ...` ↔ `OPENAI__KEY=...`。
+ * Translate a single LLM Profile into the environment variables pr-agent recognizes. pr-agent uses internal TOML config +
+ * double-underscore env var overrides: `[openai] key = ...` ↔ `OPENAI__KEY=...`.
  *
- * 走 env 而不是 `--openai.key=` CLI flag：避免密钥出现在 `ps` 进程列表 /
- * git reflog；env 仅同用户在 /proc/<pid>/environ 可见，相对安全。
+ * Uses env rather than the `--openai.key=` CLI flag: to keep the secret out of the `ps` process list /
+ * git reflog; env is only visible to the same user at /proc/<pid>/environ, relatively safe.
  *
- * 空字符串字段一律跳过——别覆盖 pr-agent 默认值或用户 shell 里已有的 env。
+ * Empty-string fields are always skipped — don't override pr-agent's default or the env already present in the user's shell.
  *
- * 此外三条防御性默认：
- * - `CONFIG__MAX_MODEL_TOKENS`：pr-agent **全局 input 上限**，默认 32000；日志里
- *   "tokens under limit: 32000" 来自这条。DeepSeek-v4 / 现代 Claude / GPT-4 都是 128k+
- *   上下文，没必要被 pr-agent 强行截到 32k。由 `maxModelTokens`（用户「上下文长度」设置）控制、
- *   默认 128000，让长 PR 能完整入 prompt。**CLI 模式忽略该设置**（CLI 工具自管上下文）、固定默认值。
- * - `CONFIG__CUSTOM_MODEL_MAX_TOKENS`（同上取值）：pr-agent 的 MAX_TOKENS 内置表只覆盖少
- *   数主流模型，DeepSeek / 新 Claude / 自部署 / openai-compatible 都不在表里，跑起来
- *   报 "model not defined in MAX_TOKENS"。这条是 unknown 模型的兜底
- * - `CONFIG__FALLBACK_MODELS=[]`：pr-agent 默认配了 fallback (一般指向 OpenAI 系列)，
- *   主模型失败后会自动用 dummy key 试 OpenAI，污染日志且容易被误读成"配错了 OpenAI"。
- *   我们已经显式指定 provider，没有 fallback 的必要
+ * Plus three defensive defaults:
+ * - `CONFIG__MAX_MODEL_TOKENS`: pr-agent's **global input limit**, default 32000; the log's
+ *   "tokens under limit: 32000" comes from this. DeepSeek-v4 / modern Claude / GPT-4 all have 128k+
+ *   context, no need for pr-agent to forcibly truncate to 32k. Controlled by `maxModelTokens` (the user's "context length" setting),
+ *   default 128000, so a long PR fits fully into the prompt. **CLI mode ignores this setting** (the CLI tool manages its own context), fixed at the default.
+ * - `CONFIG__CUSTOM_MODEL_MAX_TOKENS` (same value as above): pr-agent's built-in MAX_TOKENS table only covers a
+ *   few mainstream models; DeepSeek / new Claude / self-hosted / openai-compatible are all absent from the table, and running
+ *   errors with "model not defined in MAX_TOKENS". This is the fallback for unknown models
+ * - `CONFIG__FALLBACK_MODELS=[]`: pr-agent configures a fallback by default (usually pointing at the OpenAI family),
+ *   and after the main model fails it automatically tries OpenAI with a dummy key, polluting the log and easily misread as "OpenAI misconfigured".
+ *   We already specify the provider explicitly, so a fallback is unnecessary
  */
 export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): Record<string, string> {
   const env: Record<string, string> = {};
   if (profile.model) env['CONFIG__MODEL'] = normalizeModel(profile.provider, profile.model);
-  // 上下文长度：用户「上下文长度」设置控制 input 裁剪上限；CLI 模式忽略（工具自管上下文）→ 固定默认值。
+  // Context length: the user's "context length" setting controls the input truncation limit; CLI mode ignores it (the tool manages its own context) → fixed at the default.
   const contextTokens =
     profile.provider === 'cli' ? LLM_CONTEXT_TOKENS_DEFAULT : (maxModelTokens ?? LLM_CONTEXT_TOKENS_DEFAULT);
   env['CONFIG__MAX_MODEL_TOKENS'] = String(contextTokens);
   env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = String(contextTokens);
   env['CONFIG__FALLBACK_MODELS'] = '[]';
-  // litellm import 时会联网拉远端模型价格表（raw.githubusercontent.com），内网/弱网
-  // 下 SSL 超时拖慢启动且刷警告。我们只取真实 token 数（来自 API response.usage），
-  // 不需要价格表 → 强制只用包内本地备份、彻底不联网。见 sitecustomize 的 usage callback。
+  // On import litellm fetches the remote model price table over the network (raw.githubusercontent.com); on an intranet/weak network
+  // the SSL timeout slows startup and floods warnings. We only take the real token count (from API response.usage),
+  // don't need the price table → force using only the in-package local backup, no network at all. See sitecustomize's usage callback.
   env['LITELLM_LOCAL_MODEL_COST_MAP'] = 'True';
-  // 注：没接 LITELLM_LOG / CONFIG__VERBOSITY_LEVEL 因为 pr-agent 0.35 社区版上
-  // 都不让 completion tokens 落到 stdout —— pr-agent 把它扔进 logger.debug 的
-  // 'artifact' 字段，loguru 默认 INFO 级别滤掉。要拿到 completion tokens 需要走
-  // sitecustomize / launcher monkey-patch litellm，独立于 env 实现 (留到后续)
+  // Note: LITELLM_LOG / CONFIG__VERBOSITY_LEVEL aren't wired in because on the pr-agent 0.35 community edition
+  // neither lets completion tokens reach stdout — pr-agent dumps it into logger.debug's
+  // 'artifact' field, which loguru's default INFO level filters out. Getting completion tokens requires
+  // sitecustomize / launcher monkey-patching litellm, implemented independently of env (left for later)
   switch (profile.provider) {
     case 'openai':
     case 'openai-compatible':
     case 'dashscope':
     case 'volcengine-ark': {
-      // 阿里百炼 / 火山方舟 / 自部署 vLLM 都暴露 OpenAI 兼容 endpoint。
+      // Alibaba DashScope / Volcengine Ark / self-hosted vLLM all expose an OpenAI-compatible endpoint.
       //
-      // 严格按 pr-agent 官方推荐 (docs/usage-guide/changing_a_model)，只设双下划
-      // 线 env: `OPENAI__KEY` / `OPENAI__API_BASE`。pr-agent 内部
-      // (litellm_ai_handler.py) 会:
+      // Strictly following pr-agent's official recommendation (docs/usage-guide/changing_a_model), only set the double-underscore
+      // env: `OPENAI__KEY` / `OPENAI__API_BASE`. Internally pr-agent
+      // (litellm_ai_handler.py) does:
       //   litellm.openai_key = settings.openai.key
       //   litellm.api_base   = settings.openai.api_base
       //   self.api_base      = settings.openai.api_base
-      // 并在 `await acompletion(...)` 调用时无条件传 `api_base=self.api_base`。
+      // and on the `await acompletion(...)` call unconditionally passes `api_base=self.api_base`.
       //
-      // 不要同时设单下划线 `OPENAI_API_KEY` / `OPENAI_BASE_URL` — OpenAI SDK 实例
-      // 化时优先读这些环境变量，会把 pr-agent 注入的 `litellm.api_base` 覆盖掉，
-      // OpenAI client 改走 SDK 默认 endpoint，请求被打到 https://api.openai.com，
-      // DashScope key 必 401 (实测路径)。
+      // Don't also set the single-underscore `OPENAI_API_KEY` / `OPENAI_BASE_URL` — the OpenAI SDK reads these
+      // environment variables first when instantiating, which overrides the `litellm.api_base` pr-agent injected,
+      // making the OpenAI client take the SDK's default endpoint, sending requests to https://api.openai.com,
+      // and the DashScope key inevitably 401s (a tested path).
       //
-      // model 仍需 `openai/<...>` 前缀 (normalizeModel 已加) — litellm 第一道
-      // provider 路由按前缀认作 OpenAI-compatible client。裸 model 名 (qwen-plus)
-      // 不在 litellm.model_cost 表里，会抛 "LLM Provider NOT provided"。
+      // model still needs the `openai/<...>` prefix (normalizeModel already adds it) — litellm's first
+      // provider routing recognizes it as an OpenAI-compatible client by prefix. A bare model name (qwen-plus)
+      // isn't in the litellm.model_cost table and throws "LLM Provider NOT provided".
       //
-      // dashscope / volcengine-ark 用 LLM_PROVIDERS 预设兜底 (跟 SettingsModal
-      // placeholder 同一份默认 endpoint)，让历史 profile 留空时也能 work。
-      // openai-compatible 不兜底 — 它是"自部署/中转代理"语义，endpoint 因人而异
+      // dashscope / volcengine-ark fall back to the LLM_PROVIDERS profile (the same default endpoint as the SettingsModal
+      // placeholder), so a legacy profile still works when left blank.
+      // openai-compatible has no fallback — it carries "self-hosted/relay proxy" semantics, and the endpoint varies per user
       const baseUrlFallback: Record<string, string> = {
         dashscope: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         'volcengine-ark': 'https://ark.cn-beijing.volces.com/api/v3',
@@ -132,29 +134,29 @@ export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): R
       break;
     }
     case 'deepseek':
-      // litellm 走 deepseek/<model> 路径；env 用 DEEPSEEK__KEY。base_url 一般无需填
+      // litellm takes the deepseek/<model> path; env uses DEEPSEEK__KEY. base_url generally doesn't need to be filled in
       if (profile.api_key) env['DEEPSEEK__KEY'] = profile.api_key;
       if (profile.base_url) env['DEEPSEEK__API_BASE'] = profile.base_url;
       break;
     case 'anthropic':
       if (profile.api_key) env['ANTHROPIC__KEY'] = profile.api_key;
-      // base_url 必须走 litellm 原生 env `ANTHROPIC_API_BASE`（单下划线），**不能**用
-      // pr-agent 风格的双下划线 `ANTHROPIC__API_BASE`：pr-agent 0.36 的 litellm_ai_handler
-      // 只读 settings.anthropic.key、不读 anthropic.api_base，对 anthropic 把 api_base=None
-      // 透传给 litellm.acompletion；litellm 的 get_api_base 仅在 api_base 为空时才回落到
-      // ANTHROPIC_API_BASE / ANTHROPIC_BASE_URL（都没有才用官方 https://api.anthropic.com）。
-      // litellm 默认会给 base 自动补 `/v1/messages`，故填到根域名即可、勿自带该后缀（中转端点
-      // 本身已是完整路径时，另设 LITELLM_ANTHROPIC_DISABLE_URL_SUFFIX=true 关掉自动补全）。
+      // base_url must go through litellm's native env `ANTHROPIC_API_BASE` (single underscore), and **cannot** use
+      // the pr-agent-style double-underscore `ANTHROPIC__API_BASE`: pr-agent 0.36's litellm_ai_handler
+      // only reads settings.anthropic.key, not anthropic.api_base, passing api_base=None through to
+      // litellm.acompletion for anthropic; litellm's get_api_base only falls back to
+      // ANTHROPIC_API_BASE / ANTHROPIC_BASE_URL when api_base is empty (and uses the official https://api.anthropic.com only if neither is set).
+      // litellm by default auto-appends `/v1/messages` to the base, so fill in the root domain and don't include that suffix yourself (when a relay endpoint
+      // is itself already a full path, additionally set LITELLM_ANTHROPIC_DISABLE_URL_SUFFIX=true to turn off the auto-completion).
       if (profile.base_url) env['ANTHROPIC_API_BASE'] = profile.base_url;
       break;
     case 'cli': {
-      // 本地 CLI 模式：不直连任何 API，也不下发任何密钥。仅打两个哨兵 env 让
-      // sitecustomize shim 在 pr-agent 进程内把 LiteLLMAIHandler.chat_completion
-      // 整体换成「调本机 CLI 子进程」版本（见 scripts/pragent-shim/meebox_pragent_shim/cli/）。
-      //   MEEBOX_CLI_MODE=1   —— 开关；非空即启用 CLI 接管
-      //   MEEBOX_CLI_BIN=claude —— 要调用的命令名（一期仅 claude；shim 用 which 解析真实路径）
-      // CLI 进程经子进程继承父 env（含 PATH / HOME），故能找到 claude 二进制并读到
-      // ~/.claude 登录态。CONFIG__MODEL 已在上面置为命令名 (claude)，仅用于 token 估算。
+      // Local CLI mode: doesn't connect to any API directly, nor hand down any secret. Only sets two sentinel env vars so the
+      // sitecustomize shim, inside the pr-agent process, swaps LiteLLMAIHandler.chat_completion
+      // wholesale for a "call the local CLI subprocess" version (see scripts/pragent-shim/meebox_pragent_shim/cli/).
+      //   MEEBOX_CLI_MODE=1   —— switch; any non-empty value enables the CLI takeover
+      //   MEEBOX_CLI_BIN=claude —— the command name to invoke (phase one is claude only; the shim resolves the real path with which)
+      // The CLI process inherits the parent env (including PATH / HOME) via the subprocess, so it can find the claude binary and read the
+      // ~/.claude login state. CONFIG__MODEL was set to the command name (claude) above, used only for token estimation.
       const bin = (profile.model || 'claude').trim() || 'claude';
       env['MEEBOX_CLI_MODE'] = '1';
       env['MEEBOX_CLI_BIN'] = bin;
@@ -164,31 +166,31 @@ export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): R
   return env;
 }
 
-/** 编排 chat 通道的 env 高层选项：调用方只表达意图，key 名由 bridge 持有。 */
+/** High-level env options for the orchestration chat channel: the caller only expresses intent, the key names are held by the bridge. */
 export interface ChatEnvOptions {
-  /** pr-agent 响应语言（CONFIG__RESPONSE_LANGUAGE）；空则不设。 */
+  /** pr-agent response language (CONFIG__RESPONSE_LANGUAGE); if empty, not set. */
   responseLanguage?: string;
   /**
-   * 调低推理档（编排 chat 是路由 + 轻量综合，非深度代码分析，那在 pr-agent /review 里）。两条路径都降档提速：
-   * - 本机 CLI 模式：MEEBOX_CLI_REASONING=low（codex → model_reasoning_effort=low、claude → haiku；见 cli/specs）。
-   * - API / litellm 模式：CONFIG__REASONING_EFFORT=low（pr-agent 仅对 support_reasoning_models 应用，
-   *   非 reasoning 模型该项无副作用），避免一个 yes/no 路由判读也吐大量思考 token、拖慢响应。
+   * Lower the reasoning profile (orchestration chat is routing + light synthesis, not deep code analysis — that's in pr-agent /review). Both paths lower the profile to speed up:
+   * - local CLI mode: MEEBOX_CLI_REASONING=low (codex → model_reasoning_effort=low, claude → haiku; see cli/specs).
+   * - API / litellm mode: CONFIG__REASONING_EFFORT=low (pr-agent only applies it to support_reasoning_models,
+   *   with no side effect on non-reasoning models), to avoid a single yes/no routing decision also spewing lots of thinking tokens and slowing the response.
    */
   lowReasoning?: boolean;
   /**
-   * 服务端提示缓存（MEEBOX_CHAT_CACHE，5min TTL）：为编排 chat 的大块 system 前缀打 cache_control。多轮规划逐轮
-   * 共享同一 system → 第 2 轮起命中、降延迟/成本（仅 Anthropic 需显式标；OpenAI/DeepSeek 自动前缀缓存）。判读 system
-   * 过小不达缓存粒度自动跳过（见 litellm_handler）。
+   * Server-side prompt cache (MEEBOX_CHAT_CACHE, 5min TTL): applies cache_control to the orchestration chat's large system prefix. Multi-round planning shares the same
+   * system round over round → hits from the 2nd round onward, lowering latency/cost (only Anthropic needs an explicit marker; OpenAI/DeepSeek cache the prefix automatically). It automatically skips when
+   * the system is too small to reach the cache granularity (see litellm_handler).
    */
   promptCache?: boolean;
-  /** 裁剪输入内容的上下文长度上限（token，CONFIG__MAX_MODEL_TOKENS）；空则用默认 128000。CLI 模式忽略。 */
+  /** Context length limit for truncating input content (tokens, CONFIG__MAX_MODEL_TOKENS); if empty, uses the default 128000. Ignored in CLI mode. */
   maxModelTokens?: number;
 }
 
 /**
- * 组装编排 chat 通道的 pr-agent env：在 LLM Profile 基础 env（provider 凭据 / 模型）之上叠加 chat 专属的
- * 响应语言 / 推理档 / 提示缓存契约 key。调用方传 LlmProfile + 高层意图（不直接写 CONFIG__* / MEEBOX_* key）。
- * profile 为 null（未配置 active profile）时仅返回意图相关的 key。代理 env 由调用方另铺（非 pr-agent 范畴）。
+ * Assemble the pr-agent env for the orchestration chat channel: on top of the LLM Profile's base env (provider credentials / model), layer the chat-specific
+ * response language / reasoning profile / prompt cache contract keys. The caller passes LlmProfile + high-level intent (not directly writing CONFIG__* / MEEBOX_* keys).
+ * When profile is null (no active profile configured) only the intent-related keys are returned. The proxy env is laid out separately by the caller (outside the pr-agent scope).
  */
 export function buildChatEnv(
   profile: LlmProfile | null,
@@ -204,35 +206,35 @@ export function buildChatEnv(
   return env;
 }
 
-/** pr-agent tool run 的 env 高层选项：调用方只表达意图（tool + 响应语言），契约 key 由 bridge 持有。 */
+/** High-level env options for a pr-agent tool run: the caller only expresses intent (tool + response language), the contract keys are held by the bridge. */
 export interface ToolEnvOptions {
   tool: ReviewRunTool;
-  /** pr-agent 响应语言（CONFIG__RESPONSE_LANGUAGE）；空则不设。 */
+  /** pr-agent response language (CONFIG__RESPONSE_LANGUAGE); if empty, not set. */
   responseLanguage?: string;
-  /** 裁剪输入内容的上下文长度上限（token，CONFIG__MAX_MODEL_TOKENS）；空则用默认 128000。CLI 模式忽略。 */
+  /** Context length limit for truncating input content (tokens, CONFIG__MAX_MODEL_TOKENS); if empty, uses the default 128000. Ignored in CLI mode. */
   maxModelTokens?: number;
   /**
-   * 代码建议 / 评审发现数量上限（2~8）：/review → PR_REVIEWER__NUM_MAX_FINDINGS、
-   * /improve → PR_CODE_SUGGESTIONS__NUM_CODE_SUGGESTIONS（均硬上限）。空则用 pr-agent 默认。
-   * /ask 的软约束走提示词（见 buildExtraInstructions），不经此。
+   * Upper limit on the number of code suggestions / review findings (2~8): /review → PR_REVIEWER__NUM_MAX_FINDINGS,
+   * /improve → PR_CODE_SUGGESTIONS__NUM_CODE_SUGGESTIONS (both hard limits). If empty, uses pr-agent's default.
+   * /ask's soft constraint goes through the prompt (see buildExtraInstructions), not this.
    */
   maxCodeSuggestions?: number;
 }
 
 /**
- * 组装一次 pr-agent tool run 的 env：在 LLM Profile 基础 env 之上叠加响应语言与 per-tool pr-agent 配置 key。
- * 调用方传 LlmProfile + 意图（不直接写 CONFIG__* / PR_CODE_SUGGESTIONS__* / LOCAL__* key）。代理 env 由调用方
- * 另铺（非 pr-agent 范畴）。
+ * Assemble the env for a single pr-agent tool run: on top of the LLM Profile's base env, layer the response language and per-tool pr-agent config keys.
+ * The caller passes LlmProfile + intent (not directly writing CONFIG__* / PR_CODE_SUGGESTIONS__* / LOCAL__* keys). The proxy env is laid out
+ * separately by the caller (outside the pr-agent scope).
  *
- * /improve 在 local provider 下只有「汇总建议 → publish_comment」一条可用路径（shim 已强制 gfm_markdown=True），
- * 故显式关死两项默认、并把产出重定向到 improve.md：
- * - PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS=false：committable/inline 会走 publish_code_suggestions →
- *   local provider 直接 NotImplementedError（pr-agent 默认即 false，此处防上游翻默认值）。
- * - PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT=false：persistent_comment（默认 true）会翻历史评论做增量更新 →
- *   local provider 不实现、每次刷一段 NotImplementedError traceback（被兜底捕获，正文不丢但日志吵）；local 每次
- *   全新 worktree、无历史可翻，直接关掉走 publish_comment。
- * - LOCAL__REVIEW_PATH=improve.md：与 /review /ask 的 review.md 分流（pr-agent 原生 local.review_path 覆盖
- *   publish_comment 落盘路径，相对路径按子进程 cwd = worktree 根解析）。
+ * Under the local provider /improve has only one usable path, "aggregated suggestions → publish_comment" (the shim already forces gfm_markdown=True),
+ * so explicitly kill two defaults and redirect the output to improve.md:
+ * - PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS=false: committable/inline would go through publish_code_suggestions →
+ *   local provider throws NotImplementedError outright (pr-agent's default is already false, this guards against upstream flipping the default).
+ * - PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT=false: persistent_comment (default true) would look through history comments for incremental updates →
+ *   local provider doesn't implement it and spews a NotImplementedError traceback each time (caught by a fallback, the body isn't lost but the log is noisy); local always
+ *   uses a brand-new worktree with no history to look through, so turn it off outright and go through publish_comment.
+ * - LOCAL__REVIEW_PATH=improve.md: split from /review /ask's review.md (pr-agent's native local.review_path overrides
+ *   the publish_comment on-disk path, with the relative path resolved against the subprocess cwd = worktree root).
  */
 export function buildToolEnv(
   profile: LlmProfile | null,
@@ -244,12 +246,12 @@ export function buildToolEnv(
     env['PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS'] = 'false';
     env['PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT'] = 'false';
     env['LOCAL__REVIEW_PATH'] = PRAGENT_LOCAL_OUTPUT.improve;
-    // 代码建议数量上限（用户「代码建议数量」设置）；空则用 pr-agent 默认（num_code_suggestions=4）。
+    // Upper limit on the number of code suggestions (the user's "code suggestion count" setting); if empty, uses pr-agent's default (num_code_suggestions=4).
     if (opts.maxCodeSuggestions !== undefined) {
       env['PR_CODE_SUGGESTIONS__NUM_CODE_SUGGESTIONS'] = String(opts.maxCodeSuggestions);
     }
   }
-  // 评审发现数量上限（与 /improve 共用同一设置）；空则用 pr-agent 默认（num_max_findings=3）。
+  // Upper limit on the number of review findings (shares the same setting as /improve); if empty, uses pr-agent's default (num_max_findings=3).
   if (opts.tool === 'review' && opts.maxCodeSuggestions !== undefined) {
     env['PR_REVIEWER__NUM_MAX_FINDINGS'] = String(opts.maxCodeSuggestions);
   }

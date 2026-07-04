@@ -7,7 +7,7 @@ import {
 import type { BitbucketClient } from '../client.js';
 import type { BitbucketAttachmentUploadResponse } from '../types.js';
 
-/** Bitbucket 用户与媒体领域：头像（avatar.png 路径端点）与评论内嵌附件（attachment 协议解析）。 */
+/** Bitbucket user and media domain: avatars (avatar.png path endpoint) and comment inline attachments (attachment protocol parsing). */
 export class BitbucketMediaService extends BaseMediaService {
   constructor(
     ctx: ConnectionContext,
@@ -17,10 +17,11 @@ export class BitbucketMediaService extends BaseMediaService {
   }
 
   /**
-   * 拉用户头像（`/users/{slug}/avatar.png?s=64`）。
+   * Fetch a user avatar (`/users/{slug}/avatar.png?s=64`).
    *
-   * Bitbucket user slug 总是小写，但 comments / activities 的 author 常带回大小写混合的 name 且不附
-   * slug 字段；调用方退回 name 时大小写不一致会 404 —— 先按原值试，失败再小写一次。全部失败返回 null。
+   * A Bitbucket user slug is always lowercase, but the author in comments / activities often carries back a
+   * mixed-case name without a slug field; when the caller falls back to name, a case mismatch yields 404 —
+   * try the original value first, then lowercase once on failure. Returns null if all fail.
    */
   async getUserAvatar(slug: string, _avatarUrl?: string): Promise<BinaryResource | null> {
     const candidates = slug !== slug.toLowerCase() ? [slug, slug.toLowerCase()] : [slug];
@@ -30,28 +31,28 @@ export class BitbucketMediaService extends BaseMediaService {
           s: '64',
         });
       } catch {
-        // 试下一个候选
+        // Try the next candidate
       }
     }
     return null;
   }
 
   /**
-   * 代理拉取评论内嵌附件。
+   * Proxy-fetch a comment inline attachment.
    *
-   * host 解析、Bitbucket `attachment:` 协议处理与 PAT 鉴权拉取均在 client 内完成，本方法仅薄封装。
+   * Host resolution, Bitbucket `attachment:` protocol handling, and PAT-authenticated fetching are all done inside the client; this method is only a thin wrapper.
    */
   async getAttachment(url: string, repo?: RepoRef): Promise<BinaryResource | null> {
     return this.client.getAttachmentBinary(url, repo);
   }
 
   /**
-   * 上传图片到仓库 attachments 端点（multipart 字段 `files`），返回可嵌入评论的 markdown。
-   * 优先用响应 `links.attachment.href`（形如 `attachment:<repoId>/<id>`，getAttachmentBinary 据此渲染），
-   * 兜底用 `attachment:<id>`。attachments 是仓库级、非 PR 级，prId 忽略。
+   * Upload an image to the repository attachments endpoint (multipart field `files`), returning markdown embeddable in a comment.
+   * Prefer the response `links.attachment.href` (shaped like `attachment:<repoId>/<id>`, which getAttachmentBinary renders from),
+   * falling back to `attachment:<id>`. Attachments are repository-level, not PR-level, so prId is ignored.
    *
-   * 端点是**私有 servlet**，路径在 `/projects/{key}/repos/{slug}/attachments`（**不带** `/rest/api/1.0`
-   * 前缀——带前缀会 405；实测该裸路径 Allow: POST）。下载仍走 `/rest/api/1.0/.../attachments/{id}`。
+   * The endpoint is a **private servlet** at `/projects/{key}/repos/{slug}/attachments` (**without** the `/rest/api/1.0`
+   * prefix — with the prefix it returns 405; in practice this bare path has Allow: POST). Download still goes through `/rest/api/1.0/.../attachments/{id}`.
    */
   override async uploadAttachment(
     repo: RepoRef,

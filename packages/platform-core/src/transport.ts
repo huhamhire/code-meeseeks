@@ -1,66 +1,66 @@
 import type { ProxyConfig } from '@meebox/shared';
 
-/** 可注入的 fetch（测试桩 / 代理包装）；连接层默认用全局 fetch。 */
+/** Injectable fetch (test stub / proxy wrapper); the connection layer uses the global fetch by default. */
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-/** 二进制资源（头像 / 附件）：原始字节 + content-type，供 main 端缓存并转 data URL。 */
+/** Binary resource (avatar / attachment): raw bytes + content-type, for the main side to cache and turn into a data URL. */
 export interface BinaryResource {
   bytes: Uint8Array;
   contentType: string;
 }
 
 /**
- * 代理 fetch 工厂（注入口）。给定统一代理配置与目标 host，产出「代理感知」的 fetch；loopback / 代理
- * 关闭时返回 undefined（连接层退回直连全局 fetch）。把 undici ProxyAgent 等具体传输实现留在注入方
- * （desktop），使 platform-core 不依赖具体代理实现。
+ * Proxy fetch factory (injection point). Given the unified proxy config and the target host, produces a "proxy-aware" fetch; on loopback / proxy
+ * disabled returns undefined (the connection layer falls back to the direct global fetch). Concrete transport implementations such as undici ProxyAgent are left to the injector
+ * (desktop), so platform-core does not depend on a concrete proxy implementation.
  */
 export type ProxyFetchFactory = (proxy: ProxyConfig, host: string) => FetchLike | undefined;
 
 /**
- * 平台连接的统一配置。连接层（统一连接封装实例）据此构造——含连接参数、鉴权 token 与**统一的代理
- * 配置**。代理解析（loopback 直连 / 否则挂代理）由连接层据 `baseUrl` host 一次完成，不再由各调用点
- * 预拼 fetch（见 docs/arch/01-platform/01-adapter.md §1）。
+ * Unified config for a platform connection. The connection layer (unified connection wrapper instance) is constructed from it—containing connection params, auth token, and the **unified proxy
+ * config**. Proxy resolution (loopback direct / otherwise attach proxy) is done once by the connection layer by `baseUrl` host, no longer pre-assembled as a fetch by each call site
+ * (see docs/arch/01-platform/01-adapter.md §1).
  */
 export interface PlatformConnectionConfig {
-  /** 平台 REST API base，无尾斜杠。 */
+  /** Platform REST API base, without trailing slash. */
   baseUrl: string;
-  /** Personal Access Token；只进连接层、绝不进日志。 */
+  /** Personal Access Token; enters only the connection layer, never the logs. */
   token: string;
-  /** 单请求超时（默认 30s）。 */
+  /** Per-request timeout (default 30s). */
   timeoutMs?: number;
-  /** 统一代理配置；连接层据此 + `baseUrl` host 经 `proxyFetch` 解析有效 fetch。 */
+  /** Unified proxy config; the connection layer resolves the effective fetch from it + `baseUrl` host via `proxyFetch`. */
   proxy?: ProxyConfig;
   /**
-   * 代理 fetch 工厂（注入口）。由组合根（desktop）提供 undici 实现；连接层据 `proxy` + `baseUrl` host
-   * 调用它解析代理感知 fetch。未提供则不挂代理（即便 `proxy` 存在也直连）。
+   * Proxy fetch factory (injection point). The undici implementation is provided by the composition root (desktop); the connection layer resolves the proxy-aware fetch by
+   * calling it with `proxy` + `baseUrl` host. When not provided, no proxy is attached (direct connection even if `proxy` exists).
    */
   proxyFetch?: ProxyFetchFactory;
-  /** 显式 fetch 覆盖（测试桩 / 已自行解析代理）；给定则优先于 `proxy` 解析。 */
+  /** Explicit fetch override (test stub / proxy already resolved on its own); when given, takes priority over `proxy` resolution. */
   fetch?: FetchLike;
 }
 
 /**
- * 平台连接传输端口（port）。领域基类只依赖此接口发起调用，不感知底层 fetch / 鉴权 / 分页 / 错误解析
- * 实现。各平台包提供「统一连接封装实例」实现本端口（见 docs/arch/01-platform/01-adapter.md §1）。
+ * Platform connection transport port. Domain base classes depend only on this interface to make calls, unaware of the underlying fetch / auth / pagination / error-parsing
+ * implementation. Each platform package provides a "unified connection wrapper instance" implementing this port (see docs/arch/01-platform/01-adapter.md §1).
  *
- * 仅声明三平台同构的**最小连接能力**——纯 JSON 读写 + 分页。平台特有方法（GitHub PATCH / search、各平台
- * 信任模型迥异的二进制拉取等）由各自传输实现作为端口之外的扩展提供，不污染通用契约；二进制资源由
- * MediaService 领域基类按平台抽象（见 §3.2），故不进本端口。
+ * Declares only the **minimal connection capability** isomorphic across the three platforms—pure JSON read/write + pagination. Platform-specific methods (GitHub PATCH / search, binary fetches whose
+ * trust models differ wildly across platforms, etc.) are provided by each transport implementation as extensions outside the port, not polluting the common contract; binary resources are
+ * abstracted per platform by the MediaService domain base class (see §3.2), so they do not enter this port.
  */
 export interface PlatformTransport {
-  /** GET，返回 JSON 体。 */
+  /** GET, returns the JSON body. */
   get<T>(path: string, params?: Record<string, string>): Promise<T>;
-  /** GET，返回 JSON 体 + 响应头（读服务端版本 / 当前用户 / 分页头用）。 */
+  /** GET, returns the JSON body + response headers (for reading server version / current user / pagination headers). */
   getWithHeaders<T>(
     path: string,
     params?: Record<string, string>,
   ): Promise<{ body: T; headers: Headers }>;
-  /** POST JSON，返回 JSON 体。 */
+  /** POST JSON, returns the JSON body. */
   post<T>(path: string, body: unknown): Promise<T>;
-  /** PUT JSON；部分端点 204 无体，返回 null。 */
+  /** PUT JSON; some endpoints return 204 with no body, returning null. */
   put<T>(path: string, body: unknown): Promise<T | null>;
-  /** DELETE，无返回体。 */
+  /** DELETE, no return body. */
   del(path: string): Promise<void>;
-  /** 列表分页迭代器（平台各自的分页风格在实现内收口为统一异步迭代）。 */
+  /** List pagination iterator (each platform's pagination style is funneled inside the implementation into a unified async iteration). */
   paginate<T>(path: string, params?: Record<string, string>): AsyncIterable<T>;
 }

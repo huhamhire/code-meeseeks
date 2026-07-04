@@ -9,12 +9,12 @@ import type {
 } from '@meebox/shared';
 import type { PragentRunInfo } from './common.js';
 
-/** Agent 交互域：规则匹配 / 评审编排 / 自由规划 / 会话与台账 / pr-agent run 队列。 */
+/** Agent interaction domain: rule matching / review orchestration / free planning / session and ledger / pr-agent run queue. */
 export interface AgentChannels {
   /**
-   * 给指定 PR 查 `<agent.dir>/rules` 当前命中的**全部规则**（按 priority desc + path asc，封顶前若干条，
-   * 与评审注入同口径）。调用方传 tool 区分 /describe / /review（规则可能只对其中一个 tool 生效）。
-   * agent.dir 未配置 / 整体禁用 / 无命中 → 返回空数组。
+   * For a given PR, query the **all rules** currently matched in `<agent.dir>/rules` (by priority desc + path asc, capped at the first several,
+   * same standard as review injection). Caller passes tool to distinguish /describe / /review (a rule may apply to only one of the tools).
+   * agent.dir unconfigured / globally disabled / no match → returns empty array.
    */
   'rules:matchForPr': {
     request: { localId: string; tool: ReviewRunTool };
@@ -27,75 +27,75 @@ export interface AgentChannels {
     }>;
   };
   /**
-   * 对指定 PR 跑一次 Agent 评审微流程（describe→review→条件追问→总结）。同步等待，
-   * 期间经 agent:stepProgress 推送步骤；返回收尾后的 AgentSession（含 summary /
-   * recommendation）。pr-agent 不可用时 reject。
+   * Run one Agent review micro-flow for a given PR (describe→review→conditional follow-up→summary). Waits synchronously,
+   * pushing steps via agent:stepProgress meanwhile; returns the finalized AgentSession (with summary /
+   * recommendation). Rejects when pr-agent is unavailable.
    */
   'agent:run': {
     request: { localId: string };
     response: AgentSession;
   };
   /**
-   * 对指定 PR 跑自由规划 Agent（自然语言入口「对话即委派」）。同步等待，步骤经
-   * agent:stepProgress 推送；返回收尾会话（summary = Agent 最终回答）。
+   * Run the free-planning Agent for a given PR (natural-language entry "conversation as delegation"). Waits synchronously, steps pushed via
+   * agent:stepProgress; returns the finalized session (summary = Agent's final answer).
    */
   'agent:ask': {
     /**
-     * referencedContext：用户在 Diff 里选中的代码片段（含路径 + 行范围 + 代码），作为**隐式上下文**
-     * 注入规划 LLM 的当轮提示，不进入持久化的用户消息正文。省略 = 本轮不带选区引用。
+     * referencedContext: the code snippet the user selected in the Diff (with path + line range + code), injected as **implicit context**
+     * into this turn's prompt for the planning LLM, not entering the persisted user message body. Omitted = no selection reference this turn.
      */
     request: { localId: string; question: string; referencedContext?: string };
     response: AgentSession;
   };
-  /** 暂停当前 PR 的 Agent 运行（abort）；会话置 paused、保态。 */
+  /** Pause the current PR's Agent run (abort); session set to paused, state preserved. */
   'agent:stop': { request: { localId: string }; response: { ok: boolean } };
   /**
-   * 运行期间追加一条用户消息：若该 PR 正有 Agent 在跑 → 入队，下一主 Agent 周期并入、据最新指令重排
-   * （queued=true）；若没有在跑 → 直接起一轮自由规划（queued=false，竞态兜底，不丢消息）。
+   * Append a user message during a run: if an Agent is running for this PR → enqueue, merged into the next main Agent cycle and re-ordered per the latest instruction
+   * (queued=true); if none is running → directly start one free-planning round (queued=false, race fallback, no message lost).
    */
   'agent:enqueueMessage': {
     request: { localId: string; message: string };
     response: { queued: boolean };
   };
   /**
-   * 读取指定 PR 已落盘的 Agent 会话（含收尾 summary / recommendation）；无则返回 null。
-   * 供 UI 打开 PR 时恢复「评审总结」卡片——总结归属其发起 PR、跨 PR 切换不丢失、不串台。
+   * Read a given PR's persisted Agent session (with final summary / recommendation); returns null if none.
+   * Used by the UI to restore the "review summary" card when opening a PR—the summary belongs to its originating PR, not lost across PR switches, no cross-talk.
    */
   'agent:getSession': { request: { localId: string }; response: AgentSession | null };
   /**
-   * 读取指定 PR 的多轮对话消息（用户输入 + Agent 回答，按时间升序）；无则空数组。
-   * UI 据此渲染多轮会话；跨 PR 切换 / 重启后恢复。
+   * Read a given PR's multi-turn conversation messages (user input + Agent answers, ascending by time); empty array if none.
+   * The UI renders the multi-turn conversation from this; restored across PR switches / restart.
    */
   'agent:getConversation': { request: { localId: string }; response: AgentMessage[] };
   /**
-   * 读取指定 PR 已落盘的 Agent 过程步骤（transcript，按时间升序）；无则空数组。
-   * UI 据此恢复「过程化跟踪」的思考步骤——跨 PR 切换 / 重启后不丢失（步骤随产生增量落盘）。
+   * Read a given PR's persisted Agent process steps (transcript, ascending by time); empty array if none.
+   * The UI restores the "process tracking" thinking steps from this—not lost across PR switches / restart (steps are persisted incrementally as produced).
    */
   'agent:getTranscript': { request: { localId: string }; response: AgentStep[] };
   /**
-   * 批量读 AutoPilot 台账：返回各 PR 已自动评审的 recommendation（仅 decision=review 且有
-   * 建议者）。PR 列表据此显示徽标，无需逐个加载会话。
+   * Batch-read AutoPilot ledgers: returns each PR's auto-reviewed recommendation (only decision=review with a
+   * suggester). The PR list shows badges from this, without loading sessions one by one.
    */
   'agent:autopilotLedgers': {
     request: { localIds: string[] };
     response: Record<string, AgentRecommendationVerdict>;
   };
-  // ── pr-agent run 队列（评审工具执行层；agent:run / AutoPilot 与用户手动 run 共用同一队列）──
+  // ── pr-agent run queue (review tool execution layer; agent:run / AutoPilot and user manual runs share the same queue) ──
   /**
-   * 触发一次 pr-agent /describe 或 /review。同步等待执行结束（可能数十秒到数分钟），
-   * 期间通过 pragent:runProgress 事件推送 stdout / stderr 行。返回最终 ReviewRun
-   * 状态 (succeeded / failed)。pr-agent 不可用时 reject。
+   * Trigger one pr-agent /describe or /review. Waits synchronously for execution to finish (may take tens of seconds to minutes),
+   * pushing stdout / stderr lines via pragent:runProgress events meanwhile. Returns the final ReviewRun
+   * status (succeeded / failed). Rejects when pr-agent is unavailable.
    */
   'pragent:run': {
     /**
-     * tool='ask' 时 question 必填，作为 pr-agent CLI 的位置参数传给 ask 子命令。
-     * tool='describe'/'review' 时 question 字段被忽略。
-     * referencedContext：用户在 Diff 里选中的代码片段（隐式上下文），仅 tool='ask' 时生效——经
-     * EXTRA_INSTRUCTIONS 注入，不进入问题位置参数（故不污染回答 echo / 会话气泡）。
-     * referencedFinding：复评引用——本次 /ask 是对先前 review/improve 某条 finding 的复评（前向链，
-     * 落到 ReviewRun.referencedFinding），驱动复评模式提示词 + 结果卡的裁决动作。仅 tool='ask' 生效。
-     * scope：单 commit 评审范围（parent..sha）——由 Diff 视图提交选择器发起，把本次 run 的 diff 限定在
-     * 该 commit 自身改动而非 PR 全量。对 describe/review/ask/improve 均生效；缺省 = PR 全量范围。
+     * When tool='ask', question is required, passed as the positional argument to the pr-agent CLI's ask subcommand.
+     * When tool='describe'/'review', the question field is ignored.
+     * referencedContext: the code snippet the user selected in the Diff (implicit context), effective only when tool='ask'—injected via
+     * EXTRA_INSTRUCTIONS, not entering the question positional argument (so it doesn't pollute the answer echo / conversation bubble).
+     * referencedFinding: re-review reference—this /ask is a re-review of some prior review/improve finding (forward chain,
+     * lands on ReviewRun.referencedFinding), driving the re-review-mode prompt + the result card's verdict actions. Effective only when tool='ask'.
+     * scope: single-commit review range (parent..sha)—initiated by the Diff view's commit selector, limiting this run's diff to
+     * that commit's own changes rather than the whole PR. Effective for describe/review/ask/improve; default = whole-PR range.
      */
     request: {
       localId: string;
@@ -108,45 +108,45 @@ export interface AgentChannels {
     response: ReviewRun;
   };
   /**
-   * 列出某 PR 的历史 run，newest first。支持时间戳游标分页：
-   * - limit：截到 N 条；省略 = 不限（renderer 端慎用，规模大时可能慢）
-   * - beforeId：游标，返回 runId **严格小于** 此值的条目；省略 = 不限上界
+   * List a PR's historical runs, newest first. Supports timestamp-cursor pagination:
+   * - limit: cap at N entries; omitted = unlimited (use with care on the renderer, may be slow at scale)
+   * - beforeId: cursor, returns entries with runId **strictly less than** this value; omitted = no upper bound
    *
-   * runId 是时序字典序 (`yyyymmdd-HHmmss-mmm`)，"取游标后 N 条" 即"取此时刻之前的 N 条"
+   * runId is time-ordered lexicographically (`yyyymmdd-HHmmss-mmm`), so "take N entries after the cursor" is "take the N entries before this moment"
    */
   'pragent:listRuns': {
     request: { localId: string; limit?: number; beforeId?: string };
     response: ReviewRun[];
   };
-  /** 单条 run 查询（用于 renderer 在事件断流后兜底刷新） */
+  /** Single-run query (for the renderer to fall back and refresh after an event stream drops) */
   'pragent:getRun': {
     request: { localId: string; runId: string };
     response: ReviewRun | null;
   };
-  /** 清空指定 PR 的全部 run 历史记录（仅该 PR 生效）。返回删除条数。 */
+  /** Clear all run history for a given PR (effective only for that PR). Returns the number deleted. */
   'pragent:clearRuns': {
     request: { localId: string };
     response: { cleared: number };
   };
-  /** 删除指定 PR 的单条 run 记录（仅该 run，不动 Agent 会话 / 台账）。返回是否确有删除。 */
+  /** Delete a single run record of a given PR (only that run, leaving the Agent session / ledger untouched). Returns whether something was actually deleted. */
   'pragent:deleteRun': {
     request: { localId: string; runId: string };
     response: { ok: boolean };
   };
   /**
-   * 取消一个 run。语义跟 run 当前状态相关：
-   * - 跟 active 匹配 → SIGKILL 子进程，落盘 status='cancelled'
-   * - 在 waiting 队列里 → 从队列删除，**不**写盘 (从未真正跑过)；触发 pragent:run
-   *   原调用方的 Promise reject 让 ChatPane handleRun 走 error 分支
-   * - 都不匹配 (已结束 / 不存在) → 静默 no-op (返回 ok:false)
+   * Cancel a run. Semantics depend on the run's current state:
+   * - matches active → SIGKILL the child process, persist status='cancelled'
+   * - in the waiting queue → remove from the queue, do **not** write to disk (never actually ran); trigger the pragent:run
+   *   original caller's Promise reject so ChatPane handleRun takes the error branch
+   * - matches neither (already finished / nonexistent) → silent no-op (returns ok:false)
    */
   'pragent:cancel': {
     request: { runId: string };
     response: { ok: boolean };
   };
   /**
-   * 查询当前队列快照 (active + waiting)；renderer 启动 / 重连时拉一下，
-   * 跟 queueChanged 事件配套兜底。
+   * Query the current queue snapshot (active + waiting); the renderer pulls it on startup / reconnect,
+   * as a fallback paired with the queueChanged event.
    */
   'pragent:queue': {
     request: void;

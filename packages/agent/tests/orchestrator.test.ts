@@ -16,7 +16,7 @@ const context: AgentContext = {
 };
 const pr = { title: 'Fix bug', targetBranch: 'main' };
 
-/** 可编排的 fake deps：runTool 按 tool 返回固定文本；chat 顺序返回排好的回复。 */
+/** Orchestrable fake deps: runTool returns fixed text per tool; chat returns queued replies in order. */
 function makeDeps(opts: {
   toolText?: Partial<Record<'describe' | 'review' | 'ask' | 'improve', string>>;
   chatReplies: string[];
@@ -49,7 +49,7 @@ describe('extractJson', () => {
   });
 
   it('recovers JSON with unescaped raw newlines inside string values', () => {
-    // 模型常把多行 markdown 原样塞进字符串值、不转义换行——补转义后应能解析。
+    // The model often stuffs multi-line markdown into a string value without escaping newlines — should parse after we re-escape.
     const raw =
       '{"final": "## 摘要\n\n第一行\n第二行", "recommendation": {"verdict": "needs_work"}}';
     const parsed = extractJson<{ final: string; recommendation: { verdict: string } }>(raw);
@@ -60,7 +60,7 @@ describe('extractJson', () => {
 
 describe('salvageProse', () => {
   it('extracts the final/summary prose from an unparseable JSON action', () => {
-    // 截断（无闭合 } / 引号）时仍捞出散文，绝不把原始 JSON 丢给用户。
+    // When truncated (no closing } / quote) still salvage the prose, never hand raw JSON to the user.
     const truncated = '{"thought":"t","final":"## 摘要\\n\\n本 PR 修复了空值崩溃';
     expect(salvageProse(truncated)).toBe('## 摘要\n\n本 PR 修复了空值崩溃');
     expect(salvageProse('{"summary":"all good"}')).toBe('all good');
@@ -87,7 +87,7 @@ describe('stripTrailingJson', () => {
   });
 
   it('strips a truncated/unterminated trailing recommendation object', () => {
-    // 输出被 token 上限截断在判定 JSON 中途（无闭合 }）→ 仍把半截 JSON 从正文末尾剥掉。
+    // Output cut off by the token limit mid-way through the judge JSON (no closing }) → still strip the half JSON off the body end.
     const truncated = '## 摘要\n\n正文含"引号"也不应被腰斩。\n\n{"verdict": "needs_work", "rea';
     expect(stripTrailingJson(truncated)).toBe('## 摘要\n\n正文含"引号"也不应被腰斩。');
   });
@@ -116,7 +116,7 @@ describe('runReviewMicroflow', () => {
     const r = await runReviewMicroflow(deps, { context, pr });
 
     expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
-    // describe+review 合并步（一条 plan，两工具并行）→ judge → 收尾 plan（工具执行由 run 卡片代表）。
+    // describe+review merged step (one plan, two tools in parallel) → judge → summary plan (tool execution represented by run cards).
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'judge', 'plan']);
     expect(r.summary).toBe('all good');
     expect(r.recommendation).toEqual({ verdict: 'approve', reason: 'no issues' });
@@ -135,7 +135,7 @@ describe('runReviewMicroflow', () => {
     const r = await runReviewMicroflow(deps, { context, pr, maxFollowupAsks: 2 });
 
     const askCalls = toolCalls.filter((c) => c.tool === 'ask');
-    expect(askCalls.map((c) => c.question)).toEqual(['q1', 'q2']); // capped at 2（执行经 runTool / run 卡片）
+    expect(askCalls.map((c) => c.question)).toEqual(['q1', 'q2']); // capped at 2 (executed via runTool / run cards)
     expect(r.recommendation.verdict).toBe('needs_work');
   });
 
@@ -147,7 +147,7 @@ describe('runReviewMicroflow', () => {
         `{"summary": "${long}", "recommendation": {"verdict": "approve", "reason": "ok"}}`,
       ],
     });
-    // summaryMaxChars=100 远小于 500 字符的产出：现仅作提示词软约束，不再硬截断 → 完整保留。
+    // summaryMaxChars=100 is far below the 500-char output: now only a soft prompt hint, no hard truncation → fully preserved.
     const r = await runReviewMicroflow(deps, { context, pr, summaryMaxChars: 100 });
     expect(r.summary).toBe(long);
   });
@@ -161,7 +161,7 @@ describe('runReviewMicroflow', () => {
   });
 
   it('parses markdown summary + a flat trailing recommendation JSON (new format)', async () => {
-    // 新格式：纯 markdown 正文（含引号，不被腰斩）+ 末尾一行扁平判定 JSON。
+    // New format: pure markdown body (with quotes, not cut off) + a flat trailing judge JSON on the last line.
     const md = '## 摘要\n\n本 PR 直接违反了 PR 的"单一职责"原则，需修改。';
     const { deps } = makeDeps({
       chatReplies: [
@@ -175,7 +175,7 @@ describe('runReviewMicroflow', () => {
   });
 
   it('keeps the markdown summary intact when the trailing recommendation is truncated', async () => {
-    // 末尾判定被截断 → 正文完整保留（不腰斩）、判定回落 manual_review。
+    // Trailing judge truncated → body fully preserved (not cut off), judge falls back to manual_review.
     const md = '## 摘要\n\n结论：第 2 个问题直接违反了 PR 的约定。';
     const { deps } = makeDeps({
       chatReplies: ['{"severe": false}', `${md}\n\n{"verdict": "needs_w`],
@@ -209,7 +209,7 @@ describe('runReviewMicroflow', () => {
       pr,
       plan: { steps: ['describe-review', 'summary'] },
     });
-    // describe-review 步两只读工具仍并行跑；judge / asks 被跳过。
+    // The two read-only tools of the describe-review step still run in parallel; judge / asks are skipped.
     expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
     expect(r.summary).toBe('ok');
@@ -224,7 +224,7 @@ describe('runReviewMicroflow', () => {
       pr,
       plan: { steps: ['describe-review', 'improve', 'summary'] },
     });
-    // describe + review（并行）→ improve → summary（chat）。
+    // describe + review (parallel) → improve → summary (chat).
     expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review', 'improve']);
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan', 'plan']);
   });
@@ -282,7 +282,7 @@ describe('runReviewMicroflow', () => {
       }),
     };
     await runReviewMicroflow(deps, { context, pr });
-    expect(askReferenced).toEqual([true]); // 复评模式派发（带 referencedFinding）
+    expect(askReferenced).toEqual([true]); // dispatched in re-review mode (with referencedFinding)
     expect(closeCalls).toEqual([
       { runId: 'rev-1', findingId: 'review-000', byAskRunId: 'ask-1', verdict: 'replace' },
     ]);
@@ -343,7 +343,7 @@ describe('runReviewMicroflow', () => {
       ],
     });
     const r = await runReviewMicroflow(deps, { context, pr, plan: { steps: ['summary'] } });
-    // 非法计划回落 DEFAULT：describe-review → judge → asks(空) → summary。
+    // Invalid plan falls back to DEFAULT: describe-review → judge → asks (empty) → summary.
     expect(toolCalls.map((c) => c.tool)).toEqual(['describe', 'review']);
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'judge', 'plan']);
   });

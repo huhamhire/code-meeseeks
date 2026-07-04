@@ -6,12 +6,12 @@ import { MAX_RULE_FILES, type Rule, type RuleTool } from './types.js';
 const VALID_TOOLS: ReadonlyArray<RuleTool> = ['describe', 'review'];
 
 /**
- * 递归扫 dir 下所有 .md，gray-matter 解析 frontmatter + body。
- * - 单个文件解析失败（frontmatter yaml 烂 / 必填字段类型错）→ 跳过该文件，throw-safe
- * - dir 不存在 / 不可读 → 返回空数组，由调用方决定是否提示
- * - 文件名 / 路径不限制，但建议小写 + 短横线 (UI 展示 id 用相对路径)
+ * Recursively scan all .md under dir, parse frontmatter + body via gray-matter.
+ * - Single file parse failure (broken frontmatter yaml / required field type error) → skip that file, throw-safe
+ * - dir missing / unreadable → return empty array, caller decides whether to prompt
+ * - No restriction on file name / path, but lowercase + hyphen recommended (UI displays id as relative path)
  *
- * 返回的 Rule 按 priority desc + filePath asc 预排序，调用方可以直接遍历找首条。
+ * Returned Rule list is pre-sorted by priority desc + filePath asc, so callers can iterate directly to find the first.
  */
 export async function loadRules(
   dir: string,
@@ -51,10 +51,11 @@ async function dirExists(p: string): Promise<boolean> {
 }
 
 /**
- * 递归收集 dir 下所有 .md（跳过隐藏目录）。收集数到达 {@link MAX_RULE_FILES} 即停止遍历并告警——
- * 规则目录被误指向超大目录树时的性能兜底拦截，避免一次加载扫穿海量文件。返回顺序为目录遍历序，
- * 优先级排序在 loadRules 内统一做（sortRules），故此处截断丢弃的是「遍历靠后」的文件，与优先级无关
- * （命中上限另由 pickMatchingRules 把关）。
+ * Recursively collect all .md under dir (skipping hidden directories). Stop traversal and warn once the count
+ * reaches {@link MAX_RULE_FILES} — a performance fallback interception for when the rules dir is mistakenly pointed at
+ * a huge directory tree, avoiding scanning through a massive number of files in one load. Return order is the directory
+ * traversal order; priority sorting is done uniformly inside loadRules (sortRules), so what truncation drops here are
+ * the files "later in traversal", unrelated to priority (the match cap is separately gated by pickMatchingRules).
  */
 async function listMdFiles(
   dir: string,
@@ -72,7 +73,7 @@ async function listMdFiles(
       }
       const full = path.join(d, e.name);
       if (e.isDirectory()) {
-        // 跳过隐藏目录 (.git / .vscode 等)
+        // skip hidden directories (.git / .vscode etc.)
         if (e.name.startsWith('.')) continue;
         await walk(full);
       } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
@@ -87,7 +88,7 @@ async function listMdFiles(
   return out;
 }
 
-/** frontmatter 解析失败 / 字段类型不对时返回 null，由调用方记 warn 跳过 */
+/** Return null on frontmatter parse failure / wrong field type; caller logs warn and skips */
 function buildRule(
   filePath: string,
   baseDir: string,
@@ -96,7 +97,7 @@ function buildRule(
   const data = parsed.data as Record<string, unknown>;
   const body = parsed.content.trim();
 
-  // applies_to: 各字段都可省，省 = match anything (undefined regex)
+  // applies_to: every field is optional, omitted = match anything (undefined regex)
   const appliesRaw =
     (data.applies_to as Record<string, unknown> | undefined) ?? {};
   const applies = {
@@ -105,9 +106,9 @@ function buildRule(
     target_branch: compileRegex(appliesRaw.target_branch),
   };
 
-  // tools: 默认只给 /review。规则的语义本来就是"代码评审规约"，给 /describe
-  // (PR 描述生成) 注入约束会让描述偏题；想要规则同时影响 /describe 的用户显式
-  // 写 tools: [describe, review]
+  // tools: defaults to only /review. A rule's semantics are inherently a "code review spec"; injecting
+  // constraints into /describe (PR description generation) would derail the description; users who want a
+  // rule to also affect /describe explicitly write tools: [describe, review]
   const toolsRaw = data.tools;
   let tools: ReadonlyArray<RuleTool> = ['review'];
   if (Array.isArray(toolsRaw)) {
@@ -117,7 +118,7 @@ function buildRule(
     if (filtered.length > 0) tools = filtered;
   }
 
-  // custom_labels: 容错成空数组
+  // custom_labels: fall back to empty array on error
   const labelsRaw = data.custom_labels;
   const customLabels: string[] = Array.isArray(labelsRaw)
     ? labelsRaw.filter((x): x is string => typeof x === 'string')
@@ -141,10 +142,10 @@ function buildRule(
 function compileRegex(v: unknown): RegExp | undefined {
   if (typeof v !== 'string' || v === '') return undefined;
   try {
-    // 用户写的是正则源串。不强制加锚 (^/$)，由规则文件作者自行决定
+    // user writes a regex source string. No forced anchors (^/$); left to the rule file author to decide
     return new RegExp(v);
   } catch {
-    // 非法正则：当作未配置该字段，规则匹配时跳过；buildRule 不抛
+    // invalid regex: treat as if the field is not configured, skip during rule matching; buildRule does not throw
     return undefined;
   }
 }

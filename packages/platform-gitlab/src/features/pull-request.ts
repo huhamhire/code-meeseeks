@@ -19,7 +19,7 @@ import type { GitLabClient } from '../client.js';
 import { mapUser, projectId } from '../utils.js';
 import type { GlApprovals, GlCommit, GlMr, GlUser } from '../types.js';
 
-/** GitLab PR 操作领域：发现（三类筛选）、提交、审批、合并。GitLab 不提供活动时间线事件。 */
+/** GitLab PR operations domain: discovery (three filter categories), commits, approval, merge. GitLab provides no activity timeline events. */
 export class GitLabPullRequestService extends BasePullRequestService {
   constructor(
     ctx: ConnectionContext,
@@ -29,14 +29,14 @@ export class GitLabPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 发现待处理 MR：scope=all 全局跨项目分页命中后逐条取详情归一。
+   * Discover pending MRs: scope=all paginates globally across projects, then fetch and normalize details one by one.
    *
-   * 未 ping（无当前用户）则无法构造查询，直接返回空；逐条详情并发执行，单条失败丢弃该条。
+   * Without a ping (no current user) the query can't be built, so return empty directly; per-item details run concurrently, and a single failure discards that item.
    */
   async listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]> {
     const me = this.ctx.getCurrentUser()?.name;
-    // scope=all 全局跨项目；按 filter 切换 reviewer/author/assignee 限定（默认待我评审）。
-    // 未 ping（无 me）则无法构造 → 空。
+    // scope=all is global across projects; switch reviewer/author/assignee scoping by filter (defaults to awaiting my review).
+    // Without a ping (no me) it can't be built → empty.
     if (!me) return [];
     const items: GlMr[] = [];
     for await (const mr of this.client.paginate<GlMr>(
@@ -45,7 +45,7 @@ export class GitLabPullRequestService extends BasePullRequestService {
     )) {
       items.push(mr);
     }
-    // 每条再取详情（diff_refs / detailed_merge_status）+ 审批（approved_by）。单个失败丢弃该条。
+    // For each, fetch details (diff_refs / detailed_merge_status) + approval (approved_by). A single failure discards that item.
     const results = await Promise.allSettled(items.map((mr) => this.loadMr(mr)));
     return results
       .filter((r): r is PromiseFulfilledResult<PullRequest> => r.status === 'fulfilled')
@@ -53,9 +53,9 @@ export class GitLabPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 按一条 MR 列表项加载完整 MR：取详情，审批可用时再取 approved_by，组装审批人后归一。
+   * Load a full MR from a single MR list item: fetch details, and when approval is available fetch approved_by, assemble approvers, then normalize.
    *
-   * 审批端点因 tier / 权限不可用时按无人 approve 处理。
+   * When the approval endpoint is unavailable due to tier / permissions, treat it as nobody having approved.
    */
   private async loadMr(listItem: GlMr): Promise<PullRequest> {
     const repo = this.parseProjectPath(listItem.web_url);
@@ -67,13 +67,13 @@ export class GitLabPullRequestService extends BasePullRequestService {
         const approvals = await this.client.get<GlApprovals>(`${base}/approvals`);
         approvedUsers = (approvals.approved_by ?? []).map((a) => a.user);
       } catch {
-        /* 审批不可用（tier/权限）→ 视作无人 approve */
+        /* approval unavailable (tier/permissions) → treat as nobody approved */
       }
     }
     return this.mapMr(detail, repo, this.buildReviewers(detail, approvedUsers));
   }
 
-  /** 按 repo + iid 从远端拉单个 MR（复用 loadMr 同款组装）；404 / 403 由 client 抛出供上层归一。 */
+  /** Fetch a single MR from the remote by repo + iid (reusing loadMr's assembly); 404 / 403 are thrown by the client for the caller to normalize. */
   async getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest> {
     const base = `/projects/${projectId(repo)}/merge_requests/${prId}`;
     const detail = await this.client.get<GlMr>(base);
@@ -83,14 +83,14 @@ export class GitLabPullRequestService extends BasePullRequestService {
         const approvals = await this.client.get<GlApprovals>(`${base}/approvals`);
         approvedUsers = (approvals.approved_by ?? []).map((a) => a.user);
       } catch {
-        /* 审批不可用（tier/权限）→ 视作无人 approve */
+        /* approval unavailable (tier/permissions) → treat as nobody approved */
       }
     }
     return this.mapMr(detail, repo, this.buildReviewers(detail, approvedUsers));
   }
 
   /**
-   * 列出 MR 提交：GitLab 端点已是 newest-first，与契约一致，无需反转。
+   * List MR commits: the GitLab endpoint is already newest-first, consistent with the contract, no reversal needed.
    */
   async listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]> {
     const out: PrCommit[] = [];
@@ -99,24 +99,24 @@ export class GitLabPullRequestService extends BasePullRequestService {
     )) {
       out.push(this.mapCommit(c));
     }
-    // GitLab MR commits 端点已是 reverse-chronological（newest-first），契约同要求，无需反转。
+    // The GitLab MR commits endpoint is already reverse-chronological (newest-first), matching the contract, no reversal needed.
     return out;
   }
 
   /**
-   * GitLab 不参与活动时间线（capabilities.activityTimeline=false）：无可靠的统一决断事件源，恒返回空。
+   * GitLab does not participate in the activity timeline (capabilities.activityTimeline=false): no reliable unified decision event source, always returns empty.
    */
   async listPullRequestActivity(_repo: RepoRef, _prId: string): Promise<PrActivityEvent[]> {
-    // 差异化设计：GitLab 不参与活动时间线（capabilities.activityTimeline=false，PR 标签页退化为纯
-    // 评论视图），故无需提供决断事件。GitLab 也没有统一活动事件源——CE 无审批、审批仅以脆弱的英文
-    // 系统 note 体现，与 Bitbucket /activities、GitHub /reviews 的可靠时间戳事件不对等——返回空。
+    // Differentiated design: GitLab does not participate in the activity timeline (capabilities.activityTimeline=false, the PR tab degrades to a pure
+    // comment view), so no decision events are needed. GitLab also has no unified activity event source—CE has no approval, and approval is only reflected in fragile English
+    // system notes, not on par with the reliable timestamped events of Bitbucket /activities or GitHub /reviews—return empty.
     return [];
   }
 
   /**
-   * 写当前用户的 review 状态：approved / unapproved 分别打 approve / unapprove 端点。
+   * Write the current user's review status: approved / unapproved hit the approve / unapprove endpoints respectively.
    *
-   * GitLab 无 "request changes" 概念，needsWork 不会被 UI 触发，防御性抛错。
+   * GitLab has no "request changes" concept, needsWork won't be triggered by the UI, defensively throw.
    */
   async setPullRequestReviewStatus(
     repo: RepoRef,
@@ -132,27 +132,27 @@ export class GitLabPullRequestService extends BasePullRequestService {
       await this.client.post(`${base}/unapprove`, {});
       return;
     }
-    // needsWork：GitLab 无 "request changes" 概念。capabilities.reviewStatuses 不含 needsWork，
-    // UI 不会触发；防御性抛错。
+    // needsWork: GitLab has no "request changes" concept. capabilities.reviewStatuses doesn't include needsWork,
+    // the UI won't trigger it; defensively throw.
     throw new Error('GitLab does not support the "request changes" review status');
   }
 
   /**
-   * 合并 MR（squash / ff 由仓库设置决定）。
+   * Merge an MR (squash / ff decided by repo settings).
    *
-   * 不可合并（冲突 / 未批 / 流水线未过 / 无权限）时 GitLab 返回 405/406/409，错误携带 message 冒泡。
+   * When not mergeable (conflict / unapproved / pipeline not passing / no permission), GitLab returns 405/406/409, and the error bubbles up carrying the message.
    */
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {
-    // PUT /merge：squash/ff 由仓库设置决定。失败（冲突 / 未批 / 流水线未过 / 权限）→ 405/406/409 带 message。
+    // PUT /merge: squash/ff decided by repo settings. Failure (conflict / unapproved / pipeline not passing / permission) → 405/406/409 with message.
     await this.client.put(`/projects/${projectId(repo)}/merge_requests/${prId}/merge`, {});
   }
 
-  // ---- 映射（领域私有）----
+  // ---- Mapping (domain-private) ----
 
   /**
-   * 把发现筛选分类映射为 /merge_requests 查询参数（scope=all 全局，按角色限定）。
+   * Map a discovery filter category to /merge_requests query params (scope=all global, scoped by role).
    *
-   * GitLab 无 "mentioned" 概念，该分类退化为「待我评审」。
+   * GitLab has no "mentioned" concept, so that category degrades to "awaiting my review".
    */
   private discoveryParams(filter: PrDiscoveryFilter, me: string): Record<string, string> {
     const base = { scope: 'all', state: 'opened' };
@@ -169,8 +169,8 @@ export class GitLabPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 从 MR web_url 解析项目路径：`https://host/<group>/<sub>/<project>/-/merge_requests/<iid>`
-   * → projectKey=`group/sub`（嵌套 namespace），repoSlug=`project`。
+   * Parse the project path from an MR web_url: `https://host/<group>/<sub>/<project>/-/merge_requests/<iid>`
+   * → projectKey=`group/sub` (nested namespace), repoSlug=`project`.
    */
   private parseProjectPath(webUrl: string): RepoRef {
     let pathname: string;
@@ -187,9 +187,9 @@ export class GitLabPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 把 GitLab detailed_merge_status 映射为统一否决原因码。
+   * Map GitLab detailed_merge_status to a unified veto reason code.
    *
-   * 后台不拼本地化文案，由前端按码做 i18n；未识别的状态归为 notMergeable。
+   * The backend doesn't assemble localized text; the frontend does i18n by code; unrecognized statuses fall under notMergeable.
    */
   private mergeStatusCode(dms: string): MergeVetoCode {
     switch (dms) {
@@ -222,10 +222,10 @@ export class GitLabPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 把 GitLab MR 的合并状态映射为统一 MergeStatus（full 保真）。
+   * Map a GitLab MR's merge state to a unified MergeStatus (full fidelity).
    *
-   * 有 detailed_merge_status 时按其判定 canMerge 与否决码（未细分原因保留原始串到 detail 便于排障）；
-   * 旧实例缺该字段时退回 merge_status 近似。
+   * With detailed_merge_status, determine canMerge and veto codes from it (unsubdivided reasons keep the raw string in detail for troubleshooting);
+   * when old instances lack this field, fall back to the merge_status approximation.
    */
   private mapMergeStatus(mr: GlMr): MergeStatus {
     const dms = mr.detailed_merge_status;
@@ -236,11 +236,11 @@ export class GitLabPullRequestService extends BasePullRequestService {
       canMerge = dms === 'mergeable';
       if (!canMerge) {
         const code = this.mergeStatusCode(dms);
-        // 未细分原因（default）保留原始 dms 到 detail，便于排障
+        // Unsubdivided reason (default) keeps the raw dms in detail for troubleshooting
         vetoes.push(code === 'notMergeable' ? { code, detail: dms } : { code });
       }
     } else {
-      // 旧实例无 detailed_merge_status：退 merge_status。
+      // Old instances lack detailed_merge_status: fall back to merge_status.
       canMerge = mr.merge_status === 'can_be_merged' && !conflicted;
       if (conflicted) vetoes.push({ code: 'conflict' });
       else if (mr.merge_status === 'cannot_be_merged') vetoes.push({ code: 'notMergeable' });
@@ -251,15 +251,15 @@ export class GitLabPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 组装审批人列表：先以指派的 reviewer 占位（unapproved），再用 approved_by 覆盖 / 补充为 approved。
+   * Assemble the approver list: first placeholder the assigned reviewers (unapproved), then override / supplement to approved with approved_by.
    */
   private buildReviewers(mr: GlMr, approvedUsers: GlUser[]): Reviewer[] {
     const byUser = new Map<string, Reviewer>();
-    // 先放指派的 reviewer（默认未批）。
+    // First add the assigned reviewers (unapproved by default).
     for (const u of mr.reviewers ?? []) {
       byUser.set(u.username, { ...mapUser(u), status: 'unapproved' });
     }
-    // approved_by 覆盖 / 补充为 approved（含未在 reviewers 列表但已批的人）。
+    // approved_by overrides / supplements to approved (including people not in the reviewers list but who have approved).
     for (const u of approvedUsers) {
       byUser.set(u.username, { ...mapUser(u), status: 'approved' });
     }
@@ -267,9 +267,9 @@ export class GitLabPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 把 GitLab MR 详情（含已组装的审批人）归一为中性 PullRequest。
+   * Normalize GitLab MR details (with assembled approvers) into a neutral PullRequest.
    *
-   * 状态按 merged / opened / 其余映射为 merged / open / declined；source/target sha 优先取 diff_refs。
+   * State maps merged / opened / others to merged / open / declined; source/target sha prefer diff_refs.
    */
   private mapMr(mr: GlMr, repo: RepoRef, reviewers: Reviewer[]): PullRequest {
     const state: PullRequest['state'] =
@@ -291,13 +291,13 @@ export class GitLabPullRequestService extends BasePullRequestService {
       reviewers,
       mergeStatus,
       hasConflict: mergeStatus.conflicted,
-      // 用户 note 数（系统 note 不计、回复也是 note）→ 含回复（capabilities 标 true）。
+      // User note count (system notes excluded, replies are also notes) → includes replies (capabilities marks true).
       commentCount: mr.user_notes_count,
     };
   }
 
   /**
-   * 把 GitLab 提交归一为中性 PrCommit；缺字段时按 git 名 / 短 sha / 标题等逐级回退。
+   * Normalize a GitLab commit into a neutral PrCommit; when fields are missing, fall back step by step to git name / short sha / title, etc.
    */
   private mapCommit(c: GlCommit): PrCommit {
     const authorName = c.author_name ?? 'unknown';

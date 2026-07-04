@@ -24,7 +24,7 @@ import {
   type PrIndexFile,
 } from './pr-state.js';
 
-/** Bitbucket reviewer.status → 本地 LocalPrStatus 单向映射（poll 时把远端权威态拉下来）。 */
+/** One-way mapping Bitbucket reviewer.status → local LocalPrStatus (poll pulls down the remote authoritative state). */
 function statusFromReviewer(s: ReviewerStatus | undefined): LocalPrStatus {
   if (s === 'approved') return 'approved';
   if (s === 'needsWork') return 'needs_work';
@@ -38,38 +38,40 @@ export interface PollerConnection {
 
 export interface PollerOptions {
   connections: ReadonlyArray<PollerConnection>;
-  /** 活跃 PR 存储（`state/` 根）：索引 + 在场 PR 的 meta / 评论 / runs 等。 */
+  /** Active PR store (`state/` root): index + meta / comments / runs etc. for present PRs. */
   stateStore: StateStore;
   /**
-   * 归档 PR 冷存储（`archived/` 根，与 state/ 平级）。PR 退场（软删）时其 `prs/<hash>/` 整树从
-   * stateStore 搬入此处、复活时搬回；硬清按同一 grace 策略从此处删除。索引仍只在 stateStore 维护。
+   * Archived PR cold storage (`archived/` root, a sibling of state/). When a PR departs (soft-delete) its
+   * `prs/<hash>/` whole tree is moved from stateStore into here, and moved back on revival; hard purge deletes
+   * from here under the same grace policy. The index is still maintained only in stateStore.
    */
   archiveStore: StateStore;
   intervalSeconds: number;
   logger: Logger;
-  /** 用于测试注入；默认 Date.now() */
+  /** For test injection; defaults to Date.now() */
   now?: () => Date;
-  /** 每次 tick 完成（含 errors=N 但未抛出）后回调；用于 main → renderer 推送 */
+  /** Callback after each tick completes (including errors=N but not thrown); used for main → renderer push */
   onTick?: (info: { at: string; result: PollResult }) => void;
   /**
-   * 本轮 poll 发现"有新增 / 内容变更的 PR"的 repo 集合（去重）。main 拿到后可以
-   * 顺手 `repoMirror.syncMirror(...)` 把本地镜像跟上，让用户随后点开 PR 时省一
-   * 趟 fetch。失败 / 无 PR 变化的连接不会出现在集合中。
+   * The set of repos where this poll round found "PRs newly added / content-changed" (deduped). After receiving it,
+   * main can conveniently `repoMirror.syncMirror(...)` to catch the local mirror up, saving the user a fetch when they
+   * later open the PR. Connections that failed / had no PR changes do not appear in the set.
    *
-   * 仅触发条件：该 repo 至少有一个 PR 在本轮被识别为 added 或 changed
-   * (updatedAt 跳变)。removed 不算 (PR 关单一般不影响 commit 范围)。
+   * Trigger condition only: that repo has at least one PR recognized this round as added or changed (updatedAt jumped).
+   * removed does not count (closing a PR generally does not affect the commit range).
    */
   onPrsChanged?: (repos: ReadonlyArray<ChangedRepo>) => void;
   /**
-   * 本轮 poll 新发生的「值得提醒」事件（新 PR / 被 @ / 被回复）。main 据通知配置弹系统通知。仅在**已有基线**
-   * （索引此前非空）时产出，避免首启 / 批量涌入时通知风暴；空数组不回调。详见 PollNotificationEvent。
+   * "Notification-worthy" events newly occurring this poll round (new PR / @mentioned / replied-to). main pops system
+   * notifications per notification config. Produced only when **a baseline already exists** (the index was previously
+   * non-empty), avoiding a notification storm on first launch / bulk influx; an empty array does not call back. See PollNotificationEvent.
    */
   onNotify?: (events: ReadonlyArray<PollNotificationEvent>) => void;
 }
 
 /**
- * Poll 时通知 main 哪些 repo 有 PR 变更。字段是 PrIdentity 的 repo 投影 (去掉
- * remoteId / url)，足够 main 拼 RepoIdentity 并触发 syncMirror。
+ * Notify main during poll which repos have PR changes. The fields are the repo projection of PrIdentity (dropping
+ * remoteId / url), enough for main to assemble RepoIdentity and trigger syncMirror.
  */
 export interface ChangedRepo {
   platform: PlatformKind;
@@ -81,22 +83,22 @@ export interface ChangedRepo {
 const EMPTY: PollResult = { fetched: 0, changed: 0, added: 0, removed: 0, errors: 0 };
 
 /**
- * 周期性 poll，把跨连接发现的 PR 汇入 `state/pull-requests.json`。
+ * Periodic poll, merging PRs discovered across connections into `state/pull-requests.json`.
  *
- * 写入策略：保留旧 PR 的 localStatus 与 discoveredAt；每轮重写整文件
- * （单写者 + 原子写，规模小时简单胜过 diff 合并）。
+ * Write strategy: preserve old PRs' localStatus and discoveredAt; rewrite the whole file each round
+ * (single writer + atomic write — at small scale, simplicity beats diff merging).
  *
- * 并发：同一 tick 不重入。
+ * Concurrency: no re-entry within the same tick.
  */
 export class Poller {
   private interval?: ReturnType<typeof setInterval>;
   private inFlight = false;
-  /** tick 在 inFlight 期间又被请求 → 标记，当前轮结束后紧接着补跑一轮（不丢请求）。 */
+  /** tick requested again while inFlight → mark it, and immediately run one more round after the current one (no request dropped). */
   private rerunRequested = false;
   private _lastPollAt: string | null = null;
-  /** 可热替换的连接集合（设置页改连接 / 切换启用时换）。初值取自构造 opts */
+  /** Hot-swappable connection set (swapped when the settings page changes connections / toggles enablement). Initial value from constructor opts */
   private connections: ReadonlyArray<PollerConnection>;
-  /** 可热替换的轮询间隔（秒）。初值取自构造 opts */
+  /** Hot-swappable poll interval (seconds). Initial value from constructor opts */
   private intervalSeconds: number;
 
   constructor(private readonly opts: PollerOptions) {
@@ -105,22 +107,24 @@ export class Poller {
   }
 
   /**
-   * 热替换轮询的连接集合（设置页改连接 / 切换启用后调用）。下一轮 poll 生效；
-   * 不在此处主动 tick，调用方决定是否立即触发一次。
+   * Hot-swap the poll's connection set (called after the settings page changes connections / toggles enablement).
+   * Takes effect next poll round; does not actively tick here — the caller decides whether to trigger one immediately.
    */
   setConnections(connections: ReadonlyArray<PollerConnection>): void {
     this.connections = connections;
   }
 
   /**
-   * 归档所有「不属于 activeIds」连接的 PR，使其进入 purge 路径。
+   * Archive all PRs of connections "not in activeIds", putting them on the purge path.
    *
-   * 背景：单活动连接模型下 poller 只喂活动连接，软删只处理本轮 poll 到的连接
-   * （seenByConnection）。切换/禁用连接后，旧连接的 PR 永远不会被 poll 到 → 永不
-   * archived → 永不 purge，磁盘上累积陈旧状态。本方法在**用户显式切换/禁用连接**时由
-   * main 调用，把这些 PR 标 archivedAt；后续任意一轮 poll 的 purge 段（grace 期满）会清掉。
+   * Background: under the single-active-connection model the poller only feeds the active connection, and soft-delete
+   * only handles connections polled this round (seenByConnection). After switching/disabling a connection, the old
+   * connection's PRs are never polled → never archived → never purged, accumulating stale state on disk. This method is
+   * called by main on **the user explicitly switching/disabling a connection**, marking these PRs' archivedAt; the purge
+   * segment of any later poll round (grace expired) will clean them up.
    *
-   * 仅由显式动作触发（非网络故障），故不违反「一次网络抖动不误删整库」的不变式。
+   * Triggered only by an explicit action (not a network failure), so it does not violate the "one network blip must not
+   * wrongly delete the whole store" invariant.
    */
   async archiveConnectionsExcept(activeIds: readonly string[]): Promise<void> {
     const active = new Set(activeIds);
@@ -131,7 +135,7 @@ export class Poller {
     let dirty = false;
     for (const [localId, entry] of Object.entries(prs)) {
       if (!active.has(entry.identity.connectionId) && !entry.archivedAt) {
-        // 整树搬入归档冷存储后再标 archivedAt（搬迁先于索引落盘，崩溃可幂等重来）。
+        // Move the whole tree into archive cold storage, then mark archivedAt (migration precedes index persistence; a crash can idempotently retry).
         await relocateTree(this.opts.stateStore, this.opts.archiveStore, prDirKey(localId));
         prs[localId] = { ...entry, archivedAt: now };
         dirty = true;
@@ -143,8 +147,8 @@ export class Poller {
   }
 
   /**
-   * 热替换轮询间隔（秒）。运行中则按新周期重建定时器（不立即 tick）；下一次触发
-   * 起用新间隔。设置页改轮询间隔后调用，无需重启。
+   * Hot-swap the poll interval (seconds). While running, rebuild the timer on the new period (does not tick immediately);
+   * the new interval takes effect from the next trigger. Called after the settings page changes the poll interval, no restart needed.
    */
   setIntervalSeconds(seconds: number): void {
     this.intervalSeconds = seconds;
@@ -154,15 +158,16 @@ export class Poller {
     }
   }
 
-  /** 最近一次成功 pollOnce 完成的时间（ISO）；从未跑过返回 null */
+  /** Time (ISO) the most recent successful pollOnce completed; returns null if never run */
   getLastPollAt(): string | null {
     return this._lastPollAt;
   }
 
   /**
-   * 启动常驻轮询。`immediate=true`（默认）立刻先跑一轮；`immediate=false` 只装定时器、
-   * 不跑首轮——用于「活动连接无缓存身份」场景：避免用 me=null 跑出半成品首轮，改由调用方
-   * 在 ping 确认身份后再触发首次 tick（见 index.ts pingConnections）。
+   * Start the resident poll. `immediate=true` (default) runs one round right away; `immediate=false` only installs the
+   * timer and skips the first round — for the "active connection has no cached identity" scenario: avoids running a
+   * half-baked first round with me=null, letting the caller instead trigger the first tick after ping confirms the
+   * identity (see index.ts pingConnections).
    */
   start(immediate = true): void {
     if (this.interval) return;
@@ -178,9 +183,10 @@ export class Poller {
   }
 
   /**
-   * 立刻发起一次 poll。若上一次还在跑，则不并发，而是登记「补跑」：当前轮结束后紧接着再跑
-   * 一轮。这样在「ping 异步补到 currentUser 后请求重新分类」等场景下，请求不会因恰好撞上
-   * 进行中的 poll 而被丢弃。
+   * Trigger a poll immediately. If the previous one is still running, do not run concurrently but register a "rerun":
+   * run one more round right after the current one ends. This way, in scenarios like "requesting re-classification after
+   * ping asynchronously fills in currentUser", the request is not dropped just because it happened to collide with an
+   * in-progress poll.
    */
   async tick(): Promise<PollResult> {
     if (this.inFlight) {
@@ -201,31 +207,31 @@ export class Poller {
   }
 
   /**
-   * 单轮 poll 的安全 invariants（用户硬要求 / 设计文档化）：
+   * Safety invariants for a single poll round (hard user requirements / documented in design):
    *
-   * 1. **拉取失败 → 不动本地** ：单个连接 listPendingPullRequests 抛错时，**只算**
-   *    `errors++`，**不**：
-   *      - 写其名下任何 PR 的 meta
-   *      - 把名下既有 PR 软删 (archive)
-   *      - 从索引中剔除任何条目
-   *    实现靠 seenByConnection 只装成功连接的 hash 集合；soft archive 循环只迭代
-   *    seenByConnection 里的连接。
+   * 1. **Fetch failure → do not touch local**: when a single connection's listPendingPullRequests throws, **only**
+   *    count `errors++`, and do **not**:
+   *      - write meta for any of its PRs
+   *      - soft-delete (archive) any of its existing PRs
+   *      - remove any entry from the index
+   *    Implemented via seenByConnection holding only successful connections' hash sets; the soft-archive loop iterates
+   *    only connections in seenByConnection.
    *
-   * 2. **所有连接全失败 → 索引文件 0 写** ：dirty flag 控制；磁盘 mtime 不变，
-   *    避免上层 file watcher 误触发 / 备份工具误以为有改动。
+   * 2. **All connections fail → 0 writes to the index file**: controlled by the dirty flag; disk mtime unchanged,
+   *    avoiding false triggers of the upper file watcher / a backup tool mistakenly thinking there was a change.
    *
-   * 3. **硬清 (grace 期满 archive 条目)** 跟当轮 poll 成败无关：archivedAt 是过去
-   *    某次成功 poll 决定的事实，时间到了该清就清。
+   * 3. **Hard purge (archive entries past grace)** is unrelated to this round's poll success/failure: archivedAt is a
+   *    fact decided by some past successful poll; once the time is up, purge as due.
    */
   private async pollOnce(): Promise<PollResult> {
     const now = (this.opts.now?.() ?? new Date()).toISOString();
     const nowMs = Date.parse(now);
     const indexFile = await readPrIndex(this.opts.stateStore);
-    // 索引拷一份到 mutable Map 方便增删；条目缺失时退回到空 Map (首次 poll)
+    // Copy the index into a mutable Map for easy add/remove; fall back to an empty Map when the entry is missing (first poll)
     const indexByLocalId = new Map<string, PrIndexEntry>(Object.entries(indexFile?.prs ?? {}));
-    // 已有基线 = 本轮之前索引已非空。首轮 / 清库后的首 poll 不产出通知事件（仅建基线），避免涌入风暴。
+    // Baseline exists = the index was already non-empty before this round. The first round / first poll after clearing the store produces no notification events (only builds the baseline), avoiding an influx storm.
     const hadBaseline = indexByLocalId.size > 0;
-    // 本轮新发生的通知事件（新 PR / 被 @ / 被回复）；poll 末投影给 main 弹系统通知。
+    // Notification events newly occurring this round (new PR / @mentioned / replied-to); projected to main at poll end to pop system notifications.
     const notifyEvents: PollNotificationEvent[] = [];
 
     let fetched = 0;
@@ -233,25 +239,27 @@ export class Poller {
     let added = 0;
     let removed = 0;
     let errors = 0;
-    // dirty 跟踪本轮是否有任何状态变化 (meta 写入 / 软删 / 硬清)。全无变化时
-    // 跳过索引文件 rewrite，磁盘 mtime 不动 (invariant #2)
+    // dirty tracks whether this round had any state change (meta write / soft-delete / hard purge). When there is
+    // no change at all, skip the index file rewrite and leave disk mtime untouched (invariant #2)
     let dirty = false;
-    // 本轮发现"有新增 / 内容变更 PR"的 repo 集合 (去重)；用于 onPrsChanged
-    // 通知 main 触发 syncMirror。key = `${connectionId}|${group}|${repo}`
+    // The set of repos where this round found "PRs newly added / content-changed" (deduped); used by onPrsChanged
+    // to notify main to trigger syncMirror. key = `${connectionId}|${group}|${repo}`
     const changedReposByKey = new Map<string, ChangedRepo>();
 
-    // 每个**成功** poll 的连接看到的 localId 集合。失败的连接不进入此 map (invariant #1)
+    // The localId set seen by each **successful** poll connection. Failed connections do not enter this map (invariant #1)
     const seenByConnection = new Map<string, Set<string>>();
 
     for (const { connectionId, adapter } of this.connections) {
       const me = adapter.connection.getCurrentUser();
       try {
         const caps = adapter.connection.capabilities();
-        // 评论计数是否「含回复」：true（GitHub/GitLab）→ 计数/updatedAt 变化才扫；false（Bitbucket，
-        // 计数仅顶层、updatedDate 也不随评论跳变）→ 对待处理 PR 每轮兜底扫，否则漏「回复」类通知。
+        // Whether the comment count "includes replies": true (GitHub/GitLab) → scan only when the count/updatedAt changes;
+        // false (Bitbucket — the count is top-level only and updatedDate does not jump with comments) → fallback-scan
+        // pending PRs every round, otherwise "reply"-type notifications are missed.
         const commentCountIncludesReplies = caps.commentCountIncludesReplies;
-        // 发现分类：平台提供多类（GitHub 四类）→ 逐类轮询并 union 打标，让 renderer 切标签
-        // 走本地缓存而非每次拉远端；无分类的平台（Bitbucket）单轮询、标记为空数组。
+        // Discovery categories: a platform providing multiple categories (GitHub's four) → poll each and union-tag, so the
+        // renderer switches tabs via local cache instead of fetching remote each time; a platform without categories
+        // (Bitbucket) is polled once and tagged with an empty array.
         const filters = caps.discoveryFilters ?? [];
         const merged = new Map<string, { pr: PullRequest; matched: PrDiscoveryFilter[] }>();
         const collect = async (filter?: PrDiscoveryFilter): Promise<void> => {
@@ -274,16 +282,16 @@ export class Poller {
         seenByConnection.set(connectionId, seen);
 
         for (const { pr, matched } of merged.values()) {
-          // hash localId：platform + 连接 + group + repo + remoteId 一锅哈希。
-          // 同一 connection 下不同 repo 同 PR id 也能区分开 (Bitbucket 的 PR id 是 per-repo
-          // 递增的)；platform 字段让多平台扩展时 schema 不必改
+          // hash localId: platform + connection + group + repo + remoteId hashed all together.
+          // Different repos under the same connection with the same PR id can also be distinguished (Bitbucket's PR id is
+          // per-repo incrementing); the platform field means the schema need not change when expanding to multiple platforms
           const identity = {
             platform: adapter.kind,
             connectionId,
             group: pr.repo.projectKey,
             repo: pr.repo.repoSlug,
             remoteId: pr.remoteId,
-            url: pr.url, // 仅快照，不进 hash
+            url: pr.url, // snapshot only, not part of the hash
           };
           const localId = prHashId(identity);
           seen.add(localId);
@@ -304,11 +312,11 @@ export class Poller {
             }
           }
 
-          // localStatus 直接镜像远端当前用户的 reviewer.status（远端为权威态）。
-          // UI 上点 approve / needs work 时会先 PUT 到远端，再下一轮 poll 时此处取回。
-          // currentUser 未知时（ping 未完成/失败）无法可靠判定本人评审态：此时**保留已记录的
-          // 状态**而非覆盖成 pending，避免「已评审」被误降级（首轮 poll 已由 main 确保 me 就绪，
-          // 此分支仅作 ping 异常时的兜底）。
+          // localStatus directly mirrors the remote current user's reviewer.status (remote is authoritative).
+          // Clicking approve / needs work in the UI first PUTs to remote, and this fetches it back on the next poll round.
+          // When currentUser is unknown (ping incomplete/failed) one's own review state cannot be reliably determined:
+          // in that case **keep the recorded status** rather than overwriting to pending, avoiding "reviewed" being wrongly
+          // downgraded (the first poll round already has main ensure me is ready; this branch is only a fallback for ping errors).
           let localStatus: LocalPrStatus;
           if (me) {
             const mine = pr.reviewers.find((r) => r.name === me.name);
@@ -318,8 +326,8 @@ export class Poller {
             localStatus = prevMeta?.pr.localStatus ?? 'pending';
           }
 
-          // 通知仅针对「待处理」(localStatus==='pending') 的 PR：已 approve / 标记 needs_work 的不再打扰。
-          // 新 PR（仅已有基线时，避免首启涌入风暴）。mention/reply 事件在下方评论扫描处投影（同样受 pending 门控）。
+          // Notifications only target "pending" (localStatus==='pending') PRs: already-approved / marked-needs_work ones are no longer disturbed.
+          // New PRs (only when a baseline exists, to avoid a first-launch influx storm). mention/reply events are projected at the comment scan below (also gated by pending).
           const notifiable = hadBaseline && localStatus === 'pending';
           if (isAdded && notifiable) {
             notifyEvents.push({
@@ -333,14 +341,14 @@ export class Poller {
             });
           }
 
-          // 「我创建的」PR（作者为本人）通知：被标记需修改 / 出现冲突。仅在已有基线 + 已知 PR（prev）时探测；
-          // 各自的上一轮快照字段缺失（升级前旧索引）时按「基线」处理——只在下方索引写入处播种、不补发历史事件。
+          // "PRs I authored" (author is yourself) notifications: marked needs-work / a conflict appeared. Detected only when a baseline exists + PR is known (prev);
+          // when the respective prior-round snapshot fields are missing (old index from before the upgrade), treated as "baseline" — only seeded at the index write below, not backfilled with historical events.
           const authoredByMe = !!me && pr.author.name === me.name;
           const needsWorkReviewers = pr.reviewers
             .filter((r) => r.status === 'needsWork')
             .map((r) => r.name);
           if (authoredByMe && hadBaseline && prev) {
-            // 新出现的「需修改」评审人（本轮在 needsWork、上一轮不在）→ authored_needs_work。
+            // Newly appearing "needs work" reviewers (in needsWork this round, not last round) → authored_needs_work.
             const prevNW = prev.needsWorkReviewers;
             if (prevNW !== undefined) {
               const fresh = needsWorkReviewers.filter((n) => !prevNW.includes(n));
@@ -357,7 +365,7 @@ export class Poller {
                 });
               }
             }
-            // 合并冲突 false→true → authored_conflict（无具体发起人，actor 取 PR 作者本人）。
+            // Merge conflict false→true → authored_conflict (no specific initiator; actor is the PR author themselves).
             if (prev.hasConflict === false && pr.hasConflict === true) {
               notifyEvents.push({
                 kind: 'authored_conflict',
@@ -371,13 +379,14 @@ export class Poller {
             }
           }
 
-          // 复活：上一轮处于归档态（数据已搬入 archived/）→ 先把整树搬回活跃存储，再写 meta，
-          // 让 runs / 评论 / 已读水位等历史与新 meta 同处活跃目录（搬回先于 writePrMeta，避免 split）。
+          // Revival: last round was in archived state (data already moved into archived/) → first move the whole tree back
+          // to active storage, then write meta, so runs / comments / read watermark history sits in the active directory
+          // together with the new meta (moving back precedes writePrMeta, to avoid a split).
           if (prev?.archivedAt) {
             await relocateTree(this.opts.archiveStore, this.opts.stateStore, prDirKey(localId));
           }
 
-          // 完整 PR 元数据落到 per-PR meta.json。platform 字段让 meta 自描述
+          // Full PR metadata written to per-PR meta.json. The platform field makes meta self-describing
           await writePrMeta(this.opts.stateStore, localId, {
             ...pr,
             localId,
@@ -390,17 +399,18 @@ export class Poller {
           });
           dirty = true;
 
-          // 未读 mention（见 pr-state computeUnread / computeUnreadMentionCount）：拉评论扫「@我 / 回复我」。
-          // 游标 lastMentionAt 取较大值（驱动未读点）；mentionAts 与历史并集去重、按时间降序留最近 MENTION_ATS_CAP
-          // 条（驱动未读点旁的计数）。新到达 / 新 commit 未读无需在此处理（读取时分别按发现时间 vs 未读纪元、head sha
-          // 比对派生）。read-state 仅由 markRead 写，poll 不碰。
+          // Unread mentions (see pr-state computeUnread / computeUnreadMentionCount): fetch comments and scan "@me / reply-to-me".
+          // The cursor lastMentionAt takes the larger value (drives the unread dot); mentionAts dedupes against the historical
+          // union and keeps the most recent MENTION_ATS_CAP entries in descending time order (drives the count next to the
+          // unread dot). New-arrival / new-commit unread need not be handled here (on read they are derived by discovery time
+          // vs unread epoch, and head sha comparison respectively). read-state is written only by markRead; poll does not touch it.
           //
-          // 评论跟踪**仅针对「待处理」(notifiable=pending) PR**（含「待我评审」与「我创建的」），且需 me 已知。
-          // 是否拉评论：
-          //   - 含回复的平台（commentCountIncludesReplies）：仅当 updatedAt 跳变或 commentCount 变化（可能有新评论）
-          //     才扫——省请求。
-          //   - 不含回复的平台（Bitbucket：updatedDate 不随评论跳、commentCount 仅顶层不含回复）：无任何免费的
-          //     「含回复」信号 → 对待处理 PR 每轮兜底扫一次，否则漏「回复」类通知。
+          // Comment tracking is **only for "pending" (notifiable=pending) PRs** (including "awaiting my review" and "I authored"), and requires me to be known.
+          // Whether to fetch comments:
+          //   - Platforms including replies (commentCountIncludesReplies): scan only when updatedAt jumps or commentCount changes
+          //     (there may be new comments) — saves requests.
+          //   - Platforms not including replies (Bitbucket: updatedDate does not jump with comments, commentCount is top-level only,
+          //     excluding replies): no free "includes replies" signal → fallback-scan pending PRs once per round, otherwise "reply"-type notifications are missed.
           const commentCountChanged =
             prev?.commentCount !== undefined &&
             pr.commentCount !== undefined &&
@@ -428,12 +438,12 @@ export class Poller {
                 if (!lastMentionAt || Date.parse(latest) > Date.parse(lastMentionAt)) {
                   lastMentionAt = latest;
                 }
-                // 通知：仅对**已知 PR**（prev 存在）投影（外层已保证 notifiable=已有基线 + 待处理）；取晚于历史游标
-                // 的命中按类型聚合条数。新 PR 此前历史评论不计（prev 不存在则跳过），避免新发现 PR 触发其旧评论的提醒风暴。
+                // Notifications: projected only for **known PRs** (prev exists) (the outer layer already guarantees notifiable=baseline exists + pending);
+                // take hits later than the historical cursor and aggregate counts by type. A new PR's prior historical comments do not count (skipped when prev does not exist), avoiding a newly discovered PR triggering a notification storm from its old comments.
                 if (prev) {
                   const sinceMs = prevCursor ? Date.parse(prevCursor) : 0;
                   const fresh = hits.filter((h) => Date.parse(h.at) > sinceMs);
-                  // 按类型聚合本轮新增条数；发起人与点击定位取该类最新一条命中（通知头像 + 跳转目标）。
+                  // Aggregate this round's new counts by type; the initiator and click target take that type's latest hit (notification avatar + jump target).
                   const project = (kind: 'reply' | 'mention'): void => {
                     const subset = fresh.filter((h) => h.kind === kind);
                     if (subset.length === 0) return;
@@ -456,8 +466,8 @@ export class Poller {
                   project('mention');
                 }
               }
-              // 「我创建的」PR：他人新评论（不限是否 @我 / 回复我，自己的评论不计）→ authored_comment。
-              // 独立游标 lastCommentAt：晚于它的他人评论计为新；游标缺失（升级前）时仅播种、不补发历史评论。
+              // "PRs I authored": others' new comments (regardless of whether @me / reply-to-me; one's own comments do not count) → authored_comment.
+              // Independent cursor lastCommentAt: others' comments later than it count as new; when the cursor is missing (before the upgrade) only seed, do not backfill historical comments.
               if (authoredByMe) {
                 const others = collectCommentsFromOthers(comments, me);
                 if (others.length) {
@@ -498,7 +508,7 @@ export class Poller {
             }
           }
 
-          // 索引条目：仅 lookup/退场判定需要的字段；archivedAt 反向恢复 (远端回来了)
+          // Index entry: only the fields needed for lookup/departure decisions; archivedAt reverse recovery (remote came back)
           indexByLocalId.set(localId, {
             identity,
             updatedAt: pr.updatedAt,
@@ -519,9 +529,9 @@ export class Poller {
       }
     }
 
-    // 软删：每个成功 poll 的连接，"本地有 + 本轮没看到 + 还没 archived"的 PR
-    // 标 archivedAt = now。失败的连接 (不在 seenByConnection) 不参与，避免一次
-    // 网络故障误删整库
+    // Soft-delete: for each successful poll connection, PRs that are "present locally + not seen this round + not yet
+    // archived" are marked archivedAt = now. Failed connections (not in seenByConnection) do not participate, avoiding
+    // one network failure wrongly deleting the whole store
     for (const [connectionId, seen] of seenByConnection) {
       for (const [localId, entry] of indexByLocalId) {
         if (
@@ -529,7 +539,7 @@ export class Poller {
           !seen.has(localId) &&
           !entry.archivedAt
         ) {
-          // 整树搬入归档冷存储后再标 archivedAt（搬迁先于索引落盘，崩溃可幂等重来）。
+          // Move the whole tree into archive cold storage, then mark archivedAt (migration precedes index persistence; a crash can idempotently retry).
           await relocateTree(this.opts.stateStore, this.opts.archiveStore, prDirKey(localId));
           indexByLocalId.set(localId, { ...entry, archivedAt: now });
           removed++;
@@ -538,22 +548,23 @@ export class Poller {
       }
     }
 
-    // 硬清：archived 超过 grace 期 (默认 1 周) → rm -r 整个 PR 目录 + 索引删除
+    // Hard purge: archived past the grace period (default 1 week) → rm -r the whole PR directory + remove from index
     let purged = 0;
     let reconciled = 0;
     for (const [localId, entry] of [...indexByLocalId.entries()]) {
       if (!entry.archivedAt) continue;
       if (nowMs - Date.parse(entry.archivedAt) > PURGE_GRACE_MS) {
-        // 硬清：grace 期满 → 两端整目录清（archiveStore 主存 + stateStore 兜旧布局 / split-brain 残留）。
+        // Hard purge: grace expired → clear the whole directory on both ends (archiveStore primary + stateStore backstops old layout / split-brain residue).
         await this.opts.archiveStore.deleteDir(prDirKey(localId));
         await this.opts.stateStore.deleteDir(prDirKey(localId));
         indexByLocalId.delete(localId);
         purged++;
         dirty = true;
       } else {
-        // 对账（最终一致）：凡 archived 条目其数据都应在 archiveStore。把仍滞留活跃存储的整树搬入归档——
-        // 涵盖旧布局存量、异常 split-brain 残留、中断的搬迁。已就位者源缺失即 no-op、近零成本。
-        // 仅搬数据、不改索引（archivedAt 不变），故不置 dirty——保持「全失败 poll 零索引写」不变式。
+        // Reconcile (eventual consistency): any archived entry's data should be in archiveStore. Move any whole tree still
+        // lingering in active storage into the archive — covering old-layout backlog, abnormal split-brain residue, and
+        // interrupted migrations. For those already in place, a missing source is a no-op at near-zero cost.
+        // Only moves data, does not change the index (archivedAt unchanged), so does not set dirty — preserving the "all-failed poll writes zero index" invariant.
         const moved = await relocateTree(
           this.opts.stateStore,
           this.opts.archiveStore,
@@ -563,8 +574,8 @@ export class Poller {
       }
     }
 
-    // 索引文件仅在本轮有实际变化时重写 (invariant #2)。全失败 / 全无变化的 poll
-    // 不触磁盘 mtime
+    // The index file is rewritten only when this round had actual changes (invariant #2). An all-failed / no-change poll
+    // does not touch disk mtime
     if (dirty) {
       const next: PrIndexFile = {
         schema_version: 1,
@@ -576,11 +587,11 @@ export class Poller {
     const result: PollResult = { fetched, changed, added, removed, errors };
     this._lastPollAt = now;
     this.opts.logger.info({ ...result, purged, reconciled, dirty }, 'poll complete');
-    // 通知调用方有哪些 repo 需要 sync mirror。空集合不调，避免无谓 noop
+    // Notify the caller which repos need a mirror sync. An empty set is not called, avoiding a pointless noop
     if (changedReposByKey.size > 0) {
       this.opts.onPrsChanged?.(Array.from(changedReposByKey.values()));
     }
-    // 本轮通知事件投影给 main（弹系统通知）。空数组不调。
+    // This round's notification events projected to main (pop system notifications). An empty array is not called.
     if (notifyEvents.length > 0) {
       this.opts.onNotify?.(notifyEvents);
     }
@@ -589,4 +600,4 @@ export class Poller {
   }
 }
 
-// listStoredPullRequests / setLocalStatus 移到 pr-state.ts，跟新 schema 一起维护
+// listStoredPullRequests / setLocalStatus moved to pr-state.ts, maintained together with the new schema

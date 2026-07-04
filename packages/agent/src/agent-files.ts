@@ -12,16 +12,17 @@ import { AGENT_FILES, AGENT_RULES_SUBDIR, EMPTY_FILES } from './constants.js';
 import type { AgentContext, AgentContextFiles, LoadAgentContextOptions } from './types.js';
 
 /**
- * Agent 目录域（见 docs/arch/02-agent/01-agent.md「Agent 目录」）：把同属「on-disk agent 文件」职责的
- * 布局解析 / 初始化模版 / 脚手架 / 现读装配（上下文 + 规则）收口到一处。文件清单常量（AGENT_FILES /
- * AGENT_RULES_SUBDIR）见 constants.ts；记忆**写入**侧（appendAgentNotes）在 memory.ts。
+ * Agent directory domain (see docs/arch/02-agent/01-agent.md「Agent 目录」): consolidates the
+ * responsibilities of "on-disk agent files" — layout resolution / init templates / scaffolding /
+ * live-read assembly (context + rules) — in one place. File-list constants (AGENT_FILES /
+ * AGENT_RULES_SUBDIR) are in constants.ts; the memory **write** side (appendAgentNotes) is in memory.ts.
  */
 
-// ── 布局 ──
+// ── layout ──
 
 export type AgentContextKind = keyof typeof AGENT_FILES;
 
-/** 给定 agentDir，解析各上下文文件与 rules 目录的绝对路径。 */
+/** Given agentDir, resolve the absolute paths of each context file and the rules directory. */
 export function resolveAgentPaths(agentDir: string): {
   soul: string;
   agents: string;
@@ -38,35 +39,37 @@ export function resolveAgentPaths(agentDir: string): {
   };
 }
 
-// ── 初始化模版 ──
+// ── init templates ──
 
 /**
- * Agent 目录初始化模版（统一 **en-US**、不做 i18n，见 docs/arch/02-agent/01-agent.md「提示词模版」）。
- * 模版正文是 `resources/` 下的独立 `.md` 资源文件，构建期经 Vite `?raw` 内联；本文件只保留**加载/清单逻辑**。
+ * Agent directory init templates (uniformly **en-US**, no i18n, see docs/arch/02-agent/01-agent.md「提示词模版」).
+ * Template bodies are standalone `.md` resource files under `resources/`, inlined at build time via Vite `?raw`;
+ * this file keeps only the **load/manifest logic**.
  *
- * 三类所有权：
- * - 用户所有（`managed` 缺省）：AGENTS / MEMORY / USER / README——缺失即创建，已存在不覆盖，用户可自由改写
- *   （含改成目标语言）；Agent 亦可经记忆机制追写其中部分。
- * - 应用所有（`managed: true`）：`SOUL.md`——由应用统一下发，**加载时强制对齐内置模版**，不保留本地改动，
- *   以便随版本统一推送 Agent 行为更新。Agent 与用户都不应改写它（改了也会在下次加载被对齐回模版）。
- * - 首次播种（`seedOnce: true`）：`rules/example.md`——仅在 Agent 目录**首次脚手架**时落地一份示例，
- *   之后绝不补齐：用户删掉即永久消失（示例非必需文件，不应每次启动被「复活」）。
+ * Three ownership kinds:
+ * - User-owned (`managed` omitted): AGENTS / MEMORY / USER / README — created if missing, not overwritten if present,
+ *   users may freely rewrite them (including into a target language); the Agent may also append to some via the memory mechanism.
+ * - App-owned (`managed: true`): `SOUL.md` — issued uniformly by the app, **forcibly aligned to the built-in template on load**,
+ *   local edits are not preserved, so Agent behavior updates can be pushed uniformly across versions. Neither the Agent nor the user
+ *   should rewrite it (edits will be aligned back to the template on the next load).
+ * - Seed-once (`seedOnce: true`): `rules/example.md` — an example is written only on the Agent directory's **first scaffold**,
+ *   never replenished afterward: once the user deletes it, it is gone permanently (the example is not a required file and should not be "revived" on every startup).
  */
 export interface AgentTemplate {
-  /** 相对 agentDir 的文件路径。 */
+  /** File path relative to agentDir. */
   path: string;
   contents: string;
-  /** 应用所有：每次脚手架强制对齐到模版（覆盖本地改动）。缺省为用户所有，仅缺失时创建。 */
+  /** App-owned: forcibly aligned to the template on each scaffold (overwrites local edits). Defaults to user-owned, created only when missing. */
   managed?: boolean;
-  /** 首次播种：仅 Agent 目录首次脚手架时创建一次，删除后不再补齐（与 `managed` 互斥）。 */
+  /** Seed-once: created only once on the Agent directory's first scaffold, not replenished after deletion (mutually exclusive with `managed`). */
   seedOnce?: boolean;
 }
 
 /**
- * 默认模版清单：
- * - 用户所有缺失即创建（幂等、不覆盖）：AGENTS / MEMORY / USER / README；
- * - 应用所有（SOUL）强制对齐模版；
- * - 首次播种（rules/example.md）仅首次脚手架落地、删除后不补。
+ * Default template manifest:
+ * - User-owned created if missing (idempotent, no overwrite): AGENTS / MEMORY / USER / README;
+ * - App-owned (SOUL) forcibly aligned to the template;
+ * - Seed-once (rules/example.md) written only on the first scaffold, not replenished after deletion.
  */
 export const AGENT_TEMPLATES: AgentTemplate[] = [
   { path: 'SOUL.md', contents: soul, managed: true },
@@ -77,7 +80,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   { path: 'rules/example.md', contents: ruleExample, seedOnce: true },
 ];
 
-// ── 脚手架 ──
+// ── scaffolding ──
 
 async function exists(p: string): Promise<boolean> {
   try {
@@ -89,14 +92,14 @@ async function exists(p: string): Promise<boolean> {
 }
 
 /**
- * 脚手架 / 对齐 agentDir：确保 rules/ 子目录存在，并按所有权处理模版——
- * - 用户所有：缺失即创建，已存在不覆盖（幂等）。
- * - 应用所有（managed，如 SOUL.md）：强制对齐内置模版——缺失则创建，已存在但内容漂移则覆盖回模版。
- * - 首次播种（seedOnce，如 rules/example.md）：仅 Agent 目录首次脚手架时创建，之后不补（删除即永久消失）。
+ * Scaffold / align agentDir: ensure the rules/ subdirectory exists, and handle templates by ownership —
+ * - User-owned: created if missing, not overwritten if present (idempotent).
+ * - App-owned (managed, e.g. SOUL.md): forcibly aligned to the built-in template — created if missing, overwritten back to the template if present but drifted.
+ * - Seed-once (seedOnce, e.g. rules/example.md): created only on the Agent directory's first scaffold, not replenished afterward (deletion is permanent).
  *
- * 「首次脚手架」以 `rules/` 子目录是否已存在判定：它由首次脚手架建立、之后长存（agentDir 本身由 bootstrap
- * 预创建，不能作判据）。返回**本次实际写入**（新建或对齐）的文件相对路径列表；无写入返回空数组。
- * 见 docs/arch/02-agent/01-agent.md「提示词模版」。
+ * "First scaffold" is determined by whether the `rules/` subdirectory already exists: it is created by the first scaffold and persists thereafter (agentDir itself is
+ * pre-created by bootstrap and cannot serve as the criterion). Returns the list of relative paths of files **actually written this time** (created or aligned); returns an empty array when nothing is written.
+ * See docs/arch/02-agent/01-agent.md「提示词模版」.
  */
 export async function scaffoldAgentDir(agentDir: string): Promise<string[]> {
   if (!agentDir) throw new Error('scaffoldAgentDir: agentDir must not be empty');
@@ -106,11 +109,11 @@ export async function scaffoldAgentDir(agentDir: string): Promise<string[]> {
 
   const written: string[] = [];
   for (const tpl of AGENT_TEMPLATES) {
-    // 首次播种文件：仅首次脚手架落地，之后（rules/ 已存在）一律跳过——删除后不复活。
+    // Seed-once file: written only on the first scaffold, skipped thereafter (rules/ already exists) — not revived after deletion.
     if (tpl.seedOnce && !firstInit) continue;
     const abs = path.join(agentDir, tpl.path);
     if (await exists(abs)) {
-      // 用户所有：保留本地内容。应用所有：内容与模版一致则跳过，漂移则覆盖对齐。
+      // User-owned: keep local contents. App-owned: skip if contents match the template, overwrite to align if drifted.
       if (!tpl.managed) continue;
       const current = await readFile(abs, 'utf8').catch(() => null);
       if (current === tpl.contents) continue;
@@ -123,9 +126,9 @@ export async function scaffoldAgentDir(agentDir: string): Promise<string[]> {
   return written;
 }
 
-// ── 现读装配（上下文 + 规则）──
+// ── live-read assembly (context + rules) ──
 
-/** 读单个上下文文件；缺失（ENOENT）→ 空串，其它读失败 → 告警 + 空串（失败安全）。 */
+/** Read a single context file; missing (ENOENT) → empty string, other read failures → warn + empty string (fail-safe). */
 async function readOptional(
   file: string,
   onWarn?: LoadAgentContextOptions['onWarn'],
@@ -140,8 +143,8 @@ async function readOptional(
 }
 
 /**
- * 现读现装配：每次执行重新读 Agent 目录的 SOUL / AGENTS / MEMORY / USER 与 rules/，
- * **无缓存**（见 docs/arch/02-agent/01-agent.md「上下文注入」）。空 agentDir → 全空上下文（Agent 退化为原生）。
+ * Live read and assemble: on each execution re-read the Agent directory's SOUL / AGENTS / MEMORY / USER and rules/,
+ * **no caching** (see docs/arch/02-agent/01-agent.md「上下文注入」). Empty agentDir → all-empty context (Agent degrades to native).
  */
 export async function loadAgentContext(
   agentDir: string,
@@ -167,8 +170,8 @@ export async function loadAgentContext(
 }
 
 /**
- * 只加载规则（`<agentDir>/rules`），供「现读取首条命中规则」的注入路径用——无需读
- * SOUL/AGENTS 等上下文文件。空 agentDir → 空数组。
+ * Load only the rules (`<agentDir>/rules`), for the injection path that "live-reads the first matching rule" —
+ * no need to read SOUL/AGENTS and other context files. Empty agentDir → empty array.
  */
 export async function loadAgentRules(
   agentDir: string,

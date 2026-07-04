@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { EmbeddedRuntimeBridge, LocalCliBridge } from '../src/bridge.js';
 import type { ExecFn, ExecOptions, PrAgentRunResult } from '../src/types.js';
 
-/** 收集所有 exec 调用便于断言 cmd / args / env / timeoutMs */
+/** Collect all exec calls to ease asserting cmd / args / env / timeoutMs */
 function makeRecordingExec(returnValue?: Partial<PrAgentRunResult>): {
   exec: ExecFn;
   calls: Array<{ cmd: string; args: string[]; opts: ExecOptions }>;
@@ -22,7 +22,7 @@ function makeRecordingExec(returnValue?: Partial<PrAgentRunResult>): {
 }
 
 describe('LocalCliBridge', () => {
-  it('describe 走 pr-agent --pr_url <url> describe', async () => {
+  it('describe goes through pr-agent --pr_url <url> describe', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('pr-agent 0.36.0', exec);
     await bridge.describe({ prUrl: 'https://bb/projects/X/repos/y/pull-requests/1' });
@@ -35,7 +35,7 @@ describe('LocalCliBridge', () => {
     ]);
   });
 
-  it('review 末尾追加 extraArgs', async () => {
+  it('review appends extraArgs at the end', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('v', exec);
     await bridge.review({
@@ -51,28 +51,28 @@ describe('LocalCliBridge', () => {
     ]);
   });
 
-  it('env 通过 exec opts.env 透传（LocalCli 由 exec 层 merge process.env）', async () => {
+  it('env is passed through via exec opts.env (LocalCli merges process.env at the exec layer)', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('v', exec);
     await bridge.review({ prUrl: 'https://x/pr/1', env: { OPENAI_KEY: 'sk-test' } });
     expect(calls[0]!.opts.env).toEqual({ OPENAI_KEY: 'sk-test' });
   });
 
-  it('未给 timeoutMs 时落到默认 10 min', async () => {
+  it('falls to the default 10 min when timeoutMs is not given', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('v', exec);
     await bridge.describe({ prUrl: 'https://x/pr/1' });
     expect(calls[0]!.opts.timeoutMs).toBe(10 * 60 * 1000);
   });
 
-  it('显式 timeoutMs 覆盖默认值', async () => {
+  it('explicit timeoutMs overrides the default', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('v', exec);
     await bridge.describe({ prUrl: 'https://x/pr/1', timeoutMs: 30_000 });
     expect(calls[0]!.opts.timeoutMs).toBe(30_000);
   });
 
-  it('onLine 透传给 exec', async () => {
+  it('onLine is passed through to exec', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('v', exec);
     const onLine = vi.fn();
@@ -80,17 +80,17 @@ describe('LocalCliBridge', () => {
     expect(calls[0]!.opts.onLine).toBe(onLine);
   });
 
-  it('strategy + version 暴露', () => {
+  it('strategy + version are exposed', () => {
     const bridge = new LocalCliBridge('pr-agent 0.36.0', makeRecordingExec().exec);
     expect(bridge.strategy).toBe('local-cli');
     expect(bridge.version).toBe('pr-agent 0.36.0');
   });
 
-  it('cwd 配置后切到 local-mode: --pr_url 的值是 target branch 名 (pr-agent local provider 约定)', async () => {
+  it('after cwd is configured, switches to local-mode: --pr_url value is the target branch name (pr-agent local provider convention)', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('v', exec);
     await bridge.review({
-      prUrl: 'https://x/pr/1', // 本地模式下 prUrl 不会被用到
+      prUrl: 'https://x/pr/1', // in local mode prUrl is not used
       cwd: '/tmp/wt/abc',
       targetBranch: 'pr-abc123/base',
       env: { OPENAI_KEY: 'sk' },
@@ -103,7 +103,7 @@ describe('LocalCliBridge', () => {
     });
   });
 
-  it('local-mode 无 targetBranch: --pr_url 留空 (调用方应保证传)', async () => {
+  it('local-mode without targetBranch: --pr_url left empty (caller should guarantee passing it)', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new LocalCliBridge('v', exec);
     await bridge.review({ prUrl: 'unused', cwd: '/tmp/wt' });
@@ -111,7 +111,7 @@ describe('LocalCliBridge', () => {
     expect(calls[0]!.opts.env).toEqual({ CONFIG__GIT_PROVIDER: 'local' });
   });
 
-  it('chat: local-cli 不支持，调用即抛错（无嵌入式运行时）', async () => {
+  it('chat: local-cli is not supported, throws on call (no embedded runtime)', async () => {
     const bridge = new LocalCliBridge('v', makeRecordingExec().exec);
     await expect(bridge.chat({ user: 'hi' })).rejects.toThrow(/嵌入式/);
   });
@@ -120,7 +120,7 @@ describe('LocalCliBridge', () => {
 describe('EmbeddedRuntimeBridge', () => {
   const PY = '/app/vendor/pragent/python/bin/python3';
 
-  it('local-mode: 用嵌入式解释器 -m pr_agent.cli + target branch + local provider', async () => {
+  it('local-mode: uses the embedded interpreter -m pr_agent.cli + target branch + local provider', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new EmbeddedRuntimeBridge('embedded Python 3.12.13', PY, exec);
     await bridge.review({
@@ -146,7 +146,7 @@ describe('EmbeddedRuntimeBridge', () => {
     });
   });
 
-  it('extraArgs 追加在末尾', async () => {
+  it('extraArgs are appended at the end', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new EmbeddedRuntimeBridge('v', PY, exec);
     await bridge.review({
@@ -166,13 +166,13 @@ describe('EmbeddedRuntimeBridge', () => {
     ]);
   });
 
-  it('strategy + version 暴露', () => {
+  it('strategy + version are exposed', () => {
     const bridge = new EmbeddedRuntimeBridge('embedded Python 3.12.13', PY, makeRecordingExec().exec);
     expect(bridge.strategy).toBe('embedded');
     expect(bridge.version).toBe('embedded Python 3.12.13');
   });
 
-  it('chat: 跑 meebox_pragent_shim.chat，prompt 走 stdin，UTF-8 + 中性 cwd', async () => {
+  it('chat: runs meebox_pragent_shim.chat, prompt goes through stdin, UTF-8 + neutral cwd', async () => {
     const { exec, calls } = makeRecordingExec({ stdout: 'reply' });
     const bridge = new EmbeddedRuntimeBridge('v', PY, exec);
     const res = await bridge.chat({
@@ -194,7 +194,7 @@ describe('EmbeddedRuntimeBridge', () => {
     expect(calls[0]!.opts.timeoutMs).toBe(5 * 60 * 1000);
   });
 
-  it('chat: temperature 仅在显式传入时进 payload', async () => {
+  it('chat: temperature enters the payload only when explicitly passed', async () => {
     const { exec, calls } = makeRecordingExec();
     const bridge = new EmbeddedRuntimeBridge('v', PY, exec);
     await bridge.chat({ user: 'hi', temperature: 0.7 });

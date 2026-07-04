@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { compactDescribe } from '../src/steps/review/shared.js';
 
 describe('compactDescribe', () => {
-  it('剥掉 File Walkthrough <details> 块（取到结尾）', () => {
+  it('strips the File Walkthrough <details> block (through to the end)', () => {
     const text = [
       '### Title',
       'Add auth guard',
@@ -17,7 +17,7 @@ describe('compactDescribe', () => {
     expect(out).not.toContain('src/a.ts');
   });
 
-  it('剥掉 mermaid 代码块，保留其余正文', () => {
+  it('strips mermaid code blocks, keeps the rest of the body', () => {
     const text = [
       '## Summary',
       'Refactor cache.',
@@ -36,7 +36,7 @@ describe('compactDescribe', () => {
     expect(out).not.toContain('graph TD');
   });
 
-  it('无可剥块时原样返回（仅去首尾空白）', () => {
+  it('returns as-is when there is nothing to strip (only trims leading/trailing whitespace)', () => {
     const text = '## Summary\nLooks good.';
     expect(compactDescribe(text)).toBe('## Summary\nLooks good.');
   });

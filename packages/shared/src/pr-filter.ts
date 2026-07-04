@@ -2,15 +2,16 @@ import type { LocalPrStatus, StoredPullRequest } from './poller-contract.js';
 import type { PrDiscoveryFilter } from './platform.js';
 
 /**
- * PR 列表筛选与检索的**纯谓词**（单一真相源）。渲染层侧栏与本地 API 的 PR 列表端点共用同一套语义，
- * 避免两处各写一份过滤逻辑而漂移。仅做无副作用的判定 / 过滤，不含 UI（计数、可见性、分组属各自表现层）。
+ * **Pure predicates** for PR list filtering and search (single source of truth). The renderer sidebar
+ * and the local API's PR list endpoint share the same semantics, avoiding two divergent filter logics.
+ * Only side-effect-free judgment / filtering, no UI (count, visibility, grouping belong to each presentation layer).
  *
- * 二级筛选 `PrSecondaryFilter`：`'all'` 不限定；`LocalPrStatus`（本人评审决断 pending/approved/needs_work）
- * 按 `localStatus` 匹配；`'conflict'` / `'mergeable'` 是跨 localStatus 横切的远端合并态筛选。
+ * Secondary filter `PrSecondaryFilter`: `'all'` no restriction; `LocalPrStatus` (own review verdict pending/approved/needs_work)
+ * matches by `localStatus`; `'conflict'` / `'mergeable'` are remote merge-state filters cutting across localStatus.
  */
 export type PrSecondaryFilter = 'all' | LocalPrStatus | 'conflict' | 'mergeable';
 
-/** 二级筛选全集（与 {@link PrSecondaryFilter} 同步；本地 API 的分类标签据此列出）。 */
+/** Full set of secondary filters (synced with {@link PrSecondaryFilter}; the local API lists its category labels from this). */
 export const PR_SECONDARY_FILTERS: readonly PrSecondaryFilter[] = [
   'all',
   'pending',
@@ -20,7 +21,7 @@ export const PR_SECONDARY_FILTERS: readonly PrSecondaryFilter[] = [
   'mergeable',
 ];
 
-/** 一级（平台发现分类）匹配：未指定一级 = 不限定；否则按 PR 携带的 discoveryFilters 命中判定。 */
+/** Primary (platform discovery category) match: no primary specified = no restriction; otherwise judged by the discoveryFilters carried by the PR. */
 export function matchesDiscoveryFilter(
   pr: StoredPullRequest,
   primary?: PrDiscoveryFilter,
@@ -29,9 +30,9 @@ export function matchesDiscoveryFilter(
 }
 
 /**
- * 二级筛选匹配（状态 / 合并态）。`primary` 为当前一级发现分类（可空），用于分类相关的语义细化：
- * 「我创建的」（`created`）下「待处理」= 需作者跟进 —— 除本人评审决断 pending 外，还并入存在合并冲突的
- * PR（作者需解决冲突方能推进，即便评审已通过）。
+ * Secondary filter match (status / merge state). `primary` is the current primary discovery category (nullable), used for
+ * category-related semantic refinement: under "created by me" (`created`), "pending" = needs author follow-up —— besides own
+ * review verdict pending, it also merges in PRs with merge conflicts (the author must resolve conflicts to proceed, even if the review passed).
  */
 export function matchesSecondaryFilter(
   pr: StoredPullRequest,
@@ -53,7 +54,7 @@ export function matchesSecondaryFilter(
   }
 }
 
-/** 检索匹配：空查询恒真；否则在 标题 / 仓库 / 作者 / 编号 拼成的串里做大小写无关子串匹配。 */
+/** Search match: empty query always true; otherwise a case-insensitive substring match over the string joined from title / repo / author / number. */
 export function matchesPrQuery(pr: StoredPullRequest, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -70,14 +71,14 @@ export function matchesPrQuery(pr: StoredPullRequest, query: string): boolean {
     .includes(q);
 }
 
-/** 筛选条件（各项可省，省略即不限定）。 */
+/** Filter criteria (each item optional; omitting means no restriction). */
 export interface PrFilterCriteria {
   primary?: PrDiscoveryFilter;
   secondary?: PrSecondaryFilter;
   query?: string;
 }
 
-/** 按 一级 + 二级 + 检索 顺序过滤 PR 列表。 */
+/** Filter the PR list in primary + secondary + search order. */
 export function filterPullRequests(
   prs: StoredPullRequest[],
   criteria: PrFilterCriteria,

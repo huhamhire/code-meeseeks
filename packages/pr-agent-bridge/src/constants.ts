@@ -1,33 +1,33 @@
 import type { ReviewRunTool } from '@meebox/shared';
 
 /**
- * 包内共享常量统一收口：子进程超时兜底、强制 UTF-8 的 spawn env、pr-agent local provider 产出文件名。
- * 散落各处的同类常量集中于此，便于统一复用与调参。
+ * Single collection point for constants shared within the package: subprocess timeout fallbacks, the force-UTF-8 spawn env, pr-agent local provider output file names.
+ * Same-kind constants scattered elsewhere are consolidated here for uniform reuse and tuning.
  */
 
-// /review 在长 PR + 推理型模型 (DeepSeek-v4 / Claude thinking) 下常跑 3-8 min；5 min 经常打 timeout。
-// 设到 10 min 让绝大多数真实 PR 能跑完，仍能兜住卡死的子进程不让它无限挂着。需要更长的话调用方可在
-// opts.timeoutMs 显式覆盖。
+// /review on a long PR + reasoning model (DeepSeek-v4 / Claude thinking) often runs 3-8 min; 5 min frequently hits timeout.
+// Set to 10 min so the vast majority of real PRs finish, while still catching a stuck subprocess so it doesn't hang forever. If more is needed the caller can
+// override explicitly via opts.timeoutMs.
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
-// chat 通道单次默认 5 min：编排 / 判定调用通常远快于 /review，但推理型模型仍可能慢。
+// chat channel per-call default 5 min: orchestration / judgment calls are usually far faster than /review, but reasoning models can still be slow.
 export const DEFAULT_CHAT_TIMEOUT_MS = 5 * 60 * 1000;
-// 运行时探测（spawn `--version` 量级）默认 5s 超时兜底：足够且不拖慢启动。
+// Runtime detect (spawn `--version` scale) default 5s timeout fallback: enough and doesn't slow startup.
 export const DEFAULT_PROBE_TIMEOUT_MS = 5000;
 
 /**
- * 强制 UTF-8 的 spawn env：嵌入式 Python 在中文 Windows 上默认用系统码页 (GBK/cp936) 做 stdio / 文件
- * 编码，pr-agent 输出含 emoji (如 🔍 section 标题) 时会 'gbk' codec can't encode 崩掉。PYTHONUTF8=1
- * 覆盖 stdio + fs + 默认 open() 编码，PYTHONIOENCODING 兜底。所有 spawn 的 python 子进程统一带上。
+ * Force-UTF-8 spawn env: on Chinese Windows the embedded Python defaults to the system code page (GBK/cp936) for stdio / file
+ * encoding, so when pr-agent output contains emoji (e.g. the 🔍 section title) it crashes with 'gbk' codec can't encode. PYTHONUTF8=1
+ * overrides stdio + fs + default open() encoding, with PYTHONIOENCODING as fallback. Applied uniformly to every spawned python subprocess.
  */
 export const UTF8_ENV = { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } as const;
 
 /**
- * pr-agent local provider 各 tool 的产出落盘文件名（worktree 根的相对路径）：
- *   /describe → description.md（publish_description）
- *   /review   → review.md     （publish_comment）
- *   /ask      → review.md     （共用同一文件，publish_comment 覆盖）
- *   /improve  → improve.md    （汇总建议走 publish_comment，经 LOCAL__REVIEW_PATH 重定向与 review.md 分流）
- * 既供 buildToolEnv 设 LOCAL__REVIEW_PATH，也供调用方 run 结束后读取产出文件——两处共用此表保持同步。
+ * The on-disk output file name for each pr-agent local provider tool (path relative to the worktree root):
+ *   /describe → description.md (publish_description)
+ *   /review   → review.md      (publish_comment)
+ *   /ask      → review.md      (shares the same file, publish_comment overwrites)
+ *   /improve  → improve.md     (aggregated suggestions go through publish_comment, split from review.md via LOCAL__REVIEW_PATH redirect)
+ * Used both by buildToolEnv to set LOCAL__REVIEW_PATH and by the caller to read the output file after run finishes — both sides share this table to stay in sync.
  */
 export const PRAGENT_LOCAL_OUTPUT: Record<ReviewRunTool, string> = {
   describe: 'description.md',

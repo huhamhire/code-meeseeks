@@ -11,7 +11,7 @@ import { GitLabClientError, type GitLabClient } from '../client.js';
 import { mapUser, projectId } from '../utils.js';
 import type { GlAwardEmoji, GlDiscussion, GlMr, GlNote } from '../types.js';
 
-/** GitLab 评论领域：discussions + notes 归一为统一评论树（首 note 顶层、其余 reply）。 */
+/** GitLab comment domain: discussions + notes normalized into a unified comment tree (first note is top-level, the rest are replies). */
 export class GitLabCommentService extends BaseCommentService {
   constructor(
     ctx: ConnectionContext,
@@ -21,20 +21,20 @@ export class GitLabCommentService extends BaseCommentService {
   }
 
   /**
-   * 拉取 MR discussions 并归一为统一评论树：每个 discussion 首 note 为顶层、其余为 reply。
+   * Fetch MR discussions and normalize into a unified comment tree: each discussion's first note is top-level, the rest are replies.
    *
-   * 过滤 system note（状态变更 / 指派等自动事件）；全为 system note 的 discussion 跳过。
+   * Filters out system notes (automatic events like status changes / assignments); discussions that are entirely system notes are skipped.
    */
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
     const me = this.ctx.getCurrentUser()?.name;
     const base = `/projects/${projectId(repo)}/merge_requests/${prId}`;
-    // 先把所有非 system note 平铺收齐（保留 discussion 归属），再并行拉每条 note 的 award emoji。
+    // First collect all non-system notes flat (keeping discussion ownership), then fetch each note's award emoji in parallel.
     const discussions: Array<{ id: string; notes: GlNote[] }> = [];
     for await (const d of this.client.paginate<GlDiscussion>(`${base}/discussions`)) {
       const notes = d.notes.filter((n) => !n.system);
       if (notes.length > 0) discussions.push({ id: d.id, notes });
     }
-    // GitLab note 响应不内嵌 award emoji → 每条 note 单独查（并行）。量受评论数约束、且走评论缓存。
+    // GitLab note responses don't embed award emoji → query each note separately (in parallel). Volume is bounded by comment count and goes through the comment cache.
     const awardsByNote = await this.loadAwards(
       base,
       discussions.flatMap((d) => d.notes.map((n) => n.id)),
@@ -48,8 +48,8 @@ export class GitLabCommentService extends BaseCommentService {
   }
 
   /**
-   * 并行拉取给定 note 列表的 award emoji，返回 `Map<noteId, GlAwardEmoji[]>`。
-   * GitLab 无 note 级 award 批量端点，故逐条 GET；调用方已把 note 集合一次性传入以便并发。
+   * Fetch award emoji for the given note list in parallel, returning `Map<noteId, GlAwardEmoji[]>`.
+   * GitLab has no note-level award batch endpoint, so GET each one; the caller passes the note set in all at once to enable concurrency.
    */
   private async loadAwards(base: string, noteIds: number[]): Promise<Map<number, GlAwardEmoji[]>> {
     const out = new Map<number, GlAwardEmoji[]>();
@@ -61,7 +61,7 @@ export class GitLabCommentService extends BaseCommentService {
           );
           if (list.length > 0) out.set(id, list);
         } catch {
-          // 反应是增强项，单条 note 的 award 拉取失败（旧版本 / 权限 / 端点缺失）不应拖垮整个评论列表。
+          // Reactions are an enhancement; a single note's award fetch failing (old version / permissions / missing endpoint) shouldn't drag down the entire comment list.
         }
       }),
     );
@@ -69,8 +69,8 @@ export class GitLabCommentService extends BaseCommentService {
   }
 
   /**
-   * 切换当前用户对一条 note 的 award emoji。add：POST，已存在（GitLab 回 404 "已被占用"）按成功跳过；
-   * remove：列出找到自己该 name 的 award id 再 DELETE，不存在则跳过。
+   * Toggle the current user's award emoji on a note. add: POST, if it already exists (GitLab returns 404 "already taken") skip as success;
+   * remove: list and find one's own award id with that name, then DELETE, skipping if it doesn't exist.
    */
   override async toggleReaction(
     repo: RepoRef,
@@ -87,7 +87,7 @@ export class GitLabCommentService extends BaseCommentService {
       try {
         await this.client.post<GlAwardEmoji>(awardBase, { name });
       } catch (e) {
-        // 已反应过 → GitLab 回 404 "Name has already been taken"，幂等跳过；其余错误冒泡。
+        // Already reacted → GitLab returns 404 "Name has already been taken", idempotently skip; other errors bubble up.
         if (!(e instanceof GitLabClientError && e.status === 404)) throw e;
       }
       return;
@@ -99,27 +99,27 @@ export class GitLabCommentService extends BaseCommentService {
     await this.client.del(`${awardBase}/${mineOne.id}`);
   }
 
-  /** GitLab award 列表 + 当前用户名 → 中性 PrReaction[]（按首次出现序聚合；集外 emoji 名跳过显示）。 */
+  /** GitLab award list + current username → neutral PrReaction[] (aggregated by first-appearance order; out-of-set emoji names are skipped from display). */
   private buildReactions(awards: GlAwardEmoji[] | undefined, me: string | undefined): PrReaction[] {
     if (!awards || awards.length === 0) return [];
     const byEmoji = new Map<string, PrReaction>();
     for (const a of awards) {
       const emoji = reactionCodeToEmoji(a.name);
-      if (!emoji) continue; // gemoji 词表外的 award 名 → 暂不显示（best-effort）
+      if (!emoji) continue; // award name outside the gemoji vocabulary → not displayed for now (best-effort)
       const r = byEmoji.get(emoji) ?? { emoji, count: 0, mine: false };
       r.count += 1;
       if (me != null && a.user.username === me) r.mine = true;
       byEmoji.set(emoji, r);
     }
-    // Map 保留首次插入序（≈ award 出现序），直接输出。
+    // Map preserves first-insertion order (≈ award appearance order), output directly.
     return [...byEmoji.values()];
   }
 
   /**
-   * 发表 summary 评论：创建一个不带 position 的新 discussion（顶层 note）后归一返回。
+   * Post a summary comment: create a new discussion without a position (top-level note), then normalize and return.
    */
   async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
-    // summary 评论 = 不带 position 的新 discussion（顶层 note）
+    // summary comment = new discussion without a position (top-level note)
     const created = await this.client.post<GlDiscussion>(
       `/projects/${projectId(repo)}/merge_requests/${prId}/discussions`,
       { body },
@@ -128,9 +128,9 @@ export class GitLabCommentService extends BaseCommentService {
   }
 
   /**
-   * 发表 inline 评论：创建带 position 的 discussion。
+   * Post an inline comment: create a discussion with a position.
    *
-   * position 需 base/start/head 三 sha，先拉 MR 取 diff_refs（缺失则抛错）；按 side 锚到 new_line / old_line。
+   * position needs the three base/start/head shas, so first fetch the MR to get diff_refs (throw if missing); anchor to new_line / old_line by side.
    */
   async publishInlineComment(
     repo: RepoRef,
@@ -139,7 +139,7 @@ export class GitLabCommentService extends BaseCommentService {
     body: string,
   ): Promise<PrComment> {
     const base = `/projects/${projectId(repo)}/merge_requests/${prId}`;
-    // 行内评论 = 带 position 的 discussion；position 需 base/start/head 三 sha → 先拉 MR 取 diff_refs。
+    // inline comment = discussion with a position; position needs the three base/start/head shas → first fetch the MR to get diff_refs.
     const mr = await this.client.get<GlMr>(base);
     const refs = mr.diff_refs;
     if (!refs) {
@@ -155,7 +155,7 @@ export class GitLabCommentService extends BaseCommentService {
       new_path: anchor.path,
       old_path: anchor.path,
     };
-    // side 'new'（added/context）锚到 new_line；'old'（removed）锚到 old_line。
+    // side 'new' (added/context) anchors to new_line; 'old' (removed) anchors to old_line.
     if (anchor.side === 'new') position.new_line = anchor.line;
     else position.old_line = anchor.line;
     const created = await this.client.post<GlDiscussion>(`${base}/discussions`, { body, position });
@@ -163,9 +163,9 @@ export class GitLabCommentService extends BaseCommentService {
   }
 
   /**
-   * 在指定 discussion 下追加一条 note 作为回复。
+   * Append a note under the given discussion as a reply.
    *
-   * parentCommentId 即 discussion_id（threadId），renderer 已统一传 threadId ?? remoteId。
+   * parentCommentId is the discussion_id (threadId); the renderer already consistently passes threadId ?? remoteId.
    */
   async replyToComment(
     repo: RepoRef,
@@ -173,7 +173,7 @@ export class GitLabCommentService extends BaseCommentService {
     parentCommentId: string,
     body: string,
   ): Promise<PrComment> {
-    // parentCommentId = discussion_id（threadId）；renderer 已改为传 threadId ?? remoteId。
+    // parentCommentId = discussion_id (threadId); the renderer now passes threadId ?? remoteId.
     const note = await this.client.post<GlNote>(
       `/projects/${projectId(repo)}/merge_requests/${prId}/discussions/${parentCommentId}/notes`,
       { body },
@@ -182,9 +182,9 @@ export class GitLabCommentService extends BaseCommentService {
   }
 
   /**
-   * 编辑评论 body：经 /notes/:id 覆盖 discussion 内 note。
+   * Edit a comment body: overwrite the note within the discussion via /notes/:id.
    *
-   * GitLab 无乐观锁，version 忽略；编辑响应不带 discussion id，threadId 用 note id 兜底。
+   * GitLab has no optimistic lock, version is ignored; the edit response carries no discussion id, so threadId falls back to the note id.
    */
   async editComment(
     repo: RepoRef,
@@ -193,18 +193,18 @@ export class GitLabCommentService extends BaseCommentService {
     _version: number,
     body: string,
   ): Promise<PrComment> {
-    // GitLab 无评论乐观锁（version 忽略）；/notes/:id 覆盖 discussion 内 note。
+    // GitLab has no comment optimistic lock (version ignored); /notes/:id overwrites the note within the discussion.
     const note = await this.client.put<GlNote>(
       `/projects/${projectId(repo)}/merge_requests/${prId}/notes/${commentId}`,
       { body },
     );
     if (!note) throw new Error('Failed to edit comment: empty response from remote');
-    // 编辑响应不带 discussion id，threadId 用 note id 兜底（UI 删改后会 force-refresh 评论树）。
+    // The edit response carries no discussion id, so threadId falls back to the note id (the UI force-refreshes the comment tree after edit/delete).
     return this.mapNote(note, String(note.id), this.ctx.getCurrentUser()?.name);
   }
 
   /**
-   * 删除一条评论 note。GitLab 无乐观锁，version 忽略。
+   * Delete a comment note. GitLab has no optimistic lock, version is ignored.
    */
   async deleteComment(
     repo: RepoRef,
@@ -215,13 +215,13 @@ export class GitLabCommentService extends BaseCommentService {
     await this.client.del(`/projects/${projectId(repo)}/merge_requests/${prId}/notes/${commentId}`);
   }
 
-  // ---- 映射（领域私有）----
+  // ---- Mapping (domain-private) ----
 
   /**
-   * 把 GitLab note 归一为 PrComment。
+   * Normalize a GitLab note into a PrComment.
    *
-   * 有 text position 时推导锚点（按 new_line / old_line 判侧与行类型）、记为 inline，否则记为 summary；
-   * 按作者是否为当前用户标记 canEdit / canDelete；GitLab 无乐观锁，version 置 0 作哨兵。
+   * With a text position, derive the anchor (determine side and line type from new_line / old_line) and mark as inline, otherwise mark as summary;
+   * mark canEdit / canDelete by whether the author is the current user; GitLab has no optimistic lock, so version is set to 0 as a sentinel.
    */
   private mapNote(
     n: GlNote,
@@ -236,7 +236,7 @@ export class GitLabCommentService extends BaseCommentService {
             path: pos.new_path ?? pos.old_path ?? '',
             line: pos.new_line ?? pos.old_line ?? 0,
             side: pos.new_line != null ? 'new' : 'old',
-            // new_line + old_line 同在 = context；仅 new = added；仅 old = removed。
+            // new_line + old_line both present = context; only new = added; only old = removed.
             lineType:
               pos.new_line != null ? (pos.old_line != null ? 'context' : 'added') : 'removed',
           }
@@ -256,8 +256,8 @@ export class GitLabCommentService extends BaseCommentService {
       reactions: this.buildReactions(awards, me),
       canDelete: isMine,
       canEdit: isMine,
-      // GitLab 无乐观锁：置 0 作「无需并发令牌」哨兵，让 canEdit/canDelete 判定与编辑/删除 IPC
-      // 的 version: number 契约统一通过（editComment/deleteComment 忽略 version）。
+      // GitLab has no optimistic lock: set to 0 as a "no concurrency token needed" sentinel, so the canEdit/canDelete
+      // decision and the edit/delete IPC's version: number contract pass uniformly (editComment/deleteComment ignore version).
       version: 0,
     };
   }

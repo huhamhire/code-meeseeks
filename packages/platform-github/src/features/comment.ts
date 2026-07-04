@@ -10,7 +10,7 @@ import type {
   GhReviewComment,
 } from '../types.js';
 
-/** GitHub 反应 content ↔ 规范化 emoji 字符（固定 8 种，与 REACTION_PICKER 同序）。 */
+/** GitHub reaction content ↔ normalized emoji character (fixed 8 kinds, same order as REACTION_PICKER). */
 const GH_REACTIONS: ReadonlyArray<readonly [keyof Omit<GhReactionRollup, 'total_count'>, string]> = [
   ['+1', '👍'],
   ['-1', '👎'],
@@ -23,7 +23,7 @@ const GH_REACTIONS: ReadonlyArray<readonly [keyof Omit<GhReactionRollup, 'total_
 ];
 const GH_CONTENT_BY_EMOJI = new Map(GH_REACTIONS.map(([content, emoji]) => [emoji, content]));
 
-/** GitHub 评论领域：issue（summary）+ review（inline）两套端点归一为统一评论树。 */
+/** GitHub comment domain: issue (summary) + review (inline) two endpoint sets normalized into a unified comment tree. */
 export class GitHubCommentService extends BaseCommentService {
   constructor(
     ctx: ConnectionContext,
@@ -33,9 +33,9 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * 并发拉取 issue 评论与 review 评论并归一为统一评论树。
+   * Concurrently fetch issue comments and review comments and normalize into a unified comment tree.
    *
-   * issue 评论作为无线程的 summary；review 评论按 in_reply_to_id 还原为顶层 + 嵌套 replies。
+   * Issue comments serve as thread-less summaries; review comments are reconstructed by in_reply_to_id into top-level + nested replies.
    */
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
     const prefix = `/repos/${repo.projectKey}/${repo.repoSlug}`;
@@ -44,14 +44,14 @@ export class GitHubCommentService extends BaseCommentService {
       collect(this.client.paginate<GhReviewComment>(`${prefix}/pulls/${prId}/comments`)),
     ]);
 
-    // 反应聚合（counts）随评论响应即得；`mine` 需另查列表端点——仅对有反应的评论拉、并行，
-    // 把当前用户已反应的 content 收进 Map（按 issue/review 前缀区分 id 空间）。
+    // Reaction aggregation (counts) comes with the comment response; `mine` needs a separate list endpoint — fetched only for comments with reactions, in parallel,
+    // collecting the content the current user has reacted with into a Map (id space distinguished by issue/review prefix).
     const mineByKey = await this.loadMineReactions(prefix, issueComments, reviewComments);
 
-    // issue 评论 = summary（无线程）
+    // issue comments = summary (thread-less)
     const summary = issueComments.map((c) => this.mapIssueComment(c, mineByKey.get(`i:${c.id}`)));
 
-    // review 评论 = inline，按 in_reply_to_id 还原成 顶层 + 嵌套 replies
+    // review comments = inline, reconstructed by in_reply_to_id into top-level + nested replies
     const repliesByParent = new Map<number, GhReviewComment[]>();
     const tops: GhReviewComment[] = [];
     for (const rc of reviewComments) {
@@ -75,8 +75,8 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * 并行拉取「有反应」评论的反应列表，返回 `Map<'i:'|'r:'+id, Set<content>>`（当前用户已反应的 content）。
-   * 只对 `reactions.total_count > 0` 的评论发请求——大多数评论无反应，故额外请求数受真实反应数约束。
+   * Fetch in parallel the reaction lists of comments "with reactions", returning `Map<'i:'|'r:'+id, Set<content>>` (content the current user has reacted with).
+   * Only sends requests for comments with `reactions.total_count > 0` — most comments have no reactions, so the extra request count is bounded by the real reaction count.
    */
   private async loadMineReactions(
     prefix: string,
@@ -101,7 +101,7 @@ export class GitHubCommentService extends BaseCommentService {
           for (const r of list) if (r.user?.login === login) mine.add(r.content);
           out.set(key, mine);
         } catch {
-          // 反应是增强项，单条评论的反应列表拉取失败不应拖垮整个评论列表（counts 仍按 rollup 展示）。
+          // Reactions are an enhancement; a failed reaction-list fetch for a single comment should not drag down the entire comment list (counts are still shown from the rollup).
         }
       }),
     );
@@ -109,8 +109,8 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * 切换当前用户对评论的 emoji 反应。kind=summary → issue 反应端点；inline → review 反应端点。
-   * add：POST 幂等（已反应则原样返回）；remove：先列表找到自己该 content 的反应 id 再 DELETE，不存在则跳过。
+   * Toggle the current user's emoji reaction on a comment. kind=summary → issue reaction endpoint; inline → review reaction endpoint.
+   * add: POST is idempotent (returns as-is if already reacted); remove: first find own reaction id for that content in the list, then DELETE, skip if not present.
    */
   override async toggleReaction(
     repo: RepoRef,
@@ -138,7 +138,7 @@ export class GitHubCommentService extends BaseCommentService {
     await this.client.del(`${base}/${mineOne.id}`);
   }
 
-  /** 反应聚合（counts）+ 当前用户已反应集合 → 中性 PrReaction[]（按固定 8 序、过滤 0 计数）。 */
+  /** Reaction aggregation (counts) + the current user's reacted set → neutral PrReaction[] (in fixed 8 order, filtering out 0 counts). */
   private buildReactions(
     rollup: GhReactionRollup | undefined,
     mine: Set<string> | undefined,
@@ -153,10 +153,10 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * 发表 summary 评论：经 issue 评论端点创建（无线程、无锚点）后归一返回。
+   * Publish a summary comment: created via the issue comment endpoint (thread-less, anchor-less) and returned normalized.
    */
   async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
-    // summary 评论 = issue 评论（无线程、无锚点）
+    // summary comment = issue comment (thread-less, anchor-less)
     const created = await this.client.post<GhIssueComment>(
       `/repos/${repo.projectKey}/${repo.repoSlug}/issues/${prId}/comments`,
       { body },
@@ -165,7 +165,7 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * 发表 inline 评论：先拉 PR 取 head sha 作 commit_id，再按锚点（路径 / 行 / 侧）创建 review 评论。
+   * Publish an inline comment: first fetch the PR to get head sha as commit_id, then create a review comment by the anchor (path / line / side).
    */
   async publishInlineComment(
     repo: RepoRef,
@@ -174,7 +174,7 @@ export class GitHubCommentService extends BaseCommentService {
     body: string,
   ): Promise<PrComment> {
     const prefix = `/repos/${repo.projectKey}/${repo.repoSlug}`;
-    // 行内评论需 commit_id = head sha；按 Phase 0 决策，adapter 内部拉 PR 取 head sha
+    // Inline comments need commit_id = head sha; per the Phase 0 decision, the adapter internally fetches the PR to get head sha
     const pull = await this.client.get<GhPull>(`${prefix}/pulls/${prId}`);
     const created = await this.client.post<GhReviewComment>(`${prefix}/pulls/${prId}/comments`, {
       body,
@@ -187,9 +187,9 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * 回复评论：优先按 inline review-comment 的 replies 端点回复。
+   * Reply to a comment: prefer replying via the inline review-comment replies endpoint.
    *
-   * 父评论实为 summary（issue 评论、无线程）时端点返回 404/422，退化为新建一条 issue 评论。
+   * When the parent comment is actually a summary (issue comment, thread-less) the endpoint returns 404/422, falling back to creating a new issue comment.
    */
   async replyToComment(
     repo: RepoRef,
@@ -199,14 +199,14 @@ export class GitHubCommentService extends BaseCommentService {
   ): Promise<PrComment> {
     const prefix = `/repos/${repo.projectKey}/${repo.repoSlug}`;
     try {
-      // 优先按 inline review-comment 回复
+      // Prefer replying via the inline review-comment
       const created = await this.client.post<GhReviewComment>(
         `${prefix}/pulls/${prId}/comments/${parentCommentId}/replies`,
         { body },
       );
       return this.mapReviewComment(created);
     } catch (e) {
-      // 父评论是 summary（issue 评论，无线程）→ 退化为新建 issue 评论
+      // Parent comment is a summary (issue comment, thread-less) → fall back to creating a new issue comment
       if (e instanceof GitHubClientError && (e.status === 404 || e.status === 422)) {
         const created = await this.client.post<GhIssueComment>(
           `${prefix}/issues/${prId}/comments`,
@@ -219,9 +219,9 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * 编辑评论 body：先按 review 评论端点尝试，404 时回退到 issue 评论端点。
+   * Edit a comment body: try the review comment endpoint first, fall back to the issue comment endpoint on 404.
    *
-   * GitHub 无乐观锁，version 参数被忽略。
+   * GitHub has no optimistic lock, the version parameter is ignored.
    */
   async editComment(
     repo: RepoRef,
@@ -250,9 +250,9 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * 删除评论：先按 review 评论端点尝试，404 时回退到 issue 评论端点。
+   * Delete a comment: try the review comment endpoint first, fall back to the issue comment endpoint on 404.
    *
-   * GitHub 无乐观锁，version 参数被忽略。
+   * GitHub has no optimistic lock, the version parameter is ignored.
    */
   async deleteComment(
     repo: RepoRef,
@@ -272,10 +272,10 @@ export class GitHubCommentService extends BaseCommentService {
     }
   }
 
-  // ---- 映射（领域私有）----
+  // ---- Mapping (domain-private) ----
 
   /**
-   * 把 GitHub issue 评论归一为 summary 类 PrComment；无锚点、无线程，version 置 0 作无锁哨兵。
+   * Normalize a GitHub issue comment into a summary-kind PrComment; anchor-less, thread-less, version set to 0 as a lock-less sentinel.
    */
   private mapIssueComment(c: GhIssueComment, mine?: Set<string>): PrComment {
     return {
@@ -289,16 +289,16 @@ export class GitHubCommentService extends BaseCommentService {
       kind: 'summary',
       nativeId: String(c.id),
       reactions: this.buildReactions(c.reactions, mine),
-      // GitHub 无乐观锁：置 0 作「无需并发令牌」哨兵，让 canEdit/canDelete 判定与编辑/删除 IPC
-      // 的 version: number 契约统一通过（editComment/deleteComment 忽略 version）。
+      // GitHub has no optimistic lock: set to 0 as a "no concurrency token needed" sentinel, so canEdit/canDelete decisions and the edit/delete IPC
+      // version: number contract uniformly pass (editComment/deleteComment ignore version).
       version: 0,
     };
   }
 
   /**
-   * 把 GitHub review 评论归一为 inline 类 PrComment。
+   * Normalize a GitHub review comment into an inline-kind PrComment.
    *
-   * 锚点按 line / original_line 与 side 推导；GitHub 不直接给行类型，按 side 取保守默认（仅展示用）。
+   * The anchor is derived from line / original_line and side; GitHub does not directly give the line type, so a conservative default is taken by side (display-only).
    */
   private mapReviewComment(c: GhReviewComment, mine?: Set<string>): PrComment {
     const line = c.line ?? c.original_line ?? null;
@@ -308,7 +308,7 @@ export class GitHubCommentService extends BaseCommentService {
             path: c.path,
             line,
             side: c.side === 'LEFT' ? 'old' : 'new',
-            // GitHub 不直接给 added/removed/context；按 side 取保守默认（仅展示用）
+            // GitHub does not directly give added/removed/context; take a conservative default by side (display-only)
             lineType: c.side === 'LEFT' ? 'removed' : 'added',
           }
         : null;
@@ -324,7 +324,7 @@ export class GitHubCommentService extends BaseCommentService {
       threadId: String(c.id),
       nativeId: String(c.id),
       reactions: this.buildReactions(c.reactions, mine),
-      // 无乐观锁哨兵，同 mapIssueComment。
+      // Lock-less sentinel, same as mapIssueComment.
       version: 0,
     };
   }

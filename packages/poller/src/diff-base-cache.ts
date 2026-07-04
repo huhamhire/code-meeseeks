@@ -1,28 +1,28 @@
 import type { StateStore } from '@meebox/state-store';
 
 /**
- * PR diff 基准（merge-base）固化文件。落在 `prs/<localId>/diff-base.json`。
+ * PR diff base (merge-base) pinned file. Lives at `prs/<localId>/diff-base.json`.
  *
- * **为什么固化**：PR diff 的语义基准应是「源分支自目标分支分叉处」= `merge-base(target, head)`，
- * 而非目标分支当前 tip（`targetRef.sha`，会随别的 PR 合入而前移）。
- * - 变更文件列表 / 改动行用三点 diff（`base...head`），已隐式按 merge-base 算，对目标前移稳定；
- * - 但**文件内容**（Monaco 左栏）若按 `targetRef.sha` 读，编辑器实际是两点对比，目标漂移后别的 PR
- *   的改动会以「倒挂/撤回」形式串进来。固化 merge-base 后，内容 / 列表 / 计数 / blame / pr-agent
- *   一律以它为 base，编辑器即真三点、对目标漂移稳定，评论 / finding 行锚点也有了固定参照。
+ * **Why pin it**: the semantic base of a PR diff should be "where the source branch diverged from the target branch" = `merge-base(target, head)`,
+ * not the target branch's current tip (`targetRef.sha`, which moves forward as other PRs merge in).
+ * - The changed-files list / changed lines use three-dot diff (`base...head`), already implicitly computed against merge-base, stable against target advancing;
+ * - but **file content** (Monaco's left pane), if read against `targetRef.sha`, makes the editor an actual two-dot comparison, and after target drifts other PRs'
+ *   changes leak in as "inversions/reverts". Once merge-base is pinned, content / list / counts / blame / pr-agent
+ *   all use it as base, the editor is a true three-dot and stable against target drift, and comment / finding line anchors gain a fixed reference.
  *
- * **失效**：`head`（`sourceRef.sha`）被 rebase 致固化 base 不再是其祖先时重算；源分支把
- * 当前目标分支 merge 进来时也重算，避免旧分叉点把 merge 带来的目标分支改动算进 PR diff。
- * 源分支正常 push（head 仅前进）不失效，base 仍锚在分叉点。
+ * **Invalidation**: recomputed when `head` (`sourceRef.sha`) is rebased so the pinned base is no longer its ancestor; also recomputed when the source branch
+ * merges the current target branch in, to avoid the old divergence point counting the merge's target-branch changes into the PR diff.
+ * A normal source-branch push (head only advances) does not invalidate; the base stays anchored at the divergence point.
  *
- * 它是**本地派生缓存**、非平台元数据，独立成文件，poller 重写 meta.json 时不触碰。
+ * It is a **local derived cache**, not platform metadata, kept as its own file and untouched when poller rewrites meta.json.
  */
 export interface DiffBaseCacheFile {
   schema_version: 1;
-  /** 固化的 merge-base sha，作为 diff/内容/计数/blame/pr-agent 的统一 base */
+  /** The pinned merge-base sha, used as the unified base for diff/content/counts/blame/pr-agent */
   base_sha: string;
-  /** 算这个 base 时对应的 head（sourceRef.sha），便于排障与人工核对 */
+  /** The head (sourceRef.sha) corresponding to when this base was computed, for troubleshooting and manual verification */
   head_sha: string;
-  /** 计算完成的 ISO 时间 */
+  /** ISO time when the computation completed */
   computed_at: string;
 }
 
@@ -36,8 +36,8 @@ export interface DiffBaseCacheReuseInput {
 export async function isDiffBaseCacheReusable(input: DiffBaseCacheReuseInput): Promise<boolean> {
   const { cachedBaseSha, targetSha, headSha, isAncestor } = input;
   if (!(await isAncestor(cachedBaseSha, headSha))) return false;
-  // 源分支 merge 目标分支后，target 会成为 head 的祖先；继续用旧分叉点会把这次 merge
-  // 带入的目标分支改动也算进 PR diff，必须重算到新的 merge-base（通常就是 target）。
+  // After the source branch merges the target branch, target becomes an ancestor of head; keeping the old divergence point
+  // would count this merge's target-branch changes into the PR diff too, so it must be recomputed to the new merge-base (usually target itself).
   if (targetSha !== cachedBaseSha && (await isAncestor(targetSha, headSha))) return false;
   return true;
 }

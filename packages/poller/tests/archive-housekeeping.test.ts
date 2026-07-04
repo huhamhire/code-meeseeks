@@ -23,7 +23,7 @@ afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-// 把归档目录 mtime 回拨到超期
+// Backdate the archive directory's mtime to past the grace period
 const backdateArchive = async (hash: string, ageMs: number): Promise<void> => {
   const t = new Date(NOW.getTime() - ageMs);
   await fs.utimes(path.join(tmpDir, 'archived', 'prs', hash), t, t);
@@ -51,12 +51,12 @@ const seedIndex = async (hashes: string[]): Promise<void> => {
 };
 
 describe('sweepOrphanedArchivedPrs', () => {
-  it('删除「索引无条目 + 超 grace」的归档孤儿，保留仍被索引登记的', async () => {
+  it('deletes archived orphans "no index entry + past grace", keeps those still registered in the index', async () => {
     await archiveStore.write('prs/known/meta', { v: 1 });
     await archiveStore.write('prs/orphan/meta', { v: 1 });
     await backdateArchive('known', GRACE + 60_000);
     await backdateArchive('orphan', GRACE + 60_000);
-    await seedIndex(['known']); // 只有 known 在索引里
+    await seedIndex(['known']); // only known is in the index
 
     const removed = await sweepOrphanedArchivedPrs({ stateStore: store, archiveStore, now: () => NOW });
     expect(removed).toBe(1);
@@ -64,16 +64,16 @@ describe('sweepOrphanedArchivedPrs', () => {
     expect(await archiveStore.read('prs/orphan/meta')).toBeNull();
   });
 
-  it('索引整个丢失时也只清超 grace 的孤儿、不动仍年轻的', async () => {
+  it('even when the whole index is lost, only sweeps orphans past grace, leaving still-young ones alone', async () => {
     await archiveStore.write('prs/old/meta', { v: 1 });
     await archiveStore.write('prs/recent/meta', { v: 1 });
     await backdateArchive('old', GRACE + 60_000);
     await backdateArchive('recent', GRACE - 60_000);
-    // 不写索引（模拟索引丢失）→ keep 为空
+    // do not write the index (simulate index loss) → keep is empty
 
     const removed = await sweepOrphanedArchivedPrs({ stateStore: store, archiveStore, now: () => NOW });
     expect(removed).toBe(1);
-    expect(await archiveStore.read('prs/old/meta')).toBeNull(); // 超期 → 清
-    expect(await archiveStore.read('prs/recent/meta')).not.toBeNull(); // 年轻 → 保留（保守）
+    expect(await archiveStore.read('prs/old/meta')).toBeNull(); // past grace → swept
+    expect(await archiveStore.read('prs/recent/meta')).not.toBeNull(); // young → kept (conservative)
   });
 });

@@ -1,23 +1,23 @@
-/** 解析后的实际视觉主题（写入 data-theme 的值）。 */
+/** Resolved actual visual theme (the value written to data-theme). */
 export type ResolvedTheme = 'light' | 'dark';
 
 /**
- * 全局主题（Monaco 编辑器 + 整个 GUI chrome 共用同一主题）的浅 / 深归属。
- * - `'light'` / `'dark'`：主题恒定浅 / 深。
- * - `'auto'`：跟随操作系统深 / 浅色（系统深色用 Dark 2026、浅色用 Light 2026）。
+ * Light / dark classification of the global theme (Monaco editor + the whole GUI chrome share one theme).
+ * - `'light'` / `'dark'`: theme is constantly light / dark.
+ * - `'auto'`: follows the OS dark / light setting (system dark uses Dark 2026, light uses Light 2026).
  */
 export type EditorThemeMode = 'light' | 'dark' | 'auto';
 
 /**
- * 全局主题选项（Monaco 配色主题，亦驱动整个 GUI chrome）。`id` 为生效的 Monaco 主题名，`label` 为展示名，
- * `mode` 为浅 / 深归属（决定 `data-theme` 与原生窗口 themeSource）。
- * - `'auto'`：特殊值，跟随系统深 / 浅色（深 → `dark-2026`、浅 → `light-2026`），默认。
- * - `vs` / `vs-dark` / `hc-light` / `hc-black`：Monaco 内置主题。
- * - 其余为内置注册的第三方主题（见 renderer monaco-setup，取色自 monaco-themes）。
+ * Global theme option (Monaco color theme, also drives the whole GUI chrome). `id` is the active Monaco theme name, `label` is the display name,
+ * `mode` is the light / dark classification (determines `data-theme` and the native window themeSource).
+ * - `'auto'`: special value, follows the system dark / light setting (dark → `dark-2026`, light → `light-2026`), the default.
+ * - `vs` / `vs-dark` / `hc-light` / `hc-black`: Monaco built-in themes.
+ * - The rest are built-in registered third-party themes (see renderer monaco-setup, colors from monaco-themes).
  *
- * **label 不做 i18n**：主题为专有名（GitHub Dark / Monokai…），与语言 endonym 同理，各 UI 语言下
- * 展示一致、不翻译。**例外**：`'auto'` 非具体主题、而是「自动适应」模式，其展示文案走 i18n
- * （见 settings.editorThemeOptionAuto），本 label 仅作兜底。
+ * **label is not i18n'd**: themes are proper names (GitHub Dark / Monokai…), like language endonyms, displayed
+ * consistently across UI languages and not translated. **Exception**: `'auto'` is not a concrete theme but an "auto-adapt" mode, whose display text goes through i18n
+ * (see settings.editorThemeOptionAuto); this label is only a fallback.
  */
 export interface EditorThemeOption {
   id: string;
@@ -29,7 +29,7 @@ export const EDITOR_THEME_OPTIONS = [
   { id: 'auto', label: 'Auto', mode: 'auto' },
   { id: 'dark-2026', label: 'Dark 2026', mode: 'dark' },
   { id: 'light-2026', label: 'Light 2026', mode: 'light' },
-  // Monaco 内置 vs / vs-dark 作为 Modern 默认（无需另引 VS Code Dark/Light Modern）。
+  // Monaco built-in vs / vs-dark serve as the Modern defaults (no need to add VS Code Dark/Light Modern separately).
   { id: 'vs-dark', label: 'Dark Modern', mode: 'dark' },
   { id: 'vs', label: 'Light Modern', mode: 'light' },
   { id: 'hc-black', label: 'High Contrast Dark', mode: 'dark' },
@@ -50,14 +50,14 @@ export const EDITOR_THEME_OPTIONS = [
 
 export type EditorTheme = (typeof EDITOR_THEME_OPTIONS)[number]['id'];
 
-/** 取主题的浅 / 深归属（未知 id 回落 `'auto'`）。 */
+/** Get the light / dark classification of a theme (unknown id falls back to `'auto'`). */
 export function editorThemeMode(id: string): EditorThemeMode {
   return EDITOR_THEME_OPTIONS.find((o) => o.id === id)?.mode ?? 'auto';
 }
 
 /**
- * 把全局主题解析为实际视觉主题（写入 data-theme）。`'auto'` 主题按 `osPrefersDark` 落到深 / 浅。
- * main / renderer 共用：renderer 的 osPrefersDark 取 `prefers-color-scheme`，main 取 `nativeTheme`。
+ * Resolve the global theme into the actual visual theme (written to data-theme). The `'auto'` theme falls to dark / light per `osPrefersDark`.
+ * Shared by main / renderer: renderer's osPrefersDark comes from `prefers-color-scheme`, main's from `nativeTheme`.
  */
 export function resolveEditorThemeMode(id: string, osPrefersDark: boolean): ResolvedTheme {
   const mode = editorThemeMode(id);
@@ -65,24 +65,24 @@ export function resolveEditorThemeMode(id: string, osPrefersDark: boolean): Reso
 }
 
 /**
- * 主题对应的原生窗口 themeSource：`'auto'` 交回 OS（`'system'`），其余固定浅 / 深。
- * 主进程据此设 `nativeTheme.themeSource`，让原生窗口 chrome（Windows 细边框 / 窗控按钮）跟随主题。
+ * The native window themeSource for a theme: `'auto'` hands back to the OS (`'system'`), the rest are fixed light / dark.
+ * The main process sets `nativeTheme.themeSource` accordingly, so the native window chrome (Windows thin border / window control buttons) follows the theme.
  */
 export function editorThemeNativeSource(id: string): 'system' | 'light' | 'dark' {
   const mode = editorThemeMode(id);
   return mode === 'auto' ? 'system' : mode;
 }
 
-/** 受支持的编辑器主题 id 元组（供 zod enum 校验用）。 */
+/** Tuple of supported editor theme ids (for zod enum validation). */
 export const EDITOR_THEME_IDS = EDITOR_THEME_OPTIONS.map((o) => o.id) as [
   EditorTheme,
   ...EditorTheme[],
 ];
 
-/** 编辑器字号合理范围（px）与默认值。下限保证可读、上限避免过大破坏布局；默认对齐历史 14px。 */
+/** Reasonable editor font-size range (px) and default. Lower bound keeps it readable, upper bound avoids breaking the layout; default aligns with the historical 14px. */
 export const EDITOR_FONT_SIZE_MIN = 8;
 export const EDITOR_FONT_SIZE_MAX = 32;
 export const EDITOR_FONT_SIZE_DEFAULT = 14;
 
-/** 设置页字号下拉的预设档位（仍受上面 min/max 约束；config 手改可取范围内任意整数）。 */
+/** Preset steps for the settings-page font-size dropdown (still bound by min/max above; manual config edits may use any integer in range). */
 export const EDITOR_FONT_SIZE_PRESETS = [10, 11, 12, 13, 14, 15, 16, 18, 20, 24] as const;

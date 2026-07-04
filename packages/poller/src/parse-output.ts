@@ -8,32 +8,32 @@ import type {
 } from '@meebox/shared';
 
 export interface ParsedReviewOutput {
-  /** 取首个非空 section 标题 / 描述首行作为 PR 摘要 */
+  /** Take the first non-empty section title / first line of the description as the PR summary */
   summary?: string;
   findings: Finding[];
-  /** 复评 /ask 的裁决（解析自 `<verdict>` 段）；非复评 / 未给则不填 */
+  /** The re-review /ask verdict (parsed from the `<verdict>` block); left unset for non-re-review / when not given */
   askVerdict?: AskVerdict;
   /**
-   * pr-agent CLI 看起来"完成"了 (exit 0) 但 stdout 里有 LLM 调用失败的 marker
-   * (litellm AuthenticationError / "Failed to generate prediction" 等)。命中时
-   * 调用方应把 run.status 升级为 'failed' + errorReason='llm-error'，UI 显示
-   * 红色失败 chip 而非"完成"
+   * The pr-agent CLI appears to "complete" (exit 0) but stdout has a marker of a failed LLM call
+   * (litellm AuthenticationError / "Failed to generate prediction" etc.). On a hit, the caller should
+   * upgrade run.status to 'failed' + errorReason='llm-error', and the UI shows a red failure chip
+   * rather than "complete"
    */
   llmFailure?: { message: string };
 }
 
 /**
- * 扫 stdout 找 LLM 调用全失败的 marker。pr-agent 的 fallback retry 跑完所有备选
- * 模型仍失败时只 logger.error 一行 "Failed to <tool> PR: Failed to generate
- * prediction with any model of [...]"，CLI 自身 exit 0 不会主动失败。
+ * Scan stdout for a marker of all LLM calls failing. When pr-agent's fallback retry exhausts all alternate
+ * models and still fails, it only logger.error's one line "Failed to <tool> PR: Failed to generate
+ * prediction with any model of [...]", and the CLI itself exits 0 without actively failing.
  *
- * 抽取的 message 尽量精炼可读：
- * - 优先取 "Error during LLM inference: <一行错因>" 最后一次出现 (一般是真错因)
- * - 否则取 "Failed to <tool> PR: <reason>" 那行
- * - 都没有但有 "Failed to generate prediction with any model" → 通用兜底
+ * The extracted message is kept as concise and readable as possible:
+ * - Prefer the last occurrence of "Error during LLM inference: <one-line cause>" (usually the real cause)
+ * - Otherwise take the "Failed to <tool> PR: <reason>" line
+ * - Neither present but "Failed to generate prediction with any model" is → generic fallback
  *
- * 调用方拿到 message 后跟 `[详见原始输出]` 提示一起渲染，让用户能展开 raw stdout
- * 自行排查
+ * After getting the message, the caller renders it alongside a `[see raw output]` hint, letting the user
+ * expand the raw stdout to investigate themselves
  */
 export function detectLlmFailure(stdout: string): { message: string } | null {
   const text = stripAnsi(stdout);
@@ -43,25 +43,25 @@ export function detectLlmFailure(stdout: string): { message: string } | null {
     /Error during LLM inference/i.test(text);
   if (!hasFailMarker) return null;
 
-  // 优先抽 "Error during LLM inference: <一行内容>" 中最实质的错因
+  // Prefer extracting the most substantive cause from "Error during LLM inference: <one-line content>"
   const inferenceMatches = [...text.matchAll(/Error during LLM inference:\s*([^\n]+)/gi)];
   if (inferenceMatches.length > 0) {
     const last = inferenceMatches[inferenceMatches.length - 1]![1]!.trim();
     return { message: last };
   }
-  // 退到 "Failed to <tool> PR: ..." 那行
+  // Fall back to the "Failed to <tool> PR: ..." line
   const toolMatch = /Failed to (?:review|describe|ask|improve) PR:\s*([^\n]+)/i.exec(text);
   if (toolMatch) return { message: toolMatch[1]!.trim() };
-  // 兜底通用
+  // Generic fallback
   return { message: '所有备选模型均调用失败 (Failed to generate prediction with any model)' };
 }
 
 /**
- * 剥掉文本里的 ANSI 转义码。pr-agent 在容器里跑时 stdout 也带颜色 (logger 配置使然)，
- * 解析 / 落到 finding body / 走 react-markdown 渲染都不该带 `\x1b[...m`。
- * 实时流走 ChatPane 的 AnsiPre 解析，那条路径保留 ANSI；这里只处理"持久化 / 解析"。
+ * Strip ANSI escape codes from text. When pr-agent runs in a container, stdout also carries color (due to logger
+ * config), and parsing / landing in a finding body / rendering via react-markdown should not carry `\x1b[...m`.
+ * The live stream goes through ChatPane's AnsiPre parsing, which preserves ANSI; this only handles "persistence / parsing".
  *
- * 同时剥 CSI (`ESC [ ... letter`) 和 OSC (`ESC ] ... BEL/ST`) 等常见控制序列。
+ * Also strips common control sequences like CSI (`ESC [ ... letter`) and OSC (`ESC ] ... BEL/ST`).
  */
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_RE = /\x1b\[[\d;]*[a-zA-Z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
@@ -71,17 +71,17 @@ export function stripAnsi(s: string): string {
 }
 
 interface Section {
-  /** Markdown header 级别 1-6 */
+  /** Markdown header level 1-6 */
   level: number;
   title: string;
   body: string;
 }
 
 /**
- * 把 pr-agent 0.36.0 的 markdown 输出按 H1-H6 切片为 sections。
- * 每个 section 含 level / title / body（body 去掉前后空白）。
- * 顶部无 header 的前导内容也合成一个 level=0 / title='' 的 section，便于 /describe
- * 整段拿出来。
+ * Slice pr-agent 0.36.0's markdown output into sections by H1-H6.
+ * Each section has level / title / body (body has leading/trailing whitespace stripped).
+ * Leading content at the top with no header is also synthesized into a level=0 / title='' section, so /describe
+ * can be pulled out as a whole segment.
  */
 export function splitMarkdownSections(md: string): Section[] {
   const lines = md.replace(/\r\n/g, '\n').split('\n');
@@ -91,7 +91,7 @@ export function splitMarkdownSections(md: string): Section[] {
   for (const line of lines) {
     const m = HEADER_RE.exec(line);
     if (m) {
-      // 先把 prev section 收尾（去掉空段）
+      // First finalize the prev section (drop empty segments)
       if (cur && (cur.title || cur.body.trim())) {
         sections.push({ ...cur, body: cur.body.trim() });
       }
@@ -106,27 +106,27 @@ export function splitMarkdownSections(md: string): Section[] {
   return sections;
 }
 
-/** 剥 markdown 强调符号 (`**Foo**` → `Foo`)，用作 title 显示 + 归一比对 */
+/** Strip markdown emphasis marks (`**Foo**` → `Foo`), used for title display + normalized comparison */
 function normalizeTitle(t: string): string {
   return t.replace(/[*_]+/g, '').trim();
 }
 
-/** 我们 materializeWorktree 临时建的内部分支名（`pr-<localId>/head|base`），pr-agent 把它当 PR 标识漏出来 */
+/** The internal branch name our materializeWorktree temporarily creates (`pr-<localId>/head|base`), which pr-agent leaks as a PR identifier */
 const INTERNAL_BRANCH_RE = /pr-[\w-]+\/(head|base)\b/i;
 
 /**
- * 剥 body 首尾的"噪音行"：连续 markdown HR (`---` / `***` / `___`)、空行、
- * 整行就是 `pr-<localId>/head|base` 的内部分支名 leak。pr-agent 在段落间用 `---`
- * 分隔，splitMarkdownSections 切完后这条 HR 会黏在上一个 section 的 body 末尾；
- * 类似地 pr-<localId>/head 这种 PR identifier leak 也可能停在 body 首或尾。
- * 全部在 parser 层清掉，下游 / 渲染 / 胶囊拆分都不用关心。
+ * Strip "noise lines" from the head and tail of body: consecutive markdown HR (`---` / `***` / `___`), blank lines,
+ * and whole lines that are just the `pr-<localId>/head|base` internal branch name leak. pr-agent separates paragraphs
+ * with `---`, and after splitMarkdownSections this HR sticks to the end of the previous section's body; similarly a
+ * PR identifier leak like pr-<localId>/head may also land at the head or tail of body.
+ * All cleaned at the parser layer, so downstream / rendering / capsule splitting need not care.
  */
 function trimNoise(body: string): string {
   const isNoise = (l: string): boolean => {
     const trimmed = l.trim();
     if (trimmed === '') return true;
     if (/^(?:[-*_]\s*){3,}$/.test(trimmed)) return true; // markdown HR
-    if (INTERNAL_BRANCH_RE.test(trimmed) && trimmed.length < 40) return true; // 短行 + 含分支名
+    if (INTERNAL_BRANCH_RE.test(trimmed) && trimmed.length < 40) return true; // short line + contains branch name
     return false;
   };
   const lines = body.split('\n');
@@ -136,10 +136,10 @@ function trimNoise(body: string): string {
 }
 
 /**
- * 把规整化后的 title 映射到稳定 sectionKey。匹配采用 lower-case + 正则，覆盖
- * pr-agent 不同版本 / /describe vs /review / 中英变体的常见拼写。
+ * Map a normalized title to a stable sectionKey. Matching uses lower-case + regex, covering the common spellings
+ * across pr-agent versions / /describe vs /review / Chinese-English variants.
  *
- * 维护时新增 key：在 PrDocSectionKey 类型加，在此表加一条 [regex, key]。
+ * When maintaining and adding a key: add it to the PrDocSectionKey type, and add a [regex, key] entry to this table.
  */
 const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = [
   [/^(?:suggested[\s_-]+)?title$/i, 'title'],
@@ -147,15 +147,15 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
   [/^type$/i, 'pr-type'],
   [/^(?:pr[\s_-]+reviewer[\s_-]+guide|review[\s_-]+summary|summary)$/i, 'summary'],
   [/^description$/i, 'description'],
-  // "Diagram Walkthrough" → diagram（含 walkthrough 子串，故须排在 walkthrough 之前）
+  // "Diagram Walkthrough" → diagram (contains the walkthrough substring, so must precede walkthrough)
   [/diagram/i, 'diagram'],
-  // 注入的高层评估段（shim 给 describe schema 加 assessment 字段 → 渲染为 `### **Assessment**`）
+  // Injected high-level assessment section (the shim adds an assessment field to the describe schema → rendered as `### **Assessment**`)
   [/^(?:high[\s_-]+level[\s_-]+)?assessment$/i, 'assessment'],
   [/^walkthrough$/i, 'walkthrough'],
-  // 测试/安全段的 <strong> 文案随结论变化（pr-agent 模板硬编码，恒英文）：
-  //   测试：Relevant tests / PR contains tests / No relevant tests[ found]
-  //   安全：Security concerns / No security concerns[ identified]
-  // 只匹配 "Relevant tests"/"Security concerns" 会漏掉「有测试」「无安全风险」等常见结论 → 退化成 general。
+  // The <strong> text of the tests/security sections varies with the conclusion (hardcoded in pr-agent templates, always English):
+  //   tests: Relevant tests / PR contains tests / No relevant tests[ found]
+  //   security: Security concerns / No security concerns[ identified]
+  // Matching only "Relevant tests"/"Security concerns" would miss common conclusions like "has tests" / "no security risk" → degrading to general.
   [
     /^(?:relevant[\s_-]+tests?|pr[\s_-]+contains[\s_-]+tests?|no[\s_-]+relevant[\s_-]+tests?(?:[\s_-]+found)?)$/i,
     'relevant-tests',
@@ -166,8 +166,8 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
 ];
 
 function mapSectionKey(displayTitle: string): PrDocSectionKey | undefined {
-  // 剥首尾的 emoji / 标点 / 空白，让 `⏱️ Estimated effort to review: 3 🔵🔵`
-  // 这种带装饰的标题也能命中 SECTION_KEY_PATTERNS 里的英文锚词
+  // Strip leading/trailing emoji / punctuation / whitespace, so a decorated title like `⏱️ Estimated effort to review: 3 🔵🔵`
+  // can also hit the English anchor words in SECTION_KEY_PATTERNS
   const cleaned = displayTitle.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').trim();
   for (const [re, key] of SECTION_KEY_PATTERNS) {
     if (re.test(cleaned)) return key;
@@ -176,21 +176,22 @@ function mapSectionKey(displayTitle: string): PrDocSectionKey | undefined {
 }
 
 /**
- * 噪音段落，直接从 findings 里剔除：
- * - `user description`：纯粹回显用户已写的 PR 描述，UI 上已有 PrInfoView 显示
- * - title 含 `pr-<localId>/head|base`：我们临时建的分支名，pr-agent 把它当 PR 标识
- *   作为各级 heading leak 出来（含 emoji / 修饰也照样匹配，子串就行）
- * - 空 title + 经 trimNoise 后空 body：纯分支名 leak 的独立 section
- * - /ask 工具下的 `question` / `questions` 段：UI 上方 chat-user-msg 已展示用户提问，
- *   pr-agent 把问题回显在答案文本里是冗余的
+ * Noise sections, removed directly from findings:
+ * - `user description`: purely echoes the PR description the user already wrote, which PrInfoView already displays in the UI
+ * - title containing `pr-<localId>/head|base`: the branch name we temporarily create, which pr-agent leaks as a PR identifier
+ *   at heading levels (matches even with emoji / decoration — a substring is enough)
+ * - empty title + empty body after trimNoise: a standalone section that is a pure branch-name leak
+ * - the `question` / `questions` section under the /ask tool: the chat-user-msg above in the UI already shows the user's question,
+ *   so pr-agent echoing the question in the answer text is redundant
  */
 const SKIP_TITLES = new Set(['user description']);
 const ASK_QUESTION_HEADERS = new Set(['ask', 'question', 'questions', '问题', '提问']);
 const ASK_ANSWER_HEADERS = new Set(['answer', 'answers', '回答', '答案', '解答']);
 
 /**
- * /ask 输出里的结构性表头判别：pr-agent 把「Ask ❓」「回答:」这类标题段回显出来，对 UI 是冗余的
- * （提问已在上方气泡展示、答案紧跟其下）。先剥首尾的 emoji / 标点 / 空格再按集合匹配。
+ * Detect structural headers in /ask output: pr-agent echoes title segments like "Ask ❓" / "Answer:", which are redundant
+ * for the UI (the question is already shown in the bubble above, and the answer follows right below). Strip leading/trailing
+ * emoji / punctuation / whitespace first, then match against the sets.
  */
 function askHeaderKind(title: string): 'question' | 'answer' | null {
   const t = normalizeTitle(title)
@@ -206,32 +207,32 @@ function shouldSkipSection(sec: Section, tool: ReviewRunTool): boolean {
   if (SKIP_TITLES.has(t)) return true;
   if (tool === 'ask') {
     const kind = askHeaderKind(sec.title);
-    // 「Ask ❓」等问题回显段整段剔除；空的「回答」表头段（仅标题无正文）同样剔除。
+    // Question-echo segments like "Ask ❓" are removed entirely; an empty "Answer" header segment (title only, no body) is also removed.
     if (kind === 'question') return true;
     if (kind === 'answer' && !trimNoise(sec.body).trim()) return true;
   }
-  // title 含内部分支名 (e.g., "pr-<id>/head" / "pr-<id>/head 🔍" / "## pr-<id>/base")
+  // title contains an internal branch name (e.g., "pr-<id>/head" / "pr-<id>/head 🔍" / "## pr-<id>/base")
   if (INTERNAL_BRANCH_RE.test(t)) return true;
-  // trimNoise 把首尾的 HR / 分支名 leak 剥掉后，body 空 = 整段都是噪音
+  // After trimNoise strips the leading/trailing HR / branch-name leak, an empty body = the whole segment is noise
   const cleanedBody = trimNoise(sec.body).trim();
   if (!t && !cleanedBody) return true;
   return false;
 }
 
 /**
- * 判断一个 section 是否是 pr-agent `/review` 的 key_issues_to_review 段。
+ * Determine whether a section is pr-agent `/review`'s key_issues_to_review segment.
  *
- * pr-agent v0.35+ LocalGitProvider 跑 /review 时该段渲染为：
+ * When pr-agent v0.35+ LocalGitProvider runs /review, this segment renders as:
  *   ### ⚡ Recommended focus areas for review
- *   ####                       <- 单独空 H4 行作为 issue 间分隔符
- *   **潜在空引用**             <- issue_header (bold)
+ *   ####                       <- a standalone empty H4 line as an inter-issue separator
+ *   **Potential null reference**   <- issue_header (bold)
  *
- *   <issue_content 多行文本>
+ *   <issue_content multi-line text>
  *   ####
- *   **<下一条 header>**
+ *   **<next header>**
  *   ...
  *
- * 这里只识别 section title。展开成多条 finding 走 expandKeyIssuesSection。
+ * This only recognizes the section title. Expanding into multiple findings goes through expandKeyIssuesSection.
  */
 function isKeyIssuesSection(title: string): boolean {
   return /key\s+issues\s+to\s+review|recommended\s+focus\s+areas\s+for\s+review|关键问题|关注焦点/i.test(
@@ -240,32 +241,32 @@ function isKeyIssuesSection(title: string): boolean {
 }
 
 /**
- * 把 "Recommended focus areas for review" 段 body 按 issue 拆成多条 finding。
+ * Split the "Recommended focus areas for review" segment's body into multiple findings by issue.
  *
- * 切分锚点：**单独一行 + bold 包裹的 issue header**（如 `**潜在空引用**`）。每条
- * issue 的 content 是从它的 bold header 行下一行到下一条 bold header 行之间。
- * `####` 空标题分隔符跳过（splitMarkdownSections 不会切空标题）；首条 header
- * 之前的内容（一般只有 `####`）丢弃。
+ * Split anchor: **a standalone line + a bold-wrapped issue header** (e.g. `**Potential null reference**`). Each issue's
+ * content spans from the line after its bold header to the next bold header line.
+ * The `####` empty-title separator is skipped (splitMarkdownSections does not split empty titles); content
+ * before the first header (usually just `####`) is discarded.
  *
- * anchor 抽取：嵌入式运行时的 sitecustomize 已补 LocalGitProvider.get_line_link
- * （返回 `meebox:///<file>#L<s>-L<e>`），所以 header 渲染成 `[**header**](meebox://…)`，
- * 可直接取出结构化 anchor（与真实 provider 同源，逐条基本全覆盖）。链接缺失时（旧运行时
- * / 真无 anchor）退回从 issue 文本 best-effort 推断：旧 marker `[file:…, lines:…]`，
- * 或 `path/to/file.ext` + `第 N 行 / lines N-M` 关键词。都抽不到则 anchor 留空，
- * UI 端把"跳转编辑"按钮 disable。
+ * anchor extraction: the embedded runtime's sitecustomize already patches LocalGitProvider.get_line_link
+ * (returning `meebox:///<file>#L<s>-L<e>`), so the header renders as `[**header**](meebox://…)`, from which
+ * a structured anchor can be extracted directly (same source as the real provider, near-full per-issue coverage).
+ * When the link is missing (old runtime / truly no anchor), fall back to best-effort inference from the issue text:
+ * the old marker `[file:…, lines:…]`, or `path/to/file.ext` + `第 N 行 / lines N-M` keywords. When nothing can be
+ * extracted the anchor is left empty, and the UI disables the "jump to edit" button.
  */
 function expandKeyIssuesSection(sec: Section, baseIndex: number, tool: ReviewRunTool): Finding[] {
   const body = trimNoise(sec.body);
   const lines = body.split('\n');
-  // issue header 行两种形态：
-  //   - 无 link（旧版 / 真无 anchor）：整行 `**header**`
-  //   - 有 link（sitecustomize 补的 get_line_link）：`[**header**](meebox:///file#Ls-Le)`
+  // Two forms of the issue header line:
+  //   - no link (old version / truly no anchor): the whole line is `**header**`
+  //   - with link (get_line_link patched by sitecustomize): `[**header**](meebox:///file#Ls-Le)`
   const HEADER_LINE_RE = /^\s*\*\*\s*([^*\n][^*\n]*?)\s*\*\*\s*$/;
   const LINKED_HEADER_RE = /^\s*\[\s*\*\*\s*([^*\n][^*\n]*?)\s*\*\*\s*\]\(\s*([^)\s]+)\s*\)\s*$/;
   interface IssueBlock {
     title: string;
     body: string;
-    /** header 行带的链接（如 meebox://…）；用于取结构化 anchor */
+    /** The link carried by the header line (e.g. meebox://…); used to extract a structured anchor */
     link?: string;
   }
   const blocks: IssueBlock[] = [];
@@ -281,8 +282,8 @@ function expandKeyIssuesSection(sec: Section, baseIndex: number, tool: ReviewRun
       continue;
     }
     if (cur) {
-      // 跳过 issue 块之间的空 H4 分隔符（splitMarkdownSections 不会切 `#### ` 空标题，
-      // 整行就是 `#`+ 空白时直接丢；正文里残留 `#` 不影响）
+      // Skip the empty H4 separator between issue blocks (splitMarkdownSections does not split a `#### ` empty title;
+      // drop directly when the whole line is `#` + whitespace; a residual `#` in the body has no effect)
       if (/^#{2,}\s*$/.test(line.trim())) continue;
       cur.body += `${line}\n`;
     }
@@ -290,13 +291,13 @@ function expandKeyIssuesSection(sec: Section, baseIndex: number, tool: ReviewRun
   if (cur) blocks.push(cur);
 
   if (blocks.length === 0) {
-    // body 完全找不到 bold header（旧版 / prompt 漂移） → 退回整段当一条 finding
+    // No bold header found at all in body (old version / prompt drift) → fall back to the whole segment as one finding
     return [sectionToFinding(sec, baseIndex, tool)];
   }
 
   return blocks.map((b, i) => {
     const raw = b.body.trim();
-    // 先用含 marker 的原文解析 anchor（marker 是行号兜底），再 strip 用于展示
+    // First parse the anchor from the raw text containing the marker (the marker is a line-number fallback), then strip for display
     const anchor = resolveIssueAnchor(b.link, raw);
     const issueBody = stripAnchorMarker(raw);
     const id = `${tool}-${String(baseIndex + i).padStart(3, '0')}`;
@@ -311,22 +312,22 @@ function expandKeyIssuesSection(sec: Section, baseIndex: number, tool: ReviewRun
   });
 }
 
-// ===== GFM 输出解析（gfm_markdown=True：shim 让 LocalGitProvider 支持 GFM，使 /describe
-// 出 mermaid 图、/review 走 GFM 富 markdown）。GFM 下 /review 整体是 <table>，每段一个
-// <tr><td>…<strong>标题</strong>…</td></tr>；key_issues 段内 finding 是
-//   <details><summary><a href='meebox://…'><strong>标题</strong></a>\n\n内容\n</summary>\n\n代码片段\n\n</details>
-// 或 <a href='meebox://…'><strong>标题</strong></a><br>内容。markdown H1-H6 切片对其失配，
-// 故另走这条 HTML 解析路径（仅 review + 检测到 GFM 时）。
+// ===== GFM output parsing (gfm_markdown=True: the shim makes LocalGitProvider support GFM, so /describe
+// emits mermaid diagrams and /review uses GFM rich markdown). Under GFM /review is a whole <table>, with each
+// segment being one <tr><td>…<strong>title</strong>…</td></tr>; a finding inside the key_issues segment is
+//   <details><summary><a href='meebox://…'><strong>title</strong></a>\n\ncontent\n</summary>\n\ncode snippet\n\n</details>
+// or <a href='meebox://…'><strong>title</strong></a><br>content. markdown H1-H6 slicing mismatches it,
+// so this HTML parsing path is used instead (only for review + when GFM is detected).
 
 /**
- * 是否是 GFM 表格形态的 /review 输出（决定走 HTML 还是 markdown 解析路径）。
+ * Whether the output is GFM table-form /review (decides the HTML vs markdown parsing path).
  *
- * 判定：含闭合 `<table>…</table>` 且至少有一个单元格 `<td>`/`<th>`。判定前先剥掉代码围栏
- * （```…```），避免「markdown 正文在代码块里提到 `<table>`」被误判进 HTML 路径。
+ * Decision: contains a closed `<table>…</table>` and at least one `<td>`/`<th>` cell. Before deciding, strip code
+ * fences (```…```), to avoid "markdown body mentioning `<table>` inside a code block" being misjudged into the HTML path.
  *
- * 注意：不能要求「以 <table> 开头」—— 真实 GFM /review 常在表格前带一句前导说明
- * （如「以下是辅助评审的关键观察：」），强行锚定开头会漏判、导致整表退化成单条总结、
- * key_issues 也不再拆成独立 code-feedback。
+ * Note: must not require "starts with <table>" — real GFM /review often carries a leading sentence before the table
+ * (e.g. "The following are key observations to aid the review:"); forcibly anchoring the start would misjudge, causing
+ * the whole table to degrade into a single summary and key_issues to no longer split into standalone code-feedback.
  */
 function isGfmReviewOutput(text: string): boolean {
   const withoutFences = text.replace(/```[\s\S]*?```/g, '');
@@ -337,8 +338,8 @@ function isGfmReviewOutput(text: string): boolean {
   );
 }
 
-/** GFM finding 片段 → 可渲染文本：<br>/<summary>/<details> → 换行，其余标签剥掉，
- *  常见实体解码；代码围栏(```)是字面文本，原样保留。 */
+/** GFM finding fragment → renderable text: <br>/<summary>/<details> → newline, other tags stripped,
+ *  common entities decoded; code fences (```) are literal text, preserved as-is. */
 function gfmInlineToText(s: string): string {
   return s
     .replace(/<br\s*\/?>/gi, '\n')
@@ -352,15 +353,15 @@ function gfmInlineToText(s: string): string {
     .trim();
 }
 
-/** 把 GFM <table> 拆成行 section：每个 <tr> 内**所有**单元格（<td>/<th>）内容，行首 <strong>
- *  作 title，其余作 body（key_issues 行的 body 保留原始 HTML 供 expandGfmKeyIssues 抽 finding）。 */
+/** Split a GFM <table> into row sections: the content of **all** cells (<td>/<th>) within each <tr>, the leading <strong>
+ *  as title and the rest as body (the body of a key_issues row keeps the raw HTML for expandGfmKeyIssues to extract findings). */
 function splitGfmTableSections(html: string): Section[] {
   const sections: Section[] = [];
   const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
   let rm: RegExpExecArray | null;
   while ((rm = rowRe.exec(html)) !== null) {
     const row = rm[1]!;
-    // 收集行内所有单元格并以 \n\n 连接：多列表格不丢后续单元格内容（只取首个 <td> 会漏掉评审条目）。
+    // Collect all cells in the row and join with \n\n: a multi-column table does not drop subsequent cell content (taking only the first <td> would miss review items).
     const cellRe = /<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi;
     const cells: string[] = [];
     let cm: RegExpExecArray | null;
@@ -372,7 +373,7 @@ function splitGfmTableSections(html: string): Section[] {
           .replace(/[:：]\s*$/, '')
           .trim()
       : '';
-    // `<strong>标题</strong>: 值` 形态：去掉标题后残留的前导分隔符（: ：&nbsp; 空白）
+    // `<strong>title</strong>: value` form: the leading separator (: ：&nbsp; whitespace) left after removing the title
     const body = (titleMatch ? cellText.slice(titleMatch.index + titleMatch[0].length) : cellText)
       .replace(/^(?:&nbsp;|\s|[:：])+/gi, '')
       .trim();
@@ -381,8 +382,8 @@ function splitGfmTableSections(html: string): Section[] {
   return sections;
 }
 
-/** 从 GFM key_issues 段 body（原始 HTML）抽多条 finding：以 <a href><strong>标题</strong></a>
- *  为锚，相邻两条之间为该条正文。link 取结构化 anchor，与 markdown 路径同源。 */
+/** Extract multiple findings from the GFM key_issues segment body (raw HTML): anchoring on <a href><strong>title</strong></a>,
+ *  the text between two adjacent ones is that finding's body. The link yields the structured anchor, same source as the markdown path. */
 function expandGfmKeyIssues(html: string, baseIndex: number, tool: ReviewRunTool): Finding[] {
   const FIND_RE = /<a\s+href=['"]([^'"]+)['"]\s*>\s*<strong>([\s\S]*?)<\/strong>\s*<\/a>/gi;
   const matches = [...html.matchAll(FIND_RE)];
@@ -392,12 +393,12 @@ function expandGfmKeyIssues(html: string, baseIndex: number, tool: ReviewRunTool
     const start = m.index + m[0].length;
     const end = i + 1 < matches.length ? matches[i + 1]!.index : html.length;
     let chunk = html.slice(start, end);
-    // <details> 形态：issue_content 在 </summary> 前；其后是 relevant_lines 代码片段，
-    // 不塞进 body（代码由 anchor → DiffView 展示，body 重复贴大段代码很吵）。
+    // <details> form: issue_content is before </summary>; after it is the relevant_lines code snippet,
+    // which is not put into body (the code is shown via anchor → DiffView; re-pasting a large code block in body is noisy).
     const sumIdx = chunk.search(/<\/summary>/i);
     if (sumIdx >= 0) chunk = chunk.slice(0, sumIdx);
     const raw = gfmInlineToText(chunk);
-    // 先用含 marker 的原文解析 anchor（行号兜底），再 strip 用于展示
+    // First parse the anchor from the raw text containing the marker (line-number fallback), then strip for display
     const anchor = resolveIssueAnchor(link, raw);
     const issueBody = stripAnchorMarker(raw);
     return {
@@ -412,18 +413,18 @@ function expandGfmKeyIssues(html: string, baseIndex: number, tool: ReviewRunTool
 }
 
 /**
- * 从 issue 文本里 best-effort 抽 file path + 行号。pr-agent 渲染丢字段后这是唯一
- * 兜底途径：扫一遍 content，找 (1) 含 `/` 或 `\` 或 `.<ext>` 的路径 token，
- * (2) `第 N 行 / 行 N-M / line(s) N-M / Lines N-M` 形式的行号。抽不到返回 undefined。
+ * Best-effort extract a file path + line number from the issue text. After pr-agent rendering loses the fields this is
+ * the only fallback route: scan the content once, finding (1) a path token containing `/` or `\` or `.<ext>`,
+ * (2) a line number in the form `第 N 行 / 行 N-M / line(s) N-M / Lines N-M`. Returns undefined when nothing is extracted.
  *
- * 我们也认 prompt extra-instructions 里我们自己请求 model 显式输出的 marker：
+ * We also recognize the marker we ourselves ask the model to output explicitly in the prompt extra-instructions:
  *   [file: <path>, lines: <start>-<end>]
- * 用作 anchor 强信号 (优先采用)
+ * used as a strong anchor signal (preferentially adopted)
  */
 /**
- * 解析 sitecustomize 注入的 anchor 链接 `meebox:///<url-encoded-file>#L<s>-L<e>`
- * （行号段可选；end 可省）。非 meebox 链接（真实 provider 的 http 链接）返回 undefined，
- * 交回文本推断。path 做 URL 解码还原空格 / 非 ASCII。
+ * Parse the anchor link injected by sitecustomize `meebox:///<url-encoded-file>#L<s>-L<e>`
+ * (the line-number part is optional; end may be omitted). A non-meebox link (a real provider's http link) returns undefined,
+ * handing back to text inference. path is URL-decoded to restore spaces / non-ASCII.
  */
 function parseMeeboxAnchor(url: string): FindingAnchor | undefined {
   const m = /^meebox:\/{0,3}([^#?]+)(?:#L(\d+)(?:-L(\d+))?)?\s*$/i.exec(url.trim());
@@ -442,13 +443,14 @@ function parseMeeboxAnchor(url: string): FindingAnchor | undefined {
 }
 
 /**
- * 合并两路 anchor 信号，得到最完整的定位：
- *   - meebox 链接（sitecustomize 注入，path 来自 provider 同源、最可靠）
- *   - 文本推断（原始 `[file:…, lines:…]` marker 协议 / 路径+行号兜底）
+ * Merge the two anchor signals to get the most complete location:
+ *   - meebox link (injected by sitecustomize, path from the same source as the provider, most reliable)
+ *   - text inference (the original `[file:…, lines:…]` marker protocol / path+line-number fallback)
  *
- * 规则：链接的 path 权威；行号链接优先（模型填了结构化 start/end → 链接自带 #L），
- * 链接缺行号时回退用文本协议的行号补全——但仅当文本指向同一文件，避免跨文件错配。
- * 这样既拿到可靠 path，又不丢模型只写进 marker、没填结构化字段时的行号。
+ * Rules: the link's path is authoritative; a line-number-bearing link takes priority (the model filled structured start/end
+ * → the link carries #L), and when the link lacks line numbers, fall back to completing with the text protocol's line numbers —
+ * but only when the text points at the same file, to avoid cross-file mismatch. This gets a reliable path while not losing
+ * the line numbers from when the model only wrote them into the marker without filling structured fields.
  */
 function resolveIssueAnchor(link: string | undefined, body: string): FindingAnchor | undefined {
   const linkAnchor = link ? parseMeeboxAnchor(link) : undefined;
@@ -465,14 +467,14 @@ function resolveIssueAnchor(link: string | undefined, body: string): FindingAnch
   return linkAnchor;
 }
 
-/** 锚点 marker `[file: <path>, lines: <s>-<e>]`（我们 prompt 注入的）。抽成 anchor 后
- *  应从展示 body 删除，否则会作为多余文字泄漏到 finding 正文。
- *  路径本身可能含 `[]`（如 `a/[m-123]/x.ts`）：带 lines 时用惰性 `.+?` + 必现的 `, lines:`
- *  后缀界定（`.` 可匹配 `]`，故路径里的 `]` 不再误截）；无 lines 时回退到不含 `]` 的旧式。 */
+/** Anchor marker `[file: <path>, lines: <s>-<e>]` (injected by our prompt). After being extracted into an anchor it
+ *  should be removed from the display body, otherwise it leaks into the finding text as stray text.
+ *  The path itself may contain `[]` (e.g. `a/[m-123]/x.ts`): when lines are present, delimit with a lazy `.+?` + the
+ *  mandatory `, lines:` suffix (`.` can match `]`, so the `]` in the path is no longer wrongly cut); without lines, fall back to the old form excluding `]`. */
 const ANCHOR_MARKER_RE =
   /\[\s*file\s*:\s*(?:.+?\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?|[^,\]\n]+?)\s*\]/gi;
 
-/** 从 finding body 删掉锚点 marker，并收敛多余空白。 */
+/** Remove the anchor marker from the finding body and collapse excess whitespace. */
 export function stripAnchorMarker(body: string): string {
   return body
     .replace(ANCHOR_MARKER_RE, '')
@@ -482,8 +484,8 @@ export function stripAnchorMarker(body: string): string {
 }
 
 function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
-  // 显式 marker (我们 prompt 注入的)。带 lines 时路径用惰性 `.+?` + 必现 `, lines:` 后缀界定，
-  // 允许路径含 `[]`（`.` 匹配 `]`，不被路径里的 `]` 误截）；无 lines 时回退到不含 `]` 的旧式。
+  // Explicit marker (injected by our prompt). With lines, delimit the path with a lazy `.+?` + the mandatory `, lines:` suffix,
+  // allowing the path to contain `[]` (`.` matches `]`, not wrongly cut by the `]` in the path); without lines, fall back to the old form excluding `]`.
   const markerWithLines =
     /\[\s*file\s*:\s*(.+?)\s*,\s*lines?\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?\s*\]/i;
   const markerNoLines = /\[\s*file\s*:\s*([^,\]\s][^,\]]*?)\s*\]/i;
@@ -495,7 +497,7 @@ function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
     if (mm[3]) anchor.endLine = Number.parseInt(mm[3], 10);
     return anchor;
   }
-  // 兜底 1：含 `/` 的路径 token (优先匹配 `path/to/file.ext`)
+  // Fallback 1: a path token containing `/` (preferentially matching `path/to/file.ext`)
   const pathRe =
     /(?:^|[\s(`'"])([A-Za-z0-9_./\\-]+\/[A-Za-z0-9_./\\-]*\.[A-Za-z0-9]{1,8})(?=[\s)`'":.,!?]|$)/m;
   const pm = pathRe.exec(text);
@@ -517,23 +519,23 @@ function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
 }
 
 /**
- * 解析单段 markdown 为 Finding。识别 pr-agent 常见的
- * `**File:** path` + `**Lines:** N-M` 模式 → code-feedback；其它返回 general / description。
+ * Parse a single markdown segment into a Finding. Recognizes pr-agent's common
+ * `**File:** path` + `**Lines:** N-M` pattern → code-feedback; otherwise returns general / description.
  */
 export function sectionToFinding(sec: Section, index: number, tool: ReviewRunTool): Finding {
   const id = `${tool}-${String(index).padStart(3, '0')}`;
   const body = trimNoise(sec.body);
   const rawTitle = normalizeTitle(sec.title) || undefined;
   const mappedKey = rawTitle ? mapSectionKey(rawTitle) : undefined;
-  // /ask：带正文的「回答 / Answer」表头是冗余的（其下就是答案正文）→ 清掉标题只留正文。
+  // /ask: an "Answer" header with body is redundant (the answer text follows right below) → clear the title, keep only the body.
   const displayTitle =
     tool === 'ask' && askHeaderKind(sec.title) === 'answer' ? undefined : rawTitle;
 
-  // pr-agent 0.36.0 review 输出形如 (pr-agent 自定义 prompt 或非 LocalGitProvider 时)：
+  // pr-agent 0.36.0 review output looks like (with a pr-agent custom prompt or a non-LocalGitProvider):
   //   **File:** src/foo.ts
   //   **Lines:** 42-50
   //   **Issue:** ...
-  // 兼容 file_path / Line / 行号 等中英变体
+  // Compatible with Chinese-English variants like file_path / Line / 行号
   const fileMatch = /^\s*\*\*\s*(?:file(?:[_\s]?path)?|路径|文件)\s*:?\s*\*\*\s*(.+?)\s*$/im.exec(
     body,
   );
@@ -560,13 +562,13 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
     };
   }
 
-  // /ask 兜底：pr-agent /ask 自由回答不会按 `**File:** xxx` 这种结构化格式输出，
-  // 但我们 prompt 注入了 `[file: <path>, lines: <s>-<e>]` marker 要求 model 在
-  // 答案涉及代码位置时显式标注。命中 marker 则升格成 code-feedback —— UI 会显示
-  // "→ 编辑" 按钮直跳 DiffView 行内评论草稿，让 /ask 的提问回答也能转化为可发布
-  // 的 inline comment (跟 /review 路径一致)。
-  // 仅 /ask 启用：/describe 的 description 段如果偶然提到一个路径不应被识别成
-  // code-feedback；/review 的常规段也不该被这条兜底覆盖
+  // /ask fallback: pr-agent /ask free-form answers do not output in a structured format like `**File:** xxx`,
+  // but our prompt injects a `[file: <path>, lines: <s>-<e>]` marker requiring the model to annotate explicitly
+  // when the answer involves a code location. On a marker hit it is upgraded to code-feedback — the UI shows a
+  // "→ edit" button jumping straight to a DiffView inline-comment draft, so /ask question answers can also convert
+  // into a publishable inline comment (consistent with the /review path).
+  // Enabled only for /ask: if /describe's description segment happens to mention a path it should not be recognized as
+  // code-feedback; /review's regular segments should also not be covered by this fallback
   if (tool === 'ask') {
     const anchor = inferAnchorFromIssueText(body);
     if (anchor && typeof anchor.startLine === 'number') {
@@ -590,15 +592,15 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
   };
 }
 
-// ===== /describe 的 File Walkthrough 处理 =====
-// pr-agent 把 File Walkthrough 作为 HTML <details><table> 追加在 describe 末尾（line 131），
-// 没有 markdown header，会黏进上一段（通常是 ### Diagram Walkthrough）的 body。这里把它
-// 单独抽出，并把嵌套表格转成「按分组折叠的无序列表」（聊天面板里表格体验差），同时丢掉
-// 无实际意义的 +1/-1 统计列。
+// ===== /describe's File Walkthrough handling =====
+// pr-agent appends File Walkthrough as an HTML <details><table> at the end of describe (line 131),
+// with no markdown header, so it sticks into the previous segment's body (usually ### Diagram Walkthrough). Here it is
+// extracted separately, and the nested table is converted into a "grouped-collapsible unordered list" (tables are a poor
+// experience in the chat panel), while dropping the meaningless +1/-1 stats column.
 
 /**
- * 从 describe 输出抽出 File Walkthrough 块（追加在末尾，含嵌套 details，故从起点取到结尾）。
- * 返回 { rest: 去掉该块的正文, block: 该块原文 }；没有则 null。
+ * Extract the File Walkthrough block from describe output (appended at the end, containing nested details, so taken from start to end).
+ * Returns { rest: the body with the block removed, block: the block's raw text }; null if absent.
  */
 function extractFileWalkthrough(md: string): { rest: string; block: string } | null {
   const startRe = /<details[^>]*>\s*<summary>\s*<h3>\s*File Walkthrough\s*<\/h3>\s*<\/summary>/i;
@@ -607,25 +609,26 @@ function extractFileWalkthrough(md: string): { rest: string; block: string } | n
   return { rest: md.slice(0, m.index).trimEnd(), block: md.slice(m.index) };
 }
 
-/** HTML 文本节点转义：desc/文件名经 gfmInlineToText 已把实体解码成裸 < > &，
- *  再放进 <li> 文本上下文须重新转义，避免破坏结构 / 被下游清洗器误判。 */
+/** HTML text-node escaping: after gfmInlineToText decodes entities into bare < > & in desc/filenames,
+ *  putting them into an <li> text context requires re-escaping, to avoid breaking the structure / being misjudged by the downstream sanitizer. */
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**
- * 把 File Walkthrough 的嵌套 HTML 表格转成「按分类折叠的无序列表」纯 HTML：
- *   <details open><summary>分类名（N）</summary>
- *   <ul><li><strong>文件名</strong> — 描述</li>…</ul>
+ * Convert File Walkthrough's nested HTML table into pure HTML as a "by-category collapsible unordered list":
+ *   <details open><summary>category name（N）</summary>
+ *   <ul><li><strong>filename</strong> — description</li>…</ul>
  *   </details>
- * 保留 pr-agent 的多级分类（每个分类各自独立成可收起/展开的 <details>），丢掉每行后面
- * 无意义的 +1/-1 链接列。分类靠「<strong>X</strong></td><td><details|table>」识别 —— pr-agent
- * 仅在文件数超阈值时给分类包一层 <details>（collapsible_file_list=adaptive），小 PR 则是
- * 裸 <td><table>，两种都要认，否则小 PR 会识别不到分类、退化成平铺列表。文件靠
- * 「<strong>X</strong><dd><code>desc</code>」识别，按出现位置归到所属分类。
+ * Preserves pr-agent's multi-level categories (each category is its own collapsible/expandable <details>), dropping the
+ * meaningless +1/-1 link column after each row. Categories are recognized by "<strong>X</strong></td><td><details|table>" —
+ * pr-agent only wraps a category in a <details> when the file count exceeds a threshold (collapsible_file_list=adaptive),
+ * while a small PR is a bare <td><table>; both must be recognized, otherwise a small PR would fail to recognize categories
+ * and degrade into a flat list. Files are recognized by "<strong>X</strong><dd><code>desc</code>", assigned to the owning
+ * category by position of appearance.
  *
- * 注：产出纯 HTML（非 markdown `- ` 列表）——「markdown 列表嵌在 <details> 原始 HTML 块内」
- * 在 react-markdown(rehype-raw) 下并不稳定渲染成折叠区，纯 HTML 才能确保各级可靠折叠。
+ * Note: produces pure HTML (not a markdown `- ` list) — "a markdown list nested inside a <details> raw HTML block" does not
+ * reliably render as a collapsible region under react-markdown(rehype-raw); only pure HTML ensures reliable collapse at each level.
  */
 function walkthroughToList(block: string): string {
   const GROUP_RE = /<strong>([^<]+?)<\/strong>\s*<\/td>\s*<td>\s*<(?:details|table)\b/gi;
@@ -642,7 +645,7 @@ function walkthroughToList(block: string): string {
     `<ul>\n${items.map(fmtItem).join('\n')}\n</ul>`;
 
   if (groups.length === 0) {
-    // 无分类：直接平铺列表
+    // No categories: a flat list directly
     return files.length ? fmtList(files) : '（无文件变更明细）';
   }
   const parts: string[] = [];
@@ -660,15 +663,15 @@ function walkthroughToList(block: string): string {
   return parts.join('\n') || (files.length ? fmtList(files) : '（无文件变更明细）');
 }
 
-/** /ask 结构化分段标签 → sectionKey（固定渲染顺序：summary → analysis → suggestions）。 */
+/** /ask structured-segment tags → sectionKey (fixed render order: summary → analysis → suggestions). */
 const ASK_STRUCTURED_SECTIONS: ReadonlyArray<{ tag: string; key: PrDocSectionKey }> = [
   { tag: 'summary', key: 'ask-summary' },
   { tag: 'analysis', key: 'ask-analysis' },
   { tag: 'suggestions', key: 'ask-suggestions' },
 ];
 
-/** 取一个 `<tag>…</tag>` 块的正文（去 anchor marker + 噪音），空则 undefined。大小写不敏感、跨行。
- *  summary / analysis 段是纯文本展示，marker 是阅读噪音先剥掉。 */
+/** Take the body of a `<tag>…</tag>` block (removing the anchor marker + noise); undefined if empty. Case-insensitive, multi-line.
+ *  The summary / analysis segments are plain-text display, so the marker is reading noise and is stripped first. */
 function extractAskSection(md: string, tag: string): string | undefined {
   const m = extractAskSectionRaw(md, tag);
   if (!m) return undefined;
@@ -676,8 +679,8 @@ function extractAskSection(md: string, tag: string): string | undefined {
   return body || undefined;
 }
 
-/** 取一个 `<tag>…</tag>` 块的原始正文（仅去首尾噪音，**保留 anchor marker**），空则 undefined。
- *  suggestions 段要据 marker 拆条 / 定位，故走原始正文。 */
+/** Take the raw body of a `<tag>…</tag>` block (removing only leading/trailing noise, **keeping the anchor marker**); undefined if empty.
+ *  The suggestions segment needs the marker to split entries / locate, so it uses the raw body. */
 function extractAskSectionRaw(md: string, tag: string): string | undefined {
   const re = new RegExp(`<${tag}\\s*>([\\s\\S]*?)<\\/${tag}\\s*>`, 'i');
   const m = re.exec(md);
@@ -687,9 +690,10 @@ function extractAskSectionRaw(md: string, tag: string): string | undefined {
 }
 
 /**
- * 解析 `<suggestions>` 段为 finding 列表：以 anchor marker 为锚把建议拆成逐条——带行号 marker 的条目
- * 升为 `code-suggestion`（带 anchor，UI 出代码定位 + 编辑 / 拒绝 / 引用，可采纳为行内评论），其余文本归并为
- * 普通 `ask-suggestions`。无任何 marker → 整段一条 `ask-suggestions`（同旧行为）。idx 从 baseIndex 起编号。
+ * Parse the `<suggestions>` segment into a finding list: anchoring on the anchor marker, split suggestions entry by entry —
+ * entries with a line-number marker are upgraded to `code-suggestion` (with an anchor; the UI shows code location + edit /
+ * reject / quote, and it can be adopted as an inline comment), and the remaining text is merged into a plain `ask-suggestions`.
+ * No marker at all → the whole segment as one `ask-suggestions` (same as the old behavior). idx is numbered from baseIndex.
  */
 function parseAskSuggestions(body: string, baseIndex: number): Finding[] {
   const pad = (n: number): string => String(n).padStart(3, '0');
@@ -719,7 +723,7 @@ function parseAskSuggestions(body: string, baseIndex: number): Finding[] {
     });
     idx += 1;
   }
-  // 末个 marker 之后的尾部（无 marker）文本归并为一条普通建议。
+  // The tail text after the last marker (no marker) is merged into one plain suggestion.
   const tail = trimNoise(stripAnchorMarker(body.slice(cursor)));
   if (tail) {
     findings.push({ id: `ask-${pad(idx)}`, category: 'general', sectionKey: 'ask-suggestions', body: tail });
@@ -727,7 +731,7 @@ function parseAskSuggestions(body: string, baseIndex: number): Finding[] {
   return findings;
 }
 
-/** 抽复评 /ask 的 `<verdict>replace|keep|drop</verdict>`（大小写 / 空白容错）。无 / 不认得则 undefined。 */
+/** Extract the re-review /ask's `<verdict>replace|keep|drop</verdict>` (case / whitespace tolerant). undefined if absent / unrecognized. */
 function extractAskVerdict(md: string): AskVerdict | undefined {
   const m = /<verdict\s*>([\s\S]*?)<\/verdict\s*>/i.exec(md);
   const v = m?.[1]?.trim().toLowerCase();
@@ -735,22 +739,22 @@ function extractAskVerdict(md: string): AskVerdict | undefined {
 }
 
 /**
- * /ask 结构化分段解析：把 prompt 注入要求模型输出的 `<summary>` / `<analysis>` / `<suggestions>`
- * 三段切成独立 finding（各带 ask-* sectionKey，UI 据此着色 / 折叠 / 排序）。summary 正文首行
- * 兼作 ParsedReviewOutput.summary。
+ * /ask structured-segment parsing: split the three segments `<summary>` / `<analysis>` / `<suggestions>` that the
+ * prompt injection requires the model to output into standalone findings (each with an ask-* sectionKey, by which the UI
+ * colors / collapses / sorts). The first line of the summary body doubles as ParsedReviewOutput.summary.
  *
- * 回退：未出现任一配对标签、或标签都为空 → 返回 null，调用方走普通 /ask markdown 解析（模型没遵循
- * 结构化指令时不破坏既有行为）。
+ * Fallback: no paired tag appears, or all tags are empty → return null, and the caller goes through ordinary /ask markdown
+ * parsing (not breaking existing behavior when the model does not follow the structured instruction).
  */
 export function parseStructuredAsk(stdout: string): ParsedReviewOutput | null {
   const md = stripAnsi(stdout);
-  // 至少要有一对识别的开合标签，否则视作非结构化输出、回退。
+  // There must be at least one recognized pair of open/close tags, otherwise treat as unstructured output and fall back.
   if (!/<(summary|analysis|suggestions)\s*>[\s\S]*?<\/\1\s*>/i.test(md)) return null;
   const findings: Finding[] = [];
   let summary: string | undefined;
   let idx = 0;
   for (const { tag, key } of ASK_STRUCTURED_SECTIONS) {
-    // suggestions 段特殊处理：按 anchor marker 拆成逐条（带行号的升为可定位 code-suggestion）。
+    // suggestions segment special handling: split entry by entry by the anchor marker (those with line numbers upgraded to a locatable code-suggestion).
     if (tag === 'suggestions') {
       const raw = extractAskSectionRaw(md, tag);
       if (!raw) continue;
@@ -774,42 +778,42 @@ export function parseStructuredAsk(stdout: string): ParsedReviewOutput | null {
         .map((l) => l.trim())
         .find(Boolean);
   }
-  if (findings.length === 0) return null; // 有标签但全空 → 回退
+  if (findings.length === 0) return null; // tags present but all empty → fall back
   const askVerdict = extractAskVerdict(md);
   return { findings, ...(summary ? { summary } : {}), ...(askVerdict ? { askVerdict } : {}) };
 }
 
 /**
- * 解析 pr-agent stdout 为 findings 列表。M3-B2 是 best-effort：
- * - 切 markdown sections
- * - 跳过噪音段落 (临时分支名 leak / 用户描述回显)
- * - 识别 file + lines 模式标 code-feedback
- * - 已知 section title 映射到 sectionKey，UI 用于排序 / 着色
+ * Parse pr-agent stdout into a findings list. M3-B2 is best-effort:
+ * - split markdown sections
+ * - skip noise sections (temporary branch-name leak / user description echo)
+ * - recognize the file + lines pattern and mark code-feedback
+ * - map known section titles to sectionKey, used by the UI for sorting / coloring
  *
- * /improve 走专门解析路径：pr-agent local provider 输出是 HTML <details> 嵌套结构
- * 而非纯 markdown sections，splitMarkdownSections 切不出来。
+ * /improve goes through a dedicated parsing path: the pr-agent local provider outputs a nested HTML <details> structure
+ * rather than pure markdown sections, which splitMarkdownSections cannot split.
  *
- * 失败 / 空输出 / 完全不规则的格式 → findings 为空数组，调用方可以回退到展示原始
- * stdout。不在这里抛错。
+ * Failure / empty output / a completely irregular format → findings is an empty array, and the caller can fall back to
+ * showing the raw stdout. No error is thrown here.
  */
 export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedReviewOutput {
-  // LLM 失败检测先做：失败时仍可能有部分 sections (e.g., 之前轮次的 logger marker)，
-  // 让 findings 解析继续走完，但 llmFailure 字段标记让上层判定 status='failed'
+  // LLM failure detection first: on failure there may still be partial sections (e.g., a logger marker from a previous round),
+  // so let findings parsing run to completion, but the llmFailure field marks it so the upper layer decides status='failed'
   const llmFailure = detectLlmFailure(stdout) ?? undefined;
 
   if (tool === 'improve') {
     const out = parseImproveOutput(stdout);
     return llmFailure ? { ...out, llmFailure } : out;
   }
-  // /ask 结构化分段：prompt 注入 <summary>/<analysis>/<suggestions> 标签（见 pr-agent-bridge
-  // prompts.ts），命中则按段产出彩色 / 可折叠 finding；模型未遵循（无配对标签）则回退到下方普通解析。
+  // /ask structured segments: the prompt injects <summary>/<analysis>/<suggestions> tags (see pr-agent-bridge
+  // prompts.ts); on a hit it produces colored / collapsible findings per segment; if the model does not follow (no paired tags) fall back to the ordinary parsing below.
   if (tool === 'ask') {
     const structured = parseStructuredAsk(stdout);
     if (structured) return llmFailure ? { ...structured, llmFailure } : structured;
   }
   const cleanStdout = stripAnsi(stdout);
-  // describe：先把追加在末尾的 File Walkthrough <details> 块抽出（否则黏进 ### Diagram
-  // Walkthrough 段），单独成一条「文件变更」finding，并把嵌套表格转成折叠无序列表。
+  // describe: first extract the File Walkthrough <details> block appended at the end (otherwise it sticks into the ### Diagram
+  // Walkthrough segment), making it a standalone "file changes" finding, and convert the nested table into a collapsible unordered list.
   let walkthroughFinding: Finding | undefined;
   let baseMd = cleanStdout;
   if (tool === 'describe') {
@@ -824,8 +828,8 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
       };
     }
   }
-  // GFM 路径仅用于 /review（gfm_markdown 下整体是 <table>）；describe/ask 仍走 markdown
-  // 切片（其 HTML/表格/mermaid 由下游 react-markdown 渲染，section 结构不受影响）。
+  // The GFM path is only for /review (under gfm_markdown the whole thing is a <table>); describe/ask still go through markdown
+  // slicing (their HTML/table/mermaid is rendered downstream by react-markdown, the section structure is unaffected).
   const gfm = tool === 'review' && isGfmReviewOutput(baseMd);
   const allSections = gfm ? splitGfmTableSections(baseMd) : splitMarkdownSections(baseMd);
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
@@ -833,18 +837,18 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
     const fs = walkthroughFinding ? [walkthroughFinding] : [];
     return llmFailure ? { findings: fs, llmFailure } : { findings: fs };
   }
-  // 单 section 可能展开成多个 findings (key_issues_to_review 段)。用游标 idx 维持
-  // 全局 finding 编号稳定，UI list-key 不冲突
+  // A single section may expand into multiple findings (the key_issues_to_review segment). The cursor idx keeps
+  // the global finding numbering stable so the UI list-key does not collide
   const findings: Finding[] = [];
   let idx = 0;
   for (const sec of sections) {
     if (tool === 'review' && isKeyIssuesSection(normalizeTitle(sec.title))) {
-      // GFM：sec.body 是原始 HTML，按 <a href><strong> 抽 finding；非 GFM 走 markdown 展开
+      // GFM: sec.body is raw HTML, extract findings by <a href><strong>; non-GFM goes through markdown expansion
       const expanded = gfm
         ? expandGfmKeyIssues(sec.body, idx, tool)
         : expandKeyIssuesSection(sec, idx, tool);
       if (expanded.length === 0) {
-        // 抽不到（格式漂移）→ 退回整段一条 finding，body 清成可读文本
+        // Nothing extracted (format drift) → fall back to the whole segment as one finding, body cleaned into readable text
         findings.push(
           sectionToFinding(gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec, idx, tool),
         );
@@ -854,16 +858,16 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
         idx += expanded.length;
       }
     } else {
-      // GFM 非 key-issues 段：body 是 HTML，清成文本再交 sectionToFinding（其 **File:** 等
-      // 锚点匹配按 markdown 文本设计；这些段一般无行级 anchor，清理后展示即可）
+      // GFM non-key-issues segment: body is HTML, cleaned into text then handed to sectionToFinding (whose **File:** etc.
+      // anchor matching is designed for markdown text; these segments generally have no line-level anchor, so just display after cleaning)
       const s = gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec;
       findings.push(sectionToFinding(s, idx, tool));
       idx += 1;
     }
   }
-  // describe 的 File Walkthrough 单独成段（渲染顺序由 SECTION_ORDER 的 walkthrough 决定）
+  // describe's File Walkthrough as a standalone segment (render order determined by walkthrough in SECTION_ORDER)
   if (walkthroughFinding) findings.push(walkthroughFinding);
-  // summary：优先取首个有 title 的 section；都没有 title 取首个 body 首行
+  // summary: prefer the first section with a title; if none have a title, take the first line of the first body
   let summary: string | undefined;
   const titled = sections.find((s) => s.title);
   if (titled) summary = normalizeTitle(titled.title);
@@ -874,20 +878,20 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
       ?.trim();
     if (firstNonEmpty) summary = firstNonEmpty;
   }
-  // /ask 复评裁决兜底：结构化解析失败回退到这条普通路径时，仍从答案文本抽 <verdict>，
-  // 不丢复评的取代 / 关闭信号（run-executor 的自动关闭依赖它）。
+  // /ask re-review verdict fallback: when structured parsing fails and falls back to this ordinary path, still extract
+  // <verdict> from the answer text, not losing the re-review's supersede / closure signal (run-executor's auto-closure depends on it).
   const askVerdict = tool === 'ask' ? extractAskVerdict(cleanStdout) : undefined;
   const base = askVerdict ? { findings, summary, askVerdict } : { findings, summary };
   return llmFailure ? { ...base, llmFailure } : base;
 }
 
 /**
- * 解析 pr-agent `/improve` 工具的输出。
+ * Parse the output of pr-agent's `/improve` tool.
  *
- * pr-agent local provider 不实现 `publish_code_suggestions`，所以 `/improve` 走
- * `publish_comment` 把汇总 markdown 写到 `review.md` (跟 /review、/ask 共用)。
+ * The pr-agent local provider does not implement `publish_code_suggestions`, so `/improve` goes through
+ * `publish_comment` writing the aggregated markdown to `review.md` (shared with /review, /ask).
  *
- * 每条建议的模板 (摘自 pr-agent `pr_code_suggestions.py` 的 generate_summarized_suggestions)：
+ * The template for each suggestion (from pr-agent `pr_code_suggestions.py`'s generate_summarized_suggestions):
  * ```
  * <details><summary>{one_sentence_summary}</summary>
  *
@@ -912,19 +916,19 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
  * </details>
  * ```
  *
- * 反解策略：以**file marker 行** `[<file> [<start>-<end>]](<url>)` 为切分点。
- * 每两个相邻 marker 之间是一条建议的范围，向前找 `<summary>`，向后找
- * ` ```diff ` 块 + `importance[1-10]:` 评分。pr-agent 版本间细节会变，按 marker
- * 切片比硬解 HTML 嵌套更稳。
+ * Reverse-parse strategy: use the **file marker line** `[<file> [<start>-<end>]](<url>)` as the split point.
+ * The range between two adjacent markers is one suggestion; look backward for `<summary>`, and forward for
+ * the ` ```diff ` block + `importance[1-10]:` score. Details change across pr-agent versions, so slicing by marker
+ * is more robust than hard-parsing the nested HTML.
  *
- * 没有 marker → 输出形态不识别（旧版 / 配置变化），返回空 findings + summary 提示。
+ * No marker → the output form is unrecognized (old version / config change), returns empty findings + a summary hint.
  */
 export function parseImproveOutput(stdout: string): ParsedReviewOutput {
   const cleaned = stripAnsi(stdout).replace(/\r\n/g, '\n');
   const lines = cleaned.split('\n');
-  // file marker 行：`[<path> [<start>-<end>]](<url>)`，path 内不含空白（但可含 `[]`，如
-  // `a/[m-123]/x.ts`）；range 可能 `[42-45]` 或 `[42]` (单行)。path 用惰性非空白 `[^\s]+?` +
-  // 必现的 ` [<range>]](` 后缀界定，路径里的 `]` 不再误截。
+  // file marker line: `[<path> [<start>-<end>]](<url>)`, path contains no whitespace (but may contain `[]`, e.g.
+  // `a/[m-123]/x.ts`); range may be `[42-45]` or `[42]` (single line). path uses a lazy non-whitespace `[^\s]+?` +
+  // the mandatory ` [<range>]](` suffix to delimit, so the `]` in the path is no longer wrongly cut.
   const markerRe = /^\[([^\s]+?)\s+\[(\d+)(?:-(\d+))?\]\]\(/;
   interface Marker {
     idx: number;
@@ -954,7 +958,7 @@ export function parseImproveOutput(stdout: string): ParsedReviewOutput {
     const prevIdx = i > 0 ? markers[i - 1]!.idx : 0;
     const blockText = lines.slice(m.idx, nextIdx).join('\n');
 
-    // suggestion_content: marker 上面最近的非空非 HTML 行 (通常 **...** 加粗)
+    // suggestion_content: the nearest non-empty non-HTML line above the marker (usually **...** bold)
     let content = '';
     for (let j = m.idx - 1; j > prevIdx; j--) {
       const l = lines[j]!.trim();
@@ -964,7 +968,7 @@ export function parseImproveOutput(stdout: string): ParsedReviewOutput {
       break;
     }
 
-    // one_sentence_summary: marker 上面最近的 <summary>...</summary> (不含 importance 那个)
+    // one_sentence_summary: the nearest <summary>...</summary> above the marker (not the importance one)
     let summaryText = '';
     for (let j = m.idx - 1; j > prevIdx; j--) {
       const sm = /<summary[^>]*>([\s\S]*?)<\/summary>/i.exec(lines[j]!);
@@ -974,7 +978,7 @@ export function parseImproveOutput(stdout: string): ParsedReviewOutput {
       }
     }
 
-    // diff block + 拆 -/+ 行
+    // diff block + split -/+ lines
     let codeChange: FindingCodeChange | undefined;
     const diffStart = blockText.indexOf('```diff');
     if (diffStart >= 0) {
@@ -987,7 +991,7 @@ export function parseImproveOutput(stdout: string): ParsedReviewOutput {
         for (const dl of patch.split('\n')) {
           if (dl.startsWith('-')) existingLines.push(dl.slice(1).replace(/^ /, ''));
           else if (dl.startsWith('+')) improvedLines.push(dl.slice(1).replace(/^ /, ''));
-          // 普通 context 行 (空格起手) 在 pr-agent improve diff 里少见，忽略
+          // Plain context lines (leading space) are rare in pr-agent improve diffs, ignored
         }
         if (existingLines.length > 0 || improvedLines.length > 0) {
           codeChange = {

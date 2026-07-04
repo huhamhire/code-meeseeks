@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GitLabAdapter, normalizeGitLabApiBase } from '../src/adapter.js';
 
-// ---- 路由式 mock fetch：按 method + URL 子串匹配（数组序优先），返回 JSON Response，记录请求 ----
+// ---- Route-style mock fetch: match by method + URL substring (array order takes priority), return JSON Response, record requests ----
 interface Route {
   method?: string;
   match: string;
@@ -58,7 +58,7 @@ function makeAdapter(
 const ME = { id: 1, username: 'alice', name: 'Alice' };
 
 describe('GitLabAdapter ping / edition / capabilities', () => {
-  it('EE 实例（metadata.enterprise=true）暴露 approve/unapprove 审批', async () => {
+  it('EE instance (metadata.enterprise=true) exposes approve/unapprove approval', async () => {
     const { adapter } = makeAdapter([
       { match: '/user', body: ME },
       { match: '/metadata', body: { version: '16.5.0-ee', enterprise: true } },
@@ -68,11 +68,11 @@ describe('GitLabAdapter ping / edition / capabilities', () => {
     expect(res.user?.name).toBe('alice');
     expect(res.serverVersion).toBe('16.5.0-ee');
     expect(adapter.connection.capabilities().reviewStatuses).toEqual(['approved', 'unapproved']);
-    // GitLab 无 needsWork
+    // GitLab has no needsWork
     expect(adapter.connection.capabilities().reviewStatuses).not.toContain('needsWork');
   });
 
-  it('CE 实例（enterprise=false）审批降级为空', async () => {
+  it('CE instance (enterprise=false) degrades approval to empty', async () => {
     const { adapter } = makeAdapter([
       { match: '/user', body: ME },
       { match: '/metadata', body: { version: '16.5.0', enterprise: false } },
@@ -81,7 +81,7 @@ describe('GitLabAdapter ping / edition / capabilities', () => {
     expect(adapter.connection.capabilities().reviewStatuses).toEqual([]);
   });
 
-  it('/metadata 不可用（旧实例）退 /version，保守按 CE', async () => {
+  it('/metadata unavailable (old instance) falls back to /version, conservatively assumes CE', async () => {
     const { adapter } = makeAdapter([
       { match: '/user', body: ME },
       { match: '/metadata', status: 404, body: { message: '404' } },
@@ -92,12 +92,12 @@ describe('GitLabAdapter ping / edition / capabilities', () => {
     expect(adapter.connection.capabilities().reviewStatuses).toEqual([]);
   });
 
-  it('capabilities：full 保真 / 无乐观锁 / 不限流', () => {
+  it('capabilities: full fidelity / no optimistic lock / not rate-limited', () => {
     const { adapter } = makeAdapter([]);
     const c = adapter.connection.capabilities();
     expect(c.mergeVetoFidelity).toBe('full');
     expect(c.commentOptimisticLock).toBe(false);
-    // GitLab 走标准 CommonMark 换行（单 \n = 空格），非 hard-break
+    // GitLab uses standard CommonMark line breaks (single \n = space), not hard-break
     expect(c.commentHardBreaks).toBe(false);
     expect(c.discoveryRateLimited).toBe(false);
     expect(c.inlineComments).toBe(true);
@@ -132,8 +132,8 @@ const MR_DETAIL = {
   diff_refs: { base_sha: 'basesha', head_sha: 'headsha', start_sha: 'startsha' },
 };
 
-describe('GitLabAdapter 发现', () => {
-  it('listPendingPullRequests：MR 映射 + 嵌套 group 路径 + 审批状态', async () => {
+describe('GitLabAdapter discovery', () => {
+  it('listPendingPullRequests: MR mapping + nested group path + approval status', async () => {
     const { adapter, captured } = makeAdapter([
       { match: '/user', body: ME },
       { match: '/metadata', body: { version: '16.5.0', enterprise: true } },
@@ -149,17 +149,17 @@ describe('GitLabAdapter 发现', () => {
     expect(pr.repo).toEqual({ projectKey: 'group/sub', repoSlug: 'proj' });
     expect(pr.sourceRef.sha).toBe('headsha');
     expect(pr.targetRef.sha).toBe('basesha');
-    // not_approved → 不可合并 + full veto
+    // not_approved → not mergeable + full veto
     expect(pr.mergeStatus.canMerge).toBe(false);
     expect(pr.mergeStatus.vetoes.length).toBeGreaterThan(0);
-    // 已批的 ME 标 approved
+    // the approved ME is marked approved
     expect(pr.reviewers.find((r) => r.name === 'alice')?.status).toBe('approved');
-    // 发现请求带 reviewer_username
+    // the discovery request carries reviewer_username
     const listReq = captured.find((c) => c.url.includes('/merge_requests?'));
     expect(listReq?.url).toContain('reviewer_username=alice');
   });
 
-  it('discovery filter：created → author_username；assigned → assignee_username', async () => {
+  it('discovery filter: created → author_username; assigned → assignee_username', async () => {
     const mk = () =>
       makeAdapter([
         { match: '/user', body: ME },
@@ -182,8 +182,8 @@ describe('GitLabAdapter 发现', () => {
   });
 });
 
-describe('GitLabAdapter 评论树（discussions/notes）', () => {
-  it('inline discussion → 顶层 + replies；system note 过滤；threadId=discussion id', async () => {
+describe('GitLabAdapter comment tree (discussions/notes)', () => {
+  it('inline discussion → top-level + replies; system note filtered; threadId=discussion id', async () => {
     const discussions = [
       {
         id: 'disc1',
@@ -233,7 +233,7 @@ describe('GitLabAdapter 评论树（discussions/notes）', () => {
       { projectKey: 'group', repoSlug: 'proj' },
       '3',
     );
-    // system-only discussion 被过滤
+    // system-only discussion is filtered out
     expect(comments).toHaveLength(1);
     const top = comments[0]!;
     expect(top.kind).toBe('inline');
@@ -241,16 +241,16 @@ describe('GitLabAdapter 评论树（discussions/notes）', () => {
     expect(top.threadId).toBe('disc1');
     expect(top.remoteId).toBe('11');
     expect(top.replies).toHaveLength(1);
-    expect(top.replies[0]!.canEdit).toBe(true); // reply 作者是 ME
-    expect(top.canEdit).toBe(false); // top 作者是 bob
-    // 无乐观锁哨兵：version=0，使编辑/删除 IPC 的 version:number 契约与 ownership 判定统一通过
+    expect(top.replies[0]!.canEdit).toBe(true); // reply author is ME
+    expect(top.canEdit).toBe(false); // top author is bob
+    // no-optimistic-lock sentinel: version=0, making the edit/delete IPC's version:number contract and ownership decision pass uniformly
     expect(top.version).toBe(0);
     expect(top.replies[0]!.version).toBe(0);
   });
 });
 
-describe('GitLabAdapter 写路径 + clone', () => {
-  it('clone url：pat 嵌用户:token；ssh 走 git@host', async () => {
+describe('GitLabAdapter write path + clone', () => {
+  it('clone url: pat embeds user:token; ssh uses git@host', async () => {
     const pat = makeAdapter([
       { match: '/user', body: ME },
       { match: '/metadata', body: { version: '16', enterprise: false } },
@@ -268,7 +268,7 @@ describe('GitLabAdapter 写路径 + clone', () => {
     ).toBe('git@gitlab.com:group/proj.git');
   });
 
-  it('approve → POST /approve；unapprove → POST /unapprove', async () => {
+  it('approve → POST /approve; unapprove → POST /unapprove', async () => {
     const { adapter, captured } = makeAdapter([
       { method: 'POST', match: '/approve', body: {} },
       { method: 'POST', match: '/unapprove', body: {} },
@@ -287,14 +287,14 @@ describe('GitLabAdapter 写路径 + clone', () => {
     expect(captured.some((c) => c.method === 'POST' && c.url.endsWith('/unapprove'))).toBe(true);
   });
 
-  it('needsWork 抛错（GitLab 无此概念）', async () => {
+  it('needsWork throws (GitLab has no such concept)', async () => {
     const { adapter } = makeAdapter([]);
     await expect(
       adapter.prs.setPullRequestReviewStatus({ projectKey: 'g', repoSlug: 'p' }, '3', 'needsWork'),
     ).rejects.toThrow();
   });
 
-  it('publishInlineComment：先拉 diff_refs，position 带三 sha + new_line', async () => {
+  it('publishInlineComment: fetch diff_refs first, position carries three shas + new_line', async () => {
     const { adapter, captured } = makeAdapter([
       { match: '/user', body: ME },
       {
@@ -333,11 +333,11 @@ describe('GitLabAdapter 写路径 + clone', () => {
 });
 
 describe('normalizeGitLabApiBase', () => {
-  it('gitlab.com SaaS：官方 API base 原样保留（不破坏公共 SaaS 对接）', () => {
+  it('gitlab.com SaaS: official API base kept as-is (does not break public SaaS integration)', () => {
     expect(normalizeGitLabApiBase('https://gitlab.com/api/v4')).toBe('https://gitlab.com/api/v4');
   });
 
-  it('实例根地址自动补 /api/v4', () => {
+  it('instance root address auto-appends /api/v4', () => {
     expect(normalizeGitLabApiBase('https://gitlab.example.com')).toBe(
       'https://gitlab.example.com/api/v4',
     );
@@ -346,21 +346,21 @@ describe('normalizeGitLabApiBase', () => {
     );
   });
 
-  it('已带 /api/v4 原样（含尾斜杠归一）', () => {
+  it('already carries /api/v4 kept as-is (trailing slash normalized)', () => {
     expect(normalizeGitLabApiBase('https://gitlab.example.com/api/v4/')).toBe(
       'https://gitlab.example.com/api/v4',
     );
   });
 
-  it('relative-url-root 子路径安装：补在子路径之后', () => {
+  it('relative-url-root subpath install: append after the subpath', () => {
     expect(normalizeGitLabApiBase('https://example.com/gitlab')).toBe(
       'https://example.com/gitlab/api/v4',
     );
   });
 });
 
-describe('GitLabAdapter 头像代理', () => {
-  it('本实例头像：带 PAT 取', async () => {
+describe('GitLabAdapter avatar proxy', () => {
+  it('this-instance avatar: fetch with PAT', async () => {
     const { adapter, captured } = makeAdapter([
       { match: '/uploads/', body: 'PNG', headers: { 'content-type': 'image/png' } },
     ]);
@@ -373,7 +373,7 @@ describe('GitLabAdapter 头像代理', () => {
     expect(req?.headers['PRIVATE-TOKEN']).toBe('tok');
   });
 
-  it('gravatar 头像：公网直取，绝不带 PAT', async () => {
+  it('gravatar avatar: fetch directly over the public internet, never with PAT', async () => {
     const { adapter, captured } = makeAdapter([
       { match: 'gravatar.com', body: 'PNG', headers: { 'content-type': 'image/png' } },
     ]);
@@ -387,17 +387,17 @@ describe('GitLabAdapter 头像代理', () => {
     expect(req?.headers['PRIVATE-TOKEN']).toBeUndefined();
   });
 
-  it('其它外部 host：不代拉（防 SSRF）', async () => {
+  it('other external hosts: not proxy-fetched (SSRF prevention)', async () => {
     const { adapter } = makeAdapter([{ match: 'evil.example.com', body: 'x' }]);
     const res = await adapter.media.getUserAvatar('alice', 'https://evil.example.com/x.png');
     expect(res).toBeNull();
   });
 });
 
-describe('GitLabAdapter 附件代理', () => {
+describe('GitLabAdapter attachment proxy', () => {
   const SECRET = 'f28aebc97ff910addda099ad1a4456d3';
 
-  it('/uploads（绝对实例 URL）走 API 下载端点，带 PAT', async () => {
+  it('/uploads (absolute instance URL) uses the API download endpoint, with PAT', async () => {
     const { adapter, captured } = makeAdapter([
       { match: '/api/v4/projects/', body: 'PNG', headers: { 'content-type': 'image/png' } },
     ]);
@@ -411,7 +411,7 @@ describe('GitLabAdapter 附件代理', () => {
     expect(req?.headers['PRIVATE-TOKEN']).toBe('tok');
   });
 
-  it('/uploads（相对路径）同样映射到 API 端点', async () => {
+  it('/uploads (relative path) also maps to the API endpoint', async () => {
     const { adapter, captured } = makeAdapter([
       { match: '/api/v4/projects/', body: 'PNG', headers: { 'content-type': 'image/png' } },
     ]);
@@ -423,7 +423,7 @@ describe('GitLabAdapter 附件代理', () => {
     expect(req?.url).toContain(`/api/v4/projects/group%2Fsub%2Fproj/uploads/${SECRET}/image.png`);
   });
 
-  it('API 返回 text/html（旧版无端点 / 登录重定向）→ null（避免 HTML 当图片）', async () => {
+  it('API returns text/html (old versions lack the endpoint / login redirect) → null (avoid treating HTML as an image)', async () => {
     const { adapter } = makeAdapter([
       {
         match: '/api/v4/projects/',

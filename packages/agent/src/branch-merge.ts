@@ -1,20 +1,20 @@
 /**
- * 「纯分支合并」判定（AutoPilot 第一步 judge 的背景输入，见 docs/arch/02-agent/01-agent.md）：分支合并 / 回合并
- * 把已评审过的分支改动同步到另一分支，无原创工作，自动预评审无意义。
+ * "Pure branch merge" judge (background input for AutoPilot's first-step judge, see docs/arch/02-agent/01-agent.md): a branch merge / back-merge
+ * syncs already-reviewed branch changes to another branch, with no original work, so an automatic pre-review is meaningless.
  *
- * **判定以实际提交结构为准**：PR 提交**全为 merge commit**（无原创非 merge 提交）→ 纯合并。需调用方先经
- * commits API 拉取提交（远端元数据，不碰本地 git）后传入；未提供 commits 则无法定论（`isBranchMerge:false`、
- * basis `inconclusive`），绝不仅凭分支名定论。
+ * **The judgment is based on the actual commit structure**: PR commits are **all merge commits** (no original non-merge commits) → pure merge. The caller must first
+ * pull commits via the commits API (remote metadata, does not touch local git) and pass them in; if commits are not provided the result is inconclusive (`isBranchMerge:false`,
+ * basis `inconclusive`), never conclude from the branch name alone.
  *
- * 源分支是否为长期 / 集成分支（main / develop / release/* 等）单独以 `sourceMainline` 给出——它**只是背景
- * 信号**（疑似回合并 / 同步的线索），不单独判定是否分支合并；调用方可据此决定是否值得拉 commits 复核，并
- * 把该信号一并交给 LLM judge 由其权衡，而非据此直接跳过。
+ * Whether the source branch is a long-lived / integration branch (main / develop / release/* etc.) is given separately as `sourceMainline` — it is **only a background
+ * signal** (a hint of a suspected back-merge / sync), not judged alone for whether it is a branch merge; the caller may use it to decide whether it is worth pulling commits to recheck, and
+ * pass the signal along to the LLM judge to weigh, rather than skipping directly based on it.
  */
 
 const MAINLINE_EXACT = new Set(['main', 'master', 'develop', 'dev', 'trunk']);
 const MAINLINE_PREFIX = ['release/', 'hotfix/'];
 
-/** 源分支是否为长期 / 集成分支（其改动通常已在自身 PR 评审过）。 */
+/** Whether the source branch is a long-lived / integration branch (its changes are usually already reviewed in their own PR). */
 export function isMainlineBranch(branch: string): boolean {
   const b = branch.trim().toLowerCase();
   return MAINLINE_EXACT.has(b) || MAINLINE_PREFIX.some((p) => b.startsWith(p));
@@ -23,23 +23,23 @@ export function isMainlineBranch(branch: string): boolean {
 export interface BranchMergeInput {
   sourceBranch: string;
   targetBranch: string;
-  /** PR 提交（可选）；(c) 拿不准时由调用方拉取后传入做 (b) 判定。 */
+  /** PR commits (optional); (c) when uncertain, the caller pulls and passes them in to make the (b) judgment. */
   commits?: ReadonlyArray<{ parents: string[] }>;
 }
 
 export interface BranchMergeVerdict {
-  /** 「纯分支合并」：提交全为 merge commit（无原创非 merge 提交）。仅在提供 commits 时可定论。 */
+  /** "Pure branch merge": commits are all merge commits (no original non-merge commits). Conclusive only when commits are provided. */
   isBranchMerge: boolean;
-  /** 判定依据：提交结构 / 未提供 commits 无法定论。 */
+  /** Judgment basis: commit structure / inconclusive when commits are not provided. */
   basis: 'commits' | 'inconclusive';
-  /** 源分支是否为长期 / 集成分支（背景信号，供 judge 参考，不单独定论是否分支合并）。 */
+  /** Whether the source branch is a long-lived / integration branch (background signal for the judge's reference, not judged alone for whether it is a branch merge). */
   sourceMainline: boolean;
 }
 
 /**
- * 判定一个 PR 是否「纯分支合并」。给了 commits 才能定论（全 merge commit → true）；未给则 inconclusive
- * （调用方据 `sourceMainline` 等决定是否拉 commits 复核，或交给 LLM judge）。分支名只填 `sourceMainline`
- * 背景信号，不参与 isBranchMerge 定论。
+ * Judge whether a PR is a "pure branch merge". Conclusive only when commits are given (all merge commits → true); otherwise inconclusive
+ * (the caller decides whether to pull commits to recheck based on `sourceMainline` etc., or defers to the LLM judge). The branch name only fills the `sourceMainline`
+ * background signal, and does not participate in the isBranchMerge conclusion.
  */
 export function classifyBranchMerge(input: BranchMergeInput): BranchMergeVerdict {
   const sourceMainline = isMainlineBranch(input.sourceBranch);
