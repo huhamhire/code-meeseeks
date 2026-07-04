@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 import type { PlatformAdapter } from '@meebox/platform-core';
 import { sniffImageContentType } from '../utils/image.js';
 
-// 与 app.ts 头像缓存同约定：目录 <cacheDir>/avatars/，键 sha256(connectionId|slug) 前 24 hex；原始字节存 .bin。
+// Same convention as app.ts avatar cache: directory <cacheDir>/avatars/, key is first 24 hex of sha256(connectionId|slug); raw bytes stored as .bin.
 const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const EXT_BY_CONTENT_TYPE: Record<string, string> = {
   'image/png': 'png',
@@ -16,17 +16,17 @@ const EXT_BY_CONTENT_TYPE: Record<string, string> = {
 
 export interface AvatarFileDeps {
   cacheDir: string;
-  /** 取指定连接的 adapter（拉头像用）；找不到回 null。 */
+  /** Get the adapter for the given connection (for fetching avatars); returns null if not found. */
   getAdapter: (connectionId: string) => PlatformAdapter | null;
   logger: Logger;
 }
 
 /**
- * 确保 (connectionId, slug) 的头像已落盘，并返回一个**带正确图片扩展名**的本地文件绝对路径。
+ * Ensures the avatar for (connectionId, slug) is persisted to disk, and returns the absolute path of a local file **with the correct image extension**.
  *
- * 背景：Windows toast 的 `<image src>` 需要本地文件且按扩展名识别格式；而头像缓存只存裸字节 `.bin`。
- * 故此处在 `.bin` 之外按嗅探到的 content-type 旁挂一份 `<hash>.<ext>` 供 toast 引用。命中且未过期的缓存复用，
- * 缺失 / 过期经 adapter 拉取并落盘。无 adapter / 拉取失败 / 非位图（svg 等 toast 不支持）→ 返回 null（调用方降级为无头像）。
+ * Background: Windows toast's `<image src>` needs a local file and identifies the format by extension; but the avatar cache only stores raw bytes as `.bin`.
+ * So besides the `.bin`, this attaches a `<hash>.<ext>` copy based on the sniffed content-type for the toast to reference. A hit that has not expired is reused,
+ * a miss / expiry is fetched via the adapter and persisted. No adapter / fetch failure / non-bitmap (svg etc. not supported by toast) → returns null (caller falls back to no avatar).
  */
 export async function ensureAvatarFile(
   deps: AvatarFileDeps,
@@ -47,7 +47,7 @@ export async function ensureAvatarFile(
     const stat = await fs.stat(binPath);
     if (Date.now() - stat.mtimeMs < AVATAR_TTL_MS) bytes = await fs.readFile(binPath);
   } catch {
-    // .bin 不存在 / 读失败 → 走拉取
+    // .bin missing / read failed → go fetch
   }
   if (!bytes) {
     const adapter = deps.getAdapter(connectionId);
@@ -65,15 +65,15 @@ export async function ensureAvatarFile(
   }
 
   const ext = EXT_BY_CONTENT_TYPE[sniffImageContentType(bytes)];
-  if (!ext) return null; // svg / 未知格式：Windows toast 不可靠，降级无头像
+  if (!ext) return null; // svg / unknown format: unreliable for Windows toast, fall back to no avatar
   const imgPath = path.join(avatarDir, `${hash}.${ext}`);
   try {
     let needWrite = true;
     try {
       const [binStat, imgStat] = await Promise.all([fs.stat(binPath), fs.stat(imgPath)]);
-      needWrite = imgStat.mtimeMs < binStat.mtimeMs; // 副本比原始字节旧 → 重写
+      needWrite = imgStat.mtimeMs < binStat.mtimeMs; // copy older than raw bytes → rewrite
     } catch {
-      needWrite = true; // 副本不存在
+      needWrite = true; // copy does not exist
     }
     if (needWrite) await fs.writeFile(imgPath, bytes);
     return imgPath;

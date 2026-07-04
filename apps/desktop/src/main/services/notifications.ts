@@ -7,19 +7,19 @@ import { broadcast } from './broadcast.js';
 import { ensureAvatarFile, type AvatarFileDeps } from './avatar.js';
 
 /**
- * 系统通知 + 应用角标。两条路径：
- * - 系统通知（toast）：poll 投影的本轮事件按类型开关弹原生通知；受 OS 权限约束，用户在系统设置关闭后静默降级。
- *   Windows 走 toastXml 富样式（圆形发起人头像 + 类型 emoji + 仓库行）；其他平台用 title/body 文本（含仓库，无头像，
- *   因 Electron 在 macOS 固定显示应用图标、不支持 per-notification 头像）。
- * - dock 角标（本期仅 macOS）：renderer 据 PR 列表派生「待回应」计数后推送，主进程落地到 dock 图标。
+ * System notifications + app badge. Two paths:
+ * - System notification (toast): this round's poll-projected events fire native notifications per type toggle; subject to OS permission, silently degrades after the user disables it in system settings.
+ *   Windows uses toastXml rich style (circular initiator avatar + type emoji + repo line); other platforms use title/body text (with repo, no avatar,
+ *   because Electron fixes the app icon on macOS and does not support per-notification avatars).
+ * - dock badge (macOS only this iteration): renderer derives the "awaiting response" count from the PR list and pushes it, the main process lands it on the dock icon.
  *
- * 文案走主进程 i18n（与 dialog / pr-agent 同一实例，语言随启动配置定档）。
+ * Text goes through main-process i18n (same instance as dialog / pr-agent, language fixed by startup config).
  */
 
-/** 一轮最多单独弹的通知条数（各带定位）；超出部分折叠为一条「查看更多」提示，避免涌入时的通知风暴。 */
+/** Max number of notifications fired individually per round (each with anchoring); the overflow is collapsed into one "see more" prompt, avoiding a notification storm on influx. */
 const INDIVIDUAL_LIMIT = 5;
 
-/** 通知事件类型 → i18n 文案分组名（new_pr 的 key 为 newPr，authored_* 转驼峰，其余同名）。 */
+/** Notification event type → i18n text group name (new_pr's key is newPr, authored_* is camel-cased, the rest same name). */
 const I18N_GROUP: Record<PollNotificationEvent['kind'], string> = {
   new_pr: 'newPr',
   mention: 'mention',
@@ -29,7 +29,7 @@ const I18N_GROUP: Record<PollNotificationEvent['kind'], string> = {
   authored_conflict: 'authoredConflict',
 };
 
-/** 类型 emoji（Windows toast 单图标槽给了头像，故类型用 emoji 在标题前标记）。 */
+/** Type emoji (the Windows toast single icon slot is given to the avatar, so the type is marked with an emoji before the title). */
 const TYPE_EMOJI: Record<PollNotificationEvent['kind'], string> = {
   new_pr: '🔀',
   mention: '💬',
@@ -39,7 +39,7 @@ const TYPE_EMOJI: Record<PollNotificationEvent['kind'], string> = {
   authored_conflict: '⚠️',
 };
 
-/** 点击通知：唤起并聚焦主窗口（最小化则先还原）。 */
+/** On notification click: raise and focus the main window (restore first if minimized). */
 function focusMainWindow(): void {
   const win = BrowserWindow.getAllWindows()[0];
   if (!win) return;
@@ -57,7 +57,7 @@ function showNotification(
   n.show();
 }
 
-/** 点击通知 → 聚焦窗口 + 推导航意图给 renderer（选中 PR / 跳 diff 行 / 开活动标签，见 IpcEvents['notification:activate']）。 */
+/** On notification click → focus the window + push a navigation intent to the renderer (select PR / jump to diff line / open activity tab, see IpcEvents['notification:activate']). */
 function activateOnClick(e: PollNotificationEvent): () => void {
   return () => {
     focusMainWindow();
@@ -80,7 +80,7 @@ function escapeXml(s: string): string {
     .replace(/'/g, '&apos;');
 }
 
-/** 构造 Windows ToastGeneric XML：标题（emoji+类型）+ 正文（#编号 标题）+ 归属行（仓库）+ 圆形头像（可选）。 */
+/** Build Windows ToastGeneric XML: title (emoji+type) + body (#number title) + attribution line (repo) + circular avatar (optional). */
 function buildToastXml(line1: string, line2: string, attribution: string, avatarPath: string | null): string {
   const logo = avatarPath
     ? `<image placement="appLogoOverride" hint-crop="circle" src="${escapeXml(pathToFileURL(avatarPath).href)}"/>`
@@ -95,7 +95,7 @@ function buildToastXml(line1: string, line2: string, attribution: string, avatar
   );
 }
 
-/** 弹单条通知：Windows 富样式（头像 + emoji + 仓库），失败 / 其他平台回退为 title/body 文本（含仓库）。 */
+/** Fire a single notification: Windows rich style (avatar + emoji + repo), falling back to title/body text (with repo) on failure / other platforms. */
 async function showOne(
   e: PollNotificationEvent,
   avatarDeps: AvatarFileDeps,
@@ -128,9 +128,9 @@ async function showOne(
 }
 
 /**
- * 按通知配置弹系统通知。总开关关 / 平台不支持通知 → 直接返回（静默降级）。按类型开关过滤后：
- * 最多前 {@link INDIVIDUAL_LIMIT} 条逐条弹（各带头像富样式 + 点击定位）；超出部分（第 6 条起）折叠为一条
- * 「查看更多最新动态」提示，点击仅打开主界面、不做定位。
+ * Fire system notifications per notification config. Master toggle off / platform does not support notifications → return directly (silent degrade). After filtering by type toggle:
+ * fire at most the first {@link INDIVIDUAL_LIMIT} one by one (each with avatar rich style + click anchoring); the overflow (from the 6th on) is collapsed into one
+ * "see more recent activity" prompt, whose click only opens the main UI without anchoring.
  */
 export async function showPollNotifications(
   events: ReadonlyArray<PollNotificationEvent>,
@@ -158,7 +158,7 @@ export async function showPollNotifications(
     }
     const overflow = filtered.length - shown.length;
     if (overflow > 0) {
-      // 溢出提示：点击走默认 focusMainWindow（仅打开主界面、不定位），让用户自行查看更多最新动态。
+      // Overflow prompt: click goes to the default focusMainWindow (only opens the main UI, no anchoring), letting users browse more recent activity themselves.
       showNotification({
         title: t('notifications.more.title'),
         body: t('notifications.more.body', { count: overflow }),
@@ -170,7 +170,7 @@ export async function showPollNotifications(
 }
 
 /**
- * 设置应用角标计数（本期仅 macOS dock）。count≤0 清除角标。renderer 已据通知配置派生计数，主进程仅落地。
+ * Set the app badge count (macOS dock only this iteration). count≤0 clears the badge. The renderer has already derived the count per notification config; the main process only lands it.
  */
 export function applyBadgeCount(count: number): void {
   if (process.platform !== 'darwin') return;
