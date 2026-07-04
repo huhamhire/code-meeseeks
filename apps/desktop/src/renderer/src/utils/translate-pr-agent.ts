@@ -1,23 +1,24 @@
 /**
- * pr-agent 输出模板的翻译（独立于 react-i18next 的 UI 文案）。
+ * Translation of pr-agent output templates (independent of react-i18next's UI text).
  *
- * 背景：`CONFIG__RESPONSE_LANGUAGE=zh-CN` 只影响 LLM 生成的**内容值**，但 pr-agent
- * 在其 Python 源码里**硬编码**了一批结构化模板字符串（section 标题 / fixed labels /
- * checkbox 文字），这些 LLM 不动它们，所以中文环境下仍以英文出现。我们在渲染层做一次
- * 替换，把已知模板词翻成目标语言。
+ * Background: `CONFIG__RESPONSE_LANGUAGE=zh-CN` only affects the **content values** the LLM generates, but pr-agent
+ * **hardcodes** a batch of structured template strings in its Python source (section headings / fixed labels /
+ * checkbox text) that the LLM leaves untouched, so under a Chinese environment they still appear in English. We do one
+ * pass of replacement in the renderer, translating known template words into the target language.
  *
- * 这不是「按 key 取串」而是「按英文原文匹配、整段 blob 子串替换」，与 react-i18next 的
- * 访问模型不同，故**不进 locale 资源**，各语言的 <英文模板 → 译文> 表独立维护在同目录
- * 的 `pr-agent-labels/<lang>.json`，由本文件的替换引擎加载。
+ * This is not "look up a string by key" but "match by English source, substring-replace across the whole blob", which
+ * differs from react-i18next's access model, so it **does not go into locale resources**; each language's
+ * <English template → translation> table is maintained separately in `pr-agent-labels/<lang>.json` in the same
+ * directory, loaded by this file's replacement engine.
  *
- * 字典随 pr-agent 版本维护（按输出模板分组、便于跟上游升级 spot-check；JSON 顺序不影响
- * 正确性——引擎按 key 长度倒序处理，避免"短键先吃掉长键的子串"）。pr-agent v0.36 把
- * issue_header "Possible bug" rewrite 成大写 I 的 "Possible Issue" 绕过 LLM 翻译，故字典
- * 里另列了大写版本。
+ * The dictionary is maintained per pr-agent version (grouped by output template, to ease spot-checking against upstream
+ * upgrades; JSON order does not affect correctness — the engine processes keys in descending length order, avoiding
+ * "a short key eating the substring of a long key"). pr-agent v0.36 rewrote the issue_header "Possible bug" into
+ * "Possible Issue" with an uppercase I to bypass LLM translation, so the dictionary also lists the uppercase version.
  *
- * 语言感知：仅当 UI 语言 (config.language) 有对应字典（当前 zh-CN）时替换；en-US 等无字典
- * 语言下 pr-agent 输出本就是英文，原样返回 (passthrough)。新增目标语言 = 加一份
- * `pr-agent-labels/<lang>.json` 并在 TRANSLATION_MAPS 注册。
+ * Language-aware: replaces only when the UI language (config.language) has a matching dictionary (currently zh-CN);
+ * under dictionary-less languages like en-US the pr-agent output is already English, returned as-is (passthrough).
+ * Adding a target language = add a `pr-agent-labels/<lang>.json` and register it in TRANSLATION_MAPS.
  */
 
 import i18n, { matchSupportedLanguage, type SupportedLanguage } from '../i18n';
@@ -25,14 +26,14 @@ import zhCN from './pr-agent-labels/zh-CN.json';
 import jaJP from './pr-agent-labels/ja-JP.json';
 import deDE from './pr-agent-labels/de-DE.json';
 
-// 各语言的 <英文模板 → 译文> 表注册表。未注册的语言（如 en-US）→ passthrough。
+// Registry of each language's <English template → translation> table. Unregistered languages (e.g. en-US) → passthrough.
 const TRANSLATION_MAPS: Partial<Record<SupportedLanguage, Record<string, string>>> = {
   'zh-CN': zhCN,
   'ja-JP': jaJP,
   'de-DE': deDE,
 };
 
-// 按语言缓存「预排序条目」(长 key 在前，避免短 key 先吃掉长 key 的子串)
+// Cache "pre-sorted entries" per language (long keys first, to avoid a short key eating a long key's substring)
 const SORTED_BY_LANG = new Map<SupportedLanguage, Array<[string, string]>>();
 function sortedEntriesFor(lang: SupportedLanguage): Array<[string, string]> | null {
   const map = TRANSLATION_MAPS[lang];
@@ -46,10 +47,10 @@ function sortedEntriesFor(lang: SupportedLanguage): Array<[string, string]> | nu
 }
 
 /**
- * 把含 pr-agent 模板英文标签的字符串按当前 UI 语言翻译。
- * - 替换是字面量 (split/join)，不走正则，避免特殊字符意外匹配。
- * - 大小写敏感：模板里都是首字母大写，保持原样。
- * - 当前语言无对应字典 (如 en-US) 时原样返回 (pr-agent 输出本就是英文)。
+ * Translate a string containing pr-agent template English labels according to the current UI language.
+ * - Replacement is literal (split/join), not regex, to avoid accidental matches on special characters.
+ * - Case-sensitive: templates are all title-cased, kept as-is.
+ * - When the current language has no matching dictionary (e.g. en-US) returns as-is (pr-agent output is already English).
  */
 export function translatePrAgentLabels(text: string): string {
   if (!text) return text;

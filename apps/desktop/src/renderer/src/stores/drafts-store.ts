@@ -3,20 +3,20 @@ import type { ReviewDraft } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 
 /**
- * 跨组件共享的草稿池。每个 PR 的草稿独立存一份 (按 localId 维护)，避免 PR 切换时
- * 把别 PR 的草稿洗掉。
+ * Cross-component shared draft pool. Each PR's drafts are stored separately (keyed
+ * by localId), avoiding wiping another PR's drafts when switching PRs.
  *
- * 数据流：
- *   main IPC `drafts:create/update/delete` → 写盘 + 广播 `drafts:changed` →
- *   本 store 收到事件 → 调 `drafts:list` 重拉 → notify subscribers
+ * Data flow:
+ *   main IPC `drafts:create/update/delete` → write to disk + broadcast `drafts:changed` →
+ *   this store receives the event → calls `drafts:list` to re-pull → notify subscribers
  *
- * ChatPane / DiffView 都通过 `useDraftsForPr(localId)` 读，跟 chatRunStore /
- * repoSyncStore 同模。
+ * ChatPane / DiffView both read via `useDraftsForPr(localId)`, following the same
+ * pattern as chatRunStore / repoSyncStore.
  */
 export interface DraftsStoreState {
-  /** localId → 该 PR 的全部草稿。未拉过的 PR 缺 key (UI 第一次访问会触发 hydrate) */
+  /** localId → all drafts of that PR. A PR not yet pulled is missing its key (the UI's first access triggers hydrate) */
   byPr: ReadonlyMap<string, ReadonlyArray<ReviewDraft>>;
-  /** 正在 fetch 的 localId 集合，避免重复触发 */
+  /** Set of localIds currently being fetched, to avoid duplicate triggers */
   loading: ReadonlySet<string>;
 }
 
@@ -50,7 +50,7 @@ async function hydrate(localId: string): Promise<void> {
     const list = await invoke('drafts:list', { localId });
     setForPr(localId, list);
   } catch {
-    // 失败静默；UI 看到空草稿，重试由下次 hydrate 触发
+    // Fail silently; the UI sees empty drafts, and a retry is triggered by the next hydrate
     setForPr(localId, []);
   }
 }
@@ -63,9 +63,9 @@ export const draftsStore = {
       subscribers.delete(cb);
     };
   },
-  /** 强制重拉 (drafts:changed 事件触发) */
+  /** Force a re-pull (triggered by the drafts:changed event) */
   refresh: (localId: string): Promise<void> => hydrate(localId),
-  /** 首次访问时按需 hydrate；已 fetch 过 / 正在 fetch 不重复 */
+  /** Hydrate on demand on first access; skip if already fetched / currently fetching */
   ensureLoaded: (localId: string): void => {
     if (state.byPr.has(localId) || state.loading.has(localId)) return;
     void hydrate(localId);
@@ -73,15 +73,16 @@ export const draftsStore = {
 };
 
 /**
- * 读取指定 PR 的草稿数组。首次访问触发后台 hydrate；hydrate 完成后通过 store
- * subscription 自动 re-render。返回 null 表示还在 loading (UI 可显示加载占位)。
+ * Read the draft array of a given PR. First access triggers a background hydrate;
+ * after hydrate completes it auto re-renders via the store subscription. Returns
+ * null to indicate still loading (the UI can show a loading placeholder).
  */
 export function useDraftsForPr(localId: string | null | undefined): ReadonlyArray<ReviewDraft> | null {
   const snap = useSyncExternalStore(draftsStore.subscribe, draftsStore.getSnapshot);
-  // 首次访问按需 hydrate。**必须放 effect、绝不在 render 阶段触发**：ensureLoaded →
-  // markLoading → notify() 会同步通知所有订阅者，render 期调用即「渲染 A 组件时更新了
-  // 同样订阅本 store 的 B 组件」，React 报 "Cannot update a component while rendering a
-  // different component"。effect 在 commit 后跑，notify 落在渲染之外，告警消除。
+  // Hydrate on demand on first access. **Must go in an effect, never trigger during the render phase**: ensureLoaded →
+  // markLoading → notify() synchronously notifies all subscribers, and calling it during render means "updating component B
+  // that also subscribes to this store while rendering component A", for which React reports "Cannot update a component while
+  // rendering a different component". An effect runs after commit, so notify lands outside rendering and the warning is gone.
   useEffect(() => {
     if (localId) draftsStore.ensureLoaded(localId);
   }, [localId]);
@@ -91,12 +92,12 @@ export function useDraftsForPr(localId: string | null | undefined): ReadonlyArra
 }
 
 /**
- * 在 App 顶层 useEffect 调用一次。订阅 `drafts:changed` 事件，main 写盘后
- * renderer 自动同步。返回 cleanup 函数。
+ * Call once in a top-level App useEffect. Subscribes to the `drafts:changed` event;
+ * after main writes to disk, the renderer auto-syncs. Returns a cleanup function.
  */
 export function wireDraftsStore(): () => void {
   return subscribe('drafts:changed', (ev) => {
-    // 只重拉本地已有 (其他 PR 的草稿先不动，省 IPC 往返)
+    // Only re-pull what's already local (leave other PRs' drafts untouched, saving IPC round-trips)
     if (state.byPr.has(ev.localId) || state.loading.has(ev.localId)) {
       void draftsStore.refresh(ev.localId);
     }

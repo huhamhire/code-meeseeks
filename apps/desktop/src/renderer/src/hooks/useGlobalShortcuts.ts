@@ -3,14 +3,15 @@ import { invoke } from '../api';
 import { chatRunStore } from '../stores/chat-run-store';
 
 /**
- * 窗口级全局快捷键（VS Code 风），统一在此挂一个 `keydown` 监听：
- * - **F5**：对当前选中 PR 运行自动评审（与命令面板同逻辑：有选中 PR、可参与、且未在跑才触发——重入保护）。
- * - **DevTools**：mac ⌥⌘I / 其余 Ctrl+Shift+I（带 Shift/Alt，与下面单修饰键的 B/J 区分）。
- * - **查看已关闭**：mac ⌘⇧H（避开系统「隐藏应用」⌘H）/ 其余 Ctrl+H（浏览器历史惯例）。
- * - **布局开关**：Ctrl/Cmd+B 切 PR 列表（左侧栏）、Ctrl/Cmd+J 切对话面板（右侧）；单修饰键，排除 Shift/Alt
- *   （避开 Cmd+Shift+P 命令面板）。
+ * Window-level global shortcuts (VS Code style), all attached to a single `keydown` listener here:
+ * - **F5**: run auto review on the currently selected PR (same logic as the command palette: only triggers when there
+ *   is a selected PR, it's engageable, and it's not already running — reentrancy guard).
+ * - **DevTools**: mac ⌥⌘I / otherwise Ctrl+Shift+I (with Shift/Alt, distinguished from the single-modifier B/J below).
+ * - **View closed**: mac ⌘⇧H (avoiding the system "Hide App" ⌘H) / otherwise Ctrl+H (browser history convention).
+ * - **Layout toggles**: Ctrl/Cmd+B toggles the PR list (left sidebar), Ctrl/Cmd+J toggles the chat panel (right);
+ *   single modifier, excluding Shift/Alt (avoiding the Cmd+Shift+P command palette).
  *
- * `selectedId` / `canEngage` 经 ref 读实时值，使监听只随 platform 与几个稳定回调重建、不随选中 PR 频繁重订阅。
+ * `selectedId` / `canEngage` are read live via ref, so the listener rebuilds only with platform and a few stable callbacks, not resubscribing frequently as the selected PR changes.
  */
 export function useGlobalShortcuts({
   platform,
@@ -27,7 +28,7 @@ export function useGlobalShortcuts({
   setSidebarCollapsed: Dispatch<SetStateAction<boolean>>;
   setChatCollapsed: Dispatch<SetStateAction<boolean>>;
 }): void {
-  // 选中 PR / 可参与态的 ref：供稳定监听读实时值，免得每次切 PR 重订阅。
+  // Refs for the selected PR / engageable state: let the stable listener read live values, avoiding a resubscribe on every PR switch.
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
   const canEngageRef = useRef(canEngage);
@@ -37,7 +38,7 @@ export function useGlobalShortcuts({
     const isMac = platform === 'darwin';
     const onKey = (e: KeyboardEvent): void => {
       const k = e.key.toLowerCase();
-      // F5：对当前选中 PR 运行自动评审（有选中 PR、可参与、且未在跑才触发——重入保护）
+      // F5: run auto review on the currently selected PR (only triggers when there is a selected PR, it's engageable, and it's not already running — reentrancy guard)
       if (k === 'f5') {
         const id = selectedIdRef.current;
         if (id && canEngageRef.current && !chatRunStore.getSnapshot().agentPrs.includes(id)) {
@@ -46,7 +47,7 @@ export function useGlobalShortcuts({
         }
         return;
       }
-      // DevTools：mac ⌥⌘I / 其余 Ctrl+Shift+I（带 Shift/Alt，与下面单修饰键的 B/J 区分）
+      // DevTools: mac ⌥⌘I / otherwise Ctrl+Shift+I (with Shift/Alt, distinguished from the single-modifier B/J below)
       if (k === 'i') {
         const devtools = isMac
           ? e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey
@@ -57,7 +58,7 @@ export function useGlobalShortcuts({
         }
         return;
       }
-      // 查看已关闭（history）：mac ⌘⇧H（避开系统「隐藏应用」⌘H）/ 其余 Ctrl+H（浏览器历史惯例）
+      // View closed (history): mac ⌘⇧H (avoiding the system "Hide App" ⌘H) / otherwise Ctrl+H (browser history convention)
       if (k === 'h') {
         const wantArchived = isMac
           ? e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey
@@ -68,7 +69,7 @@ export function useGlobalShortcuts({
         }
         return;
       }
-      // 单修饰键布局开关：Ctrl/Cmd+B（PR 列表）、Ctrl/Cmd+J（对话面板）
+      // Single-modifier layout toggles: Ctrl/Cmd+B (PR list), Ctrl/Cmd+J (chat panel)
       const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (!mod || e.shiftKey || e.altKey) return;
       if (k === 'b') {

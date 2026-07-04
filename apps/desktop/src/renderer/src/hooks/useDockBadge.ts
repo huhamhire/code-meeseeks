@@ -3,9 +3,11 @@ import type { Config, StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../api';
 
 /**
- * macOS dock 角标同步：把活跃 PR「@我 / 回复我」待回应总数推给主进程落到 dock 图标。角标无独立开关——随通知
- * 总开关默认启用，关闭则置 0 清除；非 macOS 直接跳过（主进程也仅在 macOS 落地）。随 PR 列表 / 通知配置变化
- * 重算并推送。各 PR 计数已在 poll 端封顶 10，故总数自带上界。
+ * macOS dock badge sync: pushes the total pending-response count of active PRs ("@me / replies to me") to the main
+ * process to land on the dock icon. The badge has no independent switch — it follows the notification master switch,
+ * enabled by default, and is set to 0 to clear when disabled; skipped outright on non-macOS (the main process also
+ * only lands it on macOS). Recomputes and pushes as the PR list / notification config changes. Each PR's count is
+ * already capped at 10 on the poll side, so the total has a built-in upper bound.
  */
 export function useDockBadge({
   prs,
@@ -22,7 +24,7 @@ export function useDockBadge({
       ? prs.reduce((sum, p) => sum + (p.unreadMentionCount ?? 0), 0)
       : 0;
     void invoke('app:setBadgeCount', { count }).catch(() => {
-      /* 角标失败不影响主流程 */
+      /* badge failure does not affect the main flow */
     });
   }, [prs, platform, notifications]);
 }

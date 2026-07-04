@@ -3,9 +3,9 @@ import type { UpdateCheckResult } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 
 /**
- * 版本更新提示（main 为单一真相源）：挂载时水合已缓存结果（设置页手动检查 / 定时检查到的新版
- * 不因窗口重挂载而丢失），再订阅后续广播。另含 dev 调试钩子——控制台 dispatch
- * `meebox:debug-update`（detail 可带 latestVersion / 为 null 清除）模拟「发现新版」验证状态栏 chip。
+ * Version update notice (main is the single source of truth): on mount, hydrate the cached result (a new version found via the settings-page manual check / scheduled check
+ * isn't lost when the window remounts), then subscribe to subsequent broadcasts. Also includes a dev debug hook — the console can dispatch
+ * `meebox:debug-update` (detail may carry latestVersion / null to clear) to simulate "new version found" and verify the status bar chip.
  */
 export function useUpdateNotice(): UpdateCheckResult | null {
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);

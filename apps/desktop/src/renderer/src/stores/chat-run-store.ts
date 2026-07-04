@@ -3,23 +3,27 @@ import type { PragentRunInfo } from '@meebox/ipc';
 import { invoke, subscribe } from '../api';
 
 /**
- * 跨 ChatPane 实例的 pr-agent run 队列 + 实时 stdout 缓存。放模块级 store 而不是
- * React 状态，原因：用户切 PR 时 ChatPane 会被卸载重建，但 pr-agent 在主进程仍
- * 在跑、还在持续发 `pragent:runProgress` 事件 —— 把 (active, waiting, 已收到的
- * lines) 提到 React 树之上，新挂载的 ChatPane 能立刻读到正确状态。
+ * Cross-ChatPane-instance pr-agent run queue + live stdout cache. Kept in a
+ * module-level store rather than React state because: switching PRs unmounts and
+ * rebuilds ChatPane, but pr-agent keeps running in the main process and keeps
+ * emitting `pragent:runProgress` events — lifting (active, waiting, received
+ * lines) above the React tree lets a freshly mounted ChatPane read the correct
+ * state immediately.
  *
- * 数据 immutable 替换 (linesByRunId 用全新 Map / 数组，waiting 用新数组)，配合
- * useSyncExternalStore 的 identity 检查触发 re-render。
+ * Data is replaced immutably (linesByRunId uses a brand-new Map / array, waiting
+ * a new array), pairing with useSyncExternalStore's identity check to trigger a
+ * re-render.
  */
 export interface ChatRunStoreState {
-  /** 当前并发运行中的 run 列表（长度 ≤ max_concurrency）。空数组表示当前无 run 在跑 */
+  /** List of runs currently running concurrently (length ≤ max_concurrency). Empty array means no run is currently running */
   active: ReadonlyArray<PragentRunInfo>;
-  /** 等待执行的 run 队列 (FIFO，前面的先跑)。空数组表示无人排队 */
+  /** Queue of runs waiting to execute (FIFO, earlier ones run first). Empty array means nobody is queued */
   waiting: ReadonlyArray<PragentRunInfo>;
-  /** 各 run 的实时 stdout 行缓存。键 = runId；run 完成后保留直到 clearLines 调用 */
+  /** Live stdout line cache per run. Key = runId; retained after a run completes until clearLines is called */
   linesByRunId: ReadonlyMap<string, ReadonlyArray<string>>;
-  /** 有编排 Agent 运行中（思考或派发工具）的 PR localId 集合——含纯思考阶段（无活跃工具 run），
-   *  来自主进程 `agent:runningChanged`。PR 列表项「执行中」指示在工具队列之外再并入此集合。 */
+  /** Set of PR localIds with an orchestrating Agent running (thinking or dispatching tools) — includes the pure-thinking
+   *  phase (no active tool run), from the main process's `agent:runningChanged`. The PR list item's "running" indicator
+   *  merges in this set on top of the tool queue. */
   agentPrs: ReadonlyArray<string>;
 }
 
@@ -50,11 +54,11 @@ function setQueue(
   waiting: ReadonlyArray<PragentRunInfo>,
 ): void {
   const sameActive = sameRunList(state.active, active);
-  // 浅相等优化：active / waiting 的 runId(+startedAt) 序列都没变 → 不通知，避免无谓 re-render
+  // Shallow-equality optimization: if the runId(+startedAt) sequences of active / waiting are unchanged → don't notify, avoiding pointless re-renders
   if (sameActive && sameRunList(state.waiting, waiting)) return;
-  // 全局回收 stdout 缓存：离开 active 的 run（成功/失败/取消完成）清掉其 lines。
-  // 放在 store 层而非 ChatPane —— 不依赖用户当前打开哪个 PR，避免非当前 PR 上完成的
-  // run 的 lines 长期驻留。删除合并进同一次 state 更新，只 notify 一次。
+  // Globally reclaim stdout cache: clear the lines of any run that left active (completed as success/failure/cancel).
+  // Placed at the store layer rather than ChatPane — independent of which PR the user currently has open, avoiding
+  // long-lived lines for runs completed on a non-current PR. The deletions merge into the same state update, notifying only once.
   let linesByRunId = state.linesByRunId;
   if (!sameActive) {
     const nextActiveIds = new Set(active.map((r) => r.runId));
@@ -70,7 +74,7 @@ function setQueue(
   notify();
 }
 
-/** 集合相等（顺序无关）：长度相同且每个 id 都在旧集合里。避免广播顺序差异引发无谓 re-render。 */
+/** Set equality (order-independent): same length and every id is in the old set. Avoids pointless re-renders from broadcast ordering differences. */
 function sameIdSet(a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean {
   if (a.length !== b.length) return false;
   const sa = new Set(a);
@@ -118,12 +122,12 @@ export function useChatRunStore(): ChatRunStoreState {
 }
 
 /**
- * 把 IPC → store 的数据流接起来。在 App 顶层 useEffect 调用一次。
- * - 启动时拉一次队列快照兜底 (window reload / preload 重连后仍能恢复 UI)
- * - 订阅 queueChanged 事件，更新 store.active + store.waiting
- * - 订阅 runProgress 事件，把 line 追加到对应 runId 的 lines 缓存
+ * Wire up the IPC → store data flow. Call once in a top-level App useEffect.
+ * - Pull a queue snapshot once at startup as a fallback (UI can still recover after window reload / preload reconnect)
+ * - Subscribe to queueChanged events, updating store.active + store.waiting
+ * - Subscribe to runProgress events, appending each line to the lines cache of the corresponding runId
  *
- * 返回 cleanup 函数，App unmount 时一并取消订阅。
+ * Returns a cleanup function that unsubscribes everything on App unmount.
  */
 export function wireChatRunStore(): () => void {
   let cancelled = false;
@@ -132,7 +136,7 @@ export function wireChatRunStore(): () => void {
       const snap = await invoke('pragent:queue', undefined);
       if (!cancelled) chatRunStore.setQueue(snap.active, snap.waiting);
     } catch {
-      // 启动阶段拿不到队列也不致命，等事件兜
+      // Failing to get the queue at startup is not fatal; events will fill in as a fallback
     }
   })();
   const unsubQueue = subscribe('pragent:queueChanged', (ev) => {
@@ -141,7 +145,7 @@ export function wireChatRunStore(): () => void {
   const unsubProgress = subscribe('pragent:runProgress', (ev) => {
     chatRunStore.appendLine(ev.runId, ev.line);
   });
-  // 编排 Agent 运行中（含纯思考阶段）的 PR 集合：手动 run/ask 与 AutoPilot 后台评审一并计入。
+  // Set of PRs with an orchestrating Agent running (including the pure-thinking phase): manual run/ask and AutoPilot background review are both counted in.
   const unsubAgentRunning = subscribe('agent:runningChanged', (ev) => {
     chatRunStore.setAgentPrs(ev.prLocalIds);
   });

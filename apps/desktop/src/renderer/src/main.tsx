@@ -2,18 +2,18 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { addCollection } from '@iconify/react';
 import materialIconTheme from '@iconify-json/material-icon-theme/icons.json';
-// 注意：Monaco（~10MB）不在入口加载。monaco-setup 已移进 DiffView / InlineCodeContext
-// 两个懒模块，仅在首次看 diff / 行内代码上下文时才拉取，避免阻塞窗口首帧。
-// i18n 必须在 App 之前 import：副作用里同步 init i18next，保证首帧渲染前 t() 可用。
+// Note: Monaco (~10MB) is not loaded at the entry. monaco-setup has been moved into the two
+// lazy modules DiffView / InlineCodeContext, pulled only on first viewing a diff / inline code context, avoiding blocking the window's first frame.
+// i18n must be imported before App: its side effect synchronously inits i18next, ensuring t() is available before the first-frame render.
 import './i18n';
-// theme 同样在 App 之前 import：副作用里按 localStorage 缓存同步定下首帧主题（写 data-theme），
-// 避免浅色用户启动先闪一帧深色。
+// theme is likewise imported before App: its side effect synchronously pins the first-frame theme from the localStorage cache (writing data-theme),
+// avoiding a light-mode user flashing a frame of dark on startup.
 import './theme';
 import App from './App';
 import './App.scss';
 
-// 预加载 PKief Material Icon Theme，让 <Icon icon="material-icon-theme:..." />
-// 走 bundle 而非默认的 api.iconify.design CDN（CSP 不允许）
+// Preload the PKief Material Icon Theme so that <Icon icon="material-icon-theme:..." />
+// goes through the bundle instead of the default api.iconify.design CDN (disallowed by CSP)
 addCollection(materialIconTheme);
 
 const container = document.getElementById('root');

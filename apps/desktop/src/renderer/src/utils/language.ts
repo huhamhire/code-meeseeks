@@ -1,8 +1,8 @@
 /**
- * 按文件扩展名映射到 Monaco language id。Monaco 自带的 language 列表参见
+ * Map a file extension to a Monaco language id. For Monaco's built-in language list see
  * https://github.com/microsoft/monaco-editor/tree/main/src/basic-languages
  *
- * 未识别 → 返回 'plaintext'。无扩展名文件按 basename 识别（Dockerfile / Makefile）。
+ * Unrecognized → returns 'plaintext'. Extensionless files are identified by basename (Dockerfile / Makefile).
  */
 export function languageFor(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
