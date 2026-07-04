@@ -14,15 +14,15 @@ import { CommentReplyEditor } from './CommentReplyEditor';
 import { CommentMarkdown } from '../shared/CommentMarkdown';
 import { ReactionAddButton, ReactionChips, useReactions } from '../shared/ReactionBar';
 import { useCommentThread } from '../shared/useCommentThread';
-// 行内代码上下文用 Monaco，懒加载随 DiffView 同一套 Monaco chunk 按需拉取，不进入口包。
+// Inline code context uses Monaco; lazy-loaded and pulled on demand with the same Monaco chunk as DiffView, not in the entry bundle.
 const InlineCodeContext = lazy(() =>
   import('./InlineCodeContext').then((m) => ({ default: m.InlineCodeContext })),
 );
 
 /**
- * 评论树结构相等比较（按 remoteId + 正文 + version + 编辑/删除权限 + 递归 replies）。poll 多数返回
- * 内容不变的评论：相等就跳过 setState、保留旧引用，让 React bail-out，避免整棵评论树（含内联
- * Monaco）无谓重渲染（刷新抖动）。
+ * Structural equality comparison of the comment tree (by remoteId + body + version + edit/delete permissions + recursive replies). poll mostly returns
+ * comments with unchanged content: on equality, skip setState and keep the old reference so React bails out, avoiding pointless re-render of the whole
+ * comment tree (including inline Monaco) (refresh flicker).
  */
 export function sameCommentList(a: readonly PrComment[], b: readonly PrComment[]): boolean {
   if (a.length !== b.length) return false;
@@ -44,7 +44,7 @@ export function sameCommentList(a: readonly PrComment[], b: readonly PrComment[]
   return true;
 }
 
-/** 反应数组相等比较（emoji + count + mine 三元组逐项一致）：让 toggle 后的反应变化能触发重渲染。 */
+/** Equality comparison of the reactions array (emoji + count + mine triple matching item by item): lets reaction changes after a toggle trigger a re-render. */
 function sameReactions(a: PrComment['reactions'], b: PrComment['reactions']): boolean {
   const x = a ?? [];
   const y = b ?? [];
@@ -58,20 +58,20 @@ function sameReactions(a: PrComment['reactions'], b: PrComment['reactions']): bo
 }
 
 /**
- * 嵌套回复的最大缩进层级：满此层级后继续递归但**不再加缩进**（拉平展示），避免深嵌套把内容挤到
- * 右侧极窄。depth 0 为顶层评论；depth 1..MAX 逐级缩进，超过 MAX 的更深回复一律平铺在 MAX 层缩进上，
- * 仍按作者归属可读。Bitbucket 实际只一层 reply，GitHub / GitLab 可深嵌套，故设上限。
+ * Maximum indent level for nested replies: past this level recursion continues but **no further indent is added** (flattened display), avoiding
+ * deep nesting squeezing content into a very narrow right side. depth 0 is the top-level comment; depth 1..MAX indent progressively, and deeper replies
+ * beyond MAX are all laid flat at the MAX-level indent, still readable by author attribution. Bitbucket actually has only one reply level, while GitHub / GitLab can nest deeply, hence the cap.
  */
 const MAX_REPLY_DEPTH = 5;
 
 /**
- * 单条评论 + 嵌套 replies。inline 评论顶部显示 `path:line side` chip 区分锚点位置；
- * summary 评论不挂 chip。replies 走递归，depth 控制左侧缩进；满 MAX_REPLY_DEPTH 层后拉平
- * （不再加缩进，见该常量）。
+ * A single comment + nested replies. inline comments show a `path:line side` chip at the top to distinguish the anchor location;
+ * summary comments carry no chip. replies recurse, with depth controlling the left indent; past MAX_REPLY_DEPTH levels they flatten
+ * (no further indent, see that constant).
  *
- * `timeline` 模式（活动时间线，GitHub/Bitbucket）下的**顶层评论**改走时间线行版式：与其它事件统一
- * 「评论图标 + 头像 + 加粗作者名 + 『评论』动词 + 时间」标题，正文整体缩进成挂在时间线轨上的卡片。
- * 非 timeline（GitLab 纯评论视图）或回复（depth>0）维持原卡片版式。
+ * In `timeline` mode (activity timeline, GitHub/Bitbucket), the **top-level comment** switches to the timeline-row layout: a header unified with other events
+ * ("comment icon + avatar + bold author name + 'commented' verb + time"), with the body indented as a whole into a card hung on the timeline rail.
+ * Non-timeline (GitLab pure comment view) or replies (depth>0) keep the original card layout.
  */
 export function CommentItem({
   comment,
@@ -89,29 +89,29 @@ export function CommentItem({
   comment: PrComment;
   pr: StoredPullRequest;
   depth: number;
-  /** 顶层 (depth=0) 由父组件按 CAP 决定 true/false；replies 总是 false (不渲染 code) */
+  /** Top-level (depth=0) is decided true/false by the parent per CAP; replies are always false (do not render code) */
   autoExpandCode?: boolean;
   hardBreaks: boolean;
-  /** 评论 emoji 反应模式（capabilities.commentReactions）：'fixed'/'free' 才渲染；缺省 = 不支持。 */
+  /** Comment emoji reaction mode (capabilities.commentReactions): renders only for 'fixed'/'free'; absent = unsupported. */
   reactionsMode?: 'fixed' | 'free';
-  /** `@提及` 自动补全候选（PR 参与者 + 评论作者）；透传给回复编辑框。 */
+  /** `@mention` autocomplete candidates (PR participants + comment authors); passed through to the reply editor. */
   mentionCandidates?: PlatformUser[];
-  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给回复编辑框启用粘贴上传。 */
+  /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the reply editor to enable paste upload. */
   attachmentsEnabled?: boolean;
-  /** 是否处于活动时间线模式（仅影响顶层评论版式，见上方说明） */
+  /** Whether in activity timeline mode (only affects top-level comment layout, see the note above) */
   timeline?: boolean;
-  /** 内容只读（decline / 不可参与归档 PR）：隐藏回复 / 编辑 / 删除操作，仅供浏览。 */
+  /** Content read-only (decline / non-participable archived PR): hides reply / edit / delete actions, browse only. */
   readOnly?: boolean;
-  /** inline 评论锚点 chip 点击 → 跳到 Diff 对应文件/行。提供时 chip 变可点击。 */
+  /** Clicking the inline comment anchor chip → jump to the corresponding file/line in the Diff. When provided, the chip becomes clickable. */
   onJumpToAnchor?: (anchor: PrCommentAnchor) => void;
 }) {
   const { t } = useTranslation();
-  // 评论 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)
+  // Images embedded in the comment body go through the IPC proxy (Bitbucket private resources need PAT auth)
   const mdComponents = useMemo(
     () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId, pr.url) }),
     [pr.localId, pr.url],
   );
-  // 回复 / 编辑 / 删除 交互状态机（与 diff 行内评论 zone 共用，见 shared/useCommentThread）
+  // Reply / edit / delete interaction state machine (shared with the diff inline comment zone, see shared/useCommentThread)
   const {
     replyOpen,
     setReplyOpen,
@@ -127,15 +127,15 @@ export function CommentItem({
     handleDelete,
   } = useCommentThread(pr.localId, comment);
 
-  // 反应状态 + 切换（hook 无条件调用；输出仅在 reactionsMode 存在时渲染）。
+  // Reaction state + toggle (hook called unconditionally; output rendered only when reactionsMode exists).
   const { reactions, busy: reactionBusy, toggle: toggleReaction } = useReactions(
     pr.localId,
     comment,
     readOnly,
   );
 
-  // inline 评论锚点 chip：path:line + 侧别 (old=base / new=head)，让用户在评论里定位到代码位置。
-  // 提供 onJumpToAnchor 时（活动视图）chip 变可点击 → 跳到 Diff 对应文件/行。
+  // inline comment anchor chip: path:line + side (old=base / new=head), letting the user locate the code position from the comment.
+  // When onJumpToAnchor is provided (activity view) the chip becomes clickable → jump to the corresponding file/line in the Diff.
   const anchor = comment.anchor;
   const anchorChip = anchor ? (
     onJumpToAnchor ? (
@@ -160,7 +160,7 @@ export function CommentItem({
     )
   ) : null;
 
-  // inline 评论：在正文上方嵌一段代码上下文 (Monaco read-only)。replies (depth > 0) 不重复展示。
+  // inline comment: embed a code context (Monaco read-only) above the body. replies (depth > 0) do not repeat it.
   const inlineCode =
     comment.anchor && depth === 0 ? (
       <Suspense
@@ -170,7 +170,7 @@ export function CommentItem({
       </Suspense>
     ) : null;
 
-  // 编辑态：textarea 占位替换 markdown 正文；非编辑态：渲染 markdown
+  // Edit mode: textarea replaces the markdown body in place; non-edit mode: render markdown
   const bodyOrEdit =
     editOpen && typeof comment.version === 'number' ? (
       <CommentEditEditor
@@ -190,7 +190,7 @@ export function CommentItem({
       />
     );
 
-  // 操作行：编辑态隐藏所有按钮（避免跟编辑器底部按钮组重复）；只读（decline / 不可参与）整行隐藏。
+  // Action row: edit mode hides all buttons (avoiding duplication with the editor's bottom button group); read-only (decline / non-participable) hides the whole row.
   const foot = !editOpen && !readOnly ? (
     <div className="pr-comment-foot">
       {!replyOpen && (
@@ -208,7 +208,7 @@ export function CommentItem({
           {t('common.edit')}
         </button>
       )}
-      {/* 删除按钮在最后，跟其它按钮风格对齐 — disable 期间文案变"删除中…" */}
+      {/* Delete button last, aligned in style with the other buttons — while disabled the label becomes "deleting…" */}
       {canDelete && !replyOpen && (
         <button
           type="button"
@@ -220,7 +220,7 @@ export function CommentItem({
           {deleting ? t('commentsPanel.deleting') : t('common.delete')}
         </button>
       )}
-      {/* 「加反应」按钮放在操作按钮之后；回复编辑态下隐藏避免拥挤 */}
+      {/* The "add reaction" button goes after the action buttons; hidden in reply edit mode to avoid crowding */}
       {reactionsMode && !replyOpen && (
         <ReactionAddButton
           reactions={reactions}
@@ -247,7 +247,7 @@ export function CommentItem({
     </div>
   ) : null;
 
-  // 已有反应：单独成行，渲染在操作按钮行下方（编辑态隐藏）。readOnly 下只展示、不可切换。
+  // Existing reactions: on their own row, rendered below the action button row (hidden in edit mode). Under readOnly they only display, not toggle.
   const reactionChipsEl =
     reactionsMode && !editOpen ? (
       <ReactionChips
@@ -261,7 +261,7 @@ export function CommentItem({
   const replyEditor = replyOpen ? (
     <CommentReplyEditor
       prLocalId={pr.localId}
-      // 回复目标抽象（threadId）：GitLab=discussion id（reply 必需）；Bitbucket 空 / GitHub=remoteId → 回退 remoteId。
+      // Reply target abstraction (threadId): GitLab=discussion id (required for reply); Bitbucket empty / GitHub=remoteId → fall back to remoteId.
       parentCommentId={comment.threadId ?? comment.remoteId}
       mentionCandidates={mentionCandidates}
       attachmentsEnabled={attachmentsEnabled}
@@ -272,8 +272,8 @@ export function CommentItem({
 
   const repliesEl =
     comment.replies.length > 0 ? (
-      // 满 MAX_REPLY_DEPTH 层后用 pr-comments-flat 取代 pr-comments-replies（不再缩进 / 左边框）→
-      // 更深回复拉平在该层缩进上；pr-comments-flat 据此给同层级相邻评论加横向分割线区分。
+      // Past MAX_REPLY_DEPTH levels, use pr-comments-flat instead of pr-comments-replies (no more indent / left border) →
+      // deeper replies flatten at that indent level; pr-comments-flat accordingly adds a horizontal divider between adjacent same-level comments to distinguish them.
       <ul
         className={`pr-comments-list ${depth < MAX_REPLY_DEPTH ? 'pr-comments-replies' : 'pr-comments-flat'}`}
       >
@@ -306,7 +306,7 @@ export function CommentItem({
     />
   ) : null;
 
-  // 时间线模式的顶层评论：与其它事件统一的标题行（图标 + 头像 + 作者 + 『评论』+ 时间），正文挂成缩进卡片。
+  // Top-level comment in timeline mode: a header row unified with other events (icon + avatar + author + 'commented' + time), with the body hung as an indented card.
   if (timeline && depth === 0) {
     return (
       <li className="pr-comment pr-comment-timeline pr-comment-depth-0">
@@ -381,7 +381,7 @@ export function CommentItem({
 }
 
 /**
- * 精确到秒的本地时间文案（`YYYY-MM-DD HH:mm:ss`），供时间标签 hover tooltip 展示实际时间点。
+ * Local time text to the second (`YYYY-MM-DD HH:mm:ss`), for the time label's hover tooltip to show the actual time point.
  */
 export function formatExactTime(iso: string): string {
   const ms = Date.parse(iso);
@@ -392,7 +392,7 @@ export function formatExactTime(iso: string): string {
 }
 
 /**
- * 相对时间文案（刚刚 / N 分钟前 / …），一周以上回退本地日期。供评论与活动事件共用。
+ * Relative time text (just now / N minutes ago / …), falling back to the local date beyond a week. Shared by comments and activity events.
  */
 export function formatRelativeTime(iso: string): string {
   const t = Date.parse(iso);

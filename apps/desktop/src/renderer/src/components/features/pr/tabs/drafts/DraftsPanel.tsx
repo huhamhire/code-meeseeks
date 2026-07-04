@@ -9,39 +9,39 @@ import { formatBackendError } from '../../../../../errors';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
 import { ConfirmModal } from '../../../../common';
 
-// posted 已不存在 (发布成功即删本地)，筛选项只保留 publishable / all / rejected
+// posted no longer exists (successful publish deletes the local draft), filters keep only publishable / all / rejected
 type Filter = 'all' | 'publishable' | 'rejected';
 
 interface DraftsPanelProps {
   pr: StoredPullRequest;
-  /** 点 anchor 跳 Diff 视图。父端 wire 到 pendingDiffNav (走 App 顶层) */
+  /** Click anchor to jump to Diff view. Parent wires to pendingDiffNav (goes through App top level) */
   onJumpToAnchor?: (draftId: string) => void;
-  /** 活动连接能力位；此处用 commentHardBreaks 决定草稿预览是否启用 remark-breaks。 */
+  /** Active connection capability bits; here commentHardBreaks decides whether the draft preview enables remark-breaks. */
   capabilities?: PlatformCapabilities;
-  /** 内容只读（decline / 不可参与归档 PR）：隐藏草稿的发布 / 删除操作，仅供浏览。 */
+  /** Content read-only (decline / archived PR that can't be participated in): hides draft publish / delete actions, browse only. */
   readOnly?: boolean;
 }
 
 /**
- * 草稿管理面板 (M4)。跟 CommentsPanel 同一个 tab 层级、视觉权重对齐 —— 一个看
- * 远端已发评论，一个看本地未发草稿，互补。
+ * Draft management panel (M4). Same tab level as CommentsPanel, aligned visual weight — one views
+ * remote published comments, the other views local unpublished drafts, complementary.
  *
- * 跟 DiffView 内嵌 DraftZone / PublishReviewModal 的关系：
- * - DraftZone：行内就地编辑，"看到代码 + 改"的主路径
- * - PublishReviewModal：一次性"批量发布"入口，全选默认 + 发布动作流
- * - DraftsPanel：常驻"草稿总览"，跨文件 + 跨 status 浏览 / 单条 actions
+ * Relationship with DiffView's embedded DraftZone / PublishReviewModal:
+ * - DraftZone: inline in-place editing, the main path of "see the code + edit"
+ * - PublishReviewModal: one-shot "batch publish" entry, select-all default + publish action flow
+ * - DraftsPanel: persistent "draft overview", browse across files + across status / single-item actions
  *
- * status 筛选默认落在"待发布" — 用户最关心还没发的那批；筛选切到"已发布"可
- * 检视本 PR 自己发出去的评论历史，"已拒绝"可恢复 (M4 暂未做 unreject UI)
+ * status filter defaults to "to-publish" — users care most about the not-yet-published batch; switching the filter to "published"
+ * lets you inspect this PR's own published comment history, "rejected" can be restored (M4 has no unreject UI yet)
  */
 export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false }: DraftsPanelProps) {
-  // 草稿预览换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
+  // Draft preview line breaks: GitHub/Bitbucket hard-break; GitLab CommonMark soft break. Fallback true by default.
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
   const { t } = useTranslation();
   const drafts = useDraftsForPr(pr.localId);
   const [filter, setFilter] = useState<Filter>('publishable');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  // 多条草稿可能同时在发，用 Set 跟踪并发的 draftId 各自 disable / 文案
+  // Multiple drafts may be publishing at once; use a Set to track concurrent draftIds for per-item disable / label
   const [publishingIds, setPublishingIds] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<ReadonlyMap<string, string>>(new Map());
 
@@ -57,8 +57,8 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false
 
   const filtered = useMemo<ReviewDraft[]>(() => {
     const list = drafts ?? [];
-    // 排序：同文件按 startLine 升序 (跟代码自上而下阅读顺序一致)；不同文件按
-    // path 字典序 (跟文件树顺序对齐，扫起来不跳跃)
+    // Sort: within the same file by startLine ascending (matching top-to-bottom code reading order); across files by
+    // path lexicographic order (aligned with file-tree order, so scanning doesn't jump around)
     const sorted = list
       .slice()
       .sort((a, b) =>
@@ -105,9 +105,9 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false
           r?.error ? formatBackendError(r.error).title : t('draftsPanel.publishFailed'),
         );
       }
-      // 成功 → main 端直接删本地草稿 (不留 posted 历史)，broadcastDraftsChanged
-      // 让本面板重拉，被删的条目从列表里消失。远端评论由 force-refresh comments
-      // 拉回，在 CommentsPanel / DiffView CommentZone 看
+      // Success → main side deletes the local draft directly (no posted history kept), broadcastDraftsChanged
+      // makes this panel re-fetch, and the deleted item disappears from the list. The remote comment is pulled
+      // back by force-refresh comments, viewable in CommentsPanel / DiffView CommentZone
     } catch (e) {
       setError(draftId, e instanceof Error ? e.message : String(e));
     } finally {
@@ -120,8 +120,8 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false
     setConfirmDelete(null);
   };
 
-  // 草稿池正在 hydrate (首次进 PR) → 占位；fetched 后空数组才显示"无草稿"。
-  // 空态也包在 .drafts-panel 里让 flex:1 撑满横向，不变成"随内容缩"的小盒子
+  // Draft pool is hydrating (first entering the PR) → placeholder; only an empty array after fetch shows "no drafts".
+  // The empty state is also wrapped in .drafts-panel so flex:1 fills horizontally, rather than becoming a "shrink-to-content" small box
   if (drafts === null) {
     return (
       <div className="drafts-panel">
@@ -274,7 +274,7 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false
   );
 }
 
-// 状态/筛选项映射 i18n key（实际文案在组件内用 t() 解析，保持模块级表稳定）
+// Status/filter → i18n key mapping (actual text is resolved with t() inside the component, keeping the module-level table stable)
 const FILTER_LABEL_KEY: Record<Filter, string> = {
   publishable: 'draftsPanel.filterPublishable',
   all: 'draftsPanel.filterAll',

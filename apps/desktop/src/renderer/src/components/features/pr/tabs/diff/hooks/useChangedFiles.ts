@@ -12,13 +12,13 @@ export interface ChangedFilesState {
   selectedKey: string | null;
   setSelectedKey: React.Dispatch<React.SetStateAction<string | null>>;
   selected: DiffChangedFile | null;
-  /** 已渲染视图标识：新 files 到位才推进到当前 viewKey，在此之前各 effect 门控、旧视图保活。 */
+  /** Rendered view identifier: only advances to the current viewKey once new files land; before that each effect is gated and the old view is kept alive. */
   loadedKey: string | null;
 }
 
 /**
- * 拉变更文件列表 + 选中文件管理。切 PR / 切范围期间保留旧 files 渲染（stale-while-loading），
- * 新 files 到位才把 loadedKey 推进到 viewKey、整体替换。
+ * Fetch changed files list + selected file management. Keeps rendering old files while switching PR / scope (stale-while-loading),
+ * only advancing loadedKey to viewKey and replacing wholesale once new files land.
  */
 export function useChangedFiles(
   pr: StoredPullRequest,
@@ -31,7 +31,7 @@ export function useChangedFiles(
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [filesRetry, setFilesRetry] = useState(0);
 
-  // 拉变更文件列表 (fatal 失败 → 整个 diff 区域 fallback)
+  // Fetch changed files list (fatal failure → fallback for the entire diff area)
   useEffect(() => {
     let cancelled = false;
     setFilesError(null);
@@ -39,9 +39,9 @@ export function useChangedFiles(
       .then((f) => {
         if (cancelled) return;
         setFiles(f);
-        // 新 files 到位才把「已渲染视图」推进到当前 viewKey —— 在此之前各 effect 门控、旧视图保活。
+        // Only advance the "rendered view" to the current viewKey once new files land — before that each effect is gated and the old view is kept alive.
         setLoadedKey(viewKey);
-        // 选中项：仍存在则保留（同视图重试 / 切范围后同名文件仍在则不丢选中），否则回落首个。
+        // Selection: keep it if still present (same-view retry / same-named file still there after scope switch keeps selection), otherwise fall back to the first.
         setSelectedKey((prev) =>
           prev && f.some((x) => fileKey(x) === prev) ? prev : f.length > 0 ? fileKey(f[0]!) : null,
         );

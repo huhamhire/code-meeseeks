@@ -17,9 +17,9 @@ export interface PendingNav {
 }
 
 /**
- * 跳转消费：来自 ChatPane → App.pendingDiffNav。设 selectedKey 切到目标文件 + 找关联草稿，
- * 再由 reveal 副作用等 selected / diffEditor / drafts 就绪后 revealLine + 短暂高亮 + autoEdit。
- * 同时把 pendingScroll 暴露给跨文件搜索跳转（DiffSearchPanel）复用。
+ * Navigation consumption: from ChatPane → App.pendingDiffNav. Set selectedKey to switch to the target file + find the associated draft,
+ * then the reveal side effect waits for selected / diffEditor / drafts to be ready before revealLine + brief highlight + autoEdit.
+ * Also exposes pendingScroll for cross-file search navigation (DiffSearchPanel) to reuse.
  */
 export function useDiffNav(opts: {
   files: DiffChangedFile[] | null;
@@ -56,9 +56,9 @@ export function useDiffNav(opts: {
     if (target) {
       setSelectedKey(fileKey(target));
     }
-    // 查现有草稿；ChatPane 端已经懒创建过了，正常情况能找到。
-    // 没传 runId/findingId (PublishReviewModal anchor 点击场景) → 直接跳过查找，
-    // draftId 留 undefined → 下游 effect 不会触发 autoEdit，纯 navigate
+    // Look up the existing draft; ChatPane has already lazily created it, so normally it's found.
+    // No runId/findingId passed (PublishReviewModal anchor click scenario) → skip the lookup directly,
+    // draftId stays undefined → downstream effect won't trigger autoEdit, pure navigate
     const matchingDraft =
       pendingNav.runId && pendingNav.findingId
         ? (drafts ?? []).find(
@@ -69,19 +69,19 @@ export function useDiffNav(opts: {
           )
         : undefined;
     setPendingScroll({
-      // 取 endLine 跟草稿 zone / 发布锚点对齐（见 zone 行号注释），高亮行与草稿区同位
+      // Take endLine to align with the draft zone / publish anchor (see zone line number comment), so the highlight line matches the draft zone
       line: pendingNav.anchor.endLine,
       side: 'new',
       draftId: matchingDraft?.id,
     });
     onNavConsumed?.();
-    // drafts 不放 dep —— nav 进来时已 ack；后续 drafts 变化不该重复触发本逻辑
+    // drafts not in deps — already acked when nav arrives; later drafts changes shouldn't retrigger this logic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingNav, files, onNavConsumed]);
 
-  // nav 完成消费：scroll + highlight + autoEdit 关联草稿。等 selected 文件
-  // 切换 + content 加载 + diffEditor 就绪 + drafts hydrated 完，再 revealLine。
-  // pendingScroll 来自 nav effect (setSelectedKey 同时设的)；reveal 后清空
+  // nav consumption complete: scroll + highlight + autoEdit the associated draft. Wait for the selected file
+  // switch + content load + diffEditor ready + drafts hydrated, then revealLine.
+  // pendingScroll comes from the nav effect (set alongside setSelectedKey); cleared after reveal
   useEffect(() => {
     if (!pendingScroll || !diffEditor || !content || !selected) return;
     const editor =
@@ -92,12 +92,12 @@ export function useDiffNav(opts: {
     let highlightTimer: ReturnType<typeof setTimeout> | undefined;
     let revealed = false;
     const reveal = () => {
-      // onDidUpdateDiff 可能多次触发，只跳一次
+      // onDidUpdateDiff may fire multiple times, only jump once
       if (revealed) return;
       revealed = true;
-      // 居中滚到目标行
+      // Center-scroll to the target line
       editor.revealLineInCenter(pendingScroll.line);
-      // 短暂高亮：300ms 黄底脉冲
+      // Brief highlight: 300ms yellow-background pulse
       const collection = editor.createDecorationsCollection([
         {
           range: {
@@ -119,17 +119,17 @@ export function useDiffNav(opts: {
           /* editor disposed */
         }
       }, 800);
-      // 同时触发关联草稿的 autoEdit (DraftZone 自动 enter edit mode)
+      // Also trigger autoEdit for the associated draft (DraftZone auto-enters edit mode)
       if (pendingScroll.draftId) {
         triggerAutoEdit(pendingScroll.draftId);
       }
       setPendingScroll(null);
     };
 
-    // Monaco diff 是异步算的：models 挂上(onMount)后还要等 diff 计算 +
-    // hideUnchangedRegions 折叠布局完成，行号到视口位置的映射才稳定。此时
-    // 直接 revealLine 会定位到旧布局/错误位置。getLineChanges() 在算完前
-    // 返回 null、算完返回数组 → 已就绪直接跳，否则等 onDidUpdateDiff 首次触发。
+    // Monaco diff is computed asynchronously: after models mount (onMount) it still waits for diff computation +
+    // hideUnchangedRegions collapse layout to complete before the line-number-to-viewport-position mapping is stable. At this point
+    // revealLine directly would locate to the old layout / wrong position. getLineChanges() returns null before
+    // computation finishes, returns an array after → already ready jump directly, otherwise wait for onDidUpdateDiff to first fire.
     if (diffEditor.getLineChanges() != null) {
       reveal();
       return () => {
@@ -141,7 +141,7 @@ export function useDiffNav(opts: {
       disposable.dispose();
       if (highlightTimer) clearTimeout(highlightTimer);
     };
-    // triggerAutoEdit 不入 deps —— 它每次 render 换新引用，列进去会让 reveal 每帧重跑、反复定位高亮
+    // triggerAutoEdit not in deps — it changes reference every render, including it would make reveal rerun every frame, repeatedly locating/highlighting
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingScroll, diffEditor, content, selected]);
 

@@ -10,13 +10,13 @@ import {
 import { SmilePlusIcon } from '../../../../common';
 import { invoke } from '../../../../../api';
 
-/** 弹层估算尺寸（用于自适应翻转 / 视口夹取的占位计算；实际尺寸由内容决定）。 */
+/** Estimated popup size (used for adaptive flip / viewport-clamp placeholder calculations; actual size is determined by content). */
 const MENU_SIZE = {
   fixed: { w: 264, h: 48 },
   free: { w: 244, h: 232 },
 } as const;
 
-/** 据触发按钮位置 + 视口空间算弹层 fixed 坐标：下方空间不足且上方更宽裕则上翻；水平按视口夹取。 */
+/** Compute the popup's fixed coordinates from the trigger button position + viewport space: flip up when there's insufficient space below and more room above; clamp horizontally to the viewport. */
 function computeMenuPos(rect: DOMRect, mode: 'fixed' | 'free'): { top: number; left: number } {
   const margin = 6;
   const { w, h } = MENU_SIZE[mode];
@@ -28,8 +28,8 @@ function computeMenuPos(rect: DOMRect, mode: 'fixed' | 'free'): { top: number; l
 }
 
 /**
- * 评论 emoji 反应的共享状态 + 切换逻辑。切换经 `comments:toggleReaction` 写远端，成功后 main 广播
- * comments:changed → 评论列表重拉刷新（不维护本地乐观态，与编辑/删除一致）。busy 期间禁用避免重复点击。
+ * Shared state + toggle logic for comment emoji reactions. Toggling writes remotely via `comments:toggleReaction`; on success main broadcasts
+ * comments:changed → the comment list refetches and refreshes (no local optimistic state, consistent with edit/delete). Disabled during busy to avoid duplicate clicks.
  */
 export function useReactions(
   prLocalId: string,
@@ -38,7 +38,7 @@ export function useReactions(
 ): { reactions: PrReaction[]; busy: boolean; toggle: (emoji: string, add: boolean) => void } {
   const [busy, setBusy] = useState(false);
   const reactions = comment.reactions ?? [];
-  // GitHub 据 kind 选 issue / review 反应端点；其余平台忽略。anchor 兜底（旧数据无 kind）。
+  // GitHub picks the issue / review reaction endpoint by kind; other platforms ignore it. anchor is the fallback (old data has no kind).
   const kind: 'summary' | 'inline' = comment.kind ?? (comment.anchor ? 'inline' : 'summary');
   const toggle = useCallback(
     (emoji: string, add: boolean): void => {
@@ -52,7 +52,7 @@ export function useReactions(
         add,
       })
         .catch(() => {
-          // 失败静默：列表不会因 comments:changed 刷新出新反应，状态保持原样
+          // Silent on failure: the list won't refresh a new reaction via comments:changed, state stays as-is
         })
         .finally(() => setBusy(false));
     },
@@ -61,7 +61,7 @@ export function useReactions(
   return { reactions, busy, toggle };
 }
 
-/** 已有反应的展示条：emoji + 计数，本人反应高亮，点击切换。无反应则不渲染。 */
+/** Display bar for existing reactions: emoji + count, own reactions highlighted, click to toggle. Not rendered when there are no reactions. */
 export function ReactionChips({
   reactions,
   busy,
@@ -95,8 +95,8 @@ export function ReactionChips({
 }
 
 /**
- * 「加反应」按钮 + 弹出选择器。放在评论操作按钮行内（Reply/Edit 之后）。点击切换弹层，点击弹层外部 /
- * Esc 收起（非模态）。fixed 模式（GitHub）列固定 8 种；free 模式（GitLab/Bitbucket）列精选集 + 搜索。
+ * "Add reaction" button + popup picker. Placed inline in the comment action button row (after Reply/Edit). Click to toggle the popup, click outside the popup /
+ * Esc to dismiss (non-modal). fixed mode (GitHub) lists a fixed 8; free mode (GitLab/Bitbucket) lists a curated set + search.
  */
 export function ReactionAddButton({
   reactions,
@@ -115,7 +115,7 @@ export function ReactionAddButton({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  // 据触发按钮位置定位弹层；开启时及滚动 / 缩放时重算（弹层走 portal + fixed，故跟随而不被裁切）。
+  // Position the popup by the trigger button; recompute on open and on scroll / resize (the popup uses portal + fixed, so it follows without being clipped).
   useLayoutEffect(() => {
     if (!open) return;
     const place = (): void => {
@@ -131,7 +131,7 @@ export function ReactionAddButton({
     };
   }, [open, mode]);
 
-  // 点击弹层 / 触发按钮以外 / Esc 收起（非模态：不加遮罩、不拦其它交互）。
+  // Click outside the popup / trigger button, or Esc, dismisses (non-modal: no overlay, doesn't block other interactions).
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent): void => {
@@ -201,7 +201,7 @@ export function ReactionAddButton({
   );
 }
 
-/** free 模式选择器：搜索框 + 精选 emoji 网格（按关键词 / shortcode 过滤）。 */
+/** free mode picker: search box + curated emoji grid (filter by keyword / shortcode). */
 function FreeReactionPicker({
   busy,
   mineOf,
@@ -213,7 +213,7 @@ function FreeReactionPicker({
 }) {
   const { t } = useTranslation();
   const [q, setQ] = useState('');
-  // 空查询回精选默认集；否则在全量 gemoji 词表搜索（截断 60）。
+  // Empty query returns the curated default set; otherwise search the full gemoji vocabulary (truncated to 60).
   const items = searchReactionEmojis(q);
   return (
     <div className="pr-reaction-picker pr-reaction-picker-free" role="menu">

@@ -4,14 +4,14 @@ import { languageFor } from '../../../../../../utils/language';
 import type { FileResults } from './diff-search';
 
 /**
- * 异步着色：对每个 file 的每条 match.content 用 Monaco colorize 加语法高亮。
+ * Async colorize: apply syntax highlighting via Monaco colorize to each file's every match.content.
  *
- * Monaco colorize 返回带 inline style 的 HTML — 不依赖 monaco theme CSS，
- * dangerouslySetInnerHTML 即可用。串行 file 但并发 line 平衡 throughput vs
- * 启动开销 (一个文件的 language 加载只一次)。
+ * Monaco colorize returns HTML with inline styles — doesn't depend on monaco theme CSS,
+ * usable directly via dangerouslySetInnerHTML. Serial per file but concurrent per line balances throughput vs
+ * startup cost (a file's language loads only once).
  *
- * session token 检查：search session 已经被新 query 取代时立即放弃，避免
- * setState 到过期结果上
+ * session token check: bail immediately when the search session has been superseded by a new query, to avoid
+ * setState onto a stale result
  */
 export async function colorizeAll(
   results: FileResults[],
@@ -22,7 +22,7 @@ export async function colorizeAll(
   for (const fr of results) {
     if (token !== sessionRef.current) return results;
     const langId = languageFor(fr.file.path);
-    // plaintext 文件没意义着色 — 直接复用原 matches
+    // plaintext files aren't worth colorizing — just reuse the original matches
     if (langId === 'plaintext') {
       out.push(fr);
       continue;
@@ -31,7 +31,7 @@ export async function colorizeAll(
       fr.matches.map(async (m) => {
         try {
           const html = await MonacoEditorNs.colorize(m.content, langId, { tabSize: 2 });
-          // colorize 输出末尾会加 `<br/>`；裁掉避免行高跳一档
+          // colorize output appends a trailing `<br/>`; trim it to avoid a line-height jump
           return { ...m, colorizedHtml: html.replace(/<br\/?>$/i, '') };
         } catch {
           return m;

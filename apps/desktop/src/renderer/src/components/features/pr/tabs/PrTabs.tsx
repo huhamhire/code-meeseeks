@@ -4,8 +4,8 @@ import { ChatIcon, PersonIcon, WhitespaceIcon } from '../../../common';
 export type PrTab = 'diff' | 'activity' | 'drafts' | 'commits' | 'info';
 
 /**
- * PR 详情 tab 栏：diff / 评论 / 草稿 / 提交 / 信息（带计数徽标），diff tab 时右侧附带
- * 空白可视 / blame / 并排-内联 切换工具条。
+ * PR detail tab bar: diff / comments / drafts / commits / info (with count badges); when on the diff tab, the right side
+ * carries a whitespace-visibility / blame / side-by-side-inline toggle toolbar.
  */
 export function PrTabs({
   tab,
@@ -30,11 +30,11 @@ export function PrTabs({
   commitCount: number | null;
   totalDraftCount: number;
   publishableCount: number;
-  /** 该平台是否提供活动时间线（见 capabilities.activityTimeline）；否则该 tab 标题退化为「评论」 */
+  /** Whether the platform provides an activity timeline (see capabilities.activityTimeline); otherwise this tab's title degrades to "Comments" */
   activityTimeline: boolean;
-  /** 内容只读（decline / 不可参与归档 PR）：隐藏「新建评论」入口。 */
+  /** Content is read-only (declined / non-participable archived PR): hides the "new comment" entry point. */
   readOnly?: boolean;
-  /** 活动标签页右侧「评论」按钮：新建一条不锚到文件的评论 */
+  /** The "Comment" button on the right of the activity tab: creates a comment not anchored to a file */
   onNewComment: () => void;
   showWhitespace: boolean;
   onToggleWhitespace: () => void;
@@ -55,8 +55,9 @@ export function PrTabs({
       >
         {t('mainPane.tabDiff')}
       </button>
-      {/* 活动时间线（评论 + 提交 + 评审决断）在 commits 前：评审决断时讨论权重大于纯 commit 列表。
-          角标仍取评论数——讨论量最具行动指引，提交另有独立 tab 计数。 */}
+      {/* The activity timeline (comments + commits + review decisions) comes before commits: during review, discussion
+          weighs more than a plain commit list. The badge still uses the comment count — discussion volume is the most
+          actionable indicator, and commits have their own separate tab count. */}
       <button
         type="button"
         className={`pr-tab ${tab === 'activity' ? 'active' : ''}`}
@@ -70,8 +71,8 @@ export function PrTabs({
           ariaLabel={(n) => t('mainPane.commentCountAria', { count: n })}
         />
       </button>
-      {/* 草稿 tab：显示条件用总数 — 全发完仍能进 tab 看 posted/rejected 历史；
-          从未创建草稿的 PR 才完全隐藏 tab，避免冗余入口 */}
+      {/* Drafts tab: visibility condition uses the total count — even after all are posted you can still enter the tab
+          to view posted/rejected history; only PRs that never created a draft hide the tab entirely, avoiding a redundant entry point */}
       {totalDraftCount > 0 && (
         <button
           type="button"
@@ -168,10 +169,10 @@ export function PrTabs({
 }
 
 /**
- * tab 计数角标。计数异步加载（评论 / 提交）：
- * - `null`（加载中）：渲染等宽占位 chip，预留角标宽度，消除计数到达时 tab 的横向弹簧抖动；
- * - `> 0`：真实数字角标；
- * - `0`：不渲染（无角标）。
+ * Tab count badge. Counts load asynchronously (comments / commits):
+ * - `null` (loading): renders a fixed-width placeholder chip, reserving badge width to eliminate the tab's horizontal spring-jitter when the count arrives;
+ * - `> 0`: the real numeric badge;
+ * - `0`: not rendered (no badge).
  */
 function TabCountBadge({
   count,

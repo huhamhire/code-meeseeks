@@ -30,52 +30,52 @@ export function DiffPane({
   onMount: (editor: MonacoEditor.IStandaloneDiffEditor) => void;
 }) {
   const { t } = useTranslation();
-  // Monaco 内置主题不走 CSS 自定义属性，须显式切换：按编辑器主题偏好（'auto' 跟随 GUI 深浅）解析。
+  // Monaco's built-in themes do not use CSS custom properties, so they must be switched explicitly: resolved by the editor theme preference ('auto' follows GUI light/dark).
   const monacoTheme = useMonacoEditorTheme();
-  // 编辑器等宽字体 + 字号：随配置切换（字体空 = Monaco 默认；字号按平台再做微调）。
+  // Editor monospace font + font size: switch with config (empty font = Monaco default; font size gets a per-platform tweak).
   const editorAppearance = useEditorAppearance();
   const fontFamily = resolveEditorFontFamily(editorAppearance.fontFamily);
-  // Monaco 挂载后 diff 还要异步计算 + hideUnchangedRegions 折叠才稳定（见上文 reveal 逻辑），
-  // 期间编辑器是「空 → 跳一下」的重排。在它之上盖一层 overlay loading，首次 onDidUpdateDiff
-  // （或挂载即已算完）后卸载，遮住这段抖动一次性 reveal。DiffPane 按 file path keyed →
-  // 切文件自然 remount，diffReady 随之复位。
+  // After Monaco mounts, the diff still needs async computation + hideUnchangedRegions collapsing before it stabilizes (see the reveal logic below),
+  // during which the editor reflows from "empty → jump". Lay an overlay loading on top of it, unmount after the first onDidUpdateDiff
+  // (or if already computed on mount), covering this flicker for a one-shot reveal. DiffPane is keyed by file path →
+  // switching files naturally remounts, and diffReady resets with it.
   const [diffReady, setDiffReady] = useState(false);
-  // options 必须 useMemo 稳定引用：@monaco-editor/react 对 options **按引用**比对，引用一变就
-  // editor.updateOptions()。父级 DiffView 随 poll（pr 换新对象引用）重渲染 → DiffPane 重渲染，
-  // 若每次新建 options 字面量，每次 poll 都触发 updateOptions → hideUnchangedRegions 折叠布局重算 →
-  // 编辑器渲染抖动。只在真正影响项（并排/空白/字号）变化时重建。
+  // options must use a stable useMemo reference: @monaco-editor/react compares options **by reference**, and any reference change triggers
+  // editor.updateOptions(). The parent DiffView re-renders with poll (pr swaps to a new object reference) → DiffPane re-renders,
+  // and if the options literal is rebuilt each time, every poll triggers updateOptions → hideUnchangedRegions collapse layout recompute →
+  // editor render flicker. Rebuild only when items that truly matter (side-by-side / whitespace / font size) change.
   const fontSize = editorFontSize(editorAppearance.fontSize);
   const editorOptions = useMemo<MonacoEditor.IDiffEditorConstructionOptions>(
     () => ({
       readOnly: true,
       renderSideBySide,
-      // keep-alive：tab 切走时本编辑器被 display:none（尺寸归 0），切回需重排。automaticLayout
-      // 让 Monaco 自带 ResizeObserver 在显隐/尺寸变化时自动 layout，避免切回空白/错位。
+      // keep-alive: when the tab is switched away, this editor is display:none (size collapses to 0), and needs reflow on switch-back. automaticLayout
+      // lets Monaco's built-in ResizeObserver auto-layout on show/hide/size change, avoiding blank/misaligned rendering on switch-back.
       automaticLayout: true,
       minimap: { enabled: false },
       fontSize,
       fontFamily,
       scrollBeyondLastLine: false,
-      // 关掉 diff 专属的合并总览列（renderOverviewRuler=true 会在两侧滚动条之外再加一条宽列，
-      // 跟 VS Code 编辑模式「滚动条内打标」不一致）。改走编辑模式效果：内层 modified 编辑器自带的
-      // overview ruler（默认渲染、独立于 minimap）+ 行内评论装饰的 overviewRuler 投影（见 useCommentZones）。
+      // Turn off the diff-specific merged overview column (renderOverviewRuler=true adds an extra wide column outside both scrollbars,
+      // inconsistent with VS Code edit mode's "marks inside the scrollbar"). Go with the edit-mode effect instead: the inner modified editor's own
+      // overview ruler (rendered by default, independent of the minimap) + inline comment decorations' overviewRuler projection (see useCommentZones).
       renderOverviewRuler: false,
-      // 显式 3 道：让 overview ruler 按 1/3 分道（diff 占左道、评论占右道，各 1/3 宽），
-      // 避免被按 2 道算成各占一半，色条更细。
+      // Explicit 3 lanes: split the overview ruler into thirds (diff takes the left lane, comments the right, each 1/3 wide),
+      // avoiding being computed as 2 lanes each taking half, for thinner color bars.
       overviewRulerLanes: 3,
-      // 显式开 glyph margin，给行内评论标记留位置
+      // Explicitly enable glyph margin, leaving room for inline comment markers
       glyphMargin: true,
-      // 空白字符可视化：toolbar 按钮控制；'all' 时空格显示 · / Tab 显示 →
+      // Whitespace visualization: controlled by a toolbar button; when 'all', spaces show as · / Tab shows as →
       renderWhitespace: showWhitespace ? 'all' : 'none',
-      // GitHub 风格折叠：未变更段缩成可展开占位行
+      // GitHub-style folding: unchanged sections collapse into expandable placeholder rows
       hideUnchangedRegions: {
         enabled: true,
         contextLineCount: 10,
         minimumLineCount: 5,
         revealLineCount: 20,
       },
-      // 关掉依赖 ts.worker 的高级特性（diff review 不需要），同时消掉
-      // `Missing requestHandler` 噪音。hover 保留给 blame / 评论装饰用。
+      // Turn off advanced features that depend on ts.worker (diff review does not need them), which also silences
+      // the `Missing requestHandler` noise. hover is kept for blame / comment decorations.
       inlayHints: { enabled: 'off' },
       quickSuggestions: false,
       suggestOnTriggerCharacters: false,
@@ -89,9 +89,9 @@ export function DiffPane({
   const handleMount = useCallback(
     (editor: MonacoEditor.IStandaloneDiffEditor) => {
       onMount(editor);
-      // diff 算完触发 onDidUpdateDiff，但 hideUnchangedRegions 折叠的布局还要再 paint
-      // 一两帧才稳定 → 不在事件里立即揭开（否则露出折叠那一跳），略等 80ms 让折叠 paint
-      // 完成、overlay 一直盖着，再一次性 reveal。
+      // The diff computation fires onDidUpdateDiff, but the hideUnchangedRegions collapse layout still needs another
+      // frame or two of painting to stabilize → do not reveal immediately in the event (else the collapse jump shows); wait ~80ms to let the collapse
+      // paint finish while the overlay stays on, then reveal in one shot.
       const reveal = (): void => {
         window.setTimeout(() => setDiffReady(true), 80);
       };

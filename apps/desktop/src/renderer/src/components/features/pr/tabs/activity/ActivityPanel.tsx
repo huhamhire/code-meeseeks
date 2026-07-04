@@ -31,25 +31,25 @@ import {
 
 interface ActivityPanelProps {
   pr: StoredPullRequest;
-  /** 顶层评论数（不含 replies）拉取成功后回调，供父组件 tab 角标用 */
+  /** Callback after the top-level comment count (excluding replies) is fetched successfully, for the parent's tab badge */
   onCommentsLoaded?: (count: number) => void;
-  /** 活动连接能力位；此处用 commentHardBreaks 决定评论是否启用 remark-breaks。 */
+  /** Active connection capability flags; here commentHardBreaks decides whether comments enable remark-breaks. */
   capabilities?: PlatformCapabilities;
-  /** 内容只读（decline / 不可参与归档 PR）：隐藏评论回复 / 编辑 / 删除及新建编辑框。 */
+  /** Content is read-only (declined / non-participable archived PR): hides comment reply / edit / delete and the new composer. */
   readOnly?: boolean;
-  /** 是否展开「新建评论」编辑框（由标签栏「评论」按钮控制，出现在时间线顶部） */
+  /** Whether the "new comment" composer is expanded (controlled by the tab bar's "Comment" button, appears at the top of the timeline) */
   composing?: boolean;
-  /** 新建评论编辑框收起（取消 / 发布成功）回调 */
+  /** Callback when the new comment composer collapses (cancel / posted successfully) */
   onComposeClose?: () => void;
-  /** 当前 PAT 用户名（新建评论编辑框头像用） */
+  /** Current PAT username (used for the new comment composer's avatar) */
   currentUserName?: string | null;
-  /** 点击时间线上的 commit 事件 → 在 Diff 标签页本地渲染该 commit 的变更（不再跳浏览器） */
+  /** Click a commit event on the timeline → render that commit's changes locally in the Diff tab (no longer opens browser) */
   onViewCommit?: (commit: PrCommit) => void;
-  /** 点击 inline 评论锚点 chip → 跳到 Diff 对应文件/行 */
+  /** Click an inline comment anchor chip → jump to the corresponding file/line in the Diff */
   onJumpToAnchor?: (anchor: PrCommentAnchor) => void;
 }
 
-/** 三路数据 + 其配对 PR 一起冻结，跨 poll 稳定引用，给评论树（含内联 Monaco）稳定身份避免重渲染。 */
+/** The three data streams + their paired PR are frozen together, a stable reference across polls, giving the comment tree (including inline Monaco) a stable identity to avoid re-renders. */
 interface ActivityView {
   pr: StoredPullRequest;
   comments: PrComment[];
@@ -57,7 +57,7 @@ interface ActivityView {
   activity: PrActivityEvent[];
 }
 
-/** 按 id 列表逐项比对（顺序敏感）。commits 用 sha、activity 用 remoteId，相等则跳过 setState 让 React bail。 */
+/** Compares lists item by item by id (order-sensitive). commits use sha, activity uses remoteId; if equal, skip setState to let React bail. */
 function sameIds<T>(a: readonly T[], b: readonly T[], id: (x: T) => string): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
@@ -67,17 +67,18 @@ function sameIds<T>(a: readonly T[], b: readonly T[], id: (x: T) => string): boo
 }
 
 /**
- * PR 活动时间线（原「评论」标签页演进而来）。把三路数据按时间归并成一条时间线：
- *   1. 评论（summary + inline，含 replies / 编辑 / 删除 / 内联代码，沿用 {@link CommentItem}）
- *   2. 提交更新（{@link PrCommit}）
- *   3. reviewer 评审决断事件（approve / needs-work / unapprove / dismiss，{@link PrActivityEvent}）
+ * PR activity timeline (evolved from the former "Comments" tab). Merges the three data streams by time into one timeline:
+ *   1. Comments (summary + inline, including replies / edit / delete / inline code, reusing {@link CommentItem})
+ *   2. Commit updates ({@link PrCommit})
+ *   3. Reviewer review-decision events (approve / needs-work / unapprove / dismiss, {@link PrActivityEvent})
  *
- * 排序沿用评论页规则：**按时间倒序（newest first）**，最新动态在顶部。评论数据源与 DiffView 的 inline
- * 评论同一份（`diff:listComments`，main 端有 pr_updated_at 缓存）；提交 / 决断各走自己的 IPC，二者
- * 为增益信息，单独失败不影响评论时间线（catch 降级为空）。
+ * Ordering follows the comments page rule: **reverse chronological (newest first)**, latest activity on top. The comment
+ * data source is the same as DiffView's inline comments (`diff:listComments`, the main side has a pr_updated_at cache);
+ * commits / decisions each go through their own IPC, both being additive info, and a standalone failure doesn't affect the
+ * comment timeline (catch degrades to empty).
  *
- * 切 PR 时不立刻清空（stale-while-loading）：旧时间线继续渲染、上盖 loading 遮罩，新数据 ready 后
- * 整体替换，消除「先闪加载中再渲新」的空窗。
+ * Switching PRs doesn't clear immediately (stale-while-loading): the old timeline keeps rendering with a loading overlay
+ * on top, and once new data is ready it's replaced wholesale, eliminating the "flash loading then render new" gap.
  */
 export function ActivityPanel({
   pr,
@@ -90,16 +91,16 @@ export function ActivityPanel({
   onViewCommit,
   onJumpToAnchor,
 }: ActivityPanelProps) {
-  // 评论换行：GitHub/Bitbucket hard-break；GitLab CommonMark 软换行。缺省回退 true。
+  // Comment line breaks: GitHub/Bitbucket hard-break; GitLab CommonMark soft break. Defaults to true.
   const hardBreaks = capabilities?.commentHardBreaks ?? true;
-  // 评论 emoji 反应模式：'fixed'（GitHub 8 种）/ 'free'（GitLab/Bitbucket 精选集+搜索）；false/缺省 = 关闭。
+  // Comment emoji reaction mode: 'fixed' (GitHub's 8) / 'free' (GitLab/Bitbucket curated set + search); false/default = off.
   const reactionsMode = capabilities?.commentReactions || undefined;
-  // 图片附件上传：平台支持时启用评论粘贴上传。缺省保守关闭（GitHub 无上传 API 亦为 false）。
+  // Image attachment upload: enables comment paste-to-upload when the platform supports it. Conservatively off by default (GitHub has no upload API, also false).
   const attachmentsEnabled = capabilities?.commentAttachments ?? false;
-  // 差异化：GitHub/Bitbucket 渲染评论+提交+决断的活动时间线；GitLab（activityTimeline=false）退化为
-  // 纯评论视图（不拉提交/决断、沿用「评论」文案）。缺省（capabilities 未到）保守按纯评论。
+  // Differentiation: GitHub/Bitbucket render the activity timeline of comments+commits+decisions; GitLab (activityTimeline=false) degrades to
+  // a pure comment view (doesn't fetch commits/decisions, keeps the "Comments" wording). Default (capabilities not yet arrived) conservatively treats as pure comments.
   const showTimeline = capabilities?.activityTimeline ?? false;
-  // 文案命名空间：时间线模式用 activityPanel.*，纯评论模式沿用 commentsPanel.*（保持 GitLab 原体验）。
+  // Text namespace: timeline mode uses activityPanel.*, pure comment mode keeps commentsPanel.* (preserving GitLab's original experience).
   const ns = showTimeline ? 'activityPanel' : 'commentsPanel';
   const { t } = useTranslation();
   const [view, setView] = useState<ActivityView | null>(null);
@@ -112,8 +113,8 @@ export function ActivityPanel({
     setError(null);
     const fetchAll = async (): Promise<void> => {
       try {
-        // 评论是核心（失败=整块错误）；提交 / 决断是增益，单独失败 catch 成空，时间线照常展示评论。
-        // 纯评论模式（GitLab）跳过提交 / 决断拉取。
+        // Comments are core (failure = whole-block error); commits / decisions are additive, standalone failures catch to empty, and the timeline still shows comments.
+        // Pure comment mode (GitLab) skips fetching commits / decisions.
         const [comments, commits, activity] = await Promise.all([
           invoke('diff:listComments', { localId: pr.localId, force: true }),
           showTimeline
@@ -126,7 +127,7 @@ export function ActivityPanel({
             : Promise.resolve([] as PrActivityEvent[]),
         ]);
         if (cancelled) return;
-        // 三路都与上次相等：保留旧 view 引用让 React bail（poll 无实质变化时不重渲时间线）。
+        // All three streams equal last time: keep the old view reference to let React bail (don't re-render the timeline when a poll has no substantive change).
         setView((prev) =>
           prev &&
           prev.pr.localId === pr.localId &&
@@ -146,7 +147,7 @@ export function ActivityPanel({
       }
     };
     void fetchAll();
-    // 用户回复 / 编辑 / 删除 / 发布草稿后 main 广播 comments:changed → 重拉
+    // After the user replies / edits / deletes / posts a draft, main broadcasts comments:changed → refetch
     const unsub = subscribe('comments:changed', (e) => {
       if (e.localId === pr.localId) void fetchAll();
     });
@@ -154,13 +155,13 @@ export function ActivityPanel({
       cancelled = true;
       unsub();
     };
-    // onCommentsLoaded 故意不放依赖：父组件每次 render 都会重传新 ref，会触发误重拉
+    // onCommentsLoaded deliberately left out of deps: the parent passes a new ref on every render, which would trigger a spurious refetch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pr.localId, showTimeline]);
 
   const viewPr = view?.pr;
-  // inline 评论自动挂 Monaco 上限：按 createdAt 倒序后的前 N 条 inline 直接挂；超额走 click-to-expand。
-  // 跟评论页一致取 10——一屏内大概看完，再多需主动展开。
+  // Cap on auto-mounting Monaco for inline comments: the first N inline comments (after sorting by createdAt descending) mount directly; the rest use click-to-expand.
+  // Take 10 to match the comments page — roughly viewable within one screen, beyond that requires active expansion.
   const autoExpandSet = useMemo(() => {
     const out = new Set<string>();
     const inlineByNewest = (view?.comments ?? [])
@@ -170,15 +171,15 @@ export function ActivityPanel({
     return out;
   }, [view]);
 
-  // @提及候选：从已加载的评论作者（含 replies）+ 提交作者派生——有界、零额外取数、安全（仅本 PR 参与者，
-  // 不向远端枚举全员）。仅平台支持反应/提及类增强时无关，纯增益；用户仍可自由手打任意 @name。
+  // @mention candidates: derived from loaded comment authors (including replies) + commit authors — bounded, zero extra fetches, safe (only this PR's participants,
+  // not enumerating everyone from the remote). Independent of whether the platform supports reaction/mention enhancements, purely additive; the user can still freely type any @name.
   const mentionCandidates = useMemo<PlatformUser[]>(
     () => collectMentionCandidates(view?.comments ?? [], view?.commits ?? []),
     [view],
   );
 
-  // 归并三路为时间线条目并按时间倒序。deps 全是稳定引用（view 经上面三路相等比对跳过后不变、
-  // autoExpandSet 随 view）→ poll 无变化时整条时间线（含内联 Monaco）元素身份不变，React 跳过重渲。
+  // Merge the three streams into timeline entries sorted in reverse chronological order. deps are all stable references (view stays unchanged after the three-stream equality comparison above skips it,
+  // autoExpandSet follows view) → when a poll has no change, the whole timeline (including inline Monaco) keeps element identity and React skips re-rendering.
   const timeline = useMemo<ReactElement[]>(() => {
     if (!viewPr || !view) return [];
     type Row = { key: string; at: number; node: ReactElement };
@@ -221,7 +222,7 @@ export function ActivityPanel({
         node: <ReviewEvent key={`review:${ev.remoteId}`} event={ev} pr={viewPr} />,
       });
     }
-    // newest first；稳定排序下同刻条目按 评论→提交→决断 入队序排列
+    // newest first; under a stable sort, same-instant entries are ordered by enqueue order: comment→commit→decision
     rows.sort((a, b) => b.at - a.at);
     return rows.map((r) => r.node);
   }, [
@@ -238,7 +239,7 @@ export function ActivityPanel({
     onJumpToAnchor,
   ]);
 
-  // 首载失败 / 切 PR 失败（无可信展示内容，或现有 view 属于旧 PR）：整块错误，不拿旧 PR 内容冒充新的。
+  // First-load failure / PR-switch failure (no trustworthy content to show, or the existing view belongs to an old PR): whole-block error, don't pass off old PR content as the new one.
   if (error && (!view || view.pr.localId !== pr.localId)) {
     return (
       <div className="pr-comments-panel">
@@ -257,7 +258,7 @@ export function ActivityPanel({
       <div className="pr-comments-scroll">
         {(composing || (view && timeline.length > 0)) && (
           <ul className="pr-comments-list pr-activity-list">
-            {/* 新建评论编辑框作为时间线首个节点：与其它条目同款图标节点 + 头像，编辑框缩进挂在轨上。 */}
+            {/* The new comment composer as the first node of the timeline: same icon node + avatar as other entries, the composer indented and mounted on the rail. */}
             {composing && !readOnly && (
               <li className="pr-comment pr-comment-timeline pr-comment-depth-0">
                 <div className="pr-activity-item pr-activity-comment-head">
@@ -289,16 +290,16 @@ export function ActivityPanel({
           <p className="muted">{t(`${ns}.empty`)}</p>
         )}
       </div>
-      {/* 加载遮罩盖住旧内容（或首载空面板），ready 后整体替换。PaneLoading 默认 delayMs=150：
-          命中缓存的快切换遮罩根本不出现、旧内容直接换新（零闪）；只有慢加载才显 spinner。 */}
+      {/* The loading overlay covers the old content (or the empty panel on first load), replaced wholesale once ready. PaneLoading defaults to delayMs=150:
+          for cache-hit fast switches the overlay never appears and the old content swaps directly to new (zero flash); only slow loads show a spinner. */}
       {loading && <PaneLoading overlay label={t(`${ns}.loading`)} />}
     </div>
   );
 }
 
 /**
- * 从已加载的评论（含 replies 递归）+ 提交派生 @提及候选用户：按 name 去重、保序。候选源刻意只取
- * 本 PR 已出现的参与者（有界、零额外取数、不向远端枚举全员），是安全的 @ 自动补全数据来源。
+ * Derives @mention candidate users from loaded comments (recursing into replies) + commits: dedup by name, order-preserving. The candidate source deliberately takes only
+ * participants who already appear in this PR (bounded, zero extra fetches, doesn't enumerate everyone from the remote), a safe data source for @ autocomplete.
  */
 function collectMentionCandidates(comments: PrComment[], commits: PrCommit[]): PlatformUser[] {
   const seen = new Set<string>();
@@ -322,7 +323,7 @@ function collectMentionCandidates(comments: PrComment[], commits: PrCommit[]): P
   return out;
 }
 
-/** 时间线上的提交事件：commit 图标 + 短 SHA + 主题 + 作者 + 时间；可点击跳远端 commit 页。 */
+/** A commit event on the timeline: commit icon + short SHA + subject + author + time; clickable to jump to the remote commit page. */
 function CommitEvent({
   commit,
   pr,
@@ -344,7 +345,7 @@ function CommitEvent({
       <span className="pr-activity-icon pr-activity-icon-commit" aria-hidden="true">
         <CommitIcon size={18} />
       </span>
-      {/* 作者展示与评论主体人对齐：同尺寸头像 + 加粗名，不做差异化 */}
+      {/* Author display aligns with the comment's main person: same-size avatar + bold name, no differentiation */}
       <Avatar
         connectionId={pr.connectionId}
         slug={commit.author.slug ?? commit.author.name}
@@ -376,7 +377,7 @@ function CommitEvent({
   );
 }
 
-/** kind → 图标 + 语义色 class。approved 绿、needsWork 琥珀、unapproved/dismissed 中性。 */
+/** kind → icon + semantic color class. approved green, needsWork amber, unapproved/dismissed neutral. */
 const REVIEW_ICON: Record<PrActivityKind, ReactElement> = {
   approved: <ApproveIcon size={18} />,
   needsWork: <NeedsWorkIcon size={18} />,
@@ -384,7 +385,7 @@ const REVIEW_ICON: Record<PrActivityKind, ReactElement> = {
   dismissed: <CloseIcon size={18} />,
 };
 
-/** 时间线上的评审决断事件：actor + 判定动词 + 时间。 */
+/** A review-decision event on the timeline: actor + decision verb + time. */
 function ReviewEvent({ event, pr }: { event: PrActivityEvent; pr: StoredPullRequest }) {
   const { t } = useTranslation();
   return (

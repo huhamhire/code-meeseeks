@@ -5,10 +5,10 @@ import { formatBackendError } from '../../../../../errors';
 import { DraftZone } from '../drafts/DraftZone';
 
 /**
- * 同行多条草稿的容器；每条独立 DraftZone (read/edit 各自维护)，组件间用 hr 分隔。
- * onSave / onDelete 在这里调 IPC drafts:update / drafts:delete；写盘后 main 端
- * 广播 drafts:changed 事件 → drafts-store 重拉 → DiffView 顶层 useEffect 重建
- * zones (此组件随之 unmount/remount)。
+ * Container for multiple drafts on the same line; each is an independent DraftZone (maintaining its own read/edit), separated by hr.
+ * onSave / onDelete call IPC drafts:update / drafts:delete here; after writing to disk the main side
+ * broadcasts a drafts:changed event → drafts-store refetches → DiffView's top-level useEffect rebuilds the
+ * zones (this component unmounts/remounts along with it).
  */
 export function DraftZoneList({
   drafts,
@@ -21,7 +21,7 @@ export function DraftZoneList({
   prLocalId: string;
   registerEditTrigger: (draftId: string, fn: (() => void) | null) => void;
   hardBreaks: boolean;
-  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给草稿编辑框启用粘贴 / 选取上传。 */
+  /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the draft editor to enable paste / pick upload. */
   attachmentsEnabled?: boolean;
 }) {
   const { t } = useTranslation();
@@ -35,10 +35,10 @@ export function DraftZoneList({
   const onDelete = async (draftId: string): Promise<void> => {
     await invoke('drafts:delete', { localId: prLocalId, draftId });
   };
-  // 单条发布：复用 drafts:publishBatch handler，传 [draftId] 单元素。这样跟
-  // PublishReviewModal 的批量路径共用同一份 main 端逻辑 (anchor 映射 / posted
-  // 回写 / force-refresh 评论 / 失败收集都一致)，行为可预测，未来改任一处不会
-  // 让两条路径分叉
+  // Single publish: reuse the drafts:publishBatch handler, passing a single-element [draftId]. This shares the same
+  // main-side logic with PublishReviewModal's batch path (anchor mapping / posted
+  // write-back / force-refresh comments / failure collection are all consistent), keeping behavior predictable so a future
+  // change to either doesn't fork the two paths
   const onPublish = async (draftId: string): Promise<{ ok: boolean; error?: string }> => {
     const resp = await invoke('drafts:publishBatch', {
       localId: prLocalId,
@@ -46,7 +46,7 @@ export function DraftZoneList({
     });
     const r = resp.results[0];
     if (!r) return { ok: false, error: t('diffView.noResultFromMain') };
-    // r.error 是 AppError 编码串（草稿域 EPR* / 发布异常），在此解码为本地化文案再上交展示。
+    // r.error is an AppError encoded string (draft-domain EPR* / publish exception), decoded here into localized text before being handed up for display.
     return { ok: r.ok, error: r.error ? formatBackendError(r.error).title : undefined };
   };
   return (

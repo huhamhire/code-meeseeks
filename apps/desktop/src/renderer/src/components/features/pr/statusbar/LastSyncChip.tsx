@@ -4,8 +4,8 @@ import { SyncIcon, StatusChip } from '../../../common';
 import { formatRelative } from '../../../../utils/time';
 
 /**
- * 刷新按钮 + 同步状态合并：一个可点击 chip，显示最近同步相对时间 + 同步图标
- * （刷新中旋转），点击触发一次轮询。
+ * Refresh button + sync status combined: a clickable chip showing the last sync relative time + sync icon
+ * (spinning while refreshing); clicking triggers one poll.
  */
 export function LastSyncChip({
   at,
@@ -17,7 +17,7 @@ export function LastSyncChip({
   onRefresh: () => void;
 }) {
   const { t } = useTranslation();
-  // 每 30s 重渲染一次，让 "刚刚 / N 分钟前" 文案随时间向前推进
+  // Re-render every 30s so the "just now / N minutes ago" text advances with time
   const [, tick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => tick((n) => n + 1), 30_000);

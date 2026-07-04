@@ -10,37 +10,37 @@ import { useDraftZone } from './useDraftZone';
 
 interface DraftZoneProps {
   draft: ReviewDraft;
-  /** 所属 PR 的 localId；草稿编辑框图片上传（attachmentsEnabled 时）需用它定位 PR 附件存储。 */
+  /** localId of the owning PR; the draft editor's image upload (when attachmentsEnabled) uses it to locate the PR attachment store. */
   prLocalId: string;
-  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；为真才在草稿编辑框启用粘贴 / 选取上传。 */
+  /** Whether the platform supports image attachment upload (capabilities.commentAttachments); only when true does the draft editor enable paste / pick upload. */
   attachmentsEnabled?: boolean;
-  /** 评论换行策略（活动平台 commentHardBreaks）：决定预览是否启用 remark-breaks，使草稿预览 WYSIWYG。 */
+  /** Comment line-break policy (active platform commentHardBreaks): decides whether the preview enables remark-breaks, making the draft preview WYSIWYG. */
   hardBreaks: boolean;
   /**
-   * 注册 "进入编辑模式" 触发函数到外部 ref map。DiffView 调用注册的 fn 时本组件
-   * setIsEditing(true)。用 ref-based fn 而不是 props token，避免 trigger token 变化引发的
-   * unmount/mount 循环误触（详见 useDraftZone）。
+   * Register the "enter edit mode" trigger fn into an external ref map. When DiffView calls the
+   * registered fn, this component setIsEditing(true). Uses a ref-based fn instead of a props token to
+   * avoid unmount/mount cycle mis-triggers caused by trigger token changes (see useDraftZone).
    */
   registerEditTrigger?: (draftId: string, fn: (() => void) | null) => void;
-  /** 保存编辑后的 body。调用方走 IPC drafts:update。 */
+  /** Save the edited body. Caller goes through IPC drafts:update. */
   onSave: (newBody: string) => void | Promise<void>;
-  /** 删除本草稿。调用方走 IPC drafts:delete */
+  /** Delete this draft. Caller goes through IPC drafts:delete */
   onDelete: () => void | Promise<void>;
   /**
-   * 单条直接发布到远端。调用方走 drafts:publishBatch 传单元素 draftIds。
-   * 返回 ok=false 时 error 填人读错因，本组件渲染 inline 错误但不卸载 zone。
-   * 不传 = read 模式不渲染"发布"按钮。
+   * Publish a single draft directly to remote. Caller goes through drafts:publishBatch with a single-element draftIds.
+   * On ok=false, error carries a human-readable cause; this component renders an inline error but does not unmount the zone.
+   * Absent = read mode, does not render the "publish" button.
    */
   onPublish?: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 /**
- * Diff 视图内联草稿编辑 zone。挂在 Monaco editor 的 view zone 里，由
- * `createRoot.render(<DraftZone ... />)` 渲染。read/edit/publish 状态机见 [useDraftZone](./useDraftZone.ts)；
- * 本组件只负责渲染。
+ * Inline draft editing zone inside the Diff view. Mounted in Monaco editor's view zone, rendered via
+ * `createRoot.render(<DraftZone ... />)`. read/edit/publish state machine see [useDraftZone](./useDraftZone.ts);
+ * this component only handles rendering.
  *
- * 视觉跟 CommentZone (远端评论 read-only) 区分：CommentZone 黄底 → 这里**蓝底 + DRAFT chip**；
- * posted 切绿底跟远端评论对齐；rejected 默认 css 隐藏（DiffView 端 .monaco-draft-zone-rejected）。
+ * Visually distinguished from CommentZone (remote comment, read-only): CommentZone yellow bg → here **blue bg + DRAFT chip**;
+ * posted switches to green bg to align with remote comments; rejected is hidden by default via css (DiffView side .monaco-draft-zone-rejected).
  */
 export function DraftZone({
   draft,
@@ -98,10 +98,10 @@ export function DraftZone({
         </span>
         {!isEditing && canEdit && (
           <div className="draft-zone-actions">
-            {/* 单条"发布"：仅 pending/edited 显示 (posted 已发完不再渲染按钮；
-                rejected 状态在 DiffView 端 CSS 隐藏整个 zone 不会走到这里)。
-                publishing 中按钮禁用，文案改"发布中…"；其它按钮也 disable 避免
-                同条草稿同时 save / delete / publish 多路并发 */}
+            {/* Single "publish": shown only for pending/edited (posted is already published so no button;
+                rejected state has its whole zone hidden by CSS on DiffView side, never reaches here).
+                While publishing the button is disabled, label changes to "publishing…"; other buttons also disable to avoid
+                concurrent save / delete / publish on the same draft */}
             {onPublish && (
               <button
                 type="button"
@@ -160,8 +160,8 @@ export function DraftZone({
             textareaRef={textareaRef}
           />
           <div className="draft-zone-edit-actions">
-            {/* 主按钮：有 onPublish 时是"发布" (先 auto-save 再 POST，跟取消的
-                auto-save 行为对齐避免双按钮冗余)；缺 onPublish 时退回"保存" */}
+            {/* Primary button: "publish" when onPublish is present (auto-save first, then POST, aligned with cancel's
+                auto-save behavior to avoid redundant dual buttons); falls back to "save" when onPublish is absent */}
             {onPublish ? (
               <button
                 type="button"

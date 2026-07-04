@@ -8,11 +8,11 @@ import { ChevronIcon, ConflictIcon } from '../../../../common';
 interface FileTreeProps {
   files: DiffChangedFile[];
   selectedKey: string | null;
-  /** path → 远端已发布的 inline 评论数 (含 renamed 文件的 oldPath 兼容) */
+  /** path → number of published remote inline comments (with renamed-file oldPath compatibility) */
   commentCountByPath: Map<string, number>;
-  /** path → 本地待发布草稿数 (pending + edited)。跟 PR header "提交评审 (N)" 同口径 */
+  /** path → number of local unpublished drafts (pending + edited). Same measure as the PR header "Submit review (N)" */
   draftCountByPath: Map<string, number>;
-  /** 合并会冲突的文件路径集合：命中的文件行在状态点左侧标三角警示图标。 */
+  /** Set of file paths that would conflict on merge: matched file rows show a triangle warning icon to the left of the status dot. */
   conflictPaths: Set<string>;
   onSelect: (file: DiffChangedFile) => void;
 }
@@ -31,7 +31,7 @@ interface TreeFolder {
   name: string;
   path: string;
   children: TreeNode[];
-  /** 聚合自所有后代文件的状态，用于给 folder name 着色 */
+  /** Status aggregated from all descendant files, used to color the folder name */
   aggregateStatus: FolderAggregateStatus;
 }
 
@@ -51,7 +51,7 @@ export function FileTree({
 }: FileTreeProps) {
   const { t } = useTranslation();
   const tree = useMemo(() => buildTree(files), [files]);
-  // 默认全部展开。collapsed 记的是被折叠的 path 集合（默认空 = 全展开）
+  // All expanded by default. collapsed records the set of collapsed paths (empty by default = all expanded)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const toggle = (path: string): void => {
@@ -65,9 +65,9 @@ export function FileTree({
 
   return (
     <div className="diff-file-tree" role="tree">
-      {/* 内层 inline-block: 宽度 = max(max-content, 100%)，让所有 row 撑到同一宽度，
-          否则不同长度的 row 各自 100%-vs-max-content 会让 sticky dots 落在各自行尾，
-          滚动时位置参差不齐 */}
+      {/* Inner inline-block: width = max(max-content, 100%), stretching all rows to the same width,
+          otherwise rows of different lengths each go 100%-vs-max-content, leaving sticky dots at their own row ends,
+          misaligned when scrolling */}
       <div className="diff-file-tree-inner">
         {renderChildren(tree.children, 0, {
           selectedKey,
@@ -160,8 +160,8 @@ function renderChildren(nodes: TreeNode[], depth: number, ctx: RenderCtx): React
           </span>
           <span className="tree-name">{n.name}</span>
           <span className="tree-row-right" aria-hidden="false">
-            {/* draft chip 在前 / comment chip 在后：阅读顺序 "未发的 → 已发的"，
-                跟 PR header "提交评审 → 通过/需修改" 的左右顺序对齐 */}
+            {/* draft chip first / comment chip after: reading order "unpublished → published",
+                aligned with the left-to-right order of the PR header "Submit review → Approve/Needs work" */}
             {draftCount > 0 && (
               <span
                 className="tree-draft-count"
@@ -250,9 +250,9 @@ function sortTree(node: TreeFolder): void {
 }
 
 /**
- * 递归算每个 folder 的聚合状态。
- * 优先级：modified/typechange > 混合 added+deleted > added/renamed/copied > deleted
- * （与 VS Code 文件资源管理器观感对齐：folder 含修改即橙黄，纯新增才绿）
+ * Recursively compute each folder's aggregate status.
+ * Priority: modified/typechange > mixed added+deleted > added/renamed/copied > deleted
+ * (aligned with the VS Code file explorer look: a folder with any modification is amber, only pure additions are green)
  */
 function computeAggregateStatus(node: TreeFolder): FolderAggregateStatus {
   let hasModified = false;
@@ -283,7 +283,7 @@ function fileIconFor(filePath: string): string {
   const base = filePath.split('/').pop()?.toLowerCase() ?? '';
   const withPrefix = (name: string): string => `material-icon-theme:${name}`;
 
-  // 特殊文件名先匹配
+  // Match special file names first
   const byBasename: Record<string, string> = {
     dockerfile: 'docker',
     'docker-compose.yml': 'docker',

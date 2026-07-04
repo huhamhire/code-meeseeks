@@ -1,14 +1,14 @@
 import type { DiffBlameLine } from '@meebox/ipc';
 
-/** Bitbucket 风格 blame 列宽：头像(20) + name(80) + sha(75) + date(45) + padding */
+/** Bitbucket-style blame column width: avatar(20) + name(80) + sha(75) + date(45) + padding */
 export const BLAME_COLUMN_WIDTH = 240;
 
 export interface BlameLayout {
-  /** Monaco modified editor 可视高度 (px) */
+  /** Monaco modified editor visible height (px) */
   viewportHeight: number;
-  /** Monaco 当前行高 (px) */
+  /** Monaco current line height (px) */
   lineHeight: number;
-  /** Monaco 当前垂直滚动 (px) */
+  /** Monaco current vertical scroll (px) */
   scrollTop: number;
 }
 
@@ -27,7 +27,7 @@ export function formatIsoDate(d: Date): string {
   return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** 把行号列表合并为连续区段 [from, to]，便于画色带（减少 DOM 节点） */
+/** Merge a list of line numbers into contiguous ranges [from, to] to ease drawing color bands (reduces DOM nodes) */
 export function mergeContiguousLines(lines: number[]): Array<[number, number]> {
   if (lines.length === 0) return [];
   const sorted = [...lines].sort((a, b) => a - b);
@@ -48,7 +48,7 @@ export function mergeContiguousLines(lines: number[]): Array<[number, number]> {
   return out;
 }
 
-/** 合并连续同 commit 的 blame 行为区块（Bitbucket 风格：一个 commit 一格） */
+/** Merge contiguous blame lines of the same commit into blocks (Bitbucket-style: one cell per commit) */
 export function groupBlameByCommit(blame: DiffBlameLine[]): BlameBlock[] {
   const sorted = [...blame].sort((a, b) => a.line - b.line);
   const blocks: BlameBlock[] = [];

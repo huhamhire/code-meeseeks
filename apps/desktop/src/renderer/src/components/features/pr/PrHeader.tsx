@@ -10,8 +10,8 @@ import { ApproveIcon, GlobeIcon, NeedsWorkIcon, PullRequestIcon } from '../../co
 import { ReviewerStack } from './ReviewerStack';
 
 /**
- * PR 详情头：标题 / 元信息 + 动作区（浏览器打开 · 提交评论 N · 合并 · 通过 / 需修改）。
- * 审批按钮按平台能力位降级；自己作者的 PR 不能审批（灰显 + 原因）。
+ * PR detail header: title / meta + action area (open in browser · publish comments N · merge · approve / needs work).
+ * Approval buttons degrade by platform capability bits; you cannot approve your own PR (disabled + reason).
  */
 export function PrHeader({
   pr,
@@ -31,21 +31,21 @@ export function PrHeader({
   merging: boolean;
   onMerge: () => void;
   onSetStatus: (status: LocalPrStatus) => void;
-  /** 隐藏 PR 生命周期操作（合并 + 评审决断）：已关闭范围恒置。 */
+  /** Hide PR lifecycle actions (merge + review decision): always set for the closed scope. */
   hideLifecycle?: boolean;
-  /** 内容只读（decline / 不可参与）：隐藏「提交评论 (N)」发布入口。 */
+  /** Content read-only (declined / cannot participate): hides the "publish comments (N)" entry. */
   readOnly?: boolean;
   publishableCount: number;
   onPublish: () => void;
 }) {
   const { t } = useTranslation();
-  // 能力位降级：reviewStatuses 决定审批按钮显隐；capabilities undefined（旧数据/无连接）时不降级。
+  // Capability-bit degradation: reviewStatuses drives approval-button visibility; no degradation when capabilities is undefined (old data / no connection).
   const reviewAllowed = (s: ReviewerStatus): boolean =>
     !capabilities || capabilities.reviewStatuses.includes(s);
   const isOwnPr = !!currentUserName && pr.author.name === currentUserName;
   const ownPrReason = isOwnPr ? t('mainPane.ownPrReason') : undefined;
-  // 「我的评审」：取当前用户的 reviewer 条目（头像），角标状态用本地决断 localStatus（审批按钮即时更新，
-  // 比远端 reviewer.status 更跟手）。自己作者的 PR 不可评审 → 不展示。
+  // "My review": take the current user's reviewer entry (avatar); the badge status uses the local decision localStatus
+  // (approval buttons update instantly, more responsive than the remote reviewer.status). Your own PR is not reviewable → not shown.
   const selfReviewer =
     !isOwnPr && currentUserName ? pr.reviewers.find((r) => r.name === currentUserName) : undefined;
   const selfReviewStatus: ReviewerStatus =
@@ -88,7 +88,7 @@ export function PrHeader({
             </span>
           </div>
         </div>
-        {/* reviewer 头像栈：标题 + 元信息 band 右侧、按钮行之上，垂直居中 */}
+        {/* reviewer avatar stack: right of the title + meta band, above the button row, vertically centered */}
         <ReviewerStack
           reviewers={pr.reviewers}
           connectionId={pr.connectionId}
@@ -106,10 +106,10 @@ export function PrHeader({
         >
           <GlobeIcon /> {t('mainPane.openInBrowser')}
         </a>
-        {/* approve / needs work：当前状态 = 高亮；点已高亮的回退到 pending（撤销远端标记）。
-            「提交评论 (N)」放在决断按钮左边 — 评审动作分两步：先发评论 (左)，再下决断 (右)。 */}
+        {/* approve / needs work: current status = highlighted; clicking an already-highlighted one falls back to pending (revokes the remote mark).
+            "Publish comments (N)" sits to the left of the decision buttons — reviewing is two steps: post comments first (left), then make the decision (right). */}
         <div className="pr-header-actions-right">
-          {/* "提交评论" 仅在有待发布草稿时渲染：N=0 时整按钮隐藏，减少 header 视觉噪音。 */}
+          {/* "Publish comments" renders only when there are drafts pending publish: at N=0 the whole button hides, reducing header visual noise. */}
           {!readOnly && publishableCount > 0 && (
             <button
               type="button"
@@ -120,7 +120,7 @@ export function PrHeader({
               {t('mainPane.publishComments', { n: publishableCount })}
             </button>
           )}
-          {/* 合并按钮：仅在服务端判定可合并 (canMerge) 时出现。点击直接合并（无二次确认）。只读隐藏。 */}
+          {/* Merge button: appears only when the server deems it mergeable (canMerge). Clicking merges directly (no confirmation). Hidden when read-only. */}
           {!hideLifecycle && pr.mergeStatus?.canMerge && (
             <button
               type="button"

@@ -2,8 +2,8 @@ import type { ReviewerStatus } from '@meebox/shared';
 import { AlertGlyphIcon, ApproveIcon, CheckGlyphIcon, NeedsWorkIcon } from '../../common';
 
 /**
- * reviewer 状态的展示元信息与图标，供详情页 reviewer 列表（PrInfoView）、PR 头部头像栈
- * （ReviewerStack）等共用：状态 → 决断 chip 类型（复用活动时间线 chip 配色）+ 文案 key（复用 prStatus）。
+ * Display metadata and icons for reviewer status, shared by the detail page reviewer list (PrInfoView),
+ * the PR header avatar stack (ReviewerStack), etc.: status → decision chip kind (reuses activity timeline chip colors) + label key (reuses prStatus).
  */
 export const REVIEWER_STATUS_META: Record<ReviewerStatus, { chipKind: string; labelKey: string }> =
   {
@@ -12,7 +12,7 @@ export const REVIEWER_STATUS_META: Record<ReviewerStatus, { chipKind: string; la
     unapproved: { chipKind: 'unapproved', labelKey: 'prStatus.pending' },
   };
 
-/** reviewer 状态图标：approve 绿勾 / needs-work 琥珀叹号 / 待评审 中性空心点。 */
+/** Reviewer status icon: approve green check / needs-work amber exclamation / pending review neutral hollow dot. */
 export function ReviewerStatusIcon({
   status,
   size = 16,
@@ -26,8 +26,8 @@ export function ReviewerStatusIcon({
 }
 
 /**
- * 头像栈角标用的纯符号字形（无外圆环）：搭配实心彩底反色展示，只留内部勾 / 叹号。
- * approved / needsWork 才有；其它返回 null（待评审无角标）。
+ * Pure symbol glyph for the avatar stack badge (no outer ring): displayed reversed on a solid colored background, keeping only the inner check / exclamation.
+ * Only approved / needsWork have one; others return null (pending review has no badge).
  */
 export function ReviewerBadgeGlyph({ status, size = 16 }: { status: ReviewerStatus; size?: number }) {
   if (status === 'approved') return <CheckGlyphIcon size={size} />;

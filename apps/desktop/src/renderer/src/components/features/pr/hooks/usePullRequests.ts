@@ -5,16 +5,17 @@ import { invoke } from '../../../../api';
 import { formatBackendError } from '../../../../errors';
 
 /**
- * PR 列表生命周期与详情动作（领域内聚）：列表 state + 选中态、读缓存 reload / 拉远端 refresh、
- * 审批状态决断、合并。不感知 boot/连接（选中连接的反查由 App 持 boot 派生；启动 / 焦点刷新由
- * useBootstrap 经 reloadPrs 驱动），仅依赖 notifyError 弹操作级错误。
+ * PR list lifecycle and detail actions (domain-cohesive): list state + selection, cached reload /
+ * remote refresh, approval status decisions, merge. Unaware of boot/connection (the selected
+ * connection lookup is derived by App from boot; startup / focus refresh is driven by
+ * useBootstrap via reloadPrs), only depends on notifyError to surface operation-level errors.
  */
 export function usePullRequests({ notifyError }: { notifyError: (msg: string) => void }) {
   const { t } = useTranslation();
   const [prs, setPrs] = useState<StoredPullRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  // 合并进行中：GitHub 合并可能较慢（异步算 mergeable），按钮置等待态并防重复点击。
+  // Merge in progress: GitHub merge can be slow (mergeable is computed asynchronously); set the button to a waiting state and prevent repeated clicks.
   const [merging, setMerging] = useState(false);
 
   const reloadPrs = useCallback(async (): Promise<void> => {
@@ -35,12 +36,12 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     }
   }, [refreshing, reloadPrs]);
 
-  // 标记 PR 已读：用户打开 PR 时调用。先乐观清掉本地未读标志（即时反馈），再持久化已读水位——
-  // 下一轮 poll 不会因旧事件把它标回。每次选中都发 IPC：打开 PR 非高频，且推进已读水位本就是对的；
-  // 不靠 setState 更新器的副作用判断「是否未读」——更新器在渲染阶段才跑，同步读其副作用拿不到结果。
-  // 未读标志有两处：`unread` 圆点与 `unreadMentionCount`「@我/回复我」计数 chip（二者在标题槽位互斥、
-  // 计数优先）。两者都要乐观清零 —— 否则计数 chip 会残留到下一轮 poll 重算 lastReadAt 才消失，
-  // 表现为「点开 PR 后未读计数不消除」（与后端 markPrRead 落盘的 unread:false / unreadMentionCount:0 对齐）。
+  // Mark PR as read: called when the user opens a PR. First optimistically clear the local unread flags (instant feedback), then persist the read watermark —
+  // the next poll round won't re-mark it due to stale events. Send IPC on every selection: opening a PR is not high-frequency, and advancing the read watermark is inherently correct;
+  // don't rely on the side effect of the setState updater to decide "is it unread" — the updater only runs during the render phase, so synchronously reading its side effect gets no result.
+  // There are two unread flags: the `unread` dot and the `unreadMentionCount` "@me/replies to me" count chip (the two are mutually exclusive in the title slot, count takes priority).
+  // Both must be optimistically zeroed — otherwise the count chip lingers until the next poll round recomputes lastReadAt before disappearing,
+  // manifesting as "unread count doesn't clear after opening the PR" (aligned with the backend markPrRead persisting unread:false / unreadMentionCount:0).
   const markRead = useCallback(async (localId: string): Promise<void> => {
     setPrs((prev) =>
       prev.map((p) =>
@@ -67,8 +68,8 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
           setPrs((prev) => prev.map((p) => (p.localId === updated.localId ? updated : p)));
         }
       } catch (e) {
-        // 远端拒绝（如 PR 已关闭 / 合并 / 权限不足）→ 本地状态不变，弹 toast 提示。
-        // 顺手刷新一次：PR 若已关闭，下一轮 poll 会把它软删，列表自洽
+        // Remote rejection (e.g. PR already closed / merged / insufficient permissions) → local state unchanged, show a toast.
+        // Refresh once as well: if the PR is already closed, the next poll round soft-deletes it and the list stays consistent
         const msg = e instanceof Error ? e.message : String(e);
         notifyError(t('app.approveActionFailed', { msg }));
         void triggerRefresh();
@@ -84,15 +85,15 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     try {
       await invoke('prs:merge', { localId: mergedId });
     } catch (e) {
-      // 合并失败（PR 已合并 / 冲突 / veto / 权限）→ 弹 toast，本地不变。先经 formatBackendError 解码
-      // AppError 错误码做 i18n（如 EPR0003「已被合并」给友好提示），非编码错误回退原始 message。
+      // Merge failed (PR already merged / conflict / veto / permissions) → show a toast, local unchanged. First decode via formatBackendError
+      // to i18n the AppError error code (e.g. EPR0003 "already merged" gives a friendly message), non-coded errors fall back to the original message.
       notifyError(t('app.mergeFailed', { msg: formatBackendError(e).title }));
       void triggerRefresh();
       return;
     } finally {
       setMerging(false);
     }
-    // 合并成功：PR 已转 MERGED，会从 pending 列表退场。取消选中 + 刷新让其消失
+    // Merge succeeded: the PR has transitioned to MERGED and will leave the pending list. Deselect + refresh to make it disappear
     if (selectedId === mergedId) setSelectedId(null);
     await triggerRefresh();
   }, [selected, selectedId, triggerRefresh, notifyError, merging, t]);

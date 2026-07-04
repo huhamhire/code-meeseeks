@@ -3,8 +3,9 @@ import type { StoredPullRequest } from '@meebox/shared';
 import { invoke } from '../../../../../../api';
 
 /**
- * 拉「合并会冲突的文件」路径集合，供文件树标三角警示。仅当远端判定 PR 有冲突（pr.hasConflict）时才打
- * 后端（后端再跑本地 merge-tree 试合并）；无冲突直接给空集。失败保守返回空集（不标记，不报错）。
+ * Fetch the set of paths for "files that will conflict on merge", for the file tree to mark with a warning
+ * triangle. Only hits the backend when the remote deems the PR conflicted (pr.hasConflict) (the backend then
+ * runs a local merge-tree trial merge); no conflict returns an empty set directly. On failure conservatively returns an empty set (no marking, no error).
  */
 export function useConflictFiles(pr: StoredPullRequest): Set<string> {
   const [paths, setPaths] = useState<Set<string>>(() => new Set());

@@ -13,8 +13,8 @@ import { useDraftsForPr } from '../../../stores/drafts-store';
 import { PaneLoading } from '../../common';
 import { ActivityPanel } from './tabs/activity/ActivityPanel';
 import { CommitsPanel } from './tabs/CommitsPanel';
-// Monaco 编辑器（~10MB）懒加载：只有真正切到 Diff tab 才拉取 DiffView chunk，
-// 不阻塞窗口首帧 / PR 列表 / 首启向导。
+// Monaco editor (~10MB) lazy-loaded: the DiffView chunk is fetched only when actually switching to the Diff tab,
+// so it doesn't block the window's first frame / PR list / first-run wizard.
 const DiffView = lazy(() => import('./tabs/diff/DiffView').then((m) => ({ default: m.DiffView })));
 import type { PendingCommitView } from './tabs/diff/DiffView';
 import { DraftsPanel } from './tabs/drafts/DraftsPanel';
@@ -30,9 +30,9 @@ export interface PrPanelProps {
   merging?: boolean;
   capabilities?: PlatformCapabilities;
   currentUserName?: string | null;
-  /** 隐藏 PR 生命周期操作（合并 / 审批）：已关闭范围恒置（退场 PR 不再做评审决断 / 合并）。 */
+  /** Hide PR lifecycle actions (merge / approval): always set for the closed scope (departed PRs no longer take review decisions / merges). */
   hideLifecycle?: boolean;
-  /** 内容只读（decline / 不可参与）：隐藏评论 / 草稿等写入入口，仅供浏览。合并 / 仍开放的归档 PR 为 false。 */
+  /** Content read-only (declined / cannot participate): hides comment / draft and other write entries, browse-only. False for merged / still-open archived PRs. */
   readOnly?: boolean;
   pendingDiffNav?: {
     runId?: string;
@@ -45,17 +45,17 @@ export interface PrPanelProps {
     findingId?: string;
     anchor: { path: string; startLine: number; endLine: number };
   }) => void;
-  /** 外部请求切到指定标签（如通知点击 summary 评论 → 'activity'）；消费后经 onPendingTabConsumed 清空。 */
+  /** External request to switch to a given tab (e.g. clicking a summary comment notification → 'activity'); cleared via onPendingTabConsumed after consumption. */
   pendingTab?: PrTab | null;
   onPendingTabConsumed?: () => void;
-  /** Diff 视图当前查看的单 commit 范围变化上报（→ App → ChatPane 隐式范围）；全部变更 / root commit 为 null。 */
+  /** Reports changes to the single-commit scope currently viewed in the Diff view (→ App → ChatPane implicit scope); null for all changes / root commit. */
   onViewCommitScopeChange?: (scope: ReviewRunCommitScope | null) => void;
 }
 
 /**
- * PR 评审工作区：头部（标题 / 动作）+ tab 栏 + tab 内容（diff / 评论 / 草稿 / 提交 / 信息）+
- * 发布评论弹窗。承载 PR 详情相关的全部状态（当前 tab / diff 视图选项 / 评论 + 提交计数 /
- * 草稿池 / 发布弹窗），由 layout/MainPane 在选中 PR 时挂载。
+ * PR review workspace: header (title / actions) + tab bar + tab content (diff / comments / drafts / commits / info) +
+ * publish-comments modal. Holds all PR-detail-related state (current tab / diff view options / comment + commit counts /
+ * draft pool / publish modal), mounted by layout/MainPane when a PR is selected.
  */
 export function PrPanel({
   pr,
@@ -75,9 +75,9 @@ export function PrPanel({
 }: PrPanelProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<PrTab>('diff');
-  // 活动标签页「新建评论」编辑框开关（由标签栏「评论」按钮触发，编辑框出现在时间线顶部）
+  // Activity tab "new comment" editor toggle (triggered by the tab bar's "comment" button; the editor appears at the top of the timeline)
   const [composingComment, setComposingComment] = useState(false);
-  // 「查看特定 commit」请求：提交 / 活动标签页点击某 commit → 切到 Diff tab 本地渲染该 commit 变更
+  // "View a specific commit" request: clicking a commit in the commits / activity tab → switch to Diff tab and locally render that commit's changes
   const [pendingCommitView, setPendingCommitView] = useState<PendingCommitView | null>(null);
   const viewCommit = (commit: PrCommit): void => {
     setPendingCommitView({
@@ -88,11 +88,11 @@ export function PrPanel({
     });
     setTab('diff');
   };
-  // 收到跳转请求 → 强制切到 Diff tab，DiffView 自己负责消费 anchor
+  // On receiving a jump request → force-switch to the Diff tab; DiffView consumes the anchor itself
   useEffect(() => {
     if (pendingDiffNav) setTab('diff');
   }, [pendingDiffNav]);
-  // 外部请求切标签（通知点击 summary 评论 → 活动标签）：切换后即清空请求。
+  // External tab-switch request (clicking a summary comment notification → activity tab): clear the request right after switching.
   useEffect(() => {
     if (!pendingTab) return;
     setTab(pendingTab);
@@ -102,17 +102,17 @@ export function PrPanel({
     const v = localStorage.getItem('meebox.diffMode');
     return v === null ? true : v === 'side-by-side';
   });
-  // Blame 默认关：每次启动都得手动开（blame fetch 可能慢/失败，不希望用户进来就被错误 banner 干扰）
+  // Blame off by default: must be turned on manually each launch (blame fetch may be slow/fail; we don't want users greeted by an error banner on entry)
   const [showBlame, setShowBlame] = useState<boolean>(false);
-  // 空白字符可视化：默认关（大多数 review 不关心空格 / tab；强调时再开）
+  // Whitespace visualization: off by default (most reviews don't care about spaces / tabs; turn on when it matters)
   const [showWhitespace, setShowWhitespace] = useState<boolean>(
     () => localStorage.getItem('meebox.showWhitespace') === '1',
   );
   useEffect(() => {
     localStorage.setItem('meebox.showWhitespace', showWhitespace ? '1' : '0');
   }, [showWhitespace]);
-  // 评论 / commits 数 chip：PR 切换时各拉一次，cancelled token 防 race。deps 含 pr.updatedAt：
-  // 远端变更后 poller 拉到 → store 更新 → 这里重跑刷新计数，app 一直开着也能跟上远端变动。
+  // Comment / commit count chips: each fetched once on PR switch, cancelled token guards against races. deps include pr.updatedAt:
+  // after a remote change the poller pulls it → store updates → this reruns to refresh counts, so counts keep up with remote changes even with the app left open.
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [commitCount, setCommitCount] = useState<number | null>(null);
   const prLocalId = pr.localId;
@@ -124,7 +124,7 @@ export function PrPanel({
     void (async () => {
       try {
         const [cm, cc] = await Promise.all([
-          // force:true 跳过 cache stale 比对 — 本地 PR.updatedAt 可能滞后于远端（poller 周期性拉）。
+          // force:true skips the cache stale comparison — the local PR.updatedAt may lag the remote (poller pulls periodically).
           invoke('diff:listComments', { localId: prLocalId, force: true }),
           invoke('diff:commitCount', { localId: prLocalId }),
         ]);
@@ -132,7 +132,7 @@ export function PrPanel({
         setCommentCount(cm.length);
         setCommitCount(cc?.count ?? null);
       } catch {
-        // 静默：角标不显示数字，不该挡用户视线
+        // Silent: the badge shows no number, shouldn't block the user's view
       }
     })();
     return () => {
@@ -142,15 +142,15 @@ export function PrPanel({
   useEffect(() => {
     localStorage.setItem('meebox.diffMode', renderSideBySide ? 'side-by-side' : 'unified');
   }, [renderSideBySide]);
-  // 清掉历史遗留的 showBlame 持久化值；新逻辑不再读写它
+  // Clear the legacy persisted showBlame value; the new logic no longer reads/writes it
   useEffect(() => {
     if (localStorage.getItem('meebox.showBlame') !== null) {
       localStorage.removeItem('meebox.showBlame');
     }
   }, []);
 
-  // M4 草稿池 → "提交评论 (N)" 按钮的 N。pending + edited 才算 publishable；
-  // rejected（用户决断不发）/ posted（远端已发）都排除
+  // M4 draft pool → the N in the "publish comments (N)" button. Only pending + edited count as publishable;
+  // rejected (user decided not to send) / posted (already sent remotely) are both excluded
   const drafts = useDraftsForPr(prLocalId);
   const publishableCount = useMemo(
     () =>
@@ -160,10 +160,10 @@ export function PrPanel({
       ),
     [drafts],
   );
-  // 草稿 tab 显示条件用总数（任何 status 都算）；只有从来没创建过草稿的 PR 才完全隐藏 tab
+  // The drafts tab's visibility uses the total count (any status counts); only PRs that never created a draft hide the tab entirely
   const totalDraftCount = (drafts ?? []).length;
   const [publishModalOpen, setPublishModalOpen] = useState(false);
-  // 兜底：停在 'drafts' tab 但草稿全清空 → 切回 'diff' 避免显示孤儿空白内容区
+  // Fallback: sitting on the 'drafts' tab but all drafts cleared → switch back to 'diff' to avoid showing an orphan blank content area
   useEffect(() => {
     if (tab === 'drafts' && totalDraftCount === 0) setTab('diff');
   }, [tab, totalDraftCount]);
@@ -200,8 +200,8 @@ export function PrPanel({
         onSetRenderSideBySide={setRenderSideBySide}
       />
       <div className="pr-tab-content">
-        {/* keep-alive：各 tab 首访才挂载、之后保活仅 CSS 显隐（见 KeepAliveTab）。
-            切走再切回瞬时、无重拉、内嵌 Monaco / 滚动位置 / 展开态全部保留，消除切换抖动。 */}
+        {/* keep-alive: each tab mounts only on first visit, then stays alive with only CSS show/hide (see KeepAliveTab).
+            Switching away and back is instant, no refetch, embedded Monaco / scroll position / expanded state all preserved, eliminating switch jitter. */}
         <KeepAliveTab active={tab === 'diff'}>
           <Suspense fallback={<PaneLoading label={t('mainPane.loadingEditor')} />}>
             <DiffView
@@ -267,8 +267,8 @@ export function PrPanel({
           drafts={drafts ?? []}
           onClose={() => setPublishModalOpen(false)}
           onJumpToAnchor={(draftId) => {
-            // 点 anchor → 关 modal + 转 pendingDiffNav 上抛给 App。runId/findingId 不带 →
-            // DiffView 仅 navigate 不进 edit（用户想看代码上下文，不一定是要改草稿）。
+            // Click anchor → close modal + turn into pendingDiffNav bubbled up to App. runId/findingId omitted →
+            // DiffView only navigates, doesn't enter edit (the user wants to see the code context, not necessarily edit the draft).
             const d = (drafts ?? []).find((x) => x.id === draftId);
             if (!d) return;
             setPublishModalOpen(false);
@@ -287,13 +287,13 @@ export function PrPanel({
 }
 
 /**
- * tab 内容保活容器：首次 active 才挂载（保留 DiffView 等的懒加载优势），此后**不卸载**，
- * 仅靠 CSS `display` 显隐。切走再切回瞬时、无重拉、内嵌 Monaco / 滚动位置 / 展开态全保留 →
- * 消除切换抖动。隐藏期 Monaco 容器尺寸为 0，再显示需重排——由编辑器侧 `automaticLayout`
- * 自动处理（见 DiffView / InlineCodeContext）。
+ * Tab content keep-alive container: mounts only on first active (preserving DiffView's etc. lazy-load benefit), thereafter **never unmounts**,
+ * relying only on CSS `display` to show/hide. Switching away and back is instant, no refetch, embedded Monaco / scroll position / expanded state all preserved →
+ * eliminates switch jitter. While hidden the Monaco container size is 0 and reshowing needs a reflow — handled automatically by the editor-side `automaticLayout`
+ * (see DiffView / InlineCodeContext).
  */
 function KeepAliveTab({ active, children }: { active: boolean; children: ReactNode }) {
-  // 「一旦 active 过就保活」latch：ref 在 render 期写入是幂等闩锁，与本仓 stablePr 同模式。
+  // "Stay alive once active" latch: writing the ref during render is an idempotent latch, same pattern as this repo's stablePr.
   const mounted = useRef(false);
   if (active) mounted.current = true;
   if (!mounted.current) return null;
