@@ -14,7 +14,7 @@ export * from './agent.js';
 /**
  * Typed IPC channel contract.
  *
- * 按业务领域拆分维护（app / pr / config / agent），在此合并为单一映射。
+ * Maintained split by business domain (app / pr / config / agent), merged here into a single map.
  * The preload bridge and main handlers both reference this map so that
  * Renderer ↔ Main calls stay end-to-end type-safe.
  */
@@ -27,6 +27,6 @@ export interface IpcBridge {
     channel: K,
     req: IpcChannels[K]['request'],
   ): Promise<IpcChannels[K]['response']>;
-  /** 订阅 main → renderer 推送事件，返回取消订阅函数。 */
+  /** Subscribe to main → renderer push events; returns an unsubscribe function. */
   subscribe<E extends IpcEventName>(event: E, handler: (data: IpcEvents[E]) => void): () => void;
 }

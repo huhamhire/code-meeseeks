@@ -1,32 +1,32 @@
 import type { AppInfo, AppPaths, PrAgentStatus, UpdateCheckResult } from '@meebox/shared';
 import type { ConnectionSummary } from './common.js';
 
-/** GUI 框架交互域：应用信息 / 框架窗口 / 外部打开 / 对话框 / 日志回传 / 连接与头像。 */
+/** GUI framework interaction domain: app info / framework window / external open / dialogs / log relay / connections and avatars. */
 export interface AppChannels {
   'app:info': { request: void; response: AppInfo };
   'app:paths': { request: void; response: AppPaths };
   'app:prAgentStatus': { request: void; response: PrAgentStatus };
-  /** 调 Electron shell.openPath 让 OS 默认编辑器打开 config.yaml */
+  /** Call Electron shell.openPath to let the OS default editor open config.yaml */
   'app:openConfigFile': { request: void; response: void };
-  /** 调 shell.openPath 在系统文件管理器打开当前生效的 Agent 目录（不存在则先建）。 */
+  /** Call shell.openPath to open the currently effective Agent directory in the system file manager (create it first if it doesn't exist). */
   'app:openAgentDir': { request: void; response: void };
-  /** 打开 Electron DevTools（分离窗口） */
+  /** Open Electron DevTools (detached window) */
   'app:openDevTools': { request: void; response: void };
   /**
-   * 设置应用角标计数（macOS dock）。renderer 据 PR 列表派生「@我 / 回复我」待回应总数后推送；主进程按
-   * 通知配置与平台决定是否真正显示（本期仅 macOS）。count=0 清除角标。
+   * Set the app badge count (macOS dock). The renderer derives the "@me / replies to me" pending-response total from the PR list and pushes it; the main process decides
+   * whether to actually show it per notification config and platform (macOS only this iteration). count=0 clears the badge.
    */
   'app:setBadgeCount': { request: { count: number }; response: void };
-  /** 手动检测版本更新（设置页「检查更新」）。仅检测 + 返回结果，不下载 / 安装；
-   *  结果同时缓存进 main 单一真相源并在有新版时广播 app:updateAvailable，使状态栏同步。 */
+  /** Manually check for a version update (Settings page "Check for updates"). Only checks + returns the result, no download / install;
+   *  the result is also cached into main's single source of truth and, when a new version exists, broadcasts app:updateAvailable to keep the status bar in sync. */
   'app:checkUpdate': { request: void; response: UpdateCheckResult };
-  /** 读取 main 缓存的最近一次成功更新检测结果（不发起网络请求）。供窗口 / 状态栏挂载时水合，
-   *  无缓存（尚未检测过）时返回 null。 */
+  /** Read main's cached most-recent successful update-check result (does not make a network request). Used to hydrate on window / status bar mount,
+   *  returns null when there's no cache (never checked). */
   'app:getUpdateStatus': { request: void; response: UpdateCheckResult | null };
   /**
-   * 渲染层日志回传：把渲染进程的错误 / 未捕获异常转发到 main，落进同一份 meebox.log
-   * （renderer 自己的 console 不进文件）。preload 装 window.onerror / unhandledrejection
-   * 调用。`scope` 固定 'renderer'，`meta` 任意结构化上下文（如 stack / url）。
+   * Renderer log relay: forward the renderer's errors / uncaught exceptions to main, landing in the same meebox.log
+   * (the renderer's own console doesn't go to file). preload installs window.onerror / unhandledrejection
+   * to call it. `scope` is fixed 'renderer', `meta` is any structured context (e.g. stack / url).
    */
   'log:write': {
     request: {
@@ -37,40 +37,40 @@ export interface AppChannels {
     response: void;
   };
   /**
-   * 用系统默认浏览器打开 URL (shell.openExternal)。评论 markdown 内链点击 → 强制
-   * 外部打开，避免 Electron 在 app window 内跳转覆盖整个界面
+   * Open a URL in the system default browser (shell.openExternal). Clicking an inline link in comment markdown → force
+   * external open, avoiding Electron navigating within the app window and covering the whole interface
    */
   'app:openExternal': { request: { url: string }; response: void };
   /**
-   * 打开 macOS「系统设置 → 通知」面板，引导用户授予 / 开启通知权限（macOS 在系统层管控通知授权，
-   * 应用无法代为开启）。仅 macOS 有效，其他平台为 no-op。
+   * Open the macOS "System Settings → Notifications" panel to guide the user to grant / enable notification permission (macOS governs notification authorization at the system level,
+   * the app cannot enable it on their behalf). Effective on macOS only, a no-op on other platforms.
    */
   'app:openNotificationSettings': { request: void; response: void };
   /**
-   * 调起系统原生目录选择对话框；用户取消返回 path: null。
-   * defaultPath 可空，作为初始定位目录。
+   * Invoke the native system directory-picker dialog; returns path: null when the user cancels.
+   * defaultPath is optional, used as the initial location directory.
    */
   'dialog:pickDirectory': {
-    // title 由前端按 UI 语言提供（交互领域文案统一在渲染层 i18n 维护）；defaultPath 作初始定位目录。
+    // title is provided by the frontend per UI language (interaction-domain text is maintained uniformly in renderer i18n); defaultPath serves as the initial location directory.
     request: { defaultPath?: string; title: string };
     response: { path: string | null };
   };
   /**
-   * 由渲染层在主题应用后推送当前主题派生的窗控按钮配色（Windows titleBarOverlay：color=--bg-app、
-   * symbolColor=--text-primary），使系统窗控按钮与具体主题的标题栏底色精确同色；null 回退通用深 / 浅色。
+   * The renderer, after applying the theme, pushes the window-control button colors derived from the current theme (Windows titleBarOverlay: color=--bg-app,
+   * symbolColor=--text-primary), so the system window-control buttons exactly match the specific theme's title-bar background; null falls back to generic dark / light.
    */
   'window:setControlColors': {
     request: { color: string; symbolColor: string } | null;
     response: void;
   };
-  /** 各连接的 ping 后缓存：当前用户 + display_name，Header 用 */
+  /** Each connection's post-ping cache: current user + display_name, used by the Header */
   'app:connections': { request: void; response: ConnectionSummary[] };
   /**
-   * 按 (connectionId, slug) 拉用户头像 data URL；主进程缓存命中直接返回。
-   * 平台不支持 / 网络失败 / 用户无头像时返回 null，renderer 走 initials 回退。
+   * Fetch a user avatar data URL by (connectionId, slug); returns directly on a main-process cache hit.
+   * Returns null when the platform is unsupported / network fails / the user has no avatar, and the renderer takes the initials fallback.
    */
   'app:userAvatar': {
-    // avatarUrl 可选：平台返回的头像直链（GitHub 机器人必须靠它）；缺省时 main 按 slug 推导
+    // avatarUrl is optional: the direct avatar link returned by the platform (GitHub bots must rely on it); when omitted, main derives it from slug
     request: { connectionId: string; slug: string; avatarUrl?: string };
     response: { dataUrl: string } | null;
   };
