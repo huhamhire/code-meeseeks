@@ -3,13 +3,13 @@ import type { TFunction } from 'i18next';
 import type { Finding, PrDocSectionKey } from '@meebox/shared';
 
 /**
- * pr-agent /review 输出的 issue body 尾部含 `[file: <path>, lines: <s>-<e>]`
- * marker — 是我们注入的 prompt directive 让 parser 抽 anchor 的，对用户无意义。
- * FindingCard 渲染前 / 转 draft 时统一清洗
+ * The issue body from pr-agent /review has a trailing `[file: <path>, lines: <s>-<e>]`
+ * marker — injected by our prompt directive so the parser can extract the anchor, meaningless to users.
+ * Cleaned uniformly before FindingCard renders / when converting to draft
  */
 export function stripFindingMarker(body: string): string {
-  // 路径可能含 `[]`：带 lines 时用惰性 `.+?` + 必现 `, lines:` 后缀界定（`.` 匹配 `]`，不被
-  // 路径里的 `]` 误截）；无 lines 时回退到不含 `]` 的旧式。末尾锚定，只清尾部 marker。
+  // The path may contain `[]`: with lines, use lazy `.+?` + the required `, lines:` suffix to delimit (`.` matches `]`, so it isn't
+  // truncated by a `]` in the path); without lines, fall back to the old style that excludes `]`. Anchored at the end, only strips the trailing marker.
   return body
     .replace(
       /\s*\[\s*file\s*:\s*(?:.+?\s*,\s*lines?\s*:\s*\d+(?:\s*[-–—]\s*\d+)?|[^\]\n]*?)\s*\]\s*$/i,
@@ -19,11 +19,11 @@ export function stripFindingMarker(body: string): string {
 }
 
 /**
- * 把 pr-agent GFM 输出里的内联 HTML 标签归一成 markdown。finding 卡片走 ReactMarkdown
- * (允许 HTML) 能正常渲染这些标签，但转成草稿正文落进编辑器 textarea / 发布到远端后，
- * 裸 `<code>` `<br>` 不一定被渲染，会暴露成字面标签。这里把常见内联标签转成等价
- * markdown：`<code>x</code>`→`` `x` ``、`<br>`→换行、`<b>/<strong>`→`**`、`<i>/<em>`→`*`。
- * 空 `<code></code>` 直接丢弃，避免产出孤立的空反引号。
+ * Normalize inline HTML tags in pr-agent GFM output into markdown. Finding cards use ReactMarkdown
+ * (HTML allowed) which renders these tags fine, but once converted to draft body landing in the editor textarea / published to the remote,
+ * bare `<code>` `<br>` aren't necessarily rendered and get exposed as literal tags. Here we convert common inline tags to equivalent
+ * markdown: `<code>x</code>`→`` `x` ``, `<br>`→newline, `<b>/<strong>`→`**`, `<i>/<em>`→`*`.
+ * Empty `<code></code>` is simply dropped to avoid producing isolated empty backticks.
  */
 export function htmlInlineToMarkdown(text: string): string {
   return text
@@ -36,9 +36,9 @@ export function htmlInlineToMarkdown(text: string): string {
 }
 
 /**
- * sectionKey → 中文标签 + 渲染顺序。把 pr-agent 输出按已知段落排成标准文档骨架：
- *   建议标题 → 类型 → 总结 → 描述 → 走查 → 测试 → 安全 → 代码反馈 → 工作量 → 评分 → 其他
- * 未识别 (sectionKey === undefined 或 'general') 走兜底，按解析顺序放到末尾。
+ * sectionKey → label + render order. Arranges pr-agent output by known sections into a standard document skeleton:
+ *   suggested title → type → summary → description → walkthrough → tests → security → code feedback → effort → score → other
+ * Unrecognized (sectionKey === undefined or 'general') goes through the fallback, placed at the end in parse order.
  */
 const SECTION_ORDER: Record<PrDocSectionKey, number> = {
   title: 0,
@@ -46,16 +46,16 @@ const SECTION_ORDER: Record<PrDocSectionKey, number> = {
   summary: 2,
   description: 3,
   diagram: 4,
-  assessment: 5, // 思路建议紧随架构图（对齐 Qodo：Description → Diagram → Assessment）
+  assessment: 5, // assessment follows the diagram (aligned with Qodo: Description → Diagram → Assessment)
   walkthrough: 6,
   'relevant-tests': 7,
   security: 8,
   'code-feedback': 9,
-  'code-suggestion': 9, // 跟 code-feedback 一组，UI 顺序无优先关系
+  'code-suggestion': 9, // grouped with code-feedback, no ordering preference between them in the UI
   effort: 10,
   score: 11,
   general: 12,
-  // /ask 结构化分段（仅出现在 /ask run 内，彼此相对顺序：概述 → 分析 → 建议）
+  // /ask structured sections (only appear within an /ask run, relative order among them: summary → analysis → suggestions)
   'ask-summary': 13,
   'ask-analysis': 14,
   'ask-suggestions': 15,
@@ -74,7 +74,7 @@ const SECTION_LABEL_KEY: Record<PrDocSectionKey, string | null> = {
   'code-suggestion': 'chatPane.sectionCodeSuggestion',
   effort: 'chatPane.sectionEffort',
   score: 'chatPane.sectionScore',
-  general: null, // general / 未知段无 chip 标签
+  general: null, // general / unknown sections have no chip label
   'ask-summary': 'chatPane.sectionAskSummary',
   'ask-analysis': 'chatPane.sectionAskAnalysis',
   'ask-suggestions': 'chatPane.sectionAskSuggestions',
@@ -85,17 +85,17 @@ export function sectionLabel(key: PrDocSectionKey, t: TFunction): string {
 }
 
 /**
- * 工作量段已用 emoji 圆点（🔵🔵🔵⚪⚪）直观表示 1-5 分，去掉前面冗余的数字分数：
- *   "3 🔵🔵🔵⚪⚪" → "🔵🔵🔵⚪⚪"；"工作量: 3 🔵🔵" → "工作量: 🔵🔵"
- * 仅在数字后紧跟圆点 emoji 时才剥，避免误删正文里的普通数字。
+ * The effort section already uses emoji dots (🔵🔵🔵⚪⚪) to intuitively represent a 1-5 score, so drop the redundant leading numeric score:
+ *   "3 🔵🔵🔵⚪⚪" → "🔵🔵🔵⚪⚪"; "Effort: 3 🔵🔵" → "Effort: 🔵🔵"
+ * Only strips when the number is immediately followed by a dot emoji, to avoid removing ordinary numbers in the body.
  */
 export function stripEffortScoreNumber(s: string): string {
   return s.replace(/(^|[:：]\s*)\d+\s*(?=[🔵⚪⚫🟢🔴🟠🟡🟣🟤])/u, '$1');
 }
 
 /**
- * Stable sort by sectionKey 排序 + 同 key 保留原顺序 (兼容 Array.sort 非 stable JS 引擎)。
- * effort（评估工作量）段直接过滤掉：「Estimated effort to review」实用价值低，不展示。
+ * Stable sort by sectionKey + preserve original order within the same key (compatible with JS engines where Array.sort isn't stable).
+ * The effort section is filtered out entirely: "Estimated effort to review" has low practical value, not shown.
  */
 export function orderFindings(findings: Finding[]): Finding[] {
   return findings
@@ -109,7 +109,7 @@ export function orderFindings(findings: Finding[]): Finding[] {
     .map((x) => x.f);
 }
 
-/** 锚点短标签 `<basename>:<startLine>`（复评徽标 / 引用 chip 用），无锚点返回空串。 */
+/** Anchor short label `<basename>:<startLine>` (used by re-review badges / reference chips), returns empty string when there's no anchor. */
 export function anchorShortLabel(anchor?: {
   path: string;
   startLine?: number;
@@ -121,8 +121,8 @@ export function anchorShortLabel(anchor?: {
 }
 
 /**
- * 把一条待复评的 finding 拼成 /ask 的隐式引用上下文（referencedContext）：让模型看到原评论正文 + 位置，
- * 据此复评。与 diff 选区引用（formatReferencedContext）同走 EXTRA_INSTRUCTIONS 注入，不进问题位置参数。
+ * Assemble a finding pending re-review into /ask's implicit reference context (referencedContext): let the model see the original comment body + location,
+ * and re-review accordingly. Like the diff selection reference (formatReferencedContext), it's injected via EXTRA_INSTRUCTIONS, not into the question position args.
  */
 export function formatFindingReference(finding: Finding): string {
   const a = finding.anchor;
@@ -139,8 +139,8 @@ export function formatFindingReference(finding: Finding): string {
 }
 
 /**
- * 字符串 → HSL 色相。djb2 简化版，稳定 → 同一标签每次都同色。用于 PR Type 胶囊
- * 自动配色（"Bug fix" / "Enhancement" / "Tests" 各拿不同的色，不需要硬编码字典）。
+ * String → HSL hue. Simplified djb2, stable → the same label is always the same color. Used for PR Type pill
+ * auto-coloring ("Bug fix" / "Enhancement" / "Tests" each get a different color, no need for a hardcoded dictionary).
  */
 function labelHue(s: string): number {
   let h = 0;
@@ -148,14 +148,14 @@ function labelHue(s: string): number {
   return Math.abs(h) % 360;
 }
 export function pillStyle(s: string): CSSProperties {
-  // 仅注入标签 hue（--pill-hue）；明暗两套的饱和 / 明度由 CSS 按主题定（见 .pr-type-pill）——
-  // 避免在 JS 里写死暗色 HSL（底色 L=22%）导致浅色主题下胶囊过深、不协调。
+  // Only inject the label hue (--pill-hue); saturation / lightness for the light and dark sets are decided by CSS per theme (see .pr-type-pill) —
+  // avoids hardcoding a dark HSL in JS (background L=22%) that would make pills too dark and jarring in the light theme.
   return { ['--pill-hue']: labelHue(s) } as CSSProperties;
 }
 /**
- * 把 "Bug fix, Enhancement\nTests" 拆成 ["Bug fix", "Enhancement", "Tests"]。
- * parser 层已经剥过 HR，这里再加一层防御：纯标点 / 长度 ≤1 的项直接 filter 掉，
- * 避免 markdown 装饰符号溜进胶囊（"---" 这种实际遇到过）
+ * Split "Bug fix, Enhancement\nTests" into ["Bug fix", "Enhancement", "Tests"].
+ * The parser layer already stripped HRs; add another defensive layer here: filter out pure-punctuation / length ≤1 items
+ * to keep markdown decoration symbols out of the pills ("---" has actually been seen)
  */
 export function splitTypeLabels(body: string): string[] {
   return body

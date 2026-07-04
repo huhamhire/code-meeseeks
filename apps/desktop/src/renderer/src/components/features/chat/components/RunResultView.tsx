@@ -11,8 +11,8 @@ import { FindingCard } from './FindingCard';
 function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
   const { t } = useTranslation();
   const duration = run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—';
-  // 优先用 run.tokenUsage（litellm callback 捕获的 API 真实 usage，见 sitecustomize）；
-  // 历史 run 没这字段时回退到从 stdout 抓取的旧估算，保持向后兼容。
+  // Prefer run.tokenUsage (the real API usage captured by the litellm callback, see sitecustomize);
+  // fall back to the old estimate scraped from stdout when historical runs lack this field, for backward compatibility.
   const usage: TokenUsage = run.tokenUsage
     ? {
         prompt: run.tokenUsage.promptTokens,
@@ -30,8 +30,8 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
       <span className={`chat-chip chat-run-status chat-run-status-${run.status}`}>
         {runStatusLabel(run.status, t)}
       </span>
-      {/* 单 commit 评审范围徽标：本次 run 限定在某 commit 自身改动（parent..sha）时展示短 SHA；
-          全量 PR 范围（无 scope）不渲染。 */}
+      {/* Single-commit review scope badge: shows the short SHA when this run is limited to a commit's own changes (parent..sha);
+          not rendered for full PR scope (no scope). */}
       {run.scope && (
         <span
           className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-scope"
@@ -41,8 +41,8 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
           {run.scope.abbreviatedSha}
         </span>
       )}
-      {/* 模型 chip 取代运行时策略 chip — strategy 是部署细节用户不
-          关心，model 是真正影响 review 质量的变量 */}
+      {/* Model chip replaces the runtime strategy chip — strategy is a deployment detail users don't
+          care about, model is the variable that actually affects review quality */}
       {run.model && (
         <span
           className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-model"
@@ -51,7 +51,7 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
           {run.model}
         </span>
       )}
-      {/* 输入(↑绿)[⛁缓存]/输出(↓红)：输入输出各自独立 hover；缓存为输入一部分、无命中不显示。旧 run 可能只有 prompt */}
+      {/* input(↑green)[⛁cache]/output(↓red): input and output each hover independently; cache is part of input, hidden on no match. Old runs may have only prompt */}
       {usage.prompt !== undefined || usage.completion !== undefined ? (
         <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-tokens">
           <TokenStat
@@ -61,7 +61,7 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
           />
         </span>
       ) : null}
-      {/* 模型交互轮次：循环箭头图标 + 次数（取代「N 轮」文案，省空间 / 免复数）；仅多轮(agentic) 时展示 */}
+      {/* Model interaction turns: loop arrow icon + count (replaces the「N turns」text, saving space / avoiding plurals); shown only for multi-turn (agentic) */}
       {usage.turns !== undefined && usage.turns > 1 ? (
         <span
           className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-turns"
@@ -74,15 +74,15 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
       <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-duration">
         {duration}
       </span>
-      {/* 开始时间：纯文本不带胶囊背景，margin-left:auto 顶到最右 — 跟左侧
-          tool/status/strategy chip 拉开距离，视觉权重比 chip 轻一档 */}
+      {/* Start time: plain text with no pill background, margin-left:auto pushes it to the far right — spaced apart from the left-side
+          tool/status/strategy chips, one visual weight lighter than a chip */}
       <span
         className="chat-run-time"
         title={t('chatPane.startedAtTitle', { time: new Date(run.startedAt).toLocaleString() })}
       >
         {formatStartTime(run.startedAt)}
       </span>
-      {/* 删除本条 run 记录：状态行最右的小垃圾桶按钮（仅删该 run，不影响其它记录 / 徽标）。 */}
+      {/* Delete this run record: the small trash button at the far right of the status row (deletes only this run, no effect on other records / badges). */}
       <button
         type="button"
         className="chat-run-delete"
@@ -112,45 +112,45 @@ export function RunResultView({
 }: {
   run: ReviewRun;
   onRetry: (run: ReviewRun) => void;
-  /** 删除本条 run 记录（仅该 run）。 */
+  /** Delete this run record (this run only). */
   onDelete: (runId: string) => void;
-  /** 由父组件按"最后一条 + 无活动 run"判定；false 时失败 / 取消 run 也不显示重试键 */
+  /** Determined by the parent as "last one + no active run"; when false, failed / cancelled runs also don't show the retry button */
   canRetry: boolean;
-  /** 本 PR 当前草稿池快照；FindingCard 据此显示 status chip + 决定 reject 行为 */
+  /** Snapshot of this PR's current draft pool; FindingCard uses it to show the status chip + decide reject behavior */
   drafts: ReadonlyArray<ReviewDraft>;
-  /** 本 PR 的 finding 关闭关系快照（只读）；据 (run.id,finding.id) 反查复评关闭态，标注只读 chip。 */
+  /** Snapshot of this PR's finding closure relations (read-only); looks up the review-closed state by (run.id,finding.id), marking the read-only chip. */
   closures: ReadonlyArray<FindingClosure>;
-  /** 点击 finding card 上"→ 跳到代码编辑"时触发。父组件做懒创建 + 跳转 */
+  /** Fired when clicking "→ jump to code edit" on a finding card. The parent does lazy creation + jump */
   onJumpToDraft: (finding: Finding, run: ReviewRun) => void;
-  /** 拒绝某条 finding：创建 / 更新草稿到 status='rejected' */
+  /** Reject a finding: create / update a draft to status='rejected' */
   onRejectFinding: (finding: Finding, run: ReviewRun) => void;
-  /** 点击 finding 锚点：仅导航到 Diff 对应行（不进编辑态） */
+  /** Click a finding anchor: only navigate to the corresponding Diff line (no edit mode) */
   onNavigateToFinding: (finding: Finding) => void;
-  /** 「引用」一条 code finding 发起复评 /ask（挂到输入栏）。 */
+  /** 「Reference」a code finding to start a re-review /ask (attach to the input bar). */
   onReferenceFinding: (finding: Finding, run: ReviewRun) => void;
-  /** 滚动定位到指定 run 卡片（复评关闭态「查看复评」→ 关闭它的 ask run）。 */
+  /** Scroll to a given run card (review-closed state「view re-review」→ the ask run that closed it). */
   onScrollToRun: (runId: string) => void;
-  /** 滚动定位到指定 run 内的某条 finding 卡片并闪烁高亮（复评卡顶部引用徽标 → 原 finding 卡）。 */
+  /** Scroll to a given finding card within a run and flash-highlight it (reference badge at the top of the re-review card → original finding card). */
   onScrollToFinding: (runId: string, findingId: string) => void;
 }) {
   const { t } = useTranslation();
   const findings = run.findings ?? [];
-  // 失败 + 取消都用红 banner 提示。取消是用户主动行为，UI 用更轻文案区分
+  // Both failed + cancelled use a red banner. Cancel is a deliberate user action, so the UI distinguishes it with lighter wording
   const isFailed = run.status === 'failed';
   const isCancelled = run.status === 'cancelled';
   const isFailedOrCancelled = isFailed || isCancelled;
   const stdout = run.stdout ?? '';
-  // "原始输出" 折叠区独立 per-run 维护状态，互不影响。失败 / 取消默认展开方便排障，
-  // 成功默认关闭只是诊断兜底
+  // The "raw output" collapse region maintains per-run state independently, unaffecting each other. Failed / cancelled default to expanded for easier troubleshooting,
+  // success defaults to closed as just a diagnostic fallback
   const [showRawStdout, setShowRawStdout] = useState(isFailedOrCancelled);
-  // /ask 工具：把用户提问展示在 meta 行**下方**，跟 /ask 这个动作绑成一组；
-  // 上方再放用户气泡会跟 meta 行重复信息源，移到动作下方更符合"动作 → 输入"语序
+  // /ask tool: show the user's question **below** the meta row, grouped with the /ask action;
+  // putting a user bubble above would duplicate the meta row's info source, moving it below the action better fits the "action → input" order
   const userMessage = run.tool === 'ask' ? run.question?.trim() : undefined;
   return (
     <div className="chat-run-result">
       <RunMeta run={run} onDelete={() => onDelete(run.id)} />
-      {/* 复评 /ask：顶部引用定位徽标（转发箭头 + 完整路径:行号），点击滚动定位到被引用的原 finding 所在 run。
-          直接显示完整定位信息（不再用「复评自」文案，省 i18n）；路径换行规则同代码建议定位（BreakablePath 软断点）。 */}
+      {/* Re-review /ask: top reference-locator badge (forward arrow + full path:line), click to scroll to the run of the referenced original finding.
+          Shows the full locator info directly (no more「re-reviewed from」text, saving i18n); path wrapping follows code-suggestion location (BreakablePath soft break points). */}
       {run.referencedFinding && (
         <button
           type="button"
@@ -180,8 +180,8 @@ export function RunResultView({
         </button>
       )}
       {userMessage && <AskQuestion text={userMessage} />}
-      {/* 原始输出：始终紧跟 meta 行，让用户在任何状态下都能在固定位置找到日志。
-          失败 / 取消默认展开，成功默认收起 */}
+      {/* Raw output: always right after the meta row, so users can find logs in a fixed position in any state.
+          Failed / cancelled default to expanded, success defaults to collapsed */}
       {stdout.length > 0 && (
         <details
           className="chat-run-raw"
@@ -204,8 +204,8 @@ export function RunResultView({
                 : run.errorReason
                   ? t('chatPane.runFailedReason', { reason: run.errorReason })
                   : t('chatPane.runFailed')}
-            {/* llm-error 时 exitCode 是 0 (pr-agent 自己 catch 了)，显示出来反而
-                让用户误以为没出错，所以跳过 */}
+            {/* On llm-error the exitCode is 0 (pr-agent caught it itself), showing it would instead
+                mislead users into thinking nothing went wrong, so skip it */}
             {run.exitCode != null &&
               !isCancelled &&
               run.errorReason !== 'llm-error' &&
@@ -229,28 +229,28 @@ export function RunResultView({
           {run.errorMessage && !isCancelled && (
             <pre className="chat-error-detail">{run.errorMessage}</pre>
           )}
-          {/* 失败 / 取消不再单独展示输出区块：pr-agent 日志已在上方可折叠的「原始输出」（stdout 含
-              [pr-agent stdout log] 段，与 stderr 同源），避免同一份日志重复成两块。 */}
+          {/* Failed / cancelled no longer show a separate output block: the pr-agent log is already in the collapsible「raw output」above (stdout contains
+              the [pr-agent stdout log] segment, same source as stderr), avoiding duplicating the same log into two blocks. */}
         </div>
       )}
 
-      {/* 失败 / 取消不渲染 findings：取消的 /describe 会把部分 stdout 解析成「段落」误当结果展示。
-          失败 / 取消统一只保留上方可折叠的「原始输出」+ 状态横幅，不在下方另起输出区块。 */}
+      {/* Failed / cancelled don't render findings: a cancelled /describe would parse part of stdout into「paragraphs」and mistakenly show them as results.
+          Failed / cancelled uniformly keep only the collapsible「raw output」above + the status banner, not opening another output block below. */}
       {!isFailedOrCancelled &&
         (findings.length > 0 ? (
           <ul className="chat-finding-list">
             {orderFindings(findings).map((f) => {
-              // 同 run 内 finding 跟草稿一对一：source.runId+findingId 反查。命中后
-              // FindingCard 据此显示状态 chip + 跳转/拒绝按钮行为分支
+              // Findings within the same run map one-to-one to drafts: looked up by source.runId+findingId. On match,
+              // FindingCard uses it to show the status chip + branch the jump/reject button behavior
               const relatedDraft = drafts.find(
                 (d) =>
                   d.source !== undefined &&
                   d.source.runId === run.id &&
                   d.source.findingId === f.id,
               );
-              // 复评关闭态（只读）：该 finding 被复评 /ask 裁决 replace/drop 自动关闭时反查到。
+              // Review-closed state (read-only): looked up when this finding was auto-closed by a re-review /ask ruling replace/drop.
               const closure = closures.find((c) => c.runId === run.id && c.findingId === f.id);
-              // 「引用」仅对可锚定的 code 类 finding（review/improve）提供——它们才是可被复评的代码评论。
+              // 「Reference」is only offered for anchorable code-type findings (review/improve) — they are the code comments that can be re-reviewed.
               const canReference =
                 (f.sectionKey === 'code-feedback' || f.sectionKey === 'code-suggestion') &&
                 typeof f.anchor?.startLine === 'number';

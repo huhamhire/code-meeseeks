@@ -16,25 +16,25 @@ export function RunningView({
 }: {
   tool: ReviewRunTool;
   runId: string;
-  /** /ask 的提问：执行中也直接展示（与排队 / 完成态一致；问题在派发时已生成）。 */
+  /** /ask's question: shown directly while running too (consistent with queued / done state; the question was generated at dispatch). */
   question?: string;
-  /** 单 commit 评审范围（parent..sha）；限定在某 commit 时展示范围徽标，与完成态卡片一致。 */
+  /** Single-commit review scope (parent..sha); shows the scope badge when limited to a commit, consistent with the done-state card. */
   scope?: ReviewRunCommitScope;
   lines: ReadonlyArray<string>;
   startedAt: number;
-  /** 当前 active LLM profile.model — 跟 RunMeta 同源放在 chip 行，让 running
-      跟 succeeded 视觉一致；可选 (无 active profile 时不显示) */
+  /** The current active LLM profile.model — placed in the chip row from the same source as RunMeta, keeping running
+      visually consistent with succeeded; optional (not shown when there's no active profile) */
   model: string | null;
 }) {
   const { t } = useTranslation();
-  // 末行追加时自动滚到底
+  // Auto-scroll to bottom when the last line is appended
   const ref = useRef<HTMLPreElement | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [lines.length]);
 
-  // 计时器：pr-agent stdout 长间隔时让用户感知到不是卡死。1s 粒度即可
+  // Timer: lets users perceive it isn't stuck during long gaps in pr-agent stdout. 1s granularity is enough
   const [elapsedMs, setElapsedMs] = useState(0);
   useEffect(() => {
     setElapsedMs(Date.now() - startedAt);
@@ -45,9 +45,9 @@ export function RunningView({
   const phase = useMemo(() => inferPhase(lines, t), [lines, t]);
   const text = useMemo(() => lines.join('\n'), [lines]);
 
-  // 跟 RunMeta 完全同结构的 chip 行。running 跟 succeeded/failed 共享一套视觉
-  // 骨架，用户从列表扫一眼能在固定位置看到 tool / 状态 / 模型 / 时长。strategy
-  // 运行时策略是部署细节用户不关心，撤掉；model 是真正影响 review 质量的变量
+  // A chip row structurally identical to RunMeta. running shares one visual
+  // skeleton with succeeded/failed, so a glance down the list shows tool / status / model / duration in fixed positions. strategy
+  // runtime strategy is a deployment detail users don't care about, removed; model is the variable that actually affects review quality
   return (
     <div className="chat-run-running" data-run-id={runId}>
       <header className="chat-run-meta">
@@ -56,7 +56,7 @@ export function RunningView({
           <Spinner />
           {runStatusLabel('running', t)}
         </span>
-        {/* 单 commit 范围徽标：与完成态 RunMeta 一致，让运行中也能看到本次限定的提交。 */}
+        {/* Single-commit scope badge: consistent with the done-state RunMeta, so the limited commit is visible while running too. */}
         {scope && (
           <span
             className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-scope"
@@ -77,8 +77,8 @@ export function RunningView({
         <span className="chat-chip chat-chip-quiet chat-chip-neutral chat-run-duration">
           {formatElapsed(elapsedMs)}
         </span>
-        {/* 开始时间：跟 RunMeta 同模 — 纯文本右对齐，让 running 跟 succeeded
-            两态最右侧元素位置稳定 */}
+        {/* Start time: same pattern as RunMeta — plain text right-aligned, keeping the far-right element's position stable
+            across the running and succeeded states */}
         <span
           className="chat-run-time"
           title={t('chatPane.startedAtTitle', { time: new Date(startedAt).toLocaleString() })}
@@ -86,14 +86,14 @@ export function RunningView({
           {formatStartTime(startedAt)}
         </span>
       </header>
-      {/* /ask 的提问执行中也直接展示（问题已生成，不必等排队 / 完成才可见）。 */}
+      {/* /ask's question is shown directly while running too (the question is already generated, no need to wait for queued / done to be visible). */}
       {tool === 'ask' && question?.trim() && <AskQuestion text={question.trim()} />}
       {phase && (
         <div className="chat-chip chat-chip-md chat-chip-quiet chat-chip-accent chat-run-phase">
           {phase}
         </div>
       )}
-      {/* 控制台输出：执行中默认折叠收起、可手动展开（与完成态「原始输出」同款折叠效果）。 */}
+      {/* Console output: collapsed by default while running, manually expandable (same collapse effect as the done-state「raw output」). */}
       <details className="chat-run-raw">
         <summary>{t('chatPane.rawOutput', { n: text.length })}</summary>
         <AnsiPre

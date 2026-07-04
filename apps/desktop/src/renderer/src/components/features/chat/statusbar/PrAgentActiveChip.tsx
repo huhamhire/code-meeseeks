@@ -6,8 +6,8 @@ import { formatElapsed } from '../../../../utils/time';
 import { StatusChip } from '../../../common';
 
 /**
- * 队列弹出菜单：状态栏 chip 上方弹出。先列全部运行中（active）行，再列 waiting 行。
- * waiting 行右侧 × 按钮取消。最多 6 个 item 高度，超出内部滚动。
+ * Queue popover: pops up above the status bar chip. Lists all active rows first, then waiting rows.
+ * The × button on the right of a waiting row cancels it. Max 6 items tall, scrolls internally beyond that.
  */
 function QueuePopover({
   active,
@@ -88,32 +88,32 @@ function QueuePopover({
 }
 
 /**
- * pr-agent 活动状态 chip：active 时显示运行中工具 + elapsed (可点跳 PR)；idle 时
- * 显示"空闲"占位。PR 切换不会丢运行中状态，由 chatRunStore 跨实例维护。
+ * pr-agent activity chip: when active, shows the running tool + elapsed (clickable to jump to PR);
+ * when idle, shows an "idle" placeholder. Switching PRs won't lose running state, which chatRunStore maintains across instances.
  *
- * 调用方应在 pr-agent 实际可用 (PrAgentStatus.available) 时才挂这条。
+ * Callers should only mount this when pr-agent is actually available (PrAgentStatus.available).
  */
 export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => void }) {
   const { t } = useTranslation();
   const { active, waiting } = useChatRunStore();
-  // 并发模型：active 是运行中 run 列表。chip 主体展示第一条（primary）的 tool + elapsed，
-  // 多于一条时用徽标显示并发总数；点开 popover 列出全部运行中 + 排队中。
+  // Concurrency model: active is the list of running runs. The chip body shows the first (primary) run's tool + elapsed,
+  // with a badge showing the concurrent total when there's more than one; opening the popover lists all running + queued.
   const primary = active[0] ?? null;
   const runningCount = active.length;
-  // 计时器：1s 粒度，跟 ChatPane 的 elapsed 同步。仅有 primary 时启
+  // Timer: 1s granularity, synced with ChatPane's elapsed. Only started when there's a primary.
   const [elapsedMs, setElapsedMs] = useState(0);
-  // startedAt 入队时为 null，executeRun 起跑时设值；fallback 到 enqueuedAt 即可
+  // startedAt is null while queued, set when executeRun starts; fallback to enqueuedAt is fine
   const startMs = primary ? new Date(primary.startedAt ?? primary.enqueuedAt).getTime() : 0;
   useEffect(() => {
     if (!primary) return;
     setElapsedMs(Date.now() - startMs);
     const id = setInterval(() => setElapsedMs(Date.now() - startMs), 1000);
     return () => clearInterval(id);
-    // 仅依赖 primary runId + startMs：其它字段变化不影响计时
+    // Only depend on primary runId + startMs: changes to other fields don't affect timing
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primary?.runId, startMs]);
 
-  // 队列弹出菜单：点开 (active chip + 队列 ≥1) 显示 waiting 列表 + × 取消
+  // Queue popover: opening it (active chip + queue ≥1) shows the waiting list + × to cancel
   const [queueOpen, setQueueOpen] = useState(false);
   const queueRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -131,7 +131,7 @@ export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: strin
       document.removeEventListener('keydown', onKey);
     };
   }, [queueOpen]);
-  // 无可展开内容（无排队 且 运行中 ≤1）→ 自动收起菜单
+  // Nothing to expand (no queue and running ≤1) → auto-collapse the menu
   useEffect(() => {
     if (queueOpen && waiting.length === 0 && active.length <= 1) setQueueOpen(false);
   }, [queueOpen, waiting.length, active.length]);
@@ -141,7 +141,7 @@ export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: strin
   };
 
   if (!primary) {
-    // Idle：静态灰点 + "空闲" 文案。让用户一眼看到"agent 可用 + 当前没活儿"
+    // Idle: static gray dot + "idle" text. Lets the user see at a glance "agent available + nothing running right now"
     return (
       <StatusChip
         className="statusbar-pragent-chip statusbar-pragent-chip-idle"
@@ -153,7 +153,7 @@ export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: strin
     );
   }
 
-  // 可展开（运行中 >1 或有排队）→ chip 变 button 点开 popover；否则按 onJumpToPr 跳 PR。
+  // Expandable (running >1 or has queue) → chip becomes a button that opens the popover; otherwise jumps to PR via onJumpToPr.
   const expandable = waiting.length > 0 || runningCount > 1;
   const clickable = expandable || Boolean(onJumpToPr);
   const handleClick = (): void => {
@@ -163,7 +163,7 @@ export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: strin
       onJumpToPr?.(primary.prLocalId);
     }
   };
-  // 徽标数 = 其它并发运行中(runningCount-1) + 排队中(waiting)
+  // Badge count = other concurrent running (runningCount-1) + queued (waiting)
   const extraCount = runningCount - 1 + waiting.length;
   const title = expandable
     ? t('statusBar.prAgentExpandableTitle', { running: runningCount, waiting: waiting.length })

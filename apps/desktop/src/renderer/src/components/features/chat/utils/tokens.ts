@@ -1,36 +1,36 @@
 export interface TokenUsage {
-  /** 输入侧 (prompt) token 数。LITELLM_LOG=INFO 时来自 litellm；fallback 用 pr-agent
-      自己打的 "Tokens: N" (tiktoken 预估) */
+  /** Input-side (prompt) token count. Comes from litellm when LITELLM_LOG=INFO; fallback uses
+      pr-agent's own "Tokens: N" (tiktoken estimate) */
   prompt?: number;
-  /** 输出侧 (completion) token 数。仅 LITELLM_LOG=INFO 时可拿到 */
+  /** Output-side (completion) token count. Only available when LITELLM_LOG=INFO */
   completion?: number;
-  /** 总 token；优先用 litellm 给的，缺时算 prompt+completion */
+  /** Total tokens; prefers what litellm gives, computes prompt+completion when missing */
   total?: number;
-  /** 提示缓存读取量（cache_read），是 prompt 的一部分；缺/0 时不展示「(cache N)」括号 */
+  /** Prompt-cache read amount (cache_read), part of prompt; when missing/0 the "(cache N)" parenthesis is not shown */
   cacheRead?: number;
-  /** 模型交互轮次；≤1 时不单独展示 */
+  /** Model interaction turns; not shown separately when ≤1 */
   turns?: number;
 }
 
 /**
- * 从 pr-agent stdout 解析 token 用量。多源累加：
+ * Parse token usage from pr-agent stdout. Multi-source accumulation:
  *
- * 1. litellm INFO 模式 (我们默认开)：每次 LLM 调用后会打类似
+ * 1. litellm INFO mode (on by default for us): after each LLM call it prints something like
  *    `usage={'prompt_tokens': 8423, 'completion_tokens': 1234, 'total_tokens': 9657}`
- *    多轮调用 → 各项累加；这条最准
+ *    multiple call rounds → each field accumulates; this one is the most accurate
  *
- * 2. pr-agent 自己的 prompt 预估：`Tokens: 8423, total tokens under limit: ...`
- *    没 litellm 日志兜底；只反映输入侧，按最大值取代表
+ * 2. pr-agent's own prompt estimate: `Tokens: 8423, total tokens under limit: ...`
+ *    fallback when there is no litellm log; only reflects the input side, taking the max as representative
  *
- * 优先用 (1)；(1) 没命中再退到 (2)。
+ * Prefers (1); falls back to (2) when (1) does not match.
  */
 export function extractTokenUsage(stdout: string): TokenUsage {
   let prompt = 0;
   let completion = 0;
   let total = 0;
   let hasLitellm = false;
-  // litellm 的 usage dict 在 stdout 里以 Python repr 形式出现，单引号字符串
-  // (兼容 JSON 双引号也匹配)。一次 run 多轮 LLM 调用全部累加
+  // litellm's usage dict appears in stdout as a Python repr, single-quoted strings
+  // (also matches JSON double quotes for compatibility). All LLM call rounds in one run accumulate
   const usageRe =
     /['"]prompt_tokens['"]\s*:\s*(\d+)[\s,]*['"]completion_tokens['"]\s*:\s*(\d+)[\s,]*['"]total_tokens['"]\s*:\s*(\d+)/g;
   let m: RegExpExecArray | null;
@@ -43,7 +43,7 @@ export function extractTokenUsage(stdout: string): TokenUsage {
   if (hasLitellm) {
     return { prompt, completion, total: total || prompt + completion };
   }
-  // Fallback: pr-agent 的 prompt 预估
+  // Fallback: pr-agent's prompt estimate
   const fallbackRe = /Tokens:\s*(\d+)/gi;
   let maxPrompt: number | undefined;
   while ((m = fallbackRe.exec(stdout)) !== null) {

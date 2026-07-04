@@ -21,7 +21,7 @@ export function Bullet({ children }: { children: ReactNode }) {
   );
 }
 
-/** chat 区统一的 markdown 渲染（与 finding 卡片同套 remark/rehype 配置）。 */
+/** Unified markdown rendering for the chat area (same remark/rehype config as finding cards). */
 export function Md({ children }: { children: string }) {
   return (
     <ReactMarkdown
@@ -34,10 +34,10 @@ export function Md({ children }: { children: string }) {
   );
 }
 
-/** 行内 markdown：用于标题等单行文本，渲染内联代码 / 强调，去掉块级 <p> 包裹保持行内排版。 */
+/** Inline markdown: for single-line text such as titles, rendering inline code / emphasis, dropping the block-level <p> wrapper to keep inline layout. */
 export function MdInline({ children }: { children: string }) {
-  // 标题以「2. 」「- 」这类列表标记开头时，markdown 会把它解析成 <ol>/<ul> 块塞进 <h4>，撑破内联布局
-  // 并溢出。转义行首列表标记，按字面渲染序号 / 符号（保留文字），不再生成列表块。
+  // When a title starts with a list marker like "2. " or "- ", markdown parses it into an <ol>/<ul> block stuffed into <h4>, breaking the inline layout
+  // and overflowing. Escape leading list markers to render the number / symbol literally (keeping the text), no longer generating a list block.
   const inlineSafe = children
     .replace(/^(\s*)(\d+)\.(\s)/, '$1$2\\.$3')
     .replace(/^(\s*)([-*+])(\s)/, '$1\\$2$3');
@@ -53,9 +53,9 @@ export function MdInline({ children }: { children: string }) {
 }
 
 /**
- * `<summary>` 内联 markdown 渲染：raw HTML 的折叠标题（如「思路建议」各方案的 <details><summary>）内的
- * 文本不会被 markdown 二次解析，反引号 / 强调等会原样漏出。这里把其纯文本走 {@link MdInline}，让标题里的
- * `代码` / **强调** 生效。children 多为纯文本串；含非文本节点时原样渲染兜底。
+ * `<summary>` inline markdown rendering: text inside raw-HTML collapse titles (e.g. the <details><summary> of each option under "suggestions")
+ * is not re-parsed by markdown, so backticks / emphasis leak through verbatim. Here we route its plain text through {@link MdInline}, so that
+ * `code` / **emphasis** in the title take effect. children is usually a plain-text string; falls back to rendering verbatim when it contains non-text nodes.
  */
 const SummaryInlineMd: Components['summary'] = ({ children }) => {
   const text =
@@ -73,14 +73,14 @@ const SummaryInlineMd: Components['summary'] = ({ children }) => {
   );
 };
 
-/** 在给定 markdown components 之上叠加「<summary> 内联 markdown」渲染（折叠标题支持 md 预格式化）。 */
+/** Layer "<summary> inline markdown" rendering on top of the given markdown components (collapse titles support md pre-formatting). */
 export function withInlineSummary(base: Components): Components {
   return { ...base, summary: SummaryInlineMd };
 }
 
 /**
- * 代码路径折行优化：在分隔符 `/` 与连接符 `.` `_` `-` 之后插入 <wbr> 软断点，配合 CSS
- * `word-break: normal`，让长路径优先按这些字符折断（而非从单词中间断开），保证可读性。
+ * Code-path line-break optimization: insert <wbr> soft break points after the separator `/` and the connectors `.` `_` `-`, combined with CSS
+ * `word-break: normal`, so long paths preferentially break at these characters (rather than mid-word), ensuring readability.
  */
 export function BreakablePath({ path }: { path: string }) {
   const parts = path.split(/(?<=[/._-])/);
@@ -92,7 +92,7 @@ export function BreakablePath({ path }: { path: string }) {
   return <>{nodes}</>;
 }
 
-/** 把含 ANSI 转义的 stdout 文本渲染成带颜色的 <pre>。空文本时显示占位 */
+/** Render ANSI-escaped stdout text into a colored <pre>. Shows a placeholder when the text is empty */
 export function AnsiPre({
   className,
   text,
@@ -124,9 +124,9 @@ export function AnsiPre({
 }
 
 /**
- * Token 用量内联展示：↑输入(绿) [⛁缓存命中] / ↓输出(红)。输入、输出**各自独立 hover 提示**；
- * 缓存命中(cache_read)为输入的一部分，柱体图标拆分展示（间距在 cache 前，无命中时整段不渲染、不留空），
- * 悬浮另给说明。run 卡片(RunMeta) 与思考步骤(AgentStep) 共用；分隔符按上下文传入（chip 内 ` / `、步骤行空格）。
+ * Inline token-usage display: ↑input(green) [⛁cache hit] / ↓output(red). Input and output **each get their own hover tooltip**;
+ * the cache hit (cache_read) is part of the input, shown split out with a bar icon (spacing before cache, the whole segment not rendered and leaving no gap when there's no hit),
+ * with its own tooltip on hover. Shared by the run card (RunMeta) and the thinking step (AgentStep); the separator is passed by context (` / ` inside a chip, a space on step rows).
  */
 export function TokenStat({
   prompt,
@@ -169,7 +169,7 @@ export function TokenStat({
   );
 }
 
-/** /ask 提问行：问号图标 + markdown 渲染的提问内容（Agent 自拟的追问常含内联代码 / 列表）。 */
+/** /ask question row: a question-mark icon + markdown-rendered question content (the Agent's self-composed follow-up asks often contain inline code / lists). */
 export function AskQuestion({ text }: { text: string }) {
   const { t } = useTranslation();
   return (
