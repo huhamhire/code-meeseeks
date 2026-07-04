@@ -1,15 +1,15 @@
-// 跨组件复用的内联 SVG 图标。统一 currentColor 描边，跟随主题色 / 父元素文字色，
-// 离线无网络依赖。需要不同尺寸时传 size（viewBox 固定 16，缩放即可）。
+// Inline SVG icons reused across components. Uniform currentColor stroke, follows theme color / parent element's text color,
+// offline with no network dependency. Pass size when a different size is needed (viewBox fixed at 16, just scale).
 
 interface IconProps {
   size?: number;
-  /** 个别图标需要外部 class（如 ChevronIcon 的 tree-chevron 旋转动画）；其余忽略。 */
+  /** Some icons need an external class (e.g. ChevronIcon's tree-chevron rotation animation); the rest ignore it. */
   className?: string;
 }
 
 /**
- * git pull-request / 分支合并字形：两条分支汇入 + 指向合并点的箭头。
- * 既用于 PR 列表分支行前缀，也用于"合并"按钮 / 可合并 chip —— 同一语义同一图形。
+ * git pull-request / branch merge glyph: two branches converging + an arrow pointing to the merge point.
+ * Used both as the PR list branch row prefix and for the "merge" button / mergeable chip — same semantics, same graphic.
  */
 export function PullRequestIcon({ size = 12 }: IconProps) {
   return (
@@ -34,7 +34,7 @@ export function PullRequestIcon({ size = 12 }: IconProps) {
   );
 }
 
-/** 关闭叉号：模态框右上角通用关闭按钮用，图标免国际化。 */
+/** Close cross: for the modal top-right generic close button, icon needs no i18n. */
 export function CloseIcon({ size = 16 }: IconProps) {
   return (
     <svg
@@ -53,7 +53,7 @@ export function CloseIcon({ size = 16 }: IconProps) {
   );
 }
 
-/** 三角警示（叹号）：合并冲突等需要用户注意的状态。文件树冲突文件行用。 */
+/** Triangle warning (exclamation): states needing user attention such as merge conflicts. Used on file tree conflict file rows. */
 export function ConflictIcon({ size = 14, className }: IconProps) {
   return (
     <svg
@@ -75,7 +75,7 @@ export function ConflictIcon({ size = 14, className }: IconProps) {
   );
 }
 
-/** 文件夹：选择目录按钮用 */
+/** Folder: for the choose directory button */
 export function FolderIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -93,7 +93,7 @@ export function FolderIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 铅笔：编辑按钮用 */
+/** Pencil: for the edit button */
 export function PencilIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -113,7 +113,7 @@ export function PencilIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 睁眼：密钥/令牌「显示」状态用 */
+/** Open eye: for the key/token "shown" state */
 export function EyeIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -133,7 +133,7 @@ export function EyeIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 闭眼（带斜杠）：密钥/令牌「隐藏」状态用 */
+/** Closed eye (with slash): for the key/token "hidden" state */
 export function EyeOffIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -154,7 +154,7 @@ export function EyeOffIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 垃圾桶：删除按钮用 */
+/** Trash can: for the delete button */
 export function TrashIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -177,7 +177,7 @@ export function TrashIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 纸飞机（横向，Lucide send-horizontal 风格）：发送 / 提交按钮用 */
+/** Paper plane (horizontal, Lucide send-horizontal style): for the send / submit button */
 export function SendIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -197,7 +197,7 @@ export function SendIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 实心圆角方块：停止 / 取消（媒体停止键视觉惯例）。fill 版，无描边 */
+/** Solid rounded square: stop / cancel (media stop-key visual convention). Fill version, no stroke */
 export function StopIcon({ size = 14 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -206,7 +206,7 @@ export function StopIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 圆圈内 `?`：/ask 用户提问 chip 前缀（跟答案区分） */
+/** `?` inside a circle: prefix for the /ask user question chip (distinguishes it from the answer) */
 export function QuestionIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -227,7 +227,7 @@ export function QuestionIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 循环箭头（refresh-cw 风格）：重试动作，chip 内嵌小尺寸。与 SyncIcon（双箭头）区分语义 */
+/** Loop arrow (refresh-cw style): retry action, small size embedded in chips. Distinct in semantics from SyncIcon (double arrow) */
 export function RetryIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -247,7 +247,7 @@ export function RetryIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 转发 / 分享箭头（社交媒体「转发」实心弯箭头）：finding 卡片「引用」按钮用。 */
+/** Forward / share arrow (social media "share" solid curved arrow): for the finding card "quote" button. */
 export function ShareIcon({ size = 14 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -256,7 +256,7 @@ export function ShareIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 拼图块（extension / plugin）：集成 / 扩展 的通用隐喻。设置「集成」分区导航用。 */
+/** Puzzle piece (extension / plugin): common metaphor for integration / extension. For the settings "integrations" section navigation. */
 export function PuzzleIcon({ size = 14 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -265,7 +265,7 @@ export function PuzzleIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 评论：带文字行的对话气泡。finding 卡「编辑成评论草稿」动作用（与 ChatIcon 区分：内含文字行）。 */
+/** Comment: a speech bubble with text lines. For the finding card "edit into comment draft" action (distinct from ChatIcon: contains text lines). */
 export function CommentIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -286,7 +286,7 @@ export function CommentIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 圆形禁止（no-entry）：圆 + 斜杠。finding 卡「拒绝」动作用。 */
+/** Circular ban (no-entry): circle + slash. For the finding card "reject" action. */
 export function BanIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -305,7 +305,7 @@ export function BanIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 对话气泡：chat 面板触发 / 空态。large 场景传 size（如 28） */
+/** Speech bubble: chat panel trigger / empty state. Pass size for large scenarios (e.g. 28) */
 export function ChatIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -324,7 +324,7 @@ export function ChatIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 图片占位（相框 + 山峦 + 太阳）：评论「上传图片附件」按钮。 */
+/** Image placeholder (frame + mountains + sun): the comment "upload image attachment" button. */
 export function ImageIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -345,7 +345,7 @@ export function ImageIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 笑脸 + 加号：评论「添加表情反应」按钮（viewBox 24 以对齐 lucide 笔形比例）。 */
+/** Smiley + plus: the comment "add emoji reaction" button (viewBox 24 to align with lucide stroke proportions). */
 export function SmilePlusIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -369,7 +369,7 @@ export function SmilePlusIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 文件树（三横线带项目符号）：DiffView 退出搜索 / tree 模式指示 */
+/** File tree (three horizontal lines with bullets): DiffView exit search / tree mode indicator */
 export function FileTreeIcon({ size = 12 }: IconProps) {
   return (
     <svg
@@ -392,7 +392,7 @@ export function FileTreeIcon({ size = 12 }: IconProps) {
   );
 }
 
-/** 放大镜：进入搜索模式 */
+/** Magnifying glass: enter search mode */
 export function SearchIcon({ size = 12 }: IconProps) {
   return (
     <svg
@@ -412,7 +412,7 @@ export function SearchIcon({ size = 12 }: IconProps) {
   );
 }
 
-/** 右向折角箭头：树节点展开 / 折叠。className 供旋转动画（FileTree 传 tree-chevron） */
+/** Right-pointing chevron: tree node expand / collapse. className for rotation animation (FileTree passes tree-chevron) */
 export function ChevronIcon({ size = 10, className }: IconProps) {
   return (
     <svg
@@ -432,7 +432,7 @@ export function ChevronIcon({ size = 10, className }: IconProps) {
   );
 }
 
-/** 地球经纬网格：在远端浏览器打开 */
+/** Globe with lat/long grid: open in remote browser */
 export function GlobeIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -453,7 +453,7 @@ export function GlobeIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 头肩剪影：作者行前缀 / blame 视图 / 账户指示（统一的「人」图标，合并原 PersonIcon、BlameIcon、UserIcon） */
+/** Head-and-shoulders silhouette: author row prefix / blame view / account indicator (unified "person" icon, merging the original PersonIcon, BlameIcon, UserIcon) */
 export function PersonIcon({ size = 12 }: IconProps) {
   return (
     <svg
@@ -473,7 +473,7 @@ export function PersonIcon({ size = 12 }: IconProps) {
   );
 }
 
-/** 空白字符可视化（·→·）：显示 space / tab */
+/** Whitespace visualization (·→·): show space / tab */
 export function WhitespaceIcon({ size = 12 }: IconProps) {
   return (
     <svg
@@ -492,7 +492,7 @@ export function WhitespaceIcon({ size = 12 }: IconProps) {
   );
 }
 
-/** 圆圈内对勾：审批通过 */
+/** Checkmark inside a circle: approved */
 export function ApproveIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -512,7 +512,7 @@ export function ApproveIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 圆圈内感叹号：需要修改 */
+/** Exclamation inside a circle: needs work */
 export function NeedsWorkIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -533,7 +533,7 @@ export function NeedsWorkIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 纯对勾字形（无外圆环）：用于实心彩底角标，只留内部符号。 */
+/** Plain checkmark glyph (no outer ring): for solid colored-background badges, keeping only the inner symbol. */
 export function CheckGlyphIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -552,7 +552,7 @@ export function CheckGlyphIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 复制字形：前景方片 + 左上后衬纸，标准「复制到剪贴板」语义。 */
+/** Copy glyph: foreground sheet + top-left backing sheet, standard "copy to clipboard" semantics. */
 export function CopyIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -572,7 +572,7 @@ export function CopyIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 纯感叹号字形（无外圆环）：用于实心彩底角标，只留内部符号。 */
+/** Plain exclamation glyph (no outer ring): for solid colored-background badges, keeping only the inner symbol. */
 export function AlertGlyphIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -592,7 +592,7 @@ export function AlertGlyphIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** git commit 字形：横线上一个实心节点（活动时间线提交事件用）。 */
+/** git commit glyph: a solid node on a horizontal line (for activity timeline commit events). */
 export function CommitIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -613,7 +613,7 @@ export function CommitIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 机器人头像：AutoPilot 启用态。天线 + 头框 + 双眼 + 两侧耳。 */
+/** Robot head: AutoPilot enabled state. Antenna + head frame + two eyes + ears on both sides. */
 export function RobotIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -638,7 +638,7 @@ export function RobotIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 铃铛：设置页「通知」分区图标。钟体 + 顶钮 + 底部摆锤。 */
+/** Bell: the settings page "notifications" section icon. Bell body + top button + bottom clapper. */
 export function BellIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -659,7 +659,7 @@ export function BellIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** CPU / 芯片：设置页「模型」分区图标（LLM 模型）。外框 + 内核 + 四边引脚。 */
+/** CPU / chip: the settings page "model" section icon (LLM model). Outer frame + core + pins on all four sides. */
 export function CpuIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -680,8 +680,8 @@ export function CpuIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 实心四角星（AI 常见 sparkle）：评审建议徽标（手动 / AutoPilot 一视同仁）。四条边向中心内凹，
- *  四个尖角居中对称，SVG 保证字形居中、跨平台一致。 */
+/** Solid four-pointed star (AI's common sparkle): review suggestion badge (manual / AutoPilot treated alike). The four edges curve inward toward the center,
+ *  the four points are centered and symmetric, and the SVG guarantees the glyph is centered and consistent across platforms. */
 export function StarIcon({ size = 11 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -690,7 +690,7 @@ export function StarIcon({ size = 11 }: IconProps) {
   );
 }
 
-/** 机器人头像 + 斜杠：AutoPilot 关闭态。 */
+/** Robot head + slash: AutoPilot disabled state. */
 export function RobotOffIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -716,7 +716,7 @@ export function RobotOffIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 双星火花（sparkles）：AI 自动评审动作。两颗四角星，区别于工具命令的 `/` 触发器 */
+/** Double sparkles: AI auto-review action. Two four-pointed stars, distinct from the tool commands' `/` trigger */
 export function AutoReviewIcon({ size = 14 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -726,7 +726,7 @@ export function AutoReviewIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 双向循环箭头（Lucide refresh-cw-2 风格）：同步状态。与 RetryIcon（单箭头，重试动作）区分语义 */
+/** Bidirectional loop arrows (Lucide refresh-cw-2 style): sync status. Distinct in semantics from RetryIcon (single arrow, retry action) */
 export function SyncIcon({ size = 12 }: IconProps) {
   return (
     <svg
@@ -748,7 +748,7 @@ export function SyncIcon({ size = 12 }: IconProps) {
   );
 }
 
-/** 数据库柱体（Lucide database，viewBox 24）：表示提示缓存命中量（cache_read） */
+/** Database cylinder (Lucide database, viewBox 24): represents prompt cache hit volume (cache_read) */
 export function DatabaseIcon({ size = 12, className }: IconProps) {
   return (
     <svg
@@ -770,7 +770,7 @@ export function DatabaseIcon({ size = 12, className }: IconProps) {
   );
 }
 
-/** 循环箭头（Lucide repeat，viewBox 24）：表示模型交互轮次（agentic 多轮） */
+/** Loop arrow (Lucide repeat, viewBox 24): represents model interaction rounds (agentic multi-turn) */
 export function RepeatIcon({ size = 12, className }: IconProps) {
   return (
     <svg
@@ -793,7 +793,7 @@ export function RepeatIcon({ size = 12, className }: IconProps) {
   );
 }
 
-/** 齿轮（Lucide settings，viewBox 24）：设置按钮 */
+/** Gear (Lucide settings, viewBox 24): settings button */
 export function SettingsIcon({ size = 14 }: IconProps) {
   return (
     <svg
@@ -814,8 +814,8 @@ export function SettingsIcon({ size = 14 }: IconProps) {
 }
 
 /**
- * 面板开关：矩形 + 分隔细条。`side` 决定细条 / 收起态实心块在左（侧栏）还是右（chat 面板）——
- * 原 SidebarIcon 与镜像版 ChatPanelIcon 合并为一个参数化图标。collapsed 时细条侧变实心。
+ * Panel toggle: rectangle + thin divider bar. `side` decides whether the divider / collapsed-state solid block is on the left (sidebar) or right (chat panel) —
+ * the original SidebarIcon and its mirrored ChatPanelIcon merged into one parameterized icon. When collapsed, the divider side becomes solid.
  */
 export function PanelToggleIcon({
   side,
@@ -842,8 +842,8 @@ export function PanelToggleIcon({
 }
 
 /**
- * 完成徽章：大圆环 + 对勾。onboarding 完成步使用。path 带 `onboarding-check-path` class
- * 供 CSS 描边动画（stroke-dashoffset）。默认 76px（viewBox 52）。
+ * Completion badge: large ring + checkmark. Used by the onboarding completion step. The path carries the `onboarding-check-path` class
+ * for the CSS stroke animation (stroke-dashoffset). Defaults to 76px (viewBox 52).
  */
 export function SuccessBadgeIcon({ size = 76 }: IconProps) {
   return (
@@ -861,7 +861,7 @@ export function SuccessBadgeIcon({ size = 76 }: IconProps) {
   );
 }
 
-/** GitHub Octocat 标记（随文字色，用于「关于」链接的 GitHub / Star 入口）。 */
+/** GitHub Octocat mark (follows text color, for the "about" link's GitHub / Star entry). */
 export function GitHubMarkIcon({ size = 14 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
@@ -873,7 +873,7 @@ export function GitHubMarkIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** GitHub issue 字形：空心圆 + 实心圆点。用于「提交反馈 / Issue」入口。 */
+/** GitHub issue glyph: hollow circle + solid dot. For the "submit feedback / Issue" entry. */
 export function IssueIcon({ size = 14 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -883,7 +883,7 @@ export function IssueIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** 历史字形：时钟 + 逆时针回溯箭头。用于「已关闭 / 历史」PR 范围切换。 */
+/** History glyph: clock + counterclockwise rewind arrow. For the "closed / history" PR scope toggle. */
 export function HistoryIcon({ size = 14, className }: IconProps) {
   return (
     <svg
@@ -905,7 +905,7 @@ export function HistoryIcon({ size = 14, className }: IconProps) {
   );
 }
 
-/** 标签 / 发布字形：带孔的 tag。用于「发布记录」入口。 */
+/** Tag / release glyph: a tag with a hole. For the "release history" entry. */
 export function TagIcon({ size = 14 }: IconProps) {
   return (
     <svg

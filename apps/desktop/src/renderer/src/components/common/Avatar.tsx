@@ -3,24 +3,24 @@ import { invoke } from '../../api';
 
 interface AvatarProps {
   connectionId: string;
-  /** 平台用户 slug（Bitbucket 的 user.name 即 slug） */
+  /** Platform user slug (Bitbucket's user.name is the slug) */
   slug: string;
-  /** 给 initials 兜底用；也用作 title / alt */
+  /** Fallback for initials; also used as title / alt */
   displayName: string;
-  /** 头像直链（平台 avatar_url）；有则优先按它拉——GitHub 机器人靠它才取得到。 */
+  /** Direct avatar link (platform avatar_url); if present, prefer fetching by it — GitHub bots are only reachable via it. */
   avatarUrl?: string;
   size?: number;
 }
 
 /**
- * 圆形用户头像。优先用 main 进程拉的平台 avatar（in-memory cache 命中即同步返回），
- * 拉失败 / 加载中 / null 时回退到 initials + hash 色块。
+ * Circular user avatar. Prefers the platform avatar fetched by the main process (returns synchronously on in-memory cache hit),
+ * falling back to initials + hash color block on fetch failure / loading / null.
  */
 export function Avatar({ connectionId, slug, displayName, avatarUrl, size = 22 }: AvatarProps) {
   const [dataUrl, setDataUrl] = useState<string | null>(() => readCached(connectionId, slug));
 
   useEffect(() => {
-    if (dataUrl !== null) return; // 已有缓存或本组件已加载
+    if (dataUrl !== null) return; // already cached or already loaded by this component
     let cancelled = false;
     fetchAvatar(connectionId, slug, avatarUrl).then((url) => {
       if (!cancelled && url) setDataUrl(url);
@@ -28,7 +28,7 @@ export function Avatar({ connectionId, slug, displayName, avatarUrl, size = 22 }
     return () => {
       cancelled = true;
     };
-    //   仅在 (connectionId, slug) 变化时重拉
+    //   re-fetch only when (connectionId, slug) changes
   }, [connectionId, slug, avatarUrl, dataUrl]);
 
   const style = { width: size, height: size, fontSize: Math.round(size * 0.42) };
@@ -58,11 +58,11 @@ export function Avatar({ connectionId, slug, displayName, avatarUrl, size = 22 }
   );
 }
 
-/** "Kyle Wong" → "KW"；中文「张三」→「张」；单字 fallback 首字符大写 */
+/** "Kyle Wong" → "KW"; Chinese「张三」→「张」; single-word fallback uppercases the first character */
 function initialsOf(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return '?';
-  // 含 CJK：取第一个 CJK 字符
+  // Contains CJK: take the first CJK character
   const cjk = /[一-鿿]/.exec(trimmed);
   if (cjk) return cjk[0]!;
   const parts = trimmed.split(/[\s.\-_]+/).filter(Boolean);
@@ -72,7 +72,7 @@ function initialsOf(name: string): string {
   return trimmed.slice(0, 2).toUpperCase();
 }
 
-/** 名字 → 稳定的 HSL 背景色（同名永远同色，对比度足够白字） */
+/** Name → stable HSL background color (same name always same color, enough contrast for white text) */
 function colorFromName(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) {
@@ -82,7 +82,7 @@ function colorFromName(name: string): string {
   return `hsl(${String(hue)}, 45%, 38%)`;
 }
 
-// 模块级缓存：跨组件去重，避免同一作者每个 PrItem 各发一次 IPC
+// Module-level cache: dedup across components, avoid one IPC per PrItem for the same author
 const cache = new Map<string, string | null>();
 const inflight = new Map<string, Promise<string | null>>();
 

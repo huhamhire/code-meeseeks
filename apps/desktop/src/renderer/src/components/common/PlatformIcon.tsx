@@ -1,5 +1,5 @@
-// 代码平台品牌图标。沿用 icons.tsx 的内联 SVG 惯例，但平台 logo 用各自品牌色
-// （而非 currentColor），让首启向导的平台选择列表一眼可辨。viewBox 统一 24。
+// Code platform brand icons. Follows the inline SVG convention of icons.tsx, but platform logos use their own brand colors
+// (rather than currentColor), so the first-launch wizard's platform selection list is instantly distinguishable. viewBox unified at 24.
 
 import type { JSX } from 'react';
 import type { PlatformKind } from '@meebox/shared';
@@ -8,7 +8,7 @@ interface PlatformIconProps {
   size?: number;
 }
 
-/** Bitbucket：蓝色「桶」标记（简化字形，非官方资源） */
+/** Bitbucket: blue "bucket" mark (simplified glyph, not an official asset) */
 export function BitbucketIcon({ size = 24 }: PlatformIconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
@@ -25,9 +25,9 @@ export function BitbucketIcon({ size = 24 }: PlatformIconProps) {
 }
 
 /**
- * GitHub：Octocat 猫头剪影（品牌单色 logo）。随主题切换 fill —— 暗底官方反白 invertocat、
- * 浅底官方近黑（见 _theme.scss 的 --github-logo）。SVG fill **属性**不解析 var()，故经 CSS
- * fill **属性**（style）注入变量。
+ * GitHub: Octocat cat-head silhouette (monochrome brand logo). fill switches with the theme — on dark the official inverted-white invertocat,
+ * on light the official near-black (see --github-logo in _theme.scss). The SVG fill **attribute** does not resolve var(), so the variable is injected
+ * via the CSS fill **property** (style).
  */
 export function GitHubIcon({ size = 24 }: PlatformIconProps) {
   return (
@@ -40,7 +40,7 @@ export function GitHubIcon({ size = 24 }: PlatformIconProps) {
   );
 }
 
-/** GitLab：tanuki 狐狸标记（simple-icons 路径，品牌橙 #FC6D26 一眼可辨） */
+/** GitLab: tanuki fox mark (simple-icons path, brand orange #FC6D26 instantly recognizable) */
 export function GitLabIcon({ size = 24 }: PlatformIconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
@@ -52,12 +52,12 @@ export function GitLabIcon({ size = 24 }: PlatformIconProps) {
   );
 }
 
-// 平台展示顺序的唯一准绳：GitHub → Bitbucket → GitLab，新增平台一律追加在末尾。
-// 设置页下拉、使用文档（docs/guide/01-code-platform.md）等各处展示顺序均以此为准。
+// The single source of truth for platform display order: GitHub → Bitbucket → GitLab, new platforms are always appended at the end.
+// The settings-page dropdown, usage docs (docs/guide/01-code-platform.md), and all other display orders follow this.
 export const PLATFORM_META: ReadonlyArray<{
   kind: PlatformKind;
   label: string;
-  /** i18n key（在消费端用 t() 翻译；含技术性副标题与「即将支持」等状态文案） */
+  /** i18n key (translated with t() on the consumer side; covers the technical subtitle and status text like "coming soon") */
   subKey: string;
   available: boolean;
   Icon: (p: PlatformIconProps) => JSX.Element;

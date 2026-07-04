@@ -1,6 +1,6 @@
 /**
- * 通用开关（switch）：受控布尔输入，无障碍走 role="switch" + aria-checked。点击 / 空格 / 回车切换。
- * 视觉为轨道 + 滑块，开态走 accent 色（样式见 base.scss .switch）。
+ * Generic switch: controlled boolean input, accessibility via role="switch" + aria-checked. Toggles on click / space / enter.
+ * Visually a track + knob, on-state uses accent color (styles in base.scss .switch).
  */
 export function Switch({
   checked,

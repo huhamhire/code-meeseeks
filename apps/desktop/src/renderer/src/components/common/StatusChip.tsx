@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 type ChipTone = 'ok' | 'err';
 
 interface StatusChipProps {
-  /** 渲染元素：默认有 onClick 时为 button、否则 span */
+  /** Render element: defaults to button when onClick is present, otherwise span */
   as?: 'span' | 'button';
-  /** 语义色调 → statusbar-chip-ok / statusbar-chip-err */
+  /** Semantic tone → statusbar-chip-ok / statusbar-chip-err */
   tone?: ChipTone;
-  /** 追加的专属类名（如 statusbar-pragent-chip / statusbar-llm-chip） */
+  /** Appended dedicated class name (e.g. statusbar-pragent-chip / statusbar-llm-chip) */
   className?: string;
   title?: string;
   ariaLabel?: string;
@@ -18,9 +18,9 @@ interface StatusChipProps {
 }
 
 /**
- * 状态栏 chip 通用壳：统一 `statusbar-chip` 基类 + 可选语义色调（ok/err），按是否可点
- * 渲染为 button / span，并透传 title / aria / disabled。各 chip 内部结构（图标 / 文案 /
- * 下拉）作为 children 自管，专属样式经 className 追加。
+ * Generic status-bar chip shell: unified `statusbar-chip` base class + optional semantic tone (ok/err), rendered as
+ * button / span depending on whether it is clickable, passing through title / aria / disabled. Each chip's internal
+ * structure (icon / text / dropdown) is managed as children, with dedicated styles appended via className.
  */
 export function StatusChip({
   as,
