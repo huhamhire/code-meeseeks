@@ -29,7 +29,7 @@ describe('appendAgentNotes', () => {
     ]);
     expect(added).toEqual(['skip pure dependency bumps']);
     const content = await readFile(file, 'utf8');
-    // 插到 AutoPilot 节末尾、Grants 之前，不破坏后续章节。
+    // Inserted at the end of the AutoPilot section, before Grants, without disturbing later sections.
     expect(content).toBe(
       '# Title\n\n## AutoPilot\n- skip branch merges\n- skip pure dependency bumps\n\n## Grants\n- none\n',
     );
@@ -51,7 +51,7 @@ describe('appendAgentNotes', () => {
       { section: '   ', note: 'another finding' },
     ]);
     expect(added).toEqual([]);
-    // 全被丢弃 → 不建文件。
+    // All dropped → no file created.
     await expect(readFile(path.join(dir, 'MEMORY.md'), 'utf8')).rejects.toThrow();
   });
 
@@ -63,7 +63,7 @@ describe('appendAgentNotes', () => {
       { section: '项目约定', note: 'new fact' },
       { section: '其他', note: 'new fact' },
     ]);
-    expect(added).toEqual(['new fact']); // 已存在的 / 批内重复的被跳过（去重只看正文）
+    expect(added).toEqual(['new fact']); // existing / in-batch duplicates are skipped (dedup looks only at the body)
     const content = await readFile(path.join(dir, 'MEMORY.md'), 'utf8');
     expect(content.match(/repo uses g- prefix/g)).toHaveLength(1);
     expect(content.match(/new fact/g)).toHaveLength(1);

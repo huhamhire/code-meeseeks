@@ -3,17 +3,17 @@ import { Step } from '../context.js';
 import type { ReviewStepCtx } from './shared.js';
 
 /**
- * 并行生成 PR 描述（只读 /describe）与代码评审发现（只读 /review）：二者彼此独立、都只读 PR、无先后依赖，
- * 故并发分发（runStaggered 错开起跑避免抢占子进程 spawn / LLM 网络，保序、不改并发语义；实际并发仍受运行
- * 队列 max_concurrency 约束）。展示上合并为**一条**思考行（回到拆步前的单行，不再 describe / review 各占一行）；
- * 工具执行进度 / 计时由各自 run 卡片承载，不为工具补记 tool 步。
+ * Generate the PR description (read-only /describe) and code review findings (read-only /review) in parallel: the two are independent, both read the PR read-only, with no ordering dependency,
+ * so they're dispatched concurrently (runStaggered staggers start to avoid contending on child-process spawn / LLM network, preserves order, doesn't change concurrency semantics; actual concurrency is still bounded by the run
+ * queue's max_concurrency). In the display they merge into **one** thought line (back to the single line before the step split, no longer one line each for describe / review);
+ * tool execution progress / timing is carried by each run card, no extra tool step is recorded for the tools.
  */
 export class DescribeReviewStep extends Step<ReviewStepCtx> {
   readonly name = 'describe-review';
 
   async run(ctx: ReviewStepCtx): Promise<void> {
     ctx.checkAbort();
-    // 一条合并思考行（describe + review）；两个只读工具随后并行执行，结果各自回填 bag 供 judge / summary 用。
+    // One merged thought line (describe + review); the two read-only tools then run in parallel, each writing its result back into bag for judge / summary.
     await ctx.rec.record({ kind: 'plan', thought: ctx.labels.describeReview });
     const [describe, review] = await runStaggered(
       [{ tool: 'describe' as const }, { tool: 'review' as const }],

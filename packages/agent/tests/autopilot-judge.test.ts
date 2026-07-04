@@ -72,10 +72,10 @@ describe('judgeAutopilotBatch', () => {
         },
       ],
     });
-    // 分支合并(提交全 merge)给出明确证据；仅源为主干则只标注背景信号、不暗示跳过。
+    // Branch merge (all commits are merges) gives clear evidence; a mainline-only source is just a background signal, no skip hint.
     expect(user).toContain('all commits are merge commits');
     expect(user).toContain('source is a long-lived / integration branch');
-    // 旧的硬性「prefer skip」措辞不再出现。
+    // The old hard "prefer skip" wording no longer appears.
     expect(user).not.toContain('prefer skip');
   });
 
@@ -98,7 +98,7 @@ describe('judgeAutopilotBatch', () => {
     });
     const byId = Object.fromEntries(r.decisions.map((d) => [d.prLocalId, d]));
     expect(byId.a?.plan).toEqual({ steps: ['describe-review', 'summary'] });
-    expect(byId.b?.plan).toBeUndefined(); // summary 缺前置 describe-review → 非法回落
-    expect(byId.c?.plan).toBeUndefined(); // 省略 → 默认全集
+    expect(byId.b?.plan).toBeUndefined(); // summary missing prerequisite describe-review → invalid fallback
+    expect(byId.c?.plan).toBeUndefined(); // omitted → default full set
   });
 });

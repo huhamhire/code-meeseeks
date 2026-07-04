@@ -12,9 +12,9 @@ import {
 } from './shared.js';
 
 /**
- * 自由规划（ReAct）的「单步」：拼当轮 prompt → chat → 解析动作 → 红线硬校验 → 并行派发工具 / 收尾。abort 在
- * 思考前后各检一次（思考阶段也能即时停）；中途输入并入 progress、计划随轮维护与重排。驱动（planner）反复跑
- * 本步直至 final / 步数上限。无实例状态（运行态全在 ctx），以单例 planCycleStep 入驱动。
+ * The "single step" of free planning (ReAct): build this round's prompt → chat → parse action → hard red-line validation → parallel tool dispatch / finalization. abort is
+ * checked once before and once after thinking (can stop instantly even during the thinking phase); mid-run input is merged into progress, the plan is maintained and reordered each round. The driver (planner) runs
+ * this step repeatedly until final / step cap. No instance state (all runtime state is in ctx); enters the driver as the singleton planCycleStep.
  */
 export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
   readonly name = 'plan-cycle';
@@ -23,8 +23,8 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
     const { deps, input, rec, system, convo, labels, history, memories } = ctx;
     if (deps.signal?.aborted) return { kind: 'aborted' };
 
-    // 中途输入转向：把运行期间排队的用户新消息并入 progress，让本轮 ReAct 据「最新指令 + 当前进度」重排
-    // 下一步。消息已由实现方在取出时持久化进会话，此处只注入提示、不再落盘。
+    // Mid-run input redirection: merge new user messages queued during the run into progress so this round's ReAct reorders the
+    // next step per "latest instruction + current progress". Messages were already persisted into the session by the implementer when drained; here we only inject the prompt, not persist.
     const pending = (await deps.drainPendingInput?.()) ?? [];
     for (const m of pending) {
       history.push(`New user message (latest instruction — reconcile with the plan and progress): ${m}`);
@@ -47,17 +47,17 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
       .filter(Boolean)
       .join('\n');
 
-    // 计本轮 LLM 推理耗时（单步思考时长，类 Claude Code 的「Thought for Ns」），系到该决策步上。
+    // Measure this round's LLM reasoning time (single-step thinking duration, like Claude Code's "Thought for Ns"), attached to this decision step.
     const thinkStart = Date.now();
     const r = await deps.chat({ system, user });
     const thinkMs = Date.now() - thinkStart;
-    // 思考刚结束就发现已被停止 → 立即收尾，不再据此动作分发工具（停止在思考阶段也即时生效）。
+    // If found stopped right after thinking → finalize immediately, not dispatching tools per this action (stop takes effect instantly even during the thinking phase).
     if (deps.signal?.aborted) return { kind: 'aborted' };
     rec.track(r.usage);
     const action = extractJson<PlannerAction>(r.text);
-    // 累加本动作携带的记忆（任何动作都可附 remember）。
+    // Accumulate the memory carried by this action (any action may attach remember).
     accumulateRemember(action?.remember, memories);
-    // 计划更新：模型给出 plan 即归一、更新当前计划并持久化 + 广播（省略 plan = 沿用上一轮）。
+    // Plan update: when the model gives a plan, normalize it, update the current plan, and persist + broadcast (omitted plan = keep the previous round's).
     if (action?.plan !== undefined) {
       ctx.plan = normalizePlan(action.plan);
       await deps.recordPlan?.(ctx.plan);
@@ -65,7 +65,7 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
 
     const hasCalls = Boolean(action?.tool) || Boolean(action?.tools?.length);
 
-    // 无法解析 / 既无 tool(s) 又无 final → 当作收尾。兜底从原始文本打捞散文，绝不把原始 JSON 动作丢给用户。
+    // Unparseable / neither tool(s) nor final → treat as finalization. Fall back to salvaging prose from the raw text, never dumping the raw JSON action to the user.
     if (!action || (!hasCalls && !action.final)) {
       const finalText = action?.final ?? salvageProse(r.text);
       await rec.record({ kind: 'plan', thought: action?.thought, result: finalText, thinkMs, usage: r.usage });
@@ -73,22 +73,22 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
     }
 
     if (action.final && !hasCalls) {
-      // 剥掉模型误并入 final 末尾的判定 JSON（recommendation 走独立字段渲染为判定徽标）。
+      // Strip the judge JSON the model mistakenly merged into the end of final (recommendation goes through a separate field and renders as a judge badge).
       const finalText = stripTrailingJson(action.final);
       await rec.record({ kind: 'plan', thought: action.thought, result: finalText, thinkMs, usage: r.usage });
       return { kind: 'final', finalText, recommendation: parseRecommendation(action.recommendation) };
     }
 
-    // 归一为待执行工具列表：tools 多选（并行、只读）优先——元素可为工具名或 {tool, question}（多个
-    // 带问题的 /ask 也能一轮并行派发）；否则单 tool（可带 question）。
+    // Normalize into the tool list to execute: tools multi-select (parallel, read-only) takes priority — elements can be a tool name or {tool, question} (multiple
+    // /ask with questions can also be dispatched in parallel in one round); otherwise a single tool (may carry a question).
     const requested: Array<{ tool: string; question?: string }> = action.tools?.length
       ? action.tools
           .slice(0, MAX_PARALLEL_TOOLS)
           .map((tl) => (typeof tl === 'string' ? { tool: tl } : { tool: tl.tool ?? '', question: tl.question }))
       : [{ tool: action.tool ?? '', question: action.question }];
 
-    // 红线硬校验逐个把关：未授权 / 未知即拒并回喂；/ask 另按配置的追问上限封顶（连续 agentic 探索成本高）；
-    // 允许的留待并行执行。
+    // Hard red-line validation gates each one: unauthorized / unknown is rejected and fed back; /ask is additionally capped by the configured follow-up limit (consecutive agentic exploration is costly);
+    // allowed ones are held for parallel execution.
     const isAsk = (tool: string): boolean => tool.replace(/^\//, '') === 'ask';
     const allowed: Array<{ tool: string; question?: string }> = [];
     let asksAccepted = 0;
@@ -108,7 +108,7 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
         await reject(err instanceof Error ? err.message : String(err));
         continue;
       }
-      // /ask 预算：达上限即拒并回喂，促使模型据现有上下文收尾或改用只读工具（本会话累计计数，跨轮生效）。
+      // /ask budget: at the limit, reject and feed back, prompting the model to finalize with existing context or switch to read-only tools (cumulative count per session, effective across rounds).
       if (isAsk(c.tool) && ctx.asksUsed + asksAccepted >= ctx.maxAsks) {
         await reject(
           `Follow-up /ask budget exhausted (${ctx.maxAsks}). Do not call /ask again — answer with the context you already have, or use read-only file tools.`,
@@ -118,10 +118,10 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
       allowed.push(c);
       if (isAsk(c.tool)) asksAccepted++;
     }
-    if (!allowed.length) return { kind: 'continue' }; // 全被拒 → 回喂后下一轮重选
+    if (!allowed.length) return { kind: 'continue' }; // all rejected → reselect next round after feedback
 
-    // 类 Claude Code：先把本轮思考与所选步骤作为一步流式出去（思考是工具选择的前因），随后才执行工具。
-    // 工具执行的进度 / 计时由 run 卡片承载，这里不再为每个工具补记 tool 步，避免决策被堆到结果之后。
+    // Like Claude Code: first stream out this round's thinking and the selected steps as one step (thinking is the antecedent of tool selection), only then execute tools.
+    // Tool execution progress / timing is carried by the run card; we no longer record an extra tool step for each tool here, avoiding decisions being piled after results.
     await rec.record({
       kind: 'plan',
       thought: action.thought,
@@ -130,17 +130,17 @@ export class PlanCycleStep extends Step<PlanStepCtx, PlanCycleOutcome> {
       usage: r.usage,
     });
 
-    // 并行分发允许的工具（多选时同时跑，实际并发受运行队列约束）；相互错开 100~200ms 起跑，避免同一瞬间齐发。
+    // Dispatch the allowed tools in parallel (multi-select runs simultaneously, actual concurrency constrained by the run queue); stagger start by 100~200ms to avoid firing all at the same instant.
     const ran = await runStaggered(allowed, async (c) => ({ c, res: await deps.runTool(c) }));
     for (const { c, res } of ran) {
       rec.track(res.usage);
       history.push(`Called ${c.tool}${c.question ? ` ("${c.question}")` : ''} → ${clamp(res.text, 600)}`);
     }
-    // 累加本轮已发起的 /ask 计数（跨轮生效，达 maxAsks 后新的 /ask 会被上面的预算闸拒绝）。
+    // Accumulate the /ask count initiated this round (effective across rounds; after reaching maxAsks, new /ask are rejected by the budget gate above).
     ctx.asksUsed += asksAccepted;
     return { kind: 'continue' };
   }
 }
 
-/** 规划单步循环的单例（无实例状态）；驱动反复 `planCycleStep.run(ctx)`。 */
+/** Singleton for the planning single-step loop (no instance state); the driver runs `planCycleStep.run(ctx)` repeatedly. */
 export const planCycleStep = new PlanCycleStep();

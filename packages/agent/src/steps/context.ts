@@ -1,12 +1,12 @@
 import type { AgentStep, TokenUsage } from '@meebox/shared';
 
 /**
- * Agent 步骤抽象的共享基座（见 docs/arch/02-agent/01-agent.md）：把此前 planner（ReAct 循环）与 orchestrator
- * （评审微流程）各自重复的「记一步 + 累计用量」收口为可复用的 StepRecorder，并给出统一的 StepHandler
- * 形状——每条流程即一组按序执行的步骤（评审）或单步循环（规划），新流程 = 新的步骤组合，符合复用/扩展路线。
+ * Shared foundation for the agent step abstraction (see docs/arch/02-agent/01-agent.md): converges the "record one step + accumulate usage" that
+ * planner (ReAct loop) and orchestrator (review microflow) each previously duplicated into a reusable StepRecorder, and provides a unified StepHandler
+ * shape — each flow is a set of steps executed in order (review) or a single-step loop (planning); a new flow = a new combination of steps, in line with the reuse/extension path.
  */
 
-/** 累加一笔 token 用量（容缺省；calls 缺省按 1 计）。各编排 / 步骤共用。 */
+/** Accumulate one token usage entry (tolerates omission; calls defaults to 1). Shared across orchestrations / steps. */
 export function addUsage(acc: TokenUsage, u?: TokenUsage): TokenUsage {
   if (!u) return acc;
   return {
@@ -18,8 +18,8 @@ export function addUsage(acc: TokenUsage, u?: TokenUsage): TokenUsage {
 }
 
 /**
- * 步骤记录器：收口「记一步」与「累计用量」。`record()` 给步骤补时间戳、入列并经 onStep 流式推送；
- * `track()` 累加用量；`steps` / `usage` 为累计读取。各流程驱动与步骤共享同一实例。
+ * Step recorder: converges "record one step" and "accumulate usage". `record()` stamps the step with a timestamp, enqueues it, and streams it out via onStep;
+ * `track()` accumulates usage; `steps` / `usage` are cumulative reads. Each flow driver and its steps share the same instance.
  */
 export interface StepRecorder {
   readonly steps: AgentStep[];
@@ -48,10 +48,10 @@ export function createStepRecorder(onStep?: (step: AgentStep) => void | Promise<
 }
 
 /**
- * 可插拔步骤的抽象基类：子类实现 `run(ctx)`，对给定运行上下文 `Ctx` 执行一段编排逻辑（记步、调工具 / LLM、
- * 写回累加器），返回 `R`。评审微流程是一组 `Step<Ctx>`（R=void）子类的有序「注册表」、顺序跑；规划是单个
- * `Step<Ctx, PlanCycleOutcome>` 子类、被驱动反复跑直至收尾。各子类无实例状态（运行态全在 ctx），故以
- * 单例入注册表。`name` 便于调试 / 注册表可读。
+ * Abstract base class for pluggable steps: subclasses implement `run(ctx)`, executing a piece of orchestration logic (record step, call tool / LLM,
+ * write back to accumulators) against a given run context `Ctx`, returning `R`. The review microflow is an ordered "registry" of `Step<Ctx>` (R=void) subclasses, run in order; planning is a single
+ * `Step<Ctx, PlanCycleOutcome>` subclass, driven repeatedly until finalization. Each subclass has no instance state (all runtime state is in ctx), so they enter the registry as
+ * singletons. `name` aids debugging / registry readability.
  */
 export abstract class Step<Ctx, R = void> {
   abstract readonly name: string;

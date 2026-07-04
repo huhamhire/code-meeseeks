@@ -7,41 +7,41 @@ import { CACHE_BREAK } from './constants.js';
 import type { AgentContext } from './types.js';
 
 /**
- * 提示词组装域（见 docs/arch/02-agent/01-agent.md「提示词模版」「上下文注入」）：静态 user-turn 模板（PROMPT_TEMPLATES）
- * 与动态 system 上下文装配（assembleSystemContext）都属「构造发给模型的 prompt」，收口于此。占位符填充 / 截断
- * 等域无关字符串工具见 utils。
+ * Prompt assembly domain (see docs/arch/02-agent/01-agent.md "prompt templates" "context injection"): both the static user-turn templates (PROMPT_TEMPLATES)
+ * and the dynamic system context assembly (assembleSystemContext) belong to "constructing the prompt sent to the model" and converge here. Domain-agnostic string tools such as
+ * placeholder filling / truncation are in utils.
  */
 
-// ── 静态 user-turn 模板 ──
+// ── Static user-turn templates ──
 
 /**
- * 编排器提示词模板：静态正文外置到 `resources/prompts/` 的 `.md`，构建期经 Vite `?raw` 内联。动态值用
- * `{{name}}` 占位符、由 utils 的 fillTemplate 注入；条件拼接与大块动态内容（describe/review 文本、PR 列表等）
- * 仍由各调用方在 TS 侧组装。
+ * Orchestrator prompt templates: static bodies are externalized into `.md` under `resources/prompts/`, inlined at build time via Vite `?raw`. Dynamic values use
+ * `{{name}}` placeholders, injected by utils's fillTemplate; conditional concatenation and large dynamic content (describe/review text, PR list, etc.)
+ * are still assembled on the TS side by each caller.
  */
 export const PROMPT_TEMPLATES = {
-  /** 规划 ReAct 协议（动作格式 / 评审收尾骨架 / 记忆规则 / 计划 / 会话范围）。占位：overview/findings/suggestions。 */
+  /** Planning ReAct protocol (action format / review summary skeleton / memory rules / plan / session scope). Placeholders: overview/findings/suggestions. */
   protocol,
-  /** 追问判读 user 指令（占位：maxAsks/language）；describe/review 正文由调用方追加。 */
+  /** Follow-up judge user instruction (placeholders: maxAsks/language); describe/review body appended by the caller. */
   judge,
-  /** 收尾总结 user 指令 + 三段骨架（占位：maxChars/overview/findings/suggestions）；正文由调用方追加。 */
+  /** Summary user instruction + three-section skeleton (placeholders: maxChars/overview/findings/suggestions); body appended by the caller. */
   summary,
-  /** AutoPilot 批量判定 system 基底（无占位）；项目规则由调用方按需追加。 */
+  /** AutoPilot batch-judge system base (no placeholders); project rules appended by the caller as needed. */
   autopilotJudge,
 } as const;
 
-// ── 动态 system 上下文装配 ──
+// ── Dynamic system context assembly ──
 
-/** 当前 PR 的最小元数据（装配进上下文）。 */
+/** Minimal metadata for the current PR (assembled into the context). */
 export interface AssemblePrMeta {
   title: string;
   description?: string;
   targetBranch: string;
-  /** 变更概况，如「12 files, +340/-58」。 */
+  /** Change overview, e.g. "12 files, +340/-58". */
   changeSummary?: string;
 }
 
-/** 当前会话快照：让 Agent 续上未完成的规划。 */
+/** Current session snapshot: lets the agent resume unfinished planning. */
 export interface AssembleSessionSnapshot {
   todo: AgentTodoItem[];
   progressNote?: string;
@@ -51,9 +51,9 @@ export interface AssembleInput {
   context: AgentContext;
   pr: AssemblePrMeta;
   toolCatalog: ToolCatalogEntry[];
-  /** 命中规则的已拼接正文（多条经 combineRuleInstructions 拼成、含 Ruleset 分段）；无命中传空 / null。 */
+  /** Concatenated body of matched rules (multiple joined via combineRuleInstructions, incl. Ruleset sections); pass empty / null when nothing matched. */
   matchedRuleInstructions?: string | null;
-  /** 输出 / 记忆写入语言（解析后的 locale code；空 = 默认 en-US，见「语言行为指令」）。 */
+  /** Output / memory-write language (resolved locale code; empty = default en-US, see "language behavior instruction"). */
   language?: string;
   session?: AssembleSessionSnapshot;
 }
@@ -104,10 +104,10 @@ function renderLanguage(language: string | undefined): string {
 }
 
 /**
- * 现读现装配：按「上下文注入」固定次序拼接系统上下文，并按缓存友好分两段：
- * - 全局稳定前缀（跨 PR/运行一致，置最前供 1h 缓存）：SOUL → AGENTS → 工具目录 → MEMORY → USER。
- * - PR/运行相关尾部（每次不同，置最后）：命中规则 → PR 元数据 → 会话快照 → 语言行为指令。
- * 两段间插 CACHE_BREAK；任一段为空则不插标记。空段跳过。
+ * Assemble on the fly: concatenate the system context in the fixed "context injection" order, split into two cache-friendly segments:
+ * - Globally stable prefix (consistent across PRs/runs, placed first for 1h caching): SOUL → AGENTS → tool catalog → MEMORY → USER.
+ * - PR/run-related tail (differs each time, placed last): matched rules → PR metadata → session snapshot → language behavior instruction.
+ * Insert CACHE_BREAK between the two segments; if either segment is empty, do not insert the marker. Skip empty segments.
  */
 export function assembleSystemContext(input: AssembleInput): string {
   const { context, pr, toolCatalog, matchedRuleInstructions, language, session } = input;

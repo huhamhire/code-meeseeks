@@ -1,9 +1,11 @@
 import { STAGGER_MIN_MS, STAGGER_SPAN_MS } from '../constants.js';
 
 /**
- * 把并发分发的工具调用相互错开一个**累计的 100~200ms 随机延迟**：首个立即发出，其余各在前一个
- * 基础上再加 100~200ms 起跑，避免不同工具在同一瞬间齐发、抢占子进程 spawn / LLM 网络。
- * 返回顺序与入参一致（Promise.all 保序），不改变并发语义、只错开起跑时刻。延迟参数见 constants.ts。
+ * Stagger concurrently dispatched tool calls by a **cumulative 100~200ms random delay**: the first fires
+ * immediately, each of the rest starts 100~200ms after the previous, avoiding different tools firing at the
+ * same instant and contending for child-process spawn / LLM network.
+ * Return order matches the input (Promise.all preserves order); this doesn't change concurrency semantics, only
+ * staggers the start times. Delay parameters see constants.ts.
  */
 
 function sleep(ms: number): Promise<void> {

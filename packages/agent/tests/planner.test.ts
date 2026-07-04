@@ -8,7 +8,7 @@ const context: AgentContext = {
   rules: [],
 };
 const pr = { title: 'T', targetBranch: 'main' };
-const catalog = buildToolCatalog(); // read 可用、修改类禁用
+const catalog = buildToolCatalog(); // read available, mutating tools disabled
 
 function makeDeps(
   chatReplies: string[],
@@ -43,7 +43,7 @@ describe('runPlanningAgent', () => {
     });
     expect(toolCalls.map((c) => c.tool)).toEqual(['/review']);
     expect(r.finalText).toBe('LGTM');
-    // 类 Claude Code：每回合一条思考步（plan）承载本轮工具选择；工具执行由 run 卡片代表、不再补记 tool 步。
+    // Claude Code style: one thinking step (plan) per turn carries this turn's tool selection; tool execution is represented by run cards, no extra tool step.
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
     expect(r.steps[0]?.toolCall?.tool).toBe('/review');
     expect(r.tokenUsage.totalTokens).toBe(20); // 2 chat(5) + 1 tool(10)
@@ -61,7 +61,7 @@ describe('runPlanningAgent', () => {
       userRequest: 'summary and review',
     });
     expect(toolCalls.map((c) => c.tool)).toEqual(['/describe', '/review']);
-    // 一条思考步（plan，承载并行所选工具）+ 收尾 plan；工具执行由 run 卡片代表。
+    // One thinking step (plan, carrying the parallel-selected tools) + summary plan; tool execution is represented by run cards.
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
     expect(r.steps[0]?.toolCall?.tool).toBe('/describe + /review');
     expect(r.finalText).toBe('done');
@@ -82,7 +82,7 @@ describe('runPlanningAgent', () => {
       userRequest: 'explore deeply',
       maxFollowupAsks: 2,
     });
-    // 前两次 /ask 执行；第三次超预算被拒（不进 runTool）；/review 不受 /ask 预算约束仍可执行。
+    // First two /ask run; the third is over budget and refused (never reaches runTool); /review is not bound by the /ask budget and still runs.
     expect(toolCalls.map((c) => c.tool)).toEqual(['/ask', '/ask', '/review']);
     expect(r.finalText).toBe('answer');
   });
@@ -95,11 +95,11 @@ describe('runPlanningAgent', () => {
     const r = await runPlanningAgent(deps, {
       context,
       pr,
-      toolCatalog: catalog, // /approve 未授权
+      toolCatalog: catalog, // /approve not granted
       userRequest: 'x',
     });
-    expect(toolCalls.map((c) => c.tool)).toEqual(['/review']); // 仅允许的被分发
-    expect(r.steps.some((s) => s.kind === 'judge')).toBe(true); // /approve 被拒记录
+    expect(toolCalls.map((c) => c.tool)).toEqual(['/review']); // only the allowed one dispatched
+    expect(r.steps.some((s) => s.kind === 'judge')).toBe(true); // /approve refusal recorded
   });
 
   it('caps parallel tool selection at 3', async () => {
@@ -108,7 +108,7 @@ describe('runPlanningAgent', () => {
       '{"final":"ok"}',
     ]);
     await runPlanningAgent(deps, { context, pr, toolCatalog: catalog, userRequest: 'x' });
-    expect(toolCalls).toHaveLength(3); // 4 选 → 截断为 3
+    expect(toolCalls).toHaveLength(3); // 4 selected → truncated to 3
   });
 
   it('refuses ungranted mutating tools (red line) and lets the agent re-plan', async () => {
@@ -172,7 +172,7 @@ describe('runPlanningAgent', () => {
       userRequest: 'x',
     });
     expect(r.memories.user).toEqual([{ section: '评审偏好', note: '称呼: Kyle' }]);
-    expect(r.memories.memory).toEqual([]); // 纯字符串无法归类 → 丢弃
+    expect(r.memories.memory).toEqual([]); // a plain string can't be categorized → dropped
     expect(r.memories.agents).toEqual([{ section: 'AutoPilot', note: 'check tenant mapping' }]);
   });
 
