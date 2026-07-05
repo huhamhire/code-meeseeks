@@ -1,2 +1,2 @@
-"""本机 CLI provider：把评审请求转交本机已安装并授权的命令行工具代为调用模型，绕过 litellm。
-各命令的差异（argv / 输出解析 / 需剥离的计费 env）集中在 specs.py，按命令名取用。"""
+"""Local CLI provider: delegate review requests to a locally installed and authorized command-line tool to invoke the model on our behalf, bypassing litellm.
+Per-command differences (argv / output parsing / billing env to strip) are centralized in specs.py, looked up by command name."""

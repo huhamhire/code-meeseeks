@@ -2,8 +2,8 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 
-// Workspace 内部包源码是 .ts，Node 无法直接 import；让 Vite 把它们 bundle 进主进程/preload，
-// 外部第三方依赖（electron / pino / yaml / zod ...）继续 externalize 让 Node 在运行时解析。
+// Workspace internal packages are .ts source that Node cannot import directly; let Vite bundle them into main/preload,
+// while external third-party deps (electron / pino / yaml / zod ...) stay externalized for Node to resolve at runtime.
 const internalPackages = [
   '@meebox/shared',
   '@meebox/ipc',
@@ -40,7 +40,7 @@ export default defineConfig({
   },
   renderer: {
     root: resolve('src/renderer'),
-    // 渲染层引用仓库根 assets/（品牌图标等单一来源，避免拷贝重复二进制）
+    // Renderer references the repo root assets/ (single source for brand icons etc., avoiding duplicate binary copies)
     resolve: {
       alias: { '@assets': resolve('../../assets') },
     },

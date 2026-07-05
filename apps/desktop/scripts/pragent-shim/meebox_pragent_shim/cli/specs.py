@@ -1,28 +1,28 @@
-"""已适配的本机 CLI 命令规格表：argv flags（prompt 一律走 stdin）+ 输出解析器 + 需剥离的
-计费 env。新增命令在此登记一套即可；renderer 侧白名单校验须同步（见 LlmProfileForm.validateProfile）。"""
+"""Spec table for adapted local CLI commands: argv flags (the prompt always goes via stdin) + output parser + billing env to strip.
+Registering one entry here is enough for a new command; the renderer-side whitelist validation must stay in sync (see LlmProfileForm.validateProfile)."""
 from .parsers import _parse_claude_output, _parse_codex_output
 
-# `low_effort_flags`：低算力档要追加的 argv（仅 Agent 编排通道经 MEEBOX_CLI_REASONING 开启，
-# 见 install.py）。含尾部 `-`（stdin）的命令会把这些 flags 插到 `-` 之前，保持 `-` 在末位。
+# `low_effort_flags`: argv to append for the low-effort tier (only enabled by the Agent orchestration channel via MEEBOX_CLI_REASONING,
+# see install.py). Commands with a trailing `-` (stdin) insert these flags before the `-`, keeping `-` last.
 _CLI_SPECS = {
-    # claude：-p 单轮非交互 + JSON（一段含结果与 usage）；默认不传 --model，用本机默认模型/登录态。
-    # 低算力档：--model haiku（最快最省，适合编排通道的路由 / 判读 / 收尾 / 对话），与 /review 走默认
-    # 模型形成差异化；haiku 别名自动解析到当前账户可用的最新 haiku。
+    # claude: -p single-round non-interactive + JSON (one segment containing the result and usage); by default does not pass --model, using the local default model / login state.
+    # Low-effort tier: --model haiku (fastest and cheapest, suited to the orchestration channel's routing / interpretation / wrap-up / conversation), differentiated from /review which uses the default
+    # model; the haiku alias automatically resolves to the latest haiku available to the current account.
     "claude": {
         "flags": ["-p", "--output-format", "json"],
         "low_effort_flags": ["--model", "haiku"],
         "parser": _parse_claude_output,
         "strip_env": ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
     },
-    # codex：exec 非交互 + --json（JSONL 事件流）；末位 `-` 让 stdin 作完整 prompt；
-    # --skip-git-repo-check 容许临时目录运行，--sandbox read-only 只读不改文件。
-    # 默认禁用 web_search / image_gen：评审与编排在只读临时目录里跑，这两个工具用不到，
-    # 关掉既收敛工具面、又省 ~3K tokens（工具定义不再随每次请求下发）。键值：
-    #   web_search 是字符串枚举（disabled / cached / live），用 `-c web_search=disabled`；
-    #   image_gen 是 feature flag，用 `-c features.image_generation=false`（等价 --disable image_generation）。
-    # 低算力档：-c model_reasoning_effort=low（codex 默认推理较重，编排通道无需，调低提速）。
-    # 不用 minimal：gpt-5.x-codex 不支持 minimal（仅 none/low/medium/high/xhigh，传 minimal 报 400），
-    # 且 minimal 还与 web_search / image_gen 互斥；low 普遍受支持、与工具兼容，作低算力档更稳。
+    # codex: exec non-interactive + --json (JSONL event stream); the trailing `-` makes stdin the full prompt;
+    # --skip-git-repo-check allows running in a temp directory, --sandbox read-only is read-only and does not modify files.
+    # Disable web_search / image_gen by default: review and orchestration run in a read-only temp directory where these two tools are unused,
+    # turning them off both narrows the tool surface and saves ~3K tokens (tool definitions are no longer sent with each request). Keys:
+    #   web_search is a string enum (disabled / cached / live), use `-c web_search=disabled`;
+    #   image_gen is a feature flag, use `-c features.image_generation=false` (equivalent to --disable image_generation).
+    # Low-effort tier: -c model_reasoning_effort=low (codex reasons heavily by default, the orchestration channel does not need it, lowering it speeds things up).
+    # Not using minimal: gpt-5.x-codex does not support minimal (only none/low/medium/high/xhigh, passing minimal returns a 400),
+    # and minimal is also mutually exclusive with web_search / image_gen; low is widely supported and tool-compatible, making it more reliable for the low-effort tier.
     "codex": {
         "flags": [
             "exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only",

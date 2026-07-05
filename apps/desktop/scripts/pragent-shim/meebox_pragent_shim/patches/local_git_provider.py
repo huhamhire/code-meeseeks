@@ -1,18 +1,18 @@
-"""LocalGitProvider 补丁（受版本守卫）：二进制安全 get_diff_files + get_line_link anchor。"""
+"""LocalGitProvider patch (version-guarded): binary-safe get_diff_files + get_line_link anchor."""
 from ..runtime import _EXPECTED_PRAGENT_VERSION, _pragent_version, _warn
 
 
 def patch(module) -> None:
-    """LocalGitProvider.get_diff_files 对每个 diff 文件无脑 .decode('utf-8')，遇到二进制
-    文件（图片 / 编译产物 / UTF-16 等，如 0xff 开头）抛 UnicodeDecodeError 崩掉整个 review。
-    换成二进制安全版：解码失败的文件跳过（review 不处理二进制），其余逻辑与上游一致。"""
-    # 版本守卫：只对 pin 的 pr-agent 版本打补丁；不符则整组跳过（含 get_line_link）。
+    """LocalGitProvider.get_diff_files blindly .decode('utf-8') on every diff file, and on a binary
+    file (images / build artifacts / UTF-16 etc., e.g. starting with 0xff) throws UnicodeDecodeError, crashing the whole review.
+    Replace with a binary-safe version: files that fail to decode are skipped (review doesn't handle binaries), the rest of the logic identical to upstream."""
+    # version guard: only patch the pinned pr-agent version; on mismatch skip the whole group (including get_line_link).
     installed = _pragent_version()
     if installed != _EXPECTED_PRAGENT_VERSION:
         _warn(
-            f"pr-agent {installed} 与 meebox 补丁适配的 {_EXPECTED_PRAGENT_VERSION} 不符，"
-            "已跳过补丁（/review 行号定位、二进制安全 diff 失效）。如为有意升级，请同步 "
-            "runtime.py 的 _EXPECTED_PRAGENT_VERSION + pragent-runtime.json 并重新验证。"
+            f"pr-agent {installed} does not match the {_EXPECTED_PRAGENT_VERSION} that the meebox patch is adapted for; "
+            "patches skipped (/review line-number anchoring and binary-safe diff disabled). If this is an intentional upgrade, sync "
+            "runtime.py's _EXPECTED_PRAGENT_VERSION + pragent-runtime.json and re-verify."
         )
         return
     from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
@@ -38,7 +38,7 @@ def patch(module) -> None:
                 )
                 patch_str = diff_item.diff.decode("utf-8")
             except (UnicodeDecodeError, ValueError):
-                # 二进制文件无法 utf-8 解码 → 跳过该文件
+                # binary file can't be utf-8 decoded → skip this file
                 continue
             edit_type = EDIT_TYPE.MODIFIED
             if diff_item.new_file:
@@ -52,10 +52,10 @@ def patch(module) -> None:
                     original_file_content_str,
                     new_file_content_str,
                     patch_str,
-                    # 被删除文件 b_path 为 None → FilePatchInfo.filename=None，下游
-                    # set_file_languages / extract_relevant_lines_str 的 filename.rsplit/strip
-                    # 会崩，且一崩会中断整次 review 的行号片段抽取（连未删文件的 finding 也丢
-                    # 代码片段）。回退用 a_path 保证 filename 永不为 None。
+                    # a deleted file's b_path is None → FilePatchInfo.filename=None, and downstream
+                    # set_file_languages / extract_relevant_lines_str's filename.rsplit/strip
+                    # would crash, and one crash interrupts the whole review's line-snippet extraction (even findings for non-deleted files lose
+                    # code snippets). Fall back to a_path to guarantee filename is never None.
                     diff_item.b_path or diff_item.a_path,
                     edit_type=edit_type,
                     old_filename=None
@@ -68,23 +68,23 @@ def patch(module) -> None:
 
     module.LocalGitProvider.get_diff_files = get_diff_files
 
-    # _prepare_repo: 上游在 repo.is_dirty() 时抛「repository is not in a clean state」。我们对 CLI 模式
-    # /ask 的 worktree 会按需净化——截断仓库自带的 agent 指令文件（CLAUDE.md / AGENTS.md / .cursor 规则
-    # 等，防 CLI 子进程自动加载污染回答）；若这些文件被仓库纳入版本管理，净化即让工作区变「脏」，触发该守卫
-    # → 整个 /ask 在取 git provider 阶段就崩、不写 review.md。而 diff 取自分支提交（head.commit vs
-    # merge-base，见 get_diff_files），与工作区是否脏无关，故脏检查对这套「一次性受控 worktree」是误报。
-    # 只保留必需的「目标分支存在」校验，去掉脏检查。
+    # _prepare_repo: upstream throws "repository is not in a clean state" when repo.is_dirty(). For CLI-mode
+    # /ask worktrees we sanitize as needed — truncating the repo's own agent instruction files (CLAUDE.md / AGENTS.md / .cursor rules
+    # etc., to prevent the CLI subprocess from auto-loading and polluting the answer); if these files are tracked by the repo, sanitizing makes the working tree "dirty", tripping this guard
+    # → the whole /ask crashes at the git-provider acquisition stage, never writing review.md. But the diff comes from branch commits (head.commit vs
+    # merge-base, see get_diff_files), independent of whether the working tree is dirty, so the dirty check is a false positive for this "one-shot controlled worktree" setup.
+    # Keep only the required "target branch exists" check, drop the dirty check.
     def _prepare_repo(self):
         if self.target_branch_name not in self.repo.heads:
             raise KeyError(f"Branch: {self.target_branch_name} does not exist")
 
     module.LocalGitProvider._prepare_repo = _prepare_repo
 
-    # get_line_link: 基类默认 `return ''`，LocalGitProvider 未实现 → /review 的
-    # key_issues 渲染（convert_to_markdown_v2）走"无 link + 非 GFM"分支，把
-    # relevant_file/start_line/end_line 抹掉（见 ROADMAP M5 anchor 根因）。补成
-    # meebox:///<url-encoded-file>#L<s>-L<e>，使其走 [**header**](link) 分支，
-    # parse-output 据链接取结构化 anchor（与真实 provider 同源，不依赖模型自报 marker）。
+    # get_line_link: the base class defaults to `return ''`, and LocalGitProvider doesn't implement it → /review's
+    # key_issues rendering (convert_to_markdown_v2) takes the "no link + non-GFM" branch, dropping
+    # relevant_file/start_line/end_line (see ROADMAP M5 anchor root cause). Fill in as
+    # meebox:///<url-encoded-file>#L<s>-L<e>, so it takes the [**header**](link) branch,
+    # and parse-output derives the structured anchor from the link (same source as real providers, not dependent on the model self-reporting a marker).
     from urllib.parse import quote
 
     def get_line_link(self, relevant_file, relevant_line_start, relevant_line_end=None):
@@ -99,11 +99,11 @@ def patch(module) -> None:
 
     module.LocalGitProvider.get_line_link = get_line_link
 
-    # 统一启用 GFM：LocalGitProvider 默认对 'gfm_markdown' 报 False，导致 /describe 的
-    # enable_pr_diagram（configuration.toml 默认开）被 `enable and is_supported(gfm_markdown)`
-    # 门控关掉、不产出 mermaid 架构图；/review 等也走非 GFM 简化分支。这里让 gfm_markdown
-    # 返回 True，使 describe 按需输出 mermaid 图、各工具走 GFM 富 markdown（details / 表格 /
-    # mermaid）。格式兼容由应用端 markdown 解析（rehype + mermaid 渲染）处理。其余能力保持原状。
+    # uniformly enable GFM: LocalGitProvider defaults to False for 'gfm_markdown', causing /describe's
+    # enable_pr_diagram (on by default in configuration.toml) to be gated off by `enable and is_supported(gfm_markdown)`,
+    # not producing the mermaid architecture diagram; /review etc. also take the non-GFM simplified branch. Here we make gfm_markdown
+    # return True, so describe outputs mermaid diagrams as needed and each tool takes GFM rich markdown (details / tables /
+    # mermaid). Format compatibility is handled by the app-side markdown parsing (rehype + mermaid rendering). Other capabilities stay as-is.
     _orig_is_supported = module.LocalGitProvider.is_supported
 
     def is_supported(self, capability):
@@ -113,11 +113,11 @@ def patch(module) -> None:
 
     module.LocalGitProvider.is_supported = is_supported
 
-    # get_pr_labels: 基类未实现，LocalGitProvider 直接抛 NotImplementedError('Getting labels
-    # is not implemented for the local git provider')。/review 跑完会调 set_review_labels →
-    # get_pr_labels(update=True) 读现有标签做 merge，本地仓库无"标签"概念，异常被 pr_reviewer
-    # catch 后打成 ERROR 噪音（review 结果不受影响）。本地无远端标签，返回空列表即可：
-    # set_review_labels 据此走 publish_labels（LocalGitProvider 本就是 no-op），全程静默。
+    # get_pr_labels: the base class doesn't implement it, and LocalGitProvider directly throws NotImplementedError('Getting labels
+    # is not implemented for the local git provider'). After /review runs it calls set_review_labels →
+    # get_pr_labels(update=True) reads existing labels to merge; a local repo has no "label" concept, so the exception is caught by pr_reviewer
+    # and logged as ERROR noise (the review result is unaffected). A local repo has no remote labels, so returning an empty list suffices:
+    # set_review_labels then takes publish_labels (which LocalGitProvider is already a no-op for), silent throughout.
     def get_pr_labels(self, update=False):
         return []
 
