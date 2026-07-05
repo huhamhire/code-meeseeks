@@ -2,7 +2,7 @@
   "name": "@meebox/rules",
   "version": "0.0.0",
   "private": true,
-  "description": "本地 rules.dir 下 markdown 规则文件的加载 + 匹配；产物供 ipc/pr-agent 注入 extra_instructions",
+  "description": "Loads + matches markdown rule files under the local rules.dir; output feeds ipc/pr-agent to inject extra_instructions",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

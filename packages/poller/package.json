@@ -2,7 +2,7 @@
   "name": "@meebox/poller",
   "version": "0.0.0",
   "private": true,
-  "description": "PR discovery poller: 周期性调用 PlatformAdapter 并把发现入 StateStore",
+  "description": "PR discovery poller: periodically calls PlatformAdapter and writes discoveries into StateStore",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
