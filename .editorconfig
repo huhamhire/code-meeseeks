@@ -27,7 +27,7 @@ indent_size = 2
 indent_style = space
 indent_size = 4
 
-# Go 由 gofmt 统一格式化：缩进恒用 tab（非空格），此处仅约定 tab 的显示宽度为 4。
+# Go is formatted uniformly by gofmt: indentation is always tab (not spaces); this only sets the tab display width to 4.
 [*.go]
 indent_style = tab
 tab_width = 4
