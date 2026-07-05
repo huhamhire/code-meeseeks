@@ -1,30 +1,32 @@
-"""嵌入式运行时 monkeypatch 的基础设施：惰性 post-import hook 注册、版本守卫、日志。
+"""Infrastructure for the embedded runtime monkeypatch: lazy post-import hook registration, version guard, logging.
 
-绝不在本模块（或其加载链）eager import pr_agent —— sitecustomize 在每次 python 启动都会
-加载本包，eager import 会拖慢每次调用、甚至在 pr-agent 尚未装好时报错。各 patch 对 pr_agent
-的 import 一律放在 patch 函数体内（惰性），仅当目标模块真正被 import 时才执行。
+Never eager import pr_agent in this module (or its load chain) -- sitecustomize loads this package on every
+python startup, so an eager import would slow every call, or even error when pr-agent isn't installed yet. Each patch's
+import of pr_agent always sits inside the patch function body (lazily), executing only when the target module is actually imported.
 """
 import importlib.abc
 import importlib.util
 import os
 import sys
 
-# 本 shim 的 monkeypatch 依赖 pr-agent **特定版本**的内部实现（get_line_link 渲染分支、
-# get_diff_files 解码逻辑、load_yaml 等）。升级 pr-agent 可能让 patch 失配甚至误伤，故只对
-# 下面 pin 的版本生效；版本不符即跳过相关 patch（安全降级，宁可少打补丁也不乱打）。
-# 升级 pr-agent 时：同步此常量 + scripts/pragent-runtime.json 的 prAgent.version
-# （assemble 脚本会校验两者一致，并据本文件抽取该常量），并重新验证 patch 行为。
+# This shim's monkeypatch depends on **a specific version** of pr-agent's internals (get_line_link render
+# branch, get_diff_files decode logic, load_yaml, etc.). Upgrading pr-agent may make a patch mismatch or even
+# misfire, so it only takes effect for the version pinned below; on version mismatch the relevant patch is
+# skipped (safe degradation, preferring to apply fewer patches over applying wrong ones).
+# When upgrading pr-agent: sync this constant + prAgent.version in scripts/pragent-runtime.json
+# (the assemble script verifies the two match and extracts this constant from this file), and re-verify patch behavior.
 _EXPECTED_PRAGENT_VERSION = "0.36.0"
 
-# 系统上下文「缓存断点」标记：assembleSystemContext（TS, packages/agent/src/assemble.ts）在**全局稳定
-# 前缀**（SOUL/AGENTS/工具目录/记忆/用户档）与 **PR/运行相关尾部** 之间插入此串（连同两侧 --- 分隔）。
-# shim 据此把稳定前缀单独标 Anthropic 提示缓存（1h），尾部保持纯文本；消费端（litellm 分块 / CLI 拼接）
-# 分割或剥除后，标记**绝不**进入发给模型的 prompt。两处常量须逐字一致。
+# System context "cache break" marker: assembleSystemContext (TS, packages/agent/src/assemble.ts) inserts this string
+# (along with the --- separators on both sides) between the **globally stable prefix** (SOUL/AGENTS/tool directory/memory/user
+# profile) and the **PR/run-related tail**. Based on it, the shim marks the stable prefix alone with Anthropic prompt caching (1h),
+# keeping the tail as plain text; after the consumers (litellm chunking / CLI concatenation) split or strip it, the marker **never**
+# enters the prompt sent to the model. The two constants must match verbatim.
 CACHE_BREAK = "\n\n---\n\n[[MEEBOX:CACHE_BREAK]]\n\n---\n\n"
 
 
 def split_cache_break(system):
-    """按缓存断点切分 system → (stable_prefix, variable_tail)。无断点返回 (None, system)。"""
+    """Split system by cache break → (stable_prefix, variable_tail). Returns (None, system) if no break."""
     stable, sep, variable = system.partition(CACHE_BREAK)
     if not sep:
         return None, system
@@ -32,7 +34,7 @@ def split_cache_break(system):
 
 
 def strip_cache_break(system):
-    """剥除缓存断点标记（不分块的消费端用，如 CLI prompt 拼接），塌成单个 --- 分隔。"""
+    """Strip the cache break marker (for non-chunking consumers, e.g. CLI prompt concatenation), collapsing into a single --- separator."""
     return system.replace(CACHE_BREAK, "\n\n---\n\n")
 
 
@@ -42,30 +44,30 @@ def _debug(msg) -> None:
 
 
 def _warn(msg) -> None:
-    """始终输出到 stderr（不受 MEEBOX_SHIM_DEBUG 控制）。用于版本不符等"补丁静默失效"的降级
-    场景，必须让用户/日志看见。stderr 不影响 parse-output（它只解析 stdout）。"""
+    """Always writes to stderr (not gated by MEEBOX_SHIM_DEBUG). Used for degradation scenarios where "a patch
+    silently fails", such as version mismatch, which must be visible to the user/logs. stderr doesn't affect parse-output (it only parses stdout)."""
     print(f"[meebox] WARNING: {msg}", file=sys.stderr)
 
 
 def _pragent_version():
-    """读已安装 pr-agent 版本（仅读 dist 元数据，不 import pr_agent）。拿不到返回 None。"""
+    """Read the installed pr-agent version (only reads dist metadata, doesn't import pr_agent). Returns None if unavailable."""
     try:
         from importlib.metadata import version
 
         return version("pr-agent")
-    except Exception:  # noqa: BLE001 - 未安装 / 元数据缺失（pip 装包途中等）
+    except Exception:  # noqa: BLE001 - not installed / metadata missing (mid pip install, etc.)
         return None
 
 
 def _register_post_import(module_name, patch_fn) -> None:
-    """注册一个 meta_path finder：当 module_name 被 import 后立即执行 patch_fn(module)。
-    不在此处 import 该模块，保持 python 启动/探测/pip 轻量。"""
+    """Register a meta_path finder: run patch_fn(module) immediately after module_name is imported.
+    Doesn't import the module here, keeping python startup/probing/pip lightweight."""
 
     class _Finder(importlib.abc.MetaPathFinder):
         def find_spec(self, fullname, path=None, target=None):
             if fullname != module_name:
                 return None
-            # 临时摘掉自己，借默认机制拿到真实 spec，再包一层 loader 在 exec 后 patch
+            # Temporarily remove self, use the default mechanism to get the real spec, then wrap a loader to patch after exec
             sys.meta_path.remove(self)
             try:
                 spec = importlib.util.find_spec(fullname)

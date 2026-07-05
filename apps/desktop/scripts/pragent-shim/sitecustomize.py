@@ -1,18 +1,18 @@
-# meebox 嵌入式运行时 monkeypatch shim —— 薄加载器。
+# meebox embedded runtime monkeypatch shim -- thin loader.
 #
-# CPython 启动时经 `site` 自动 import 本模块（名为 sitecustomize，无需 PYTHONPATH/挂载）。
-# 真正的补丁实现按领域拆在同目录的 `meebox_pragent_shim` 包里（patches/ 与 cli/）。
-# 本文件只负责：调用 apply() 注册全部惰性 post-import hook，并整体兜底——shim 绝不能让
-# 解释器/agent 崩。**绝不在此 eager import pr_agent**（本文件每次 python 启动都会跑：
-# 探测 --version / find_spec / pip 装包等，eager import 会拖慢甚至在 pr-agent 未装好时报错）。
+# CPython auto-imports this module via `site` on startup (named sitecustomize, no PYTHONPATH/mount needed).
+# The actual patch implementations are split by domain into the `meebox_pragent_shim` package in the same directory (patches/ and cli/).
+# This file is only responsible for: calling apply() to register all lazy post-import hooks, and providing an overall fallback -- the shim
+# must never crash the interpreter/agent. **Never eager import pr_agent here** (this file runs on every python startup:
+# probing --version / find_spec / pip install, etc.; an eager import would slow it down or even error when pr-agent isn't installed yet).
 #
-# 由 assemble-pragent-runtime.mjs 把本文件 + meebox_pragent_shim/ 整体拷进 site-packages。
-# 详见 docs/arch/02-agent/05-pragent-runtime.md。
+# assemble-pragent-runtime.mjs copies this file + meebox_pragent_shim/ wholesale into site-packages.
+# See docs/arch/02-agent/05-pragent-runtime.md for details.
 try:
     from meebox_pragent_shim import apply
 
     apply()
-except Exception as exc:  # noqa: BLE001 - shim 绝不能让解释器/agent 崩
+except Exception as exc:  # noqa: BLE001 - the shim must never crash the interpreter/agent
     try:
         import os
         import sys
