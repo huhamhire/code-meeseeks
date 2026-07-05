@@ -11,8 +11,9 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 >
 > - **Brand website launched**: a VitePress-based project website with a landing page / download page / FAQ and hosted bilingual user docs, auto-deployed via GitHub Pages.
 > - **Project internationalization**: the README and user docs are now fully bilingual (English default + Chinese).
+> - **Customizable code-suggestion output**: steer how AI suggestions are written and lay out the review-draft comment they produce (Settings → Agent → Strategy).
 >
-> This release focuses on the project's external presentation; the desktop app and CLI behavior are largely unchanged from 0.9.0, aside from a minor startup fix.
+> Beyond the external presentation, the desktop app gains customizable code-suggestion output; the rest of the desktop app and CLI behavior is largely unchanged from 0.9.0, aside from a minor startup fix.
 
 ### ✨ Added
 
@@ -25,6 +26,9 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 - **Project documentation internationalization**: external docs are now fully bilingual (English as default / fallback, Chinese as the mirror).
   - The README is split into English (default) and Chinese, switchable from the top of each.
   - User docs are bilingual — English is canonical, Chinese is the mirror, and the website renders each by language.
+- **Customizable code-suggestion output** (Settings → Agent → Strategy, both edited in an inline modal):
+  - _Suggestion spec_ (`code_suggestion_spec`): free-text guidance injected into `/improve`, `/review`, `/ask` to shape each suggestion's structure (e.g. Problem / Analysis / Suggestion) — a soft constraint the model generally follows.
+  - _Suggestion layout_ (`code_suggestion_layout`): a deterministic markdown template for the review-draft comment, with `<TITLE>` / `<SUGGESTIONS>` / `<HOME>` / `<PR>` / `<MODEL>` placeholders. Empty uses a default layout — a linked "AI suggestion" label + model name above the suggestion body (the default draft-comment prefix thus changes from the previous plain `[AI suggestion]`).
 
 ### 🔧 Fixed
 

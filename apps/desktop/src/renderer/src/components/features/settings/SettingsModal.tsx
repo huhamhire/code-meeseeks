@@ -17,6 +17,7 @@ import { useAppearanceDraft } from './hooks/useAppearanceDraft';
 import { ConnectionEditorModal } from './editors/ConnectionEditorModal';
 import { LlmEditorModal } from './editors/LlmEditorModal';
 import { ProxyEditorModal } from './editors/ProxyEditorModal';
+import { TemplateEditorModal } from './editors/TemplateEditorModal';
 import { LanguageSection } from './sections/LanguageSection';
 import { ThemeSection } from './sections/ThemeSection';
 import { EditorSection } from './sections/EditorSection';
@@ -248,6 +249,14 @@ export function SettingsModal({
                   onMaxFollowupAsksChange={s.setMaxFollowupAsks}
                   maxCodeSuggestions={s.maxCodeSuggestions}
                   onMaxCodeSuggestionsChange={s.setMaxCodeSuggestions}
+                  codeSuggestionSpec={s.codeSuggestionSpec}
+                  onEditCodeSuggestionSpec={() =>
+                    s.setTemplateEditor({ field: 'spec', draft: s.codeSuggestionSpec })
+                  }
+                  codeSuggestionLayout={s.codeSuggestionLayout}
+                  onEditCodeSuggestionLayout={() =>
+                    s.setTemplateEditor({ field: 'layout', draft: s.codeSuggestionLayout })
+                  }
                 />
                 <ConcurrencySection
                   value={s.maxConcurrencyInput}
@@ -298,6 +307,15 @@ export function SettingsModal({
           onChange={s.setProxyEditor}
           onSave={() => s.saveProxyEditor()}
           onCancel={() => s.setProxyEditor(null)}
+        />
+      )}
+      {s.templateEditor && (
+        <TemplateEditorModal
+          field={s.templateEditor.field}
+          draft={s.templateEditor.draft}
+          onChange={(next) => s.setTemplateEditor({ ...s.templateEditor!, draft: next })}
+          onSave={s.saveTemplateEditor}
+          onCancel={() => s.setTemplateEditor(null)}
         />
       )}
       {s.connDeleteId && (

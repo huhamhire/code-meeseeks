@@ -272,6 +272,7 @@ export default function App() {
             boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
           }
           viewCommitScope={viewCommitScope}
+          codeSuggestionLayout={boot.config.agent.strategy.code_suggestion_layout}
         />
       </div>
       <StatusBar

@@ -228,11 +228,25 @@ function worktreeRetrievalDirective(tool: ReviewRunTool, enabled: boolean): stri
  * - PR context / rules are read and passed in by the caller (the local provider does not fetch these from the
  *   remote itself)
  */
+/**
+ * User-defined code-suggestion spec (free text from settings): injected verbatim for the tools that produce code
+ * suggestions (/improve, /review, /ask) to shape how the model structures each suggestion (e.g. Problem / Analysis /
+ * Suggestion sectioning). A soft constraint. /describe is excluded (it writes the PR description, not code suggestions).
+ * Empty / whitespace → no injection.
+ */
+function codeSuggestionSpecDirective(tool: ReviewRunTool, spec?: string): string {
+  if (!spec?.trim()) return '';
+  if (tool !== 'improve' && tool !== 'review' && tool !== 'ask') return '';
+  return spec.trim();
+}
+
 export function buildExtraInstructions(input: {
   tool: ReviewRunTool;
   language: string;
   prContext: string;
   matchedRuleInstructions: string;
+  /** User-defined code-suggestion spec (verbatim, soft constraint): injected for /improve, /review, /ask; empty means none. */
+  codeSuggestionSpec?: string;
   /** Code snippet the user selected in the Diff (self-describing quote block, already assembled by the render layer), injected only for /ask. */
   referencedContext?: string;
   /** Whether this /ask is a "re-evaluation" of an existing comment; when true, inject the re-evaluation verdict directive (/ask only). */
@@ -249,6 +263,7 @@ export function buildExtraInstructions(input: {
     referencedAskDirective(input.tool, !!input.referencedFinding),
     worktreeRetrievalDirective(input.tool, !!input.worktreeRetrieval),
     reviewLayoutDirective(input.tool),
+    codeSuggestionSpecDirective(input.tool, input.codeSuggestionSpec),
     input.prContext,
     input.referencedContext ?? '',
     input.matchedRuleInstructions,

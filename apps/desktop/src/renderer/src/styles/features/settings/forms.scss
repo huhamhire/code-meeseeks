@@ -442,3 +442,10 @@ select.settings-input {
   width: 180px;
   text-align: right;
 }
+// Sub-item right edit control: a status chip (configured / default) + an "Edit" button opening the template modal.
+.settings-sublist-edit {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+}

@@ -49,6 +49,19 @@ export function useSettingsDraft({
   const [maxCodeSuggestions, setMaxCodeSuggestionsState] = useState(
     config.agent.strategy.max_code_suggestions,
   );
+  // Code-suggestion spec (LLM soft constraint, injected as extra_instructions for /improve /review /ask) + layout template
+  // (deterministic, applied when a finding becomes a draft body). Both free markdown, edited in a nested modal, saved with config:setAgent.
+  const [codeSuggestionSpec, setCodeSuggestionSpecState] = useState(
+    config.agent.strategy.code_suggestion_spec,
+  );
+  const [codeSuggestionLayout, setCodeSuggestionLayoutState] = useState(
+    config.agent.strategy.code_suggestion_layout,
+  );
+  // Code-suggestion template editor (shared nested modal): null=closed; field selects which value the draft edits, saved back on confirm.
+  const [templateEditor, setTemplateEditor] = useState<{
+    field: 'spec' | 'layout';
+    draft: string;
+  } | null>(null);
   const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState(config.pr_agent.max_concurrency);
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
@@ -81,6 +94,8 @@ export function useSettingsDraft({
     autoFollowup: config.agent.strategy.auto_followup,
     maxFollowupAsks: config.agent.strategy.max_followup_asks,
     maxCodeSuggestions: config.agent.strategy.max_code_suggestions,
+    codeSuggestionSpec: config.agent.strategy.code_suggestion_spec,
+    codeSuggestionLayout: config.agent.strategy.code_suggestion_layout,
     poller: config.poller.interval_seconds,
     concurrency: config.pr_agent.max_concurrency,
     llm: config.llm,
@@ -278,6 +293,21 @@ export function useSettingsDraft({
     setMaxCodeSuggestionsState(n);
     setSaved(false);
   };
+  const setCodeSuggestionSpec = (v: string): void => {
+    setCodeSuggestionSpecState(v);
+    setSaved(false);
+  };
+  const setCodeSuggestionLayout = (v: string): void => {
+    setCodeSuggestionLayoutState(v);
+    setSaved(false);
+  };
+  // Confirm the template editor: write the draft back to the field it edits, then close.
+  const saveTemplateEditor = (): void => {
+    if (!templateEditor) return;
+    if (templateEditor.field === 'spec') setCodeSuggestionSpec(templateEditor.draft);
+    else setCodeSuggestionLayout(templateEditor.draft);
+    setTemplateEditor(null);
+  };
   const setReposDir = (v: string): void => {
     setReposDirInput(v);
     setSaved(false);
@@ -303,7 +333,9 @@ export function useSettingsDraft({
     agentDirInput.trim() !== base.agentDir ||
     autoFollowup !== base.autoFollowup ||
     maxFollowupAsks !== base.maxFollowupAsks ||
-    maxCodeSuggestions !== base.maxCodeSuggestions;
+    maxCodeSuggestions !== base.maxCodeSuggestions ||
+    codeSuggestionSpec !== base.codeSuggestionSpec ||
+    codeSuggestionLayout !== base.codeSuggestionLayout;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const concurrencyChanged = maxConcurrencyInput !== base.concurrency;
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
@@ -350,6 +382,8 @@ export function useSettingsDraft({
               auto_followup: autoFollowup,
               max_followup_asks: maxFollowupAsks,
               max_code_suggestions: maxCodeSuggestions,
+              code_suggestion_spec: codeSuggestionSpec,
+              code_suggestion_layout: codeSuggestionLayout,
             },
           },
         });
@@ -392,6 +426,8 @@ export function useSettingsDraft({
         autoFollowup,
         maxFollowupAsks,
         maxCodeSuggestions,
+        codeSuggestionSpec,
+        codeSuggestionLayout,
         poller: Number.parseInt(pollerInput, 10),
         concurrency: maxConcurrencyInput,
         llm,
@@ -461,6 +497,11 @@ export function useSettingsDraft({
     setMaxFollowupAsks,
     maxCodeSuggestions,
     setMaxCodeSuggestions,
+    codeSuggestionSpec,
+    codeSuggestionLayout,
+    templateEditor,
+    setTemplateEditor,
+    saveTemplateEditor,
     reposDirInput,
     setReposDir,
     pickReposDir,

@@ -273,6 +273,23 @@ export const ConfigSchema = z.object({
            * - /ask: a prompt-layer soft constraint on the structured `<suggestions>` section (the model generally complies, a rare few may exceed).
            */
           max_code_suggestions: z.number().int().min(2).max(8).default(4),
+          /**
+           * User-defined code-suggestion spec (free text): injected verbatim as extra_instructions for the tools
+           * that produce code suggestions (/improve, /review, /ask), shaping how the model structures each
+           * suggestion (e.g. a Problem / Analysis / Suggestion sectioning). A **soft constraint** — the model
+           * generally complies but is not guaranteed to. Empty by default (nothing injected). /describe is excluded.
+           */
+          code_suggestion_spec: z.string().default(''),
+          /**
+           * User-defined markdown layout applied **deterministically** when turning an AI code-suggestion finding into
+           * a review draft body — the author controls the whole comment layout (line breaks, sections, extra content).
+           * Placeholders (uppercase, angle-bracketed): `<TITLE>` localized "AI suggestion" label, `<SUGGESTIONS>` the
+           * suggestion body, `<HOME>` project site url, `<PR>` current PR url, `<MODEL>` current active model name (for
+           * an attribution suffix). If it contains `<SUGGESTIONS>` it is the full body template; otherwise the whole
+           * string is prepended as a prefix before the body. Empty falls back to `DEFAULT_CODE_SUGGESTION_LAYOUT`
+           * (an AI-suggestion badge + model name, then the body).
+           */
+          code_suggestion_layout: z.string().default(''),
         })
         .default({}),
     })

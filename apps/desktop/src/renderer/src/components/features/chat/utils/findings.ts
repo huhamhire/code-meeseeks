@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { TFunction } from 'i18next';
-import type { Finding, PrDocSectionKey } from '@meebox/shared';
+import { DEFAULT_CODE_SUGGESTION_LAYOUT, type Finding, type PrDocSectionKey } from '@meebox/shared';
 
 /**
  * The issue body from pr-agent /review has a trailing `[file: <path>, lines: <s>-<e>]`
@@ -33,6 +33,41 @@ export function htmlInlineToMarkdown(text: string): string {
     )
     .replace(/<\s*(?:strong|b)\s*>([\s\S]*?)<\s*\/\s*(?:strong|b)\s*>/gi, '**$1**')
     .replace(/<\s*(?:em|i)\s*>([\s\S]*?)<\s*\/\s*(?:em|i)\s*>/gi, '*$1*');
+}
+
+/**
+ * Render an AI code-suggestion finding into a review draft body, applying the user's deterministic layout template
+ * (settings → agent.strategy.code_suggestion_layout). The author controls the whole comment layout (line breaks,
+ * sections, extra content). Placeholders (uppercase, angle-bracketed):
+ *   `<TITLE>`       — localized "AI suggestion" label
+ *   `<SUGGESTIONS>` — the (already cleaned) suggestion body
+ *   `<HOME>`        — project site url
+ *   `<PR>`          — current PR url
+ *   `<MODEL>`       — current active model name (empty when unknown), e.g. for an attribution suffix
+ * If the template contains `<SUGGESTIONS>` it is used as a full body template (the author places the body); otherwise
+ * the whole string is prepended as a prefix before the body. An empty template falls back to
+ * `DEFAULT_CODE_SUGGESTION_LAYOUT`. All substitution is deterministic — no dependency on model compliance.
+ */
+export function renderCodeSuggestionDraft(input: {
+  template: string;
+  /** The already-cleaned suggestion body (stripFindingMarker + htmlInlineToMarkdown applied by the caller). */
+  body: string;
+  /** Localized "AI suggestion" label for `<TITLE>`. */
+  title: string;
+  homeUrl: string;
+  prUrl: string;
+  /** Current active model name for `<MODEL>` (empty string when unknown). */
+  modelName: string;
+}): string {
+  const tpl = input.template.trim() || DEFAULT_CODE_SUGGESTION_LAYOUT;
+  const filled = tpl
+    .replaceAll('<TITLE>', input.title)
+    .replaceAll('<HOME>', input.homeUrl)
+    .replaceAll('<PR>', input.prUrl)
+    .replaceAll('<MODEL>', input.modelName)
+    .replaceAll('<SUGGESTIONS>', input.body);
+  // Contains the body placeholder → full body template; otherwise treat as a prefix and append the body after it.
+  return tpl.includes('<SUGGESTIONS>') ? filled : `${filled}\n\n${input.body}`;
 }
 
 /**
