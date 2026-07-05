@@ -82,6 +82,7 @@ export default defineConfig({
         nav: [
           { text: 'Guide', link: '/guide/' },
           { text: 'Download', link: '/download' },
+          { text: 'Changelog', link: '/changelog' },
           { text: 'FAQ', link: '/faq' },
         ],
         sidebar: {
@@ -116,6 +117,7 @@ export default defineConfig({
         nav: [
           { text: '使用说明', link: '/zh/guide/' },
           { text: '下载', link: '/zh/download' },
+          { text: '更新日志', link: '/zh/changelog' },
           { text: '常见问题', link: '/zh/faq' },
         ],
         sidebar: {

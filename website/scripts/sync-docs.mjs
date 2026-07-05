@@ -1,14 +1,17 @@
-// Sync the user guide from docs/guide/ into the VitePress site (both locales).
+// Sync the user guide + changelog from the repo into the VitePress site (both locales).
 //
-// The repo `docs/guide/` is the single source of truth; this copies it into the
-// site at dev/build time (those dirs are gitignored — never edit them by hand):
-//   docs/guide/*.md        (English, canonical) → guide/     (EN root locale)
-//   docs/guide/zh-CN/*.md  (Chinese)            → zh/guide/  (zh locale)
-// Links that escape the guide (e.g. ../arch/, ../../README) point at pages the
-// site does not host, so they are rewritten to absolute GitHub URLs; intra-guide
-// links stay relative for VitePress to resolve. The per-file language switcher
-// (a "**English** · [简体中文]" line) is stripped — the site has its own locale
-// menu, and the switcher's cross-locale relative links don't map onto the site.
+// The repo is the single source of truth; this copies content into the site at
+// dev/build time (the destinations are gitignored — never edit them by hand):
+//   docs/guide/*.md        (English, canonical) → guide/         (EN root locale)
+//   docs/guide/zh-CN/*.md  (Chinese)            → zh/guide/      (zh locale)
+//   CHANGELOG.md           (English, canonical) → changelog.md   (EN root locale)
+//   CHANGELOG.zh-CN.md     (Chinese)            → zh/changelog.md (zh locale)
+// Links that escape the guide (e.g. ../arch/, ../../README, or CHANGELOG's LICENSE)
+// point at pages the site does not host, so they are rewritten to absolute GitHub
+// URLs; intra-guide links stay relative for VitePress to resolve. The per-file
+// language switcher (a "**English** · [简体中文]" line) is stripped — the site has
+// its own locale menu, and the switcher's cross-locale relative links don't map
+// onto the site.
 
 import { readdir, readFile, writeFile, rm, mkdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -24,6 +27,18 @@ const LOCALES = [
     src: path.resolve(CWD, '../docs/guide/zh-CN'),
     repoDir: 'docs/guide/zh-CN',
     dest: path.resolve(CWD, 'zh/guide'),
+  },
+]
+
+// Standalone top-level docs synced from the repo root (single source of truth).
+// repoDir '.' resolves their escaping links (e.g. CHANGELOG's LICENSE) against the
+// repo root, so they rewrite to absolute GitHub URLs.
+const SINGLES = [
+  { src: path.resolve(CWD, '../CHANGELOG.md'), repoDir: '.', dest: path.resolve(CWD, 'changelog.md') },
+  {
+    src: path.resolve(CWD, '../CHANGELOG.zh-CN.md'),
+    repoDir: '.',
+    dest: path.resolve(CWD, 'zh/changelog.md'),
   },
 ]
 
@@ -79,8 +94,19 @@ async function syncLocale({ src, repoDir, dest }) {
   console.log(`[sync-docs] copied ${count} guide file(s) → ${path.relative(CWD, dest)}/`)
 }
 
+// Sync one standalone file (e.g. CHANGELOG): strip the switcher, rewrite escaping
+// links, write to the destination page (creating the parent dir if needed).
+async function syncSingle({ src, repoDir, dest }) {
+  const raw = await readFile(src, 'utf8')
+  const md = rewriteLinks(stripSwitcher(raw), repoDir)
+  await mkdir(path.dirname(dest), { recursive: true })
+  await writeFile(dest, md, 'utf8')
+  console.log(`[sync-docs] copied ${path.basename(src)} → ${path.relative(CWD, dest)}`)
+}
+
 async function main() {
   for (const locale of LOCALES) await syncLocale(locale)
+  for (const single of SINGLES) await syncSingle(single)
 }
 
 main().catch((err) => {
