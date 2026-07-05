@@ -221,9 +221,12 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # Deep-link to this version on the website changelog. The anchor is stable and date-independent:
-          # sync-docs.mjs injects `{#v<version, dots→hyphens>}`; build the same slug here from the tag.
-          CHANGELOG_URL="https://huhamhire.github.io/code-meeseeks/changelog#v$(echo "$VERSION" | tr '.' '-')"
+          # Deep-link to this version on the website changelog, per language. The anchor is stable and
+          # date-independent: sync-docs.mjs injects `{#v<version, dots→hyphens>}` on both locales' pages;
+          # build the same slug here from the tag. EN is the root locale, ZH lives under /zh/.
+          SLUG="v$(echo "$VERSION" | tr '.' '-')"
+          CHANGELOG_EN="https://huhamhire.github.io/code-meeseeks/changelog#${SLUG}"
+          CHANGELOG_ZH="https://huhamhire.github.io/code-meeseeks/zh/changelog#${SLUG}"
           # Extract the body between `## [VERSION] ...` and the next `## [` (index==1 does a literal prefix match, avoiding regex metacharacters)
           awk -v ver="## [$VERSION]" 'index($0,ver)==1{f=1;next} f&&/^## \[/{exit} f{print}' CHANGELOG.md > changelog-section.md
           if [ -s changelog-section.md ]; then
@@ -233,8 +236,9 @@ jobs:
             echo "::warning::CHANGELOG.md has no [$VERSION] section, Release body falls back to the original RELEASE_NOTES.md"
             sed 's/%%CHANGELOG_SECTION%%//' .github/RELEASE_NOTES.md > RELEASE_BODY.tmp
           fi
-          # Fill the version deep-link (use | as the sed delimiter — the URL contains slashes)
-          sed "s|%%CHANGELOG_URL%%|${CHANGELOG_URL}|" RELEASE_BODY.tmp > RELEASE_BODY.md
+          # Fill the per-language version deep-links (use | as the sed delimiter — the URLs contain slashes)
+          sed -e "s|%%CHANGELOG_URL_EN%%|${CHANGELOG_EN}|" -e "s|%%CHANGELOG_URL_ZH%%|${CHANGELOG_ZH}|" \
+            RELEASE_BODY.tmp > RELEASE_BODY.md
 
       - name: Upload to Release (single point)
         uses: softprops/action-gh-release@v2
