@@ -842,6 +842,7 @@
     "updateAvailableLabel": "↑ 新しいバージョン v{{version}} · ダウンロードへ",
     "updateDisabledHint": "アップデートの確認は設定で無効化されています（config.yaml `update.check_enabled`）",
     "updateDisabledTitle": "アップデートの確認は設定で無効化されています",
+    "website": "公式サイト",
     "workDirTitle": "作業ディレクトリ"
   },
   "sidebar": {

@@ -207,20 +207,24 @@
   margin-top: 0;
 }
 
-// About & feedback: low-frequency community external-link row (Star / Issue / Releases). A 1px divider + whitespace cleanly separates it from the runtime
-// controls above; each link has its own icon and wider spacing, distinguishable from one another. Restrained text links that don't upstage the runtime controls.
+// About & feedback: a label on its own line, then a wrapping row of low-frequency community external links (Website / Star / Issue / Releases).
+// A 1px divider + whitespace cleanly separates it from the runtime controls above; each link has its own icon and wider spacing, distinguishable
+// from one another. Restrained text links that don't upstage the runtime controls.
 .settings-about-links {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: $space-6;
   margin-top: $space-6;
   padding-top: $space-5;
   border-top: 1px solid $border-default-fade;
   font-size: $fs-sm;
 }
 .settings-about-label {
-  margin-right: $space-2;
+  display: block;
+  margin-bottom: $space-3;
+}
+.settings-about-linkrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $space-6;
 }
 .settings-about-link {
   display: inline-flex;

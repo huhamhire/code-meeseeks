@@ -19,7 +19,7 @@
 
 <sub>关键词 / Keywords：PR-Agent GUI · pr-agent desktop client · AI 代码评审 / AI code review · Pull Request &amp; Merge Request review · Bitbucket / GitHub reviewer 工具 · 本地化 / 私有部署 / self-hosted</sub>
 
-[English](README.md) · **简体中文**
+[English](README.md) · **简体中文** · [官网](https://huhamhire.github.io/code-meeseeks/)
 
 </div>
 
@@ -98,7 +98,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 
 - **主题与外观** —— 深色 / 浅色 / 跟随系统，多款编辑器配色主题，自定义等宽字体与字号。
 - **命令面板** —— `Ctrl/Cmd+Shift+P` 唤起，快速执行常用操作并归口分散功能。
-- **多语言界面** —— 简体中文 / English / 日本語 / Deutsch，AI 回复语言随界面语言。
+- **多语言界面** —— English / 简体中文 / 日本語 / Deutsch，AI 回复语言随界面语言。
 - **无边框窗口** —— 自绘标题栏（VS Code 风），展示品牌名与当前 PR 标题。
 
 <div align="center">

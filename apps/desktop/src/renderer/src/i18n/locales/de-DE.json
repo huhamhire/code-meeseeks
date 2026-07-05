@@ -859,6 +859,7 @@
     "updateAvailableLabel": "↑ Neue Version v{{version}} · Zum Download",
     "updateDisabledHint": "Die Update-Prüfung ist in der Konfiguration deaktiviert (config.yaml `update.check_enabled`)",
     "updateDisabledTitle": "Die Update-Prüfung ist in der Konfiguration deaktiviert",
+    "website": "Website",
     "workDirTitle": "Arbeitsverzeichnis"
   },
   "sidebar": {

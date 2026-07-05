@@ -859,6 +859,7 @@
     "updateAvailableLabel": "↑ New version v{{version}} · Go to download",
     "updateDisabledHint": "Update checking is disabled in config (config.yaml `update.check_enabled`)",
     "updateDisabledTitle": "Update checking is disabled in config",
+    "website": "Website",
     "workDirTitle": "Working Directory"
   },
   "sidebar": {
