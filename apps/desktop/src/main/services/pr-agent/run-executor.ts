@@ -375,6 +375,8 @@ export class RunExecutor {
       language: getMainLanguage(),
       prContext,
       matchedRuleInstructions,
+      // User-defined code-suggestion spec (settings): injected for /improve /review /ask (gated inside buildExtraInstructions); /describe excluded.
+      codeSuggestionSpec: bootstrap.config.agent.strategy.code_suggestion_spec,
       // /ask selected-line reference + re-review verdict: spliced into the "question" (user turn), see askQuestion assembly below.
       referencedContext: req.tool === 'ask' ? req.referencedContext : undefined,
       // /ask re-review mode: inject verdict (replace/keep/drop) directive when a finding is referenced.

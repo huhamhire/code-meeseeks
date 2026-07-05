@@ -77,6 +77,8 @@ interface ChatPaneProps {
    * dismissing that chip, this session no longer follows the view scope (until switching to another commit). The auto review micro-flow is unaffected and always operates on the full PR.
    */
   viewCommitScope?: ReviewRunCommitScope | null;
+  /** User-defined code-suggestion draft layout (settings → agent.strategy.code_suggestion_layout); empty falls back to the built-in prefix. */
+  codeSuggestionLayout: string;
 }
 
 /**
@@ -102,6 +104,7 @@ export function ChatPane({
   llmConfigured = true,
   onOpenSettings,
   viewCommitScope,
+  codeSuggestionLayout,
 }: ChatPaneProps) {
   const { t } = useTranslation();
   const startResize = (e: React.MouseEvent): void => {
@@ -194,6 +197,8 @@ export function ChatPane({
     myActiveRuns,
     myWaiting,
     drafts,
+    codeSuggestionLayout,
+    currentLlmModel: currentLlmModel ?? null,
     setError: session.setError,
     setRuns: session.setRuns,
     setHasMoreOlder: session.setHasMoreOlder,

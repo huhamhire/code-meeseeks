@@ -20,6 +20,10 @@ export function AgentStrategySection({
   onMaxFollowupAsksChange,
   maxCodeSuggestions,
   onMaxCodeSuggestionsChange,
+  codeSuggestionSpec,
+  onEditCodeSuggestionSpec,
+  codeSuggestionLayout,
+  onEditCodeSuggestionLayout,
 }: {
   autoFollowup: boolean;
   onAutoFollowupChange: (next: boolean) => void;
@@ -27,6 +31,10 @@ export function AgentStrategySection({
   onMaxFollowupAsksChange: (next: number) => void;
   maxCodeSuggestions: number;
   onMaxCodeSuggestionsChange: (next: number) => void;
+  codeSuggestionSpec: string;
+  onEditCodeSuggestionSpec: () => void;
+  codeSuggestionLayout: string;
+  onEditCodeSuggestionLayout: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -88,6 +96,50 @@ export function AgentStrategySection({
               </option>
             ))}
           </select>
+        </li>
+        {/* Code-suggestion spec: a soft LLM directive (extra_instructions for /improve /review /ask) shaping how each suggestion is structured. Edited as free markdown in a nested modal. */}
+        <li className="settings-sublist-row">
+          <div className="settings-sublist-text">
+            <span className="settings-sublist-label">{t('settings.codeSuggestionSpecLabel')}</span>
+            <span className="muted settings-sublist-desc">
+              {t('settings.codeSuggestionSpecHint')}
+            </span>
+          </div>
+          <div className="settings-sublist-edit">
+            <span
+              className={`settings-status-chip ${codeSuggestionSpec.trim() ? 'is-on' : 'is-off'}`}
+            >
+              {codeSuggestionSpec.trim()
+                ? t('settings.codeSuggestionSet')
+                : t('settings.codeSuggestionDefault')}
+            </span>
+            <button type="button" className="btn btn-sm" onClick={onEditCodeSuggestionSpec}>
+              {t('common.edit')}
+            </button>
+          </div>
+        </li>
+        {/* Code-suggestion layout: a deterministic markdown template for the whole draft comment when a finding becomes a draft (placeholders <TITLE>/<SUGGESTIONS>/<HOME>/<PR>/<MODEL>). */}
+        <li className="settings-sublist-row">
+          <div className="settings-sublist-text">
+            <span className="settings-sublist-label">
+              {t('settings.codeSuggestionLayoutLabel')}
+            </span>
+            <span className="muted settings-sublist-desc">
+              {t('settings.codeSuggestionLayoutHint')}
+            </span>
+          </div>
+          <div className="settings-sublist-edit">
+            <span
+              className={`settings-status-chip ${codeSuggestionLayout.trim() ? 'is-on' : 'is-off'}`}
+            >
+              {codeSuggestionLayout.trim()
+                ? t('settings.codeSuggestionSet')
+                : t('settings.codeSuggestionDefault')}
+            </span>
+            <button type="button" className="btn btn-sm" onClick={onEditCodeSuggestionLayout}>
+              {t('common.edit')}
+            </button>
+          </div>
         </li>
       </ul>
     </section>

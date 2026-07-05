@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppInfo, PrAgentStatus } from '@meebox/shared';
+import { PRODUCT_HOME_URL, type AppInfo, type PrAgentStatus } from '@meebox/shared';
 import {
   CheckGlyphIcon,
   CopyIcon,
@@ -100,7 +100,7 @@ export function RuntimeSection({ info, updateEnabled }: { info: AppInfo; updateE
         <div className="settings-about-linkrow">
           <a
             className="settings-about-link"
-            href="https://huhamhire.github.io/code-meeseeks/"
+            href={PRODUCT_HOME_URL}
             target="_blank"
             rel="noreferrer"
           >

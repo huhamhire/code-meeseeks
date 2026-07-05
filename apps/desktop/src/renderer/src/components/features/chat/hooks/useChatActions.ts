@@ -12,9 +12,14 @@ import type {
   ReviewRunTool,
   StoredPullRequest,
 } from '@meebox/shared';
+import { PRODUCT_HOME_URL } from '@meebox/shared';
 import { invoke } from '../../../../api';
 import { useChatRunStore } from '../../../../stores/chat-run-store';
-import { htmlInlineToMarkdown, stripFindingMarker } from '../utils/findings';
+import {
+  htmlInlineToMarkdown,
+  renderCodeSuggestionDraft,
+  stripFindingMarker,
+} from '../utils/findings';
 
 interface UseChatActionsParams {
   pr: StoredPullRequest | null;
@@ -27,6 +32,10 @@ interface UseChatActionsParams {
   myWaiting: ReadonlyArray<PragentRunInfo>;
   /** Current draft pool snapshot for this PR; finding ↔ draft reverse lookup. */
   drafts: ReadonlyArray<ReviewDraft> | null | undefined;
+  /** User-defined code-suggestion draft layout (settings → agent.strategy.code_suggestion_layout); empty falls back to the built-in prefix. */
+  codeSuggestionLayout: string;
+  /** Current active model name (for the `<MODEL>` layout placeholder); null when none configured. */
+  currentLlmModel: string | null;
   // Session-state write entry points (provided by useChatSession)
   setError: Dispatch<SetStateAction<string | null>>;
   setRuns: Dispatch<SetStateAction<ReviewRun[]>>;
@@ -84,6 +93,8 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     myActiveRuns,
     myWaiting,
     drafts,
+    codeSuggestionLayout,
+    currentLlmModel,
     setError,
     setRuns,
     setHasMoreOlder,
@@ -277,13 +288,21 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   };
 
   /**
-   * Turns an AI finding body into the draft's initial body: first stripFindingMarker removes the
-   * trailing [file:...] marker, then normalizes inline HTML tags in pr-agent's GFM into markdown (the draft editor is
-   * plain text, so bare `<code>`/`<br>` would leak through), and finally adds the `[AI suggestion]` prefix — so the remote reviewer
-   * knows this comment came from pr-agent
+   * Turns an AI finding into the draft's initial body: first stripFindingMarker removes the trailing [file:...] marker,
+   * then normalizes inline HTML tags in pr-agent's GFM into markdown (the draft editor is plain text, so bare
+   * `<code>`/`<br>` would leak through), and finally applies the user's deterministic code-suggestion template
+   * (settings → agent.strategy.code_suggestion_layout). When the template is empty, falls back to
+   * `DEFAULT_CODE_SUGGESTION_LAYOUT` (an AI-suggestion badge + model name) — so the remote reviewer knows this came from pr-agent.
    */
-  const buildDraftBodyFromFinding = (body: string): string =>
-    `${t('chatPane.aiSuggestionPrefix')} ${htmlInlineToMarkdown(stripFindingMarker(body))}`;
+  const buildDraftBodyFromFinding = (finding: Finding): string =>
+    renderCodeSuggestionDraft({
+      template: codeSuggestionLayout,
+      body: htmlInlineToMarkdown(stripFindingMarker(finding.body)),
+      title: t('chatPane.aiSuggestionLabel'),
+      homeUrl: PRODUCT_HOME_URL,
+      prUrl: pr?.url ?? '',
+      modelName: currentLlmModel ?? '',
+    });
 
   /**
    * Handler for clicking the "Edit" button on a ChatPane finding card:
@@ -309,7 +328,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
           localId: pr.localId,
           draft: {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
-            body: buildDraftBodyFromFinding(finding.body),
+            body: buildDraftBodyFromFinding(finding),
             origin: 'finding',
             source: { runId: run.id, findingId: finding.id },
             status: 'pending',
@@ -366,7 +385,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
           localId: pr.localId,
           draft: {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
-            body: buildDraftBodyFromFinding(finding.body),
+            body: buildDraftBodyFromFinding(finding),
             origin: 'finding',
             source: { runId: run.id, findingId: finding.id },
             status: 'rejected',
