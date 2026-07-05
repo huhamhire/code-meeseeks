@@ -1,11 +1,8 @@
-> ⚠️ **Early preview (0.x)**: features, configuration, and data formats may change incompatibly, and stability is not fully verified.
-> Do not use it for critical production review workflows — assess the risk and back up your data first.
+> 📖 Full changelog: [English](%%CHANGELOG_URL_EN%%) · [简体中文](%%CHANGELOG_URL_ZH%%)
 
 ## What's changed
 
 %%CHANGELOG_SECTION%%
-
-> 📖 This version on the website changelog (English · 简体中文): %%CHANGELOG_URL%%
 
 ## Installation
 
