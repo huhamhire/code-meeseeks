@@ -106,7 +106,7 @@ export function setControllerContext(ctx: ControllerContext): void {
 /** Get the controller context singleton; throws if uninitialized (before registerIpcHandlers / during module load) to guard timing. */
 export function getContext(): ControllerContext {
   if (!currentContext) {
-    throw new Error('ControllerContext 尚未初始化（registerIpcHandlers 未调用）');
+    throw new Error('ControllerContext not initialized (registerIpcHandlers was not called)');
   }
   return currentContext;
 }

@@ -127,7 +127,7 @@ export interface ReviewStepCtx {
   deps: ReviewOrchestratorDeps;
   input: ReviewOrchestratorInput;
   rec: StepRecorder;
-  /** User stop: boundary check at each step; if already aborted, throw `用户暂停` (the thinking phase can be interrupted immediately too). */
+  /** User stop: boundary check at each step; if already aborted, throw the stable code `aborted` (the thinking phase can be interrupted immediately too). */
   checkAbort: () => void;
   maxAsks: number;
   summaryMax: number;

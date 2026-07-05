@@ -136,10 +136,10 @@ export async function runPlanning(
         chat: deps.chat,
         runTool: async ({ tool, question }) => {
           const bare = tool.replace(/^\//, '');
-          if (!READ_RUN_TOOL_IDS.has(bare)) throw new Error(`不支持的工具：${tool}`);
+          if (!READ_RUN_TOOL_IDS.has(bare)) throw new Error(`Unsupported tool: ${tool}`);
           const run = await deps.enqueueRun(pr, bare as ReviewRunTool, question);
           if (run.status !== 'succeeded') {
-            throw new Error(`pr-agent ${bare} 未成功：${run.errorMessage ?? run.status}`);
+            throw new Error(`pr-agent ${bare} did not succeed: ${run.errorMessage ?? run.status}`);
           }
           return { text: reviewRunText(run), usage: run.tokenUsage };
         },
