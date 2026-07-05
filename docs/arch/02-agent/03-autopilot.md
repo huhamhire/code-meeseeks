@@ -1,221 +1,219 @@
-# AutoPilot 与调度
+# AutoPilot & scheduling
 
-## 职责与边界
+## Responsibilities & boundaries
 
-把「新 / 变更 PR 进来自动预跑评审」做成**默认关闭、可一键启用**的后台自动化，由 `AGENTS.md` 规定其触发与例外策略；决策权仍在评审者（草稿不自动发布，修改性操作受红线约束，见 [Agent 与上下文](01-agent.md) 的工具规范）。
+Make "auto-pre-run a review when a new / changed PR comes in" a **default-off, one-click-enable** background automation, with its trigger and exception policy governed by `AGENTS.md`; the decision still rests with the reviewer (drafts are not auto-published, mutating operations are constrained by the red line, see the tool conventions in [Agent & context](01-agent.md)).
 
-负责：轮询触发与准入门控、批量 LLM 判定（例外规则）、规划 agent ↔ 各 PR 子 agent 的分层执行、有界微流程与步数预算、台账去重与结果展示、用户优先的有序调度。
+Owns: poll triggering and admission gating, batch LLM judgment (exception rules), the layered execution of planner ↔ per-PR sub-agents, the bounded micro-flow and step budget, ledger dedup and result display, and user-first ordered scheduling.
 
-不负责：交互式会话与自然语言路由（见 [会话 Agent 化](02-session.md)）、Agent 目录与工具红线（见 [Agent 与上下文](01-agent.md)）、findings 解析 / 草稿池 / 发布（见 [评审闭环](../01-platform/03-review-workflow.md)）。
+Does not own: interactive sessions and natural-language routing (see [Agentic sessions](02-session.md)), the Agent directory and tool red line (see [Agent & context](01-agent.md)), findings parsing / draft pool / publishing (see [Review workflow](../01-platform/03-review-workflow.md)).
 
-## 核心设计
+## Core design
 
-### 分层架构：规划 agent（主）↔ 各 PR agent（子）
+### Layered architecture: planner (main) ↔ per-PR agent (sub)
 
-autopilot 不是「一个大 agent 串跑所有 PR」，而是**主子两层 + 两个并发域**：
+Autopilot is not "one big agent running all PRs serially", but **main-sub two layers + two concurrency domains**:
 
-- **主 = 规划 agent（planner，跨 PR、唯一）**：批量判定哪些 PR 要评审、为每个待评审 PR
-  拟定子任务计划、派发；**不碰工具、不出总结**。
-- **子 = 每个 PR 的 agent（独立）**：各自执行 planner 派的**有界微流程**，并**在本 PR
-  子任务结束后产出本 PR 的总结**（逐 PR，无全局总结）。
-- **并发域一：Agent 编排层 = 全局单并发**——planner 与各 PR agent 的推理由**单个后台 worker
-  串行**驱动（成本有界、顺序确定）。
-- **并发域二：pr_agent 工具层 = 并行**——子 agent 派发的 `/describe`·`/review`·`/ask`
-  走**共享运行队列并行**消化（与用户任务同池、用户优先，见下「调度」）。
+- **Main = planner (cross-PR, single)**: batch-judges which PRs to review, drafts a sub-task plan for each PR to review,
+  and dispatches; **touches no tool, produces no summary**.
+- **Sub = per-PR agent (independent)**: each executes the **bounded micro-flow** the planner dispatched, and **produces this PR's
+  summary after this PR's sub-task finishes** (per PR, no global summary).
+- **Concurrency domain one: the Agent orchestration layer = a single global concurrency** — the reasoning of the planner and each per-PR agent is driven by a **single background worker
+  serially** (bounded cost, deterministic order).
+- **Concurrency domain two: the pr_agent tool layer = parallel** — the `/describe` · `/review` · `/ask` dispatched by sub-agents
+  are consumed **in parallel via the shared run queue** (same pool as user tasks, user-first, see "Scheduling" below).
 
 ```mermaid
 flowchart TD
-    P["Poller tick · PR 变更"] --> G{"AutoPilot 闸<br/>启用? 准入门控? 候选去重?"}
-    G -- 否 --> X["本轮跳过"]
-    G -- 是 --> PL
+    P["Poller tick · PR change"] --> G{"AutoPilot gate<br/>enabled? admission gating? candidate dedup?"}
+    G -- no --> X["skip this round"]
+    G -- yes --> PL
 
-    subgraph ORCH["① Agent 编排层 — 全局单并发 (单 worker 串行)"]
+    subgraph ORCH["① Agent orchestration layer — single global concurrency (single worker serial)"]
         direction TB
-        PL["主 · 规划 agent / planner (跨 PR)"]
-        PL --> J["批量判定 ≤ batch_size<br/>逐 PR: 评审 / 跳过 + 原因"]
-        J --> PLAN["为待评审 PR 拟定子任务计划"]
-        PLAN --> D{"派发"}
-        D --> A1["子 · PR#1 agent"]
-        D --> A2["子 · PR#2 agent"]
-        D --> An["子 · PR#N agent"]
-        A1 --> M1["describe → review → 条件追问(≤2) → 本 PR 总结"]
-        A2 --> M2["(同上, 独立执行)"]
-        An --> Mn["(同上, 独立执行)"]
+        PL["Main · planner (cross-PR)"]
+        PL --> J["Batch judge ≤ batch_size<br/>per PR: review / skip + reason"]
+        J --> PLAN["Draft a sub-task plan for PRs to review"]
+        PLAN --> D{"Dispatch"}
+        D --> A1["Sub · PR#1 agent"]
+        D --> A2["Sub · PR#2 agent"]
+        D --> An["Sub · PR#N agent"]
+        A1 --> M1["describe → review → conditional follow-up(≤2) → this PR's summary"]
+        A2 --> M2["(same, executed independently)"]
+        An --> Mn["(same, executed independently)"]
     end
 
-    M1 -. "工具调用 (agent 低优先级)" .-> Q
+    M1 -. "tool call (agent low priority)" .-> Q
     M2 -.-> Q
     Mn -.-> Q
 
-    subgraph TOOLQ["② pr_agent 工具层 — 并行 (max_concurrency · 含 user 任务)"]
+    subgraph TOOLQ["② pr_agent tool layer — parallel (max_concurrency · includes user tasks)"]
         direction TB
-        Q["共享运行队列<br/>user 高 / agent 低"]
+        Q["Shared run queue<br/>user high / agent low"]
         Q --> R1["worktree run"]
         Q --> R2["worktree run"]
     end
 
-    M1 --> OUT["逐 PR 结果产物<br/>草稿 + 总结 + recommendation"]
+    M1 --> OUT["per-PR result artifacts<br/>draft + summary + recommendation"]
     M2 --> OUT
     Mn --> OUT
-    OUT --> UI["PR 级展示 (与会话无关)<br/>列表徽标 / PR 详情结果条目<br/>不发布远端 · 决策在人"]
+    OUT --> UI["PR-level display (session-independent)<br/>list badge / PR-detail result entry<br/>not published to remote · the human decides"]
 ```
 
-### 触发与准入
+### Triggering & admission
 
-**启用开关**：底部状态栏 **AutoPilot 按钮**，默认**禁用**，用户手动启用；状态持久化于配置
-（`agent.autopilot.enabled`，默认 `false`）。禁用时下述逻辑完全不跑。
+**Enable switch**: the bottom status bar's **AutoPilot button**, **disabled by default**, enabled manually by the user; the state is persisted in config
+(`agent.autopilot.enabled`, default `false`). When disabled, the logic below does not run at all.
 
-**触发节奏**：AutoPilot 挂在 Poller 的「PR 变更」回调上，**评估节奏对齐轮询**——每个 poller tick
-（间隔 = `poller.interval_seconds`）评估一遍，**不单设独立的最小间隔守卫**；准入门控 + 台账去重已防止重复
-评审 / 打爆 LLM，全局 `busy` 锁防止上一遍未完又叠跑。此外**启用开关时（关 → 开）立即触发一次 poll**，
-让本轮即时评估、不必等下个轮询周期。
+**Trigger cadence**: AutoPilot hooks onto the Poller's "PR change" callback; the **evaluation cadence aligns with polling** — it evaluates once per poller tick
+(interval = `poller.interval_seconds`), with **no separate minimum-interval guard**; admission gating + ledger dedup already prevent duplicate
+review / hammering the LLM, and the global `busy` lock prevents a new round stacking on an unfinished one. Additionally, **on flipping the switch on (off → on) it triggers a poll immediately**,
+so this round is evaluated at once, without waiting for the next polling cycle.
 
-**准入门控**（自上而下，任一不满足即跳过该 PR）：
+**Admission gating** (top-down; if any is unmet, skip that PR):
 
-1. **分类 + 状态硬门控**——只对**「待我评审」分类**（`discoveryFilters` 含 `review-requested`）下、
-   **「待处理」状态**（`localStatus === 'pending'`）的 PR 触发；已通过 / 标记需修改、或非「待我评审」
-   的一律不自动评审。不支持发现分类的平台（`discoveryFilters` 为空）天然不命中。
-2. **已评审即止**——会话中一旦已有 `/describe` 或 `/review` 的有效产出（成功或正在跑，手动或自动皆算）
-   即判定已评审过 / 评审中，不再自动触发（见 `hasReviewOutput`）；评审**失败无产出**则不算、下轮可重试。
-3. **跳过去重（台账）**——仅排除「本版本已被 LLM 判定 skip」的 PR（台账 `decision='skipped'` 且
-   `autoReviewedUpdatedAt` 等于当前 `updatedAt`），避免对判过 skip 的 PR 反复重判；无产出又未被 skip 的
-   待评审 PR 一律放行（**不再因台账里有任意记录就拦下**——「已成功评审」由准入闸 2 用产出判定，不靠台账）。
+1. **Category + status hard gate** — trigger only for PRs under the **"Review Requested" category** (`discoveryFilters` contains `review-requested`) and in
+   **"pending" status** (`localStatus === 'pending'`); already approved / marked needs work, or not "Review Requested", are never auto-reviewed. Platforms that don't support discovery categories (`discoveryFilters` empty) naturally don't match.
+2. **Stop once reviewed** — once the session already has a valid `/describe` or `/review` output (succeeded or running, manual or auto)
+   it is judged already-reviewed / reviewing, and no longer auto-triggered (see `hasReviewOutput`); a review that **failed with no output** does not count and can be retried next round.
+3. **Skip dedup (ledger)** — exclude only PRs "already judged skip by the LLM for this version" (ledger `decision='skipped'` and
+   `autoReviewedUpdatedAt` equals the current `updatedAt`), to avoid re-judging a PR that was judged skip; a PR to review with no output and not skipped is always let through (**no longer blocked just because the ledger has any record at all** — "already reviewed successfully" is judged by output at admission gate 2, not by the ledger).
 
-**自动评审状态记录（ledger）**：每个 PR 记录一份 AutoPilot 台账（评审时所对应的 PR `updatedAt` / 判定
-结果与原因 / 建议倾向）。台账主要供：
+**Auto-review state record (ledger)**: each PR records an AutoPilot ledger (the PR `updatedAt` at review time / judgment
+result and reason / recommendation leaning). The ledger mainly serves:
 
-- PR 列表的建议徽标（★，手动 / 自动一视同仁）；
-- 上述「跳过去重」（只看 `decision='skipped'`）。
+- The recommendation badge in the PR list (★, treating manual / auto alike);
+- The above "skip dedup" (looking only at `decision='skipped'`).
 
-PR 被推新 commit（`updatedAt` 变）后，旧 skip 记录自然失效、可再次进入候选。
+After a PR is pushed a new commit (`updatedAt` changes), the old skip record naturally invalidates and it can re-enter the candidate set.
 
-**移除 / purge 即终止**：每轮 poll tick 后，对**已不在本地 PR 列表**（被移除 / 软删后 purge）的 PR，
-若其上仍有在执行的 agent 操作（编排控制器 + 派发到运行队列的工具 run），一律直接终止——PR 都没了，
-继续评审无意义且空耗 LLM / 占用 worktree。
+**Removal / purge = terminate**: after each poll tick, for a PR **no longer in the local PR list** (purged after removal / soft-delete),
+if it still has running agent operations (the orchestration controller + tool runs dispatched to the run queue), terminate them outright — the PR is gone,
+so continuing to review is pointless and wastes LLM / occupies a worktree.
 
-### 批量判定（例外规则）
+### Batch judgment (exception rules)
 
-候选 PR 不无脑全跑，先过一道 LLM 判定：
+Candidate PRs aren't all run blindly; they first pass an LLM judgment:
 
-1. 收集候选 PR 的**标题 + 描述**，组织成结构化清单。
-2. **单次上下文规模受限**：每批至多 `agent.autopilot.batch_size`（默认 10）个 PR；超出按批跨轮处理，
-   并 `log` 出被推迟的数量（不静默截断）。
-3. 喂入 LLM，按规则逐 PR 判「是否值得自动评审」并附原因——例如**分支合并 / 回合并类 PR 可跳过**、
-   纯依赖升级可跳过等，例外规则在 `AGENTS.md` 里可扩充。
-   - **分支合并信号只是证据、不是裁决**：是否「纯分支合并」**以实际提交结构判定**（拉 commits 看是否
-     **全为 merge commit**），绝不仅凭源分支名（`classifyBranchMerge`）。源分支为主干（`main`/`dev` 等）
-     单独只作背景信号一并交给 judge，**不构成跳过理由**——避免误伤「源分支恰为主干」的 fork 原创 PR。
-     judge 综合标题/描述 + 这些信号自行选择评审 / 跳过。
-4. 判定结果落台账（含「skipped + 原因」，便于审计与 UI 展示）。
+1. Collect the candidates' **title + description** into a structured list.
+2. **Single-context size is bounded**: at most `agent.autopilot.batch_size` (default 10) PRs per batch; excess is handled across rounds in batches,
+   and the deferred count is `log`ged (no silent truncation).
+3. Feed the LLM, which judges per PR "is it worth auto-reviewing" with a reason — e.g. **branch-merge / back-merge PRs can be skipped**,
+   a pure dependency bump can be skipped, etc.; the exception rules are extensible in `AGENTS.md`.
+   - **A branch-merge signal is only evidence, not the verdict**: whether it is a "pure branch merge" is **judged by the actual commit structure** (pull commits to see whether they are
+     **all merge commits**), never solely by the source branch name (`classifyBranchMerge`). A source branch being a trunk (`main`/`dev`, etc.)
+     alone is only a background signal handed to the judge and **does not constitute a skip reason** — to avoid mistakenly harming an original fork PR whose "source branch happens to be a trunk".
+     The judge weighs title/description + these signals and chooses to review / skip.
+4. The judgment lands in the ledger (including "skipped + reason", for auditing and UI display).
 
-### 分层执行：规划与微流程
+### Layered execution: planning & the micro-flow
 
-判为「评审」后，autopilot **不由单个 agent 串跑所有 PR**，而是分两层（这也是「规避超长任务」的结构性手段）：
+Once judged "review", autopilot **does not run all PRs serially in a single agent**, but splits into two layers (this is also the structural means of "avoiding overly long tasks"):
 
-- **规划层（规划 agent / planner，跨 PR）**：上面的批量判定即其职责——逐 PR 定「评审 / 跳过」，
-  并为每个待评审 PR **拟定子任务计划**（默认即下述微流程，亦可经 `AGENTS.md` 规则定制步骤）。
-  planner **只规划与分发**，自身不跑工具、不产 PR 总结，预算极小。
-- **执行层（每个 PR 各自的 agent，独立）**：拿到计划后，**各 PR 的 agent 独立完成自己的子任务**，
-  并**在本 PR 子任务结束后产出本 PR 的总结**。总结是**逐 PR**的、由该 PR 的 agent 收尾——**不存在跨
-  PR 的全局总结**。
+- **Planning layer (planner, cross-PR)**: the batch judgment above is its job — decide "review / skip" per PR,
+  and **draft a sub-task plan** for each PR to review (defaults to the micro-flow below, and the steps can also be customized via `AGENTS.md` rules).
+  The planner **only plans and dispatches**; it runs no tool itself, produces no PR summary, and has a tiny budget.
+- **Execution layer (each PR's own agent, independent)**: given the plan, **each PR's agent independently completes its own sub-task**,
+  and **produces this PR's summary after this PR's sub-task finishes**. The summary is **per PR**, wrapped up by that PR's agent — **there is no cross-PR
+  global summary**.
 
-> 交互式入口无 planner：用户直接与某个 PR 的 agent 对话（见 [会话 Agent 化](02-session.md)）；planner 是 autopilot 跨 PR 专属。
+> The interactive entry has no planner: the user talks directly with a specific PR's agent (see [Agentic sessions](02-session.md)); the planner is autopilot's cross-PR exclusive.
 
-每个 PR 的 agent 执行如下**有界微流程**（即 planner 派发的子任务计划），按**低优先级**入工具队列（见下「调度」）：
+Each PR's agent executes the following **bounded micro-flow** (i.e. the sub-task plan the planner dispatched), entering the tool queue at **low priority** (see "Scheduling" below):
 
-1. `/describe` + `/review` —— 生成描述与 findings，产物进既有草稿池（见 [评审闭环](../01-platform/03-review-workflow.md)）。
-2. **仅对严重问题条件性追问** —— **默认不追问**。该 PR 的 agent 读工具输出（findings 及其
-   `severity`），仅当出现**特别恶性 / 高严重度**的疑点（例如疑似安全漏洞、数据损坏、严重逻辑缺陷且需核实上下文）才考虑就该点补跑
-   `/ask`。**硬上限 ≤2 个问题**（`agent.strategy.max_followup_asks`，默认 2）：
-   没有严重问题就一个都不问，绝不为追问而追问。`/ask` 是只读工具，属红线放行范围（见 [Agent 与上下文](01-agent.md) 的工具规范）。
-3. **逐 PR 收尾总结（严格限长）** —— **由该 PR 的 agent 在本 PR 子任务全部结束后**产出一段**严格限长**的总结
-   （受 `agent.summary_max_chars` 约束，默认数百字内；超限须**自行压缩、不截断要点**；无跨 PR 全局总结）。内容含**要点、风险、
-   以及是否建议通过的倾向**——给出 `approve` / `needs_work` / `manual_review` 三档之一 + 一句理由。
-   落盘为**挂在 PR 上的结果产物**（`summary` + `recommendation` + 步骤日志）。**关键——展示不依赖任何 agent 会话视图**：
-   autopilot 是**后台异步任务**，故总结**不能**寄生在聊天 transcript。它经 **PR 级、与会话无关**的三个 surface 呈现：
-   - **PR 列表**项的 `recommendation` **小徽标**：跨 PR triage，由轻量台账直接读，无需加载会话。
-   - **PR 详情的评审结果区**：把本次 autopilot 产物（草稿 findings + 总结 + `recommendation` chip）作为一条
-     **结果条目**并入既有 run / 评审面板，**打开 PR 即见、无需开聊天**。
-   - 可选的**完成通知 / 未读角标**「autopilot 预评审完成」。
+1. `/describe` + `/review` — generate the description and findings; the artifacts enter the existing draft pool (see [Review workflow](../01-platform/03-review-workflow.md)).
+2. **Conditional follow-up only on severe issues** — **no follow-up by default**. This PR's agent reads the tool output (findings and their
+   `severity`), and only when a **particularly malignant / high-severity** suspicion arises (e.g. a suspected security vulnerability, data corruption, a severe logic defect that needs context verification) does it consider re-running
+   `/ask` on that point. **Hard cap ≤2 questions** (`agent.strategy.max_followup_asks`, default 2):
+   with no severe issue it asks nothing at all, never following up for the sake of it. `/ask` is a read-only tool, within the red-line-allowed range (see the tool conventions in [Agent & context](01-agent.md)).
+3. **Per-PR wrap-up summary (strictly length-limited)** — produced **by that PR's agent after all of this PR's sub-tasks finish**, a **strictly length-limited** summary
+   (constrained by `agent.summary_max_chars`, default within a few hundred characters; over the limit it must **compress itself, not truncate key points**; no cross-PR global summary). The content includes **key points, risks,
+   and whether it leans toward approving** — giving one of the three tiers `approve` / `needs_work` / `manual_review` + a one-line reason.
+   It lands as a **result artifact attached to the PR** (`summary` + `recommendation` + step log). **Key — display depends on no agent session view**:
+   autopilot is a **background async task**, so the summary **cannot** parasitize the chat transcript. It is presented via three **PR-level, session-independent** surfaces:
+   - The `recommendation` **badge** on the **PR list** item: cross-PR triage, read directly from the lightweight ledger, no session load needed.
+   - The **PR detail's review-result area**: fold this autopilot artifact (draft findings + summary + `recommendation` chip) as a
+     **result entry** into the existing run / review panel, **visible on opening the PR, no chat needed**.
+   - An optional **completion notification / unread badge** "autopilot pre-review done".
 
-   步骤日志是**可按需展开的审计留档**。**仅为非约束性建议**：给「建议通过」不等于执行 `/approve`、「建议修改」也不触发
-   `/needswork`——真通过 / 打回仍是评审者手动点按（红线见 [Agent 与上下文](01-agent.md) 的工具规范）；结果条目可放
-   **「采纳为 PR 状态」按钮**把建议一键转成手动操作，但点按始终在人。
+   The step log is an **audit record expandable on demand**. **Only a non-binding recommendation**: "recommend approve" does not equal executing `/approve`, "recommend changes" does not trigger
+   `/needswork` either — actually approving / rejecting is still a manual click by the reviewer (red line in the tool conventions of [Agent & context](01-agent.md)); the result entry can offer an
+   **"adopt as PR status" button** to turn the recommendation into a manual action in one click, but the click always rests with the human.
 
-**步骤计划可经规则定制（plan）**：上述微流程是**默认序列**（`describe-review` → `judge` → `asks` →
-`summary`，由步骤注册表 `REVIEW_STEP_REGISTRY` 组装、`assembleReviewSteps` 装配），而非写死。批量判定时，
-规划 agent 可据 `AGENTS.md` 规则为单个 PR 给出**自定义计划**（一组有序步骤 id），从而**跳过 / 重排 /
-增删**步骤。可用步骤 id：`describe-review`、`improve`（生成代码改进建议，独立、默认不含、规则要时纳入）、
-`judge`、`asks`、`summary`——例如「配置类 PR 只生成描述与 findings、跳过追问」得 `["describe-review",
-"summary"]`。计划**省略或非法时回落默认全集**：合法性校验 `isValidReviewPlan`——步骤 id 须在注册表内，且含
-`judge` / `summary` 时必须先含 `describe-review`（后两步读其产物）；判定层与微流程驱动处**双重守卫**。
-**仅 autopilot 走计划**：手动评审按钮不经判定层、恒跑默认全集。「跳过整篇」仍用判定的 `review:false`。
-新增工具步 = 在 `REVIEW_STEP_REGISTRY` 登记 + 并入 `ReviewStepKind`（工具本身见统一注册表 `TOOLS`）。
+**The step plan can be customized via rules (plan)**: the above micro-flow is the **default sequence** (`describe-review` → `judge` → `asks` →
+`summary`, assembled by the step registry `REVIEW_STEP_REGISTRY` and `assembleReviewSteps`), not hard-coded. During batch judgment, the
+planner can, per `AGENTS.md` rules, give a **custom plan** (an ordered set of step ids) for a single PR, thus **skipping / reordering /
+adding-removing** steps. Available step ids: `describe-review`, `improve` (generate code-improvement suggestions, standalone, off by default, included when a rule wants it),
+`judge`, `asks`, `summary` — e.g. "a config-type PR only generates the description and findings, skip the follow-up" gives `["describe-review",
+"summary"]`. When the plan **is omitted or invalid, it falls back to the full default set**: validity check `isValidReviewPlan` — step ids must be in the registry, and if it contains
+`judge` / `summary` it must first contain `describe-review` (the latter two read its artifacts); **double-guarded** at the judgment layer and the micro-flow driver.
+**Only autopilot goes through a plan**: the manual review button does not pass the judgment layer and always runs the full default set. "Skip the whole thing" still uses the judgment's `review:false`.
+Adding a tool step = register it in `REVIEW_STEP_REGISTRY` + add it to `ReviewStepKind` (the tool itself is in the unified registry `TOOLS`).
 
-**不自动发布**：上述全部产物——草稿、追问回答、总结——**只落本地、进待确认状态**，进应用即见，
-**不自动写远端**（除非下「写权限扩展」显式授权）。决策权仍在评审者。
+**No auto-publish**: all the above artifacts — drafts, follow-up answers, summary — **only land locally, in a to-be-confirmed state**, visible on entering the app,
+**not auto-written to the remote** (unless explicitly granted under "Write permission extension" below). The decision still rests with the reviewer.
 
-### 步数预算与写权限
+### Step budget & write permission
 
-**步数上限——分层各有预算，结构推导而非借用 `agent.max_steps`**：
+**Step cap — each layer has its own budget, structurally derived rather than borrowing `agent.max_steps`**:
 
-- **规划 agent（planner）**：只做「批量判定 + 派发」，预算极小（一次 judge pass + 分发），不自由展开。
-- **每个 PR 的 agent**：**不自由规划**，只执行 planner 派的微流程——默认模板，或规则定制的计划（在
-  注册表既有步骤内裁剪 / 重排 / 增删，最多纳入一个 `improve` 步，**不会自由展开**）；模板内另一可变处是
-  0..N 个条件性追问。故步数上限**由模板形状 + 计划推导**，不套用更宽的交互式 `agent.max_steps`：硬上限 ≈
-  `2（describe + review）+ max_followup_asks + 1（summary）` + 少量判定开销，
-  **唯一能推高它的可调量是 `max_followup_asks`**。另设结构化硬 backstop（按上式推导、运行期不超过它）兜底，
-  防自循环把背景任务撑爆；触顶即停并标注「autopilot 步数上限中止」。背景自动化的步数因此**可预测、随模板而定**。
+- **Planner**: only "batch judgment + dispatch", a tiny budget (one judge pass + dispatch), no free divergence.
+- **Each PR's agent**: **does not plan freely**, only executes the planner-dispatched micro-flow — the default template, or the rule-customized plan (trim / reorder / add-remove
+  within the registry's existing steps, at most including one `improve` step, **never freely diverging**); the other variable within the template is
+  0..N conditional follow-ups. Hence the step cap is **derived from the template shape + the plan**, not borrowing the wider interactive `agent.max_steps`: the hard cap ≈
+  `2 (describe + review) + max_followup_asks + 1 (summary)` + a little judgment overhead,
+  and **the only tunable that can raise it is `max_followup_asks`**. A separate structured hard backstop (derived by the formula above, never exceeded at runtime) provides a safety net,
+  preventing a self-loop from blowing up the background task; on hitting the ceiling it stops and annotates "autopilot aborted due to step cap". Background automation's step count is therefore **predictable, determined by the template**.
 
-**写权限扩展（受工具红线约束）**：保留后续能力——若用户在 `AGENTS.md` / `rules/`（见 [规则](04-rules.md)）中**明确授权**，
-AutoPilot 可执行自动发布 comment、自动 `approve` / `needswork`。**默认全部拒绝**；授权是逐项、
-可审计的显式开关，运行时按 [Agent 与上下文](01-agent.md) 工具规范的硬校验放行。
+**Write permission extension (constrained by the tool red line)**: a reserved future capability — if the user **explicitly grants** in `AGENTS.md` / `rules/` (see [Rules](04-rules.md)),
+AutoPilot may perform auto-publish comment, auto `approve` / `needswork`. **All denied by default**; grants are per-item,
+auditable explicit switches, released at runtime per the hard check of the [Agent & context](01-agent.md) tool conventions.
 
-### 调度：用户优先的有序队列
+### Scheduling: a user-first ordered queue
 
-调度分**两个并发域**，分别约束「agent 编排」与「pr_agent 工具运行」——这是本设计的关键取舍：
+Scheduling splits into **two concurrency domains**, constraining "agent orchestration" and "pr_agent tool running" respectively — this is the key trade-off of this design:
 
-- **Agent 编排层 —— 全局单并发**：planner 与各 PR agent 的**推理循环**由**单个后台 autopilot worker
-  串行驱动**，全局一次只有一个 agent 在「思考 / 分发」。理由：agent 推理是不可预测、花 token
-  的部分，串行化让背景成本有界、顺序确定，避免 N 个并发规划循环同时烧钱。该并发度**固定为 1**（非
-  `max_concurrency`）。
-- **pr_agent 工具运行层 —— 并行**：`/describe`·`/review`·`/ask` 子进程仍走既有**共享运行队列**（见
-  [评审闭环](../01-platform/03-review-workflow.md) 的 `max_concurrency` + worktree 并发模型），**可并行调用**——跨 PR、
-  且与用户任务并发。单并发的 agent 循环只管「分发」，重活在工具层并行消化，throughput
-  不被串行推理卡住。
-- **优先级泳道（工具层）**：`user`（手动发起，高）/ `agent`（planner 与各 PR agent 派发，低）。
-  高优先级在等待队列**插到所有低优先级之前**，但**不打断**正在执行的 run（执行不可抢占，避免半截
-  worktree / 部分副作用）；同级 FIFO。`QueueItem` 增 `priority` / `origin`（user / agent /
-  autopilot）字段，复用既有 `AbortController` / `queueChanged` 机制。
+- **Agent orchestration layer — single global concurrency**: the **reasoning loops** of the planner and each PR agent are driven **serially by a single background autopilot worker**,
+  with globally only one agent "thinking / dispatching" at a time. Reason: agent reasoning is the unpredictable, token-costly
+  part, and serializing it keeps the background cost bounded and the order deterministic, avoiding N concurrent planning loops burning money at once. This concurrency is **fixed at 1** (not
+  `max_concurrency`).
+- **pr_agent tool-running layer — parallel**: the `/describe` · `/review` · `/ask` subprocesses still go through the existing **shared run queue** (see
+  the `max_concurrency` + worktree concurrency model in [Review workflow](../01-platform/03-review-workflow.md)), **callable in parallel** — across PRs,
+  and concurrent with user tasks. The single-concurrency agent loop only handles "dispatch"; the heavy work is consumed in parallel at the tool layer, so throughput
+  isn't blocked by serial reasoning.
+- **Priority swimlanes (tool layer)**: `user` (manually initiated, high) / `agent` (dispatched by the planner and each PR agent, low).
+  A high-priority item is **inserted before all low-priority items** in the waiting queue, but **does not preempt** a running run (execution is non-preemptible, to avoid a half-done
+  worktree / partial side effect); same-priority is FIFO. `QueueItem` gains `priority` / `origin` (user / agent /
+  autopilot) fields, reusing the existing `AbortController` / `queueChanged` mechanism.
 
-效果：autopilot 的 agent 推理串行、便宜、可控；它派发的 review 子进程与用户随时点的 `/review`
-在工具队列里**并行**消化、用户优先。三种 `origin` **共用同一工具队列、并发预算与运行态 store**——
-没有隐形后台执行：自动任务与手动任务一样占可见并发槽、一样在状态栏与对应 PR 视图实时可见（见
-[会话 Agent 化](02-session.md) 的「运行态可见且共享」）。
+Effect: autopilot's agent reasoning is serial, cheap, controllable; the review subprocesses it dispatches and the `/review` the user clicks at any time
+are consumed **in parallel** in the tool queue, user-first. The three `origin`s **share the same tool queue, concurrency budget and run-state store** —
+no hidden background execution: an auto task occupies a visible concurrency slot like a manual task, and is visible in real time in the status bar and the corresponding PR view (see
+"Run state visible and shared" in [Agentic sessions](02-session.md)).
 
-## 数据 / 接口契约
+## Data / interface contract
 
-**台账布局**（落在 [状态存储](../99-core/01-state-storage.md) 的 `state/prs/<hash>/agent/autopilot.json`；planner pass 记于顶层 `state/agent/`）。
+**Ledger layout** (lands at `state/prs/<hash>/agent/autopilot.json` in [State storage](../99-core/01-state-storage.md); a planner pass is recorded at the top level `state/agent/`).
 
-核心形状（以名称与形状描述，不绑定实现）：
+Core shapes (described by name and shape, not bound to implementation):
 
-- `AutopilotLedger`（**每 PR 一条，供列表徽标直接读、无需加载会话**）：`autoReviewedUpdatedAt` ·
-  `decision`（`review` | `skipped`）· `reason` · `recommendation?`（`approve` | `needs_work` |
-  `manual_review`）· `summaryRef`（指向该 PR 子 agent 会话的总结）· `at`。
-- `PlannerPass`（**规划 agent，跨 PR，不落 per-PR 目录**）：`batch[]`（逐 PR 判定 + 子任务计划）· `tokenUsage` · `at`。
-- 运行队列 `QueueItem` 增补：`priority`（`user` | `agent`）· `origin`（`user` | `agent` | `autopilot`）。
-- **并发模型**：agent 编排层**固定单并发**（单后台 worker，非 `max_concurrency`）/ pr_agent 工具层
-  **`max_concurrency`**（共享队列，见上「调度」）。
+- `AutopilotLedger` (**one per PR, read directly for the list badge, no session load needed**): `autoReviewedUpdatedAt` ·
+  `decision` (`review` | `skipped`) · `reason` · `recommendation?` (`approve` | `needs_work` |
+  `manual_review`) · `summaryRef` (points to the summary of that PR's sub-agent session) · `at`.
+- `PlannerPass` (**the planner, cross-PR, not landing in a per-PR directory**): `batch[]` (per-PR judgment + sub-task plan) · `tokenUsage` · `at`.
+- Run-queue `QueueItem` additions: `priority` (`user` | `agent`) · `origin` (`user` | `agent` | `autopilot`).
+- **Concurrency model**: the agent orchestration layer is **fixed single-concurrency** (single background worker, not `max_concurrency`) / the pr_agent tool layer is
+  **`max_concurrency`** (shared queue, see "Scheduling" above).
 
-**IPC 通道**（沿用 `invoke<K>` + `IpcChannels` 约束）：
+**IPC channels** (following the `invoke<K>` + `IpcChannels` constraint):
 
-- `agent:autoReview`：一键自动评审按钮——对当前 PR 立即跑微流程（`user` 优先级，不经 AutoPilot 三道闸；见 [会话 Agent 化](02-session.md) 的交互控制）。
-- `agent:autopilotToggle` / `agent:autopilotState`：启停 AutoPilot / 读其状态与台账。
-- 既有 `pragent:*` 队列通道复用，仅扩展 `priority` / `origin`。
+- `agent:autoReview`: the one-click auto review button — run the micro-flow immediately for the current PR (`user` priority, bypassing AutoPilot's three gates; see the interaction control in [Agentic sessions](02-session.md)).
+- `agent:autopilotToggle` / `agent:autopilotState`: start/stop AutoPilot / read its state and ledger.
+- The existing `pragent:*` queue channels are reused, only extended with `priority` / `origin`.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **防雪崩靠多道闸**：AutoPilot 的安全性来自**准入门控**（分类 + 状态）+**台账去重**+**批量上限**
-  （`batch_size`）+ 全局 `busy` 锁 + 评估节奏对齐轮询，任一缺失都可能在大量 PR / 高频轮询下打爆 LLM 配额。
-- **批量判定尤其要控规模**：候选清单喂 LLM 的 `batch_size` 是成本与上下文的关键旋钮，超出按批跨轮、不静默截断。
-- **写权限是硬约束**：自动写操作（发布 / approve / needswork）默认全拒，授权逐项且经运行时硬校验放行（见 [Agent 与上下文](01-agent.md)）。
+- **Avalanche prevention relies on multiple gates**: AutoPilot's safety comes from **admission gating** (category + status) + **ledger dedup** + **batch cap**
+  (`batch_size`) + the global `busy` lock + the evaluation cadence aligned with polling; missing any one could blow up the LLM quota under many PRs / high-frequency polling.
+- **Batch judgment especially must control size**: the `batch_size` feeding the candidate list to the LLM is the key knob for cost and context; excess is handled across rounds in batches, no silent truncation.
+- **Write permission is a hard constraint**: auto write operations (publish / approve / needswork) are all denied by default, and grants are per-item and released via a runtime hard check (see [Agent & context](01-agent.md)).
