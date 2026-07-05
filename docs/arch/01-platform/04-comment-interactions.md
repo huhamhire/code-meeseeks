@@ -1,127 +1,98 @@
-# 评论互动（Comment Interactions）
+# Comment interactions
 
-PR 评论之上的三类人工互动：**emoji 反应**、**@提及自动补全**、**图片附件上传**。三者都建立在既有评论
-读写闭环（见 [评审闭环](03-review-workflow.md)）与平台适配层（见 [平台适配](01-adapter.md)）之上，按平台能力位显隐降级。
+Three kinds of manual interaction on top of PR comments: **emoji reactions**, **@mention autocomplete**, and **image attachment upload**. All three build on the existing comment read/write loop (see [Review workflow](03-review-workflow.md)) and the platform adaptation layer (see [Platform adaptation](01-adapter.md)), showing / hiding and degrading per platform capability flag.
 
-## 1. 职责与边界
+## 1. Responsibilities & boundaries
 
-- **负责**：评论的「互动增强」——给已有评论加 / 取 emoji 反应并展示聚合；撰写评论 / 回复时 `@提及`
-  用户的就地补全；撰写时粘贴图片上传并回填正文。
-- **不负责**：评论本体的增删改查与回复（属评审闭环 05）、行内评论锚定（属 diff）、评论正文的 markdown
-  渲染与内嵌图片代理拉取（既有能力，本域仅在上传后复用其渲染）。
-- **边界原则**：互动是**纯增益**——任一项不被平台支持、或其数据获取失败，都不得影响评论列表的正常加载与
-  展示（best-effort，失败静默降级）。
+- **Responsible for**: the "interaction enhancements" on comments — adding / removing an emoji reaction on an existing comment and showing the aggregate; in-place autocompletion of `@mention`-ing a user while writing a comment / reply; pasting an image to upload while writing, and backfilling the body.
+- **Not responsible for**: the CRUD and replies of the comment body itself (belongs to review workflow 05), inline-comment anchoring (belongs to diff), markdown rendering of the comment body and the proxied fetch of embedded images (an existing capability; this domain only reuses its rendering after an upload).
+- **Boundary principle**: interaction is a **pure gain** — if any item is unsupported by the platform, or its data fetch fails, it must not affect the normal loading and display of the comment list (best-effort; silently degrade on failure).
 
-## 2. 核心设计
+## 2. Core design
 
-### 能力位驱动的显隐降级
+### Capability-flag-driven show/hide degradation
 
-三项各由能力位声明（`commentReactions` / `commentAttachments`，以及 @提及无需后端能力），渲染层据此
-显 / 隐入口。平台不支持即整块不出现，不在调用处写 `if (platform === …)`（沿用 01 的降级范式）。其中
-`commentReactions` 取三态 `false | 'fixed' | 'free'`——`fixed` 仅固定集（GitHub 8 种、无搜索），`free`
-支持任意 emoji（精选集 + 搜索）。
+Each of the three is declared by a capability flag (`commentReactions` / `commentAttachments`, and @mention needs no backend capability), and the render layer shows / hides the entry accordingly. If the platform doesn't support it, the whole block does not appear, and no `if (platform === …)` is written at the call site (following 01's degradation paradigm). `commentReactions` takes three states `false | 'fixed' | 'free'` — `fixed` is a fixed set only (GitHub's 8, no search), `free` supports any emoji (a curated set + search).
 
-| 能力 | GitHub | Bitbucket | GitLab |
+| Capability | GitHub | Bitbucket | GitLab |
 | --- | --- | --- | --- |
-| 反应 `commentReactions` | `'fixed'`（8 种） | `'free'`（7.x+） | `'free'` |
-| 附件 `commentAttachments` | ✗（无公开上传 API） | ✓ | ✓ |
-| @提及补全 | ✓（无需能力位） | ✓ | ✓ |
+| Reactions `commentReactions` | `'fixed'` (8) | `'free'` (7.x+) | `'free'` |
+| Attachments `commentAttachments` | ✗ (no public upload API) | ✓ | ✓ |
+| @mention autocomplete | ✓ (no capability flag needed) | ✓ | ✓ |
 
-### emoji 反应：统一 emoji 字符为中性 key
+### emoji reactions: unify the emoji character as a neutral key
 
-各平台原生反应标识互不相同——GitHub 是固定 8 种 content（`+1`/`laugh`…）、GitLab 是 award emoji 名
-（`thumbsup`…）、Bitbucket 是 emoticon shortcut（`eyes`…）。中性模型 `PrReaction` 以 **Unicode emoji
-字符**为 key（`{ emoji, count, mine }`），渲染层直接绘制、跨平台一致；**原生名 ↔ emoji 的映射由各
-平台 adapter 私有持有**（它最了解自家 API）。
+Each platform's native reaction identifier differs — GitHub uses a fixed set of 8 content values (`+1`/`laugh`…), GitLab uses award emoji names (`thumbsup`…), Bitbucket uses emoticon shortcuts (`eyes`…). The neutral model `PrReaction` keys on the **Unicode emoji character** (`{ emoji, count, mine }`), so the render layer draws it directly, consistent across platforms; **the native-name ↔ emoji mapping is held privately by each platform's adapter** (which knows its own API best).
 
-选择器按模式取候选：
+The picker takes candidates by mode:
 
-- **`fixed`（GitHub）**：用 `REACTION_PICKER`——固定 8 种、无搜索（对齐 GitHub Reactions API 上限）。
-- **`free`（GitLab / Bitbucket）**：用**内置精选大集** `REACTION_EMOJIS`（~150 个高频 emoji + 标准 shortcode + 检索关键词）+ 搜索框。
-- **原生名映射**：GitLab award 名 / Bitbucket emoticon shortname 同为标准 emoji shortcode，故 free 两端的 char↔原生名映射（`emojiToReactionCode` / `reactionCodeToEmoji`）统一从该集派生。
-- **集外 emoji**：用户经 web 用集外 emoji 反应的仍按字符**显示**（best-effort：Bitbucket 从 twemoji url 码点解、GitLab 按 award 名回查），仅 picker 不提供。
-- **后向扩展点**：要加一种反应，在 `REACTION_EMOJIS` 追加一行（emoji + 正确 shortcode + 关键词）即可，free 两端 adapter 自动生效；fixed 集另在 `REACTION_PICKER` + GitHub content 映射维护。
+- **`fixed` (GitHub)**: use `REACTION_PICKER` — a fixed set of 8, no search (aligned with the GitHub Reactions API cap).
+- **`free` (GitLab / Bitbucket)**: use the **built-in curated large set** `REACTION_EMOJIS` (~150 high-frequency emoji + standard shortcode + search keywords) + a search box.
+- **Native-name mapping**: GitLab award names / Bitbucket emoticon shortnames are both standard emoji shortcodes, so the char ↔ native-name mapping for both free ends (`emojiToReactionCode` / `reactionCodeToEmoji`) is uniformly derived from that set.
+- **Out-of-set emoji**: a reaction a user made via the web with an out-of-set emoji is still **displayed** by its character (best-effort: Bitbucket decodes the code point from the twemoji url, GitLab looks it back up by award name), only the picker doesn't offer it.
+- **Backward extension point**: to add a reaction, append a row in `REACTION_EMOJIS` (emoji + correct shortcode + keywords) and both free ends' adapters take effect automatically; the fixed set is maintained separately in `REACTION_PICKER` + the GitHub content mapping.
 
-刻意用**内置精选集**而非全量 Unicode / 第三方大词表，原因有二：
+Deliberately using a **built-in curated set** rather than the full Unicode / a third-party large lexicon, for two reasons:
 
-- 避免打包冗余与「比实例 Twemoji 版本新的 emoji 写入静默失败」（如 Bitbucket 实测自带 Twemoji 12.1.2、~1180 个，全量词表是其超集）；
-- 精选集 shortcode 可控、写入可靠。
+- avoid packaging bloat and "silent write failure of an emoji newer than the instance's Twemoji version" (e.g. Bitbucket measured to ship Twemoji 12.1.2, ~1180, of which a full lexicon is a superset);
+- the curated set's shortcodes are controlled and its writes are reliable.
 
-代价是长尾 emoji 搜不到——经评估对评审场景足够（含 alien 等常用项）。
+The cost is that long-tail emoji can't be searched — assessed as sufficient for the review scenario (including common items like alien).
 
-选择器为避免被评论滚动容器裁切 / 与其它层级 z-index 干涉，经 **portal 渲染到 body + fixed 定位**，坐标
-由触发按钮位置 + 视口空间算出（上下自适应翻转、水平夹取），并随滚动 / 缩放重算；点击弹层外部 / Esc 收起。
-「加反应」按钮置于评论操作按钮行内，已有反应另起一行展示在其下。
+To avoid being clipped by the comment scroll container / interfering with other layers' z-index, the picker is rendered **via a portal to body + fixed positioning**, with coordinates computed from the trigger button's position + viewport space (auto-flip up/down, horizontal clamp), and recomputed on scroll / zoom; clicking outside the popover / Esc dismisses it. The "add reaction" button sits inline in the comment action-button row, and existing reactions are shown on a separate line below it.
 
-**读取的有界化**：反应聚合的获取按平台差异处理，且一律 best-effort（单条失败不拖垮列表）——
+**Bounding the reads**: fetching the reaction aggregate is handled per platform difference, and always best-effort (a single failure doesn't drag down the list) —
 
-- GitHub：评论响应自带反应计数（counts），无需额外请求即可展示；仅「当前用户是否反应过」（`mine`）
-  需补查，且**只对有反应的评论**（counts>0）发请求，额外请求数受真实反应数约束。
-- GitLab：note 不内嵌 award，须逐 note 查 award_emoji（并行）；单条失败 catch 成无反应。
-- Bitbucket：反应随评论 `properties.reactions` 一并返回，**零额外请求**。
+- GitHub: comment responses carry reaction counts, so display needs no extra request; only "whether the current user has reacted" (`mine`) needs a follow-up query, and **only for comments that have reactions** (counts > 0), so the number of extra requests is bounded by the real reaction count.
+- GitLab: notes don't embed awards, so award_emoji must be queried per note (in parallel); a single failure is caught as no reaction.
+- Bitbucket: reactions are returned along with the comment's `properties.reactions`, **zero extra requests**.
 
-**切换语义**：`toggleReaction(add)` 幂等——add 时重复加按成功处理；remove 时 GitHub/GitLab 需先查到
-自己那条反应的 id 再删，不存在则跳过。成功后走既有「写后清缓存 + 广播 `comments:changed` + 重拉」模型，
-不维护前端乐观态（与编辑 / 删除一致）。
+**Toggle semantics**: `toggleReaction(add)` is idempotent — on add, a duplicate add is treated as success; on remove, GitHub/GitLab must first find the id of one's own reaction and then delete it, skipping if it doesn't exist. On success it follows the existing "clear cache after write + broadcast `comments:changed` + refetch" model, maintaining no frontend optimistic state (consistent with edit / delete).
 
-### @提及：参与者候选 + 客户端补全
+### @mention: participant candidates + client-side completion
 
-通知由平台服务端对评论正文里的 `@name` 自动完成，故**后端零改动**即已生效；本域只做撰写时的补全 UX。
+Notification is done by the platform server automatically for `@name` in the comment body, so it takes effect with **zero backend change**; this domain only handles the completion UX while writing.
 
-候选源刻意只取**本 PR 已加载的参与者**——评论作者（含 replies 递归）+ 提交作者——按 name 去重。这是
-**有界、零额外取数、安全**的来源：不向远端枚举全员（大组织几千人，既慢又触发限流，也避免越权拉取），
-候选规模约等于参与者数（通常 < 20）。输入 `@` 后按查询串客户端过滤、展示前若干条；补全仅为便利，用户
-仍可自由手打任意 `@name`（平台据文本自行解析通知）。需要更广检索时，可在此基础上叠加「平台用户搜索
-端点」层（带 query 过滤 + 分页截断），但默认不开。
+The candidate source deliberately takes only the **participants already loaded for this PR** — comment authors (including replies recursively) + commit authors — deduped by name. This is a **bounded, zero-extra-fetch, safe** source: it doesn't enumerate everyone from the remote (a large org has thousands of people, which is slow and triggers rate limits, and it also avoids over-privileged fetching), and the candidate size roughly equals the participant count (usually < 20). After typing `@`, client-side filter by the query string and show the top few; completion is merely a convenience, and the user can still freely type any `@name` (the platform parses notifications from the text itself). When broader search is needed, a "platform user-search endpoint" layer (with query filter + pagination truncation) can be stacked on top of this, but it's off by default.
 
-### 图片附件：平台原生上传 + 既有渲染复用
+### Image attachments: platform-native upload + reuse of existing rendering
 
-粘贴图片 → 渲染层拦截 → 经 IPC 把字节交 adapter 上传 → 回填平台返回的 markdown 到正文。各平台：
+Paste an image → the render layer intercepts → hand the bytes to the adapter via IPC to upload → backfill the platform-returned markdown into the body. Per platform:
 
-- **GitLab**：上传到项目级 `/uploads`，返回 `![file](/uploads/<secret>/<file>)`；该相对 URL 经既有
-  附件代理（走带 PAT 的 API 下载端点）渲染，无额外渲染改动。
-- **Bitbucket**：上传到仓库级 attachments 端点（multipart 字段 `files`，须带 `X-Atlassian-Token:
-  no-check` 绕 XSRF），用响应的 `attachment:<repoId>/<id>` 形式 markdown；既有渲染已识别 `attachment:`
-  协议。
-- **GitHub**：无公开附件上传 API（web 端走未文档化私有端点），能力位为假 → 渲染层不挂粘贴上传入口。
+- **GitLab**: upload to the project-level `/uploads`, returning `![file](/uploads/<secret>/<file>)`; that relative URL renders via the existing attachment proxy (via the PAT-carrying API download endpoint), with no extra rendering change.
+- **Bitbucket**: upload to the repo-level attachments endpoint (multipart field `files`, must carry `X-Atlassian-Token: no-check` to bypass XSRF), using the response's `attachment:<repoId>/<id>`-form markdown; existing rendering already recognizes the `attachment:` protocol.
+- **GitHub**: no public attachment upload API (the web end uses an undocumented private endpoint), capability flag false → the render layer doesn't attach a paste-upload entry.
 
-上传期间禁用输入框，避免异步回填时正文已被改动导致插入位置漂移。
+During upload the input box is disabled, to avoid the insertion position drifting when the async backfill lands after the body has been changed.
 
-## 3. 数据 / 接口契约
+## 3. Data / interface contract
 
-**核心实体 / 常量**（仅列关键形状，完整定义见类型）：
+**Core entities / constants** (only the key shapes are listed; for the complete definitions see the types):
 
-| 实体 | 用途 | 形状 / 关键字段 |
+| Entity | Purpose | Shape / key fields |
 | --- | --- | --- |
-| `PrReaction` | 中性反应模型，挂 `PrComment.reactions?` | `{ emoji, count, mine }`（emoji 字符为 key） |
-| `REACTION_PICKER` | `fixed` 模式候选（共享常量） | 固定 8 种 emoji 字符 |
-| `REACTION_EMOJIS` | `free` 模式候选 + 搜索源 + char↔code 映射来源（共享精选集） | `{ emoji, code, keywords }[]`（~150 条） |
+| `PrReaction` | neutral reaction model, hung on `PrComment.reactions?` | `{ emoji, count, mine }` (emoji character as key) |
+| `REACTION_PICKER` | `fixed`-mode candidates (shared constant) | a fixed set of 8 emoji characters |
+| `REACTION_EMOJIS` | `free`-mode candidates + search source + char ↔ code mapping source (shared curated set) | `{ emoji, code, keywords }[]` (~150 entries) |
 
-**能力位**：`commentReactions: false | 'fixed' | 'free'`；`commentAttachments`（布尔）。
+**Capability flags**: `commentReactions: false | 'fixed' | 'free'`; `commentAttachments` (boolean).
 
-**服务接口**（方法名 + 语义，不列伪签名）：
+**Service interfaces** (method name + semantics, no pseudo-signatures):
 
-- `CommentService.toggleReaction`：切换某评论的某 emoji 反应（幂等）；`kind`（summary / inline）供 GitHub 选 issue / review 反应端点，其余平台忽略；不支持的平台抛错。
-- `MediaService.uploadAttachment`：上传图片附件并回填 markdown——入参 `CommentAttachmentUpload`（`{ fileName, contentType, bytes }`），返回 `CommentAttachmentResult`（`{ markdown }`）或 `null`（不支持）。
+- `CommentService.toggleReaction`: toggle a given emoji reaction on a given comment (idempotent); `kind` (summary / inline) lets GitHub pick the issue / review reaction endpoint, ignored by other platforms; throws on unsupported platforms.
+- `MediaService.uploadAttachment`: upload an image attachment and backfill the markdown — input `CommentAttachmentUpload` (`{ fileName, contentType, bytes }`), returning `CommentAttachmentResult` (`{ markdown }`) or `null` (unsupported).
 
-**IPC 通道**：
+**IPC channels**:
 
-- `comments:toggleReaction`：切换反应，成功后广播 `comments:changed`。
-- `comments:uploadAttachment`：字节走 `ArrayBuffer` 传输，main 端转 `Uint8Array` 交 adapter；仅产出 markdown、不动评论缓存。
+- `comments:toggleReaction`: toggle a reaction, broadcasting `comments:changed` on success.
+- `comments:uploadAttachment`: bytes are transported as an `ArrayBuffer`, which the main side converts to `Uint8Array` and hands to the adapter; it only produces markdown and doesn't touch the comment cache.
 
-**i18n**：反应入口走 `reactions.*`，上传状态走 `attachments.*`。
+**i18n**: the reaction entry goes through `reactions.*`, upload status through `attachments.*`.
 
-## 4. 扩展与注意事项
+## 4. Extension & caveats
 
-- **新增平台**：实现 `toggleReaction` / `uploadAttachment`、声明对应能力位、提供本平台「原生名 ↔ emoji」
-  映射即可；不支持的项保持默认（反应抛错 / 上传返回 null），能力位置假即整块隐藏。
-- **Bitbucket 反应形状已实测核定**：`properties.reactions[].emoticon` 给 `shortcut` + `url`（twemoji
-  SVG，文件名即 Unicode 码点，如 `1f440.svg`），无 `value`、无 `count` 字段（计数取 `users.length`）。
-  展示 emoji **优先从 url 码点解码**（对任意 emoji 都成立），回退 shortcut 名映射。emoticon shortcut
-  命名不规范（如 `smile` / `laughing`），写入（toggle）用 `REACTION_EMOJIS` 建的 char→shortcode 表，
-  新增反应种类时在该精选集补行并确保 shortcode 为真实实例接受。
-- **读取一律 best-effort**：反应 / award 的补查失败必须 catch 成「无反应」，绝不冒泡中断评论列表加载。
-- **@提及不扩成全员枚举**：候选默认限本 PR 参与者；若引入平台用户搜索，须带 query 过滤 + 结果截断 +
-  防抖 + 取消在途，避免拉全量与限流（见对取数安全的约束）。
-- **附件渲染依赖既有代理**：上传只负责产出 markdown，内嵌图片的鉴权拉取与展示复用既有评论图片代理；
-  新平台若采用新的 URL 形态，需同步让附件代理识别。
+- **Adding a new platform**: implement `toggleReaction` / `uploadAttachment`, declare the corresponding capability flags, and provide this platform's "native-name ↔ emoji" mapping; leave unsupported items at their default (reaction throws / upload returns null), and setting the capability flag false hides the whole block.
+- **Bitbucket's reaction shape has been verified empirically**: `properties.reactions[].emoticon` gives `shortcut` + `url` (a twemoji SVG whose filename is the Unicode code point, e.g. `1f440.svg`), with no `value` and no `count` field (the count is taken from `users.length`). Display prefers **decoding the emoji from the url code point** (works for any emoji), falling back to the shortcut-name mapping. Emoticon shortcut naming is irregular (e.g. `smile` / `laughing`), so writes (toggle) use the char → shortcode table built from `REACTION_EMOJIS`; when adding a new reaction kind, append a row in that curated set and ensure the shortcode is one the real instance accepts.
+- **Reads are always best-effort**: a follow-up query failure of reactions / awards must be caught as "no reaction", and must never bubble up to interrupt the comment list load.
+- **@mention does not expand to enumerating everyone**: candidates default to this PR's participants; if platform user search is introduced, it must carry a query filter + result truncation + debounce + in-flight cancellation, to avoid full-list fetching and rate limiting (see the constraint on fetch safety).
+- **Attachment rendering depends on the existing proxy**: upload only produces markdown, and the authenticated fetch and display of embedded images reuse the existing comment-image proxy; if a new platform adopts a new URL shape, the attachment proxy must be updated to recognize it accordingly.
