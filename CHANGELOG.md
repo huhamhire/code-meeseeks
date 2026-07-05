@@ -12,7 +12,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 > - **Brand website launched**: a VitePress-based project website with a landing page / download page / FAQ and hosted bilingual user docs, auto-deployed via GitHub Pages.
 > - **Project internationalization**: the README and user docs are now fully bilingual (English default + Chinese).
 >
-> This release focuses on the project's external presentation; the desktop app and CLI behavior are unchanged from 0.9.0.
+> This release focuses on the project's external presentation; the desktop app and CLI behavior are largely unchanged from 0.9.0, aside from a minor startup fix.
 
 ### ✨ Added
 
@@ -25,6 +25,10 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 - **Project documentation internationalization**: external docs are now fully bilingual (English as default / fallback, Chinese as the mirror).
   - The README is split into English (default) and Chinese, switchable from the top of each.
   - User docs are bilingual — English is canonical, Chinese is the mirror, and the website renders each by language.
+
+### 🔧 Fixed
+
+- Startup now pings only the active connection instead of every configured one: a non-active connection's identity has no UI consumer, so pinging it only added startup network requests and, for an unreachable connection, a recurring warning on each launch. Switching the active connection still refreshes its identity on demand.
 
 ## [0.9.0] - 2026-07-02
 
