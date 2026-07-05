@@ -17,11 +17,11 @@ import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
 
 /*
- * Agent 交互域 controllers：规则匹配 / 评审编排 / 自由规划 / 会话与台账读取 / pr-agent run 队列
+ * Agent interaction-domain controllers: rule matching / review orchestration / free planning / session and ledger reads / pr-agent run queue
  */
 
 /**
- * 查 PR 当前命中的规则（ask 工具不接规则；无命中回 null）。
+ * Look up the rules a PR currently matches (the ask tool takes no rules; returns null on no match).
  */
 export const matchRuleForPr: IpcController<'rules:matchForPr'> = async (_event, req) => {
   if (req.tool === 'ask') return [];
@@ -46,7 +46,7 @@ export const matchRuleForPr: IpcController<'rules:matchForPr'> = async (_event, 
 };
 
 /**
- * 评审微流程（describe→review→条件追问→总结），收尾落「评审总结」。
+ * Review micro-flow (describe→review→conditional follow-up→summary), finishing by writing the "review summary".
  */
 export const runReview: IpcController<'agent:run'> = async (_event, req) => {
   const ctx = getContext();
@@ -54,7 +54,7 @@ export const runReview: IpcController<'agent:run'> = async (_event, req) => {
 };
 
 /**
- * 自由规划 Agent（自然语言「对话即委派」）。
+ * Free-planning Agent (natural-language "conversation as delegation").
  */
 export const runPlanning: IpcController<'agent:ask'> = async (_event, req) => {
   const ctx = getContext();
@@ -66,7 +66,7 @@ export const runPlanning: IpcController<'agent:ask'> = async (_event, req) => {
 };
 
 /**
- * 运行期间追加一条用户消息：有 Agent 在跑则入队（下一周期并入重排），否则起一轮自由规划兜底。
+ * Append a user message during a run: if an Agent is running, enqueue it (merged into the reorder next cycle); otherwise start a free-planning round as fallback.
  */
 export const enqueueMessage: IpcController<'agent:enqueueMessage'> = async (_event, req) => {
   const ctx = getContext();
@@ -74,13 +74,13 @@ export const enqueueMessage: IpcController<'agent:enqueueMessage'> = async (_eve
 };
 
 /**
- * 暂停某 PR 的 Agent 运行（思考 / 执行任意阶段即时中止）。
+ * Pause a PR's Agent run (immediate abort at any thinking / execution stage).
  */
 export const stopAgent: IpcController<'agent:stop'> = (_event, req) =>
   getContext().orchestrator.stop(req.localId);
 
 /**
- * 读指定 PR 已落盘的 Agent 会话（跨 PR 切换、重启后恢复）。
+ * Read a given PR's persisted Agent session (restored across PR switches and restarts).
  */
 export const getSession: IpcController<'agent:getSession'> = async (_event, req) => {
   const ctx = getContext();
@@ -88,7 +88,7 @@ export const getSession: IpcController<'agent:getSession'> = async (_event, req)
 };
 
 /**
- * 读指定 PR 的多轮对话消息。
+ * Read a given PR's multi-turn conversation messages.
  */
 export const getConversation: IpcController<'agent:getConversation'> = async (_event, req) => {
   const ctx = getContext();
@@ -96,7 +96,7 @@ export const getConversation: IpcController<'agent:getConversation'> = async (_e
 };
 
 /**
- * 读指定 PR 的 Agent 过程步骤（transcript）。
+ * Read a given PR's Agent process steps (transcript).
  */
 export const getTranscript: IpcController<'agent:getTranscript'> = async (_event, req) => {
   const ctx = getContext();
@@ -104,13 +104,13 @@ export const getTranscript: IpcController<'agent:getTranscript'> = async (_event
 };
 
 /**
- * 批量读 AutoPilot 台账：仅返回 decision=review 且有建议者的 recommendation（PR 列表徽标用）。
+ * Batch-read AutoPilot ledgers: return only recommendation where decision=review and a recommender exists (used for PR list badges).
  */
 export const getAutopilotLedgers: IpcController<'agent:autopilotLedgers'> = async (_event, req) => {
   const ctx = getContext();
   const out: Record<string, AgentRecommendationVerdict> = {};
   for (const id of req.localIds) {
-    // 已关闭 PR 列表的台账徽标须从归档存储读（其台账随 PR 树搬入冷存储）。
+    // Ledger badges for the closed-PR list must be read from archive storage (their ledgers move into cold storage along with the PR tree).
     const ledger = await getAutopilotLedger(await ctx.pr.storeForPr(id), id);
     if (ledger?.decision === 'review' && ledger.recommendation) {
       out[id] = ledger.recommendation;
@@ -120,11 +120,11 @@ export const getAutopilotLedgers: IpcController<'agent:autopilotLedgers'> = asyn
 };
 
 /*
- * pr-agent run 队列（评审工具执行层；agent:run / AutoPilot 与用户手动 run 共用同一队列）
+ * pr-agent run queue (review-tool execution layer; agent:run / AutoPilot and user manual runs share the same queue)
  */
 
 /**
- * 触发一次 run（队列调度）。/ask 必须带 question，提前校验避免排队后才报错。
+ * Trigger one run (queue-scheduled). /ask must carry a question; validate early to avoid erroring only after queuing.
  */
 export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
   const ctx = getContext();
@@ -147,18 +147,18 @@ export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
 };
 
 /**
- * 取消一个 run（active SIGKILL / waiting 出队）。
+ * Cancel a run (active SIGKILL / waiting dequeue).
  */
 export const cancelPragent: IpcController<'pragent:cancel'> = (_event, req) =>
   getContext().runQueue.cancel(req.runId);
 
 /**
- * 当前队列快照（启动 / 重连兜底）。
+ * Current queue snapshot (startup / reconnect fallback).
  */
 export const getQueue: IpcController<'pragent:queue'> = () => getContext().runQueue.snapshot();
 
 /**
- * 列某 PR 历史 run（游标分页）。
+ * List a PR's run history (cursor pagination).
  */
 export const listRuns: IpcController<'pragent:listRuns'> = async (_event, req) => {
   const ctx = getContext();
@@ -169,7 +169,7 @@ export const listRuns: IpcController<'pragent:listRuns'> = async (_event, req) =
 };
 
 /**
- * 单条 run 查询。
+ * Query a single run.
  */
 export const getRun: IpcController<'pragent:getRun'> = async (_event, req) => {
   const ctx = getContext();
@@ -177,7 +177,7 @@ export const getRun: IpcController<'pragent:getRun'> = async (_event, req) => {
 };
 
 /**
- * 清某 PR 全部 run 历史，并一并清 Agent 会话 + AutoPilot 台账（广播 ★ 徽标即时消失）。
+ * Clear all of a PR's run history, and clear the Agent session + AutoPilot ledger together (broadcast so the ★ badge disappears immediately).
  */
 export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req) => {
   const ctx = getContext();
@@ -189,7 +189,7 @@ export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req)
 };
 
 /**
- * 删除单条 run 记录（仅该 run，不动 Agent 会话 / 台账 / ★ 徽标）。renderer 乐观从列表移除。
+ * Delete a single run record (only that run; leaves the Agent session / ledger / ★ badge untouched). The renderer optimistically removes it from the list.
  */
 export const deleteRun: IpcController<'pragent:deleteRun'> = async (_event, req) => {
   const ctx = getContext();
