@@ -1,110 +1,110 @@
-# GUI 与交互
+# GUI & interaction
 
-## 职责与边界
+## Responsibilities & boundaries
 
-渲染层（React）的整体布局、各面板职责、跨 PR 状态保活与关键交互约定。渲染层只做展示与交互，
-所有数据/IO 经 IPC 调主进程（见 [架构总览](../00-overview.md)）。
+The overall layout of the render layer (React), each panel's responsibilities, cross-PR state persistence, and key interaction conventions. The render layer only handles display and interaction;
+all data/IO goes through IPC to the main process (see [Architecture overview](../00-overview.md)).
 
-负责：UI 结构、面板交互、前端状态保活、外链/模态/本地偏好等交互规范。不负责：业务逻辑与 IO（在主进程各模块）。
+Owns: UI structure, panel interaction, front-end state persistence, and interaction conventions such as external links / modals / local preferences. Does not own: business logic and IO (those live in the main-process modules).
 
-## 核心设计
+## Core design
 
-### 布局
+### Layout
 
-根组件挂载后做一次 bootstrap（并行拉 app 信息 / 配置 / PR 列表 / pr-agent 状态 / 连接 / 上次同步），
-之后是自绘标题栏 + 三栏 + 状态栏的主界面，外加按需浮层：
+After the root component mounts it runs a one-time bootstrap (fetching app info / config / PR list / pr-agent status / connections / last sync in parallel),
+then renders the main UI of a custom-drawn title bar + three columns + status bar, plus on-demand overlays:
 
 ```mermaid
 flowchart TB
-  subgraph APP["主界面（无边框自绘）"]
+  subgraph APP["Main UI (frameless, custom-drawn)"]
     direction TB
-    TBAR["TitleBar：品牌名 · 选中 PR 标题 · 系统窗控（整条可拖拽）"]
-    subgraph BODY["三栏（宽度可拖拽 / 可收起）"]
+    TBAR["TitleBar: brand name · selected PR title · system window controls (whole bar draggable)"]
+    subgraph BODY["Three columns (draggable width / collapsible)"]
       direction LR
-      SB["Sidebar · 左<br/>待评审 PR 列表<br/>分组折叠 · 过滤 · 搜索"]
-      MP["MainPane · 中<br/>变更 / 评论 / 提交 / 详情<br/>「变更」= DiffView"]
-      CP["ChatPane · 右<br/>对话驱动 pr-agent<br/>/describe · /review · /ask"]
+      SB["Sidebar · left<br/>Review-requested PR list<br/>grouped & collapsible · filter · search"]
+      MP["MainPane · center<br/>Changes / Comments / Commits / Details<br/>'Changes' = DiffView"]
+      CP["ChatPane · right<br/>conversation-driven pr-agent<br/>/describe · /review · /ask"]
     end
-    SBAR["StatusBar：pr-agent 状态/队列 · 同步进度 · 最近同步 · LLM"]
+    SBAR["StatusBar: pr-agent status/queue · sync progress · last sync · LLM"]
     TBAR --- BODY
     BODY --- SBAR
   end
-  OV["浮层（按需）：SettingsModal · OnboardingWizard · 二层模态 · toast"]
-  APP -. 覆盖 .-> OV
+  OV["Overlays (on demand): SettingsModal · OnboardingWizard · second-level modals · toast"]
+  APP -. covers .-> OV
 ```
 
-各区职责：
+Responsibilities of each area:
 
-- **TitleBar（顶）**：无边框窗口的自绘标题栏（见下「无边框窗口」），展示品牌名 + 选中 PR 标题，整条可拖拽窗口。
-- **Sidebar（左）**：待评审 PR 列表，按 `项目/仓库` 分组 + 手风琴折叠，updatedAt 倒序，状态过滤 + 搜索；
-  宽度可拖拽、可整体收起。
-- **MainPane（中）**：选中 PR 的详情，分「变更 / 评论 / 提交 / 详情」标签页。变更页即 **DiffView**。
-- **ChatPane（右）**：对话式驱动 pr-agent（`/describe` `/review` `/ask`），默认收起；宽度可拖拽。
-- **StatusBar（底）**：pr-agent 状态 / 队列、仓库同步进度、最近同步时间、当前 LLM 等胶囊。
-- **浮层**：SettingsModal（设置）、OnboardingWizard（首启向导）、各确认/编辑二层模态、操作级 toast。
+- **TitleBar (top)**: the custom-drawn title bar of the frameless window (see "Frameless window" below), showing the brand name + selected PR title; the whole bar drags the window.
+- **Sidebar (left)**: the review-requested PR list, grouped by `project/repo` with accordion collapse, sorted by `updatedAt` descending, with status filter + search;
+  draggable width, collapsible as a whole.
+- **MainPane (center)**: details of the selected PR, split into "Changes / Comments / Commits / Details" tabs. The Changes tab is **DiffView**.
+- **ChatPane (right)**: conversation-driven pr-agent (`/describe` `/review` `/ask`), collapsed by default; draggable width.
+- **StatusBar (bottom)**: pills for pr-agent status / queue, repo sync progress, last sync time, current LLM, etc.
+- **Overlays**: SettingsModal (settings), OnboardingWizard (setup wizard), various confirm/edit second-level modals, and action-level toasts.
 
-### 关键面板
+### Key panels
 
-- **DiffView**：Monaco 并排 diff + 文件树（图标/Git 着色/草稿与评论 chip）+ 行内评论（view zone）+
-  blame + 跨文件搜索 + 行内草稿编辑（DraftZone）。文件切换只渲染当前文件。
-- **ChatPane**：run 卡片（RunMeta 显示模型名 + ↑输入/↓输出 token）；finding 卡片可「→ 编辑」（跳 Diff
-  并进入草稿编辑）/「✗ 拒绝」；队列串行、可中断/重试；命令补全 + 历史。
-- **DraftsPanel**：「草稿」标签页，跨文件浏览草稿，单条/批量发布，与「评论」标签对照本地未发 vs 远端已发。
-- **SettingsModal**：连接 / LLM / 代理 / 规则目录 / 轮询 / repos_dir 的可视化 CRUD，子项用二层编辑模态；
-  连接/代理带「测试」。
-- **OnboardingWizard**：首启引导配代码平台（+ 可选 LLM）。
+- **DiffView**: Monaco side-by-side diff + file tree (icons / Git coloring / draft & comment chips) + inline comments (view zone) +
+  blame + cross-file search + inline draft editing (DraftZone). Switching files only renders the current file.
+- **ChatPane**: run cards (RunMeta shows the model name + ↑input/↓output tokens); finding cards support "→ Edit" (jump to the Diff
+  and enter draft editing) / "✗ Reject"; the queue is serial, interruptible/retryable; command completion + history.
+- **DraftsPanel**: the "Drafts" tab, browsing drafts across files, publishing single/batch, and cross-referencing local-unsent vs. remote-published against the "Comments" tab.
+- **SettingsModal**: visual CRUD for connection / LLM / proxy / rules directory / polling / repos_dir, with second-level edit modals for sub-items;
+  connection/proxy come with a "Test" action.
+- **OnboardingWizard**: first-launch onboarding that configures the code platform (+ optional LLM).
 
-### 跨 PR 状态保活
+### Cross-PR state persistence
 
-pr-agent run 的实时状态、仓库同步、草稿都用**模块级 store**（`useSyncExternalStore`）持有，并在根组件
-启动时把主进程的事件流（run 进度 / 队列变化 / 同步进度 / 草稿变化）接入。这样切换 PR 时运行中的状态、
-实时 stdout、草稿列表不随组件卸载丢失。
+The live status of a pr-agent run, repo sync, and drafts are all held in **module-level stores** (`useSyncExternalStore`), and the root component
+wires the main process's event streams (run progress / queue changes / sync progress / draft changes) into them on startup. This way, when switching PRs, running state,
+live stdout, and the draft list are not lost when components unmount.
 
-### 组件分层：App = 组合根，领域逻辑归 hooks
+### Component layering: App = composition root, domain logic lives in hooks
 
-`App.tsx` 是**组合根（composition root）**——只做三件事：调用各领域 hook、装配视图模型（廉价派生）、把数据与回调透传给 TitleBar / Sidebar / MainPane / ChatPane / StatusBar 等子组件。**不在 App 内堆领域逻辑**（状态机、effect、IPC 调用、ref 同步等），这些下沉到 `renderer/src/hooks/use*.ts` 各自的领域 hook：
+`App.tsx` is the **composition root** — it does only three things: call each domain hook, assemble view models (cheap derivations), and pass data and callbacks through to child components such as TitleBar / Sidebar / MainPane / ChatPane / StatusBar. **No domain logic is piled inside App** (state machines, effects, IPC calls, ref sync, etc.); those sink into the respective domain hooks under `renderer/src/hooks/use*.ts`:
 
-- `usePullRequests`（列表 / 选中 / 审批 / 合并 / 刷新 / 已读）、`useBootstrap`（启动 + 全局生命周期）、`usePrNavigation`（发现分类 / 活跃·归档范围 / 归档懒加载 / 按 URL 打开 / 定位跳转 / 通知点击导航 / 跨组件 Diff·Tab 跳转意图）、`useGlobalShortcuts`（窗口级快捷键）、`usePanelLayout`、`useDockBadge`、`useTheme`、`useToast`、`useUpdateNotice`、`useExternalLinkGuard`、`useAppStores`。
-- **判据**：一段逻辑若含自身的 state/effect/ref 同步、或可独立测试，就该是一个 hook；若只是「把 A 的输出接到 B 的入参」的装配与廉价派生（如按能力位过滤可见筛选项），留在组合根。
-- **避免反向臃肿**：相互依赖的状态（如 scope / selectedId / discoveryFilter）收在**同一个** hook，别拆成多个靠参数互穿 setter 的小 hook。hook 之间有依赖时按「数据源 → 派生」单向组合（如 `usePrNavigation` 组合在 `usePullRequests` 之上）。
+- `usePullRequests` (list / selection / review decision / merge / refresh / read), `useBootstrap` (startup + global lifecycle), `usePrNavigation` (discovery category / active·archived scope / archive lazy-load / open by URL / locate-and-jump / notification-click navigation / cross-component Diff·Tab jump intent), `useGlobalShortcuts` (window-level shortcuts), `usePanelLayout`, `useDockBadge`, `useTheme`, `useToast`, `useUpdateNotice`, `useExternalLinkGuard`, `useAppStores`.
+- **Criterion**: a piece of logic that carries its own state/effect/ref sync, or that can be tested independently, should be a hook; if it is merely the "wire A's output into B's input" assembly and cheap derivation (e.g. filtering visible filter options by capability flags), it stays in the composition root.
+- **Avoid reverse bloat**: interdependent state (e.g. scope / selectedId / discoveryFilter) is kept in **one** hook, not split into several small hooks that thread setters through each other's params. When hooks have dependencies, compose them one-directionally as "data source → derivation" (e.g. `usePrNavigation` composes on top of `usePullRequests`).
 
-历史上 App 会随特性迭代「长回来」（通知、快捷键等细分领域内联堆积）——发现 App 又变臃肿时，按上述判据把成形的领域抽成 hook、回归组合根。
+Historically App has tended to "grow back" as features iterate (notifications, shortcuts, and other sub-domains inlined and piling up) — when you notice App bloating again, extract the matured domains into hooks per the criterion above and return to the composition root.
 
-### 无边框窗口
+### Frameless window
 
-主窗口去掉系统原生标题栏（`titleBarStyle: 'hidden'`），由渲染层自绘一条 36px 标题栏（VS Code 风），
-让深色主题从顶贯通到底。窗控按钮**不自绘**，交由系统画以保留原生行为（Snap Layouts / 双击最大化 / 吸附）：
+The main window removes the native OS title bar (`titleBarStyle: 'hidden'`), and the render layer custom-draws a 36px title bar (VS Code style),
+letting the dark theme run continuously from top to bottom. Window control buttons are **not custom-drawn**; the system draws them to preserve native behavior (Snap Layouts / double-click to maximize / snapping):
 
-- **macOS**：保留红绿灯，`trafficLightPosition` 下移到自绘标题栏内；标题栏左侧留 72px 占位避让。
-- **Windows / Linux**：`titleBarOverlay` 让系统在右上画最小化/最大化/关闭，渲染层只接管中间标题区，
-  **勿在右上角放可点元素**（会被 overlay 覆盖）。`titleBarOverlay.height` 必须与渲染层 `.app-titlebar` 高度（36px）一致。
+- **macOS**: keep the traffic lights, with `trafficLightPosition` shifted down into the custom title bar; leave a 72px spacer on the left of the title bar to avoid overlap.
+- **Windows / Linux**: `titleBarOverlay` lets the system draw minimize/maximize/close at the top-right; the render layer only takes over the middle title area,
+  **do not place clickable elements in the top-right corner** (they get covered by the overlay). `titleBarOverlay.height` must match the render layer's `.app-titlebar` height (36px).
 
-拖拽实现：整条标题栏 `-webkit-app-region: drag`，其中的按钮/链接/输入等交互元素各自 `no-drag`，否则点击被当成拖窗。
+Drag implementation: the whole title bar is `-webkit-app-region: drag`, while the buttons/links/inputs and other interactive elements within it are each `no-drag`, otherwise a click is treated as a window drag.
 
-平台差异经 `AppInfo.platform`（bootstrap 时由主进程下发）判定，渲染层不直接读 `process`。
+Platform differences are decided via `AppInfo.platform` (delivered by the main process at bootstrap); the render layer does not read `process` directly.
 
-### 交互约定
+### Interaction conventions
 
-- **外链统一外开**：所有 UGC（评论 / PR 描述 / finding / chat）里的 `http(s)` 链接点击都走系统默认浏览器
-  （capture 阶段全局拦截 + `app:openExternal`），不在应用窗口内导航覆盖界面。
-- **二层模态背景点击只关本层**：嵌套模态（连接/LLM/代理编辑、确认框）的 backdrop 点击 `stopPropagation`，
-  不冒泡到外层设置模态的关闭（含 createPortal 的确认框，React 合成事件仍按组件树冒泡）。
-- **操作级 toast vs 整屏错误**：远端动作（审批/合并/发布）失败弹 toast，区别于 bootstrap 致命错误的整屏报错。
-- **窗口聚焦自动刷新**：窗口重新获得焦点时主动拉一次 PR meta（跟上「切到平台改完再切回」场景）。
-- **布局偏好持久化**：侧栏/对话宽度与折叠态、diff 视图模式等存 localStorage。
+- **All external links open externally**: every `http(s)` link click inside UGC (comments / PR description / findings / chat) goes to the system default browser
+  (global interception at the capture phase + `app:openExternal`), never navigating inside the app window to cover the UI.
+- **Second-level modal backdrop click only closes its own layer**: for nested modals (connection/LLM/proxy editing, confirm dialogs) the backdrop click calls `stopPropagation`,
+  so it does not bubble up to close the outer settings modal (including createPortal confirm dialogs — React synthetic events still bubble along the component tree).
+- **Action-level toast vs. full-screen error**: a failed remote action (review decision/merge/publish) raises a toast, distinct from the full-screen error of a fatal bootstrap failure.
+- **Auto-refresh on window focus**: when the window regains focus, proactively fetch PR meta once (to follow the "switch to the platform, make edits, then switch back" scenario).
+- **Layout preferences persisted**: sidebar/chat width and collapse state, diff view mode, etc. are stored in localStorage.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-- 渲染层经 preload 暴露的泛型 `invoke<K>(channel, req)` 调主进程；事件订阅经 `subscribe(event, cb)`。
-  全部由 `IpcChannels` 类型映射约束（见 [总览](../00-overview.md)）。
-- 领域类型（PR / Finding / ReviewRun / Draft / 配置）来自 `shared`，前后端共享。
+- The render layer calls the main process via the generic `invoke<K>(channel, req)` exposed through preload; event subscription goes via `subscribe(event, cb)`.
+  All of it is constrained by the `IpcChannels` type map (see [Overview](../00-overview.md)).
+- Domain types (PR / Finding / ReviewRun / Draft / config) come from `shared`, shared between front and back end.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **新交互一律走 IPC + 类型映射**：渲染层不直接碰 Node / 文件 / 网络。
-- **跨 PR 需存活的状态进模块级 store**，不要塞组件 useState（切 PR 即丢）。
-- **App.tsx 保持组合根**：新交互的领域逻辑下沉到 `hooks/use*.ts`，App 只装配（见「组件分层」）；发现 App 又变臃肿即按域抽 hook。
-- **安全基线**：`contextIsolation` 开、无 `nodeIntegration`、CSP；preload 只暴露白名单能力。
-- **二层模态**新增时记得 backdrop `stopPropagation`，否则会连带关掉外层。
-- **无边框标题栏高度**改动时，渲染层 `.app-titlebar` 与主进程 `titleBarOverlay.height` 两处须同步，否则 Windows 窗控与标题区错位；标题栏内新增交互元素记得标 `no-drag`。
-- Monaco 的 worker、view zone（行内评论/草稿）渲染较重，注意大 PR 下的懒加载与销毁。
+- **New interactions always go through IPC + the type map**: the render layer never touches Node / files / network directly.
+- **State that must survive across PRs goes into a module-level store**, not component `useState` (switching PRs loses it).
+- **Keep App.tsx a composition root**: the domain logic of a new interaction sinks into `hooks/use*.ts`, and App only assembles (see "Component layering"); when App bloats again, extract hooks by domain.
+- **Security baseline**: `contextIsolation` on, no `nodeIntegration`, CSP; preload exposes only whitelisted capabilities.
+- **When adding a second-level modal** remember the backdrop `stopPropagation`, otherwise it will also close the outer layer.
+- **When changing the frameless title bar height**, the render layer's `.app-titlebar` and the main process's `titleBarOverlay.height` must stay in sync, otherwise the Windows window controls and title area misalign; remember to mark newly added interactive elements in the title bar as `no-drag`.
+- Monaco's workers and view zones (inline comments/drafts) are heavy to render; watch lazy loading and disposal on large PRs.
