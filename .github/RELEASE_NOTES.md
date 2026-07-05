@@ -1,4 +1,4 @@
-> 📖 This release on the website changelog: [English](%%CHANGELOG_URL_EN%%) · [简体中文](%%CHANGELOG_URL_ZH%%)
+> 📖 Full changelog: [English](%%CHANGELOG_URL_EN%%) · [简体中文](%%CHANGELOG_URL_ZH%%)
 
 ## What's changed
 
