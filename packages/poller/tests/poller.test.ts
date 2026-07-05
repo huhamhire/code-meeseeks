@@ -25,22 +25,22 @@ import {
 const unusedComments: CommentService = {
   listPullRequestComments: async () => [],
   publishSummaryComment: () =>
-    Promise.reject(new Error('FakeAdapter.publishSummaryComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.publishSummaryComment not implemented (unused by poller tests)')),
   publishInlineComment: () =>
-    Promise.reject(new Error('FakeAdapter.publishInlineComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.publishInlineComment not implemented (unused by poller tests)')),
   replyToComment: () =>
-    Promise.reject(new Error('FakeAdapter.replyToComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.replyToComment not implemented (unused by poller tests)')),
   editComment: () =>
-    Promise.reject(new Error('FakeAdapter.editComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.editComment not implemented (unused by poller tests)')),
   deleteComment: () =>
-    Promise.reject(new Error('FakeAdapter.deleteComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.deleteComment not implemented (unused by poller tests)')),
   toggleReaction: () =>
-    Promise.reject(new Error('FakeAdapter.toggleReaction 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.toggleReaction not implemented (unused by poller tests)')),
 };
 const unusedMedia: MediaService = {
   getUserAvatar: async () => null,
   getAttachment: () =>
-    Promise.reject(new Error('FakeAdapter.getAttachment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.getAttachment not implemented (unused by poller tests)')),
   uploadAttachment: async () => null,
 };
 
@@ -108,14 +108,14 @@ class FakeAdapter implements PlatformAdapter {
         return this.prList;
       },
       getSinglePullRequest: () =>
-        Promise.reject(new Error('FakeAdapter.getSinglePullRequest 未实现（poller 测试不使用）')),
+        Promise.reject(new Error('FakeAdapter.getSinglePullRequest not implemented (unused by poller tests)')),
       listPullRequestCommits: async () => [],
       listPullRequestActivity: async () => [],
       setPullRequestReviewStatus: async () => {
         // the test only cares about the poller's own behavior; setReviewStatus is called at the IPC layer, not triggered by the poller
       },
       mergePullRequest: () =>
-        Promise.reject(new Error('FakeAdapter.mergePullRequest 未实现（poller 测试不使用）')),
+        Promise.reject(new Error('FakeAdapter.mergePullRequest not implemented (unused by poller tests)')),
     };
   }
   setPrs(prs: PullRequest[]): void {

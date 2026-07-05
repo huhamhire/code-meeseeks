@@ -537,10 +537,10 @@ export const addDraft: IpcController<'drafts:create'> = async (_event, req) => {
   const ctx = getContext();
   const { draft, localId } = req;
   if (draft.origin === 'finding' && !draft.source) {
-    throw new Error('drafts:create: origin=finding 必须传 source { runId, findingId }');
+    throw new Error('drafts:create: origin=finding requires source { runId, findingId }');
   }
   if (draft.origin === 'manual' && draft.source) {
-    throw new Error('drafts:create: origin=manual 不应该传 source');
+    throw new Error('drafts:create: origin=manual must not pass source');
   }
   const created = await createDraft(await ctx.pr.storeForPr(localId), localId, draft);
   ctx.broadcast('drafts:changed', { localId });

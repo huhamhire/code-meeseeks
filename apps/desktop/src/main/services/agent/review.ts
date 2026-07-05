@@ -94,7 +94,7 @@ export async function runReview(
             referencedFinding,
           );
           if (run.status !== 'succeeded') {
-            throw new Error(`pr-agent ${tool} 未成功：${run.errorMessage ?? run.status}`);
+            throw new Error(`pr-agent ${tool} did not succeed: ${run.errorMessage ?? run.status}`);
           }
           // Carry back runId / findings / askVerdict: lets the judge name findings by id, and links asks re-review with auto-close.
           return {

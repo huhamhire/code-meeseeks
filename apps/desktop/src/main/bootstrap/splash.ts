@@ -44,6 +44,8 @@ const SPLASH_COLORS = {
  * The logo is inlined via base64 (see resolveSplashLogo); the data URL is self-contained, with
  * identical dev/packaged behavior. Colors switch with the effective theme (`dark`), to avoid a dark
  * splash under a light theme.
+ * Intentionally text-free (logo + brand name + spinner only): the splash renders before i18n loads,
+ * so it must not depend on any localized copy — the spinner conveys "loading" without words.
  */
 export function createSplash(dark: boolean): BrowserWindow {
   const c = dark ? SPLASH_COLORS.dark : SPLASH_COLORS.light;
@@ -79,13 +81,12 @@ export function createSplash(dark: boolean): BrowserWindow {
       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
     .logo{width:72px;height:72px;border-radius:16px;}
     .name{font-size:17px;font-weight:600;letter-spacing:.3px;}
-    .row{display:flex;align-items:center;gap:8px;color:${c.sub};font-size:12px;}
-    .ring{width:14px;height:14px;border-radius:50%;border:2px solid ${c.ring};
+    .ring{width:16px;height:16px;border-radius:50%;border:2px solid ${c.ring};
       border-top-color:${c.accent};animation:spin .8s linear infinite;}
     @keyframes spin{to{transform:rotate(360deg);}}
   </style></head><body>
     ${logoEl}<div class="name">Code Meeseeks</div>
-    <div class="row"><div class="ring"></div><span>启动中…</span></div>
+    <div class="ring"></div>
   </body></html>`;
   void splash.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
   splash.once('ready-to-show', () => {
