@@ -1,429 +1,431 @@
-# 更新日志（Changelog）
+# Changelog
 
-本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
-版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+**English** · [简体中文](CHANGELOG.zh-CN.md)
+
+All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-> 本版重点：
+> Highlights of this release:
 >
-> - **品牌官网上线**：基于 VitePress 的项目官网，含落地页 / 下载页 / 常见问题与托管的双语使用文档，经 GitHub Pages 自动部署。
-> - **项目国际化**：README 与使用文档全面双语化（英文默认 + 中文）。
+> - **Brand website launched**: a VitePress-based project website with a landing page / download page / FAQ and hosted bilingual user docs, auto-deployed via GitHub Pages.
+> - **Project internationalization**: the README and user docs are now fully bilingual (English default + Chinese).
 >
-> 本版聚焦项目对外呈现，桌面应用与 CLI 的功能行为较 0.9.0 无变化。
+> This release focuses on the project's external presentation; the desktop app and CLI behavior are unchanged from 0.9.0.
 
-### ✨ 新增
+### ✨ Added
 
-- **品牌官网**：面向用户的项目官网正式上线（<https://huhamhire.github.io/code-meeseeks/>）。
-  - 落地页：一句话定位 + 深浅自适应的产品截图 + 核心特性 + 模型生态展示 + 跳转 Releases 的下载入口。
-  - 下载页：按访问者操作系统自动推荐对应安装包，GUI 与 CLI 分栏；CLI 提供 macOS / Linux 一键安装脚本；下载信息运行期取最新 Release，并有构建期静态兜底以抵御接口限流。
-  - 常见问题（FAQ）独立成页。
-  - 托管使用文档：官网直接从仓库使用文档构建渲染，中英文双语、随文档更新同步，且站内搜索支持中文界面。
-  - 部署与发版解耦：官网经独立流水线部署到 GitHub Pages，不占用应用 / CLI 的发版流程。
-- **项目文档国际化**：对外文档全面双语化（英文为默认 / 兜底、中文对照）。
-  - README 拆分为英文（默认）与中文两份，顶部可互相切换。
-  - 使用文档双语化——英文为正本、中文为对照镜像，官网按语言分别渲染。
+- **Brand website**: the user-facing project website is now live (<https://huhamhire.github.io/code-meeseeks/>).
+  - Landing page: one-line positioning + light/dark-adaptive product screenshots + core features + a model-ecosystem showcase + a download entry linking to Releases.
+  - Download page: automatically recommends the matching installer for the visitor's OS, with GUI and CLI in separate columns; the CLI offers one-line install scripts for macOS / Linux; download info is fetched from the latest Release at runtime, with a build-time static fallback to withstand API rate-limiting.
+  - FAQ on its own page.
+  - Hosted user docs: the website builds and renders directly from the repo's user docs, bilingual and kept in sync with them, and site search supports a Chinese interface.
+  - Deploy decoupled from releases: the website deploys to GitHub Pages via an independent pipeline, without occupying the app / CLI release flow.
+- **Project documentation internationalization**: external docs are now fully bilingual (English as default / fallback, Chinese as the mirror).
+  - The README is split into English (default) and Chinese, switchable from the top of each.
+  - User docs are bilingual — English is canonical, Chinese is the mirror, and the website renders each by language.
 
 ## [0.9.0] - 2026-07-02
 
-> 本版重点：
+> Highlights of this release:
 >
-> - **外部集成与 CLI**：开启本机 API 把 PR 浏览与评审 Agent 操作开放给外部集成，并提供跨平台命令行工具 `meebox`
+> - **External integration and CLI**: open a local API to expose PR browsing and review-Agent operations to external integrations, plus a cross-platform command-line tool `meebox`
 
-### ✨ 新增
+### ✨ Added
 
-- **外部集成 · 本地 API 服务**：设置新增「集成」分区，可开启一个本机 API 服务，将 PR 浏览与评审 Agent 操作以接口形式开放给外部 agent / 工具 / 脚本集成。
-  - 默认关闭；开启即强制访问令牌鉴权，令牌可一键生成 / 显示 / 复制 / 重新生成。
-  - 监听地址可自定义：默认仅本机可达，按需可开放到局域网（开放时给出安全提示）。
-  - 开放浏览（当前身份 / PR 列表 / 详情 / diff / 动态 / 提交 / 评审人）、评审 Agent（状态 / 历史 / 自动评审 / 指令 / 对话 / 中断）与评审写动作（通过 / 需修改 / 发评论）；不开放合并与变更类 Agent 工具（publish 等）。
-- **外部集成 · 命令行工具 `meebox`**：随发布提供 Windows / macOS / Linux 跨平台命令行客户端，经本地 API 服务浏览 PR、操作评审 Agent 并执行评审写动作（approve / needswork / comment），便于脚本与外部 agent 集成。PR 列表精简且支持分页；PR 关联命令用 `--pr <id>`；连接信息须显式提供（flag / 环境变量 / cli.yaml），不读 GUI 主配置。
-- **PR 列表发现分类未读圆点**：某发现分类（待我评审 / 我创建 等）下有新的待处理 PR 时，在该分类标签后加未读圆点，一眼看出哪类有新进展；圆点始终基于活跃 PR，即便当前处于「已关闭」视图也正确反映活跃分类的未读。
-- **「我创建的」PR 通知**：针对本人创建的 PR 新增三类系统通知——收到他人新评论、被评审标记「需修改」、出现合并冲突；通知分区提供独立开关、默认开启。
-- **命令回显气泡**：在评审 Agent 面板直接发起 `/review`、`/describe`、`/improve`、`/ask` 等命令时，命令即时以用户气泡回显在其结果卡片之上，贴合对话习惯；编排 / AutoPilot 派发的子任务不回显，避免与编排会话的用户消息重复。
-- **按提交发起评审 Agent**：在 Diff 视图将变更范围切到某个提交后，评审 Agent 面板直接键入的 `/describe`、`/review`、`/improve`、`/ask`（含自然语言提问）会自动限定在该提交自身改动（`parent..sha`）而非 PR 全量；输入栏以范围 chip 标示当前提交，chip 选中态源自视图选择，点击可临时禁用（不删除、切到别的提交自动复位），与 Diff 选区 chip 交互一致。同一时刻仅一个 scope 生效：选中 Diff 行时以选区为准、暂挂提交范围，取消选区后自动还原。运行中与完成的评审结果卡均展示所限定提交的范围徽标。一键自动评审仍作用于 PR 全量。
+- **External integration · local API service**: Settings gains an "Integration" section where you can start a local API service that exposes PR browsing and review-Agent operations as endpoints for external agents / tools / scripts.
+  - Off by default; enabling it enforces access-token authentication, with one-click token generate / show / copy / regenerate.
+  - Custom listen address: reachable only from the local machine by default, optionally opened to the LAN (with a security warning when opened).
+  - Exposes browsing (current identity / PR list / detail / diff / activity / commits / reviewers), the review Agent (status / history / auto-review / instructions / conversation / interrupt), and review write actions (approve / needs-work / comment); does not expose merge or change-type Agent tools (publish, etc.).
+- **External integration · command-line tool `meebox`**: a cross-platform Windows / macOS / Linux command-line client shipped with the release that browses PRs, operates the review Agent, and performs review write actions (approve / needswork / comment) through the local API service — convenient for scripts and external agents. The PR list is compact and paginated; PR-scoped commands use `--pr <id>`; connection info must be provided explicitly (flag / environment variable / cli.yaml) and does not read the GUI's main config.
+- **Unread dots on PR-list discovery categories**: when a discovery category (To review / Created by me, etc.) has new pending PRs, an unread dot is added after that category's label so you can see at a glance which category has new activity; the dot is always based on active PRs, correctly reflecting active-category unreads even while in the "Closed" view.
+- **Notifications for PRs I created**: three new system notifications for your own PRs — a new comment from someone else, a reviewer marking "needs work", and a merge conflict; the Notifications section provides independent toggles, on by default.
+- **Command echo bubbles**: when you issue `/review`, `/describe`, `/improve`, `/ask`, etc. directly in the review-Agent panel, the command is instantly echoed as a user bubble above its result card, matching conversational habit; subtasks dispatched by orchestration / AutoPilot are not echoed, avoiding duplication with the orchestration conversation's user messages.
+- **Launch the review Agent per commit**: after switching the change scope to a specific commit in the Diff view, `/describe`, `/review`, `/improve`, `/ask` (including natural-language questions) typed directly in the review-Agent panel are automatically scoped to that commit's own changes (`parent..sha`) rather than the whole PR; the input bar marks the current commit with a scope chip, whose selected state derives from the view selection and can be temporarily disabled by clicking (not removed; switching to another commit auto-resets), consistent with the Diff-selection chip interaction. Only one scope is in effect at a time: when Diff lines are selected the selection takes precedence and the commit scope is suspended, restored automatically once the selection is cleared. Both running and completed review-result cards show the scoped commit's range badge. One-click auto-review still applies to the whole PR.
 
-### ♻️ 变更
+### ♻️ Changed
 
-- 评审 Agent 的 `/ask`（本机 agentic CLI 提供方）注入代码检索指引：引导以只读搜索定向查符号 / 只读所需行段替代整文件通读与全仓扫描，在保留读真实文件深度的同时，降低探索轮次与 token 消耗。
-- 「追问数量」上限现同时约束自由对话 Agent（会话即委派）的自动 `/ask`：此前该上限仅作用于评审微流程的条件追问，自由规划循环仅受「Agent 最大步数」约束、可连续多次 `/ask`（每次均为一次成本较高的 agentic 探索）；现自由对话中的 `/ask` 亦按「追问数量」封顶（始终生效，与「自动追问」开关无关），避免探索成本失控。
-- 状态栏不再常态显示 pr-agent 版本号（减少常态噪声），仅在其不可用时保留告警提示；版本号改在设置「关于」页的运行环境信息中展示。
-- 「我创建的」分类下的「待处理」筛选并入存在合并冲突的 PR：作者视角下有冲突的 PR 需其跟进解决（即便评审已通过），故一并计入待处理。
-- PR 列表的状态二级筛选改为宽度自适应胶囊：一行容得下即不换行，容纳不下时换行并按每行项数均分撑满整行，消除换行后右侧留白参差。
-- 评审 Agent 派生的临时工作树内部分支不再使用固定的品牌化名称，改为与 PR 关联的 `pr-<localId>/head`、`pr-<localId>/base`（分层命名贴合平台 PR 引用惯例）：消除产出中可辨识的固定行为特征，同时保证该内部分支名不会漏入对外发布的评审内容。
+- The review Agent's `/ask` (local agentic-CLI provider) injects code-retrieval guidance: it steers toward read-only searches to locate symbols / read only the needed line ranges instead of reading whole files and scanning the whole repo, lowering exploration rounds and token consumption while preserving the depth of reading real files.
+- The "follow-up count" cap now also constrains the free-conversation Agent's (conversation-as-delegation) automatic `/ask`: previously this cap applied only to the review micro-flow's conditional follow-ups, while the free planning loop was bounded only by "Agent max steps" and could `/ask` many times in a row (each a costly agentic exploration); now `/ask` in free conversation is likewise capped by "follow-up count" (always in effect, independent of the "auto follow-up" toggle), preventing runaway exploration cost.
+- The status bar no longer routinely shows the pr-agent version (reducing steady-state noise), keeping only the warning when it is unavailable; the version now appears in the runtime-environment info on the Settings "About" page.
+- The "pending" filter under the "Created by me" category now includes PRs with merge conflicts: from the author's perspective a conflicted PR needs their follow-up to resolve (even if the review has passed), so it counts as pending.
+- The PR-list status sub-filter becomes width-adaptive pills: no wrap when a row fits, wrapping otherwise and distributing items evenly to fill each row, eliminating the ragged right-side gap after wrapping.
+- Internal branches in the review Agent's derived temporary worktree no longer use a fixed branded name, switching to PR-associated `pr-<localId>/head`, `pr-<localId>/base` (layered naming matching platform PR-reference conventions): removes an identifiable fixed behavioral signature from the output while ensuring the internal branch name never leaks into externally published review content.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 修复 PR 列表分组标题背景色、Windows 窗口右上角控制按钮此前不随主题（编辑器配色主题）变化的问题；现二者均跟随当前主题派生配色，深浅 / 主题切换实时生效。
-- 修复点开带「@我 / 回复我」未读计数的 PR 后，标题处的未读计数 chip 不立即消除、需等下一轮轮询才清零的问题：标为已读时同步乐观清零该计数（此前仅清未读圆点，遗漏了计数 chip）。
-- 修复德语等界面下设置页左侧导航的长标签（如「通知」）溢出被裁切的问题；现长标签自动换行完整显示。
+- Fixed PR-list group-header backgrounds and the Windows window's top-right control buttons not following the theme (editor color theme); both now derive their colors from the current theme, with light/dark and theme switches taking effect in real time.
+- Fixed the unread-count chip at the title not clearing immediately after opening a PR with an "@me / replied to me" unread count and requiring the next poll to reset: marking as read now optimistically zeroes that count in sync (previously it only cleared the unread dot, missing the count chip).
+- Fixed long labels in the Settings left nav (e.g. "Notifications") overflowing and being clipped in German and other locales; long labels now wrap and display in full.
 
 ## [0.8.0] - 2026-06-30
 
-> 本版重点：
+> Highlights of this release:
 >
-> - **消息通知**：系统通知（新 PR / 评论回复 / 被 @）+ macOS dock 角标 + 授权引导
-> - **评论体验优化**：emoji 反应、@ 提及补全、图片附件、表情代码渲染——评论 / 回复 / 行内 / 草稿一致
-> - **命令面板**：`Ctrl/Cmd+Shift+P` 归口常用操作
-> - **已关闭 PR 浏览与按 URL 打开**：查看历史 PR、补充评论 / 补跑评审
-> - **评审规则增强**：规则目录递归、多规则按 `Ruleset` 分段注入
-> - **2026 主题配色** 与 **PR 列表点名计数**
+> - **Notifications**: system notifications (new PR / comment reply / @mention) + macOS dock badge + permission guidance
+> - **Comment experience improvements**: emoji reactions, @-mention completion, image attachments, emoji-code rendering — consistent across comments / replies / inline / drafts
+> - **Command palette**: `Ctrl/Cmd+Shift+P` centralizes common actions
+> - **Closed-PR browsing and open-by-URL**: view historical PRs, add comments / re-run reviews
+> - **Review-rule enhancements**: recursive rule directory, multiple rules injected by `Ruleset` section
+> - **2026 theme colors** and **PR-list mention counts**
 
-### ✨ 新增
+### ✨ Added
 
-- **评论体验优化**：评论列表、回复、行内（代码行）评论与草稿编辑保持一致的撰写与互动体验。
-  - **emoji 反应**：评论（含行内评论）下方展示已有 emoji 反应（含计数与本人标记），可点选添加 / 取消；GitLab / Bitbucket 支持搜索挑选更多表情，GitHub 为其固定表情集——随平台能力提供，不支持的平台自动隐藏。
-  - **@提及自动补全**：撰写评论 / 回复时输入 `@` 可从本 PR 参与者（评论与提交作者）中选择补全；仍可自由手打任意用户名。
-  - **图片附件**：撰写评论 / 回复 / 行内评论 / 草稿时可粘贴图片或点输入框右上角的图片按钮选取上传，自动插入正文（随平台能力提供，不支持的平台隐藏入口）。
-  - **表情代码渲染**：评论正文里的 `:tada:` 等表情代码按内置表情集渲染为对应 emoji（代码块与未知代码原样保留）。
-- **消息通知**：新增「通知」设置分区，可开启系统通知并按事件类型分别控制——收到新的 PR、收到评论回复、评论中被 @。
-  - Windows / macOS 弹原生系统通知；是否显示遵循操作系统的通知设置，关闭后自动静默。
-  - Windows 通知带发起人头像、按 PR / 评论 / 回复区分的类型标记，并显示所在仓库。
-  - 仅对「待处理」的 PR 弹通知——已批准 / 已标记需修改的 PR 不再打扰。
-  - 点击通知直接定位：新 PR 打开该 PR；内联评论跳到 Diff 对应代码行，顶层评论打开该 PR 的对话标签。
-  - 批量动态时最多单独弹 5 条，更多折叠为一条「查看更多最新动态」提示，点击打开主界面查看，避免通知刷屏。
-  - macOS dock 图标显示待你回应的评论计数角标。
-  - macOS 通知设置提供「打开系统通知设置」按钮，便于在系统层授予通知权限（macOS 不允许应用代为开启）。
-- **PR 列表点名计数**：当未读评论中有 @ 你 / 回复你时，列表项标题前的未读圆点升级为显示条数的计数标记（封顶「10+」），一眼看出有多少条待你回应的评论；仅新分配 / 新提交导致的未读仍显示圆点。
-- **关于页系统信息**：设置「关于」页新增操作系统（平台 + 版本）与 CPU 架构信息，并提供「复制信息」按钮一键复制全部运行环境信息，便于反馈问题时附带环境。
-- **已关闭 PR 浏览与补充评审**：侧栏新增「已关闭」范围切换，查看历史退场（已合并 / 关闭 / 不再需你评审）的 PR；进入时按需加载。
-  - 已合并 / 仍开放的 PR 可补充评论、补跑 AI 评审（源分支已删的合并 PR 按提交定位 diff）；仅不再提供合并 / 审批等改动操作。
-  - 已关闭（declined）的 PR 仅供浏览。
-- **按 URL 打开 PR**：命令面板新增「打开 URL」（快捷键 mac `⌘⇧U` / 其余 `Ctrl+Shift+U`），粘贴 / 输入当前平台的 PR 链接即可打开（自动忽略尾缀），用于查看未正式被请求参与评审的他人 PR，含已合并 / 已关闭的 PR。
-  - 已在列表或历史中的 PR 直接定位；新链接会鉴权拉取后存入历史（随相同生命周期到期清理），无权限 / 链接无效即提示。
-- **命令面板**：标题栏新增命令输入框（`Ctrl/Cmd+Shift+P` 唤起），快速执行常用操作并归口分散功能。
-  - PR 类命令：查看各发现分类（待我评审 / 我创建 等，随平台能力）、查看已关闭、按 URL 打开、分类筛选（待处理 / 全部 / 冲突 / 可合并 等）、切换 PR 列表。
-  - 评审类命令：运行自动评审、切换 AutoPilot、切换对话面板。
-  - 设置类命令：切换显示语言 / 主题 / 模型、切换代理、打开设置 / 关于 / DevTools。
-  - 命令按领域前缀分类（PR / 评审 / 设置）、两级选择（如「切换主题」展开主题列表）；非英语界面附英文名且始终支持中英文检索，匹配处高亮。
-  - 打开时默认选中上次用过的命令，回车即重复。
-  - 常用操作支持快捷键（开合 PR 列表 / 对话面板、运行自动评审、DevTools），命令面板内显示对应键位。
-- Agent 上下文目录新增 README 说明文件：介绍各文件用途并指向项目主页，便于用第三方编辑器了解与维护该目录。
+- **Comment experience improvements**: the comment list, replies, inline (code-line) comments, and draft editing keep a consistent authoring and interaction experience.
+  - **Emoji reactions**: existing emoji reactions (with counts and your own marks) are shown beneath comments (including inline comments), clickable to add / remove; GitLab / Bitbucket support searching for more emoji, GitHub offers its fixed set — provided per platform capability, hidden automatically where unsupported.
+  - **@-mention autocomplete**: typing `@` while writing a comment / reply lets you complete from this PR's participants (comment and commit authors); you can still freely type any username.
+  - **Image attachments**: while writing a comment / reply / inline comment / draft you can paste an image or click the image button at the top-right of the input to upload, auto-inserting it into the body (provided per platform capability, entry hidden where unsupported).
+  - **Emoji-code rendering**: emoji codes like `:tada:` in comment bodies render to the corresponding emoji per the built-in set (code blocks and unknown codes are preserved as-is).
+- **Notifications**: a new "Notifications" settings section lets you enable system notifications and control them by event type — a new PR received, a comment reply received, being @-mentioned in a comment.
+  - Windows / macOS pop native system notifications; whether they show respects the OS notification settings, silenced automatically when off.
+  - Windows notifications carry the initiator's avatar, a type marker distinguishing PR / comment / reply, and the repository shown.
+  - Notifications pop only for "pending" PRs — approved / needs-work PRs no longer disturb.
+  - Click a notification to jump straight there: a new PR opens that PR; an inline comment jumps to the corresponding code line in the Diff, a top-level comment opens that PR's conversation tab.
+  - For batch activity, at most 5 pop individually, more collapse into one "See more recent activity" prompt that opens the main UI on click, avoiding notification floods.
+  - The macOS dock icon shows a badge with the count of comments awaiting your response.
+  - macOS notification settings provide an "Open system notification settings" button to grant notification permission at the OS level (macOS does not allow an app to enable it on your behalf).
+- **PR-list mention counts**: when unread comments include @-you / replies-to-you, the unread dot before the list-item title upgrades to a count marker showing the number (capped at "10+"), so you can see at a glance how many comments await your response; unread from new assignment / new commits alone still shows a dot.
+- **About-page system info**: the Settings "About" page adds the operating system (platform + version) and CPU architecture, plus a "Copy info" button to copy all runtime-environment info at once, handy for attaching your environment when reporting issues.
+- **Closed-PR browsing and supplementary review**: a new "Closed" scope switch in the sidebar to view PRs that have exited (merged / closed / no longer need your review); loaded on demand on entry.
+  - Merged / still-open PRs can take additional comments and re-run AI review (a merged PR whose source branch was deleted locates diffs by commit); only merge / approval and other change actions are withheld.
+  - Closed (declined) PRs are browse-only.
+- **Open PR by URL**: the command palette adds "Open URL" (shortcut mac `⌘⇧U` / otherwise `Ctrl+Shift+U`) — paste / type a PR link for the current platform to open it (trailing suffixes ignored), for viewing others' PRs you were not formally requested to review, including merged / closed PRs.
+  - A PR already in the list or history is located directly; a new link is authenticated, fetched, and stored in history (cleared on the same lifecycle expiry), prompting on no permission / invalid link.
+- **Command palette**: a command input in the title bar (`Ctrl/Cmd+Shift+P`) to quickly run common actions and centralize scattered features.
+  - PR commands: view each discovery category (To review / Created by me, etc., per platform capability), view Closed, Open by URL, category filters (pending / all / conflict / mergeable, etc.), toggle the PR list.
+  - Review commands: run auto-review, toggle AutoPilot, toggle the conversation panel.
+  - Settings commands: switch display language / theme / model, toggle proxy, open Settings / About / DevTools.
+  - Commands are categorized by domain prefix (PR / Review / Settings), with two-level selection (e.g. "Switch theme" expands the theme list); non-English UIs append the English name and always support Chinese-and-English search, with matches highlighted.
+  - Opens with the last-used command selected by default; press Enter to repeat.
+  - Common actions support shortcuts (toggle PR list / conversation panel, run auto-review, DevTools), with the corresponding keys shown in the palette.
+- A README file is added to the Agent context directory: it introduces each file's purpose and links to the project home, making the directory easier to understand and maintain in a third-party editor.
 
-### ♻️ 变更
+### ♻️ Changed
 
-- 默认主题（跟随系统）改用 2026 系列配色：深色 / 浅色分别采用 Dark 2026 / Light 2026，启动闪屏同步对齐；已自定义主题的设置不受影响。
-- 退场（已合并 / 关闭 / 不再需你评审）的 PR 数据迁出活跃目录、独立归档存放，归档保留与到期自动清理策略保持不变。
-- Agent 的 SOUL（人格定义）文件改由应用统一管理：每次加载自动对齐到内置模版、本地改动不再保留，以便随版本统一更新 Agent 行为基线（AGENTS / MEMORY / USER 与规则仍归你所有、可自由改写）。
-- 评审规则增强：规则目录支持子目录递归组织、自动加载全部规则文件；同一 PR 命中的多条规则不再只取首条，而是按 `Ruleset` 分段一并注入评审（按 priority 排序、单次封顶 20 条），命中提示改为显示条数、可预览全部命中规则。
-- PR 列表的状态二级筛选随发现分类细化：「待处理」反映「本人尚未评审」，仅在「待我评审」分类、以及支持「需修改」评审态的平台（GitHub / Bitbucket）的「我创建的」等分类下保留；GitLab（二元审批、无「需修改」）的非「待我评审」分类不再展示无意义的「待处理」。
-- Agent 目录的示例规则改为仅在首次初始化时生成；删除后不再被重新创建，便于清理不需要的示例。
+- The default theme (follow system) switches to the 2026 series colors: dark / light use Dark 2026 / Light 2026 respectively, with the launch splash aligned; settings with a custom theme are unaffected.
+- Exited (merged / closed / no-longer-need-your-review) PR data moves out of the active directory into separate archive storage, with the archive retention and expiry auto-cleanup policy unchanged.
+- The Agent's SOUL (persona definition) file is now managed uniformly by the app: each load auto-aligns to the built-in template and local edits are no longer kept, so the Agent's behavior baseline updates uniformly with each version (AGENTS / MEMORY / USER and rules remain yours, freely editable).
+- Review-rule enhancements: the rule directory supports recursive sub-directory organization, auto-loading all rule files; multiple rules matched by the same PR are no longer limited to the first — they are injected into the review by `Ruleset` section (sorted by priority, capped at 20 per run), and the match hint now shows a count with all matched rules previewable.
+- The PR-list status sub-filter refines per discovery category: "pending" reflects "not yet reviewed by me", kept only in the "To review" category and, on platforms supporting a "needs work" review state (GitHub / Bitbucket), in categories like "Created by me"; GitLab (binary approval, no "needs work") no longer shows the meaningless "pending" in non-"To review" categories.
+- The Agent directory's example rules are now generated only on first initialization; once deleted they are not recreated, making it easy to clear unwanted examples.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 修复将 Agent 上下文目录指向自定义或新位置后该目录未被初始化、加载为空的问题；现在无论经设置或直接修改配置变更，目录在使用前都会自动补齐 SOUL / AGENTS 等上下文模版。
-- 修复运行中的 AI 任务、其 PR 被自动移入「已关闭」后，点击状态栏的执行指示无法定位并打开该 PR 会话的问题；现可正确跳转到「已关闭」分类、选中该 PR 并打开会话。
-- 修复状态栏「待审 PR」计数把「我创建的」等并非待我评审的 PR 也计入的问题；现仅统计需我评审且本人尚未处理的 PR。
-- 修复部分平台（尤以 Bitbucket）上他人回复评论 / 在评论中 @你 时常常不弹通知的问题；现对待处理（待我评审 / 我创建）的 PR 可靠跟踪评论变化，回复与提及均会及时提醒。
-- 修复点击系统通知无法定位到已归档 PR（如运行中任务的 PR 刚被移入「已关闭」）的问题；现可正确跳转到「已关闭」分类、选中该 PR 并按类型打开对应位置。
-- 修复正在查看某 PR 的变更（Diff）时，该 PR 收到新的评论回复，内嵌评论却需切换到其它 PR 再切回才刷新的问题；现在轮询发现回复 / 提及后会即时刷新当前打开的评论。
+- Fixed the Agent context directory not being initialized and loading empty after pointing it to a custom or new location; now, whether changed via settings or by directly editing the config, the directory auto-fills the SOUL / AGENTS and other context templates before use.
+- Fixed being unable to locate and open a running AI task's PR conversation from the status-bar execution indicator after its PR was auto-moved to "Closed"; it now correctly jumps to the "Closed" category, selects that PR, and opens the conversation.
+- Fixed the status-bar "PRs to review" count including PRs like "Created by me" that are not for me to review; it now counts only PRs that need my review and are not yet handled by me.
+- Fixed comment replies / @-mentions from others on some platforms (especially Bitbucket) often not popping a notification; comment changes are now reliably tracked for pending (To review / Created by me) PRs, with replies and mentions promptly alerted.
+- Fixed clicking a system notification being unable to locate an archived PR (e.g. a running task's PR just moved to "Closed"); it now correctly jumps to the "Closed" category, selects that PR, and opens the corresponding position by type.
+- Fixed inline comments needing a switch to another PR and back to refresh when the PR you are viewing (Diff) receives a new comment reply; the currently open comments now refresh immediately once polling detects a reply / mention.
 
 ## [0.7.0] - 2026-06-27
 
-> 本版重点：
+> Highlights of this release:
 >
-> - **深色 / 浅色主题与外观体系**：主题切换、编辑器配色主题、自定义等宽字体与字号
-> - **AI 评审运行参数**：评审任务并发、上下文长度、Agent 策略（自动追问 / 代码建议数量）
-> - **PR 列表未读标记**
-> - **Agent 对话增强**：选区引用附带显示、思考过程 markdown 排版、`/merge` 直接合并
-> - **本机 agentic CLI 编排提速**
-> - **代码平台接入层领域化重构**（行为不变）
+> - **Dark / light themes and appearance system**: theme switching, editor color themes, custom monospace font and size
+> - **AI review runtime parameters**: review-task concurrency, context length, Agent strategy (auto follow-up / code-suggestion count)
+> - **PR-list unread markers**
+> - **Agent conversation enhancements**: attached display of selection references, markdown-formatted thinking, `/merge` for direct merge
+> - **Faster local agentic-CLI orchestration**
+> - **Domain-oriented refactor of the code-platform integration layer** (behavior unchanged)
 
-### ✨ 新增
+### ✨ Added
 
-- **主题与外观**
-  - 深色 / 浅色主题切换：可选浅色、深色或跟随系统，界面即时切换、重启保留。
-  - 编辑器配色主题：内置多款可选（VS Code 2026 / Modern、高对比，以及 GitHub、Monokai、Dracula、Nord、Solarized 等），可跟随应用主题或单独指定。
-  - 编辑器字体与字号：自定义等宽字体（可多个候选）与字号，编辑器及全应用等宽文本（diff / 评论 / 代码块）一并生效。
-- **AI 评审运行参数**
-  - 评审任务并发：在设置页「AI」分区调整同时执行的评审任务数（1~8），即时生效、无需重启。
-  - 上下文长度：在设置页「AI」分区设置裁剪输入内容的上下文长度上限（32k~1M 的习惯档位），让长 PR 完整入 prompt；对本地 CLI 模式不生效。
-  - Agent 策略：在设置页「智能体」分区新增策略组——「自动追问」（关闭后评审直接总结、不再条件追问，省 token）与「代码建议数量」（统一约束 /review·/improve·/ask 单次生成的代码建议数量，2~8）。
-- **PR 列表**
-  - 未读标记：PR 新进入待审列表（新分配 / 请求你评审），或自上次查看后有新 commit 推送、有人 @ 你 / 回复你，列表项会标一个未读圆点；打开 PR 即清除。
-- **Agent 对话**
-  - 提问引用附带显示：带 Diff 选区代码提问时，引用的代码在消息气泡下方折叠展示（评论建议引用沿用复评卡片上的定位徽标）。
-  - 思考过程支持预格式化排版：思考 / 判读内容按 markdown 渲染（代码块 / 列表 / 换行）。
-  - 新增 `/merge` 指令：满足合并条件的 PR 可在对话中直接合并，触发前弹二次确认。
+- **Themes and appearance**
+  - Dark / light theme switching: choose light, dark, or follow system, with the UI switching instantly and persisting across restarts.
+  - Editor color themes: several built-in options (VS Code 2026 / Modern, high-contrast, plus GitHub, Monokai, Dracula, Nord, Solarized, etc.), following the app theme or set separately.
+  - Editor font and size: custom monospace font (multiple candidates) and size, applied to the editor and all app monospace text (diff / comments / code blocks) alike.
+- **AI review runtime parameters**
+  - Review-task concurrency: adjust the number of simultaneous review tasks (1–8) in the Settings "AI" section, effective immediately, no restart.
+  - Context length: set the context-length cap for trimming input content (habitual tiers from 32k–1M) in the Settings "AI" section, so long PRs fit fully into the prompt; not in effect for local CLI mode.
+  - Agent strategy: a new strategy group in the Settings "Agent" section — "auto follow-up" (when off, the review summarizes directly with no conditional follow-up, saving tokens) and "code-suggestion count" (uniformly constrains the number of code suggestions generated per `/review`·`/improve`·`/ask`, 2–8).
+- **PR list**
+  - Unread markers: a PR newly entering the review list (newly assigned / your review requested), or with new commits pushed since you last viewed it, or someone @-ing you / replying to you, gets an unread dot on the list item; opening the PR clears it.
+- **Agent conversation**
+  - Attached display of question references: when asking about code with a Diff selection, the referenced code is shown collapsed beneath the message bubble (comment-suggestion references reuse the locating badge on the re-review card).
+  - Preformatted thinking: thinking / judgment content renders as markdown (code blocks / lists / line breaks).
+  - New `/merge` command: a PR meeting the merge conditions can be merged directly in the conversation, with a confirmation prompt before triggering.
 
-### ♻️ 变更
+### ♻️ Changed
 
-- 本机 agentic CLI 模式下 Agent 编排的自有步骤（路由 / 追问判读 / 评审总结）响应更快：每步不再加载用不到的 API 调用栈，降低每次响应的固定启动延迟，对话与自动评审整体更跟手。
-- 配置面板改为左右分区布局：左侧分区导航（常规 / 连接 / AI / 关于）、右侧按分区归类展示配置项，替代此前单列平铺；分区结构为后续扩展（主题、编辑器风格、上下文窗口等）预留。
-- **代码平台接入层基于领域设计重构**（行为不变）：为后续平台接入与维护打基础。
-  - 按连接、PR 操作、评论、用户与媒体四个领域拆分为独立服务，职责更清晰、便于按领域独立维护与测试。
-  - 各平台的连接与代理配置统一收口到连接层，新增代码平台可按领域分步接入。
-  - 平台连接相关的状态提示（如版本不支持原因）改为按界面语言本地化。
+- The Agent's own orchestration steps (routing / follow-up judgment / review summary) respond faster in local agentic-CLI mode: each step no longer loads the unused API call stack, lowering the fixed startup latency per response, making conversation and auto-review more responsive overall.
+- The settings panel switches to a left-right sectioned layout: section nav on the left (General / Connection / AI / About), config items grouped by section on the right, replacing the previous single-column layout; the section structure reserves room for later expansion (theme, editor style, context window, etc.).
+- **Domain-driven refactor of the code-platform integration layer** (behavior unchanged): laying the groundwork for later platform integration and maintenance.
+  - Split into independent services by the four domains of connection, PR operations, comments, and users & media, with clearer responsibilities, easier to maintain and test per domain.
+  - Each platform's connection and proxy config is unified into the connection layer, and a new code platform can be integrated step by step per domain.
+  - Platform-connection status hints (e.g. version-unsupported reasons) are now localized to the UI language.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 并排 diff 在窗口较窄自动降为统一布局时，滚动条总览标尺的删除标记丢失、只剩新增的绿色；现按实际布局正确区分红/绿。
-- 窗口尺寸与最大化状态现可跨重启记住（此前调整尺寸或最大化后关窗常丢失）。
-- 高分屏开启缩放时，默认窗口尺寸可能超出屏幕范围；现按当前显示器可用区域自适应并居中显示。
-- 本地状态目录下偶发残留的临时文件会随每次运行持续累积；现于启动时自动清理。
+- When a side-by-side diff auto-degrades to a unified layout in a narrow window, the scrollbar-overview ruler's deletion marks were lost, leaving only additions in green; it now correctly distinguishes red/green per the actual layout.
+- Window size and maximized state are now remembered across restarts (previously often lost after resizing or maximizing and closing).
+- With scaling enabled on a high-DPI display, the default window size could exceed the screen; it now adapts to the current display's available area and centers.
+- Temporary files occasionally left in the local state directory would keep accumulating each run; they are now cleaned up automatically at startup.
 
 ## [0.6.0] - 2026-06-23
 
-> 本版重点：
+> Highlights of this release:
 >
-> - **`/ask` 复评闭环**：对评审建议发起复评、自动取代 / 关闭原评论
-> - **`/ask` 结构化分段输出**与**完整文件上下文**
-> - **Agent 会话中途输入与「计划」面板**
-> - **Diff 体验增强**：选区引用提问、按变更范围 / 单 commit 查看、冲突文件标注、删除行评论、滚动条总览标尺
-> - **PR「活动」时间线**
-> - 前后端基于领域设计的重大重构（行为不变）与 Agent 编排提速
+> - **`/ask` re-review loop**: launch a re-review of review suggestions, auto-superseding / closing the original comment
+> - **`/ask` structured sectioned output** and **full-file context**
+> - **Mid-run Agent input and the "Plan" panel**
+> - **Diff experience enhancements**: selection-reference questions, view by change scope / single commit, conflict-file annotation, deleted-line comments, scrollbar-overview ruler
+> - **PR "Activity" timeline**
+> - Major domain-driven front/back-end refactor (behavior unchanged) and faster Agent orchestration
 
-### ✨ 新增
+### ✨ Added
 
-- **Agent 评审与对话**
-  - `/ask` 复评闭环：对 `/review`、`/improve` 的代码评论建议（finding）发起「复评」，按裁决（取代 / 保留 / 撤销）自动取代或关闭原评论；自动评审微流程亦可由 judge 触发复评。
-  - `/ask` 结构化分段输出：自由问答按「结论 / 分析解读 / 建议」三段着色呈现，针对代码的建议可定位行号、采纳为行内评论。
-  - CLI 模式 `/ask` 取完整文件上下文：本机 CLI 接管时可读取仓库完整文件作答，读取前清空仓库自带 agent 指令文件以防注入污染。
-  - 会话「中途输入」与「计划」面板：运行期间再输入消息即时入队并重排后续行动；规划 Agent 维护可视的 todo 计划，随会话持久化、切 PR / 重启自动恢复。
-  - run 卡片展示「模型实际交互规模」：呈现提示缓存命中量与模型交互轮次，避免本机 CLI 多轮累加的 token 用量被误读为超限。
-- **Diff 阅览**
-  - 选中代码引用进提问：选中若干行后作为隐式上下文随提问注入模型、可一键忽略，删除行与未改动行同样可引用。
-  - 按「变更范围」查看：可切换查看全部变更或某个 commit 的变更，点击 commit 本地渲染只读 diff、不再跳浏览器。
-  - 文件树标注合并冲突文件：有冲突的 PR 对会冲突的文件标琥珀色三角警示图标，无需逐文件试合并即可定位。
-  - 给「删除行」新增行内评论 / 草稿：并排视图下 base 侧（删除 / 上下文行）也可 hover「+」创建。
-  - 滚动条总览标尺：把增 / 改 / 删与「有评论的行」投影到滚动条旁，拖动即可快速定位。
-- **PR 详情与协作**
-  - 「评论」标签页演进为「活动」时间线（GitHub / Bitbucket）：评论、提交更新、评审决断归并为一条时间线，并可直接发不锚定文件的 summary 评论；GitLab 保持纯评论视图。
-  - PR 头部展示 reviewer 头像栈：按评审状态排序展示评审者头像、带决断角标，超出折叠为「+n」下拉。
-  - 详情标签页国际化与左右布局：整面板按界面语言出文案，改为左描述 / 右时间线 + 评审者列表、窄宽响应式堆叠。
-- 连接 / LLM 配置模态退出拦截：有未提交改动时关闭弹确认框，避免误丢未保存内容。
+- **Agent review and conversation**
+  - `/ask` re-review loop: launch a "re-review" of `/review`, `/improve` code-comment suggestions (findings), automatically superseding or closing the original comment per the verdict (supersede / keep / withdraw); the auto-review micro-flow can also trigger a re-review from the judge.
+  - `/ask` structured sectioned output: free Q&A is presented color-coded in three sections — conclusion / analysis / suggestions, with code-targeted suggestions locatable by line number and adoptable as inline comments.
+  - CLI-mode `/ask` takes full-file context: when the local CLI takes over it can read complete repo files to answer, clearing the repo's own agent-instruction files before reading to prevent injection contamination.
+  - "Mid-run input" and the "Plan" panel: typing a message during a run queues it instantly and re-orders subsequent actions; the planning Agent maintains a visible todo plan, persisted with the conversation and auto-restored on PR switch / restart.
+  - Run cards show the "actual model interaction scale": presenting prompt-cache hits and model interaction rounds, so multi-round token usage accumulated by the local CLI is not misread as over-limit.
+- **Diff reading**
+  - Reference selected code in a question: after selecting some lines, they are injected into the model as implicit context with the question and can be ignored with one click; deleted lines and unchanged lines can be referenced too.
+  - View by "change scope": switch between viewing all changes or a specific commit's changes, clicking a commit renders a read-only diff locally instead of jumping to the browser.
+  - File tree annotates conflicting files: a conflicted PR marks the conflicting files with an amber triangle warning icon, locating them without trying to merge file by file.
+  - New inline comments / drafts on "deleted lines": in the side-by-side view the base side (deleted / context lines) can also hover "+" to create.
+  - Scrollbar-overview ruler: projects add / change / delete and "lines with comments" beside the scrollbar, drag to locate quickly.
+- **PR detail and collaboration**
+  - The "Comments" tab evolves into an "Activity" timeline (GitHub / Bitbucket): comments, commit updates, and review decisions merge into one timeline, and you can post a summary comment not anchored to a file directly; GitLab keeps a pure comment view.
+  - The PR header shows a reviewer avatar stack: reviewer avatars sorted by review status, with a decision corner badge, overflow collapsed into a "+n" dropdown.
+  - Detail-tab internationalization and left-right layout: the whole panel renders text per UI language, changed to description on the left / timeline + reviewer list on the right, responsively stacked when narrow.
+- Connection / LLM config modal exit interception: closing with uncommitted changes pops a confirmation, avoiding accidental loss of unsaved content.
 
-### ♻️ 变更
+### ♻️ Changed
 
-- **前后端基于领域设计的重大重构**（可维护性，行为不变）：按领域边界重组前后端代码，划清模块职责与依赖方向。
-  - 前端：组件按 `common`（基础 UI）/ `layout`（应用骨架）/ `features`（业务领域）分层，业务逻辑下沉所属领域，超大组件（ChatPane / SettingsModal / DiffView 等）拆为「容器 + 领域组件 + hooks」。
-  - 后端：抽出 IPC 服务层、按领域分组 Agent 服务、解耦运行队列；Agent 引擎抽出可插拔「步骤」抽象统一记步与用量累计，编排提示词外置为资源文件。
-  - 对外接口、界面与交互行为均不变。
-- **Agent 编排响应提速**（对用户行为不变）：条件追问并行派发、追问判读瘦身为轻量路由、编排链路统一低推理 + 判读输出封顶，并把全局稳定系统前缀接入 Anthropic 1h 提示缓存，整体延迟与成本下降。
-- 复评 `/ask` 取代 / 撤销改为静默自动关闭原 finding，「取代」裁决把建议提升为可采纳的代码反馈卡，前端仅只读展示关闭态与「查看复评」导航。
-- agent「评审总结」聚焦 PR 整体结论：只吃每条追问的结论而非完整答案明细，输出 PR 级整体结论、不复制明细。
-- PR 提交列表 / 活动时间线按 first-parent 过滤合入的他人提交，只保留本 PR 自产提交；镜像未就位时回退不丢信息。
-- 评审 / Diff 界面交互打磨（一批小优化）：评审总结卡与 finding 卡统一样式行距、可折叠卡整行标题即展开并带过渡动画、点击复评引用徽标定位并高亮原卡、危险按钮统一为高饱和红、设置模态复用首启向导左右布局，及移除「已达并发上限」横幅、隐藏 `/review`「评估工作量」段等。
+- **Major domain-driven front/back-end refactor** (maintainability, behavior unchanged): reorganizes front/back-end code by domain boundaries, clarifying module responsibilities and dependency direction.
+  - Front end: components layered by `common` (base UI) / `layout` (app skeleton) / `features` (business domains), with business logic pushed down to its domain and oversized components (ChatPane / SettingsModal / DiffView, etc.) split into "container + domain components + hooks".
+  - Back end: extracts an IPC service layer, groups Agent services by domain, decouples the run queue; the Agent engine extracts a pluggable "step" abstraction to unify step recording and usage accumulation, with orchestration prompts externalized to resource files.
+  - External interfaces, UI, and interaction behavior are all unchanged.
+- **Faster Agent orchestration response** (behavior unchanged to users): conditional follow-ups are dispatched in parallel, follow-up judgment is slimmed to a lightweight route, the orchestration chain uniformly uses low reasoning + capped judgment output, and the global stable system prefix is wired into the Anthropic 1h prompt cache, lowering overall latency and cost.
+- Re-review `/ask` supersede / withdraw now silently auto-closes the original finding, the "supersede" verdict promotes the suggestion into an adoptable code-feedback card, and the front end only shows the closed state read-only with a "view re-review" navigation.
+- The Agent's "review summary" focuses on the PR's overall conclusion: it consumes only each follow-up's conclusion rather than the full answer detail, outputting a PR-level overall conclusion without duplicating detail.
+- The PR commit list / activity timeline filters merged-in others' commits by first-parent, keeping only this PR's own commits; falls back without losing info when the mirror is not ready.
+- Review / Diff UI interaction polish (a batch of small improvements): the review-summary and finding cards share styling and line spacing, collapsible cards expand from the whole title row with a transition animation, clicking a re-review reference badge locates and highlights the original card, danger buttons are unified to a saturated red, the settings modal reuses the first-launch wizard's left-right layout, and the "concurrency limit reached" banner is removed, the `/review` "estimate effort" section is hidden, etc.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 源分支 merge 目标分支后，变更页 diff 混入目标分支的已有改动。(#107，感谢 @csj2000)
-- `/ask` 的结构化分段 / 引用上下文 / 复评裁决指令此前对模型不生效。
-- 复评「取代」裁决的改进建议改为可直接发布的替代评论，不再是关于评论的元讨论。
-- 失败 / 取消的任务不再产出无意义的 finding 卡。
-- CLI 模式 `/ask` 在仓库自带 agent 指令文件被版本管理时整体失败。
-- 本地镜像缺 PR head sha（源分支被删 / 强推）导致 diff / 评审失败且不自愈。
-- 消除 PR 切换 / 刷新 / 标签页切换时的多处渲染抖动与闪烁。
-- 消除 Monaco 控制台 `Missing requestHandler` 噪音报错。
-- 评审总结偶发被截断 / 回落「无法解析建议」。
-- 拉取变更文件列表偶发失败（`ENOENT … diff-base.json`）。
-- 合并已合并 / 已关闭的 PR 时报错不友好。
-- 补齐 PR 评审状态 chip、Agent 步骤行等写死文案的国际化。
-- 设置页手动「检查更新」结果即时同步到状态栏。
-- PR 详情 / 评论页正文限宽居中、reviewers 列表排序稳定。
+- After the source branch merges the target branch, the changes-page diff mixed in the target branch's existing changes. (#107, thanks @csj2000)
+- `/ask`'s structured sectioning / reference context / re-review verdict instructions previously had no effect on the model.
+- The re-review "supersede" verdict's improvement suggestion becomes a directly publishable alternative comment, no longer a meta-discussion about the comment.
+- Failed / canceled tasks no longer produce meaningless finding cards.
+- CLI-mode `/ask` failed entirely when the repo's own agent-instruction files were under version control.
+- A local mirror missing the PR head sha (source branch deleted / force-pushed) caused diff / review failure without self-healing.
+- Eliminated multiple render jitters and flickers on PR switch / refresh / tab switch.
+- Eliminated the Monaco console `Missing requestHandler` noise error.
+- The review summary was occasionally truncated / fell back to "unable to parse suggestions".
+- Fetching the changed-file list occasionally failed (`ENOENT … diff-base.json`).
+- Merging an already-merged / closed PR gave an unfriendly error.
+- Filled in the internationalization of hardcoded text like the PR review-status chip and Agent step rows.
+- The Settings-page manual "Check for updates" result now syncs to the status bar immediately.
+- The PR detail / comments-page body is width-constrained and centered, and the reviewers list sorts stably.
 
 ## [0.5.0] - 2026-06-17
 
-> 本版重点：
+> Highlights of this release:
 >
-> - 可委派的**高阶 Agent**（会话 Agent 化 + AutoPilot 后台预评审）
-> - **无边框窗口 + 自绘标题栏**
-> - 重型组件加载抖动、评论嵌套展示等体验打磨
+> - Delegable **high-level Agent** (conversation-as-Agent + AutoPilot background pre-review)
+> - **Frameless window + custom title bar**
+> - Polish of heavy-component load jitter, nested comment display, etc.
 
-### ✨ 新增
+### ✨ Added
 
-- **高阶 Agent（会话 Agent 化 + AutoPilot 预评审）**：在 PR 评审中引入可委派的智能体，随 LLM 配置自动可用、无需单独启用开关。
-  - 一键自动评审：对当前 PR 跑「描述 → 评审 →（仅严重问题）追问 → 总结」微流程，给出非约束性建议（建议通过 / 修改 / 人工复核）并汇总为「评审总结」卡片。
-  - 对话即委派：聊天框输入自然语言，规划 Agent 按需调用只读工具完成请求，与 PR 无关的请求礼貌拒绝、运行中可随时停止。
-  - AutoPilot 后台预评审：对「待我评审」且「待处理」的新 PR 自动预评审，建议落入列表徽标、总结落入会话；写操作经逐项授权 + 红线校验把关（默认仅开放只读工具）。
-  - 评审状态可视化：PR 列表项展示蓝色「执行中」旋转指示或评审建议 ★（覆盖纯思考阶段），AutoPilot 触发的评审打机器人标记。
-  - 并行多问：规划 Agent 可在一轮内并行派发多个 `/ask`。
-  - 评审步骤 token 用量可见：每个推理步右侧分步展示本步 token 用量（不累计）。
-  - Agent 上下文目录：以 SOUL / AGENTS / MEMORY / USER 与 rules/ 构成 Agent 的人格与知识来源，默认落 `~/.code-meeseeks/agent`、首启幂等补齐模版。
-- **无边框窗口 + 自绘标题栏**（VS Code 风）：去掉系统原生标题栏、渲染层自绘 36px 标题栏、深色主题贯通到底，窗控按钮交由系统绘制保留原生行为，标题栏展示品牌名与当前 PR 标题。
-- 设置页新增「关于 & 反馈」入口：GitHub 仓库 / 提交 Issue / Releases 三个外链。
+- **High-level Agent (conversation-as-Agent + AutoPilot pre-review)**: a delegable agent introduced into PR review, automatically available with the LLM config, no separate enable toggle.
+  - One-click auto-review: runs a "describe → review → (serious issues only) follow-up → summarize" micro-flow for the current PR, giving non-binding advice (suggest approve / request changes / manual review) summarized into a "review summary" card.
+  - Conversation-as-delegation: type natural language in the chat box, and the planning Agent calls read-only tools as needed to fulfill the request, politely declining requests unrelated to the PR and stoppable anytime while running.
+  - AutoPilot background pre-review: automatically pre-reviews new PRs that are "to review" and "pending", with advice landing in the list badge and the summary landing in the conversation; write operations are gated by per-item authorization + red-line checks (only read-only tools open by default).
+  - Review-status visualization: PR-list items show a blue "running" spinner or a review-advice ★ (covering the pure-thinking phase), and AutoPilot-triggered reviews are marked with a robot icon.
+  - Parallel multi-question: the planning Agent can dispatch multiple `/ask` in parallel within one round.
+  - Review-step token usage visible: each reasoning step shows that step's token usage on the right (not cumulative).
+  - Agent context directory: SOUL / AGENTS / MEMORY / USER and rules/ constitute the Agent's persona and knowledge source, landing by default in `~/.code-meeseeks/agent`, idempotently filled with templates on first launch.
+- **Frameless window + custom title bar** (VS Code style): removes the native system title bar, renders a 36px title bar in the render layer, carries the dark theme all the way through, hands window-control buttons to the system to keep native behavior, and shows the brand name and current PR title in the title bar.
+- The Settings page adds an "About & feedback" entry: three external links — GitHub repo / submit Issue / Releases.
 
-### ♻️ 变更
+### ♻️ Changed
 
-- **重型组件加载抖动收敛**：切换 PR / 文件时 diff（Monaco）、会话内容等重型区域统一盖延迟 loading、就绪后一次性 reveal，缓存命中的快切换零闪。
-- 移除独立 `ollama` provider，统一经 `openai-compatible` 接入本地 Ollama（自带兼容端点、更标准），旧配置自动迁移；`openai-compatible` 标记为已验证。
-- 评论嵌套展示统一（评论 tab + 行内）：回复满 5 层拉平为同层级、嵌套改「左竖线缩进」扁平样式。
-- describe「文件变更」分类默认折叠，避免输出过长。
-- 评审总结不再硬截断：`summary_max_chars` 仅作软约束，已生成内容完整保留。
-- 一批 UI 细节：评审建议星标改为四角 sparkle ✦、统一 PR 列表状态 chip 带高消除行高漂移、`/ask` 问题末尾追加语言要求改善按界面语言作答。
+- **Heavy-component load-jitter convergence**: when switching PRs / files, heavy areas like the diff (Monaco) and conversation content uniformly cover with a delayed loading state and reveal all at once when ready, with zero flicker on cache-hit fast switches.
+- Removed the standalone `ollama` provider, unifying local Ollama via `openai-compatible` (with its own compatible endpoint, more standard); old config migrates automatically; `openai-compatible` is marked verified.
+- Unified nested comment display (comment tab + inline): replies flatten to the same level at 5 deep, with nesting changed to a flat "left vertical line indent" style.
+- describe's "file changes" category is collapsed by default, avoiding overly long output.
+- The review summary no longer hard-truncates: `summary_max_chars` is only a soft constraint, generated content is preserved in full.
+- A batch of UI details: the review-advice star changes to a four-point sparkle ✦, the unified PR-list status chip has high line height to eliminate drift, and appending a language requirement to the end of the `/ask` question improves answering in the UI language.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 修复 PR diff 基准随目标分支漂移导致的「修改被撤回」误判。
-- 修复 Windows 控制台中文日志乱码。
-- 修复 finding 锚点解析在文件路径含方括号（如 `a/[m-123]/x.ts`）时出错。
-- 修复 Anthropic provider 的自建 / 中转 base_url 此前不生效。(#65，感谢 @dnvyrn)
-- 本地镜像 clone/fetch 被打断留下的残缺镜像现可自动重建自愈。
-- 清空 PR 执行历史时一并清掉列表评审建议 ★，自动评审完成后 ★ 即时更新。
-- PR「提交」数角标排除源分支合入目标分支带来的提交与 merge 提交。
-- 补 walkthrough 文件分类标题（Miscellaneous / Formatting / Dependencies）的中 / 日 / 德译文。
-- 消除评论页 poll / 刷新触发的渲染抖动。
+- Fixed the "changes reverted" misjudgment caused by the PR diff base drifting with the target branch.
+- Fixed garbled Chinese logs in the Windows console.
+- Fixed a finding-anchor parse error when the file path contains square brackets (e.g. `a/[m-123]/x.ts`).
+- Fixed the Anthropic provider's self-built / relay base_url previously having no effect. (#65, thanks @dnvyrn)
+- A broken mirror left by an interrupted local-mirror clone/fetch now self-heals by auto-rebuilding.
+- Clearing a PR's execution history now also clears the list review-advice ★, and the ★ updates immediately after auto-review completes.
+- The PR "commits" count badge excludes commits brought in by merging the target branch into the source branch and merge commits.
+- Added the Chinese / Japanese / German translations for the walkthrough file-category headings (Miscellaneous / Formatting / Dependencies).
+- Eliminated render jitter triggered by comment-page poll / refresh.
 
 ## [0.4.0] - 2026-06-14
 
-> 本版重点：
+> Highlights of this release:
 >
-> - **接入 GitLab**（gitlab.com + Self-Managed，CE / EE）
-> - 评审交互与渲染打磨（拒绝折叠、草稿锚点对齐、评论内嵌附件图片、GitHub / GitLab 评论编辑删除）
-> - **连接 Base URL 放宽**
-> - **Windows 升级安装健壮性**（per-machine 提权 + 绕过旧卸载器）
+> - **GitLab integration** (gitlab.com + Self-Managed, CE / EE)
+> - Review-interaction and rendering polish (decline collapse, draft-anchor alignment, in-comment attachment images, GitHub / GitLab comment edit & delete)
+> - **Relaxed connection Base URL**
+> - **Windows upgrade-install robustness** (per-machine elevation + bypassing the old uninstaller)
 >
-> ⚠️ **Windows 安装说明**：本版为 **per-machine 安装**（所有用户 / Program Files），安装器双击即弹 UAC 提权运行；安装后的应用以普通权限启动。从旧版升级会自动清理旧安装，无需手动卸载。
+> ⚠️ **Windows install note**: this release is a **per-machine install** (all users / Program Files); the installer pops UAC elevation on double-click, and the installed app launches with normal privileges. Upgrading from an old version auto-cleans the old install, no manual uninstall needed.
 
-### ✨ 新增
+### ✨ Added
 
-- **GitLab 接入**（gitlab.com + Self-Managed，CE / EE，REST API v4）：MR 发现、diff 评论读 / 发 / 改 / 删 / 回复、合并、clone（PAT / SSH）、头像 / 附件代理；设置页与首启向导可新增 GitLab 连接（Base URL 可留空默认 gitlab.com）。
-  - CE / EE 审批降级：经 `/metadata` 探测 edition——EE 支持通过 / 撤销，CE 无 API 审批、UI 灰显（GitLab 审批二元、无「需修改」）。
+- **GitLab integration** (gitlab.com + Self-Managed, CE / EE, REST API v4): MR discovery, diff-comment read / post / edit / delete / reply, merge, clone (PAT / SSH), avatar / attachment proxy; the Settings page and first-launch wizard can add a GitLab connection (Base URL can be left empty to default to gitlab.com).
+  - CE / EE approval degradation: detects the edition via `/metadata` — EE supports approve / revoke, CE has no API approval and grays it out in the UI (GitLab approval is binary, no "needs work").
 
-### ♻️ 变更
+### ♻️ Changed
 
-- **连接 Base URL 放宽**：GitHub Enterprise / GitLab Self-Managed 可直接填实例地址（如 `https://ghe.example.com`），`/api/v3`、`/api/v4` 自动补全；github.com / gitlab.com 留空即用默认。
-- 拒绝代码反馈 / 改进建议后卡片自动折叠置灰、仅保留头部与锚点行（含撤销入口），降低已决断项视觉占用。
-- 本地 CLI 类 LLM provider 标注「实验性」：提示其依赖上游 CLI（claude / codex 等）、稳定性不作保证。
-- 设置页连接 / LLM 预设卡片显示对应品牌类型图标避免误配；危险按钮实底改为饱和红提高警示力；Windows 安装页不再展开空白的文件日志列表、仅留进度条。
+- **Relaxed connection Base URL**: GitHub Enterprise / GitLab Self-Managed can fill the instance address directly (e.g. `https://ghe.example.com`), with `/api/v3`, `/api/v4` auto-completed; github.com / gitlab.com use the default when left empty.
+- After declining a code feedback / improvement suggestion, the card auto-collapses to gray, keeping only the header and anchor row (with an undo entry), reducing the visual footprint of decided items.
+- Local CLI-type LLM providers are marked "experimental": noting their dependence on an upstream CLI (claude / codex, etc.) with no stability guarantee.
+- The Settings-page connection / LLM preset cards show the corresponding brand-type icon to avoid misconfiguration; danger buttons change to solid saturated red for a stronger warning; the Windows install page no longer expands the blank file-log list, leaving only the progress bar.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 修复 GitHub / GitLab 无法编辑 / 删除自己的评论。
-- 修复 Bitbucket 评论内嵌附件图片不渲染。
-- 修复代码建议草稿区的锚定行与最终发布落点不一致。
-- 评论内嵌图片代理失败时降级为「浏览器打开」链接，不再显示破图标。
-- 修复 Windows 升级安装卡死 /「无法关闭」。
+- Fixed being unable to edit / delete your own comments on GitHub / GitLab.
+- Fixed Bitbucket in-comment attachment images not rendering.
+- Fixed the anchored line in the code-suggestion draft area not matching the final published location.
+- In-comment image proxy failure now degrades to an "open in browser" link instead of showing a broken icon.
+- Fixed Windows upgrade-install hanging / "cannot close".
 
 ## [0.3.1] - 2026-06-11
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 修复 macOS 分发版「本地 CLI」provider（claude / codex）经 Finder / Dock 启动时因 PATH 不全而失效。(#21)
+- Fixed the macOS distribution's "local CLI" providers (claude / codex) failing due to an incomplete PATH when launched via Finder / Dock. (#21)
 
 ## [0.3.0] - 2026-06-11
 
-> 本版重点：
+> Highlights of this release:
 >
-> - **界面国际化**（四语 + 即时切换）
-> - **Mermaid 架构图渲染**
-> - **版本更新检测**
-> - `/improve` 与 `/describe` 思路建议段等 pr-agent 能力扩展
-> - 修复首启同步、子进程树清理与安装 / 升级健壮性
+> - **UI internationalization** (four languages + instant switching)
+> - **Mermaid architecture-diagram rendering**
+> - **Version-update detection**
+> - pr-agent capability extensions such as `/improve` and the `/describe` approach-suggestion section
+> - Fixes for first-launch sync, child-process-tree cleanup, and install / upgrade robustness
 >
-> ⚠️ **Windows 用户升级注意**：若已安装**早期版本**（含 `0.3.0-alpha.1` 及更早），升级到本版前请**先手动卸载旧版**（设置 → 应用 → Code Meeseeks → 卸载，或安装目录下的 `Uninstall Code Meeseeks.exe`），完成后再运行新安装器；否则覆盖安装可能长时间卡住或弹出「Code Meeseeks 无法关闭」。原因：早期版本运行时会在安装目录写入上万个 Python 字节码（`.pyc`）缓存文件，使覆盖升级时「卸载旧版」一步需逐个删除海量小文件、极慢甚至卡死。本版起运行时不再写入这些缓存，**之后的升级可正常覆盖、无需手动卸载**。
+> ⚠️ **Windows upgrade note**: if an **earlier version** is installed (including `0.3.0-alpha.1` and earlier), **manually uninstall the old version first** before upgrading to this one (Settings → Apps → Code Meeseeks → Uninstall, or `Uninstall Code Meeseeks.exe` in the install directory), then run the new installer; otherwise the overwrite install may hang for a long time or pop "Code Meeseeks cannot be closed". Reason: at runtime, earlier versions wrote tens of thousands of Python bytecode (`.pyc`) cache files into the install directory, making the "uninstall old version" step of an overwrite upgrade delete a huge number of small files one by one — extremely slow, even hanging. From this release runtime no longer writes these caches, so **subsequent upgrades overwrite normally with no manual uninstall needed**.
 
-### ✨ 新增
+### ✨ Added
 
-- **多语言界面（i18n）**：接入 react-i18next，全部 GUI 文本与主进程面向用户文案覆盖**简体中文 / English / 日本語 / Deutsch** 四语；pr-agent 输出模板渲染期翻译同步语言感知。
-  - 语言选择：设置页与首启向导下拉选择、即时生效，AI 回复语言随之（下次运行起）。
-  - 语言解析：`config.language` 为空时按操作系统偏好语言匹配，默认 / 兜底为 en-US。
-  - 按需懒加载：默认语言静态进入口，其余语言切换时才拉取（`ja-JP` / `de-DE` 为机器初稿）。
-- **Mermaid 架构图渲染**：markdown 中的 `mermaid` 代码块渲染为图形，覆盖 PR 描述 / 评论 / chat 评审输出，点击进入模态预览（缩放 / 平移 / 适应窗口），渲染失败回退原始代码块。
-- **版本更新检测**：启动时及设置页查 GitHub Releases 最新稳定版比对，有新版在状态栏提示并可点击前往下载（仅检测、不自动安装），走配置的出站代理、可关闭。
-- **启用 `/improve` 指令**：逐行代码改进建议（带 1-10 重要度评分），输出落独立 `improve.md` 与 `/review` 分流。
-- **/describe 架构图与思路建议段**：统一启用 GFM 使社区版 `/describe` 选择性输出 mermaid 架构图；并注入「思路建议」段——2-4 个替代实现方案（各自折叠）+ 倾向性推荐。
-- describe 排版优化：架构图、文件变更各自独立成段配色块标题，文件变更按分类折叠。
-- **清空执行历史**：chat 面板标题栏新增垃圾桶按钮，清空当前 PR 的执行历史。
+- **Multilingual UI (i18n)**: integrates react-i18next, covering all GUI text and main-process user-facing text in **Simplified Chinese / English / 日本語 / Deutsch**; pr-agent output-template rendering is language-aware at render time.
+  - Language selection: dropdown selection in the Settings page and first-launch wizard, effective immediately, with the AI reply language following (from the next run).
+  - Language resolution: when `config.language` is empty, matches the OS preferred language, defaulting / falling back to en-US.
+  - On-demand lazy loading: the default language enters statically, others are fetched only on switch (`ja-JP` / `de-DE` are machine first drafts).
+- **Mermaid architecture-diagram rendering**: `mermaid` code blocks in markdown render to diagrams, covering PR descriptions / comments / chat review output, clickable into a modal preview (zoom / pan / fit to window), falling back to the raw code block on render failure.
+- **Version-update detection**: at startup and on the Settings page, queries the latest stable release on GitHub Releases for comparison, prompting in the status bar with a click to go download when there's a new version (detection only, no auto-install), going through the configured outbound proxy, and can be turned off.
+- **Enable the `/improve` command**: line-by-line code-improvement suggestions (with a 1–10 importance score), output landing in a separate `improve.md` split from `/review`.
+- **/describe architecture diagram and approach-suggestion section**: uniformly enables GFM so the community-edition `/describe` selectively outputs a mermaid architecture diagram; and injects an "approach suggestions" section — 2–4 alternative implementation approaches (each collapsed) + a leaning recommendation.
+- describe layout optimization: the architecture diagram and file changes each become a separate section with a colored-block heading, and file changes collapse by category.
+- **Clear execution history**: a trash button added to the chat-panel title bar clears the current PR's execution history.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- **安装 / 升级健壮性**：减少安装目录小文件数，缓解升级卸载缓慢 / 卡死（已装早期版本仍需先手动卸载）。
-- 修复取消 / 超时 / 退出时 litellm 等孙进程变孤儿。
-- 修复活动连接无缓存身份时首启「看似未触发远端同步」。
+- **Install / upgrade robustness**: reduces the number of small files in the install directory, alleviating slow / hanging uninstall on upgrade (an installed earlier version still needs a manual uninstall first).
+- Fixed litellm and other grandchild processes being orphaned on cancel / timeout / exit.
+- Fixed first launch "appearing not to trigger a remote sync" when the active connection has no cached identity.
 
 ## [0.2.0] - 2026-06-09
 
-> 本版重点：
+> Highlights of this release:
 >
-> - **接入 GitHub**（github.com + GitHub Enterprise Server）与多平台适配抽象
-> - **评审任务并发执行**
-> - **启动显著提速**
-> - **移除 Docker 运行策略**，收敛到内嵌运行时
+> - **GitHub integration** (github.com + GitHub Enterprise Server) and a multi-platform adaptation abstraction
+> - **Concurrent review-task execution**
+> - **Significantly faster startup**
+> - **Removed the Docker run strategy**, converging to the embedded runtime
 
-### ✨ 新增
+### ✨ Added
 
-- **GitHub 适配**（github.com + GitHub Enterprise Server，REST API v3）：PR 发现、diff 评论读写、行内评论、审批（通过 / 需修改 / 撤销）、合并；审批按平台能力降级，自己作者的 PR 审批按钮灰显。
-- **多平台适配抽象基线**：`PlatformAdapter` 能力描述符 + 评论线程字段，UI 据能力位显 / 隐 / 灰，不在调用处写平台判断。
-- **PR 发现分类**：GitHub 对齐仪表盘四类（待我评审 / 我创建 / 指派我 / 提及我），Bitbucket 增两类；结果本地缓存、按标签本地过滤。
-- **评审任务并发执行**：队列改为可配置并发（每个 run 独立 worktree + 子进程），多个 PR 评审可并行，并发数由 `pr_agent.max_concurrency` 控制（1~8，默认 2）。
-- **本地 CLI 模型 provider**（`cli`）：把评审请求转交本机已安装并授权的命令行工具（Claude Code / Codex CLI），凭据与计费由该 CLI 自理。
-- **单活动连接模型**：PR 列表与状态栏只反映当前活动连接，切换后归档旧连接的 PR。
-- 新增面向用户的**使用说明**文档（`docs/guide/`）：安装与首次使用、平台 / LLM / 代理配置、配置文件参考、自定义评审规则。
-- 合并按钮等待态，防止重复点击。
+- **GitHub adaptation** (github.com + GitHub Enterprise Server, REST API v3): PR discovery, diff-comment read/write, inline comments, approval (approve / needs-work / revoke), merge; approval degrades per platform capability, and the approve button is grayed out for your own authored PRs.
+- **Multi-platform adaptation baseline**: `PlatformAdapter` capability descriptors + comment-thread fields, with the UI showing / hiding / graying per capability bits, no platform checks written at call sites.
+- **PR discovery categories**: GitHub aligns with the dashboard's four categories (To review / Created by me / Assigned to me / Mentioning me), Bitbucket adds two; results are cached locally and filtered locally by label.
+- **Concurrent review-task execution**: the queue becomes configurable-concurrency (each run an independent worktree + child process), so multiple PR reviews run in parallel, with concurrency controlled by `pr_agent.max_concurrency` (1–8, default 2).
+- **Local CLI model provider** (`cli`): hands review requests to a locally installed and authorized command-line tool (Claude Code / Codex CLI), with credentials and billing handled by that CLI.
+- **Single-active-connection model**: the PR list and status bar reflect only the current active connection, archiving the old connection's PRs on switch.
+- Added user-facing **user-guide** docs (`docs/guide/`): install and first use, platform / LLM / proxy config, config-file reference, custom review rules.
+- Merge-button waiting state, preventing repeat clicks.
 
-### ♻️ 变更
+### ♻️ Changed
 
-- **启动提速**：新增启动闪屏即时呈现 logo + spinner；Monaco 改懒加载，渲染入口包 ~10MB → ~2.6MB；pr-agent 探测移出建窗关键路径。
-- 全仓内部命名统一为 **Bitbucket**，去除 `BBS` / `BB` 等歧义缩写（纯改名）。
-- 架构设计文档目录 `docs/modules/` → `docs/arch/`。
-- 日志增强：dev 控制台改 logfmt 单行（按级别上色，文件仍 JSON）；渲染层未捕获错误经 IPC 回传 main 一并落日志。
+- **Faster startup**: adds a launch splash presenting the logo + spinner instantly; Monaco changes to lazy loading, shrinking the render entry bundle ~10MB → ~2.6MB; pr-agent detection moved off the window-creation critical path.
+- Unified internal naming to **Bitbucket** repo-wide, removing ambiguous abbreviations like `BBS` / `BB` (pure rename).
+- The architecture-design docs directory `docs/modules/` → `docs/arch/`.
+- Logging enhancements: the dev console changes to single-line logfmt (colored by level, files still JSON); uncaught render-layer errors are relayed to main via IPC and logged together.
 
-### 🗑️ 移除
+### 🗑️ Removed
 
-- **移除 Docker 运行策略**：嵌入式运行时 + 系统 local-cli 已覆盖全部场景，`pr_agent.strategy` 不再接受 `docker`。
+- **Removed the Docker run strategy**: the embedded runtime + system local-cli already cover all scenarios, `pr_agent.strategy` no longer accepts `docker`.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 修复模型返回多行自由文本值导致 pr-agent YAML 解析失败、`/review` 崩溃。
-- 修复删除文件的行号片段渲染崩溃。
-- 修复首启向导平台卡视觉错位。
+- Fixed multi-line free-text values returned by the model breaking pr-agent YAML parsing and crashing `/review`.
+- Fixed a render crash on deleted-file line-number fragments.
+- Fixed the first-launch wizard platform-card visual misalignment.
 
-### 🔒 安全
+### 🔒 Security
 
-- GitHub 图片代理仅对可信的 GitHub / GHE 资产域附带 PAT，避免凭据被带往第三方域。
-- 升级 `nx` 至 22.7.5 并修复 `minimatch` ReDoS（high）依赖告警。
+- The GitHub image proxy attaches the PAT only for trusted GitHub / GHE asset domains, avoiding credentials being carried to third-party domains.
+- Upgraded `nx` to 22.7.5 and fixed the `minimatch` ReDoS (high) dependency warning.
 
 ## [0.1.0] - 2026-06-08
 
-> 面向 **Reviewer 个人** 的本地化、半自动 AI 代码评审桌面客户端，
-> 基于社区版 [pr-agent](https://docs.pr-agent.ai/) 构建：拉取待评审 PR、本地跑 AI 生成评审意见，
-> 逐条确认 / 编辑后再发布到代码平台。**决策权在人、规则在本地、数据在本地。**
+> A localized, semi-automatic AI code-review desktop client **for individual Reviewers**,
+> built on the community edition of [pr-agent](https://docs.pr-agent.ai/): pull PRs awaiting review, run AI locally to generate review opinions,
+> confirm / edit each one, then publish to the code platform. **Decisions rest with the human, rules stay local, data stays local.**
 
-### ✨ 新增
+### ✨ Added
 
-- **平台接入与 PR 发现**
-  - Bitbucket Server / Data Center 接入（REST API v1，>= 7.0）。
-  - 轮询自动发现作为 Reviewer 的待评审 Open PR；按仓库分组、状态过滤、搜索。
-  - 首启配置向导：引导配置代码平台连接 +（可选）LLM；缺有效连接时下次启动仍回向导。
-  - 单例锁：二次启动聚焦已有窗口，不再多开。
-- **本地 Diff 阅读**
-  - bare 镜像（按需 clone / fetch）+ Monaco 并排 / 内联 diff。
-  - 文件树、行内评论、git blame、跨文件代码搜索。
-  - GitHub 风格未变更段折叠。
-- **AI 评审（pr-agent）**
-  - 对话式驱动 `/describe`、`/review`、`/ask`，输出结构化成可操作的 findings。
-  - 评审任务队列：串行执行、排队任务在 chat 内可见、随时取消、失败重试。
-  - finding 行号锚点可点击跳转到 Diff 对应行。
-  - 真实 token 用量采集（输入 / 输出分列）。
-  - LLM 未配置时 chat 面板给出明确提示并禁用输入。
-- **评审 → 发布闭环**
-  - findings → 草稿池 → 行内编辑（Monaco view zone）→ 单条 / 批量发布到远端。
-  - 发布后远端评论自动刷新；重复发布幂等（发完即删本地草稿）。
-  - 自己作者的远端评论支持回复 / 编辑 / 删除。
-  - 远端可合并时一键合并 PR；审批 / 合并远端失败时弹 toast 提示，不再静默。
-- **个性化规则**
-  - 每位 Reviewer 维护自己的规则目录（markdown + frontmatter），按项目 / 仓库 / 目标分支命中后注入评审。
-- **多 LLM Provider**
-  - 适配并实测验证：OpenAI、Anthropic、DeepSeek、阿里百炼（通义千问）、火山方舟（豆包）。
-  - 厂商原厂模型只填型号名即用（按 provider 自动补 litellm 前缀）。
-  - ollama / openai-compatible 理论可行（待验证）。
-  - 设置页连接 / LLM / 代理可视化 CRUD（草稿态「写入不启用」，保存或显式启用才应用）。
-  - 出站 HTTP 代理：LLM 调用 / 代码平台 / git HTTPS 统一走代理，本地地址自动直连。
-- **运行时与打包**
-  - 内嵌可重定位 Python + 固定版本 pr-agent，开箱即用，无需自装 Python / Docker（Docker 模式可选）。
-  - 桌面安装包：Windows x64（NSIS）、macOS arm64（dmg，ad-hoc 签名、未公证）。
-  - 对 pr-agent 的无侵入补丁体系：二进制安全 diff、新模型兼容、YAML 容错、token 用量采集等。
-- **隐私与数据**
-  - 本地优先：除调用所配置的 LLM API 与代码平台外不向第三方上报数据。
-  - 配置 / 状态 / 日志固定在 `~/.code-meeseeks/`；仓库镜像目录可配置。
+- **Platform integration and PR discovery**
+  - Bitbucket Server / Data Center integration (REST API v1, >= 7.0).
+  - Polling auto-discovers Open PRs awaiting review where you are a Reviewer; grouped by repo, status-filtered, searchable.
+  - First-launch config wizard: guides configuring the code-platform connection + (optionally) the LLM; returns to the wizard on next launch when a valid connection is missing.
+  - Single-instance lock: a second launch focuses the existing window instead of opening another.
+- **Local diff reading**
+  - Bare mirror (on-demand clone / fetch) + Monaco side-by-side / inline diff.
+  - File tree, inline comments, git blame, cross-file code search.
+  - GitHub-style unchanged-section collapsing.
+- **AI review (pr-agent)**
+  - Conversationally drives `/describe`, `/review`, `/ask`, outputting structured, actionable findings.
+  - Review-task queue: serial execution, queued tasks visible in chat, cancelable anytime, retry on failure.
+  - Finding line-anchor clicks jump to the corresponding line in the Diff.
+  - Real token-usage collection (input / output separately).
+  - When the LLM is unconfigured, the chat panel gives a clear prompt and disables input.
+- **Review → publish loop**
+  - findings → draft pool → inline editing (Monaco view zone) → publish single / batch to remote.
+  - Remote comments auto-refresh after publish; repeat publish is idempotent (local draft deleted once published).
+  - Your own remote comments support reply / edit / delete.
+  - One-click merge when the remote is mergeable; a toast prompts on approval / merge remote failure instead of failing silently.
+- **Personalized rules**
+  - Each Reviewer maintains their own rules directory (markdown + frontmatter), injected into the review after matching by project / repo / target branch.
+- **Multiple LLM providers**
+  - Adapted and tested: OpenAI, Anthropic, DeepSeek, Alibaba Bailian (Tongyi Qianwen), Volcano Ark (Doubao).
+  - Vendors' first-party models take just the model name (litellm prefix auto-added per provider).
+  - ollama / openai-compatible are theoretically workable (pending verification).
+  - The Settings page offers visual CRUD for connection / LLM / proxy (draft state "write without enabling", applied only on save or explicit enable).
+  - Outbound HTTP proxy: LLM calls / code platform / git HTTPS uniformly go through the proxy, with local addresses auto-direct.
+- **Runtime and packaging**
+  - Embedded relocatable Python + pinned pr-agent, works out of the box, no self-installed Python / Docker needed (Docker mode optional).
+  - Desktop installers: Windows x64 (NSIS), macOS arm64 (dmg, ad-hoc signed, un-notarized).
+  - A non-invasive patch system for pr-agent: binary-safe diff, new-model compatibility, YAML fault tolerance, token-usage collection, etc.
+- **Privacy and data**
+  - Local-first: reports no data to third parties beyond calling the configured LLM API and code platform.
+  - Config / state / logs fixed under `~/.code-meeseeks/`; the repo mirror directory is configurable.
 
-### 🔧 修复
+### 🔧 Fixed
 
-- 修复只读安装目录（如 `C:\Program Files`）下 pr-agent 启动告警。
+- Fixed the pr-agent startup warning under a read-only install directory (e.g. `C:\Program Files`).
 
 ---
 
-许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
+License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
 [Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...HEAD
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0

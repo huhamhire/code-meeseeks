@@ -215,17 +215,19 @@ jobs:
 
       # Assemble the Release body: inject the CHANGELOG section for the matching version into the placeholder in RELEASE_NOTES,
       # so the Release page shows this version's changes directly instead of just a link. If no matching section is found, fall back to the original notes.
+      # Source is the Chinese mirror CHANGELOG.zh-CN.md (RELEASE_NOTES.md is Chinese too, so the Release body stays fully Chinese);
+      # CHANGELOG.md is the English canonical. When the Release body goes bilingual, revisit this to stitch both language sections.
       - name: Assemble Release notes
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           # Extract the body between `## [VERSION] ...` and the next `## [` (index==1 does a literal prefix match, avoiding regex metacharacters)
-          awk -v ver="## [$VERSION]" 'index($0,ver)==1{f=1;next} f&&/^## \[/{exit} f{print}' CHANGELOG.md > changelog-section.md
+          awk -v ver="## [$VERSION]" 'index($0,ver)==1{f=1;next} f&&/^## \[/{exit} f{print}' CHANGELOG.zh-CN.md > changelog-section.md
           if [ -s changelog-section.md ]; then
             awk 'FNR==NR{a[++n]=$0;next} /%%CHANGELOG_SECTION%%/{for(i=1;i<=n;i++)print a[i];next} {print}' \
               changelog-section.md .github/RELEASE_NOTES.md > RELEASE_BODY.md
           else
-            echo "::warning::CHANGELOG has no [$VERSION] section, Release body falls back to the original RELEASE_NOTES.md"
+            echo "::warning::CHANGELOG.zh-CN.md has no [$VERSION] section, Release body falls back to the original RELEASE_NOTES.md"
             sed 's/%%CHANGELOG_SECTION%%//' .github/RELEASE_NOTES.md > RELEASE_BODY.md
           fi
 
