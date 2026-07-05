@@ -1,174 +1,173 @@
-# Agent 与上下文
+# Agent & context
 
-## 职责与边界
+## Responsibilities & boundaries
 
-Agent 是「对话即委派」与「自动预评审」共同的底座：一套可被规则约束、读取本地分层上下文、自主编排 pr-agent 工具的运行时。本篇讲 **Agent 的身份与上下文**——目录分层、上下文注入、工具红线、会话隔离、提示词模版；两类用法各成一篇：
+The Agent is the shared foundation of both "conversation-as-delegation" and "automatic pre-review": a runtime that can be constrained by rules, reads the local layered context, and autonomously orchestrates pr-agent tools. This doc covers **the Agent's identity and context** — directory tiers, context injection, tool mutation red line, session isolation, prompt templates. The two usage modes each get their own doc:
 
-- **会话 Agent 化**（交互式自然语言 → 委派）见 [会话 Agent 化](02-session.md)。
-- **AutoPilot 自动预评审**（轮询触发、跨 PR 调度）见 [AutoPilot 与调度](03-autopilot.md)。
+- **Agentic sessions** (interactive natural language → delegation) — see [Agentic sessions](02-session.md).
+- **AutoPilot automatic pre-review** (poll-triggered, cross-PR scheduling) — see [AutoPilot & scheduling](03-autopilot.md).
 
-负责：Agent 上下文目录（灵魂 / 规范 / 记忆 / 用户画像 / 规则）的加载与注入、工具目录与修改性操作的授权红线、会话隔离与可写记忆的并发、提示词模版与初始化。
+Owns: loading and injecting the Agent context directory (soul / conventions / memory / user profile / rules), the tool catalog and the authorization red line for mutating operations, session isolation and concurrency of writable memory, prompt templates and initialization.
 
-不负责：自然语言路由与规划循环（见 [会话 Agent 化](02-session.md)）、AutoPilot 候选筛选与调度（见 [AutoPilot 与调度](03-autopilot.md)）、pr-agent 进程本身与 token 采集（见 [pr-agent 运行时](05-pragent-runtime.md)）、findings 解析与草稿发布（见 [评审闭环](../01-platform/03-review-workflow.md)）、规则匹配的正则语义（见 [规则](04-rules.md)；本模块只承载规则正文的存储位置 `<agent.dir>/rules/`）、PR 发现 / 软删 / 索引（见 [状态存储](../99-core/01-state-storage.md)）、平台写操作 API（见 [平台适配](../01-platform/01-adapter.md)）。
+Does not own: natural-language routing and the planning loop (see [Agentic sessions](02-session.md)), AutoPilot candidate filtering and scheduling (see [AutoPilot & scheduling](03-autopilot.md)), the pr-agent process itself and token collection (see [pr-agent runtime](05-pragent-runtime.md)), findings parsing and draft publishing (see [Review workflow](../01-platform/03-review-workflow.md)), the regex semantics of rule matching (see [Rules](04-rules.md); this module only holds the storage location of rule bodies, `<agent.dir>/rules/`), PR discovery / soft-delete / index (see [State storage](../99-core/01-state-storage.md)), platform write-operation APIs (see [Platform adaptation](../01-platform/01-adapter.md)).
 
-> 与 [规则系统](04-rules.md) 的关系：规则正文存于 Agent 目录的 `rules/` 子目录（`<agent.dir>/rules/`）；其「一文件一规则 + frontmatter 匹配 + 取全部命中（封顶 N 条）按 Ruleset 分段拼接 + per-tool 注入 `EXTRA_INSTRUCTIONS`」的匹配语义由 [规则](04-rules.md) 定义，本模块只负责加载与注入。
+> Relationship to the [rules system](04-rules.md): rule bodies live in the `rules/` subdirectory of the Agent directory (`<agent.dir>/rules/`); their matching semantics — "one file one rule + frontmatter matching + take all matches (capped at N) concatenated in Ruleset segments + per-tool injection into `EXTRA_INSTRUCTIONS`" — are defined by [Rules](04-rules.md). This module only handles loading and injection.
 
-## 核心设计
+## Core design
 
-### Agent 目录：分层上下文
+### Agent directory: layered context
 
-Agent 目录是 Agent 的**完整人格与知识来源**，挂载于配置 `agent.dir`（路径，空 = 回落默认位置 `~/.code-meeseeks/agent`）；**无独立启用开关**——配了 LLM 且 pr-agent 就绪即可用。与应用数据解耦，可指向独立目录或团队 git repo。
+The Agent directory is the Agent's **complete persona and knowledge source**, mounted at the config `agent.dir` (a path; empty = fall back to the default location `~/.code-meeseeks/agent`). It has **no separate enable switch** — it works once an LLM is configured and pr-agent is ready. It is decoupled from application data and can point at a standalone directory or a team git repo.
 
-目录约定（缺任一文件不阻断，缺则该层上下文为空）：
+Directory convention (a missing file is not blocking; if missing, that context tier is empty):
 
 ```
 <agent.dir>/
-├── SOUL.md      # 灵魂：核心职责、工作边界、语气基调（Agent 只读·默认由预制模版规定）
-├── AGENTS.md    # 工作规范：评审流程、AutoPilot 触发策略、工具使用红线（人写）
-├── MEMORY.md    # 长期记忆：跨 PR / 跨会话的事实沉淀（Agent 可追加，人可编辑）
-├── USER.md      # 用户画像：评审偏好与个人习惯（Agent 可追加，人可编辑）
-├── README.md    # 目录说明：各文件用途与项目地址引导（人用第三方 IDE 维护，非 Agent 上下文）
-└── rules/       # 规则化注入：「一文件一规则 + frontmatter」（人写，见 04-rules）
-    └── example.md  # 首次播种的禁用示例规则，删除后不补
+├── SOUL.md      # Soul: core responsibilities, work boundaries, tone (Agent read-only · by default defined by the prebuilt template)
+├── AGENTS.md    # Work conventions: review flow, AutoPilot trigger policy, tool-use red line (human-written)
+├── MEMORY.md    # Long-term memory: facts accumulated across PRs / sessions (Agent may append, human may edit)
+├── USER.md      # User profile: review preferences and personal habits (Agent may append, human may edit)
+├── README.md    # Directory description: purpose of each file + pointer to the project (maintained by the human in a third-party IDE, not Agent context)
+└── rules/       # Rule-based injection: "one file one rule + frontmatter" (human-written, see 04-rules)
+    └── example.md  # A disabled example rule seeded once; not restored after deletion
 ```
 
-关键取舍：
+Key trade-offs:
 
-- **分层而非单文件**：`SOUL` 定职责边界（恒定）、`AGENTS` 定流程与红线（恒定）、`rules/` 定逐 PR
-  命中的细则（结构化、可正则匹配）、`MEMORY` / `USER` 是**可写记忆**（Agent 在工作中沉淀、人可校订）。
-- **`SOUL.md` 对 Agent 只读**：灵魂是 Agent 自身无权改写的「宪法」——**禁止 Agent 修改 `SOUL.md`**，
-  默认情况下其内容**完全由预制模版规定**（初始化时落地，见下「提示词模版与资源目录」）。约束在运行时强制：装配上下文时
-  `SOUL.md` 只读注入，Agent 工具目录里没有写 `SOUL.md` 的能力；即便 LLM
-  越权产出对它的写操作也被拒（与下「工具规范」修改类红线同源）。这样 Agent 无法自我重定义职责与边界。
-  仅人（或团队 git repo 的维护者）可改 `SOUL.md`。
-- **读写边界清晰**：`SOUL` 仅人可改（Agent 只读）；`AGENTS` / `rules/` 人写为主；`MEMORY` / `USER`
-  是 Agent 与人共写的可写记忆。
-- **整目录团队共享**：与 [规则](04-rules.md) 同理——把 `agent.dir` 指向一个 git repo，团队 clone
-  即同一套灵魂 / 规范 / 规则。`MEMORY` / `USER` 虽可写，但仍属共享上下文（跨 PR 生效），
-  写入走原子写（见下「会话隔离」）。
-- **空目录 = 退化为原生**：`agent.dir` 为空（未配置 Agent 目录）时，Agent 运行时降级——
-  自然语言回退到等价 `/ask`、AutoPilot 不可用、pr-agent 走原生行为。保证「不配置也能用」。
+- **Layered rather than single-file**: `SOUL` defines responsibility boundaries (constant), `AGENTS` defines the flow and red line (constant), `rules/` defines the per-PR
+  matched detail rules (structured, regex-matchable), `MEMORY` / `USER` are **writable memory** (the Agent accumulates them during work, the human can revise).
+- **`SOUL.md` is read-only to the Agent**: the soul is a "constitution" the Agent itself has no right to rewrite — **the Agent is forbidden to modify `SOUL.md`**,
+  and by default its content is **fully defined by the prebuilt template** (materialized at initialization, see "Prompt templates & resource directory" below). The constraint is enforced at runtime: when assembling context,
+  `SOUL.md` is injected read-only, and the Agent's tool catalog has no capability to write `SOUL.md`; even if the LLM
+  overreaches and produces a write operation against it, that is rejected (same source as the mutating red line under "Tool conventions" below). This way the Agent cannot redefine its own responsibilities and boundaries.
+  Only a human (or the maintainer of the team git repo) can change `SOUL.md`.
+- **Clear read/write boundary**: `SOUL` is human-changeable only (Agent read-only); `AGENTS` / `rules/` are primarily human-written; `MEMORY` / `USER`
+  are writable memory co-written by Agent and human.
+- **Whole-directory team sharing**: same idea as [Rules](04-rules.md) — point `agent.dir` at a git repo, and a team clone
+  gets the same soul / conventions / rules. Although `MEMORY` / `USER` are writable, they remain shared context (in effect across PRs);
+  writes go through atomic write (see "Session isolation" below).
+- **Empty directory = degrade to native**: when `agent.dir` is empty (no Agent directory configured), the Agent runtime degrades —
+  natural language falls back to the equivalent `/ask`, AutoPilot is unavailable, and pr-agent uses native behavior. This guarantees "usable even without configuration".
 
-### 上下文注入：每次执行装配最新内容
+### Context injection: assemble the latest content on every run
 
-**每次 Agent 执行都现读、现装配，无缓存**（与 [规则](04-rules.md)「每次 run 现读规则」一致），
-确保用户刚改完 `SOUL.md` / 新写一条 MEMORY 立即生效。Agent 目录是寥寥几个小 Markdown，
-现读开销在毫秒级、相对一次数秒的 LLM 调用可忽略；且天然 stale-proof——`agent.dir` 常指向团队 git
-repo，外部 `git pull` 在应用之外发生，现读总能拿到最新。故**不引入内存缓存 /
-文件监听作为加载权威**：监听器（跨平台可靠性坑、自写 `MEMORY/USER` 反触发回环）的收益主要是 UI
-反应性而非 run 路径性能，可作为后续旁路信号（通知渲染层刷新「当前命中规则」chip），
-但绝不让正确性依赖它。
+**Every Agent run reads fresh and assembles fresh, with no cache** (consistent with [Rules](04-rules.md)'s "read rules fresh on each run"),
+ensuring that a user who just edited `SOUL.md` / wrote a new MEMORY entry sees it take effect immediately. The Agent directory is a handful of small Markdown files;
+the fresh-read cost is milliseconds, negligible against an LLM call that takes seconds; and it is naturally stale-proof — `agent.dir` often points at a team git
+repo, and an external `git pull` happens outside the app, so a fresh read always gets the latest. Hence we **do not introduce an in-memory cache /
+file watcher as the loading authority**: a watcher (cross-platform reliability pitfalls, self-writing `MEMORY/USER` re-triggering a loop) mainly benefits UI
+reactivity rather than run-path performance, and may serve later as a side-channel signal (notifying the render layer to refresh the "currently matched rules" chip),
+but correctness must never depend on it.
 
-一次装配的系统上下文按固定次序拼接：
+One assembly of the system context is concatenated in a fixed order:
 
-1. `SOUL.md` 正文 —— 人格与边界。
-2. `AGENTS.md` 正文 —— 工作规范与红线。
-3. **工具目录（tool catalog）** —— 环境内预定义的工具指令（`/describe`·`/review`·`/ask` 等）的名称、
-   语义、参数与**可用性标记**（读类 / 修改类），由运行时**注入**而非写死在提示词里。
-   新增工具只需在目录登记即对 Agent 可见。
-4. 命中的 `rules/` 规则正文 —— 按当前 PR 上下文 `{projectKey, repoSlug, targetBranch, tool}`
-   匹配取首条（见 [规则](04-rules.md)）。
-5. `MEMORY.md` + `USER.md` 正文 —— 长期记忆与用户画像。
-6. **当前 PR 元数据** —— 标题 / 描述 / 目标分支 / 变更概况。
-7. **当前会话快照** —— 本 PR 的 todo 与进度（见 [会话 Agent 化](02-session.md)），让 Agent 续上未完成的规划。
-8. **语言行为指令** —— 执行时注入的显式国际化规则，覆盖两类语言行为：
-   - **AI 输出语言**：Agent / 评审产物用目标语言输出，跟随 `config.language` /
-     `resolveLanguage`（沿用既有「AI 回复语言随界面语言」，见 [pr-agent 运行时](05-pragent-runtime.md)
-     的响应语言注入、[i18n](../03-gui/04-i18n.md)）。
-   - **记忆写入语言**：Agent 向 `MEMORY.md` / `USER.md` **追加新记忆时用用户习惯语言记录**（默认取
-     `config.language`，可由 `USER.md` 已记录的语言偏好细化），便于用户日后阅读自己的记忆。
-     这条写入行为规则**必须显式写进提示词**——否则 Agent 可能按模版的 en-US 或随机语言落记忆。
+1. `SOUL.md` body — persona and boundaries.
+2. `AGENTS.md` body — work conventions and the red line.
+3. **Tool catalog** — the name,
+   semantics, params and **availability flag** (read-type / mutating) of the predefined tool instructions in the environment (`/describe` · `/review` · `/ask`, etc.), **injected** by the runtime rather than hard-coded into the prompt.
+   Adding a tool only requires registering it in the catalog for the Agent to see it.
+4. Matched `rules/` bodies — matched against the current PR context `{projectKey, repoSlug, targetBranch, tool}`,
+   taking the first match (see [Rules](04-rules.md)).
+5. `MEMORY.md` + `USER.md` bodies — long-term memory and user profile.
+6. **Current PR metadata** — title / description / target branch / change overview.
+7. **Current session snapshot** — this PR's todos and progress (see [Agentic sessions](02-session.md)), so the Agent can resume unfinished planning.
+8. **Language behavior directives** — explicit i18n rules injected at execution time, covering two kinds of language behavior:
+   - **AI output language**: the Agent / review artifacts output in the target language, following `config.language` /
+     `resolveLanguage` (continuing the existing "AI reply language follows the UI language"; see the response-language injection in [pr-agent runtime](05-pragent-runtime.md)
+     and [i18n](../03-gui/04-i18n.md)).
+   - **Memory-write language**: when the Agent **appends new memory to `MEMORY.md` / `USER.md`, it records in the user's habitual language** (defaults to
+     `config.language`, and can be refined by a language preference already recorded in `USER.md`), so the user can later read their own memory.
+     This write-behavior rule **must be written explicitly into the prompt** — otherwise the Agent may record memory in the template's en-US or a random language.
 
-**三个语言概念解耦**（三者独立）：
+**Three decoupled language concepts** (all three independent):
 
-1. **模版 / 上下文文件写成什么语言**：en-US 单份、用户可改写（见下「提示词模版与资源目录」）。
-2. **AI 输出语言**：跟随 `config.language`。
-3. **记忆写入语言**：用户习惯语言。
+1. **What language the template / context files are written in**: a single en-US copy, user-editable (see "Prompt templates & resource directory" below).
+2. **AI output language**: follows `config.language`.
+3. **Memory-write language**: the user's habitual language.
 
-`SOUL.md` 可以是英文，输出与新记忆仍按用户语言走中文；反之亦然——由第 8 项这组执行时规则
-单点控制输出与写入两类行为。
+`SOUL.md` may be in English while output and new memory still follow the user's language, e.g. Chinese; and vice versa — the set of execution-time rules in item 8
+is the single point of control over both output and write behaviors.
 
-工具目录的「可用性标记」是红线落地的关键（见下「工具规范」）：修改类工具在未授权时以**禁用态**注入，
-Agent 知其存在但不可调用。
+The tool catalog's "availability flag" is the key to enforcing the red line (see "Tool conventions" below): a mutating tool, while unauthorized, is injected in a **disabled state**,
+so the Agent knows it exists but cannot call it.
 
-### 工具规范：修改性操作红线
+### Tool conventions: the red line for mutating operations
 
-工具目录按副作用分两类，运行时**硬性**区别对待（不只靠提示词约束）：
+The tool catalog is split into two classes by side effect, treated **hard-differently** at runtime (not just by prompt constraint):
 
-- **读 / 分析类**（`/describe`·`/review`·`/ask`、读 diff、读 findings、读 PR 列表等）：Agent
-  始终可自主调用。注意 `/describe`·`/review` 本身只产出本地草稿、不写远端，属安全操作。
-- **修改类**（`/approve`、`/needswork`、发布 inline 评论、reply/edit/delete、合并 PR
-  等一切对远端有副作用的写）：**默认禁止 Agent 自主调用**。仅在两种授权下放行：
-  1. **用户直接下达指令**（在会话里显式要求执行该操作）；
-  2. **规则显式授权**（`AGENTS.md` / `rules/` 中明确授予 AutoPilot 某项写权限，见 [AutoPilot 与调度](03-autopilot.md) 的「写权限扩展」）。
+- **Read / analysis type** (`/describe` · `/review` · `/ask`, reading diff, reading findings, reading the PR list, etc.): the Agent
+  may always invoke them autonomously. Note that `/describe` · `/review` themselves only produce local drafts and do not write the remote — they are safe operations.
+- **Mutating type** (`/approve`, `/needswork`, publishing an inline comment, reply/edit/delete, merging a PR,
+  and any write with a side effect on the remote): **by default the Agent is forbidden to invoke them autonomously**. They are released under only two authorizations:
+  1. **The user issues a direct instruction** (explicitly asking for that operation in the session);
+  2. **A rule grants it explicitly** (`AGENTS.md` / `rules/` explicitly grant AutoPilot some write permission, see "Write permission extension" in [AutoPilot & scheduling](03-autopilot.md)).
 
-红线在运行时层强制：修改类工具在无授权时以**禁用态**注入工具目录，且执行入口二次校验授权标志——即便
-LLM「越权」产出一个 `/approve` 调用，运行时也拒绝并记入 transcript。这样「提示词被绕过」
-不等于「操作被执行」。
+The red line is enforced at the runtime layer: a mutating tool, while unauthorized, is injected into the tool catalog in a **disabled state**, and the execution entry re-checks the authorization flag — so even if the
+LLM "overreaches" and produces an `/approve` call, the runtime rejects it and records it in the transcript. This way "the prompt was bypassed"
+does not equal "the operation was executed".
 
-**工具清单单一真相源**：所有工具（id / 命令名 / 读改分类 / grant / 是否运行队列工具）集中声明在共享层的
-**统一注册表 `TOOLS`（tool-registry）**；运行工具枚举 `ReviewRunTool`、工具目录 `buildToolCatalog`、规划红线
-允许集均由它派生——新增 / 调整工具只改注册表一处。
+**Single source of truth for the tool list**: all tools (id / command name / read-vs-mutate classification / grant / whether it is a run-queue tool) are declared centrally in the
+**unified registry `TOOLS` (tool-registry)** in the shared layer; the run-tool enum `ReviewRunTool`, the tool catalog `buildToolCatalog`, and the planning red line's
+allow-set are all derived from it — adding / adjusting a tool changes only the one registry.
 
-### 会话隔离与规则共享
+### Session isolation & rule sharing
 
-- **规则 / 上下文共享**：`agent.dir`（SOUL / AGENTS / MEMORY / USER / rules）是**全局单份**，所有
-  PR 的 Agent 会话读同一套。改一处，处处生效。
-- **会话隔离**：每个 PR 的 Agent 会话状态（todo、进度、plan、transcript）**按 PR 隔离**，落在该 PR
-  的 per-PR 目录下（见 [状态存储](../99-core/01-state-storage.md) 的 `state/prs/<hash>/`），互不串扰。不同 PR 并发跑
-  Agent 安全。
-- **可写记忆的并发**：`MEMORY.md` / `USER.md` 是跨 PR 共享的可写文件，多个会话可能同时追加 → 走
-  StateStore 同款**原子写（tmp → fsync → rename）**、Main 进程单写者串行化；
-  追加语义优先（不整文件覆盖），降低并发互覆风险。
+- **Rule / context sharing**: `agent.dir` (SOUL / AGENTS / MEMORY / USER / rules) is a **single global copy**; all
+  PRs' Agent sessions read the same set. Change one place, it takes effect everywhere.
+- **Session isolation**: each PR's Agent session state (todo, progress, plan, transcript) is **isolated per PR**, landing under that PR's
+  per-PR directory (see `state/prs/<hash>/` in [State storage](../99-core/01-state-storage.md)), with no cross-talk. Running Agents concurrently across different PRs is safe.
+- **Concurrency of writable memory**: `MEMORY.md` / `USER.md` are writable files shared across PRs, and multiple sessions may append simultaneously → they go through the
+  same **atomic write (tmp → fsync → rename)** as StateStore, serialized by the single-writer Main process;
+  append semantics take priority (no whole-file overwrite), reducing the risk of concurrent mutual overwrite.
 
-### 提示词模版与资源目录
+### Prompt templates & resource directory
 
-- **工程内预建模版**：仓库内置一套默认 `SOUL.md` / `AGENTS.md` / `MEMORY.md` / `USER.md` / `README.md`
-  与示例 `rules/`，作为 Agent 目录的**初始化骨架**。`README.md` 是面向用户的目录说明（各文件用途 + 指向项目
-  GitHub 的引导），供用户用第三方 IDE 阅读 / 维护，不作为 Agent 上下文注入。
-- **模版统一 en-US 单份、不做 i18n**：模版是用户的**著作内容**而非产品 UI，故不提供多语变体——一律以
-  **en-US** 落地（与项目 en-US 兜底一致）。用户初始化后可自由改写成目标语言（中文 / 日文 …）；
-  改的是自己的上下文文件，与 AI 输出语言互不绑定（输出语言由上「上下文注入」第 8 项的执行时国际化规则单点控制）。
-- **统一资源目录管理**：模版集中放在桌面应用的**单一资源目录**下，
-  随应用打包（与嵌入式运行时等资源同级管理），由初始化逻辑按清单拷贝；不散落在各处。
-- **初始化时机与三类所有权**：「用时初始化」——每次加载前都先 scaffold 一次（不依赖首启 / 设置交互这类一次性时机），
-  按文件所有权分三类处理：
-  - **用户所有（缺失即创建、不覆盖）**：`AGENTS.md` / `MEMORY.md` / `USER.md` / `README.md`——可编辑 Markdown，
-    用户与 Agent 后续按各自权限改写；删除后下次 scaffold 会补回（保证基础骨架与目录说明长在）。
-  - **应用所有（强制对齐模版）**：`SOUL.md`——见下条。
-  - **首次播种（仅首次落地、删后不补）**：`rules/example.md`——示例规则**非必需**，仅在 Agent 目录**首次脚手架**
-    （以 `rules/` 子目录尚不存在判定）时播一份；用户删掉即永久消失，不会每次启动被「复活」。
-- **`SOUL.md` 默认由模版规定**：灵魂的内容**默认完全来自预制模版**（初始化落地的就是模版正文），
-  Agent 全程无权改写（见上「Agent 目录」）。这把「Agent 是谁、边界在哪」的定义权牢牢留在模版 / 维护者侧；
-  个人或团队若要定制，仍由人去改 `agent.dir` 里的 `SOUL.md`（或在团队 git repo 中统一维护），
-  而非交给 Agent 自演化。
+- **Prebuilt templates in the repo**: the repo ships a default set of `SOUL.md` / `AGENTS.md` / `MEMORY.md` / `USER.md` / `README.md`
+  plus an example `rules/`, as the **initialization skeleton** of the Agent directory. `README.md` is a user-facing directory description (purpose of each file + a pointer to the project's
+  GitHub) for the user to read / maintain in a third-party IDE; it is not injected as Agent context.
+- **Templates are a single en-US copy, no i18n**: the templates are the user's **authored content**, not product UI, so no multilingual variants are provided — they all land as
+  **en-US** (consistent with the project's en-US fallback). After initialization the user may freely rewrite them into a target language (Chinese / Japanese …);
+  they are editing their own context files, decoupled from the AI output language (the output language is controlled at a single point by the execution-time i18n rule in item 8 of "Context injection" above).
+- **Unified resource-directory management**: the templates are placed centrally under the desktop app's **single resource directory**,
+  packaged with the app (managed alongside resources such as the embedded runtime), and copied per manifest by the initialization logic; not scattered around.
+- **Initialization timing and three ownership classes**: "initialize on use" — scaffold once before every load (not relying on one-off timing such as first launch / settings interaction),
+  handled in three classes by file ownership:
+  - **User-owned (create if missing, never overwrite)**: `AGENTS.md` / `MEMORY.md` / `USER.md` / `README.md` — editable Markdown,
+    later rewritten by user and Agent per their respective permissions; if deleted, the next scaffold restores it (guaranteeing the base skeleton and directory description persist).
+  - **App-owned (force-aligned to the template)**: `SOUL.md` — see the next item.
+  - **Seeded once (landed only on first run, not restored after deletion)**: `rules/example.md` — the example rule is **not required**, seeded only on the Agent directory's **first scaffold**
+    (determined by the `rules/` subdirectory not yet existing); once the user deletes it, it disappears permanently and is not "revived" on every startup.
+- **`SOUL.md` is defined by the template by default**: the soul's content **by default comes entirely from the prebuilt template** (what initialization lands is the template body),
+  and the Agent has no right to rewrite it throughout (see "Agent directory" above). This keeps the authority to define "who the Agent is and where its boundaries are" firmly on the template / maintainer side;
+  a person or team wanting to customize still has a human change `SOUL.md` inside `agent.dir` (or maintain it uniformly in the team git repo),
+  rather than handing it to Agent self-evolution.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-**配置（`agent.*` 命名空间）**：完整字段与默认值见 [配置与凭据](../99-core/02-config-and-secrets.md) 的配置形状，本篇只点设计要点：
+**Config (`agent.*` namespace)**: for the full fields and defaults see the config shape in [Config & secrets](../99-core/02-config-and-secrets.md); this doc only highlights the design points:
 
-- **无独立启用开关**：配了 LLM 且 pr-agent 就绪即可用；`agent.dir` 空 = 回落默认位置（非停用）。
-- `strategy.max_followup_asks`（条件性 `/ask` 硬上限）归 `strategy` 而非 `autopilot`——手动自动评审与 AutoPilot 共用同一微流程（见 [会话 Agent 化](02-session.md)、[AutoPilot 与调度](03-autopilot.md)）。
-- `autopilot.grants` 为逐项写权限授权（默认全空 = 全拒）。
+- **No separate enable switch**: it works once an LLM is configured and pr-agent is ready; `agent.dir` empty = fall back to the default location (not disabled).
+- `strategy.max_followup_asks` (the hard cap on conditional `/ask`) belongs to `strategy`, not `autopilot` — manual auto review and AutoPilot share the same micro-flow (see [Agentic sessions](02-session.md), [AutoPilot & scheduling](03-autopilot.md)).
+- `autopilot.grants` is per-item write-permission grants (empty by default = all denied).
 
-**Agent 目录文件清单**：`SOUL.md` / `AGENTS.md` / `MEMORY.md` / `USER.md` / `rules/*.md`（rules 的
-frontmatter schema 见 [规则](04-rules.md)）；另含 `README.md`（用户向目录说明，非注入上下文）与首次播种的
-`rules/example.md`（禁用示例，删后不补）。注入上下文仅取前者中的 `SOUL/AGENTS/MEMORY/USER` + 命中规则正文。
+**Agent directory file list**: `SOUL.md` / `AGENTS.md` / `MEMORY.md` / `USER.md` / `rules/*.md` (the rules'
+frontmatter schema is in [Rules](04-rules.md)); plus `README.md` (user-facing directory description, not injected context) and the seeded-once
+`rules/example.md` (a disabled example, not restored after deletion). The injected context takes only `SOUL/AGENTS/MEMORY/USER` from the former + the matched rule bodies.
 
-**`ToolCatalogEntry`**：`name` / `semantics` / `params` / `mutating`(bool) / `enabled`(按授权)——工具目录注入用，红线据 `mutating` + `enabled` 落地。
+**`ToolCatalogEntry`**: `name` / `semantics` / `params` / `mutating`(bool) / `enabled`(per authorization) — used for tool-catalog injection; the red line is enforced from `mutating` + `enabled`.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **红线是硬约束、非软提示**：修改类工具的授权校验必须落在运行时执行入口，不能只写进 `SOUL.md` 期望
-  LLM 自觉；提示词与运行时双保险，运行时为准。
-- **可写记忆的失控风险**：Agent 持续往 `MEMORY.md` / `USER.md` 追加可能膨胀 / 噪声化 →
-  需有体量上限或回收策略（后续可加 housekeeping），并保持人可随时编辑校订。
-- **语言三分**（三者解耦，别把「文件写成什么语言」与「输出 / 记忆用什么语言」绑死）：
-  - **模版 / 上下文文件**：统一 en-US 单份、不做 i18n（用户可改写成任意语言）。
-  - **AI 输出语言**：由执行时注入的国际化规则控制，跟随 `config.language`。
-  - **记忆写入语言**：Agent 追加 `MEMORY.md` / `USER.md` 时用用户习惯语言记录，此行为规则须
-    显式注入提示词（见上「上下文注入」第 8 项、[i18n](../03-gui/04-i18n.md)）。
-- **规则匹配语义与语言无关**。
-- **后续可扩展**：Agent 规划器可接本机 agentic CLI（claude / codex 等，复用
-  [pr-agent 运行时](05-pragent-runtime.md) 的本地 CLI provider 思路）作为编排大脑；
-  工具目录可纳入更多只读分析工具（按 changed_paths 聚焦、跨 PR 关联等）而不动红线框架。
+- **The red line is a hard constraint, not a soft hint**: the authorization check for mutating tools must land at the runtime execution entry; it cannot merely be written into `SOUL.md` hoping the
+  LLM behaves. Prompt and runtime are dual insurance; the runtime is authoritative.
+- **Runaway risk of writable memory**: the Agent continually appending to `MEMORY.md` / `USER.md` may bloat / add noise →
+  a size cap or recycling policy is needed (housekeeping can be added later), while keeping it human-editable at any time.
+- **Language triad** (all three decoupled; don't bind "what language the file is written in" to "what language output / memory uses"):
+  - **Template / context files**: a single en-US copy, no i18n (the user may rewrite into any language).
+  - **AI output language**: controlled by the i18n rule injected at execution time, following `config.language`.
+  - **Memory-write language**: when appending to `MEMORY.md` / `USER.md` the Agent records in the user's habitual language; this behavior rule must be
+    injected into the prompt explicitly (see item 8 of "Context injection" above, and [i18n](../03-gui/04-i18n.md)).
+- **Rule matching semantics are language-independent**.
+- **Extensible later**: the Agent planner can hook into a local agentic CLI (claude / codex, etc., reusing the local CLI provider approach of
+  [pr-agent runtime](05-pragent-runtime.md)) as the orchestration brain;
+  the tool catalog can take in more read-only analysis tools (focus by changed_paths, cross-PR correlation, etc.) without touching the red-line framework.

@@ -2,7 +2,7 @@
 
 Thanks for your interest in contributing! This page is the entry point for contributors. For the deeper engineering handbook (repo structure, module boundaries, conventions), see [AGENTS.md](AGENTS.md); for environment setup and build steps, see the [Development guide](docs/development/README.md).
 
-> **Language**: developer-facing docs and code artifacts are in English — the developer/contributor docs under [`docs/development/`](docs/development/README.md), commit messages, and PR descriptions. The user guide is bilingual ([`docs/guide/`](docs/guide/README.md): English canonical + a Chinese mirror), and the module design docs under [`docs/arch/`](docs/arch/README.md) remain in Chinese (design-reasoning working notes).
+> **Language**: developer- and design-facing docs and code artifacts are in English — the developer/contributor docs under [`docs/development/`](docs/development/README.md), the module design docs under [`docs/arch/`](docs/arch/README.md) (with a terminology [glossary](docs/arch/glossary.md)), commit messages, and PR descriptions. Only the user-facing surfaces are bilingual: the user guide ([`docs/guide/`](docs/guide/README.md)), the [README](README.md), and the [CHANGELOG](CHANGELOG.md) — English canonical + a Chinese mirror.
 
 ## Getting set up
 
@@ -49,7 +49,7 @@ go build ./...
 ## Documentation conventions
 
 - **User guide** — [`docs/guide/`](docs/guide/README.md), bilingual (English canonical at the root, Chinese mirror under `zh-CN/`). When you change one locale, update the other.
-- **Module design docs** — [`docs/arch/`](docs/arch/README.md), in Chinese.
+- **Module design docs** — [`docs/arch/`](docs/arch/README.md), in English (terminology locked by [`glossary.md`](docs/arch/glossary.md)).
 - **Developer/contributor docs** — [`docs/development/`](docs/development/README.md), in English.
 
 See [AGENTS.md](AGENTS.md) for the full set of engineering conventions (IPC, i18n, error codes, platform ordering, and more).

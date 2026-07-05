@@ -1,81 +1,69 @@
-# 配置与凭据
+# Config & secrets
 
-## 职责与边界
+## Responsibilities & boundaries
 
-统一管理应用配置与敏感凭据：单一 `config.yaml`（连接、LLM、规则、轮询、代理等）+ 凭据抽象 +
-设置页可视化编辑 + 首启向导。
+Uniformly manage application config and sensitive credentials: a single `config.yaml` (connections, LLM, rules, polling, proxy, etc.) + a credential abstraction + a visual editor on the settings page + a setup wizard.
 
-负责：配置 schema、读写与热更新、凭据存取抽象、设置 UI。不负责：各子系统怎么用这些配置（见对应分篇）。
+In scope: config schema, read/write and hot-reload, the credential store/retrieve abstraction, the settings UI. Out of scope: how each subsystem uses this config (see the respective doc).
 
-## 核心设计
+## Core design
 
-- **单一 `config.yaml`（含敏感字段）**：配置与凭据合并在一个文件，不拆 `secrets.yaml`（减心智）。文件权限
-  收紧（Unix 600 / Windows ACL）。**应用数据目录固定** `~/.code-meeseeks/`（config/state/logs/），仅
-  `workspace.repos_dir` 可改（见 [状态存储](01-state-storage.md)）。
-- **schema 用 zod 定义 + 全字段默认值**：解析时缺字段补默认，老配置自动兼容、新增字段非破坏性。顶层形状见下「数据 / 接口契约」的 `config.yaml` 示例。
-- **凭据抽象 `SecretStore`**：所有 token / API key 读写经它，不直接 `fs`。一期实现把凭据存在 `config.yaml`
-  （`ConfigFileSecretStore`）；预留 keytar/OS Keychain 实现，将来只换注入、业务零改动。凭据**绝不进日志/异常栈**。
-- **多套 LLM 预设（profiles）**：`llm.profiles[]` 每条独立 `provider / model / base_url / api_key`，`active_id`
-  切当前生效。内置 provider 选项（openai / openai-compatible / deepseek / anthropic / dashscope /
-  volcengine-ark / cli）；按 provider 决定注入哪族 env（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。本地 Ollama
-  经 openai-compatible 的 `/v1` 端点接入（旧 `ollama` 值自动迁移）。
-- **热更新（写盘 + 内存同步）**：每个设置项保存时写 `config.yaml` **并**更新内存中的 config，必要时热重建
-  受影响运行时（如连接/代理变更重建 adapter、轮询间隔热替换定时器），无需重启。
-- **设置页可视化 CRUD**：连接、LLM 预设、代理、规则目录、轮询间隔、`repos_dir` 都能在设置页编辑；
-  连接/LLM 有「测试」入口（ping / 代理连通）。也提供「用系统关联程序打开 config.yaml」直接编辑（适合高级用户，
-  减少冗余 UI）。
-- **首启配置向导**：首次启动自动建 `~/.code-meeseeks/` + 默认 `config.yaml`；引导配代码平台连接（+ 可选 LLM），
-  最快路径进入可用状态。
+- **A single `config.yaml` (including sensitive fields)**: config and credentials are merged into one file rather than splitting out a `secrets.yaml` (less mental overhead). File permissions are tightened (Unix 600 / Windows ACL). **The application data directory is fixed** at `~/.code-meeseeks/` (config/state/logs/); only `workspace.repos_dir` is changeable (see [State storage](01-state-storage.md)).
+- **Schema defined with zod + full-field defaults**: on parse, missing fields are filled with defaults, so old configs stay auto-compatible and new fields are non-breaking. The top-level shape is shown in the `config.yaml` example under "Data / interface contract" below.
+- **Credential abstraction `SecretStore`**: all token / API key reads/writes go through it, never `fs` directly. Phase one implements storing credentials in `config.yaml` (`ConfigFileSecretStore`); a keytar/OS Keychain implementation is reserved so that later only the injection is swapped, with zero business change. Credentials **never enter logs / exception stacks**.
+- **Multiple LLM profiles**: `llm.profiles[]`, each with its own `provider / model / base_url / api_key`, with `active_id` selecting the active one. The built-in provider options (openai / openai-compatible / deepseek / anthropic / dashscope / volcengine-ark / cli); the provider decides which family of env is injected (see [pr-agent runtime](../02-agent/05-pragent-runtime.md)). A local Ollama connects via openai-compatible's `/v1` endpoint (the old `ollama` value is auto-migrated).
+- **Hot-reload (write to disk + in-memory sync)**: on saving each setting, write `config.yaml` **and** update the in-memory config, hot-rebuilding the affected runtime when necessary (e.g. a connection/proxy change rebuilds the adapter, a polling-interval change hot-swaps the timer), without restart.
+- **Visual CRUD on the settings page**: connections, LLM profiles, proxy, the rules directory, polling interval, and `repos_dir` can all be edited on the settings page; connections/LLM have a "Test" entry point (ping / proxy connectivity). There is also "Open config.yaml with the system-associated program" for direct editing (suited to advanced users, reducing redundant UI).
+- **Setup wizard**: on first launch it auto-creates `~/.code-meeseeks/` + a default `config.yaml`, and guides configuring the code-platform connection (+ optional LLM), the fastest path to a usable state.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-应用配置是单一 `config.yaml`，顶层形状（节选；缺字段由 zod 补默认值，老配置非破坏性兼容）：
+The application config is a single `config.yaml`, with this top-level shape (excerpt; missing fields are filled with defaults by zod, old configs are non-breaking compatible):
 
 ```yaml
-language: ''                     # UI / pr-agent 输出语言；空 = 按 OS 自动、回落英语
-appearance:                      # 纯前端展示项（主进程仅据主题设原生窗口 themeSource）
-  editor_theme: auto             # 'auto' 跟随系统深浅，或内置 / 第三方主题 id
-connections: []                  # 代码平台连接（含 token 等鉴权字段）
-active_connection_id: ''         # 当前唯一启用的连接 id（同时只启用一条）
-llm:                             # 多套 LLM 预设，按 active_id 切当前生效
-  profiles: []                   # 每条独立 provider / model / base_url / api_key
+language: ''                     # UI / pr-agent output language; empty = auto by OS, fall back to English
+appearance:                      # pure frontend display items (the main process only sets the native window themeSource from the theme)
+  editor_theme: auto             # 'auto' follows system light/dark, or a built-in / third-party theme id
+connections: []                  # code-platform connections (including token and other auth fields)
+active_connection_id: ''         # the single currently enabled connection id (only one enabled at a time)
+llm:                             # multiple LLM profiles, switching the active one by active_id
+  profiles: []                   # each with its own provider / model / base_url / api_key
   active_id: ''
-  context_tokens: 128000         # 输入上下文裁剪上限（token，32k~1M）
-agent:                           # 高阶 Agent
-  dir: ''                        # 人格 / 知识 / 规则目录；空 = 默认位置
-  max_steps: 8                   # 单会话步数上限
-  summary_max_chars: 800         # 收尾总结篇幅上限
-  autopilot: { enabled: false }  # AutoPilot 预评审（默认关；另含 batch_size / grants）
-  strategy:                      # 自动评审行为策略（手动 + AutoPilot 共用）
-    auto_followup: true          # 是否启用自动追问
+  context_tokens: 128000         # input-context truncation cap (tokens, 32k~1M)
+agent:                           # high-level Agent
+  dir: ''                        # persona / knowledge / rules directory; empty = default location
+  max_steps: 8                   # max steps per session
+  summary_max_chars: 800         # cap on the wrap-up summary length
+  autopilot: { enabled: false }  # AutoPilot pre-review (off by default; also holds batch_size / grants)
+  strategy:                      # auto-review behavior strategy (shared by manual + AutoPilot)
+    auto_followup: true          # whether to enable automatic follow-up asks
     max_followup_asks: 2
-    max_code_suggestions: 4      # 单次代码建议 / 发现数量上限（2~8）
-poller: { interval_seconds: 300 } # 轮询间隔（秒，≥30）
-proxy: { enabled: false }        # 出站代理；默认关 = 直连
-notifications:                   # 消息通知；enabled 为总开关
+    max_code_suggestions: 4      # cap on code suggestions / findings per run (2~8)
+poller: { interval_seconds: 300 } # polling interval (seconds, ≥30)
+proxy: { enabled: false }        # outbound proxy; off by default = direct connection
+notifications:                   # notifications; enabled is the master switch
   enabled: true
-  new_pr: true                   # 分类型系统通知开关
+  new_pr: true                   # per-type system-notification switches
   reply: true
   mention: true
-pr_agent:                        # pr-agent 运行时
+pr_agent:                        # pr-agent runtime
   strategy: auto                 # auto | embedded | local-cli
-  max_concurrency: 2             # 评审并发数（1~8）
-update: { check_enabled: true }  # 启动检测新版（仅提示，不自动下载）
+  max_concurrency: 2             # review concurrency (1~8)
+update: { check_enabled: true }  # check for a new version at startup (prompt only, no auto-download)
 workspace:
-  repos_dir: ~/.code-meeseeks/repos  # 唯一可迁移到大盘的数据子目录
+  repos_dir: ~/.code-meeseeks/repos  # the only data subdirectory relocatable to a large disk
 ```
 
-- **凭据抽象 `SecretStore`**：`get` / `set` / `delete`——所有 token / API key 经它读写，不直接碰 `fs`，凭据绝不进日志 / 异常栈。
-- **设置相关 IPC**（保存即热生效）：
-  - 分项写入：`config:setConnections` / `setLlm` / `setProxy` / `setAgent` / `setPoller` / `setReposDir` / `setNotifications`；
-  - 读取：`config:read`；
-  - 连通性测试：`config:testConnection` / `config:testProxy`（ping / 代理连通）；
-  - 其它：「用系统关联程序打开 config 文件」。
+- **Credential abstraction `SecretStore`**: `get` / `set` / `delete` — all token / API key reads/writes go through it, never touching `fs` directly, and credentials never enter logs / exception stacks.
+- **Settings-related IPC** (a save takes effect immediately):
+  - Per-item writes: `config:setConnections` / `setLlm` / `setProxy` / `setAgent` / `setPoller` / `setReposDir` / `setNotifications`;
+  - Read: `config:read`;
+  - Connectivity tests: `config:testConnection` / `config:testProxy` (ping / proxy connectivity);
+  - Other: "Open the config file with the system-associated program".
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **凭据明文落盘**：当前安全模型——文件权限收紧 + 文档提示风险；面向开发者群体可接受。切 keytar 时只换
-  `SecretStore` 实现。
-- **配置向后兼容**：加新字段务必带默认值（zod `.default`），并考虑旧形态迁移（如 LLM 从单配置迁到 profiles 的兼容）。
-- **`repos_dir` 改动**是低频操作，可能需重启/挂起轮询。
-- `~/.code-meeseeks/` 不可迁移（仅 `repos_dir` 可搬到大盘）；config/state/logs 总量小，固定路径便于备份定位。
+- **Credentials stored in plaintext**: the current security model — tightened file permissions + documented risk warning; acceptable for a developer audience. When switching to keytar, only the `SecretStore` implementation changes.
+- **Config backward compatibility**: any new field must carry a default (zod `.default`) and consider migration from the old shape (e.g. the compatibility of migrating LLM from a single config to profiles).
+- **Changing `repos_dir`** is a low-frequency operation and may require a restart / suspending polling.
+- `~/.code-meeseeks/` is not relocatable (only `repos_dir` can move to a large disk); config/state/logs are small in total, and a fixed path makes backups easy to locate.

@@ -1,59 +1,59 @@
-# 规则系统
+# Rules system
 
-## 职责与边界
+## Responsibilities & boundaries
 
-让评审带上团队/仓库的编码规约：存储用户写的规则、按 PR 上下文匹配、把命中规则注入 pr-agent 的
-`extra_instructions`。
+Let the review carry the team's/repo's coding conventions: store user-written rules, match by PR context, and inject matched rules into pr-agent's
+`extra_instructions`.
 
-负责：规则加载/匹配/注入。不负责：pr-agent 调用（见 [pr-agent 运行时](05-pragent-runtime.md)）、规则正文怎么写（用户的事）。
+Owns: rule loading/matching/injection. Does not own: pr-agent invocation (see [pr-agent runtime](05-pragent-runtime.md)), how the rule body is written (the user's business).
 
-## 核心设计
+## Core design
 
-- **规则目录归于 Agent 目录 `<agent.dir>/rules/`**：规则正文是 Agent 知识来源的一部分，随 Agent 目录统一管理
-  （见 [Agent](01-agent.md)「Agent 目录」），不再单设顶层 `rules.*` 配置。`agent.dir` 留空时默认 `~/.code-meeseeks/agent`；
-  团队把 `agent.dir` 指向一个 git repo，所有人 clone 即同一套规则与上下文。规则纯「读」，跟可变状态隔离。
-- **Markdown + YAML frontmatter，一文件一规则**：递归扫 `<agent.dir>/rules/` 下所有 `.md`（**目录层级不参与匹配**，纯组织，
-  跳过隐藏目录）。frontmatter 是结构化元数据，**markdown 正文就是注入给 pr-agent 的 `extra_instructions`**——人能读、
-  git diff 清楚、无重复内容。
-  - **遍历性能兜底**：单目录递归收集 `.md` 封顶 `MAX_RULE_FILES`（200）个，到达即停并 warn——防止 `agent.dir` 被误指向
-    超大目录树时一次加载扫穿海量文件。
-- **匹配语义：每次 run 现读 + 取全部命中（封顶 N 条）**：
-  1. 扫所有 `.md`，解析 frontmatter（解析失败 → warn + 跳过，不阻断）。
-  2. 按 `priority desc + 文件路径 asc` 预排序。
-  3. 对当前 `{ projectKey, repoSlug, targetBranch, tool }` 逐条 `.test()`：`enabled=false` / `tools` 不含当前工具 /
-     `applies_to.<字段>` 正则不匹配 → 跳；字段缺省视为命中。
-  4. **取全部命中**，封顶 `DEFAULT_MAX_MATCHED_RULES`（20）条（超出按排序丢弃靠后者，安全兜底防 prompt 膨胀）。
-  5. 多条正文经 `combineRuleInstructions` 以 `## Ruleset N` 分段拼接（frontmatter 已在加载期被 gray-matter 剥离，
-     不入正文），作 `extra_instructions`；分段标题让模型区分不同规约、互不串味。
-  「全局基础 + 项目 override」仍可用 priority 数字表达（基础低、项目高 → 排在前、Ruleset 序靠前）。
-- **per-tool 注入**：`/review` → `PR_REVIEWER__EXTRA_INSTRUCTIONS`、`/describe` → `PR_DESCRIPTION__EXTRA_INSTRUCTIONS`。
-  Agentic 评审 / 规划走系统上下文的「Matched rules」段（同一拼接口径）。命中规则数在评审执行时经日志输出。
-- **失败安全**：单文件 frontmatter 坏掉只跳过它，其余规则照常加载。
+- **The rules directory belongs to the Agent directory `<agent.dir>/rules/`**: rule bodies are part of the Agent's knowledge source, managed uniformly with the Agent directory
+  (see "Agent directory" in [Agent](01-agent.md)), no longer a separate top-level `rules.*` config. When `agent.dir` is empty it defaults to `~/.code-meeseeks/agent`;
+  a team points `agent.dir` at a git repo, and everyone's clone gets the same rules and context. Rules are pure "read", isolated from mutable state.
+- **Markdown + YAML frontmatter, one file one rule**: recursively scan all `.md` under `<agent.dir>/rules/` (**directory levels don't participate in matching**, purely organizational,
+  skipping hidden directories). The frontmatter is structured metadata, and **the markdown body is exactly the `extra_instructions` injected into pr-agent** — human-readable,
+  clear in git diff, no duplicate content.
+  - **Traversal-performance backstop**: recursively collecting `.md` in a single directory is capped at `MAX_RULE_FILES` (200); on reaching it, it stops and warns — preventing an `agent.dir` mistakenly pointed at
+    a huge directory tree from scanning through a massive number of files in one load.
+- **Matching semantics: read fresh on each run + take all matches (capped at N)**:
+  1. Scan all `.md`, parse frontmatter (parse failure → warn + skip, non-blocking).
+  2. Pre-sort by `priority desc + file path asc`.
+  3. `.test()` each against the current `{ projectKey, repoSlug, targetBranch, tool }`: `enabled=false` / `tools` not containing the current tool /
+     an `applies_to.<field>` regex not matching → skip; a missing field counts as a match.
+  4. **Take all matches**, capped at `DEFAULT_MAX_MATCHED_RULES` (20) (excess discarded per the sort order from the back, a safety net against prompt bloat).
+  5. Multiple bodies are concatenated by `combineRuleInstructions` in `## Ruleset N` segments (frontmatter has already been stripped by gray-matter at load time,
+     not entering the body) as `extra_instructions`; the segment headings let the model distinguish different conventions without cross-contamination.
+  "Global base + project override" can still be expressed with the priority number (base low, project high → sorted first, earlier Ruleset order).
+- **Per-tool injection**: `/review` → `PR_REVIEWER__EXTRA_INSTRUCTIONS`, `/describe` → `PR_DESCRIPTION__EXTRA_INSTRUCTIONS`.
+  Agentic review / planning goes through the "Matched rules" segment of the system context (same concatenation basis). The matched-rule count is logged during review execution.
+- **Fail-safe**: a single file's broken frontmatter only skips that file; the rest of the rules load as usual.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-规则文件 frontmatter（字段均可省，省 = 匹配任意；值是**正则源串**）：
+Rule-file frontmatter (all fields optional; omit = match any; a value is a **regex source string**):
 
 ```markdown
 ---
 applies_to:
-  project: "^FX$"                  # projectKey 正则
-  repo: "^fx-.*"                   # repoSlug 正则
-  target_branch: "^(master|main)$" # PR base 分支名 正则
-tools: [review]                    # 缺省 [review]
-priority: 50                       # 缺省 0；越大越优先
+  project: "^FX$"                  # projectKey regex
+  repo: "^fx-.*"                   # repoSlug regex
+  target_branch: "^(master|main)$" # PR base branch name regex
+tools: [review]                    # defaults to [review]
+priority: 50                       # defaults to 0; larger is higher priority
 enabled: true
 ---
 
-# 正文即 extra_instructions（给 pr-agent 的规约）
+# The body is extra_instructions (the convention given to pr-agent)
 ```
 
-配置：规则目录固定为 `<agent.dir>/rules/`（`agent.dir` 见 [配置与凭据](../99-core/02-config-and-secrets.md)，空 = 默认 `~/.code-meeseeks/agent`）。
+Config: the rules directory is fixed at `<agent.dir>/rules/` (`agent.dir` is in [Config & secrets](../99-core/02-config-and-secrets.md), empty = default `~/.code-meeseeks/agent`).
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **用户需懂正则**（学习成本）；UI 可后续给「按项目匹配」等 helper 自动 wrap 成 `^X$`。
-- **多条命中全部生效**：命中的规则按 Ruleset 分段全部注入（封顶 20 条），UI 的「命中规则」chip 显示命中条数、
-  预览弹窗按 Ruleset 逐条列出，便于确认本次 review 受哪些规约约束。
-- frontmatter 未做严格 schema 校验，类型不对静默 fallback 默认值；规则多了可加严。
-- 可扩展方向：按 `changed_paths` 匹配、规则 lint/预览、规则市场（导入导出 .md 包）、命中上限可配置。
+- **The user must know regex** (learning cost); the UI can later provide helpers like "match by project" that auto-wrap into `^X$`.
+- **Multiple matches all take effect**: matched rules are all injected in Ruleset segments (capped at 20), the UI's "matched rules" chip shows the match count,
+  and the preview popover lists them one by one per Ruleset, making it easy to confirm which conventions constrain this review.
+- Frontmatter is not strictly schema-validated; a wrong type silently falls back to the default value; validation can tighten once there are many rules.
+- Extensible directions: match by `changed_paths`, rule lint/preview, a rule marketplace (import/export `.md` packs), a configurable match cap.

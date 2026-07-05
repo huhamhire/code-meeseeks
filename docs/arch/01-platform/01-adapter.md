@@ -1,22 +1,16 @@
-# 代码平台适配
+# Code platform adaptation
 
-把「代码托管平台」的差异收口到一个统一抽象 `PlatformAdapter`，业务层（轮询、镜像、评审发布）
-只依赖该抽象、不感知具体平台。`PlatformAdapter` 不是单一巨接口，而是**按业务领域拆分的服务容器**
-（连接 / PR 操作 / 评论 / 用户与媒体四个领域），各领域共享一份平台连接。本章是平台适配的**统一设计
-与维护入口**：分层与领域拆分、能力位与降级、评论统一模型，以及各平台（Bitbucket / GitHub / GitLab）
-差异化适配逻辑。
+Funnel the differences between "code hosting platforms" into a single unified abstraction, `PlatformAdapter`; the business layers (polling, mirroring, review publishing) depend only on this abstraction and are unaware of the concrete platform. `PlatformAdapter` is not one monolithic interface but a **service container split by business domain** (four domains: connection / PR operations / comments / user & media), all sharing one platform connection. This chapter is the **unified design and maintenance entry point** for platform adaptation: layering and the domain split, capability flags and degradation, the unified comment model, and the differential adaptation logic of each platform (Bitbucket / GitHub / GitLab).
 
-已实现：**Bitbucket Server / Data Center**、**GitHub（github.com + GitHub Enterprise Server）**、
-**GitLab（gitlab.com + Self-Managed，CE/EE，REST API v4）**。不负责：git 本地操作（见
-[仓库镜像](02-repo-mirror.md)）、pr-agent 调用（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。
+Implemented: **Bitbucket Server / Data Center**, **GitHub (github.com + GitHub Enterprise Server)**, **GitLab (gitlab.com + Self-Managed, CE/EE, REST API v4)**. Out of scope: local git operations (see [Repo mirror](02-repo-mirror.md)), pr-agent invocation (see [pr-agent runtime](../02-agent/05-pragent-runtime.md)).
 
 ---
 
-## 1. 核心抽象设计
+## 1. Core abstraction design
 
-### 分层
+### Layering
 
-三层，契约与传输实现解耦：
+Three layers, with the contract decoupled from the transport implementation:
 
 ```mermaid
 classDiagram
@@ -88,219 +82,160 @@ classDiagram
   PlatformTransport <|.. BitbucketClient
 ```
 
-> **图说**（`<|..` 实现 / `<|--` 继承 / `o--` 持有组合）：
+> **Legend** (`<|..` implements / `<|--` inherits / `o--` holds by composition):
 >
-> - **契约层** `@meebox/platform-core`：每个领域接口由对应 `Base*` 实现、承载跨平台逻辑；`Base*` 共同继承 `PlatformDomainService`；容器接口 `PlatformAdapter` 持有四个领域接口。
-> - **平台扩展**（**GitHub / GitLab / Bitbucket** 同构）：`*Adapter` 实现容器接口 `PlatformAdapter`、`*Client` 实现传输端口 `PlatformTransport`。
-> - 每个 `*Adapter` 组合该平台四个领域服务（分别 `extends` 对应 `Base*`）、各服务经 `ConnectionContext` 共享同一 `*Client`——为免图杂未展开。
+> - **Contract layer** `@meebox/platform-core`: each domain interface is implemented by its corresponding `Base*`, which carries the cross-platform logic; the `Base*` classes all inherit `PlatformDomainService`; the container interface `PlatformAdapter` holds the four domain interfaces.
+> - **Platform extensions** (**GitHub / GitLab / Bitbucket** isomorphic): `*Adapter` implements the container interface `PlatformAdapter`, `*Client` implements the transport port `PlatformTransport`.
+> - Each `*Adapter` composes that platform's four domain services (each `extends` the corresponding `Base*`); the services share the same `*Client` via `ConnectionContext` — not expanded in the diagram to avoid clutter.
 
-- **契约层 `@meebox/platform-core`**：只声明业务契约，零 HTTP 实现。含四个**领域接口**与对应**领域基类**
-  （`BaseConnection` / `BasePullRequestService` / `BaseCommentService` / `BaseMediaService`，承载跨平台业务
-  逻辑）、**传输端口 `PlatformTransport`**（领域服务发请求的唯一接缝）、连接上下文 `ConnectionContext`、
-  组合器 `composePlatformAdapter`，以及可选传输 helper（超时 / URL 拼接 / 错误解析 / Link 分页等自由函数）。
-- **实现层 `@meebox/platform-{github,gitlab,bitbucket-server}`**：每平台一个**统一连接封装实例**（client，
-  实现 `PlatformTransport`）+ 四个领域服务（`extends` 对应基类、注入 client）。平台特有的响应类型放
-  `types.ts`、跨领域工具放 `utils.ts`、领域专属映射作各服务私有方法。
-- **根 `PlatformAdapter`（领域服务容器）**：`{ kind, connection, prs, comments, media }`，不含业务逻辑，
-  只持有并暴露四个领域。业务层按领域取服务（`adapter.comments.list(...)` / `adapter.prs.listPending(...)`）。
+- **Contract layer `@meebox/platform-core`**: declares only business contracts, zero HTTP implementation. Contains the four **domain interfaces** and their corresponding **domain base classes** (`BaseConnection` / `BasePullRequestService` / `BaseCommentService` / `BaseMediaService`, carrying the cross-platform business logic), the **transport port `PlatformTransport`** (the sole seam through which domain services issue requests), the connection context `ConnectionContext`, the composer `composePlatformAdapter`, and optional transport helpers (free functions for timeouts / URL joining / error parsing / Link pagination, etc.).
+- **Implementation layer `@meebox/platform-{github,gitlab,bitbucket-server}`**: one **unified connection-wrapper instance** per platform (a client implementing `PlatformTransport`) + four domain services (each `extends` the corresponding base class and is injected with the client). Platform-specific response types go in `types.ts`, cross-domain utilities in `utils.ts`, domain-specific mappings as private methods of each service.
+- **Root `PlatformAdapter` (domain-service container)**: `{ kind, connection, prs, comments, media }`, no business logic — it only holds and exposes the four domains. Business layers pull services by domain (`adapter.comments.list(...)` / `adapter.prs.listPending(...)`).
 
-**领域拆分**（替代旧的单一约 20 方法巨接口）：
+**Domain split** (replacing the old single ~20-method monolithic interface):
 
-| 领域 | 接口 | 职责 |
+| Domain | Interface | Responsibility |
 | --- | --- | --- |
-| `connection` | `PlatformConnection` | 连接探测 `ping()`、当前用户缓存、能力聚合 `capabilities()`、clone URL |
-| `prs` | `PullRequestService` | PR 发现、提交（**newest-first**）、活动决断、审批、合并 |
-| `comments` | `CommentService` | 评论读 / 发 / 回复 / 编辑 / 删除 |
-| `media` | `MediaService` | 头像、评论内嵌附件代理 |
+| `connection` | `PlatformConnection` | connection probe `ping()`, current-user cache, capability aggregation `capabilities()`, clone URL |
+| `prs` | `PullRequestService` | PR discovery, commits (**newest-first**), activity, review decision, merge |
+| `comments` | `CommentService` | comment read / post / reply / edit / delete |
+| `media` | `MediaService` | avatars, proxying comment-embedded attachments |
 
-- **统一连接封装实例（每平台一个 client）**：实现 `PlatformTransport` 端口，是该平台连接 / 鉴权配置的
-  单一持有者——base URL 归一与 web/git host 推导、PAT、单请求超时、代理解析、clone 协议与 clone URL 构造，
-  全收口于此。token 经凭据层读取、**绝不进日志**。四领域经 `ConnectionContext`（持 client + `cachedUser`）
-  共享同一连接态，不重复持有 transport 或 token。
-- **传输端口 `PlatformTransport`**：仅声明三平台同构的最小连接能力——`get/getWithHeaders/post/put/del`
-  + `paginate`（纯 JSON 读写 + 分页）。二进制拉取、`search`/`patch`、clone URL 等平台特有方法是各 client
-  的端口外扩展（信任模型迥异，不入通用契约）。领域基类只依赖此端口，不知底层 fetch / 鉴权头 / 翻页风格。
-- **平台中性的 PR 身份 `PrIdentity`**：`platform / group / repo / remoteId / connectionId`（+ 可选 url）。
-  各平台把自己的概念映射进来；这套身份也是状态存储 hash localId 的输入（见 [状态存储](../99-core/01-state-storage.md)）。
+- **Unified connection-wrapper instance (one client per platform)**: implements the `PlatformTransport` port and is the single holder of that platform's connection / auth config — base-URL normalization and web/git host derivation, PAT, per-request timeout, proxy resolution, clone protocol and clone-URL construction, all funneled here. The token is read via the credential layer and **never enters logs**. The four domains share the same connection state via `ConnectionContext` (which holds the client + `cachedUser`), never independently holding the transport or token.
+- **Transport port `PlatformTransport`**: declares only the minimal connection capability isomorphic across the three platforms — `get/getWithHeaders/post/put/del` + `paginate` (pure JSON read/write + pagination). Binary fetching, `search`/`patch`, clone URL, etc. are per-client extensions outside the port (their trust models differ sharply and do not belong in the generic contract). The domain base classes depend only on this port and are unaware of the underlying fetch / auth headers / pagination style.
+- **Platform-neutral PR identity `PrIdentity`**: `platform / group / repo / remoteId / connectionId` (+ optional url). Each platform maps its own concepts into it; this identity is also the input for hashing the state store's `localId` (see [State storage](../99-core/01-state-storage.md)).
 
-  | 中性概念 | Bitbucket | GitHub | GitLab |
+  | Neutral concept | Bitbucket | GitHub | GitLab |
   | --- | --- | --- | --- |
-  | group | projectKey | owner（org/user） | namespace |
+  | group | projectKey | owner (org/user) | namespace |
   | repo | repoSlug | repo | project path |
-  | remoteId | PR id | PR number | MR **iid**（项目内编号） |
+  | remoteId | PR id | PR number | MR **iid** (per-project number) |
 
-- **认证只用 PAT**：`Authorization: Bearer <token>`（GitLab 走 `PRIVATE-TOKEN` 头）。token 经凭据层读取，绝不进日志。
-- **代理统一进连接层**：连接配置 `PlatformConnectionConfig` 携带 `proxy`，client 构造时据 baseUrl host
-  **一次性**解析有效 fetch（loopback 直连 / 否则挂代理）。为不让 core 依赖 undici，解析经注入的
-  `ProxyFetchFactory` 完成（组合根 desktop 提供实现）。分页按平台风格封装成异步迭代器（Bitbucket
-  `start/limit`；GitHub/GitLab `Link` 头）。
-- **Diff 不走 adapter 抓取**：平台 `/diff` 端点对大 PR 会 `truncated`；Diff 展示一律由本地镜像 `git` 算
-  （见 [仓库镜像](02-repo-mirror.md)），与平台解耦。**仅「发布行内评论」时用平台锚点**——本地算 diff 时已知每行
-  新旧行号与 added/removed/context 角色，正是各平台锚点都需要的输入，这是抽象能成立的关键。
-- **clone 协议二选一**：`pat`（默认，URL 里嵌 `<user>:<PAT>`）或 `ssh`（`git@host:...`，走系统 ssh 配置）。
+- **Authentication is PAT-only**: `Authorization: Bearer <token>` (GitLab uses the `PRIVATE-TOKEN` header). The token is read via the credential layer and never enters logs.
+- **Proxying is funneled into the connection layer**: the connection config `PlatformConnectionConfig` carries `proxy`, and at client construction the effective fetch is resolved **once** by baseUrl host (loopback = direct connection / otherwise attach proxy). To keep core from depending on undici, the resolution is done via the injected `ProxyFetchFactory` (the composition root, desktop, provides the implementation). Pagination is wrapped into an async iterator per platform style (Bitbucket `start/limit`; GitHub/GitLab `Link` header).
+- **Diff is not fetched through the adapter**: a platform's `/diff` endpoint will `truncated` for large PRs; diff display is always computed by the local mirror's `git` (see [Repo mirror](02-repo-mirror.md)), decoupled from the platform. **Platform anchors are used only when "publishing an inline comment"** — the local diff computation already knows each line's old/new line numbers and its added/removed/context role, which is exactly the input every platform's anchor needs; this is the key that makes the abstraction hold.
+- **Clone protocol is one of two**: `pat` (default, embedding `<user>:<PAT>` in the URL) or `ssh` (`git@host:...`, via the system ssh config).
 
-### 接口与中性数据模型
+### Interfaces & neutral data model
 
-各领域服务方法：
+Per-domain service methods:
 
-- `connection`：`capabilities()`（静态能力描述符，见 §2）、`ping()`（版本 + 用户）、`getCurrentUser()`
-  （同步读 ping 缓存，判 approved 用）、`getCloneUrl()`。
-- `prs`：`listPendingPullRequests()`（reviewer 待处理，跨仓）、`listPullRequestCommits()`（**newest-first**）、
-  `listPullRequestActivity()`、`setPullRequestReviewStatus()`、`mergePullRequest()`。
-- `comments`：`listPullRequestComments()`、`publishSummaryComment()`、`publishInlineComment()`、
-  `replyToComment()`、`editComment()`、`deleteComment()`。
-- `media`：`getUserAvatar()`、`getAttachment()`。
+- `connection`: `capabilities()` (static capability descriptor, see §2), `ping()` (version + user), `getCurrentUser()` (synchronously reads the ping cache, used for the approved check), `getCloneUrl()`.
+- `prs`: `listPendingPullRequests()` (reviewer's pending, cross-repo), `listPullRequestCommits()` (**newest-first**), `listPullRequestActivity()`, `setPullRequestReviewStatus()`, `mergePullRequest()`.
+- `comments`: `listPullRequestComments()`, `publishSummaryComment()`, `publishInlineComment()`, `replyToComment()`, `editComment()`, `deleteComment()`.
+- `media`: `getUserAvatar()`, `getAttachment()`.
 
-中性类型要点：
+Neutral-type highlights:
 
-- `PrComment`：`anchor`（null=summary / 非空=inline）、`replies[]`、可选 `version`（**仅 Bitbucket 乐观锁**）、
-  `kind`（'summary' | 'inline'）、`threadId`（回复目标抽象：Bitbucket=父评论 id / GitHub=review-comment id / GitLab=discussion id）。
-- `PrCommentAnchor`：`(path, line, side('old'|'new'), lineType('added'|'removed'|'context'))`。
-- `PrDiffRefs`：`{ headSha, baseSha, startSha? }`——行内评论发布锚点用（GitHub head sha / GitLab 三 sha；Bitbucket 忽略）。
-- `MergeStatus`：`{ canMerge, conflicted, vetoes[] }`；保真度见 §2 的 `mergeVetoFidelity`。
+- `PrComment`: `anchor` (null = summary / non-null = inline), `replies[]`, optional `version` (**Bitbucket optimistic lock only**), `kind` ('summary' | 'inline'), `threadId` (the reply-target abstraction: Bitbucket = parent comment id / GitHub = review-comment id / GitLab = discussion id).
+- `PrCommentAnchor`: `(path, line, side('old'|'new'), lineType('added'|'removed'|'context'))`.
+- `PrDiffRefs`: `{ headSha, baseSha, startSha? }` — used for the inline-comment publish anchor (GitHub head sha / GitLab three shas; Bitbucket ignores it).
+- `MergeStatus`: `{ canMerge, conflicted, vetoes[] }`; for fidelity see `mergeVetoFidelity` in §2.
 
 ---
 
-## 2. 能力描述符与功能降级
+## 2. Capability descriptor & capability degradation
 
-无法在所有平台等价实现的能力，用 `capabilities()` 返回的 **`PlatformCapabilities`** 显式声明，
-UI 据此 显/隐/灰，业务层据此调策略——**绝不在调用处 `try/catch` 猜，也不写 `if (platform === ...)`**。
+Capabilities that cannot be implemented equivalently on all platforms are declared explicitly via the **`PlatformCapabilities`** returned by `capabilities()`; the UI shows / hides / greys accordingly, and the business layer switches strategy accordingly — **never `try/catch` to guess at the call site, and never write `if (platform === ...)`**.
 
-`PlatformCapabilities` 字段：`reviewStatuses`（支持的审批决断）、`inlineComments`、`inlineMultiline`、
-`commentOptimisticLock`、`commentHardBreaks`（单 `\n` 是否按 hard-break 渲染）、`mergeVetoFidelity`
-（'full' | 'partial'）、`discoveryRateLimited`、`discoveryFilters`（PR 发现分类）、`resolvableThreads`、
-`suggestions`、`reviewGrouping`、`activityTimeline`（是否提供决断活动事件流）、`commentCountIncludesReplies`
-（`PullRequest.commentCount` 是否含回复——决定 poller 评论跟踪触发策略，见 [通知](../03-gui/03-notifications.md)；GitHub/GitLab 为真、Bitbucket 为假）。
+`PlatformCapabilities` fields: `reviewStatuses` (supported review decisions), `inlineComments`, `inlineMultiline`, `commentOptimisticLock`, `commentHardBreaks` (whether a single `\n` renders as a hard break), `mergeVetoFidelity` ('full' | 'partial'), `discoveryRateLimited`, `discoveryFilters` (PR discovery categories), `resolvableThreads`, `suggestions`, `reviewGrouping`, `activityTimeline` (whether a review-decision activity event stream is provided), `commentCountIncludesReplies` (whether `PullRequest.commentCount` includes replies — determines the poller's comment-tracking trigger strategy, see [Notifications](../03-gui/03-notifications.md); true for GitHub/GitLab, false for Bitbucket).
 
-**合并否决原因走中性码**：`MergeVeto` 不在后台拼面向用户的本地化文案。GitHub / GitLab 把派生原因归一到
-`@meebox/platform-core` 的稳定码 `MergeVetoCode`（`conflict` / `branchProtected` / `behind` / `checksFailed`
-/ `checking` / `draft` / `discussionsUnresolved` / `notApproved` / `notOpen` / `blockedByDependency` /
-`notMergeable`），前端按码 i18n（`mergeVeto.<code>`）；Bitbucket 直接透传服务端文案（`summary`，无码）。
-同理连接探测的版本不支持等后台用户态错误以错误码承载（见 [错误码](../99-core/04-error-codes.md)），不在后台拼中文。
+**Merge-veto reasons go through neutral codes**: `MergeVeto` does not assemble user-facing localized text in the backend. GitHub / GitLab normalize their derived reasons to the stable codes `MergeVetoCode` in `@meebox/platform-core` (`conflict` / `branchProtected` / `behind` / `checksFailed` / `checking` / `draft` / `discussionsUnresolved` / `notApproved` / `notOpen` / `blockedByDependency` / `notMergeable`), and the frontend does i18n by code (`mergeVeto.<code>`); Bitbucket passes the server text through directly (`summary`, no code). Likewise, backend user-facing errors such as unsupported version from the connection probe are carried by error codes (see [Error codes](../99-core/04-error-codes.md)), not assembled as Chinese text in the backend.
 
-各平台能力一览：
+Per-platform capability overview:
 
-| 能力 | Bitbucket | GitHub | GitLab |
+| Capability | Bitbucket | GitHub | GitLab |
 | --- | --- | --- | --- |
-| reviewStatuses | 通过/需修改/撤销 | 通过/需修改/撤销 | Premium：通过/撤销；CE：无 API 审批 |
-| commentOptimisticLock | 是（version） | 否 | 否 |
-| mergeVetoFidelity | full（/merge vetoes） | partial（拼 mergeable_state） | full（detailed_merge_status） |
-| discoveryRateLimited | 否 | 是（search 30/分） | 否 |
-| resolvableThreads / suggestions | 否 / 否 | 概念有，当前未实现 | 概念有，当前未实现 |
+| reviewStatuses | approve/needs work/revoke | approve/needs work/revoke | Premium: approve/revoke; CE: no review API |
+| commentOptimisticLock | yes (version) | no | no |
+| mergeVetoFidelity | full (/merge vetoes) | partial (assembled from mergeable_state) | full (detailed_merge_status) |
+| discoveryRateLimited | no | yes (search 30/min) | no |
+| resolvableThreads / suggestions | no / no | conceptually present, not yet implemented | conceptually present, not yet implemented |
 
-### 功能降级三态与判据
+### The three degradation states & the decision criteria
 
-- **置灰 + 原因 tooltip**：用户预期存在、但因平台版本 / 权限暂不可用 → 保留可发现性并说明原因。
-- **隐藏不渲染**：平台概念上根本没有该能力。
-- **降级替代**：有可用的弱替代动作。
+- **Grey out + reason tooltip**: the user expects it to exist, but it is temporarily unavailable due to platform version / permissions → preserve discoverability and state the reason.
+- **Hidden (not rendered)**: the platform conceptually has no such capability at all.
+- **Degraded substitute**: a usable weaker substitute action exists.
 
-判据：**「本可有但此实例没有」→ 置灰说明；「平台无此概念」→ 隐藏；「有弱替代」→ 替代 + 提示。**
+Criteria: **"could exist but this instance lacks it" → grey out with explanation; "the platform has no such concept" → hidden; "a weak substitute exists" → substitute + hint.**
 
-两层能力来源：
+Two layers of capability source:
 
-- **静态**（平台/版本/套餐）← `capabilities()`：经 `ConnectionSummary.capabilities` 下发渲染层，决定 feature 级 显/隐/灰。
-- **动态**（本 PR / 本用户权限 / 异步未就绪）← PR 数据：决定 instance 级 灰 + 原因（如合并按钮仅 `mergeStatus.canMerge` 时出现；
-  GitHub `mergeable=null` 用「计算中」中性态而非永久置灰；自己作者的 PR 审批按钮灰显）。
-
----
-
-## 3. 评论交互：统一模型 + 能力位
-
-**不按平台分设计评论 UI**，而是一套交互模型，差异收敛成能力位。渲染层只消费中性 `PrComment` 树 +
-`capabilities()`；各平台评论概念由 **adapter 归一**成同一棵嵌套结构。核心动作（读 / 回复 / 编辑 / 删除 /
-草稿→确认发布）三家一致。**归一可行 = 不分叉**；只有当某平台模型无法被 `PrComment` 无损表达时，才重估「专门组件」。
-
-能力位（面向评论 UI）：`resolvableThreads`（线程解决 + 折叠）、`suggestions`（行内建议一键应用）、
-`reviewGrouping`（决断 + 行内评论成组提交，映射到本地「草稿池→批量发布」，见 [评审闭环](03-review-workflow.md)）、
-`commentOptimisticLock`（删改是否带 version）。能力位为 false 时按 §2 降级（隐藏 / 置灰）。
+- **Static** (platform / version / plan) ← `capabilities()`: pushed down to the render layer via `ConnectionSummary.capabilities`, deciding feature-level show / hide / grey.
+- **Dynamic** (this PR / this user's permissions / async not-yet-ready) ← PR data: decides instance-level grey + reason (e.g. the merge button appears only when `mergeStatus.canMerge`; GitHub's `mergeable=null` uses a neutral "computing" state rather than a permanent grey; the review button is greyed on your own authored PR).
 
 ---
 
-## 4. 平台差异化适配
+## 3. Comment interactions: unified model + capability flags
 
-### 4.1 Bitbucket Server / Data Center（REST API v1，≥ 7.0）
+**Do not design a per-platform comment UI**; instead a single interaction model, with the differences converged into capability flags. The render layer consumes only the neutral `PrComment` tree + `capabilities()`; each platform's comment concepts are **normalized by the adapter** into the same nested structure. The core actions (read / reply / edit / delete / draft → confirm publish) are identical across the three. **Normalizable = no forking**; only when a platform's model cannot be expressed losslessly by `PrComment` do we reconsider a "dedicated component".
 
-- **发现**：dashboard 聚合端点 `/dashboard/pull-requests?role=REVIEWER&state=OPEN`，一次拿全跨项目跨仓库的待评审 PR。
-- **当前用户**：每个鉴权请求响应头带 `X-AUSERNAME`（slug），ping 时据此 + `/users/{slug}` 取 displayName。
-- **版本下限 7.0**：`ping()` 读 `application-properties` 版本，低于 7.0 拒绝（multilineMarker 等关键能力 7.0 起）。
-- **评论**：走 `/activities` 拿全部活动，过滤 `COMMENTED` + `ADDED`；单棵评论树，reply 走 `comment.comments[]` 嵌套。
-- **行内锚点**：`anchor{path, line, lineType(ADDED/REMOVED/CONTEXT), fileType(FROM/TO)}` + `diffType=EFFECTIVE`
-  （锚到「当前生效 diff」，PR 后续 push 仍跟着行走）；多行用 multilineMarker。
-- **乐观锁**：评论删 / 改必带 `version`（query / body），不一致回 409；删除带 reply 的评论被拒（409）。
-- **审批**：`PUT …/participants/{userSlug}` 写 status（APPROVED / NEEDS_WORK / UNAPPROVED），幂等可来回切。
-- **合并**：`/merge` 一次给 `canMerge / conflicted / vetoes`（full 保真）；`POST …/merge?version=N` 带乐观锁。
-- **clone**：pat → `https://<user>:<PAT>@host/scm/<proj>/<repo>.git`（用户名取 cachedUser）；ssh → `git@host:<proj>/<repo>.git`（默认 7999 端口需 ssh config 配）。
-
-### 4.2 GitHub（github.com + GitHub Enterprise Server，REST API v3）
-
-> 以下是「代码本身讲不清」的核心逻辑，务必随实现一起维护。
-
-- **Base URL 与 host 推导**：连接 base 是 **API base**（github.com→`https://api.github.com`；GHE→`https://<host>/api/v3`）。
-  clone / 头像 / 网页用的 **web/git host** 由 adapter 推导：`api.github.com → github.com`；GHE → 同 host（去掉 `/api/v3`）。
-- **发现（强限流 + 最终一致 + 两段取数）**：无 dashboard，用 Search `GET /search/issues?q=is:open is:pr review-requested:@me archived:false`。
-  - search **约 30 次/分钟限流** → `capabilities.discoveryRateLimited=true`，该平台轮询间隔单独拉长。
-  - search 返回的是 **issue 形态**（含 `repository_url` + `number`），需逐条再取 `GET /repos/{o}/{r}/pulls/{n}`（拿 head/base sha、
-    mergeable、draft）+ `GET …/pulls/{n}/reviews`（算 reviewer 状态），并行 N+1。
-  - 结果**最终一致**：刚被请求评审的 PR 可能短暂查不到——属预期，靠下一轮轮询补上。
-- **评论三分体系归一**：GitHub 把评论拆三套 ——
-  - issue 评论 `/issues/{n}/comments` = PR 级讨论（≈ summary，无线程）；
-  - review 评论 `/pulls/{n}/comments` = 行内（带 `path/line/side/in_reply_to_id`）；
-  - reviews `/pulls/{n}/reviews` = 决断。
-  adapter 把 issue 评论作 summary、review 评论按 `in_reply_to_id` 还原成顶层 + 嵌套 reply，统一成 `PrComment` 树。
-- **行内锚点需 head sha**：`POST …/pulls/{n}/comments` 必带 `commit_id`（= PR head sha）。按抽象决策，**adapter 内部
-  先拉 PR 取 head sha** 再发，调用方无需改。side：内部 'old'→`LEFT` / 'new'→`RIGHT`。行号须落在该 commit 的 diff 内，否则 422。
-- **审批是追加事件**：通过→`POST …/reviews{event:APPROVE}`；需修改→`{event:REQUEST_CHANGES, body}`（GitHub 要求带 body）；
-  撤销→找当前用户最近一条 APPROVED/CHANGES_REQUESTED review，`PUT …/reviews/{id}/dismissals`。
-  **不能审批自己的 PR**（422）→ UI 对自己作者的 PR 灰显审批按钮。「当前状态」取该用户最近一条决断性 review。
-- **评论删 / 改 / 回复无 version**：先按 inline（`/pulls/comments/{id}` 改删、`/pulls/{n}/comments/{id}/replies` 回复），
-  404/422 退化为 issue 评论端点（`/issues/comments/{id}`、新建 issue 评论）。
-- **合并与可合并（partial）**：`mergeable`（bool|**null**，异步计算，初次可能 null）+ `mergeable_state`
-  （clean/dirty/blocked/behind/unstable）。逐条否决项无单一端点，由 adapter 按 `mergeable_state` **派生近似**
-  （fidelity=partial）；`null` 不当 false，标「计算中」。合并 `PUT …/pulls/{n}/merge`。
-- **提交**：`/pulls/{n}/commits` 为 oldest-first，adapter **反转**为 newest-first。
-- **头像 / 附件**：头像直链 `<webBase>/<login>.png`；评论内嵌图片是绝对 URL（user-attachments / githubusercontent / GHE host），
-  经 main 端带 PAT 代理拉（私有需鉴权）。
-- **Token 权限**：见 [代码平台配置 · GitHub PAT 权限参考](../../guide/01-code-platform.md)（经典 `repo`；细粒度 Pull requests RW + Contents RW + Metadata R）。
-
-### 4.3 GitLab（gitlab.com + Self-Managed CE/EE，REST API v4）
-
-- **Base URL 与 host 推导**：连接 base 是 **API base**（gitlab.com→`https://gitlab.com/api/v4`；自建→`https://<host>/api/v4`），
-  可留空默认官方。clone / 附件 / 网页用的 web host 由 adapter 推导（取 base 的 host，去掉 `/api/v4`）。鉴权走 `PRIVATE-TOKEN` 头。
-- **身份映射**：`projectKey`=namespace（**含嵌套 group**，如 `group/subgroup`）、`repoSlug`=project、`remoteId`=MR **iid**。
-  端点 `:id` 用 `encodeURIComponent(projectKey/repoSlug)`（GitLab 接受 URL-encoded 全路径作 project id）。MR web_url 解析出项目路径。
-- **发现（三类）**：`GET /merge_requests?scope=all&state=opened&...`（全局跨项目）。`discoveryFilters` =
-  待我评审（`reviewer_username`）/ 我创建（`author_username`）/ 指派我（`assignee_username`）；GitLab 无 "mentioned"
-  概念故不含。poller 逐类轮询 union 打标，renderer 切标签。列表项再逐条取详情（`diff_refs` 三 sha +
-  `detailed_merge_status`）+（EE）`/approvals`（approved_by → reviewer 状态），N+1。
-- **评论 = discussions + notes**：`GET …/discussions` 一棵棵讨论，首 note 作顶层、其余作 reply；过滤 `system` note。
-  inline = note 带 `position`（`new_path/new_line` 或 `old_path/old_line`）。reply 走 **discussion_id**（= `threadId`）；改 / 删走
-  **note_id**（= `remoteId`）—— 二者不同，故 renderer 回复入口改传 `threadId ?? remoteId`（Bitbucket/GitHub 不受影响）。
-- **行内锚点需三 sha**：`POST …/discussions{body, position}`，position 含 `base/start/head_sha`（adapter 内部先拉 MR 取 `diff_refs`）+
-  `position_type:'text'` + 按 side 填 `new_line`/`old_line`。当前**单行**（`inlineMultiline=false`）。
-- **审批（edition 降级）**：approve/unapprove API **自 13.9 起为 Premium/Ultimate**，CE / EE-Free 无；GitLab 审批二元、**无
-  needsWork**。`ping()` 经 `GET /metadata`（15.2+）的 `enterprise` 标志探测 edition（旧实例退 `/version` 保守按 CE）；
-  `capabilities.reviewStatuses` = EE→`['approved','unapproved']` / CE→`[]`（UI 灰显）。注：`enterprise=true` 不绝对保证审批可用
-  （EE-Free 无），故写路径仍优雅失败提示。
-- **可合并（full 保真）**：`detailed_merge_status`（15.6+，`mergeable` / `broken_status` / `not_approved` / `ci_must_pass` …）逐条派生
-  veto + `has_conflicts` 定 conflicted；旧实例退 `merge_status`。合并 `PUT …/merge`。
-- **提交**：`/commits` 已是 newest-first，无需反转。
-- **头像 / 附件**：头像用 `avatar_url` 直链（仅本实例 host 才带 PAT）；评论内嵌相对 `/uploads/...` 补成
-  `<webBase>/<project>/uploads/...` 经 PAT 代理拉，外部 host 不带凭据。
+Capability flags (comment-UI-facing): `resolvableThreads` (thread resolve + collapse), `suggestions` (one-click apply of an inline suggestion), `reviewGrouping` (review decision + inline comments submitted as a group, mapping to the local "draft pool → batch publish", see [Review workflow](03-review-workflow.md)), `commentOptimisticLock` (whether delete/edit carries `version`). When a flag is false, degrade per §2 (hide / grey out).
 
 ---
 
-## 5. 扩展与注意事项
+## 4. Platform-specific adaptation
 
-- **加新平台 = 新 `@meebox/platform-<name>` 包**：
-  - 一个实现 `PlatformTransport` 的连接 client（自管鉴权 / 分页 / host 推导 / clone）；
-  - 四个领域服务，分别 `extends` `BaseConnection` / `BasePullRequestService` / `BaseCommentService` / `BaseMediaService`，补平台端点与映射（映射作各服务私有方法，响应类型放 `types.ts`、跨领域工具放 `utils.ts`）；
-  - 用 `composePlatformAdapter` 组装成容器适配器；
-  - adapters.ts 加 case + config schema（discriminatedUnion）+ 配置 UI 放开平台选项；
-  - 内部包两步登记（见 [AGENTS.md](../../../AGENTS.md)）。
+### 4.1 Bitbucket Server / Data Center (REST API v1, ≥ 7.0)
 
-  建议先用既有平台的 **adapter 契约测试**作基线，新平台过套件再开。可只实现 / 测试单个领域，不必一次补齐全部。
-- **能力位驱动 UI**：审批/合并/评论交互一律读 `capabilities` + PR 状态分支，**不出现 `if (platform === ...)`**（守住接缝）。
-- **写路径有副作用**：合并不可逆；评论发布要幂等（成功落远端 id 防重发，见 [评审闭环](03-review-workflow.md)）；
-  审批 / 合并远端失败要给用户明确提示（toast），不可静默。
-- **作者字段双名**：展示名（中文/真名）与登录名（英文 id）分清——展示用前者，匹配「当前用户 / 是否自己的 PR」用后者。
-- **后续未尽项**：评论「解决线程 / suggestion 应用」UI（能力位已留位，未实现）；真实 GHE / GitLab Self-Managed 端到端联调。
+- **Discovery**: the dashboard aggregation endpoint `/dashboard/pull-requests?role=REVIEWER&state=OPEN` returns all pending-review PRs across projects and repos in one call.
+- **Current user**: every authenticated request's response carries the `X-AUSERNAME` header (slug); at ping time, `/users/{slug}` is used to get the displayName.
+- **Version floor 7.0**: `ping()` reads the `application-properties` version and rejects anything below 7.0 (key capabilities such as multilineMarker exist only from 7.0).
+- **Comments**: fetch all activities via `/activities`, filtering `COMMENTED` + `ADDED`; a single comment tree, with replies nested via `comment.comments[]`.
+- **Inline anchor**: `anchor{path, line, lineType(ADDED/REMOVED/CONTEXT), fileType(FROM/TO)}` + `diffType=EFFECTIVE` (anchored to the "currently effective diff", so it follows the line even after subsequent pushes to the PR); multi-line uses the multilineMarker.
+- **Optimistic lock**: comment delete / edit must carry `version` (query / body); a mismatch returns 409; deleting a comment that has replies is rejected (409).
+- **Review**: `PUT …/participants/{userSlug}` writes status (APPROVED / NEEDS_WORK / UNAPPROVED); idempotent and freely switchable back and forth.
+- **Merge**: `/merge` returns `canMerge / conflicted / vetoes` in one call (full fidelity); `POST …/merge?version=N` carries the optimistic lock.
+- **Clone**: pat → `https://<user>:<PAT>@host/scm/<proj>/<repo>.git` (username taken from cachedUser); ssh → `git@host:<proj>/<repo>.git` (the default port 7999 must be set in ssh config).
+
+### 4.2 GitHub (github.com + GitHub Enterprise Server, REST API v3)
+
+> The following is the core logic that "the code itself can't make clear" — be sure to maintain it alongside the implementation.
+
+- **Base URL and host derivation**: the connection base is the **API base** (github.com → `https://api.github.com`; GHE → `https://<host>/api/v3`). The **web/git host** used for clone / avatars / web pages is derived by the adapter: `api.github.com → github.com`; GHE → the same host (with `/api/v3` stripped).
+- **Discovery (heavy rate limit + eventual consistency + two-stage fetch)**: no dashboard, so use Search `GET /search/issues?q=is:open is:pr review-requested:@me archived:false`.
+  - search is **rate-limited to ~30/min** → `capabilities.discoveryRateLimited=true`, and this platform's poll interval is lengthened separately.
+  - search returns **issue-shaped** results (with `repository_url` + `number`), so each one must then fetch `GET /repos/{o}/{r}/pulls/{n}` (for head/base sha, mergeable, draft) + `GET …/pulls/{n}/reviews` (to compute reviewer status), an N+1 in parallel.
+  - the results are **eventually consistent**: a PR that was just requested for review may briefly not be found — this is expected, and the next poll round picks it up.
+- **Normalizing the three-comment system**: GitHub splits comments into three sets —
+  - issue comments `/issues/{n}/comments` = PR-level discussion (≈ summary, no threads);
+  - review comments `/pulls/{n}/comments` = inline (with `path/line/side/in_reply_to_id`);
+  - reviews `/pulls/{n}/reviews` = decisions.
+  The adapter treats issue comments as the summary and reconstructs review comments by `in_reply_to_id` into top-level + nested replies, unified into a `PrComment` tree.
+- **Inline anchor needs head sha**: `POST …/pulls/{n}/comments` must carry `commit_id` (= PR head sha). By the abstraction's decision, **the adapter internally fetches the PR to get the head sha** before posting, so the caller needs no change. side: internal 'old' → `LEFT` / 'new' → `RIGHT`. The line must fall within that commit's diff, otherwise 422.
+- **Review is an append event**: approve → `POST …/reviews{event:APPROVE}`; needs work → `{event:REQUEST_CHANGES, body}` (GitHub requires a body); revoke → find the current user's most recent APPROVED/CHANGES_REQUESTED review and `PUT …/reviews/{id}/dismissals`. **You cannot review your own PR** (422) → the UI greys the review button on your own authored PR. The "current status" is taken from the user's most recent decision review.
+- **Comment delete / edit / reply have no version**: try inline first (`/pulls/comments/{id}` for edit/delete, `/pulls/{n}/comments/{id}/replies` for reply), and on 404/422 fall back to the issue-comment endpoints (`/issues/comments/{id}`, create a new issue comment).
+- **Merge and mergeability (partial)**: `mergeable` (bool | **null**, computed async, may be null on the first fetch) + `mergeable_state` (clean/dirty/blocked/behind/unstable). There is no single endpoint for the individual veto items, so the adapter **derives an approximation** from `mergeable_state` (fidelity = partial); `null` is not treated as false but marked "computing". Merge via `PUT …/pulls/{n}/merge`.
+- **Commits**: `/pulls/{n}/commits` is oldest-first, and the adapter **reverses** it to newest-first.
+- **Avatars / attachments**: avatars are a direct link `<webBase>/<login>.png`; comment-embedded images are absolute URLs (user-attachments / githubusercontent / GHE host), fetched via the main-side PAT proxy (private ones need auth).
+- **Token permissions**: see [Code platform config · GitHub PAT permission reference](../../guide/01-code-platform.md) (classic `repo`; fine-grained Pull requests RW + Contents RW + Metadata R).
+
+### 4.3 GitLab (gitlab.com + Self-Managed CE/EE, REST API v4)
+
+- **Base URL and host derivation**: the connection base is the **API base** (gitlab.com → `https://gitlab.com/api/v4`; self-hosted → `https://<host>/api/v4`), and may be left blank to default to the official one. The web host used for clone / attachments / web pages is derived by the adapter (take the base's host, strip `/api/v4`). Auth goes through the `PRIVATE-TOKEN` header.
+- **Identity mapping**: `projectKey` = namespace (**including nested groups**, e.g. `group/subgroup`), `repoSlug` = project, `remoteId` = MR **iid**. The endpoint `:id` uses `encodeURIComponent(projectKey/repoSlug)` (GitLab accepts the URL-encoded full path as the project id). The project path is parsed from the MR web_url.
+- **Discovery (three categories)**: `GET /merge_requests?scope=all&state=opened&...` (global cross-project). `discoveryFilters` = Review Requested (`reviewer_username`) / Created (`author_username`) / Assigned (`assignee_username`); GitLab has no "mentioned" concept and so excludes it. The poller polls each category, unions and tags them, and the renderer switches tabs. List items then fetch details one by one (`diff_refs` three shas + `detailed_merge_status`) + (EE) `/approvals` (approved_by → reviewer status), an N+1.
+- **Comments = discussions + notes**: `GET …/discussions` returns discussions one by one, the first note as top-level and the rest as replies; `system` notes are filtered out. inline = a note with `position` (`new_path/new_line` or `old_path/old_line`). Reply goes through **discussion_id** (= `threadId`); edit / delete go through **note_id** (= `remoteId`) — the two differ, so the renderer's reply entry passes `threadId ?? remoteId` (Bitbucket/GitHub are unaffected).
+- **Inline anchor needs three shas**: `POST …/discussions{body, position}`, where position contains `base/start/head_sha` (the adapter internally fetches the MR to get `diff_refs`) + `position_type:'text'` + `new_line`/`old_line` filled per side. Currently **single-line** (`inlineMultiline=false`).
+- **Review (edition degradation)**: the approve/unapprove API is **Premium/Ultimate from 13.9 on**, absent in CE / EE-Free; GitLab review is binary, with **no needsWork**. `ping()` probes the edition via the `enterprise` flag of `GET /metadata` (15.2+) (older instances fall back to `/version`, conservatively treated as CE); `capabilities.reviewStatuses` = EE → `['approved','unapproved']` / CE → `[]` (UI greyed). Note: `enterprise=true` does not absolutely guarantee review is available (EE-Free lacks it), so the write path still degrades gracefully with a hint.
+- **Mergeability (full fidelity)**: `detailed_merge_status` (15.6+, `mergeable` / `broken_status` / `not_approved` / `ci_must_pass` …) derives vetoes one by one + `has_conflicts` determines conflicted; older instances fall back to `merge_status`. Merge via `PUT …/merge`.
+- **Commits**: `/commits` is already newest-first, no reversal needed.
+- **Avatars / attachments**: avatars use the `avatar_url` direct link (PAT attached only for the same instance host); comment-embedded relative `/uploads/...` are completed to `<webBase>/<project>/uploads/...` and fetched via the PAT proxy, with no credentials sent to external hosts.
+
+---
+
+## 5. Extension & caveats
+
+- **Adding a new platform = a new `@meebox/platform-<name>` package**:
+  - one connection client implementing `PlatformTransport` (self-managing auth / pagination / host derivation / clone);
+  - four domain services, each `extends` `BaseConnection` / `BasePullRequestService` / `BaseCommentService` / `BaseMediaService`, filling in the platform endpoints and mappings (mappings as private methods of each service, response types in `types.ts`, cross-domain utilities in `utils.ts`);
+  - assemble them into the container adapter with `composePlatformAdapter`;
+  - add a case in adapters.ts + config schema (discriminatedUnion) + expose the platform option in the config UI;
+  - the two internal-package registration steps (see [AGENTS.md](../../../AGENTS.md)).
+
+  It's recommended to first use an existing platform's **adapter contract test** as the baseline, and only ship the new platform once it passes the suite. You may implement / test a single domain first, without filling in all of them at once.
+- **Capability flags drive the UI**: review/merge/comment interactions always branch on `capabilities` + PR status, with **no `if (platform === ...)`** (keep the seam intact).
+- **The write path has side effects**: merge is irreversible; comment publishing must be idempotent (on success, record the remote id to prevent re-sending, see [Review workflow](03-review-workflow.md)); a remote failure of review / merge must give the user a clear hint (toast), never silent.
+- **Author field, two names**: keep the display name (Chinese / real name) and the login name (English id) distinct — display uses the former, matching "current user / whether it's my own PR" uses the latter.
+- **Remaining open items**: the comment "resolve thread / apply suggestion" UI (the capability flags are reserved, not yet implemented); real GHE / GitLab Self-Managed end-to-end integration testing.

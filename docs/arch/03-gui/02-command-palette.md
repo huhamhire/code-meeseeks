@@ -1,62 +1,62 @@
-# 命令面板
+# Command palette
 
-## 职责与边界
+## Responsibilities & boundaries
 
-标题栏内嵌的 VS Code 风命令面板：快捷操作的统一输入入口，并为「没有直接交互入口」的功能提供可发现、键盘可达的归口。
+A VS Code-style command palette embedded in the title bar: a unified input entry for quick actions, and the discoverable, keyboard-reachable home for features that have "no direct interaction entry".
 
-负责：命令的注册与分域归类、按当前界面语言搜索、两级选择交互、命令的即时执行。不负责：命令背后各功能的实现（复用既有设置 / IPC 能力，不另起一套）、斜杠命令解析（chat 自有，见 [评审闭环](../01-platform/03-review-workflow.md)，后续可并入同一注册表）。
+Owns: registering commands and grouping them by domain, searching by the current UI language, two-level selection interaction, and immediate command execution. Does not own: the implementation behind each command (it reuses existing settings / IPC capabilities rather than starting a new one), or slash-command parsing (chat has its own; see [Review workflow](../01-platform/03-review-workflow.md), which may later merge into the same registry).
 
-## 功能设计
+## Functional design
 
-命令「做什么、怎么组织 / 门控 / 执行」的设计；具体命令清单见「[命令与快捷键一览](#命令与快捷键一览)」。
+The design of "what a command does, and how it is organized / gated / executed"; for the concrete command list see "[Commands & shortcuts](#commands--shortcuts)".
 
-- **注册表 + 分域文件**：命令实现按领域拆分到各自文件，一个注册表聚合所有领域；上层只认「构建顶层命令」这一个入口。新增领域 = 加一个领域文件 + 在注册表登记，上层与交互层不动。
-- **领域与命令组织**：命令按领域分组，**领域按英文名字典序固定排列**；每条顶层命令带一个领域 `category`，作为命令名前缀展示并参与搜索（搜领域名即可筛出该域全部命令）。现有三域 **PR / 评审 / 设置**。
-- **统一门控（`when`）**：命令可声明 `when()` 谓词，注册表统一据此过滤——返回 false 即不出现，各领域不再各写 `if`（如「运行自动评审」`when` 为「有选中 PR」；平台无某发现分类则其命令本就不生成，数据驱动门控）。执行期的瞬时守卫（如同一 PR 已在跑的**重入保护**）放在 `run` 内按点击实时判定（比可见性更可靠），走与 ChatPane 一键评审同一 `agent:run` 通道、运行态经事件 / store 反映。
-- **即时生效复用既有原语**：命令执行一律复用设置页同一套「即时生效 + 写盘 + 同步前端配置」链路（界面语言走 i18n 运行时切换 + 持久化、主题走外观 store 派生、模型 / 代理走对应 config 写入 IPC），**不另写一套**，保证与设置页行为一致。深链类命令（打开关于 / 模型分区）打开设置面板并定位到指定分区。
-- **二级选项惰性求值**：进入容器命令时才计算其选项，并读当前配置标注「生效项」（打勾）。模型列表末尾固定「添加模型…」入口（无预设时即唯一项），打开设置的模型分区新建。
-- **自由文本输入命令**：命令可声明 `input`（占位提示 + `run(text)`），进入二级层后输入框转为接受任意文本、回车提交（与 `options` / 顶层 `run` 互斥）。已落地「PR：打开 URL」——按 path 形态解析链接（忽略 host / query / 尾缀），本地已存在（活跃 / 归档）则直接定位，否则远端鉴权拉取后存入归档冷存储（随归档生命周期到期清理）再打开；无活动连接 / 链接无效 / 无权限以错误码经 toast 反馈。后端契约见 IPC `prs:openByUrl` 与 [状态存储](../99-core/01-state-storage.md)。
+- **Registry + per-domain files**: command implementations are split by domain into their own files, and one registry aggregates all domains; the upper layer knows only the single entry "build the top-level commands". Adding a domain = add a domain file + register it in the registry, without touching the upper or interaction layers.
+- **Domain and command organization**: commands are grouped by domain, and **domains are fixed in dictionary order of their English names**; each top-level command carries a domain `category`, shown as a prefix of the command name and included in search (searching the domain name filters out all commands in that domain). The three current domains are **PR / Review / Settings**.
+- **Unified gating (`when`)**: a command can declare a `when()` predicate, and the registry filters uniformly by it — return false and it does not appear, so domains no longer each write their own `if` (e.g. "Run auto review"'s `when` is "there is a selected PR"; if a platform lacks a discovery category, its command simply is not generated — data-driven gating). Transient runtime guards (such as **re-entry protection** when the same PR is already running) live inside `run`, decided live on click (more reliable than visibility), going through the same `agent:run` channel as ChatPane's one-click review, with run state reflected via events / store.
+- **Immediate effect reuses existing primitives**: command execution always reuses the same "take effect immediately + write to disk + sync front-end config" pipeline as the settings page (UI language goes through i18n runtime switch + persistence, theme via the appearance store derivation, model / proxy via the corresponding config-write IPC), **not a second implementation**, guaranteeing behavior identical to the settings page. Deep-link commands (open About / the model section) open the settings panel and locate the given section.
+- **Second-level options are lazily evaluated**: options are computed only when entering a container command, reading the current config to mark the "active item" (checked). The model list has a fixed "Add model…" entry at the end (the sole entry when there are no profiles), which opens the settings model section to create one.
+- **Free-text input commands**: a command can declare `input` (placeholder hint + `run(text)`); after entering the second level the input box switches to accepting arbitrary text and submitting on Enter (mutually exclusive with `options` / a top-level `run`). "PR: Open URL" has landed — it parses the link by its path shape (ignoring host / query / suffix); if it already exists locally (active / archived) it locates it directly, otherwise it authenticates and fetches it remotely, stores it in the archive cold storage (expiring on the archive lifecycle), and opens it; no active connection / invalid link / no permission is fed back via toast with an error code. The backend contract is IPC `prs:openByUrl` and [State storage](../99-core/01-state-storage.md).
 
-## 命令与快捷键一览
+## Commands & shortcuts
 
-当前已实现的命令、功能与窗口级快捷键（macOS 用符号、其余平台用文字；无快捷键以 — 表示）。
+The currently implemented commands, their functions, and window-level shortcuts (macOS uses symbols, other platforms use text; no shortcut is shown as —).
 
-| 领域 | 命令 | 功能 | macOS | Windows / Linux |
+| Domain | Command | Function | macOS | Windows / Linux |
 | --- | --- | --- | --- | --- |
-| — | 打开命令面板 | 唤起并聚焦标题栏命令输入框 | <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> |
-| PR | 查看「待我评审 / 我创建 / 指派我 / 提及我」 | 切到对应发现分类（随平台能力，逐类各一条一级命令） | — | — |
-| PR | 查看已关闭 | 切到归档（已关闭）范围浏览退场 PR | <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>H</kbd> | <kbd>Ctrl</kbd>+<kbd>H</kbd> |
-| PR | 分类筛选 | 二级：按状态筛选（待处理 / 全部 / 冲突 / 可合并 等，随平台门控） | — | — |
-| PR | 打开 URL | 自由文本二级层：粘贴 / 输入当前平台 PR 链接打开（含他人 / 已退场 PR） | <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>U</kbd> | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> |
-| PR | 切换 PR 列表 | 折叠 / 展开左侧 PR 列表（侧栏） | <kbd>⌘</kbd>+<kbd>B</kbd> | <kbd>Ctrl</kbd>+<kbd>B</kbd> |
-| 评审 | 运行自动评审 | 对当前选中 PR 跑自动评审（需有选中 PR；重入保护） | <kbd>F5</kbd> | <kbd>F5</kbd> |
-| 评审 | 切换 AutoPilot | 开 / 关 AutoPilot 预评审 | — | — |
-| 评审 | 切换对话面板 | 折叠 / 展开右侧对话面板（ChatPane） | <kbd>⌘</kbd>+<kbd>J</kbd> | <kbd>Ctrl</kbd>+<kbd>J</kbd> |
-| 设置 | 切换显示语言 | 二级：选界面语言（即时切换 + 持久化） | — | — |
-| 设置 | 切换主题 | 二级：选编辑器配色主题（含「跟随系统」） | — | — |
-| 设置 | 切换模型 | 二级：选 LLM 预设（末尾「添加模型…」入口） | — | — |
-| 设置 | 切换代理 | 开 / 关网络代理 | — | — |
-| 设置 | 打开设置 | 打开设置面板 | — | — |
-| 设置 | 打开关于 | 打开设置面板「关于」分区 | — | — |
-| 设置 | 打开 DevTools | 打开 Electron DevTools（分离窗口） | <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>I</kbd> | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> |
+| — | Open command palette | Summon and focus the title-bar command input box | <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> |
+| PR | View "Review Requested / Created / Assigned / Mentioned" | Switch to the corresponding discovery category (per platform capability, one first-level command each) | — | — |
+| PR | View closed | Switch to the archived (closed) scope to browse retired PRs | <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>H</kbd> | <kbd>Ctrl</kbd>+<kbd>H</kbd> |
+| PR | Category filter | Second level: filter by status (pending / all / conflicting / mergeable, etc., gated per platform) | — | — |
+| PR | Open URL | Free-text second level: paste / type a PR link on the current platform to open it (including others' / retired PRs) | <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>U</kbd> | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> |
+| PR | Toggle PR list | Collapse / expand the left PR list (sidebar) | <kbd>⌘</kbd>+<kbd>B</kbd> | <kbd>Ctrl</kbd>+<kbd>B</kbd> |
+| Review | Run auto review | Run auto review on the currently selected PR (requires a selected PR; re-entry protection) | <kbd>F5</kbd> | <kbd>F5</kbd> |
+| Review | Toggle AutoPilot | Turn AutoPilot pre-review on / off | — | — |
+| Review | Toggle chat panel | Collapse / expand the right chat panel (ChatPane) | <kbd>⌘</kbd>+<kbd>J</kbd> | <kbd>Ctrl</kbd>+<kbd>J</kbd> |
+| Settings | Switch display language | Second level: pick the UI language (immediate switch + persistence) | — | — |
+| Settings | Switch theme | Second level: pick the editor color theme (including "Follow system") | — | — |
+| Settings | Switch model | Second level: pick an LLM profile ("Add model…" entry at the end) | — | — |
+| Settings | Toggle proxy | Turn the network proxy on / off | — | — |
+| Settings | Open settings | Open the settings panel | — | — |
+| Settings | Open About | Open the settings panel's "About" section | — | — |
+| Settings | Open DevTools | Open the Electron DevTools (detached window) | <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>I</kbd> | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> |
 
-## 交互规范
+## Interaction conventions
 
-- **触发与位置**：输入框常驻标题栏中部（绝对居中浮层，不占流、不挤压两侧），快捷键打开并聚焦（窗口级渲染层监听）。PR 标题留在左侧原位（避开右上 Windows 窗控）；标题过长逼近命令框时右缘渐隐、没入浮层下（输入框不透明底遮盖），短标题不显。
-- **两级导航**：顶层为命令列表；选中「容器型」命令（切换语言 / 主题 / 模型）或「自由文本」命令（打开 URL）原地进入二级层——选项列表或纯输入。**最多两级**；二级层左侧显示前缀提示符（`prefixLabel`，如「URL ›」，否则回退命令名），**空查询按 `Backspace` 回退上一级**，`Esc` 退出整个面板。叶子命令（打开设置 / 关于 / DevTools、开关代理）直接执行。
-- **双语展示 + 中英检索**：命令文案随界面语言本地化；**非英语界面**下命令附**英文次行**（对齐 VS Code 显示语言），英语界面只显一行。搜索 haystack **恒含中英两套**——始终支持英文检索（即便次行未显）。语言切换后命令清单按新语言重建（以语言为 key，而非依赖 t 引用变化）。
-- **快捷键**：常用命令配**窗口级**快捷键（非系统级 globalShortcut——后者应用未聚焦也触发、非所需；跨平台按 mac `⌘`/`⌥` 与其余 `Ctrl`/`Shift` 区分）。选键**避雷优先于助记**：避开腾讯系截图（`…+A`）、重载、`Cmd+Enter` 等冲突，宁缺勿凑（如 AutoPilot 暂无键位）。有键位的命令在面板内以 VS Code 风「一键一框」展示（命令声明按键 token 数组、由平台相关格式化产生）。键位清单见上表。
-- **标题栏共存**：命令面板浮层与 PR 标题、品牌名、平台窗控（mac 红绿灯 / Windows overlay）共处自绘标题栏；新增标题栏元素须遵守拖拽区 / no-drag 划分，且勿放到右上角窗控覆盖区。
+- **Trigger and position**: the input box is docked in the middle of the title bar (an absolutely centered overlay that does not take flow or squeeze the sides), opened and focused by shortcut (a window-level render-layer listener). The PR title stays in its place on the left (avoiding the Windows window controls at the top-right); when a long title approaches the command box the right edge fades out and sinks under the overlay (the input box's opaque background covers it), and short titles are unaffected.
+- **Two-level navigation**: the top level is the command list; selecting a "container" command (switch language / theme / model) or a "free-text" command (open URL) enters the second level in place — an option list or plain input. **At most two levels**; the second level shows a prefix hint on the left (`prefixLabel`, e.g. "URL ›", otherwise falling back to the command name), and **an empty query with `Backspace` returns to the previous level**, while `Esc` exits the whole palette. Leaf commands (open settings / About / DevTools, toggle proxy) execute directly.
+- **Bilingual display + Chinese-English search**: command wording is localized to the UI language; **in non-English UIs** a command carries an **English second line** (aligning with VS Code's display-language behavior), while an English UI shows a single line. The search haystack **always contains both Chinese and English** — English search is always supported (even when the second line is not shown). After a language switch the command list is rebuilt in the new language (keyed by language, rather than relying on a change of the `t` reference).
+- **Shortcuts**: common commands are given **window-level** shortcuts (not the system-level `globalShortcut` — that fires even when the app is unfocused, which is not wanted; cross-platform, mac `⌘`/`⌥` vs. `Ctrl`/`Shift` elsewhere). Key selection **prioritizes avoiding conflicts over mnemonics**: steer clear of Tencent-suite screenshots (`…+A`), reload, `Cmd+Enter`, and other conflicts, preferring none over a forced fit (e.g. AutoPilot has no key for now). Commands with keys are shown in the palette in VS Code's "one key, one box" style (the command declares a key-token array, and platform-specific formatting renders it). See the key list in the table above.
+- **Coexistence in the title bar**: the command-palette overlay shares the custom-drawn title bar with the PR title, brand name, and platform window controls (mac traffic lights / Windows overlay); newly added title-bar elements must obey the drag-region / no-drag split and must not be placed in the top-right window-control cover area.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-- **命令上下文（CommandContext）**：当前配置 + 同步前端配置的钩子 + 「打开设置面板（可指定初始分区）」+ 当前语言的翻译函数。各领域命令构建器都接收它。
-- **顶层命令（RootCommand）**：`id` / 本地化 `title` / 领域 `category`；二者择一——叶子的 `run`，或容器的 `options`（惰性返回二级选项 + 进入后的输入占位提示）。
-- **二级选项（CommandOption）**：`id` / `title` / 是否 `active`（生效项打勾）/ `run`。
-- **设置面板深链**：设置面板接受「初始分区」入参；命令面板的「打开关于 / 添加模型」据此定位分区。
+- **Command context (CommandContext)**: the current config + a hook to sync front-end config + "open the settings panel (with an optional initial section)" + the translation function for the current language. Every domain's command builder receives it.
+- **Top-level command (RootCommand)**: `id` / localized `title` / domain `category`; one of two — a leaf's `run`, or a container's `options` (lazily returns second-level options + the input placeholder hint shown after entering).
+- **Second-level option (CommandOption)**: `id` / `title` / whether `active` (the active item is checked) / `run`.
+- **Settings-panel deep link**: the settings panel accepts an "initial section" argument; the command palette's "open About / add model" locates the section by it.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **新增领域命令**：新增一个领域文件导出该域的命令构建器，并在注册表登记即可；命令文案在四语言 locale 的 `commandPalette` 命名空间补齐（递归字典序）。
-- **斜杠命令归并**：现阶段不纳入（规划未定）。未来可让 chat 斜杠命令与命令面板共用同一注册表（命令模型已含 `when` 类上下文判定的扩展空间），避免两套定义漂移。
-- **键位维护**：面板内的键位提示（上表 / `shortcut` token 数组）仅作展示，实际按键匹配在窗口级监听里另行判定（见 [GUI 交互](01-ui-interaction.md) 的全局快捷键），二者各自维护——改键位时两处同步。
+- **Adding a domain command**: add a domain file exporting that domain's command builder and register it in the registry; fill in the command wording under the `commandPalette` namespace of all four locales (recursive dictionary order).
+- **Slash-command merge**: not included for now (planning undecided). In the future, chat slash commands and the command palette could share the same registry (the command model already has room for `when`-style context predicates), avoiding drift between two sets of definitions.
+- **Key maintenance**: the in-palette key hints (the table above / the `shortcut` token array) are display only; the actual key matching is decided separately in the window-level listener (see the global shortcuts in [GUI interaction](01-ui-interaction.md)), and the two are maintained independently — keep both in sync when changing a key.

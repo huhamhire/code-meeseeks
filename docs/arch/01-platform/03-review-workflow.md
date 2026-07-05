@@ -1,54 +1,38 @@
-# 评审 → 发布闭环
+# Review → publish workflow
 
-## 职责与边界
+## Responsibilities & boundaries
 
-从「跑一次评审」到「评论落到远端」的完整链路：命令执行 → 输出解析为结构化 findings → 草稿池 →
-用户逐条确认/编辑/拒绝/手动追加 → 批量发布为 inline 评论；以及评论的 reply/edit/delete 与 PR 合并。
+The full chain from "run one review" to "comments landing on the remote": command execution → output parsed into structured findings → draft pool → the user confirms / edits / rejects / manually appends each → batch-publish as inline comments; plus comment reply/edit/delete and PR merge.
 
-负责：评审命令编排、输出解析、草稿状态机、发布。不负责：跑 pr-agent 本身（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）、
-平台评论 API（见 [平台适配](01-adapter.md)）。
+Responsible for: review-command orchestration, output parsing, the draft state machine, publishing. Not responsible for: running pr-agent itself (see [pr-agent runtime](../02-agent/05-pragent-runtime.md)), the platform comment API (see [Platform adaptation](01-adapter.md)).
 
-## 核心设计
+## Core design
 
-- **三个命令**：`/describe`（生成 PR 描述）、`/review`（生成评审 findings）、`/ask`（自由问答）。对话式
-  交互 + **队列模型**：并发执行 ≤ `pr_agent.max_concurrency`（默认 2）条 run，其余 FIFO 排队；每个 run
-  独立 worktree（路径带 nonce）+ 独立子进程，并发安全；支持中断/重试；run 状态与实时 stdout
-  跨 PR 切换存活（模块级 store，不随组件卸载丢）。
-- **输出解析为 findings**：pr-agent 把结果写进 worktree 的 markdown，解析层按 section 切分，把 `/review` 的
-  「key_issues / Recommended focus areas」段展开成多条 `code-feedback` finding（每条 title + body + anchor）。
-- **anchor（file:line 定位）双信号合并**：
-  - 主源：嵌入式运行时补的 `get_line_link` 让 header 渲染成 `[**header**](meebox:///<file>#L<s>-L<e>)`，
-    解析取其中**结构化 anchor**（path 来自 provider 同源，最可靠）。
-  - 兜底：prompt 要求模型在正文附 `[file:…, lines:…]` marker；当链接只有 path、无行号时（模型没填结构化
-    start/end）用 marker 的行号补全（仅同文件才借，避免错配）。
-  - 取不到则 anchor 留空，UI 把「跳转编辑」按钮 disable。
-- **草稿池（不直接发布）**：`/review` 成功后 code-feedback findings 自动入草稿池作候选；用户在 Diff 内联
-  （DraftZone）编辑措辞 / 拒绝 / 手动追加；**显式确认后才批量 POST 远端**。再次 `/review` 会丢弃旧的 pending
-  草稿、用新结果作候选（edited/posted/rejected/manual 保留）。
-- **finding 状态机**：`pending → accepted/edited/rejected/posted`；发布成功落 `posted_remote_id` 作幂等 key，
-  防重发。
-- **发布走平台 inline 评论**：批量 `publishInlineComment`，内部 finding 锚点映射成平台锚点（见 [平台适配](01-adapter.md)）。
-- **评论二次操作**：reply / edit / delete（带 can-edit/can-delete 预判：只允许操作自己作者的评论，远端再校验）；
-  PR 合并按 `mergeStatus.canMerge` 控制入口，合并不可逆、远端二次校验。
-- **token 用量落 run**：主进程逐行捕获子进程 stderr 的 `@@MEEBOX_USAGE@@` 哨兵累加（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)），
-  写入 `ReviewRun.tokenUsage`；UI run meta 展示 ↑输入 / ↓输出。
-- **LLM 失败识别**：pr-agent 可能 exit 0 但 stdout 其实是 LLM 全失败（认证错 / 无可用模型）→ 解析层标 llmFailure，
-  落 failed 而非「完成」。
+- **Three commands**: `/describe` (generate the PR description), `/review` (generate review findings), `/ask` (free-form Q&A). Conversational interaction + a **queue model**: concurrent execution of ≤ `pr_agent.max_concurrency` (default 2) runs, the rest queued FIFO; each run gets an independent worktree (path carries a nonce) + an independent subprocess, concurrency-safe; supports abort/retry; run state and live stdout survive across PR switches (a module-level store, not lost on component unmount).
+- **Parsing output into findings**: pr-agent writes the result into a markdown in the worktree, and the parse layer splits by section, expanding the `/review` "key_issues / Recommended focus areas" section into multiple `code-feedback` findings (each with title + body + anchor).
+- **anchor (file:line locating) merges two signals**:
+  - Primary source: the embedded runtime's patched `get_line_link` renders the header as `[**header**](meebox:///<file>#L<s>-L<e>)`, and parsing takes its **structured anchor** (the path comes from the same source as the provider, most reliable).
+  - Fallback: the prompt asks the model to append a `[file:…, lines:…]` marker in the body; when the link has only a path and no line numbers (the model didn't fill in the structured start/end), the marker's line numbers complete it (borrowed only within the same file, to avoid mismatches).
+  - If none can be obtained, the anchor is left empty and the UI disables the "jump to edit" button.
+- **Draft pool (does not publish directly)**: after `/review` succeeds, code-feedback findings automatically enter the draft pool as candidates; the user edits the wording / rejects / manually appends inline in the diff (DraftZone); **only after explicit confirmation are they batch-POSTed to the remote**. Running `/review` again discards the old pending drafts and uses the new results as candidates (edited/posted/rejected/manual are preserved).
+- **finding state machine**: `pending → accepted/edited/rejected/posted`; on successful publish, `posted_remote_id` is recorded as the idempotency key to prevent re-sending.
+- **Publishing goes through platform inline comments**: batch `publishInlineComment`, internally mapping the finding anchor to the platform anchor (see [Platform adaptation](01-adapter.md)).
+- **Secondary comment operations**: reply / edit / delete (with can-edit/can-delete pre-checks: only your own authored comments may be operated on, re-validated on the remote); PR merge's entry is controlled by `mergeStatus.canMerge`, merge is irreversible and re-validated on the remote.
+- **Token usage lands on the run**: the main process captures the subprocess stderr's `@@MEEBOX_USAGE@@` sentinel line by line and accumulates it (see [pr-agent runtime](../02-agent/05-pragent-runtime.md)), writing to `ReviewRun.tokenUsage`; the UI run meta shows ↑input / ↓output.
+- **LLM-failure detection**: pr-agent may exit 0 while stdout is actually a full LLM failure (auth error / no available model) → the parse layer marks llmFailure and lands failed rather than "completed".
 
-## 数据 / 接口契约
+## Data / interface contract
 
-仅列承载设计含义的关键字段，完整字段见各类型定义：
+Only the key fields carrying design meaning are listed; for the complete fields see each type definition:
 
-| 实体 | 用途 | 关键字段 |
+| Entity | Purpose | Key fields |
 | --- | --- | --- |
-| `Finding` | 单条评审发现（草稿 / 发布的最小单元） | `anchor{path,startLine?,endLine?}`（行内锚点）· `sectionKey`（归类）· 状态机 `severity` / `status` / `draft_body` / `posted_remote_id`（幂等发布凭据） |
-| `ReviewRun` | 一次评审会话（持久化于 per-PR 目录，见 [状态存储](../99-core/01-state-storage.md)） | `tool` · `status` · `model` · `findings[]` · `tokenUsage{promptTokens,completionTokens,totalTokens,calls}` · `summary` |
+| `Finding` | a single review finding (the smallest unit of a draft / published item) | `anchor{path,startLine?,endLine?}` (inline anchor) · `sectionKey` (categorization) · state machine `severity` / `status` / `draft_body` / `posted_remote_id` (idempotent-publish credential) |
+| `ReviewRun` | one review session (persisted in the per-PR directory, see [State storage](../99-core/01-state-storage.md)) | `tool` · `status` · `model` · `findings[]` · `tokenUsage{promptTokens,completionTokens,totalTokens,calls}` · `summary` |
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **`/improve` 不接**：pr-agent 社区版 + LocalGitProvider 下 `publish_code_suggestions` 不可用，故闭环改走
-  「复用 `/review` 的 code-feedback finding 作 inline 候选」。
-- **anchor 覆盖率**取决于模型是否填结构化行号 + 是否输出 marker；两路都用上以最大化覆盖。历史 run 无结构化
-  `tokenUsage` 时 UI 回退到从 stdout 估算。
-- **草稿语义**：再跑 `/review` 只清 pending，避免误删用户已编辑/已发布的草稿。
-- 发布是有副作用的远端写，务必走幂等（posted_remote_id）。
+- **`/improve` is not wired up**: under pr-agent community edition + LocalGitProvider, `publish_code_suggestions` is unavailable, so the loop instead goes through "reusing `/review`'s code-feedback findings as inline candidates".
+- **anchor coverage** depends on whether the model fills in structured line numbers + whether it outputs a marker; both paths are used to maximize coverage. When a historical run has no structured `tokenUsage`, the UI falls back to estimating from stdout.
+- **Draft semantics**: rerunning `/review` clears only pending, to avoid mistakenly deleting the user's already-edited / already-published drafts.
+- Publishing is a side-effectful remote write, so it must be idempotent (posted_remote_id).
