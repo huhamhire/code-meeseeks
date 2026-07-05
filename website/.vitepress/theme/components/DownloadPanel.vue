@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useData } from 'vitepress'
+import { useData, withBase } from 'vitepress'
 import { detectOS } from '../os'
 import { useLatestRelease } from '../composables/useLatestRelease'
 
@@ -38,6 +38,8 @@ function iconFor(goos) {
 const { lang } = useData()
 const zh = computed(() => String(lang.value).toLowerCase().startsWith('zh'))
 const t = computed(() => (zh.value ? STR.zh : STR.en))
+// "Release notes" points at the on-site changelog page (per locale, base-aware), not the GitHub release.
+const changelogHref = computed(() => withBase(zh.value ? '/zh/changelog' : '/changelog'))
 
 const { state, release, desktop, cli } = useLatestRelease()
 const os = ref('unknown')
@@ -194,7 +196,7 @@ const STR = {
     <template v-else>
       <div class="dl-head">
         <span class="dl-tag">{{ t.latest }} · {{ release.tag_name }}</span>
-        <a class="dl-link" :href="release.html_url" target="_blank" rel="noreferrer">{{ t.notes }} →</a>
+        <a class="dl-link" :href="changelogHref">{{ t.notes }} →</a>
       </div>
 
       <!-- Recommended for the detected OS -->
