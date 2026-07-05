@@ -57,35 +57,41 @@ export class ConnectionRuntimeController {
     );
   }
 
-  /** Fully async ping: refresh remote identity and persist incrementally; if the active connection's identity changes (including first acquisition), run one extra poll (has network, not on the startup critical path). */
+  /**
+   * Fully async ping of the active connection only: refresh its remote identity and persist
+   * incrementally; if the identity changes (including first acquisition), run one extra poll. Non-active
+   * connections are not pinged — their identity has no UI consumer (app:connections filters to the active
+   * one) and is refreshed when they become active (settings save → reconfigure → ping). Has network, not
+   * on the startup critical path.
+   */
   ping(): void {
     const activeId = this.bootstrap.config.active_connection_id;
-    for (const { connectionId, adapter } of this.runtime.adapters) {
-      const isActive = connectionId === activeId;
-      const beforeName = adapter.connection.getCurrentUser()?.name ?? null;
-      // If the active connection has no cached identity at startup → poller.start(immediate=false) skipped the first round; here, after ping settles, it must trigger
-      // the **first sync** (regardless of ping success): "confirm identity first, then sync once immediately".
-      const hadIdentity = beforeName !== null;
-      void adapter.connection.ping().then(
-        async (r) => {
-          this.logger.info(
-            { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
-            'adapter ping',
-          );
-          const user = adapter.connection.getCurrentUser();
-          await this.persistConnectionUser(connectionId, user);
-          // Trigger reclassification/first sync: active connection and (identity changed, including first acquisition/account switch, or had no identity and needs the first round).
-          if (isActive && (!hadIdentity || (user?.name ?? null) !== beforeName)) {
-            void this.poller.tick();
-          }
-        },
-        (err: unknown) => {
-          this.logger.warn({ err, connectionId }, 'adapter ping failed');
-          // ping failed but the active connection had no cached identity (first round skipped) → still sync once with the PAT as fallback, to avoid appearing not synced.
-          if (isActive && !hadIdentity) void this.poller.tick();
-        },
-      );
-    }
+    const active = this.runtime.adapters.find((a) => a.connectionId === activeId);
+    if (!active) return;
+    const { connectionId, adapter } = active;
+    const beforeName = adapter.connection.getCurrentUser()?.name ?? null;
+    // If the active connection has no cached identity at startup → poller.start(immediate=false) skipped the first round; here, after ping settles, it must trigger
+    // the **first sync** (regardless of ping success): "confirm identity first, then sync once immediately".
+    const hadIdentity = beforeName !== null;
+    void adapter.connection.ping().then(
+      async (r) => {
+        this.logger.info(
+          { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
+          'adapter ping',
+        );
+        const user = adapter.connection.getCurrentUser();
+        await this.persistConnectionUser(connectionId, user);
+        // Trigger reclassification/first sync when the identity changed (including first acquisition/account switch) or there was no identity yet and the first round is needed.
+        if (!hadIdentity || (user?.name ?? null) !== beforeName) {
+          void this.poller.tick();
+        }
+      },
+      (err: unknown) => {
+        this.logger.warn({ err, connectionId }, 'adapter ping failed');
+        // ping failed but there was no cached identity (first round skipped) → still sync once with the PAT as fallback, to avoid appearing not synced.
+        if (!hadIdentity) void this.poller.tick();
+      },
+    );
   }
 
   /** Hot-apply after the settings page changes connections / proxy: rewire + archive non-active connections (local IO) + async ping. */
