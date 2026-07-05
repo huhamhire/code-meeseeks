@@ -8,11 +8,13 @@ import { buildAdapters, type ConnectionRuntime } from '../adapters.js';
 import { writeConnectionStates, type ConnectionState } from '../utils/connection-state.js';
 
 /**
- * 连接运行时控制器：把启动序列里的「连接接线 / ping / 热重配」从 index.ts 收口。「接线」与「ping」解耦，
- * 实现「启动不依赖网络」——见各方法注释。运行态（runtime + 连接级本地状态）是实例可变状态，故以 class 封装。
+ * Connections runtime controller: consolidates the startup sequence's "connection wiring / ping /
+ * hot-reconfigure" out of index.ts. "Wiring" and "ping" are decoupled to achieve "startup does not
+ * depend on the network" — see each method's comment. Runtime state (runtime + connection-level local
+ * state) is mutable instance state, hence wrapped in a class.
  */
 export class ConnectionRuntimeController {
-  /** 可变持有的连接运行时（adapters 全量 + adapterByHost）；IPC / repoMirror 经引用读到最新值。 */
+  /** Mutably held connections runtime (full adapters + adapterByHost); IPC / repoMirror read the latest values through the reference. */
   readonly runtime: ConnectionRuntime = { adapters: [], adapterByHost: new Map() };
 
   constructor(
@@ -20,23 +22,23 @@ export class ConnectionRuntimeController {
     private readonly stateStore: JsonFileStateStore,
     private readonly poller: Poller,
     private readonly logger: Logger,
-    /** 启动时载入的连接级本地状态（含上次 ping 的 currentUser）；随 ping 增量回写。 */
+    /** Connection-level local state loaded at startup (includes the last ping's currentUser); written back incrementally on each ping. */
     private connectionStates: Record<string, ConnectionState>,
   ) {}
 
-  /** 当前启用连接的 id 列表（poller.archiveConnectionsExcept 用）。 */
+  /** Id list of the currently enabled connections (used by poller.archiveConnectionsExcept). */
   activeConnectionIds(): string[] {
     return this.runtime.adapters
       .filter((a) => a.connectionId === this.bootstrap.config.active_connection_id)
       .map((a) => a.connectionId);
   }
 
-  /** 重建 adapters/byHost、用本地持久化身份预热 currentUser、把活动连接喂给 poller（同步、无网络，可在建窗前调）。 */
+  /** Rebuild adapters/byHost, prewarm currentUser from locally persisted identity, feed the active connection to the poller (synchronous, no network, callable before the window is created). */
   wire(): void {
     const adapters = buildAdapters(this.bootstrap.config.connections, this.bootstrap.config.proxy);
     const byHost = new Map<string, PlatformAdapter>();
     for (const { connectionId, adapter } of adapters) {
-      // 预热 currentUser：有本地记录就先填上（无记录则保持 null，由 ping 兜底）。
+      // Prewarm currentUser: if there's a local record, fill it in first (if no record, keep null, ping is the fallback).
       const cachedUser = this.connectionStates[connectionId]?.user;
       if (cachedUser) adapter.connection.setCurrentUser?.(cachedUser);
       const conn = this.bootstrap.config.connections.find((c) => c.id === connectionId);
@@ -49,51 +51,57 @@ export class ConnectionRuntimeController {
     }
     this.runtime.adapters = adapters;
     this.runtime.adapterByHost = byHost;
-    // 只轮询当前启用的连接（同时仅一条）；其余仅保留配置不轮询。
+    // Only poll the currently enabled connection (at most one at a time); the rest keep their config but are not polled.
     this.poller.setConnections(
       adapters.filter((a) => a.connectionId === this.bootstrap.config.active_connection_id),
     );
   }
 
-  /** 全异步 ping：刷新远端身份并增量持久化；活动连接身份变化（含首次取得）则补一轮 poll（有网络，不在启动关键路径）。 */
+  /**
+   * Fully async ping of the active connection only: refresh its remote identity and persist
+   * incrementally; if the identity changes (including first acquisition), run one extra poll. Non-active
+   * connections are not pinged — their identity has no UI consumer (app:connections filters to the active
+   * one) and is refreshed when they become active (settings save → reconfigure → ping). Has network, not
+   * on the startup critical path.
+   */
   ping(): void {
     const activeId = this.bootstrap.config.active_connection_id;
-    for (const { connectionId, adapter } of this.runtime.adapters) {
-      const isActive = connectionId === activeId;
-      const beforeName = adapter.connection.getCurrentUser()?.name ?? null;
-      // 活动连接启动时无缓存身份 → poller.start(immediate=false) 没跑首轮；此处 ping settle 后必须触发
-      // **首次同步**（无论 ping 成功与否）：「先确认身份，再立即同步一次」。
-      const hadIdentity = beforeName !== null;
-      void adapter.connection.ping().then(
-        async (r) => {
-          this.logger.info(
-            { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
-            'adapter ping',
-          );
-          const user = adapter.connection.getCurrentUser();
-          await this.persistConnectionUser(connectionId, user);
-          // 触发重分类/首次同步：活动连接且（身份变化 含首次取得/换号，或本就无身份需补首轮）。
-          if (isActive && (!hadIdentity || (user?.name ?? null) !== beforeName)) {
-            void this.poller.tick();
-          }
-        },
-        (err: unknown) => {
-          this.logger.warn({ err, connectionId }, 'adapter ping failed');
-          // ping 失败但活动连接本就无缓存身份（首轮被跳过）→ 仍用 PAT 兜底同步一次，避免看似没同步。
-          if (isActive && !hadIdentity) void this.poller.tick();
-        },
-      );
-    }
+    const active = this.runtime.adapters.find((a) => a.connectionId === activeId);
+    if (!active) return;
+    const { connectionId, adapter } = active;
+    const beforeName = adapter.connection.getCurrentUser()?.name ?? null;
+    // If the active connection has no cached identity at startup → poller.start(immediate=false) skipped the first round; here, after ping settles, it must trigger
+    // the **first sync** (regardless of ping success): "confirm identity first, then sync once immediately".
+    const hadIdentity = beforeName !== null;
+    void adapter.connection.ping().then(
+      async (r) => {
+        this.logger.info(
+          { connectionId, ok: r.ok, serverVersion: r.serverVersion, user: r.user?.name },
+          'adapter ping',
+        );
+        const user = adapter.connection.getCurrentUser();
+        await this.persistConnectionUser(connectionId, user);
+        // Trigger reclassification/first sync when the identity changed (including first acquisition/account switch) or there was no identity yet and the first round is needed.
+        if (!hadIdentity || (user?.name ?? null) !== beforeName) {
+          void this.poller.tick();
+        }
+      },
+      (err: unknown) => {
+        this.logger.warn({ err, connectionId }, 'adapter ping failed');
+        // ping failed but there was no cached identity (first round skipped) → still sync once with the PAT as fallback, to avoid appearing not synced.
+        if (!hadIdentity) void this.poller.tick();
+      },
+    );
   }
 
-  /** 设置页改连接 / 代理后的热生效：重接线 + 归档非活动连接（本地 IO）+ 异步 ping。 */
+  /** Hot-apply after the settings page changes connections / proxy: rewire + archive non-active connections (local IO) + async ping. */
   async reconfigure(): Promise<void> {
     this.wire();
     await this.poller.archiveConnectionsExcept(this.activeConnectionIds());
     this.ping();
   }
 
-  /** 持久化某连接的 currentUser（仅身份变化时写盘，避免无谓 IO）。写盘失败不影响运行。 */
+  /** Persist a connection's currentUser (only writes to disk when identity changes, to avoid pointless IO). A write failure does not affect operation. */
   private async persistConnectionUser(
     connectionId: string,
     user: PlatformUser | null,

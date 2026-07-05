@@ -1,18 +1,18 @@
-// 设计 token 桥接层：颜色 / 字号 / 圆角 / 间距 / 行高 / z-index 阶梯
-// 各 .scss 文件用 `@use './tokens' as *;` 拉到本地作用域。
+// Design token bridge layer: color / font size / radius / spacing / line height / z-index ladder
+// Each .scss file pulls it into local scope with `@use './tokens' as *;`.
 //
-// 颜色三层结构（见 _palette.scss / _theme.scss）：
-// - _palette.scss  原始标准色（Tier 1，唯一色值真相源）
-// - _theme.scss    语义 → 原色，发射为 CSS 自定义属性（Tier 2，运行期可整体换主题）
-// - 本文件          把语义 SCSS 变量桥接到对应 CSS 自定义属性（`$token: var(--token)`），
-//                  使用处保持 `background: $bg-app` 等旧写法不变，编译即输出 `var(--bg-app)`。
+// Three-layer color structure (see _palette.scss / _theme.scss):
+// - _palette.scss  raw standard colors (Tier 1, the single source of truth for color values)
+// - _theme.scss    semantic → raw color, emitted as CSS custom properties (Tier 2, whole theme swappable at runtime)
+// - this file      bridges semantic SCSS variables to the corresponding CSS custom properties (`$token: var(--token)`),
+//                  so usage sites keep old forms like `background: $bg-app` unchanged, compiling to `var(--bg-app)`.
 //
-// 规则：
-// - 颜色一律桥接到 var(--*)，绝不在此写裸 hex —— 改色去 _palette.scss / _theme.scss。
-// - 需在使用处按 alpha 叠加的少数色，用 `rgb(var(--rgb-*) / <alpha>)`（通道三元组见 _theme.scss）。
-// - 字号 / 间距 / 圆角 / z-index 等非颜色 token 仍为编译期常量（不参与主题切换），留在本文件。
+// Rules:
+// - Colors are always bridged to var(--*), never write bare hex here —— change colors in _palette.scss / _theme.scss.
+// - For the few colors that need alpha stacking at usage sites, use `rgb(var(--rgb-*) / <alpha>)` (channel triples in _theme.scss).
+// - Non-color tokens like font size / spacing / radius / z-index remain compile-time constants (do not participate in theme switching) and stay in this file.
 
-// ===== 背景色 =====
+// ===== Background colors =====
 $bg-app:          var(--bg-app);
 $bg-white-fade:   var(--bg-white-fade);
 $bg-panel:        var(--bg-panel);
@@ -24,12 +24,12 @@ $bg-selected:     var(--bg-selected);
 $bg-group-header: var(--bg-group-header);
 $chip-neutral:    var(--chip-neutral);
 
-// ===== 边框 =====
+// ===== Border =====
 $border-default:      var(--border-default);
 $border-default-fade: var(--border-default-fade);
 $border-muted:        var(--border-muted);
 
-// ===== 文字 =====
+// ===== Text =====
 $text-primary:   var(--text-primary);
 $text-body:      var(--text-body);
 $text-muted:     var(--text-muted);
@@ -38,7 +38,7 @@ $text-dim:       var(--text-dim);
 $text-on-accent: var(--text-on-accent);
 $text-on-selected: var(--text-on-selected);
 
-// ===== 语义色 (动作 / 状态) =====
+// ===== Semantic colors (action / state) =====
 $color-accent:             var(--color-accent);
 $color-accent-hover:       var(--color-accent-hover);
 $color-accent-bg-fade:     var(--color-accent-bg-fade);
@@ -57,7 +57,7 @@ $color-token-in:           var(--color-token-in);
 $color-token-out:          var(--color-token-out);
 $color-token-cache:        var(--color-token-cache);
 
-// 语义色浅底 (chip / banner 背景)
+// Semantic light backgrounds (chip / banner background)
 $color-accent-bg-hover:    var(--color-accent-bg-hover);
 $color-approved-fade:      var(--color-approved-fade);
 $color-approved-fade-soft: var(--color-approved-fade-soft);
@@ -65,13 +65,13 @@ $color-warning-fade:       var(--color-warning-fade);
 $color-danger-fade:        var(--color-danger-fade);
 $color-danger-border:      var(--color-danger-border);
 
-// off-palette 状态浅底
+// off-palette state light backgrounds
 $color-conflict-fade:      var(--color-conflict-fade);
 $color-pending-fade:       var(--color-pending-fade);
 $color-posted-fade:        var(--color-posted-fade);
 $color-search-hit:         var(--color-search-hit);
 
-// ===== Git decoration 配色 =====
+// ===== Git decoration colors =====
 $git-added:           var(--git-added);
 $git-added-bg-fade:   var(--git-added-bg-fade);
 $git-modified:        var(--git-modified);
@@ -81,44 +81,44 @@ $git-needs-work-fg:   var(--git-needs-work-fg);
 $blame-change:        var(--blame-change);
 $blame-fold:          var(--blame-fold);
 
-// ===== 文件改动状态点 =====
+// ===== File change status dots =====
 $file-status-added:    var(--file-status-added);
 $file-status-modified: var(--file-status-modified);
 $file-status-deleted:  var(--file-status-deleted);
 $file-status-renamed:  var(--file-status-renamed);
 $file-status-copied:   var(--file-status-copied);
 
-// ===== Avatar / Initials 等装饰 =====
+// ===== Avatar / Initials and other decorations =====
 $avatar-bg-default:   var(--avatar-bg-default);
 
-// ===== 滚动条 (webkit) =====
+// ===== Scrollbar (webkit) =====
 $scrollbar-thumb:        var(--scrollbar-thumb);
 $scrollbar-thumb-hover:  var(--scrollbar-thumb-hover);
 $scrollbar-thumb-active: var(--scrollbar-thumb-active);
 
-// ===== 字号 =====
-// 整体设计基线在 14px：body 默认 / Monaco 编辑器都走 $fs-lg=14。
-// $fs-md=13 是次要文本（输入框 / 小按钮 / 评论正文）；更小的 12 / 11
-// 仅留给 chip 标签 / footer 注脚等单独信息密度高的场景。
+// ===== Font size =====
+// The overall design baseline is 14px: body default / Monaco editor both use $fs-lg=14.
+// $fs-md=13 is secondary text (input box / small button / comment body); the smaller 12 / 11
+// are reserved for scenarios with high information density like chip tags / footer notes.
 $fs-xs:  11px;
 $fs-sm:  12px;
 $fs-md:  13px;
-$fs-lg:  14px; // body 默认 / Monaco 编辑器字号
-$fs-xl:  16px; // 段落标题 / 主面板顶栏标题
+$fs-lg:  14px; // body default / Monaco editor font size
+$fs-xl:  16px; // paragraph heading / main panel top bar heading
 
-// ===== 行高 =====
+// ===== Line height =====
 $lh-tight:  1.35;
 $lh-normal: 1.4;
 $lh-loose:  1.5;
 
-// ===== 圆角 =====
-$radius-sm:  3px; // chip / 小按钮
-$radius-md:  4px; // 输入框 / hover 区
-$radius-lg:  5px; // 卡片 / 弹出菜单
-$radius-pill: 9px; // 圆点 count-pill / review-chip
-$radius-full: 50%; // 圆形 (avatar 等)
+// ===== Radius =====
+$radius-sm:  3px; // chip / small button
+$radius-md:  4px; // input box / hover area
+$radius-lg:  5px; // card / popup menu
+$radius-pill: 9px; // dot count-pill / review-chip
+$radius-full: 50%; // circular (avatar, etc.)
 
-// ===== 间距 (4 倍数) =====
+// ===== Spacing (multiples of 4) =====
 $space-1: 2px;
 $space-2: 4px;
 $space-3: 6px;
@@ -127,14 +127,14 @@ $space-5: 10px;
 $space-6: 12px;
 $space-8: 16px;
 
-// ===== z-index 阶梯 =====
+// ===== z-index ladder =====
 $z-resize-handle: 50;
 $z-blame-overlay: 5;
 $z-statusbar-menu: 200;
 $z-modal:         1000;
 $z-modal-nested:  1100;
 
-// ===== 字体族 =====
-// 等宽字体优先取用户配置（--editor-font-family，由 renderer 按 config 写入 documentElement），
-// 未配置时回落 Monaco 注入的 --vscode-editor-font-family，再回落内置 Consolas / monospace。
+// ===== Font family =====
+// The monospace font prefers the user config (--editor-font-family, written to documentElement by the renderer per config);
+// when unconfigured it falls back to the --vscode-editor-font-family injected by Monaco, then to the built-in Consolas / monospace.
 $font-mono: var(--editor-font-family, var(--vscode-editor-font-family, 'Consolas', monospace));

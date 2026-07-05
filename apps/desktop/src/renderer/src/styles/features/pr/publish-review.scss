@@ -1,11 +1,11 @@
-// 提交评审 modal（草稿批量发布，见 components/features/pr/tabs/drafts/PublishReviewModal）。
-// 通用模态壳复用 common/modal：backdrop → .modal-backdrop，底栏 → .modal-actions，
-// 外框 → .modal（本文件只叠更宽的 max-width）。这里只放发布列表 / 进度 / 结果等专属内容。
+// Publish review modal (batch-publish drafts; see components/features/pr/tabs/drafts/PublishReviewModal).
+// Reuses the common/modal shell: backdrop → .modal-backdrop, footer bar → .modal-actions,
+// outer frame → .modal (this file only layers a wider max-width). Here we only put publish-list / progress / result content.
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
-// 比默认 .modal(640) 宽：要展示 N 条草稿的 anchor + body 摘要，太窄一条占两屏不利核对
+// Wider than the default .modal(640): shows anchor + body summary of N drafts; too narrow and one item spans two screens, hard to review
 .publish-review-modal {
   max-width: 720px;
 }
@@ -73,7 +73,7 @@
   color: $text-primary;
   word-break: break-all;
 }
-// anchor 可点版本：button 退成链接外观（@include anchor-link）+ hover 主色
+// Clickable anchor variant: button demoted to link appearance (@include anchor-link) + hover primary color
 .publish-review-item-anchor-link {
   @include anchor-link;
   text-align: left;
@@ -105,8 +105,8 @@
   color: $text-body;
   background: $bg-panel-alt;
   border-radius: $radius-sm;
-  // body 通常 2~10 行，过长折叠：max-height + 内部 scroll，避免一条长 finding
-  // 把整个 modal 撑爆
+  // body is usually 2~10 lines; collapse when too long: max-height + inner scroll, to keep a single long finding
+  // from blowing out the whole modal
   max-height: 180px;
   overflow-y: auto;
   white-space: pre-wrap;
@@ -119,15 +119,15 @@
   flex-direction: column;
   align-items: center;
   gap: $space-4;
-  // 上下留多一些纵向空间让 spinner 视觉居中；tokens 阶梯到 $space-8 (16px) 就
-  // 封顶了，再加一倍直接写字面值，跟设计意图比照算
+  // Extra vertical space above/below so the spinner reads visually centered; the tokens ladder tops out at $space-8 (16px),
+  // so doubling it is written as a literal, gauged against the design intent
   padding: 32px $space-8;
 
   p {
     margin: 0;
   }
 }
-// 复用 base 的 spin keyframe
+// Reuses base's spin keyframe
 .publish-review-spinner {
   width: 32px;
   height: 32px;

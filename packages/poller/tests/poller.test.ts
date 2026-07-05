@@ -21,42 +21,42 @@ import {
   type PrIndexFile,
 } from '../src/pr-state.js';
 
-// 仅在 IPC 层被调用、poller 不触发的领域方法补桩；满足容器接口契约。
+// stubs for domain methods called only at the IPC layer and not triggered by the poller; satisfies the container interface contract.
 const unusedComments: CommentService = {
   listPullRequestComments: async () => [],
   publishSummaryComment: () =>
-    Promise.reject(new Error('FakeAdapter.publishSummaryComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.publishSummaryComment not implemented (unused by poller tests)')),
   publishInlineComment: () =>
-    Promise.reject(new Error('FakeAdapter.publishInlineComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.publishInlineComment not implemented (unused by poller tests)')),
   replyToComment: () =>
-    Promise.reject(new Error('FakeAdapter.replyToComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.replyToComment not implemented (unused by poller tests)')),
   editComment: () =>
-    Promise.reject(new Error('FakeAdapter.editComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.editComment not implemented (unused by poller tests)')),
   deleteComment: () =>
-    Promise.reject(new Error('FakeAdapter.deleteComment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.deleteComment not implemented (unused by poller tests)')),
   toggleReaction: () =>
-    Promise.reject(new Error('FakeAdapter.toggleReaction 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.toggleReaction not implemented (unused by poller tests)')),
 };
 const unusedMedia: MediaService = {
   getUserAvatar: async () => null,
   getAttachment: () =>
-    Promise.reject(new Error('FakeAdapter.getAttachment 未实现（poller 测试不使用）')),
+    Promise.reject(new Error('FakeAdapter.getAttachment not implemented (unused by poller tests)')),
   uploadAttachment: async () => null,
 };
 
 /**
- * 容器形状的测试替身：poller 只读 kind / connection.getCurrentUser /
- * connection.capabilities / prs.listPendingPullRequests，其余领域补最小桩。
- * 真测试逻辑（用户、能力、待处理 PR 行为）落在对应子对象里；测试辅助（setPrs /
- * failNextList / seedUser）仍挂在 adapter 上，子对象闭包读同一实例状态。
+ * Container-shaped test double: the poller only reads kind / connection.getCurrentUser /
+ * connection.capabilities / prs.listPendingPullRequests; other domains get minimal stubs.
+ * The real test logic (user, capabilities, pending-PR behavior) lives in the corresponding sub-objects;
+ * test helpers (setPrs / failNextList / seedUser) still hang on the adapter, and the sub-object closures read the same instance state.
  */
 class FakeAdapter implements PlatformAdapter {
   readonly kind = 'bitbucket-server' as const;
   private currentUser: { name: string; displayName: string } | null = null;
   private commentList: PrComment[] = [];
-  // 能力开关：模拟「含回复的计数信号」平台（GitHub/GitLab）；默认 false（Bitbucket 粗信号、每轮兜底扫）。
+  // capability switch: simulates a "reply-inclusive count signal" platform (GitHub/GitLab); defaults to false (Bitbucket coarse signal, fallback scan every round).
   private replyAware = false;
-  // listPullRequestComments 调用计数：验证 reliable 平台未变化时不扫 / coarse 平台每轮扫。
+  // listPullRequestComments call count: verifies a reliable platform does not scan when unchanged / a coarse platform scans every round.
   commentCalls = 0;
   readonly connection: PlatformConnection;
   readonly prs: PullRequestService;
@@ -108,14 +108,14 @@ class FakeAdapter implements PlatformAdapter {
         return this.prList;
       },
       getSinglePullRequest: () =>
-        Promise.reject(new Error('FakeAdapter.getSinglePullRequest 未实现（poller 测试不使用）')),
+        Promise.reject(new Error('FakeAdapter.getSinglePullRequest not implemented (unused by poller tests)')),
       listPullRequestCommits: async () => [],
       listPullRequestActivity: async () => [],
       setPullRequestReviewStatus: async () => {
-        // 测试只关心 poller 自身行为；setReviewStatus 在 IPC 层调用，poller 不触发
+        // the test only cares about the poller's own behavior; setReviewStatus is called at the IPC layer, not triggered by the poller
       },
       mergePullRequest: () =>
-        Promise.reject(new Error('FakeAdapter.mergePullRequest 未实现（poller 测试不使用）')),
+        Promise.reject(new Error('FakeAdapter.mergePullRequest not implemented (unused by poller tests)')),
     };
   }
   setPrs(prs: PullRequest[]): void {
@@ -124,15 +124,15 @@ class FakeAdapter implements PlatformAdapter {
   failNextList(): void {
     this.failList = true;
   }
-  // 测试辅助：直接灌入当前用户（区别于 PlatformConnection 的 setCurrentUser(user) 契约方法）。
+  // test helper: directly seed the current user (distinct from PlatformConnection's setCurrentUser(user) contract method).
   seedUser(name: string, displayName = name): void {
     this.currentUser = { name, displayName };
   }
-  // 测试辅助：灌入 listPullRequestComments 返回的评论（未读 mention / 通知投影用）。
+  // test helper: seed the comments returned by listPullRequestComments (for unread mention / notification projection).
   seedComments(list: PrComment[]): void {
     this.commentList = list;
   }
-  // 测试辅助：切到「含回复计数信号」平台语义（GitHub/GitLab）；默认 false 模拟 Bitbucket 粗信号。
+  // test helper: switch to "reply-inclusive count signal" platform semantics (GitHub/GitLab); defaults to false to simulate Bitbucket coarse signal.
   setReplyAware(v: boolean): void {
     this.replyAware = v;
   }
@@ -170,7 +170,7 @@ function makePr(id: string, updatedAt: string, title = `PR ${id}`): PullRequest 
   };
 }
 
-/** 「我创建的」PR：作者即当前用户（默认 alice）。用于 authored_* 通知测试。 */
+/** "authored by me" PR: author is the current user (defaults to alice). Used for authored_* notification tests. */
 function makeAuthoredPr(id: string, updatedAt: string, author = 'alice'): PullRequest {
   const pr = makePr(id, updatedAt);
   pr.author = { name: author, displayName: author };
@@ -179,7 +179,7 @@ function makeAuthoredPr(id: string, updatedAt: string, author = 'alice'): PullRe
 
 let tmpDir: string;
 let store: JsonFileStateStore;
-// 归档冷存储：与 store 物理分离（store 根 = tmpDir，archived 根 = tmpDir/archived）。
+// archive cold storage: physically separate from store (store root = tmpDir, archived root = tmpDir/archived).
 let archiveStore: JsonFileStateStore;
 
 beforeEach(async () => {
@@ -293,7 +293,7 @@ describe('Poller.tick', () => {
     expect(stored[0]!.connectionId).toBe('good');
   });
 
-  it('tick re-entrancy: a second tick while one is in flight returns immediately (并登记补跑)', async () => {
+  it('tick re-entrancy: a second tick while one is in flight returns immediately (and registers a catch-up run)', async () => {
     let resolveList: ((v: PullRequest[]) => void) | undefined;
     let listCalls = 0;
     const slowConnection: PlatformConnection = {
@@ -326,9 +326,10 @@ describe('Poller.tick', () => {
         // unused in this test
       },
       mergePullRequest: () => Promise.reject(new Error('unused')),
-      // 首次返回受 resolveList 控制的挂起 promise；后续（in-flight 期间第二次 tick 登记的
-      // 「补跑」）立即返回，避免测试悬挂。补跑是新语义：第二次 tick 虽即时返回 EMPTY，但当前轮
-      // 结束后会紧接着再 poll 一轮（保证 ping 异步补到 currentUser 后的重分类请求不丢）。
+      // the first call returns a pending promise controlled by resolveList; subsequent ones (the
+      // "catch-up run" registered by the second tick during in-flight) return immediately to avoid a hung test.
+      // the catch-up run is new semantics: although the second tick returns EMPTY immediately, right after the current
+      // round ends it polls one more round (ensures the reclassification request after ping asynchronously fills currentUser is not lost).
       listPendingPullRequests: () => {
         listCalls += 1;
         return listCalls === 1
@@ -340,7 +341,7 @@ describe('Poller.tick', () => {
       kind: 'bitbucket-server',
       connection: slowConnection,
       prs: slowPulls,
-      // 以下领域本测试不触发；补最小桩满足容器接口契约。
+      // the following domains are not triggered by this test; minimal stubs satisfy the container interface contract.
       comments: {
         listPullRequestComments: async () => [],
         publishSummaryComment: () => Promise.reject(new Error('unused')),
@@ -364,9 +365,9 @@ describe('Poller.tick', () => {
       logger: noopLogger,
     });
     const firstTick = poller.tick();
-    // 让 firstTick 推进到 adapter.listPendingPullRequests 调用（穿过 stateStore.read 的真实 fs 读）
+    // let firstTick advance to the adapter.listPendingPullRequests call (through the real fs read of stateStore.read)
     await new Promise<void>((r) => setTimeout(r, 50));
-    const secondTick = await poller.tick(); // 立即返回 EMPTY
+    const secondTick = await poller.tick(); // returns EMPTY immediately
     expect(secondTick).toEqual({ fetched: 0, changed: 0, added: 0, removed: 0, errors: 0 });
     resolveList!([makePr('1', '2026-05-28T01:00:00.000Z')]);
     await firstTick;
@@ -388,7 +389,7 @@ describe('Poller.tick', () => {
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(2);
 
-    // PR #2 在远端 merged → 不再出现在 dashboard
+    // PR #2 merged remotely → no longer appears in the dashboard
     adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
     const r = await poller.tick();
     expect(r.removed).toBe(1);
@@ -398,7 +399,7 @@ describe('Poller.tick', () => {
   });
 
   it('all connections fail in one tick: index file mtime untouched + state intact', async () => {
-    // 先一次成功 poll，落地基线
+    // first a successful poll to lay down the baseline
     const ok1 = makePr('1', '2026-05-28T01:00:00.000Z');
     const ok2 = makePr('2', '2026-05-28T02:00:00.000Z');
     const adapter = new FakeAdapter([ok1, ok2]);
@@ -414,9 +415,9 @@ describe('Poller.tick', () => {
     const mtimeBefore = (await fs.stat(indexPath)).mtimeMs;
     const storedBefore = await listStoredPullRequests(store);
 
-    // 下一轮：远端整体失败 (网络断 / 5xx) → 本地一行不动 (invariant #1+#2)
+    // next round: remote fails as a whole (network down / 5xx) → not a single local row moves (invariant #1+#2)
     adapter.failNextList();
-    // 至少加 5ms 时间窗，避免 mtime 分辨率 (Windows NTFS 100ns 都行，保险起见)
+    // add at least a 5ms time window to avoid mtime resolution (Windows NTFS 100ns would do, just to be safe)
     await new Promise<void>((r) => setTimeout(r, 5));
     const r = await poller.tick();
     expect(r.errors).toBe(1);
@@ -424,7 +425,7 @@ describe('Poller.tick', () => {
     expect(r.changed).toBe(0);
     expect(r.added).toBe(0);
     const mtimeAfter = (await fs.stat(indexPath)).mtimeMs;
-    expect(mtimeAfter).toBe(mtimeBefore); // 文件没被重写
+    expect(mtimeAfter).toBe(mtimeBefore); // file was not rewritten
     expect(await listStoredPullRequests(store)).toEqual(storedBefore);
   });
 
@@ -443,7 +444,7 @@ describe('Poller.tick', () => {
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(2);
 
-    // 下一次 poll 失败（网络抖动 / 远端 5xx）→ 本地状态库不动
+    // next poll fails (network jitter / remote 5xx) → local state store untouched
     adapter.failNextList();
     const r = await poller.tick();
     expect(r.errors).toBe(1);
@@ -467,19 +468,19 @@ describe('Poller.tick', () => {
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(2);
 
-    // ok 连接成功但其 PR 远端关单；broken 连接 fail
+    // ok connection succeeds but its PR is closed remotely; broken connection fails
     ok.setPrs([]);
     broken.failNextList();
     const r = await poller.tick();
-    expect(r.removed).toBe(1); // 只剪了 ok 的
+    expect(r.removed).toBe(1); // only ok's was pruned
     expect(r.errors).toBe(1);
     const stored = await listStoredPullRequests(store);
     expect(stored).toHaveLength(1);
     expect(stored[0]!.connectionId).toBe('broken');
   });
 
-  // localStatus 直接镜像 Bitbucket reviewer.status，是远端权威态的本地缓存。
-  // hasConflict 不影响 localStatus（仅作为独立维度，UI 通过 hasConflict 单独筛选）。
+  // localStatus directly mirrors Bitbucket reviewer.status; it is a local cache of the remote authoritative state.
+  // hasConflict does not affect localStatus (it is only an independent dimension; the UI filters by hasConflict separately).
 
   it('preserves hasConflict=true on new PR without changing localStatus', async () => {
     const pr = makePr('1', '2026-05-28T01:00:00.000Z');
@@ -548,14 +549,14 @@ describe('Poller.tick', () => {
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('pending');
 
-    // Bitbucket 上 kyle 点了 approve
+    // kyle clicked approve on Bitbucket
     adapter.setPrs([
       { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'approved' as const }] },
     ]);
     await poller.tick();
     expect((await listStoredPullRequests(store))[0]!.localStatus).toBe('approved');
 
-    // Bitbucket 上 kyle 撤销，回到 pending
+    // kyle revoked on Bitbucket, back to pending
     adapter.setPrs([
       { ...pr, reviewers: [{ name: 'kyle', displayName: 'Kyle', status: 'unapproved' as const }] },
     ]);
@@ -576,7 +577,7 @@ describe('Poller.tick', () => {
     const file = await store.read<PrIndexFile>(PR_INDEX_KEY);
     expect(file?.schema_version).toBe(1);
     expect(Object.keys(file!.prs)).toHaveLength(1);
-    // 每个 PR 的 meta.json 落在 prs/<hash>/meta.json
+    // each PR's meta.json lands at prs/<hash>/meta.json
     const hash = Object.keys(file!.prs)[0]!;
     const meta = await store.read<{ schema_version: 1; pr: { localId: string } }>(
       `prs/${hash}/meta`,
@@ -619,19 +620,19 @@ describe('Poller.tick', () => {
     expect(await listStoredPullRequests(store)).toHaveLength(2);
     const goneHash = (await listStoredPullRequests(store)).find((p) => p.remoteId === '2')!.localId;
 
-    // PR #2 关单 → soft archive (archivedAt set in index)，list 自动过滤掉
+    // PR #2 closed → soft archive (archivedAt set in index), list filters it out automatically
     adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
     await poller.tick();
     const visible = await listStoredPullRequests(store);
     expect(visible).toHaveLength(1);
     expect(visible[0]!.remoteId).toBe('1');
 
-    // 索引条目仍在 (待 grace 期满才硬删)；数据已从活跃存储搬入归档冷存储
+    // index entry still present (hard-deleted only after grace period expires); data already moved from active storage into archive cold storage
     const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
     const archivedEntries = Object.values(index!.prs).filter((e) => e.archivedAt);
     expect(archivedEntries).toHaveLength(1);
-    expect(await store.read(`prs/${goneHash}/meta`)).toBeNull(); // 活跃存储已搬空
-    expect(await archiveStore.read(`prs/${goneHash}/meta`)).not.toBeNull(); // 落到归档存储
+    expect(await store.read(`prs/${goneHash}/meta`)).toBeNull(); // active storage already emptied
+    expect(await archiveStore.read(`prs/${goneHash}/meta`)).not.toBeNull(); // landed in archive storage
   });
 
   it('archived PR re-appearing on remote becomes active again', async () => {
@@ -646,21 +647,21 @@ describe('Poller.tick', () => {
     await poller.tick();
     const hash = (await listStoredPullRequests(store))[0]!.localId;
 
-    // 远端关单 → soft archive：数据搬入归档存储
+    // closed remotely → soft archive: data moved into archive storage
     adapter.setPrs([]);
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(0);
     expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull();
 
-    // 复活：远端又出现 (例如 reviewer 被重新加回) → archivedAt 清零、整树搬回活跃存储
+    // revival: reappears remotely (e.g. reviewer re-added) → archivedAt cleared, whole tree moved back to active storage
     adapter.setPrs([makePr('1', '2026-05-28T01:00:00.000Z')]);
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(1);
-    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull(); // 搬回活跃存储
-    expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull(); // 归档存储已腾空
+    expect(await store.read(`prs/${hash}/meta`)).not.toBeNull(); // moved back to active storage
+    expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull(); // archive storage now vacated
   });
 
-  it('外部删除 prs/index.json: 下一轮 poll 自动重建', async () => {
+  it('external deletion of prs/index.json: next poll rebuilds automatically', async () => {
     const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
@@ -672,16 +673,16 @@ describe('Poller.tick', () => {
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(1);
 
-    // 模拟外部 (用户 / 清理工具) 直接 rm 掉索引文件
+    // simulate an external party (user / cleanup tool) directly rm-ing the index file
     await fs.rm(path.join(tmpDir, 'prs', 'index.json'));
     expect(await listStoredPullRequests(store)).toHaveLength(0);
 
-    // 下一轮 poll 重建索引
+    // next poll rebuilds the index
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(1);
   });
 
-  it('外部删除 meta.json 但索引尚存：list 跳过；下一轮 poll 重写 meta', async () => {
+  it('external deletion of meta.json but index still present: list skips; next poll rewrites meta', async () => {
     const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
     const poller = new Poller({
       connections: [{ connectionId: 'bb1', adapter }],
@@ -694,11 +695,11 @@ describe('Poller.tick', () => {
     const hash = (await listStoredPullRequests(store))[0]!.localId;
     const metaPath = path.join(tmpDir, 'prs', hash, 'meta.json');
 
-    // 外部清掉 meta；索引 entry 仍在
+    // external party clears meta; the index entry remains
     await fs.rm(metaPath);
-    expect(await listStoredPullRequests(store)).toHaveLength(0); // list 跳过
+    expect(await listStoredPullRequests(store)).toHaveLength(0); // list skips
 
-    // 下一轮 poll：PR 还在远端 → 写回 meta
+    // next poll: the PR is still on remote → writes meta back
     await poller.tick();
     expect(await listStoredPullRequests(store)).toHaveLength(1);
     await expect(fs.access(metaPath)).resolves.toBeUndefined();
@@ -718,12 +719,12 @@ describe('Poller.tick', () => {
     await poller.tick();
     const hash = (await listStoredPullRequests(store))[0]!.localId;
 
-    // T+0: 关单 → soft archive：数据搬入归档存储（仍在 grace 期内保留）
+    // T+0: closed → soft archive: data moved into archive storage (still retained within grace period)
     adapter.setPrs([]);
     await poller.tick();
     expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull();
 
-    // T+8 天: 超过 1 周 grace → 硬清掉整目录（归档存储 + 活跃存储两端都清）
+    // T+8 days: past the 1-week grace → hard-purge the whole directory (cleared on both archive storage + active storage)
     now = new Date('2026-06-09T00:00:00.000Z');
     await poller.tick();
     expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull();
@@ -732,7 +733,7 @@ describe('Poller.tick', () => {
     expect(Object.keys(index!.prs)).toHaveLength(0);
   });
 
-  it('对账：把滞留活跃存储的归档数据搬入归档存储（旧布局 / split-brain 最终一致）', async () => {
+  it('reconciliation: move archived data stuck in active storage into archive storage (old layout / split-brain eventual consistency)', async () => {
     const adapter = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
     const now = new Date('2026-06-01T00:00:00.000Z');
     const poller = new Poller({
@@ -746,19 +747,19 @@ describe('Poller.tick', () => {
     await poller.tick();
     const hash = (await listStoredPullRequests(store))[0]!.localId;
 
-    // 模拟旧布局存量：手工把索引条目标 archived，但数据**仍留在活跃存储**（未搬迁）
+    // simulate old-layout leftovers: manually mark the index entry archived, but the data **still stays in active storage** (not migrated)
     const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
     index!.prs[hash]!.archivedAt = now.toISOString();
     await store.write(PR_INDEX_KEY, index!);
     expect(await store.read(`prs/${hash}/meta`)).not.toBeNull();
     expect(await archiveStore.read(`prs/${hash}/meta`)).toBeNull();
 
-    // 远端仍无该 PR → 下一轮 poll 的对账步（未到 grace、不清）把整树搬入归档存储
+    // the PR still absent from remote → the reconciliation step of the next poll (before grace, no purge) moves the whole tree into archive storage
     adapter.setPrs([]);
     await poller.tick();
-    expect(await store.read(`prs/${hash}/meta`)).toBeNull(); // 搬出活跃存储
-    expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull(); // 落到归档存储
-    // 仍在索引、仍 archived（对账只搬数据、不动索引）
+    expect(await store.read(`prs/${hash}/meta`)).toBeNull(); // moved out of active storage
+    expect(await archiveStore.read(`prs/${hash}/meta`)).not.toBeNull(); // landed in archive storage
+    // still in the index, still archived (reconciliation only moves data, does not touch the index)
     const after = await store.read<PrIndexFile>(PR_INDEX_KEY);
     expect(after!.prs[hash]!.archivedAt).toBe(now.toISOString());
   });
@@ -802,7 +803,7 @@ describe('setLocalStatus', () => {
 });
 
 describe('Poller.archiveConnectionsExcept', () => {
-  it('归档非活动连接的 PR、保留活动连接（进入 purge 路径）', async () => {
+  it('archives PRs of inactive connections, keeps the active connection (enters the purge path)', async () => {
     const a1 = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
     const a2 = new FakeAdapter([makePr('2', '2026-05-28T01:00:00.000Z')]);
     const now = new Date('2026-06-01T00:00:00.000Z');
@@ -817,25 +818,25 @@ describe('Poller.archiveConnectionsExcept', () => {
       logger: noopLogger,
       now: () => now,
     });
-    await poller.tick(); // 两个连接的 PR 都入库，archivedAt=null
+    await poller.tick(); // PRs from both connections are stored, archivedAt=null
 
-    // 用户切换：只剩 bb1 活动
+    // user switches: only bb1 remains active
     await poller.archiveConnectionsExcept(['bb1']);
 
     const index = await store.read<PrIndexFile>(PR_INDEX_KEY);
     const entries = Object.values(index!.prs);
     const bb1 = entries.find((e) => e.identity.connectionId === 'bb1')!;
     const bb2 = entries.find((e) => e.identity.connectionId === 'bb2')!;
-    expect(bb1.archivedAt).toBeNull(); // 活动连接不动
-    expect(bb2.archivedAt).toBe(now.toISOString()); // 非活动连接被归档
-    // bb1 数据留在活跃存储；bb2 数据搬入归档存储
+    expect(bb1.archivedAt).toBeNull(); // active connection untouched
+    expect(bb2.archivedAt).toBe(now.toISOString()); // inactive connection archived
+    // bb1 data stays in active storage; bb2 data moved into archive storage
     const bb1Hash = Object.entries(index!.prs).find(([, e]) => e === bb1)![0];
     const bb2Hash = Object.entries(index!.prs).find(([, e]) => e === bb2)![0];
     expect(await store.read(`prs/${bb1Hash}/meta`)).not.toBeNull();
     expect(await store.read(`prs/${bb2Hash}/meta`)).toBeNull();
     expect(await archiveStore.read(`prs/${bb2Hash}/meta`)).not.toBeNull();
 
-    // 幂等：再调一次不改已归档的时间戳
+    // idempotent: calling again does not change the already-archived timestamp
     const later = new Date('2026-06-02T00:00:00.000Z');
     const poller2 = new Poller({
       connections: [{ connectionId: 'bb1', adapter: a1 }],
@@ -848,7 +849,7 @@ describe('Poller.archiveConnectionsExcept', () => {
     await poller2.archiveConnectionsExcept(['bb1']);
     const index2 = await store.read<PrIndexFile>(PR_INDEX_KEY);
     const bb2After = Object.values(index2!.prs).find((e) => e.identity.connectionId === 'bb2')!;
-    expect(bb2After.archivedAt).toBe(now.toISOString()); // 仍是首次归档时间
+    expect(bb2After.archivedAt).toBe(now.toISOString()); // still the first archive time
   });
 });
 
@@ -872,11 +873,11 @@ describe('Poller onNotify (system notification projection)', () => {
       onNotify: (e) => events.push(...e),
     });
 
-    // 首轮：建基线，不产出任何事件（避免首启涌入风暴）。
+    // first round: build the baseline, produce no events (avoids a first-launch flood).
     await poller.tick();
     expect(events).toEqual([]);
 
-    // 次轮：PR1 内容变更 + 一条 @alice 的新评论；同时来一个全新 PR2。
+    // second round: PR1 content changed + one new @alice comment; a brand-new PR2 also arrives.
     now = new Date('2026-06-02T00:00:00.000Z');
     adapter.setPrs([
       makePr('1', '2026-05-29T01:00:00.000Z'),
@@ -894,21 +895,21 @@ describe('Poller onNotify (system notification projection)', () => {
     const kinds = events.map((e) => ({ kind: e.kind, remoteId: e.remoteId, count: e.count }));
     expect(kinds).toContainEqual({ kind: 'new_pr', remoteId: '2', count: undefined });
     expect(kinds).toContainEqual({ kind: 'mention', remoteId: '1', count: 1 });
-    // 仅这两条（PR2 是新发现、其自身评论不投影 mention；PR1 仅 mention 一条）。
+    // only these two (PR2 is a new discovery, its own comments do not project a mention; PR1 has just one mention).
     expect(events).toHaveLength(2);
 
-    // 富字段：仓库 + 连接 + 发起人（new_pr=PR 作者；mention=评论作者）一并投影。
+    // rich fields: repo + connection + actor (new_pr=PR author; mention=comment author) all projected together.
     const newPr = events.find((e) => e.kind === 'new_pr')!;
     expect(newPr.repo).toEqual({ projectKey: 'P', repoSlug: 'r' });
     expect(newPr.connectionId).toBe('bb1');
-    expect(newPr.actor.name).toBe('u'); // makePr 的作者
+    expect(newPr.actor.name).toBe('u'); // makePr's author
     const mention = events.find((e) => e.kind === 'mention')!;
-    expect(mention.actor.name).toBe('bob'); // 评论作者
-    expect(mention.comment?.anchor).toBeNull(); // summary 评论 → 点击打开活动标签
+    expect(mention.actor.name).toBe('bob'); // comment author
+    expect(mention.comment?.anchor).toBeNull(); // summary comment → click opens the activity tab
   });
 
   it('suppresses notifications for non-pending PRs (already approved / needs_work)', async () => {
-    // PR1 当前用户已 approve → localStatus 非 pending；即便有新 @ 评论也不弹通知。
+    // PR1 already approved by the current user → localStatus is not pending; even a new @ comment does not pop a notification.
     const approved = makePr('1', '2026-05-28T01:00:00.000Z');
     approved.reviewers = [{ name: 'alice', displayName: 'Alice', status: 'approved' as const }];
     const adapter = new FakeAdapter([approved]);
@@ -925,7 +926,7 @@ describe('Poller onNotify (system notification projection)', () => {
       onNotify: (e) => events.push(...e),
     });
 
-    await poller.tick(); // 基线
+    await poller.tick(); // baseline
     now = new Date('2026-06-02T00:00:00.000Z');
     const changed = makePr('1', '2026-05-29T01:00:00.000Z');
     changed.reviewers = [{ name: 'alice', displayName: 'Alice', status: 'approved' as const }];
@@ -938,14 +939,14 @@ describe('Poller onNotify (system notification projection)', () => {
       }),
     ]);
     await poller.tick();
-    expect(events).toEqual([]); // 非 pending → 不投影
+    expect(events).toEqual([]); // not pending → not projected
   });
 
   it('coarse-signal platform (Bitbucket) catches a reply with no updatedAt / commentCount change', async () => {
-    // 核心修复：Bitbucket 回复既不顶 updatedDate、也不计入顶层 commentCount → 唯有对待处理 PR 每轮兜底扫才不漏。
+    // core fix: a Bitbucket reply neither bumps updatedDate nor counts toward the top-level commentCount → only a fallback scan of pending PRs every round avoids missing it.
     const pr1 = makePr('1', '2026-05-28T01:00:00.000Z');
-    pr1.commentCount = 5; // 顶层评论数；新增回复不会改变它
-    const adapter = new FakeAdapter([pr1]); // FakeAdapter 默认 commentCountIncludesReplies=false（粗信号）
+    pr1.commentCount = 5; // top-level comment count; adding a reply does not change it
+    const adapter = new FakeAdapter([pr1]); // FakeAdapter defaults to commentCountIncludesReplies=false (coarse signal)
     adapter.seedUser('alice');
     const events: PollNotificationEvent[] = [];
     let now = new Date('2026-06-01T00:00:00.000Z');
@@ -959,15 +960,15 @@ describe('Poller onNotify (system notification projection)', () => {
       onNotify: (e) => events.push(...e),
     });
 
-    await poller.tick(); // 基线
+    await poller.tick(); // baseline
     expect(events).toEqual([]);
 
-    // 次轮：updatedAt 与 commentCount 都不变，仅在 alice 的评论下新增一条 bob 的回复。
+    // second round: updatedAt and commentCount both unchanged, only a bob reply added under alice's comment.
     now = new Date('2026-06-02T00:00:00.000Z');
-    adapter.setPrs([pr1]); // 同一 PR，updatedAt / commentCount 原样
+    adapter.setPrs([pr1]); // same PR, updatedAt / commentCount as-is
     adapter.seedComments([
       makeComment({
-        author: { name: 'alice', displayName: 'Alice' }, // 我的顶层评论
+        author: { name: 'alice', displayName: 'Alice' }, // my top-level comment
         body: 'my comment',
         createdAt: '2026-05-28T02:00:00.000Z',
         replies: [
@@ -991,7 +992,7 @@ describe('Poller onNotify (system notification projection)', () => {
     const pr1 = makePr('1', '2026-05-28T01:00:00.000Z');
     pr1.commentCount = 0;
     const adapter = new FakeAdapter([pr1]);
-    adapter.setReplyAware(true); // 模拟 GitHub/GitLab：含回复的计数信号
+    adapter.setReplyAware(true); // simulate GitHub/GitLab: reply-inclusive count signal
     adapter.seedUser('alice');
     const events: PollNotificationEvent[] = [];
     let now = new Date('2026-06-01T00:00:00.000Z');
@@ -1005,10 +1006,10 @@ describe('Poller onNotify (system notification projection)', () => {
       onNotify: (e) => events.push(...e),
     });
 
-    await poller.tick(); // 基线：reliable 平台基线轮不扫
+    await poller.tick(); // baseline: reliable platform does not scan on the baseline round
     expect(adapter.commentCalls).toBe(0);
 
-    // 次轮：commentCount 0→1（含回复信号变化）→ 扫一次并投影 mention（updatedAt 故意不变，证明靠计数触发）。
+    // second round: commentCount 0→1 (reply-inclusive signal changes) → scan once and project a mention (updatedAt intentionally unchanged, proving it triggers on the count).
     now = new Date('2026-06-02T00:00:00.000Z');
     const pr1b = makePr('1', '2026-05-28T01:00:00.000Z');
     pr1b.commentCount = 1;
@@ -1021,18 +1022,18 @@ describe('Poller onNotify (system notification projection)', () => {
       }),
     ]);
     await poller.tick();
-    expect(adapter.commentCalls).toBe(1); // 计数变化 → 扫了一次
+    expect(adapter.commentCalls).toBe(1); // count changed → scanned once
     expect(events.some((e) => e.kind === 'mention')).toBe(true);
 
-    // 第三轮：updatedAt 与 commentCount 都不变 → 不再扫，无新事件。
+    // third round: updatedAt and commentCount both unchanged → no more scans, no new events.
     now = new Date('2026-06-03T00:00:00.000Z');
     const pr1c = makePr('1', '2026-05-28T01:00:00.000Z');
     pr1c.commentCount = 1;
     adapter.setPrs([pr1c]);
     const eventsLen = events.length;
     await poller.tick();
-    expect(adapter.commentCalls).toBe(1); // 未变化 → 未扫
-    expect(events.length).toBe(eventsLen); // 无新事件
+    expect(adapter.commentCalls).toBe(1); // unchanged → not scanned
+    expect(events.length).toBe(eventsLen); // no new events
   });
 
   it('authored PR: fires authored_needs_work when a reviewer newly marks needs-work', async () => {
@@ -1050,7 +1051,7 @@ describe('Poller onNotify (system notification projection)', () => {
       onNotify: (e) => events.push(...e),
     });
 
-    await poller.tick(); // 基线：无 needsWork 评审人
+    await poller.tick(); // baseline: no needsWork reviewer
     expect(events).toEqual([]);
 
     now = new Date('2026-06-02T00:00:00.000Z');
@@ -1062,7 +1063,7 @@ describe('Poller onNotify (system notification projection)', () => {
     const e = events.find((x) => x.kind === 'authored_needs_work');
     expect(e).toBeDefined();
     expect(e!.remoteId).toBe('1');
-    expect(e!.actor.name).toBe('bob'); // 标记需修改的评审人
+    expect(e!.actor.name).toBe('bob'); // the reviewer who marked needs-work
   });
 
   it('authored PR: fires authored_conflict on a false→true merge-conflict transition', async () => {
@@ -1080,7 +1081,7 @@ describe('Poller onNotify (system notification projection)', () => {
       onNotify: (e) => events.push(...e),
     });
 
-    await poller.tick(); // 基线：无冲突
+    await poller.tick(); // baseline: no conflict
     expect(events).toEqual([]);
 
     now = new Date('2026-06-02T00:00:00.000Z');
@@ -1110,9 +1111,9 @@ describe('Poller onNotify (system notification projection)', () => {
       onNotify: (e) => events.push(...e),
     });
 
-    await poller.tick(); // 基线：首轮不 notifiable、不扫评论
+    await poller.tick(); // baseline: first round is not notifiable, does not scan comments
 
-    // 第二轮：出现一条他人评论 → 仅播种游标、不补发历史评论。
+    // second round: a comment from someone else appears → only seed the cursor, do not backfill historical comments.
     now = new Date('2026-06-02T00:00:00.000Z');
     adapter.setPrs([makeAuthoredPr('1', '2026-05-29T01:00:00.000Z')]);
     adapter.seedComments([
@@ -1125,7 +1126,7 @@ describe('Poller onNotify (system notification projection)', () => {
     await poller.tick();
     expect(events.some((e) => e.kind === 'authored_comment')).toBe(false);
 
-    // 第三轮：又来一条更晚的他人评论（晚于游标）→ 触发 authored_comment。
+    // third round: another later comment from someone else (after the cursor) → triggers authored_comment.
     now = new Date('2026-06-03T00:00:00.000Z');
     adapter.setPrs([makeAuthoredPr('1', '2026-05-30T01:00:00.000Z')]);
     adapter.seedComments([

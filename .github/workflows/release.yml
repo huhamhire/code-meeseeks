@@ -1,19 +1,19 @@
-# 发布 workflow —— tag 触发，自动出 Windows + macOS(arm64) 安装包并挂到 GitHub Release。
+# Release workflow — tag-triggered, automatically builds Windows + macOS(arm64) installers and attaches them to a GitHub Release.
 #
-# 免费路线（当前）：仓库无 Apple 签名 secrets → mac 包由 afterPack 做 ad-hoc 签名
-# （arm64 能跑，含嵌入式 python），但不公证，用户首次需"仍要打开"。见 docs/mac-build.md。
+# Free route (current): repo has no Apple signing secrets → mac package is ad-hoc signed by afterPack
+# (runs on arm64, includes embedded python), but not notarized, so users need "Open anyway" on first launch. See docs/mac-build.md.
 #
-# 升级到公证（将来有 Apple Developer ID）：把下列 secrets 配进仓库即可，workflow 不用改——
-# afterPack 检测到凭据会自动让位给 electron-builder 的正式签名 + 公证：
-#   MAC_CSC_LINK            Developer ID 证书 .p12 的 base64
-#   MAC_CSC_KEY_PASSWORD    .p12 密码
-#   APPLE_API_KEY           App Store Connect API key .p8 的 base64（或路径）
+# Upgrading to notarization (once an Apple Developer ID is available): just configure the following secrets in the repo, no workflow change needed —
+# on detecting credentials afterPack yields to electron-builder's proper signing + notarization:
+#   MAC_CSC_LINK            base64 of the Developer ID certificate .p12
+#   MAC_CSC_KEY_PASSWORD    .p12 password
+#   APPLE_API_KEY           base64 (or path) of the App Store Connect API key .p8
 #   APPLE_API_KEY_ID / APPLE_API_ISSUER
-# 并在 electron-builder.yml mac 段加 hardenedRuntime / entitlements / notarize。
+# and add hardenedRuntime / entitlements / notarize to the mac section of electron-builder.yml.
 #
-# 发布采用**两阶段**：gui / cli 各 matrix job 只构建并把产物上传为 workflow artifact；末置单个
-# release job 汇总下载 + 组装正文 + 一次性上传到 Release。此前各 job 各自调 softprops 直传，多个 job
-# 并发对同一 tag 创建 / finalize Release 会撞 `already_exists` 竞态——单点发布根除之。
+# Release is **two-stage**: the gui / cli matrix jobs only build and upload their artifacts as workflow artifacts; a final single
+# release job aggregates the downloads + assembles the body + uploads to the Release in one shot. Previously each job called softprops directly, and multiple jobs
+# concurrently creating / finalizing the Release for the same tag hit an `already_exists` race — a single publish point eliminates it.
 
 name: Release
 
@@ -24,7 +24,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write # 创建 Release + 上传产物
+  contents: write # create Release + upload artifacts
 
 concurrency:
   group: release-${{ github.ref }}
@@ -38,27 +38,27 @@ jobs:
         include:
           - os: windows-latest
             artifacts: apps/desktop/release/*.exe
-          - os: macos-14 # arm64 runner，原生构建 mac arm64
+          - os: macos-14 # arm64 runner, natively builds mac arm64
             artifacts: apps/desktop/release/*.dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true # 拉 LFS 图标（assets/icons/icon.ico 等），否则只是指针 → 构建失败
+          lfs: true # pull LFS icons (assets/icons/icon.ico etc.), otherwise they are just pointers → build failure
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: npm ci
 
-      # 有 Apple 凭据时才提升为签名 env（走正式签名 + 公证）；没有则一个都不设。
-      # 关键：不能把缺失的 secret 直接挂到 env —— 那样 CSC_LINK 会变成空串 ""，
-      # electron-builder 会把它当证书路径解析成 projectDir(apps/desktop) → "not a file" 报错。
-      # 无凭据时交给 afterPack 做 ad-hoc 签名（见文件头注释 + after-pack.cjs）。
-      - name: 准备 mac 签名凭据
+      # Only promote to signing env when Apple credentials are present (proper signing + notarization); otherwise set none.
+      # Key point: do not attach a missing secret straight to env — that turns CSC_LINK into an empty string "",
+      # and electron-builder resolves it as a certificate path relative to projectDir(apps/desktop) → "not a file" error.
+      # Without credentials, hand off to afterPack for ad-hoc signing (see file-header comment + after-pack.cjs).
+      - name: Prepare mac signing credentials
         if: runner.os == 'macOS'
         shell: bash
         env:
@@ -76,28 +76,28 @@ jobs:
               echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID"
               echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
             } >> "$GITHUB_ENV"
-            echo "检测到 Apple 凭据 → 正式签名 + 公证"
+            echo "Apple credentials detected → proper signing + notarization"
           else
-            echo "无 Apple 凭据 → afterPack ad-hoc 签名（免费路线）"
+            echo "No Apple credentials → afterPack ad-hoc signing (free route)"
           fi
 
-      - name: 构建 + 出包
-        shell: bash # win/mac 统一用 bash，保证多行命令 fail-fast
+      - name: Build + package
+        shell: bash # use bash on both win/mac to guarantee fail-fast on multi-line commands
         working-directory: apps/desktop
         run: |
-          npm run prepare:pragent   # 组装当前平台的嵌入式 pr-agent 运行时
+          npm run prepare:pragent   # assemble the embedded pr-agent runtime for the current platform
           npm run build             # electron-vite build
-          npm run notices           # 生成第三方声明，供 electron-builder 打入包
+          npm run notices           # generate third-party notices for electron-builder to bundle
           npx electron-builder --publish never
         env:
-          # 无 CSC_LINK 时禁止 electron-builder 去钥匙串自动找签名身份（afterPack 已 ad-hoc）；
-          # 有真证书时走 CSC_LINK 导入签名，不受此项影响。
+          # Without CSC_LINK, forbid electron-builder from auto-finding a signing identity in the keychain (afterPack already did ad-hoc);
+          # with a real certificate, CSC_LINK imports the signature and this setting has no effect.
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          # prepare:pragent 调 GitHub API 列 python-build-standalone release 资产；匿名 60 次/h/IP
-          # 易被限流（HTTP 403）。带上 Actions 自带 token 提到认证额度（脚本已支持 GITHUB_TOKEN）。
+          # prepare:pragent calls the GitHub API to list python-build-standalone release assets; anonymous 60/h/IP
+          # is easily rate-limited (HTTP 403). Pass the Actions-provided token to raise it to the authenticated quota (the script supports GITHUB_TOKEN).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 生成 SHA256 校验和
+      - name: Generate SHA256 checksums
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         working-directory: apps/desktop/release
@@ -111,8 +111,8 @@ jobs:
             fi
           done
 
-      # 安装包 + 校验和上传为 workflow artifact，交末置 release job 单点发布（不在此直传 Release）。
-      - name: 上传构建产物
+      # Upload installers + checksums as workflow artifacts, leaving the final release job as the single publish point (no direct Release upload here).
+      - name: Upload build artifacts
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
@@ -123,9 +123,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # meebox CLI（cli/，独立 Go module）：纯 Go、无 CGO → 单 runner 交叉编译全平台。出四平台压缩包 +
-  # 校验和，随桌面安装包挂到同一个 GitHub Release（不打进安装包，是独立可分发物）。同样只上传为 artifact，
-  # 由末置 release job 单点发布；workflow_dispatch 仍构建做编译冒烟、不上传（无 tag）。
+  # meebox CLI (cli/, standalone Go module): pure Go, no CGO → cross-compile all platforms on a single runner. Produces four-platform archives +
+  # checksums, attached alongside the desktop installers to the same GitHub Release (not bundled into the installer, a separate distributable). Likewise only uploaded as an artifact,
+  # published by the final release job as the single point; workflow_dispatch still builds as a compile smoke test but does not upload (no tag).
   cli:
     name: CLI (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
@@ -145,12 +145,12 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
 
-      # 显式声明 node：版本号取自 apps/desktop/package.json（`node -p` 读取），不依赖 runner 隐式自带 node。
+      # Declare node explicitly: the version is read from apps/desktop/package.json (via `node -p`), not relying on the runner's implicit node.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: 交叉编译 meebox CLI
+      - name: Cross-compile meebox CLI
         shell: bash
         working-directory: cli
         env:
@@ -158,20 +158,20 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
         run: |
-          # 版本与 app 同源：取自 apps/desktop/package.json（app 运行期版本的唯一真相源），
-          # 而非独立依赖 git tag——发布前置已校验 tag == 该版本，故二者一致但只有一个来源。
+          # Version shares the app's source: taken from apps/desktop/package.json (the single source of truth for the app's runtime version),
+          # rather than independently relying on the git tag — release prechecks already verified tag == that version, so they agree but there is only one source.
           VERSION="$(node -p "require('$GITHUB_WORKSPACE/apps/desktop/package.json').version")"
           mkdir -p dist
           go build -trimpath \
             -ldflags "-s -w -X github.com/huhamhire/code-meeseeks/cli/cmd.version=${VERSION}" \
             -o "dist/meebox${{ matrix.ext }}" .
 
-      - name: 打包压缩包 + 校验和
+      - name: Package archive + checksum
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         working-directory: cli/dist
         run: |
-          VERSION="$(node -p "require('$GITHUB_WORKSPACE/apps/desktop/package.json').version")"  # 与 app 同源
+          VERSION="$(node -p "require('$GITHUB_WORKSPACE/apps/desktop/package.json').version")"  # shares the app's source
           BIN="meebox${{ matrix.ext }}"
           ARCHIVE="meebox-cli-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.archive }}"
           # Bundle LICENSE + README + SKILL.md so the archive is a drop-in agent skill
@@ -183,13 +183,13 @@ jobs:
           else
             tar -czf "${ARCHIVE}" "${FILES[@]}"
           fi
-          # 只对本 matrix 实际产出的那个压缩包做校验和。此前遍历 .zip/.tar.gz 两种扩展名：zip 变体
-          # （windows/mac）最后一轮 `[ -e X.tar.gz ]` 为假、返回 1，恰是步骤末命令 → 整步以 1 退出而挂；
-          # linux（.tar.gz 末轮命中）才幸免。直接对已知文件名求 sha256，去掉这个脆弱循环。
+          # Checksum only the one archive this matrix actually produced. Previously it iterated both .zip/.tar.gz extensions: for the zip variants
+          # (windows/mac) the last round `[ -e X.tar.gz ]` was false and returned 1, and being the step's final command → the whole step exited 1 and failed;
+          # only linux (.tar.gz matched on the last round) escaped. Compute sha256 on the known filename directly, dropping this fragile loop.
           sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
 
-      # 压缩包 + 校验和上传为 workflow artifact（glob 仅取 meebox-cli-*，排除 dist 里的裸二进制与随包 LICENSE 等）。
-      - name: 上传构建产物
+      # Upload archive + checksum as workflow artifacts (glob takes only meebox-cli-*, excluding the bare binary and bundled LICENSE etc. in dist).
+      - name: Upload build artifacts
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
@@ -198,44 +198,51 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # 单点发布：等所有构建产物就绪后，一个 job 汇总下载 + 组装正文 + 一次性上传到 Release。避免多个
-  # matrix job 并发对同一 tag 创建 / finalize Release 触发 `already_exists` 竞态。仅 tag 触发。
+  # Single publish point: once all build artifacts are ready, one job aggregates downloads + assembles the body + uploads to the Release in one shot. Avoids multiple
+  # matrix jobs concurrently creating / finalizing the Release for the same tag triggering an `already_exists` race. Tag-triggered only.
   release:
     needs: [gui, cli]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # 取 CHANGELOG / RELEASE_NOTES（正文组装用）；无需 LFS
+      - uses: actions/checkout@v4 # fetch CHANGELOG / RELEASE_NOTES (for body assembly); no LFS needed
 
-      - name: 下载全部构建产物
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
-          merge-multiple: true # 各 job 的产物合并平铺到 dist/（文件名互不相同、无冲突）
+          merge-multiple: true # merge each job's artifacts flat into dist/ (filenames are all distinct, no conflicts)
 
-      # 组装 Release 正文：把 CHANGELOG 里对应版本的段落注入 RELEASE_NOTES 的占位，
-      # 让 Release 页直接看到本版变更，而不是只给一个链接。找不到对应段落则回退用原说明。
-      - name: 组装 Release 说明
+      # Assemble the Release body: inject the CHANGELOG section for the matching version into the placeholder in RELEASE_NOTES,
+      # so the Release page shows this version's changes directly instead of just a link. If no matching section is found, fall back to the original notes.
+      # Source is the English canonical CHANGELOG.md (RELEASE_NOTES.md is English too, so the Release body is single-language English);
+      # the bilingual venue is the website changelog (https://huhamhire.github.io/code-meeseeks/changelog), linked from RELEASE_NOTES.md.
+      - name: Assemble Release notes
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # 抽取 `## [VERSION] ...` 到下一个 `## [` 之间的正文（index==1 做字面前缀匹配，避开正则元字符）
+          # Deep-link to this version on the website changelog. The anchor is stable and date-independent:
+          # sync-docs.mjs injects `{#v<version, dots→hyphens>}`; build the same slug here from the tag.
+          CHANGELOG_URL="https://huhamhire.github.io/code-meeseeks/changelog#v$(echo "$VERSION" | tr '.' '-')"
+          # Extract the body between `## [VERSION] ...` and the next `## [` (index==1 does a literal prefix match, avoiding regex metacharacters)
           awk -v ver="## [$VERSION]" 'index($0,ver)==1{f=1;next} f&&/^## \[/{exit} f{print}' CHANGELOG.md > changelog-section.md
           if [ -s changelog-section.md ]; then
             awk 'FNR==NR{a[++n]=$0;next} /%%CHANGELOG_SECTION%%/{for(i=1;i<=n;i++)print a[i];next} {print}' \
-              changelog-section.md .github/RELEASE_NOTES.md > RELEASE_BODY.md
+              changelog-section.md .github/RELEASE_NOTES.md > RELEASE_BODY.tmp
           else
-            echo "::warning::CHANGELOG 未找到 [$VERSION] 段，Release 正文回退用 RELEASE_NOTES.md 原文"
-            sed 's/%%CHANGELOG_SECTION%%//' .github/RELEASE_NOTES.md > RELEASE_BODY.md
+            echo "::warning::CHANGELOG.md has no [$VERSION] section, Release body falls back to the original RELEASE_NOTES.md"
+            sed 's/%%CHANGELOG_SECTION%%//' .github/RELEASE_NOTES.md > RELEASE_BODY.tmp
           fi
+          # Fill the version deep-link (use | as the sed delimiter — the URL contains slashes)
+          sed "s|%%CHANGELOG_URL%%|${CHANGELOG_URL}|" RELEASE_BODY.tmp > RELEASE_BODY.md
 
-      - name: 上传到 Release（单点）
+      - name: Upload to Release (single point)
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           fail_on_unmatched_files: true
-          # alpha / 任何带 - 的预发布 tag（如 v0.1.0-alpha.1）→ 标为 prerelease，且不抢占 Latest
+          # alpha / any prerelease tag with a - (e.g. v0.1.0-alpha.1) → marked prerelease, and does not claim Latest
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ !contains(github.ref_name, '-') }}
-          # 正文 = RELEASE_NOTES（安装 / 首次打开 / 校验和）+ 注入的本版 CHANGELOG 段
+          # body = RELEASE_NOTES (install / first open / checksums) + the injected CHANGELOG section for this version
           body_path: RELEASE_BODY.md

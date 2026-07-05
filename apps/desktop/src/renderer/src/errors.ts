@@ -2,23 +2,23 @@ import { decodeAppError, errorDomain } from '@meebox/shared';
 import i18n from './i18n';
 
 /**
- * 把 main 进程 / 适配器 / fetch 抛出的原始异常翻成用户能读懂的文案。
+ * Translate raw exceptions thrown by the main process / adapters / fetch into text the user can understand.
  *
- * 设计原则：
- * - **不把原始 message 隐藏掉**，detail 字段保留原文便于诊断
- * - 只识别常见模式给个 title 标签，未匹配的直接落到"未知错误"标签
- * - 不在这里 console.error，调用方决定是否记日志
+ * Design principles:
+ * - **Do not hide the raw message**, the detail field keeps the original text for diagnosis
+ * - Only recognize common patterns to give a title label; unmatched ones fall to the "unknown error" label
+ * - Do not console.error here, the caller decides whether to log
  */
 export interface FormattedError {
-  /** 短标签，UI 顶部色字或图标旁文案，如"连接超时" */
+  /** Short label, colored text at the top of the UI or text next to an icon, e.g. "Connection timed out" */
   title: string;
-  /** 详情，给用户看的人话或原始 message */
+  /** Detail, human-readable text for the user or the raw message */
   detail: string;
-  /** 给可观测性 / 自动重试逻辑用的归类 */
+  /** Classification for observability / auto-retry logic */
   kind: 'timeout' | 'network' | 'auth' | 'not-found' | 'platform' | 'unknown';
 }
 
-// title/hint 存 i18n key，实际文案在 formatBackendError 用 i18n.t() 翻译（纯模块无法用 hook）
+// title/hint store i18n keys, the actual text is translated in formatBackendError via i18n.t() (a pure module cannot use hooks)
 const MATCHERS: Array<{
   re: RegExp;
   titleKey: string;
@@ -88,8 +88,8 @@ const MATCHERS: Array<{
 
 export function formatBackendError(err: unknown): FormattedError {
   const raw = err instanceof Error ? err.message : String(err);
-  // 先解码统一错误码（AppError 信封）→ 按码精确 i18n（errors.<CODE>，meta 作插值）。未注册码 / 缺 key →
-  // 通用兜底文案 + 显示原始码（便于报障）。非本信封 → 落到下方正则模式匹配（第三方 / 历史未编码错误兜底）。
+  // First decode the unified error code (AppError envelope) → precise i18n by code (errors.<CODE>, meta as interpolation). Unregistered code / missing key →
+  // generic fallback text + show the raw code (eases reporting). Not this envelope → fall to the regex pattern matching below (fallback for third-party / historical uncoded errors).
   const decoded = decodeAppError(raw);
   if (decoded) {
     const key = `errors.${decoded.code}`;

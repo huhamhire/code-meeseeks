@@ -12,49 +12,57 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// 默认窗口尺寸（无本地记录时）。最小尺寸保证核心三栏（sidebar 240 + file-tree 180 + diff 内容）在
-// chat-pane 折叠态下仍可用；高度兜住 pr-header + tabs + diff + statusbar。单位均为 DIP（设备无关像素）。
+// Default window size (when there is no local record). The minimum size guarantees the core three
+// columns (sidebar 240 + file-tree 180 + diff content) remain usable with the chat-pane collapsed;
+// the height accommodates pr-header + tabs + diff + statusbar. Units are all DIP (device-independent pixels).
 const DEFAULT_SIZE = { width: 1280, height: 800 };
 const MIN_SIZE = { width: 960, height: 600 };
 
-// 自绘标题栏右侧的系统窗控按钮（Windows titleBarOverlay）配色：与 .app-titlebar 背景（--bg-app）同色，
-// 接缝无感；symbol 取主文字色。明暗两套，跟随有效主题（nativeTheme.shouldUseDarkColors）。值对齐 palette
-// 暗/浅 bg-app（$vscode-gray-850 / $vscode-gray-30）与主文字（$vscode-gray-200 / $vscode-gray-840）。
+// Colors of the system window-control buttons on the right of the self-drawn title bar (Windows
+// titleBarOverlay): same color as the .app-titlebar background (--bg-app), so the seam is invisible;
+// the symbol takes the primary text color. Dark/light sets, following the effective theme
+// (nativeTheme.shouldUseDarkColors). Values align with palette dark/light bg-app
+// ($vscode-gray-850 / $vscode-gray-30) and primary text ($vscode-gray-200 / $vscode-gray-840).
 const TITLE_BAR_OVERLAY = {
   dark: { color: '#1e1e1e', symbolColor: '#cccccc' },
   light: { color: '#f8f8f8', symbolColor: '#1f1f20' },
 };
-// 渲染层派生的窗控配色（跟随具体主题的 --bg-app/--text-primary，hex）；null 时按 nativeTheme 深浅取通用色兜底。
+// Renderer-derived window-control colors (following the specific theme's --bg-app/--text-primary, hex); when null, falls back to generic colors by nativeTheme dark/light.
 let overlayColors: { color: string; symbolColor: string } | null = null;
-/** 通用深/浅窗控配色（无渲染层派生色时的兜底，按 nativeTheme 有效深浅）。 */
+/** Generic dark/light window-control colors (fallback when there is no renderer-derived color, by nativeTheme effective dark/light). */
 function genericOverlayColors(): { color: string; symbolColor: string } {
   return nativeTheme.shouldUseDarkColors ? TITLE_BAR_OVERLAY.dark : TITLE_BAR_OVERLAY.light;
 }
-/** 当前窗控 overlay（渲染层派生色优先，否则通用色）+ 高度（与 .app-titlebar 一致 36px）。 */
+/** Current window-control overlay (renderer-derived color first, otherwise generic color) + height (36px, matching .app-titlebar). */
 function currentOverlay(): { color: string; symbolColor: string; height: number } {
   return { ...(overlayColors ?? genericOverlayColors()), height: 36 };
 }
 /**
- * 由渲染层在主题应用后经 IPC 调用：把当前主题派生的窗控配色（color=--bg-app、symbolColor=--text-primary）
- * 设给所有窗口；传 null 回退通用深/浅色。使窗控按钮与具体主题的标题栏底色精确同色，而非仅通用深/浅。
+ * Called by the renderer via IPC after the theme is applied: sets the current theme-derived
+ * window-control colors (color=--bg-app, symbolColor=--text-primary) on all windows; passing null
+ * falls back to generic dark/light colors. Makes the window-control buttons exactly match the specific
+ * theme's title-bar background, rather than only generic dark/light.
  */
 export function setWindowControlColors(colors: { color: string; symbolColor: string } | null): void {
   overlayColors = colors;
-  if (process.platform === 'darwin') return; // macOS 无 titleBarOverlay
+  if (process.platform === 'darwin') return; // macOS has no titleBarOverlay
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue;
     try {
       win.setTitleBarOverlay(currentOverlay());
     } catch {
-      /* 平台不支持 setTitleBarOverlay → 忽略 */
+      /* platform does not support setTitleBarOverlay → ignore */
     }
   }
 }
 
 /**
- * 解析建窗尺寸/位置：把期望尺寸（本地记录优先，回退默认）clamp 进**当前显示器工作区**，并据此压低最小
- * 尺寸——否则高 DPI 缩放后工作区（DIP）可能小于默认/最小值，窗口被撑大溢出屏幕（issue：缩放后默认尺寸超屏）。
- * 取光标所在显示器（多屏更贴合「在哪开窗」），按其工作区居中，保证整窗在屏内（不持久化 x/y，仅建窗定位）。
+ * Resolves the window size/position: clamps the desired size (local record first, falling back to
+ * default) into the **current display's work area**, and lowers the minimum size accordingly—otherwise
+ * under high-DPI scaling the work area (DIP) may be smaller than the default/minimum, and the window
+ * gets stretched off-screen (issue: default size exceeds screen after scaling). Takes the display under
+ * the cursor (on multi-screen this better matches "where to open"), centers within its work area, and
+ * guarantees the whole window stays on-screen (does not persist x/y, only positions at creation).
  */
 function resolveWindowBounds(state: WindowState): {
   x: number;
@@ -75,25 +83,27 @@ function resolveWindowBounds(state: WindowState): {
 }
 
 /**
- * 主窗口管理：建窗（恢复尺寸 + 自绘标题栏 + 外链路由 + 首帧显示/关 splash）+ resize/move/close 防抖回写。
- * windowState 是实例可变状态（跨多次 create——如 macOS activate 重建——保持最新），故以 class 封装；
- * 异步载入由 loadWindowManager 完成（构造同步、不持异步）。
+ * Main window manager: window creation (restore size + self-drawn title bar + external-link routing +
+ * first-paint show/close splash) + debounced write-back on resize/move/close.
+ * windowState is instance-mutable state (kept up to date across multiple create calls—e.g. macOS
+ * activate re-creation), so it is wrapped in a class; async loading is done by loadWindowManager
+ * (construction is synchronous, holds nothing async).
  */
 export class WindowManager {
   constructor(
     private readonly stateStore: JsonFileStateStore,
-    /** state 目录绝对路径；关窗同步落盘兜底用（见 writeWindowStateSync）。 */
+    /** Absolute path of the state directory; used for the synchronous write-to-disk fallback on window close (see writeWindowStateSync). */
     private readonly stateDir: string,
     private readonly logger: Logger,
-    /** 进程启动时刻，用于度量到首帧（ready-to-show）的启动耗时。 */
+    /** Process start moment, used to measure the startup elapsed time to the first paint (ready-to-show). */
     private readonly startMs: number,
-    /** 当前窗口状态（尺寸/最大化）；随 resize/maximize/close 回写。 */
+    /** Current window state (size/maximized); written back on resize/maximize/close. */
     private windowState: WindowState,
   ) {}
 
-  /** 创建主窗口（首个传 splash，主界面首帧就绪时关闭它；macOS activate 再建时不传）。 */
+  /** Creates the main window (the first call passes splash, closed when the main UI's first paint is ready; macOS activate re-creation does not pass it). */
   create(splash?: BrowserWindow): void {
-    // 尺寸/位置：本地记录优先、回退默认，并按当前显示器工作区 clamp + 居中（高 DPI 缩放下防溢出屏幕）。
+    // Size/position: local record first, falling back to default, and clamped + centered within the current display's work area (prevents overflowing the screen under high-DPI scaling).
     const bounds = resolveWindowBounds(this.windowState);
     const win = new BrowserWindow({
       x: bounds.x,
@@ -103,15 +113,16 @@ export class WindowManager {
       minWidth: bounds.minWidth,
       minHeight: bounds.minHeight,
       show: false,
-      // 首帧前的窗口底色与 app 一致，避免显示瞬间白闪
+      // Window background before the first paint matches the app, to avoid a white flash at the display instant
       backgroundColor: '#1e1e1e',
-      // 无边框 + 自绘标题栏（VS Code 风）：macOS 保留红绿灯并下移到自绘标题栏内；Windows/Linux 用
-      // titleBarOverlay 让系统继续画窗控按钮，渲染层只接管中间标题区。高度需与 .app-titlebar 一致（36px）。
+      // Frameless + self-drawn title bar (VS Code style): macOS keeps the traffic lights and shifts them
+      // down into the self-drawn title bar; Windows/Linux use titleBarOverlay to let the system keep
+      // drawing the window-control buttons, with the renderer taking over only the middle title area. Height must match .app-titlebar (36px).
       titleBarStyle: 'hidden',
       ...(process.platform === 'darwin'
         ? { trafficLightPosition: { x: 12, y: 11 } }
         : { titleBarOverlay: currentOverlay() }),
-      // dev 下显式给窗口图标；打包态窗口/任务栏图标走 exe 内嵌（electron-builder），故仅 dev 设置。
+      // In dev, explicitly set the window icon; in packaged mode the window/taskbar icon comes from the exe embed (electron-builder), so only set it in dev.
       icon: app.isPackaged
         ? undefined
         : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
@@ -123,13 +134,13 @@ export class WindowManager {
       },
     });
 
-    // 快照当前窗口状态。getNormalBounds 取「非最大化」尺寸，故最大化时记录的仍是还原后的正常大小；
-    // 最大化态另存布尔位，下次启动据此恢复。
+    // Snapshot the current window state. getNormalBounds takes the "non-maximized" size, so what is
+    // recorded while maximized is still the restored normal size; the maximized state is stored separately as a boolean, restored on next startup.
     const snapshot = (): WindowState => {
       const b = win.getNormalBounds();
       return { width: b.width, height: b.height, maximized: win.isMaximized() };
     };
-    // 记住窗口大小 / 最大化：尺寸 resize 防抖回写，最大化切换即时回写（离散、低频）。写盘失败不影响使用。
+    // Remember window size / maximized: size resize is written back debounced, maximize toggles are written back immediately (discrete, low frequency). Write failures do not affect usage.
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
     const persist = (): void => {
       if (win.isDestroyed()) return;
@@ -142,11 +153,11 @@ export class WindowManager {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(persist, 400);
     };
-    // 不监听 move：仅存尺寸（不存 x/y），位置变化无需回写。
+    // Do not listen to move: only size is stored (not x/y), so position changes need no write-back.
     win.on('resize', scheduleSave);
     win.on('maximize', persist);
     win.on('unmaximize', persist);
-    // 关窗同步落盘：close 后进程即退出，异步写来不及 flush（最大化 / resize 后秒关会丢状态）→ 同步写兜底。
+    // Synchronous write-to-disk on close: after close the process exits immediately, and an async write cannot flush in time (closing within a second of maximize / resize would lose state) → synchronous write fallback.
     win.on('close', () => {
       if (win.isDestroyed()) return;
       if (saveTimer) clearTimeout(saveTimer);
@@ -158,8 +169,8 @@ export class WindowManager {
       }
     });
 
-    // 主界面首帧就绪：恢复最大化态 → 显示主窗口 → 关闭 splash，并记录进程启动→首帧耗时。
-    // maximize 必须放到这里：建窗后即调用会让无边框窗口在内容就绪前以空白态抢先出现（盖过/早于 splash）。
+    // Main UI first paint ready: restore maximized state → show main window → close splash, and record the process-start→first-paint elapsed time.
+    // maximize must go here: calling it right after window creation would make the frameless window appear prematurely in a blank state before content is ready (covering/preceding the splash).
     win.once('ready-to-show', () => {
       if (this.windowState.maximized) win.maximize();
       win.show();
@@ -170,23 +181,24 @@ export class WindowManager {
       );
     });
 
-    // 'auto' 主题下 OS 深浅变化时 nativeTheme 发 'updated'：按当前 overlay（渲染层派生色优先，否则通用色）
-    // 重置窗控配色兜底（macOS 无 titleBarOverlay，不注册）。具体主题的精确配色由渲染层经 setWindowControlColors
-    // 主动推送（见 useGlobalTheme），此处仅在渲染层未推送时按 nativeTheme 深浅回退。
+    // Under the 'auto' theme, nativeTheme emits 'updated' on OS dark/light changes: reset the
+    // window-control colors as a fallback by the current overlay (renderer-derived color first, otherwise
+    // generic color) (macOS has no titleBarOverlay, not registered). The specific theme's exact colors are
+    // actively pushed by the renderer via setWindowControlColors (see useGlobalTheme); here it only falls back by nativeTheme dark/light when the renderer has not pushed.
     if (process.platform !== 'darwin') {
       const onThemeUpdated = (): void => {
         if (win.isDestroyed()) return;
         try {
           win.setTitleBarOverlay(currentOverlay());
         } catch {
-          /* 平台不支持 setTitleBarOverlay → 忽略 */
+          /* platform does not support setTitleBarOverlay → ignore */
         }
       };
       nativeTheme.on('updated', onThemeUpdated);
       win.on('closed', () => nativeTheme.off('updated', onThemeUpdated));
     }
 
-    // 把 <a target="_blank"> / window.open 都路由到 OS 默认浏览器，不在 Electron 内开新窗口。
+    // Route both <a target="_blank"> / window.open to the OS default browser, not opening new windows inside Electron.
     win.webContents.setWindowOpenHandler(({ url }) => {
       void shell.openExternal(url);
       return { action: 'deny' };
@@ -200,10 +212,10 @@ export class WindowManager {
   }
 }
 
-/** 载入窗口状态（缺失/损坏 → 空对象，回退默认尺寸）并构造 WindowManager。 */
+/** Loads the window state (missing/corrupt → empty object, falling back to default size) and constructs the WindowManager. */
 export async function loadWindowManager(deps: {
   stateStore: JsonFileStateStore;
-  /** state 目录绝对路径（= JsonFileStateStore 的根目录）；关窗同步落盘用。 */
+  /** Absolute path of the state directory (= JsonFileStateStore's root); used for the synchronous write-to-disk on window close. */
   stateDir: string;
   logger: Logger;
   startMs: number;

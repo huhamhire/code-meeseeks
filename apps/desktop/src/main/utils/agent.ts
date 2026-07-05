@@ -1,6 +1,6 @@
 import type { LlmProfile } from '@meebox/shared';
 
-/** 从 llm config 拿当前选中的 profile；active_id 空或找不到都返回 null。 */
+/** Get the currently selected profile from llm config; returns null when active_id is empty or not found. */
 export function resolveActiveLlmProfile(llm: {
   profiles: LlmProfile[];
   active_id: string;

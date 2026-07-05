@@ -1,10 +1,10 @@
-// chat 面板内 pr-agent run 的状态输出：失败 / 占用 banner、运行中视图、run 结果头
-// (RunMeta 行 + 各类胶囊 + 状态徽标)、/ask 提问行、排队卡片。findings 见 chat-findings。
+// Status output of a pr-agent run in the chat panel: failure / busy banner, running view, run result header
+// (RunMeta row + various pills + status badge), /ask question row, queued card. For findings see chat-findings.
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
-// === 失败 banner ===
+// === failure banner ===
 .chat-error {
   background: $color-danger-fade;
   border: 1px solid $color-danger-border;
@@ -20,7 +20,7 @@
   }
 }
 
-// 重试按钮：ghost 图标按钮（跟 .chat-pane-send 共用外框），浮到 banner 顶行右侧
+// Retry button: ghost icon button (shares outer frame with .chat-pane-send), floated to the right of the banner top row
 .chat-run-retry {
   @include ghost-btn;
   float: right;
@@ -41,7 +41,7 @@
   color: $text-muted;
 }
 
-// 失败 run 内嵌的 stderr / stdout 折叠区：在 chat-error 红色 banner 里多一层缩进
+// stderr / stdout collapsible area embedded in a failed run: one extra level of indentation inside the chat-error red banner
 .chat-error-stderr,
 .chat-error-stdout {
   margin-top: $space-3;
@@ -53,7 +53,7 @@
     padding: $space-1 0;
     user-select: none;
   }
-  // 内嵌的 stdout panel 用更小的字号 + 限高，避免遮住下方 finding 列表
+  // The embedded stdout panel uses a smaller font size + height cap, to avoid covering the finding list below
   .chat-run-stdout {
     max-height: 280px;
     font-size: $fs-xs;
@@ -61,17 +61,17 @@
   }
 }
 
-// === 运行中：spinner + 实时 stdout ===
+// === running: spinner + live stdout ===
 .chat-run-running {
   display: flex;
   flex-direction: column;
   gap: $space-3;
 }
 
-// 阶段推断 chip：从 stdout 命中关键字得到的当前阶段文案 (启动 / 解析 diff /
-// 组装 prompt / 等待 LLM 响应)。放在 RunMeta 行下方独立一行，跟 stdout 之间
-// 用 gap 隔开 — 不挤进 chip 行避免横向溢出，单独一行也让"当前在做什么"更醒目
-// 度量/配色走 chat-chip + chat-chip-md + chat-chip-quiet + chat-chip-accent，这里只留布局
+// Phase-inference chip: current phase text derived from keyword hits in stdout (startup / parsing diff /
+// assembling prompt / awaiting LLM response). Placed on its own row below the RunMeta row, separated from
+// stdout by a gap — not crammed into the chip row to avoid horizontal overflow; a dedicated row also makes "what's happening now" more prominent.
+// Metrics/coloring go through chat-chip + chat-chip-md + chat-chip-quiet + chat-chip-accent; only layout is kept here
 .chat-run-phase {
   align-self: flex-start;
 }
@@ -91,15 +91,15 @@
   overflow-y: auto;
 }
 
-// === Run 结果 ===
+// === Run result ===
 .chat-run-result {
   display: flex;
   flex-direction: column;
   gap: $space-4;
 }
 
-// /ask 用户提问行：贴在 RunMeta 下方，左侧 `?` 图标 + 提问内容，
-// 视觉上让人立即识别"这是用户输入而不是答案"
+// /ask user question row: sits below RunMeta, `?` icon on the left + question content,
+// visually letting the reader immediately recognize "this is user input, not the answer"
 .chat-user-msg {
   display: flex;
   gap: $space-3;
@@ -115,7 +115,7 @@
   svg {
     flex-shrink: 0;
     color: $color-info;
-    margin-top: 2px; // 跟首行文字基线对齐
+    margin-top: 2px; // align with the first line's text baseline
   }
 }
 .chat-user-msg-body {
@@ -125,14 +125,14 @@
 }
 .chat-run-meta {
   display: flex;
-  flex-wrap: wrap; // 空间不够时整块 chip 换行，而非互相挤压重叠
+  flex-wrap: wrap; // when space runs out, wrap whole chips instead of squeezing/overlapping each other
   align-items: center;
   gap: $space-3;
   font-size: $fs-sm;
   padding-bottom: $space-3;
   border-bottom: 1px solid $border-muted;
 
-  // chip 不收缩：保持各自完整宽度，宁可换行也不压缩文字造成重叠
+  // chips don't shrink: keep each at full width, wrapping rather than compressing text into overlap
   > * {
     flex-shrink: 0;
   }
@@ -140,43 +140,43 @@
 .chat-run-tool {
   font-family: $font-mono;
   font-weight: 600;
-  font-size: $fs-xs; // 跟 chip 一档；align-items:center 下基线就齐了
+  font-size: $fs-xs; // same tier as the chip; under align-items:center the baseline aligns
   color: $color-info;
 }
-// 中性胶囊：模型 / token 用量 / 耗时共用 chat-chip + chat-chip-quiet + chat-chip-neutral；
-// 各自只补字体差异（下方 mono / 截断）。
+// Neutral pills: model / token usage / duration share chat-chip + chat-chip-quiet + chat-chip-neutral;
+// each only adds font differences (mono / truncation below).
 .chat-run-tokens,
 .chat-run-turns,
 .chat-run-duration {
   font-family: $font-mono;
   font-variant-numeric: tabular-nums;
 }
-// 轮次胶囊：循环箭头图标 + 次数，图标与数字对齐
+// Turns pill: loop-arrow icon + count, icon aligned with the number
 .chat-run-turns {
   display: inline-flex;
   align-items: center;
   gap: 3px;
 }
-// 单 commit 范围徽标：提交图标 + 短 SHA，图标与 SHA 对齐（等宽字体）
+// Single-commit scope badge: commit icon + short SHA, icon aligned with the SHA (monospace font)
 .chat-run-scope {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   font-family: $font-mono;
 }
-// 输入 / 输出各自一组（箭头 + 数字[+ 缓存]）：独立 hover 提示的悬浮目标，内部行内对齐
+// Input / output each form a group (arrow + number[+ cache]): a hover target for an independent hover tooltip, aligned inline internally
 .chat-token-grp {
   display: inline-flex;
   align-items: center;
 }
-// token 用量箭头：↑输入(绿) / ↓输出(红)，run 卡片与思考步骤共用
+// Token usage arrows: ↑input (green) / ↓output (red), shared by the run card and thinking steps
 .chat-token-in {
   color: $color-token-in;
 }
 .chat-token-out {
   color: $color-token-out;
 }
-// cache_read 拆分（↑总量 后的缓存命中量）：与输入数字拉开间隔，数字同色、柱体图标浅蓝并与数字对齐
+// cache_read split (cache-hit amount after ↑total): spaced apart from the input number, same-colored number, light-blue bar icon aligned with the number
 .chat-token-cache {
   display: inline-flex;
   align-items: center;
@@ -187,14 +187,14 @@
     color: $color-token-cache;
   }
 }
-// 模型名可能很长：单行截断 + 省略号，避免一个 chip 撑爆整行
+// Model name can be very long: single-line truncation + ellipsis, so one chip doesn't blow out the whole row
 .chat-run-model {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-// 开始时间：纯文本不带胶囊背景；margin-left:auto 顶到 chip 队列最右，把视觉
-// 权重让给左侧主信息 (tool/状态/strategy/时长)，自己只作为 "什么时候跑的" 标注
+// Start time: plain text without a pill background; margin-left:auto pushes it to the far right of the chip queue, ceding visual
+// weight to the main info on the left (tool/status/strategy/duration), serving only as a "when it ran" annotation
 .chat-run-time {
   margin-left: auto;
   font-family: $font-mono;
@@ -203,7 +203,7 @@
   color: $text-muted;
   white-space: nowrap;
 }
-// 状态行最右的删除按钮：默认低调隐于行内，hover 变红强调「删除本条记录」。
+// Delete button at the far right of the status row: subdued and blended into the row by default, turns red on hover to emphasize "delete this record".
 .chat-run-delete {
   display: inline-flex;
   align-items: center;
@@ -216,14 +216,14 @@
   border-radius: $radius-sm;
   opacity: 0.6;
 
-  // hover 用统一的高饱和危险红（$color-danger-strong），与 .btn-icon-danger / 拒绝按钮一致
+  // hover uses the unified high-saturation danger red ($color-danger-strong), consistent with .btn-icon-danger / the reject button
   &:hover {
     background: $color-danger-strong-fade;
     color: $color-danger-strong;
     opacity: 1;
   }
 }
-// 度量走 chat-chip；这里只留 status 专属：大写 + spinner gap + 实色状态变体
+// Metrics go through chat-chip; only status-specific bits are kept here: uppercase + spinner gap + solid-color status variants
 .chat-run-status {
   gap: $space-2;
   text-transform: uppercase;
@@ -232,9 +232,9 @@
     background: $color-accent;
     color: $text-on-accent;
 
-    // status 内嵌 Spinner 跟"运行中"文字 inline 排。.spinner 默认 12×12，
-    // border-top-color: $color-accent 在蓝底上看不见 — 这里 override 用半透明
-    // 白 + 实白顶部，跟 chip 文字色对比明显
+    // The Spinner embedded in status lays out inline with the "running" text. .spinner defaults to 12×12,
+    // and border-top-color: $color-accent is invisible on a blue background — here we override with translucent
+    // white + solid white top, giving clear contrast against the chip text color
     .spinner {
       width: 10px;
       height: 10px;
@@ -257,19 +257,19 @@
     background: $border-default;
     color: $text-primary;
   }
-  // 排队中：弱化的中性胶囊，区别于运行中的高亮蓝
+  // queued: a muted neutral pill, distinct from the highlighted blue of running
   &.chat-run-status-queued {
     background: $bg-surface;
     color: $text-muted;
   }
 }
 
-// 排队中卡片：比运行中更轻，留点上下间距跟历史/运行中区隔
+// Queued card: lighter than running, with some top/bottom spacing to separate it from history/running
 .chat-run-queued {
   padding: $space-3 0;
   opacity: 0.85;
 }
-// 取消排队按钮：跟在 meta 行最右，纯图标
+// Cancel-queue button: trails at the far right of the meta row, icon-only
 .chat-run-queued-cancel {
   margin-left: auto;
   display: inline-flex;
@@ -302,13 +302,13 @@
   }
 }
 
-// 复评「复评自 <file:line>」徽标：可点击回链被引用的原 finding 所在 run。
+// Re-review "re-reviewed from <file:line>" badge: a clickable back-link to the run containing the referenced original finding.
 .chat-run-ref-badge {
   align-self: flex-start;
   max-width: 100%;
   display: inline-flex;
-  // 图标对齐定位文本首行（不随多行路径垂直居中而单独成行）；图标与定位文本不在徽标层换行——
-  // 换行交给定位文本内部，否则定位文本整体掉到图标下一行、图标被孤立成单独一行。
+  // Icon aligns with the first line of the location text (not centered onto its own line with a multi-line path); icon and location text don't wrap at the badge level —
+  // wrapping is delegated to inside the location text, otherwise the whole location text drops to the line below the icon and the icon is isolated on its own line.
   align-items: flex-start;
   flex-wrap: nowrap;
   gap: $space-1 $space-2;
@@ -323,19 +323,19 @@
 
   svg {
     flex-shrink: 0;
-    // 12px 图标在首行内与文字光学对齐（align-items:flex-start 顶对齐后略微下压）。
+    // The 12px icon is optically aligned with the text within the first line (nudged down slightly after align-items:flex-start top-aligns it).
     margin-top: 2px;
   }
   .chat-run-ref-loc {
-    // 行内文本流（非 flex）：路径与行号作为连续行内内容换行——行号紧跟路径末行，而非作为独立 flex
-    // 项掉到新行。作为徽标 flex 子项 display 被 blockify 为块、占余宽并在内部换行（首行仍与图标同排）。
+    // Inline text flow (not flex): path and line number wrap as continuous inline content — the line number follows the path's last line, rather than dropping to a new line as an independent flex
+    // item. As a badge flex child its display is blockified to block, taking the remaining width and wrapping internally (the first line still sits alongside the icon).
     display: block;
     min-width: 0;
     flex: 1 1 auto;
   }
   code {
     font-family: $font-mono;
-    // 换行规则同代码建议定位（.chat-finding-anchor code）：优先 BreakablePath 的软断点，超宽兜底任意断。
+    // Wrapping rules match the code-suggestion location (.chat-finding-anchor code): prefer BreakablePath's soft break points, falling back to arbitrary breaks when overly wide.
     word-break: normal;
     overflow-wrap: anywhere;
     min-width: 0;
@@ -345,7 +345,7 @@
   }
 }
 
-// 复评卡 ↔ 原 finding 卡互链滚动定位时的短暂高亮。
+// Brief highlight when the re-review card ↔ original finding card cross-link scrolls into position.
 .chat-run-flash {
   animation: chat-run-flash-kf 1.5s ease-out;
 }

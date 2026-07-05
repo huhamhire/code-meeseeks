@@ -6,16 +6,16 @@ import type { AppPaths, Config } from '@meebox/shared';
 export interface BootstrapResult {
   paths: AppPaths;
   config: Config;
-  /** ~/.code-meeseeks/ 本次启动时新建（首启） */
+  /** ~/.code-meeseeks/ created on this launch (first run) */
   firstRun: boolean;
 }
 
 /**
- * 应用启动时调用一次：
- * - 确保 `~/.code-meeseeks/` 及子目录存在
- * - 若 config.yaml 不存在，写入默认值
- * - 若已存在，读出并 schema 校验
- * - 解析 reposDir，返回 AppPaths + Config + firstRun 标志
+ * Called once at application startup:
+ * - Ensure `~/.code-meeseeks/` and its subdirectories exist
+ * - If config.yaml is absent, write default values
+ * - If present, read it and validate against the schema
+ * - Resolve reposDir, return AppPaths + Config + firstRun flag
  */
 export async function ensureWorkspace(): Promise<BootstrapResult> {
   const appDir = getAppDir();
@@ -27,7 +27,7 @@ export async function ensureWorkspace(): Promise<BootstrapResult> {
     firstRun = true;
   }
 
-  // 子目录创建放在配置加载之前，避免后续日志/state 写入时还需检查
+  // Create subdirectories before loading config, so later log/state writes need not re-check
   const stubPaths = buildAppPaths('~/.code-meeseeks/repos');
   for (const dir of [
     stubPaths.appDir,

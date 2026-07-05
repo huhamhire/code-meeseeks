@@ -2,8 +2,9 @@ import { useTranslation } from 'react-i18next';
 import type { AgentTodoItem } from '@meebox/shared';
 
 /**
- * 规划 Agent 的计划面板：展示当前 todo（勾选 = 已完成）。运行中据 agent:planUpdated 实时刷新、随新输入
- * 重排；切 PR / 重启经 agent:getSession 水合。空计划不渲染。
+ * Plan panel for the planning Agent: shows the current todo (checked = done). Refreshes live from
+ * agent:planUpdated while running, reorders with new input; hydrates via agent:getSession on PR switch /
+ * restart. Empty plan is not rendered.
  */
 export function PlanPanel({ todo }: { todo: AgentTodoItem[] }) {
   const { t } = useTranslation();

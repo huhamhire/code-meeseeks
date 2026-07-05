@@ -6,10 +6,10 @@ import { Step } from '../context.js';
 import { isVerdict, summaryPrompt, type ReviewStepCtx } from './shared.js';
 
 /**
- * 收尾总结 + 建议。模型输出「纯 markdown 正文 + 末尾一行判定 JSON」（见 summary.md）：正文走
- * stripTrailingJson 剥掉末尾判定（含被截断的 dangling JSON 兜底），判定走 extractTrailingJson 单独解析。
- * 不再把整段 markdown 塞进 JSON 字符串——避免正文里的引号/换行破坏 JSON 解析、并在解析失败时被腰斩。
- * 给足输出 token 上限，避免 provider 默认上限截断正文。
+ * Summary + suggestion. The model outputs "plain markdown body + a one-line verdict JSON at the end" (see summary.md): the body goes through
+ * stripTrailingJson to strip the trailing verdict (with a fallback for truncated dangling JSON), the verdict is parsed separately via extractTrailingJson.
+ * No longer stuffing the whole markdown into a JSON string — avoids quotes/newlines in the body breaking JSON parsing and getting cut off on parse failure.
+ * Give a generous output token cap to avoid the provider's default cap truncating the body.
  */
 export class SummaryStep extends Step<ReviewStepCtx> {
   readonly name = 'summary';
@@ -30,18 +30,18 @@ export class SummaryStep extends Step<ReviewStepCtx> {
     });
     const sumMs = Date.now() - sumStart;
     ctx.rec.track(sum.usage);
-    // 兜底：模型若仍把整段包进 JSON 字符串（违背 prompt），stripTrailingJson 会把整个对象剥空 → 用
-    // salvageProse 从 "summary"/"final" 字段捞回正文。
+    // Fallback: if the model still wraps the whole thing in a JSON string (against the prompt), stripTrailingJson strips the whole object to empty → use
+    // salvageProse to recover the body from the "summary"/"final" field.
     const summary = stripTrailingJson(sum.text).trim() || salvageProse(sum.text).trim();
-    // 末尾判定：新格式是扁平 {verdict,reason}；兼容旧格式（整体 JSON 的嵌套 recommendation 字段）。
+    // Trailing verdict: the new format is a flat {verdict,reason}; compatible with the legacy format (the nested recommendation field of a whole JSON object).
     const obj = extractTrailingJson<{
       verdict?: unknown;
       reason?: unknown;
       recommendation?: { verdict?: unknown; reason?: unknown };
     }>(sum.text);
     const rec = obj?.recommendation ?? obj;
-    // 判定解析失败 → 转人工复核、不带理由：该兜底对用户无价值，前端按空 reason 隐藏灰字（不再输出
-    // 「无法解析建议，转人工复核」）。模型给出的合法 manual_review 理由仍照常展示。
+    // Verdict parse failure → manual_review with no reason: this fallback has no value to the user, the frontend hides the grey text on an empty reason (no longer outputting
+    // "failed to parse suggestion, switching to manual review"). A valid manual_review reason from the model is still displayed as usual.
     const recommendation: AgentRecommendation =
       rec && isVerdict(rec.verdict)
         ? { verdict: rec.verdict, reason: typeof rec.reason === 'string' ? rec.reason : '' }

@@ -2,19 +2,19 @@ import type { PrComment } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
 
 /**
- * PR 评论快照文件。落在 `prs/<localId>/comments.json`。
+ * PR comments snapshot file. Lives at `prs/<localId>/comments.json`.
  *
- * 失效判定：`pr_updated_at` 跟当前 PR meta 的 updatedAt 不一致即视为 stale，
- * 需要重新从远端拉 + 覆写本文件。**注意 updatedAt 并非对所有平台都随评论跳**——含回复的平台
- * （GitHub 等）新评论会跳，但 Bitbucket 的 updatedDate 不随评论 / 回复变化（见 poller.ts 的
- * `commentCountIncludesReplies` 逻辑）。故轮询发现评论变更时由主进程显式失效本缓存 + 广播
- * comments:changed（见 apps/desktop main 的 invalidateCommentsCache），不依赖 updatedAt 自失效。
+ * Staleness check: if `pr_updated_at` does not match the current PR meta's updatedAt it is considered stale,
+ * requiring a re-fetch from remote + overwrite of this file. **Note that updatedAt does not bump with comments on all platforms**—on platforms with replies
+ * (GitHub etc.) a new comment bumps it, but Bitbucket's updatedDate does not change with comments / replies (see poller.ts's
+ * `commentCountIncludesReplies` logic). So when polling discovers a comment change the main process explicitly invalidates this cache + broadcasts
+ * comments:changed (see apps/desktop main's invalidateCommentsCache), rather than relying on updatedAt to self-invalidate.
  */
 export interface CommentsCacheFile {
   schema_version: 1;
-  /** 写入本缓存时 PR meta 的 updatedAt 值；stale 判定的对比目标 */
+  /** The PR meta's updatedAt value when this cache was written; the comparison target for the stale check */
   pr_updated_at: string;
-  /** 本次远端拉取完成的 ISO 时间，便于排障 */
+  /** ISO time when this remote fetch completed, for troubleshooting */
   fetched_at: string;
   comments: PrComment[];
 }
@@ -42,7 +42,7 @@ export async function writeCommentsCache(
 }
 
 /**
- * 缓存是否需要重拉。null / pr_updated_at 跟当前不一致都算 stale。
+ * Whether the cache needs a re-fetch. null / pr_updated_at not matching the current one both count as stale.
  */
 export function isCommentsCacheStale(
   cache: CommentsCacheFile | null,

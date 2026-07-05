@@ -22,7 +22,7 @@ export function ProxyEditorModal({
     result: { ok: boolean; reason?: string } | null;
   }>({ testing: false, result: null });
   const [pwVisible, setPwVisible] = useState(false);
-  // 改任意字段都清掉上次测试结果（避免误导）
+  // Changing any field clears the previous test result (to avoid misleading)
   const patch = (p: Partial<Config['proxy']>): void => {
     onChange({ ...draft, ...p });
     setTest({ testing: false, result: null });
@@ -49,7 +49,7 @@ export function ProxyEditorModal({
       </label>
       {draft.enabled && (
         <>
-          {/* 字段名放输入框前（modal-kv 网格）；用户名 / 密码分上下两行，均可选 */}
+          {/* Field names precede the inputs (modal-kv grid); username / password on separate rows, both optional */}
           <div className="modal-kv" style={{ marginTop: 10, alignItems: 'center' }}>
             <div className="modal-kv-key">{t('settings.proxyHost')}</div>
             <div className="modal-kv-val">

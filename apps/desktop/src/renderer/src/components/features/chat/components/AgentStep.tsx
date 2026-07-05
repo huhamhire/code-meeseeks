@@ -6,15 +6,18 @@ import { formatElapsed } from '../utils/format';
 import { Md, Spinner, TokenStat } from './shared';
 
 /**
- * 内联思考步骤（类 Claude Code「先思考→定步骤→执行步骤」）：穿插在时间线里、排在所选工具的 run
- * 卡片之前。两行展示——首行带 bullet 标记的「已思考 xx s」（单步思考耗时，非总累计），次行另起展示
- * 步骤结果（思考内容 / 判读结论）。不展示选了哪个工具（由随后的 run 卡片体现）；工具执行的进度 /
- * 计时也归 run 卡片。
+ * Inline thinking step (Claude Code-like "think first → decide steps → execute steps"): interleaved
+ * in the timeline, ordered before the selected tool's run card. Two-line display — the first line has
+ * a bullet marker "thought for xx s" (single-step thinking time, not cumulative total), the second
+ * line separately shows the step result (thinking content / judgment conclusion). Does not show which
+ * tool was selected (reflected by the subsequent run card); tool execution progress / timing also
+ * belong to the run card.
  */
 export function AgentStepRow({ step }: { step: AgentStep }) {
   const { t } = useTranslation();
-  // 首行始终带 bullet 标记：有思考计时 → 「已思考 xx s」；无计时（如微流程固定派发步）→ 用思考内容
-  // 当首行，保证每一步都可见、都有分段标记，绝不渲染成空行。
+  // The first line always has a bullet marker: with thinking timer → "thought for xx s"; without a
+  // timer (e.g. a micro-flow's fixed dispatch step) → use the thinking content as the first line,
+  // ensuring every step is visible and has a segment marker, never rendered as an empty line.
   const hasTime = step.thinkMs != null;
   const headText = hasTime
     ? t('chatPane.agent.thoughtFor', { time: formatElapsed(step.thinkMs ?? 0) })
@@ -25,16 +28,17 @@ export function AgentStepRow({ step }: { step: AgentStep }) {
         <span className="chat-agent-step-bullet" aria-hidden>
           •
         </span>
-        {/* AutoPilot 后台评审的首步打机器人 chip，标识「这次评审由 AutoPilot 触发」。 */}
+        {/* The first step of an AutoPilot background review gets a robot chip, marking "this review was triggered by AutoPilot". */}
         {step.autopilot && (
           <span className="chat-agent-step-autopilot" title={t('chatPane.autopilotRun')}>
             <RobotIcon size={12} />
           </span>
         )}
         {headText && <span>{headText}</span>}
-        {/* 本步**单独**的 token 用量（不累计）：judge / 总结 / 规划等经独立 LLM 通道的推理步带值；
-            与 run 卡片同款 ↑输入(绿)[⛁缓存]/↓输出(红)，输入输出各自独立 hover、靠行尾对齐。
-            describe/review/ask 的开销在各自 run 卡片上。 */}
+        {/* This step's **standalone** token usage (not cumulative): reasoning steps via an independent LLM
+            channel like judge / summary / planning carry a value; same style as the run card ↑input(green)
+            [⛁cache]/↓output(red), input and output hover independently, aligned to the line end.
+            describe/review/ask costs are on their respective run cards. */}
         {step.usage &&
         (step.usage.promptTokens !== undefined || step.usage.completionTokens !== undefined) ? (
           <span className="chat-agent-step-tokens">
@@ -47,8 +51,9 @@ export function AgentStepRow({ step }: { step: AgentStep }) {
           </span>
         ) : null}
       </div>
-      {/* 思考 / 判读正文走 markdown：保留换行并渲染预格式化内容（代码块 / 列表 / 内联代码），
-          与助手回复一致；纯文本内容渲染结果不变。 */}
+      {/* Thinking / judgment body goes through markdown: preserves line breaks and renders preformatted
+          content (code blocks / lists / inline code), consistent with assistant replies; plain-text
+          content renders unchanged. */}
       {hasTime && step.thought && (
         <div className="chat-agent-step-body markdown">
           <Md>{step.thought}</Md>
@@ -64,10 +69,13 @@ export function AgentStepRow({ step }: { step: AgentStep }) {
 }
 
 /**
- * 实时「思考中」指示：仅在 Agent 自身 LLM 正在推理（无工具 run 占用 / 排队）时挂载。计时锚定到传入的
- * `since`（最近一次活动结束时刻，由父级从持久数据算出），而非组件挂载——切走再切回不清零；新一步产生
- * 后 since 前移 → 计时回到当前步从零起算（仍是单步思考时长，非总累计）。
- * 首行布局与已完成步骤对齐：spinner 充当进行中的 bullet 标记，「思考中」后紧贴计时。
+ * Live "thinking" indicator: mounted only when the Agent's own LLM is reasoning (no tool run occupying /
+ * queued). The timer is anchored to the passed-in `since` (the moment the most recent activity ended,
+ * computed by the parent from persisted data) rather than component mount — switching away and back does
+ * not reset it; once a new step is produced, since advances forward → the timer restarts from zero for
+ * the current step (still single-step thinking duration, not cumulative total).
+ * The first-line layout aligns with completed steps: the spinner acts as the in-progress bullet marker,
+ * with the timer right after "thinking".
  */
 export function ThinkingLive({ since }: { since: number }) {
   const { t } = useTranslation();

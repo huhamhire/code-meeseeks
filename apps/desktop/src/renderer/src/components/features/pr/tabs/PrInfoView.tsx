@@ -18,15 +18,15 @@ interface PrInfoViewProps {
 
 export function PrInfoView({ pr }: PrInfoViewProps) {
   const { t } = useTranslation();
-  // 描述 body 内嵌图片走 IPC 代理 (Bitbucket 私有资源需 PAT 鉴权)，与评论/diff 一致
+  // Images embedded in the description body go through the IPC proxy (Bitbucket private resources need PAT auth), consistent with comments/diff
   const mdComponents = useMemo(
     () => ({ ...mermaidComponents, img: makeBitbucketImageFor(pr.localId, pr.url) }),
     [pr.localId, pr.url],
   );
 
-  // 各平台 adapter 产出的 reviewers 顺序不稳定（GitHub 按 Map 插入序，随评审推进
-  // requested_reviewers 会被移除/补到末尾），每次 poll 列表抖动。展示层按 displayName
-  // 字典序固定排序，name 兜底兜稳，与平台无关。
+  // The reviewers order produced by each platform's adapter is unstable (GitHub uses Map insertion order,
+  // and as review progresses requested_reviewers get removed/appended to the end), so the list jitters every poll.
+  // The display layer sorts stably by displayName in lexicographic order, with name as a stable fallback, platform-agnostic.
   const reviewers = useMemo(
     () =>
       [...pr.reviewers].sort(
@@ -38,14 +38,14 @@ export function PrInfoView({ pr }: PrInfoViewProps) {
   return (
     <div className="pr-info-view">
       <div className="pr-info-content pr-info-layout">
-        {/* 左：描述（主内容）；右：时间线 + 评审者（元信息侧栏，参考 PR overview 布局） */}
+        {/* Left: description (main content); right: timeline + reviewers (metadata sidebar, modeled on PR overview layout) */}
         <div className="pr-info-main">
           {pr.description ? (
             <section className="pr-detail-section">
               <h3>{t('prInfo.description')}</h3>
               <div className="pr-detail-description markdown">
-                {/* Bitbucket 远端用 \r\n 行尾，remark 解析时 CR 跟 LF 各算一次换行 → 单换行
-                    被当成段落分隔，每个 list item 之间多一段空白。归一化成 \n */}
+                {/* Bitbucket remote uses \r\n line endings; when remark parses, CR and LF each count as a line break → a single
+                    newline gets treated as a paragraph separator, adding blank space between each list item. Normalize to \n */}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={REMOTE_REHYPE_PLUGINS}

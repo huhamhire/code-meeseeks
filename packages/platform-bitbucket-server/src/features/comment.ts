@@ -16,13 +16,15 @@ import type {
   BitbucketReactionProperty,
 } from '../types.js';
 
-// emoji ↔ Bitbucket emoticon shortcut（= gemoji shortcode）经共享 gemoji 词表换算：写入（toggle）用
-// emojiToReactionCode；读取展示优先从 twemoji url 码点解（emojiFromTwemojiUrl），shortcut 经
-// reactionCodeToEmoji 回退。实测确认形如 `eyes` 的 shortcode 可用（见 docs/arch/01-platform/04-comment-interactions）。
+// emoji ↔ Bitbucket emoticon shortcut (= gemoji shortcode) converted via the shared gemoji table: writing
+// (toggle) uses emojiToReactionCode; for read/display, prefer decoding code points from the twemoji url
+// (emojiFromTwemojiUrl), falling back to shortcut via reactionCodeToEmoji. Confirmed in practice that a
+// shortcode like `eyes` works (see docs/arch/01-platform/04-comment-interactions).
 
 /**
- * 从 Bitbucket emoticon 的 twemoji 资源 URL 解出 emoji 字符：文件名是 Unicode 码点（连字符分隔多码点，
- * 如 `1f440.svg` → 👀、`2764-fe0f.svg` → ❤️）。解析不出返回 undefined（调用方回退 shortcut 映射）。
+ * Decode the emoji character from a Bitbucket emoticon's twemoji resource URL: the filename is Unicode
+ * code points (hyphen-separated for multiple code points, e.g. `1f440.svg` → 👀, `2764-fe0f.svg` → ❤️).
+ * Returns undefined when it cannot be parsed (caller falls back to the shortcut mapping).
  */
 function emojiFromTwemojiUrl(url: string | undefined): string | undefined {
   if (!url) return undefined;
@@ -35,7 +37,7 @@ function emojiFromTwemojiUrl(url: string | undefined): string | undefined {
   }
 }
 
-/** Bitbucket 评论领域：经 /activities 流归一评论树，发布 / 回复 / 删改走 comments 端点（带乐观锁）。 */
+/** Bitbucket comment domain: normalize the comment tree via the /activities stream; publish / reply / edit-delete go through the comments endpoint (with optimistic lock). */
 export class BitbucketCommentService extends BaseCommentService {
   constructor(
     ctx: ConnectionContext,
@@ -45,8 +47,9 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * 经 /activities 流取全部评论：过滤 COMMENTED + ADDED 的顶层评论（跳过 DELETED/UPDATED 派生事件与
-   * 带 parent 的 reply），按 id 去重，reply 跟随父评论的 .comments 一并归一。
+   * Get all comments via the /activities stream: filter top-level comments that are COMMENTED + ADDED
+   * (skip DELETED/UPDATED derived events and replies with a parent), dedupe by id, and normalize replies
+   * along with their parent comment's .comments.
    */
   async listPullRequestComments(repo: RepoRef, prId: string): Promise<PrComment[]> {
     const seen = new Set<string>();
@@ -68,7 +71,7 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * 发表 summary 评论（仅 text，不带 anchor / parent）。
+   * Post a summary comment (text only, no anchor / parent).
    */
   async publishSummaryComment(repo: RepoRef, prId: string, body: string): Promise<PrComment> {
     const created = await this.client.post<BitbucketComment>(
@@ -79,10 +82,11 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * 发表 inline 评论：把中性锚点翻成 Bitbucket anchor 提交。
+   * Post an inline comment: translate the neutral anchor into a Bitbucket anchor for submission.
    *
-   * anchor 的 line + lineType + fileType 三元组须与该行在 diff 里的真实角色一致，否则 Bitbucket 回
-   * 400；diffType=EFFECTIVE 让评论锚到「当前生效 diff」，PR 后续 push 仍跟随行走。
+   * The anchor's line + lineType + fileType triple must match the line's real role in the diff, otherwise
+   * Bitbucket returns 400; diffType=EFFECTIVE anchors the comment to the "currently effective diff", and it
+   * still follows the line across subsequent PR pushes.
    */
   async publishInlineComment(
     repo: RepoRef,
@@ -98,7 +102,7 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * 回复评论：POST comments，body 带 parent.id；不带 anchor（reply 继承父评论锚点）。
+   * Reply to a comment: POST comments with parent.id in the body; no anchor (a reply inherits the parent comment's anchor).
    */
   async replyToComment(
     repo: RepoRef,
@@ -114,9 +118,9 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * 编辑评论 body：PUT comments/{cid}，payload {text, version}（version 乐观锁，不一致回 409）。
+   * Edit a comment body: PUT comments/{cid}, payload {text, version} (version is an optimistic lock; a mismatch returns 409).
    *
-   * 正常返回更新后的评论（version+1）；上游异常回 204 时抛错（无法确认更新）。
+   * Normally returns the updated comment (version+1); throws when upstream anomalously returns 204 (cannot confirm the update).
    */
   async editComment(
     repo: RepoRef,
@@ -138,7 +142,7 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * 删除评论：DELETE comments/{cid}?version={v}（version 乐观锁必填，不一致 / 有 reply / 非作者回 409/403）。
+   * Delete a comment: DELETE comments/{cid}?version={v} (version optimistic lock is required; mismatch / has replies / not the author returns 409/403).
    */
   async deleteComment(
     repo: RepoRef,
@@ -152,8 +156,8 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * 切换当前用户对评论的 emoji 反应（comment-likes 插件）：add=PUT、remove=DELETE 同一 reactions 端点。
-   * 端点幂等（重复 PUT / 不存在时 DELETE 均 200），故无需先查状态。
+   * Toggle the current user's emoji reaction on a comment (comment-likes plugin): add=PUT, remove=DELETE on the same reactions endpoint.
+   * The endpoint is idempotent (repeated PUT / DELETE when nonexistent both return 200), so there is no need to query state first.
    */
   override async toggleReaction(
     repo: RepoRef,
@@ -170,12 +174,12 @@ export class BitbucketCommentService extends BaseCommentService {
     else await this.client.del(url);
   }
 
-  // ---- 映射（领域私有）----
+  // ---- mapping (domain-private) ----
 
   /**
-   * Bitbucket 评论 → 中性 PrComment（递归归一 reply）。
+   * Bitbucket comment → neutral PrComment (recursively normalize replies).
    *
-   * 透传 Bitbucket 乐观锁 version（删改时调用方须带回，否则 409）；anchor 为空则为 summary 评论。
+   * Passes through the Bitbucket optimistic-lock version (the caller must carry it back on edit/delete, otherwise 409); an empty anchor means a summary comment.
    */
   private mapBitbucketComment(c: BitbucketComment, anchor?: BitbucketCommentAnchor): PrComment {
     return {
@@ -192,11 +196,12 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * Bitbucket `properties.reactions` → 中性 PrReaction[]（形状按真实实例核定）。
+   * Bitbucket `properties.reactions` → neutral PrReaction[] (shape verified against a real instance).
    *
-   * 展示 emoji 优先从 `emoticon.url` 的 twemoji 文件名解码点（如 `1f440.svg` → 👀，对任意 emoji 都成立），
-   * 回退 shortcut 名映射；都得不到则跳过。`mine` 按 `users[]` 是否含当前用户（slug / name 任一匹配）；
-   * 计数取 `users.length`（Bitbucket 不返回 count 字段）。
+   * Display emoji is preferably decoded from the code points of `emoticon.url`'s twemoji filename (e.g.
+   * `1f440.svg` → 👀, valid for any emoji), falling back to the shortcut name mapping; skip if neither works.
+   * `mine` is based on whether `users[]` includes the current user (matching either slug or name); the count
+   * is taken from `users.length` (Bitbucket does not return a count field).
    */
   private mapReactions(reactions: BitbucketReactionProperty[] | undefined): PrReaction[] {
     if (!reactions || reactions.length === 0) return [];
@@ -214,10 +219,11 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * Bitbucket 评论 anchor → 中性锚点。
+   * Bitbucket comment anchor → neutral anchor.
    *
-   * 无行号 = 文件级 / 孤儿 anchor，无法锚到具体行 → 返回 null（退化为 summary）；lineType 偶有缺省时
-   * 兜底 'context'（最保守值，与发布 anchor 的兜底一致）。
+   * No line number = file-level / orphan anchor, cannot anchor to a specific line → return null (degrade to
+   * summary); when lineType is occasionally absent, fall back to 'context' (the most conservative value,
+   * consistent with the publish-anchor fallback).
    */
   private mapBitbucketAnchor(a: BitbucketCommentAnchor): PrCommentAnchor | null {
     if (a.line == null) return null;
@@ -230,9 +236,9 @@ export class BitbucketCommentService extends BaseCommentService {
   }
 
   /**
-   * 中性锚点 → Bitbucket REST anchor 字段（发布 inline 评论用，mapBitbucketAnchor 的反方向）。
+   * Neutral anchor → Bitbucket REST anchor fields (for publishing inline comments, the reverse of mapBitbucketAnchor).
    *
-   * diffType 显式给 'EFFECTIVE'，让评论锚到「当前生效 diff」而非某次具体 commit，PR 后续 push 仍跟随。
+   * diffType is explicitly set to 'EFFECTIVE', anchoring the comment to the "currently effective diff" rather than a specific commit, so it still follows across subsequent PR pushes.
    */
   private toBBAnchor(a: PrCommentAnchor): BitbucketCommentAnchor {
     return {

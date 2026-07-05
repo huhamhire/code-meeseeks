@@ -21,12 +21,12 @@ async function write(rel: string, body: string): Promise<void> {
 }
 
 describe('loadRules', () => {
-  it('空 dir 返回空数组', async () => {
+  it('empty dir returns empty array', async () => {
     const rules = await loadRules('');
     expect(rules).toEqual([]);
   });
 
-  it('dir 不存在调 onWarn 并返回空', async () => {
+  it('nonexistent dir calls onWarn and returns empty', async () => {
     const warns: string[] = [];
     const rules = await loadRules(path.join(tmp, 'no-such-dir'), {
       onWarn: (msg) => warns.push(msg),
@@ -35,7 +35,7 @@ describe('loadRules', () => {
     expect(warns[0]).toMatch(/not found/);
   });
 
-  it('解析 frontmatter + body；缺省字段走默认', async () => {
+  it('parses frontmatter + body; missing fields use defaults', async () => {
     await write(
       'simple.md',
       `---
@@ -65,7 +65,7 @@ priority: 10
     expect(r.instructions).toContain('正文示例');
   });
 
-  it('递归扫描子目录，id 用相对路径', async () => {
+  it('scans subdirectories recursively, id uses relative path', async () => {
     await write('a.md', '---\n---\n\nA');
     await write('sub/b.md', '---\n---\n\nB');
     await write('sub/nested/c.md', '---\n---\n\nC');
@@ -74,7 +74,7 @@ priority: 10
     expect(ids).toEqual(['a.md', 'sub/b.md', 'sub/nested/c.md']);
   });
 
-  it('跳过隐藏目录 (.git / .vscode)', async () => {
+  it('skips hidden directories (.git / .vscode)', async () => {
     await write('keep.md', '---\n---\n\nkeep');
     await write('.git/internal.md', '---\n---\n\nshouldnt-load');
     await write('.vscode/settings.md', '---\n---\n\nshouldnt-load');
@@ -82,7 +82,7 @@ priority: 10
     expect(rules.map((r) => r.id)).toEqual(['keep.md']);
   });
 
-  it('非 .md 文件被忽略', async () => {
+  it('non-.md files are ignored', async () => {
     await write('rule.md', '---\n---\n\nyes');
     await write('readme.txt', 'no');
     await write('notes.markdown', 'no');
@@ -90,7 +90,7 @@ priority: 10
     expect(rules.map((r) => r.id)).toEqual(['rule.md']);
   });
 
-  it('frontmatter yaml 烂掉时调 onWarn 并跳过该文件，其他规则继续加载', async () => {
+  it('calls onWarn and skips the file when frontmatter yaml is broken, other rules keep loading', async () => {
     await write('good.md', '---\napplies_to:\n  project: FX\n---\n\nok');
     await write('bad.md', '---\napplies_to: {invalid yaml [\n---\n\nbroken');
     const warns: string[] = [];
@@ -99,7 +99,7 @@ priority: 10
     expect(warns.length).toBe(1);
   });
 
-  it('非法正则源串视为该字段未配置，不抛', async () => {
+  it('treats an invalid regex source string as the field being unset, does not throw', async () => {
     await write(
       'bad-regex.md',
       `---
@@ -115,7 +115,7 @@ body
     expect(rules[0]!.applies_to.project).toBeUndefined();
   });
 
-  it('排序：priority desc 优先，tie-break 用 id asc', async () => {
+  it('sorting: priority desc first, tie-break by id asc', async () => {
     await write('aaa.md', '---\npriority: 5\n---\n\nA');
     await write('bbb.md', '---\npriority: 10\n---\n\nB');
     await write('ccc.md', '---\npriority: 5\n---\n\nC');
@@ -123,7 +123,7 @@ body
     expect(rules.map((r) => r.id)).toEqual(['bbb.md', 'aaa.md', 'ccc.md']);
   });
 
-  it('frontmatter 完全缺省时也能加载，所有字段走默认 (tools 默认只 review)', async () => {
+  it('loads even when frontmatter is entirely absent, all fields use defaults (tools defaults to review only)', async () => {
     await write('bare.md', '# only body\n\n纯 markdown，没 frontmatter');
     const rules = await loadRules(tmp);
     expect(rules).toHaveLength(1);
@@ -136,14 +136,14 @@ body
     expect(r.instructions).toContain('# only body');
   });
 
-  it('enabled=false 仍加载到列表 (由 match 阶段过滤)', async () => {
+  it('enabled=false is still loaded into the list (filtered at the match stage)', async () => {
     await write('off.md', '---\nenabled: false\n---\n\nbody');
     const rules = await loadRules(tmp);
     expect(rules).toHaveLength(1);
     expect(rules[0]!.enabled).toBe(false);
   });
 
-  it('custom_labels 类型容错', async () => {
+  it('custom_labels type tolerance', async () => {
     await write(
       'labels.md',
       `---
@@ -154,7 +154,7 @@ body
 `,
     );
     const rules: Rule[] = await loadRules(tmp);
-    // 数字 / null 被过滤，只保留 string
+    // numbers / null are filtered out, only strings kept
     expect(rules[0]!.custom_labels).toEqual(['tech-debt', 'needs-tests']);
   });
 });

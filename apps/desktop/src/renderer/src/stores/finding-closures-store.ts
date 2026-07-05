@@ -3,10 +3,10 @@ import type { FindingClosure } from '@meebox/shared';
 import { invoke, subscribe } from '../api';
 
 /**
- * 跨组件共享的 finding 关闭关系池（复评 /ask 取代/撤销原 finding 时建立）。每个 PR 独立一份，与
- * draftsStore 同模。数据流：main `findingClosures:create/delete` → 写盘 + 广播 `findingClosures:changed`
- * → 本 store 重拉 → notify。`useFindingClosuresForPr(localId)` 供 FindingCard / RunResultView 读，
- * 据 (runId, findingId) 反查某条 finding 是否已被复评关闭。
+ * Cross-component shared finding-closure relation pool (established when a re-review /ask supersedes/revokes the original
+ * finding). One separate copy per PR, same pattern as draftsStore. Data flow: main `findingClosures:create/delete` → write
+ * to disk + broadcast `findingClosures:changed` → this store re-pulls → notify. `useFindingClosuresForPr(localId)` is read
+ * by FindingCard / RunResultView to look up, by (runId, findingId), whether a given finding has been closed by re-review.
  */
 export interface FindingClosuresStoreState {
   byPr: ReadonlyMap<string, ReadonlyArray<FindingClosure>>;
@@ -62,7 +62,7 @@ export const findingClosuresStore = {
   },
 };
 
-/** 读取指定 PR 的关闭关系数组（null = loading）。首次访问触发后台 hydrate。 */
+/** Read the closure-relation array of a given PR (null = loading). First access triggers a background hydrate. */
 export function useFindingClosuresForPr(
   localId: string | null | undefined,
 ): ReadonlyArray<FindingClosure> | null {
@@ -70,7 +70,7 @@ export function useFindingClosuresForPr(
     findingClosuresStore.subscribe,
     findingClosuresStore.getSnapshot,
   );
-  // 同 draftsStore：hydrate 放 effect，避免 render 期 notify 触发跨组件更新告警。
+  // Same as draftsStore: put hydrate in an effect, avoiding a render-phase notify triggering the cross-component update warning.
   useEffect(() => {
     if (localId) findingClosuresStore.ensureLoaded(localId);
   }, [localId]);
@@ -79,7 +79,7 @@ export function useFindingClosuresForPr(
   return snap.byPr.get(localId)!;
 }
 
-/** App 顶层调用一次，订阅 `findingClosures:changed` 自动同步。 */
+/** Call once at the top level of App; subscribes to `findingClosures:changed` to auto-sync. */
 export function wireFindingClosuresStore(): () => void {
   return subscribe('findingClosures:changed', (ev) => {
     if (state.byPr.has(ev.localId) || state.loading.has(ev.localId)) {

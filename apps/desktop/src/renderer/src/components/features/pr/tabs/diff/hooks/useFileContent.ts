@@ -12,7 +12,7 @@ export interface FileContentState {
   setContentError: (v: FormattedError | null) => void;
 }
 
-/** 读取选中文件 base / head 两侧内容。切视图期间门控（loadedKey !== viewKey）保留旧内容。 */
+/** Reads the base / head content of the selected file. During a view switch it is gated (loadedKey !== viewKey), keeping the old content. */
 export function useFileContent(
   pr: StoredPullRequest,
   selected: DiffChangedFile | null,
@@ -25,8 +25,8 @@ export function useFileContent(
   const [contentError, setContentError] = useState<FormattedError | null>(null);
 
   useEffect(() => {
-    // 门控：切视图期间（新 files 未到、selected 仍指向旧文件）不拉内容，保留旧内容渲染，
-    // 避免用「新视图 + 旧文件路径」错拉。新 files ready 后 selected 切到新文件再拉。
+    // Gate: during a view switch (new files not yet arrived, selected still points to the old file), do not fetch content, keep rendering the old content,
+    // avoiding a wrong fetch with "new view + old file path". After the new files are ready and selected switches to the new file, fetch then.
     if (loadedKey !== viewKey) return;
     if (!selected) {
       setContent(null);

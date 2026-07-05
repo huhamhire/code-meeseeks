@@ -4,27 +4,27 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '../../api';
 
 /**
- * react-markdown 默认 url sanitize 只允许 http/https/mailto/tel 协议，
- * 非白名单协议 → src 被吞成空。Bitbucket 评论 markdown 用 `attachment:9/16854` 引用
- * 内嵌附件，必须直通让 BitbucketImage 收到原始 src 走 IPC 代理拉
+ * react-markdown's default url sanitize only allows the http/https/mailto/tel protocols;
+ * non-whitelisted protocols → src is swallowed to empty. Bitbucket comment markdown references
+ * inline attachments with `attachment:9/16854`, which must pass through so BitbucketImage receives the raw src and fetches via the IPC proxy
  */
 export function transformBitbucketUrl(url: string): string {
   if (url.startsWith('attachment:')) return url;
-  // 其他保持 react-markdown 默认安全行为
+  // Others keep react-markdown's default safe behavior
   return /^(https?:|mailto:|tel:|#|\/)/.test(url) ? url : '';
 }
 
 /**
- * 评论 body 内嵌图片：Bitbucket 私有 attachment URL 需要 PAT 鉴权，原生 `<img>`
- * 没法发 Authorization 头取私有资源 → 走 main 端 IPC `comments:fetchAttachment`
- * 代理拉 bytes 转 data URL 显示。
+ * Inline image in the comment body: Bitbucket private attachment URLs require PAT auth, and a native `<img>`
+ * cannot send an Authorization header to fetch private resources → goes through the main-side IPC `comments:fetchAttachment`
+ * to proxy-fetch the bytes and convert to a data URL for display.
  *
- * **不缓存** (用户决策 — 评论图片重复加载概率低，跟头像走磁盘缓存不同)。每次
- * mount 调一次 IPC。
+ * **Not cached** (user decision — comment images have a low chance of repeated loading, unlike avatars which use disk cache). Calls IPC once per
+ * mount.
  *
- * 用工厂 makeBitbucketImageFor(localId, prWebUrl) 包出 ReactMarkdown components.img 用的
- * 组件 — 闭包捕获 localId 给 IPC 用；prWebUrl 为 PR 网页地址，代理失败时降级链接指向它
- * （在系统浏览器里带 session 渲染评论与图片），而非指向拉不到的资产 URL（相对路径会落到 localhost）
+ * Uses the factory makeBitbucketImageFor(localId, prWebUrl) to wrap the component used as ReactMarkdown components.img —
+ * the closure captures localId for the IPC; prWebUrl is the PR web address, and on proxy failure the fallback link points to it
+ * (rendering comments and images with session in the system browser) rather than to the unreachable asset URL (relative paths would resolve to localhost)
  */
 export function makeBitbucketImageFor(localId: string, prWebUrl?: string) {
   return function BitbucketImage(props: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -46,7 +46,7 @@ export function makeBitbucketImageFor(localId: string, prWebUrl?: string) {
       setResolvedSrc(null);
       void (async () => {
         try {
-          // 8s timeout 防 main 端 fetch 卡死 / handler 没注册让 loading 占位永久挂着
+          // 8s timeout to prevent the main-side fetch from hanging / an unregistered handler keeping the loading placeholder up forever
           const ipcPromise = invoke('comments:fetchAttachment', { localId, url: src });
           const timeoutPromise = new Promise<null>((resolve) =>
             setTimeout(() => resolve(null), 8000),
@@ -65,8 +65,8 @@ export function makeBitbucketImageFor(localId: string, prWebUrl?: string) {
     }, [src]);
 
     if (failed && src) {
-      // attachment: 协议浏览器无法加载，fail 时显示明确的"加载失败"文本而不是
-      // 损坏图标；http/https URL fail 时退回原生 <img> (可能是跨 host 公网图)
+      // The attachment: protocol cannot be loaded by the browser; on fail show explicit "load failed" text instead of
+      // a broken icon; on http/https URL fail, fall back to native <img> (may be a cross-host public image)
       if (src.startsWith('attachment:')) {
         return (
           <span className="bitbucket-image-failed muted" aria-label={t('bitbucketImage.loadFailedAria')}>
@@ -74,9 +74,9 @@ export function makeBitbucketImageFor(localId: string, prWebUrl?: string) {
           </span>
         );
       }
-      // 代理拉不到（如 GitLab <17.4 私有上传仅认浏览器 session，PAT 无法代理）：先试浏览器原生
-      // 加载（公网图可成）；原生也失败则降级成链接 —— 指向 PR 网页（在系统浏览器带 session 看
-      // 评论与图片），避免破图标，也避免相对 /uploads 路径被解析成 localhost。
+      // Proxy fetch fails (e.g. GitLab <17.4 private uploads only recognize the browser session, PAT cannot proxy): first try native browser
+      // loading (public images can succeed); if native also fails, degrade to a link — pointing to the PR web page (viewing
+      // comments and images with session in the system browser), avoiding a broken icon and avoiding relative /uploads paths being resolved to localhost.
       if (nativeError) {
         const fallbackHref = prWebUrl ?? (/^https?:\/\//.test(src) ? src : null);
         if (fallbackHref) {
@@ -134,8 +134,8 @@ export function makeBitbucketImageFor(localId: string, prWebUrl?: string) {
 }
 
 /**
- * 全屏大图预览：点击 BitbucketImage 缩略图 → portal 渲染到 document.body 的全屏
- * overlay。点击背景 / Esc 关闭。img 自身 stopPropagation 防点 img 关闭
+ * Full-screen large image preview: clicking a BitbucketImage thumbnail → portal renders a full-screen
+ * overlay into document.body. Click the background / Esc to close. The img itself stopPropagation to prevent closing on img click
  */
 function ImageZoomOverlay({
   src,

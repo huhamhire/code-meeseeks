@@ -3,16 +3,16 @@ import { LLM_CONTEXT_TIERS, formatTokens } from '../utils';
 import { TierSlider } from './TierSlider';
 
 /**
- * LLM 上下文长度：裁剪输入内容的上下文长度上限（token），32k~1M 间的习惯档位。
- * 复用轮询配置的数值拖拽组件（TierSlider）。本地 CLI 模式不生效（CLI 工具自管上下文）。
+ * LLM context length: the upper limit of the context length (tokens) for trimming input content, with common tiers between 32k~1M.
+ * Reuses the numeric drag component (TierSlider) from the polling config. Does not take effect in local CLI mode (the CLI tool manages context itself).
  */
 export function LlmContextSection({
   value,
   onChange,
 }: {
-  /** 当前上下文长度（token） */
+  /** Current context length (tokens) */
   value: number;
-  /** 选定档位 → 回传该档 token 数 */
+  /** Selected tier → pass back that tier's token count */
   onChange: (tokens: number) => void;
 }) {
   const { t } = useTranslation();

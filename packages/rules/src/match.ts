@@ -1,12 +1,12 @@
 import { DEFAULT_MAX_MATCHED_RULES, type Rule, type RuleMatchContext } from './types.js';
 
 /**
- * 判断单条规则是否匹配 PR 上下文。语义：
- * - enabled=false → 不匹配
- * - tools 不含当前 tool → 不匹配
- * - applies_to.<field> 缺省 → 视为匹配任意；存在 → 字段值需通过 regex.test()
+ * Determine whether a single rule matches the PR context. Semantics:
+ * - enabled=false → no match
+ * - tools does not include the current tool → no match
+ * - applies_to.<field> omitted → treated as matching anything; present → field value must pass regex.test()
  *
- * 任一字段不匹配立刻返回 false (短路)。
+ * Return false immediately if any field fails to match (short-circuit).
  */
 export function ruleMatches(rule: Rule, ctx: RuleMatchContext): boolean {
   if (!rule.enabled) return false;
@@ -19,9 +19,10 @@ export function ruleMatches(rule: Rule, ctx: RuleMatchContext): boolean {
 }
 
 /**
- * 取同一 PR 命中的全部规则，按 priority desc + filePath asc（loadRules 已预排序，故保序），
- * 封顶 `limit` 条（默认 {@link DEFAULT_MAX_MATCHED_RULES}）作安全兜底，超出按排序丢弃靠后者。
- * 多条规则的正文由调用方经 {@link combineRuleInstructions} 拼接注入。
+ * Take all rules matched for the same PR, by priority desc + filePath asc (loadRules already pre-sorted, so order is
+ * preserved), capped at `limit` rules (default {@link DEFAULT_MAX_MATCHED_RULES}) as a safety fallback; those beyond
+ * the cap are dropped from the end per the sort order. The bodies of multiple rules are concatenated and injected by
+ * the caller via {@link combineRuleInstructions}.
  */
 export function pickMatchingRules(
   rules: ReadonlyArray<Rule>,
@@ -33,17 +34,18 @@ export function pickMatchingRules(
 }
 
 /**
- * 取命中规则的**首条**（priority desc + filePath asc）。UI 单条预览等仍用得到；评审注入走
- * {@link pickMatchingRules} 取多条。
+ * Take the **first** matched rule (priority desc + filePath asc). Still used for UI single-rule preview etc.; review
+ * injection uses {@link pickMatchingRules} to take multiple.
  */
 export function pickMatchingRule(rules: ReadonlyArray<Rule>, ctx: RuleMatchContext): Rule | null {
   return rules.find((r) => ruleMatches(r, ctx)) ?? null;
 }
 
 /**
- * 把多条命中规则的正文拼成单段注入文本。各规则只取 body（frontmatter 在加载期已被 gray-matter 剥离，
- * 不会泄漏进 instructions）；规则间以 `## Ruleset N` 分段标题分隔，便于模型区分不同规约、互不串味。
- * 单条时也加 `## Ruleset 1` 头以保持一致。空输入 → 空串。
+ * Concatenate the bodies of multiple matched rules into a single injection text. Each rule contributes only its body
+ * (frontmatter was already stripped by gray-matter at load time, so it won't leak into instructions); rules are
+ * separated by `## Ruleset N` section headings, so the model can distinguish different specs without cross-contamination.
+ * A single rule also gets a `## Ruleset 1` header for consistency. Empty input → empty string.
  */
 export function combineRuleInstructions(rules: ReadonlyArray<Rule>): string {
   return rules

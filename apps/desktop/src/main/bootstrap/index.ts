@@ -1,7 +1,8 @@
 /**
- * 应用启动装配域：OS/平台启动微调 + 各运行时（pr-agent / 连接 / 窗口 / 轮询 / 镜像 / 版本检测 / splash）
- * 的 init/factory。index.ts 作为组合根从此处取用、装配；各模块只依赖 ../（context / services / utils /
- * adapters）与库包。
+ * Application startup assembly domain: OS/platform startup tweaks + init/factory for each runtime
+ * (pr-agent / connections / window / poller / mirror / version detection / splash). index.ts acts as
+ * the composition root that draws from here and assembles; each module only depends on ../ (context /
+ * services / utils / adapters) and library packages.
  */
 export { applyOsStartupTweaks } from './os-startup-tweaks.js';
 export { PrAgentRuntime } from './pragent-runtime.js';

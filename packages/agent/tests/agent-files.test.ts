@@ -25,14 +25,14 @@ describe('scaffoldAgentDir', () => {
     const soul = await readFile(path.join(dir, 'SOUL.md'), 'utf8');
     expect(soul.length).toBeGreaterThan(0);
 
-    // 第二次脚手架不重复创建（幂等）
+    // second scaffold does not re-create (idempotent)
     const again = await scaffoldAgentDir(dir);
     expect(again).toEqual([]);
   });
 
   it('does not recreate the seed-once example rule after deletion', async () => {
     await scaffoldAgentDir(dir);
-    // 用户删掉示例规则——首次播种文件，删除后不应被复活。
+    // user deletes the example rule—a seed-once file, it should not be revived after deletion.
     await unlink(path.join(dir, 'rules/example.md'));
     const again = await scaffoldAgentDir(dir);
     expect(again).not.toContain('rules/example.md');
@@ -41,7 +41,7 @@ describe('scaffoldAgentDir', () => {
 
   it('recreates a deleted user-owned README (create-if-missing)', async () => {
     await scaffoldAgentDir(dir);
-    // README 属用户所有的「缺失即创建」，删除后下次脚手架补回（与首次播种的示例规则相区别）。
+    // README is user-owned "create-if-missing"; the next scaffold restores it after deletion (distinct from the seed-once example rule).
     await unlink(path.join(dir, 'README.md'));
     const again = await scaffoldAgentDir(dir);
     expect(again).toContain('README.md');
@@ -57,7 +57,7 @@ describe('scaffoldAgentDir', () => {
   it('realigns the managed SOUL.md back to the built-in template', async () => {
     await scaffoldAgentDir(dir);
     const template = await readFile(path.join(dir, 'SOUL.md'), 'utf8');
-    // 用户本地改动 SOUL.md —— 不被认可，下次脚手架对齐回模版。
+    // user locally edits SOUL.md—not honored, the next scaffold realigns it back to the template.
     await writeFile(path.join(dir, 'SOUL.md'), '# locally edited', 'utf8');
     const written = await scaffoldAgentDir(dir);
     expect(written).toContain('SOUL.md');
@@ -77,13 +77,13 @@ describe('loadAgentContext', () => {
     const ctx = await loadAgentContext(dir);
     expect(ctx.files.soul).toContain('Soul');
     expect(ctx.files.agents).toContain('Working Agreement');
-    // 模版示例规则被加载（enabled: false，仅验证被解析）
+    // the template example rule is loaded (enabled: false, only verifying it's parsed)
     expect(ctx.rules.length).toBe(1);
     expect(ctx.rules[0]?.enabled).toBe(false);
   });
 
   it('treats missing context files as empty (failure-safe)', async () => {
-    // 只有 rules 目录、无四个上下文文件
+    // only the rules dir, none of the four context files
     const ctx = await loadAgentContext(dir);
     expect(ctx.files.soul).toBe('');
     expect(ctx.files.memory).toBe('');

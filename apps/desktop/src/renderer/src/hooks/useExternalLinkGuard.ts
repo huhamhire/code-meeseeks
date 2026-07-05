@@ -2,9 +2,9 @@ import { useEffect } from 'react';
 import { invoke } from '../api';
 
 /**
- * 全局外链跳转防护：所有 UGC 场景（评论 / PR 描述 / finding / chat 等）内的
- * `<a href="http(s)://">` 点击都走系统默认浏览器，不允许 Electron 在 app window 内直接跳转
- * 覆盖整个界面。capture 阶段 listener 先于 React onClick 跑。
+ * Global external link navigation guard: clicks on `<a href="http(s)://">` in any UGC scenario (comments / PR
+ * description / finding / chat, etc.) all go through the system default browser; Electron is not allowed to navigate
+ * directly within the app window and cover the entire UI. The capture-phase listener runs before React onClick.
  */
 export function useExternalLinkGuard(): void {
   useEffect(() => {

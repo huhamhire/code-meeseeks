@@ -41,44 +41,48 @@ import {
 } from './usage.js';
 import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 
-/** finishReviewRun 的收尾 patch 类型（收尾 helper 的返回）。 */
+/** Finalization patch type for finishReviewRun (return of the finalization helper). */
 type FinishPatch = Parameters<typeof finishReviewRun>[3];
 
 /**
- * pr-agent run 的**执行器**（与队列调度 RunQueue 分离）：给定一个已 dequeue 的队列项，跑完一个 run。
- * 调度（并发 / 优先级 / 取消 / 泵）归 RunQueue；本类只管「怎么跑一个 run」，无队列状态。
+ * The **executor** for a pr-agent run (separate from queue scheduling in RunQueue): given an
+ * already-dequeued queue item, it runs one run to completion. Scheduling (concurrency / priority /
+ * cancel / pump) belongs to RunQueue; this class only handles "how to run one run", with no queue state.
  *
- * execute 编排五个阶段：startRun（落盘 + 标记开始）→ prepareWorkspace（镜像 + worktree）→
- * buildInvocation（env + 提示词组装）→ bridge.run（spawn）→ collectOutput（读产物 + 解析）→ 收尾落盘。
+ * execute orchestrates five stages: startRun (persist + mark started) → prepareWorkspace (mirror + worktree)
+ * → buildInvocation (env + prompt assembly) → bridge.run (spawn) → collectOutput (read artifacts + parse) → finalize persist.
  */
 export class RunExecutor {
   private readonly execFileP = promisify(execFile);
-  /** embedded .secrets.toml 兜底的 memo（只在首个 embedded run 解析一次目录 + 写文件）。 */
+  /** Memo for the embedded .secrets.toml fallback (resolve dir + write file only once, on the first embedded run). */
   private embeddedSecretsEnsured: Promise<void> | null = null;
 
   constructor(private readonly ctx: ServiceContext) {}
 
   /**
-   * 真正执行一个 queue item：startRun → worktree → bridge.run → finishWith。
-   * 由 RunQueue.pump() 调用；任何抛错都被调度层兜成 Promise reject，外层 pragent:run 调用方收到。
-   * notifyStarted：startedAt 落定后回调调度层广播队列变化（执行器不持队列态）。
+   * Actually execute one queue item: startRun → worktree → bridge.run → finishWith.
+   * Called by RunQueue.pump(); any thrown error is caught by the scheduling layer into a Promise reject,
+   * received by the outer pragent:run caller.
+   * notifyStarted: once startedAt is settled, calls back into the scheduling layer to broadcast queue
+   * changes (the executor holds no queue state).
    */
   async execute(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {
     const { getPrAgentBridge, embeddedPythonPath, broadcast } = this.ctx;
     const bridge = getPrAgentBridge();
     if (!bridge) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
     const { req, pr } = item;
-    // per-PR 存储路由：对已归档（已关闭范围）的合并 / 仍开放 PR 补跑评审时，run 数据落归档冷存储，
-    // 不写活跃存储（否则被下轮 poll 对账连同归档数据误删，见 PrService.storeForPr）。
+    // per-PR storage routing: when re-running review for an already-archived (closed-scope) merged /
+    // still-open PR, run data goes to archived cold storage, not the active store (otherwise the next
+    // poll reconciliation would wrongly delete it along with archived data, see PrService.storeForPr).
     const stateStore = await this.ctx.pr.storeForPr(pr.localId);
 
     const run = await this.startRun(item, bridge, notifyStarted);
     const t0 = Date.now();
-    // 真实 token 用量累加器：sitecustomize 的 litellm callback 把每次调用的 usage 以
-    // `@@MEEBOX_USAGE@@ {json}` 哨兵行打到 stderr，下面 onLine 拦截累加（无需临时文件 / env）。
+    // Real token usage accumulator: sitecustomize's litellm callback emits each call's usage as a
+    // `@@MEEBOX_USAGE@@ {json}` sentinel line to stderr; onLine below intercepts and accumulates (no temp file / env needed).
     const usageAcc = newUsageAcc();
     const onLine = (line: string, stream: 'stdout' | 'stderr'): void => {
-      // 拦截 usage 哨兵行：累加后不转发给 renderer（避免污染实时日志）。
+      // Intercept usage sentinel lines: accumulate then don't forward to the renderer (avoid polluting live logs).
       if (stream === 'stderr' && accumulateUsageSentinel(line, usageAcc)) return;
       broadcast('pragent:runProgress', { runId: run.id, line, stream });
     };
@@ -96,14 +100,16 @@ export class RunExecutor {
         wt.path,
       );
 
-      // CLI 模式 /ask 把子进程 cwd 落到 worktree（取完整文件上下文，buildInvocation 已设 MEEBOX_CLI_WORKDIR）。
-      // 落 cwd 前先清空仓库自带的 agent 指令文件，避免被 CLI 自动加载污染回答。env key 在 = 走此路径。
+      // In CLI mode /ask sets the subprocess cwd to the worktree (for full file context; buildInvocation
+      // already set MEEBOX_CLI_WORKDIR). Before landing cwd, clear the repo's own agent instruction files
+      // to avoid the CLI auto-loading them and polluting the answer. Presence of the env key gates this path.
       if (env['MEEBOX_CLI_WORKDIR']) {
         await neutralizeWorktreeInstructions(env['MEEBOX_CLI_WORKDIR'], this.ctx.logger);
       }
 
-      // embedded 策略：执行期在嵌入式安装目录补空 .secrets.toml 压掉启动告警（memo 化只首次做）。
-      // local-cli 不需要（pipx 装的 pr-agent 路径不同，告警也不出）。
+      // embedded strategy: at execution time write an empty .secrets.toml into the embedded install dir
+      // to suppress the startup warning (memoized, done only on the first run).
+      // local-cli doesn't need it (pipx-installed pr-agent has a different path and the warning doesn't appear).
       if (bridge.strategy === 'embedded' && embeddedPythonPath) {
         await this.ensureEmbeddedSecrets(embeddedPythonPath);
       }
@@ -118,7 +124,7 @@ export class RunExecutor {
         extraArgs,
         signal: item.ac!.signal,
       });
-      // 真实 token 用量（onLine 累加的 stderr 哨兵行），落到 succeeded / llm-failed 收尾。
+      // Real token usage (stderr sentinel lines accumulated by onLine), carried into succeeded / llm-failed finalization.
       const tokenUsage = finalizeUsage(usageAcc);
       const { parsed, fileContent } = await this.collectOutput(
         wt,
@@ -135,7 +141,7 @@ export class RunExecutor {
       const finished = await finishWith(
         this.finishPatchForError(err, tokenUsage, t0, run.id),
       );
-      // 非预期异常（非 PrAgentRunError）：落 failed 后仍把异常往上抛，避免吞掉。
+      // Unexpected exception (not PrAgentRunError): after persisting failed, still rethrow to avoid swallowing it.
       if (!(err instanceof PrAgentRunError)) throw err;
       return finished;
     } finally {
@@ -144,10 +150,10 @@ export class RunExecutor {
   }
 
   /**
-   * 成功路径收尾 patch：parsed.llmFailure → failed(reason=llm-error)，否则 succeeded。
-   * pr-agent CLI 可能 exit 0 但 stdout 其实是 LLM 调用全失败（litellm AuthenticationError /
-   * "Failed to generate prediction with any model" 等 marker）→ 不算 succeeded，UI 用红色失败 chip 渲染。
-   * stdout 持久化「LLM 真实产出」(文件内容)；原 stdout 留作日志在折叠区供排障。
+   * Success-path finalization patch: parsed.llmFailure → failed(reason=llm-error), otherwise succeeded.
+   * The pr-agent CLI may exit 0 while stdout is actually a total LLM-call failure (litellm AuthenticationError /
+   * "Failed to generate prediction with any model" and similar markers) → not counted as succeeded, UI renders a red failure chip.
+   * stdout persists the "real LLM output" (file content); the original stdout is kept as a log in a collapsed area for troubleshooting.
    */
   private finishPatchForResult(
     result: { exitCode: number; stdout: string; stderr: string },
@@ -173,7 +179,7 @@ export class RunExecutor {
         { runId, reason: parsed.llmFailure.message },
         'pragent exit 0 but LLM call failed; marking run as failed',
       );
-      // 失败任务不做结构化采集——findings 置空，UI 只展示原始输出（不转 chatpane finding 卡）。
+      // Failed runs get no structured collection — findings set empty, UI shows only raw output (no chatpane finding card).
       return {
         ...base,
         status: 'failed',
@@ -187,14 +193,15 @@ export class RunExecutor {
       status: 'succeeded',
       findings: parsed.findings,
       summary: parsed.summary,
-      // 复评裁决（解析自复评 /ask 的 <verdict>）；非复评 / 未给则 undefined。
+      // Re-review verdict (parsed from the re-review /ask's <verdict>); undefined if not a re-review / not given.
       askVerdict: parsed.askVerdict,
     };
   }
 
   /**
-   * 异常路径收尾 patch：PrAgentRunError → cancelled（用户取消）/ failed（其它 reason），尽量解析已收集的
-   * 部分 stdout + 记已产生的 token 用量；其它非预期异常 → failed（仅 errorMessage，避免 run 卡在 running）。
+   * Error-path finalization patch: PrAgentRunError → cancelled (user cancel) / failed (other reason), parsing
+   * whatever partial stdout was collected + recording token usage already produced; other unexpected exceptions
+   * → failed (errorMessage only, to avoid a run stuck in running).
    */
   private finishPatchForError(
     err: unknown,
@@ -203,13 +210,13 @@ export class RunExecutor {
     runId: string,
   ): FinishPatch {
     if (err instanceof PrAgentRunError) {
-      // 用户主动取消 → cancelled，其它 reason → failed；二者都落盘让 UI 能从历史 run 里看到该事件。
+      // User-initiated cancel → cancelled, other reason → failed; both are persisted so the UI can see the event in run history.
       const status: ReviewRunStatus = err.reason === 'cancelled' ? 'cancelled' : 'failed';
       this.ctx.logger.warn(
         { runId, reason: err.reason, exitCode: err.result.exitCode },
         `pragent run ${status}`,
       );
-      // 失败 / 取消的任务不做结构化采集——只保留原始输出（stdout/stderr）供展示，不解析成 finding 卡。
+      // Failed / cancelled runs get no structured collection — keep only raw output (stdout/stderr) for display, not parsed into finding cards.
       return {
         status,
         finishedAt: new Date().toISOString(),
@@ -231,7 +238,7 @@ export class RunExecutor {
     };
   }
 
-  /** 阶段①：落盘 startReviewRun（用入队预分配 runId）+ 标记 startedAt 并通知调度层广播 + 记日志。 */
+  /** Stage 1: persist startReviewRun (using the runId pre-assigned at enqueue) + mark startedAt + notify scheduling layer to broadcast + log. */
   private async startRun(
     item: QueueItem,
     bridge: PrAgentBridge,
@@ -240,10 +247,10 @@ export class RunExecutor {
     const { bootstrap, logger } = this.ctx;
     const { req, pr } = item;
     const stateStore = await this.ctx.pr.storeForPr(pr.localId);
-    // 提前 resolve active LLM profile — model 字段要随 startReviewRun 一起落盘，让 UI 在 meta 行展示
-    // "这次 run 用的什么模型"（持久化用 profile.model 原文，不做 normalizeModel 前缀处理，跟 Settings 一致）。
+    // Resolve the active LLM profile early — the model field must be persisted together with startReviewRun so the
+    // UI shows "which model this run used" in the meta row (persist profile.model verbatim, no normalizeModel prefix handling, consistent with Settings).
     const activeLlmForRecord = resolveActiveLlmProfile(bootstrap.config.llm);
-    // 用入队预分配的 runId 覆盖 startReviewRun 的自生 id，让 cancel(runId) 在 active 状态也能精确定位。
+    // Override startReviewRun's self-generated id with the runId pre-assigned at enqueue, so cancel(runId) can precisely locate it even in active state.
     const run = await startReviewRun(stateStore, {
       id: item.info.runId,
       prLocalId: pr.localId,
@@ -252,14 +259,14 @@ export class RunExecutor {
       prAgentVersion: bridge.version,
       strategy: bridge.strategy,
       model: activeLlmForRecord?.model || undefined,
-      // 复评引用前向链：随 run 落盘，UI 据此在 /ask 卡上展示「复评自…」徽标 + 裁决动作。
+      // Re-review reference forward chain: persisted with the run, the UI uses it to show a "re-reviewed from…" badge + verdict action on the /ask card.
       referencedFinding: req.tool === 'ask' ? req.referencedFinding : undefined,
-      // 触发来源随 run 落盘：user 来源的 run 由 ChatPane 补命令回显气泡；agent 子 run 不回显。
+      // Trigger origin persisted with the run: user-origin runs get a command echo bubble added by ChatPane; agent sub-runs don't echo.
       origin: item.priority,
-      // 单 commit 评审范围随 run 落盘：结果卡据此展示范围徽标。
+      // Single-commit review scope persisted with the run: the result card uses it to show a scope badge.
       scope: req.scope,
     });
-    // 把入队时 startedAt=null 的 info 升级为 active 形态 + 广播（经调度层）。
+    // Upgrade the info (startedAt=null at enqueue) to active form + broadcast (via the scheduling layer).
     item.info = { ...item.info, startedAt: run.startedAt };
     notifyStarted();
     logger.info(
@@ -270,30 +277,31 @@ export class RunExecutor {
   }
 
   /**
-   * 阶段②：同步镜像 + 物化 worktree（与 UI diff 同源，评审基于 PR 自分叉的改动）。
-   * 缺省按固定 merge-base 定界 PR 全量（head=PR 源 sha，base=merge-base）；传入单 commit 范围（scope）时
-   * 改按该 commit 自身改动定界（head=scope.sha，base=scope.parent），pr-agent 只见 parent..sha 的 diff。
+   * Stage 2: sync mirror + materialize worktree (same source as the UI diff; review is based on the PR's forked changes).
+   * By default bounds the full PR by a fixed merge-base (head=PR source sha, base=merge-base); when a single-commit scope
+   * is passed, bounds by that commit's own changes instead (head=scope.sha, base=scope.parent), so pr-agent sees only the parent..sha diff.
    */
   private async prepareWorkspace(pr: QueueItem['pr'], scope?: QueueItem['req']['scope']) {
     const { repoMirror, pr: prService } = this.ctx;
     const repoId = prService.repoIdentityFor(pr);
-    // 走 ensureMirrorReadyForPr（而非裸 syncMirror）：与 UI diff 同源，且复用其自愈——源分支被删 / 强推后
-    // 按平台精确 fetch PR 头引用补齐 head sha，否则 materializeWorktree 建 head 分支会因对象缺失失败。
+    // Use ensureMirrorReadyForPr (rather than bare syncMirror): same source as the UI diff, and reuses its self-healing —
+    // after the source branch is deleted / force-pushed, it precisely fetches the PR head ref per platform to fill in the head sha,
+    // otherwise materializeWorktree building the head branch would fail on the missing object.
     await prService.ensureMirrorReadyForPr(pr);
     if (scope) {
-      // 单 commit 范围：head=目标 commit，base=其父 commit → LOCAL__TARGET_BRANCH 指向 parent，
-      // pr-agent 只见该 commit 自身改动。parent 是 head 的祖先、随镜像同步而在，无需另取。
+      // Single-commit scope: head=target commit, base=its parent commit → LOCAL__TARGET_BRANCH points at parent,
+      // pr-agent sees only that commit's own changes. parent is an ancestor of head and present via mirror sync, no extra fetch needed.
       return repoMirror.materializeWorktree(repoId, scope.sha, scope.parent, pr.localId);
     }
-    // pr-agent 的 LOCAL__TARGET_BRANCH 用固定 merge-base，而非 targetRef.sha 漂移后混入别的 PR 的两点对比。
+    // pr-agent's LOCAL__TARGET_BRANCH uses a fixed merge-base, rather than a two-dot comparison that would mix in another PR after targetRef.sha drifts.
     const diffBase = await prService.resolveDiffBaseSha(pr);
     return repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase, pr.localId);
   }
 
   /**
-   * 阶段③：组装 bridge.run 的 env + 位置参数。代理 env 铺底 + buildToolEnv（凭据/模型/响应语言/per-tool），
-   * 再注入 EXTRA_INSTRUCTIONS（PR 上下文 + 命中规则，local provider 不会自己拉，须现读；/ask 跳过）。
-   * /ask 把问题作位置参数并在末尾追加目标语言要求（近因位置提升按 UI 语言作答的遵循度）。
+   * Stage 3: assemble bridge.run's env + positional args. Proxy env as the base + buildToolEnv (credentials/model/response language/per-tool),
+   * then inject EXTRA_INSTRUCTIONS (PR context + matched rules; the local provider won't fetch them itself, must read now; /ask skips this).
+   * /ask passes the question as a positional arg and appends the target-language requirement at the end (recency position improves adherence to answering in the UI language).
    */
   private async buildInvocation(
     req: QueueItem['req'],
@@ -307,8 +315,8 @@ export class RunExecutor {
   }> {
     const { bootstrap, logger, ensureAgentDir, pr: prService } = this.ctx;
     const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
-    // 代理 env 先铺底（非 pr-agent 范畴，仅 HTTP(S)_PROXY 类）；LLM 凭据/模型 + 响应语言 + per-tool 配置
-    // 由 bridge 的 buildToolEnv 按意图组装——契约 key 收口在 @meebox/pr-agent-bridge。
+    // Proxy env as the base first (not pr-agent's domain, just HTTP(S)_PROXY-type); LLM credentials/model + response language + per-tool config
+    // are assembled by intent via the bridge's buildToolEnv — contract keys are consolidated in @meebox/pr-agent-bridge.
     const env: Record<string, string> = {
       ...buildProxyEnv(bootstrap.config.proxy),
       ...buildToolEnv(activeLlm, {
@@ -319,8 +327,8 @@ export class RunExecutor {
       }),
     };
 
-    // CLI 模式 /ask：把子进程 cwd 落到（待净化的）worktree，让自由问答能读完整文件（shim cli/install.py
-    // 据此 env 切 cwd）。describe/review 不下发、维持中性临时目录；API 模式不涉及（远程接口只有 diff）。
+    // CLI mode /ask: set the subprocess cwd to the (to-be-sanitized) worktree so free-form Q&A can read full files
+    // (shim cli/install.py switches cwd based on this env). describe/review don't set it and keep a neutral temp dir; API mode is unaffected (the remote interface only has the diff).
     if (req.tool === 'ask' && activeLlm?.provider === 'cli') {
       env['MEEBOX_CLI_WORKDIR'] = wtPath;
     }
@@ -354,34 +362,36 @@ export class RunExecutor {
         matchedRuleInstructions = combineRuleInstructions(matched);
         matchedRuleIds = matched.map((r) => r.id);
       }
-      // 始终记一条：让用户从日志确认规则加载/命中情况（0 命中也输出，便于排查「为何规则没生效」）。
+      // Always log one line: let users confirm rule loading/matching from logs (output even on 0 matches, to help debug "why the rule didn't take effect").
       logger.info(
         { runId, tool: req.tool, rulesLoaded: rules.length, rulesMatched: matched.length, ruleIds: matchedRuleIds },
         'pragent run: rules',
       );
     }
 
-    // 提示词组装收口到 @meebox/pr-agent-bridge 的 prompts：语言指示 / anchor marker / 排版 / PR 上下文 / 命中规则。
+    // Prompt assembly is consolidated into @meebox/pr-agent-bridge's prompts: language directive / anchor marker / formatting / PR context / matched rules.
     const extraInstructions = buildExtraInstructions({
       tool: req.tool,
       language: getMainLanguage(),
       prContext,
       matchedRuleInstructions,
-      // /ask 选中行引用 + 复评裁决：拼进「问题」（user turn），见下方 askQuestion 组装。
+      // User-defined code-suggestion spec (settings): injected for /improve /review /ask (gated inside buildExtraInstructions); /describe excluded.
+      codeSuggestionSpec: bootstrap.config.agent.strategy.code_suggestion_spec,
+      // /ask selected-line reference + re-review verdict: spliced into the "question" (user turn), see askQuestion assembly below.
       referencedContext: req.tool === 'ask' ? req.referencedContext : undefined,
-      // /ask 复评模式：引用了某条 finding 时注入裁决（replace/keep/drop）指示。
+      // /ask re-review mode: inject verdict (replace/keep/drop) directive when a finding is referenced.
       referencedFinding: req.tool === 'ask' ? !!req.referencedFinding : undefined,
-      // /ask 代码建议数量软约束（与 /review /improve 共用同一设置）。
+      // /ask code-suggestion count soft constraint (shares the same setting as /review /improve).
       maxCodeSuggestions:
         req.tool === 'ask' ? bootstrap.config.agent.strategy.max_code_suggestions : undefined,
-      // /ask 代码检索指引：仅 CLI 提供方（子进程 cwd 落在完整 worktree、可用文件工具）注入，引导定向检索
-      // （内置只读搜索 / grep 查符号 · 只读所需行段）替代整文件通读，降低 agentic 探索成本。刻意只用只读工具集
-      // （headless default 模式下非只读工具会中止会话，故不诱导 rg）。API 提供方无文件访问、不注入。
+      // /ask code-retrieval guidance: injected only for the CLI provider (subprocess cwd is in the full worktree, file tools available), steering targeted retrieval
+      // (built-in read-only search / grep for symbols · read only the needed line ranges) instead of reading whole files, lowering agentic exploration cost. Deliberately uses only the read-only tool set
+      // (in headless default mode non-read-only tools abort the session, so don't induce rg). The API provider has no file access, not injected.
       worktreeRetrieval: req.tool === 'ask' && activeLlm?.provider === 'cli',
     });
-    // /ask 的 pr_questions prompt **不渲染 extra_instructions**（与 describe/review/improve 不同），
-    // 经 env 注入对 /ask 是死字段。故 /ask 的指令改为拼进「问题」（user turn，见下方 askQuestion），
-    // env 注入仅用于其它三个工具。
+    // /ask's pr_questions prompt **does not render extra_instructions** (unlike describe/review/improve),
+    // so env injection is a dead field for /ask. Thus /ask's instructions are instead spliced into the "question"
+    // (user turn, see askQuestion below); env injection is only used for the other three tools.
     if (extraInstructions && req.tool !== 'ask') {
       env[extraInstructionsEnvKey(req.tool)] = extraInstructions;
     }
@@ -392,15 +402,15 @@ export class RunExecutor {
       );
     }
 
-    // ask 工具：问题作为位置参数（user turn，spawn args 单元素，含空格也是一个 arg 不切分），并在问题
-    // **末尾**硬性追加语言要求。系统侧 CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS 对自由问答常被大量
-    // 英文 diff 盖过 → 模型用英文作答；在 user turn 末尾（近因位置、用目标语言书写）再要求一次。en-US 返回空。
+    // ask tool: the question is a positional arg (user turn, a single spawn-args element; spaces don't split it into multiple args),
+    // and the language requirement is hard-appended at the **end** of the question. System-side CONFIG__RESPONSE_LANGUAGE / EXTRA_INSTRUCTIONS
+    // for free-form Q&A are often drowned out by the large English diff → the model answers in English; ask again at the end of the user turn (recency position, written in the target language). en-US returns empty.
     const askLangSuffix = req.tool === 'ask' ? askLanguageSuffixFor(getMainLanguage()) : '';
     let askQuestion: string | undefined;
     if (req.tool === 'ask' && req.question) {
-      // /ask 的指令（结构化分段 / anchor marker / 复评裁决 / 引用上下文）拼进 user turn——pr_questions
-      // 不读 extra_instructions，唯有问题文本真正到达模型。语言后缀放最末（近因位置最促使按目标语言作答）。
-      // 回显（pr-agent 把问题原样写进产物）由 collectOutput 的 stripAskQuestionEcho 整段剥掉。
+      // /ask's instructions (structured sections / anchor marker / re-review verdict / referenced context) are spliced into the user turn —
+      // pr_questions doesn't read extra_instructions, only the question text actually reaches the model. The language suffix goes last (recency position most encourages answering in the target language).
+      // The echo (pr-agent writes the question verbatim into the artifact) is stripped entirely by collectOutput's stripAskQuestionEcho.
       const parts = [req.question];
       if (extraInstructions) parts.push(extraInstructions);
       if (askLangSuffix) parts.push(askLangSuffix);
@@ -411,9 +421,9 @@ export class RunExecutor {
   }
 
   /**
-   * 阶段⑤：读 local provider 写到 worktree 根的产物文件（落盘文件名见 PRAGENT_LOCAL_OUTPUT），/ask 去掉
-   * 回显的问题行，解析为 findings/summary；/review 成功时丢弃旧 pending 草稿（让本轮 finding 成新候选源）。
-   * 文件缺失则回退用 stdout 解析。返回解析结果 + 原始文件内容（供收尾拼日志）。
+   * Stage 5: read the artifact file the local provider wrote to the worktree root (persisted filename see PRAGENT_LOCAL_OUTPUT), /ask removes
+   * the echoed question line, parse into findings/summary; on /review success drop old pending drafts (letting this round's findings become the new candidate source).
+   * If the file is missing, fall back to parsing stdout. Returns the parse result + raw file content (for finalization log splicing).
    */
   private async collectOutput(
     wt: { path: string },
@@ -424,7 +434,7 @@ export class RunExecutor {
   ): Promise<{ parsed: ReturnType<typeof parseReviewOutput>; fileContent: string }> {
     const { logger, broadcast } = this.ctx;
     const stateStore = await this.ctx.pr.storeForPr(req.localId);
-    // cleanup 前必须先把文件读出来（与 buildToolEnv 的 LOCAL__REVIEW_PATH 同源）。
+    // The file must be read out before cleanup (same source as buildToolEnv's LOCAL__REVIEW_PATH).
     const outFile = PRAGENT_LOCAL_OUTPUT[req.tool];
     let fileContent = '';
     try {
@@ -435,22 +445,22 @@ export class RunExecutor {
         'pr-agent local provider output file missing; fall back to stdout',
       );
     }
-    // /ask 输出里 pr-agent 把问题原样回显在 answer body 顶部（跟 chat 输入气泡重复）；解析前逐字删掉。
+    // In /ask output pr-agent echoes the question verbatim at the top of the answer body (duplicating the chat input bubble); delete it verbatim before parsing.
     const cleanedContent =
       req.tool === 'ask' && req.question?.trim()
         ? stripAskQuestionEcho(fileContent, req.question, askLangSuffix)
         : fileContent;
     const parsed = parseReviewOutput(cleanedContent || resultStdout, req.tool);
-    // 复评 /ask（引用了某条 finding）：
-    // - 裁决 replace → 把建议提升为带定位的代码评论（取原 finding 的 anchor），渲染 / 采纳同 /review 代码反馈；
-    // - 裁决 replace / drop → 静默关闭被引用的原 finding（建立关闭关系 + 广播），无需用户手动点关闭。
-    // keep / 无裁决：原评论保留、不动。
+    // Re-review /ask (a finding was referenced):
+    // - verdict replace → promote the suggestion to a positioned code comment (taking the original finding's anchor), rendered / adopted like /review code feedback;
+    // - verdict replace / drop → silently close the referenced original finding (establish the closure relation + broadcast), no need for the user to manually click close.
+    // keep / no verdict: the original comment is kept, untouched.
     if (req.tool === 'ask' && req.referencedFinding && parsed.askVerdict && !parsed.llmFailure) {
       const ref = req.referencedFinding;
       const anchor = ref.anchor;
       if (parsed.askVerdict === 'replace' && anchor && typeof anchor.startLine === 'number') {
-        // 已自带定位的 code-suggestion（模型按 marker 锚到引用处）保持不动；否则把建议（退到 summary）
-        // 兜底锚到被引用评论的原位置并升为代码反馈，保证取代评论始终带定位、可采纳。
+        // A code-suggestion that already carries positioning (the model anchored to the reference via the marker) is left untouched; otherwise the suggestion (fallen back to summary)
+        // is fallback-anchored to the referenced comment's original position and promoted to code feedback, ensuring the replacing comment always carries positioning and is adoptable.
         const sug =
           parsed.findings.find(
             (f) => f.sectionKey === 'code-suggestion' || f.sectionKey === 'ask-suggestions',
@@ -475,7 +485,7 @@ export class RunExecutor {
         }
       }
     }
-    // M4 草稿再摄入：/review 成功完成时丢掉 pending+finding 旧草稿（edited/posted/rejected/manual 保留）。
+    // M4 draft re-ingestion: on successful /review completion drop old pending+finding drafts (edited/posted/rejected/manual are kept).
     if (req.tool === 'review') {
       try {
         const dropped = await dropPendingFindingDrafts(stateStore, req.localId);
@@ -494,10 +504,10 @@ export class RunExecutor {
   }
 
   /**
-   * embedded 策略：执行期在嵌入式安装目录的 settings/ 与 settings_prod/ 补空 .secrets.toml
-   * （pr-agent 启动会去找该文件，缺失就打 WARNING；我们走 env 传密钥不用 secrets.toml，写个空
-   * 文件压掉告警）。memo 化：只在首个 embedded run 解析一次目录 + 写文件，后续直接复用。
-   * importlib.util.find_spec 仅定位不 import pr_agent，快；失败仅 warn 不阻断 run。
+   * embedded strategy: at execution time write an empty .secrets.toml into the embedded install dir's settings/ and settings_prod/
+   * (pr-agent looks for this file at startup and prints a WARNING when missing; we pass secrets via env and don't use secrets.toml, so write an empty
+   * file to suppress the warning). Memoized: resolve dir + write file only once on the first embedded run, reused afterwards.
+   * importlib.util.find_spec only locates pr_agent without importing it, fast; on failure only warn, don't block the run.
    */
   private ensureEmbeddedSecrets(pythonPath: string): Promise<void> {
     this.embeddedSecretsEnsured ??= (async () => {

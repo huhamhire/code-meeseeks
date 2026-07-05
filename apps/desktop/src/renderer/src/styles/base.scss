@@ -1,5 +1,5 @@
 @use './tokens' as *;
-@use './theme'; // 发射 :root 主题变量块（语义 → 标准色）；本文件经 App.scss 首位引入，确保只发射一次
+@use './theme'; // emits the :root theme variable block (semantic → standard color); this file is imported first via App.scss to ensure it is emitted only once
 
 * {
   box-sizing: border-box;
@@ -24,9 +24,9 @@ body {
   font-size: $fs-lg;
 }
 
-/* 全局滚动条：跟 VS Code Dark+ 一致的细暗色样式。Monaco 内部滚动条自己渲染，不受此影响。
-   用 background-color (而非 shorthand background) 保留 background-clip，状态切换时
-   只换颜色，不重复声明 clip。 */
+/* Global scrollbar: a thin dark style consistent with VS Code Dark+. Monaco's internal scrollbar renders itself and is unaffected by this.
+   Use background-color (rather than the shorthand background) to preserve background-clip, so on state changes
+   only the color swaps, without redeclaring clip. */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -111,7 +111,7 @@ textarea {
   font-size: $fs-sm;
 }
 
-// 仅图标按钮（编辑/删除/选择目录）：收窄水平 padding，svg 居中
+// Icon-only button (edit/delete/choose directory): narrow horizontal padding, svg centered
 .btn-icon {
   padding-left: $space-4;
   padding-right: $space-4;
@@ -121,22 +121,22 @@ textarea {
   }
 }
 
-// 危险图标按钮（删除连接 / LLM 配置等）：hover 变饱和红，与其它危险按钮统一
+// Danger icon button (delete connection / LLM config, etc.): hover turns saturated red, unified with other danger buttons
 .btn-icon-danger:hover:not(:disabled) {
   border-color: $color-danger-strong;
   color: $color-danger-strong;
   background: $color-danger-strong-fade;
 }
 
-// 主操作图标按钮（编辑）：hover 变蓝
+// Primary action icon button (edit): hover turns blue
 .btn-icon-primary:hover:not(:disabled) {
   border-color: $color-accent;
   color: $color-accent;
 }
 
 .btn-danger {
-  // 实底用饱和的 $color-danger-bg（#c72e0f），而非偏浅鲑红的 $color-danger
-  // （后者是为文案 / 红边框设计的浅色，当实底背景会发灰白、警示力不足）。
+  // Solid background uses the saturated $color-danger-bg (#c72e0f), rather than the lighter salmon-red $color-danger
+  // (the latter is a light color designed for copy / red borders; as a solid background it looks grayish-white with insufficient warning force).
   background: $color-danger-bg;
   border-color: $color-danger-bg;
   color: $text-on-accent;
@@ -157,8 +157,8 @@ textarea {
   }
 }
 
-// 文本型按钮：无底 / 无边框的链接态动作（工具栏里的轻量操作，如「全选 / 取消全选」），
-// 强调蓝、hover 加下划线；不占按钮实底，读作行内链接。
+// Text button: a link-state action with no background / no border (lightweight toolbar operations, e.g. "select all / deselect all"),
+// accent blue, underline on hover; takes no button solid background, reads as an inline link.
 .btn-link {
   background: none;
   border: none;
@@ -186,15 +186,15 @@ textarea {
   text-align: center;
 }
 
-// 可合并分类计数 >0 时染绿，提示"有可直接合并的 PR"。绿底白字在过滤按钮的
-// 默认底 / btn-primary 选中蓝底上都够对比
+// When the mergeable category count is >0, tint green to hint "there are directly mergeable PRs". Green background with white text has enough contrast
+// on both the filter button's default background and the btn-primary selected blue background
 .count-pill-mergeable {
   background: $color-approved;
   color: $text-on-accent;
 }
 
-// 操作级 toast：顶部居中浮层，自动消失 / 点击关闭。用于审批 / 合并等远端动作失败提示
-// （放顶部避免在 diff 视图下与底部状态栏 / 横向滚动条叠压）。
+// Action-level toast: top-centered popover, auto-dismiss / click to close. Used for failure hints of remote actions like approve / merge
+// (placed at top to avoid overlapping the bottom statusbar / horizontal scrollbar in diff view).
 .app-toast {
   position: fixed;
   left: 50%;
@@ -218,7 +218,7 @@ textarea {
 @keyframes app-toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -8px); // 顶部浮层：自上方滑入
+    transform: translate(-50%, -8px); // top popover: slides in from above
   }
   to {
     opacity: 1;
@@ -226,8 +226,8 @@ textarea {
   }
 }
 
-// 活动脉冲点：表示"正在进行"的小圆点。跨域共享（pr-agent 活动 chip + repo sync chip）。
-// idle 变体：静态灰、不脉冲。
+// Activity pulse dot: a small dot indicating "in progress". Shared across domains (pr-agent activity chip + repo sync chip).
+// idle variant: static gray, no pulse.
 .activity-dot {
   width: 6px;
   height: 6px;
@@ -252,8 +252,8 @@ textarea {
   }
 }
 
-// 通用图标按钮：透明底无边框，hover 浅底高亮。app 多处复用（状态栏 / Modal / ChatPane /
-// 同步刷新等），故置于 base 而非某一业务域。
+// Generic icon button: transparent background no border, hover light-background highlight. Reused in many places in the app (statusbar / Modal / ChatPane /
+// sync refresh, etc.), so placed in base rather than a single business domain.
 .icon-btn {
   background: transparent;
   border: none;
@@ -267,7 +267,7 @@ textarea {
 
   &:hover:not(:disabled) {
     background: $bg-white-fade;
-    // 主文字色（随主题）——勿写死 white：浅色模式下白图标会消失在浅底 hover 上。
+    // primary text color (follows theme) —— do not hardcode white: in light mode a white icon disappears on the light hover background.
     color: $text-primary;
   }
   &:disabled {
@@ -287,8 +287,8 @@ textarea {
   }
 }
 
-// 通用开关（Switch 组件）：轨道 + 滑块。off 走中性灰底，on 走 accent 底，滑块右移；白色滑块带轻阴影
-// 在深浅轨道上都可辨。
+// Generic switch (Switch component): track + knob. off uses a neutral gray background, on uses an accent background, knob shifts right; the white knob has a light shadow
+// so it is distinguishable on both dark and light tracks.
 .switch {
   position: relative;
   flex-shrink: 0;

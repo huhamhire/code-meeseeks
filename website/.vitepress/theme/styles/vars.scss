@@ -1,0 +1,27 @@
+// Map brand tokens → VitePress theme CSS variables (light + dark).
+// Keep the token → --vp-c-brand-* mapping here; never write raw brand hex elsewhere.
+@use 'sass:color';
+@use 'tokens' as *;
+
+:root {
+  --vp-c-brand-1: #{$brand-accent-light};
+  --vp-c-brand-2: #{$brand-hover-light};
+  --vp-c-brand-3: #{$brand-primary-light};
+  --vp-c-brand-soft: #{color.change($brand-hover-light, $alpha: 0.14)};
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #{$brand-primary-light} 20%, #{$brand-primary-dark});
+  --vp-home-hero-image-background-image: linear-gradient(
+    120deg,
+    #{color.change($brand-accent-light, $alpha: 0.28)},
+    #{color.change($brand-primary-dark, $alpha: 0.28)}
+  );
+  --vp-home-hero-image-filter: blur(48px);
+}
+
+.dark {
+  --vp-c-brand-1: #{$brand-primary-dark};
+  --vp-c-brand-2: #{$brand-hover-dark};
+  --vp-c-brand-3: #{$brand-accent-dark};
+  --vp-c-brand-soft: #{color.change($brand-primary-dark, $alpha: 0.16)};
+}

@@ -4,7 +4,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { ConfigSchema, type Config } from '@meebox/shared';
 
 /**
- * 读取 config.yaml 并校验。文件不存在时返回 null（由 bootstrap 决定是否创建）。
+ * Read config.yaml and validate it. Returns null when the file is absent (bootstrap decides whether to create it).
  */
 export async function readConfig(configFile: string): Promise<Config | null> {
   let text: string;
@@ -19,7 +19,7 @@ export async function readConfig(configFile: string): Promise<Config | null> {
 }
 
 /**
- * 原子写入 config.yaml：先写 tmp，fsync，再 rename。
+ * Atomic write of config.yaml: write to tmp, fsync, then rename.
  */
 export async function writeConfig(configFile: string, config: Config): Promise<void> {
   const yaml = stringifyYaml(config);
@@ -35,7 +35,7 @@ export async function writeConfig(configFile: string, config: Config): Promise<v
   await fs.rename(tmp, configFile);
 }
 
-/** 默认配置：所有字段走 zod schema 的 default 值。 */
+/** Default config: every field takes the zod schema's default value. */
 export function defaultConfig(): Config {
   return ConfigSchema.parse({});
 }

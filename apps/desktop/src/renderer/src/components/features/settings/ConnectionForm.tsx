@@ -6,10 +6,10 @@ import { invoke } from '../../../api';
 import { formatBackendError } from '../../../errors';
 import { EyeIcon, EyeOffIcon } from '../../common';
 
-// 连接编辑用的扁平草稿（Connection 是嵌套的 auth/clone，拍平后表单好写），存盘前还原。
-// 设置页 ConnectionEditorModal 与首启向导 PlatformStep 共用同一份草稿形状 + 表单。
+// Flat draft for connection editing (Connection is nested auth/clone; flattening makes the form easier), restored before saving.
+// The settings-page ConnectionEditorModal and the first-launch wizard PlatformStep share the same draft shape + form.
 export type ConnEntry = Config['connections'][number];
-/** 当前支持配置的平台 kind */
+/** Platform kinds currently supported for configuration */
 export type ConnKind = 'github' | 'bitbucket-server' | 'gitlab';
 export type ConnDraft = {
   id: string;
@@ -32,7 +32,7 @@ export function toConnDraft(c: ConnEntry): ConnDraft {
 }
 
 export function fromConnDraft(d: ConnDraft): ConnEntry {
-  // GitHub / GitLab 的 Base URL 可留空 → 默认官方 endpoint（GHE / 自建实例才需手填）。
+  // Base URL for GitHub / GitLab may be left empty → default official endpoint (only GHE / self-hosted instances need manual entry).
   const trimmed = d.base_url.trim();
   const base_url =
     trimmed === '' && d.kind === 'github'
@@ -54,7 +54,7 @@ export function fromConnDraft(d: ConnDraft): ConnEntry {
       : { ...common, kind: 'bitbucket-server' as const };
 }
 
-/** 各平台的字段文案（名称 / Base URL / 令牌 占位） */
+/** Field copy for each platform (name / Base URL / token placeholders) */
 function kindHints(
   t: TFunction,
 ): Record<ConnKind, { name: string; baseUrl: string; token: string }> {
@@ -77,22 +77,22 @@ function kindHints(
   };
 }
 
-/** Base URL 形如 http(s)://… 才算合法；GitHub / GitLab 允许留空（默认官方 endpoint）。 */
+/** Base URL is valid only when shaped like http(s)://…; GitHub / GitLab may be left empty (default official endpoint). */
 export function connUrlValid(d: ConnDraft): boolean {
   const u = d.base_url.trim();
   if ((d.kind === 'github' || d.kind === 'gitlab') && u === '') return true;
   return /^https?:\/\/.+/i.test(u);
 }
-/** 名称 + 合法 URL + token 三者齐全才允许保存 */
+/** Saving is allowed only when name + valid URL + token are all present */
 export function connDraftCanSave(d: ConnDraft): boolean {
   return d.display_name.trim() !== '' && connUrlValid(d) && d.token.trim() !== '';
 }
 
 /**
- * 连接配置受控表单（名称 / Base URL / PAT / Clone 协议 + 「测试连接」）。
- * 只负责字段渲染与即时连通性测试；保存 / 取消等动作由外层（模态框 / 向导）提供。
+ * Controlled connection-config form (name / Base URL / PAT / Clone protocol + "test connection").
+ * Only handles field rendering and live connectivity testing; save / cancel actions are provided by the outer layer (modal / wizard).
  *
- * autoFocus 默认开（模态打开聚焦名称）；嵌在向导里时按需关闭避免抢焦点。
+ * autoFocus defaults on (focuses the name field when the modal opens); turn it off as needed when embedded in the wizard to avoid stealing focus.
  */
 export function ConnectionForm({
   draft,
@@ -110,7 +110,7 @@ export function ConnectionForm({
 
   const update = <K extends keyof ConnDraft>(field: K, value: ConnDraft[K]): void => {
     onChange({ ...draft, [field]: value });
-    setTestResult(null); // 改字段清掉旧测试结果，避免误导
+    setTestResult(null); // clear the old test result on field change to avoid misleading
   };
 
   const urlValid = connUrlValid(draft);
@@ -216,7 +216,7 @@ export function ConnectionForm({
           </select>
         </div>
       </div>
-      {/* 测试连接：独立一行，左按钮右结果。保存 / 取消 由外层决定布局 */}
+      {/* Test connection: own row, button on the left, result on the right. Save / cancel layout is decided by the outer layer */}
       <div className="settings-actions" style={{ marginTop: 12, alignItems: 'center' }}>
         <button
           type="button"

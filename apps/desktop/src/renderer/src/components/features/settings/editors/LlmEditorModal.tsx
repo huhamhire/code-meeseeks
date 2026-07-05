@@ -20,7 +20,7 @@ export function LlmEditorModal({
 }) {
   const { t } = useTranslation();
   const { mode, draft } = state;
-  // 点保存才把所有必填项暴露出来（LlmProfileForm 内部按 touched 渐进显示）
+  // Only reveal all required fields when Save is clicked (LlmProfileForm shows them progressively by touched)
   const [forceShowErrors, setForceShowErrors] = useState(false);
   const isValid = Object.keys(validateProfile(draft, existing)).length === 0;
   const trySave = (): void => {
@@ -30,11 +30,11 @@ export function LlmEditorModal({
     }
     onSave();
   };
-  // 退出校验：记下打开时的草稿快照，与当前比对判断是否有未提交改动
+  // Exit validation: snapshot the draft on open, compare against current to detect uncommitted changes
   const initialDraft = useRef(JSON.stringify(draft));
   const dirty = JSON.stringify(draft) !== initialDraft.current;
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  // 关闭（背景点击 / 关闭键 / 取消按钮）统一走这里：有改动则先拦截确认
+  // Closing (backdrop click / close key / cancel button) all routes through here: intercept with a confirm if dirty
   const requestClose = (): void => {
     if (dirty) setConfirmDiscard(true);
     else onCancel();
@@ -47,8 +47,8 @@ export function LlmEditorModal({
         onClose={requestClose}
         title={mode === 'add' ? t('settings.addLlmTitle') : t('settings.editLlmTitle')}
       >
-        {/* 左右两栏：左选 provider（复用向导布局），右填该 provider 的配置（隐藏表单内冗余的 provider 下拉）。
-            固定高度：两栏各自在其内滚动，切换 provider 时模态高度恒定、不抖动。 */}
+        {/* Two columns: left picks the provider (reuses wizard layout), right fills that provider's config (hides the form's redundant provider dropdown).
+            Fixed height: each column scrolls within itself, so the modal height stays constant and doesn't jitter when switching provider. */}
         <div className="config-pick-grid config-pick-grid-fixed">
           <LlmProviderPicker
             value={draft.provider}

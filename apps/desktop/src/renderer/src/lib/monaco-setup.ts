@@ -1,23 +1,24 @@
-// 让 @monaco-editor/react 使用本地 monaco-editor 包，而不是从 CDN 拉 loader.js。
-// 配合 CSP 严格化（无 cdn.jsdelivr.net 例外）。
+// Make @monaco-editor/react use the local monaco-editor package instead of pulling loader.js from a CDN.
+// Pairs with the strict CSP (no cdn.jsdelivr.net exception).
 //
-// 仅注册 base editor worker，markdown / 通用 diff 用不到 JSON/CSS/HTML/TS language worker。
-// M1+ 真正要做语法高亮时再按需 import 对应 language worker。
+// Only register the base editor worker; markdown / generic diff don't need the JSON/CSS/HTML/TS language workers.
+// When M1+ actually needs syntax highlighting, import the corresponding language worker on demand.
 
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import { loader } from '@monaco-editor/react';
-// 4 个「带 worker 后端语言服务」的 contribution 子模块（editor.main 已加载，这里再引一次只为
-// 取其具名导出的 *Defaults；ES module 单例不会重复执行）。它们的运行期 JS 具名导出
-// typescriptDefaults / jsonDefaults / cssDefaults … 但 .d.ts 误为 `export {}`（monaco 0.55 ESM
-// 打包缺陷），故按 namespace 引入、下方经 unknown 转成已知形状取用，不引入 any。
+// The 4 contribution submodules for "worker-backed language services" (editor.main already loaded them; importing
+// again here is only to grab their named-exported *Defaults; ES module singletons won't re-execute). Their runtime
+// JS named-exports typescriptDefaults / jsonDefaults / cssDefaults … but the .d.ts is wrongly `export {}` (monaco
+// 0.55 ESM bundling defect), so import as namespace and cast via unknown below into the known shapes, without any.
 import * as tsLang from 'monaco-editor/esm/vs/language/typescript/monaco.contribution.js';
 import * as jsonLang from 'monaco-editor/esm/vs/language/json/monaco.contribution.js';
 import * as cssLang from 'monaco-editor/esm/vs/language/css/monaco.contribution.js';
 import * as htmlLang from 'monaco-editor/esm/vs/language/html/monaco.contribution.js';
-// 第三方编辑器主题（IStandaloneThemeData 形状，vendored 自 monaco-themes，见 editor-themes/NOTICE.md），
-// 下方经 defineTheme 注册供选择。id 与 @meebox/shared EDITOR_THEME_OPTIONS 对齐；vs / vs-dark / hc-*
-// 为 Monaco 内置、无需注册。就地内置而非 npm 依赖：monaco-themes 的 exports 未暴露 ./themes/* 子路径。
+// Third-party editor themes (IStandaloneThemeData shape, vendored from monaco-themes, see editor-themes/NOTICE.md),
+// registered via defineTheme below for selection. ids align with @meebox/shared EDITOR_THEME_OPTIONS; vs / vs-dark /
+// hc-* are Monaco built-ins, no registration needed. Vendored in place rather than an npm dependency: monaco-themes'
+// exports don't expose the ./themes/* subpath.
 import githubLight from './editor-themes/github-light.json';
 import githubDark from './editor-themes/github-dark.json';
 import monokai from './editor-themes/monokai.json';
@@ -30,11 +31,11 @@ import solarizedLight from './editor-themes/solarized-light.json';
 import solarizedDark from './editor-themes/solarized-dark.json';
 import cobalt2 from './editor-themes/cobalt2.json';
 import oceanicNext from './editor-themes/oceanic-next.json';
-// VS Code 内置 2026 默认主题（转换自 microsoft/vscode theme-defaults，已解析 include 链并转为 Monaco 形状）。
+// VS Code built-in 2026 default themes (converted from microsoft/vscode theme-defaults, include chain resolved and converted to Monaco shape).
 import dark2026 from './editor-themes/dark-2026.json';
 import light2026 from './editor-themes/light-2026.json';
 
-// Vite 的 ?worker import 返回一个可 new 的 Worker 构造类。
+// Vite's ?worker import returns a newable Worker constructor class.
 self.MonacoEnvironment = {
   getWorker() {
     return new editorWorker();
@@ -43,8 +44,8 @@ self.MonacoEnvironment = {
 
 loader.config({ monaco });
 
-// 注册第三方编辑器主题（id → 主题数据）。Monaco 内置 vs / vs-dark / hc-* 不在此列。JSON 的 base
-// 字段类型为 string，与 IStandaloneThemeData 的字面量联合不完全兼容，经 unknown 转换取用。
+// Register third-party editor themes (id → theme data). Monaco built-in vs / vs-dark / hc-* aren't in this list.
+// The JSON's base field is typed string, not fully compatible with IStandaloneThemeData's literal union, so cast via unknown.
 const CUSTOM_EDITOR_THEMES: ReadonlyArray<readonly [string, unknown]> = [
   ['github-light', githubLight],
   ['github-dark', githubDark],
@@ -66,9 +67,10 @@ for (const [id, data] of CUSTOM_EDITOR_THEMES) {
 }
 
 /**
- * 【SPIKE】按主题 id 取其 base + colors，供「GUI chrome 跟随编辑器主题」验证从中提取 background /
- * foreground / selection 等 base 色。第三方 monaco-themes 仅带极少数 colors（editor.* 几个键），
- * 内置 vs / vs-dark / hc-* 无 JSON、在此补最小已知色。验证完毕若不采纳可整体移除。
+ * [SPIKE] Get a theme's base + colors by id, for the "GUI chrome follows editor theme" experiment to extract base
+ * colors like background / foreground / selection. Third-party monaco-themes carry only a handful of colors (a few
+ * editor.* keys); built-in vs / vs-dark / hc-* have no JSON, so supply minimal known colors here. Removable
+ * wholesale if not adopted after the experiment.
  */
 export interface EditorThemeColorData {
   base: string;
@@ -119,24 +121,26 @@ export function getEditorThemeColors(id: string): EditorThemeColorData | null {
 }
 
 /**
- * 关掉 4 个「带 worker 后端语言服务」的语言族的全部特性：typescript/javascript（ts.worker）、
- * json（json.worker）、css/scss/less（css.worker）、html/handlebars/razor（html.worker）。
+ * Turn off all features of the 4 "worker-backed language service" language families: typescript/javascript
+ * (ts.worker), json (json.worker), css/scss/less (css.worker), html/handlebars/razor (html.worker).
  *
- * 本应用只用 Monaco 做只读 diff + 语法着色（着色走 monarch tokenizer，与语言服务无关），不需要
- * 补全 / 悬浮 / 符号 / 诊断 / 格式化等；而这些特性会向对应 *.worker 发 RPC（getNavigationTree /
- * getSyntacticDiagnostics / doValidation …）。但我们只注册了 base editor.worker（见上 getWorker）
- * → 这些方法找不到 handler，抛 `Missing requestHandler or method: …`。
+ * This app only uses Monaco for read-only diff + syntax coloring (coloring goes through the monarch tokenizer,
+ * unrelated to language services), and needs no completion / hover / symbols / diagnostics / formatting, etc.;
+ * those features send RPCs to the corresponding *.worker (getNavigationTree / getSyntacticDiagnostics /
+ * doValidation …). But we only registered the base editor.worker (see getWorker above) → these methods find no
+ * handler and throw `Missing requestHandler or method: …`.
  *
- * 传空 ModeConfiguration（各字段均 optional，缺省即不注册对应 provider）→ 这些 provider 不再注册、
- * 不再发 RPC，从源头消除整族报错（下方 window 兜底退化为纯保险）。其余 80+ 语言是 monarch
- * tokenizer 纯着色、无 worker 后端，不受影响也无需处理。
+ * Passing an empty ModeConfiguration (each field is optional, absent = don't register that provider) → these
+ * providers are no longer registered, no longer send RPCs, eliminating the whole family of errors at the source
+ * (the window fallback below degrades to pure insurance). The other 80+ languages are pure monarch tokenizer
+ * coloring with no worker backend, unaffected and needing no handling.
  */
 interface LangServiceDefaults {
-  // 传空 ModeConfiguration（各字段均 optional，缺省即不注册对应 provider）= 关掉全部特性
+  // Passing an empty ModeConfiguration (each field is optional, absent = don't register that provider) = turn off all features
   setModeConfiguration(modeConfiguration: object): void;
 }
-// 运行期具名导出存在（见各 contribution.js 的 export），但其 .d.ts 误为 `export {}`，故经
-// unknown 转成已知 *Defaults 形状取用（不引入 any）；名字缺失时 filter 兜底，未来 monaco 改名不崩。
+// The runtime named exports exist (see each contribution.js's export), but their .d.ts is wrongly `export {}`, so
+// cast via unknown into the known *Defaults shape (without any); filter as fallback when a name is missing, so a future monaco rename won't crash.
 const defaultsOf = (mod: unknown, names: readonly string[]): LangServiceDefaults[] =>
   names
     .map((n) => (mod as Record<string, LangServiceDefaults | undefined>)[n])
@@ -152,18 +156,19 @@ for (const d of [
 }
 
 /**
- * Monaco 在 DiffEditor 快速切换文件时，会出现 model 已 dispose 但 widget 还在
- * 收尾的竞态；以及"内置 ts/js language contribution 主动询问 inlayHints /
- * quickInfo / navigationTree / ...，editor.worker 没实现对应方法"的一系列运行时
- * 报错。两类都不影响渲染，但污染 console 让用户以为应用挂了。
+ * When Monaco quickly switches files in DiffEditor, a race occurs where the model is already disposed but the
+ * widget is still finishing up; plus a series of runtime errors from "the built-in ts/js language contribution
+ * proactively asking for inlayHints / quickInfo / navigationTree / ..., which editor.worker doesn't implement".
+ * Neither affects rendering, but they pollute the console and make users think the app crashed.
  *
- * 仅按消息前缀黑名单吞掉，不动其他真实业务错误。
+ * Only swallow by a message-prefix blacklist, leaving other real business errors untouched.
  *
- * `Missing requestHandler or method:` 整族源于 worker RPC 找不到 handler（已在上方从源头
- * 关闭对应语言服务，这里留作双保险）；`TextModel got disposed …` 是 DiffEditor 切换 model
- * 的 dispose 竞态。两类都是 Monaco 上游已知问题、不影响渲染、应用侧无法根除 → **默认静默忽略**
- * （作为已知问题）。需诊断时在 devtools 执行 `localStorage.setItem('meebox.monacoDebug','1')`
- * 再刷新，即可看到被吞的报错明细。
+ * The whole `Missing requestHandler or method:` family stems from worker RPCs finding no handler (already turned
+ * off at the source above by disabling the corresponding language services; kept here as double insurance);
+ * `TextModel got disposed …` is the DiffEditor model-switch dispose race. Both are Monaco upstream known issues,
+ * don't affect rendering, and can't be eradicated on the app side → **silently ignored by default** (as known
+ * issues). To diagnose, run `localStorage.setItem('meebox.monacoDebug','1')` in devtools and refresh to see the
+ * details of the swallowed errors.
  */
 const MONACO_DEBUG = (() => {
   try {
@@ -187,7 +192,7 @@ function isBenignMonacoError(msg: unknown): boolean {
 window.addEventListener('error', (e) => {
   if (isBenignMonacoError(e.message) || isBenignMonacoError(e.error?.message)) {
     e.preventDefault();
-    // 默认静默（已知问题）；开 meebox.monacoDebug 才打一行便于诊断
+    // Silent by default (known issue); only log a line when meebox.monacoDebug is on, for diagnostics
     if (MONACO_DEBUG) console.warn('[monaco] suppressed benign error:', e.message);
   }
 });

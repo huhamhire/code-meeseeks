@@ -23,44 +23,44 @@ const ctx: RuleMatchContext = {
 };
 
 describe('ruleMatches', () => {
-  it('frontmatter 全省 + enabled=true → 匹配任意', () => {
+  it('frontmatter all omitted + enabled=true → matches anything', () => {
     expect(ruleMatches(mkRule(), ctx)).toBe(true);
   });
 
-  it('enabled=false → 永远不匹配', () => {
+  it('enabled=false → never matches', () => {
     expect(ruleMatches(mkRule({ enabled: false }), ctx)).toBe(false);
   });
 
-  it('tools 不含当前 tool → 不匹配', () => {
+  it('tools does not include the current tool → no match', () => {
     expect(ruleMatches(mkRule({ tools: ['describe'] }), ctx)).toBe(false);
     expect(ruleMatches(mkRule({ tools: ['review'] }), ctx)).toBe(true);
   });
 
-  it('project 正则精确锚 (^FX$) 命中', () => {
+  it('project regex with exact anchors (^FX$) matches', () => {
     const r = mkRule({ applies_to: { project: /^FX$/ } });
     expect(ruleMatches(r, ctx)).toBe(true);
     expect(ruleMatches(r, { ...ctx, projectKey: 'FX-OTHER' })).toBe(false);
   });
 
-  it('project 正则模糊 (FX) 不锚时会子串命中', () => {
+  it('fuzzy project regex (FX) without anchors matches on substring', () => {
     const r = mkRule({ applies_to: { project: /FX/ } });
     expect(ruleMatches(r, { ...ctx, projectKey: 'PRE-FX-SUF' })).toBe(true);
   });
 
-  it('repo 正则命中', () => {
+  it('repo regex matches', () => {
     const r = mkRule({ applies_to: { repo: /^fx-.*/ } });
     expect(ruleMatches(r, ctx)).toBe(true);
     expect(ruleMatches(r, { ...ctx, repoSlug: 'other-help' })).toBe(false);
   });
 
-  it('target_branch 多选正则命中', () => {
+  it('target_branch multi-choice regex matches', () => {
     const r = mkRule({ applies_to: { target_branch: /^(master|main)$/ } });
     expect(ruleMatches(r, ctx)).toBe(true);
     expect(ruleMatches(r, { ...ctx, targetBranch: 'main' })).toBe(true);
     expect(ruleMatches(r, { ...ctx, targetBranch: 'develop' })).toBe(false);
   });
 
-  it('多字段同时设：任一不匹配整体 false', () => {
+  it('multiple fields set at once: any one not matching makes the whole thing false', () => {
     const r = mkRule({
       applies_to: { project: /^FX$/, repo: /^fx-other$/ },
     });
@@ -69,7 +69,7 @@ describe('ruleMatches', () => {
 });
 
 describe('pickMatchingRule', () => {
-  it('多条命中按列表顺序取第一条 (调用方传入时已经预排序)', () => {
+  it('with multiple matches takes the first by list order (caller pre-sorts before passing in)', () => {
     const rules = [
       mkRule({ id: '01.md' }),
       mkRule({ id: '02.md' }),
@@ -77,12 +77,12 @@ describe('pickMatchingRule', () => {
     expect(pickMatchingRule(rules, ctx)?.id).toBe('01.md');
   });
 
-  it('全不命中返回 null', () => {
+  it('returns null when nothing matches', () => {
     const rules = [mkRule({ applies_to: { project: /^OTHER$/ } })];
     expect(pickMatchingRule(rules, ctx)).toBeNull();
   });
 
-  it('enabled=false 的规则会被跳过，下一条继续', () => {
+  it('enabled=false rules are skipped, continuing to the next', () => {
     const rules = [
       mkRule({ id: 'a.md', enabled: false }),
       mkRule({ id: 'b.md' }),
@@ -90,7 +90,7 @@ describe('pickMatchingRule', () => {
     expect(pickMatchingRule(rules, ctx)?.id).toBe('b.md');
   });
 
-  it('tool 不匹配的规则会被跳过', () => {
+  it('rules whose tool does not match are skipped', () => {
     const rules = [
       mkRule({ id: 'desc-only.md', tools: ['describe'] }),
       mkRule({ id: 'review-ok.md', tools: ['review'] }),
@@ -100,7 +100,7 @@ describe('pickMatchingRule', () => {
 });
 
 describe('pickMatchingRules', () => {
-  it('返回全部命中（保序），过滤掉不匹配 / 禁用的', () => {
+  it('returns all matches (order preserved), filtering out non-matching / disabled ones', () => {
     const rules = [
       mkRule({ id: 'a.md' }),
       mkRule({ id: 'b.md', enabled: false }),
@@ -110,18 +110,18 @@ describe('pickMatchingRules', () => {
     expect(pickMatchingRules(rules, ctx).map((r) => r.id)).toEqual(['a.md', 'd.md']);
   });
 
-  it('封顶 limit 条（按列表顺序取前 N）', () => {
+  it('caps at limit entries (takes the first N by list order)', () => {
     const rules = [mkRule({ id: '1.md' }), mkRule({ id: '2.md' }), mkRule({ id: '3.md' })];
     expect(pickMatchingRules(rules, ctx, 2).map((r) => r.id)).toEqual(['1.md', '2.md']);
   });
 
-  it('全不命中返回空数组', () => {
+  it('returns an empty array when nothing matches', () => {
     expect(pickMatchingRules([mkRule({ applies_to: { project: /^OTHER$/ } })], ctx)).toEqual([]);
   });
 });
 
 describe('combineRuleInstructions', () => {
-  it('按 Ruleset N 分段拼接各规则正文（frontmatter 已在加载期剥离）', () => {
+  it('concatenates each rule body in Ruleset N sections (frontmatter already stripped at load time)', () => {
     const out = combineRuleInstructions([
       mkRule({ instructions: 'first body' }),
       mkRule({ instructions: 'second body' }),
@@ -129,7 +129,7 @@ describe('combineRuleInstructions', () => {
     expect(out).toBe('## Ruleset 1\n\nfirst body\n\n## Ruleset 2\n\nsecond body');
   });
 
-  it('空输入 → 空串', () => {
+  it('empty input → empty string', () => {
     expect(combineRuleInstructions([])).toBe('');
   });
 });

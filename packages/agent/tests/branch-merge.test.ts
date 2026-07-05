@@ -52,7 +52,7 @@ describe('classifyBranchMerge', () => {
   });
 
   it('does not flag a mainline source that carries original (non-merge) commits', () => {
-    // 复现误判修复：源为 master/dev 的 fork 原创 PR——提交含非 merge → 不是分支合并。
+    // Reproduces the misjudgment fix: an original fork PR sourced from master/dev — commits include a non-merge → not a branch merge.
     const commits = [{ parents: ['a', 'b'] }, { parents: ['c'] }];
     expect(classifyBranchMerge({ sourceBranch: 'master', targetBranch: 'master', commits })).toEqual(
       { isBranchMerge: false, basis: 'commits', sourceMainline: true },

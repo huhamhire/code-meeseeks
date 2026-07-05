@@ -13,9 +13,9 @@ import type { StateStore } from '@meebox/state-store';
 import { makeRunId } from './runs.js';
 
 /**
- * Agent 会话落在 `prs/<localId>/agent/`：每个 PR 一份 session + 一条 transcript，
- * 与 meta / comments / runs 同处该 PR 目录，PR 退场时 deleteDir 整棵清掉（与它们同寿命）。
- * localId 是 prHashId 出来的 12 位 hex，无路径不安全字符，不需 sanitize。
+ * Agent sessions live under `prs/<localId>/agent/`: one session + one transcript per PR,
+ * alongside meta / comments / runs in that PR directory; on PR retirement deleteDir wipes the whole tree (same lifespan as them).
+ * localId is the 12-hex output of prHashId, has no path-unsafe characters, and needs no sanitize.
  */
 function sessionKey(prLocalId: string): string {
   return `prs/${prLocalId}/agent/session`;
@@ -30,15 +30,15 @@ function conversationKey(prLocalId: string): string {
 export interface StartAgentSessionInput {
   prLocalId: string;
   maxSteps: number;
-  /** 外部预分配的 session id（与队列 id 对齐）；缺省按时序生成。 */
+  /** Externally pre-allocated session id (aligned with the queue id); defaults to time-ordered generation. */
   id?: string;
-  /** 触发会话的用户自然语言请求（agent:ask）；自动评审无文本则缺省。 */
+  /** The user's natural-language request that triggered the session (agent:ask); defaults absent for auto reviews with no text. */
   userRequest?: string;
 }
 
 /**
- * 起一个新会话：写初始 running 状态，并把 transcript 清空（新会话覆盖旧的，
- * 每个 PR 同时只有一份当前会话，见「会话隔离」）。
+ * Start a new session: write the initial running status and clear the transcript (a new session overwrites the old one,
+ * each PR has only one current session at a time, see "session isolation").
  */
 export async function startAgentSession(
   stateStore: StateStore,
@@ -78,8 +78,8 @@ export interface AgentSessionPatch {
 }
 
 /**
- * Merge patch 到已存在的会话并重写。会话不存在返回 null（不重建空记录，避免
- * start 失败后的 update 静默成功；与 finishReviewRun 一致）。
+ * Merge the patch into an existing session and rewrite it. Returns null if the session does not exist (does not rebuild an empty record, to avoid
+ * an update silently succeeding after a failed start; consistent with finishReviewRun).
  */
 export async function updateAgentSession(
   stateStore: StateStore,
@@ -113,8 +113,8 @@ export async function getAgentTranscript(
 }
 
 /**
- * 追加一个编排步骤到 transcript，并同步会话的 stepCount（= transcript 长度）。
- * 会话不存在返回 null（必须先 start）。`at` 缺省时打当前时间。
+ * Append an orchestration step to the transcript and sync the session's stepCount (= transcript length).
+ * Returns null if the session does not exist (must start first). `at` defaults to the current time.
  */
 export async function appendAgentStep(
   stateStore: StateStore,
@@ -140,7 +140,7 @@ export async function appendAgentStep(
   return next;
 }
 
-/** 清掉某 PR 的会话 + transcript + 多轮对话（删 `prs/<localId>/agent/*`）。 */
+/** Wipe a PR's session + transcript + multi-turn conversation (delete `prs/<localId>/agent/*`). */
 export async function clearAgentSession(
   stateStore: StateStore,
   prLocalId: string,
@@ -151,8 +151,8 @@ export async function clearAgentSession(
 }
 
 /**
- * 多轮对话日志（跨回合保留，独立于 per-turn 的 session / transcript 生命周期）：读取本 PR
- * 全部消息（用户输入 + Agent 收尾回答）。无则空数组。
+ * Multi-turn conversation log (retained across turns, independent of the per-turn session / transcript lifecycle): read this PR's
+ * full message list (user input + Agent's summary answers). Empty array if none.
  */
 export async function getAgentConversation(
   stateStore: StateStore,
@@ -162,7 +162,7 @@ export async function getAgentConversation(
   return file?.messages ?? [];
 }
 
-/** 整体重写某 PR 的多轮对话（用于压缩 / 摘要替换旧消息）。 */
+/** Rewrite a PR's multi-turn conversation as a whole (used to compact / replace old messages with a summary). */
 export async function writeAgentConversation(
   stateStore: StateStore,
   prLocalId: string,
@@ -174,7 +174,7 @@ export async function writeAgentConversation(
   });
 }
 
-/** 追加一条对话消息（用户 / 助手），返回追加后的完整消息列表。`at` 缺省打当前时间。 */
+/** Append a conversation message (user / assistant), returning the full message list after the append. `at` defaults to the current time. */
 export async function appendAgentMessage(
   stateStore: StateStore,
   prLocalId: string,

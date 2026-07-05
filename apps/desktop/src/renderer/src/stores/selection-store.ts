@@ -1,41 +1,43 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * 跨组件共享的「Diff 选区」池（渲染层内部态，不走 IPC）。DiffView 在用户于 Diff 里选中代码时写入，
- * ChatPane / ChatInputBar 读出，用于把选中代码作为**隐式上下文**带进 agent/ask 提问。
+ * Cross-component shared "Diff selection" pool (renderer-internal state, not via IPC). DiffView writes on
+ * user code selection in the Diff, ChatPane / ChatInputBar read it, to carry the selected code as **implicit
+ * context** into agent/ask questions.
  *
- * 数据流：
- *   DiffView 监听 Monaco onDidChangeCursorSelection → set(选区) / clear() →
- *   notify → useDiffSelection 重渲染 → 输入栏角标更新 →
- *   发送时（未忽略）formatReferencedContext(选区) → 作为 referencedContext 发给 main
+ * Data flow:
+ *   DiffView listens to Monaco onDidChangeCursorSelection → set(selection) / clear() →
+ *   notify → useDiffSelection re-renders → input bar badge updates →
+ *   on send (not ignored) formatReferencedContext(selection) → sent to main as referencedContext
  *
- * 与 drafts-store 同模（模块级状态 + Set<subscriber> + useSyncExternalStore），但纯本地、无 hydrate。
+ * Same pattern as drafts-store (module-level state + Set<subscriber> + useSyncExternalStore), but purely local, no hydrate.
  */
 export interface DiffSelection {
-  /** 选区归属 PR（防跨 PR 串台：useDiffSelection 不匹配当前 PR 时对外呈 null）。 */
+  /** PR the selection belongs to (prevents cross-PR mixups: useDiffSelection presents null when it doesn't match the current PR). */
   prLocalId: string;
-  /** 文件路径（head 侧用新路径，old 侧用基线路径）。 */
+  /** File path (head side uses new path, old side uses baseline path). */
   path: string;
-  /** 选区所在 Diff 子编辑器：old=基线(original) / new=变更(modified)。 */
+  /** Diff sub-editor the selection is in: old=baseline(original) / new=changed(modified). */
   side: 'old' | 'new';
-  /** 起止行（含两端，1 基，即该侧显示文件行号）。 */
+  /** Start/end lines (both ends inclusive, 1-based, i.e. the displayed file line numbers on that side). */
   startLine: number;
   endLine: number;
-  /** 行数（endLine - startLine + 1）。指 head/old 主选区的行数，不含下方 removed 附带行。 */
+  /** Line count (endLine - startLine + 1). Refers to the head/old primary selection line count, excluding the removed lines carried below. */
   lineCount: number;
-  /** 选中文本快照（选区产生时即取，发送时直接用，无需回查 model）。 */
+  /** Selected text snapshot (captured when the selection is produced, used directly on send, no need to re-query the model). */
   text: string;
   /**
-   * 内联（统一）视图专属：head 选区跨到的删除/改动 hunk 的**基线侧**原始行（含真实代码）。统一视图下
-   * 删除行是 Monaco view-zone、无法被光标选中，故据 getLineChanges() 映射、从 original model 取出，与
-   * 所选 head 行一并引用——让删除内容也能「像添加行一样」被引用。side==='new' 且非并排视图时可能有。
+   * Inline (unified) view only: the **baseline-side** original lines (with real code) of the deleted/changed hunk
+   * spanned by the head selection. In unified view the deleted lines are Monaco view-zones and can't be cursor-selected,
+   * so they are mapped via getLineChanges() and taken from the original model, referenced together with the selected
+   * head lines — letting deleted content also be referenced "like added lines". May be present when side==='new' and not side-by-side view.
    */
   removed?: { startLine: number; endLine: number; text: string };
 }
 
 interface SelectionStoreState {
   selection: DiffSelection | null;
-  /** 忽略态：用户点角标切到「不附带」，本条消息不带选区引用（角标仍显示，置灰 + eye-slash）。 */
+  /** Ignored state: user clicked the badge to toggle "don't carry", this message carries no selection reference (badge still shows, greyed out + eye-slash). */
   ignored: boolean;
 }
 
@@ -54,18 +56,18 @@ export const selectionStore = {
       subscribers.delete(cb);
     };
   },
-  /** 写入新选区。每次新选区默认「附带」（ignored 复位为 false）。 */
+  /** Write a new selection. Each new selection defaults to "carry" (ignored reset to false). */
   set: (selection: DiffSelection): void => {
     state = { selection, ignored: false };
     notify();
   },
-  /** 清空选区（选区塌缩 / 切 PR / 文件切换）。 */
+  /** Clear the selection (selection collapse / PR switch / file switch). */
   clear: (): void => {
     if (state.selection === null && !state.ignored) return;
     state = { selection: null, ignored: false };
     notify();
   },
-  /** 切换忽略态（角标点击）。 */
+  /** Toggle ignored state (badge click). */
   toggleIgnored: (): void => {
     if (!state.selection) return;
     state = { ...state, ignored: !state.ignored };
@@ -74,8 +76,8 @@ export const selectionStore = {
 };
 
 /**
- * 读取「归属当前 PR」的选区快照。选区 prLocalId 与传入不符（切到别的 PR / 无 PR）→ 返回 null 选区，
- * 避免把别 PR 的选区误带进本会话。
+ * Read the selection snapshot "belonging to the current PR". If the selection's prLocalId doesn't match the passed
+ * value (switched to another PR / no PR) → returns a null selection, to avoid carrying another PR's selection into this session.
  */
 export function useDiffSelection(prLocalId: string | null | undefined): {
   selection: DiffSelection | null;
@@ -88,7 +90,7 @@ export function useDiffSelection(prLocalId: string | null | undefined): {
   return snap;
 }
 
-/** 行范围标签：单行 `Lx`，多行 `Lx-Ly`。 */
+/** Line range label: single line `Lx`, multiple lines `Lx-Ly`. */
 function rangeLabel(startLine: number, endLine: number): string {
   return startLine === endLine
     ? `L${String(startLine)}`
@@ -96,10 +98,12 @@ function rangeLabel(startLine: number, endLine: number): string {
 }
 
 /**
- * 把选区拼成自描述的引用块（路径 + 行范围 + 侧 + 代码围栏），渲染层拼一次作为 referencedContext 发出。
- * 两条注入路径（pragent /ask 与 planner）共用此串。用四个反引号围栏，避免选中代码内含三反引号时破栏。
+ * Assemble the selection into a self-describing reference block (path + line range + side + code fence); the renderer
+ * assembles it once and sends it as referencedContext. Both injection paths (pragent /ask and planner) share this string.
+ * Uses four-backtick fences to avoid breaking the fence when the selected code contains triple backticks.
  *
- * 内联视图带 removed 时分两块列出：所选 head 行 + 跨到的基线删除行，让删除内容也能被引用。
+ * When the inline view carries removed, it lists two blocks: the selected head lines + the spanned baseline deleted lines,
+ * so the deleted content can also be referenced.
  */
 export function formatReferencedContext(sel: DiffSelection): string {
   const sideLabel = sel.side === 'old' ? 'base' : 'head';

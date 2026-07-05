@@ -3,23 +3,23 @@ import { useTranslation } from 'react-i18next';
 import type { PlatformUser } from '@meebox/shared';
 import { ImageIcon } from '../../../../common';
 
-/** 弹出候选最多展示条数（候选源本就是 PR 参与者的有界集合，再截断以免列表过长）。 */
+/** Max number of suggestions shown in the popup (the source is already a bounded set of PR participants; truncate further to keep the list from growing too long). */
 const MAX_SUGGESTIONS = 8;
 
 interface MentionMenu {
-  /** `@` 之后已输入的查询串（不含 `@`）。 */
+  /** Query string typed after `@` (excluding `@`). */
   query: string;
-  /** `@` 在 value 中的下标（替换插入时的起点）。 */
+  /** Index of `@` in value (start point for replacement insertion). */
   at: number;
-  /** 过滤后的候选。 */
+  /** Filtered suggestions. */
   items: PlatformUser[];
-  /** 当前高亮项下标。 */
+  /** Index of the currently highlighted item. */
   index: number;
 }
 
 /**
- * 解析光标前文本里正在输入的 `@提及` token：返回 `@` 位置与查询串，否则 null。
- * 触发条件：`@` 紧跟在行首 / 空白 / 左括号之后，其后是「非空白非 @」串（用户名允许 . - _）。
+ * Parse the `@mention` token being typed in the text before the cursor: return the `@` position and query string, otherwise null.
+ * Trigger condition: `@` immediately follows the line start / whitespace / an opening paren, followed by a "non-whitespace non-@" string (usernames allow . - _).
  */
 function parseMention(value: string, caret: number): { at: number; query: string } | null {
   const before = value.slice(0, caret);
@@ -30,12 +30,12 @@ function parseMention(value: string, caret: number): { at: number; query: string
 }
 
 /**
- * 评论编辑用 textarea，叠加 `@提及` 自动补全。候选由调用方传入（PR 参与者 + 评论作者等**已加载**的
- * 有界集合，不向远端枚举全员，见 docs/arch/01-platform/01-adapter）；输入 `@` 后按查询串就地过滤、↑↓ 选择、Enter/Tab 确认、
- * Esc 关闭。补全仅为便利——用户仍可自由手打任意 `@name`，平台据文本自行解析通知。
+ * Comment-editing textarea overlaid with `@mention` autocomplete. Suggestions are passed in by the caller (a bounded set of **already loaded**
+ * PR participants + comment authors etc., not an enumeration of all remote members, see docs/arch/01-platform/01-adapter); after typing `@` filter in place by the query string, ↑↓ to select, Enter/Tab to confirm,
+ * Esc to close. Autocomplete is only a convenience — users can still freely type any `@name` by hand, and the platform parses notifications from the text itself.
  *
- * 弹层打开时拦截 ↑↓/Enter/Tab/Esc 用于候选导航，其余按键（含 Cmd/Ctrl+Enter 发送、Esc 取消）冒泡给
- * 调用方的 onKeyDown；弹层关闭时所有按键都交给 onKeyDown。
+ * While the popup is open, ↑↓/Enter/Tab/Esc are intercepted for suggestion navigation; other keys (including Cmd/Ctrl+Enter to send, Esc to cancel) bubble up to
+ * the caller's onKeyDown; while the popup is closed all keys go to onKeyDown.
  */
 export function MentionTextarea({
   value,
@@ -56,8 +56,8 @@ export function MentionTextarea({
   candidates: PlatformUser[];
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   /**
-   * 粘贴图片时的上传回调：上传成功返回可插入的 markdown（否则 null）。提供时启用图片粘贴上传
-   * （平台 commentAttachments 能力为真才由调用方传入）。上传期间禁用输入，避免 value 漂移。
+   * Upload callback for pasted images: returns insertable markdown on success (otherwise null). When provided, enables image paste upload
+   * (the caller only passes it when the platform's commentAttachments capability is true). Input is disabled during upload to avoid value drift.
    */
   onUpload?: (file: File) => Promise<string | null>;
   placeholder?: string;
@@ -67,8 +67,8 @@ export function MentionTextarea({
   autoFocus?: boolean;
   ariaLabel?: string;
   /**
-   * 可选：把内部 textarea 元素回传给调用方 ref（与组件内部 ref 并存）。供调用方做外部 focus /
-   * 焦点判定（如 DraftZone 进入编辑态聚焦、Esc 命中判定）。不传则仅组件内部使用。
+   * Optional: pass the internal textarea element back to the caller's ref (coexists with the component's internal ref). Lets the caller do external focus /
+   * focus checks (e.g. DraftZone focusing on entering edit mode, Esc hit testing). If omitted, used only internally by the component.
    */
   textareaRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
 }) {
@@ -79,7 +79,7 @@ export function MentionTextarea({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // 候选去重（按 name），保序：调用方可能混入重复参与者 / 评论作者。
+  // Dedupe suggestions (by name), preserving order: the caller may mix in duplicate participants / comment authors.
   const pool = useMemo(() => {
     const seen = new Set<string>();
     const out: PlatformUser[] = [];
@@ -120,7 +120,7 @@ export function MentionTextarea({
     const next = value.slice(0, menu.at) + insert + value.slice(end);
     onChange(next);
     setMenu(null);
-    // 插入后把光标放到补全文本之后
+    // After insertion, place the cursor after the completed text
     const caret = menu.at + insert.length;
     requestAnimationFrame(() => {
       const el = ref.current;
@@ -158,7 +158,7 @@ export function MentionTextarea({
     onKeyDown?.(e);
   };
 
-  // 上传一张图片并把返回的 markdown 插入当前光标处（无焦点时插到末尾）。粘贴 / 点附件按钮共用。
+  // Upload one image and insert the returned markdown at the current cursor (append to end when unfocused). Shared by paste / clicking the attach button.
   const uploadAndInsert = (file: File): void => {
     if (!onUpload || uploading) return;
     const at = ref.current?.selectionStart ?? value.length;
@@ -179,7 +179,7 @@ export function MentionTextarea({
         });
       })
       .catch((e: unknown) => {
-        // 上传失败（平台拒绝 / 网络等）：就地提示，不让 rejection 逃逸成未处理异常。
+        // Upload failed (platform rejection / network etc.): show inline, don't let the rejection escape as an unhandled exception.
         setUploadError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => setUploading(false));
@@ -199,7 +199,7 @@ export function MentionTextarea({
   const pickFile = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0];
     if (file) uploadAndInsert(file);
-    e.target.value = ''; // 复位：同一文件可再次选取触发 change
+    e.target.value = ''; // Reset: allow the same file to be selected again to trigger change
   };
 
   return (
@@ -271,7 +271,7 @@ export function MentionTextarea({
                 role="option"
                 aria-selected={i === menu.index}
                 className={`mention-option${i === menu.index ? ' mention-option-active' : ''}`}
-                // mousedown 而非 click：抢在 textarea blur（关闭弹层）之前选中
+                // mousedown rather than click: select before the textarea blur (which closes the popup)
                 onMouseDown={(e) => {
                   e.preventDefault();
                   select(u);

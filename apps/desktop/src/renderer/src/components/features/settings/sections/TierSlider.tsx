@@ -2,9 +2,9 @@ import type { CSSProperties } from 'react';
 import { nearestTierIdx } from '../utils';
 
 /**
- * 离散档位滑块（数值拖拽组件）：拖的是档位索引而非数值，从而实现非线性步长 + 刻度吸附。
- * 轮询间隔 / 评审并发 / LLM 上下文长度等数值配置共用此组件（见 PollerSection 等）。
- * 仅负责滑块 + 刻度 + 右侧读数的呈现；具体档位 / 文案由调用方传入。
+ * Discrete tier slider (numeric drag component): drags the tier index rather than the value, achieving non-linear step size + tick snapping.
+ * Numeric configs such as poll interval / review concurrency / LLM context length share this component (see PollerSection etc.).
+ * Only responsible for rendering the slider + ticks + right-side readout; specific tiers / text are passed in by the caller.
  */
 export function TierSlider({
   tiers,
@@ -14,16 +14,16 @@ export function TierSlider({
   formatTick = String,
   formatValue,
 }: {
-  /** 档位数值集合（升序）；滑块在其索引上移动。 */
+  /** Tier value set (ascending); the slider moves over its indices. */
   tiers: readonly number[];
-  /** 当前数值（不在档位上时就近吸附到最接近档位）。 */
+  /** Current value (snaps to the nearest tier when not on a tier). */
   value: number;
-  /** 选定档位 → 回传该档数值。 */
+  /** Selected tier → passes back that tier's value. */
   onChange: (value: number) => void;
   ariaLabel: string;
-  /** 刻度文案（默认直接显示数值）。 */
+  /** Tick text (defaults to showing the value directly). */
   formatTick?: (tier: number) => string;
-  /** 右侧读数文案；省略则不渲染右侧读数（纯数字无单位、与刻度重复时可隐藏）。 */
+  /** Right-side readout text; omit to not render the right-side readout (can hide when it's a plain unitless number that duplicates the ticks). */
   formatValue?: (value: number) => string;
 }) {
   const idx = nearestTierIdx(tiers, value);
@@ -42,8 +42,8 @@ export function TierSlider({
           onChange={(e) => onChange(tiers[Number.parseInt(e.target.value, 10)]!)}
           aria-label={ariaLabel}
         />
-        {/* 档位刻度：按 thumb 实际停靠位置绝对定位（thumb 宽 12px，两端内缩 6px），
-            translateX(-50%) 居中对齐；当前档位高亮。 */}
+        {/* Tier ticks: absolutely positioned by the thumb's actual resting position (thumb is 12px wide, inset 6px at each end),
+            translateX(-50%) for center alignment; current tier highlighted. */}
         <div className="settings-range-ticks">
           {tiers.map((tier, i) => {
             const frac = i / (tiers.length - 1);

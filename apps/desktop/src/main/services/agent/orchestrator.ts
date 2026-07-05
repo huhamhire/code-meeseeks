@@ -22,20 +22,23 @@ import { reviewFlow } from './flows/review.js';
 import type { AgentChat, OrchestratorRuntime } from './runtime.js';
 
 /**
- * Agent 编排服务（有状态协调器）：手动评审（agent:run）、自由规划（agent:ask）、AutoPilot 后台预评审，
- * 以及随 poll tick 清理已消失 PR 的在跑操作。运行态（每 PR 的 AbortController、「执行中」集合、AutoPilot
- * busy 锁、中途输入队列）是实例可变状态，故以 class 封装并实现 OrchestratorRuntime——把状态访问 + 共享
- * helper（withAgentChat / 收尾落地 / 步骤广播等）暴露给按「一任务一文件」拆分的各 flow（见 ./flows）。
+ * Agent orchestration service (stateful coordinator): manual review (agent:run), free-form planning
+ * (agent:ask), AutoPilot background pre-review, plus cleanup of in-flight ops on PRs that have vanished
+ * on each poll tick. Runtime state (per-PR AbortController, "running" set, AutoPilot busy lock, mid-run
+ * input queue) is instance-mutable state, so it is wrapped in a class implementing OrchestratorRuntime——
+ * exposing state access + shared helpers (withAgentChat / summary landing / step broadcast, etc.) to the
+ * flows split one-task-per-file (see ./flows).
  */
 export class Orchestrator implements OrchestratorRuntime {
-  // 编排 Agent 每 PR 至多一个在跑，AbortController 供 agent:stop 即时中止——思考 / 工具执行任意阶段都能停。
+  // At most one orchestrator agent runs per PR; AbortController lets agent:stop abort instantly——can stop at any stage of thinking / tool execution.
   private readonly agentControllers = new Map<string, AbortController>();
-  // 运行中（思考或派发工具）的编排 Agent 所属 PR 集合，向 renderer 广播「执行中」。手动 run/ask 与
-  // AutoPilot 后台评审一并计入，让 PR 列表项在纯思考阶段（无活跃工具 run）也显示执行中标记。
+  // Set of PRs whose orchestrator agent is running (thinking or dispatching tools), broadcast "running" to
+  // renderer. Manual run/ask and AutoPilot background review both count, so PR list items show the running
+  // mark even in the pure-thinking stage (no active tool run).
   private readonly runningAgentPrs = new Set<string>();
-  // Agent 编排层全局单并发：一次只跑一遍 AutoPilot pass（busy 锁），防止上一遍未完又叠跑。
+  // Global single-concurrency at the agent orchestration layer: run at most one AutoPilot pass at a time (busy lock), preventing a new pass stacking on an unfinished one.
   private autopilotBusy = false;
-  // 中途输入转向：每 PR 一个待处理用户消息队列（运行中追加 → 入队，下一周期 drain 注入）。
+  // Mid-run input redirect: one pending user-message queue per PR (appended while running → enqueued, injected via drain next cycle).
   private readonly pendingInputByPr = new Map<string, string[]>();
 
   constructor(
@@ -43,14 +46,14 @@ export class Orchestrator implements OrchestratorRuntime {
     readonly runQueue: RunQueue,
   ) {}
 
-  // ── 公共 API（IPC 入口；委托给 ./flows 下按任务拆分的各 flow）──
+  // ── Public API (IPC entry points; delegates to the per-task flows under ./flows) ──
 
-  /** 对指定 PR 跑评审微流程（agent:run）。 */
+  /** Run the review micro-flow on the given PR (agent:run). */
   runReview(pr: StoredPullRequest): Promise<AgentSession> {
     return reviewFlow(this, pr);
   }
 
-  /** 对指定 PR 跑自由规划 Agent（agent:ask）。 */
+  /** Run the free-form planning agent on the given PR (agent:ask). */
   runPlanning(
     pr: StoredPullRequest,
     question: string,
@@ -60,8 +63,9 @@ export class Orchestrator implements OrchestratorRuntime {
   }
 
   /**
-   * 运行期间追加用户消息（agent:enqueueMessage）：有 Agent 在跑 → 入队，下一主 Agent 周期 drain 注入
-   * （queued=true）；无在跑 → 直接起一轮自由规划兜底（queued=false，fire-and-forget，不丢消息）。
+   * Append a user message during a run (agent:enqueueMessage): an agent is running → enqueue, injected via
+   * drain on the next main-agent cycle (queued=true); none running → directly start a free-form planning
+   * fallback (queued=false, fire-and-forget, no message dropped).
    */
   enqueueMessage(pr: StoredPullRequest, message: string): { queued: boolean } {
     const text = message.trim();
@@ -76,14 +80,14 @@ export class Orchestrator implements OrchestratorRuntime {
       );
       return { queued: true };
     }
-    // 竞态兜底：检查到没有在跑 → 直接起一轮自由规划（UI 经 step / conversation 事件更新）。
+    // Race fallback: found none running → directly start a free-form planning round (UI updates via step / conversation events).
     void this.runPlanning(pr, text).catch((err: unknown) => {
       this.ctx.logger.warn({ err, prLocalId: pr.localId }, 'enqueueMessage fallback planning failed');
     });
     return { queued: false };
   }
 
-  /** 暂停某 PR 的 Agent 运行（agent:stop）：abort 其 AbortController。 */
+  /** Pause a PR's agent run (agent:stop): abort its AbortController. */
   stop(localId: string): { ok: boolean } {
     const ac = this.agentControllers.get(localId);
     if (!ac) return { ok: false };
@@ -92,23 +96,27 @@ export class Orchestrator implements OrchestratorRuntime {
   }
 
   /**
-   * poll tick：满足开关 + 未在跑 + bridge 就绪时跑一遍 AutoPilot pass（准入门控 + 台账去重在 autopilotPass
-   * 内）。busy 锁防止上一遍未完又叠跑。见 docs/arch/02-agent/03-autopilot.md「AutoPilot」。
+   * poll tick: when switch on + not running + bridge ready, run one AutoPilot pass (admission gating +
+   * ledger dedup live inside autopilotPass). The busy lock prevents a new pass stacking on an unfinished
+   * one. See docs/arch/02-agent/03-autopilot.md "AutoPilot".
    */
   runAutopilotIfDue(): void {
     const ap = this.ctx.bootstrap.config.agent.autopilot;
     if (!ap.enabled || this.autopilotBusy || !this.ctx.getPrAgentBridge()) return;
-    // 准入通过 → fire-and-forget 异步 pass（poll tick 不阻塞）；busy 锁在 autopilotPass 内成对管理。
+    // Admission passed → fire-and-forget async pass (poll tick not blocked); busy lock managed in pairs inside autopilotPass.
     void autopilotPass(this);
   }
 
   /**
-   * poll tick 后调用：把已被 purge（彻底从索引移除）的 PR 上仍在执行的 agent 操作一律终止——PR 都没了，
-   * 继续评审无意义且浪费 LLM / 占用 worktree。
+   * Called after a poll tick: terminate any agent ops still in flight on PRs that have been purged (fully
+   * removed from the index)——the PR is gone, so continuing the review is pointless and wastes LLM /
+   * occupies a worktree.
    *
-   * 「在场」判定用**索引全集**（活跃 + 归档，readPrIndex 覆盖二者）、而非仅活跃集——否则对**已归档**（已关闭范围）
-   * PR 补跑 AI 评审时，下轮 poll 会把它误判为「已移除」而中途掐断（归档 PR 仍在索引、只是 archivedAt 非空）。
-   * 仅当条目彻底不在索引里（grace 期满硬清）才终止。
+   * "Presence" is judged against the **full index** (active + archived, readPrIndex covers both), not just
+   * the active set——otherwise, when re-running AI review on an **archived** (closed-scope) PR, the next poll
+   * would mistake it for "removed" and cut it off midway (an archived PR is still in the index, just with a
+   * non-empty archivedAt). Terminate only when an entry is entirely absent from the index (hard-cleaned
+   * after the grace period).
    */
   async terminateAgentsForGonePrs(): Promise<void> {
     const { stateStore, logger } = this.ctx;
@@ -126,7 +134,7 @@ export class Orchestrator implements OrchestratorRuntime {
     }
   }
 
-  // ── OrchestratorRuntime 实现（供 ./flows 复用的状态访问 + 共享 helper）──
+  // ── OrchestratorRuntime implementation (state access + shared helpers reused by ./flows) ──
 
   registerController(localId: string, ac: AbortController): void {
     this.agentControllers.set(localId, ac);
@@ -149,7 +157,7 @@ export class Orchestrator implements OrchestratorRuntime {
     this.autopilotBusy = busy;
   }
 
-  /** 取出并清空某 PR 的待处理用户消息队列。 */
+  /** Take and clear a PR's pending user-message queue. */
   takePending(localId: string): string[] {
     const q = this.pendingInputByPr.get(localId);
     if (!q || q.length === 0) return [];
@@ -158,8 +166,10 @@ export class Orchestrator implements OrchestratorRuntime {
   }
 
   /**
-   * 每个编排步骤的统一出口：① 后台日志（kind / tool / 用时，便于排障与离线回看；thought 与 result 不入
-   * 日志避免刷屏 + 泄漏，完整步骤已落 transcript.json）；② 广播给渲染层（agent:stepProgress）做过程化展示。
+   * Unified exit for every orchestration step: ① background log (kind / tool / elapsed, for troubleshooting
+   * and offline replay; thought and result are not logged to avoid flooding + leakage, the full step is
+   * already persisted to transcript.json); ② broadcast to the renderer (agent:stepProgress) for progressive
+   * display.
    */
   emitStep(pr: StoredPullRequest, sessionId: string, step: AgentStep): void {
     this.ctx.logger.info(
@@ -175,15 +185,17 @@ export class Orchestrator implements OrchestratorRuntime {
     this.ctx.broadcast('agent:stepProgress', { sessionId, prLocalId: pr.localId, step });
   }
 
-  /** 设置 LLM env + 临时 chat cwd + chat 函数，运行 fn，收尾清理临时目录。
-   *  signal：用户停止时 abort → 杀掉在跑的 LLM chat 子进程，让思考阶段也能立即中止（不必等模型返回）。 */
+  /** Set up LLM env + temp chat cwd + chat function, run fn, then clean up the temp dir on finish.
+   *  signal: on user stop, abort → kill the running LLM chat subprocess, so the thinking stage can also abort immediately (no need to wait for the model to return). */
   async withAgentChat<T>(fn: (chat: AgentChat) => Promise<T>, signal?: AbortSignal): Promise<T> {
     const { getPrAgentBridge, bootstrap } = this.ctx;
     const bridge = getPrAgentBridge();
     if (!bridge) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
-    // 复用与 pr-agent run 同一套 LLM env（provider 凭据 / 模型 / 代理 / 响应语言）。代理 env 先铺底（非
-    // pr-agent 范畴）；LLM 凭据/模型 + 编排 chat 专属档（响应语言 / 低推理档 / 提示缓存）由 buildChatEnv 按
-    // 意图组装。低档与缓存仅作用于本 chat spawn：pr-agent 工具 run（/review 等）的 env 不含 → 仍满档推理。
+    // Reuse the same LLM env as a pr-agent run (provider credentials / model / proxy / response language).
+    // Proxy env is laid down first (outside pr-agent scope); LLM credentials/model + orchestration-chat
+    // specific settings (response language / low-reasoning tier / prompt cache) are assembled by buildChatEnv
+    // per intent. The low tier and cache apply only to this chat spawn: the env of pr-agent tool runs
+    // (/review etc.) does not include them → still full-tier reasoning.
     const activeLlm = resolveActiveLlmProfile(bootstrap.config.llm);
     const env: Record<string, string> = {
       ...buildProxyEnv(bootstrap.config.proxy),
@@ -194,7 +206,7 @@ export class Orchestrator implements OrchestratorRuntime {
         maxModelTokens: bootstrap.config.llm.context_tokens,
       }),
     };
-    // chat 子进程落到中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。
+    // The chat subprocess runs in a neutral temp dir (in cli mode, avoids picking up the reviewed repo's CLAUDE.md).
     const chatCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-agent-chat-'));
     try {
       const chat: AgentChat = async ({ system, user, maxOutputTokens }) => {
@@ -210,13 +222,15 @@ export class Orchestrator implements OrchestratorRuntime {
   }
 
   /**
-   * 评审收尾的统一落地（手动一键评审与 AutoPilot 背景评审共用）：仅成功收尾（done）且有总结时——
-   * ① 追加一条 assistant 评审消息（UI 渲染「评审总结」卡片）；② 写评审台账（recommendation + 当前
-   *    updatedAt，给 PR 列表建议徽标 + AutoPilot 同版本去重）。失败 / 用户停止（paused）不落，便于重试。
+   * Unified landing for review summary finish (shared by manual one-click review and AutoPilot background
+   * review): only when finished successfully (done) and a summary exists——
+   * ① append one assistant review message (UI renders the "review summary" card); ② write the review ledger
+   *    (recommendation + current updatedAt, feeding the PR list suggestion badge + AutoPilot same-version
+   *    dedup). On failure / user stop (paused) nothing is landed, for easy retry.
    */
   async recordReviewSummaryMessage(pr: StoredPullRequest, session: AgentSession): Promise<void> {
     if (session.status !== 'done' || !session.summary) return;
-    // per-PR 存储路由：已归档（已关闭范围）PR 补跑评审的总结消息 / 台账落归档冷存储。
+    // per-PR storage routing: for a re-run review on an archived (closed-scope) PR, the summary message / ledger lands in archived cold storage.
     const store = await this.ctx.pr.storeForPr(pr.localId);
     await appendAgentMessage(store, pr.localId, {
       role: 'assistant',
@@ -230,17 +244,17 @@ export class Orchestrator implements OrchestratorRuntime {
       recommendation: session.recommendation?.verdict,
       at: new Date().toISOString(),
     });
-    // 通知渲染层：若正打开该 PR，重载会话让后台评审的「评审总结」卡片即时出现（手动评审自行重载，重复无害）。
+    // Notify the renderer: if this PR is open, reloading the conversation makes the background review's "review summary" card appear instantly (manual review reloads itself, so the duplicate is harmless).
     this.ctx.broadcast('agent:conversationChanged', { prLocalId: pr.localId });
   }
 
-  // ── 私有 helper ──
+  // ── Private helpers ──
 
   private broadcastAgentRunning(): void {
     this.ctx.broadcast('agent:runningChanged', { prLocalIds: [...this.runningAgentPrs] });
   }
 
-  /** 终止某 PR 上的全部 agent 操作：中止编排（agent:run/ask）+ 取消其派发的工具 run。 */
+  /** Terminate all agent ops on a PR: abort orchestration (agent:run/ask) + cancel the tool runs it dispatched. */
   private terminateAgentForPr(localId: string): void {
     this.agentControllers.get(localId)?.abort();
     this.runQueue.cancelRunsForPr(localId);

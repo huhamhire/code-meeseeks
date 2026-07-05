@@ -1,0 +1,395 @@
+// Page / component styles, extracted here for unified maintenance
+// (moved out of DownloadPanel.vue's scoped block and the old custom.css).
+// Class names are uniquely prefixed, so global scope is safe.
+
+// ── Screenshot frame (landing hero) ─────────────────────────────
+.screenshot-frame {
+  // The mac-window capture bakes in its own outer frame margin. Break out of the
+  // content column (viewport-centered) so it can run wider than the text width.
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94vw, 1600px);
+  margin: 40px 0 0;
+
+  img {
+    width: 100%;
+    height: auto;
+    // The PNG carries its own window chrome and a transparent (alpha) margin.
+    // drop-shadow follows the opaque pixels so the shadow hugs the window,
+    // instead of box-shadow ringing the padded bounds. No border/radius of ours.
+    filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.3));
+  }
+
+  figcaption {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--vp-c-text-3);
+  }
+}
+
+// Light/dark screenshot swap (default light; .dark on <html> flips it).
+.mb-shot-dark {
+  display: none;
+}
+.dark .mb-shot-dark {
+  display: block;
+}
+.dark .mb-shot-light {
+  display: none;
+}
+
+// ── Download panel ──────────────────────────────────────────────
+.dl {
+  margin: 8px 0 4px;
+
+  &-muted {
+    color: var(--vp-c-text-2);
+  }
+
+  &-hint {
+    font-size: 13px;
+    margin-top: 8px;
+  }
+
+  &-ico {
+    width: 1.05em;
+    height: 1.05em;
+    fill: currentColor;
+    flex: none;
+    vertical-align: -0.15em;
+  }
+
+  &-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  &-tag {
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 12px;
+    background: var(--vp-c-brand-soft);
+    color: var(--vp-c-brand-1);
+  }
+
+  &-link {
+    color: var(--vp-c-brand-1);
+    font-weight: 500;
+  }
+
+  &-links {
+    margin: 6px 0 0;
+  }
+
+  &-card {
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 12px;
+    padding: 20px;
+    background: var(--vp-c-bg-soft);
+  }
+
+  &-tabs {
+    display: flex;
+    gap: 24px;
+    margin: 24px 0 4px;
+    border-bottom: 1px solid var(--vp-c-divider);
+  }
+
+  &-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 2px;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--vp-c-text-2);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    transition: color 0.2s;
+
+    &:hover {
+      color: var(--vp-c-text-1);
+    }
+
+    &.active {
+      color: var(--vp-c-brand-1);
+      border-bottom-color: var(--vp-c-brand-1);
+    }
+  }
+
+  &-cmd {
+    margin-top: 16px;
+
+    &-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--vp-c-text-3);
+      margin-bottom: 8px;
+    }
+
+    &-row {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+
+      code {
+        flex: 1;
+        overflow-x: auto;
+        white-space: nowrap;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: var(--vp-c-bg-alt);
+        border: 1px solid var(--vp-c-divider);
+        font-family: var(--vp-font-family-mono);
+        font-size: 13px;
+        color: var(--vp-c-text-1);
+      }
+    }
+  }
+
+  &-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--vp-c-brand-2);
+    background: none;
+    color: var(--vp-c-brand-1);
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      background: var(--vp-c-brand-soft);
+    }
+  }
+
+  &-reco {
+    border-color: var(--vp-c-brand-3);
+
+    &-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--vp-c-brand-1);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+  }
+
+  &-error {
+    border-color: var(--vp-c-warning-1, var(--vp-c-divider));
+  }
+
+  &-list {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      border: 1px solid var(--vp-c-divider);
+      border-radius: 10px;
+      background: var(--vp-c-bg-soft);
+    }
+  }
+
+  &-plat {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    min-width: 180px;
+  }
+
+  &-file {
+    flex: 1 1 200px;
+    font-family: var(--vp-font-family-mono);
+    font-size: 12px;
+    color: var(--vp-c-text-3);
+    word-break: break-all;
+  }
+
+  &-note {
+    margin: 14px 0 0;
+
+    ul {
+      margin: 4px 0 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 3px 0;
+    }
+  }
+
+  &-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--vp-c-brand-2);
+    color: var(--vp-c-brand-1);
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+    transition: all 0.2s;
+
+    &:hover {
+      border-color: var(--vp-c-brand-1);
+      background: var(--vp-c-brand-soft);
+    }
+
+    &-brand {
+      background: var(--vp-c-brand-3);
+      border-color: var(--vp-c-brand-3);
+      color: #fff;
+
+      // Keep the solid brand fill on hover (brand-2 is a light text-link shade —
+      // using it as a button bg makes white text unreadable in dark mode); just brighten.
+      &:hover {
+        background: var(--vp-c-brand-3);
+        border-color: var(--vp-c-brand-3);
+        color: #fff;
+        filter: brightness(1.12);
+      }
+    }
+  }
+
+  &-size {
+    font-weight: 400;
+    font-size: 12px;
+    opacity: 0.8;
+  }
+}
+
+// ── FAQ (expanded Q&A, no accordion) ────────────────────────────
+.faq {
+  margin-top: 8px;
+
+  h3 {
+    margin-top: 36px;
+    border-top: none;
+    padding-top: 0;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+
+  h3:first-of-type {
+    margin-top: 12px;
+  }
+
+  p {
+    margin: 12px 0;
+    line-height: 1.75;
+    color: var(--vp-c-text-2);
+  }
+}
+
+// ── Override .vp-doc <a> defaults for panel buttons/links ────────
+// The panel renders inside .vp-doc, whose `a` rule (0,1,1) would otherwise
+// win over our button classes — tinting the solid brand button's text blue
+// (blue-on-blue) and underlining buttons. Out-specify it.
+.vp-doc .dl {
+  a {
+    text-decoration: none;
+  }
+
+  .dl-btn-brand,
+  .dl-btn-brand:hover {
+    color: #fff;
+  }
+}
+
+// ── Loading skeleton (mirrors the loaded layout) ────────────────
+@keyframes dl-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.dl-skel {
+  .dl-skel-tabs {
+    display: flex;
+    gap: 24px;
+    margin: 24px 0 12px;
+  }
+
+  .sk {
+    display: block;
+    border-radius: 6px;
+    background: linear-gradient(
+      90deg,
+      var(--vp-c-bg-soft) 25%,
+      var(--vp-c-bg-alt) 40%,
+      var(--vp-c-bg-soft) 55%
+    );
+    background-size: 200% 100%;
+    animation: dl-shimmer 1.4s ease-in-out infinite;
+  }
+
+  .sk-tag {
+    width: 150px;
+    height: 26px;
+    border-radius: 13px;
+  }
+  .sk-link {
+    width: 96px;
+    height: 18px;
+  }
+  .sk-label {
+    width: 200px;
+    height: 12px;
+    margin-bottom: 16px;
+  }
+  .sk-btn {
+    width: 260px;
+    max-width: 100%;
+    height: 40px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+  }
+  .sk-note {
+    width: 100%;
+    height: 68px;
+    border-radius: 8px;
+  }
+  .sk-tab {
+    width: 130px;
+    height: 22px;
+  }
+  .sk-row {
+    width: 100%;
+    height: 66px;
+    border-radius: 10px;
+    margin-top: 8px;
+  }
+}
+

@@ -1,9 +1,11 @@
 /**
- * 按文件头魔数嗅探常见图片格式；嗅不出退到 octet-stream（浏览器仍可能解码 PNG）。
+ * Sniff common image formats by file-header magic numbers; falls back to octet-stream when it
+ * can't be sniffed (the browser may still decode PNG).
  *
- * 用于 Bitbucket 头像本地落盘后回读时还原 content-type —— 落盘时只存裸字节，回读后
- * 还要拼 data URL，content-type 缺失会导致 <img src> 不渲染。Bitbucket 实际只可能
- * 返回 PNG / JPEG / GIF / WebP / SVG 其中之一，但作为防御性嗅探留全。
+ * Used to restore the content-type when reading back a Bitbucket avatar after it was persisted
+ * locally — only raw bytes are stored on write, and reading back still needs to build a data URL,
+ * so a missing content-type would keep <img src> from rendering. Bitbucket can in practice only
+ * return one of PNG / JPEG / GIF / WebP / SVG, but the full set is kept as defensive sniffing.
  */
 export function sniffImageContentType(bytes: Uint8Array): string {
   if (
@@ -34,7 +36,7 @@ export function sniffImageContentType(bytes: Uint8Array): string {
   ) {
     return 'image/webp';
   }
-  // SVG / XML 以 '<' 起；blame avatar 应该不会出 SVG 但兜底
+  // SVG / XML starts with '<'; a blame avatar shouldn't be SVG but this is a fallback
   if (bytes.length >= 1 && bytes[0] === 0x3c) {
     return 'image/svg+xml';
   }

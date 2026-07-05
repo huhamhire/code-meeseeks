@@ -4,7 +4,7 @@ import type { GitLabClient } from '../client.js';
 import { mapUser } from '../utils.js';
 import type { GlMetadata, GlUser, GlVersion } from '../types.js';
 
-/** GitLab 连接领域：能力声明（按 edition 降级审批）、ping（含 edition 探测）、PAT/SSH clone URL。 */
+/** GitLab connection domain: capability declaration (degrade approval by edition), ping (with edition detection), PAT/SSH clone URL. */
 export class GitLabConnection extends BaseConnection {
   readonly kind = 'gitlab' as const;
 
@@ -16,9 +16,9 @@ export class GitLabConnection extends BaseConnection {
   }
 
   /**
-   * GitLab 能力：审批二元（approve/unapprove，无 "request changes" → 不含 needsWork），且 Premium 起才有
-   * API → 据 edition 降级（CE/EE-Free 空 + UI 灰显）；行内单行评论；无评论乐观锁；合并否决项 full
-   * 保真（detailed_merge_status）；发现端点不强限流。「解决线程 / suggestion / 成组提交」概念有、当前未实现。
+   * GitLab capabilities: approval is binary (approve/unapprove, no "request changes" → no needsWork), and the API only exists
+   * from Premium up → degrade by edition (CE/EE-Free empty + UI greyed-out); single-line inline comments; no comment optimistic lock; merge vetoes full
+   * fidelity (detailed_merge_status); discovery endpoint not rate-limited. "Resolve thread / suggestion / grouped submission" concepts exist but are currently unimplemented.
    */
   capabilities(): PlatformCapabilities {
     const reviewStatuses: ReadonlyArray<ReviewerStatus> = this.client.approvalsAvailable
@@ -29,55 +29,55 @@ export class GitLabConnection extends BaseConnection {
       inlineComments: true,
       inlineMultiline: false,
       commentOptimisticLock: false,
-      // GitLab Award Emoji 支持任意 emoji → free。
+      // GitLab Award Emoji supports arbitrary emoji → free.
       commentReactions: 'free',
       commentAttachments: true,
-      // GitLab 评论走标准 CommonMark（单 \n = 软换行/空格），不按 hard-break。
+      // GitLab comments use standard CommonMark (single \n = soft wrap/space), not hard-break.
       commentHardBreaks: false,
       mergeVetoFidelity: 'full',
       discoveryRateLimited: false,
-      // GitLab MR 列表支持 reviewer_username / author_username / assignee_username 筛选 → 三类分页。
-      // 没有 "mentioned" 概念，故不含 mentioned（poller 逐类轮询 + union 打标，renderer 切标签）。
+      // GitLab MR list supports reviewer_username / author_username / assignee_username filters → three pagination categories.
+      // No "mentioned" concept, so mentioned is not included (poller polls each category + union tags, renderer switches tabs).
       discoveryFilters: ['review-requested', 'created', 'assigned'],
       resolvableThreads: false,
       suggestions: false,
       reviewGrouping: false,
-      // GitLab 无统一活动事件源（CE 无审批、审批系统 note 解析脆弱）→ PR 标签页退化为纯评论视图。
+      // GitLab has no unified activity event source (CE has no approval, approval system note parsing is fragile) → the PR tab degrades to a pure comment view.
       activityTimeline: false,
-      // user_notes_count 含回复（回复也是 note）→ 计数变化可靠反映回复，poller 仅在计数/更新时间变化时扫。
+      // user_notes_count includes replies (replies are also notes) → count changes reliably reflect replies, poller only scans when the count/update time changes.
       commentCountIncludesReplies: true,
     };
   }
 
   /**
-   * 探测连接：取当前用户落地缓存，并经 /metadata 探测 edition 以决定审批可用性。
+   * Probe the connection: fetch the current user into the cache, and detect edition via /metadata to decide approval availability.
    *
-   * /metadata 不可用（旧实例）时退 /version 并保守置为 CE（无审批）。
+   * When /metadata is unavailable (old instances), fall back to /version and conservatively assume CE (no approval).
    */
   async ping(): Promise<PingResult> {
     const me = await this.client.get<GlUser>('/user');
     this.setCurrentUser(mapUser(me));
     let serverVersion = 'gitlab';
     try {
-      // /metadata（15.2+）带 enterprise 标志，用于 edition 探测。
+      // /metadata (15.2+) carries the enterprise flag, used for edition detection.
       const meta = await this.client.get<GlMetadata>('/metadata');
       serverVersion = meta.version;
       this.client.approvalsAvailable = meta.enterprise === true;
     } catch {
-      // /metadata 不可用（旧实例）→ 退 /version，保守置 CE（无审批）。
+      // /metadata unavailable (old instances) → fall back to /version, conservatively assume CE (no approval).
       this.client.approvalsAvailable = false;
       try {
         const ver = await this.client.get<GlVersion>('/version');
         serverVersion = ver.version;
       } catch {
-        /* /version 也拿不到时保留默认串 */
+        /* keep the default string when /version can't be fetched either */
       }
     }
     return { ok: true, serverVersion, user: this.getCurrentUser() ?? undefined };
   }
 
   /**
-   * 构造仓库的 git clone URL，按当前用户名内嵌 PAT 凭据（无用户时退无凭据形式）。
+   * Build the repo's git clone URL, embedding PAT credentials by current username (falls back to the credential-less form when there's no user).
    */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     return this.client.getCloneUrl(repo, this.getCurrentUser()?.name);

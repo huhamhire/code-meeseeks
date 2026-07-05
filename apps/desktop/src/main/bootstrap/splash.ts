@@ -3,11 +3,12 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 
 /**
- * 读取品牌 logo 并转成 base64 data URI，内联进 splash data URL（splash 是独立 data URL
- * 文档，无法走 file:// 相对路径引用资源，故必须内联）。两路探测：
- * - 打包态：`<resources>/icon.png`（electron-builder extraResources copy）
- * - dev：仓库 `assets/icons/icon.png`
- * 两路都读不到（如 LFS 未拉取）则返回 null，splash 优雅回退为纯 spinner。
+ * Reads the brand logo and converts it to a base64 data URI, inlined into the splash data URL (the
+ * splash is a standalone data URL document and cannot reference resources via file:// relative paths,
+ * so inlining is required). Two candidate paths are detected:
+ * - packaged: `<resources>/icon.png` (electron-builder extraResources copy)
+ * - dev: repo `assets/icons/icon.png`
+ * If neither can be read (e.g. LFS not pulled), returns null and the splash gracefully falls back to a plain spinner.
  */
 function resolveSplashLogo(): string | null {
   const candidates = [
@@ -17,36 +18,43 @@ function resolveSplashLogo(): string | null {
   for (const p of candidates) {
     try {
       const buf = readFileSync(p);
-      // LFS 指针文件不是合法 PNG（无 \x89PNG magic）→ 跳过，避免 splash 显示裂图
+      // An LFS pointer file is not a valid PNG (no \x89PNG magic) → skip, to avoid a broken image in the splash
       if (buf.length < 8 || buf[0] !== 0x89 || buf[1] !== 0x50) continue;
       return `data:image/png;base64,${buf.toString('base64')}`;
     } catch {
-      /* 试下一个候选 */
+      /* try the next candidate */
     }
   }
   return null;
 }
 
-// 闪屏明暗两套配色，跟随有效主题、对齐默认的 2026 主题（底 / 文字取 2026 editor background / foreground，
-// accent 仍用语义 accent —— chrome-sync 不覆盖 accent）：
-// 暗 = dark-2026 底 #121314 + 文字 #BBBEBF + $vscode-blue-700 accent；浅 = light-2026 底 #FFFFFF + 深文字 + $vscode-blue-800。
+// Splash dark/light color sets, following the effective theme and aligned with the default 2026 theme
+// (bg / text taken from 2026 editor background / foreground, accent still uses the semantic accent —
+// chrome-sync does not override accent):
+// dark = dark-2026 bg #121314 + text #BBBEBF + $vscode-blue-700 accent; light = light-2026 bg #FFFFFF + dark text + $vscode-blue-800.
 const SPLASH_COLORS = {
   dark: { bg: '#121314', text: '#BBBEBF', sub: '#6f7172', ring: 'rgba(255,255,255,.16)', accent: '#0e639c' },
   light: { bg: '#FFFFFF', text: '#202020', sub: '#6e6e6e', ring: 'rgba(0,0,0,.14)', accent: '#005fb8' },
 };
 
 /**
- * 启动闪屏：独立的无边框轻量窗口，加载内联 data URL（品牌 logo + 纯 CSS spinner），
- * 几十 ms 即可呈现，遮住主窗口首帧前的渲染层加载空窗。主窗口 ready-to-show 时关闭。
- * logo 经 base64 内联（见 resolveSplashLogo），data URL 自包含、dev/打包行为一致。
- * 配色随有效主题（`dark`）切换，避免浅色主题下启动闪屏仍是深色。
+ * Startup splash: a standalone frameless lightweight window loading an inline data URL (brand logo +
+ * pure-CSS spinner), presentable within tens of ms, covering the blank renderer-load gap before the
+ * main window's first paint. Closed when the main window is ready-to-show.
+ * The logo is inlined via base64 (see resolveSplashLogo); the data URL is self-contained, with
+ * identical dev/packaged behavior. Colors switch with the effective theme (`dark`), to avoid a dark
+ * splash under a light theme.
+ * Intentionally text-free (logo + brand name + spinner only): the splash renders before i18n loads,
+ * so it must not depend on any localized copy — the spinner conveys "loading" without words.
  */
 export function createSplash(dark: boolean): BrowserWindow {
   const c = dark ? SPLASH_COLORS.dark : SPLASH_COLORS.light;
   const width = 280;
   const height = 240;
-  // 与主窗口同源：按光标所在显示器的 workArea 居中（workArea 已扣掉 mac 菜单栏 / 刘海）。不用
-  // Electron 的 center:true——它按整屏 bounds（含顶部不可用区）算中点、且固定主显示器，会让 splash 偏高、多屏错位。
+  // Same approach as the main window: center within the workArea of the display under the cursor
+  // (workArea already excludes the mac menu bar / notch). Do not use Electron's center:true—it computes
+  // the midpoint from the full-screen bounds (including the unusable top area) and pins to the primary
+  // display, which makes the splash sit too high and misalign across multiple screens.
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   const x = Math.round(area.x + (area.width - width) / 2);
   const y = Math.round(area.y + (area.height - height) / 2);
@@ -73,13 +81,12 @@ export function createSplash(dark: boolean): BrowserWindow {
       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
     .logo{width:72px;height:72px;border-radius:16px;}
     .name{font-size:17px;font-weight:600;letter-spacing:.3px;}
-    .row{display:flex;align-items:center;gap:8px;color:${c.sub};font-size:12px;}
-    .ring{width:14px;height:14px;border-radius:50%;border:2px solid ${c.ring};
+    .ring{width:16px;height:16px;border-radius:50%;border:2px solid ${c.ring};
       border-top-color:${c.accent};animation:spin .8s linear infinite;}
     @keyframes spin{to{transform:rotate(360deg);}}
   </style></head><body>
     ${logoEl}<div class="name">Code Meeseeks</div>
-    <div class="row"><div class="ring"></div><span>启动中…</span></div>
+    <div class="ring"></div>
   </body></html>`;
   void splash.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
   splash.once('ready-to-show', () => {

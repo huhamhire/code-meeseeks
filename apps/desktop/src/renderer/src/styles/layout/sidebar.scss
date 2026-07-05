@@ -7,7 +7,7 @@
 }
 
 .sidebar {
-  // width 通过 inline style 由 App 控制，min/max 由 React 端 clamp，CSS 端兜底
+  // width is controlled by App via inline style, min/max clamped on the React side, CSS side as fallback
   flex-shrink: 0;
   border-right: 1px solid $border-default;
   background: $bg-panel;
@@ -46,9 +46,9 @@
 .sidebar-filters {
   flex-wrap: wrap;
 
-  // 胶囊宽度自适应：basis 取内容宽（auto）→ 一行挤得下就用一行；容纳不下时按内容宽换行（窄侧栏下
-  // 自然落为每行两个）。flex-grow 让每行按项数均分撑满整行，消除定宽按钮换行后右侧留白参差。
-  // 内容居中，读作对称胶囊。
+  // Pill width auto-adapts: basis takes content width (auto) → one row if it fits; wraps by content width when it doesn't (in a narrow sidebar
+  // naturally falls to two per row). flex-grow makes each row split evenly to fill the whole row, eliminating uneven right-side whitespace after fixed-width buttons wrap.
+  // Content centered, reads as symmetric pills.
   .btn {
     flex: 1 1 auto;
     justify-content: center;
@@ -69,18 +69,18 @@
   }
 }
 
-// 范围行（常驻）：左组发现分类 / 进行中锚点 + 右组「已关闭」辅助切换。两组间距分隔，右组靠右。
-// **行本身不设上下 padding**（垂直留白下放到 tab 内）：这样行内容盒 = 可见区，靠右图标按钮 align-self
-// center 才真正落在可见区垂直中心（上下留白一致）；同时 tab 的下划线指示仍贴住行底（紧邻 1px 分隔线）。
+// Scope row (always present): left group discovery categories / in-progress anchor + right group "closed" auxiliary toggle. The two groups separated by spacing, right group aligned right.
+// **The row itself has no top/bottom padding** (vertical whitespace pushed down into the tabs): this way the row content box = visible area, so the right-aligned icon button's align-self
+// center actually lands at the visible area's vertical center (symmetric top/bottom whitespace); meanwhile the tab's underline indicator still hugs the row bottom (adjacent to the 1px divider).
 .sidebar-scope {
-  // 组间仅留极小间隔（$space-2）：把多余留白让给左侧 tab 组，使 tabs 尽量铺满、延伸到贴近图标按钮
+  // Only a minimal gap between groups ($space-2): give the excess whitespace to the left tab group, so the tabs fill as much as possible and extend close to the icon button
   gap: $space-2;
-  // 左缘对齐其余 toolbar（$space-6）；右缘收紧（$space-4）让「已关闭」图标按钮更靠右、贴近面板边
+  // Left edge aligns with the rest of the toolbar ($space-6); right edge tightened ($space-4) to push the "closed" icon button further right, close to the panel edge
   padding: 0 $space-4 0 $space-6;
   align-items: stretch;
 }
 
-// 左组：发现分类 tabs 等分（或无分类平台的单一「进行中」锚点）；flex-grow 吃掉行内多余空间
+// Left group: discovery category tabs split evenly (or a single "in-progress" anchor for platforms without categories); flex-grow eats up the extra space in the row
 .sidebar-scope-primary {
   flex: 1 1 auto;
   display: flex;
@@ -88,8 +88,8 @@
   min-width: 0;
 }
 
-// 右组：「已关闭」切换 —— **非 tab**，做成靠右的独立图标按钮（类似工具栏「⋯」），不随 tabs 拉伸、
-// 不带下划线指示；选中态用填充底 + 高亮色，区别于左组 tab 的下划线指示。
+// Right group: "closed" toggle — **not a tab**, made a standalone right-aligned icon button (like the toolbar "⋯"), doesn't stretch with the tabs,
+// no underline indicator; selected state uses filled background + highlight color, distinct from the left group tabs' underline indicator.
 .sidebar-scope-history {
   flex: 0 0 auto;
   align-self: center;
@@ -113,7 +113,7 @@
     color: $text-body;
   }
 
-  // 选中（已关闭范围激活）：填充底 + 高亮色（图标按钮式按下态，非 tab 下划线）
+  // Selected (closed scope active): filled background + highlight color (icon-button-style pressed state, not tab underline)
   &.is-active {
     background: $bg-selected;
     color: $color-info;
@@ -122,16 +122,16 @@
 
 .sidebar-discovery-tab {
   flex: 1;
-  // 文字在 tab 高度内垂直 + 水平居中
+  // Text vertically + horizontally centered within the tab height
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  // 非活动 tab 用可读的 muted，而非几乎不可见的 dim，提升整组可视性
+  // Inactive tab uses a readable muted rather than the near-invisible dim, improving the whole group's visibility
   color: $text-muted;
-  // 垂直留白下放到 tab：上 $space-4、下 $space-3 + 2px 下划线 ≈ 上下对称（行更高些），文字居中；下划线贴住行底
+  // Vertical whitespace pushed down into the tab: top $space-4, bottom $space-3 + 2px underline ≈ symmetric top/bottom (row a bit taller), text centered; underline hugs the row bottom
   padding: $space-4 0 $space-3;
   font-size: 12px;
   cursor: pointer;
@@ -143,14 +143,14 @@
     color: $text-body;
   }
 
-  // 活动 tab 用亮蓝 $color-info（对齐 ChatPane 的明亮配色），比深蓝 $color-accent 更醒目
+  // Active tab uses bright blue $color-info (aligned with ChatPane's bright palette), more prominent than the dark blue $color-accent
   &.is-active {
     color: $color-info;
     border-bottom-color: $color-info;
   }
 }
 
-// 一级发现分类标签的未读圆点：该分类下有未读 PR 时，跟在标签文字后（复用 PR 项未读点的亮蓝）。
+// Unread dot for top-level discovery category labels: when there are unread PRs under the category, follows the label text (reuses the bright blue of the PR item unread dot).
 .sidebar-discovery-tab-dot {
   display: inline-block;
   width: 6px;
@@ -220,7 +220,7 @@
   user-select: none;
   display: flex;
   gap: $space-5;
-  // 头像 40px 视觉锚定整行：标题 + meta 大约 36-40px 高，center 对齐看起来最稳
+  // The 40px avatar visually anchors the whole row: title + meta are roughly 36-40px tall, center alignment looks the most stable
   align-items: center;
 
   &:hover {
@@ -240,7 +240,7 @@
   min-width: 0;
 }
 
-// 圆形头像：img 与 initials 共用尺寸 / 圆角；initials 走 hash 色 + 白字
+// Circular avatar: img and initials share size / radius; initials use a hash color + white text
 .avatar {
   display: inline-flex;
   align-items: center;
@@ -279,7 +279,7 @@
   margin-bottom: $space-2;
   line-height: $lh-tight;
   word-break: break-word;
-  // 超长 PR 标题截到 2 行 + 省略号，避免单条 PR 撑爆整列高度
+  // Very long PR titles truncated to 2 lines + ellipsis, to keep a single PR from blowing out the whole column height
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -294,8 +294,8 @@
   gap: $space-1;
 }
 
-// meta 两行：row 1 = author + 状态 chip；row 2 = branch (源→目标)
-// flex-direction:row + align-items:center 让 chip 跟 author 基线居中
+// meta two rows: row 1 = author + status chip; row 2 = branch (source→target)
+// flex-direction:row + align-items:center centers the chip with the author baseline
 .pr-item-meta-row {
   display: flex;
   align-items: center;
@@ -307,19 +307,19 @@
 .pr-item-meta-branch {
   flex: 1 1 auto;
   min-width: 0;
-  // flex + align-items:center 真正垂直居中前缀图标与文字（取代脆弱的 vertical-align 基线微调）；
-  // 文字的省略号截断交给内层 .pr-item-meta-text。
+  // flex + align-items:center truly vertically centers the prefix icon and text (replacing the fragile vertical-align baseline tweak);
+  // text ellipsis truncation is delegated to the inner .pr-item-meta-text.
   display: flex;
   align-items: center;
 
-  // 图标前缀：固定列宽对齐 author/branch 两行，不随文字省略号缩没
+  // Icon prefix: fixed column width aligns the author/branch two rows, doesn't shrink away with text ellipsis
   svg {
     flex: 0 0 auto;
     margin-right: $space-2;
     opacity: 0.75;
   }
 }
-// 前缀图标后的文字：占满剩余宽度并在过长时省略号截断（min-width:0 让其可收缩）。
+// Text after the prefix icon: fills the remaining width and truncates with ellipsis when too long (min-width:0 lets it shrink).
 .pr-item-meta-text {
   min-width: 0;
   overflow: hidden;
@@ -327,14 +327,14 @@
   white-space: nowrap;
 }
 
-// chip 推右贴边 + 不可缩 — 长 author 时 chip 仍可见
+// chip pushed to the right edge + non-shrinkable — chip still visible with a long author
 .pr-item-review-chips {
   flex: 0 0 auto;
   margin-left: auto;
 }
 
-// reviewer 统计胶囊：靠右贴边，把 author/branch meta 挤左。固定带高 + 居中：让不同行无论含哪种
-// chip（文字计数 / 图标星标 / 执行中 spinner）都占同一高度，避免跨行 chip 垂直位置漂移。
+// Reviewer stats pill: aligned to the right edge, pushing the author/branch meta left. Fixed band height + centered: so different rows, whichever kind of
+// chip they contain (text count / icon star / running spinner), all occupy the same height, avoiding vertical drift of chips across rows.
 .pr-item-review-chips {
   display: inline-flex;
   align-items: center;
@@ -343,8 +343,8 @@
   margin-left: auto;
 }
 
-// 所有 chip 统一带高（含图标类 verdict / mergeable 与文字类 approved / needs-work）：图标 chip 原本
-// 只有 ~13px、比文字 chip(~17px)矮，导致「星标 only」行与「星标+计数」行高度不一。固定 18px + 居中对齐。
+// All chips have a unified band height (including icon-type verdict / mergeable and text-type approved / needs-work): icon chips were originally
+// only ~13px, shorter than text chips (~17px), causing "star only" rows and "star + count" rows to differ in height. Fixed 18px + center-aligned.
 .review-chip {
   display: inline-flex;
   align-items: center;
@@ -357,8 +357,8 @@
   font-weight: 600;
   line-height: $lh-normal;
 
-  // 饱和背景 + 白字 — 跟 ChatPane .chat-run-status 风格对齐，hover sidebar
-  // 时一眼能扫到 reviewer 状态 (之前 git-decoration-fade 淡色背景视觉太弱)
+  // Saturated background + white text — aligned with ChatPane .chat-run-status style, so hovering the sidebar
+  // lets you scan the reviewer status at a glance (the previous git-decoration-fade light background was visually too weak)
   &.review-chip-approved {
     background: $color-approved;
     color: $text-on-accent;
@@ -368,8 +368,8 @@
     color: $text-on-accent;
   }
 
-  // 可合并 chip：纯分支合并图标无数值。绿底跟 approved 同色系，表"正向放行"；
-  // icon-only 收紧水平 padding 让胶囊不至于过宽
+  // Mergeable chip: pure branch-merge icon with no number. Green base in the same color family as approved, meaning "positive go-ahead";
+  // icon-only tightens horizontal padding so the pill isn't too wide
   &.review-chip-mergeable {
     background: $color-approved;
     color: $text-on-accent;
@@ -380,8 +380,8 @@
     }
   }
 
-  // 评审建议徽标（★，手动 / AutoPilot 一视同仁）：approve 绿 / needs_work 琥珀 / manual_review 蓝。
-  // flex 居中让 SVG 星形垂直对齐（此前 ★ 字形基线偏移、不居中）。
+  // Review suggestion badge (★, manual / AutoPilot treated the same): approve green / needs_work amber / manual_review blue.
+  // flex centering vertically aligns the SVG star (the ★ glyph baseline was previously offset, not centered).
   &.verdict-chip {
     display: inline-flex;
     align-items: center;
@@ -408,8 +408,8 @@
 
 }
 
-// 执行中指示：复用运行卡片同款 .spinner（中心对称的蓝色环旋转），裸图标无 chip 外框；
-// 清掉 .spinner 默认的 inline-文字外边距，在徽标行里居中对齐。
+// Running indicator: reuses the run card's .spinner (a center-symmetric blue ring rotating), bare icon with no chip frame;
+// clears .spinner's default inline-text margin, center-aligned in the badge row.
 .pr-item-spinner {
   margin: 0;
   vertical-align: middle;
@@ -420,25 +420,25 @@
   font-size: $fs-md;
 }
 
-// 行级状态前缀：approved 绿勾、needs_work 红叹号；pending 不加。
-// 字符 + bold + 大号 + accent 描边底色让符号在标题文本里"跳出来"，
-// 不用 emoji 是因为不同 OS 字体渲染差异大、不可控
+// Row-level status prefix: approved green check, needs_work red exclamation; pending adds none.
+// character + bold + larger size + accent outline background make the symbol "pop out" in the title text,
+// emoji isn't used because font rendering varies greatly and is uncontrollable across OSes
 .pr-item-status-approved .pr-item-title::before,
 .pr-item-status-needs_work .pr-item-title::before {
   display: inline-block;
   margin-right: $space-2;
-  // 固定方形尺寸 + 内容居中 — 否则 ✓ 跟 ! 字符天然宽度不同 chip 看起来一宽一扁
+  // Fixed square size + centered content — otherwise the ✓ and ! characters have naturally different widths, making the chip look wide vs. flat
   width: 18px;
   height: 18px;
   text-align: center;
   border-radius: $radius-sm;
   font-weight: 800;
-  // 字符比标题文字小一号，留出 chip 内边距视觉更精致；标题 $fs-lg ≈ 13px → 11px
+  // Character one size smaller than the title text, leaving chip padding for a more refined look; title $fs-lg ≈ 13px → 11px
   font-size: 0.85em;
   line-height: 18px;
   vertical-align: 0.05em;
 }
-// 暗色 fade 背景 + 高饱和度字：底色淡而不突兀，符号本身仍醒目
+// Dark fade background + high-saturation text: base color light and unobtrusive, symbol itself still prominent
 .pr-item-status-approved .pr-item-title::before {
   content: '✓';
   background: $git-added-bg-fade;
@@ -455,8 +455,8 @@
   font-size: $fs-md;
 }
 
-// 未读圆点：自上次查看后该 PR 有「与我相关」的新事件（新到达 / 新 commit 推送 / @我 / 回复我）。
-// 标题前一个亮蓝实心小圆点（沿用未读消息惯例，取较亮的 info 蓝以在列表里醒目），并把标题字重提到 600 更跳。
+// Unread dot: since the last view this PR has new "relevant to me" events (new arrival / new commit push / @me / reply to me).
+// A bright blue solid small dot before the title (following the unread-message convention, using the brighter info blue to stand out in the list), and bumps the title font weight to 600 to pop more.
 .pr-item-unread-dot {
   display: inline-block;
   width: 7px;
@@ -470,9 +470,9 @@
 .pr-item-unread .pr-item-title {
   font-weight: 600;
 }
-// 未读点名计数：有「@我 / 回复我」未读时，圆点升级为标题前的中性数字胶囊（封顶 10 → 「10+」）。
-// 中性色（$chip-neutral 灰底 + $text-body 文字），不抢评审状态 chip（绿/红/蓝）的语义；无图标，纯数字省空间。
-// 固定带高 + 居中、min-width 容双字符，单/双位数不致左右跳动。
+// Unread mention count: when there are "@me / reply to me" unreads, the dot upgrades to a neutral numeric pill before the title (capped at 10 → "10+").
+// Neutral color ($chip-neutral gray base + $text-body text), doesn't steal the semantics of the review status chips (green/red/blue); no icon, pure number to save space.
+// Fixed band height + centered, min-width fits two characters, so single/double digits don't jump left/right.
 .pr-item-unread-count {
   display: inline-flex;
   align-items: center;

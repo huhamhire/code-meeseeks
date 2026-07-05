@@ -6,27 +6,27 @@ import type {
 import type { BinaryResource } from '../transport.js';
 import { PlatformDomainService } from '../context.js';
 
-/** 用户与媒体：头像 / 评论内嵌附件代理（带凭据拉取由平台信任模型把关）。 */
+/** User and media: avatar / comment inline attachment proxy (credentialed fetch gated by the platform trust model). */
 export interface MediaService {
   /**
-   * 拉取用户头像图片。
+   * Fetch the user avatar image.
    *
-   * 平台不支持或失败返回 null，调用方走 initials 回退。
+   * Returns null when the platform does not support it or on failure; the caller falls back to initials.
    */
   getUserAvatar(slug: string, avatarUrl?: string): Promise<BinaryResource | null>;
 
   /**
-   * 代理拉取评论 body 内嵌图片。
+   * Proxy-fetch an image embedded in a comment body.
    *
-   * host 不属当前平台、协议无法解析或拉取失败时返回 null。
+   * Returns null when the host does not belong to the current platform, the protocol cannot be parsed, or the fetch fails.
    */
   getAttachment(url: string, repo?: RepoRef): Promise<BinaryResource | null>;
 
   /**
-   * 上传一张图片作为评论附件，返回可插入评论正文的 markdown 片段。
+   * Upload an image as a comment attachment and return a markdown snippet insertable into the comment body.
    *
-   * 仅 `commentAttachments` 能力为真的平台实现（GitLab /uploads、Bitbucket attachments）；
-   * 不支持的平台返回 null（GitHub 无公开上传 API）。
+   * Only implemented by platforms whose `commentAttachments` capability is true (GitLab /uploads, Bitbucket attachments);
+   * returns null on platforms that do not support it (GitHub has no public upload API).
    */
   uploadAttachment(
     repo: RepoRef,
@@ -36,21 +36,21 @@ export interface MediaService {
 }
 
 /**
- * 用户与媒体领域基类：头像与附件拉取契约留给平台子类按各自资产域实现。
+ * User and media domain base class: the avatar and attachment fetch contracts are left to platform subclasses to implement per their own asset domain.
  */
 export abstract class BaseMediaService extends PlatformDomainService implements MediaService {
   /**
-   * 由平台子类实现：拉取用户头像，失败或不支持返回 null。
+   * Implemented by platform subclasses: fetch the user avatar, returning null on failure or when unsupported.
    */
   abstract getUserAvatar(slug: string, avatarUrl?: string): Promise<BinaryResource | null>;
 
   /**
-   * 由平台子类实现：代理拉取评论内嵌附件，非本平台或失败返回 null。
+   * Implemented by platform subclasses: proxy-fetch a comment inline attachment, returning null when not this platform or on failure.
    */
   abstract getAttachment(url: string, repo?: RepoRef): Promise<BinaryResource | null>;
 
   /**
-   * 由平台子类覆写：上传评论附件并回 markdown。默认不支持（返回 null）。
+   * Overridden by platform subclasses: upload a comment attachment and return markdown. Unsupported by default (returns null).
    */
   uploadAttachment(
     _repo: RepoRef,

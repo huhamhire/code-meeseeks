@@ -1,9 +1,10 @@
-// 远端 markdown（PR 描述 / 评论）里常含原始 HTML —— 典型如 Qodo / pr-agent 机器人用
-// <details> 折叠、<table>、<picture>/<img>、<sub>/<sup> 等 GitHub 风格 HTML。react-markdown
-// 默认会丢弃原始 HTML，导致这类评论显示残缺。这里用 rehype-raw 解析 HTML，再用 rehype-sanitize
-// 按白名单过滤（剔除 <script>、on* 事件、javascript: 链接等），既能渲染又不引入 XSS。
+// Remote markdown (PR descriptions / comments) often contains raw HTML — typically GitHub-style HTML like Qodo /
+// pr-agent bots' <details> folds, <table>, <picture>/<img>, <sub>/<sup>, etc. react-markdown drops raw HTML by
+// default, leaving such comments rendered incompletely. Here rehype-raw parses the HTML, then rehype-sanitize
+// filters it by an allowlist (stripping <script>, on* events, javascript: links, etc.), rendering it without
+// introducing XSS.
 //
-// 仅对**远端来源**的 markdown 启用（评论、PR 描述）；本地 / AI 生成的内容无需放开 HTML。
+// Enabled only for **remote-sourced** markdown (comments, PR descriptions); local / AI-generated content needs no HTML.
 import type { Options } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -12,13 +13,13 @@ function extend<T>(list: readonly T[] | null | undefined, extra: readonly T[]): 
   return Array.from(new Set<T>([...(list ?? []), ...extra]));
 }
 
-// 在 rehype-sanitize 的 GitHub 默认白名单基础上，补齐 Qodo 等机器人常用但默认未必放开的标签/属性。
+// On top of rehype-sanitize's GitHub default allowlist, add tags/attributes commonly used by bots like Qodo but not necessarily allowed by default.
 const schema = {
   ...defaultSchema,
-  // 放行 Bitbucket 评论的 `attachment:<repoId>/<id>` 内部协议（内嵌图片/附件引用）。
-  // 默认 protocols 白名单 src/href 只许 http/https，会在 react-markdown 的 urlTransform
-  // 之前就把 attachment: 的 src/href 整个剥掉 → img 收不到 src（BitbucketImage 不触发）、
-  // a 收不到 href（渲染成裸文字）。两条附件渲染路径都被卡死，故在此显式放行 attachment 协议。
+  // Allow Bitbucket comments' `attachment:<repoId>/<id>` internal protocol (inline image/attachment references).
+  // The default protocols allowlist only permits http/https for src/href, and would strip attachment:'s src/href
+  // entirely before react-markdown's urlTransform → img gets no src (BitbucketImage doesn't fire), a gets no href
+  // (rendered as bare text). Both attachment render paths are dead-ended, so explicitly allow the attachment protocol here.
   protocols: {
     ...defaultSchema.protocols,
     src: extend(defaultSchema.protocols?.src, ['attachment']),
@@ -47,7 +48,7 @@ const schema = {
   },
 };
 
-/** 远端 markdown 的 rehype 插件链：解析原始 HTML → 按白名单消毒。 */
+/** rehype plugin chain for remote markdown: parse raw HTML → sanitize by allowlist. */
 export const REMOTE_REHYPE_PLUGINS: NonNullable<Options['rehypePlugins']> = [
   rehypeRaw,
   [rehypeSanitize, schema],

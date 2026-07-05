@@ -1,5 +1,5 @@
-// 右侧 pr-agent chat 面板：外壳 + 标题栏 + 滚动体容器 + 底部输入区。
-// run 卡片 / findings / agent 输出分别拆到 chat-run / chat-findings / chat-agent。
+// Right-side pr-agent chat pane: shell + title bar + scroll body container + bottom input area.
+// run cards / findings / agent output are split into chat-run / chat-findings / chat-agent respectively.
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
@@ -14,10 +14,10 @@
   position: relative;
 }
 
-// 折叠态：组件仍挂载 (保住 run 计时器 + runProgress 订阅) 但视觉上消失。
-// width:0 + overflow:hidden 替代 display:none，避免 width inline style 反复变化
-// 触发 layout thrash；inline style 上的 width 仍按用户上次设的值保留，下次展开
-// 直接生效
+// Collapsed state: the component stays mounted (keeping the run timer + runProgress subscription) but visually disappears.
+// width:0 + overflow:hidden replaces display:none, avoiding repeated changes to the width inline style
+// triggering layout thrash; the width on the inline style is kept at the user's last set value, taking effect
+// directly on the next expand
 .chat-pane-collapsed {
   width: 0 !important;
   overflow: hidden;
@@ -25,7 +25,7 @@
   pointer-events: none;
 }
 
-// 拖拽柄基样式：透明热区 + hover/active 主色高亮（左缘 col-resize 与输入区顶边 row-resize 共用）
+// Drag handle base style: transparent hotspot + hover/active accent highlight (shared by the left-edge col-resize and the input area top-edge row-resize)
 %chat-resize-handle {
   position: absolute;
   z-index: $z-resize-handle;
@@ -38,7 +38,7 @@
   }
 }
 
-// 拖拽柄：左缘，跟 sidebar 镜像
+// Drag handle: left edge, mirrors the sidebar
 .chat-pane-resize-handle {
   @extend %chat-resize-handle;
   top: 0;
@@ -67,7 +67,7 @@
   color: $text-muted;
   font-size: $fs-sm;
 }
-// 清空历史按钮：顶到标题栏最右。hover 用统一的高饱和危险红（与删除单条记录 / .btn-icon-danger 一致）。
+// Clear history button: pushed to the far right of the title bar. hover uses the unified high-saturation danger red (consistent with deleting a single record / .btn-icon-danger).
 .chat-pane-clear {
   margin-left: auto;
 
@@ -82,19 +82,19 @@
   padding: $space-5 $space-6;
   display: flex;
   flex-direction: column;
-  // 顶层每个 chunk (run 卡片 / 运行中视图 / busy / error) 之间留较大间距 ——
-  // 比 .chat-run-result 内部 gap ($space-4) 更宽，让"运行边界"在视觉上清晰可辨，
-  // 避免上一条 finding 列表跟下一条 meta 行黏成一块
+  // Larger spacing between each top-level chunk (run card / running view / busy / error) —
+  // wider than the internal gap of .chat-run-result ($space-4), making the "run boundary" visually distinguishable,
+  // avoiding the previous finding list sticking together with the next meta row
   gap: $space-8;
 
-  // flex column 子项默认 min-width:auto，宽内容（代码块 / 长串）会把子块撑过面板宽度 → 整条会话
-  // 横向溢出。允许子块收缩到面板宽度，宽内容在块内横向滚动 / 换行，而非把整个会话撑出横向滚动条。
+  // flex column children default to min-width:auto, and wide content (code blocks / long strings) would stretch a child past the pane width → the whole conversation
+  // overflows horizontally. Allow children to shrink to the pane width, with wide content scrolling / wrapping within the block, rather than stretching the whole conversation out with a horizontal scrollbar.
   > * {
     min-width: 0;
   }
 }
 
-// "向上滚动加载更早" 提示行：顶端显眼但不抢眼，居中虚化
+// "Scroll up to load earlier" hint row: prominent at the top but not attention-grabbing, centered and faded
 .chat-run-more-hint {
   text-align: center;
   font-size: $fs-xs;
@@ -102,7 +102,7 @@
   border-bottom: 1px dashed $border-muted;
 }
 
-// 当前 PR 命中的规则 chip：actions bar 下方一行，点击弹出正文预览
+// Rule chip matched by the current PR: a row below the actions bar, clicking pops up a body preview
 .chat-rule-chip {
   display: flex;
   align-items: center;
@@ -133,7 +133,7 @@
   flex: 1;
 }
 
-// === 规划 Agent 计划面板 (PlanPanel)：header 下、滚动区上，始终可见的复选清单 ===
+// === Planning Agent plan panel (PlanPanel): below the header, above the scroll area, an always-visible checklist ===
 .chat-plan-panel {
   flex-shrink: 0;
   margin: 0 $space-6 $space-3;
@@ -197,7 +197,7 @@
   word-break: break-word;
 }
 
-// === 底部交互输入区 (ChatInputBar) ===
+// === Bottom interactive input area (ChatInputBar) ===
 .chat-pane-input {
   border-top: 1px solid $border-muted;
   padding: $space-4 $space-6 $space-5;
@@ -206,15 +206,15 @@
   gap: $space-3;
   flex-shrink: 0;
   background: $bg-panel-alt;
-  position: relative; // 给 .chat-cmd-suggest 浮层做定位基
+  position: relative; // Positioning base for the .chat-cmd-suggest floating layer
 }
-// textarea + 顶边拖动 handle 的容器
+// Container for the textarea + top-edge drag handle
 .chat-pane-textarea-wrap {
   position: relative;
 }
-// 顶边自绘 handle：向上拖让 textarea 长高 (input 区在底部, 视觉是向上扩展，
-// 跟操作方向一致)。CSS native `resize: vertical` 的右下角 handle 跟视觉方向反，
-// 不用。
+// Top-edge custom-drawn handle: dragging up makes the textarea taller (the input area is at the bottom, visually expanding upward,
+// consistent with the drag direction). The bottom-right handle of CSS native `resize: vertical` runs counter to the visual direction,
+// so it is not used.
 .chat-pane-textarea-resize-handle {
   @extend %chat-resize-handle;
   top: -3px;
@@ -224,7 +224,7 @@
   cursor: row-resize;
 }
 .chat-pane-textarea {
-  resize: none; // 用自绘 handle 代替 CSS resize
+  resize: none; // Custom-drawn handle replaces CSS resize
   width: 100%;
   display: block;
   background: $bg-surface;
@@ -235,8 +235,8 @@
   line-height: $lh-normal;
   padding: $space-3 $space-4;
   border-radius: $radius-md;
-  overflow-y: auto; // 内容超过当前高度时内部滚动
-  // 默认 2 行；JS 端 handle 拖动可调到 8 行；继续输入超过当前高度走内部滚动
+  overflow-y: auto; // Scroll internally when content exceeds the current height
+  // Default 2 rows; the JS-side handle drag can adjust up to 8 rows; further input beyond the current height scrolls internally
   min-height: calc(#{$fs-lg} * #{$lh-normal} * 2 + #{$space-3} * 2);
   max-height: calc(#{$fs-lg} * #{$lh-normal} * 8 + #{$space-3} * 2);
   box-sizing: border-box;
@@ -256,8 +256,8 @@
   justify-content: space-between;
   gap: $space-4;
 }
-// stop + send 包在一个 group 里，让 space-between 只对"/ 按钮 vs 这一组"生效，
-// stop 跟 send 之间用 group 自己的 gap 控制贴近距离。发送区不参与压缩：窄宽度时挤压的是左侧 chip 而非发送键。
+// stop + send wrapped in one group so space-between applies only to "/ button vs this group",
+// with the closeness between stop and send controlled by the group's own gap. The send area does not participate in compression: at narrow widths it is the left chip that gets squeezed, not the send key.
 .chat-pane-send-group {
   display: inline-flex;
   align-items: center;
@@ -265,8 +265,8 @@
   flex-shrink: 0;
 }
 
-// 命令触发器组：`/` 命令按钮 + 自动评审图标按钮，左对齐成一组（两者间距略放宽）。
-// min-width:0 允许本组在窄宽度下收窄（由内部可伸缩的范围 / 选区 chip 让位、省略号截断），不推挤右侧发送区。
+// Command trigger group: `/` command button + auto-review icon button, left-aligned into one group (spacing between them slightly loosened).
+// min-width:0 lets this group narrow at narrow widths (by the internally shrinkable range / selection chip yielding and truncating with an ellipsis), not squeezing the right-side send area.
 .chat-cmd-group {
   display: inline-flex;
   align-items: center;
@@ -274,15 +274,15 @@
   min-width: 0;
 }
 
-// 命令触发器：单 `/` 按钮 + 弹出菜单 (替代之前 3 个并列按钮)
+// Command trigger: single `/` button + popup menu (replacing the previous 3 side-by-side buttons)
 .chat-cmd-bar {
   position: relative;
   display: inline-flex;
 }
 
 .chat-cmd-trigger {
-  // 等宽按钮：`/` 命令触发器与自动评审图标按钮宽度一致、左对齐成一组；高度随内容（padding
-  // 决定），不固定行高外的额外高度，避免显得过高。共用 ghost 按钮外框。
+  // Equal-width buttons: the `/` command trigger and the auto-review icon button have the same width, left-aligned into one group; height follows the content (determined by
+  // padding), no extra height beyond the line height, avoiding looking too tall. Shares the ghost button frame.
   @include ghost-btn;
   box-sizing: border-box;
   min-width: 30px;
@@ -306,7 +306,7 @@
   }
 }
 
-// 自动评审图标按钮：复用 .chat-cmd-trigger 基样式，强调色区分。
+// Auto-review icon button: reuses the .chat-cmd-trigger base style, distinguished by accent color.
 .chat-agent-review-trigger {
   color: $color-info;
 
@@ -317,8 +317,8 @@
   }
 }
 
-// AutoReview 与「选区角标」之间的竖线分隔：居中、定高（略低于按钮，不顶满）；
-// 额外左间距，与左侧按钮拉开（在组 gap 基础上再加）。
+// Vertical line divider between AutoReview and the "selection corner badge": centered, fixed height (slightly lower than the button, not filling fully);
+// extra left spacing to pull away from the left button (added on top of the group gap).
 .chat-cmd-divider {
   width: 1px;
   height: 18px;
@@ -328,13 +328,13 @@
   background: $border-default;
 }
 
-// Diff 选区角标：图标 + 「N 行已选中」。点击切忽略态——忽略时置灰 + 删除线 + eye-slash 图标。
+// Diff selection corner badge: icon + "N lines selected". Clicking toggles the ignore state — when ignored, grayed out + strikethrough + eye-slash icon.
 .chat-selection-chip {
   display: inline-flex;
   align-items: center;
   gap: $space-2;
   max-width: 180px;
-  // 窄宽度时自身收窄（span 省略号截断），把空间让给右侧发送区，而非撑破布局。
+  // Narrows itself at narrow widths (span truncated with an ellipsis), yielding space to the right-side send area rather than bursting the layout.
   min-width: 0;
   padding: $space-2 $space-2;
   background: transparent;
@@ -366,7 +366,7 @@
   }
 }
 
-// 复评引用 chip：复用选区 chip 视觉，着 info 色以区分；末尾带 ✕ 清除按钮（chip 本身不可点）。
+// Re-review reference chip: reuses the selection chip visuals, colored info to distinguish; ends with a ✕ clear button (the chip itself is not clickable).
 .chat-reference-chip {
   max-width: 220px;
   color: $color-info;
@@ -392,12 +392,12 @@
   }
 }
 
-// `/` 按钮弹出的菜单：在按钮正上方展开
+// Menu popped up by the `/` button: expands directly above the button
 .chat-cmd-menu {
   @include popover;
   bottom: calc(100% + #{$space-2});
   left: 0;
-  // 宽到能让最长一条 (label + desc) 单行展示，避免说明被挤换行
+  // Wide enough to show the longest entry (label + desc) on a single line, avoiding the description being squeezed and wrapping
   min-width: 240px;
   width: max-content;
   max-width: 360px;
@@ -407,17 +407,17 @@
   border-radius: $radius-md;
 }
 
-// 分组分隔：pragent 工具 (/review /describe /ask) ↔ review 决断 (/approve /needswork)
-// 之间画一条横线，让两类操作在视觉上分开
+// Group separator: draw a horizontal line between pragent tools (/review /describe /ask) ↔ review decisions (/approve /needswork)
+// to visually separate the two kinds of actions
 .chat-cmd-menu-group {
   border-top: 1px solid $border-muted;
   margin-top: $space-2;
   padding-top: $space-2;
 }
 
-// `/` 自动补全浮层：positioned 在 textarea 正上方 (input 容器是 relative)。
-// 宽度跟 .chat-cmd-menu 对齐 —— 紧凑自适应，避免 space-between 把 label 和
-// desc 推到 textarea 两端 (700px+) 导致说明文字离指令太远不易读
+// `/` autocomplete floating layer: positioned directly above the textarea (the input container is relative).
+// Width aligned with .chat-cmd-menu — compact and adaptive, avoiding space-between pushing label and
+// desc to the two ends of the textarea (700px+), which would leave the description too far from the command and hard to read
 .chat-cmd-suggest {
   @include popover;
   bottom: 100%;
@@ -435,7 +435,7 @@
 .chat-cmd-suggest-item {
   display: flex;
   align-items: baseline;
-  // label 左 / desc 右，两端对齐 — 横向空间不够时不让 desc 换到下一行
+  // label left / desc right, aligned to both ends — when horizontal space is insufficient, don't let desc wrap to the next line
   justify-content: space-between;
   gap: $space-6;
   width: 100%;
@@ -454,27 +454,27 @@
     white-space: nowrap;
     flex-shrink: 0;
   }
-  // desc 走 muted；不要换行，避免 "标记 PR 为需修改" 被拆成两行
+  // desc goes muted; no wrapping, avoiding "mark PR as needs work" being split into two lines
   .muted {
     white-space: nowrap;
   }
-  // hover + 键盘选中态共用 .active；hover 通过 onMouseEnter 同步 selectedIdx 触发
+  // hover + keyboard-selected state share .active; hover triggers by syncing selectedIdx via onMouseEnter
   &.active,
   &:hover {
     background: $bg-hover;
   }
 }
 
-// 解析错误 (未知命令 / ask 缺 question)
+// Parse error (unknown command / ask missing question)
 .chat-input-error {
   color: $color-danger;
   font-size: $fs-xs;
   margin-top: -$space-2;
 }
 
-// 输入栏右侧的发送 / 停止按钮。跟左侧 `/` 命令按钮 (.chat-cmd-trigger) 共用 ghost 外框：
-// 浅底 + 1px 边框 + radius-sm，hover 时主色描边 + 主色文字。
-// 同槽位形态切换：idle 纸飞机 / running stop 方块
+// Send / stop button on the right of the input bar. Shares the ghost frame with the left `/` command button (.chat-cmd-trigger):
+// light background + 1px border + radius-sm, accent border + accent text on hover.
+// Same-slot form switching: idle paper plane / running stop square
 .chat-pane-send {
   @include ghost-btn;
   display: inline-flex;
@@ -487,14 +487,14 @@
     color 0.12s,
     opacity 0.12s;
   flex-shrink: 0;
-  line-height: 1; // 让 svg 在中线对齐 / 命令按钮高度一致
+  line-height: 1; // Aligns the svg on the midline / same height as the command button
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 }
-// Stop 形态：保留同样的边框结构但用饱和 danger 着色，hover 仍变深，明确表达"危险动作"
+// Stop form: keeps the same border structure but colored with saturated danger, still darkening on hover, clearly conveying a "dangerous action"
 .chat-pane-send-stop {
   color: $color-danger-strong;
   &:hover:not(:disabled) {

@@ -5,8 +5,8 @@ import { PullRequestIcon } from '../../../common';
 
 export function WelcomeStep({ onStart }: { onStart: () => void }) {
   const { t } = useTranslation();
-  // 隐藏后门：连续快速点击 logo 7 次打开 DevTools（每次间隔 > 800ms 则计数清零）。
-  // 首启向导下没有菜单 / 状态栏入口，给开发排障留一个不显眼的手势。
+  // Hidden backdoor: 7 rapid clicks on the logo open DevTools (an interval > 800ms between clicks resets the count).
+  // The onboarding wizard has no menu / status bar entry, so this leaves an unobtrusive gesture for dev troubleshooting.
   const tapRef = useRef<{ count: number; last: number }>({ count: 0, last: 0 });
   const onLogoTap = (): void => {
     const now = performance.now();

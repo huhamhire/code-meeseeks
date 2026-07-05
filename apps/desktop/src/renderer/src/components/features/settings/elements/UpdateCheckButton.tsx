@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { UpdateCheckResult } from '@meebox/shared';
 import { invoke } from '../../../../api';
 
-/** 「检查更新」按钮（运行环境段）：手动查 GitHub 最新版，自管 loading + 结果展示。 */
+/** "Check for updates" button (runtime environment section): manually queries the latest GitHub release, self-manages loading + result display. */
 export function UpdateCheckButton({ enabled }: { enabled: boolean }) {
   const { t } = useTranslation();
   const [checking, setChecking] = useState(false);

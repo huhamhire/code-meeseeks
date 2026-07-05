@@ -2,7 +2,7 @@
   "name": "@meebox/ipc",
   "version": "0.0.0",
   "private": true,
-  "description": "Typed IPC 契约（renderer ↔ main）：按业务领域拆分的 IpcChannels / IpcEvents / IpcBridge",
+  "description": "Typed IPC contract (renderer ↔ main): IpcChannels / IpcEvents / IpcBridge split by business domain",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

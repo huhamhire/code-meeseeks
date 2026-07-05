@@ -2,23 +2,23 @@ import type { PrComment } from '@meebox/shared';
 import type { PlatformAdapter } from '@meebox/platform-core';
 
 /**
- * 给每条评论 (含 replies 子树) 打 canDelete / canEdit 标志。不依赖 controller 上下文。
+ * Tags each comment (including the replies subtree) with canDelete / canEdit flags. No controller context needed.
  *
- * - canDelete: author.name === 当前 PAT 用户 && 无 reply && 有 version
- *   (Bitbucket 拒删带 reply 的；DELETE 必带 version 乐观锁)
- * - canEdit:   author.name === 当前 PAT 用户 && 有 version
- *   (Bitbucket 允许编辑带 reply 的评论；PUT 也带 version)
+ * - canDelete: author.name === current PAT user && no reply && has version
+ *   (Bitbucket refuses to delete ones with a reply; DELETE must carry a version optimistic lock)
+ * - canEdit:   author.name === current PAT user && has version
+ *   (Bitbucket allows editing comments with a reply; PUT also carries a version)
  *
- * 当前用户拿不到 (ping 未完成 / 失败) → 全部 false。renderer 直读 flag 不再
- * 自己比对 author / version / replies，链路最短最稳。
+ * If the current user is unavailable (ping not done / failed) → all false. The renderer reads the flag directly and no longer
+ * compares author / version / replies itself, keeping the path shortest and most stable.
  */
 export function annotateOwnership(comments: PrComment[], adapter: PlatformAdapter): PrComment[] {
   const me = adapter.connection.getCurrentUser();
   if (!me) {
     return setOwnershipRecursive(comments, () => ({ canDelete: false, canEdit: false }));
   }
-  // 「带 reply 的评论不可删」是 Bitbucket 限制（删父评论会孤立子评论）；GitHub / GitLab 允许删
-  // 自己的评论（含有 reply 的）。用乐观锁能力位作 Bitbucket 代理。
+  // "Comments with a reply cannot be deleted" is a Bitbucket limitation (deleting a parent comment would orphan child comments); GitHub / GitLab allow deleting
+  // one's own comments (including those with a reply). Use the optimistic-lock capability bit as a proxy for Bitbucket.
   const noDeleteWithReplies = adapter.connection.capabilities().commentOptimisticLock;
   return setOwnershipRecursive(comments, (c) => {
     const isMine = c.author.name === me.name;

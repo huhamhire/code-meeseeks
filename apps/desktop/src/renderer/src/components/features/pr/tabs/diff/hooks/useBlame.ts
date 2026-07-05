@@ -15,9 +15,9 @@ export interface BlameState {
 }
 
 /**
- * blame 数据 + Monaco 视图坐标同步。仅在开关开 + 文件有 head 内容时拉；deleted / 二进制不拉。
- * blameLayout 从 Monaco modified editor 同步 lineHeight / scrollTop / viewportHeight，供独立
- * React blame 列定位（见 BlameColumn）。
+ * blame data + Monaco view coordinate sync. Only fetched when the toggle is on + the file has head content; deleted / binary are not fetched.
+ * blameLayout syncs lineHeight / scrollTop / viewportHeight from the Monaco modified editor, for positioning the independent
+ * React blame column (see BlameColumn).
  */
 export function useBlame(
   pr: StoredPullRequest,
@@ -34,13 +34,13 @@ export function useBlame(
     changedLines: number[];
   } | null>(null);
   const [blameError, setBlameError] = useState<FormattedError | null>(null);
-  // Monaco modified editor 的视图坐标 (用于 React overlay 渲染 blame 列)；
-  // null = blame 关 / blame 数据没好 / editor 未挂载
+  // View coordinates of the Monaco modified editor (used by the React overlay to render the blame column);
+  // null = blame off / blame data not ready / editor not mounted
   const [blameLayout, setBlameLayout] = useState<BlameLayout | null>(null);
 
-  // 拉 blame：仅在开关开 + 文件有 head 内容时跑。deleted 文件 / 二进制不跑。
+  // Fetch blame: only runs when the toggle is on + the file has head content. deleted files / binary do not run.
   useEffect(() => {
-    // 门控：切视图期间不拉 blame（同 content：避免新视图 + 旧文件错拉），保留旧 blame。
+    // Gate: don't fetch blame while switching views (same as content: avoids mis-fetching new view + old file), keep old blame.
     if (loadedKey !== viewKey) return;
     if (!showBlame || !selected || !content || content.head.binary) {
       setBlame(null);
@@ -70,9 +70,9 @@ export function useBlame(
     };
   }, [showBlame, selected, content, pr.localId, loadedKey, viewKey, range]);
 
-  // Blame 走独立 React 列（Bitbucket 风格），不在 Monaco DOM 里。只需要从 Monaco
-  // 同步 lineHeight / scrollTop / viewportHeight，BlameColumn 自己用 absolute
-  // 子项画 row 并按 scrollTop 平移。
+  // Blame uses an independent React column (Bitbucket-style), not inside the Monaco DOM. It only needs to
+  // sync lineHeight / scrollTop / viewportHeight from Monaco; BlameColumn draws rows with its own absolute
+  // children and shifts them by scrollTop.
   useEffect(() => {
     if (!diffEditor || !showBlame || !blame || blame.lines.length === 0) {
       setBlameLayout(null);
@@ -91,7 +91,7 @@ export function useBlame(
       });
     };
     update();
-    // 初次 mount 时 layout 可能还在计算，下一 tick 再算一次
+    // On initial mount layout may still be computing, so recompute once on the next tick
     const t = setTimeout(update, 0);
     const subs = [
       modifiedEditor.onDidScrollChange(update),

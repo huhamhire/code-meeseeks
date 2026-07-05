@@ -8,73 +8,73 @@ import type {
 } from '@meebox/shared';
 import { PlatformDomainService } from '../context.js';
 
-/** PR 操作：发现、提交 / 活动数据、审批决断、合并。 */
+/** PR operations: discovery, commit / activity data, review decisions, merge. */
 export interface PullRequestService {
   /**
-   * 列出待处理 PR，跨项目跨仓库。
+   * List pending PRs, across projects and repositories.
    *
-   * 默认按 review-requested 发现；GitHub 按 opts.filter 切换发现范围。
+   * Discovers by review-requested by default; GitHub switches the discovery scope by opts.filter.
    */
   listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]>;
 
   /**
-   * 按 repo + id **从远端拉取单个 PR**（不经发现列表 / 缓存），用于「按 URL 打开 PR」。
-   * 无权限 / 不存在时由底层 client 抛带 HTTP status 的错误（403 / 404），上层据此归一成错误码。
+   * **Fetch a single PR from the remote** by repo + id (bypassing the discovery list / cache), used for "open PR by URL".
+   * On no permission / not found, the underlying client throws an error carrying the HTTP status (403 / 404), which the upper layer normalizes into an error code.
    */
   getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest>;
 
   /**
-   * 列出 PR 全部提交，按 **newest first** 排序。
+   * List all commits of a PR, sorted **newest first**.
    */
   listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]>;
 
   /**
-   * 列出 PR 上的「评审决断」活动事件（approve / needs-work / unapprove / dismiss），带时间戳。
+   * List the "review decision" activity events on a PR (approve / needs-work / unapprove / dismiss), with timestamps.
    */
   listPullRequestActivity(repo: RepoRef, prId: string): Promise<PrActivityEvent[]>;
 
   /**
-   * 把当前用户在该 PR 上的 review 状态写到远端（approved / needsWork / unapproved）。
+   * Write the current user's review status on this PR to the remote (approved / needsWork / unapproved).
    */
   setPullRequestReviewStatus(repo: RepoRef, prId: string, status: ReviewerStatus): Promise<void>;
 
   /**
-   * 合并 PR 到目标分支。
+   * Merge a PR into the target branch.
    *
-   * 仅应在 mergeStatus.canMerge=true 时调用；操作不可逆。
+   * Should only be called when mergeStatus.canMerge=true; the operation is irreversible.
    */
   mergePullRequest(repo: RepoRef, prId: string): Promise<void>;
 }
 
 /**
- * PR 操作领域基类：契约方法全部留给平台子类实现，仅约束统一的领域接口形态。
+ * PR operations domain base class: all contract methods are left to platform subclasses to implement, only constraining the unified domain interface shape.
  */
 export abstract class BasePullRequestService
   extends PlatformDomainService
   implements PullRequestService
 {
   /**
-   * 由平台子类实现：跨项目发现待处理 PR 并归一为中性类型。
+   * Implemented by platform subclasses: discover pending PRs across projects and normalize into neutral types.
    */
   abstract listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]>;
 
   /**
-   * 由平台子类实现：按 repo + id 从远端拉取单个 PR（「按 URL 打开 PR」）。
+   * Implemented by platform subclasses: fetch a single PR from the remote by repo + id ("open PR by URL").
    */
   abstract getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest>;
 
   /**
-   * 由平台子类实现：列出 PR 提交，按 newest first 返回。
+   * Implemented by platform subclasses: list PR commits, returned newest first.
    */
   abstract listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]>;
 
   /**
-   * 由平台子类实现：列出 PR 的评审决断活动事件（无对应能力的平台返回空）。
+   * Implemented by platform subclasses: list a PR's review decision activity events (platforms lacking the capability return empty).
    */
   abstract listPullRequestActivity(repo: RepoRef, prId: string): Promise<PrActivityEvent[]>;
 
   /**
-   * 由平台子类实现：把当前用户的 review 状态写到远端。
+   * Implemented by platform subclasses: write the current user's review status to the remote.
    */
   abstract setPullRequestReviewStatus(
     repo: RepoRef,
@@ -83,7 +83,7 @@ export abstract class BasePullRequestService
   ): Promise<void>;
 
   /**
-   * 由平台子类实现：合并 PR 到目标分支。
+   * Implemented by platform subclasses: merge a PR into the target branch.
    */
   abstract mergePullRequest(repo: RepoRef, prId: string): Promise<void>;
 }

@@ -13,35 +13,35 @@ import { getLastUpdateResult, publishUpdateResult } from '../utils/update-state.
 import type { IpcController } from './types.js';
 
 /*
- * GUI 框架交互域 controllers：应用信息 / 框架窗口 / 外部打开 / 对话框 / 日志回传 / 连接与头像
+ * GUI shell interaction-domain controllers: app info / shell window / external open / dialogs / log relay / connections and avatars
  */
 
 /**
- * 应用 / 运行时版本信息（关于页）。
+ * App / runtime version info (About page).
  */
 export const readAppInfo: IpcController<'app:info'> = () => buildAppInfo(getContext().bootstrap);
 
 /**
- * 关键目录路径（config / agent / 日志）。
+ * Key directory paths (config / agent / logs).
  */
 export const readAppPaths: IpcController<'app:paths'> = () => getContext().bootstrap.paths;
 
 /**
- * 渲染层在主题应用后推送窗控按钮配色（跟随具体主题的 --bg-app/--text-primary）；null 回退通用深/浅。
+ * The renderer pushes window-control button colors after applying a theme (follows the specific theme's --bg-app/--text-primary); null falls back to generic dark/light.
  */
 export const setWindowControlColors: IpcController<'window:setControlColors'> = (_event, req) => {
   applyWindowControlColors(req);
 };
 
 /**
- * pr-agent 探测状态（是否就绪）。
+ * pr-agent probe status (whether it is ready).
  */
 export const readPrAgentStatus: IpcController<'app:prAgentStatus'> = () =>
   getContext().getPrAgentStatus();
 
 let rendererLogger: Logger | undefined;
 /**
- * 渲染层错误 / 未捕获异常转发到 main，按级别写 renderer scope 日志（落同一份 meebox.log）。
+ * Renderer errors / uncaught exceptions are forwarded to main and written to the renderer-scope log by level (into the same meebox.log).
  */
 export const writeRendererLog: IpcController<'log:write'> = (_event, req) => {
   rendererLogger ??= getContext().logger.child({ scope: 'renderer' });
@@ -63,19 +63,19 @@ export const writeRendererLog: IpcController<'log:write'> = (_event, req) => {
 };
 
 /**
- * 各连接 ping 后缓存（当前用户 + display_name），Header / 状态栏用。
+ * Per-connection post-ping cache (current user + display_name), used by the Header / status bar.
  */
 export const listConnections: IpcController<'app:connections'> = () => {
   const { bootstrap, connectionRuntime } = getContext();
   return buildConnectionSummaries(bootstrap, connectionRuntime.adapters);
 };
 
-// 头像两级缓存：进程内 Map（含 null 负缓存）+ 磁盘文件（TTL 7 天，按 mtime 判过期）。
+// Two-level avatar cache: in-process Map (including null negative cache) + disk file (TTL 7 days, expiry judged by mtime).
 const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const avatarMem = new Map<string, { dataUrl: string } | null>();
 
 /**
- * 按 (connectionId, slug) 拉头像 dataUrl：内存 → 磁盘 → 远端，失败回 null。
+ * Fetch the avatar dataUrl by (connectionId, slug): memory → disk → remote, returning null on failure.
  */
 export const getUserAvatar: IpcController<'app:userAvatar'> = async (_event, req) => {
   const { logger, connectionRuntime, bootstrap } = getContext();
@@ -86,7 +86,7 @@ export const getUserAvatar: IpcController<'app:userAvatar'> = async (_event, req
   const hash = crypto.createHash('sha256').update(memKey).digest('hex').slice(0, 24);
   const filePath = path.join(avatarDir, `${hash}.bin`);
 
-  // 1) 磁盘 cache 命中且未过期？命中不打日志 (高频路径，避免日志噪音)
+  // 1) Disk cache hit and not expired? Do not log on hit (high-frequency path, avoid log noise)
   try {
     const stat = await fs.stat(filePath);
     const age = Date.now() - stat.mtimeMs;
@@ -97,13 +97,13 @@ export const getUserAvatar: IpcController<'app:userAvatar'> = async (_event, req
       avatarMem.set(memKey, result);
       return result;
     }
-    // 过期：删了重拉。删失败也没关系（writeFile 会覆盖）
+    // Expired: delete and re-fetch. A failed delete is fine (writeFile will overwrite)
     await fs.unlink(filePath).catch(() => undefined);
   } catch {
-    // 文件不存在 / 读失败 → 走 fetch
+    // File missing / read failed → go to fetch
   }
 
-  // 2) 没缓存 / 已过期：去远端拉
+  // 2) No cache / expired: fetch from remote
   const adapter = connectionRuntime.adapters.find(
     (a) => a.connectionId === req.connectionId,
   )?.adapter;
@@ -121,7 +121,7 @@ export const getUserAvatar: IpcController<'app:userAvatar'> = async (_event, req
       avatarMem.set(memKey, null);
       return null;
     }
-    // 落盘：best-effort，写失败不影响响应
+    // Persist to disk: best-effort, a write failure does not affect the response
     try {
       await fs.mkdir(avatarDir, { recursive: true });
       await fs.writeFile(filePath, img.bytes);
@@ -144,7 +144,7 @@ export const getUserAvatar: IpcController<'app:userAvatar'> = async (_event, req
 };
 
 /**
- * OS 默认编辑器打开 config.yaml。
+ * Open config.yaml in the OS default editor.
  */
 export const openConfigFile: IpcController<'app:openConfigFile'> = async () => {
   const err = await shell.openPath(getContext().bootstrap.paths.configFile);
@@ -152,8 +152,8 @@ export const openConfigFile: IpcController<'app:openConfigFile'> = async () => {
 };
 
 /**
- * 文件管理器打开当前生效的 Agent 目录。先「用时补齐」上下文模版（ensureAgentDir 幂等、含建目录），
- * 这样直接打开（未跑过任何评审时）也能看到 SOUL/AGENTS 等文件，而非空目录。
+ * Open the currently effective Agent directory in the file manager. First lazily fill in the context templates (ensureAgentDir is idempotent and creates the directory),
+ * so opening it directly (when no review has ever run) still shows SOUL/AGENTS and other files rather than an empty directory.
  */
 export const openAgentDir: IpcController<'app:openAgentDir'> = async () => {
   const dir = await getContext().ensureAgentDir();
@@ -162,21 +162,21 @@ export const openAgentDir: IpcController<'app:openAgentDir'> = async () => {
 };
 
 /**
- * 打开 DevTools（分离窗口）——需访问发起调用的 webContents。
+ * Open DevTools (detached window) — needs access to the calling webContents.
  */
 export const openDevTools: IpcController<'app:openDevTools'> = (event) => {
   event.sender.openDevTools({ mode: 'detach' });
 };
 
 /**
- * 设置应用角标计数（本期仅 macOS dock）。renderer 已据 PR 列表 + 通知配置派生「待回应」计数，主进程仅落地。
+ * Set the app badge count (currently macOS dock only). The renderer already derives the "awaiting response" count from the PR list + notification config; the main process only applies it.
  */
 export const setBadgeCount: IpcController<'app:setBadgeCount'> = (_event, req) => {
   applyBadgeCount(req.count);
 };
 
 /**
- * 手动检测更新：受 check_enabled 门控；结果交单一真相源缓存 + 有新版广播。
+ * Manual update check: gated by check_enabled; the result is handed to the single-source-of-truth cache + broadcast when a new version exists.
  */
 export const checkUpdate: IpcController<'app:checkUpdate'> = async () => {
   const { bootstrap } = getContext();
@@ -194,12 +194,12 @@ export const checkUpdate: IpcController<'app:checkUpdate'> = async () => {
 };
 
 /**
- * 读 main 缓存的最近一次更新检测结果（不发请求）。
+ * Read the main-cached most recent update-check result (issues no request).
  */
 export const getUpdateStatus: IpcController<'app:getUpdateStatus'> = () => getLastUpdateResult();
 
 /**
- * 系统浏览器打开外链（白名单仅放行 http(s)，防 file:// / javascript: 注入）。
+ * Open an external link in the system browser (allowlist permits only http(s), guarding against file:// / javascript: injection).
  */
 export const openExternal: IpcController<'app:openExternal'> = async (_event, req) => {
   if (!/^https?:\/\//.test(req.url)) return;
@@ -207,9 +207,9 @@ export const openExternal: IpcController<'app:openExternal'> = async (_event, re
 };
 
 /**
- * 打开 macOS「系统设置 → 通知」面板，引导用户授予 / 开启通知权限（macOS 在系统层管控通知授权、应用无法
- * 代为开启）。非 macOS 为 no-op。通知面板的 pane id 随系统版本不同（Ventura+ 改名），逐个回退；全失败则
- * 退到系统设置根。
+ * Open the macOS "System Settings → Notifications" panel to guide the user to grant / enable notification permission (macOS manages notification authorization at the system level; the app cannot
+ * enable it on the user's behalf). No-op on non-macOS. The notifications panel's pane id varies by system version (renamed in Ventura+), so fall back one by one; if all fail,
+ * fall back to the System Settings root.
  */
 export const openNotificationSettings: IpcController<
   'app:openNotificationSettings'
@@ -217,25 +217,25 @@ export const openNotificationSettings: IpcController<
   if (process.platform !== 'darwin') return;
   const panes = [
     'x-apple.systempreferences:com.apple.Notifications-Settings.extension', // Ventura(13)+
-    'x-apple.systempreferences:com.apple.preference.notifications', // 旧版
-    'x-apple.systempreferences:', // 兜底：系统设置根
+    'x-apple.systempreferences:com.apple.preference.notifications', // older versions
+    'x-apple.systempreferences:', // fallback: System Settings root
   ];
   for (const url of panes) {
     try {
       await shell.openExternal(url);
       return;
     } catch {
-      // 该 pane id 在当前系统版本不识别 → 尝试下一个
+      // This pane id is not recognized on the current system version → try the next one
     }
   }
 };
 
 /**
- * 系统原生目录选择对话框——需绑定到发起调用的窗口。
+ * Native OS directory-picker dialog — must be bound to the calling window.
  */
 export const pickDirectory: IpcController<'dialog:pickDirectory'> = async (event, req) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-  // 标题由前端按 UI 语言提供（目录选择属交互领域文案，统一在渲染层 i18n 维护，主进程不再 localize）。
+  // The title is provided by the frontend per UI language (directory picking is interaction-domain text, maintained uniformly by renderer i18n; the main process no longer localizes it).
   const result = win
     ? await dialog.showOpenDialog(win, {
         title: req.title,

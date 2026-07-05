@@ -1,9 +1,9 @@
 @use '../../tokens' as *;
 
-// DiffSearchPanel：替换文件树位置的搜索面板。
-// 结构：input row → stats line → 结果列表 (按文件 group)。
-// 视觉跟 Bitbucket "Search code" 风格对齐：紧凑列表 + 文件名 chip + 行号 +
-// 关键词黄背景高亮 + +/- diff role marker
+// DiffSearchPanel: search panel that replaces the file tree.
+// Structure: input row → stats line → results list (grouped by file).
+// Visually aligned with Bitbucket "Search code" style: compact list + file name chip + line number +
+// keyword yellow-background highlight + +/- diff role marker
 
 .diff-search-panel {
   flex: 1;
@@ -22,9 +22,9 @@
   flex-shrink: 0;
 }
 
-// input 跟 case toggle 共用基础尺寸 — 同 box-sizing + 同 padding 上下 + 同
-// font-size，才能在 flex row 里基线和外框双对齐。toggle 一般比 input 文字略小
-// 但因为字符宽度 ("Aa")，按钮还要够宽不被挤
+// input and case toggle share a base size — same box-sizing + same top/bottom padding + same
+// font-size, so baseline and outer frame both align in the flex row. The toggle text is usually
+// slightly smaller than the input, but because of character width ("Aa") the button must also be wide enough not to get squeezed
 %diff-search-input-base {
   box-sizing: border-box;
   padding: 5px $space-4;
@@ -98,7 +98,7 @@
   text-align: center;
 }
 
-// 文件级行：头 (折叠按钮 + 文件名 + 路径 + 命中数 chip)，下方是 matches 列表
+// File-level row: head (collapse button + file name + path + match-count chip), matches list below
 .diff-search-file {
   border-bottom: 1px solid $border-muted;
 }
@@ -167,7 +167,7 @@
   margin: 0;
 }
 
-// 单条匹配：[marker] [line#] [content with <mark>]
+// Single match: [marker] [line#] [content with <mark>]
 .diff-search-match {
   width: 100%;
   display: flex;

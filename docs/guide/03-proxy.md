@@ -1,31 +1,33 @@
-# 网络代理配置
+# Network Proxy Setup
 
-企业内网 / 受限网络下，让所有**出站网络**统一经一个 **HTTP 代理**出网。在 **设置 → 代理** 配置。
+**English** · [简体中文](zh-CN/03-proxy.md)
 
-## 覆盖范围
+On a corporate intranet / restricted network, route all **outbound traffic** through a single **HTTP proxy**. Configure it under **Settings → Proxy**.
 
-开关打开后，以下三类出口统一走代理：
+## Coverage
 
-- **LLM 调用**（pr-agent 内嵌的 LLM 客户端）—— 内网下没它整个评审不可用。
-- **代码平台 REST**（轮询 / 评论 / 头像 / 附件 / 合并 / 连接探测）。
-- **git over HTTPS**（clone / fetch）。
+Once the toggle is on, these three egress paths all go through the proxy:
 
-**本地地址自动直连**：`localhost / 127.0.0.1 / ::1`（含本地 Ollama 等本地服务）不经代理。
+- **LLM calls** (the LLM client embedded in pr-agent) — without it, the entire review flow is unusable on an intranet.
+- **Code platform REST** (polling / comments / avatars / attachments / merge / connection probes).
+- **git over HTTPS** (clone / fetch).
 
-## 配置项
+**Local addresses connect directly, automatically**: `localhost / 127.0.0.1 / ::1` (including a local Ollama and other local services) bypass the proxy.
 
-| 字段 | 说明 |
+## Settings
+
+| Field | Description |
 | --- | --- |
-| 开关 | 总开关；关 = 全部直连（默认） |
-| 地址 / 端口 | 代理 host 与 port |
-| 用户名 / 密码 | Basic Auth，可留空 |
+| Toggle | Master switch; off = everything connects directly (default) |
+| Host / Port | Proxy host and port |
+| Username / Password | Basic Auth, may be left empty |
 
-> 保存即热生效：修改后立即重建平台客户端，REST 立即走新代理；LLM / git 出口在下次操作时读最新配置。
-> 配好后可点「测试」，客户端会经该代理试连一个外部地址验证连通（代理认证失败 407 会报原因）。
+> Saving takes effect immediately: the platform client is rebuilt right away and REST goes through the new proxy at once; the LLM / git egress paths read the latest config on their next operation.
+> After configuring, click "Test" and the client will try to reach an external address through the proxy to verify connectivity (a proxy auth failure, 407, reports the reason).
 
-## 注意事项
+## Notes
 
-- **SSH 克隆不走代理**：HTTP 代理对 SSH 不直接适用，跨平台也无统一手段。若 Clone 协议选 SSH，请自行在 `~/.ssh/config` 配 `ProxyCommand`。
-- **本地 CLI 模式同样走代理**：用[本地 CLI 模式](02-llm.md#本地-cli-模式)评审时，CLI 子进程继承代理环境变量，出站自动走代理。
-- **socks5 暂不支持**：一期仅 HTTP 代理（含 Basic Auth）。
-- **平台被代理误伤**：内网代码平台若因走代理反而连不上，属边缘场景，当前未提供「平台直连」单独开关。
+- **SSH clone does not use the proxy**: an HTTP proxy does not apply directly to SSH, and there is no uniform cross-platform mechanism for it. If your clone protocol is SSH, configure `ProxyCommand` yourself in `~/.ssh/config`.
+- **Local CLI mode also uses the proxy**: when reviewing with [local CLI mode](02-llm.md#local-cli-mode), the CLI subprocess inherits the proxy environment variables, so its outbound traffic goes through the proxy automatically.
+- **socks5 is not yet supported**: this first phase supports HTTP proxies only (including Basic Auth).
+- **Platform caught in the crossfire**: if an intranet code platform becomes unreachable precisely because it is routed through the proxy, that is an edge case; there is currently no separate "platform direct connection" toggle.

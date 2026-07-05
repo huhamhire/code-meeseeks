@@ -1,14 +1,14 @@
 import { TOOLS, type ToolCatalogEntry } from '@meebox/shared';
 
 /**
- * 工具目录与修改红线（见 docs/arch/02-agent/01-agent.md「工具修改红线」）。读 / 分析类工具 Agent 始终可自主调用；
- * 修改类（对远端有副作用）**默认禁止**，仅在 `grants` 显式授权时放行——以**禁用态**注入目录（Agent 知其
- * 存在但不可调用），并由 `assertToolAllowed` 在分发入口**运行时硬校验**：即便 LLM 越权产出修改类调用也被拒。
- * 工具清单（读 / 改 / grant）来自 @meebox/shared 的统一注册表 `TOOLS`（tool-registry）。
+ * Tool catalog and the mutation red line (see docs/arch/02-agent/01-agent.md "工具修改红线"). Read / analysis tools can always be invoked by the Agent on its own;
+ * mutating ones (with side effects on the remote) are **disabled by default** and only allowed when explicitly granted in `grants` — injected into the catalog in a **disabled state** (the Agent knows they
+ * exist but cannot call them), and hard-validated at runtime by `assertToolAllowed` at the dispatch entry: even if the LLM produces an out-of-scope mutating call, it is rejected.
+ * The tool list (read / mutating / grant) comes from @meebox/shared's unified registry `TOOLS` (tool-registry).
  */
 
 /**
- * 构建工具目录：读类 enabled=true；修改类仅在 grants 含其授权项时 enabled，否则禁用态。从注册表派生。
+ * Builds the tool catalog: read tools enabled=true; mutating tools enabled only when grants contains their grant item, otherwise disabled. Derived from the registry.
  */
 export function buildToolCatalog(grants: ReadonlyArray<string> = []): ToolCatalogEntry[] {
   const granted = new Set(grants);
@@ -23,8 +23,8 @@ export function buildToolCatalog(grants: ReadonlyArray<string> = []): ToolCatalo
 }
 
 /**
- * 运行时硬校验（红线落地）：分发某工具前调用。未知工具 / 修改类且未授权 → 抛错；
- * 读类 / 已授权 → 放行。这是「提示词被绕过 ≠ 操作被执行」的最后一道闸。
+ * Runtime hard validation (the red line enforced): called before dispatching a tool. Unknown tool / mutating and unauthorized → throw;
+ * read / authorized → allow. This is the last gate that makes "prompt bypassed ≠ action executed".
  */
 export function assertToolAllowed(
   toolName: string,

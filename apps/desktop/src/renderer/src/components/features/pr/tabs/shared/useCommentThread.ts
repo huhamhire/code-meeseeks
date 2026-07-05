@@ -3,13 +3,13 @@ import type { PrComment } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 
 /**
- * 单条评论的「回复 / 编辑 / 删除」交互状态机。评论/活动 tab 的 CommentItem 与 diff 行内
- * 评论 zone 的 CommentNode 共用同一份逻辑（IPC 调用、状态转移、权限读取完全一致），仅外壳
- * （CSS 类 / i18n 文案 / 版式）各异。
+ * Interaction state machine for a single comment's "reply / edit / delete". The comment/activity tab's CommentItem and the diff inline
+ * comment zone's CommentNode share the same logic (IPC calls, state transitions, permission reads are identical), differing only in the shell
+ * (CSS classes / i18n text / layout).
  *
- * canEdit / canDelete 由 main 端预判（annotateOwnership），renderer 直读 flag，不再自己比对
- * author / version / replies。删除成功后 main 端清 cache + 广播 comments:changed，上层面板/zone
- * 重拉评论，这条自然从列表消失，无需本地维护。
+ * canEdit / canDelete are predetermined by main (annotateOwnership); the renderer reads the flag directly, no longer comparing
+ * author / version / replies itself. After a successful delete, main clears the cache + broadcasts comments:changed, the upper panel/zone
+ * refetches comments, this one naturally disappears from the list, no local maintenance needed.
  */
 export interface CommentThread {
   replyOpen: boolean;
@@ -47,7 +47,7 @@ export function useCommentThread(prLocalId: string, comment: PrComment): Comment
         commentId: comment.remoteId,
         version: comment.version,
       });
-      // 成功 → main 端清 cache + 广播 comments:changed → 上层重拉，这条评论自然消失
+      // Success → main clears the cache + broadcasts comments:changed → upper layer refetches, this comment naturally disappears
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e));
       setDeleting(false);

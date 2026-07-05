@@ -1,162 +1,197 @@
-# CLI 工具（meebox）
+# CLI tool (meebox)
 
-## 职责与边界
+## Responsibilities & boundaries
 
-提供一个**独立分发的跨平台命令行客户端**，经[本地 API](01-service-api.md) 消费应用能力，供外部
-agent / 脚本 / CI 把 meebox 的 PR 发现、浏览与 Agent 操作纳入自动化流程。命令名 **`meebox`**。
+Provide an **independently distributed cross-platform command-line client** that consumes the app's capabilities through the
+[local API](01-service-api.md), so external agents / scripts / CI can fold meebox's PR discovery, browsing, and Agent
+operations into automation flows. The command is named **`meebox`**.
 
-负责：把 API 端点封装成顺手的命令树、解析连接 / 鉴权配置、按人 / 机两种消费方式输出（文本 / JSON）、
-约定退出码。提供浏览与**评审写动作**（approve / needswork / comment）——与服务端写边界一致。
+Responsible for: wrapping API endpoints into a handy command tree, parsing connection / auth config, output for two
+consumption modes (human / machine — text / JSON), and an exit-code convention. It provides browsing and **review write
+actions** (approve / needswork / comment) — consistent with the server's write boundary.
 
-**不负责**：
+**Not responsible for**:
 
-- 业务逻辑 —— CLI 是 API 的瘦客户端，不内置任何评审 / 平台逻辑。
-- **合并与变更类 Agent 工具**（merge / publish 等）—— 不提供对应命令；API 本就不开放（见 [服务端写边界](01-service-api.md)）。
-- 桌面应用本体 —— CLI **不内嵌进安装包**，是独立可分发物（见下「分发」）。
+- Business logic — the CLI is a thin client over the API and embeds no review / platform logic.
+- **Merge and change-type Agent tools** (merge / publish, etc.) — no corresponding commands; the API itself does not expose
+  them (see [server write boundary](01-service-api.md)).
+- The desktop app itself — the CLI is **not embedded in the installer**; it is an independent distributable (see
+  "Distribution" below).
 
-## 核心设计
+## Core design
 
-### 技术栈与仓库形态决策（Go 评估）
+### Tech-stack and repo-shape decision (Go evaluation)
 
-CLI 优先技术栈定为 **Go**，并就「是否内嵌当前项目」给出结论——**该问题分两层，结论不同**：
+The preferred tech stack for the CLI is settled as **Go**, and the "whether to embed it in the current project" question has a
+conclusion — **the question has two layers, with different conclusions**:
 
-1. **是否打进 Electron 安装包：否。** CLI 面向外部自动化、经 HTTP 与应用通信，无需随桌面包分发；打进去
-   只会无谓增大安装体积。二者是**相互独立的可分发物**。
-2. **源码是否放进本仓库（monorepo）：是，但作为独立的顶层 `cli/` 目录、自带 `go.mod`，不纳入 npm
-   workspaces / Nx。** Go 有独立的模块系统与构建缓存，与 npm/Nx 的工程模型不兼容；强行包成 Nx project
-   （run-commands 壳）徒增复杂、且让 Go 工具链成为全仓开发的前置。CLI 与主工程的**唯一耦合是 HTTP/JSON
-   线协议**（语言无关），无代码级共享，故「同仓、独立构建」最自然。
+1. **Whether to bundle it into the Electron installer: no.** The CLI targets external automation and talks to the app over
+   HTTP; it need not ship with the desktop package, and bundling it would only needlessly bloat the install size. The two are
+   **independent distributables**.
+2. **Whether to place the source in this repo (monorepo): yes, but as a standalone top-level `cli/` directory with its own
+   `go.mod`, not part of npm workspaces / Nx.** Go has its own module system and build cache, incompatible with the npm/Nx
+   engineering model; forcibly wrapping it into an Nx project (a run-commands shell) adds complexity and makes the Go toolchain
+   a prerequisite for whole-repo development. The CLI's **only coupling with the main project is the HTTP/JSON wire protocol**
+   (language-agnostic), with no code-level sharing, so "same repo, independent build" is the most natural.
 
-**为什么 Go 适合做这个 CLI**：静态链接小体积二进制、`GOOS`/`GOARCH` 一条命令交叉编译出全平台、启动快、
-无运行时依赖——正是分发型 CLI 的理想形态。相较把 Node/TS 用 pkg / SEA 打包（产物数十 MB、交叉编译脆弱、
-冷启动慢），Go 在分发体验上明显占优。
+**Why Go suits this CLI**: a small statically linked binary, cross-compilation for all platforms with a single
+`GOOS`/`GOARCH` command, fast startup, no runtime dependency — exactly the ideal shape for a distribution CLI. Compared with
+bundling Node/TS via pkg / SEA (tens of MB, fragile cross-compilation, slow cold start), Go is clearly ahead on distribution
+experience.
 
-**代价与应对——类型契约同步**：Go 端无法编译期复用 `shared` 的 TS 类型。
+**Cost and mitigation — type-contract sync**: the Go side cannot reuse `shared`'s TS types at compile time.
 
-- **初期**：API 端点少而稳，**手写 Go struct 对齐文档契约**即可（成本低）。
-- **将来**：若契约增长，引入 OpenAPI / JSON Schema 作单一事实源，生成 TS 侧校验 + Go 侧 client，
-  消除手工漂移。
+- **Initially**: the API endpoints are few and stable, so **hand-written Go structs aligned to the doc contract** suffice
+  (low cost).
+- **Later**: if the contract grows, introduce OpenAPI / JSON Schema as the single source of truth, generating TS-side
+  validation + a Go-side client to eliminate manual drift.
 
-### 连接与鉴权
+### Connection and authentication
 
-CLI 需 API base URL + token。来源优先级（高 → 低）：
+The CLI needs an API base URL + token. Source priority (high → low):
 
-1. 命令行 flag：`--api-url` / `--token`；
-2. 环境变量：`MEEBOX_API_URL` / `MEEBOX_TOKEN`；
-3. CLI 自身配置文件 `~/.code-meeseeks/cli.yaml`（与 GUI 的 `config.yaml` 同目录、独立文件，隔离二者配置）。
+1. Command-line flags: `--api-url` / `--token`;
+2. Environment variables: `MEEBOX_API_URL` / `MEEBOX_TOKEN`;
+3. The CLI's own config file `~/.code-meeseeks/cli.yaml` (same directory as the GUI's `config.yaml` but a separate file,
+   isolating the two configs).
 
-连接信息须**显式提供**（flag / 环境变量 / `cli.yaml` 三者之一），token 缺失即报鉴权错误。`meebox login
---token <token> [--server <url>]` 把 token（与可选 server，默认 loopback）写入 `cli.yaml`，免去后续每次传参——
-它是 CLI 唯一的配置**写入**命令，与 `cli.yaml` 的读取（上述优先级）配对，使配置管理自洽。
+Connection info must be **explicitly provided** (one of flag / environment variable / `cli.yaml`); a missing token raises an
+auth error. `meebox login --token <token> [--server <url>]` writes the token (and an optional server, defaulting to loopback)
+into `cli.yaml`, saving passing arguments every time thereafter — it is the CLI's only config **write** command, paired with
+the reading of `cli.yaml` (the priority above), making config management self-contained.
 
-**不读取 GUI 主配置**：CLI 刻意**不**读应用主配置 `~/.code-meeseeks/config.yaml`。该文件承载连接层机密
-（各代码平台的访问令牌等），若从中静默取服务令牌，等于让 CLI 触达其本不应接触的凭据——属预期外的越权访问，
-故移除此前的「本机自动发现」设计。环境变量 `MEEBOX_TOKEN` 是本机免逐次传参的推荐方式（配合 shell / CI 环境注入）。
+**Does not read the GUI's main config**: the CLI deliberately does **not** read the app's main config
+`~/.code-meeseeks/config.yaml`. That file carries connection-layer secrets (access tokens for each code platform, etc.);
+silently taking the service token from it would let the CLI reach credentials it should not touch — an out-of-scope
+over-reach, so the earlier "local auto-discovery" design was removed. The environment variable `MEEBOX_TOKEN` is the
+recommended way to avoid passing arguments each time on a local machine (paired with shell / CI environment injection).
 
-### 命令结构
+### Command structure
 
 ```text
-meebox [全局 flag] <组> <命令> [参数]
+meebox [global flags] <group> <command> [args]
 
-全局 flag：--api-url · --token · --output (yaml|json) · --quiet
+global flags: --api-url · --token · --output (yaml|json) · --quiet
 ```
 
-命令分两类——**根层级系统性命令** 与 **两个领域组**：
+Commands fall into two classes — **root-level system commands** and **two domain groups**:
 
-- **系统性命令（根层级）** —— `login`（保存凭据到 `cli.yaml`）、`whoami`（身份）、`version`（客户端 +
-  服务端版本）、`skill`（打印内嵌的 SKILL.md）：与具体 PR / Agent 无关的工具 / 会话层操作，直接置于根层级、
-  不套领域组（符合 `kubectl version` / `gh auth` 等惯例）。
-- **`pr`** —— PR 相关操作：浏览 + 评审写动作，并含 `categories`（`pr list` 的筛选词表）与 `refresh`
-  （触发一次拉取、刷新 PR 列表）。
-- **`agent`** —— 评审 Agent 操作。
+- **System commands (root level)** — `login` (save credentials to `cli.yaml`), `whoami` (identity), `version` (client +
+  server version), `skill` (print the embedded SKILL.md): tool / session-level operations unrelated to a specific PR / Agent,
+  placed directly at the root level without a domain group (following conventions like `kubectl version` / `gh auth`).
+- **`pr`** — PR-related operations: browsing + review write actions, plus `categories` (the filter vocabulary for `pr list`)
+  and `refresh` (trigger one fetch, refresh the PR list).
+- **`agent`** — review Agent operations.
 
-`pr` / `agent` 下的 PR 维度子命令用**必填 flag `--pr <id>`** 传 PR 标识（`id` 由 `pr list` 输出获得）——
-agent **不嵌进 `pr`**（避免 `pr agent … --pr` 里 `pr` 重复），与 `pr` 平级；根层级系统性命令与
-`pr categories` / `pr refresh` / `pr list` 非 PR 维度，无需 `--pr`。
+PR-scoped subcommands under `pr` / `agent` pass the PR identifier via the **required flag `--pr <id>`** (`id` is obtained from
+`pr list` output) — agent is **not nested inside `pr`** (avoiding the duplicated `pr` in `pr agent … --pr`) and sits as a
+peer of `pr`; the root-level system commands and `pr categories` / `pr refresh` / `pr list` are not PR-scoped and need no
+`--pr`.
 
-| 命令 | 用途 | 对应 API |
+| Command | Purpose | Corresponding API |
 | --- | --- | --- |
-| `meebox login --token <token> [--server <url>]` | 保存 token（与可选 server，默认 loopback）到 `cli.yaml`，供后续命令免传参 | —（本地写，无 API） |
-| `meebox whoami` | 当前身份（用户 + 平台 + 连接名） | `GET /whoami` |
-| `meebox version` | 客户端（CLI）+ 服务端（应用）版本；服务端不可达时仅客户端、退出码仍 0 | `GET /version` |
-| `meebox skill` | 打印构建时 `go:embed` 内嵌的 agent 使用说明（SKILL.md） | —（本地，无 API） |
-| `meebox pr categories` | 列当前启用平台的分类标签（`categories` 一级 + `statuses` 二级）——`pr list` 的筛选词表 | `GET /categories` |
-| `meebox pr refresh` | 触发一次立即轮询刷新（拉取最新 PR、落本地），返回本轮计数汇总（fetched / changed / added / removed / errors）；等价 GUI 手动刷新 | `POST /refresh` |
-| `meebox pr list [--category <一级>] [--status <二级>] [--query <检索>] [--skip N] [--limit N]` | PR 列表（精简投影 + 分页，默认 limit 100） | `GET /prs` |
-| `meebox pr show --pr <id>` | 描述详情 | `GET /prs/{id}` |
-| `meebox pr diff --pr <id> [--file <path>] [--side base\|head]` | 无 `--file` 列变更文件；有则取该文件内容 | `GET /prs/{id}/diff` |
-| `meebox pr activity --pr <id>` | 动态（时间线） | `GET /prs/{id}/activity` |
-| `meebox pr commits --pr <id>` | 提交列表 | `GET /prs/{id}/commits` |
-| `meebox pr reviewers --pr <id>` | 评审人审批状态 | `GET /prs/{id}/reviewers` |
-| `meebox pr approve --pr <id>` | 评审决断「通过」（真实远端写） | `POST /prs/{id}/approve` |
-| `meebox pr needswork --pr <id>` | 评审决断「需修改」（真实远端写） | `POST /prs/{id}/needswork` |
-| `meebox pr comment --pr <id> <message>` | 发一条顶层评论（真实远端写） | `POST /prs/{id}/comment` |
-| `meebox agent status --pr <id>` | Agent 当前执行状态 | `GET /prs/{id}/agent` |
-| `meebox agent history --pr <id>` | 历史会话 | `GET /prs/{id}/agent/conversation` |
-| `meebox agent review --pr <id>` | 执行 auto review | `POST /prs/{id}/agent/review` |
-| `meebox agent instruct --pr <id> <command> [args]` | 发送 Agent 指令（仅只读：describe / review / ask / improve） | `POST /prs/{id}/agent/instruct` |
-| `meebox agent chat --pr <id> <message>` | 自然语言聊天（可触发任务执行） | `POST /prs/{id}/agent/chat` |
-| `meebox agent stop --pr <id>` | 中断该 PR 运行中的 Agent（PR 级） | `POST /prs/{id}/agent/stop` |
-| `meebox agent run list --pr <id>` | 该 PR 运行队列中的 pr-agent runs（active + waiting） | `GET /prs/{id}/agent/runs` |
-| `meebox agent run cancel --pr <id> --run <runId>` | 按 run 取消一个 pr-agent 工具调用 | `POST /prs/{id}/agent/runs/{runId}/cancel` |
+| `meebox login --token <token> [--server <url>]` | Save the token (and an optional server, defaulting to loopback) to `cli.yaml`, so later commands need no arguments | — (local write, no API) |
+| `meebox whoami` | Current identity (user + platform + connection name) | `GET /whoami` |
+| `meebox version` | Client (CLI) + server (app) version; when the server is unreachable, client only, exit code still 0 | `GET /version` |
+| `meebox skill` | Print the agent usage guide (SKILL.md) embedded at build time via `go:embed` | — (local, no API) |
+| `meebox pr categories` | List the category labels for the currently enabled platform (`categories` level one + `statuses` level two) — the filter vocabulary for `pr list` | `GET /categories` |
+| `meebox pr refresh` | Trigger one immediate polling refresh (fetch the latest PRs, persist locally), returning this round's count summary (fetched / changed / added / removed / errors); equivalent to a GUI manual refresh | `POST /refresh` |
+| `meebox pr list [--category <level one>] [--status <level two>] [--query <search>] [--skip N] [--limit N]` | PR list (compact projection + pagination, default limit 100) | `GET /prs` |
+| `meebox pr show --pr <id>` | Description detail | `GET /prs/{id}` |
+| `meebox pr diff --pr <id> [--file <path>] [--side base\|head]` | Without `--file`, list changed files; with it, fetch that file's content | `GET /prs/{id}/diff` |
+| `meebox pr activity --pr <id>` | Activity (timeline) | `GET /prs/{id}/activity` |
+| `meebox pr commits --pr <id>` | Commit list | `GET /prs/{id}/commits` |
+| `meebox pr reviewers --pr <id>` | Reviewer approval status | `GET /prs/{id}/reviewers` |
+| `meebox pr approve --pr <id>` | Review decision "approve" (real remote write) | `POST /prs/{id}/approve` |
+| `meebox pr needswork --pr <id>` | Review decision "needs work" (real remote write) | `POST /prs/{id}/needswork` |
+| `meebox pr comment --pr <id> <message>` | Post a top-level comment (real remote write) | `POST /prs/{id}/comment` |
+| `meebox agent status --pr <id>` | The Agent's current execution status | `GET /prs/{id}/agent` |
+| `meebox agent history --pr <id>` | Conversation history | `GET /prs/{id}/agent/conversation` |
+| `meebox agent review --pr <id>` | Run auto review | `POST /prs/{id}/agent/review` |
+| `meebox agent instruct --pr <id> <command> [args]` | Send an Agent instruction (read-only only: describe / review / ask / improve) | `POST /prs/{id}/agent/instruct` |
+| `meebox agent chat --pr <id> <message>` | Natural-language chat (can trigger task execution) | `POST /prs/{id}/agent/chat` |
+| `meebox agent stop --pr <id>` | Interrupt the running Agent for this PR (PR-level) | `POST /prs/{id}/agent/stop` |
+| `meebox agent run list --pr <id>` | The pr-agent runs in this PR's run queue (active + waiting) | `GET /prs/{id}/agent/runs` |
+| `meebox agent run cancel --pr <id> --run <runId>` | Cancel one pr-agent tool call by run | `POST /prs/{id}/agent/runs/{runId}/cancel` |
 
-- `<id>` 为 PR 的 `localId`（列表投影里对外命名为 `id`，由 `pr list` 输出获得）。
-- 评审写动作走 `pr approve` / `pr needswork` / `pr comment` 专用命令；变更类工具（publish 等）不在 `instruct`
-  白名单内，传入即被服务端拒绝（CLI 亦前置友好报错）。merge（合并）不提供。
-- 中断粒度：`agent stop` 停整个 PR 的 Agent；`agent run cancel` 只取消指定的单个 pr-agent run。
+- `<id>` is the PR's `localId` (named `id` externally in the list projection, obtained from `pr list` output).
+- Review write actions go through the dedicated `pr approve` / `pr needswork` / `pr comment` commands; change-type tools
+  (publish, etc.) are not in the `instruct` whitelist and are rejected by the server if passed (the CLI also errors friendly
+  up front). merge is not provided.
+- Interrupt granularity: `agent stop` stops the entire PR's Agent; `agent run cancel` cancels only the specified single
+  pr-agent run.
 
-### 输出与退出码
+### Output and exit codes
 
-- **`--output yaml`（默认）**：把响应渲染为 YAML（类 k8s `-o yaml`）——结构化又可读，便于人交互式查看。
-  与 JSON 一样是对响应数据的**通用转换**，不做逐命令表格 / formatter（省去手写 struct 的契约同步负担）。
-- **`--output json`**：原样输出 API `data`，供外部 agent / 脚本机器消费。agent 传参无门槛，故默认面向人优化（YAML）、
-  机器集成显式取 `json`；两者字段形状同源、皆稳定。
-- **退出码约定**：`0` 成功；非 0 表错误并按类别区分（如 `2` 鉴权失败、`3` 资源不存在、`1` 通用错误）；
-  错误信息打 `stderr`，携带服务端返回的错误码（`ESV*` 等），便于脚本分支处理。
+- **`--output yaml` (default)**: render the response as YAML (like k8s `-o yaml`) — structured yet readable, convenient for
+  interactive human viewing. Like JSON, it is a **generic transform** of the response data, without per-command tables /
+  formatters (sparing the contract-sync burden of hand-written structs).
+- **`--output json`**: output the API `data` verbatim, for external agents / scripts to consume by machine. Passing arguments
+  has no barrier for an agent, so the default is optimized for humans (YAML) while machine integration explicitly takes
+  `json`; both have the same-source field shape and are both stable.
+- **Exit-code convention**: `0` success; non-zero for errors, distinguished by category (e.g. `2` auth failure, `3` resource
+  not found, `1` generic error); error messages go to `stderr`, carrying the error code returned by the server (`ESV*`, etc.)
+  for scripts to branch on.
 
-### 实现选型
+### Implementation choices
 
-- Go + 命令树库（如 cobra）+ 标准 `net/http` client，**最小依赖**。
-- 错误码 / 响应封套与服务端契约一一对齐（见 [服务端契约](01-service-api.md)）。
+- Go + a command-tree library (e.g. cobra) + the standard `net/http` client, **minimal dependencies**.
+- Error codes / response envelope align one-to-one with the server contract (see [server contract](01-service-api.md)).
 
-## 数据 / 接口契约
+## Data / interface contract
 
-- **配置来源优先级**：flag > env（`MEEBOX_API_URL` / `MEEBOX_TOKEN`）> CLI 配置文件
-  （`~/.code-meeseeks/cli.yaml`）。连接信息须显式提供；CLI 不读 GUI 主配置 `config.yaml`（含连接层机密）。
-- **输出模式**：`yaml`（默认，人，类 k8s `-o yaml`）/ `json`（机，输出 API `data`）；均为响应数据的通用转换。
-- **退出码**：`0` 成功 / `1` 通用 / `2` 鉴权 / `3` not found（按需扩展）。
-- **二进制与压缩包命名**：`meebox-cli-<version>-<os>-<arch>.<ext>`（Windows / macOS 用 `.zip`、Linux 用 `.tar.gz`），
-  附 `.sha256` 校验和。`<version>` 取自 `apps/desktop/package.json`（与 app 同源，唯一真相源），发布前置校验其与 `v*` tag 一致。
-- **压缩包内容 = 可直接投放的 skill 目录**：除二进制外一并打包 `LICENSE` + `README.md` + `SKILL.md`。解压到
-  agent 的 skills 目录即得一个可用 skill——`SKILL.md`（frontmatter `name: meebox`）教 agent 用法，紧邻其驱动
-  的二进制。这是 CLI「面向 agent 交付」的主形态。
-- **二进制自述（`go:embed`）**：同一份 `SKILL.md` 经 `go:embed` 于构建期内嵌进二进制，`meebox skill` 打印之。
-  即便二进制脱离压缩包（如 `go install` 或裸放 `PATH`）也能自述用法，且内嵌内容与随包 `SKILL.md` 构建期一致。
-  刻意**不做** `--manifest` 之类的 function-calling JSON——skill 的消费形态是 markdown，非工具 schema 注入；
-  真有此需求应从命令树生成、而非另手维护一份 JSON。
+- **Config source priority**: flag > env (`MEEBOX_API_URL` / `MEEBOX_TOKEN`) > CLI config file
+  (`~/.code-meeseeks/cli.yaml`). Connection info must be explicitly provided; the CLI does not read the GUI's main config
+  `config.yaml` (which holds connection-layer secrets).
+- **Output modes**: `yaml` (default, human, like k8s `-o yaml`) / `json` (machine, outputs the API `data`); both are generic
+  transforms of the response data.
+- **Exit codes**: `0` success / `1` generic / `2` auth / `3` not found (extended as needed).
+- **Binary and archive naming**: `meebox-cli-<version>-<os>-<arch>.<ext>` (Windows / macOS use `.zip`, Linux uses `.tar.gz`),
+  with a `.sha256` checksum. `<version>` is taken from `apps/desktop/package.json` (same source as the app, the single source
+  of truth), verified against the `v*` tag as a release prerequisite.
+- **Archive content = a directly droppable skill directory**: besides the binary it also packages `LICENSE` + `README.md` +
+  `SKILL.md`. Extracting it into an agent's skills directory yields a usable skill — `SKILL.md` (frontmatter `name: meebox`)
+  teaches the agent the usage, right next to the binary it drives. This is the CLI's primary "delivery to agents" form.
+- **Binary self-description (`go:embed`)**: the same `SKILL.md` is embedded into the binary at build time via `go:embed`, and
+  `meebox skill` prints it. Even a binary separated from its archive (e.g. `go install` or dropped bare onto `PATH`) can
+  describe its own usage, and the embedded content matches the packaged `SKILL.md` at build time. It deliberately **does not**
+  produce a `--manifest`-style function-calling JSON — a skill's consumption form is markdown, not tool-schema injection; if
+  that need arises it should be generated from the command tree, not maintained separately as JSON.
 
-## 分发与 CI
+## Distribution & CI
 
-- **覆盖平台**：Windows x64、macOS arm64、Linux x64 / arm64。
-- **随主工程一起发布**：发布流程的 **Go 构建 job**（`actions/setup-go` + `GOOS`/`GOARCH` 交叉编译矩阵）产出
-  四平台压缩包（含二进制 + `LICENSE` + `README.md` + `SKILL.md`）+ 校验和，与桌面安装包一并上传到**同一个
-  GitHub Release**（由现有 `v*` tag 触发，见 [发布流程](../../../AGENTS.md)）。
-- 版本号**取自 `apps/desktop/package.json`（与 app 同源）**，经 `-ldflags` 注入 `cmd.version`——不独立依赖 git tag（发布前置校验 tag 与之一致），确保 CLI 与服务端 API 契约版本可对应。
-- **一键安装脚本（macOS / Linux）**：`tools/cli/install.sh` 经 `curl … | bash` 一条命令完成安装——探测系统 /
-  架构 → 取匹配的 Release 压缩包 → 校验 SHA-256 → 解出 `meebox` 装入 `PATH`（默认 `/usr/local/bin`，不可写回退
-  `~/.local/bin`；`MEEBOX_VERSION` / `MEEBOX_BIN_DIR` 可覆盖）。刻意**不落地 `SKILL.md`**（已内嵌、`meebox skill`
-  可导出）。Windows 不在脚本覆盖内，走手动下载。
+- **Platform coverage**: Windows x64, macOS arm64, Linux x64 / arm64.
+- **Released together with the main project**: the release flow's **Go build job** (`actions/setup-go` + `GOOS`/`GOARCH`
+  cross-compilation matrix) produces four-platform archives (binary + `LICENSE` + `README.md` + `SKILL.md`) + checksums, and
+  uploads them alongside the desktop installer to the **same GitHub Release** (triggered by the existing `v*` tag, see
+  [release flow](../../../AGENTS.md)).
+- The version number is **taken from `apps/desktop/package.json` (same source as the app)** and injected into `cmd.version` via
+  `-ldflags` — it does not independently depend on the git tag (the tag is verified against it as a release prerequisite),
+  ensuring the CLI and server API contract versions correspond.
+- **One-shot install script (macOS / Linux)**: `tools/cli/install.sh` installs in one `curl … | bash` command — detect system
+  / architecture → fetch the matching Release archive → verify SHA-256 → extract `meebox` and install it onto `PATH` (default
+  `/usr/local/bin`, falling back to `~/.local/bin` if not writable; `MEEBOX_VERSION` / `MEEBOX_BIN_DIR` can override). It
+  deliberately **does not lay down `SKILL.md`** (already embedded, exportable via `meebox skill`). Windows is not covered by
+  the script; use manual download.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **写边界与服务端一致**：仅提供评审写动作（approve / needswork / comment）；合并与变更类 Agent 工具不提供。
-  新增命令前先确认对应 API 端点已存在，写端点须与服务端写边界对齐。
-- **加新命令先加端点**：CLI 不得绕过 API 直连应用内部；能力缺口先在[服务端](01-service-api.md)补端点。
-- **不触碰 GUI 机密**：CLI 不读应用主配置 `~/.code-meeseeks/config.yaml`（含各平台访问令牌等连接层机密）；服务令牌须经 flag / 环境变量 / `cli.yaml` 显式提供，避免越权触达预期外凭据。
-- **契约漂移防护**：初期手写 struct 务必随服务端契约同步更新；契约增长后转 OpenAPI / Schema 代码生成。
-- **版本兼容门控**：CLI 每次请求带 `X-Meebox-CLI-Version` 头声明自身版本（与 app 同源）；服务端据集中管理的
-  最低可兼容版本统一门控，CLI 收到 `SV_CLIENT_TOO_OLD`（HTTP 426）即输出「过旧、请升级」提示。见
-  [服务端契约](01-service-api.md) 的「CLI 版本兼容门控」。
-- **JSON 优先稳定**：`--output json` 是自动化主路径，其字段形状视为对外契约，演进需保持兼容。
-- **代理走环境变量**：HTTP client 用 Go `net/http` 默认 transport，天然遵循标准 `HTTP(S)_PROXY` /
-  `NO_PROXY`；loopback（`127.0.0.1` / `localhost`）默认直连不走代理——无需自实现代理逻辑。
+- **Write boundary consistent with the server**: only review write actions are provided (approve / needswork / comment);
+  merge and change-type Agent tools are not. Before adding a command, first confirm the corresponding API endpoint exists; a
+  write command must align with the server write boundary.
+- **Add the endpoint before a new command**: the CLI must not bypass the API to reach app internals directly; fill a
+  capability gap by adding an endpoint on the [server](01-service-api.md) first.
+- **Do not touch GUI secrets**: the CLI does not read the app's main config `~/.code-meeseeks/config.yaml` (which holds
+  connection-layer secrets such as per-platform access tokens); the service token must be explicitly provided via flag /
+  environment variable / `cli.yaml`, avoiding over-reaching to out-of-scope credentials.
+- **Contract-drift protection**: initially, be sure to keep hand-written structs updated in sync with the server contract;
+  once the contract grows, switch to OpenAPI / Schema code generation.
+- **Version compatibility gating**: the CLI carries the `X-Meebox-CLI-Version` header on every request declaring its own
+  version (same source as the app); the server gates uniformly by its centrally managed minimum compatible version, and on
+  receiving `SV_CLIENT_TOO_OLD` (HTTP 426) the CLI prints a "too old, please upgrade" message. See the "CLI version
+  compatibility gating" in the [server contract](01-service-api.md).
+- **JSON stability first**: `--output json` is the main automation path; its field shape is treated as an external contract
+  and must stay compatible as it evolves.
+- **Proxy via environment variables**: the HTTP client uses Go `net/http`'s default transport, naturally honoring the standard
+  `HTTP(S)_PROXY` / `NO_PROXY`; loopback (`127.0.0.1` / `localhost`) connects directly by default without a proxy — no need to
+  implement proxy logic ourselves.

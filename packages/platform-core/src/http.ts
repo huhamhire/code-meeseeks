@@ -1,16 +1,16 @@
 import type { FetchLike, PlatformConnectionConfig } from './transport.js';
 
-/** 连接层默认单请求超时。 */
+/** Default per-request timeout for the connection layer. */
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
 const globalFetch: FetchLike = (input, init) => fetch(input, init);
 
-/** 去尾斜杠（归一 base URL 用）。 */
+/** Strip trailing slashes (for normalizing the base URL). */
 export function stripTrailingSlash(s: string): string {
   return s.replace(/\/+$/, '');
 }
 
-/** 取 URL 的 host；解析失败返回空串。 */
+/** Get the host of a URL; returns an empty string on parse failure. */
 export function hostOf(url: string): string {
   try {
     return new URL(url).host;
@@ -20,8 +20,8 @@ export function hostOf(url: string): string {
 }
 
 /**
- * 拼请求 URL：`path` 以 http(s) 开头时原样请求（分页 next / 绝对资源 URL）；否则拼到 `baseUrl` 之后。
- * 可选 query 写进 searchParams。
+ * Build the request URL: when `path` starts with http(s) it is requested as-is (pagination next / absolute resource URL); otherwise it is appended after `baseUrl`.
+ * Optional query is written into searchParams.
  */
 export function buildUrl(baseUrl: string, path: string, params?: Record<string, string>): string {
   const u = /^https?:\/\//.test(path) ? new URL(path) : new URL(`${baseUrl}${path}`);
@@ -29,7 +29,7 @@ export function buildUrl(baseUrl: string, path: string, params?: Record<string, 
   return u.toString();
 }
 
-/** 带超时（AbortController）的 fetch；超时即 abort。`init.signal` 由本函数注入，调用方勿自带。 */
+/** fetch with a timeout (AbortController); aborts on timeout. `init.signal` is injected by this function, callers should not supply their own. */
 export async function fetchWithTimeout(
   fetchFn: FetchLike,
   url: string,
@@ -45,7 +45,7 @@ export async function fetchWithTimeout(
   }
 }
 
-/** 从 `Link` 头解析 `rel="next"` 的 URL；无则 null（GitHub / GitLab 的 Link 头分页共用）。 */
+/** Parse the `rel="next"` URL from the `Link` header; null if absent (shared by GitHub / GitLab Link-header pagination). */
 export function parseNextLink(link: string | null): string | null {
   if (!link) return null;
   for (const part of link.split(',')) {
@@ -55,7 +55,7 @@ export function parseNextLink(link: string | null): string | null {
   return null;
 }
 
-/** 收集异步迭代器为数组。 */
+/** Collect an async iterator into an array. */
 export async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {
   const out: T[] = [];
   for await (const v of it) out.push(v);
@@ -63,8 +63,8 @@ export async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {
 }
 
 /**
- * 从错误响应体（JSON）提取 API 给的真因消息。识别 `{message}`（GitHub / Bitbucket）与 `{error}`
- * （GitLab 部分端点）；对象型 message 序列化为字符串。非 JSON 响应体 → 空串。
+ * Extract the real-cause message the API gives from the error response body (JSON). Recognizes `{message}` (GitHub / Bitbucket) and `{error}`
+ * (some GitLab endpoints); an object-typed message is serialized to a string. Non-JSON response body → empty string.
  */
 export function extractApiMessage(text: string): string {
   try {
@@ -73,17 +73,17 @@ export function extractApiMessage(text: string): string {
     if (typeof m === 'string') return m;
     if (m && typeof m === 'object') return JSON.stringify(m);
   } catch {
-    /* 非 JSON 响应体，忽略 */
+    /* non-JSON response body, ignore */
   }
   return '';
 }
 
 /**
- * 解析连接层有效 fetch，把代理解析统一收口到连接层（替代各调用点手拼 `proxyFetchForHost`）：
- * - 显式 `config.fetch` 覆盖优先（测试桩 / 已自行解析代理）；
- * - 否则按统一 `config.proxy` + `baseUrl` host 经注入的 `config.proxyFetch` 工厂解析；工厂返回 undefined
- *   （loopback / 代理关闭）时退回直连全局 fetch；
- * - 无 proxy / 无工厂 → 直连全局 fetch。
+ * Resolve the connection layer's effective fetch, funneling proxy resolution into the connection layer (replacing each call site hand-assembling `proxyFetchForHost`):
+ * - explicit `config.fetch` override takes priority (test stub / proxy already resolved on its own);
+ * - otherwise resolve via the injected `config.proxyFetch` factory by the unified `config.proxy` + `baseUrl` host; when the factory returns undefined
+ *   (loopback / proxy disabled), fall back to the direct global fetch;
+ * - no proxy / no factory → direct global fetch.
  */
 export function resolveConnectionFetch(config: PlatformConnectionConfig): FetchLike {
   if (config.fetch) return config.fetch;

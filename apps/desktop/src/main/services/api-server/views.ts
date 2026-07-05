@@ -9,59 +9,59 @@ import type {
 } from '@meebox/shared';
 
 /**
- * PR 列表视图项：`GET /prs` 对外暴露的**精简投影**。这是「请求接口视图层的树结构约束方法」——
- * 单一投影函数 {@link toPrListItem} 定义列表返回的字段集合与次序，避免直接把整条
- * StoredPullRequest（含 description 明细、完整人员对象等）泄给列表消费方。
+ * PR list view item: the **slim projection** exposed by `GET /prs`. This is the view-layer tree-structure constraint for the
+ * request interface — a single projection function {@link toPrListItem} defines the field set and order returned by the list,
+ * avoiding leaking the entire StoredPullRequest (with description details, full people objects, etc.) to list consumers.
  *
- * 收窄原则：
- * - 只给标识与概览，**去掉 description 明细**（详情走 `GET /prs/{id}`）；
- * - **人员信息只留 slug**（reviewer 另带 status）；头像 / 展示名等留给详情；
- * - **字段顺序即输出顺序**：id / title / author / createdAt 优先，再给其余概览字段。
+ * Narrowing principles:
+ * - Give only identifiers and overview, **drop description details** (details go through `GET /prs/{id}`);
+ * - **Keep only slug for people info** (reviewer additionally carries status); avatar / display name, etc. left to details;
+ * - **Field order is output order**: id / title / author / createdAt first, then the remaining overview fields.
  */
 export interface PrListItem {
-  /** PR 的本地稳定标识（== StoredPullRequest.localId）；写操作与详情端点均按此定位。 */
+  /** The PR's local stable identifier (== StoredPullRequest.localId); write operations and the details endpoint both locate by this. */
   id: string;
   title: string;
-  /** 作者 slug（缺失时回退 name）；不含展示名 / 头像。 */
+  /** Author slug (falls back to name when missing); no display name / avatar. */
   author: string;
   createdAt: string;
-  /** 本人评审决断（pending / approved / needs_work）。 */
+  /** Own review verdict (pending / approved / needs_work). */
   status: LocalPrStatus;
   state: 'open' | 'merged' | 'declined';
   draft: boolean;
   platform: PlatformKind;
-  /** `projectKey/repoSlug`。 */
+  /** `projectKey/repoSlug`. */
   repo: string;
-  /** 远端平台 PR 编号。 */
+  /** Remote platform PR number. */
   remoteId: string;
   updatedAt: string;
   hasConflict: boolean;
-  /** 远端判定可直接合并（== mergeStatus.canMerge）。 */
+  /** Remote-determined directly mergeable (== mergeStatus.canMerge). */
   mergeable: boolean;
-  /** 命中的发现分类（一级 category）。 */
+  /** Matched discovery categories (top-level category). */
   categories: PrDiscoveryFilter[];
-  /** 评审人：仅 slug + status。 */
+  /** Reviewers: slug + status only. */
   reviewers: Array<{ slug: string; status: ReviewerStatus }>;
   unread: boolean;
   unreadMentionCount: number;
 }
 
 /**
- * 某 PR 在运行队列里的一个 pr-agent run 视图项：`GET /prs/{id}/agent/runs` 的投影。用于让调用方
- * 发现可取消的 run（runId + tool + 运行 / 排队态），配合 `…/runs/{runId}/cancel` 做按 run 取消。
+ * View item for one pr-agent run of a PR in the run queue: the projection of `GET /prs/{id}/agent/runs`. Lets the caller
+ * discover cancelable runs (runId + tool + running / queued state), paired with `…/runs/{runId}/cancel` for per-run cancel.
  */
 export interface PrAgentRunItem {
   runId: string;
   tool: ReviewRunTool;
-  /** active = 正在执行；waiting = 排队中。 */
+  /** active = executing; waiting = queued. */
   state: 'active' | 'waiting';
-  /** 开始执行时间（ISO）；waiting 为 null。 */
+  /** Execution start time (ISO); null when waiting. */
   startedAt: string | null;
   enqueuedAt: string;
   question?: string;
 }
 
-/** 从队列快照筛出属于该 PR 的 run（active 在前、waiting 在后），投影为精简项。 */
+/** Filter the runs belonging to this PR from the queue snapshot (active first, waiting after), projected to slim items. */
 export function toPrAgentRuns(
   queue: { active: PragentRunInfo[]; waiting: PragentRunInfo[] },
   prId: string,
@@ -80,7 +80,7 @@ export function toPrAgentRuns(
   ];
 }
 
-/** 把存储态 PR 投影为列表视图项。对象字面量的键序即 JSON 输出顺序（CLI 视图层据此渲染）。 */
+/** Project a stored-state PR to a list view item. The object literal's key order is the JSON output order (the CLI view layer renders accordingly). */
 export function toPrListItem(pr: StoredPullRequest): PrListItem {
   return {
     id: pr.localId,

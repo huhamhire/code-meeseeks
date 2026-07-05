@@ -4,10 +4,13 @@ import type { Config } from '@meebox/shared';
 import { CopyIcon, EyeIcon, EyeOffIcon, Switch, SyncIcon } from '../../../common';
 
 /**
- * 本地 API 服务监听分区：总开关（分区头）+ 缩进「功能列表」逐行展示监听地址 / 访问令牌（行首圆点 +
- * 标签 + 说明，右侧控件），与「策略」「通知」等分区风格统一。地址为 http://<host>:<port> 组合，token
- * 可显示 / 复制 / 重新生成；任何开关状态下均可编辑。启用且无 token 时自动生成；非 loopback 绑定给安全
- * 警示。监听地址 / 端口 / token 均为**草稿制**——随底栏「保存」经 config:setService 生效，不保存则丢弃。
+ * Local API service listen section: master switch (section head) + an indented "feature list" showing
+ * the listen address / access token line by line (leading dot + label + description, controls on the
+ * right), stylistically consistent with the "Strategy" / "Notification" sections. The address is an
+ * http://<host>:<port> combination; the token can be revealed / copied / regenerated, and is editable
+ * under any switch state. When enabled with no token one is auto-generated; a non-loopback binding
+ * shows a security warning. Listen address / port / token are all **draft-based** — they take effect
+ * via config:setService with the bottom-bar "Save", and are discarded if not saved.
  */
 export function ServiceSection({
   value,
@@ -16,24 +19,24 @@ export function ServiceSection({
 }: {
   value: Config['service'];
   onChange: (next: Config['service']) => void;
-  /** 立即重新生成 token（写盘 + 即时生效）；启用且无 token 时也由此自动补一枚。 */
+  /** Regenerate the token immediately (write to disk + take effect instantly); also used to auto-add one when enabled with no token. */
   onRegenerateToken: () => void;
 }) {
   const { t } = useTranslation();
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
   const on = value.enabled;
-  // 暴露判定：非 loopback 绑定（0.0.0.0 / 局域网 IP 等）即视为可被同网段访问，给安全警示。
+  // Exposure check: a non-loopback binding (0.0.0.0 / LAN IP, etc.) is treated as accessible from the same subnet, so show a security warning.
   const host = value.host.trim();
   const exposed = host !== '' && !['127.0.0.1', 'localhost', '::1'].includes(host);
 
   const set = (patch: Partial<Config['service']>): void => onChange({ ...value, ...patch });
 
-  // 监听地址组与令牌组共用同一固定宽度，使两行右侧控件左右边缘对齐；组内输入框自适应填充剩余。
+  // The listen address group and the token group share the same fixed width so the right-side controls of both rows align at their left and right edges; the input inside each group flexibly fills the remainder.
   const CONTROL_W = 320;
 
   const handleEnabled = (v: boolean): void => {
-    if (v && !value.token) onRegenerateToken(); // 启用且无 token → 自动生成一枚
+    if (v && !value.token) onRegenerateToken(); // enabled with no token → auto-generate one
     set({ enabled: v });
   };
 
@@ -44,7 +47,7 @@ export function ServiceSection({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* 复制失败静默 */
+      /* copy failure silenced */
     }
   };
 

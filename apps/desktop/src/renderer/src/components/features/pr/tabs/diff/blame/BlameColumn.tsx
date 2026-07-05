@@ -13,13 +13,14 @@ import {
 } from './blame-utils';
 
 /**
- * Bitbucket 风格 blame 列。独立于 Monaco DOM 之外，作为 diff-pane-wrapper 的左侧
- * flex 子项；内部用 absolute 子项画各 commit 区块，按 Monaco scrollTop 平移。
+ * Bitbucket-style blame column. Lives outside the Monaco DOM, as the left flex
+ * child of diff-pane-wrapper; internally draws each commit block with absolute
+ * children, shifted by Monaco scrollTop.
  *
- * 设计权衡：
- * - 不走 Monaco InjectedText (DiffEditor 里实测不渲染，详见 commit 提交记录)
- * - 不走 Monaco overlay widget (没有"绝对行号"定位选项，只能贴角)
- * - 独立 DOM 列：可控、稳定、跟 React 生命周期一致；唯一成本是要同步 scrollTop
+ * Design trade-offs:
+ * - Not using Monaco InjectedText (verified not rendered inside DiffEditor, see commit history)
+ * - Not using Monaco overlay widget (no "absolute line number" positioning option, can only pin to corners)
+ * - Independent DOM column: controllable, stable, in sync with the React lifecycle; the only cost is syncing scrollTop
  */
 export function BlameColumn({
   blame,
@@ -34,20 +35,21 @@ export function BlameColumn({
 }) {
   const { t } = useTranslation();
   const blocks = useMemo(() => groupBlameByCommit(blame.lines), [blame.lines]);
-  // 把 changedLines 合并成连续区段，渲染色带（减少 DOM 数量）
+  // Merge changedLines into contiguous ranges to render color bands (reduces DOM count)
   const changedRanges = useMemo(
     () => mergeContiguousLines(blame.changedLines),
     [blame.changedLines],
   );
   const modifiedEditor = diffEditor.getModifiedEditor();
-  // layout 只是触发器：scrollTop / viewportHeight 任一变就重渲，重渲时再走 Monaco
-  // 实时坐标 API，避免行数学手算和 Monaco 实际渲染的偏差（padding / view zones /
-  // hideUnchangedRegions 占位 / sticky scroll 全靠 Monaco 自己算）
-  // 注意：layout 也被上面 style 的 --blame-lh 引用
+  // layout is only a trigger: any change to scrollTop / viewportHeight re-renders, and on re-render
+  // we go through Monaco's live coordinate API, avoiding manual line math and its divergence from
+  // Monaco's actual rendering (padding / view zones / hideUnchangedRegions placeholders / sticky
+  // scroll are all computed by Monaco itself)
+  // Note: layout is also referenced by --blame-lh in the style above
 
-  // 只渲染 Monaco 当前可见的行：hideUnchangedRegions 折叠掉的行返回的 range
-  // 里不会出现，自然不画 blame；评论 view zone 撑出的额外高度也由 Monaco 的
-  // getTopForLineNumber 反映
+  // Only render lines currently visible in Monaco: lines folded away by hideUnchangedRegions
+  // won't appear in the returned range, so no blame is drawn for them; the extra height pushed
+  // out by comment view zones is also reflected by Monaco's getTopForLineNumber
   const visibleRanges = modifiedEditor.getVisibleRanges();
   const scrollTop = modifiedEditor.getScrollTop();
 
@@ -68,7 +70,7 @@ export function BlameColumn({
   type Item = BlameItem | ChangeItem | FoldItem;
   const items: Item[] = [];
 
-  // 1) Blame 区块：跟 visible range 求交集
+  // 1) Blame blocks: intersect with visible range
   for (const range of visibleRanges) {
     for (const block of blocks) {
       const from = Math.max(block.lineFrom, range.startLineNumber);
@@ -86,8 +88,8 @@ export function BlameColumn({
     }
   }
 
-  // 2) PR 改动行色带：在可见 range 内的部分画绿色竖条占位（不带文字，跟 Monaco
-  //    diff 的"added"装饰呼应）
+  // 2) PR changed-line color band: draw a green vertical bar placeholder for the part within the
+  //    visible range (no text, echoing Monaco diff's "added" decoration)
   for (const range of visibleRanges) {
     for (const [from0, to0] of changedRanges) {
       const from = Math.max(from0, range.startLineNumber);
@@ -104,14 +106,14 @@ export function BlameColumn({
     }
   }
 
-  // 3) 折叠占位行（"X hidden lines"）：相邻两个 visibleRange 之间一行的位置，
-  //    用斜纹/灰底标识"无效行"——这一行不对应 head 文件里任何 line，blame
-  //    自然没有。
+  // 3) Fold placeholder line ("X hidden lines"): the position of the one line between two adjacent
+  //    visibleRanges, marked with hatching/gray background as an "invalid line"—this line does not
+  //    correspond to any line in the head file, so naturally has no blame.
   for (let i = 0; i < visibleRanges.length - 1; i++) {
     const cur = visibleRanges[i]!;
     const next = visibleRanges[i + 1]!;
     if (next.startLineNumber - cur.endLineNumber <= 1) continue;
-    // 占位行在 cur 的最后一行底部与 next 第一行顶部之间
+    // The placeholder line sits between the bottom of cur's last line and the top of next's first line
     const yTop = modifiedEditor.getTopForLineNumber(cur.endLineNumber + 1) - scrollTop;
     const yBottom = modifiedEditor.getTopForLineNumber(next.startLineNumber) - scrollTop;
     if (yBottom <= yTop) continue;
@@ -126,8 +128,8 @@ export function BlameColumn({
   return (
     <aside
       className="blame-column"
-      // --blame-lh = Monaco 的实际行高，让 blame-row 的 grid 行轨道 / line-height
-      // 都用同一个值，垂直跟 Monaco 第一行代码同高、同 baseline
+      // --blame-lh = Monaco's actual line height, so blame-row's grid row track / line-height
+      // both use the same value, vertically matching Monaco's first code line in height and baseline
       style={
         {
           width: BLAME_COLUMN_WIDTH,
@@ -186,8 +188,8 @@ function BlameRow({
   height: number;
   connectionId: string;
 }) {
-  // 用 ISO 风格 YYYY-MM-DD：locale 无关、固定 10 字符，在 70px 列宽稳定显示。
-  // toLocaleDateString 的中文输出 "2023年3月29日" 太宽会被截断。
+  // Use ISO-style YYYY-MM-DD: locale-independent, fixed 10 characters, displays stably in the 70px column width.
+  // toLocaleDateString's Chinese output "2023年3月29日" is too wide and would be truncated.
   const dateStr = block.authorDate ? formatIsoDate(new Date(block.authorDate)) : '';
   const title = `${block.author}\n${block.commit.slice(0, 12)}\n${block.summary}\n${
     block.authorDate ? new Date(block.authorDate).toLocaleString() : ''

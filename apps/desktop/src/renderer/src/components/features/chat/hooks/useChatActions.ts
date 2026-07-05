@@ -12,22 +12,31 @@ import type {
   ReviewRunTool,
   StoredPullRequest,
 } from '@meebox/shared';
+import { PRODUCT_HOME_URL } from '@meebox/shared';
 import { invoke } from '../../../../api';
 import { useChatRunStore } from '../../../../stores/chat-run-store';
-import { htmlInlineToMarkdown, stripFindingMarker } from '../utils/findings';
+import {
+  htmlInlineToMarkdown,
+  renderCodeSuggestionDraft,
+  stripFindingMarker,
+} from '../utils/findings';
 
 interface UseChatActionsParams {
   pr: StoredPullRequest | null;
   prAgent: PrAgentStatus;
   llmConfigured: boolean;
   prLocalId: string | undefined;
-  /** 本 PR 运行中的活动 run（去重 / 停止全部用）。 */
+  /** Active runs in progress for this PR (used for dedup / stop-all). */
   myActiveRuns: ReadonlyArray<PragentRunInfo>;
-  /** 本 PR 排队中的任务（去重用）。 */
+  /** Queued tasks for this PR (used for dedup). */
   myWaiting: ReadonlyArray<PragentRunInfo>;
-  /** 本 PR 当前草稿池快照；finding ↔ draft 反查。 */
+  /** Current draft pool snapshot for this PR; finding ↔ draft reverse lookup. */
   drafts: ReadonlyArray<ReviewDraft> | null | undefined;
-  // 会话态写入口（由 useChatSession 提供）
+  /** User-defined code-suggestion draft layout (settings → agent.strategy.code_suggestion_layout); empty falls back to the built-in prefix. */
+  codeSuggestionLayout: string;
+  /** Current active model name (for the `<MODEL>` layout placeholder); null when none configured. */
+  currentLlmModel: string | null;
+  // Session-state write entry points (provided by useChatSession)
   setError: Dispatch<SetStateAction<string | null>>;
   setRuns: Dispatch<SetStateAction<ReviewRun[]>>;
   setHasMoreOlder: Dispatch<SetStateAction<boolean>>;
@@ -36,7 +45,7 @@ interface UseChatActionsParams {
   setTodo: Dispatch<SetStateAction<AgentTodoItem[]>>;
   currentPrIdRef: MutableRefObject<string | undefined>;
   reloadConversation: (localId: string) => Promise<void>;
-  // 跨组件跳转回调（由 MainPane / App 注入）
+  // Cross-component jump callbacks (injected by MainPane / App)
   onJumpToDraftEditor?: (target: {
     runId: string;
     findingId: string;
@@ -46,9 +55,9 @@ interface UseChatActionsParams {
 }
 
 export interface ChatActions {
-  /** Agent 运行态（自动评审微流程 / 自由规划对话）：记录各 PR 的起跑时刻（localId → since）。 */
+  /** Agent running state (auto-review micro-flow / free-planning conversation): records the start time of each PR (localId → since). */
   runningPrs: Map<string, number>;
-  /** 仅「跑在当前 PR」才在本会话显示运行态 / 思考中。 */
+  /** Only when "running on the current PR" does this session show running / thinking state. */
   agentRunningHere: boolean;
   handleRun: (
     tool: ReviewRunTool,
@@ -70,9 +79,10 @@ export interface ChatActions {
 }
 
 /**
- * ChatPane 的业务动作集合：触发 pr-agent 工具 / 自动评审 / 对话即委派、取消与停止、清空历史、
- * 以及 finding → 草稿的懒创建 / 拒绝 / 导航。并发模型——不同 PR 的 agent 任务可并发 / 排队，仅禁止
- * 对**同一 PR**重复发起；运行态按发起 PR 归属，不串到其它 PR 会话。
+ * ChatPane's set of business actions: trigger pr-agent tools / auto-review / conversation-as-delegation,
+ * cancel and stop, clear history, plus lazy creation / rejection / navigation of finding → draft. Concurrency
+ * model — agent tasks on different PRs can run concurrently / queue; only repeated triggers on the **same PR**
+ * are forbidden; running state belongs to the initiating PR and does not bleed into other PR sessions.
  */
 export function useChatActions(params: UseChatActionsParams): ChatActions {
   const {
@@ -83,6 +93,8 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     myActiveRuns,
     myWaiting,
     drafts,
+    codeSuggestionLayout,
+    currentLlmModel,
     setError,
     setRuns,
     setHasMoreOlder,
@@ -96,21 +108,21 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   } = params;
   const { t } = useTranslation();
 
-  // 记录**各 PR** 的起跑时刻（localId → since）。不同 PR 的 agent 任务可并发 / 排队，仅禁止对同一 PR 重复发起。
-  // 本地态只承载**用户手动发起**的乐观即时反馈（不等 main 广播回环）；AutoPilot 后台评审不经此处。
+  // Records the start time of **each PR** (localId → since). Agent tasks on different PRs can run concurrently / queue; only repeated triggers on the same PR are forbidden.
+  // Local state only carries the optimistic immediate feedback of **user manual triggers** (does not wait for the main broadcast round-trip); AutoPilot background review does not go through here.
   const [runningPrs, setRunningPrs] = useState<Map<string, number>>(() => new Map());
-  // 编排 Agent 运行中的 PR 集合（含纯思考阶段）——来自 store 的 `agent:runningChanged`，手动与 AutoPilot
-  // 一并计入，是「是否在跑」的权威来源。
+  // Set of PRs with the orchestrating Agent running (including pure thinking phase) — from the store's `agent:runningChanged`, counting both manual and AutoPilot;
+  // it is the authoritative source for "is it running".
   const { agentPrs } = useChatRunStore();
-  // 仅「跑在当前 PR」才在本会话显示运行态 / 思考中；其它 PR 在跑不影响本会话发起（可并发 / 排队）。
-  // 取「本地乐观态 ∪ store 权威态」：手动发起即时点亮（本地），AutoPilot 后台评审经 store 点亮——
-  // 否则后台评审的纯思考阶段（工具 run 跑完后的 judge / 总结）因 agentRunningHere=false 不显示「思考中」。
+  // Only when "running on the current PR" does this session show running / thinking state; other PRs running does not affect triggering in this session (can run concurrently / queue).
+  // Takes "local optimistic state ∪ store authoritative state": manual triggers light up immediately (local), AutoPilot background review lights up via the store —
+  // otherwise the pure thinking phase of background review (judge / summary after the tool run finishes) would not show "thinking" because agentRunningHere=false.
   const agentRunningHere =
     prLocalId !== undefined && (runningPrs.has(prLocalId) || agentPrs.includes(prLocalId));
 
-  // 触发 /describe / /review / /ask。队列模型下 active 非空也允许提交，新 run 进
-  // 队列，main 端先后串行执行。失败抛 banner；成功不需要手动 setRuns，session effect
-  // 会在 active 切换时自动 refresh
+  // Triggers /describe / /review / /ask. Under the queue model, submitting is allowed even when active is non-empty; the new run enters
+  // the queue and main executes them serially in order. Failures throw a banner; success needs no manual setRuns, the session effect
+  // auto-refreshes when active changes
   const handleRun = async (
     tool: ReviewRunTool,
     question?: string,
@@ -119,8 +131,8 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     scope?: ReviewRun['scope'],
   ): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured) return;
-    // 去重（即时反馈）：同一 PR 同一工具已在执行 / 排队 → 阻止重复触发（main 端亦有
-    // 权威校验兜底）。/ask 每次问题不同、单 commit 范围（scope）是定向动作，均不限制（与后端 dedup 同口径）。
+    // Dedup (immediate feedback): if the same tool for the same PR is already executing / queued → block the repeated trigger (main also has
+    // authoritative validation as a fallback). /ask has a different question each time, and single-commit scope is a targeted action, so neither is restricted (same criteria as backend dedup).
     if (
       tool !== 'ask' &&
       !scope &&
@@ -144,10 +156,10 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     }
   };
 
-  // 一键自动评审：触发 main 的 agent:run（评审微流程）。describe/review/ask 子 run 经既有运行
-  // 队列展示在历史里；收尾评审作为一条 assistant 消息落入多轮对话，完成后重载对话呈现。
+  // One-click auto-review: triggers main's agent:run (review micro-flow). The describe/review/ask sub-runs are shown in history via the existing run
+  // queue; the concluding review lands as an assistant message in the multi-turn conversation, and the conversation is reloaded for display after completion.
   const handleAgentReview = async (): Promise<void> => {
-    // 仅禁止对同一 PR 重复发起；其它 PR 在跑不阻塞（并发 / 排队）。
+    // Only repeated triggers on the same PR are forbidden; other PRs running does not block (concurrent / queued).
     if (!pr || !prAgent.available || !llmConfigured || runningPrs.has(pr.localId)) return;
     const startedId = pr.localId;
     setError(null);
@@ -172,15 +184,15 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     }
   };
 
-  // 自然语言「对话即委派」：交给自由规划 Agent（agent:ask）。用户输入即时 optimistic 回显，
-  // 收尾后以落盘对话（含用户 + 助手消息）整体对齐。
+  // Natural-language "conversation-as-delegation": hand off to the free-planning Agent (agent:ask). User input is echoed optimistically at once,
+  // and after completion aligned wholesale against the persisted conversation (including user + assistant messages).
   const handleAgentAsk = async (question: string, referencedContext?: string): Promise<void> => {
     if (!pr || !prAgent.available || !llmConfigured) return;
     const startedId = pr.localId;
-    // 中途输入（已有 Agent 在跑）走 enqueueMessage，后端不持久化引用上下文 → 该路径不带 ref，
-    // 避免重载对齐时引用块闪烁消失；仅新一轮提问的气泡附带引用上下文。
+    // Mid-flight input (an Agent already running) goes through enqueueMessage; the backend does not persist referenced context → this path carries no ref,
+    // to avoid the reference block flickering away on reload alignment; only the bubble of a new-round ask carries referenced context.
     const enqueueing = runningPrs.has(startedId);
-    // 即时 optimistic 回显用户气泡（运行中 / 新轮都先冒泡，不再静默丢弃中途输入）。
+    // Echo the user bubble optimistically at once (both running / new-round bubble first, no longer silently discarding mid-flight input).
     setMessages((prev) => [
       ...prev,
       {
@@ -190,7 +202,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
         at: new Date().toISOString(),
       },
     ]);
-    // 本 PR 已有 Agent 在跑：不另起一轮，入队到下一主 Agent 周期并入、据最新指令重排（中途输入转向）。
+    // An Agent is already running for this PR: do not start another round; enqueue to be merged into the next main Agent cycle and reordered per the latest instruction (mid-flight input redirect).
     if (enqueueing) {
       try {
         await invoke('agent:enqueueMessage', { localId: startedId, message: question });
@@ -227,9 +239,9 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     }
   };
 
-  // 清空当前 PR 的执行历史（仅该 PR）：删远端记录 + 清本地列表，并一并清掉 Agent 收尾结果 /
-  // 步骤 / 错误横幅（含「已停止 / 失败」提示），避免清空后仍残留陈旧反馈。进行中的 run 不受影响
-  // （在 chatRunStore，跑完会重新落盘）。
+  // Clear this PR's execution history (this PR only): delete remote records + clear the local list, and also clear the Agent conclusion result /
+  // steps / error banner (including "stopped / failed" hints), to avoid stale feedback lingering after clearing. In-progress runs are unaffected
+  // (they live in chatRunStore and are re-persisted on completion).
   const handleClearRuns = async (): Promise<void> => {
     if (!prLocalId) return;
     try {
@@ -245,7 +257,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     }
   };
 
-  // 取消 / 重试 在 store 模型里就是简单两步：cancel 走 IPC，retry 调 handleRun
+  // Cancel / retry are just two simple steps in the store model: cancel goes through IPC, retry calls handleRun
   const handleCancel = async (runId: string): Promise<void> => {
     try {
       await invoke('pragent:cancel', { runId });
@@ -253,8 +265,8 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
-  // 删除单条已结束的 run 记录（成功 / 失败 / 取消）：删远端记录后乐观从本地列表移除该条。
-  // 仅删该 run，不动 Agent 会话 / 台账 / 徽标（与「清空」区分）。
+  // Delete a single finished run record (success / failed / cancelled): after deleting the remote record, optimistically remove it from the local list.
+  // Deletes only that run, not touching the Agent session / ledger / badge (distinct from "clear").
   const handleDeleteRun = async (runId: string): Promise<void> => {
     if (!prLocalId) return;
     try {
@@ -264,36 +276,44 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
-  // 停止本 PR 会话内进行中的全部任务：逐条取消所有活动 run（Agent 并行多选时可能 >1），
-  // 并中止 Agent 编排（abort，阻止其在子任务取消后继续后续步骤）。
+  // Stop all in-progress tasks in this PR session: cancel every active run one by one (may be >1 with Agent parallel multi-select),
+  // and abort the Agent orchestration (abort, preventing it from continuing subsequent steps after sub-tasks are cancelled).
   const handleStopAll = (): void => {
     for (const r of myActiveRuns) void handleCancel(r.runId);
     if (agentRunningHere && prLocalId) void invoke('agent:stop', { localId: prLocalId });
   };
   const handleRetry = (run: ReviewRun): void => {
-    // 重试沿用原 run 的单 commit 范围（若有），保证复跑仍限定同一 commit。
+    // Retry reuses the original run's single-commit scope (if any), ensuring the rerun stays limited to the same commit.
     void handleRun(run.tool, run.question, undefined, undefined, run.scope);
   };
 
   /**
-   * 把 AI finding body 转成草稿初始 body：先 stripFindingMarker 去掉 [file:...]
-   * 末尾 marker，再把 pr-agent GFM 里的内联 HTML 标签归一成 markdown（草稿编辑器是
-   * 纯文本，裸 `<code>`/`<br>` 会露馅），最后加 `[AI 建议]` 前缀 — 让远端 reviewer
-   * 看到时知道这条评论来自 pr-agent
+   * Turns an AI finding into the draft's initial body: first stripFindingMarker removes the trailing [file:...] marker,
+   * then normalizes inline HTML tags in pr-agent's GFM into markdown (the draft editor is plain text, so bare
+   * `<code>`/`<br>` would leak through), and finally applies the user's deterministic code-suggestion template
+   * (settings → agent.strategy.code_suggestion_layout). When the template is empty, falls back to
+   * `DEFAULT_CODE_SUGGESTION_LAYOUT` (an AI-suggestion badge + model name) — so the remote reviewer knows this came from pr-agent.
    */
-  const buildDraftBodyFromFinding = (body: string): string =>
-    `${t('chatPane.aiSuggestionPrefix')} ${htmlInlineToMarkdown(stripFindingMarker(body))}`;
+  const buildDraftBodyFromFinding = (finding: Finding): string =>
+    renderCodeSuggestionDraft({
+      template: codeSuggestionLayout,
+      body: htmlInlineToMarkdown(stripFindingMarker(finding.body)),
+      title: t('chatPane.aiSuggestionLabel'),
+      homeUrl: PRODUCT_HOME_URL,
+      prUrl: pr?.url ?? '',
+      modelName: currentLlmModel ?? '',
+    });
 
   /**
-   * ChatPane finding card 上点"编辑"按钮的处理：
-   * - 已有关联草稿 → 直接 onJumpToDraftEditor，DiffView 打开它
-   * - 没有关联草稿 → 懒创建一条 pending + onJumpToDraftEditor
-   * - 关联草稿是 rejected → update 回 pending (撤销拒绝) + 跳转
+   * Handler for clicking the "Edit" button on a ChatPane finding card:
+   * - Already has an associated draft → directly onJumpToDraftEditor, DiffView opens it
+   * - No associated draft → lazily create a pending one + onJumpToDraftEditor
+   * - Associated draft is rejected → update back to pending (undo rejection) + jump
    */
   const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
     if (!pr) return;
     if (!finding.anchor || typeof finding.anchor.startLine !== 'number') {
-      return; // 没 anchor 行号 → 没法变 inline，按钮本不该出现，兜底
+      return; // No anchor line number → cannot become inline; the button should not appear, fallback
     }
     const startLine = finding.anchor.startLine;
     const endLine = finding.anchor.endLine ?? startLine;
@@ -303,19 +323,19 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     );
     try {
       if (!existing) {
-        // 懒创建：从 finding 拷贝 body 作初始内容；side 默认 'new' (head 侧 inline 评论惯例)
+        // Lazy create: copy the body from the finding as initial content; side defaults to 'new' (head-side inline comment convention)
         await invoke('drafts:create', {
           localId: pr.localId,
           draft: {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
-            body: buildDraftBodyFromFinding(finding.body),
+            body: buildDraftBodyFromFinding(finding),
             origin: 'finding',
             source: { runId: run.id, findingId: finding.id },
             status: 'pending',
           },
         });
       } else if (existing.status === 'rejected') {
-        // 撤销 reject 决断 → 回到 pending，让用户重新编辑
+        // Undo the reject decision → back to pending, letting the user edit again
         await invoke('drafts:update', {
           localId: pr.localId,
           draftId: existing.id,
@@ -333,7 +353,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
     });
   };
 
-  // 点击 finding 锚点：仅导航到 Diff 对应行（不创建/打开草稿），便于快速核对上下文
+  // Click a finding anchor: only navigate to the corresponding Diff line (does not create/open a draft), for quickly checking context
   const handleNavigateToFinding = (finding: Finding): void => {
     if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
     const startLine = finding.anchor.startLine;
@@ -365,7 +385,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
           localId: pr.localId,
           draft: {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
-            body: buildDraftBodyFromFinding(finding.body),
+            body: buildDraftBodyFromFinding(finding),
             origin: 'finding',
             source: { runId: run.id, findingId: finding.id },
             status: 'rejected',

@@ -29,7 +29,7 @@ import { useGlobalTheme, useEditorAppearanceSync } from './hooks/useTheme';
 export default function App() {
   const { t } = useTranslation();
   const { toast, notifyError, dismiss: dismissToast } = useToast();
-  // PR 列表 / 选中 / 审批 / 合并 / 刷新 —— 领域逻辑归 usePullRequests
+  // PR list / selection / approve / merge / refresh — domain logic lives in usePullRequests
   const {
     prs,
     setPrs,
@@ -43,10 +43,10 @@ export default function App() {
     mergeSelectedPr,
     markRead,
   } = usePullRequests({ notifyError });
-  // 应用启动 / 全局生命周期（boot 加载、语言、poll / focus 刷新、向导完成、连接热生效）
+  // App startup / global lifecycle (boot load, language, poll / focus refresh, wizard completion, connection hot-apply)
   const { boot, fatalError, lastSyncAt, needsOnboarding, completeOnboarding, refreshBootAndPrs, patchConfig } =
     useBootstrap({ setPrs, reloadPrs });
-  // 布局态（左右两栏宽度 / 折叠）、版本更新提示、store 接线、外链防护——各自成 app 级 hook
+  // Layout state (left/right column widths / collapse), version update notice, store wiring, external link guard — each its own app-level hook
   const {
     sidebarWidth,
     setSidebarWidth,
@@ -60,8 +60,8 @@ export default function App() {
   const updateInfo = useUpdateNotice();
   useAppStores();
   useExternalLinkGuard();
-  // 外观（全局主题 + 编辑器字体）：跟随 config 同步到运行时 store + 字体 CSS 变量。boot 前用默认值，
-  // 模块导入时已按 localStorage 缓存定下首帧主题，boot 到达后切到 config 主题。
+  // Appearance (global theme + editor font): sync from config to runtime store + font CSS variables. Use defaults before boot,
+  // module import already pins the first-frame theme from the localStorage cache, switch to config theme once boot arrives.
   useEditorAppearanceSync(
     boot?.config.appearance ?? {
       editor_theme: 'auto',
@@ -69,27 +69,27 @@ export default function App() {
       editor_font_size: 14,
     },
   );
-  // 全局主题：订阅 store 的主题，反推浅 / 深写 data-theme（驱动语义色板）+ 派生 chrome 结构色 +
-  // 持久化 localStorage；'auto' 主题下跟随 OS 深浅切换。
+  // Global theme: subscribe to the store's theme, derive light / dark to write data-theme (drives the semantic palette) + derive chrome structural colors +
+  // persist to localStorage; under the 'auto' theme follow the OS light/dark switch.
   useGlobalTheme();
 
   const [showSettings, setShowSettings] = useState(false);
-  // 设置面板初始分区（命令面板「打开关于 / 模型」等深链用）；缺省由 SettingsModal 落 'general'。
+  // Settings panel initial section (used by command palette deep links like "open About / Model"); default falls to 'general' in SettingsModal.
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory | undefined>(undefined);
   const openSettings = useCallback((category?: SettingsCategory) => {
     setSettingsCategory(category);
     setShowSettings(true);
   }, []);
-  // PR 状态筛选（待处理 / 全部 / 冲突 / 可合并等）：提升到 App 以便命令面板亦可驱动、折叠侧栏不丢选择。
+  // PR status filter (pending / all / conflict / mergeable etc.): lifted to App so the command palette can also drive it and a collapsed sidebar doesn't lose the selection.
   const [statusFilter, setStatusFilter] = useState<FilterKey>('pending');
-  // 当前 Diff 视图选中的单 commit 范围（DiffView 上报）：作为聊天区命令的隐式范围（见 ChatPane）。
-  // 按 sha 去重，避免 DiffView 每次 render 传新对象引发的重渲染回环。
+  // The single-commit scope currently selected in the Diff view (reported by DiffView): serves as the implicit scope for chat commands (see ChatPane).
+  // Dedupe by sha to avoid a re-render loop from DiffView passing a new object on every render.
   const [viewCommitScope, setViewCommitScope] = useState<ReviewRunCommitScope | null>(null);
   const handleViewCommitScope = useCallback((s: ReviewRunCommitScope | null) => {
     setViewCommitScope((prev) => (prev?.sha === s?.sha ? prev : s));
   }, []);
-  // PR 导航 / 范围领域（发现分类 / 活跃·归档切换 / 归档懒加载 / 按 URL 打开 / 定位跳转 / 通知点击导航 +
-  // 跨组件 Diff·Tab 跳转意图）——领域逻辑归 usePrNavigation；选中态 / 已读仍由 usePullRequests 拥有。
+  // PR navigation / scope domain (discovery filters / active·archived switch / archived lazy load / open by URL / locate jump / notification-click navigation +
+  // cross-component Diff·Tab jump intent) — domain logic lives in usePrNavigation; selection state / read status is still owned by usePullRequests.
   const {
     scope,
     discoveryFilter,
@@ -106,16 +106,16 @@ export default function App() {
     pendingTab,
     setPendingTab,
   } = usePrNavigation({ prs, selectedId, setSelectedId, markRead, notifyError });
-  // macOS dock 角标：活跃 PR「@我 / 回复我」待回应总数 → 主进程落到 dock 图标（系统行为，逻辑见 useDockBadge）。
+  // macOS dock badge: total count of active PRs "@me / replied to me" awaiting response → main process writes it to the dock icon (system behavior, logic in useDockBadge).
   useDockBadge({
     prs,
     platform: boot?.info.platform,
     notifications: boot?.config.notifications,
   });
   const archived = scope === 'archived';
-  // 状态栏「待审 PR」计数：仅计**需我评审且本人尚未评审**的 PR（discovery=review-requested 且 localStatus=pending）。
-  // 不能简单数 localStatus==='pending'——「我创建的」等分类的 PR 本人非评审人、localStatus 恒为 pending，会把计数撑大。
-  // 无发现分类的平台（单一「待我评审」发现）discoveryFilters 为空，视作 review-requested。
+  // Status bar "PRs to review" count: only counts PRs that **need my review and I have not yet reviewed** (discovery=review-requested and localStatus=pending).
+  // Cannot simply count localStatus==='pending' — PRs in categories like "created by me" have me as a non-reviewer, localStatus stays pending forever, inflating the count.
+  // On platforms without discovery categories (a single "awaiting my review" discovery) discoveryFilters is empty, treated as review-requested.
   const pendingReviewCount = useMemo(
     () =>
       prs.filter(
@@ -125,10 +125,10 @@ export default function App() {
       ).length,
     [prs],
   );
-  // 已关闭范围的「可参与」判定：合并 / 仍开放的 PR 可补充评论 + AI 评审；decline 仅浏览。活跃范围恒可参与。
+  // "Can engage" determination for the closed scope: merged / still-open PRs allow adding comments + AI review; declined ones are browse-only. The active scope is always engageable.
   const canEngage = !archived || (selectedPr ? selectedPr.state !== 'declined' : false);
 
-  // 窗口级全局快捷键（F5 自动评审 / DevTools / 查看已关闭 / Ctrl-Cmd+B·J 布局开关）——领域逻辑归 useGlobalShortcuts。
+  // Window-level global shortcuts (F5 auto review / DevTools / view closed / Ctrl-Cmd+B·J layout toggles) — domain logic lives in useGlobalShortcuts.
   useGlobalShortcuts({
     platform: boot?.info.platform,
     selectedId,
@@ -163,26 +163,26 @@ export default function App() {
     );
   }
 
-  // 选中 PR 所属连接：能力位（审批按钮降级）+ 当前 PAT 用户（判「是否自己的 PR」）。
+  // Connection the selected PR belongs to: capability bits (approve-button downgrade) + current PAT user (to judge "is my own PR").
   const selectedConn = selectedPr
     ? boot.connections.find((c) => c.connectionId === selectedPr.connectionId)
     : undefined;
-  // 有 active 连接但 LLM 未配置 → ChatPane 给出「需配置才能启用」提示并禁用输入
+  // Has an active connection but LLM not configured → ChatPane shows a "configure to enable" hint and disables input
   const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
-  // 发现分类标签由活动连接的能力决定（GitHub 四类、Bitbucket 两类、其余无）。
+  // Discovery category tabs are determined by the active connection's capabilities (GitHub four, Bitbucket two, others none).
   const activeConnSummary = boot.connections.find(
     (c) => c.connectionId === boot.config.active_connection_id,
   );
   const availableDiscoveryFilters = activeConnSummary?.capabilities.discoveryFilters ?? [];
   const showDiscoveryFilter = availableDiscoveryFilters.length > 0;
-  // 平台是否支持 needs_work（「需修改」）评审态：GitHub / Bitbucket 支持、GitLab（二元审批）不支持。
-  // 决定非「待我评审」发现分类下是否保留「待处理」状态筛选（见 Sidebar.visibleFilters）。
+  // Whether the platform supports the needs_work ("needs changes") review state: GitHub / Bitbucket support it, GitLab (binary approval) does not.
+  // Determines whether the "pending" status filter is kept under discovery categories other than "awaiting my review" (see Sidebar.visibleFilters).
   const supportsNeedsWork = activeConnSummary?.capabilities.reviewStatuses.includes('needsWork') ?? false;
-  // 选中的分类可能因切换连接而对当前平台无效 → 回落首个可用。
+  // The selected category may be invalid for the current platform after switching connections → fall back to the first available.
   const effectiveDiscoveryFilter = availableDiscoveryFilters.includes(discoveryFilter)
     ? discoveryFilter
     : availableDiscoveryFilters[0];
-  // 命令面板「分类筛选」可选的状态项：与侧栏一致——有发现分类时隐藏决断类（通过 / 需修改）。
+  // Status items selectable in the command palette "category filter": consistent with the sidebar — hide decision types (approved / needs changes) when discovery categories exist.
   const visibleStatusFilters = showDiscoveryFilter
     ? PR_STATUS_FILTERS.filter((f) => !DECISION_STATUS_FILTERS.has(f.value))
     : PR_STATUS_FILTERS;
@@ -193,7 +193,7 @@ export default function App() {
         platform={boot.info.platform}
         title={selectedPr?.title}
         config={boot.config}
-        // 不可参与（decline / 无选中）时「运行自动评审」命令应隐藏：以 null 关掉其 when 门控。
+        // When not engageable (declined / no selection) the "run auto review" command should hide: pass null to close its when gate.
         selectedPrId={canEngage ? selectedId : null}
         patchConfig={patchConfig}
         openSettings={openSettings}
@@ -214,7 +214,7 @@ export default function App() {
             selectedId={selectedId}
             onSelect={(pr) => {
               setSelectedId(pr.localId);
-              // 已关闭范围无未读概念，无需推进已读水位。
+              // The closed scope has no unread concept, no need to advance the read watermark.
               if (!archived) void markRead(pr.localId);
             }}
             width={sidebarWidth}
@@ -240,7 +240,7 @@ export default function App() {
               merging={merging}
               capabilities={selectedConn?.capabilities}
               currentUserName={selectedConn?.user?.name ?? null}
-              // 已关闭范围隐藏 PR 生命周期操作（合并 / 审批）；decline / 不可参与再隐藏评论 / 草稿写入。
+              // The closed scope hides PR lifecycle actions (merge / approve); declined / not-engageable further hides comment / draft writes.
               hideLifecycle={archived}
               readOnly={!canEngage}
               pendingDiffNav={pendingDiffNav}
@@ -254,13 +254,13 @@ export default function App() {
             <PrEmpty hasConnections={boot.config.connections.length > 0} />
           )}
         </MainPane>
-        {/* ChatPane 始终挂载，折叠只是 CSS 隐藏：保住运行中的 run 生命周期（计时器 / runProgress 订阅）。 */}
+        {/* ChatPane is always mounted, collapse is just CSS hiding: preserves the lifecycle of a running run (timers / runProgress subscription). */}
         <ChatPane
           pr={selectedPr}
           prAgent={boot.prAgent}
           width={chatWidth}
           onResize={setChatWidth}
-          // 不可参与（decline / 无选中）时强制折叠对话面板、隐去 AI 评审入口；合并 / 仍开放 PR 仍可补评审。
+          // When not engageable (declined / no selection) force-collapse the chat panel and hide the AI review entry; merged / still-open PRs can still add reviews.
           collapsed={chatCollapsed || !canEngage}
           llmConfigured={llmConfigured}
           onOpenSettings={() => setShowSettings(true)}
@@ -272,6 +272,7 @@ export default function App() {
             boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
           }
           viewCommitScope={viewCommitScope}
+          codeSuggestionLayout={boot.config.agent.strategy.code_suggestion_layout}
         />
       </div>
       <StatusBar

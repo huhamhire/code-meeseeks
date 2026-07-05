@@ -17,36 +17,36 @@ interface UseAppearanceDraftParams {
 }
 
 /**
- * 外观类「即时生效」设置：UI 语言 / 全局主题 + 编辑器字体（Monaco 主题即全局主题，另含等宽字体 + 字号）。
- * 与 useSettingsDraft 的「草稿 → 整体保存」事务相互正交 —— 这里每项改即生效：实时应用到运行时
- * （store / data-theme / chrome / CSS 变量）+ 持久化（localStorage + 写盘）+ 同步父级，不进 base/saveAll。
- * 写盘失败不回滚 UI（已切），仅经 error 提示；下次启动按 localStorage 兜底。主题切换的 data-theme /
- * chrome 派生由 App 的 useGlobalTheme 订阅 store 变化驱动（见 hooks/useTheme）。
+ * Appearance "instant-effect" settings: UI language / global theme + editor font (Monaco theme is the global theme, plus monospace font + size).
+ * Orthogonal to useSettingsDraft's "draft → save-all" transaction —— here each change takes effect immediately: applied to the runtime in real time
+ * (store / data-theme / chrome / CSS variables) + persisted (localStorage + written to disk) + synced to parent, not part of base/saveAll.
+ * Write-to-disk failure does not roll back the UI (already switched), only surfaces via error; next startup falls back to localStorage. The data-theme /
+ * chrome derivation of theme switching is driven by App's useGlobalTheme subscribing to store changes (see hooks/useTheme).
  */
 export function useAppearanceDraft({
   config,
   onLanguageChange,
   onEditorAppearanceChange,
 }: UseAppearanceDraftParams) {
-  // 即时生效项写盘失败的错误（与整体保存的 saveError 分开，由 SettingsModal 合并展示）
+  // Error from write-to-disk failure of instant-effect items (kept separate from save-all's saveError, merged for display by SettingsModal)
   const [error, setError] = useState<string | null>(null);
 
-  // UI 语言：即时生效项（不走全局保存）
+  // UI language: instant-effect item (does not go through save-all)
   const [language, setLanguage] = useState<SupportedLanguage>(() => resolveUiLanguage(config.language));
   const handleLanguageChange = (next: SupportedLanguage): void => {
     if (next === language) return;
     setLanguage(next);
-    void i18n.changeLanguage(next); // 渲染层实时切换
-    persistLanguage(next); // localStorage 缓存，下次启动同步命中
-    onLanguageChange?.(next); // 同步父级 boot.config.language
+    void i18n.changeLanguage(next); // switch the renderer layer in real time
+    persistLanguage(next); // localStorage cache, hit synchronously on next startup
+    onLanguageChange?.(next); // sync parent boot.config.language
     invoke('config:setLanguage', { language: next }).catch((e: unknown) => {
-      // 写盘 / 主进程切换失败不回滚 UI（已切），仅提示；下次启动按 localStorage 兜底
+      // Write-to-disk / main-process switch failure does not roll back the UI (already switched), only surfaces; next startup falls back to localStorage
       setError(e instanceof Error ? e.message : String(e));
     });
   };
 
-  // 全局主题（Monaco 主题 + 等宽字体）：即时生效项。主题为离散选择 → 改即写盘；字体为文本输入 →
-  // onChange 仅实时预览（写 store + CSS + 同步父级），onBlur 才写盘，避免逐字符落盘。
+  // Global theme (Monaco theme + monospace font): instant-effect items. Theme is a discrete choice → written to disk on change; font is text input →
+  // onChange only previews in real time (writes store + CSS + syncs parent), onBlur writes to disk, avoiding per-character disk writes.
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(config.appearance.editor_theme);
   const [editorFontFamily, setEditorFontFamily] = useState<string>(
     config.appearance.editor_font_family,
@@ -54,7 +54,7 @@ export function useAppearanceDraft({
   const [editorFontSize, setEditorFontSizeState] = useState<number>(
     config.appearance.editor_font_size,
   );
-  // 实时应用到运行时：写共享 store（Monaco 组件读）+ 字体 CSS 变量（全应用 $font-mono）+ 同步父级。
+  // Apply to runtime in real time: write shared store (read by Monaco component) + font CSS variable (app-wide $font-mono) + sync parent.
   const applyEditorAppearance = (nextTheme: EditorTheme, nextFont: string, nextSize: number): void => {
     setEditorAppearance({ editorTheme: nextTheme, fontFamily: nextFont, fontSize: nextSize });
     applyEditorFontFamily(nextFont);
@@ -79,12 +79,12 @@ export function useAppearanceDraft({
   };
   const handleEditorFontChange = (next: string): void => {
     setEditorFontFamily(next);
-    applyEditorAppearance(editorTheme, next, editorFontSize); // 实时预览，不写盘
+    applyEditorAppearance(editorTheme, next, editorFontSize); // real-time preview, not written to disk
   };
   const commitEditorFont = (): void => {
-    persistEditorAppearance(editorTheme, editorFontFamily, editorFontSize); // 失焦才写盘
+    persistEditorAppearance(editorTheme, editorFontFamily, editorFontSize); // written to disk only on blur
   };
-  // 字号为离散下拉 → 改即生效并写盘；clamp 防越界（异常 / config 手改超范围）。
+  // Font size is a discrete dropdown → takes effect and written to disk on change; clamp guards against out-of-range (anomaly / manually edited config out of range).
   const handleEditorFontSizeChange = (next: number): void => {
     const clamped = Math.min(EDITOR_FONT_SIZE_MAX, Math.max(EDITOR_FONT_SIZE_MIN, Math.round(next)));
     if (clamped === editorFontSize) return;
@@ -94,10 +94,10 @@ export function useAppearanceDraft({
   };
 
   return {
-    // 语言
+    // language
     language,
     handleLanguageChange,
-    // 全局主题 + 编辑器字体
+    // global theme + editor font
     editorTheme,
     editorFontFamily,
     editorFontSize,
@@ -105,7 +105,7 @@ export function useAppearanceDraft({
     handleEditorFontChange,
     commitEditorFont,
     handleEditorFontSizeChange,
-    // 即时生效项写盘错误
+    // write-to-disk error of instant-effect items
     error,
   };
 }

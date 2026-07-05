@@ -1,6 +1,6 @@
-// 版本更新检测（仅检测 + 提示，不下载 / 安装）。查 GitHub Releases 最新**稳定版**
-// （/releases/latest 天然排除 prerelease/alpha），与当前版本做 semver 比对。
-// 走配置的出站代理（企业内网友好）；匿名 GitHub API（低频，启动 + 手动），无需 token。
+// Version update check (check + notify only, no download / install). Queries the latest **stable release**
+// from GitHub Releases (/releases/latest naturally excludes prerelease/alpha) and does a semver comparison against the current version.
+// Goes through the configured outbound proxy (enterprise-intranet friendly); anonymous GitHub API (low frequency, startup + manual), no token needed.
 
 import type { ProxyConfig, UpdateCheckResult } from '@meebox/shared';
 import { gt as semverGt, valid as semverValid } from 'semver';
@@ -21,7 +21,7 @@ interface GithubRelease {
 }
 
 /**
- * 检测是否有新版本。任何网络 / 解析失败都收敛成 ok=false + error，不抛。
+ * Check whether a new version exists. Any network / parse failure collapses into ok=false + error, never throws.
  */
 export async function checkForUpdate(
   currentVersion: string,
@@ -34,11 +34,11 @@ export async function checkForUpdate(
     error,
   });
 
-  // semver.valid 容忍前缀 v、拒绝尾部垃圾（1.2.3beta / 1.2.3.4 → null）
+  // semver.valid tolerates a leading v, rejects trailing garbage (1.2.3beta / 1.2.3.4 → null)
   const current = semverValid(currentVersion);
   if (!current) return fail(`Unable to parse the current version: ${currentVersion}`);
 
-  // 代理感知 fetch（命中本地/代理关闭则用全局 fetch 直连）
+  // proxy-aware fetch (hits local / proxy disabled → uses global fetch for a direct connection)
   const doFetch = proxyFetchForHost(proxy, API_HOST) ?? fetch;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -47,14 +47,14 @@ export async function checkForUpdate(
       signal: ctrl.signal,
       headers: {
         Accept: 'application/vnd.github+json',
-        // GitHub API 要求 UA；用内部代号（OWNER/REPO 是真实仓库路径，属对外内容，保留）
+        // GitHub API requires a UA; use the internal codename (OWNER/REPO are the real repo path, outward-facing content, kept)
         'User-Agent': 'meebox-updater',
       },
     });
     if (!res.ok) return fail(`GitHub API ${String(res.status)}`);
     const data = (await res.json()) as GithubRelease;
-    // 只提示正式版：/releases/latest 本就排除 prerelease/draft；此处再防御一道，
-    // 万一拿到 prerelease/draft 一律视为「无更新」，不引导用户升到预发布。
+    // Only notify for stable releases: /releases/latest already excludes prerelease/draft; defend once more here,
+    // in case a prerelease/draft comes through treat it uniformly as "no update", never steering the user to a prerelease.
     if (data.prerelease || data.draft) {
       return { ok: true, hasUpdate: false, currentVersion };
     }

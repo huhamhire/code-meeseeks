@@ -2,12 +2,13 @@ import type { AgentStepLabels } from '@meebox/agent';
 import { t } from '../../i18n/index.js';
 
 /**
- * 把 agent 步骤展示文案 / 总结骨架 / 中止原因从主进程 i18n 资源（locales/*.json 的 `agent.*`）解析出来，
- * 注入纯逻辑的 agent 编排器——agent 内仅留 en-US 兜底，多语言译文统一在 i18n 资源维护。
- * 经会话语言（= getMainLanguage，t() 当前语言）解析，与 UI 一致；步骤文案在生成时落地、随 transcript 持久化。
+ * Resolve agent step display text / summary skeleton / abort reason from the main-process i18n resources
+ * (`agent.*` in locales/*.json) and inject them into the pure-logic agent orchestrator — the agent keeps only the
+ * en-US fallback, and multilingual translations are maintained uniformly in the i18n resources.
+ * Resolved via the session language (= getMainLanguage, t()'s current language), consistent with the UI; step text is materialized at generation time and persisted with the transcript.
  */
 
-/** 从 i18n 资源构造步骤展示文案（judgeSevere 走 i18next 复数 count）。 */
+/** Build step display text from i18n resources (judgeSevere uses i18next plural count). */
 export function buildStepLabels(): AgentStepLabels {
   return {
     describeReview: t('agent.steps.describeReview'),
@@ -20,7 +21,7 @@ export function buildStepLabels(): AgentStepLabels {
   };
 }
 
-/** 从 i18n 资源构造评审总结三段骨架标题（概述 / 关键发现 / 建议）。 */
+/** Build the three-section review summary skeleton titles from i18n resources (overview / key findings / suggestions). */
 export function buildSummarySections(): [string, string, string] {
   return [
     t('agent.summarySections.overview'),
@@ -30,8 +31,9 @@ export function buildSummarySections(): [string, string, string] {
 }
 
 /**
- * 把 agent 返回的中止原因稳定 code 映射为本地化文案：'aborted' / 'max_steps' 经 i18n 资源；其它（failed
- * 分支的具体错误信息）原样返回。落盘前调用，使 session.terminationReason 即为目标语言文本（渲染层逐字显示）。
+ * Map the stable abort-reason code returned by the agent to localized text: 'aborted' / 'max_steps' via the i18n
+ * resources; others (the specific error message from the failed branch) are returned as-is. Called before persisting so
+ * that session.terminationReason is already target-language text (the renderer displays it verbatim).
  */
 export function mapTerminationReason(code: string | undefined): string | undefined {
   if (code === 'aborted') return t('agent.termination.aborted');

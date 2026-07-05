@@ -7,18 +7,18 @@ import { uploadCommentImage } from '../shared/uploadCommentImage';
 
 interface CommentComposerProps {
   prLocalId: string;
-  /** `@提及` 自动补全候选（PR 参与者 + 评论作者，由父组件从已加载数据派生）。 */
+  /** `@mention` autocomplete candidates (PR participants + comment authors, derived by the parent from loaded data). */
   mentionCandidates?: PlatformUser[];
-  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；为真才启用粘贴上传。 */
+  /** Whether the platform supports image attachment upload (capabilities.commentAttachments); paste-to-upload is enabled only when true. */
   attachmentsEnabled?: boolean;
   onCancel: () => void;
-  /** 发布成功后调用（收起编辑框；时间线通过 comments:changed 事件自动刷新，新评论出现在顶部） */
+  /** Called after posting succeeds (collapses the composer; the timeline auto-refreshes via the comments:changed event, the new comment appears at the top) */
   onPosted: () => void;
 }
 
 /**
- * 新建 summary（不锚到文件）评论的编辑框：textarea + 发送/取消。出现在活动时间线最上方。
- * Cmd/Ctrl+Enter 发送，Esc 取消；空 body disabled 发送。版式复用回复编辑框样式。
+ * Composer for a new summary (not anchored to a file) comment: textarea + send/cancel. Appears at the top of the activity timeline.
+ * Cmd/Ctrl+Enter sends, Esc cancels; send is disabled on an empty body. Layout reuses the reply composer's styles.
  */
 export function CommentComposer({
   prLocalId,

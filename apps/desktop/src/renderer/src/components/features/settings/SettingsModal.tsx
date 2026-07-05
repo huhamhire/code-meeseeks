@@ -17,6 +17,7 @@ import { useAppearanceDraft } from './hooks/useAppearanceDraft';
 import { ConnectionEditorModal } from './editors/ConnectionEditorModal';
 import { LlmEditorModal } from './editors/LlmEditorModal';
 import { ProxyEditorModal } from './editors/ProxyEditorModal';
+import { TemplateEditorModal } from './editors/TemplateEditorModal';
 import { LanguageSection } from './sections/LanguageSection';
 import { ThemeSection } from './sections/ThemeSection';
 import { EditorSection } from './sections/EditorSection';
@@ -44,8 +45,8 @@ export type SettingsCategory =
   | 'about';
 
 /**
- * 配置分区导航元数据（左侧栏）。新增配置分区在此登记一项，并在右侧面板的 switch
- * 中渲染对应 section —— 分区结构为后续扩展（主题 / 编辑器 / 上下文窗口等）预留。
+ * Settings-section nav metadata (left sidebar). Register a new settings section here and render
+ * the corresponding section in the right panel's switch — the section structure is reserved for future extensions (theme / editor / context window etc.).
  */
 const SETTINGS_CATEGORIES: ReadonlyArray<{
   id: SettingsCategory;
@@ -65,33 +66,33 @@ interface SettingsModalProps {
   info: AppInfo;
   paths: AppPaths;
   config: Config;
-  /** LLM 配置改动后通知父级同步状态（StatusBar chip 等） */
+  /** Notify the parent to sync state (StatusBar chip etc.) after LLM config changes */
   onLlmChange?: (llm: Config['llm']) => void;
   onProxyChange?: (proxy: Config['proxy']) => void;
-  /** UI 语言即时切换后通知父级同步 boot.config.language（与写盘/实时切换解耦的状态同步） */
+  /** Notify the parent to sync boot.config.language after an instant UI-language switch (state sync decoupled from write-to-disk / live switching) */
   onLanguageChange?: (language: SupportedLanguage) => void;
-  /** 外观（全局主题 + 等宽字体 + 字号）即时改动后通知父级同步 boot.config.appearance */
+  /** Notify the parent to sync boot.config.appearance after an instant appearance change (global theme + monospace font + font size) */
   onEditorAppearanceChange?: (appearance: {
     editor_theme: EditorTheme;
     editor_font_family: string;
     editor_font_size: number;
   }) => void;
   /**
-   * 连接改动（含切换活动连接）保存成功后通知父级。父级需重拉 config + 连接摘要 + PR 列表：
-   * 活动连接变化后，main 端 app:connections 只返回新活动连接的摘要、prs:list 只返回其 PR，
-   * 不刷新的话 App 的 boot.connections / 列表会过期（丢 capabilities/user、PR 对不上）。
+   * Notify the parent after a connection change (including switching the active connection) is saved successfully. The parent needs to re-fetch config + connection summary + PR list:
+   * after the active connection changes, the main side's app:connections only returns the new active connection's summary and prs:list only returns its PRs,
+   * without refreshing, the App's boot.connections / list goes stale (loses capabilities/user, PRs don't match).
    */
   onConnectionsChange?: () => void | Promise<void>;
-  /** 整体保存成功后回传写盘后的权威 config，父级据此同步 boot.config（再次打开设置页显示最新值）。 */
+  /** After a full save succeeds, pass back the authoritative config after write-to-disk; the parent syncs boot.config from it (so reopening settings shows the latest values). */
   onConfigPersisted?: (config: Config) => void;
-  /** 打开时的初始分区（命令面板「打开关于」等深链用）；缺省 'general'。 */
+  /** Initial section on open (used by deep links like the command palette's "open About"); defaults to 'general'. */
   initialCategory?: SettingsCategory;
   onClose: () => void;
 }
 
 /**
- * 设置面板（容器）：布局编排 + 装配各分区。草稿 / 保存状态机归 useSettingsDraft，
- * 各设置分区拆到 sections/，连接 / 代理 / LLM 编辑器拆到 editors/，通用模态壳用 common/Modal。
+ * Settings panel (container): layout orchestration + assembling the sections. The draft / save state machine belongs to useSettingsDraft,
+ * each settings section is split into sections/, the connection / proxy / LLM editors into editors/, and the generic modal shell uses common/Modal.
  */
 export function SettingsModal({
   info,
@@ -108,7 +109,7 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const { t } = useTranslation();
   const [category, setCategory] = useState<SettingsCategory>(initialCategory ?? 'general');
-  // 已挂载时再次以新初始分区打开（命令面板深链）：切到目标分区；用户在面板内手动导航仍走 setCategory。
+  // Reopening with a new initial section while already mounted (command-palette deep link): switch to the target section; manual navigation within the panel still goes through setCategory.
   useEffect(() => {
     if (initialCategory) setCategory(initialCategory);
   }, [initialCategory]);
@@ -121,7 +122,7 @@ export function SettingsModal({
     onConfigPersisted,
     onClose,
   });
-  // 外观类即时生效设置（语言 / 主题 / 编辑器外观）：与整体保存事务正交，独立 hook 管理。
+  // Appearance-type instantly-applied settings (language / theme / editor appearance): orthogonal to the full-save transaction, managed by a separate hook.
   const a = useAppearanceDraft({
     config,
     onLanguageChange,
@@ -133,7 +134,7 @@ export function SettingsModal({
       <Modal
         size="lg"
         onClose={onClose}
-        // 有未保存草稿时点背景误关会丢配置：设置页禁用背景点击关闭，仅右上角关闭键（或保存成功）退出。
+        // Accidentally closing via a backdrop click with an unsaved draft loses config: the settings page disables backdrop-click close, exit only via the top-right close button (or a successful save).
         closeOnBackdrop={false}
         title={t('settings.title')}
         headerClose="icon"
@@ -217,7 +218,7 @@ export function SettingsModal({
                 />
               </>
             )}
-            {/* 模型：仅 LLM 连接 + 上下文长度。 */}
+            {/* Model: only LLM connections + context length. */}
             {category === 'model' && (
               <>
                 <LlmSection
@@ -233,7 +234,7 @@ export function SettingsModal({
                 />
               </>
             )}
-            {/* 智能体：记忆目录 + 策略 + 评审并发。 */}
+            {/* Agent: memory directory + strategy + review concurrency. */}
             {category === 'agent' && (
               <>
                 <AgentDirSection
@@ -248,6 +249,14 @@ export function SettingsModal({
                   onMaxFollowupAsksChange={s.setMaxFollowupAsks}
                   maxCodeSuggestions={s.maxCodeSuggestions}
                   onMaxCodeSuggestionsChange={s.setMaxCodeSuggestions}
+                  codeSuggestionSpec={s.codeSuggestionSpec}
+                  onEditCodeSuggestionSpec={() =>
+                    s.setTemplateEditor({ field: 'spec', draft: s.codeSuggestionSpec })
+                  }
+                  codeSuggestionLayout={s.codeSuggestionLayout}
+                  onEditCodeSuggestionLayout={() =>
+                    s.setTemplateEditor({ field: 'layout', draft: s.codeSuggestionLayout })
+                  }
                 />
                 <ConcurrencySection
                   value={s.maxConcurrencyInput}
@@ -298,6 +307,15 @@ export function SettingsModal({
           onChange={s.setProxyEditor}
           onSave={() => s.saveProxyEditor()}
           onCancel={() => s.setProxyEditor(null)}
+        />
+      )}
+      {s.templateEditor && (
+        <TemplateEditorModal
+          field={s.templateEditor.field}
+          draft={s.templateEditor.draft}
+          onChange={(next) => s.setTemplateEditor({ ...s.templateEditor!, draft: next })}
+          onSave={s.saveTemplateEditor}
+          onCancel={() => s.setTemplateEditor(null)}
         />
       )}
       {s.connDeleteId && (

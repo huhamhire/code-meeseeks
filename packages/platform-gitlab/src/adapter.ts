@@ -8,8 +8,8 @@ import { GitLabMediaService } from './features/media.js';
 export { normalizeGitLabApiBase, type GitLabAdapterOptions } from './client.js';
 
 /**
- * GitLab 适配器：领域服务容器（connection / prs / comments / media），四个领域共享一份连接上下文
- * （统一连接封装实例 + 当前用户缓存）。
+ * GitLab adapter: domain service container (connection / prs / comments / media), where the four domains share one
+ * connection context (a unified connection wrapper instance + current-user cache).
  */
 export class GitLabAdapter implements PlatformAdapter {
   readonly kind = 'gitlab' as const;

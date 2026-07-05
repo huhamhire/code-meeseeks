@@ -12,9 +12,9 @@ function toggleAutopilot(ctx: CommandContext): void {
 }
 
 /**
- * 「评审」领域命令：开关 AutoPilot、对当前 PR 运行自动评审。运行自动评审走与 ChatPane「一键自动评审」
- * 同一通道（`agent:run`），运行态与会话经事件 / store 反映；需当前选中 PR 且 LLM 已配置才列出
- * （无 `when` 机制前先按上下文裁剪）。
+ * "Review" domain commands: toggle AutoPilot, run auto review on the current PR. Running auto review goes through the same channel
+ * (`agent:run`) as ChatPane's "one-click auto review"; run state and session are reflected via events / store; listed only when a PR is selected and the LLM is configured
+ * (trimmed by context until a `when` mechanism exists).
  */
 export function buildReviewCommands(ctx: CommandContext): RootCommand[] {
   const { t, tEn, selectedPrId, isPrRunning } = ctx;
@@ -26,15 +26,15 @@ export function buildReviewCommands(ctx: CommandContext): RootCommand[] {
     title: t(key),
     titleEn: tEn(key),
   });
-  // 域内按英文名字典序：Run Auto Review < Toggle AutoPilot < Toggle Chat Panel
+  // Within-domain English-name lexicographic order: Run Auto Review < Toggle AutoPilot < Toggle Chat Panel
   return [
     {
       id: 'run-auto-review',
       ...cmd('commandPalette.cmdRunAutoReview'),
-      // 门控：有选中 PR 才出现（无 PR 无意义）。执行时再做重入保护：同一 PR 已在跑则忽略。走与 ChatPane
-      // 一键评审同通道，运行态 / 会话经事件 + store 反映；LLM 未配置 / pr-agent 未就绪由后端按失败回流到会话。
+      // Gating: only appears when a PR is selected (meaningless without one). Reentrancy guard at execution: ignore if the same PR is already running. Uses the same channel as ChatPane's
+      // one-click review; run state / session reflected via events + store; LLM not configured / pr-agent not ready flow back into the session as a failure from the backend.
       when: () => Boolean(selectedPrId),
-      shortcut: ['F5'], // 运行（IDE 惯例）；单键避开组合冲突，见 App 窗口级快捷键
+      shortcut: ['F5'], // Run (IDE convention); single key avoids combo conflicts, see App window-level shortcuts
       run: () => {
         if (selectedPrId && !isPrRunning(selectedPrId)) {
           void invoke('agent:run', { localId: selectedPrId });

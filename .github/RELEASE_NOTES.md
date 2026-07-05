@@ -1,24 +1,24 @@
-> ⚠️ **早期预览版（0.x）**：功能、配置与数据格式可能发生不兼容变更，稳定性未经充分验证。
-> 请勿用于关键生产评审流程，使用前自行评估风险并备份数据。
+> ⚠️ **Early preview (0.x)**: features, configuration, and data formats may change incompatibly, and stability is not fully verified.
+> Do not use it for critical production review workflows — assess the risk and back up your data first.
 
-## 版本变更
+## What's changed
 
 %%CHANGELOG_SECTION%%
 
-> 完整历史见 [CHANGELOG](https://github.com/huhamhire/code-meeseeks/blob/master/CHANGELOG.md)。
+> 📖 This version on the website changelog (English · 简体中文): %%CHANGELOG_URL%%
 
-## 安装说明
+## Installation
 
-安装包开箱即用，已内置评审所需运行环境，**安装后即可使用，无需额外配置**。
+The installers are ready to use — the review runtime is bundled in, so **no extra setup is needed after installing**.
 
-**首次打开**：本版**未做代码签名公证**（开源免费路线），系统会拦截未知开发者的应用：
+**First launch**: this build is **not code-signed / notarized** (a free, open-source path), so the OS blocks apps from unidentified developers:
 
-- **macOS**：右键点 App 选「打开 → 仍要打开」；或「系统设置 → 隐私与安全性 → 仍要打开」。
-  也可终端执行 `xattr -dr com.apple.quarantine "/Applications/Code Meeseeks.app"`。
-- **Windows**：SmartScreen 弹窗点「更多信息 → 仍要运行」。
+- **macOS**: right-click the app → "Open" → "Open"; or System Settings → Privacy & Security → "Open Anyway".
+  You can also run `xattr -dr com.apple.quarantine "/Applications/Code Meeseeks.app"` in a terminal.
+- **Windows**: on the SmartScreen prompt, click "More info" → "Run anyway".
 
-## 许可
+## License
 
-本项目 [Apache-2.0](https://github.com/huhamhire/code-meeseeks/blob/master/LICENSE)。安装包内含的
-第三方组件许可归集为 **`THIRD-PARTY-NOTICES.md`**，已随安装包内置（位于 App 资源目录，macOS 为
-`Code Meeseeks.app/Contents/Resources/`，Windows 为安装目录 `resources/`）。
+This project is licensed under [Apache-2.0](https://github.com/huhamhire/code-meeseeks/blob/master/LICENSE). The third-party
+component licenses bundled in the installer are collected into **`THIRD-PARTY-NOTICES.md`**, shipped inside the package (in the
+app resources directory — `Code Meeseeks.app/Contents/Resources/` on macOS, the install dir's `resources/` on Windows).

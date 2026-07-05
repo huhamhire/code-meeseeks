@@ -12,13 +12,13 @@ import {
   type PlatformTransport,
 } from '@meebox/platform-core';
 
-/** GitHub 连接配置 = 统一连接配置 + clone 协议（连接层自管的连接配置，非 HTTP 传输细节）。 */
+/** GitHub connection config = unified connection config + clone protocol (connection-layer-managed connection config, not HTTP transport details). */
 export interface GitHubClientOptions extends PlatformConnectionConfig {
-  /** clone 协议：'pat'（默认）走 HTTPS + 用户名:PAT；'ssh' 走系统 ssh 配置 */
+  /** clone protocol: 'pat' (default) uses HTTPS + username:PAT; 'ssh' uses the system ssh config */
   cloneProtocol?: 'pat' | 'ssh';
 }
 
-/** 适配器构造选项与连接配置同形。 */
+/** Adapter construction options are the same shape as the connection config. */
 export type GitHubAdapterOptions = GitHubClientOptions;
 
 export class GitHubClientError extends Error {
@@ -36,9 +36,9 @@ const API_VERSION = '2022-11-28';
 const ACCEPT = 'application/vnd.github+json';
 
 /**
- * 容错归一 GitHub API base：用户可只填实例地址或完整 API base。
- * - `github.com` / `www.github.com`（或留空场景的官方域）→ 官方 API host `https://api.github.com`；
- * - GitHub Enterprise Server 实例根 `https://ghe.example.com` → 补 `/api/v3`（已带 `/api/vN` 则原样）。
+ * Fault-tolerant normalization of the GitHub API base: the user may enter only the instance address or a full API base.
+ * - `github.com` / `www.github.com` (or the official domain in the empty case) → official API host `https://api.github.com`;
+ * - GitHub Enterprise Server instance root `https://ghe.example.com` → append `/api/v3` (kept as-is if it already has `/api/vN`).
  */
 export function normalizeGitHubApiBase(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, '');
@@ -57,12 +57,13 @@ export function normalizeGitHubApiBase(input: string): string {
 }
 
 /**
- * GitHub REST 客户端 = 统一连接封装实例，实现 {@link PlatformTransport}：自管连接 / 鉴权配置（base
- * URL 归一、PAT、超时、代理解析）与 GitHub 连接派生态（web/git host、clone 协议、clone URL 构造）。
- * 通用传输样板复用 `@meebox/platform-core` helper；GitHub 特有部分（鉴权头 / 限流提示 / 可信资产域 /
- * search / patch / clone）留在本类。业务语义留给各领域服务。
+ * GitHub REST client = unified connection wrapper instance implementing {@link PlatformTransport}: self-manages connection /
+ * auth config (base URL normalization, PAT, timeout, proxy resolution) and GitHub connection-derived state (web/git host,
+ * clone protocol, clone URL construction). Generic transport boilerplate reuses `@meebox/platform-core` helpers;
+ * GitHub-specific parts (auth headers / rate-limit hints / trusted asset hosts / search / patch / clone) stay in this class.
+ * Business semantics are left to the domain services.
  *
- * path 以 `/` 开头时拼 baseUrl；传入完整 http(s) URL 时原样请求（分页 next / 头像等用）。
+ * When path starts with `/` it is joined onto baseUrl; when a full http(s) URL is passed it is requested as-is (used for pagination next / avatars etc.).
  */
 export class GitHubClient implements PlatformTransport {
   private readonly baseUrl: string;
@@ -70,7 +71,7 @@ export class GitHubClient implements PlatformTransport {
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;
   private readonly cloneProtocol: 'pat' | 'ssh';
-  /** web / git host base（api.github.com → https://github.com；GHE → 实例 host）。 */
+  /** web / git host base (api.github.com → https://github.com; GHE → instance host). */
   readonly webBase: string;
   private readonly gitHost: string;
 
@@ -78,12 +79,12 @@ export class GitHubClient implements PlatformTransport {
     const apiBase = normalizeGitHubApiBase(opts.baseUrl);
     this.baseUrl = stripTrailingSlash(apiBase);
     this.token = opts.token;
-    // 连接层统一解析有效 fetch（显式 fetch 覆盖 > 代理 > 直连）。
+    // Connection layer uniformly resolves the effective fetch (explicit fetch override > proxy > direct).
     this.fetchFn = resolveConnectionFetch({ ...opts, baseUrl: apiBase });
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.cloneProtocol = opts.cloneProtocol ?? 'pat';
     const api = new URL(apiBase);
-    // github.com 的 API 在 api.github.com，但 clone/web 在 github.com；GHE 同 host。
+    // github.com's API is at api.github.com, but clone/web is at github.com; GHE shares the same host.
     this.webBase =
       api.hostname === 'api.github.com' ? 'https://github.com' : `${api.protocol}//${api.host}`;
     this.gitHost = new URL(this.webBase).host;
@@ -115,10 +116,10 @@ export class GitHubClient implements PlatformTransport {
 
   private async err(res: Response, method: string, urlOrPath: string): Promise<GitHubClientError> {
     const txt = await res.text().catch(() => '');
-    // GitHub 错误体是 JSON，message 才是真因（如合并 405「Pull Request is not mergeable」）。
+    // GitHub error bodies are JSON, and message is the real cause (e.g. merge 405 "Pull Request is not mergeable").
     const apiMsg = extractApiMessage(txt);
     const detail = apiMsg ? `：${apiMsg}` : '';
-    // 限流（403/429 + X-RateLimit-Remaining: 0）给更可读的提示，便于上层节流。
+    // Rate limit (403/429 + X-RateLimit-Remaining: 0) gives a more readable hint to help upper layers throttle.
     const remaining = res.headers.get('x-ratelimit-remaining');
     const rateLimited = (res.status === 403 || res.status === 429) && remaining === '0';
     const hint = rateLimited ? '（GitHub API 限流，请稍后重试）' : '';
@@ -134,7 +135,7 @@ export class GitHubClient implements PlatformTransport {
     return body;
   }
 
-  /** 同 get，但同时返回响应头（ping 读 GHE 版本 / 分页读 Link 用）。 */
+  /** Same as get, but also returns the response headers (used by ping to read the GHE version / by pagination to read Link). */
   async getWithHeaders<T>(
     path: string,
     params?: Record<string, string>,
@@ -158,7 +159,7 @@ export class GitHubClient implements PlatformTransport {
     return (await res.json()) as T;
   }
 
-  /** PUT；部分端点（merge / dismissals）返回 JSON，留空时返回 null。 */
+  /** PUT; some endpoints (merge / dismissals) return JSON, returns null when empty. */
   async put<T>(path: string, body: unknown): Promise<T | null> {
     const res = await this.raw('PUT', buildUrl(this.baseUrl, path), body);
     if (!res.ok) throw await this.err(res, 'PUT', path);
@@ -176,8 +177,8 @@ export class GitHubClient implements PlatformTransport {
   }
 
   /**
-   * GitHub `Link` 头分页：列表端点返回 JSON 数组，下一页地址在 `Link: <url>; rel="next"`。
-   * 逐页跟 next 直到没有。per_page=100。
+   * GitHub `Link` header pagination: list endpoints return a JSON array, the next-page address is in `Link: <url>; rel="next"`.
+   * Follow next page by page until there is none. per_page=100.
    */
   async *paginate<T>(path: string, params: Record<string, string> = {}): AsyncIterable<T> {
     let url: string | null = buildUrl(this.baseUrl, path, { per_page: '100', ...params });
@@ -191,8 +192,8 @@ export class GitHubClient implements PlatformTransport {
   }
 
   /**
-   * Search 端点（`/search/issues` 等）：返回 `{ items, total_count }`，分页同样走 Link 头。
-   * 注意搜索 30 次/分限流；调用方应节流。
+   * Search endpoints (`/search/issues` etc.): return `{ items, total_count }`, pagination also goes through the Link header.
+   * Note the search rate limit of 30/min; callers should throttle.
    */
   async *searchItems<T>(path: string, params: Record<string, string>): AsyncIterable<T> {
     let url: string | null = buildUrl(this.baseUrl, path, { per_page: '100', ...params });
@@ -206,8 +207,8 @@ export class GitHubClient implements PlatformTransport {
   }
 
   /**
-   * 构造 git clone URL：ssh → `git@<gitHost>:<proj>/<repo>.git`；pat → 在 web host 内嵌
-   * `<currentUser>:<PAT>`。pat 需 ping() 已落地当前用户（由调用方经连接上下文传入），否则抛错。
+   * Construct the git clone URL: ssh → `git@<gitHost>:<proj>/<repo>.git`; pat → embed
+   * `<currentUser>:<PAT>` in the web host. pat requires ping() to have already landed the current user (passed in by the caller via connection context), otherwise it throws.
    */
   getCloneUrl(repo: RepoRef, currentUserName?: string): string {
     if (this.cloneProtocol === 'ssh') {
@@ -226,10 +227,10 @@ export class GitHubClient implements PlatformTransport {
   }
 
   /**
-   * 判断目标 host 是否为本连接可信的 GitHub/GHE 资产域 —— 只有可信域才会带 PAT。
-   * github.com：api.github.com + github.com + *.githubusercontent.com（头像 / user-attachments
-   * 等都在此）。GHE：实例 host 及其子域（媒体资产常在同实例下）。其余（评论里攻击者放的外部
-   * 图片 URL）一律不带凭据，避免 PAT 被外发泄露。
+   * Determine whether the target host is a trusted GitHub/GHE asset host for this connection — only trusted hosts carry the PAT.
+   * github.com: api.github.com + github.com + *.githubusercontent.com (avatars / user-attachments
+   * etc. are all here). GHE: the instance host and its subdomains (media assets are usually under the same instance). Everything else (external
+   * image URLs placed by an attacker in a comment) carries no credentials, to avoid the PAT leaking outbound.
    */
   private isTrustedAssetHost(host: string): boolean {
     const apiHost = new URL(this.baseUrl).host;
@@ -241,15 +242,15 @@ export class GitHubClient implements PlatformTransport {
         host.endsWith('.githubusercontent.com')
       );
     }
-    // GHE：实例同 host 或其子域
+    // GHE: same host as the instance or its subdomains
     return host === apiHost || host.endsWith(`.${apiHost}`);
   }
 
   /**
-   * 拉二进制资源（头像 / 评论内嵌图片）。url 为完整 http(s)。**只代理可信 GitHub/GHE 资产域**
-   * （带 PAT 取私有资源）；非可信 host（如评论里攻击者放的外部图片 URL）直接返回 null —— 既不
-   * 外发 PAT（防泄露），也不让主进程去代拉任意外部 URL（防 SSRF），交渲染层退回原生 <img> 加载。
-   * 非 2xx / 异常 → 同样返回 null 让上层 fallback。
+   * Fetch a binary resource (avatar / comment inline image). url is a full http(s). **Only proxies trusted GitHub/GHE asset hosts**
+   * (carrying the PAT to fetch private resources); non-trusted hosts (e.g. external image URLs placed by an attacker in a comment) return null directly — neither
+   * sending out the PAT (preventing leakage) nor letting the main process proxy-fetch arbitrary external URLs (preventing SSRF), leaving the renderer to fall back to native <img> loading.
+   * Non-2xx / exception → also returns null to let the upper layer fall back.
    */
   async getBinary(url: string): Promise<BinaryResource | null> {
     if (!/^https?:\/\//.test(url)) return null;

@@ -47,14 +47,14 @@ describe('autopilot ledger', () => {
   });
 
   it('needsAutoReview: true when no ledger or version changed; false when same', async () => {
-    expect(await needsAutoReview(store, PR, 't1')).toBe(true); // 无台账
+    expect(await needsAutoReview(store, PR, 't1')).toBe(true); // no ledger
     await writeAutopilotLedger(store, {
       prLocalId: PR,
       autoReviewedUpdatedAt: 't1',
       decision: 'review',
       at: '2026-06-15T10:00:00.000Z',
     });
-    expect(await needsAutoReview(store, PR, 't1')).toBe(false); // 同版本
-    expect(await needsAutoReview(store, PR, 't2')).toBe(true); // 内容已变
+    expect(await needsAutoReview(store, PR, 't1')).toBe(false); // same version
+    expect(await needsAutoReview(store, PR, 't2')).toBe(true); // content changed
   });
 });

@@ -9,7 +9,7 @@ import {
   updateAgentSession,
 } from '../src/agent-session.js';
 
-/** 内存版 StateStore：覆盖 read/write/delete/list/deleteDir，供持久化逻辑单测。 */
+/** In-memory StateStore: covers read/write/delete/list/deleteDir, for unit-testing persistence logic. */
 class MemStore implements StateStore {
   private m = new Map<string, unknown>();
   async read<T>(key: string): Promise<T | null> {

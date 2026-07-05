@@ -1,8 +1,10 @@
-/** 字符串处理工具（域无关）：模板占位符填充、按长度截断。 */
+/** String processing utilities (domain-agnostic): template placeholder filling, length-based truncation. */
 
 /**
- * 用 vars 替换模板里的 `{{name}}` 占位符（字面替换），并去掉资源文件尾换行（trimEnd）以与原内联字符串
- * 对齐。替换后若仍残留 `{{...}}` 占位符即抛错——兜住漏填（外置后没有编译期校验，运行期早失败胜过静默）。
+ * Replace `{{name}}` placeholders in the template with vars (literal replacement), and trim the resource file's
+ * trailing newline (trimEnd) to align with the original inline string. If any `{{...}}` placeholder remains after
+ * replacement, throw—covering missed fills (once externalized there's no compile-time validation, failing early
+ * at runtime beats silence).
  */
 export function fillTemplate(tpl: string, vars: Record<string, string>): string {
   let out = tpl;
@@ -12,7 +14,7 @@ export function fillTemplate(tpl: string, vars: Record<string, string>): string 
   return out.trimEnd();
 }
 
-/** 把字符串 trim 后截到至多 max 字符，超出以省略号收尾。 */
+/** Trim the string then truncate to at most max chars, ending with an ellipsis if it overflows. */
 export function clamp(s: string, max: number): string {
   const t = s.trim();
   return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;

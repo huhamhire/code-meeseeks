@@ -1,0 +1,16 @@
+// Top nav: keep everything right-aligned (VitePress default), but put the page
+// links (menu) to the LEFT of the search box, and keep the search compact
+// instead of letting it fill the middle. Desktop only (≥768px, where the nav
+// menu is visible) so the mobile search + hamburger layout is untouched.
+// Right-side order becomes: [Guide · Download · FAQ] [Search] [theme · social].
+@media (min-width: 768px) {
+  .VPNavBar .menu {
+    order: -1;
+    margin-right: 24px;
+  }
+
+  .VPNavBar .search {
+    flex-grow: 0;
+    padding-left: 0;
+  }
+}

@@ -5,11 +5,11 @@ import type { SettingsCategory } from '../features/settings';
 import type { FilterKey } from './Sidebar';
 
 interface TitleBarProps {
-  /** 运行平台：macOS 需为红绿灯留出左侧占位；Windows/Linux 窗控由系统 overlay 画在右上。 */
+  /** Running platform: macOS needs left-side space reserved for the traffic-light buttons; Windows/Linux window controls are drawn top-right by the system overlay. */
   platform: Platform;
-  /** 标题区展示的上下文文案（如当前 PR 标题）；非必要、窄屏让位给命令面板，可省略隐藏。 */
+  /** Context text shown in the title area (e.g. the current PR title); non-essential, yields to the command palette on narrow screens, can be omitted/hidden. */
   title?: string;
-  /** 命令面板上下文：当前配置 + 选中 PR + 同步父级状态 + 打开设置面板。 */
+  /** Command palette context: current config + selected PR + synced parent state + open settings panel. */
   config: Config;
   selectedPrId: string | null;
   patchConfig: (updater: (c: Config) => Config) => void;
@@ -25,14 +25,14 @@ interface TitleBarProps {
 }
 
 /**
- * 无边框窗口的自绘标题栏（VS Code 风）。整条 `-webkit-app-region: drag` 可拖拽窗口，
- * 其中的交互元素需各自标 `no-drag`（见 styles/titlebar.scss）。
+ * Self-drawn title bar for the frameless window (VS Code style). The whole bar is `-webkit-app-region: drag`
+ * so the window can be dragged; interactive elements within it must each be marked `no-drag` (see styles/titlebar.scss).
  *
- * 平台差异：
- * - macOS：`titleBarStyle: hidden` 保留红绿灯，左侧留 72px 占位避免与品牌名重叠；
- *   左上空间被红绿灯占据，**不展示**应用图标，仅品牌名。
- * - Windows/Linux：`titleBarOverlay` 让系统在右上画最小化/最大化/关闭，故右侧留白，
- *   勿在右上角放可点元素（会被 overlay 覆盖）；左侧空闲，开头展示应用图标。
+ * Platform differences:
+ * - macOS: `titleBarStyle: hidden` keeps the traffic-light buttons, leaving 72px on the left to avoid overlapping the brand name;
+ *   the top-left space is occupied by the traffic lights, so the app icon is **not shown**, only the brand name.
+ * - Windows/Linux: `titleBarOverlay` lets the system draw minimize/maximize/close top-right, so the right side is left blank;
+ *   do not place clickable elements top-right (they would be covered by the overlay); the left side is free, showing the app icon at the start.
  */
 export function TitleBar({
   platform,
@@ -55,9 +55,9 @@ export function TitleBar({
     <header className={`app-titlebar${isMac ? ' app-titlebar--mac' : ''}`}>
       {!isMac && <img className="app-titlebar-icon" src={brandIcon} alt="" />}
       <div className="app-titlebar-brand">Code Meeseeks</div>
-      {/* PR 标题留在左侧原位（避开右上 Windows 窗控）；窄屏时右缘渐隐、被居中的命令面板浮层遮盖。 */}
+      {/* PR title stays in its original left position (avoiding the top-right Windows window controls); on narrow screens its right edge fades out and is covered by the centered command-palette overlay. */}
       {title && <div className="app-titlebar-title">{title}</div>}
-      {/* 命令面板：居中绝对浮层（DOM 置后→绘制在标题之上，输入框不透明底覆盖其下标题）。 */}
+      {/* Command palette: centered absolute overlay (placed later in DOM → drawn above the title, the input's opaque background covers the title beneath it). */}
       <div className="app-titlebar-center">
         <CommandPalette
           platform={platform}

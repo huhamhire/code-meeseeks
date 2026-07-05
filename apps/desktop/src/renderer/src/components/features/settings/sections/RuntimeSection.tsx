@@ -1,23 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppInfo, PrAgentStatus } from '@meebox/shared';
-import { CheckGlyphIcon, CopyIcon, GitHubMarkIcon, IssueIcon, TagIcon } from '../../../common';
+import { PRODUCT_HOME_URL, type AppInfo, type PrAgentStatus } from '@meebox/shared';
+import {
+  CheckGlyphIcon,
+  CopyIcon,
+  GitHubMarkIcon,
+  GlobeIcon,
+  IssueIcon,
+  TagIcon,
+} from '../../../common';
 import { invoke } from '../../../../api';
 import { UpdateCheckButton } from '../elements/UpdateCheckButton';
 
 export function RuntimeSection({ info, updateEnabled }: { info: AppInfo; updateEnabled: boolean }) {
   const { t } = useTranslation();
-  // 复制后短暂切到「打勾 + 已复制」绿色态作反馈（无 toast 体系，按钮内联反馈）。
+  // After copying, briefly switch to a green "check + copied" state as feedback (no toast system, inline button feedback).
   const [copied, setCopied] = useState(false);
-  // pr-agent 运行时状态：从状态栏弱化下沉到此处按需展示，打开关于页时拉取。
+  // pr-agent runtime status: de-emphasized from the status bar down to here for on-demand display, fetched when the about page opens.
   const [prAgent, setPrAgent] = useState<PrAgentStatus | null>(null);
   useEffect(() => {
     void invoke('app:prAgentStatus', undefined)
       .then(setPrAgent)
       .catch(() => setPrAgent(null));
   }, []);
-  // 仅展示版本号（不显示 embedded/local-cli 运行策略——对用户无意义）：embedded 的 version 形如
-  // `pr-agent 0.36.0` → 取 `0.36.0`；local-cli 为 help 首行 → 截到首个空白前。
+  // Only show the version number (not the embedded/local-cli run strategy — meaningless to the user): embedded version looks like
+  // `pr-agent 0.36.0` → take `0.36.0`; local-cli is the first help line → truncate before the first whitespace.
   const prAgentVer = prAgent?.available
     ? prAgent.strategy === 'embedded'
       ? prAgent.version.replace(/^pr-agent\s+/, '')
@@ -25,10 +32,10 @@ export function RuntimeSection({ info, updateEnabled }: { info: AppInfo; updateE
     : null;
   const prAgentText = prAgent ? (prAgentVer ?? t('statusBar.prAgentUnavailable')) : '…';
 
-  // 操作系统：平台代号 + 系统版本合并展示（如「darwin 15.5」）。
+  // Operating system: platform code + system version shown combined (e.g. "darwin 15.5").
   const osText = `${info.platform} ${info.osVersion}`.trim();
 
-  // 整体运行环境信息的纯文本快照（每行「键: 值」），供一键复制粘贴到 issue / 反馈。
+  // Plain-text snapshot of the overall runtime environment info (each line "key: value"), for one-click copy-paste into issues / feedback.
   const infoText = [
     `${t('settings.appVersion')}: ${info.appVersion}`,
     `Electron: ${info.electronVersion}`,
@@ -87,36 +94,47 @@ export function RuntimeSection({ info, updateEnabled }: { info: AppInfo; updateE
           {t('settings.openDevTools')}
         </button>
       </div>
-      {/* 关于 & 反馈：低频社区链接。http(s) 外链由 App 顶层点击拦截走 openExternal 在系统浏览器打开。 */}
+      {/* About & feedback: label on its own line, then a wrapping row of low-frequency community links. http(s) external links are intercepted by the App top-level click and routed through openExternal to open in the system browser. */}
       <div className="settings-about-links">
         <span className="muted settings-about-label">{t('settings.aboutFeedback')}</span>
-        <a
-          className="settings-about-link"
-          href="https://github.com/huhamhire/code-meeseeks"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <GitHubMarkIcon size={14} />
-          {t('settings.starOnGithub')}
-        </a>
-        <a
-          className="settings-about-link"
-          href="https://github.com/huhamhire/code-meeseeks/issues/new"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <IssueIcon size={14} />
-          {t('settings.reportIssue')}
-        </a>
-        <a
-          className="settings-about-link"
-          href="https://github.com/huhamhire/code-meeseeks/releases"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <TagIcon size={14} />
-          {t('settings.releases')}
-        </a>
+        <div className="settings-about-linkrow">
+          <a
+            className="settings-about-link"
+            href={PRODUCT_HOME_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <GlobeIcon size={14} />
+            {t('settings.website')}
+          </a>
+          <a
+            className="settings-about-link"
+            href="https://github.com/huhamhire/code-meeseeks"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <GitHubMarkIcon size={14} />
+            {t('settings.starOnGithub')}
+          </a>
+          <a
+            className="settings-about-link"
+            href="https://github.com/huhamhire/code-meeseeks/issues/new"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <IssueIcon size={14} />
+            {t('settings.reportIssue')}
+          </a>
+          <a
+            className="settings-about-link"
+            href="https://github.com/huhamhire/code-meeseeks/releases"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <TagIcon size={14} />
+            {t('settings.releases')}
+          </a>
+        </div>
       </div>
     </section>
   );

@@ -1,105 +1,103 @@
-# 错误码与错误传递
+# Error codes & error propagation
 
-## 职责与边界
+## Responsibilities & boundaries
 
-把**后端（主进程 + 内部库）抛给前端、最终面向用户展示的错误**，统一收敛为**错误码**承载；
-本地化由**前端**负责（按码查 i18n 文案）。后端不再各自拼面向用户的本地化字符串。
+Uniformly converge **errors that the backend (main process + internal libraries) throws to the frontend and ultimately shows to the user** onto **error codes** as their carrier; localization is the **frontend**'s job (look up the i18n copy by code). The backend no longer assembles user-facing localized strings itself.
 
-- **负责**：跨 IPC 抵达渲染层、需要展示给用户的错误的「编码 + 传递 + 兜底」契约；错误码命名空间与注册表。
-- **不负责**：
-  - **开发者排障的内部异常 / 后台日志**——仍用英语、不做 i18n（见 [i18n](../03-gui/04-i18n.md) 与 `AGENTS.md`「包内异常用英语」「后台日志用英语」）。错误码面向用户，不取代技术异常。
-  - LLM 生成内容、pr-agent 输出模板的语言（见 [i18n](../03-gui/04-i18n.md)）。
+- **In scope**: the "encode + propagate + fall back" contract for errors that cross IPC to the render layer and need to be shown to the user; the error-code namespace and registry.
+- **Out of scope**:
+  - **Internal exceptions for developer troubleshooting / backend logs** — still English, no i18n (see [i18n](../03-gui/04-i18n.md) and `AGENTS.md` "in-package exceptions in English" / "backend logs in English"). Error codes are user-facing; they don't replace technical exceptions.
+  - The language of LLM-generated content and pr-agent output templates (see [i18n](../03-gui/04-i18n.md)).
 
-> 边界判据：**「这条错误是否会跨 IPC 展示给用户」**。是 → 错误码 + 前端 i18n；否（纯开发者向 / 日志）→ 英语技术异常。
+> Boundary test: **"does this error cross IPC to be shown to the user"**. Yes → error code + frontend i18n; No (pure developer-facing / logs) → English technical exception.
 
-## 核心设计
+## Core design
 
-### 1. 错误码格式
+### 1. Error-code format
 
 ```
-E + <两字母领域标签> + <四位数字>      共 7 位，正则 ^E[A-Z]{2}\d{4}$
+E + <two-letter domain tag> + <four digits>      7 chars total, regex ^E[A-Z]{2}\d{4}$
 ```
 
-示例：`EAG0001`、`EUI0001`、`ECF0001`、`ENT0407`。
+Examples: `EAG0001`, `EUI0001`, `ECF0001`, `ENT0407`.
 
-- **领域标签**（两字母大写）：
+- **Domain tags** (two uppercase letters):
 
-  | 标签 | 领域 |
+  | Tag | Domain |
   | --- | --- |
-  | `AG` | Agent（评审编排 / AutoPilot / pr-agent 调用等） |
-  | `UI` | GUI（渲染层交互 / 窗口 / 展示） |
-  | `CF` | Config（配置与凭据 / 设置 / 向导） |
-  | `NT` | 网络（出站请求 / 代理 / 平台 API / 版本检查等） |
-  | `PR` | PR / 草稿（草稿池 / 发布闭环 / PR 级操作等） |
+  | `AG` | Agent (review orchestration / AutoPilot / pr-agent calls, etc.) |
+  | `UI` | GUI (render-layer interaction / windows / display) |
+  | `CF` | Config (config & secrets / settings / wizard) |
+  | `NT` | Network (outbound requests / proxy / platform API / version check, etc.) |
+  | `PR` | PR / draft (draft pool / publish loop / PR-level operations, etc.) |
 
-  新增领域**一律追加在末尾**（与平台展示顺序约定同源思路）：取一个未用的两字母大写、登记进注册表、并在本表补一行。
+  A new domain is **always appended at the end** (same reasoning as the platform display-order convention): pick an unused two-uppercase-letter tag, register it, and add a row to this table.
 
-- **四位数字**：每个领域 `0001`–`9999` **顺序分配**，注册表为唯一真相源（不复用、不跳改语义）。
-  每个领域保留 `0000` 作**「未分类」兜底码**（如 `EAG0000` = 未归类的 Agent 错误）。
+- **Four digits**: each domain is assigned `0001`–`9999` **in order**, with the registry as the single source of truth (no reuse, no semantic reassignment). Each domain reserves `0000` as the **"uncategorized" fallback code** (e.g. `EAG0000` = an uncategorized Agent error).
 
-### 2. 统一错误对象（AppError）
+### 2. Unified error object (AppError)
 
-业务领域统一封装为单一错误类型 **`AppError`**（继承 `Error`）：
+Business domains are uniformly wrapped in a single error type **`AppError`** (extending `Error`):
 
-- `code`：错误码（上述格式），决定语义与前端 i18n key。
-- `meta?`：**扩展参数对象**，承载两类内容（仅放**可序列化的标量** string / number / boolean，不放大对象、不放敏感值）：
-  - i18n 插值参数（如 `{ tool: 'review' }`）；
-  - 诊断字段（如 `{ status: 407 }`）。
-- `message`（开发者向）：英文短描 + 含 code，供后台日志与 stack 阅读（后台日志仍英语，不影响用户文案）。
+- `code`: the error code (the format above), which determines the semantics and the frontend i18n key.
+- `meta?`: an **extension parameter object** carrying two kinds of content (only **serializable scalars** string / number / boolean — no large objects, no sensitive values):
+  - i18n interpolation params (e.g. `{ tool: 'review' }`);
+  - diagnostic fields (e.g. `{ status: 407 }`).
+- `message` (developer-facing): a short English description + the code, for backend logs and stack reading (backend logs stay English, not affecting the user copy).
 
-业务侧抛错统一 `throw new AppError(code, meta?)`，不再各自拼本地化字符串。`AppError` 的构造与编解码集中在**共享层**（main / renderer / 内部库共用同一份），保证两端对码与 wire 形态的认知一致。
+The business side throws uniformly with `throw new AppError(code, meta?)`, no longer assembling localized strings itself. The construction and encode/decode of `AppError` are centralized in the **shared layer** (main / renderer / internal libraries share one copy), guaranteeing both ends agree on the code and the wire format.
 
-### 3. 传输契约（跨 IPC）
+### 3. Transport contract (across IPC)
 
-**关键约束**：Electron 的 IPC 以**结构化克隆**传递错误，**只可靠保留 `Error.message`**（`name`/`stack` 多数情况在；**自定义属性 `code`/`meta` 会被丢弃**）。故 `code` 与 `meta` **必须编码进 `message`**，才能必达前端。
+**Key constraint**: Electron's IPC passes errors via **structured clone**, and **only `Error.message` is reliably preserved** (`name`/`stack` are present in most cases; **the custom properties `code`/`meta` are dropped**). So `code` and `meta` **must be encoded into `message`** to reach the frontend reliably.
 
-- **wire 形态**：`AppError` 跨 IPC 时，其 `message` 为**规范化编码串**——以固定 sentinel 前缀打头、其后接 `{code, meta}` 的单行 JSON，例如：
+- **Wire format**: when an `AppError` crosses IPC, its `message` is a **normalized encoded string** — led by a fixed sentinel prefix, followed by single-line JSON of `{code, meta}`, e.g.:
 
   ```
   @meebox/err {"code":"EAG0002","msg":"EAG0002","meta":{"tool":"review"}}
   ```
 
-  渲染层在收到的 message 中**定位 sentinel 并解析其后的 JSON**（容忍 Electron 给 message 加的 `Error invoking remote method '…': ` 前缀——只认 sentinel 起的尾段）。
-- **非 `AppError` 抛出**（第三方库 / 尚未封装的错误）：渲染层解码失败 → 归入**全局未知兜底码**，原始 message 作诊断保留（不隐藏）。
-- **可选：结果信封**。除「抛错」外，新接口也可显式返回 `{ ok: false, error: { code, meta } }` 信封（不经异常通道）。现状以 throw 为主，信封为后续可选，二者前端处理一致（都拿到 `{code, meta}`）。
+  The render layer **locates the sentinel in the received message and parses the JSON after it** (tolerating the `Error invoking remote method '…': ` prefix Electron adds to the message — it only reads the tail starting from the sentinel).
+- **Non-`AppError` throws** (third-party libraries / not-yet-wrapped errors): the render layer's decode fails → they fall into the **global unknown fallback code**, with the original message retained as diagnostics (not hidden).
+- **Optional: result envelope**. Besides "throwing", a new interface may also explicitly return an `{ ok: false, error: { code, meta } }` envelope (not via the exception channel). Currently throwing is the mainstay and the envelope is an optional follow-up; the frontend handles both the same (both yield `{code, meta}`).
 
-### 4. 前端处理（i18n + 兜底）
+### 4. Frontend handling (i18n + fallback)
 
-渲染层把收到的错误统一解码为 `{ code, meta }`，再做本地化：
+The render layer uniformly decodes a received error into `{ code, meta }`, then localizes:
 
-- **i18n key 约定**：`errors.<CODE>`（如 `errors.EAG0001`），`meta` 经 i18next 插值（变量名与 meta 字段对应）。各 locale 对等覆盖（见 [i18n](../03-gui/04-i18n.md)「对等译文集」「递归字典序」）。
-- **兜底**：未知码 / 解码失败 → 通用错误文案（`errors.unknown` 之类）+ **显示原始码**（如「错误 ENT0407」），既不误导也便于用户报障。
-- **取代现状**：现渲染层是对英文 message 做**正则模式匹配**来选 i18n key（脆弱、随 message 文案漂移）。改造后：**先解码 AppError → 按码精确映射**；正则匹配**降级为兜底**（仅用于第三方 / 历史未编码错误）。
+- **i18n key convention**: `errors.<CODE>` (e.g. `errors.EAG0001`), with `meta` interpolated by i18next (variable names correspond to meta fields). Each locale covers it equivalently (see [i18n](../03-gui/04-i18n.md) "equivalent translation sets" / "recursive dictionary order").
+- **Fallback**: an unknown code / decode failure → generic error copy (`errors.unknown` or the like) + **show the original code** (e.g. "Error ENT0407"), which neither misleads nor hinders the user filing a report.
+- **Replacing the status quo**: the current render layer does **regex pattern matching** on the English message to pick the i18n key (fragile, drifting with the message copy). After the rework: **decode AppError first → map precisely by code**; regex matching is **downgraded to a fallback** (used only for third-party / historically un-encoded errors).
 
-### 5. 与既有约定的关系
+### 5. Relationship to existing conventions
 
-- **后台日志 / 包内技术异常**：仍英语、不 i18n（开发者向）。`AppError.message` 的英文短描即服务于此。
-- **面向用户、跨 IPC 的错误**：走 `AppError` + 码 + 前端 i18n。
-- **主进程 i18n 的错误文案逐步迁出**：当前主进程 i18n 资源里承载的错误消息（pr-agent / 代理 / 版本检查等），按本规范迁到「码 + 渲染层 i18n」；主进程 i18n 仅保留**确属 main 侧、非跨 IPC**的面向用户文本（如系统对话框标题）。迁移分阶段进行，不要求一次性替换。
+- **Backend logs / in-package technical exceptions**: still English, no i18n (developer-facing). `AppError.message`'s short English description serves exactly this.
+- **User-facing errors that cross IPC**: go through `AppError` + code + frontend i18n.
+- **Main-process i18n error copy migrates out gradually**: the error messages currently carried in the main-process i18n resources (pr-agent / proxy / version check, etc.) migrate to "code + render-layer i18n" per this spec; main-process i18n keeps only user-facing text that is **truly main-side and non-cross-IPC** (e.g. system-dialog titles). The migration proceeds in phases, not requiring a one-shot replacement.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-- **`AppError`**：`{ name: 'AppError'; code: ErrorCode; meta?: Record<string, string | number | boolean> }`，`message` 为 §3 的 wire 编码串。
-- **`ErrorCode` 注册表**（共享层、唯一真相源）：枚举所有错误码并标注其领域（及可选的 meta 字段约定）；新增码必须在此登记。
-- **wire 编码**：`message` 的 sentinel + JSON 规范（§3），main / renderer 共用同一编解码。
-- **i18n 资源**：渲染层各 locale 的 `errors.<CODE>` 条目（对等覆盖）+ `errors.unknown` 兜底。
+- **`AppError`**: `{ name: 'AppError'; code: ErrorCode; meta?: Record<string, string | number | boolean> }`, with `message` being the wire-encoded string of §3.
+- **`ErrorCode` registry** (shared layer, single source of truth): enumerates all error codes and annotates their domain (and the optional meta-field convention); a new code must be registered here.
+- **wire encoding**: the sentinel + JSON spec for `message` (§3), with main / renderer sharing one codec.
+- **i18n resources**: the render layer's per-locale `errors.<CODE>` entries (equivalent coverage) + the `errors.unknown` fallback.
 
-### 示例（非全量；全量以代码注册表为准）
+### Examples (not exhaustive; the full set is per the code registry)
 
-**完整码表不在文档维护**——以共享层 `ERROR_CODES` 注册表为唯一真相源，文档只给几条示例帮助理解形态：
+**The full code table is not maintained in the docs** — the shared-layer `ERROR_CODES` registry is the single source of truth; the docs give only a few examples to help understand the form:
 
-| 码 | 领域 | 语义 | meta |
+| Code | Domain | Semantics | meta |
 | --- | --- | --- | --- |
-| `EAG0002` | Agent | 该 PR 的 `/{tool}` 任务重复触发（带插值参数） | `tool` |
-| `ENT0407` | 网络 | 代理认证失败（407） | — |
-| `EPR0001` | PR | 草稿不存在（可能已被删除） | — |
-| `EAG0000` | Agent | 各领域 `0000` 为「未分类」兜底码 | — |
+| `EAG0002` | Agent | the `/{tool}` task for that PR is duplicate-triggered (with an interpolation param) | `tool` |
+| `ENT0407` | Network | proxy auth failure (407) | — |
+| `EPR0001` | PR | the draft doesn't exist (may have been deleted) | — |
+| `EAG0000` | Agent | each domain's `0000` is the "uncategorized" fallback code | — |
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **新增码**：在注册表选定领域 + 取下一个空号登记，并在各 locale 补 `errors.<CODE>`（保持递归字典序）。
-- **新增领域**：两字母大写、登记、领域表追加在末尾；不复用、不改既有码语义。
-- **`meta` 纪律**：只放可序列化标量，供插值 / 诊断；勿放大对象、PII、凭据。
-- **兜底优先级**：精确码 → 领域 `0000` → 全局 `errors.unknown`（始终显示原始码）。
-- **不破坏开发者体验**：编码进 message 的同时保留英文短描，日志可读；技术异常该英语仍英语。
-- **迁移策略**：新错误一律走码；旧错误（主进程 i18n / 渲染层正则）逐步替换，正则匹配长期保留为第三方错误兜底。
+- **Adding a code**: pick the domain in the registry + take the next free number and register it, and add `errors.<CODE>` to each locale (keeping recursive dictionary order).
+- **Adding a domain**: two uppercase letters, register, append to the domain table at the end; no reuse, no changing existing code semantics.
+- **`meta` discipline**: only serializable scalars, for interpolation / diagnostics; no large objects, PII, or credentials.
+- **Fallback priority**: exact code → domain `0000` → global `errors.unknown` (always show the original code).
+- **Don't hurt the developer experience**: while encoded into the message, the short English description is retained so logs stay readable; technical exceptions that should be English stay English.
+- **Migration strategy**: new errors always go through codes; old errors (main-process i18n / render-layer regex) are replaced gradually, with regex matching kept long-term as a fallback for third-party errors.

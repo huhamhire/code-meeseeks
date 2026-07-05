@@ -4,34 +4,34 @@ import { invoke } from '../../../../../../api';
 
 export const CASE_SENSITIVE_LS_KEY = 'meebox.diffSearch.caseSensitive';
 
-/** 大文件保护：单文件超过 N 条命中只展示前 N + "更多" */
+/** Large-file guard: when a single file exceeds N matches, show only the first N + "more" */
 export const PER_FILE_MATCH_CAP = 200;
 
 export const SEARCH_DEBOUNCE_MS = 220;
 
 /**
- * 搜索范围限制：仅扫"变更行 + 上下 N 行 context"，跟 Monaco DiffEditor 视觉上
- * 用户能看到的"diff 周围若干行 context"对齐。N=10 比 git diff 默认 unified=3
- * 更宽松，让搜索能命中变更附近稍远的引用 (常见场景：改了某个函数实现，调用方
- * 在其上下 5-10 行能被搜到)
+ * Search scope limit: scan only "changed lines + N lines of context above/below", aligned with the
+ * "few lines of context around the diff" the user visually sees in the Monaco DiffEditor. N=10 is more
+ * generous than git diff's default unified=3, letting search match references slightly farther from a
+ * change (common case: changed a function's implementation, callers 5-10 lines above/below get found)
  */
 const CONTEXT_LINES = 10;
 
 export interface LineMatch {
-  /** 1-based 行号 (在 srcSide 端的行号) */
+  /** 1-based line number (line number on the srcSide side) */
   line: number;
   content: string;
-  /** 该行在 diff 中的角色 */
+  /** The line's role in the diff */
   diffRole: 'added' | 'removed' | 'context';
-  /** 该行属于 head 还是 base 文件 — 决定 onJumpToMatch 的 side 参数 */
+  /** Whether the line belongs to the head or base file — decides onJumpToMatch's side param */
   srcSide: 'old' | 'new';
-  /** 匹配子串在 content 中的起止位置 (用于高亮渲染) */
+  /** Start/end position of the matched substring within content (used for highlight rendering) */
   matchStart: number;
   matchEnd: number;
   /**
-   * Monaco colorize 后的 HTML (含 inline style 语法着色)。第一波结果回来时为
-   * undefined，后台 colorize 完成后异步填上，UI 再 update 一次。
-   * 未着色时 fallback 到 renderHighlight 走纯文本 + 关键词 `<mark>`
+   * HTML after Monaco colorize (with inline-style syntax coloring). Undefined when the first wave of results
+   * returns; filled in asynchronously after background colorize completes, then the UI updates once more.
+   * When uncolorized, falls back to renderHighlight using plain text + keyword `<mark>`
    */
   colorizedHtml?: string;
 }
@@ -51,19 +51,19 @@ export function dirname(p: string): string {
 }
 
 /**
- * 跨文件搜索主逻辑：
+ * Cross-file search main logic:
  *
- * 对每个 file:
- *   1. 拉 head + base 内容 (有缓存命中即跳过 IPC)
- *   2. 用 multiset consume 算"变更行"集合，扩展 ±CONTEXT_LINES 得到"可见范围"
- *      (跟用户在 Diff 视图能看到的 hunk 周围 context 对齐)
- *   3. 仅在可见范围内扫 line-by-line 找匹配
- *   4. head 命中：base 端也有 → context；否则 added
- *   5. base 命中且 head 端无：removed (排除已被 context 命中的)
- *   6. 同文件结果按 line 升序整理
+ * For each file:
+ *   1. Fetch head + base content (skip IPC on cache hit)
+ *   2. Compute the "changed lines" set via multiset consume, expand ±CONTEXT_LINES to get the "visible range"
+ *      (aligned with the hunk-surrounding context the user sees in the Diff view)
+ *   3. Scan line-by-line for matches only within the visible range
+ *   4. head match: base side also has it → context; otherwise added
+ *   5. base match with none on the head side: removed (excluding those already matched as context)
+ *   6. Sort a file's results in ascending line order
  *
- * 单个文件失败 (binary / 拉取错误) 静默跳过，最后返回 partialError 提示有几个
- * 文件没搜成
+ * A single file failing (binary / fetch error) is silently skipped; finally returns partialError noting how many
+ * files failed to search
  */
 export async function runSearch(
   token: number,
@@ -87,30 +87,30 @@ export async function runSearch(
           loadContent(cache, prLocalId, 'head', headPath),
           loadContent(cache, prLocalId, 'base', basePath),
         ]);
-        // 中途用户切到别的 query — 当前 promise 还没 return 就被取消，直接放弃
+        // User switched to another query midway — this promise was cancelled before returning, so bail
         if (token === -1) return;
 
         const headLines = headText === null ? [] : headText.split('\n');
         const baseLines = baseText === null ? [] : baseText.split('\n');
-        // 用 Multiset 而非 Set — 同内容行可能出现多次 (空行 / 大括号 / 同名变量
-        // 声明)。Set 会让"基础侧某次 instance 仍存在"误判为 context 跳过 added
+        // Use a Multiset rather than a Set — a same-content line may appear multiple times (blank line / brace / same-named
+        // variable declaration). A Set would misjudge "some instance still exists on the base side" as context and skip added
         const baseLineCount = countLines(baseLines);
         const headLineCount = countLines(headLines);
 
-        // 变更行集合 + ±CONTEXT_LINES context = 用户在 Diff 视图看得到的范围
+        // Changed-line set + ±CONTEXT_LINES context = the range the user sees in the Diff view
         const changedHead = findChangedIndices(headLines, baseLineCount);
         const changedBase = findChangedIndices(baseLines, headLineCount);
         const visibleHead = expandToContext(changedHead, headLines.length);
         const visibleBase = expandToContext(changedBase, baseLines.length);
 
         const matches: LineMatch[] = [];
-        // head 端扫
+        // scan the head side
         for (let i = 0; i < headLines.length; i++) {
           if (!visibleHead.has(i)) continue;
           const line = headLines[i]!;
           const span = findMatchSpan(line, rawQuery, caseSensitive, probe);
           if (span === null) continue;
-          // base 端有同样内容 → context；否则 added
+          // base side has the same content → context; otherwise added
           const stillInBase = (baseLineCount.get(line) ?? 0) > 0;
           const stripped = stripLeadingIndent(line, span);
           matches.push({
@@ -122,7 +122,7 @@ export async function runSearch(
             matchEnd: stripped.matchEnd,
           });
         }
-        // base 端扫，仅收集"仅在 base 出现"的 removed 行 (避免跟 context 重复)
+        // scan the base side, collecting only removed lines that "appear only in base" (to avoid duplicating context)
         for (let i = 0; i < baseLines.length; i++) {
           if (!visibleBase.has(i)) continue;
           const line = baseLines[i]!;
@@ -140,7 +140,7 @@ export async function runSearch(
           });
         }
         if (matches.length === 0) return;
-        // 排序：先按 srcSide (head 优先) 再按 line，让结果列表有可预测顺序
+        // Sort: first by srcSide (head first) then by line, giving the result list a predictable order
         matches.sort((a, b) => {
           if (a.srcSide !== b.srcSide) return a.srcSide === 'new' ? -1 : 1;
           return a.line - b.line;
@@ -152,7 +152,7 @@ export async function runSearch(
     }),
   );
 
-  // 文件级排序按 path 字典序，跟文件树视觉对齐
+  // File-level sort by path lexicographic order, aligned with the file tree visually
   out.sort((a, b) => a.file.path.localeCompare(b.file.path));
   return {
     results: out,
@@ -162,11 +162,11 @@ export async function runSearch(
 }
 
 /**
- * 用 multiset consume 算"变更行"行号集合：other 端有同内容行就配对消费 (从
- * count 表里扣 1)，配不上的就是"仅在本侧出现" — 即变更行。
+ * Compute the "changed lines" line-number set via multiset consume: if the other side has a same-content line, pair
+ * and consume it (decrement 1 from the count table); those that can't be paired "appear only on this side" — i.e. changed lines.
  *
- * 比简单 set 含 / 不含判定更准 — 同内容行 (空行 / `}` / 同名 import) 在 PR 一
- * 般是匹配存在，不是变更
+ * More accurate than a simple set contains / doesn't-contain check — same-content lines (blank line / `}` / same-named
+ * import) in a PR are generally matches that exist, not changes
  */
 export function findChangedIndices(
   ownLines: string[],
@@ -183,7 +183,7 @@ export function findChangedIndices(
   return changed;
 }
 
-/** 把变更行索引集合按 ±CONTEXT_LINES 扩展，并合并相邻区间 */
+/** Expand the changed-line index set by ±CONTEXT_LINES and merge adjacent ranges */
 export function expandToContext(changed: Set<number>, total: number): Set<number> {
   const out = new Set<number>();
   for (const idx of changed) {
@@ -208,8 +208,8 @@ export async function loadContent(
       side,
       path,
     });
-    // DiffFileContent 联合：{binary:false, content:string} 或 {binary:true}。
-    // binary 文件跳过搜索 (没有可比对的文本)；non-binary 取 content 字段
+    // DiffFileContent union: {binary:false, content:string} or {binary:true}.
+    // binary files skip search (no comparable text); non-binary takes the content field
     const text = c.binary === false ? c.content : null;
     cache.set(k, text);
     return text;
@@ -220,9 +220,10 @@ export async function loadContent(
 }
 
 /**
- * 剥行首缩进 (tab / 空格) — 搜索面板宽度有限，对齐到代码原缩进会浪费横向空间
- * 也让 match 看起来不显眼。剥掉后视觉上左对齐，关键词高亮起止点也按剥后内容
- * 重算。命中**在**缩进里 (query 包含 leading 空白) → 不剥，保持高亮位置正确
+ * Strip leading indent (tab / space) — the search panel has limited width; keeping the code's original indent
+ * wastes horizontal space and makes the match look inconspicuous. After stripping it's visually left-aligned, and
+ * the keyword highlight start/end are recomputed against the stripped content. If the match is **inside** the
+ * indent (query contains leading whitespace) → don't strip, to keep the highlight position correct
  */
 export function stripLeadingIndent(
   line: string,
@@ -232,7 +233,7 @@ export function stripLeadingIndent(
   if (!m) return { content: line, matchStart: span[0], matchEnd: span[1] };
   const offset = m[0].length;
   if (span[0] < offset) {
-    // 命中在缩进区，剥了就高亮就错位 — 保留原内容
+    // Match is in the indent region; stripping would misalign the highlight — keep the original content
     return { content: line, matchStart: span[0], matchEnd: span[1] };
   }
   return {

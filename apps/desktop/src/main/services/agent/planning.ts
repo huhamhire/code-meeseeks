@@ -26,9 +26,11 @@ import type { StateStore } from '@meebox/state-store';
 import { buildStepLabels, buildSummarySections, mapTerminationReason } from './labels.js';
 
 /**
- * 把自由规划编排器（runPlanningAgent）接到主进程：自然语言入口的「对话即委派」。
- * runTool 把读类工具映射到既有 pr-agent 运行队列；红线由编排器经 assertToolAllowed 把关。
- * signal 支持用户暂停（Stop）；暂停 → 会话置 paused 保态。
+ * Wires the free-form planning orchestrator (runPlanningAgent) to the main process: "conversation as
+ * delegation" from a natural-language entry point.
+ * runTool maps read tools onto the existing pr-agent run queue; red lines are gated by the orchestrator
+ * via assertToolAllowed. signal supports user pause (Stop); on pause → the session is set to paused to
+ * preserve state.
  */
 
 const STDOUT_LOG_SEP = '\n\n---\n[pr-agent stdout log]\n';
@@ -36,8 +38,10 @@ function reviewRunText(run: ReviewRun): string {
   return (run.stdout ?? '').split(STDOUT_LOG_SEP)[0]?.trim() ?? '';
 }
 
-// 会话压缩：存储超阈值时把较早消息摘要成一条 digest、仅留最近若干条原文，控制存储与后续注入规模
-// （约定会话上下文不超 LLM 半窗：先压缩/裁剪再注入）。阈值高于注入预算，超出才触发、不频繁。
+// Conversation compaction: when storage exceeds the threshold, summarize earlier messages into a single
+// digest and keep only the most recent few verbatim, controlling storage and later injection size (the
+// convention is conversation context stays under half the LLM window: compact/trim before injecting). The
+// threshold is above the injection budget, so it triggers only when exceeded, not frequently.
 const CONVO_COMPACT_THRESHOLD_CHARS = 80000;
 const CONVO_KEEP_RECENT = 6;
 const COMPACT_SYSTEM =
@@ -45,7 +49,7 @@ const COMPACT_SYSTEM =
   'concise digest. Preserve key facts, decisions, the user’s stated preferences / 称呼, and any open ' +
   'threads. Reply in the same language as the conversation. Output plain text only, no preamble.';
 
-/** 存储超阈值时，把较早消息摘要为一条 digest 替换之；未超阈值 / 失败则原样保留。 */
+/** When storage exceeds the threshold, summarize earlier messages into a single digest and replace them; below the threshold / on failure, keep them as-is. */
 async function maybeCompactConversation(
   stateStore: PlanningDeps['stateStore'],
   chat: PlanningDeps['chat'],
@@ -66,12 +70,12 @@ async function maybeCompactConversation(
     const digest: AgentMessage = {
       role: 'assistant',
       content: `（早期对话摘要）\n${text.trim()}`,
-      // 用最早消息的时间戳，保证 digest 仍排在时间线最前。
+      // Use the earliest message's timestamp so the digest still sorts first on the timeline.
       at: older[0]?.at ?? now().toISOString(),
     };
     await writeAgentConversation(stateStore, prLocalId, [digest, ...recent]);
   } catch {
-    /* 压缩失败：保留原对话，下次再试（读时仍有预算裁剪兜底） */
+    /* Compaction failed: keep the original conversation, retry next time (read-time budget trimming still provides a fallback) */
   }
 }
 
@@ -81,24 +85,26 @@ export interface PlanningDeps {
   chat: (input: { system: string; user: string }) => Promise<PlanningToolResult>;
   agentContext: AgentContext;
   toolCatalog: ToolCatalogEntry[];
-  /** 命中规则的已拼接正文（多条经 combineRuleInstructions 拼成）；无命中传空 / null。 */
+  /** Concatenated body of matched rules (multiple joined via combineRuleInstructions); pass empty / null when no match. */
   matchedRuleInstructions?: string | null;
   language: string;
   maxSteps: number;
-  /** 本会话 /ask 数量上限（配置「追问数量」max_followup_asks）：连续 agentic 探索成本高，按此封顶。 */
+  /** /ask count cap for this session (config "follow-up count" max_followup_asks): continuous agentic exploration is costly, so cap it here. */
   maxFollowupAsks: number;
-  /** 用户选中的代码引用（隐式上下文）：注入规划 LLM 当轮提示，不进持久化用户消息。 */
+  /** User-selected code reference (implicit context): injected into the planning LLM's current-round prompt, not stored as a user message. */
   referencedContext?: string;
   signal?: AbortSignal;
   onStep?: (sessionId: string, step: AgentStep) => void;
-  /** 持久化 Agent 主动记下的非隐私条目到各可写上下文文件（USER/MEMORY/AGENTS）。 */
+  /** Persist non-private items the agent proactively noted into the writable context files (USER/MEMORY/AGENTS). */
   recordMemory?: (notes: AgentMemoryNotes) => Promise<void>;
   /**
-   * 取出运行期间排队的用户新消息（中途输入转向）：每轮顶部由 planner 调用。实现方（orchestrator）
-   * 负责持久化进会话并广播刷新；此处直接透传给 planner，由其并入当轮 progress。
+   * Take the new user messages queued during the run (mid-run input redirect): called by the planner at the
+   * top of each round. The implementer (orchestrator) is responsible for persisting them into the
+   * conversation and broadcasting a refresh; here they are passed straight through to the planner, which
+   * merges them into the current round's progress.
    */
   drainPendingInput?: () => Promise<string[]> | string[];
-  /** 计划（todo）更新回调：planner 给出 / 更新 plan 时调用，由 orchestrator 持久化 + 广播。 */
+  /** Plan (todo) update callback: called when the planner produces / updates a plan, persisted + broadcast by the orchestrator. */
   recordPlan?: (todo: AgentTodoItem[]) => void | Promise<void>;
 }
 
@@ -108,12 +114,12 @@ export async function runPlanning(
   deps: PlanningDeps,
   now: () => Date = () => new Date(),
 ): Promise<AgentSession> {
-  // 多轮对话：先读既往消息（注入规划上下文），再把本轮用户输入追加为一条消息（持久化）。
+  // Multi-turn conversation: first read prior messages (inject planning context), then append this round's user input as a message (persisted).
   const history = await getAgentConversation(deps.stateStore, pr.localId);
   await appendAgentMessage(
     deps.stateStore,
     pr.localId,
-    // 带 Diff 选区引用时一并持久化，供 UI 在气泡下方折叠展示「引用的代码」。
+    // When a Diff selection reference is present, persist it alongside, for the UI to show the "referenced code" collapsed below the bubble.
     { role: 'user', content: userRequest, referencedContext: deps.referencedContext },
     now,
   );
@@ -130,10 +136,10 @@ export async function runPlanning(
         chat: deps.chat,
         runTool: async ({ tool, question }) => {
           const bare = tool.replace(/^\//, '');
-          if (!READ_RUN_TOOL_IDS.has(bare)) throw new Error(`不支持的工具：${tool}`);
+          if (!READ_RUN_TOOL_IDS.has(bare)) throw new Error(`Unsupported tool: ${tool}`);
           const run = await deps.enqueueRun(pr, bare as ReviewRunTool, question);
           if (run.status !== 'succeeded') {
-            throw new Error(`pr-agent ${bare} 未成功：${run.errorMessage ?? run.status}`);
+            throw new Error(`pr-agent ${bare} did not succeed: ${run.errorMessage ?? run.status}`);
           }
           return { text: reviewRunText(run), usage: run.tokenUsage };
         },
@@ -161,7 +167,7 @@ export async function runPlanning(
       },
     );
 
-    // 把 Agent 收尾回答追加为一条助手消息（评审类带 recommendation）；暂停 / 空回答不记。
+    // Append the agent's closing answer as an assistant message (review-type carries recommendation); paused / empty answers are not recorded.
     if (result.finalText && result.terminationReason !== 'aborted') {
       await appendAgentMessage(
         deps.stateStore,
@@ -171,13 +177,13 @@ export async function runPlanning(
       );
     }
 
-    // 持久化本轮主动记忆（非隐私）到各可写文件；失败不阻断会话收尾。
+    // Persist this round's proactive memories (non-private) to the writable files; failure does not block session finish.
     const mem = result.memories;
     if (deps.recordMemory && (mem.user.length || mem.memory.length || mem.agents.length)) {
       await deps.recordMemory(mem);
     }
 
-    // 会话超阈值时压缩较早消息（best-effort，不阻断收尾）。
+    // When the conversation exceeds the threshold, compact earlier messages (best-effort, does not block finish).
     await maybeCompactConversation(deps.stateStore, deps.chat, pr.localId, now);
 
     return (
@@ -190,7 +196,7 @@ export async function runPlanning(
       })) ?? session
     );
   } catch (err) {
-    // 用户停止（abort 杀掉在跑的 chat / 工具子进程 → 抛错）→ 干净的 paused 收尾，不当失败报错。
+    // User stop (abort kills the running chat / tool subprocess → throws) → clean paused finish, not reported as a failure.
     const aborted = deps.signal?.aborted || (err instanceof Error && err.message === 'aborted');
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {

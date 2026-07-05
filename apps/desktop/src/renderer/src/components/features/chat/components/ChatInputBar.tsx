@@ -19,55 +19,58 @@ import { useTextareaAutosizeDrag } from '../hooks/useTextareaAutosizeDrag';
 interface ChatInputBarProps {
   pr: StoredPullRequest | null;
   prAgent: PrAgentStatus;
-  /** LLM 是否已配置；未配置时禁用输入（即便 pr-agent 运行时就绪也无法调用） */
+  /** Whether the LLM is configured; when not, the input is disabled (even if the pr-agent runtime is ready it cannot be invoked) */
   llmConfigured: boolean;
   /**
-   * 本 PR 上的活动 run 工具；非空时在 send 按钮旁额外渲染 stop 按钮。
-   * 队列模型下输入永不因此禁用 (新提交进队列)。
+   * The active run tool on this PR; when non-null, an extra stop button is rendered beside the send button.
+   * Under the queue model the input is never disabled because of this (new submissions enter the queue).
    */
   runningTool: ReviewRunTool | null;
   onRun: (tool: ReviewRunTool, question?: string) => void;
-  /** 无 '/' 前缀的自然语言输入 → 交给自由规划 Agent（对话即委派，见设计「会话 Agent 化」）。 */
+  /** Natural-language input without a '/' prefix → handed to the free-planning Agent (conversation is delegation, see design "conversation as Agent"). */
   onAgentAsk: (question: string) => void;
   /**
-   * 终止当前活动 run。仅 runningTool 非空时有意义；ChatPane 已绑好对应 runId。
-   * stop 按钮跟 send 共用槽位：runningTool 时点击触发此回调而非 onRun
+   * Terminates the current active run. Only meaningful when runningTool is non-null; ChatPane has already bound the corresponding runId.
+   * The stop button shares a slot with send: when runningTool is set, a click triggers this callback instead of onRun
    */
   onCancel?: () => void;
-  /** /approve /needswork 命令触发的 review 决断，跟 PR header 按钮共用 prs:setLocalStatus */
+  /** review decision triggered by the /approve /needswork commands, shares prs:setLocalStatus with the PR header buttons */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
-  /** PR 远端可直接合并（mergeStatus.canMerge）：决定 /merge 是否在命令菜单 / 补全出现。 */
+  /** The PR can be merged directly on the remote (mergeStatus.canMerge): decides whether /merge appears in the command menu / completion. */
   canMerge: boolean;
-  /** /merge 命令触发（弹二次确认后实际合并，跟 PR header 合并按钮共用 prs:merge）。 */
+  /** Triggered by the /merge command (actually merges after a confirmation dialog, shares prs:merge with the PR header merge button). */
   onMerge?: () => void;
-  /** Agent 是否跑在当前 PR：决定图标按钮高亮 + 运行中文案 + 禁用重复发起（其它 PR 在跑不禁用本 PR）。 */
+  /** Whether the Agent is running on the current PR: decides the icon button highlight + running text + disabling re-invocation (an Agent running on another PR does not disable this PR). */
   agentRunningHere: boolean;
-  /** 触发一键自动评审微流程（describe→review→条件追问→总结）。 */
+  /** Triggers the one-click auto-review micro-flow (describe→review→conditional follow-up ask→summary). */
   onAgentReview: () => void;
   /**
-   * 当前 Diff 选区行数；null = 无选区（不渲染选区角标）。角标位于 AutoReview 右侧，提示「N 行已选中」，
-   * 发送时把选中代码作为隐式上下文带进提问。
+   * Current Diff selection line count; null = no selection (the selection badge is not rendered). The badge sits to the
+   * right of AutoReview, hinting "N lines selected", and carries the selected code into the question as implicit context on send.
    */
   selectionLineCount: number | null;
-  /** 选区忽略态：true 时本条消息不带选区引用（角标置灰 + eye-slash）。 */
+  /** Selection ignored state: when true this message carries no selection reference (badge greyed out + eye-slash). */
   selectionIgnored: boolean;
-  /** 点击选区角标 → 切换忽略态。 */
+  /** Click the selection badge → toggle the ignored state. */
   onToggleSelection: () => void;
-  /** 复评引用 chip：引用了某条 finding 时展示「复评 <file:line>」+ 清除；null = 不渲染。 */
+  /** Re-review reference chip: shows "re-review <file:line>" + clear when a finding is referenced; null = not rendered. */
   referenceChip?: { label: string; onClear: () => void } | null;
   /**
-   * 单 commit 范围 chip：跟随 Diff 视图选中的 commit 展示「短 SHA · 主题」。存在选中即显示，点击**切换启用/禁用**
-   * （禁用不删除 chip，本会话命令回到 PR 全量；禁用态置灰 + eye-slash）——选中态源自视图，可手动禁用。
+   * Single-commit scope chip: follows the commit selected in the Diff view, showing "short SHA · subject". Shown whenever there is
+   * a selection, click to **toggle enable/disable** (disabling does not remove the chip, this session's commands revert to the whole
+   * PR; disabled state greyed out + eye-slash) — the selected state originates from the view and can be disabled manually.
    */
   commitScopeChip?: { label: string; disabled: boolean; onToggle: () => void } | null;
 }
 
 /**
- * 输入栏：textarea + 命令按钮 + `/` 触发的自动补全。状态机（输入 / 命令解析 / 补全 / 历史回放 /
- * 停止）见 [useChatInput](../hooks/useChatInput.ts)；命令解析纯逻辑见 ../utils/parse-command。
+ * Input bar: textarea + command button + autocomplete triggered by `/`. State machine (input / command
+ * parsing / completion / history replay / stop) see [useChatInput](../hooks/useChatInput.ts); the pure
+ * command-parsing logic is in ../utils/parse-command.
  *
- * 提交语义：空不提交；`/describe` `/review` 等触发对应工具；`/ask <文本>` 触发 ask；未知 `/xxx` 报错；
- * 不以 `/` 开头 = 自然语言委派给自由规划 Agent。Shift+Enter 换行，Enter 提交。
+ * Submit semantics: empty does not submit; `/describe` `/review` etc. trigger the corresponding tool;
+ * `/ask <text>` triggers ask; unknown `/xxx` errors; not starting with `/` = natural language delegated
+ * to the free-planning Agent. Shift+Enter for a newline, Enter to submit.
  */
 export function ChatInputBar({
   pr,
@@ -147,7 +150,7 @@ export function ChatInputBar({
                   onClick={() => handleInsertCommand(c)}
                   onMouseEnter={() => setAutocompleteIdx(i)}
                   onMouseDown={(e) => {
-                    // 防止 textarea 失焦后 blur 处理把菜单收掉
+                    // Prevent the blur handler from collapsing the menu after the textarea loses focus
                     e.preventDefault();
                   }}
                   role="option"
@@ -162,7 +165,7 @@ export function ChatInputBar({
         </ul>
       )}
       <div className="chat-pane-textarea-wrap">
-        {/* 顶边拖动 handle：向上拖 → textarea 高度增加，跟视觉扩展方向一致 */}
+        {/* Top-edge drag handle: drag up → textarea height increases, consistent with the visual expansion direction */}
         <div
           className="chat-pane-textarea-resize-handle"
           onMouseDown={handleTextareaResizeStart}
@@ -203,7 +206,7 @@ export function ChatInputBar({
               <ul className="chat-cmd-menu" role="menu">
                 {visibleCommands.map((c, i) => {
                   const prev = visibleCommands[i - 1];
-                  // pragent → review-action 边界插一道分隔线
+                  // Insert a divider at the pragent → review-action boundary
                   const needDivider = prev !== undefined && prev.kind !== c.kind;
                   return (
                     <li key={c.name} className={needDivider ? 'chat-cmd-menu-group' : undefined}>
@@ -222,9 +225,11 @@ export function ChatInputBar({
               </ul>
             )}
           </div>
-          {/* 自动评审：图标按钮紧贴 `/` 命令触发器右侧。仅 pr-agent 就绪时出现，LLM 未配置 / 本 PR 评审
-            进行中则禁用触发（其它 PR 在跑不禁用——可并发 / 排队）。停止统一由发送区的停止按钮负责（取消
-            进行中的子任务即终止流程），不再单独提供 Agent 停止按钮，避免两个语义重叠的停止入口。 */}
+          {/* Auto-review: icon button right beside the `/` command trigger. Appears only when pr-agent is ready;
+            disabled when the LLM is not configured / a review on this PR is in progress (a review running on another
+            PR does not disable it — concurrency / queueing allowed). Stopping is handled uniformly by the stop button
+            in the send area (cancelling the in-progress subtask terminates the flow); no separate Agent stop button is
+            provided, avoiding two semantically overlapping stop entry points. */}
           {pr && prAgent.available && (
             <button
               type="button"
@@ -241,8 +246,9 @@ export function ChatInputBar({
               <AutoReviewIcon />
             </button>
           )}
-          {/* Diff 选区角标：竖线分隔后展示「N 行已选中」。点击切忽略态（eye-slash + 置灰）——忽略时
-              本条消息不带选区引用。选中代码以隐式上下文随提问发出，不进入会话气泡。 */}
+          {/* Diff selection badge: shows "N lines selected" after a vertical divider. Click to toggle the ignored
+              state (eye-slash + greyed out) — when ignored this message carries no selection reference. The selected
+              code is sent as implicit context with the question and does not enter the conversation bubble. */}
           {selectionLineCount !== null && (
             <>
               <span className="chat-cmd-divider" aria-hidden="true" />
@@ -261,8 +267,8 @@ export function ChatInputBar({
               </button>
             </>
           )}
-          {/* 复评引用 chip：引用了某条 review/improve finding 时展示「复评 <file:line>」，点 ✕ 清除引用。
-              发送时本条 /ask 会携带该 finding 引用走复评模式（出裁决 + 采纳/关闭动作）。 */}
+          {/* Re-review reference chip: shows "re-review <file:line>" when a review/improve finding is referenced, click ✕ to clear the reference.
+              On send this /ask carries the finding reference into re-review mode (produces a verdict + adopt/close actions). */}
           {referenceChip && (
             <>
               <span className="chat-cmd-divider" aria-hidden="true" />
@@ -281,8 +287,8 @@ export function ChatInputBar({
               </span>
             </>
           )}
-          {/* 单 commit 范围 chip：跟随视图选中的 commit 展示「短 SHA · 主题」。点击切换启用/禁用（不删除）——
-              启用时命令限定在该 commit（parent..sha），禁用则回到 PR 全量、置灰 + eye-slash。 */}
+          {/* Single-commit scope chip: follows the commit selected in the view, showing "short SHA · subject". Click to toggle enable/disable (without removing) —
+              when enabled the commands are scoped to that commit (parent..sha), when disabled they revert to the whole PR, greyed out + eye-slash. */}
           {commitScopeChip && (
             <>
               <span className="chat-cmd-divider" aria-hidden="true" />
@@ -302,8 +308,8 @@ export function ChatInputBar({
             </>
           )}
         </div>
-        {/* 队列模型下 send 永远在 (新提交进队列)；本 PR active 时 stop 紧贴 send 左侧。
-            包到一个 group 里避免 input-row 的 space-between 把 stop 推到中央 */}
+        {/* Under the queue model send is always present (new submissions enter the queue); when this PR is active, stop sits right to the left of send.
+            Wrapped in a group to prevent input-row's space-between from pushing stop to the center */}
         <div className="chat-pane-send-group">
           {running && onCancel && (
             <button

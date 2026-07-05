@@ -11,16 +11,16 @@ interface UseSettingsDraftParams {
   onLlmChange?: (llm: Config['llm']) => void;
   onProxyChange?: (proxy: Config['proxy']) => void;
   onConnectionsChange?: () => void | Promise<void>;
-  /** 整体保存成功后回传写盘后的权威 config，供父级同步 boot.config（再次打开设置页显示最新值）。 */
+  /** After a successful save-all, passes back the authoritative written config so the parent can sync boot.config (reopening the settings page shows the latest values). */
   onConfigPersisted?: (config: Config) => void;
   onClose: () => void;
 }
 
 /**
- * SettingsModal 的「草稿 → 整体保存」状态机：所有编辑只改本地 state，点底栏「保存」才整体写盘 +
- * 生效；连接 / LLM 改动额外自动写入 config.yaml（防丢失）但不应用到运行时。对外暴露各分区所需的
- * 语义化 state 与 setter（编辑即标脏），以及编辑器弹窗状态与 saveAll。即时生效的外观类设置
- * （语言 / 主题 / 编辑器外观）与本事务正交，拆到 useAppearanceDraft。
+ * SettingsModal's "draft → save-all" state machine: all edits only change local state; clicking the footer "Save" writes to disk +
+ * takes effect as a whole; connection / LLM changes are additionally auto-written to config.yaml (to prevent loss) but not applied to the runtime. Exposes the
+ * semantic state and setters each section needs (editing marks dirty), plus editor popup state and saveAll. Instant-effect appearance settings
+ * (language / theme / editor appearance) are orthogonal to this transaction and split out into useAppearanceDraft.
  */
 export function useSettingsDraft({
   config,
@@ -35,13 +35,13 @@ export function useSettingsDraft({
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
 
-  // 草稿 → 整体保存：所有编辑只改本地 state，点底栏"保存"才整体写盘 + 生效
+  // draft → save-all: all edits only change local state; clicking the footer "Save" writes to disk + takes effect as a whole
   const [reposDirInput, setReposDirInput] = useState(config.workspace.repos_dir);
-  // Agent 其余字段（max_steps / summary_max_chars / autopilot）在 UI 不编辑，仅持有以便保存时
-  // 原样回传、不被覆盖成默认值；目录经 agentDirInput、策略开关经 autoFollowup 可编辑。
+  // Agent's other fields (max_steps / summary_max_chars / autopilot) are not edited in the UI, only held so that on save they are
+  // passed back as-is and not overwritten with defaults; dir is editable via agentDirInput, strategy toggles via autoFollowup.
   const [agent] = useState<Config['agent']>(config.agent);
   const [agentDirInput, setAgentDirInput] = useState(config.agent.dir);
-  // Agent 策略（自动追问开关 + 追问数量上限 + 代码建议数量上限）。随 config:setAgent 一并保存。
+  // Agent strategy (auto-followup toggle + followup count cap + code-suggestion count cap). Saved together with config:setAgent.
   const [autoFollowup, setAutoFollowupState] = useState(config.agent.strategy.auto_followup);
   const [maxFollowupAsks, setMaxFollowupAsksState] = useState(
     config.agent.strategy.max_followup_asks,
@@ -49,24 +49,37 @@ export function useSettingsDraft({
   const [maxCodeSuggestions, setMaxCodeSuggestionsState] = useState(
     config.agent.strategy.max_code_suggestions,
   );
+  // Code-suggestion spec (LLM soft constraint, injected as extra_instructions for /improve /review /ask) + layout template
+  // (deterministic, applied when a finding becomes a draft body). Both free markdown, edited in a nested modal, saved with config:setAgent.
+  const [codeSuggestionSpec, setCodeSuggestionSpecState] = useState(
+    config.agent.strategy.code_suggestion_spec,
+  );
+  const [codeSuggestionLayout, setCodeSuggestionLayoutState] = useState(
+    config.agent.strategy.code_suggestion_layout,
+  );
+  // Code-suggestion template editor (shared nested modal): null=closed; field selects which value the draft edits, saved back on confirm.
+  const [templateEditor, setTemplateEditor] = useState<{
+    field: 'spec' | 'layout';
+    draft: string;
+  } | null>(null);
   const [pollerInput, setPollerInput] = useState(String(config.poller.interval_seconds));
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState(config.pr_agent.max_concurrency);
   const [llm, setLlm] = useState<Config['llm']>(config.llm);
   const [llmEditor, setLlmEditor] = useState<{ mode: 'add' | 'edit'; draft: LlmProfile } | null>(
     null,
   );
-  // 消息通知（总开关 + 分类型系统通知 + dock 角标）。随 config:setNotifications 保存。
+  // Message notifications (master toggle + per-type system notifications + dock badge). Saved with config:setNotifications.
   const [notifications, setNotificationsState] = useState<Config['notifications']>(
     config.notifications,
   );
   const [proxy, setProxy] = useState<Config['proxy']>(config.proxy);
-  // 代理在独立模态框里编辑：null=关闭，非 null=正在编辑的草稿；保存回 proxy，底栏「保存」才写盘。
+  // Proxy is edited in a separate modal: null=closed, non-null=draft being edited; saved back to proxy, written to disk only on footer "Save".
   const [proxyEditor, setProxyEditor] = useState<Config['proxy'] | null>(null);
 
-  // 本地 API 服务监听（开关 / host / port 随整体保存；token 经 generateServiceToken 立即写盘）。
+  // Local API service listener (toggle / host / port follow save-all; token written to disk immediately via generateServiceToken).
   const [service, setServiceState] = useState<Config['service']>(config.service);
 
-  // 连接：多条可配置 + 单选启用；编辑只改本地 state，整体保存才写盘 + 热重建
+  // Connections: multiple configurable + single-select enabled; editing only changes local state, save-all writes to disk + hot-rebuilds
   const [connections, setConnections] = useState<Config['connections']>(config.connections);
   const [activeConnId, setActiveConnId] = useState<string>(config.active_connection_id);
   const [connEditor, setConnEditor] = useState<{ mode: 'add' | 'edit'; draft: ConnDraft } | null>(
@@ -74,13 +87,15 @@ export function useSettingsDraft({
   );
   const [connDeleteId, setConnDeleteId] = useState<string | null>(null);
 
-  // 保存基线：保存成功后更新，用于 changed 判定（禁用保存按钮）
+  // Save baseline: updated after a successful save, used for changed detection (to disable the save button)
   const [base, setBase] = useState(() => ({
     reposDir: config.workspace.repos_dir,
     agentDir: config.agent.dir,
     autoFollowup: config.agent.strategy.auto_followup,
     maxFollowupAsks: config.agent.strategy.max_followup_asks,
     maxCodeSuggestions: config.agent.strategy.max_code_suggestions,
+    codeSuggestionSpec: config.agent.strategy.code_suggestion_spec,
+    codeSuggestionLayout: config.agent.strategy.code_suggestion_layout,
     poller: config.poller.interval_seconds,
     concurrency: config.pr_agent.max_concurrency,
     llm: config.llm,
@@ -113,7 +128,7 @@ export function useSettingsDraft({
     }
   };
 
-  // 连接 / LLM 编辑：改本地 state + 自动写入 config.yaml（防丢失），但不应用到运行时
+  // Connection / LLM editing: change local state + auto-write to config.yaml (to prevent loss), but not applied to the runtime
   const autosaveDraft = (
     nextConnections: Config['connections'],
     activeId: string,
@@ -124,11 +139,11 @@ export function useSettingsDraft({
       active_connection_id: activeId,
       llm: nextLlm,
     }).catch(() => {
-      /* 自动保存失败不打断编辑；点底栏保存时会再写一次 */
+      /* Autosave failure does not interrupt editing; it will be written again on footer save */
     });
   };
 
-  // ── LLM 配置 ──
+  // ── LLM config ──
   const persistLlm = (next: Config['llm']): void => {
     setLlm(next);
     setSaved(false);
@@ -174,13 +189,13 @@ export function useSettingsDraft({
     if (llm.active_id === id) return;
     persistLlm({ ...llm, active_id: id });
   };
-  // 上下文长度归属 llm（随 config:setLlm 一并保存）；编辑即走 persistLlm（标脏 + 草稿写盘）。
+  // Context length belongs to llm (saved together with config:setLlm); editing goes through persistLlm (mark dirty + draft write-to-disk).
   const setLlmContextTokens = (tokens: number): void => {
     if (llm.context_tokens === tokens) return;
     persistLlm({ ...llm, context_tokens: tokens });
   };
 
-  // ── 连接 ──
+  // ── Connections ──
   const persistConnections = (next: Config['connections'], activeId: string): void => {
     setConnections(next);
     setActiveConnId(activeId);
@@ -210,14 +225,14 @@ export function useSettingsDraft({
     const conn = fromConnDraft(draft);
     const next =
       mode === 'add' ? [...connections, conn] : connections.map((c) => (c.id === conn.id ? conn : c));
-    // 新增首条自动设为启用
+    // The first added one is automatically set as enabled
     const activeId = mode === 'add' && !activeConnId ? conn.id : activeConnId;
     persistConnections(next, activeId);
     setConnEditor(null);
   };
   const deleteConn = (id: string): void => {
     const next = connections.filter((c) => c.id !== id);
-    // 删的是当前启用 → 启用回退到剩下第一条（无则空串，不轮询任何连接）
+    // Deleting the currently enabled one → enabled falls back to the first remaining (empty string if none, polls no connection)
     const activeId = activeConnId === id ? (next[0]?.id ?? '') : activeConnId;
     persistConnections(next, activeId);
   };
@@ -226,7 +241,7 @@ export function useSettingsDraft({
     persistConnections(connections, id);
   };
 
-  // ── 代理 ──
+  // ── Proxy ──
   const saveProxyEditor = (): void => {
     if (!proxyEditor) return;
     setProxy(proxyEditor);
@@ -234,7 +249,7 @@ export function useSettingsDraft({
     setSaved(false);
   };
 
-  // ── 目录 / 轮询的语义化 setter（编辑即标脏）──
+  // ── Semantic setters for directory / polling (editing marks dirty) ──
   const setPoller = (seconds: number): void => {
     setPollerInput(String(seconds));
     setSaved(false);
@@ -251,8 +266,8 @@ export function useSettingsDraft({
     setServiceState(next);
     setSaved(false);
   };
-  // token 重新生成只更新草稿并标脏（不落盘、不同步基线）：与 host / port 一致走草稿制，随底栏「保存」
-  // 经 config:setService 生效；不保存则丢弃、保留原 token。functional update 避开与开关切换的竞态。
+  // Token regeneration only updates the draft and marks dirty (not written to disk, does not sync baseline): like host / port, follows the draft model, takes effect
+  // via config:setService on footer "Save"; if not saved it is discarded, keeping the original token. functional update avoids a race with toggle switching.
   const regenerateServiceToken = async (): Promise<void> => {
     try {
       const { token } = await invoke('config:generateServiceToken', undefined);
@@ -278,6 +293,21 @@ export function useSettingsDraft({
     setMaxCodeSuggestionsState(n);
     setSaved(false);
   };
+  const setCodeSuggestionSpec = (v: string): void => {
+    setCodeSuggestionSpecState(v);
+    setSaved(false);
+  };
+  const setCodeSuggestionLayout = (v: string): void => {
+    setCodeSuggestionLayoutState(v);
+    setSaved(false);
+  };
+  // Confirm the template editor: write the draft back to the field it edits, then close.
+  const saveTemplateEditor = (): void => {
+    if (!templateEditor) return;
+    if (templateEditor.field === 'spec') setCodeSuggestionSpec(templateEditor.draft);
+    else setCodeSuggestionLayout(templateEditor.draft);
+    setTemplateEditor(null);
+  };
   const setReposDir = (v: string): void => {
     setReposDirInput(v);
     setSaved(false);
@@ -297,13 +327,15 @@ export function useSettingsDraft({
     if (r.path) setReposDir(r.path);
   };
 
-  // ── 变更检测（对比基线）+ 整体保存 ──
+  // ── Change detection (compare against baseline) + save-all ──
   const reposDirChanged = reposDirInput.trim() !== base.reposDir;
   const agentChanged =
     agentDirInput.trim() !== base.agentDir ||
     autoFollowup !== base.autoFollowup ||
     maxFollowupAsks !== base.maxFollowupAsks ||
-    maxCodeSuggestions !== base.maxCodeSuggestions;
+    maxCodeSuggestions !== base.maxCodeSuggestions ||
+    codeSuggestionSpec !== base.codeSuggestionSpec ||
+    codeSuggestionLayout !== base.codeSuggestionLayout;
   const pollerChanged = pollerInput.trim() !== String(base.poller);
   const concurrencyChanged = maxConcurrencyInput !== base.concurrency;
   const llmChanged = JSON.stringify(llm) !== JSON.stringify(base.llm);
@@ -340,7 +372,7 @@ export function useSettingsDraft({
         await invoke('config:setMaxConcurrency', { max_concurrency: maxConcurrencyInput });
       }
       if (agentChanged) {
-        // UI 编辑 dir + 策略开关；其余字段从已加载的 config 原样保留，避免被覆盖成默认值。
+        // UI edits dir + strategy toggles; other fields are kept as-is from the loaded config to avoid being overwritten with defaults.
         await invoke('config:setAgent', {
           agent: {
             ...agent,
@@ -350,6 +382,8 @@ export function useSettingsDraft({
               auto_followup: autoFollowup,
               max_followup_asks: maxFollowupAsks,
               max_code_suggestions: maxCodeSuggestions,
+              code_suggestion_spec: codeSuggestionSpec,
+              code_suggestion_layout: codeSuggestionLayout,
             },
           },
         });
@@ -367,7 +401,7 @@ export function useSettingsDraft({
       }
       if (serviceChanged) {
         const host = service.host.trim();
-        // 简单合法性校验：非空、无空白 / 协议 / 斜杠（端口单列）；放过 IPv4 / 主机名 / 0.0.0.0 / ::1。
+        // Simple validation: non-empty, no whitespace / protocol / slash (port is separate); allows IPv4 / hostname / 0.0.0.0 / ::1.
         if (!host || !/^[A-Za-z0-9.:-]+$/.test(host)) {
           throw new Error(t('settings.serviceHostInvalidError'));
         }
@@ -383,8 +417,8 @@ export function useSettingsDraft({
       if (reposDirChanged && reposDirInput.trim()) {
         await invoke('config:setReposDir', { reposDir: reposDirInput.trim() });
       }
-      // 回读写盘后的权威配置同步父级 boot.config：否则 agent / poller / 并发 等无即时回调的项，
-      // 再次打开设置页仍读旧的 boot.config（行为已生效但 UI 显示陈旧）。含 main 端 clamp 后的值。
+      // Read back the authoritative written config to sync the parent's boot.config: otherwise items without an immediate callback like agent / poller / concurrency
+      // would still read the stale boot.config when reopening the settings page (behavior has taken effect but the UI shows stale values). Includes main-side clamped values.
       onConfigPersisted?.(await invoke('config:read', undefined));
       setBase({
         reposDir: reposDirInput.trim(),
@@ -392,6 +426,8 @@ export function useSettingsDraft({
         autoFollowup,
         maxFollowupAsks,
         maxCodeSuggestions,
+        codeSuggestionSpec,
+        codeSuggestionLayout,
         poller: Number.parseInt(pollerInput, 10),
         concurrency: maxConcurrencyInput,
         llm,
@@ -402,7 +438,7 @@ export function useSettingsDraft({
         activeConnId,
       });
       setSaved(true);
-      // 保存成功后自动关闭设置面板（失败则保持打开并展示 saveError）
+      // Automatically close the settings panel after a successful save (on failure, keep it open and show saveError)
       onClose();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e));
@@ -412,7 +448,7 @@ export function useSettingsDraft({
   };
 
   return {
-    // 连接
+    // connections
     connections,
     activeConnId,
     connEditor,
@@ -435,19 +471,19 @@ export function useSettingsDraft({
     deleteProfile,
     setActiveLlm,
     setLlmContextTokens,
-    // 代理
+    // proxy
     proxy,
     proxyEditor,
     setProxyEditor,
     saveProxyEditor,
-    // 通知
+    // notifications
     notifications,
     setNotifications,
-    // 本地 API 服务监听
+    // local API service listener
     service,
     setService,
     regenerateServiceToken,
-    // 轮询 / 并发 / 目录
+    // polling / concurrency / directories
     pollerInput,
     setPoller,
     maxConcurrencyInput,
@@ -461,11 +497,16 @@ export function useSettingsDraft({
     setMaxFollowupAsks,
     maxCodeSuggestions,
     setMaxCodeSuggestions,
+    codeSuggestionSpec,
+    codeSuggestionLayout,
+    templateEditor,
+    setTemplateEditor,
+    saveTemplateEditor,
     reposDirInput,
     setReposDir,
     pickReposDir,
     totalBytes,
-    // 保存 / 配置文件
+    // save / config file
     opening,
     openError,
     openConfigFile,

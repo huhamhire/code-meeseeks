@@ -20,7 +20,7 @@ import type { GitHubClient } from '../client.js';
 import { mapUser } from '../utils.js';
 import type { GhCommit, GhPull, GhReview, GhSearchItem } from '../types.js';
 
-/** 发现筛选分类 → GitHub search 主体限定词（对齐仪表盘四类）。 */
+/** Discovery filter category → GitHub search body qualifier (aligned with the dashboard's four categories). */
 const FILTER_QUALIFIER: Record<PrDiscoveryFilter, string> = {
   'review-requested': 'review-requested:@me',
   created: 'author:@me',
@@ -28,21 +28,21 @@ const FILTER_QUALIFIER: Record<PrDiscoveryFilter, string> = {
   mentioned: 'mentions:@me',
 };
 
-/** review 决断态 → 活动事件类型（COMMENTED / PENDING 非决断，不在表中 → 跳过）。 */
+/** review decision state → activity event kind (COMMENTED / PENDING are non-decisions, not in the table → skipped). */
 const ACTIVITY_KIND_BY_STATE: Partial<Record<GhReview['state'], PrActivityKind>> = {
   APPROVED: 'approved',
   CHANGES_REQUESTED: 'needsWork',
   DISMISSED: 'dismissed',
 };
 
-/** review 决断态 → reviewer 状态（COMMENTED / PENDING 不改变决断态，不在表中）。 */
+/** review decision state → reviewer status (COMMENTED / PENDING do not change the decision state, not in the table). */
 const REVIEWER_STATUS_BY_STATE: Partial<Record<GhReview['state'], ReviewerStatus>> = {
   APPROVED: 'approved',
   CHANGES_REQUESTED: 'needsWork',
   DISMISSED: 'unapproved',
 };
 
-/** GitHub PR 操作领域：发现（search 两段取数）、提交、活动决断、审批、合并。 */
+/** GitHub PR operations domain: discovery (search two-stage fetch), commits, activity decisions, approval, merge. */
 export class GitHubPullRequestService extends BasePullRequestService {
   constructor(
     ctx: ConnectionContext,
@@ -52,9 +52,9 @@ export class GitHubPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 发现待处理 PR：先经 search/issues 命中候选，再逐条取详情归一。
+   * Discover pending PRs: first hit candidates via search/issues, then fetch details per item and normalize.
    *
-   * 仅保留确为 PR 的命中；逐条详情请求并发执行，单条失败丢弃该条而不拖垮整体。
+   * Only hits confirmed to be PRs are kept; per-item detail requests run concurrently, a single failure discards that item without dragging down the whole.
    */
   async listPendingPullRequests(opts?: ListPendingOptions): Promise<PullRequest[]> {
     const items: GhSearchItem[] = [];
@@ -63,7 +63,7 @@ export class GitHubPullRequestService extends BasePullRequestService {
     })) {
       if (it.pull_request) items.push(it);
     }
-    // 每条命中再取 PR 详情（sha / mergeable / draft）+ reviews（reviewer 状态）。单个失败丢弃该条。
+    // For each hit, fetch PR details (sha / mergeable / draft) + reviews (reviewer status). A single failure discards that item.
     const results = await Promise.allSettled(items.map((it) => this.loadPull(it)));
     return results
       .filter((r): r is PromiseFulfilledResult<PullRequest> => r.status === 'fulfilled')
@@ -71,7 +71,7 @@ export class GitHubPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 按一条 search 命中加载完整 PR：并发取 PR 详情与 reviews，组装审批人与合并状态后归一。
+   * Load the full PR from a single search hit: concurrently fetch PR details and reviews, assemble reviewers and merge status, then normalize.
    */
   private async loadPull(item: GhSearchItem): Promise<PullRequest> {
     const { owner, repo } = this.parseRepositoryUrl(item.repository_url);
@@ -83,7 +83,7 @@ export class GitHubPullRequestService extends BasePullRequestService {
     return this.mapPull(pull, this.buildReviewers(pull, reviews), this.mapMergeStatus(pull));
   }
 
-  /** 按 repo + 号从远端拉单个 PR（复用 loadPull 同款组装）；404 / 403 由 client 抛出供上层归一。 */
+  /** Fetch a single PR from the remote by repo + number (reuses the same assembly as loadPull); 404 / 403 are thrown by the client for the upper layer to normalize. */
   async getSinglePullRequest(repo: RepoRef, prId: string): Promise<PullRequest> {
     const base = `/repos/${repo.projectKey}/${repo.repoSlug}/pulls/${prId}`;
     const [pull, reviews] = await Promise.all([
@@ -94,7 +94,7 @@ export class GitHubPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 列出 PR 提交：GitHub 端点为 oldest-first，按契约反转为 newest-first 返回。
+   * List PR commits: the GitHub endpoint is oldest-first, reversed to newest-first per the contract on return.
    */
   async listPullRequestCommits(repo: RepoRef, prId: string): Promise<PrCommit[]> {
     const out: PrCommit[] = [];
@@ -103,14 +103,14 @@ export class GitHubPullRequestService extends BasePullRequestService {
     )) {
       out.push(this.mapCommit(c));
     }
-    // GitHub commits 是 oldest-first；契约要求 newest-first
+    // GitHub commits are oldest-first; the contract requires newest-first
     return out.reverse();
   }
 
   /**
-   * 把 PR 的 reviews 提炼为评审决断活动事件。
+   * Distill the PR's reviews into review-decision activity events.
    *
-   * 仅保留有提交时间的决断态（APPROVED / CHANGES_REQUESTED / DISMISSED），COMMENTED / PENDING 跳过。
+   * Only decision states with a submit time (APPROVED / CHANGES_REQUESTED / DISMISSED) are kept, COMMENTED / PENDING are skipped.
    */
   async listPullRequestActivity(repo: RepoRef, prId: string): Promise<PrActivityEvent[]> {
     const reviews = await collect(
@@ -120,7 +120,7 @@ export class GitHubPullRequestService extends BasePullRequestService {
     );
     const out: PrActivityEvent[] = [];
     for (const r of reviews) {
-      // COMMENTED / PENDING 不是决断；submitted_at 缺失（草稿态）跳过
+      // COMMENTED / PENDING are not decisions; skip when submitted_at is missing (draft state)
       if (!r.user || !r.submitted_at) continue;
       const kind = ACTIVITY_KIND_BY_STATE[r.state];
       if (!kind) continue;
@@ -135,10 +135,10 @@ export class GitHubPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 写当前用户在 PR 上的 review 状态。
+   * Write the current user's review status on the PR.
    *
-   * approved / needsWork 各提交一条 review（REQUEST_CHANGES 需带 body）；unapproved 则撤销本人最近一条
-   * 决断性评审（dismiss）。
+   * approved / needsWork each submit one review (REQUEST_CHANGES needs a body); unapproved dismisses the user's most recent
+   * decisive review (dismiss).
    */
   async setPullRequestReviewStatus(
     repo: RepoRef,
@@ -151,14 +151,14 @@ export class GitHubPullRequestService extends BasePullRequestService {
       return;
     }
     if (status === 'needsWork') {
-      // GitHub 要求 REQUEST_CHANGES 带 body（发往 GitHub 的内容，用英语中性文案）
+      // GitHub requires REQUEST_CHANGES to carry a body (content sent to GitHub, using neutral English text)
       await this.client.post(`${prefix}/pulls/${prId}/reviews`, {
         event: 'REQUEST_CHANGES',
         body: 'Changes requested',
       });
       return;
     }
-    // unapproved：撤销当前用户最近一条 APPROVED / CHANGES_REQUESTED 评审
+    // unapproved: dismiss the current user's most recent APPROVED / CHANGES_REQUESTED review
     const me = this.ctx.getCurrentUser()?.name;
     if (!me) return;
     const reviews = await collect(
@@ -176,29 +176,29 @@ export class GitHubPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 合并 PR（仅用 merge commit、不回退 squash/rebase）。
+   * Merge a PR (uses merge commit only, no fallback to squash/rebase).
    *
-   * 不可合并（禁用 merge commit / 冲突 / 必评必检未过 / 落后 / 无权限）时，GitHub 返回 405 或 403，
-   * 错误经 client 携带响应体 message 冒泡给上层。
+   * When not mergeable (merge commit disabled / conflict / required reviews or checks not passed / behind / no permission), GitHub returns 405 or 403,
+   * and the error bubbles up to the upper layer via the client carrying the response body message.
    */
   async mergePullRequest(repo: RepoRef, prId: string): Promise<void> {
-    // 仅用 merge commit（空 body = 默认 merge_method=merge），不回退 squash/rebase。
-    // 失败（仓库禁用 merge commit / 冲突 / 必评未过 / 必检未过 / 分支落后 / 无权限）→ GitHub 返回
-    // 405「not mergeable」或 403，client 把响应体 message 带进 GitHubClientError 冒泡给上层。
+    // Uses merge commit only (empty body = default merge_method=merge), no fallback to squash/rebase.
+    // On failure (repo disables merge commit / conflict / required reviews not passed / required checks not passed / branch behind / no permission) → GitHub returns
+    // 405 "not mergeable" or 403, the client carries the response body message into GitHubClientError and bubbles it up.
     await this.client.put(`/repos/${repo.projectKey}/${repo.repoSlug}/pulls/${prId}/merge`, {});
   }
 
-  // ---- 映射（领域私有）----
+  // ---- Mapping (domain-private) ----
 
   /**
-   * 按发现筛选分类拼出 search/issues 查询串（限定开放、非归档、PR 类型）。
+   * Build the search/issues query string by discovery filter category (limited to open, non-archived, PR type).
    */
   private discoveryQuery(filter: PrDiscoveryFilter): string {
     return `is:open is:pr ${FILTER_QUALIFIER[filter]} archived:false`;
   }
 
   /**
-   * 从 search 命中的 repository_url 解析出 owner / repo；无法解析则抛错。
+   * Parse owner / repo from the search hit's repository_url; throws if unparseable.
    */
   private parseRepositoryUrl(repositoryUrl: string): { owner: string; repo: string } {
     // https://api.github.com/repos/{owner}/{repo}
@@ -208,10 +208,10 @@ export class GitHubPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 把 GitHub 的 mergeable / mergeable_state 映射为统一合并状态。
+   * Map GitHub's mergeable / mergeable_state to a unified merge status.
    *
-   * GitHub 否决信息仅 partial 保真，按 state 近似归类到单一否决码（冲突 / 受保护 / 落后 / 必检失败 /
-   * 检测中）；canMerge 仅在 mergeable=true 且 state=clean 时为真。
+   * GitHub veto info is only partial fidelity, approximately classified by state into a single veto code (conflict / protected / behind / checks failed /
+   * checking); canMerge is true only when mergeable=true and state=clean.
    */
   private mapMergeStatus(p: GhPull): MergeStatus {
     const state = p.mergeable_state ?? 'unknown';
@@ -230,15 +230,15 @@ export class GitHubPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 组装审批人列表：先以「已请求但未评审」者占位（unapproved），再按时间升序用每人最近一条决断态覆盖。
+   * Assemble the reviewer list: first place "requested but not yet reviewed" people as placeholders (unapproved), then override with each person's most recent decision state in ascending time order.
    */
   private buildReviewers(pull: GhPull, reviews: GhReview[]): Reviewer[] {
     const byLogin = new Map<string, Reviewer>();
-    // 先放「已请求但未评审」的 reviewer（pending = unapproved）
+    // First place "requested but not yet reviewed" reviewers (pending = unapproved)
     for (const u of pull.requested_reviewers ?? []) {
       byLogin.set(u.login, { ...mapUser(u), status: 'unapproved' });
     }
-    // reviews 按时间升序，取每人最近一条「决断性」状态覆盖
+    // reviews in ascending time order, override with each person's most recent "decisive" status
     const sorted = [...reviews].sort((a, b) =>
       (a.submitted_at ?? '').localeCompare(b.submitted_at ?? ''),
     );
@@ -251,9 +251,9 @@ export class GitHubPullRequestService extends BasePullRequestService {
   }
 
   /**
-   * 把 GitHub PR 详情（含已组装的审批人与合并状态）归一为中性 PullRequest。
+   * Normalize GitHub PR details (including the assembled reviewers and merge status) into a neutral PullRequest.
    *
-   * 状态按 merged / closed / 其余映射为 merged / declined / open。
+   * State is mapped by merged / closed / else to merged / declined / open.
    */
   private mapPull(p: GhPull, reviewers: Reviewer[], mergeStatus: MergeStatus): PullRequest {
     const state: PullRequest['state'] = p.merged
@@ -280,13 +280,13 @@ export class GitHubPullRequestService extends BasePullRequestService {
       reviewers,
       mergeStatus,
       hasConflict: mergeStatus.conflicted,
-      // 会话评论 + 行内评审评论；行内回复本身即 review_comment → 含回复（capabilities 标 true）。
+      // Conversation comments + inline review comments; an inline reply is itself a review_comment → includes replies (capabilities marks true).
       commentCount: (p.comments ?? 0) + (p.review_comments ?? 0),
     };
   }
 
   /**
-   * 把 GitHub 提交归一为中性 PrCommit；作者 / 提交者信息缺失时按 git 名→登录名→兜底逐级回退。
+   * Normalize a GitHub commit into a neutral PrCommit; when author / committer info is missing, fall back level by level git name → login → fallback.
    */
   private mapCommit(c: GhCommit): PrCommit {
     const authorName = c.commit.author?.name ?? c.author?.login ?? 'unknown';

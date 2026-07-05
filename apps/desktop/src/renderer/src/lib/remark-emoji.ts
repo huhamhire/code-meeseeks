@@ -1,22 +1,23 @@
 import { reactionCodeToEmoji } from '@meebox/shared';
 
-/** mdast 节点的最小结构（仅取本插件用到的字段，避免引入 mdast 类型依赖）。 */
+/** Minimal shape of an mdast node (only the fields this plugin uses, avoiding an mdast type dependency). */
 interface MdNode {
   type: string;
   value?: string;
   children?: MdNode[];
 }
 
-// `:shortcode:`：字母 / 数字 / _ / + / -（覆盖 gemoji 风格名，如 tada / +1 / heart_eyes）。
+// `:shortcode:`: letters / digits / _ / + / - (covers gemoji-style names, like tada / +1 / heart_eyes).
 const SHORTCODE = /:([a-z0-9_+-]{1,40}):/gi;
 
 /**
- * remark 插件：把评论正文里的 `:shortcode:`（如 `:tada:` → 🎉）替换为对应 emoji 字符，复用内置精选集
- * （{@link reactionCodeToEmoji}，含 `+1`/`-1` 别名）。
+ * remark plugin: replace `:shortcode:` in comment bodies (like `:tada:` → 🎉) with the corresponding emoji
+ * character, reusing the built-in curated set ({@link reactionCodeToEmoji}, including `+1`/`-1` aliases).
  *
- * 只改写 mdast `text` 节点——代码（inlineCode / code 块）的内容不在 text 节点里，故天然跳过，
- * `def f(x):` / `http://h:8080` 等不会被误伤；内置集外的未知 shortcode 原样保留（部分渲染、与精选集
- * 路线一致）。emoji 是纯文本，直接就地替换字符串、无需拆分节点。
+ * Only rewrites mdast `text` nodes — the contents of code (inlineCode / code blocks) aren't in text nodes, so they're
+ * naturally skipped, and `def f(x):` / `http://h:8080`, etc. won't be hit by mistake; unknown shortcodes outside the
+ * built-in set are kept as-is (partial rendering, consistent with the curated-set approach). emoji are plain text,
+ * so replace the string in place directly, no need to split nodes.
  */
 export function remarkEmojiShortcodes() {
   return (tree: MdNode): void => {

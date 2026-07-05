@@ -1,11 +1,11 @@
-// chat 域在底部状态栏的 chip：AutoPilot 开关 + pr-agent 活动指示 / 队列 popover。
-// 组件见 components/features/chat/statusbar/。基础壳 (.app-statusbar / .statusbar-chip)
-// 在 layout/statusbar；活动脉冲点 .activity-dot 在 base（与 repo sync 跨域共用）。
+// chat-domain chips in the bottom status bar: AutoPilot toggle + pr-agent activity indicator / queue popover.
+// For components see components/features/chat/statusbar/. The base shell (.app-statusbar / .statusbar-chip)
+// is in layout/statusbar; the activity pulse dot .activity-dot is in base (shared cross-domain with repo sync).
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
-// AutoPilot 开关 chip：机器人图标（开）/ 斜杠机器人（关）+ 文案；默认中性，启用时蓝底强调
+// AutoPilot toggle chip: robot icon (on) / slashed robot (off) + label; neutral by default, blue-background emphasis when enabled
 .statusbar-chip-autopilot {
   cursor: pointer;
 
@@ -15,13 +15,13 @@
   }
 }
 
-// 队列弹出框定位基：active chip 外面套一层 relative 让 popover 绝对定位
+// Queue popover positioning base: wrap the active chip in a relative layer so the popover can position absolutely
 .statusbar-pragent-chip-wrap {
   position: relative;
   display: inline-flex;
 }
 
-// pr-agent 运行中指示。蓝色调跟 chat-run-phase 一致；button 形态时给 hover 边框反馈
+// pr-agent running indicator. Blue tone consistent with chat-run-phase; provides a hover border feedback in button form
 .statusbar-pragent-chip {
   @include chip-tone(accent);
   font-variant-numeric: tabular-nums;
@@ -34,17 +34,17 @@ button.statusbar-pragent-chip {
     border-color: $color-accent;
   }
 }
-// Idle 形态：去掉主蓝色调，换成中性灰底白字，区分"在跑"和"空闲"两种语义
+// Idle form: drop the primary blue tone, switch to a neutral gray background with white text, distinguishing the "running" and "idle" semantics
 .statusbar-pragent-chip-idle {
   background: $chip-neutral;
   color: $text-muted;
 }
 .statusbar-pragent-elapsed {
-  // 不用 mono 字体 — sans 和 mono 的 x-height 差异让 flex center 后视觉基线不齐。
-  // 数字等宽靠父级 .statusbar-pragent-chip 的 font-variant-numeric: tabular-nums
+  // Don't use a mono font — the x-height difference between sans and mono misaligns the visual baseline after flex center.
+  // Number monospacing relies on the parent .statusbar-pragent-chip's font-variant-numeric: tabular-nums
   opacity: 0.75;
 }
-// 队列数尾缀 (+N)：跟 elapsed 视觉一致但显得是 "另外排队" 不是 "时间"
+// Queue-count suffix (+N): visually consistent with elapsed but reads as "additionally queued" rather than "time"
 .statusbar-pragent-queue-count {
   font-family: $font-mono;
   font-weight: 600;
@@ -53,8 +53,8 @@ button.statusbar-pragent-chip {
   background: rgba(255, 255, 255, 0.1);
 }
 
-// === 队列 popover ===
-// chip 上方弹出。最多 6 行高 + 内部滚动，避免遮住其他状态栏元素
+// === queue popover ===
+// Pops up above the chip. At most 6 rows tall + internal scrolling, to avoid covering other status bar elements
 .statusbar-queue-popover {
   @include popover;
   bottom: calc(100% + #{$space-2});
@@ -79,7 +79,7 @@ button.statusbar-pragent-chip {
   list-style: none;
   margin: 0;
   padding: 0;
-  // 最多 6 条 (active 1 + 排队 5)；超出滚动。每行约 32px (padding+content)
+  // At most 6 entries (1 active + 5 queued); scrolls when exceeded. Each row is about 32px (padding+content)
   max-height: calc(32px * 6);
   overflow-y: auto;
 }

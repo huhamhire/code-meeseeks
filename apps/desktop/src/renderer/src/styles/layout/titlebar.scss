@@ -1,10 +1,10 @@
 @use '../tokens' as *;
 
-// 无边框窗口的自绘标题栏。高度必须与 main 进程 titleBarOverlay.height 一致（36px）。
+// Self-drawn title bar for the frameless window. Height must match the main process titleBarOverlay.height (36px).
 .app-titlebar {
-  position: relative; // 命令面板浮层（app-titlebar-center）以此为定位上下文居中
-  // 整条抬到「菜单/弹层」层级：否则命令面板下拉会被 app-body 的 diff 内容遮盖——app-titlebar-center
-  // 的 transform 自建层叠上下文，把面板 z-index 困在标题栏内部，需在标题栏这一层抬到内容之上（低于模态 1000）。
+  position: relative; // command palette overlay (app-titlebar-center) uses this as positioning context to center
+  // Whole bar raised to the "menu/popup" layer: otherwise the command palette dropdown would be covered by app-body's diff content — app-titlebar-center's
+  // transform creates its own stacking context, trapping the panel z-index inside the title bar, so it must be raised above content at the title bar layer (below modal 1000).
   z-index: $z-statusbar-menu;
   flex: 0 0 36px;
   height: 36px;
@@ -15,11 +15,11 @@
   background: $bg-app;
   border-bottom: 1px solid $border-muted;
   user-select: none;
-  // 整条作为拖拽区；内部交互元素需各自 no-drag
+  // Whole bar as a drag region; inner interactive elements each need no-drag
   -webkit-app-region: drag;
 
-  // macOS：为左上角红绿灯留位（trafficLightPosition x=12 起，3 颗 + 间距约到 x≈64）。再留一段
-  // 舒适间隔，避免品牌名紧贴红绿灯显得局促。
+  // macOS: leave room for the top-left traffic lights (trafficLightPosition starts at x=12, 3 dots + spacing reaching about x≈64). Leave a further
+  // comfortable gap so the brand name isn't cramped against the traffic lights.
   &--mac {
     padding-left: 92px;
   }
@@ -30,7 +30,7 @@
   height: 18px;
   border-radius: $radius-md;
   flex: 0 0 auto;
-  // 拖拽区内的图片默认可被拖出，禁掉以免误触发原生图片拖拽
+  // Images in the drag region can be dragged out by default; disable it to avoid accidentally triggering native image drag
   -webkit-user-drag: none;
 }
 
@@ -48,19 +48,19 @@
   white-space: nowrap;
   overflow: hidden;
   min-width: 0;
-  // 留在左侧原位；上限不越过中线、避免漫到右侧撞 Windows 窗控（浮层 DOM 置后绘制在上、输入框不透明底遮盖）。
-  // 渐隐由命令面板左缘的渐变罩负责（见 .app-titlebar-center::before），锚定输入框位置，故此处不自带 mask。
+  // Stays in place on the left; upper limit doesn't cross the midline, to avoid spilling right and hitting the Windows window controls (overlay DOM placed later draws on top, input's opaque base covers it).
+  // Fade-out is handled by the gradient mask at the command palette's left edge (see .app-titlebar-center::before), anchored to the input position, so this doesn't carry its own mask.
   flex: 1 1 auto;
   max-width: 42%;
 }
 
-// 标题栏内的可点元素需关闭拖拽，否则点击会被当成拖窗
+// Clickable elements in the title bar must disable drag, otherwise clicks would be treated as window dragging
 .app-titlebar :is(button, a, input, select) {
   -webkit-app-region: no-drag;
 }
 
-// 命令面板（VS Code 风）：标题栏居中的输入框 + 下拉结果。绝对浮层居中，不占流、不挤压标题，
-// 绘制在标题之上以遮盖（输入框不透明底）。
+// Command palette (VS Code style): centered input in the title bar + dropdown results. Absolute overlay centered, out of flow, doesn't squeeze the title,
+// drawn on top of the title to cover it (input's opaque base).
 .app-titlebar-center {
   position: absolute;
   left: 50%;
@@ -70,8 +70,8 @@
   display: flex;
   align-items: center;
 
-  // 输入框左缘的渐变罩：透明 → 标题栏底色，锚定在输入框左侧。标题漫到这里时隐入底色，
-  // 形成「逼近命令框即渐隐」的过渡（不论标题多长、窗口多宽都与输入框对齐）。不拦截点击。
+  // Gradient mask at the input's left edge: transparent → title bar base color, anchored to the input's left side. When the title spills here it fades into the base color,
+  // forming a "fade out on approaching the command box" transition (aligned with the input regardless of title length or window width). Doesn't intercept clicks.
   &::before {
     content: '';
     position: absolute;
@@ -89,11 +89,11 @@
   width: 38vw;
   min-width: 220px;
   max-width: 420px;
-  // 整块关闭拖拽：下拉面板是 div（非 button/input），不关会被当拖窗区
+  // Whole block disables drag: the dropdown panel is a div (not button/input), without disabling it would be treated as a drag region
   -webkit-app-region: no-drag;
 }
 
-// 输入框外框：承载边框 / 底色，内含可选的「当前子层」前缀标签 + 实际 input。
+// Input outer frame: carries the border / base color, contains an optional "current sublevel" prefix label + the actual input.
 .cmdk-field {
   display: flex;
   align-items: center;
@@ -110,8 +110,8 @@
   }
 }
 
-// 二级层前缀提示符（如「URL ›」/「切换主题 ›」）：提示符样式（非标签框）+ 尾部 chevron，
-// 读作「进入此层输入」，呼应 shell / VS Code 子模式提示。chevron 由样式统一加，prefixLabel 数据保持简洁。
+// Sublevel prefix prompt (e.g. "URL ›" / "Switch theme ›"): prompt style (not a label box) + trailing chevron,
+// reads as "enter this level to input", echoing shell / VS Code submode prompts. The chevron is added uniformly by style, keeping the prefixLabel data clean.
 .cmdk-field-prefix {
   flex: 0 0 auto;
   max-width: 50%;
@@ -149,7 +149,7 @@
   left: 0;
   right: 0;
   z-index: 1000;
-  // 最高高度：取 60vh 与 460px 较小值——高屏不喧宾夺主（约 10 行两行项 / 16 行单行项），超出滚动
+  // Max height: takes the smaller of 60vh and 460px — on tall screens it doesn't overwhelm (about 10 two-line items / 16 single-line items), scrolls beyond that
   max-height: min(60vh, 460px);
   overflow-y: auto;
   padding: $space-2;
@@ -177,7 +177,7 @@
   }
 }
 
-// 命令项主体（占满除右侧勾选外的宽度）：可叠主行 + 英文次行
+// Command item body (fills the width except the right checkmark): can stack a main line + English sub line
 .cmdk-item-main {
   flex: 1 1 auto;
   min-width: 0;
@@ -185,14 +185,14 @@
   flex-direction: column;
 }
 
-// 单行（领域前缀 + 命令名）
+// Single line (domain prefix + command name)
 .cmdk-item-line {
   display: flex;
   align-items: baseline;
   min-width: 0;
 }
 
-// 英文次行：弱化（更小、更淡），仅非英语界面展示
+// English sub line: de-emphasized (smaller, dimmer), shown only in non-English UI
 .cmdk-item-sub {
   font-size: $fs-sm;
   color: $text-muted;
@@ -206,8 +206,8 @@
   white-space: nowrap;
 }
 
-// 领域前缀（如「设置」），置于命令名前，便于检索归类。与命令名间距收紧。
-// 主行前缀用亮中性色（选中行深蓝底上仍可读，accent 蓝字会撞底故不用）；英文次行前缀跟随次行弱化色。
+// Domain prefix (e.g. "Settings"), placed before the command name for easier searching/categorization. Spacing to the command name tightened.
+// Main-line prefix uses a bright neutral color (still readable on the selected row's dark blue base, accent blue text would clash with the base so it's not used); English sub-line prefix follows the sub-line's de-emphasized color.
 .cmdk-item-cat {
   flex: 0 0 auto;
   margin-right: $space-2;
@@ -228,7 +228,7 @@
   color: $color-accent;
 }
 
-// 快捷键提示（命令项右侧）：一键一框（VS Code 风），每个 token 一个淡键帽
+// Shortcut hint (right of the command item): one key one box (VS Code style), a light keycap per token
 .cmdk-item-kbd {
   flex: 0 0 auto;
   margin-left: $space-4;
@@ -256,7 +256,7 @@
   font-size: $fs-lg;
 }
 
-// 搜索命中高亮（覆盖 <mark> 默认黄底黑字）：用统一的搜索命中色，文字色继承不变
+// Search hit highlight (overrides <mark>'s default yellow base black text): uses the unified search hit color, text color inherited unchanged
 .cmdk-hl {
   background: $color-search-hit;
   color: inherit;

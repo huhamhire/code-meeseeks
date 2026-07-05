@@ -4,8 +4,8 @@ import type { Config } from '@meebox/shared';
 import { StarIcon, StatusChip } from '../../../common';
 
 /**
- * 当前 active LLM profile 概要。点击展开下拉，列出所有 profile 直接切换。
- * 未配置时显示 "LLM: 未配置"，点击直接打开设置。
+ * Summary of the currently active LLM profile. Click to expand a dropdown listing all profiles for direct switching.
+ * When unconfigured, shows "LLM: not configured"; clicking opens settings directly.
  */
 export function LlmChip({
   llm,
@@ -18,7 +18,7 @@ export function LlmChip({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  // 点外面关菜单
+  // Click outside to close the menu
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent): void => {

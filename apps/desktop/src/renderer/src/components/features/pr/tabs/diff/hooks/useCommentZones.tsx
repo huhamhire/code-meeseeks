@@ -11,8 +11,9 @@ import { mountInlineZones } from '../zones/mountInlineZones';
 import type { LoadedContent } from '../diff-types';
 
 /**
- * 行内评论标记：评论锚定行 glyph margin 蓝点（hover 出 markdown 摘要）+ 行下方插 view zone 渲染
- * 评论内容。zone 挂载 / 清理走通用 mountInlineZones；glyph decorations 由本 hook 自管。
+ * Inline comment markers: a blue dot in the glyph margin on the comment's anchored line (hover shows a
+ * markdown summary) + a view zone inserted below the line rendering the comment content. Zone mount /
+ * cleanup goes through the shared mountInlineZones; glyph decorations are managed by this hook itself.
  */
 export function useCommentZones(opts: {
   diffEditor: MonacoEditor.IStandaloneDiffEditor | null;
@@ -25,11 +26,11 @@ export function useCommentZones(opts: {
   prWebUrl: string;
   renderSideBySide: boolean;
   commentHardBreaks: boolean;
-  /** 评论 emoji 反应模式（capabilities.commentReactions）：'fixed'/'free' 才渲染加反应按钮；缺省 = 不支持。 */
+  /** Comment emoji reaction mode (capabilities.commentReactions): only 'fixed'/'free' render the add-reaction button; absent = unsupported. */
   reactionsMode?: 'fixed' | 'free';
-  /** 平台是否支持图片附件上传（capabilities.commentAttachments）；透传给行内回复编辑框启用粘贴上传。 */
+  /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the inline reply editor to enable paste upload. */
   attachmentsEnabled?: boolean;
-  /** 内容只读（decline / 不可参与归档 PR）：行内评论 zone 隐藏回复 / 编辑 / 删除。 */
+  /** Content read-only (declined / non-participatable archived PR): inline comment zones hide reply / edit / delete. */
   readOnly?: boolean;
 }): void {
   const {
@@ -76,8 +77,8 @@ export function useCommentZones(opts: {
           glyphMarginClassName: 'monaco-comment-glyph',
           glyphMarginHoverMessage: { value: renderHoverMd(cs) },
           linesDecorationsClassName: 'monaco-comment-line-deco',
-          // 评论锚点行在滚动条总览标尺投一个蓝色刻度（与评论 glyph 同色系），
-          // 用户拖滚动条一眼可见「哪里有评论」；minimap 仍关闭。
+          // The comment anchor line projects a blue tick on the scrollbar overview ruler (same color family as
+          // the comment glyph), so users see "where the comments are" at a glance when dragging; minimap stays off.
           overviewRuler: {
             color: '#3794ff',
             position: MonacoEditorNs.OverviewRulerLane.Right,
@@ -101,8 +102,8 @@ export function useCommentZones(opts: {
       newByLine,
       zoneClassName: 'monaco-comment-zone',
       innerClassName: 'monaco-comment-zone-inner',
-      // 不拦 wheel —— 评论区 auto-size 无内部滚动，滚轮要冒泡给 Monaco 滚编辑器，
-      // 否则鼠标停在评论上时整个 diff 无法滚动（stopPropagation 会吃掉滚动）。
+      // Don't intercept wheel — comment zones auto-size with no inner scroll, so the wheel must bubble to Monaco to
+      // scroll the editor, otherwise the whole diff can't scroll while hovering a comment (stopPropagation would eat the scroll).
       stopEvents: ['mousedown', 'mouseup', 'click', 'dblclick'],
       initialHeight: (cs, lineHeight) =>
         Math.max(estimateZoneHeight(cs) * lineHeight, lineHeight * 3),
@@ -126,7 +127,7 @@ export function useCommentZones(opts: {
         originalDecorations.clear();
         modifiedDecorations.clear();
       } catch {
-        // editor 已 dispose
+        // editor already disposed
       }
       cleanupZones();
     };

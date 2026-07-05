@@ -1,41 +1,30 @@
-# 仓库镜像与 Diff
+# Repo mirror & diff
 
-## 职责与边界
+## Responsibilities & boundaries
 
-把 PR 涉及的仓库镜像到本地，供 Diff 展示、blame、以及给 pr-agent 提供工作树。所有 git 操作走
-`simple-git` + 系统 `git`。
+Mirror the repos involved in a PR to local disk, to serve diff display, blame, and to provide pr-agent with a worktree. All git operations go through `simple-git` + the system `git`.
 
-负责：bare 镜像的 clone/fetch、worktree 物化、按 sha 读文件与算 diff、blame、磁盘占用统计。
-不负责：从平台 REST 抓 diff（不用，平台 diff 会截断）、评论（见 [平台适配](01-adapter.md)）。
+Responsible for: bare-mirror clone/fetch, worktree materialization, reading files and computing diffs by sha, blame, disk-usage stats. Not responsible for: fetching diffs from the platform REST (not used, platform diffs get truncated), comments (see [Platform adaptation](01-adapter.md)).
 
-## 核心设计
+## Core design
 
-- **完整 bare 镜像（`--mirror`）**：每个仓库一份 bare 镜像，含**全部 refs**。关键是 Bitbucket 把 PR 源
-  sha 放在 `refs/pull-requests/<id>/from`，普通 `--bare` 拉不到会导致 `git diff base...head` 找不到 head。
-  早期试过 `--filter=blob:none` partial clone 省盘，但 blame / pr-agent 需要历史 blob 时会触发按需拉取、
-  远端不全时直接 fatal —— 故改回完整 clone，磁盘代价交给可配置的 `repos_dir`（见 [状态存储](../99-core/01-state-storage.md)）。
-- **首次 clone，后续增量 fetch**：fetch 用显式 refspec 覆盖式拉 `refs/heads/*` + `refs/pull-requests/*/from`。
-- **全局串行 sync 队列**：任意时刻只有一个仓库在 clone/fetch——多个调用方（切 PR / 定时）共用同一队列，
-  不并发打远端、不抢 git 带宽，进度更稳；同一仓库的并发请求复用同一 in-flight Promise。读操作不走队列。
-- **worktree 物化**：从本地 bare **`git clone --local --no-checkout`** 派生独立 repo（同盘 objects 走 hardlink，
-  磁盘 ~0、跨 mount 边界也成立），再建两个内部分支 `pr-<localId>/head` / `pr-<localId>/base` 指向 PR 的 head/base sha
-  （localId = 每-PR 稳定主键，与 PR 关联便于追溯、不带工具品牌前缀；无 localId 时回退随机 nonce）。
-  pr-agent 的 LocalGitProvider 在这个 worktree 上算 diff（见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。
-- **Diff 不 checkout 文件**：展示 diff 只需按 sha 读 blob（`git show <sha>:<path>`）+ 改动文件列表，
-  不把文件 checkout 到磁盘，省 IO。Monaco 侧按文件懒加载，二进制/超大文件跳过。
-- **出站代理**：打远端的 clone/fetch 按代理配置注入 env（见 [网络与代理](../99-core/03-networking-proxy.md)）；本地只读操作不注入。
+- **Full bare mirror (`--mirror`)**: one bare mirror per repo, containing **all refs**. The key point is that Bitbucket puts the PR source sha under `refs/pull-requests/<id>/from`, which a plain `--bare` won't pull, causing `git diff base...head` to not find head. We tried a `--filter=blob:none` partial clone early on to save disk, but when blame / pr-agent need a historical blob it triggers on-demand fetching, and when the remote is incomplete it fatals outright — so we reverted to a full clone, leaving the disk cost to the configurable `repos_dir` (see [State storage](../99-core/01-state-storage.md)).
+- **First-time clone, incremental fetch thereafter**: fetch uses an explicit refspec to overwrite-pull `refs/heads/*` + `refs/pull-requests/*/from`.
+- **Global serial sync queue**: at any moment only one repo is cloning/fetching — multiple callers (PR switch / scheduled) share one queue, so there's no concurrent hammering of the remote, no contention for git bandwidth, and steadier progress; concurrent requests for the same repo reuse the same in-flight Promise. Read operations do not go through the queue.
+- **Worktree materialization**: derive an independent repo from the local bare via **`git clone --local --no-checkout`** (same-disk objects go through hardlink, disk cost ~0, and it also works across mount boundaries), then create two internal branches `pr-<localId>/head` / `pr-<localId>/base` pointing at the PR's head/base shas (localId = the stable per-PR primary key, associated with the PR for traceability and carrying no tool-brand prefix; falls back to a random nonce when there is no localId). pr-agent's LocalGitProvider computes the diff on this worktree (see [pr-agent runtime](../02-agent/05-pragent-runtime.md)).
+- **Diff does not checkout files**: displaying a diff only needs reading the blob by sha (`git show <sha>:<path>`) + the list of changed files, without checking files out to disk, saving IO. The Monaco side lazy-loads per file, and skips binary / oversized files.
+- **Outbound proxy**: clone/fetch that hit the remote inject env per proxy config (see [Networking & proxy](../99-core/03-networking-proxy.md)); local read-only operations do not inject.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-- **镜像路径**：`<repos_dir>/<host>/<projectKey>/<repoSlug>/bare`。
-- **主要能力**（对主进程，按名 + 语义）：`syncMirror`（建 / 增量 fetch）· `materializeWorktree`（按 head / base 物化工作树）· `hasCommit`（预检是否需 fetch）· `listChangedFiles` · `getFileContent` · `getSize` · blame。
-- **进度事件**：clone / fetch 分阶段发 `start` / `progress` / `done` / `error`，经 IPC 推渲染层显示同步进度。
+- **Mirror path**: `<repos_dir>/<host>/<projectKey>/<repoSlug>/bare`.
+- **Main capabilities** (to the main process, by name + semantics): `syncMirror` (create / incremental fetch) · `materializeWorktree` (materialize a worktree by head / base) · `hasCommit` (pre-check whether a fetch is needed) · `listChangedFiles` · `getFileContent` · `getSize` · blame.
+- **Progress events**: clone / fetch emit staged `start` / `progress` / `done` / `error`, pushed via IPC to the render layer to show sync progress.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **`simple-git` 的 `.env()` 整体替换子进程 env**：注入代理 env 时务必 merge `process.env`，否则丢 `PATH`/`HOME`。
-- **LFS**：仅在需要的 worktree 实例上 opt-in 允许 unsafe filter，其余读操作保持严格模式。
-- **fresh clone 后 FS 可能未 flush**（Windows 尤甚）：物化后等 git 能稳定 `rev-parse HEAD` 几次再返回，避免
-  紧接着的 diff 撞上 refs/packs 不一致。
-- **磁盘是大头**：仓库镜像 GB 级，`repos_dir` 可改到大盘；设置页展示总占用，提供清理。
-- **二进制文件**：diff/读取要对非 UTF-8 内容安全跳过（pr-agent 侧也有对应处理，见 [pr-agent 运行时](../02-agent/05-pragent-runtime.md)）。
+- **`simple-git`'s `.env()` replaces the whole subprocess env**: when injecting proxy env, be sure to merge `process.env`, otherwise you lose `PATH`/`HOME`.
+- **LFS**: opt in to allowing unsafe filter only on the worktree instances that need it; keep other read operations in strict mode.
+- **After a fresh clone the FS may not be flushed** (especially on Windows): after materializing, wait until git can stably `rev-parse HEAD` a few times before returning, to avoid the immediately following diff hitting refs/packs inconsistency.
+- **Disk is the big cost**: repo mirrors are on the GB scale; `repos_dir` can be moved to a large disk; the settings page shows total usage and offers cleanup.
+- **Binary files**: diff/read must safely skip non-UTF-8 content (the pr-agent side has corresponding handling too, see [pr-agent runtime](../02-agent/05-pragent-runtime.md)).

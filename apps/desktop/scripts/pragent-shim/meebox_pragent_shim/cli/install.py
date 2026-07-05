@@ -1,11 +1,11 @@
-"""CLI 模式：调本机 CLI 子进程跑一轮对话，完全绕过 litellm / 直连 API。
+"""CLI mode: invoke a local CLI subprocess to run one round of conversation, fully bypassing litellm / the direct API.
 
-两个入口共用同一份子进程逻辑 `run_cli_chat`：
-  - `_install_cli_chat_completion`：把 LiteLLMAIHandler.chat_completion 整体替换为调 CLI 的版本，
-    由 patches.litellm_handler 在 MEEBOX_CLI_MODE 置位时调用——服务 **pr-agent 工具 run**（/describe
-    /review /ask 经 `python -m pr_agent.cli`，其内部 LLM 调用必经 chat_completion）。
-  - `run_cli_chat`：编排 **chat 通道**（`python -m meebox_pragent_shim.chat`）在 CLI 模式下直接调它，
-    无需 import pr_agent / litellm（CLI 路径根本不用 litellm），省去每次 chat 子进程的整套 import 开销。
+Both entry points share the same subprocess logic `run_cli_chat`:
+  - `_install_cli_chat_completion`: replaces LiteLLMAIHandler.chat_completion wholesale with a CLI-invoking version,
+    called by patches.litellm_handler when MEEBOX_CLI_MODE is set — serves the **pr-agent tool run** (/describe
+    /review /ask via `python -m pr_agent.cli`, whose internal LLM calls all go through chat_completion).
+  - `run_cli_chat`: the orchestration **chat channel** (`python -m meebox_pragent_shim.chat`) calls it directly in CLI mode,
+    with no need to import pr_agent / litellm (the CLI path does not use litellm at all), saving the full import overhead of every chat subprocess.
 """
 import os
 import sys
@@ -16,8 +16,8 @@ from .specs import _CLI_SPECS
 
 
 def _resolve_cli_exe(bin_name):
-    """用 shutil.which 解析命令真实路径。Windows 据 PATHEXT 命中 .cmd/.bat（不能被 CreateProcess
-    直接拉起，须经 cmd /c）。返回 (exe_path_or_None, needs_cmd_wrapper)。"""
+    """Resolve the command's real path via shutil.which. On Windows, PATHEXT may match .cmd/.bat (which cannot be
+    launched directly by CreateProcess and must go through cmd /c). Returns (exe_path_or_None, needs_cmd_wrapper)."""
     import shutil
 
     exe = shutil.which(bin_name)
@@ -28,21 +28,21 @@ def _resolve_cli_exe(bin_name):
 
 
 async def run_cli_chat(bin_name, system, user) -> str:
-    """调本机 CLI 子进程跑一轮 system+user 对话，返回回复正文（usage 经哨兵打 stderr）。
+    """Invoke a local CLI subprocess to run one round of system+user conversation, returning the reply body (usage is emitted to stderr via a sentinel).
 
-    pr-agent 只依赖 chat_completion 返回 (text, finish_reason) 这个稳定契约（base_ai_handler 定义），
-    故 CLI 接管与 pr-agent 具体版本无关，**不受版本守卫限制**（区别于依赖内部实现的其它 patch）。本函数
-    自包含、不 import pr_agent / litellm，编排 chat 通道在 CLI 模式可直接调用以省去整套 import 开销。
+    pr-agent only depends on the stable contract that chat_completion returns (text, finish_reason) (defined by base_ai_handler),
+    so the CLI takeover is independent of the specific pr-agent version and **not subject to the version guard** (unlike other patches that depend on internal implementation). This function
+    is self-contained and does not import pr_agent / litellm; the orchestration chat channel can call it directly in CLI mode to save the full import overhead.
 
-    各命令差异（argv flags / 输出解析 / 需剥离的计费 env）集中在 _CLI_SPECS，按命令名取用：
-      - prompt 经 **stdin** 喂入：review prompt 含完整 diff（数十 KB），走 argv 会撞命令行长度上限；
-        system / user 拼成一段（CLI 单轮无独立 system 槽）。
-      - cwd 默认落到中性临时目录：避免吃到被评审仓库的上下文（CLAUDE.md / AGENTS.md 等）污染输出。
-        例外：主进程仅对 /ask 经 MEEBOX_CLI_WORKDIR 下发（已净化的）worktree 路径，让自由问答能读到
-        完整文件；describe/review 不下发该 env、维持中性临时目录。净化在主进程侧做（清空仓库自带指令文件）。
-      - 子进程继承父 env（PATH / HOME / 代理变量），故能找到命令、复用其登录态、出站自动走代理。
-      - **凭据隔离**：剥掉对应计费 key（claude: ANTHROPIC_*；codex: OPENAI_API_KEY / CODEX_API_KEY），
-        让 CLI 使用其自身登录会话，而非环境里残留的 API key。模型与额度由该 CLI 账户与用户授权决定。
+    Per-command differences (argv flags / output parsing / billing env to strip) are centralized in _CLI_SPECS, looked up by command name:
+      - The prompt is fed via **stdin**: the review prompt contains the full diff (tens of KB), and passing it via argv would hit the command-line length limit;
+        system / user are concatenated into one segment (a single CLI round has no separate system slot).
+      - cwd defaults to a neutral temp directory: to avoid picking up context from the repo under review (CLAUDE.md / AGENTS.md etc.) that would pollute the output.
+        Exception: the main process only passes a (sanitized) worktree path via MEEBOX_CLI_WORKDIR for /ask, so free-form Q&A can read
+        the full files; describe/review do not pass this env and keep the neutral temp directory. Sanitization is done on the main-process side (clearing the repo's own instruction files).
+      - The subprocess inherits the parent env (PATH / HOME / proxy variables), so it can find the command, reuse its login state, and route outbound traffic through the proxy automatically.
+      - **Credential isolation**: strip the corresponding billing key (claude: ANTHROPIC_*; codex: OPENAI_API_KEY / CODEX_API_KEY),
+        so the CLI uses its own login session rather than an API key lingering in the environment. The model and quota are determined by that CLI account and the user's authorization.
     """
     import asyncio
     import tempfile
@@ -51,18 +51,18 @@ async def run_cli_chat(bin_name, system, user) -> str:
     spec = _CLI_SPECS.get(name)
     if spec is None:
         raise RuntimeError(
-            f"不支持的本地 CLI 命令 '{bin_name}'（当前已适配 claude / codex）。"
+            f"unsupported local CLI command '{bin_name}' (currently adapted: claude / codex)."
         )
     exe, needs_cmd = _resolve_cli_exe(bin_name)
-    # 命令前缀（cmd 包装 + exe）；exe 解析失败为 None。
+    # Command prefix (cmd wrapper + exe); None if exe resolution failed.
     cmd_prefix = (["cmd", "/c", exe] if needs_cmd else [exe]) if exe else None
     if cmd_prefix is None:
         raise RuntimeError(
-            f"找不到本地 CLI 命令 '{bin_name}'：请确认已安装、已登录，且 '{bin_name}' 在 PATH 中。"
+            f"local CLI command '{bin_name}' not found: please confirm it is installed, logged in, and that '{bin_name}' is on PATH."
         )
 
-    # 低算力档：仅 Agent 编排通道经 MEEBOX_CLI_REASONING=low/minimal 开启；把 low_effort_flags
-    # 插到尾部 `-`（stdin 占位）之前、保持 `-` 在末位；无尾部 `-` 则直接追加。
+    # Low-effort tier: only the Agent orchestration channel enables it via MEEBOX_CLI_REASONING=low/minimal; insert low_effort_flags
+    # before the trailing `-` (stdin placeholder), keeping `-` last; if there is no trailing `-`, just append.
     flags = list(spec["flags"])
     if os.environ.get("MEEBOX_CLI_REASONING", "").strip().lower() in ("low", "minimal"):
         extra = list(spec.get("low_effort_flags") or [])
@@ -70,11 +70,11 @@ async def run_cli_chat(bin_name, system, user) -> str:
             flags = flags[:-1] + extra + ["-"] if flags and flags[-1] == "-" else flags + extra
     argv = cmd_prefix + flags
 
-    # CLI 单轮无独立 system 槽：system+user 拼一段。先剥除缓存断点标记（仅 Anthropic litellm 路径用于
-    # 分块缓存；CLI 不缓存、标记不得进入 prompt）。
+    # A single CLI round has no separate system slot: concatenate system+user into one segment. First strip cache-break markers (used only by the Anthropic litellm path for
+    # chunked caching; the CLI does not cache, and the markers must not enter the prompt).
     system = strip_cache_break(system) if system else system
     prompt = f"{system}\n\n\n{user}" if system else user
-    # 基于 os.environ 拷贝再剔除计费 key——其余（PATH/HOME/代理变量等）原样保留。
+    # Copy from os.environ then remove the billing keys — everything else (PATH/HOME/proxy variables, etc.) is kept as-is.
     child_env = {k: v for k, v in os.environ.items() if k not in spec["strip_env"]}
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -86,20 +86,20 @@ async def run_cli_chat(bin_name, system, user) -> str:
             env=child_env,
         )
     except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"启动 CLI '{bin_name}' 失败: {exc}") from exc
+        raise RuntimeError(f"failed to start CLI '{bin_name}': {exc}") from exc
     out, err = await proc.communicate(prompt.encode("utf-8"))
     if proc.returncode != 0:
         raise RuntimeError(
-            f"CLI '{bin_name}' 退出码 {proc.returncode}: "
+            f"CLI '{bin_name}' exit code {proc.returncode}: "
             f"{(err or b'').decode('utf-8', 'replace')[:500]}"
         )
     text, usage = spec["parser"]((out or b"").decode("utf-8", "replace"))
     if usage:
-        # prompt_tokens ≈ 输入侧总规模，output_tokens ≈ completion（input/output_tokens 两家同名）。
-        # 缓存字段两家约定不同：
-        #   - Anthropic(claude)：input_tokens **不含**缓存，cache_read/创建需累加进总量；
-        #     cache_read 用 cache_read_input_tokens。
-        #   - OpenAI(codex)：input_tokens **已含**缓存，cached_input_tokens 仅作命中量、不再计入总量。
+        # prompt_tokens ≈ total input-side size, output_tokens ≈ completion (input/output_tokens share the same names across both).
+        # The cache fields differ in convention between the two:
+        #   - Anthropic(claude): input_tokens **excludes** cache, so cache_read/creation must be added into the total;
+        #     cache_read uses cache_read_input_tokens.
+        #   - OpenAI(codex): input_tokens **already includes** cache, and cached_input_tokens is only the hit count, not counted into the total again.
         prompt_tokens = usage.get("input_tokens")
         for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
             v = usage.get(k)
@@ -107,7 +107,7 @@ async def run_cli_chat(bin_name, system, user) -> str:
                 prompt_tokens = (prompt_tokens or 0) + v
         cache_read = usage.get("cache_read_input_tokens")
         if not isinstance(cache_read, int):
-            cache_read = usage.get("cached_input_tokens")  # codex/OpenAI 风格
+            cache_read = usage.get("cached_input_tokens")  # codex/OpenAI style
         turns = usage.get("num_turns")
         _emit_usage_tokens(
             prompt_tokens,
@@ -119,9 +119,9 @@ async def run_cli_chat(bin_name, system, user) -> str:
 
 
 def _install_cli_chat_completion(handler_cls, bin_name) -> None:
-    """把 chat_completion 换成调本机 CLI 子进程的版本（委托 run_cli_chat），服务 pr-agent 工具 run。
-    chat_completion 的 model / temperature / img_path 在 CLI 路径里用不到（命令与算力档由 spec + env 决定），
-    仅为满足 base_ai_handler 的方法签名而保留。"""
+    """Replace chat_completion with a version that invokes a local CLI subprocess (delegating to run_cli_chat), serving the pr-agent tool run.
+    chat_completion's model / temperature / img_path are unused on the CLI path (the command and effort tier are determined by spec + env);
+    they are kept only to satisfy base_ai_handler's method signature."""
 
     async def chat_completion(self, model, system, user, temperature=0.2, img_path=None):
         text = await run_cli_chat(bin_name, system, user)

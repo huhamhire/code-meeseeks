@@ -8,7 +8,7 @@ import {
   matchesSecondaryFilter,
 } from '../src/pr-filter.js';
 
-/** 最小 StoredPullRequest 构造：只填谓词用到的字段，其余以 double-cast 略过。 */
+/** Minimal StoredPullRequest builder: only fills the fields the predicates use, skipping the rest via double-cast. */
 function mkPr(over: Partial<StoredPullRequest>): StoredPullRequest {
   return {
     title: 'Fix login bug',
@@ -24,20 +24,20 @@ function mkPr(over: Partial<StoredPullRequest>): StoredPullRequest {
 }
 
 describe('matchesDiscoveryFilter', () => {
-  it('无一级 = 不限定，恒真', () => {
+  it('no primary = unfiltered, always true', () => {
     expect(matchesDiscoveryFilter(mkPr({ discoveryFilters: [] }), undefined)).toBe(true);
   });
-  it('命中 discoveryFilters 为真', () => {
+  it('matches discoveryFilters → true', () => {
     expect(
       matchesDiscoveryFilter(mkPr({ discoveryFilters: ['review-requested', 'created'] }), 'created'),
     ).toBe(true);
   });
-  it('未命中为假', () => {
+  it('no match → false', () => {
     expect(matchesDiscoveryFilter(mkPr({ discoveryFilters: ['review-requested'] }), 'assigned')).toBe(
       false,
     );
   });
-  it('PR 无 discoveryFilters 且指定了一级 → 假', () => {
+  it('PR has no discoveryFilters and a primary is given → false', () => {
     expect(matchesDiscoveryFilter(mkPr({ discoveryFilters: undefined }), 'review-requested')).toBe(
       false,
     );
@@ -45,18 +45,18 @@ describe('matchesDiscoveryFilter', () => {
 });
 
 describe('matchesSecondaryFilter', () => {
-  it("'all' 恒真", () => {
+  it("'all' is always true", () => {
     expect(matchesSecondaryFilter(mkPr({ localStatus: 'needs_work' }), 'all')).toBe(true);
   });
-  it('按 localStatus 匹配', () => {
+  it('matches by localStatus', () => {
     expect(matchesSecondaryFilter(mkPr({ localStatus: 'approved' }), 'approved')).toBe(true);
     expect(matchesSecondaryFilter(mkPr({ localStatus: 'pending' }), 'approved')).toBe(false);
   });
-  it("'conflict' 看 hasConflict", () => {
+  it("'conflict' checks hasConflict", () => {
     expect(matchesSecondaryFilter(mkPr({ hasConflict: true }), 'conflict')).toBe(true);
     expect(matchesSecondaryFilter(mkPr({ hasConflict: false }), 'conflict')).toBe(false);
   });
-  it("'mergeable' 看 mergeStatus.canMerge", () => {
+  it("'mergeable' checks mergeStatus.canMerge", () => {
     expect(
       matchesSecondaryFilter(
         mkPr({ mergeStatus: { canMerge: true, conflicted: false, vetoes: [] } }),
@@ -70,14 +70,14 @@ describe('matchesSecondaryFilter', () => {
       ),
     ).toBe(false);
   });
-  it("'pending' 默认按 localStatus，不含冲突", () => {
+  it("'pending' defaults to localStatus, excludes conflicts", () => {
     expect(matchesSecondaryFilter(mkPr({ localStatus: 'pending' }), 'pending')).toBe(true);
     expect(
       matchesSecondaryFilter(mkPr({ localStatus: 'approved', hasConflict: true }), 'pending'),
     ).toBe(false);
   });
-  it("'created' 分类下 'pending' 并入冲突 PR（作者需跟进）", () => {
-    // 评审已通过但存在冲突 → created 下计入待处理
+  it("'pending' under 'created' includes conflicted PRs (author must follow up)", () => {
+    // review already approved but has a conflict → counted as pending under created
     expect(
       matchesSecondaryFilter(
         mkPr({ localStatus: 'approved', hasConflict: true }),
@@ -85,7 +85,7 @@ describe('matchesSecondaryFilter', () => {
         'created',
       ),
     ).toBe(true);
-    // 无冲突且非 pending → 仍不计入
+    // no conflict and not pending → still not counted
     expect(
       matchesSecondaryFilter(
         mkPr({ localStatus: 'approved', hasConflict: false }),
@@ -93,7 +93,7 @@ describe('matchesSecondaryFilter', () => {
         'created',
       ),
     ).toBe(false);
-    // localStatus pending 本就计入
+    // localStatus pending is counted on its own
     expect(
       matchesSecondaryFilter(
         mkPr({ localStatus: 'pending', hasConflict: false }),
@@ -111,19 +111,19 @@ describe('matchesPrQuery', () => {
     author: { displayName: 'Alice Zhang', name: 'alice' } as StoredPullRequest['author'],
     remoteId: '42',
   });
-  it('空查询恒真', () => {
+  it('empty query is always true', () => {
     expect(matchesPrQuery(pr, '')).toBe(true);
     expect(matchesPrQuery(pr, '   ')).toBe(true);
   });
-  it('大小写无关匹配标题 / 仓库 / 作者 / 编号', () => {
-    expect(matchesPrQuery(pr, 'LOGIN')).toBe(true); // 标题
+  it('case-insensitive match on title / repo / author / id', () => {
+    expect(matchesPrQuery(pr, 'LOGIN')).toBe(true); // title
     expect(matchesPrQuery(pr, 'web-app')).toBe(true); // repoSlug
     expect(matchesPrQuery(pr, 'proj')).toBe(true); // projectKey
     expect(matchesPrQuery(pr, 'alice')).toBe(true); // author.name
     expect(matchesPrQuery(pr, 'Alice Zhang')).toBe(true); // author.displayName
     expect(matchesPrQuery(pr, '42')).toBe(true); // remoteId
   });
-  it('未命中为假', () => {
+  it('no match → false', () => {
     expect(matchesPrQuery(pr, 'nonexistent')).toBe(false);
   });
 });
@@ -151,25 +151,25 @@ describe('filterPullRequests', () => {
     }),
   ];
 
-  it('空条件返回全部', () => {
+  it('empty criteria returns all', () => {
     expect(filterPullRequests(prs, {})).toHaveLength(3);
   });
-  it('一级过滤', () => {
+  it('primary filter', () => {
     const out = filterPullRequests(prs, { primary: 'review-requested' });
     expect(out.map((p) => p.remoteId)).toEqual(['1', '3']);
   });
-  it('一级 + 二级 AND', () => {
+  it('primary + secondary AND', () => {
     const out = filterPullRequests(prs, { primary: 'review-requested', secondary: 'approved' });
     expect(out.map((p) => p.remoteId)).toEqual(['3']);
   });
-  it('二级 + 检索 AND', () => {
+  it('secondary + query AND', () => {
     const out = filterPullRequests(prs, { secondary: 'approved', query: 'beta' });
     expect(out.map((p) => p.remoteId)).toEqual(['2']);
   });
-  it('conflict 横切筛选', () => {
+  it('conflict cross-cutting filter', () => {
     expect(filterPullRequests(prs, { secondary: 'conflict' }).map((p) => p.remoteId)).toEqual(['3']);
   });
-  it("'created' + 'pending' 并入冲突的已通过 PR", () => {
+  it("'created' + 'pending' includes conflicted approved PRs", () => {
     const createdPrs = [
       mkPr({ remoteId: '10', localStatus: 'pending', discoveryFilters: ['created'] }),
       mkPr({
@@ -186,7 +186,7 @@ describe('filterPullRequests', () => {
 });
 
 describe('PR_SECONDARY_FILTERS', () => {
-  it('含全部二级筛选键', () => {
+  it('contains all secondary filter keys', () => {
     expect(PR_SECONDARY_FILTERS).toEqual([
       'all',
       'pending',

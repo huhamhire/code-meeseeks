@@ -1,80 +1,80 @@
-# 工具 token 成本与上下文分层
+# Tool token cost & context tiers
 
-## 职责与边界
+## Responsibilities & boundaries
 
-聚焦 pr-agent 各工具（`/describe` `/review` `/improve` `/ask`）与自由对话 Agent 的**上下文来源与 token
-成本模型**：上下文分几层、成本在哪一层放量、以何种手段收敛而不牺牲评审深度。运行时机制（调用桥 / 嵌入式
-Python / monkeypatch / token 采集）见 [pr-agent 集成与运行时](05-pragent-runtime.md)；会话 Agent 化与规划循环见
-[会话 Agent 化](02-session.md)；worktree 物化见 [仓库镜像](../01-platform/02-repo-mirror.md)。
+Focus on the **context sources and token cost model** of the pr-agent tools (`/describe` `/review` `/improve` `/ask`) and the free-conversation Agent:
+how many tiers the context has, at which tier cost scales up, and by what means to converge it without sacrificing review depth. The runtime mechanisms (invocation bridge / embedded
+Python / monkeypatch / token collection) are in [pr-agent integration & runtime](05-pragent-runtime.md); agentic sessions and the planning loop are in
+[Agentic sessions](02-session.md); worktree materialization is in [Repo mirror](../01-platform/02-repo-mirror.md).
 
-结论先行：成本放量集中在「本机 agentic CLI 提供方下的 `/ask`」与「自由对话 Agent 的规划循环」——前者一次
-探索可跨多轮读文件，后者可连发多次这样的 `/ask`。**不存在「diff-only 的盲评审」**：pr-agent 默认已把变更的
-近端上下文（所在函数 / 类、周边行、整份新文件、best-practices）注入 prompt。
+Conclusion first: cost scaling concentrates in "`/ask` under the local agentic CLI provider" and "the free-conversation Agent's planning loop" — the former can
+read files across multiple turns in one exploration, the latter can fire multiple such `/ask` in a row. **There is no "diff-only blind review"**: by default pr-agent already injects the
+near-end context of the change (the enclosing function / class, surrounding lines, the whole new file, best-practices) into the prompt.
 
-## 三层上下文模型
+## Three-tier context model
 
-评审上下文并非「diff vs 全仓」二选一，而是三层递进：
+Review context is not "diff vs whole repo, pick one" but three progressive tiers:
 
-| 层 | 上下文 | 成本 | 本仓何处使用 |
+| Tier | Context | Cost | Where used in this repo |
 |----|--------|------|-------------|
-| 1 · 裸 diff | 仅 `+/-` 行 | 极低 | 无（不单独使用） |
-| 2 · **展开 diff（pr-agent 默认）** | diff + 动态上下文补到**所在函数 / 类** + hunk 周边行 + 整份新文件 + best-practices | **有界、确定**（受 `MAX_MODEL_TOKENS` 约束） | `/review` `/describe` `/improve`，以及 `/ask` 的基座 |
-| 3 · agentic 探索 | 按需读任意文件、跟调用链、跨文件核对 | **无界**（轮次 × 累计上下文，近平方增长） | 仅 `/ask` + CLI 提供方（下发 worktree cwd）；自由对话 Agent 可跨步多次触发 |
+| 1 · bare diff | only `+/-` lines | very low | none (not used standalone) |
+| 2 · **expanded diff (pr-agent default)** | diff + dynamic context extended to the **enclosing function / class** + hunk surrounding lines + the whole new file + best-practices | **bounded, deterministic** (constrained by `MAX_MODEL_TOKENS`) | `/review` `/describe` `/improve`, and the base of `/ask` |
+| 3 · agentic exploration | read any file on demand, follow the call chain, cross-file cross-check | **unbounded** (turns × accumulated context, near-quadratic growth) | only `/ask` + the CLI provider (hands down the worktree cwd); the free-conversation Agent can trigger it multiple times across steps |
 
-第 2 层是 pr-agent 对「裸 diff 不足以评审」的既定答案：以确定成本纳入变更的近端爆炸半径，而非放 agent 自由
-探索。pr-agent 默认即开（[configuration.toml](../../../apps/desktop/vendor/pragent/python/Lib/site-packages/pr_agent/settings/configuration.toml)：
-`allow_dynamic_context=true`、`patch_extra_lines_before=5`/`_after=1`、`max_extra_lines_before_dynamic_context=10`、
-`best_practices` 等），本应用未覆盖这些默认，故 `/review` 天然享有第 2 层上下文——缺的是**远端**上下文（别处
-文件的调用方、跨模块契约、数个文件外的不变量）。
+Tier 2 is pr-agent's established answer to "a bare diff isn't enough to review": include the change's near-end blast radius at a deterministic cost, rather than letting the agent explore
+freely. pr-agent has it on by default ([configuration.toml](../../../apps/desktop/vendor/pragent/python/Lib/site-packages/pr_agent/settings/configuration.toml):
+`allow_dynamic_context=true`, `patch_extra_lines_before=5`/`_after=1`, `max_extra_lines_before_dynamic_context=10`,
+`best_practices`, etc.); this app does not override these defaults, so `/review` naturally enjoys tier-2 context — what's missing is the **remote** context (callers in other
+files, cross-module contracts, invariants several files away).
 
-第 3 层只在 CLI-`/ask`：`buildInvocation` 仅当 `tool==='ask' && provider==='cli'` 时下发 `MEEBOX_CLI_WORKDIR`，让
-agentic CLI 在 worktree 里读文件、多轮迭代。此时 CLI **仍先拿到 pr-agent 渲染的展开 diff**（见 pr_questions 模板
-的 `The PR Git Diff`）——它不是「只有问题、从零翻找」，而是「已有第 2 层、再探第 3 层」。
+Tier 3 is only in CLI-`/ask`: `buildInvocation` hands down `MEEBOX_CLI_WORKDIR` only when `tool==='ask' && provider==='cli'`, letting the
+agentic CLI read files in the worktree and iterate across turns. At this point the CLI **still first receives the pr-agent-rendered expanded diff** (see the `The PR Git Diff` of the pr_questions template) —
+it is not "only the question, searching from scratch", but "already has tier 2, then explores tier 3".
 
-## 成本驱动
+## Cost drivers
 
-- **CLI-`/ask` 的 agentic 探索（第 3 层）**：worktree 可读、无轮次上限，倾向整文件通读 / 全仓扫描；每轮携带
-  不断增长的对话 + 工具结果重传，近平方增长。CLI 模式下 `MAX_MODEL_TOKENS` 被忽略（CLI 自管上下文窗口），
-  无应用侧输入上限。
-- **自由对话 Agent 的规划循环**：仅受「Agent 最大步数」`max_steps`（默认 8）约束，可跨多步连发 `/ask`，每次都是
-  一次第 3 层探索——若不另加约束，成本随步数叠加而失控。
+- **CLI-`/ask`'s agentic exploration (tier 3)**: the worktree is readable with no turn cap, tending toward whole-file read-throughs / whole-repo scans; each turn carries the
+  ever-growing conversation + tool results and re-transmits, near-quadratic growth. In CLI mode `MAX_MODEL_TOKENS` is ignored (the CLI self-manages the context window),
+  with no app-side input cap.
+- **The free-conversation Agent's planning loop**: constrained only by the "Agent max steps" `max_steps` (default 8), it can fire `/ask` in a row across multiple steps, each being
+  one tier-3 exploration — without extra constraints, cost gets out of control as the steps stack.
 
-第 2 层（含 API 提供方的 `/ask`、所有 review/describe/improve）是单轮、受 token 预算硬约束的确定成本。
+Tier 2 (including the API provider's `/ask`, all review/describe/improve) is a single-turn, token-budget-hard-constrained deterministic cost.
 
-## 优化措施
+## Optimization measures
 
-目标：让第 2 层足够充分（廉价、确定），让第 3 层的**必要**探索更高效、**数量**受控——而非砍掉探索降级评审。
+Goal: make tier 2 sufficiently full (cheap, deterministic), and make tier 3's **necessary** exploration more efficient and its **quantity** controlled — rather than cutting exploration to degrade the review.
 
-### 已实现
+### Implemented
 
-- **CLI-`/ask` 只读代码检索指引**：`buildExtraInstructions` 的 `worktreeRetrievalDirective`（仅 CLI 提供方注入）
-  引导以 diff 为改动真源、**定向搜符号 · 只读所需行段**替代整文件通读与全仓扫描，够用即止。刻意只用**只读**
-  工具集——headless（无 TTY）下 claude default 权限模式对内置只读工具（Read/Grep、以及 `grep`·`git log/show`
-  等只读 Bash 命令）静默放行、无授权摩擦，但对非只读工具（写、以及 `rg` 等不在内置只读白名单的命令）不是
-  拒绝而是**直接中止会话**，故明确「用 `grep` 不用 `rg`」、禁止改动类命令。只依赖「内置只读工具静默放行」这一
-  跨版本稳定语义，不加 `--allowedTools`/`--permission-mode` 等依赖具体 claude 版本的启动参数。
-- **自由对话 Agent 的 `/ask` 预算**：规划循环按配置「追问数量」`max_followup_asks` 对本会话 `/ask` 计数封顶，
-  达上限即在红线校验处拒绝新的 `/ask` 并回喂（促模型据现有上下文收尾或改用只读工具）；`describe/review/improve`
-  不受此约束、`max_steps` 不变。**count-only**：始终按配置的追问数量生效，与「自动追问」开关无关（开关仅约束
-  评审微流程的条件追问）。评审微流程侧的条件追问（judge 步）与本预算共用同一配置值。
+- **CLI-`/ask` read-only code-retrieval directive**: `buildExtraInstructions`'s `worktreeRetrievalDirective` (injected only for the CLI provider)
+  guides taking the diff as the true source of the change, **searching for symbols in a targeted way · reading only the needed line ranges** instead of whole-file read-throughs and whole-repo scans, stopping once sufficient. It deliberately uses only the **read-only**
+  tool set — under headless (no TTY), claude default permission mode silently allows built-in read-only tools (Read/Grep, plus `grep` · `git log/show`
+  and other read-only Bash commands) with no authorization friction, but for a non-read-only tool (writes, plus `rg` and other commands not in the built-in read-only whitelist) it does not
+  reject but **aborts the session outright**, so it makes explicit "use `grep` not `rg`" and forbids mutating commands. It relies only on the cross-version-stable semantic of "built-in read-only tools are silently allowed",
+  without adding `--allowedTools`/`--permission-mode` and other startup args that depend on a specific claude version.
+- **The free-conversation Agent's `/ask` budget**: the planning loop caps this session's `/ask` count per the configured "follow-up count" `max_followup_asks`,
+  and on reaching the cap rejects a new `/ask` at the red-line check and feeds it back (prompting the model to wrap up from the existing context or switch to a read-only tool); `describe/review/improve`
+  are not subject to this, and `max_steps` is unchanged. **count-only**: it always takes effect per the configured follow-up count, independent of the "auto follow-up" switch (the switch only constrains
+  the conditional follow-up of the review micro-flow). The review-micro-flow-side conditional follow-up (the judge step) shares the same config value as this budget.
 
-### 已否决
+### Rejected
 
-- **给 CLI-`/ask` 前置注入统一 diff**：CLI-`/ask` 的 prompt 已由 pr_questions 模板携带 pr-agent 的展开 diff（第 2
-  层），再注入一份只是重复上下文、徒增 prompt，且不减少第 3 层探索（探索是为拿 diff 之外的远端上下文）。
+- **Pre-injecting a unified diff for CLI-`/ask`**: the CLI-`/ask` prompt already carries pr-agent's expanded diff via the pr_questions template (tier
+  2), and injecting another copy only duplicates the context, bloats the prompt, and does not reduce tier-3 exploration (which exists to get the remote context beyond the diff).
 
-### 待评估（暂缓）
+### Under evaluation (deferred)
 
-- **codegraph 作为检索工具**：把「盲读」换成「定向查（定义 / 调用方 / 影响面）」，收敛第 3 层浪费。**仅适用于
-  有工具循环的 agentic 路径（`/ask`）**：作为 MCP server 挂给 headless CLI。`/review` 是单轮工具、无工具循环，
-  codegraph 对它只能是 **orchestrator 侧预注入**（组 prompt 时选取远端上下文拼进第 2 层），而非「传给 review 的
-  工具」。成本：worktree 每次物化即临时，需每次建图或改对长驻镜像增量维护并保鲜；claude 支持 MCP、codex 不支持
-  外部 MCP 注入。宜在既有措施仍不足时再上。
-- **单次 `/ask` 的 agentic 轮次上限**（claude `--max-turns`）：作安全兜底、非成本主手段；依赖具体 CLI 版本对该
-  旗标的支持，暂不引入。
+- **codegraph as a retrieval tool**: swap "blind reading" for "targeted query (definition / callers / impact surface)", converging tier-3 waste. **Applies only to
+  the agentic path with a tool loop (`/ask`)**: mounted as an MCP server for the headless CLI. `/review` is a single-turn tool with no tool loop, and
+  codegraph for it can only be **orchestrator-side pre-injection** (select the remote context when composing the prompt and splice it into tier 2), rather than "a tool passed to review".
+  Cost: a worktree is temporary on each materialization, requiring building the graph each time or switching to incremental maintenance and freshness-keeping on a long-lived mirror; claude supports MCP, codex does not support
+  external MCP injection. Better to adopt it only when the existing measures still fall short.
+- **Agentic turn cap for a single `/ask`** (claude `--max-turns`): as a safety net, not a primary cost lever; it depends on a specific CLI version's support for that
+  flag, so not introduced for now.
 
-## 关联
+## Related / See also
 
-- [pr-agent 集成与运行时](05-pragent-runtime.md)：调用桥 / 嵌入式运行时 / monkeypatch / token 采集 / env 注入。
-- [会话 Agent 化](02-session.md)：规划循环（ReAct）、步数上限、过程留存。
-- [仓库镜像](../01-platform/02-repo-mirror.md)：worktree 物化与三点 diff 口径。
+- [pr-agent integration & runtime](05-pragent-runtime.md): invocation bridge / embedded runtime / monkeypatch / token collection / env injection.
+- [Agentic sessions](02-session.md): the planning loop (ReAct), the step cap, process retention.
+- [Repo mirror](../01-platform/02-repo-mirror.md): worktree materialization and the three-dot diff basis.

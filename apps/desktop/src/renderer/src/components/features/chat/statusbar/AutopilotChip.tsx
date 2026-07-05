@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { RobotIcon, RobotOffIcon, StatusChip } from '../../../common';
 
 /**
- * AutoPilot 开关 chip：默认关，点击切换（持久化到 agent.autopilot.enabled，下次 poll 生效）。
+ * AutoPilot toggle chip: off by default, click to toggle (persisted to agent.autopilot.enabled, takes effect on next poll).
  */
 export function AutopilotChip({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   const { t } = useTranslation();

@@ -9,8 +9,9 @@ import { invoke } from '../../../../api';
 import type { MatchedRules } from '../types';
 
 /**
- * 命中规则预览。单条沿用「Rule: <id>」标题；多条时标题改为计数，正文按 `Ruleset N` 分段逐条列出
- * （与评审注入的拼接口径一致），让用户确认本次 review 会被哪些规约约束。
+ * Matched rule preview. A single match keeps the「Rule: <id>」title; multiple matches switch the title to a
+ * count and list each in the body split by `Ruleset N` (matching the review injection's concatenation),
+ * letting the user confirm which rules will constrain this review.
  */
 export function RulePreviewModal({
   rules,
@@ -53,7 +54,7 @@ export function RulePreviewModal({
           )}
           <div className="modal-kv">
             <div className="modal-kv-key">{t('chatPane.ruleFilePath')}</div>
-            {/* 相对 Agent 目录展示（`rules/<id>`），避免暴露冗长的机器绝对路径；打开目录按钮在标题栏统一提供。 */}
+            {/* Shown relative to the Agent dir (`rules/<id>`), to avoid exposing the long machine absolute path; the open-dir button is provided uniformly in the title bar. */}
             <div className="modal-kv-val">
               <code>rules/{rule.id}</code>
             </div>

@@ -16,7 +16,7 @@ export function LlmStep({
   onValidityChange: (valid: boolean) => void;
 }) {
   const { t } = useTranslation();
-  // 两阶段：先选 provider（居中滚动列表）→ 选定后列表收到左侧、右侧展开配置
+  // Two phases: first pick a provider (centered scrolling list) → once chosen the list collapses to the left and the config expands on the right
   const [chosen, setChosen] = useState(false);
   const pick = (provider: LlmProfile['provider']): void => {
     onChange({ ...draft, provider });
@@ -28,9 +28,9 @@ export function LlmStep({
       <p className="muted onboarding-step-sub">{t('onboarding.llmSub')}</p>
 
       {!chosen ? (
-        // 阶段一：居中的 provider 选择列表（滚动）
+        // Phase one: centered provider pick list (scrolling)
         <div className="onboarding-provider-pick">
-          {/* 阶段一沿用中性配置选择器视觉，但每项尾随「›」提示可进入、且不预选高亮 */}
+          {/* Phase one reuses the neutral config picker visuals, but each item trails a "›" hinting it's enterable and has no pre-selected highlight */}
           <div
             className="config-pick-list"
             role="radiogroup"
@@ -58,7 +58,7 @@ export function LlmStep({
           </div>
         </div>
       ) : (
-        // 阶段二：左侧列表（图标左移）+ 右侧配置
+        // Phase two: left list (icons shifted left) + right config
         <div className="onboarding-llm-grid">
           <LlmProviderPicker
             value={draft.provider}

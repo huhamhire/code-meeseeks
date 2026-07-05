@@ -1,6 +1,6 @@
 /**
- * pino-roll 上游（3.x）不带 .d.ts。这里给出最小的全 workspace 共享声明，
- * 各包按需在 tsconfig.json 的 include 里加 `../../typings/**` 引入。
+ * pino-roll upstream (3.x) ships no .d.ts. This provides a minimal workspace-wide shared declaration;
+ * each package imports it as needed by adding `../../typings/**` to the include in tsconfig.json.
  */
 declare module 'pino-roll' {
   import type { Writable } from 'node:stream';

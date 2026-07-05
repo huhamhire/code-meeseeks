@@ -1,5 +1,5 @@
-// PR 头部动作区：浏览器打开 / 合并 / 提交评审 / approve·needs-work 决断按钮。
-// 见 components/features/pr/PrHeader。头部带布局 (.pr-header / -top / -title / -meta) 在 layout/main-pane。
+// PR header actions: open in browser / merge / publish review / approve·needs-work decision buttons.
+// See components/features/pr/PrHeader. The header band layout (.pr-header / -top / -title / -meta) is in layout/main-pane.
 
 @use '../../tokens' as *;
 
@@ -9,16 +9,16 @@
   flex-wrap: wrap;
   align-items: center;
 }
-// "浏览器打开" 按钮：图标 + 文案 横排
+// "Open in browser" button: icon + label in a row
 .pr-header-open-browser {
   display: inline-flex;
   align-items: center;
   gap: $space-2;
 }
 
-// "合并" 按钮：分支合并图标 + 文案。基础态与 approve 的 inactive 一致（默认描边 + 正文色，仅图标用
-// 绿色语义色），不再「常绿填充」——常绿易被误判为「已点击 / 已合并」态。改以 1s 周期 blink 突出
-// 可点击；点击后（merging → disabled）走 .btn:disabled 灰显并停闪。
+// "Merge" button: branch-merge icon + label. Base state matches approve's inactive (default border + body color, only the icon uses
+// the green semantic color), no longer "always-green filled" — always-green is easily misread as a "clicked / merged" state. Instead, a 1s-cycle blink highlights
+// clickability; after clicking (merging → disabled) it goes through .btn:disabled to gray out and stop blinking.
 .pr-header-merge {
   display: inline-flex;
   align-items: center;
@@ -31,7 +31,7 @@
   }
 
   &:hover:not(:disabled) {
-    // hover 给确定反馈：停闪 + 实心绿描边 + 浅绿填充
+    // hover gives definite feedback: stop blinking + solid green border + light green fill
     animation: none;
     background: rgb(var(--rgb-approved) / 0.14);
     border-color: $color-approved;
@@ -50,7 +50,7 @@
     background: rgb(var(--rgb-approved) / 0.14);
   }
 }
-// 降低动态偏好：不闪烁，保留绿描边以示可合并
+// Reduced-motion preference: no blinking, keep the green border to indicate mergeable
 @media (prefers-reduced-motion: reduce) {
   .pr-header-merge {
     animation: none;
@@ -58,32 +58,32 @@
   }
 }
 
-// review 决断按钮组：用 auto margin 顶到右边；wrap 时整组下沉但仍保持右对齐
+// review decision button group: pushed to the right with auto margin; on wrap the whole group drops down but stays right-aligned
 .pr-header-actions-right {
   margin-left: auto;
   display: inline-flex;
   gap: $space-3;
 }
 
-// "提交评审 (N)" 入口：N > 0 时主色描边 + 主色文字，跟"通过 / 需修改" inactive 态视觉权重一致
-// （它俩也是默认描边、靠 icon 颜色做语义）；不做整块填充避免在 header 里盖过"浏览器打开"主色按钮。
-// hover 时浅填一层主色提示可点。0 条时走默认 :disabled 灰显
+// "Publish review (N)" entry: when N > 0, accent border + accent text, matching the visual weight of the "approve / needs-work" inactive state
+// (those also use a default border, with icon color carrying the semantic); no full fill, to avoid overpowering the "open in browser" accent button in the header.
+// On hover, a light accent fill hints clickability. When 0, it uses the default :disabled gray-out
 .pr-header-publish {
   &:not(:disabled) {
     border-color: $color-info;
     color: $color-info;
 
     &:hover {
-      // 用极浅的主色填充 (~10% 透明)；border 同时加深一档强化可点感
+      // Very light accent fill (~10% transparent); border also deepens one step to reinforce clickability
       background: rgb(var(--rgb-accent) / 0.12);
     }
   }
 }
 
-// PR review 操作按钮 (approve / needs work) —— 图标 + 文案。
-// 图标用动作语义色：approve = 绿，needs work = 黄 (amber)。
-// 文案在 inactive 状态仍是 $text-body，避免整行文字被绿/黄"染色"破坏对比；
-// active 状态整体填充语义色，icon 与文字一起翻到对比色
+// PR review action buttons (approve / needs work) —— icon + label.
+// Icons use action semantic colors: approve = green, needs work = yellow (amber).
+// The label stays $text-body in the inactive state, to avoid the whole line of text being "tinted" green/yellow and breaking contrast;
+// in the active state the whole thing fills with the semantic color, icon and text flip together to the contrast color
 .review-action {
   display: inline-flex;
   align-items: center;

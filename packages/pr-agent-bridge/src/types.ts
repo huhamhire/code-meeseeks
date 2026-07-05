@@ -1,67 +1,68 @@
 import type { PrAgentStrategy } from '@meebox/shared';
 
-/** pr-agent 子命令枚举；跟 @meebox/shared 的 ReviewRunTool 同集合 */
+/** pr-agent subcommand enum; same set as @meebox/shared's ReviewRunTool */
 export type PrAgentTool = 'describe' | 'review' | 'ask' | 'improve';
 
 export interface PrAgentRunOptions {
   /**
-   * pr-agent 入口 `--pr_url`。
-   * - 远端模式：Bitbucket PR URL，如 https://host/projects/.../pull-requests/<id>
-   * - 本地模式 (cwd 已配置)：直接传 cwd 路径（容器里固定为 /repo），pr-agent 拿来
-   *   定位本地仓库目录，不会走任何远端 API
+   * pr-agent entry `--pr_url`.
+   * - Remote mode: Bitbucket PR URL, e.g. https://host/projects/.../pull-requests/<id>
+   * - Local mode (cwd configured): pass the cwd path directly (fixed to /repo in the container), which
+   *   pr-agent uses to locate the local repository directory, without hitting any remote API
    */
   prUrl: string;
   tool: PrAgentTool;
-  /** 注入到子进程的环境变量（LLM key / platform token / config 覆盖） */
+  /** Environment variables injected into the subprocess (LLM key / platform token / config overrides) */
   env?: Record<string, string>;
-  /** 追加到 CLI 末尾的参数（如 --extra_instructions / --config_file） */
+  /** Arguments appended at the end of the CLI (e.g. --extra_instructions / --config_file) */
   extraArgs?: string[];
-  /** 单次调用超时，默认 5 min */
+  /** Timeout for a single call, default 5 min */
   timeoutMs?: number;
-  /** stdout / stderr 整行流式推送（M3-B UI 进度提示用） */
+  /** Per-line streaming push of stdout / stderr (for M3-B UI progress hints) */
   onLine?: (line: string, stream: 'stdout' | 'stderr') => void;
   /**
-   * 用户主动取消信号。abort 后 SIGKILL 子进程，reject 为 PrAgentRunError reason='cancelled'。
-   * 不传则永不取消，仅 timeoutMs 兜底。
+   * User-initiated cancellation signal. After abort, SIGKILL the subprocess and reject with
+   * PrAgentRunError reason='cancelled'. If not passed, never cancels, with only timeoutMs as a fallback.
    */
   signal?: AbortSignal;
   /**
-   * 本地工作树绝对路径。配置后切到 `git_provider=local` 模式：把 cwd 作为子进程
-   * 工作目录，pr-agent 自己跑 `git diff <targetBranch>...HEAD`，完全不出网到代码托管。
-   * 不设置则走原远端 provider 模式（默认 prUrl 远端拉 PR）。
+   * Absolute path of the local worktree. When configured, switches to `git_provider=local` mode: uses cwd
+   * as the subprocess working directory, and pr-agent runs `git diff <targetBranch>...HEAD` itself, never
+   * going out to the code host. If not set, uses the original remote provider mode (default: pull the PR
+   * from the remote via prUrl).
    */
   cwd?: string;
   /**
-   * 本地 diff 起点。仅 `cwd` 设置时生效；典型值是 PR base sha 或 ref 名。
-   * 传给 pr-agent 的 `--target_branch`；缺省时 pr-agent 自己 fallback 到默认分支。
+   * Local diff starting point. Effective only when `cwd` is set; typical value is the PR base sha or ref name.
+   * Passed to pr-agent's `--target_branch`; when omitted, pr-agent falls back to the default branch itself.
    */
   targetBranch?: string;
 }
 
 export interface PrAgentRunResult {
-  /** 子进程完整 stdout 文本 */
+  /** Full stdout text of the subprocess */
   stdout: string;
-  /** 子进程完整 stderr 文本 */
+  /** Full stderr text of the subprocess */
   stderr: string;
-  /** 退出码；信号被杀 / 启动失败时为 -1 */
+  /** Exit code; -1 when killed by signal / launch failed */
   exitCode: number;
-  /** 运行墙钟时间 (ms) */
+  /** Wall-clock run time (ms) */
   durationMs: number;
 }
 
 export type PrAgentRunFailureReason =
-  /** 超时被 SIGKILL */
+  /** SIGKILLed on timeout */
   | 'timeout'
-  /** 子进程未能启动（ENOENT / 权限 / fork 失败） */
+  /** Subprocess failed to launch (ENOENT / permission / fork failure) */
   | 'spawn-failed'
-  /** 正常退出但 exit code != 0 */
+  /** Exited normally but exit code != 0 */
   | 'non-zero-exit'
-  /** 被外部信号杀死（非超时） */
+  /** Killed by an external signal (not a timeout) */
   | 'killed'
-  /** 用户主动取消 (AbortSignal abort) */
+  /** User-initiated cancellation (AbortSignal abort) */
   | 'cancelled';
 
-/** pr-agent 跑失败时抛出；携带原因 + 已收集的 stdout / stderr / exitCode 供 UI 展示 */
+/** Thrown when pr-agent run fails; carries the reason + collected stdout / stderr / exitCode for UI display */
 export class PrAgentRunError extends Error {
   constructor(
     message: string,
@@ -77,62 +78,65 @@ export interface ExecOptions {
   timeoutMs: number;
   env?: Record<string, string>;
   onLine?: (line: string, stream: 'stdout' | 'stderr') => void;
-  /** 子进程工作目录；local 模式用 */
+  /** Subprocess working directory; used in local mode */
   cwd?: string;
-  /** 用户主动取消信号；abort 后 SIGKILL 子进程并 reject reason='cancelled' */
+  /** User-initiated cancellation signal; after abort, SIGKILL the subprocess and reject reason='cancelled' */
   signal?: AbortSignal;
-  /** 写入子进程 stdin 的内容（写完即 end）；chat 通道传 prompt 用。 */
+  /** Content written to the subprocess stdin (ended after writing); used by the chat channel to pass the prompt. */
   input?: string;
 }
 
 /**
- * 编排器「独立 LLM 通道」的一次原始对话调用（见 docs/arch/02-agent/02-session.md「会话 Agent 化」）。
- * 复用嵌入式运行时的 litellm（provider 路由 / 代理 / token 采集已解决）：
- * 子进程跑 `meebox_pragent_shim.chat`，prompt 经 stdin 传入，结果走 stdout，
- * token 用量经 `@@MEEBOX_USAGE@@` 哨兵打到 stderr（与 pr-agent run 同一套）。
+ * A single raw dialogue call of the orchestrator's "standalone LLM channel" (see
+ * docs/arch/02-agent/02-session.md "Session Agentification"). Reuses the embedded runtime's litellm
+ * (provider routing / proxy / token collection already solved): the subprocess runs
+ * `meebox_pragent_shim.chat`, the prompt is passed via stdin, the result goes through stdout, and token
+ * usage is printed to stderr via the `@@MEEBOX_USAGE@@` sentinel (the same setup as pr-agent run).
  */
 export interface ChatRunOptions {
-  /** system 段（可空）。 */
+  /** system section (nullable). */
   system?: string;
-  /** user 段（必填）。 */
+  /** user section (required). */
   user: string;
-  /** 采样温度；anthropic 经 shim 自动剔除。 */
+  /** Sampling temperature; automatically stripped for anthropic via the shim. */
   temperature?: number;
   /**
-   * 输出 token 上限（litellm max_tokens）。用于轻量路由判读（如追问判读）封顶输出、避免模型
-   * 对一个 yes/no 决策吐大量 token 拖慢响应。仅嵌入式 litellm 路径生效；CLI provider 忽略。
-   * 省略 = 不封顶（总结 / 规划收尾等需完整篇幅者不传）。
+   * Output token cap (litellm max_tokens). Used to cap output for lightweight routing judgments (e.g.
+   * follow-up judgment), avoiding the model spewing large amounts of tokens for a yes/no decision and
+   * slowing the response. Effective only on the embedded litellm path; ignored by the CLI provider.
+   * Omitted = no cap (not passed for those needing full length, e.g. summarization / planning wrap-up).
    */
   maxOutputTokens?: number;
-  /** 注入子进程的 env（LLM key / model / 代理，复用 buildPragentEnv）。 */
+  /** env injected into the subprocess (LLM key / model / proxy, reuses buildPragentEnv). */
   env?: Record<string, string>;
-  /** 子进程工作目录；建议传中性临时目录（cli 模式避免吃到被评审仓库的 CLAUDE.md）。 */
+  /** Subprocess working directory; recommended to pass a neutral temp directory (in cli mode, to avoid picking up the reviewed repo's CLAUDE.md). */
   cwd?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
 
 /**
- * 注入式子进程执行接口：默认实现走 node:child_process.spawn，单测可注入 fake 版本
- * 不依赖真实 Node 子进程。Bridge 层不直接 import spawn，只依赖此接口。
+ * Injectable subprocess exec interface: the default implementation goes through node:child_process.spawn,
+ * and unit tests can inject a fake version without depending on a real Node subprocess. The Bridge layer
+ * does not import spawn directly, only depending on this interface.
  */
 export type ExecFn = (cmd: string, args: string[], opts: ExecOptions) => Promise<PrAgentRunResult>;
 
 export interface PrAgentBridge {
-  /** 解析后选中的策略名 */
+  /** The selected strategy name after resolution */
   readonly strategy: PrAgentStrategy;
-  /** 探测时拿到的版本字符串（CLI --help / --version 首行，或嵌入式查出的 pr-agent 版本） */
+  /** Version string obtained during detection (CLI --help / --version first line, or the pr-agent version discovered by the embedded runtime) */
   readonly version: string;
-  /** 跑 /describe；等价 run({ ...opts, tool: 'describe' }) */
+  /** Run /describe; equivalent to run({ ...opts, tool: 'describe' }) */
   describe(opts: Omit<PrAgentRunOptions, 'tool'>): Promise<PrAgentRunResult>;
-  /** 跑 /review；等价 run({ ...opts, tool: 'review' }) */
+  /** Run /review; equivalent to run({ ...opts, tool: 'review' }) */
   review(opts: Omit<PrAgentRunOptions, 'tool'>): Promise<PrAgentRunResult>;
-  /** 通用入口；后续加 /ask /improve 时直接用 run */
+  /** Generic entry; use run directly when adding /ask /improve later */
   run(opts: PrAgentRunOptions): Promise<PrAgentRunResult>;
   /**
-   * 编排器的独立 LLM 对话通道（复用嵌入式 litellm，见 ChatRunOptions）。
-   * 仅嵌入式策略支持；local-cli 策略调用即抛错。结果 stdout = 回复文本，
-   * stderr 含 `@@MEEBOX_USAGE@@` token 哨兵（调用方按既有解析器累加）。
+   * The orchestrator's standalone LLM dialogue channel (reuses the embedded litellm, see ChatRunOptions).
+   * Supported only by the embedded strategy; the local-cli strategy throws on call. Result stdout = reply
+   * text, stderr contains the `@@MEEBOX_USAGE@@` token sentinel (accumulated by the caller via the existing parser).
    */
   chat(opts: ChatRunOptions): Promise<PrAgentRunResult>;
 }

@@ -3,26 +3,26 @@ import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-ed
 import type { DiffChangedFile } from '@meebox/ipc';
 import type { LoadedContent } from '../diff-types';
 
-// 增/改绿、删红（与 GitHub diff 配色同系）。diff 标记走 overview ruler 的 Left 道，
-// 跟评论锚点（Right 道，见 useCommentZones）分列，互不遮挡。
+// Add/change green, delete red (same color family as GitHub diff). diff marks go on the overview ruler's Left lane,
+// separate from comment anchors (Right lane, see useCommentZones), so they don't overlap.
 const ADDED_COLOR = '#3fb950';
 const REMOVED_COLOR = '#f85149';
 
 /**
- * 把 diff 增/删/改投影到内层编辑器自带的 overview ruler（编辑模式风格，单条滚动条标尺），
- * 替代 diff 专属的 renderOverviewRuler 宽列（那条在并排视图会多出独立列，见 DiffPane）。
+ * Project diff add/delete/change onto the inner editor's built-in overview ruler (edit-mode style, single scrollbar ruler),
+ * replacing the diff-specific renderOverviewRuler wide column (that one adds a separate column in side-by-side view, see DiffPane).
  *
- * - modified 编辑器：增 / 改行绿色；纯删在删除点打一条红 tick
- * - 并排视图下 original 编辑器：删 / 改行红色
+ * - modified editor: add / change lines green; pure delete draws a red tick at the delete point
+ * - original editor under side-by-side view: delete / change lines red
  *
- * 注意：`renderSideBySide` 是用户在工具栏选的「并排 / 统一」**意向**，而 Monaco 在宽度不足时会
- * 自动把并排降级成 inline/unified 布局（useInlineViewWhenSpaceIsLimited 默认开），此时意向仍为
- * 并排但实际渲染是统一。若按意向把删除红标画到 original 编辑器，降级后 original 不可见 → 红标全丢、
- * 滚动条只剩绿色。故按 **实际渲染模式** 决定红标去向：Monaco 把实际模式反映在 `.monaco-diff-editor`
- * 根节点的 `side-by-side` class 上（降级 inline 时去掉），据此判定，而非用户意向 prop。
+ * Note: `renderSideBySide` is the user's toolbar-selected "side-by-side / unified" **intent**, while Monaco, when width is insufficient, will
+ * automatically downgrade side-by-side to inline/unified layout (useInlineViewWhenSpaceIsLimited on by default), where the intent is still
+ * side-by-side but the actual rendering is unified. If we draw the delete red mark to the original editor by intent, after downgrade original is invisible → red marks all lost,
+ * scrollbar left with green only. So decide red-mark placement by the **actual render mode**: Monaco reflects the actual mode in the `.monaco-diff-editor`
+ * root node's `side-by-side` class (removed when downgrading to inline), judge by that rather than the user intent prop.
  *
- * diff 异步算完后 getLineChanges() 才有值；首帧已算完直接刷，否则等 onDidUpdateDiff。布局在断点处
- * 切换并排 ↔ 统一时（onDidLayoutChange）按新模式重画红标（rAF 合并、待 class 切换稳定后再读）。
+ * getLineChanges() only has a value after the async diff finishes; if the first frame already finished refresh directly, otherwise wait for onDidUpdateDiff. When the layout
+ * switches side-by-side ↔ unified at a breakpoint (onDidLayoutChange) redraw red marks by the new mode (rAF-coalesced, read after the class switch stabilizes).
  */
 export function useDiffOverviewMarks(opts: {
   diffEditor: MonacoEditor.IStandaloneDiffEditor | null;
@@ -38,8 +38,8 @@ export function useDiffOverviewMarks(opts: {
     const modCol = modifiedEditor.createDecorationsCollection([]);
     const origCol = originalEditor.createDecorationsCollection([]);
 
-    // 实际是否并排：读 Monaco 反映实际渲染模式的 `.monaco-diff-editor.side-by-side` class
-    // （宽度不足自动降级 inline 时去掉该 class）；取不到时回退用户意向 prop。
+    // Whether actually side-by-side: read Monaco's `.monaco-diff-editor.side-by-side` class that reflects the actual render mode
+    // (the class is removed when auto-downgrading to inline on insufficient width); fall back to the user intent prop when unavailable.
     const isSideBySide = (): boolean => {
       if (!renderSideBySide) return false;
       const el = diffEditor.getContainerDomNode().querySelector('.monaco-diff-editor');
@@ -63,25 +63,25 @@ export function useDiffOverviewMarks(opts: {
       const modDecos: MonacoEditor.IModelDeltaDecoration[] = [];
       const origDecos: MonacoEditor.IModelDeltaDecoration[] = [];
       for (const c of changes) {
-        const isInsert = c.originalEndLineNumber === 0; // 纯增（原始侧无行）
-        const isDelete = c.modifiedEndLineNumber === 0; // 纯删（修改侧无行）
-        // 增 / 改：modified 侧 modifiedStart..End 标绿（左道）
+        const isInsert = c.originalEndLineNumber === 0; // pure add (no line on original side)
+        const isDelete = c.modifiedEndLineNumber === 0; // pure delete (no line on modified side)
+        // add / change: modified side modifiedStart..End marked green (Left lane)
         if (!isDelete) {
           modDecos.push(
             deco(c.modifiedStartLineNumber, c.modifiedEndLineNumber, ADDED_COLOR, Lane.Left),
           );
         }
-        // 删 / 改的「移除部分」标红：
+        // mark the "removed part" of delete / change red:
         if (!isInsert) {
           if (sideBySide) {
-            // 并排：红画在左侧 original 编辑器自带 ruler（左道），与右侧绿互不干扰
+            // side-by-side: red drawn on the left original editor's built-in ruler (Left lane), doesn't interfere with the right-side green
             origDecos.push(
               deco(c.originalStartLineNumber, c.originalEndLineNumber, REMOVED_COLOR, Lane.Left),
             );
           } else {
-            // 统一视图（含并排降级而来）：original 编辑器不可见，红 tick 与绿同画在 modified 左道。
-            // 被删行在 unified 下是 view zone（无 model 行号），只能标在删除点 modifiedStartLineNumber；
-            // 改块同一行既绿又红时绿覆盖红 → 改块呈绿、纯删那行（无绿）呈红。
+            // unified view (including downgraded from side-by-side): original editor invisible, red tick and green both drawn on modified Left lane.
+            // Deleted lines under unified are view zones (no model line number), can only be marked at the delete point modifiedStartLineNumber;
+            // when a change block's same line is both green and red, green covers red → change block shows green, pure-delete line (no green) shows red.
             const line = Math.max(1, c.modifiedStartLineNumber);
             modDecos.push(deco(line, line, REMOVED_COLOR, Lane.Left));
           }
@@ -93,8 +93,8 @@ export function useDiffOverviewMarks(opts: {
 
     if (diffEditor.getLineChanges() != null) refresh();
     const disp = diffEditor.onDidUpdateDiff(refresh);
-    // 宽度跨断点导致并排 ↔ 统一切换时，红标去向随之改变 → 重画。layout 事件可能早于 Monaco 切
-    // `side-by-side` class，故用 rAF 推迟到本帧末再读 class；rAF 同时合并 resize 期间的高频事件。
+    // When width crosses a breakpoint causing side-by-side ↔ unified switch, red-mark placement changes accordingly → redraw. The layout event may precede Monaco switching
+    // the `side-by-side` class, so use rAF to defer reading the class to the end of this frame; rAF also coalesces high-frequency events during resize.
     let raf = 0;
     const scheduleRefresh = (): void => {
       if (raf) return;

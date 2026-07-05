@@ -1,177 +1,218 @@
-# 服务监听与本地 API
+# Local API service
 
-## 职责与边界
+## Responsibilities & boundaries
 
-在主进程内提供一个**本地 HTTP API**，把应用既有的 PR 发现 / 浏览 / Agent 操作能力，以语言无关的
-线协议暴露给**外部 agent / 工具 / 脚本**（经 [CLI](02-cli.md) 或直接 HTTP 调用）。是继渲染层 IPC
-之后的**第二个前端**——同一套主进程 service 层，换一层入站协议。
+Provide a **local HTTP API** inside the main process that exposes the app's existing PR discovery / browsing / Agent
+capabilities over a language-agnostic wire protocol to **external agents / tools / scripts** (via the [CLI](02-cli.md) or
+direct HTTP calls). It is the **second front-end** after the renderer's IPC — the same main-process service layer behind a
+different inbound protocol.
 
-负责：服务监听开关与生命周期、bearer token 鉴权、请求路由与响应封装、把内部能力映射成稳定的 HTTP 契约。
+Responsible for: the service-listener toggle and lifecycle, bearer-token authentication, request routing and response
+enveloping, and mapping internal capabilities onto a stable HTTP contract.
 
-开放的**写操作**限定为评审动作：approve / needswork（远端评审决断）与顶层 comment（发评论），复用
-GUI 同源 controller（见下「写边界」）。另有 `POST …/refresh` 触发一次本地轮询刷新——虽用 POST，但
-**无远端写副作用**（纯读远端 + 落本地），不属评审写动作范畴，与合并 / 变更类工具的禁令无关。
+The exposed **write operations** are limited to review actions: approve / needswork (remote review decisions) and top-level
+comment (posting a comment), reusing the GUI's same-source controller (see "Write boundary" below). There is also
+`POST …/refresh`, which triggers one local polling refresh — though it uses POST, it has **no remote write side effect**
+(pure remote read + local persist), so it is not a review write action and is unrelated to the ban on merge / change-type
+tools.
 
-**不负责**：
+**Not responsible for**:
 
-- **合并与 pr-agent 变更类工具** —— merge（合并 PR）、pr-agent 的 publish 等变更工具不开放；有此需求由
-  调用方自行用平台 API 实现（见下「写边界」）。
-- **多用户 / 远端服务形态** —— 仍是单用户本地应用，API 只是本机（或可选局域网）的入站通道，不引入账户体系。
-- 业务逻辑本身 —— 复用 IPC controller 同源的 service 层，不在 HTTP 侧另起一套实现。
+- **Merge and pr-agent change-type tools** — merge (merging a PR), pr-agent's publish, and other mutating tools are not
+  exposed; if needed the caller implements them itself via the platform API (see "Write boundary" below).
+- **Multi-user / remote-service shape** — it remains a single-user local app; the API is only a local (or optionally LAN)
+  inbound channel and introduces no account system.
+- Business logic itself — it reuses the same service layer as the IPC controllers, without a separate implementation on the
+  HTTP side.
 
-## 核心设计
+## Core design
 
-### 默认关闭、强制鉴权
+### Off by default, authentication enforced
 
-- **默认不启用**：`config.yaml` 新增 `service` 段，`enabled` 默认 `false`。不开启则主进程不监听任何端口，
-  对外零暴露面。
-- **强制 bearer token**：开启监听即要求 token——所有请求须带 `Authorization: Bearer <token>`，缺失 / 不匹配
-  直接拒绝（401 + 错误码）。**没有「关闭鉴权」选项**。开关首次打开时若 token 为空则**自动生成**一枚高强度
-  随机 token（`crypto.randomBytes` → base64url / hex），保证「启用」与「有 token」原子绑定。
-- **比对用常数时间**：token 校验走常数时间比较，避免计时侧信道。
-- **token 落盘策略同既有凭据**：token 明文存 `config.yaml`（与平台 token / LLM key / 代理密码一致，经
-  `SecretStore` 抽象读写、绝不进日志 / 异常栈），属已知风险、文件权限收紧。将来切 keychain 时随既有凭据一并迁移。
+- **Disabled by default**: `config.yaml` gains a `service` section, with `enabled` defaulting to `false`. When off, the main
+  process listens on no port — zero external surface.
+- **Mandatory bearer token**: enabling the listener requires a token — every request must carry
+  `Authorization: Bearer <token>`; missing / mismatched is rejected outright (401 + error code). There is **no "disable auth"
+  option**. When the toggle is first turned on and the token is empty, a high-strength random token is **auto-generated**
+  (`crypto.randomBytes` → base64url / hex), guaranteeing that "enabled" and "has a token" are atomically bound.
+- **Constant-time comparison**: token verification uses constant-time comparison to avoid a timing side channel.
+- **Token storage follows the existing credential policy**: the token is stored in plaintext in `config.yaml` (same as
+  platform tokens / LLM keys / proxy passwords, read/written through the `SecretStore` abstraction, never entering logs /
+  exception traces) — a known risk mitigated by tightened file permissions. When migrating to a keychain in the future it
+  moves along with the existing credentials.
 
-### 监听地址与端口
+### Listen address and port
 
-- **默认仅 loopback**：`host` 默认 `127.0.0.1`，只本机可达。这是绝大多数「本机外部 agent 集成」场景的安全默认。
-- **可选 `0.0.0.0`**：允许配置为监听所有网卡（供同网段的远端 agent / CI 节点接入）。这是**显式高风险选项**——
-  设置页与文档须给安全警示（token 即唯一防线、建议配合防火墙 / 反代）。绑 `0.0.0.0` 时 token 强度与保密尤为关键。
-- **固定安全默认端口**：默认 `18765`（可在配置中改）。取 10000+ 既避开拥挤的 8xxx 开发 / 系统服务段
-  （3000 / 5173 / 8000 / 8080 / 8888 等），又稳落在**临时端口范围（ephemeral，Windows 49152+ / Linux 32768+）
-  之下**——固定监听端口若落进临时段可能与系统瞬时出站 socket 抢占，`18765` 处于已注册端口段、无此风险。
-  端口被占用导致监听失败时，记录错误并以非致命方式提示（不阻塞应用启动）。
+- **Loopback only by default**: `host` defaults to `127.0.0.1`, reachable only locally. This is the secure default for the
+  vast majority of "local external-agent integration" scenarios.
+- **Optional `0.0.0.0`**: can be configured to listen on all interfaces (for same-subnet remote agents / CI nodes to connect).
+  This is an **explicit high-risk option** — the settings page and docs must give a security warning (the token is the only
+  line of defense; a firewall / reverse proxy is recommended). When bound to `0.0.0.0`, token strength and secrecy are
+  especially critical.
+- **Fixed secure default port**: defaults to `18765` (changeable in config). Choosing 10000+ both avoids the crowded 8xxx
+  development / system-service range (3000 / 5173 / 8000 / 8080 / 8888, etc.) and sits **below the ephemeral port range**
+  (Windows 49152+ / Linux 32768+) — a fixed listen port landing in the ephemeral range could contend with the system's
+  transient outbound sockets, whereas `18765` is in the registered-port range with no such risk. If binding fails because the
+  port is taken, log the error and warn non-fatally (without blocking app startup).
 
-### HTTP 实现：最小依赖
+### HTTP implementation: minimal dependencies
 
-- 用 Node 内置 `http` 起服务 + **极简手写路由**（按 method + path 模式匹配），**不引入 express 等重型框架**——
-  与项目「优先复用、最小依赖」一致，端点数量有限、无需框架。
-- 统一中间环节：JSON body 解析（带最大 body 上限）、请求超时、鉴权校验、错误 → 响应封装、访问日志
-  （记 method / path / status / 耗时，**不记** token 与敏感 body）。
+- Use Node's built-in `http` to start the server + a **minimal hand-written router** (matching by method + path pattern),
+  **without pulling in a heavy framework like express** — consistent with the project's "prefer reuse, minimal dependencies";
+  the endpoint count is limited and needs no framework.
+- Shared middle stages: JSON body parsing (with a max body limit), request timeout, auth verification, error → response
+  enveloping, and access logging (recording method / path / status / latency, but **not** the token or sensitive body).
 
-### 路由复用 service 层
+### Routes reuse the service layer
 
-- HTTP route handler 经与 IPC controller **同一个进程级 `ControllerContext`**（`getContext()`）取用 service
-  （`ctx.pr` / `ctx.orchestrator` / `ctx.poller` / `ctx.connectionRuntime` 等），**不重复业务逻辑**。
-- 原则：核心能力沉在 service 层，IPC 与 HTTP 各自只做**薄封装 + 协议适配**。新增 API 端点前，先确保对应能力
-  在 service 层有可复用方法（必要时把 controller 内联逻辑下沉到 service）。
-- **路由按领域分模块**：HTTP 路由处理器按业务领域（系统性 / PR / Agent）分置于独立模块，聚合层只做**注册与路径
-  匹配**、不含业务逻辑——与 [CLI](02-cli.md) 命令树的领域划分对称，新增端点归入对应域、便于定位与扩展。
+- HTTP route handlers obtain services through the **same process-level `ControllerContext`** (`getContext()`) as the IPC
+  controllers (`ctx.pr` / `ctx.orchestrator` / `ctx.poller` / `ctx.connectionRuntime`, etc.), **without duplicating business
+  logic**.
+- Principle: core capabilities live in the service layer; IPC and HTTP each do only a **thin wrapper + protocol adaptation**.
+  Before adding an API endpoint, first ensure the corresponding capability has a reusable method in the service layer (sinking
+  inlined controller logic into the service where necessary).
+- **Routes are split by domain into modules**: HTTP route handlers are placed in separate modules by business domain
+  (system-level / PR / Agent); the aggregation layer only does **registration and path matching** and contains no business
+  logic — symmetric with the domain split of the [CLI](02-cli.md) command tree; new endpoints go into the corresponding
+  domain for easy location and extension.
 
-### CLI 版本兼容门控
+### CLI version compatibility gating
 
-服务端对**所有 API 调用**统一做 CLI 版本门控（不按端点差异化）：
+The server applies CLI version gating uniformly to **all API calls** (not differentiated per endpoint):
 
-- CLI 每个请求带版本头 `X-Meebox-CLI-Version: <version>` 声明自身版本（取自与 app 同源的版本，见 [CLI](02-cli.md)）。
-- 服务端集中管理**最低可兼容 CLI 版本**，请求中间件比对：版本头**可解析且低于下限** → 拦截，返回
-  `426 Upgrade Required` + 错误码 `SV_CLIENT_TOO_OLD`（meta 带 `minVersion` / `clientVersion`）。
-- **默认宽松**：缺版本头（旧 CLI / 非 CLI 客户端）或版本不可解析（如本地 `dev` 构建）→ 放行，保证既有 CLI
-  默认可用；破坏性线协议变更时上调最低版本即门控掉更旧的 CLI。
-- **按版本线比对、忽略预发布后缀**：比对前把版本 coerce 到 `major.minor.patch`。CLI 与 app 同源发版，预发布
-  构建（如 `0.9.0-alpha.1`）与其正式版同属一条版本线、共享同一线协议；semver 中预发布低于其正式版，若不忽略
-  后缀会把与下限同线的预发布 CLI 误判为过旧（下限 `0.9.0` 时连 `0.9.0-alpha.1` 都会被拦）。下限即版本线粒度
-  的破坏性变更闸门，不区分同线内的预发布序号。
-- CLI 收到该错误码即输出明确的「CLI 过旧、请升级」提示（含双方版本），不裸报 HTTP 错误。
+- The CLI carries a version header `X-Meebox-CLI-Version: <version>` on every request declaring its own version (taken from
+  the same source as the app; see [CLI](02-cli.md)).
+- The server centrally manages the **minimum compatible CLI version**; request middleware compares: a version header that is
+  **parseable and below the floor** → intercept, return `426 Upgrade Required` + error code `SV_CLIENT_TOO_OLD` (meta carries
+  `minVersion` / `clientVersion`).
+- **Lenient by default**: a missing version header (old CLI / non-CLI clients) or an unparseable version (e.g. a local `dev`
+  build) → pass through, guaranteeing existing CLIs work by default; on a breaking wire-protocol change, raise the minimum
+  version to gate out older CLIs.
+- **Compare by version line, ignoring the prerelease suffix**: coerce the version to `major.minor.patch` before comparing.
+  The CLI and app release from the same source; a prerelease build (e.g. `0.9.0-alpha.1`) belongs to the same version line as
+  its stable release and shares the same wire protocol; in semver a prerelease ranks below its stable version, so not ignoring
+  the suffix would misjudge a prerelease CLI on the same line as the floor as too old (with a floor of `0.9.0`, even
+  `0.9.0-alpha.1` gets blocked). The floor is the breaking-change gate at version-line granularity and does not distinguish
+  prerelease ordinals within the same line.
+- On receiving this error code the CLI prints a clear "CLI too old, please upgrade" message (with both versions), rather than
+  raising a raw HTTP error.
 
-### 写边界（放开评审动作，拒绝合并与变更类 Agent 工具）
+### Write boundary (allow review actions, reject merge and change-type Agent tools)
 
-- 开放的写操作**限定评审动作**：`POST …/approve`·`…/needswork`（远端评审决断，复用 `prs:setLocalStatus`——
-  先写远端评审状态、再落本地）与 `POST …/comment`（发顶层评论，复用 `comments:create`）。均为真实远端写。
-- Agent 指令（`…/agent/instruct`）**仍限只读工具**（`/describe`·`/review`·`/ask`·`/improve`）；变更类工具
-  （`/publish` 等，见工具注册表 `kind: 'mutating'`）**在 API 层即被硬拒绝**——与 Agent 自身 grant 授权闸
-  **相互独立**：即便某 PR 的 AutoPilot grants 授予了写权限，经 API 的 instruct 仍不得触发写工具。评审写动作
-  改走上面的 approve / needswork / comment 专用端点，不经 instruct。
-- **不开放合并（merge）**：对远端影响大且不可逆，暂不纳入 API。
-- **无二次确认**：API 无交互确认通道；已开放的写端点直接执行（调用方自负授权），需交互确认的动作（如合并）
-  干脆不开放。
+- The exposed write operations are **limited to review actions**: `POST …/approve` · `…/needswork` (remote review decisions,
+  reusing `prs:setLocalStatus` — write the remote review status first, then persist locally) and `POST …/comment` (post a
+  top-level comment, reusing `comments:create`). All are real remote writes.
+- Agent instructions (`…/agent/instruct`) are **still limited to read-only tools** (`/describe` · `/review` · `/ask` ·
+  `/improve`); change-type tools (`/publish`, etc.; see the tool registry `kind: 'mutating'`) are **hard-rejected at the API
+  layer** — this is **independent of** the Agent's own grant authorization gate: even if a PR's AutoPilot grants have granted
+  write permission, an instruct via the API still may not trigger write tools. Review write actions go through the dedicated
+  approve / needswork / comment endpoints above, not through instruct.
+- **Merge not exposed**: high-impact and irreversible on the remote, so not included in the API for now.
+- **No secondary confirmation**: the API has no interactive confirmation channel; already-exposed write endpoints execute
+  directly (the caller bears responsibility for authorization); actions that need interactive confirmation (e.g. merge) are
+  simply not exposed.
 
-### 生命周期与热生效
+### Lifecycle and taking effect immediately
 
-- **启动时机**：在主进程完成连接 / IPC 初始化（`ControllerContext` 就绪）之后、轮询启动前后启动监听器；
-  仅当 `service.enabled` 为真才实际 `listen`。
-- **优雅关闭**：应用退出（`before-quit`）时关闭监听、停止接收新连接、放行 in-flight 请求后退出。
-- **热生效**：`enabled` / `host` / `port` / token 变更 → 写盘 + 内存同步 + **停旧监听起新监听**（端口 / 地址变更
-  必然重建；token 变更即时生效，旧 token 立刻失效）。与既有「保存即热生效」一致，无需重启应用。
+- **Startup timing**: start the listener after the main process finishes connection / IPC initialization
+  (`ControllerContext` ready), around when polling starts; only actually `listen` when `service.enabled` is true.
+- **Graceful shutdown**: on app exit (`before-quit`), close the listener, stop accepting new connections, drain in-flight
+  requests, then exit.
+- **Take effect immediately**: changing `enabled` / `host` / `port` / token → write to disk + sync in memory + **stop the old
+  listener and start a new one** (a port / address change necessarily rebuilds; a token change takes effect immediately and
+  the old token is invalidated at once). Consistent with the existing "save to take effect immediately", no app restart
+  required.
 
-### 并发与资源
+### Concurrency and resources
 
-- 只读 `GET` 端点可并发处理。
-- Agent 写入型动作（触发 review / 指令 / 聊天）**复用既有 run 队列与 Orchestrator 的单工作者 + 并发上限**，
-  不绕过调度——API 触发与 GUI 触发在同一队列里排队，互不抢占语义保持一致。
+- Read-only `GET` endpoints can be processed concurrently.
+- Agent write-type actions (trigger review / instruct / chat) **reuse the existing run queue and the Orchestrator's single
+  worker + concurrency cap**, without bypassing scheduling — API-triggered and GUI-triggered runs queue in the same queue,
+  keeping non-preemptive semantics consistent.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-### 配置（`config.yaml` 顶层 `service`）
+### Config (`config.yaml` top-level `service`)
 
 ```yaml
 service:
-  enabled: false        # 总开关；默认关 = 不监听、零暴露面
-  host: 127.0.0.1        # 监听地址；可设 0.0.0.0（高风险，需安全警示）
-  port: 18765            # 固定安全默认端口（10000+，避开 8xxx 拥挤段且低于临时端口范围），可改
-  token: ''              # bearer token；启用且为空时自动生成；明文落盘（同既有凭据策略）
+  enabled: false        # master switch; off by default = not listening, zero exposure
+  host: 127.0.0.1        # listen address; can be 0.0.0.0 (high risk, needs a security warning)
+  port: 18765            # fixed secure default port (10000+, avoids the crowded 8xxx range and stays below the ephemeral range), changeable
+  token: ''              # bearer token; auto-generated when enabled and empty; stored in plaintext (same as the existing credential policy)
 ```
 
-### 鉴权
+### Authentication
 
-- 请求头：`Authorization: Bearer <token>`；缺失 / 不匹配 → `401` + 错误码。
-- token 经 `SecretStore` 读写，响应 / 日志中不回显。
+- Request header: `Authorization: Bearer <token>`; missing / mismatched → `401` + error code.
+- The token is read/written through `SecretStore` and is never echoed in responses / logs.
 
-### 统一响应封套
+### Uniform response envelope
 
 ```jsonc
-// 成功
+// success
 { "ok": true, "data": <T> }
-// 失败（复用 AppError 的 code + 可序列化 meta；前端 / CLI 按码本地化）
+// failure (reuses AppError's code + serializable meta; frontend / CLI localize by code)
 { "ok": false, "error": { "code": "ESV0001", "meta": { /* ... */ } } }
 ```
 
-- HTTP 状态码与语义对齐：`400` 校验失败 / `401` 未授权 / `403` 写工具被拒（未开放的写操作）/ `404` 资源不存在 /
-  `409` 冲突 / `426` CLI 版本过旧 / `500` 内部错误。
-- 新增 **`SV`（service）错误码领域**（`E`+`SV`+四位，见 [错误码规范](../99-core/04-error-codes.md)）：
-  如 token 无效、写操作被拒、监听未就绪等；与既有 `AG`/`PR`/`NT` 等领域并列。
+- HTTP status codes align with semantics: `400` validation failure / `401` unauthorized / `403` write tool rejected (a
+  non-exposed write operation) / `404` resource not found / `409` conflict / `426` CLI version too old / `500` internal error.
+- Adds a new **`SV` (service) error-code domain** (`E`+`SV`+four digits, see [error-code spec](../99-core/04-error-codes.md)):
+  e.g. invalid token, write operation rejected, listener not ready; parallel to the existing `AG`/`PR`/`NT` domains.
 
-### 端点（`/api/v1`，逐条对应 [CLI](02-cli.md) 命令）
+### Endpoints (`/api/v1`, one-to-one with [CLI](02-cli.md) commands)
 
-读端点用 `GET`、写端点用 `POST`。列表返回**精简投影**，其余读端点返回同源结构。
+Read endpoints use `GET`, write endpoints use `POST`. The list returns a **compact projection**; other read endpoints return
+the same-source structure.
 
-| Method & Path | 用途 | 复用的内部能力 |
+| Method & Path | Purpose | Reused internal capability |
 | --- | --- | --- |
-| `GET /api/v1/whoami` | 当前身份：活动连接 PAT 所属用户（`name`/`displayName`/`slug`）+ 集成平台 + 连接显示名；无活动连接各项 null | 连接摘要（当前用户 + 平台） |
-| `GET /api/v1/categories` | 当前启用平台下可用的分类标签：`categories`（`PrDiscoveryFilter`）+ `statuses`（状态 / 合并态筛选），按平台能力裁剪 | 平台能力位 + 列表筛选语义 |
-| `POST /api/v1/refresh` | 触发一次立即轮询刷新（拉取所有连接的最新 PR、落本地），返回本轮计数汇总（`PollResult`：fetched / changed / added / removed / errors）；等价 GUI 手动刷新，无远端写副作用 | `poller.tick`（`prs:refresh` 同源） |
-| `GET /api/v1/version` | 服务端（桌面应用）版本（`{ version }`），供 CLI `version` 命令同时展示客户端 + 服务端版本 | `buildAppInfo().appVersion`（`app:info` 同源） |
-| `GET /api/v1/prs` | PR 列表（**精简投影** `PrListItem`：字段序 id/title/author/createdAt 优先，去 description、人员仅 slug）；query：`category`（一级）/`status`（二级）/`q`（检索）/`skip`+`limit`（分页，默认 limit 100） | `prs:list` + 列表筛选谓词 + 视图投影 |
-| `GET /api/v1/prs/{id}` | 描述详情（完整 `StoredPullRequest`：标题 / 描述 / 作者 / 分支 / 时间 / 状态 / 合并态） | `StoredPullRequest` |
-| `GET /api/v1/prs/{id}/diff` | 变更文件列表；带 `?path=&side=base\|head` 时取单文件内容 | `diff:listChangedFiles` / `diff:getFileContent` 同源 |
-| `GET /api/v1/prs/{id}/activity` | 动态（评论 / 提交更新 / 评审决断归并的时间线） | `diff:listActivity` 同源 |
-| `GET /api/v1/prs/{id}/commits` | 提交列表（`PrCommit[]`） | `diff:listCommits` 同源 |
-| `GET /api/v1/prs/{id}/reviewers` | 评审人审批状态（`Reviewer[]`，含各人 `status`） | `StoredPullRequest.reviewers` |
-| `GET /api/v1/prs/{id}/agent` | Agent 当前执行状态（`AgentSession`：status / 进度 / 总结 / 建议） | `agent:getSession` 同源 |
-| `GET /api/v1/prs/{id}/agent/conversation` | 历史会话（`AgentMessage[]`） | `agent:getConversation` 同源 |
-| `POST /api/v1/prs/{id}/agent/review` | 执行 auto review（固定评审微流程 describe→review→[追问]→总结） | `agent:run` 同源 |
-| `POST /api/v1/prs/{id}/agent/instruct` | 发送 Agent 指令（**仅只读工具**：describe / review / ask / improve；写工具硬拒绝） | 只读工具派发（复用 run 队列） |
-| `POST /api/v1/prs/{id}/agent/chat` | 发送自然语言聊天（可触发 Agent 规划与任务执行） | `agent:ask` / `agent:enqueueMessage` 同源 |
-| `POST /api/v1/prs/{id}/agent/stop` | 中断该 PR 运行中的 Agent（思考 / 执行任意阶段即时停；PR 级，非按单个 run） | `agent:stop` 同源 |
-| `POST /api/v1/prs/{id}/approve` | 评审决断「通过」（写远端评审状态 + 落本地） | `prs:setLocalStatus` 同源 |
-| `POST /api/v1/prs/{id}/needswork` | 评审决断「需修改」（写远端评审状态 + 落本地） | `prs:setLocalStatus` 同源 |
-| `POST /api/v1/prs/{id}/comment` | 发一条顶层评论（body 为正文，空则 400） | `comments:create` 同源 |
+| `GET /api/v1/whoami` | Current identity: the user the active connection's PAT belongs to (`name`/`displayName`/`slug`) + integration platform + connection display name; each field null when there is no active connection | connection summary (current user + platform) |
+| `GET /api/v1/categories` | Available category labels under the currently enabled platform: `categories` (`PrDiscoveryFilter`) + `statuses` (status / merge-state filters), trimmed per platform capability | platform capability flags + list-filter semantics |
+| `POST /api/v1/refresh` | Trigger one immediate polling refresh (fetch the latest PRs across all connections, persist locally), returning this round's count summary (`PollResult`: fetched / changed / added / removed / errors); equivalent to a GUI manual refresh, no remote write side effect | `poller.tick` (same source as `prs:refresh`) |
+| `GET /api/v1/version` | Server (desktop app) version (`{ version }`), so the CLI `version` command can show both client + server versions | `buildAppInfo().appVersion` (same source as `app:info`) |
+| `GET /api/v1/prs` | PR list (**compact projection** `PrListItem`: field order prioritizes id/title/author/createdAt, drops description, people as slug only); query: `category` (level one) / `status` (level two) / `q` (search) / `skip`+`limit` (pagination, default limit 100) | `prs:list` + list-filter predicate + view projection |
+| `GET /api/v1/prs/{id}` | Description detail (full `StoredPullRequest`: title / description / author / branch / time / status / merge state) | `StoredPullRequest` |
+| `GET /api/v1/prs/{id}/diff` | Changed-file list; with `?path=&side=base\|head` fetches single-file content | `diff:listChangedFiles` / `diff:getFileContent` same source |
+| `GET /api/v1/prs/{id}/activity` | Activity (timeline merging comments / commit updates / review decisions) | `diff:listActivity` same source |
+| `GET /api/v1/prs/{id}/commits` | Commit list (`PrCommit[]`) | `diff:listCommits` same source |
+| `GET /api/v1/prs/{id}/reviewers` | Reviewer approval status (`Reviewer[]`, with each person's `status`) | `StoredPullRequest.reviewers` |
+| `GET /api/v1/prs/{id}/agent` | The Agent's current execution status (`AgentSession`: status / progress / summary / recommendation) | `agent:getSession` same source |
+| `GET /api/v1/prs/{id}/agent/conversation` | Conversation history (`AgentMessage[]`) | `agent:getConversation` same source |
+| `POST /api/v1/prs/{id}/agent/review` | Run auto review (the fixed review micro-flow describe→review→[follow-up ask]→summary) | `agent:run` same source |
+| `POST /api/v1/prs/{id}/agent/instruct` | Send an Agent instruction (**read-only tools only**: describe / review / ask / improve; write tools hard-rejected) | read-only tool dispatch (reuses the run queue) |
+| `POST /api/v1/prs/{id}/agent/chat` | Send natural-language chat (can trigger Agent planning and task execution) | `agent:ask` / `agent:enqueueMessage` same source |
+| `POST /api/v1/prs/{id}/agent/stop` | Interrupt the running Agent for this PR (stops immediately at any thinking / execution stage; PR-level, not per individual run) | `agent:stop` same source |
+| `POST /api/v1/prs/{id}/approve` | Review decision "approve" (write remote review status + persist locally) | `prs:setLocalStatus` same source |
+| `POST /api/v1/prs/{id}/needswork` | Review decision "needs work" (write remote review status + persist locally) | `prs:setLocalStatus` same source |
+| `POST /api/v1/prs/{id}/comment` | Post a top-level comment (body is the content, `400` if empty) | `comments:create` same source |
 
-- `{id}` 即 PR 的 `localId`——跨平台稳定 PR 标识（内部哈希，非平台 `remoteId`）；列表投影里对外命名为 `id`，所有 PR 维度端点以它定位。
-- 过程步骤（transcript）暂不在初版 API 内开放，作为将来扩展位（见下）。
+- `{id}` is the PR's `localId` — a cross-platform stable PR identifier (an internal hash, not the platform `remoteId`); in the
+  list projection it is named `id` externally, and all PR-scoped endpoints locate by it.
+- Step transcripts are not exposed in the initial API; they are reserved as a future extension slot (see below).
 
-### 新增 IPC（设置页驱动）
+### New IPC (driven by the settings page)
 
-- `config:setService`：写 `service` 段 → 写盘 + 内存同步 + 重建监听器（热生效）。
-- `config:generateServiceToken`：重新生成 token → 写盘 + 即时失效旧 token，返回新 token 供 UI 展示 / 复制。
+- `config:setService`: write the `service` section → write to disk + sync in memory + rebuild the listener (take effect
+  immediately).
+- `config:generateServiceToken`: regenerate the token → write to disk + immediately invalidate the old token, returning the
+  new token for the UI to display / copy.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **加新端点先下沉 service**：HTTP 与 IPC 必须共用 service 方法，避免逻辑分叉；端点是 service 能力的薄投影。
-- **写边界是硬约束**：评审写动作仅经 approve / needswork / comment 专用端点；Agent `instruct` 的只读工具
-  白名单在 API 层强校验、独立于 Agent grant 闸——新增 Agent 工具时同步确认其 `kind` 与是否纳入 instruct
-  白名单，默认排除一切 `mutating`。放开新的写端点须显式评估远端副作用（合并等高影响动作暂不开放）。
-- **`0.0.0.0` 安全警示不可省**：设置页与使用文档须明确暴露范围与风险；token 是唯一防线。
-- **端口冲突**：监听失败以非致命方式提示，不拖垮应用启动；提示用户改端口。
-- **进度推送是将来扩展位**：初版以「轮询 `GET .../agent` 拉状态」为主；如需实时进度，可在同一监听器上加
-  SSE / WebSocket 推送 Agent step 事件（复用现有 `agent:stepProgress` 广播），不改既有 REST 契约。
-- **契约稳定性**：`/api/v1` 前缀预留版本演进位；响应封套与错误码领域一旦发布需保持兼容（CLI 与第三方依赖它）。
+- **Sink into the service before adding a new endpoint**: HTTP and IPC must share the service method to avoid logic forking;
+  an endpoint is a thin projection of a service capability.
+- **The write boundary is a hard constraint**: review write actions go only through the dedicated approve / needswork /
+  comment endpoints; the read-only-tool whitelist for the Agent `instruct` is strictly validated at the API layer,
+  independent of the Agent grant gate — when adding a new Agent tool, confirm in sync its `kind` and whether it enters the
+  instruct whitelist, excluding all `mutating` by default. Exposing a new write endpoint requires explicitly assessing remote
+  side effects (high-impact actions like merge remain unexposed).
+- **The `0.0.0.0` security warning cannot be omitted**: the settings page and usage docs must make the exposure scope and risk
+  explicit; the token is the only line of defense.
+- **Port conflict**: a failed listen warns non-fatally without dragging down app startup; prompt the user to change the port.
+- **Progress push is a future extension slot**: the initial version relies mainly on "poll `GET .../agent` to pull status";
+  if real-time progress is needed, SSE / WebSocket pushing Agent step events can be added on the same listener (reusing the
+  existing `agent:stepProgress` broadcast) without changing the existing REST contract.
+- **Contract stability**: the `/api/v1` prefix reserves room for version evolution; once the response envelope and error-code
+  domain are published they must stay compatible (the CLI and third parties depend on them).

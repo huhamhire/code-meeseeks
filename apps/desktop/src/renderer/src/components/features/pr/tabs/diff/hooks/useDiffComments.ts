@@ -11,8 +11,8 @@ export interface DiffCommentsState {
 }
 
 /**
- * 拉 PR 评论（inline + summary）。打开 / 范围切换后强制远端拉一次；订阅 comments:changed 重拉。
- * commit 只读视图不展示行内评论（锚定在 PR 全量 diff 行号上，套到单 commit 会错位）。
+ * Fetch PR comments (inline + summary). Force a remote fetch once after open / scope switch; subscribe to comments:changed to refetch.
+ * The commit read-only view doesn't show inline comments (they anchor to the PR full-diff line numbers, so applying them to a single commit misaligns).
  */
 export function useDiffComments(
   pr: StoredPullRequest,
@@ -25,9 +25,9 @@ export function useDiffComments(
   const [commentsRetry, setCommentsRetry] = useState(0);
 
   useEffect(() => {
-    // 门控：切 PR 期间（新 files 未到）不拉新评论，保留旧评论与旧内容一致渲染，避免 view zone 错位。
+    // Gate: during PR switch (new files not yet arrived) don't fetch new comments, keep old comments rendering consistent with old content, avoid view zone misalignment.
     if (loadedKey !== viewKey) return;
-    // commit 只读视图：行内评论锚定在 PR 全量 diff 行号上，套到单 commit 版本会错位，故不展示。
+    // commit read-only view: inline comments anchor to the PR full-diff line numbers, applying them to a single commit version misaligns, so don't show.
     if (scopeKind !== 'all') {
       setComments([]);
       return;
@@ -48,8 +48,8 @@ export function useDiffComments(
         });
     };
     fetchList(true);
-    // 评论 reply / 状态变更后 main 端 broadcast comments:changed，inline view zone
-    // 需要重拉刷新评论树 (含新 reply 嵌到父评论 .replies)
+    // After a comment reply / status change the main process broadcasts comments:changed, the inline view zone
+    // needs to refetch to refresh the comment tree (including new replies nested into the parent comment's .replies)
     const unsub = subscribe('comments:changed', (e) => {
       if (e.localId === pr.localId) fetchList(true);
     });

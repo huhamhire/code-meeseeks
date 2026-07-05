@@ -1,13 +1,13 @@
-"""真实 token usage 采集：以哨兵行 `@@MEEBOX_USAGE@@ {json}` 打到 stderr，主进程 onLine
-据此累加（见 apps/desktop/src/main/ipc.ts）。只取 token、不取 cost。全程容错。"""
+"""Real token usage collection: emitted to stderr as a sentinel line `@@MEEBOX_USAGE@@ {json}`, which the main process onLine
+accumulates from (see apps/desktop/src/main/ipc.ts). Takes only tokens, not cost. Fault-tolerant throughout."""
 import sys
 
 from .runtime import _debug
 
 
 def _emit_usage(response) -> None:
-    """从 litellm response 读**真实 usage**（API 返回，非预估）。供 litellm handler 的
-    _get_completion 包装调用。"""
+    """Read **real usage** from the litellm response (API-returned, not estimated). Called by the litellm handler's
+    _get_completion wrapper."""
     try:
         usage = getattr(response, "usage", None)
         if usage is None and isinstance(response, dict):
@@ -26,9 +26,9 @@ def _emit_usage(response) -> None:
             "total_tokens": _g("total_tokens"),
         }
         if rec["prompt_tokens"] is None and rec["completion_tokens"] is None:
-            return  # 没有任何可用数字（如流式 MockResponse）→ 不打
-        # 提示缓存读取量：Anthropic 走 cache_read_input_tokens；OpenAI 兼容走
-        # prompt_tokens_details.cached_tokens。两路尽力采集、缺失则不带（UI 据有无决定是否展示）。
+            return  # no usable numbers at all (e.g. streaming MockResponse) → don't emit
+        # Prompt cache read amount: Anthropic uses cache_read_input_tokens; OpenAI-compatible uses
+        # prompt_tokens_details.cached_tokens. Best-effort collection on both paths, omitted if missing (UI decides whether to display based on presence).
         cache_read = _g("cache_read_input_tokens")
         if not isinstance(cache_read, int):
             details = _g("prompt_tokens_details")
@@ -48,8 +48,8 @@ def _emit_usage(response) -> None:
 def _emit_usage_tokens(
     prompt_tokens, completion_tokens, cache_read_tokens=None, turns=None
 ) -> None:
-    """CLI 模式下从 CLI 返回的 JSON usage 直接构造哨兵（与 _emit_usage 同格式，主进程同一套
-    累加逻辑）。两个 token 数都为 None 则不打；cache_read / turns 仅在有值时附带。"""
+    """In CLI mode, construct the sentinel directly from the CLI-returned JSON usage (same format as _emit_usage, same
+    accumulation logic in the main process). Doesn't emit if both token counts are None; cache_read / turns are attached only when present."""
     try:
         if prompt_tokens is None and completion_tokens is None:
             return

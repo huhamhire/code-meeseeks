@@ -1,30 +1,30 @@
-// 平台层统一后台状态码：后台只发**稳定中性码**、不拼面向用户的本地化文案，本地化由前端按码做
-// （见 docs/arch/01-platform/01-adapter.md §2 与 docs/arch/99-core/04-error-codes.md）。
-// 各平台适配器把自身原生状态归一到这些码；前端按码 i18n（renderer locales 的 `mergeVeto.<code>`）。
+// Platform-layer unified backend status codes: the backend only emits **stable, neutral codes**, never assembling user-facing localized text; localization is done by the frontend per code
+// (see docs/arch/01-platform/01-adapter.md §2 and docs/arch/99-core/04-error-codes.md).
+// Each platform adapter normalizes its own native status to these codes; the frontend does i18n per code (`mergeVeto.<code>` in renderer locales).
 
-/** 合并否决原因码（GitHub mergeable_state / GitLab detailed_merge_status 等归一到此）。 */
+/** Merge veto reason codes (GitHub mergeable_state / GitLab detailed_merge_status etc. normalize to these). */
 export const MERGE_VETO_CODES = [
-  /** 存在合并冲突。 */
+  /** A merge conflict exists. */
   'conflict',
-  /** 被分支保护阻止（必需评审 / 必需检查未通过）。 */
+  /** Blocked by branch protection (required review / required checks not passed). */
   'branchProtected',
-  /** 落后于目标分支，需先更新 / rebase。 */
+  /** Behind the target branch, needs updating / rebase first. */
   'behind',
-  /** 必需检查未通过 / CI 进行中。 */
+  /** Required checks not passed / CI in progress. */
   'checksFailed',
-  /** 可合并状态计算中。 */
+  /** Mergeable state being computed. */
   'checking',
-  /** 草稿 / WIP，需标记为可合并。 */
+  /** Draft / WIP, needs to be marked as ready to merge. */
   'draft',
-  /** 存在未解决的讨论。 */
+  /** Unresolved discussions exist. */
   'discussionsUnresolved',
-  /** 审批未满足要求。 */
+  /** Approval requirements not met. */
   'notApproved',
-  /** PR / MR 非打开状态。 */
+  /** PR / MR is not in open state. */
   'notOpen',
-  /** 被其它合并请求阻塞。 */
+  /** Blocked by another merge request. */
   'blockedByDependency',
-  /** 远端判定当前不可合并（其它 / 未细分原因）。 */
+  /** Remote deems it currently not mergeable (other / unspecified reason). */
   'notMergeable',
 ] as const;
 

@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 
 /**
- * 主内容区（layout 薄壳）：仅提供语义化 `<main>` 槽位，内容由上层（App）按当前业务决定。
- * 不感知 PR 等具体领域，便于后续扩展非 PR 的主区业务——往这个槽里塞别的面板即可。
+ * Main content area (thin layout shell): provides only the semantic `<main>` slot; content is
+ * decided by the upper layer (App) per the current business.
+ * Domain-agnostic (unaware of PRs etc.), easing future non-PR main-area business—just drop another
+ * pane into this slot.
  */
 export function MainPane({ children }: { children: ReactNode }) {
   return <main className="main">{children}</main>;

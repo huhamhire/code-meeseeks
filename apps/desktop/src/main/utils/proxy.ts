@@ -1,21 +1,21 @@
-// 出站网络代理 plumbing。读 config.proxy，产出三种形态：
-//   - buildProxyEnv：子进程 env（给 ① pr-agent、③ git HTTPS，litellm/git 认 HTTP(S)_PROXY）
-//   - buildProxyDispatcher：undici ProxyAgent（给 ② Bitbucket Server REST 的 fetch）
-//   - shouldBypass：loopback/本地是否直连（② 在调用点据此决定要不要挂 dispatcher）
-// 一期仅 HTTP 代理；enabled=false 时全部产出「空/直连」，调用点无需各自判断开关。
+// Outbound network proxy plumbing. Reads config.proxy and produces three forms:
+//   - buildProxyEnv: child-process env (for ① pr-agent, ③ git HTTPS; litellm/git honor HTTP(S)_PROXY)
+//   - buildProxyDispatcher: undici ProxyAgent (for ② the fetch to Bitbucket Server REST)
+//   - shouldBypass: whether loopback/local goes direct (② decides at the call site whether to attach a dispatcher)
+// Phase one is HTTP proxy only; when enabled=false all forms yield "empty/direct connection", so call sites need not each check the switch.
 import { ProxyAgent, type Dispatcher } from 'undici';
 import { ERROR_CODES, errorCodeMessage, type ProxyConfig } from '@meebox/shared';
 
-// loopback / 本地：始终直连，不经代理。env 路径靠 NO_PROXY，dispatcher 路径靠 shouldBypass。
+// loopback / local: always direct connection, never through the proxy. The env path relies on NO_PROXY, the dispatcher path on shouldBypass.
 const NO_PROXY = 'localhost,127.0.0.1,::1';
 
-/** loopback / 本地 host → true（应直连，不走代理）。 */
+/** loopback / local host → true (should go direct connection, not through the proxy). */
 export function shouldBypass(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, ''); // 去掉 IPv6 字面量方括号
+  const h = host.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 literal brackets
   return h === 'localhost' || h.endsWith('.localhost') || h === '127.0.0.1' || h === '::1';
 }
 
-/** 拼标准代理 URL：`<protocol>://[user:pass@]host:port`。关闭 / 无 host 时 undefined。 */
+/** Build a standard proxy URL: `<protocol>://[user:pass@]host:port`. undefined when disabled / no host. */
 export function proxyUrl(proxy: ProxyConfig): string | undefined {
   if (!proxy.enabled || !proxy.host) return undefined;
   const auth = proxy.username
@@ -25,9 +25,9 @@ export function proxyUrl(proxy: ProxyConfig): string | undefined {
 }
 
 /**
- * 子进程 env：HTTP_PROXY/HTTPS_PROXY/ALL_PROXY + NO_PROXY（大小写都给——不同库读法不一，
- * httpx/git/curl 多认小写，部分认大写）。NO_PROXY 把 loopback/本地排除在代理外。
- * 关闭时返回 {}，调用点 spread 即无副作用。
+ * Child-process env: HTTP_PROXY/HTTPS_PROXY/ALL_PROXY + NO_PROXY (both cases given — libraries read differently,
+ * httpx/git/curl mostly honor lowercase, some honor uppercase). NO_PROXY excludes loopback/local from the proxy.
+ * Returns {} when disabled, so spreading at the call site has no side effect.
  */
 export function buildProxyEnv(proxy: ProxyConfig): Record<string, string> {
   const url = proxyUrl(proxy);
@@ -45,8 +45,8 @@ export function buildProxyEnv(proxy: ProxyConfig): Record<string, string> {
 }
 
 /**
- * undici ProxyAgent（含 Basic Auth，凭据嵌在 URL）。关闭时 undefined。
- * 注意：ProxyAgent 自身不认 NO_PROXY —— loopback 绕过由调用点先过 shouldBypass 决定。
+ * undici ProxyAgent (includes Basic Auth, credentials embedded in the URL). undefined when disabled.
+ * Note: ProxyAgent itself does not honor NO_PROXY — loopback bypass is decided by the call site running shouldBypass first.
  */
 export function buildProxyDispatcher(proxy: ProxyConfig): Dispatcher | undefined {
   const url = proxyUrl(proxy);
@@ -54,12 +54,12 @@ export function buildProxyDispatcher(proxy: ProxyConfig): Dispatcher | undefined
   return new ProxyAgent(url);
 }
 
-// 测试连通用的中性外部端点：返回 204、体积极小。代理能转发到它即说明出网正常。
+// Neutral external endpoint for connectivity testing: returns 204, extremely small. If the proxy can forward to it, outbound networking works.
 const PROXY_TEST_URL = 'https://www.google.com/generate_204';
 
 /**
- * 用给定代理配置试连一个外部地址，验证代理是否可用（设置页「测试连通」）。
- * 拿到任意 HTTP 响应即视为代理转发成功；407 视为认证失败；超时/网络错误归一成 reason。
+ * Try connecting to an external address with the given proxy config to verify the proxy is usable (the settings page "test connectivity").
+ * Any HTTP response counts as a successful proxy forward; 407 counts as auth failure; timeout/network errors are normalized into reason.
  */
 export async function testProxyConnectivity(
   proxy: ProxyConfig,
@@ -84,9 +84,9 @@ export async function testProxyConnectivity(
 }
 
 /**
- * 给某目标 host 造一个「代理感知」的 fetch，注入 BitbucketClient 的 opts.fetch。
- * host 命中 loopback/本地 → 返回 undefined（调用点用默认全局 fetch 直连）。
- * 否则返回带 dispatcher 的 fetch 包装。代理关闭也返回 undefined。
+ * Build a "proxy-aware" fetch for a target host, to inject into BitbucketClient's opts.fetch.
+ * host hits loopback/local → returns undefined (the call site uses the default global fetch for a direct connection).
+ * Otherwise returns a fetch wrapper carrying the dispatcher. Also returns undefined when the proxy is disabled.
  */
 export function proxyFetchForHost(
   proxy: ProxyConfig,

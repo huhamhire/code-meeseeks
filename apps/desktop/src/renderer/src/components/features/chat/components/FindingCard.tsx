@@ -23,13 +23,13 @@ import {
 } from '../utils/findings';
 import { BreakablePath, MdInline, withInlineSummary } from './shared';
 
-// 折叠标题（<details><summary>）支持内联 markdown：思路建议各方案标题里的 `代码` / **强调** 等生效。
-// 预算在模块级，避免每次渲染重建 components 对象。
+// Collapsible titles (<details><summary>) support inline markdown: `code` / **emphasis** etc. in the suggestion option titles take effect.
+// Budgeted at module level to avoid rebuilding the components object on every render.
 const DEFAULT_MD_COMPONENTS = withInlineSummary(mermaidComponents);
 const WALKTHROUGH_MD_COMPONENTS = withInlineSummary(walkthroughMdComponents);
 
-// chip 配色 tone → chat-chip-<tone>（色板见 styles/features/chat/chip.scss）。
-// finding 类别：元信息/图/工作量→accent，内容/测试/安全→approved，代码反馈/建议→warning，评分/兜底→neutral。
+// chip color tone → chat-chip-<tone> (palette see styles/features/chat/chip.scss).
+// finding categories: meta-info/diagram/effort→accent, content/tests/security→approved, code-feedback/suggestion→warning, score/fallback→neutral.
 const CAT_TONE: Record<PrDocSectionKey, 'accent' | 'approved' | 'warning' | 'neutral'> = {
   title: 'accent',
   'pr-type': 'accent',
@@ -43,14 +43,14 @@ const CAT_TONE: Record<PrDocSectionKey, 'accent' | 'approved' | 'warning' | 'neu
   security: 'approved',
   'code-feedback': 'warning',
   'code-suggestion': 'warning',
-  // /ask 结构化分段：结论高亮(绿)、建议高亮(琥珀)、过程分析中性(灰，默认收起)
+  // /ask structured segments: conclusion highlight (green), suggestion highlight (amber), process analysis neutral (grey, collapsed by default)
   'ask-summary': 'approved',
   'ask-analysis': 'neutral',
   'ask-suggestions': 'warning',
   score: 'neutral',
   general: 'neutral',
 };
-// 草稿状态：待处理/已编辑→accent，已发布→approved，已拒绝→neutral
+// Draft status: pending/edited→accent, posted→approved, rejected→neutral
 const DRAFT_TONE: Record<NonNullable<ReviewDraft['status']>, 'accent' | 'approved' | 'neutral'> = {
   pending: 'accent',
   edited: 'accent',
@@ -59,9 +59,9 @@ const DRAFT_TONE: Record<NonNullable<ReviewDraft['status']>, 'accent' | 'approve
 };
 
 /**
- * Finding 卡头部右上角的操作图标栏：编辑（评论气泡）/ 拒绝（圆形禁止）+ 引用（转发箭头）。
- * 仅代码类 finding（/review code-feedback 与 /improve code-suggestion）+ anchor 完整、未关闭时出现，
- * 排在折叠 chevron 之左。编辑动作随草稿状态切换语义（编辑 / 查看 / 撤销）；posted / rejected 不出拒绝。
+ * The action icon bar in the top-right of the Finding card header: edit (comment bubble) / reject (circular ban) + reference (forward arrow).
+ * Appears only for code-type findings (/review code-feedback and /improve code-suggestion) + complete anchor, not closed,
+ * ordered to the left of the collapse chevron. The edit action switches semantics with draft status (edit / view / undo); posted / rejected do not show reject.
  */
 function FindingHeadActions({
   relatedDraft,
@@ -76,11 +76,11 @@ function FindingHeadActions({
 }) {
   const { t } = useTranslation();
   const status = relatedDraft?.status;
-  // posted（远端已存，不撤销）/ rejected（已是拒绝态）不出拒绝按钮。
+  // posted (already exists on the remote, not undone) / rejected (already in the rejected state) do not show the reject button.
   const canReject = status !== 'posted' && status !== 'rejected';
   return (
     <div className="chat-finding-head-actions">
-      {/* 编辑→评论草稿。posted 跳转即「查看」；rejected 跳转即「撤销并继续编辑」。 */}
+      {/* Edit→comment draft. For posted, jumping means "view"; for rejected, jumping means "undo and keep editing". */}
       {onJump && (
         <button
           type="button"
@@ -115,7 +115,7 @@ function FindingHeadActions({
           <BanIcon size={16} />
         </button>
       )}
-      {/* 引用：发起复评 /ask（挂到输入栏），社媒「转发」箭头图标，排在编辑 / 拒绝之右。 */}
+      {/* Reference: initiate a re-review /ask (attached to the input bar), social-media "forward" arrow icon, ordered to the right of edit / reject. */}
       {onReference && (
         <button
           type="button"
@@ -132,10 +132,11 @@ function FindingHeadActions({
 }
 
 /**
- * Finding 卡 anchor 行右侧的状态展示。仅代码类 finding（/review code-feedback 与 /improve
- * code-suggestion）+ anchor 完整时出现。动作按钮已上移到头部图标栏（见 FindingHeadActions），
- * 此处只承载**状态**：被复评裁决 replace/drop 自动关闭时的只读关闭 chip（+「查看复评」导航，不提供
- * 撤销/关闭等用户操作——关闭由后端 ask 任务驱动），否则草稿状态 chip（待处理 / 已编辑 / 已发布 / 已拒绝）。
+ * Status display to the right of the Finding card's anchor row. Appears only for code-type findings (/review
+ * code-feedback and /improve code-suggestion) + complete anchor. The action buttons have been moved up to the
+ * header icon bar (see FindingHeadActions), so this only carries **status**: a read-only closed chip when auto-closed
+ * by a re-review verdict of replace/drop (+ "view re-review" navigation, no user operations like undo/close — closing
+ * is driven by the backend ask task), otherwise the draft status chip (pending / edited / posted / rejected).
  */
 function FindingDraftActions({
   relatedDraft,
@@ -143,13 +144,13 @@ function FindingDraftActions({
   onViewAsk,
 }: {
   relatedDraft?: ReviewDraft;
-  /** 被复评裁决自动关闭/取代时的关闭关系（只读展示驱动）。 */
+  /** The closure relationship when auto-closed/replaced by a re-review verdict (drives read-only display). */
   closure?: FindingClosure;
-  /** 「查看复评」导航回调：滚动定位到关闭它的复评 /ask 卡片（只读导航，非关闭操作）。 */
+  /** "View re-review" navigation callback: scroll to and locate the re-review /ask card that closed it (read-only navigation, not a close operation). */
   onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
-  // 已被复评取代/关闭：只读 chip（+ 查看复评导航）。关闭由后端 ask 裁决驱动，不提供撤销按钮。
+  // Already replaced/closed by a re-review: read-only chip (+ view re-review navigation). Closing is driven by the backend ask verdict, no undo button is provided.
   if (closure) {
     return (
       <div className="chat-finding-draft-actions">
@@ -198,50 +199,50 @@ export function FindingCard({
   onViewAsk,
 }: {
   finding: Finding;
-  /** 该 finding 关联的草稿；undefined = 尚未交互过；不为空 = 已 pending / edited / rejected / posted */
+  /** The draft associated with this finding; undefined = not interacted with yet; non-null = already pending / edited / rejected / posted */
   relatedDraft?: ReviewDraft;
-  /** 「→ 跳到代码编辑」按钮回调 */
+  /** "→ Jump to code editing" button callback */
   onJump?: () => void;
-  /** 「✗ 拒绝」按钮回调 */
+  /** "✗ Reject" button callback */
   onReject?: () => void;
-  /** 点击锚点：仅导航到 Diff 对应行（不进编辑态） */
+  /** Click the anchor: only navigate to the corresponding Diff line (does not enter edit state) */
   onNavigate?: () => void;
-  /** 「引用」按钮回调：把本 finding 挂到输入栏发起复评 /ask（仅 code 类 finding 出现）。 */
+  /** "Reference" button callback: attaches this finding to the input bar to initiate a re-review /ask (only appears for code-type findings). */
   onReference?: () => void;
-  /** 本 finding 被复评裁决 replace/drop 自动关闭时的关闭关系（只读展示驱动）。 */
+  /** The closure relationship when this finding is auto-closed by a re-review verdict of replace/drop (drives read-only display). */
   closure?: FindingClosure;
-  /** 「查看复评」导航回调：滚动定位到关闭它的复评 /ask 卡片。 */
+  /** "View re-review" navigation callback: scroll to and locate the re-review /ask card that closed it. */
   onViewAsk?: () => void;
 }) {
   const { t } = useTranslation();
-  // 已拒绝：左色条 + 类别 chip 置灰，卡片默认折叠收起（仅留头部 chip + 锚点行）。点头部的展开/收起
-  // 切换可临时回看正文，不影响草稿状态。
+  // Rejected: left color bar + category chip greyed out, card collapsed by default (only the header chip + anchor row remain). Clicking the
+  // header's expand/collapse toggle can temporarily review the body without affecting the draft status.
   const isRejected = relatedDraft?.status === 'rejected';
-  // 被复评取代/关闭：同样收起降饱和（与已拒绝同套视觉），anchor 行出只读关闭 chip。
+  // Replaced/closed by a re-review: likewise collapsed and desaturated (same visual as rejected), the anchor row shows a read-only closed chip.
   const isClosed = !!closure;
-  // sectionKey 优先（新解析的），fallback 到 category (旧持久化的 run)
+  // sectionKey takes priority (newly parsed), fallback to category (from an older persisted run)
   const key: PrDocSectionKey = finding.sectionKey ?? 'general';
-  // 可操作的代码类 finding（/review code-feedback、/improve code-suggestion 且 anchor 带行号）：
-  // 才出头部编辑 / 拒绝 / 引用图标栏 + anchor 行的草稿状态 / 关闭态。
+  // Actionable code-type findings (/review code-feedback, /improve code-suggestion with an anchor line number):
+  // only these show the header edit / reject / reference icon bar + the anchor row's draft status / closed state.
   const isActionableCode =
     (key === 'code-feedback' || key === 'code-suggestion') &&
     finding.anchor?.startLine !== undefined;
-  // 默认折叠：已拒绝 / 被复评关闭 finding，或 /ask「分析过程」段（过程性讨论默认收起、可展开）。
+  // Collapsed by default: rejected / re-review-closed findings, or the /ask "analysis process" segment (process discussion collapsed by default, expandable).
   const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
   const [expanded, setExpanded] = useState(false);
   const collapsed = collapsibleByDefault && !expanded;
   const label = sectionLabel(key, t);
-  // 标题在已知 sectionKey 上**通常**跟 chip label 内容重复 (h4 显示 "PR Type" + chip
-  // 显示 "类型")，所以默认只有 general 段才出 title。但 pr-agent 把若干段的"值"放在
-  // 标题里 (e.g., `Estimated effort to review: 3 🔵🔵🔵⚪⚪` / `Score: 85 🟢🟢...`)，
-  // body 是空的；这种情况强制把 title 渲染出来，否则卡片只剩 chip 一片空白。
-  // 先剥 [file:...] 末尾 marker (pr-agent /review 的 anchor 注入用，用户不可见)
-  // 再走 pr-agent 模板翻译。bodyEmpty 也按 stripped 后判断
+  // On a known sectionKey the title **usually** duplicates the chip label content (h4 shows "PR Type" + chip
+  // shows "类型"), so by default only the general segment shows the title. But pr-agent puts some segments' "values"
+  // in the title (e.g., `Estimated effort to review: 3 🔵🔵🔵⚪⚪` / `Score: 85 🟢🟢...`),
+  // with an empty body; in this case force the title to render, otherwise the card is left with just the chip and blank space.
+  // First strip the trailing [file:...] marker (used for pr-agent /review's anchor injection, invisible to the user)
+  // then run pr-agent template translation. bodyEmpty is also judged after stripping
   const strippedBody = stripFindingMarker(finding.body);
   const bodyEmpty = !strippedBody.trim();
   const showTitle = !!finding.title && (key === 'general' || bodyEmpty);
-  // pr-agent 把若干 section 标题 / 固定模板字符串硬编码成英文 (CONFIG__RESPONSE_LANGUAGE
-  // 只翻译 LLM 内容值)，渲染前替换成中文。工作量已用 emoji 圆点表分值，去掉冗余的数字分数。
+  // pr-agent hard-codes some section titles / fixed template strings in English (CONFIG__RESPONSE_LANGUAGE
+  // only translates LLM content values), replaced with Chinese before rendering. Effort already uses emoji dots for the score value, so drop the redundant numeric score.
   const translatedBody =
     key === 'effort'
       ? stripEffortScoreNumber(translatePrAgentLabels(strippedBody))
@@ -253,15 +254,15 @@ export function FindingCard({
     : undefined;
   return (
     <li
-      // data-finding-id：供复评卡顶部引用徽标点击后在原 run 内精确定位到这条原 finding 卡片并闪烁高亮。
+      // data-finding-id: lets the reference badge at the top of the re-review card, when clicked, precisely locate this original finding card within the original run and flash-highlight it.
       data-finding-id={finding.id}
       className={`chat-finding chat-finding-${key}${isRejected || isClosed ? ' chat-finding-rejected' : ''}${collapsed ? ' chat-finding-collapsed' : ''}`}
     >
       <header
         className={`chat-finding-head${collapsibleByDefault ? ' chat-finding-head-toggle' : ''}`}
-        // 可折叠卡（分析过程 / 已拒绝 / 被复评关闭的代码反馈）：整行标题区即展开/收起热区，扩大可点面积。
-        // 忽略来自内部按钮（编辑/拒绝/引用/chevron）的点击——它们各自处理、不应误触折叠（chevron 的
-        // 点击经此处冒泡，由它自身的 onClick 处理一次即可，故 closest('button') 命中时直接跳过）。
+        // Collapsible cards (analysis process / rejected / re-review-closed code feedback): the whole title row is the expand/collapse hot zone, enlarging the clickable area.
+        // Ignore clicks from inner buttons (edit/reject/reference/chevron) — they handle themselves and should not accidentally trigger collapse (the chevron's
+        // click bubbles through here, its own onClick handles it once, so skip directly when closest('button') hits).
         onClick={
           collapsibleByDefault
             ? (e) => {
@@ -271,13 +272,13 @@ export function FindingCard({
             : undefined
         }
       >
-        {/* 已知 sectionKey 用中文标签 chip；general / 未知不显示，避免 UI 噪音 */}
+        {/* Known sectionKey uses a Chinese label chip; general / unknown are not shown, avoiding UI noise */}
         {label && (
           <span className={`chat-chip chat-chip-md chat-finding-cat chat-chip-${CAT_TONE[key]}`}>
             {label}
           </span>
         )}
-        {/* PR Type 段：值胶囊与「类型」标签同排、右对齐（不再上下两排，提升空间利用率） */}
+        {/* PR Type segment: value pills on the same row as the "type" label, right-aligned (no longer two stacked rows, improving space utilization) */}
         {key === 'pr-type' && (
           <div className="chat-finding-pills chat-finding-pills-inline">
             {splitTypeLabels(translatedBody).map((t) => (
@@ -292,8 +293,8 @@ export function FindingCard({
             <MdInline>{translatedTitle}</MdInline>
           </h4>
         )}
-        {/* 头部操作图标栏：编辑（评论）/ 拒绝（圆形禁止）/ 引用（转发箭头）。仅可锚定的 code 类
-            finding 且未被复评关闭时出现，排在折叠 chevron 之左；与标题同排、右上角成组。 */}
+        {/* Header action icon bar: edit (comment) / reject (circular ban) / reference (forward arrow). Appears only for anchorable code-type
+            findings not closed by a re-review, ordered to the left of the collapse chevron; on the same row as the title, grouped in the top-right. */}
         {isActionableCode && !isClosed && (onJump || onReject || onReference) && (
           <FindingHeadActions
             relatedDraft={relatedDraft}
@@ -302,7 +303,7 @@ export function FindingCard({
             onReference={onReference}
           />
         )}
-        {/* 可默认折叠的段（已拒绝 / ask 分析过程）出现展开 / 收起切换：chevron 收起态指右、展开态转下 */}
+        {/* Segments collapsible by default (rejected / ask analysis process) get an expand / collapse toggle: chevron points right when collapsed, turns down when expanded */}
         {collapsibleByDefault && (
           <button
             type="button"
@@ -317,7 +318,7 @@ export function FindingCard({
       {finding.anchor && (
         <div className="chat-finding-anchor muted">
           {finding.anchor.startLine !== undefined && onNavigate ? (
-            // 可点击：跳转到 Diff 对应行（scroll+highlight，不进编辑态）
+            // Clickable: jump to the corresponding Diff line (scroll+highlight, does not enter edit state)
             <button
               type="button"
               className="chat-finding-anchor-link"
@@ -349,7 +350,7 @@ export function FindingCard({
               )}
             </>
           )}
-          {/* /improve 建议带的 1-10 重要度评分；高分加 warning 着色提示 reviewer */}
+          {/* The 1-10 importance score carried by /improve suggestions; high scores get warning coloring to alert the reviewer */}
           {typeof finding.score === 'number' && (
             <span
               className={`chat-finding-score${finding.score >= 8 ? ' chat-finding-score-high' : ''}`}
@@ -358,8 +359,8 @@ export function FindingCard({
               {finding.score}/10
             </span>
           )}
-          {/* M4 草稿状态 chip / 复评关闭态：锚到具体行的代码类 finding 才展示（操作按钮已上移到头部
-              图标栏）。仅在有草稿状态或被复评关闭时出现，否则不占位。 */}
+          {/* M4 draft status chip / re-review closed state: only shown for code-type findings anchored to a specific line (action buttons
+              have been moved up to the header icon bar). Appears only when there is a draft status or it is closed by a re-review, otherwise takes no space. */}
           {isActionableCode && (isClosed || relatedDraft?.status) && (
             <FindingDraftActions
               relatedDraft={relatedDraft}
@@ -369,30 +370,30 @@ export function FindingCard({
           )}
         </div>
       )}
-      {/* 可折叠内容（正文 + 代码对比）：grid-rows 0fr↔1fr 平滑收展（auto 高度可动画）。内容始终挂载，
-          由 CSS 按 .chat-finding-collapsed 收起、inner overflow:hidden 裁切——故折叠/展开有高度过渡动画。
-          pr-type 的值胶囊已并入头部行、无正文段；无 codeChange 时整体不渲染。 */}
+      {/* Collapsible content (body + code comparison): grid-rows 0fr↔1fr for smooth collapse/expand (auto height can be animated). Content is always mounted,
+          collapsed by CSS via .chat-finding-collapsed with inner overflow:hidden clipping — hence the height transition animation on collapse/expand.
+          pr-type's value pills have been merged into the header row, no body segment; when there is no codeChange the whole thing does not render. */}
       {(key !== 'pr-type' || finding.codeChange) && (
         <div className="chat-finding-collapsible">
           <div className="chat-finding-collapsible-inner">
             {key !== 'pr-type' && (
               <div className="chat-finding-body markdown">
-                {/* remarkBreaks 把 finding body 里的单换行也当成 <br>。pr-agent 的 trace、
-                    或一般段落里 reviewer 习惯按软换行折行，不加 remarkBreaks 会被 markdown
-                    合并成长一行。Findings 主要是富文本说明，不存在"故意软换行连接"的场景 */}
+                {/* remarkBreaks treats single line breaks in the finding body as <br> too. In pr-agent's trace,
+                    or in general paragraphs where reviewers habitually wrap by soft line breaks, without remarkBreaks markdown
+                    would merge them into one long line. Findings are mainly rich-text descriptions, there is no "deliberate soft-break joining" scenario */}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkBreaks]}
                   rehypePlugins={REMOTE_REHYPE_PLUGINS}
-                  // 「文件变更」walkthrough 用去掉 <details open> 的覆盖，使各文件分类默认折叠收起。
-                  // 两套均叠加「<summary> 内联 markdown」（折叠标题支持 `代码` 等预格式化）。
+                  // The "file changes" walkthrough uses an override without <details open>, so each file category is collapsed by default.
+                  // Both sets add "<summary> inline markdown" on top (collapsible titles support preformatting like `code`).
                   components={key === 'walkthrough' ? WALKTHROUGH_MD_COMPONENTS : DEFAULT_MD_COMPONENTS}
                 >
                   {translatedBody}
                 </ReactMarkdown>
               </div>
             )}
-            {/* /improve 给的 existing → improved 代码对比。两段都是片段，独立 <pre> 块
-                + 红/绿背景 模拟 diff 视觉 (不用 Monaco DiffEditor 节省开销) */}
+            {/* The existing → improved code comparison given by /improve. Both are fragments, independent <pre> blocks
+                + red/green background to mimic the diff visual (not using Monaco DiffEditor, saving overhead) */}
             {finding.codeChange && (
               <div className="chat-finding-code-change">
                 {finding.codeChange.existing && (

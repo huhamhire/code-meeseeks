@@ -3,12 +3,12 @@ import { Step } from '../context.js';
 import type { ReviewStepCtx } from './shared.js';
 
 /**
- * 多个追问同属一个阶段、彼此独立，故并行派发（runStaggered 保序、错开起跑；asks 为空不触发）。
+ * Multiple follow-up asks belong to the same phase and are independent, so they're dispatched in parallel (runStaggered preserves order, staggers start; not triggered when asks is empty).
  *
- * PR3 复评关联：judge 点名了 review finding（targetFindingId）的追问，以**复评模式**派发——携带被复评
- * finding 的正文（referencedContext）+ 结构化引用（referencedFinding），run 卡片即出「复评自」徽标 + 裁决；
- * 裁决 replace/drop 时自动关闭被取代的原 review finding（closeFinding，建立 FindingClosure）。keep / 未点名
- * 不动。新评论不自动落草稿——留待用户在复评卡手动「采纳」（与手动引用路径一致）。
+ * PR3 re-evaluation link: a follow-up ask that judge named a review finding for (targetFindingId) is dispatched in **re-evaluation mode** — carrying the re-evaluated
+ * finding's body (referencedContext) + structured reference (referencedFinding), so the run card shows a "re-evaluated from" badge + verdict;
+ * on verdict replace/drop it auto-closes the superseded original review finding (closeFinding, establishing a FindingClosure). keep / unnamed
+ * are left untouched. New comments don't auto-drop into drafts — left for the user to manually "adopt" on the re-evaluation card (consistent with the manual reference path).
  */
 export class AsksStep extends Step<ReviewStepCtx> {
   readonly name = 'asks';
@@ -20,7 +20,7 @@ export class AsksStep extends Step<ReviewStepCtx> {
     const findings = ctx.bag.review?.findings ?? [];
     const results = asks.length
       ? await runStaggered(asks, (a) => {
-          // 命中点名 + 该 finding 存在且可锚定 → 复评模式（携引用上下文 + 前向链）。
+          // named hit + the finding exists and is anchorable → re-evaluation mode (carries referenced context + forward link).
           const target =
             a.targetFindingId && reviewRunId
               ? findings.find(
@@ -42,7 +42,7 @@ export class AsksStep extends Step<ReviewStepCtx> {
           return ctx.deps.runTool({ tool: 'ask', question: a.question });
         })
       : [];
-    // 复评裁决 replace/drop → 自动关闭被取代的原 review finding（建立 FindingClosure）。
+    // re-evaluation verdict replace/drop → auto-close the superseded original review finding (establishing a FindingClosure).
     for (let i = 0; i < results.length; i += 1) {
       const ask = results[i]!;
       const targetId = asks[i]!.targetFindingId;
@@ -61,8 +61,8 @@ export class AsksStep extends Step<ReviewStepCtx> {
         });
       }
     }
-    // 喂给总结的只取追问的「结论」(ask-summary)，不灌全文——/ask 现产出富文本分析 / 表格 / 代码块 /
-    // 逐条代码建议，整段灌进去会撑爆总结、诱导模型照搬单条追问的细节，背离「总结=PR 整体结论」的初衷。
+    // Feed the summary only the follow-up ask's "conclusion" (ask-summary), not the full text — /ask now produces rich-text analysis / tables / code blocks /
+    // per-item code suggestions; dumping the whole thing in would bloat the summary and lure the model into copying a single ask's details, betraying the intent of "summary = the PR's overall conclusion".
     ctx.bag.askResults = results.map((ask, i) => {
       const conclusion =
         ask.findings?.find((f) => f.sectionKey === 'ask-summary')?.body?.trim() || ask.text.trim();

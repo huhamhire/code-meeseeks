@@ -5,14 +5,14 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  // 定位锚：切 PR 时加载遮罩 .pane-loading-overlay 铺满整个 diff 区（树 + 编辑器）。
+  // Positioning anchor: when switching PRs the loading mask .pane-loading-overlay covers the whole diff area (tree + editor).
   position: relative;
 }
 
-// 显示换行符 ↵：monaco renderWhitespace 只渲染 space/tab，不显示 EOL；
-// 给每行最后一个 token span 加 ::after 标记。
-// 注意：.view-line 容器宽度 = viewport 全宽，所以 ::after 加在 .view-line 上
-// 会跑到 viewport 最右；必须挂到 .view-line > span:last-child 紧贴代码字符末尾
+// Show EOL character ↵: monaco renderWhitespace only renders space/tab, not EOL;
+// add an ::after marker to each line's last token span.
+// Note: the .view-line container width = full viewport width, so putting ::after on .view-line
+// would push it to the far right of the viewport; it must attach to .view-line > span:last-child right at the end of the code characters
 .diff-editor-show-eol {
   .view-line > span:last-child::after {
     content: '↵';
@@ -23,7 +23,7 @@
   }
 }
 
-// Split / Unified 切换钮组：紧贴的两个按钮，第二个去掉左 border 避免重叠
+// Split / Unified toggle button group: two adjacent buttons, the second drops its left border to avoid overlap
 .diff-mode-toggle {
   display: inline-flex;
   gap: 0;
@@ -67,7 +67,7 @@
   flex-direction: column;
 }
 
-// 主区 wrapper：左侧 blame-column 是固定宽度；ErrorBoundary 或 DiffPane 走 flex:1
+// Main area wrapper: the left blame-column is fixed width; ErrorBoundary or DiffPane take flex:1
 .diff-pane-wrapper {
   flex: 1;
   min-height: 0;
@@ -81,7 +81,7 @@
   }
 }
 
-// Monaco 编辑器外壳：position:relative 作为 diff 就绪前 overlay loading 的定位锚点。
+// Monaco editor shell: position:relative serves as the positioning anchor for the overlay loading shown before the diff is ready.
 .diff-pane-editor {
   position: relative;
   height: 100%;
@@ -114,7 +114,7 @@
   }
 }
 
-// 单 pane 内部出错：ErrorBoundary 兜底
+// Error inside a single pane: ErrorBoundary fallback
 .error-boundary-fallback {
   padding: 24px;
   display: flex;
@@ -143,7 +143,7 @@
   word-break: break-word;
 }
 
-// 整块 fallback：拉变更文件本身失败时占满 diff 区
+// Whole-block fallback: fills the diff area when fetching the changed file itself fails
 .backend-error-view {
   display: flex;
   flex-direction: column;
@@ -171,8 +171,8 @@
   color: $text-primary;
 }
 
-// 顶部 banner：评论 / 单文件内容这类非阻塞失败时，让 diff 继续显示。
-// kind=auth / not-found 走更柔和的黄；其余 (network/unknown) 走红
+// Top banner: for non-blocking failures like comments / single-file content, keep the diff showing.
+// kind=auth / not-found use a softer yellow; the rest (network/unknown) use red
 .backend-error-banner {
   display: flex;
   align-items: center;
@@ -225,7 +225,7 @@
   white-space: pre-wrap;
 }
 
-// Mirror sync 进度条 (clone / fetch 阶段占满 diff 区)
+// Mirror sync progress bar (fills the diff area during clone / fetch phases)
 .sync-progress {
   display: flex;
   flex-direction: column;
@@ -270,7 +270,7 @@
   }
 }
 
-// 二进制文件 (image/binary) 占位
+// Binary file (image/binary) placeholder
 .diff-binary {
   display: flex;
   align-items: center;

@@ -12,47 +12,47 @@ import type {
 } from '@meebox/shared';
 import type { DiffBlameLine, DiffChangedFile, DiffFileContent, DiffSide } from './common.js';
 
-/** PR 操作域：评论 / 列表 / 状态 / 合并 / 镜像 / diff / 草稿。 */
+/** PR operations domain: comments / list / status / merge / mirror / diff / drafts. */
 export interface PrChannels {
   /**
-   * 拉评论 body 内嵌图片 (`![alt](url)`)。url 可能是 Bitbucket attachment 绝对/相对地址，
-   * 私有实例需要带 PAT 才能取 → renderer `<img>` 标签无法直接 fetch，必须走 main 代理。
-   * 返回 data URL 给 renderer 拼到 `<img src>`；获取失败 (404 / 跨 host / 非图片) 返回 null
+   * Fetch an image embedded in a comment body (`![alt](url)`). The url may be a Bitbucket attachment absolute/relative address;
+   * a private instance requires a PAT to fetch → the renderer `<img>` tag cannot fetch it directly, so it must go through the main proxy.
+   * Returns a data URL for the renderer to put in `<img src>`; returns null on fetch failure (404 / cross-host / non-image)
    */
   'comments:fetchAttachment': {
     request: { localId: string; url: string };
     response: { dataUrl: string } | null;
   };
   /**
-   * 对已有评论发回复。提交成功后 main 端会刷新 comments cache + broadcast
-   * comments:changed 事件，renderer 各组件重新拉取列表自动展示新 reply
+   * Reply to an existing comment. After a successful submit, the main side refreshes the comments cache + broadcasts
+   * the comments:changed event; renderer components refetch the list and automatically show the new reply
    */
   'comments:reply': {
     request: { localId: string; parentCommentId: string; body: string };
     response: PrComment;
   };
   /**
-   * 在 PR 上发一条 summary（顶层、不锚到文件）评论。成功后 main 端清评论缓存 + 广播
-   * comments:changed，活动 / 评论面板自动重拉，新评论出现在时间线顶部。
+   * Post a summary (top-level, not anchored to a file) comment on the PR. On success the main side clears the comment cache + broadcasts
+   * comments:changed; the activity / comments panel refetches automatically, and the new comment appears at the top of the timeline.
    */
   'comments:create': {
     request: { localId: string; body: string };
     response: PrComment;
   };
   /**
-   * 删除自己作者的远端评论。Bitbucket 要求带 version (乐观锁)，调用方从已有 PrComment
-   * 拿；不一致 / 评论已有回复 / 自己不是作者都会失败 (Bitbucket 409/403)。成功后 main
-   * 端清空评论缓存 + broadcast comments:changed，UI 自动重拉刷新
+   * Delete a remote comment you authored. Bitbucket requires a version (optimistic lock), which the caller takes from an existing PrComment;
+   * mismatch / comment already has replies / not being the author all fail (Bitbucket 409/403). On success the main
+   * side clears the comment cache + broadcasts comments:changed, and the UI refetches to refresh automatically
    */
   'comments:delete': {
     request: { localId: string; commentId: string; version: number };
     response: void;
   };
   /**
-   * 编辑自己作者评论的 body。Bitbucket PUT 同样要 version (乐观锁) — 不一致回 409，
-   * 上层应提示"远端已更新，请刷新后重试"并拒绝静默覆盖。Bitbucket 允许编辑带 reply
-   * 的评论 (跟 delete 区别)。成功后 main 端清评论缓存 + 广播
-   * comments:changed，UI 自动重拉显示新文本
+   * Edit the body of a comment you authored. Bitbucket PUT also requires a version (optimistic lock) — a mismatch returns 409,
+   * and the upper layer should prompt "remote has updated, please refresh and retry" and refuse to overwrite silently. Bitbucket allows editing a comment
+   * that has replies (unlike delete). On success the main side clears the comment cache + broadcasts
+   * comments:changed, and the UI refetches automatically to show the new text
    */
   'comments:edit': {
     request: {
@@ -64,9 +64,9 @@ export interface PrChannels {
     response: PrComment;
   };
   /**
-   * 切换当前用户对一条评论的 emoji 反应（add=true 加 / false 取下）。emoji 为规范化 Unicode 字符
-   * （见 shared REACTION_PICKER）；kind 区分 summary / inline（GitHub 据此选反应端点）。成功后 main
-   * 端清评论缓存 + 广播 comments:changed，UI 重拉刷新反应条。仅 commentReactions 能力为真的平台暴露。
+   * Toggle the current user's emoji reaction on a comment (add=true to add / false to remove). emoji is a normalized Unicode character
+   * (see shared REACTION_PICKER); kind distinguishes summary / inline (GitHub picks the reaction endpoint accordingly). On success the main
+   * side clears the comment cache + broadcasts comments:changed, and the UI refetches to refresh the reaction bar. Exposed only on platforms where the commentReactions capability is true.
    */
   'comments:toggleReaction': {
     request: {
@@ -79,24 +79,24 @@ export interface PrChannels {
     response: void;
   };
   /**
-   * 上传图片作为评论附件（粘贴 / 选取触发），返回可插入正文的 markdown 片段；不支持的平台
-   * （GitHub）返回 null。bytes 走 ArrayBuffer 经 IPC 传输，main 端转 Uint8Array 交 adapter 上传。
-   * 仅 commentAttachments 能力为真的平台暴露入口。
+   * Upload an image as a comment attachment (triggered by paste / picker), returns a markdown snippet insertable into the body; unsupported platforms
+   * (GitHub) return null. bytes are transferred over IPC as an ArrayBuffer, which the main side converts to Uint8Array and hands to the adapter to upload.
+   * The entry point is exposed only on platforms where the commentAttachments capability is true.
    */
   'comments:uploadAttachment': {
     request: { localId: string; fileName: string; contentType: string; bytes: ArrayBuffer };
     response: { markdown: string } | null;
   };
   'prs:list': { request: void; response: StoredPullRequest[] };
-  /** 列出已归档（退场）PR：从冷存储读取，供「已关闭」视图浏览（只读）。 */
+  /** List archived (retired) PRs: read from cold storage, for the "closed" view to browse (read-only). */
   'prs:listArchived': { request: void; response: StoredPullRequest[] };
   /**
-   * 按 URL 打开当前平台的 PR：解析链接 → 若本地已存在（活跃 / 归档）直接定位；否则远端拉取（鉴权）后
-   * 存入归档冷存储再定位。返回其 localId 与所在范围；解析失败 / 无权限 / 不存在抛 AppError 错误码。
+   * Open the current platform's PR by URL: parse the link → if it already exists locally (active / archived) locate it directly; otherwise fetch from remote (authenticated),
+   * store into archive cold storage, then locate it. Returns its localId and location; throws an AppError error code on parse failure / no permission / not found.
    */
   'prs:openByUrl': {
     request: { url: string };
-    /** discoveryFilters：活跃 PR 所属发现分类（前端据此落到能展示它的 tab）；归档 PR 为空。 */
+    /** discoveryFilters: the discovery categories an active PR belongs to (the frontend uses this to land on a tab that can show it); empty for archived PRs. */
     response: {
       localId: string;
       location: 'active' | 'archived';
@@ -104,131 +104,131 @@ export interface PrChannels {
     };
   };
   'prs:refresh': { request: void; response: PollResult };
-  /** Poller 最近一次完成时间（ISO 或 null）；启动时初始化用 */
+  /** Poller's last completion time (ISO or null); used for initialization at startup */
   'prs:lastSync': { request: void; response: { at: string | null } };
   'prs:setLocalStatus': {
     request: { localId: string; status: LocalPrStatus };
     response: StoredPullRequest | null;
   };
   /**
-   * 标记 PR 为已读：推进已读水位（当前 head sha + 时间）并清未读标记。用户打开 PR 时调用。
-   * 返回带 `unread:false` 的最新 PR（找不到返回 null）。下一轮 poll 不会因旧事件再把它标回未读。
+   * Mark a PR as read: advance the read watermark (current head sha + time) and clear the unread flag. Called when the user opens the PR.
+   * Returns the latest PR with `unread:false` (returns null if not found). The next poll round will not mark it unread again due to old events.
    */
   'prs:markRead': {
     request: { localId: string };
     response: StoredPullRequest | null;
   };
   /**
-   * 合并 PR 到目标分支（仅对 canMerge=true 的 PR 暴露入口）。成功后远端 PR 转
-   * MERGED，调用方应自行刷新列表（下一轮 poll 会软删该 PR）。失败抛错冒泡到 renderer。
+   * Merge the PR into the target branch (entry point exposed only for PRs with canMerge=true). On success the remote PR turns
+   * MERGED, and the caller should refresh the list itself (the next poll round will soft-delete the PR). On failure it throws, bubbling up to the renderer.
    */
   'prs:merge': {
     request: { localId: string };
     response: void;
   };
-  /** 同步 PR 所属 repo 的本地镜像（必要时 clone，否则 fetch），返回镜像绝对路径 */
+  /** Sync the local mirror of the PR's repo (clone if necessary, otherwise fetch), returns the mirror's absolute path */
   'repo:sync': {
     request: { localId: string };
     response: { mirrorPath: string; freshClone: boolean };
   };
   /**
-   * 列出变更文件（自动先 sync mirror）。默认 PR baseSha → headSha 的全部变更；
-   * 传 base / head（如某 commit 的 `parent..sha`）则列该范围的变更，用于「查看特定 commit」。
+   * List changed files (automatically syncs the mirror first). Defaults to all changes from PR baseSha → headSha;
+   * passing base / head (e.g. a commit's `parent..sha`) lists the changes in that range, used for "view a specific commit".
    */
   'diff:listChangedFiles': {
     request: { localId: string; base?: string; head?: string };
     response: DiffChangedFile[];
   };
   /**
-   * 列出合并到目标分支会产生冲突的文件路径（PR 目标 tip ⟂ 源 head 的 `git merge-tree` 试合并）。
-   * 仅 `pr.hasConflict` 为真时才实际跑 merge-tree，否则直接返回空数组（省一次本地试合并）。
-   * 试合并失败 / 无法判定时返回空数组（保守不标冲突），文件树据此在对应行标三角警示图标。
+   * List file paths that would conflict when merging into the target branch (a `git merge-tree` trial merge of PR target tip ⟂ source head).
+   * Actually runs merge-tree only when `pr.hasConflict` is true, otherwise returns an empty array directly (saving one local trial merge).
+   * Returns an empty array on trial-merge failure / when undecidable (conservatively not flagging conflict); the file tree uses this to mark a triangle warning icon on the corresponding row.
    */
   'diff:listConflictFiles': {
     request: { localId: string };
     response: string[];
   };
   /**
-   * 读取 base 或 head 一侧某文件的内容（二进制返回 {binary:true}）。默认取 PR base / head 一侧；
-   * 传 base / head sha 则按指定范围取（commit 视图：base=parent、head=commit）。
+   * Read the content of a file on the base or head side (binary returns {binary:true}). Defaults to the PR base / head side;
+   * passing base / head sha reads by the specified range (commit view: base=parent, head=commit).
    */
   'diff:getFileContent': {
     request: { localId: string; side: DiffSide; path: string; base?: string; head?: string };
     response: DiffFileContent;
   };
   /**
-   * 拉取 PR 上的已有评论（inline + summary 都拉，renderer 自己分）。
+   * Fetch existing comments on the PR (both inline + summary are fetched, renderer splits them itself).
    *
-   * 默认走 cache + pr_updated_at stale 比对：命中回缓存，stale/miss 拉远端。
-   * 但本地 PR.updatedAt 来自 poller 周期性拉，可能滞后 — 远端新增评论后，
-   * 本地 updatedAt 不变 → cache 误判命中 → 不刷新。打开 PR 时 renderer 应该
-   * 传 force=true 跳过 stale 比对强制远端拉一次，确保 badge 计数 / inline
-   * 评论是最新的
+   * Defaults to cache + pr_updated_at stale comparison: on a hit return the cache, on stale/miss fetch remote.
+   * But local PR.updatedAt comes from the poller's periodic fetch and may lag — after a remote comment is added,
+   * local updatedAt stays unchanged → cache falsely hits → no refresh. When opening a PR the renderer should
+   * pass force=true to skip the stale comparison and force one remote fetch, ensuring the badge count / inline
+   * comments are up to date
    */
   'diff:listComments': {
     request: { localId: string; force?: boolean };
     response: PrComment[];
   };
   /**
-   * 仅读评论缓存里的总条数 (inline + summary 顶层条目数；不展开 replies)，**不**
-   * 打远端。UI 用于 tab 角标 "评论 (N)" 的懒展示：缓存有就直接显示，缓存空就不显示。
-   * 用户切到 Comments 标签时触发 `diff:listComments` 拉远端 + 写缓存，下次进 PR
-   * 角标就有数字了。
+   * Read only the total count from the comment cache (inline + summary top-level entry count; does not expand replies), **without**
+   * hitting remote. The UI uses it for lazy display of the tab badge "Comments (N)": if the cache has it, show directly; if the cache is empty, do not show.
+   * When the user switches to the Comments tab it triggers `diff:listComments` to fetch remote + write the cache, so the next time the PR is opened
+   * the badge has a number.
    */
   'diff:commentCountCached': {
     request: { localId: string };
     response: { count: number } | null;
   };
-  /** 拉取 PR 包含的 commits，newest first */
+  /** Fetch the commits contained in the PR, newest first */
   'diff:listCommits': {
     request: { localId: string };
     response: PrCommit[];
   };
   /**
-   * 拉取 PR 上的评审决断活动事件（approve / needs-work / unapprove / dismiss），带时间戳。
-   * 活动时间线把它与评论 / 提交按时间归并。不缓存（量小，量级同 commits）；平台取不到历史
-   * 决断（如 GitLab CE 无审批）时返回 []，时间线只展示评论与提交。
+   * Fetch review-verdict activity events on the PR (approve / needs-work / unapprove / dismiss), with timestamps.
+   * The activity timeline merges them with comments / commits by time. Not cached (small volume, on par with commits); when the platform cannot retrieve historical
+   * verdicts (e.g. GitLab CE has no approvals) it returns [], and the timeline shows only comments and commits.
    */
   'diff:listActivity': {
     request: { localId: string };
     response: PrActivityEvent[];
   };
   /**
-   * 本地 git rev-list 算 PR 引入的 commit 数 (base..head)。完全走本地 bare 镜像，
-   * 不打远端；任一 sha 不在镜像 (尚未 sync 到本 PR 范围) → null。
-   * UI 用于 Commits 标签页角标的懒展示，跟 diff:commentCountCached 同模式
+   * Local git rev-list to count the commits the PR introduces (base..head). Entirely via the local bare mirror,
+   * no remote hit; if any sha is not in the mirror (not yet synced to this PR range) → null.
+   * The UI uses it for lazy display of the Commits tab badge, same pattern as diff:commentCountCached
    */
   'diff:commitCount': {
     request: { localId: string };
     response: { count: number } | null;
   };
   /**
-   * 给 head 侧文件跑 git blame；同时返回 PR 引入的 head 行号集合，
-   * renderer 能区分"未变更行（出 blame）"vs"PR 改动行（出色带占位）"。
+   * Run git blame on the head-side file; also returns the set of head line numbers the PR introduces,
+   * so the renderer can distinguish "unchanged lines (show blame)" vs "PR-changed lines (show a color-band placeholder)".
    */
   'diff:getBlame': {
     request: { localId: string; path: string; base?: string; head?: string };
     response: {
-      /** 仅未变更行的 blame（已过滤掉 PR 改动行） */
+      /** Blame for unchanged lines only (PR-changed lines already filtered out) */
       lines: DiffBlameLine[];
-      /** PR 引入的 head 行号 (added / modified)，用于 blame 列画色带占位 */
+      /** Head line numbers the PR introduces (added / modified), used to draw the color-band placeholder in the blame column */
       changedLines: number[];
     };
   };
-  /** 计算本地所有 repo 镜像的总占用字节数（设置页用） */
+  /** Compute the total bytes used by all local repo mirrors (for the settings page) */
   'repo:getTotalSize': { request: void; response: { totalBytes: number } };
   /**
-   * 列出指定 PR 的全部草稿 (pending / edited / posted / rejected 都返回，UI 端按
-   * status 过滤显示 / 折叠)。
+   * List all drafts of the given PR (pending / edited / posted / rejected are all returned; the UI filters by
+   * status to display / collapse).
    */
   'drafts:list': {
     request: { localId: string };
     response: ReviewDraft[];
   };
   /**
-   * 创建一条草稿。id / createdAt / updatedAt 由 main 端生成，调用方传业务字段即可。
-   * 调用约定：origin='finding' 时必须传 source；origin='manual' 时不要传 source。
-   * 成功后 main 端广播 `drafts:changed` 事件。
+   * Create a draft. id / createdAt / updatedAt are generated by the main side; the caller only passes business fields.
+   * Call convention: when origin='finding' source must be passed; when origin='manual' do not pass source.
+   * On success the main side broadcasts the `drafts:changed` event.
    */
   'drafts:create': {
     request: {
@@ -238,10 +238,10 @@ export interface PrChannels {
     response: ReviewDraft;
   };
   /**
-   * 部分更新一条草稿。规则：
-   * - 编辑 body 且 status='pending' → 自动转 'edited'
-   * - 显式传 status (e.g., 'rejected') → 按传入值覆盖
-   * - 找不到 draftId 返回 null (不抛错，UI 静默兜底)
+   * Partially update a draft. Rules:
+   * - editing body while status='pending' → automatically turns 'edited'
+   * - explicitly passing status (e.g., 'rejected') → overwrite with the passed value
+   * - draftId not found returns null (no throw, UI falls back silently)
    */
   'drafts:update': {
     request: {
@@ -251,14 +251,14 @@ export interface PrChannels {
     };
     response: ReviewDraft | null;
   };
-  /** 删除一条草稿。删 posted 草稿是允许的 (只清本地，远端 comment 不动) */
+  /** Delete a draft. Deleting a posted draft is allowed (only clears local, remote comment is untouched) */
   'drafts:delete': {
     request: { localId: string; draftId: string };
     response: void;
   };
   /**
-   * finding 关闭关系（复评 /ask「取代 / 撤销」原 finding 时建立）。独立于草稿，仅作用于 ChatPane
-   * finding 卡片的关闭态 + 与复评卡片互链。create/delete 后 main 广播 `findingClosures:changed`。
+   * finding closure relation (established when a re-review /ask "supersedes / revokes" the original finding). Independent of drafts, it only affects the closed state
+   * of the ChatPane finding card + its cross-link with the re-review card. After create/delete the main side broadcasts `findingClosures:changed`.
    */
   'findingClosures:list': {
     request: { localId: string };
@@ -279,17 +279,17 @@ export interface PrChannels {
     response: void;
   };
   /**
-   * 批量发布草稿到远端：每条 draft 经 adapter.publishInlineComment 发到 Bitbucket，
-   * 成功 → 本地 draft status='posted' + 写 posted_remote_id；失败 → 保持原 status
-   * 不变并把错误收集到 results 里。**单条失败不中断后续条目** —— 跟 Bitbucket web UI
-   * "Start review" 行为对齐 (那边也是逐条 POST，某条 400 不影响其它)。
+   * Batch-publish drafts to remote: each draft is sent to Bitbucket via adapter.publishInlineComment,
+   * success → local draft status='posted' + write posted_remote_id; failure → keep the original status
+   * unchanged and collect the error into results. **A single failure does not interrupt subsequent items** —— aligned with the Bitbucket web UI
+   * "Start review" behavior (which also POSTs one by one, where one 400 does not affect others).
    *
-   * 一次性发完后 main 会：
-   * 1. 广播 `drafts:changed` —— DiffView / FindingCard 重拉草稿换 status chip
-   * 2. force-refresh Bitbucket PR 评论 (跳缓存) + 广播 `comments:changed`，让 CommentsPanel
-   *    立即看到自己刚发布的评论，不用等下一轮 poller
+   * After publishing all at once, main will:
+   * 1. broadcast `drafts:changed` —— DiffView / FindingCard refetch drafts and swap the status chip
+   * 2. force-refresh Bitbucket PR comments (skip cache) + broadcast `comments:changed`, so CommentsPanel
+   *    immediately sees the comments it just published, without waiting for the next poller round
    *
-   * 调用方 (renderer modal) 据 results 显示 "成功 N 失败 M" + 错误明细
+   * The caller (renderer modal) uses results to show "N succeeded M failed" + error details
    */
   'drafts:publishBatch': {
     request: { localId: string; draftIds: string[] };
@@ -297,9 +297,9 @@ export interface PrChannels {
       results: Array<{
         draftId: string;
         ok: boolean;
-        /** 成功时填，跟落库的 draft.posted_remote_id 同值 */
+        /** Filled on success, same value as the persisted draft.posted_remote_id */
         postedRemoteId?: string;
-        /** 失败时填，人读错因 (Bitbucket REST 4xx body 经过 PlatformError 包装) */
+        /** Filled on failure, human-readable error reason (Bitbucket REST 4xx body wrapped via PlatformError) */
         error?: string;
       }>;
     };

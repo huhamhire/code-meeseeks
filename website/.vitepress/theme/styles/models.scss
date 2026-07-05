@@ -1,0 +1,44 @@
+// "Works with your models" provider strip below the hero screenshot.
+// Monochrome brand marks (simple-icons), muted by default and brightening on
+// hover, so the row reads as one calm system rather than a rainbow of logos.
+.ms {
+  text-align: center;
+  margin: 56px auto 8px;
+
+  &-label {
+    margin: 0 0 22px;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--vp-c-text-3);
+  }
+
+  &-logos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 48px;
+  }
+
+  &-logo {
+    display: inline-flex;
+    color: var(--vp-c-text-2);
+    opacity: 0.6;
+    transition:
+      opacity 0.2s,
+      color 0.2s;
+
+    &:hover {
+      opacity: 1;
+      color: var(--vp-c-text-1);
+    }
+
+    svg {
+      display: block;
+      width: 48px;
+      height: 48px;
+    }
+  }
+}

@@ -13,35 +13,38 @@ import { clamp, fillTemplate } from '../../utils/index.js';
 import type { StepRecorder } from '../context.js';
 
 /**
- * 自由规划 plan-cycle 步骤的共享件：动作类型 + 解析（记忆 / 建议 / 计划）、会话上下文与协议拼装、运行上下文。
- * 步骤本体见 ./plan-cycle-step，驱动见 ../../planner。
+ * Shared pieces for the free-form planning plan-cycle step: action types + parsing (memory / suggestion / plan),
+ * conversation context and protocol assembly, run context.
+ * See ./plan-cycle-step for the step itself, ../../planner for the driver.
  */
 
 export interface PlannerAction {
   thought?: string;
   tool?: string;
   /**
-   * 一次并行多选只读工具（如 describe + review，或多个 /ask）；与 tool 二选一，tools 优先。
-   * 元素可为工具名字符串，或 `{tool, question}` 对象——后者让一轮里并行派发多个带问题的 /ask。
+   * Select multiple read-only tools in parallel at once (e.g. describe + review, or several /ask); mutually
+   * exclusive with tool, tools takes precedence.
+   * Elements may be a tool-name string, or a `{tool, question}` object — the latter dispatches several /ask
+   * with questions in parallel within one round.
    */
   tools?: Array<string | { tool?: string; question?: string }>;
   question?: string;
   final?: string;
   /**
-   * 计划（todo）：模型可在任意动作里给出 / 更新一份简短步骤清单（标 done、按优先级重排、增删）。
-   * 元素可为字符串或 `{id?, text, done?}`。省略 = 计划不变（沿用上一轮）。见 buildProtocol 的 plan 约定。
+   * Plan (todo): the model may give / update a short step list in any action (mark done, reorder by priority, add/remove).
+   * Elements may be a string or `{id?, text, done?}`. Omitted = plan unchanged (carry over the previous round). See the plan convention in buildProtocol.
    */
   plan?: Array<string | { id?: unknown; text?: unknown; done?: unknown }>;
-  /** 评审类收尾的非约束性判定建议（verdict + 理由）；非评审请求省略。 */
+  /** Non-binding judge suggestion for review-type summaries (verdict + reason); omitted for non-review requests. */
   recommendation?: { verdict?: unknown; reason?: unknown };
   /**
-   * 主动记下的**非隐私**条目，按目标可写文件分组：user→USER.md（用户信息），memory→MEMORY.md
-   * （长期知识），agents→AGENTS.md（工作规范，仅追加）。SOUL.md 永不写。
+   * Proactively recorded **non-private** entries, grouped by the target writable file: user→USER.md (user info),
+   * memory→MEMORY.md (long-term knowledge), agents→AGENTS.md (working conventions, append-only). SOUL.md is never written.
    */
   remember?: { user?: unknown; memory?: unknown; agents?: unknown };
 }
 
-/** 解析单条记忆：必须是带 `section` + `note` 的对象；无法归入专题章节的条目丢弃（返回 null）。 */
+/** Parse a single memory: must be an object with `section` + `note`; entries that can't be filed under a topic section are dropped (return null). */
 function toNote(raw: unknown): MemoryNote | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as { section?: unknown; note?: unknown };
@@ -51,13 +54,13 @@ function toNote(raw: unknown): MemoryNote | null {
   return { section, note };
 }
 
-/** 把目标文件的 remember 数组解析为 MemoryNote[]（容错；丢弃无法归类的条目）。 */
+/** Parse a target file's remember array into MemoryNote[] (fault-tolerant; drop entries that can't be classified). */
 function toNoteList(raw: unknown): MemoryNote[] {
   const items = Array.isArray(raw) ? raw : raw == null ? [] : [raw];
   return items.map(toNote).filter((n): n is MemoryNote => n !== null);
 }
 
-/** 把一个动作里的 remember 累加进 acc（容错；非对象忽略）。 */
+/** Accumulate one action's remember into acc (fault-tolerant; ignore non-objects). */
 export function accumulateRemember(value: PlannerAction['remember'], acc: AgentMemoryNotes): void {
   if (!value || typeof value !== 'object') return;
   acc.user.push(...toNoteList(value.user));
@@ -65,7 +68,7 @@ export function accumulateRemember(value: PlannerAction['remember'], acc: AgentM
   acc.agents.push(...toNoteList(value.agents));
 }
 
-/** 从收尾动作解析出合法 recommendation；verdict 非法 / 缺省 → undefined（不强加判定）。 */
+/** Parse a valid recommendation from the summary action; invalid / missing verdict → undefined (don't force a judge). */
 export function parseRecommendation(
   rec?: PlannerAction['recommendation'],
 ): AgentRecommendation | undefined {
@@ -80,7 +83,7 @@ export function parseRecommendation(
   };
 }
 
-/** 把模型给出的 plan 归一为 AgentTodoItem[]：容字符串 / 对象，丢空文本；缺 id 按序补。 */
+/** Normalize the model's plan into AgentTodoItem[]: accept string / object, drop empty text; fill missing id in order. */
 export function normalizePlan(raw: PlannerAction['plan']): AgentTodoItem[] {
   if (!Array.isArray(raw)) return [];
   const out: AgentTodoItem[] = [];
@@ -102,52 +105,52 @@ export function normalizePlan(raw: PlannerAction['plan']): AgentTodoItem[] {
   return out;
 }
 
-/** 取最近若干轮、各自限长，并按总预算从新到旧裁剪（丢弃超预算的更早消息），返回时间升序文本。 */
+/** Take the most recent rounds, each length-capped, and trim newest-to-oldest by total budget (drop earlier over-budget messages), returning text in ascending time order. */
 export function buildConversationContext(history: readonly AgentMessage[]): string {
   const lines: string[] = [];
   let budget = HISTORY_BUDGET_CHARS;
   for (let i = history.length - 1; i >= 0; i--) {
     const m = history[i]!;
     const line = `${m.role === 'user' ? 'User' : 'Assistant'}: ${clamp(m.content, HISTORY_MESSAGE_MAX)}`;
-    if (line.length + 1 > budget) break; // 预算耗尽：更早的对话整体裁掉
+    if (line.length + 1 > budget) break; // budget exhausted: trim the earlier conversation entirely
     budget -= line.length + 1;
     lines.push(line);
   }
   return lines.reverse().join('\n');
 }
 
-/** 规划 ReAct 协议：正文外置在 resources/prompts/protocol.md，三段标题（按语言本地化）经占位符注入。 */
+/** Planning ReAct protocol: body is externalized in resources/prompts/protocol.md, the three section titles (localized per language) are injected via placeholders. */
 export function buildProtocol(sections: readonly [string, string, string]): string {
   const [overview, findings, suggestions] = sections;
   return fillTemplate(PROMPT_TEMPLATES.protocol, { overview, findings, suggestions });
 }
 
-/** 规划单轮（plan-cycle 步骤）的运行上下文：依赖 + 输入 + 共享记录器 + 跨轮累加器。 */
+/** Run context for a single planning round (plan-cycle step): deps + input + shared recorder + cross-round accumulators. */
 export interface PlanStepCtx {
   deps: PlanningDeps;
   input: PlanningInput;
   rec: StepRecorder;
-  /** 完整 system（含 Protocol），逐轮复用。 */
+  /** Full system (incl. Protocol), reused across rounds. */
   system: string;
-  /** 既往多轮对话（按预算裁剪后的文本），逐轮复用。 */
+  /** Prior multi-round conversation (text after budget trimming), reused across rounds. */
   convo: string;
   labels: AgentStepLabels;
-  /** 本轮 progress 累加（工具结果 / 红线拒绝回喂），逐轮追加。 */
+  /** This round's progress accumulation (tool results / red-line rejection feedback), appended each round. */
   history: string[];
-  /** 本轮主动记下、待持久化的非隐私条目，逐轮累加。 */
+  /** Non-private entries proactively recorded this round, pending persistence, accumulated across rounds. */
   memories: AgentMemoryNotes;
-  /** 当前计划（todo），逐轮回喂提示；模型给出 plan 即更新（重排 / 勾选 / 增删）。 */
+  /** Current plan (todo), fed back as a prompt each round; updated whenever the model gives a plan (reorder / check / add/remove). */
   plan: AgentTodoItem[];
   /**
-   * 本会话 /ask 数量上限（遵循配置的「追问数量」max_followup_asks）：自由规划里连续 /ask（各为一次
-   * agentic 探索）成本高，按此封顶——与「自动追问」开关无关（开关仅约束评审微流程）。
+   * Upper bound on /ask count this session (follows the configured "follow-up ask count" max_followup_asks): consecutive /ask in
+   * free-form planning (each an agentic exploration) is expensive, so it's capped here — unrelated to the "auto follow-up ask" toggle (which only constrains the review microflow).
    */
   maxAsks: number;
-  /** 本会话已发起的 /ask 计数，逐轮累加；达 maxAsks 后拒绝新的 /ask 并回喂促收尾。 */
+  /** Count of /ask already issued this session, accumulated across rounds; after reaching maxAsks, reject new /ask and feed back to push toward a summary. */
   asksUsed: number;
 }
 
-/** plan-cycle 的产出：继续下一轮 / 收尾（带 final + 可选建议）/ 用户暂停。 */
+/** plan-cycle output: continue to the next round / summary (with final + optional suggestion) / user pause. */
 export type PlanCycleOutcome =
   | { kind: 'continue' }
   | { kind: 'final'; finalText: string; recommendation?: AgentRecommendation }

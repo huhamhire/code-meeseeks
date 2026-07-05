@@ -9,21 +9,21 @@ import { SummaryStep } from './summary-step.js';
 export type { ReviewBag, ReviewStepCtx } from './shared.js';
 
 /**
- * 评审微流程可用步骤的稳定标识（与各 step.name 对应）。一份评审计划即由这些 kind 有序组成。
- * 新增工具步 = 在 REVIEW_STEP_REGISTRY 登记 + 在此并上 kind，驱动与默认计划无需改动。
+ * Stable identifiers for the review microflow's available steps (corresponding to each step.name). A review plan is composed of these kinds in order.
+ * Adding a tool step = register it in REVIEW_STEP_REGISTRY + add its kind here; the driver and default plan need no changes.
  */
 export type ReviewStepKind = 'describe-review' | 'improve' | 'judge' | 'asks' | 'summary';
 
 /**
- * 评审微流程执行计划：一组**有序**步骤 kind。AutoPilot 后续可据用户 agent 上下文规则给出自定义计划
- * （跳过 / 重排 / 增删步骤）；手动评审恒用 DEFAULT_REVIEW_PLAN。计划来源（规则 → 计划）是后续工作，
- * 本层只提供「按计划组装并执行」的基础能力。
+ * Review microflow execution plan: a set of **ordered** step kinds. AutoPilot may later give a custom plan
+ * (skip / reorder / add/remove steps) based on user agent context rules; manual review always uses DEFAULT_REVIEW_PLAN. The plan source (rules → plan) is future work,
+ * this layer only provides the base capability of "assemble and execute by plan".
  */
 export interface ReviewPlan {
   steps: ReviewStepKind[];
 }
 
-/** 步骤注册表（kind → 无状态单例）。各 step 运行态全在 ctx，故单例可复用。 */
+/** Step registry (kind → stateless singleton). Each step's runtime state lives entirely in ctx, so singletons are reusable. */
 export const REVIEW_STEP_REGISTRY: Record<ReviewStepKind, Step<ReviewStepCtx>> = {
   'describe-review': new DescribeReviewStep(),
   improve: new ImproveStep(),
@@ -32,15 +32,15 @@ export const REVIEW_STEP_REGISTRY: Record<ReviewStepKind, Step<ReviewStepCtx>> =
   summary: new SummaryStep(),
 };
 
-/** 默认计划：与拆 plan 前的固定序列完全一致（describe-review → judge → asks → summary）。 */
+/** Default plan: exactly the same fixed sequence as before the plan split (describe-review → judge → asks → summary). */
 export const DEFAULT_REVIEW_PLAN: ReviewPlan = {
   steps: ['describe-review', 'judge', 'asks', 'summary'],
 };
 
 /**
- * 计划合法性：① 非空；② 各 kind 须在注册表内；③ judge / summary 读 describe·review 的产物（bag.describe /
- * bag.review），故计划含二者时必须先含 describe-review。非法计划由驱动回落 DEFAULT_REVIEW_PLAN
- * （见 runReviewMicroflow），避免规则给出坏计划时崩在步骤里。
+ * Plan validity: (1) non-empty; (2) each kind must be in the registry; (3) judge / summary read describe·review's outputs (bag.describe /
+ * bag.review), so a plan containing either must include describe-review first. Invalid plans fall back to DEFAULT_REVIEW_PLAN by the driver
+ * (see runReviewMicroflow), avoiding a crash inside a step when a rule gives a bad plan.
  */
 export function isValidReviewPlan(plan: ReviewPlan): boolean {
   if (plan.steps.length === 0) return false;
@@ -50,7 +50,7 @@ export function isValidReviewPlan(plan: ReviewPlan): boolean {
   return true;
 }
 
-/** 把计划组装成有序步骤实例（驱动据此顺序执行）。调用方须先经 isValidReviewPlan 校验。 */
+/** Assemble the plan into ordered step instances (the driver executes in this order). Callers must validate via isValidReviewPlan first. */
 export function assembleReviewSteps(plan: ReviewPlan): Step<ReviewStepCtx>[] {
   return plan.steps.map((k) => REVIEW_STEP_REGISTRY[k]);
 }

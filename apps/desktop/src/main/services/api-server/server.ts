@@ -8,11 +8,12 @@ import { HttpError, readJsonBody, sendError, sendOk } from './http.js';
 import { matchRoute } from './routes/index.js';
 
 /**
- * 本地 API 服务监听器（见 docs/arch/04-integration/01-service-api.md）。
+ * Local API service listener (see docs/arch/04-integration/01-service-api.md).
  *
- * 主进程内置 HTTP listener，作为渲染层 IPC 之外的「第二前端」：复用同一 ControllerContext 与 service 层，
- * 把只读 PR / Agent 能力暴露给外部 CLI / 工具。默认关闭；开启即强制 bearer token 鉴权。生命周期由 main 装配：
- * start（按 config 决定是否 listen）/ stop（退出时优雅关闭）/ reconfigure（配置变更停旧起新）。
+ * A built-in HTTP listener in the main process, acting as a "second frontend" beyond the renderer IPC: it reuses the same
+ * ControllerContext and service layer to expose read-only PR / Agent capabilities to external CLI / tools. Off by default;
+ * enabling it enforces bearer token auth. Lifecycle wired up by main:
+ * start (decides whether to listen per config) / stop (graceful close on exit) / reconfigure (stop old, start new on config change).
  */
 export interface ApiServerDeps {
   bootstrap: BootstrapResult;
@@ -24,12 +25,12 @@ export class ApiServer {
 
   constructor(private readonly deps: ApiServerDeps) {}
 
-  /** 实时读内存 service 配置（token 变更无需重建即生效）。 */
+  /** Read the in-memory service config live (token changes take effect without rebuild). */
   private get cfg() {
     return this.deps.bootstrap.config.service;
   }
 
-  /** 按配置启动监听（未启用 / token 为空则不启动）。监听失败为非致命：记录后不抛，不拖垮应用启动。 */
+  /** Start listening per config (skip if disabled / token empty). Listen failure is non-fatal: log and don't throw, so it won't drag down app startup. */
   async start(): Promise<void> {
     if (this.server) return;
     const cfg = this.cfg;
@@ -59,7 +60,7 @@ export class ApiServer {
     });
   }
 
-  /** 优雅关闭：停止接收新连接、放行 in-flight 后落定。 */
+  /** Graceful close: stop accepting new connections, let in-flight requests drain, then settle. */
   async stop(): Promise<void> {
     const server = this.server;
     if (!server) return;
@@ -68,13 +69,13 @@ export class ApiServer {
     this.deps.logger.info('local API server stopped');
   }
 
-  /** 配置（开关 / host / port）变更：停旧起新。 */
+  /** Config (toggle / host / port) change: stop old, start new. */
   async reconfigure(): Promise<void> {
     await this.stop();
     await this.start();
   }
 
-  /** 常数时间比对 bearer token；缺 token 配置 / 非 Bearer 头 / 长度不符均判失败。 */
+  /** Constant-time compare of the bearer token; missing token config / non-Bearer header / length mismatch all fail. */
   private authorized(req: IncomingMessage): boolean {
     const token = this.cfg.token;
     if (!token) return false;
@@ -97,7 +98,7 @@ export class ApiServer {
     let outcome: { status: number; code?: string };
     try {
       if (!this.authorized(req)) throw new HttpError(401, ERROR_CODES.SV_UNAUTHORIZED);
-      // 兼容性门控：对所有 API 调用统一拦截过旧的 CLI（缺版本头 / 不可解析 → 放行）。
+      // Compatibility gate: uniformly reject too-old CLIs on all API calls (missing version header / unparseable → let through).
       if (isClientTooOld(req.headers[CLI_VERSION_HEADER])) {
         throw new HttpError(426, ERROR_CODES.SV_CLIENT_TOO_OLD, {
           minVersion: MIN_CLI_VERSION,

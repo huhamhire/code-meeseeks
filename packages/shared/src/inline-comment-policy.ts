@@ -1,25 +1,25 @@
 /**
- * 不同代码托管平台对 inline comment 允许的"锚定行范围"差异较大：
+ * Different code platforms vary widely in the "anchor line range" they allow for inline comments:
  *
- * - Bitbucket Server / Data Center: 严格 — `/comments` 接口要求 anchor.line
- *   落在 diff hunk 范围内（含 context 行）。锚到 hunk 之外的行 Bitbucket 直接 400。
- * - GitHub / GitLab: 宽松 — diff 视图内任意行都能起评论
- *   （GitHub 多文件 review comment 也是按 file:line 锚定但范围更宽松）。
+ * - Bitbucket Server / Data Center: strict — the `/comments` endpoint requires anchor.line
+ *   to fall within the diff hunk range (including context lines). Anchoring to a line outside the hunk gets a 400 from Bitbucket.
+ * - GitHub / GitLab: permissive — a comment can start on any line within the diff view
+ *   (GitHub's multi-file review comment also anchors by file:line but with a looser range).
  *
- * 把"哪一行能新增内联评论"抽象成 platform-specific policy，让 DiffView 渲染行
- * hover '+' glyph 时按当前 PR 的 platform 选 profile 过滤；后续 Bitbucket publishInline
- * 提交时也复用同一份规则做前置校验，避免 400。
+ * Abstract "which line can take a new inline comment" into a platform-specific policy, so DiffView
+ * filters by the profile chosen from the current PR's platform when rendering the hover '+' glyph; the same ruleset is later reused
+ * for pre-validation at Bitbucket publishInline submit time to avoid a 400.
  *
- * Hunk 信息来自 monaco DiffEditor 的 getLineChanges()，不依赖额外 IPC：
+ * Hunk info comes from monaco DiffEditor's getLineChanges(), without extra IPC:
  * - ILineChange.{original,modified}{Start,End}LineNumber → DiffHunkRange
- * - 转换在 DiffView 里就近做，policy 只接受归一化结构
+ * - the conversion is done locally in DiffView; policy only accepts the normalized structure
  */
 import type { PlatformKind } from './platform.js';
 
 /**
- * 单个 diff hunk 在 original / modified 两侧的行范围。inclusive。
- * - modified=null：纯删除（modified 侧没有对应行）
- * - original=null：纯新增（original 侧没有对应行）
+ * Line range of a single diff hunk on the original / modified sides. inclusive.
+ * - modified=null: pure deletion (no corresponding line on the modified side)
+ * - original=null: pure addition (no corresponding line on the original side)
  */
 export interface DiffHunkRange {
   modified: { start: number; end: number } | null;
@@ -27,12 +27,12 @@ export interface DiffHunkRange {
 }
 
 export interface InlineCommentPolicy {
-  /** Profile 显示名，hover '+' 被禁用时 tooltip 可以引用 */
+  /** Profile display name; the tooltip can reference it when hover '+' is disabled */
   label: string;
   /**
-   * 判断 (side, line) 是否允许新增 inline comment。hunks 是全文件的变更范围列表。
-   * 注意：策略只看 anchor 行能否落点，不管"已有评论 / 草稿占用"那一档；占用判断
-   * 仍在 DiffView 的 occupied set 里做
+   * Decide whether (side, line) allows a new inline comment. hunks is the list of change ranges for the whole file.
+   * Note: the policy only checks whether the anchor line is a valid landing spot, not the "existing comment / draft occupied" case; occupancy
+   * is still decided in DiffView's occupied set
    */
   isLineAllowed(
     hunks: ReadonlyArray<DiffHunkRange>,
@@ -42,8 +42,8 @@ export interface InlineCommentPolicy {
 }
 
 /**
- * 工厂：以"hunk 范围 ± context 行"为允许行的 policy。context=0 时严格 hunk 内；
- * Bitbucket 实测允许变更上下 10 行（含 context 行）可加评论
+ * Factory: a policy whose allowed lines are "hunk range ± context lines". context=0 means strictly inside the hunk;
+ * Bitbucket in practice allows comments within 10 lines above/below the change (including context lines)
  */
 function makeContextRangePolicy(label: string, context: number): InlineCommentPolicy {
   return {
@@ -61,17 +61,17 @@ function makeContextRangePolicy(label: string, context: number): InlineCommentPo
 }
 
 /**
- * Bitbucket profile：允许变更区域**上下 10 行**内的行 (跟 Bitbucket Web UI 行为对齐 — 离 hunk
- * 太远的行 /comments 接口直接 400)。新增行 (modified 侧) 锚到 modified range，
- * 删除行 (original 侧) 锚到 original range。Bitbucket 的 fileType=FROM/TO 字段后续在
- * publishInline 时根据 side 翻译
+ * Bitbucket profile: allows lines within **10 lines above/below** the change area (aligned with Bitbucket Web UI behavior — a line
+ * too far from the hunk gets a 400 from the /comments endpoint). Added lines (modified side) anchor to the modified range,
+ * deleted lines (original side) anchor to the original range. Bitbucket's fileType=FROM/TO field is later translated by side at
+ * publishInline time
  */
 const bitbucketPolicy = makeContextRangePolicy(
   'Bitbucket Server: 变更上下 10 行内可加评论',
   10,
 );
 
-/** 宽松 profile：任意行允许（GitHub / GitLab） */
+/** Permissive profile: any line allowed (GitHub / GitLab) */
 const permissivePolicy: InlineCommentPolicy = {
   label: '任意行可加评论',
   isLineAllowed: () => true,
@@ -83,7 +83,7 @@ export const INLINE_COMMENT_POLICIES: Readonly<Record<PlatformKind, InlineCommen
   gitlab: permissivePolicy,
 };
 
-/** 平台值未知时回退宽松 policy，避免新平台接入时把 + 全屏蔽 */
+/** Fall back to the permissive policy when the platform value is unknown, to avoid fully hiding + when a new platform is integrated */
 export function policyForPlatform(platform: PlatformKind): InlineCommentPolicy {
   return INLINE_COMMENT_POLICIES[platform] ?? permissivePolicy;
 }

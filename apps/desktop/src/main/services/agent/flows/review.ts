@@ -9,9 +9,10 @@ import type { AgentChat, OrchestratorRuntime } from '../runtime.js';
 import { planningFlow } from './planning.js';
 
 /**
- * 手动评审编排（agent:run）：现读现装配上下文 + 注册 AbortController + 标记执行中，跑评审微流程，收尾把
- * 「评审总结」落多轮对话与台账。评审微流程是固定模板、无法中途转向：跑完后把运行期间排队的用户消息作为
- * 一轮自由规划接续处理（fire-and-forget，本次评审会话照常返回）。
+ * Manual review orchestration (agent:run): assemble context on demand + register AbortController + mark running,
+ * run the review micro-flow, and at the end persist the "review summary" to the conversation and ledger. The review
+ * micro-flow is a fixed template and cannot be redirected mid-run: after it finishes, the user messages queued during
+ * the run are handled as a follow-up free-planning round (fire-and-forget; this review session returns as usual).
  */
 export async function reviewFlow(
   runtime: OrchestratorRuntime,
@@ -19,11 +20,11 @@ export async function reviewFlow(
 ): Promise<AgentSession> {
   const { getPrAgentBridge, ensureAgentDir, logger } = runtime.ctx;
   if (!getPrAgentBridge()) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
-  // 现读现装配 Agent 上下文（SOUL/AGENTS/MEMORY/USER + rules），无缓存；加载前先确保目录已初始化。
+  // Assemble the Agent context on demand (SOUL/AGENTS/MEMORY/USER + rules), no cache; ensure the directory is initialized before loading.
   const agentContext = await loadAgentContext(await ensureAgentDir(), {
     onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
   });
-  // 注册 AbortController，让停止按钮（agent:stop）能在思考 / 执行任意阶段即时中止本次评审。
+  // Register the AbortController so the stop button (agent:stop) can immediately abort this review at any thinking / execution phase.
   const ac = new AbortController();
   runtime.registerController(pr.localId, ac);
   runtime.markRunning(pr.localId);
@@ -38,13 +39,13 @@ export async function reviewFlow(
       { prLocalId: pr.localId, status: session.status, steps: session.stepCount },
       'agent review done',
     );
-    // 收尾总结计入多轮对话（assistant 评审消息）→ UI 渲染「评审总结」卡片。
+    // The wrap-up summary is added to the conversation (assistant review message) → UI renders the "review summary" card.
     await runtime.recordReviewSummaryMessage(pr, session);
   } finally {
     runtime.clearController(pr.localId);
     runtime.unmarkRunning(pr.localId);
   }
-  // 评审微流程无法中途转向：跑完后把排队的用户消息作为一轮自由规划接续处理（fire-and-forget）。
+  // The review micro-flow cannot be redirected mid-run: after it finishes, the queued user messages are handled as a follow-up free-planning round (fire-and-forget).
   const pending = runtime.takePending(pr.localId);
   if (pending.length) {
     void planningFlow(runtime, pr, pending.join('\n\n')).catch((err: unknown) => {
@@ -55,8 +56,9 @@ export async function reviewFlow(
 }
 
 /**
- * 对一个 PR 跑评审微流程（共用 enqueue 队列 / 持久化 / 步骤广播）。手动评审与 AutoPilot 背景评审共用。
- * 编排派发的 run 走 agent 低优先级泳道；修改类工具按 grants 门控（红线见 buildToolCatalog）。
+ * Run the review micro-flow for a PR (shared enqueue queue / persistence / step broadcast). Shared by manual review
+ * and AutoPilot background review.
+ * Runs dispatched by the orchestration use the agent low-priority lane; modifying tools are gated by grants (red line see buildToolCatalog).
  */
 export async function runReviewForPr(
   runtime: OrchestratorRuntime,
@@ -65,14 +67,14 @@ export async function runReviewForPr(
   chat: AgentChat,
   signal?: AbortSignal,
   autopilot = false,
-  /** 评审执行计划（仅 AutoPilot 按规则注入）；省略 → 微流程走默认全集。 */
+  /** Review execution plan (only injected by AutoPilot per rules); omitted → micro-flow uses the default full set. */
   plan?: ReviewPlan,
 ): Promise<AgentSession> {
   const agentCfg = runtime.ctx.bootstrap.config.agent;
-  // per-PR 存储路由：已归档（已关闭范围）PR 补跑评审时，会话 / run / 关闭关系都落归档冷存储。
+  // per-PR storage routing: when re-running review on an archived (closed-scope) PR, the conversation / run / closure relations all go to archive cold storage.
   const store = await runtime.ctx.pr.storeForPr(pr.localId);
-  // 自动追问关闭：评审微流程跳过 judge + asks（不判读、不条件追问），直接总结——省一次 judge LLM
-  // 调用与潜在追问开销。覆盖默认计划与 AutoPilot 规则注入计划两种来源。
+  // Auto follow-up off: the review micro-flow skips judge + asks (no interpretation, no conditional follow-up ask) and
+  // summarizes directly — saving one judge LLM call and the potential follow-up ask cost. Covers both sources: the default plan and the AutoPilot rule-injected plan.
   const effectivePlan: ReviewPlan | undefined = agentCfg.strategy.auto_followup
     ? plan
     : {
@@ -95,7 +97,7 @@ export async function runReviewForPr(
   );
   return runReview(pr, {
     stateStore: store,
-    // 编排派发的 run 走 agent 低优先级泳道：用户随时点 /review 会插到它们之前。复评 /ask 携引用上下文 + 前向链。
+    // Runs dispatched by the orchestration use the agent low-priority lane: a user clicking /review at any time jumps ahead of them. Re-review /ask carries the referenced context + forward chain.
     enqueueRun: (p, tool, question, referencedContext, referencedFinding) =>
       runtime.runQueue.enqueuePragentRun(
         p,
@@ -105,7 +107,7 @@ export async function runReviewForPr(
         referencedContext,
         referencedFinding,
       ),
-    // 复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播刷新卡片）。
+    // Re-review verdict replace/drop → close the superseded original review finding (write FindingClosure + broadcast a card refresh).
     closeFinding: async (p, call) => {
       await addFindingClosure(store, p.localId, call);
       runtime.ctx.broadcast('findingClosures:changed', { localId: p.localId });

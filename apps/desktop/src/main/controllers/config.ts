@@ -9,16 +9,16 @@ import { testProxyConnectivity } from '../utils/proxy.js';
 import type { IpcController } from './types.js';
 
 /*
- * 配置操作域 controllers：读 / 写 config.yaml（含热生效与草稿暂存）及连接 / 代理试连
+ * Config operation-domain controllers: read / write config.yaml (including hot-reload and draft staging) and connection / proxy test connections
  */
 
 /**
- * 读当前内存配置。
+ * Read the current in-memory config.
  */
 export const readConfig: IpcController<'config:read'> = () => getContext().bootstrap.config;
 
 /**
- * 写 repos_dir（重启生效）。
+ * Write repos_dir (takes effect on restart).
  */
 export const setReposDir: IpcController<'config:setReposDir'> = async (_event, req) => {
   const { bootstrap, logger } = getContext();
@@ -31,7 +31,7 @@ export const setReposDir: IpcController<'config:setReposDir'> = async (_event, r
 };
 
 /**
- * 写 UI 语言并即时生效：内存同步 + 主进程 i18n changeLanguage。
+ * Write the UI language and apply it immediately: in-memory sync + main-process i18n changeLanguage.
  */
 export const setLanguage: IpcController<'config:setLanguage'> = async (_event, req) => {
   const { bootstrap, logger } = getContext();
@@ -43,9 +43,9 @@ export const setLanguage: IpcController<'config:setLanguage'> = async (_event, r
 };
 
 /**
- * 写外观（全局主题 = Monaco 主题 + 等宽字体 + 字号）；内存同步。主题切换由 renderer 即时完成；主进程据
- * 主题设 nativeTheme.themeSource，让原生窗口 chrome（Windows 细边框 / 窗控按钮深浅）跟随——'auto' 主题
- * 交回 OS（'system'），其余固定浅 / 深。窗控按钮配色由 WindowManager 监听 nativeTheme 'updated' 重置。
+ * Write appearance (global theme = Monaco theme + monospace font + font size); in-memory sync. Theme switching is done instantly by the renderer; the main process sets
+ * nativeTheme.themeSource from the theme so native window chrome (Windows thin border / window-control button light-dark) follows — the 'auto' theme
+ * is handed back to the OS ('system'), the rest fixed light / dark. Window-control button colors are reset by WindowManager listening to nativeTheme 'updated'.
  */
 export const setEditorAppearance: IpcController<'config:setEditorAppearance'> = async (
   _event,
@@ -72,7 +72,7 @@ export const setEditorAppearance: IpcController<'config:setEditorAppearance'> = 
 };
 
 /**
- * 写 LLM Provider 配置；内存同步，下次 pragent:run 用新值。
+ * Write LLM Provider config; in-memory sync, the next pragent:run uses the new values.
  */
 export const setLlm: IpcController<'config:setLlm'> = async (_event, req) => {
   const { bootstrap, logger } = getContext();
@@ -86,9 +86,9 @@ export const setLlm: IpcController<'config:setLlm'> = async (_event, req) => {
 };
 
 /**
- * 写 agent 配置（含 agent.dir）；内存同步即热生效——effectiveAgentDir 现读 in-memory 配置，下次
- * 加载上下文即用新目录（无资源绑定，无需重建）。新目录的模版初始化不在此做，交由「用时补齐」
- * （ensureAgentDir，见 context.ts）保证，避免把初始化绑死在设置交互这一条路径上。
+ * Write agent config (including agent.dir); in-memory sync means hot-reload — effectiveAgentDir now reads the in-memory config, and the next
+ * context load uses the new directory (no resource binding, no rebuild needed). Template initialization for the new directory is not done here; it is guaranteed by lazy fill-in
+ * (ensureAgentDir, see context.ts), to avoid binding initialization to this single settings-interaction path.
  */
 export const setAgent: IpcController<'config:setAgent'> = async (_event, req) => {
   const { bootstrap, logger } = getContext();
@@ -99,7 +99,7 @@ export const setAgent: IpcController<'config:setAgent'> = async (_event, req) =>
 };
 
 /**
- * 写消息通知配置（总开关 + 分类型系统通知 + dock 角标）；内存同步，下轮 poll 弹通知 / renderer 推角标即用新值。
+ * Write message-notification config (master switch + per-type system notifications + dock badge); in-memory sync, the next poll popping notifications / renderer pushing the badge uses the new values.
  */
 export const setNotifications: IpcController<'config:setNotifications'> = async (_event, req) => {
   const { bootstrap, logger } = getContext();
@@ -110,7 +110,7 @@ export const setNotifications: IpcController<'config:setNotifications'> = async 
 };
 
 /**
- * 翻转 AutoPilot 开关；关→开时立即 poll 一轮按准入规则评估。
+ * Toggle the AutoPilot switch; on off→on, immediately run one poll to evaluate against the admission rules.
  */
 export const setAutopilotEnabled: IpcController<'agent:setAutopilotEnabled'> = async (
   _event,
@@ -131,7 +131,7 @@ export const setAutopilotEnabled: IpcController<'agent:setAutopilotEnabled'> = a
 };
 
 /**
- * 写连接列表 + 启用连接，热重建 adapter/poller 并立即 poll 一轮。
+ * Write the connection list + active connection, hot-rebuild the adapter/poller and immediately run one poll.
  */
 export const setConnections: IpcController<'config:setConnections'> = async (_event, req) => {
   const { bootstrap, logger, poller, reconfigureConnections } = getContext();
@@ -152,7 +152,7 @@ export const setConnections: IpcController<'config:setConnections'> = async (_ev
 };
 
 /**
- * 写代理配置，热重建 adapter（REST 经代理即时生效）。
+ * Write proxy config, hot-rebuild the adapter (REST via proxy takes effect immediately).
  */
 export const setProxy: IpcController<'config:setProxy'> = async (_event, req) => {
   const { bootstrap, logger, reconfigureConnections } = getContext();
@@ -167,13 +167,13 @@ export const setProxy: IpcController<'config:setProxy'> = async (_event, req) =>
 };
 
 /**
- * 用给定代理试连，验证可用性；不写配置。
+ * Test-connect with the given proxy to verify usability; does not write config.
  */
 export const testProxy: IpcController<'config:testProxy'> = (_event, req) =>
   testProxyConnectivity(req.proxy);
 
 /**
- * 用草稿 url/token 临时起 adapter ping，不落配置；失败归一成 ok:false + reason。
+ * Spin up a temporary adapter ping with draft url/token, without persisting config; failures normalize to ok:false + reason.
  */
 export const testConnection: IpcController<'config:testConnection'> = async (_event, req) => {
   try {
@@ -189,8 +189,8 @@ export const testConnection: IpcController<'config:testConnection'> = async (_ev
 };
 
 /**
- * 写本地 API 服务监听配置（开关 / host / port / token）；内存同步后热重建监听器（停旧起新）。
- * token 由请求体携带（设置页保存当前值）；单独「重新生成 token」走 generateServiceToken。
+ * Write local API service listener config (switch / host / port / token); after in-memory sync, hot-rebuild the listener (stop old, start new).
+ * The token is carried in the request body (the settings page saves the current value); the standalone "regenerate token" goes through generateServiceToken.
  */
 export const setService: IpcController<'config:setService'> = async (_event, req) => {
   const { bootstrap, logger, reconfigureApiServer } = getContext();
@@ -205,16 +205,16 @@ export const setService: IpcController<'config:setService'> = async (_event, req
 };
 
 /**
- * 生成一枚高强度随机 bearer token（32 字节 → base64url，43 字符，字符集 [A-Za-z0-9-_]，URL / 请求头安全）
- * 并返回，**不落盘**——由前端置入设置草稿，随底栏「保存」经 config:setService 生效；不保存则丢弃
- * （与 host / port 同为草稿制）。
+ * Generate and return a high-strength random bearer token (32 bytes → base64url, 43 chars, charset [A-Za-z0-9-_], URL / header safe),
+ * **without persisting** — the frontend places it into the settings draft and it takes effect via config:setService on the footer "Save"; discarded if not saved
+ * (draft-based like host / port).
  */
 export const generateServiceToken: IpcController<'config:generateServiceToken'> = () => {
   return { token: randomBytes(32).toString('base64url') };
 };
 
 /**
- * 配置过程中把连接 + LLM 草稿写盘防丢失，但不更新内存 config、不 reconfigure（不生效）。
+ * During configuration, write connection + LLM drafts to disk to avoid loss, but do not update the in-memory config and do not reconfigure (does not take effect).
  */
 export const autosaveDraft: IpcController<'config:autosaveDraft'> = async (_event, req) => {
   const { bootstrap, logger } = getContext();
@@ -232,7 +232,7 @@ export const autosaveDraft: IpcController<'config:autosaveDraft'> = async (_even
 };
 
 /**
- * 写轮询间隔（clamp 60~900）并热替换 poller 定时器，无需重启。
+ * Write the polling interval (clamp 60~900) and hot-swap the poller timer, no restart needed.
  */
 export const setPoller: IpcController<'config:setPoller'> = async (_event, req) => {
   const { bootstrap, logger, poller } = getContext();
@@ -248,7 +248,7 @@ export const setPoller: IpcController<'config:setPoller'> = async (_event, req) 
 };
 
 /**
- * 写评审任务并发数（clamp 1~8）并热替换 run 队列上限，无需重启。
+ * Write the review-task concurrency (clamp 1~8) and hot-swap the run queue limit, no restart needed.
  */
 export const setMaxConcurrency: IpcController<'config:setMaxConcurrency'> = async (_event, req) => {
   const { bootstrap, logger, runQueue } = getContext();

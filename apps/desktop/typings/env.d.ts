@@ -1,9 +1,9 @@
 /**
- * Renderer 端的 ambient 全局类型声明。放在 typings/ 而非 src/，避免跟业务源码混在
- * 同一目录。tsconfig.json 的 include 已经加上 `typings/**`。
+ * Ambient global type declarations for the renderer. Placed in typings/ rather than src/ to avoid
+ * mixing with business source in the same directory. tsconfig.json's include already adds `typings/**`.
  *
- * vite/client 的全局类型通过 tsconfig.json 的 compilerOptions.types 引入；
- * 不再 /// reference，跟 logger 包共享 typings 的做法保持一致。
+ * vite/client's global types are brought in via tsconfig.json's compilerOptions.types;
+ * no more /// reference, consistent with how the logger package shares typings.
  */
 import type { IpcBridge } from '@meebox/ipc';
 

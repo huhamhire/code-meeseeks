@@ -3,30 +3,30 @@ import type { SyncProgressEvent } from '@meebox/shared';
 import { subscribe } from '../api';
 
 /**
- * 跨组件共享的当前活动 repo sync 状态。
+ * Cross-component shared state of the currently active repo sync.
  *
- * 数据来源：main 的 `sync:progress` 事件流（每个 repo 的 start/progress/done/error）。
- * 一个 repo 一条记录：start → 进 active，progress 更新阶段+百分比，done/error 移出。
+ * Data source: main's `sync:progress` event stream (each repo's start/progress/done/error).
+ * One record per repo: start → enters active, progress updates stage + percent, done/error removes it.
  *
- * UI 用法：StatusBar 取 `getActive()` 第一条展示；没有任何 active 时 chip 隐藏不占位。
- * 同一时刻可能有多个 repo 排队 (RepoMirrorManager 已是全局单队列串行)，store 都收着
- * 便于"还有 N 个在排队"扩展，第一版只展示首条。
+ * UI usage: StatusBar displays the first entry from `getActive()`; when there is no active entry the chip is hidden and takes no space.
+ * Multiple repos may be queued at the same time (RepoMirrorManager is already a global single-queue serial), and the store keeps them all
+ * to allow a "N more queued" extension; the first version only displays the first entry.
  */
 export interface RepoSyncState {
-  /** repoKey ("host/group/repo") → 当前阶段快照 */
+  /** repoKey ("host/group/repo") → current stage snapshot */
   active: ReadonlyMap<string, RepoSyncSnapshot>;
 }
 
 export interface RepoSyncSnapshot {
-  /** 来自 sync:progress.repo，"host/projectKey/repoSlug" */
+  /** From sync:progress.repo, "host/projectKey/repoSlug" */
   repo: string;
-  /** simple-git 阶段名（compressing / receiving / resolving / ...）；start 时可能空 */
+  /** simple-git stage name (compressing / receiving / resolving / ...); may be empty at start */
   stage?: string;
-  /** 0-100；progress 阶段填，done 时一般已到 100 */
+  /** 0-100; filled during the progress stage, usually already at 100 on done */
   percent?: number;
-  /** 给 hover tooltip / 排障用 */
+  /** For the hover tooltip / troubleshooting */
   message?: string;
-  /** 进入 active 的时间戳，用于 UI 排序 / "停留 X 秒" 显示 */
+  /** Timestamp of entering active, used for UI ordering / "held for X seconds" display */
   startedAt: number;
 }
 
@@ -67,7 +67,7 @@ export const repoSyncStore = {
       subscribers.delete(cb);
     };
   },
-  /** 测试 / 调试用：直接灌一条事件 */
+  /** For testing / debugging: feed in an event directly */
   handleEvent,
 };
 
@@ -76,8 +76,8 @@ export function useRepoSyncStore(): RepoSyncState {
 }
 
 /**
- * 把 IPC sync:progress 事件接到 store。App 顶层 useEffect 调一次。
- * Date.now() 仅在事件发生时本地取，store 自身保持纯。
+ * Wire the IPC sync:progress event to the store. Call once in a top-level App useEffect.
+ * Date.now() is read locally only when an event occurs, keeping the store itself pure.
  */
 export function wireRepoSyncStore(): () => void {
   return subscribe('sync:progress', (ev) => {

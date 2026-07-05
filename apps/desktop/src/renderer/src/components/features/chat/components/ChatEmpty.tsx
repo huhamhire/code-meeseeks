@@ -26,7 +26,7 @@ export function ChatEmpty({
       </div>
     );
   }
-  // pr-agent 运行时就绪但没有可用 LLM → 引导去设置配置一条模型
+  // pr-agent runtime is ready but no usable LLM → guide the user to settings to configure a model
   if (!llmConfigured) {
     return (
       <div className="chat-empty">

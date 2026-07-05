@@ -2,18 +2,19 @@ import { useSyncExternalStore } from 'react';
 import type { EditorTheme } from '@meebox/shared';
 
 /**
- * 编辑器外观（Monaco 配色主题 + 等宽字体）的渲染层共享态。App 从 config.appearance 写入，深层的 Monaco
- * 组件（DiffPane / InlineCodeContext）经 useEditorAppearance 读出 —— 避免逐层透传 props。
+ * Renderer-layer shared state for editor appearance (Monaco color theme + monospace font). App writes it from
+ * config.appearance, and deep Monaco components (DiffPane / InlineCodeContext) read it via useEditorAppearance —
+ * avoiding threading props through every layer.
  *
- * 与 selection-store 同模（模块级状态 + Set<subscriber> + useSyncExternalStore）：纯本地、无 IPC、无
- * hydrate。持久化与写盘走 config（IPC config:setEditorAppearance），本 store 只承载「当前生效值」。
+ * Same pattern as selection-store (module-level state + Set<subscriber> + useSyncExternalStore): purely local, no IPC, no
+ * hydrate. Persistence and disk writes go through config (IPC config:setEditorAppearance); this store only carries the "currently effective value".
  */
 export interface EditorAppearanceState {
-  /** 编辑器配色主题偏好：'auto' 跟随 GUI 深 / 浅色，其余为具体 Monaco 主题名。 */
+  /** Editor color theme preference: 'auto' follows the GUI's dark / light mode, otherwise a specific Monaco theme name. */
   editorTheme: EditorTheme;
-  /** 等宽字体族（空 = 用内置 mono 字体栈）。 */
+  /** Monospace font family (empty = use the built-in mono font stack). */
   fontFamily: string;
-  /** 字号（px，未做平台微调的基准值）。 */
+  /** Font size (px, the baseline value before any platform fine-tuning). */
   fontSize: number;
 }
 
@@ -34,7 +35,7 @@ const store = {
   },
 };
 
-/** 写入当前编辑器外观（App 在 config 变化时调用）。各字段相等则跳过，避免无谓重渲。 */
+/** Write the current editor appearance (App calls this when config changes). Skips if all fields are equal, avoiding pointless re-renders. */
 export function setEditorAppearance(next: EditorAppearanceState): void {
   if (
     next.editorTheme === state.editorTheme &&
@@ -47,7 +48,7 @@ export function setEditorAppearance(next: EditorAppearanceState): void {
   notify();
 }
 
-/** 读当前编辑器外观（Monaco 组件用）。 */
+/** Read the current editor appearance (for Monaco components). */
 export function useEditorAppearance(): EditorAppearanceState {
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 }

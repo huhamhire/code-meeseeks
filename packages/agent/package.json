@@ -2,7 +2,7 @@
   "name": "@meebox/agent",
   "version": "0.0.0",
   "private": true,
-  "description": "高阶 Agent 核心：Agent 目录加载（SOUL/AGENTS/MEMORY/USER + rules）、上下文装配、模版脚手架；编排与 AutoPilot 后续接入（见 docs/arch/02-agent/01-agent.md）",
+  "description": "High-level Agent core: Agent-directory loading (SOUL/AGENTS/MEMORY/USER + rules), context assembly, template scaffolding; orchestration and AutoPilot wired in later (see docs/arch/02-agent/01-agent.md)",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

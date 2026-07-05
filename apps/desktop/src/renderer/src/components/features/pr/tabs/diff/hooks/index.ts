@@ -1,5 +1,5 @@
-// diff 业务 hooks 的 barrel：数据流（变更文件 / 内容 / 评论 / blame / 范围 / 跳转）与
-// 行内 view-zone 装配（评论 / 草稿 / hover「+」新建草稿）各自成 hook，由 DiffView 组合根聚合。
+// Barrel for diff business hooks: data flow (changed files / content / comments / blame / scope / navigation) and
+// inline view-zone assembly (comments / drafts / hover "+" to create a draft) are each their own hook, aggregated by the DiffView composition root.
 export { useFileListWidth } from './useFileListWidth';
 export { useSyncProgress } from './useSyncProgress';
 export { useDiffScope, type DiffScopeState } from './useDiffScope';

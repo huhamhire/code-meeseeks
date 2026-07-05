@@ -5,19 +5,19 @@ import { PER_FILE_MATCH_CAP, basename, dirname } from './search/diff-search';
 import { useDiffSearch } from './search/useDiffSearch';
 
 /**
- * 搜索 PR diff 全部变更文件内容。仿 Bitbucket "Search code" 入口的行为：
+ * Search the content of all changed files in the PR diff. Mimics the behavior of Bitbucket's "Search code" entry:
  *
- * - query 在 head + base 两端 line-by-line 找匹配
- * - 每个匹配行带 side 标记：
- *     'added'   — 仅出现在 head 端 (前缀 `+`)
- *     'removed' — 仅出现在 base 端 (前缀 `-`)
- *     'context' — 两端都有相同内容 (无前缀)
- * - 按文件 group，文件名右侧 badge 显示该文件匹配数
- * - 文件级 expand/collapse，默认全展开
- * - 点击某条结果 → 调 onJumpToMatch 切换文件 + scroll 到对应行
+ * - query matches line-by-line on both the head + base sides
+ * - each matched line carries a side marker:
+ *     'added'   — appears only on the head side (prefix `+`)
+ *     'removed' — appears only on the base side (prefix `-`)
+ *     'context' — same content on both sides (no prefix)
+ * - grouped by file, a badge to the right of the file name shows that file's match count
+ * - file-level expand/collapse, all expanded by default
+ * - clicking a result → calls onJumpToMatch to switch file + scroll to the corresponding line
  *
- * 搜索算法见 [search/diff-search](./search/diff-search.ts)，状态机见
- * [search/useDiffSearch](./search/useDiffSearch.ts)；本组件只负责渲染。
+ * Search algorithm in [search/diff-search](./search/diff-search.ts), state machine in
+ * [search/useDiffSearch](./search/useDiffSearch.ts); this component only handles rendering.
  */
 
 interface DiffSearchPanelProps {
@@ -25,8 +25,8 @@ interface DiffSearchPanelProps {
   prLocalId: string;
   onJumpToMatch: (file: DiffChangedFile, line: number, side: 'old' | 'new') => void;
   /**
-   * 用户按 Esc 时调 — 父端通常把 sidebarMode 切回 'tree'。无论焦点在 input 还是
-   * 结果列表都生效 (走 window 层 keydown)
+   * Called when the user presses Esc — the parent usually switches sidebarMode back to 'tree'. Works whether focus is
+   * on the input or the result list (via a window-level keydown)
    */
   onExit?: () => void;
 }
@@ -47,9 +47,9 @@ export function DiffSearchPanel({ files, prLocalId, onJumpToMatch, onExit }: Dif
     inputRef,
   } = useDiffSearch(files, prLocalId);
 
-  // Esc 退出搜索：用 window capture-stage listener 让焦点在 input / 结果按钮 /
-  // 任何子元素都生效。子元素的 input 自带 Esc 清空行为浏览器不一定有 (type=text)
-  // 不会跟它冲突
+  // Esc to exit search: a window capture-stage listener makes it work whether focus is on the input / result button /
+  // any child element. Browsers don't necessarily give a child input a built-in Esc-to-clear behavior (type=text)
+  // so there's no conflict with it
   useEffect(() => {
     if (!onExit) return;
     const onKey = (e: KeyboardEvent): void => {
@@ -143,9 +143,9 @@ export function DiffSearchPanel({ files, prLocalId, onJumpToMatch, onExit }: Dif
                           {m.diffRole === 'added' ? '+' : m.diffRole === 'removed' ? '-' : ' '}
                         </span>
                         <span className="diff-search-match-line">{m.line}</span>
-                        {/* colorize 完成后用 dangerouslySetInnerHTML 渲染带语法
-                            着色的 HTML；未完成 / plaintext 文件走 fallback 走纯
-                            文本 + 关键词 <mark> 高亮 */}
+                        {/* Once colorize finishes, render the syntax-colored HTML via
+                            dangerouslySetInnerHTML; not-yet-done / plaintext files fall
+                            back to plain text + keyword <mark> highlight */}
                         {m.colorizedHtml ? (
                           <span
                             className="diff-search-match-content"
@@ -181,8 +181,8 @@ export function DiffSearchPanel({ files, prLocalId, onJumpToMatch, onExit }: Dif
 }
 
 /**
- * 关键词高亮：把 content 按 [matchStart, matchEnd) 拆三段，中间一段套 <mark>。
- * 只高亮第一处命中，避免渲染额外计算
+ * Keyword highlight: split content into three parts by [matchStart, matchEnd), wrapping the middle part in <mark>.
+ * Only highlights the first hit, avoiding extra render computation
  */
 function renderHighlight(content: string, start: number, end: number): React.ReactNode {
   if (start < 0 || end <= start) return content;
