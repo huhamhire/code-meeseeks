@@ -1,105 +1,105 @@
-# 架构总览
+# Architecture overview
 
-## 职责与边界
+## Responsibilities & boundaries
 
-本篇给出整体架构与各模块的关系，作为其余模块文档的入口。具体设计落在各分篇。
+This doc gives the overall architecture and the relationships between modules, serving as the entry point to the rest of the module docs. Specific designs live in the individual docs.
 
-形态：单用户**本地桌面应用**（Electron），无服务端、无多用户同步。主进程（Node）承载所有
-业务与 IO；渲染层（React）只做展示与交互，经 IPC 调主进程。
+Form factor: a single-user **local desktop application** (Electron), no server, no multi-user sync. The main process (Node) carries all
+business logic and IO; the render layer (React) only does display and interaction, calling the main process over IPC.
 
-## 核心设计
+## Core design
 
-### 进程模型
+### Process model
 
-- **Main（Node + TS）**：业务与 IO 的唯一所在——轮询、仓库镜像、跑 pr-agent、状态读写、发布评论。
-  单写者，独占状态目录，无需文件锁。
-- **Renderer（React）**：UI（PR 列表 / Diff / 对话 / 草稿）。`contextIsolation` 开、无 `nodeIntegration`、走 CSP。
-- **Preload**：经 `contextBridge` 只暴露一个泛型 `invoke(channel, req)` 与少量事件订阅，不暴露 Node 能力。
+- **Main (Node + TS)**: the sole home of business logic and IO — polling, repo mirror, running pr-agent, state reads/writes, publishing comments.
+  Single writer, exclusive owner of the state directory, no file lock needed.
+- **Renderer (React)**: the UI (PR list / Diff / conversation / drafts). `contextIsolation` on, no `nodeIntegration`, under CSP.
+- **Preload**: exposes, via `contextBridge`, only a single generic `invoke(channel, req)` plus a few event subscriptions, exposing no Node capabilities.
 
 ### IPC
 
-Renderer ↔ Main 全部走 `ipcMain.handle(channel, …)` + 渲染侧泛型 `invoke<K>(channel, req)`，由一份
-集中的 `IpcChannels` 类型映射约束请求/响应类型。新增交互＝先在该映射加通道类型，再两侧实现。
-（注意：早期设想用 tRPC，实际是这套手写类型映射。）
+Renderer ↔ Main all goes through `ipcMain.handle(channel, …)` + the render-side generic `invoke<K>(channel, req)`, with a single
+centralized `IpcChannels` type map constraining request/response types. Adding an interaction = first add the channel type to that map, then implement both sides.
+(Note: tRPC was considered early on; what shipped is this hand-written type map.)
 
-### 数据流（一次评审的主链路）
+### Data flow (the main path of one review)
 
 ```mermaid
 flowchart TB
-  subgraph discover[发现]
-    poller[轮询 Poller] -->|按连接拉「待评审 PR」| state[(状态存储<br/>per-PR 目录)]
+  subgraph discover[Discover]
+    poller[Poller] -->|pull "PRs to review" per connection| state[(State storage<br/>per-PR directory)]
   end
 
-  subgraph review[评审一条 PR]
+  subgraph review[Review one PR]
     direction TB
-    pick([用户选中 PR]) --> mirror[仓库镜像<br/>同步 bare + 物化 worktree]
-    cmd(["/review · /describe · /ask"]) --> bridge[pr-agent 桥<br/>worktree 上跑嵌入式 pr-agent]
+    pick([User selects a PR]) --> mirror[Repo mirror<br/>sync bare + materialize worktree]
+    cmd(["/review · /describe · /ask"]) --> bridge[pr-agent bridge<br/>run embedded pr-agent on the worktree]
     mirror --> bridge
-    bridge --> parse[输出解析 → findings]
-    parse --> drafts[草稿池]
-    drafts --> confirm([用户确认 / 编辑])
-    confirm --> publish[批量发布 → 平台 Adapter]
+    bridge --> parse[Output parsing → findings]
+    parse --> drafts[Draft pool]
+    drafts --> confirm([User confirms / edits])
+    confirm --> publish[Batch publish → platform Adapter]
   end
 
-  state -.选中.-> pick
+  state -.select.-> pick
 ```
 
-### 模块地图（packages / 主进程子系统）
+### Module map (packages / main-process subsystems)
 
-- **`01-platform/`** —— 平台集成与 PR 操作
-  - [代码平台适配](01-platform/01-adapter.md) —— `platform-bitbucket-server` + `PlatformAdapter` 抽象
-  - [仓库镜像与 Diff](01-platform/02-repo-mirror.md) —— `repo-mirror`
-  - [评审→发布闭环](01-platform/03-review-workflow.md) —— `poller`(输出解析) + 主进程草稿 / 发布
-  - [评论互动](01-platform/04-comment-interactions.md) —— 渲染层评论 UI + Adapter 反应 / 附件能力
-- **`02-agent/`** —— Agent 与规则
-  - [Agent 与上下文](02-agent/01-agent.md) —— Agent 目录 / 上下文注入 / 工具红线
-  - [会话 Agent 化](02-agent/02-session.md) —— 自然语言委派 + 规划循环
-  - [AutoPilot 与调度](02-agent/03-autopilot.md) —— 自动预评审 + 优先级队列
-  - [规则系统](02-agent/04-rules.md) —— `rules`
-  - [pr-agent 集成与运行时](02-agent/05-pragent-runtime.md) —— `pr-agent-bridge` + 嵌入式运行时
-- **`03-gui/`** —— GUI 与交互
-  - [GUI 与交互](03-gui/01-ui-interaction.md) —— 渲染层 React（布局 / 面板 / 跨 PR 保活）
-  - [命令面板](03-gui/02-command-palette.md) —— 渲染层标题栏入口 + 分域命令注册表
-  - [消息通知](03-gui/03-notifications.md) —— `poller` 事件投影 + 主进程系统通知 / dock 角标
-  - [国际化](03-gui/04-i18n.md) —— react-i18next + 主 / 渲染双运行时 locale
-- **`04-integration/`** —— 外部集成扩展与 CLI
-  - [服务监听与本地 API](04-integration/01-service-api.md) —— 主进程内置 HTTP API（IPC 之外的第二前端）
-  - [CLI 工具](04-integration/02-cli.md) —— Go 独立二进制，经本地 API 消费应用能力
-- **`99-core/`** —— 基础设施
-  - [状态存储与数据模型](99-core/01-state-storage.md) —— `state-store` + `poller` 的 pr-state
-  - [配置与凭据](99-core/02-config-and-secrets.md) —— `config` + 设置页
-  - [出站网络与代理](99-core/03-networking-proxy.md) —— 主进程 proxy plumbing
-  - [错误码与传递](99-core/04-error-codes.md) —— `shared` 的 `AppError` + 跨 IPC 编码
+- **`01-platform/`** — Platform integration & PR operations
+  - [Code-platform adaptation](01-platform/01-adapter.md) — `platform-bitbucket-server` + the `PlatformAdapter` abstraction
+  - [Repo mirror & Diff](01-platform/02-repo-mirror.md) — `repo-mirror`
+  - [Review→publish loop](01-platform/03-review-workflow.md) — `poller` (output parsing) + main-process drafts / publish
+  - [Comment interactions](01-platform/04-comment-interactions.md) — render-layer comment UI + Adapter reaction / attachment capabilities
+- **`02-agent/`** — Agent & rules
+  - [Agent & context](02-agent/01-agent.md) — Agent directory / context injection / tool mutation red line
+  - [Agentic sessions](02-agent/02-session.md) — natural-language delegation + planning loop
+  - [AutoPilot & scheduling](02-agent/03-autopilot.md) — automatic pre-review + priority queue
+  - [Rules system](02-agent/04-rules.md) — `rules`
+  - [pr-agent integration & runtime](02-agent/05-pragent-runtime.md) — `pr-agent-bridge` + embedded runtime
+- **`03-gui/`** — GUI & interaction
+  - [GUI & interaction](03-gui/01-ui-interaction.md) — render-layer React (layout / panels / cross-PR state persistence)
+  - [Command palette](03-gui/02-command-palette.md) — render-layer title-bar entry + domain-grouped command registry
+  - [Notifications](03-gui/03-notifications.md) — `poller` event projection + main-process system notifications / dock badge
+  - [Internationalization](03-gui/04-i18n.md) — react-i18next + dual main / render runtime locale
+- **`04-integration/`** — External integration extensions & CLI
+  - [Local API service & listener](04-integration/01-service-api.md) — main-process built-in HTTP API (a second front-end beyond IPC)
+  - [CLI tool](04-integration/02-cli.md) — standalone Go binary, consuming app capabilities via the local API
+- **`99-core/`** — Infrastructure
+  - [State storage & data model](99-core/01-state-storage.md) — `state-store` + the `poller`'s pr-state
+  - [Config & credentials](99-core/02-config-and-secrets.md) — `config` + settings page
+  - [Outbound network & proxy](99-core/03-networking-proxy.md) — main-process proxy plumbing
+  - [Error codes & propagation](99-core/04-error-codes.md) — `shared`'s `AppError` + cross-IPC encoding
 
-> 打包 / 构建 / 签名 见开发专题 [`../development/packaging-release.md`](../development/packaging-release.md)（非产品子系统）。
+> Packaging / build / signing: see the development topic [`../development/packaging-release.md`](../development/packaging-release.md) (not a product subsystem).
 
-`shared` 是跨包共享类型（含 `IpcChannels` 契约、PR/Finding/Run 等领域类型）；`logger` 是统一日志。
+`shared` holds cross-package shared types (including the `IpcChannels` contract and PR/Finding/Run and other domain types); `logger` is the unified logging.
 
-### 工程基线
+### Engineering baseline
 
-- npm workspaces + Nx 单仓多包；统一 `lint`/`typecheck`/`test`/`build` 任务（详见根 `AGENTS.md`）。
-- 桌面壳 Electron + electron-vite；渲染 React + Monaco（并排/内联 diff）。
+- npm workspaces + Nx monorepo; unified `lint`/`typecheck`/`test`/`build` tasks (see the root `AGENTS.md`).
+- Desktop shell Electron + electron-vite; rendering React + Monaco (side-by-side/inline diff).
 
-### 数据与隐私边界
+### Data & privacy boundary
 
-- **本地优先**：仓库副本、PR 元数据、评论缓存、草稿、配置全部留在本地工作目录 `~/.code-meeseeks/`
-  （仓库镜像可改到 `repos_dir`）。无服务端、不做多用户同步。
-- **出站只有两类**（除此不向任何第三方上报数据；两类都可经统一 HTTP 代理管控，见 [网络与代理](99-core/03-networking-proxy.md)）：
-  - 评审者自配的 **LLM API**（经 pr-agent / litellm）；
-  - 所配置的**代码平台**（PR / 评论 REST + git 拉取）。
-- **发给 LLM 的内容**：pr-agent 评审时只把 **PR diff + 命中的规则**（extra_instructions）发给 LLM，不发其它本地数据。
-- **凭据**：平台 token / LLM API key / 代理密码**明文**存 `config.yaml`（文件权限收紧），属已知风险；
-  抽象层预留 keytar 升级（见 [配置与凭据](99-core/02-config-and-secrets.md)）。
-- **安全基线**：渲染层 `contextIsolation` 开、无 `nodeIntegration`、CSP；preload 仅暴露白名单能力（见 [GUI 交互](03-gui/01-ui-interaction.md)）。
+- **Local-first**: repo copies, PR metadata, comment cache, drafts, and config all stay in the local working directory `~/.code-meeseeks/`
+  (the repo mirror can be redirected to `repos_dir`). No server, no multi-user sync.
+- **Only two kinds of outbound** (nothing else is reported to any third party; both kinds can be governed through a unified HTTP proxy, see [Networking & proxy](99-core/03-networking-proxy.md)):
+  - the reviewer's self-configured **LLM API** (via pr-agent / litellm);
+  - the configured **code platform** (PR / comment REST + git fetch).
+- **What is sent to the LLM**: when pr-agent reviews, it sends only the **PR diff + matched rules** (extra_instructions) to the LLM, nothing else from local data.
+- **Credentials**: the platform token / LLM API key / proxy password are stored in **plaintext** in `config.yaml` (with tightened file permissions), a known risk;
+  the abstraction layer reserves a keytar upgrade (see [Config & credentials](99-core/02-config-and-secrets.md)).
+- **Security baseline**: the render layer has `contextIsolation` on, no `nodeIntegration`, CSP; preload exposes only whitelisted capabilities (see [GUI interaction](03-gui/01-ui-interaction.md)).
 
-## 数据 / 接口契约
+## Data / interface contract
 
-- **IPC 契约**：集中在 `shared` 的 `IpcChannels` 类型映射（`channel → { request, response }`）。
-- **领域类型**：PR（`StoredPullRequest` / `PrIdentity`）、评论（`PrComment`）、评审 run（`ReviewRun`，含
-  `findings` / `tokenUsage`）、平台抽象（`PlatformAdapter`）均在 `shared`，被各包共享。
+- **IPC contract**: centralized in `shared`'s `IpcChannels` type map (`channel → { request, response }`).
+- **Domain types**: PR (`StoredPullRequest` / `PrIdentity`), comment (`PrComment`), review run (`ReviewRun`, including
+  `findings` / `tokenUsage`), and the platform abstraction (`PlatformAdapter`) all live in `shared`, shared across packages.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **加新代码平台**：实现 `PlatformAdapter`，业务层（Poller/发布/镜像）不感知具体平台。见 [平台适配](01-platform/01-adapter.md)。
-- **跨进程能力**一律走 IPC 通道 + 类型映射，别在渲染层直接碰 Node / 文件 / 网络。
-- 各分篇描述「当前实现」，演进时同步更新对应分篇即可。
+- **Adding a new code platform**: implement `PlatformAdapter`; the business layer (Poller/publish/mirror) is agnostic to the specific platform. See [Platform adaptation](01-platform/01-adapter.md).
+- **Cross-process capabilities** always go through an IPC channel + type map; don't touch Node / files / network directly in the render layer.
+- Each doc describes the "current implementation"; when it evolves, just update the corresponding doc in sync.
