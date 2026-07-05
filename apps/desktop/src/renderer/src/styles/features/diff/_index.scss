@@ -1,5 +1,5 @@
-// DiffView 样式簇入口：@forward 各 partial，App.scss 用 `@use '.../features/diff'` 一行引入。
-// 新增 diff partial 在此登记即可，无需改 App.scss。
+// DiffView style cluster entry: @forward each partial, App.scss imports in one line via `@use '.../features/diff'`.
+// Register a new diff partial here; no need to touch App.scss.
 @forward 'view';
 @forward 'search';
 @forward 'file-tree';

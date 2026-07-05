@@ -1,6 +1,6 @@
-// 通用模态壳：backdrop / 外框 / header / body / 区块(section) / 键值表(kv) / 底栏(footer/
-// actions) / 嵌套子模态 / 尺寸修饰。各业务模态在此基础上组合，专属内容样式在各自域维护
-// （settings → features/settings/forms，提交评审 → features/pr/publish-review 等）。
+// Generic modal shell: backdrop / outer frame / header / body / section / key-value table (kv) / footer (footer/
+// actions) / nested sub-modal / size modifiers. Each business modal composes on top of this, with dedicated content styles maintained in their own domains
+// (settings → features/settings/forms, publish review → features/pr/publish-review etc.).
 
 @use '../tokens' as *;
 
@@ -40,16 +40,16 @@
   }
 }
 
-// header 右侧组：自定义动作（headerActions）+ 关闭键，右对齐并排。
-// align-items: stretch 让图标动作按钮拉伸到与关闭键等高（图标内容比文字矮，否则会短一截）。
+// header right-side group: custom actions (headerActions) + close button, right-aligned side by side.
+// align-items: stretch makes the icon action buttons stretch to the same height as the close button (icon content is shorter than text, otherwise it would come up short).
 .modal-header-right {
   display: flex;
   align-items: stretch;
   gap: $space-3;
 }
 
-// 右上角关闭按钮：方形 X 图标（免国际化），复用 .icon-btn 的透明无边框，
-// 这里只调方形 padding + hover 浅底
+// Top-right close button: square X icon (no i18n needed), reuses .icon-btn's transparent borderless look,
+// here only tweaks square padding + hover light background
 .modal-close {
   padding: 4px;
   border-radius: $radius-sm;
@@ -66,16 +66,16 @@
   overflow-y: auto;
 }
 
-// 宽尺寸：左右分区类模态（如 SettingsModal 分区导航 + 内容）需要更宽横向空间，
-// 让左导航与右侧内容各得其所。定高（受 .modal 的 max-height: 84vh 上限约束），
-// 使切换分区时模态尺寸恒定、右侧内容区独立滚动而非整体撑高。
+// Wide size: left/right split modals (e.g. SettingsModal's section nav + content) need more horizontal space,
+// so the left nav and right content each get their place. Fixed height (bounded by .modal's max-height: 84vh),
+// keeping the modal size constant when switching sections, with the right content area scrolling independently rather than stretching the whole thing.
 .modal-lg {
   max-width: 760px;
   height: 600px;
 }
 
-// ConfirmModal: 跟 SettingsModal 共用 .modal-backdrop/.modal/.modal-header，加几条
-// 小尺寸 + 底部操作行特化
+// ConfirmModal: shares .modal-backdrop/.modal/.modal-header with SettingsModal, adds a few
+// small-size + bottom action row specializations
 .modal-confirm {
   max-width: 380px;
 }
@@ -107,15 +107,15 @@
   }
 }
 
-// 分区分隔线：在分区上方画一条细线 + 留白，把它与上方分区视觉分组（如设置「常规」里编辑器配置与
-// 语言 / 主题分隔）。
+// Section divider: draws a thin line + whitespace above a section, visually grouping it apart from the section above (e.g. separating editor config from
+// language / theme in settings "General").
 .modal-section-divider {
   border-top: 1px solid $border-default;
   padding-top: $space-8;
 }
 
-// 区块标题行：标题左、操作按钮（如"+ 添加连接"）右，省纵向空间。h4 去掉自身
-// 下边距改由本行统一控制
+// Section head row: title left, action button (e.g. "+ Add connection") right, saving vertical space. h4 drops its own
+// bottom margin, controlled uniformly by this row instead
 .modal-section-head {
   display: flex;
   align-items: center;
@@ -127,7 +127,7 @@
   }
 }
 
-// 标题 + 状态 chip 成组靠左，让右侧操作按钮保持两端对齐
+// Title + status chip grouped to the left, keeping the right action button in space-between alignment
 .modal-section-head-title {
   display: flex;
   align-items: center;
@@ -147,14 +147,14 @@
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   word-break: break-all;
   color: $text-body;
-  min-width: 0; // 让 input width:100% 不被 grid cell 自然撑出去
+  min-width: 0; // keep input width:100% from being pushed out by the grid cell's natural size
 }
 
 .modal-footer {
   margin-top: $space-4;
 }
 
-// 模态框底栏：左侧工具（编辑 config.yaml / DevTools），右侧全局保存。固定不滚动
+// Modal footer bar: tools on the left (edit config.yaml / DevTools), global save on the right. Fixed, no scroll
 .modal-footer-bar {
   flex-shrink: 0;
   display: flex;
@@ -183,15 +183,15 @@
   margin-top: $space-4;
 }
 
-// 嵌套子模态框 + 小模态体
+// Nested sub-modal + small modal body
 .modal-backdrop-nested {
   background: rgba(0, 0, 0, 0.4);
   z-index: $z-modal-nested;
 }
 .modal-sm {
-  // LlmEditorModal 用：URL / 模型 ID / 自部署 endpoint 这类字段很长
-  // (dashscope 默认 endpoint 已经 ~50 chars，自定义 base URL 更长)，
-  // 拓到 720px 让输入框横向空间充裕
+  // Used by LlmEditorModal: fields like URL / model ID / self-hosted endpoint are very long
+  // (dashscope's default endpoint is already ~50 chars, custom base URLs are longer),
+  // widened to 720px to give the inputs ample horizontal space
   max-width: 720px;
   width: 100%;
 }

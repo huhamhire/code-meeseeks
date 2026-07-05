@@ -1,5 +1,5 @@
-// Bitbucket 评论 attachment 图片（见 components/common/BitbucketImage）：经 IPC 代理拉回
-// data URL，缩略展示 + 点击放大 overlay。原图通常很大（截图等），故限尺寸 + zoom-in 提示。
+// Bitbucket comment attachment images (see components/common/BitbucketImage): fetched back via IPC proxy
+// as data URLs, shown as thumbnails + click-to-enlarge overlay. Originals are usually large (screenshots etc.), so limit size + zoom-in hint.
 
 @use '../tokens' as *;
 
@@ -9,7 +9,7 @@
   height: auto;
   width: auto;
   object-fit: contain;
-  // !important 覆盖 monaco view zone 内的 cursor:text 继承
+  // !important overrides inherited cursor:text inside the monaco view zone
   cursor: zoom-in !important;
   border-radius: $radius-sm;
   border: 1px solid $border-default;
@@ -25,7 +25,7 @@
   border-radius: $radius-sm;
 }
 
-// 大图预览 overlay (portal 到 document.body) — 点击缩略图打开
+// Large image preview overlay (portal to document.body) — opened by clicking the thumbnail
 .bitbucket-image-zoom-backdrop {
   position: fixed;
   inset: 0;

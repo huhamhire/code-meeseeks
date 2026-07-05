@@ -1,18 +1,19 @@
-// 主题层（语义层 / Tier 2）：把语义 token 映射到 _palette.scss 的标准色，发射为 CSS 自定义属性
-// （CSS custom properties），使「语义 → 色值」可在运行期整体切换 —— 这是深色 / 浅色主题切换的基座。
+// Theme layer (semantic layer / Tier 2): maps semantic tokens to the standard colors of _palette.scss,
+// emitting them as CSS custom properties, so "semantic → color value" can be switched wholesale at runtime
+// —— this is the base for dark / light theme switching.
 //
-// - 默认（:root）即当前**暗色**主题。
-// - 浅色主题在 `:root[data-theme='light'] { ... }` 覆盖同名变量即可，无需触碰任何使用处。
-// - 业务样式不直接引用本文件的变量名，而经 _tokens.scss 的 `$token: var(--token)` 桥接（使用处零改动）。
+// - The default (:root) is the current **dark** theme.
+// - The light theme just overrides same-named variables in `:root[data-theme='light'] { ... }`, without touching any usage site.
+// - Business styles do not reference this file's variable names directly, but bridge through _tokens.scss's `$token: var(--token)` (zero changes at usage sites).
 //
-// 半透明叠加一律**从 palette 原色派生**（`#{rgba($palette-var, a)}` 编译期出固定 rgba；或使用处
-// 按多档 alpha 叠加时用 `rgb(var(--rgb-x) / a)`，三元组见底部）—— 绝不再手抄十进制通道字面量，
-// 否则改原色时浅底不跟随、悄悄脱节（单一真相源原则）。
+// Semi-transparent overlays are always **derived from palette raw colors** (`#{rgba($palette-var, a)}` emits a fixed rgba at compile time; or at usage sites
+// stacking multiple alpha levels via `rgb(var(--rgb-x) / a)`, triples at the bottom) —— never hand-copy decimal channel literals again,
+// otherwise the light background will not follow when the raw color changes, silently drifting out of sync (single source of truth principle).
 
 @use 'sass:color';
 @use './palette' as *;
 
-// 取色的 RGB 通道三元组（空格分隔，供 `rgb(<triple> / <alpha>)`）。以 palette 原色为唯一来源。
+// RGB channel triple of a color (space-separated, for `rgb(<triple> / <alpha>)`). palette raw color is the sole source.
 @function rgb-channels($c) {
   @return #{color.channel($c, 'red', $space: rgb)}
     #{color.channel($c, 'green', $space: rgb)}
@@ -20,9 +21,9 @@
 }
 
 :root {
-  // ===== 背景 =====
+  // ===== Background =====
   --bg-app: #{$vscode-gray-850};
-  --bg-white-fade: #{rgba($white, 0.12)}; // icon-btn hover / count-pill 底
+  --bg-white-fade: #{rgba($white, 0.12)}; // icon-btn hover / count-pill background
   --bg-panel: #{$vscode-gray-840};
   --bg-panel-alt: #{$vscode-gray-880};
   --bg-elev: #{$vscode-gray-820};
@@ -30,45 +31,45 @@
   --bg-hover: #{$vscode-gray-780};
   --bg-selected: #{$vscode-blue-900};
   --bg-group-header: #{$vscode-gray-900};
-  // 状态栏「未启用 / idle」中性胶囊底：独立于边框色，暗色沿用旧 border-default 灰（#3e3e42）。
+  // Statusbar "not enabled / idle" neutral pill background: independent of border color, dark reuses the old border-default gray (#3e3e42).
   --chip-neutral: #{$vscode-gray-680};
 
-  // ===== 边框 =====
+  // ===== Border =====
   --border-default: #{$vscode-gray-680};
-  --border-default-fade: #{rgba($vscode-gray-680, 0.5)}; // blame row 内分隔线
+  --border-default-fade: #{rgba($vscode-gray-680, 0.5)}; // divider inside a blame row
   --border-muted: #{$vscode-gray-760};
 
-  // ===== 文字 =====
+  // ===== Text =====
   --text-primary: #{$vscode-gray-200};
   --text-body: #{$vscode-gray-160};
   --text-muted: #{$vscode-gray-420};
   --text-subtle: #{$vscode-slate-500};
   --text-dim: #{$vscode-gray-500};
-  --text-on-accent: #{$white}; // 饱和色实底（accent / warning / danger 等）上的文字，深浅皆白
-  // 选中高亮底（--bg-selected）上的文字：暗色底深蓝 → 白；浅色底浅蓝 → 深字。与 --text-on-accent
-  // 分开，避免浅色下选中项沿用白字成「反色」。
+  --text-on-accent: #{$white}; // text on saturated solid backgrounds (accent / warning / danger, etc.), white in both dark and light
+  // Text on the selected highlight background (--bg-selected): dark deep-blue background → white; light light-blue background → dark text. Kept separate from --text-on-accent
+  // to avoid selected items reusing white text in light and becoming "inverted".
   --text-on-selected: #{$white};
 
-  // ===== 语义色（动作 / 状态）=====
+  // ===== Semantic colors (action / state) =====
   --color-accent: #{$vscode-blue-700};
   --color-accent-hover: #{$vscode-blue-600};
   --color-accent-bg-fade: #{rgba($vscode-blue-700, 0.18)};
   --color-accent-strong-fade: #{rgba($vscode-blue-700, 0.5)}; // resize handle hover/active
   --color-info: #{$vscode-blue-300};
   --color-success: #{$tw-green-700};
-  --color-success-strong: #{$tw-green-500}; // 高饱和成功绿（复制成功打勾等强反馈）
+  --color-success-strong: #{$tw-green-500}; // high-saturation success green (strong feedback like copy-success checkmark)
   --color-approved: #{$tw-green-600};
   --color-warning: #{$tw-amber-600};
   --color-warning-bright: #{$tw-amber-400};
   --color-danger: #{$vscode-red-300};
   --color-danger-bg: #{$vscode-red-700};
   --color-danger-strong: #{$vscode-red-500};
-  --color-danger-strong-fade: #{rgba($vscode-red-500, 0.12)}; // ghost 危险按钮 hover 浅红底
+  --color-danger-strong-fade: #{rgba($vscode-red-500, 0.12)}; // ghost danger button hover light red background
   --color-token-in: #{$tw-green-500};
   --color-token-out: #{$tw-red-500};
   --color-token-cache: #{$vscode-blue-300};
 
-  // 语义色浅底（chip / banner 背景，与对应主色同色相）
+  // Semantic light backgrounds (chip / banner background, same hue as the corresponding primary color)
   --color-accent-bg-hover: #{rgba($vscode-blue-700, 0.28)};
   --color-approved-fade: #{rgba($tw-green-600, 0.18)};
   --color-approved-fade-soft: #{rgba($tw-green-600, 0.1)};
@@ -76,41 +77,41 @@
   --color-danger-fade: #{rgba($vscode-red-300, 0.08)};
   --color-danger-border: #{rgba($vscode-red-300, 0.35)};
 
-  // 状态浅底（pending / posted 原 off-palette 一次性色，已收敛到对应主色相）
-  --color-conflict-fade: #{rgba($tw-amber-500, 0.18)}; // 冲突 / needsWork chip 填充
-  --color-pending-fade: #{rgba($tw-amber-600, 0.15)}; // 待办 / 草稿 pending 填充
-  --color-posted-fade: #{rgba($tw-green-600, 0.15)}; // 草稿已发布填充
-  --color-search-hit: #{rgba($material-yellow-300, 0.42)}; // diff 搜索命中高亮
+  // State light backgrounds (pending / posted originally off-palette one-off colors, now converged to the corresponding primary hue)
+  --color-conflict-fade: #{rgba($tw-amber-500, 0.18)}; // conflict / needsWork chip fill
+  --color-pending-fade: #{rgba($tw-amber-600, 0.15)}; // todo / draft pending fill
+  --color-posted-fade: #{rgba($tw-green-600, 0.15)}; // draft posted fill
+  --color-search-hit: #{rgba($material-yellow-300, 0.42)}; // diff search hit highlight
 
-  // ===== Git decoration 配色（跟 Monaco / VS Code 一致）=====
+  // ===== Git decoration colors (consistent with Monaco / VS Code) =====
   --git-added: #{$vscode-green-300};
   --git-added-bg-fade: #{rgba($vscode-green-300, 0.16)};
   --git-modified: #{$vscode-amber-300};
   --git-deleted: #{$vscode-red-600};
   --git-needs-work-fade: #{rgba($vscode-red-600, 0.18)};
   --git-needs-work-fg: #{$vscode-red-300};
-  --blame-change: #{$vscode-lime-700}; // PR 改动行绿条
-  --blame-fold: #{$vscode-slate-500}; // 折叠占位斜纹灰
+  --blame-change: #{$vscode-lime-700}; // PR changed-line green bar
+  --blame-fold: #{$vscode-slate-500}; // fold placeholder diagonal-stripe gray
 
-  // ===== 文件改动状态点（目录树 Material 图标集）=====
-  // 鲜明的 Material 饱和色：圆点小、需「跳」出来，深浅主题都用亮色更醒目（区别于文件名的 git 装饰色）。
+  // ===== File change status dots (directory tree Material icon set) =====
+  // Vivid Material saturated colors: the dot is small and needs to "pop"; both dark and light themes use bright colors for more prominence (distinct from the file name's git decoration color).
   --file-status-added: #{$material-green-500};
   --file-status-modified: #{$material-amber-500};
   --file-status-deleted: #{$material-red-550};
   --file-status-renamed: #{$material-purple-400};
   --file-status-copied: #{$material-blue-400};
 
-  // ===== Avatar / 装饰 =====
+  // ===== Avatar / decoration =====
   --avatar-bg-default: #{$vscode-gray-780};
-  // GitHub octocat 单色 logo：暗底用官方反白（invertocat），浅底翻成官方近黑（见浅色块覆盖）。
+  // GitHub octocat monochrome logo: dark background uses the official inverted white (invertocat), light background flips to the official near-black (see light block override).
   --github-logo: #{$white};
 
-  // ===== 滚动条（webkit）=====
+  // ===== Scrollbar (webkit) =====
   --scrollbar-thumb: #{$vscode-gray-600};
   --scrollbar-thumb-hover: #{$vscode-gray-540};
   --scrollbar-thumb-active: #{$vscode-gray-500};
 
-  // ===== RGB 通道三元组（供使用处 `rgb(var(--rgb-x) / <alpha>)` 半透明叠加）=====
+  // ===== RGB channel triples (for usage sites' `rgb(var(--rgb-x) / <alpha>)` semi-transparent overlays) =====
   --rgb-accent: #{rgb-channels($vscode-blue-700)};
   --rgb-danger: #{rgb-channels($vscode-red-300)};
   --rgb-warning: #{rgb-channels($tw-amber-600)};
@@ -121,13 +122,13 @@
 }
 
 // ============================================================================
-// 浅色主题：覆盖同名语义变量。偏好解析为 light 时 renderer 写 documentElement[data-theme='light']
-// 触发本块。白底需更深 / 更饱和的品牌色保对比；半透明叠加（白雾 hover / 分隔线）翻成黑雾，否则白底看不见。
+// Light theme: overrides same-named semantic variables. When the preference resolves to light, the renderer writes documentElement[data-theme='light']
+// to trigger this block. A white background needs deeper / more saturated brand colors to keep contrast; semi-transparent overlays (white-fog hover / divider) flip to black fog, otherwise invisible on white.
 // ============================================================================
 :root[data-theme='light'] {
-  // ===== 背景 =====
+  // ===== Background =====
   --bg-app: #{$vscode-gray-30};
-  --bg-white-fade: #{rgba($black, 0.06)}; // icon-btn hover：白底改黑雾
+  --bg-white-fade: #{rgba($black, 0.06)}; // icon-btn hover: white background switches to black fog
   --bg-panel: #{$vscode-gray-60};
   --bg-panel-alt: #{$vscode-gray-90};
   --bg-elev: #{$white};
@@ -135,31 +136,31 @@
   --bg-hover: #{$vscode-gray-120};
   --bg-selected: #{$vscode-blue-100};
   --bg-group-header: #{$vscode-gray-120};
-  // 浅色用更浅的灰：边框级灰（#cfcfcf）作胶囊填充在白底状态栏上偏深，改用 #e0e0e0 更轻。
+  // Light uses a lighter gray: border-level gray (#cfcfcf) as pill fill looks too deep on the white-background statusbar, switch to #e0e0e0 for lighter.
   --chip-neutral: #{$vscode-gray-150};
 
-  // ===== 边框 =====
+  // ===== Border =====
   --border-default: #{$vscode-gray-220};
   --border-default-fade: #{rgba($black, 0.08)};
   --border-muted: #{$vscode-gray-150};
 
-  // ===== 文字 =====
+  // ===== Text =====
   --text-primary: #{$vscode-gray-840};
   --text-body: #{$vscode-gray-820};
   --text-muted: #{$vscode-gray-500};
   --text-subtle: #{$vscode-gray-420};
   --text-dim: #{$vscode-gray-340};
   --text-on-accent: #{$white};
-  --text-on-selected: #{$vscode-gray-840}; // 浅色选中底（浅蓝）承深字
+  --text-on-selected: #{$vscode-gray-840}; // light selected background (light blue) carries dark text
 
-  // ===== 语义色（动作 / 状态）=====
+  // ===== Semantic colors (action / state) =====
   --color-accent: #{$vscode-blue-800};
   --color-accent-hover: #{$vscode-blue-750};
   --color-accent-bg-fade: #{rgba($vscode-blue-800, 0.1)};
   --color-accent-strong-fade: #{rgba($vscode-blue-800, 0.4)};
   --color-info: #{$vscode-blue-650};
   --color-success: #{$tw-green-700};
-  --color-success-strong: #{$tw-green-600}; // 高饱和成功绿（浅色下取 green-600 兼顾可读）
+  --color-success-strong: #{$tw-green-600}; // high-saturation success green (light takes green-600 to balance readability)
   --color-approved: #{$tw-green-700};
   --color-warning: #{$tw-amber-700};
   --color-warning-bright: #{$tw-amber-700};
@@ -193,24 +194,24 @@
   --blame-change: #{$vscode-lime-700};
   --blame-fold: #{$vscode-gray-380};
 
-  // ===== 文件改动状态点（目录树 Material 图标集）=====
+  // ===== File change status dots (directory tree Material icon set) =====
   --file-status-added: #{$material-green-480};
   --file-status-modified: #{$material-amber-550};
   --file-status-deleted: #{$material-red-550};
   --file-status-renamed: #{$material-purple-500};
   --file-status-copied: #{$material-blue-500};
 
-  // ===== Avatar / 装饰 =====
+  // ===== Avatar / decoration =====
   --avatar-bg-default: #{$vscode-gray-150};
-  // GitHub octocat 浅底用官方近黑（$vscode-gray-900 ≈ 品牌 #181717），白底反白 logo 不可见。
+  // GitHub octocat light background uses the official near-black ($vscode-gray-900 ≈ brand #181717); an inverted-white logo is invisible on white.
   --github-logo: #{$vscode-gray-900};
 
-  // ===== 滚动条 =====
+  // ===== Scrollbar =====
   --scrollbar-thumb: #{$vscode-gray-260};
   --scrollbar-thumb-hover: #{$vscode-gray-340};
   --scrollbar-thumb-active: #{$vscode-gray-380};
 
-  // ===== RGB 通道三元组（随浅色品牌基色重置）=====
+  // ===== RGB channel triples (reset along with the light brand base colors) =====
   --rgb-accent: #{rgb-channels($vscode-blue-800)};
   --rgb-danger: #{rgb-channels($vscode-red-650)};
   --rgb-warning: #{rgb-channels($tw-amber-700)};

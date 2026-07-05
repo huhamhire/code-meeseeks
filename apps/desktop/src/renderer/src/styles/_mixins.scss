@@ -1,11 +1,13 @@
-// 跨文件复用的样式片段。mixin 可经 @use 跨模块复用（placeholder/@extend 不能跨模块），
-// 因此「多文件共用」的片段统一沉到这里。各文件按层级 `@use '../mixins' as *;` 拉取。
+// Style fragments reused across files. A mixin can be reused across modules via @use
+// (placeholder/@extend cannot cross modules), so fragments shared by multiple files all
+// sink to here. Each file pulls them in by layer with `@use '../mixins' as *;`.
 @use 'sass:map';
 @use 'sass:list';
 @use './tokens' as *;
 
-// 浮层菜单基座：绝对定位的暗色浮层（statusbar 队列 / LLM 菜单、chat `/` 命令菜单与补全浮层）。
-// 仅含「浮层外观」共性；定位锚点 / 圆角 / 内边距 / 宽度由各调用点自定。
+// Popover menu base: an absolutely positioned dark popover (statusbar queue / LLM menu,
+// chat `/` command menu and completion popover). Contains only the "popover appearance"
+// commonality; positioning anchor / radius / padding / width are set per call site.
 @mixin popover {
   position: absolute;
   background: $bg-elev;
@@ -14,8 +16,8 @@
   z-index: $z-statusbar-menu;
 }
 
-// Ghost 按钮外框：浅底 + 1px 边框 + 小圆角，hover 主色描边 + 主色文字。
-// chat 的 `/` 命令触发 / 发送 / 重试 / 草稿操作按钮共用；display / padding / disabled 各自补。
+// Ghost button frame: light background + 1px border + small radius, hover accent border + accent text.
+// Shared by chat's `/` command trigger / send / retry / draft action buttons; display / padding / disabled added per site.
 @mixin ghost-btn {
   background: $bg-surface;
   border: 1px solid $border-default;
@@ -30,15 +32,16 @@
   }
 }
 
-// 单行截断省略号（需配合确定的宽度约束生效）。
+// Single-line truncation with ellipsis (requires a definite width constraint to take effect).
 @mixin ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-// 「按钮即链接」复位：把 <button> 退成行内链接外观（透明底 / 无边框 / 无内边距）+ 统一
-// focus-visible 焦点环。各调用点自定 color / font / hover（评论锚点 / 草稿锚点 / finding 锚点等）。
+// "Button as link" reset: strip <button> back to an inline link appearance (transparent background /
+// no border / no padding) + a uniform focus-visible focus ring. Each call site sets color / font / hover
+// (comment anchor / draft anchor / finding anchor, etc.).
 @mixin anchor-link {
   background: transparent;
   border: none;
@@ -52,13 +55,14 @@
   }
 }
 
-// ===== chip 共性词汇（statusbar / chat / 各业务域的小圆标签复用）=====
-// 各场景 chip 度量（高度 / padding / 字号）差异大，故 common 只共「本质 + 色板词汇」，
-// 不强塞统一 class：各场景类 @include chip 后自叠度量，配色统一走 chip-tone。
+// ===== chip common vocabulary (reused by statusbar / chat / small rounded tags across business domains) =====
+// chip metrics (height / padding / font size) differ widely per scenario, so common shares only the
+// "essence + palette vocabulary" and does not force a unified class: each scenario class @includes chip
+// then layers its own metrics, with coloring uniformly going through chip-tone.
 //
-// chip 本质：行内 flex 居中 + 圆角 + 不换行 + 加粗。
-// 注意：若调用方还需 `font: inherit`（按钮型 chip 重置 UA 字体），须先写 font:inherit
-// 再 @include chip，否则简写会把这里的 font-weight 顶回继承值。
+// chip essence: inline flex centering + radius + no wrap + bold.
+// Note: if the caller also needs `font: inherit` (button-type chip resetting the UA font), write font:inherit
+// first, then @include chip, otherwise the shorthand pushes this font-weight back to the inherited value.
 @mixin chip {
   display: inline-flex;
   align-items: center;
@@ -67,8 +71,9 @@
   white-space: nowrap;
 }
 
-// 语义色板：浅底 + 同色相前景。扩展语义色 = 在此 map 加一条，全场景（含 @each 生成的
-// chat-chip-<name>）即时可用 —— 这是 chip 的可扩展轴。
+// Semantic palette: light background + same-hue foreground. Extending a semantic color = add one entry
+// to this map, and it is instantly usable in all scenarios (including the @each-generated
+// chat-chip-<name>) —— this is chip's extensibility axis.
 $chip-tones: (
   'accent': ($color-accent-bg-fade, $color-info),
   'approved': ($color-approved-fade, $color-approved),
@@ -80,12 +85,12 @@ $chip-tones: (
   background: list.nth($pair, 1);
   color: list.nth($pair, 2);
 }
-// 实色填充（强调态，如运行中 / 选中）
+// Solid fill (emphasis state, e.g. running / selected)
 @mixin chip-solid($bg: $color-accent, $fg: $text-on-accent) {
   background: $bg;
   color: $fg;
 }
-// 描边（边框随 currentColor，由调用方设 color）
+// Outline (border follows currentColor, caller sets color)
 @mixin chip-outline {
   border: 1px solid currentColor;
 }

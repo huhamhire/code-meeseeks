@@ -1,19 +1,19 @@
-// 左侧改动文件树：.diff-file-list 容器 + 拖拽柄 + .diff-file-tree (FileTree 组件) +
-// 行/文件夹/文件 + 状态点 + 文件名 git decoration 着色。
-// 颜色跟 VS Code Git decoration 对齐：filename 走 $git-*；状态点用更亮的 Material 系
-// 以在小尺寸点上保持识别度。
+// left changed-file tree: .diff-file-list container + drag handle + .diff-file-tree (FileTree component) +
+// row/folder/file + status dot + filename git decoration coloring.
+// colors align with VS Code Git decoration: filename uses $git-*; status dots use a brighter Material palette
+// to stay identifiable on small dots.
 
 @use '../../tokens' as *;
 
 .diff-file-list {
-  // width 通过 inline style 由 DiffView 控制；CSS 端兜底最小值，避免 width 丢失时塌缩
+  // width is controlled by DiffView via inline style; CSS provides a fallback minimum to avoid collapse when width is lost
   min-width: 180px;
   flex-shrink: 0;
   border-right: 1px solid $border-default;
   background: $bg-panel;
-  // 垂直自滚；水平显式 hidden 避免被规范自动提成 auto，否则
-  // 和内层 .diff-file-tree 各出一条横向滚动条 (CSS Overflow 规范：当一个轴是 auto
-  // 另一个是 visible 时，visible 会被强制提升为 auto)
+  // vertical auto-scroll; horizontal explicitly hidden to avoid being auto-promoted to auto by the spec, otherwise
+  // this and the inner .diff-file-tree each get a horizontal scrollbar (CSS Overflow spec: when one axis is auto
+  // and the other is visible, visible is forced up to auto)
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
@@ -52,8 +52,8 @@
   gap: $space-4;
 }
 
-// header 右侧搜索按钮 — 默认看着轻，hover/active 切到主色让用户知道当前模式。
-// 单按钮，跟"X 个文件" / "搜索变更内容"标签合占同一行 toolbar
+// search button on the right of the header — looks light by default, hover/active switches to accent color to signal the current mode.
+// single button, sharing the same toolbar row as the "X files" / "search changed content" label
 .diff-file-list-search-btn {
   display: inline-flex;
   align-items: center;
@@ -83,7 +83,7 @@
   }
 }
 
-// 变更范围选择器（文件树头部「<n> 个文件 · 全部变更 / <commit>」可点击下拉）
+// change scope selector (clickable dropdown in the file tree header: "<n> files · all changes / <commit>")
 .diff-scope-select {
   position: relative;
   flex: 1 1 auto;
@@ -100,7 +100,7 @@
   border-radius: $radius-sm;
   color: $text-muted;
   cursor: pointer;
-  // header 整体 uppercase + letterspacing；trigger 内含 commit 主题，需还原为普通可读文本
+  // the header is overall uppercase + letterspacing; the trigger contains the commit subject, which needs restoring to ordinary readable text
   text-transform: none;
   letter-spacing: normal;
 
@@ -123,8 +123,8 @@
     transform: rotate(180deg);
   }
 }
-// 下拉用 fixed 定位（top/left/width 由 JS 按触发器位置计算）+ portal 挂 body，
-// 避免被 .diff-file-list 的 overflow 裁切 / 被右侧 Monaco 盖住。
+// the dropdown uses fixed positioning (top/left/width computed by JS from the trigger position) + portal mounted on body,
+// to avoid being clipped by .diff-file-list's overflow / covered by the right-side Monaco.
 .diff-scope-menu {
   position: fixed;
   z-index: 100;
@@ -139,7 +139,7 @@
   border-radius: $radius-md;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
-// 每个选项：左侧横跨两行高度的图标 + 右侧两行正文（标题行 + 元信息副行，参考 Bitbucket）
+// each option: an icon spanning two rows' height on the left + two body rows on the right (title row + meta subrow, referencing Bitbucket)
 .diff-scope-option {
   display: flex;
   flex-direction: row;
@@ -218,17 +218,17 @@
   margin-left: auto;
 }
 
-// 文件树容器
+// file tree container
 .diff-file-tree {
   flex: 1;
-  overflow: auto; // x + y 都可滚，文件名/层级超出时横向滚动
+  overflow: auto; // both x + y scrollable, horizontal scroll when filename/nesting overflows
   padding: $space-2 0;
 }
 
-// 内层容器：用 inline-block 让自身宽度 = 内容 max-content，再用 min-width:100%
-// 兜底到容器视口宽。结果是：当某行很长时，整个 inner 都被撑宽 → 所有 row 都跟着
-// 撑到同一宽度（因为 row 是 block 元素 width:auto），sticky dots 因此都贴在统一的
-// 滚动右端，scroll 时同步漂移、视口内永远固定在最右。
+// inner container: use inline-block so its own width = content max-content, then min-width:100%
+// falls back to the container viewport width. The result: when a row is very long, the whole inner is widened → all rows
+// stretch to the same width (because rows are block elements with width:auto), so sticky dots all cling to a unified
+// scroll right end, drifting in sync while scrolling and staying pinned to the far right within the viewport.
 .diff-file-tree-inner {
   display: inline-block;
   min-width: 100%;
@@ -260,7 +260,7 @@
   }
 }
 
-// 固定 16px 占位槽：始终占位，iconify 的 svg 晚一帧进 DOM 也不塌缩 → 文件名不再左右抖动。
+// fixed 16px placeholder slot: always occupies space, so even when iconify's svg enters the DOM a frame late it won't collapse → the filename no longer jitters horizontally.
 .tree-icon {
   flex-shrink: 0;
   width: 16px;
@@ -271,9 +271,9 @@
 }
 
 .tree-name {
-  // 不截断；长名直接撑出触发横向滚动
+  // no truncation; long names simply extend and trigger horizontal scroll
   white-space: nowrap;
-  // flex:1 让 name 占满剩余空间，把右侧状态点固定推到右边缘
+  // flex:1 lets name fill the remaining space, pushing the right status dot fixed to the right edge
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -288,9 +288,9 @@
   flex-shrink: 0;
 }
 
-// 待发布草稿 chip：跟 comment chip 同尺寸 / radius，仅配色区分。用 warning
-// 色 (amber) 强调"待办"语义 —— 跟 PR header "提交评审 (N)" 按钮的视觉权重
-// 呼应，让用户在文件树扫一眼就能定位到还有未发草稿的文件
+// pending-draft chip: same size / radius as the comment chip, differing only in color. Uses warning
+// color (amber) to emphasize the "to-do" semantics —— echoing the visual weight of the PR header "submit review (N)" button,
+// so users can locate files with unpublished drafts at a glance in the file tree
 .tree-draft-count {
   background: $color-warning;
   color: $text-on-accent;
@@ -305,7 +305,7 @@
   flex-shrink: 0;
 }
 
-// 合并冲突警示：紧贴状态点左侧的三角叹号，用 warning 色提示该文件合并会冲突。
+// merge conflict warning: a triangle exclamation right next to the left of the status dot, using warning color to indicate this file will conflict on merge.
 .tree-conflict {
   display: inline-flex;
   align-items: center;
@@ -313,14 +313,14 @@
   color: $color-warning;
 }
 
-// 评论 chip + 状态点的右侧容器；横向滚动时固定在视口右边缘，左缘渐变淡出，
-// 遮盖背后滚出来的长文件名。背景跟随 .tree-row 状态 (默认/hover/selected)。
+// right container for the comment chip + status dot; pinned to the viewport's right edge during horizontal scroll, its left edge fades out via gradient,
+// masking the long filename scrolling out behind it. Background follows the .tree-row state (default/hover/selected).
 //
-// 渐变起点用「同色零透明」(rgb(from … / 0)) 而非 transparent：transparent 等价 rgba(0,0,0,0)
-// （透明黑），渐变中段会掺入半透明灰 → 在选中蓝底上呈现一道发灰的「阴影」带。同色零透明则纯按
-// 该底色淡入、无杂色。
-// align-self: stretch 让背景撑满整行高度（行用 align-items:center，默认子项不拉伸 → 背景盒只有
-// 圆点那么高、未撑满整行）；内部仍 align-items:center 居中圆点/chip。
+// the gradient start uses "same-color zero-alpha" (rgb(from … / 0)) rather than transparent: transparent equals rgba(0,0,0,0)
+// (transparent black), so the gradient midsection blends in semi-transparent gray → producing a grayish "shadow" band on the selected blue base. Same-color zero-alpha
+// fades in purely by that base color, with no stray color.
+// align-self: stretch makes the background fill the full row height (the row uses align-items:center, so by default children don't stretch → the background box is only
+// as tall as the dot, not filling the row); inside it still uses align-items:center to center the dot/chip.
 .tree-row-right {
   position: sticky;
   right: 0;
@@ -330,8 +330,8 @@
   gap: $space-3;
   padding: 0 $space-4 0 14px;
   flex-shrink: 0;
-  // 强制顶到行右端：即使 row 是 max-content 导致 flex:1 无可分配空间，
-  // auto margin 仍能保证间距
+  // force it to the row's right end: even when row is max-content leaving flex:1 no space to distribute,
+  // auto margin still guarantees the spacing
   margin-left: auto;
   z-index: 2;
   background: linear-gradient(to right, rgb(from #{$bg-panel} r g b / 0) 0, $bg-panel 14px);
@@ -339,8 +339,8 @@
   .tree-row:hover & {
     background: linear-gradient(to right, rgb(from #{$bg-hover} r g b / 0) 0, $bg-hover 14px);
   }
-  // 选中态行底已是实色高亮，不再铺遮罩渐变 —— 圆点直接落在选中底色上更干净（避免任何叠色 / 边界感）。
-  // 代价：文件名长到触发横向滚动时会从圆点下方穿过、不再被遮住（窄面板 / 深层级才会遇到）。
+  // the selected row base is already a solid highlight, so no mask gradient is laid down —— the dot sitting directly on the selected base is cleaner (avoiding any color blend / edge artifact).
+  // trade-off: when a filename is long enough to trigger horizontal scroll, it passes under the dot and is no longer masked (only hit in narrow panels / deep nesting).
   .tree-row.selected & {
     background: none;
   }
@@ -351,7 +351,7 @@
   color: $text-body;
 }
 
-// folder name 按聚合状态着色（跟 VS Code Git decoration 的折叠规则一致）
+// folder name colored by aggregated status (consistent with VS Code Git decoration's collapse rules)
 .folder-status-added .tree-name {
   color: $git-added;
 }
@@ -363,7 +363,7 @@
   color: $git-deleted;
 }
 
-// VS Code Git decoration 配色：filename 整体按 status 着色
+// VS Code Git decoration coloring: filename colored entirely by status
 .tree-file-added .tree-name,
 .tree-file-renamed .tree-name,
 .tree-file-copied .tree-name {
@@ -378,7 +378,7 @@
   text-decoration: line-through;
 }
 
-// 选中行：保留高亮蓝底，文字用选中态前景（暗色底白、浅色底深字），覆盖 git 状态色以保证对比
+// selected row: keep the highlighted blue base, text uses the selected-state foreground (white on dark base, dark text on light base), overriding the git status color to ensure contrast
 .tree-file.selected .tree-name {
   color: $text-on-selected;
 }
@@ -396,22 +396,22 @@
   transform: rotate(90deg);
 }
 
-// 文件行没 chevron，用相同宽度的不可见占位维持层级对齐
+// file rows have no chevron, using an invisible placeholder of the same width to maintain hierarchy alignment
 .tree-chevron-spacer {
   flex-shrink: 0;
   width: 10px;
   margin-right: -2px;
 }
 
-// 文件改动状态点 (right column)。
-// Material 系亮色：在 8px 小圆点上比 $git-* 装饰色更易辨认
+// file change status dot (right column).
+// Material bright colors: more distinguishable than $git-* decoration colors on an 8px small dot
 .diff-file-status {
   width: 8px;
   height: 8px;
   border-radius: $radius-full;
   flex-shrink: 0;
 
-  // 状态色叠加（markup：`diff-file-status file-<status>`），色值统一走 token
+  // status color overlay (markup: `diff-file-status file-<status>`), color values uniformly go through tokens
   &.file-added {
     background: $file-status-added;
   }

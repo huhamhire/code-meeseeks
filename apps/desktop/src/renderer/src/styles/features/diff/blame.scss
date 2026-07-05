@@ -1,9 +1,9 @@
-// DiffView 的 Bitbucket 风格 blame 列：toolbar 开关 + 左侧 blame 栏（头像/名/sha/日期 4 列 grid）。
-// 见 components/features/pr/tabs/diff/blame/BlameColumn。toolbar 内的尺寸钉死在 layout/main-pane 的 .pr-tabs-right。
+// DiffView's Bitbucket-style blame column: toolbar toggle + left blame bar (avatar/name/sha/date 4-column grid).
+// See components/features/pr/tabs/diff/blame/BlameColumn. Sizing inside the toolbar is pinned in layout/main-pane's .pr-tabs-right.
 
 @use '../../tokens' as *;
 
-// blame 开关：跟 .diff-mode-toggle button 同尺寸（高度由 .pr-tabs-right 内统一 height 钉死）
+// blame toggle: same size as .diff-mode-toggle button (height pinned by the unified height inside .pr-tabs-right)
 .blame-toggle {
   display: inline-flex;
   align-items: center;
@@ -27,8 +27,8 @@
   }
 }
 
-// blame 列：独立 React 组件，做 diff-pane-wrapper 的左侧 flex 子项。
-// 内部 row 用 absolute 子项画，按 Monaco scrollTop 实时同步位置。
+// blame column: standalone React component, acts as the left flex child of diff-pane-wrapper.
+// Inner rows are drawn as absolute children, syncing position in real time to Monaco scrollTop.
 .blame-column {
   flex-shrink: 0;
   background: $bg-panel-alt;
@@ -44,10 +44,10 @@
   height: 100%;
 }
 
-// 4 列 grid 固定布局：头像 | 名 | sha | 日期。
-//   - 区块跨多行时，内容贴顶部（align-content: start）；下方留空给该 commit 的后续行
-//   - 顶部一行的 track 高度 = --blame-lh（Monaco 实际行高），跟第一行代码同 Y、同高
-//   - 行内三个文本 + 头像 align-items: center 共享同一垂直中线，避免错位
+// Fixed 4-column grid layout: avatar | name | sha | date.
+//   - when a block spans multiple lines, content sticks to the top (align-content: start); space below is left for that commit's following lines
+//   - top row's track height = --blame-lh (Monaco's actual line height), same Y and height as the first code line
+//   - the three texts + avatar in a row share the same vertical centerline via align-items: center, avoiding misalignment
 .blame-row {
   position: absolute;
   left: 0;
@@ -71,15 +71,15 @@
     background: $bg-hover;
   }
 
-  // 头像在 row 中也以 lineHeight 为基准居中：grid align-items: center 已经处理，
-  // 这里只统一尺寸 + 不收缩
+  // avatar is also centered in the row on the lineHeight baseline: grid align-items: center already handles it,
+  // here we only unify size + prevent shrinking
   .avatar {
     width: 18px;
     height: 18px;
   }
 }
 
-// 三个文本元素共享 line-height + font-size，baseline 一致
+// the three text elements share line-height + font-size, keeping a consistent baseline
 .blame-row-name,
 .blame-row-sha,
 .blame-row-date {
@@ -105,7 +105,7 @@
   text-align: right;
 }
 
-// PR 改动行色带：左侧 3px 绿条，对齐 Monaco diff 的 "added" 装饰色
+// PR change-line color band: left 3px green bar, aligned with Monaco diff's "added" decoration color
 .blame-row-change {
   position: absolute;
   left: 0;
@@ -117,7 +117,7 @@
   box-sizing: border-box;
 }
 
-// 折叠占位行（"X hidden lines"）：斜纹背景 + 灰底，表示"非真实行 / 无 blame"
+// collapsed placeholder row ("X hidden lines"): diagonal-stripe background + gray base, indicating "not a real line / no blame"
 .blame-row-fold {
   position: absolute;
   left: 0;

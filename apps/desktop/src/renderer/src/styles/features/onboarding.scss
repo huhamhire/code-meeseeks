@@ -1,6 +1,6 @@
 @use '../tokens' as *;
 
-// 首启配置向导：整屏覆盖，居中卡片 + 步骤圆点 + 轮播 slide
+// Onboarding config wizard: full-screen overlay, centered card + step dots + carousel slides
 .onboarding {
   position: absolute;
   inset: 0;
@@ -24,7 +24,7 @@
   overflow: hidden;
 }
 
-// ===== 顶部步骤圆点 =====
+// ===== top step dots =====
 .onboarding-dots {
   display: flex;
   align-items: center;
@@ -42,7 +42,7 @@
   color: $text-muted;
   font-size: $fs-md;
 
-  // 圆点之间的连接线
+  // connecting line between dots
   &:not(:last-child)::after {
     content: '';
     width: 24px;
@@ -84,7 +84,7 @@
   }
 }
 
-// ===== slide 主体 =====
+// ===== slide body =====
 .onboarding-slide {
   padding: $space-8;
   overflow-y: auto;
@@ -113,7 +113,7 @@
   line-height: $lh-loose;
 }
 
-// ===== 欢迎页 =====
+// ===== welcome page =====
 .onboarding-welcome {
   text-align: center;
   padding: $space-6 $space-4;
@@ -137,8 +137,8 @@
 .onboarding-points {
   list-style: none;
   padding: 0;
-  // width:fit-content + margin auto：整组按最宽一条收窄后水平居中，
-  // 条目内部仍左对齐（圆点对齐），视觉上跟标题/介绍一条中轴
+  // width:fit-content + margin auto: the whole group narrows to its widest entry then centers horizontally,
+  // items inside stay left-aligned (dot-aligned), sharing one central axis with the title/intro visually
   width: fit-content;
   max-width: 480px;
   margin: 0 auto $space-8;
@@ -165,14 +165,14 @@
     }
   }
 }
-// 欢迎页底部 nav 内的语言选择：标签 + 定宽下拉，标签与下拉之间留白。位于 nav-left /
-// nav-right（step 0 均为空）之间，靠父级 justify-content:space-between 居中。
+// Language selection in the welcome page's bottom nav: label + fixed-width dropdown, with spacing between label and dropdown. Sits between nav-left /
+// nav-right (both empty at step 0), centered by the parent's justify-content:space-between.
 .onboarding-nav-language {
   display: flex;
   align-items: center;
   gap: $space-4;
 }
-// 语言下拉：收窄固定宽度、左对齐；不被 .settings-input 的 flex:1 撑满（复合选择器提权）
+// Language dropdown: narrow fixed width, left-aligned; not stretched by .settings-input's flex:1 (compound selector for higher specificity)
 .settings-input.onboarding-language-select {
   flex: 0 0 auto;
   width: 160px;
@@ -182,11 +182,11 @@
   justify-content: center;
 }
 
-// ===== 平台步：左右布局 =====
-// 平台选择列表 + 表单的左右两栏布局收敛到 config-picker.scss（.config-pick-grid / -list / -item …），
-// 由 PlatformStep 与设置面板「连接」子模态共用，本文件不再单独维护。
+// ===== platform step: left-right layout =====
+// The two-column left-right layout of platform selection list + form is consolidated into config-picker.scss (.config-pick-grid / -list / -item …),
+// shared by PlatformStep and the settings panel's "Connection" sub-modal; no longer maintained separately in this file.
 
-// ===== 折叠的「缓存目录」高级入口 =====
+// ===== collapsed "cache directory" advanced entry =====
 .onboarding-advanced {
   margin-top: $space-6;
   border-top: 1px solid $border-muted;
@@ -220,8 +220,8 @@
   margin-top: $space-4;
 }
 
-// ===== LLM 步：provider 选择 + 配置 =====
-// provider 品牌图标容器（SVG glyph）
+// ===== LLM step: provider selection + config =====
+// provider brand icon container (SVG glyph)
 .llm-provider-glyph {
   display: inline-flex;
   align-items: center;
@@ -233,22 +233,22 @@
   }
 }
 
-// provider 选择列表（两阶段共用：图标 + 名称 + 箭头/选中）收敛到 config-picker.scss
-// （.config-pick-list / -item / -name / -arrow …），由 LlmStep 与设置面板「LLM」子模态共用。
+// The provider selection list (shared across two stages: icon + name + arrow/selected) is consolidated into config-picker.scss
+// (.config-pick-list / -item / -name / -arrow …), shared by LlmStep and the settings panel's "LLM" sub-modal.
 
-// 阶段一：居中的选择列表
+// Stage one: centered selection list
 .onboarding-provider-pick {
   max-width: 360px;
   margin: 0 auto;
 }
-// 阶段一选择列表：与阶段二网格同高（190px），两步切换不跳动；provider 增多时在内滚动
+// Stage-one selection list: same height as the stage-two grid (190px), so switching between the two steps doesn't jump; scrolls internally as providers grow
 .onboarding-provider-pick .config-pick-list {
   height: 190px;
   overflow-y: auto;
 }
 
-// 阶段二：左列表 + 右配置。固定高度 + 两栏各自滚动，
-// 切换 provider 时模态高度恒定、不抖动，列表后续扩展也不撑高（同设置子模态）。
+// Stage two: list on the left + config on the right. Fixed height + each column scrolls on its own,
+// so the modal height stays constant and doesn't jitter when switching provider, and later list expansion doesn't stretch it either (same as the settings sub-modal).
 .onboarding-llm-grid {
   display: grid;
   grid-template-columns: 220px 1fr;
@@ -256,14 +256,14 @@
   align-items: stretch;
   height: 190px;
 
-  // 左侧列表：从右侧滑入到位（视觉上「收到左边」），并在固定高度内滚动
+  // Left list: slides in from the right into place (visually "collected to the left"), and scrolls within a fixed height
   .config-pick-list {
     min-height: 0;
     overflow-y: auto;
     animation: onboarding-slide-left 0.28s ease both;
   }
 }
-// 右侧配置：略微延迟后渐隐进入；固定高度内滚动，顶部留半行余白与左侧列表协调
+// Right config: fades in after a slight delay; scrolls within a fixed height, leaving half a row of top whitespace to harmonize with the left list
 .onboarding-llm-form {
   min-width: 0;
   min-height: 0;
@@ -293,7 +293,7 @@
   }
 }
 
-// ===== 完成页：成功图案 + 友好文案 =====
+// ===== done page: success graphic + friendly copy =====
 .onboarding-done {
   text-align: center;
   padding: $space-6 $space-4;
@@ -303,7 +303,7 @@
   margin-bottom: $space-5;
   animation: onboarding-pop 0.36s ease both;
 }
-// 对勾描边按路径长度做「书写」动画
+// The checkmark stroke does a "writing" animation based on path length
 .onboarding-check-path {
   stroke-dasharray: 34;
   stroke-dashoffset: 34;
@@ -328,7 +328,7 @@
   }
 }
 
-// ===== 底部导航 =====
+// ===== bottom navigation =====
 .onboarding-nav {
   display: flex;
   align-items: center;
@@ -344,7 +344,7 @@
 }
 
 @media (max-width: 640px) {
-  // .config-pick-grid 的窄屏单列回退在 config-picker.scss；此处仅 LLM 步的 grid
+  // The narrow-screen single-column fallback for .config-pick-grid is in config-picker.scss; here only the LLM step's grid
   .onboarding-llm-grid {
     grid-template-columns: 1fr;
   }

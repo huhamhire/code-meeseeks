@@ -1,5 +1,5 @@
-// settings 域在底部状态栏的 chip：当前连接用户 + LLM 切换 chip / 下拉菜单。
-// 组件见 components/features/settings/statusbar/。基础壳在 layout/statusbar。
+// Chips for the settings domain in the bottom status bar: current connection user + LLM switch chip / dropdown menu.
+// Components in components/features/settings/statusbar/. Base shell in layout/statusbar.
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
@@ -18,13 +18,13 @@
   }
 }
 
-// === LLM 切换 chip + 下拉菜单：自洽组件，统一 llm-chip-* 命名（原 statusbar-llm-* 并入）===
+// === LLM switch chip + dropdown menu: self-contained component, unified llm-chip-* naming (former statusbar-llm-* merged in) ===
 .llm-chip-wrap {
   position: relative;
   display: inline-flex;
 }
-// chip 本体（与 .statusbar-chip 基类组合）；active 态用 VS Code 蓝标签色，
-// 跟 pending status-tag / blame-toggle.active 同色
+// The chip itself (combined with the .statusbar-chip base class); active state uses the VS Code blue tag color,
+// same color as pending status-tag / blame-toggle.active
 .llm-chip {
   cursor: pointer;
 
@@ -33,7 +33,7 @@
     color: $text-on-accent;
   }
 }
-// 切换菜单：chip 正上方弹出
+// Switch menu: pops up directly above the chip
 .llm-chip-menu {
   @include popover;
   bottom: calc(100% + #{$space-2});

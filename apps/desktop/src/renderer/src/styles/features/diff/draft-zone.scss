@@ -1,27 +1,27 @@
-// Monaco 行内草稿 view zone (设计见 ADR-0007)：跟 comment-zone 视觉区分 ——
-// remote 评论是黄底，草稿用蓝底 + "草稿" 标识；posted 状态切回绿底跟远端评论形态一致
+// Monaco inline draft view zone (design see ADR-0007): visually distinct from comment-zone ——
+// remote comments have a yellow base, drafts use a blue base + "draft" marker; posted state switches back to green to match remote comment form
 
 @use '../../tokens' as *;
 
-// **结构**：
-//   .monaco-draft-zone (= dom，monaco 控制 style.height, 不能放视觉样式)
-//     .monaco-draft-zone-inner (= 内容容器，蓝色背景 / padding / border-left 全在这)
+// **Structure**:
+//   .monaco-draft-zone (= dom, monaco controls style.height, no visual styles here)
+//     .monaco-draft-zone-inner (= content container, blue background / padding / border-left all here)
 //
-// monaco 直接给 dom 写 inline style.height = <heightInPx>px，覆盖任何 CSS。如果把
-// 视觉样式（背景、border）放 dom 上，蓝框尺寸 = monaco wrapper 高度 ≠ 内容高度
-// → 出现"蓝框停在 textarea，按钮溢出到下方代码上"。所以 dom 只是 monaco 占位容器，
-// 视觉容器是 inner，用 ResizeObserver 测 inner.offsetHeight 同步回 zoneObj.heightInPx
+// monaco writes inline style.height = <heightInPx>px directly onto the dom, overriding any CSS. If
+// visual styles (background, border) are put on the dom, the blue box size = monaco wrapper height ≠ content height
+// → resulting in "blue box stopping at the textarea, buttons overflowing onto the code below". So the dom is only a monaco placeholder container,
+// the visual container is inner, measured via ResizeObserver on inner.offsetHeight and synced back to zoneObj.heightInPx
 .monaco-draft-zone {
   overflow: visible;
   box-sizing: border-box;
-  // 防御性 z-index：万一 syncHeight 没把 monaco wrapper 撑到内容高度、按钮区溢出 dom
-  // 边界，溢出部分（按钮）在层叠上压过 monaco .view-lines 仍可点击。
-  // monaco 自己给 dom 设 position:absolute，z-index 在 absolute 上直接生效
+  // defensive z-index: in case syncHeight fails to grow the monaco wrapper to content height and the button area overflows the dom
+  // boundary, the overflowing part (buttons) stacks above monaco .view-lines and stays clickable.
+  // monaco sets position:absolute on the dom itself, so z-index takes effect directly on the absolute element
   z-index: 50;
 }
 
 .monaco-draft-zone-inner {
-  // 同样防御 z-index：inner 内部按钮永远在最顶层
+  // same defensive z-index: buttons inside inner are always on the topmost layer
   position: relative;
   z-index: 51;
   background: rgb(var(--rgb-accent) / 0.12); // $color-accent fade
@@ -39,10 +39,10 @@
   line-height: $lh-loose;
   box-sizing: border-box;
 
-  // CSS 兜底：inline style.width 由 DiffView applyInnerLayout 监听 editor 的
-  // onDidLayoutChange 动态设 (= contentLeft + contentWidth，对应代码区右边界)。
-  // CSS max-width:100% 防止 width 没设 / 设错值时仍不超 dom 视口宽。
-  // 注：DiffEditor 关闭了 minimap，所以不留 minimap buffer
+  // CSS fallback: inline style.width is set dynamically by DiffView applyInnerLayout watching the editor's
+  // onDidLayoutChange (= contentLeft + contentWidth, corresponding to the code area's right edge).
+  // CSS max-width:100% prevents exceeding the dom viewport width when width is unset / set wrong.
+  // Note: DiffEditor disables the minimap, so no minimap buffer is reserved
   max-width: 100%;
 }
 
@@ -61,7 +61,7 @@
   flex-direction: column;
   gap: $space-2;
 
-  // posted 状态：整体绿色调，跟远端评论视觉一致
+  // posted state: overall green tone, visually consistent with remote comments
   &.draft-zone-status-posted {
     .draft-zone-tag {
       background: $color-approved;
@@ -76,7 +76,7 @@
   flex-wrap: wrap;
 }
 
-// "草稿" 标识：常驻 chip，让用户一眼区分本地草稿 vs 远端评论
+// "draft" marker: an always-on chip, letting users tell local drafts vs remote comments at a glance
 .draft-zone-tag {
   padding: 1px $space-3;
   border-radius: $radius-sm;
@@ -159,7 +159,7 @@
   background: $color-danger-strong-fade;
 }
 
-// 图标按钮 (垃圾桶等)：方形紧凑，跟文字按钮高度对齐
+// icon buttons (trash can, etc.): compact square, height-aligned with text buttons
 .draft-zone-btn-icon {
   padding: 0;
   width: 22px;
@@ -173,7 +173,7 @@
   }
 }
 
-// edit 模式下的删除按钮：靠右远离保存/取消，视觉上"独立操作"
+// delete button in edit mode: right-aligned away from save/cancel, visually an "independent action"
 .draft-zone-edit-delete {
   margin-left: auto;
 }
@@ -206,7 +206,7 @@
 }
 
 .draft-zone-edit-actions {
-  display: flex; // 必须 block-level flex 才能让 margin-left:auto 推 [🗑] 到右端
+  display: flex; // must be block-level flex so margin-left:auto pushes [🗑] to the right end
   align-items: center;
   gap: $space-3;
 }
@@ -221,9 +221,9 @@
   margin-top: $space-2;
 }
 
-// 单条发布失败的 inline 错误条。视觉权重比"已发布" foot 高一档 — danger 色
-// 描边 + 浅红底，user 一眼能看到；右侧 ✕ 让用户主动 dismiss (不带超时自动消失
-// 避免错过)。比弹 modal 干扰更小 — zone 仍在原位，可改 body 再次"发布"重试
+// inline error bar for a single publish failure. Visual weight one notch above the "published" foot — danger-color
+// outline + light red base, so the user sees it at a glance; the ✕ on the right lets the user dismiss it actively (no timeout auto-dismiss,
+// to avoid missing it). Less intrusive than a modal — the zone stays in place, and the body can be edited to retry "publish"
 .draft-zone-publish-error {
   display: flex;
   align-items: flex-start;
@@ -252,10 +252,10 @@
   }
 }
 
-// 行 hover 出现的 '+' 草稿创建按钮 — Monaco glyph margin 区 (editor 最左、
-// line number 左侧外列；DiffEditor options 启用了 glyphMargin:true 让那一列宽到
-// ~24px 装下 +)。decoration 元素本身 width/height 由 monaco 控制 (glyphMarginWidth
-// × lineHeight)，子 ::before 用 flex 占满 parent + 居中 '+' 字符
+// the '+' draft-creation button appearing on line hover — Monaco glyph margin area (editor's far left,
+// the outer column left of the line number; DiffEditor options enable glyphMargin:true to widen that column to
+// ~24px to fit +). The decoration element's own width/height is controlled by monaco (glyphMarginWidth
+// × lineHeight), the child ::before uses flex to fill the parent + center the '+' character
 .monaco-draft-add-glyph {
   cursor: pointer;
 
@@ -280,7 +280,7 @@
   }
 }
 
-// nav 跳转 reveal 后短暂高亮 (0.8s 脉冲)，help 用户看清落到哪一行
+// brief highlight after nav jump reveal (0.8s pulse), helping the user see which line it landed on
 .monaco-draft-highlight-flash {
   background: rgb(var(--rgb-warning) / 0.25);
   animation: draft-nav-flash 0.8s ease-out;

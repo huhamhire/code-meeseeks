@@ -1,6 +1,6 @@
-// PR 域样式簇入口：@forward 各 partial，App.scss 用 `@use '.../features/pr'` 一行引入。
-// 新增 pr partial 在此登记即可，无需改 App.scss。publish-review 组合通用 .modal，
-// 故 App.scss 中本簇须在 common/modal 之后引入。
+// PR domain style cluster entry: @forward each partial; App.scss imports with a single `@use '.../features/pr'`.
+// Register a new pr partial here — no need to touch App.scss. publish-review composes the shared .modal,
+// so this cluster must be imported after common/modal in App.scss.
 @forward 'statusbar';
 @forward 'reviewer-stack';
 @forward 'header-actions';

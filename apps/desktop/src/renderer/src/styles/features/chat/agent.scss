@@ -1,16 +1,16 @@
-// chat 面板内 Agent（自动评审 / 自然对话）的输出：评审总结卡 + 判定徽标、过程化思考步骤、
-// 自然对话回复气泡、用户输入气泡、空态引导。run 结果与 findings 分别见 chat-run / chat-findings。
+// Agent output inside the chat pane (auto-review / natural conversation): review summary card + verdict badge, procedural thinking steps,
+// natural conversation reply bubbles, user input bubbles, empty-state guidance. run results and findings see chat-run / chat-findings respectively.
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
-// === Agent 自动评审：触发条 + 收尾总结卡 ===
+// === Agent auto-review: trigger bar + closing summary card ===
 .chat-agent-summary {
-  // 横向不再额外内缩（去掉原 $space-6）——与 finding 卡同宽（二者同处 .chat-pane-body 的 $space-6 内边距内）。
+  // No extra horizontal inset (dropped the original $space-6) — same width as finding cards (both sit inside .chat-pane-body's $space-6 padding).
   margin: $space-4 0;
   padding: $space-4 $space-5;
   border: 1px solid $border-muted;
-  // 左侧主题色条：统一用蓝色，与卡片蓝色淡底（$color-accent-bg-fade）成一套（不随判定变色）。
+  // Left theme-color bar: always blue, paired with the card's faint blue background ($color-accent-bg-fade) (does not change with the verdict).
   border-left: 3px solid $color-accent;
   border-radius: $radius-md;
   background: $color-accent-bg-fade;
@@ -23,7 +23,7 @@
   gap: $space-3;
   margin-bottom: $space-3;
 
-  // 标题做成实色 chip（与「代码反馈 / 工作量」等卡片标签同款），右侧判定为描边 chip，成对。
+  // Title rendered as a solid chip (same style as card labels like "code feedback / effort"), paired with the outline chip verdict on the right.
   strong {
     flex-shrink: 0;
     padding: 2px $space-3;
@@ -34,8 +34,8 @@
     font-weight: 600;
   }
 }
-// 判定徽标：描边色 chip（边框 + 文字同色，随判定变色）。度量/描边走
-// chat-chip + chat-chip-tight + chat-chip-md + chat-chip-outline，这里只留布局 + 判定色。
+// Verdict badge: outline-color chip (border + text same color, changes with the verdict). Metrics/outline go through
+// chat-chip + chat-chip-tight + chat-chip-md + chat-chip-outline; this keeps only layout + verdict color.
 .chat-agent-verdict {
   flex-shrink: 0;
 
@@ -51,20 +51,20 @@
 }
 .chat-agent-summary-text {
   margin: 0 0 $space-3;
-  // 与 finding 卡正文统一字号 / 行高（此前 $fs-md + 默认行高显得比其它卡片更窄）。
+  // Unified font size / line height with finding card body text (previously $fs-md + default line height looked narrower than other cards).
   font-size: $fs-lg;
   line-height: $lh-normal;
   color: $text-body;
 }
-// 评审总结 / 对话回复内的 markdown 章节标题（## 摘要 等）压到不超过卡片标题（评审总结）字号，
-// 避免章节标题比卡片标题还大、层级倒置。组合类选择器提升特异性以盖过 markdown.scss 的默认 h 字号。
+// Markdown section headings inside review summary / conversation reply (## Summary, etc.) capped to not exceed the card title (review summary) font size,
+// avoiding section headings larger than the card title and an inverted hierarchy. The combined-class selector raises specificity to override markdown.scss's default h font size.
 .markdown.chat-agent-summary-text,
 .markdown.chat-agent-reply-body {
   h1,
   h2,
   h3,
   h4 {
-    // 与正文同字号（靠加粗区分层级），不小于正文、也不放大成 markdown 默认大标题。
+    // Same font size as body text (hierarchy distinguished by bold), not smaller than body text nor enlarged to markdown's default big headings.
     font-size: $fs-lg;
     margin: $space-3 0 $space-1;
   }
@@ -72,8 +72,8 @@
     margin-top: 0;
   }
 }
-// 评审总结的 ## 小节之间用分割线隔开（首节不加，避免与卡片头部叠线），对应「概述 / 发现 / 建议」三段、
-// 层次清晰。仅评审总结（固定三段骨架）应用，对话回复（自由排版）不加。
+// Divider lines between the review summary's ## sections (not on the first section, to avoid stacking a line onto the card header), matching the "overview / findings / suggestions" three sections,
+// clear hierarchy. Applied only to the review summary (fixed three-section skeleton); conversation replies (free layout) get none.
 .markdown.chat-agent-summary-text {
   h2 {
     margin-top: $space-4;
@@ -86,18 +86,18 @@
     border-top: none;
   }
 }
-// 建议理由：markdown 渲染但保持次要灰（覆盖 .markdown 默认正文色）。
+// Suggestion rationale: markdown-rendered but kept secondary gray (overrides .markdown's default body color).
 .chat-agent-summary-reason {
   font-size: $fs-sm;
   color: $text-muted;
 }
 
-// 用户输入气泡：自然语言「对话即委派」的输入回显，右对齐成对话气泡。
-// 注意类名避开既有 .chat-user-msg（/ask 提问行，带左竖条 + 淡蓝底），否则会叠到气泡外形成第二层底色。
+// User input bubble: echo of the natural-language "conversation-as-delegation" input, right-aligned as a conversation bubble.
+// Note the class name avoids the existing .chat-user-msg (/ask question row, with left bar + faint blue background), otherwise it would stack outside the bubble forming a second background layer.
 .chat-user-row {
   margin: $space-3 $space-6;
   display: flex;
-  // 纵向堆叠并右对齐：气泡在上，引用上下文（若有）折叠块在其下方。
+  // Stack vertically and right-align: bubble on top, quoted context (if any) collapse block below it.
   flex-direction: column;
   align-items: flex-end;
   gap: $space-2;
@@ -113,7 +113,7 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
-// 提问气泡下方的引用上下文（Diff 选区代码）：折叠块，默认收起，轻量底色区别于气泡。
+// Quoted context below the question bubble (Diff selection code): collapse block, collapsed by default, light background to distinguish from the bubble.
 .chat-user-ref {
   max-width: 85%;
   padding: $space-2 $space-3;
@@ -128,34 +128,34 @@
     user-select: none;
     color: $text-muted;
   }
-  // 展开后标题与下方代码围栏留点距离
+  // Leave some distance between the title and the code fence below once expanded
   &[open] > summary {
     margin-bottom: $space-2;
   }
 }
 
-// 过程化跟踪（类 Claude Code）：思考步骤按时间穿插进时间线。两行——带 bullet 标记的「已思考 xx s」
-// 首行 + 另起的步骤结果次行。无底色 / 无边框（思考态不加蓝色背景）；实时「思考中」首行以 spinner 充当
-// 进行中的 bullet，计时紧贴提示之后。
+// Procedural tracking (Claude Code style): thinking steps interleaved into the timeline by time. Two rows — the "thought xx s"
+// first row with a bullet marker + a separate step-result second row. No background / no border (thinking state adds no blue background); the live "thinking" first row uses a spinner as
+// the in-progress bullet, with the timer right after the prompt.
 .chat-agent-step {
-  margin: $space-2 $space-6 $space-2 $space-1; // 左缩进收到最小，让 bullet 视觉尽量靠前
+  margin: $space-2 $space-6 $space-2 $space-1; // Left indent kept to a minimum so the bullet sits visually as far forward as possible
   font-size: $fs-sm;
 }
-// 首行：bullet / spinner 标记 + 「已思考 / 思考中 xx s」提示，计时紧贴文本（不撑开到行尾）。
-// bullet 占固定列宽、与文案间留 gap 间距；正文按「列宽 + gap」缩进，保证首行文案与正文左对齐。
+// First row: bullet / spinner marker + "thought / thinking xx s" prompt, timer right against the text (not pushed to the line end).
+// The bullet takes a fixed column width, with gap spacing to the text; body text indents by "column width + gap", keeping first-row text left-aligned with body text.
 .chat-agent-step-head {
   display: flex;
   align-items: center;
-  gap: $space-3; // bullet 与文案之间的留白
+  gap: $space-3; // Whitespace between the bullet and the text
   color: $text-muted;
 }
 .chat-agent-step-bullet {
-  flex: 0 0 $space-3; // 固定 bullet 列宽，文本对齐的基准
+  flex: 0 0 $space-3; // Fixed bullet column width, the baseline for text alignment
   color: $color-info;
-  font-size: $fs-md; // 略大，标记更醒目
+  font-size: $fs-md; // Slightly larger, makes the marker more prominent
   line-height: 1;
 }
-// 步骤行内的本步 token 用量（不累计）：等宽数字、顶到行尾，与「已思考 xx s」同一行右侧轻量呈现。
+// Per-step token usage within the step row (not cumulative): tabular numerals, pushed to the line end, lightly presented on the right of the same row as "thought xx s".
 .chat-agent-step-tokens {
   margin-left: auto;
   flex-shrink: 0;
@@ -163,7 +163,7 @@
   font-variant-numeric: tabular-nums;
   font-size: $fs-xs;
 }
-// AutoPilot 触发标记：评审首步行内的机器人图标（强调色），表「这次评审由 AutoPilot 触发」。
+// AutoPilot trigger marker: robot icon (accent color) within the review's first step row, indicating "this review was triggered by AutoPilot".
 .chat-agent-step-autopilot {
   display: inline-flex;
   align-items: center;
@@ -174,7 +174,7 @@
     display: block;
   }
 }
-// 次行：步骤结果（思考内容 / 判读结论），缩进到首行文案的左缘（= bullet 列宽 + gap）对齐。
+// Second row: step result (thinking content / interpreted conclusion), indented to align with the left edge of the first-row text (= bullet column width + gap).
 .chat-agent-step-body {
   margin-top: $space-1;
   padding-left: $space-3 + $space-3;
@@ -186,7 +186,7 @@
   }
 }
 
-// Agent 自然对话回复：左对齐、带 Agent 图标的轻量包装，区别于「评审总结」卡片（无判定 / 无标题）。
+// Agent natural conversation reply: left-aligned, lightweight wrapper with an Agent icon, distinct from the "review summary" card (no verdict / no title).
 .chat-agent-reply {
   margin: $space-3 $space-6;
   display: flex;
@@ -208,7 +208,7 @@
   min-width: 0;
 }
 
-// === 空态 ===
+// === Empty state ===
 .chat-empty {
   display: flex;
   flex-direction: column;
