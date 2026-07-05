@@ -221,15 +221,20 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          # Deep-link to this version on the website changelog. The anchor is stable and date-independent:
+          # sync-docs.mjs injects `{#v<version, dots→hyphens>}`; build the same slug here from the tag.
+          CHANGELOG_URL="https://huhamhire.github.io/code-meeseeks/changelog#v$(echo "$VERSION" | tr '.' '-')"
           # Extract the body between `## [VERSION] ...` and the next `## [` (index==1 does a literal prefix match, avoiding regex metacharacters)
           awk -v ver="## [$VERSION]" 'index($0,ver)==1{f=1;next} f&&/^## \[/{exit} f{print}' CHANGELOG.md > changelog-section.md
           if [ -s changelog-section.md ]; then
             awk 'FNR==NR{a[++n]=$0;next} /%%CHANGELOG_SECTION%%/{for(i=1;i<=n;i++)print a[i];next} {print}' \
-              changelog-section.md .github/RELEASE_NOTES.md > RELEASE_BODY.md
+              changelog-section.md .github/RELEASE_NOTES.md > RELEASE_BODY.tmp
           else
             echo "::warning::CHANGELOG.md has no [$VERSION] section, Release body falls back to the original RELEASE_NOTES.md"
-            sed 's/%%CHANGELOG_SECTION%%//' .github/RELEASE_NOTES.md > RELEASE_BODY.md
+            sed 's/%%CHANGELOG_SECTION%%//' .github/RELEASE_NOTES.md > RELEASE_BODY.tmp
           fi
+          # Fill the version deep-link (use | as the sed delimiter — the URL contains slashes)
+          sed "s|%%CHANGELOG_URL%%|${CHANGELOG_URL}|" RELEASE_BODY.tmp > RELEASE_BODY.md
 
       - name: Upload to Release (single point)
         uses: softprops/action-gh-release@v2

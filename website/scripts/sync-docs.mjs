@@ -65,6 +65,19 @@ function rewriteLinks(md, repoDir) {
   return md.replace(/\]\(([^)]+)\)/g, (_m, target) => `](${rewriteTarget(target, repoDir)})`)
 }
 
+// Give changelog version headings a stable, date-independent anchor so release
+// notes can deep-link to a version: `## [0.10.0] - 2026-07-05` gains a trailing
+// `{#v0-10-0}` (VitePress custom-anchor syntax). GitHub's CHANGELOG stays clean —
+// the anchor lives only in the synced site copy. release.yml builds the same slug
+// from the tag (`v` + version, dots → hyphens). `## [Unreleased]` (non-numeric) is
+// left untouched.
+function addVersionAnchors(md) {
+  return md.replace(
+    /^(## \[)(\d[^\]]*)(\][^\n]*)$/gm,
+    (_line, open, version, rest) => `${open}${version}${rest} {#v${version.replace(/\./g, '-')}}`,
+  )
+}
+
 // Drop the language-switcher line (and a single adjacent blank line so we don't
 // leave a stray gap under the H1).
 function stripSwitcher(md) {
@@ -94,11 +107,12 @@ async function syncLocale({ src, repoDir, dest }) {
   console.log(`[sync-docs] copied ${count} guide file(s) → ${path.relative(CWD, dest)}/`)
 }
 
-// Sync one standalone file (e.g. CHANGELOG): strip the switcher, rewrite escaping
-// links, write to the destination page (creating the parent dir if needed).
+// Sync one standalone file (the CHANGELOGs): strip the switcher, rewrite escaping
+// links, add stable version anchors, write to the destination page (creating the
+// parent dir if needed).
 async function syncSingle({ src, repoDir, dest }) {
   const raw = await readFile(src, 'utf8')
-  const md = rewriteLinks(stripSwitcher(raw), repoDir)
+  const md = addVersionAnchors(rewriteLinks(stripSwitcher(raw), repoDir))
   await mkdir(path.dirname(dest), { recursive: true })
   await writeFile(dest, md, 'utf8')
   console.log(`[sync-docs] copied ${path.basename(src)} → ${path.relative(CWD, dest)}`)

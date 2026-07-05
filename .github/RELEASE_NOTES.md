@@ -5,7 +5,7 @@
 
 %%CHANGELOG_SECTION%%
 
-> Full changelog — every version, in English and 简体中文: <https://huhamhire.github.io/code-meeseeks/changelog>
+> 📖 This version on the website changelog (English · 简体中文): %%CHANGELOG_URL%%
 
 ## Installation
 
