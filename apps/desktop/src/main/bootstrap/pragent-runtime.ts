@@ -6,16 +6,19 @@ import { app } from 'electron';
 import type { Logger } from 'pino';
 
 /**
- * pr-agent 运行时：解析嵌入式解释器路径 + kick-off 探测（构造即开跑、不 await），结果异步回填。探测**不放
- * 在建窗关键路径**——它走 spawn 探测（auto 回退 local-cli 最坏 5s），await 会把首帧推迟数秒；改 kick-off
- * 与 whenReady + 渲染层加载并发跑。bridge 由探测异步回填，故以 class 持有可变态。
- * - probe：app:prAgentStatus 据此 await 拿最终状态（boot 时序通常已完成）。
- * - getBridge()：pragent run 入口读，未就绪时为 null → 走「未就绪」提示。
+ * pr-agent runtime: resolves the embedded interpreter path + kicks off the probe (starts on
+ * construction, not awaited), result backfilled asynchronously. The probe is **kept off the
+ * window-creation critical path**—it runs a spawn probe (auto fallback to local-cli, worst case 5s),
+ * and awaiting it would delay the first paint by seconds; instead the kick-off runs concurrently with
+ * whenReady + renderer load. The bridge is backfilled asynchronously by the probe, so a class holds
+ * the mutable state.
+ * - probe: app:prAgentStatus awaits this for the final status (usually already done by boot time).
+ * - getBridge(): read at the pragent run entry, null when not ready → falls back to a "not ready" prompt.
  */
 export class PrAgentRuntime {
-  /** 嵌入式解释器绝对路径（探测层据此判 embedded 是否可用，文件不存在则回退 local-cli）。 */
+  /** Absolute path to the embedded interpreter (the probe layer uses it to judge embedded availability; falls back to local-cli if the file is missing). */
   readonly embeddedPythonPath: string;
-  /** 探测 promise（构造逻辑保证恒 resolve、不 reject）。 */
+  /** Probe promise (construction logic guarantees it always resolves, never rejects). */
   readonly probe: Promise<PrAgentStatus>;
   private bridge: PrAgentBridge | null = null;
 
@@ -27,16 +30,16 @@ export class PrAgentRuntime {
     this.probe = this.kickoffProbe();
   }
 
-  /** 探测完成前为 null。 */
+  /** null until the probe completes. */
   getBridge(): PrAgentBridge | null {
     return this.bridge;
   }
 
   /**
-   * 嵌入式 pr-agent 运行时的解释器绝对路径。
-   * - dev：`apps/desktop/vendor/pragent/...`（app.getAppPath() = apps/desktop）
-   * - 打包：`<resources>/pragent/...`（electron-builder extraResources）
-   * - `MEEBOX_PRAGENT_PYTHON` env 覆盖兜底
+   * Absolute path to the interpreter of the embedded pr-agent runtime.
+   * - dev: `apps/desktop/vendor/pragent/...` (app.getAppPath() = apps/desktop)
+   * - packaged: `<resources>/pragent/...` (electron-builder extraResources)
+   * - `MEEBOX_PRAGENT_PYTHON` env override fallback
    */
   private static resolveEmbeddedPython(): string {
     const override = process.env.MEEBOX_PRAGENT_PYTHON;

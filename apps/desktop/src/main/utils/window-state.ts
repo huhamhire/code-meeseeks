@@ -3,32 +3,32 @@ import path from 'node:path';
 import type { StateStore } from '@meebox/state-store';
 
 /**
- * 主窗口的本地状态（持久化在 state store），让下次启动沿用上次的窗口大小。
- * 只存尺寸 + 最大化态，不存 x/y 位置 —— 多显示器/分辨率变化时按坐标恢复易把窗口摆到屏幕外，
- * 尺寸恢复无此风险，也契合「记住窗口大小」的诉求（建窗时按当前显示器工作区居中，见 window-manager）。
+ * Local state of the main window (persisted in the state store), so the next launch reuses the previous window size.
+ * Stores only size + maximized state, not x/y position — with multiple displays / resolution changes, restoring by coordinates easily places the window off-screen,
+ * whereas size restoration has no such risk and matches the "remember window size" intent (on window creation, centered within the current display's work area, see window-manager).
  */
 export interface WindowState {
   width?: number;
   height?: number;
-  /** 上次关闭时是否最大化；是则下次启动以正常尺寸建窗后再 maximize。 */
+  /** Whether it was maximized at last close; if so, the next launch creates the window at normal size then maximizes. */
   maximized?: boolean;
 }
 
 const KEY = 'window/state';
 
-/** 读取窗口状态；无文件 / 读取失败由调用方兜底为空。 */
+/** Read the window state; on no file / read failure the caller falls back to empty. */
 export async function readWindowState(store: StateStore): Promise<WindowState> {
   return (await store.read<WindowState>(KEY)) ?? {};
 }
 
-/** 写回窗口状态（in-session 防抖回写走 store，并发安全 + 原子）。 */
+/** Write the window state back (in-session debounced writeback goes through the store, concurrency-safe + atomic). */
 export async function writeWindowState(store: StateStore, state: WindowState): Promise<void> {
   await store.write<WindowState>(KEY, state);
 }
 
 /**
- * 关窗同步落盘：`close` 事件后进程即退出（Windows/Linux 关最后一个窗口即 quit），异步写来不及 flush
- * → 尺寸丢失。故关窗走同步写兜底。路径与 JsonFileStateStore 的 key→path 映射一致（`<stateDir>/window/state.json`）。
+ * Synchronous write to disk on window close: after the `close` event the process exits immediately (Windows/Linux quit on closing the last window), an async write cannot flush in time
+ * → size lost. So window close uses a synchronous write as fallback. The path matches JsonFileStateStore's key→path mapping (`<stateDir>/window/state.json`).
  */
 export function writeWindowStateSync(stateDir: string, state: WindowState): void {
   const file = path.join(stateDir, `${KEY}.json`);

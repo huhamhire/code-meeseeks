@@ -4,7 +4,7 @@ import type { ConnectionSummary } from '@meebox/ipc';
 import type { AppInfo } from '@meebox/shared';
 import type { BuiltAdapter } from '../adapters.js';
 
-/** 应用 / 运行时版本信息（app:info）。纯数据组装，不依赖 controller 上下文。 */
+/** App / runtime version info (app:info). Pure data assembly, no controller context needed. */
 export function buildAppInfo(bootstrap: BootstrapResult): AppInfo {
   return {
     appVersion: app.getVersion(),
@@ -17,12 +17,12 @@ export function buildAppInfo(bootstrap: BootstrapResult): AppInfo {
   };
 }
 
-/** 当前活动连接的状态摘要（app:connections）。 */
+/** Status summary of the currently active connection (app:connections). */
 export function buildConnectionSummaries(
   bootstrap: BootstrapResult,
   adapters: readonly BuiltAdapter[],
 ): ConnectionSummary[] {
-  // 单活动连接模型：状态栏只展示当前活动连接的启用状态（与 poller 只轮询活动连接一致）。
+  // Single-active-connection model: the status bar only shows the enabled state of the current active connection (consistent with poller only polling the active connection).
   const activeId = bootstrap.config.active_connection_id;
   return adapters
     .filter(({ connectionId }) => connectionId === activeId)

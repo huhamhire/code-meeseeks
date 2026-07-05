@@ -13,15 +13,16 @@ import { toPrListItem } from '../views.js';
 import { NO_EVENT, seg, type Route, type RouteHandler } from './shared.js';
 
 /**
- * PR 领域端点：列表 / 详情 / diff / 动态 / 提交 / 评审人（浏览），刷新（refresh）与分类词表（categories），
- * 以及评审写动作（approve / needswork / comment，真实远端写，复用 GUI 同源 controller）。
- * 仍**不**暴露 merge（合并）。写边界见 docs/arch/04-integration/01-service-api.md。
+ * PR domain endpoints: list / detail / diff / activity / commits / reviewers (browsing), refresh and
+ * category vocabulary (categories), plus review write actions (approve / needswork / comment, real remote
+ * writes, reusing the GUI's same-source controller). Still does **not** expose merge. Write boundary see
+ * docs/arch/04-integration/01-service-api.md.
  */
 
-/** 列表分页默认页大小（`limit` 缺省 / 非法 / ≤0 时取此值）。 */
+/** List pagination default page size (used when `limit` is missing / invalid / ≤0). */
 const DEFAULT_LIMIT = 100;
 
-/** 当前启用平台下可用的分类标签：`categories`（平台发现分类）+ `statuses`（状态 / 合并态筛选）。 */
+/** Category labels available under the currently active platform: `categories` (platform discovery filters) + `statuses` (status / merge-state filters). */
 const categories: RouteHandler = () => {
   const ctx = getContext();
   const activeId = ctx.bootstrap.config.active_connection_id;
@@ -40,16 +41,18 @@ const categories: RouteHandler = () => {
 };
 
 /**
- * 触发一次立即轮询刷新（等价 GUI 的手动刷新 / 窗口聚焦刷新）：拉取所有连接的最新 PR、落本地，
- * 返回本轮计数汇总（fetched / changed / added / removed / errors）。复用 GUI 同源 poller.tick
- * （`prs:refresh`）。无远端写副作用（纯读远端 + 落本地），列为安全的开放动作。
+ * Trigger an immediate polling refresh (equivalent to the GUI's manual refresh / window-focus refresh):
+ * fetch the latest PRs across all connections, persist locally, and return this round's count summary
+ * (fetched / changed / added / removed / errors). Reuses the GUI's same-source poller.tick
+ * (`prs:refresh`). No remote write side effects (pure remote read + local persist), listed as a safe open action.
  */
 const refresh: RouteHandler = () => prCtl.refreshPrs(NO_EVENT, undefined);
 
 /**
- * PR 列表：`category`（一级发现分类）+ `status`（二级状态 / 合并态）过滤 + `q` 检索 +
- * `skip`/`limit` 分页（默认 limit 100）。过滤语义复用 @meebox/shared 的纯谓词（与渲染层侧栏同源）；
- * 返回**精简列表投影**（{@link toPrListItem}，去 description 明细、人员仅 slug），此处仅解析参数 + 委派。
+ * PR list: `category` (primary discovery filter) + `status` (secondary status / merge-state) filtering + `q`
+ * search + `skip`/`limit` pagination (default limit 100). Filter semantics reuse @meebox/shared's pure
+ * predicates (same source as the renderer sidebar); returns a **compact list projection** ({@link toPrListItem},
+ * drops description detail, people as slug only). Here only parses params + delegates.
  */
 const listPrs: RouteHandler = async ({ query }) => {
   const all = await prCtl.listPrs(NO_EVENT, undefined);
@@ -69,7 +72,7 @@ const showPr: RouteHandler = ({ params }) => getContext().pr.findPrOrThrow(param
 const reviewers: RouteHandler = async ({ params }) =>
   (await getContext().pr.findPrOrThrow(params.id)).reviewers;
 
-/** 无 path → 变更文件列表；带 path → 取该文件某一侧（默认 head）内容。 */
+/** No path → changed file list; with path → get that file's content on one side (default head). */
 const diff: RouteHandler = ({ params, query }) => {
   const path = query.get('path');
   if (path) {
@@ -84,15 +87,15 @@ const activity: RouteHandler = ({ params }) =>
 
 const commits: RouteHandler = ({ params }) => prCtl.listCommits(NO_EVENT, { localId: params.id });
 
-/** 评审决断「通过」：先写远端评审状态、再落本地（复用 GUI 同源 setPrStatus）。 */
+/** Review verdict "approve": write the remote review status first, then persist locally (reuses the GUI's same-source setPrStatus). */
 const approve: RouteHandler = ({ params }) =>
   prCtl.setPrStatus(NO_EVENT, { localId: params.id, status: 'approved' });
 
-/** 评审决断「需修改」：先写远端评审状态、再落本地。 */
+/** Review verdict "needs work": write the remote review status first, then persist locally. */
 const needswork: RouteHandler = ({ params }) =>
   prCtl.setPrStatus(NO_EVENT, { localId: params.id, status: 'needs_work' });
 
-/** 发一条顶层（不锚文件）评论到远端 PR。body.body 为评论正文，空则 400。 */
+/** Post a top-level (not file-anchored) comment to the remote PR. body.body is the comment text; empty → 400. */
 const comment: RouteHandler = ({ params, body }) => {
   const b = (body ?? {}) as { body?: string };
   if (!b.body?.trim()) {

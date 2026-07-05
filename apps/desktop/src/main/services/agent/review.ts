@@ -14,23 +14,23 @@ import type { StateStore } from '@meebox/state-store';
 import { buildStepLabels, buildSummarySections, mapTerminationReason } from './labels.js';
 
 /**
- * 把纯逻辑的 `runReviewMicroflow` 接到主进程能力上（见 docs/arch/02-agent/01-agent.md
- * 「AutoPilot」有界微流程）：
- * - runTool：经既有 pr-agent 运行队列跑 describe/review/ask，取产物文本回喂；
- * - chat：经嵌入式运行时的独立 LLM 通道做受限判断 / 总结；
- * - 持久化 + 步骤流式：startAgentSession / appendAgentStep / updateAgentSession + onStep 广播。
+ * Wires the pure-logic `runReviewMicroflow` onto main-process capabilities (see
+ * docs/arch/02-agent/01-agent.md "AutoPilot" bounded micro-flow):
+ * - runTool: run describe/review/ask via the existing pr-agent run queue, take the artifact text and feed it back;
+ * - chat: make constrained judgments / summaries via the embedded runtime's independent LLM channel;
+ * - persistence + step streaming: startAgentSession / appendAgentStep / updateAgentSession + onStep broadcast.
  */
 
 const STDOUT_LOG_SEP = '\n\n---\n[pr-agent stdout log]\n';
 
-/** 取一次 run 的「LLM 真实产出」（剥掉 ipc 拼在后面的 pr-agent stdout 日志段）。 */
+/** Take a run's "real LLM output" (strip the pr-agent stdout log segment ipc appended at the end). */
 function reviewRunText(run: ReviewRun): string {
   return (run.stdout ?? '').split(STDOUT_LOG_SEP)[0]?.trim() ?? '';
 }
 
 export interface ReviewDeps {
   stateStore: StateStore;
-  /** 入队一个 pr-agent run，resolve 完成的 ReviewRun（与用户手动 run 共用队列）。复评 /ask 携引用上下文 + 前向链。 */
+  /** Enqueue a pr-agent run, resolving the completed ReviewRun (shares the queue with user manual runs). Re-review /ask carries reference context + forward chain. */
   enqueueRun: (
     pr: StoredPullRequest,
     tool: ReviewRunTool,
@@ -38,48 +38,49 @@ export interface ReviewDeps {
     referencedContext?: string,
     referencedFinding?: ReviewRun['referencedFinding'],
   ) => Promise<ReviewRun>;
-  /** 复评裁决 replace/drop → 关闭被取代的原 review finding（写 FindingClosure + 广播）。缺省 = 不关。 */
+  /** Re-review verdict replace/drop → close the superseded original review finding (write FindingClosure + broadcast). Default = don't close. */
   closeFinding?: (
     pr: StoredPullRequest,
     call: { runId: string; findingId: string; byAskRunId: string; verdict: AskVerdict },
   ) => Promise<void>;
-  /** 经独立 LLM 通道做一次受限对话（判严重性 / 出总结）。 */
+  /** Run one constrained conversation via the independent LLM channel (judge severity / produce summary). */
   chat: (input: { system: string; user: string }) => Promise<{ text: string; usage?: TokenUsage }>;
   agentContext: AgentContext;
-  /** 命中规则的已拼接正文（多条经 combineRuleInstructions 拼成）；无命中传空 / null。 */
+  /** Concatenated body of matched rules (multiple joined via combineRuleInstructions); pass empty / null when no match. */
   matchedRuleInstructions?: string | null;
   language: string;
-  /** 工具目录（含修改红线标注）；注入编排器系统上下文。 */
+  /** Tool catalog (with modification red-line annotations); injected into the orchestrator's system context. */
   toolCatalog?: ToolCatalogEntry[];
   maxFollowupAsks: number;
   summaryMaxChars: number;
-  /** 评审执行计划（步骤序列）；省略 / 非法时微流程回落默认全集。仅 AutoPilot 按规则注入，手动评审省略。 */
+  /** Review execution plan (step sequence); when omitted / invalid the micro-flow falls back to the default full set. Injected by rule only for AutoPilot, omitted for manual review. */
   plan?: ReviewPlan;
-  /** 步骤流式回调（广播给渲染层）。 */
+  /** Step streaming callback (broadcast to the renderer). */
   onStep?: (sessionId: string, step: AgentStep) => void;
-  /** 用户停止：透传给微流程，思考 / 执行任意阶段都能立即中止（停止按钮 → agent:stop）。 */
+  /** User stop: passed through to the micro-flow, can abort immediately at any stage of thinking / execution (stop button → agent:stop). */
   signal?: AbortSignal;
-  /** 是否 AutoPilot 后台派发：标到本次评审的**首步**上，UI 据此在步骤行打机器人 chip。 */
+  /** Whether this is an AutoPilot background dispatch: tagged onto this review's **first step**, so the UI marks a robot chip on the step row. */
   autopilot?: boolean;
 }
 
 /**
- * 对一个 PR 跑评审微流程并落盘会话。返回收尾后的 AgentSession（成功 done / 失败 failed）。
- * 微流程内部工具失败会抛错，这里兜成 failed 会话而非向上抛（背景自动化不该崩主流程）。
+ * Run the review micro-flow on a PR and persist the session. Returns the finished AgentSession (done on
+ * success / failed on failure). Tool failures inside the micro-flow throw; here they are caught into a
+ * failed session rather than re-thrown (background automation shouldn't crash the main flow).
  */
 export async function runReview(
   pr: StoredPullRequest,
   deps: ReviewDeps,
   now: () => Date = () => new Date(),
 ): Promise<AgentSession> {
-  // 步数上限按微流程模板推导：describe + review + ≤N 追问 + 总结（+判定余量）。
+  // The step cap is derived from the micro-flow template: describe + review + ≤N follow-up asks + summary (+ judgment margin).
   const session = await startAgentSession(
     deps.stateStore,
     { prLocalId: pr.localId, maxSteps: 3 + deps.maxFollowupAsks + 1 },
     now,
   );
 
-  // AutoPilot 触发时，机器人标记只打在本次评审的**首步**上（首步即「生成 PR 描述与审查发现」）。
+  // On AutoPilot trigger, the robot mark is placed only on this review's **first step** (the first step being "generate PR description and review findings").
   let firstStep = true;
   try {
     const result = await runReviewMicroflow(
@@ -95,7 +96,7 @@ export async function runReview(
           if (run.status !== 'succeeded') {
             throw new Error(`pr-agent ${tool} 未成功：${run.errorMessage ?? run.status}`);
           }
-          // 回带 runId / findings / askVerdict：供 judge 按 id 点名 finding、asks 复评关联与自动关闭。
+          // Carry back runId / findings / askVerdict: lets the judge name findings by id, and links asks re-review with auto-close.
           return {
             text: reviewRunText(run),
             usage: run.tokenUsage,
@@ -137,7 +138,7 @@ export async function runReview(
       })) ?? session
     );
   } catch (err) {
-    // 用户停止（abort）→ 干净的 paused 收尾，不当失败报错；其余异常仍记为 failed。
+    // User stop (abort) → clean paused finish, not reported as a failure; other exceptions are still recorded as failed.
     const aborted = deps.signal?.aborted || (err instanceof Error && err.message === 'aborted');
     return (
       (await updateAgentSession(deps.stateStore, pr.localId, {

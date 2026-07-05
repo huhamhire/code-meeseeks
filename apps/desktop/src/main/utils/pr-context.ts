@@ -6,26 +6,29 @@ interface BuildPrContextOpts {
   pr: StoredPullRequest;
   adapter: PlatformAdapter;
   logger?: Logger;
-  /** 取最近 N 条 comment (top-level + 嵌套 replies 合计)，默认 20 */
+  /** Take the most recent N comments (top-level + nested replies combined), default 20 */
   maxComments?: number;
-  /** 每条 comment body 截到 N 字符，默认 300 */
+  /** Truncate each comment body to N characters, default 300 */
   maxCommentLen?: number;
 }
 
 /**
- * 把 PR 自身的非 diff 维度信息拼成一段 markdown，注给 pr-agent 作 EXTRA_INSTRUCTIONS。
+ * Assemble the PR's own non-diff information into a markdown block, injected into pr-agent as
+ * EXTRA_INSTRUCTIONS.
  *
- * 包含：
- * - 标题
- * - 描述（PR.description，作者写的；为空时跳过 —— 这正是 /describe 要生成的内容）
- * - 已有评论（按 top-level 时间倒序取最多 N 条 + 嵌套 replies）
+ * Includes:
+ * - Title
+ * - Description (PR.description, written by the author; skipped when empty — this is exactly what
+ *   /describe is meant to generate)
+ * - Existing comments (up to N, top-level in reverse chronological order + nested replies)
  *
- * pr-agent local provider 自己不会去 Bitbucket 拉这些信息（local provider 只看 worktree
- * 的 git diff），所以必须我们这边主动提供。这段会跟 rules.instructions 拼接，让
- * /describe / /review 都能感知背景。
+ * The pr-agent local provider won't fetch this information from Bitbucket itself (the local
+ * provider only looks at the worktree's git diff), so we must provide it proactively. This block
+ * is concatenated with rules.instructions so that both /describe and /review can perceive the
+ * background.
  *
- * 失败 safe：comments fetch 失败 → warn + 跳过；标题以外字段都缺 → 返回空串
- * (调用方可以判断是否要发)。
+ * Fail-safe: comments fetch fails → warn + skip; every field but the title missing → return an
+ * empty string (the caller can decide whether to send it).
  */
 export async function buildPrContext({
   pr,
@@ -62,8 +65,9 @@ export async function buildPrContext({
     );
   }
 
-  // 只有 title 一项时（无描述、无评论）通常意味着 PR 刚开，没什么背景信息可言；
-  // 让调用方拿到空串决定是否注入，避免给 prompt 加无用前缀
+  // When there's only the title (no description, no comments) it usually means the PR was just
+  // opened with no background to speak of; let the caller get an empty string and decide whether
+  // to inject, avoiding a useless prefix on the prompt
   if (sections.length === 1 && !desc && comments.length === 0) {
     return '';
   }
@@ -71,11 +75,11 @@ export async function buildPrContext({
 }
 
 /**
- * 把嵌套评论树拍扁为 markdown 列表：
- * - top-level 按 createdAt 倒序 (最新在前)
- * - 同一 thread 内 replies 跟父节点，保留原顺序
- * - 每行：`<indent>- @<author>[ (file:line)] <YYYY-MM-DD>: <body>`
- * - body 中的换行替换成空格，截到 maxLen 字符
+ * Flatten the nested comment tree into a markdown list:
+ * - top-level sorted by createdAt in reverse order (newest first)
+ * - replies within the same thread follow their parent node, preserving the original order
+ * - each line: `<indent>- @<author>[ (file:line)] <YYYY-MM-DD>: <body>`
+ * - newlines in body replaced with spaces, truncated to maxLen characters
  */
 function formatComments(
   comments: ReadonlyArray<PrComment>,

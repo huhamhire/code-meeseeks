@@ -10,12 +10,12 @@ import {
 import type { ServiceContext } from '../context.js';
 import { RunExecutor } from './run-executor.js';
 
-/** pr-agent run 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。 */
+/** pr-agent run priority lane: user (manually initiated, high) / agent (orchestration / AutoPilot dispatch, low). */
 export type RunPriority = 'user' | 'agent';
 
 /**
- * 队列项：一次入队的 pr-agent run 的全部上下文（含 resolve/reject 回原始调用方）。归调度器所有；执行器
- * （run-executor）仅以 `import type` 引用本类型，类型在运行时被擦除，故不构成运行时循环依赖。
+ * Queue item: all context of one enqueued pr-agent run (including resolve/reject back to the original caller). Owned by the scheduler; the executor
+ * (run-executor) references this type only via `import type`, and the type is erased at runtime, so it forms no runtime circular dependency.
  */
 export interface QueueItem {
   info: PragentRunInfo;
@@ -30,35 +30,35 @@ export interface QueueItem {
   pr: StoredPullRequest;
   resolve: (run: ReviewRun) => void;
   reject: (err: Error) => void;
-  /** 优先级泳道：user（手动发起，高）/ agent（编排 / AutoPilot 派发，低）。 */
+  /** Priority lane: user (manually initiated, high) / agent (orchestration / AutoPilot dispatch, low). */
   priority: RunPriority;
-  /** 仅 active 状态填；用于 cancel SIGKILL */
+  /** Filled only in active state; used for cancel SIGKILL */
   ac?: AbortController;
 }
 
 /**
- * pr-agent run 队列服务。
+ * pr-agent run queue service.
  *
- * FIFO 队列，并发上限 maxConcurrency（post-Docker 下每个 run 独立 worktree + 独立子进程，
- * 并发安全）。其余在 waiting 排队；每次 active 完成 / 取消 → 自动泵下一条。
+ * FIFO queue, concurrency cap maxConcurrency (post-Docker, each run has an independent worktree + independent subprocess,
+ * concurrency-safe). The rest queue in waiting; each time an active run completes / cancels → automatically pump the next one.
  *
- * 设计要点：
- *   - runId 在入队时就分配（跟最终落盘 ReviewRun.id 一致），cancel(runId) 在 active / waiting
- *     两种状态都能精确定位
- *   - queued 状态不落盘；被取消时直接 reject 原 Promise，不留 disk artifact
- *   - 真正 dequeue 才 startReviewRun 写 disk + 跑 pr-agent
- *   - 每次队列变化广播 'pragent:queueChanged'，renderer store 同步
+ * Design points:
+ *   - runId is assigned at enqueue (consistent with the finally-persisted ReviewRun.id), so cancel(runId) can precisely locate it
+ *     in both active / waiting states
+ *   - queued state is not persisted; when cancelled it directly rejects the original Promise, leaving no disk artifact
+ *   - only on actual dequeue does startReviewRun write disk + run pr-agent
+ *   - each queue change broadcasts 'pragent:queueChanged', syncing the renderer store
  *
- * 队列与运行态（waiting / active / 并发上限）是实例可变状态，故以 class 封装；PR 领域操作
- * （镜像 / diff base / adapter）经注入的 ctx.pr 取用。
+ * The queue and running state (waiting / active / concurrency cap) are instance-mutable state, hence encapsulated in a class; PR domain operations
+ * (mirror / diff base / adapter) are accessed via the injected ctx.pr.
  */
 export class RunQueue {
   private readonly waiting: QueueItem[] = [];
-  /** 并发运行中的 run（runId → item）；上限 maxConcurrency。 */
+  /** Concurrently running runs (runId → item); capped at maxConcurrency. */
   private readonly active = new Map<string, QueueItem>();
-  /** 并发上限；可经 setMaxConcurrency 热替换（config:setMaxConcurrency）。 */
+  /** Concurrency cap; hot-swappable via setMaxConcurrency (config:setMaxConcurrency). */
   private maxConcurrency: number;
-  /** run 执行器（落盘 / worktree / spawn / 解析收尾）；调度与执行分离，本类只负责并发 / 优先级 / 取消。 */
+  /** Run executor (persist / worktree / spawn / parse finalize); scheduling and execution are separated, this class only handles concurrency / priority / cancel. */
   private readonly executor: RunExecutor;
 
   constructor(private readonly ctx: ServiceContext) {
@@ -67,8 +67,8 @@ export class RunQueue {
   }
 
   /**
-   * 入队一个 pr-agent run（与用户手动 run 共用同一队列 / 并发 / 取消机制）。dedup：同 PR
-   * 同工具已在执行 / 排队则抛错（/ask 不限）。resolve 完成的 ReviewRun。
+   * Enqueue a pr-agent run (shares the same queue / concurrency / cancel mechanism as a user's manual run). dedup: if the same PR
+   * with the same tool is already executing / queued, throw (/ask is unrestricted). Resolves the completed ReviewRun.
    */
   enqueuePragentRun(
     pr: StoredPullRequest,
@@ -80,8 +80,8 @@ export class RunQueue {
     scope?: ReviewRun['scope'],
   ): Promise<ReviewRun> {
     const { logger } = this.ctx;
-    // dedup 仅约束「PR 全量」的同工具重复；/ask 每次问题不同、单 commit 范围（scope）是定向动作，均放行
-    // （允许全量 review 之外再对某 commit 单独 review，互不视作重复）。
+    // dedup only constrains same-tool duplicates for the "full PR"; /ask (a different question each time) and single-commit scope (a targeted action) are both let through
+    // (allowing a per-commit review in addition to the full review, without treating them as duplicates).
     if (tool !== 'ask' && !scope) {
       const sameTask = (q: QueueItem): boolean =>
         q.info.prLocalId === pr.localId && q.info.tool === tool;
@@ -89,7 +89,7 @@ export class RunQueue {
         throw new AppError(ERROR_CODES.AG_DUPLICATE_TASK, { tool });
       }
     }
-    // 入队时就分配 runId；后续 cancel(runId) 在 waiting / active 都能定位
+    // Assign runId at enqueue; a later cancel(runId) can locate it in both waiting / active
     const runId = makeRunId(new Date());
     return new Promise<ReviewRun>((resolve, reject) => {
       const item: QueueItem = {
@@ -105,15 +105,15 @@ export class RunQueue {
           enqueuedAt: new Date().toISOString(),
           startedAt: null,
         },
-        // referencedContext / referencedFinding 仅入 req（内存态，不进 info/PragentRunInfo）→ 不进队列广播。
-        // referencedFinding 会在 run-executor startRun 时落到 ReviewRun（前向链持久化）。
+        // referencedContext / referencedFinding only go into req (in-memory state, not into info/PragentRunInfo) → not in the queue broadcast.
+        // referencedFinding is persisted to the ReviewRun during run-executor startRun (forward-chain persistence).
         req: {
           localId: pr.localId,
           tool,
           question,
           referencedContext: tool === 'ask' ? referencedContext : undefined,
           referencedFinding: tool === 'ask' ? referencedFinding : undefined,
-          // 单 commit 范围对所有工具生效（不限 ask）：executor 据此物化 parent..sha 的 worktree。
+          // Single-commit scope applies to all tools (not just ask): the executor uses it to materialize the parent..sha worktree.
           scope,
         },
         pr,
@@ -121,7 +121,7 @@ export class RunQueue {
         resolve,
         reject,
       };
-      // 优先级插队：user 任务排到所有 agent 任务之前（同泳道内仍 FIFO）；不打断在跑的 run。
+      // Priority jump-in: user tasks queue ahead of all agent tasks (still FIFO within the same lane); does not interrupt a running run.
       if (priority === 'user') {
         const firstAgentIdx = this.waiting.findIndex((q) => q.priority === 'agent');
         if (firstAgentIdx >= 0) this.waiting.splice(firstAgentIdx, 0, item);
@@ -138,25 +138,25 @@ export class RunQueue {
   }
 
   /**
-   * 热替换并发上限（config:setMaxConcurrency）。调大后立即泵队列填满新名额；调小不打断在跑的 run，
-   * 自然随其完成收敛（pump 仅在 active 降到新上限以下才起跑后续）。
+   * Hot-swap the concurrency cap (config:setMaxConcurrency). After raising it, immediately pump the queue to fill the new slots; lowering it does not interrupt running runs,
+   * converging naturally as they complete (pump only starts subsequent runs once active drops below the new cap).
    */
   setMaxConcurrency(max: number): void {
     this.maxConcurrency = max;
     this.pump();
   }
 
-  /** 取消一个 run（pragent:cancel）：active→SIGKILL；waiting→出队 + reject；都不匹配→ok:false。 */
+  /** Cancel one run (pragent:cancel): active→SIGKILL; waiting→dequeue + reject; neither matches→ok:false. */
   cancel(runId: string): { ok: boolean } {
     const { logger } = this.ctx;
-    // active 命中 → SIGKILL (finally 会写 cancelled 到 disk)
+    // active hit → SIGKILL (finally will write cancelled to disk)
     const running = this.active.get(runId);
     if (running) {
       logger.info({ runId }, 'pragent run cancel: active');
       running.ac?.abort();
       return { ok: true };
     }
-    // waiting 命中 → 从队列删除 + reject 原 Promise，不写盘 (从未真正跑过)
+    // waiting hit → remove from queue + reject the original Promise, no disk write (never actually ran)
     const idx = this.waiting.findIndex((q) => q.info.runId === runId);
     if (idx >= 0) {
       const [removed] = this.waiting.splice(idx, 1);
@@ -168,7 +168,7 @@ export class RunQueue {
     return { ok: false };
   }
 
-  /** 当前队列快照（pragent:queue / 广播用）。 */
+  /** Current queue snapshot (for pragent:queue / broadcast). */
   snapshot(): { active: PragentRunInfo[]; waiting: PragentRunInfo[] } {
     return {
       active: [...this.active.values()].map((q) => q.info),
@@ -176,7 +176,7 @@ export class RunQueue {
     };
   }
 
-  /** 取消某 PR 的全部 run：active 的 SIGKILL，waiting 的出队 + reject。 */
+  /** Cancel all runs for a PR: SIGKILL the active ones, dequeue + reject the waiting ones. */
   cancelRunsForPr(localId: string): void {
     for (const item of this.active.values()) if (item.req.localId === localId) item.ac?.abort();
     let removed = false;
@@ -190,7 +190,7 @@ export class RunQueue {
     if (removed) this.broadcastQueueChanged();
   }
 
-  /** active + waiting 涉及的 PR localId 集合（terminateAgentsForGonePrs 用）。 */
+  /** Set of PR localIds involved in active + waiting (used by terminateAgentsForGonePrs). */
   queuedPrLocalIds(): string[] {
     const ids: string[] = [];
     for (const item of this.active.values()) ids.push(item.req.localId);
@@ -198,7 +198,7 @@ export class RunQueue {
     return ids;
   }
 
-  /** 应用退出时中止所有进行中的 run，返回被中止的 run 数。 */
+  /** Abort all in-progress runs on app exit, returning the number of aborted runs. */
   abortAllActiveRuns(): number {
     let n = 0;
     for (const item of this.active.values()) {
@@ -213,8 +213,8 @@ export class RunQueue {
   }
 
   /**
-   * 队列泵：在并发未达上限且 waiting 非空时，连续 dequeue 起跑，直到填满 maxConcurrency。
-   * 每条 run 结束（成功/失败/取消）后从 active 移除并再泵一次，自然续上后续任务。
+   * Queue pump: while concurrency is below the cap and waiting is non-empty, continuously dequeue and start runs until maxConcurrency is filled.
+   * After each run ends (success/failure/cancel) it is removed from active and the pump runs again, naturally continuing subsequent tasks.
    */
   private pump(): void {
     while (this.active.size < this.maxConcurrency && this.waiting.length > 0) {
@@ -230,7 +230,7 @@ export class RunQueue {
         .finally(() => {
           this.active.delete(item.info.runId);
           this.broadcastQueueChanged();
-          // 放微任务里再泵，避免递归栈累积
+          // Pump again in a microtask to avoid recursive stack buildup
           queueMicrotask(() => this.pump());
         });
     }

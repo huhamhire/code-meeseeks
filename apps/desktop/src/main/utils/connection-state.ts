@@ -2,24 +2,26 @@ import type { PlatformUser } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
 
 /**
- * 连接级本地状态（按 connectionId 持久化在 state store）。当前只存「上次 ping 拿到的当前
- * 用户身份」用于预热 poller 判 approved（首轮即正确、不必等 ping）；结构刻意留作可扩展，
- * 后续可在此追加其它连接级交互状态（如最近查看时间、列表偏好等）。
+ * Connection-level local state (persisted per connectionId in the state store). Currently only
+ * stores the "current user identity from the last ping" to warm up the poller's approved check
+ * (correct from the first round, no need to wait for a ping); the structure is intentionally left
+ * extensible so other connection-level interaction state (e.g. last-viewed time, list preferences)
+ * can be appended here later.
  */
 export interface ConnectionState {
-  /** 上次 ping 得到的当前 PAT 所属用户；用于建连接时预热 adapter 的 currentUser 缓存。 */
+  /** The user owning the current PAT from the last ping; used to warm up the adapter's currentUser cache when establishing a connection. */
   user?: PlatformUser | null;
 }
 
 interface ConnectionStateFile {
   schema_version: 1;
-  /** connectionId → 该连接的本地状态 */
+  /** connectionId → local state of that connection */
   connections: Record<string, ConnectionState>;
 }
 
 const KEY = 'connections/state';
 
-/** 读取全部连接状态；无文件返回空表。 */
+/** Read all connection states; returns an empty table when there is no file. */
 export async function readConnectionStates(
   store: StateStore,
 ): Promise<Record<string, ConnectionState>> {
@@ -27,7 +29,7 @@ export async function readConnectionStates(
   return file?.connections ?? {};
 }
 
-/** 整表写回连接状态。 */
+/** Write the whole table of connection states back. */
 export async function writeConnectionStates(
   store: StateStore,
   connections: Record<string, ConnectionState>,

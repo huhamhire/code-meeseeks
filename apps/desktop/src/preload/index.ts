@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
-// preload 跑在渲染进程，可用 window / DOM 事件类型；tsconfig.node 默认无 DOM lib，
-// 故在此显式引入（仅类型，不影响产物）。
+// preload runs in the renderer process, so window / DOM event types are available; tsconfig.node has no DOM lib by default,
+// hence the explicit reference here (types only, no impact on output).
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   IpcBridge,
@@ -40,12 +40,12 @@ try {
   console.error('[preload] failed to expose window.api:', e);
 }
 
-// 渲染层全局错误兜底：转发到 main 落进 meebox.log（renderer 自己的 console 不进文件）。
-// 在 preload 装监听 → 能捕获 React 挂载前的早期错误；用 ipcRenderer.invoke 直连，
-// 不经 contextBridge。转发失败静默（避免错误处理自身再抛）。
+// Renderer global error fallback: forward to main so it lands in meebox.log (renderer's own console does not go to file).
+// Installing the listener in preload → can capture early errors before React mounts; uses ipcRenderer.invoke directly,
+// not via contextBridge. Forwarding failures are silent (to avoid the error handling itself throwing again).
 function reportRendererError(msg: string, meta: Record<string, unknown>): void {
   void ipcRenderer.invoke('log:write', { level: 'error', msg, meta }).catch(() => {
-    /* main 未就绪 / 通道异常时静默 */
+    /* silent when main is not ready / channel error */
   });
 }
 window.addEventListener('error', (e: ErrorEvent) => {

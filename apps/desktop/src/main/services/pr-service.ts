@@ -19,38 +19,38 @@ import type { JsonFileStateStore } from '@meebox/state-store';
 import type { ConnectionRuntime } from '../adapters.js';
 import { broadcast } from './broadcast.js';
 
-/** PrService 构造依赖（由 context 注入）。 */
+/** PrService construction dependencies (injected by context). */
 export interface PrServiceDeps {
   bootstrap: BootstrapResult;
   stateStore: JsonFileStateStore;
-  /** 归档 PR 冷存储：定位 PR 时活跃库未命中后兜底（「已关闭」视图打开已归档 PR 详情）。 */
+  /** Archived PR cold storage: fallback when the active store misses during PR lookup (opening an archived PR's details from the "closed" view). */
   archiveStore: JsonFileStateStore;
-  /** 可变连接运行时；reconfigure 原地替换内容，本服务经引用读到最新 adapters。 */
+  /** Mutable connection runtime; reconfigure replaces the contents in place, and this service reads the latest adapters via the reference. */
   connectionRuntime: ConnectionRuntime;
   repoMirror: RepoMirrorManager;
 }
 
 /**
- * PR 领域服务：PR 定位 / 连接 adapter 解析 / 仓库镜像就位 / diff base 解析 / 评论缓存失效。
+ * PR domain service: PR lookup / connection adapter resolution / repo mirror readiness / diff base resolution / comments cache invalidation.
  *
- * 把原先散落在 common/ 的 pr-lookup·mirror·comments-cache 收拢为单一强领域类，依赖经构造注入、
- * 各方法共享 `this.deps`，避免逐函数透传。controller 一律经 `ctx.pr.<method>()` 调用；调用方
- * 应以实例方法形式调用（勿解构方法，否则丢失 this 绑定）。
+ * Collects the pr-lookup·mirror·comments-cache previously scattered in common/ into a single strong domain class, with dependencies injected via the constructor and
+ * each method sharing `this.deps`, avoiding per-function pass-through. Controllers always call via `ctx.pr.<method>()`; callers
+ * should invoke as instance methods (do not destructure methods, or the this binding is lost).
  */
 export class PrService {
   /**
-   * 按 localId 索引正在跑的 resolveDiffBaseSha。打开 PR 时 listChangedFiles / getFileContent /
-   * getBlame / listCommits / getCommitCount 等多个 handler 会并发解析同一 PR 的 diff-base：去重后
-   * 只算一次 merge-base、只写一次 diff-base.json，避免对同一 key 的并发写（Windows 上会触发 rename
-   * EPERM，见 JsonFileStateStore 自愈）。
+   * Indexes in-flight resolveDiffBaseSha by localId. When opening a PR, multiple handlers such as listChangedFiles / getFileContent /
+   * getBlame / listCommits / getCommitCount concurrently resolve the same PR's diff-base: after dedup,
+   * merge-base is computed once and diff-base.json is written once, avoiding concurrent writes to the same key (which triggers rename
+   * EPERM on Windows, see JsonFileStateStore self-heal).
    */
   private readonly diffBaseInFlight = new Map<string, Promise<string>>();
 
   constructor(private readonly deps: PrServiceDeps) {}
 
   /**
-   * 按 localId 在状态库定位 PR，找不到抛错（统一错误文案）。先查活跃库；未命中再兜底归档冷存储，
-   * 使「已关闭」视图打开已归档 PR 时其 diff / 评论等路径仍可解析。
+   * Locate a PR by localId in the state store, throwing if not found (uniform error text). Query the active store first; on miss fall back to archived cold storage,
+   * so an archived PR's diff / comments paths still resolve when opened from the "closed" view.
    */
   async findPrOrThrow(localId: string): Promise<StoredPullRequest> {
     const prs = await listStoredPullRequests(this.deps.stateStore);
@@ -62,18 +62,18 @@ export class PrService {
   }
 
   /**
-   * 解析某 PR 的 per-PR 存储根：已归档（索引 `archivedAt` 非空）→ 归档冷存储，否则活跃存储。
+   * Resolve a PR's per-PR storage root: archived (index `archivedAt` non-empty) → archived cold storage, otherwise the active store.
    *
-   * 所有 per-PR 子树读写（评论缓存 / 草稿 / 关闭关系 / 评审 run / 会话 / 台账 / diff-base 缓存）都应
-   * 经此解析后落到正确的根——否则对已归档 PR 的写会落进活跃存储，被下轮 poll 对账（`relocateTree` 源覆盖
-   * 目的、先清空目的）连同归档数据一并误删（见 docs/arch/99-core/01-state-storage）。索引始终只在活跃存储维护，故据它判定。
+   * All per-PR subtree reads/writes (comments cache / drafts / close relations / review run / sessions / ledger / diff-base cache) should
+   * land on the correct root after this resolution — otherwise a write for an archived PR lands in the active store and gets erroneously deleted along with archived data by the next poll reconciliation (`relocateTree` source overwrites
+   * destination, clearing destination first) (see docs/arch/99-core/01-state-storage). The index is always maintained only in the active store, so decide by it.
    */
   async storeForPr(localId: string): Promise<JsonFileStateStore> {
     const index = await readPrIndex(this.deps.stateStore);
     return index?.prs[localId]?.archivedAt ? this.deps.archiveStore : this.deps.stateStore;
   }
 
-  /** PR → RepoIdentity（host / projectKey / repoSlug）；connection 缺失抛错。 */
+  /** PR → RepoIdentity (host / projectKey / repoSlug); throws if the connection is missing. */
   repoIdentityFor(pr: StoredPullRequest): RepoIdentity {
     const conn = this.deps.bootstrap.config.connections.find((c) => c.id === pr.connectionId);
     if (!conn) throw new Error(`connection not found: ${pr.connectionId}`);
@@ -84,13 +84,13 @@ export class PrService {
     };
   }
 
-  /** PR 对应连接的 adapter；连接无 adapter 时返回 undefined。 */
+  /** The adapter of the PR's connection; returns undefined when the connection has no adapter. */
   adapterFor(pr: StoredPullRequest): PlatformAdapter | undefined {
     return this.deps.connectionRuntime.adapters.find((a) => a.connectionId === pr.connectionId)
       ?.adapter;
   }
 
-  /** 同 adapterFor，但无 adapter 时抛错（绝大多数 handler 走它）。 */
+  /** Same as adapterFor, but throws when there is no adapter (the vast majority of handlers use it). */
   adapterForOrThrow(pr: StoredPullRequest): PlatformAdapter {
     const adapter = this.adapterFor(pr);
     if (!adapter) throw new Error(`no adapter for connection ${pr.connectionId}`);
@@ -98,14 +98,14 @@ export class PrService {
   }
 
   /**
-   * 打开 PR 时镜像就位的保障。优先快速路径：本地 bare 已含 head+base 两个 sha
-   * → 直接回 mirrorPath，不打远端。两 sha 都齐意味着上次 sync 已经覆盖了本 PR
-   * 的 commit 范围（PR sha 是 immutable 的），renderer 可以直接走本地 diff 计算。
+   * Guarantees mirror readiness when opening a PR. Prefer the fast path: local bare already contains both head+base shas
+   * → return mirrorPath directly, no remote call. Both shas present means the last sync already covered this PR's
+   * commit range (PR sha is immutable), so the renderer can compute the diff locally.
    *
-   * 缺 sha (任一) → 走 syncMirror 兜底走 git fetch。
+   * Missing sha (either one) → go through syncMirror falling back to git fetch.
    *
-   * 后台 poll 在拿到 PR 状态更新后会主动 syncMirror，所以正常打开 PR 时
-   * 快速路径命中率应该很高。
+   * Background poll actively syncMirror after getting PR status updates, so on a normal PR open
+   * the fast-path hit rate should be high.
    */
   async ensureMirrorReadyForPr(
     pr: StoredPullRequest,
@@ -116,13 +116,13 @@ export class PrService {
       this.deps.repoMirror.hasCommit(id, pr.targetRef.sha),
     ]);
     if (hasHead && hasBase) {
-      // 快速路径：mirror 已含 head + base，直接回不打远端。命中频繁，不打 log
+      // Fast path: mirror already contains head + base, return directly without a remote call. Frequently hit, so no log.
       return { mirrorPath: this.deps.repoMirror.mirrorPath(id), freshClone: false };
     }
     const r = await this.deps.repoMirror.syncMirror(id);
-    // 自愈：源分支被删 / 强推后 head sha 不在 refs/heads，syncMirror（只抓 heads + Bitbucket 通配 PR 引用）
-    // 仍补不齐 → 按平台 + PR 号精确 fetch PR 头引用（GitHub refs/pull/<n>/head 等，通配取不到，必须精确）。
-    // 补齐后 diff base...head 才不报 "Invalid symmetric difference"。best-effort，仍缺则由下游 diff 抛可读错误。
+    // Self-heal: after the source branch is deleted / force-pushed, head sha is not in refs/heads, and syncMirror (only fetches heads + Bitbucket wildcard PR refs)
+    // still cannot backfill → precisely fetch the PR head ref by platform + PR number (GitHub refs/pull/<n>/head etc., unreachable by wildcard, must be precise).
+    // Only after backfill does diff base...head not report "Invalid symmetric difference". Best-effort; if still missing, downstream diff throws a readable error.
     if (!(await this.deps.repoMirror.hasCommit(id, pr.sourceRef.sha))) {
       const refspec = pullRequestHeadRefspec(pr.platform, pr.remoteId);
       if (refspec) await this.deps.repoMirror.fetchRefspecs(id, [refspec]);
@@ -131,24 +131,24 @@ export class PrService {
   }
 
   /**
-   * 解析 PR diff 的固定 base（merge-base）——见 `@meebox/poller` diff-base-cache。
+   * Resolve a PR diff's fixed base (merge-base) — see `@meebox/poller` diff-base-cache.
    *
-   * PR diff 的语义基准是「源分支自目标分支分叉处」= `merge-base(targetRef.sha, sourceRef.sha)`，
-   * 而非目标分支当前 tip（会随别的 PR 合入前移）。首次算出后固化于 `prs/<localId>/diff-base.json`，
-   * 之后 listChangedFiles / 文件内容 / commitCount / blame / pr-agent worktree 一律以它为 base：
-   * - 内容（Monaco 左栏）锚到 merge-base → 编辑器即真三点，目标漂移不再把别的 PR 改动倒挂进来；
-   * - 行锚点（评论 / finding）有了固定参照，目标漂移不致错位。
+   * A PR diff's semantic baseline is "where the source branch forked from the target branch" = `merge-base(targetRef.sha, sourceRef.sha)`,
+   * not the target branch's current tip (which advances as other PRs merge in). Once computed, it is fixed in `prs/<localId>/diff-base.json`,
+   * and thereafter listChangedFiles / file content / commitCount / blame / pr-agent worktree all use it as base:
+   * - content (Monaco left column) anchored to merge-base → the editor is a true three-dot diff, and target drift no longer back-hangs other PRs' changes;
+   * - line anchors (comment / finding) have a fixed reference, so target drift does not misalign them.
    *
-   * 失效重算：
-   * - 固化 base 不再是当前 head 的祖先（源分支被 rebase）；
-   * - 当前 target 已经成为 head 的祖先，说明源分支把目标分支 merge 进来了，旧分叉点会把 merge
-   *   带来的目标分支内容也算进 PR diff。
-   * 算不出（缺对象 / 无共同祖先）→ 兜底退回 targetRef.sha 且**不固化**，下次再试。
+   * Invalidate and recompute when:
+   * - the fixed base is no longer an ancestor of the current head (source branch was rebased);
+   * - the current target has become an ancestor of head, meaning the source branch merged the target branch in, and the old fork point would count the merge-brought
+   *   target branch content into the PR diff too.
+   * Uncomputable (missing object / no common ancestor) → fall back to targetRef.sha and **do not fix it**, retry next time.
    *
-   * 前置：mirror 已含 head + targetRef.sha（diff 入口已 ensureMirrorReadyForPr / syncMirror）。
+   * Precondition: mirror already contains head + targetRef.sha (the diff entry has already done ensureMirrorReadyForPr / syncMirror).
    */
   async resolveDiffBaseSha(pr: StoredPullRequest): Promise<string> {
-    // 并发去重：同一 PR 的多路并发解析复用同一 in-flight Promise，只算一次、只写一次 diff-base.json。
+    // Concurrency dedup: multiple concurrent resolutions of the same PR reuse the same in-flight Promise, computing once and writing diff-base.json once.
     const existing = this.diffBaseInFlight.get(pr.localId);
     if (existing) return existing;
     const promise = this.computeDiffBaseSha(pr).finally(() => {
@@ -161,7 +161,7 @@ export class PrService {
   private async computeDiffBaseSha(pr: StoredPullRequest): Promise<string> {
     const id = this.repoIdentityFor(pr);
     const head = pr.sourceRef.sha;
-    // 已归档 PR（已关闭范围打开看 diff）其 diff-base 缓存须落归档存储，避免写活跃存储被对账误删。
+    // For an archived PR (opened from the closed scope to view diff), its diff-base cache must land in archived storage, to avoid a write to the active store being erroneously deleted by reconciliation.
     const store = await this.storeForPr(pr.localId);
     const cached = await readDiffBaseCache(store, pr.localId);
     if (
@@ -187,16 +187,16 @@ export class PrService {
   }
 
   /**
-   * 清掉某 PR 的评论缓存并广播 `comments:changed`，让 CommentsPanel / DiffView 内嵌评论重拉刷新。
-   * 收口 comments reply/delete/edit 与 drafts:publishBatch 共用的链路（清 `prs/<localId>/comments`
-   * 缓存 → 下次 listComments force 拉远端 → 广播触发重拉）。cache miss 无所谓，吞掉异常。
+   * Clear a PR's comments cache and broadcast `comments:changed`, so CommentsPanel / DiffView inline comments re-fetch and refresh.
+   * Consolidates the path shared by comments reply/delete/edit and drafts:publishBatch (clear `prs/<localId>/comments`
+   * cache → next listComments force-fetches remote → broadcast triggers a re-fetch). A cache miss is fine, swallow the exception.
    */
   async invalidateCommentsCache(localId: string): Promise<void> {
     try {
       const store = await this.storeForPr(localId);
       await store.delete(`prs/${localId}/comments`);
     } catch {
-      /* cache miss 也无所谓 */
+      /* cache miss is fine */
     }
     broadcast('comments:changed', { localId });
   }

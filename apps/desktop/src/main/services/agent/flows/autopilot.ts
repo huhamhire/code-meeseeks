@@ -16,9 +16,12 @@ import type { OrchestratorRuntime } from '../runtime.js';
 import { runReviewForPr } from './review.js';
 
 /**
- * 跑一遍 AutoPilot pass（busy 锁置位 / 复位包住全程）。仅由 Orchestrator.runAutopilotIfDue 通过准入后触发。
- * 候选准入（硬性门控，自上而下）：① 仅「待我评审 + 待处理」；② 已有 describe/review 产出（成功 / 进行中）
- * → 已评审过 / 评审中，排除；③ 本版本已被判 skip 的台账去重。再按 batch_size 截断，批量判定后并行编排评审。
+ * Runs one AutoPilot pass (the busy lock set / reset wraps the whole run). Only triggered by
+ * Orchestrator.runAutopilotIfDue after passing admission.
+ * Candidate admission (hard gates, top-down): (1) only "review-requested + pending"; (2) already has
+ * describe/review output (succeeded / in progress) → already reviewed / reviewing, excluded; (3) ledger
+ * dedup for this version already judged skip. Then truncate by batch_size, batch-judge, and orchestrate
+ * reviews in parallel.
  */
 export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void> {
   const { bootstrap, stateStore, ensureAgentDir, logger } = runtime.ctx;
@@ -27,10 +30,11 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
   try {
     const prs = await listStoredPullRequests(stateStore);
     const candidates: StoredPullRequest[] = [];
-    // 准入漏斗计数（用于 0 候选时定位卡在哪一道闸——便于排查「为何不再触发」）。
-    let reviewReqPending = 0; // 命中「待我评审 + 待处理」
-    let alreadyReviewed = 0; // 其中已有 describe/review 产出（成功 / 进行中）而被排除
-    let skipDeduped = 0; // 其中本版本已被判定跳过而被排除
+    // Admission funnel counters (to locate which gate blocked when there are 0 candidates — helps debug
+    // "why does it no longer trigger").
+    let reviewReqPending = 0; // matched "review-requested + pending"
+    let alreadyReviewed = 0; // among those, excluded for already having describe/review output (succeeded / in progress)
+    let skipDeduped = 0; // among those, excluded for already being judged skip this version
     for (const pr of prs) {
       if (candidates.length >= ap.batch_size) break;
       if (!pr.discoveryFilters.includes('review-requested')) continue;
@@ -48,7 +52,7 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
       candidates.push(pr);
     }
     if (candidates.length === 0) {
-      // 仍在按周期评估，只是当前无新合格 PR——把漏斗计数打出来，避免被误读成「没在跑」。
+      // Still evaluating on schedule, just no new eligible PR right now — log the funnel counters to avoid being misread as "not running".
       logger.info(
         { total: prs.length, reviewReqPending, alreadyReviewed, skipDeduped },
         'autopilot pass: no eligible candidates',
@@ -59,9 +63,11 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
     const agentContext = await loadAgentContext(await ensureAgentDir(), {
       onWarn: (msg, file) => logger.warn({ file }, `agent context: ${msg}`),
     });
-    // 第一步 judge 的背景输入：逐候选判「纯分支合并」。判定**以实际提交结构为准**——拉一次 commits API
-    // 看「提交是否全为 merge」；分支名只作 sourceMainline 背景信号、不单独定论。并行跑，整体约一轮 round-trip。
-    // 失败不阻断（无 commits → inconclusive、按非合并处理，仍带 sourceMainline 信号交 judge 权衡）。
+    // Background input for the first judge step: classify each candidate as "pure branch merge". The
+    // decision is **based on the actual commit structure** — one commits API call to see "whether all
+    // commits are merges"; the branch name is only a sourceMainline background signal, never decisive alone.
+    // Runs in parallel, roughly one round-trip overall.
+    // Failure does not block (no commits → inconclusive, treated as non-merge, still carrying the sourceMainline signal for the judge to weigh).
     const branchMergeByPr = new Map<string, BranchMergeVerdict>();
     await Promise.all(
       candidates.map(async (p) => {
@@ -86,7 +92,7 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
     );
 
     await runtime.withAgentChat(async (chat) => {
-      // 批量判定（例外规则来自 AGENTS.md；分支信息 + 分支合并信号作背景输入）。
+      // Batch judgment (exception rules come from AGENTS.md; branch info + branch-merge signal as background input).
       const { decisions } = await judgeAutopilotBatch(chat, {
         candidates: candidates.map((p) => {
           const v = branchMergeByPr.get(p.localId);
@@ -103,12 +109,12 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
         agentsRules: agentContext.files.agents,
       });
       const byId = new Map(candidates.map((p) => [p.localId, p] as const));
-      // 先落「跳过」决策（无工具开销，顺序写盘即可）；收集「评审」决策（连同其执行计划）待并行编排。
+      // Persist "skip" decisions first (no tool cost, sequential write is fine); collect "review" decisions (along with their execution plan) for parallel orchestration.
       const toReview: Array<{ pr: StoredPullRequest; plan?: ReviewPlan }> = [];
       for (const d of decisions) {
         const pr = byId.get(d.prLocalId);
         if (!pr) continue;
-        // 每条决策都记日志（含 review/skip + 原因 + 计划 + 分支合并信号），便于排查「judge 是否在按规则跑」。
+        // Log every decision (with review/skip + reason + plan + branch-merge signal) to help debug "whether the judge runs by the rules".
         logger.info(
           {
             prLocalId: pr.localId,
@@ -129,13 +135,13 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
           });
           continue;
         }
-        // d.plan 省略 → 微流程走默认全集；规则驱动计划的注入点（见 JudgeDecision.plan）。
+        // d.plan omitted → micro-flow uses the default full set; the injection point for rule-driven plans (see JudgeDecision.plan).
         toReview.push({ pr, plan: d.plan });
       }
-      // 多 PR 评审并行编排：各编排 await 自己的工具 run 时彼此不挡，让 run-queue 并发尽量被填满。
+      // Parallel orchestration of multi-PR reviews: each orchestration awaits its own tool run without blocking the others, filling up run-queue concurrency as much as possible.
       await Promise.all(
         toReview.map(async ({ pr, plan }) => {
-          // AutoPilot 后台评审无 AbortController，但同样标记「执行中」——纯思考阶段也在 PR 列表项显示。
+          // AutoPilot background review has no AbortController, but is still marked "running" — the pure thinking phase also shows on the PR list item.
           runtime.markRunning(pr.localId);
           try {
             const session = await runReviewForPr(
@@ -147,7 +153,7 @@ export async function autopilotPass(runtime: OrchestratorRuntime): Promise<void>
               true,
               plan,
             );
-            // done：落「评审总结」消息 + 台账（含 verdict）+ 广播（与手动评审一致）。失败 / 暂停不落台账。
+            // done: persist the "review summary" message + ledger (with verdict) + broadcast (same as manual review). Failure / pause does not write the ledger.
             await runtime.recordReviewSummaryMessage(pr, session);
           } finally {
             runtime.unmarkRunning(pr.localId);
