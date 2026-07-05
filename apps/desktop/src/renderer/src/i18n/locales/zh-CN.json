@@ -842,6 +842,7 @@
     "updateAvailableLabel": "↑ 新版本 v{{version}} · 前往下载",
     "updateDisabledHint": "更新检测已在配置中关闭（config.yaml `update.check_enabled`）",
     "updateDisabledTitle": "更新检测已在配置中关闭",
+    "website": "官网",
     "workDirTitle": "工作目录"
   },
   "sidebar": {

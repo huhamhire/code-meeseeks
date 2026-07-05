@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppInfo, PrAgentStatus } from '@meebox/shared';
-import { CheckGlyphIcon, CopyIcon, GitHubMarkIcon, IssueIcon, TagIcon } from '../../../common';
+import {
+  CheckGlyphIcon,
+  CopyIcon,
+  GitHubMarkIcon,
+  GlobeIcon,
+  IssueIcon,
+  TagIcon,
+} from '../../../common';
 import { invoke } from '../../../../api';
 import { UpdateCheckButton } from '../elements/UpdateCheckButton';
 
@@ -87,36 +94,47 @@ export function RuntimeSection({ info, updateEnabled }: { info: AppInfo; updateE
           {t('settings.openDevTools')}
         </button>
       </div>
-      {/* About & feedback: low-frequency community links. http(s) external links are intercepted by the App top-level click and routed through openExternal to open in the system browser. */}
+      {/* About & feedback: label on its own line, then a wrapping row of low-frequency community links. http(s) external links are intercepted by the App top-level click and routed through openExternal to open in the system browser. */}
       <div className="settings-about-links">
         <span className="muted settings-about-label">{t('settings.aboutFeedback')}</span>
-        <a
-          className="settings-about-link"
-          href="https://github.com/huhamhire/code-meeseeks"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <GitHubMarkIcon size={14} />
-          {t('settings.starOnGithub')}
-        </a>
-        <a
-          className="settings-about-link"
-          href="https://github.com/huhamhire/code-meeseeks/issues/new"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <IssueIcon size={14} />
-          {t('settings.reportIssue')}
-        </a>
-        <a
-          className="settings-about-link"
-          href="https://github.com/huhamhire/code-meeseeks/releases"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <TagIcon size={14} />
-          {t('settings.releases')}
-        </a>
+        <div className="settings-about-linkrow">
+          <a
+            className="settings-about-link"
+            href="https://huhamhire.github.io/code-meeseeks/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <GlobeIcon size={14} />
+            {t('settings.website')}
+          </a>
+          <a
+            className="settings-about-link"
+            href="https://github.com/huhamhire/code-meeseeks"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <GitHubMarkIcon size={14} />
+            {t('settings.starOnGithub')}
+          </a>
+          <a
+            className="settings-about-link"
+            href="https://github.com/huhamhire/code-meeseeks/issues/new"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <IssueIcon size={14} />
+            {t('settings.reportIssue')}
+          </a>
+          <a
+            className="settings-about-link"
+            href="https://github.com/huhamhire/code-meeseeks/releases"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <TagIcon size={14} />
+            {t('settings.releases')}
+          </a>
+        </div>
       </div>
     </section>
   );

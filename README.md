@@ -19,7 +19,7 @@ Graphical interface (GUI) for the community [PR-Agent](https://docs.pr-agent.ai/
 
 <sub>Keywords：PR-Agent GUI · pr-agent desktop client · AI code review · Pull Request &amp; Merge Request review · Bitbucket / GitHub reviewer tool · local / self-hosted / private deployment</sub>
 
-**English** · [简体中文](README.zh-CN.md)
+**English** · [简体中文](README.zh-CN.md) · [Website](https://huhamhire.github.io/code-meeseeks/)
 
 </div>
 
@@ -98,7 +98,7 @@ Core design stance:
 
 - **Themes and appearance** — dark / light / follow system, several editor color themes, and a custom monospace font and size.
 - **Command palette** — invoke with `Ctrl/Cmd+Shift+P` to quickly run common actions and centralize scattered features.
-- **Multilingual UI** — Simplified Chinese / English / 日本語 / Deutsch, with the AI's reply language following the UI language.
+- **Multilingual UI** — English / 简体中文 / 日本語 / Deutsch, with the AI's reply language following the UI language.
 - **Frameless window** — a custom-drawn title bar (VS Code style) showing the brand name and current PR title.
 
 <div align="center">
