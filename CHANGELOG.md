@@ -5,7 +5,7 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.10.0] - 2026-07-05
 
 > Highlights of this release:
 >
@@ -435,7 +435,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...HEAD
+[0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.6.0...v0.7.0
