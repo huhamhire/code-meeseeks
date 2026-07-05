@@ -1,127 +1,88 @@
-# 状态存储与数据模型
+# State storage & data model
 
-## 职责与边界
+## Responsibilities & boundaries
 
-持久化 PR 元数据、评论缓存、评审 run、连接/已观察仓库等。一期用 **JSON 文件**（非 SQLite），
-封装在 `StateStore` 接口后，将来可平滑换实现。
+Persist PR metadata, the comment cache, review runs, connections / observed repos, and so on. Phase one uses **JSON files** (not SQLite), wrapped behind the `StateStore` interface so the implementation can be swapped smoothly later.
 
-负责：状态读写、PR 目录布局、软删与清理、路径安全。不负责：配置/凭据（见 [配置与凭据](02-config-and-secrets.md)）、
-仓库镜像（见 [仓库镜像](../01-platform/02-repo-mirror.md)）。
+In scope: state read/write, PR directory layout, soft-delete and cleanup, path safety. Out of scope: config / credentials (see [Config & secrets](02-config-and-secrets.md)) and the repo mirror (see [Repo mirror](../01-platform/02-repo-mirror.md)).
 
-## 核心设计
+## Core design
 
-### 存储模型
+### Storage model
 
-- **JSON 文件 + `StateStore` 抽象**：`read/write/delete/deleteDir/list`。一期实现 `JsonFileStateStore`，
-  每个 key 一个文件（相对 `state/` 根）。**原子写**：tmp → fsync → rename，避免崩溃留半截文件。
-  单写者（Main 进程独占），无文件锁。所有文件带 `schema_version`。
-  为什么不上 SQLite：规模小（最多数百 PR / 数千 finding）；native 模块要按 Electron 版本逐平台重编译，
-  CI 矩阵麻烦。触发阈值（单文件 >10MB 频繁读写 / 跨实体复杂查询 / 实测瓶颈）到了再换实现，业务层不变。
-- **PR localId = hash**：`sha1("<platform>|<connectionId>|<group>|<repo>|<remoteId>").slice(0,12)`。
-  理由：Bitbucket PR id 是 per-repo 递增的，同连接不同 repo 会撞号；hash 唯一且路径友好（无 `:`/`/`，跨平台免 sanitize）；
-  多平台共用同一 identity。
-- **per-PR 目录布局**（活跃 PR 落 `state/prs/`，退场 PR 整树搬到平级的 `archived/prs/` 冷存储）：
+- **JSON files + the `StateStore` abstraction**: `read/write/delete/deleteDir/list`. Phase one implements `JsonFileStateStore`, one file per key (relative to the `state/` root). **Atomic write**: tmp → fsync → rename, so a crash never leaves a half-written file. Single writer (the Main process holds it exclusively), no file locks. Every file carries a `schema_version`.
+  Why not SQLite: the scale is small (at most a few hundred PRs / a few thousand findings); native modules must be recompiled per platform per Electron version, which complicates the CI matrix. Swap the implementation once a trigger threshold is hit (a single file >10MB read/written frequently / complex cross-entity queries / a measured bottleneck), with the business layer unchanged.
+- **PR localId = hash**: `sha1("<platform>|<connectionId>|<group>|<repo>|<remoteId>").slice(0,12)`.
+  Rationale: Bitbucket PR ids are per-repo incremental, so different repos on the same connection collide; the hash is unique and path-friendly (no `:`/`/`, no cross-platform sanitize needed); and multiple platforms share one identity.
+- **Per-PR directory layout** (active PRs live in `state/prs/`; a retired PR has its whole tree relocated to the sibling `archived/prs/` cold storage):
   ```
   ~/.code-meeseeks/
   ├── state/prs/
-  │   ├── index.json          # hash → PrIndexEntry（lookup + 退场判定的单一来源；含活跃 + 归档全部条目）
-  │   └── <hash>/             # 仅活跃（在场）PR
-  │       ├── meta.json       # 完整 PR 元数据 StoredPullRequest（自带 platform 字段）
-  │       ├── comments.json   # 评论快照 + cache key
-  │       ├── read-state.json # 用户已读水位（未读标记派生用，仅 markRead 写）
-  │       └── runs/<runId>.json # 评审会话（跟 PR 同寿命）
-  └── archived/prs/<hash>/    # 退场（软删）PR 的同形冷存储；grace 期满整树清掉
+  │   ├── index.json          # hash → PrIndexEntry (single source for lookup + retirement decisions; holds all active + archived entries)
+  │   └── <hash>/             # active (present) PRs only
+  │       ├── meta.json       # full PR metadata StoredPullRequest (carries its own platform field)
+  │       ├── comments.json   # comment snapshot + cache key
+  │       ├── read-state.json # user read watermark (used to derive the unread marker; written only by markRead)
+  │       └── runs/<runId>.json # review session (same lifetime as the PR)
+  └── archived/prs/<hash>/    # isomorphic cold storage for retired (soft-deleted) PRs; the whole tree is purged when the grace period expires
   ```
-  - **活跃 / 归档物理分离**：`state/` 与 `archived/` 是两个平级的 `StateStore` 根。活跃存储只装在场 PR；
-    PR 退场时其 `prs/<hash>/` 整树经 `relocateTree(state → archived)` 搬入冷存储，复活时反向搬回。
-    默认列表只读活跃存储（`listStoredPullRequests` 天然不含归档）；归档除供生命周期清理外，另由「已关闭」
-    视图按需读取——`listArchivedPullRequests(state, archived)`（按索引 `archivedAt` 非空筛、逐个 meta 从归档存储读）
-    出列表，打开某条时 `findPrOrThrow` 在活跃库未命中后兜底归档存储，使其 diff / 评论等路径仍可解析。
-  - **per-PR 存储按归档状态路由（写安全 + 补充评审）**：已关闭范围对**已合并 / 仍开放**的 PR 仍允许补充评论 +
-    补跑 AI 评审（仅不提供合并 / 审批）。这要求 per-PR 子树读写（评论缓存 / 草稿 / 关闭关系 / 评审 run / 会话 /
-    台账 / diff-base 缓存）经 `PrService.storeForPr(localId)`（据索引 `archivedAt` 解析）落到正确的根——否则对归档 PR
-    的写会进活跃存储，被下轮 poll 对账（`relocateTree` 源覆盖目的、**先清空目的**）连同归档数据一并误删。**仅浏览（declined）
-    的写入由前端按 PR 状态门控**（不渲染评论 / 评审入口），但存储路由仍是兜底正确性的前提。
-  - **索引仍单点**：`index.json` 只在活跃存储维护，是「哪些 hash 存在 + archivedAt」的唯一真相，覆盖活跃 + 归档全部条目；
-    数据所在根由 `archivedAt` 是否为空隐含决定（空=活跃存储 / 非空=归档存储）。
-  - 另有 `connections.json` / `watched-repos.json` / `posted-comments.json`（横向幂等记录，与 PR 目录解耦）。
-- **评论缓存按 PR `updatedAt` 失效**：`comments.json` 存写入时的 `pr_updated_at`；与当前 PR meta 的 `updatedAt`
-  不一致即 stale → 重拉。Bitbucket 任何 PR 变更都跳 `updatedAt`，是足够保险的 cache key。
-- **安全 invariant**：
-  - **拉取失败不动本地**：某连接 `listPendingPullRequests` 抛错 → 不写其名下 PR、不软删、不剔索引；
-    全失败则索引零写入、mtime 不变（避免误触 watcher/备份）。poll 是唯一权威，远端是最终 truth。
-  - **路径越界屏障**：所有 fs 操作过 `subpathInside` 检查（拒 `..` / 绝对路径 / 清空根），因为 key 由调用方
-    拼接（含 PR localId / runId），必须防未净化输入越界读写。
-- **读宽容、写幂等**：状态文件被外部删/坏时，读返回 null/skip、下一轮 poll 重建；不做启动 reconcile / 自动备份。
-- **启动清扫孤儿 tmp**：原子写「tmp → rename」中，进程在两步之间被强杀 / 退出（如关窗瞬间的 in-flight 异步写）会留下 `*.tmp`
-  孤儿、跨会话累积。`sweepStaleTmpFiles` 在启动早期、任何写入之前删掉全部 `*.tmp`——单写者前提下此刻无 in-flight 写，凡 tmp 皆为
-  上次会话孤儿，可放心删；**绝不在运行期清扫**，以免误删并发写 / rename 重试正在用的 tmp（冲突场景不误删多余文件）。
-- **启动清扫归档孤儿**：按索引遍历的硬清够不到「索引丢失 / 重建后失去条目」的归档数据（poll 只从远端补回活跃 PR），
-  会在 `archived/prs/` 永久滞留。`sweepOrphanedArchivedPrs`（启动期、写入前）以无索引方式兜底：walk `archived/prs/*`，
-  对「统一索引无对应条目 **且** 目录 mtime 超 grace」的整树删掉（mtime 作 archivedAt 的代理）。双重保守避免误删暂时
-  不在索引里的目录；机制为 `JsonFileStateStore.sweepOrphanDirs`。**正常清理仍走统一索引的到期硬清，此处仅补索引丢失的缺口。**
+  - **Active / archived are physically separated**: `state/` and `archived/` are two sibling `StateStore` roots. Active storage holds only present PRs; when a PR is retired, its `prs/<hash>/` whole tree is moved into cold storage via `relocateTree(state → archived)`, and moved back on revive. The default list reads only active storage (`listStoredPullRequests` naturally excludes archives); beyond serving lifecycle cleanup, archives are also read on demand by the "Closed" view — `listArchivedPullRequests(state, archived)` (filters on the index by non-empty `archivedAt`, reading each meta from archive storage) produces the list, and when one is opened `findPrOrThrow` falls back to archive storage after missing in the active store, keeping its diff / comment / other paths resolvable.
+  - **Per-PR storage is routed by archived state (write safety + supplemental review)**: within the closed scope, **merged / still-open** PRs still allow adding comments + re-running AI review (only merge / approval are withheld). This requires per-PR subtree read/write (comment cache / drafts / close relations / review runs / sessions / ledger / diff-base cache) to land in the correct root via `PrService.storeForPr(localId)` (resolved from the index's `archivedAt`) — otherwise a write to an archived PR would go into active storage and be wrongly deleted along with the archived data by the next poll's reconcile (`relocateTree` has the source overwrite the destination, **clearing the destination first**). **Writes for browse-only (declined) PRs are gated by the frontend per PR status** (the comment / review entry points are not rendered), but storage routing remains the prerequisite for backstop correctness.
+  - **The index stays the single point**: `index.json` is maintained only in active storage and is the sole truth for "which hashes exist + archivedAt", covering all active + archived entries; the root the data lives in is implied by whether `archivedAt` is empty (empty = active storage / non-empty = archive storage).
+  - There are also `connections.json` / `watched-repos.json` / `posted-comments.json` (cross-cutting idempotency records, decoupled from the PR directory).
+- **Comment cache invalidated by PR `updatedAt`**: `comments.json` stores the `pr_updated_at` at write time; if it disagrees with the current PR meta's `updatedAt`, it is stale → re-fetch. Bitbucket bumps `updatedAt` on any PR change, so it is a sufficiently safe cache key.
+- **Safety invariants**:
+  - **A fetch failure doesn't touch local data**: if a connection's `listPendingPullRequests` throws → don't write its PRs, don't soft-delete, don't drop from the index; if all fail, the index gets zero writes and its mtime is unchanged (avoiding falsely triggering watchers / backups). The poll is the sole authority; the remote is the final truth.
+  - **Path-escape barrier**: every fs operation passes a `subpathInside` check (rejects `..` / absolute paths / clearing the root), because the key is concatenated by the caller (including PR localId / runId) and must be guarded against unsanitized input reading/writing out of bounds.
+- **Lenient reads, idempotent writes**: when a state file is externally deleted / corrupted, the read returns null/skip and the next poll rebuilds it; there is no startup reconcile / auto-backup.
+- **Sweep orphan tmp files at startup**: in the atomic write "tmp → rename", a process force-killed / exiting between the two steps (e.g. an in-flight async write at the instant a window closes) leaves `*.tmp` orphans that accumulate across sessions. `sweepStaleTmpFiles` deletes all `*.tmp` early at startup, before any write — under the single-writer premise there is no in-flight write at this moment, so every tmp is an orphan from the last session and can be safely deleted; **never sweep during runtime**, to avoid wrongly deleting a tmp being used by a concurrent write / rename retry (so a conflict scenario doesn't delete spare files by mistake).
+- **Sweep orphan archives at startup**: index-driven hard cleanup can't reach archived data whose "index entry was lost / dropped after a rebuild" (the poll only refills active PRs from the remote), which would linger forever in `archived/prs/`. `sweepOrphanedArchivedPrs` (at startup, before any write) is an index-free backstop: it walks `archived/prs/*` and deletes the whole tree of any that "has no corresponding entry in the unified index **and** whose directory mtime exceeds the grace period" (mtime stands in for archivedAt). The double conservatism avoids wrongly deleting a directory temporarily absent from the index; the mechanism is `JsonFileStateStore.sweepOrphanDirs`. **Normal cleanup still goes through the unified index's expiry-based hard cleanup; this only fills the gap of a lost index.**
 
-### 业务生命周期
+### Business lifecycle
 
-PR 在存储中的**在场状态**随其远端生命周期流转——由 `index.json` 的 `archivedAt` 是否为空界定（空 = 活跃存储 / 非空 = 归档冷存储），跨存储迁移一律经 `relocateTree`（先清空目的、源末删、幂等可重来）：
+A PR's **presence state** in storage flows with its remote lifecycle — delimited by whether `index.json`'s `archivedAt` is empty (empty = active storage / non-empty = archive cold storage); cross-storage migration always goes through `relocateTree` (clear the destination first, delete the source last, idempotent and re-runnable):
 
 ```mermaid
 stateDiagram-v2
-  state "活跃存储 state/" as Active
-  state "归档冷存储 archived/" as Archived
-  [*] --> Active: poll 发现（待评审 / 我创建）
-  [*] --> Archived: 按 URL 打开（直接入归档）
-  Active --> Archived: 退场软删（merged / declined / 非 reviewer）
-  Archived --> Active: 远端复现 → 复活
-  Archived --> [*]: grace 期满 → 两端整树清除
+  state "active storage state/" as Active
+  state "archive cold storage archived/" as Archived
+  [*] --> Active: poll discovers (review requested / created)
+  [*] --> Archived: opened by URL (goes straight to archive)
+  Active --> Archived: retire soft-delete (merged / declined / no longer reviewer)
+  Archived --> Active: reappears remotely → revive
+  Archived --> [*]: grace period expires → whole tree purged from both ends
   note right of Archived
-    对账每轮收敛：凡 archivedAt 非空必在 archived/
+    reconcile converges each round: any non-empty archivedAt must be in archived/
   end note
 ```
 
-- **软删 + 1 周 grace + 冷存储搬迁**：PR 从远端 reviewer 列表消失（merged/declined/不再是 reviewer）→ 把整树搬入
-  `archived/` 冷存储、再标 `archivedAt`（搬迁先于索引落盘，崩溃可幂等重来），不立即删盘；窗口内 UI 隐藏但数据保留，
-  远端复现时整树搬回活跃存储、自动复活；grace 期满下轮 poll 从**归档 + 活跃两端**整目录清掉（两端清以兜旧布局 /
-  异常 split-brain 残留）。便于事后回看。
-- **按 URL 打开的 PR 直接入归档**：命令面板「打开 URL」拉取的他人 PR（未正式请求你评审）由 IPC `prs:openByUrl`
-  鉴权拉取后**直接 `writePrMeta(archiveStore)` + 写一条 `archivedAt=now` 的索引条目**——既不在远端 reviewer 列表、
-  也无需先经活跃态，故一开始就当归档对待，**复用同一 grace 清理与对账**（grace 期满即被两端清扫）。写索引时紧邻重读
-  做 read-modify-write 以缩小与 poll 重写索引的竞态窗口。镜像沿用打开详情时的懒拉取（含源分支已删按 PR 头引用定位）。
-- **对账（最终一致）**：每轮 poll 遍历 archived 条目时，未到 grace 的若数据仍滞留活跃存储 → 整树搬入归档存储
-  （`relocateTree(state → archived)`，已就位者源缺失即 no-op）。覆盖升级前旧布局的存量、异常 split-brain 残留、
-  中断的搬迁，使「凡 archived 必在 archived/」自动收敛——无需迁移脚本。对账只搬数据、不改索引，不破「全失败 poll 零索引写」不变式。
-- **未读标记**：`listStoredPullRequests` 派生 `StoredPullRequest.unread`（不持久化）。规则：**从未打开过**（无 read-state）即
-  未读——覆盖新分配 / 请求评审的新到达，以及清空目录 / 全新安装后涌入的 PR；**打开过之后**则看源 head 又变（新 commit）或已读
-  时间后有「@我 / 回复我」评论（`index.lastMentionAt > read-state.lastReadAt`）。两类状态**分文件、分写者**以避开竞态：**已读水位**
-  `read-state.json`（`lastReadHeadSha`+`lastReadAt`）**仅** `prs:markRead`（用户打开 PR）写、poll 一概不碰；**mention 游标**
-  `index.lastMentionAt` 由 poll 独占维护（poll 整体重写 index.json，不会覆盖用户水位），仅在 PR `updatedAt` 跳变时拉评论扫描、与
-  历史取较大值，成本与活动量成正比。commit 检测对各平台通用、不依赖 `updatedAt`。早期开发版不做升级兼容（不抑制旧存量泛红，清库 / 重装即可）。
-- **未读点名计数**：同一次评论扫描里，除游标外还把「@我 / 回复我」评论的 `createdAt` 累积进 `index.mentionAts`（与历史并集去重、
-  按时间降序留最近 10 条）。`listStoredPullRequests` 据此派生 `StoredPullRequest.unreadMentionCount`（不持久化）：数其中晚于
-  `read-state.lastReadAt` 的条数（从未打开过则全计）。与 `unread` **并存、互不替代**——计数封顶 10（UI 满额显示「10+」），UI 在有计数时
-  以数字标记替换未读圆点、否则仍显示圆点。同属 poll 独占维护、与已读水位解耦。
+- **Soft-delete + 1-week grace + relocation to cold storage**: when a PR disappears from the remote reviewer list (merged/declined/no longer a reviewer) → move the whole tree into `archived/` cold storage, then mark `archivedAt` (relocation precedes writing the index, so a crash is idempotently re-runnable); it is not deleted from disk immediately. Within the window the UI hides it but the data is retained; when it reappears remotely the whole tree moves back to active storage and auto-revives; when the grace period expires the next poll purges the whole directory from **both the archive and active ends** (clearing both ends catches old-layout / abnormal split-brain residue). This makes after-the-fact review convenient.
+- **PRs opened by URL go straight to the archive**: someone else's PR pulled via the command palette "Open URL" (which never formally requested your review) is, after IPC `prs:openByUrl` authenticated-fetches it, written **directly with `writePrMeta(archiveStore)` + an index entry of `archivedAt=now`** — it is neither on the remote reviewer list nor needs to pass through the active state first, so it is treated as archived from the start, **reusing the same grace cleanup and reconcile** (purged from both ends once the grace period expires). When writing the index, it immediately re-reads and does a read-modify-write to shrink the race window against the poll rewriting the index. The mirror follows the lazy fetch of opening details (including locating a deleted source branch by the PR head ref).
+- **Reconcile (eventual consistency)**: each poll round, while iterating the archived entries, if one not yet past grace still has data lingering in active storage → move the whole tree into archive storage (`relocateTree(state → archived)`; a no-op if already in place with the source missing). This covers pre-upgrade old-layout leftovers, abnormal split-brain residue, and interrupted relocations, converging "anything archived must be in archived/" automatically — no migration script needed. Reconcile only moves data, never touches the index, and doesn't break the "an all-failed poll writes zero to the index" invariant.
+- **Unread marker**: `listStoredPullRequests` derives `StoredPullRequest.unread` (not persisted). Rules: **never opened** (no read-state) means unread — covering newly assigned / review-requested arrivals as well as the PRs flooding in after clearing the directory / a fresh install; **once opened**, it looks at whether the source head changed again (a new commit) or there is an "@me / reply to me" comment after the read time (`index.lastMentionAt > read-state.lastReadAt`). The two kinds of state are **split across files, with separate writers** to avoid races: the **read watermark** `read-state.json` (`lastReadHeadSha` + `lastReadAt`) is written **only** by `prs:markRead` (the user opening the PR) and never touched by the poll; the **mention cursor** `index.lastMentionAt` is maintained exclusively by the poll (the poll rewrites index.json wholesale and never overwrites the user watermark), fetching comments to scan only when the PR's `updatedAt` jumps and taking the max against history, at a cost proportional to the activity volume. Commit detection is common across platforms and doesn't depend on `updatedAt`. The early dev builds do no upgrade compatibility (they don't suppress old stock going red across the board; just clear the store / reinstall).
+- **Unread mention count**: in the same comment scan, beyond the cursor it also accumulates the `createdAt` of "@me / reply to me" comments into `index.mentionAts` (unioned with and deduped against history, kept in descending time order to the most recent 10). `listStoredPullRequests` derives `StoredPullRequest.unreadMentionCount` from this (not persisted): counting those later than `read-state.lastReadAt` (all of them if never opened). It **coexists with, and does not replace, `unread`** — the count caps at 10 (the UI shows "10+" at capacity), and the UI replaces the unread dot with a numeric marker when there is a count, otherwise still showing the dot. It is likewise maintained exclusively by the poll and decoupled from the read watermark.
 
-## 数据 / 接口契约
+## Data / interface contract
 
-**抽象接口**
+**Abstract interfaces**
 
-- `StateStore`：键值式状态读写抽象——`read` / `write` / `delete` / `deleteDir` / `list`（key 为相对 `state/` 根的路径，`deleteDir` / `list` 按前缀批量）。
-- `relocateTree`：跨 store 整树搬迁（list→read→write→deleteDir），活跃⇄归档间搬 PR 子树；目标先清空（源为权威）、源末删（幂等可重来）、源缺失即 no-op，不破 `StateStore` 抽象。
+- `StateStore`: a key-value state read/write abstraction — `read` / `write` / `delete` / `deleteDir` / `list` (the key is a path relative to the `state/` root; `deleteDir` / `list` operate on a prefix in bulk).
+- `relocateTree`: cross-store whole-tree relocation (list→read→write→deleteDir), moving a PR subtree between active ⇄ archive; the destination is cleared first (the source is authoritative), the source is deleted last (idempotent, re-runnable), and a missing source is a no-op — without breaking the `StateStore` abstraction.
 
-**核心实体**（仅列承载设计含义的关键字段，完整字段见各类型定义；所有持久化文件含 `schema_version`）
+**Core entities** (only the key fields carrying design meaning are listed; see each type definition for the full fields; every persisted file carries `schema_version`)
 
-| 实体（文件） | 用途 | 关键字段 |
+| Entity (file) | Purpose | Key fields |
 | --- | --- | --- |
-| `PrIndexEntry`（`index.json`） | lookup + 退场判定的单一来源（含活跃 + 归档全部条目） | `identity` · `updatedAt` · `archivedAt\|null`（空 = 活跃 / 非空 = 归档）· mention 游标 `lastMentionAt?` · `mentionAts?`（最近 10 条，未读点名计数据此派生） |
-| `StoredPullRequest`（`meta.json`） | 完整 PR 元数据，`platform` 自描述 | 派生态 `unread` / `unreadMentionCount` 不持久化 |
-| `PrReadStateFile`（`read-state.json`） | 用户已读水位，仅 `prs:markRead` 写 | `lastReadHeadSha` · `lastReadAt` |
-| `ReviewRun`（`runs/<runId>.json`） | 评审会话（详见 [评审闭环](../01-platform/03-review-workflow.md)） | `findings` · `tokenUsage` · `model` · 状态机字段 |
+| `PrIndexEntry` (`index.json`) | single source for lookup + retirement decisions (all active + archived entries) | `identity` · `updatedAt` · `archivedAt\|null` (empty = active / non-empty = archived) · mention cursor `lastMentionAt?` · `mentionAts?` (most recent 10; the unread mention count is derived from this) |
+| `StoredPullRequest` (`meta.json`) | full PR metadata, `platform` self-describing | derived states `unread` / `unreadMentionCount` not persisted |
+| `PrReadStateFile` (`read-state.json`) | user read watermark, written only by `prs:markRead` | `lastReadHeadSha` · `lastReadAt` |
+| `ReviewRun` (`runs/<runId>.json`) | review session (see [Review workflow](../01-platform/03-review-workflow.md)) | `findings` · `tokenUsage` · `model` · state-machine fields |
 
-横向幂等记录（与 PR 目录解耦）：`connections.json` / `watched-repos.json` / `posted-comments.json`。
+Cross-cutting idempotency records (decoupled from the PR directory): `connections.json` / `watched-repos.json` / `posted-comments.json`.
 
-## 扩展与注意事项
+## Extension & caveats
 
-- **升级 SQLite**：只换 `StateStore` 实现 + 数据迁移，接口与业务不动。
-- **grace 期 / hash 长度 / cache key** 都是直觉取值，留了可调空间（改动需清空 `state/` 重拉）。
-- **本地开发**：schema 变更阶段直接清空 `state/` 重拉，不写迁移脚本。
-- 孤儿目录（索引无条目）暂不主动清理，占盘但不影响功能，后续加 housekeeping。
+- **Upgrading to SQLite**: swap only the `StateStore` implementation + data migration; the interface and business stay put.
+- **grace period / hash length / cache key** are all intuitive values with room to tune (a change requires clearing `state/` and re-fetching).
+- **Local development**: during a schema-change phase, just clear `state/` and re-fetch rather than writing a migration script.
+- Orphan directories (no index entry) are not actively cleaned for now — they take disk space but don't affect functionality; add housekeeping later.
