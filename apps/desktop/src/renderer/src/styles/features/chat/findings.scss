@@ -1,5 +1,5 @@
-// chat 面板内 pr-agent 结构化结果卡片 (findings)：按 sectionKey 着色的卡片、类别 chip、
-// 概览指标行、草稿状态/操作、评分、代码对比块、锚点跳转、PR Type 胶囊。
+// pr-agent structured result cards (findings) inside the chat pane: cards colored by sectionKey, category chip,
+// overview metric row, draft status/actions, score, code comparison block, anchor jump, PR Type pills.
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
@@ -22,12 +22,12 @@
   font-size: $fs-lg;
   line-height: $lh-normal;
 
-  // 按 sectionKey 着不同的左条颜色，呈现"标准文档"骨架的视觉分组：
-  //   - 元信息 (建议标题 / 类型) + 架构图 + 工作量 走主蓝
-  //   - 描述 / 走查 / 总结 + 测试 / 安全（概览结论）走绿
-  //   - 评分 走中性灰
-  //   - 代码反馈 / 改进建议 走警示色 (黄/橙)
-  // general (兜底) 不着色，保留默认灰
+  // Color the left bar differently by sectionKey to present the visual grouping of the "standard document" skeleton:
+  //   - meta info (suggested title / type) + architecture diagram + effort use main blue
+  //   - description / walkthrough / summary + tests / security (overview conclusions) use green
+  //   - score uses neutral gray
+  //   - code feedback / improvement suggestions use warning color (yellow/orange)
+  // general (fallback) stays uncolored, keeping the default gray
   &.chat-finding-title,
   &.chat-finding-pr-type,
   &.chat-finding-diagram,
@@ -43,7 +43,7 @@
   &.chat-finding-ask-summary {
     border-left-color: $color-approved;
   }
-  // /ask 过程分析：中性灰（默认收起的过程性段，不抢眼）
+  // /ask process analysis: neutral gray (collapsed-by-default procedural section, unobtrusive)
   &.chat-finding-score,
   &.chat-finding-ask-analysis {
     border-left-color: $text-muted;
@@ -56,22 +56,22 @@
   &.chat-finding-general {
     border-left-color: $border-default;
   }
-  // 已拒绝：左色条转中性灰（盖过 code-feedback / suggestion 的警示色）、整卡降饱和收起
+  // Rejected: left color bar turns neutral gray (overrides the warning color of code-feedback / suggestion), whole card desaturated and collapsed
   &.chat-finding-rejected {
     border-left-color: $text-muted;
     opacity: 0.68;
   }
 }
 
-// 点击复评引用徽标定位到原 finding 卡片时的短暂高亮：用「覆盖式高亮环 + inset 淡色填充」而非背景渐隐
-// ——finding 卡有实底 $bg-elev，背景渐隐会被洗掉看不出闪烁；覆盖式与卡片底色无关、任意底色都清晰可见，
-// 动画结束自动回落（fill-mode 默认 none）。高亮色 = 卡片左条主题色（--flash-color，按 sectionKey 取），
-// 让定位反馈与卡片类别视觉一致（如代码建议=橙黄）；已关闭/拒绝卡统一中性灰（盖过类别色）。
+// Brief highlight when clicking a re-review reference badge to locate the original finding card: uses an "overlay highlight ring + inset faint fill" rather than a background fade-out
+// —finding cards have a solid $bg-elev background, so a background fade would be washed out and the flash invisible; the overlay is independent of the card background, clearly visible on any background,
+// and falls back automatically when the animation ends (fill-mode defaults to none). Highlight color = the card's left bar theme color (--flash-color, taken by sectionKey),
+// keeping the location feedback visually consistent with the card category (e.g. code suggestion = orange-yellow); closed/rejected cards use unified neutral gray (overriding the category color).
 .chat-finding-flash {
   --flash-color: #{$border-default};
   animation: chat-finding-flash-kf 1.5s ease-out;
 }
-// 类别色：与上面 .chat-finding 的 border-left-color 分组逐一对应。
+// Category colors: correspond one-to-one with the border-left-color groups of .chat-finding above.
 .chat-finding-title.chat-finding-flash,
 .chat-finding-pr-type.chat-finding-flash,
 .chat-finding-diagram.chat-finding-flash,
@@ -96,7 +96,7 @@
 .chat-finding-ask-suggestions.chat-finding-flash {
   --flash-color: #{$color-warning};
 }
-// 已关闭/拒绝卡：统一中性灰（语义=非活跃，盖过类别色）。须置于类别规则之后以同特异性覆盖。
+// Closed/rejected cards: unified neutral gray (semantics = inactive, overriding the category color). Must be placed after the category rules to override at the same specificity.
 .chat-finding-rejected.chat-finding-flash {
   --flash-color: #{$text-muted};
 }
@@ -118,17 +118,17 @@
   gap: $space-3;
   margin-bottom: $space-3;
 }
-// 收起态：正文已隐藏，头部的下间距会让卡片上下不对称（下方多出 margin-bottom）→ 归零，使上下内边距对称。
+// Collapsed state: body is hidden, and the header's bottom spacing would make the card vertically asymmetric (extra margin-bottom below) → zero it out so top/bottom padding is symmetric.
 .chat-finding-collapsed .chat-finding-head {
   margin-bottom: 0;
 }
-// 可折叠卡：整行标题区即展开/收起热区（扩大可点面积，不止右侧 chevron）。
+// Collapsible card: the whole title row is the expand/collapse hotspot (enlarges the clickable area, not just the right-side chevron).
 .chat-finding-head-toggle {
   cursor: pointer;
 }
-// 折叠/展开高度动画：grid-template-rows 0fr↔1fr（可对 auto 高度做过渡）。内容始终挂载，inner
-// overflow:hidden + min-height:0 在收起时裁切——故收/展是平滑的高度过渡。仅可折叠卡会切到
-// collapsed → 0fr；其余卡恒 1fr、无动画。
+// Collapse/expand height animation: grid-template-rows 0fr↔1fr (allows transitioning auto height). Content is always mounted, inner
+// overflow:hidden + min-height:0 clips when collapsed — so collapse/expand is a smooth height transition. Only collapsible cards switch to
+// collapsed → 0fr; other cards stay 1fr with no animation.
 .chat-finding-collapsible {
   display: grid;
   grid-template-rows: 1fr;
@@ -141,21 +141,21 @@
   min-height: 0;
   overflow: hidden;
 }
-// 尊重系统「减少动效」：关掉高度过渡与 chevron 旋转过渡。
+// Respect the system "reduce motion": turn off the height transition and the chevron rotation transition.
 @media (prefers-reduced-motion: reduce) {
   .chat-finding-collapsible,
   .chat-finding-collapse-toggle svg {
     transition: none;
   }
 }
-// 分析解读（ask-analysis）展开时：chip 行下加一条分割线，与下方富文本内容（表格 / 代码块）衔接更自然，
-// 避免头部 chip 直接贴正文显得突兀。仅展开态（无 chat-finding-collapsed）出现。
+// When analysis interpretation (ask-analysis) is expanded: add a divider below the chip row for a more natural transition to the rich-text content below (tables / code blocks),
+// avoiding the abruptness of the header chip sitting directly against the body. Appears only in the expanded state (no chat-finding-collapsed).
 .chat-finding-ask-analysis:not(.chat-finding-collapsed) .chat-finding-head {
   padding-bottom: $space-3;
   border-bottom: 1px solid $border-default;
 }
-// 分析解读正文：H2 作为小节标题——字号调小到正文级（靠加粗区分，不过分抢眼），且每个小节上方用分割线
-// 隔开，长解读分段清晰。首个 H2（正文起始即标题）不重复加线，避免与头部分割线叠成双线。
+// Analysis interpretation body: H2 as a subsection heading — font size reduced to body level (distinguished by bold, not overly prominent), and each subsection separated by a divider
+// above it, keeping long interpretations clearly segmented. The first H2 (a title at the very start of the body) does not add a duplicate line, avoiding a double line stacking with the header divider.
 .chat-finding-ask-analysis .chat-finding-body {
   h2 {
     font-size: $fs-lg;
@@ -169,18 +169,18 @@
     border-top: none;
   }
 }
-// 度量走 chat-chip + chat-chip-md；配色由 markup 的 chat-chip-<tone(key)> 决定
-// (元信息/图/工作量→accent，内容/测试/安全→approved，警示→warning，评分/兜底→neutral)。
+// Metrics go through chat-chip + chat-chip-md; color determined by markup's chat-chip-<tone(key)>
+// (meta info/diagram/effort→accent, content/tests/security→approved, warning→warning, score/fallback→neutral).
 .chat-finding-cat {
   flex-shrink: 0;
 }
-// 已拒绝卡片：类别 chip 一并置灰，盖过分类配色（与左色条置灰一致）
+// Rejected card: the category chip is grayed out too, overriding the category color (consistent with the grayed-out left color bar)
 .chat-finding-rejected .chat-finding-cat {
   background: $bg-surface;
   color: $text-muted;
 }
-// 已拒绝卡片头部的展开 / 收起切换：chevron 图标，推到头部最右，低调中性样式。
-// 图标在右侧，收起态朝左（◂，旋转 180° 指回内容），展开态朝下（▾，旋转 90°）。
+// Expand / collapse toggle in the rejected card header: chevron icon, pushed to the far right of the header, low-key neutral style.
+// Icon on the right, points left when collapsed (◂, rotated 180° to point back at the content), points down when expanded (▾, rotated 90°).
 .chat-finding-collapse-toggle {
   margin-left: auto;
   flex-shrink: 0;
@@ -193,7 +193,7 @@
   color: $text-muted;
   cursor: pointer;
 
-  // ChevronIcon 原始朝右（▸）；收起态旋转 180° 朝左
+  // ChevronIcon originally points right (▸); collapsed state rotates 180° to point left
   svg {
     transition: transform 0.15s ease;
     transform: rotate(180deg);
@@ -207,8 +207,8 @@
     background: $bg-surface;
   }
 }
-// 头部操作图标栏：编辑（评论）/ 拒绝（圆形禁止）/ 引用（转发箭头）成组贴右上角，排在折叠 chevron 之左。
-// margin-left:auto 顶到最右；与 collapse-toggle 并存时由本组吃掉左侧空白，二者贴右成一组。
+// Header action icon bar: edit (comment) / reject (circle ban) / reference (forward arrow) grouped at the top-right corner, placed to the left of the collapse chevron.
+// margin-left:auto pushes it to the far right; when coexisting with collapse-toggle, this group absorbs the left whitespace so both sit right as one group.
 .chat-finding-head-actions {
   margin-left: auto;
   flex-shrink: 0;
@@ -220,7 +220,7 @@
     margin-left: 0;
   }
 }
-// 头部图标按钮（编辑 / 拒绝）：低调中性 → hover 主色；拒绝单独 → hover 高饱和危险红。
+// Header icon buttons (edit / reject): low-key neutral → hover accent color; reject alone → hover high-saturation danger red.
 .chat-finding-head-btn {
   display: inline-flex;
   align-items: center;
@@ -240,7 +240,7 @@
   color: $color-danger-strong;
   background: $color-danger-strong-fade;
 }
-// 「引用」按钮：社媒「转发」箭头图标，排在编辑 / 拒绝之右。低调中性 → hover 主色。
+// "Reference" button: social-media "forward" arrow icon, placed to the right of edit / reject. Low-key neutral → hover accent color.
 .chat-finding-reference-btn {
   display: inline-flex;
   align-items: center;
@@ -256,7 +256,7 @@
     background: $bg-surface;
   }
 }
-// 概览指标（工作量 / 测试 / 安全 / 评分）：值很短，chip 与值排同一行、紧凑展示，不再各占两行。
+// Overview metrics (effort / tests / security / score): values are very short, chip and value on the same row, compact display, no longer two rows each.
 .chat-finding-effort,
 .chat-finding-relevant-tests,
 .chat-finding-security,
@@ -272,7 +272,7 @@
   .chat-finding-body {
     margin: 0;
 
-    // 去掉 markdown 段落块级外边距，使「2 🔵🔵」之类短值与 chip 同排
+    // Remove the markdown paragraph block-level margin so short values like "2 🔵🔵" line up with the chip
     p {
       margin: 0;
     }
@@ -287,18 +287,18 @@
   min-width: 0;
   word-break: break-word;
 }
-// 草稿状态 chip + 操作按钮：anchor 行右侧，跟 score chip 共用 margin-left:auto 推到末尾
+// Draft status chip + action buttons: right side of the anchor row, sharing margin-left:auto with the score chip to push to the end
 .chat-finding-draft-actions {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: $space-2;
-  // 不可压缩 — anchor 行 path 太长时整段 chip+按钮要么完整显示要么换行，
-  // 不允许被压扁让按钮文字 wrap (用户实测"编辑"被换成两行)
+  // Non-shrinkable — when the anchor row path is too long, the whole chip+button segment either shows fully or wraps,
+  // not allowed to be squashed and let the button text wrap (user testing showed "edit" wrapped onto two lines)
   flex-shrink: 0;
 }
-// 度量走 chat-chip + chat-chip-tight；配色由 markup 的 chat-chip-<tone(status)> 决定
-// (pending/edited→accent，posted→approved，rejected→neutral)。rejected 额外加删除线。
+// Metrics go through chat-chip + chat-chip-tight; color determined by markup's chat-chip-<tone(status)>
+// (pending/edited→accent, posted→approved, rejected→neutral). rejected additionally adds a strikethrough.
 .chat-finding-draft-chip-rejected {
   text-decoration: line-through;
 }
@@ -311,7 +311,7 @@
   white-space: nowrap;
 }
 
-// /improve 的重要度评分 chip：右浮在 anchor 行末尾，高分 (>=8) 加 warning 调色
+// /improve importance score chip: floated right at the end of the anchor row, high scores (>=8) get warning coloring
 .chat-finding-score {
   margin-left: auto;
   padding: 1px $space-2;
@@ -328,7 +328,7 @@
   }
 }
 
-// /improve 建议的 existing → improved 代码片段对比块。两个独立 <pre>，红绿背景模拟 diff
+// existing → improved code snippet comparison block for /improve suggestions. Two separate <pre>, red/green backgrounds simulating a diff
 .chat-finding-code-change {
   display: flex;
   flex-direction: column;
@@ -362,8 +362,8 @@
   display: flex;
   gap: $space-2;
   align-items: baseline;
-  // path 长 + actions 不可缩 (flex-shrink:0) 时，整段会被推到容器外。
-  // 允许 wrap：path code 太长时 actions 换到下一行，永远在可见区内
+  // When the path is long + actions non-shrinkable (flex-shrink:0), the whole segment gets pushed outside the container.
+  // Allow wrap: when the path code is too long, actions wrap to the next line, always within the visible area
   flex-wrap: wrap;
 
   code {
@@ -372,15 +372,15 @@
     border-radius: $radius-sm;
     font-family: $font-mono;
     color: $text-body;
-    // 长路径优先按分隔符 / 连接符折断（BreakablePath 在 / . _ - 后插了 <wbr> 软断点）：
-    // word-break:normal 让浏览器只在这些软断点（及空格 / CJK）处折行，保证可读性；overflow-wrap:anywhere
-    // 仅作兜底——单个分段仍超宽时才允许任意断开，且让 code 作为 flex item 能正常收缩不撑爆容器。
+    // Long paths break at separators / connectors first (BreakablePath inserts <wbr> soft break points after / . _ -):
+    // word-break:normal makes the browser wrap only at these soft break points (and spaces / CJK), ensuring readability; overflow-wrap:anywhere
+    // is just a fallback — only allows arbitrary breaking when a single segment is still too wide, and lets code as a flex item shrink normally without bursting the container.
     word-break: normal;
     overflow-wrap: anywhere;
     min-width: 0;
   }
 }
-// 可点击锚点：path + 行号整体作为「跳转到代码对应行」的链接按钮
+// Clickable anchor: path + line number as a whole acts as a "jump to the corresponding code line" link button
 .chat-finding-anchor-link {
   @include anchor-link;
   display: inline-flex;
@@ -403,19 +403,19 @@
   font-size: $fs-lg;
 }
 
-// PR Type 段：拆成胶囊横排。背景色 / 描边色 / 文字色 inline 由 pillStyle() 计算
-// (按标签内容 hash 出色相)，这里只管布局 + 共通排版
+// PR Type section: split into a horizontal row of pills. Background / border / text colors are computed inline by pillStyle()
+// (hues hashed from the label content); this only handles layout + common typography
 .chat-finding-pills {
   display: flex;
   flex-wrap: wrap;
   gap: $space-2;
 }
-// PR Type 值胶囊并入头部行时：推到「类型」标签右侧、右对齐（多个仍可换行），单行省纵向空间。
+// When PR Type value pills are merged into the header row: pushed to the right of the "type" label, right-aligned (multiple can still wrap), single row saving vertical space.
 .chat-finding-pills-inline {
   margin-left: auto;
   justify-content: flex-end;
 }
-// 值胶囊已并入头部行，头部即整卡内容，去掉下外边距避免多余留白。
+// Value pills are merged into the header row, so the header is the whole card content; remove the bottom margin to avoid extra whitespace.
 .chat-finding-pr-type .chat-finding-head {
   margin-bottom: 0;
 }
@@ -427,8 +427,8 @@
   font-weight: 500;
   letter-spacing: 0.02em;
   line-height: $lh-normal;
-  // 按标签 hue 自动上色（--pill-hue 由 pillStyle 注入；缺省回退中性蓝）。暗色主题：深底 + 亮字；
-  // 浅色主题在下方覆写为浅底 + 深字，避免沿用暗色深胶囊在浅背景上过重。
+  // Auto-colored by the label hue (--pill-hue injected by pillStyle; falls back to neutral blue by default). Dark theme: dark background + bright text;
+  // light theme is overridden below to light background + dark text, avoiding the dark pill being too heavy on a light background.
   border: 1px solid hsl(var(--pill-hue, 210) 50% 32%);
   background: hsl(var(--pill-hue, 210) 55% 22%);
   color: hsl(var(--pill-hue, 210) 85% 78%);

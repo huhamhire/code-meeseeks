@@ -1,5 +1,5 @@
-// PR Commits 标签页：限宽居中表格（sha / 主题 / 作者 / 时间）+ 合并标记。
-// 见 components/features/pr/tabs/CommitsPanel。
+// PR Commits tab: width-limited centered table (sha / subject / author / time) + merge tag.
+// See components/features/pr/tabs/CommitsPanel.
 
 @use '../../tokens' as *;
 
@@ -10,7 +10,7 @@
   background: $bg-app;
 }
 .pr-commits-table {
-  // 表格限宽 960 居中，与详情 / 活动 / 评论页一致；滚动条留在外层 .pr-commits-panel 右缘
+  // Table width-limited to 960 and centered, consistent with the detail / activity / comments pages; scrollbar stays on the outer .pr-commits-panel right edge
   width: 100%;
   max-width: 960px;
   margin: 0 auto;
@@ -25,17 +25,17 @@
   }
   th {
     text-align: left;
-    // 表头与行同步加高，保持视觉一致
+    // Header raised in sync with rows, keeping visual consistency
     padding: $space-5 $space-4;
     font-weight: 600;
     color: $text-muted;
-    // 表头字号不小于正文（与表格 $fs-md 一致），靠加粗 + muted 色区分而非缩小
+    // Header font size not smaller than body (consistent with the table's $fs-md), distinguished by bold + muted color rather than shrinking
     font-size: $fs-md;
     border-bottom: 1px solid $border-default;
     white-space: nowrap;
   }
   td {
-    // 行高适当加高（纵向 padding 6px → 10px），提交列表更松弛易读
+    // Row height raised moderately (vertical padding 6px → 10px), making the commit list more relaxed and readable
     padding: $space-5 $space-4;
     border-bottom: 1px solid $border-muted;
     vertical-align: middle;
@@ -69,8 +69,8 @@
   font-weight: 600;
 }
 .pr-commits-col-subject {
-  // 主题列允许折行；但 cap 高度避免极长 message 把表格撑炸
-  max-width: 0; // trick: 配合 width:100% 让 table-layout 算可用宽，剩余给主题列
+  // Subject column allows wrapping; but cap the height to keep an extremely long message from blowing up the table
+  max-width: 0; // trick: paired with width:100% to let table-layout compute available width, giving the rest to the subject column
   width: 100%;
   word-break: break-word;
 }

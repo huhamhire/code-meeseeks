@@ -1,18 +1,18 @@
 @use '../tokens' as *;
 
-// 配置选择器：左右两栏布局 —— 左侧集成平台 / LLM provider 选择列表，右侧受控表单。
-// 由 settings 域的 PlatformPicker / LlmProviderPicker 复用，首启向导与设置面板子模态共用同一视觉。
-// （从原 .onboarding-platform-* / .onboarding-provider-* 收敛为中性类，统一在 settings 维护。）
+// Config picker: two-column layout —— integration platform / LLM provider selection list on the left, controlled form on the right.
+// Reused by the settings domain's PlatformPicker / LlmProviderPicker, the onboarding wizard and settings panel sub-modal share the same visuals.
+// (Converged from the original .onboarding-platform-* / .onboarding-provider-* into neutral classes, maintained uniformly in settings.)
 
 .config-pick-grid {
   display: grid;
-  // 左列固定 220px：容下最长副标题（如「gitlab.com / Self-Managed」）单行不折行
+  // Left column fixed at 220px: fits the longest subtitle (e.g. "gitlab.com / Self-Managed") on a single line without wrapping
   grid-template-columns: 220px 1fr;
   gap: $space-8;
   align-items: start;
 }
 .config-pick-form {
-  min-width: 0; // 防止右栏内容把 grid 撑出
+  min-width: 0; // prevent right-column content from blowing out the grid
 }
 
 .config-pick-list {
@@ -21,19 +21,19 @@
   gap: $space-3;
 }
 
-// 设置子模态内的左右两栏：固定高度，避免切换 provider 时右侧表单高矮变化导致模态抖动。
-// 左侧列表与右侧表单各自在该固定高度内独立滚动（自适应填满，内容不足时下方留白、内容超出则滚动），
-// 整体高度恒定。向导里在大卡片中铺开、不加此类，保持自适应。
+// Two columns inside the settings sub-modal: fixed height, avoiding modal jitter when the right form's height changes on provider switch.
+// The left list and right form each scroll independently within that fixed height (adaptively filling, whitespace below when content is short, scroll when content overflows),
+// with overall height constant. In the wizard it spreads out in a large card without this class, staying adaptive.
 .config-pick-grid-fixed {
   height: 190px;
   align-items: stretch;
 
   > .config-pick-list,
   > .config-pick-form {
-    min-height: 0; // 允许在 grid 行内收缩，从而触发自身滚动
+    min-height: 0; // allow shrinking within the grid row, thereby triggering its own scroll
     overflow-y: auto;
   }
-  // 右侧表单顶部留半行余白，第一项不贴顶、与左侧列表卡片视觉更协调
+  // Half a line of whitespace at the top of the right form, so the first item isn't flush to the top and reads more in harmony with the left list cards
   > .config-pick-form {
     padding-top: $space-5;
   }
@@ -61,8 +61,8 @@
     box-shadow: inset 3px 0 0 $color-accent;
     color: $text-primary;
   }
-  // 置灰：未实现平台 / 只读态的非当前项。仅 .disabled 控制视觉淡化，
-  // 交互失效单独用 HTML disabled 属性 —— 这样只读态下「当前选中项」可保持高亮不被淡化。
+  // Grayed out: unimplemented platforms / non-current items in read-only state. Only .disabled controls the visual dimming,
+  // interaction disabling uses the HTML disabled attribute separately —— this way the "currently selected item" in read-only state stays highlighted without being dimmed.
   &.disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -73,7 +73,7 @@
   display: inline-flex;
   justify-content: center;
   flex-shrink: 0;
-  width: 24px; // 固定宽度，保证各项图标占位一致、文字起点不漂移
+  width: 24px; // fixed width, ensuring each item's icon takes consistent space and text start doesn't drift
 
   &.muted-icon {
     color: $text-muted;
@@ -81,7 +81,7 @@
   }
 }
 
-// 平台项：图标右侧名称 + 副标题居中
+// Platform item: name to the right of the icon + centered subtitle
 .config-pick-text {
   flex: 1;
   display: flex;
@@ -99,9 +99,9 @@
 .config-pick-meta {
   color: $text-muted;
   font-size: $fs-sm;
-  white-space: nowrap; // 副标题始终单行，避免被拆词换行
+  white-space: nowrap; // subtitle always on a single line, avoiding word-break wrapping
 }
-// provider 项：名称占满图标右侧、过长省略号（无副标题，与平台项区分）
+// provider item: name fills the space right of the icon, ellipsis when too long (no subtitle, distinguishing it from platform items)
 .config-pick-name-fill {
   flex: 1;
   min-width: 0;

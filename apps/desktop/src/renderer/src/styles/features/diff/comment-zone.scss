@@ -1,37 +1,37 @@
-// Monaco 行内评论 view zone + glyph margin 标记。
-// 通过 DiffView 内 viewZone 注入 DOM；样式跟 markdown.scss 配合，
-// .comment-zone-body 也会加 .markdown class 走 markdown 视觉规则。
+// Monaco inline comment view zone + glyph margin marker.
+// DOM is injected via viewZone inside DiffView; styles work with markdown.scss,
+// .comment-zone-body also gets the .markdown class to follow markdown visual rules.
 
 @use '../../tokens' as *;
 
-// 结构 (跟 DraftZone 同):
-//   .monaco-comment-zone (= dom，monaco 控制 style.height inline，不能放视觉样式)
-//     .monaco-comment-zone-inner (= 内容容器，背景 / padding / 边框全在这)
-//       .comment-zone-inner (= CommentZone React 根，flex column 列表)
+// Structure (same as DraftZone):
+//   .monaco-comment-zone (= dom, monaco controls style.height inline, no visual styles here)
+//     .monaco-comment-zone-inner (= content container, background / padding / border all here)
+//       .comment-zone-inner (= CommentZone React root, flex column list)
 //
-// dom 自身设了视觉样式时蓝框尺寸 = monaco wrapper 高度 ≠ 内容高度，图片异步
-// 加载 / 嵌套评论展开后会出现内容溢出。挪到 inner + RO 监听 inner.offsetHeight
-// 同步 zoneObj.heightInPx 让 zone 自动撑高
+// When the dom itself sets visual styles, the blue box size = monaco wrapper height ≠ content height, so
+// content overflows after async image loading / nested comment expansion. Moved to inner + RO watching inner.offsetHeight
+// to sync zoneObj.heightInPx so the zone grows automatically
 .monaco-comment-zone {
   overflow: visible;
-  // monaco view zone 内部某层 z-index 较高会遮挡 view zone DOM 的鼠标命中
-  // (跟 DraftZone z-index:50 同套防御)，不然 click 完全到不了 inner 内 img/a
+  // some layer inside the monaco view zone with a higher z-index would block mouse hits on the view zone DOM
+  // (same defense as DraftZone z-index:50), otherwise clicks can't reach img/a inside inner at all
   z-index: 50;
 }
 .monaco-comment-zone-inner {
   position: relative;
   z-index: 51;
 }
-// monaco editor 全局会给 view zone 内 element 加 user-select: none / cursor:text，
-// 让评论变得既不能选文字也不能点链接。这里 reset 让评论变成"普通可交互内容"：
-//  - user-select: text 让浏览器允许 selection
-//  - cursor: text 让 hover 评论体看起来"像可选文本"
-//  - a / .bitbucket-image 覆盖各自语义 cursor
+// The monaco editor globally adds user-select: none / cursor:text to elements inside the view zone,
+// making comments neither text-selectable nor link-clickable. This reset turns comments into "ordinary interactive content":
+//  - user-select: text lets the browser allow selection
+//  - cursor: text makes the hovered comment body look "like selectable text"
+//  - a / .bitbucket-image override their respective semantic cursors
 .monaco-comment-zone,
 .monaco-comment-zone-inner {
-  // monaco view zone 默认可能给子元素设 pointer-events: none 让代码命中区干净
-  // (DraftZone 工作是因为 button/textarea 浏览器特殊处理)。显式 auto 让 Bitbucket
-  // 评论里 img / a 也能接收 click
+  // the monaco view zone may by default set pointer-events: none on children to keep the code hit area clean
+  // (DraftZone works because browsers handle button/textarea specially). Explicit auto lets img / a inside Bitbucket
+  // comments receive clicks too
   pointer-events: auto !important;
 }
 .monaco-comment-zone-inner {
@@ -45,10 +45,10 @@
   cursor: zoom-in !important;
 }
 
-// 回复 / 删除按钮：默认 hidden，hover 父评论时显示，避免常驻占视觉
+// reply / delete buttons: hidden by default, shown on hovering the parent comment, to avoid always-on visual clutter
 .comment-zone-foot {
   margin-top: $space-2;
-  min-height: 22px; // 占位防 hover 抖动
+  min-height: 22px; // placeholder to prevent hover jitter
   display: flex;
   gap: $space-3;
   align-items: center;
@@ -70,13 +70,13 @@
   border-color: $color-accent;
   color: $color-info;
 }
-// 编辑按钮：中性操作走主色描边，跟"回复"风格相似但有微差让人区分
+// edit button: neutral action uses the accent-color outline, similar to "reply" style but with a slight difference to distinguish
 .comment-zone-edit-btn:hover {
   border-color: $color-info;
   color: $color-info;
   background: rgb(var(--rgb-accent) / 0.08);
 }
-// 删除按钮主色用 danger，跟其它按钮拉开语义；disabled 时半透明
+// delete button uses danger as its main color to differentiate its semantics from other buttons; semi-transparent when disabled
 .comment-zone-delete-btn:hover:not(:disabled) {
   border-color: $color-danger-strong;
   color: $color-danger-strong;
@@ -86,12 +86,12 @@
   opacity: 0.4;
   cursor: not-allowed !important;
 }
-// 「加反应」按钮跟 foot 其它按钮一样默认隐藏、hover / focus 才显（已有反应 chips 常驻可见、不在此列）。
+// The "add reaction" button, like other foot buttons, is hidden by default and shown only on hover / focus (existing reaction chips stay always visible, not in this group).
 .comment-zone-foot .pr-reaction-add-wrap {
   opacity: 0;
   transition: opacity 0.12s;
 }
-// hover comment body 区时显示 foot 里的所有按钮（含加反应）；focus-within 覆盖键盘 / 反应弹层打开态
+// on hovering the comment body area, show all buttons in foot (including add reaction); focus-within covers keyboard / reaction popover open states
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-reply-btn,
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-edit-btn,
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-delete-btn,
@@ -106,7 +106,7 @@
   opacity: 1;
 }
 
-// 删除失败 inline 红条 (跟 .pr-comment-delete-error 同模)
+// inline red bar for delete failure (same pattern as .pr-comment-delete-error)
 .comment-zone-delete-error {
   display: flex;
   align-items: flex-start;
@@ -138,7 +138,7 @@
   background: $bg-panel-alt;
   border-left: 3px solid $color-accent;
   padding: $space-3 $space-6 $space-4 $space-8;
-  // 跟代码字号同等 (14px) — 评论不该比代码小
+  // same font size as code (14px) — comments should not be smaller than code
   font-size: $fs-lg;
   color: $text-primary;
   font-family:
@@ -179,30 +179,30 @@
   }
 }
 
-// 评论正文 / reply 与头像列对齐：左侧缩进 = 头像宽(18) + head gap(8) = 26
+// comment body / reply aligned with the avatar column: left indent = avatar width(18) + head gap(8) = 26
 .comment-zone-body {
   word-wrap: break-word;
   margin-top: $space-2;
   padding-left: 26px;
 }
 
-// margin-left 由 DiffView 内 CommentNode 按 depth 计算后写到 style 里
-// (前 5 层每层 18px，第 6+ 层 0 跟第 5 层平齐)
+// margin-left is computed by depth in CommentNode inside DiffView and written into style
+// (first 5 levels 18px each, level 6+ is 0, flush with level 5)
 .comment-zone-reply {
   margin-top: $space-4;
-  // 每层步进 12px + 左竖线 —— 缩进量与边框色对齐评论 tab 的 .pr-comments-replies（$space-6 / $border-muted）。
+  // 12px step per level + left vertical line —— indent amount and border color align with the comments tab's .pr-comments-replies ($space-6 / $border-muted).
   margin-left: $space-6;
   padding: $space-2 0 $space-2 $space-5;
   border-left: 2px solid $border-muted;
-  // 字号继承父级 (.monaco-comment-zone-inner 14px)，不再缩减 — 嵌套 reply 跟
-  // 父评论同等可读性，视觉层级靠左侧 border + indent 区分就够
+  // font size inherits from parent (.monaco-comment-zone-inner 14px), no further shrinking — nested reply has
+  // the same readability as the parent comment; the left border + indent are enough to distinguish visual hierarchy
 
   & + & {
     margin-top: $space-3;
   }
 
-  // 满 MAX_REPLY_INDENT_DEPTH 层后拉平：去步进 / 去左竖线 / 去左 padding，更深回复平铺在上限层级上。
-  // 必须三者全去 —— 仅去 margin 步进、保留 padding-left + border 会逐级累加仍右移（"还是有缩进"的根因）。
+  // flatten after reaching MAX_REPLY_INDENT_DEPTH levels: drop the step / left vertical line / left padding, deeper replies lay flat at the cap level.
+  // All three must be dropped —— dropping only the margin step while keeping padding-left + border accumulates per level and still shifts right (the root cause of "still indented").
   &.comment-zone-reply-flat {
     margin-left: 0;
     padding-left: 0;
@@ -210,13 +210,13 @@
   }
 
   .comment-zone-body {
-    // reply 头像也是 18px，从左对齐头像列
+    // reply avatar is also 18px, left-aligned to the avatar column
     padding-left: 26px;
     margin-top: 3px;
   }
 }
 
-// Monaco 行内评论标记 (glyph margin 蓝点 + 行号左侧细条)
+// Monaco inline comment marker (glyph margin blue dot + thin bar left of the line number)
 .monaco-comment-glyph {
   position: relative;
 

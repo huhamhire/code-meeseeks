@@ -1,11 +1,11 @@
-// settings 域的表单 / 列表 / 设置项控件样式：SettingsModal 各 section + 首启向导复用。
-// 通用模态壳 (.modal / .modal-section / .modal-kv 等) 在 common/modal；这里只放 settings 专属。
+// Form / list / settings-item control styles for the settings domain: reused by SettingsModal sections + first-run wizard.
+// Generic modal shell (.modal / .modal-section / .modal-kv etc.) lives in common/modal; only settings-specific styles go here.
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
-// 配置面板左右分区：模态 body 去内边距、由本布局接管；左侧分区导航固定不滚，
-// 右侧分区内容独立滚动。分区结构为后续扩展（主题 / 编辑器 / 上下文窗口等）预留。
+// Settings panel left/right split: the modal body drops its padding, this layout takes over; the left section nav stays fixed and doesn't scroll,
+// the right section content scrolls independently. The section structure is reserved for future expansion (theme / editor / context window etc.).
 .modal-body.settings-modal-body {
   padding: 0;
   overflow: hidden;
@@ -17,7 +17,7 @@
   display: flex;
   flex: 1;
   min-width: 0;
-  // 撑满定高模态（.modal-lg）：左导航固定、右面板独立滚动，不随分区内容增减高度
+  // Fill the fixed-height modal (.modal-lg): left nav fixed, right panel scrolls independently, height doesn't change with section content
   min-height: 0;
 }
 .settings-nav {
@@ -26,14 +26,14 @@
   flex-direction: column;
   gap: $space-1;
   padding: $space-5 $space-4;
-  // 与模态主体同色（$bg-elev），仅以右侧分隔线区分导航区，避免色块割裂
+  // Same color as the modal body ($bg-elev), the nav area is set apart only by the right divider line to avoid color-block fragmentation
   border-right: 1px solid $border-default;
   overflow-y: auto;
 }
 .settings-nav-item {
   display: flex;
   align-items: center;
-  // 图标与文案间距放宽：原 $space-3 视觉上偏挤、偏左，拉到 $space-5 让二者更舒展
+  // Widen the icon-to-text spacing: the original $space-3 looked cramped and left-leaning, pulling it to $space-5 gives both more breathing room
   gap: $space-5;
   padding: $space-3 $space-5;
   border: none;
@@ -49,8 +49,8 @@
     color: $text-muted;
   }
 
-  // 标签允许换行 + 断词：德语等长复合词（如 Benachrichtigungen）在固定宽导航里一行放不下，
-  // 靠 hyphens 正确断词（依赖 <html lang>，见 i18n），overflow-wrap 兜底——绝不裁切。
+  // Labels allow wrapping + word breaking: long compound words in German etc. (e.g. Benachrichtigungen) don't fit one line in the fixed-width nav,
+  // hyphens break them correctly (depends on <html lang>, see i18n), overflow-wrap as fallback — never clip.
   span {
     min-width: 0;
     overflow-wrap: break-word;
@@ -78,33 +78,33 @@
   overflow-y: auto;
   padding: $space-8;
 
-  // 设置页配置项上下间距放宽一档（比通用 modal 的 $space-8 更舒展），避免堆叠拥挤
+  // Widen the top/bottom spacing of settings items one notch (more relaxed than the generic modal's $space-8), avoiding a cramped stack
   .modal-section {
     margin-bottom: 20px;
   }
 
-  // 分区内末个 section 去掉多余底部留白
+  // Drop the extra bottom whitespace on the last section within the group
   .modal-section:last-child {
     margin-bottom: 0;
   }
 }
 
-// 语言下拉：固定宽度、靠右（块定位），文本左对齐；不被 .settings-input 的 flex:1 撑满（复合选择器提权）
+// Language dropdown: fixed width, right-aligned (block positioning), text left-aligned; not stretched by .settings-input's flex:1 (compound selector raises specificity)
 .settings-input.settings-language-select {
   flex: 0 0 auto;
   width: 180px;
 }
-// 整行铺满的输入（编辑器字体：自由输入、可能较长的逗号分隔列表，单独成行铺满、不靠右压缩）
+// Full-row input (editor font: free input, possibly long comma-separated list, on its own row filling full width, not compressed to the right)
 .settings-input.settings-input-block {
   flex: none;
   width: 100%;
 }
-// 单独成行的字段：标题在上、控件在下；收紧标题与控件间距
+// Field on its own row: title on top, control below; tighten the title-to-control spacing
 .settings-field-stacked h4 {
   margin-bottom: $space-3;
 }
 
-// 设置项启用状态 chip：复用 common chip 词汇 —— on=approved(绿)、off=neutral(灰)
+// Settings-item enabled-state chip: reuses common chip vocabulary — on=approved(green), off=neutral(gray)
 .settings-status-chip {
   @include chip;
   padding: 1px $space-2;
@@ -118,7 +118,7 @@
   }
 }
 
-// settings-input 在 modal-kv 值列里撑满（覆盖默认 input 宽度）
+// settings-input fills the modal-kv value column (overrides the default input width)
 .modal-kv-val .settings-input {
   width: 100%;
   box-sizing: border-box;
@@ -145,13 +145,13 @@
   margin-top: $space-5;
 }
 
-// 拖拽滑块（轮询间隔等）：自定义细 track（3px）+ 蓝色填充（--range-fill 控制）+ 圆点 thumb
+// Drag slider (polling interval etc.): custom thin track (3px) + blue fill (controlled by --range-fill) + round-dot thumb
 .settings-range {
   align-self: center;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
-  height: 12px; // 给 thumb 垂直居中留空间
+  height: 12px; // leave room to vertically center the thumb
   background: transparent;
 
   &::-webkit-slider-runnable-track {
@@ -169,14 +169,14 @@
     appearance: none;
     width: 12px;
     height: 12px;
-    margin-top: -4.5px; // (track 3 - thumb 12)/2，使圆点垂直居中于细线
+    margin-top: -4.5px; // (track 3 - thumb 12)/2, vertically centers the dot on the thin line
     border-radius: 50%;
     background: $color-accent;
   }
 }
 
-// 档位刻度参考行：每个刻度按 thumb 停靠位置绝对定位（见组件内 left 计算），
-// translateX(-50%) 居中对齐；当前档位高亮
+// Step tick reference row: each tick is absolutely positioned at the thumb's stop position (see the left calculation in the component),
+// translateX(-50%) centers it; the current step is highlighted
 .settings-range-ticks {
   position: relative;
   height: 16px;
@@ -202,13 +202,13 @@
   gap: $space-4;
   flex-wrap: wrap;
 }
-// 行内结果文案（如「测试连接」结果）：去掉块级 margin-top，与同行按钮垂直居中对齐
+// Inline result text (e.g. "test connection" result): drops the block-level margin-top, vertically centered with the buttons on the same row
 .settings-actions .error-text {
   margin-top: 0;
 }
 
-// 关于 & 反馈：低频社区外链行（Star / Issue / Releases）。带 1px 分隔线 + 留白与上方运行时
-// 控件清晰分区；各链接带专属图标、加大间距，彼此可辨。克制的文字链接，不抢运行时控件。
+// About & feedback: low-frequency community external-link row (Star / Issue / Releases). A 1px divider + whitespace cleanly separates it from the runtime
+// controls above; each link has its own icon and wider spacing, distinguishable from one another. Restrained text links that don't upstage the runtime controls.
 .settings-about-links {
   display: flex;
   align-items: center;
@@ -253,12 +253,12 @@
   }
 }
 
-// 关于页「复制运行环境信息」按钮：紧跟运行时标题的图标按钮；复制成功后短暂切到打勾的高饱和
-// 绿色态（is-copied）作反馈。两态均为同尺寸图标、不改内边距，避免点击后高度抖动。
+// About page "copy runtime environment info" button: an icon button right after the runtime title; on successful copy it briefly switches to a checkmark high-saturation
+// green state (is-copied) as feedback. Both states are same-size icons with unchanged padding, avoiding height jitter after clicking.
 .settings-copy-info {
   display: inline-flex;
   align-items: center;
-  margin-left: $space-3; // 与标题拉开间距
+  margin-left: $space-3; // add spacing from the title
 
   &.is-copied {
     border-color: $color-success-strong;
@@ -266,8 +266,8 @@
   }
 }
 
-// 原生 <select> 默认比文本输入高：去掉原生外观、补自绘下拉箭头，盒模型与
-// .settings-input 完全一致从而等高。
+// Native <select> is taller than text inputs by default: strip the native appearance, add a self-drawn dropdown arrow, box model
+// exactly matches .settings-input so heights are equal.
 select.settings-input {
   appearance: none;
   -webkit-appearance: none;
@@ -288,13 +288,13 @@ select.settings-input {
     letter-spacing: 0.04em;
   }
 
-  // 显隐（眼睛）按钮跟随输入框高度，不因图标小而矮一截，行视觉对齐其它单输入行
+  // The show/hide (eye) button follows the input height, not shorter just because the icon is small, visually aligning the row with other single-input rows
   .btn {
     align-self: stretch;
   }
 }
 
-// 必填项标识 + 校验错误样式
+// Required-item marker + validation error styles
 .settings-required {
   color: $color-danger;
   margin-left: $space-1;
@@ -318,12 +318,12 @@ select.settings-input {
   margin: $space-2 0 0;
 }
 
-// LLM 模型主面板紧凑列表：active radio + 名称/概要 + 操作按钮
+// LLM model main panel compact list: active radio + name/summary + action buttons
 .llm-profile-list {
   display: flex;
   flex-direction: column;
   gap: $space-3;
-  // 最多展示约 4.5 行：露出半行提示下方还有内容、可滚动，避免漏看（4 行整高会被误以为到底）
+  // Show at most about 4.5 rows: exposing a half row hints there's more content below and it scrolls, avoiding missed items (a full 4-row height would be mistaken for the end)
   max-height: 266px;
   overflow-y: auto;
 }
@@ -346,8 +346,8 @@ select.settings-input {
   align-items: center;
   cursor: pointer;
 }
-// 卡片前缀类型图标：连接=平台品牌图标（彩色），LLM=模型/终端图标（随文字色）。固定占位
-// 让标题起点对齐，一眼区分类型、避免误判。
+// Card prefix type icon: connection=platform brand icon (colored), LLM=model/terminal icon (follows text color). Fixed placeholder
+// aligns the title start point, distinguishing types at a glance and avoiding misjudgment.
 .llm-profile-icon {
   flex-shrink: 0;
   width: 22px;
@@ -376,7 +376,7 @@ select.settings-input {
   @include ellipsis;
   min-width: 0;
 }
-// 实验性标记：本地 CLI 类 provider 受上游 CLI 行为变更影响，标注以示风险。
+// Experimental marker: local CLI-type providers are affected by upstream CLI behavior changes, marked to signal risk.
 .badge-experimental {
   flex-shrink: 0;
   font-size: $fs-xs;
@@ -393,12 +393,12 @@ select.settings-input {
   font-size: $fs-sm;
 }
 
-// 分区下的「下一级功能列表」（如「策略」的子项）：左缩进 + 行首圆点体现从属关系；每行左侧
-// 标题 + 说明，右侧放控件——控件不限于开关，后续可为下拉 / 滑块等，故命名与结构保持通用。
+// "Next-level feature list" under a section (e.g. sub-items of "strategy"): left indent + leading dot conveys the subordinate relationship; each row has title +
+// description on the left, control on the right — the control isn't limited to a switch and could later be a dropdown / slider etc., so naming and structure stay generic.
 .settings-sublist {
   list-style: none;
   margin: $space-1 0 0;
-  padding-left: $space-3; // 整体内缩，与分区标题拉开层级
+  padding-left: $space-3; // indent as a whole, setting the level apart from the section title
 }
 .settings-sublist-row {
   display: flex;
@@ -406,7 +406,7 @@ select.settings-input {
   gap: $space-4;
   padding: $space-3 0;
 
-  // 行首圆点：列表标记，体现子项从属
+  // Leading dot: list marker, conveys sub-item subordination
   &::before {
     content: '•';
     flex-shrink: 0;
@@ -421,7 +421,7 @@ select.settings-input {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1; // 撑开，把右侧控件顶到行末
+  flex: 1; // expand, pushing the right control to the end of the row
   min-width: 0;
 }
 .settings-sublist-label {
@@ -431,8 +431,8 @@ select.settings-input {
   font-size: $fs-sm;
   line-height: $lh-normal;
 }
-// 子项右侧下拉：与其他主配置下拉（settings-language-select）同宽 180px，不被 .settings-input
-// 的 flex:1 撑满（复合选择器提权覆盖）。纯数值选项右对齐，避免在宽框内孤零零靠左。
+// Sub-item right dropdown: same 180px width as other main config dropdowns (settings-language-select), not stretched by .settings-input's
+// flex:1 (compound selector raises specificity to override). Pure numeric options are right-aligned, avoiding them sitting lonely on the left in a wide box.
 .settings-input.settings-sublist-select {
   flex: 0 0 auto;
   width: 180px;

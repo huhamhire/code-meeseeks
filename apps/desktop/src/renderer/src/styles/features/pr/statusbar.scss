@@ -1,23 +1,23 @@
-// pr 域在底部状态栏的 chip：PR 数 / 最近同步时间 + 刷新按钮 / 当前 repo clone-fetch 进度。
-// 组件见 components/features/pr/statusbar/。基础壳在 layout/statusbar；活动脉冲点
-// .activity-dot 在 base（repo sync 与 pr-agent 跨域共用）。
+// pr-domain chips in the bottom status bar: PR count / last sync time + refresh button / current repo clone-fetch progress.
+// Components in components/features/pr/statusbar/. Base shell in layout/statusbar; the activity pulse dot
+// .activity-dot is in base (shared across domains by repo sync and pr-agent).
 
 @use '../../tokens' as *;
 @use '../../mixins' as *;
 
-// PR 数 chip：图标 + 数字横排（gap / svg 基线由 .statusbar-chip 统一）。用与 pr-agent 活动 /
-// repo sync 同一蓝调（chip-tone accent），与主题强调色一致。
+// PR count chip: icon + number in a row (gap / svg baseline unified by .statusbar-chip). Uses the same blue tone as pr-agent activity /
+// repo sync (chip-tone accent), consistent with the theme accent color.
 .statusbar-chip-prs {
   @include chip-tone(accent);
   font-variant-numeric: tabular-nums;
 }
 
-// 同步时间 chip：时钟图标 + 相对时间文本
-// 合并刷新按钮 + 同步状态：chip 外观的可点击按钮（重置 button 默认样式）
+// Sync time chip: clock icon + relative time text
+// Merges refresh button + sync status: a clickable button with chip appearance (resets button default styles)
 .statusbar-sync-btn {
   border: none;
   color: inherit;
-  // 只继承字体族；字号沿用 .statusbar-chip，但同步状态文案不加粗
+  // Inherit only the font family; font size follows .statusbar-chip, but sync-status text is not bold
   font-family: inherit;
   font-weight: 400;
   cursor: pointer;
@@ -33,8 +33,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-// 当前 repo sync (clone/fetch) chip：跟 pr-agent 活动 chip 同蓝调（chip-tone accent），
-// dot 用 .activity-dot 的脉冲语义即"在跑"。idle 时整条不渲染
+// Current repo sync (clone/fetch) chip: same blue tone as the pr-agent activity chip (chip-tone accent),
+// dot uses .activity-dot's pulse semantic meaning "running". Not rendered at all when idle
 .statusbar-repo-sync-chip {
   @include chip-tone(accent);
   font-variant-numeric: tabular-nums;

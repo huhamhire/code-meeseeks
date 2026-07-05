@@ -1,14 +1,14 @@
-// PR 评论标签页：全量评论（summary + inline）卡片排版 + 嵌套回复 + 锚点 chip + 回复/编辑/删除
-// 操作 + 代码上下文。见 components/features/pr/tabs/comments。活动时间线版式在 features/pr/activity。
+// PR comments tab: full comment (summary + inline) card layout + nested replies + anchor chip + reply/edit/delete
+// actions + code context. See components/features/pr/tabs/comments. The activity timeline layout is in features/pr/activity.
 
 @use '../../tokens' as *;
 
-// 外层为定位锚（position:relative）+ 不滚动：让加载遮罩 .pane-loading-overlay 铺满视口、
-// 居中 spinner，而非随内部滚动跑到滚动区顶端。滚动交给内层 .pr-comments-scroll。
+// The outer layer is a positioning anchor (position:relative) + no scroll: lets the loading overlay .pane-loading-overlay fill the viewport
+// and center the spinner, rather than tracking inner scroll to the top of the scroll area. Scrolling is handled by the inner .pr-comments-scroll.
 .pr-comments-panel {
   flex: 1;
   min-height: 0;
-  // 同 .pr-tab-pane：可收缩到小于内容固有宽度，横向滚动交给内层 .pr-comments-scroll
+  // Same as .pr-tab-pane: can shrink below the content's intrinsic width, horizontal scroll handled by the inner .pr-comments-scroll
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -18,7 +18,7 @@
 }
 .pr-comments-scroll {
   flex: 1;
-  // 纵向常驻滚动；横向在内容低于最小宽度时出现滚动条（见下方 min-width）
+  // Vertical scroll always present; horizontal scrollbar appears when content drops below the min width (see min-width below)
   overflow: auto;
   padding: $space-6 20px;
 }
@@ -30,9 +30,9 @@
   flex-direction: column;
   gap: $space-5;
 }
-// 顶层时间线 / 评论列表：宽度在 [480, 960] 内自适应缩放并居中；窄于 480 不再压缩，
-// 转为外层 .pr-comments-scroll 的横向滚动（避免内嵌代码 / 评论被挤到不可读）。
-// 仅约束直接子列表，嵌套 replies 的 .pr-comments-list 不受影响。
+// Top-level timeline / comment list: width scales responsively within [480, 960] and is centered; below 480 it no longer compresses,
+// switching to horizontal scroll on the outer .pr-comments-scroll (to avoid embedded code / comments being squeezed to unreadable).
+// Only constrains the direct child list; the nested replies' .pr-comments-list is unaffected.
 .pr-comments-scroll > .pr-comments-list {
   max-width: 960px;
   min-width: 480px;
@@ -45,29 +45,29 @@
 }
 .pr-comment {
   padding: $space-4 $space-5;
-  // 卡片视觉（底色 / 边框 / 圆角）只给**顶层评论**；嵌套回复改走「左竖线缩进」的扁平样式（与行内
-  // 评论 DiffView 一致）——回复的 <ul> 渲染在父 <li.pr-comment> 内部，若每层都是卡片就会层层「盒中盒」。
+  // Card visuals (background / border / radius) apply only to **top-level comments**; nested replies use the flat "left vertical line indent" style (consistent with the inline
+  // comment DiffView) — a reply's <ul> renders inside the parent <li.pr-comment>, so making every level a card would nest "boxes within boxes".
   &.pr-comment-depth-0 {
     background: $bg-elev;
     border: 1px solid $border-default;
     border-radius: $radius-md;
   }
-  // 嵌套回复：无卡片盒子，仅纵向留白；横向缩进与左竖线由 .pr-comments-replies 提供，满 5 层后拉平。
+  // Nested replies: no card box, only vertical spacing; horizontal indent and left vertical line come from .pr-comments-replies, flattened after 5 levels.
   &:not(.pr-comment-depth-0) {
     padding: $space-3 0;
   }
 }
-// 拉平层（满 MAX_REPLY_DEPTH 层后）的回复同层级、无卡片盒子区隔 → 每条加一道顶部横向分割线 + 上下
-// 留白（margin 在线上方、padding 在线下方），清晰区分上下相邻评论（首条同时与上一缩进层级隔开）。
-// 置于 .pr-comment 之后以盖过其 padding-top。
+// Flattened-level replies (after MAX_REPLY_DEPTH levels) are at the same level with no card box to separate them → each gets a top horizontal divider + vertical
+// spacing (margin above the line, padding below it), clearly separating adjacent comments (the first is also separated from the previous indent level).
+// Placed after .pr-comment to override its padding-top.
 .pr-comments-flat > .pr-comment {
   margin-top: $space-4;
   padding-top: $space-4;
   border-top: 1px solid $border-muted;
 }
 
-// 时间线模式的顶层评论：li 自身退掉卡片样式（卡片下移到 .pr-comment-card），标题行走 .pr-activity-item
-// 版式与其它事件统一；正文卡片整体缩进、挂在时间线轨右侧。
+// Top-level comments in timeline mode: the li itself drops the card style (the card moves down to .pr-comment-card), the title row uses .pr-activity-item
+// layout unified with other events; the body card is indented as a whole, hung on the right of the timeline rail.
 .pr-comment-timeline.pr-comment-depth-0 {
   padding: 0;
   background: none;
@@ -75,7 +75,7 @@
   border-radius: 0;
 }
 .pr-comment-card {
-  // 缩进对齐到标题行的头像左缘（行左 padding + 图标 22 + gap）
+  // Indented to align with the title row's avatar left edge (row left padding + icon 22 + gap)
   margin-left: calc(22px + #{$space-3} * 2);
   margin-top: $space-2;
   padding: $space-4 $space-5;
@@ -105,7 +105,7 @@
   color: $color-info;
   font-size: $fs-xs;
 
-  // base 侧 (old) 用红调，head 侧 (new) 用绿调，跟 diff 视觉一致
+  // base side (old) uses a red tone, head side (new) uses a green tone, consistent with the diff visuals
   &.pr-comment-anchor-old {
     background: rgb(var(--rgb-danger) / 0.15);
     color: $color-danger;
@@ -121,8 +121,8 @@
     padding: 0;
   }
 }
-// 可点击锚点 chip（活动视图）：button 形态需重置原生样式，并给可点反馈。
-// 注意：它是「可点击的 chip」（保留 chip 底色），不同于纯文本链接的 anchor-link mixin。
+// Clickable anchor chip (activity view): the button form needs native styles reset, plus clickable feedback.
+// Note: it is a "clickable chip" (retaining the chip background), different from the plain-text-link anchor-link mixin.
 .pr-comment-anchor-link {
   border: none;
   font-family: inherit;
@@ -141,7 +141,7 @@
   font-size: $fs-md;
   line-height: $lh-normal;
 }
-// 评论 emoji 反应条（见 tabs/shared/ReactionBar）：已有反应 pill + 「加反应」按钮 + 就地候选行。
+// Comment emoji reaction bar (see tabs/shared/ReactionBar): existing reaction pills + "add reaction" button + in-place candidate row.
 .pr-reactions {
   margin-top: $space-3;
   display: flex;
@@ -170,7 +170,7 @@
     opacity: 0.75;
   }
 }
-// 自己反应过：主色描边 + 淡主色底 + 计数主色，呼应「已选中」语义。
+// Reacted by self: accent border + faint accent background + accent count, echoing the "selected" semantic.
 .pr-reaction-mine {
   border-color: $color-accent;
   background: $color-accent-bg-fade;
@@ -200,22 +200,22 @@
   border-radius: $radius-pill;
   color: $text-muted;
   cursor: pointer;
-  // SVG 图标基线规整，line-height:0 去掉行盒带来的额外高度，确保与相邻文字按钮垂直居中。
+  // SVG icons have a clean baseline; line-height:0 removes the extra height from the line box, ensuring vertical centering with adjacent text buttons.
   line-height: 0;
-  // hover 配色对齐相邻的评论操作按钮（编辑/回复）：用 info 色系，避免与 accent 色系混用。
+  // hover colors align with adjacent comment action buttons (edit/reply): use the info color family, avoiding mixing with the accent family.
   &:hover:not(:disabled) {
     border-color: $color-info;
     color: $color-info;
     background: $bg-hover;
   }
 }
-// 候选浮层经 portal 渲染到 body、fixed 定位（坐标由 JS 按触发按钮位置 + 视口空间自适应算出，
-// 上下翻转、视口夹取），从而不被评论滚动容器裁切、也不与其它层级 z-index 干涉。
+// The candidate popover is rendered to body via portal with fixed positioning (coordinates computed by JS from the trigger button position + adaptive viewport space,
+// with vertical flip and viewport clamping), so it isn't clipped by the comment scroll container nor interferes with other z-index layers.
 .pr-reaction-portal {
   position: fixed;
   z-index: 1000;
 }
-// 候选面板外观（定位交给 .pr-reaction-portal）。fixed 模式为单行 8 键；free 模式为搜索框 + 网格。
+// Candidate panel appearance (positioning delegated to .pr-reaction-portal). fixed mode is a single row of 8 keys; free mode is a search box + grid.
 .pr-reaction-picker {
   display: flex;
   gap: $space-1;
@@ -292,7 +292,7 @@
     background: $bg-hover;
   }
 }
-// 编辑按钮：跟回复按钮同尺寸，hover 主色描边 — 是中性操作，不需要 danger 配色
+// Edit button: same size as the reply button, hover accent border — it's a neutral action, no need for danger colors
 .pr-comment-edit-btn {
   padding: 2px $space-4;
   font-size: $fs-sm;
@@ -307,8 +307,8 @@
     background: rgb(var(--rgb-accent) / 0.08);
   }
 }
-// 删除按钮：跟回复按钮同尺寸，主色用 danger 让用户一眼识别为破坏性操作。
-// 二次确认走 ConfirmModal，按钮上不再加 hover-only 隐藏 (避免误以为没这功能)
+// Delete button: same size as the reply button, uses danger as the main color so users recognize it at a glance as a destructive action.
+// Secondary confirmation goes through ConfirmModal; no more hover-only hiding on the button (to avoid making users think the feature is missing)
 .pr-comment-delete-btn {
   padding: 2px $space-4;
   font-size: $fs-sm;
@@ -327,7 +327,7 @@
     cursor: not-allowed;
   }
 }
-// 删除失败 inline 红条
+// Delete failure inline red bar
 .pr-comment-delete-error {
   display: flex;
   align-items: flex-start;
@@ -379,7 +379,7 @@
     border-color: $color-accent;
   }
 }
-// @提及自动补全（见 tabs/shared/MentionTextarea）：textarea 包一层定位锚，候选浮层覆盖在其下方。
+// @mention autocomplete (see tabs/shared/MentionTextarea): the textarea is wrapped in a positioning anchor, with the candidate popover overlaid below it.
 .mention-textarea-wrap {
   position: relative;
   display: block;
@@ -447,7 +447,7 @@
     opacity: 1;
   }
 }
-// 上传图片按钮：悬浮在 textarea 右上角（避开右下角的原生拖拽缩放手柄）。
+// Upload image button: floats at the top-right corner of the textarea (avoiding the native drag-resize handle at the bottom-right).
 .mention-attach {
   position: absolute;
   top: 6px;
@@ -526,7 +526,7 @@
   }
 }
 
-// inline 评论上方嵌的代码上下文：Monaco read-only，锚定行整行底色
+// Code context embedded above inline comments: Monaco read-only, full-row background on the anchored line
 .comment-code-context {
   margin: $space-3 0;
   border: 1px solid $border-default;
@@ -542,7 +542,7 @@
   border-radius: $radius-md;
   font-size: $fs-sm;
 }
-// 懒加载占位按钮：CAP 之外的 inline 评论用，点击才挂 Monaco
+// Lazy-load placeholder button: used for inline comments beyond the CAP, mounts Monaco only on click
 .comment-code-context-toggle {
   margin: $space-3 0;
   padding: $space-3 $space-4;
@@ -566,8 +566,8 @@
     color: $color-info;
   }
 }
-// Monaco decoration：锚定行整行底色 + 左侧色带 (margin gutter)，跟 inline 锚点
-// chip 颜色保持一组语义 (warning amber 区分于 added 绿 / removed 红)
+// Monaco decoration: full-row background on the anchored line + left color band (margin gutter), keeping one semantic group
+// with the inline anchor chip color (warning amber, distinct from added green / removed red)
 .comment-code-context-anchor-line {
   background: rgb(var(--rgb-warning) / 0.18);
 }

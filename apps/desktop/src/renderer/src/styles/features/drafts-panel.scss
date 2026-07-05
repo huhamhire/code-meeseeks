@@ -1,19 +1,19 @@
 @use '../tokens' as *;
 @use '../mixins' as *;
 
-// 草稿管理面板。布局跟 CommentsPanel 一致：上半个状态筛选条、下半个滚动
-// 列表。每条卡片含 anchor + status chip + actions + body markdown + (可选) 错误
+// Drafts management panel. Layout matches CommentsPanel: a status filter bar in the upper half, a scrolling
+// list in the lower half. Each card contains anchor + status chip + actions + body markdown + (optional) error
 
 .drafts-panel {
-  // 父 .pr-tab-content 是 display:flex row，子元素默认按 content 大小，要 flex:1
-  // 才能撑满 main pane 横向 (跟 .pr-comments-panel 同模)；min-width:0 防止内嵌
-  // 长 markdown / code 撑出父容器
+  // The parent .pr-tab-content is display:flex row, children default to content size, needs flex:1
+  // to fill the main pane horizontally (same pattern as .pr-comments-panel); min-width:0 prevents embedded
+  // long markdown / code from bursting out of the parent container
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   background: $bg-panel;
-  overflow: hidden; // 内部 .drafts-panel-list 自己滚
+  overflow: hidden; // the inner .drafts-panel-list scrolls on its own
 }
 
 .drafts-panel-filter {
@@ -79,8 +79,8 @@
   list-style: none;
   padding: $space-6;
   margin: 0;
-  // 在 .drafts-panel (column flex) 里占满剩余高度 + 自身滚动；min-height:0 防止
-  // 内嵌长 markdown 把外层撑出去导致 .drafts-panel 整体滚
+  // Fills the remaining height inside .drafts-panel (column flex) + scrolls itself; min-height:0 prevents
+  // embedded long markdown from stretching the outer layer and making the whole .drafts-panel scroll
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -89,7 +89,7 @@
   gap: $space-5;
 }
 
-// 单条草稿卡片：border-left 着色按 status 区分 — 一眼区分待办 / 已发 / 已拒
+// Single draft card: border-left color differentiated by status — distinguishes pending / posted / rejected at a glance
 .drafts-panel-item {
   background: $bg-surface;
   border: 1px solid $border-muted;
@@ -185,7 +185,7 @@
   font-size: $fs-md;
   color: $text-body;
   line-height: $lh-loose;
-  // 长 body 不撑爆面板；纵向滚动 + max-height
+  // Long body doesn't blow out the panel; vertical scrolling + max-height
   max-height: 220px;
   overflow-y: auto;
   word-wrap: break-word;

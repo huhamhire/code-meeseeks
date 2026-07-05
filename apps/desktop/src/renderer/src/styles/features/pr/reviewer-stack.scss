@@ -1,5 +1,5 @@
-// PR 头部右上角的 reviewer 头像栈（Bitbucket 风格略重叠 + 决断角标 + 「+n」下拉）。
-// 见 components/features/pr/ReviewerStack。
+// Reviewer avatar stack at the top-right of the PR header (Bitbucket-style slight overlap + verdict badge + "+n" dropdown).
+// See components/features/pr/ReviewerStack.
 
 @use '../../tokens' as *;
 
@@ -8,7 +8,7 @@
   align-items: center;
   flex-shrink: 0;
 
-  // 重叠：除首个外左移；各项带灰色描边环分隔相邻头像
+  // Overlap: shift left except the first; each item has a gray outline ring to separate adjacent avatars
   > * + * {
     margin-left: -6px;
   }
@@ -20,14 +20,14 @@
   position: relative;
   display: inline-flex;
 }
-// 「我的评审」：与他人头像栈拉开间距并加细分隔线，不重叠（覆盖 `> * + *` 的 -6px 重叠，复合选择器提权）。
+// "My review": spaced apart from the others' avatar stack with a thin divider, no overlap (overrides the -6px overlap of `> * + *`, compound selector raises specificity).
 .reviewer-stack > .reviewer-stack-self {
   margin-left: $space-4;
   padding-left: $space-4;
   border-left: 1px solid $border-muted;
 }
-// 角标：钉在头像右上角（待评审无角标）。反色处理——实心彩色圆底 + 白色勾/叹号符号（此前是白底彩符，
-// 白色面积过大不够醒目）。无描边环（纯彩底，靠颜色与头像区分）。
+// Badge: pinned to the avatar's top-right corner (no badge when pending review). Inverted — solid colored round base + white check/exclamation symbol (was previously a colored symbol on white base,
+// too much white area, not prominent enough). No outline ring (pure colored base, distinguished from the avatar by color).
 .reviewer-stack-badge {
   position: absolute;
   top: -1px;
@@ -38,7 +38,7 @@
   align-items: center;
   justify-content: center;
 
-  // 实心彩色圆底（按状态着色，撑满角标）。
+  // Solid colored round base (colored by status, fills the badge).
   &::before {
     content: '';
     position: absolute;
@@ -48,8 +48,8 @@
   }
   svg {
     display: block;
-    position: relative; // 压在彩底之上
-    color: #fff; // 白色符号
+    position: relative; // sits on top of the colored base
+    color: #fff; // white symbol
   }
 }
 .reviewer-stack-badge-approved {
@@ -58,12 +58,12 @@
 .reviewer-stack-badge-needsWork {
   --reviewer-badge-color: #{$color-warning};
 }
-// 「+n」溢出项：灰圆，点击展开下拉
+// "+n" overflow item: gray circle, click to expand the dropdown
 .reviewer-stack-more {
   width: 32px;
   height: 32px;
   padding: 0;
-  border: none; // 复位浏览器默认 button 边框，使其与头像一致只剩 box-shadow 外框
+  border: none; // reset the browser default button border so it matches avatars with only the box-shadow frame left
   border-radius: $radius-full;
   background: $bg-surface;
   box-shadow: 0 0 0 1px $border-default;
@@ -81,7 +81,7 @@
     color: $text-primary;
   }
 }
-// 「+n」下拉（fixed + portal，视觉同 diff-scope-menu）：其余 reviewer 头像 + 名 + 决断 chip
+// "+n" dropdown (fixed + portal, visually same as diff-scope-menu): remaining reviewer avatar + name + verdict chip
 .reviewer-stack-menu {
   z-index: $z-statusbar-menu;
   min-width: 200px;

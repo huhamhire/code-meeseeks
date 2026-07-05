@@ -1,14 +1,14 @@
-// PR 活动时间线（提交 / 评审决断事件行 + 评论行）：竖向虚线轨 + 图标节点 + 决断 chip。
-// 见 components/features/pr/tabs/activity。评论卡片样式在 features/pr/comments。
+// PR activity timeline (commit / review decision event rows + comment rows): vertical dashed rail + icon nodes + decision chip.
+// See components/features/pr/tabs/activity. Comment card styles live in features/pr/comments.
 
 @use '../../tokens' as *;
 
-// 所有条目（评论 / 提交 / 决断）首列都是同一位置的图标节点，正文在右；一条竖向虚线轨贯穿图标列、
-// 连接相邻条目，图标用面板底色遮住轨线形成「节点」效果。
+// Every item (comment / commit / decision) has an icon node in the same first-column position, body on the right; a vertical dashed rail runs through the icon column,
+// connecting adjacent items, with icons masking the rail using the panel background to form the "node" effect.
 .pr-activity-list {
   position: relative;
 
-  // 竖向虚线轨：居中于图标列（行左 padding $space-3 + 图标半宽 11px）。首尾各内缩一点，不超出首/末节点。
+  // Vertical dashed rail: centered on the icon column (row left padding $space-3 + icon half-width 11px). Inset a bit at both ends so it doesn't extend past the first/last node.
   &::before {
     content: '';
     position: absolute;
@@ -24,7 +24,7 @@
   align-items: center;
   gap: $space-3;
   padding: $space-2 $space-3;
-  // 与评论主体人文本同字号（body 默认 14px），作者展示不做差异化
+  // Same font size as the comment body text (body default 14px); author display is not differentiated
   font-size: $fs-lg;
   color: $text-body;
 }
@@ -44,12 +44,12 @@
   width: 22px;
   height: 22px;
   color: $text-muted;
-  // 浮于虚线轨之上并用面板底色遮挡轨线 → 图标成为时间线节点
+  // Floats above the dashed rail and masks it with the panel background → the icon becomes a timeline node
   position: relative;
   z-index: 1;
   background: $bg-app;
 }
-// 决断语义色：approve 绿、needs-work 琥珀；unapproved / dismissed 维持中性 muted
+// Decision semantic colors: approve green, needs-work amber; unapproved / dismissed stay neutral muted
 .pr-activity-icon-approved {
   color: $color-approved;
 }
@@ -96,13 +96,13 @@
   color: $text-muted;
 }
 
-// 评论事件标题行：长文件路径锚点 chip 吸收宽度压力——路径过长时截断、保留尾部（文件名）与 `:行号`，
-// 避免把『评论』动词（及头像左的固定项）挤压换行。
+// Comment event title row: the long file-path anchor chip absorbs width pressure — truncate when the path is too long, keeping the tail (file name) and `:line-number`,
+// to avoid squeezing the 'comment' verb (and the fixed items left of the avatar) onto a new line.
 .pr-activity-comment-head .pr-comment-anchor {
   min-width: 0;
   overflow: hidden;
 
-  // 路径段截断保留文件名：direction: rtl 让省略号落在左侧（首部），:行号在 code 外不受影响。
+  // Path segment truncation keeps the file name: direction: rtl puts the ellipsis on the left (head), :line-number sits outside code and is unaffected.
   code {
     min-width: 0;
     overflow: hidden;
@@ -112,14 +112,14 @@
     text-align: left;
   }
 }
-// reviewer 决断动词用带色 chip 突出：approve 绿、needs-work 琥珀、unapproved/dismissed 中性
+// The reviewer decision verb is highlighted with a colored chip: approve green, needs-work amber, unapproved/dismissed neutral
 .pr-activity-chip {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   padding: 1px $space-3;
   border-radius: $radius-pill;
-  // 与行内文本同字号（14px），比默认 chip 更突出
+  // Same font size as inline text (14px), more prominent than the default chip
   font-size: $fs-lg;
   font-weight: 600;
 }
@@ -142,8 +142,8 @@
   font-size: $fs-xs;
 }
 
-// 时间标签自定义 tooltip：原生 title 延迟长、且部分场景不弹（review 行），改用 data-tip + ::after，
-// 短延迟（120ms 显示、移开即隐），各时间标签行为一致、精确到秒。
+// Custom tooltip for time labels: native title has a long delay and doesn't show in some cases (review rows), so use data-tip + ::after instead,
+// with a short delay (show at 120ms, hide on leave), giving all time labels consistent behavior, precise to the second.
 .time-tip {
   position: relative;
 }
@@ -170,12 +170,12 @@
   transition-delay: 0.12s;
 }
 
-// 新建评论编辑框：缩进对齐到标题行头像左缘，挂在时间线轨右侧（与评论卡片同一缩进）
+// New comment editor box: indented to align with the title row's avatar left edge, hung on the right of the timeline rail (same indent as comment cards)
 .pr-activity-compose-card {
   margin-left: calc(22px + #{$space-3} * 2);
 }
 
-// 活动标签页右侧「评论」按钮：复用 diff 工具条按钮的轻量样式
+// Activity tab's right-side "comment" button: reuses the lightweight style of the diff toolbar buttons
 .pr-tab-action-btn {
   display: inline-flex;
   align-items: center;
