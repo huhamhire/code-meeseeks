@@ -1,6 +1,3 @@
-> ⚠️ **Early preview (0.x)**: features, configuration, and data formats may change incompatibly, and stability is not fully verified.
-> Do not use it for critical production review workflows — assess the risk and back up your data first.
-
 ## What's changed
 
 %%CHANGELOG_SECTION%%
