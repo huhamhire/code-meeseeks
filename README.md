@@ -29,7 +29,7 @@ Code Meeseeks (internal codename `meebox`) is a **desktop graphical interface (G
 
 Core design stance:
 
-- **The human decides** — every comment must be confirmed / edited by the reviewer before it reaches the remote; the AI only drafts.
+- **Human decides** — every comment must be confirmed / edited by the reviewer before it reaches the remote; the AI only drafts.
 - **Rules stay local** — the reviewer configures their own check rules, style preferences, and LLM provider.
 - **Data stays local** — repository mirrors, PR metadata, and comment drafts all live in a local working directory; friendly to corporate intranets.
 

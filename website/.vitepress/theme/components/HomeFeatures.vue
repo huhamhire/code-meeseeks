@@ -24,7 +24,7 @@ function icon(name) {
 const EN = [
   {
     icon: 'gavel',
-    title: 'The human decides',
+    title: 'Human decides',
     points: ["You confirm or edit every comment before it's published", 'The AI only drafts — you keep the final call'],
   },
   {
