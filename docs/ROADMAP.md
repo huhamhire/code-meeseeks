@@ -1,22 +1,12 @@
 # Code Meeseeks Roadmap
 
-> 最后更新：2026-07-03
+> 最后更新：2026-07-05
 
-本文件只保留**高层视角**：已交付能力全景、持续演进、风险与下一步。面向用户的**特性详述**见
-**[README](../README.md)**；各模块的**设计与实现细节**见 **[模块设计文档 docs/arch/](arch/README.md)**。
+> 面向用户的**特性详述**见 **[README](../README.md)**。
+>
+> 各模块的**设计与实现细节**见 **[模块设计文档 docs/arch/](arch/README.md)**。
 
-## 1. 项目定位
-
-面向 Reviewer **个人**的本地化、半自动化代码评审 GUI 客户端，基于社区版
-[pr-agent](https://docs.pr-agent.ai/) 构建，核心立场是**决策权在人、规则在本地、数据在本地**。
-
-> 完整定位、适用 / 不适用场景见 **[README](../README.md)**，此处不再重复。
-
----
-
-## 2. 已交付能力
-
-> 按 README「核心特性」的领域划分组织，此处为**交付全景**（高层）；面向用户的特性详述见 README。
+## 1. 已交付能力
 
 #### 🌍 多平台接入
 
@@ -41,7 +31,7 @@
 - [x] 复评闭环：对评审发现发起 `/ask` 复评，按裁决（取代 / 保留 / 撤销）自动处理原评论
 - [x] Agentic 自主规划 + 多工具编排 + 长期 Memory + 过程可观测，可中途追加输入、随时停止
 - [x] AutoPilot 预评审：对待我评审·待处理的新 PR 自动预跑，准入控制 + 逐项授权 + 红线校验（默认仅只读工具）
-- [x] CLI 模式 `/ask` 仓库文件访问：一次性 worktree 取完整上下文 + 落 cwd 前清洗仓库自带 agent 指令文件防注入（见 [06](arch/06-agent.md)）
+- [x] CLI 模式 `/ask` 仓库文件访问：一次性 worktree 取完整上下文 + 落 cwd 前清洗仓库自带 agent 指令文件防注入（见 [agent 设计](arch/02-agent/01-agent.md)）
 
 #### ✍️ 评审闭环与协作
 
@@ -72,11 +62,12 @@
 
 - [x] 单仓多包（npm + Nx）+ Electron + 类型化 IPC + CI（lint / typecheck / test / build）
 - [x] 桌面安装包 Windows x64 + macOS arm64；CI 按 `v*` tag 自动出包并发 GitHub Release（暂不出 Linux）
+- [x] 品牌官网（VitePress，英文默认 + 中文，GitHub Pages 独立部署、与发版流水线解耦）+ 项目对外文档双语（README / 使用文档：英文正本 + 中文镜像）
 - [x] 开源发布（Apache-2.0 + NOTICE）
 
 ---
 
-## 3. 持续演进
+## 2. 持续演进
 
 开放的持续阶段，不设单一 Done when。
 
@@ -84,40 +75,11 @@
 
 - [ ] **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
 
-### 0.10.0：项目国际化与品牌官网 🌐
-
-本轮聚焦「项目自身」的对外呈现（区别于**应用界面** i18n，后者已四语交付），分**品牌官网**与**文档国际化**两条线。
-
-**A. 品牌官网**（技术栈 **VitePress**；英文默认 + 中文；源码置主仓 `website/`）
-
-- [ ] 落地页：定位一句话 + 截图 / 演示 + 核心特性（镜像 README 领域划分，营销化改写）+ 下载 CTA（跳 Releases）+ FAQ
-- [x] 托管使用文档：官网从仓库 `docs/guide/` 构建渲染（**不另起一份**），i18n 走 VitePress `locales`（EN 根 + `/zh/`）
-- [ ] 部署：GitHub Pages（source 选 GitHub Actions），新增独立 `pages.yml`（路径过滤 `website/**` + `docs/**`，push `master` 触发），**与 `release.yml` 的 `v*` 发版流水线解耦**
-- [ ] 自定义域名（可选，后续 `CNAME`）
-
-**B. 文档国际化**（英文默认 + 中文；`arch/` 与 `ROADMAP` 维持中文、不纳入本轮）
-
-- [ ] **阶段 1（本轮）**：README 拆分 —— `README.md`（英文，默认）+ `README.zh-CN.md`（中文），两份顶部各置语言切换行；现有中文 README 迁至 `README.zh-CN.md`
-- [x] **阶段 2**：`docs/guide/` 用户向文档 EN + ZH——英文占根（规范正本），中文镜像于 `zh-CN/`，每篇置语言切换行；官网 `sync-docs.mjs` 双 locale 构建（EN→`/guide/`、ZH→`/zh/guide/`）
-- [x] **阶段 3**：开发/贡献者向英文化——`docs/development/` 转英文单语 + 新增英文 `CONTRIBUTING.md`（贡献者入口）；commit / PR 约定改用英文（见 [AGENTS](../AGENTS.md)）。`docs/arch/` 与本 ROADMAP 仍维持中文（设计推演工作稿、随代码高频变动，成本高 / 外部读到概率低，等外部贡献者信号出现再单独评估）
-
-**内容同步规范**（防 README / docs / 官网三处漂移，每类内容单一真相源）：
-
-| 内容 | 真相源 (SoT) | 其余处理 |
-| --- | --- | --- |
-| 定位 / 核心特性 | README | 官网落地页在营销高度改写，细节链回 README/docs，不逐字复制 |
-| 使用文档 | 仓库 `docs/guide/` | 官网从其构建渲染，不另存一份 |
-| arch 设计文档 | 仓库 `docs/arch/`（中文） | 不进官网、不翻译（与「设计文档中文、异常/日志英语」约定一致） |
-
 ---
 
-## 4. 风险与未决项
+## 3. 风险与未决项
 
 | 风险 / 议题               | 应对                                                                                               |
 | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| pr-agent 升级破坏输出格式 | 输出解析层独立（parse-output 单测进 CI）+ shim 构建期 / 运行期版本守卫（见 [04](arch/04-pragent-runtime.md)）+ 构建期冒烟（import / 补丁 / litellm，release）；升级 pin 时人工刷样本重验 |
-| 大型 PR 性能 / diff 截断  | Diff 走本地 git（不用平台截断端点）+ Monaco 懒加载 + 大文件跳过（见 [02](arch/02-repo-mirror.md)） |
-| 大型仓库挤爆磁盘          | `repos_dir` 可配置 + 设置页显示体积 + 清理                                                         |
-| 明文凭据（config.yaml）   | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留（keytar 升级暂无计划，见 [08](arch/08-config-and-secrets.md)）  |
-| JSON 状态文件膨胀         | 监控单文件大小；评估后维持 JSON（SQLite 为备选，暂不切，见 [03](arch/03-state-storage.md)）        |
+| 明文凭据（config.yaml）   | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留（keytar 升级暂无计划，见 [配置与密钥](arch/99-core/02-config-and-secrets.md)）  |
 | LLM 调用成本              | token 用量统计已做；规则层可控 max_tokens / 模型分级                                               |
