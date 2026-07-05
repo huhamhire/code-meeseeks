@@ -1,85 +1,85 @@
 # Code Meeseeks Roadmap
 
-> 最后更新：2026-07-05
+> Last updated: 2026-07-05
 
-> 面向用户的**特性详述**见 **[README](../README.md)**。
+> For user-facing **feature details**, see **[README](../README.md)**.
 >
-> 各模块的**设计与实现细节**见 **[模块设计文档 docs/arch/](arch/README.md)**。
+> For each module's **design and implementation details**, see the **[module design docs docs/arch/](arch/README.md)**.
 
-## 1. 已交付能力
+## 1. Delivered capabilities
 
-#### 🌍 多平台接入
+#### 🌍 Multi-platform integration
 
-- [x] 统一接入 GitHub / Bitbucket / GitLab（含 GitHub Enterprise / GitLab Self-Managed，按平台能力自适应降级）
-- [x] 本地优先：仓库副本 / PR 元数据 / 草稿存本机；内嵌 pr-agent 运行时，免装 Python / Docker
-- [x] 出站 HTTP 代理（本地地址自动直连）
+- [x] Unified integration with GitHub / Bitbucket / GitLab (including GitHub Enterprise / GitLab Self-Managed, with adaptive degradation per platform capability)
+- [x] Local-first: repo copy / PR metadata / drafts stored locally; embedded pr-agent runtime, no Python / Docker install needed
+- [x] Outbound HTTP proxy (local addresses auto-direct)
 
-#### 📥 PR 发现与浏览
+#### 📥 PR discovery and browsing
 
-- [x] 轮询自动发现 + 分类（待我评审 / 我创建 / 指派 / 提及）+ 仓库分组 + 状态过滤 + 搜索
-- [x] 未读与点名标记（新分配 / 新提交 / 被 @ / 被回复；被点名条数单独计数）
-- [x] 历史归档浏览 + 按 URL 打开任意 PR（含补充评论、补跑评审）
+- [x] Polling auto-discovery + categories (To review / Created by me / Assigned / Mentioned) + repo grouping + status filter + search
+- [x] Unread and mention markers (newly assigned / new commits / @-ed / replied to; mention count tallied separately)
+- [x] Archived-history browsing + open any PR by URL (including supplementary comments, re-running reviews)
 
-#### 🔍 本地 Diff 阅读
+#### 🔍 Local diff reading
 
-- [x] 并排 / 内联 diff、文件树（合并冲突标注）、按变更范围 / 单 commit、总览标尺、blame、跨文件搜索
-- [x] 行内评论（新增行与删除行均可）+ 选中代码作上下文引用
+- [x] Side-by-side / inline diff, file tree (merge-conflict annotation), by change scope / single commit, overview ruler, blame, cross-file search
+- [x] Inline comments (on added and deleted lines alike) + selected code as context reference
 
-#### 🤖 AI / Agentic 评审
+#### 🤖 AI / Agentic review
 
-- [x] 指令驱动 pr-agent（`/describe`·`/review`·`/improve`·`/ask`），结果结构化成可操作的评审发现
-- [x] 复评闭环：对评审发现发起 `/ask` 复评，按裁决（取代 / 保留 / 撤销）自动处理原评论
-- [x] Agentic 自主规划 + 多工具编排 + 长期 Memory + 过程可观测，可中途追加输入、随时停止
-- [x] AutoPilot 预评审：对待我评审·待处理的新 PR 自动预跑，准入控制 + 逐项授权 + 红线校验（默认仅只读工具）
-- [x] CLI 模式 `/ask` 仓库文件访问：一次性 worktree 取完整上下文 + 落 cwd 前清洗仓库自带 agent 指令文件防注入（见 [agent 设计](arch/02-agent/01-agent.md)）
+- [x] Command-driven pr-agent (`/describe`·`/review`·`/improve`·`/ask`), with results structured into actionable review findings
+- [x] Re-review loop: launch an `/ask` re-review of a finding, auto-handling the original comment per the verdict (supersede / keep / withdraw)
+- [x] Agentic autonomous planning + multi-tool orchestration + long-term Memory + observable process, with mid-run input and stop-anytime
+- [x] AutoPilot pre-review: auto pre-runs on new to-review·pending PRs, with admission control + per-item authorization + red-line checks (read-only tools by default)
+- [x] CLI-mode `/ask` repo-file access: a one-off worktree takes full context + cleans the repo's own agent-instruction files before landing in cwd to prevent injection (see [agent design](arch/02-agent/01-agent.md))
 
-#### ✍️ 评审闭环与协作
+#### ✍️ Review loop and collaboration
 
-- [x] 评审发现 → 草稿池 → 内联编辑 → 单条 / 批量发布；远端可合并状态可视 + 一键合并（亦可 `/merge`）
-- [x] 评论互动：回复 / 编辑 / 删除 + emoji 反应 + @ 提及补全 + 图片附件 + `:shortcode:` 表情渲染（随平台能力）
-- [x] 活动时间线：评论 / 提交更新 / 评审决断归并为一条（GitHub / Bitbucket）
-- [x] 消息通知：新 PR / 评论回复 / 被 @ 分类系统通知（仅待处理 PR）+ 点击直达 PR / 代码行 + macOS dock 角标 + macOS 授权引导
+- [x] Findings → draft pool → inline editing → single / batch publish; remote mergeable state visualized + one-click merge (also `/merge`)
+- [x] Comment interaction: reply / edit / delete + emoji reactions + @-mention completion + image attachments + `:shortcode:` emoji rendering (per platform capability)
+- [x] Activity timeline: comments / commit updates / review decisions merged into one (GitHub / Bitbucket)
+- [x] Notifications: categorized system notifications for new PR / comment reply / @-mention (pending PRs only) + click-through to PR / code line + macOS dock badge + macOS permission guidance
 
-#### ⚙️ 模型与规则
+#### ⚙️ Models and rules
 
-- [x] 多 LLM Provider（OpenAI / openai-compatible / DeepSeek / Anthropic / 通义千问 / 火山方舟等；本地 CLI claude·codex）+ token 用量采集
-- [x] 个性化规则目录（markdown + frontmatter，子目录递归；命中多条按 Ruleset 分段注入、`priority` 排序）
-- [x] 运行参数可调：评审任务并发、输入上下文长度、Agent 策略（自动追问开关、代码建议数量）
+- [x] Multiple LLM providers (OpenAI / openai-compatible / DeepSeek / Anthropic / Tongyi Qianwen / Volcano Ark, etc.; local CLI claude·codex) + token-usage collection
+- [x] Personalized rules directory (markdown + frontmatter, recursive sub-directories; multiple matches injected by Ruleset section, sorted by `priority`)
+- [x] Adjustable runtime parameters: review-task concurrency, input context length, Agent strategy (auto follow-up toggle, code-suggestion count)
 
-#### 🔌 外部集成与 CLI
+#### 🔌 External integration and CLI
 
-- [x] 本机本地 API（仅本机可达 + 令牌鉴权）开放 PR 发现 / 浏览 / diff / 评审 Agent / 评审写动作，供外部 agent · 脚本 · CI 集成
-- [x] 跨平台 CLI `meebox`（Windows / macOS / Linux）：浏览 PR + 驱动评审 Agent + 评审写动作（approve / needswork / comment）；压缩包即 agent skill 目录
+- [x] Local API (local-only reachable + token auth) exposing PR discovery / browsing / diff / review Agent / review write actions, for external agent · script · CI integration
+- [x] Cross-platform CLI `meebox` (Windows / macOS / Linux): browse PRs + drive the review Agent + review write actions (approve / needswork / comment); the archive is itself an agent skill directory
 
-#### 🎨 界面与体验
+#### 🎨 Interface and experience
 
-- [x] 主题与外观：深色 / 浅色 / 跟随系统 + 多款编辑器配色 + 自定义等宽字体字号
-- [x] 命令面板（`Ctrl/Cmd+Shift+P`）归口分散功能 + 全局快捷键
-- [x] 四语界面（简体中文 / English / 日本語 / Deutsch），AI 回复语言随界面语言
-- [x] 无边框自绘标题栏 + 首启配置向导 + 设置页可视化 CRUD
+- [x] Themes and appearance: dark / light / follow system + several editor color themes + custom monospace font and size
+- [x] Command palette (`Ctrl/Cmd+Shift+P`) centralizing scattered features + global shortcuts
+- [x] Four-language UI (Simplified Chinese / English / 日本語 / Deutsch), with the AI reply language following the UI language
+- [x] Frameless custom title bar + first-launch config wizard + visual CRUD on the settings page
 
-#### 📦 工程与发布
+#### 📦 Engineering and release
 
-- [x] 单仓多包（npm + Nx）+ Electron + 类型化 IPC + CI（lint / typecheck / test / build）
-- [x] 桌面安装包 Windows x64 + macOS arm64；CI 按 `v*` tag 自动出包并发 GitHub Release（暂不出 Linux）
-- [x] 品牌官网（VitePress，英文默认 + 中文，GitHub Pages 独立部署、与发版流水线解耦）+ 项目对外文档双语（README / 使用文档：英文正本 + 中文镜像）
-- [x] 开源发布（Apache-2.0 + NOTICE）
-
----
-
-## 2. 持续演进
-
-开放的持续阶段，不设单一 Done when。
-
-### 进行中 / 待办 ⏭️
-
-- [ ] **可观测性扩展**：规则命中率、模型对比（token 用量已做）。
+- [x] Monorepo multi-package (npm + Nx) + Electron + typed IPC + CI (lint / typecheck / test / build)
+- [x] Desktop installers Windows x64 + macOS arm64; CI auto-builds and publishes a GitHub Release on `v*` tags (no Linux for now)
+- [x] Brand website (VitePress, English default + Chinese, deployed independently to GitHub Pages, decoupled from the release pipeline) + bilingual external docs (README / user guide: English canonical + Chinese mirror)
+- [x] Open-source release (Apache-2.0 + NOTICE)
 
 ---
 
-## 3. 风险与未决项
+## 2. Ongoing evolution
 
-| 风险 / 议题               | 应对                                                                                               |
-| ------------------------- | -------------------------------------------------------------------------------------------------- |
-| 明文凭据（config.yaml）   | 文件权限收紧 + 文档警示 + `SecretStore` 抽象预留（keytar 升级暂无计划，见 [配置与密钥](arch/99-core/02-config-and-secrets.md)）  |
-| LLM 调用成本              | token 用量统计已做；规则层可控 max_tokens / 模型分级                                               |
+Open-ended continuous phases, with no single Done-when.
+
+### In progress / backlog ⏭️
+
+- [ ] **Observability expansion**: rule hit rate, model comparison (token usage already done).
+
+---
+
+## 3. Risks and open items
+
+| Risk / topic | Response |
+| --- | --- |
+| Plaintext credentials (config.yaml) | Tighten file permissions + doc warnings + a reserved `SecretStore` abstraction (no keytar-upgrade plan for now, see [config and secrets](arch/99-core/02-config-and-secrets.md)) |
+| LLM call cost | Token-usage tracking done; rule layer can control max_tokens / model tiering |
