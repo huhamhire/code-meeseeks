@@ -112,7 +112,7 @@ npm --prefix apps/desktop run pack
 │   └── state-store/                # JSON state storage (atomic writes)
 ├── docs/                           # ROADMAP / arch design / development track
 ├── assets/                         # brand / icon assets (LFS)
-└── tools/                          # probes and other helper scripts
+└── tools/                          # helper scripts (icon gen, third-party notices, CLI install)
 ```
 
 ## 8. Data directory
