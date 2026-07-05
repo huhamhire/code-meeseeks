@@ -1,5 +1,5 @@
-name: 缺陷报告（Bug report）
-description: 报告一个问题或异常行为
+name: Bug report
+description: Report a problem or unexpected behavior
 labels: [bug]
 assignees:
   - huhamhire
@@ -7,22 +7,29 @@ body:
   - type: textarea
     id: description
     attributes:
-      label: 问题描述（What happened）
-      description: 发生了什么、预期是什么，以及复现步骤。
-      placeholder: 简要描述问题与复现步骤。
+      label: What happened
+      description: What happened, what you expected, and steps to reproduce.
+      placeholder: Briefly describe the problem and how to reproduce it.
     validations:
       required: true
-  - type: input
+  - type: textarea
     id: version
     attributes:
-      label: 版本（Version）
-      placeholder: 如 0.6.0-alpha.1
+      label: Version / environment
+      description: Open **Settings → About**, click the copy button, and paste the runtime info here (app version, PR-Agent, OS, etc.).
+      placeholder: |
+        App version: 0.10.0
+        Electron: 33.0.0
+        Node: 22.0.0
+        Operating system: darwin 15.5
+        Architecture: arm64
+        PR-Agent: 0.36.0
     validations:
       required: false
   - type: dropdown
     id: os
     attributes:
-      label: 操作系统（OS）
+      label: OS
       options:
         - Windows
         - macOS
@@ -32,7 +39,7 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: 日志 / 截图（Logs / screenshots）
-      description: 相关日志（`~/.code-meeseeks/`）或截图，便于定位。
+      label: Logs / screenshots
+      description: Relevant logs (`~/.code-meeseeks/`) or screenshots to help diagnose.
     validations:
       required: false
