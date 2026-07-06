@@ -5,6 +5,19 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 🔧 修复
+
+- 行内评审草稿评论现支持 `@` 提及参与者的自动补全，与活动 / 回复输入框一致。
+- Bitbucket 用户名包含特殊字符（如点号）时，`@` 提及会以正确的引号形式插入，确保提及生效并通知到对方。
+- 评审「安全」结论在无风险时表达更清晰（统一为「未发现安全风险」），不再是易被误读为告警的简短「否」。
+- 单行文件变更（如 `VERSION` 或哈希文件）的评审不再把改动误读为文件同时包含新旧两个值。
+- 通过文件树打开带评论的文件时，行内评论不再出现宽度计算错误（超出编辑器区域），也无需再手动缩放窗口恢复。
+- 放大的评论图片预览：关闭按钮不再被窗口控件遮挡，且图标居中显示。
+- 更换代码平台访问令牌后，拉取上游代码不再因鉴权失败而报错（此前需清理仓库缓存才能恢复）。
+- 默认的 AI 建议草稿排版重新以方括号包裹其链接标签与模型名（恢复为预期的 `[标签 (模型)]` 形式）。
+
 ## [0.10.0] - 2026-07-05
 
 > 本版重点：
@@ -435,6 +448,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...HEAD
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0
