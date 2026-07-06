@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '../../api';
+import { CloseIcon } from './icons';
 
 /**
  * react-markdown's default url sanitize only allows the http/https/mailto/tel protocols;
@@ -173,7 +174,7 @@ function ImageZoomOverlay({
         onClick={onClose}
         aria-label={t('bitbucketImage.closeZoomAria')}
       >
-        ×
+        <CloseIcon size={18} />
       </button>
     </div>,
     document.body,

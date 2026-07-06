@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { type editor as MonacoEditor } from 'monaco-editor';
-import type { ReviewDraft } from '@meebox/shared';
+import type { PlatformKind, PlatformUser, ReviewDraft } from '@meebox/shared';
 import type { DiffChangedFile } from '@meebox/ipc';
 import { DraftZoneList } from '../DraftZoneList';
 import { mountInlineZones } from '../zones/mountInlineZones';
@@ -24,6 +24,10 @@ export function useDraftZones(opts: {
   commentHardBreaks: boolean;
   /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the draft editor to enable paste / picker upload. */
   attachmentsEnabled?: boolean;
+  /** `@mention` autocomplete candidates for the draft editor (bounded PR participants; see collectMentionCandidates). */
+  mentionCandidates?: PlatformUser[];
+  /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames). */
+  platform?: PlatformKind;
   scopeKind: 'all' | 'commit';
 }): void {
   const {
@@ -36,6 +40,8 @@ export function useDraftZones(opts: {
     renderSideBySide,
     commentHardBreaks,
     attachmentsEnabled = false,
+    mentionCandidates,
+    platform,
     scopeKind,
   } = opts;
 
@@ -86,6 +92,8 @@ export function useDraftZones(opts: {
           registerEditTrigger={registerEditTrigger}
           hardBreaks={commentHardBreaks}
           attachmentsEnabled={attachmentsEnabled}
+          mentionCandidates={mentionCandidates}
+          platform={platform}
         />
       ),
     });
@@ -101,6 +109,8 @@ export function useDraftZones(opts: {
     renderSideBySide,
     commentHardBreaks,
     attachmentsEnabled,
+    mentionCandidates,
+    platform,
     scopeKind,
   ]);
 }

@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { ReviewDraft } from '@meebox/shared';
+import type { PlatformKind, PlatformUser, ReviewDraft } from '@meebox/shared';
 import { ConfirmModal, TrashIcon } from '../../../../common';
 import { MentionTextarea } from '../shared/MentionTextarea';
 import { uploadCommentImage } from '../shared/uploadCommentImage';
@@ -16,6 +16,10 @@ interface DraftZoneProps {
   attachmentsEnabled?: boolean;
   /** Comment line-break policy (active platform commentHardBreaks): decides whether the preview enables remark-breaks, making the draft preview WYSIWYG. */
   hardBreaks: boolean;
+  /** `@mention` autocomplete candidates for the editor (bounded PR participants; see collectMentionCandidates). Empty/undefined = no completion menu, but manual `@name` still works. */
+  mentionCandidates?: PlatformUser[];
+  /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames). */
+  platform?: PlatformKind;
   /**
    * Register the "enter edit mode" trigger fn into an external ref map. When DiffView calls the
    * registered fn, this component setIsEditing(true). Uses a ref-based fn instead of a props token to
@@ -47,6 +51,8 @@ export function DraftZone({
   prLocalId,
   attachmentsEnabled = false,
   hardBreaks,
+  mentionCandidates,
+  platform,
   registerEditTrigger,
   onSave,
   onDelete,
@@ -148,7 +154,8 @@ export function DraftZone({
             className="draft-zone-textarea"
             value={editingBody}
             onChange={setEditingBody}
-            candidates={[]}
+            candidates={mentionCandidates ?? []}
+            platform={platform}
             onKeyDown={onKeyDown}
             onUpload={
               attachmentsEnabled ? (f) => uploadCommentImage(prLocalId, f) : undefined

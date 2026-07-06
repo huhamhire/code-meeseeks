@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PlatformUser } from '@meebox/shared';
+import type { PlatformKind, PlatformUser } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { MentionTextarea } from '../shared/MentionTextarea';
 import { uploadCommentImage } from '../shared/uploadCommentImage';
@@ -9,6 +9,8 @@ interface CommentComposerProps {
   prLocalId: string;
   /** `@mention` autocomplete candidates (PR participants + comment authors, derived by the parent from loaded data). */
   mentionCandidates?: PlatformUser[];
+  /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames). */
+  platform?: PlatformKind;
   /** Whether the platform supports image attachment upload (capabilities.commentAttachments); paste-to-upload is enabled only when true. */
   attachmentsEnabled?: boolean;
   onCancel: () => void;
@@ -23,6 +25,7 @@ interface CommentComposerProps {
 export function CommentComposer({
   prLocalId,
   mentionCandidates = [],
+  platform,
   attachmentsEnabled = false,
   onCancel,
   onPosted,
@@ -66,6 +69,7 @@ export function CommentComposer({
         value={body}
         onChange={setBody}
         candidates={mentionCandidates}
+        platform={platform}
         onKeyDown={onKeyDown}
         onUpload={attachmentsEnabled ? (f) => uploadCommentImage(prLocalId, f) : undefined}
         placeholder={t('commentComposer.placeholder')}

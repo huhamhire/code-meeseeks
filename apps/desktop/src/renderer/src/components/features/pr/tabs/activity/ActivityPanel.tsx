@@ -22,6 +22,7 @@ import {
   PaneLoading,
 } from '../../../../common';
 import { CommentComposer } from '../comments/CommentComposer';
+import { collectMentionCandidates } from '../shared/mentionCandidates';
 import {
   CommentItem,
   formatExactTime,
@@ -276,6 +277,7 @@ export function ActivityPanel({
                   <CommentComposer
                     prLocalId={pr.localId}
                     mentionCandidates={mentionCandidates}
+                    platform={pr.platform}
                     attachmentsEnabled={attachmentsEnabled}
                     onCancel={() => onComposeClose?.()}
                     onPosted={() => onComposeClose?.()}
@@ -297,31 +299,6 @@ export function ActivityPanel({
   );
 }
 
-/**
- * Derives @mention candidate users from loaded comments (recursing into replies) + commits: dedup by name, order-preserving. The candidate source deliberately takes only
- * participants who already appear in this PR (bounded, zero extra fetches, doesn't enumerate everyone from the remote), a safe data source for @ autocomplete.
- */
-function collectMentionCandidates(comments: PrComment[], commits: PrCommit[]): PlatformUser[] {
-  const seen = new Set<string>();
-  const out: PlatformUser[] = [];
-  const push = (u: PlatformUser | undefined): void => {
-    if (!u?.name || seen.has(u.name)) return;
-    seen.add(u.name);
-    out.push(u);
-  };
-  const walk = (list: PrComment[]): void => {
-    for (const c of list) {
-      push(c.author);
-      if (c.replies.length > 0) walk(c.replies);
-    }
-  };
-  walk(comments);
-  for (const cm of commits) {
-    push(cm.author);
-    push(cm.committer);
-  }
-  return out;
-}
 
 /** A commit event on the timeline: commit icon + short SHA + subject + author + time; clickable to jump to the remote commit page. */
 function CommitEvent({

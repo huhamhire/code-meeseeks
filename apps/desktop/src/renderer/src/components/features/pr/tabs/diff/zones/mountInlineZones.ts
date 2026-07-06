@@ -119,34 +119,46 @@ export function mountInlineZones<T>(opts: MountInlineZonesOptions<T>): () => voi
         setTimeout(syncHeight, 50);
         setTimeout(syncHeight, 200);
 
-        // Width + position strategy (aligned with Bitbucket / GitHub inline comments): use BoundingClientRect to get the
-        // browser's actual render coordinates (clientWidth / layoutInfo.width occasionally exceed the editor's visual
-        // boundary in monaco inline view, observed the comment box spilling into the ChatPane area). inner starts at the
-        // dom origin and extends at most to the editor's visual right boundary - verticalScrollbar. When dom isn't yet
-        // attached to the DOM tree rect.width=0, fall back to the editor's left boundary.
+        // Width strategy: derive the inner width from Monaco's own layout info, not from getBoundingClientRect. The
+        // editor's DOM rect is unreliable during init / a file switch (it can report a transient too-wide box until a
+        // manual resize forces a remeasure), whereas getLayoutInfo() is Monaco's authoritative post-layout geometry and
+        // is correct as soon as the editor has laid out. The zone dom sits at the content origin (after the gutter) and
+        // is pinned in the viewport via translateX(scrollLeft), so the inner spans the content area minus the right
+        // scrollbar: width = layoutInfo.width - contentLeft - verticalScrollbarWidth.
         const editorDomNode = editorInst.getDomNode();
-        const applyInnerLayout = (): void => {
-          if (!editorDomNode) return;
-          const editorRect = editorDomNode.getBoundingClientRect();
-          if (editorRect.width <= 0) return; // editor not laid out yet, wait for the next trigger
-          const domRect = dom.getBoundingClientRect();
-          const sbW = editorInst.getLayoutInfo().verticalScrollbarWidth ?? 0;
-          const innerLeft = domRect.width > 0 ? domRect.left : editorRect.left;
-          const innerRight = editorRect.right - sbW;
-          const w = Math.max(0, innerRight - innerLeft);
-          if (w > 0) {
-            inner.style.marginLeft = '0';
-            inner.style.width = `${w}px`;
-            inner.style.maxWidth = `${w}px`;
-          }
+        // Returns the width applied to inner (px), or -1 when the editor isn't laid out yet (nothing applied).
+        const applyInnerLayout = (): number => {
+          const li = editorInst.getLayoutInfo();
+          const w = li.width - li.contentLeft - (li.verticalScrollbarWidth ?? 0);
+          if (w <= 0) return -1; // editor not laid out yet, wait for the next trigger
+          inner.style.marginLeft = '0';
+          inner.style.width = `${w}px`;
+          inner.style.maxWidth = `${w}px`;
+          return w;
         };
-        applyInnerLayout();
-        // Multi-point fallback: on file switch + autoEdit jump, monaco is still computing the diff / the file mount isn't
-        // done, and getBoundingClientRect gives a non-stable layout (observed the box width blowing out when jumping to a new file, recovering after resize).
-        requestAnimationFrame(applyInnerLayout);
-        setTimeout(applyInnerLayout, 50);
-        setTimeout(applyInnerLayout, 200);
-        setTimeout(applyInnerLayout, 500);
+        // Settle loop instead of fixed one-shot timers: on a file switch / first Monaco init the editor geometry
+        // stabilizes at an unpredictable time (font measurement, async diff compute, hideUnchangedRegions collapse,
+        // loading-overlay removal). Fixed timers can all fire before the final layout, leaving the box measured too
+        // wide (spilling into the chat pane) until a manual resize. Re-apply on animation frames until the width
+        // repeats across two consecutive frames (stable) or a generous cap elapses; the permanent observers below
+        // then handle any later change. rAF (not setTimeout) so measurement reads a painted layout.
+        let settleRaf = 0;
+        let settleStart = -1;
+        let prevWidth = -1;
+        const settle = (now: number): void => {
+          if (settleStart < 0) settleStart = now;
+          const w = applyInnerLayout();
+          // Stable: a positive width unchanged from the previous frame. Keep going while it's still moving or not
+          // yet laid out, but never past the cap (covers a layout that legitimately never fully settles).
+          if ((w > 0 && w === prevWidth) || now - settleStart > 1500) {
+            settleRaf = 0;
+            return;
+          }
+          prevWidth = w;
+          settleRaf = requestAnimationFrame(settle);
+        };
+        applyInnerLayout(); // synchronous first apply avoids a one-frame flash at full width
+        settleRaf = requestAnimationFrame(settle);
         // Dual trigger: onDidLayoutChange (geometry change) + ResizeObserver watching the editor DOM (window / splitter
         // resize), non-overlapping coverage; onDidUpdateDiff (after a file switch the layout still changes while the diff is computed, stabilizing only once done).
         const layoutDisp = editorInst.onDidLayoutChange(applyInnerLayout);
@@ -183,6 +195,9 @@ export function mountInlineZones<T>(opts: MountInlineZonesOptions<T>): () => voi
             () => diffDisp.dispose(),
             () => editorRO?.disconnect(),
             () => scrollDisp.dispose(),
+            () => {
+              if (settleRaf) cancelAnimationFrame(settleRaf);
+            },
           ],
         });
       }

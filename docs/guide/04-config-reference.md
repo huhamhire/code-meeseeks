@@ -202,7 +202,7 @@ Two optional fields control how AI code suggestions read and how they land in a 
 If the layout contains `<SUGGESTIONS>` it is used as the full comment body; otherwise the whole string is prepended as a prefix before the body. Empty falls back to the default layout:
 
 ```text
-[<TITLE>](<HOME>) (<MODEL>)
+[[<TITLE>](<HOME>) (<MODEL>)]
 <SUGGESTIONS>
 ```
 

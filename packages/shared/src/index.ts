@@ -4,6 +4,7 @@ export * from './config.js';
 export * from './error-code.js';
 export * from './inline-comment-policy.js';
 export * from './language.js';
+export * from './mention.js';
 export * from './platform.js';
 export * from './poller-contract.js';
 export * from './pr-agent-status.js';

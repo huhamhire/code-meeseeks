@@ -48,13 +48,18 @@
 }
 .bitbucket-image-zoom-close {
   position: absolute;
-  top: 16px;
+  // Drop below the 36px frameless title-bar zone: the native window controls (min/max/close on
+  // Windows/Linux top-right, traffic lights on macOS top-left) are drawn on top of all web content,
+  // so a top: 16px button would sit under them. 48px clears the overlay on every platform.
+  top: 48px;
   right: 24px;
   width: 36px;
   height: 36px;
-  font-size: 24px;
-  line-height: 32px;
-  text-align: center;
+  // Flex-center the CloseIcon SVG (symmetric geometry → true optical center, unlike the old `×`
+  // text glyph whose font metrics left it off-center).
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.12);
   color: #fff;

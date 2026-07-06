@@ -264,6 +264,7 @@ export function CommentItem({
       // Reply target abstraction (threadId): GitLab=discussion id (required for reply); Bitbucket empty / GitHub=remoteId → fall back to remoteId.
       parentCommentId={comment.threadId ?? comment.remoteId}
       mentionCandidates={mentionCandidates}
+      platform={pr.platform}
       attachmentsEnabled={attachmentsEnabled}
       onCancel={() => setReplyOpen(false)}
       onPosted={() => setReplyOpen(false)}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PlatformUser } from '@meebox/shared';
+import type { PlatformKind, PlatformUser } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { MentionTextarea } from '../shared/MentionTextarea';
 import { uploadCommentImage } from '../shared/uploadCommentImage';
@@ -10,6 +10,8 @@ interface CommentReplyEditorProps {
   parentCommentId: string;
   /** `@mention` autocomplete candidates (PR participants + comment authors). */
   mentionCandidates?: PlatformUser[];
+  /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames). */
+  platform?: PlatformKind;
   /** Whether the platform supports image attachment upload; paste upload is enabled only when true. */
   attachmentsEnabled?: boolean;
   onCancel: () => void;
@@ -25,6 +27,7 @@ export function CommentReplyEditor({
   prLocalId,
   parentCommentId,
   mentionCandidates = [],
+  platform,
   attachmentsEnabled = false,
   onCancel,
   onPosted,
@@ -68,6 +71,7 @@ export function CommentReplyEditor({
         value={body}
         onChange={setBody}
         candidates={mentionCandidates}
+        platform={platform}
         onKeyDown={onKeyDown}
         onUpload={attachmentsEnabled ? (f) => uploadCommentImage(prLocalId, f) : undefined}
         placeholder={t('commentReplyEditor.placeholder')}
