@@ -10,6 +10,7 @@ untouched. Each patch is wrapped in try/except (see runtime._register_post_impor
 applied it silently degrades, never letting a shim exception block the flow.
 """
 from .patches.describe_assessment import patch as _patch_describe_assessment
+from .patches.git_patch_processing import patch as _patch_git_patch_processing
 from .patches.litellm_handler import patch as _patch_litellm_handler
 from .patches.load_yaml import patch as _patch_load_yaml
 from .patches.local_git_provider import patch as _patch_local_git_provider
@@ -38,5 +39,12 @@ def apply() -> None:
     _register_post_import(
         "pr_agent.tools.pr_description",
         _patch_describe_assessment,
+    )
+    # git patch processing: fix the phantom "unchanged" line on single-line hunks (omitted hunk size defaulted to 0
+    # instead of 1), which made single-line file changes look like they contained both the old and new value. Self-
+    # disabling once upstream fixes it — see patches/git_patch_processing.py.
+    _register_post_import(
+        "pr_agent.algo.git_patch_processing",
+        _patch_git_patch_processing,
     )
     _debug("meebox shim loaded")
