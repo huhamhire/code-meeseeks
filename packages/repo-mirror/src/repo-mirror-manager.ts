@@ -161,7 +161,10 @@ export class RepoMirrorManager {
       return;
     }
     try {
-      await this.withProxyEnv(simpleGit({ baseDir: mp })).raw(['fetch', 'origin', ...refspecs]);
+      // Fetch by a freshly re-assembled authenticated URL (not the stored origin), so a rotated token applies
+      // here too — origin may still carry a historical/stale token on older mirrors.
+      const url = await this.opts.getCloneUrl(repo);
+      await this.withProxyEnv(simpleGit({ baseDir: mp })).raw(['fetch', url, ...refspecs]);
     } catch (err) {
       this.opts.logger?.debug(
         {
@@ -627,6 +630,16 @@ export class RepoMirrorManager {
       if (hasMirror) {
         try {
           this.opts.logger?.debug({ repo: key }, 'mirror exists, fetching');
+          // Re-assemble the authenticated URL fresh every sync and fetch by explicit URL rather than via the
+          // stored `origin` remote: a rotated token then takes effect immediately. Historically the token was
+          // baked into remote.origin.url at clone time, so after a PAT rotation an existing mirror kept fetching
+          // with the stale token → `fatal: Authentication failed` until the cache dir was cleared.
+          const url = await this.opts.getCloneUrl(repo);
+          // Best-effort: rewrite origin to the credential-free URL. Strips a token any historically-cached mirror
+          // baked in (security), and normalizes origin for the health check; the fetch below does not depend on it.
+          await simpleGit({ baseDir: mirrorPath })
+            .raw(['remote', 'set-url', 'origin', stripGitCredentials(url)])
+            .catch(() => undefined);
           // Explicit refspec, force-overwrite fetch:
           //   - refs/heads/*: all branches (including the PR target and source branches)
           //   - refs/pull-requests/*/from: Bitbucket stores the PR source sha separately here.
@@ -636,7 +649,7 @@ export class RepoMirrorManager {
           await this.withProxyEnv(simpleGit({ baseDir: mirrorPath, ...gitProgressOpt })).raw([
             'fetch',
             '--progress',
-            'origin',
+            url,
             '+refs/heads/*:refs/heads/*',
             '+refs/pull-requests/*/from:refs/pull-requests/*/from',
           ]);
@@ -675,6 +688,13 @@ export class RepoMirrorManager {
         '--no-hardlinks',
         '--progress',
       ]);
+      // Never persist the token: `git clone` writes the authenticated URL into remote.origin.url, so immediately
+      // rewrite origin to the credential-free form. Subsequent fetches re-assemble the authenticated URL fresh
+      // (see the fetch path above), so a later token rotation needs no cache clear. Best-effort — a failure here
+      // doesn't invalidate the freshly-cloned mirror.
+      await simpleGit({ baseDir: mirrorPath })
+        .raw(['remote', 'set-url', 'origin', stripGitCredentials(url)])
+        .catch(() => undefined);
       // On systems like Windows the FS may still be flushing after a fresh clone, and the immediately following git diff
       // can hit a "refs/packs state inconsistent" error. Wait until git itself can rev-parse HEAD
       // stably a few times before returning, so the mirror the caller receives is guaranteed usable.
@@ -714,6 +734,27 @@ export class RepoMirrorManager {
       }
     }
     return total;
+  }
+}
+
+/**
+ * Strip any embedded credentials from a git remote URL. The authenticated clone URL carries the PAT
+ * (`https://<user>:<token>@host/...`); we never want that token persisted into the mirror's `.git/config`
+ * (a plaintext-secret / security concern) nor baked into `remote.origin.url` where it goes stale on the next
+ * token rotation (the historical "Authentication failed until you clear the cache" bug). Instead the
+ * authenticated URL is re-assembled fresh (from configured repo + upstream) for each remote op, and only this
+ * credential-free form is stored. scp-like SSH remotes (`git@host:proj/repo.git`) aren't valid URL() inputs and
+ * carry no embedded token, so they're returned unchanged.
+ */
+export function stripGitCredentials(url: string): string {
+  try {
+    const u = new URL(url);
+    if (!u.username && !u.password) return url;
+    u.username = '';
+    u.password = '';
+    return u.toString();
+  } catch {
+    return url;
   }
 }
 

@@ -8,6 +8,7 @@ import {
   parseBlamePorcelain,
   parseHunkAddedLines,
   parseMergeTreeConflictsZ,
+  stripGitCredentials,
 } from '../src/repo-mirror-manager.js';
 import type { RepoIdentity } from '../src/types.js';
 
@@ -85,6 +86,39 @@ describe('RepoMirrorManager.syncMirror', () => {
     expect(log.total).toBeGreaterThanOrEqual(2);
   });
 
+  it('fetch re-assembles the URL fresh instead of reusing the stored origin (token rotation)', async () => {
+    // Simulate a token rotation: getCloneUrl returns upstreamA for the clone, then a DIFFERENT upstreamB for the
+    // fetch. If the fetch reused the stored origin (upstreamA) it would miss upstreamB's new commit; the fix fetches
+    // by the freshly re-assembled URL, so the rotated location/token takes effect without clearing the cache.
+    const upstreamB = path.join(tmpRoot, 'upstream-b');
+    await simpleGit(tmpRoot).clone(upstreamPath, upstreamB); // shares history with upstreamA
+    const bGit = simpleGit(upstreamB);
+    await bGit.addConfig('user.email', 'test@example.com', false, 'local');
+    await bGit.addConfig('user.name', 'Test', false, 'local');
+    await bGit.addConfig('commit.gpgsign', 'false', false, 'local');
+    await fs.writeFile(path.join(upstreamB, 'ROTATED.md'), 'after rotate');
+    await bGit.add('.');
+    await bGit.commit('after rotate');
+    const sha2 = (await bGit.revparse(['HEAD'])).trim();
+
+    let call = 0;
+    const mgr = new RepoMirrorManager({
+      reposDir,
+      getCloneUrl: () => Promise.resolve(++call === 1 ? upstreamPath : upstreamB),
+    });
+    await mgr.syncMirror(repo); // clone from upstreamA
+    const r = await mgr.syncMirror(repo); // fetch — must use the fresh URL (upstreamB), not stored origin
+
+    expect(r.freshClone).toBe(false); // fetched, did not fall back to a self-heal re-clone
+    // upstreamB's new commit is only reachable if the fetch used the fresh URL
+    expect(await mgr.hasCommit(repo, sha2)).toBe(true);
+    // origin was migrated to the credential-free URL, and never left pointing at a stale one
+    const originUrl = (
+      await simpleGit(r.mirrorPath).raw(['config', '--get', 'remote.origin.url'])
+    ).trim();
+    expect(originUrl).toBe(upstreamB);
+  });
+
   it('dedups concurrent syncMirror calls for the same repo (shared in-flight)', async () => {
     let urlCalls = 0;
     const mgr = new RepoMirrorManager({
@@ -119,7 +153,9 @@ describe('RepoMirrorManager.syncMirror', () => {
     await mgr.syncMirror(repo);
     // after one sync completes, call again; should trigger a new sync (a fetch here, since the mirror already exists)
     await mgr.syncMirror(repo);
-    expect(urlCalls).toBe(1); // clone only once; fetch does not go through getCloneUrl
+    // clone (1) + fetch (2): the fetch now re-assembles the authenticated URL fresh via getCloneUrl (instead of
+    // reusing the stored origin), so a rotated token takes effect without clearing the cache.
+    expect(urlCalls).toBe(2);
   });
 
   it('serializes syncMirror across different repos via global queue', async () => {
@@ -499,5 +535,30 @@ describe('RepoMirrorManager.materializeWorktree', () => {
     } finally {
       await Promise.all([w1.cleanup(), w2.cleanup(), w3.cleanup()]);
     }
+  });
+});
+
+describe('stripGitCredentials', () => {
+  it('strips user + token from an https clone URL', () => {
+    expect(stripGitCredentials('https://alice:PAT123@bb.example.com/scm/FX/fx-help.git')).toBe(
+      'https://bb.example.com/scm/FX/fx-help.git',
+    );
+  });
+
+  it('strips a token even when only a username (or only a password) is present', () => {
+    expect(stripGitCredentials('https://x-token-auth:tok@host/o/r.git')).toBe('https://host/o/r.git');
+    expect(stripGitCredentials('https://tokenonly@host/o/r.git')).toBe('https://host/o/r.git');
+  });
+
+  it('leaves a credential-free https URL unchanged', () => {
+    expect(stripGitCredentials('https://bb.example.com/scm/FX/fx-help.git')).toBe(
+      'https://bb.example.com/scm/FX/fx-help.git',
+    );
+  });
+
+  it('leaves an scp-like ssh remote unchanged (not a URL, no embedded token)', () => {
+    expect(stripGitCredentials('git@bb.example.com:FX/fx-help.git')).toBe(
+      'git@bb.example.com:FX/fx-help.git',
+    );
   });
 });
