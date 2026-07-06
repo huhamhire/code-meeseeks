@@ -252,6 +252,7 @@ export function DiffView({
     commentHardBreaks,
     attachmentsEnabled,
     mentionCandidates,
+    platform: pr.platform,
     scopeKind: scope.kind,
   });
   // Line hover '+' to create a new draft (not mounted in the commit read-only view)

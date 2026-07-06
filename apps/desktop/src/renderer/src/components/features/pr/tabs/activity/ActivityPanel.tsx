@@ -277,6 +277,7 @@ export function ActivityPanel({
                   <CommentComposer
                     prLocalId={pr.localId}
                     mentionCandidates={mentionCandidates}
+                    platform={pr.platform}
                     attachmentsEnabled={attachmentsEnabled}
                     onCancel={() => onComposeClose?.()}
                     onPosted={() => onComposeClose?.()}

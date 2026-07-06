@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PlatformUser } from '@meebox/shared';
+import { formatMention, type PlatformKind, type PlatformUser } from '@meebox/shared';
 import { ImageIcon } from '../../../../common';
 
 /** Max number of suggestions shown in the popup (the source is already a bounded set of PR participants; truncate further to keep the list from growing too long). */
@@ -41,6 +41,7 @@ export function MentionTextarea({
   value,
   onChange,
   candidates,
+  platform,
   onKeyDown,
   onUpload,
   placeholder,
@@ -54,6 +55,11 @@ export function MentionTextarea({
   value: string;
   onChange: (v: string) => void;
   candidates: PlatformUser[];
+  /**
+   * Active platform, deciding the inserted mention syntax (see formatMention): Bitbucket quotes non-simple
+   * usernames like `@"first.last"`. Omitted → GitHub-style bare `@name` (safe default; only affects insertion, not typing).
+   */
+  platform?: PlatformKind;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   /**
    * Upload callback for pasted images: returns insertable markdown on success (otherwise null). When provided, enables image paste upload
@@ -116,7 +122,8 @@ export function MentionTextarea({
   const select = (user: PlatformUser): void => {
     if (!menu) return;
     const end = menu.at + 1 + menu.query.length;
-    const insert = `@${user.name} `;
+    // Platform-aligned mention syntax (Bitbucket quotes non-simple usernames); trailing space added here.
+    const insert = `${platform ? formatMention(platform, user) : `@${user.name}`} `;
     const next = value.slice(0, menu.at) + insert + value.slice(end);
     onChange(next);
     setMenu(null);
