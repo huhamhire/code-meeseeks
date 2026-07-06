@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import type { ReviewDraft } from '@meebox/shared';
+import type { PlatformUser, ReviewDraft } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { formatBackendError } from '../../../../../errors';
 import { DraftZone } from '../drafts/DraftZone';
@@ -16,6 +16,7 @@ export function DraftZoneList({
   registerEditTrigger,
   hardBreaks,
   attachmentsEnabled = false,
+  mentionCandidates,
 }: {
   drafts: ReviewDraft[];
   prLocalId: string;
@@ -23,6 +24,8 @@ export function DraftZoneList({
   hardBreaks: boolean;
   /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the draft editor to enable paste / pick upload. */
   attachmentsEnabled?: boolean;
+  /** `@mention` autocomplete candidates for the draft editor (bounded PR participants; see collectMentionCandidates). */
+  mentionCandidates?: PlatformUser[];
 }) {
   const { t } = useTranslation();
   const onSave = async (draftId: string, body: string): Promise<void> => {
@@ -58,6 +61,7 @@ export function DraftZoneList({
             prLocalId={prLocalId}
             attachmentsEnabled={attachmentsEnabled}
             hardBreaks={hardBreaks}
+            mentionCandidates={mentionCandidates}
             registerEditTrigger={registerEditTrigger}
             onSave={(body) => onSave(d.id, body)}
             onDelete={() => onDelete(d.id)}

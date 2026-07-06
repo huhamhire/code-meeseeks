@@ -11,6 +11,7 @@ import type {
 } from '@meebox/shared';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
 import { ErrorBoundary, PaneLoading, FileTreeIcon, SearchIcon } from '../../../../common';
+import { collectMentionCandidates } from '../shared/mentionCandidates';
 import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
 import { DiffScopeSelect } from './DiffScopeSelect';
@@ -186,6 +187,13 @@ export function DiffView({
     }
   }, [pr.url, pr.repo.projectKey, pr.repo.repoSlug]);
 
+  // @mention candidates for inline draft editing: same bounded/safe source as the activity composer — loaded comment
+  // authors (incl. replies) seeded with the PR author (who may not have commented). No extra fetches; the user can still type any @name.
+  const mentionCandidates = useMemo(
+    () => collectMentionCandidates(comments, [], [pr.author]),
+    [comments, pr.author],
+  );
+
   // For the file tree: path → number of comments anchored to that file (including dual-path aliases + renamed oldPath)
   const commentCountByPath = useMemo(() => {
     const m = new Map<string, number>();
@@ -243,6 +251,7 @@ export function DiffView({
     renderSideBySide,
     commentHardBreaks,
     attachmentsEnabled,
+    mentionCandidates,
     scopeKind: scope.kind,
   });
   // Line hover '+' to create a new draft (not mounted in the commit read-only view)
