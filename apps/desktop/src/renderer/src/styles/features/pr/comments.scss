@@ -424,6 +424,11 @@
 .mention-option-display {
   font-size: $fs-sm;
 }
+// "Searching users…" hint row shown while a debounced remote user search is in flight (see MentionTextarea.onRemoteSearch).
+.mention-menu-hint {
+  padding: $space-2 $space-3;
+  font-size: $fs-sm;
+}
 .mention-upload-status {
   font-size: $fs-sm;
   padding: $space-1 0;

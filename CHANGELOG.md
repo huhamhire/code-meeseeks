@@ -5,6 +5,36 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-07-07
+
+> Highlights of this release:
+>
+> - **Richer `@mention`**: autocomplete now searches users beyond the PR's participants on the code platform (GitHub / Bitbucket / GitLab), so you can mention anyone without knowing their exact username — and mentioning behaves consistently across every comment editor, including inline diff comments and review drafts.
+> - **Review engine updated**: the embedded pr-agent moves to 0.39.0, picking up upstream model-provider routing improvements and fixes.
+> - **Consistent timestamps**: displayed times now use a fixed, locale-independent 24-hour `yyyy-mm-dd HH:mm:ss` format.
+>
+> The rest of the release is a batch of review-experience fixes (security-result wording, single-line file diffs, inline-comment width, token-rotation auth, and more).
+
+### ✨ Added
+
+- `@mention` autocomplete can now find users beyond this PR's participants: after the local suggestions, it searches matching users on the code platform (GitHub / Bitbucket / GitLab), so you can mention someone without knowing their exact username. It works consistently in every comment editor — the activity composer, replies (including inline diff comment replies), and review drafts.
+
+### ♻️ Changed
+
+- Updated the embedded review engine (pr-agent) to 0.39.0, picking up upstream model-provider routing improvements and fixes.
+- Displayed timestamps now use a consistent, locale-independent format — 24-hour `yyyy-mm-dd HH:mm:ss`, with same-day times showing only `HH:mm:ss` — instead of following the OS locale (so they no longer differ from the app's language or between machines).
+
+### 🔧 Fixed
+
+- Inline review-draft comments now offer `@mention` participant autocomplete, matching the activity and reply composers.
+- `@mentions` of a Bitbucket username containing special characters (e.g. a dot) are now inserted in the correctly quoted form, so the mention resolves and notifies the user.
+- The review "Security" result now reads unambiguously when there are no concerns (a consistent "no security concerns") instead of a terse "No" that could be mistaken for a warning.
+- Reviews of single-line file changes (e.g. a `VERSION` or hash file) no longer misread the change as the file containing both the old and new value.
+- Inline comments no longer render at the wrong width (spilling past the editor) when a commented file is opened from the file tree — a manual window resize is no longer needed.
+- The close button on the enlarged comment-image preview no longer sits beneath the window controls, and its icon is centered.
+- Fetching upstream code no longer fails with an authentication error after a code-platform access token is changed (which previously required clearing the repo cache to recover).
+- The default AI-suggestion draft layout again wraps its linked label and model name in brackets (the intended `[label (model)]` form).
+
 ## [0.10.0] - 2026-07-05
 
 > Highlights of this release:
@@ -435,6 +465,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
+[0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0

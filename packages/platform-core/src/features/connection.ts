@@ -43,6 +43,17 @@ export interface PlatformConnection {
    * Return the git clone URL (with PAT embedded as user:PAT or ssh scp-like form).
    */
   getCloneUrl(repo: RepoRef): Promise<string>;
+
+  /**
+   * Search users **with access to the given repo** by a free-text query (for `@mention` autocomplete), returning a
+   * bounded list ordered by platform relevance. Repo-scoped (not a global directory search): each platform hits its
+   * repo-permission endpoint (Bitbucket repo `permissions/users`, GitHub `collaborators`, GitLab project `users`), so
+   * suggestions are people who can actually act on the PR. Backs the mention editor's remote fallback; only meaningful
+   * when the `userSearch` capability is true. Implementations cap the result count; a "no match" resolves to an empty
+   * array. (Some endpoints require elevated permission — e.g. Bitbucket repo-admin; on such failure the caller degrades
+   * to the local candidate menu, see docs/arch/01-platform/04-comment-interactions.md.)
+   */
+  searchUsers(query: string, repo: RepoRef): Promise<PlatformUser[]>;
 }
 
 /**
@@ -79,4 +90,9 @@ export abstract class BaseConnection extends PlatformDomainService implements Pl
    * Implemented by platform subclasses: construct a directly cloneable git URL from a repo reference.
    */
   abstract getCloneUrl(repo: RepoRef): Promise<string>;
+
+  /**
+   * Implemented by platform subclasses: query the platform's repo-permission endpoint for `@mention` autocomplete.
+   */
+  abstract searchUsers(query: string, repo: RepoRef): Promise<PlatformUser[]>;
 }

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import type { ReviewDraft } from '@meebox/shared';
+import type { PlatformKind, PlatformUser, ReviewDraft } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { formatBackendError } from '../../../../../errors';
 import { DraftZone } from '../drafts/DraftZone';
@@ -16,6 +16,9 @@ export function DraftZoneList({
   registerEditTrigger,
   hardBreaks,
   attachmentsEnabled = false,
+  mentionCandidates,
+  platform,
+  userSearchEnabled = false,
 }: {
   drafts: ReviewDraft[];
   prLocalId: string;
@@ -23,6 +26,12 @@ export function DraftZoneList({
   hardBreaks: boolean;
   /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the draft editor to enable paste / pick upload. */
   attachmentsEnabled?: boolean;
+  /** `@mention` autocomplete candidates for the draft editor (bounded PR participants; see collectMentionCandidates). */
+  mentionCandidates?: PlatformUser[];
+  /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames). */
+  platform?: PlatformKind;
+  /** Whether the platform supports remote user search (capabilities.userSearch); passed through to the draft editor for the mention remote fallback. */
+  userSearchEnabled?: boolean;
 }) {
   const { t } = useTranslation();
   const onSave = async (draftId: string, body: string): Promise<void> => {
@@ -58,6 +67,9 @@ export function DraftZoneList({
             prLocalId={prLocalId}
             attachmentsEnabled={attachmentsEnabled}
             hardBreaks={hardBreaks}
+            mentionCandidates={mentionCandidates}
+            platform={platform}
+            userSearchEnabled={userSearchEnabled}
             registerEditTrigger={registerEditTrigger}
             onSave={(body) => onSave(d.id, body)}
             onDelete={() => onDelete(d.id)}

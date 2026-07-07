@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { type editor as MonacoEditor } from 'monaco-editor';
 import type { DiffBlameLine } from '@meebox/ipc';
 import { Avatar } from '../../../../../common';
+import { formatTimestamp } from '../../../../../../utils/time';
 import {
   BLAME_COLUMN_WIDTH,
   formatIsoDate,
@@ -192,7 +193,7 @@ function BlameRow({
   // toLocaleDateString's Chinese output "2023年3月29日" is too wide and would be truncated.
   const dateStr = block.authorDate ? formatIsoDate(new Date(block.authorDate)) : '';
   const title = `${block.author}\n${block.commit.slice(0, 12)}\n${block.summary}\n${
-    block.authorDate ? new Date(block.authorDate).toLocaleString() : ''
+    block.authorDate ? formatTimestamp(block.authorDate, { full: true }) : ''
   }`;
   return (
     <div className="blame-row" style={{ top, height }} title={title}>

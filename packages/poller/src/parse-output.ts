@@ -518,6 +518,27 @@ function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
   return undefined;
 }
 
+/** pr-agent's canonical English "no security concern" verdict; the renderer's label dictionary maps it per language. */
+const NO_SECURITY_CONCERN_CANONICAL = 'No security concerns identified';
+
+/**
+ * Whether a security-section verdict text means "no concern". pr-agent emits this verdict in many surface forms
+ * across versions / response languages — a terse "否" / "No", the English template phrase, or a localized
+ * "未发现安全风险" — and a bare "安全: 否" reads ambiguously ("unsafe?" vs "no issues?"). Matches only when the
+ * WHOLE value is a negative verdict (a terse pure negative, or a short "无/未发现…安全/风险…" phrasing bounded in
+ * length), so a descriptive real concern that merely starts with such a word is not swallowed.
+ */
+function isNoSecurityConcern(text: string): boolean {
+  const s = text.replace(/[\s。.!！,，、;；:：]+$/u, '').trim();
+  if (!s) return false;
+  // Terse pure negatives (the whole value)
+  if (/^(?:否|无|无风险|没有|未发现|不适用|no|none|n\/?a|nil)$/i.test(s)) return true;
+  // Short "no … security/risk …" phrasing (whole value, bounded so a long real concern isn't matched)
+  if (/^(?:未发现|没有|无|不存在)[^，,。.；;]{0,12}(?:安全|风险|问题|隐患)[^，,。.；;]{0,8}$/u.test(s)) return true;
+  if (/^no\s+(?:security\s+)?concerns?(?:\s+identified)?$/i.test(s)) return true;
+  return false;
+}
+
 /**
  * Parse a single markdown segment into a Finding. Recognizes pr-agent's common
  * `**File:** path` + `**Lines:** N-M` pattern → code-feedback; otherwise returns general / description.
@@ -581,6 +602,14 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
         anchor,
       };
     }
+  }
+
+  // Security verdict normalization: collapse every "no concern" surface form (verdict lives in the body for the
+  // `Security concerns: <value>` shape, or in the title for a standalone `No security concerns identified` strong)
+  // to the single canonical phrase, so the card always reads unambiguously (e.g. zh "安全 · 未发现安全风险") instead
+  // of a bare "安全 · 否". A real concern (descriptive body) doesn't match and passes through untouched.
+  if (mappedKey === 'security' && isNoSecurityConcern(body.trim() || displayTitle || '')) {
+    return { id, category: 'general', sectionKey: 'security', body: NO_SECURITY_CONCERN_CANONICAL };
   }
 
   return {

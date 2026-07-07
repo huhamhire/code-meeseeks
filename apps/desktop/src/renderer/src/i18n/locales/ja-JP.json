@@ -564,6 +564,9 @@
     "unified": "統合表示",
     "whitespace": "空白"
   },
+  "mention": {
+    "searching": "ユーザーを検索中…"
+  },
   "mergeVeto": {
     "behind": "ターゲットブランチに遅れています",
     "blockedByDependency": "他のマージリクエストによりブロックされています",

@@ -1,10 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PlatformUser } from '@meebox/shared';
+import { formatMention, type PlatformKind, type PlatformUser } from '@meebox/shared';
 import { ImageIcon } from '../../../../common';
 
 /** Max number of suggestions shown in the popup (the source is already a bounded set of PR participants; truncate further to keep the list from growing too long). */
 const MAX_SUGGESTIONS = 8;
+
+/** Debounce before firing a remote user-search request while typing an `@mention` (avoids a request per keystroke). */
+const REMOTE_SEARCH_DEBOUNCE_MS = 250;
 
 interface MentionMenu {
   /** Query string typed after `@` (excluding `@`). */
@@ -15,6 +18,8 @@ interface MentionMenu {
   items: PlatformUser[];
   /** Index of the currently highlighted item. */
   index: number;
+  /** A debounced remote search is in flight for this query (only when onRemoteSearch is wired). */
+  loading?: boolean;
 }
 
 /**
@@ -41,6 +46,8 @@ export function MentionTextarea({
   value,
   onChange,
   candidates,
+  platform,
+  onRemoteSearch,
   onKeyDown,
   onUpload,
   placeholder,
@@ -54,6 +61,18 @@ export function MentionTextarea({
   value: string;
   onChange: (v: string) => void;
   candidates: PlatformUser[];
+  /**
+   * Active platform, deciding the inserted mention syntax (see formatMention): Bitbucket quotes non-simple
+   * usernames like `@"first.last"`. Omitted → GitHub-style bare `@name` (safe default; only affects insertion, not typing).
+   */
+  platform?: PlatformKind;
+  /**
+   * Optional remote user-search fallback (wired only when the platform's `userSearch` capability is true). When set,
+   * after the local `candidates` are exhausted the component debounces ({@link REMOTE_SEARCH_DEBOUNCE_MS}) and appends
+   * remote matches to the menu, letting the user `@mention` people beyond this PR's participants. Failures resolve to
+   * `[]` upstream, so this only ever adds suggestions — manual `@name` typing keeps working regardless.
+   */
+  onRemoteSearch?: (query: string) => Promise<PlatformUser[]>;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   /**
    * Upload callback for pasted images: returns insertable markdown on success (otherwise null). When provided, enables image paste upload
@@ -78,6 +97,22 @@ export function MentionTextarea({
   const [menu, setMenu] = useState<MentionMenu | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Debounce timer + monotonically increasing request id for the remote search: a stale (superseded) response is
+  // discarded by comparing its captured id against the latest, so out-of-order arrivals never clobber the newer query.
+  const remoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteSeq = useRef(0);
+
+  // Cancel any pending remote search: stop the debounce timer and bump the sequence so an in-flight response is ignored.
+  const cancelRemote = (): void => {
+    if (remoteTimer.current) {
+      clearTimeout(remoteTimer.current);
+      remoteTimer.current = null;
+    }
+    remoteSeq.current++;
+  };
+
+  // Clear the debounce timer on unmount (avoid a setMenu after the component is gone).
+  useEffect(() => () => cancelRemote(), []);
 
   // Dedupe suggestions (by name), preserving order: the caller may mix in duplicate participants / comment authors.
   const pool = useMemo(() => {
@@ -92,17 +127,19 @@ export function MentionTextarea({
   }, [candidates]);
 
   const refresh = (el: HTMLTextAreaElement): void => {
-    if (pool.length === 0) {
+    // Nothing to offer at all (no local pool and no remote fallback) → keep the menu closed.
+    if (pool.length === 0 && !onRemoteSearch) {
       setMenu(null);
       return;
     }
     const ctx = parseMention(el.value, el.selectionStart ?? el.value.length);
     if (!ctx) {
+      cancelRemote();
       setMenu(null);
       return;
     }
     const q = ctx.query.toLowerCase();
-    const items = pool
+    const localItems = pool
       .filter(
         (u) =>
           q === '' ||
@@ -110,13 +147,59 @@ export function MentionTextarea({
           u.displayName.toLowerCase().includes(q),
       )
       .slice(0, MAX_SUGGESTIONS);
-    setMenu(items.length > 0 ? { query: ctx.query, at: ctx.at, items, index: 0 } : null);
+
+    // Remote fallback: only for a non-empty query (an empty `@` shouldn't enumerate the whole directory). Show local
+    // matches immediately with a "searching" hint, then debounce a remote lookup and append its results as they land.
+    const wantRemote = onRemoteSearch !== undefined && ctx.query.trim().length > 0;
+    if (!wantRemote) {
+      cancelRemote();
+      setMenu(localItems.length > 0 ? { query: ctx.query, at: ctx.at, items: localItems, index: 0 } : null);
+      return;
+    }
+
+    setMenu({ query: ctx.query, at: ctx.at, items: localItems, index: 0, loading: true });
+    if (remoteTimer.current) clearTimeout(remoteTimer.current);
+    const seq = ++remoteSeq.current;
+    remoteTimer.current = setTimeout(() => {
+      void onRemoteSearch(ctx.query)
+        .then((users) => {
+          if (seq !== remoteSeq.current) return; // superseded by a newer keystroke
+          setMenu((prev) => {
+            // Only merge if the popup still targets this same `@…` token (guard against races with fast edits).
+            if (!prev || prev.at !== ctx.at || prev.query !== ctx.query) return prev;
+            const seen = new Set(prev.items.map((u) => u.name));
+            const merged = [...prev.items];
+            for (const u of users) {
+              if (u.name && !seen.has(u.name)) {
+                seen.add(u.name);
+                merged.push(u);
+              }
+            }
+            const items = merged.slice(0, MAX_SUGGESTIONS);
+            // No local and no remote matches → close the menu rather than show an empty box.
+            return items.length > 0 ? { ...prev, items, loading: false } : null;
+          });
+        })
+        .catch(() => {
+          if (seq !== remoteSeq.current) return;
+          // Remote failed: drop the loading hint, keep whatever local matches we already showed.
+          setMenu((prev) =>
+            prev && prev.at === ctx.at && prev.query === ctx.query
+              ? prev.items.length > 0
+                ? { ...prev, loading: false }
+                : null
+              : prev,
+          );
+        });
+    }, REMOTE_SEARCH_DEBOUNCE_MS);
   };
 
   const select = (user: PlatformUser): void => {
     if (!menu) return;
+    cancelRemote();
     const end = menu.at + 1 + menu.query.length;
-    const insert = `@${user.name} `;
+    // Platform-aligned mention syntax (Bitbucket quotes non-simple usernames); trailing space added here.
+    const insert = `${platform ? formatMention(platform, user) : `@${user.name}`} `;
     const next = value.slice(0, menu.at) + insert + value.slice(end);
     onChange(next);
     setMenu(null);
@@ -133,7 +216,9 @@ export function MentionTextarea({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.nativeEvent.isComposing) return;
-    if (menu) {
+    // While the popup only shows a "searching…" hint (no items yet), don't intercept nav/confirm keys — let Enter etc.
+    // fall through to the caller (e.g. Cmd/Ctrl+Enter to send); only Escape closes the pending popup.
+    if (menu && menu.items.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setMenu({ ...menu, index: (menu.index + 1) % menu.items.length });
@@ -149,11 +234,12 @@ export function MentionTextarea({
         select(menu.items[menu.index]!);
         return;
       }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setMenu(null);
-        return;
-      }
+    }
+    if (menu && e.key === 'Escape') {
+      e.preventDefault();
+      cancelRemote();
+      setMenu(null);
+      return;
     }
     onKeyDown?.(e);
   };
@@ -218,7 +304,10 @@ export function MentionTextarea({
         }}
         onKeyUp={(e) => refresh(e.currentTarget)}
         onClick={(e) => refresh(e.currentTarget)}
-        onBlur={() => setMenu(null)}
+        onBlur={() => {
+          cancelRemote();
+          setMenu(null);
+        }}
         onKeyDown={handleKeyDown}
         onPaste={onUpload ? handlePaste : undefined}
         placeholder={placeholder}
@@ -262,7 +351,7 @@ export function MentionTextarea({
           </button>
         </div>
       )}
-      {menu && (
+      {menu && (menu.items.length > 0 || menu.loading) && (
         <ul className="mention-menu" role="listbox">
           {menu.items.map((u, i) => (
             <li key={u.name}>
@@ -285,6 +374,11 @@ export function MentionTextarea({
               </button>
             </li>
           ))}
+          {menu.loading && (
+            <li className="mention-menu-hint muted" aria-hidden="true">
+              {t('mention.searching')}
+            </li>
+          )}
         </ul>
       )}
     </div>

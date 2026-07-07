@@ -12,4 +12,4 @@ export const PRODUCT_HOME_URL = 'https://huhamhire.github.io/code-meeseeks/';
  * Single source of truth for both the deterministic fallback (renderCodeSuggestionDraft) and the settings editor's
  * placeholder, so "placeholder == actual default". Placeholders: `<TITLE>` / `<HOME>` / `<MODEL>` / `<SUGGESTIONS>`.
  */
-export const DEFAULT_CODE_SUGGESTION_LAYOUT = '[<TITLE>](<HOME>) (<MODEL>)\n<SUGGESTIONS>';
+export const DEFAULT_CODE_SUGGESTION_LAYOUT = '[[<TITLE>](<HOME>) (<MODEL>)]\n<SUGGESTIONS>';

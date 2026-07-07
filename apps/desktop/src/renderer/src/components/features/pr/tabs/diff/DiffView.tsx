@@ -11,6 +11,7 @@ import type {
 } from '@meebox/shared';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
 import { ErrorBoundary, PaneLoading, FileTreeIcon, SearchIcon } from '../../../../common';
+import { collectMentionCandidates } from '../shared/mentionCandidates';
 import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
 import { DiffScopeSelect } from './DiffScopeSelect';
@@ -98,6 +99,8 @@ export function DiffView({
   // Inline comment emoji reaction / image attachment capabilities (same capability bits as the comments / activity tab): absent = unsupported (don't render the add-reaction button / don't enable paste upload).
   const reactionsMode = capabilities?.commentReactions || undefined;
   const attachmentsEnabled = capabilities?.commentAttachments ?? false;
+  // Remote @mention user search: enables the draft editor's remote fallback (search users beyond this PR's participants) when the platform supports it.
+  const userSearchEnabled = capabilities?.userSearch ?? false;
   const { t } = useTranslation();
   // Draft pool: store shared across ChatPane / DiffView; this component needs it to render inline zones
   const drafts = useDraftsForPr(pr.localId);
@@ -186,6 +189,13 @@ export function DiffView({
     }
   }, [pr.url, pr.repo.projectKey, pr.repo.repoSlug]);
 
+  // @mention candidates for inline draft editing: same bounded/safe source as the activity composer — loaded comment
+  // authors (incl. replies) seeded with the PR author (who may not have commented). No extra fetches; the user can still type any @name.
+  const mentionCandidates = useMemo(
+    () => collectMentionCandidates(comments, [], [pr.author]),
+    [comments, pr.author],
+  );
+
   // For the file tree: path → number of comments anchored to that file (including dual-path aliases + renamed oldPath)
   const commentCountByPath = useMemo(() => {
     const m = new Map<string, number>();
@@ -230,6 +240,9 @@ export function DiffView({
     commentHardBreaks,
     reactionsMode,
     attachmentsEnabled,
+    mentionCandidates,
+    platform: pr.platform,
+    userSearchEnabled,
     readOnly,
   });
   // Inline draft view zone (not rendered in the commit read-only view)
@@ -243,6 +256,9 @@ export function DiffView({
     renderSideBySide,
     commentHardBreaks,
     attachmentsEnabled,
+    mentionCandidates,
+    platform: pr.platform,
+    userSearchEnabled,
     scopeKind: scope.kind,
   });
   // Line hover '+' to create a new draft (not mounted in the commit read-only view)

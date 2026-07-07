@@ -70,6 +70,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('comments:toggleReaction', pr.toggleReaction); // Toggle a comment emoji reaction
   ipcMain.handle('comments:uploadAttachment', pr.uploadAttachment); // Upload a comment image attachment
   ipcMain.handle('comments:fetchAttachment', pr.fetchAttachment); // Fetch a comment inline image (proxied with PAT)
+  ipcMain.handle('mentions:search', pr.searchMentions); // Search platform users for @mention autocomplete
   ipcMain.handle('prs:list', pr.listPrs); // PR list (active connection only)
   ipcMain.handle('prs:listArchived', pr.listArchivedPrs); // Closed (archived) PR list (read-only browsing)
   ipcMain.handle('prs:openByUrl', pr.openPrByUrl); // Open a current-platform PR by URL (locate / fetch archive)

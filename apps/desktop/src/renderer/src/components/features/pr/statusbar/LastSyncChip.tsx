@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SyncIcon, StatusChip } from '../../../common';
-import { formatRelative } from '../../../../utils/time';
+import { formatRelative, formatTimestamp } from '../../../../utils/time';
 
 /**
  * Refresh button + sync status combined: a clickable chip showing the last sync relative time + sync icon
@@ -28,7 +28,7 @@ export function LastSyncChip({
   const title = refreshing
     ? t('statusBar.refreshing')
     : date
-      ? t('statusBar.lastSyncTitle', { time: date.toLocaleString() })
+      ? t('statusBar.lastSyncTitle', { time: formatTimestamp(date, { full: true }) })
       : t('statusBar.neverSyncedTitle');
   return (
     <StatusChip

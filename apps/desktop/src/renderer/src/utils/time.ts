@@ -1,4 +1,9 @@
 import type { TFunction } from 'i18next';
+import { formatTimestamp } from '@meebox/shared';
+
+// House timestamp formatters live in @meebox/shared (pure + unit-tested); re-exported here so renderer code keeps
+// importing them from utils/time.
+export { formatTimestamp, formatDate } from '@meebox/shared';
 
 /**
  * Format a millisecond duration as "Ns" / "Mm SSs":
@@ -16,7 +21,7 @@ export function formatElapsed(ms: number, opts?: { compact?: boolean }): string 
 
 /**
  * Format a point in time as relative time: "just now / N seconds ago / N minutes ago / N hours ago"; beyond 1 day
- * give an absolute time, to avoid vagueness like "3 days ago".
+ * give an absolute time (house format), to avoid vagueness like "3 days ago".
  */
 export function formatRelative(date: Date, t: TFunction): string {
   const diffSec = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
@@ -26,5 +31,5 @@ export function formatRelative(date: Date, t: TFunction): string {
   if (diffMin < 60) return t('statusBar.minutesAgo', { count: diffMin });
   const diffHr = Math.round(diffMin / 60);
   if (diffHr < 24) return t('statusBar.hoursAgo', { count: diffHr });
-  return date.toLocaleString();
+  return formatTimestamp(date, { full: true });
 }

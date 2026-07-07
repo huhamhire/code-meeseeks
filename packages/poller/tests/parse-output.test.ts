@@ -479,7 +479,34 @@ describe('parseReviewOutput', () => {
     const { findings } = parseReviewOutput(md, 'review');
     // the old implementation only recognized "Relevant tests"/"Security concerns"; these two common conclusions would degrade to general (no chip/coloring)
     expect(findings.find((f) => /tests/i.test(f.title ?? ''))?.sectionKey).toBe('relevant-tests');
-    expect(findings.find((f) => /security/i.test(f.title ?? ''))?.sectionKey).toBe('security');
+    // the standalone "No security concerns" strong is classified as security and its verdict normalized into the canonical body (title cleared).
+    const sec = findings.find((f) => f.sectionKey === 'security');
+    expect(sec?.body).toBe('No security concerns identified');
+  });
+
+  it('GFM /review: every "no concern" security verdict (terse / template / localized) collapses to one canonical phrase', () => {
+    const build = (verdict: string): string =>
+      [
+        '<table>',
+        `<tr><td>🔒&nbsp;<strong>Security concerns</strong>: ${verdict}</td></tr>`,
+        '</table>',
+      ].join('\n');
+    for (const verdict of ['否', 'No', 'N/A', '无风险', '未发现安全风险', '未发现明显安全风险']) {
+      const { findings } = parseReviewOutput(build(verdict), 'review');
+      const sec = findings.find((f) => f.sectionKey === 'security');
+      expect(sec?.body).toBe('No security concerns identified');
+    }
+  });
+
+  it('GFM /review: a real security concern is not swallowed by the no-concern normalization', () => {
+    const md = [
+      '<table>',
+      '<tr><td>🔒&nbsp;<strong>Security concerns</strong>: 存在 SQL 注入风险，用户输入未过滤后拼接查询</td></tr>',
+      '</table>',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'review');
+    const sec = findings.find((f) => f.sectionKey === 'security');
+    expect(sec?.body).toContain('SQL 注入');
   });
 });
 

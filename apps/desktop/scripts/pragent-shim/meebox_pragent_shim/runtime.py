@@ -15,7 +15,7 @@ import sys
 # skipped (safe degradation, preferring to apply fewer patches over applying wrong ones).
 # When upgrading pr-agent: sync this constant + prAgent.version in scripts/pragent-runtime.json
 # (the assemble script verifies the two match and extracts this constant from this file), and re-verify patch behavior.
-_EXPECTED_PRAGENT_VERSION = "0.36.0"
+_EXPECTED_PRAGENT_VERSION = "0.39.0"
 
 # System context "cache break" marker: assembleSystemContext (TS, packages/agent/src/assemble.ts) inserts this string
 # (along with the --- separators on both sides) between the **globally stable prefix** (SOUL/AGENTS/tool directory/memory/user
