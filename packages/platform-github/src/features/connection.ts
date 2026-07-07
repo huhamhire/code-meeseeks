@@ -1,6 +1,6 @@
-import type { PingResult, PlatformCapabilities, RepoRef } from '@meebox/shared';
+import type { PingResult, PlatformCapabilities, PlatformUser, RepoRef } from '@meebox/shared';
 import { BaseConnection, type ConnectionContext } from '@meebox/platform-core';
-import type { GitHubClient } from '../client.js';
+import { GitHubClientError, type GitHubClient } from '../client.js';
 import type { GhUser } from '../types.js';
 
 /** GitHub connection domain: capability declaration, ping (including GHE version), PAT/SSH clone URL. */
@@ -39,6 +39,8 @@ export class GitHubConnection extends BaseConnection {
       activityTimeline: true,
       // comments + review_comments include inline replies → count changes reliably reflect replies, the poller only scans when count/update time changes.
       commentCountIncludesReplies: true,
+      // GitHub exposes the repo collaborators list, so the mention editor can search repo-permitted users beyond this PR's participants.
+      userSearch: true,
     };
   }
 
@@ -64,5 +66,43 @@ export class GitHubConnection extends BaseConnection {
    */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     return this.client.getCloneUrl(repo, this.getCurrentUser()?.name);
+  }
+
+  /**
+   * Search users for `@mention` autocomplete, **repo-scoped when the caller is privileged enough**. GitHub has no
+   * repo-scoped user *search* endpoint, so we first list collaborators (`/repos/{owner}/{repo}/collaborators`, the people
+   * with repo access) and filter client-side by login / name substring — but that endpoint needs **push access**, so a
+   * read-only reviewer gets 403. On that auth failure we fall back to the global `/search/users` (callable by any
+   * authenticated user), so mention search still works for everyone; only the scoping widens to "anyone on GitHub".
+   * Capped at 20. Non-auth errors propagate (the controller degrades them to the local menu).
+   */
+  async searchUsers(query: string, repo: RepoRef): Promise<PlatformUser[]> {
+    const raw = query.trim();
+    if (!raw) return [];
+    const toUser = (u: GhUser): PlatformUser => ({
+      name: u.login,
+      displayName: u.name ?? u.login,
+      slug: u.login,
+      avatarUrl: u.avatar_url,
+    });
+    try {
+      const q = raw.toLowerCase();
+      const list = await this.client.get<GhUser[]>(
+        `/repos/${repo.projectKey}/${repo.repoSlug}/collaborators`,
+        { per_page: '100' },
+      );
+      return list
+        .filter((u) => u.login.toLowerCase().includes(q) || (u.name ?? '').toLowerCase().includes(q))
+        .slice(0, 20)
+        .map(toUser);
+    } catch (e) {
+      if (!(e instanceof GitHubClientError) || (e.status !== 401 && e.status !== 403)) throw e;
+      // No push access → fall back to the global user search (any authenticated user can call it).
+      const res = await this.client.get<{ items: GhUser[] }>('/search/users', {
+        q: raw,
+        per_page: '20',
+      });
+      return res.items.map(toUser);
+    }
   }
 }

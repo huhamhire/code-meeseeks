@@ -564,6 +564,9 @@
     "unified": "统一",
     "whitespace": "空白"
   },
+  "mention": {
+    "searching": "正在搜索用户…"
+  },
   "mergeVeto": {
     "behind": "落后于目标分支，需先更新",
     "blockedByDependency": "被其它合并请求阻塞",

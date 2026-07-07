@@ -70,6 +70,35 @@ export const createComment: IpcController<'comments:create'> = async (_event, re
   return created;
 };
 
+/** Minimum query length before hitting the remote user-search endpoint (avoids a request per keystroke on 1 char). */
+const MENTION_SEARCH_MIN_QUERY = 2;
+
+/**
+ * Search platform users for `@mention` autocomplete. Resolves the connection from the PR, guards on the `userSearch`
+ * capability + a minimum query length, and delegates to the adapter's connection.searchUsers. Read-only, no cache /
+ * broadcast. Returns [] when unsupported / query too short (the renderer treats it as "no remote matches").
+ */
+export const searchMentions: IpcController<'mentions:search'> = async (_event, req) => {
+  const query = req.query.trim();
+  if (query.length < MENTION_SEARCH_MIN_QUERY) return [];
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  const adapter = ctx.pr.adapterForOrThrow(pr);
+  if (!adapter.connection.capabilities().userSearch) return [];
+  try {
+    // Repo-scoped where the caller is privileged; the adapter falls back to a broader directory on auth failure (see connection.searchUsers).
+    return await adapter.connection.searchUsers(query, {
+      projectKey: pr.repo.projectKey,
+      repoSlug: pr.repo.repoSlug,
+    });
+  } catch (e) {
+    // Mention search is a pure convenience: on any failure (permissions / network / rate limit) degrade to the local
+    // candidate menu rather than surfacing a loud handler error. Warn for troubleshooting, then return empty.
+    console.warn('mentions:search failed, degrading to local candidates:', e);
+    return [];
+  }
+};
+
 /**
  * Delete a remote comment authored by yourself (with a version optimistic lock). Failures are rethrown verbatim to the renderer; on success clear the cache + broadcast.
  */

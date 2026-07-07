@@ -18,7 +18,8 @@ Each of the three is declared by a capability flag (`commentReactions` / `commen
 | --- | --- | --- | --- |
 | Reactions `commentReactions` | `'fixed'` (8) | `'free'` (7.x+) | `'free'` |
 | Attachments `commentAttachments` | ✗ (no public upload API) | ✓ | ✓ |
-| @mention autocomplete | ✓ (no capability flag needed) | ✓ | ✓ |
+| @mention local completion | ✓ (no flag; always on) | ✓ | ✓ |
+| @mention remote search `userSearch` | ✓ `collaborators` → `/search/users` on 401/403 | ✓ `/users?permission=LICENSED_USER&filter=` (native picker endpoint) | ✓ `/projects/:id/users` (any member) |
 
 ### emoji reactions: unify the emoji character as a neutral key
 
@@ -49,11 +50,26 @@ To avoid being clipped by the comment scroll container / interfering with other 
 
 **Toggle semantics**: `toggleReaction(add)` is idempotent — on add, a duplicate add is treated as success; on remove, GitHub/GitLab must first find the id of one's own reaction and then delete it, skipping if it doesn't exist. On success it follows the existing "clear cache after write + broadcast `comments:changed` + refetch" model, maintaining no frontend optimistic state (consistent with edit / delete).
 
-### @mention: participant candidates + client-side completion
+### @mention: participant candidates + remote search fallback
 
 Notification is done by the platform server automatically for `@name` in the comment body, so it takes effect with **zero backend change**; this domain only handles the completion UX while writing.
 
-The candidate source deliberately takes only the **participants already loaded for this PR** — comment authors (including replies recursively) + commit authors — deduped by name. This is a **bounded, zero-extra-fetch, safe** source: it doesn't enumerate everyone from the remote (a large org has thousands of people, which is slow and triggers rate limits, and it also avoids over-privileged fetching), and the candidate size roughly equals the participant count (usually < 20). After typing `@`, client-side filter by the query string and show the top few; completion is merely a convenience, and the user can still freely type any `@name` (the platform parses notifications from the text itself). When broader search is needed, a "platform user-search endpoint" layer (with query filter + pagination truncation) can be stacked on top of this, but it's off by default.
+The candidate source has **two layers**, local-first:
+
+1. **Local participants (default, always on)**: the **participants already loaded for this PR** — comment authors (including replies recursively) + commit authors — deduped by name. A **bounded, zero-extra-fetch, safe** source: it doesn't enumerate everyone from the remote, and the candidate size roughly equals the participant count (usually < 20). After typing `@`, client-side filter by the query string and show the top few.
+2. **Remote user search (fallback, gated by `userSearch`)**: once the local set is exhausted for a non-empty query, the mention editor debounces (`REMOTE_SEARCH_DEBOUNCE_MS` = 250 ms) and calls the `mentions:search` IPC channel → `connection.searchUsers(query, repo)` → a per-platform user-search endpoint, capped at 20 and appended below the local matches. This lets the user `@mention` people **outside the PR** without knowing the exact username — the gap that a bounded local set alone cannot fill.
+
+Per-platform endpoint choice — **prefer repo-scoped, but only where a normal reviewer can actually call it**:
+
+- **GitLab** — `/projects/:id/users?search=` (project members): repo-scoped and callable by any member. Ideal case.
+- **GitHub** — `/repos/{o}/{r}/collaborators` filtered client-side (repo-scoped), but listing collaborators needs **push access**; on 401/403 the adapter falls back to the global `/search/users` (any authenticated user). So scope is "repo collaborators when privileged, else anyone on GitHub".
+- **Bitbucket** — `/rest/api/latest/users?permission=LICENSED_USER&filter=`: **the exact endpoint Bitbucket's own web mention picker uses**. Instance-wide (Bitbucket Server's repo `permissions/users` is repo-admin-gated → 401 for reviewers, so a repo-scoped variant isn't usable by normal users); `LICENSED_USER` keeps it to real accounts and it's callable by anyone authenticated.
+
+Any genuine failure (permissions / network / rate limit) degrades to the local menu with **no error surfaced to the user**: the `mentions:search` controller catches it, `console.warn`s for troubleshooting, and returns `[]`.
+
+Both layers are a **pure convenience**: the user can still freely type any `@name` (the platform parses notifications from the text itself), and any remote-search failure silently degrades to the local menu (see the fetch-safety constraint below). The remote query respects a minimum length (2 chars, enforced both in the renderer helper and the main controller), result truncation, debounce, and in-flight cancellation (a stale response is discarded by sequence check).
+
+**Consistency across surfaces (design philosophy)**: every comment-interaction behavior — reactions, `@mention` (local + remote), attachments, reply / edit / delete — must be **identical on all comment surfaces**: the comments/activity page (`CommentItem`), the inline diff comment zone (`InlineCommentZone`), and the inline draft editor (`DraftZone`). This is enforced by **sharing the leaf components / hooks** (`CommentReplyEditor`, `MentionTextarea`, `useReactions`, `useCommentThread`) rather than reimplementing per surface, so a surface can only differ in layout, never in interaction behavior. When adding or changing an interaction, wire it into **all** surfaces (thread the same props down each path) — a capability reaching only one surface is a bug, not a scope choice.
 
 ### Image attachments: platform-native upload + reuse of existing rendering
 
@@ -75,7 +91,7 @@ During upload the input box is disabled, to avoid the insertion position driftin
 | `REACTION_PICKER` | `fixed`-mode candidates (shared constant) | a fixed set of 8 emoji characters |
 | `REACTION_EMOJIS` | `free`-mode candidates + search source + char ↔ code mapping source (shared curated set) | `{ emoji, code, keywords }[]` (~150 entries) |
 
-**Capability flags**: `commentReactions: false | 'fixed' | 'free'`; `commentAttachments` (boolean).
+**Capability flags**: `commentReactions: false | 'fixed' | 'free'`; `commentAttachments` (boolean); `userSearch` (boolean — remote `@mention` user search).
 
 **Service interfaces** (method name + semantics, no pseudo-signatures):
 
@@ -94,5 +110,5 @@ During upload the input box is disabled, to avoid the insertion position driftin
 - **Adding a new platform**: implement `toggleReaction` / `uploadAttachment`, declare the corresponding capability flags, and provide this platform's "native-name ↔ emoji" mapping; leave unsupported items at their default (reaction throws / upload returns null), and setting the capability flag false hides the whole block.
 - **Bitbucket's reaction shape has been verified empirically**: `properties.reactions[].emoticon` gives `shortcut` + `url` (a twemoji SVG whose filename is the Unicode code point, e.g. `1f440.svg`), with no `value` and no `count` field (the count is taken from `users.length`). Display prefers **decoding the emoji from the url code point** (works for any emoji), falling back to the shortcut-name mapping. Emoticon shortcut naming is irregular (e.g. `smile` / `laughing`), so writes (toggle) use the char → shortcode table built from `REACTION_EMOJIS`; when adding a new reaction kind, append a row in that curated set and ensure the shortcode is one the real instance accepts.
 - **Reads are always best-effort**: a follow-up query failure of reactions / awards must be caught as "no reaction", and must never bubble up to interrupt the comment list load.
-- **@mention does not expand to enumerating everyone**: candidates default to this PR's participants; if platform user search is introduced, it must carry a query filter + result truncation + debounce + in-flight cancellation, to avoid full-list fetching and rate limiting (see the constraint on fetch safety).
+- **@mention does not expand to enumerating everyone**: candidates default to this PR's participants; the `userSearch` remote fallback is query-scoped and carries a minimum query length + result truncation (20) + debounce (250 ms) + in-flight cancellation, so it never full-list-fetches and stays clear of rate limits (GitHub `/search/users` is ~30/min — the debounce keeps well under it).
 - **Attachment rendering depends on the existing proxy**: upload only produces markdown, and the authenticated fetch and display of embedded images reuse the existing comment-image proxy; if a new platform adopts a new URL shape, the attachment proxy must be updated to recognize it accordingly.

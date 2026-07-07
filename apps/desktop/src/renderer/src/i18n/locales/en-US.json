@@ -578,6 +578,9 @@
     "unified": "Unified",
     "whitespace": "Whitespace"
   },
+  "mention": {
+    "searching": "Searching users…"
+  },
   "mergeVeto": {
     "behind": "Behind the target branch",
     "blockedByDependency": "Blocked by another merge request",

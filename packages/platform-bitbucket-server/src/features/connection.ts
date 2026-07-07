@@ -3,6 +3,7 @@ import {
   errorCodeMessage,
   type PingResult,
   type PlatformCapabilities,
+  type PlatformUser,
   type RepoRef,
 } from '@meebox/shared';
 import { BaseConnection, type ConnectionContext } from '@meebox/platform-core';
@@ -50,6 +51,8 @@ export class BitbucketServerConnection extends BaseConnection {
       activityTimeline: true,
       // properties.commentCount only counts top-level comments, and updatedDate does not change with comments → no "includes replies" signal, so the poller falls back to scanning pending PRs every round.
       commentCountIncludesReplies: false,
+      // Bitbucket exposes the licensed-user search (the same endpoint the web mention picker uses), so the mention editor can search users beyond this PR's participants.
+      userSearch: true,
     };
   }
 
@@ -102,6 +105,27 @@ export class BitbucketServerConnection extends BaseConnection {
    */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     return this.client.getCloneUrl(repo, this.getCurrentUser()?.name);
+  }
+
+  /**
+   * Search users for `@mention` autocomplete via the same endpoint Bitbucket's own web mention picker uses:
+   * `/rest/api/latest/users?permission=LICENSED_USER&filter=<q>` (`filter` matches username / display name / email).
+   * `permission=LICENSED_USER` restricts to real licensed accounts and — unlike the repo `permissions/users` endpoint,
+   * which is repo-admin-gated (401 for a normal reviewer) — this is callable by any authenticated user, so it works for
+   * everyone. Scope is instance-wide (Bitbucket Server has no non-admin repo-scoped user endpoint; the native picker is
+   * instance-wide too). Inactive accounts dropped, capped at 20. Errors propagate (the controller degrades to the local menu).
+   */
+  async searchUsers(query: string, _repo: RepoRef): Promise<PlatformUser[]> {
+    const q = query.trim();
+    if (!q) return [];
+    const page = await this.client.get<{ values: BitbucketUser[] }>('/rest/api/latest/users', {
+      permission: 'LICENSED_USER',
+      filter: q,
+      limit: '20',
+    });
+    return page.values
+      .filter((u) => u.active !== false)
+      .map((u) => ({ name: u.name, displayName: u.displayName, slug: u.slug }));
   }
 
   /**

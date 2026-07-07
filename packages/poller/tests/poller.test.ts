@@ -92,12 +92,14 @@ class FakeAdapter implements PlatformAdapter {
         reviewGrouping: false,
         activityTimeline: true,
         commentCountIncludesReplies: this.replyAware,
+        userSearch: false,
       }),
       ping: async () => {
         if (this.failPing) throw new Error('ping fail');
         return { ok: true, serverVersion: 'fake' };
       },
       getCloneUrl: async () => 'https://fake.example.com/repo.git',
+      searchUsers: async () => [],
     };
     this.prs = {
       listPendingPullRequests: async (): Promise<PullRequest[]> => {
@@ -313,10 +315,12 @@ describe('Poller.tick', () => {
         reviewGrouping: false,
         activityTimeline: true,
         commentCountIncludesReplies: false,
+        userSearch: false,
       }),
       ping: async () => ({ ok: true }),
       getCurrentUser: () => null,
       getCloneUrl: async () => 'https://stub',
+      searchUsers: async () => [],
     };
     const slowPulls: PullRequestService = {
       getSinglePullRequest: () => Promise.reject(new Error('unused')),

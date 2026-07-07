@@ -664,6 +664,13 @@ export interface PlatformCapabilities {
    *   no free "includes replies" signal at all; the poller fetches a comment scan as a fallback every round for **pending PRs**, otherwise it would miss "reply"-type notifications.
    */
   commentCountIncludesReplies: boolean;
+  /**
+   * Whether the platform exposes a remote user-search endpoint for `@mention` autocomplete (Bitbucket `/users?filter=`,
+   * GitHub `/search/users`, GitLab `/users?search=`). When true the mention editor, after exhausting the bounded local
+   * candidate set (this PR's participants), falls back to a debounced remote lookup so the user can `@mention` people
+   * outside the PR without knowing the exact username. When false the editor stays local-only (manual `@name` still works).
+   */
+  userSearch: boolean;
 }
 
 /**

@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import type { PlatformKind, PlatformUser, ReviewDraft } from '@meebox/shared';
 import { ConfirmModal, TrashIcon } from '../../../../common';
 import { MentionTextarea } from '../shared/MentionTextarea';
+import { searchMentionUsers } from '../shared/mentionSearch';
 import { uploadCommentImage } from '../shared/uploadCommentImage';
 import { useDraftZone } from './useDraftZone';
 
@@ -20,6 +21,8 @@ interface DraftZoneProps {
   mentionCandidates?: PlatformUser[];
   /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames). */
   platform?: PlatformKind;
+  /** Whether the platform supports remote user search (capabilities.userSearch); enables the mention editor's remote fallback when true. */
+  userSearchEnabled?: boolean;
   /**
    * Register the "enter edit mode" trigger fn into an external ref map. When DiffView calls the
    * registered fn, this component setIsEditing(true). Uses a ref-based fn instead of a props token to
@@ -53,6 +56,7 @@ export function DraftZone({
   hardBreaks,
   mentionCandidates,
   platform,
+  userSearchEnabled = false,
   registerEditTrigger,
   onSave,
   onDelete,
@@ -156,6 +160,9 @@ export function DraftZone({
             onChange={setEditingBody}
             candidates={mentionCandidates ?? []}
             platform={platform}
+            onRemoteSearch={
+              userSearchEnabled ? (q) => searchMentionUsers(prLocalId, q) : undefined
+            }
             onKeyDown={onKeyDown}
             onUpload={
               attachmentsEnabled ? (f) => uploadCommentImage(prLocalId, f) : undefined

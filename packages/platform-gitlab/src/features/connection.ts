@@ -1,7 +1,13 @@
-import type { PingResult, PlatformCapabilities, RepoRef, ReviewerStatus } from '@meebox/shared';
+import type {
+  PingResult,
+  PlatformCapabilities,
+  PlatformUser,
+  RepoRef,
+  ReviewerStatus,
+} from '@meebox/shared';
 import { BaseConnection, type ConnectionContext } from '@meebox/platform-core';
 import type { GitLabClient } from '../client.js';
-import { mapUser } from '../utils.js';
+import { mapUser, projectId } from '../utils.js';
 import type { GlMetadata, GlUser, GlVersion } from '../types.js';
 
 /** GitLab connection domain: capability declaration (degrade approval by edition), ping (with edition detection), PAT/SSH clone URL. */
@@ -46,6 +52,8 @@ export class GitLabConnection extends BaseConnection {
       activityTimeline: false,
       // user_notes_count includes replies (replies are also notes) → count changes reliably reflect replies, poller only scans when the count/update time changes.
       commentCountIncludesReplies: true,
+      // GitLab exposes /projects/:id/users?search=, so the mention editor can search project members beyond this PR's participants.
+      userSearch: true,
     };
   }
 
@@ -81,5 +89,20 @@ export class GitLabConnection extends BaseConnection {
    */
   async getCloneUrl(repo: RepoRef): Promise<string> {
     return this.client.getCloneUrl(repo, this.getCurrentUser()?.name);
+  }
+
+  /**
+   * Search **project members** for `@mention` autocomplete via `/projects/:id/users?search=` (matches username / name;
+   * the members-among-the-project set, i.e. users with access to the repo). Capped at 20 results; each is mapped to the
+   * neutral PlatformUser via {@link mapUser}. Callable by any project member (no elevated permission needed).
+   */
+  async searchUsers(query: string, repo: RepoRef): Promise<PlatformUser[]> {
+    const q = query.trim();
+    if (!q) return [];
+    const users = await this.client.get<GlUser[]>(`/projects/${projectId(repo)}/users`, {
+      search: q,
+      per_page: '20',
+    });
+    return users.map(mapUser);
   }
 }

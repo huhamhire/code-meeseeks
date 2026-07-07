@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type ReactMarkdown from 'react-markdown';
-import type { PrComment } from '@meebox/shared';
+import type { PlatformKind, PlatformUser, PrComment } from '@meebox/shared';
 import { Avatar, makeBitbucketImageFor, ConfirmModal } from '../../../../../common';
 import { formatTimestamp } from '../../../../../../utils/time';
 import { CommentEditEditor } from '../../comments/CommentEditEditor';
@@ -36,6 +36,9 @@ export function CommentZone({
   hardBreaks,
   reactionsMode,
   attachmentsEnabled = false,
+  mentionCandidates,
+  platform,
+  userSearchEnabled = false,
   readOnly = false,
 }: {
   comments: PrComment[];
@@ -48,6 +51,12 @@ export function CommentZone({
   reactionsMode?: 'fixed' | 'free';
   /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the reply editor to enable paste upload. */
   attachmentsEnabled?: boolean;
+  /** `@mention` autocomplete candidates for the reply editor (bounded PR participants); kept identical to the comments/activity tab so inline and page reply behave the same. */
+  mentionCandidates?: PlatformUser[];
+  /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames); passed through to the reply editor. */
+  platform?: PlatformKind;
+  /** Whether the platform supports remote user search (capabilities.userSearch); passed through to the reply editor for the mention remote fallback. */
+  userSearchEnabled?: boolean;
   /** Content read-only (decline / archived PR that can't be participated in): hide the inline comment reply / edit / delete actions. */
   readOnly?: boolean;
 }) {
@@ -68,6 +77,9 @@ export function CommentZone({
             hardBreaks={hardBreaks}
             reactionsMode={reactionsMode}
             attachmentsEnabled={attachmentsEnabled}
+            mentionCandidates={mentionCandidates}
+            platform={platform}
+            userSearchEnabled={userSearchEnabled}
             readOnly={readOnly}
           />
         </div>
@@ -139,6 +151,9 @@ function CommentNode({
   hardBreaks,
   reactionsMode,
   attachmentsEnabled = false,
+  mentionCandidates,
+  platform,
+  userSearchEnabled = false,
   readOnly = false,
 }: {
   comment: PrComment;
@@ -150,6 +165,9 @@ function CommentNode({
   hardBreaks: boolean;
   reactionsMode?: 'fixed' | 'free';
   attachmentsEnabled?: boolean;
+  mentionCandidates?: PlatformUser[];
+  platform?: PlatformKind;
+  userSearchEnabled?: boolean;
   readOnly?: boolean;
 }) {
   const { t } = useTranslation();
@@ -257,7 +275,10 @@ function CommentNode({
             prLocalId={prLocalId}
             // Reply target abstraction (threadId): GitLab=discussion id (required for reply); Bitbucket empty / GitHub=remoteId → fall back to remoteId.
             parentCommentId={comment.threadId ?? comment.remoteId}
+            mentionCandidates={mentionCandidates}
+            platform={platform}
             attachmentsEnabled={attachmentsEnabled}
+            userSearchEnabled={userSearchEnabled}
             onCancel={() => setReplyOpen(false)}
             onPosted={() => setReplyOpen(false)}
           />
@@ -298,6 +319,9 @@ function CommentNode({
           hardBreaks={hardBreaks}
           reactionsMode={reactionsMode}
           attachmentsEnabled={attachmentsEnabled}
+          mentionCandidates={mentionCandidates}
+          platform={platform}
+          userSearchEnabled={userSearchEnabled}
           readOnly={readOnly}
         />
       ))}

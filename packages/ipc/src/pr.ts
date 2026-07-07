@@ -2,6 +2,7 @@ import type {
   AskVerdict,
   FindingClosure,
   LocalPrStatus,
+  PlatformUser,
   PollResult,
   PrActivityEvent,
   PrComment,
@@ -86,6 +87,17 @@ export interface PrChannels {
   'comments:uploadAttachment': {
     request: { localId: string; fileName: string; contentType: string; bytes: ArrayBuffer };
     response: { markdown: string } | null;
+  };
+  /**
+   * Search platform users for `@mention` autocomplete (exposed only where the `userSearch` capability is true).
+   * The mention editor calls this as a debounced fallback once the bounded local candidate set (this PR's participants)
+   * is exhausted, so the user can mention people outside the PR without knowing the exact username. The connection is
+   * resolved from `localId` (the PR's platform / repo). Returns a bounded, platform-relevance-ordered list; an empty /
+   * too-short query or a search failure resolves to `[]` (the editor silently falls back to the local menu).
+   */
+  'mentions:search': {
+    request: { localId: string; query: string };
+    response: PlatformUser[];
   };
   'prs:list': { request: void; response: StoredPullRequest[] };
   /** List archived (retired) PRs: read from cold storage, for the "closed" view to browse (read-only). */

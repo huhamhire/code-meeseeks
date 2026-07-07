@@ -83,6 +83,7 @@ export function CommentItem({
   reactionsMode,
   mentionCandidates,
   attachmentsEnabled = false,
+  userSearchEnabled = false,
   timeline = false,
   readOnly = false,
   onJumpToAnchor,
@@ -99,6 +100,8 @@ export function CommentItem({
   mentionCandidates?: PlatformUser[];
   /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the reply editor to enable paste upload. */
   attachmentsEnabled?: boolean;
+  /** Whether the platform supports remote user search (capabilities.userSearch); passed through to the reply editor for the mention remote fallback. */
+  userSearchEnabled?: boolean;
   /** Whether in activity timeline mode (only affects top-level comment layout, see the note above) */
   timeline?: boolean;
   /** Content read-only (decline / non-participable archived PR): hides reply / edit / delete actions, browse only. */
@@ -267,6 +270,7 @@ export function CommentItem({
       mentionCandidates={mentionCandidates}
       platform={pr.platform}
       attachmentsEnabled={attachmentsEnabled}
+      userSearchEnabled={userSearchEnabled}
       onCancel={() => setReplyOpen(false)}
       onPosted={() => setReplyOpen(false)}
     />
@@ -289,6 +293,7 @@ export function CommentItem({
             reactionsMode={reactionsMode}
             mentionCandidates={mentionCandidates}
             attachmentsEnabled={attachmentsEnabled}
+            userSearchEnabled={userSearchEnabled}
             readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
           />

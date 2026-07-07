@@ -98,6 +98,8 @@ export function ActivityPanel({
   const reactionsMode = capabilities?.commentReactions || undefined;
   // Image attachment upload: enables comment paste-to-upload when the platform supports it. Conservatively off by default (GitHub has no upload API, also false).
   const attachmentsEnabled = capabilities?.commentAttachments ?? false;
+  // Remote @mention user search: enables the mention editor's remote fallback (search users beyond this PR's participants) when the platform supports it. Off by default.
+  const userSearchEnabled = capabilities?.userSearch ?? false;
   // Differentiation: GitHub/Bitbucket render the activity timeline of comments+commits+decisions; GitLab (activityTimeline=false) degrades to
   // a pure comment view (doesn't fetch commits/decisions, keeps the "Comments" wording). Default (capabilities not yet arrived) conservatively treats as pure comments.
   const showTimeline = capabilities?.activityTimeline ?? false;
@@ -200,6 +202,7 @@ export function ActivityPanel({
             reactionsMode={reactionsMode}
             mentionCandidates={mentionCandidates}
             attachmentsEnabled={attachmentsEnabled}
+            userSearchEnabled={userSearchEnabled}
             timeline={showTimeline}
             readOnly={readOnly}
             onJumpToAnchor={onJumpToAnchor}
@@ -234,6 +237,7 @@ export function ActivityPanel({
     reactionsMode,
     mentionCandidates,
     attachmentsEnabled,
+    userSearchEnabled,
     showTimeline,
     readOnly,
     onViewCommit,
@@ -279,6 +283,7 @@ export function ActivityPanel({
                     mentionCandidates={mentionCandidates}
                     platform={pr.platform}
                     attachmentsEnabled={attachmentsEnabled}
+                    userSearchEnabled={userSearchEnabled}
                     onCancel={() => onComposeClose?.()}
                     onPosted={() => onComposeClose?.()}
                   />

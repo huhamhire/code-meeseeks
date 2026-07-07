@@ -18,6 +18,7 @@ export function DraftZoneList({
   attachmentsEnabled = false,
   mentionCandidates,
   platform,
+  userSearchEnabled = false,
 }: {
   drafts: ReviewDraft[];
   prLocalId: string;
@@ -29,6 +30,8 @@ export function DraftZoneList({
   mentionCandidates?: PlatformUser[];
   /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames). */
   platform?: PlatformKind;
+  /** Whether the platform supports remote user search (capabilities.userSearch); passed through to the draft editor for the mention remote fallback. */
+  userSearchEnabled?: boolean;
 }) {
   const { t } = useTranslation();
   const onSave = async (draftId: string, body: string): Promise<void> => {
@@ -66,6 +69,7 @@ export function DraftZoneList({
             hardBreaks={hardBreaks}
             mentionCandidates={mentionCandidates}
             platform={platform}
+            userSearchEnabled={userSearchEnabled}
             registerEditTrigger={registerEditTrigger}
             onSave={(body) => onSave(d.id, body)}
             onDelete={() => onDelete(d.id)}
