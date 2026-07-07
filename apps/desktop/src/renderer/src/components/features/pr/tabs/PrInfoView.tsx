@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StoredPullRequest } from '@meebox/shared';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
+import { formatTimestamp } from '../../../../utils/time';
 import {
   Avatar,
   makeBitbucketImageFor,
@@ -69,11 +70,11 @@ export function PrInfoView({ pr }: PrInfoViewProps) {
             <h3>{t('prInfo.timeline')}</h3>
             <div className="pr-detail-kv">
               <div className="modal-kv-key">{t('prInfo.createdAt')}</div>
-              <div className="modal-kv-val">{new Date(pr.createdAt).toLocaleString()}</div>
+              <div className="modal-kv-val">{formatTimestamp(pr.createdAt, { full: true })}</div>
               <div className="modal-kv-key">{t('prInfo.updatedAt')}</div>
-              <div className="modal-kv-val">{new Date(pr.updatedAt).toLocaleString()}</div>
+              <div className="modal-kv-val">{formatTimestamp(pr.updatedAt, { full: true })}</div>
               <div className="modal-kv-key">{t('prInfo.recentUpdate')}</div>
-              <div className="modal-kv-val">{new Date(pr.lastSeenAt).toLocaleString()}</div>
+              <div className="modal-kv-val">{formatTimestamp(pr.lastSeenAt, { full: true })}</div>
             </div>
           </section>
 

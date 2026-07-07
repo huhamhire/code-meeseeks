@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PlatformUser, PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import i18n from '../../../../../i18n';
+import { formatDate, formatTimestamp } from '../../../../../utils/time';
 import {
   Avatar,
   makeBitbucketImageFor,
@@ -382,14 +383,11 @@ export function CommentItem({
 }
 
 /**
- * Local time text to the second (`YYYY-MM-DD HH:mm:ss`), for the time label's hover tooltip to show the actual time point.
+ * Exact local time (`yyyy-mm-dd HH:mm:ss`, always with the date) for the time label's hover tooltip — the
+ * tooltip's whole job is precise disambiguation, so it never omits the date.
  */
 export function formatExactTime(iso: string): string {
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) return iso;
-  const d = new Date(ms);
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return formatTimestamp(iso, { full: true });
 }
 
 /**
@@ -406,5 +404,5 @@ export function formatRelativeTime(iso: string): string {
     return i18n.t('commentsPanel.hoursAgo', { count: Math.round(diffSec / 3600) });
   if (diffSec < 86400 * 7)
     return i18n.t('commentsPanel.daysAgo', { count: Math.round(diffSec / 86400) });
-  return new Date(t).toLocaleDateString();
+  return formatDate(t);
 }

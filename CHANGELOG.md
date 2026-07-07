@@ -10,6 +10,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 ### ♻️ Changed
 
 - Updated the embedded review engine (pr-agent) to 0.39.0, picking up upstream model-provider routing improvements and fixes.
+- Displayed timestamps now use a consistent, locale-independent format — 24-hour `yyyy-mm-dd HH:mm:ss`, with same-day times showing only `HH:mm:ss` — instead of following the OS locale (so they no longer differ from the app's language or between machines).
 
 ### 🔧 Fixed
 
