@@ -19,8 +19,9 @@ Root cause (in pr_agent/algo/git_patch_processing.py):
 Fix: default an OMITTED hunk size to 1 (spec-correct) instead of 0, keeping an EXPLICIT 0 (e.g. `@@ -0,0 +1 @@`
 new-file case) as 0. This makes the trailing-context slice start after the hunk, so no phantom line is emitted.
 
-Upstream status (as of pr-agent 0.36.0): still present on `main`; no upstream issue/PR addresses it (PRs #2322 /
-#2330 guard a DIFFERENT None — a fully malformed `@@` line where `match` itself is None — not the size default).
+Upstream status (re-checked at pr-agent 0.39.0): still present — `extract_hunk_headers` is byte-identical to
+0.36.0 and still coerces the omitted size to 0; no upstream issue/PR addresses it (PRs #2322 / #2330 guard a
+DIFFERENT None — a fully malformed `@@` line where `match` itself is None — not the size default).
 
 Removal / upgrade checklist:
   * This patch is BOTH version-guarded (only applies to the pinned _EXPECTED_PRAGENT_VERSION) AND self-disabling
