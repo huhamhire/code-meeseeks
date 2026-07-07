@@ -1,8 +1,9 @@
 import type { TFunction } from 'i18next';
 import type { ReviewRun } from '@meebox/shared';
 
-// Duration formatting lives in utils/time (status-bar compact version uses the compact option); re-exported here so chat components import it nearby.
-export { formatElapsed } from '../../../../utils/time';
+// Duration / timestamp formatting live in utils/time; re-exported here so chat components import them nearby.
+export { formatElapsed, formatTimestamp } from '../../../../utils/time';
+import { formatTimestamp } from '../../../../utils/time';
 
 /** 1234 → "1.2k"; keeps 1 decimal place; < 1000 returns the number as-is */
 export function formatTokens(n: number): string {
@@ -24,29 +25,13 @@ export function runStatusLabel(status: ReviewRun['status'], t: TFunction): strin
 }
 
 /**
- * Format a timestamp as "HH:MM:SS" (same day) or "MM-DD HH:MM" (crossing days).
- * The user mainly cares about "which run"; second granularity is enough to tell
- * adjacent runs apart; runs from another day get a date marker so the history run
- * list groups them at a glance. Accepts an ISO string (persisted
- * ReviewRun.startedAt) or a millisecond timestamp (RunningView side passes the
- * Date.getTime() of the parsed ISO)
+ * Format a review run's start time in the house format: same day → "HH:mm:ss", other days →
+ * "yyyy-mm-dd HH:mm:ss". The user mainly cares about "which run"; second granularity tells adjacent runs apart,
+ * and runs from another day carry the date so the history list groups them at a glance. Accepts an ISO string
+ * (persisted ReviewRun.startedAt) or a millisecond timestamp (RunningView passes the parsed ISO's getTime()).
  */
 export function formatStartTime(input: string | number): string {
-  const d = new Date(input);
-  const now = new Date();
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  if (sameDay) {
-    const ss = String(d.getSeconds()).padStart(2, '0');
-    return `${hh}:${mm}:${ss}`;
-  }
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${mo}-${da} ${hh}:${mm}`;
+  return formatTimestamp(input);
 }
 
 /**

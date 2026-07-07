@@ -6,6 +6,7 @@ import { invoke } from '../../../../api';
 import { formatBackendError, type FormattedError } from '../../../../errors';
 import { Avatar } from '../../../common';
 import { formatExactTime } from './comments/CommentItem';
+import { formatDate } from '../../../../utils/time';
 
 interface CommitsPanelProps {
   pr: StoredPullRequest;
@@ -151,7 +152,5 @@ function formatCommitTime(iso: string, t: TFunction): string {
   if (diffSec < 86400) return t('commitsPanel.hoursAgo', { count: Math.round(diffSec / 3600) });
   if (diffSec < 86400 * 7) return t('commitsPanel.daysAgo', { count: Math.round(diffSec / 86400) });
   // Older than a week shows yyyy-mm-dd, avoiding the vagueness of "X weeks ago"
-  const d = new Date(parsed);
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return formatDate(parsed);
 }

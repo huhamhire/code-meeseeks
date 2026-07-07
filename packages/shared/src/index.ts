@@ -12,4 +12,5 @@ export * from './pr-filter.js';
 export * from './product.js';
 export * from './sync-progress.js';
 export * from './theme.js';
+export * from './time-format.js';
 export * from './tool-registry.js';

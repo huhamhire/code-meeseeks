@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
 import { CommitIcon, RepeatIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
 import { orderFindings } from '../utils/findings';
-import { formatStartTime, runStatusLabel } from '../utils/format';
+import { formatStartTime, formatTimestamp, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
 import { AnsiPre, AskQuestion, BreakablePath, TokenStat } from './shared';
 import { FindingCard } from './FindingCard';
@@ -78,7 +78,7 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
           tool/status/strategy chips, one visual weight lighter than a chip */}
       <span
         className="chat-run-time"
-        title={t('chatPane.startedAtTitle', { time: new Date(run.startedAt).toLocaleString() })}
+        title={t('chatPane.startedAtTitle', { time: formatTimestamp(run.startedAt, { full: true }) })}
       >
         {formatStartTime(run.startedAt)}
       </span>

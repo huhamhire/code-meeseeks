@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type ReactMarkdown from 'react-markdown';
 import type { PrComment } from '@meebox/shared';
 import { Avatar, makeBitbucketImageFor, ConfirmModal } from '../../../../../common';
+import { formatTimestamp } from '../../../../../../utils/time';
 import { CommentEditEditor } from '../../comments/CommentEditEditor';
 import { CommentReplyEditor } from '../../comments/CommentReplyEditor';
 import { CommentMarkdown } from '../../shared/CommentMarkdown';
@@ -347,7 +348,7 @@ function CommentAuthorRow({
         size={18}
       />
       <strong>{displayName}</strong>
-      <span className="muted">{new Date(at).toLocaleString()}</span>
+      <span className="muted">{formatTimestamp(at)}</span>
     </div>
   );
 }
@@ -356,7 +357,7 @@ function CommentAuthorRow({
 export function renderHoverMd(comments: PrComment[]): string {
   return comments
     .map((c) => {
-      const head = `**${c.author.displayName}** · ${new Date(c.createdAt).toLocaleString()}`;
+      const head = `**${c.author.displayName}** · ${formatTimestamp(c.createdAt, { full: true })}`;
       const body = c.body.length > 600 ? c.body.slice(0, 600) + '…' : c.body;
       const replies = c.replies
         .map(

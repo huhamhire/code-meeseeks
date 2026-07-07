@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReviewRunCommitScope, ReviewRunTool } from '@meebox/shared';
 import { CommitIcon } from '../../../common';
-import { formatElapsed, formatStartTime, inferPhase, runStatusLabel } from '../utils/format';
+import { formatElapsed, formatStartTime, formatTimestamp, inferPhase, runStatusLabel } from '../utils/format';
 import { AnsiPre, AskQuestion, Spinner } from './shared';
 
 export function RunningView({
@@ -81,7 +81,7 @@ export function RunningView({
             across the running and succeeded states */}
         <span
           className="chat-run-time"
-          title={t('chatPane.startedAtTitle', { time: new Date(startedAt).toLocaleString() })}
+          title={t('chatPane.startedAtTitle', { time: formatTimestamp(startedAt, { full: true }) })}
         >
           {formatStartTime(startedAt)}
         </span>
