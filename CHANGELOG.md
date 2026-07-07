@@ -7,6 +7,10 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### ♻️ Changed
+
+- Updated the embedded review engine (pr-agent) to 0.39.0, picking up upstream model-provider routing improvements and fixes.
+
 ### 🔧 Fixed
 
 - Inline review-draft comments now offer `@mention` participant autocomplete, matching the activity and reply composers.

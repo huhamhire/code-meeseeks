@@ -8,6 +8,6 @@
   },
   "prAgent": {
     "_comment": "嵌入式运行时安装的 pr-agent 版本（pinned）；须与 sitecustomize.py 的 _EXPECTED_PRAGENT_VERSION 对齐，升级时两处同步",
-    "version": "0.36.0"
+    "version": "0.39.0"
   }
 }
