@@ -5,7 +5,15 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.11.0] - 2026-07-07
+
+> 本次发布要点：
+>
+> - **更强的 `@` 提及**：自动补全现会到代码平台（GitHub / Bitbucket / GitLab）检索 PR 参与者以外的用户，让你无需知道对方的准确用户名即可提及；且在所有评论编辑器（含行内差异评论与评审草稿）中行为一致。
+> - **评审引擎升级**：内置 pr-agent 升级至 0.39.0，纳入上游的模型服务商路由改进与修复。
+> - **统一的时间显示**：界面时间戳统一为与地区无关的 24 小时制 `yyyy-mm-dd HH:mm:ss` 格式。
+>
+> 其余为一批评审体验修复（安全结论措辞、单行文件差异、行内评论宽度、令牌轮换鉴权等）。
 
 ### ✨ 新增
 
@@ -457,7 +465,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...HEAD
+[0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.7.0...v0.8.0

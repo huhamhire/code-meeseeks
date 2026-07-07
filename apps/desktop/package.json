@@ -1,6 +1,6 @@
 {
   "name": "@meebox/desktop",
-  "version": "0.11.0-dev",
+  "version": "0.11.0",
   "private": true,
   "description": "meebox Electron desktop app",
   "author": {
