@@ -7,6 +7,10 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### ✨ Added
+
+- `@mention` autocomplete can now find users beyond this PR's participants: after the local suggestions, it searches matching users on the code platform (GitHub / Bitbucket / GitLab), so you can mention someone without knowing their exact username. It works consistently in every comment editor — the activity composer, replies (including inline diff comment replies), and review drafts.
+
 ### ♻️ Changed
 
 - Updated the embedded review engine (pr-agent) to 0.39.0, picking up upstream model-provider routing improvements and fixes.
