@@ -62,6 +62,8 @@ npm --prefix apps/desktop run prepare:pragent    # align the embedded pr-agent r
 
 `npm install` (not `npm ci`) resolves against `package.json` and writes the lockfile back, keeping local and remote `package-lock.json` consistent; `prepare:pragent` is idempotent and aligns the local pr-agent runtime per `pragent-runtime.json` (skips if the version is unchanged, only syncing the shim). If the lockfile changes, commit it together with the change it belongs to.
 
+**Vulnerability-alert fixes — no `overrides`**: resolve a Dependabot / `npm audit` advisory only by upgrading the actual direct or parent dependency — **never** with npm `overrides` (or any other transitive version-pin hack). Overrides mask the real dependency graph and silently break on the parent's next update. When there is no clean parent upgrade (a transitive vuln pinned by a parent that has no patched release — e.g. `monaco-editor` pinning `dompurify`, or `vitepress` pinning `vite`), **prefer to leave it unpatched** over forcing an override. File a long-term **tracking issue** for advisories worth following (typically a **runtime** dependency); **dev-server-only tool-chain** advisories that never reach the shipped artifact (e.g. the `vite`/`esbuild` dev server under the website) may simply be left with no issue.
+
 ## Required before committing
 
 After changing code, run these four steps locally before wrapping up (this is exactly what CI does): `lint` → `typecheck` → `test` → `build`. lint is zero-tolerance (`--max-warnings=0`), and a warning will turn CI red.
