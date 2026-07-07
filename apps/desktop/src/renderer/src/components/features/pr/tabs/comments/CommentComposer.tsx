@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { PlatformKind, PlatformUser } from '@meebox/shared';
 import { invoke } from '../../../../../api';
 import { MentionTextarea } from '../shared/MentionTextarea';
+import { searchMentionUsers } from '../shared/mentionSearch';
 import { uploadCommentImage } from '../shared/uploadCommentImage';
 
 interface CommentComposerProps {
@@ -13,6 +14,8 @@ interface CommentComposerProps {
   platform?: PlatformKind;
   /** Whether the platform supports image attachment upload (capabilities.commentAttachments); paste-to-upload is enabled only when true. */
   attachmentsEnabled?: boolean;
+  /** Whether the platform supports remote user search (capabilities.userSearch); enables the mention editor's remote fallback when true. */
+  userSearchEnabled?: boolean;
   onCancel: () => void;
   /** Called after posting succeeds (collapses the composer; the timeline auto-refreshes via the comments:changed event, the new comment appears at the top) */
   onPosted: () => void;
@@ -27,6 +30,7 @@ export function CommentComposer({
   mentionCandidates = [],
   platform,
   attachmentsEnabled = false,
+  userSearchEnabled = false,
   onCancel,
   onPosted,
 }: CommentComposerProps) {
@@ -70,6 +74,9 @@ export function CommentComposer({
         onChange={setBody}
         candidates={mentionCandidates}
         platform={platform}
+        onRemoteSearch={
+          userSearchEnabled ? (q) => searchMentionUsers(prLocalId, q) : undefined
+        }
         onKeyDown={onKeyDown}
         onUpload={attachmentsEnabled ? (f) => uploadCommentImage(prLocalId, f) : undefined}
         placeholder={t('commentComposer.placeholder')}

@@ -23,6 +23,9 @@ class FakeConnection extends BaseConnection {
   async getCloneUrl() {
     return 'https://example/repo.git';
   }
+  async searchUsers() {
+    return [];
+  }
 }
 
 describe('MutableConnectionContext + BaseConnection', () => {

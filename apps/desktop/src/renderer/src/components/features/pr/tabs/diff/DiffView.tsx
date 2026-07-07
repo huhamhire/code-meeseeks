@@ -99,6 +99,8 @@ export function DiffView({
   // Inline comment emoji reaction / image attachment capabilities (same capability bits as the comments / activity tab): absent = unsupported (don't render the add-reaction button / don't enable paste upload).
   const reactionsMode = capabilities?.commentReactions || undefined;
   const attachmentsEnabled = capabilities?.commentAttachments ?? false;
+  // Remote @mention user search: enables the draft editor's remote fallback (search users beyond this PR's participants) when the platform supports it.
+  const userSearchEnabled = capabilities?.userSearch ?? false;
   const { t } = useTranslation();
   // Draft pool: store shared across ChatPane / DiffView; this component needs it to render inline zones
   const drafts = useDraftsForPr(pr.localId);
@@ -238,6 +240,9 @@ export function DiffView({
     commentHardBreaks,
     reactionsMode,
     attachmentsEnabled,
+    mentionCandidates,
+    platform: pr.platform,
+    userSearchEnabled,
     readOnly,
   });
   // Inline draft view zone (not rendered in the commit read-only view)
@@ -253,6 +258,7 @@ export function DiffView({
     attachmentsEnabled,
     mentionCandidates,
     platform: pr.platform,
+    userSearchEnabled,
     scopeKind: scope.kind,
   });
   // Line hover '+' to create a new draft (not mounted in the commit read-only view)

@@ -578,6 +578,9 @@
     "unified": "Vereinheitlicht",
     "whitespace": "Leerzeichen"
   },
+  "mention": {
+    "searching": "Benutzer werden gesucht…"
+  },
   "mergeVeto": {
     "behind": "Hinter dem Zielbranch",
     "blockedByDependency": "Durch einen anderen Merge Request blockiert",

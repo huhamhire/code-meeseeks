@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
-import type { PrComment } from '@meebox/shared';
+import type { PlatformKind, PlatformUser, PrComment } from '@meebox/shared';
 import type { DiffChangedFile } from '@meebox/ipc';
 import {
   CommentZone,
@@ -30,6 +30,12 @@ export function useCommentZones(opts: {
   reactionsMode?: 'fixed' | 'free';
   /** Whether the platform supports image attachment upload (capabilities.commentAttachments); passed through to the inline reply editor to enable paste upload. */
   attachmentsEnabled?: boolean;
+  /** `@mention` autocomplete candidates for the inline reply editor (bounded PR participants; see collectMentionCandidates). Kept identical to the comments/activity tab so inline and page behave the same. */
+  mentionCandidates?: PlatformUser[];
+  /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames); passed through to the inline reply editor. */
+  platform?: PlatformKind;
+  /** Whether the platform supports remote user search (capabilities.userSearch); passed through to the inline reply editor for the mention remote fallback. */
+  userSearchEnabled?: boolean;
   /** Content read-only (declined / non-participatable archived PR): inline comment zones hide reply / edit / delete. */
   readOnly?: boolean;
 }): void {
@@ -46,6 +52,9 @@ export function useCommentZones(opts: {
     commentHardBreaks,
     reactionsMode,
     attachmentsEnabled = false,
+    mentionCandidates,
+    platform,
+    userSearchEnabled = false,
     readOnly = false,
   } = opts;
 
@@ -117,6 +126,9 @@ export function useCommentZones(opts: {
           hardBreaks={commentHardBreaks}
           reactionsMode={reactionsMode}
           attachmentsEnabled={attachmentsEnabled}
+          mentionCandidates={mentionCandidates}
+          platform={platform}
+          userSearchEnabled={userSearchEnabled}
           readOnly={readOnly}
         />
       ),
@@ -144,6 +156,9 @@ export function useCommentZones(opts: {
     commentHardBreaks,
     reactionsMode,
     attachmentsEnabled,
+    mentionCandidates,
+    platform,
+    userSearchEnabled,
     readOnly,
   ]);
 }

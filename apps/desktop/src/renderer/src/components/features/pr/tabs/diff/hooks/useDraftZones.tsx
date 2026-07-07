@@ -28,6 +28,8 @@ export function useDraftZones(opts: {
   mentionCandidates?: PlatformUser[];
   /** Active platform, deciding inserted mention syntax (Bitbucket quotes non-simple usernames). */
   platform?: PlatformKind;
+  /** Whether the platform supports remote user search (capabilities.userSearch); passed through to the draft editor for the mention remote fallback. */
+  userSearchEnabled?: boolean;
   scopeKind: 'all' | 'commit';
 }): void {
   const {
@@ -42,6 +44,7 @@ export function useDraftZones(opts: {
     attachmentsEnabled = false,
     mentionCandidates,
     platform,
+    userSearchEnabled = false,
     scopeKind,
   } = opts;
 
@@ -94,6 +97,7 @@ export function useDraftZones(opts: {
           attachmentsEnabled={attachmentsEnabled}
           mentionCandidates={mentionCandidates}
           platform={platform}
+          userSearchEnabled={userSearchEnabled}
         />
       ),
     });
@@ -111,6 +115,7 @@ export function useDraftZones(opts: {
     attachmentsEnabled,
     mentionCandidates,
     platform,
+    userSearchEnabled,
     scopeKind,
   ]);
 }
