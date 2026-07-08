@@ -183,12 +183,15 @@ export interface PingResult {
 export interface PrCommentAnchor {
   /** Current path (for a renamed file, the dst side) */
   path: string;
-  /** Anchor line number */
-  line: number;
+  /**
+   * Anchor line number. **Absent = a file-level comment** — anchored to the whole file rather than a specific line
+   * (Bitbucket / GitHub support this; see {@link PlatformCapabilities.fileLevelComments}).
+   */
+  line?: number;
   /** 'old' = anchor to base / FROM; 'new' = anchor to head / TO */
   side: 'old' | 'new';
-  /** The diff role of the anchored line */
-  lineType: 'added' | 'removed' | 'context';
+  /** The diff role of the anchored line; absent for a file-level comment (no line). */
+  lineType?: 'added' | 'removed' | 'context';
 }
 
 /**
@@ -510,7 +513,10 @@ export interface PrComment {
   createdAt: string;
   /** ISO */
   updatedAt: string;
-  /** null = PR top-level summary comment; set = inline comment anchored to a specific file line */
+  /**
+   * null = PR top-level summary comment; set = anchored to a file — to a specific line (`anchor.line` present, an inline
+   * comment) or to the whole file (`anchor.line` absent, a file-level comment).
+   */
   anchor: PrCommentAnchor | null;
   /** Nested replies (Bitbucket uses comment.comments[]) */
   replies: PrComment[];
@@ -538,11 +544,12 @@ export interface PrComment {
    */
   canEdit?: boolean;
   /**
-   * Comment kind (multi-platform abstraction): 'summary' = PR-level discussion; 'inline' = anchored to a file line.
-   * Currently whether anchor is null already distinguishes them; this field is the explicit label during normalization for GitHub (issue/review comments split across two APIs) /
-   * GitLab (note/discussion), convenient for UI and write-back. Optional, not filled for old data.
+   * Comment kind (multi-platform abstraction): 'summary' = PR-level discussion; 'inline' = anchored to a file line;
+   * 'file' = anchored to a whole file (no line). Redundant with anchor (null → summary; anchor with line → inline;
+   * anchor without line → file), but an explicit label during normalization for GitHub (issue/review comments split
+   * across two APIs) / GitLab (note/discussion), convenient for UI and write-back. Optional, not filled for old data.
    */
-  kind?: 'summary' | 'inline';
+  kind?: 'summary' | 'inline' | 'file';
   /**
    * Thread identifier (abstraction of the reply target). Bitbucket=parent comment id, GitHub=review-comment id,
    * GitLab=discussion id. Passed through to the adapter on reply; Bitbucket currently just uses remoteId.
@@ -608,6 +615,12 @@ export interface PlatformCapabilities {
   reviewStatuses: ReadonlyArray<ReviewerStatus>;
   /** Whether inline comments are supported */
   inlineComments: boolean;
+  /**
+   * Whether a comment can be anchored to a **whole file** (not a specific line). Bitbucket (anchor without a line) and
+   * GitHub (`subject_type: "file"`) support it → true; GitLab has no file-level diff-comment API → false (the UI hides
+   * the "comment on file" entry, and any remote file-level comment degrades to a summary). See {@link PrCommentAnchor}.
+   */
+  fileLevelComments: boolean;
   /** Whether multi-line inline comments are supported */
   inlineMultiline: boolean;
   /** Whether comment edit/delete requires a version optimistic lock (Bitbucket only) */

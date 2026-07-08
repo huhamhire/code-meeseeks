@@ -246,6 +246,7 @@
     "textareaAria": "评论回复编辑器"
   },
   "commentsPanel": {
+    "anchorFileTitle": "文件级评论（整个文件）",
     "anchorJumpTitle": "跳转到 Diff 对应位置",
     "anchorTitle": "锚定 {{side}} 侧 · {{lineType}}",
     "daysAgo_other": "{{count}} 天前",
@@ -332,12 +333,10 @@
     "binaryNotRendered": "⚠️ 二进制文件，不渲染 diff",
     "blameChangeRangeTitle": "此区段为本 PR 引入的改动",
     "blameFailed": "blame 失败",
-    "blameFailedNamed": "{{path}} blame 失败",
-    "diffRenderFailed": "diff 渲染失败：{{message}}",
+    "blameFailedNamed": "{{path}} blame 失败",    "diffRenderFailed": "diff 渲染失败：{{message}}",
     "diffRenderFailedHint": "切换文件 / 重试通常能恢复。底层异常已记录到 console。",
     "dismissNotificationTitle": "收起此通知",
-    "fileCount_other": "{{count}} 个文件",
-    "lfsManagedTitle": "由 Git LFS 管理",
+    "fileCount_other": "{{count}} 个文件",    "lfsManagedTitle": "由 Git LFS 管理",
     "loadChangedFilesFailed": "拉取变更文件列表失败",
     "loadCommentsFailed": "拉取评论失败",
     "loadingContentHint": "从本地镜像读 git blob，大文件 / 二进制判定时可能略慢",

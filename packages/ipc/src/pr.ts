@@ -41,6 +41,15 @@ export interface PrChannels {
     response: PrComment;
   };
   /**
+   * Post a file-level comment — anchored to a whole file rather than a specific line (Bitbucket / GitHub). Exposed only
+   * where the `fileLevelComments` capability is true; `side` defaults to 'new' (the head-side file). On success the main
+   * side clears the comment cache + broadcasts comments:changed, and the activity / comments panel refetches.
+   */
+  'comments:createFile': {
+    request: { localId: string; path: string; side?: 'old' | 'new'; body: string };
+    response: PrComment;
+  };
+  /**
    * Delete a remote comment you authored. Bitbucket requires a version (optimistic lock), which the caller takes from an existing PrComment;
    * mismatch / comment already has replies / not being the author all fail (Bitbucket 409/403). On success the main
    * side clears the comment cache + broadcasts comments:changed, and the UI refetches to refresh automatically

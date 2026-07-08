@@ -23,6 +23,8 @@ export class GitHubConnection extends BaseConnection {
     return {
       reviewStatuses: ['approved', 'needsWork', 'unapproved'],
       inlineComments: true,
+      // GitHub supports file-level review comments (subject_type: "file").
+      fileLevelComments: true,
       inlineMultiline: true,
       commentOptimisticLock: false,
       // GitHub Reactions API has only a fixed 8 kinds → fixed.

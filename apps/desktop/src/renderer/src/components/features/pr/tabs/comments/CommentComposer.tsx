@@ -16,14 +16,20 @@ interface CommentComposerProps {
   attachmentsEnabled?: boolean;
   /** Whether the platform supports remote user search (capabilities.userSearch); enables the mention editor's remote fallback when true. */
   userSearchEnabled?: boolean;
+  /**
+   * Override the post action. Default posts a PR summary comment (`comments:create`); pass this to post elsewhere with
+   * the same composer (e.g. a file-level comment via `comments:createFile`). Receives the body, resolves on success.
+   */
+  onSubmit?: (body: string) => Promise<unknown>;
   onCancel: () => void;
   /** Called after posting succeeds (collapses the composer; the timeline auto-refreshes via the comments:changed event, the new comment appears at the top) */
   onPosted: () => void;
 }
 
 /**
- * Composer for a new summary (not anchored to a file) comment: textarea + send/cancel. Appears at the top of the activity timeline.
- * Cmd/Ctrl+Enter sends, Esc cancels; send is disabled on an empty body. Layout reuses the reply composer's styles.
+ * Composer for a new comment: textarea + send/cancel. Posts a PR summary comment by default (top of the activity
+ * timeline), or whatever `onSubmit` overrides it to (e.g. a file-level comment). Cmd/Ctrl+Enter sends, Esc cancels;
+ * send is disabled on an empty body. Layout reuses the reply composer's styles.
  */
 export function CommentComposer({
   prLocalId,
@@ -31,6 +37,7 @@ export function CommentComposer({
   platform,
   attachmentsEnabled = false,
   userSearchEnabled = false,
+  onSubmit,
   onCancel,
   onPosted,
 }: CommentComposerProps) {
@@ -46,7 +53,8 @@ export function CommentComposer({
     setPosting(true);
     setError(null);
     try {
-      await invoke('comments:create', { localId: prLocalId, body });
+      if (onSubmit) await onSubmit(body);
+      else await invoke('comments:create', { localId: prLocalId, body });
       onPosted();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

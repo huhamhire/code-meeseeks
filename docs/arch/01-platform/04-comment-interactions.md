@@ -20,6 +20,7 @@ Each of the three is declared by a capability flag (`commentReactions` / `commen
 | Attachments `commentAttachments` | ✗ (no public upload API) | ✓ | ✓ |
 | @mention local completion | ✓ (no flag; always on) | ✓ | ✓ |
 | @mention remote search `userSearch` | ✓ `collaborators` → `/search/users` on 401/403 | ✓ `/users?permission=LICENSED_USER&filter=` (native picker endpoint) | ✓ `/projects/:id/users` (any member) |
+| File-level comments `fileLevelComments` | ✓ `subject_type: "file"` | ✓ anchor without a line | ✗ (no file-level diff-comment API) |
 
 ### emoji reactions: unify the emoji character as a neutral key
 
@@ -70,6 +71,14 @@ Any genuine failure (permissions / network / rate limit) degrades to the local m
 Both layers are a **pure convenience**: the user can still freely type any `@name` (the platform parses notifications from the text itself), and any remote-search failure silently degrades to the local menu (see the fetch-safety constraint below). The remote query respects a minimum length (2 chars, enforced both in the renderer helper and the main controller), result truncation, debounce, and in-flight cancellation (a stale response is discarded by sequence check).
 
 **Consistency across surfaces (design philosophy)**: every comment-interaction behavior — reactions, `@mention` (local + remote), attachments, reply / edit / delete — must be **identical on all comment surfaces**: the comments/activity page (`CommentItem`), the inline diff comment zone (`InlineCommentZone`), and the inline draft editor (`DraftZone`). This is enforced by **sharing the leaf components / hooks** (`CommentReplyEditor`, `MentionTextarea`, `useReactions`, `useCommentThread`) rather than reimplementing per surface, so a surface can only differ in layout, never in interaction behavior. When adding or changing an interaction, wire it into **all** surfaces (thread the same props down each path) — a capability reaching only one surface is a bug, not a scope choice.
+
+### File-level comments: whole-file anchor + capability degradation
+
+A comment can anchor to a **whole file** (not a specific line) where the platform supports it (`fileLevelComments`). This is modeled by a `PrCommentAnchor` **without a `line`** (path + side only): `anchor == null` → PR summary; `anchor` with a line → inline; `anchor` without a line → file-level. The comment `kind` (`'summary' | 'inline' | 'file'`) mirrors this.
+
+- **Read (all platforms)**: previously a line-less remote anchor was collapsed to a summary, losing its file association (notably Bitbucket, whose web UI creates file comments). Now each adapter maps it to a file-level anchor: Bitbucket (anchor without `line`), GitHub (`subject_type: "file"`). GitLab has no file-level diff-comment concept, so its notes stay summary. File-level comments render in a **strip above the diff editor** for that file (line-based inline zones can't host a line-less anchor), and in the comments/activity list they show a path-only chip (non-clickable — there's no line to jump to).
+- **Write (Bitbucket / GitHub)**: a "comment on file" entry in the diff file-comment strip posts via `comments:createFile` → the adapter's inline-publish path with a line-less anchor (Bitbucket sends only path + fileType; GitHub sends `subject_type: "file"`). GitLab's `fileLevelComments` is `false`, so the entry is hidden; the adapter also guards `publishInlineComment` against a line-less anchor defensively.
+- **Interaction parity**: the file-comment strip reuses `CommentItem` / `CommentComposer`, so reactions / mention / reply / edit / delete behave identically to every other comment surface (see the consistency rule below). File-level comments are review comments, so reactions use the inline (review) endpoint.
 
 ### Image attachments: platform-native upload + reuse of existing rendering
 

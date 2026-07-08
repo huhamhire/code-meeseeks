@@ -517,7 +517,7 @@ describe('BitbucketServerAdapter.listPullRequestComments anchor mapping', () => 
     expect(cs[0]!.anchor).toEqual({ path: 'src/a.ts', line: 42, side: 'new', lineType: 'added' });
   });
 
-  it('binary / file-level comment anchor with no line/lineType → degrades to anchor=null (no crash)', async () => {
+  it('file-level comment anchor (no line/lineType) → maps to a file-level anchor (path + side, no line)', async () => {
     const adapter = makeAdapter(
       mockFetch(
         activities([
@@ -536,7 +536,9 @@ describe('BitbucketServerAdapter.listPullRequestComments anchor mapping', () => 
       '1022',
     );
     expect(cs).toHaveLength(1);
-    expect(cs[0]!.anchor).toBeNull();
+    // No line = a file-level comment: keep it anchored to the file (path + side), not degraded to a summary.
+    expect(cs[0]!.anchor).toEqual({ path: 'assets/logo.png', side: 'new' });
+    expect(cs[0]!.kind).toBe('file');
   });
 
   it('has line but missing lineType → lineType falls back to context', async () => {

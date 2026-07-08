@@ -33,6 +33,8 @@ export class GitLabConnection extends BaseConnection {
     return {
       reviewStatuses,
       inlineComments: true,
+      // GitLab has no file-level diff-comment API (position_type is text/image only) → unsupported.
+      fileLevelComments: false,
       inlineMultiline: false,
       commentOptimisticLock: false,
       // GitLab Award Emoji supports arbitrary emoji → free.

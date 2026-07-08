@@ -182,13 +182,15 @@ export class BitbucketCommentService extends BaseCommentService {
    * Passes through the Bitbucket optimistic-lock version (the caller must carry it back on edit/delete, otherwise 409); an empty anchor means a summary comment.
    */
   private mapBitbucketComment(c: BitbucketComment, anchor?: BitbucketCommentAnchor): PrComment {
+    const mappedAnchor = anchor ? this.mapBitbucketAnchor(anchor) : null;
     return {
       remoteId: String(c.id),
       author: mapUser(c.author),
       body: c.text,
       createdAt: new Date(c.createdDate).toISOString(),
       updatedAt: new Date(c.updatedDate).toISOString(),
-      anchor: anchor ? this.mapBitbucketAnchor(anchor) : null,
+      anchor: mappedAnchor,
+      kind: mappedAnchor == null ? 'summary' : mappedAnchor.line == null ? 'file' : 'inline',
       replies: (c.comments ?? []).map((r) => this.mapBitbucketComment(r)),
       reactions: this.mapReactions(c.properties?.reactions),
       version: c.version,
@@ -221,32 +223,40 @@ export class BitbucketCommentService extends BaseCommentService {
   /**
    * Bitbucket comment anchor → neutral anchor.
    *
-   * No line number = file-level / orphan anchor, cannot anchor to a specific line → return null (degrade to
-   * summary); when lineType is occasionally absent, fall back to 'context' (the most conservative value,
-   * consistent with the publish-anchor fallback).
+   * No line number = a file-level comment (attached to the whole file) or an orphaned anchor (the anchored line no
+   * longer exists) → keep it as a **file-level** anchor (path + side, no line) so the UI can still associate it with its
+   * file, rather than degrading to a summary. When lineType is occasionally absent on a line anchor, fall back to
+   * 'context' (the most conservative value, consistent with the publish-anchor fallback).
    */
-  private mapBitbucketAnchor(a: BitbucketCommentAnchor): PrCommentAnchor | null {
-    if (a.line == null) return null;
+  private mapBitbucketAnchor(a: BitbucketCommentAnchor): PrCommentAnchor {
+    const side: PrCommentAnchor['side'] = a.fileType === 'FROM' ? 'old' : 'new';
+    if (a.line == null) return { path: a.path, side };
     return {
       path: a.path,
       line: a.line,
-      side: a.fileType === 'FROM' ? 'old' : 'new',
-      lineType: (a.lineType?.toLowerCase() ?? 'context') as PrCommentAnchor['lineType'],
+      side,
+      lineType: (a.lineType?.toLowerCase() ?? 'context') as NonNullable<PrCommentAnchor['lineType']>,
     };
   }
 
   /**
-   * Neutral anchor → Bitbucket REST anchor fields (for publishing inline comments, the reverse of mapBitbucketAnchor).
+   * Neutral anchor → Bitbucket REST anchor fields (for publishing comments, the reverse of mapBitbucketAnchor).
    *
-   * diffType is explicitly set to 'EFFECTIVE', anchoring the comment to the "currently effective diff" rather than a specific commit, so it still follows across subsequent PR pushes.
+   * A file-level anchor (no line) sends only path + fileType (Bitbucket attaches the comment to the file). diffType is
+   * explicitly set to 'EFFECTIVE', anchoring the comment to the "currently effective diff" rather than a specific
+   * commit, so it still follows across subsequent PR pushes.
    */
   private toBBAnchor(a: PrCommentAnchor): BitbucketCommentAnchor {
+    const fileType: BitbucketCommentAnchor['fileType'] = a.side === 'old' ? 'FROM' : 'TO';
+    if (a.line == null) {
+      return { diffType: 'EFFECTIVE', path: a.path, fileType };
+    }
     return {
       diffType: 'EFFECTIVE',
       path: a.path,
       line: a.line,
-      lineType: a.lineType.toUpperCase() as BitbucketCommentAnchor['lineType'],
-      fileType: a.side === 'old' ? 'FROM' : 'TO',
+      lineType: (a.lineType?.toUpperCase() ?? 'CONTEXT') as BitbucketCommentAnchor['lineType'],
+      fileType,
     };
   }
 }

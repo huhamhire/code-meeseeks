@@ -141,32 +141,43 @@ export function CommentItem({
   // inline comment anchor chip: path:line + side (old=base / new=head), letting the user locate the code position from the comment.
   // When onJumpToAnchor is provided (activity view) the chip becomes clickable → jump to the corresponding file/line in the Diff.
   const anchor = comment.anchor;
+  // File-level comments (no line) show just the path; line comments show `path:line`.
+  const anchorLabel = anchor ? (
+    <>
+      <code>{anchor.path}</code>
+      {anchor.line != null ? `:${String(anchor.line)}` : ''}
+    </>
+  ) : null;
+  const anchorHint = anchor
+    ? anchor.line == null
+      ? t('commentsPanel.anchorFileTitle')
+      : t('commentsPanel.anchorTitle', {
+          side: anchor.side === 'old' ? 'base' : 'head',
+          lineType: anchor.lineType,
+        })
+    : '';
   const anchorChip = anchor ? (
-    onJumpToAnchor ? (
+    // File-level anchors (no line) have no line to jump to → render as a non-clickable chip even in the activity view.
+    onJumpToAnchor && anchor.line != null ? (
       <button
         type="button"
         className={`pr-comment-anchor pr-comment-anchor-${anchor.side} pr-comment-anchor-link`}
         onClick={() => onJumpToAnchor(anchor)}
         title={t('commentsPanel.anchorJumpTitle')}
       >
-        <code>{anchor.path}</code>:{anchor.line}
+        {anchorLabel}
       </button>
     ) : (
-      <span
-        className={`pr-comment-anchor pr-comment-anchor-${anchor.side}`}
-        title={t('commentsPanel.anchorTitle', {
-          side: anchor.side === 'old' ? 'base' : 'head',
-          lineType: anchor.lineType,
-        })}
-      >
-        <code>{anchor.path}</code>:{anchor.line}
+      <span className={`pr-comment-anchor pr-comment-anchor-${anchor.side}`} title={anchorHint}>
+        {anchorLabel}
       </span>
     )
   ) : null;
 
   // inline comment: embed a code context (Monaco read-only) above the body. replies (depth > 0) do not repeat it.
+  // File-level comments (no line) have no single line to show → skip the code context.
   const inlineCode =
-    comment.anchor && depth === 0 ? (
+    comment.anchor && comment.anchor.line != null && depth === 0 ? (
       <Suspense
         fallback={<div className="pane-loading muted">{t('commentsPanel.loadingCodeContext')}</div>}
       >

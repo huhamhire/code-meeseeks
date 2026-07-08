@@ -165,7 +165,8 @@ export class GitHubCommentService extends BaseCommentService {
   }
 
   /**
-   * Publish an inline comment: first fetch the PR to get head sha as commit_id, then create a review comment by the anchor (path / line / side).
+   * Publish a comment anchored to the diff: to a specific line (path / line / side) or, when the anchor has no line, to
+   * the whole file via `subject_type: "file"` (a file-level comment). First fetches the PR to get head sha as commit_id.
    */
   async publishInlineComment(
     repo: RepoRef,
@@ -176,13 +177,20 @@ export class GitHubCommentService extends BaseCommentService {
     const prefix = `/repos/${repo.projectKey}/${repo.repoSlug}`;
     // Inline comments need commit_id = head sha; per the Phase 0 decision, the adapter internally fetches the PR to get head sha
     const pull = await this.client.get<GhPull>(`${prefix}/pulls/${prId}`);
-    const created = await this.client.post<GhReviewComment>(`${prefix}/pulls/${prId}/comments`, {
-      body,
-      commit_id: pull.head.sha,
-      path: anchor.path,
-      line: anchor.line,
-      side: anchor.side === 'old' ? 'LEFT' : 'RIGHT',
-    });
+    const req =
+      anchor.line == null
+        ? { body, commit_id: pull.head.sha, path: anchor.path, subject_type: 'file' as const }
+        : {
+            body,
+            commit_id: pull.head.sha,
+            path: anchor.path,
+            line: anchor.line,
+            side: anchor.side === 'old' ? 'LEFT' : 'RIGHT',
+          };
+    const created = await this.client.post<GhReviewComment>(
+      `${prefix}/pulls/${prId}/comments`,
+      req,
+    );
     return this.mapReviewComment(created);
   }
 
@@ -302,16 +310,20 @@ export class GitHubCommentService extends BaseCommentService {
    */
   private mapReviewComment(c: GhReviewComment, mine?: Set<string>): PrComment {
     const line = c.line ?? c.original_line ?? null;
+    const side: PrCommentAnchor['side'] = c.side === 'LEFT' ? 'old' : 'new';
     const anchor: PrCommentAnchor | null =
       line != null
         ? {
             path: c.path,
             line,
-            side: c.side === 'LEFT' ? 'old' : 'new',
+            side,
             // GitHub does not directly give added/removed/context; take a conservative default by side (display-only)
-            lineType: c.side === 'LEFT' ? 'removed' : 'added',
+            lineType: side === 'old' ? 'removed' : 'added',
           }
-        : null;
+        : c.subject_type === 'file'
+          ? // file-level review comment (no line): keep it anchored to the file, don't degrade to summary
+            { path: c.path, side }
+          : null;
     return {
       remoteId: String(c.id),
       author: mapUser(c.user),
@@ -320,7 +332,7 @@ export class GitHubCommentService extends BaseCommentService {
       updatedAt: c.updated_at,
       anchor,
       replies: [],
-      kind: 'inline',
+      kind: anchor != null && anchor.line == null ? 'file' : 'inline',
       threadId: String(c.id),
       nativeId: String(c.id),
       reactions: this.buildReactions(c.reactions, mine),
