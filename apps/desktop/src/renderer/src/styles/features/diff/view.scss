@@ -101,6 +101,8 @@
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+  // Match the file tree's node font size (.tree-row) rather than the header bar's, since it reads as a path.
+  font-size: $fs-md;
   // Tighten so the text line never exceeds the 22px content height that keeps the header bar level with the file tree's.
   line-height: 1;
   // Button reset.
