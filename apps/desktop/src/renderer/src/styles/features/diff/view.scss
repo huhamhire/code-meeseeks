@@ -76,7 +76,7 @@
   max-height: 40%;
   overflow: hidden;
 }
-// Header bar: mirrors .diff-file-list-header (same padding + divider) so its bottom border lines up with the file tree's.
+// Header bar: mirrors .diff-file-list-header (same padding + divider + panel background) so it lines up with the file tree's.
 .diff-file-comments-head {
   flex-shrink: 0;
   display: flex;
@@ -86,6 +86,7 @@
   padding: $space-3 $space-6;
   font-size: $fs-sm;
   color: $text-muted;
+  background: $bg-panel;
   border-bottom: 1px solid $border-muted;
 }
 // Comments / composer scroll below the header bar within the capped strip.
@@ -101,16 +102,17 @@
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  // Match the file tree's node font size (.tree-row) rather than the header bar's, since it reads as a path.
-  font-size: $fs-md;
   // Tighten so the text line never exceeds the 22px content height that keeps the header bar level with the file tree's.
   line-height: 1;
-  // Button reset.
+  // Button reset. NOTE: `font: inherit` resets font-size too, so the font-size override MUST come after it — otherwise
+  // the shorthand pulls the size back to the header bar's $fs-sm (12px).
   padding: 0;
   background: transparent;
   border: none;
   color: inherit;
   font: inherit;
+  // Match the file tree's node font size (.tree-row / $fs-md, 13px) rather than the header bar's, since it reads as a path.
+  font-size: $fs-md;
   cursor: pointer;
 
   &:hover {
