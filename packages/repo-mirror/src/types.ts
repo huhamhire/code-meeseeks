@@ -35,7 +35,15 @@ export interface ChangedFile {
   similarity?: number;
 }
 
-export type FileContent = { binary: false; content: string } | { binary: true };
+/**
+ * File content at a commit for diff rendering. `binary: true` means "not rendered as a text diff"; the optional `lfs`
+ * field marks a Git LFS-managed file — the mirror stores the small LFS pointer blob (objects are never smudged), so we
+ * detect the pointer and surface it as an LFS placeholder (with the real byte size from the pointer) instead of dumping
+ * the pointer text as a diff. A `binary: true` without `lfs` is a plain inline binary (stored in git directly, not LFS).
+ */
+export type FileContent =
+  | { binary: false; content: string }
+  | { binary: true; lfs?: { size: number | null } };
 
 /** Single-line blame info. Parsed from `git blame --porcelain <sha> -- <path>`. */
 export interface BlameLine {

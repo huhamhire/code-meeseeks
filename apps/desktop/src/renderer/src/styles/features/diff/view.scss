@@ -272,6 +272,7 @@
 
 // Binary file (image/binary) placeholder
 .diff-binary {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -279,4 +280,35 @@
   width: 100%;
   color: $color-warning-bright;
   font-size: $fs-lg;
+}
+// Git LFS status tag, pinned to the pane's top-right corner: LFS-managed (neutral) vs inline binary / not LFS (warning).
+.diff-lfs-tag,
+.diff-nonlfs-tag {
+  position: absolute;
+  top: $space-3;
+  right: $space-3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1;
+  font-size: $fs-sm;
+  padding: 2px 8px;
+  border-radius: $radius-sm;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+// The ⚠️ emoji sits on the text baseline by default; give it its own tight box so the flex align-items centers it against the label.
+.diff-lfs-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-size: 0.9em;
+}
+.diff-lfs-tag {
+  color: $text-muted;
+  border-color: $border-default;
+}
+.diff-nonlfs-tag {
+  color: $color-warning-bright;
+  border-color: $color-warning-bright;
 }

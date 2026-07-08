@@ -208,8 +208,8 @@ export async function loadContent(
       side,
       path,
     });
-    // DiffFileContent union: {binary:false, content:string} or {binary:true}.
-    // binary files skip search (no comparable text); non-binary takes the content field
+    // DiffFileContent union: {binary:false, content:string} or {binary:true} (the latter incl. Git LFS pointers).
+    // binary / LFS files skip search (no comparable text); only non-binary takes the content field
     const text = c.binary === false ? c.content : null;
     cache.set(k, text);
     return text;
