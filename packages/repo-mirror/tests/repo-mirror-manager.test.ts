@@ -395,6 +395,28 @@ describe('RepoMirrorManager diff/content', () => {
 
     const r = await mgr.getFileContent(repo, sha, 'icon.png');
     expect(r.binary).toBe(true);
+    // A plain inline binary is not LFS-managed.
+    expect(r.binary === true && r.lfs).toBeUndefined();
+  });
+
+  it('getFileContent detects a Git LFS pointer and surfaces its size', async () => {
+    // An LFS-managed file is stored in git as a small pointer blob (the mirror never smudges), so getFileContent sees
+    // the pointer text; it should flag binary + carry the declared size instead of returning the pointer as text.
+    const upstream = simpleGit(upstreamPath);
+    const pointer =
+      'version https://git-lfs.github.com/spec/v1\n' +
+      'oid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393\n' +
+      'size 12345\n';
+    await fs.writeFile(path.join(upstreamPath, 'big.psd'), pointer);
+    await upstream.add('.');
+    await upstream.commit('add lfs pointer');
+    const sha = (await upstream.revparse(['HEAD'])).trim();
+
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+
+    const r = await mgr.getFileContent(repo, sha, 'big.psd');
+    expect(r).toEqual({ binary: true, lfs: { size: 12345 } });
   });
 
   it('parseMergeTreeConflictsZ takes conflict file names between the first OID and the section-separating double NUL (deduped)', () => {

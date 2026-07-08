@@ -8,6 +8,7 @@ import { useMonacoEditorTheme } from '../../../../../hooks/useTheme';
 import { useEditorAppearance } from '../../../../../stores/editor-appearance-store';
 import { resolveEditorFontFamily } from '../../../../../theme';
 import { languageFor } from '../../../../../utils/language';
+import { formatBytes } from '../../../settings/utils';
 import { PaneLoading } from '../../../../common';
 import { Spinner } from './DiffStatus';
 import type { LoadedContent } from './diff-types';
@@ -119,7 +120,27 @@ export function DiffPane({
     );
   }
   if (content.base.binary || content.head.binary) {
-    return <div className="diff-binary">{t('diffView.binaryNotRendered')}</div>;
+    // Git LFS status: prefer the head side's pointer info (the current version), fall back to base (e.g. a deleted file).
+    const headLfs = content.head.binary ? content.head.lfs : undefined;
+    const baseLfs = content.base.binary ? content.base.lfs : undefined;
+    const lfs = headLfs ?? baseLfs;
+    return (
+      <div className="diff-binary">
+        <span>{t('diffView.binaryNotRendered')}</span>
+        {lfs ? (
+          <span className="diff-lfs-tag" title={t('diffView.lfsManagedTitle')}>
+            Git LFS{lfs.size != null ? ` · ${formatBytes(lfs.size)}` : ''}
+          </span>
+        ) : (
+          <span className="diff-nonlfs-tag" title={t('diffView.notLfsTitle')}>
+            <span className="diff-lfs-icon" aria-hidden="true">
+              ⚠️
+            </span>
+            {t('diffView.notLfs')}
+          </span>
+        )}
+      </div>
+    );
   }
   return (
     <div className="diff-pane-editor">

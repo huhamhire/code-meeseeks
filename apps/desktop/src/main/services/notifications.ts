@@ -64,9 +64,11 @@ function activateOnClick(e: PollNotificationEvent): () => void {
     broadcast('notification:activate', {
       localId: e.localId,
       kind: e.kind,
-      anchor: e.comment?.anchor
-        ? { path: e.comment.anchor.path, line: e.comment.anchor.line }
-        : null,
+      anchor:
+        // File-level comments (no line) aren't line-navigable → no anchor (clicking just opens the PR).
+        e.comment?.anchor && e.comment.anchor.line != null
+          ? { path: e.comment.anchor.path, line: e.comment.anchor.line }
+          : null,
     });
   };
 }

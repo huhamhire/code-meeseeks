@@ -67,6 +67,94 @@
   flex-direction: column;
 }
 
+// File-level comment strip: sits above the diff editor inside .diff-content (a flex column). Natural height, capped so
+// many comments never crowd the editor out; the editor (.diff-pane-wrapper, flex:1) keeps the remaining space.
+.diff-file-comments {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 40%;
+  overflow: hidden;
+}
+// Header bar: mirrors .diff-file-list-header (same padding + divider) so its bottom border lines up with the file tree's.
+.diff-file-comments-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+  padding: $space-3 $space-6;
+  font-size: $fs-sm;
+  color: $text-muted;
+  border-bottom: 1px solid $border-muted;
+}
+// Comments / composer scroll below the header bar within the capped strip.
+.diff-file-comments-body {
+  overflow-y: auto;
+  padding: $space-2 $space-3;
+}
+// Project-relative path breadcrumb of the open file (VS Code-style, chevron-separated). The whole thing is one button:
+// clicking copies the relative path (no per-segment navigation / expansion). Single line, truncates on overflow.
+.diff-file-crumbs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  // Match the file tree's node font size (.tree-row) rather than the header bar's, since it reads as a path.
+  font-size: $fs-md;
+  // Tighten so the text line never exceeds the 22px content height that keeps the header bar level with the file tree's.
+  line-height: 1;
+  // Button reset.
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover {
+    color: $text-body;
+  }
+}
+.diff-file-crumb {
+  display: inline-flex;
+  align-items: center;
+}
+.diff-file-crumb-sep {
+  margin: 0 3px;
+  opacity: 0.6;
+}
+.diff-file-crumb-name {
+  font-weight: 600;
+}
+.diff-file-crumb-copied {
+  margin-left: 6px;
+  font-weight: 600;
+  color: $color-success;
+}
+// Icon-only "comment on file" button (pushed right by the header's space-between). Fixed 22px box so it matches the
+// file tree header's content height exactly (row = 12px padding + 1px border + 22px = 35px, level with the file tree).
+.diff-file-comment-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: $text-muted;
+  background: transparent;
+  border: none;
+  border-radius: $radius-sm;
+  cursor: pointer;
+
+  &:hover {
+    background: $bg-hover;
+    color: inherit;
+  }
+}
+
 // Main area wrapper: the left blame-column is fixed width; ErrorBoundary or DiffPane take flex:1
 .diff-pane-wrapper {
   flex: 1;
@@ -272,6 +360,7 @@
 
 // Binary file (image/binary) placeholder
 .diff-binary {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -279,4 +368,35 @@
   width: 100%;
   color: $color-warning-bright;
   font-size: $fs-lg;
+}
+// Git LFS status tag, pinned to the pane's top-right corner: LFS-managed (neutral) vs inline binary / not LFS (warning).
+.diff-lfs-tag,
+.diff-nonlfs-tag {
+  position: absolute;
+  top: $space-3;
+  right: $space-3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1;
+  font-size: $fs-sm;
+  padding: 2px 8px;
+  border-radius: $radius-sm;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+// The ⚠️ emoji sits on the text baseline by default; give it its own tight box so the flex align-items centers it against the label.
+.diff-lfs-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-size: 0.9em;
+}
+.diff-lfs-tag {
+  color: $text-muted;
+  border-color: $border-default;
+}
+.diff-nonlfs-tag {
+  color: $color-warning-bright;
+  border-color: $color-warning-bright;
 }

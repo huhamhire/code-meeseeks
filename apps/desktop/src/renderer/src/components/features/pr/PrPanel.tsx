@@ -229,11 +229,13 @@ export function PrPanel({
             onComposeClose={() => setComposingComment(false)}
             currentUserName={currentUserName}
             onViewCommit={viewCommit}
-            onJumpToAnchor={(a: PrCommentAnchor) =>
+            onJumpToAnchor={(a: PrCommentAnchor) => {
+              // File-level anchors (no line) aren't line-navigable; CommentItem doesn't make them clickable, guard anyway.
+              if (a.line == null) return;
               onRequestDiffNav?.({
                 anchor: { path: a.path, startLine: a.line, endLine: a.line },
-              })
-            }
+              });
+            }}
           />
         </KeepAliveTab>
         <KeepAliveTab active={tab === 'drafts'}>

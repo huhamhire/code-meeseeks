@@ -65,6 +65,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
    */
   ipcMain.handle('comments:reply', pr.replyComment); // Reply to a comment
   ipcMain.handle('comments:create', pr.createComment); // Create a summary comment
+  ipcMain.handle('comments:createFile', pr.createFileComment); // Create a file-level comment (whole file, no line)
   ipcMain.handle('comments:delete', pr.deleteComment); // Delete your own comment
   ipcMain.handle('comments:edit', pr.editComment); // Edit your own comment
   ipcMain.handle('comments:toggleReaction', pr.toggleReaction); // Toggle a comment emoji reaction

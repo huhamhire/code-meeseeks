@@ -16,7 +16,14 @@ export interface DiffChangedFile {
   similarity?: number;
 }
 
-export type DiffFileContent = { binary: false; content: string } | { binary: true };
+/**
+ * File content for diff rendering. `binary: true` = not rendered as a text diff; the optional `lfs` field marks a Git
+ * LFS-managed file (the mirror holds the LFS pointer, so we show an LFS placeholder + the real byte size instead of the
+ * pointer text). `binary: true` with no `lfs` is a plain inline binary (committed to git directly, not LFS).
+ */
+export type DiffFileContent =
+  | { binary: false; content: string }
+  | { binary: true; lfs?: { size: number | null } };
 
 export type DiffSide = 'base' | 'head';
 

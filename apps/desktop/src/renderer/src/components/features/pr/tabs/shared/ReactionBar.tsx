@@ -38,8 +38,10 @@ export function useReactions(
 ): { reactions: PrReaction[]; busy: boolean; toggle: (emoji: string, add: boolean) => void } {
   const [busy, setBusy] = useState(false);
   const reactions = comment.reactions ?? [];
-  // GitHub picks the issue / review reaction endpoint by kind; other platforms ignore it. anchor is the fallback (old data has no kind).
-  const kind: 'summary' | 'inline' = comment.kind ?? (comment.anchor ? 'inline' : 'summary');
+  // GitHub picks the issue / review reaction endpoint by kind; other platforms ignore it. anchor is the fallback (old
+  // data has no kind). File-level comments are review comments too → use the 'inline' (review) reaction endpoint.
+  const kind: 'summary' | 'inline' =
+    (comment.kind ?? (comment.anchor ? 'inline' : 'summary')) === 'summary' ? 'summary' : 'inline';
   const toggle = useCallback(
     (emoji: string, add: boolean): void => {
       if (busy || readOnly) return;

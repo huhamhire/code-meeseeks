@@ -5,6 +5,13 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### ✨ 新增
+
+- diff 中的二进制文件（图片、Office 文档、PDF 等）现会显示其 Git LFS 状态——受 LFS 管理的文件显示「Git LFS · &lt;大小&gt;」标记，直接内联存入 git 的文件显示「⚠ 非 LFS」标记。
+- 现可对整个文件（而不仅是某一行）添加评论（平台支持时，Bitbucket / GitHub）：diff 中新增「对文件评论」入口，且已存在的文件级评论现能正确归属显示，不再被当作 PR 通用评论。
+
 ## [0.11.0] - 2026-07-07
 
 > 本次发布要点：
@@ -465,6 +472,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...HEAD
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0

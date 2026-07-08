@@ -16,6 +16,7 @@ import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
 import { DiffScopeSelect } from './DiffScopeSelect';
 import { DiffPane } from './DiffPane';
+import { FileCommentStrip } from './FileCommentStrip';
 import { BackendErrorBanner, BackendErrorView, SyncProgress } from './DiffStatus';
 import { BlameColumn } from './blame/BlameColumn';
 import { fileKey, type PendingCommitView } from './diff-types';
@@ -394,6 +395,21 @@ export function DiffView({
                 : t('diffView.blameFailed')
             }
             onDismiss={() => setBlameError(null)}
+          />
+        )}
+        {selected && (
+          <FileCommentStrip
+            pr={pr}
+            path={selected.path}
+            oldPath={selected.oldPath}
+            comments={comments}
+            capabilities={capabilities}
+            hardBreaks={commentHardBreaks}
+            reactionsMode={reactionsMode}
+            mentionCandidates={mentionCandidates}
+            attachmentsEnabled={attachmentsEnabled}
+            userSearchEnabled={userSearchEnabled}
+            readOnly={readOnly}
           />
         )}
         {selected && (

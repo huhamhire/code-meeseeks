@@ -63,6 +63,8 @@ export function useCommentZones(opts: {
     const fileComments = comments.filter(
       (c) =>
         c.anchor &&
+        // File-level comments (no line) are not line-anchored; they render in DiffView's file-level strip, not here.
+        c.anchor.line != null &&
         (c.anchor.path === selected.path ||
           (selected.oldPath && c.anchor.path === selected.oldPath)),
     );
@@ -70,10 +72,12 @@ export function useCommentZones(opts: {
     const oldByLine = new Map<number, PrComment[]>();
     const newByLine = new Map<number, PrComment[]>();
     for (const c of fileComments) {
+      // fileComments already excludes line-less (file-level) anchors, so line is present here.
+      const line = c.anchor!.line!;
       const target = c.anchor!.side === 'old' ? oldByLine : newByLine;
-      const arr = target.get(c.anchor!.line) ?? [];
+      const arr = target.get(line) ?? [];
       arr.push(c);
-      target.set(c.anchor!.line, arr);
+      target.set(line, arr);
     }
 
     const buildDecorations = (

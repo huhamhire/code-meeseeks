@@ -70,6 +70,25 @@ export const createComment: IpcController<'comments:create'> = async (_event, re
   return created;
 };
 
+/**
+ * Post a file-level comment (anchored to a whole file, no line) via the inline-comment publish path with a line-less
+ * anchor. Only reachable where the fileLevelComments capability is true (the UI gates the entry). On success clears the
+ * comments cache + broadcasts comments:changed so the UI refetches.
+ */
+export const createFileComment: IpcController<'comments:createFile'> = async (_event, req) => {
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  const adapter = ctx.pr.adapterForOrThrow(pr);
+  const created = await adapter.comments.publishInlineComment(
+    { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+    pr.remoteId,
+    { path: req.path, side: req.side ?? 'new' },
+    req.body,
+  );
+  await ctx.pr.invalidateCommentsCache(pr.localId);
+  return created;
+};
+
 /** Minimum query length before hitting the remote user-search endpoint (avoids a request per keystroke on 1 char). */
 const MENTION_SEARCH_MIN_QUERY = 2;
 

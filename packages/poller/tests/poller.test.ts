@@ -80,6 +80,7 @@ class FakeAdapter implements PlatformAdapter {
       capabilities: () => ({
         reviewStatuses: ['approved', 'needsWork', 'unapproved'] as const,
         inlineComments: true,
+        fileLevelComments: true,
         inlineMultiline: true,
         commentOptimisticLock: true,
         commentReactions: 'free' as const,
@@ -303,6 +304,7 @@ describe('Poller.tick', () => {
       capabilities: () => ({
         reviewStatuses: ['approved', 'needsWork', 'unapproved'],
         inlineComments: true,
+        fileLevelComments: true,
         inlineMultiline: true,
         commentOptimisticLock: true,
         commentReactions: 'free',

@@ -5,6 +5,13 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### ✨ Added
+
+- Binary files in the diff (images, office documents, PDFs, …) now show their Git LFS status — a "Git LFS · &lt;size&gt;" tag for LFS-managed files, or a "⚠ Not LFS" tag for files stored inline in git.
+- Comments can now be anchored to a whole file (not only a single line) where the platform supports it (Bitbucket / GitHub): a "comment on file" entry in the diff, and existing file-level comments now display correctly instead of being shown as generic PR comments.
+
 ## [0.11.0] - 2026-07-07
 
 > Highlights of this release:
@@ -465,6 +472,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...HEAD
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0
