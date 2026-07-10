@@ -11,6 +11,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 - Binary files in the diff (images, office documents, PDFs, …) now show their Git LFS status — a "Git LFS · &lt;size&gt;" tag for LFS-managed files, or a "⚠ Not LFS" tag for files stored inline in git.
 - Comments can now be anchored to a whole file (not only a single line) where the platform supports it (Bitbucket / GitHub): a "comment on file" entry in the diff, and existing file-level comments now display correctly instead of being shown as generic PR comments.
+- Reviews now pick up the reviewed repository's own guidance file (`AGENTS.md`) as project context, so the review, description, and suggestions follow the project's stated conventions.
 
 ## [0.11.0] - 2026-07-07
 
