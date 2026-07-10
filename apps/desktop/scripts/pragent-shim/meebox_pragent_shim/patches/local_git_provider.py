@@ -1,4 +1,4 @@
-"""LocalGitProvider patch (version-guarded): binary-safe get_diff_files + get_line_link anchor."""
+"""LocalGitProvider patch (version-guarded): binary-safe get_diff_files + get_line_link anchor + repo-context file fetch."""
 from ..runtime import _EXPECTED_PRAGENT_VERSION, _pragent_version, _warn
 
 
@@ -122,3 +122,29 @@ def patch(module) -> None:
         return []
 
     module.LocalGitProvider.get_pr_labels = get_pr_labels
+
+    # get_repo_file_content: pr-agent 0.39.0's configuration.toml ships a new default
+    # `repo_context_files = ["AGENTS.md"]` — build_repo_context() fetches those files from the reviewed
+    # repo and injects them as <instruction_files> so /review /describe /improve follow the project's own
+    # conventions. The base class returns "" (no-op), so LocalGitProvider is judged "does not support
+    # repository file fetching" and logs a WARNING each run while silently skipping the feature. Implement it
+    # by reading the blob straight from the base branch's tree object (not the working tree): the review's diff
+    # is head.commit vs merge-base(target_branch_name), and target_branch_name is the branch the PR merges
+    # into — the trusted "default/base branch" content the feature wants (repo_context_from_default_branch=true).
+    # Reading the tree object (never the working tree) also keeps this independent of _prepare_repo's working-tree
+    # sanitizing of agent instruction files (that guards the /ask CLI subprocess; repo_context serves the other
+    # tools). A missing file / any git error degrades to "" (no context) rather than raising, so
+    # build_repo_context treats it as "no context" and never caches a fetch error.
+    def get_repo_file_content(self, file_path, from_default_branch=False):
+        rel = (file_path or "").lstrip("/")
+        if not rel:
+            return ""
+        try:
+            # For a local provider there is no remote "default branch" distinct from the PR base, so both the
+            # default-branch and target-branch cases collapse to target_branch_name (guaranteed to exist by
+            # _prepare_repo). `git show <ref>:<path>` returns the file text, or errors if the path is absent.
+            return self.repo.git.show(f"{self.target_branch_name}:{rel}")
+        except Exception:
+            return ""
+
+    module.LocalGitProvider.get_repo_file_content = get_repo_file_content

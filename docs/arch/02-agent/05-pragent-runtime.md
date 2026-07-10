@@ -62,6 +62,7 @@ Current patches:
   letting `/review`'s key_issues render with a structured file:line.
 - **Anthropic drops temperature**: new Claude models deprecate temperature, so all `anthropic/*` are put into the "don't send temperature" set.
 - **load_yaml tolerance**: an anchor marker taking a whole line breaks YAML → on parse failure, strip the marker and retry, avoiding a whole review crash.
+- **repo-context file fetch**: pr-agent 0.39.0 defaults `repo_context_files = ["AGENTS.md"]`, but `LocalGitProvider` inherits the base no-op `get_repo_file_content` → the feature is skipped with a per-run WARNING. Implement it by reading the blob from the base branch's tree (`git show <target_branch>:<path>`, never the working tree), so `/review /describe /improve` inject the reviewed repo's `AGENTS.md`/etc. as `<instruction_files>`; a missing file degrades to `""`.
 - **Local CLI provider**: when `MEEBOX_CLI_MODE` is set, replace `chat_completion` wholesale with the "call the local CLI" version (see below).
 - **token usage collection**: see below.
 
