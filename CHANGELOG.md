@@ -13,6 +13,10 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 - Comments can now be anchored to a whole file (not only a single line) where the platform supports it (Bitbucket / GitHub): a "comment on file" entry in the diff, and existing file-level comments now display correctly instead of being shown as generic PR comments.
 - Reviews now pick up the reviewed repository's own guidance file (`AGENTS.md`) as project context, so the review, description, and suggestions follow the project's stated conventions.
 
+### 🔧 Fixed
+
+- An in-progress inline comment reply or edit in the diff is no longer discarded when the comment list refreshes (e.g. the poller pulls a new remote comment while you're typing) — the open editor keeps its text.
+
 ## [0.11.0] - 2026-07-07
 
 > Highlights of this release:
