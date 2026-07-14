@@ -58,6 +58,8 @@ export function useLineCommentAdder(opts: {
     const occupiedOld = new Set<number>();
     for (const d of drafts ?? []) {
       if (d.status === 'rejected') continue;
+      // Reply-drafts render nested under their parent comment, not as a line draft, so they don't occupy the '+'.
+      if (d.kind === 'reply' || !d.anchor) continue;
       // Use startLine consistently with zone creation — previously using endLine would make hover '+' treat line 403
       // (finding start) as unoccupied and wrongly draw +; in a multi-line finding scenario two + would appear at once
       (d.anchor.side === 'old' ? occupiedOld : occupiedNew).add(d.anchor.startLine);

@@ -218,7 +218,7 @@ export function DiffView({
     const publishable = drafts.filter((d) => d.status === 'pending' || d.status === 'edited');
     for (const f of files) {
       const n = publishable.filter(
-        (d) => d.anchor.path === f.path || (f.oldPath && d.anchor.path === f.oldPath),
+        (d) => d.anchor && (d.anchor.path === f.path || (f.oldPath && d.anchor.path === f.oldPath)),
       ).length;
       if (n > 0) m.set(f.path, n);
     }

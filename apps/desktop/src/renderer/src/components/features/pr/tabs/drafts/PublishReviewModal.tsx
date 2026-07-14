@@ -153,14 +153,18 @@ export function PublishReviewModal({
               </div>
               <ul className="publish-review-list">
                 {candidates.map((d) => {
-                  const lineLabel =
-                    d.anchor.endLine !== d.anchor.startLine
-                      ? `${String(d.anchor.startLine)}-${String(d.anchor.endLine)}`
-                      : String(d.anchor.startLine);
-                  const sideLabel =
-                    d.anchor.side === 'old'
+                  const anchor = d.anchor;
+                  const isReply = d.kind === 'reply';
+                  const lineLabel = anchor
+                    ? anchor.endLine !== anchor.startLine
+                      ? `${String(anchor.startLine)}-${String(anchor.endLine)}`
+                      : String(anchor.startLine)
+                    : '';
+                  const sideLabel = anchor
+                    ? anchor.side === 'old'
                       ? t('publishReviewModal.sideOld')
-                      : t('publishReviewModal.sideNew');
+                      : t('publishReviewModal.sideNew')
+                    : '';
                   return (
                     <li key={d.id} className="publish-review-item">
                       <label>
@@ -170,9 +174,19 @@ export function PublishReviewModal({
                           onChange={() => toggle(d.id)}
                         />
                         <div className="publish-review-item-meta">
+                          {/* Reply-drafts carry a "reply" tag; anchored ones still show file:line (jump lands on the parent's line). */}
+                          {isReply && (
+                            <span className="publish-review-item-reply-tag">
+                              {t('publishReviewModal.replyTag')}
+                            </span>
+                          )}
                           {/* anchor is clickable → close modal + jump to Diff; the checkbox label is outer,
                               stopPropagation here prevents the click from triggering a check toggle */}
-                          {onJumpToAnchor ? (
+                          {!anchor ? (
+                            <span className="publish-review-item-anchor muted">
+                              {t('publishReviewModal.replyToComment')}
+                            </span>
+                          ) : onJumpToAnchor ? (
                             <button
                               type="button"
                               className="publish-review-item-anchor publish-review-item-anchor-link"
@@ -183,12 +197,12 @@ export function PublishReviewModal({
                               }}
                               title={t('publishReviewModal.jumpToDiffTitle')}
                             >
-                              {d.anchor.path}:{lineLabel}
+                              {anchor.path}:{lineLabel}
                               <span className="muted"> · {sideLabel}</span>
                             </button>
                           ) : (
                             <code className="publish-review-item-anchor">
-                              {d.anchor.path}:{lineLabel}
+                              {anchor.path}:{lineLabel}
                               <span className="muted"> · {sideLabel}</span>
                             </code>
                           )}
@@ -256,7 +270,9 @@ export function PublishReviewModal({
                       const d = candidates.find((c) => c.id === r.draftId);
                       return (
                         <li key={r.draftId}>
-                          <code>{d ? `${d.anchor.path}:${d.anchor.startLine}` : r.draftId}</code>
+                          <code>
+                            {d?.anchor ? `${d.anchor.path}:${d.anchor.startLine}` : r.draftId}
+                          </code>
                           <span className="publish-review-failure-msg">
                             {' '}
                             — {r.error && formatBackendError(r.error).title}

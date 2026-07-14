@@ -12,7 +12,9 @@ import {
 } from '../../../../common';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
+import { ReplyDraftList } from './ReplyDraftList';
 import { CommentMarkdown } from '../shared/CommentMarkdown';
+import { toReplyDraftAnchor } from '../shared/replyDraftAnchor';
 import { ReactionAddButton, ReactionChips, useReactions } from '../shared/ReactionBar';
 import { useCommentThread } from '../shared/useCommentThread';
 // Inline code context uses Monaco; lazy-loaded and pulled on demand with the same Monaco chunk as DiffView, not in the entry bundle.
@@ -278,6 +280,7 @@ export function CommentItem({
       prLocalId={pr.localId}
       // Reply target abstraction (threadId): GitLab=discussion id (required for reply); Bitbucket empty / GitHub=remoteId → fall back to remoteId.
       parentCommentId={comment.threadId ?? comment.remoteId}
+      parentAnchor={toReplyDraftAnchor(comment.anchor)}
       mentionCandidates={mentionCandidates}
       platform={pr.platform}
       attachmentsEnabled={attachmentsEnabled}
@@ -286,6 +289,21 @@ export function CommentItem({
       onPosted={() => setReplyOpen(false)}
     />
   ) : null;
+
+  // Pending reply-drafts for this comment (self-fetching from the drafts store; renders null when there are none),
+  // shown at the tail of the thread as editable draft cards — the same deferred-draft model as a new inline comment.
+  const replyDraftsEl = (
+    <ReplyDraftList
+      prLocalId={pr.localId}
+      parentCommentId={comment.threadId ?? comment.remoteId}
+      hardBreaks={hardBreaks}
+      mentionCandidates={mentionCandidates}
+      platform={pr.platform}
+      attachmentsEnabled={attachmentsEnabled}
+      userSearchEnabled={userSearchEnabled}
+      readOnly={readOnly}
+    />
+  );
 
   const repliesEl =
     comment.replies.length > 0 ? (
@@ -358,8 +376,9 @@ export function CommentItem({
           {foot}
           {reactionChipsEl}
           {deleteErrorEl}
-          {replyEditor}
           {repliesEl}
+          {replyDraftsEl}
+          {replyEditor}
         </div>
         {confirmModalEl}
       </li>
@@ -391,8 +410,9 @@ export function CommentItem({
       {foot}
       {reactionChipsEl}
       {deleteErrorEl}
-      {replyEditor}
       {repliesEl}
+      {replyDraftsEl}
+      {replyEditor}
       {confirmModalEl}
     </li>
   );
