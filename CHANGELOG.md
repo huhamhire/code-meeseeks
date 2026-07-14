@@ -5,7 +5,16 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.11.1] - 2026-07-14
+
+> Highlights of this release:
+>
+> - **File-level comments**: comment on a whole file, not just a single line, where the platform supports it (Bitbucket / GitHub).
+> - **Replies as drafts**: replying to a comment now creates a deferred draft — consistent with a new comment, persisted across switches, and published with the review batch.
+> - **Project-aware reviews**: the review now reads the reviewed repository's own `AGENTS.md` as context.
+> - **Git LFS status in the diff**: binary files show whether they're Git LFS-managed.
+>
+> Plus a fix so an in-progress inline comment isn't discarded when the comment list refreshes.
 
 ### ✨ Added
 
@@ -478,7 +487,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0

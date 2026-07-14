@@ -5,7 +5,16 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.11.1] - 2026-07-14
+
+> 本次发布要点：
+>
+> - **文件级评论**：可对整个文件（而非仅某一行）添加评论（平台支持时，Bitbucket / GitHub）。
+> - **回复即草稿**：回复评论现会生成延迟草稿——与新建评论一致，跨切换保留，随评审批量发布。
+> - **项目感知的评审**：评审现会读取被审仓库自身的 `AGENTS.md` 作为上下文。
+> - **diff 中的 Git LFS 状态**：二进制文件会显示其是否由 Git LFS 管理。
+>
+> 另修复：评论列表刷新时，正在编写的内联评论不再被丢弃。
 
 ### ✨ 新增
 
@@ -478,7 +487,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0
