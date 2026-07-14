@@ -16,6 +16,7 @@ import { DiffSearchPanel } from './DiffSearchPanel';
 import { FileTree } from './FileTree';
 import { DiffScopeSelect } from './DiffScopeSelect';
 import { DiffPane } from './DiffPane';
+import { FileCommentStrip } from './FileCommentStrip';
 import { BackendErrorBanner, BackendErrorView, SyncProgress } from './DiffStatus';
 import { BlameColumn } from './blame/BlameColumn';
 import { fileKey, type PendingCommitView } from './diff-types';
@@ -217,7 +218,7 @@ export function DiffView({
     const publishable = drafts.filter((d) => d.status === 'pending' || d.status === 'edited');
     for (const f of files) {
       const n = publishable.filter(
-        (d) => d.anchor.path === f.path || (f.oldPath && d.anchor.path === f.oldPath),
+        (d) => d.anchor && (d.anchor.path === f.path || (f.oldPath && d.anchor.path === f.oldPath)),
       ).length;
       if (n > 0) m.set(f.path, n);
     }
@@ -394,6 +395,21 @@ export function DiffView({
                 : t('diffView.blameFailed')
             }
             onDismiss={() => setBlameError(null)}
+          />
+        )}
+        {selected && (
+          <FileCommentStrip
+            pr={pr}
+            path={selected.path}
+            oldPath={selected.oldPath}
+            comments={comments}
+            capabilities={capabilities}
+            hardBreaks={commentHardBreaks}
+            reactionsMode={reactionsMode}
+            mentionCandidates={mentionCandidates}
+            attachmentsEnabled={attachmentsEnabled}
+            userSearchEnabled={userSearchEnabled}
+            readOnly={readOnly}
           />
         )}
         {selected && (

@@ -5,6 +5,28 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.11.1] - 2026-07-14
+
+> Highlights of this release:
+>
+> - **File-level comments**: comment on a whole file, not just a single line, where the platform supports it (Bitbucket / GitHub).
+> - **Replies as drafts**: replying to a comment now creates a deferred draft — consistent with a new comment, persisted across switches, and published with the review batch.
+> - **Project-aware reviews**: the review now reads the reviewed repository's own `AGENTS.md` as context.
+> - **Git LFS status in the diff**: binary files show whether they're Git LFS-managed.
+>
+> Plus a fix so an in-progress inline comment isn't discarded when the comment list refreshes.
+
+### ✨ Added
+
+- Binary files in the diff (images, office documents, PDFs, …) now show their Git LFS status — a "Git LFS · &lt;size&gt;" tag for LFS-managed files, or a "⚠ Not LFS" tag for files stored inline in git.
+- Comments can now be anchored to a whole file (not only a single line) where the platform supports it (Bitbucket / GitHub): a "comment on file" entry in the diff, and existing file-level comments now display correctly instead of being shown as generic PR comments.
+- Reviews now pick up the reviewed repository's own guidance file (`AGENTS.md`) as project context, so the review, description, and suggestions follow the project's stated conventions.
+- Replying to a comment now creates a **reply draft** instead of posting immediately — consistent with adding a new inline comment. The reply is persisted (so an unsubmitted reply survives switching PRs/files/tabs), shown below its parent comment on every surface (activity timeline + inline diff), and published together with your other drafts via "Publish comments".
+
+### 🔧 Fixed
+
+- An in-progress inline comment reply or edit in the diff is no longer discarded when the comment list refreshes (e.g. the poller pulls a new remote comment while you're typing) — the open editor keeps its text.
+
 ## [0.11.0] - 2026-07-07
 
 > Highlights of this release:
@@ -465,6 +487,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0

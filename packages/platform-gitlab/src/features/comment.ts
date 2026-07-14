@@ -138,6 +138,11 @@ export class GitLabCommentService extends BaseCommentService {
     anchor: PrCommentAnchor,
     body: string,
   ): Promise<PrComment> {
+    // GitLab has no file-level diff-comment API (position_type is only text/image), so file-level anchors are
+    // unsupported — the fileLevelComments capability is false, so the UI never offers it; guard defensively here.
+    if (anchor.line == null) {
+      throw new Error('GitLab does not support file-level diff comments');
+    }
     const base = `/projects/${projectId(repo)}/merge_requests/${prId}`;
     // inline comment = discussion with a position; position needs the three base/start/head shas → first fetch the MR to get diff_refs.
     const mr = await this.client.get<GlMr>(base);

@@ -52,6 +52,17 @@ Complete these **in the same batch of changes**, flowing through `dev` → `mast
 
 The tag name and the package.json version must match (`v<version>`). A prerelease tag with a `-` in the name (e.g. `-alpha.N`) is automatically marked prerelease by release.yml and does not claim Latest.
 
+## Post-release steps (mandatory, right after tagging)
+
+After the `v<version>` tag is pushed and the Release is building, do **both** of these on `dev`, or the branches drift:
+
+1. **Back-merge `master` into `dev`** — the `dev → master` release PR adds a merge commit to `master` that `dev` doesn't have, so the branches diverge the moment the release merges. Left unaligned, every later `dev → master` PR shows phantom "behind" commits and risks messy merges. Realign by merging `master` back:
+   ```bash
+   git checkout dev && git merge master && git push
+   ```
+   Verify alignment with `git log dev..master` (must be **empty** — `master` is fully contained in `dev`). The `package.json` / lockfile version line does not conflict: it resolves to `dev`'s newer `-dev` value, because relative to the merge base only `dev` changed it (see the `-dev` rule below).
+2. **Bump `dev` to the next `-dev`** — see the version-number rule below. This may be committed before or after the back-merge; both orders are conflict-free.
+
 **Version-number rule (`-dev`)**: right after each stable release, `dev` immediately bumps [apps/desktop/package.json](../../apps/desktop/package.json) to **the next version's `-dev` prerelease number** (e.g. after shipping `0.6.0`, switch to `0.7.0-dev`, and `npm install` to sync the lockfile), marking the development state. `-dev` is a development marker only — **not tagged, not released**; at release time change it to the target number (`0.7.0-alpha.N` or `0.7.0`) per above. `-dev` is valid semver (`0.6.0` < `0.7.0-dev` < `0.7.0`), so it doesn't affect update checking ([update-check.ts](../../apps/desktop/src/main/utils/update-check.ts) compares with `semver.gt`, not a range) or the build.
 
 ## CHANGELOG writing style (user-facing, concise)

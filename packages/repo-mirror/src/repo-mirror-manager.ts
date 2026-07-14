@@ -508,7 +508,8 @@ export class RepoMirrorManager {
   /**
    * Read a file's content at a given commit. Under a full bare clone all blobs are local, so git show directly.
    * If the file is not in that commit (add/delete scenarios) returns empty content.
-   * Simple null-byte heuristic to detect binary (first 8000 characters).
+   * A Git LFS pointer is detected first (surfaced as an LFS marker + real size); otherwise a simple null-byte
+   * heuristic (first 8000 characters) flags an inline binary.
    */
   async getFileContent(repo: RepoIdentity, sha: string, filePath: string): Promise<FileContent> {
     const mirrorPath = this.mirrorPath(repo);
@@ -518,6 +519,13 @@ export class RepoMirrorManager {
     } catch {
       // File does not exist at that commit (before an add / after a delete), return empty
       return { binary: false, content: '' };
+    }
+    // Git LFS: the mirror stores the pointer blob (LFS objects are never smudged, see the worktree filter config above),
+    // so an LFS-managed file's content here is the small pointer text. Detect it and surface an LFS marker + the real
+    // byte size (from the pointer's `size` line), instead of rendering the pointer text as a bogus diff.
+    if (content.startsWith('version https://git-lfs.github.com/spec/v1')) {
+      const m = /^size (\d+)$/m.exec(content);
+      return { binary: true, lfs: { size: m ? Number(m[1]) : null } };
     }
     if (content.slice(0, 8000).includes(' ')) {
       return { binary: true };

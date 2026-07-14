@@ -239,3 +239,12 @@
   width: 3px !important;
   margin-left: 3px;
 }
+
+// Pending reply-drafts rendered under a comment (both the activity timeline and the inline diff zone). Reuses the
+// DraftZone card styling; this wrapper only handles spacing between the parent thread and the pending reply cards.
+.reply-draft-list {
+  margin-top: $space-2;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}

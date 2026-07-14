@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
 import type { PlatformKind, PlatformUser, PrComment } from '@meebox/shared';
 import type { DiffChangedFile } from '@meebox/ipc';
@@ -7,13 +7,19 @@ import {
   estimateZoneHeight,
   renderHoverMd,
 } from '../inline-comments/InlineCommentZone';
-import { mountInlineZones } from '../zones/mountInlineZones';
+import { createInlineZones, type InlineZonesController } from '../zones/mountInlineZones';
 import type { LoadedContent } from '../diff-types';
 
 /**
  * Inline comment markers: a blue dot in the glyph margin on the comment's anchored line (hover shows a
- * markdown summary) + a view zone inserted below the line rendering the comment content. Zone mount /
- * cleanup goes through the shared mountInlineZones; glyph decorations are managed by this hook itself.
+ * markdown summary) + a view zone inserted below the line rendering the comment content.
+ *
+ * Split into two effects deliberately. A **structural** effect owns the zone controller's lifecycle (recreated only
+ * when the editor / file / view orientation changes); a **content** effect calls `controller.update(...)` whenever
+ * the comments or passthrough props change, which **reconciles** zones in place rather than tearing them down. This
+ * is what lets an in-progress inline reply / edit survive a comments refresh (e.g. the poller pulling a new remote
+ * comment mid-typing): the anchored line's zone keeps its React root, so the open editor's text isn't discarded.
+ * Glyph decorations are stateless and simply recreated by the content effect.
  */
 export function useCommentZones(opts: {
   diffEditor: MonacoEditor.IStandaloneDiffEditor | null;
@@ -58,11 +64,38 @@ export function useCommentZones(opts: {
     readOnly = false,
   } = opts;
 
+  // Structural lifecycle: (re)create the zone controller only when the editor / file / view orientation changes.
+  // A comments refresh does NOT touch these deps, so the controller (and its live zones) survives — the content
+  // effect below then reconciles into it instead of tearing everything down.
+  const controllerRef = useRef<InlineZonesController<PrComment> | null>(null);
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
+    const controller = createInlineZones<PrComment>({
+      diffEditor,
+      renderSideBySide,
+      zoneClassName: 'monaco-comment-zone',
+      innerClassName: 'monaco-comment-zone-inner',
+      // Don't intercept wheel — comment zones auto-size with no inner scroll, so the wheel must bubble to Monaco to
+      // scroll the editor, otherwise the whole diff can't scroll while hovering a comment (stopPropagation would eat the scroll).
+      stopEvents: ['mousedown', 'mouseup', 'click', 'dblclick'],
+    });
+    controllerRef.current = controller;
+    return () => {
+      controller.dispose();
+      controllerRef.current = null;
+    };
+  }, [diffEditor, content, selected, renderSideBySide]);
+
+  // Content sync: reconcile zones + rebuild glyph decorations whenever comments / passthrough props change. Declared
+  // after the structural effect so on mount the controller exists before this runs (React runs setup in order).
+  useEffect(() => {
+    const controller = controllerRef.current;
+    if (!controller || !diffEditor || !content || !selected) return;
     const fileComments = comments.filter(
       (c) =>
         c.anchor &&
+        // File-level comments (no line) are not line-anchored; they render in DiffView's file-level strip, not here.
+        c.anchor.line != null &&
         (c.anchor.path === selected.path ||
           (selected.oldPath && c.anchor.path === selected.oldPath)),
     );
@@ -70,12 +103,40 @@ export function useCommentZones(opts: {
     const oldByLine = new Map<number, PrComment[]>();
     const newByLine = new Map<number, PrComment[]>();
     for (const c of fileComments) {
+      // fileComments already excludes line-less (file-level) anchors, so line is present here.
+      const line = c.anchor!.line!;
       const target = c.anchor!.side === 'old' ? oldByLine : newByLine;
-      const arr = target.get(c.anchor!.line) ?? [];
+      const arr = target.get(line) ?? [];
       arr.push(c);
-      target.set(c.anchor!.line, arr);
+      target.set(line, arr);
     }
 
+    // Reconcile the zones: unchanged anchored lines re-render in place (an open reply/edit editor keeps its text),
+    // only genuinely added/removed lines mount/unmount.
+    controller.update({
+      oldByLine,
+      newByLine,
+      initialHeight: (cs, lineHeight) =>
+        Math.max(estimateZoneHeight(cs) * lineHeight, lineHeight * 3),
+      render: (cs) => (
+        <CommentZone
+          comments={cs}
+          connectionId={connectionId}
+          attachmentBase={attachmentBase}
+          prLocalId={prLocalId}
+          prWebUrl={prWebUrl}
+          hardBreaks={commentHardBreaks}
+          reactionsMode={reactionsMode}
+          attachmentsEnabled={attachmentsEnabled}
+          mentionCandidates={mentionCandidates}
+          platform={platform}
+          userSearchEnabled={userSearchEnabled}
+          readOnly={readOnly}
+        />
+      ),
+    });
+
+    // Glyph-margin dots + overview-ruler ticks are stateless → just recreate them to match the current comments.
     const buildDecorations = (
       byLine: Map<number, PrComment[]>,
     ): MonacoEditor.IModelDeltaDecoration[] =>
@@ -104,36 +165,6 @@ export function useCommentZones(opts: {
       buildDecorations(newByLine),
     );
 
-    const cleanupZones = mountInlineZones<PrComment>({
-      diffEditor,
-      renderSideBySide,
-      oldByLine,
-      newByLine,
-      zoneClassName: 'monaco-comment-zone',
-      innerClassName: 'monaco-comment-zone-inner',
-      // Don't intercept wheel — comment zones auto-size with no inner scroll, so the wheel must bubble to Monaco to
-      // scroll the editor, otherwise the whole diff can't scroll while hovering a comment (stopPropagation would eat the scroll).
-      stopEvents: ['mousedown', 'mouseup', 'click', 'dblclick'],
-      initialHeight: (cs, lineHeight) =>
-        Math.max(estimateZoneHeight(cs) * lineHeight, lineHeight * 3),
-      render: (cs) => (
-        <CommentZone
-          comments={cs}
-          connectionId={connectionId}
-          attachmentBase={attachmentBase}
-          prLocalId={prLocalId}
-          prWebUrl={prWebUrl}
-          hardBreaks={commentHardBreaks}
-          reactionsMode={reactionsMode}
-          attachmentsEnabled={attachmentsEnabled}
-          mentionCandidates={mentionCandidates}
-          platform={platform}
-          userSearchEnabled={userSearchEnabled}
-          readOnly={readOnly}
-        />
-      ),
-    });
-
     return () => {
       try {
         originalDecorations.clear();
@@ -141,7 +172,6 @@ export function useCommentZones(opts: {
       } catch {
         // editor already disposed
       }
-      cleanupZones();
     };
   }, [
     diffEditor,

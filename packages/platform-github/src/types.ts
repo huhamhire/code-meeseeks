@@ -87,6 +87,8 @@ export interface GhReviewComment {
   original_line?: number | null;
   side?: 'LEFT' | 'RIGHT';
   start_line?: number | null;
+  /** 'file' = a file-level review comment (no line); 'line' (default) = anchored to a line. */
+  subject_type?: 'line' | 'file';
   in_reply_to_id?: number;
   html_url?: string;
   reactions?: GhReactionRollup;

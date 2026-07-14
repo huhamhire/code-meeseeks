@@ -36,6 +36,8 @@ export class BitbucketServerConnection extends BaseConnection {
     return {
       reviewStatuses: ['approved', 'needsWork', 'unapproved'],
       inlineComments: true,
+      // Bitbucket supports commenting on a whole file (anchor without a line).
+      fileLevelComments: true,
       inlineMultiline: true,
       commentOptimisticLock: true,
       // Comment emoji reactions since 7.x (minimum supported version is 7.0); emoticon supports any emoji → free.

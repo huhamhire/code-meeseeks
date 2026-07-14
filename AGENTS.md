@@ -70,9 +70,11 @@ After changing code, run these four steps locally before wrapping up (this is ex
 
 ## Release flow
 
-Release: merge `dev` into `master` → tag `v*` on `master`, which triggers [release.yml](.github/workflows/release.yml) (produces Windows / macOS installers + CLI binaries + a GitHub Release).
+Release: merge `dev` into `master` → tag `v*` on `master`, which triggers [release.yml](.github/workflows/release.yml) (produces Windows / macOS installers + CLI binaries + a GitHub Release) → **back-merge `master` into `dev`** + bump `dev` to the next `-dev`.
 
 ⚠️ **Before tagging, complete the three prerequisites (version / CHANGELOG / proofread) in the same batch of changes, flowing through `dev` → `master` with the release** — miss any step and CI won't error (only `::warning::`) but will produce a wrong Release. **The full prerequisite checklist, the `-dev` version-number rule, and CHANGELOG writing style are in [Packaging & release](docs/development/packaging-release.md)**. The tag name must equal the package.json version (`v<version>`); a prerelease tag with a `-` in the name is automatically marked prerelease and does not claim Latest.
+
+**Post-release back-merge (mandatory)**: after the `dev → master` release PR merges, `master` gains a merge commit that `dev` does not contain, so the branches immediately diverge — leave it and every subsequent `dev → master` PR shows phantom "behind" commits and risks messy merges. Right after tagging, **merge `master` back into `dev`** (`git checkout dev && git merge master && git push`) so `master` becomes an ancestor of `dev` again (verify with `git log dev..master` = empty). The `-dev` version bump on `dev` may land before or after this back-merge; the version line resolves to `dev`'s newer `-dev` automatically (no conflict), since `dev` changed it last relative to the merge base.
 
 ## CLI sub-project (cli/)
 

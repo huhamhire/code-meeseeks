@@ -5,6 +5,28 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.11.1] - 2026-07-14
+
+> 本次发布要点：
+>
+> - **文件级评论**：可对整个文件（而非仅某一行）添加评论（平台支持时，Bitbucket / GitHub）。
+> - **回复即草稿**：回复评论现会生成延迟草稿——与新建评论一致，跨切换保留，随评审批量发布。
+> - **项目感知的评审**：评审现会读取被审仓库自身的 `AGENTS.md` 作为上下文。
+> - **diff 中的 Git LFS 状态**：二进制文件会显示其是否由 Git LFS 管理。
+>
+> 另修复：评论列表刷新时，正在编写的内联评论不再被丢弃。
+
+### ✨ 新增
+
+- diff 中的二进制文件（图片、Office 文档、PDF 等）现会显示其 Git LFS 状态——受 LFS 管理的文件显示「Git LFS · &lt;大小&gt;」标记，直接内联存入 git 的文件显示「⚠ 非 LFS」标记。
+- 现可对整个文件（而不仅是某一行）添加评论（平台支持时，Bitbucket / GitHub）：diff 中新增「对文件评论」入口，且已存在的文件级评论现能正确归属显示，不再被当作 PR 通用评论。
+- 评审现会读取被审仓库自身的规范文件（`AGENTS.md`）作为项目上下文，使评审、描述与建议遵循该项目既定的约定。
+- 回复评论现会生成一条**回复草稿**，而非立即提交——与新增内联评论的行为一致。回复被持久化（未提交的回复可跨 PR / 文件 / 标签页切换保留），在每个界面（活动时间线 + 内联 diff）都显示在其父评论下方，并随其他草稿一起通过「发布评论」批量发布。
+
+### 🔧 修复
+
+- 在 diff 中正在编写的内联评论回复 / 编辑，不再因评论列表刷新（如轮询在你输入时拉到新的远端评论）而被丢弃——打开的编辑器会保留已输入的内容。
+
 ## [0.11.0] - 2026-07-07
 
 > 本次发布要点：
@@ -465,6 +487,8 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
+[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.8.0...v0.9.0

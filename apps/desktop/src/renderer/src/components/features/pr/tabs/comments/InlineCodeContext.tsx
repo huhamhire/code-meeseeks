@@ -58,6 +58,10 @@ function InlineCodeContextImpl({
     let cancelled = false;
     setSnippet(null);
     setError(null);
+    // File-level anchors (no line) have no line to contextualize; the caller doesn't mount this for them, but guard anyway.
+    // Capture as a const so the narrowing carries into the async closure below.
+    const line = anchor.line;
+    if (line == null) return;
     void (async () => {
       try {
         const c = await invoke('diff:getFileContent', {
@@ -72,10 +76,10 @@ function InlineCodeContextImpl({
           return;
         }
         const allLines = c.content.split('\n');
-        const startLine = Math.max(1, anchor.line - contextLines);
-        const endLine = Math.min(allLines.length, anchor.line + contextLines);
+        const startLine = Math.max(1, line - contextLines);
+        const endLine = Math.min(allLines.length, line + contextLines);
         const text = allLines.slice(startLine - 1, endLine).join('\n');
-        setSnippet({ text, startLine, anchorInSnippet: anchor.line - startLine + 1 });
+        setSnippet({ text, startLine, anchorInSnippet: line - startLine + 1 });
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e));

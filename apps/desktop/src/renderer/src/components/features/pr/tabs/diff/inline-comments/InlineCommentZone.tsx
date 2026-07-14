@@ -6,7 +6,9 @@ import { Avatar, makeBitbucketImageFor, ConfirmModal } from '../../../../../comm
 import { formatTimestamp } from '../../../../../../utils/time';
 import { CommentEditEditor } from '../../comments/CommentEditEditor';
 import { CommentReplyEditor } from '../../comments/CommentReplyEditor';
+import { ReplyDraftList } from '../../comments/ReplyDraftList';
 import { CommentMarkdown } from '../../shared/CommentMarkdown';
+import { toReplyDraftAnchor } from '../../shared/replyDraftAnchor';
 import { ReactionAddButton, ReactionChips, useReactions } from '../../shared/ReactionBar';
 import { useCommentThread } from '../../shared/useCommentThread';
 
@@ -275,6 +277,7 @@ function CommentNode({
             prLocalId={prLocalId}
             // Reply target abstraction (threadId): GitLab=discussion id (required for reply); Bitbucket empty / GitHub=remoteId → fall back to remoteId.
             parentCommentId={comment.threadId ?? comment.remoteId}
+            parentAnchor={toReplyDraftAnchor(comment.anchor)}
             mentionCandidates={mentionCandidates}
             platform={platform}
             attachmentsEnabled={attachmentsEnabled}
@@ -325,6 +328,17 @@ function CommentNode({
           readOnly={readOnly}
         />
       ))}
+      {/* Pending reply-drafts for this comment, rendered at the thread tail (same deferred-draft model as a new inline comment). */}
+      <ReplyDraftList
+        prLocalId={prLocalId}
+        parentCommentId={comment.threadId ?? comment.remoteId}
+        hardBreaks={hardBreaks}
+        mentionCandidates={mentionCandidates}
+        platform={platform}
+        attachmentsEnabled={attachmentsEnabled}
+        userSearchEnabled={userSearchEnabled}
+        readOnly={readOnly}
+      />
       {confirmDelete && (
         <ConfirmModal
           title={t('commentsPanel.deleteConfirmTitle')}

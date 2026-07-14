@@ -59,13 +59,14 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false
     const list = drafts ?? [];
     // Sort: within the same file by startLine ascending (matching top-to-bottom code reading order); across files by
     // path lexicographic order (aligned with file-tree order, so scanning doesn't jump around)
-    const sorted = list
-      .slice()
-      .sort((a, b) =>
-        a.anchor.path === b.anchor.path
-          ? a.anchor.startLine - b.anchor.startLine
-          : a.anchor.path.localeCompare(b.anchor.path),
-      );
+    const sorted = list.slice().sort((a, b) => {
+      // Reply-drafts may have no anchor (reply to a summary comment); fall back to empty path / line 0 so they sort stably first.
+      const pathA = a.anchor?.path ?? '';
+      const pathB = b.anchor?.path ?? '';
+      return pathA === pathB
+        ? (a.anchor?.startLine ?? 0) - (b.anchor?.startLine ?? 0)
+        : pathA.localeCompare(pathB);
+    });
     if (filter === 'all') return sorted;
     if (filter === 'publishable')
       return sorted.filter((d) => d.status === 'pending' || d.status === 'edited');
@@ -159,33 +160,50 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false
       ) : (
         <ul className="drafts-panel-list">
           {filtered.map((d) => {
-            const lineLabel =
-              d.anchor.endLine !== d.anchor.startLine
-                ? `${String(d.anchor.startLine)}-${String(d.anchor.endLine)}`
-                : String(d.anchor.startLine);
-            const sideLabel =
-              d.anchor.side === 'old' ? t('draftsPanel.sideOld') : t('draftsPanel.sideNew');
+            const anchor = d.anchor;
+            const isReply = d.kind === 'reply';
+            const lineLabel = anchor
+              ? anchor.endLine !== anchor.startLine
+                ? `${String(anchor.startLine)}-${String(anchor.endLine)}`
+                : String(anchor.startLine)
+              : '';
+            const sideLabel = anchor
+              ? anchor.side === 'old'
+                ? t('draftsPanel.sideOld')
+                : t('draftsPanel.sideNew')
+              : '';
             const publishable = d.status === 'pending' || d.status === 'edited';
             const pubErr = errors.get(d.id);
             const isPublishing = publishingIds.has(d.id);
             return (
               <li key={d.id} className={`drafts-panel-item drafts-panel-item-${d.status}`}>
                 <div className="drafts-panel-item-head">
-                  {onJumpToAnchor ? (
-                    <button
-                      type="button"
-                      className="drafts-panel-item-anchor drafts-panel-item-anchor-link"
-                      onClick={() => onJumpToAnchor(d.id)}
-                      title={t('draftsPanel.jumpToDiffTitle')}
-                    >
-                      {d.anchor.path}:{lineLabel}
-                      <span className="muted"> · {sideLabel}</span>
-                    </button>
+                  {/* Reply-drafts carry a small "reply" tag; when anchored to an inline comment they still show the
+                      parent's file:line (jump lands on the parent's line), otherwise (reply to a summary comment) just the tag. */}
+                  {isReply && (
+                    <span className="drafts-panel-item-reply-tag">{t('draftsPanel.replyTag')}</span>
+                  )}
+                  {anchor ? (
+                    onJumpToAnchor ? (
+                      <button
+                        type="button"
+                        className="drafts-panel-item-anchor drafts-panel-item-anchor-link"
+                        onClick={() => onJumpToAnchor(d.id)}
+                        title={t('draftsPanel.jumpToDiffTitle')}
+                      >
+                        {anchor.path}:{lineLabel}
+                        <span className="muted"> · {sideLabel}</span>
+                      </button>
+                    ) : (
+                      <code className="drafts-panel-item-anchor">
+                        {anchor.path}:{lineLabel}
+                        <span className="muted"> · {sideLabel}</span>
+                      </code>
+                    )
                   ) : (
-                    <code className="drafts-panel-item-anchor">
-                      {d.anchor.path}:{lineLabel}
-                      <span className="muted"> · {sideLabel}</span>
-                    </code>
+                    <span className="drafts-panel-item-anchor muted">
+                      {t('draftsPanel.replyToComment')}
+                    </span>
                   )}
                   <span className={`drafts-panel-item-status status-${d.status}`}>
                     {t(STATUS_LABEL_KEY[d.status])}

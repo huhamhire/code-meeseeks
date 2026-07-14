@@ -73,6 +73,15 @@
   color: $text-primary;
   word-break: break-all;
 }
+// "reply" pill marking a reply-draft in the publish list.
+.publish-review-item-reply-tag {
+  font-size: $fs-xs;
+  padding: 0 6px;
+  border-radius: $radius-sm;
+  background: $bg-hover;
+  color: $text-muted;
+  white-space: nowrap;
+}
 // Clickable anchor variant: button demoted to link appearance (@include anchor-link) + hover primary color
 .publish-review-item-anchor-link {
   @include anchor-link;

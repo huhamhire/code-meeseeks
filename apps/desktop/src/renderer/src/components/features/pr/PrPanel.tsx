@@ -229,11 +229,13 @@ export function PrPanel({
             onComposeClose={() => setComposingComment(false)}
             currentUserName={currentUserName}
             onViewCommit={viewCommit}
-            onJumpToAnchor={(a: PrCommentAnchor) =>
+            onJumpToAnchor={(a: PrCommentAnchor) => {
+              // File-level anchors (no line) aren't line-navigable; CommentItem doesn't make them clickable, guard anyway.
+              if (a.line == null) return;
               onRequestDiffNav?.({
                 anchor: { path: a.path, startLine: a.line, endLine: a.line },
-              })
-            }
+              });
+            }}
           />
         </KeepAliveTab>
         <KeepAliveTab active={tab === 'drafts'}>
@@ -243,7 +245,8 @@ export function PrPanel({
             readOnly={readOnly}
             onJumpToAnchor={(draftId) => {
               const d = (drafts ?? []).find((x) => x.id === draftId);
-              if (!d) return;
+              // Reply-drafts with no anchor (reply to a summary comment) aren't line-navigable.
+              if (!d?.anchor) return;
               onRequestDiffNav?.({
                 anchor: {
                   path: d.anchor.path,
@@ -270,7 +273,8 @@ export function PrPanel({
             // Click anchor → close modal + turn into pendingDiffNav bubbled up to App. runId/findingId omitted →
             // DiffView only navigates, doesn't enter edit (the user wants to see the code context, not necessarily edit the draft).
             const d = (drafts ?? []).find((x) => x.id === draftId);
-            if (!d) return;
+            // Reply-drafts with no anchor (reply to a summary comment) aren't line-navigable.
+            if (!d?.anchor) return;
             setPublishModalOpen(false);
             onRequestDiffNav?.({
               anchor: {

@@ -169,6 +169,16 @@
   white-space: nowrap;
 }
 
+// "reply" pill marking a reply-draft (vs a new-comment draft) in the drafts list.
+.drafts-panel-item-reply-tag {
+  font-size: $fs-xs;
+  padding: 0 6px;
+  border-radius: $radius-sm;
+  background: $bg-hover;
+  color: $text-muted;
+  white-space: nowrap;
+}
+
 .drafts-panel-item-actions {
   margin-left: auto;
   display: inline-flex;
