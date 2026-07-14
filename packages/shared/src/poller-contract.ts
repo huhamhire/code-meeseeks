@@ -172,13 +172,28 @@ export interface ReviewDraft {
   id: string;
   /** PR hash localId, consistent with the parent directory */
   prLocalId: string;
-  /** Anchor: same as FindingAnchor but startLine/endLine required (a draft must anchor to a specific line) */
-  anchor: ReviewDraftAnchor;
+  /**
+   * Draft kind: a brand-new inline/file comment (`comment`) vs a reply to an existing comment (`reply`). Absent =
+   * `comment` (back-compat: drafts persisted before reply-drafts existed, and all `finding`-origin drafts, are comments).
+   * A reply defers the same way a new comment does — it sits in the draft pool and publishes via the batch — but
+   * publishes through the reply API against {@link replyTo} instead of a fresh inline comment.
+   */
+  kind?: 'comment' | 'reply';
+  /**
+   * Anchor to a specific line. **Required for a `comment`** (a new comment must land on a line). For a `reply` it is a
+   * snapshot of the parent comment's anchor: present when replying to an inline comment (positions the draft zone at
+   * the parent's line), absent when replying to a summary comment (which has no line — that reply-draft shows only in
+   * the drafts panel / activity timeline, never as a diff zone).
+   */
+  anchor?: ReviewDraftAnchor;
+  /** Reply target (which existing comment this answers). Required when kind='reply'; unused for comments. */
+  replyTo?: { parentCommentId: string; threadId?: string };
   /** Current comment body. When pending = the AI suggestion's original text; when edited = after user editing */
   body: string;
   /**
    * Origin: AI suggestion (`finding`) vs user-added manually (`manual`).
    * A draft created by the user from a DiffView line hover '+' is manual; one navigated from ChatPane is finding.
+   * A reply-draft is always `manual` (the user authored it).
    */
   origin: 'finding' | 'manual';
   /**

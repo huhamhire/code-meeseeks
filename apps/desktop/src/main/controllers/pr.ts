@@ -590,6 +590,18 @@ export const addDraft: IpcController<'drafts:create'> = async (_event, req) => {
   if (draft.origin === 'manual' && draft.source) {
     throw new Error('drafts:create: origin=manual must not pass source');
   }
+  // Kind constraints: a reply must target a parent comment and is always a manually-authored draft (no source);
+  // a comment (default) must anchor to a line. Enforced here so malformed drafts never reach disk.
+  if (draft.kind === 'reply') {
+    if (!draft.replyTo?.parentCommentId) {
+      throw new Error('drafts:create: kind=reply requires replyTo.parentCommentId');
+    }
+    if (draft.origin !== 'manual') {
+      throw new Error('drafts:create: kind=reply must be origin=manual');
+    }
+  } else if (!draft.anchor) {
+    throw new Error('drafts:create: a comment draft requires an anchor');
+  }
   const created = await createDraft(await ctx.pr.storeForPr(localId), localId, draft);
   ctx.broadcast('drafts:changed', { localId });
   return created;
@@ -674,20 +686,40 @@ export const publishDraftBatch: IpcController<'drafts:publishBatch'> = async (_e
       continue;
     }
     try {
-      // ReviewDraftAnchor → PrCommentAnchor: side maps conservatively new→added / old→removed;
-      // multi-line lands on endLine (the comment appears below the annotated range, not interrupting top-down reading). Hitting a context line
-      // makes Bitbucket return 400; the error is collected into results for the user to see.
-      const posted = await adapter.comments.publishInlineComment(
-        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
-        pr.remoteId,
-        {
-          path: draft.anchor.path,
-          line: draft.anchor.endLine,
-          side: draft.anchor.side,
-          lineType: draft.anchor.side === 'old' ? 'removed' : 'added',
-        },
-        draft.body,
-      );
+      let posted: { remoteId: string };
+      if (draft.kind === 'reply') {
+        // Reply-draft: publish against the parent comment via the reply API (not a fresh inline comment). The parent
+        // already exists remotely, so ordering within the batch doesn't matter.
+        if (!draft.replyTo?.parentCommentId) {
+          results.push({ draftId, ok: false, error: 'reply draft missing replyTo.parentCommentId' });
+          continue;
+        }
+        posted = await adapter.comments.replyToComment(
+          { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+          pr.remoteId,
+          draft.replyTo.parentCommentId,
+          draft.body,
+        );
+      } else {
+        if (!draft.anchor) {
+          results.push({ draftId, ok: false, error: 'comment draft missing anchor' });
+          continue;
+        }
+        // ReviewDraftAnchor → PrCommentAnchor: side maps conservatively new→added / old→removed;
+        // multi-line lands on endLine (the comment appears below the annotated range, not interrupting top-down reading). Hitting a context line
+        // makes Bitbucket return 400; the error is collected into results for the user to see.
+        posted = await adapter.comments.publishInlineComment(
+          { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+          pr.remoteId,
+          {
+            path: draft.anchor.path,
+            line: draft.anchor.endLine,
+            side: draft.anchor.side,
+            lineType: draft.anchor.side === 'old' ? 'removed' : 'added',
+          },
+          draft.body,
+        );
+      }
       // Successful publish = the local draft's mission is done, delete it directly (the remote comment is pulled back and takes over display via the force-refresh below).
       await deleteDraft(store, req.localId, draftId);
       anyPublished = true;

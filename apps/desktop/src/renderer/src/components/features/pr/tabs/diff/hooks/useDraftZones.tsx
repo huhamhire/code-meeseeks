@@ -54,6 +54,9 @@ export function useDraftZones(opts: {
     if (scopeKind !== 'all') return;
     const fileDrafts = (drafts ?? []).filter((d) => {
       if (d.status === 'rejected' || d.status === 'posted') return false;
+      // Reply-drafts render nested under their parent comment (ReplyDraftList), not as standalone line zones — skip them here.
+      if (d.kind === 'reply') return false;
+      if (!d.anchor) return false;
       return d.anchor.path === selected.path || selected.oldPath === d.anchor.path;
     });
     if (fileDrafts.length === 0) return;
@@ -61,13 +64,15 @@ export function useDraftZones(opts: {
     const oldByLine = new Map<number, ReviewDraft[]>();
     const newByLine = new Map<number, ReviewDraft[]>();
     for (const d of fileDrafts) {
-      const target = d.anchor.side === 'old' ? oldByLine : newByLine;
+      // fileDrafts filter guarantees a non-reply draft with an anchor.
+      const anchor = d.anchor!;
+      const target = anchor.side === 'old' ? oldByLine : newByLine;
       // Use endLine as the zone line number, aligned with the publish anchor — publishInlineComment sends to
       // the remote using anchor.endLine, and the draft zone also lands on endLine, so "preview position = final publish position" (WYSIWYG). nav reveal highlights the same
       // endLine, so the two are visually consistent, and a multi-line finding (startLine=403, endLine=425) won't have its start/end misplaced.
-      const arr = target.get(d.anchor.endLine) ?? [];
+      const arr = target.get(anchor.endLine) ?? [];
       arr.push(d);
-      target.set(d.anchor.endLine, arr);
+      target.set(anchor.endLine, arr);
     }
 
     return mountInlineZones<ReviewDraft>({
