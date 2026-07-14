@@ -14,6 +14,10 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 - Reviews now pick up the reviewed repository's own guidance file (`AGENTS.md`) as project context, so the review, description, and suggestions follow the project's stated conventions.
 - Replying to a comment now creates a **reply draft** instead of posting immediately — consistent with adding a new inline comment. The reply is persisted (so an unsubmitted reply survives switching PRs/files/tabs), shown below its parent comment on every surface (activity timeline + inline diff), and published together with your other drafts via "Publish comments".
 
+### 🔧 Fixed
+
+- An in-progress inline comment reply or edit in the diff is no longer discarded when the comment list refreshes (e.g. the poller pulls a new remote comment while you're typing) — the open editor keeps its text.
+
 ## [0.11.0] - 2026-07-07
 
 > Highlights of this release:
