@@ -10,7 +10,9 @@ import { formatBackendError } from '../errors';
 export interface PendingDiffNav {
   runId?: string;
   findingId?: string;
-  anchor: { path: string; startLine: number; endLine: number };
+  // `side` decides which diff side the reveal targets (old = base/left, new = head/right); omitted defaults to 'new'.
+  // Required so an old-side comment/draft reveal lands correctly (incl. after an auto-degrade to unified — see useDiffNav).
+  anchor: { path: string; startLine: number; endLine: number; side?: 'old' | 'new' };
 }
 
 export interface PrNavigation {
@@ -156,7 +158,9 @@ export function usePrNavigation({
     return subscribe('notification:activate', ({ localId, kind, anchor }) => {
       void jumpToPr(localId);
       if (anchor) {
-        setPendingDiffNav({ anchor: { path: anchor.path, startLine: anchor.line, endLine: anchor.line } });
+        setPendingDiffNav({
+          anchor: { path: anchor.path, startLine: anchor.line, endLine: anchor.line, side: anchor.side },
+        });
       } else if (kind === 'mention' || kind === 'reply') {
         setPendingTab('activity');
       }

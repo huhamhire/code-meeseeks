@@ -67,7 +67,11 @@ function activateOnClick(e: PollNotificationEvent): () => void {
       anchor:
         // File-level comments (no line) aren't line-navigable → no anchor (clicking just opens the PR).
         e.comment?.anchor && e.comment.anchor.line != null
-          ? { path: e.comment.anchor.path, line: e.comment.anchor.line }
+          ? {
+              path: e.comment.anchor.path,
+              line: e.comment.anchor.line,
+              side: e.comment.anchor.side,
+            }
           : null,
     });
   };
