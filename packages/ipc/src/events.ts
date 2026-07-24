@@ -84,7 +84,7 @@ export interface IpcEvents {
   'notification:activate': {
     localId: string;
     kind: PollNotificationKind;
-    anchor: { path: string; line: number } | null;
+    anchor: { path: string; line: number; side: 'old' | 'new' } | null;
   };
 }
 

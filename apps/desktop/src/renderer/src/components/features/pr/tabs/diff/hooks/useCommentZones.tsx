@@ -8,6 +8,7 @@ import {
   renderHoverMd,
 } from '../inline-comments/InlineCommentZone';
 import { createInlineZones, type InlineZonesController } from '../zones/mountInlineZones';
+import { remapOldByLineToModified } from '../zones/line-mapping';
 import type { LoadedContent } from '../diff-types';
 
 /**
@@ -158,16 +159,29 @@ export function useCommentZones(opts: {
 
     const originalEditor = diffEditor.getOriginalEditor();
     const modifiedEditor = diffEditor.getModifiedEditor();
-    const originalDecorations = originalEditor.createDecorationsCollection(
-      buildDecorations(oldByLine),
-    );
+    // Old-side markers: in side-by-side they sit on the (visible) original editor; in unified — including
+    // auto-degraded-from-side-by-side, since renderSideBySide here is the ACTUAL render mode — the original editor is
+    // hidden, so remap them onto the modified editor at the mapped line (mirroring how the zone bodies are routed in
+    // computeDesired), otherwise the glyph dot + overview tick vanish with the hidden editor.
+    const modifiedLines = new Map(newByLine);
+    let originalLines: Map<number, PrComment[]> | null = oldByLine;
+    if (!renderSideBySide && oldByLine.size > 0) {
+      originalLines = null;
+      const remappedOld = remapOldByLineToModified(diffEditor.getLineChanges() ?? [], oldByLine);
+      for (const [line, cs] of remappedOld) {
+        modifiedLines.set(line, [...(modifiedLines.get(line) ?? []), ...cs]);
+      }
+    }
+    const originalDecorations = originalLines
+      ? originalEditor.createDecorationsCollection(buildDecorations(originalLines))
+      : null;
     const modifiedDecorations = modifiedEditor.createDecorationsCollection(
-      buildDecorations(newByLine),
+      buildDecorations(modifiedLines),
     );
 
     return () => {
       try {
-        originalDecorations.clear();
+        originalDecorations?.clear();
         modifiedDecorations.clear();
       } catch {
         // editor already disposed

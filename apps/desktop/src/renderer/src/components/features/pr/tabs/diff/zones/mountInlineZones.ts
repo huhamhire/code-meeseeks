@@ -248,6 +248,9 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
     for (const [line, items] of content.newByLine) {
       desired.set(`new:${line}`, { editor: modifiedEditor, afterLine: line, items });
     }
+    // renderSideBySide here is the ACTUAL render mode (callers pass useActualRenderSideBySide, not the toolbar intent):
+    // only mount old-side zones on the original editor when it is genuinely visible; when Monaco has auto-degraded to
+    // inline the original editor is hidden, so remap old lines onto the modified editor instead.
     if (renderSideBySide) {
       for (const [line, items] of content.oldByLine) {
         desired.set(`old:${line}`, { editor: originalEditor, afterLine: line, items });
