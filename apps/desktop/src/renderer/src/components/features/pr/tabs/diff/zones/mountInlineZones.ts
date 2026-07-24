@@ -10,35 +10,14 @@ import { remapOldByLineToModified } from './line-mapping';
  * `removeZone` / `unmount` cleanup. The differences (which events to intercept, initial height estimation, what component
  * to render) are injected via options.
  *
- * Two entry points sharing the same internals:
- *  - {@link createInlineZones} returns a persistent controller whose `update(content)` **reconciles** zones by
- *    `(side, line)` key: an unchanged key re-renders its existing React root in place (preserving the zone's React
- *    state, e.g. an in-progress inline reply/edit that must survive a comments refresh / poll), a new key mounts a
- *    fresh zone, a vanished key is removed. Use this when the zone content changes independently of the editor/file.
- *  - {@link mountInlineZones} is the original one-shot form (create + populate once, teardown on cleanup), kept for
- *    callers that rebuild their whole zone set per effect run (the draft zones).
+ * {@link createInlineZones} returns a persistent controller whose `update(content)` **reconciles** zones by
+ * `(side, line)` key: an unchanged key re-renders its existing React root in place (preserving the zone's React
+ * state, e.g. an in-progress inline reply/edit/draft that must survive a comments/drafts refresh / poll), a new key
+ * mounts a fresh zone, a vanished key is removed. Both the inline comment zones (useCommentZones) and the inline draft
+ * zones (useDraftZones) drive it from a split structural/content effect pair, so their editors survive a refresh.
  *
  * The comment zone's extra glyph decorations are not managed here (the caller useCommentZones creates / clears them itself).
  */
-export interface MountInlineZonesOptions<T> {
-  diffEditor: MonacoEditor.IStandaloneDiffEditor;
-  renderSideBySide: boolean;
-  /** Old-side (deleted / base-side context lines) buckets: key = line number */
-  oldByLine: Map<number, T[]>;
-  /** New-side (added / head-side context lines) buckets: key = line number */
-  newByLine: Map<number, T[]>;
-  /** Class of the monaco wrapper dom ('monaco-comment-zone' / 'monaco-draft-zone') */
-  zoneClassName: string;
-  /** Class of the real visual container inner ('monaco-comment-zone-inner' / 'monaco-draft-zone-inner') */
-  innerClassName: string;
-  /** Set of events stopPropagation takes over on dom + inner (drafts include keydown/wheel etc., comments only mouse-click kinds) */
-  stopEvents: readonly string[];
-  /** Initial zone height (px) estimation; lineHeight is monaco's current line height */
-  initialHeight: (items: T[], lineHeight: number) => number;
-  /** Render the zone content (React node) */
-  render: (items: T[]) => ReactNode;
-}
-
 /** Structural options for {@link createInlineZones}: everything that identifies where/how zones mount, minus the content. */
 export interface CreateInlineZonesOptions {
   diffEditor: MonacoEditor.IStandaloneDiffEditor;
@@ -375,26 +354,4 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
   };
 
   return { update, dispose };
-}
-
-/**
- * One-shot form (create + populate once, teardown on cleanup). Behaviourally identical to the pre-controller
- * mechanism, kept for callers (the draft zones) that rebuild their entire zone set on each effect run. Returns a
- * cleanup function to call in the effect's teardown.
- */
-export function mountInlineZones<T>(opts: MountInlineZonesOptions<T>): () => void {
-  const controller = createInlineZones<T>({
-    diffEditor: opts.diffEditor,
-    renderSideBySide: opts.renderSideBySide,
-    zoneClassName: opts.zoneClassName,
-    innerClassName: opts.innerClassName,
-    stopEvents: opts.stopEvents,
-  });
-  controller.update({
-    oldByLine: opts.oldByLine,
-    newByLine: opts.newByLine,
-    initialHeight: opts.initialHeight,
-    render: opts.render,
-  });
-  return () => controller.dispose();
 }

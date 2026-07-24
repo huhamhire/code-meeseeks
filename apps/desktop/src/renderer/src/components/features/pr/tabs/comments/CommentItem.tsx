@@ -22,43 +22,9 @@ const InlineCodeContext = lazy(() =>
   import('./InlineCodeContext').then((m) => ({ default: m.InlineCodeContext })),
 );
 
-/**
- * Structural equality comparison of the comment tree (by remoteId + body + version + edit/delete permissions + recursive replies). poll mostly returns
- * comments with unchanged content: on equality, skip setState and keep the old reference so React bails out, avoiding pointless re-render of the whole
- * comment tree (including inline Monaco) (refresh flicker).
- */
-export function sameCommentList(a: readonly PrComment[], b: readonly PrComment[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i]!;
-    const y = b[i]!;
-    if (
-      x.remoteId !== y.remoteId ||
-      x.body !== y.body ||
-      x.version !== y.version ||
-      x.canEdit !== y.canEdit ||
-      x.canDelete !== y.canDelete ||
-      !sameReactions(x.reactions, y.reactions) ||
-      !sameCommentList(x.replies, y.replies)
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/** Equality comparison of the reactions array (emoji + count + mine triple matching item by item): lets reaction changes after a toggle trigger a re-render. */
-function sameReactions(a: PrComment['reactions'], b: PrComment['reactions']): boolean {
-  const x = a ?? [];
-  const y = b ?? [];
-  if (x.length !== y.length) return false;
-  for (let i = 0; i < x.length; i++) {
-    if (x[i]!.emoji !== y[i]!.emoji || x[i]!.count !== y[i]!.count || x[i]!.mine !== y[i]!.mine) {
-      return false;
-    }
-  }
-  return true;
-}
+// Structural comment-tree equality lives in the shared module so the diff view (useDiffComments) can reuse the same poll bail; re-exported here for the
+// activity/comments-page importers that historically pulled it from this file.
+export { sameCommentList } from '../shared/commentEquality';
 
 /**
  * Maximum indent level for nested replies: past this level recursion continues but **no further indent is added** (flattened display), avoiding
