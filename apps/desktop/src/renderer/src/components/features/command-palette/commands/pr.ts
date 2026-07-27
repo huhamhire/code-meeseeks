@@ -93,5 +93,20 @@ export function buildPrCommands(ctx: CommandContext): RootCommand[] {
     run: () => ctx.togglePrList(),
   });
 
+  // Refresh PR: re-fetch just the selected PR from remote (metadata + comments), not a whole-poller tick. Only shown
+  // when a PR is selected. Bound to bare F5 (real key match in App's window-level listener); shortcut here is display-only.
+  out.push({
+    id: 'refresh-pr',
+    category,
+    categoryEn,
+    title: t('commandPalette.cmdRefreshPr'),
+    titleEn: tEn('commandPalette.cmdRefreshPr'),
+    when: () => Boolean(ctx.selectedPrId),
+    shortcut: ['F5'],
+    run: () => {
+      if (ctx.selectedPrId) ctx.refreshPr(ctx.selectedPrId);
+    },
+  });
+
   return out;
 }

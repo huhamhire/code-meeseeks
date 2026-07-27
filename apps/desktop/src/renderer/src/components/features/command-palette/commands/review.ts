@@ -34,7 +34,8 @@ export function buildReviewCommands(ctx: CommandContext): RootCommand[] {
       // Gating: only appears when a PR is selected (meaningless without one). Reentrancy guard at execution: ignore if the same PR is already running. Uses the same channel as ChatPane's
       // one-click review; run state / session reflected via events + store; LLM not configured / pr-agent not ready flow back into the session as a failure from the backend.
       when: () => Boolean(selectedPrId),
-      shortcut: ['F5'], // Run (IDE convention); single key avoids combo conflicts, see App window-level shortcuts
+      // Ctrl+F5 (literal Ctrl on all platforms): moved off bare F5 so an accidental F5 doesn't kick off a review; bare F5 is now "Refresh PR". See App window-level shortcuts.
+      shortcut: formatChord(ctx.platform, 'F5', { ctrl: true }),
       run: () => {
         if (selectedPrId && !isPrRunning(selectedPrId)) {
           void invoke('agent:run', { localId: selectedPrId });

@@ -16,6 +16,13 @@
   gap: $space-2;
 }
 
+// Refresh: neutral icon-only button beside "open in browser". Its content is a single icon (shorter than the text
+// buttons' line-height), so stretch it to the row height to match the open-in-browser / decision buttons; the icon
+// stays vertically centered (.btn is align-items:center).
+.pr-header-refresh {
+  align-self: stretch;
+}
+
 // "Merge" button: branch-merge icon + label. Base state matches approve's inactive (default border + body color, only the icon uses
 // the green semantic color), no longer "always-green filled" — always-green is easily misread as a "clicked / merged" state. Instead, a 1s-cycle blink highlights
 // clickability; after clicking (merging → disabled) it goes through .btn:disabled to gray out and stop blinking.

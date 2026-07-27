@@ -315,6 +315,65 @@ export const openPrByUrl: IpcController<'prs:openByUrl'> = async (_event, req) =
 export const refreshPrs: IpcController<'prs:refresh'> = () => getContext().poller.tick();
 
 /**
+ * Refresh a SINGLE PR from remote (metadata + comments) without a whole-poller tick. Fetches just this PR via the
+ * adapter (bypassing the discovery list), recomputes localStatus from the current user's reviewer status (remote
+ * authoritative, same rule as the poll), persists the updated meta, and invalidates the comments cache (broadcasts
+ * comments:changed → the open comments / activity / inline-diff refetch). If the head sha advanced, best-effort ensure
+ * the mirror has the new commits so the diff renders the new code. Returns the updated PR; the renderer then reloads the
+ * list locally (no network poll of other PRs).
+ */
+export const refreshOnePr: IpcController<'prs:refreshOne'> = async (_event, req) => {
+  const ctx = getContext();
+  const existing = await ctx.pr.findPrOrThrow(req.localId);
+  const adapter = ctx.pr.adapterForOrThrow(existing);
+  // Remote fetch of just this PR. 403/404 normalize to error codes (matching openPrByUrl); other errors bubble up.
+  let fresh;
+  try {
+    fresh = await adapter.prs.getSinglePullRequest(
+      { projectKey: existing.repo.projectKey, repoSlug: existing.repo.repoSlug },
+      existing.remoteId,
+    );
+  } catch (err) {
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 403) throw new AppError(ERROR_CODES.PR_FORBIDDEN, undefined, 'forbidden');
+    if (status === 404) throw new AppError(ERROR_CODES.PR_NOT_FOUND, undefined, 'not found');
+    throw err;
+  }
+  // localStatus mirrors the remote current user's reviewer status (remote authoritative, same mapping as the poll);
+  // when the current user is unknown (ping incomplete) keep the recorded status rather than downgrading to pending.
+  const me = adapter.connection.getCurrentUser();
+  const mineStatus = me ? fresh.reviewers.find((r) => r.name === me.name)?.status : undefined;
+  const localStatus = !me
+    ? existing.localStatus
+    : mineStatus === 'approved'
+      ? 'approved'
+      : mineStatus === 'needsWork'
+        ? 'needs_work'
+        : 'pending';
+  const stored: StoredPullRequest = {
+    ...fresh,
+    localId: existing.localId,
+    platform: existing.platform,
+    connectionId: existing.connectionId,
+    localStatus,
+    // Preserve local-only bookkeeping (a single-PR refresh isn't a discovery pass).
+    discoveryFilters: existing.discoveryFilters,
+    discoveredAt: existing.discoveredAt,
+    lastSeenAt: new Date().toISOString(),
+  };
+  await writePrMeta(await ctx.pr.storeForPr(req.localId), req.localId, stored);
+  await ctx.pr.invalidateCommentsCache(req.localId);
+  if (fresh.sourceRef.sha !== existing.sourceRef.sha) {
+    try {
+      await ctx.pr.ensureMirrorReadyForPr(stored);
+    } catch {
+      /* non-fatal: the diff view self-heals / surfaces a readable error if the mirror still lacks the sha */
+    }
+  }
+  return stored;
+};
+
+/**
  * The Poller's most recent completion time (used for startup initialization).
  */
 export const getLastSync: IpcController<'prs:lastSync'> = () => ({

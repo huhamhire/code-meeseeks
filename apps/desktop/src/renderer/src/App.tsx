@@ -36,16 +36,25 @@ export default function App() {
     selectedId,
     setSelectedId,
     refreshing,
+    refreshingPr,
     merging,
     reloadPrs,
     triggerRefresh,
+    refreshPr,
     setSelectedPrStatus,
     mergeSelectedPr,
     markRead,
   } = usePullRequests({ notifyError });
   // App startup / global lifecycle (boot load, language, poll / focus refresh, wizard completion, connection hot-apply)
-  const { boot, fatalError, lastSyncAt, needsOnboarding, completeOnboarding, refreshBootAndPrs, patchConfig } =
-    useBootstrap({ setPrs, reloadPrs });
+  const {
+    boot,
+    fatalError,
+    lastSyncAt,
+    needsOnboarding,
+    completeOnboarding,
+    refreshBootAndPrs,
+    patchConfig,
+  } = useBootstrap({ setPrs, reloadPrs });
   // Layout state (left/right column widths / collapse), version update notice, store wiring, external link guard — each its own app-level hook
   const {
     sidebarWidth,
@@ -128,12 +137,13 @@ export default function App() {
   // "Can engage" determination for the closed scope: merged / still-open PRs allow adding comments + AI review; declined ones are browse-only. The active scope is always engageable.
   const canEngage = !archived || (selectedPr ? selectedPr.state !== 'declined' : false);
 
-  // Window-level global shortcuts (F5 auto review / DevTools / view closed / Ctrl-Cmd+B·J layout toggles) — domain logic lives in useGlobalShortcuts.
+  // Window-level global shortcuts (F5 refresh / Ctrl+F5 auto review / DevTools / view closed / Ctrl-Cmd+B·J layout toggles) — domain logic lives in useGlobalShortcuts.
   useGlobalShortcuts({
     platform: boot?.info.platform,
     selectedId,
     canEngage,
     viewArchived,
+    refreshPr: (localId) => void refreshPr(localId),
     setSidebarCollapsed,
     setChatCollapsed,
   });
@@ -177,7 +187,8 @@ export default function App() {
   const showDiscoveryFilter = availableDiscoveryFilters.length > 0;
   // Whether the platform supports the needs_work ("needs changes") review state: GitHub / Bitbucket support it, GitLab (binary approval) does not.
   // Determines whether the "pending" status filter is kept under discovery categories other than "awaiting my review" (see Sidebar.visibleFilters).
-  const supportsNeedsWork = activeConnSummary?.capabilities.reviewStatuses.includes('needsWork') ?? false;
+  const supportsNeedsWork =
+    activeConnSummary?.capabilities.reviewStatuses.includes('needsWork') ?? false;
   // The selected category may be invalid for the current platform after switching connections → fall back to the first available.
   const effectiveDiscoveryFilter = availableDiscoveryFilters.includes(discoveryFilter)
     ? discoveryFilter
@@ -204,6 +215,7 @@ export default function App() {
         prStatusFilters={visibleStatusFilters}
         setPrStatusFilter={setStatusFilter}
         viewArchived={viewArchived}
+        refreshPr={(localId) => void refreshPr(localId)}
         openPrByUrl={openPrByUrl}
       />
       <div className="app-body">
@@ -238,6 +250,8 @@ export default function App() {
               onSetStatus={(s) => void setSelectedPrStatus(s)}
               onMerge={() => void mergeSelectedPr()}
               merging={merging}
+              onRefresh={() => void refreshPr(selectedPr.localId)}
+              refreshing={refreshingPr}
               capabilities={selectedConn?.capabilities}
               currentUserName={selectedConn?.user?.name ?? null}
               // The closed scope hides PR lifecycle actions (merge / approve); declined / not-engageable further hides comment / draft writes.
