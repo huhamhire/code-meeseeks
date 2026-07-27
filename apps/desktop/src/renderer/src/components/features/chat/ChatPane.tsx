@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   Finding,
@@ -24,6 +24,7 @@ import { useChatActions } from './hooks/useChatActions';
 import { useChatTimeline } from './hooks/useChatTimeline';
 import { AgentStepRow, ThinkingLive } from './components/AgentStep';
 import { ChatEmpty } from './components/ChatEmpty';
+import { CommitDivider } from './components/CommitDivider';
 import { ChatInputBar } from './components/ChatInputBar';
 import { ConversationMessage } from './components/ConversationMessage';
 import { PlanPanel } from './components/PlanPanel';
@@ -241,12 +242,31 @@ export function ChatPane({
     prLocalId,
   });
 
+  // Commit divider: the PR head SHA the most recent completed run reviewed. When the current PR head has advanced past
+  // it, a single sawtooth divider is shown at the bottom of the timeline marking the new head — signalling prior
+  // reviews are now stale, even if no run has been started against the new code yet. Suppressed while a run is active
+  // (it's already processing the current head). Returns the new head SHA to mark, or null when nothing is stale.
+  const staleHeadSha = useMemo(() => {
+    if (hasMyActive) return null;
+    const head = pr?.sourceRef.sha;
+    if (!head) return null;
+    // Timeline is ascending, so the last run entry carrying a headSha is the most recent completed review.
+    let lastRunHeadSha: string | undefined;
+    for (const entry of timeline) {
+      if (entry.run?.headSha) lastRunHeadSha = entry.run.headSha;
+    }
+    // No baseline run with a recorded head (e.g. only pre-feature runs) → nothing to be stale against.
+    if (!lastRunHeadSha) return null;
+    return head !== lastRunHeadSha ? head : null;
+  }, [timeline, hasMyActive, pr?.sourceRef.sha]);
+
   // Pure UI state: rule preview modal / clear confirm modal / merge confirm modal
   const [showRulePreview, setShowRulePreview] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
 
-  const { runs, error, loadingSession, matchedRules, bodyRef, hasMoreOlder, loadingOlder } = session;
+  const { runs, error, loadingSession, matchedRules, bodyRef, hasMoreOlder, loadingOlder } =
+    session;
 
   // Re-review card ↔ original finding card cross-link: scroll to and briefly highlight. The flash class differs by target: run cards use chat-run-flash
   // (fading background, visible on the run card's transparent base); finding cards use chat-finding-flash (an overlay highlight ring — finding cards have
@@ -396,6 +416,9 @@ export function ChatPane({
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
         )}
+        {/* Commit divider: the PR head advanced past the last reviewed commit → mark the new head at the bottom of the
+            run list (prior reviews are stale). Shown even when no run has been started against the new code yet. */}
+        {staleHeadSha && <CommitDivider sha={staleHeadSha} />}
         {/* This PR's queued tasks: placed after running ones, each cancellable individually. The position uses the **global** queue order (the queue is shared across PRs,
             otherwise every PR showing "position 1" would be misleading) — the runId's index in the global waiting array +1. */}
         {myWaiting.map((w) => (

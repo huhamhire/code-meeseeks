@@ -102,6 +102,33 @@
   border-bottom: 1px dashed $border-muted;
 }
 
+// "Commit divider": a sawtooth rule inserted into the run timeline where the PR code changed between two runs (see
+// ChatPane commitDividers). A zigzag line flanks a centered commit-id chip, marking the newer commit the runs below it
+// ran against, so history runs on an older revision read as a separate section. The zigzag is a masked SVG tile, so its
+// color follows the theme token ($border-muted) via background-color and it renders correctly in both light and dark.
+$commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='8'%20viewBox='0%200%2012%208'%3E%3Cpath%20d='M0%206%20L3%202%20L6%206%20L9%202%20L12%206'%20fill='none'%20stroke='black'%20stroke-width='1.4'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+.chat-commit-divider {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  margin: $space-6 $space-2 $space-3;
+  user-select: none;
+
+  &__line {
+    flex: 1 1 auto;
+    height: 8px;
+    background-color: $border-muted;
+    opacity: 0.75;
+    -webkit-mask: $commit-zigzag repeat-x center / auto 100%;
+    mask: $commit-zigzag repeat-x center / auto 100%;
+  }
+
+  // Keep the commit-id chip at its intrinsic width; only the flanking zigzag lines flex.
+  &__chip {
+    flex: 0 0 auto;
+  }
+}
+
 // Rule chip matched by the current PR: a row below the actions bar, clicking pops up a body preview
 .chat-rule-chip {
   display: flex;

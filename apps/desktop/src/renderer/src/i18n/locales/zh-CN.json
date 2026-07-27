@@ -71,6 +71,7 @@
     "codeExistingAria": "原代码",
     "codeImprovedAria": "改进代码",
     "commandNoArgs": "{{cmd}} 不接受参数",
+    "commitDividerTitle": "自上次评审后代码已变更 —— 当前为提交 {{sha}}",
     "deleteRunAria": "删除",
     "deleteRunTitle": "删除此记录",
     "draftJumpEditTitle": "在代码中编辑",
