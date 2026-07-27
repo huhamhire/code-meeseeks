@@ -61,6 +61,8 @@ export interface StartReviewRunInput {
   origin?: ReviewRun['origin'];
   /** Single-commit review scope (parent..sha); omitted = full PR scope. Persisted for the result card's scope badge. */
   scope?: ReviewRun['scope'];
+  /** PR head commit SHA the run runs against (pr.sourceRef.sha); persisted so ChatPane can draw a commit divider between runs across a code change. */
+  headSha?: string;
 }
 
 /** Write the initial running state; callers must start before invoking pr-agent. */
@@ -81,6 +83,7 @@ export async function startReviewRun(
     referencedFinding: input.referencedFinding,
     origin: input.origin,
     scope: input.scope,
+    headSha: input.headSha,
     status: 'running',
     startedAt: at.toISOString(),
   };

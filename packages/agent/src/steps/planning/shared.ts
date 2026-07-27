@@ -105,18 +105,49 @@ export function normalizePlan(raw: PlannerAction['plan']): AgentTodoItem[] {
   return out;
 }
 
-/** Take the most recent rounds, each length-capped, and trim newest-to-oldest by total budget (drop earlier over-budget messages), returning text in ascending time order. */
-export function buildConversationContext(history: readonly AgentMessage[]): string {
-  const lines: string[] = [];
+/** Boundary marker injected into the conversation context where the PR head commit changed, so the planning agent knows
+ * messages above it were made against older code (soft awareness — no history is dropped). Internal prompt artifact → English. */
+function commitChangeMarker(sha: string): string {
+  return `[--- PR code updated to commit ${sha.slice(0, 8)} at this point; messages below are based on the new code, earlier ones may reference outdated code ---]`;
+}
+
+/**
+ * Take the most recent rounds, each length-capped, and trim newest-to-oldest by total budget (drop earlier over-budget
+ * messages), returning text in ascending time order. Where a message's `headSha` differs from the previous kept
+ * message's, a {@link commitChangeMarker} is interleaved so the agent perceives the code changed between those turns;
+ * a trailing marker is added when `currentHeadSha` (this turn's head) has advanced past the newest kept message.
+ * Messages without a recorded headSha (predating the field) never produce a marker.
+ */
+export function buildConversationContext(
+  history: readonly AgentMessage[],
+  currentHeadSha?: string,
+): string {
+  // First pass, newest→oldest: keep the messages that fit the budget.
+  const kept: AgentMessage[] = [];
   let budget = HISTORY_BUDGET_CHARS;
   for (let i = history.length - 1; i >= 0; i--) {
     const m = history[i]!;
     const line = `${m.role === 'user' ? 'User' : 'Assistant'}: ${clamp(m.content, HISTORY_MESSAGE_MAX)}`;
     if (line.length + 1 > budget) break; // budget exhausted: trim the earlier conversation entirely
     budget -= line.length + 1;
-    lines.push(line);
+    kept.push(m);
   }
-  return lines.reverse().join('\n');
+  kept.reverse(); // ascending time order
+  // Second pass, ascending: render each message, inserting a commit-change marker at head-commit boundaries.
+  const lines: string[] = [];
+  let prevSha: string | undefined;
+  for (const m of kept) {
+    if (m.headSha && prevSha && m.headSha !== prevSha) lines.push(commitChangeMarker(m.headSha));
+    if (m.headSha) prevSha = m.headSha;
+    lines.push(
+      `${m.role === 'user' ? 'User' : 'Assistant'}: ${clamp(m.content, HISTORY_MESSAGE_MAX)}`,
+    );
+  }
+  // Trailing marker: the current turn's code has advanced past the newest historical message.
+  if (currentHeadSha && prevSha && currentHeadSha !== prevSha) {
+    lines.push(commitChangeMarker(currentHeadSha));
+  }
+  return lines.join('\n');
 }
 
 /** Planning ReAct protocol: body is externalized in resources/prompts/protocol.md, the three section titles (localized per language) are injected via placeholders. */
