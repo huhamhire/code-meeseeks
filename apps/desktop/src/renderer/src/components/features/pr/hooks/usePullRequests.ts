@@ -15,6 +15,8 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
   const [prs, setPrs] = useState<StoredPullRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Single-PR refresh in flight (distinct from the whole-list `refreshing`): disables the PR header's refresh button.
+  const [refreshingPr, setRefreshingPr] = useState(false);
   // Merge in progress: GitHub merge can be slow (mergeable is computed asynchronously); set the button to a waiting state and prevent repeated clicks.
   const [merging, setMerging] = useState(false);
 
@@ -35,6 +37,25 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
       setRefreshing(false);
     }
   }, [refreshing, reloadPrs]);
+
+  // Refresh a single PR from remote (metadata + comments) without a whole-poller tick — the one remote call is this PR's
+  // fetch; reloadPrs afterwards is local (re-derives the list from disk, so the header / unread / diff head update).
+  // Comments/inline-diff refresh reactively via the comments:changed the main side broadcasts.
+  const refreshPr = useCallback(
+    async (localId: string): Promise<void> => {
+      if (refreshingPr) return;
+      setRefreshingPr(true);
+      try {
+        await invoke('prs:refreshOne', { localId });
+        await reloadPrs();
+      } catch (e) {
+        console.error('refresh PR failed', e);
+      } finally {
+        setRefreshingPr(false);
+      }
+    },
+    [refreshingPr, reloadPrs],
+  );
 
   // Mark PR as read: called when the user opens a PR. First optimistically clear the local unread flags (instant feedback), then persist the read watermark —
   // the next poll round won't re-mark it due to stale events. Send IPC on every selection: opening a PR is not high-frequency, and advancing the read watermark is inherently correct;
@@ -105,9 +126,11 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     setSelectedId,
     selected,
     refreshing,
+    refreshingPr,
     merging,
     reloadPrs,
     triggerRefresh,
+    refreshPr,
     setSelectedPrStatus,
     mergeSelectedPr,
     markRead,

@@ -6,7 +6,7 @@ import type {
   ReviewerStatus,
   StoredPullRequest,
 } from '@meebox/shared';
-import { ApproveIcon, GlobeIcon, NeedsWorkIcon, PullRequestIcon } from '../../common';
+import { ApproveIcon, GlobeIcon, NeedsWorkIcon, PullRequestIcon, RetryIcon } from '../../common';
 import { ReviewerStack } from './ReviewerStack';
 
 /**
@@ -19,6 +19,8 @@ export function PrHeader({
   currentUserName,
   merging,
   onMerge,
+  onRefresh,
+  refreshing = false,
   onSetStatus,
   hideLifecycle = false,
   readOnly = false,
@@ -30,6 +32,10 @@ export function PrHeader({
   currentUserName?: string | null;
   merging: boolean;
   onMerge: () => void;
+  /** Refresh PRs (re-poll + reload); wired to the neutral refresh button beside "open in browser". */
+  onRefresh: () => void;
+  /** Whether a refresh is in flight (disables the refresh button). */
+  refreshing?: boolean;
   onSetStatus: (status: LocalPrStatus) => void;
   /** Hide PR lifecycle actions (merge + review decision): always set for the closed scope. */
   hideLifecycle?: boolean;
@@ -106,6 +112,18 @@ export function PrHeader({
         >
           <GlobeIcon /> {t('mainPane.openInBrowser')}
         </a>
+        {/* Refresh (re-poll + reload): neutral icon button (no accent fill) beside "open in browser"; disabled while a refresh is in flight. Also bound to F5. */}
+        <button
+          type="button"
+          className="btn btn-sm btn-icon pr-header-refresh"
+          onClick={onRefresh}
+          disabled={refreshing}
+          aria-busy={refreshing}
+          title={t('mainPane.refreshTitle')}
+          aria-label={t('mainPane.refreshTitle')}
+        >
+          <RetryIcon size={14} />
+        </button>
         {/* approve / needs work: current status = highlighted; clicking an already-highlighted one falls back to pending (revokes the remote mark).
             "Publish comments (N)" sits to the left of the decision buttons — reviewing is two steps: post comments first (left), then make the decision (right). */}
         <div className="pr-header-actions-right">

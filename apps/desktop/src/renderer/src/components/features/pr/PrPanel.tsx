@@ -28,6 +28,10 @@ export interface PrPanelProps {
   onSetStatus: (status: LocalPrStatus) => void;
   onMerge: () => void;
   merging?: boolean;
+  /** Refresh PRs (re-poll + reload); wired to the header refresh button. */
+  onRefresh: () => void;
+  /** Whether a refresh is in flight (disables the header refresh button). */
+  refreshing?: boolean;
   capabilities?: PlatformCapabilities;
   currentUserName?: string | null;
   /** Hide PR lifecycle actions (merge / approval): always set for the closed scope (departed PRs no longer take review decisions / merges). */
@@ -62,6 +66,8 @@ export function PrPanel({
   onSetStatus,
   onMerge,
   merging = false,
+  onRefresh,
+  refreshing = false,
   capabilities,
   currentUserName,
   hideLifecycle = false,
@@ -176,6 +182,8 @@ export function PrPanel({
         currentUserName={currentUserName}
         merging={merging}
         onMerge={onMerge}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
         onSetStatus={onSetStatus}
         hideLifecycle={hideLifecycle}
         readOnly={readOnly}

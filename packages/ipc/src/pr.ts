@@ -125,6 +125,16 @@ export interface PrChannels {
     };
   };
   'prs:refresh': { request: void; response: PollResult };
+  /**
+   * Refresh a SINGLE PR from remote (metadata + comments) without a whole-poller tick: re-fetch just this PR, recompute
+   * localStatus from the current user's reviewer status, persist its meta, and invalidate its comments cache (broadcasts
+   * comments:changed). Returns the updated PR (null if not found / not fetchable). Used by the header refresh button, the
+   * F5 shortcut, and the "Refresh PR" command.
+   */
+  'prs:refreshOne': {
+    request: { localId: string };
+    response: StoredPullRequest | null;
+  };
   /** Poller's last completion time (ISO or null); used for initialization at startup */
   'prs:lastSync': { request: void; response: { at: string | null } };
   'prs:setLocalStatus': {
