@@ -8,7 +8,11 @@ import type {
 } from '@meebox/shared';
 import { assembleSystemContext, type AssemblePrMeta } from './prompts.js';
 import type { MemoryNote } from './memory.js';
-import { DEFAULT_STEP_LABELS, DEFAULT_SUMMARY_SECTIONS, type AgentStepLabels } from './orchestrator.js';
+import {
+  DEFAULT_STEP_LABELS,
+  DEFAULT_SUMMARY_SECTIONS,
+  type AgentStepLabels,
+} from './orchestrator.js';
 import { createStepRecorder } from './steps/context.js';
 import {
   buildConversationContext,
@@ -70,6 +74,12 @@ export interface PlanningInput {
    */
   history?: AgentMessage[];
   /**
+   * Current PR head commit SHA. When it differs from the newest historical message's headSha (or between historical
+   * turns), buildConversationContext injects a "code changed to commit X" marker so the agent knows earlier discussion
+   * may reference outdated code. Context awareness only — never passed through to pr-agent tools.
+   */
+  currentHeadSha?: string;
+  /**
    * Code reference selected by the user in the diff (self-describing block). Injected into this round's planning context so the agent knows which code the user is looking at;
    * **never** passed through to pr-agent tools (same constraint as history). Omitted = no selection reference this round.
    */
@@ -130,7 +140,7 @@ export async function runPlanningAgent(
 
   // Inject prior multi-turn conversation into the planning context (trimmed by budget) so the agent remembers exchanges across rounds; only for the planning LLM's reference,
   // never passed through to pr-agent tools.
-  const convo = buildConversationContext(input.history ?? []);
+  const convo = buildConversationContext(input.history ?? [], input.currentHeadSha);
   const ctx: PlanStepCtx = {
     deps,
     input,
@@ -149,7 +159,13 @@ export async function runPlanningAgent(
   for (let i = 0; i < maxSteps; i++) {
     const outcome = await planCycleStep.run(ctx);
     if (outcome.kind === 'aborted') {
-      return { steps: rec.steps, finalText: '', tokenUsage: rec.usage, memories, terminationReason: 'aborted' };
+      return {
+        steps: rec.steps,
+        finalText: '',
+        tokenUsage: rec.usage,
+        memories,
+        terminationReason: 'aborted',
+      };
     }
     if (outcome.kind === 'final') {
       return {
@@ -162,5 +178,11 @@ export async function runPlanningAgent(
     }
   }
 
-  return { steps: rec.steps, finalText: '', tokenUsage: rec.usage, memories, terminationReason: 'max_steps' };
+  return {
+    steps: rec.steps,
+    finalText: '',
+    tokenUsage: rec.usage,
+    memories,
+    terminationReason: 'max_steps',
+  };
 }
