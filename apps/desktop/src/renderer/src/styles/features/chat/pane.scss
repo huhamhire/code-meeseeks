@@ -123,9 +123,15 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
     mask: $commit-zigzag repeat-x center / auto 100%;
   }
 
-  // Keep the commit-id chip at its intrinsic width; only the flanking zigzag lines flex.
+  // Keep the commit-id chip at its intrinsic width; only the flanking zigzag lines flex. Add a small gap between the
+  // commit icon and the sha (the chip mixin sets none), and make the svg a block so it aligns to the sha's line box.
   &__chip {
     flex: 0 0 auto;
+    gap: $space-2;
+
+    svg {
+      display: block;
+    }
   }
 }
 

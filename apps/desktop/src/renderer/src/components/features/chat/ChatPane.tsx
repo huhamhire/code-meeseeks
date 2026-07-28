@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   Finding,
   LocalPrStatus,
   PrAgentStatus,
+  PrCommit,
   ReviewRun,
   ReviewRunCommitScope,
   StoredPullRequest,
 } from '@meebox/shared';
+import { invoke } from '../../../api';
 import { ChatIcon, TrashIcon, ConfirmModal, PaneLoading } from '../../common';
 import { useChatRunStore } from '../../../stores/chat-run-store';
 import { useDraftsForPr } from '../../../stores/drafts-store';
@@ -242,23 +244,47 @@ export function ChatPane({
     prLocalId,
   });
 
-  // Commit divider: the PR head SHA the most recent completed run reviewed. When the current PR head has advanced past
-  // it, a single sawtooth divider is shown at the bottom of the timeline marking the new head — signalling prior
-  // reviews are now stale, even if no run has been started against the new code yet. Suppressed while a run is active
-  // (it's already processing the current head). Returns the new head SHA to mark, or null when nothing is stale.
-  const staleHeadSha = useMemo(() => {
-    if (hasMyActive) return null;
-    const head = pr?.sourceRef.sha;
-    if (!head) return null;
-    // Timeline is ascending, so the last run entry carrying a headSha is the most recent completed review.
-    let lastRunHeadSha: string | undefined;
+  // Commit dividers: mark every point in the run timeline where the reviewed commit changes, so the boundary persists
+  // rather than vanishing once the new code is reviewed. Two cases:
+  //  - between two consecutive runs whose headSha differs → a divider *before* the newer run (a durable boundary
+  //    between the old-commit runs above and the new-commit runs below);
+  //  - a trailing divider at the bottom when the current PR head has advanced past the last run's commit (covers a new
+  //    commit that hasn't been reviewed yet — including while a run against it is still in flight).
+  // The timeline is ascending by start time; only runs that recorded a headSha participate (pre-feature runs are skipped).
+  const commitDividers = useMemo(() => {
+    const before = new Map<string, string>(); // timeline entry.key → the newer headSha to render a divider before it
+    let prevSha: string | undefined;
     for (const entry of timeline) {
-      if (entry.run?.headSha) lastRunHeadSha = entry.run.headSha;
+      const sha = entry.run?.headSha;
+      if (!sha) continue;
+      if (prevSha && sha !== prevSha) before.set(entry.key, sha);
+      prevSha = sha;
     }
-    // No baseline run with a recorded head (e.g. only pre-feature runs) → nothing to be stale against.
-    if (!lastRunHeadSha) return null;
-    return head !== lastRunHeadSha ? head : null;
-  }, [timeline, hasMyActive, pr?.sourceRef.sha]);
+    const head = pr?.sourceRef.sha;
+    const bottom = head && prevSha && head !== prevSha ? head : null;
+    return { before, bottom };
+  }, [timeline, pr?.sourceRef.sha]);
+
+  // Commit messages for divider tooltips: fetch the PR's commits (main-cached; keyed on head sha so it refreshes when
+  // the head advances) into a sha → message map. Empty until loaded / on failure (the tooltip falls back to the short sha).
+  const [commitMsgBySha, setCommitMsgBySha] = useState<Map<string, string>>(() => new Map());
+  useEffect(() => {
+    if (!prLocalId) {
+      setCommitMsgBySha(new Map());
+      return;
+    }
+    let cancelled = false;
+    void invoke('diff:listCommits', { localId: prLocalId })
+      .then((commits: PrCommit[]) => {
+        if (!cancelled) setCommitMsgBySha(new Map(commits.map((c) => [c.sha, c.message])));
+      })
+      .catch(() => {
+        if (!cancelled) setCommitMsgBySha(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [prLocalId, pr?.sourceRef.sha]);
 
   // Pure UI state: rule preview modal / clear confirm modal / merge confirm modal
   const [showRulePreview, setShowRulePreview] = useState(false);
@@ -375,26 +401,35 @@ export function ChatPane({
             Initially only the latest RUNS_PAGE_SIZE are fetched; after scrolling up to the top, fetch an earlier batch by cursor */}
         {timeline.map((entry, i) =>
           entry.run ? (
+            // A commit divider precedes this run when the reviewed commit changed since the previous run (see commitDividers).
             // data-run-id: for re-review card ↔ original finding card cross-link scroll targeting (scrollToRun).
-            <div key={entry.key} data-run-id={entry.run.id}>
-              <RunResultView
-                run={entry.run}
-                onRetry={actions.handleRetry}
-                onDelete={actions.handleDeleteRun}
-                // Only in the single case of "the last run in the timeline + nothing running" can a failed / cancelled run
-                // be retried; once the user has started a new action (whether succeeded or running) → old failures no longer show retry,
-                // avoiding a back-click re-queue that would disrupt conversation order
-                canRetry={i === timeline.length - 1 && !hasMyActive}
-                drafts={drafts ?? []}
-                closures={closures}
-                onJumpToDraft={actions.handleJumpToDraft}
-                onRejectFinding={actions.handleRejectFinding}
-                onNavigateToFinding={actions.handleNavigateToFinding}
-                onReferenceFinding={onReferenceFinding}
-                onScrollToRun={scrollToRun}
-                onScrollToFinding={scrollToFinding}
-              />
-            </div>
+            <Fragment key={entry.key}>
+              {commitDividers.before.has(entry.key) && (
+                <CommitDivider
+                  sha={commitDividers.before.get(entry.key)!}
+                  message={commitMsgBySha.get(commitDividers.before.get(entry.key)!)}
+                />
+              )}
+              <div data-run-id={entry.run.id}>
+                <RunResultView
+                  run={entry.run}
+                  onRetry={actions.handleRetry}
+                  onDelete={actions.handleDeleteRun}
+                  // Only in the single case of "the last run in the timeline + nothing running" can a failed / cancelled run
+                  // be retried; once the user has started a new action (whether succeeded or running) → old failures no longer show retry,
+                  // avoiding a back-click re-queue that would disrupt conversation order
+                  canRetry={i === timeline.length - 1 && !hasMyActive}
+                  drafts={drafts ?? []}
+                  closures={closures}
+                  onJumpToDraft={actions.handleJumpToDraft}
+                  onRejectFinding={actions.handleRejectFinding}
+                  onNavigateToFinding={actions.handleNavigateToFinding}
+                  onReferenceFinding={onReferenceFinding}
+                  onScrollToRun={scrollToRun}
+                  onScrollToFinding={scrollToFinding}
+                />
+              </div>
+            </Fragment>
           ) : entry.active ? (
             // Running: progress bar + live stdout stream, interleaved into the timeline by start time (startedAt is null when enqueued,
             // set when it starts, falling back to enqueuedAt). Not rendered when prAgent is not ready.
@@ -416,9 +451,15 @@ export function ChatPane({
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
         )}
-        {/* Commit divider: the PR head advanced past the last reviewed commit → mark the new head at the bottom of the
-            run list (prior reviews are stale). Shown even when no run has been started against the new code yet. */}
-        {staleHeadSha && <CommitDivider sha={staleHeadSha} />}
+        {/* Bottom commit divider: the PR head advanced past the last run's commit and no run against it exists yet
+            (a new commit not reviewed yet, including while a run against it is still in flight). Once such a run
+            completes, the boundary instead renders between the old and new runs above (see commitDividers.before). */}
+        {commitDividers.bottom && (
+          <CommitDivider
+            sha={commitDividers.bottom}
+            message={commitMsgBySha.get(commitDividers.bottom)}
+          />
+        )}
         {/* This PR's queued tasks: placed after running ones, each cancellable individually. The position uses the **global** queue order (the queue is shared across PRs,
             otherwise every PR showing "position 1" would be misleading) — the runId's index in the global waiting array +1. */}
         {myWaiting.map((w) => (

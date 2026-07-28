@@ -71,7 +71,6 @@
     "codeExistingAria": "Original code",
     "codeImprovedAria": "Improved code",
     "commandNoArgs": "{{cmd}} does not accept arguments",
-    "commitDividerTitle": "Code changed since the last review — now at commit {{sha}}",
     "deleteRunAria": "Delete",
     "deleteRunTitle": "Delete this run",
     "draftJumpEditTitle": "Edit in code",
