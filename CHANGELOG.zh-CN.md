@@ -5,6 +5,32 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.11.2] - 2026-07-28
+
+> 本次发布要点：
+>
+> - **评审过时标记**：当 PR 有新提交进来时，评审时间线会画一条分割线，把基于旧代码的评审与新代码的评审清晰分隔——悬停可见对应提交。
+> - **感知提交变化的评审**：新提交进来后继续评审对话时，Agent 现在知道先前的讨论可能引用了已变更的代码。
+> - **快速刷新单个 PR**：用 F5、新增的刷新按钮或命令，只从远端刷新当前 PR，无需等待周期性同步。
+>
+> 另修复：刷新时正在编写的内联评论被打断、窄面板下 side-by-side 折叠为 unified 时的评论定位、以及 macOS 上意外的媒体库权限申请。
+
+### ✨ 新增
+
+- 每当 PR 有新提交进来，评审时间线会标出一条分割线，将基于旧代码的评审与新代码的评审分隔开（悬停显示该提交的消息），让「先前评审结果基于过时代码」一目了然。
+- 评审 Agent 现在能感知跨提交的代码变化：新提交进来后继续对话时，它知道先前的讨论可能引用了此后已变更的代码。
+- 现在可只从远端刷新当前 PR——按 F5、点击「浏览器打开」旁新增的刷新按钮，或执行「刷新 PR」命令——无需等待周期性后台同步。
+
+### ♻️ 变更
+
+- 自动评审从 F5 改为 Ctrl+F5，避免误触；F5 现在用于刷新当前 PR。
+
+### 🔧 修复
+
+- diff 中正在编写的内联评论或草稿编辑，在评论列表刷新时不再被打断——无论是周期性同步，还是编写时有新的远端评论到达。
+- 当面板过窄导致 side-by-side diff 自动切换为 unified 时，内联评论及其标记现在显示在正确位置（此前锚定在删除 / 基准侧的评论会丢失）；跳转到这类评论的锚点也能定位到正确行。
+- macOS 上，应用启动时不再申请 Apple Music / 媒体库访问权限。
+
 ## [0.11.1] - 2026-07-14
 
 > 本次发布要点：
@@ -488,6 +514,7 @@
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
 [Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.11.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0
