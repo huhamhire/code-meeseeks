@@ -4,10 +4,12 @@ import type {
   Finding,
   LocalPrStatus,
   PrAgentStatus,
+  PrCommit,
   ReviewRun,
   ReviewRunCommitScope,
   StoredPullRequest,
 } from '@meebox/shared';
+import { invoke } from '../../../api';
 import { ChatIcon, TrashIcon, ConfirmModal, PaneLoading } from '../../common';
 import { useChatRunStore } from '../../../stores/chat-run-store';
 import { useDraftsForPr } from '../../../stores/drafts-store';
@@ -260,6 +262,27 @@ export function ChatPane({
     return head !== lastRunHeadSha ? head : null;
   }, [timeline, hasMyActive, pr?.sourceRef.sha]);
 
+  // The new head commit's message, for the divider tooltip. diff:listCommits is the PR's introduced commits (the head
+  // is the newest); main-cached, so this is cheap. Falls back to the short sha when unavailable.
+  const [staleHeadMessage, setStaleHeadMessage] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!staleHeadSha || !prLocalId) {
+      setStaleHeadMessage(undefined);
+      return;
+    }
+    let cancelled = false;
+    void invoke('diff:listCommits', { localId: prLocalId })
+      .then((commits: PrCommit[]) => {
+        if (!cancelled) setStaleHeadMessage(commits.find((c) => c.sha === staleHeadSha)?.message);
+      })
+      .catch(() => {
+        if (!cancelled) setStaleHeadMessage(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [staleHeadSha, prLocalId]);
+
   // Pure UI state: rule preview modal / clear confirm modal / merge confirm modal
   const [showRulePreview, setShowRulePreview] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -418,7 +441,7 @@ export function ChatPane({
         )}
         {/* Commit divider: the PR head advanced past the last reviewed commit → mark the new head at the bottom of the
             run list (prior reviews are stale). Shown even when no run has been started against the new code yet. */}
-        {staleHeadSha && <CommitDivider sha={staleHeadSha} />}
+        {staleHeadSha && <CommitDivider sha={staleHeadSha} message={staleHeadMessage} />}
         {/* This PR's queued tasks: placed after running ones, each cancellable individually. The position uses the **global** queue order (the queue is shared across PRs,
             otherwise every PR showing "position 1" would be misleading) — the runId's index in the global waiting array +1. */}
         {myWaiting.map((w) => (
