@@ -21,6 +21,7 @@ import { BackendErrorBanner, BackendErrorView, SyncProgress } from './DiffStatus
 import { BlameColumn } from './blame/BlameColumn';
 import { fileKey, type PendingCommitView } from './diff-types';
 import {
+  useActualRenderSideBySide,
   useBlame,
   useChangedFiles,
   useCommentZones,
@@ -60,7 +61,7 @@ interface DiffViewProps {
   pendingNav?: {
     runId?: string;
     findingId?: string;
-    anchor: { path: string; startLine: number; endLine: number };
+    anchor: { path: string; startLine: number; endLine: number; side?: 'old' | 'new' };
   } | null;
   onNavConsumed?: () => void;
   /**
@@ -107,6 +108,10 @@ export function DiffView({
   const drafts = useDraftsForPr(pr.localId);
   // Use state, not a ref: onMount fires asynchronously, so a state change is required to re-run the subsequent useEffect decoration logic.
   const [diffEditor, setDiffEditor] = useState<MonacoEditor.IStandaloneDiffEditor | null>(null);
+  // The ACTUAL render mode: renderSideBySide is only the toolbar intent, but Monaco auto-degrades to inline when the
+  // pane is too narrow. Positioning (which inner editor a comment/draft zone, glyph, or "+" adder targets) must use
+  // this, not the intent, or old-side items land on the original editor Monaco has hidden. See useActualRenderSideBySide.
+  const actualSideBySide = useActualRenderSideBySide(diffEditor, renderSideBySide);
 
   const progress = useSyncProgress(pr);
   const { fileListWidth, startFileListResize } = useFileListWidth();
@@ -168,9 +173,16 @@ export function DiffView({
     pendingNav,
     onNavConsumed,
     triggerAutoEdit,
+    // Intent prop: useDiffNav reads the actual mode live at reveal time to place old-side targets correctly.
+    renderSideBySide,
   });
   // Capture the Diff selection → selectionStore, so ChatPane can carry the selected code as implicit context into agent/ask questions.
-  useSelectionCapture({ diffEditor, selected, prLocalId: pr.localId, renderSideBySide });
+  useSelectionCapture({
+    diffEditor,
+    selected,
+    prLocalId: pr.localId,
+    renderSideBySide: actualSideBySide,
+  });
 
   // sidebar mode: 'tree' (file tree) / 'search' (cross-file search), defaults to the file tree. Returns to 'tree' on PR switch.
   const [sidebarMode, setSidebarMode] = useState<'tree' | 'search'>('tree');
@@ -237,7 +249,9 @@ export function DiffView({
     attachmentBase,
     prLocalId: pr.localId,
     prWebUrl: pr.url,
-    renderSideBySide,
+    // The actual render mode, so old-side comment zones + glyph/tick markers land on the visible editor after an
+    // auto-degrade to unified (the reported "published comment lacks position" case).
+    renderSideBySide: actualSideBySide,
     commentHardBreaks,
     reactionsMode,
     attachmentsEnabled,
@@ -254,7 +268,7 @@ export function DiffView({
     selected,
     prLocalId: pr.localId,
     registerEditTrigger,
-    renderSideBySide,
+    renderSideBySide: actualSideBySide,
     commentHardBreaks,
     attachmentsEnabled,
     mentionCandidates,
@@ -271,7 +285,8 @@ export function DiffView({
     prLocalId: pr.localId,
     platform: pr.platform,
     scopeKind: scope.kind,
-    renderSideBySide,
+    // Actual mode: wire the old-side "+" adder only when the original editor is actually visible (not auto-degraded).
+    renderSideBySide: actualSideBySide,
     readOnly,
     triggerAutoEdit,
     t,

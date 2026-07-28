@@ -19,6 +19,7 @@ interface TitleBarProps {
   discoveryFilters: readonly PrDiscoveryFilter[];
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
   viewArchived: () => void;
+  refreshPr: (localId: string) => void;
   openPrByUrl: (url: string) => void | Promise<void>;
   prStatusFilters: ReadonlyArray<{ value: FilterKey; labelKey: string }>;
   setPrStatusFilter: (filter: FilterKey) => void;
@@ -46,6 +47,7 @@ export function TitleBar({
   discoveryFilters,
   setDiscoveryFilter,
   viewArchived,
+  refreshPr,
   openPrByUrl,
   prStatusFilters,
   setPrStatusFilter,
@@ -70,6 +72,7 @@ export function TitleBar({
           discoveryFilters={discoveryFilters}
           setDiscoveryFilter={setDiscoveryFilter}
           viewArchived={viewArchived}
+          refreshPr={refreshPr}
           openPrByUrl={openPrByUrl}
           prStatusFilters={prStatusFilters}
           setPrStatusFilter={setPrStatusFilter}

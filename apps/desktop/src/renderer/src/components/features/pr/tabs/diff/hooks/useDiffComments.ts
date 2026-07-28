@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PrComment, StoredPullRequest } from '@meebox/shared';
 import { invoke, subscribe } from '../../../../../../api';
 import { formatBackendError, type FormattedError } from '../../../../../../errors';
+import { sameCommentList } from '../../shared/commentEquality';
 
 export interface DiffCommentsState {
   comments: PrComment[];
@@ -37,7 +38,9 @@ export function useDiffComments(
     const fetchList = (force: boolean): void => {
       invoke('diff:listComments', { localId: pr.localId, force })
         .then((cs) => {
-          if (!cancelled) setComments(cs);
+          // poll mostly returns unchanged comments: keep the old array reference on structural equality so downstream memos
+          // (mentionCandidates) stay identity-stable and the inline draft/comment zones aren't torn down mid-edit (see useDraftZones).
+          if (!cancelled) setComments((prev) => (sameCommentList(prev, cs) ? prev : cs));
         })
         .catch((e: unknown) => {
           if (!cancelled) {

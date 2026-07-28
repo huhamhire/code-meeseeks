@@ -5,6 +5,32 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.11.2] - 2026-07-28
+
+> Highlights of this release:
+>
+> - **Stale-review marker**: when a PR gets new commits, the review timeline draws a divider so reviews made against older code are clearly separated from newer ones — hover to see the commit.
+> - **Commit-aware review**: continuing a review conversation after new commits land — the agent now knows earlier discussion may reference code that has since changed.
+> - **Quick single-PR refresh**: refresh just the current PR from remote with F5, a new refresh button, or a command — instead of waiting for the periodic sync.
+>
+> Plus fixes for inline-comment editing being interrupted by a refresh, comment positioning when a narrow diff collapses to unified, and an unexpected macOS media-library prompt.
+
+### ✨ Added
+
+- The review timeline now marks a divider whenever the PR gains new commits, separating reviews made against older code from newer ones (hover shows the commit's message), so it's obvious when earlier review results are based on outdated code.
+- The review agent is now aware of code changes across commits: when you continue a conversation after new commits land, it knows earlier discussion may reference code that has since changed.
+- You can now refresh just the current PR from remote — press F5, click the new refresh button next to "open in browser", or run the "Refresh PR" command — instead of waiting for the periodic background sync.
+
+### ♻️ Changed
+
+- Auto review moved from F5 to Ctrl+F5 to avoid triggering it by accident; F5 now refreshes the current PR.
+
+### 🔧 Fixed
+
+- An in-progress inline comment or draft editor in the diff is no longer interrupted when the comment list refreshes — whether from the periodic sync or a new remote comment arriving while you're typing.
+- Inline comments and their markers now appear in the right place when a side-by-side diff automatically switches to unified because the pane is too narrow (comments anchored to the deleted / base side previously went missing); jumping to such a comment's anchor also lands on the correct line.
+- On macOS, the app no longer prompts for access to Apple Music / your media library on launch.
+
 ## [0.11.1] - 2026-07-14
 
 > Highlights of this release:
@@ -488,6 +514,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
 [Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.11.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.9.0...v0.10.0

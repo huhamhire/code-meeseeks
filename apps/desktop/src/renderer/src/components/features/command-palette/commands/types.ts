@@ -26,6 +26,8 @@ export interface CommandContext {
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
   /** Switch to the "closed" (archived) scope (used by the PR-domain "view closed" command). */
   viewArchived: () => void;
+  /** Refresh a single PR by localId (re-fetch that PR from remote; used by the PR-domain "Refresh PR" command for the selected PR, also bound to bare F5). */
+  refreshPr: (localId: string) => void;
   /** Open a PR of the current platform by URL (used by the PR-domain "open URL" free-text command): locate locally or fetch the archive then jump, popping a toast on failure. */
   openPrByUrl: (url: string) => void | Promise<void>;
   /** Optional PR status filter items (pending / all / conflict / mergeable, etc., already gated by platform). */

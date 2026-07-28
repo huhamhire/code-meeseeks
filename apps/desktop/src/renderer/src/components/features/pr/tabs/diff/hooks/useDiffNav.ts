@@ -3,6 +3,8 @@ import { type editor as MonacoEditor } from 'monaco-editor';
 import type { ReviewDraft } from '@meebox/shared';
 import type { DiffChangedFile } from '@meebox/ipc';
 import { fileKey, type LoadedContent } from '../diff-types';
+import { mapOriginalLineToModified } from '../zones/line-mapping';
+import { isActualSideBySide } from './useActualRenderSideBySide';
 
 export interface PendingScroll {
   line: number;
@@ -13,7 +15,7 @@ export interface PendingScroll {
 export interface PendingNav {
   runId?: string;
   findingId?: string;
-  anchor: { path: string; startLine: number; endLine: number };
+  anchor: { path: string; startLine: number; endLine: number; side?: 'old' | 'new' };
 }
 
 /**
@@ -31,6 +33,8 @@ export function useDiffNav(opts: {
   pendingNav: PendingNav | null | undefined;
   onNavConsumed: (() => void) | undefined;
   triggerAutoEdit: (draftId: string) => void;
+  /** Toolbar intent; the reveal reads the ACTUAL mode from this at reveal time (see isActualSideBySide) to place old-side targets. */
+  renderSideBySide: boolean;
 }): {
   pendingScroll: PendingScroll | null;
   setPendingScroll: React.Dispatch<React.SetStateAction<PendingScroll | null>>;
@@ -45,6 +49,7 @@ export function useDiffNav(opts: {
     pendingNav,
     onNavConsumed,
     triggerAutoEdit,
+    renderSideBySide,
   } = opts;
   const [pendingScroll, setPendingScroll] = useState<PendingScroll | null>(null);
 
@@ -71,7 +76,9 @@ export function useDiffNav(opts: {
     setPendingScroll({
       // Take endLine to align with the draft zone / publish anchor (see zone line number comment), so the highlight line matches the draft zone
       line: pendingNav.anchor.endLine,
-      side: 'new',
+      // Preserve the anchor's side so an old-side (base) comment/draft reveals on the correct side; older producers that
+      // don't carry side fall back to 'new' (head), the common case for code-review findings.
+      side: pendingNav.anchor.side ?? 'new',
       draftId: matchingDraft?.id,
     });
     onNavConsumed?.();
@@ -84,10 +91,6 @@ export function useDiffNav(opts: {
   // pendingScroll comes from the nav effect (set alongside setSelectedKey); cleared after reveal
   useEffect(() => {
     if (!pendingScroll || !diffEditor || !content || !selected) return;
-    const editor =
-      pendingScroll.side === 'old'
-        ? diffEditor.getOriginalEditor()
-        : diffEditor.getModifiedEditor();
 
     let highlightTimer: ReturnType<typeof setTimeout> | undefined;
     let revealed = false;
@@ -95,15 +98,27 @@ export function useDiffNav(opts: {
       // onDidUpdateDiff may fire multiple times, only jump once
       if (revealed) return;
       revealed = true;
+      // Resolve the target editor + line by side AND the ACTUAL render mode (read live here, after the diff has settled
+      // and Monaco's `.side-by-side` class is stable). An old-side target sits on the original editor only when it is
+      // genuinely visible; when Monaco has auto-degraded to unified the original editor is hidden, so remap the old line
+      // onto the modified editor (same mapping the old-side zones use) and reveal there — otherwise the reveal lands on
+      // an invisible editor / the wrong line.
+      const revealOld =
+        pendingScroll.side === 'old' && isActualSideBySide(diffEditor, renderSideBySide);
+      const editor = revealOld ? diffEditor.getOriginalEditor() : diffEditor.getModifiedEditor();
+      const line =
+        pendingScroll.side === 'old' && !revealOld
+          ? mapOriginalLineToModified(diffEditor.getLineChanges() ?? [], pendingScroll.line)
+          : pendingScroll.line;
       // Center-scroll to the target line
-      editor.revealLineInCenter(pendingScroll.line);
+      editor.revealLineInCenter(line);
       // Brief highlight: 300ms yellow-background pulse
       const collection = editor.createDecorationsCollection([
         {
           range: {
-            startLineNumber: pendingScroll.line,
+            startLineNumber: line,
             startColumn: 1,
-            endLineNumber: pendingScroll.line,
+            endLineNumber: line,
             endColumn: 1,
           },
           options: {
@@ -143,7 +158,7 @@ export function useDiffNav(opts: {
     };
     // triggerAutoEdit not in deps — it changes reference every render, including it would make reveal rerun every frame, repeatedly locating/highlighting
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingScroll, diffEditor, content, selected]);
+  }, [pendingScroll, diffEditor, content, selected, renderSideBySide]);
 
   return { pendingScroll, setPendingScroll };
 }

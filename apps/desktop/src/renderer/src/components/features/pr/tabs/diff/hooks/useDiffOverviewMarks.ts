@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { editor as MonacoEditorNs, type editor as MonacoEditor } from 'monaco-editor';
 import type { DiffChangedFile } from '@meebox/ipc';
 import type { LoadedContent } from '../diff-types';
+import { isActualSideBySide } from './useActualRenderSideBySide';
 
 // Add/change green, delete red (same color family as GitHub diff). diff marks go on the overview ruler's Left lane,
 // separate from comment anchors (Right lane, see useCommentZones), so they don't overlap.
@@ -38,14 +39,6 @@ export function useDiffOverviewMarks(opts: {
     const modCol = modifiedEditor.createDecorationsCollection([]);
     const origCol = originalEditor.createDecorationsCollection([]);
 
-    // Whether actually side-by-side: read Monaco's `.monaco-diff-editor.side-by-side` class that reflects the actual render mode
-    // (the class is removed when auto-downgrading to inline on insufficient width); fall back to the user intent prop when unavailable.
-    const isSideBySide = (): boolean => {
-      if (!renderSideBySide) return false;
-      const el = diffEditor.getContainerDomNode().querySelector('.monaco-diff-editor');
-      return el ? el.classList.contains('side-by-side') : true;
-    };
-
     const Lane = MonacoEditorNs.OverviewRulerLane;
     const deco = (
       startLine: number,
@@ -59,7 +52,7 @@ export function useDiffOverviewMarks(opts: {
 
     const refresh = (): void => {
       const changes = diffEditor.getLineChanges() ?? [];
-      const sideBySide = isSideBySide();
+      const sideBySide = isActualSideBySide(diffEditor, renderSideBySide);
       const modDecos: MonacoEditor.IModelDeltaDecoration[] = [];
       const origDecos: MonacoEditor.IModelDeltaDecoration[] = [];
       for (const c of changes) {

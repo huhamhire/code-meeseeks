@@ -1,14 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { type editor as MonacoEditor } from 'monaco-editor';
 import type { PlatformKind, PlatformUser, ReviewDraft } from '@meebox/shared';
 import type { DiffChangedFile } from '@meebox/ipc';
 import { DraftZoneList } from '../DraftZoneList';
-import { mountInlineZones } from '../zones/mountInlineZones';
+import { createInlineZones, type InlineZonesController } from '../zones/mountInlineZones';
 import type { LoadedContent } from '../diff-types';
 
 /**
- * Inline draft view zones (blue background, editable). Uses the same mountInlineZones mechanism as comment zones, bucketed by anchor.side,
- * with endLine as the zone line number (aligned with the publish anchor, WYSIWYG).
+ * Inline draft view zones (blue background, editable). Uses the same zone mechanism as comment zones, bucketed by
+ * anchor.side, with endLine as the zone line number (aligned with the publish anchor, WYSIWYG).
+ *
+ * Split into two effects like {@link useCommentZones}: a **structural** effect owns the zone controller's lifecycle
+ * (recreated only when the editor / file / view orientation / scope changes); a **content** effect calls
+ * `controller.update(...)` whenever the drafts or passthrough props change, which **reconciles** zones by (side, line)
+ * key rather than tearing them down. This lets an in-progress inline draft edit survive a drafts/comments refresh
+ * (e.g. the poller pulling a new remote comment mid-typing, or another draft being added elsewhere): the anchored
+ * line's zone keeps its React root, so the open editor's text / focus / caret aren't discarded. A genuinely removed
+ * draft (deleted / published / anchor moved / file switch) still unmounts, firing its useDraftZone cancel cleanup.
  *
  * Does not render rejected (user decided not to send) / posted (the remote comment is already taken over by CommentZone; re-rendering would be visually duplicate).
  * The commit read-only view (scopeKind !== 'all') does not render drafts (anchored on the PR full-diff line numbers, not applicable to a single commit).
@@ -48,9 +56,43 @@ export function useDraftZones(opts: {
     scopeKind,
   } = opts;
 
+  // Structural lifecycle: (re)create the zone controller only when the editor / file / view orientation / scope
+  // changes. A drafts or comments refresh does NOT touch these deps, so the controller (and its live zones) survives —
+  // the content effect below then reconciles into it instead of tearing everything down.
+  const controllerRef = useRef<InlineZonesController<ReviewDraft> | null>(null);
   useEffect(() => {
     if (!diffEditor || !content || !selected) return;
     // commit read-only view: does not render local draft zones (drafts are anchored on the PR full-diff line numbers, not applicable to a single commit).
+    if (scopeKind !== 'all') return;
+    const controller = createInlineZones<ReviewDraft>({
+      diffEditor,
+      renderSideBySide,
+      zoneClassName: 'monaco-draft-zone',
+      innerClassName: 'monaco-draft-zone-inner',
+      stopEvents: [
+        'mousedown',
+        'mouseup',
+        'click',
+        'dblclick',
+        'keydown',
+        'keyup',
+        'wheel',
+        'contextmenu',
+      ],
+    });
+    controllerRef.current = controller;
+    return () => {
+      controller.dispose();
+      controllerRef.current = null;
+    };
+  }, [diffEditor, content, selected, renderSideBySide, scopeKind]);
+
+  // Content sync: reconcile draft zones whenever the drafts / passthrough props change. Declared after the structural
+  // effect so on mount the controller exists before this runs (React runs setup in order). Reconcile means a surviving
+  // draft re-renders in place (an open editor keeps its text / focus), only added/removed drafts mount/unmount.
+  useEffect(() => {
+    const controller = controllerRef.current;
+    if (!controller || !diffEditor || !content || !selected) return;
     if (scopeKind !== 'all') return;
     const fileDrafts = (drafts ?? []).filter((d) => {
       if (d.status === 'rejected' || d.status === 'posted') return false;
@@ -59,7 +101,6 @@ export function useDraftZones(opts: {
       if (!d.anchor) return false;
       return d.anchor.path === selected.path || selected.oldPath === d.anchor.path;
     });
-    if (fileDrafts.length === 0) return;
 
     const oldByLine = new Map<number, ReviewDraft[]>();
     const newByLine = new Map<number, ReviewDraft[]>();
@@ -75,23 +116,12 @@ export function useDraftZones(opts: {
       target.set(anchor.endLine, arr);
     }
 
-    return mountInlineZones<ReviewDraft>({
-      diffEditor,
-      renderSideBySide,
+    // Reconcile: unchanged draft lines re-render in place (an open draft editor keeps its text / focus / caret), only
+    // genuinely added/removed lines mount/unmount. An empty set removes all remaining zones (no early-return, so
+    // deleting the last draft on a line tears its zone down through the controller).
+    controller.update({
       oldByLine,
       newByLine,
-      zoneClassName: 'monaco-draft-zone',
-      innerClassName: 'monaco-draft-zone-inner',
-      stopEvents: [
-        'mousedown',
-        'mouseup',
-        'click',
-        'dblclick',
-        'keydown',
-        'keyup',
-        'wheel',
-        'contextmenu',
-      ],
       initialHeight: (ds) => Math.max(ds.length * 60, 80),
       render: (ds) => (
         <DraftZoneList
@@ -106,8 +136,6 @@ export function useDraftZones(opts: {
         />
       ),
     });
-    // Does not depend on zone rebuilds triggered by autoEditTokens / registerEditTrigger (registerEditTrigger is a stable
-    // useCallback) — avoids trigger-induced DraftZone unmount/mount, eliminating the race of re-entering edit mode after cancel.
   }, [
     diffEditor,
     drafts,

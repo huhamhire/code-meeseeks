@@ -120,7 +120,13 @@ export async function runPlanning(
     deps.stateStore,
     pr.localId,
     // When a Diff selection reference is present, persist it alongside, for the UI to show the "referenced code" collapsed below the bubble.
-    { role: 'user', content: userRequest, referencedContext: deps.referencedContext },
+    // headSha stamps the PR head this turn was made against, so a later turn on a newer commit gets a "code changed" marker in the planning context.
+    {
+      role: 'user',
+      content: userRequest,
+      referencedContext: deps.referencedContext,
+      headSha: pr.sourceRef.sha,
+    },
     now,
   );
 
@@ -161,6 +167,8 @@ export async function runPlanning(
         summarySections: buildSummarySections(),
         userRequest,
         history,
+        // Current PR head, so the planning context can flag a code change since the newest historical turn.
+        currentHeadSha: pr.sourceRef.sha,
         referencedContext: deps.referencedContext,
         maxSteps: deps.maxSteps,
         maxFollowupAsks: deps.maxFollowupAsks,
@@ -172,7 +180,12 @@ export async function runPlanning(
       await appendAgentMessage(
         deps.stateStore,
         pr.localId,
-        { role: 'assistant', content: result.finalText, recommendation: result.recommendation },
+        {
+          role: 'assistant',
+          content: result.finalText,
+          recommendation: result.recommendation,
+          headSha: pr.sourceRef.sha,
+        },
         now,
       );
     }

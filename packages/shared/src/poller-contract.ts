@@ -314,6 +314,13 @@ export interface ReviewRun {
    * Default = whole-PR scope. The result card shows a scope badge accordingly.
    */
   scope?: ReviewRunCommitScope;
+  /**
+   * PR head commit SHA (`pr.sourceRef.sha`) the run was executed against, stamped at start. Used only for the ChatPane
+   * "commit divider": when two consecutive runs have differing headSha, the code changed between them, and a sawtooth
+   * divider marking the newer commit is inserted between the older (history) runs and the newer ones. Historical runs
+   * predating this field are undefined → no divider is drawn for them (compared only between two defined, differing SHAs).
+   */
+  headSha?: string;
   /** The pr-agent version obtained at probe time (CLI first line / the pr-agent version found by the embedded runtime) */
   prAgentVersion: string;
   strategy: PrAgentStrategy;

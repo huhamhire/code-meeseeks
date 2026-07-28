@@ -76,6 +76,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('prs:listArchived', pr.listArchivedPrs); // Closed (archived) PR list (read-only browsing)
   ipcMain.handle('prs:openByUrl', pr.openPrByUrl); // Open a current-platform PR by URL (locate / fetch archive)
   ipcMain.handle('prs:refresh', pr.refreshPrs); // Poll and refresh immediately
+  ipcMain.handle('prs:refreshOne', pr.refreshOnePr); // Refresh a single PR from remote (no whole-poller tick)
   ipcMain.handle('prs:lastSync', pr.getLastSync); // Most recent sync time
   ipcMain.handle('prs:setLocalStatus', pr.setPrStatus); // Set review status (remote first, then local)
   ipcMain.handle('prs:markRead', pr.markRead); // Mark PR read (advance unread watermark)

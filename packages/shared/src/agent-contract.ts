@@ -82,6 +82,13 @@ export interface AgentMessage {
    * not set when there is no selection / for assistant messages. (Finding references go through the /ask run card, not this field.)
    */
   referencedContext?: string;
+  /**
+   * PR head commit SHA (`pr.sourceRef.sha`) at the time this turn was recorded. Used by the planning agent's context
+   * assembly (buildConversationContext) to inject a "code changed to commit X" marker between turns whose head differs,
+   * so the agent perceives that earlier discussion may reference outdated code — without dropping any history. Messages
+   * predating this field are undefined and simply produce no marker.
+   */
+  headSha?: string;
   /** Creation time (ISO), used for timeline ordering. */
   at: string;
 }

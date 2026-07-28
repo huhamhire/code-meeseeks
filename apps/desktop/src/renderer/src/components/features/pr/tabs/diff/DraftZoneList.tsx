@@ -7,8 +7,10 @@ import { DraftZone } from '../drafts/DraftZone';
 /**
  * Container for multiple drafts on the same line; each is an independent DraftZone (maintaining its own read/edit), separated by hr.
  * onSave / onDelete call IPC drafts:update / drafts:delete here; after writing to disk the main side
- * broadcasts a drafts:changed event → drafts-store refetches → DiffView's top-level useEffect rebuilds the
- * zones (this component unmounts/remounts along with it).
+ * broadcasts a drafts:changed event → drafts-store refetches → useDraftZones' content effect calls the zone
+ * controller's update(), which **reconciles** this zone in place (keyed by draft id) rather than unmounting it, so a
+ * DraftZone whose editor is open keeps its text / focus across the refresh. Only a removed draft (deleted / published)
+ * unmounts.
  */
 export function DraftZoneList({
   drafts,

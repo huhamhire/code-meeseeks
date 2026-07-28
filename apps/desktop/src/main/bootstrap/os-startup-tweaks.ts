@@ -56,10 +56,16 @@ function applyWindowsStartupTweaks(): void {
  *   real keychain. Cost: cookie encryption degrades to a static key, but the key was already stored in
  *   plaintext, so no real loss. Removable once there's a proper Developer ID signature. Must be before
  *   app.whenReady().
+ * - disable-features MediaSessionService/HardwareMediaKeyHandling: Chromium's macOS "Now Playing" /
+ *   media-session integration queries the MediaPlayer framework, which makes macOS prompt for "access
+ *   Apple Music / your media library" on launch. We play no media and expose no now-playing controls, so
+ *   this permission is unexpected and confusing; disabling the features stops Chromium from ever touching
+ *   the media library. Must be before app.whenReady().
  * - Prepend common CLI dirs to PATH (see augmentMacPath): must be before pr-agent probing / running.
  */
 function applyMacStartupTweaks(): void {
   app.commandLine.appendSwitch('use-mock-keychain');
+  app.commandLine.appendSwitch('disable-features', 'MediaSessionService,HardwareMediaKeyHandling');
   augmentMacPath();
 }
 

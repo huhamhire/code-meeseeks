@@ -28,6 +28,10 @@ export interface PrPanelProps {
   onSetStatus: (status: LocalPrStatus) => void;
   onMerge: () => void;
   merging?: boolean;
+  /** Refresh PRs (re-poll + reload); wired to the header refresh button. */
+  onRefresh: () => void;
+  /** Whether a refresh is in flight (disables the header refresh button). */
+  refreshing?: boolean;
   capabilities?: PlatformCapabilities;
   currentUserName?: string | null;
   /** Hide PR lifecycle actions (merge / approval): always set for the closed scope (departed PRs no longer take review decisions / merges). */
@@ -37,13 +41,13 @@ export interface PrPanelProps {
   pendingDiffNav?: {
     runId?: string;
     findingId?: string;
-    anchor: { path: string; startLine: number; endLine: number };
+    anchor: { path: string; startLine: number; endLine: number; side?: 'old' | 'new' };
   } | null;
   onDiffNavConsumed?: () => void;
   onRequestDiffNav?: (target: {
     runId?: string;
     findingId?: string;
-    anchor: { path: string; startLine: number; endLine: number };
+    anchor: { path: string; startLine: number; endLine: number; side?: 'old' | 'new' };
   }) => void;
   /** External request to switch to a given tab (e.g. clicking a summary comment notification → 'activity'); cleared via onPendingTabConsumed after consumption. */
   pendingTab?: PrTab | null;
@@ -62,6 +66,8 @@ export function PrPanel({
   onSetStatus,
   onMerge,
   merging = false,
+  onRefresh,
+  refreshing = false,
   capabilities,
   currentUserName,
   hideLifecycle = false,
@@ -176,6 +182,8 @@ export function PrPanel({
         currentUserName={currentUserName}
         merging={merging}
         onMerge={onMerge}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
         onSetStatus={onSetStatus}
         hideLifecycle={hideLifecycle}
         readOnly={readOnly}
@@ -233,7 +241,7 @@ export function PrPanel({
               // File-level anchors (no line) aren't line-navigable; CommentItem doesn't make them clickable, guard anyway.
               if (a.line == null) return;
               onRequestDiffNav?.({
-                anchor: { path: a.path, startLine: a.line, endLine: a.line },
+                anchor: { path: a.path, startLine: a.line, endLine: a.line, side: a.side },
               });
             }}
           />
@@ -252,6 +260,7 @@ export function PrPanel({
                   path: d.anchor.path,
                   startLine: d.anchor.startLine,
                   endLine: d.anchor.endLine,
+                  side: d.anchor.side,
                 },
               });
             }}
@@ -281,6 +290,7 @@ export function PrPanel({
                 path: d.anchor.path,
                 startLine: d.anchor.startLine,
                 endLine: d.anchor.endLine,
+                side: d.anchor.side,
               },
             });
           }}

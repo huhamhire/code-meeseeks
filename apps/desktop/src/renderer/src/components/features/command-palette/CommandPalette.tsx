@@ -24,6 +24,8 @@ interface CommandPaletteProps {
   setDiscoveryFilter: (filter: PrDiscoveryFilter) => void;
   /** Switch to the "closed" (archived) scope (used by the PR-domain "view closed" command). */
   viewArchived: () => void;
+  /** Refresh a single PR by localId (used by the PR-domain "Refresh PR" command for the selected PR). */
+  refreshPr: (localId: string) => void;
   /** Open a PR of the current platform by URL (used by the PR-domain "open URL" free-text command). */
   openPrByUrl: (url: string) => void | Promise<void>;
   /** Selectable PR status filters (used by the PR-domain "filter by category" second-level options). */
@@ -88,6 +90,7 @@ export function CommandPalette({
   discoveryFilters,
   setDiscoveryFilter,
   viewArchived,
+  refreshPr,
   openPrByUrl,
   prStatusFilters,
   setPrStatusFilter,
@@ -126,6 +129,7 @@ export function CommandPalette({
         discoveryFilters,
         setDiscoveryFilter,
         viewArchived,
+        refreshPr,
         openPrByUrl,
         prStatusFilters,
         setPrStatusFilter,
@@ -145,6 +149,7 @@ export function CommandPalette({
       discoveryFilters,
       setDiscoveryFilter,
       viewArchived,
+      refreshPr,
       openPrByUrl,
       prStatusFilters,
       setPrStatusFilter,

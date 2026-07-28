@@ -265,6 +265,8 @@ export class RunExecutor {
       origin: item.priority,
       // Single-commit review scope persisted with the run: the result card uses it to show a scope badge.
       scope: req.scope,
+      // PR head commit the run runs against: stamped so ChatPane can draw a commit divider when the code changes between runs.
+      headSha: pr.sourceRef.sha,
     });
     // Upgrade the info (startedAt=null at enqueue) to active form + broadcast (via the scheduling layer).
     item.info = { ...item.info, startedAt: run.startedAt };
