@@ -2,17 +2,23 @@ name: Deploy Website (GitHub Pages)
 
 # Brand website (website/, VitePress). Decoupled from the v* release pipeline:
 # build on every PR touching the site/docs (as a check), deploy on push to master.
+# CHANGELOG.md / CHANGELOG.zh-CN.md are included because the site changelog is synced from them (see
+# website/scripts/sync-docs.mjs) — a release merges the changelog to master and must rebuild the site.
 on:
   push:
     branches: [master]
     paths:
       - 'website/**'
       - 'docs/**'
+      - 'CHANGELOG.md'
+      - 'CHANGELOG.zh-CN.md'
       - '.github/workflows/pages.yml'
   pull_request:
     paths:
       - 'website/**'
       - 'docs/**'
+      - 'CHANGELOG.md'
+      - 'CHANGELOG.zh-CN.md'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
