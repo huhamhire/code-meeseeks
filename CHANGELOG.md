@@ -15,6 +15,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 - A failed review now shows the provider's actual error instead of only "all fallback models failed" — the real cause (an unavailable model, an expired login, an exhausted quota) was previously swallowed and never reached the run card.
 - A local CLI provider that exits successfully but returns an empty reply is now reported as a failure naming that cause, rather than as an unexplained LLM failure.
+- A merged PR now leaves the list on its own shortly after you merge it, instead of lingering until the next periodic sync — the remote takes a few seconds to actually mark it merged, and the app now waits for that rather than refreshing too early and finding nothing changed.
+- Approving a PR now updates whether it can be merged, so the merge button appears as soon as your approval satisfies the last requirement — previously it stayed hidden until the next periodic sync, because the remote recomputes mergeability only after the approval returns.
 
 ## [0.11.2] - 2026-07-28
 

@@ -114,10 +114,16 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     } finally {
       setMerging(false);
     }
-    // Merge succeeded: the PR has transitioned to MERGED and will leave the pending list. Deselect + refresh to make it disappear
+    // Merge accepted: deselect, since the PR is on its way out of the pending list.
+    //
+    // Deliberately NOT a remote refresh here: the remote takes a moment to actually mark the PR merged and drop it from
+    // the discovery list, so a poll fired now reads pre-merge state — it would cost a full round-trip across every
+    // connection only to redraw the same list, with the PR still in it. Main confirms the merge landed and archives the
+    // PR (see services/pr-post-action.ts), then broadcasts prs:changed; the local reload below just reflects whatever is
+    // already on disk in the meantime.
     if (selectedId === mergedId) setSelectedId(null);
-    await triggerRefresh();
-  }, [selected, selectedId, triggerRefresh, notifyError, merging, t]);
+    await reloadPrs();
+  }, [selected, selectedId, reloadPrs, triggerRefresh, notifyError, merging, t]);
 
   return {
     prs,
