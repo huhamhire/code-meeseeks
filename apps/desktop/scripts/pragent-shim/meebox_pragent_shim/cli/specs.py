@@ -1,6 +1,6 @@
 """Spec table for adapted local CLI commands: argv flags (the prompt always goes via stdin) + output parser + billing env to strip.
 Registering one entry here is enough for a new command; the renderer-side whitelist validation must stay in sync (see LlmProfileForm.validateProfile)."""
-from .parsers import _parse_claude_output, _parse_codex_output
+from .parsers import _extract_codex_error, _parse_claude_output, _parse_codex_output
 
 # `low_effort_flags`: argv to append for the low-effort tier (only enabled by the Agent orchestration channel via MEEBOX_CLI_REASONING,
 # see install.py). Commands with a trailing `-` (stdin) insert these flags before the `-`, keeping `-` last.
@@ -30,6 +30,9 @@ _CLI_SPECS = {
         ],
         "low_effort_flags": ["-c", "model_reasoning_effort=low"],
         "parser": _parse_codex_output,
+        # codex writes its failures into the stdout event stream and leaves stderr empty, so a non-zero exit needs
+        # the cause extracted from stdout (see install.py); commands without this key just fall back to stderr.
+        "error_extractor": _extract_codex_error,
         "strip_env": ("OPENAI_API_KEY", "CODEX_API_KEY"),
     },
 }

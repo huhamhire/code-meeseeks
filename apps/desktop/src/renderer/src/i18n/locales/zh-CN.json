@@ -98,6 +98,9 @@
     "goToSettings": "去设置",
     "inputAria": "聊天输入框",
     "llmCallFailed": "LLM 调用失败",
+    "llmErrorHint": {
+      "modelUnavailable": "所请求的模型不可用。使用本地 CLI 供应商时，模型由该 CLI 自身的配置决定，请在 CLI 中改用受支持的模型后重新运行。"
+    },
     "mergeConfirmLabel": "合并",
     "mergeConfirmMessage": "确定将「{{title}}」合并到目标分支？此操作不可撤销。",
     "mergeConfirmTitle": "合并 PR",

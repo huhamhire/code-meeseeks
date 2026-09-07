@@ -15,6 +15,7 @@ import {
 } from '@meebox/pr-agent-bridge';
 import {
   addFindingClosure,
+  classifyLlmFailure,
   dropPendingFindingDrafts,
   finishReviewRun,
   parseReviewOutput,
@@ -37,7 +38,8 @@ import {
   accumulateUsageSentinel,
   finalizeUsage,
   newUsageAcc,
-  stripUsageSentinels,
+  parseLlmErrorSentinel,
+  stripShimSentinels,
 } from './usage.js';
 import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 
@@ -171,12 +173,18 @@ export class RunExecutor {
       durationMs: Date.now() - t0,
       exitCode: result.exitCode,
       stdout,
-      stderr: stripUsageSentinels(result.stderr),
+      stderr: stripShimSentinels(result.stderr),
       tokenUsage,
     };
     if (parsed.llmFailure) {
+      // pr-agent's fallback retry only logs "Failed to generate prediction with any model" to stdout and hides the real
+      // exception in loguru's artifact field, so prefer the shim's stderr sentinel when present — it carries the actual
+      // provider/CLI error, which is also the only text worth classifying into an actionable hint.
+      const sentinel = parseLlmErrorSentinel(result.stderr);
+      const message = sentinel?.message ?? parsed.llmFailure.message;
+      const errorHint = classifyLlmFailure(message);
       this.ctx.logger.warn(
-        { runId, reason: parsed.llmFailure.message },
+        { runId, reason: message, cli: sentinel?.cli, hint: errorHint },
         'pragent exit 0 but LLM call failed; marking run as failed',
       );
       // Failed runs get no structured collection — findings set empty, UI shows only raw output (no chatpane finding card).
@@ -184,7 +192,8 @@ export class RunExecutor {
         ...base,
         status: 'failed',
         errorReason: 'llm-error',
-        errorMessage: parsed.llmFailure.message,
+        errorMessage: message,
+        ...(errorHint ? { errorHint } : {}),
         findings: [],
       };
     }
@@ -225,7 +234,7 @@ export class RunExecutor {
         errorReason: err.reason,
         errorMessage: err.message,
         stdout: err.result.stdout,
-        stderr: stripUsageSentinels(err.result.stderr),
+        stderr: stripShimSentinels(err.result.stderr),
         findings: [],
         tokenUsage,
       };

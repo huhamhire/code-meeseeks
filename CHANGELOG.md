@@ -5,6 +5,17 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### ✨ Added
+
+- A review that fails because the model is unavailable now says so and tells you what to do — with a local CLI provider (claude / codex) the model comes from that CLI's own configuration, so it has to be changed there.
+
+### 🔧 Fixed
+
+- A failed review now shows the provider's actual error instead of only "all fallback models failed" — the real cause (an unavailable model, an expired login, an exhausted quota) was previously swallowed and never reached the run card.
+- A local CLI provider that exits successfully but returns an empty reply is now reported as a failure naming that cause, rather than as an unexplained LLM failure.
+
 ## [0.11.2] - 2026-07-28
 
 > Highlights of this release:

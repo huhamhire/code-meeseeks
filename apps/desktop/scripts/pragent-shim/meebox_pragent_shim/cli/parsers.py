@@ -71,3 +71,45 @@ def _parse_codex_output(stdout):
     if isinstance(usage, dict) and turns:
         usage["num_turns"] = turns
     return (text if isinstance(text, str) else ""), usage
+
+
+def _extract_codex_error(stdout):
+    """Pull the failure cause out of the `codex exec --json` event stream, returning a message string or None.
+
+    codex reports failures on **stdout** (the JSONL stream) and leaves stderr empty, so without this the caller would
+    raise with an empty detail and the real cause (auth, model 404, quota ...) would never reach the logs. Precedence:
+      - `turn.failed` → error.message is the terminal verdict, most accurate;
+      - otherwise the last `type=="error"` event (the intermediate retry notices carry the same upstream message);
+      - otherwise the last `item.completed` whose item.type=="error" (startup-stage errors, e.g. an unavailable feature host).
+    """
+    import json
+
+    turn_failed = None
+    last_error = None
+    last_item_error = None
+    for line in (stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except Exception:  # noqa: BLE001 - skip non-JSON lines (logs, etc.)
+            continue
+        if not isinstance(ev, dict):
+            continue
+        etype = ev.get("type")
+        if etype == "turn.failed":
+            err = ev.get("error")
+            if isinstance(err, dict) and isinstance(err.get("message"), str):
+                turn_failed = err["message"]
+        elif etype == "error":
+            msg = ev.get("message")
+            if isinstance(msg, str):
+                last_error = msg
+        elif etype == "item.completed":
+            item = ev.get("item")
+            if isinstance(item, dict) and item.get("type") == "error":
+                msg = item.get("message")
+                if isinstance(msg, str):
+                    last_item_error = msg
+    return turn_failed or last_error or last_item_error

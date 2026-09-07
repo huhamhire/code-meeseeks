@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classifyLlmFailure,
   parseReviewOutput,
   parseStructuredAsk,
   sectionToFinding,
@@ -696,5 +697,35 @@ describe('parseStructuredAsk', () => {
       parseReviewOutput('<summary>x</summary>\n<verdict>maybe</verdict>', 'ask').askVerdict,
     ).toBeUndefined();
     expect(parseReviewOutput('<summary>x</summary>', 'ask').askVerdict).toBeUndefined();
+  });
+});
+
+describe('classifyLlmFailure', () => {
+  it('codex: model retired upstream (404 wording) → model-unavailable', () => {
+    expect(
+      classifyLlmFailure(
+        "CLI 'codex' exit code 1: unexpected status 404 Not Found: The model `gpt-5.5` does not exist or you do not have access to it., url: https://chatgpt.com/backend-api/codex/responses",
+      ),
+    ).toBe('model-unavailable');
+  });
+
+  it('codex: model not entitled for the account → model-unavailable', () => {
+    expect(
+      classifyLlmFailure(
+        "The 'gpt-5.1-codex' model is not supported when using Codex with a ChatGPT account.",
+      ),
+    ).toBe('model-unavailable');
+  });
+
+  it('direct API: litellm model_not_found → model-unavailable', () => {
+    expect(
+      classifyLlmFailure('litellm.NotFoundError: The model `x` was not found (model_not_found)'),
+    ).toBe('model-unavailable');
+  });
+
+  it('unrelated failures stay unclassified (no misleading remedy)', () => {
+    expect(classifyLlmFailure('litellm.AuthenticationError: invalid api key')).toBeUndefined();
+    expect(classifyLlmFailure('Read timed out after 600s')).toBeUndefined();
+    expect(classifyLlmFailure("CLI 'codex' returned an empty reply")).toBeUndefined();
   });
 });

@@ -104,6 +104,11 @@ litellm**.
 - **Reuse the CLI's own login state**: the subprocess inherits `HOME`/`USERPROFILE`, and the CLI reads its own login credentials (e.g. `~/.claude`) to run.
   To avoid a stray API key in the local environment leaking in and overriding the CLI's own login method, the shim explicitly strips
   `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` from the subprocess env. The model used, the quota and compliance are all decided by that CLI's account and the user's authorization.
+- **Error source on a non-zero exit**: not every CLI reports its failure on stderr — `codex exec --json` writes `turn.failed` / `error`
+  events into the **stdout** JSONL stream and leaves stderr empty, so taking stderr alone would raise with an empty reason and the real
+  cause (auth expired / model unavailable / quota) would never reach the log, leaving only pr-agent's generic "all fallback models failed".
+  A spec may therefore declare an `error_extractor` that pulls the verdict out of stdout (precedence `turn.failed` → the last `error`
+  event → an `item.completed` error item), with stderr as the fallback for commands without one.
 - **Proxy auto pass-through**: the subprocess env is copied from `os.environ` (only the two API keys above removed), and `HTTP(S)_PROXY` / `NO_PROXY`
   are kept as-is → `claude`'s egress automatically goes through the user-configured proxy (see [Networking & proxy](../99-core/03-networking-proxy.md)), no extra setup needed.
 - **token usage**: from the claude JSON's `usage`, construct the same `@@MEEBOX_USAGE@@` sentinel, accumulated by the same main-process path. The ↑ total input takes

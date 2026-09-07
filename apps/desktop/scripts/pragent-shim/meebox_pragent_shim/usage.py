@@ -1,5 +1,10 @@
 """Real token usage collection: emitted to stderr as a sentinel line `@@MEEBOX_USAGE@@ {json}`, which the main process onLine
-accumulates from (see apps/desktop/src/main/ipc.ts). Takes only tokens, not cost. Fault-tolerant throughout."""
+accumulates from (see apps/desktop/src/main/ipc.ts). Takes only tokens, not cost. Fault-tolerant throughout.
+
+The same stderr sentinel channel also carries `@@MEEBOX_LLM_ERROR@@ {json}` (see _emit_llm_error): pr-agent's
+retry_with_fallback_models logs the underlying exception into loguru's `artifact=` field, which the default format never
+prints, so a failing LLM call reaches stdout as nothing but "Failed to generate prediction with any model". The sentinel
+carries the real cause out of band, past that lossy log line."""
 import sys
 
 from .runtime import _debug
@@ -67,3 +72,22 @@ def _emit_usage_tokens(
         print(f"@@MEEBOX_USAGE@@ {json.dumps(rec)}", file=sys.stderr, flush=True)
     except Exception as exc:  # noqa: BLE001
         _debug(f"emit cli usage failed (ignored): {exc}")
+
+
+def _emit_llm_error(cli, message) -> None:
+    """Emit the real cause of a failed LLM call to stderr as `@@MEEBOX_LLM_ERROR@@ {json}`, right before raising.
+
+    Emitting is purely additive — the exception is still raised and pr-agent still runs its fallback retry; this only
+    keeps the cause from being swallowed by that retry's log line, so the run card can show what actually went wrong
+    (and classify it, e.g. an unavailable model) instead of the generic "all fallback models failed".
+    """
+    try:
+        import json
+
+        print(
+            f"@@MEEBOX_LLM_ERROR@@ {json.dumps({'cli': cli, 'message': message})}",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _debug(f"emit llm error failed (ignored): {exc}")

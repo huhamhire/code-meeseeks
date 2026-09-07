@@ -23,6 +23,35 @@ export interface ParsedReviewOutput {
 }
 
 /**
+ * Actionable classification of an LLM failure, used by the UI to add a "what to do about it" hint on top of the raw
+ * technical message. Only cases with a concrete user action get a kind; everything else stays unclassified (undefined)
+ * and renders the message alone.
+ *
+ * - `model-unavailable`: the model the provider was asked for does not exist / is not accessible for this account.
+ *   Typical with a local CLI provider, whose model is pinned in the CLI's own config (e.g. `~/.codex/config.toml`)
+ *   and can be retired upstream at any time — the app never chose it, so the fix is to change it there.
+ */
+export type LlmFailureKind = 'model-unavailable';
+
+/**
+ * Classify an LLM failure message into an actionable kind, or undefined when nothing actionable is recognized.
+ * Matches the wording of both the direct-API path (litellm `NotFoundError` / `model_not_found`) and the local CLI path
+ * (codex's `The model \`x\` does not exist or you do not have access to it` / `is not supported when using ...`).
+ */
+export function classifyLlmFailure(message: string): LlmFailureKind | undefined {
+  const m = stripAnsi(message);
+  if (
+    /model_not_found/i.test(m) ||
+    /\bmodel\b[^\n]{0,80}\bdoes not exist\b/i.test(m) ||
+    /\bmodel\b[^\n]{0,80}\bis not supported\b/i.test(m) ||
+    /\bdo(?:es)? not have access to (?:it|this model)\b/i.test(m)
+  ) {
+    return 'model-unavailable';
+  }
+  return undefined;
+}
+
+/**
  * Scan stdout for a marker of all LLM calls failing. When pr-agent's fallback retry exhausts all alternate
  * models and still fails, it only logger.error's one line "Failed to <tool> PR: Failed to generate
  * prediction with any model of [...]", and the CLI itself exits 0 without actively failing.
