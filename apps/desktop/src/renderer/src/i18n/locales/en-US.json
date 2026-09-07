@@ -98,6 +98,9 @@
     "goToSettings": "Go to Settings",
     "inputAria": "Chat input",
     "llmCallFailed": "LLM call failed",
+    "llmErrorHint": {
+      "modelUnavailable": "The requested model is unavailable. With a local CLI provider the model comes from that CLI's own configuration — switch it to a supported model there, then run again."
+    },
     "mergeConfirmLabel": "Merge",
     "mergeConfirmMessage": "Merge \"{{title}}\" into its target branch? This can't be undone.",
     "mergeConfirmTitle": "Merge PR",

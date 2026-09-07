@@ -345,6 +345,13 @@ export interface ReviewRun {
   exitCode?: number;
   errorReason?: ReviewRunFailureReason;
   errorMessage?: string;
+  /**
+   * Actionable classification of the failure, when one is recognized (see poller's classifyLlmFailure). errorMessage stays
+   * the raw technical cause; this drives an extra "how to fix it" line in the UI, localized by the frontend from the kind.
+   * Currently only `model-unavailable` (the provider rejected the requested model — for a local CLI provider the model
+   * lives in that CLI's own config, so the user has to change it there). Historical runs don't have it.
+   */
+  errorHint?: 'model-unavailable';
   /** Raw stdout text; still kept after M3-B2 parses it into findings, for "see original" debugging */
   stdout?: string;
   /** Raw stderr text */

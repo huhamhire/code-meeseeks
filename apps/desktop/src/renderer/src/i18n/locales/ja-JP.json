@@ -98,6 +98,9 @@
     "goToSettings": "設定へ移動",
     "inputAria": "チャット入力",
     "llmCallFailed": "LLM の呼び出しに失敗しました",
+    "llmErrorHint": {
+      "modelUnavailable": "要求されたモデルは利用できません。ローカル CLI プロバイダーの場合、モデルはその CLI 自身の設定で決まります。CLI 側でサポートされているモデルに変更してから再実行してください。"
+    },
     "mergeConfirmLabel": "マージ",
     "mergeConfirmMessage": "「{{title}}」をターゲットブランチにマージしますか？この操作は取り消せません。",
     "mergeConfirmTitle": "PR をマージ",

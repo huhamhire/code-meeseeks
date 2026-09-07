@@ -98,6 +98,9 @@
     "goToSettings": "Zu den Einstellungen",
     "inputAria": "Chat-Eingabe",
     "llmCallFailed": "LLM-Aufruf fehlgeschlagen",
+    "llmErrorHint": {
+      "modelUnavailable": "Das angeforderte Modell ist nicht verfügbar. Bei einem lokalen CLI-Anbieter stammt das Modell aus der Konfiguration dieser CLI — stellen Sie dort auf ein unterstütztes Modell um und führen Sie den Lauf erneut aus."
+    },
     "mergeConfirmLabel": "Mergen",
     "mergeConfirmMessage": "„{{title}}“ in den Zielbranch mergen? Dies kann nicht rückgängig gemacht werden.",
     "mergeConfirmTitle": "PR mergen",

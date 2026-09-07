@@ -11,7 +11,7 @@ import os
 import sys
 
 from ..runtime import _debug, strip_cache_break
-from ..usage import _emit_usage_tokens
+from ..usage import _emit_llm_error, _emit_usage_tokens
 from .specs import _CLI_SPECS
 
 
@@ -88,12 +88,18 @@ async def run_cli_chat(bin_name, system, user) -> str:
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"failed to start CLI '{bin_name}': {exc}") from exc
     out, err = await proc.communicate(prompt.encode("utf-8"))
+    out_text = (out or b"").decode("utf-8", "replace")
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"CLI '{bin_name}' exit code {proc.returncode}: "
-            f"{(err or b'').decode('utf-8', 'replace')[:500]}"
-        )
-    text, usage = spec["parser"]((out or b"").decode("utf-8", "replace"))
+        # Error source: some CLIs report the failure only on **stdout** (codex writes turn.failed / error events into its
+        # JSONL stream and leaves stderr empty), which would otherwise surface as an empty reason and lose the real cause
+        # (auth / model unavailable / quota). When the spec provides an extractor, take stdout's verdict first and fall
+        # back to stderr; either way keep the raise contract (pr-agent turns it into "all fallback models failed").
+        extractor = spec.get("error_extractor")
+        detail = (extractor(out_text) if extractor else None) or (err or b"").decode("utf-8", "replace")
+        detail = (detail or "<no output>")[:500]
+        _emit_llm_error(bin_name, detail)
+        raise RuntimeError(f"CLI '{bin_name}' exit code {proc.returncode}: {detail}")
+    text, usage = spec["parser"](out_text)
     if usage:
         # prompt_tokens ≈ total input-side size, output_tokens ≈ completion (input/output_tokens share the same names across both).
         # The cache fields differ in convention between the two:
@@ -115,6 +121,18 @@ async def run_cli_chat(bin_name, system, user) -> str:
             cache_read_tokens=cache_read if isinstance(cache_read, int) else None,
             turns=turns if isinstance(turns, int) else None,
         )
+    # Empty reply on a zero exit code: the CLI ran to completion but produced no assistant message (codex does this when a turn
+    # dies on a tool/feature failure, e.g. Code Mode failing closed because its host binary is missing). Downstream this became
+    # an empty prompt into pr-agent's load_yaml → the opaque "all fallback models failed"; raise here instead, carrying any error
+    # event the stream did report, so the run card names the actual cause. Usage is emitted first, keeping the token count truthful.
+    if not (text or "").strip():
+        extractor = spec.get("error_extractor")
+        detail = (extractor(out_text) if extractor else None) or ""
+        msg = f"CLI '{bin_name}' returned an empty reply" + (
+            f": {detail[:500]}" if detail else " (no error reported in its output)"
+        )
+        _emit_llm_error(bin_name, msg)
+        raise RuntimeError(msg)
     return text
 
 

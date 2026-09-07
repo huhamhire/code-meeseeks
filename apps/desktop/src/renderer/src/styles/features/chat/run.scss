@@ -41,6 +41,14 @@
   color: $text-muted;
 }
 
+// Actionable remedy line under the raw cause: prose (not mono like .chat-error-detail), so it reads as guidance
+// from the app rather than as more provider output.
+.chat-error-hint {
+  margin: $space-2 0 0;
+  font-size: $fs-xs;
+  line-height: 1.5;
+}
+
 // stderr / stdout collapsible area embedded in a failed run: one extra level of indentation inside the chat-error red banner
 .chat-error-stderr,
 .chat-error-stdout {

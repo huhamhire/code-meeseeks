@@ -73,13 +73,51 @@ export function finalizeUsage(acc: UsageAcc): TokenUsage | undefined {
 }
 
 /**
- * Strip usage sentinel lines from stderr before persistence: onLine already intercepts them in real time without forwarding, but exec internally
+ * Strip shim sentinel lines from stderr before persistence: onLine already intercepts them in real time without forwarding, but exec internally
  * accumulates all stderr into result.stderr (including sentinels), so clear these noise lines before persisting.
  */
-export function stripUsageSentinels(stderr: string | undefined): string | undefined {
+export function stripShimSentinels(stderr: string | undefined): string | undefined {
   if (!stderr) return stderr;
   return stderr
     .split('\n')
-    .filter((l) => !l.includes(USAGE_SENTINEL))
+    .filter((l) => !l.includes(USAGE_SENTINEL) && !l.includes(LLM_ERROR_SENTINEL))
     .join('\n');
+}
+
+/**
+ * LLM-error sentinel-line prefix (kept consistent with the shim's usage._emit_llm_error). Shares the stderr sentinel
+ * channel with usage: pr-agent's fallback retry logs the underlying exception into loguru's `artifact=` field, which the
+ * default format drops, so the real cause never reaches stdout — the shim routes it out of band through this line.
+ */
+export const LLM_ERROR_SENTINEL = '@@MEEBOX_LLM_ERROR@@';
+
+/**
+ * Pull the LLM-call cause out of stderr sentinel lines, returning the **last** one (a run may retry several times; the last
+ * is what actually sank the run). Bad JSON / a missing message is ignored — this is a diagnostic enrichment, never a
+ * reason to fail differently.
+ */
+export function parseLlmErrorSentinel(
+  stderr: string | undefined,
+): { cli?: string; message: string } | undefined {
+  if (!stderr) return undefined;
+  let found: { cli?: string; message: string } | undefined;
+  for (const line of stderr.split('\n')) {
+    const i = line.indexOf(LLM_ERROR_SENTINEL);
+    if (i < 0) continue;
+    try {
+      const rec = JSON.parse(line.slice(i + LLM_ERROR_SENTINEL.length).trim()) as {
+        cli?: unknown;
+        message?: unknown;
+      };
+      if (typeof rec.message === 'string' && rec.message.trim()) {
+        found = {
+          cli: typeof rec.cli === 'string' ? rec.cli : undefined,
+          message: rec.message.trim(),
+        };
+      }
+    } catch {
+      // Malformed sentinel → skip, keep any earlier one.
+    }
+  }
+  return found;
 }

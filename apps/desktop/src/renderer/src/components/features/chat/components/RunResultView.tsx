@@ -229,6 +229,12 @@ export function RunResultView({
           {run.errorMessage && !isCancelled && (
             <pre className="chat-error-detail">{run.errorMessage}</pre>
           )}
+          {/* Actionable hint on top of the raw cause: the message above is the provider's own wording (English, technical),
+              which doesn't tell the user what to do. A recognized kind adds one localized line of remedy — currently
+              「the model is unavailable, change it」, whose fix lives outside the app for a local CLI provider. */}
+          {run.errorHint === 'model-unavailable' && !isCancelled && (
+            <p className="chat-error-hint">{t('chatPane.llmErrorHint.modelUnavailable')}</p>
+          )}
           {/* Failed / cancelled no longer show a separate output block: the pr-agent log is already in the collapsible「raw output」above (stdout contains
               the [pr-agent stdout log] segment, same source as stderr), avoiding duplicating the same log into two blocks. */}
         </div>
