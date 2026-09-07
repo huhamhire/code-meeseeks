@@ -325,6 +325,12 @@
     "testing": "Teste…",
     "tokenLabel": "Zugriffstoken (PAT)"
   },
+  "crash": {
+    "hint": "Ein Neuladen behebt das in der Regel. Tritt es wiederholt auf, benennen die Details unten und das Anwendungsprotokoll (meebox.log) die Ursache.",
+    "reload": "Neu laden",
+    "retry": "Erneut versuchen",
+    "title": "Beim Rendern der Oberfläche ist ein Fehler aufgetreten"
+  },
   "diffSearchPanel": {
     "caseSensitiveOff": "Groß-/Kleinschreibung beachten (aus)",
     "caseSensitiveOn": "Groß-/Kleinschreibung beachten (ein)",
@@ -344,9 +350,11 @@
     "binaryNotRendered": "⚠️ Binärdatei, Diff wird nicht dargestellt",
     "blameChangeRangeTitle": "Dieser Bereich wurde durch diesen PR geändert",
     "blameFailed": "blame fehlgeschlagen",
-    "blameFailedNamed": "blame für {{path}} fehlgeschlagen",    "diffRenderFailed": "Diff-Darstellung fehlgeschlagen: {{message}}",
+    "blameFailedNamed": "blame für {{path}} fehlgeschlagen",
+    "diffRenderFailed": "Diff-Darstellung fehlgeschlagen: {{message}}",
     "diffRenderFailedHint": "Ein Dateiwechsel oder erneuter Versuch behebt das Problem meist. Der zugrunde liegende Fehler wurde in der console protokolliert.",
-    "dismissNotificationTitle": "Diese Benachrichtigung schließen",    "fileCount_one": "{{count}} Datei",
+    "dismissNotificationTitle": "Diese Benachrichtigung schließen",
+    "fileCount_one": "{{count}} Datei",
     "fileCount_other": "{{count}} Dateien",
     "lfsManagedTitle": "Von Git LFS verwaltet",
     "loadChangedFilesFailed": "Geänderte Dateien konnten nicht geladen werden",

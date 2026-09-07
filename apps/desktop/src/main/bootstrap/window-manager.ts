@@ -18,6 +18,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_SIZE = { width: 1280, height: 800 };
 const MIN_SIZE = { width: 960, height: 600 };
 
+/**
+ * How many times a window may auto-reload after a renderer crash / load failure before giving up. Bounded so a page
+ * that dies on load can't spin in a reload loop; the counter resets on any successful load (see installCrashRecovery).
+ */
+const MAX_CRASH_RELOADS = 3;
+
 // Colors of the system window-control buttons on the right of the self-drawn title bar (Windows
 // titleBarOverlay): same color as the .app-titlebar background (--bg-app), so the seam is invisible;
 // the symbol takes the primary text color. Dark/light sets, following the effective theme
@@ -204,11 +210,66 @@ export class WindowManager {
       return { action: 'deny' };
     });
 
+    this.installCrashRecovery(win);
+
     if (process.env.ELECTRON_RENDERER_URL) {
       void win.loadURL(process.env.ELECTRON_RENDERER_URL);
     } else {
       void win.loadFile(path.join(__dirname, '../renderer/index.html'));
     }
+  }
+
+  /**
+   * Recover the window from renderer-level failures that the React error boundary cannot see.
+   *
+   * A boundary only catches errors thrown while rendering; if the renderer **process** dies (OOM, GPU fault, a native
+   * crash inside Monaco) or the document fails to load, no JavaScript survives to report it — the window is simply left
+   * showing its background colour, permanently, since nothing was watching. These listeners are that watcher: log what
+   * happened (the only record there would otherwise be) and reload the window so the user gets a working UI back
+   * instead of a dead frame.
+   *
+   * Reloads are capped: a page that crashes on load would otherwise reload forever, burning CPU and hiding the fault.
+   * After the cap the window is left as-is with an error in the log, and the user can restart the app.
+   */
+  private installCrashRecovery(win: BrowserWindow): void {
+    let reloads = 0;
+    const reload = (reason: string): void => {
+      if (win.isDestroyed()) return;
+      if (reloads >= MAX_CRASH_RELOADS) {
+        this.logger.error(
+          { reason, reloads },
+          'renderer failed repeatedly; not reloading again (restart the app)',
+        );
+        return;
+      }
+      reloads += 1;
+      this.logger.warn({ reason, attempt: reloads }, 'reloading the renderer to recover');
+      win.webContents.reload();
+    };
+    // A successful load means the previous failure (if any) is behind us; reset the budget so an unrelated crash
+    // hours later still gets its full set of retries.
+    win.webContents.on('did-finish-load', () => {
+      reloads = 0;
+    });
+    win.webContents.on('render-process-gone', (_evt, details) => {
+      this.logger.error({ details }, 'renderer process gone');
+      // 'clean-exit' is a normal teardown (window closing), not a crash to recover from.
+      if (details.reason !== 'clean-exit') reload(`render-process-gone:${details.reason}`);
+    });
+    win.webContents.on('did-fail-load', (_evt, errorCode, errorDescription, validatedURL) => {
+      // -3 is ERR_ABORTED, which a superseded navigation raises normally; nothing failed for the user.
+      if (errorCode === -3) return;
+      this.logger.error({ errorCode, errorDescription, validatedURL }, 'renderer failed to load');
+      reload(`did-fail-load:${errorCode}`);
+    });
+    // Not recovered automatically: an unresponsive renderer is usually a long synchronous task that finishes on its
+    // own, and reloading would throw away the user's in-flight state. Logged so a hang leaves a trace.
+    win.webContents.on('unresponsive', () => {
+      this.logger.warn('renderer became unresponsive');
+    });
+    win.webContents.on('responsive', () => {
+      this.logger.info('renderer became responsive again');
+    });
   }
 }
 

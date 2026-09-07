@@ -17,6 +17,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 - A local CLI provider that exits successfully but returns an empty reply is now reported as a failure naming that cause, rather than as an unexplained LLM failure.
 - A merged PR now leaves the list on its own shortly after you merge it, instead of lingering until the next periodic sync — the remote takes a few seconds to actually mark it merged, and the app now waits for that rather than refreshing too early and finding nothing changed.
 - Approving a PR now updates whether it can be merged, so the merge button appears as soon as your approval satisfies the last requirement — previously it stayed hidden until the next periodic sync, because the remote recomputes mergeability only after the approval returns.
+- The window no longer goes permanently black when the interface fails: a crash now shows what went wrong with a retry / reload, a failure during startup shows a recovery screen, and a renderer that dies outright is reloaded automatically. Crash details are also written to the application log, which they previously never were.
+- Switching to another PR while a merge is still in flight no longer clears the PR you just opened.
 
 ## [0.11.2] - 2026-07-28
 

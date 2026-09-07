@@ -2,6 +2,7 @@
 // Cross-domain consumers (features/* · layout/* · App etc.) import via this barrel; common's internal modules reference each other
 // (markdownMermaid → MermaidDiagram, Modal → icons, ConfirmModal → Modal) via relative paths,
 // not through this barrel, to avoid circular dependencies.
+export * from './AppCrashScreen';
 export * from './Avatar';
 export * from './BitbucketImage';
 export * from './ConfirmModal';

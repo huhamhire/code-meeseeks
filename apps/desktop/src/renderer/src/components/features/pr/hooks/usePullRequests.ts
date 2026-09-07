@@ -121,9 +121,13 @@ export function usePullRequests({ notifyError }: { notifyError: (msg: string) =>
     // connection only to redraw the same list, with the PR still in it. Main confirms the merge landed and archives the
     // PR (see services/pr-post-action.ts), then broadcasts prs:changed; the local reload below just reflects whatever is
     // already on disk in the meantime.
-    if (selectedId === mergedId) setSelectedId(null);
+    //
+    // Compare against the **current** selection, not the `selectedId` this callback closed over: a merge is a remote
+    // round-trip, and clicking another PR while it is in flight leaves the closure holding the pre-merge id. Testing
+    // that stale value would clear a selection the user has since made, blanking the PR they just opened.
+    setSelectedId((cur) => (cur === mergedId ? null : cur));
     await reloadPrs();
-  }, [selected, selectedId, reloadPrs, triggerRefresh, notifyError, merging, t]);
+  }, [selected, reloadPrs, setSelectedId, triggerRefresh, notifyError, merging, t]);
 
   return {
     prs,

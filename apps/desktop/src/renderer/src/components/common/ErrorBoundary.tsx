@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { invoke } from '../../api';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -27,11 +28,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   override componentDidCatch(err: Error, info: ErrorInfo): void {
-    console.error(
-      `[ErrorBoundary${this.props.label ? `:${this.props.label}` : ''}] caught:`,
-      err,
-      info.componentStack,
-    );
+    const label = this.props.label ? `:${this.props.label}` : '';
+    console.error(`[ErrorBoundary${label}] caught:`, err, info.componentStack);
+    // Also relay to main so the crash lands in meebox.log: the renderer console is not written to file, and a render
+    // error is not an uncaught window error either, so without this a caught crash leaves no trace on disk — which is
+    // exactly what makes such a report impossible to diagnose after the fact.
+    void invoke('log:write', {
+      level: 'error',
+      msg: `renderer render error${label}: ${err.message}`,
+      meta: { stack: err.stack, componentStack: info.componentStack ?? undefined },
+    }).catch(() => {
+      /* the log relay must never be the thing that breaks the fallback UI */
+    });
   }
 
   reset = (): void => {
