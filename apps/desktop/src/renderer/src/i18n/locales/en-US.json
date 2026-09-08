@@ -325,6 +325,12 @@
     "testing": "Testing…",
     "tokenLabel": "Access Token (PAT)"
   },
+  "crash": {
+    "hint": "Reloading usually resolves it. If it keeps happening, the details below and the application log (meebox.log) identify the cause.",
+    "reload": "Reload",
+    "retry": "Retry",
+    "title": "Something went wrong rendering the interface"
+  },
   "diffSearchPanel": {
     "caseSensitiveOff": "Case sensitive (off)",
     "caseSensitiveOn": "Case sensitive (on)",
@@ -344,9 +350,11 @@
     "binaryNotRendered": "⚠️ Binary file, diff not rendered",
     "blameChangeRangeTitle": "This range was changed by this PR",
     "blameFailed": "Blame failed",
-    "blameFailedNamed": "Blame failed for {{path}}",    "diffRenderFailed": "Diff render failed: {{message}}",
+    "blameFailedNamed": "Blame failed for {{path}}",
+    "diffRenderFailed": "Diff render failed: {{message}}",
     "diffRenderFailedHint": "Switching files or retrying usually recovers. The underlying error has been logged to the console.",
-    "dismissNotificationTitle": "Dismiss this notification",    "fileCount_one": "{{count}} file",
+    "dismissNotificationTitle": "Dismiss this notification",
+    "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
     "lfsManagedTitle": "Managed by Git LFS",
     "loadChangedFilesFailed": "Failed to load changed files",

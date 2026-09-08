@@ -1,3 +1,7 @@
+// boot-guard must be the FIRST import: its side effect arms the last-resort watchdog before any other module runs, so a
+// module that throws while initializing (i18n / theme / App below) still ends with a readable screen instead of a
+// permanently blank window. Anything imported above it would be outside the guard.
+import './boot-guard';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { addCollection } from '@iconify/react';
@@ -10,6 +14,7 @@ import './i18n';
 // avoiding a light-mode user flashing a frame of dark on startup.
 import './theme';
 import App from './App';
+import { AppCrashScreen, ErrorBoundary } from './components/common';
 import './App.scss';
 
 // Preload the PKief Material Icon Theme so that <Icon icon="material-icon-theme:..." />
@@ -21,6 +26,14 @@ if (!container) throw new Error('#root not found');
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    {/* Root boundary: without one, any error thrown while rendering unmounts the entire tree and leaves an empty
+        #root — an all-black window with no way back short of restarting the app. Here the user gets what broke plus
+        a retry / reload, and the boundary relays the stack to main so the crash is on disk in meebox.log. */}
+    <ErrorBoundary
+      label="App"
+      fallback={(err, reset) => <AppCrashScreen err={err} onRetry={reset} />}
+    >
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

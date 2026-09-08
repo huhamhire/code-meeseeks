@@ -31,6 +31,11 @@ import {
 } from '@meebox/shared';
 import { annotateOwnership } from '../services/comments.js';
 import { getContext } from '../services/context.js';
+import {
+  confirmMergeSettled,
+  confirmMergeabilityAfterReview,
+  refreshSinglePr,
+} from '../services/pr-post-action.js';
 import type { IpcController } from './types.js';
 
 /*
@@ -322,56 +327,8 @@ export const refreshPrs: IpcController<'prs:refresh'> = () => getContext().polle
  * the mirror has the new commits so the diff renders the new code. Returns the updated PR; the renderer then reloads the
  * list locally (no network poll of other PRs).
  */
-export const refreshOnePr: IpcController<'prs:refreshOne'> = async (_event, req) => {
-  const ctx = getContext();
-  const existing = await ctx.pr.findPrOrThrow(req.localId);
-  const adapter = ctx.pr.adapterForOrThrow(existing);
-  // Remote fetch of just this PR. 403/404 normalize to error codes (matching openPrByUrl); other errors bubble up.
-  let fresh;
-  try {
-    fresh = await adapter.prs.getSinglePullRequest(
-      { projectKey: existing.repo.projectKey, repoSlug: existing.repo.repoSlug },
-      existing.remoteId,
-    );
-  } catch (err) {
-    const status = (err as { status?: number } | null)?.status;
-    if (status === 403) throw new AppError(ERROR_CODES.PR_FORBIDDEN, undefined, 'forbidden');
-    if (status === 404) throw new AppError(ERROR_CODES.PR_NOT_FOUND, undefined, 'not found');
-    throw err;
-  }
-  // localStatus mirrors the remote current user's reviewer status (remote authoritative, same mapping as the poll);
-  // when the current user is unknown (ping incomplete) keep the recorded status rather than downgrading to pending.
-  const me = adapter.connection.getCurrentUser();
-  const mineStatus = me ? fresh.reviewers.find((r) => r.name === me.name)?.status : undefined;
-  const localStatus = !me
-    ? existing.localStatus
-    : mineStatus === 'approved'
-      ? 'approved'
-      : mineStatus === 'needsWork'
-        ? 'needs_work'
-        : 'pending';
-  const stored: StoredPullRequest = {
-    ...fresh,
-    localId: existing.localId,
-    platform: existing.platform,
-    connectionId: existing.connectionId,
-    localStatus,
-    // Preserve local-only bookkeeping (a single-PR refresh isn't a discovery pass).
-    discoveryFilters: existing.discoveryFilters,
-    discoveredAt: existing.discoveredAt,
-    lastSeenAt: new Date().toISOString(),
-  };
-  await writePrMeta(await ctx.pr.storeForPr(req.localId), req.localId, stored);
-  await ctx.pr.invalidateCommentsCache(req.localId);
-  if (fresh.sourceRef.sha !== existing.sourceRef.sha) {
-    try {
-      await ctx.pr.ensureMirrorReadyForPr(stored);
-    } catch {
-      /* non-fatal: the diff view self-heals / surfaces a readable error if the mirror still lacks the sha */
-    }
-  }
-  return stored;
-};
+export const refreshOnePr: IpcController<'prs:refreshOne'> = (_event, req) =>
+  refreshSinglePr(getContext(), req.localId, { invalidateComments: true });
 
 /**
  * The Poller's most recent completion time (used for startup initialization).
@@ -382,6 +339,11 @@ export const getLastSync: IpcController<'prs:lastSync'> = () => ({
 
 /**
  * Set review status: write remote first (on failure the frontend is unchanged), and persist locally after the remote is OK.
+ *
+ * A verdict can change the remote's mergeability verdict (an approval satisfying the last required rule makes the PR
+ * mergeable), but the remote recomputes that asynchronously — the value returned here is still the pre-verdict one. So
+ * kick off a background re-check that lands the new canMerge, rather than leaving the merge button a poll interval
+ * behind reality (see services/pr-post-action.ts).
  */
 export const setPrStatus: IpcController<'prs:setLocalStatus'> = async (_event, req) => {
   const ctx = getContext();
@@ -398,7 +360,9 @@ export const setPrStatus: IpcController<'prs:setLocalStatus'> = async (_event, r
     pr.remoteId,
     remoteStatus,
   );
-  return setLocalStatus(ctx.stateStore, req.localId, req.status);
+  const updated = await setLocalStatus(ctx.stateStore, req.localId, req.status);
+  confirmMergeabilityAfterReview(ctx, req.localId, pr.mergeStatus.canMerge);
+  return updated;
 };
 
 /**
@@ -408,7 +372,12 @@ export const markRead: IpcController<'prs:markRead'> = (_event, req) =>
   markPrRead(getContext().stateStore, req.localId);
 
 /**
- * Merge a PR; do not persist locally here, relying on renderer refresh → poll soft-delete to finish, to avoid local and remote disagreeing.
+ * Merge a PR; do not persist locally here, relying on refresh → poll soft-delete to finish, to avoid local and remote disagreeing.
+ *
+ * The remote does not settle synchronously: for a moment after the merge is accepted the PR still reports open and still
+ * comes back in the discovery list, so an immediate refresh would show it sitting in the list untouched. A background
+ * re-check confirms it actually left the open state and then archives it through a poll tick (see
+ * services/pr-post-action.ts); it is deliberately not awaited, so the caller isn't blocked on the remote settling.
  */
 export const mergePr: IpcController<'prs:merge'> = async (_event, req) => {
   const ctx = getContext();
@@ -418,6 +387,7 @@ export const mergePr: IpcController<'prs:merge'> = async (_event, req) => {
     { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
     pr.remoteId,
   );
+  confirmMergeSettled(ctx, req.localId);
 };
 
 /**

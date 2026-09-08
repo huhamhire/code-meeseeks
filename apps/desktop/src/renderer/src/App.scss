@@ -29,6 +29,7 @@
 @use './styles/features/pr-info';
 @use './styles/features/chat';
 @use './styles/features/drafts-panel';
+@use './styles/common/crash';
 @use './styles/common/modal';
 @use './styles/features/pr'; // pr 簇（含 publish-review，须在 common/modal 之后）
 @use './styles/features/settings/forms';
