@@ -666,9 +666,11 @@ describe('parseStructuredAsk', () => {
   });
 
   it('suggestions section with no marker → the whole section as one ask-suggestions (same as old behavior)', () => {
-    const md = ['<suggestions>', 'General advice with no specific code location.', '</suggestions>'].join(
-      '\n',
-    );
+    const md = [
+      '<suggestions>',
+      'General advice with no specific code location.',
+      '</suggestions>',
+    ].join('\n');
     const { findings } = parseReviewOutput(md, 'ask');
     expect(findings[0]!.sectionKey).toBe('ask-suggestions');
     expect(findings[0]!.body).toBe('General advice with no specific code location.');
@@ -727,5 +729,46 @@ describe('classifyLlmFailure', () => {
     expect(classifyLlmFailure('litellm.AuthenticationError: invalid api key')).toBeUndefined();
     expect(classifyLlmFailure('Read timed out after 600s')).toBeUndefined();
     expect(classifyLlmFailure("CLI 'codex' returned an empty reply")).toBeUndefined();
+  });
+});
+
+describe('splitMarkdownSections minLevel', () => {
+  // Regression: a PR description ending in a git merge tail. `# Conflicts:` and the `#\tpath` lines under it are
+  // markdown H1s, so before minLevel they outranked /describe's own `###` structure and split the result into
+  // sections named after conflicted files — with the real description scattered across them.
+  const describeOut = [
+    '### **User description**',
+    'fix: isolate internal and external roles',
+    'Merge remote-tracking branch',
+    '',
+    '# Conflicts:',
+    '#\tpackage-lock.json',
+    '#\tpackage.json',
+    '',
+    '___',
+    '',
+    '### **PR Type**',
+    'Enhancement, Bug fix',
+  ].join('\n');
+
+  it('keeps a quoted merge tail inside the section that quotes it', () => {
+    const titles = splitMarkdownSections(describeOut, 3).map((s) => s.title);
+    expect(titles).toEqual(['**User description**', '**PR Type**']);
+    const userDesc = splitMarkdownSections(describeOut, 3)[0]!;
+    // The conflict tail stays put as body text rather than becoming structure.
+    expect(userDesc.body).toContain('# Conflicts:');
+    expect(userDesc.body).toContain('package-lock.json');
+  });
+
+  it('default level 1 still splits on every heading (unchanged for other tools)', () => {
+    const titles = splitMarkdownSections(describeOut).map((s) => s.title);
+    expect(titles).toContain('Conflicts:');
+  });
+
+  it('describe output routes through the shallower minimum', () => {
+    const { findings } = parseReviewOutput(describeOut, 'describe');
+    // No finding is named after a conflicted file.
+    expect(findings.some((f) => /conflicts/i.test(f.title ?? ''))).toBe(false);
+    expect(findings.some((f) => /package-lock/i.test(f.title ?? ''))).toBe(false);
   });
 });

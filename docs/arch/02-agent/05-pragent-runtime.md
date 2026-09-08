@@ -58,7 +58,8 @@ Design principles:
 
 Current patches (pinned pr-agent **0.45.0**):
 - **anchor line numbers** (details in [Review workflow](../01-platform/03-review-workflow.md)): patch `get_line_link` to return `meebox:///<file>#L<s>-L<e>`,
-  letting `/review`'s key_issues render with a structured file:line.
+  letting `/review`'s key_issues render with a structured file:line. **`-1` means "the whole file"** upstream — `/describe` passes it for every File Walkthrough row — and it is truthy, so it must be screened out explicitly or the link becomes `#L-1`, which the anchor parser then rejects outright (its line group only accepts digits), losing even the path. Anything that is not a positive line number yields a file-level link.
+- **diff line counts**: `FilePatchInfo.num_plus_lines` / `num_minus_lines` default to `-1` and only the real platform providers fill them in, so `/describe`'s File Walkthrough rendered every row as `+-1/--1`. `get_diff_files` is **wrapped** (not reimplemented) to backfill the two counters from the patch text, counted by the same rule the platform providers use — upstream keeps owning how the diff is produced.
 - **Anthropic drops temperature**: new Claude models deprecate temperature, so all `anthropic/*` are put into the "don't send temperature" set.
 - **load_yaml tolerance**: an anchor marker taking a whole line breaks YAML → on parse failure, strip the marker and retry, avoiding a whole review crash.
 - **repo-context file fetch**: pr-agent defaults `repo_context_files = ["AGENTS.md"]`, but `LocalGitProvider` inherits the base no-op `get_repo_file_content` → the feature is skipped with a per-run WARNING. Implement it by reading the blob from the base branch's tree (`git show <target_branch>:<path>`, never the working tree), so `/review /describe /improve` inject the reviewed repo's `AGENTS.md`/etc. as `<instruction_files>`; a missing file degrades to `""`.

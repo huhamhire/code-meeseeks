@@ -16,6 +16,9 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔧 Fixed
 
+- The file list in a generated PR description now shows the real number of added and removed lines per file, instead of `+-1/--1`.
+- Links in that file list now open the file instead of pointing at a non-existent line, so clicking through works.
+- A PR description ending in a git merge tail (`# Conflicts:` and the file lines under it) no longer breaks up the generated description — those lines are part of the quoted description, not headings of their own.
 - A part of the interface that loads on demand — the diff editor, a comment's inline code context — no longer takes the whole app down with it when it fails to load; the failure now stays inside that pane. If it failed because the app was updated or rebuilt while the window was open, it says so and offers to reload, which is the only thing that actually helps in that case.
 - A failed review now shows the provider's actual error instead of only "all fallback models failed" — the real cause (an unavailable model, an expired login, an exhausted quota) was previously swallowed and never reached the run card.
 - A local CLI provider that exits successfully but returns an empty reply is now reported as a failure naming that cause, rather than as an unexplained LLM failure.

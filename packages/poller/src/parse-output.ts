@@ -107,19 +107,25 @@ interface Section {
 }
 
 /**
- * Slice pr-agent 0.36.0's markdown output into sections by H1-H6.
+ * Slice pr-agent's markdown output into sections by heading.
  * Each section has level / title / body (body has leading/trailing whitespace stripped).
  * Leading content at the top with no header is also synthesized into a level=0 / title='' section, so /describe
  * can be pulled out as a whole segment.
+ *
+ * `minLevel` is the shallowest heading allowed to start a section; anything shallower stays as body text. The tool's
+ * own structure sits at a known depth, while the text it quotes is arbitrary user prose — so without this, a heading
+ * the user happened to write outranks the structure and tears it apart. The case that forced it: a PR description
+ * ending in a git merge tail, where `# Conflicts:` and the `#\tpath` lines under it are markdown H1s, split a
+ * `/describe` result into sections named after conflicted files.
  */
-export function splitMarkdownSections(md: string): Section[] {
+export function splitMarkdownSections(md: string, minLevel = 1): Section[] {
   const lines = md.replace(/\r\n/g, '\n').split('\n');
   const sections: Section[] = [];
   let cur: Section | null = { level: 0, title: '', body: '' };
   const HEADER_RE = /^(#{1,6})\s+(.+?)\s*$/;
   for (const line of lines) {
     const m = HEADER_RE.exec(line);
-    if (m) {
+    if (m && m[1]!.length >= minLevel) {
       // First finalize the prev section (drop empty segments)
       if (cur && (cur.title || cur.body.trim())) {
         sections.push({ ...cur, body: cur.body.trim() });
@@ -889,7 +895,13 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
   // The GFM path is only for /review (under gfm_markdown the whole thing is a <table>); describe/ask still go through markdown
   // slicing (their HTML/table/mermaid is rendered downstream by react-markdown, the section structure is unaffected).
   const gfm = tool === 'review' && isGfmReviewOutput(baseMd);
-  const allSections = gfm ? splitGfmTableSections(baseMd) : splitMarkdownSections(baseMd);
+  // /describe frames its whole structure at `###` (User description / PR Type / Description / Diagram Walkthrough /
+  // Assessment), and one of those sections quotes the PR description verbatim. Splitting at H1/H2 there would let the
+  // author's own prose define sections — a merge-conflict tail (`# Conflicts:`) being the case that surfaced it. Other
+  // tools keep the default, since their bodies are model output shaped by our prompts, not quoted user text.
+  const allSections = gfm
+    ? splitGfmTableSections(baseMd)
+    : splitMarkdownSections(baseMd, tool === 'describe' ? 3 : 1);
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) {
     const fs = walkthroughFinding ? [walkthroughFinding] : [];

@@ -38,17 +38,50 @@ def patch(module) -> None:
     # and parse-output derives the structured anchor from the link (same source as real providers, not dependent on the model self-reporting a marker).
     from urllib.parse import quote
 
+    def _line_no(value):
+        """A usable 1-based line number, or 0 for "no specific line"."""
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            return 0
+        return n if n > 0 else 0
+
     def get_line_link(self, relevant_file, relevant_line_start, relevant_line_end=None):
         f = quote((relevant_file or "").lstrip("/"), safe="/")
         if not f:
             return ""
-        if not relevant_line_start:
+        # `-1` is upstream's "whole file, no particular line" (pr_description passes it for every File Walkthrough
+        # row). It is truthy, so a plain falsiness check let it through and produced `#L-1` — a fragment the app then
+        # parsed into a bogus anchor at line -1. Anything that is not a positive line number yields a file-level link.
+        start = _line_no(relevant_line_start)
+        if not start:
             return f"meebox:///{f}"
-        if relevant_line_end and relevant_line_end != relevant_line_start:
-            return f"meebox:///{f}#L{relevant_line_start}-L{relevant_line_end}"
-        return f"meebox:///{f}#L{relevant_line_start}"
+        end = _line_no(relevant_line_end)
+        if end and end != start:
+            return f"meebox:///{f}#L{start}-L{end}"
+        return f"meebox:///{f}#L{start}"
 
     module.LocalGitProvider.get_line_link = get_line_link
+
+    # num_plus_lines / num_minus_lines: FilePatchInfo defaults both to -1, and only the real platform providers fill
+    # them in — LocalGitProvider does not, so /describe's File Walkthrough rendered every row as "+-1/--1". Wrap
+    # rather than reimplement get_diff_files: upstream owns how the diff is produced (0.45.0 also made it binary-safe),
+    # and this only backfills two derived counters, computed the same way the platform providers do.
+    _orig_get_diff_files = module.LocalGitProvider.get_diff_files
+
+    def get_diff_files(self):
+        files = _orig_get_diff_files(self)
+        for f in files or []:
+            if getattr(f, "num_plus_lines", -1) >= 0:
+                continue  # already counted (a future upstream that fills them in wins)
+            lines = (getattr(f, "patch", None) or "").splitlines()
+            # Count the same way the platform providers do: any line starting with +/-, which includes the
+            # `+++`/`---` file headers. Kept identical rather than "corrected" so the numbers agree across providers.
+            f.num_plus_lines = len([ln for ln in lines if ln.startswith("+")])
+            f.num_minus_lines = len([ln for ln in lines if ln.startswith("-")])
+        return files
+
+    module.LocalGitProvider.get_diff_files = get_diff_files
 
     # uniformly enable GFM: LocalGitProvider defaults to False for 'gfm_markdown', causing /describe's
     # enable_pr_diagram (on by default in configuration.toml) to be gated off by `enable and is_supported(gfm_markdown)`,
