@@ -78,6 +78,16 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
  * - `CONFIG__FALLBACK_MODELS=[]`: pr-agent configures a fallback by default (usually pointing at the OpenAI family),
  *   and after the main model fails it automatically tries OpenAI with a dummy key, polluting the log and easily misread as "OpenAI misconfigured".
  *   We already specify the provider explicitly, so a fallback is unnecessary
+ *
+ * Plus a group that pins **upstream features whose defaults changed under us**. The app parses `/review` and
+ * `/describe` output as structured markdown (see poller/parse-output), so anything upstream appends to that output is
+ * not a free improvement — it lands as a bogus finding or a stray section. These are therefore turned off explicitly
+ * rather than left at whatever the pinned pr-agent version happens to default to (re-check on every upgrade):
+ * - `PR_REVIEWER__PERSISTENT_FINDING_STATE=false` (new in 0.45, defaults **true**): would append a "resolved findings"
+ *   section carrying cross-run state. The app already owns that concept — drafts, finding closures, re-review verdicts
+ *   — so upstream's version would both duplicate it and parse as extra findings.
+ * - `PR_REVIEWER__ENABLE_REVIEW_COVERAGE_FOOTER=false` / `PR_CODE_SUGGESTIONS__ENABLE_SUGGESTIONS_COVERAGE_FOOTER=false`
+ *   (new in 0.45, both default **true**): a footer appended to the body, which the parser would read as content.
  */
 export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): Record<string, string> {
   const env: Record<string, string> = {};
@@ -88,6 +98,11 @@ export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): R
   env['CONFIG__MAX_MODEL_TOKENS'] = String(contextTokens);
   env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = String(contextTokens);
   env['CONFIG__FALLBACK_MODELS'] = '[]';
+  // Pin upstream output-shaping features that default on (see the doc comment above): the app parses this output, so
+  // extra sections/footers are corruption rather than enrichment.
+  env['PR_REVIEWER__PERSISTENT_FINDING_STATE'] = 'false';
+  env['PR_REVIEWER__ENABLE_REVIEW_COVERAGE_FOOTER'] = 'false';
+  env['PR_CODE_SUGGESTIONS__ENABLE_SUGGESTIONS_COVERAGE_FOOTER'] = 'false';
   // On import litellm fetches the remote model price table over the network (raw.githubusercontent.com); on an intranet/weak network
   // the SSL timeout slows startup and floods warnings. We only take the real token count (from API response.usage),
   // don't need the price table → force using only the in-package local backup, no network at all. See sitecustomize's usage callback.

@@ -1,72 +1,23 @@
-"""LocalGitProvider patch (version-guarded): binary-safe get_diff_files + get_line_link anchor + repo-context file fetch."""
+"""LocalGitProvider patch (version-guarded): get_line_link anchor + dirty-tolerant repo prep + repo-context file fetch."""
 from ..runtime import _EXPECTED_PRAGENT_VERSION, _pragent_version, _warn
 
 
 def patch(module) -> None:
-    """LocalGitProvider.get_diff_files blindly .decode('utf-8') on every diff file, and on a binary
-    file (images / build artifacts / UTF-16 etc., e.g. starting with 0xff) throws UnicodeDecodeError, crashing the whole review.
-    Replace with a binary-safe version: files that fail to decode are skipped (review doesn't handle binaries), the rest of the logic identical to upstream."""
-    # version guard: only patch the pinned pr-agent version; on mismatch skip the whole group (including get_line_link).
+    """Inject the methods LocalGitProvider does not implement: the structured /review anchor (get_line_link),
+    a dirty-tolerant _prepare_repo, labels, and repo-context file reads.
+
+    Binary-safe get_diff_files used to live here too; pr-agent 0.45.0 fixed it upstream (it now skips a file that
+    fails to decode, with a warning), so that override is gone — one less thing to keep in step with upstream.
+    """
+    # version guard: only patch the pinned pr-agent version; on mismatch skip the whole group.
     installed = _pragent_version()
     if installed != _EXPECTED_PRAGENT_VERSION:
         _warn(
             f"pr-agent {installed} does not match the {_EXPECTED_PRAGENT_VERSION} that the meebox patch is adapted for; "
-            "patches skipped (/review line-number anchoring and binary-safe diff disabled). If this is an intentional upgrade, sync "
+            "patches skipped (/review line-number anchoring disabled). If this is an intentional upgrade, sync "
             "runtime.py's _EXPECTED_PRAGENT_VERSION + pragent-runtime.json and re-verify."
         )
         return
-    from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
-
-    def get_diff_files(self):
-        diffs = self.repo.head.commit.diff(
-            self.repo.merge_base(self.repo.head, self.repo.branches[self.target_branch_name]),
-            create_patch=True,
-            R=True,
-        )
-        diff_files = []
-        for diff_item in diffs:
-            try:
-                original_file_content_str = (
-                    diff_item.a_blob.data_stream.read().decode("utf-8")
-                    if diff_item.a_blob is not None
-                    else ""
-                )
-                new_file_content_str = (
-                    diff_item.b_blob.data_stream.read().decode("utf-8")
-                    if diff_item.b_blob is not None
-                    else ""
-                )
-                patch_str = diff_item.diff.decode("utf-8")
-            except (UnicodeDecodeError, ValueError):
-                # binary file can't be utf-8 decoded → skip this file
-                continue
-            edit_type = EDIT_TYPE.MODIFIED
-            if diff_item.new_file:
-                edit_type = EDIT_TYPE.ADDED
-            elif diff_item.deleted_file:
-                edit_type = EDIT_TYPE.DELETED
-            elif diff_item.renamed_file:
-                edit_type = EDIT_TYPE.RENAMED
-            diff_files.append(
-                FilePatchInfo(
-                    original_file_content_str,
-                    new_file_content_str,
-                    patch_str,
-                    # a deleted file's b_path is None → FilePatchInfo.filename=None, and downstream
-                    # set_file_languages / extract_relevant_lines_str's filename.rsplit/strip
-                    # would crash, and one crash interrupts the whole review's line-snippet extraction (even findings for non-deleted files lose
-                    # code snippets). Fall back to a_path to guarantee filename is never None.
-                    diff_item.b_path or diff_item.a_path,
-                    edit_type=edit_type,
-                    old_filename=None
-                    if diff_item.a_path == diff_item.b_path
-                    else diff_item.a_path,
-                )
-            )
-        self.diff_files = diff_files
-        return diff_files
-
-    module.LocalGitProvider.get_diff_files = get_diff_files
 
     # _prepare_repo: upstream throws "repository is not in a clean state" when repo.is_dirty(). For CLI-mode
     # /ask worktrees we sanitize as needed — truncating the repo's own agent instruction files (CLAUDE.md / AGENTS.md / .cursor rules

@@ -9,6 +9,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### ✨ Added
 
+- The bundled review engine is now pr-agent 0.45.0 (from 0.39.0). Two long-standing local fixes are no longer needed — a single-line file change is rendered correctly upstream now, and a binary file no longer has to be worked around — and its YAML handling is more tolerant of imperfect model output.
 - Mentions now render as a pill instead of blending into the surrounding text, so it is obvious at a glance when someone is named — on the activity page, in the inline diff comments, in drafts, and in the PR description alike.
 - Proxy settings now take a list of **direct connections**: hosts that bypass the proxy and connect straight out, so an internal code platform, its git remote, or a self-hosted model stays reachable while everything else still goes through the proxy. Uses the familiar `NO_PROXY` syntax (a domain covers its subdomains), and applies to every outbound path at once — REST, git and the LLM call.
 - A review that fails because the model is unavailable now says so and tells you what to do — with a local CLI provider (claude / codex) the model comes from that CLI's own configuration, so it has to be changed there.

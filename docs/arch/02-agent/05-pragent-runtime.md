@@ -56,15 +56,18 @@ Design principles:
 - **Version guard**: patches depend on a specific pr-agent version's internal implementation → if `_EXPECTED_PRAGENT_VERSION` ≠ the actually installed version at runtime,
   **skip all patches and emit a stderr WARNING** (safe degradation); at build time it hard-checks the shim constant == the manifest version, failing outright on mismatch.
 
-Current patches:
-- **Binary-safe diff**: the original `get_diff_files` blindly utf-8-decodes every file and crashes on binary → changed to skip on decode failure.
+Current patches (pinned pr-agent **0.45.0**):
 - **anchor line numbers** (details in [Review workflow](../01-platform/03-review-workflow.md)): patch `get_line_link` to return `meebox:///<file>#L<s>-L<e>`,
   letting `/review`'s key_issues render with a structured file:line.
 - **Anthropic drops temperature**: new Claude models deprecate temperature, so all `anthropic/*` are put into the "don't send temperature" set.
 - **load_yaml tolerance**: an anchor marker taking a whole line breaks YAML → on parse failure, strip the marker and retry, avoiding a whole review crash.
-- **repo-context file fetch**: pr-agent 0.39.0 defaults `repo_context_files = ["AGENTS.md"]`, but `LocalGitProvider` inherits the base no-op `get_repo_file_content` → the feature is skipped with a per-run WARNING. Implement it by reading the blob from the base branch's tree (`git show <target_branch>:<path>`, never the working tree), so `/review /describe /improve` inject the reviewed repo's `AGENTS.md`/etc. as `<instruction_files>`; a missing file degrades to `""`.
+- **repo-context file fetch**: pr-agent defaults `repo_context_files = ["AGENTS.md"]`, but `LocalGitProvider` inherits the base no-op `get_repo_file_content` → the feature is skipped with a per-run WARNING. Implement it by reading the blob from the base branch's tree (`git show <target_branch>:<path>`, never the working tree), so `/review /describe /improve` inject the reviewed repo's `AGENTS.md`/etc. as `<instruction_files>`; a missing file degrades to `""`.
 - **Local CLI provider**: when `MEEBOX_CLI_MODE` is set, replace `chat_completion` wholesale with the "call the local CLI" version (see below).
 - **token usage collection**: see below.
+
+**Retired patches** (kept as a record, because "why is this no longer patched" is the question an upgrade raises): *binary-safe diff* and the *single-line-hunk phantom line* were both **fixed upstream in 0.45.0** — `get_diff_files` now skips a file that fails to decode, and `extract_hunk_headers` defaults an omitted hunk size to 1 rather than 0. Both were verified against the installed runtime before deletion, not assumed from release notes.
+
+**Upstream defaults that must stay pinned**: 0.45.0 turned on three features that append to the output this app *parses* — `pr_reviewer.persistent_finding_state` (a "resolved findings" section carrying upstream's own cross-run state, which the app already owns via drafts / finding closures / re-review verdicts), and two coverage footers. They are forced off in `buildPragentEnv` rather than left at their defaults. **Re-check this list on every upgrade**: a new default that adds a section is not a free improvement here — it lands as a bogus finding.
 
 ### Real token usage
 
