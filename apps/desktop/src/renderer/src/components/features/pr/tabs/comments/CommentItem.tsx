@@ -10,7 +10,12 @@ import {
   ConfirmModal,
   LazyBoundary,
   mermaidComponents,
+  ShareIcon,
 } from '../../../../common';
+import {
+  commentReferenceStore,
+  useCommentReference,
+} from '../../../../../stores/comment-reference-store';
 import { CommentEditEditor } from './CommentEditEditor';
 import { CommentReplyEditor } from './CommentReplyEditor';
 import { ReplyDraftList } from './ReplyDraftList';
@@ -106,6 +111,10 @@ export function CommentItem({
     comment,
     readOnly,
   );
+
+  // Whether this comment is the one currently referenced into the Agent conversation (drives the toggle + active styling).
+  const activeRef = useCommentReference(pr.localId);
+  const referenced = activeRef?.commentId === comment.remoteId;
 
   // inline comment anchor chip: path:line + side (old=base / new=head), letting the user locate the code position from the comment.
   // When onJumpToAnchor is provided (activity view) the chip becomes clickable → jump to the corresponding file/line in the Diff.
@@ -203,6 +212,35 @@ export function CommentItem({
           title={t('commentsPanel.deleteTitle')}
         >
           {deleting ? t('commentsPanel.deleting') : t('common.delete')}
+        </button>
+      )}
+      {/* Reference this comment into the Agent conversation: attaches it as implicit context, so the question can be
+          "is this right?" without the user restating the comment or its location. Uses the same ShareIcon as the
+          finding reference button — one action, one glyph, rather than teaching the same gesture twice. A toggle
+          rather than a one-way action: clicking the referenced comment again releases it (the input-bar chip can
+          also clear it). */}
+      {!replyOpen && (
+        <button
+          type="button"
+          className={`pr-comment-reference-btn${referenced ? ' is-active' : ''}`}
+          onClick={() =>
+            referenced
+              ? commentReferenceStore.clear()
+              : commentReferenceStore.set({
+                  prLocalId: pr.localId,
+                  commentId: comment.remoteId,
+                  author: comment.author.displayName || comment.author.name,
+                  body: comment.body,
+                  ...(comment.anchor
+                    ? { anchor: { path: comment.anchor.path, line: comment.anchor.line } }
+                    : {}),
+                })
+          }
+          title={referenced ? t('commentsPanel.referenceClearTitle') : t('commentsPanel.referenceTitle')}
+          aria-label={referenced ? t('commentsPanel.referenceClearTitle') : t('commentsPanel.referenceTitle')}
+          aria-pressed={referenced}
+        >
+          <ShareIcon size={13} />
         </button>
       )}
       {/* The "add reaction" button goes after the action buttons; hidden in reply edit mode to avoid crowding */}

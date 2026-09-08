@@ -307,6 +307,25 @@
     background: rgb(var(--rgb-accent) / 0.08);
   }
 }
+// Reference button: icon-only, so it sizes to the glyph instead of a label. While the comment is referenced it stays
+// lit (is-active), because an attached reference has to be visible without hovering to find it again.
+.pr-comment-reference-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px $space-3;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  &:hover,
+  &.is-active {
+    border-color: $color-accent;
+    color: $color-info;
+    background: rgb(var(--rgb-accent) / 0.08);
+  }
+}
 // Delete button: same size as the reply button, uses danger as the main color so users recognize it at a glance as a destructive action.
 // Secondary confirmation goes through ConfirmModal; no more hover-only hiding on the button (to avoid making users think the feature is missing)
 .pr-comment-delete-btn {

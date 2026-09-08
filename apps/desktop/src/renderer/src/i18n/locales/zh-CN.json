@@ -71,6 +71,9 @@
     "codeExistingAria": "原代码",
     "codeImprovedAria": "改进代码",
     "commandNoArgs": "{{cmd}} 不接受参数",
+    "commentReference": {
+      "clearTitle": "移除引用的评论"
+    },
     "deleteRunAria": "删除",
     "deleteRunTitle": "删除此记录",
     "draftJumpEditTitle": "在代码中编辑",
@@ -269,6 +272,8 @@
     "loading": "加载评论中…",
     "loadingCodeContext": "加载代码上下文…",
     "minutesAgo_other": "{{count}} 分钟前",
+    "referenceClearTitle": "取消引用这条评论",
+    "referenceTitle": "让 Agent 调查这条评论",
     "reply": "回复"
   },
   "commitsPanel": {

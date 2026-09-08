@@ -71,6 +71,9 @@
     "codeExistingAria": "元のコード",
     "codeImprovedAria": "改善後のコード",
     "commandNoArgs": "{{cmd}} は引数を受け付けません",
+    "commentReference": {
+      "clearTitle": "参照中のコメントを外す"
+    },
     "deleteRunAria": "削除",
     "deleteRunTitle": "この記録を削除",
     "draftJumpEditTitle": "コード内で編集",
@@ -269,6 +272,8 @@
     "loading": "コメントを読み込み中…",
     "loadingCodeContext": "コードコンテキストを読み込み中…",
     "minutesAgo_other": "{{count}} 分前",
+    "referenceClearTitle": "このコメントの参照を解除",
+    "referenceTitle": "このコメントについてエージェントに調べてもらう",
     "reply": "返信"
   },
   "commitsPanel": {

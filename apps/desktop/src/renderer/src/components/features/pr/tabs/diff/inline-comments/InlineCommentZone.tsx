@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type ReactMarkdown from 'react-markdown';
 import type { PlatformKind, PlatformUser, PrComment } from '@meebox/shared';
-import { Avatar, makeBitbucketImageFor, ConfirmModal } from '../../../../../common';
+import { Avatar, makeBitbucketImageFor, ConfirmModal, ShareIcon } from '../../../../../common';
 import { formatTimestamp } from '../../../../../../utils/time';
 import { CommentEditEditor } from '../../comments/CommentEditEditor';
 import { CommentReplyEditor } from '../../comments/CommentReplyEditor';
@@ -11,6 +11,10 @@ import { CommentMarkdown } from '../../shared/CommentMarkdown';
 import { toReplyDraftAnchor } from '../../shared/replyDraftAnchor';
 import { ReactionAddButton, ReactionChips, useReactions } from '../../shared/ReactionBar';
 import { useCommentThread } from '../../shared/useCommentThread';
+import {
+  commentReferenceStore,
+  useCommentReference,
+} from '../../../../../../stores/comment-reference-store';
 
 /**
  * Estimate view zone height (in lines). Each comment = header(avatar+name+date, 1.3 lines) + body
@@ -199,6 +203,9 @@ function CommentNode({
     canDelete,
     handleDelete,
   } = useCommentThread(prLocalId, comment);
+  // Whether this comment is the one currently referenced into the Agent conversation.
+  const activeRef = useCommentReference(prLocalId);
+  const referenced = activeRef?.commentId === comment.remoteId;
 
   // body wraps only author + content + reply button / editor; replies live outside as siblings —
   // so hovering inner replies doesn't bubble up to trigger the outer :hover and reveal all ancestor reply buttons at once
@@ -261,6 +268,38 @@ function CommentNode({
                 {deleting ? t('commentsPanel.deleting') : t('common.delete')}
               </button>
             )}
+            {/* Reference into the Agent conversation — same action, same glyph and same toggle behaviour as the
+                comments tab, since a comment surface may differ in layout but never in what its actions do. */}
+            <button
+              type="button"
+              className={`comment-zone-reference-btn${referenced ? ' is-active' : ''}`}
+              onClick={() =>
+                referenced
+                  ? commentReferenceStore.clear()
+                  : commentReferenceStore.set({
+                      prLocalId,
+                      commentId: comment.remoteId,
+                      author: comment.author.displayName || comment.author.name,
+                      body: comment.body,
+                      ...(comment.anchor
+                        ? { anchor: { path: comment.anchor.path, line: comment.anchor.line } }
+                        : {}),
+                    })
+              }
+              title={
+                referenced
+                  ? t('commentsPanel.referenceClearTitle')
+                  : t('commentsPanel.referenceTitle')
+              }
+              aria-label={
+                referenced
+                  ? t('commentsPanel.referenceClearTitle')
+                  : t('commentsPanel.referenceTitle')
+              }
+              aria-pressed={referenced}
+            >
+              <ShareIcon size={13} />
+            </button>
             {/* The "add reaction" button goes after the action buttons (consistent with the comments tab); the whole foot group is already hidden in reply / edit mode. */}
             {reactionsMode && (
               <ReactionAddButton
