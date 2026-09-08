@@ -27,6 +27,7 @@ import { useChatTimeline } from './hooks/useChatTimeline';
 import { AgentStepRow, ThinkingLive } from './components/AgentStep';
 import { ChatEmpty } from './components/ChatEmpty';
 import { CommitDivider } from './components/CommitDivider';
+import { computeCommitDividers } from './utils/commit-dividers';
 import { ChatInputBar } from './components/ChatInputBar';
 import { ConversationMessage } from './components/ConversationMessage';
 import { PlanPanel } from './components/PlanPanel';
@@ -244,26 +245,12 @@ export function ChatPane({
     prLocalId,
   });
 
-  // Commit dividers: mark every point in the run timeline where the reviewed commit changes, so the boundary persists
-  // rather than vanishing once the new code is reviewed. Two cases:
-  //  - between two consecutive runs whose headSha differs → a divider *before* the newer run (a durable boundary
-  //    between the old-commit runs above and the new-commit runs below);
-  //  - a trailing divider at the bottom when the current PR head has advanced past the last run's commit (covers a new
-  //    commit that hasn't been reviewed yet — including while a run against it is still in flight).
-  // The timeline is ascending by start time; only runs that recorded a headSha participate (pre-feature runs are skipped).
-  const commitDividers = useMemo(() => {
-    const before = new Map<string, string>(); // timeline entry.key → the newer headSha to render a divider before it
-    let prevSha: string | undefined;
-    for (const entry of timeline) {
-      const sha = entry.run?.headSha;
-      if (!sha) continue;
-      if (prevSha && sha !== prevSha) before.set(entry.key, sha);
-      prevSha = sha;
-    }
-    const head = pr?.sourceRef.sha;
-    const bottom = head && prevSha && head !== prevSha ? head : null;
-    return { before, bottom };
-  }, [timeline, pr?.sourceRef.sha]);
+  // Commit dividers: every point in the timeline where the reviewed commit changes (see computeCommitDividers, which
+  // also explains why the trailing boundary anchors after the last run rather than at the end of the pane).
+  const commitDividers = useMemo(
+    () => computeCommitDividers(timeline, pr?.sourceRef.sha),
+    [timeline, pr?.sourceRef.sha],
+  );
 
   // Commit messages for divider tooltips: fetch the PR's commits (main-cached; keyed on head sha so it refreshes when
   // the head advances) into a sha → message map. Empty until loaded / on failure (the tooltip falls back to the short sha).
@@ -451,9 +438,10 @@ export function ChatPane({
             <ConversationMessage key={entry.key} message={entry.message} />
           ) : null,
         )}
-        {/* Bottom commit divider: the PR head advanced past the last run's commit and no run against it exists yet
-            (a new commit not reviewed yet, including while a run against it is still in flight). Once such a run
-            completes, the boundary instead renders between the old and new runs above (see commitDividers.before). */}
+        {/* Trailing commit divider, for the one case with no entry to precede: the head advanced past the last run's
+            commit and nothing has landed after that run yet. As soon as anything does — a message, a step, a queued
+            run — the boundary moves into `before` and anchors there, so it stays put instead of being pushed down by
+            each new bubble (see computeCommitDividers). */}
         {commitDividers.bottom && (
           <CommitDivider
             sha={commitDividers.bottom}
