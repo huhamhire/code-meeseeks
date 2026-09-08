@@ -17,6 +17,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔧 Fixed
 
+- The commit divider in the review timeline now stays where the commit boundary actually is, instead of sliding further down every time a new message appears below it.
 - The file list in a generated PR description now shows the real number of added and removed lines per file, instead of `+-1/--1`.
 - Links in that file list now open the file instead of pointing at a non-existent line, so clicking through works.
 - A PR description ending in a git merge tail (`# Conflicts:` and the file lines under it) no longer breaks up the generated description — those lines are part of the quoted description, not headings of their own.
