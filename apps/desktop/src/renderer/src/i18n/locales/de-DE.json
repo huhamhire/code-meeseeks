@@ -72,7 +72,8 @@
     "codeImprovedAria": "Verbesserter Code",
     "commandNoArgs": "{{cmd}} akzeptiert keine Argumente",
     "commentReference": {
-      "clearTitle": "Referenzierten Kommentar entfernen"
+      "clearTitle": "Referenzierten Kommentar entfernen",
+      "useAsReply": "Als Antwort übernehmen"
     },
     "deleteRunAria": "Löschen",
     "deleteRunTitle": "Diesen Lauf löschen",

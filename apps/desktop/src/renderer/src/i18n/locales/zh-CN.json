@@ -72,7 +72,8 @@
     "codeImprovedAria": "改进代码",
     "commandNoArgs": "{{cmd}} 不接受参数",
     "commentReference": {
-      "clearTitle": "移除引用的评论"
+      "clearTitle": "移除引用的评论",
+      "useAsReply": "用作回复"
     },
     "deleteRunAria": "删除",
     "deleteRunTitle": "删除此记录",

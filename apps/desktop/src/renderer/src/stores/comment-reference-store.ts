@@ -27,10 +27,17 @@ export interface CommentReference {
 }
 
 interface CommentReferenceState {
+  /** Attached to the input bar, to be carried with the next question. */
   reference: CommentReference | null;
+  /**
+   * The comment the **most recent** question referenced, kept after sending so the answer can be turned into a reply
+   * to that comment. Held only in memory and only for that one round: the association is what makes "use as reply"
+   * meaningful, and an association that outlived its round would attach the answer to the wrong comment.
+   */
+  answering: CommentReference | null;
 }
 
-let state: CommentReferenceState = { reference: null };
+let state: CommentReferenceState = { reference: null, answering: null };
 const subscribers = new Set<() => void>();
 
 function notify(): void {
@@ -47,12 +54,33 @@ export const commentReferenceStore = {
   },
   /** Reference a comment (replaces any current one — the input bar carries at most one comment reference). */
   set: (reference: CommentReference): void => {
-    state = { reference };
+    state = { ...state, reference };
     notify();
   },
   clear: (): void => {
     if (!state.reference) return;
-    state = { reference: null };
+    state = { ...state, reference: null };
+    notify();
+  },
+  /**
+   * Called when a question is sent: the attached reference (if any) detaches from the input bar and becomes the one
+   * this round is answering. Called on **every** send, including unreferenced ones — that is what clears a previous
+   * round's association, so a later unrelated answer never offers to be posted as a reply to an old comment.
+   */
+  handOff: (): void => {
+    state = { reference: null, answering: state.reference };
+    notify();
+  },
+  /** Drop the association (the answer was used, dismissed, or the PR changed). */
+  clearAnswering: (): void => {
+    if (!state.answering) return;
+    state = { ...state, answering: null };
+    notify();
+  },
+  /** Drop both, e.g. on PR switch. */
+  reset: (): void => {
+    if (!state.reference && !state.answering) return;
+    state = { reference: null, answering: null };
     notify();
   },
 };
@@ -64,6 +92,16 @@ export function useCommentReference(prLocalId: string | undefined): CommentRefer
     commentReferenceStore.getSnapshot,
   );
   const ref = snap.reference;
+  return ref && ref.prLocalId === prLocalId ? ref : null;
+}
+
+/** The comment the current round is answering, for this PR, or null. */
+export function useAnsweringComment(prLocalId: string | undefined): CommentReference | null {
+  const snap = useSyncExternalStore(
+    commentReferenceStore.subscribe,
+    commentReferenceStore.getSnapshot,
+  );
+  const ref = snap.answering;
   return ref && ref.prLocalId === prLocalId ? ref : null;
 }
 

@@ -72,7 +72,8 @@
     "codeImprovedAria": "改善後のコード",
     "commandNoArgs": "{{cmd}} は引数を受け付けません",
     "commentReference": {
-      "clearTitle": "参照中のコメントを外す"
+      "clearTitle": "参照中のコメントを外す",
+      "useAsReply": "返信として使う"
     },
     "deleteRunAria": "削除",
     "deleteRunTitle": "この記録を削除",

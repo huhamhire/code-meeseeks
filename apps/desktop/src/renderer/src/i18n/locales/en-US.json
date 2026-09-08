@@ -72,7 +72,8 @@
     "codeImprovedAria": "Improved code",
     "commandNoArgs": "{{cmd}} does not accept arguments",
     "commentReference": {
-      "clearTitle": "Remove the referenced comment"
+      "clearTitle": "Remove the referenced comment",
+      "useAsReply": "Use as reply"
     },
     "deleteRunAria": "Delete",
     "deleteRunTitle": "Delete this run",
