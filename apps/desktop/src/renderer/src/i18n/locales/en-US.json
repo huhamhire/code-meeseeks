@@ -329,6 +329,8 @@
     "hint": "Reloading usually resolves it. If it keeps happening, the details below and the application log (meebox.log) identify the cause.",
     "reload": "Reload",
     "retry": "Retry",
+    "staleHint": "Part of the interface could no longer be loaded, which happens when the app is updated or rebuilt while a window stays open. Reloading picks up the current version.",
+    "staleTitle": "The app files changed since this window opened",
     "title": "Something went wrong rendering the interface"
   },
   "diffSearchPanel": {
@@ -501,6 +503,11 @@
     "expandLabel": "⊕ Expand code context ({{path}}:{{line}})",
     "expandTitle": "Expand code around the anchored line",
     "loading": "Loading code context…"
+  },
+  "lazyLoad": {
+    "failed": "This part of the interface could not be loaded.",
+    "genericHint": "Retrying often works; if it keeps failing, reload the window.",
+    "staleHint": "The app files changed since this window opened — usually an update or a rebuild. Reloading picks up the current version."
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "This provider needs no key (leave empty)",

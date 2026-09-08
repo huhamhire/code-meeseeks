@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo } from 'react';
+import { lazy, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PlatformUser, PrComment, PrCommentAnchor, StoredPullRequest } from '@meebox/shared';
 import i18n from '../../../../../i18n';
@@ -8,6 +8,7 @@ import {
   makeBitbucketImageFor,
   ChatIcon,
   ConfirmModal,
+  LazyBoundary,
   mermaidComponents,
 } from '../../../../common';
 import { CommentEditEditor } from './CommentEditEditor';
@@ -146,11 +147,12 @@ export function CommentItem({
   // File-level comments (no line) have no single line to show → skip the code context.
   const inlineCode =
     comment.anchor && comment.anchor.line != null && depth === 0 ? (
-      <Suspense
-        fallback={<div className="pane-loading muted">{t('commentsPanel.loadingCodeContext')}</div>}
+      <LazyBoundary
+        label="InlineCodeContext"
+        loading={<div className="pane-loading muted">{t('commentsPanel.loadingCodeContext')}</div>}
       >
         <InlineCodeContext pr={pr} anchor={comment.anchor} autoExpand={autoExpandCode} />
-      </Suspense>
+      </LazyBoundary>
     ) : null;
 
   // Edit mode: textarea replaces the markdown body in place; non-edit mode: render markdown

@@ -329,6 +329,8 @@
     "hint": "Ein Neuladen behebt das in der Regel. Tritt es wiederholt auf, benennen die Details unten und das Anwendungsprotokoll (meebox.log) die Ursache.",
     "reload": "Neu laden",
     "retry": "Erneut versuchen",
+    "staleHint": "Ein Teil der Oberfläche konnte nicht mehr geladen werden — das passiert, wenn die Anwendung bei geöffnetem Fenster aktualisiert oder neu gebaut wird. Ein Neuladen übernimmt die aktuelle Version.",
+    "staleTitle": "Die Anwendungsdateien haben sich geändert, seit dieses Fenster geöffnet wurde",
     "title": "Beim Rendern der Oberfläche ist ein Fehler aufgetreten"
   },
   "diffSearchPanel": {
@@ -501,6 +503,11 @@
     "expandLabel": "⊕ Code-Kontext erweitern ({{path}}:{{line}})",
     "expandTitle": "Code um die verankerte Zeile erweitern",
     "loading": "Code-Kontext wird geladen…"
+  },
+  "lazyLoad": {
+    "failed": "Dieser Teil der Oberfläche konnte nicht geladen werden.",
+    "genericHint": "Ein erneuter Versuch hilft meistens; schlägt es weiterhin fehl, laden Sie das Fenster neu.",
+    "staleHint": "Die Anwendungsdateien haben sich seit dem Öffnen dieses Fensters geändert — meist durch ein Update oder einen Neubau. Ein Neuladen übernimmt die aktuelle Version."
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "Dieser Provider benötigt keinen Schlüssel (leer lassen)",
