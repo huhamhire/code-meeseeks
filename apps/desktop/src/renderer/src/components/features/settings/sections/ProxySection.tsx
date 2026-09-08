@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import type { Config } from '@meebox/shared';
+import { parseNoProxy, type Config } from '@meebox/shared';
 
 export function ProxySection({
   proxy,
@@ -10,6 +10,7 @@ export function ProxySection({
 }) {
   const { t } = useTranslation();
   const on = proxy.enabled && !!proxy.host;
+  const bypassCount = parseNoProxy(proxy.no_proxy).length;
   return (
     <section className="modal-section">
       <div className="modal-section-head">
@@ -28,6 +29,13 @@ export function ProxySection({
       <p className="muted" style={{ margin: 0 }}>
         {t('settings.proxyStatusHint')}
       </p>
+      {/* Surface that bypass rules are in force: when a host unexpectedly does (or does not) go through the proxy, the
+          rule list is the first thing to check, and it would otherwise be hidden inside the dialog. */}
+      {on && bypassCount > 0 && (
+        <p className="muted" style={{ margin: '4px 0 0' }}>
+          {t('settings.proxyNoProxySummary', { count: bypassCount })}
+        </p>
+      )}
     </section>
   );
 }

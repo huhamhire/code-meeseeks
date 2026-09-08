@@ -109,7 +109,25 @@ export function ProxyEditorModal({
                 </button>
               </div>
             </div>
+            <div className="modal-kv-key">{t('settings.proxyNoProxy')}</div>
+            <div className="modal-kv-val">
+              {/* Multi-line on purpose: a bypass list is usually several hosts, and one per line stays readable where a
+                  single comma-separated line does not. Stored normalized to one line (see normalizeNoProxy), and the
+                  parser accepts commas / whitespace / newlines alike, so a value pasted from NO_PROXY also works. */}
+              <textarea
+                className="settings-input"
+                rows={3}
+                value={draft.no_proxy}
+                onChange={(e) => patch({ no_proxy: e.target.value })}
+                placeholder={t('settings.proxyNoProxyPlaceholder')}
+                aria-label={t('settings.proxyNoProxyAria')}
+                spellCheck={false}
+              />
+            </div>
           </div>
+          <p className="muted" style={{ margin: '6px 0 0' }}>
+            {t('settings.proxyNoProxyHint')}
+          </p>
           <div
             className="settings-edit-row"
             style={{ marginTop: 10, alignItems: 'center', gap: 10 }}

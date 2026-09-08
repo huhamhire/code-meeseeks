@@ -46,6 +46,7 @@ proxy:
   port: 8080
   username: ''
   password: ''
+  no_proxy: ''         # 跳过代理的地址，逗号分隔；本机地址始终直连
 
 pr_agent:
   strategy: auto
@@ -214,7 +215,7 @@ Agent **无独立启用开关**——配置了 LLM 且 pr-agent 就绪即可用�
 
 ## `proxy` — 出站网络代理
 
-开启后 LLM 调用、代码平台 REST、git HTTPS 统一经代理；loopback / 本地地址（含本地 Ollama）自动直连。SSH 方式的 git 拉取不走此配置，需在 `~/.ssh/config` 自配。
+开启后 LLM 调用、代码平台 REST、git HTTPS 统一经代理；loopback / 本地地址（含本地 Ollama）自动直连，`no_proxy` 中列出的地址同样直连。SSH 方式的 git 拉取不走此配置，需在 `~/.ssh/config` 自配。
 
 | 字段 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
@@ -224,6 +225,7 @@ Agent **无独立启用开关**——配置了 LLM 且 pr-agent 就绪即可用�
 | `port` | integer | `8080` | 代理端口，`1`–`65535`。 |
 | `username` | string | `''` | Basic Auth 用户名，无鉴权留空。 |
 | `password` | string | `''` | Basic Auth 密码，无鉴权留空。 |
+| `no_proxy` | string | `''` | 直连而不走代理的地址，沿用通行的 `NO_PROXY` 写法（逗号分隔；填域名同时覆盖其子域；`*` 表示全部绕过；不支持 CIDR 网段）。本机地址始终直连，无需填写。参见[网络代理配置](03-proxy.md#直连地址跳过代理)。 |
 
 ## `pr_agent` — 运行时
 

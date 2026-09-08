@@ -144,8 +144,12 @@ export type LlmProfile = z.infer<typeof LlmProfileSchema>;
 /**
  * Outbound network proxy. Phase 1 supports HTTP proxy only: once enabled, LLM / Bitbucket Server
  * REST / git HTTPS all go through the proxy, only loopback/local (including local Ollama) connect directly automatically; SSH goes through the user's
- * own ~/.ssh/config. The config surface only exposes host/port/Basic Auth.
+ * own ~/.ssh/config. The config surface exposes host/port/Basic Auth plus the bypass list.
  * `protocol` is an enum reserved as an extension point (phase 1 only 'http'; adding socks5 etc. is non-breaking for existing configs).
+ *
+ * `no_proxy`: hosts that egress directly despite the proxy being on, in the conventional `NO_PROXY` syntax (see
+ * no-proxy.ts for the supported subset and why it mirrors the environment variable). Loopback is always bypassed and
+ * is not part of this value. Empty (the default) preserves the historical behaviour of proxying everything non-local.
  */
 export const ProxySchema = z.object({
   enabled: z.boolean().default(false),
@@ -154,6 +158,7 @@ export const ProxySchema = z.object({
   port: z.number().int().min(1).max(65535).default(8080),
   username: z.string().default(''),
   password: z.string().default(''),
+  no_proxy: z.string().default(''),
 });
 export type ProxyConfig = z.infer<typeof ProxySchema>;
 
