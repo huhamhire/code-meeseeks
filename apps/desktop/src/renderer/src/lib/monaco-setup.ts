@@ -5,16 +5,8 @@
 // When M1+ actually needs syntax highlighting, import the corresponding language worker on demand.
 
 import * as monaco from 'monaco-editor';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import editorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 import { loader } from '@monaco-editor/react';
-// The 4 contribution submodules for "worker-backed language services" (editor.main already loaded them; importing
-// again here is only to grab their named-exported *Defaults; ES module singletons won't re-execute). Their runtime
-// JS named-exports typescriptDefaults / jsonDefaults / cssDefaults … but the .d.ts is wrongly `export {}` (monaco
-// 0.55 ESM bundling defect), so import as namespace and cast via unknown below into the known shapes, without any.
-import * as tsLang from 'monaco-editor/esm/vs/language/typescript/monaco.contribution.js';
-import * as jsonLang from 'monaco-editor/esm/vs/language/json/monaco.contribution.js';
-import * as cssLang from 'monaco-editor/esm/vs/language/css/monaco.contribution.js';
-import * as htmlLang from 'monaco-editor/esm/vs/language/html/monaco.contribution.js';
 // Third-party editor themes (IStandaloneThemeData shape, vendored from monaco-themes, see editor-themes/NOTICE.md),
 // registered via defineTheme below for selection. ids align with @meebox/shared EDITOR_THEME_OPTIONS; vs / vs-dark /
 // hc-* are Monaco built-ins, no registration needed. Vendored in place rather than an npm dependency: monaco-themes'
@@ -135,22 +127,19 @@ export function getEditorThemeColors(id: string): EditorThemeColorData | null {
  * (the window fallback below degrades to pure insurance). The other 80+ languages are pure monarch tokenizer
  * coloring with no worker backend, unaffected and needing no handling.
  */
-interface LangServiceDefaults {
-  // Passing an empty ModeConfiguration (each field is optional, absent = don't register that provider) = turn off all features
-  setModeConfiguration(modeConfiguration: object): void;
-}
-// The runtime named exports exist (see each contribution.js's export), but their .d.ts is wrongly `export {}`, so
-// cast via unknown into the known *Defaults shape (without any); filter as fallback when a name is missing, so a future monaco rename won't crash.
-const defaultsOf = (mod: unknown, names: readonly string[]): LangServiceDefaults[] =>
-  names
-    .map((n) => (mod as Record<string, LangServiceDefaults | undefined>)[n])
-    .filter((d): d is LangServiceDefaults => typeof d?.setModeConfiguration === 'function');
-
+// monaco 0.56.0 moved these language services from `vs/language/<x>/monaco.contribution.js` (whose .d.ts was an
+// empty `export {}`, forcing a cast through unknown) to typed namespaces on the package entry. Reading them from
+// `monaco` is both the supported path and fully typed, so the previous hand-written shape + name lookup is gone.
 for (const d of [
-  ...defaultsOf(tsLang, ['typescriptDefaults', 'javascriptDefaults']),
-  ...defaultsOf(jsonLang, ['jsonDefaults']),
-  ...defaultsOf(cssLang, ['cssDefaults', 'scssDefaults', 'lessDefaults']),
-  ...defaultsOf(htmlLang, ['htmlDefaults', 'handlebarDefaults', 'razorDefaults']),
+  monaco.typescript.typescriptDefaults,
+  monaco.typescript.javascriptDefaults,
+  monaco.json.jsonDefaults,
+  monaco.css.cssDefaults,
+  monaco.css.scssDefaults,
+  monaco.css.lessDefaults,
+  monaco.html.htmlDefaults,
+  monaco.html.handlebarDefaults,
+  monaco.html.razorDefaults,
 ]) {
   d.setModeConfiguration({});
 }
@@ -169,6 +158,13 @@ for (const d of [
  * don't affect rendering, and can't be eradicated on the app side → **silently ignored by default** (as known
  * issues). To diagnose, run `localStorage.setItem('meebox.monacoDebug','1')` in devtools and refresh to see the
  * details of the swallowed errors.
+ *
+ * **Re-checked at monaco 0.56.0: both still present, so this stays.** `Missing requestHandler` is still a plain
+ * `Promise.reject` from `editorWebWorker.$fmr`, and `TextModel got disposed` still goes through
+ * `onUnexpectedError(new BugIndicatingError(...))` in `diffEditorWidget` — i.e. they still surface as an
+ * unhandledrejection and a window error respectively, which is what the two listeners below catch. Re-check on the
+ * next upgrade rather than assuming: this suppression is deliberately narrow, and outliving its cause would mean
+ * silently swallowing a message that had become meaningful again.
  */
 const MONACO_DEBUG = (() => {
   try {
