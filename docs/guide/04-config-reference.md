@@ -46,6 +46,7 @@ proxy:
   port: 8080
   username: ''
   password: ''
+  no_proxy: ''         # hosts that bypass the proxy, comma-separated; loopback is always bypassed
 
 pr_agent:
   strategy: auto
@@ -214,7 +215,7 @@ If the layout contains `<SUGGESTIONS>` it is used as the full comment body; othe
 
 ## `proxy` — outbound network proxy
 
-When enabled, LLM calls, code platform REST, and git HTTPS all go through the proxy; loopback / local addresses (including a local Ollama) connect directly. git fetch over SSH does not use this config — configure it yourself in `~/.ssh/config`.
+When enabled, LLM calls, code platform REST, and git HTTPS all go through the proxy; loopback / local addresses (including a local Ollama) connect directly, as do any hosts listed in `no_proxy`. git fetch over SSH does not use this config — configure it yourself in `~/.ssh/config`.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -224,6 +225,7 @@ When enabled, LLM calls, code platform REST, and git HTTPS all go through the pr
 | `port` | integer | `8080` | Proxy port, `1`–`65535`. |
 | `username` | string | `''` | Basic Auth username, empty if no auth. |
 | `password` | string | `''` | Basic Auth password, empty if no auth. |
+| `no_proxy` | string | `''` | Hosts that connect directly instead of through the proxy, in the conventional `NO_PROXY` syntax (comma-separated; a domain also covers its subdomains; `*` bypasses everything; CIDR ranges are not supported). Loopback is always bypassed and need not be listed. See [Network proxy setup](03-proxy.md#direct-connections-bypass-list). |
 
 ## `pr_agent` — runtime
 

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { nativeTheme } from 'electron';
-import { editorThemeNativeSource } from '@meebox/shared';
+import { editorThemeNativeSource, normalizeNoProxy } from '@meebox/shared';
 import { writeConfig } from '@meebox/config';
 import { buildDraftAdapter } from '../adapters.js';
 import { setMainLanguage } from '../i18n/index.js';
@@ -156,12 +156,16 @@ export const setConnections: IpcController<'config:setConnections'> = async (_ev
  */
 export const setProxy: IpcController<'config:setProxy'> = async (_event, req) => {
   const { bootstrap, logger, reconfigureConnections } = getContext();
-  const next = { ...bootstrap.config, proxy: req.proxy };
+  // Normalize the bypass list on the way in, not in the form: whichever way the config arrives — this IPC, or a
+  // hand-edited config.yaml — what lands on disk is one canonical comma-separated line, so the value the user reads
+  // back is the value actually matched against.
+  const proxy = { ...req.proxy, no_proxy: normalizeNoProxy(req.proxy.no_proxy) };
+  const next = { ...bootstrap.config, proxy };
   await writeConfig(bootstrap.paths.configFile, next);
-  bootstrap.config.proxy = req.proxy;
+  bootstrap.config.proxy = proxy;
   await reconfigureConnections();
   logger.info(
-    { enabled: req.proxy.enabled, host: req.proxy.host, port: req.proxy.port },
+    { enabled: proxy.enabled, host: proxy.host, port: proxy.port, noProxy: proxy.no_proxy },
     'proxy config updated (hot-reloaded)',
   );
 };
