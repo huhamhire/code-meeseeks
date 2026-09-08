@@ -3,6 +3,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../../lib/markdown';
 import { remarkEmojiShortcodes } from '../../../../../lib/remark-emoji';
+import { remarkMentions } from '../../../../../lib/remark-mention';
 import { transformBitbucketUrl } from '../../../../common';
 
 /**
@@ -29,8 +30,8 @@ export function CommentMarkdown({
       <ReactMarkdown
         remarkPlugins={
           hardBreaks
-            ? [remarkGfm, remarkBreaks, remarkEmojiShortcodes]
-            : [remarkGfm, remarkEmojiShortcodes]
+            ? [remarkGfm, remarkBreaks, remarkEmojiShortcodes, remarkMentions]
+            : [remarkGfm, remarkEmojiShortcodes, remarkMentions]
         }
         rehypePlugins={REMOTE_REHYPE_PLUGINS}
         components={components}

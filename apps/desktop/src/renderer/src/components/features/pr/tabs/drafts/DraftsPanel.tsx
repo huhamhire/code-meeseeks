@@ -8,6 +8,7 @@ import { invoke } from '../../../../../api';
 import { formatBackendError } from '../../../../../errors';
 import { useDraftsForPr } from '../../../../../stores/drafts-store';
 import { ConfirmModal } from '../../../../common';
+import { remarkMentions } from '../../../../../lib/remark-mention';
 
 // posted no longer exists (successful publish deletes the local draft), filters keep only publishable / all / rejected
 type Filter = 'all' | 'publishable' | 'rejected';
@@ -250,7 +251,11 @@ export function DraftsPanel({ pr, onJumpToAnchor, capabilities, readOnly = false
                 <div className="drafts-panel-item-body markdown">
                   {d.body.trim() ? (
                     <ReactMarkdown
-                      remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}
+                      remarkPlugins={
+                        hardBreaks
+                          ? [remarkGfm, remarkBreaks, remarkMentions]
+                          : [remarkGfm, remarkMentions]
+                      }
                     >
                       {d.body}
                     </ReactMarkdown>

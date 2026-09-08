@@ -4,6 +4,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { PlatformKind, PlatformUser, ReviewDraft } from '@meebox/shared';
 import { ConfirmModal, TrashIcon } from '../../../../common';
+import { remarkMentions } from '../../../../../lib/remark-mention';
 import { MentionTextarea } from '../shared/MentionTextarea';
 import { searchMentionUsers } from '../shared/mentionSearch';
 import { uploadCommentImage } from '../shared/uploadCommentImage';
@@ -227,9 +228,17 @@ export function DraftZone({
           </div>
         </div>
       ) : (
+        // Mentions render as pills here too: a draft is a comment the user is about to post, and the same body must
+        // not read differently before and after publishing (see docs/arch/01-platform/04-comment-interactions.md).
         <div className="draft-zone-body markdown">
           {draft.body.trim() ? (
-            <ReactMarkdown remarkPlugins={hardBreaks ? [remarkGfm, remarkBreaks] : [remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={
+                hardBreaks
+                  ? [remarkGfm, remarkBreaks, remarkMentions]
+                  : [remarkGfm, remarkMentions]
+              }
+            >
               {draft.body}
             </ReactMarkdown>
           ) : (
