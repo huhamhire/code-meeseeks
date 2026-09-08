@@ -148,3 +148,20 @@
     margin-right: $space-2;
   }
 }
+
+// @mention pill (remark-mention → span.comment-mention). Rendered as one unit so a mention reads as "a person" rather
+// than as prose that happens to start with `@`. Scoped to the whole file rather than nested inside `.markdown`,
+// because the class is emitted by the markdown pipeline wherever a comment body is rendered — including the draft
+// preview, whose container carries `.markdown`, and any future surface that may not.
+.comment-mention {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: $radius-pill;
+  background: $color-accent-bg-fade;
+  color: $color-accent;
+  font-weight: 500;
+  // Keep line height from growing where a mention sits in a dense comment: the pill borrows the line box it is in.
+  line-height: 1.4;
+  // A long username must wrap with the text rather than force the comment to scroll sideways.
+  word-break: break-word;
+}
