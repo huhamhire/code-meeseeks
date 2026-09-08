@@ -7,6 +7,7 @@ export * from './Avatar';
 export * from './BitbucketImage';
 export * from './ConfirmModal';
 export * from './ErrorBoundary';
+export * from './LazyBoundary';
 export * from './LlmProviderIcon';
 export * from './Loading';
 export * from './MermaidDiagram';

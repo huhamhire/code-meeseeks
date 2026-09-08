@@ -323,6 +323,8 @@
     "hint": "重新加载通常即可恢复。若反复出现，下方详情与应用日志（meebox.log）可定位原因。",
     "reload": "重新加载",
     "retry": "重试",
+    "staleHint": "部分界面已无法加载——通常是窗口开着时应用被更新或重新构建所致。重新加载即可载入当前版本。",
+    "staleTitle": "应用文件在窗口打开后发生了变化",
     "title": "界面渲染出错"
   },
   "diffSearchPanel": {
@@ -490,6 +492,11 @@
     "expandLabel": "⊕ 展开代码上下文 ({{path}}:{{line}})",
     "expandTitle": "展开锚定行前后代码",
     "loading": "加载代码上下文…"
+  },
+  "lazyLoad": {
+    "failed": "这部分界面加载失败。",
+    "genericHint": "重试通常可以恢复；若持续失败，请重新加载窗口。",
+    "staleHint": "应用文件在窗口打开后发生了变化——通常是更新或重新构建所致。重新加载即可载入当前版本。"
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "该 provider 无需密钥（留空）",

@@ -56,3 +56,22 @@
   display: flex;
   gap: $space-2;
 }
+
+// Failure of one lazily-loaded pane (LazyBoundary). Sized to sit inside whatever region failed — a comment's code
+// context, the diff pane — rather than taking over the window like .app-crash does.
+.lazy-boundary-error {
+  padding: $space-8;
+  color: $text-muted;
+  font-size: $fs-xs;
+  line-height: 1.5;
+
+  p {
+    margin: 0 0 $space-2;
+  }
+}
+
+.lazy-boundary-actions {
+  display: flex;
+  gap: $space-2;
+  margin-top: $space-3;
+}

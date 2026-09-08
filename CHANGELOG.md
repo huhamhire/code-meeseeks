@@ -15,6 +15,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔧 Fixed
 
+- A part of the interface that loads on demand — the diff editor, a comment's inline code context — no longer takes the whole app down with it when it fails to load; the failure now stays inside that pane. If it failed because the app was updated or rebuilt while the window was open, it says so and offers to reload, which is the only thing that actually helps in that case.
 - A failed review now shows the provider's actual error instead of only "all fallback models failed" — the real cause (an unavailable model, an expired login, an exhausted quota) was previously swallowed and never reached the run card.
 - A local CLI provider that exits successfully but returns an empty reply is now reported as a failure naming that cause, rather than as an unexplained LLM failure.
 - A merged PR now leaves the list on its own shortly after you merge it, instead of lingering until the next periodic sync — the remote takes a few seconds to actually mark it merged, and the app now waits for that rather than refreshing too early and finding nothing changed.
