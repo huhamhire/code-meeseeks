@@ -88,6 +88,10 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
  *   — so upstream's version would both duplicate it and parse as extra findings.
  * - `PR_REVIEWER__ENABLE_REVIEW_COVERAGE_FOOTER=false` / `PR_CODE_SUGGESTIONS__ENABLE_SUGGESTIONS_COVERAGE_FOOTER=false`
  *   (new in 0.45, both default **true**): a footer appended to the body, which the parser would read as content.
+ * - `PR_DESCRIPTION__PR_DIAGRAM_DIRECTION=LR` (new in 0.45, defaults `adaptive`): `adaptive` turns any chain longer
+ *   than a few nodes top-down, which is the wrong trade for where this diagram is read — a narrow chat column, where
+ *   a tall diagram pushes everything else off screen while a wide one scrolls sideways and can be opened in the
+ *   preview view. Pinned left-to-right rather than left to a heuristic tuned for a full-width page.
  */
 export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): Record<string, string> {
   const env: Record<string, string> = {};
@@ -103,6 +107,7 @@ export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): R
   env['PR_REVIEWER__PERSISTENT_FINDING_STATE'] = 'false';
   env['PR_REVIEWER__ENABLE_REVIEW_COVERAGE_FOOTER'] = 'false';
   env['PR_CODE_SUGGESTIONS__ENABLE_SUGGESTIONS_COVERAGE_FOOTER'] = 'false';
+  env['PR_DESCRIPTION__PR_DIAGRAM_DIRECTION'] = 'LR';
   // On import litellm fetches the remote model price table over the network (raw.githubusercontent.com); on an intranet/weak network
   // the SSL timeout slows startup and floods warnings. We only take the real token count (from API response.usage),
   // don't need the price table → force using only the in-package local backup, no network at all. See sitecustomize's usage callback.
