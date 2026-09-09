@@ -18,6 +18,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔧 Fixed
 
+- A generated PR description no longer ends with a blank card — an invisible marker the review engine now stamps into its output was being treated as a section of its own.
+- Diagrams in a generated PR description are laid out left-to-right again, instead of turning tall and top-down once they get past a few steps and pushing the rest of the result off screen.
 - The commit divider in the review timeline now stays where the commit boundary actually is, instead of sliding further down every time a new message appears below it.
 - The file list in a generated PR description now shows the real number of added and removed lines per file, instead of `+-1/--1`.
 - Links in that file list now open the file instead of pointing at a non-existent line, so clicking through works.

@@ -772,3 +772,30 @@ describe('splitMarkdownSections minLevel', () => {
     expect(findings.some((f) => /package-lock/i.test(f.title ?? ''))).toBe(false);
   });
 });
+
+describe('invisible-only sections', () => {
+  // Regression: pr-agent 0.45.0 stamps `<!-- pr-agent-generated -->` at the top of its output. That landed in the
+  // leading (title-less) section, whose body was therefore "not empty" — but an HTML comment renders to nothing, so
+  // the run result grew a card that looked blank.
+  it('drops a section whose body is only an HTML comment', () => {
+    const md = [
+      'pr-7c82edaec417/head',
+      '<!-- pr-agent-generated -->',
+      '### **PR Type**',
+      'Enhancement',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'describe');
+    expect(findings.map((f) => f.title)).toEqual(['PR Type']);
+  });
+
+  it('keeps a section that has real content alongside the comment', () => {
+    const md = [
+      '<!-- pr-agent-generated -->',
+      'actual prose',
+      '### **PR Type**',
+      'Enhancement',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'describe');
+    expect(findings.some((f) => (f.body ?? '').includes('actual prose'))).toBe(true);
+  });
+});

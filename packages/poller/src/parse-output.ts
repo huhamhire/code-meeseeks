@@ -161,6 +161,10 @@ function trimNoise(body: string): string {
     const trimmed = l.trim();
     if (trimmed === '') return true;
     if (/^(?:[-*_]\s*){3,}$/.test(trimmed)) return true; // markdown HR
+    // A line that is nothing but an HTML comment: invisible once rendered, so it is not content. pr-agent 0.45.0
+    // stamps `<!-- pr-agent-generated -->` at the top of its output, and counting that as content produced a section
+    // with a body that renders to nothing — an empty card in the run result.
+    if (/^<!--[\s\S]*-->$/.test(trimmed)) return true;
     if (INTERNAL_BRANCH_RE.test(trimmed) && trimmed.length < 40) return true; // short line + contains branch name
     return false;
   };
