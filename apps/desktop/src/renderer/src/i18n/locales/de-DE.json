@@ -71,6 +71,10 @@
     "codeExistingAria": "Originalcode",
     "codeImprovedAria": "Verbesserter Code",
     "commandNoArgs": "{{cmd}} akzeptiert keine Argumente",
+    "commentReference": {
+      "clearTitle": "Referenzierten Kommentar entfernen",
+      "useAsReply": "Als Antwort übernehmen"
+    },
     "deleteRunAria": "Löschen",
     "deleteRunTitle": "Diesen Lauf löschen",
     "draftJumpEditTitle": "Im Code bearbeiten",
@@ -272,6 +276,8 @@
     "loadingCodeContext": "Code-Kontext wird geladen…",
     "minutesAgo_one": "vor {{count}} Minute",
     "minutesAgo_other": "vor {{count}} Minuten",
+    "referenceClearTitle": "Verweis auf diesen Kommentar aufheben",
+    "referenceTitle": "Den Agenten zu diesem Kommentar befragen",
     "reply": "Antworten"
   },
   "commitsPanel": {

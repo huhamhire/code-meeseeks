@@ -12,8 +12,15 @@ import type {
 import { invoke } from '../../../api';
 import { ChatIcon, TrashIcon, ConfirmModal, PaneLoading } from '../../common';
 import { useChatRunStore } from '../../../stores/chat-run-store';
-import { useDraftsForPr } from '../../../stores/drafts-store';
+import { draftsStore, useDraftsForPr } from '../../../stores/drafts-store';
 import { useFindingClosuresForPr } from '../../../stores/finding-closures-store';
+import {
+  commentReferenceStore,
+  commentReferenceLabel,
+  formatCommentReference,
+  useAnsweringComment,
+  useCommentReference,
+} from '../../../stores/comment-reference-store';
 import {
   formatReferencedContext,
   selectionStore,
@@ -160,6 +167,7 @@ export function ChatPane({
   // On PR switch, clear the reference state and reset the detached state to avoid cross-PR residue.
   useEffect(() => {
     setRefFinding(null);
+    commentReferenceStore.reset();
     setScopeDetached(false);
   }, [prLocalId]);
   // On switching to another commit (or clearing the view scope), reset the detached state: the newly selected commit becomes the implicit scope again.
@@ -172,10 +180,23 @@ export function ChatPane({
 
   // Diff selection (belonging to the current PR): used for the input bar's "N lines selected" badge + carrying the selected code as implicit context into a question.
   const { selection: diffSelection, ignored: selectionIgnored } = useDiffSelection(prLocalId);
-  // When not ignored, format the selection into a reference string; shared by /ask and natural-language questions. Ignored / no selection → undefined (this message carries no reference).
+  // Comment referenced from a comment surface (activity panel / inline diff zone), carried as implicit context so the
+  // question can be about the comment without restating it.
+  const commentRef = useCommentReference(prLocalId);
+  // Implicit context for this message: the diff selection and the referenced comment are independent sources and
+  // compose — asking "is this comment right about the code I selected?" needs both. Each block is self-describing, so
+  // concatenating them needs no framing. Undefined when neither is present (the message carries no reference).
   const referencedContext =
-    diffSelection && !selectionIgnored ? formatReferencedContext(diffSelection) : undefined;
+    [
+      diffSelection && !selectionIgnored ? formatReferencedContext(diffSelection) : null,
+      commentRef ? formatCommentReference(commentRef) : null,
+    ]
+      .filter(Boolean)
+      .join('\n\n') || undefined;
 
+  // The comment this round is answering (set when the question carried a reference). Its presence is what puts the
+  // "use as reply" action on the answer.
+  const answeringComment = useAnsweringComment(prLocalId);
   // The effective scope for this PR's chat commands: follows the commit selected in the Diff view, unless the user has detached (scopeDetached).
   // Only one scope may be in effect at a time — when a Diff selection exists it takes precedence (finer-grained), the commit scope is suspended and its chip
   // is hidden too (see commitScopeChip), auto-restored after the selection is cleared.
@@ -251,6 +272,45 @@ export function ChatPane({
     () => computeCommitDividers(timeline, pr?.sourceRef.sha),
     [timeline, pr?.sourceRef.sha],
   );
+
+  // Key of the last assistant message in the timeline: the answer the action belongs on. Anchored to the last one
+  // rather than to a message id because a conversation message has no stable id of its own here.
+  const lastAnswerKey = useMemo(() => {
+    for (let i = timeline.length - 1; i >= 0; i -= 1) {
+      const m = timeline[i]?.message;
+      if (m && m.role !== 'user') return timeline[i]!.key;
+    }
+    return null;
+  }, [timeline]);
+  /** Turn the agent's answer into a draft reply to the comment that was asked about, then release the association. */
+  const createReplyDraftFromAnswer = (body: string): void => {
+    if (!answeringComment || !prLocalId) return;
+    void invoke('drafts:create', {
+      localId: prLocalId,
+      draft: {
+        body,
+        status: 'pending',
+        replyTo: { parentCommentId: answeringComment.commentId },
+        ...(answeringComment.anchor?.line != null
+          ? {
+              anchor: {
+                path: answeringComment.anchor.path,
+                startLine: answeringComment.anchor.line,
+                endLine: answeringComment.anchor.line,
+              },
+            }
+          : {}),
+      } as Parameters<typeof invoke<'drafts:create'>>[1]['draft'],
+    })
+      .then(() => {
+        void draftsStore.refresh(prLocalId);
+        commentReferenceStore.clearAnswering();
+      })
+      .catch((e: unknown) => {
+        console.error('create reply draft from answer failed', e);
+      });
+  };
+
 
   // Commit messages for divider tooltips: fetch the PR's commits (main-cached; keyed on head sha so it refreshes when
   // the head advances) into a sha → message map. Empty until loaded / on failure (the tooltip falls back to the short sha).
@@ -435,7 +495,20 @@ export function ChatPane({
           ) : entry.step ? (
             <AgentStepRow key={entry.key} step={entry.step} />
           ) : entry.message ? (
-            <ConversationMessage key={entry.key} message={entry.message} />
+            <ConversationMessage
+              key={entry.key}
+              message={entry.message}
+              useAsReply={
+                answeringComment && entry.key === lastAnswerKey
+                  ? {
+                      label: t('chatPane.commentReference.useAsReply'),
+                      onUse: () => {
+                        createReplyDraftFromAnswer(entry.message!.content);
+                      },
+                    }
+                  : null
+              }
+            />
           ) : null,
         )}
         {/* Trailing commit divider, for the one case with no entry to precede: the head advanced past the last run's
@@ -500,6 +573,13 @@ export function ChatPane({
             undefined,
             tool === 'ask' ? undefined : (effectiveScope ?? undefined),
           );
+          // Hand the referenced comment off to the round being answered: it detaches from the input bar (a reference
+          // is per-question — leaving it attached would silently prepend the same comment to every later message)
+          // while staying associated with this answer, so the answer can be turned into a reply to it. Called on
+          // every send, including unreferenced ones, which is what clears a previous round's association.
+          // The diff selection is deliberately *not* released — it stays visible in the editor, so keeping it is
+          // what the user sees and expects.
+          if (tool === 'ask') commentReferenceStore.handOff();
         }}
         onAgentAsk={(q) => {
           if (refFinding) {
@@ -512,6 +592,7 @@ export function ChatPane({
             return;
           }
           void actions.handleAgentAsk(q, referencedContext);
+          commentReferenceStore.handOff();
         }}
         onCancel={hasMyActive || agentRunningHere ? actions.handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
@@ -533,6 +614,18 @@ export function ChatPane({
                 label: anchorShortLabel(refFinding.finding.anchor),
                 onClear: () => {
                   setRefFinding(null);
+                },
+              }
+            : null
+        }
+        // Referenced comment: chip showing "<author>: <excerpt>" + clear. Attached from a comment's reference button;
+        // carried as implicit context with the next question, and released on send (see onSend).
+        commentChip={
+          commentRef
+            ? {
+                label: commentReferenceLabel(commentRef),
+                onClear: () => {
+                  commentReferenceStore.clear();
                 },
               }
             : null

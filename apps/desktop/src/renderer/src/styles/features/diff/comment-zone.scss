@@ -55,6 +55,7 @@
 }
 .comment-zone-reply-btn,
 .comment-zone-edit-btn,
+.comment-zone-reference-btn,
 .comment-zone-delete-btn {
   padding: 2px $space-3;
   font-size: $fs-sm;
@@ -64,7 +65,10 @@
   color: $text-muted;
   cursor: pointer !important;
   opacity: 0;
-  transition: opacity 0.12s, border-color 0.12s, color 0.12s;
+  transition:
+    opacity 0.12s,
+    border-color 0.12s,
+    color 0.12s;
 }
 .comment-zone-reply-btn:hover {
   border-color: $color-accent;
@@ -75,6 +79,26 @@
   border-color: $color-info;
   color: $color-info;
   background: rgb(var(--rgb-accent) / 0.08);
+}
+// Reference button: icon-only, so it sizes to the glyph rather than to a label; while the comment is referenced it
+// stays lit (is-active) and visible regardless of hover, since an attached reference must be discoverable at a glance.
+.comment-zone-reference-btn {
+  // Padding and font-size come from the shared rule above, so this only has to centre the glyph within that box —
+  // overriding them here is what made the button a different height from the text buttons beside it.
+  display: inline-flex;
+  align-items: center;
+
+  svg {
+    display: block;
+  }
+}
+.comment-zone-reference-btn:hover,
+.comment-zone-reference-btn.is-active {
+  border-color: $color-accent;
+  color: $color-info;
+}
+.comment-zone-item-body .comment-zone-foot .comment-zone-reference-btn.is-active {
+  opacity: 1;
 }
 // delete button uses danger as its main color to differentiate its semantics from other buttons; semi-transparent when disabled
 .comment-zone-delete-btn:hover:not(:disabled) {
@@ -94,10 +118,12 @@
 // on hovering the comment body area, show all buttons in foot (including add reaction); focus-within covers keyboard / reaction popover open states
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-reply-btn,
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-edit-btn,
+.comment-zone-item-body:hover > .comment-zone-foot .comment-zone-reference-btn,
 .comment-zone-item-body:hover > .comment-zone-foot .comment-zone-delete-btn,
 .comment-zone-item-body:hover > .comment-zone-foot .pr-reaction-add-wrap,
 .comment-zone-foot:focus-within .comment-zone-reply-btn,
 .comment-zone-foot:focus-within .comment-zone-edit-btn,
+.comment-zone-foot:focus-within .comment-zone-reference-btn,
 .comment-zone-foot:focus-within .comment-zone-delete-btn,
 .comment-zone-foot:focus-within .pr-reaction-add-wrap,
 .comment-zone-reply-btn:focus,
@@ -115,7 +141,7 @@
   padding: $space-3 $space-4;
   font-size: $fs-sm;
   color: $color-danger;
-  background: rgb(var(--rgb-danger) / 0.10);
+  background: rgb(var(--rgb-danger) / 0.1);
   border-left: 3px solid $color-danger;
   border-radius: $radius-sm;
   word-break: break-word;
@@ -142,12 +168,7 @@
   font-size: $fs-lg;
   color: $text-primary;
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    'PingFang SC',
-    'Microsoft YaHei',
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   line-height: $lh-loose;
   box-sizing: border-box;
 }

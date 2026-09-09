@@ -272,3 +272,16 @@
   font-size: $fs-sm;
   line-height: $lh-loose;
 }
+
+// "Use as reply" action under an agent answer that was asked about a comment. Sits inside the reply body so it
+// aligns with the text rather than the icon gutter, and stays quiet — it is an offer, not the main content.
+.chat-agent-reply-actions {
+  display: flex;
+  margin-top: $space-3;
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: $space-2;
+  }
+}

@@ -12,6 +12,7 @@ import {
   FileTreeIcon,
   SendIcon,
   StopIcon,
+  ShareIcon,
 } from '../../../common';
 import { useChatInput } from '../hooks/useChatInput';
 import { useTextareaAutosizeDrag } from '../hooks/useTextareaAutosizeDrag';
@@ -55,6 +56,8 @@ interface ChatInputBarProps {
   onToggleSelection: () => void;
   /** Re-review reference chip: shows "re-review <file:line>" + clear when a finding is referenced; null = not rendered. */
   referenceChip?: { label: string; onClear: () => void } | null;
+  /** Referenced-comment chip: shows "<author>: <excerpt>" + clear when a comment is referenced; null = not rendered. */
+  commentChip?: { label: string; onClear: () => void } | null;
   /**
    * Single-commit scope chip: follows the commit selected in the Diff view, showing "short SHA · subject". Shown whenever there is
    * a selection, click to **toggle enable/disable** (disabling does not remove the chip, this session's commands revert to the whole
@@ -89,6 +92,7 @@ export function ChatInputBar({
   selectionIgnored,
   onToggleSelection,
   referenceChip,
+  commentChip,
   commitScopeChip,
 }: ChatInputBarProps) {
   const { t } = useTranslation();
@@ -281,6 +285,27 @@ export function ChatInputBar({
                   onClick={referenceChip.onClear}
                   title={t('chatPane.reference.clearTitle')}
                   aria-label={t('chatPane.reference.clearTitle')}
+                >
+                  ✕
+                </button>
+              </span>
+            </>
+          )}
+          {/* Referenced comment chip: the comment is carried as implicit context for this question. Its own chip rather
+              than sharing the re-review one — that reference changes what the run *does* (produces a verdict), while
+              this only adds context, and the two can be attached at once. */}
+          {commentChip && (
+            <>
+              <span className="chat-cmd-divider" aria-hidden="true" />
+              <span className="chat-selection-chip chat-reference-chip" title={commentChip.label}>
+                <ShareIcon size={12} />
+                <span>{commentChip.label}</span>
+                <button
+                  type="button"
+                  className="chat-reference-chip-clear"
+                  onClick={commentChip.onClear}
+                  title={t('chatPane.commentReference.clearTitle')}
+                  aria-label={t('chatPane.commentReference.clearTitle')}
                 >
                   ✕
                 </button>

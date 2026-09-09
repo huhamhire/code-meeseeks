@@ -9,6 +9,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### ✨ Added
 
+- A comment can now be handed to the agent to investigate: click the reference button on any comment and ask about it, and the agent gets the comment, its author and the code it points at, then checks the claim against the actual code. Its answer can be turned into a draft reply to that comment in one click, editable before it goes out.
 - The code editor is now Monaco 0.56.0 (from 0.55.1), which also drops the outdated sanitizer copy behind most of the open dependency advisories.
 - The bundled review engine is now pr-agent 0.45.0 (from 0.39.0). Two long-standing local fixes are no longer needed — a single-line file change is rendered correctly upstream now, and a binary file no longer has to be worked around — and its YAML handling is more tolerant of imperfect model output.
 - Mentions now render as a pill instead of blending into the surrounding text, so it is obvious at a glance when someone is named — on the activity page, in the inline diff comments, in drafts, and in the PR description alike.
