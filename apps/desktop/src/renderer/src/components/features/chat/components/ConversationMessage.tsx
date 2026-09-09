@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { AgentMessage } from '@meebox/shared';
-import { ChatIcon } from '../../../common';
+import { ChatIcon, ShareIcon } from '../../../common';
 import { VERDICT_LABEL_KEY } from '../constants';
 import { Md } from './shared';
 
@@ -8,8 +8,17 @@ import { Md } from './shared';
  * Display of a single multi-turn conversation message: user → right-aligned bubble; assistant review type
  * (with recommendation) → "review summary" card + verdict badge; assistant conversation type (no
  * recommendation) → left-aligned dedicated conversation reply wrapper.
+ *
+ * `useAsReply` turns the answer into a draft reply to the comment the question referenced. Offered only on the answer
+ * to such a question (the caller decides), because the action needs to know which comment it is replying to.
  */
-export function ConversationMessage({ message }: { message: AgentMessage }) {
+export function ConversationMessage({
+  message,
+  useAsReply,
+}: {
+  message: AgentMessage;
+  useAsReply?: { label: string; onUse: () => void } | null;
+}) {
   const { t } = useTranslation();
   if (message.role === 'user') {
     return (
@@ -53,6 +62,17 @@ export function ConversationMessage({ message }: { message: AgentMessage }) {
       <ChatIcon size={16} />
       <div className="markdown chat-agent-reply-body">
         <Md>{message.content}</Md>
+        {/* Turn the answer into a draft reply to the comment that was asked about. A draft rather than a posted
+            reply: the answer is the agent's, and publishing in the user's name is theirs to decide — the draft lands
+            in the same pool as every other pending reply, editable and published with the review batch. */}
+        {useAsReply && (
+          <div className="chat-agent-reply-actions">
+            <button type="button" className="btn btn-sm" onClick={useAsReply.onUse}>
+              <ShareIcon size={12} />
+              <span>{useAsReply.label}</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

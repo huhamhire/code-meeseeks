@@ -23,6 +23,35 @@ export interface ParsedReviewOutput {
 }
 
 /**
+ * Actionable classification of an LLM failure, used by the UI to add a "what to do about it" hint on top of the raw
+ * technical message. Only cases with a concrete user action get a kind; everything else stays unclassified (undefined)
+ * and renders the message alone.
+ *
+ * - `model-unavailable`: the model the provider was asked for does not exist / is not accessible for this account.
+ *   Typical with a local CLI provider, whose model is pinned in the CLI's own config (e.g. `~/.codex/config.toml`)
+ *   and can be retired upstream at any time — the app never chose it, so the fix is to change it there.
+ */
+export type LlmFailureKind = 'model-unavailable';
+
+/**
+ * Classify an LLM failure message into an actionable kind, or undefined when nothing actionable is recognized.
+ * Matches the wording of both the direct-API path (litellm `NotFoundError` / `model_not_found`) and the local CLI path
+ * (codex's `The model \`x\` does not exist or you do not have access to it` / `is not supported when using ...`).
+ */
+export function classifyLlmFailure(message: string): LlmFailureKind | undefined {
+  const m = stripAnsi(message);
+  if (
+    /model_not_found/i.test(m) ||
+    /\bmodel\b[^\n]{0,80}\bdoes not exist\b/i.test(m) ||
+    /\bmodel\b[^\n]{0,80}\bis not supported\b/i.test(m) ||
+    /\bdo(?:es)? not have access to (?:it|this model)\b/i.test(m)
+  ) {
+    return 'model-unavailable';
+  }
+  return undefined;
+}
+
+/**
  * Scan stdout for a marker of all LLM calls failing. When pr-agent's fallback retry exhausts all alternate
  * models and still fails, it only logger.error's one line "Failed to <tool> PR: Failed to generate
  * prediction with any model of [...]", and the CLI itself exits 0 without actively failing.
@@ -78,19 +107,25 @@ interface Section {
 }
 
 /**
- * Slice pr-agent 0.36.0's markdown output into sections by H1-H6.
+ * Slice pr-agent's markdown output into sections by heading.
  * Each section has level / title / body (body has leading/trailing whitespace stripped).
  * Leading content at the top with no header is also synthesized into a level=0 / title='' section, so /describe
  * can be pulled out as a whole segment.
+ *
+ * `minLevel` is the shallowest heading allowed to start a section; anything shallower stays as body text. The tool's
+ * own structure sits at a known depth, while the text it quotes is arbitrary user prose — so without this, a heading
+ * the user happened to write outranks the structure and tears it apart. The case that forced it: a PR description
+ * ending in a git merge tail, where `# Conflicts:` and the `#\tpath` lines under it are markdown H1s, split a
+ * `/describe` result into sections named after conflicted files.
  */
-export function splitMarkdownSections(md: string): Section[] {
+export function splitMarkdownSections(md: string, minLevel = 1): Section[] {
   const lines = md.replace(/\r\n/g, '\n').split('\n');
   const sections: Section[] = [];
   let cur: Section | null = { level: 0, title: '', body: '' };
   const HEADER_RE = /^(#{1,6})\s+(.+?)\s*$/;
   for (const line of lines) {
     const m = HEADER_RE.exec(line);
-    if (m) {
+    if (m && m[1]!.length >= minLevel) {
       // First finalize the prev section (drop empty segments)
       if (cur && (cur.title || cur.body.trim())) {
         sections.push({ ...cur, body: cur.body.trim() });
@@ -126,6 +161,10 @@ function trimNoise(body: string): string {
     const trimmed = l.trim();
     if (trimmed === '') return true;
     if (/^(?:[-*_]\s*){3,}$/.test(trimmed)) return true; // markdown HR
+    // A line that is nothing but an HTML comment: invisible once rendered, so it is not content. pr-agent 0.45.0
+    // stamps `<!-- pr-agent-generated -->` at the top of its output, and counting that as content produced a section
+    // with a body that renders to nothing — an empty card in the run result.
+    if (/^<!--[\s\S]*-->$/.test(trimmed)) return true;
     if (INTERNAL_BRANCH_RE.test(trimmed) && trimmed.length < 40) return true; // short line + contains branch name
     return false;
   };
@@ -860,7 +899,13 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
   // The GFM path is only for /review (under gfm_markdown the whole thing is a <table>); describe/ask still go through markdown
   // slicing (their HTML/table/mermaid is rendered downstream by react-markdown, the section structure is unaffected).
   const gfm = tool === 'review' && isGfmReviewOutput(baseMd);
-  const allSections = gfm ? splitGfmTableSections(baseMd) : splitMarkdownSections(baseMd);
+  // /describe frames its whole structure at `###` (User description / PR Type / Description / Diagram Walkthrough /
+  // Assessment), and one of those sections quotes the PR description verbatim. Splitting at H1/H2 there would let the
+  // author's own prose define sections — a merge-conflict tail (`# Conflicts:`) being the case that surfaced it. Other
+  // tools keep the default, since their bodies are model output shaped by our prompts, not quoted user text.
+  const allSections = gfm
+    ? splitGfmTableSections(baseMd)
+    : splitMarkdownSections(baseMd, tool === 'describe' ? 3 : 1);
   const sections = allSections.filter((s) => !shouldSkipSection(s, tool));
   if (sections.length === 0) {
     const fs = walkthroughFinding ? [walkthroughFinding] : [];

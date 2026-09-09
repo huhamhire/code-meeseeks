@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StoredPullRequest } from '@meebox/shared';
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
+import { remarkMentions } from '../../../../lib/remark-mention';
 import { formatTimestamp } from '../../../../utils/time';
 import {
   Avatar,
@@ -48,7 +49,7 @@ export function PrInfoView({ pr }: PrInfoViewProps) {
                 {/* Bitbucket remote uses \r\n line endings; when remark parses, CR and LF each count as a line break → a single
                     newline gets treated as a paragraph separator, adding blank space between each list item. Normalize to \n */}
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
+                  remarkPlugins={[remarkGfm, remarkMentions]}
                   rehypePlugins={REMOTE_REHYPE_PLUGINS}
                   components={mdComponents}
                   urlTransform={transformBitbucketUrl}

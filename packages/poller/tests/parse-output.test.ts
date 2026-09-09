@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classifyLlmFailure,
   parseReviewOutput,
   parseStructuredAsk,
   sectionToFinding,
@@ -665,9 +666,11 @@ describe('parseStructuredAsk', () => {
   });
 
   it('suggestions section with no marker → the whole section as one ask-suggestions (same as old behavior)', () => {
-    const md = ['<suggestions>', 'General advice with no specific code location.', '</suggestions>'].join(
-      '\n',
-    );
+    const md = [
+      '<suggestions>',
+      'General advice with no specific code location.',
+      '</suggestions>',
+    ].join('\n');
     const { findings } = parseReviewOutput(md, 'ask');
     expect(findings[0]!.sectionKey).toBe('ask-suggestions');
     expect(findings[0]!.body).toBe('General advice with no specific code location.');
@@ -696,5 +699,103 @@ describe('parseStructuredAsk', () => {
       parseReviewOutput('<summary>x</summary>\n<verdict>maybe</verdict>', 'ask').askVerdict,
     ).toBeUndefined();
     expect(parseReviewOutput('<summary>x</summary>', 'ask').askVerdict).toBeUndefined();
+  });
+});
+
+describe('classifyLlmFailure', () => {
+  it('codex: model retired upstream (404 wording) → model-unavailable', () => {
+    expect(
+      classifyLlmFailure(
+        "CLI 'codex' exit code 1: unexpected status 404 Not Found: The model `gpt-5.5` does not exist or you do not have access to it., url: https://chatgpt.com/backend-api/codex/responses",
+      ),
+    ).toBe('model-unavailable');
+  });
+
+  it('codex: model not entitled for the account → model-unavailable', () => {
+    expect(
+      classifyLlmFailure(
+        "The 'gpt-5.1-codex' model is not supported when using Codex with a ChatGPT account.",
+      ),
+    ).toBe('model-unavailable');
+  });
+
+  it('direct API: litellm model_not_found → model-unavailable', () => {
+    expect(
+      classifyLlmFailure('litellm.NotFoundError: The model `x` was not found (model_not_found)'),
+    ).toBe('model-unavailable');
+  });
+
+  it('unrelated failures stay unclassified (no misleading remedy)', () => {
+    expect(classifyLlmFailure('litellm.AuthenticationError: invalid api key')).toBeUndefined();
+    expect(classifyLlmFailure('Read timed out after 600s')).toBeUndefined();
+    expect(classifyLlmFailure("CLI 'codex' returned an empty reply")).toBeUndefined();
+  });
+});
+
+describe('splitMarkdownSections minLevel', () => {
+  // Regression: a PR description ending in a git merge tail. `# Conflicts:` and the `#\tpath` lines under it are
+  // markdown H1s, so before minLevel they outranked /describe's own `###` structure and split the result into
+  // sections named after conflicted files — with the real description scattered across them.
+  const describeOut = [
+    '### **User description**',
+    'fix: isolate internal and external roles',
+    'Merge remote-tracking branch',
+    '',
+    '# Conflicts:',
+    '#\tpackage-lock.json',
+    '#\tpackage.json',
+    '',
+    '___',
+    '',
+    '### **PR Type**',
+    'Enhancement, Bug fix',
+  ].join('\n');
+
+  it('keeps a quoted merge tail inside the section that quotes it', () => {
+    const titles = splitMarkdownSections(describeOut, 3).map((s) => s.title);
+    expect(titles).toEqual(['**User description**', '**PR Type**']);
+    const userDesc = splitMarkdownSections(describeOut, 3)[0]!;
+    // The conflict tail stays put as body text rather than becoming structure.
+    expect(userDesc.body).toContain('# Conflicts:');
+    expect(userDesc.body).toContain('package-lock.json');
+  });
+
+  it('default level 1 still splits on every heading (unchanged for other tools)', () => {
+    const titles = splitMarkdownSections(describeOut).map((s) => s.title);
+    expect(titles).toContain('Conflicts:');
+  });
+
+  it('describe output routes through the shallower minimum', () => {
+    const { findings } = parseReviewOutput(describeOut, 'describe');
+    // No finding is named after a conflicted file.
+    expect(findings.some((f) => /conflicts/i.test(f.title ?? ''))).toBe(false);
+    expect(findings.some((f) => /package-lock/i.test(f.title ?? ''))).toBe(false);
+  });
+});
+
+describe('invisible-only sections', () => {
+  // Regression: pr-agent 0.45.0 stamps `<!-- pr-agent-generated -->` at the top of its output. That landed in the
+  // leading (title-less) section, whose body was therefore "not empty" — but an HTML comment renders to nothing, so
+  // the run result grew a card that looked blank.
+  it('drops a section whose body is only an HTML comment', () => {
+    const md = [
+      'pr-7c82edaec417/head',
+      '<!-- pr-agent-generated -->',
+      '### **PR Type**',
+      'Enhancement',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'describe');
+    expect(findings.map((f) => f.title)).toEqual(['PR Type']);
+  });
+
+  it('keeps a section that has real content alongside the comment', () => {
+    const md = [
+      '<!-- pr-agent-generated -->',
+      'actual prose',
+      '### **PR Type**',
+      'Enhancement',
+    ].join('\n');
+    const { findings } = parseReviewOutput(md, 'describe');
+    expect(findings.some((f) => (f.body ?? '').includes('actual prose'))).toBe(true);
   });
 });

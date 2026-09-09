@@ -5,6 +5,33 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-09-09
+
+### ✨ Added
+
+- A comment can now be handed to the agent to investigate: click the reference button on any comment and ask about it, and the agent gets the comment, its author and the code it points at, then checks the claim against the actual code. Its answer can be turned into a draft reply to that comment in one click, editable before it goes out.
+- The code editor is now Monaco 0.56.0 (from 0.55.1), which also drops the outdated sanitizer copy behind most of the open dependency advisories.
+- The bundled review engine is now pr-agent 0.45.0 (from 0.39.0). Two long-standing local fixes are no longer needed — a single-line file change is rendered correctly upstream now, and a binary file no longer has to be worked around — and its YAML handling is more tolerant of imperfect model output.
+- Mentions now render as a pill instead of blending into the surrounding text, so it is obvious at a glance when someone is named — on the activity page, in the inline diff comments, in drafts, and in the PR description alike.
+- Proxy settings now take a list of **direct connections**: hosts that bypass the proxy and connect straight out, so an internal code platform, its git remote, or a self-hosted model stays reachable while everything else still goes through the proxy. Uses the familiar `NO_PROXY` syntax (a domain covers its subdomains), and applies to every outbound path at once — REST, git and the LLM call.
+- A review that fails because the model is unavailable now says so and tells you what to do — with a local CLI provider (claude / codex) the model comes from that CLI's own configuration, so it has to be changed there.
+
+### 🔧 Fixed
+
+- A generated PR description no longer ends with a blank card — an invisible marker the review engine now stamps into its output was being treated as a section of its own.
+- Diagrams in a generated PR description are laid out left-to-right again, instead of turning tall and top-down once they get past a few steps and pushing the rest of the result off screen.
+- The commit divider in the review timeline now stays where the commit boundary actually is, instead of sliding further down every time a new message appears below it.
+- The file list in a generated PR description now shows the real number of added and removed lines per file, instead of `+-1/--1`.
+- Links in that file list now open the file instead of pointing at a non-existent line, so clicking through works.
+- A PR description ending in a git merge tail (`# Conflicts:` and the file lines under it) no longer breaks up the generated description — those lines are part of the quoted description, not headings of their own.
+- A part of the interface that loads on demand — the diff editor, a comment's inline code context — no longer takes the whole app down with it when it fails to load; the failure now stays inside that pane. If it failed because the app was updated or rebuilt while the window was open, it says so and offers to reload, which is the only thing that actually helps in that case.
+- A failed review now shows the provider's actual error instead of only "all fallback models failed" — the real cause (an unavailable model, an expired login, an exhausted quota) was previously swallowed and never reached the run card.
+- A local CLI provider that exits successfully but returns an empty reply is now reported as a failure naming that cause, rather than as an unexplained LLM failure.
+- A merged PR now leaves the list on its own shortly after you merge it, instead of lingering until the next periodic sync — the remote takes a few seconds to actually mark it merged, and the app now waits for that rather than refreshing too early and finding nothing changed.
+- Approving a PR now updates whether it can be merged, so the merge button appears as soon as your approval satisfies the last requirement — previously it stayed hidden until the next periodic sync, because the remote recomputes mergeability only after the approval returns.
+- The window no longer goes permanently black when the interface fails: a crash now shows what went wrong with a retry / reload, a failure during startup shows a recovery screen, and a renderer that dies outright is reloaded automatically. Crash details are also written to the application log, which they previously never were.
+- Switching to another PR while a merge is still in flight no longer clears the PR you just opened.
+
 ## [0.11.2] - 2026-07-28
 
 > Highlights of this release:
@@ -514,6 +541,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
 [Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.12.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.10.0...v0.11.0

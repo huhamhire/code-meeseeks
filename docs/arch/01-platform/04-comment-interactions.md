@@ -72,6 +72,18 @@ Both layers are a **pure convenience**: the user can still freely type any `@nam
 
 **Consistency across surfaces (design philosophy)**: every comment-interaction behavior — reactions, `@mention` (local + remote), attachments, reply / edit / delete — must be **identical on all comment surfaces**: the comments/activity page (`CommentItem`), the inline diff comment zone (`InlineCommentZone`), and the inline draft editor (`DraftZone`). This is enforced by **sharing the leaf components / hooks** (`CommentReplyEditor`, `MentionTextarea`, `useReactions`, `useCommentThread`) rather than reimplementing per surface, so a surface can only differ in layout, never in interaction behavior. When adding or changing an interaction, wire it into **all** surfaces (thread the same props down each path) — a capability reaching only one surface is a bug, not a scope choice.
 
+### @mention rendering: a pill, not running text
+
+A mention is a reference to a person, and left as plain text it disappears into the sentence — exactly when the reader is scanning a thread for whether it concerns them. So a mention renders as a **pill** (`remark-mention` → `span.comment-mention`), applied wherever author-written prose that can name someone is rendered: the activity page, the inline comment zone, both draft surfaces, and the PR description. Drafts are included because a draft is a comment about to be posted, and the same body must not read differently before and after publishing; the PR description is included because it is the same kind of authored text, and a mention that is a pill in one place and plain text in another reads as a bug. Agent-facing markdown (chat, finding cards, rule previews) is **not** included — nothing there addresses a person.
+
+Three things worth knowing about the implementation:
+
+- **Parsing is the counterpart of writing, and lives beside it.** `findMentions` sits next to `formatMention` in `shared/mention.ts`, so the syntax — notably Bitbucket's quoted `@"first.last"`, which the server requires for a username containing a dot — is defined once instead of once per direction.
+- **It is syntactic, not resolved.** There is no authoritative local list of who exists on the remote (a mention may name someone outside this PR's participants), so anything shaped like a mention is styled. That is the right side of the trade only because a false positive costs a tinted background and nothing else: the text is not altered and nothing becomes clickable. Boundary rules exclude the common false positives — an email address (no leading boundary before `@`), a scoped package (`@scope/pkg`), and trailing sentence punctuation. Code spans and fences are excluded for free, since only mdast `text` nodes are rewritten.
+- **The class has to be allowlisted for sanitize, by value.** Comment bodies pass through `rehype-sanitize`, which strips `class` from a `span` by default; the pill class is allowed as a **value-restricted** attribute rather than as free-form `className`, so a comment cannot borrow arbitrary app styles by writing raw HTML.
+
+The pill is also the one place the rendered text intentionally differs from the source: it shows `@first.last`, dropping Bitbucket's quotes, which are platform syntax rather than part of anyone's name.
+
 ### File-level comments: whole-file anchor + capability degradation
 
 A comment can anchor to a **whole file** (not a specific line) where the platform supports it (`fileLevelComments`). This is modeled by a `PrCommentAnchor` **without a `line`** (path + side only): `anchor == null` → PR summary; `anchor` with a line → inline; `anchor` without a line → file-level. The comment `kind` (`'summary' | 'inline' | 'file'`) mirrors this.

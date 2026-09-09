@@ -71,6 +71,10 @@
     "codeExistingAria": "原代码",
     "codeImprovedAria": "改进代码",
     "commandNoArgs": "{{cmd}} 不接受参数",
+    "commentReference": {
+      "clearTitle": "移除引用的评论",
+      "useAsReply": "用作回复"
+    },
     "deleteRunAria": "删除",
     "deleteRunTitle": "删除此记录",
     "draftJumpEditTitle": "在代码中编辑",
@@ -98,6 +102,9 @@
     "goToSettings": "去设置",
     "inputAria": "聊天输入框",
     "llmCallFailed": "LLM 调用失败",
+    "llmErrorHint": {
+      "modelUnavailable": "所请求的模型不可用。使用本地 CLI 供应商时，模型由该 CLI 自身的配置决定，请在 CLI 中改用受支持的模型后重新运行。"
+    },
     "mergeConfirmLabel": "合并",
     "mergeConfirmMessage": "确定将「{{title}}」合并到目标分支？此操作不可撤销。",
     "mergeConfirmTitle": "合并 PR",
@@ -266,6 +273,8 @@
     "loading": "加载评论中…",
     "loadingCodeContext": "加载代码上下文…",
     "minutesAgo_other": "{{count}} 分钟前",
+    "referenceClearTitle": "取消引用这条评论",
+    "referenceTitle": "让 Agent 调查这条评论",
     "reply": "回复"
   },
   "commitsPanel": {
@@ -316,6 +325,14 @@
     "testing": "测试中…",
     "tokenLabel": "访问令牌 (PAT)"
   },
+  "crash": {
+    "hint": "重新加载通常即可恢复。若反复出现，下方详情与应用日志（meebox.log）可定位原因。",
+    "reload": "重新加载",
+    "retry": "重试",
+    "staleHint": "部分界面已无法加载——通常是窗口开着时应用被更新或重新构建所致。重新加载即可载入当前版本。",
+    "staleTitle": "应用文件在窗口打开后发生了变化",
+    "title": "界面渲染出错"
+  },
   "diffSearchPanel": {
     "caseSensitiveOff": "区分大小写 (已关闭)",
     "caseSensitiveOn": "区分大小写 (已开启)",
@@ -334,10 +351,12 @@
     "binaryNotRendered": "⚠️ 二进制文件，不渲染 diff",
     "blameChangeRangeTitle": "此区段为本 PR 引入的改动",
     "blameFailed": "blame 失败",
-    "blameFailedNamed": "{{path}} blame 失败",    "diffRenderFailed": "diff 渲染失败：{{message}}",
+    "blameFailedNamed": "{{path}} blame 失败",
+    "diffRenderFailed": "diff 渲染失败：{{message}}",
     "diffRenderFailedHint": "切换文件 / 重试通常能恢复。底层异常已记录到 console。",
     "dismissNotificationTitle": "收起此通知",
-    "fileCount_other": "{{count}} 个文件",    "lfsManagedTitle": "由 Git LFS 管理",
+    "fileCount_other": "{{count}} 个文件",
+    "lfsManagedTitle": "由 Git LFS 管理",
     "loadChangedFilesFailed": "拉取变更文件列表失败",
     "loadCommentsFailed": "拉取评论失败",
     "loadingContentHint": "从本地镜像读 git blob，大文件 / 二进制判定时可能略慢",
@@ -479,6 +498,11 @@
     "expandLabel": "⊕ 展开代码上下文 ({{path}}:{{line}})",
     "expandTitle": "展开锚定行前后代码",
     "loading": "加载代码上下文…"
+  },
+  "lazyLoad": {
+    "failed": "这部分界面加载失败。",
+    "genericHint": "重试通常可以恢复；若持续失败，请重新加载窗口。",
+    "staleHint": "应用文件在窗口打开后发生了变化——通常是更新或重新构建所致。重新加载即可载入当前版本。"
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "该 provider 无需密钥（留空）",
@@ -820,6 +844,11 @@
     "proxyHostPlaceholder": "如 127.0.0.1",
     "proxyHostRequired": "请填代理地址",
     "proxyModalHint": "HTTP 代理（出站）。开启后 LLM 调用、代码平台、git(HTTPS) 统一经代理，本地地址直连。",
+    "proxyNoProxy": "直连地址",
+    "proxyNoProxyAria": "跳过代理的地址",
+    "proxyNoProxyHint": "此处列出的地址将直连而不走代理，适用于代理无法访问的内网代码平台或模型服务。每行一条或以逗号分隔；填写域名同时覆盖其子域。本机地址始终直连。",
+    "proxyNoProxyPlaceholder": "corp.example.com\n10.0.0.5",
+    "proxyNoProxySummary_other": "{{count}} 个地址跳过代理",
     "proxyOk": "✓ 代理可用",
     "proxyPassword": "密码",
     "proxyPasswordAria": "代理密码",

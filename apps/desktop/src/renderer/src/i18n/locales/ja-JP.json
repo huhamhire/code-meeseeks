@@ -71,6 +71,10 @@
     "codeExistingAria": "元のコード",
     "codeImprovedAria": "改善後のコード",
     "commandNoArgs": "{{cmd}} は引数を受け付けません",
+    "commentReference": {
+      "clearTitle": "参照中のコメントを外す",
+      "useAsReply": "返信として使う"
+    },
     "deleteRunAria": "削除",
     "deleteRunTitle": "この記録を削除",
     "draftJumpEditTitle": "コード内で編集",
@@ -98,6 +102,9 @@
     "goToSettings": "設定へ移動",
     "inputAria": "チャット入力",
     "llmCallFailed": "LLM の呼び出しに失敗しました",
+    "llmErrorHint": {
+      "modelUnavailable": "要求されたモデルは利用できません。ローカル CLI プロバイダーの場合、モデルはその CLI 自身の設定で決まります。CLI 側でサポートされているモデルに変更してから再実行してください。"
+    },
     "mergeConfirmLabel": "マージ",
     "mergeConfirmMessage": "「{{title}}」をターゲットブランチにマージしますか？この操作は取り消せません。",
     "mergeConfirmTitle": "PR をマージ",
@@ -266,6 +273,8 @@
     "loading": "コメントを読み込み中…",
     "loadingCodeContext": "コードコンテキストを読み込み中…",
     "minutesAgo_other": "{{count}} 分前",
+    "referenceClearTitle": "このコメントの参照を解除",
+    "referenceTitle": "このコメントについてエージェントに調べてもらう",
     "reply": "返信"
   },
   "commitsPanel": {
@@ -316,6 +325,14 @@
     "testing": "テスト中…",
     "tokenLabel": "アクセストークン (PAT)"
   },
+  "crash": {
+    "hint": "再読み込みで通常は復旧します。繰り返し発生する場合は、以下の詳細とアプリケーションログ（meebox.log）で原因を特定できます。",
+    "reload": "再読み込み",
+    "retry": "再試行",
+    "staleHint": "画面の一部を読み込めなくなりました。ウィンドウを開いたままアプリが更新または再ビルドされた場合に発生します。再読み込みすると最新版が読み込まれます。",
+    "staleTitle": "ウィンドウを開いた後にアプリのファイルが変更されました",
+    "title": "画面の描画中にエラーが発生しました"
+  },
   "diffSearchPanel": {
     "caseSensitiveOff": "大文字小文字を区別 (オフ)",
     "caseSensitiveOn": "大文字小文字を区別 (オン)",
@@ -334,10 +351,12 @@
     "binaryNotRendered": "⚠️ バイナリファイル、差分は表示されません",
     "blameChangeRangeTitle": "この範囲はこの PR で変更されました",
     "blameFailed": "blame に失敗しました",
-    "blameFailedNamed": "{{path}} の blame に失敗しました",    "diffRenderFailed": "差分の表示に失敗しました: {{message}}",
+    "blameFailedNamed": "{{path}} の blame に失敗しました",
+    "diffRenderFailed": "差分の表示に失敗しました: {{message}}",
     "diffRenderFailedHint": "ファイルを切り替えるか再試行すると通常は復旧します。元のエラーは console に記録されています。",
     "dismissNotificationTitle": "この通知を閉じる",
-    "fileCount_other": "{{count}} ファイル",    "lfsManagedTitle": "Git LFS で管理",
+    "fileCount_other": "{{count}} ファイル",
+    "lfsManagedTitle": "Git LFS で管理",
     "loadChangedFilesFailed": "変更ファイルの読み込みに失敗しました",
     "loadCommentsFailed": "コメントの読み込みに失敗しました",
     "loadingContentHint": "ローカルミラーから git blob を読み込んでいます。大きいファイルやバイナリファイルは時間がかかる場合があります",
@@ -479,6 +498,11 @@
     "expandLabel": "⊕ コードコンテキストを展開 ({{path}}:{{line}})",
     "expandTitle": "アンカー行の前後のコードを展開",
     "loading": "コードコンテキストを読み込み中…"
+  },
+  "lazyLoad": {
+    "failed": "この部分の画面を読み込めませんでした。",
+    "genericHint": "再試行で復旧することが多く、繰り返し失敗する場合はウィンドウを再読み込みしてください。",
+    "staleHint": "ウィンドウを開いた後にアプリのファイルが変更されました（通常は更新または再ビルド）。再読み込みすると最新版が読み込まれます。"
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "このプロバイダーはキー不要です（空のままに）",
@@ -820,6 +844,11 @@
     "proxyHostPlaceholder": "例：127.0.0.1",
     "proxyHostRequired": "プロキシホストを入力してください",
     "proxyModalHint": "HTTP プロキシ（送信）。有効にすると、LLM 呼び出し・コードプラットフォーム・git（HTTPS）はすべてプロキシ経由になります。ローカルアドレスは直接接続します。",
+    "proxyNoProxy": "直接接続するホスト",
+    "proxyNoProxyAria": "プロキシを経由しないホスト",
+    "proxyNoProxyHint": "ここに指定したホストはプロキシを経由せず直接接続します。プロキシから到達できない社内のコードプラットフォームやモデルに利用します。1 行に 1 つ、またはカンマ区切り。ドメインを指定するとそのサブドメインも対象になります。ローカルアドレスは常に直接接続します。",
+    "proxyNoProxyPlaceholder": "corp.example.com\n10.0.0.5",
+    "proxyNoProxySummary_other": "{{count}} 件のホストがプロキシを経由しません",
     "proxyOk": "✓ プロキシに到達可能です",
     "proxyPassword": "パスワード",
     "proxyPasswordAria": "プロキシパスワード",

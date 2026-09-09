@@ -404,6 +404,33 @@ describe('Poller.tick', () => {
     expect(stored[0]!.remoteId).toBe('1');
   });
 
+  it('archivePullRequest: departs one PR immediately, without a poll round', async () => {
+    const adapter = new FakeAdapter([
+      makePr('1', '2026-05-28T01:00:00.000Z'),
+      makePr('2', '2026-05-28T02:00:00.000Z'),
+    ]);
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+    });
+    await poller.tick();
+    const merged = (await listStoredPullRequests(store)).find((p) => p.remoteId === '2')!;
+
+    // The remote still lists both (a just-merged PR lingers in the discovery list), so a tick would not drop it —
+    // archiving by localId is what makes it leave now.
+    expect(await poller.archivePullRequest(merged.localId)).toBe(true);
+    const stored = await listStoredPullRequests(store);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.remoteId).toBe('1');
+
+    // Idempotent: already archived, and an unknown localId is a no-op rather than an error.
+    expect(await poller.archivePullRequest(merged.localId)).toBe(false);
+    expect(await poller.archivePullRequest('no-such-pr')).toBe(false);
+  });
+
   it('all connections fail in one tick: index file mtime untouched + state intact', async () => {
     // first a successful poll to lay down the baseline
     const ok1 = makePr('1', '2026-05-28T01:00:00.000Z');

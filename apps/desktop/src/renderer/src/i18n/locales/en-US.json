@@ -71,6 +71,10 @@
     "codeExistingAria": "Original code",
     "codeImprovedAria": "Improved code",
     "commandNoArgs": "{{cmd}} does not accept arguments",
+    "commentReference": {
+      "clearTitle": "Remove the referenced comment",
+      "useAsReply": "Use as reply"
+    },
     "deleteRunAria": "Delete",
     "deleteRunTitle": "Delete this run",
     "draftJumpEditTitle": "Edit in code",
@@ -98,6 +102,9 @@
     "goToSettings": "Go to Settings",
     "inputAria": "Chat input",
     "llmCallFailed": "LLM call failed",
+    "llmErrorHint": {
+      "modelUnavailable": "The requested model is unavailable. With a local CLI provider the model comes from that CLI's own configuration — switch it to a supported model there, then run again."
+    },
     "mergeConfirmLabel": "Merge",
     "mergeConfirmMessage": "Merge \"{{title}}\" into its target branch? This can't be undone.",
     "mergeConfirmTitle": "Merge PR",
@@ -269,6 +276,8 @@
     "loadingCodeContext": "Loading code context…",
     "minutesAgo_one": "{{count}} minute ago",
     "minutesAgo_other": "{{count}} minutes ago",
+    "referenceClearTitle": "Stop referencing this comment",
+    "referenceTitle": "Ask the agent about this comment",
     "reply": "Reply"
   },
   "commitsPanel": {
@@ -322,6 +331,14 @@
     "testing": "Testing…",
     "tokenLabel": "Access Token (PAT)"
   },
+  "crash": {
+    "hint": "Reloading usually resolves it. If it keeps happening, the details below and the application log (meebox.log) identify the cause.",
+    "reload": "Reload",
+    "retry": "Retry",
+    "staleHint": "Part of the interface could no longer be loaded, which happens when the app is updated or rebuilt while a window stays open. Reloading picks up the current version.",
+    "staleTitle": "The app files changed since this window opened",
+    "title": "Something went wrong rendering the interface"
+  },
   "diffSearchPanel": {
     "caseSensitiveOff": "Case sensitive (off)",
     "caseSensitiveOn": "Case sensitive (on)",
@@ -341,9 +358,11 @@
     "binaryNotRendered": "⚠️ Binary file, diff not rendered",
     "blameChangeRangeTitle": "This range was changed by this PR",
     "blameFailed": "Blame failed",
-    "blameFailedNamed": "Blame failed for {{path}}",    "diffRenderFailed": "Diff render failed: {{message}}",
+    "blameFailedNamed": "Blame failed for {{path}}",
+    "diffRenderFailed": "Diff render failed: {{message}}",
     "diffRenderFailedHint": "Switching files or retrying usually recovers. The underlying error has been logged to the console.",
-    "dismissNotificationTitle": "Dismiss this notification",    "fileCount_one": "{{count}} file",
+    "dismissNotificationTitle": "Dismiss this notification",
+    "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
     "lfsManagedTitle": "Managed by Git LFS",
     "loadChangedFilesFailed": "Failed to load changed files",
@@ -490,6 +509,11 @@
     "expandLabel": "⊕ Expand code context ({{path}}:{{line}})",
     "expandTitle": "Expand code around the anchored line",
     "loading": "Loading code context…"
+  },
+  "lazyLoad": {
+    "failed": "This part of the interface could not be loaded.",
+    "genericHint": "Retrying often works; if it keeps failing, reload the window.",
+    "staleHint": "The app files changed since this window opened — usually an update or a rebuild. Reloading picks up the current version."
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "This provider needs no key (leave empty)",
@@ -837,6 +861,12 @@
     "proxyHostPlaceholder": "e.g. 127.0.0.1",
     "proxyHostRequired": "Please enter the proxy host",
     "proxyModalHint": "HTTP proxy (outbound). When enabled, LLM calls, code platforms, and git (HTTPS) all go through the proxy; local addresses connect directly.",
+    "proxyNoProxy": "Direct connections",
+    "proxyNoProxyAria": "Hosts that bypass the proxy",
+    "proxyNoProxyHint": "Hosts listed here connect directly instead of through the proxy — useful for an internal code platform or model that the proxy cannot reach. One per line or comma-separated; a domain also covers its subdomains. Local addresses always connect directly.",
+    "proxyNoProxyPlaceholder": "corp.example.com\n10.0.0.5",
+    "proxyNoProxySummary_one": "{{count}} host bypasses the proxy",
+    "proxyNoProxySummary_other": "{{count}} hosts bypass the proxy",
     "proxyOk": "✓ Proxy is reachable",
     "proxyPassword": "Password",
     "proxyPasswordAria": "Proxy password",

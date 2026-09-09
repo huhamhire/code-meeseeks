@@ -8,6 +8,7 @@
 import type { Options } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import { MENTION_CLASS } from './remark-mention';
 
 function extend<T>(list: readonly T[] | null | undefined, extra: readonly T[]): T[] {
   return Array.from(new Set<T>([...(list ?? []), ...extra]));
@@ -44,6 +45,11 @@ const schema = {
     td: extend(defaultSchema.attributes?.td, ['align']),
     th: extend(defaultSchema.attributes?.th, ['align']),
     a: extend(defaultSchema.attributes?.a, ['rel', 'target']),
+    // The @mention pill (remark-mention) renders as <span class="comment-mention">, and sanitize would otherwise strip
+    // the class, leaving the mention indistinguishable from prose. Allowed as a **value-restricted** attribute
+    // (`[name, ...allowed values]`), not as free-form className: the body is user-generated, so permitting arbitrary
+    // classes on a span would let a comment borrow any style in the app.
+    span: extend(defaultSchema.attributes?.span, [['className', MENTION_CLASS]]),
     '*': extend(defaultSchema.attributes?.['*'], ['align']),
   },
 };

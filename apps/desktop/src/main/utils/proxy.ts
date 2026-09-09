@@ -4,15 +4,33 @@
 //   - shouldBypass: whether loopback/local goes direct (② decides at the call site whether to attach a dispatcher)
 // Phase one is HTTP proxy only; when enabled=false all forms yield "empty/direct connection", so call sites need not each check the switch.
 import { ProxyAgent, type Dispatcher } from 'undici';
-import { ERROR_CODES, errorCodeMessage, type ProxyConfig } from '@meebox/shared';
+import {
+  ERROR_CODES,
+  LOOPBACK_NO_PROXY,
+  errorCodeMessage,
+  matchesNoProxy,
+  normalizeNoProxy,
+  type ProxyConfig,
+} from '@meebox/shared';
 
-// loopback / local: always direct connection, never through the proxy. The env path relies on NO_PROXY, the dispatcher path on shouldBypass.
-const NO_PROXY = 'localhost,127.0.0.1,::1';
+/**
+ * Effective bypass rules = the built-in loopback set + whatever the user configured. Loopback is prepended rather than
+ * left to the user: a local model or local service must never be sent through a proxy, and that guarantee should not
+ * depend on the user having typed it.
+ */
+function effectiveNoProxy(proxy: ProxyConfig): string {
+  return normalizeNoProxy(`${LOOPBACK_NO_PROXY},${proxy.no_proxy ?? ''}`);
+}
 
-/** loopback / local host → true (should go direct connection, not through the proxy). */
-export function shouldBypass(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 literal brackets
-  return h === 'localhost' || h.endsWith('.localhost') || h === '127.0.0.1' || h === '::1';
+/**
+ * Host should egress directly (loopback, or covered by the user's `no_proxy`) rather than through the proxy.
+ *
+ * The env path hands the same rules to subprocesses via `NO_PROXY` and lets their libraries apply them; this is the
+ * in-process equivalent for the dispatcher path, which is why both derive from `effectiveNoProxy` — the two egress
+ * classes must not disagree about the same config.
+ */
+export function shouldBypass(proxy: ProxyConfig, host: string): boolean {
+  return matchesNoProxy(host, effectiveNoProxy(proxy));
 }
 
 /** Build a standard proxy URL: `<protocol>://[user:pass@]host:port`. undefined when disabled / no host. */
@@ -32,6 +50,7 @@ export function proxyUrl(proxy: ProxyConfig): string | undefined {
 export function buildProxyEnv(proxy: ProxyConfig): Record<string, string> {
   const url = proxyUrl(proxy);
   if (!url) return {};
+  const bypass = effectiveNoProxy(proxy);
   return {
     HTTP_PROXY: url,
     http_proxy: url,
@@ -39,8 +58,8 @@ export function buildProxyEnv(proxy: ProxyConfig): Record<string, string> {
     https_proxy: url,
     ALL_PROXY: url,
     all_proxy: url,
-    NO_PROXY,
-    no_proxy: NO_PROXY,
+    NO_PROXY: bypass,
+    no_proxy: bypass,
   };
 }
 
@@ -85,14 +104,15 @@ export async function testProxyConnectivity(
 
 /**
  * Build a "proxy-aware" fetch for a target host, to inject into BitbucketClient's opts.fetch.
- * host hits loopback/local → returns undefined (the call site uses the default global fetch for a direct connection).
- * Otherwise returns a fetch wrapper carrying the dispatcher. Also returns undefined when the proxy is disabled.
+ * host hits loopback/local or the configured bypass list → returns undefined (the call site uses the default global
+ * fetch for a direct connection). Otherwise returns a fetch wrapper carrying the dispatcher. Also returns undefined
+ * when the proxy is disabled.
  */
 export function proxyFetchForHost(
   proxy: ProxyConfig,
   host: string,
 ): ((input: string, init?: RequestInit) => Promise<Response>) | undefined {
-  if (shouldBypass(host)) return undefined;
+  if (shouldBypass(proxy, host)) return undefined;
   const dispatcher = buildProxyDispatcher(proxy);
   if (!dispatcher) return undefined;
   return (input, init) =>

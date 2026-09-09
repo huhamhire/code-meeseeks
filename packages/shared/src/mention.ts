@@ -26,3 +26,53 @@ export function formatMention(platform: PlatformKind, user: Pick<PlatformUser, '
   }
   return `@${id}`;
 }
+
+/** One mention found in a body: `[start, end)` are indices into the input, `name` excludes the `@` and any quotes. */
+export interface FoundMention {
+  start: number;
+  end: number;
+  name: string;
+}
+
+/**
+ * Mention token, the reading counterpart of {@link formatMention} — both forms it can write must parse back here, which
+ * is why the two live together: the quoted Bitbucket form is defined once, not once per direction.
+ *
+ * The leading boundary is deliberately narrow (start of input, whitespace, or an opening bracket) because `@` is common
+ * in prose that is not a mention; requiring the boundary is what keeps `user@example.com` from matching its domain.
+ */
+const MENTION = /(^|[\s([{])@(?:"([^"\n]{1,64})"|([A-Za-z0-9_][A-Za-z0-9_.-]{0,63}))/g;
+
+/**
+ * Locate `@mention` tokens in a plain-text run, for rendering them distinctly from surrounding prose.
+ *
+ * **Syntactic, not resolved**: there is no authoritative local list of who exists on the remote (a mention may name
+ * someone outside this PR's participants), so anything shaped like a mention is reported. Callers should therefore use
+ * this for presentation only — a false positive that merely restyles a word is cheap, one that turned text into a link
+ * or a notification would not be. The boundary rules exclude the common false positives anyway:
+ *
+ * - an email address (`user@example.com`) — the `@` has no leading boundary;
+ * - a scoped package (`@scope/pkg`) — a `/` immediately after the name disqualifies it;
+ * - a trailing `.` or `-` is treated as punctuation and left out of the name, so a mention ending a sentence is clean.
+ *
+ * Code spans are not a concern here: callers run this over text runs, and markdown code never reaches them.
+ */
+export function findMentions(text: string): FoundMention[] {
+  const out: FoundMention[] = [];
+  MENTION.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = MENTION.exec(text)) !== null) {
+    const lead = m[1] ?? '';
+    const quoted = m[2];
+    // A trailing `.` / `-` belongs to the surrounding prose, not to the username.
+    const name = quoted ?? (m[3] ?? '').replace(/[.-]+$/, '');
+    if (!name) continue;
+    const start = m.index + lead.length;
+    // `@` + name, plus the two quotes when quoted.
+    const end = start + name.length + (quoted ? 3 : 1);
+    MENTION.lastIndex = end;
+    if (text[end] === '/') continue; // scoped package, not a mention
+    out.push({ start, end, name });
+  }
+  return out;
+}

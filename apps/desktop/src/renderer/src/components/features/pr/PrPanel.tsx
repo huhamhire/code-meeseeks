@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   LocalPrStatus,
@@ -10,7 +10,7 @@ import type {
 } from '@meebox/shared';
 import { invoke } from '../../../api';
 import { useDraftsForPr } from '../../../stores/drafts-store';
-import { PaneLoading } from '../../common';
+import { LazyBoundary, PaneLoading } from '../../common';
 import { ActivityPanel } from './tabs/activity/ActivityPanel';
 import { CommitsPanel } from './tabs/CommitsPanel';
 // Monaco editor (~10MB) lazy-loaded: the DiffView chunk is fetched only when actually switching to the Diff tab,
@@ -211,7 +211,10 @@ export function PrPanel({
         {/* keep-alive: each tab mounts only on first visit, then stays alive with only CSS show/hide (see KeepAliveTab).
             Switching away and back is instant, no refetch, embedded Monaco / scroll position / expanded state all preserved, eliminating switch jitter. */}
         <KeepAliveTab active={tab === 'diff'}>
-          <Suspense fallback={<PaneLoading label={t('mainPane.loadingEditor')} />}>
+          <LazyBoundary
+            label="DiffView"
+            loading={<PaneLoading label={t('mainPane.loadingEditor')} />}
+          >
             <DiffView
               pr={pr}
               renderSideBySide={renderSideBySide}
@@ -225,7 +228,7 @@ export function PrPanel({
               onCommitViewConsumed={() => setPendingCommitView(null)}
               onViewCommitScopeChange={onViewCommitScopeChange}
             />
-          </Suspense>
+          </LazyBoundary>
         </KeepAliveTab>
         <KeepAliveTab active={tab === 'activity'}>
           <ActivityPanel

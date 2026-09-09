@@ -1,0 +1,77 @@
+// Full-window crash fallback (AppCrashScreen): what replaces the app when the root subtree fails to render.
+// Deliberately self-contained — it must stay legible even when the failure came from the very UI it is replacing.
+
+@use '../tokens' as *;
+
+.app-crash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $space-8;
+  background: $bg-app;
+  color: $text-body;
+  // Above everything, including a modal backdrop left behind by the tree that just crashed.
+  z-index: $z-modal + 10;
+}
+
+.app-crash-card {
+  max-width: 560px;
+  width: 100%;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: 6px;
+  padding: $space-8;
+}
+
+.app-crash-title {
+  margin: 0 0 $space-2;
+  font-size: $fs-lg;
+  font-weight: 600;
+}
+
+.app-crash-hint {
+  margin: 0 0 $space-3;
+  color: $text-muted;
+  line-height: 1.5;
+}
+
+.app-crash-detail {
+  margin: 0 0 $space-8;
+  padding: $space-3;
+  max-height: 220px;
+  overflow: auto;
+  background: $bg-app;
+  border: 1px solid $border-default;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: $font-mono;
+  font-size: $fs-xs;
+  color: $text-muted;
+}
+
+.app-crash-actions {
+  display: flex;
+  gap: $space-2;
+}
+
+// Failure of one lazily-loaded pane (LazyBoundary). Sized to sit inside whatever region failed — a comment's code
+// context, the diff pane — rather than taking over the window like .app-crash does.
+.lazy-boundary-error {
+  padding: $space-8;
+  color: $text-muted;
+  font-size: $fs-xs;
+  line-height: 1.5;
+
+  p {
+    margin: 0 0 $space-2;
+  }
+}
+
+.lazy-boundary-actions {
+  display: flex;
+  gap: $space-2;
+  margin-top: $space-3;
+}

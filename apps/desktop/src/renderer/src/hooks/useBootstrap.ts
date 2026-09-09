@@ -121,6 +121,16 @@ export function useBootstrap({ setPrs, reloadPrs }: UseBootstrapParams): {
     });
   }, [reloadPrs]);
 
+  // A PR settled after a write action (merge landed / a review verdict changed mergeability): main has already
+  // persisted the new state, so reload the list locally — no remote call. Separate from poll:tick because these land
+  // between ticks, on the user's own action, and are exactly the moments where waiting a whole interval is felt.
+  useEffect(() => {
+    if (!window.api) return;
+    return subscribe('prs:changed', () => {
+      void reloadPrs();
+    });
+  }, [reloadPrs]);
+
   // Proactively refresh the remote when the window regains focus: fetch PR meta; on Bitbucket, after adding a comment /
   // changing status, PR.updatedAt jumps → PrPanel's prUpdatedAt dep fires → force listComments to fetch new comments.
   useEffect(() => {

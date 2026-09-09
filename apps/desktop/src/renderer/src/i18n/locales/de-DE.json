@@ -71,6 +71,10 @@
     "codeExistingAria": "Originalcode",
     "codeImprovedAria": "Verbesserter Code",
     "commandNoArgs": "{{cmd}} akzeptiert keine Argumente",
+    "commentReference": {
+      "clearTitle": "Referenzierten Kommentar entfernen",
+      "useAsReply": "Als Antwort übernehmen"
+    },
     "deleteRunAria": "Löschen",
     "deleteRunTitle": "Diesen Lauf löschen",
     "draftJumpEditTitle": "Im Code bearbeiten",
@@ -98,6 +102,9 @@
     "goToSettings": "Zu den Einstellungen",
     "inputAria": "Chat-Eingabe",
     "llmCallFailed": "LLM-Aufruf fehlgeschlagen",
+    "llmErrorHint": {
+      "modelUnavailable": "Das angeforderte Modell ist nicht verfügbar. Bei einem lokalen CLI-Anbieter stammt das Modell aus der Konfiguration dieser CLI — stellen Sie dort auf ein unterstütztes Modell um und führen Sie den Lauf erneut aus."
+    },
     "mergeConfirmLabel": "Mergen",
     "mergeConfirmMessage": "„{{title}}“ in den Zielbranch mergen? Dies kann nicht rückgängig gemacht werden.",
     "mergeConfirmTitle": "PR mergen",
@@ -269,6 +276,8 @@
     "loadingCodeContext": "Code-Kontext wird geladen…",
     "minutesAgo_one": "vor {{count}} Minute",
     "minutesAgo_other": "vor {{count}} Minuten",
+    "referenceClearTitle": "Verweis auf diesen Kommentar aufheben",
+    "referenceTitle": "Den Agenten zu diesem Kommentar befragen",
     "reply": "Antworten"
   },
   "commitsPanel": {
@@ -322,6 +331,14 @@
     "testing": "Teste…",
     "tokenLabel": "Zugriffstoken (PAT)"
   },
+  "crash": {
+    "hint": "Ein Neuladen behebt das in der Regel. Tritt es wiederholt auf, benennen die Details unten und das Anwendungsprotokoll (meebox.log) die Ursache.",
+    "reload": "Neu laden",
+    "retry": "Erneut versuchen",
+    "staleHint": "Ein Teil der Oberfläche konnte nicht mehr geladen werden — das passiert, wenn die Anwendung bei geöffnetem Fenster aktualisiert oder neu gebaut wird. Ein Neuladen übernimmt die aktuelle Version.",
+    "staleTitle": "Die Anwendungsdateien haben sich geändert, seit dieses Fenster geöffnet wurde",
+    "title": "Beim Rendern der Oberfläche ist ein Fehler aufgetreten"
+  },
   "diffSearchPanel": {
     "caseSensitiveOff": "Groß-/Kleinschreibung beachten (aus)",
     "caseSensitiveOn": "Groß-/Kleinschreibung beachten (ein)",
@@ -341,9 +358,11 @@
     "binaryNotRendered": "⚠️ Binärdatei, Diff wird nicht dargestellt",
     "blameChangeRangeTitle": "Dieser Bereich wurde durch diesen PR geändert",
     "blameFailed": "blame fehlgeschlagen",
-    "blameFailedNamed": "blame für {{path}} fehlgeschlagen",    "diffRenderFailed": "Diff-Darstellung fehlgeschlagen: {{message}}",
+    "blameFailedNamed": "blame für {{path}} fehlgeschlagen",
+    "diffRenderFailed": "Diff-Darstellung fehlgeschlagen: {{message}}",
     "diffRenderFailedHint": "Ein Dateiwechsel oder erneuter Versuch behebt das Problem meist. Der zugrunde liegende Fehler wurde in der console protokolliert.",
-    "dismissNotificationTitle": "Diese Benachrichtigung schließen",    "fileCount_one": "{{count}} Datei",
+    "dismissNotificationTitle": "Diese Benachrichtigung schließen",
+    "fileCount_one": "{{count}} Datei",
     "fileCount_other": "{{count}} Dateien",
     "lfsManagedTitle": "Von Git LFS verwaltet",
     "loadChangedFilesFailed": "Geänderte Dateien konnten nicht geladen werden",
@@ -490,6 +509,11 @@
     "expandLabel": "⊕ Code-Kontext erweitern ({{path}}:{{line}})",
     "expandTitle": "Code um die verankerte Zeile erweitern",
     "loading": "Code-Kontext wird geladen…"
+  },
+  "lazyLoad": {
+    "failed": "Dieser Teil der Oberfläche konnte nicht geladen werden.",
+    "genericHint": "Ein erneuter Versuch hilft meistens; schlägt es weiterhin fehl, laden Sie das Fenster neu.",
+    "staleHint": "Die Anwendungsdateien haben sich seit dem Öffnen dieses Fensters geändert — meist durch ein Update oder einen Neubau. Ein Neuladen übernimmt die aktuelle Version."
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "Dieser Provider benötigt keinen Schlüssel (leer lassen)",
@@ -837,6 +861,12 @@
     "proxyHostPlaceholder": "z. B. 127.0.0.1",
     "proxyHostRequired": "Bitte den Proxy-Host eingeben",
     "proxyModalHint": "HTTP-Proxy (ausgehend). Wenn aktiviert, laufen LLM-Aufrufe, Code-Plattformen und git (HTTPS) alle über den Proxy; lokale Adressen verbinden sich direkt.",
+    "proxyNoProxy": "Direktverbindungen",
+    "proxyNoProxyAria": "Hosts, die den Proxy umgehen",
+    "proxyNoProxyHint": "Hier aufgeführte Hosts verbinden sich direkt statt über den Proxy — nützlich für eine interne Code-Plattform oder ein Modell, das der Proxy nicht erreicht. Einer pro Zeile oder durch Kommas getrennt; eine Domain umfasst auch ihre Subdomains. Lokale Adressen verbinden sich immer direkt.",
+    "proxyNoProxyPlaceholder": "corp.example.com\n10.0.0.5",
+    "proxyNoProxySummary_one": "{{count}} Host umgeht den Proxy",
+    "proxyNoProxySummary_other": "{{count}} Hosts umgehen den Proxy",
     "proxyOk": "✓ Proxy ist erreichbar",
     "proxyPassword": "Passwort",
     "proxyPasswordAria": "Proxy-Passwort",

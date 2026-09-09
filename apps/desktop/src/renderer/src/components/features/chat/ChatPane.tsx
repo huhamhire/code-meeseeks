@@ -12,8 +12,15 @@ import type {
 import { invoke } from '../../../api';
 import { ChatIcon, TrashIcon, ConfirmModal, PaneLoading } from '../../common';
 import { useChatRunStore } from '../../../stores/chat-run-store';
-import { useDraftsForPr } from '../../../stores/drafts-store';
+import { draftsStore, useDraftsForPr } from '../../../stores/drafts-store';
 import { useFindingClosuresForPr } from '../../../stores/finding-closures-store';
+import {
+  commentReferenceStore,
+  commentReferenceLabel,
+  formatCommentReference,
+  useAnsweringComment,
+  useCommentReference,
+} from '../../../stores/comment-reference-store';
 import {
   formatReferencedContext,
   selectionStore,
@@ -27,6 +34,7 @@ import { useChatTimeline } from './hooks/useChatTimeline';
 import { AgentStepRow, ThinkingLive } from './components/AgentStep';
 import { ChatEmpty } from './components/ChatEmpty';
 import { CommitDivider } from './components/CommitDivider';
+import { computeCommitDividers } from './utils/commit-dividers';
 import { ChatInputBar } from './components/ChatInputBar';
 import { ConversationMessage } from './components/ConversationMessage';
 import { PlanPanel } from './components/PlanPanel';
@@ -159,6 +167,7 @@ export function ChatPane({
   // On PR switch, clear the reference state and reset the detached state to avoid cross-PR residue.
   useEffect(() => {
     setRefFinding(null);
+    commentReferenceStore.reset();
     setScopeDetached(false);
   }, [prLocalId]);
   // On switching to another commit (or clearing the view scope), reset the detached state: the newly selected commit becomes the implicit scope again.
@@ -171,10 +180,23 @@ export function ChatPane({
 
   // Diff selection (belonging to the current PR): used for the input bar's "N lines selected" badge + carrying the selected code as implicit context into a question.
   const { selection: diffSelection, ignored: selectionIgnored } = useDiffSelection(prLocalId);
-  // When not ignored, format the selection into a reference string; shared by /ask and natural-language questions. Ignored / no selection → undefined (this message carries no reference).
+  // Comment referenced from a comment surface (activity panel / inline diff zone), carried as implicit context so the
+  // question can be about the comment without restating it.
+  const commentRef = useCommentReference(prLocalId);
+  // Implicit context for this message: the diff selection and the referenced comment are independent sources and
+  // compose — asking "is this comment right about the code I selected?" needs both. Each block is self-describing, so
+  // concatenating them needs no framing. Undefined when neither is present (the message carries no reference).
   const referencedContext =
-    diffSelection && !selectionIgnored ? formatReferencedContext(diffSelection) : undefined;
+    [
+      diffSelection && !selectionIgnored ? formatReferencedContext(diffSelection) : null,
+      commentRef ? formatCommentReference(commentRef) : null,
+    ]
+      .filter(Boolean)
+      .join('\n\n') || undefined;
 
+  // The comment this round is answering (set when the question carried a reference). Its presence is what puts the
+  // "use as reply" action on the answer.
+  const answeringComment = useAnsweringComment(prLocalId);
   // The effective scope for this PR's chat commands: follows the commit selected in the Diff view, unless the user has detached (scopeDetached).
   // Only one scope may be in effect at a time — when a Diff selection exists it takes precedence (finer-grained), the commit scope is suspended and its chip
   // is hidden too (see commitScopeChip), auto-restored after the selection is cleared.
@@ -244,26 +266,51 @@ export function ChatPane({
     prLocalId,
   });
 
-  // Commit dividers: mark every point in the run timeline where the reviewed commit changes, so the boundary persists
-  // rather than vanishing once the new code is reviewed. Two cases:
-  //  - between two consecutive runs whose headSha differs → a divider *before* the newer run (a durable boundary
-  //    between the old-commit runs above and the new-commit runs below);
-  //  - a trailing divider at the bottom when the current PR head has advanced past the last run's commit (covers a new
-  //    commit that hasn't been reviewed yet — including while a run against it is still in flight).
-  // The timeline is ascending by start time; only runs that recorded a headSha participate (pre-feature runs are skipped).
-  const commitDividers = useMemo(() => {
-    const before = new Map<string, string>(); // timeline entry.key → the newer headSha to render a divider before it
-    let prevSha: string | undefined;
-    for (const entry of timeline) {
-      const sha = entry.run?.headSha;
-      if (!sha) continue;
-      if (prevSha && sha !== prevSha) before.set(entry.key, sha);
-      prevSha = sha;
+  // Commit dividers: every point in the timeline where the reviewed commit changes (see computeCommitDividers, which
+  // also explains why the trailing boundary anchors after the last run rather than at the end of the pane).
+  const commitDividers = useMemo(
+    () => computeCommitDividers(timeline, pr?.sourceRef.sha),
+    [timeline, pr?.sourceRef.sha],
+  );
+
+  // Key of the last assistant message in the timeline: the answer the action belongs on. Anchored to the last one
+  // rather than to a message id because a conversation message has no stable id of its own here.
+  const lastAnswerKey = useMemo(() => {
+    for (let i = timeline.length - 1; i >= 0; i -= 1) {
+      const m = timeline[i]?.message;
+      if (m && m.role !== 'user') return timeline[i]!.key;
     }
-    const head = pr?.sourceRef.sha;
-    const bottom = head && prevSha && head !== prevSha ? head : null;
-    return { before, bottom };
-  }, [timeline, pr?.sourceRef.sha]);
+    return null;
+  }, [timeline]);
+  /** Turn the agent's answer into a draft reply to the comment that was asked about, then release the association. */
+  const createReplyDraftFromAnswer = (body: string): void => {
+    if (!answeringComment || !prLocalId) return;
+    void invoke('drafts:create', {
+      localId: prLocalId,
+      draft: {
+        body,
+        status: 'pending',
+        replyTo: { parentCommentId: answeringComment.commentId },
+        ...(answeringComment.anchor?.line != null
+          ? {
+              anchor: {
+                path: answeringComment.anchor.path,
+                startLine: answeringComment.anchor.line,
+                endLine: answeringComment.anchor.line,
+              },
+            }
+          : {}),
+      } as Parameters<typeof invoke<'drafts:create'>>[1]['draft'],
+    })
+      .then(() => {
+        void draftsStore.refresh(prLocalId);
+        commentReferenceStore.clearAnswering();
+      })
+      .catch((e: unknown) => {
+        console.error('create reply draft from answer failed', e);
+      });
+  };
+
 
   // Commit messages for divider tooltips: fetch the PR's commits (main-cached; keyed on head sha so it refreshes when
   // the head advances) into a sha → message map. Empty until loaded / on failure (the tooltip falls back to the short sha).
@@ -448,12 +495,26 @@ export function ChatPane({
           ) : entry.step ? (
             <AgentStepRow key={entry.key} step={entry.step} />
           ) : entry.message ? (
-            <ConversationMessage key={entry.key} message={entry.message} />
+            <ConversationMessage
+              key={entry.key}
+              message={entry.message}
+              useAsReply={
+                answeringComment && entry.key === lastAnswerKey
+                  ? {
+                      label: t('chatPane.commentReference.useAsReply'),
+                      onUse: () => {
+                        createReplyDraftFromAnswer(entry.message!.content);
+                      },
+                    }
+                  : null
+              }
+            />
           ) : null,
         )}
-        {/* Bottom commit divider: the PR head advanced past the last run's commit and no run against it exists yet
-            (a new commit not reviewed yet, including while a run against it is still in flight). Once such a run
-            completes, the boundary instead renders between the old and new runs above (see commitDividers.before). */}
+        {/* Trailing commit divider, for the one case with no entry to precede: the head advanced past the last run's
+            commit and nothing has landed after that run yet. As soon as anything does — a message, a step, a queued
+            run — the boundary moves into `before` and anchors there, so it stays put instead of being pushed down by
+            each new bubble (see computeCommitDividers). */}
         {commitDividers.bottom && (
           <CommitDivider
             sha={commitDividers.bottom}
@@ -512,6 +573,13 @@ export function ChatPane({
             undefined,
             tool === 'ask' ? undefined : (effectiveScope ?? undefined),
           );
+          // Hand the referenced comment off to the round being answered: it detaches from the input bar (a reference
+          // is per-question — leaving it attached would silently prepend the same comment to every later message)
+          // while staying associated with this answer, so the answer can be turned into a reply to it. Called on
+          // every send, including unreferenced ones, which is what clears a previous round's association.
+          // The diff selection is deliberately *not* released — it stays visible in the editor, so keeping it is
+          // what the user sees and expects.
+          if (tool === 'ask') commentReferenceStore.handOff();
         }}
         onAgentAsk={(q) => {
           if (refFinding) {
@@ -524,6 +592,7 @@ export function ChatPane({
             return;
           }
           void actions.handleAgentAsk(q, referencedContext);
+          commentReferenceStore.handOff();
         }}
         onCancel={hasMyActive || agentRunningHere ? actions.handleStopAll : undefined}
         onSetReviewStatus={onSetReviewStatus}
@@ -545,6 +614,18 @@ export function ChatPane({
                 label: anchorShortLabel(refFinding.finding.anchor),
                 onClear: () => {
                   setRefFinding(null);
+                },
+              }
+            : null
+        }
+        // Referenced comment: chip showing "<author>: <excerpt>" + clear. Attached from a comment's reference button;
+        // carried as implicit context with the next question, and released on send (see onSend).
+        commentChip={
+          commentRef
+            ? {
+                label: commentReferenceLabel(commentRef),
+                onClear: () => {
+                  commentReferenceStore.clear();
                 },
               }
             : null

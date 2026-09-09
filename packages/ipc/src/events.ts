@@ -40,6 +40,13 @@ export interface IpcEvents {
   /** Broadcast after a comment reply / status change; renderer components (CommentsPanel / DiffView inline) refetch */
   'comments:changed': { localId: string };
   /**
+   * A PR's stored state changed outside a poll tick, and the renderer should reload the list. Emitted when a
+   * post-action re-check observes the remote settling after a write action — a merge actually landing (the PR has by
+   * then been archived out of the list), or a review verdict flipping the remote's mergeable verdict (the merge button
+   * appears / disappears). Without it those changes would surface only on the next periodic poll.
+   */
+  'prs:changed': { localId: string };
+  /**
    * Queue change broadcast: triggered by active add/remove or waiting add/remove. Renderer syncs the
    * chat-pane running UI + StatusBar queue chip. `active` is the list of currently concurrent running runs
    * (length ≤ max_concurrency).

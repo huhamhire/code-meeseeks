@@ -147,6 +147,32 @@ export class Poller {
   }
 
   /**
+   * Archive one PR by localId (same soft-delete move as a poll round's departure path: relocate the tree into cold
+   * storage, then mark archivedAt), returning whether anything changed. A no-op when the PR is unknown or already archived.
+   *
+   * Exists so a **confirmed departure** can take effect immediately instead of riding on a full poll round. The
+   * departure a poll infers from absence — "not seen this round" — is the same conclusion a caller can reach directly by
+   * observing the remote state (a merge that has landed), and there the whole-round cost is pure latency: a tick fetches
+   * every connection's discovery lists before the one PR the user just acted on can leave the list.
+   *
+   * Like archiveConnectionsExcept, this is driven by an explicit fact rather than by a failure to see the PR, so it does
+   * not weaken the "one network blip must not wrongly delete the store" invariant.
+   */
+  async archivePullRequest(localId: string): Promise<boolean> {
+    const indexFile = await readPrIndex(this.opts.stateStore);
+    const entry = indexFile?.prs[localId];
+    if (!indexFile || !entry || entry.archivedAt) return false;
+    const now = (this.opts.now?.() ?? new Date()).toISOString();
+    // Move the whole tree into archive cold storage, then mark archivedAt (migration precedes index persistence; a crash can idempotently retry).
+    await relocateTree(this.opts.stateStore, this.opts.archiveStore, prDirKey(localId));
+    await writePrIndex(this.opts.stateStore, {
+      schema_version: 1,
+      prs: { ...indexFile.prs, [localId]: { ...entry, archivedAt: now } },
+    });
+    return true;
+  }
+
+  /**
    * Hot-swap the poll interval (seconds). While running, rebuild the timer on the new period (does not tick immediately);
    * the new interval takes effect from the next trigger. Called after the settings page changes the poll interval, no restart needed.
    */
