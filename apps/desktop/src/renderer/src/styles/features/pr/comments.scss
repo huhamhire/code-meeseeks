@@ -312,8 +312,10 @@
 .pr-comment-reference-btn {
   display: inline-flex;
   align-items: center;
-  padding: 2px $space-3;
-  line-height: 1;
+  // Same padding and font-size as the text buttons beside it, so the line box — and therefore the button height —
+  // matches theirs. An icon button that sizes to its glyph instead ends up a different height from its row.
+  padding: 2px $space-4;
+  font-size: $fs-sm;
   background: transparent;
   border: 1px solid $border-default;
   border-radius: $radius-sm;
@@ -324,6 +326,12 @@
     border-color: $color-accent;
     color: $color-info;
     background: rgb(var(--rgb-accent) / 0.08);
+  }
+
+  // Block-level svg: as an inline element it would sit on the text baseline and add descender space below it,
+  // making the button taller than its siblings even with the line box matched.
+  svg {
+    display: block;
   }
 }
 // Delete button: same size as the reply button, uses danger as the main color so users recognize it at a glance as a destructive action.

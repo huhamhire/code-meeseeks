@@ -83,10 +83,14 @@
 // Reference button: icon-only, so it sizes to the glyph rather than to a label; while the comment is referenced it
 // stays lit (is-active) and visible regardless of hover, since an attached reference must be discoverable at a glance.
 .comment-zone-reference-btn {
+  // Padding and font-size come from the shared rule above, so this only has to centre the glyph within that box —
+  // overriding them here is what made the button a different height from the text buttons beside it.
   display: inline-flex;
   align-items: center;
-  padding: 2px $space-2;
-  line-height: 1;
+
+  svg {
+    display: block;
+  }
 }
 .comment-zone-reference-btn:hover,
 .comment-zone-reference-btn.is-active {
