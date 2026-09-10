@@ -5,6 +5,12 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.12.1] - 2026-09-10
+
+### 🔧 修复
+
+- Windows 上将应用安装到默认位置后，评审不再失败。评审引擎捆绑的一个文件已过期，导致每次运行都尝试把它重新下载到安装目录——而那里没有写入权限。现在应用直接携带正确的文件，运行时不再下载或写入任何内容（因此离线也可用）。
+
 ## [0.12.0] - 2026-09-09
 
 ### ✨ 新增
@@ -541,6 +547,7 @@
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
 [Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.12.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
