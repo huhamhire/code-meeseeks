@@ -5,6 +5,12 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.12.1] - 2026-09-10
+
+### 🔧 Fixed
+
+- Reviews no longer fail on Windows when the app is installed to its default location. A file bundled with the review engine was out of date, which made it try to re-download itself into the installation directory on every run — where it has no write permission. The correct file now ships with the app, so nothing is downloaded or written at run time (which also means it works offline).
+
 ## [0.12.0] - 2026-09-09
 
 ### ✨ Added
@@ -541,6 +547,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
 [Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.12.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.0...v0.11.1
