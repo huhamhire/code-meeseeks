@@ -39,6 +39,7 @@ const SHIM_DIR = join(__dirname, 'pragent-shim');
 const SHIM_PKG_NAME = 'meebox_pragent_shim';
 const SHIM_LOADER = join(SHIM_DIR, 'sitecustomize.py');
 const SHIM_RUNTIME = join(SHIM_DIR, SHIM_PKG_NAME, 'runtime.py'); // where _EXPECTED_PRAGENT_VERSION lives
+const TIKTOKEN_SCRIPT = join(__dirname, 'tiktoken-cache.py'); // prime/verify the bundled tiktoken encodings
 const UA = 'meebox-runtime-assembler';
 
 const FORCE = process.argv.includes('--force') || process.env.MEEBOX_PRAGENT_FORCE === '1';
@@ -266,6 +267,19 @@ async function slimRuntime(root) {
  * the shim patch chain is in place, and the stdlib C extensions / pure-py modules pr-agent actually depends on are all present. Any failure calls fail()
  * to turn the build red, so **over-trimming is blocked directly in CI and never ships**.
  */
+/**
+ * Bake the tiktoken encodings into vendor (prime), and assert they will be used without a write (verify).
+ *
+ * The rationale and the failure it prevents are documented in scripts/tiktoken-cache.py — kept there rather than as an
+ * inline snippet because the check has to read tiktoken's own pinned hashes, which is real code, not a one-liner.
+ */
+function runTiktokenCache(pythonExe, mode) {
+  const r = spawnSync(pythonExe, [TIKTOKEN_SCRIPT, mode], { encoding: 'utf8' });
+  if (r.status !== 0)
+    fail(`tiktoken cache ${mode} failed: ${r.stdout || ''}${r.stderr || r.error?.message || ''}`);
+  return r.stdout.trim();
+}
+
 function smokeTest(pythonExe) {
   // (0) Split rule: importing meebox_pragent_shim alone must not pull pr_agent into sys.modules (no eager
   //     import pr_agent at the top level, else it slows every python startup). Verified in a fresh interpreter.
@@ -294,7 +308,11 @@ function smokeTest(pythonExe) {
   ].join('\n');
   const out = pythonStdout(pythonExe, code);
   if (!out.includes('MEEBOX_SMOKE_OK')) fail(`smoke test failed (output: ${out.slice(0, 300)})`);
-  log('smoke test OK: pr_agent importable + shim patch active + key stdlib + litellm completion path intact');
+  // Token encodings must be a cache **hit**, not merely loadable. A stale file still loads on this machine, because
+  // this machine can re-download it — which is precisely how the 0.12.0 build passed here and then died in a read-only
+  // install. Runs after slimming, so it also catches a slim rule that deletes the cache.
+  runTiktokenCache(pythonExe, 'verify');
+  log('smoke test OK: pr_agent importable + shim patch active + key stdlib + litellm completion path + tiktoken cache usable read-only');
 }
 
 async function main() {
@@ -330,6 +348,7 @@ async function main() {
       const sp = await syncShim(pythonExe);
       await ensureSecretsPlaceholders(sp);
       // Slimming is idempotent: skip if already deleted, so the fast path runs it too — an already-assembled old vendor slims after one prepare:pragent.
+      runTiktokenCache(pythonExe, 'prime');
       await slimRuntime(VENDOR_DIR);
       smokeTest(pythonExe);
       log(`ready, skipping rebuild (${versionKey}); re-synced shim + slimmed + smoke tested → ${sp}. Use --force to force a full rebuild.`);
@@ -391,7 +410,10 @@ async function main() {
   await ensureSecretsPlaceholders(sitePackages);
   log('wrote empty pr_agent/settings(_prod)/.secrets.toml placeholder');
 
-  // 7. Slim (B) + smoke test (CI safety net) + write VERSION
+  // 7. Prime tiktoken (must precede slimming, so the smoke test also catches a slim rule that deletes the cache)
+  runTiktokenCache(pythonExe, 'prime');
+
+  // 8. Slim (B) + smoke test (CI safety net) + write VERSION
   await slimRuntime(VENDOR_DIR);
   smokeTest(pythonExe);
   await writeFile(

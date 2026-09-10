@@ -70,6 +70,17 @@ Current patches (pinned pr-agent **0.45.0**):
 
 **Upstream defaults that must stay pinned** (in `buildPragentEnv`): 0.45.0 turned on three features that append to the output this app *parses* — `pr_reviewer.persistent_finding_state` (a "resolved findings" section carrying upstream's own cross-run state, which the app already owns via drafts / finding closures / re-review verdicts) and two coverage footers — plus `pr_description.pr_diagram_direction='adaptive'`, which turns a longer diagram top-down. **Re-check this list on every upgrade**, and note the two distinct ways a default can be wrong here: one *adds output* (landing as a bogus finding), the other *changes presentation* for a surface upstream does not know about — pr-agent assumes a full-width page, while this diagram is read in a narrow chat column. Neither shows up as an error.
 
+### Read-only install directory
+
+Once installed the runtime sits under `C:\Program Files` / `/Applications` and **cannot be written to**; a write raises `PermissionError` that propagates out and kills the command. Assembly therefore has to bake in anything a run would otherwise create:
+
+- `.secrets.toml` — pr-agent warns on every startup when it is missing, so an empty placeholder is written at assemble time.
+- **tiktoken encodings** — litellm points `TIKTOKEN_CACHE_DIR` at its own `litellm_core_utils/tokenizers/` and ships encoding files there to be offline-capable, but the files it ships **fail the `expected_hash` pinned by the tiktoken it depends on** (all of them, as of litellm 1.99.0 / tiktoken 0.12.0). tiktoken then deletes and re-downloads them into site-packages on every run. `scripts/tiktoken-cache.py prime` repairs the bundled bytes at assemble time so the cache is a **hit** and nothing is written; `verify` asserts it.
+
+**Why the smoke test has to compare hashes rather than just load the encoding**: a stale file still loads on the build machine — that machine can re-download it. So "CI passed" says nothing about the installed copy. This is exactly how 0.12.0 shipped: the runtime assembled and smoke-tested cleanly, and every Windows install then failed on the first `/describe`. The check compares the bundled bytes against the hash tiktoken pins, which is the thing that actually decides fetch-or-reuse at runtime, and it runs **after** slimming so a slim rule that deletes the cache is caught too.
+
+The general rule is in [AGENTS.md](../../../AGENTS.md) under engineering maintenance pitfalls: when adding or upgrading a Python dependency, check whether it writes under its own package at runtime, and if so pre-populate it here plus assert it.
+
 ### Real token usage
 
 Inline-wrap pr-agent's `_get_completion`, take `prompt/completion/total_tokens` from the returned `response.usage`,
