@@ -108,12 +108,15 @@ Provider 选 **OpenAI 兼容**，Base URL **必填**为目标服务的 `/v1` 端
 1. 在本机安装对应 CLI 并完成登录。
 2. 进入 设置 → LLM，新建预设，**Provider 选「本地 CLI」**。
 3. 在 **CLI 命令** 字段填入命令名，如 `claude` 或 `codex`。
-4. 保存并设为 active。
+4. 可选填写**附加参数**，例如 Codex 使用 `--model gpt-6.1-sol -c model_reasoning_effort=medium`，Claude 使用 `--model sonnet --effort medium`。含空格的值使用引号组合，换行与空格一样用于分隔参数；预览显示解析后的参数数组。不支持 shell 展开或 shell 命令。
+5. 保存并设为 active。
 
 ### 关键行为
 
-- **以本机登录态运行**：评审请求交由本机 CLI 处理，沿用其默认模型与登录会话，不使用此处或环境中的 API Key。
-- **实际模型**：由本机 CLI 的默认模型 / 账户档位决定，**不由此处输入决定**（此处填写的是命令名，非模型名）。
+- **以本机登录态运行**：评审请求交由本机 CLI 处理，使用选定模型与 CLI 登录会话，不使用此处或环境中的 API Key。
+- **实际模型**：附加参数仅为当前预设覆盖 CLI 本地默认配置；未填写时沿用 CLI 自身配置。命令字段仍只填写命令名，模型可用性仍取决于 CLI 账号及版本。
+- **支持的参数**：Codex 支持 `--model` / `-m`，以及通过 `--config` / `-c` 设置 `model`、`model_reasoning_effort`、`service_tier`、`model_verbosity`；Claude 支持 `--model`、`--effort`、`--max-turns`、`--max-budget-usd`、`--fallback-model`。兼容 `--option value` 和 `--option=value`。输入输出协议、沙箱、工作目录、提示词和子命令由应用管理，不允许覆盖。
+- **范围与优先级**：参数用于描述、评审、问答、代码建议及 Agent 编排聊天。显式设置 Codex 推理强度后，不再自动覆盖为低强度；显式设置 Claude 模型或推理强度后，不再自动选用 Haiku。留空保留原有行为，参数以预设中的 `cli_args: string[]` 保存。自定义 Windows 批处理启动器拒绝 shell 元字符，原生及标准 npm 启动器直接传递参数值。
 - **代理自动透传**：开启[网络代理](03-proxy.md)后，CLI 的出站请求会自动经代理，无需额外配置。
 
 > 前提：本机须已安装对应命令、位于 PATH 中且已登录，否则评审会因找不到命令而失败；评审消耗计入该 CLI 账户自身的额度。

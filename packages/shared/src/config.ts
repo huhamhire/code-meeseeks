@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validCliArgs } from './cli-args.js';
 import {
   EDITOR_FONT_SIZE_DEFAULT,
   EDITOR_FONT_SIZE_MAX,
@@ -114,7 +115,15 @@ const LlmProfileObject = z.object({
   /** Human-readable name, may be empty; the UI falls back to provider+model for display */
   label: z.string().default(''),
   provider: z
-    .enum(['openai', 'openai-compatible', 'deepseek', 'anthropic', 'dashscope', 'volcengine-ark', 'cli'])
+    .enum([
+      'openai',
+      'openai-compatible',
+      'deepseek',
+      'anthropic',
+      'dashscope',
+      'volcengine-ark',
+      'cli',
+    ])
     .default('openai-compatible'),
   /** OpenAI-family / local service: api_base. Optional, leave empty */
   base_url: z.string().default(''),
@@ -124,12 +133,20 @@ const LlmProfileObject = z.object({
    * (`gpt-4o`) which goes to OpenAI.
    */
   model: z.string().default(''),
+  /** Local CLI arguments; omitted legacy profiles behave as an empty list. */
+  cli_args: z.array(z.string()).optional(),
   /** Primary key; leave empty for local / no-auth services */
   api_key: z.string().default(''),
 });
 
 /** An old `ollama` profile is migrated to `openai-compatible` before validation (see migrateLegacyLlmProvider). */
-export const LlmProfileSchema = z.preprocess(migrateLegacyLlmProvider, LlmProfileObject);
+export const LlmProfileSchema = z.preprocess(
+  migrateLegacyLlmProvider,
+  LlmProfileObject.refine(
+    (profile) => profile.provider !== 'cli' || validCliArgs(profile.model, profile.cli_args ?? []),
+    { message: 'Unsupported or invalid local CLI arguments', path: ['cli_args'] },
+  ),
+);
 
 export type LlmProvider =
   | 'openai'
@@ -374,10 +391,7 @@ export const ConfigSchema = z.object({
         typeof val === 'object' &&
         !Array.isArray(val) &&
         !('profiles' in val) &&
-        ('provider' in val ||
-          'model' in val ||
-          'api_key' in val ||
-          'base_url' in val)
+        ('provider' in val || 'model' in val || 'api_key' in val || 'base_url' in val)
       ) {
         const o = val as Record<string, unknown>;
         const oldProvider = typeof o.provider === 'string' ? o.provider : '';

@@ -103,7 +103,7 @@
     "inputAria": "Chat input",
     "llmCallFailed": "LLM call failed",
     "llmErrorHint": {
-      "modelUnavailable": "The requested model is unavailable. With a local CLI provider the model comes from that CLI's own configuration — switch it to a supported model there, then run again."
+      "modelUnavailable": "The requested model is unavailable. With a local CLI provider, check the profile's additional arguments and the CLI's own configuration, select a supported model, then run again."
     },
     "mergeConfirmLabel": "Merge",
     "mergeConfirmMessage": "Merge \"{{title}}\" into its target branch? This can't be undone.",
@@ -517,12 +517,17 @@
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "This provider needs no key (leave empty)",
+    "cliArgsHint": "Optional. Quotes group values; no shell expansion. Overrides CLI defaults for this profile. Codex: --model and -c model/model_reasoning_effort/service_tier/model_verbosity. Claude: --model, --effort, --max-turns, --max-budget-usd, --fallback-model.",
+    "cliArgsLabel": "Additional arguments",
+    "cliArgsPreview": "Argument preview:",
     "cliCommandFallback": "command-line tool",
     "cliCommandLabel": "CLI Command",
     "cliCommandPlaceholder": "Command name, e.g. claude / codex",
     "cliNamePlaceholder": "e.g. claude / codex",
     "cliWarningPrefix": "⚠️ Filling in and enabling this profile authorizes Code Meeseeks to invoke the local",
     "cliWarningSuffix": "tool to perform review operations. Make sure the command is installed and signed in.",
+    "errorCliArgs": "Invalid or unsupported arguments. Output format, sandbox, working directory, prompts and subcommands are managed by the app.",
+    "errorCliArgsQuote": "Close the quoted argument before saving.",
     "errorCliUnsupported": "Unsupported CLI tool",
     "errorLabelDuplicate": "Name already exists",
     "errorLabelSlug": "Only letters / digits / - / _ allowed, 1-32 characters",

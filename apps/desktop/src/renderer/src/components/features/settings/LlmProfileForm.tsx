@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LlmProfile, LlmProvider } from '@meebox/shared';
+import { formatCliArgs, parseCliArgs, validCliArgs } from '@meebox/shared';
 import i18n from '../../../i18n';
 import { EyeIcon, EyeOffIcon } from '../../common';
 
@@ -107,6 +108,7 @@ export interface ProfileErrors {
   model?: string;
   base_url?: string;
   api_key?: string;
+  cli_args?: string;
 }
 
 /**
@@ -146,6 +148,8 @@ export function validateProfile(p: LlmProfile, existing: LlmProfile[]): ProfileE
     if (!cmd) errors.model = i18n.t('llmProfileForm.errorRequired');
     else if (cmd !== 'claude' && cmd !== 'codex')
       errors.model = i18n.t('llmProfileForm.errorCliUnsupported');
+    if (!validCliArgs(cmd, p.cli_args ?? []))
+      errors.cli_args = i18n.t('llmProfileForm.errorCliArgs');
     return errors;
   }
 
@@ -189,11 +193,19 @@ export function LlmProfileForm({
 }) {
   const { t } = useTranslation();
   const [keyVisible, setKeyVisible] = useState(false);
+  const [argsText, setArgsText] = useState(() => formatCliArgs(draft.cli_args ?? []));
+  let argsSyntaxError = false;
+  try {
+    parseCliArgs(argsText);
+  } catch {
+    argsSyntaxError = true;
+  }
   const [touched, setTouched] = useState<Record<keyof ProfileErrors, boolean>>({
     label: false,
     model: false,
     base_url: false,
     api_key: false,
+    cli_args: false,
   });
   const markTouched = (k: keyof ProfileErrors): void => {
     setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
@@ -201,12 +213,16 @@ export function LlmProfileForm({
   const providerMeta = getProviderMeta(draft.provider);
   const isCli = draft.provider === 'cli';
   const errors = validateProfile(draft, existing);
+  if (isCli && argsSyntaxError) errors.cli_args = t('llmProfileForm.errorCliArgsQuote');
+  const valid = Object.keys(errors).length === 0;
+  useEffect(() => {
+    onValidityChange?.(valid);
+  }, [onValidityChange, valid]);
   const showError = (k: keyof ProfileErrors): boolean =>
     (forceShowErrors || touched[k]) && !!errors[k];
   const update = <K extends keyof LlmProfile>(field: K, value: LlmProfile[K]): void => {
     const next = { ...draft, [field]: value };
     onChange(next);
-    onValidityChange?.(Object.keys(validateProfile(next, existing)).length === 0);
   };
   // Base URL placeholder: show the URL directly when there's a default endpoint; give an example + required hint when there's no default
   const baseUrlPlaceholder = providerMeta.defaultBaseUrl || 'https://your-endpoint.example.com/v1';
@@ -265,6 +281,52 @@ export function LlmProfileForm({
             }
           />
         </div>
+        {isCli && (
+          <>
+            <label className="modal-kv-key" htmlFor="llm-cli-args">
+              {t('llmProfileForm.cliArgsLabel')}
+            </label>
+            <div className="modal-kv-val">
+              <textarea
+                id="llm-cli-args"
+                className={`settings-input${showError('cli_args') ? ' settings-input-error' : ''}`}
+                rows={3}
+                value={argsText}
+                placeholder={
+                  draft.model.trim().toLowerCase() === 'claude'
+                    ? '--model sonnet --effort medium'
+                    : '--model gpt-6.1-sol\n-c model_reasoning_effort=medium'
+                }
+                onChange={(e) => {
+                  const text = e.target.value;
+                  setArgsText(text);
+                  markTouched('cli_args');
+                  try {
+                    update('cli_args', parseCliArgs(text));
+                  } catch {
+                    // Keep the last parsed array while incomplete quotes remain visible in the editor.
+                  }
+                }}
+                onBlur={() => markTouched('cli_args')}
+                aria-invalid={!!errors.cli_args}
+                aria-describedby="llm-cli-args-hint"
+              />
+              <p id="llm-cli-args-hint" className="muted">
+                {t('llmProfileForm.cliArgsHint')}
+              </p>
+              {showError('cli_args') ? (
+                <p role="alert" className="muted">
+                  {errors.cli_args}
+                </p>
+              ) : (
+                <p className="muted">
+                  {t('llmProfileForm.cliArgsPreview')}{' '}
+                  <code>{JSON.stringify(draft.cli_args ?? [])}</code>
+                </p>
+              )}
+            </div>
+          </>
+        )}
         {/* cli mode doesn't connect to the API directly: no Base URL / API Key concept, hide the whole group */}
         {!isCli && (
           <>

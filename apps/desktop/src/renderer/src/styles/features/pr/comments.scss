@@ -2,6 +2,7 @@
 // actions + code context. See components/features/pr/tabs/comments. The activity timeline layout is in features/pr/activity.
 
 @use '../../tokens' as *;
+@use '../../mixins' as *;
 
 // The outer layer is a positioning anchor (position:relative) + no scroll: lets the loading overlay .pane-loading-overlay fill the viewport
 // and center the spinner, rather than tracking inner scroll to the top of the scroll area. Scrolling is handled by the inner .pr-comments-scroll.
@@ -191,17 +192,13 @@
   display: inline-flex;
 }
 .pr-reaction-add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  @include comment-action-size;
   padding: 2px $space-3;
   background: transparent;
   border: 1px solid $border-default;
   border-radius: $radius-pill;
   color: $text-muted;
   cursor: pointer;
-  // SVG icons have a clean baseline; line-height:0 removes the extra height from the line box, ensuring vertical centering with adjacent text buttons.
-  line-height: 0;
   // hover colors align with adjacent comment action buttons (edit/reply): use the info color family, avoiding mixing with the accent family.
   &:hover:not(:disabled) {
     border-color: $color-info;
@@ -279,6 +276,7 @@
   align-items: center;
 }
 .pr-comment-reply-btn {
+  @include comment-action-size;
   padding: 2px $space-4;
   font-size: $fs-sm;
   background: transparent;
@@ -294,6 +292,7 @@
 }
 // Edit button: same size as the reply button, hover accent border — it's a neutral action, no need for danger colors
 .pr-comment-edit-btn {
+  @include comment-action-size;
   padding: 2px $space-4;
   font-size: $fs-sm;
   background: transparent;
@@ -307,13 +306,9 @@
     background: rgb(var(--rgb-accent) / 0.08);
   }
 }
-// Reference button: icon-only, so it sizes to the glyph instead of a label. While the comment is referenced it stays
-// lit (is-active), because an attached reference has to be visible without hovering to find it again.
+// A referenced comment stays highlighted without requiring hover.
 .pr-comment-reference-btn {
-  display: inline-flex;
-  align-items: center;
-  // Same padding and font-size as the text buttons beside it, so the line box — and therefore the button height —
-  // matches theirs. An icon button that sizes to its glyph instead ends up a different height from its row.
+  @include comment-action-size;
   padding: 2px $space-4;
   font-size: $fs-sm;
   background: transparent;
@@ -327,16 +322,11 @@
     color: $color-info;
     background: rgb(var(--rgb-accent) / 0.08);
   }
-
-  // Block-level svg: as an inline element it would sit on the text baseline and add descender space below it,
-  // making the button taller than its siblings even with the line box matched.
-  svg {
-    display: block;
-  }
 }
 // Delete button: same size as the reply button, uses danger as the main color so users recognize it at a glance as a destructive action.
 // Secondary confirmation goes through ConfirmModal; no more hover-only hiding on the button (to avoid making users think the feature is missing)
 .pr-comment-delete-btn {
+  @include comment-action-size;
   padding: 2px $space-4;
   font-size: $fs-sm;
   background: transparent;

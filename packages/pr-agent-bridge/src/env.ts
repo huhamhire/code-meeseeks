@@ -93,12 +93,17 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
  *   a tall diagram pushes everything else off screen while a wide one scrolls sideways and can be opened in the
  *   preview view. Pinned left-to-right rather than left to a heuristic tuned for a full-width page.
  */
-export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): Record<string, string> {
+export function buildPragentEnv(
+  profile: LlmProfile,
+  maxModelTokens?: number,
+): Record<string, string> {
   const env: Record<string, string> = {};
   if (profile.model) env['CONFIG__MODEL'] = normalizeModel(profile.provider, profile.model);
   // Context length: the user's "context length" setting controls the input truncation limit; CLI mode ignores it (the tool manages its own context) → fixed at the default.
   const contextTokens =
-    profile.provider === 'cli' ? LLM_CONTEXT_TOKENS_DEFAULT : (maxModelTokens ?? LLM_CONTEXT_TOKENS_DEFAULT);
+    profile.provider === 'cli'
+      ? LLM_CONTEXT_TOKENS_DEFAULT
+      : (maxModelTokens ?? LLM_CONTEXT_TOKENS_DEFAULT);
   env['CONFIG__MAX_MODEL_TOKENS'] = String(contextTokens);
   env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = String(contextTokens);
   env['CONFIG__FALLBACK_MODELS'] = '[]';
@@ -180,6 +185,7 @@ export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): R
       const bin = (profile.model || 'claude').trim() || 'claude';
       env['MEEBOX_CLI_MODE'] = '1';
       env['MEEBOX_CLI_BIN'] = bin;
+      env['MEEBOX_CLI_ARGS'] = JSON.stringify(profile.cli_args ?? []);
       break;
     }
   }

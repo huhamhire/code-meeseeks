@@ -103,7 +103,7 @@
     "inputAria": "聊天输入框",
     "llmCallFailed": "LLM 调用失败",
     "llmErrorHint": {
-      "modelUnavailable": "所请求的模型不可用。使用本地 CLI 供应商时，模型由该 CLI 自身的配置决定，请在 CLI 中改用受支持的模型后重新运行。"
+      "modelUnavailable": "所请求的模型不可用。使用本地 CLI 供应商时，请检查预设的附加参数及 CLI 自身配置，选择受支持的模型后重新运行。"
     },
     "mergeConfirmLabel": "合并",
     "mergeConfirmMessage": "确定将「{{title}}」合并到目标分支？此操作不可撤销。",
@@ -506,12 +506,17 @@
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "该 provider 无需密钥（留空）",
+    "cliArgsHint": "可选。引号用于组合参数值，不执行 shell 展开。仅覆盖当前预设的 CLI 默认配置。Codex 支持 --model 和 -c model/model_reasoning_effort/service_tier/model_verbosity；Claude 支持 --model、--effort、--max-turns、--max-budget-usd、--fallback-model。",
+    "cliArgsLabel": "附加参数",
+    "cliArgsPreview": "参数预览：",
     "cliCommandFallback": "命令行",
     "cliCommandLabel": "CLI 命令",
     "cliCommandPlaceholder": "命令名，如 claude / codex",
     "cliNamePlaceholder": "如 claude / codex",
     "cliWarningPrefix": "⚠️ 填写并启用此预设，即代表你授权 Code Meeseeks 调用本机的",
     "cliWarningSuffix": "工具执行评审操作。请确认对应命令已安装并完成登录。",
+    "errorCliArgs": "参数无效或不受支持。输出格式、沙箱、工作目录、提示词及子命令由应用管理。",
+    "errorCliArgsQuote": "请补全参数引号后再保存。",
     "errorCliUnsupported": "不受支持的 CLI 工具",
     "errorLabelDuplicate": "名称已存在",
     "errorLabelSlug": "只允许 字母 / 数字 / - / _，1-32 字符",
