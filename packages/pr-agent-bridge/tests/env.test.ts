@@ -25,4 +25,12 @@ describe('CLI argument transport', () => {
     const profile = LlmProfileSchema.parse({ id: 'legacy', provider: 'cli', model: 'codex' });
     expect(buildChatEnv(profile).MEEBOX_CLI_ARGS).toBe('[]');
   });
+
+  it('pins the canonical 0.50 local improve output settings', () => {
+    const env = buildToolEnv(null, { tool: 'improve' });
+    expect(env.PR_CODE_SUGGESTIONS__COMMITTABLE_CODE_SUGGESTIONS).toBe('false');
+    expect(env.PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS).toBeUndefined();
+    expect(env.LOCAL__REVIEW_PATH).toBe('improve.md');
+    expect(env.PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT).toBe('false');
+  });
 });

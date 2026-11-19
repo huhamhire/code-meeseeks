@@ -1,41 +1,47 @@
-# 嵌入式 pr-agent 运行时（开发环境准备）
+# Embedded pr-agent runtime
 
-把一份**可重定位的 CPython + 预装好的 pr-agent** 组装到 `apps/desktop/vendor/pragent/`，
-让应用无需用户预装 Python / Docker 即可跑 pr-agent（见 [docs/arch/02-agent/03-pragent-runtime](../../../docs/arch/02-agent/05-pragent-runtime.md)）。
+Assemble relocatable CPython and pinned pr-agent into `apps/desktop/vendor/pragent/`, so users do not need Python or Docker. See the [runtime architecture](../../../docs/arch/02-agent/05-pragent-runtime.md).
 
-## 用法
+## Usage
+
+Run from the repository root:
 
 ```bash
-# 在 apps/desktop 下
-npm run prepare:pragent          # 幂等：已就绪则跳过
-npm run prepare:pragent -- --force   # 强制重建
+npm --prefix apps/desktop run prepare:pragent
+npm --prefix apps/desktop run prepare:pragent -- --force
 ```
 
-或经 Nx：`npx nx run @meebox/desktop:"prepare:pragent"`。
+The first command is idempotent: a matching runtime is reused, but the shim is always synchronized and smoke tests run. `--force` rebuilds the interpreter and dependencies. Packaging targets also prepare the runtime through Nx dependencies.
 
-打包（`pack` / `dist`）已通过 Nx `dependsOn` 自动先跑它。
+## Output
 
-## 产物布局
-
-```
-apps/desktop/vendor/pragent/         # gitignore，不入库
-├── python/                          # python-build-standalone（含 pip/stdlib/ssl）
+```text
+apps/desktop/vendor/pragent/          # generated, gitignored
+├── python/                          # python-build-standalone, including pip and stdlib
 │   └── .../site-packages/
-│       ├── pr_agent/ ...            # pip install pr-agent==<manifest 版本>
-│       ├── sitecustomize.py         # 薄加载器（CPython 启动经 site 自动 import）
-│       └── meebox_pragent_shim/     # monkeypatch shim 包（无侵入补丁，见 docs/arch/02-agent/05-pragent-runtime.md）
-└── VERSION                          # 组装指纹（幂等判定 + 记录 sha256）
+│       ├── pr_agent/
+│       ├── sitecustomize.py         # lazy shim loader
+│       └── meebox_pragent_shim/
+└── VERSION                          # assembly fingerprint and archive SHA-256
 ```
 
-## 版本来源
+## Versions and dependencies
 
-- Python / pr-agent 版本 pin 在 [`pragent-runtime.json`](./pragent-runtime.json)。
-- pr-agent 版本须与 `sitecustomize.py` 的 `_EXPECTED_PRAGENT_VERSION` 对齐（assemble 期强校验）。
-- 脚本按 pin 的 `tag` + `pythonMajorMinor` + 宿主平台三元组，从 GitHub release 解析
-  `install_only` 资产，下载后用官方 `.sha256` sidecar 校验完整性。
+- [pragent-runtime.json](pragent-runtime.json) pins Python's release and pr-agent's version. Keep the latter aligned with `_EXPECTED_PRAGENT_VERSION` in `pragent-shim/meebox_pragent_shim/runtime.py`; assembly rejects a mismatch.
+- The assembly script resolves the host's `install_only` Python archive from its GitHub release and verifies the published SHA-256 sidecar when available.
+- Install the core `pr-agent` distribution. Since 0.48, hosted git-provider SDKs are optional extras; the app uses the local provider and handles platform access through its own adapters. Do not delete SDK dependencies by name: LiteLLM may require them independently.
+- Node 22+ and network access are required for the initial build. Archive extraction uses `tar` from npm. An optional `GITHUB_TOKEN` avoids unauthenticated GitHub API rate limits.
+- Assembly supports Windows x64, macOS arm64/x64, and Linux x64 hosts. This does not imply that every platform has a release installer.
 
-## 前置
+## Verification
 
-- Node 22+（全局 fetch）；系统 `tar`（Windows 10+/macOS/Linux 自带）；首次需联网。
-- 可选 `GITHUB_TOKEN` 避开 API 限流（CI 推荐）。
-- 初版仅支持 **Windows x64**；macOS arm64 后续（脚本已留平台分支）。
+`prepare:pragent` checks lazy shim loading, patch activation, standard-library extensions, a mocked LiteLLM completion, and bundled tokenizer hashes. `tiktoken-cache.py` locates the bundled cache explicitly because newer LiteLLM versions initialize it lazily. It primes encodings during assembly and verifies offline loading after slimming; runtime execution must not repair files under the installation directory.
+
+`tests/test_pragent_runtime.py` exercises the installed version, empty fallback configuration, trusted base-branch context, dirty worktrees, file anchors, description assessment, YAML repair, API usage/cache/temperature handling, CLI dispatch, and local output from describe/review/ask/improve. Model responses are synthetic; no real model or remote code platform is called.
+
+The source-only CLI argument tests can also run independently:
+
+```bash
+# Windows; use vendor/pragent/python/bin/python3 on macOS/Linux
+apps/desktop/vendor/pragent/python/python.exe -B -S apps/desktop/scripts/tests/test_cli_args.py
+```

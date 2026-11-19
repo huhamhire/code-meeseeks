@@ -8,7 +8,7 @@ Launched by the embedded runtime as `python -m meebox_pragent_shim.chat`, splitt
     judge / summary) invoked multiple times per flow, which adds up considerably.
 
   - **API mode** (anthropic / openai / deepseek ...): litellm is the HTTP client and cannot be bypassed, so reuse pr-agent's
-    `LiteLLMAIHandler.chat_completion` **already patched by this shim** -- provider routing, Anthropic temperature removal,
+    `LiteLLMAIHandler.chat_completion` **already patched by this shim** -- upstream provider routing and temperature handling,
     prompt caching, and the token usage sentinel are all inherited, no need to reimplement here.
 
 Convention: stdin receives a JSON blob `{"system": ..., "user": ..., "temperature"?: ..., "max_output_tokens"?: ...}`,
