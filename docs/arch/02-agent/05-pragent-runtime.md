@@ -94,8 +94,14 @@ and that print would pollute stdout and leak into the review summary — this sw
 
 ### Local CLI provider
 
-Let the user run reviews **without filling in an API key, using a locally installed and logged-in agentic CLI** (phase one is **Claude Code** only). The LLM Profile
-gains `provider='cli'`, with the `model` field holding the command name (`claude`). Other providers go through litellm direct-to-API, while cli mode **fully bypasses
+Profiles may carry optional `cli_args: string[]`. `buildPragentEnv` always serializes this to `MEEBOX_CLI_ARGS` as a JSON array (including `[]` for legacy profiles, preventing inherited arguments). Both tool runs and orchestration chat use `run_cli_chat`, which validates the array and inserts it before Codex's trailing stdin `-`, or after Claude's fixed flags. Model selection remains separate from the command name.
+
+The shared argument editor groups quoted text without shell expansion and previews the argv array. The config schema and Python shim both validate supported value options: Codex `--model`/`-m` and `--config`/`-c` for `model`, `model_reasoning_effort`, `service_tier`, `model_verbosity`; Claude `--model`, `--effort`, `--max-turns`, `--max-budget-usd`, `--fallback-model`. Positional prompts, subcommands, and app-owned protocol/sandbox/cwd flags are rejected. Keep the TypeScript and Python validation tables aligned.
+
+Explicit Codex reasoning effort suppresses the orchestration-only low-effort default. An explicit Claude model or effort suppresses automatic Haiku selection. The shim prefers npm's JS entry point via Node on Windows to avoid passing argument values through `cmd.exe`; custom batch launchers reject shell metacharacters. Invalid arguments emit the existing LLM-error sentinel before subprocess creation. Offline coverage lives in `packages/shared/tests/cli-args.test.ts`, `packages/pr-agent-bridge/tests/env.test.ts`, and `scripts/tests/test_cli_args.py` (run the latter with embedded Python `-B -S`).
+
+Let the user run reviews **without filling in an API key, using a locally installed and logged-in agentic CLI** (**Claude Code** and **Codex** are supported). The LLM Profile
+gains `provider='cli'`, with the `model` field holding the command name (`claude` / `codex`). Other providers go through litellm direct-to-API, while cli mode **fully bypasses
 litellm**.
 
 - **Entry point**: env `MEEBOX_CLI_MODE=1` + `MEEBOX_CLI_BIN=claude` (injected by `buildPragentEnv`) → the shim swaps
@@ -157,8 +163,8 @@ error**, but the natural result of agentic multi-turn + prompt caching. Key poin
   serializing same-PR tasks for cache reuse; if you really want to maximize cross-run reuse, consider lightweight scheduling of "describe first, release the rest after it finishes" (limited gain, not implemented).
 - **litellm path & cross-model cache adaptation**: in API mode the explicit `cache_control` marker **takes effect only on the Anthropic family** (native / Bedrock / Vertex Claude).
   `_apply_system_prompt_cache` (`patches/litellm_handler.py`) marks a 1h-TTL cache for Anthropic, covering two kinds of calls:
-    - **Orchestration chat channel** (`MEEBOX_CHAT_CACHE` set, system contains `CACHE_BREAK`) caches the globally stable prefix by breakpoint;
-    - **pr-agent tool run** (`/review` `/describe` `/improve` `/ask`, no `CACHE_BREAK`) caches the whole system — pr-agent's instructions + output format are about 12k chars, vary only by config/language/rules, and are stable across PRs (the variable diff is on the user side and not cached), so under the same config it hits across runs within 1h.
+  - **Orchestration chat channel** (`MEEBOX_CHAT_CACHE` set, system contains `CACHE_BREAK`) caches the globally stable prefix by breakpoint;
+  - **pr-agent tool run** (`/review` `/describe` `/improve` `/ask`, no `CACHE_BREAK`) caches the whole system — pr-agent's instructions + output format are about 12k chars, vary only by config/language/rules, and are stable across PRs (the variable diff is on the user side and not cached), so under the same config it hits across runs within 1h.
 
   OpenAI / DeepSeek use **automatic prefix caching** (no marking needed; put stable content in the prefix
   to hit; the shim auto-strips the markers for non-Anthropic and reassembles plain text); whether openai-compatible (DashScope / Volcano / vLLM) hits depends on the backend,

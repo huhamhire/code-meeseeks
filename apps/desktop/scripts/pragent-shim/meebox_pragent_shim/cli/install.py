@@ -13,6 +13,7 @@ import sys
 from ..runtime import _debug, strip_cache_break
 from ..usage import _emit_llm_error, _emit_usage_tokens
 from .specs import _CLI_SPECS
+from .args import command_prefix, profile_args
 
 
 def _resolve_cli_exe(bin_name):
@@ -53,10 +54,13 @@ async def run_cli_chat(bin_name, system, user) -> str:
         raise RuntimeError(
             f"unsupported local CLI command '{bin_name}' (currently adapted: claude / codex)."
         )
-    exe, needs_cmd = _resolve_cli_exe(bin_name)
-    # Command prefix (cmd wrapper + exe); None if exe resolution failed.
-    cmd_prefix = (["cmd", "/c", exe] if needs_cmd else [exe]) if exe else None
-    if cmd_prefix is None:
+    try:
+        user_args, overrides_low_effort = profile_args(name)
+    except RuntimeError as exc:
+        _emit_llm_error(bin_name, str(exc))
+        raise
+    exe, needs_cmd = _resolve_cli_exe(name)
+    if exe is None:
         raise RuntimeError(
             f"local CLI command '{bin_name}' not found: please confirm it is installed, logged in, and that '{bin_name}' is on PATH."
         )
@@ -64,11 +68,16 @@ async def run_cli_chat(bin_name, system, user) -> str:
     # Low-effort tier: only the Agent orchestration channel enables it via MEEBOX_CLI_REASONING=low/minimal; insert low_effort_flags
     # before the trailing `-` (stdin placeholder), keeping `-` last; if there is no trailing `-`, just append.
     flags = list(spec["flags"])
-    if os.environ.get("MEEBOX_CLI_REASONING", "").strip().lower() in ("low", "minimal"):
+    if not overrides_low_effort and os.environ.get("MEEBOX_CLI_REASONING", "").strip().lower() in ("low", "minimal"):
         extra = list(spec.get("low_effort_flags") or [])
         if extra:
             flags = flags[:-1] + extra + ["-"] if flags and flags[-1] == "-" else flags + extra
-    argv = cmd_prefix + flags
+    flags = flags[:-1] + user_args + ["-"] if flags and flags[-1] == "-" else flags + user_args
+    try:
+        argv = command_prefix(exe, needs_cmd, name, flags) + flags
+    except RuntimeError as exc:
+        _emit_llm_error(bin_name, str(exc))
+        raise
 
     # A single CLI round has no separate system slot: concatenate system+user into one segment. First strip cache-break markers (used only by the Anthropic litellm path for
     # chunked caching; the CLI does not cache, and the markers must not enter the prompt).

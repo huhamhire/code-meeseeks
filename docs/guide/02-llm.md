@@ -108,12 +108,15 @@ An advanced option: instead of connecting directly to any LLM API, invoke — wi
 1. Install the corresponding CLI on your machine and log in.
 2. Go to Settings → LLM, create a new profile, and **choose "Local CLI" as the Provider**.
 3. Enter the command name in the **CLI command** field, e.g. `claude` or `codex`.
-4. Save and set it as active.
+4. Optionally enter **Additional arguments**, for example `--model gpt-6.1-sol -c model_reasoning_effort=medium` for Codex or `--model sonnet --effort medium` for Claude. Quotes group values containing spaces; newlines separate arguments like spaces. The preview shows the parsed argument array. Shell expansion and shell commands are not supported.
+5. Save and set it as active.
 
 ### Key behaviors
 
-- **Runs under your machine's login state**: the review request is handled by the local CLI, using its default model and login session — it does not use the API Key set here or in the environment.
-- **Actual model**: determined by the local CLI's default model / account tier, **not by what you enter here** (what you enter is a command name, not a model name).
+- **Runs under your machine's login state**: the review request is handled by the local CLI, using the selected model and its login session — it does not use the API Key set here or in the environment.
+- **Actual model**: additional arguments override the CLI's local defaults for this profile; without them, the CLI uses its own configuration. The command field remains a command name only. Model availability still depends on the CLI account and version.
+- **Supported arguments**: Codex accepts `--model` / `-m` and `--config` / `-c` for `model`, `model_reasoning_effort`, `service_tier`, and `model_verbosity`. Claude accepts `--model`, `--effort`, `--max-turns`, `--max-budget-usd`, and `--fallback-model`. Both `--option value` and `--option=value` work. Input/output protocol, sandbox, working directory, prompts, and subcommands are managed by the app and cannot be overridden.
+- **Scope and precedence**: arguments apply to descriptions, reviews, questions, code suggestions, and agent orchestration chats. An explicit Codex reasoning effort takes precedence over the chat's automatic low effort; an explicit Claude model or effort disables the chat's automatic Haiku selection. Empty arguments preserve existing behavior. Arguments are saved as `cli_args: string[]` in the profile. Custom Windows batch launchers reject shell metacharacters; native and standard npm launchers pass argument values directly.
 - **Proxy passthrough is automatic**: once the [network proxy](03-proxy.md) is enabled, the CLI's outbound requests go through the proxy automatically, with no extra configuration.
 
 > Prerequisite: the corresponding command must be installed on your machine, on the PATH, and logged in, otherwise the review fails because the command is not found; review usage counts against that CLI account's own quota.

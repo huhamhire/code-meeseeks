@@ -103,7 +103,7 @@
     "inputAria": "チャット入力",
     "llmCallFailed": "LLM の呼び出しに失敗しました",
     "llmErrorHint": {
-      "modelUnavailable": "要求されたモデルは利用できません。ローカル CLI プロバイダーの場合、モデルはその CLI 自身の設定で決まります。CLI 側でサポートされているモデルに変更してから再実行してください。"
+      "modelUnavailable": "要求されたモデルは利用できません。ローカル CLI では、プリセットの追加引数と CLI 自体の設定を確認し、対応モデルを選んで再実行してください。"
     },
     "mergeConfirmLabel": "マージ",
     "mergeConfirmMessage": "「{{title}}」をターゲットブランチにマージしますか？この操作は取り消せません。",
@@ -506,12 +506,17 @@
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "このプロバイダーはキー不要です（空のままに）",
+    "cliArgsHint": "任意。引用符で値をまとめます。シェル展開は行いません。このプリセットのみ CLI の既定値を上書きします。Codex: --model と -c model/model_reasoning_effort/service_tier/model_verbosity。Claude: --model、--effort、--max-turns、--max-budget-usd、--fallback-model。",
+    "cliArgsLabel": "追加引数",
+    "cliArgsPreview": "引数のプレビュー:",
     "cliCommandFallback": "コマンドラインツール",
     "cliCommandLabel": "CLI コマンド",
     "cliCommandPlaceholder": "コマンド名（例：claude / codex）",
     "cliNamePlaceholder": "例：claude / codex",
     "cliWarningPrefix": "⚠️ このプロファイルを入力して有効化すると、Code Meeseeks がローカルの",
     "cliWarningSuffix": "ツールを呼び出してレビュー操作を実行することを許可します。対応するコマンドがインストール済みで、サインイン済みであることを確認してください。",
+    "errorCliArgs": "無効または未対応の引数です。出力形式、サンドボックス、作業ディレクトリ、プロンプト、サブコマンドはアプリが管理します。",
+    "errorCliArgsQuote": "保存する前に引用符を閉じてください。",
     "errorCliUnsupported": "サポートされていない CLI ツール",
     "errorLabelDuplicate": "名前はすでに存在します",
     "errorLabelSlug": "使用できるのは 英字 / 数字 / - / _ のみ、1〜32 文字",

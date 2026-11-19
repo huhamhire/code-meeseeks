@@ -189,8 +189,8 @@ Applies to the auto-review micro-flow (shared by manual "auto review" and AutoPi
 
 Two optional fields control how AI code suggestions read and how they land in a review-draft comment. Both are editable from **Settings → Agent → Strategy** via an inline editor, so you don't have to hand-edit the config file.
 
-- **`code_suggestion_spec`** — a *soft* guideline appended to the model's instructions for `/improve`, `/review`, and `/ask`. Use it to steer the content structure of each suggestion, e.g. _"Structure every suggestion as three sections — Problem, Analysis, Suggestion — each on its own line."_ The model generally complies but is not guaranteed to.
-- **`code_suggestion_layout`** — a *deterministic* markdown template applied when a suggestion becomes a review-draft comment (substitution is exact, no dependency on the model). Placeholders:
+- **`code_suggestion_spec`** — a _soft_ guideline appended to the model's instructions for `/improve`, `/review`, and `/ask`. Use it to steer the content structure of each suggestion, e.g. _"Structure every suggestion as three sections — Problem, Analysis, Suggestion — each on its own line."_ The model generally complies but is not guaranteed to.
+- **`code_suggestion_layout`** — a _deterministic_ markdown template applied when a suggestion becomes a review-draft comment (substitution is exact, no dependency on the model). Placeholders:
 
 | Placeholder | Value |
 | --- | --- |
@@ -322,5 +322,6 @@ Listen configuration for the local HTTP API service, providing app capabilities 
 | `base_url` | string | `''` | API endpoint. Most official providers leave it empty for the default; `openai-compatible` / self-hosted must fill it in. |
 | `model` | string | `''` | Model name. Most providers take only the model name and the app adds the litellm prefix automatically; in `cli` mode this holds a command name (e.g. `claude`). |
 | `api_key` | string | `''` | Auth key. Empty for local types (local CLI / self-hosted service without auth). |
+| `cli_args` | string[] | omitted (equivalent to `[]`) | Additional arguments for local CLI profiles, e.g. `["--model", "gpt-6.1-sol", "-c", "model_reasoning_effort=medium"]`. Overrides CLI defaults for this profile; supported options and precedence are described in [LLM setup](02-llm.md#local-cli-mode). |
 
 For value examples per provider and local CLI mode notes, see [LLM setup](02-llm.md).

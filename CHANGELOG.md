@@ -5,6 +5,12 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### ✨ Added
+
+- Local CLI profiles now accept additional arguments for choosing a model and reasoning settings without changing the CLI's global configuration. Quoted values and an argument preview are supported; explicit profile settings also take precedence in agent orchestration chats. Arguments that conflict with the app's input, output, or sandbox settings are rejected.
+
 ## [0.12.1] - 2026-09-10
 
 ### 🔧 Fixed
