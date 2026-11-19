@@ -11,6 +11,10 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 - Local CLI profiles now accept additional arguments for choosing a model and reasoning settings without changing the CLI's global configuration. Quoted values and an argument preview are supported; explicit profile settings also take precedence in agent orchestration chats. Arguments that conflict with the app's input, output, or sandbox settings are rejected.
 
+### 🔧 Fixed
+
+- Reply, edit, delete, reference, and add-reaction buttons now have a consistent height in the activity timeline and inline comments.
+
 ## [0.12.1] - 2026-09-10
 
 ### 🔧 Fixed
