@@ -10,6 +10,7 @@ export interface PendingScroll {
   line: number;
   side: 'old' | 'new';
   draftId?: string;
+  targetKey?: string;
 }
 
 export interface PendingNav {
@@ -58,9 +59,12 @@ export function useDiffNav(opts: {
     const target = files.find(
       (f) => f.path === pendingNav.anchor.path || f.oldPath === pendingNav.anchor.path,
     );
-    if (target) {
-      setSelectedKey(fileKey(target));
+    if (!target) {
+      onNavConsumed?.();
+      return;
     }
+    const targetKey = fileKey(target);
+    setSelectedKey(targetKey);
     // Look up the existing draft; ChatPane has already lazily created it, so normally it's found.
     // No runId/findingId passed (PublishReviewModal anchor click scenario) → skip the lookup directly,
     // draftId stays undefined → downstream effect won't trigger autoEdit, pure navigate
@@ -80,6 +84,7 @@ export function useDiffNav(opts: {
       // don't carry side fall back to 'new' (head), the common case for code-review findings.
       side: pendingNav.anchor.side ?? 'new',
       draftId: matchingDraft?.id,
+      targetKey,
     });
     onNavConsumed?.();
     // drafts not in deps — already acked when nav arrives; later drafts changes shouldn't retrigger this logic
@@ -91,6 +96,9 @@ export function useDiffNav(opts: {
   // pendingScroll comes from the nav effect (set alongside setSelectedKey); cleared after reveal
   useEffect(() => {
     if (!pendingScroll || !diffEditor || !content || !selected) return;
+    if (pendingScroll.targetKey &&
+      (pendingScroll.targetKey !== fileKey(selected) || pendingScroll.targetKey !== content.fileKey)) return;
+    if (!diffEditor.getModel()) return;
 
     let highlightTimer: ReturnType<typeof setTimeout> | undefined;
     let revealed = false;

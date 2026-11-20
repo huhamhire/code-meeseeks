@@ -38,6 +38,8 @@ export interface AgentToolCall {
 /** An orchestration-level step (one decision round of the orchestration agent, excluding the internal cost of a pr-agent run). */
 export interface AgentStep {
   kind: AgentStepKind;
+  /** Start of the automatic review that owns this step. */
+  reviewStartedAt?: string;
   /** Thought summary (archived + streamed). */
   thought?: string;
   /** The tool call when kind='tool'. */
@@ -73,6 +75,8 @@ export type AgentMessageRole = 'user' | 'assistant';
  */
 export interface AgentMessage {
   role: AgentMessageRole;
+  /** Start of the automatic review summarized by this message. */
+  reviewStartedAt?: string;
   content: string;
   /** Non-binding verdict for an assistant review-type turn; not set for conversation / user messages. */
   recommendation?: AgentRecommendation;

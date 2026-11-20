@@ -3,6 +3,7 @@ import type {
   AgentRecommendationVerdict,
   AgentSession,
   AgentStep,
+  CodexReviewReadiness,
   ReviewRun,
   ReviewRunCommitScope,
   ReviewRunTool,
@@ -114,6 +115,19 @@ export interface AgentChannels {
    *
    * runId is time-ordered lexicographically (`yyyymmdd-HHmmss-mmm`), so "take N entries after the cursor" is "take the N entries before this moment"
    */
+  'codex:reviewStatus': { request: void; response: CodexReviewReadiness };
+  'codex:models': {
+    request: void;
+    response: { id: string; label: string }[];
+  };
+  'codex:review': { request: { localId: string; model?: string }; response: ReviewRun };
+  'codex:ask': {
+    request: { localId: string; model?: string; question: string; reference?: { runId: string; findingId: string } };
+    response: ReviewRun;
+  };
+  'codex:listRuns': { request: { localId: string }; response: ReviewRun[] };
+  'codex:deleteRun': { request: { localId: string; runId: string }; response: { ok: boolean } };
+  'codex:cancel': { request: { localId: string; runId: string }; response: { ok: boolean } };
   'pragent:listRuns': {
     request: { localId: string; limit?: number; beforeId?: string };
     response: ReviewRun[];
@@ -123,7 +137,7 @@ export interface AgentChannels {
     request: { localId: string; runId: string };
     response: ReviewRun | null;
   };
-  /** Clear all run history for a given PR (effective only for that PR). Returns the number deleted. */
+  /** Clear PR Agent history for the PR. Returns the number deleted. */
   'pragent:clearRuns': {
     request: { localId: string };
     response: { cleared: number };
@@ -141,7 +155,7 @@ export interface AgentChannels {
    * - matches neither (already finished / nonexistent) → silent no-op (returns ok:false)
    */
   'pragent:cancel': {
-    request: { runId: string };
+    request: { localId: string; runId: string };
     response: { ok: boolean };
   };
   /**

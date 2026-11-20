@@ -201,6 +201,7 @@ the same-source structure.
 
 ## Extension & caveats
 
+- **Review engine scope**. Agent endpoints expose PR Agent sessions and tasks. Native Codex review uses desktop IPC. External agents can call Codex directly for native review.
 - **Sink into the service before adding a new endpoint**: HTTP and IPC must share the service method to avoid logic forking;
   an endpoint is a thin projection of a service capability.
 - **The write boundary is a hard constraint**: review write actions go only through the dedicated approve / needswork /

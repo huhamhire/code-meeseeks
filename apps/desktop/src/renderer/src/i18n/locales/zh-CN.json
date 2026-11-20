@@ -44,6 +44,7 @@
       "verdictNeedsWork": "建议修改"
     },
     "aiSuggestionLabel": "AI 建议",
+    "anchorJumpPreviousRevisionTitle": "在当前变更中打开记录的行号。该位置可能已移动。",
     "anchorJumpTitle": "跳转到代码对应行",
     "askArgQuestion": "问题",
     "askNeedsQuestion": "/ask 需要输入问题内容",
@@ -70,6 +71,32 @@
     "cmdTriggerTitle": "选择预定义命令",
     "codeExistingAria": "原代码",
     "codeImprovedAria": "改进代码",
+    "codex": {
+      "ask": "询问这个 PR 或继续追问…",
+      "bulletAsk": "询问本次变更，或引用评审发现继续追问。",
+      "bulletReview": "用 Codex 评审整个 PR，并列出找到的问题。",
+      "emptyHint": "点击评审发现上的引用按钮，可在追问时带上该发现。",
+      "emptyTitle": "评审和讨论这个 PR",
+      "login-required": "请登录 Codex CLI 后返回。",
+      "missing": "未找到 Codex CLI。",
+      "model": "Codex 模型",
+      "phase": {
+        "answering": "正在检查代码并回答",
+        "checking": "正在检查相关代码",
+        "finalizing": "正在整理评审结果",
+        "preparing": "正在准备评审工作区…",
+        "reviewing": "正在评审 PR",
+        "starting": "正在启动 Codex…"
+      },
+      "progress": "评审进度",
+      "reference": "引用的评审发现",
+      "running": "正在审查",
+      "send": "发送问题",
+      "start": "运行 Codex 审查",
+      "tabs": "审查引擎",
+      "unavailable": "无法确认 Codex CLI 是否就绪。",
+      "unsupported": "请更新 Codex CLI 以使用原生审查。"
+    },
     "commandNoArgs": "{{cmd}} 不接受参数",
     "commentReference": {
       "clearTitle": "移除引用的评论",
@@ -142,6 +169,18 @@
     "retryAria": "重试",
     "retryTitle": "重试 /{{tool}}",
     "retryWithQuestionTitle": "重试 /{{tool}} {{question}}",
+    "reviewPhase": {
+      "preparing": "正在准备评审工作区…",
+      "reviewing": "正在运行 PR Agent 评审…",
+      "validating": "正在校验评审发现和变更行…"
+    },
+    "reviewResult": {
+      "clean": "评审完成，未发现代码问题。",
+      "invalid": "未获得可用的评审结果，请查看原始输出。",
+      "partial": "评审未完整覆盖，遗漏 {{omitted}} 个文件，部分评审 {{clipped}} 个文件",
+      "stale": "此评审针对较早的 PR 版本。",
+      "unknown": "无法确认本次评审的覆盖范围。"
+    },
     "ruleChipLabel": "规则",
     "ruleChipTitle": "点击查看规则正文",
     "ruleFilePath": "文件路径",
@@ -455,6 +494,11 @@
     "EAG0001": "/ask 需要提供 question",
     "EAG0002": "该 PR 的 /{{tool}} 任务已在执行或排队中，请勿重复触发",
     "EAG0003": "pr-agent 未就绪：嵌入式运行时与本机 CLI 都未探测到。Settings 页查看探测细节",
+    "EAG0004": "无法确认 Codex CLI 是否就绪。",
+    "EAG0005": "Codex 问题最多 {{limit}} 个字符。",
+    "EAG0006": "请先评审当前 PR 版本，再引用评审发现。",
+    "EAG0007": "无法加载 Codex 模型列表。请重新打开 Codex 标签页后重试。",
+    "EAG0008": "所选模型当前不可用。请选择其他型号，或重新打开 Codex 标签页。",
     "ECF0001": "未支持的 Bitbucket Server 版本 {{version}}；最低要求 {{min}}",
     "ENT0001": "代理未启用或地址为空",
     "ENT0407": "代理认证失败 (407)，检查用户名/密码",
@@ -506,7 +550,7 @@
   },
   "llmProfileForm": {
     "apiKeyOptionalPlaceholder": "该 provider 无需密钥（留空）",
-    "cliArgsHint": "可选。引号用于组合参数值，不执行 shell 展开。仅覆盖当前预设的 CLI 默认配置。Codex 支持 --model 和 -c model/model_reasoning_effort/service_tier/model_verbosity；Claude 支持 --model、--effort、--max-turns、--max-budget-usd、--fallback-model。",
+    "cliArgsHint": "可选，用于覆盖此预设的 CLI 默认设置。",
     "cliArgsLabel": "附加参数",
     "cliArgsPreview": "参数预览：",
     "cliCommandFallback": "命令行",

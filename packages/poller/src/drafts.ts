@@ -15,11 +15,29 @@ function makeDraftId(): string {
   return crypto.randomBytes(8).toString('hex').slice(0, 12);
 }
 
-/** Read drafts; returns an empty array if the file is missing (PR entering the draft flow for the first time) */
-export async function listDrafts(
+const mutationsByStore = new WeakMap<StateStore, Map<string, Promise<void>>>();
+
+function mutateDrafts<T>(
   store: StateStore,
   prLocalId: string,
-): Promise<ReviewDraft[]> {
+  mutate: () => Promise<T>,
+): Promise<T> {
+  const pending = mutationsByStore.get(store) ?? new Map<string, Promise<void>>();
+  mutationsByStore.set(store, pending);
+  const result = (pending.get(prLocalId) ?? Promise.resolve()).then(mutate);
+  const settled = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  pending.set(prLocalId, settled);
+  void settled.then(() => {
+    if (pending.get(prLocalId) === settled) pending.delete(prLocalId);
+  });
+  return result;
+}
+
+/** Read drafts; returns an empty array if the file is missing (PR entering the draft flow for the first time) */
+export async function listDrafts(store: StateStore, prLocalId: string): Promise<ReviewDraft[]> {
   const file = await store.read<DraftsFile>(draftsKey(prLocalId));
   return file?.drafts ?? [];
 }
@@ -35,8 +53,7 @@ export async function getDraft(
 
 /**
  * Write the entire drafts array back to disk. All mutators (create / update / delete /
- * dropPendingFindingDrafts) go through this path, so the "read-modify-write" atomicity falls back on StateStore's
- * tmp + rename.
+ * dropPendingFindingDrafts) serialize per PR. StateStore replaces the completed file atomically.
  */
 async function writeDrafts(
   store: StateStore,
@@ -60,18 +77,20 @@ export async function createDraft(
   input: Omit<ReviewDraft, 'id' | 'createdAt' | 'updatedAt' | 'prLocalId'>,
   now: () => Date = () => new Date(),
 ): Promise<ReviewDraft> {
-  const all = await listDrafts(store, prLocalId);
-  const nowIso = now().toISOString();
-  const draft: ReviewDraft = {
-    id: makeDraftId(),
-    prLocalId,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-    ...input,
-  };
-  all.push(draft);
-  await writeDrafts(store, prLocalId, all);
-  return draft;
+  return mutateDrafts(store, prLocalId, async () => {
+    const all = await listDrafts(store, prLocalId);
+    const nowIso = now().toISOString();
+    const draft: ReviewDraft = {
+      id: makeDraftId(),
+      prLocalId,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      ...input,
+    };
+    all.push(draft);
+    await writeDrafts(store, prLocalId, all);
+    return draft;
+  });
 }
 
 /**
@@ -89,24 +108,26 @@ export async function updateDraft(
   patch: Partial<Pick<ReviewDraft, 'body' | 'status' | 'posted_remote_id'>>,
   now: () => Date = () => new Date(),
 ): Promise<ReviewDraft | null> {
-  const all = await listDrafts(store, prLocalId);
-  const idx = all.findIndex((d) => d.id === draftId);
-  if (idx < 0) return null;
-  const cur = all[idx]!;
-  // body change + pending → automatically 'edited'; explicit patch.status takes precedence
-  const autoStatus =
-    patch.body !== undefined && patch.body !== cur.body && cur.status === 'pending'
-      ? 'edited'
-      : undefined;
-  const next: ReviewDraft = {
-    ...cur,
-    ...patch,
-    status: patch.status ?? autoStatus ?? cur.status,
-    updatedAt: now().toISOString(),
-  };
-  all[idx] = next;
-  await writeDrafts(store, prLocalId, all);
-  return next;
+  return mutateDrafts(store, prLocalId, async () => {
+    const all = await listDrafts(store, prLocalId);
+    const idx = all.findIndex((d) => d.id === draftId);
+    if (idx < 0) return null;
+    const cur = all[idx]!;
+    // body change + pending → automatically 'edited'; explicit patch.status takes precedence
+    const autoStatus =
+      patch.body !== undefined && patch.body !== cur.body && cur.status === 'pending'
+        ? 'edited'
+        : undefined;
+    const next: ReviewDraft = {
+      ...cur,
+      ...patch,
+      status: patch.status ?? autoStatus ?? cur.status,
+      updatedAt: now().toISOString(),
+    };
+    all[idx] = next;
+    await writeDrafts(store, prLocalId, all);
+    return next;
+  });
 }
 
 export async function deleteDraft(
@@ -114,10 +135,12 @@ export async function deleteDraft(
   prLocalId: string,
   draftId: string,
 ): Promise<void> {
-  const all = await listDrafts(store, prLocalId);
-  const filtered = all.filter((d) => d.id !== draftId);
-  if (filtered.length === all.length) return; // no-op, a nonexistent id does not throw
-  await writeDrafts(store, prLocalId, filtered);
+  return mutateDrafts(store, prLocalId, async () => {
+    const all = await listDrafts(store, prLocalId);
+    const filtered = all.filter((d) => d.id !== draftId);
+    if (filtered.length === all.length) return; // no-op, a nonexistent id does not throw
+    await writeDrafts(store, prLocalId, filtered);
+  });
 }
 
 /**
@@ -132,13 +155,22 @@ export async function deleteDraft(
 export async function dropPendingFindingDrafts(
   store: StateStore,
   prLocalId: string,
+  beforeRunId?: string,
 ): Promise<number> {
-  const all = await listDrafts(store, prLocalId);
-  const kept = all.filter(
-    (d) => !(d.status === 'pending' && d.origin === 'finding'),
-  );
-  const dropped = all.length - kept.length;
-  if (dropped === 0) return 0;
-  await writeDrafts(store, prLocalId, kept);
-  return dropped;
+  return mutateDrafts(store, prLocalId, async () => {
+    const all = await listDrafts(store, prLocalId);
+    const kept = all.filter(
+      (d) =>
+        !(
+          d.status === 'pending' &&
+          d.origin === 'finding' &&
+          d.source?.engine !== 'codex' &&
+          (!beforeRunId || (d.source && d.source.runId < beforeRunId))
+        ),
+    );
+    const dropped = all.length - kept.length;
+    if (dropped === 0) return 0;
+    await writeDrafts(store, prLocalId, kept);
+    return dropped;
+  });
 }

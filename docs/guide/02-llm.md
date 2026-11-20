@@ -121,6 +121,18 @@ An advanced option: instead of connecting directly to any LLM API, invoke — wi
 
 > Prerequisite: the corresponding command must be installed on your machine, on the PATH, and logged in, otherwise the review fails because the command is not found; review usage counts against that CLI account's own quota.
 
+## Native Codex review
+
+Install and sign in to a compatible Codex CLI. The desktop app detects it automatically at startup and when the window regains focus. In a PR, switch from **PR Agent** to **Codex** and select **Run Codex review**. Codex reviews the full PR.
+
+Open the **/** menu or type `/` for command suggestions. Submit `/review` to review the full PR or `/ask <question>` to ask about the changes. You can also enter a question directly.
+
+Submit `/approve` to approve the PR or `/needswork` to request changes on the code hosting platform. These commands share the review actions in the PR header and work while Codex is running.
+
+The model picker sits to the left of **Send**. It loads the local Codex catalog when you open the tab, using a five-minute cache, and remembers the last selected model across restarts. On first use, or when the saved model leaves the list, it selects the latest available numbered Sol model or the first model when no Sol is available. If the desktop has no catalog entries, Codex uses its CLI default.
+
+Type a question about the PR or use the reference button on a review finding. Follow-up questions use recent messages for the current comparison and can read code in a temporary checkout. Review and answer text follows the app language. The running card shows review stages and any progress summaries the CLI provides. The Codex tab keeps its own review history. Findings with a valid line in the diff can be turned into comment drafts for you to edit or publish. This tab is a desktop feature. Automation that needs native Codex review can call Codex directly.
+
 ## Advanced: review concurrency
 
 The app supports running multiple review tasks **concurrently** (e.g. running `/review` on several PRs at once, without blocking one another). The concurrency is controlled by the `pr_agent.max_concurrency` setting, **default 2**, range **1–8**.

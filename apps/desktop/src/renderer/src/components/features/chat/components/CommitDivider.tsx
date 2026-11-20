@@ -1,12 +1,6 @@
 import { CommitIcon } from '../../../common';
 
-/**
- * Sawtooth "commit divider" shown at the bottom of the run timeline when the PR head has advanced past the commit the
- * most recent run reviewed (see ChatPane staleHeadSha). It marks the new head — signalling that the reviews above are
- * now based on stale code — even if no run has been started against the new commit yet. The chip shows the abbreviated
- * commit id; the tooltip shows that commit's message (falls back to the short sha when unavailable). Reuses the same
- * chip vocabulary as the single-commit scope badge in RunResultView.
- */
+/** Marks a source-head transition in the review timeline. */
 export function CommitDivider({ sha, message }: { sha: string; message?: string }) {
   const short = sha.slice(0, 8);
   // Tooltip = the actual commit message (more meaningful than a generic "code changed" string, and needs no i18n).
@@ -24,4 +18,16 @@ export function CommitDivider({ sha, message }: { sha: string; message?: string 
       <span className="chat-commit-divider__line" aria-hidden="true" />
     </div>
   );
+}
+
+export function CommitDividerList({
+  shas = [],
+  messages,
+}: {
+  shas?: readonly string[];
+  messages?: ReadonlyMap<string, string>;
+}) {
+  return shas.map((sha, index) => (
+    <CommitDivider key={`${sha}-${String(index)}`} sha={sha} message={messages?.get(sha)} />
+  ));
 }

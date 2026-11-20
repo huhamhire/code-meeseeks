@@ -7,6 +7,16 @@
   padding: 0;
 }
 
+// Replace native focus rings with the app's keyboard focus indicator.
+:where(:focus) {
+  outline: none;
+}
+
+:where(:focus-visible) {
+  outline: 1px solid $color-accent;
+  outline-offset: 2px;
+}
+
 html,
 body,
 #root,

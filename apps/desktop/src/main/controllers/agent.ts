@@ -12,9 +12,12 @@ import {
   listReviewRunsForPr,
 } from '@meebox/poller';
 import { pickMatchingRules } from '@meebox/rules';
-import { AppError, ERROR_CODES, type AgentRecommendationVerdict } from '@meebox/shared';
+import { AppError, CODEX_QUESTION_LIMIT, ERROR_CODES, type AgentRecommendationVerdict } from '@meebox/shared';
+import { discoverCodexReview } from '../services/pr-agent/codex-review.js';
+import { listCodexModels } from '../services/pr-agent/codex-models.js';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
+import { buildProxyEnv } from '../utils/proxy.js';
 
 /*
  * Agent interaction-domain controllers: rule matching / review orchestration / free planning / session and ledger reads / pr-agent run queue
@@ -149,8 +152,65 @@ export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
 /**
  * Cancel a run (active SIGKILL / waiting dequeue).
  */
+export const codexReviewStatus: IpcController<'codex:reviewStatus'> = async () =>
+  (await discoverCodexReview()).status;
+
+async function readCodexCatalog() {
+  try {
+    return await listCodexModels(buildProxyEnv(getContext().bootstrap.config.proxy));
+  } catch {
+    throw new AppError(ERROR_CODES.AG_CODEX_MODEL_LIST_FAILED);
+  }
+}
+
+export const codexModels: IpcController<'codex:models'> = () => readCodexCatalog();
+
+export const listCodexRuns: IpcController<'codex:listRuns'> = async (_event, req) =>
+  listReviewRunsForPr(await getContext().pr.storeForPr(req.localId), req.localId, { engine: 'codex' });
+
+export const deleteCodexRun: IpcController<'codex:deleteRun'> = async (_event, req) => ({
+  ok: await deleteReviewRun(await getContext().pr.storeForPr(req.localId), req.localId, req.runId, 'codex'),
+});
+
+export const cancelCodexRun: IpcController<'codex:cancel'> = (_event, req) =>
+  getContext().runQueue.cancel(req.localId, req.runId, 'codex');
+
+async function checkCodexModel(model?: string): Promise<string | undefined> {
+  if (model === undefined) return;
+  const models = await readCodexCatalog();
+  if (!models.some((entry) => entry.id === model)) throw new AppError(ERROR_CODES.AG_CODEX_MODEL_UNAVAILABLE);
+  return model;
+}
+
+export const runCodexReview: IpcController<'codex:review'> = async (_event, req) => {
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  return ctx.runQueue.enqueueCodexReview(pr, await checkCodexModel(req.model));
+};
+
+export const askCodex: IpcController<'codex:ask'> = async (_event, req) => {
+  const question = typeof req.question === 'string' ? req.question.trim() : '';
+  if (!question) throw new AppError(ERROR_CODES.AG_ASK_NEEDS_QUESTION);
+  if (question.length > CODEX_QUESTION_LIMIT) {
+    throw new AppError(ERROR_CODES.AG_CODEX_QUESTION_TOO_LONG, { limit: CODEX_QUESTION_LIMIT });
+  }
+  const ctx = getContext();
+  const pr = await ctx.pr.findPrOrThrow(req.localId);
+  const model = await checkCodexModel(req.model);
+  if (req.reference) {
+    const run = await getReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.reference.runId, 'codex');
+    const finding = run?.findings?.find((f) => f.id === req.reference?.findingId);
+    if (run?.engine !== 'codex' || run.tool !== 'review' || run.status !== 'succeeded' ||
+        run.headSha !== pr.sourceRef.sha || run.baseSha !== pr.targetRef.sha || !finding) {
+      throw new AppError(ERROR_CODES.AG_CODEX_REFERENCE_STALE);
+    }
+    return ctx.runQueue.enqueueCodexAsk(pr, question, { ...req.reference, anchor: finding.anchor }, model);
+  }
+  return ctx.runQueue.enqueueCodexAsk(pr, question, undefined, model);
+};
+
 export const cancelPragent: IpcController<'pragent:cancel'> = (_event, req) =>
-  getContext().runQueue.cancel(req.runId);
+  getContext().runQueue.cancel(req.localId, req.runId, 'pr-agent');
 
 /**
  * Current queue snapshot (startup / reconnect fallback).
@@ -165,6 +225,7 @@ export const listRuns: IpcController<'pragent:listRuns'> = async (_event, req) =
   return listReviewRunsForPr(await ctx.pr.storeForPr(req.localId), req.localId, {
     limit: req.limit,
     beforeId: req.beforeId,
+    engine: 'pr-agent',
   });
 };
 
@@ -173,11 +234,11 @@ export const listRuns: IpcController<'pragent:listRuns'> = async (_event, req) =
  */
 export const getRun: IpcController<'pragent:getRun'> = async (_event, req) => {
   const ctx = getContext();
-  return getReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId);
+  return getReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId, 'pr-agent');
 };
 
 /**
- * Clear all of a PR's run history, and clear the Agent session + AutoPilot ledger together (broadcast so the ★ badge disappears immediately).
+ * Clear PR Agent run history, session, and AutoPilot ledger for the PR.
  */
 export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req) => {
   const ctx = getContext();
@@ -193,5 +254,5 @@ export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req)
  */
 export const deleteRun: IpcController<'pragent:deleteRun'> = async (_event, req) => {
   const ctx = getContext();
-  return { ok: await deleteReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId) };
+  return { ok: await deleteReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId, 'pr-agent') };
 };

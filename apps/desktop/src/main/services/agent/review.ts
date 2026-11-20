@@ -108,7 +108,12 @@ export async function runReview(
         closeFinding: deps.closeFinding ? (call) => deps.closeFinding!(pr, call) : undefined,
         chat: deps.chat,
         onStep: async (step) => {
-          const tagged = deps.autopilot && firstStep ? { ...step, autopilot: true } : step;
+          const tagged = {
+            ...step,
+            at: step.at ?? now().toISOString(),
+            reviewStartedAt: session.startedAt,
+            ...(deps.autopilot && firstStep ? { autopilot: true } : {}),
+          };
           firstStep = false;
           await appendAgentStep(deps.stateStore, pr.localId, tagged, now);
           deps.onStep?.(session.id, tagged);

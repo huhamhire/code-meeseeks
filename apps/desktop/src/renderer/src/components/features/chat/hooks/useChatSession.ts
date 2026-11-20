@@ -165,7 +165,7 @@ export function useChatSession(
       void (async () => {
         try {
           const finished = await invoke('pragent:getRun', { localId: prLocalId, runId });
-          if (finished) {
+          if (finished && currentPrIdRef.current === prLocalId) {
             setRuns((prevRuns) => {
               const idx = prevRuns.findIndex((r) => r.id === finished.id);
               if (idx >= 0) {
@@ -185,7 +185,9 @@ export function useChatSession(
             });
           }
         } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
+          if (currentPrIdRef.current === prLocalId) {
+            setError(e instanceof Error ? e.message : String(e));
+          }
         }
       })();
     }

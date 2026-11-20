@@ -9,10 +9,25 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### ✨ Added
 
+- PR Agent shows review progress and distinguishes complete, partial, and unverified coverage across API and local CLI model profiles.
+- The Codex tab explains its available commands in the empty state and offers `/review`, `/ask`, `/approve`, and `/needswork` through the command menu and input completion.
+- A Codex tab runs native reviews from the desktop when a compatible local Codex CLI is detected and signed in. The experimental tab supports native reviews, read-only multi-turn questions, and follow-ups on review findings. Findings can be used as comment drafts. The model picker initially selects the latest available Sol and remembers the selected model across restarts.
+- The bundled review engine is upgraded from pr-agent 0.45.0 to 0.50.0, using upstream support for trusted repository instructions and model temperature compatibility.
 - Local CLI profiles now accept additional arguments for choosing a model and reasoning settings without changing the CLI's global configuration. Quoted values and an argument preview are supported; explicit profile settings also take precedence in agent orchestration chats. Arguments that conflict with the app's input, output, or sandbox settings are rejected.
 
 ### 🔧 Fixed
 
+- Closing a diff editor no longer causes a crash when another Monaco view initializes its hover controls. Inline comment code previews now use static syntax highlighting and retain file line numbers, anchor highlights, and editor appearance settings.
+- Clicking diagrams, PR rows, and other controls no longer leaves a focus outline. Keyboard focus uses the app's theme.
+- Finding locations remain clickable for read-only navigation, including findings from earlier PR revisions.
+- After the first completed review, new PR heads appear as commit dividers that stay in place as later messages and runs arrive.
+- New commits received during an automatic review are marked after its summary.
+- PR Agent records the reviewed comparison, verifies finding anchors against changed lines, and preserves pending drafts after partial or failed reviews.
+- The review tabs keep unsent input when switching engines and scope run history, progress, and run operations to their own engine.
+- The Codex model picker sits next to Send and loads its catalog automatically.
+- PR Agent and Codex share the same top-edge drag handle and keep the input height when switching tabs.
+- The local CLI profile editor uses a brief hint for additional arguments and shows the parsed preview when arguments are present.
+- A failed model call no longer retries the review engine's built-in fallback when fallbacks are disabled, including redundant local CLI calls under a different model label. Provider failures still report their original cause.
 - Reply, edit, delete, reference, and add-reaction buttons now have a consistent height in the activity timeline and inline comments.
 
 ## [0.12.1] - 2026-09-10

@@ -236,6 +236,8 @@ export class Orchestrator implements OrchestratorRuntime {
       role: 'assistant',
       content: session.summary,
       recommendation: session.recommendation,
+      headSha: pr.sourceRef.sha,
+      reviewStartedAt: session.startedAt,
     });
     await writeAutopilotLedger(store, {
       prLocalId: pr.localId,

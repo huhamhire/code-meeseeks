@@ -16,6 +16,8 @@ export interface PrAgentRunOptions {
   env?: Record<string, string>;
   /** Arguments appended at the end of the CLI (e.g. --extra_instructions / --config_file) */
   extraArgs?: string[];
+  /** Structured review output destination for runtimes with proven support. */
+  jsonOutputPath?: string;
   /** Timeout for a single call, default 5 min */
   timeoutMs?: number;
   /** Per-line streaming push of stdout / stderr (for M3-B UI progress hints) */

@@ -229,7 +229,7 @@
   &.selected {
     background: $bg-selected;
   }
-  &:focus {
+  &:focus-visible {
     outline: 1px solid $color-accent;
     outline-offset: -1px;
   }

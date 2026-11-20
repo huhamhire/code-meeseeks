@@ -160,7 +160,14 @@ export class EmbeddedRuntimeBridge extends BaseBridge {
     if (opts.cwd) {
       return {
         cmd: this.pythonPath,
-        args: [...cli, '--pr_url', opts.targetBranch ?? '', opts.tool, ...(opts.extraArgs ?? [])],
+        args: [
+          ...cli,
+          '--pr_url',
+          opts.targetBranch ?? '',
+          ...(opts.jsonOutputPath ? ['--json-output', opts.jsonOutputPath] : []),
+          opts.tool,
+          ...(opts.extraArgs ?? []),
+        ],
         env: { ...(opts.env ?? {}), ...UTF8_ENV, CONFIG__GIT_PROVIDER: 'local' },
         cwd: opts.cwd,
       };

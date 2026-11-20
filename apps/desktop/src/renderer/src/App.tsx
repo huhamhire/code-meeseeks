@@ -82,6 +82,13 @@ export default function App() {
   // persist to localStorage; under the 'auto' theme follow the OS light/dark switch.
   useGlobalTheme();
 
+  const [reviewEngine, setReviewEngine] = useState<'pr-agent' | 'codex'>(() =>
+    localStorage.getItem('meebox.reviewEngine') === 'codex' ? 'codex' : 'pr-agent',
+  );
+  const selectReviewEngine = useCallback((engine: 'pr-agent' | 'codex') => {
+    localStorage.setItem('meebox.reviewEngine', engine);
+    setReviewEngine(engine);
+  }, []);
   const [showSettings, setShowSettings] = useState(false);
   // Settings panel initial section (used by command palette deep links like "open About / Model"); default falls to 'general' in SettingsModal.
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory | undefined>(undefined);
@@ -271,6 +278,8 @@ export default function App() {
         {/* ChatPane is always mounted, collapse is just CSS hiding: preserves the lifecycle of a running run (timers / runProgress subscription). */}
         <ChatPane
           pr={selectedPr}
+          engine={reviewEngine}
+          onEngineChange={selectReviewEngine}
           prAgent={boot.prAgent}
           width={chatWidth}
           onResize={setChatWidth}
@@ -281,6 +290,11 @@ export default function App() {
           onJumpToDraftEditor={(target) => setPendingDiffNav(target)}
           onNavigateToAnchor={(anchor) => setPendingDiffNav({ anchor })}
           onSetReviewStatus={(s) => void setSelectedPrStatus(s)}
+          codexReviewStatuses={
+            archived || (selectedPr && selectedPr.author.name === selectedConn?.user?.name)
+              ? []
+              : selectedConn?.capabilities?.reviewStatuses
+          }
           onMerge={() => void mergeSelectedPr()}
           currentLlmModel={
             boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
@@ -293,7 +307,7 @@ export default function App() {
         prsCount={pendingReviewCount}
         prAgent={boot.prAgent}
         connections={boot.connections}
-        llm={boot.config.llm}
+        llm={reviewEngine === 'codex' ? null : boot.config.llm}
         refreshing={refreshing}
         sidebarCollapsed={sidebarCollapsed}
         chatCollapsed={chatCollapsed}

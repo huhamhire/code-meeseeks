@@ -98,6 +98,7 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
 
 export function RunResultView({
   run,
+  stale,
   onRetry,
   onDelete,
   canRetry,
@@ -111,6 +112,7 @@ export function RunResultView({
   onScrollToFinding,
 }: {
   run: ReviewRun;
+  stale?: boolean;
   onRetry: (run: ReviewRun) => void;
   /** Delete this run record (this run only). */
   onDelete: (runId: string) => void;
@@ -121,13 +123,13 @@ export function RunResultView({
   /** Snapshot of this PR's finding closure relations (read-only); looks up the review-closed state by (run.id,finding.id), marking the read-only chip. */
   closures: ReadonlyArray<FindingClosure>;
   /** Fired when clicking "→ jump to code edit" on a finding card. The parent does lazy creation + jump */
-  onJumpToDraft: (finding: Finding, run: ReviewRun) => void;
+  onJumpToDraft?: (finding: Finding, run: ReviewRun) => void;
   /** Reject a finding: create / update a draft to status='rejected' */
-  onRejectFinding: (finding: Finding, run: ReviewRun) => void;
+  onRejectFinding?: (finding: Finding, run: ReviewRun) => void;
   /** Click a finding anchor: only navigate to the corresponding Diff line (no edit mode) */
-  onNavigateToFinding: (finding: Finding) => void;
+  onNavigateToFinding?: (finding: Finding) => void;
   /** 「Reference」a code finding to start a re-review /ask (attach to the input bar). */
-  onReferenceFinding: (finding: Finding, run: ReviewRun) => void;
+  onReferenceFinding?: (finding: Finding, run: ReviewRun) => void;
   /** Scroll to a given run card (review-closed state「view re-review」→ the ask run that closed it). */
   onScrollToRun: (runId: string) => void;
   /** Scroll to a given finding card within a run and flash-highlight it (reference badge at the top of the re-review card → original finding card). */
@@ -140,6 +142,8 @@ export function RunResultView({
   const isCancelled = run.status === 'cancelled';
   const isFailedOrCancelled = isFailed || isCancelled;
   const stdout = run.stdout ?? '';
+  const coverage = run.reviewCoverage;
+  const clean = coverage?.status === 'complete' && !findings.some((finding) => finding.sectionKey === 'code-feedback');
   // The "raw output" collapse region maintains per-run state independently, unaffecting each other. Failed / cancelled default to expanded for easier troubleshooting,
   // success defaults to closed as just a diagnostic fallback
   const [showRawStdout, setShowRawStdout] = useState(isFailedOrCancelled);
@@ -201,7 +205,7 @@ export function RunResultView({
               ? t('chatPane.runCancelled')
               : run.errorReason === 'llm-error'
                 ? t('chatPane.llmCallFailed')
-                : run.errorReason
+                : run.errorReason && run.errorReason !== 'invalid-review-output'
                   ? t('chatPane.runFailedReason', { reason: run.errorReason })
                   : t('chatPane.runFailed')}
             {/* On llm-error the exitCode is 0 (pr-agent caught it itself), showing it would instead
@@ -209,6 +213,7 @@ export function RunResultView({
             {run.exitCode != null &&
               !isCancelled &&
               run.errorReason !== 'llm-error' &&
+              run.errorReason !== 'invalid-review-output' &&
               ` · exit ${String(run.exitCode)}`}
           </strong>
           {canRetry && (
@@ -240,6 +245,26 @@ export function RunResultView({
         </div>
       )}
 
+      {stale && <p className="muted">{t('chatPane.reviewResult.stale')}</p>}
+      {!isFailedOrCancelled && coverage?.status === 'partial' && (
+        <details className="chat-run-raw">
+          <summary>{t('chatPane.reviewResult.partial', {
+            omitted: coverage.omittedFiles?.length ?? 0,
+            clipped: coverage.partialFiles?.length ?? 0,
+          })}</summary>
+          <ul>
+            {coverage.omittedFiles?.map((file) => <li key={file}>{file}</li>)}
+            {coverage.partialFiles?.map((file) => <li key={`partial-${file}`}>{file}</li>)}
+          </ul>
+        </details>
+      )}
+      {!isFailedOrCancelled && coverage?.status === 'unknown' && (
+        <p className="muted">{t('chatPane.reviewResult.unknown')}</p>
+      )}
+      {coverage?.status === 'invalid' && (
+        <p className="muted">{t('chatPane.reviewResult.invalid')}</p>
+      )}
+      {clean && <p className="muted">{t('chatPane.reviewResult.clean')}</p>}
       {/* Failed / cancelled don't render findings: a cancelled /describe would parse part of stdout into「paragraphs」and mistakenly show them as results.
           Failed / cancelled uniformly keep only the collapsible「raw output」above + the status banner, not opening another output block below. */}
       {!isFailedOrCancelled &&
@@ -259,23 +284,25 @@ export function RunResultView({
               // 「Reference」is only offered for anchorable code-type findings (review/improve) — they are the code comments that can be re-reviewed.
               const canReference =
                 (f.sectionKey === 'code-feedback' || f.sectionKey === 'code-suggestion') &&
-                typeof f.anchor?.startLine === 'number';
+                typeof f.anchor?.startLine === 'number' &&
+                f.inlineAnchorVerified !== false;
               return (
                 <FindingCard
                   key={f.id}
                   finding={f}
                   relatedDraft={relatedDraft}
                   closure={closure}
-                  onJump={() => onJumpToDraft(f, run)}
-                  onReject={() => onRejectFinding(f, run)}
-                  onNavigate={() => onNavigateToFinding(f)}
-                  onReference={canReference ? () => onReferenceFinding(f, run) : undefined}
+                  onJump={!stale && onJumpToDraft ? () => onJumpToDraft(f, run) : undefined}
+                  onReject={!stale && onRejectFinding ? () => onRejectFinding(f, run) : undefined}
+                  onNavigate={onNavigateToFinding ? () => onNavigateToFinding(f) : undefined}
+                  staleLocation={stale}
+                  onReference={!stale && canReference && onReferenceFinding ? () => onReferenceFinding(f, run) : undefined}
                   onViewAsk={closure ? () => onScrollToRun(closure.byAskRunId) : undefined}
                 />
               );
             })}
           </ul>
-        ) : run.status === 'succeeded' ? (
+        ) : run.status === 'succeeded' && !coverage ? (
           <div className="chat-finding-empty muted">{t('chatPane.noFindings')}</div>
         ) : null)}
     </div>

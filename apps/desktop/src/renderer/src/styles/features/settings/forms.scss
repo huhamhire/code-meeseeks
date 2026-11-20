@@ -124,6 +124,11 @@
   box-sizing: border-box;
 }
 
+.settings-cli-args-hint {
+  font-family: system-ui, sans-serif;
+  word-break: normal;
+}
+
 .connection-list {
   list-style: none;
   padding: 0;

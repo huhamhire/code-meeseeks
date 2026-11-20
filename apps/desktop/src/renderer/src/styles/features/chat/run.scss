@@ -310,6 +310,82 @@
   }
 }
 
+.chat-codex-progress {
+  margin-top: $space-3;
+  font-size: $fs-sm;
+}
+
+.chat-codex-current,
+.chat-codex-step-heading,
+.chat-codex-steps li summary {
+  display: flex;
+  align-items: baseline;
+  gap: $space-3;
+}
+
+.chat-codex-current {
+  align-items: center;
+  color: $text-primary;
+}
+
+.chat-codex-time {
+  margin-inline-start: auto;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-codex-steps {
+  ol {
+    list-style: none;
+    padding-inline-start: $space-3;
+    margin: $space-2 0;
+  }
+
+  li {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    align-items: baseline;
+    gap: $space-3;
+    padding: $space-2 0;
+    color: $text-muted;
+
+    &[aria-current='step'] {
+      color: $text-primary;
+    }
+
+    summary {
+      color: inherit;
+      padding: 0;
+
+      &::before {
+        content: '›';
+        color: $text-muted;
+      }
+    }
+
+    details[open] > summary::before {
+      transform: rotate(90deg);
+    }
+
+    p {
+      margin: $space-2 0 0;
+      color: $text-primary;
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+  }
+}
+
+.chat-codex-node {
+  color: $color-info;
+  text-align: center;
+
+  [aria-current='step'] > &::before {
+    content: '●';
+  }
+}
+
 // Re-review "re-reviewed from <file:line>" badge: a clickable back-link to the run containing the referenced original finding.
 .chat-run-ref-badge {
   align-self: flex-start;

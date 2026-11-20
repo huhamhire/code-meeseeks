@@ -7,6 +7,7 @@ When understanding or maintaining a module, this is the **preferred entry point*
 
 - **This directory (arch/) = current conclusions**: continuously updated as the implementation evolves; the "source of truth" for a module.
 - **ROADMAP**: delivered capabilities, ongoing evolution, risks and next steps; no implementation details (those live here).
+- **Drafts (`../drafts/`)**: proposals, comparisons, and research under evaluation. Only approved architecture belongs in `arch/`; draft content must be reviewed and reconciled with the implementation before promotion.
 
 ## Per-doc skeleton convention
 

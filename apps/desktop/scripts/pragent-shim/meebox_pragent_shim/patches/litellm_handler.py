@@ -1,8 +1,9 @@
 """litellm handler patch (merged into one patch_fn; registering multiple finders on the same module would shadow each other):
   (0) CLI mode (MEEBOX_CLI_MODE set): swap chat_completion to call the local CLI directly, bypassing litellm, then
       return. This branch runs before the version guard and is not bound to the pr-agent version.
-  (1) Drop temperature for new Anthropic models (pinned version only).
-  (2) Wrap _get_completion to inline-collect real token usage (pinned version only).
+  (1) Wrap _get_completion to inline-collect real token usage (pinned version only).
+
+Temperature support is handled upstream by model metadata and adaptive-thinking detection in 0.50.0.
 """
 import os
 
@@ -88,18 +89,7 @@ def _apply_system_prompt_cache(kwargs: dict) -> None:
 
 
 def patch(module) -> None:
-    """(1) New first-party Anthropic models (claude-opus-4-8 etc.) deprecate the temperature parameter, but pr-agent
-    by default still sends temperature=0.2 → the Anthropic API directly reports "temperature is deprecated for this model",
-    failing all review/describe.
-
-    pr-agent only omits temperature for models that **exactly match** an entry in NO_SUPPORT_TEMPERATURE_MODELS, a list that is
-    hardcoded and lists only OpenAI o-series/gpt-5 etc., without any new Claude (upstream updates lag). custom_reasoning_model
-    could also drop temperature but merges system into user (degrading Claude's system prompt), so it's not used.
-
-    Here we replace the module-global NO_SUPPORT_TEMPERATURE_MODELS with a smart container that "additionally recognizes all
-    anthropic/* prefixed models": any model going through first-party anthropic never sends temperature. In LiteLLMAIHandler.__init__,
-    `self.no_support_temperature_models = NO_SUPPORT_TEMPERATURE_MODELS` reads the module-global name, so rebinding
-    the global takes effect for handlers created afterward; only the membership test is touched, not the system/user merge."""
+    """Install the local CLI transport or the API usage/cache wrapper for the pinned runtime."""
     # Suppress the decorative hints (ANSI red text) like "Provider List: …" that litellm prints to **stdout**. The orchestrated chat channel uses the subprocess
     # stdout as the model reply: in cost/token accounting, when litellm calls get_llm_provider and fails for a new model not in the local model_cost table (e.g. claude-opus-4-8),
     # it first prints that hint then raises (the error is swallowed upstream, not affecting the final result), but the print has already polluted
@@ -124,22 +114,11 @@ def patch(module) -> None:
     if installed != _EXPECTED_PRAGENT_VERSION:
         # version mismatch: the local_git_provider patch has already _warn'd about the overall degradation, so silently skip here to avoid duplicate noise
         _debug(
-            f"skip no-temperature patch: pr-agent {installed} != {_EXPECTED_PRAGENT_VERSION}"
+            f"skip completion wrapper: pr-agent {installed} != {_EXPECTED_PRAGENT_VERSION}"
         )
         return
 
-    orig = list(getattr(module, "NO_SUPPORT_TEMPERATURE_MODELS", []))
-
-    class _NoTempModels(list):
-        def __contains__(self, model) -> bool:
-            if list.__contains__(self, model):
-                return True
-            # our normalizeModel always prepends the anthropic/ prefix for the anthropic provider
-            return (model or "").lower().startswith("anthropic/")
-
-    module.NO_SUPPORT_TEMPERATURE_MODELS = _NoTempModels(orig)
-
-    # (2) Real token usage collection: wrap LiteLLMAIHandler._get_completion, take response.usage from its returned
+    # Real token usage collection: wrap LiteLLMAIHandler._get_completion, take response.usage from its returned
     # (content, finish_reason, response), and inline-print a sentinel to stderr.
     # Don't use litellm's callback —— that fires asynchronously on a background logging worker, and is lost if the CLI exits too fast;
     # here it's inline in pr-agent's await chain, guaranteed to run before process exit, reliable.

@@ -17,13 +17,13 @@ from .runtime import _debug, _register_post_import
 
 
 def apply() -> None:
-    # local_git_provider: inject get_line_link (the structured /review anchor) + get_repo_file_content. Registered as a
+    # local_git_provider: anchors, diff counts, labels, and dirty-tolerant preparation. Registered as a
     # single patch_fn because multiple finders on one module shadow each other (only meta_path[0] takes effect).
     _register_post_import(
         "pr_agent.git_providers.local_git_provider",
         _patch_local_git_provider,
     )
-    # litellm handler: CLI mode dispatch + Anthropic temperature removal + wrap _get_completion to collect token usage.
+    # litellm handler: CLI mode dispatch + wrap _get_completion for prompt caching and token usage.
     _register_post_import(
         "pr_agent.algo.ai_handlers.litellm_ai_handler",
         _patch_litellm_handler,

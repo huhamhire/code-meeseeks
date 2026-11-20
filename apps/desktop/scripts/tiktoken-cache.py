@@ -7,9 +7,9 @@ Run by assemble-pragent-runtime.mjs with a mode argument:
 
 Why this exists
 ---------------
-litellm points ``TIKTOKEN_CACHE_DIR`` at its own ``litellm_core_utils/tokenizers/`` and ships encoding files there, so
+pr-agent 0.50's token handler points ``TIKTOKEN_CACHE_DIR`` at LiteLLM's ``litellm_core_utils/tokenizers/`` and ships encoding files there, so
 that tiktoken works offline. But the files it ships are **out of sync with the tiktoken it depends on**: each one fails
-the ``expected_hash`` pinned in ``tiktoken_ext/openai_public.py``. tiktoken therefore treats the cache as invalid on
+the ``expected_hash`` pinned in ``tiktoken_ext/openai_public.py``. tiktoken therefore treats a stale cache as invalid on
 every run — it deletes the file and re-downloads it into that same directory, inside site-packages.
 
 Harmless on a build machine, fatal once installed: under ``C:\\Program Files`` (or any read-only install root) the write
@@ -39,12 +39,18 @@ REQUIRED = ("o200k_base", "cl100k_base")
 
 
 def _cache_dir() -> pathlib.Path:
-    import litellm  # noqa: F401  — importing it is what sets TIKTOKEN_CACHE_DIR
+    import importlib.util
 
-    cache = os.environ.get("TIKTOKEN_CACHE_DIR", "")
-    if not cache:
-        raise SystemExit("litellm did not set TIKTOKEN_CACHE_DIR; the cache location is unknown")
-    return pathlib.Path(cache)
+    # LiteLLM 1.105 loads its encoding module lazily. Match pr-agent 0.50's token_handler directory explicitly,
+    # and never prime an inherited host cache instead of the files that will actually ship in the installer.
+    spec = importlib.util.find_spec("litellm")
+    if spec is None or not spec.submodule_search_locations:
+        raise SystemExit("litellm package directory could not be resolved")
+    cache = pathlib.Path(spec.submodule_search_locations[0]) / "litellm_core_utils" / "tokenizers"
+    if not cache.is_dir():
+        raise SystemExit("litellm bundled tokenizer directory is missing")
+    os.environ["TIKTOKEN_CACHE_DIR"] = str(cache)
+    return cache
 
 
 def _pins() -> dict:
@@ -67,7 +73,7 @@ def _url_for(pins: dict, name: str) -> str:
 def prime() -> None:
     import tiktoken
 
-    _cache_dir()  # side effect: sets TIKTOKEN_CACHE_DIR
+    _cache_dir()  # Prime the shipped files, independent of the build machine's cache settings.
     for name in REQUIRED:
         # get_encoding validates the cached file against expected_hash and re-fetches on mismatch — exactly the repair
         # wanted here, while the directory is still writable.
@@ -93,6 +99,13 @@ def verify() -> None:
                 f"bundled tiktoken {name} does not match the hash tiktoken pins, so it would be re-downloaded at "
                 f"runtime — which fails in a read-only install dir. expected {pins[url]}, got {actual}"
             )
+    # Also exercise fresh encoding construction: a cache miss must fail rather than repair itself online.
+    import tiktoken
+    from unittest.mock import patch
+
+    with patch("tiktoken.load.read_file", side_effect=AssertionError("Tokenizer cache miss attempted a download")):
+        for name in REQUIRED:
+            assert tiktoken.get_encoding(name).encode("Offline runtime check")
     print("MEEBOX_TIKTOKEN_VERIFIED")
 
 

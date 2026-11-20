@@ -1,7 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
+  CodexReviewReadiness,
   Finding,
+  ReviewEngine,
+  ReviewerStatus,
   LocalPrStatus,
   PrAgentStatus,
   PrCommit,
@@ -27,13 +30,16 @@ import {
   useDiffSelection,
 } from '../../../stores/selection-store';
 import { anchorShortLabel, formatFindingReference } from './utils/findings';
+import { scrollToResult } from './utils/scroll-to-result';
+import { isStaleReview } from './utils/review-snapshot';
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './constants';
 import { useChatSession } from './hooks/useChatSession';
 import { useChatActions } from './hooks/useChatActions';
 import { useChatTimeline } from './hooks/useChatTimeline';
 import { AgentStepRow, ThinkingLive } from './components/AgentStep';
+import { CodexReviewPane } from './components/CodexReviewPane';
 import { ChatEmpty } from './components/ChatEmpty';
-import { CommitDivider } from './components/CommitDivider';
+import { CommitDividerList } from './components/CommitDivider';
 import { computeCommitDividers } from './utils/commit-dividers';
 import { ChatInputBar } from './components/ChatInputBar';
 import { ConversationMessage } from './components/ConversationMessage';
@@ -45,6 +51,8 @@ import { RunResultView } from './components/RunResultView';
 
 interface ChatPaneProps {
   pr: StoredPullRequest | null;
+  engine: ReviewEngine;
+  onEngineChange: (engine: ReviewEngine) => void;
   prAgent: PrAgentStatus;
   width: number;
   onResize: (next: number) => void;
@@ -63,6 +71,7 @@ interface ChatPaneProps {
   }) => void;
   /** PR review verdict triggered by the /approve /needswork commands; wired to prs:setLocalStatus by MainPane */
   onSetReviewStatus?: (status: LocalPrStatus) => void;
+  codexReviewStatuses?: readonly ReviewerStatus[];
   /** Merge triggered by the /merge command (called after the confirm dialog, shares prs:merge with the PR header merge button); only available when canMerge. */
   onMerge?: () => void;
   /**
@@ -103,12 +112,15 @@ interface ChatPaneProps {
  */
 export function ChatPane({
   pr,
+  engine,
+  onEngineChange,
   prAgent,
   width,
   onResize,
   collapsed,
   onJumpToDraftEditor,
   onSetReviewStatus,
+  codexReviewStatuses,
   onMerge,
   onNavigateToAnchor,
   currentLlmModel,
@@ -118,6 +130,31 @@ export function ChatPane({
   codeSuggestionLayout,
 }: ChatPaneProps) {
   const { t } = useTranslation();
+  const [codexStatus, setCodexStatus] = useState<CodexReviewReadiness>('missing');
+  const [codexModel, setCodexModel] = useState(() => localStorage.getItem('meebox.codexModel') ?? '');
+  const [probeRevision, setProbeRevision] = useState(0);
+  const [inputHeight, setInputHeight] = useState<number | null>(null);
+  useEffect(() => {
+    if (codexModel) localStorage.setItem('meebox.codexModel', codexModel);
+  }, [codexModel]);
+  useEffect(() => {
+    const recheck = () => setProbeRevision((previous) => previous + 1);
+    window.addEventListener('focus', recheck);
+    return () => window.removeEventListener('focus', recheck);
+  }, []);
+  useEffect(() => {
+    let live = true;
+    void invoke('codex:reviewStatus', undefined).then(
+      (status) => { if (live) setCodexStatus(status); },
+      () => { if (live) setCodexStatus('unavailable'); },
+    );
+    return () => { live = false; };
+  }, [probeRevision]);
+  const native = engine === 'codex';
+  const [hasOpenedCodex, setHasOpenedCodex] = useState(native);
+  useEffect(() => {
+    if (native) setHasOpenedCodex(true);
+  }, [native]);
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
@@ -147,10 +184,10 @@ export function ChatPane({
   const { active, waiting, linesByRunId } = useChatRunStore();
   // Concurrency model: active is a list of concurrently running runs. This PR's running runs may be >1 (user fires multiple
   // tools at the same PR); other PRs' concurrency count feeds the "running elsewhere" hint.
-  const myActiveRuns = active.filter((a) => a.prLocalId === pr?.localId);
+  const myActiveRuns = active.filter((a) => a.prLocalId === pr?.localId && a.engine !== 'codex');
   const hasMyActive = myActiveRuns.length > 0;
   // This PR's queued tasks (FIFO, earlier ones run first), shown as "queued" cards at the end of the chat
-  const myWaiting = waiting.filter((w) => w.prLocalId === pr?.localId);
+  const myWaiting = waiting.filter((w) => w.prLocalId === pr?.localId && w.engine !== 'codex');
   const myActiveIds = myActiveRuns.map((a) => a.runId);
 
   // M4 draft pool: fetch this PR's drafts from the main process, associated with findings via the source field
@@ -266,12 +303,17 @@ export function ChatPane({
     prLocalId,
   });
 
-  // Commit dividers: every point in the timeline where the reviewed commit changes (see computeCommitDividers, which
-  // also explains why the trailing boundary anchors after the last run rather than at the end of the pane).
   const commitDividers = useMemo(
-    () => computeCommitDividers(timeline, pr?.sourceRef.sha),
-    [timeline, pr?.sourceRef.sha],
+    () => computeCommitDividers(timeline, pr?.sourceRef.sha, pr?.headChanges, agentRunningHere),
+    [timeline, pr?.sourceRef.sha, pr?.headChanges, agentRunningHere],
   );
+  const latestHeadChangeAt = pr?.headChanges?.at(-1)?.at;
+  useEffect(() => {
+    const body = session.bodyRef.current;
+    if (latestHeadChangeAt && body && body.scrollHeight - body.scrollTop - body.clientHeight <= 64) {
+      body.scrollTop = body.scrollHeight;
+    }
+  }, [latestHeadChangeAt, session.bodyRef]);
 
   // Key of the last assistant message in the timeline: the answer the action belongs on. Anchored to the last one
   // rather than to a message id because a conversation message has no stable id of its own here.
@@ -341,28 +383,6 @@ export function ChatPane({
   const { runs, error, loadingSession, matchedRules, bodyRef, hasMoreOlder, loadingOlder } =
     session;
 
-  // Re-review card ↔ original finding card cross-link: scroll to and briefly highlight. The flash class differs by target: run cards use chat-run-flash
-  // (fading background, visible on the run card's transparent base); finding cards use chat-finding-flash (an overlay highlight ring — finding cards have
-  // a solid $bg-elev base, so a fading background would be washed out and the flash unnoticeable).
-  const flash = (el: Element, cls: 'chat-run-flash' | 'chat-finding-flash'): void => {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add(cls);
-    window.setTimeout(() => el.classList.remove(cls), 1600);
-  };
-  const scrollToRun = (runId: string): void => {
-    const el = bodyRef.current?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
-    if (el) flash(el, 'chat-run-flash');
-  };
-  // Clicking the reference badge at the top of a re-review card: precisely locate and flash-highlight the referenced finding card within the original run (if the card isn't found —
-  // e.g. paged out / collapsed — fall back to highlighting the whole run, giving at least positional feedback).
-  const scrollToFinding = (runId: string, findingId: string): void => {
-    const runEl = bodyRef.current?.querySelector(`[data-run-id="${CSS.escape(runId)}"]`);
-    if (!runEl) return;
-    const findingEl = runEl.querySelector(`[data-finding-id="${CSS.escape(findingId)}"]`);
-    if (findingEl) flash(findingEl, 'chat-finding-flash');
-    else flash(runEl, 'chat-run-flash');
-  };
-
   return (
     <aside
       className={`chat-pane${collapsed ? ' chat-pane-collapsed' : ''}`}
@@ -378,26 +398,84 @@ export function ChatPane({
       />
       <header className="chat-pane-header">
         <ChatIcon />
-        <span className="chat-pane-title">PR Agent</span>
+        {codexStatus !== 'missing' || native ? (
+          <div className="chat-engine-tabs" role="tablist" aria-label={t('chatPane.codex.tabs')}
+            onKeyDown={(event) => {
+              if ((event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') || (!native && codexStatus !== 'ready')) return;
+              event.preventDefault();
+              onEngineChange(native ? 'pr-agent' : 'codex');
+              document.getElementById(native ? 'pr-agent-review-tab' : 'codex-review-tab')?.focus();
+            }}>
+            <button type="button" role="tab" id="pr-agent-review-tab" aria-selected={!native}
+              aria-controls="pr-agent-review-panel" tabIndex={native ? -1 : 0} onClick={() => onEngineChange('pr-agent')}>PR Agent</button>
+            <button type="button" role="tab" id="codex-review-tab" aria-selected={native}
+              aria-controls="codex-review-panel" tabIndex={native ? 0 : -1}
+              aria-label={`Codex (${t('settings.experimental')})`}
+              title={codexStatus === 'ready' ? t('settings.experimental') : t(`chatPane.codex.${codexStatus}`)}
+              disabled={!native && codexStatus !== 'ready'} onClick={() => onEngineChange('codex')}>
+              Codex
+              <svg className="chat-engine-experimental" width="13" height="13" viewBox="0 0 16 16"
+                fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"
+                aria-hidden="true">
+                <path d="M6 2h4M6.5 2v4l-4 6.3a1 1 0 0 0 .8 1.5h9.4a1 1 0 0 0 .8-1.5L9.5 6V2M4.6 9h6.8" />
+              </svg>
+              {[...active, ...waiting].some((run) => run.prLocalId === prLocalId && run.engine === 'codex') && (
+                <span className="chat-engine-running" aria-label={t('chatPane.codex.running')} />
+              )}
+            </button>
+          </div>
+        ) : <span className="chat-pane-title">PR Agent</span>}
         {pr && (
-          <span className="chat-pane-subtitle" title={pr.title}>
-            #{pr.remoteId}
-          </span>
-        )}
-        {/* Runtime strategy chip removed: users don't care about deployment details, and the status bar already has a PR Agent version chip */}
-        {pr && runs.length > 0 && (
-          <button
-            type="button"
-            className="icon-btn chat-pane-clear"
-            title={t('chatPane.clearHistoryTitle')}
-            aria-label={t('chatPane.clearHistoryAria')}
-            onClick={() => setShowClearConfirm(true)}
-          >
-            <TrashIcon />
-          </button>
+          <div className="chat-pane-header-context">
+            {!native && runs.length > 0 && (
+              <button
+                type="button"
+                className="icon-btn chat-pane-clear"
+                title={t('chatPane.clearHistoryTitle')}
+                aria-label={t('chatPane.clearHistoryAria')}
+                onClick={() => setShowClearConfirm(true)}
+              >
+                <TrashIcon />
+              </button>
+            )}
+            <span className="chat-pane-subtitle" title={pr.title}>
+              #{pr.remoteId}
+            </span>
+          </div>
         )}
       </header>
 
+      <div className="chat-engine-panel" id="codex-review-panel" role="tabpanel"
+        aria-labelledby="codex-review-tab" hidden={!native}>
+      {(native || hasOpenedCodex) && (
+        <CodexReviewPane
+          key={prLocalId}
+          collapsed={collapsed || !native}
+          visible={native}
+          inputHeight={inputHeight}
+          onInputHeightChange={setInputHeight}
+          localId={prLocalId}
+          headSha={pr?.sourceRef.sha}
+          headChanges={pr?.headChanges}
+          commitMessages={commitMsgBySha}
+          baseSha={pr?.targetRef.sha}
+          status={codexStatus}
+          model={codexModel}
+          onModelChange={setCodexModel}
+          onSetReviewStatus={onSetReviewStatus}
+          reviewStatuses={codexReviewStatuses}
+          onRecheck={() => setProbeRevision((previous) => previous + 1)}
+          drafts={drafts ?? []}
+          closures={closures}
+          onJumpToDraft={actions.handleJumpToDraft}
+          onRejectFinding={actions.handleRejectFinding}
+          onNavigateToFinding={actions.handleNavigateToFinding}
+        />
+      )}
+      </div>
+      <div className="chat-engine-panel" id="pr-agent-review-panel" hidden={native}
+        role={codexStatus !== 'missing' || native ? 'tabpanel' : undefined}
+        aria-labelledby={codexStatus !== 'missing' || native ? 'pr-agent-review-tab' : undefined}>
       {/* Chip for rules matched by the current PR: not shown when rules.dir is unconfigured / globally disabled / no match.
           Click to expand the body preview so the user can confirm which rule will constrain this review */}
       {matchedRules.length > 0 && (
@@ -446,20 +524,15 @@ export function ChatPane({
         )}
         {/* History runs stacked in ascending time order, each an independent card (maintaining its own raw stdout collapse state).
             Initially only the latest RUNS_PAGE_SIZE are fetched; after scrolling up to the top, fetch an earlier batch by cursor */}
-        {timeline.map((entry, i) =>
-          entry.run ? (
-            // A commit divider precedes this run when the reviewed commit changed since the previous run (see commitDividers).
-            // data-run-id: for re-review card ↔ original finding card cross-link scroll targeting (scrollToRun).
-            <Fragment key={entry.key}>
-              {commitDividers.before.has(entry.key) && (
-                <CommitDivider
-                  sha={commitDividers.before.get(entry.key)!}
-                  message={commitMsgBySha.get(commitDividers.before.get(entry.key)!)}
-                />
-              )}
+        {timeline.map((entry, i) => (
+          <Fragment key={entry.key}>
+            <CommitDividerList shas={commitDividers.before.get(entry.key)} messages={commitMsgBySha} />
+            {entry.run ? (
+              // data-run-id: for re-review card ↔ original finding card cross-link scroll targeting (scrollToRun).
               <div data-run-id={entry.run.id}>
                 <RunResultView
                   run={entry.run}
+                  stale={isStaleReview(entry.run, pr)}
                   onRetry={actions.handleRetry}
                   onDelete={actions.handleDeleteRun}
                   // Only in the single case of "the last run in the timeline + nothing running" can a failed / cancelled run
@@ -472,55 +545,45 @@ export function ChatPane({
                   onRejectFinding={actions.handleRejectFinding}
                   onNavigateToFinding={actions.handleNavigateToFinding}
                   onReferenceFinding={onReferenceFinding}
-                  onScrollToRun={scrollToRun}
-                  onScrollToFinding={scrollToFinding}
+                  onScrollToRun={(runId) => scrollToResult(bodyRef.current, runId)}
+                  onScrollToFinding={(runId, findingId) => scrollToResult(bodyRef.current, runId, findingId)}
                 />
               </div>
-            </Fragment>
-          ) : entry.active ? (
-            // Running: progress bar + live stdout stream, interleaved into the timeline by start time (startedAt is null when enqueued,
-            // set when it starts, falling back to enqueuedAt). Not rendered when prAgent is not ready.
-            prAgent.available ? (
-              <RunningView
-                key={entry.key}
-                tool={entry.active.tool}
-                runId={entry.active.runId}
-                question={entry.active.question}
-                scope={entry.active.scope}
-                lines={linesByRunId.get(entry.active.runId) ?? []}
-                startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
-                model={currentLlmModel ?? null}
+            ) : entry.active ? (
+              // Running: progress bar + live stdout stream, interleaved into the timeline by start time (startedAt is null when enqueued,
+              // set when it starts, falling back to enqueuedAt). Not rendered when prAgent is not ready.
+              prAgent.available ? (
+                <RunningView
+                  tool={entry.active.tool}
+                  runId={entry.active.runId}
+                  reviewPhase={entry.active.reviewPhase}
+                  question={entry.active.question}
+                  scope={entry.active.scope}
+                  lines={linesByRunId.get(entry.active.runId) ?? []}
+                  startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
+                  model={currentLlmModel ?? null}
+                />
+              ) : null
+            ) : entry.step ? (
+              <AgentStepRow step={entry.step} />
+            ) : entry.message ? (
+              <ConversationMessage
+                message={entry.message}
+                useAsReply={
+                  answeringComment && entry.key === lastAnswerKey
+                    ? {
+                        label: t('chatPane.commentReference.useAsReply'),
+                        onUse: () => {
+                          createReplyDraftFromAnswer(entry.message!.content);
+                        },
+                      }
+                    : null
+                }
               />
-            ) : null
-          ) : entry.step ? (
-            <AgentStepRow key={entry.key} step={entry.step} />
-          ) : entry.message ? (
-            <ConversationMessage
-              key={entry.key}
-              message={entry.message}
-              useAsReply={
-                answeringComment && entry.key === lastAnswerKey
-                  ? {
-                      label: t('chatPane.commentReference.useAsReply'),
-                      onUse: () => {
-                        createReplyDraftFromAnswer(entry.message!.content);
-                      },
-                    }
-                  : null
-              }
-            />
-          ) : null,
-        )}
-        {/* Trailing commit divider, for the one case with no entry to precede: the head advanced past the last run's
-            commit and nothing has landed after that run yet. As soon as anything does — a message, a step, a queued
-            run — the boundary moves into `before` and anchors there, so it stays put instead of being pushed down by
-            each new bubble (see computeCommitDividers). */}
-        {commitDividers.bottom && (
-          <CommitDivider
-            sha={commitDividers.bottom}
-            message={commitMsgBySha.get(commitDividers.bottom)}
-          />
-        )}
+            ) : null}
+          </Fragment>
+        ))}
+        <CommitDividerList shas={commitDividers.bottom} messages={commitMsgBySha} />
         {/* This PR's queued tasks: placed after running ones, each cancellable individually. The position uses the **global** queue order (the queue is shared across PRs,
             otherwise every PR showing "position 1" would be misleading) — the runId's index in the global waiting array +1. */}
         {myWaiting.map((w) => (
@@ -548,6 +611,8 @@ export function ChatPane({
       </div>
 
       <ChatInputBar
+        inputHeight={inputHeight}
+        onInputHeightChange={setInputHeight}
         pr={pr}
         prAgent={prAgent}
         llmConfigured={llmConfigured}
@@ -675,6 +740,7 @@ export function ChatPane({
           onCancel={() => setShowMergeConfirm(false)}
         />
       )}
+      </div>
     </aside>
   );
 }
