@@ -277,16 +277,20 @@ export function ChatPane({
   });
   const { agentRunningHere } = actions;
 
-  // Send a re-review /ask: carries the referenced finding's structured reference + body context, going through the /ask direct tool (produces a verdict +
-  // adopt/close action); clears the reference state after sending.
+  // Only findings with a current inline anchor can produce an anchored replacement.
   const sendReferencedAsk = (q: string): void => {
     if (!refFinding) return;
     const { finding, run } = refFinding;
-    void actions.handleRun('ask', q, formatFindingReference(finding), {
-      runId: run.id,
-      findingId: finding.id,
-      anchor: finding.anchor,
-    });
+    const canReplace =
+      !isStaleReview(run, pr) &&
+      typeof finding.anchor?.startLine === 'number' &&
+      finding.inlineAnchorVerified !== false;
+    void actions.handleRun(
+      'ask',
+      q,
+      formatFindingReference(finding, !canReplace),
+      canReplace ? { runId: run.id, findingId: finding.id, anchor: finding.anchor } : undefined,
+    );
     setRefFinding(null);
   };
 
@@ -601,6 +605,9 @@ export function ChatPane({
                   aria-label={t('chatPane.reviewFeedback')}
                 >
                   <h3>{t('chatPane.reviewFeedback')}</h3>
+                  {feedback.some(({ run }) => isStaleReview(run, pr)) && (
+                    <p className="muted">{t('chatPane.reviewResult.stale')}</p>
+                  )}
                   {feedback.map(({ run, findings }) => (
                     <RunFindingList
                       key={run.id}

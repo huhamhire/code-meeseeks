@@ -61,8 +61,7 @@ const DRAFT_TONE: Record<NonNullable<ReviewDraft['status']>, 'accent' | 'approve
 
 /**
  * The action icon bar in the top-right of the Finding card header: edit (comment bubble) / reject (circular ban) + reference (forward arrow).
- * Appears only for code-type findings (/review code-feedback and /improve code-suggestion) + complete anchor, not closed,
- * ordered to the left of the collapse chevron. The edit action switches semantics with draft status (edit / view / undo); posted / rejected do not show reject.
+ * Inline draft actions require an eligible anchor. The edit action follows draft status (edit / view / undo).
  */
 function FindingHeadActions({
   relatedDraft,
@@ -225,11 +224,8 @@ export function FindingCard({
   const isRejected = relatedDraft?.status === 'rejected';
   // Replaced/closed by a re-review: likewise collapsed and desaturated (same visual as rejected), the anchor row shows a read-only closed chip.
   const isClosed = !!closure;
-  // sectionKey takes priority (newly parsed), fallback to category (from an older persisted run)
-  const key: PrDocSectionKey = finding.sectionKey ?? 'general';
-  // Actionable code-type findings (/review code-feedback, /improve code-suggestion with an anchor line number):
-  // only these show the header edit / reject / reference icon bar + the anchor row's draft status / closed state.
-  const isActionableCode =
+  const key: PrDocSectionKey = finding.sectionKey ?? finding.category ?? 'general';
+  const hasInlineAnchor =
     (key === 'code-feedback' || key === 'code-suggestion') &&
     finding.anchor?.startLine !== undefined &&
     finding.inlineAnchorVerified !== false;
@@ -312,13 +308,11 @@ export function FindingCard({
             <MdInline>{translatedTitle}</MdInline>
           </h4>
         )}
-        {/* Header action icon bar: edit (comment) / reject (circular ban) / reference (forward arrow). Appears only for anchorable code-type
-            findings not closed by a re-review, ordered to the left of the collapse chevron; on the same row as the title, grouped in the top-right. */}
-        {isActionableCode && !isClosed && (onJump || onReject || onReference) && (
+        {!isClosed && ((hasInlineAnchor && (onJump || onReject)) || onReference) && (
           <FindingHeadActions
             relatedDraft={relatedDraft}
-            onJump={onJump}
-            onReject={onReject}
+            onJump={hasInlineAnchor ? onJump : undefined}
+            onReject={hasInlineAnchor ? onReject : undefined}
             onReference={onReference}
           />
         )}
@@ -380,7 +374,7 @@ export function FindingCard({
           )}
           {/* M4 draft status chip / re-review closed state: only shown for code-type findings anchored to a specific line (action buttons
               have been moved up to the header icon bar). Appears only when there is a draft status or it is closed by a re-review, otherwise takes no space. */}
-          {isActionableCode && (isClosed || relatedDraft?.status) && (
+          {hasInlineAnchor && (isClosed || relatedDraft?.status) && (
             <FindingDraftActions
               relatedDraft={relatedDraft}
               closure={closure}

@@ -168,7 +168,7 @@ export function anchorShortLabel(anchor?: {
  * Assemble a finding pending re-review into /ask's implicit reference context (referencedContext): let the model see the original comment body + location,
  * and re-review accordingly. Like the diff selection reference (formatReferencedContext), it's injected via EXTRA_INSTRUCTIONS, not into the question position args.
  */
-export function formatFindingReference(finding: Finding): string {
+export function formatFindingReference(finding: Finding, contextOnly = false): string {
   const a = finding.anchor;
   const loc = a
     ? ` on \`${a.path}\`${
@@ -179,7 +179,10 @@ export function formatFindingReference(finding: Finding): string {
           : ''
       }`
     : '';
-  return `An existing review comment${loc} is being re-evaluated:\n\n${stripFindingMarker(finding.body)}`;
+  const instruction = contextOnly
+    ? `The question refers to a review finding${loc}. Verify any cited location against the current PR before using it.`
+    : `An existing review comment${loc} is being re-evaluated:`;
+  return `${instruction}\n\n${stripFindingMarker(finding.body)}`;
 }
 
 /**

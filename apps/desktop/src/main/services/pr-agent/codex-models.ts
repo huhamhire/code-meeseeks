@@ -1,26 +1,92 @@
 import { spawn } from 'node:child_process';
+import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
+import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { discoverCodexReview, REVIEW_FEATURE_FLAGS } from './codex-review.js';
+import type { StateStore } from '@meebox/state-store';
+import { resolveCodexExecutable, REVIEW_FEATURE_FLAGS } from './codex-review.js';
 
 type CatalogModel = { id: string; label: string };
-type ReadyRuntime = Extract<
-  Awaited<ReturnType<typeof discoverCodexReview>>,
-  { status: 'ready' }
->['runtime'];
+type CodexExecutable = NonNullable<Awaited<ReturnType<typeof resolveCodexExecutable>>>;
 const CACHE_TTL_MS = 5 * 60_000;
+const CACHE_KEY = 'codex/model-catalog';
+const MAX_CLI_CACHE_BYTES = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 12_000;
-let cached: { models: CatalogModel[]; expiresAt: number } | undefined;
+type CatalogSnapshot = { models: CatalogModel[]; expiresAt: number };
+let cached: CatalogSnapshot | undefined;
+let hydration: Promise<void> | undefined;
 let pending: Promise<CatalogModel[]> | undefined;
 
-export function listCodexModels(env: Record<string, string> = {}): Promise<CatalogModel[]> {
+function normalizeModel(id: unknown, displayName: unknown): CatalogModel | undefined {
+  if (typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_./:-]{0,199}$/.test(id)) return;
+  const label = typeof displayName === 'string' ? displayName.slice(0, 120) : id;
+  return { id, label: label || id };
+}
+
+async function readCliCache(): Promise<CatalogModel[]> {
+  try {
+    const file = path.resolve(
+      process.env.CODEX_HOME || path.join(os.homedir(), '.codex'),
+      'models_cache.json',
+    );
+    const stats = await stat(file);
+    if (!stats.isFile() || stats.size > MAX_CLI_CACHE_BYTES) return [];
+    const data = JSON.parse(await readFile(file, 'utf8')) as {
+      models?: Array<{
+        slug?: unknown;
+        display_name?: unknown;
+        visibility?: unknown;
+        input_modalities?: unknown;
+      } | null>;
+    } | null;
+    const models = new Map<string, CatalogModel>();
+    for (const entry of Array.isArray(data?.models) ? data.models : []) {
+      if (
+        entry?.visibility !== 'list' ||
+        (Array.isArray(entry.input_modalities) && !entry.input_modalities.includes('text'))
+      )
+        continue;
+      const model = normalizeModel(entry.slug, entry.display_name);
+      if (model) models.set(model.id, model);
+    }
+    return [...models.values()];
+  } catch {
+    return [];
+  }
+}
+
+export async function getCachedCodexModels(store: StateStore): Promise<CatalogModel[]> {
+  if (!hydration) {
+    hydration = (async () => {
+      const snapshot = await store.read<CatalogSnapshot>(CACHE_KEY).catch(() => null);
+      const models = Array.isArray(snapshot?.models)
+        ? snapshot.models.flatMap((entry) => normalizeModel(entry?.id, entry?.label) ?? [])
+        : [];
+      const expiresAt = snapshot?.expiresAt ?? 0;
+      cached = models.length
+        ? { models, expiresAt: Number.isFinite(expiresAt) ? expiresAt : 0 }
+        : { models: await readCliCache(), expiresAt: 0 };
+    })();
+  }
+  await hydration;
+  return cached?.models ?? [];
+}
+
+export async function listCodexModels(
+  store: StateStore,
+  env: Record<string, string> = {},
+  readyRuntime?: CodexExecutable,
+): Promise<CatalogModel[]> {
+  await getCachedCodexModels(store);
   if (pending) return pending;
-  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.models);
+  if (cached && cached.expiresAt > Date.now()) return cached.models;
   pending = (async () => {
-    const discovery = await discoverCodexReview();
-    if (discovery.status !== 'ready') throw new Error('Codex is not ready');
-    const models = await readCatalog(discovery.runtime, env);
+    const executable = readyRuntime ?? (await resolveCodexExecutable());
+    if (!executable) throw new Error('Codex executable was not found');
+    const models = await readCatalog(executable, env);
+    if (!models.length) throw new Error('Codex returned no selectable models');
     cached = { models, expiresAt: Date.now() + CACHE_TTL_MS };
+    await store.write(CACHE_KEY, cached).catch(() => {});
     return models;
   })().finally(() => {
     pending = undefined;
@@ -28,7 +94,10 @@ export function listCodexModels(env: Record<string, string> = {}): Promise<Catal
   return pending;
 }
 
-function readCatalog(runtime: ReadyRuntime, env: Record<string, string>): Promise<CatalogModel[]> {
+function readCatalog(
+  runtime: CodexExecutable,
+  env: Record<string, string>,
+): Promise<CatalogModel[]> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       runtime.command,
@@ -105,14 +174,8 @@ function readCatalog(runtime: ReadyRuntime, env: Record<string, string>): Promis
             (Array.isArray(entry.inputModalities) && !entry.inputModalities.includes('text'))
           )
             continue;
-          if (
-            typeof entry.model !== 'string' ||
-            !/^[A-Za-z0-9][A-Za-z0-9_./:-]{0,199}$/.test(entry.model)
-          )
-            continue;
-          const label =
-            typeof entry.displayName === 'string' ? entry.displayName.slice(0, 120) : entry.model;
-          models.set(entry.model, { id: entry.model, label: label || entry.model });
+          const model = normalizeModel(entry.model, entry.displayName);
+          if (model) models.set(model.id, model);
         }
         const cursor = reply.result.nextCursor;
         if (cursor && seenCursors.size < 5 && !seenCursors.has(cursor)) {

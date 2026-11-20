@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatCliArgs, parseCliArgs, validCliArgs } from '../src/cli-args.js';
+import {
+  formatCliArgs,
+  getCodexCliModel,
+  parseCliArgs,
+  setCodexCliModel,
+  validCliArgs,
+} from '../src/cli-args.js';
 import { LlmProfileSchema } from '../src/config.js';
 
 describe('CLI profile arguments', () => {
@@ -32,6 +38,18 @@ describe('CLI profile arguments', () => {
     expect(
       validCliArgs('claude', ['--model', 'sonnet', '--effort=medium', '--max-turns', '3']),
     ).toBe(true);
+  });
+
+  it('replaces only model overrides and supports restoring the CLI default', () => {
+    const preserved = ['--config=service_tier=default', '-c', 'model_reasoning_effort=medium'];
+    const args = ['-c', 'model = "prior-config"', ...preserved, '-m=prior-flag'];
+    expect(getCodexCliModel(args)).toBe('prior-flag');
+    expect(getCodexCliModel(['--config=model="prior-config"'])).toBe('prior-config');
+    const next = setCodexCliModel(args, 'gpt-6.2-sol');
+    expect(next).toEqual([...preserved, '--model', 'gpt-6.2-sol']);
+    expect(validCliArgs('codex', next)).toBe(true);
+    expect(getCodexCliModel(next)).toBe('gpt-6.2-sol');
+    expect(setCodexCliModel(next, null)).toEqual(preserved);
   });
 
   it.each([

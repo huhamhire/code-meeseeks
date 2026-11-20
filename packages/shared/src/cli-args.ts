@@ -45,6 +45,45 @@ const VALUE_OPTIONS: Record<string, readonly string[]> = {
 };
 const CONFIG_KEYS = ['model', 'model_reasoning_effort', 'service_tier', 'model_verbosity'];
 
+export function isCodexCliProfile(profile: { provider: string; model: string }): boolean {
+  return profile.provider === 'cli' && profile.model.trim().toLowerCase() === 'codex';
+}
+
+function* codexArgEntries(args: readonly string[]) {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]!;
+    const equals = arg.indexOf('=');
+    const option = equals < 0 ? arg : arg.slice(0, equals);
+    const value = equals < 0 ? args[++i] : arg.slice(equals + 1);
+    const tokens = equals < 0 && value !== undefined ? [arg, value] : [arg];
+    const flagModel = option === '--model' || option === '-m';
+    const configModel =
+      (option === '--config' || option === '-c') && /^\s*model\s*=/.test(value ?? '');
+    yield { tokens, value, flagModel, configModel };
+  }
+}
+
+export function getCodexCliModel(args: readonly string[] = []): string | undefined {
+  let flag: string | undefined;
+  let config: string | undefined;
+  for (const { value, flagModel, configModel } of codexArgEntries(args)) {
+    if (flagModel) flag = value;
+    if (configModel && value)
+      config = value
+        .slice(value.indexOf('=') + 1)
+        .trim()
+        .replace(/^(["'])(.*)\1$/, '$2');
+  }
+  return flag || config;
+}
+
+export function setCodexCliModel(args: readonly string[], model: string | null): string[] {
+  const preserved = [...codexArgEntries(args)]
+    .filter(({ flagModel, configModel }) => !flagModel && !configModel)
+    .flatMap(({ tokens }) => tokens);
+  return model ? [...preserved, '--model', model] : preserved;
+}
+
 /** Return false for positional prompts, subcommands, unknown options, or application-managed flags. */
 export function validCliArgs(command: string, args: readonly string[]): boolean {
   if (!args.length) return true;

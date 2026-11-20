@@ -14,7 +14,7 @@ import {
 import { pickMatchingRules } from '@meebox/rules';
 import { AppError, CODEX_QUESTION_LIMIT, ERROR_CODES, type AgentRecommendationVerdict } from '@meebox/shared';
 import { discoverCodexReview } from '../services/pr-agent/codex-review.js';
-import { listCodexModels } from '../services/pr-agent/codex-models.js';
+import { getCachedCodexModels, listCodexModels } from '../services/pr-agent/codex-models.js';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
 import { buildProxyEnv } from '../utils/proxy.js';
@@ -152,18 +152,30 @@ export const runPragent: IpcController<'pragent:run'> = async (_event, req) => {
 /**
  * Cancel a run (active SIGKILL / waiting dequeue).
  */
-export const codexReviewStatus: IpcController<'codex:reviewStatus'> = async () =>
-  (await discoverCodexReview()).status;
+export const codexReviewStatus: IpcController<'codex:reviewStatus'> = async () => {
+  const discovery = await discoverCodexReview();
+  if (discovery.status === 'ready') {
+    const ctx = getContext();
+    void listCodexModels(
+      ctx.stateStore,
+      buildProxyEnv(ctx.bootstrap.config.proxy),
+      discovery.runtime,
+    ).catch(() => {});
+  }
+  return discovery.status;
+};
 
 async function readCodexCatalog() {
+  const ctx = getContext();
   try {
-    return await listCodexModels(buildProxyEnv(getContext().bootstrap.config.proxy));
+    return await listCodexModels(ctx.stateStore, buildProxyEnv(ctx.bootstrap.config.proxy));
   } catch {
     throw new AppError(ERROR_CODES.AG_CODEX_MODEL_LIST_FAILED);
   }
 }
 
-export const codexModels: IpcController<'codex:models'> = () => readCodexCatalog();
+export const codexModels: IpcController<'codex:models'> = (_event, req) =>
+  req.cachedOnly ? getCachedCodexModels(getContext().stateStore) : readCodexCatalog();
 
 export const listCodexRuns: IpcController<'codex:listRuns'> = async (_event, req) =>
   listReviewRunsForPr(await getContext().pr.storeForPr(req.localId), req.localId, { engine: 'codex' });
@@ -177,6 +189,8 @@ export const cancelCodexRun: IpcController<'codex:cancel'> = (_event, req) =>
 
 async function checkCodexModel(model?: string): Promise<string | undefined> {
   if (model === undefined) return;
+  const cached = await getCachedCodexModels(getContext().stateStore);
+  if (cached.some((entry) => entry.id === model)) return model;
   const models = await readCodexCatalog();
   if (!models.some((entry) => entry.id === model)) throw new AppError(ERROR_CODES.AG_CODEX_MODEL_UNAVAILABLE);
   return model;

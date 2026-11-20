@@ -39,7 +39,7 @@ async function executable(file: string): Promise<boolean> {
   }
 }
 
-async function resolveCodex(): Promise<Omit<Runtime, 'version'> | undefined> {
+export async function resolveCodexExecutable(): Promise<Omit<Runtime, 'version'> | undefined> {
   const windows = process.platform === 'win32';
   const dirs = (process.env.PATH ?? '')
     .split(path.delimiter)
@@ -64,7 +64,7 @@ async function resolveCodex(): Promise<Omit<Runtime, 'version'> | undefined> {
 }
 
 export async function discoverCodexReview(): Promise<Discovery> {
-  const runtime = await resolveCodex();
+  const runtime = await resolveCodexExecutable();
   if (!runtime) return { status: 'missing' };
   const probe = (args: string[]) =>
     defaultExec(runtime.command, [...runtime.prefix, ...args], {

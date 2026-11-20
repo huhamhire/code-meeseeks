@@ -193,8 +193,7 @@ export function ChatInputBar({
               </button>
             </>
           )}
-          {/* Re-review reference chip: shows "re-review <file:line>" when a review/improve finding is referenced, click ✕ to clear the reference.
-              On send this /ask carries the finding reference into re-review mode (produces a verdict + adopt/close actions). */}
+          {/* Finding reference for the next question. */}
           {referenceChip && (
             <>
               <span className="chat-cmd-divider" aria-hidden="true" />

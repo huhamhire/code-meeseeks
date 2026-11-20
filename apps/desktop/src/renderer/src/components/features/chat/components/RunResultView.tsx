@@ -146,10 +146,11 @@ export function RunFindingList({
         const closure = closures.find(
           (item) => item.runId === run.id && item.findingId === finding.id,
         );
+        const kind = finding.sectionKey ?? finding.category;
         const canReference =
-          (finding.sectionKey === 'code-feedback' || finding.sectionKey === 'code-suggestion') &&
+          (kind === 'code-feedback' || kind === 'code-suggestion') &&
           typeof finding.anchor?.startLine === 'number' &&
-          finding.inlineAnchorVerified !== false;
+          (run.engine !== 'codex' || (!stale && finding.inlineAnchorVerified !== false));
         return (
           <FindingCard
             key={finding.id}
@@ -162,7 +163,7 @@ export function RunFindingList({
             onNavigate={onNavigateToFinding ? () => onNavigateToFinding(finding) : undefined}
             staleLocation={stale}
             onReference={
-              !stale && canReference && onReferenceFinding
+              canReference && onReferenceFinding
                 ? () => onReferenceFinding(finding, run)
                 : undefined
             }

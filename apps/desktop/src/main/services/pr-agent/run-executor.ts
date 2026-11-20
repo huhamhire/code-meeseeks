@@ -31,6 +31,8 @@ import { combineRuleInstructions, pickMatchingRules } from '@meebox/rules';
 import {
   AppError,
   ERROR_CODES,
+  getCodexCliModel,
+  isCodexCliProfile,
   type ReviewRun,
   type ReviewRunStatus,
 } from '@meebox/shared';
@@ -496,7 +498,10 @@ export class RunExecutor {
       engine: item.info.engine,
       prAgentVersion: bridge.version,
       strategy: bridge.strategy,
-      model: activeLlmForRecord?.model || undefined,
+      model:
+        (activeLlmForRecord && isCodexCliProfile(activeLlmForRecord)
+          ? getCodexCliModel(activeLlmForRecord.cli_args)
+          : undefined) ?? (activeLlmForRecord?.model || undefined),
       // Re-review reference forward chain: persisted with the run, the UI uses it to show a "re-reviewed from…" badge + verdict action on the /ask card.
       referencedFinding: req.tool === 'ask' ? req.referencedFinding : undefined,
       // Trigger origin persisted with the run: user-origin runs get a command echo bubble added by ChatPane; agent sub-runs don't echo.

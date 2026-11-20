@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ReviewRunCommitScope } from '@meebox/shared';
+import { getCodexCliModel, isCodexCliProfile, setCodexCliModel, type ReviewRunCommitScope } from '@meebox/shared';
 import { invoke } from './api';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
@@ -185,7 +185,8 @@ export default function App() {
     ? boot.connections.find((c) => c.connectionId === selectedPr.connectionId)
     : undefined;
   // Has an active connection but LLM not configured → ChatPane shows a "configure to enable" hint and disables input
-  const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
+  const activeLlm = boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id);
+  const llmConfigured = !!activeLlm;
   // Discovery category tabs are determined by the active connection's capabilities (GitHub four, Bitbucket two, others none).
   const activeConnSummary = boot.connections.find(
     (c) => c.connectionId === boot.config.active_connection_id,
@@ -297,7 +298,8 @@ export default function App() {
           }
           onMerge={() => void mergeSelectedPr()}
           currentLlmModel={
-            boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
+            (activeLlm && isCodexCliProfile(activeLlm) ? getCodexCliModel(activeLlm.cli_args) : undefined) ??
+            activeLlm?.model ?? null
           }
           viewCommitScope={viewCommitScope}
           codeSuggestionLayout={boot.config.agent.strategy.code_suggestion_layout}
@@ -316,8 +318,14 @@ export default function App() {
         onToggleChat={() => setChatCollapsed((c) => !c)}
         onRefresh={() => void triggerRefresh()}
         onOpenSettings={() => setShowSettings(true)}
-        onSwitchActiveLlm={(id) => {
-          const next = { ...boot.config.llm, active_id: id };
+        onSwitchActiveLlm={(id, codexModel) => {
+          const { llm } = boot.config;
+          const profiles = codexModel === undefined ? llm.profiles : llm.profiles.map((profile) =>
+            profile.id === id && isCodexCliProfile(profile)
+              ? { ...profile, cli_args: setCodexCliModel(profile.cli_args ?? [], codexModel) }
+              : profile,
+          );
+          const next = { ...llm, profiles, active_id: id };
           void invoke('config:setLlm', { llm: next });
           patchConfig((c) => ({ ...c, llm: next }));
         }}

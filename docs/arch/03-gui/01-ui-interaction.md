@@ -46,7 +46,7 @@ Responsibilities of each area:
 ### Key panels
 
 - **DiffView**: Monaco side-by-side diff + file tree (icons / Git coloring / draft & comment chips) + inline comments (view zone) +
-  blame + cross-file search + inline draft editing (DraftZone). Switching files only renders the current file.
+  blame + cross-file search + inline draft editing (DraftZone). Switching files only renders the current file. The file breadcrumb can collapse published inline comment zones and their line markers. It keeps comment reply state, draft editors, and file comment counts available. The app remembers the visibility preference locally.
 - **ChatPane**. Each engine has its own history, progress, and unsent input. The app remembers the selected engine. PR Agent uses the active LLM profile, and the Codex tab uses its own model picker. Completed automatic PR Agent reviews leave the description visible and put code feedback between the collapsed review process and the final summary. See [Review workflow](../01-platform/03-review-workflow.md).
 - **DraftsPanel**: the "Drafts" tab, browsing drafts across files, publishing single/batch, and cross-referencing local-unsent vs. remote-published against the "Comments" tab.
 - **SettingsModal**: visual CRUD for connection / LLM / proxy / rules directory / polling / repos_dir, with second-level edit modals for sub-items;

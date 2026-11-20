@@ -117,7 +117,7 @@ export interface AgentChannels {
    */
   'codex:reviewStatus': { request: void; response: CodexReviewReadiness };
   'codex:models': {
-    request: void;
+    request: { cachedOnly?: boolean };
     response: { id: string; label: string }[];
   };
   'codex:review': { request: { localId: string; model?: string }; response: ReviewRun };

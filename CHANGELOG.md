@@ -9,6 +9,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### ✨ Added
 
+- The PR Agent model menu lets you choose a model inside a Codex CLI profile.
+- The diff file breadcrumb can hide published inline comments while keeping local drafts available.
 - PR Agent code findings can show P1–P3 with their trigger and consequence. P1 requires cited evidence from a follow-up on the reviewed commit.
 - Automatic PR Agent follow-ups can check related source and tests at the reviewed commit. API and local CLI profiles receive the same bounded excerpts and source locations.
 - PR Agent shows review progress and distinguishes complete, partial, and unverified coverage across API and local CLI model profiles.
@@ -19,8 +21,10 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔧 Fixed
 
+- The Codex model picker opens from the saved catalog or the local CLI cache while it refreshes in the background.
 - Automatic PR Agent reviews exclude existing PR comments and replies while retaining the PR description.
 - Completed automatic reviews keep the PR description visible, collect code feedback before the final summary, and collapse intermediate review and follow-up results.
+- Grouped PR Agent feedback marks older reviews and lets you reference their findings in follow-up questions. Inline comment drafts still require a current, verified location.
 - Closing a diff editor no longer causes a crash when another Monaco view initializes its hover controls. Inline comment code previews now use static syntax highlighting and retain file line numbers, anchor highlights, and editor appearance settings.
 - Clicking diagrams, PR rows, and other controls no longer leaves a focus outline. Keyboard focus uses the app's theme.
 - Finding locations remain clickable for read-only navigation, including findings from earlier PR revisions.

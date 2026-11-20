@@ -110,6 +110,12 @@ export function PrPanel({
   });
   // Blame off by default: must be turned on manually each launch (blame fetch may be slow/fail; we don't want users greeted by an error banner on entry)
   const [showBlame, setShowBlame] = useState<boolean>(false);
+  const [showInlineComments, setShowInlineComments] = useState(
+    () => localStorage.getItem('meebox.showInlineComments') !== '0',
+  );
+  useEffect(() => {
+    localStorage.setItem('meebox.showInlineComments', showInlineComments ? '1' : '0');
+  }, [showInlineComments]);
   // Whitespace visualization: off by default (most reviews don't care about spaces / tabs; turn on when it matters)
   const [showWhitespace, setShowWhitespace] = useState<boolean>(
     () => localStorage.getItem('meebox.showWhitespace') === '1',
@@ -220,6 +226,8 @@ export function PrPanel({
               renderSideBySide={renderSideBySide}
               showBlame={showBlame}
               showWhitespace={showWhitespace}
+              showInlineComments={showInlineComments}
+              onToggleInlineComments={() => setShowInlineComments((value) => !value)}
               capabilities={capabilities}
               readOnly={readOnly}
               pendingNav={pendingDiffNav ?? null}
