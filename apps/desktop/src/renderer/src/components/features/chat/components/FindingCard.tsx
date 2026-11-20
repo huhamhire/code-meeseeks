@@ -194,6 +194,7 @@ export function FindingCard({
   onJump,
   onReject,
   onNavigate,
+  staleLocation,
   onReference,
   closure,
   onViewAsk,
@@ -207,6 +208,7 @@ export function FindingCard({
   onReject?: () => void;
   /** Click the anchor: only navigate to the corresponding Diff line (does not enter edit state) */
   onNavigate?: () => void;
+  staleLocation?: boolean;
   /** "Reference" button callback: attaches this finding to the input bar to initiate a re-review /ask (only appears for code-type findings). */
   onReference?: () => void;
   /** The closure relationship when this finding is auto-closed by a re-review verdict of replace/drop (drives read-only display). */
@@ -226,7 +228,8 @@ export function FindingCard({
   // only these show the header edit / reject / reference icon bar + the anchor row's draft status / closed state.
   const isActionableCode =
     (key === 'code-feedback' || key === 'code-suggestion') &&
-    finding.anchor?.startLine !== undefined;
+    finding.anchor?.startLine !== undefined &&
+    finding.inlineAnchorVerified !== false;
   // Collapsed by default: rejected / re-review-closed findings, or the /ask "analysis process" segment (process discussion collapsed by default, expandable).
   const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
   const [expanded, setExpanded] = useState(false);
@@ -323,7 +326,7 @@ export function FindingCard({
               type="button"
               className="chat-finding-anchor-link"
               onClick={onNavigate}
-              title={t('chatPane.anchorJumpTitle')}
+              title={t(staleLocation ? 'chatPane.anchorJumpPreviousRevisionTitle' : 'chatPane.anchorJumpTitle')}
             >
               <code>
                 <BreakablePath path={finding.anchor.path} />

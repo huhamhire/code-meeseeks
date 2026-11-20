@@ -44,6 +44,7 @@
       "verdictNeedsWork": "Needs work"
     },
     "aiSuggestionLabel": "AI suggestion",
+    "anchorJumpPreviousRevisionTitle": "Open the recorded line in the current diff. The line may have moved.",
     "anchorJumpTitle": "Jump to the corresponding line in code",
     "askArgQuestion": "question",
     "askNeedsQuestion": "/ask requires a question",
@@ -79,7 +80,6 @@
       "login-required": "Sign in to Codex CLI and return here.",
       "missing": "Codex CLI was not found.",
       "model": "Codex model",
-      "outdated": "This review is for an earlier revision.",
       "phase": {
         "answering": "Inspecting the code and answering",
         "checking": "Checking related code",
@@ -169,6 +169,18 @@
     "retryAria": "Retry",
     "retryTitle": "Retry /{{tool}}",
     "retryWithQuestionTitle": "Retry /{{tool}} {{question}}",
+    "reviewPhase": {
+      "preparing": "Preparing the review workspace…",
+      "reviewing": "Running PR Agent review…",
+      "validating": "Validating findings and changed lines…"
+    },
+    "reviewResult": {
+      "clean": "Review complete. No code findings.",
+      "invalid": "The review produced no usable result. See raw output for details.",
+      "partial": "Partial review: {{omitted}} files omitted, {{clipped}} partially reviewed",
+      "stale": "This review applies to an earlier PR revision.",
+      "unknown": "Review coverage could not be verified."
+    },
     "ruleChipLabel": "Rule",
     "ruleChipTitle": "Click to view rule content",
     "ruleFilePath": "File path",

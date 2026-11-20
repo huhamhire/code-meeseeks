@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { loadAgentRules } from '@meebox/agent';
@@ -17,11 +18,13 @@ import {
 import {
   addFindingClosure,
   classifyLlmFailure,
+  detectLlmFailure,
   dropPendingFindingDrafts,
   finishReviewRun,
   getReviewRun,
   listReviewRunsForPr,
   parseReviewOutput,
+  parseStructuredReview,
   startReviewRun,
 } from '@meebox/poller';
 import { combineRuleInstructions, pickMatchingRules } from '@meebox/rules';
@@ -46,6 +49,7 @@ import {
 } from './usage.js';
 import { buildCodexAskContext } from './codex-context.js';
 import { discoverCodexReview, readReviewEvents, runNativeAsk, runNativeReview } from './codex-review.js';
+import { validateReviewAnchor } from './review-anchor.js';
 import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 
 /** Finalization patch type for finishReviewRun (return of the finalization helper). */
@@ -99,8 +103,16 @@ export class RunExecutor {
       return updated ?? { ...run, ...patch };
     };
 
-    const wt = await this.prepareWorkspace(pr, req.scope);
+    const reportPhase = (phase: NonNullable<QueueItem['info']['reviewPhase']>) => {
+      if (req.tool !== 'review') return;
+      item.info = { ...item.info, reviewPhase: phase };
+      notifyStarted();
+    };
+    let wt: Awaited<ReturnType<RunExecutor['prepareWorkspace']>> | undefined;
+    let artifactDir: string | undefined;
     try {
+      reportPhase('preparing');
+      wt = await this.prepareWorkspace(pr, req.scope);
       const { env, extraArgs, askLangSuffix } = await this.buildInvocation(
         req,
         pr,
@@ -122,6 +134,15 @@ export class RunExecutor {
         await this.ensureEmbeddedSecrets(embeddedPythonPath);
       }
 
+      if (req.tool === 'review') {
+        artifactDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-review-'));
+      }
+      const reviewMarkdown = artifactDir && path.join(artifactDir, 'review.md');
+      if (reviewMarkdown) env['LOCAL__REVIEW_PATH'] = reviewMarkdown;
+      const artifact = artifactDir && bridge.strategy === 'embedded' && bridge.version === 'pr-agent 0.50.0'
+        ? path.join(artifactDir, 'review.json')
+        : undefined;
+      reportPhase('reviewing');
       const result = await bridge.run({
         prUrl: pr.url,
         tool: req.tool,
@@ -130,30 +151,93 @@ export class RunExecutor {
         cwd: wt.path,
         targetBranch: wt.targetBranchName,
         extraArgs,
+        jsonOutputPath: artifact,
         signal: item.ac!.signal,
       });
       // Real token usage (stderr sentinel lines accumulated by onLine), carried into succeeded / llm-failed finalization.
       const tokenUsage = finalizeUsage(usageAcc);
+      reportPhase('validating');
       const { parsed, fileContent } = await this.collectOutput(
-        wt,
+        reviewMarkdown ?? path.join(wt.path, PRAGENT_LOCAL_OUTPUT[req.tool]),
         result.stdout,
         req,
         run.id,
         askLangSuffix,
       );
-      return await finishWith(
-        this.finishPatchForResult(result, parsed, fileContent, tokenUsage, t0, run.id),
+      const structured = artifact
+        ? parseStructuredReview(await fs.readFile(artifact, 'utf8').catch(() => ''))
+        : undefined;
+      const patch = this.finishPatchForResult(
+        result, parsed, fileContent, tokenUsage, t0, run.id,
+        req.tool === 'review' && !structured ? detectLlmFailure(result.stdout) : null,
       );
+      patch.mergeBaseSha = wt.diffBaseSha;
+      if (req.tool === 'review' && patch.status === 'succeeded') {
+        const markdownAvailable = fileContent.trim() || parsed.findings.some((finding) =>
+          finding.sectionKey === 'code-feedback' ||
+          finding.sectionKey === 'relevant-tests' ||
+          finding.sectionKey === 'security' ||
+          finding.sectionKey === 'effort' ||
+          finding.sectionKey === 'score',
+        );
+        patch.reviewCoverage = structured?.coverage ?? { status: markdownAvailable ? 'unknown' : 'invalid' };
+        if (patch.reviewCoverage.status === 'invalid') {
+          patch.status = 'failed';
+          patch.errorReason = 'invalid-review-output';
+          patch.findings = [];
+        } else {
+          const findings = structured
+            ? [...parsed.findings.filter((finding) => finding.sectionKey !== 'code-feedback'), ...structured.findings]
+            : parsed.findings;
+          for (const finding of findings) {
+            const anchor = finding.anchor;
+            if (anchor?.startLine === undefined) continue;
+            const inlineAnchor = await validateReviewAnchor(
+              wt.path, wt.diffBaseSha, path.resolve(wt.path, anchor.path),
+              anchor.startLine, anchor.endLine ?? anchor.startLine, item.ac!.signal,
+            );
+            if (inlineAnchor) {
+              finding.anchor = inlineAnchor;
+            } else {
+              finding.inlineAnchorVerified = false;
+              if (!Number.isSafeInteger(anchor.startLine) || anchor.startLine < 1) {
+                finding.anchor = { path: anchor.path };
+              }
+            }
+          }
+          item.ac!.signal.throwIfAborted();
+          patch.findings = findings;
+        }
+      }
+      const finished = await finishReviewRun(stateStore, pr.localId, run.id, patch);
+      if (
+        finished?.status === 'succeeded' &&
+        finished.reviewCoverage?.status === 'complete' &&
+        !req.scope &&
+        finished.findings?.every((finding) =>
+          finding.sectionKey !== 'code-feedback' ||
+          (finding.anchor?.startLine !== undefined && finding.inlineAnchorVerified !== false),
+        )
+      ) {
+        await this.replacePendingReviewDrafts(pr, stateStore, run.id);
+      }
+      return finished ?? { ...run, ...patch };
     } catch (err) {
       const tokenUsage = finalizeUsage(usageAcc);
-      const finished = await finishWith(
-        this.finishPatchForError(err, tokenUsage, t0, run.id),
-      );
+      const patch = this.finishPatchForError(err, tokenUsage, t0, run.id);
+      if (item.ac?.signal.aborted && !(err instanceof PrAgentRunError)) {
+        patch.status = 'cancelled';
+        patch.errorReason = 'cancelled';
+      }
+      const finished = await finishWith({ ...patch, mergeBaseSha: wt?.diffBaseSha });
       // Unexpected exception (not PrAgentRunError): after persisting failed, still rethrow to avoid swallowing it.
-      if (!(err instanceof PrAgentRunError)) throw err;
+      if (!(err instanceof PrAgentRunError) && patch.status !== 'cancelled') throw err;
       return finished;
     } finally {
-      await wt.cleanup();
+      if (artifactDir) await fs.rm(artifactDir, { recursive: true, force: true }).catch((err: unknown) =>
+        this.ctx.logger.warn({ err, runId: run.id }, 'Could not remove review artifacts'),
+      );
+      await wt?.cleanup();
     }
   }
 
@@ -263,6 +347,7 @@ export class RunExecutor {
     tokenUsage: ReturnType<typeof finalizeUsage>,
     t0: number,
     runId: string,
+    runtimeFailure: ReturnType<typeof detectLlmFailure>,
   ): FinishPatch {
     const stdout = fileContent
       ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
@@ -275,12 +360,13 @@ export class RunExecutor {
       stderr: stripShimSentinels(result.stderr),
       tokenUsage,
     };
-    if (parsed.llmFailure) {
+    const llmFailure = runtimeFailure ?? parsed.llmFailure;
+    if (llmFailure) {
       // pr-agent's fallback retry only logs "Failed to generate prediction with any model" to stdout and hides the real
       // exception in loguru's artifact field, so prefer the shim's stderr sentinel when present — it carries the actual
       // provider/CLI error, which is also the only text worth classifying into an actionable hint.
       const sentinel = parseLlmErrorSentinel(result.stderr);
-      const message = sentinel?.message ?? parsed.llmFailure.message;
+      const message = sentinel?.message ?? llmFailure.message;
       const errorHint = classifyLlmFailure(message);
       this.ctx.logger.warn(
         { runId, reason: message, cli: sentinel?.cli, hint: errorHint },
@@ -376,6 +462,7 @@ export class RunExecutor {
       scope: req.scope,
       // PR head commit the run runs against: stamped so ChatPane can draw a commit divider when the code changes between runs.
       headSha: pr.sourceRef.sha,
+      baseSha: pr.targetRef.sha,
     });
     // Upgrade the info (startedAt=null at enqueue) to active form + broadcast (via the scheduling layer).
     item.info = { ...item.info, startedAt: run.startedAt };
@@ -447,7 +534,9 @@ export class RunExecutor {
       const adapter = prService.adapterFor(pr);
       if (adapter) {
         try {
-          prContext = await buildPrContext({ pr, adapter, logger });
+          prContext = await buildPrContext({
+            pr, adapter, logger, maxComments: req.tool === 'review' ? 0 : undefined,
+          });
         } catch (err) {
           logger.warn(
             { err, runId, localId: pr.localId },
@@ -529,11 +618,11 @@ export class RunExecutor {
 
   /**
    * Stage 5: read the artifact file the local provider wrote to the worktree root (persisted filename see PRAGENT_LOCAL_OUTPUT), /ask removes
-   * the echoed question line, parse into findings/summary; on /review success drop old pending drafts (letting this round's findings become the new candidate source).
+   * the echoed question line and parse into findings and summary.
    * If the file is missing, fall back to parsing stdout. Returns the parse result + raw file content (for finalization log splicing).
    */
   private async collectOutput(
-    wt: { path: string },
+    outputPath: string,
     resultStdout: string,
     req: QueueItem['req'],
     runId: string,
@@ -541,14 +630,12 @@ export class RunExecutor {
   ): Promise<{ parsed: ReturnType<typeof parseReviewOutput>; fileContent: string }> {
     const { logger, broadcast } = this.ctx;
     const stateStore = await this.ctx.pr.storeForPr(req.localId);
-    // The file must be read out before cleanup (same source as buildToolEnv's LOCAL__REVIEW_PATH).
-    const outFile = PRAGENT_LOCAL_OUTPUT[req.tool];
     let fileContent = '';
     try {
-      fileContent = await fs.readFile(path.join(wt.path, outFile), 'utf8');
+      fileContent = await fs.readFile(outputPath, 'utf8');
     } catch (readErr) {
       logger.warn(
-        { err: readErr, wtPath: wt.path, outFile, runId },
+        { err: readErr, outputPath, runId },
         'pr-agent local provider output file missing; fall back to stdout',
       );
     }
@@ -592,22 +679,24 @@ export class RunExecutor {
         }
       }
     }
-    // M4 draft re-ingestion: on successful /review completion drop old pending+finding drafts (edited/posted/rejected/manual are kept).
-    if (req.tool === 'review') {
-      try {
-        const dropped = await dropPendingFindingDrafts(stateStore, req.localId);
-        if (dropped > 0) {
-          logger.info(
-            { runId, localId: req.localId, dropped },
-            'pragent /review: dropped stale pending drafts',
-          );
-          broadcast('drafts:changed', { localId: req.localId });
-        }
-      } catch (err) {
-        logger.warn({ err, runId }, 'dropPendingFindingDrafts failed');
-      }
-    }
     return { parsed, fileContent };
+  }
+
+  private async replacePendingReviewDrafts(
+    pr: QueueItem['pr'],
+    stateStore: Awaited<ReturnType<ServiceContext['pr']['storeForPr']>>,
+    runId: string,
+  ): Promise<void> {
+    const { logger, broadcast } = this.ctx;
+    try {
+      const current = await this.ctx.pr.findPrOrThrow(pr.localId);
+      if (current.sourceRef.sha !== pr.sourceRef.sha || current.targetRef.sha !== pr.targetRef.sha) return;
+      if (await dropPendingFindingDrafts(stateStore, pr.localId, runId)) {
+        broadcast('drafts:changed', { localId: pr.localId });
+      }
+    } catch (err) {
+      logger.warn({ err, runId }, 'Could not replace pending review drafts');
+    }
   }
 
   /**

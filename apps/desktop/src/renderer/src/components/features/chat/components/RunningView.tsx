@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReviewEngine, ReviewRunCommitScope, ReviewRunTool } from '@meebox/shared';
+import type { PragentRunInfo } from '@meebox/ipc';
 import { CommitIcon } from '../../../common';
 import type { CodexProgressEntry } from '../../../../stores/chat-run-store';
 import { CodexProgress } from './CodexProgress';
@@ -17,11 +18,13 @@ export function RunningView({
   model,
   engine,
   codexProgress,
+  reviewPhase,
 }: {
   tool: ReviewRunTool;
   runId: string;
   engine?: ReviewEngine;
   codexProgress?: readonly CodexProgressEntry[];
+  reviewPhase?: PragentRunInfo['reviewPhase'];
   /** /ask's question: shown directly while running too (consistent with queued / done state; the question was generated at dispatch). */
   question?: string;
   /** Single-commit review scope (parent..sha); shows the scope badge when limited to a commit, consistent with the done-state card. */
@@ -49,7 +52,10 @@ export function RunningView({
   }, [startedAt]);
 
   const native = engine === 'codex';
-  const phase = useMemo(() => native ? '' : inferPhase(lines, t), [lines, native, t]);
+  const phase = useMemo(
+    () => native ? '' : reviewPhase ? t(`chatPane.reviewPhase.${reviewPhase}`) : inferPhase(lines, t),
+    [lines, native, reviewPhase, t],
+  );
   const text = useMemo(() => lines.join('\n'), [lines]);
 
   // A chip row structurally identical to RunMeta. running shares one visual
@@ -96,7 +102,7 @@ export function RunningView({
       {/* /ask's question is shown directly while running too (the question is already generated, no need to wait for queued / done to be visible). */}
       {tool === 'ask' && question?.trim() && <AskQuestion text={question.trim()} />}
       {phase && (
-        <div className="chat-chip chat-chip-md chat-chip-quiet chat-chip-accent chat-run-phase">
+        <div className="chat-chip chat-chip-md chat-chip-quiet chat-chip-accent chat-run-phase" role="status">
           {phase}
         </div>
       )}

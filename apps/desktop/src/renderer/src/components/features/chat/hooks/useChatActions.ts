@@ -14,6 +14,7 @@ import type {
 } from '@meebox/shared';
 import { PRODUCT_HOME_URL } from '@meebox/shared';
 import { invoke } from '../../../../api';
+import { isStaleReview } from '../utils/review-snapshot';
 import { useChatRunStore } from '../../../../stores/chat-run-store';
 import {
   htmlInlineToMarkdown,
@@ -311,7 +312,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
    * - Associated draft is rejected → update back to pending (undo rejection) + jump
    */
   const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
-    if (!pr) return;
+    if (!pr || isStaleReview(run, pr) || finding.inlineAnchorVerified === false) return;
     if (!finding.anchor || typeof finding.anchor.startLine !== 'number') {
       return; // No anchor line number → cannot become inline; the button should not appear, fallback
     }
@@ -357,15 +358,17 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   const handleNavigateToFinding = (finding: Finding): void => {
     if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
     const startLine = finding.anchor.startLine;
+    if (!Number.isSafeInteger(startLine) || startLine < 1) return;
+    const endLine = finding.anchor.endLine;
     onNavigateToAnchor?.({
       path: finding.anchor.path,
       startLine,
-      endLine: finding.anchor.endLine ?? startLine,
+      endLine: endLine !== undefined && Number.isSafeInteger(endLine) && endLine >= startLine ? endLine : startLine,
     });
   };
 
   const handleRejectFinding = async (finding: Finding, run: ReviewRun): Promise<void> => {
-    if (!pr) return;
+    if (!pr || isStaleReview(run, pr) || finding.inlineAnchorVerified === false) return;
     if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
     const startLine = finding.anchor.startLine;
     const endLine = finding.anchor.endLine ?? startLine;

@@ -44,6 +44,7 @@
       "verdictNeedsWork": "要修正"
     },
     "aiSuggestionLabel": "AI 提案",
+    "anchorJumpPreviousRevisionTitle": "現在の差分で記録された行を開きます。位置が変わっている場合があります。",
     "anchorJumpTitle": "コードの該当行へジャンプ",
     "askArgQuestion": "質問",
     "askNeedsQuestion": "/ask には質問の入力が必要です",
@@ -79,7 +80,6 @@
       "login-required": "Codex CLI にログインしてから戻ってください。",
       "missing": "Codex CLI が見つかりません。",
       "model": "Codex モデル",
-      "outdated": "このレビューは以前のリビジョンを対象としています。",
       "phase": {
         "answering": "コードを調査して回答中",
         "checking": "関連コードを確認中",
@@ -169,6 +169,18 @@
     "retryAria": "再試行",
     "retryTitle": "/{{tool}} を再試行",
     "retryWithQuestionTitle": "/{{tool}} {{question}} を再試行",
+    "reviewPhase": {
+      "preparing": "レビュー用の作業領域を準備中…",
+      "reviewing": "PR Agent でレビュー中…",
+      "validating": "指摘と変更行を検証中…"
+    },
+    "reviewResult": {
+      "clean": "レビューが完了しました。コードの指摘はありません。",
+      "invalid": "利用できるレビュー結果がありません。元の出力を確認してください。",
+      "partial": "レビューの範囲が不完全です（未確認 {{omitted}} ファイル、一部確認 {{clipped}} ファイル）",
+      "stale": "このレビューは以前の PR リビジョンに対するものです。",
+      "unknown": "レビューの対象範囲を確認できませんでした。"
+    },
     "ruleChipLabel": "ルール",
     "ruleChipTitle": "クリックしてルール本文を表示",
     "ruleFilePath": "ファイルパス",

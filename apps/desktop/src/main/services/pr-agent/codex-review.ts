@@ -14,6 +14,8 @@ import {
 } from '@meebox/pr-agent-bridge';
 import type { CodexReviewReadiness, Finding, SupportedLanguage } from '@meebox/shared';
 
+import { validateReviewAnchor } from './review-anchor.js';
+
 const exec = promisify(execFile);
 export const REVIEW_FEATURE_FLAGS = [
   '--disable',
@@ -223,7 +225,7 @@ export async function runNativeReview(
     const match = /^- (.+?) — (.+):(\d+)-(\d+)\r?\n([\s\S]*)$/.exec(part);
     if (!match) continue;
     const [, title, file, start, end, body] = match;
-    const anchor = await validateAnchor(
+    const anchor = await validateReviewAnchor(
       root,
       mergeBaseSha,
       file!,
@@ -342,60 +344,6 @@ async function disableMcpServers(
   } catch {
     // The list may contain private launch arguments. Keep it out of run diagnostics.
     throw new Error('Could not isolate Codex review from configured MCP servers.');
-  }
-}
-
-async function validateAnchor(
-  root: string,
-  base: string,
-  file: string,
-  startLine: number,
-  endLine: number,
-  signal: AbortSignal,
-): Promise<Finding['anchor']> {
-  if (
-    !path.isAbsolute(file) ||
-    !Number.isSafeInteger(startLine) ||
-    !Number.isSafeInteger(endLine) ||
-    startLine < 1 ||
-    endLine < startLine
-  )
-    return;
-  try {
-    const realFile = await fs.realpath(file);
-    const relative = path.relative(root, realFile);
-    if (
-      !relative ||
-      relative === '..' ||
-      relative.startsWith('..' + path.sep) ||
-      path.isAbsolute(relative)
-    )
-      return;
-    const repoPath = relative.split(path.sep).join('/');
-    const { stdout } = await exec(
-      'git',
-      [
-        '--literal-pathspecs',
-        'diff',
-        '--no-ext-diff',
-        '--no-textconv',
-        '--unified=0',
-        base,
-        'HEAD',
-        '--',
-        repoPath,
-      ],
-      { cwd: root, windowsHide: true, signal },
-    );
-    // The published anchor must land entirely on lines in an added/changed hunk.
-    for (const match of stdout.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)) {
-      const first = Number(match[1]);
-      const length = Number(match[2] ?? 1);
-      if (startLine >= first && endLine < first + length)
-        return { path: repoPath, startLine, endLine };
-    }
-  } catch {
-    return;
   }
 }
 

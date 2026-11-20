@@ -60,6 +60,8 @@ export interface ConnectionSummary {
  */
 export interface PragentRunInfo {
   engine: NonNullable<ReviewRun['engine']>;
+  reviewPhase?: 'preparing' | 'reviewing' | 'validating';
+  headSha?: string;
   runId: string;
   prLocalId: string;
   /** Repo slug and PR number (for queue display, avoiding showing only the localId hash). */

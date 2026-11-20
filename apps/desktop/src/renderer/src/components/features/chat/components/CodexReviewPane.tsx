@@ -7,6 +7,7 @@ import {
   type LocalPrStatus,
   type ReviewerStatus,
   type ReviewRun,
+  type StoredPullRequest,
 } from '@meebox/shared';
 import { invoke } from '../../../../api';
 import { useChatRunStore } from '../../../../stores/chat-run-store';
@@ -14,6 +15,7 @@ import { AutoReviewIcon, ChatIcon, PaneLoading, SendIcon, StopIcon } from '../..
 import { CodexModelPicker } from './CodexModelPicker';
 import { ChatCommandButton, ChatCommandSuggestions } from './ChatCommands';
 import { ChatEmptyCommands } from './ChatEmpty';
+import { CommitDividerList } from './CommitDivider';
 import { ResizableChatInput } from './ResizableChatInput';
 import { RunResultView } from './RunResultView';
 import { QueuedView } from './QueuedView';
@@ -24,6 +26,7 @@ import { CODEX_COMMANDS } from '../commands';
 import { useChatCommands } from '../hooks/useChatCommands';
 import { parseCodexCommand } from '../utils/parse-command';
 import { scrollToResult } from '../utils/scroll-to-result';
+import { computeCommitDividers } from '../utils/commit-dividers';
 
 type Props = Pick<
   ComponentProps<typeof RunResultView>,
@@ -35,6 +38,8 @@ type Props = Pick<
   inputHeight: number | null;
   onInputHeightChange: (height: number) => void;
   headSha?: string;
+  headChanges?: StoredPullRequest['headChanges'];
+  commitMessages?: ReadonlyMap<string, string>;
   baseSha?: string;
   status: CodexReviewReadiness;
   model: string;
@@ -51,6 +56,8 @@ export function CodexReviewPane({
   inputHeight,
   onInputHeightChange,
   headSha,
+  headChanges,
+  commitMessages,
   baseSha,
   status,
   model,
@@ -77,6 +84,22 @@ export function CodexReviewPane({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const runningId = running?.runId;
+  const history = (runs ?? [])
+    .slice()
+    .reverse()
+    .filter((run) => run.id !== runningId);
+  const timeline = history.map((run) => ({
+    key: run.id,
+    sortTime: Date.parse(run.startedAt),
+    headSha: run.headSha,
+  }));
+  if (running)
+    timeline.push({
+      key: running.runId,
+      sortTime: Date.parse(running.startedAt ?? running.enqueuedAt),
+      headSha: running.headSha,
+    });
+  const commitDividers = computeCommitDividers(timeline, headSha, headChanges);
   const latestRunId = runs?.[0]?.id;
   const activeReference =
     reference?.run.headSha === headSha && reference?.run.baseSha === baseSha ? reference : null;
@@ -167,6 +190,17 @@ export function CodexReviewPane({
     const body = bodyRef.current;
     if (body) body.scrollTop = body.scrollHeight;
   }, [latestRunId, runningId, queued?.runId]);
+  const latestHeadChangeAt = headChanges?.at(-1)?.at;
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (
+      latestHeadChangeAt &&
+      body &&
+      body.scrollHeight - body.scrollTop - body.clientHeight <= 64
+    ) {
+      body.scrollTop = body.scrollHeight;
+    }
+  }, [latestHeadChangeAt]);
 
   const start = async (ask?: { question: string; reference?: ReviewRun['referencedFinding'] }) => {
     if (!localId || !canSubmit) return false;
@@ -296,17 +330,15 @@ export function CodexReviewPane({
             )}
           </div>
         )}
-        {runs
-          ?.slice()
-          .reverse()
-          .filter((run) => run.id !== runningId)
-          .map((run, i, history) => {
-            const current = run.headSha === headSha && run.baseSha === baseSha;
-            return (
-              <div key={run.id} data-run-id={run.id}>
-                {run.status === 'succeeded' && !current && (
-                  <p className="muted">{t('chatPane.codex.outdated')}</p>
-                )}
+        {history.map((run, i) => {
+          const current = run.headSha === headSha && run.baseSha === baseSha;
+          return (
+            <div key={run.id}>
+              <CommitDividerList
+                shas={commitDividers.before.get(run.id)}
+                messages={commitMessages}
+              />
+              <div data-run-id={run.id}>
                 <RunResultView
                   onScrollToRun={(runId) => scrollToResult(bodyRef.current, runId)}
                   onScrollToFinding={(runId, findingId) =>
@@ -314,6 +346,7 @@ export function CodexReviewPane({
                   }
                   {...resultProps}
                   run={run}
+                  stale={!current}
                   canRetry={
                     canSubmit && i === history.length - 1 && (run.tool === 'review' || current)
                   }
@@ -326,7 +359,7 @@ export function CodexReviewPane({
                   }
                   onDelete={(id) => void remove(id)}
                   onJumpToDraft={current ? resultProps.onJumpToDraft : undefined}
-                  onNavigateToFinding={current ? resultProps.onNavigateToFinding : undefined}
+                  onNavigateToFinding={resultProps.onNavigateToFinding}
                   onRejectFinding={current ? resultProps.onRejectFinding : undefined}
                   onReferenceFinding={
                     current && run.tool === 'review' && status === 'ready'
@@ -338,20 +371,28 @@ export function CodexReviewPane({
                   }
                 />
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
         {running && (
-          <RunningView
-            tool={running.tool}
-            question={running.question}
-            runId={running.runId}
-            engine="codex"
-            lines={[]}
-            codexProgress={codexProgressByRunId.get(running.runId)}
-            model={null}
-            startedAt={new Date(running.startedAt ?? running.enqueuedAt).getTime()}
-          />
+          <>
+            <CommitDividerList
+              shas={commitDividers.before.get(running.runId)}
+              messages={commitMessages}
+            />
+            <RunningView
+              tool={running.tool}
+              question={running.question}
+              runId={running.runId}
+              engine="codex"
+              lines={[]}
+              codexProgress={codexProgressByRunId.get(running.runId)}
+              model={null}
+              startedAt={new Date(running.startedAt ?? running.enqueuedAt).getTime()}
+            />
+          </>
         )}
+        <CommitDividerList shas={commitDividers.bottom} messages={commitMessages} />
         {queued && (
           <QueuedView
             tool={queued.tool}

@@ -142,9 +142,10 @@ class RuntimeCompatibilityTest(unittest.TestCase):
         import yaml
         from pr_agent.config_loader import get_settings
         from pr_agent.tools.pr_description import PRDescription
-        from pr_agent.tools.pr_reviewer import PRReviewer
         from pr_agent.tools.pr_questions import PRQuestions
         from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
+        from pr_agent import cli
+        from pr_agent.agent.pr_agent import PRAgent
 
         calls = []
 
@@ -181,10 +182,26 @@ class RuntimeCompatibilityTest(unittest.TestCase):
                 body = (root / "description.md").read_text("utf-8")
                 self.assertIn("Fixture alternative", body)
                 self.assertIn("File Walkthrough", body)
-                asyncio.run(PRReviewer("base", ai_handler=lambda: FakeHandler(review)).run())
-                body = (root / "review.md").read_text("utf-8")
+                artifact = root / "structured-review.json"
+                markdown = root / "local-review-output.md"
+                env_probe = subprocess.run(
+                    [sys.executable, "-B", "-c", "from pr_agent.config_loader import get_settings; print(get_settings().get('local.review_path'))"],
+                    env=dict(os.environ, LOCAL__REVIEW_PATH=str(markdown)),
+                    capture_output=True, text=True, timeout=30, check=True,
+                )
+                self.assertEqual(env_probe.stdout.strip(), str(markdown))
+                settings.set("local.review_path", str(markdown))
+                with patch.object(
+                    cli, "PRAgent", lambda: PRAgent(ai_handler=lambda: FakeHandler(review))
+                ):
+                    cli.run(["--pr_url", "base", "--json-output", str(artifact), "review"])
+                structured = json.loads(artifact.read_text("utf-8"))
+                self.assertEqual(structured["review"]["key_issues_to_review"][0]["start_line"], 1)
+                self.assertEqual(structured["coverage"], {"files_not_reviewed": [], "files_partially_reviewed": []})
+                body = markdown.read_text("utf-8")
                 self.assertIn("Fixture issue", body)
                 self.assertIn("meebox:///sample.py#L1", body)
+                settings.set("local.review_path", None)
                 asyncio.run(PRQuestions("base", args=["What changed?"], ai_handler=lambda: FakeHandler("Fixture answer")).run())
                 self.assertIn("Fixture answer", (root / "review.md").read_text("utf-8"))
                 settings.set("local.review_path", str(root / "improve.md"))

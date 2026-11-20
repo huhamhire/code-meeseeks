@@ -49,7 +49,11 @@ function sameRunList(
 ): boolean {
   return (
     a.length === b.length &&
-    a.every((x, i) => x.runId === b[i]?.runId && x.startedAt === b[i]?.startedAt)
+    a.every((run, i) => {
+      const next = b[i];
+      return run.runId === next?.runId && run.startedAt === next.startedAt &&
+        run.reviewPhase === next.reviewPhase;
+    })
   );
 }
 
@@ -58,7 +62,7 @@ function setQueue(
   waiting: ReadonlyArray<PragentRunInfo>,
 ): void {
   const sameActive = sameRunList(state.active, active);
-  // Shallow-equality optimization: if the runId(+startedAt) sequences of active / waiting are unchanged → don't notify, avoiding pointless re-renders
+  // Skip notifications when queue membership and displayed run state are unchanged.
   if (sameActive && sameRunList(state.waiting, waiting)) return;
   // Globally reclaim stdout cache: clear the lines of any run that left active (completed as success/failure/cancel).
   // Placed at the store layer rather than ChatPane — independent of which PR the user currently has open, avoiding

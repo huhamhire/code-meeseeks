@@ -127,6 +127,7 @@ export class RunQueue {
           prNumber: pr.remoteId,
           tool,
           engine,
+          headSha: pr.sourceRef.sha,
           question: tool === 'ask' ? question : undefined,
           origin: priority,
           scope,

@@ -40,6 +40,7 @@ export type ReviewRunFailureReason =
   | 'non-zero-exit'
   | 'killed'
   | 'cancelled'
+  | 'invalid-review-output'
   | 'llm-error';
 
 /**
@@ -118,6 +119,8 @@ export interface Finding {
   body: string;
   /** Present when category='code-feedback' / 'code-suggestion' */
   anchor?: FindingAnchor;
+  /** False when the location can be shown but cannot be used for an inline draft. */
+  inlineAnchorVerified?: boolean;
   /**
    * The "original code → improved code" comparison carried by an /improve suggestion. Filled only when sectionKey='code-suggestion'.
    * The UI renders the before/after fragments with single-language syntax highlight
@@ -300,6 +303,12 @@ export interface ReviewRun {
   engineVersion?: string;
   baseSha?: string;
   mergeBaseSha?: string;
+  /** Structured coverage is reported by the runtime. Legacy Markdown cannot establish completeness. */
+  reviewCoverage?: {
+    status: 'complete' | 'partial' | 'unknown' | 'invalid';
+    omittedFiles?: string[];
+    partialFiles?: string[];
+  };
   /** yyyymmdd-HHmmss-ms sequential id, convenient for listing in reverse filename order */
   id: string;
   /** PR hash localId (12 hex chars), aligned with StoredPullRequest.localId */
@@ -443,6 +452,8 @@ export interface StoredPullRequest extends PullRequest {
   discoveredAt: string;
   /** Time most recently still seen by a poll, ISO */
   lastSeenAt: string;
+  /** Observed source-head transitions, ordered by observation time for the review timelines. */
+  headChanges?: Array<{ sha: string; at: string }>;
   /**
    * "Unread" marker (derived value, filled by `listStoredPullRequests` after computing against the read watermark in the index; the persisted meta.json
    * doesn't contain this field). True means a new event **relevant to me** has occurred since the user last viewed this PR: the source branch pushed a new commit, or

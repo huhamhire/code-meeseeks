@@ -13,7 +13,7 @@ import {
   makeRunId,
   startReviewRun,
 } from '../src/runs.js';
-import { createDraft, dropPendingFindingDrafts, listDrafts } from '../src/drafts.js';
+import { createDraft, dropPendingFindingDrafts, listDrafts, updateDraft } from '../src/drafts.js';
 
 let tmpRoot: string;
 let store: JsonFileStateStore;
@@ -133,7 +133,11 @@ describe('getReviewRun', () => {
 describe('hasReviewOutput', () => {
   const pr = 'abc123def456';
   const startWith = (tool: 'describe' | 'review' | 'ask', at: Date) =>
-    startReviewRun(store, { prLocalId: pr, tool, prAgentVersion: 'v', strategy: 'embedded' }, () => at);
+    startReviewRun(
+      store,
+      { prLocalId: pr, tool, prAgentVersion: 'v', strategy: 'embedded' },
+      () => at,
+    );
 
   it('no run → false', async () => {
     expect(await hasReviewOutput(store, pr)).toBe(false);
@@ -193,7 +197,9 @@ describe('listReviewRunsForPr', () => {
       });
     }
     expect(await dropPendingFindingDrafts(store, prLocalId)).toBe(1);
-    expect((await listDrafts(store, prLocalId)).map((draft) => draft.source?.runId)).toEqual([native.id]);
+    expect((await listDrafts(store, prLocalId)).map((draft) => draft.source?.runId)).toEqual([
+      native.id,
+    ]);
     expect(await clearReviewRunsForPr(store, prLocalId)).toBe(1);
     expect((await getReviewRun(store, prLocalId, native.id))?.engine).toBe('codex');
   });
@@ -201,7 +207,12 @@ describe('listReviewRunsForPr', () => {
   it('scopes individual reads and deletes to the requested engine and PR', async () => {
     const pr = 'abc123def456';
     const legacy = await startReviewRun(store, { id: 'legacy', prLocalId: pr, tool: 'review' });
-    const codex = await startReviewRun(store, { id: 'native', prLocalId: pr, tool: 'ask', engine: 'codex' });
+    const codex = await startReviewRun(store, {
+      id: 'native',
+      prLocalId: pr,
+      tool: 'ask',
+      engine: 'codex',
+    });
 
     expect(await getReviewRun(store, pr, legacy.id, 'codex')).toBeNull();
     expect(await getReviewRun(store, pr, codex.id, 'pr-agent')).toBeNull();
@@ -213,6 +224,41 @@ describe('listReviewRunsForPr', () => {
     expect((await getReviewRun(store, pr, codex.id, 'codex'))?.id).toBe(codex.id);
     expect(await deleteReviewRun(store, pr, legacy.id, 'pr-agent')).toBe(true);
     expect(await deleteReviewRun(store, pr, codex.id, 'codex')).toBe(true);
+  });
+
+  it('keeps pending drafts from the current and newer review during cleanup', async () => {
+    const pr = 'abc123def456';
+    for (const runId of ['20261119-100000-000', '20261119-100000-001', '20261119-100000-002']) {
+      await createDraft(store, pr, {
+        origin: 'finding',
+        source: { runId, findingId: 'finding', engine: 'pr-agent' },
+        body: 'Finding',
+        status: 'pending',
+      });
+    }
+    expect(await dropPendingFindingDrafts(store, pr, '20261119-100000-001')).toBe(1);
+    expect((await listDrafts(store, pr)).map((draft) => draft.source?.runId)).toEqual([
+      '20261119-100000-001',
+      '20261119-100000-002',
+    ]);
+  });
+
+  it('preserves a draft edit started before review cleanup', async () => {
+    const pr = 'abc123def456';
+    const draft = await createDraft(store, pr, {
+      origin: 'finding',
+      source: { runId: '20261119-100000-000', findingId: 'finding', engine: 'pr-agent' },
+      body: 'Finding',
+      status: 'pending',
+    });
+    const [, dropped] = await Promise.all([
+      updateDraft(store, pr, draft.id, { body: 'Edited finding' }),
+      dropPendingFindingDrafts(store, pr, '20261119-100000-001'),
+    ]);
+    expect(dropped).toBe(0);
+    expect(await listDrafts(store, pr)).toMatchObject([
+      { body: 'Edited finding', status: 'edited' },
+    ]);
   });
 
   it('newest first, no cross-PR bleed', async () => {

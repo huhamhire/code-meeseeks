@@ -104,6 +104,7 @@ export async function startReviewRun(
 export interface FinishReviewRunPatch {
   baseSha?: string;
   mergeBaseSha?: string;
+  reviewCoverage?: ReviewRun['reviewCoverage'];
   status: ReviewRunStatus;
   finishedAt: string;
   durationMs: number;

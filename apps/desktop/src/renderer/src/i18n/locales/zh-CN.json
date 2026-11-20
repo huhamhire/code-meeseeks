@@ -44,6 +44,7 @@
       "verdictNeedsWork": "建议修改"
     },
     "aiSuggestionLabel": "AI 建议",
+    "anchorJumpPreviousRevisionTitle": "在当前变更中打开记录的行号。该位置可能已移动。",
     "anchorJumpTitle": "跳转到代码对应行",
     "askArgQuestion": "问题",
     "askNeedsQuestion": "/ask 需要输入问题内容",
@@ -79,7 +80,6 @@
       "login-required": "请登录 Codex CLI 后返回。",
       "missing": "未找到 Codex CLI。",
       "model": "Codex 模型",
-      "outdated": "此审查对应较早的代码版本。",
       "phase": {
         "answering": "正在检查代码并回答",
         "checking": "正在检查相关代码",
@@ -169,6 +169,18 @@
     "retryAria": "重试",
     "retryTitle": "重试 /{{tool}}",
     "retryWithQuestionTitle": "重试 /{{tool}} {{question}}",
+    "reviewPhase": {
+      "preparing": "正在准备评审工作区…",
+      "reviewing": "正在运行 PR Agent 评审…",
+      "validating": "正在校验评审发现和变更行…"
+    },
+    "reviewResult": {
+      "clean": "评审完成，未发现代码问题。",
+      "invalid": "未获得可用的评审结果，请查看原始输出。",
+      "partial": "评审未完整覆盖，遗漏 {{omitted}} 个文件，部分评审 {{clipped}} 个文件",
+      "stale": "此评审针对较早的 PR 版本。",
+      "unknown": "无法确认本次评审的覆盖范围。"
+    },
     "ruleChipLabel": "规则",
     "ruleChipTitle": "点击查看规则正文",
     "ruleFilePath": "文件路径",

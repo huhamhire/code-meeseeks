@@ -44,6 +44,7 @@
       "verdictNeedsWork": "Nachbesserung nötig"
     },
     "aiSuggestionLabel": "KI-Vorschlag",
+    "anchorJumpPreviousRevisionTitle": "Die gespeicherte Zeile im aktuellen Diff öffnen. Die Position kann sich geändert haben.",
     "anchorJumpTitle": "Zur entsprechenden Zeile im Code springen",
     "askArgQuestion": "Frage",
     "askNeedsQuestion": "/ask erfordert eine Frage",
@@ -79,7 +80,6 @@
       "login-required": "Melden Sie sich bei der Codex CLI an und kehren Sie hierher zurück.",
       "missing": "Die Codex CLI wurde nicht gefunden.",
       "model": "Codex-Modell",
-      "outdated": "Diese Prüfung bezieht sich auf eine frühere Revision.",
       "phase": {
         "answering": "Code wird untersucht und die Frage beantwortet",
         "checking": "Zugehörigen Code prüfen",
@@ -169,6 +169,18 @@
     "retryAria": "Erneut versuchen",
     "retryTitle": "/{{tool}} erneut versuchen",
     "retryWithQuestionTitle": "/{{tool}} {{question}} erneut versuchen",
+    "reviewPhase": {
+      "preparing": "Review-Arbeitsbereich wird vorbereitet…",
+      "reviewing": "PR Agent führt das Review aus…",
+      "validating": "Befunde und geänderte Zeilen werden geprüft…"
+    },
+    "reviewResult": {
+      "clean": "Review abgeschlossen. Keine Codebefunde.",
+      "invalid": "Das Review hat kein verwertbares Ergebnis geliefert. Details stehen in der Roh-Ausgabe.",
+      "partial": "Teilweises Review: {{omitted}} Dateien ausgelassen, {{clipped}} teilweise geprüft",
+      "stale": "Dieses Review betrifft eine frühere PR-Revision.",
+      "unknown": "Der Umfang des Reviews konnte nicht überprüft werden."
+    },
     "ruleChipLabel": "Regel",
     "ruleChipTitle": "Klicken, um den Regelinhalt anzuzeigen",
     "ruleFilePath": "Dateipfad",

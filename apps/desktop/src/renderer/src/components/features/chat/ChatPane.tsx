@@ -31,6 +31,7 @@ import {
 } from '../../../stores/selection-store';
 import { anchorShortLabel, formatFindingReference } from './utils/findings';
 import { scrollToResult } from './utils/scroll-to-result';
+import { isStaleReview } from './utils/review-snapshot';
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './constants';
 import { useChatSession } from './hooks/useChatSession';
 import { useChatActions } from './hooks/useChatActions';
@@ -38,7 +39,7 @@ import { useChatTimeline } from './hooks/useChatTimeline';
 import { AgentStepRow, ThinkingLive } from './components/AgentStep';
 import { CodexReviewPane } from './components/CodexReviewPane';
 import { ChatEmpty } from './components/ChatEmpty';
-import { CommitDivider } from './components/CommitDivider';
+import { CommitDividerList } from './components/CommitDivider';
 import { computeCommitDividers } from './utils/commit-dividers';
 import { ChatInputBar } from './components/ChatInputBar';
 import { ConversationMessage } from './components/ConversationMessage';
@@ -302,12 +303,17 @@ export function ChatPane({
     prLocalId,
   });
 
-  // Commit dividers: every point in the timeline where the reviewed commit changes (see computeCommitDividers, which
-  // also explains why the trailing boundary anchors after the last run rather than at the end of the pane).
   const commitDividers = useMemo(
-    () => computeCommitDividers(timeline, pr?.sourceRef.sha),
-    [timeline, pr?.sourceRef.sha],
+    () => computeCommitDividers(timeline, pr?.sourceRef.sha, pr?.headChanges),
+    [timeline, pr?.sourceRef.sha, pr?.headChanges],
   );
+  const latestHeadChangeAt = pr?.headChanges?.at(-1)?.at;
+  useEffect(() => {
+    const body = session.bodyRef.current;
+    if (latestHeadChangeAt && body && body.scrollHeight - body.scrollTop - body.clientHeight <= 64) {
+      body.scrollTop = body.scrollHeight;
+    }
+  }, [latestHeadChangeAt, session.bodyRef]);
 
   // Key of the last assistant message in the timeline: the answer the action belongs on. Anchored to the last one
   // rather than to a message id because a conversation message has no stable id of its own here.
@@ -450,6 +456,8 @@ export function ChatPane({
           onInputHeightChange={setInputHeight}
           localId={prLocalId}
           headSha={pr?.sourceRef.sha}
+          headChanges={pr?.headChanges}
+          commitMessages={commitMsgBySha}
           baseSha={pr?.targetRef.sha}
           status={codexStatus}
           model={codexModel}
@@ -516,20 +524,15 @@ export function ChatPane({
         )}
         {/* History runs stacked in ascending time order, each an independent card (maintaining its own raw stdout collapse state).
             Initially only the latest RUNS_PAGE_SIZE are fetched; after scrolling up to the top, fetch an earlier batch by cursor */}
-        {timeline.map((entry, i) =>
-          entry.run ? (
-            // A commit divider precedes this run when the reviewed commit changed since the previous run (see commitDividers).
-            // data-run-id: for re-review card ↔ original finding card cross-link scroll targeting (scrollToRun).
-            <Fragment key={entry.key}>
-              {commitDividers.before.has(entry.key) && (
-                <CommitDivider
-                  sha={commitDividers.before.get(entry.key)!}
-                  message={commitMsgBySha.get(commitDividers.before.get(entry.key)!)}
-                />
-              )}
+        {timeline.map((entry, i) => (
+          <Fragment key={entry.key}>
+            <CommitDividerList shas={commitDividers.before.get(entry.key)} messages={commitMsgBySha} />
+            {entry.run ? (
+              // data-run-id: for re-review card ↔ original finding card cross-link scroll targeting (scrollToRun).
               <div data-run-id={entry.run.id}>
                 <RunResultView
                   run={entry.run}
+                  stale={isStaleReview(entry.run, pr)}
                   onRetry={actions.handleRetry}
                   onDelete={actions.handleDeleteRun}
                   // Only in the single case of "the last run in the timeline + nothing running" can a failed / cancelled run
@@ -546,51 +549,41 @@ export function ChatPane({
                   onScrollToFinding={(runId, findingId) => scrollToResult(bodyRef.current, runId, findingId)}
                 />
               </div>
-            </Fragment>
-          ) : entry.active ? (
-            // Running: progress bar + live stdout stream, interleaved into the timeline by start time (startedAt is null when enqueued,
-            // set when it starts, falling back to enqueuedAt). Not rendered when prAgent is not ready.
-            prAgent.available ? (
-              <RunningView
-                key={entry.key}
-                tool={entry.active.tool}
-                runId={entry.active.runId}
-                question={entry.active.question}
-                scope={entry.active.scope}
-                lines={linesByRunId.get(entry.active.runId) ?? []}
-                startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
-                model={currentLlmModel ?? null}
+            ) : entry.active ? (
+              // Running: progress bar + live stdout stream, interleaved into the timeline by start time (startedAt is null when enqueued,
+              // set when it starts, falling back to enqueuedAt). Not rendered when prAgent is not ready.
+              prAgent.available ? (
+                <RunningView
+                  tool={entry.active.tool}
+                  runId={entry.active.runId}
+                  reviewPhase={entry.active.reviewPhase}
+                  question={entry.active.question}
+                  scope={entry.active.scope}
+                  lines={linesByRunId.get(entry.active.runId) ?? []}
+                  startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
+                  model={currentLlmModel ?? null}
+                />
+              ) : null
+            ) : entry.step ? (
+              <AgentStepRow step={entry.step} />
+            ) : entry.message ? (
+              <ConversationMessage
+                message={entry.message}
+                useAsReply={
+                  answeringComment && entry.key === lastAnswerKey
+                    ? {
+                        label: t('chatPane.commentReference.useAsReply'),
+                        onUse: () => {
+                          createReplyDraftFromAnswer(entry.message!.content);
+                        },
+                      }
+                    : null
+                }
               />
-            ) : null
-          ) : entry.step ? (
-            <AgentStepRow key={entry.key} step={entry.step} />
-          ) : entry.message ? (
-            <ConversationMessage
-              key={entry.key}
-              message={entry.message}
-              useAsReply={
-                answeringComment && entry.key === lastAnswerKey
-                  ? {
-                      label: t('chatPane.commentReference.useAsReply'),
-                      onUse: () => {
-                        createReplyDraftFromAnswer(entry.message!.content);
-                      },
-                    }
-                  : null
-              }
-            />
-          ) : null,
-        )}
-        {/* Trailing commit divider, for the one case with no entry to precede: the head advanced past the last run's
-            commit and nothing has landed after that run yet. As soon as anything does — a message, a step, a queued
-            run — the boundary moves into `before` and anchors there, so it stays put instead of being pushed down by
-            each new bubble (see computeCommitDividers). */}
-        {commitDividers.bottom && (
-          <CommitDivider
-            sha={commitDividers.bottom}
-            message={commitMsgBySha.get(commitDividers.bottom)}
-          />
-        )}
+            ) : null}
+          </Fragment>
+        ))}
+        <CommitDividerList shas={commitDividers.bottom} messages={commitMsgBySha} />
         {/* This PR's queued tasks: placed after running ones, each cancellable individually. The position uses the **global** queue order (the queue is shared across PRs,
             otherwise every PR showing "position 1" would be misleading) — the runId's index in the global waiting array +1. */}
         {myWaiting.map((w) => (
