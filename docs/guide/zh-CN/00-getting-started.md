@@ -4,7 +4,7 @@
 
 ## 系统要求
 
-- **操作系统**：Windows 10 / 11（x64）或 macOS（Apple Silicon / arm64）。当前不提供 Intel Mac 与 Linux 安装包。
+- **操作系统**：Windows 10 / 11（x64）或 macOS 13 Ventura 及以上（Apple Silicon / arm64）。当前不提供 Intel Mac 与 Linux 安装包。
 - **git**：本机需已安装 git，并在 PATH 中。客户端克隆仓库、读取本地 diff 都依赖系统 git。
 - 评审与生成内容需要一个可用的 LLM（见 [LLM 配置](02-llm.md)）；嵌入式运行时已随应用打包，无需另装 Python 或 Docker。
 

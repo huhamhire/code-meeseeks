@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+> ⚠️ **macOS 桌面版现要求 Apple Silicon 及 macOS 13 Ventura 或更高版本。** 内置 Electron 运行时由 42.3.0 升级至 45.4.1。
+
 ### ✨ 新增
 
 - PR Agent 的模型菜单支持在 Codex CLI 预设下选择具体型号。

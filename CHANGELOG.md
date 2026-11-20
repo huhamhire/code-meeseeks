@@ -7,6 +7,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> ⚠️ **The macOS desktop app now requires macOS 13 Ventura or later on Apple Silicon.** This change comes with the upgrade from Electron 42.3.0 to 45.4.1.
+
 ### ✨ Added
 
 - The PR Agent model menu lets you choose a model inside a Codex CLI profile.

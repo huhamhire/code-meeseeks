@@ -119,7 +119,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 | 平台        | 产物                                                 | 状态    |
 | ----------- | ---------------------------------------------------- | ------- |
 | Windows x64 | `code-meeseeks-<version>-win-x64.exe`（NSIS 安装包） | ✅ 可用 |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg`              | ✅ 可用 |
+| macOS 13+ arm64 | `code-meeseeks-<version>-mac-arm64.dmg`          | ✅ 可用 |
 
 安装包已内嵌 pr-agent，安装后即可使用，无需额外环境。
 
