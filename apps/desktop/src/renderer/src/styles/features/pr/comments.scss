@@ -548,13 +548,40 @@
   }
 }
 
-// Code context embedded above inline comments: Monaco read-only, full-row background on the anchored line
+// Read-only code context above inline comments.
 .comment-code-context {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
   margin: $space-3 0;
+  padding: 6px 0;
   border: 1px solid $border-default;
   border-radius: $radius-md;
   overflow: hidden;
   background: $bg-app;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+
+  code {
+    min-width: 0;
+    padding-right: 6px;
+    font: inherit;
+  }
+}
+.comment-code-context-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+.comment-code-context-line-number {
+  padding: 0 8px;
+  color: $text-muted;
+  text-align: right;
+  user-select: none;
+}
+.comment-code-context-anchor-line {
+  background: rgb(var(--rgb-warning) / 0.18);
+  box-shadow: inset 2px 0 $color-warning;
 }
 .comment-code-context-loading,
 .comment-code-context-error {
@@ -564,7 +591,7 @@
   border-radius: $radius-md;
   font-size: $fs-sm;
 }
-// Lazy-load placeholder button: used for inline comments beyond the CAP, mounts Monaco only on click
+// Load older comment previews on demand.
 .comment-code-context-toggle {
   margin: $space-3 0;
   padding: $space-3 $space-4;
@@ -587,13 +614,4 @@
     border-color: $color-accent;
     color: $color-info;
   }
-}
-// Monaco decoration: full-row background on the anchored line + left color band (margin gutter), keeping one semantic group
-// with the inline anchor chip color (warning amber, distinct from added green / removed red)
-.comment-code-context-anchor-line {
-  background: rgb(var(--rgb-warning) / 0.18);
-}
-.comment-code-context-anchor-gutter {
-  background: $color-warning;
-  width: 2px !important;
 }

@@ -17,6 +17,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔧 Fixed
 
+- Closing a diff editor no longer causes a crash when another Monaco view initializes its hover controls. Inline comment code previews now use static syntax highlighting and retain file line numbers, anchor highlights, and editor appearance settings.
+- Clicking diagrams, PR rows, and other controls no longer leaves a focus outline. Keyboard focus uses the app's theme.
 - Finding locations remain clickable for read-only navigation, including findings from earlier PR revisions.
 - After the first completed review, new PR heads appear as commit dividers that stay in place as later messages and runs arrive.
 - New commits received during an automatic review are marked after its summary.
