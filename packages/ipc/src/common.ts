@@ -1,6 +1,7 @@
 import type {
   PlatformCapabilities,
   PlatformUser,
+  ReviewRun,
   ReviewRunCommitScope,
   ReviewRunOrigin,
   ReviewRunTool,
@@ -54,10 +55,11 @@ export interface ConnectionSummary {
  * - waiting: `startedAt` is null, the UI shows "queued" + enqueuedAt
  *
  * runId is generated at enqueue (matching the eventually-persisted ReviewRun.id; the queued state is not written to disk, only when actually
- * starting does startReviewRun land it on disk). This lets `pragent:cancel(runId)` reference the same id in both queued/active
+ * starting does startReviewRun land it on disk). Cancellation uses the same id in both queued and active
  * states.
  */
 export interface PragentRunInfo {
+  engine: NonNullable<ReviewRun['engine']>;
   runId: string;
   prLocalId: string;
   /** Repo slug and PR number (for queue display, avoiding showing only the localId hash). */

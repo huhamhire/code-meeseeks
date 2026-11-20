@@ -15,7 +15,7 @@ interface StatusBarProps {
   prsCount: number;
   prAgent: PrAgentStatus | null;
   connections: ConnectionSummary[];
-  llm: Config['llm'];
+  llm: Config['llm'] | null;
   refreshing: boolean;
   sidebarCollapsed: boolean;
   chatCollapsed: boolean;
@@ -103,7 +103,7 @@ export function StatusBar({
       {/* pr-agent activity / idle indicator. Hidden when pr-agent is unavailable (the runtime chip above already shows a red warning). */}
       {prAgent?.available && <PrAgentActiveChip onJumpToPr={onJumpToPr} />}
       <AutopilotChip enabled={autopilotEnabled} onToggle={onToggleAutopilot} />
-      <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />
+      {llm && <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />}
       {updateInfo?.hasUpdate && updateInfo.url && (
         <StatusChip
           className="statusbar-chip-update"

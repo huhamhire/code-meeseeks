@@ -260,7 +260,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   // Cancel / retry are just two simple steps in the store model: cancel goes through IPC, retry calls handleRun
   const handleCancel = async (runId: string): Promise<void> => {
     try {
-      await invoke('pragent:cancel', { runId });
+      if (prLocalId) await invoke('pragent:cancel', { localId: prLocalId, runId });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -330,7 +330,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
             body: buildDraftBodyFromFinding(finding),
             origin: 'finding',
-            source: { runId: run.id, findingId: finding.id },
+            source: { runId: run.id, findingId: finding.id, engine: run.engine },
             status: 'pending',
           },
         });
@@ -387,7 +387,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
             body: buildDraftBodyFromFinding(finding),
             origin: 'finding',
-            source: { runId: run.id, findingId: finding.id },
+            source: { runId: run.id, findingId: finding.id, engine: run.engine },
             status: 'rejected',
           },
         });

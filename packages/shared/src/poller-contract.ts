@@ -200,7 +200,7 @@ export interface ReviewDraft {
    * Filled only when origin='finding', pointing back to the source finding. The UI uses it on the ChatPane finding card
    * to look up the associated Draft's status chip display
    */
-  source?: { runId: string; findingId: string };
+  source?: { runId: string; findingId: string; engine?: ReviewEngine };
   status: 'pending' | 'edited' | 'posted' | 'rejected';
   /** The remote comment id after a successful publish, idempotency key + navigation link */
   posted_remote_id?: string;
@@ -289,7 +289,17 @@ export interface ReviewRunCommitScope {
   subject: string;
 }
 
+export type ReviewEngine = 'pr-agent' | 'codex';
+
+export const CODEX_QUESTION_LIMIT = 4000;
+
+export type CodexReviewReadiness = 'missing' | 'unsupported' | 'login-required' | 'unavailable' | 'ready';
+
 export interface ReviewRun {
+  engine?: ReviewEngine;
+  engineVersion?: string;
+  baseSha?: string;
+  mergeBaseSha?: string;
   /** yyyymmdd-HHmmss-ms sequential id, convenient for listing in reverse filename order */
   id: string;
   /** PR hash localId (12 hex chars), aligned with StoredPullRequest.localId */
@@ -322,8 +332,8 @@ export interface ReviewRun {
    */
   headSha?: string;
   /** The pr-agent version obtained at probe time (CLI first line / the pr-agent version found by the embedded runtime) */
-  prAgentVersion: string;
-  strategy: PrAgentStrategy;
+  prAgentVersion?: string;
+  strategy?: PrAgentStrategy;
   /**
    * The LLM model ID used by this run — taken from the active LlmProfile.model at startup (in the form after
    * normalizeModel adds the provider prefix, e.g., `openai/qwen-plus` /

@@ -1,4 +1,5 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 import treeKill from 'tree-kill';
 import { PrAgentRunError, type ExecFn, type PrAgentRunResult } from './types.js';
 
@@ -128,8 +129,9 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         }
       }
 
+      const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') };
       const onData = (stream: 'stdout' | 'stderr') => (chunk: Buffer | string) => {
-        const s = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        const s = typeof chunk === 'string' ? chunk : decoders[stream].write(chunk);
         if (stream === 'stdout') stdout += s;
         else stderr += s;
         if (!opts.onLine) return;
@@ -168,6 +170,8 @@ export function createExec(spawnFn: SpawnFn = spawn as unknown as SpawnFn): Exec
         settled = true;
         clearTimeout(timer);
         opts.signal?.removeEventListener('abort', onAbort);
+        onData('stdout')(decoders.stdout.end());
+        onData('stderr')(decoders.stderr.end());
         // Emit any leftover partial line as well
         if (opts.onLine) {
           if (stdoutBuf) opts.onLine(stdoutBuf, 'stdout');

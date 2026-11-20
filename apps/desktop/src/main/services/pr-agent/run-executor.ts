@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { loadAgentRules } from '@meebox/agent';
+import type { CodexReviewProgress } from '@meebox/ipc';
 import {
   PRAGENT_LOCAL_OUTPUT,
   PrAgentRunError,
@@ -18,6 +19,8 @@ import {
   classifyLlmFailure,
   dropPendingFindingDrafts,
   finishReviewRun,
+  getReviewRun,
+  listReviewRunsForPr,
   parseReviewOutput,
   startReviewRun,
 } from '@meebox/poller';
@@ -41,6 +44,8 @@ import {
   parseLlmErrorSentinel,
   stripShimSentinels,
 } from './usage.js';
+import { buildCodexAskContext } from './codex-context.js';
+import { discoverCodexReview, readReviewEvents, runNativeAsk, runNativeReview } from './codex-review.js';
 import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 
 /** Finalization patch type for finishReviewRun (return of the finalization helper). */
@@ -70,6 +75,7 @@ export class RunExecutor {
    */
   async execute(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {
     const { getPrAgentBridge, embeddedPythonPath, broadcast } = this.ctx;
+    if (item.info.engine === 'codex') return this.executeCodex(item, notifyStarted);
     const bridge = getPrAgentBridge();
     if (!bridge) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
     const { req, pr } = item;
@@ -149,6 +155,99 @@ export class RunExecutor {
     } finally {
       await wt.cleanup();
     }
+  }
+
+  private async executeCodex(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {
+    const { pr, info, req } = item;
+    const signal = item.ac!.signal;
+    const discovery = await discoverCodexReview();
+    if (signal.aborted) throw new AppError(ERROR_CODES.AG_CODEX_NOT_READY);
+    if (discovery.status !== 'ready') throw new AppError(ERROR_CODES.AG_CODEX_NOT_READY);
+    const store = await this.ctx.pr.storeForPr(pr.localId);
+    const run = await startReviewRun(store, {
+      id: info.runId,
+      prLocalId: pr.localId,
+      engine: 'codex',
+      engineVersion: discovery.runtime.version,
+      tool: req.tool,
+      question: req.question,
+      model: req.model,
+      referencedFinding: req.referencedFinding,
+      origin: 'user',
+      headSha: pr.sourceRef.sha,
+      baseSha: pr.targetRef.sha,
+    });
+    item.info = { ...info, startedAt: run.startedAt };
+    notifyStarted();
+    const t0 = Date.now();
+    let workspace: Awaited<ReturnType<RunExecutor['prepareWorkspace']>> | undefined;
+    let patch: FinishPatch;
+    const onProgress = (codex: CodexReviewProgress) => {
+      this.ctx.broadcast('codex:runProgress', { runId: run.id, codex, at: Date.now() });
+    };
+    try {
+      onProgress({ phase: 'preparing' });
+      workspace = await this.prepareWorkspace(pr);
+      signal.throwIfAborted();
+      if (!workspace.targetBranchName) throw new Error('Codex review requires a fixed base ref.');
+      this.ctx.logger.debug({ runId: run.id, durationMs: Date.now() - t0 }, 'Codex review workspace prepared');
+      onProgress({ phase: 'starting' });
+      const env = buildProxyEnv(this.ctx.bootstrap.config.proxy);
+      const language = getMainLanguage();
+      let result: Awaited<ReturnType<typeof runNativeReview>>;
+      if (req.tool === 'ask') {
+        const matches = (previous: ReviewRun) => previous.engine === 'codex' &&
+          previous.status === 'succeeded' && previous.headSha === pr.sourceRef.sha &&
+          previous.baseSha === pr.targetRef.sha && previous.mergeBaseSha === workspace?.diffBaseSha;
+        const history = (await listReviewRunsForPr(store, pr.localId, {
+          engine: 'codex', beforeId: run.id, limit: 40,
+        })).filter(matches);
+        const review = history.find((previous) => previous.tool === 'review');
+        const ref = req.referencedFinding;
+        const refRun = ref ? await getReviewRun(store, pr.localId, ref.runId, 'codex') : null;
+        const selected = refRun && matches(refRun) ? refRun.findings?.find((f) => f.id === ref?.findingId) : undefined;
+        if (ref && !selected) throw new AppError(ERROR_CODES.AG_CODEX_REFERENCE_STALE);
+        const context = buildCodexAskContext(req.question ?? '', history, review, selected);
+        result = await runNativeAsk(discovery.runtime, workspace.path, workspace.targetBranchName,
+          context, env, signal, language, onProgress, req.model);
+      } else {
+        result = await runNativeReview(discovery.runtime, workspace.path, workspace.targetBranchName,
+          env, signal, language, onProgress, req.model);
+      }
+      patch = {
+        status: 'succeeded',
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        summary: result.summary,
+        findings: result.findings,
+        baseSha: pr.targetRef.sha,
+        mergeBaseSha: result.mergeBaseSha,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0,
+      };
+    } catch (err) {
+      const result = err instanceof PrAgentRunError ? err.result : undefined;
+      const output = result ? readReviewEvents(result.stdout ?? '') : undefined;
+      const status = signal.aborted ? 'cancelled' : 'failed';
+      const reason = err instanceof PrAgentRunError ? err.reason : undefined;
+      const details = output?.error || result?.stderr?.trim();
+      const message = reason === 'timeout' ? 'Codex request timed out.'
+        : details || (err instanceof Error ? err.message : String(err));
+      patch = {
+        status,
+        errorReason: reason,
+        errorMessage: status === 'failed' ? message.slice(0, 4000) : undefined,
+        exitCode: result?.exitCode,
+        stdout: output?.review,
+        findings: [],
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0,
+      };
+      this.ctx.logger.info({ runId: run.id, status, exitCode: result?.exitCode }, 'Codex review ended');
+    } finally {
+      await workspace?.cleanup();
+    }
+    return (await finishReviewRun(store, pr.localId, run.id, patch)) ?? { ...run, ...patch };
   }
 
   /**
@@ -265,6 +364,7 @@ export class RunExecutor {
       prLocalId: pr.localId,
       tool: req.tool,
       question: req.tool === 'ask' ? req.question : undefined,
+      engine: item.info.engine,
       prAgentVersion: bridge.version,
       strategy: bridge.strategy,
       model: activeLlmForRecord?.model || undefined,
@@ -299,14 +399,10 @@ export class RunExecutor {
     // after the source branch is deleted / force-pushed, it precisely fetches the PR head ref per platform to fill in the head sha,
     // otherwise materializeWorktree building the head branch would fail on the missing object.
     await prService.ensureMirrorReadyForPr(pr);
-    if (scope) {
-      // Single-commit scope: head=target commit, base=its parent commit → LOCAL__TARGET_BRANCH points at parent,
-      // pr-agent sees only that commit's own changes. parent is an ancestor of head and present via mirror sync, no extra fetch needed.
-      return repoMirror.materializeWorktree(repoId, scope.sha, scope.parent, pr.localId);
-    }
-    // pr-agent's LOCAL__TARGET_BRANCH uses a fixed merge-base, rather than a two-dot comparison that would mix in another PR after targetRef.sha drifts.
-    const diffBase = await prService.resolveDiffBaseSha(pr);
-    return repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase, pr.localId);
+    // Single-commit reviews compare against the parent. Full PR reviews use the same fixed merge base as the UI diff.
+    const diffBaseSha = scope?.parent ?? await prService.resolveDiffBaseSha(pr);
+    const workspace = await repoMirror.materializeWorktree(repoId, scope?.sha ?? pr.sourceRef.sha, diffBaseSha, pr.localId);
+    return { ...workspace, diffBaseSha };
   }
 
   /**

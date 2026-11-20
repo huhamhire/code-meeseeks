@@ -292,11 +292,6 @@ export function LlmProfileForm({
                 className={`settings-input${showError('cli_args') ? ' settings-input-error' : ''}`}
                 rows={3}
                 value={argsText}
-                placeholder={
-                  draft.model.trim().toLowerCase() === 'claude'
-                    ? '--model sonnet --effort medium'
-                    : '--model gpt-6.1-sol\n-c model_reasoning_effort=medium'
-                }
                 onChange={(e) => {
                   const text = e.target.value;
                   setArgsText(text);
@@ -311,19 +306,18 @@ export function LlmProfileForm({
                 aria-invalid={!!errors.cli_args}
                 aria-describedby="llm-cli-args-hint"
               />
-              <p id="llm-cli-args-hint" className="muted">
+              <p id="llm-cli-args-hint" className="settings-cli-args-hint muted">
                 {t('llmProfileForm.cliArgsHint')}
               </p>
               {showError('cli_args') ? (
                 <p role="alert" className="muted">
                   {errors.cli_args}
                 </p>
-              ) : (
+              ) : draft.cli_args?.length ? (
                 <p className="muted">
-                  {t('llmProfileForm.cliArgsPreview')}{' '}
-                  <code>{JSON.stringify(draft.cli_args ?? [])}</code>
+                  {t('llmProfileForm.cliArgsPreview')} <code>{JSON.stringify(draft.cli_args)}</code>
                 </p>
-              )}
+              ) : null}
             </div>
           </>
         )}

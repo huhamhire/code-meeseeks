@@ -9,11 +9,17 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### ✨ Added
 
+- The Codex tab explains its available commands in the empty state and offers `/review`, `/ask`, `/approve`, and `/needswork` through the command menu and input completion.
+- A Codex tab runs native reviews from the desktop when a compatible local Codex CLI is detected and signed in. The experimental tab supports native reviews, read-only multi-turn questions, and follow-ups on review findings. Findings can be used as comment drafts. The model picker initially selects the latest available Sol and remembers the selected model across restarts.
 - The bundled review engine is upgraded from pr-agent 0.45.0 to 0.50.0, using upstream support for trusted repository instructions and model temperature compatibility.
 - Local CLI profiles now accept additional arguments for choosing a model and reasoning settings without changing the CLI's global configuration. Quoted values and an argument preview are supported; explicit profile settings also take precedence in agent orchestration chats. Arguments that conflict with the app's input, output, or sandbox settings are rejected.
 
 ### 🔧 Fixed
 
+- The review tabs keep unsent input when switching engines and scope run history, progress, and run operations to their own engine.
+- The Codex model picker sits next to Send and loads its catalog automatically.
+- PR Agent and Codex share the same top-edge drag handle and keep the input height when switching tabs.
+- The local CLI profile editor uses a brief hint for additional arguments and shows the parsed preview when arguments are present.
 - A failed model call no longer retries the review engine's built-in fallback when fallbacks are disabled, including redundant local CLI calls under a different model label. Provider failures still report their original cause.
 - Reply, edit, delete, reference, and add-reaction buttons now have a consistent height in the activity timeline and inline comments.
 

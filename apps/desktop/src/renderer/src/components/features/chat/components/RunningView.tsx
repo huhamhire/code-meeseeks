@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ReviewRunCommitScope, ReviewRunTool } from '@meebox/shared';
+import type { ReviewEngine, ReviewRunCommitScope, ReviewRunTool } from '@meebox/shared';
 import { CommitIcon } from '../../../common';
+import type { CodexProgressEntry } from '../../../../stores/chat-run-store';
+import { CodexProgress } from './CodexProgress';
 import { formatElapsed, formatStartTime, formatTimestamp, inferPhase, runStatusLabel } from '../utils/format';
 import { AnsiPre, AskQuestion, Spinner } from './shared';
 
@@ -13,9 +15,13 @@ export function RunningView({
   lines,
   startedAt,
   model,
+  engine,
+  codexProgress,
 }: {
   tool: ReviewRunTool;
   runId: string;
+  engine?: ReviewEngine;
+  codexProgress?: readonly CodexProgressEntry[];
   /** /ask's question: shown directly while running too (consistent with queued / done state; the question was generated at dispatch). */
   question?: string;
   /** Single-commit review scope (parent..sha); shows the scope badge when limited to a commit, consistent with the done-state card. */
@@ -42,7 +48,8 @@ export function RunningView({
     return () => clearInterval(id);
   }, [startedAt]);
 
-  const phase = useMemo(() => inferPhase(lines, t), [lines, t]);
+  const native = engine === 'codex';
+  const phase = useMemo(() => native ? '' : inferPhase(lines, t), [lines, native, t]);
   const text = useMemo(() => lines.join('\n'), [lines]);
 
   // A chip row structurally identical to RunMeta. running shares one visual
@@ -51,7 +58,7 @@ export function RunningView({
   return (
     <div className="chat-run-running" data-run-id={runId}>
       <header className="chat-run-meta">
-        <span className={`chat-run-tool chat-run-tool-${tool}`}>/{tool}</span>
+        <span className={`chat-run-tool chat-run-tool-${tool}`}>{native ? 'Codex' : `/${tool}`}</span>
         <span className="chat-chip chat-run-status chat-run-status-running">
           <Spinner />
           {runStatusLabel('running', t)}
@@ -94,15 +101,19 @@ export function RunningView({
         </div>
       )}
       {/* Console output: collapsed by default while running, manually expandable (same collapse effect as the done-state「raw output」). */}
-      <details className="chat-run-raw">
-        <summary>{t('chatPane.rawOutput', { n: text.length })}</summary>
-        <AnsiPre
-          className="chat-run-stdout"
-          preRef={ref}
-          text={text}
-          placeholder={t('chatPane.waitingOutput')}
-        />
-      </details>
+      {native ? (
+        <CodexProgress entries={codexProgress ?? []} startedAt={startedAt} elapsedMs={elapsedMs} />
+      ) : (
+        <details className="chat-run-raw">
+          <summary>{t('chatPane.rawOutput')}</summary>
+          <AnsiPre
+            className="chat-run-stdout"
+            preRef={ref}
+            text={text}
+            placeholder={t('chatPane.waitingOutput')}
+          />
+        </details>
+      )}
     </div>
   );
 }

@@ -135,7 +135,7 @@ export async function dropPendingFindingDrafts(
 ): Promise<number> {
   const all = await listDrafts(store, prLocalId);
   const kept = all.filter(
-    (d) => !(d.status === 'pending' && d.origin === 'finding'),
+    (d) => !(d.status === 'pending' && d.origin === 'finding' && d.source?.engine !== 'codex'),
   );
   const dropped = all.length - kept.length;
   if (dropped === 0) return 0;

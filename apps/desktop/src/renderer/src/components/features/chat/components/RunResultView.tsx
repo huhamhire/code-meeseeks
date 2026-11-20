@@ -121,13 +121,13 @@ export function RunResultView({
   /** Snapshot of this PR's finding closure relations (read-only); looks up the review-closed state by (run.id,finding.id), marking the read-only chip. */
   closures: ReadonlyArray<FindingClosure>;
   /** Fired when clicking "→ jump to code edit" on a finding card. The parent does lazy creation + jump */
-  onJumpToDraft: (finding: Finding, run: ReviewRun) => void;
+  onJumpToDraft?: (finding: Finding, run: ReviewRun) => void;
   /** Reject a finding: create / update a draft to status='rejected' */
-  onRejectFinding: (finding: Finding, run: ReviewRun) => void;
+  onRejectFinding?: (finding: Finding, run: ReviewRun) => void;
   /** Click a finding anchor: only navigate to the corresponding Diff line (no edit mode) */
-  onNavigateToFinding: (finding: Finding) => void;
+  onNavigateToFinding?: (finding: Finding) => void;
   /** 「Reference」a code finding to start a re-review /ask (attach to the input bar). */
-  onReferenceFinding: (finding: Finding, run: ReviewRun) => void;
+  onReferenceFinding?: (finding: Finding, run: ReviewRun) => void;
   /** Scroll to a given run card (review-closed state「view re-review」→ the ask run that closed it). */
   onScrollToRun: (runId: string) => void;
   /** Scroll to a given finding card within a run and flash-highlight it (reference badge at the top of the re-review card → original finding card). */
@@ -266,10 +266,10 @@ export function RunResultView({
                   finding={f}
                   relatedDraft={relatedDraft}
                   closure={closure}
-                  onJump={() => onJumpToDraft(f, run)}
-                  onReject={() => onRejectFinding(f, run)}
-                  onNavigate={() => onNavigateToFinding(f)}
-                  onReference={canReference ? () => onReferenceFinding(f, run) : undefined}
+                  onJump={onJumpToDraft ? () => onJumpToDraft(f, run) : undefined}
+                  onReject={onRejectFinding ? () => onRejectFinding(f, run) : undefined}
+                  onNavigate={onNavigateToFinding ? () => onNavigateToFinding(f) : undefined}
+                  onReference={canReference && onReferenceFinding ? () => onReferenceFinding(f, run) : undefined}
                   onViewAsk={closure ? () => onScrollToRun(closure.byAskRunId) : undefined}
                 />
               );

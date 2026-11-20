@@ -17,7 +17,7 @@ function QueuePopover({
 }: {
   active: ReturnType<typeof useChatRunStore>['active'];
   waiting: ReturnType<typeof useChatRunStore>['waiting'];
-  onCancel: (runId: string) => void;
+  onCancel: (localId: string, runId: string) => void;
   onJumpToPr: (localId: string) => void;
 }) {
   const { t } = useTranslation();
@@ -48,7 +48,7 @@ function QueuePopover({
             <button
               type="button"
               className="statusbar-queue-cancel"
-              onClick={() => onCancel(a.runId)}
+              onClick={() => onCancel(a.prLocalId, a.runId)}
               title={t('statusBar.stopRunning')}
               aria-label={t('common.cancel')}
             >
@@ -74,7 +74,7 @@ function QueuePopover({
             <button
               type="button"
               className="statusbar-queue-cancel"
-              onClick={() => onCancel(q.runId)}
+              onClick={() => onCancel(q.prLocalId, q.runId)}
               title={t('statusBar.removeFromQueue')}
               aria-label={t('common.cancel')}
             >
@@ -95,7 +95,9 @@ function QueuePopover({
  */
 export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: string) => void }) {
   const { t } = useTranslation();
-  const { active, waiting } = useChatRunStore();
+  const queue = useChatRunStore();
+  const active = queue.active.filter((run) => run.engine !== 'codex');
+  const waiting = queue.waiting.filter((run) => run.engine !== 'codex');
   // Concurrency model: active is the list of running runs. The chip body shows the first (primary) run's tool + elapsed,
   // with a badge showing the concurrent total when there's more than one; opening the popover lists all running + queued.
   const primary = active[0] ?? null;
@@ -136,8 +138,8 @@ export function PrAgentActiveChip({ onJumpToPr }: { onJumpToPr?: (localId: strin
     if (queueOpen && waiting.length === 0 && active.length <= 1) setQueueOpen(false);
   }, [queueOpen, waiting.length, active.length]);
 
-  const handleCancelQueued = (runId: string): void => {
-    void invoke('pragent:cancel', { runId });
+  const handleCancelQueued = (localId: string, runId: string): void => {
+    void invoke('pragent:cancel', { localId, runId });
   };
 
   if (!primary) {

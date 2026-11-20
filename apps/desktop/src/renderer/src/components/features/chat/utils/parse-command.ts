@@ -1,5 +1,5 @@
 import type { LocalPrStatus, ReviewRunTool } from '@meebox/shared';
-import { COMMANDS } from '../commands';
+import { CODEX_COMMANDS, COMMANDS } from '../commands';
 
 /**
  * Discriminated result of parsing the input-bar submission (pure function, no i18n / side effects):
@@ -20,13 +20,13 @@ export type ParsedCommand =
   | { kind: 'run'; name: ReviewRunTool; question?: string }
   | { kind: 'agentAsk'; question: string };
 
-export function parseChatCommand(trimmed: string): ParsedCommand {
+export function parseChatCommand(trimmed: string, commands = COMMANDS): ParsedCommand {
   // Parse the command head: starts with '/' → look it up in the COMMANDS table; no '/' → equivalent to natural-language delegation
   if (trimmed.startsWith('/')) {
-    const spaceIdx = trimmed.indexOf(' ');
+    const spaceIdx = trimmed.search(/\s/);
     const head = spaceIdx < 0 ? trimmed : trimmed.slice(0, spaceIdx);
     const rest = spaceIdx < 0 ? '' : trimmed.slice(spaceIdx + 1).trim();
-    const found = COMMANDS.find((c) => c.label === head);
+    const found = commands.find((c) => c.label === head);
     if (!found) return { kind: 'unknown', head };
     // review-action: /approve /needswork take no arguments; extra text is rejected to avoid misuse
     if (found.kind === 'review-action') {
@@ -47,4 +47,13 @@ export function parseChatCommand(trimmed: string): ParsedCommand {
   }
   // No '/' → natural-language "conversation as delegation": handed to the free-planning Agent (not /ask).
   return { kind: 'agentAsk', question: trimmed };
+}
+
+export function parseCodexCommand(trimmed: string, commands = CODEX_COMMANDS): ParsedCommand {
+  const normalized = trimmed.replace(/^\/\S+/, (head) => head.toLowerCase());
+  const parsed = parseChatCommand(normalized, commands);
+  if (parsed.kind === 'run' && parsed.name === 'review' && /\s/.test(normalized)) {
+    return { kind: 'commandNoArgs', cmd: '/review' };
+  }
+  return parsed;
 }

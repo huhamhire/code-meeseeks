@@ -74,9 +74,10 @@ export function toPrAgentRuns(
     enqueuedAt: r.enqueuedAt,
     ...(r.question ? { question: r.question } : {}),
   });
+  const isPrAgentRun = (run: PragentRunInfo) => run.prLocalId === prId && run.engine !== 'codex';
   return [
-    ...queue.active.filter((r) => r.prLocalId === prId).map((r) => pick(r, 'active')),
-    ...queue.waiting.filter((r) => r.prLocalId === prId).map((r) => pick(r, 'waiting')),
+    ...queue.active.filter(isPrAgentRun).map((r) => pick(r, 'active')),
+    ...queue.waiting.filter(isPrAgentRun).map((r) => pick(r, 'waiting')),
   ];
 }
 

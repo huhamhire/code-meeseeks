@@ -3,6 +3,7 @@ import { makeRunId } from '@meebox/poller';
 import {
   AppError,
   ERROR_CODES,
+  type ReviewEngine,
   type ReviewRun,
   type ReviewRunTool,
   type StoredPullRequest,
@@ -22,6 +23,7 @@ export interface QueueItem {
   req: {
     localId: string;
     tool: ReviewRunTool;
+    model?: string;
     question?: string;
     referencedContext?: string;
     referencedFinding?: ReviewRun['referencedFinding'];
@@ -54,6 +56,7 @@ export interface QueueItem {
  */
 export class RunQueue {
   private readonly waiting: QueueItem[] = [];
+  private lastRunTime = 0;
   /** Concurrently running runs (runId → item); capped at maxConcurrency. */
   private readonly active = new Map<string, QueueItem>();
   /** Concurrency cap; hot-swappable via setMaxConcurrency (config:setMaxConcurrency). */
@@ -70,6 +73,19 @@ export class RunQueue {
    * Enqueue a pr-agent run (shares the same queue / concurrency / cancel mechanism as a user's manual run). dedup: if the same PR
    * with the same tool is already executing / queued, throw (/ask is unrestricted). Resolves the completed ReviewRun.
    */
+  enqueueCodexReview(pr: StoredPullRequest, model?: string): Promise<ReviewRun> {
+    return this.enqueueRun(pr, 'codex', { tool: 'review', model }, 'user');
+  }
+
+  enqueueCodexAsk(
+    pr: StoredPullRequest,
+    question: string,
+    reference?: ReviewRun['referencedFinding'],
+    model?: string,
+  ): Promise<ReviewRun> {
+    return this.enqueueRun(pr, 'codex', { tool: 'ask', question, referencedFinding: reference, model }, 'user');
+  }
+
   enqueuePragentRun(
     pr: StoredPullRequest,
     tool: ReviewRunTool,
@@ -79,18 +95,29 @@ export class RunQueue {
     referencedFinding?: ReviewRun['referencedFinding'],
     scope?: ReviewRun['scope'],
   ): Promise<ReviewRun> {
+    return this.enqueueRun(pr, 'pr-agent', { tool, question, referencedContext, referencedFinding, scope }, priority);
+  }
+
+  private enqueueRun(
+    pr: StoredPullRequest,
+    engine: ReviewEngine,
+    { tool, question, referencedContext, referencedFinding, scope, model }: Omit<QueueItem['req'], 'localId'>,
+    priority: RunPriority,
+  ): Promise<ReviewRun> {
     const { logger } = this.ctx;
     // dedup only constrains same-tool duplicates for the "full PR"; /ask (a different question each time) and single-commit scope (a targeted action) are both let through
     // (allowing a per-commit review in addition to the full review, without treating them as duplicates).
-    if (tool !== 'ask' && !scope) {
+    if (engine === 'codex' || (tool !== 'ask' && !scope)) {
       const sameTask = (q: QueueItem): boolean =>
-        q.info.prLocalId === pr.localId && q.info.tool === tool;
+        q.info.prLocalId === pr.localId && q.info.engine === engine &&
+        (engine === 'codex' || q.info.tool === tool);
       if ([...this.active.values()].some(sameTask) || this.waiting.some(sameTask)) {
         throw new AppError(ERROR_CODES.AG_DUPLICATE_TASK, { tool });
       }
     }
     // Assign runId at enqueue; a later cancel(runId) can locate it in both waiting / active
-    const runId = makeRunId(new Date());
+    this.lastRunTime = Math.max(Date.now(), this.lastRunTime + 1);
+    const runId = makeRunId(new Date(this.lastRunTime));
     return new Promise<ReviewRun>((resolve, reject) => {
       const item: QueueItem = {
         info: {
@@ -99,6 +126,7 @@ export class RunQueue {
           repoSlug: pr.repo.repoSlug,
           prNumber: pr.remoteId,
           tool,
+          engine,
           question: tool === 'ask' ? question : undefined,
           origin: priority,
           scope,
@@ -110,6 +138,7 @@ export class RunQueue {
         req: {
           localId: pr.localId,
           tool,
+          model,
           question,
           referencedContext: tool === 'ask' ? referencedContext : undefined,
           referencedFinding: tool === 'ask' ? referencedFinding : undefined,
@@ -147,17 +176,21 @@ export class RunQueue {
   }
 
   /** Cancel one run (pragent:cancel): active→SIGKILL; waiting→dequeue + reject; neither matches→ok:false. */
-  cancel(runId: string): { ok: boolean } {
+  cancel(localId: string, runId: string, engine: ReviewEngine): { ok: boolean } {
     const { logger } = this.ctx;
+    const matches = (item: QueueItem) =>
+      item.info.runId === runId &&
+      item.info.prLocalId === localId &&
+      item.info.engine === engine;
     // active hit → SIGKILL (finally will write cancelled to disk)
     const running = this.active.get(runId);
-    if (running) {
+    if (running && matches(running)) {
       logger.info({ runId }, 'pragent run cancel: active');
       running.ac?.abort();
       return { ok: true };
     }
     // waiting hit → remove from queue + reject the original Promise, no disk write (never actually ran)
-    const idx = this.waiting.findIndex((q) => q.info.runId === runId);
+    const idx = this.waiting.findIndex(matches);
     if (idx >= 0) {
       const [removed] = this.waiting.splice(idx, 1);
       logger.info({ runId, queueLen: this.waiting.length }, 'pragent run cancel: queued');

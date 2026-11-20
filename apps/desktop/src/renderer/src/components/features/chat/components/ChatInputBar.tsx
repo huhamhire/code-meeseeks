@@ -15,13 +15,16 @@ import {
   ShareIcon,
 } from '../../../common';
 import { useChatInput } from '../hooks/useChatInput';
-import { useTextareaAutosizeDrag } from '../hooks/useTextareaAutosizeDrag';
+import { ChatCommandButton, ChatCommandSuggestions } from './ChatCommands';
+import { ResizableChatInput } from './ResizableChatInput';
 
 interface ChatInputBarProps {
   pr: StoredPullRequest | null;
   prAgent: PrAgentStatus;
   /** Whether the LLM is configured; when not, the input is disabled (even if the pr-agent runtime is ready it cannot be invoked) */
   llmConfigured: boolean;
+  inputHeight: number | null;
+  onInputHeightChange: (height: number) => void;
   /**
    * The active run tool on this PR; when non-null, an extra stop button is rendered beside the send button.
    * Under the queue model the input is never disabled because of this (new submissions enter the queue).
@@ -79,6 +82,8 @@ export function ChatInputBar({
   pr,
   prAgent,
   llmConfigured,
+  inputHeight,
+  onInputHeightChange,
   runningTool,
   onRun,
   onAgentAsk,
@@ -104,19 +109,11 @@ export function ChatInputBar({
     running,
     stopRequested,
     requestStop,
-    showAutocomplete,
-    filtered,
-    visibleCommands,
-    autocompleteIdx,
-    setAutocompleteIdx,
-    cmdMenuOpen,
-    setCmdMenuOpen,
-    handleInsertCommand,
+    commands,
     onKeyDown,
     submit,
     placeholder,
     textareaRef,
-    cmdMenuRef,
   } = useChatInput({
     pr,
     prAgent,
@@ -130,8 +127,6 @@ export function ChatInputBar({
     canMerge,
     onMerge,
   });
-  const { textareaHeightPx, handleTextareaResizeStart } = useTextareaAutosizeDrag(textareaRef);
-
   return (
     <form
       className="chat-pane-input"
@@ -140,95 +135,22 @@ export function ChatInputBar({
         submit();
       }}
     >
-      {showAutocomplete && filtered.length > 0 && (
-        <ul className="chat-cmd-suggest" role="listbox" aria-label={t('chatPane.cmdSuggestAria')}>
-          {filtered.map((c, i) => {
-            const active = i === Math.min(autocompleteIdx, filtered.length - 1);
-            const prev = filtered[i - 1];
-            const needDivider = prev !== undefined && prev.kind !== c.kind;
-            return (
-              <li key={c.name} className={needDivider ? 'chat-cmd-menu-group' : undefined}>
-                <button
-                  type="button"
-                  className={`chat-cmd-suggest-item${active ? ' active' : ''}`}
-                  onClick={() => handleInsertCommand(c)}
-                  onMouseEnter={() => setAutocompleteIdx(i)}
-                  onMouseDown={(e) => {
-                    // Prevent the blur handler from collapsing the menu after the textarea loses focus
-                    e.preventDefault();
-                  }}
-                  role="option"
-                  aria-selected={active}
-                >
-                  <code>{c.label}</code>
-                  <span className="muted">{t(c.descKey)}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <div className="chat-pane-textarea-wrap">
-        {/* Top-edge drag handle: drag up → textarea height increases, consistent with the visual expansion direction */}
-        <div
-          className="chat-pane-textarea-resize-handle"
-          onMouseDown={handleTextareaResizeStart}
-          title={t('chatPane.resizeInputTitle')}
-          aria-label={t('chatPane.resizeInputAria')}
-        />
-        <textarea
-          ref={textareaRef}
-          className="chat-pane-textarea"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={2}
-          aria-label={t('chatPane.inputAria')}
-          style={
-            textareaHeightPx !== null ? { height: `${String(textareaHeightPx)}px` } : undefined
-          }
-        />
-      </div>
+      <ChatCommandSuggestions menu={commands} />
+      <ResizableChatInput
+        textareaRef={textareaRef}
+        inputHeight={inputHeight}
+        onInputHeightChange={onInputHeightChange}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        disabled={disabled}
+        aria-label={t('chatPane.inputAria')}
+      />
       {parseError && <div className="chat-input-error">{parseError}</div>}
       <div className="chat-pane-input-row">
         <div className="chat-cmd-group">
-          <div className="chat-cmd-bar" ref={cmdMenuRef}>
-            <button
-              type="button"
-              className={`chat-cmd-trigger${cmdMenuOpen ? ' active' : ''}`}
-              onClick={() => setCmdMenuOpen((v) => !v)}
-              disabled={disabled}
-              aria-haspopup="menu"
-              aria-expanded={cmdMenuOpen}
-              title={t('chatPane.cmdTriggerTitle')}
-            >
-              /
-            </button>
-            {cmdMenuOpen && (
-              <ul className="chat-cmd-menu" role="menu">
-                {visibleCommands.map((c, i) => {
-                  const prev = visibleCommands[i - 1];
-                  // Insert a divider at the pragent → review-action boundary
-                  const needDivider = prev !== undefined && prev.kind !== c.kind;
-                  return (
-                    <li key={c.name} className={needDivider ? 'chat-cmd-menu-group' : undefined}>
-                      <button
-                        type="button"
-                        className="chat-cmd-suggest-item"
-                        onClick={() => handleInsertCommand(c)}
-                        role="menuitem"
-                      >
-                        <code>{c.label}</code>
-                        <span className="muted">{t(c.descKey)}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+          <ChatCommandButton menu={commands} />
           {/* Auto-review: icon button right beside the `/` command trigger. Appears only when pr-agent is ready;
             disabled when the LLM is not configured / a review on this PR is in progress (a review running on another
             PR does not disable it — concurrency / queueing allowed). Stopping is handled uniformly by the stop button
