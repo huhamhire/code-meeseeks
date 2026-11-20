@@ -50,6 +50,7 @@ import {
 import { buildCodexAskContext } from './codex-context.js';
 import { discoverCodexReview, readReviewEvents, runNativeAsk, runNativeReview } from './codex-review.js';
 import { validateReviewAnchor } from './review-anchor.js';
+import { collectReviewEvidence } from './review-evidence.js';
 import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 
 /** Finalization patch type for finishReviewRun (return of the finalization helper). */
@@ -112,12 +113,39 @@ export class RunExecutor {
     let artifactDir: string | undefined;
     try {
       reportPhase('preparing');
-      wt = await this.prepareWorkspace(pr, req.scope);
+      // Only automatic follow-ups on a specific finding use bounded evidence.
+      const ref =
+        item.priority === 'agent' && req.tool === 'ask' ? req.referencedFinding : undefined;
+      const reviewed = ref ? await getReviewRun(stateStore, pr.localId, ref.runId, 'pr-agent') : null;
+      const comparison =
+        reviewed?.tool === 'review' &&
+        reviewed.status === 'succeeded' &&
+        reviewed.headSha === pr.sourceRef.sha &&
+        reviewed.mergeBaseSha &&
+        !reviewed.scope
+          ? reviewed
+          : undefined;
+      wt = await this.prepareWorkspace(pr, req.scope, comparison?.mergeBaseSha);
+      const finding = comparison?.findings?.find((entry) => entry.id === ref?.findingId);
+      const evidence = finding?.anchor
+        ? await collectReviewEvidence(
+            wt.path,
+            pr.sourceRef.sha,
+            finding.anchor,
+            [req.question, finding.title, finding.body].join('\n'),
+            item.ac!.signal,
+          )
+        : undefined;
+      const evidencePrompt = ref
+        ? (evidence?.prompt ??
+          'Repository evidence could not be collected for this review snapshot. State this limitation and keep the original finding.')
+        : undefined;
       const { env, extraArgs, askLangSuffix } = await this.buildInvocation(
         req,
         pr,
         run.id,
         wt.path,
+        evidencePrompt,
       );
 
       // In CLI mode /ask sets the subprocess cwd to the worktree (for full file context; buildInvocation
@@ -163,6 +191,7 @@ export class RunExecutor {
         req,
         run.id,
         askLangSuffix,
+        !ref || !!evidence?.locations.length,
       );
       const structured = artifact
         ? parseStructuredReview(await fs.readFile(artifact, 'utf8').catch(() => ''))
@@ -172,6 +201,7 @@ export class RunExecutor {
         req.tool === 'review' && !structured ? detectLlmFailure(result.stdout) : null,
       );
       patch.mergeBaseSha = wt.diffBaseSha;
+      if (ref) patch.repositoryEvidence = evidence?.locations ?? [];
       if (req.tool === 'review' && patch.status === 'succeeded') {
         const markdownAvailable = fileContent.trim() || parsed.findings.some((finding) =>
           finding.sectionKey === 'code-feedback' ||
@@ -458,6 +488,7 @@ export class RunExecutor {
       referencedFinding: req.tool === 'ask' ? req.referencedFinding : undefined,
       // Trigger origin persisted with the run: user-origin runs get a command echo bubble added by ChatPane; agent sub-runs don't echo.
       origin: item.priority,
+      reviewStartedAt: req.reviewStartedAt,
       // Single-commit review scope persisted with the run: the result card uses it to show a scope badge.
       scope: req.scope,
       // PR head commit the run runs against: stamped so ChatPane can draw a commit divider when the code changes between runs.
@@ -479,7 +510,11 @@ export class RunExecutor {
    * By default bounds the full PR by a fixed merge-base (head=PR source sha, base=merge-base); when a single-commit scope
    * is passed, bounds by that commit's own changes instead (head=scope.sha, base=scope.parent), so pr-agent sees only the parent..sha diff.
    */
-  private async prepareWorkspace(pr: QueueItem['pr'], scope?: QueueItem['req']['scope']) {
+  private async prepareWorkspace(
+    pr: QueueItem['pr'],
+    scope?: QueueItem['req']['scope'],
+    reviewedBaseSha?: string,
+  ) {
     const { repoMirror, pr: prService } = this.ctx;
     const repoId = prService.repoIdentityFor(pr);
     // Use ensureMirrorReadyForPr (rather than bare syncMirror): same source as the UI diff, and reuses its self-healing —
@@ -487,7 +522,7 @@ export class RunExecutor {
     // otherwise materializeWorktree building the head branch would fail on the missing object.
     await prService.ensureMirrorReadyForPr(pr);
     // Single-commit reviews compare against the parent. Full PR reviews use the same fixed merge base as the UI diff.
-    const diffBaseSha = scope?.parent ?? await prService.resolveDiffBaseSha(pr);
+    const diffBaseSha = scope?.parent ?? reviewedBaseSha ?? await prService.resolveDiffBaseSha(pr);
     const workspace = await repoMirror.materializeWorktree(repoId, scope?.sha ?? pr.sourceRef.sha, diffBaseSha, pr.localId);
     return { ...workspace, diffBaseSha };
   }
@@ -502,6 +537,7 @@ export class RunExecutor {
     pr: QueueItem['pr'],
     runId: string,
     wtPath: string,
+    evidencePrompt?: string,
   ): Promise<{
     env: Record<string, string>;
     extraArgs: string[] | undefined;
@@ -524,7 +560,7 @@ export class RunExecutor {
     // CLI mode /ask: set the subprocess cwd to the (to-be-sanitized) worktree so free-form Q&A can read full files
     // (shim cli/install.py switches cwd based on this env). describe/review don't set it and keep a neutral temp dir; API mode is unaffected (the remote interface only has the diff).
     if (req.tool === 'ask' && activeLlm?.provider === 'cli') {
-      env['MEEBOX_CLI_WORKDIR'] = wtPath;
+      env['MEEBOX_CLI_WORKDIR'] = evidencePrompt ? '' : wtPath;
     }
 
     let prContext = '';
@@ -583,7 +619,7 @@ export class RunExecutor {
       // /ask code-retrieval guidance: injected only for the CLI provider (subprocess cwd is in the full worktree, file tools available), steering targeted retrieval
       // (built-in read-only search / grep for symbols · read only the needed line ranges) instead of reading whole files, lowering agentic exploration cost. Deliberately uses only the read-only tool set
       // (in headless default mode non-read-only tools abort the session, so don't induce rg). The API provider has no file access, not injected.
-      worktreeRetrieval: req.tool === 'ask' && activeLlm?.provider === 'cli',
+      worktreeRetrieval: !!env['MEEBOX_CLI_WORKDIR'],
     });
     // /ask's pr_questions prompt **does not render extra_instructions** (unlike describe/review/improve),
     // so env injection is a dead field for /ask. Thus /ask's instructions are instead spliced into the "question"
@@ -609,6 +645,7 @@ export class RunExecutor {
       // The echo (pr-agent writes the question verbatim into the artifact) is stripped entirely by collectOutput's stripAskQuestionEcho.
       const parts = [req.question];
       if (extraInstructions) parts.push(extraInstructions);
+      if (evidencePrompt) parts.push(evidencePrompt);
       if (askLangSuffix) parts.push(askLangSuffix);
       askQuestion = parts.join('\n\n');
     }
@@ -627,6 +664,7 @@ export class RunExecutor {
     req: QueueItem['req'],
     runId: string,
     askLangSuffix: string,
+    allowFindingClosure = true,
   ): Promise<{ parsed: ReturnType<typeof parseReviewOutput>; fileContent: string }> {
     const { logger, broadcast } = this.ctx;
     const stateStore = await this.ctx.pr.storeForPr(req.localId);
@@ -645,6 +683,7 @@ export class RunExecutor {
         ? stripAskQuestionEcho(fileContent, req.question, askLangSuffix)
         : fileContent;
     const parsed = parseReviewOutput(cleanedContent || resultStdout, req.tool);
+    if (!allowFindingClosure) delete parsed.askVerdict;
     // Re-review /ask (a finding was referenced):
     // - verdict replace → promote the suggestion to a positioned code comment (taking the original finding's anchor), rendered / adopted like /review code feedback;
     // - verdict replace / drop → silently close the referenced original finding (establish the closure relation + broadcast), no need for the user to manually click close.

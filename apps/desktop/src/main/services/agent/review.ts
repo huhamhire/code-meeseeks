@@ -37,6 +37,7 @@ export interface ReviewDeps {
     question?: string,
     referencedContext?: string,
     referencedFinding?: ReviewRun['referencedFinding'],
+    reviewStartedAt?: string,
   ) => Promise<ReviewRun>;
   /** Re-review verdict replace/drop → close the superseded original review finding (write FindingClosure + broadcast). Default = don't close. */
   closeFinding?: (
@@ -92,6 +93,7 @@ export async function runReview(
             question,
             referencedContext,
             referencedFinding,
+            session.startedAt,
           );
           if (run.status !== 'succeeded') {
             throw new Error(`pr-agent ${tool} did not succeed: ${run.errorMessage ?? run.status}`);

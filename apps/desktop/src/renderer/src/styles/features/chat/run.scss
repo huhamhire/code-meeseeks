@@ -106,6 +106,34 @@
   gap: $space-4;
 }
 
+.chat-review-process {
+  padding: $space-3 $space-4;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+
+  > summary {
+    color: $text-muted;
+    cursor: pointer;
+  }
+}
+
+.chat-review-process-body,
+.chat-review-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+.chat-review-process-body {
+  margin-top: $space-4;
+}
+
+.chat-review-feedback > h3 {
+  font-size: $fs-md;
+  font-weight: 600;
+}
+
 // /ask user question row: sits below RunMeta, `?` icon on the left + question content,
 // visually letting the reader immediately recognize "this is user input, not the answer"
 .chat-user-msg {

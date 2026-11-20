@@ -169,11 +169,13 @@
     "retryAria": "Erneut versuchen",
     "retryTitle": "/{{tool}} erneut versuchen",
     "retryWithQuestionTitle": "/{{tool}} {{question}} erneut versuchen",
+    "reviewFeedback": "Code-Feedback",
     "reviewPhase": {
       "preparing": "Review-Arbeitsbereich wird vorbereitet…",
       "reviewing": "PR Agent führt das Review aus…",
       "validating": "Befunde und geänderte Zeilen werden geprüft…"
     },
+    "reviewProcess": "Prüfungsverlauf",
     "reviewResult": {
       "clean": "Review abgeschlossen. Keine Codebefunde.",
       "invalid": "Das Review hat kein verwertbares Ergebnis geliefert. Details stehen in der Roh-Ausgabe.",

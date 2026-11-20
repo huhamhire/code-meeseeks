@@ -303,6 +303,8 @@ export interface ReviewRun {
   engineVersion?: string;
   baseSha?: string;
   mergeBaseSha?: string;
+  /** Source ranges supplied to an automatic follow-up. An empty list means no evidence was available. */
+  repositoryEvidence?: FindingAnchor[];
   /** Structured coverage is reported by the runtime. Legacy Markdown cannot establish completeness. */
   reviewCoverage?: {
     status: 'complete' | 'partial' | 'unknown' | 'invalid';
@@ -328,6 +330,8 @@ export interface ReviewRun {
    * (their user input is already carried by the orchestration session's user message, avoiding duplicate bubbling). Historical runs lack this field (undefined), not echoed.
    */
   origin?: ReviewRunOrigin;
+  /** Start marker shared with the automatic review's steps and summary. */
+  reviewStartedAt?: string;
   /**
    * Single-commit review scope: filled when this run is limited to that commit's own changes (`parent..sha`) rather than the whole PR.
    * Default = whole-PR scope. The result card shows a scope badge accordingly.

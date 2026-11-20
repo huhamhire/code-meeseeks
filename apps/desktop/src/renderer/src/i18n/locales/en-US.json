@@ -169,11 +169,13 @@
     "retryAria": "Retry",
     "retryTitle": "Retry /{{tool}}",
     "retryWithQuestionTitle": "Retry /{{tool}} {{question}}",
+    "reviewFeedback": "Code feedback",
     "reviewPhase": {
       "preparing": "Preparing the review workspace…",
       "reviewing": "Running PR Agent review…",
       "validating": "Validating findings and changed lines…"
     },
+    "reviewProcess": "Review process",
     "reviewResult": {
       "clean": "Review complete. No code findings.",
       "invalid": "The review produced no usable result. See raw output for details.",

@@ -169,11 +169,13 @@
     "retryAria": "重试",
     "retryTitle": "重试 /{{tool}}",
     "retryWithQuestionTitle": "重试 /{{tool}} {{question}}",
+    "reviewFeedback": "代码反馈",
     "reviewPhase": {
       "preparing": "正在准备评审工作区…",
       "reviewing": "正在运行 PR Agent 评审…",
       "validating": "正在校验评审发现和变更行…"
     },
+    "reviewProcess": "评审过程",
     "reviewResult": {
       "clean": "评审完成，未发现代码问题。",
       "invalid": "未获得可用的评审结果，请查看原始输出。",

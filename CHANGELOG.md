@@ -9,6 +9,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### ✨ Added
 
+- Automatic PR Agent follow-ups can check related source and tests at the reviewed commit. API and local CLI profiles receive the same bounded excerpts and source locations.
 - PR Agent shows review progress and distinguishes complete, partial, and unverified coverage across API and local CLI model profiles.
 - The Codex tab explains its available commands in the empty state and offers `/review`, `/ask`, `/approve`, and `/needswork` through the command menu and input completion.
 - A Codex tab runs native reviews from the desktop when a compatible local Codex CLI is detected and signed in. The experimental tab supports native reviews, read-only multi-turn questions, and follow-ups on review findings. Findings can be used as comment drafts. The model picker initially selects the latest available Sol and remembers the selected model across restarts.
@@ -17,6 +18,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔧 Fixed
 
+- Completed automatic reviews keep the PR description visible, collect code feedback before the final summary, and collapse intermediate review and follow-up results.
 - Closing a diff editor no longer causes a crash when another Monaco view initializes its hover controls. Inline comment code previews now use static syntax highlighting and retain file line numbers, anchor highlights, and editor appearance settings.
 - Clicking diagrams, PR rows, and other controls no longer leaves a focus outline. Keyboard focus uses the app's theme.
 - Finding locations remain clickable for read-only navigation, including findings from earlier PR revisions.

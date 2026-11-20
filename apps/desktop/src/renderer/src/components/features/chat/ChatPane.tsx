@@ -35,7 +35,7 @@ import { isStaleReview } from './utils/review-snapshot';
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './constants';
 import { useChatSession } from './hooks/useChatSession';
 import { useChatActions } from './hooks/useChatActions';
-import { useChatTimeline } from './hooks/useChatTimeline';
+import { useChatTimeline, type TimelineEntry } from './hooks/useChatTimeline';
 import { AgentStepRow, ThinkingLive } from './components/AgentStep';
 import { CodexReviewPane } from './components/CodexReviewPane';
 import { ChatEmpty } from './components/ChatEmpty';
@@ -47,7 +47,10 @@ import { PlanPanel } from './components/PlanPanel';
 import { QueuedView } from './components/QueuedView';
 import { RulePreviewModal } from './components/RulePreviewModal';
 import { RunningView } from './components/RunningView';
-import { RunResultView } from './components/RunResultView';
+import { RunFindingList, RunResultView, type RunFindingActions } from './components/RunResultView';
+import { getReviewPresentation } from './utils/review-presentation';
+
+const EMPTY_FINDING_CLOSURES: RunFindingActions['closures'] = [];
 
 interface ChatPaneProps {
   pr: StoredPullRequest | null;
@@ -194,7 +197,7 @@ export function ChatPane({
   const drafts = useDraftsForPr(prLocalId);
   // Re-review closure-relation pool (read-only): when a re-review /ask verdict is replace/drop, the backend automatically closes the original finding (see asks-step →
   // closeFinding) and broadcasts it; here we look up by (runId,findingId) and mark it on FindingCard with a read-only chip "superseded/closed by re-review".
-  const closures = useFindingClosuresForPr(prLocalId) ?? [];
+  const closures = useFindingClosuresForPr(prLocalId) ?? EMPTY_FINDING_CLOSURES;
 
   // Re-review reference state: clicking a finding's "reference" → only attaches to the input bar (chip); does not auto-fill the question, the user types it. The reference is carried on send.
   const [refFinding, setRefFinding] = useState<{ finding: Finding; run: ReviewRun } | null>(null);
@@ -307,6 +310,10 @@ export function ChatPane({
     () => computeCommitDividers(timeline, pr?.sourceRef.sha, pr?.headChanges, agentRunningHere),
     [timeline, pr?.sourceRef.sha, pr?.headChanges, agentRunningHere],
   );
+  const reviewPresentation = useMemo(
+    () => getReviewPresentation(timeline, closures, commitDividers.before),
+    [timeline, closures, commitDividers.before],
+  );
   const latestHeadChangeAt = pr?.headChanges?.at(-1)?.at;
   useEffect(() => {
     const body = session.bodyRef.current;
@@ -382,6 +389,37 @@ export function ChatPane({
 
   const { runs, error, loadingSession, matchedRules, bodyRef, hasMoreOlder, loadingOlder } =
     session;
+
+  const findingActions: RunFindingActions = {
+    drafts: drafts ?? [],
+    closures,
+    onJumpToDraft: actions.handleJumpToDraft,
+    onRejectFinding: actions.handleRejectFinding,
+    onNavigateToFinding: actions.handleNavigateToFinding,
+    onReferenceFinding,
+    onScrollToRun: (runId) => scrollToResult(bodyRef.current, runId),
+  };
+  const renderRun = (entry: TimelineEntry, canRetry = false) => {
+    const run = entry.run;
+    return (
+      run && (
+        <div data-run-id={run.id}>
+          <RunResultView
+            run={run}
+            stale={isStaleReview(run, pr)}
+            onRetry={actions.handleRetry}
+            onDelete={actions.handleDeleteRun}
+            canRetry={canRetry}
+            movedFindings={reviewPresentation.movedFindings.get(run.id)}
+            onScrollToFinding={(runId, findingId) =>
+              scrollToResult(bodyRef.current, runId, findingId)
+            }
+            {...findingActions}
+          />
+        </div>
+      )
+    );
+  };
 
   return (
     <aside
@@ -524,65 +562,83 @@ export function ChatPane({
         )}
         {/* History runs stacked in ascending time order, each an independent card (maintaining its own raw stdout collapse state).
             Initially only the latest RUNS_PAGE_SIZE are fetched; after scrolling up to the top, fetch an earlier batch by cursor */}
-        {timeline.map((entry, i) => (
-          <Fragment key={entry.key}>
-            <CommitDividerList shas={commitDividers.before.get(entry.key)} messages={commitMsgBySha} />
-            {entry.run ? (
-              // data-run-id: for re-review card ↔ original finding card cross-link scroll targeting (scrollToRun).
-              <div data-run-id={entry.run.id}>
-                <RunResultView
-                  run={entry.run}
-                  stale={isStaleReview(entry.run, pr)}
-                  onRetry={actions.handleRetry}
-                  onDelete={actions.handleDeleteRun}
-                  // Only in the single case of "the last run in the timeline + nothing running" can a failed / cancelled run
-                  // be retried; once the user has started a new action (whether succeeded or running) → old failures no longer show retry,
-                  // avoiding a back-click re-queue that would disrupt conversation order
-                  canRetry={i === timeline.length - 1 && !hasMyActive}
-                  drafts={drafts ?? []}
-                  closures={closures}
-                  onJumpToDraft={actions.handleJumpToDraft}
-                  onRejectFinding={actions.handleRejectFinding}
-                  onNavigateToFinding={actions.handleNavigateToFinding}
-                  onReferenceFinding={onReferenceFinding}
-                  onScrollToRun={(runId) => scrollToResult(bodyRef.current, runId)}
-                  onScrollToFinding={(runId, findingId) => scrollToResult(bodyRef.current, runId, findingId)}
-                />
-              </div>
-            ) : entry.active ? (
-              // Running: progress bar + live stdout stream, interleaved into the timeline by start time (startedAt is null when enqueued,
-              // set when it starts, falling back to enqueuedAt). Not rendered when prAgent is not ready.
-              prAgent.available ? (
-                <RunningView
-                  tool={entry.active.tool}
-                  runId={entry.active.runId}
-                  reviewPhase={entry.active.reviewPhase}
-                  question={entry.active.question}
-                  scope={entry.active.scope}
-                  lines={linesByRunId.get(entry.active.runId) ?? []}
-                  startedAt={new Date(entry.active.startedAt ?? entry.active.enqueuedAt).getTime()}
-                  model={currentLlmModel ?? null}
-                />
-              ) : null
-            ) : entry.step ? (
-              <AgentStepRow step={entry.step} />
-            ) : entry.message ? (
-              <ConversationMessage
-                message={entry.message}
-                useAsReply={
-                  answeringComment && entry.key === lastAnswerKey
-                    ? {
-                        label: t('chatPane.commentReference.useAsReply'),
-                        onUse: () => {
-                          createReplyDraftFromAnswer(entry.message!.content);
-                        },
-                      }
-                    : null
-                }
+        {timeline.map((entry, i) => {
+          const process = reviewPresentation.processAt.get(entry.key);
+          const feedback = reviewPresentation.feedbackAt.get(entry.key);
+          return (
+            <Fragment key={entry.key}>
+              <CommitDividerList
+                shas={commitDividers.before.get(entry.key)}
+                messages={commitMsgBySha}
               />
-            ) : null}
-          </Fragment>
-        ))}
+              {process && (
+                <details className="chat-review-process">
+                  <summary>{t('chatPane.reviewProcess')}</summary>
+                  <div className="chat-review-process-body">
+                    {process.map((item) => (
+                      <Fragment key={item.key}>
+                        {item.step ? <AgentStepRow step={item.step} /> : renderRun(item)}
+                      </Fragment>
+                    ))}
+                  </div>
+                </details>
+              )}
+              {feedback && (
+                <section
+                  className="chat-review-feedback"
+                  aria-label={t('chatPane.reviewFeedback')}
+                >
+                  <h3>{t('chatPane.reviewFeedback')}</h3>
+                  {feedback.map(({ run, findings }) => (
+                    <RunFindingList
+                      key={run.id}
+                      run={run}
+                      findings={findings}
+                      stale={isStaleReview(run, pr)}
+                      {...findingActions}
+                    />
+                  ))}
+                </section>
+              )}
+              {reviewPresentation.processMembers.has(entry.key) ? null : entry.run ? (
+                renderRun(entry, i === timeline.length - 1 && !hasMyActive)
+              ) : entry.active ? (
+                // Running: progress bar + live stdout stream, interleaved into the timeline by start time (startedAt is null when enqueued,
+                // set when it starts, falling back to enqueuedAt). Not rendered when prAgent is not ready.
+                prAgent.available ? (
+                  <RunningView
+                    tool={entry.active.tool}
+                    runId={entry.active.runId}
+                    reviewPhase={entry.active.reviewPhase}
+                    question={entry.active.question}
+                    scope={entry.active.scope}
+                    lines={linesByRunId.get(entry.active.runId) ?? []}
+                    startedAt={new Date(
+                      entry.active.startedAt ?? entry.active.enqueuedAt,
+                    ).getTime()}
+                    model={currentLlmModel ?? null}
+                  />
+                ) : null
+              ) : entry.step ? (
+                <AgentStepRow step={entry.step} />
+              ) : entry.message ? (
+                <ConversationMessage
+                  message={entry.message}
+                  useAsReply={
+                    answeringComment && entry.key === lastAnswerKey
+                      ? {
+                          label: t('chatPane.commentReference.useAsReply'),
+                          onUse: () => {
+                            createReplyDraftFromAnswer(entry.message!.content);
+                          },
+                        }
+                      : null
+                  }
+                />
+              ) : null}
+            </Fragment>
+          );
+        })}
         <CommitDividerList shas={commitDividers.bottom} messages={commitMsgBySha} />
         {/* This PR's queued tasks: placed after running ones, each cancellable individually. The position uses the **global** queue order (the queue is shared across PRs,
             otherwise every PR showing "position 1" would be misleading) — the runId's index in the global waiting array +1. */}

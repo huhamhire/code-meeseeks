@@ -169,11 +169,13 @@
     "retryAria": "再試行",
     "retryTitle": "/{{tool}} を再試行",
     "retryWithQuestionTitle": "/{{tool}} {{question}} を再試行",
+    "reviewFeedback": "コードへのフィードバック",
     "reviewPhase": {
       "preparing": "レビュー用の作業領域を準備中…",
       "reviewing": "PR Agent でレビュー中…",
       "validating": "指摘と変更行を検証中…"
     },
+    "reviewProcess": "レビューの過程",
     "reviewResult": {
       "clean": "レビューが完了しました。コードの指摘はありません。",
       "invalid": "利用できるレビュー結果がありません。元の出力を確認してください。",
