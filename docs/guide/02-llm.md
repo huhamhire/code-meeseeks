@@ -121,6 +121,12 @@ An advanced option: instead of connecting directly to any LLM API, invoke — wi
 
 > Prerequisite: the corresponding command must be installed on your machine, on the PATH, and logged in, otherwise the review fails because the command is not found; review usage counts against that CLI account's own quota.
 
+## Automatic review in PR Agent
+
+Choose **Auto Review** to generate a PR description, review the diff, and produce a final summary. The review uses the author's PR description and excludes existing PR comments and replies. You can explicitly reference a comment when asking a question.
+
+When the review completes, the description stays visible and code feedback appears before the final summary. Expand **Review process** to inspect intermediate results. Finding priorities help you choose what to read first. P1 requires a follow-up that cites evidence from the reviewed commit, and the label shows the model's stated trigger and consequence. Review and publish any findings you decide to adopt.
+
 ## Native Codex review
 
 Install and sign in to a compatible Codex CLI. The desktop app detects it automatically at startup and when the window regains focus. In a PR, switch from **PR Agent** to **Codex** and select **Run Codex review**. Codex reviews the full PR.
