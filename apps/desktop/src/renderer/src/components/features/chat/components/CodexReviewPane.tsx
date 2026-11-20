@@ -26,7 +26,7 @@ import { CODEX_COMMANDS } from '../commands';
 import { useChatCommands } from '../hooks/useChatCommands';
 import { parseCodexCommand } from '../utils/parse-command';
 import { scrollToResult } from '../utils/scroll-to-result';
-import { computeCommitDividers } from '../utils/commit-dividers';
+import { computeCommitDividers, type CommitTimelineEntry } from '../utils/commit-dividers';
 
 type Props = Pick<
   ComponentProps<typeof RunResultView>,
@@ -88,10 +88,11 @@ export function CodexReviewPane({
     .slice()
     .reverse()
     .filter((run) => run.id !== runningId);
-  const timeline = history.map((run) => ({
+  const timeline: CommitTimelineEntry[] = history.map((run) => ({
     key: run.id,
     sortTime: Date.parse(run.startedAt),
     headSha: run.headSha,
+    completedReview: run.tool === 'review' && run.status === 'succeeded',
   }));
   if (running)
     timeline.push({

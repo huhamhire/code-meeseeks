@@ -18,7 +18,8 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 ### 🔧 Fixed
 
 - Finding locations remain clickable for read-only navigation, including findings from earlier PR revisions.
-- Review timelines show a commit divider when a new PR head is detected and keep it in place as later messages and runs arrive.
+- After the first completed review, new PR heads appear as commit dividers that stay in place as later messages and runs arrive.
+- New commits received during an automatic review are marked after its summary.
 - PR Agent records the reviewed comparison, verifies finding anchors against changed lines, and preserves pending drafts after partial or failed reviews.
 - The review tabs keep unsent input when switching engines and scope run history, progress, and run operations to their own engine.
 - The Codex model picker sits next to Send and loads its catalog automatically.

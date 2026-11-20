@@ -304,8 +304,8 @@ export function ChatPane({
   });
 
   const commitDividers = useMemo(
-    () => computeCommitDividers(timeline, pr?.sourceRef.sha, pr?.headChanges),
-    [timeline, pr?.sourceRef.sha, pr?.headChanges],
+    () => computeCommitDividers(timeline, pr?.sourceRef.sha, pr?.headChanges, agentRunningHere),
+    [timeline, pr?.sourceRef.sha, pr?.headChanges, agentRunningHere],
   );
   const latestHeadChangeAt = pr?.headChanges?.at(-1)?.at;
   useEffect(() => {

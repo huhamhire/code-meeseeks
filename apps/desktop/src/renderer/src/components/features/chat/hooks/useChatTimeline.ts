@@ -7,6 +7,10 @@ export interface TimelineEntry {
   key: string;
   sortTime: number;
   headSha?: string;
+  completedReview?: boolean;
+  orchestratedReview?: boolean;
+  reviewStartedAt?: number;
+  reviewSummary?: boolean;
   run: ReviewRun | null;
   active: PragentRunInfo | null;
   step: AgentStep | null;
@@ -64,6 +68,8 @@ export function useChatTimeline(params: {
       key: `run-${r.id}`,
       sortTime: ms(r.startedAt),
       headSha: r.headSha,
+      completedReview: r.tool === 'review' && r.status === 'succeeded',
+      orchestratedReview: r.tool === 'review' && r.origin === 'agent' && r.status === 'succeeded',
       run: r as ReviewRun | null,
     }));
     const activeEntries = myActiveRuns.map((a) => ({
@@ -77,6 +83,7 @@ export function useChatTimeline(params: {
       ...base,
       key: `step-${i}-${s.at ?? ''}`,
       sortTime: ms(s.at),
+      reviewStartedAt: ms(s.reviewStartedAt) || undefined,
       step: s as AgentStep | null,
     }));
     const msgEntries = messages.map((m, i) => ({
@@ -84,6 +91,8 @@ export function useChatTimeline(params: {
       key: `msg-${i}-${m.at}`,
       sortTime: ms(m.at),
       headSha: m.headSha,
+      reviewStartedAt: ms(m.reviewStartedAt) || undefined,
+      reviewSummary: m.role === 'assistant' && !!(m.reviewStartedAt || m.recommendation),
       message: m as AgentMessage | null,
     }));
     // Command echo bubble: only for runs **directly triggered by the user** (origin==='user'), add a user message right above its card
