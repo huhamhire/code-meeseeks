@@ -9,6 +9,11 @@
 
 > ⚠️ **macOS 桌面版现要求 Apple Silicon 及 macOS 13 Ventura 或更高版本。** 内置 Electron 运行时由 42.3.0 升级至 45.4.1。
 
+### 🔒 安全
+
+- 更新 Git 操作、HTTP 请求、图表渲染和规则文件解析所用的依赖，纳入安全修复。
+- PR Agent 内置的 Python 运行时更新到 3.12.16。
+
 ### ✨ 新增
 
 - PR Agent 的模型菜单支持在 Codex CLI 预设下选择具体型号。

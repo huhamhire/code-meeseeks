@@ -80,7 +80,7 @@
     "anser": "^2.3.5",
     "i18next": "^26.3.1",
     "i18next-resources-to-backend": "^1.2.1",
-    "mermaid": "^11.4.0",
+    "mermaid": "^11.17.2",
     "monaco-editor": "^0.56.0",
     "pino": "^9.5.0",
     "pino-roll": "^3.0.0",
@@ -93,7 +93,7 @@
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "semver": "^7.6.3",
-    "undici": "^6.21.1",
+    "undici": "^6.29.1",
     "yaml": "^2.6.0",
     "zod": "^3.23.0"
   },
