@@ -12,9 +12,10 @@ import {
   listReviewRunsForPr,
 } from '@meebox/poller';
 import { pickMatchingRules } from '@meebox/rules';
-import { AppError, CODEX_QUESTION_LIMIT, ERROR_CODES, type AgentRecommendationVerdict } from '@meebox/shared';
+import { AppError, CODEX_QUESTION_LIMIT, ERROR_CODES, type AgentRecommendationVerdict, type ReviewRun } from '@meebox/shared';
 import { discoverCodexReview } from '../services/pr-agent/codex-review.js';
 import { getCachedCodexModels, listCodexModels } from '../services/pr-agent/codex-models.js';
+import { recoverPaddedReviewAnchors } from '../services/pr-agent/review-anchor.js';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
 import { buildProxyEnv } from '../utils/proxy.js';
@@ -231,16 +232,25 @@ export const cancelPragent: IpcController<'pragent:cancel'> = (_event, req) =>
  */
 export const getQueue: IpcController<'pragent:queue'> = () => getContext().runQueue.snapshot();
 
+async function recoverRunAnchors(localId: string, runs: ReviewRun[]): Promise<ReviewRun[]> {
+  const ctx = getContext();
+  return recoverPaddedReviewAnchors(runs, async () => {
+    const pr = await ctx.pr.findPrOrThrow(localId);
+    return ctx.repoMirror.mirrorPath(ctx.pr.repoIdentityFor(pr));
+  });
+}
+
 /**
  * List a PR's run history (cursor pagination).
  */
 export const listRuns: IpcController<'pragent:listRuns'> = async (_event, req) => {
   const ctx = getContext();
-  return listReviewRunsForPr(await ctx.pr.storeForPr(req.localId), req.localId, {
+  const runs = await listReviewRunsForPr(await ctx.pr.storeForPr(req.localId), req.localId, {
     limit: req.limit,
     beforeId: req.beforeId,
     engine: 'pr-agent',
   });
+  return recoverRunAnchors(req.localId, runs);
 };
 
 /**
@@ -248,7 +258,10 @@ export const listRuns: IpcController<'pragent:listRuns'> = async (_event, req) =
  */
 export const getRun: IpcController<'pragent:getRun'> = async (_event, req) => {
   const ctx = getContext();
-  return getReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId, 'pr-agent');
+  const run = await getReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId, 'pr-agent');
+  if (!run) return run;
+  const [recovered] = await recoverRunAnchors(req.localId, [run]);
+  return recovered ?? run;
 };
 
 /**

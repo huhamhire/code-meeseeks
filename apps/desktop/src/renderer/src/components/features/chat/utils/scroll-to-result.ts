@@ -5,11 +5,11 @@ export function scrollToResult(
 ): void {
   const id = CSS.escape(runId);
   const run = container?.querySelector(`[data-run-id="${id}"]`);
-  const finding =
-    findingId &&
-    container?.querySelector(
-      `[data-feedback-run-id="${id}"] [data-finding-id="${CSS.escape(findingId)}"]`,
-    );
+  const selector = findingId && `[data-finding-id="${CSS.escape(findingId)}"]`;
+  const finding = selector && (
+    container?.querySelector(`.chat-review-feedback [data-feedback-run-id="${id}"] ${selector}`) ??
+    run?.querySelector(selector)
+  );
   const target = finding || run;
   if (!target) return;
   for (

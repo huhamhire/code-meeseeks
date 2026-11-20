@@ -48,15 +48,16 @@ export function parseStructuredReview(text: string):
     const start = issue?.['start_line'];
     const end = issue?.['end_line'];
     const priority = readReviewPriority(body);
+    const filePath = file.trim();
     findings.push({
       id: `structured-review-${String(findings.length + 1)}`,
       category: 'code-feedback',
       sectionKey: 'code-feedback',
       title,
       ...priority,
-      anchor: file
+      anchor: filePath
         ? {
-            path: file,
+            path: filePath,
             startLine: typeof start === 'number' ? start : undefined,
             endLine: typeof end === 'number' ? end : undefined,
           }

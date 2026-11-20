@@ -25,7 +25,7 @@ describe('parseStructuredReview', () => {
         review: {
           key_issues_to_review: [
             {
-              relevant_file: 'src/a.ts',
+              relevant_file: ' src/a.ts\r\n',
               issue_header: 'Review title',
               issue_content:
                 'Review finding\n[review-priority: {"level":"P2","trigger":"empty input","consequence":"request fails"}]',

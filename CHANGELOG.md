@@ -23,8 +23,9 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 - The Codex model picker opens from the saved catalog or the local CLI cache while it refreshes in the background.
 - Automatic PR Agent reviews exclude existing PR comments and replies while retaining the PR description.
-- Completed automatic reviews keep the PR description visible, collect code feedback before the final summary, and collapse intermediate review and follow-up results.
-- Grouped PR Agent feedback marks older reviews and lets you reference their findings in follow-up questions. Inline comment drafts still require a current, verified location.
+- Completed automatic reviews keep the PR description visible and copy unique, actionable findings before the final summary. The collapsed review process retains the original results, including feedback replaced or withdrawn by a follow-up.
+- Findings from older PR revisions remain available for follow-up questions in the review process. Inline comment drafts require a current, eligible location.
+- PR Agent trims extra whitespace from structured finding paths and rechecks previously affected findings against the local review diff.
 - Closing a diff editor no longer causes a crash when another Monaco view initializes its hover controls. Inline comment code previews now use static syntax highlighting and retain file line numbers, anchor highlights, and editor appearance settings.
 - Clicking diagrams, PR rows, and other controls no longer leaves a focus outline. Keyboard focus uses the app's theme.
 - Finding locations remain clickable for read-only navigation, including findings from earlier PR revisions.

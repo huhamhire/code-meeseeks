@@ -144,7 +144,7 @@ export function RunFindingList({
           (draft) => draft.source?.runId === run.id && draft.source.findingId === finding.id,
         );
         const closure = closures.find(
-          (item) => item.runId === run.id && item.findingId === finding.id,
+          (item) => item.runId === run.id && item.findingId === finding.id && item.verdict !== 'keep',
         );
         const kind = finding.sectionKey ?? finding.category;
         const canReference =
@@ -182,7 +182,6 @@ export function RunResultView({
   onDelete,
   canRetry,
   onScrollToFinding,
-  movedFindings,
   ...findingActions
 }: RunFindingActions & {
   run: ReviewRun;
@@ -192,15 +191,11 @@ export function RunResultView({
   onDelete: (runId: string) => void;
   /** Determined by the parent as "last one + no active run"; when false, failed / cancelled runs also don't show the retry button */
   canRetry: boolean;
-  movedFindings?: ReadonlySet<string>;
   /** Scroll to a given finding card within a run and flash-highlight it (reference badge at the top of the re-review card → original finding card). */
   onScrollToFinding: (runId: string, findingId: string) => void;
 }) {
   const { t } = useTranslation();
   const findings = run.findings ?? [];
-  const visibleFindings = movedFindings
-    ? findings.filter(({ id }) => !movedFindings.has(id))
-    : findings;
   // Both failed + cancelled use a red banner. Cancel is a deliberate user action, so the UI distinguishes it with lighter wording
   const isFailed = run.status === 'failed';
   const isCancelled = run.status === 'cancelled';
@@ -340,9 +335,9 @@ export function RunResultView({
       {/* Failed / cancelled don't render findings: a cancelled /describe would parse part of stdout into「paragraphs」and mistakenly show them as results.
           Failed / cancelled uniformly keep only the collapsible「raw output」above + the status banner, not opening another output block below. */}
       {!isFailedOrCancelled &&
-        (visibleFindings.length > 0 ? (
-          <RunFindingList run={run} findings={visibleFindings} stale={stale} {...findingActions} />
-        ) : run.status === 'succeeded' && !coverage && !movedFindings ? (
+        (findings.length > 0 ? (
+          <RunFindingList run={run} findings={findings} stale={stale} {...findingActions} />
+        ) : run.status === 'succeeded' && !coverage ? (
           <div className="chat-finding-empty muted">{t('chatPane.noFindings')}</div>
         ) : null)}
     </div>

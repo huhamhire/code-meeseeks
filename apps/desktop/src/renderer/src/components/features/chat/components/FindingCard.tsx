@@ -15,6 +15,7 @@ import {
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { translatePrAgentLabels } from '../../../../utils/translate-pr-agent';
 import {
+  hasInlineFindingAnchor,
   pillStyle,
   sectionLabel,
   splitTypeLabels,
@@ -225,10 +226,7 @@ export function FindingCard({
   // Replaced/closed by a re-review: likewise collapsed and desaturated (same visual as rejected), the anchor row shows a read-only closed chip.
   const isClosed = !!closure;
   const key: PrDocSectionKey = finding.sectionKey ?? finding.category ?? 'general';
-  const hasInlineAnchor =
-    (key === 'code-feedback' || key === 'code-suggestion') &&
-    finding.anchor?.startLine !== undefined &&
-    finding.inlineAnchorVerified !== false;
+  const hasInlineAnchor = hasInlineFindingAnchor(finding);
   // Collapsed by default: rejected / re-review-closed findings, or the /ask "analysis process" segment (process discussion collapsed by default, expandable).
   const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
   const [expanded, setExpanded] = useState(false);

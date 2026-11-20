@@ -1,6 +1,20 @@
 import type { CSSProperties } from 'react';
 import type { TFunction } from 'i18next';
-import { DEFAULT_CODE_SUGGESTION_LAYOUT, type Finding, type PrDocSectionKey, type ReviewPriority } from '@meebox/shared';
+import { DEFAULT_CODE_SUGGESTION_LAYOUT, type Finding, type FindingAnchor, type PrDocSectionKey, type ReviewPriority } from '@meebox/shared';
+
+export function hasInlineFindingAnchor(
+  finding: Finding,
+): finding is Finding & { anchor: FindingAnchor & { startLine: number } } {
+  const kind = finding.sectionKey ?? finding.category;
+  const line = finding.anchor?.startLine;
+  return (
+    (kind === 'code-feedback' || kind === 'code-suggestion') &&
+    typeof line === 'number' &&
+    Number.isSafeInteger(line) &&
+    line > 0 &&
+    finding.inlineAnchorVerified !== false
+  );
+}
 
 /**
  * The issue body from pr-agent /review has a trailing `[file: <path>, lines: <s>-<e>]`

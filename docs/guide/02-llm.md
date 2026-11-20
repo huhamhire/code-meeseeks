@@ -127,7 +127,7 @@ In PR Agent, open the status-bar model menu and select a Codex CLI profile to op
 
 Choose **Auto Review** to generate a PR description, review the diff, and produce a final summary. The review uses the author's PR description and excludes existing PR comments and replies. You can explicitly reference a comment when asking a question.
 
-When the review completes, the description stays visible and code feedback appears before the final summary. Expand **Review process** to inspect intermediate results. Finding priorities help you choose what to read first. P1 requires a follow-up that cites evidence from the reviewed commit, and the label shows the model's stated trigger and consequence. Review and publish any findings you decide to adopt.
+When the review completes, the description stays visible. Before the final summary, each distinct finding that can become an inline comment offers shortcuts to create a draft or ask a follow-up. Findings replaced or withdrawn by a follow-up are omitted from this list. Expand **Review process** to inspect the original results. Finding priorities help you choose what to read first. P1 requires a follow-up that cites evidence from the reviewed commit, and the label shows the model's stated trigger and consequence.
 
 Use **Inline comments** in the top-right diff toolbar to hide published line comments while reading the changes. Local drafts and controls for adding comments remain available. The app remembers this preference.
 

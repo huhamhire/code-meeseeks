@@ -29,7 +29,7 @@ import {
   selectionStore,
   useDiffSelection,
 } from '../../../stores/selection-store';
-import { anchorShortLabel, formatFindingReference } from './utils/findings';
+import { anchorShortLabel, formatFindingReference, hasInlineFindingAnchor } from './utils/findings';
 import { scrollToResult } from './utils/scroll-to-result';
 import { isStaleReview } from './utils/review-snapshot';
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH } from './constants';
@@ -281,10 +281,7 @@ export function ChatPane({
   const sendReferencedAsk = (q: string): void => {
     if (!refFinding) return;
     const { finding, run } = refFinding;
-    const canReplace =
-      !isStaleReview(run, pr) &&
-      typeof finding.anchor?.startLine === 'number' &&
-      finding.inlineAnchorVerified !== false;
+    const canReplace = !isStaleReview(run, pr) && hasInlineFindingAnchor(finding);
     void actions.handleRun(
       'ask',
       q,
@@ -315,8 +312,8 @@ export function ChatPane({
     [timeline, pr?.sourceRef.sha, pr?.headChanges, agentRunningHere],
   );
   const reviewPresentation = useMemo(
-    () => getReviewPresentation(timeline, closures, commitDividers.before),
-    [timeline, closures, commitDividers.before],
+    () => getReviewPresentation(timeline, closures, commitDividers.before, pr),
+    [timeline, closures, commitDividers.before, pr],
   );
   const latestHeadChangeAt = pr?.headChanges?.at(-1)?.at;
   useEffect(() => {
@@ -426,7 +423,6 @@ export function ChatPane({
             onRetry={actions.handleRetry}
             onDelete={actions.handleDeleteRun}
             canRetry={canRetry}
-            movedFindings={reviewPresentation.movedFindings.get(run.id)}
             onScrollToFinding={(runId, findingId) =>
               scrollToResult(bodyRef.current, runId, findingId)
             }
@@ -605,15 +601,11 @@ export function ChatPane({
                   aria-label={t('chatPane.reviewFeedback')}
                 >
                   <h3>{t('chatPane.reviewFeedback')}</h3>
-                  {feedback.some(({ run }) => isStaleReview(run, pr)) && (
-                    <p className="muted">{t('chatPane.reviewResult.stale')}</p>
-                  )}
                   {feedback.map(({ run, findings }) => (
                     <RunFindingList
                       key={run.id}
                       run={run}
                       findings={findings}
-                      stale={isStaleReview(run, pr)}
                       {...findingActions}
                     />
                   ))}
