@@ -121,6 +121,16 @@ An advanced option: instead of connecting directly to any LLM API, invoke — wi
 
 > Prerequisite: the corresponding command must be installed on your machine, on the PATH, and logged in, otherwise the review fails because the command is not found; review usage counts against that CLI account's own quota.
 
+## Automatic review in PR Agent
+
+In PR Agent, open the status-bar model menu and select a Codex CLI profile to open its model submenu. Choose a specific model or **CLI default model**. The choice is saved with that profile and retains its other CLI arguments.
+
+Choose **Auto Review** to generate a PR description, review the diff, and produce a final summary. The review uses the author's PR description and excludes existing PR comments and replies. You can explicitly reference a comment when asking a question.
+
+When the review completes, the description stays visible. Before the final summary, each distinct finding that can become an inline comment offers shortcuts to create a draft or ask a follow-up. Findings replaced or withdrawn by a follow-up are omitted from this list. Expand **Review process** to inspect the original results. Finding priorities help you choose what to read first. P1 requires a follow-up that cites evidence from the reviewed commit, and the label shows the model's stated trigger and consequence.
+
+Use **Inline comments** in the top-right diff toolbar to hide published line comments while reading the changes. Local drafts and controls for adding comments remain available. The app remembers this preference.
+
 ## Native Codex review
 
 Install and sign in to a compatible Codex CLI. The desktop app detects it automatically at startup and when the window regains focus. In a PR, switch from **PR Agent** to **Codex** and select **Run Codex review**. Codex reviews the full PR.
@@ -129,7 +139,7 @@ Open the **/** menu or type `/` for command suggestions. Submit `/review` to rev
 
 Submit `/approve` to approve the PR or `/needswork` to request changes on the code hosting platform. These commands share the review actions in the PR header and work while Codex is running.
 
-The model picker sits to the left of **Send**. It loads the local Codex catalog when you open the tab, using a five-minute cache, and remembers the last selected model across restarts. On first use, or when the saved model leaves the list, it selects the latest available numbered Sol model or the first model when no Sol is available. If the desktop has no catalog entries, Codex uses its CLI default.
+The model picker sits to the left of **Send**. It shows the last successful catalog, or the local CLI cache on first use, while it refreshes in the background. Cached models remain available if the refresh fails. The picker remembers the last selected model across restarts. When there is no available saved selection, it selects the latest numbered Sol or the first available model. If the desktop has no catalog entries, Codex uses its CLI default.
 
 Type a question about the PR or use the reference button on a review finding. Follow-up questions use recent messages for the current comparison and can read code in a temporary checkout. Review and answer text follows the app language. The running card shows review stages and any progress summaries the CLI provides. The Codex tab keeps its own review history. Findings with a valid line in the diff can be turned into comment drafts for you to edit or publish. This tab is a desktop feature. Automation that needs native Codex review can call Codex directly.
 

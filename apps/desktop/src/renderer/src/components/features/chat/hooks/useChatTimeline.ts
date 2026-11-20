@@ -68,6 +68,7 @@ export function useChatTimeline(params: {
       key: `run-${r.id}`,
       sortTime: ms(r.startedAt),
       headSha: r.headSha,
+      reviewStartedAt: ms(r.reviewStartedAt) || undefined,
       completedReview: r.tool === 'review' && r.status === 'succeeded',
       orchestratedReview: r.tool === 'review' && r.origin === 'agent' && r.status === 'succeeded',
       run: r as ReviewRun | null,

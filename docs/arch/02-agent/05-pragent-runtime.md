@@ -68,6 +68,8 @@ Current patches (pinned pr-agent **0.50.0**):
 
 In **0.50.0**, `LocalGitProvider.get_repo_file_content` natively reads committed base-branch blobs, so the trusted repository-context override is removed. Temperature compatibility now comes from upstream model metadata and adaptive-thinking detection; the old blanket Anthropic exclusion is removed. The offline compatibility suite verifies both behaviors against the installed runtime.
 
+The review prompt requests optional priority metadata in a marker inside `issue_content`, preserving upstream's strict YAML schema. Both the JSON artifact and the Markdown parser recover the level, trigger, and consequence. Missing or invalid metadata leaves the finding unrated. The runtime fixture verifies that both output formats preserve the marker.
+
 **Empty fallbacks**: `CONFIG__FALLBACK_MODELS='[]'` now clears upstream defaults because 0.50 disables Dynaconf's global merging. With 0.45's `merge_enabled=True`, an empty list retained the default fallback. The runtime test checks the actual loaded settings, model list, and a single attempted call on a synthetic provider failure. This prevents unintended retries; it does not fix a primary provider's authentication, model availability, or quota errors. `/improve` now uses the canonical `committable_code_suggestions` spelling and keeps aggregated Markdown output rather than upstream local suggestion artifacts.
 
 **Dependencies and assembly checks**: install core `pr-agent` without hosted-provider extras (optional since 0.48). Platform access belongs to the app's adapters; do not delete dependencies by SDK name because LiteLLM may still need them. Assembly runs `scripts/tests/test_pragent_runtime.py` with synthetic model responses and external connections blocked, covering describe/review/ask/improve output, anchors, assessment, YAML repair, CLI dispatch, API usage/caching, trusted repository context, and empty fallbacks. These checks also run when the existing runtime is reused.
@@ -123,11 +125,12 @@ litellm**.
   usage sentinel.
 - **Prompt via stdin**: the review prompt contains the full diff (tens of KB), and passing via argv would hit the command-line length limit; system/user are merged into
   one block to feed in (the CLI has no separate system slot). cwd defaults to a neutral temp directory, avoiding picking up the reviewed repo's `CLAUDE.md`/`AGENTS.md`.
-- **`/ask` exception (take full file context)**: free Q&A needs to read real files, so only for `/ask` the main process hands down env `MEEBOX_CLI_WORKDIR`
+- **`/ask` exception (take full file context)**: interactive Q&A can read real files, so the main process hands down env `MEEBOX_CLI_WORKDIR`
   = the materialized worktree, and the shim accordingly sets the subprocess cwd to the worktree (`describe`/`review` don't get it, keeping the neutral temp directory).
   Before setting cwd, the main process first **clears the repo's own agent instruction files inside that worktree** (`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor`
   rules / `.github/copilot-instructions.md`, see `services/pr-agent/worktree-sanitize.ts`) — the worktree is the PR HEAD,
   author-controlled, and if not cleared the CLI would auto-load these instructions, letting the reviewed PR inject / pollute the answer through them; the worktree is discarded after use, so clearing in place has no side effect.
+  Automatic follow-ups on a specific finding use the same preselected repository excerpts for API and local CLI profiles. The CLI runs from its neutral directory for those follow-ups. See [Automatic review](03-autopilot.md).
 - **Reuse the CLI's own login state**: the subprocess inherits `HOME`/`USERPROFILE`, and the CLI reads its own login credentials (e.g. `~/.claude`) to run.
   To avoid a stray API key in the local environment leaking in and overriding the CLI's own login method, the shim explicitly strips
   `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` from the subprocess env. The model used, the quota and compliance are all decided by that CLI's account and the user's authorization.

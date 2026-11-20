@@ -38,6 +38,8 @@ export interface InlineZonesContent<T> {
 export interface InlineZonesController<T> {
   /** Reconcile the mounted zones to match `content`, preserving the React root (and its state) of any unchanged key. */
   update(content: InlineZonesContent<T>): void;
+  /** Collapse the layout without discarding local reply or edit state. */
+  setVisible(visible: boolean): void;
   /** Remove every zone and unmount its root. */
   dispose(): void;
 }
@@ -50,6 +52,7 @@ interface ZoneRef {
   /** The afterLineNumber this zone currently sits at; a change means the anchor moved → remove + re-add rather than re-render in place. */
   afterLine: number;
   root: Root;
+  applyVisibility(): void;
   disposers: Array<() => void>;
 }
 
@@ -59,6 +62,7 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
   const modifiedEditor = diffEditor.getModifiedEditor();
   // Live registry keyed by the stable `(side, line)` key; persists across update() calls so unchanged zones keep their root.
   const zones = new Map<string, ZoneRef>();
+  let visible = true;
 
   // Create ONE zone. **Must be called inside editorInst.changeViewZones(accessor => ...)**, so the caller batches
   // adds/removes. Registers the resulting ZoneRef into `zones` under `key`.
@@ -90,6 +94,7 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
 
     const inner = document.createElement('div');
     inner.className = innerClassName;
+    inner.hidden = !visible;
     dom.appendChild(inner);
 
     const root = createRoot(inner);
@@ -98,7 +103,7 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
     const initialPx = initialHeight(items, lineHeight);
     const zoneObj: MonacoEditor.IViewZone = {
       afterLineNumber: afterLine,
-      heightInPx: initialPx,
+      heightInPx: visible ? initialPx : 0,
       domNode: dom,
     };
     const zoneId = accessor.addZone(zoneObj);
@@ -107,9 +112,7 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
     // during textarea drag-resize causes zone-rebuild jitter. layoutZone is a lightweight operation; mutate
     // heightInPx first then layoutZone to let monaco recompute the viewModel whitespace.
     // Measure with inner.offsetHeight (dom's height is hard-set by monaco, so offsetHeight would self-loop).
-    const syncHeight = (): void => {
-      const next = inner.offsetHeight;
-      if (next <= 0) return;
+    const layoutHeight = (next: number): void => {
       if (Math.abs(next - (zoneObj.heightInPx ?? 0)) < 1) return;
       zoneObj.heightInPx = next;
       try {
@@ -119,6 +122,12 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
       } catch {
         /* editor disposed */
       }
+    };
+    let lastHeight = initialPx;
+    const syncHeight = (): void => {
+      if (!visible || inner.offsetHeight <= 0) return;
+      lastHeight = inner.offsetHeight;
+      layoutHeight(lastHeight);
     };
     // ResizeObserver tracks inner height changes (read↔edit switch, textarea resize, async loading of embedded images,
     // nested comment expansion). requestAnimationFrame avoids the "sync layout in the callback re-triggers RO" loop.
@@ -201,6 +210,10 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
       zoneId,
       afterLine,
       root,
+      applyVisibility() {
+        inner.hidden = !visible;
+        layoutHeight(visible ? inner.offsetHeight || lastHeight : 0);
+      },
       // Disconnect ResizeObserver + dispose listeners first, then unmount root, to avoid the DOM height collapse
       // caused by unmount triggering the observer callback + a layoutZone(disposed editor) error.
       disposers: [
@@ -356,5 +369,13 @@ export function createInlineZones<T>(opts: CreateInlineZonesOptions): InlineZone
     });
   };
 
-  return { update, dispose };
+  return {
+    update,
+    setVisible(next) {
+      if (next === visible) return;
+      visible = next;
+      for (const zone of zones.values()) zone.applyVisibility();
+    },
+    dispose,
+  };
 }

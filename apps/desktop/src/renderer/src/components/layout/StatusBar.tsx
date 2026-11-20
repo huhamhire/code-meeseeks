@@ -26,7 +26,7 @@ interface StatusBarProps {
   onRefresh: () => void;
   onOpenSettings: () => void;
   /** Switch the active LLM profile; the parent component does the actual persistence */
-  onSwitchActiveLlm: (profileId: string) => void;
+  onSwitchActiveLlm: (profileId: string, codexModel?: string | null) => void;
   /**
    * Jump to a given PR (used by the "pr-agent running" chip click). Nullable — when omitted the chip still
    * shows but is not clickable. The parent component can just pass `setSelectedId`

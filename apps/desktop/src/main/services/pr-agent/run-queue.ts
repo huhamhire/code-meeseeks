@@ -28,6 +28,7 @@ export interface QueueItem {
     referencedContext?: string;
     referencedFinding?: ReviewRun['referencedFinding'];
     scope?: ReviewRun['scope'];
+    reviewStartedAt?: string;
   };
   pr: StoredPullRequest;
   resolve: (run: ReviewRun) => void;
@@ -94,14 +95,15 @@ export class RunQueue {
     referencedContext?: string,
     referencedFinding?: ReviewRun['referencedFinding'],
     scope?: ReviewRun['scope'],
+    reviewStartedAt?: string,
   ): Promise<ReviewRun> {
-    return this.enqueueRun(pr, 'pr-agent', { tool, question, referencedContext, referencedFinding, scope }, priority);
+    return this.enqueueRun(pr, 'pr-agent', { tool, question, referencedContext, referencedFinding, scope, reviewStartedAt }, priority);
   }
 
   private enqueueRun(
     pr: StoredPullRequest,
     engine: ReviewEngine,
-    { tool, question, referencedContext, referencedFinding, scope, model }: Omit<QueueItem['req'], 'localId'>,
+    { tool, question, referencedContext, referencedFinding, scope, model, reviewStartedAt }: Omit<QueueItem['req'], 'localId'>,
     priority: RunPriority,
   ): Promise<ReviewRun> {
     const { logger } = this.ctx;
@@ -143,6 +145,7 @@ export class RunQueue {
           question,
           referencedContext: tool === 'ask' ? referencedContext : undefined,
           referencedFinding: tool === 'ask' ? referencedFinding : undefined,
+          reviewStartedAt,
           // Single-commit scope applies to all tools (not just ask): the executor uses it to materialize the parent..sha worktree.
           scope,
         },

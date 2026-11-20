@@ -24,6 +24,7 @@ import { Bullet } from './shared';
 import { resolveCodexModel } from '../utils/codex-models';
 import { CODEX_COMMANDS } from '../commands';
 import { useChatCommands } from '../hooks/useChatCommands';
+import { useCodexModelCatalog } from '../hooks/useCodexModelCatalog';
 import { parseCodexCommand } from '../utils/parse-command';
 import { scrollToResult } from '../utils/scroll-to-result';
 import { computeCommitDividers, type CommitTimelineEntry } from '../utils/commit-dividers';
@@ -75,9 +76,9 @@ export function CodexReviewPane({
   const [runs, setRuns] = useState<ReviewRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [models, setModels] = useState<{ id: string; label: string }[]>([]);
-  const [loadingModels, setLoadingModels] = useState(true);
-  const [modelError, setModelError] = useState(false);
+  const { models, loading: loadingModels, error: modelError } = useCodexModelCatalog(
+    visible && status === 'ready',
+  );
   const [question, setQuestion] = useState('');
   const [commandError, setCommandError] = useState<string | null>(null);
   const [reference, setReference] = useState<{ run: ReviewRun; finding: Finding } | null>(null);
@@ -106,7 +107,8 @@ export function CodexReviewPane({
     reference?.run.headSha === headSha && reference?.run.baseSha === baseSha ? reference : null;
   const selectedModel = resolveCodexModel(models, model);
   const selectedModelId = selectedModel?.id;
-  const canSubmit = !!localId && !busy && !submitting && status === 'ready' && !loadingModels;
+  const canSubmit =
+    !!localId && !busy && !submitting && status === 'ready' && (!loadingModels || models.length > 0);
   const availableCommands = CODEX_COMMANDS.filter((command) => {
     if (command.kind !== 'review-action') return status === 'ready';
     const reviewStatus = command.reviewStatus === 'approved' ? 'approved' : 'needsWork';
@@ -133,28 +135,6 @@ export function CodexReviewPane({
     commands: availableCommands,
     disabled: inputDisabled,
   });
-
-  useEffect(() => {
-    if (!visible || status !== 'ready') return;
-    let live = true;
-    setLoadingModels(true);
-    setModelError(false);
-    void invoke('codex:models', undefined).then(
-      (items) => {
-        if (!live) return;
-        setModels(items);
-        setLoadingModels(false);
-      },
-      () => {
-        if (!live) return;
-        setModelError(true);
-        setLoadingModels(false);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [status, visible]);
 
   useEffect(() => {
     if (
@@ -485,7 +465,7 @@ export function CodexReviewPane({
                 label={t('chatPane.codex.model')}
                 options={status === 'ready' ? models : []}
                 selected={selectedModel}
-                loading={status === 'ready' && loadingModels}
+                loading={status === 'ready' && loadingModels && models.length === 0}
                 onSelect={onModelChange}
               />
             )}
@@ -500,7 +480,7 @@ export function CodexReviewPane({
             </button>
           </div>
         </div>
-        {modelError && <span role="status">{t('errors.EAG0007')}</span>}
+        {modelError && !models.length && <span role="status">{t('errors.EAG0007')}</span>}
       </form>
     </>
   );

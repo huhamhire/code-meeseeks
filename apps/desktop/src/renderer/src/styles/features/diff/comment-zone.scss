@@ -39,6 +39,10 @@
   user-select: text;
   cursor: text;
 }
+.monaco-comment-zone-inner[hidden] {
+  display: none;
+}
+
 .monaco-comment-zone-inner a {
   cursor: pointer !important;
 }

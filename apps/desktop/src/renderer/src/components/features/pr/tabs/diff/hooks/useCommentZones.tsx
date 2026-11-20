@@ -23,6 +23,7 @@ import type { LoadedContent } from '../diff-types';
  * Glyph decorations are stateless and simply recreated by the content effect.
  */
 export function useCommentZones(opts: {
+  visible: boolean;
   diffEditor: MonacoEditor.IStandaloneDiffEditor | null;
   comments: PrComment[];
   content: LoadedContent | null;
@@ -48,6 +49,7 @@ export function useCommentZones(opts: {
 }): void {
   const {
     diffEditor,
+    visible,
     comments,
     content,
     selected,
@@ -114,6 +116,7 @@ export function useCommentZones(opts: {
 
     // Reconcile the zones: unchanged anchored lines re-render in place (an open reply/edit editor keeps its text),
     // only genuinely added/removed lines mount/unmount.
+    controller.setVisible(visible);
     controller.update({
       oldByLine,
       newByLine,
@@ -157,6 +160,7 @@ export function useCommentZones(opts: {
         },
       }));
 
+    if (!visible) return;
     const originalEditor = diffEditor.getOriginalEditor();
     const modifiedEditor = diffEditor.getModifiedEditor();
     // Old-side markers: in side-by-side they sit on the (visible) original editor; in unified — including
@@ -189,6 +193,7 @@ export function useCommentZones(opts: {
     };
   }, [
     diffEditor,
+    visible,
     comments,
     content,
     selected,

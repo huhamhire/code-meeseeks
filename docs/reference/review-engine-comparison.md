@@ -1,7 +1,7 @@
 # Codex and PR-Agent review comparison
 
-> Status: research draft supporting a proposed integration, not an approved architecture, implemented feature, or quality benchmark.
-> Checked: 2026-11-19. Draft integration proposal: [Native review engines](native-review.md).
+> Versioned capability comparison and evaluation protocol. Upstream baseline checked 2026-11-19.
+> See [Review workflow](../arch/01-platform/03-review-workflow.md) for the current integration and [Native review extensions](../drafts/native-review.md) for open design questions.
 
 ## Responsibilities & boundaries
 
@@ -28,22 +28,9 @@ Public local-review source does not establish the implementation, prompts, or se
 
 Community PR-Agent is not synonymous with this app's PR Agent tab. Code Meeseeks adds planning, judge/follow-up asks, re-review closures, shared memory, rules, queues, and draft publication around upstream tools. In current CLI mode, review/describe send prepared prompts through Codex in a neutral directory; `/ask` can use a sanitized repository worktree. These are app decisions, not inherent limitations of Codex or every PR-Agent deployment. See [sessions](../arch/02-agent/02-session.md) and [runtime](../arch/02-agent/05-pragent-runtime.md).
 
-### Proposed adoption in the PR Agent pipeline
+### Adopted workflow changes
 
-The implementation order below is an engineering recommendation. Review-quality gains still need measurement.
-
-| Order | Capability                                   | Proposed change                                                                                                                                                                                                                                                                                                                                                                                       | Acceptance evidence                                                                                                                                                                                                     |
-| ----- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | Structured results and review completeness   | Probe the embedded PR-Agent 0.50.0 local-worktree invocation with `--json-output`. Normalize structured findings and coverage into the existing run record. Keep Markdown for rendering and for older or incompatible runtimes. Distinguish a valid review with zero findings, partial coverage, and an unusable result. Replace pending findings only after persisting a validated, complete review. | Exercise a clean PR, clipped or omitted files, a failed chunk, a missing or malformed artifact, and an LLM failure reported with exit code zero. Verify that previous pending drafts survive incomplete or failed runs. |
-| 2     | Reproducible comparison and verified anchors | Persist the exact head, target head, and comparison base used by each run. Reuse the Git diff checks from the desktop Codex adapter where the PR Agent anchor format permits it. Check paths and changed lines before offering inline drafts. Detect stale comparisons after a push or target update.                                                                                                 | Cover whole-PR and single-commit reviews, a changed target, renamed files, invalid or out-of-scope anchors, and relevant evidence outside the changed hunk.                                                             |
-| 3     | Bounded evidence gathering                   | Use the current PR Agent review as the first pass. Route high-impact candidates with unresolved assumptions to a bounded, read-only follow-up that inspects specific callers, contracts, or tests from the same snapshot. Record the trigger, consequence, and supporting locations. Reuse the existing judge and follow-up ask flow before adding another orchestrator.                              | Compare accepted defects, cross-file recall, false positives, and latency against the current pipeline. Require narrow read budgets and provenance for additional source evidence and trusted rule references.          |
-| 4     | Focused review context and progress          | Pass the frozen comparison, scoped trusted guidance, and selected evidence to the review. Where the runtime exposes the signal, report preparation, review, verification, and result validation as distinct stages.                                                                                                                                                                                   | Confirm the prepared comparison and selected evidence match the stored snapshot. Check that progress and completion reflect observed runtime events.                                                                    |
-
-The desktop's PR Agent path currently parses Markdown from the local output file or stdout. The installed reviewer provides structured coverage for partially included and remaining files. Compatibility of that JSON artifact with the desktop invocation still needs a runtime smoke test. The current output collector can clear pending findings before final classification handles a detected LLM failure. Treat draft replacement and completeness as one delivery item. See [the run executor](../../apps/desktop/src/main/services/pr-agent/run-executor.ts) and [the runtime design](../arch/02-agent/05-pragent-runtime.md). [P1, P5]
-
-The desktop already materializes per-run worktrees and supplies trusted guidance. Its Codex adapter checks candidate anchors against changed lines. The main work is to preserve PR Agent's comparison identity and carry verified evidence through the result and draft boundary. Consider cross-engine comparison after single-engine results and measurements are stable. [C2, C3, C4]
-
-Retain strengths already present: provider choice, bounded context, deterministic output validation, suggestion reflection, configurable review dimensions, and the app's human-controlled draft loop. Evaluate enabling useful upstream features before implementing equivalents. Do not transplant private endpoints, disable sandbox boundaries, or represent native overall correctness as a remote approval. Do not port upstream implementation or prompt text wholesale; assess licensing before copying code or assets.
+The desktop implements structured results and coverage, fixed comparison snapshots and verified anchors, bounded evidence gathering, and progress reporting. Current behavior is maintained in [Review workflow](../arch/01-platform/03-review-workflow.md), [AutoPilot](../arch/02-agent/03-autopilot.md), and [PR Agent runtime](../arch/02-agent/05-pragent-runtime.md). The evaluation below measures the effects of those changes.
 
 ### Evaluation protocol
 
@@ -56,6 +43,7 @@ Run two complementary comparisons: the normal product experience with each engin
 | Precision                   | Accepted actionable defects divided by adjudicated findings, with rejection reasons                       |
 | Known-defect recall         | Known/seeded defects found divided by the relevant labeled set; natural PRs have no complete ground truth |
 | Anchor and evidence quality | Correct file/range, accurate trigger and impact, verified rule/caller/test references                     |
+| Priority agreement          | Human-assigned levels, P1 precision, high-impact findings ranked too low, and agreement across models     |
 | Cost and latency            | Full-run elapsed time, available usage, calls/turns, retries, follow-up overhead, and manual triage time  |
 | Reliability                 | Completion, auth/model failures, cancellation, truncation, parse errors, and incomplete coverage          |
 | Workflow usefulness         | Draft adoption/edit/rejection, duplicate comments, and reproducibility on the same snapshot               |
@@ -64,7 +52,7 @@ A self-reported confidence or reflection score is not a calibrated correctness p
 
 ## Data / interface contract
 
-The experiment needs a snapshot identity, engine/runtime identity, reported model provenance, raw and normalized results, completion/parse status, available usage, and human adjudication. These are research records, not a new public API. The proposed runtime and finding boundaries are defined in [Native review engines](native-review.md).
+The experiment needs a snapshot identity, engine/runtime identity, reported model provenance, raw and normalized results, completion/parse status, available usage, and human adjudication. These are research records, not a new public API. The current run and finding contracts are defined in [Review workflow](../arch/01-platform/03-review-workflow.md).
 
 Evidence sources inspected for this research:
 
@@ -80,6 +68,6 @@ Evidence sources inspected for this research:
 
 ## Extension & caveats
 
-The first implementation experiment must establish the installed transport's terminal output shape. The public App Server guide describes final review text, while native core source carries a structured review result internally. Neither fact alone establishes which structured fields the chosen external transport exposes. JSONL transport support and prompt-level JSON instructions are not sufficient proof.
+For future transports, validate the installed runtime output using captured fixtures. Record which native structured fields the external protocol exposes and how they map to the desktop adapter.
 
-Still unverified: real review quality, reliable evidence retrieval, test execution under the chosen sandbox, user skill/plugin availability inside the dedicated reviewer, effective model reporting, accurate usage, cross-platform cancellation, and parity with hosted PR review. Native capability detection should gate only the features actually verified. Refresh this comparison when either pinned upstream version changes.
+Evaluate review quality, evidence retrieval across repositories, priority accuracy, effective model reporting, usage, and cross-platform cancellation. Hosted PR review parity requires separate evidence. Refresh the upstream comparison when either baseline version changes.

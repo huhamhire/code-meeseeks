@@ -62,6 +62,7 @@ export interface StartReviewRunInput {
   referencedFinding?: ReviewRun['referencedFinding'];
   /** Trigger origin: user (manual) / agent (orchestration dispatch). Used for the ChatPane command echo bubble; omitted means no echo. */
   origin?: ReviewRun['origin'];
+  reviewStartedAt?: string;
   /** Single-commit review scope (parent..sha); omitted = full PR scope. Persisted for the result card's scope badge. */
   scope?: ReviewRun['scope'];
   /** PR head commit SHA the run runs against (pr.sourceRef.sha); persisted so ChatPane can draw a commit divider between runs across a code change. */
@@ -88,6 +89,7 @@ export async function startReviewRun(
     model: input.model,
     referencedFinding: input.referencedFinding,
     origin: input.origin,
+    reviewStartedAt: input.reviewStartedAt,
     scope: input.scope,
     headSha: input.headSha,
     baseSha: input.baseSha,
@@ -104,6 +106,8 @@ export async function startReviewRun(
 export interface FinishReviewRunPatch {
   baseSha?: string;
   mergeBaseSha?: string;
+  repositoryEvidence?: ReviewRun['repositoryEvidence'];
+  verifiedPriorityEvidence?: ReviewRun['verifiedPriorityEvidence'];
   reviewCoverage?: ReviewRun['reviewCoverage'];
   status: ReviewRunStatus;
   finishedAt: string;

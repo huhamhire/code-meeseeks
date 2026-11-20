@@ -354,11 +354,14 @@ describe('parseReviewOutput', () => {
       '**Stale cache**',
       '',
       'Cache key is reused across sessions.',
+      '[review-priority: {"level":"P1","trigger":"two sessions share a key","consequence":"a session reads the wrong cached value"}]',
       '[file: src/cache.ts, lines: 88-93]',
     ].join('\n');
     const { findings } = parseReviewOutput(md, 'review');
     const c = findings.find((f) => f.category === 'code-feedback')!;
     expect(c.anchor).toEqual({ path: 'src/cache.ts', startLine: 88, endLine: 93 });
+    expect(c.reviewPriority?.level).toBe('P1');
+    expect(c.body).not.toContain('[review-priority:');
   });
 
   it('key-issues section with no bold header → falls back to a single finding (no content lost)', () => {
@@ -381,6 +384,7 @@ describe('parseReviewOutput', () => {
       "<details><summary><a href='meebox:///src/auth/login.ts#L42-L50'><strong>潜在空引用</strong></a>",
       '',
       'user 可能为 null，访问 user.id 前未判空。',
+      '<br>[review-priority: {"level":"P2","trigger":"用户不存在","consequence":"请求失败"}]',
       '</summary>',
       '',
       '```ts',
@@ -399,6 +403,11 @@ describe('parseReviewOutput', () => {
     expect(code.map((f) => f.title)).toEqual(['潜在空引用', '缓存未加锁']);
     expect(code[0]!.anchor).toEqual({ path: 'src/auth/login.ts', startLine: 42, endLine: 50 });
     expect(code[0]!.body).toMatch(/未判空/);
+    expect(code[0]!.reviewPriority).toEqual({
+      level: 'P2',
+      trigger: '用户不存在',
+      consequence: '请求失败',
+    });
     expect(code[1]!.anchor).toEqual({ path: 'pkg/cache.go', startLine: 17 });
     // effort line also sliced into a section finding (title maps to effort)
     expect(findings.some((f) => f.sectionKey === 'effort')).toBe(true);

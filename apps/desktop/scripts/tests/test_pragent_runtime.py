@@ -161,7 +161,8 @@ class RuntimeCompatibilityTest(unittest.TestCase):
                 return self.answer, "stop"
 
         description = yaml.safe_dump({"title": "Fixture title", "type": ["Enhancement"], "description": "- Update fixture", "assessment": "Fixture alternative", "pr_files": [{"filename": "sample.py", "changes_title": "Update value", "changes_summary": "Change the fixture value", "label": "enhancement"}]})
-        review = yaml.safe_dump({"review": {"estimated_effort_to_review_[1-5]": 1, "relevant_tests": "Yes", "security_concerns": "No", "key_issues_to_review": [{"relevant_file": "sample.py", "issue_header": "Fixture issue", "issue_content": "Synthetic issue for the upgrade regression", "start_line": 1, "end_line": 1}]}})
+        marker = '[review-priority: {"level":"P2","trigger":"fixture runs","consequence":"value changes"}]'
+        review = yaml.safe_dump({"review": {"estimated_effort_to_review_[1-5]": 1, "relevant_tests": "Yes", "security_concerns": "No", "key_issues_to_review": [{"relevant_file": "sample.py", "issue_header": "Fixture issue", "issue_content": f"Synthetic issue for the upgrade regression\n{marker}", "start_line": 1, "end_line": 1}]}})
         suggestions = yaml.safe_dump({"code_suggestions": [{"relevant_file": "sample.py", "language": "python", "existing_code": "value = 2", "improved_code": "value = 3", "suggestion_content": "Check the fixture value", "one_sentence_summary": "Check the fixture value", "label": "possible bug"}]})
         settings = get_settings()
         with tempfile.TemporaryDirectory() as tmp, contextlib.chdir(tmp):
@@ -197,9 +198,11 @@ class RuntimeCompatibilityTest(unittest.TestCase):
                     cli.run(["--pr_url", "base", "--json-output", str(artifact), "review"])
                 structured = json.loads(artifact.read_text("utf-8"))
                 self.assertEqual(structured["review"]["key_issues_to_review"][0]["start_line"], 1)
+                self.assertIn(marker, structured["review"]["key_issues_to_review"][0]["issue_content"])
                 self.assertEqual(structured["coverage"], {"files_not_reviewed": [], "files_partially_reviewed": []})
                 body = markdown.read_text("utf-8")
                 self.assertIn("Fixture issue", body)
+                self.assertIn(marker, body)
                 self.assertIn("meebox:///sample.py#L1", body)
                 settings.set("local.review_path", None)
                 asyncio.run(PRQuestions("base", args=["What changed?"], ai_handler=lambda: FakeHandler("Fixture answer")).run())

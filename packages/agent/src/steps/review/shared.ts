@@ -50,7 +50,8 @@ function renderFindingsForJudge(findings: Finding[]): string {
       const a = f.anchor;
       const loc = a ? `${a.path}${a.startLine ? `:${String(a.startLine)}` : ''}` : '';
       const brief = f.body.replace(/\s+/g, ' ').trim().slice(0, 160);
-      return `- id=${f.id}${loc ? ` (${loc})` : ''}: ${brief}`;
+      const candidate = f.reviewPriority?.level === 'P1' ? ' [proposed P1; needs evidence]' : '';
+      return `- id=${f.id}${loc ? ` (${loc})` : ''}${candidate}: ${brief}`;
     })
     .join('\n');
 }

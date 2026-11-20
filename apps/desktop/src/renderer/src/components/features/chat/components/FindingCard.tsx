@@ -15,11 +15,13 @@ import {
 import { REMOTE_REHYPE_PLUGINS } from '../../../../lib/markdown';
 import { translatePrAgentLabels } from '../../../../utils/translate-pr-agent';
 import {
+  hasInlineFindingAnchor,
   pillStyle,
   sectionLabel,
   splitTypeLabels,
   stripEffortScoreNumber,
   stripFindingMarker,
+  type DisplayReviewPriority,
 } from '../utils/findings';
 import { BreakablePath, MdInline, withInlineSummary } from './shared';
 
@@ -60,8 +62,7 @@ const DRAFT_TONE: Record<NonNullable<ReviewDraft['status']>, 'accent' | 'approve
 
 /**
  * The action icon bar in the top-right of the Finding card header: edit (comment bubble) / reject (circular ban) + reference (forward arrow).
- * Appears only for code-type findings (/review code-feedback and /improve code-suggestion) + complete anchor, not closed,
- * ordered to the left of the collapse chevron. The edit action switches semantics with draft status (edit / view / undo); posted / rejected do not show reject.
+ * Inline draft actions require an eligible anchor. The edit action follows draft status (edit / view / undo).
  */
 function FindingHeadActions({
   relatedDraft,
@@ -190,6 +191,7 @@ function FindingDraftActions({
 
 export function FindingCard({
   finding,
+  reviewPriority,
   relatedDraft,
   onJump,
   onReject,
@@ -200,6 +202,7 @@ export function FindingCard({
   onViewAsk,
 }: {
   finding: Finding;
+  reviewPriority?: DisplayReviewPriority;
   /** The draft associated with this finding; undefined = not interacted with yet; non-null = already pending / edited / rejected / posted */
   relatedDraft?: ReviewDraft;
   /** "→ Jump to code editing" button callback */
@@ -222,19 +225,17 @@ export function FindingCard({
   const isRejected = relatedDraft?.status === 'rejected';
   // Replaced/closed by a re-review: likewise collapsed and desaturated (same visual as rejected), the anchor row shows a read-only closed chip.
   const isClosed = !!closure;
-  // sectionKey takes priority (newly parsed), fallback to category (from an older persisted run)
-  const key: PrDocSectionKey = finding.sectionKey ?? 'general';
-  // Actionable code-type findings (/review code-feedback, /improve code-suggestion with an anchor line number):
-  // only these show the header edit / reject / reference icon bar + the anchor row's draft status / closed state.
-  const isActionableCode =
-    (key === 'code-feedback' || key === 'code-suggestion') &&
-    finding.anchor?.startLine !== undefined &&
-    finding.inlineAnchorVerified !== false;
+  const key: PrDocSectionKey = finding.sectionKey ?? finding.category ?? 'general';
+  const hasInlineAnchor = hasInlineFindingAnchor(finding);
   // Collapsed by default: rejected / re-review-closed findings, or the /ask "analysis process" segment (process discussion collapsed by default, expandable).
   const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
   const [expanded, setExpanded] = useState(false);
   const collapsed = collapsibleByDefault && !expanded;
   const label = sectionLabel(key, t);
+  const priorityReason = reviewPriority !== 'unrated' ? finding.reviewPriority : undefined;
+  const priorityTitle = priorityReason
+    ? t('chatPane.reviewPriorityDetails', priorityReason)
+    : t('chatPane.reviewPriorityUnrated');
   // On a known sectionKey the title **usually** duplicates the chip label content (h4 shows "PR Type" + chip
   // shows "类型"), so by default only the general segment shows the title. But pr-agent puts some segments' "values"
   // in the title (e.g., `Estimated effort to review: 3 🔵🔵🔵⚪⚪` / `Score: 85 🟢🟢...`),
@@ -281,6 +282,15 @@ export function FindingCard({
             {label}
           </span>
         )}
+        {reviewPriority && (
+          <span
+            className={`chat-chip chat-chip-${reviewPriority === 'P1' || reviewPriority === 'P2' ? 'warning' : 'neutral'}`}
+            title={priorityTitle}
+            aria-label={`${reviewPriority === 'unrated' ? '' : reviewPriority + ' · '}${priorityTitle}`}
+          >
+            {reviewPriority === 'unrated' ? t('chatPane.reviewPriorityUnrated') : reviewPriority}
+          </span>
+        )}
         {/* PR Type segment: value pills on the same row as the "type" label, right-aligned (no longer two stacked rows, improving space utilization) */}
         {key === 'pr-type' && (
           <div className="chat-finding-pills chat-finding-pills-inline">
@@ -296,13 +306,11 @@ export function FindingCard({
             <MdInline>{translatedTitle}</MdInline>
           </h4>
         )}
-        {/* Header action icon bar: edit (comment) / reject (circular ban) / reference (forward arrow). Appears only for anchorable code-type
-            findings not closed by a re-review, ordered to the left of the collapse chevron; on the same row as the title, grouped in the top-right. */}
-        {isActionableCode && !isClosed && (onJump || onReject || onReference) && (
+        {!isClosed && ((hasInlineAnchor && (onJump || onReject)) || onReference) && (
           <FindingHeadActions
             relatedDraft={relatedDraft}
-            onJump={onJump}
-            onReject={onReject}
+            onJump={hasInlineAnchor ? onJump : undefined}
+            onReject={hasInlineAnchor ? onReject : undefined}
             onReference={onReference}
           />
         )}
@@ -364,7 +372,7 @@ export function FindingCard({
           )}
           {/* M4 draft status chip / re-review closed state: only shown for code-type findings anchored to a specific line (action buttons
               have been moved up to the header icon bar). Appears only when there is a draft status or it is closed by a re-review, otherwise takes no space. */}
-          {isActionableCode && (isClosed || relatedDraft?.status) && (
+          {hasInlineAnchor && (isClosed || relatedDraft?.status) && (
             <FindingDraftActions
               relatedDraft={relatedDraft}
               closure={closure}

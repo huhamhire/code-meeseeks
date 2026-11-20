@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   PlatformCapabilities,
   PlatformUser,
@@ -6,7 +7,7 @@ import type {
   StoredPullRequest,
 } from '@meebox/shared';
 import { invoke } from '../../../../../api';
-import { ChatIcon } from '../../../../common';
+import { ChatIcon, EyeIcon, EyeOffIcon } from '../../../../common';
 import { CommentComposer } from '../comments/CommentComposer';
 import { CommentItem } from '../comments/CommentItem';
 
@@ -22,6 +23,8 @@ export function FileCommentStrip({
   pr,
   path,
   oldPath,
+  showInlineComments,
+  onToggleInlineComments,
   comments,
   capabilities,
   hardBreaks,
@@ -34,6 +37,8 @@ export function FileCommentStrip({
   pr: StoredPullRequest;
   path: string;
   oldPath?: string;
+  showInlineComments: boolean;
+  onToggleInlineComments: () => void;
   comments: PrComment[];
   capabilities?: PlatformCapabilities;
   hardBreaks: boolean;
@@ -43,6 +48,7 @@ export function FileCommentStrip({
   userSearchEnabled?: boolean;
   readOnly?: boolean;
 }) {
+  const { t } = useTranslation();
   const [composing, setComposing] = useState(false);
   const [copied, setCopied] = useState(false);
   // The file's project-relative path as breadcrumb segments (last = the file name).
@@ -70,9 +76,6 @@ export function FileCommentStrip({
     [comments, path, oldPath],
   );
   const canComment = !readOnly && (capabilities?.fileLevelComments ?? false);
-  // Nothing to show and nothing to add → render nothing (keep the diff clean for files without file-level comments).
-  if (fileComments.length === 0 && !canComment) return null;
-
   return (
     <div className="diff-file-comments">
       <div className="diff-file-comments-head">
@@ -95,15 +98,27 @@ export function FileCommentStrip({
             </span>
           )}
         </button>
-        {canComment && !composing && (
+        <div className="diff-file-comments-actions">
           <button
             type="button"
             className="diff-file-comment-btn"
-            onClick={() => setComposing(true)}
+            onClick={onToggleInlineComments}
+            title={t(showInlineComments ? 'mainPane.hideInlineComments' : 'mainPane.showInlineComments')}
+            aria-label={t('mainPane.inlineComments')}
+            aria-pressed={showInlineComments}
           >
-            <ChatIcon size={15} />
+            {showInlineComments ? <EyeIcon size={15} /> : <EyeOffIcon size={15} />}
           </button>
-        )}
+          {canComment && !composing && (
+            <button
+              type="button"
+              className="diff-file-comment-btn"
+              onClick={() => setComposing(true)}
+            >
+              <ChatIcon size={15} />
+            </button>
+          )}
+        </div>
       </div>
       {(fileComments.length > 0 || composing) && (
         <div className="diff-file-comments-body">

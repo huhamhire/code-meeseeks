@@ -39,16 +39,15 @@ Responsibilities of each area:
 - **Sidebar (left)**: the review-requested PR list, grouped by `project/repo` with accordion collapse, sorted by `updatedAt` descending, with status filter + search;
   draggable width, collapsible as a whole.
 - **MainPane (center)**: details of the selected PR, split into "Changes / Comments / Commits / Details" tabs. The Changes tab is **DiffView**.
-- **ChatPane (right)**: conversation-driven pr-agent (`/describe` `/review` `/ask`), collapsed by default; draggable width.
+- **ChatPane (right)**. The selected PR has a PR Agent tab and an experimental Codex tab, with a draggable pane width and the PR number aligned separately from the engine tabs.
 - **StatusBar (bottom)**: pills for pr-agent status / queue, repo sync progress, last sync time, current LLM, etc.
 - **Overlays**: SettingsModal (settings), OnboardingWizard (setup wizard), various confirm/edit second-level modals, and action-level toasts.
 
 ### Key panels
 
 - **DiffView**: Monaco side-by-side diff + file tree (icons / Git coloring / draft & comment chips) + inline comments (view zone) +
-  blame + cross-file search + inline draft editing (DraftZone). Switching files only renders the current file.
-- **ChatPane**: run cards (RunMeta shows the model name + ↑input/↓output tokens); finding cards support "→ Edit" (jump to the Diff
-  and enter draft editing) / "✗ Reject"; the queue is serial, interruptible/retryable; command completion + history.
+  blame + cross-file search + inline draft editing (DraftZone). Switching files only renders the current file. The file breadcrumb can collapse published inline comment zones and their line markers. It keeps comment reply state, draft editors, and file comment counts available. The app remembers the visibility preference locally.
+- **ChatPane**. Each engine has its own history, progress, and unsent input. The app remembers the selected engine. PR Agent uses the active LLM profile, and the Codex tab uses its own model picker. Completed automatic PR Agent reviews leave the description visible and put code feedback between the collapsed review process and the final summary. See [Review workflow](../01-platform/03-review-workflow.md).
 - **DraftsPanel**: the "Drafts" tab, browsing drafts across files, publishing single/batch, and cross-referencing local-unsent vs. remote-published against the "Comments" tab.
 - **SettingsModal**: visual CRUD for connection / LLM / proxy / rules directory / polling / repos_dir, with second-level edit modals for sub-items;
   connection/proxy come with a "Test" action.

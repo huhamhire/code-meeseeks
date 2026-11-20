@@ -1,4 +1,5 @@
 import type { Finding, ReviewRun } from '@meebox/shared';
+import { readReviewPriority } from './review-priority.js';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -46,15 +47,17 @@ export function parseStructuredReview(text: string):
     }
     const start = issue?.['start_line'];
     const end = issue?.['end_line'];
+    const priority = readReviewPriority(body);
+    const filePath = file.trim();
     findings.push({
       id: `structured-review-${String(findings.length + 1)}`,
       category: 'code-feedback',
       sectionKey: 'code-feedback',
       title,
-      body,
-      anchor: file
+      ...priority,
+      anchor: filePath
         ? {
-            path: file,
+            path: filePath,
             startLine: typeof start === 'number' ? start : undefined,
             endLine: typeof end === 'number' ? end : undefined,
           }

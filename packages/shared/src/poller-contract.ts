@@ -84,6 +84,8 @@ export interface FindingAnchor {
 /** Finding severity: used by the M4 review publish loop; the UI decides chip coloring / sort priority */
 export type FindingSeverity = 'info' | 'warning' | 'error';
 
+export type ReviewPriority = 'P1' | 'P2' | 'P3';
+
 /**
  * The Finding's state machine in the review → publish loop:
  *   pending  : default, awaiting the user's decision
@@ -131,6 +133,8 @@ export interface Finding {
    * Combined with severity (M4 review decision) for sorting / coloring: score ≥ 8 defaults to 'warning', < 5 defaults to 'info'
    */
   score?: number;
+  /** Model-proposed priority and its stated evidence. P1 requires a follow-up before display. */
+  reviewPriority?: { level: ReviewPriority; trigger: string; consequence: string };
   /**
    * Severity (M4); the current parser doesn't fill it; M4 will add the inference logic per pr-agent output / rules when wiring up /improve.
    * The UI renders as 'info' by default
@@ -303,6 +307,10 @@ export interface ReviewRun {
   engineVersion?: string;
   baseSha?: string;
   mergeBaseSha?: string;
+  /** Source ranges supplied to an automatic follow-up. An empty list means no evidence was available. */
+  repositoryEvidence?: FindingAnchor[];
+  /** Source line cited by the automatic follow-up to support the referenced finding's P1. */
+  verifiedPriorityEvidence?: FindingAnchor;
   /** Structured coverage is reported by the runtime. Legacy Markdown cannot establish completeness. */
   reviewCoverage?: {
     status: 'complete' | 'partial' | 'unknown' | 'invalid';
@@ -328,6 +336,8 @@ export interface ReviewRun {
    * (their user input is already carried by the orchestration session's user message, avoiding duplicate bubbling). Historical runs lack this field (undefined), not echoed.
    */
   origin?: ReviewRunOrigin;
+  /** Start marker shared with the automatic review's steps and summary. */
+  reviewStartedAt?: string;
   /**
    * Single-commit review scope: filled when this run is limited to that commit's own changes (`parent..sha`) rather than the whole PR.
    * Default = whole-PR scope. The result card shows a scope badge accordingly.

@@ -98,7 +98,7 @@ export async function runReviewForPr(
   return runReview(pr, {
     stateStore: store,
     // Runs dispatched by the orchestration use the agent low-priority lane: a user clicking /review at any time jumps ahead of them. Re-review /ask carries the referenced context + forward chain.
-    enqueueRun: (p, tool, question, referencedContext, referencedFinding) =>
+    enqueueRun: (p, tool, question, referencedContext, referencedFinding, reviewStartedAt) =>
       runtime.runQueue.enqueuePragentRun(
         p,
         tool,
@@ -106,6 +106,8 @@ export async function runReviewForPr(
         'agent',
         referencedContext,
         referencedFinding,
+        undefined,
+        reviewStartedAt,
       ),
     // Re-review verdict replace/drop → close the superseded original review finding (write FindingClosure + broadcast a card refresh).
     closeFinding: async (p, call) => {

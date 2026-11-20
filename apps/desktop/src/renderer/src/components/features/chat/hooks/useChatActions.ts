@@ -17,6 +17,7 @@ import { invoke } from '../../../../api';
 import { isStaleReview } from '../utils/review-snapshot';
 import { useChatRunStore } from '../../../../stores/chat-run-store';
 import {
+  hasInlineFindingAnchor,
   htmlInlineToMarkdown,
   renderCodeSuggestionDraft,
   stripFindingMarker,
@@ -312,10 +313,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
    * - Associated draft is rejected → update back to pending (undo rejection) + jump
    */
   const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
-    if (!pr || isStaleReview(run, pr) || finding.inlineAnchorVerified === false) return;
-    if (!finding.anchor || typeof finding.anchor.startLine !== 'number') {
-      return; // No anchor line number → cannot become inline; the button should not appear, fallback
-    }
+    if (!pr || isStaleReview(run, pr) || !hasInlineFindingAnchor(finding)) return;
     const startLine = finding.anchor.startLine;
     const endLine = finding.anchor.endLine ?? startLine;
     const existing = (drafts ?? []).find(
@@ -368,8 +366,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   };
 
   const handleRejectFinding = async (finding: Finding, run: ReviewRun): Promise<void> => {
-    if (!pr || isStaleReview(run, pr) || finding.inlineAnchorVerified === false) return;
-    if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
+    if (!pr || isStaleReview(run, pr) || !hasInlineFindingAnchor(finding)) return;
     const startLine = finding.anchor.startLine;
     const endLine = finding.anchor.endLine ?? startLine;
     const existing = (drafts ?? []).find(

@@ -135,8 +135,13 @@
   font-weight: 600;
   color: $color-success;
 }
-// Icon-only "comment on file" button (pushed right by the header's space-between). Fixed 22px box so it matches the
-// file tree header's content height exactly (row = 12px padding + 1px border + 22px = 35px, level with the file tree).
+.diff-file-comments-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: $space-2;
+}
+
+// The 22px icon buttons keep the breadcrumb level with the file tree header.
 .diff-file-comment-btn {
   flex-shrink: 0;
   display: inline-flex;

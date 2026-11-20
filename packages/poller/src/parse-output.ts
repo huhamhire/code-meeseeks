@@ -6,6 +6,7 @@ import type {
   PrDocSectionKey,
   ReviewRunTool,
 } from '@meebox/shared';
+import { readReviewPriority } from './review-priority.js';
 
 export interface ParsedReviewOutput {
   /** Take the first non-empty section title / first line of the description as the PR summary */
@@ -335,7 +336,7 @@ function expandKeyIssuesSection(sec: Section, baseIndex: number, tool: ReviewRun
   }
 
   return blocks.map((b, i) => {
-    const raw = b.body.trim();
+    const { body: raw, reviewPriority } = readReviewPriority(b.body.trim());
     // First parse the anchor from the raw text containing the marker (the marker is a line-number fallback), then strip for display
     const anchor = resolveIssueAnchor(b.link, raw);
     const issueBody = stripAnchorMarker(raw);
@@ -346,6 +347,7 @@ function expandKeyIssuesSection(sec: Section, baseIndex: number, tool: ReviewRun
       sectionKey: 'code-feedback' as const,
       title: b.title,
       body: issueBody,
+      ...(reviewPriority ? { reviewPriority } : {}),
       ...(anchor ? { anchor } : {}),
     };
   });
@@ -436,7 +438,7 @@ function expandGfmKeyIssues(html: string, baseIndex: number, tool: ReviewRunTool
     // which is not put into body (the code is shown via anchor → DiffView; re-pasting a large code block in body is noisy).
     const sumIdx = chunk.search(/<\/summary>/i);
     if (sumIdx >= 0) chunk = chunk.slice(0, sumIdx);
-    const raw = gfmInlineToText(chunk);
+    const { body: raw, reviewPriority } = readReviewPriority(gfmInlineToText(chunk));
     // First parse the anchor from the raw text containing the marker (line-number fallback), then strip for display
     const anchor = resolveIssueAnchor(link, raw);
     const issueBody = stripAnchorMarker(raw);
@@ -446,6 +448,7 @@ function expandGfmKeyIssues(html: string, baseIndex: number, tool: ReviewRunTool
       sectionKey: 'code-feedback' as const,
       title,
       body: issueBody,
+      ...(reviewPriority ? { reviewPriority } : {}),
       ...(anchor ? { anchor } : {}),
     };
   });
@@ -584,7 +587,9 @@ function isNoSecurityConcern(text: string): boolean {
  */
 export function sectionToFinding(sec: Section, index: number, tool: ReviewRunTool): Finding {
   const id = `${tool}-${String(index).padStart(3, '0')}`;
-  const body = trimNoise(sec.body);
+  const trimmed = trimNoise(sec.body);
+  const { body, reviewPriority } =
+    tool === 'review' ? readReviewPriority(trimmed) : { body: trimmed };
   const rawTitle = normalizeTitle(sec.title) || undefined;
   const mappedKey = rawTitle ? mapSectionKey(rawTitle) : undefined;
   // /ask: an "Answer" header with body is redundant (the answer text follows right below) → clear the title, keep only the body.
@@ -618,6 +623,7 @@ export function sectionToFinding(sec: Section, index: number, tool: ReviewRunToo
       sectionKey: 'code-feedback',
       title: displayTitle,
       body,
+      ...(reviewPriority ? { reviewPriority } : {}),
       anchor,
     };
   }
