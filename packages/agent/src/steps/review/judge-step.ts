@@ -30,13 +30,27 @@ export class JudgeStep extends Step<ReviewStepCtx> {
       asks?: Array<{ question?: string; targetFindingId?: string }>;
       questions?: string[];
     }>(judge.text);
-    const raw = verdict?.asks?.length
+    const raw: ReviewStepCtx['bag']['asks'] = verdict?.asks?.length
       ? verdict.asks.map((a) => ({
           question: a.question ?? '',
           targetFindingId: a.targetFindingId,
         }))
       : (verdict?.questions ?? []).map((q) => ({ question: q }));
-    const asks = verdict?.severe ? raw.filter((a) => a.question.trim()).slice(0, ctx.maxAsks) : [];
+    const candidates = new Set(
+      (ctx.bag.review?.findings ?? [])
+        .filter((finding) => finding.reviewPriority?.level === 'P1')
+        .map(({ id }) => id),
+    );
+    const asks = verdict?.severe
+      ? raw
+          .filter((a) => a.question.trim())
+          .sort(
+            (a, b) =>
+              Number(candidates.has(b.targetFindingId ?? '')) -
+              Number(candidates.has(a.targetFindingId ?? '')),
+          )
+          .slice(0, ctx.maxAsks)
+      : [];
     ctx.bag.asks = asks;
     await ctx.rec.record({
       kind: 'judge',

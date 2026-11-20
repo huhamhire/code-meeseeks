@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { TFunction } from 'i18next';
-import { DEFAULT_CODE_SUGGESTION_LAYOUT, type Finding, type PrDocSectionKey } from '@meebox/shared';
+import { DEFAULT_CODE_SUGGESTION_LAYOUT, type Finding, type PrDocSectionKey, type ReviewPriority } from '@meebox/shared';
 
 /**
  * The issue body from pr-agent /review has a trailing `[file: <path>, lines: <s>-<e>]`
@@ -132,14 +132,23 @@ export function stripEffortScoreNumber(s: string): string {
  * Stable sort by sectionKey + preserve original order within the same key (compatible with JS engines where Array.sort isn't stable).
  * The effort section is filtered out entirely: "Estimated effort to review" has low practical value, not shown.
  */
-export function orderFindings(findings: Finding[]): Finding[] {
+export type DisplayReviewPriority = ReviewPriority | 'unrated';
+
+const PRIORITY_ORDER: Record<DisplayReviewPriority, number> = { P1: 0, P2: 1, P3: 2, unrated: 3 };
+
+export function orderFindings(
+  findings: Finding[],
+  priority?: (finding: Finding) => DisplayReviewPriority | undefined,
+): Finding[] {
   return findings
     .filter((f) => f.sectionKey !== 'effort')
     .map((f, i) => ({ f, i }))
     .sort((a, b) => {
       const ka = SECTION_ORDER[a.f.sectionKey ?? 'general'] ?? 99;
       const kb = SECTION_ORDER[b.f.sectionKey ?? 'general'] ?? 99;
-      return ka === kb ? a.i - b.i : ka - kb;
+      if (ka !== kb) return ka - kb;
+      return PRIORITY_ORDER[priority?.(a.f) ?? 'unrated'] -
+        PRIORITY_ORDER[priority?.(b.f) ?? 'unrated'] || a.i - b.i;
     })
     .map((x) => x.f);
 }

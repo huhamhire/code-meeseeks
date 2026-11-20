@@ -20,6 +20,7 @@ import {
   splitTypeLabels,
   stripEffortScoreNumber,
   stripFindingMarker,
+  type DisplayReviewPriority,
 } from '../utils/findings';
 import { BreakablePath, MdInline, withInlineSummary } from './shared';
 
@@ -190,6 +191,7 @@ function FindingDraftActions({
 
 export function FindingCard({
   finding,
+  reviewPriority,
   relatedDraft,
   onJump,
   onReject,
@@ -200,6 +202,7 @@ export function FindingCard({
   onViewAsk,
 }: {
   finding: Finding;
+  reviewPriority?: DisplayReviewPriority;
   /** The draft associated with this finding; undefined = not interacted with yet; non-null = already pending / edited / rejected / posted */
   relatedDraft?: ReviewDraft;
   /** "→ Jump to code editing" button callback */
@@ -235,6 +238,10 @@ export function FindingCard({
   const [expanded, setExpanded] = useState(false);
   const collapsed = collapsibleByDefault && !expanded;
   const label = sectionLabel(key, t);
+  const priorityReason = reviewPriority !== 'unrated' ? finding.reviewPriority : undefined;
+  const priorityTitle = priorityReason
+    ? t('chatPane.reviewPriorityDetails', priorityReason)
+    : t('chatPane.reviewPriorityUnrated');
   // On a known sectionKey the title **usually** duplicates the chip label content (h4 shows "PR Type" + chip
   // shows "类型"), so by default only the general segment shows the title. But pr-agent puts some segments' "values"
   // in the title (e.g., `Estimated effort to review: 3 🔵🔵🔵⚪⚪` / `Score: 85 🟢🟢...`),
@@ -279,6 +286,15 @@ export function FindingCard({
         {label && (
           <span className={`chat-chip chat-chip-md chat-finding-cat chat-chip-${CAT_TONE[key]}`}>
             {label}
+          </span>
+        )}
+        {reviewPriority && (
+          <span
+            className={`chat-chip chat-chip-${reviewPriority === 'P1' || reviewPriority === 'P2' ? 'warning' : 'neutral'}`}
+            title={priorityTitle}
+            aria-label={`${reviewPriority === 'unrated' ? '' : reviewPriority + ' · '}${priorityTitle}`}
+          >
+            {reviewPriority === 'unrated' ? t('chatPane.reviewPriorityUnrated') : reviewPriority}
           </span>
         )}
         {/* PR Type segment: value pills on the same row as the "type" label, right-aligned (no longer two stacked rows, improving space utilization) */}

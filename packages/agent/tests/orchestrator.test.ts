@@ -139,6 +139,41 @@ describe('runReviewMicroflow', () => {
     expect(r.recommendation.verdict).toBe('needs_work');
   });
 
+  it('uses limited follow-up slots for proposed P1 findings first', async () => {
+    const { deps } = makeDeps({
+      chatReplies: [
+        '{"severe":true,"asks":[{"question":"Other question"},{"question":"Check the trigger","targetFindingId":"candidate"}]}',
+      ],
+    });
+    const calls: string[] = [];
+    deps.runTool = async ({ tool, question }) => {
+      if (tool === 'ask') calls.push(question ?? '');
+      return {
+        text: tool,
+        runId: 'review',
+        findings:
+          tool === 'review'
+            ? [
+                {
+                  id: 'candidate',
+                  category: 'code-feedback',
+                  sectionKey: 'code-feedback',
+                  body: 'The request can fail.',
+                  anchor: { path: 'handler.ts', startLine: 2 },
+                  reviewPriority: {
+                    level: 'P1',
+                    trigger: 'default configuration',
+                    consequence: 'request fails',
+                  },
+                },
+              ]
+            : undefined,
+      };
+    };
+    await runReviewMicroflow(deps, { context, pr, maxFollowupAsks: 1 });
+    expect(calls).toEqual(['Check the trigger']);
+  });
+
   it('does not truncate the summary (summaryMaxChars is a soft prompt hint only)', async () => {
     const long = 'x'.repeat(500);
     const { deps } = makeDeps({

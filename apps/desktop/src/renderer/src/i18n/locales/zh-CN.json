@@ -175,6 +175,8 @@
       "reviewing": "正在运行 PR Agent 评审…",
       "validating": "正在校验评审发现和变更行…"
     },
+    "reviewPriorityDetails": "模型建议等级\n触发条件：{{trigger}}\n后果：{{consequence}}",
+    "reviewPriorityUnrated": "未评级",
     "reviewProcess": "评审过程",
     "reviewResult": {
       "clean": "评审完成，未发现代码问题。",

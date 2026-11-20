@@ -4,6 +4,8 @@ Each review finding is listed with a stable `id=` (and its file:line) in the id-
 
 For a specific finding, ask what needs to be checked in the implementation, callers, contracts, or tests to establish the claimed consequence. Quote up to three exact source identifiers in backticks when the finding names them. Use only identifiers supported by the supplied review context.
 
+Prioritize follow-up for proposed P1 findings. The proposed rank is a hypothesis. Ask which code would establish the trigger, its reachability, and the serious consequence before confirming that level.
+
 The `id` is an internal handle — use it **only** in the `targetFindingId` field. **Never** write it into the `question` text: the reader never sees these ids, so phrase each question as self-contained natural language, referring to the issue by what it is (or its file:line) rather than by `review-00x`.
 
 Reply with JSON only: `{"severe": boolean, "asks": [{"question": string, "targetFindingId"?: string}]}`. No explanation, no reasoning.

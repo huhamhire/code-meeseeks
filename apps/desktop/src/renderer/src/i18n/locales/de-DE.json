@@ -175,6 +175,8 @@
       "reviewing": "PR Agent führt das Review aus…",
       "validating": "Befunde und geänderte Zeilen werden geprüft…"
     },
+    "reviewPriorityDetails": "Vom Modell vorgeschlagene Priorität\nAuslöser: {{trigger}}\nAuswirkung: {{consequence}}",
+    "reviewPriorityUnrated": "Nicht bewertet",
     "reviewProcess": "Prüfungsverlauf",
     "reviewResult": {
       "clean": "Review abgeschlossen. Keine Codebefunde.",

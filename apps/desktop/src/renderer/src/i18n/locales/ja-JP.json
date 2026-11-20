@@ -175,6 +175,8 @@
       "reviewing": "PR Agent でレビュー中…",
       "validating": "指摘と変更行を検証中…"
     },
+    "reviewPriorityDetails": "モデルによる優先度の推定\n発生条件：{{trigger}}\n影響：{{consequence}}",
+    "reviewPriorityUnrated": "未評価",
     "reviewProcess": "レビューの過程",
     "reviewResult": {
       "clean": "レビューが完了しました。コードの指摘はありません。",

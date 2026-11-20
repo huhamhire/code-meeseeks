@@ -50,7 +50,7 @@ import {
 import { buildCodexAskContext } from './codex-context.js';
 import { discoverCodexReview, readReviewEvents, runNativeAsk, runNativeReview } from './codex-review.js';
 import { validateReviewAnchor } from './review-anchor.js';
-import { collectReviewEvidence } from './review-evidence.js';
+import { collectReviewEvidence, readPriorityEvidence } from './review-evidence.js';
 import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 
 /** Finalization patch type for finishReviewRun (return of the finalization helper). */
@@ -136,16 +136,25 @@ export class RunExecutor {
             item.ac!.signal,
           )
         : undefined;
+      const candidate = finding?.reviewPriority?.level === 'P1' && evidence?.locations.length
+        ? finding.reviewPriority
+        : undefined;
       const evidencePrompt = ref
         ? (evidence?.prompt ??
           'Repository evidence could not be collected for this review snapshot. State this limitation and keep the original finding.')
         : undefined;
+      const priorityPrompt = candidate && [
+        'Independently verify the proposed P1 (serious impact that calls for a fix before merge).',
+        JSON.stringify({ trigger: candidate.trigger, consequence: candidate.consequence })
+          .replace(/https?:\/\//gi, (url) => url.replace(':', '\\u003a')),
+        'If a supplied repository line supports the concrete trigger and serious consequence, explain how in your analysis. When the verdict is keep and P1 is supported, include exactly one line <priority_evidence>{"path":"relative/path","line":123}</priority_evidence> outside the answer sections, using an actual path and line from the supplied excerpts. Omit the marker if uncertain.',
+      ].join('\n');
       const { env, extraArgs, askLangSuffix } = await this.buildInvocation(
         req,
         pr,
         run.id,
         wt.path,
-        evidencePrompt,
+        priorityPrompt ? `${evidencePrompt}\n\n${priorityPrompt}` : evidencePrompt,
       );
 
       // In CLI mode /ask sets the subprocess cwd to the worktree (for full file context; buildInvocation
@@ -185,13 +194,14 @@ export class RunExecutor {
       // Real token usage (stderr sentinel lines accumulated by onLine), carried into succeeded / llm-failed finalization.
       const tokenUsage = finalizeUsage(usageAcc);
       reportPhase('validating');
-      const { parsed, fileContent } = await this.collectOutput(
+      const { parsed, fileContent, verifiedPriorityEvidence } = await this.collectOutput(
         reviewMarkdown ?? path.join(wt.path, PRAGENT_LOCAL_OUTPUT[req.tool]),
         result.stdout,
         req,
         run.id,
         askLangSuffix,
         !ref || !!evidence?.locations.length,
+        candidate ? evidence?.locations : undefined,
       );
       const structured = artifact
         ? parseStructuredReview(await fs.readFile(artifact, 'utf8').catch(() => ''))
@@ -202,6 +212,9 @@ export class RunExecutor {
       );
       patch.mergeBaseSha = wt.diffBaseSha;
       if (ref) patch.repositoryEvidence = evidence?.locations ?? [];
+      if (patch.status === 'succeeded' && verifiedPriorityEvidence) {
+        patch.verifiedPriorityEvidence = verifiedPriorityEvidence;
+      }
       if (req.tool === 'review' && patch.status === 'succeeded') {
         const markdownAvailable = fileContent.trim() || parsed.findings.some((finding) =>
           finding.sectionKey === 'code-feedback' ||
@@ -570,8 +583,12 @@ export class RunExecutor {
       const adapter = prService.adapterFor(pr);
       if (adapter) {
         try {
+          // Description and improvement results in an automatic review can inform its later steps.
           prContext = await buildPrContext({
-            pr, adapter, logger, maxComments: req.tool === 'review' ? 0 : undefined,
+            pr,
+            adapter,
+            logger,
+            maxComments: req.tool === 'review' || req.reviewStartedAt !== undefined ? 0 : undefined,
           });
         } catch (err) {
           logger.warn(
@@ -665,7 +682,12 @@ export class RunExecutor {
     runId: string,
     askLangSuffix: string,
     allowFindingClosure = true,
-  ): Promise<{ parsed: ReturnType<typeof parseReviewOutput>; fileContent: string }> {
+    priorityLocations?: ReviewRun['repositoryEvidence'],
+  ): Promise<{
+    parsed: ReturnType<typeof parseReviewOutput>;
+    fileContent: string;
+    verifiedPriorityEvidence?: ReviewRun['verifiedPriorityEvidence'];
+  }> {
     const { logger, broadcast } = this.ctx;
     const stateStore = await this.ctx.pr.storeForPr(req.localId);
     let fileContent = '';
@@ -682,7 +704,10 @@ export class RunExecutor {
       req.tool === 'ask' && req.question?.trim()
         ? stripAskQuestionEcho(fileContent, req.question, askLangSuffix)
         : fileContent;
-    const parsed = parseReviewOutput(cleanedContent || resultStdout, req.tool);
+    const priority = priorityLocations && cleanedContent
+      ? readPriorityEvidence(cleanedContent, priorityLocations)
+      : undefined;
+    const parsed = parseReviewOutput(priority?.text ?? (cleanedContent || resultStdout), req.tool);
     if (!allowFindingClosure) delete parsed.askVerdict;
     // Re-review /ask (a finding was referenced):
     // - verdict replace → promote the suggestion to a positioned code comment (taking the original finding's anchor), rendered / adopted like /review code feedback;
@@ -718,7 +743,11 @@ export class RunExecutor {
         }
       }
     }
-    return { parsed, fileContent };
+    return {
+      parsed,
+      fileContent,
+      verifiedPriorityEvidence: parsed.askVerdict === 'keep' ? priority?.location : undefined,
+    };
   }
 
   private async replacePendingReviewDrafts(

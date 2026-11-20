@@ -175,6 +175,8 @@
       "reviewing": "Running PR Agent review…",
       "validating": "Validating findings and changed lines…"
     },
+    "reviewPriorityDetails": "Model-estimated priority\nTrigger: {{trigger}}\nConsequence: {{consequence}}",
+    "reviewPriorityUnrated": "Unrated",
     "reviewProcess": "Review process",
     "reviewResult": {
       "clean": "Review complete. No code findings.",

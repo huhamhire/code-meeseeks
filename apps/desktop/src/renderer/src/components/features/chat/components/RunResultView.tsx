@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
 import { CommitIcon, RepeatIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
-import { orderFindings } from '../utils/findings';
+import { orderFindings, type DisplayReviewPriority } from '../utils/findings';
 import { formatStartTime, formatTimestamp, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
 import { AnsiPre, AskQuestion, BreakablePath, TokenStat } from './shared';
@@ -101,6 +101,7 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
 export interface RunFindingActions {
   drafts: ReadonlyArray<ReviewDraft>;
   closures: ReadonlyArray<FindingClosure>;
+  verifiedP1?: ReadonlyMap<string, ReadonlySet<string>>;
   onJumpToDraft?: (finding: Finding, run: ReviewRun) => void;
   onRejectFinding?: (finding: Finding, run: ReviewRun) => void;
   onNavigateToFinding?: (finding: Finding) => void;
@@ -114,6 +115,7 @@ export function RunFindingList({
   stale,
   drafts,
   closures,
+  verifiedP1,
   onJumpToDraft,
   onRejectFinding,
   onNavigateToFinding,
@@ -124,9 +126,20 @@ export function RunFindingList({
   findings: Finding[];
   stale?: boolean;
 }) {
+  const priorityOf = (finding: Finding): DisplayReviewPriority | undefined => {
+    if (
+      run.engine === 'codex' ||
+      run.tool !== 'review' ||
+      (finding.sectionKey ?? finding.category) !== 'code-feedback'
+    )
+      return;
+    const proposed = finding.reviewPriority?.level;
+    if (proposed === 'P1' && !verifiedP1?.get(run.id)?.has(finding.id)) return 'unrated';
+    return proposed ?? 'unrated';
+  };
   return (
     <ul className="chat-finding-list" data-feedback-run-id={run.id}>
-      {orderFindings(findings).map((finding) => {
+      {orderFindings(findings, priorityOf).map((finding) => {
         const relatedDraft = drafts.find(
           (draft) => draft.source?.runId === run.id && draft.source.findingId === finding.id,
         );
@@ -141,6 +154,7 @@ export function RunFindingList({
           <FindingCard
             key={finding.id}
             finding={finding}
+            reviewPriority={priorityOf(finding)}
             relatedDraft={relatedDraft}
             closure={closure}
             onJump={!stale && onJumpToDraft ? () => onJumpToDraft(finding, run) : undefined}

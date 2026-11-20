@@ -390,9 +390,21 @@ export function ChatPane({
   const { runs, error, loadingSession, matchedRules, bodyRef, hasMoreOlder, loadingOlder } =
     session;
 
+  const verifiedP1 = useMemo(() => {
+    const confirmed = new Map<string, Set<string>>();
+    for (const run of runs) {
+      const ref = run.referencedFinding;
+      if (run.status !== 'succeeded' || !run.verifiedPriorityEvidence || !ref) continue;
+      const findings = confirmed.get(ref.runId) ?? new Set<string>();
+      findings.add(ref.findingId);
+      confirmed.set(ref.runId, findings);
+    }
+    return confirmed;
+  }, [runs]);
   const findingActions: RunFindingActions = {
     drafts: drafts ?? [],
     closures,
+    verifiedP1,
     onJumpToDraft: actions.handleJumpToDraft,
     onRejectFinding: actions.handleRejectFinding,
     onNavigateToFinding: actions.handleNavigateToFinding,

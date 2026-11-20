@@ -43,6 +43,34 @@ const EXCLUSIONS = [
 ];
 const MAX_EXCERPTS = 4;
 const MAX_PROMPT_CHARS = 3200;
+const PRIORITY_EVIDENCE_LINE =
+  /^[ \t]*<priority_evidence>([^\r\n]*?)<\/priority_evidence>[ \t]*\r?$/gm;
+
+export function readPriorityEvidence(answer: string, locations: readonly FindingAnchor[]) {
+  const markers = [...answer.matchAll(PRIORITY_EVIDENCE_LINE)];
+  const text = answer.replace(PRIORITY_EVIDENCE_LINE, '');
+  if (markers.length !== 1) return { text };
+  try {
+    const citation = JSON.parse(markers[0][1]) as { path?: unknown; line?: unknown } | null;
+    const line = citation?.line;
+    if (
+      typeof citation?.path !== 'string' ||
+      typeof line !== 'number' ||
+      !Number.isSafeInteger(line)
+    )
+      return { text };
+    const found = locations.some(
+      ({ path, startLine, endLine }) =>
+        path === citation.path &&
+        startLine !== undefined &&
+        line >= startLine &&
+        line <= (endLine ?? startLine),
+    );
+    return { text, location: found ? { path: citation.path, startLine: line } : undefined };
+  } catch {
+    return { text };
+  }
+}
 
 interface Excerpt {
   path: string;

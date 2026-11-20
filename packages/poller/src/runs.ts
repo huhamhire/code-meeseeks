@@ -107,6 +107,7 @@ export interface FinishReviewRunPatch {
   baseSha?: string;
   mergeBaseSha?: string;
   repositoryEvidence?: ReviewRun['repositoryEvidence'];
+  verifiedPriorityEvidence?: ReviewRun['verifiedPriorityEvidence'];
   reviewCoverage?: ReviewRun['reviewCoverage'];
   status: ReviewRunStatus;
   finishedAt: string;

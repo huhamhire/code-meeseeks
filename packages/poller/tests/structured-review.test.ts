@@ -27,7 +27,8 @@ describe('parseStructuredReview', () => {
             {
               relevant_file: 'src/a.ts',
               issue_header: 'Review title',
-              issue_content: 'Review finding',
+              issue_content:
+                'Review finding\n[review-priority: {"level":"P2","trigger":"empty input","consequence":"request fails"}]',
               start_line: 3,
               end_line: 4,
             },
@@ -44,6 +45,7 @@ describe('parseStructuredReview', () => {
     expect(result?.findings[0]).toMatchObject({
       title: 'Review title',
       body: 'Review finding',
+      reviewPriority: { level: 'P2', trigger: 'empty input', consequence: 'request fails' },
       anchor: { path: 'src/a.ts', startLine: 3, endLine: 4 },
     });
   });

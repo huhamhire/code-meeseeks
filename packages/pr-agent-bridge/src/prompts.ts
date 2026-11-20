@@ -98,6 +98,17 @@ function reviewLayoutDirective(tool: ReviewRunTool): string {
   ].join('\n');
 }
 
+function reviewPriorityDirective(tool: ReviewRunTool): string {
+  if (tool !== 'review') return '';
+  return [
+    'Keep the review YAML schema unchanged. Inside each issue_content, add a separate single-line marker before the final file anchor:',
+    '[review-priority: {"level":"P2","trigger":"concrete triggering condition","consequence":"observable effect"}]',
+    'Use P1 for an evidenced serious consequence that should be addressed before merge, P2 for a concrete regression with limited impact, or P3 for a low-impact issue that can be deferred.',
+    'Use unrated if either the trigger or consequence is uncertain. Keep the marker, JSON keys and level values unchanged in every locale.',
+    'Do not put the priority in the title. Do not infer severity from code style or from the presence of a finding alone.',
+  ].join('\n');
+}
+
 /**
  * /ask structured-sectioning directive: structuring is just **a light wrapper on top of pr-agent's native
  * /ask rich-text answer** — wrapping the answer into the literal three sections `<summary>` / `<analysis>` /
@@ -263,6 +274,7 @@ export function buildExtraInstructions(input: {
     referencedAskDirective(input.tool, !!input.referencedFinding),
     worktreeRetrievalDirective(input.tool, !!input.worktreeRetrieval),
     reviewLayoutDirective(input.tool),
+    reviewPriorityDirective(input.tool),
     codeSuggestionSpecDirective(input.tool, input.codeSuggestionSpec),
     input.prContext,
     input.referencedContext ?? '',
