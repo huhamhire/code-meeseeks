@@ -20,6 +20,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 ### ♻️ Changed
 
 - Updated the desktop build to Vite 8.
+- The selected PR Agent or Codex tab now connects visually to its review panel. Composer controls and popup menus use consistent small corner radii.
 
 ### ✨ Added
 

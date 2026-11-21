@@ -57,6 +57,10 @@
   font-size: $fs-md;
   color: $text-primary;
   flex-shrink: 0;
+
+  &:has(> .chat-engine-tabs) {
+    background: $bg-panel-alt;
+  }
 }
 .chat-pane-title {
   font-weight: 600;
@@ -78,6 +82,7 @@
 
 .chat-pane-clear {
   flex-shrink: 0;
+  border-radius: $radius-md;
   &:hover:not(:disabled) {
     color: $color-danger-strong;
     background: $color-danger-strong-fade;
@@ -325,6 +330,7 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
   // Equal-width buttons: the `/` command trigger and the auto-review icon button have the same width, left-aligned into one group; height follows the content (determined by
   // padding), no extra height beyond the line height, avoiding looking too tall. Shares the ghost button frame.
   @include ghost-btn;
+  border-radius: $radius-md;
   box-sizing: border-box;
   min-width: 30px;
   display: inline-flex;
@@ -445,7 +451,7 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
   list-style: none;
   padding: $space-2 0;
   margin: 0;
-  border-radius: $radius-md;
+  border-radius: $radius-lg;
 }
 
 // Group separator: draw a horizontal line between pragent tools (/review /describe /ask) ↔ review decisions (/approve /needswork)
@@ -469,7 +475,7 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
   max-width: 360px;
   list-style: none;
   padding: $space-2 0;
-  border-radius: $radius-md;
+  border-radius: $radius-lg;
   max-height: 200px;
   overflow-y: auto;
 }
@@ -514,10 +520,11 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
 }
 
 // Send / stop button on the right of the input bar. Shares the ghost frame with the left `/` command button (.chat-cmd-trigger):
-// light background + 1px border + radius-sm, accent border + accent text on hover.
+// Light background and a 1px border, with accent border and text on hover.
 // Same-slot form switching: idle paper plane / running stop square
 .chat-pane-send {
   @include ghost-btn;
+  border-radius: $radius-md;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -563,12 +570,24 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
     color: $text-muted;
     border: 0;
     border-bottom: 2px solid transparent;
+    border-radius: $radius-lg $radius-lg 0 0;
     white-space: nowrap;
     cursor: pointer;
 
-    &[aria-selected='true'] {
-      border-bottom-color: $color-info;
+    &:hover:not(:disabled, [aria-selected='true']) {
+      background: $bg-hover;
       color: $text-primary;
+    }
+
+    &[aria-selected='true'] {
+      background: $bg-panel;
+      // Cover the header divider below the selected tab without changing its layout.
+      box-shadow: 0 1px 0 $bg-panel;
+      color: $text-primary;
+    }
+
+    &:focus-visible {
+      outline-offset: -3px;
     }
 
     &:disabled {
