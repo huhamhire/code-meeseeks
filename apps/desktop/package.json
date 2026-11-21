@@ -1,6 +1,6 @@
 {
   "name": "@meebox/desktop",
-  "version": "0.13.0-dev",
+  "version": "0.13.0",
   "private": true,
   "description": "meebox Electron desktop app",
   "author": {
@@ -66,8 +66,8 @@
     "@meebox/config": "*",
     "@meebox/ipc": "*",
     "@meebox/logger": "*",
-    "@meebox/platform-core": "*",
     "@meebox/platform-bitbucket-server": "*",
+    "@meebox/platform-core": "*",
     "@meebox/platform-github": "*",
     "@meebox/platform-gitlab": "*",
     "@meebox/poller": "*",
@@ -106,7 +106,7 @@
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "sass": "^1.108.2",
-    "tar": "^7.4.3",
+    "tar": "^7.5.23",
     "vite": "^8.3.8"
   }
 }
