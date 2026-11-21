@@ -36,7 +36,7 @@ function patchMonacoStandaloneEditor(source: string, id: string): string | undef
   const hoverFactory = 'instantiationService.createInstance(WorkbenchHoverDelegate';
   const markdownFactory = 'instantiationService.createInstance(EditorMarkdownCodeBlockRenderer';
   if (
-    version !== '0.56.0' ||
+    version !== '0.57.0' ||
     ![servicesImport, hoverFactory, markdownFactory].every((target) => source.includes(target))
   ) {
     throw new Error(

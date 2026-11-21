@@ -11,6 +11,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔒 Security
 
+- Updated the code editor to Monaco 0.57.0 for additional HTML sanitization fixes.
 - Updated diagram rendering, desktop packaging, and development tooling to address dependency advisories.
 - Updated configuration validation to Zod 4 while preserving defaults and legacy profile migration.
 - Updated Git operations, HTTP requests, diagram rendering, and rule-file parsing to patched dependencies.
