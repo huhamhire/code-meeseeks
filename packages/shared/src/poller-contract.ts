@@ -40,6 +40,7 @@ export type ReviewRunFailureReason =
   | 'non-zero-exit'
   | 'killed'
   | 'cancelled'
+  | 'invalid-review-output'
   | 'llm-error';
 
 /**
@@ -83,6 +84,8 @@ export interface FindingAnchor {
 /** Finding severity: used by the M4 review publish loop; the UI decides chip coloring / sort priority */
 export type FindingSeverity = 'info' | 'warning' | 'error';
 
+export type ReviewPriority = 'P1' | 'P2' | 'P3';
+
 /**
  * The Finding's state machine in the review → publish loop:
  *   pending  : default, awaiting the user's decision
@@ -118,6 +121,8 @@ export interface Finding {
   body: string;
   /** Present when category='code-feedback' / 'code-suggestion' */
   anchor?: FindingAnchor;
+  /** False when the location can be shown but cannot be used for an inline draft. */
+  inlineAnchorVerified?: boolean;
   /**
    * The "original code → improved code" comparison carried by an /improve suggestion. Filled only when sectionKey='code-suggestion'.
    * The UI renders the before/after fragments with single-language syntax highlight
@@ -128,6 +133,8 @@ export interface Finding {
    * Combined with severity (M4 review decision) for sorting / coloring: score ≥ 8 defaults to 'warning', < 5 defaults to 'info'
    */
   score?: number;
+  /** Model-proposed priority and its stated evidence. P1 requires a follow-up before display. */
+  reviewPriority?: { level: ReviewPriority; trigger: string; consequence: string };
   /**
    * Severity (M4); the current parser doesn't fill it; M4 will add the inference logic per pr-agent output / rules when wiring up /improve.
    * The UI renders as 'info' by default
@@ -200,7 +207,7 @@ export interface ReviewDraft {
    * Filled only when origin='finding', pointing back to the source finding. The UI uses it on the ChatPane finding card
    * to look up the associated Draft's status chip display
    */
-  source?: { runId: string; findingId: string };
+  source?: { runId: string; findingId: string; engine?: ReviewEngine };
   status: 'pending' | 'edited' | 'posted' | 'rejected';
   /** The remote comment id after a successful publish, idempotency key + navigation link */
   posted_remote_id?: string;
@@ -289,7 +296,27 @@ export interface ReviewRunCommitScope {
   subject: string;
 }
 
+export type ReviewEngine = 'pr-agent' | 'codex';
+
+export const CODEX_QUESTION_LIMIT = 4000;
+
+export type CodexReviewReadiness = 'missing' | 'unsupported' | 'login-required' | 'unavailable' | 'ready';
+
 export interface ReviewRun {
+  engine?: ReviewEngine;
+  engineVersion?: string;
+  baseSha?: string;
+  mergeBaseSha?: string;
+  /** Source ranges supplied to an automatic follow-up. An empty list means no evidence was available. */
+  repositoryEvidence?: FindingAnchor[];
+  /** Source line cited by the automatic follow-up to support the referenced finding's P1. */
+  verifiedPriorityEvidence?: FindingAnchor;
+  /** Structured coverage is reported by the runtime. Legacy Markdown cannot establish completeness. */
+  reviewCoverage?: {
+    status: 'complete' | 'partial' | 'unknown' | 'invalid';
+    omittedFiles?: string[];
+    partialFiles?: string[];
+  };
   /** yyyymmdd-HHmmss-ms sequential id, convenient for listing in reverse filename order */
   id: string;
   /** PR hash localId (12 hex chars), aligned with StoredPullRequest.localId */
@@ -309,6 +336,8 @@ export interface ReviewRun {
    * (their user input is already carried by the orchestration session's user message, avoiding duplicate bubbling). Historical runs lack this field (undefined), not echoed.
    */
   origin?: ReviewRunOrigin;
+  /** Start marker shared with the automatic review's steps and summary. */
+  reviewStartedAt?: string;
   /**
    * Single-commit review scope: filled when this run is limited to that commit's own changes (`parent..sha`) rather than the whole PR.
    * Default = whole-PR scope. The result card shows a scope badge accordingly.
@@ -322,8 +351,8 @@ export interface ReviewRun {
    */
   headSha?: string;
   /** The pr-agent version obtained at probe time (CLI first line / the pr-agent version found by the embedded runtime) */
-  prAgentVersion: string;
-  strategy: PrAgentStrategy;
+  prAgentVersion?: string;
+  strategy?: PrAgentStrategy;
   /**
    * The LLM model ID used by this run — taken from the active LlmProfile.model at startup (in the form after
    * normalizeModel adds the provider prefix, e.g., `openai/qwen-plus` /
@@ -433,6 +462,8 @@ export interface StoredPullRequest extends PullRequest {
   discoveredAt: string;
   /** Time most recently still seen by a poll, ISO */
   lastSeenAt: string;
+  /** Observed source-head transitions, ordered by observation time for the review timelines. */
+  headChanges?: Array<{ sha: string; at: string }>;
   /**
    * "Unread" marker (derived value, filled by `listStoredPullRequests` after computing against the read watermark in the index; the persisted meta.json
    * doesn't contain this field). True means a new event **relevant to me** has occurred since the user last viewed this PR: the source branch pushed a new commit, or

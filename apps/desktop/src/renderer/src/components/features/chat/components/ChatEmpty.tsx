@@ -1,7 +1,18 @@
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrAgentStatus, StoredPullRequest } from '@meebox/shared';
 import { ChatIcon } from '../../../common';
 import { Bullet } from './shared';
+
+export function ChatEmptyCommands({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <p className="chat-empty-sub">{t('chatPane.emptyCmdHint')}</p>
+      <ul className="chat-empty-list">{children}</ul>
+    </>
+  );
+}
 
 export function ChatEmpty({
   pr,
@@ -58,8 +69,7 @@ export function ChatEmpty({
       </p>
       <p className="chat-empty-sub">{t('chatPane.emptyInputHint')}</p>
       <p className="chat-empty-sub">{t('chatPane.emptyAutoReviewHint')}</p>
-      <p className="chat-empty-sub">{t('chatPane.emptyCmdHint')}</p>
-      <ul className="chat-empty-list">
+      <ChatEmptyCommands>
         <Bullet>
           <code>/describe</code> {t('chatPane.bulletDescribe')}
         </Bullet>
@@ -72,7 +82,7 @@ export function ChatEmpty({
         <Bullet>
           <code>/ask &lt;{t('chatPane.askArgQuestion')}&gt;</code> {t('chatPane.bulletAsk')}
         </Bullet>
-      </ul>
+      </ChatEmptyCommands>
       <p className="chat-empty-foot muted">
         {pr ? t('chatPane.emptyFootWithPr') : t('chatPane.emptyFootNoPr')}
       </p>

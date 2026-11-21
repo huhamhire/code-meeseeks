@@ -19,17 +19,18 @@ export interface PollTickEvent {
  * Streams whole lines of stdout / stderr during a pr-agent run. Renderer uses it to display
  * in real time in ChatPane or the log area. Many per run; not sent after the run ends.
  */
-export interface PragentRunProgressEvent {
-  runId: string;
-  line: string;
-  stream: 'stdout' | 'stderr';
-}
+export type CodexReviewProgress =
+  | { phase: 'preparing' | 'starting' | 'reviewing' | 'answering' | 'checking' | 'finalizing' }
+  | { summary: string };
+
+export type PragentRunProgressEvent = { runId: string; line: string; stream: 'stdout' | 'stderr' };
 
 /** main → renderer push events. Renderer subscribes via window.api.subscribe. */
 export interface IpcEvents {
   'sync:progress': SyncProgressEvent;
   'poll:tick': PollTickEvent;
   'pragent:runProgress': PragentRunProgressEvent;
+  'codex:runProgress': { runId: string; codex: CodexReviewProgress; at: number };
   /**
    * Draft change broadcast: triggered when a PR's drafts.json is added/deleted/modified, or by the
    * "re-ingest" cleanup on /review completion. Renderer refetches the drafts list (filtered per localId).

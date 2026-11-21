@@ -274,6 +274,37 @@ describe('Poller.tick', () => {
     expect(stored.title).toBe('new title');
   });
 
+  it('persists successive head transitions without moving them on later polls', async () => {
+    const pr = makePr('1', '2026-05-28T01:00:00.000Z');
+    const adapter = new FakeAdapter([pr]);
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const poller = new Poller({
+      connections: [{ connectionId: 'bb1', adapter }],
+      stateStore: store,
+      archiveStore,
+      intervalSeconds: 60,
+      logger: noopLogger,
+      now: () => now,
+    });
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]?.headChanges).toBeUndefined();
+
+    for (const [sha, at] of [
+      ['new-head', '2026-06-02T00:00:00.000Z'],
+      ['next-head', '2026-06-03T00:00:00.000Z'],
+    ] as const) {
+      now = new Date(at);
+      adapter.setPrs([{ ...pr, sourceRef: { ...pr.sourceRef, sha } }]);
+      await poller.tick();
+    }
+    now = new Date('2026-06-04T00:00:00.000Z');
+    await poller.tick();
+    expect((await listStoredPullRequests(store))[0]?.headChanges).toEqual([
+      { sha: 'new-head', at: '2026-06-02T00:00:00.000Z' },
+      { sha: 'next-head', at: '2026-06-03T00:00:00.000Z' },
+    ]);
+  });
+
   it('isolates errors per connection: failure in one does not block others', async () => {
     const ok = new FakeAdapter([makePr('1', '2026-05-28T01:00:00.000Z')]);
     const broken = new FakeAdapter();

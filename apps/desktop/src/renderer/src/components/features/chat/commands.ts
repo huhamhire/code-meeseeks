@@ -96,3 +96,8 @@ export const COMMANDS: ReadonlyArray<CommandSpec> = [
     insertAs: '/merge',
   },
 ];
+
+export const CODEX_COMMANDS = COMMANDS.filter(
+  (command) =>
+    command.name === 'review' || command.name === 'ask' || command.kind === 'review-action',
+);

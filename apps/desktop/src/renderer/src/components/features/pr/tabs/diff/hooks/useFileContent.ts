@@ -3,7 +3,7 @@ import type { StoredPullRequest } from '@meebox/shared';
 import type { DiffChangedFile } from '@meebox/ipc';
 import { invoke } from '../../../../../../api';
 import { formatBackendError, type FormattedError } from '../../../../../../errors';
-import type { LoadedContent } from '../diff-types';
+import { fileKey, type LoadedContent } from '../diff-types';
 
 export interface FileContentState {
   content: LoadedContent | null;
@@ -53,7 +53,7 @@ export function useFileContent(
       }),
     ])
       .then(([base, head]) => {
-        if (!cancelled) setContent({ base, head });
+        if (!cancelled) setContent({ base, head, fileKey: fileKey(selected) });
       })
       .catch((e: unknown) => {
         if (!cancelled) {

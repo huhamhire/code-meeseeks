@@ -57,6 +57,10 @@
   font-size: $fs-md;
   color: $text-primary;
   flex-shrink: 0;
+
+  &:has(> .chat-engine-tabs) {
+    background: $bg-panel-alt;
+  }
 }
 .chat-pane-title {
   font-weight: 600;
@@ -67,10 +71,18 @@
   color: $text-muted;
   font-size: $fs-sm;
 }
-// Clear history button: pushed to the far right of the title bar. hover uses the unified high-saturation danger red (consistent with deleting a single record / .btn-icon-danger).
-.chat-pane-clear {
-  margin-left: auto;
 
+.chat-pane-header-context {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  margin-inline-start: auto;
+  min-width: 0;
+}
+
+.chat-pane-clear {
+  flex-shrink: 0;
+  border-radius: $radius-md;
   &:hover:not(:disabled) {
     color: $color-danger-strong;
     background: $color-danger-strong-fade;
@@ -255,6 +267,7 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
   right: 0;
   height: 6px;
   cursor: row-resize;
+  touch-action: none;
 }
 .chat-pane-textarea {
   resize: none; // Custom-drawn handle replaces CSS resize
@@ -269,9 +282,9 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
   padding: $space-3 $space-4;
   border-radius: $radius-md;
   overflow-y: auto; // Scroll internally when content exceeds the current height
-  // Default 2 rows; the JS-side handle drag can adjust up to 8 rows; further input beyond the current height scrolls internally
-  min-height: calc(#{$fs-lg} * #{$lh-normal} * 2 + #{$space-3} * 2);
-  max-height: calc(#{$fs-lg} * #{$lh-normal} * 8 + #{$space-3} * 2);
+  // Inclusive of vertical padding and borders.
+  min-height: calc(#{$fs-lg} * #{$lh-normal} * 2 + #{$space-3} * 2 + 2px);
+  max-height: calc(#{$fs-lg} * #{$lh-normal} * 8 + #{$space-3} * 2 + 2px);
   box-sizing: border-box;
 
   &:disabled {
@@ -317,6 +330,7 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
   // Equal-width buttons: the `/` command trigger and the auto-review icon button have the same width, left-aligned into one group; height follows the content (determined by
   // padding), no extra height beyond the line height, avoiding looking too tall. Shares the ghost button frame.
   @include ghost-btn;
+  border-radius: $radius-md;
   box-sizing: border-box;
   min-width: 30px;
   display: inline-flex;
@@ -437,7 +451,7 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
   list-style: none;
   padding: $space-2 0;
   margin: 0;
-  border-radius: $radius-md;
+  border-radius: $radius-lg;
 }
 
 // Group separator: draw a horizontal line between pragent tools (/review /describe /ask) ↔ review decisions (/approve /needswork)
@@ -461,7 +475,7 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
   max-width: 360px;
   list-style: none;
   padding: $space-2 0;
-  border-radius: $radius-md;
+  border-radius: $radius-lg;
   max-height: 200px;
   overflow-y: auto;
 }
@@ -506,10 +520,11 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
 }
 
 // Send / stop button on the right of the input bar. Shares the ghost frame with the left `/` command button (.chat-cmd-trigger):
-// light background + 1px border + radius-sm, accent border + accent text on hover.
+// Light background and a 1px border, with accent border and text on hover.
 // Same-slot form switching: idle paper plane / running stop square
 .chat-pane-send {
   @include ghost-btn;
+  border-radius: $radius-md;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -535,4 +550,161 @@ $commit-zigzag: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/s
     border-color: $color-danger-strong;
     color: $color-danger-strong;
   }
+}
+
+.chat-engine-panel:not([hidden]) {
+  display: contents;
+}
+
+.chat-engine-tabs {
+  display: flex;
+  align-self: stretch;
+  margin-block: -$space-4;
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: $space-3;
+    padding: $space-4 $space-5;
+    background: transparent;
+    color: $text-muted;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: $radius-lg $radius-lg 0 0;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover:not(:disabled, [aria-selected='true']) {
+      background: $bg-hover;
+      color: $text-primary;
+    }
+
+    &[aria-selected='true'] {
+      background: $bg-panel;
+      // Cover the header divider below the selected tab without changing its layout.
+      box-shadow: 0 1px 0 $bg-panel;
+      color: $text-primary;
+    }
+
+    &:focus-visible {
+      outline-offset: -3px;
+    }
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+  }
+}
+
+.chat-engine-experimental {
+  flex-shrink: 0;
+  color: $text-muted;
+}
+
+.chat-engine-running {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $color-info;
+}
+
+.chat-codex-composer {
+  > .chat-chip {
+    align-self: flex-start;
+    min-width: 0;
+    max-width: 100%;
+    @include ellipsis;
+    cursor: pointer;
+  }
+}
+
+.chat-codex-actions,
+.chat-codex-empty-heading {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+}
+
+.chat-codex-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.chat-codex-send-group {
+  margin-inline-start: auto;
+  min-width: 0;
+}
+
+.chat-codex-model-trigger {
+  @include ghost-btn;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-3;
+  max-width: 160px;
+  min-width: 0;
+  padding: $space-2 $space-3;
+  border-radius: $radius-md;
+  color: $text-primary;
+  font-size: $fs-md;
+  cursor: pointer;
+
+  span {
+    @include ellipsis;
+  }
+
+  svg {
+    flex-shrink: 0;
+    transform: rotate(-90deg);
+  }
+
+  .spinner {
+    margin: 0;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &[aria-expanded='true'] svg {
+    transform: rotate(90deg);
+  }
+}
+
+.chat-codex-model-menu {
+  @include popover;
+  position: fixed;
+  box-sizing: border-box;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: $space-2;
+  border-radius: $radius-lg;
+  list-style: none;
+  outline: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: $space-3;
+    padding: $space-3 $space-4;
+    border-radius: $radius-sm;
+    color: $text-primary;
+    font-size: $fs-md;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+
+    &.active {
+      background: $bg-hover;
+    }
+
+    &[aria-selected='true'] {
+      color: $color-info;
+    }
+  }
+}
+
+.chat-codex-model-check {
+  flex: 0 0 1em;
+  color: $color-info;
 }

@@ -89,3 +89,10 @@
     margin: $space-2 0;
   }
 }
+
+.llm-chip-submenu {
+  right: calc(100% + #{$space-2});
+  bottom: 0;
+  max-height: min(320px, calc(100vh - 60px));
+  overflow-y: auto;
+}

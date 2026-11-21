@@ -62,12 +62,12 @@ const agentRuns: RouteHandler = async ({ params }) => {
 const agentRunCancel: RouteHandler = async ({ params }) => {
   const snapshot = await agentCtl.getQueue(NO_EVENT, undefined);
   const belongs = [...snapshot.active, ...snapshot.waiting].some(
-    (r) => r.runId === params.runId && r.prLocalId === params.id,
+    (r) => r.engine !== 'codex' && r.runId === params.runId && r.prLocalId === params.id,
   );
   if (!belongs) {
     throw new HttpError(404, ERROR_CODES.SV_NOT_FOUND, { runId: params.runId, localId: params.id });
   }
-  return agentCtl.cancelPragent(NO_EVENT, { runId: params.runId });
+  return agentCtl.cancelPragent(NO_EVENT, { localId: params.id, runId: params.runId });
 };
 
 export const agentRoutes: Route[] = [

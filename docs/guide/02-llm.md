@@ -108,15 +108,40 @@ An advanced option: instead of connecting directly to any LLM API, invoke — wi
 1. Install the corresponding CLI on your machine and log in.
 2. Go to Settings → LLM, create a new profile, and **choose "Local CLI" as the Provider**.
 3. Enter the command name in the **CLI command** field, e.g. `claude` or `codex`.
-4. Save and set it as active.
+4. Optionally enter **Additional arguments**, for example `--model gpt-6.1-sol -c model_reasoning_effort=medium` for Codex or `--model sonnet --effort medium` for Claude. Quotes group values containing spaces; newlines separate arguments like spaces. The preview shows the parsed argument array. Shell expansion and shell commands are not supported.
+5. Save and set it as active.
 
 ### Key behaviors
 
-- **Runs under your machine's login state**: the review request is handled by the local CLI, using its default model and login session — it does not use the API Key set here or in the environment.
-- **Actual model**: determined by the local CLI's default model / account tier, **not by what you enter here** (what you enter is a command name, not a model name).
+- **Runs under your machine's login state**: the review request is handled by the local CLI, using the selected model and its login session — it does not use the API Key set here or in the environment.
+- **Actual model**: additional arguments override the CLI's local defaults for this profile; without them, the CLI uses its own configuration. The command field remains a command name only. Model availability still depends on the CLI account and version.
+- **Supported arguments**: Codex accepts `--model` / `-m` and `--config` / `-c` for `model`, `model_reasoning_effort`, `service_tier`, and `model_verbosity`. Claude accepts `--model`, `--effort`, `--max-turns`, `--max-budget-usd`, and `--fallback-model`. Both `--option value` and `--option=value` work. Input/output protocol, sandbox, working directory, prompts, and subcommands are managed by the app and cannot be overridden.
+- **Scope and precedence**: arguments apply to descriptions, reviews, questions, code suggestions, and agent orchestration chats. An explicit Codex reasoning effort takes precedence over the chat's automatic low effort; an explicit Claude model or effort disables the chat's automatic Haiku selection. Empty arguments preserve existing behavior. Arguments are saved as `cli_args: string[]` in the profile. Custom Windows batch launchers reject shell metacharacters; native and standard npm launchers pass argument values directly.
 - **Proxy passthrough is automatic**: once the [network proxy](03-proxy.md) is enabled, the CLI's outbound requests go through the proxy automatically, with no extra configuration.
 
 > Prerequisite: the corresponding command must be installed on your machine, on the PATH, and logged in, otherwise the review fails because the command is not found; review usage counts against that CLI account's own quota.
+
+## Automatic review in PR Agent
+
+In PR Agent, open the status-bar model menu and select a Codex CLI profile to open its model submenu. Choose a specific model or **CLI default model**. The choice is saved with that profile and retains its other CLI arguments.
+
+Choose **Auto Review** to generate a PR description, review the diff, and produce a final summary. The review uses the author's PR description and excludes existing PR comments and replies. You can explicitly reference a comment when asking a question.
+
+When the review completes, the description stays visible. Before the final summary, each distinct finding that can become an inline comment offers shortcuts to create a draft or ask a follow-up. Findings replaced or withdrawn by a follow-up are omitted from this list. Expand **Review process** to inspect the original results. Finding priorities help you choose what to read first. P1 requires a follow-up that cites evidence from the reviewed commit, and the label shows the model's stated trigger and consequence.
+
+Use **Inline comments** in the top-right diff toolbar to hide published line comments while reading the changes. Local drafts and controls for adding comments remain available. The app remembers this preference.
+
+## Native Codex review
+
+Install and sign in to a compatible Codex CLI. The desktop app detects it automatically at startup and when the window regains focus. In a PR, switch from **PR Agent** to **Codex** and select **Run Codex review**. Codex reviews the full PR.
+
+Open the **/** menu or type `/` for command suggestions. Submit `/review` to review the full PR or `/ask <question>` to ask about the changes. You can also enter a question directly.
+
+Submit `/approve` to approve the PR or `/needswork` to request changes on the code hosting platform. These commands share the review actions in the PR header and work while Codex is running.
+
+The model picker sits to the left of **Send**. It shows the last successful catalog, or the local CLI cache on first use, while it refreshes in the background. Cached models remain available if the refresh fails. The picker remembers the last selected model across restarts. When there is no available saved selection, it selects the latest numbered Sol or the first available model. If the desktop has no catalog entries, Codex uses its CLI default.
+
+Type a question about the PR or use the reference button on a review finding. Follow-up questions use recent messages for the current comparison and can read code in a temporary checkout. Review and answer text follows the app language. The running card shows review stages and any progress summaries the CLI provides. The Codex tab keeps its own review history. Findings with a valid line in the diff can be turned into comment drafts for you to edit or publish. This tab is a desktop feature. Automation that needs native Codex review can call Codex directly.
 
 ## Advanced: review concurrency
 

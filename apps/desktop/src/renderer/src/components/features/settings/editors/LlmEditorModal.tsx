@@ -22,7 +22,8 @@ export function LlmEditorModal({
   const { mode, draft } = state;
   // Only reveal all required fields when Save is clicked (LlmProfileForm shows them progressively by touched)
   const [forceShowErrors, setForceShowErrors] = useState(false);
-  const isValid = Object.keys(validateProfile(draft, existing)).length === 0;
+  const [formValid, setFormValid] = useState(true);
+  const isValid = formValid && Object.keys(validateProfile(draft, existing)).length === 0;
   const trySave = (): void => {
     if (!isValid) {
       setForceShowErrors(true);
@@ -32,7 +33,7 @@ export function LlmEditorModal({
   };
   // Exit validation: snapshot the draft on open, compare against current to detect uncommitted changes
   const initialDraft = useRef(JSON.stringify(draft));
-  const dirty = JSON.stringify(draft) !== initialDraft.current;
+  const dirty = !formValid || JSON.stringify(draft) !== initialDraft.current;
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // Closing (backdrop click / close key / cancel button) all routes through here: intercept with a confirm if dirty
   const requestClose = (): void => {
@@ -60,6 +61,7 @@ export function LlmEditorModal({
               existing={existing}
               onChange={onChange}
               forceShowErrors={forceShowErrors}
+              onValidityChange={setFormValid}
               hideProvider
             />
           </div>

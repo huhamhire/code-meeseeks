@@ -4,7 +4,7 @@
 
 ## System requirements
 
-- **Operating system**: Windows 10 / 11 (x64) or macOS (Apple Silicon / arm64). Intel Mac and Linux installers are not currently provided.
+- **Operating system**: Windows 10 / 11 (x64) or macOS 13 Ventura or later (Apple Silicon / arm64). Intel Mac and Linux installers are not currently provided.
 - **git**: git must be installed on your machine and on your PATH. The client relies on system git to clone repositories and read local diffs.
 - Reviewing and generating content requires a working LLM (see [LLM setup](02-llm.md)); the embedded runtime is bundled with the app, so no separate Python or Docker install is needed.
 

@@ -139,7 +139,16 @@ export async function writePrMeta(
   localId: string,
   pr: StoredPullRequest,
 ): Promise<void> {
-  await store.write<PrMetaFile>(prMetaKey(localId), { schema_version: 1, pr });
+  const previous = (await readPrMeta(store, localId))?.pr;
+  const headChanges = previous?.headChanges ?? pr.headChanges;
+  const nextChanges =
+    previous && previous.sourceRef.sha !== pr.sourceRef.sha
+      ? [...(headChanges ?? []), { sha: pr.sourceRef.sha, at: pr.lastSeenAt }]
+      : headChanges;
+  await store.write<PrMetaFile>(prMetaKey(localId), {
+    schema_version: 1,
+    pr: nextChanges ? { ...pr, headChanges: nextChanges } : pr,
+  });
 }
 
 /**

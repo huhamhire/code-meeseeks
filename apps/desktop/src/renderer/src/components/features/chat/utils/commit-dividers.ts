@@ -1,49 +1,109 @@
-import type { TimelineEntry } from '../hooks/useChatTimeline';
+import type { StoredPullRequest } from '@meebox/shared';
 
-export interface CommitDividers {
-  /** timeline entry.key → the headSha whose boundary is drawn immediately *before* that entry. */
-  before: Map<string, string>;
-  /** headSha for a divider after everything, used only when the boundary has no entry to precede. */
-  bottom: string | null;
+export interface CommitTimelineEntry {
+  key: string;
+  sortTime: number;
+  headSha?: string;
+  completedReview?: boolean;
+  orchestratedReview?: boolean;
+  reviewStartedAt?: number;
+  reviewSummary?: boolean;
 }
 
-/**
- * Place the commit boundaries in the chat timeline: every point where the reviewed commit changes, so the boundary
- * persists rather than vanishing once the new code has been reviewed.
- *
- * - **Between runs**: two consecutive runs with different `headSha` → a boundary before the newer one, separating the
- *   old-commit runs above from the new-commit ones below.
- * - **After the newest run**: the PR head has advanced past the last run's commit and nothing has reviewed it yet.
- *   The boundary belongs immediately after that last run — **not at the end of the timeline**. Those differ as soon as
- *   anything else lands (a message, a thinking step, a queued run), and anchoring to the end made the divider drift
- *   down the pane on every new bubble, as if the boundary itself kept moving. A boundary marks a point in history; it
- *   has to stay where that point is, with everything that came after it below.
- *
- * The timeline is ascending by start time; only runs that recorded a `headSha` participate (runs from before that field
- * existed are skipped, which is why the last *run* and the last *sha-bearing run* are tracked as the same cursor).
- */
+export interface CommitDividers {
+  before: Map<string, string[]>;
+  bottom: string[];
+}
+
+/** Observed transitions keep their timestamp. Infer older boundaries from revision-bearing history. */
 export function computeCommitDividers(
-  timeline: readonly TimelineEntry[],
+  timeline: readonly CommitTimelineEntry[],
   headSha: string | undefined,
+  changes: StoredPullRequest['headChanges'] = [],
+  agentRunning = false,
 ): CommitDividers {
-  const before = new Map<string, string>();
-  let prevSha: string | undefined;
-  let lastShaIdx = -1;
-  timeline.forEach((entry, i) => {
-    const sha = entry.run?.headSha;
-    if (!sha) return;
-    if (prevSha && sha !== prevSha) before.set(entry.key, sha);
-    prevSha = sha;
-    lastShaIdx = i;
+  const before = new Map<string, string[]>();
+  const bottom: string[] = [];
+  const firstReview = timeline.find((entry) => entry.completedReview);
+  if (!firstReview) return { before, bottom };
+
+  const reviews: Array<{ start: number; summaryIndex: number }> = [];
+  let legacyReviewStart: number | undefined;
+  let incompleteReview: { start: number; lastStepIndex: number } | undefined;
+  timeline.forEach((entry, index) => {
+    if (entry.orchestratedReview) legacyReviewStart ??= entry.sortTime;
+    if (!entry.reviewSummary) {
+      if (entry.reviewStartedAt !== undefined) {
+        incompleteReview = { start: entry.reviewStartedAt, lastStepIndex: index };
+      }
+      return;
+    }
+    const start = entry.reviewStartedAt ?? legacyReviewStart;
+    if (start !== undefined) {
+      reviews.push({ start, summaryIndex: index });
+      if (incompleteReview?.start === start) incompleteReview = undefined;
+    }
+    legacyReviewStart = undefined;
   });
-  // No run has recorded a sha, or the head is the one already reviewed → no trailing boundary.
-  if (!headSha || !prevSha || headSha === prevSha) return { before, bottom: null };
-  // Anchor the boundary before whatever first followed that last run. Nothing follows it yet → fall back to the end,
-  // which is then the same position (and stops being a moving target as soon as an entry appears there).
-  const next = timeline[lastShaIdx + 1];
-  if (next) {
-    before.set(next.key, headSha);
-    return { before, bottom: null };
+
+  const add = (index: number, sha: string, time: number) => {
+    // A commit observed while an automatic review is in progress belongs after its conclusion.
+    if (incompleteReview && time >= incompleteReview.start) {
+      if (agentRunning) return;
+      index = Math.max(index, incompleteReview.lastStepIndex + 1);
+    }
+    for (const { start, summaryIndex } of reviews) {
+      const summary = timeline[summaryIndex];
+      if (summary && time >= start && time <= summary.sortTime) {
+        index = Math.max(index, summaryIndex + 1);
+      }
+    }
+    const entry = timeline[index];
+    if (!entry) {
+      bottom.push(sha);
+      return;
+    }
+    const current = before.get(entry.key);
+    if (current) current.push(sha);
+    else before.set(entry.key, [sha]);
+  };
+  const observed = changes
+    .map(({ sha, at }) => ({ sha, time: Date.parse(at) }))
+    .filter(({ time }) => Number.isFinite(time) && time > firstReview.sortTime)
+    .sort((a, b) => a.time - b.time);
+
+  let previousSha: string | undefined;
+  let previousIndex = -1;
+  const firstObserved = observed[0]?.time ?? Number.POSITIVE_INFINITY;
+  timeline.forEach((entry, index) => {
+    if (
+      entry.sortTime < firstReview.sortTime ||
+      entry.sortTime >= firstObserved ||
+      !entry.headSha
+    ) {
+      return;
+    }
+    if (previousSha && previousSha !== entry.headSha) {
+      add(
+        previousIndex + 1,
+        entry.headSha,
+        timeline[previousIndex + 1]?.sortTime ?? entry.sortTime,
+      );
+    }
+    previousSha = entry.headSha;
+    previousIndex = index;
+  });
+
+  for (const change of observed) {
+    const index = timeline.findIndex((entry) => entry.sortTime >= change.time);
+    add(index === -1 ? timeline.length : index, change.sha, change.time);
   }
-  return { before, bottom: headSha };
+  if (!observed.length && headSha && previousSha && headSha !== previousSha) {
+    add(
+      previousIndex + 1,
+      headSha,
+      timeline[previousIndex + 1]?.sortTime ?? Number.POSITIVE_INFINITY,
+    );
+  }
+  return { before, bottom };
 }

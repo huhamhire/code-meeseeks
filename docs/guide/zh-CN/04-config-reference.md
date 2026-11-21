@@ -322,5 +322,6 @@ Agent **无独立启用开关**——配置了 LLM 且 pr-agent 就绪即可用�
 | `base_url` | string | `''` | API 端点。多数官方 provider 留空走默认；`openai-compatible` / 自部署需填。 |
 | `model` | string | `''` | 模型名。多数 provider 只填型号名，应用按 provider 自动补 litellm 前缀；`cli` 模式此处填命令名（如 `claude`）。 |
 | `api_key` | string | `''` | 鉴权密钥。本地类（本地 CLI / 无鉴权自建服务）留空。 |
+| `cli_args` | string[] | 省略（等价于 `[]`） | 本地 CLI 预设的附加参数，如 `["--model", "gpt-6.1-sol", "-c", "model_reasoning_effort=medium"]`。仅覆盖当前预设的 CLI 默认配置，支持的选项与优先级见 [LLM 配置](02-llm.md#本地-cli-模式)。 |
 
 各 provider 的取值示例与本地 CLI 模式说明见 [LLM 配置](02-llm.md)。

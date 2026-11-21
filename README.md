@@ -71,6 +71,7 @@ Core design stance:
 #### 🤖 AI / Agentic review
 
 - **Command-driven pr-agent** — drive it conversationally with `/describe`, `/review`, `/improve`, `/ask`; results are structured into actionable review findings.
+- **Native Codex review (experimental)** — use a compatible, signed-in local Codex CLI to review a PR and ask follow-up questions in a separate desktop tab. See the [Codex review guide](docs/guide/02-llm.md#native-codex-review).
 - **Re-review loop** — raise an `/ask` re-review on a review suggestion, and per the verdict (supersede / keep / withdraw) the original comment is automatically superseded or closed.
 - **Agentic orchestration** — natural-language-driven planning + multi-tool orchestration + long-term Memory, with an observable process (a think → tool → think timeline); you can add input mid-run and stop at any time, turning review into collaboration with accumulating context.
 - **AutoPilot pre-review** — automatically pre-runs review on new PRs pending your review, so drafts are ready for confirmation the moment you open the app; write actions are gated by per-item authorization + red-line checks (read-only tools only by default).
@@ -119,7 +120,7 @@ Download the installer for your platform from [Releases](../../releases):
 | Platform    | Artifact                                             | Status      |
 | ----------- | ---------------------------------------------------- | ----------- |
 | Windows x64 | `code-meeseeks-<version>-win-x64.exe` (NSIS installer) | ✅ Available |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg`              | ✅ Available |
+| macOS 13+ arm64 | `code-meeseeks-<version>-mac-arm64.dmg`          | ✅ Available |
 
 pr-agent is embedded in the installer, so it works right after installation with no extra environment setup.
 

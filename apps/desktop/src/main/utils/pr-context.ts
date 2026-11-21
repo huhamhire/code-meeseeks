@@ -48,10 +48,12 @@ export async function buildPrContext({
 
   let comments: PrComment[] = [];
   try {
-    comments = await adapter.comments.listPullRequestComments(
-      { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
-      pr.remoteId,
-    );
+    if (maxComments > 0) {
+      comments = await adapter.comments.listPullRequestComments(
+        { projectKey: pr.repo.projectKey, repoSlug: pr.repo.repoSlug },
+        pr.remoteId,
+      );
+    }
   } catch (err) {
     logger?.warn(
       { err, localId: pr.localId },

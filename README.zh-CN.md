@@ -71,6 +71,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 #### 🤖 AI / Agentic 评审
 
 - **指令驱动 pr-agent** —— `/describe`、`/review`、`/improve`、`/ask` 对话式驱动，结果结构化成可操作的评审发现。
+- **Codex 原生评审（实验性）** —— 通过兼容且已登录的本机 Codex CLI，在独立桌面标签页评审 PR 并继续追问。详见 [Codex 评审指南](docs/guide/zh-CN/02-llm.md#codex-原生评审)。
 - **复评闭环** —— 对评审建议发起 `/ask` 复评，按裁决（取代 / 保留 / 撤销）自动取代或关闭原评论。
 - **Agentic 自主编排** —— 自然语言驱动的规划 + 多工具编排 + 长期 Memory，过程可观测（think → tool → think 时间线），可中途追加输入、随时停止，让评审走向可累积上下文的协作。
 - **AutoPilot 预评审** —— 对待我评审·待处理的新 PR 自动预跑评审，进应用即见待确认草稿；写操作经逐项授权 + 红线校验把关（默认仅开放只读工具）。
@@ -119,7 +120,7 @@ Code Meeseeks（内部开发代号 `meebox`）是命令行工具 [pr-agent](http
 | 平台        | 产物                                                 | 状态    |
 | ----------- | ---------------------------------------------------- | ------- |
 | Windows x64 | `code-meeseeks-<version>-win-x64.exe`（NSIS 安装包） | ✅ 可用 |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg`              | ✅ 可用 |
+| macOS 13+ arm64 | `code-meeseeks-<version>-mac-arm64.dmg`          | ✅ 可用 |
 
 安装包已内嵌 pr-agent，安装后即可使用，无需额外环境。
 

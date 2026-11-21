@@ -1,6 +1,20 @@
 import type { CSSProperties } from 'react';
 import type { TFunction } from 'i18next';
-import { DEFAULT_CODE_SUGGESTION_LAYOUT, type Finding, type PrDocSectionKey } from '@meebox/shared';
+import { DEFAULT_CODE_SUGGESTION_LAYOUT, type Finding, type FindingAnchor, type PrDocSectionKey, type ReviewPriority } from '@meebox/shared';
+
+export function hasInlineFindingAnchor(
+  finding: Finding,
+): finding is Finding & { anchor: FindingAnchor & { startLine: number } } {
+  const kind = finding.sectionKey ?? finding.category;
+  const line = finding.anchor?.startLine;
+  return (
+    (kind === 'code-feedback' || kind === 'code-suggestion') &&
+    typeof line === 'number' &&
+    Number.isSafeInteger(line) &&
+    line > 0 &&
+    finding.inlineAnchorVerified !== false
+  );
+}
 
 /**
  * The issue body from pr-agent /review has a trailing `[file: <path>, lines: <s>-<e>]`
@@ -132,14 +146,23 @@ export function stripEffortScoreNumber(s: string): string {
  * Stable sort by sectionKey + preserve original order within the same key (compatible with JS engines where Array.sort isn't stable).
  * The effort section is filtered out entirely: "Estimated effort to review" has low practical value, not shown.
  */
-export function orderFindings(findings: Finding[]): Finding[] {
+export type DisplayReviewPriority = ReviewPriority | 'unrated';
+
+const PRIORITY_ORDER: Record<DisplayReviewPriority, number> = { P1: 0, P2: 1, P3: 2, unrated: 3 };
+
+export function orderFindings(
+  findings: Finding[],
+  priority?: (finding: Finding) => DisplayReviewPriority | undefined,
+): Finding[] {
   return findings
     .filter((f) => f.sectionKey !== 'effort')
     .map((f, i) => ({ f, i }))
     .sort((a, b) => {
       const ka = SECTION_ORDER[a.f.sectionKey ?? 'general'] ?? 99;
       const kb = SECTION_ORDER[b.f.sectionKey ?? 'general'] ?? 99;
-      return ka === kb ? a.i - b.i : ka - kb;
+      if (ka !== kb) return ka - kb;
+      return PRIORITY_ORDER[priority?.(a.f) ?? 'unrated'] -
+        PRIORITY_ORDER[priority?.(b.f) ?? 'unrated'] || a.i - b.i;
     })
     .map((x) => x.f);
 }
@@ -159,7 +182,7 @@ export function anchorShortLabel(anchor?: {
  * Assemble a finding pending re-review into /ask's implicit reference context (referencedContext): let the model see the original comment body + location,
  * and re-review accordingly. Like the diff selection reference (formatReferencedContext), it's injected via EXTRA_INSTRUCTIONS, not into the question position args.
  */
-export function formatFindingReference(finding: Finding): string {
+export function formatFindingReference(finding: Finding, contextOnly = false): string {
   const a = finding.anchor;
   const loc = a
     ? ` on \`${a.path}\`${
@@ -170,7 +193,10 @@ export function formatFindingReference(finding: Finding): string {
           : ''
       }`
     : '';
-  return `An existing review comment${loc} is being re-evaluated:\n\n${stripFindingMarker(finding.body)}`;
+  const instruction = contextOnly
+    ? `The question refers to a review finding${loc}. Verify any cited location against the current PR before using it.`
+    : `An existing review comment${loc} is being re-evaluated:`;
+  return `${instruction}\n\n${stripFindingMarker(finding.body)}`;
 }
 
 /**

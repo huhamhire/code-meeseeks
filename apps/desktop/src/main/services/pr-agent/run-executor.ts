@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { loadAgentRules } from '@meebox/agent';
+import type { CodexReviewProgress } from '@meebox/ipc';
 import {
   PRAGENT_LOCAL_OUTPUT,
   PrAgentRunError,
@@ -16,15 +18,21 @@ import {
 import {
   addFindingClosure,
   classifyLlmFailure,
+  detectLlmFailure,
   dropPendingFindingDrafts,
   finishReviewRun,
+  getReviewRun,
+  listReviewRunsForPr,
   parseReviewOutput,
+  parseStructuredReview,
   startReviewRun,
 } from '@meebox/poller';
 import { combineRuleInstructions, pickMatchingRules } from '@meebox/rules';
 import {
   AppError,
   ERROR_CODES,
+  getCodexCliModel,
+  isCodexCliProfile,
   type ReviewRun,
   type ReviewRunStatus,
 } from '@meebox/shared';
@@ -41,6 +49,10 @@ import {
   parseLlmErrorSentinel,
   stripShimSentinels,
 } from './usage.js';
+import { buildCodexAskContext } from './codex-context.js';
+import { discoverCodexReview, readReviewEvents, runNativeAsk, runNativeReview } from './codex-review.js';
+import { validateReviewAnchor } from './review-anchor.js';
+import { collectReviewEvidence, readPriorityEvidence } from './review-evidence.js';
 import { neutralizeWorktreeInstructions } from './worktree-sanitize.js';
 
 /** Finalization patch type for finishReviewRun (return of the finalization helper). */
@@ -70,6 +82,7 @@ export class RunExecutor {
    */
   async execute(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {
     const { getPrAgentBridge, embeddedPythonPath, broadcast } = this.ctx;
+    if (item.info.engine === 'codex') return this.executeCodex(item, notifyStarted);
     const bridge = getPrAgentBridge();
     if (!bridge) throw new AppError(ERROR_CODES.AG_PR_AGENT_NOT_READY);
     const { req, pr } = item;
@@ -93,13 +106,57 @@ export class RunExecutor {
       return updated ?? { ...run, ...patch };
     };
 
-    const wt = await this.prepareWorkspace(pr, req.scope);
+    const reportPhase = (phase: NonNullable<QueueItem['info']['reviewPhase']>) => {
+      if (req.tool !== 'review') return;
+      item.info = { ...item.info, reviewPhase: phase };
+      notifyStarted();
+    };
+    let wt: Awaited<ReturnType<RunExecutor['prepareWorkspace']>> | undefined;
+    let artifactDir: string | undefined;
     try {
+      reportPhase('preparing');
+      // Only automatic follow-ups on a specific finding use bounded evidence.
+      const ref =
+        item.priority === 'agent' && req.tool === 'ask' ? req.referencedFinding : undefined;
+      const reviewed = ref ? await getReviewRun(stateStore, pr.localId, ref.runId, 'pr-agent') : null;
+      const comparison =
+        reviewed?.tool === 'review' &&
+        reviewed.status === 'succeeded' &&
+        reviewed.headSha === pr.sourceRef.sha &&
+        reviewed.mergeBaseSha &&
+        !reviewed.scope
+          ? reviewed
+          : undefined;
+      wt = await this.prepareWorkspace(pr, req.scope, comparison?.mergeBaseSha);
+      const finding = comparison?.findings?.find((entry) => entry.id === ref?.findingId);
+      const evidence = finding?.anchor
+        ? await collectReviewEvidence(
+            wt.path,
+            pr.sourceRef.sha,
+            finding.anchor,
+            [req.question, finding.title, finding.body].join('\n'),
+            item.ac!.signal,
+          )
+        : undefined;
+      const candidate = finding?.reviewPriority?.level === 'P1' && evidence?.locations.length
+        ? finding.reviewPriority
+        : undefined;
+      const evidencePrompt = ref
+        ? (evidence?.prompt ??
+          'Repository evidence could not be collected for this review snapshot. State this limitation and keep the original finding.')
+        : undefined;
+      const priorityPrompt = candidate && [
+        'Independently verify the proposed P1 (serious impact that calls for a fix before merge).',
+        JSON.stringify({ trigger: candidate.trigger, consequence: candidate.consequence })
+          .replace(/https?:\/\//gi, (url) => url.replace(':', '\\u003a')),
+        'If a supplied repository line supports the concrete trigger and serious consequence, explain how in your analysis. When the verdict is keep and P1 is supported, include exactly one line <priority_evidence>{"path":"relative/path","line":123}</priority_evidence> outside the answer sections, using an actual path and line from the supplied excerpts. Omit the marker if uncertain.',
+      ].join('\n');
       const { env, extraArgs, askLangSuffix } = await this.buildInvocation(
         req,
         pr,
         run.id,
         wt.path,
+        priorityPrompt ? `${evidencePrompt}\n\n${priorityPrompt}` : evidencePrompt,
       );
 
       // In CLI mode /ask sets the subprocess cwd to the worktree (for full file context; buildInvocation
@@ -116,6 +173,15 @@ export class RunExecutor {
         await this.ensureEmbeddedSecrets(embeddedPythonPath);
       }
 
+      if (req.tool === 'review') {
+        artifactDir = await fs.mkdtemp(path.join(os.tmpdir(), 'meebox-review-'));
+      }
+      const reviewMarkdown = artifactDir && path.join(artifactDir, 'review.md');
+      if (reviewMarkdown) env['LOCAL__REVIEW_PATH'] = reviewMarkdown;
+      const artifact = artifactDir && bridge.strategy === 'embedded' && bridge.version === 'pr-agent 0.50.0'
+        ? path.join(artifactDir, 'review.json')
+        : undefined;
+      reportPhase('reviewing');
       const result = await bridge.run({
         prUrl: pr.url,
         tool: req.tool,
@@ -124,31 +190,193 @@ export class RunExecutor {
         cwd: wt.path,
         targetBranch: wt.targetBranchName,
         extraArgs,
+        jsonOutputPath: artifact,
         signal: item.ac!.signal,
       });
       // Real token usage (stderr sentinel lines accumulated by onLine), carried into succeeded / llm-failed finalization.
       const tokenUsage = finalizeUsage(usageAcc);
-      const { parsed, fileContent } = await this.collectOutput(
-        wt,
+      reportPhase('validating');
+      const { parsed, fileContent, verifiedPriorityEvidence } = await this.collectOutput(
+        reviewMarkdown ?? path.join(wt.path, PRAGENT_LOCAL_OUTPUT[req.tool]),
         result.stdout,
         req,
         run.id,
         askLangSuffix,
+        !ref || !!evidence?.locations.length,
+        candidate ? evidence?.locations : undefined,
       );
-      return await finishWith(
-        this.finishPatchForResult(result, parsed, fileContent, tokenUsage, t0, run.id),
+      const structured = artifact
+        ? parseStructuredReview(await fs.readFile(artifact, 'utf8').catch(() => ''))
+        : undefined;
+      const patch = this.finishPatchForResult(
+        result, parsed, fileContent, tokenUsage, t0, run.id,
+        req.tool === 'review' && !structured ? detectLlmFailure(result.stdout) : null,
       );
+      patch.mergeBaseSha = wt.diffBaseSha;
+      if (ref) patch.repositoryEvidence = evidence?.locations ?? [];
+      if (patch.status === 'succeeded' && verifiedPriorityEvidence) {
+        patch.verifiedPriorityEvidence = verifiedPriorityEvidence;
+      }
+      if (req.tool === 'review' && patch.status === 'succeeded') {
+        const markdownAvailable = fileContent.trim() || parsed.findings.some((finding) =>
+          finding.sectionKey === 'code-feedback' ||
+          finding.sectionKey === 'relevant-tests' ||
+          finding.sectionKey === 'security' ||
+          finding.sectionKey === 'effort' ||
+          finding.sectionKey === 'score',
+        );
+        patch.reviewCoverage = structured?.coverage ?? { status: markdownAvailable ? 'unknown' : 'invalid' };
+        if (patch.reviewCoverage.status === 'invalid') {
+          patch.status = 'failed';
+          patch.errorReason = 'invalid-review-output';
+          patch.findings = [];
+        } else {
+          const findings = structured
+            ? [...parsed.findings.filter((finding) => finding.sectionKey !== 'code-feedback'), ...structured.findings]
+            : parsed.findings;
+          for (const finding of findings) {
+            const anchor = finding.anchor;
+            if (anchor?.startLine === undefined) continue;
+            const inlineAnchor = await validateReviewAnchor(
+              wt.path, wt.diffBaseSha, path.resolve(wt.path, anchor.path),
+              anchor.startLine, anchor.endLine ?? anchor.startLine, item.ac!.signal,
+            );
+            if (inlineAnchor) {
+              finding.anchor = inlineAnchor;
+            } else {
+              finding.inlineAnchorVerified = false;
+              if (!Number.isSafeInteger(anchor.startLine) || anchor.startLine < 1) {
+                finding.anchor = { path: anchor.path };
+              }
+            }
+          }
+          item.ac!.signal.throwIfAborted();
+          patch.findings = findings;
+        }
+      }
+      const finished = await finishReviewRun(stateStore, pr.localId, run.id, patch);
+      if (
+        finished?.status === 'succeeded' &&
+        finished.reviewCoverage?.status === 'complete' &&
+        !req.scope &&
+        finished.findings?.every((finding) =>
+          finding.sectionKey !== 'code-feedback' ||
+          (finding.anchor?.startLine !== undefined && finding.inlineAnchorVerified !== false),
+        )
+      ) {
+        await this.replacePendingReviewDrafts(pr, stateStore, run.id);
+      }
+      return finished ?? { ...run, ...patch };
     } catch (err) {
       const tokenUsage = finalizeUsage(usageAcc);
-      const finished = await finishWith(
-        this.finishPatchForError(err, tokenUsage, t0, run.id),
-      );
+      const patch = this.finishPatchForError(err, tokenUsage, t0, run.id);
+      if (item.ac?.signal.aborted && !(err instanceof PrAgentRunError)) {
+        patch.status = 'cancelled';
+        patch.errorReason = 'cancelled';
+      }
+      const finished = await finishWith({ ...patch, mergeBaseSha: wt?.diffBaseSha });
       // Unexpected exception (not PrAgentRunError): after persisting failed, still rethrow to avoid swallowing it.
-      if (!(err instanceof PrAgentRunError)) throw err;
+      if (!(err instanceof PrAgentRunError) && patch.status !== 'cancelled') throw err;
       return finished;
     } finally {
-      await wt.cleanup();
+      if (artifactDir) await fs.rm(artifactDir, { recursive: true, force: true }).catch((err: unknown) =>
+        this.ctx.logger.warn({ err, runId: run.id }, 'Could not remove review artifacts'),
+      );
+      await wt?.cleanup();
     }
+  }
+
+  private async executeCodex(item: QueueItem, notifyStarted: () => void): Promise<ReviewRun> {
+    const { pr, info, req } = item;
+    const signal = item.ac!.signal;
+    const discovery = await discoverCodexReview();
+    if (signal.aborted) throw new AppError(ERROR_CODES.AG_CODEX_NOT_READY);
+    if (discovery.status !== 'ready') throw new AppError(ERROR_CODES.AG_CODEX_NOT_READY);
+    const store = await this.ctx.pr.storeForPr(pr.localId);
+    const run = await startReviewRun(store, {
+      id: info.runId,
+      prLocalId: pr.localId,
+      engine: 'codex',
+      engineVersion: discovery.runtime.version,
+      tool: req.tool,
+      question: req.question,
+      model: req.model,
+      referencedFinding: req.referencedFinding,
+      origin: 'user',
+      headSha: pr.sourceRef.sha,
+      baseSha: pr.targetRef.sha,
+    });
+    item.info = { ...info, startedAt: run.startedAt };
+    notifyStarted();
+    const t0 = Date.now();
+    let workspace: Awaited<ReturnType<RunExecutor['prepareWorkspace']>> | undefined;
+    let patch: FinishPatch;
+    const onProgress = (codex: CodexReviewProgress) => {
+      this.ctx.broadcast('codex:runProgress', { runId: run.id, codex, at: Date.now() });
+    };
+    try {
+      onProgress({ phase: 'preparing' });
+      workspace = await this.prepareWorkspace(pr);
+      signal.throwIfAborted();
+      if (!workspace.targetBranchName) throw new Error('Codex review requires a fixed base ref.');
+      this.ctx.logger.debug({ runId: run.id, durationMs: Date.now() - t0 }, 'Codex review workspace prepared');
+      onProgress({ phase: 'starting' });
+      const env = buildProxyEnv(this.ctx.bootstrap.config.proxy);
+      const language = getMainLanguage();
+      let result: Awaited<ReturnType<typeof runNativeReview>>;
+      if (req.tool === 'ask') {
+        const matches = (previous: ReviewRun) => previous.engine === 'codex' &&
+          previous.status === 'succeeded' && previous.headSha === pr.sourceRef.sha &&
+          previous.baseSha === pr.targetRef.sha && previous.mergeBaseSha === workspace?.diffBaseSha;
+        const history = (await listReviewRunsForPr(store, pr.localId, {
+          engine: 'codex', beforeId: run.id, limit: 40,
+        })).filter(matches);
+        const review = history.find((previous) => previous.tool === 'review');
+        const ref = req.referencedFinding;
+        const refRun = ref ? await getReviewRun(store, pr.localId, ref.runId, 'codex') : null;
+        const selected = refRun && matches(refRun) ? refRun.findings?.find((f) => f.id === ref?.findingId) : undefined;
+        if (ref && !selected) throw new AppError(ERROR_CODES.AG_CODEX_REFERENCE_STALE);
+        const context = buildCodexAskContext(req.question ?? '', history, review, selected);
+        result = await runNativeAsk(discovery.runtime, workspace.path, workspace.targetBranchName,
+          context, env, signal, language, onProgress, req.model);
+      } else {
+        result = await runNativeReview(discovery.runtime, workspace.path, workspace.targetBranchName,
+          env, signal, language, onProgress, req.model);
+      }
+      patch = {
+        status: 'succeeded',
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        summary: result.summary,
+        findings: result.findings,
+        baseSha: pr.targetRef.sha,
+        mergeBaseSha: result.mergeBaseSha,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0,
+      };
+    } catch (err) {
+      const result = err instanceof PrAgentRunError ? err.result : undefined;
+      const output = result ? readReviewEvents(result.stdout ?? '') : undefined;
+      const status = signal.aborted ? 'cancelled' : 'failed';
+      const reason = err instanceof PrAgentRunError ? err.reason : undefined;
+      const details = output?.error || result?.stderr?.trim();
+      const message = reason === 'timeout' ? 'Codex request timed out.'
+        : details || (err instanceof Error ? err.message : String(err));
+      patch = {
+        status,
+        errorReason: reason,
+        errorMessage: status === 'failed' ? message.slice(0, 4000) : undefined,
+        exitCode: result?.exitCode,
+        stdout: output?.review,
+        findings: [],
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0,
+      };
+      this.ctx.logger.info({ runId: run.id, status, exitCode: result?.exitCode }, 'Codex review ended');
+    } finally {
+      await workspace?.cleanup();
+    }
+    return (await finishReviewRun(store, pr.localId, run.id, patch)) ?? { ...run, ...patch };
   }
 
   /**
@@ -164,6 +392,7 @@ export class RunExecutor {
     tokenUsage: ReturnType<typeof finalizeUsage>,
     t0: number,
     runId: string,
+    runtimeFailure: ReturnType<typeof detectLlmFailure>,
   ): FinishPatch {
     const stdout = fileContent
       ? `${fileContent}\n\n---\n[pr-agent stdout log]\n${result.stdout}`
@@ -176,12 +405,13 @@ export class RunExecutor {
       stderr: stripShimSentinels(result.stderr),
       tokenUsage,
     };
-    if (parsed.llmFailure) {
+    const llmFailure = runtimeFailure ?? parsed.llmFailure;
+    if (llmFailure) {
       // pr-agent's fallback retry only logs "Failed to generate prediction with any model" to stdout and hides the real
       // exception in loguru's artifact field, so prefer the shim's stderr sentinel when present — it carries the actual
       // provider/CLI error, which is also the only text worth classifying into an actionable hint.
       const sentinel = parseLlmErrorSentinel(result.stderr);
-      const message = sentinel?.message ?? parsed.llmFailure.message;
+      const message = sentinel?.message ?? llmFailure.message;
       const errorHint = classifyLlmFailure(message);
       this.ctx.logger.warn(
         { runId, reason: message, cli: sentinel?.cli, hint: errorHint },
@@ -265,17 +495,23 @@ export class RunExecutor {
       prLocalId: pr.localId,
       tool: req.tool,
       question: req.tool === 'ask' ? req.question : undefined,
+      engine: item.info.engine,
       prAgentVersion: bridge.version,
       strategy: bridge.strategy,
-      model: activeLlmForRecord?.model || undefined,
+      model:
+        (activeLlmForRecord && isCodexCliProfile(activeLlmForRecord)
+          ? getCodexCliModel(activeLlmForRecord.cli_args)
+          : undefined) ?? (activeLlmForRecord?.model || undefined),
       // Re-review reference forward chain: persisted with the run, the UI uses it to show a "re-reviewed from…" badge + verdict action on the /ask card.
       referencedFinding: req.tool === 'ask' ? req.referencedFinding : undefined,
       // Trigger origin persisted with the run: user-origin runs get a command echo bubble added by ChatPane; agent sub-runs don't echo.
       origin: item.priority,
+      reviewStartedAt: req.reviewStartedAt,
       // Single-commit review scope persisted with the run: the result card uses it to show a scope badge.
       scope: req.scope,
       // PR head commit the run runs against: stamped so ChatPane can draw a commit divider when the code changes between runs.
       headSha: pr.sourceRef.sha,
+      baseSha: pr.targetRef.sha,
     });
     // Upgrade the info (startedAt=null at enqueue) to active form + broadcast (via the scheduling layer).
     item.info = { ...item.info, startedAt: run.startedAt };
@@ -292,21 +528,21 @@ export class RunExecutor {
    * By default bounds the full PR by a fixed merge-base (head=PR source sha, base=merge-base); when a single-commit scope
    * is passed, bounds by that commit's own changes instead (head=scope.sha, base=scope.parent), so pr-agent sees only the parent..sha diff.
    */
-  private async prepareWorkspace(pr: QueueItem['pr'], scope?: QueueItem['req']['scope']) {
+  private async prepareWorkspace(
+    pr: QueueItem['pr'],
+    scope?: QueueItem['req']['scope'],
+    reviewedBaseSha?: string,
+  ) {
     const { repoMirror, pr: prService } = this.ctx;
     const repoId = prService.repoIdentityFor(pr);
     // Use ensureMirrorReadyForPr (rather than bare syncMirror): same source as the UI diff, and reuses its self-healing —
     // after the source branch is deleted / force-pushed, it precisely fetches the PR head ref per platform to fill in the head sha,
     // otherwise materializeWorktree building the head branch would fail on the missing object.
     await prService.ensureMirrorReadyForPr(pr);
-    if (scope) {
-      // Single-commit scope: head=target commit, base=its parent commit → LOCAL__TARGET_BRANCH points at parent,
-      // pr-agent sees only that commit's own changes. parent is an ancestor of head and present via mirror sync, no extra fetch needed.
-      return repoMirror.materializeWorktree(repoId, scope.sha, scope.parent, pr.localId);
-    }
-    // pr-agent's LOCAL__TARGET_BRANCH uses a fixed merge-base, rather than a two-dot comparison that would mix in another PR after targetRef.sha drifts.
-    const diffBase = await prService.resolveDiffBaseSha(pr);
-    return repoMirror.materializeWorktree(repoId, pr.sourceRef.sha, diffBase, pr.localId);
+    // Single-commit reviews compare against the parent. Full PR reviews use the same fixed merge base as the UI diff.
+    const diffBaseSha = scope?.parent ?? reviewedBaseSha ?? await prService.resolveDiffBaseSha(pr);
+    const workspace = await repoMirror.materializeWorktree(repoId, scope?.sha ?? pr.sourceRef.sha, diffBaseSha, pr.localId);
+    return { ...workspace, diffBaseSha };
   }
 
   /**
@@ -319,6 +555,7 @@ export class RunExecutor {
     pr: QueueItem['pr'],
     runId: string,
     wtPath: string,
+    evidencePrompt?: string,
   ): Promise<{
     env: Record<string, string>;
     extraArgs: string[] | undefined;
@@ -341,7 +578,7 @@ export class RunExecutor {
     // CLI mode /ask: set the subprocess cwd to the (to-be-sanitized) worktree so free-form Q&A can read full files
     // (shim cli/install.py switches cwd based on this env). describe/review don't set it and keep a neutral temp dir; API mode is unaffected (the remote interface only has the diff).
     if (req.tool === 'ask' && activeLlm?.provider === 'cli') {
-      env['MEEBOX_CLI_WORKDIR'] = wtPath;
+      env['MEEBOX_CLI_WORKDIR'] = evidencePrompt ? '' : wtPath;
     }
 
     let prContext = '';
@@ -351,7 +588,13 @@ export class RunExecutor {
       const adapter = prService.adapterFor(pr);
       if (adapter) {
         try {
-          prContext = await buildPrContext({ pr, adapter, logger });
+          // Description and improvement results in an automatic review can inform its later steps.
+          prContext = await buildPrContext({
+            pr,
+            adapter,
+            logger,
+            maxComments: req.tool === 'review' || req.reviewStartedAt !== undefined ? 0 : undefined,
+          });
         } catch (err) {
           logger.warn(
             { err, runId, localId: pr.localId },
@@ -398,7 +641,7 @@ export class RunExecutor {
       // /ask code-retrieval guidance: injected only for the CLI provider (subprocess cwd is in the full worktree, file tools available), steering targeted retrieval
       // (built-in read-only search / grep for symbols · read only the needed line ranges) instead of reading whole files, lowering agentic exploration cost. Deliberately uses only the read-only tool set
       // (in headless default mode non-read-only tools abort the session, so don't induce rg). The API provider has no file access, not injected.
-      worktreeRetrieval: req.tool === 'ask' && activeLlm?.provider === 'cli',
+      worktreeRetrieval: !!env['MEEBOX_CLI_WORKDIR'],
     });
     // /ask's pr_questions prompt **does not render extra_instructions** (unlike describe/review/improve),
     // so env injection is a dead field for /ask. Thus /ask's instructions are instead spliced into the "question"
@@ -424,6 +667,7 @@ export class RunExecutor {
       // The echo (pr-agent writes the question verbatim into the artifact) is stripped entirely by collectOutput's stripAskQuestionEcho.
       const parts = [req.question];
       if (extraInstructions) parts.push(extraInstructions);
+      if (evidencePrompt) parts.push(evidencePrompt);
       if (askLangSuffix) parts.push(askLangSuffix);
       askQuestion = parts.join('\n\n');
     }
@@ -433,26 +677,30 @@ export class RunExecutor {
 
   /**
    * Stage 5: read the artifact file the local provider wrote to the worktree root (persisted filename see PRAGENT_LOCAL_OUTPUT), /ask removes
-   * the echoed question line, parse into findings/summary; on /review success drop old pending drafts (letting this round's findings become the new candidate source).
+   * the echoed question line and parse into findings and summary.
    * If the file is missing, fall back to parsing stdout. Returns the parse result + raw file content (for finalization log splicing).
    */
   private async collectOutput(
-    wt: { path: string },
+    outputPath: string,
     resultStdout: string,
     req: QueueItem['req'],
     runId: string,
     askLangSuffix: string,
-  ): Promise<{ parsed: ReturnType<typeof parseReviewOutput>; fileContent: string }> {
+    allowFindingClosure = true,
+    priorityLocations?: ReviewRun['repositoryEvidence'],
+  ): Promise<{
+    parsed: ReturnType<typeof parseReviewOutput>;
+    fileContent: string;
+    verifiedPriorityEvidence?: ReviewRun['verifiedPriorityEvidence'];
+  }> {
     const { logger, broadcast } = this.ctx;
     const stateStore = await this.ctx.pr.storeForPr(req.localId);
-    // The file must be read out before cleanup (same source as buildToolEnv's LOCAL__REVIEW_PATH).
-    const outFile = PRAGENT_LOCAL_OUTPUT[req.tool];
     let fileContent = '';
     try {
-      fileContent = await fs.readFile(path.join(wt.path, outFile), 'utf8');
+      fileContent = await fs.readFile(outputPath, 'utf8');
     } catch (readErr) {
       logger.warn(
-        { err: readErr, wtPath: wt.path, outFile, runId },
+        { err: readErr, outputPath, runId },
         'pr-agent local provider output file missing; fall back to stdout',
       );
     }
@@ -461,7 +709,11 @@ export class RunExecutor {
       req.tool === 'ask' && req.question?.trim()
         ? stripAskQuestionEcho(fileContent, req.question, askLangSuffix)
         : fileContent;
-    const parsed = parseReviewOutput(cleanedContent || resultStdout, req.tool);
+    const priority = priorityLocations && cleanedContent
+      ? readPriorityEvidence(cleanedContent, priorityLocations)
+      : undefined;
+    const parsed = parseReviewOutput(priority?.text ?? (cleanedContent || resultStdout), req.tool);
+    if (!allowFindingClosure) delete parsed.askVerdict;
     // Re-review /ask (a finding was referenced):
     // - verdict replace → promote the suggestion to a positioned code comment (taking the original finding's anchor), rendered / adopted like /review code feedback;
     // - verdict replace / drop → silently close the referenced original finding (establish the closure relation + broadcast), no need for the user to manually click close.
@@ -496,22 +748,28 @@ export class RunExecutor {
         }
       }
     }
-    // M4 draft re-ingestion: on successful /review completion drop old pending+finding drafts (edited/posted/rejected/manual are kept).
-    if (req.tool === 'review') {
-      try {
-        const dropped = await dropPendingFindingDrafts(stateStore, req.localId);
-        if (dropped > 0) {
-          logger.info(
-            { runId, localId: req.localId, dropped },
-            'pragent /review: dropped stale pending drafts',
-          );
-          broadcast('drafts:changed', { localId: req.localId });
-        }
-      } catch (err) {
-        logger.warn({ err, runId }, 'dropPendingFindingDrafts failed');
+    return {
+      parsed,
+      fileContent,
+      verifiedPriorityEvidence: parsed.askVerdict === 'keep' ? priority?.location : undefined,
+    };
+  }
+
+  private async replacePendingReviewDrafts(
+    pr: QueueItem['pr'],
+    stateStore: Awaited<ReturnType<ServiceContext['pr']['storeForPr']>>,
+    runId: string,
+  ): Promise<void> {
+    const { logger, broadcast } = this.ctx;
+    try {
+      const current = await this.ctx.pr.findPrOrThrow(pr.localId);
+      if (current.sourceRef.sha !== pr.sourceRef.sha || current.targetRef.sha !== pr.targetRef.sha) return;
+      if (await dropPendingFindingDrafts(stateStore, pr.localId, runId)) {
+        broadcast('drafts:changed', { localId: pr.localId });
       }
+    } catch (err) {
+      logger.warn({ err, runId }, 'Could not replace pending review drafts');
     }
-    return { parsed, fileContent };
   }
 
   /**

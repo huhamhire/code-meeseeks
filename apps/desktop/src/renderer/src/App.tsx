@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ReviewRunCommitScope } from '@meebox/shared';
+import { getCodexCliModel, isCodexCliProfile, setCodexCliModel, type ReviewRunCommitScope } from '@meebox/shared';
 import { invoke } from './api';
 import { ChatPane } from './components/features/chat';
 import { MainPane } from './components/layout/MainPane';
@@ -82,6 +82,13 @@ export default function App() {
   // persist to localStorage; under the 'auto' theme follow the OS light/dark switch.
   useGlobalTheme();
 
+  const [reviewEngine, setReviewEngine] = useState<'pr-agent' | 'codex'>(() =>
+    localStorage.getItem('meebox.reviewEngine') === 'codex' ? 'codex' : 'pr-agent',
+  );
+  const selectReviewEngine = useCallback((engine: 'pr-agent' | 'codex') => {
+    localStorage.setItem('meebox.reviewEngine', engine);
+    setReviewEngine(engine);
+  }, []);
   const [showSettings, setShowSettings] = useState(false);
   // Settings panel initial section (used by command palette deep links like "open About / Model"); default falls to 'general' in SettingsModal.
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory | undefined>(undefined);
@@ -178,7 +185,8 @@ export default function App() {
     ? boot.connections.find((c) => c.connectionId === selectedPr.connectionId)
     : undefined;
   // Has an active connection but LLM not configured → ChatPane shows a "configure to enable" hint and disables input
-  const llmConfigured = boot.config.llm.profiles.some((p) => p.id === boot.config.llm.active_id);
+  const activeLlm = boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id);
+  const llmConfigured = !!activeLlm;
   // Discovery category tabs are determined by the active connection's capabilities (GitHub four, Bitbucket two, others none).
   const activeConnSummary = boot.connections.find(
     (c) => c.connectionId === boot.config.active_connection_id,
@@ -271,6 +279,8 @@ export default function App() {
         {/* ChatPane is always mounted, collapse is just CSS hiding: preserves the lifecycle of a running run (timers / runProgress subscription). */}
         <ChatPane
           pr={selectedPr}
+          engine={reviewEngine}
+          onEngineChange={selectReviewEngine}
           prAgent={boot.prAgent}
           width={chatWidth}
           onResize={setChatWidth}
@@ -281,9 +291,15 @@ export default function App() {
           onJumpToDraftEditor={(target) => setPendingDiffNav(target)}
           onNavigateToAnchor={(anchor) => setPendingDiffNav({ anchor })}
           onSetReviewStatus={(s) => void setSelectedPrStatus(s)}
+          codexReviewStatuses={
+            archived || (selectedPr && selectedPr.author.name === selectedConn?.user?.name)
+              ? []
+              : selectedConn?.capabilities?.reviewStatuses
+          }
           onMerge={() => void mergeSelectedPr()}
           currentLlmModel={
-            boot.config.llm.profiles.find((p) => p.id === boot.config.llm.active_id)?.model ?? null
+            (activeLlm && isCodexCliProfile(activeLlm) ? getCodexCliModel(activeLlm.cli_args) : undefined) ??
+            activeLlm?.model ?? null
           }
           viewCommitScope={viewCommitScope}
           codeSuggestionLayout={boot.config.agent.strategy.code_suggestion_layout}
@@ -293,7 +309,7 @@ export default function App() {
         prsCount={pendingReviewCount}
         prAgent={boot.prAgent}
         connections={boot.connections}
-        llm={boot.config.llm}
+        llm={reviewEngine === 'codex' ? null : boot.config.llm}
         refreshing={refreshing}
         sidebarCollapsed={sidebarCollapsed}
         chatCollapsed={chatCollapsed}
@@ -302,8 +318,14 @@ export default function App() {
         onToggleChat={() => setChatCollapsed((c) => !c)}
         onRefresh={() => void triggerRefresh()}
         onOpenSettings={() => setShowSettings(true)}
-        onSwitchActiveLlm={(id) => {
-          const next = { ...boot.config.llm, active_id: id };
+        onSwitchActiveLlm={(id, codexModel) => {
+          const { llm } = boot.config;
+          const profiles = codexModel === undefined ? llm.profiles : llm.profiles.map((profile) =>
+            profile.id === id && isCodexCliProfile(profile)
+              ? { ...profile, cli_args: setCodexCliModel(profile.cli_args ?? [], codexModel) }
+              : profile,
+          );
+          const next = { ...llm, profiles, active_id: id };
           void invoke('config:setLlm', { llm: next });
           patchConfig((c) => ({ ...c, llm: next }));
         }}

@@ -106,6 +106,34 @@
   gap: $space-4;
 }
 
+.chat-review-process {
+  padding: $space-3 $space-4;
+  background: $bg-elev;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+
+  > summary {
+    color: $text-muted;
+    cursor: pointer;
+  }
+}
+
+.chat-review-process-body,
+.chat-review-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+.chat-review-process-body {
+  margin-top: $space-4;
+}
+
+.chat-review-feedback > h3 {
+  font-size: $fs-md;
+  font-weight: 600;
+}
+
 // /ask user question row: sits below RunMeta, `?` icon on the left + question content,
 // visually letting the reader immediately recognize "this is user input, not the answer"
 .chat-user-msg {
@@ -307,6 +335,82 @@
     cursor: pointer;
     color: $text-muted;
     padding: $space-2 0;
+  }
+}
+
+.chat-codex-progress {
+  margin-top: $space-3;
+  font-size: $fs-sm;
+}
+
+.chat-codex-current,
+.chat-codex-step-heading,
+.chat-codex-steps li summary {
+  display: flex;
+  align-items: baseline;
+  gap: $space-3;
+}
+
+.chat-codex-current {
+  align-items: center;
+  color: $text-primary;
+}
+
+.chat-codex-time {
+  margin-inline-start: auto;
+  color: $text-muted;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-codex-steps {
+  ol {
+    list-style: none;
+    padding-inline-start: $space-3;
+    margin: $space-2 0;
+  }
+
+  li {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    align-items: baseline;
+    gap: $space-3;
+    padding: $space-2 0;
+    color: $text-muted;
+
+    &[aria-current='step'] {
+      color: $text-primary;
+    }
+
+    summary {
+      color: inherit;
+      padding: 0;
+
+      &::before {
+        content: '›';
+        color: $text-muted;
+      }
+    }
+
+    details[open] > summary::before {
+      transform: rotate(90deg);
+    }
+
+    p {
+      margin: $space-2 0 0;
+      color: $text-primary;
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+  }
+}
+
+.chat-codex-node {
+  color: $color-info;
+  text-align: center;
+
+  [aria-current='step'] > &::before {
+    content: '●';
   }
 }
 

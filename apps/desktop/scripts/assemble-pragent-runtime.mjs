@@ -40,6 +40,7 @@ const SHIM_PKG_NAME = 'meebox_pragent_shim';
 const SHIM_LOADER = join(SHIM_DIR, 'sitecustomize.py');
 const SHIM_RUNTIME = join(SHIM_DIR, SHIM_PKG_NAME, 'runtime.py'); // where _EXPECTED_PRAGENT_VERSION lives
 const TIKTOKEN_SCRIPT = join(__dirname, 'tiktoken-cache.py'); // prime/verify the bundled tiktoken encodings
+const COMPAT_SCRIPT = join(__dirname, 'tests', 'test_pragent_runtime.py');
 const UA = 'meebox-runtime-assembler';
 
 const FORCE = process.argv.includes('--force') || process.env.MEEBOX_PRAGENT_FORCE === '1';
@@ -89,7 +90,9 @@ function hostTarget() {
     return { triple: 'x86_64-apple-darwin', pythonRel: ['python', 'bin', 'python3'] };
   if (platform === 'linux' && arch === 'x64')
     return { triple: 'x86_64-unknown-linux-gnu', pythonRel: ['python', 'bin', 'python3'] };
-  fail(`unsupported host platform ${platform}/${arch} (initial release win x64 only; mac arm64 later)`);
+  fail(
+    `unsupported host platform ${platform}/${arch} (initial release win x64 only; mac arm64 later)`,
+  );
 }
 
 function ghHeaders() {
@@ -154,7 +157,8 @@ function runPython(pythonExe, args, { allowFail = false } = {}) {
     if (allowFail) return false;
     fail(`execution failed ${pythonExe} ${args.join(' ')}: ${r.error.message}`);
   }
-  if (r.status !== 0 && !allowFail) fail(`non-zero exit (${r.status}) ${pythonExe} ${args.join(' ')}`);
+  if (r.status !== 0 && !allowFail)
+    fail(`non-zero exit (${r.status}) ${pythonExe} ${args.join(' ')}`);
   return r.status === 0;
 }
 
@@ -195,7 +199,8 @@ async function syncShim(pythonExe) {
  * so rerunning prepare:pragent fixes an old vendor without a --force full rebuild.
  */
 async function ensureSecretsPlaceholders(sitePackages) {
-  const body = '# meebox placeholder empty file: suppress the pr-agent startup warning about a missing .secrets.toml\n';
+  const body =
+    '# meebox placeholder empty file: suppress the pr-agent startup warning about a missing .secrets.toml\n';
   for (const sub of ['settings', 'settings_prod']) {
     const dir = join(sitePackages, 'pr_agent', sub);
     await mkdir(dir, { recursive: true });
@@ -258,9 +263,9 @@ async function slimRuntime(root) {
   log(`runtime slimming: removed ${dirsRemoved} directories + ${filesRemoved} files`);
 }
 
-// Note: an attempt to slim by deleting unused provider SDKs (botocore/azure/grpc…) proved infeasible per smokeTest —
-// pr-agent's git_providers/__init__ **eagerly imports all providers at startup** (CodeCommit→boto3,
-// AzureDevOps→azure), so deleting them crashes `import pr_agent` outright. These SDKs must be kept; no provider trimming.
+// Since pr-agent 0.48, git provider SDKs are optional extras loaded lazily. Install the core distribution for our
+// local worktree provider; platform network access is handled by the app's adapters. Never delete SDKs by name:
+// LiteLLM may still need some of them transitively. Offline compatibility tests verify the local tool paths.
 
 /**
  * Build-time smoke test (CI safety net): use the embedded interpreter to verify end-to-end that the slimmed runtime is still intact — pr-agent imports,
@@ -287,7 +292,8 @@ function smokeTest(pythonExe) {
     pythonExe,
     'import sys, meebox_pragent_shim; assert "pr_agent" not in sys.modules, "shim eager-loaded pr_agent at the top level"; print("LAZY_OK")',
   );
-  if (!lazy.includes('LAZY_OK')) fail(`smoke test failed (shim lazy loading, output: ${lazy.slice(0, 200)})`);
+  if (!lazy.includes('LAZY_OK'))
+    fail(`smoke test failed (shim lazy loading, output: ${lazy.slice(0, 200)})`);
   // Shim effectiveness check: get_pr_labels is patched by sitecustomize to return [] (unpatched it throws NotImplementedError).
   const code = [
     'import os',
@@ -312,7 +318,10 @@ function smokeTest(pythonExe) {
   // this machine can re-download it — which is precisely how the 0.12.0 build passed here and then died in a read-only
   // install. Runs after slimming, so it also catches a slim rule that deletes the cache.
   runTiktokenCache(pythonExe, 'verify');
-  log('smoke test OK: pr_agent importable + shim patch active + key stdlib + litellm completion path + tiktoken cache usable read-only');
+  runPython(pythonExe, ['-B', COMPAT_SCRIPT]);
+  log(
+    'smoke test OK: pr_agent importable + shim patch active + key stdlib + litellm completion path + tiktoken cache usable read-only',
+  );
 }
 
 async function main() {
@@ -328,7 +337,8 @@ async function main() {
   // upgrading pr-agent must sync both places + re-verify the patch, otherwise fail outright and block shipping.
   const shimSrc = await readFile(SHIM_RUNTIME, 'utf8');
   const shimVer = /_EXPECTED_PRAGENT_VERSION\s*=\s*["']([^"']+)["']/.exec(shimSrc)?.[1];
-  if (!shimVer) fail(`meebox_pragent_shim/runtime.py: _EXPECTED_PRAGENT_VERSION constant not found`);
+  if (!shimVer)
+    fail(`meebox_pragent_shim/runtime.py: _EXPECTED_PRAGENT_VERSION constant not found`);
   if (shimVer !== prAgentVersion)
     fail(
       `shim version(${shimVer}) ≠ manifest pr-agent(${prAgentVersion}); when upgrading pr-agent, sync ` +
@@ -351,7 +361,9 @@ async function main() {
       runTiktokenCache(pythonExe, 'prime');
       await slimRuntime(VENDOR_DIR);
       smokeTest(pythonExe);
-      log(`ready, skipping rebuild (${versionKey}); re-synced shim + slimmed + smoke tested → ${sp}. Use --force to force a full rebuild.`);
+      log(
+        `ready, skipping rebuild (${versionKey}); re-synced shim + slimmed + smoke tested → ${sp}. Use --force to force a full rebuild.`,
+      );
       return;
     }
     log(`VERSION mismatch (old: ${prev.key}), rebuilding.`);
@@ -379,7 +391,9 @@ async function main() {
     if (expected !== actualSha) fail(`sha256 mismatch! expected ${expected} actual ${actualSha}`);
     log(`sha256 verified (${actualSha.slice(0, 12)}…)`);
   } else {
-    log(`WARN: no .sha256 sidecar, recording actual value only ${actualSha.slice(0, 12)}… (unverified)`);
+    log(
+      `WARN: no .sha256 sidecar, recording actual value only ${actualSha.slice(0, 12)}… (unverified)`,
+    );
   }
 
   // 4. Clear + extract (node-tar, no system tar dependency)

@@ -4,7 +4,7 @@ copyright: Copyright © 2026 huhamhire
 
 # Under npm workspaces hoisting, electron-builder cannot infer electron's actual version
 # from apps/desktop/node_modules, so it must be declared explicitly (keep in sync with devDependencies).
-electronVersion: 42.3.0
+electronVersion: 45.4.1
 
 # macOS free route: ad-hoc recursive signing of the built .app (required on arm64, includes embedded python).
 # Automatically skipped when Apple signing credentials env is present, handing back to proper signing + notarization. No-op on win/linux.
@@ -74,6 +74,7 @@ win:
   artifactName: code-meeseeks-${version}-win-${arch}.${ext}
 
 mac:
+  minimumSystemVersion: '13.0.0'
   # mac-specific icon: dark rounded backing + padded glyph (transparent non-square icons get a white backing from the system on macOS).
   # Composited from icon.png by tools/icons/gen-mac-icon.py; supply a ≥512 PNG and electron-builder auto-converts to .icns.
   icon: ../../assets/icons/icon-mac.png

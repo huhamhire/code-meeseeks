@@ -41,9 +41,9 @@ const EN = [
     icon: 'bot',
     title: 'Agentic review',
     points: [
-      'Command-driven pr-agent + autonomous orchestration',
-      'AutoPilot pre-review & re-review loop',
-      'Observable, interruptible process',
+      'PR Agent checks related code and tests during review',
+      'Native Codex review and follow-up questions (experimental)',
+      'AutoPilot pre-review with visible progress',
     ],
   },
   {
@@ -77,7 +77,7 @@ const ZH = [
   {
     icon: 'bot',
     title: 'Agentic 评审',
-    points: ['指令驱动 pr-agent + 自主编排', 'AutoPilot 预评审 + 复评闭环', '过程可观测，可中途追加、随时停止'],
+    points: ['PR Agent 可在评审中查阅相关代码和测试', 'Codex 原生评审和追问（实验性）', 'AutoPilot 自动预评审，进度可见'],
   },
   {
     icon: 'sliders',

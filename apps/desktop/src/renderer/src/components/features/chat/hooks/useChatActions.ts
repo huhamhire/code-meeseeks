@@ -14,8 +14,10 @@ import type {
 } from '@meebox/shared';
 import { PRODUCT_HOME_URL } from '@meebox/shared';
 import { invoke } from '../../../../api';
+import { isStaleReview } from '../utils/review-snapshot';
 import { useChatRunStore } from '../../../../stores/chat-run-store';
 import {
+  hasInlineFindingAnchor,
   htmlInlineToMarkdown,
   renderCodeSuggestionDraft,
   stripFindingMarker,
@@ -260,7 +262,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   // Cancel / retry are just two simple steps in the store model: cancel goes through IPC, retry calls handleRun
   const handleCancel = async (runId: string): Promise<void> => {
     try {
-      await invoke('pragent:cancel', { runId });
+      if (prLocalId) await invoke('pragent:cancel', { localId: prLocalId, runId });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -311,10 +313,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
    * - Associated draft is rejected → update back to pending (undo rejection) + jump
    */
   const handleJumpToDraft = async (finding: Finding, run: ReviewRun): Promise<void> => {
-    if (!pr) return;
-    if (!finding.anchor || typeof finding.anchor.startLine !== 'number') {
-      return; // No anchor line number → cannot become inline; the button should not appear, fallback
-    }
+    if (!pr || isStaleReview(run, pr) || !hasInlineFindingAnchor(finding)) return;
     const startLine = finding.anchor.startLine;
     const endLine = finding.anchor.endLine ?? startLine;
     const existing = (drafts ?? []).find(
@@ -330,7 +329,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
             body: buildDraftBodyFromFinding(finding),
             origin: 'finding',
-            source: { runId: run.id, findingId: finding.id },
+            source: { runId: run.id, findingId: finding.id, engine: run.engine },
             status: 'pending',
           },
         });
@@ -357,16 +356,17 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
   const handleNavigateToFinding = (finding: Finding): void => {
     if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
     const startLine = finding.anchor.startLine;
+    if (!Number.isSafeInteger(startLine) || startLine < 1) return;
+    const endLine = finding.anchor.endLine;
     onNavigateToAnchor?.({
       path: finding.anchor.path,
       startLine,
-      endLine: finding.anchor.endLine ?? startLine,
+      endLine: endLine !== undefined && Number.isSafeInteger(endLine) && endLine >= startLine ? endLine : startLine,
     });
   };
 
   const handleRejectFinding = async (finding: Finding, run: ReviewRun): Promise<void> => {
-    if (!pr) return;
-    if (!finding.anchor || typeof finding.anchor.startLine !== 'number') return;
+    if (!pr || isStaleReview(run, pr) || !hasInlineFindingAnchor(finding)) return;
     const startLine = finding.anchor.startLine;
     const endLine = finding.anchor.endLine ?? startLine;
     const existing = (drafts ?? []).find(
@@ -387,7 +387,7 @@ export function useChatActions(params: UseChatActionsParams): ChatActions {
             anchor: { path: finding.anchor.path, startLine, endLine, side: 'new' },
             body: buildDraftBodyFromFinding(finding),
             origin: 'finding',
-            source: { runId: run.id, findingId: finding.id },
+            source: { runId: run.id, findingId: finding.id, engine: run.engine },
             status: 'rejected',
           },
         });

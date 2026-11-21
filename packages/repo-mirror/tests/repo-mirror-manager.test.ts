@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import {
   RepoMirrorManager,
   parseBlamePorcelain,
@@ -297,6 +297,19 @@ describe('RepoMirrorManager diff/content', () => {
 
     const atHead = await mgr.getFileContent(repo, headSha, 'a.txt');
     expect(atHead).toEqual({ binary: false, content: 'line1\nline2\nline3-new\n' });
+  });
+
+  it('getBlame attributes lines in the bare mirror to their original commits', async () => {
+    const { baseSha, headSha } = await prepareTwoCommits();
+    const mgr = makeManager();
+    await mgr.syncMirror(repo);
+
+    const blame = await mgr.getBlame(repo, headSha, 'a.txt');
+    expect(blame.map(({ line, commit }) => [line, commit])).toEqual([
+      [1, baseSha],
+      [2, baseSha],
+      [3, headSha],
+    ]);
   });
 
   it('getFileContent returns empty content for files not present at that sha', async () => {

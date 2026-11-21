@@ -10,7 +10,7 @@ For contributors and developers building from source. For the product overview s
 
 | Dependency | Version | Notes |
 | --- | --- | --- |
-| Node.js | ≥ 20 (22 for development) | See the root `package.json` engines |
+| Node.js | ≥ 22.12 | See the root `package.json` engines |
 | npm | ≥ 10 | Uses workspaces — do not use pnpm/yarn |
 | Git | Any recent version | Repo mirroring + diff go through system `git` |
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validCliArgs } from './cli-args.js';
 import {
   EDITOR_FONT_SIZE_DEFAULT,
   EDITOR_FONT_SIZE_MAX,
@@ -15,7 +16,7 @@ export const CloneSettingsSchema = z
      */
     protocol: z.enum(['pat', 'ssh']).default('pat'),
   })
-  .default({});
+  .prefault({});
 
 export const BitbucketServerConnectionSchema = z.object({
   id: z.string().min(1),
@@ -114,7 +115,15 @@ const LlmProfileObject = z.object({
   /** Human-readable name, may be empty; the UI falls back to provider+model for display */
   label: z.string().default(''),
   provider: z
-    .enum(['openai', 'openai-compatible', 'deepseek', 'anthropic', 'dashscope', 'volcengine-ark', 'cli'])
+    .enum([
+      'openai',
+      'openai-compatible',
+      'deepseek',
+      'anthropic',
+      'dashscope',
+      'volcengine-ark',
+      'cli',
+    ])
     .default('openai-compatible'),
   /** OpenAI-family / local service: api_base. Optional, leave empty */
   base_url: z.string().default(''),
@@ -124,12 +133,20 @@ const LlmProfileObject = z.object({
    * (`gpt-4o`) which goes to OpenAI.
    */
   model: z.string().default(''),
+  /** Local CLI arguments; omitted legacy profiles behave as an empty list. */
+  cli_args: z.array(z.string()).optional(),
   /** Primary key; leave empty for local / no-auth services */
   api_key: z.string().default(''),
 });
 
 /** An old `ollama` profile is migrated to `openai-compatible` before validation (see migrateLegacyLlmProvider). */
-export const LlmProfileSchema = z.preprocess(migrateLegacyLlmProvider, LlmProfileObject);
+export const LlmProfileSchema = z.preprocess(
+  migrateLegacyLlmProvider,
+  LlmProfileObject.refine(
+    (profile) => profile.provider !== 'cli' || validCliArgs(profile.model, profile.cli_args ?? []),
+    { message: 'Unsupported or invalid local CLI arguments', path: ['cli_args'] },
+  ),
+);
 
 export type LlmProvider =
   | 'openai'
@@ -216,12 +233,12 @@ export const ConfigSchema = z.object({
         .max(EDITOR_FONT_SIZE_MAX)
         .default(EDITOR_FONT_SIZE_DEFAULT),
     })
-    .default({}),
+    .prefault({}),
   workspace: z
     .object({
       repos_dir: z.string().default('~/.code-meeseeks/repos'),
     })
-    .default({}),
+    .prefault({}),
   /**
    * The high-level Agent (see docs/arch/02-agent/01-agent.md). The Agent directory is the Agent's complete personality and knowledge source:
    * `<agent.dir>/` contains SOUL.md / AGENTS.md / MEMORY.md / USER.md and the rules/ subdirectory
@@ -254,7 +271,7 @@ export const ConfigSchema = z.object({
            */
           grants: z.array(z.string()).default([]),
         })
-        .default({}),
+        .prefault({}),
       /**
        * Agent behavior strategy (an extension point; subsequent behavior switches are merged here). Applies to the automatic review micro-flow (shared by manual auto-review +
        * AutoPilot), not exclusive to AutoPilot. Current items:
@@ -296,16 +313,16 @@ export const ConfigSchema = z.object({
            */
           code_suggestion_layout: z.string().default(''),
         })
-        .default({}),
+        .prefault({}),
     })
-    .default({}),
+    .prefault({}),
   poller: z
     .object({
       interval_seconds: z.number().int().min(30).default(300),
     })
-    .default({}),
+    .prefault({}),
   /** Outbound network proxy. Disabled by default = all direct connections, equivalent to historical behavior. */
-  proxy: ProxySchema.default({}),
+  proxy: ProxySchema.prefault({}),
   /**
    * Version update check. At startup (and manually from the settings page) queries the latest stable GitHub Releases version and compares it against the current version,
    * only **notifying** the user to download when a newer version exists (no auto download / install). check_enabled=false disables the check.
@@ -314,9 +331,9 @@ export const ConfigSchema = z.object({
     .object({
       check_enabled: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
   /** Local API service listener (disabled by default). See {@link ServiceSchema} above. */
-  service: ServiceSchema.default({}),
+  service: ServiceSchema.prefault({}),
   /**
    * Notifications (see docs/arch/03-gui/03-notifications.md). enabled is the master switch; when off, neither system notifications pop nor does the dock badge light up.
    * The other items control per event type whether a system notification (toast) pops: new_pr / reply / mention target scenarios like "awaiting my review";
@@ -339,7 +356,7 @@ export const ConfigSchema = z.object({
       /** Pop a system notification when a PR I authored has a merge conflict */
       authored_conflict: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
   /**
    * pr-agent runtime strategy selection.
    * - 'auto' (default): prefer the embedded runtime (bundled with the app, always available on a normal install), and if missing
@@ -356,7 +373,7 @@ export const ConfigSchema = z.object({
        */
       max_concurrency: z.number().int().min(1).max(8).default(2),
     })
-    .default({}),
+    .prefault({}),
   connections: z.array(ConnectionSchema).default([]),
   /**
    * The single currently **active** connection id (only one is active at a time, see the settings page). When empty / no matching connection is found,
@@ -374,10 +391,7 @@ export const ConfigSchema = z.object({
         typeof val === 'object' &&
         !Array.isArray(val) &&
         !('profiles' in val) &&
-        ('provider' in val ||
-          'model' in val ||
-          'api_key' in val ||
-          'base_url' in val)
+        ('provider' in val || 'model' in val || 'api_key' in val || 'base_url' in val)
       ) {
         const o = val as Record<string, unknown>;
         const oldProvider = typeof o.provider === 'string' ? o.provider : '';
@@ -433,7 +447,7 @@ export const ConfigSchema = z.object({
           .max(LLM_CONTEXT_TOKENS_MAX)
           .default(LLM_CONTEXT_TOKENS_DEFAULT),
       })
-      .default({}),
+      .prefault({}),
   ),
 });
 

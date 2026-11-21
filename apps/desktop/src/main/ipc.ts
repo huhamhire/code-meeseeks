@@ -136,6 +136,13 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('agent:getConversation', agent.getConversation); // Read multi-round conversation messages
   ipcMain.handle('agent:getTranscript', agent.getTranscript); // Read Agent process steps
   ipcMain.handle('agent:autopilotLedgers', agent.getAutopilotLedgers); // Batch read AutoPilot review ledgers
+  ipcMain.handle('codex:reviewStatus', agent.codexReviewStatus);
+  ipcMain.handle('codex:models', agent.codexModels);
+  ipcMain.handle('codex:review', agent.runCodexReview);
+  ipcMain.handle('codex:ask', agent.askCodex);
+  ipcMain.handle('codex:listRuns', agent.listCodexRuns);
+  ipcMain.handle('codex:deleteRun', agent.deleteCodexRun);
+  ipcMain.handle('codex:cancel', agent.cancelCodexRun);
   ipcMain.handle('pragent:run', agent.runPragent); // Trigger one pr-agent run (enqueue)
   ipcMain.handle('pragent:cancel', agent.cancelPragent); // Cancel a run
   ipcMain.handle('pragent:queue', agent.getQueue); // Queue snapshot (active + waiting)

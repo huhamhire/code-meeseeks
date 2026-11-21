@@ -37,6 +37,7 @@ export interface ReviewDeps {
     question?: string,
     referencedContext?: string,
     referencedFinding?: ReviewRun['referencedFinding'],
+    reviewStartedAt?: string,
   ) => Promise<ReviewRun>;
   /** Re-review verdict replace/drop → close the superseded original review finding (write FindingClosure + broadcast). Default = don't close. */
   closeFinding?: (
@@ -92,6 +93,7 @@ export async function runReview(
             question,
             referencedContext,
             referencedFinding,
+            session.startedAt,
           );
           if (run.status !== 'succeeded') {
             throw new Error(`pr-agent ${tool} did not succeed: ${run.errorMessage ?? run.status}`);
@@ -108,7 +110,12 @@ export async function runReview(
         closeFinding: deps.closeFinding ? (call) => deps.closeFinding!(pr, call) : undefined,
         chat: deps.chat,
         onStep: async (step) => {
-          const tagged = deps.autopilot && firstStep ? { ...step, autopilot: true } : step;
+          const tagged = {
+            ...step,
+            at: step.at ?? now().toISOString(),
+            reviewStartedAt: session.startedAt,
+            ...(deps.autopilot && firstStep ? { autopilot: true } : {}),
+          };
           firstStep = false;
           await appendAgentStep(deps.stateStore, pr.localId, tagged, now);
           deps.onStep?.(session.id, tagged);

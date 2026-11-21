@@ -1,5 +1,6 @@
 import type {
   Finding,
+  ReviewEngine,
   ReviewRun,
   ReviewRunFailureReason,
   ReviewRunFile,
@@ -39,8 +40,10 @@ export function makeRunId(now: Date = new Date()): string {
 export interface StartReviewRunInput {
   prLocalId: string;
   tool: ReviewRunTool;
-  prAgentVersion: string;
-  strategy: PrAgentStrategy;
+  engine?: ReviewRun['engine'];
+  engineVersion?: string;
+  prAgentVersion?: string;
+  strategy?: PrAgentStrategy;
   /** The question for the /ask tool; leave empty for other tools */
   question?: string;
   /**
@@ -59,10 +62,12 @@ export interface StartReviewRunInput {
   referencedFinding?: ReviewRun['referencedFinding'];
   /** Trigger origin: user (manual) / agent (orchestration dispatch). Used for the ChatPane command echo bubble; omitted means no echo. */
   origin?: ReviewRun['origin'];
+  reviewStartedAt?: string;
   /** Single-commit review scope (parent..sha); omitted = full PR scope. Persisted for the result card's scope badge. */
   scope?: ReviewRun['scope'];
   /** PR head commit SHA the run runs against (pr.sourceRef.sha); persisted so ChatPane can draw a commit divider between runs across a code change. */
   headSha?: string;
+  baseSha?: string;
 }
 
 /** Write the initial running state; callers must start before invoking pr-agent. */
@@ -76,14 +81,18 @@ export async function startReviewRun(
     id: input.id ?? makeRunId(at),
     prLocalId: input.prLocalId,
     tool: input.tool,
+    engine: input.engine,
+    engineVersion: input.engineVersion,
     question: input.question,
     prAgentVersion: input.prAgentVersion,
     strategy: input.strategy,
     model: input.model,
     referencedFinding: input.referencedFinding,
     origin: input.origin,
+    reviewStartedAt: input.reviewStartedAt,
     scope: input.scope,
     headSha: input.headSha,
+    baseSha: input.baseSha,
     status: 'running',
     startedAt: at.toISOString(),
   };
@@ -95,6 +104,11 @@ export async function startReviewRun(
 }
 
 export interface FinishReviewRunPatch {
+  baseSha?: string;
+  mergeBaseSha?: string;
+  repositoryEvidence?: ReviewRun['repositoryEvidence'];
+  verifiedPriorityEvidence?: ReviewRun['verifiedPriorityEvidence'];
+  reviewCoverage?: ReviewRun['reviewCoverage'];
   status: ReviewRunStatus;
   finishedAt: string;
   durationMs: number;
@@ -138,9 +152,10 @@ export async function getReviewRun(
   stateStore: StateStore,
   prLocalId: string,
   runId: string,
+  engine?: ReviewEngine,
 ): Promise<ReviewRun | null> {
-  const file = await stateStore.read<ReviewRunFile>(runKey(prLocalId, runId));
-  return file?.run ?? null;
+  const run = (await stateStore.read<ReviewRunFile>(runKey(prLocalId, runId)))?.run;
+  return run && (!engine || (run.engine ?? 'pr-agent') === engine) ? run : null;
 }
 
 /**
@@ -157,16 +172,15 @@ export async function getReviewRun(
  *   filter + slice, then batch read, avoiding a full-table scan on a large store
  */
 /**
- * Clear all run history records for a PR (only that PR; deletes `prs/<localId>/runs/*`). Returns the number deleted.
+ * Clear PR Agent run history for a PR. Returns the number deleted.
  * A running run's persisted record is deleted too, but finishReviewRun rewrites it on completion → does not affect the in-progress run.
  */
 export async function clearReviewRunsForPr(
   stateStore: StateStore,
   prLocalId: string,
 ): Promise<number> {
-  const prefix = `prs/${prLocalId}/runs`;
-  const keys: string[] = [];
-  for await (const k of stateStore.list(prefix)) keys.push(k);
+  const runs = await listReviewRunsForPr(stateStore, prLocalId, { engine: 'pr-agent' });
+  const keys = runs.map((run) => runKey(prLocalId, run.id));
   for (const k of keys) await stateStore.delete(k);
   return keys.length;
 }
@@ -176,17 +190,17 @@ export async function deleteReviewRun(
   stateStore: StateStore,
   prLocalId: string,
   runId: string,
+  engine?: ReviewEngine,
 ): Promise<boolean> {
-  const key = runKey(prLocalId, runId);
-  const existed = (await stateStore.read<ReviewRunFile>(key)) != null;
-  await stateStore.delete(key);
-  return existed;
+  if (!(await getReviewRun(stateStore, prLocalId, runId, engine))) return false;
+  await stateStore.delete(runKey(prLocalId, runId));
+  return true;
 }
 
 export async function listReviewRunsForPr(
   stateStore: StateStore,
   prLocalId: string,
-  opts: { limit?: number; beforeId?: string } = {},
+  opts: { limit?: number; beforeId?: string; engine?: ReviewRun['engine'] } = {},
 ): Promise<ReviewRun[]> {
   const prefix = `prs/${prLocalId}/runs`;
   const keys: string[] = [];
@@ -201,11 +215,11 @@ export async function listReviewRunsForPr(
       return last < before;
     });
   }
-  const page = opts.limit !== undefined ? filtered.slice(0, opts.limit) : filtered;
   const out: ReviewRun[] = [];
-  for (const k of page) {
+  for (const k of filtered) {
+    if (opts.limit !== undefined && out.length >= opts.limit) break;
     const file = await stateStore.read<ReviewRunFile>(k);
-    if (file) out.push(file.run);
+    if (file && (!opts.engine || (file.run.engine ?? 'pr-agent') === opts.engine)) out.push(file.run);
   }
   return out;
 }
@@ -216,7 +230,7 @@ export async function listReviewRunsForPr(
  * Failed / cancelled runs do not count (no valid result produced), and can still trigger.
  */
 export async function hasReviewOutput(stateStore: StateStore, prLocalId: string): Promise<boolean> {
-  const runs = await listReviewRunsForPr(stateStore, prLocalId);
+  const runs = await listReviewRunsForPr(stateStore, prLocalId, { engine: 'pr-agent' });
   return runs.some(
     (r) =>
       (r.tool === 'describe' || r.tool === 'review') &&

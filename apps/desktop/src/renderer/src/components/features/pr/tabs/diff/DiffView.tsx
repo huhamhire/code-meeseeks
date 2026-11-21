@@ -45,6 +45,8 @@ export type { PendingCommitView } from './diff-types';
 interface DiffViewProps {
   pr: StoredPullRequest;
   renderSideBySide: boolean;
+  showInlineComments: boolean;
+  onToggleInlineComments: () => void;
   showBlame: boolean;
   showWhitespace: boolean;
   /** Active connection capability bits; here commentHardBreaks decides whether comments enable remark-breaks. */
@@ -85,6 +87,8 @@ interface DiffViewProps {
 export function DiffView({
   pr,
   renderSideBySide,
+  showInlineComments,
+  onToggleInlineComments,
   showBlame,
   showWhitespace,
   capabilities,
@@ -242,6 +246,7 @@ export function DiffView({
   // Inline comment marks + view zone
   useCommentZones({
     diffEditor,
+    visible: showInlineComments,
     comments,
     content,
     selected,
@@ -417,6 +422,8 @@ export function DiffView({
             pr={pr}
             path={selected.path}
             oldPath={selected.oldPath}
+            showInlineComments={showInlineComments}
+            onToggleInlineComments={onToggleInlineComments}
             comments={comments}
             capabilities={capabilities}
             hardBreaks={commentHardBreaks}

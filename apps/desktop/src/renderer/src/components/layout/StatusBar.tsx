@@ -15,7 +15,7 @@ interface StatusBarProps {
   prsCount: number;
   prAgent: PrAgentStatus | null;
   connections: ConnectionSummary[];
-  llm: Config['llm'];
+  llm: Config['llm'] | null;
   refreshing: boolean;
   sidebarCollapsed: boolean;
   chatCollapsed: boolean;
@@ -26,7 +26,7 @@ interface StatusBarProps {
   onRefresh: () => void;
   onOpenSettings: () => void;
   /** Switch the active LLM profile; the parent component does the actual persistence */
-  onSwitchActiveLlm: (profileId: string) => void;
+  onSwitchActiveLlm: (profileId: string, codexModel?: string | null) => void;
   /**
    * Jump to a given PR (used by the "pr-agent running" chip click). Nullable — when omitted the chip still
    * shows but is not clickable. The parent component can just pass `setSelectedId`
@@ -103,7 +103,7 @@ export function StatusBar({
       {/* pr-agent activity / idle indicator. Hidden when pr-agent is unavailable (the runtime chip above already shows a red warning). */}
       {prAgent?.available && <PrAgentActiveChip onJumpToPr={onJumpToPr} />}
       <AutopilotChip enabled={autopilotEnabled} onToggle={onToggleAutopilot} />
-      <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />
+      {llm && <LlmChip llm={llm} onSwitch={onSwitchActiveLlm} onOpenSettings={onOpenSettings} />}
       {updateInfo?.hasUpdate && updateInfo.url && (
         <StatusChip
           className="statusbar-chip-update"

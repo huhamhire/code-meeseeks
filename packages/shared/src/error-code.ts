@@ -19,6 +19,11 @@ export const ERROR_CODES = {
   AG_DUPLICATE_TASK: 'EAG0002',
   /** pr-agent is not ready (neither the embedded runtime nor a local CLI was detected). */
   AG_PR_AGENT_NOT_READY: 'EAG0003',
+  AG_CODEX_NOT_READY: 'EAG0004',
+  AG_CODEX_QUESTION_TOO_LONG: 'EAG0005',
+  AG_CODEX_REFERENCE_STALE: 'EAG0006',
+  AG_CODEX_MODEL_LIST_FAILED: 'EAG0007',
+  AG_CODEX_MODEL_UNAVAILABLE: 'EAG0008',
   /** Unclassified config error (fallback). */
   CF_UNCLASSIFIED: 'ECF0000',
   /** Platform version below the supported minimum (meta.version actual version, meta.min minimum requirement). */

@@ -56,17 +56,23 @@ Design principles:
 - **Version guard**: patches depend on a specific pr-agent version's internal implementation → if `_EXPECTED_PRAGENT_VERSION` ≠ the actually installed version at runtime,
   **skip all patches and emit a stderr WARNING** (safe degradation); at build time it hard-checks the shim constant == the manifest version, failing outright on mismatch.
 
-Current patches (pinned pr-agent **0.45.0**):
+Current patches (pinned pr-agent **0.50.0**):
 - **anchor line numbers** (details in [Review workflow](../01-platform/03-review-workflow.md)): patch `get_line_link` to return `meebox:///<file>#L<s>-L<e>`,
   letting `/review`'s key_issues render with a structured file:line. **`-1` means "the whole file"** upstream — `/describe` passes it for every File Walkthrough row — and it is truthy, so it must be screened out explicitly or the link becomes `#L-1`, which the anchor parser then rejects outright (its line group only accepts digits), losing even the path. Anything that is not a positive line number yields a file-level link.
 - **diff line counts**: `FilePatchInfo.num_plus_lines` / `num_minus_lines` default to `-1` and only the real platform providers fill them in, so `/describe`'s File Walkthrough rendered every row as `+-1/--1`. `get_diff_files` is **wrapped** (not reimplemented) to backfill the two counters from the patch text, counted by the same rule the platform providers use — upstream keeps owning how the diff is produced.
-- **Anthropic drops temperature**: new Claude models deprecate temperature, so all `anthropic/*` are put into the "don't send temperature" set.
 - **load_yaml tolerance**: an anchor marker taking a whole line breaks YAML → on parse failure, strip the marker and retry, avoiding a whole review crash.
-- **repo-context file fetch**: pr-agent defaults `repo_context_files = ["AGENTS.md"]`, but `LocalGitProvider` inherits the base no-op `get_repo_file_content` → the feature is skipped with a per-run WARNING. Implement it by reading the blob from the base branch's tree (`git show <target_branch>:<path>`, never the working tree), so `/review /describe /improve` inject the reviewed repo's `AGENTS.md`/etc. as `<instruction_files>`; a missing file degrades to `""`.
 - **Local CLI provider**: when `MEEBOX_CLI_MODE` is set, replace `chat_completion` wholesale with the "call the local CLI" version (see below).
 - **token usage collection**: see below.
 
 **Retired patches** (kept as a record, because "why is this no longer patched" is the question an upgrade raises): *binary-safe diff* and the *single-line-hunk phantom line* were both **fixed upstream in 0.45.0** — `get_diff_files` now skips a file that fails to decode, and `extract_hunk_headers` defaults an omitted hunk size to 1 rather than 0. Both were verified against the installed runtime before deletion, not assumed from release notes.
+
+In **0.50.0**, `LocalGitProvider.get_repo_file_content` natively reads committed base-branch blobs, so the trusted repository-context override is removed. Temperature compatibility now comes from upstream model metadata and adaptive-thinking detection; the old blanket Anthropic exclusion is removed. The offline compatibility suite verifies both behaviors against the installed runtime.
+
+The review prompt requests optional priority metadata in a marker inside `issue_content`, preserving upstream's strict YAML schema. Both the JSON artifact and the Markdown parser recover the level, trigger, and consequence. Missing or invalid metadata leaves the finding unrated. The runtime fixture verifies that both output formats preserve the marker.
+
+**Empty fallbacks**: `CONFIG__FALLBACK_MODELS='[]'` now clears upstream defaults because 0.50 disables Dynaconf's global merging. With 0.45's `merge_enabled=True`, an empty list retained the default fallback. The runtime test checks the actual loaded settings, model list, and a single attempted call on a synthetic provider failure. This prevents unintended retries; it does not fix a primary provider's authentication, model availability, or quota errors. `/improve` now uses the canonical `committable_code_suggestions` spelling and keeps aggregated Markdown output rather than upstream local suggestion artifacts.
+
+**Dependencies and assembly checks**: install core `pr-agent` without hosted-provider extras (optional since 0.48). Platform access belongs to the app's adapters; do not delete dependencies by SDK name because LiteLLM may still need them. Assembly runs `scripts/tests/test_pragent_runtime.py` with synthetic model responses and external connections blocked, covering describe/review/ask/improve output, anchors, assessment, YAML repair, CLI dispatch, API usage/caching, trusted repository context, and empty fallbacks. These checks also run when the existing runtime is reused.
 
 **Upstream defaults that must stay pinned** (in `buildPragentEnv`): 0.45.0 turned on three features that append to the output this app *parses* — `pr_reviewer.persistent_finding_state` (a "resolved findings" section carrying upstream's own cross-run state, which the app already owns via drafts / finding closures / re-review verdicts) and two coverage footers — plus `pr_description.pr_diagram_direction='adaptive'`, which turns a longer diagram top-down. **Re-check this list on every upgrade**, and note the two distinct ways a default can be wrong here: one *adds output* (landing as a bogus finding), the other *changes presentation* for a surface upstream does not know about — pr-agent assumes a full-width page, while this diagram is read in a narrow chat column. Neither shows up as an error.
 
@@ -76,6 +82,8 @@ Once installed the runtime sits under `C:\Program Files` / `/Applications` and *
 
 - `.secrets.toml` — pr-agent warns on every startup when it is missing, so an empty placeholder is written at assemble time.
 - **tiktoken encodings** — litellm points `TIKTOKEN_CACHE_DIR` at its own `litellm_core_utils/tokenizers/` and ships encoding files there to be offline-capable, but the files it ships **fail the `expected_hash` pinned by the tiktoken it depends on** (all of them, as of litellm 1.99.0 / tiktoken 0.12.0). tiktoken then deletes and re-downloads them into site-packages on every run. `scripts/tiktoken-cache.py prime` repairs the bundled bytes at assemble time so the cache is a **hit** and nothing is written; `verify` asserts it.
+
+With LiteLLM 1.105.1, importing LiteLLM no longer initializes that environment variable; pr-agent 0.50's token handler sets it lazily. The assembly helper explicitly resolves the same bundled directory, independent of any inherited host cache. Verification compares hashes and constructs both encodings with download reads blocked.
 
 **Why the smoke test has to compare hashes rather than just load the encoding**: a stale file still loads on the build machine — that machine can re-download it. So "CI passed" says nothing about the installed copy. This is exactly how 0.12.0 shipped: the runtime assembled and smoke-tested cleanly, and every Windows install then failed on the first `/describe`. The check compares the bundled bytes against the hash tiktoken pins, which is the thing that actually decides fetch-or-reuse at runtime, and it runs **after** slimming so a slim rule that deletes the cache is caught too.
 
@@ -94,8 +102,14 @@ and that print would pollute stdout and leak into the review summary — this sw
 
 ### Local CLI provider
 
-Let the user run reviews **without filling in an API key, using a locally installed and logged-in agentic CLI** (phase one is **Claude Code** only). The LLM Profile
-gains `provider='cli'`, with the `model` field holding the command name (`claude`). Other providers go through litellm direct-to-API, while cli mode **fully bypasses
+Profiles may carry optional `cli_args: string[]`. `buildPragentEnv` always serializes this to `MEEBOX_CLI_ARGS` as a JSON array (including `[]` for legacy profiles, preventing inherited arguments). Both tool runs and orchestration chat use `run_cli_chat`, which validates the array and inserts it before Codex's trailing stdin `-`, or after Claude's fixed flags. Model selection remains separate from the command name.
+
+The shared argument editor groups quoted text without shell expansion and previews the argv array. The config schema and Python shim both validate supported value options: Codex `--model`/`-m` and `--config`/`-c` for `model`, `model_reasoning_effort`, `service_tier`, `model_verbosity`; Claude `--model`, `--effort`, `--max-turns`, `--max-budget-usd`, `--fallback-model`. Positional prompts, subcommands, and app-owned protocol/sandbox/cwd flags are rejected. Keep the TypeScript and Python validation tables aligned.
+
+Explicit Codex reasoning effort suppresses the orchestration-only low-effort default. An explicit Claude model or effort suppresses automatic Haiku selection. The shim prefers npm's JS entry point via Node on Windows to avoid passing argument values through `cmd.exe`; custom batch launchers reject shell metacharacters. Invalid arguments emit the existing LLM-error sentinel before subprocess creation. Offline coverage lives in `packages/shared/tests/cli-args.test.ts`, `packages/pr-agent-bridge/tests/env.test.ts`, and `scripts/tests/test_cli_args.py` (run the latter with embedded Python `-B -S`).
+
+Let the user run reviews **without filling in an API key, using a locally installed and logged-in agentic CLI** (**Claude Code** and **Codex** are supported). The LLM Profile
+gains `provider='cli'`, with the `model` field holding the command name (`claude` / `codex`). Other providers go through litellm direct-to-API, while cli mode **fully bypasses
 litellm**.
 
 - **Entry point**: env `MEEBOX_CLI_MODE=1` + `MEEBOX_CLI_BIN=claude` (injected by `buildPragentEnv`) → the shim swaps
@@ -107,15 +121,16 @@ litellm**.
   which must pass `chat_completion`). The **orchestration's own steps** (routing / judge / summary via `meebox_pragent_shim.chat`) in CLI mode
   **call `run_cli_chat` directly, without importing pr_agent / litellm** — the CLI path doesn't use litellm anyway, and needlessly spinning up the whole pr_agent +
   litellm import would add hundreds of ms to 1s+ of startup overhead per chat subprocess, while orchestration calls many times per flow. API mode has no such shortcut (litellm
-  is the HTTP client, unbypassable), still reusing the patched `LiteLLMAIHandler` to inherit provider routing / temperature-drop / prompt cache /
+  is the HTTP client, unbypassable), still reusing the patched `LiteLLMAIHandler` to inherit upstream provider routing / temperature handling / prompt cache /
   usage sentinel.
 - **Prompt via stdin**: the review prompt contains the full diff (tens of KB), and passing via argv would hit the command-line length limit; system/user are merged into
   one block to feed in (the CLI has no separate system slot). cwd defaults to a neutral temp directory, avoiding picking up the reviewed repo's `CLAUDE.md`/`AGENTS.md`.
-- **`/ask` exception (take full file context)**: free Q&A needs to read real files, so only for `/ask` the main process hands down env `MEEBOX_CLI_WORKDIR`
+- **`/ask` exception (take full file context)**: interactive Q&A can read real files, so the main process hands down env `MEEBOX_CLI_WORKDIR`
   = the materialized worktree, and the shim accordingly sets the subprocess cwd to the worktree (`describe`/`review` don't get it, keeping the neutral temp directory).
   Before setting cwd, the main process first **clears the repo's own agent instruction files inside that worktree** (`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursor`
   rules / `.github/copilot-instructions.md`, see `services/pr-agent/worktree-sanitize.ts`) — the worktree is the PR HEAD,
   author-controlled, and if not cleared the CLI would auto-load these instructions, letting the reviewed PR inject / pollute the answer through them; the worktree is discarded after use, so clearing in place has no side effect.
+  Automatic follow-ups on a specific finding use the same preselected repository excerpts for API and local CLI profiles. The CLI runs from its neutral directory for those follow-ups. See [Automatic review](03-autopilot.md).
 - **Reuse the CLI's own login state**: the subprocess inherits `HOME`/`USERPROFILE`, and the CLI reads its own login credentials (e.g. `~/.claude`) to run.
   To avoid a stray API key in the local environment leaking in and overriding the CLI's own login method, the shim explicitly strips
   `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` from the subprocess env. The model used, the quota and compliance are all decided by that CLI's account and the user's authorization.
@@ -130,7 +145,7 @@ litellm**.
   `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` (the entire input side the model actually processed); of which
   `cache_read_input_tokens` (the cache read) is **listed out separately** for UI split display, and the top-level `num_turns` (agentic turns) is thrown up alongside. Details in
   "Token metering & prompt cache in CLI mode" below.
-- **Phase-one boundary**: `claude` only (UI validation blocks codex, etc.; the command box accepts input pending later work); concurrency is "one subprocess per call"; when the parent process is
+- **Process boundary**: Claude Code and Codex are supported; concurrency is "one subprocess per call"; when the parent process is
   SIGKILLed on timeout, the child `claude` may briefly linger (orphan), and kill propagation can be added later.
 
 ### Token metering & prompt cache in CLI mode
@@ -157,8 +172,8 @@ error**, but the natural result of agentic multi-turn + prompt caching. Key poin
   serializing same-PR tasks for cache reuse; if you really want to maximize cross-run reuse, consider lightweight scheduling of "describe first, release the rest after it finishes" (limited gain, not implemented).
 - **litellm path & cross-model cache adaptation**: in API mode the explicit `cache_control` marker **takes effect only on the Anthropic family** (native / Bedrock / Vertex Claude).
   `_apply_system_prompt_cache` (`patches/litellm_handler.py`) marks a 1h-TTL cache for Anthropic, covering two kinds of calls:
-    - **Orchestration chat channel** (`MEEBOX_CHAT_CACHE` set, system contains `CACHE_BREAK`) caches the globally stable prefix by breakpoint;
-    - **pr-agent tool run** (`/review` `/describe` `/improve` `/ask`, no `CACHE_BREAK`) caches the whole system — pr-agent's instructions + output format are about 12k chars, vary only by config/language/rules, and are stable across PRs (the variable diff is on the user side and not cached), so under the same config it hits across runs within 1h.
+  - **Orchestration chat channel** (`MEEBOX_CHAT_CACHE` set, system contains `CACHE_BREAK`) caches the globally stable prefix by breakpoint;
+  - **pr-agent tool run** (`/review` `/describe` `/improve` `/ask`, no `CACHE_BREAK`) caches the whole system — pr-agent's instructions + output format are about 12k chars, vary only by config/language/rules, and are stable across PRs (the variable diff is on the user side and not cached), so under the same config it hits across runs within 1h.
 
   OpenAI / DeepSeek use **automatic prefix caching** (no marking needed; put stable content in the prefix
   to hit; the shim auto-strips the markers for non-Anthropic and reassembles plain text); whether openai-compatible (DashScope / Volcano / vLLM) hits depends on the backend,

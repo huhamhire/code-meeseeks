@@ -5,6 +5,55 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-11-21
+
+> ⚠️ **The macOS desktop app now requires macOS 13 Ventura or later on Apple Silicon.** This change comes with the upgrade from Electron 42.3.0 to 45.4.1.
+>
+> - **Native Codex review** adds a desktop tab for reviewing PRs and asking follow-up questions with a local Codex CLI.
+> - **PR Agent** checks related code and tests during automatic review and gathers actionable findings before the final summary.
+
+### 🔒 Security
+
+- Updated the code editor to Monaco 0.57.0 for additional HTML sanitization fixes.
+- Updated dependencies for Git operations, HTTP requests, diagrams, rule-file parsing, desktop packaging, and development tooling.
+
+### ♻️ Changed
+
+- Updated the desktop build to Vite 8 and configuration validation to Zod 4, preserving existing defaults and profile migration.
+- Updated the bundled review engine to PR Agent 0.50.0 and Python 3.12.16, with improved model compatibility and support for trusted repository instructions.
+- The selected PR Agent or Codex tab now connects visually to its review panel. Composer controls and popup menus use consistent small corner radii.
+
+### ✨ Added
+
+- **Codex review (experimental)**
+  - The desktop detects a compatible, signed-in local Codex CLI and enables a separate review tab.
+  - The tab shows review progress and uses the app language for native reviews, read-only multi-turn questions, and follow-ups on findings.
+  - The command menu and input completion offer `/review`, `/ask`, `/approve`, and `/needswork`, and eligible findings can become comment drafts.
+  - The model picker favors the latest available Sol, remembers your choice, and refreshes the model list in the background.
+- **PR Agent review**
+  - Automatic follow-ups check related source and tests at the reviewed commit, with the same evidence available to API and local CLI profiles.
+  - Findings can show P1–P3 with their triggers and consequences, and P1 requires supporting evidence from a follow-up on the reviewed commit.
+  - Review progress distinguishes complete, partial, and unverified coverage.
+  - Automatic reviews preserve the PR description, exclude existing comments from review input, and gather unique actionable findings before the final summary.
+  - The collapsed review process retains the original findings, including those superseded or withdrawn during follow-up.
+- **Model configuration and diff**
+  - Local CLI profiles accept additional arguments with a preview, so you can choose a model or reasoning settings for that profile.
+  - The PR Agent model menu lets you pick a specific model inside a Codex CLI profile.
+  - The diff file breadcrumb can hide published inline comments while keeping local drafts available.
+
+### 🔧 Fixed
+
+- Review tabs retain unsent input and composer height when switching, and keep each engine's history and progress separate.
+- The Codex model picker can show cached choices beside Send while the catalog refreshes.
+- Findings from earlier revisions remain navigable and available for follow-up, and new inline drafts require a valid location in the current diff.
+- Extra whitespace in a finding's file path no longer breaks its diff link.
+- Pending drafts survive partial or failed reviews.
+- Commit dividers stay in place between review sessions, and commits received during automatic review are marked after its summary.
+- Closing a diff editor no longer causes related code views to crash, and comment previews retain syntax highlighting and line numbers.
+- Clicks no longer leave stray focus outlines on diagrams or PR rows, and keyboard focus remains visible.
+- Provider failures retain their original cause and respect the setting to disable fallback retries.
+- Comment action buttons now have consistent heights in the activity timeline and inline comments.
+
 ## [0.12.1] - 2026-09-10
 
 ### 🔧 Fixed
@@ -546,7 +595,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
-[Unreleased]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...HEAD
+[0.13.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.1...v0.11.2

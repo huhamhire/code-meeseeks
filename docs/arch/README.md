@@ -7,6 +7,8 @@ When understanding or maintaining a module, this is the **preferred entry point*
 
 - **This directory (arch/) = current conclusions**: continuously updated as the implementation evolves; the "source of truth" for a module.
 - **ROADMAP**: delivered capabilities, ongoing evolution, risks and next steps; no implementation details (those live here).
+- [Design drafts](../drafts/README.md) contain proposals and open design questions. Reconcile accepted proposals with the implementation before updating the architecture.
+- [Reference materials](../reference/README.md) hold versioned comparisons and evaluation protocols.
 
 ## Per-doc skeleton convention
 

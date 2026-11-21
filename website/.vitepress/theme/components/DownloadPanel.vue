@@ -103,6 +103,7 @@ const STR = {
     recommended: 'Recommended for your system',
     desktop: 'Desktop app',
     desktopIntro: 'The full graphical client — discover, read, review, and publish PRs, all on your machine.',
+    macRequirement: 'Starting with 0.13.0, the Mac desktop app requires Apple Silicon and macOS 13 Ventura or later.',
     guideLink: 'User guide',
     cliTitle: 'Command-line tool (meebox)',
     cliIntro:
@@ -138,6 +139,7 @@ const STR = {
     recommended: '为你的系统推荐',
     desktop: '桌面应用',
     desktopIntro: '完整图形客户端——在本机发现、阅读、评审并发布 PR。',
+    macRequirement: '从 0.13.0 起，Mac 桌面应用要求 Apple 芯片及 macOS 13 Ventura 或更高版本。',
     guideLink: '使用说明',
     cliTitle: '命令行工具（meebox）',
     cliIntro:
@@ -245,6 +247,7 @@ const STR = {
       <!-- Desktop app -->
       <div v-show="tab === 'gui'" role="tabpanel">
         <p class="dl-muted">{{ t.desktopIntro }}</p>
+        <p v-if="desktop.macos" class="dl-muted">{{ t.macRequirement }}</p>
         <p class="dl-links">
           <a class="dl-link" :href="GUIDE_URL" target="_blank" rel="noreferrer">{{ t.guideLink }} →</a>
         </p>

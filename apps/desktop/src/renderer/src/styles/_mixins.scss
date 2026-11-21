@@ -5,6 +5,22 @@
 @use 'sass:list';
 @use './tokens' as *;
 
+// Shared geometry for text and icon actions on every comment surface.
+@mixin comment-action-size {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 22px;
+  min-width: 22px;
+  flex-shrink: 0;
+  line-height: 1;
+
+  svg {
+    display: block;
+  }
+}
+
 // Popover menu base: an absolutely positioned dark popover (statusbar queue / LLM menu,
 // chat `/` command menu and completion popover). Contains only the "popover appearance"
 // commonality; positioning anchor / radius / padding / width are set per call site.

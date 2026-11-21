@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Finding, FindingClosure, ReviewDraft, ReviewRun } from '@meebox/shared';
 import { CommitIcon, RepeatIcon, RetryIcon, ShareIcon, TrashIcon } from '../../../common';
-import { orderFindings } from '../utils/findings';
+import { orderFindings, type DisplayReviewPriority } from '../utils/findings';
 import { formatStartTime, formatTimestamp, runStatusLabel } from '../utils/format';
 import { extractTokenUsage, type TokenUsage } from '../utils/tokens';
 import { AnsiPre, AskQuestion, BreakablePath, TokenStat } from './shared';
@@ -78,7 +78,9 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
           tool/status/strategy chips, one visual weight lighter than a chip */}
       <span
         className="chat-run-time"
-        title={t('chatPane.startedAtTitle', { time: formatTimestamp(run.startedAt, { full: true }) })}
+        title={t('chatPane.startedAtTitle', {
+          time: formatTimestamp(run.startedAt, { full: true }),
+        })}
       >
         {formatStartTime(run.startedAt)}
       </span>
@@ -96,40 +98,99 @@ function RunMeta({ run, onDelete }: { run: ReviewRun; onDelete: () => void }) {
   );
 }
 
-export function RunResultView({
+export interface RunFindingActions {
+  drafts: ReadonlyArray<ReviewDraft>;
+  closures: ReadonlyArray<FindingClosure>;
+  verifiedP1?: ReadonlyMap<string, ReadonlySet<string>>;
+  onJumpToDraft?: (finding: Finding, run: ReviewRun) => void;
+  onRejectFinding?: (finding: Finding, run: ReviewRun) => void;
+  onNavigateToFinding?: (finding: Finding) => void;
+  onReferenceFinding?: (finding: Finding, run: ReviewRun) => void;
+  onScrollToRun: (runId: string) => void;
+}
+
+export function RunFindingList({
   run,
-  onRetry,
-  onDelete,
-  canRetry,
+  findings,
+  stale,
   drafts,
   closures,
+  verifiedP1,
   onJumpToDraft,
   onRejectFinding,
   onNavigateToFinding,
   onReferenceFinding,
   onScrollToRun,
-  onScrollToFinding,
-}: {
+}: RunFindingActions & {
   run: ReviewRun;
+  findings: Finding[];
+  stale?: boolean;
+}) {
+  const priorityOf = (finding: Finding): DisplayReviewPriority | undefined => {
+    if (
+      run.engine === 'codex' ||
+      run.tool !== 'review' ||
+      (finding.sectionKey ?? finding.category) !== 'code-feedback'
+    )
+      return;
+    const proposed = finding.reviewPriority?.level;
+    if (proposed === 'P1' && !verifiedP1?.get(run.id)?.has(finding.id)) return 'unrated';
+    return proposed ?? 'unrated';
+  };
+  return (
+    <ul className="chat-finding-list" data-feedback-run-id={run.id}>
+      {orderFindings(findings, priorityOf).map((finding) => {
+        const relatedDraft = drafts.find(
+          (draft) => draft.source?.runId === run.id && draft.source.findingId === finding.id,
+        );
+        const closure = closures.find(
+          (item) => item.runId === run.id && item.findingId === finding.id && item.verdict !== 'keep',
+        );
+        const kind = finding.sectionKey ?? finding.category;
+        const canReference =
+          (kind === 'code-feedback' || kind === 'code-suggestion') &&
+          typeof finding.anchor?.startLine === 'number' &&
+          (run.engine !== 'codex' || (!stale && finding.inlineAnchorVerified !== false));
+        return (
+          <FindingCard
+            key={finding.id}
+            finding={finding}
+            reviewPriority={priorityOf(finding)}
+            relatedDraft={relatedDraft}
+            closure={closure}
+            onJump={!stale && onJumpToDraft ? () => onJumpToDraft(finding, run) : undefined}
+            onReject={!stale && onRejectFinding ? () => onRejectFinding(finding, run) : undefined}
+            onNavigate={onNavigateToFinding ? () => onNavigateToFinding(finding) : undefined}
+            staleLocation={stale}
+            onReference={
+              canReference && onReferenceFinding
+                ? () => onReferenceFinding(finding, run)
+                : undefined
+            }
+            onViewAsk={closure ? () => onScrollToRun(closure.byAskRunId) : undefined}
+          />
+        );
+      })}
+    </ul>
+  );
+}
+
+export function RunResultView({
+  run,
+  stale,
+  onRetry,
+  onDelete,
+  canRetry,
+  onScrollToFinding,
+  ...findingActions
+}: RunFindingActions & {
+  run: ReviewRun;
+  stale?: boolean;
   onRetry: (run: ReviewRun) => void;
   /** Delete this run record (this run only). */
   onDelete: (runId: string) => void;
   /** Determined by the parent as "last one + no active run"; when false, failed / cancelled runs also don't show the retry button */
   canRetry: boolean;
-  /** Snapshot of this PR's current draft pool; FindingCard uses it to show the status chip + decide reject behavior */
-  drafts: ReadonlyArray<ReviewDraft>;
-  /** Snapshot of this PR's finding closure relations (read-only); looks up the review-closed state by (run.id,finding.id), marking the read-only chip. */
-  closures: ReadonlyArray<FindingClosure>;
-  /** Fired when clicking "→ jump to code edit" on a finding card. The parent does lazy creation + jump */
-  onJumpToDraft: (finding: Finding, run: ReviewRun) => void;
-  /** Reject a finding: create / update a draft to status='rejected' */
-  onRejectFinding: (finding: Finding, run: ReviewRun) => void;
-  /** Click a finding anchor: only navigate to the corresponding Diff line (no edit mode) */
-  onNavigateToFinding: (finding: Finding) => void;
-  /** 「Reference」a code finding to start a re-review /ask (attach to the input bar). */
-  onReferenceFinding: (finding: Finding, run: ReviewRun) => void;
-  /** Scroll to a given run card (review-closed state「view re-review」→ the ask run that closed it). */
-  onScrollToRun: (runId: string) => void;
   /** Scroll to a given finding card within a run and flash-highlight it (reference badge at the top of the re-review card → original finding card). */
   onScrollToFinding: (runId: string, findingId: string) => void;
 }) {
@@ -140,6 +201,10 @@ export function RunResultView({
   const isCancelled = run.status === 'cancelled';
   const isFailedOrCancelled = isFailed || isCancelled;
   const stdout = run.stdout ?? '';
+  const coverage = run.reviewCoverage;
+  const clean =
+    coverage?.status === 'complete' &&
+    !findings.some((finding) => finding.sectionKey === 'code-feedback');
   // The "raw output" collapse region maintains per-run state independently, unaffecting each other. Failed / cancelled default to expanded for easier troubleshooting,
   // success defaults to closed as just a diagnostic fallback
   const [showRawStdout, setShowRawStdout] = useState(isFailedOrCancelled);
@@ -201,7 +266,7 @@ export function RunResultView({
               ? t('chatPane.runCancelled')
               : run.errorReason === 'llm-error'
                 ? t('chatPane.llmCallFailed')
-                : run.errorReason
+                : run.errorReason && run.errorReason !== 'invalid-review-output'
                   ? t('chatPane.runFailedReason', { reason: run.errorReason })
                   : t('chatPane.runFailed')}
             {/* On llm-error the exitCode is 0 (pr-agent caught it itself), showing it would instead
@@ -209,6 +274,7 @@ export function RunResultView({
             {run.exitCode != null &&
               !isCancelled &&
               run.errorReason !== 'llm-error' &&
+              run.errorReason !== 'invalid-review-output' &&
               ` · exit ${String(run.exitCode)}`}
           </strong>
           {canRetry && (
@@ -240,42 +306,38 @@ export function RunResultView({
         </div>
       )}
 
+      {stale && <p className="muted">{t('chatPane.reviewResult.stale')}</p>}
+      {!isFailedOrCancelled && coverage?.status === 'partial' && (
+        <details className="chat-run-raw">
+          <summary>
+            {t('chatPane.reviewResult.partial', {
+              omitted: coverage.omittedFiles?.length ?? 0,
+              clipped: coverage.partialFiles?.length ?? 0,
+            })}
+          </summary>
+          <ul>
+            {coverage.omittedFiles?.map((file) => (
+              <li key={file}>{file}</li>
+            ))}
+            {coverage.partialFiles?.map((file) => (
+              <li key={`partial-${file}`}>{file}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {!isFailedOrCancelled && coverage?.status === 'unknown' && (
+        <p className="muted">{t('chatPane.reviewResult.unknown')}</p>
+      )}
+      {coverage?.status === 'invalid' && (
+        <p className="muted">{t('chatPane.reviewResult.invalid')}</p>
+      )}
+      {clean && <p className="muted">{t('chatPane.reviewResult.clean')}</p>}
       {/* Failed / cancelled don't render findings: a cancelled /describe would parse part of stdout into「paragraphs」and mistakenly show them as results.
           Failed / cancelled uniformly keep only the collapsible「raw output」above + the status banner, not opening another output block below. */}
       {!isFailedOrCancelled &&
         (findings.length > 0 ? (
-          <ul className="chat-finding-list">
-            {orderFindings(findings).map((f) => {
-              // Findings within the same run map one-to-one to drafts: looked up by source.runId+findingId. On match,
-              // FindingCard uses it to show the status chip + branch the jump/reject button behavior
-              const relatedDraft = drafts.find(
-                (d) =>
-                  d.source !== undefined &&
-                  d.source.runId === run.id &&
-                  d.source.findingId === f.id,
-              );
-              // Review-closed state (read-only): looked up when this finding was auto-closed by a re-review /ask ruling replace/drop.
-              const closure = closures.find((c) => c.runId === run.id && c.findingId === f.id);
-              // 「Reference」is only offered for anchorable code-type findings (review/improve) — they are the code comments that can be re-reviewed.
-              const canReference =
-                (f.sectionKey === 'code-feedback' || f.sectionKey === 'code-suggestion') &&
-                typeof f.anchor?.startLine === 'number';
-              return (
-                <FindingCard
-                  key={f.id}
-                  finding={f}
-                  relatedDraft={relatedDraft}
-                  closure={closure}
-                  onJump={() => onJumpToDraft(f, run)}
-                  onReject={() => onRejectFinding(f, run)}
-                  onNavigate={() => onNavigateToFinding(f)}
-                  onReference={canReference ? () => onReferenceFinding(f, run) : undefined}
-                  onViewAsk={closure ? () => onScrollToRun(closure.byAskRunId) : undefined}
-                />
-              );
-            })}
-          </ul>
-        ) : run.status === 'succeeded' ? (
+          <RunFindingList run={run} findings={findings} stale={stale} {...findingActions} />
+        ) : run.status === 'succeeded' && !coverage ? (
           <div className="chat-finding-empty muted">{t('chatPane.noFindings')}</div>
         ) : null)}
     </div>

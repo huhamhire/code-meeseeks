@@ -6,6 +6,11 @@ import type { AgentMessage, AgentStep, ReviewRun } from '@meebox/shared';
 export interface TimelineEntry {
   key: string;
   sortTime: number;
+  headSha?: string;
+  completedReview?: boolean;
+  orchestratedReview?: boolean;
+  reviewStartedAt?: number;
+  reviewSummary?: boolean;
   run: ReviewRun | null;
   active: PragentRunInfo | null;
   step: AgentStep | null;
@@ -62,28 +67,37 @@ export function useChatTimeline(params: {
       ...base,
       key: `run-${r.id}`,
       sortTime: ms(r.startedAt),
+      headSha: r.headSha,
+      reviewStartedAt: ms(r.reviewStartedAt) || undefined,
+      completedReview: r.tool === 'review' && r.status === 'succeeded',
+      orchestratedReview: r.tool === 'review' && r.origin === 'agent' && r.status === 'succeeded',
       run: r as ReviewRun | null,
     }));
     const activeEntries = myActiveRuns.map((a) => ({
       ...base,
       key: `active-${a.runId}`,
       sortTime: ms(a.startedAt ?? a.enqueuedAt),
+      headSha: a.headSha,
       active: a as PragentRunInfo | null,
     }));
     const stepEntries = agentSteps.map((s, i) => ({
       ...base,
       key: `step-${i}-${s.at ?? ''}`,
       sortTime: ms(s.at),
+      reviewStartedAt: ms(s.reviewStartedAt) || undefined,
       step: s as AgentStep | null,
     }));
     const msgEntries = messages.map((m, i) => ({
       ...base,
       key: `msg-${i}-${m.at}`,
       sortTime: ms(m.at),
+      headSha: m.headSha,
+      reviewStartedAt: ms(m.reviewStartedAt) || undefined,
+      reviewSummary: m.role === 'assistant' && !!(m.reviewStartedAt || m.recommendation),
       message: m as AgentMessage | null,
     }));
     // Command echo bubble: only for runs **directly triggered by the user** (origin==='user'), add a user message right above its card
-    // (sortTime takes the start time -1ms). Orchestration / AutoPilot sub-runs (origin==='agent') are not echoed — their user input is already
+    // (the stable sort places echoes first at the same start time). Orchestration / AutoPilot sub-runs (origin==='agent') are not echoed — their user input is already
     // carried by the orchestration session's user message. Historical runs have no origin (undefined) → not echoed. active and completed states are mutually exclusive on the same runId,
     // key uniformly `echo-<runId>`, so the running→completed switch is smooth without remounting.
     const echoOf = (
@@ -91,21 +105,25 @@ export function useChatTimeline(params: {
       tool: string,
       question: string | undefined,
       anchorMs: number,
+      headSha?: string,
     ) => ({
       ...base,
       key: `echo-${runId}`,
-      sortTime: anchorMs - 1,
+      sortTime: anchorMs,
+      headSha,
       message: { role: 'user', content: echoContent(tool, question), at: '' } as AgentMessage,
     });
     const echoEntries = [
       ...visibleRuns
         .filter((r) => r.origin === 'user')
-        .map((r) => echoOf(r.id, r.tool, r.question, ms(r.startedAt))),
+        .map((r) => echoOf(r.id, r.tool, r.question, ms(r.startedAt), r.headSha)),
       ...myActiveRuns
         .filter((a) => a.origin === 'user')
-        .map((a) => echoOf(a.runId, a.tool, a.question, ms(a.startedAt ?? a.enqueuedAt))),
+        .map((a) =>
+          echoOf(a.runId, a.tool, a.question, ms(a.startedAt ?? a.enqueuedAt), a.headSha),
+        ),
     ];
-    return [...runEntries, ...activeEntries, ...stepEntries, ...msgEntries, ...echoEntries].sort(
+    return [...echoEntries, ...runEntries, ...activeEntries, ...stepEntries, ...msgEntries].sort(
       (a, b) => a.sortTime - b.sortTime,
     );
   }, [visibleRuns, myActiveRuns, agentSteps, messages]);

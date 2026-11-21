@@ -93,12 +93,17 @@ function normalizeModel(provider: LlmProfile['provider'], model: string): string
  *   a tall diagram pushes everything else off screen while a wide one scrolls sideways and can be opened in the
  *   preview view. Pinned left-to-right rather than left to a heuristic tuned for a full-width page.
  */
-export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): Record<string, string> {
+export function buildPragentEnv(
+  profile: LlmProfile,
+  maxModelTokens?: number,
+): Record<string, string> {
   const env: Record<string, string> = {};
   if (profile.model) env['CONFIG__MODEL'] = normalizeModel(profile.provider, profile.model);
   // Context length: the user's "context length" setting controls the input truncation limit; CLI mode ignores it (the tool manages its own context) → fixed at the default.
   const contextTokens =
-    profile.provider === 'cli' ? LLM_CONTEXT_TOKENS_DEFAULT : (maxModelTokens ?? LLM_CONTEXT_TOKENS_DEFAULT);
+    profile.provider === 'cli'
+      ? LLM_CONTEXT_TOKENS_DEFAULT
+      : (maxModelTokens ?? LLM_CONTEXT_TOKENS_DEFAULT);
   env['CONFIG__MAX_MODEL_TOKENS'] = String(contextTokens);
   env['CONFIG__CUSTOM_MODEL_MAX_TOKENS'] = String(contextTokens);
   env['CONFIG__FALLBACK_MODELS'] = '[]';
@@ -180,6 +185,7 @@ export function buildPragentEnv(profile: LlmProfile, maxModelTokens?: number): R
       const bin = (profile.model || 'claude').trim() || 'claude';
       env['MEEBOX_CLI_MODE'] = '1';
       env['MEEBOX_CLI_BIN'] = bin;
+      env['MEEBOX_CLI_ARGS'] = JSON.stringify(profile.cli_args ?? []);
       break;
     }
   }
@@ -246,10 +252,10 @@ export interface ToolEnvOptions {
  * The caller passes LlmProfile + intent (not directly writing CONFIG__* / PR_CODE_SUGGESTIONS__* / LOCAL__* keys). The proxy env is laid out
  * separately by the caller (outside the pr-agent scope).
  *
- * Under the local provider /improve has only one usable path, "aggregated suggestions → publish_comment" (the shim already forces gfm_markdown=True),
- * so explicitly kill two defaults and redirect the output to improve.md:
- * - PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS=false: committable/inline would go through publish_code_suggestions →
- *   local provider throws NotImplementedError outright (pr-agent's default is already false, this guards against upstream flipping the default).
+ * Keep /improve on the aggregated Markdown path via publish_comment (the shim forces gfm_markdown=True),
+ * and redirect the output to improve.md:
+ * - PR_CODE_SUGGESTIONS__COMMITTABLE_CODE_SUGGESTIONS=false: preserve the Markdown contract consumed by our parser
+ *   instead of switching to upstream's local suggestion artifacts. Version 0.50 uses the canonical double-t spelling.
  * - PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT=false: persistent_comment (default true) would look through history comments for incremental updates →
  *   local provider doesn't implement it and spews a NotImplementedError traceback each time (caught by a fallback, the body isn't lost but the log is noisy); local always
  *   uses a brand-new worktree with no history to look through, so turn it off outright and go through publish_comment.
@@ -263,7 +269,7 @@ export function buildToolEnv(
   const env: Record<string, string> = profile ? buildPragentEnv(profile, opts.maxModelTokens) : {};
   if (opts.responseLanguage) env['CONFIG__RESPONSE_LANGUAGE'] = opts.responseLanguage;
   if (opts.tool === 'improve') {
-    env['PR_CODE_SUGGESTIONS__COMMITABLE_CODE_SUGGESTIONS'] = 'false';
+    env['PR_CODE_SUGGESTIONS__COMMITTABLE_CODE_SUGGESTIONS'] = 'false';
     env['PR_CODE_SUGGESTIONS__PERSISTENT_COMMENT'] = 'false';
     env['LOCAL__REVIEW_PATH'] = PRAGENT_LOCAL_OUTPUT.improve;
     // Upper limit on the number of code suggestions (the user's "code suggestion count" setting); if empty, uses pr-agent's default (num_code_suggestions=4).

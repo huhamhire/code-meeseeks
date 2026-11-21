@@ -122,10 +122,13 @@ Once judged "review", autopilot **does not run all PRs serially in a single agen
 Each PR's agent executes the following **bounded micro-flow** (i.e. the sub-task plan the planner dispatched), entering the tool queue at **low priority** (see "Scheduling" below):
 
 1. `/describe` + `/review` — generate the description and findings; the artifacts enter the existing draft pool (see [Review workflow](../01-platform/03-review-workflow.md)).
+   Automatic review tools use the PR description and applicable repository rules. Existing PR comments and replies are excluded throughout the workflow.
 2. **Conditional follow-up only on severe issues** — **no follow-up by default**. This PR's agent reads the tool output (findings and their
    `severity`), and only when a **particularly malignant / high-severity** suspicion arises (e.g. a suspected security vulnerability, data corruption, a severe logic defect that needs context verification) does it consider re-running
    `/ask` on that point. **Hard cap ≤2 questions** (`agent.strategy.max_followup_asks`, default 2):
    with no severe issue it asks nothing at all, never following up for the sake of it. `/ask` is a read-only tool, within the red-line-allowed range (see the tool conventions in [Agent & context](01-agent.md)).
+   When a follow-up targets a specific finding, the desktop reuses the review's recorded head and merge base. It searches committed source from that snapshot using up to five literal symbols from the nearby code, finding, or question. Retrieval has a 3.5-second budget and supplies up to four excerpts, with a preference for a matching test and a 3,200-character budget for serialized excerpts. API and local CLI profiles receive the same evidence. The run stores the supplied source ranges. When no evidence is available, the follow-up cannot automatically replace or close the finding.
+   The judge prioritizes proposed P1 findings when selecting follow-ups. A successful follow-up can support a P1 by keeping the finding and citing a line in one of the supplied ranges. See [finding priorities](../01-platform/03-review-workflow.md#findings-and-publication).
 3. **Per-PR wrap-up summary (strictly length-limited)** — produced **by that PR's agent after all of this PR's sub-tasks finish**, a **strictly length-limited** summary
    (constrained by `agent.summary_max_chars`, default within a few hundred characters; over the limit it must **compress itself, not truncate key points**; no cross-PR global summary). The content includes **key points, risks,
    and whether it leans toward approving** — giving one of the three tiers `approve` / `needs_work` / `manual_review` + a one-line reason.

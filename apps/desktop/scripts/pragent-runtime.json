@@ -1,13 +1,13 @@
 {
-  "_comment": "pr-agent 嵌入式运行时组装清单。被 scripts/assemble-pragent-runtime.mjs 读取，按 tag + pythonMajorMinor 从 GitHub release 解析当前宿主平台的 install_only 资产并装入 vendor/pragent/。见 ADR-0008。",
+  "_comment": "Embedded runtime manifest consumed by assemble-pragent-runtime.mjs. Resolves the host install_only asset by tag and Python major.minor, then installs into vendor/pragent/. See ADR-0008.",
   "pythonBuildStandalone": {
     "repo": "astral-sh/python-build-standalone",
-    "tag": "20260602",
+    "tag": "20261110",
     "pythonMajorMinor": "3.12",
     "variant": "install_only"
   },
   "prAgent": {
-    "_comment": "嵌入式运行时安装的 pr-agent 版本（pinned）；须与 sitecustomize.py 的 _EXPECTED_PRAGENT_VERSION 对齐，升级时两处同步",
-    "version": "0.45.0"
+    "_comment": "Pinned pr-agent version. Keep aligned with meebox_pragent_shim/runtime.py's _EXPECTED_PRAGENT_VERSION.",
+    "version": "0.50.0"
   }
 }

@@ -1,6 +1,6 @@
 # Code Meeseeks Roadmap
 
-> Last updated: 2026-07-05
+> Last updated: 2026-11-19
 
 > For user-facing **feature details**, see **[README](../README.md)**.
 >
@@ -31,6 +31,8 @@
 - [x] Re-review loop: launch an `/ask` re-review of a finding, auto-handling the original comment per the verdict (supersede / keep / withdraw)
 - [x] Agentic autonomous planning + multi-tool orchestration + long-term Memory + observable process, with mid-run input and stop-anytime
 - [x] AutoPilot pre-review: auto pre-runs on new to-review·pending PRs, with admission control + per-item authorization + red-line checks (read-only tools by default)
+- [x] Native Codex review and read-only follow-up questions in a desktop tab, with automatic CLI discovery and shared comment drafts
+- [x] PR Agent coverage reporting, same-snapshot evidence for automatic follow-ups, and per-finding priority
 - [x] CLI-mode `/ask` repo-file access: a one-off worktree takes full context + cleans the repo's own agent-instruction files before landing in cwd to prevent injection (see [agent design](arch/02-agent/01-agent.md))
 
 #### ✍️ Review loop and collaboration
@@ -74,6 +76,7 @@ Open-ended continuous phases, with no single Done-when.
 ### In progress / backlog ⏭️
 
 - [ ] **Observability expansion**: rule hit rate, model comparison (token usage already done).
+- [ ] **Review engine evaluation**. Measure quality, priority agreement, and cost on representative PRs before expanding the native workflow. See the [extensions draft](drafts/native-review.md) and [comparison reference](reference/review-engine-comparison.md).
 
 ---
 
