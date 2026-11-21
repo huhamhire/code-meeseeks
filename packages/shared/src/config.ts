@@ -16,7 +16,7 @@ export const CloneSettingsSchema = z
      */
     protocol: z.enum(['pat', 'ssh']).default('pat'),
   })
-  .default({});
+  .prefault({});
 
 export const BitbucketServerConnectionSchema = z.object({
   id: z.string().min(1),
@@ -233,12 +233,12 @@ export const ConfigSchema = z.object({
         .max(EDITOR_FONT_SIZE_MAX)
         .default(EDITOR_FONT_SIZE_DEFAULT),
     })
-    .default({}),
+    .prefault({}),
   workspace: z
     .object({
       repos_dir: z.string().default('~/.code-meeseeks/repos'),
     })
-    .default({}),
+    .prefault({}),
   /**
    * The high-level Agent (see docs/arch/02-agent/01-agent.md). The Agent directory is the Agent's complete personality and knowledge source:
    * `<agent.dir>/` contains SOUL.md / AGENTS.md / MEMORY.md / USER.md and the rules/ subdirectory
@@ -271,7 +271,7 @@ export const ConfigSchema = z.object({
            */
           grants: z.array(z.string()).default([]),
         })
-        .default({}),
+        .prefault({}),
       /**
        * Agent behavior strategy (an extension point; subsequent behavior switches are merged here). Applies to the automatic review micro-flow (shared by manual auto-review +
        * AutoPilot), not exclusive to AutoPilot. Current items:
@@ -313,16 +313,16 @@ export const ConfigSchema = z.object({
            */
           code_suggestion_layout: z.string().default(''),
         })
-        .default({}),
+        .prefault({}),
     })
-    .default({}),
+    .prefault({}),
   poller: z
     .object({
       interval_seconds: z.number().int().min(30).default(300),
     })
-    .default({}),
+    .prefault({}),
   /** Outbound network proxy. Disabled by default = all direct connections, equivalent to historical behavior. */
-  proxy: ProxySchema.default({}),
+  proxy: ProxySchema.prefault({}),
   /**
    * Version update check. At startup (and manually from the settings page) queries the latest stable GitHub Releases version and compares it against the current version,
    * only **notifying** the user to download when a newer version exists (no auto download / install). check_enabled=false disables the check.
@@ -331,9 +331,9 @@ export const ConfigSchema = z.object({
     .object({
       check_enabled: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
   /** Local API service listener (disabled by default). See {@link ServiceSchema} above. */
-  service: ServiceSchema.default({}),
+  service: ServiceSchema.prefault({}),
   /**
    * Notifications (see docs/arch/03-gui/03-notifications.md). enabled is the master switch; when off, neither system notifications pop nor does the dock badge light up.
    * The other items control per event type whether a system notification (toast) pops: new_pr / reply / mention target scenarios like "awaiting my review";
@@ -356,7 +356,7 @@ export const ConfigSchema = z.object({
       /** Pop a system notification when a PR I authored has a merge conflict */
       authored_conflict: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
   /**
    * pr-agent runtime strategy selection.
    * - 'auto' (default): prefer the embedded runtime (bundled with the app, always available on a normal install), and if missing
@@ -373,7 +373,7 @@ export const ConfigSchema = z.object({
        */
       max_concurrency: z.number().int().min(1).max(8).default(2),
     })
-    .default({}),
+    .prefault({}),
   connections: z.array(ConnectionSchema).default([]),
   /**
    * The single currently **active** connection id (only one is active at a time, see the settings page). When empty / no matching connection is found,
@@ -447,7 +447,7 @@ export const ConfigSchema = z.object({
           .max(LLM_CONTEXT_TOKENS_MAX)
           .default(LLM_CONTEXT_TOKENS_DEFAULT),
       })
-      .default({}),
+      .prefault({}),
   ),
 });
 

@@ -11,8 +11,13 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🔒 Security
 
+- Updated configuration validation to Zod 4 while preserving defaults and legacy profile migration.
 - Updated Git operations, HTTP requests, diagram rendering, and rule-file parsing to patched dependencies.
 - Updated the Python runtime bundled with PR Agent to 3.12.16.
+
+### ♻️ Changed
+
+- Updated the desktop build to Vite 8.
 
 ### ✨ Added
 

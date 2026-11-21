@@ -54,11 +54,17 @@ function patchMonacoStandaloneEditor(source: string, id: string): string | undef
     .replace(markdownFactory, `${createInstance}(EditorMarkdownCodeBlockRenderer`);
 }
 
+const monacoLifecycle = {
+  name: 'monaco-standalone-lifecycle',
+  enforce: 'pre' as const,
+  transform: patchMonacoStandaloneEditor,
+};
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin({ exclude: internalPackages })],
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         input: { index: resolve('src/main/index.ts') },
       },
     },
@@ -66,7 +72,7 @@ export default defineConfig({
   preload: {
     plugins: [externalizeDepsPlugin({ exclude: internalPackages })],
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         input: { index: resolve('src/preload/index.ts') },
       },
     },
@@ -77,32 +83,12 @@ export default defineConfig({
     resolve: {
       alias: { '@assets': resolve('../../assets') },
     },
-    plugins: [
-      react(),
-      {
-        name: 'monaco-standalone-lifecycle',
-        enforce: 'pre',
-        transform: patchMonacoStandaloneEditor,
-      },
-    ],
+    plugins: [react(), monacoLifecycle],
     optimizeDeps: {
-      esbuildOptions: {
-        plugins: [
-          {
-            name: 'monaco-standalone-lifecycle',
-            setup(build) {
-              build.onLoad({ filter: /standaloneCodeEditor\.js$/ }, ({ path }) => {
-                if (!monacoStandaloneEditor.test(normalizePath(path))) return;
-                const contents = patchMonacoStandaloneEditor(readFileSync(path, 'utf8'), path);
-                return { contents, loader: 'js' };
-              });
-            },
-          },
-        ],
-      },
+      rolldownOptions: { plugins: [monacoLifecycle] },
     },
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         input: { index: resolve('src/renderer/index.html') },
       },
     },

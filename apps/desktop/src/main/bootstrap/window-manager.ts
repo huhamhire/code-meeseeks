@@ -1,6 +1,5 @@
 import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { JsonFileStateStore } from '@meebox/state-store';
 import type { Logger } from 'pino';
 import {
@@ -9,8 +8,6 @@ import {
   writeWindowStateSync,
   type WindowState,
 } from '../utils/window-state.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Default window size (when there is no local record). The minimum size guarantees the core three
 // columns (sidebar 240 + file-tree 180 + diff content) remain usable with the chat-pane collapsed;
@@ -133,7 +130,7 @@ export class WindowManager {
         ? undefined
         : path.join(app.getAppPath(), '../../assets/icons/icon.ico'),
       webPreferences: {
-        preload: path.join(__dirname, '../preload/index.mjs'),
+        preload: path.join(import.meta.dirname, '../preload/index.mjs'),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
@@ -215,7 +212,7 @@ export class WindowManager {
     if (process.env.ELECTRON_RENDERER_URL) {
       void win.loadURL(process.env.ELECTRON_RENDERER_URL);
     } else {
-      void win.loadFile(path.join(__dirname, '../renderer/index.html'));
+      void win.loadFile(path.join(import.meta.dirname, '../renderer/index.html'));
     }
   }
 
