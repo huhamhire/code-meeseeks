@@ -38,7 +38,7 @@ jobs:
         include:
           - os: windows-latest
             artifacts: apps/desktop/release/*.exe
-          - os: macos-14 # arm64 runner, natively builds mac arm64
+          - os: macos-15 # arm64 runner, natively builds mac arm64
             artifacts: apps/desktop/release/*.dmg
     runs-on: ${{ matrix.os }}
     steps:
