@@ -22,7 +22,7 @@ In scope: build / package / sign / produce artifacts / CI. Out of scope: how the
   detects the credentials and steps aside to electron-builder's proper signing + notarization; the workflow structure is unchanged.
 - **Per-platform icons**: Windows uses `.ico`; macOS uses a **dedicated dark rounded icon** — a full-bleed transparent glyph on macOS (especially newer systems)
   gets a rounded mask and a white backing, so we ship a separate "dark squircle + inset glyph" for mac; icon sources go through Git LFS.
-- **CI release**: pushing a `v*` tag triggers a matrix of `windows-latest` + `macos-14` (arm64), each building natively and attaching to that tag's Release;
+- **CI release**: pushing a `v*` tag triggers a matrix of `windows-latest` + `macos-15` (arm64), each building natively and attaching to that tag's Release;
   checkout must use `lfs: true` (otherwise the icon is an LFS pointer → icon conversion crashes).
 
 ## Data / interface contract

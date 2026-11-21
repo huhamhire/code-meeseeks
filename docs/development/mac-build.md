@@ -38,7 +38,7 @@ already branches per platform).
 ## 2. Release (GitHub Actions)
 
 [.github/workflows/release.yml](../../.github/workflows/release.yml): pushing a `v*` tag triggers a matrix of
-`windows-latest` + `macos-14` (arm64), each building its own package and attaching to that tag's Release.
+`windows-latest` + `macos-15` (arm64), each building its own package and attaching to that tag's Release.
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
