@@ -49,7 +49,7 @@ npm --prefix apps/desktop run dev               # electron-vite dev
 npm --prefix apps/desktop run dist              # produce the installer (see docs/development/mac-build.md)
 ```
 
-Environment: Node ≥ 20 (22 in practice), npm ≥ 10. **Use npm as the sole package manager** (workspaces, lockfile `package-lock.json`) — do not use yarn / pnpm.
+Environment: Node ≥ 22.12, npm ≥ 10. **Use npm as the sole package manager** (workspaces, lockfile `package-lock.json`) — do not use yarn / pnpm.
 
 ## Dependency sync
 

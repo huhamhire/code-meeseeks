@@ -7,6 +7,20 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> ⚠️ **The macOS desktop app now requires macOS 13 Ventura or later on Apple Silicon.** This change comes with the upgrade from Electron 42.3.0 to 45.4.1.
+
+### 🔒 Security
+
+- Updated the code editor to Monaco 0.57.0 for additional HTML sanitization fixes.
+- Updated diagram rendering, desktop packaging, and development tooling to address dependency advisories.
+- Updated configuration validation to Zod 4 while preserving defaults and legacy profile migration.
+- Updated Git operations, HTTP requests, diagram rendering, and rule-file parsing to patched dependencies.
+- Updated the Python runtime bundled with PR Agent to 3.12.16.
+
+### ♻️ Changed
+
+- Updated the desktop build to Vite 8.
+
 ### ✨ Added
 
 - The PR Agent model menu lets you choose a model inside a Codex CLI profile.

@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "@meebox/shared": "*",
-    "yaml": "^2.6.0",
-    "zod": "^3.23.0"
+    "yaml": "^2.6.0"
   }
 }

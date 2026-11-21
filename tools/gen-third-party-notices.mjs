@@ -8,7 +8,7 @@
 //
 // Each component lists name@version + license identifier + source URL, and where possible attaches the LICENSE text (<details> collapsible).
 // Usage: node tools/gen-third-party-notices.mjs  → writes to repo root THIRD-PARTY-NOTICES.md
-// Requires `npm ci` + `npm --prefix apps/desktop run prepare:pragent` first (otherwise the python section is empty).
+// Run `npm install` and `npm --prefix apps/desktop run prepare:pragent` before generating the notices.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -49,10 +49,16 @@ function repoUrl(pkg) {
 // ── 1. npm production dependencies ────────────────────────────────
 function collectNpm() {
   let json;
-  // On Windows the executable is npm.cmd; execFileSync won't auto-append the suffix
-  const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const args = ['ls', '--omit=dev', '--all', '--json'];
+  // Windows cannot launch the npm.cmd shim directly through execFileSync.
+  const npmEntrypoint = process.env.npm_execpath;
+  const [command, argv] = npmEntrypoint
+    ? [process.execPath, [npmEntrypoint, ...args]]
+    : process.platform === 'win32'
+      ? ['cmd.exe', ['/d', '/c', 'npm.cmd', ...args]]
+      : ['npm', args];
   try {
-    const out = execFileSync(NPM, ['ls', '--omit=dev', '--all', '--json'], {
+    const out = execFileSync(command, argv, {
       cwd: ROOT,
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
@@ -100,12 +106,13 @@ function collectNpm() {
 
 // ── 2. Embedded Python (vendor/pragent) pip packages ──────────────
 function collectPython() {
-  const base = join(ROOT, 'apps/desktop/vendor/pragent/python/lib');
-  if (!existsSync(base)) return [];
-  const pyDir = readdirSync(base).find((d) => /^python3\.\d+$/.test(d));
-  if (!pyDir) return [];
-  const sp = join(base, pyDir, 'site-packages');
-  if (!existsSync(sp)) return [];
+  const python = join(ROOT, 'apps/desktop/vendor/pragent/python');
+  const base = join(python, 'lib');
+  const pyDir = existsSync(base) && readdirSync(base).find((d) => /^python3\.\d+$/.test(d));
+  const sp = process.platform === 'win32'
+    ? join(python, 'Lib', 'site-packages')
+    : pyDir && join(base, pyDir, 'site-packages');
+  if (!sp || !existsSync(sp)) return [];
   const out = [];
   for (const d of readdirSync(sp)) {
     if (!d.endsWith('.dist-info')) continue;

@@ -2,7 +2,7 @@
   "_comment": "Embedded runtime manifest consumed by assemble-pragent-runtime.mjs. Resolves the host install_only asset by tag and Python major.minor, then installs into vendor/pragent/. See ADR-0008.",
   "pythonBuildStandalone": {
     "repo": "astral-sh/python-build-standalone",
-    "tag": "20260602",
+    "tag": "20261110",
     "pythonMajorMinor": "3.12",
     "variant": "install_only"
   },

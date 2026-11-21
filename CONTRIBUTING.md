@@ -6,7 +6,7 @@ Thanks for your interest in contributing! This page is the entry point for contr
 
 ## Getting set up
 
-See the [Development guide](docs/development/README.md) for prerequisites (Node ≥ 20, npm ≥ 10, Git + Git LFS), installing dependencies, assembling the embedded pr-agent runtime, and running in dev mode.
+See the [Development guide](docs/development/README.md) for prerequisites (Node ≥ 22.12, npm ≥ 10, Git + Git LFS), installing dependencies, assembling the embedded pr-agent runtime, and running in dev mode.
 
 The standalone Go CLI under [`cli/`](cli/README.md) is a separate module with its own workflow — see [AGENTS.md · CLI](AGENTS.md).
 

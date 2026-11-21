@@ -119,7 +119,7 @@ Download the installer for your platform from [Releases](../../releases):
 | Platform    | Artifact                                             | Status      |
 | ----------- | ---------------------------------------------------- | ----------- |
 | Windows x64 | `code-meeseeks-<version>-win-x64.exe` (NSIS installer) | ✅ Available |
-| macOS arm64 | `code-meeseeks-<version>-mac-arm64.dmg`              | ✅ Available |
+| macOS 13+ arm64 | `code-meeseeks-<version>-mac-arm64.dmg`          | ✅ Available |
 
 pr-agent is embedded in the installer, so it works right after installation with no extra environment setup.
 

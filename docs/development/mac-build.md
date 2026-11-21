@@ -19,6 +19,8 @@ As an open-source project, we **do not enroll in the Apple Developer ID ($99/yr)
 
 ## 1. Local development
 
+The desktop app requires macOS 13 Ventura or later on Apple Silicon.
+
 ```bash
 # Run only (no signing; dev electron runs directly)
 npm --prefix apps/desktop run dev
