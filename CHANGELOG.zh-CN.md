@@ -5,6 +5,12 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 🔧 修复
+
+- PR 更新或无法验证反馈行号时，代码反馈仍会显示在最终评审总结前。
+
 ## [0.13.0] - 2026-11-21
 
 > ⚠️ **macOS 桌面版现要求 Apple Silicon 及 macOS 13 Ventura 或更高版本。** 内置 Electron 运行时由 42.3.0 升级至 45.4.1。

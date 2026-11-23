@@ -312,8 +312,8 @@ export function ChatPane({
     [timeline, pr?.sourceRef.sha, pr?.headChanges, agentRunningHere],
   );
   const reviewPresentation = useMemo(
-    () => getReviewPresentation(timeline, closures, commitDividers.before, pr),
-    [timeline, closures, commitDividers.before, pr],
+    () => getReviewPresentation(timeline, closures, commitDividers.before),
+    [timeline, closures, commitDividers.before],
   );
   const latestHeadChangeAt = pr?.headChanges?.at(-1)?.at;
   useEffect(() => {
@@ -601,14 +601,20 @@ export function ChatPane({
                   aria-label={t('chatPane.reviewFeedback')}
                 >
                   <h3>{t('chatPane.reviewFeedback')}</h3>
-                  {feedback.map(({ run, findings }) => (
-                    <RunFindingList
-                      key={run.id}
-                      run={run}
-                      findings={findings}
-                      {...findingActions}
-                    />
-                  ))}
+                  {feedback.map(({ run, findings }) => {
+                    const stale = isStaleReview(run, pr);
+                    return (
+                      <Fragment key={run.id}>
+                        {stale && <p className="muted">{t('chatPane.reviewResult.stale')}</p>}
+                        <RunFindingList
+                          run={run}
+                          findings={findings}
+                          stale={stale}
+                          {...findingActions}
+                        />
+                      </Fragment>
+                    );
+                  })}
                 </section>
               )}
               {reviewPresentation.processMembers.has(entry.key) ? null : entry.run ? (
