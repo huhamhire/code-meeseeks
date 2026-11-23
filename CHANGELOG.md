@@ -5,6 +5,12 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### 🔧 Fixed
+
+- Code feedback stays visible before the final review summary after the PR changes or when a line location cannot be verified.
+
 ## [0.13.0] - 2026-11-21
 
 > ⚠️ **The macOS desktop app now requires macOS 13 Ventura or later on Apple Silicon.** This change comes with the upgrade from Electron 42.3.0 to 45.4.1.
