@@ -390,6 +390,7 @@
   },
   "diffView": {
     "addCommentHint": "点击新增评论",
+    "addFileComment": "添加文件评论",
     "backToFileTree": "返回文件树",
     "binaryNotRendered": "⚠️ 二进制文件，不渲染 diff",
     "blameChangeRangeTitle": "此区段为本 PR 引入的改动",
@@ -398,6 +399,7 @@
     "diffRenderFailed": "diff 渲染失败：{{message}}",
     "diffRenderFailedHint": "切换文件 / 重试通常能恢复。底层异常已记录到 console。",
     "dismissNotificationTitle": "收起此通知",
+    "fileChangeDescription": "变更说明",
     "fileCount_other": "{{count}} 个文件",
     "lfsManagedTitle": "由 Git LFS 管理",
     "loadChangedFilesFailed": "拉取变更文件列表失败",

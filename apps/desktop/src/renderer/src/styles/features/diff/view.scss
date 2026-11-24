@@ -141,6 +141,31 @@
   gap: $space-2;
 }
 
+.diff-file-description {
+  flex: 0 0 auto;
+  max-height: 5lh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: $space-3 $space-6;
+  border-bottom: 1px solid $border-muted;
+  background: $bg-elev;
+  color: $text-body;
+  font-size: $fs-md;
+  line-height: $lh-normal;
+}
+
+.diff-file-description-label {
+  margin-inline-end: $space-2;
+  color: $text-muted;
+  white-space: nowrap;
+
+  svg {
+    margin-inline-end: $space-2;
+    vertical-align: -2px;
+  }
+}
+
 // The 22px icon buttons keep the breadcrumb level with the file tree header.
 .diff-file-comment-btn {
   flex-shrink: 0;

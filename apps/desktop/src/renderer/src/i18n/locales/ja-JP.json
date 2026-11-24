@@ -390,6 +390,7 @@
   },
   "diffView": {
     "addCommentHint": "クリックしてコメントを追加",
+    "addFileComment": "ファイルにコメントを追加",
     "backToFileTree": "ファイルツリーに戻る",
     "binaryNotRendered": "⚠️ バイナリファイル、差分は表示されません",
     "blameChangeRangeTitle": "この範囲はこの PR で変更されました",
@@ -398,6 +399,7 @@
     "diffRenderFailed": "差分の表示に失敗しました: {{message}}",
     "diffRenderFailedHint": "ファイルを切り替えるか再試行すると通常は復旧します。元のエラーは console に記録されています。",
     "dismissNotificationTitle": "この通知を閉じる",
+    "fileChangeDescription": "変更の概要",
     "fileCount_other": "{{count}} ファイル",
     "lfsManagedTitle": "Git LFS で管理",
     "loadChangedFilesFailed": "変更ファイルの読み込みに失敗しました",

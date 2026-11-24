@@ -269,6 +269,9 @@ export function buildExtraInstructions(input: {
 }): string | undefined {
   const parts = [
     languageDirectiveFor(input.language),
+    input.tool === 'describe'
+      ? 'Keep the existing YAML schema and treat description and pr_files as separate fields. In description, use up to four top-level bullets organized by behavior or workflow. Explain what changed and how the logic works, with no file paths, file inventories, or file-by-file implementation notes. Put all per-file implementation details in pr_files, using the full repository-relative filename and a short changes_title for each file. Do not repeat those entries in description, even as sub-bullets.'
+      : '',
     anchorMarkerDirective(input.tool),
     structuredAskDirective(input.tool, input.maxCodeSuggestions),
     referencedAskDirective(input.tool, !!input.referencedFinding),

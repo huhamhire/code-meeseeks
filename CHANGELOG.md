@@ -7,9 +7,20 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### ✨ Added
+
+- **Diff editor**
+  - The current file’s generated change summary appears below the Diff header when available.
+
+### ♻️ Changed
+
+- PR descriptions focus on behavior and workflow changes. File-by-file entries are filtered out of the description, and the separate file list starts collapsed.
+- Final review summaries are shorter and leave individual findings and suggestions in their cards.
+
 ### 🔧 Fixed
 
 - Code feedback stays visible before the final review summary after the PR changes or when a line location cannot be verified.
+- Mermaid flowchart nodes no longer glow, and edge labels use a subtle background that follows the app theme.
 
 ## [0.13.0] - 2026-11-21
 

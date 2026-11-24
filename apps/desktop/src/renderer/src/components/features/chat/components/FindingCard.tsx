@@ -227,8 +227,9 @@ export function FindingCard({
   const isClosed = !!closure;
   const key: PrDocSectionKey = finding.sectionKey ?? finding.category ?? 'general';
   const hasInlineAnchor = hasInlineFindingAnchor(finding);
-  // Collapsed by default: rejected / re-review-closed findings, or the /ask "analysis process" segment (process discussion collapsed by default, expandable).
-  const collapsibleByDefault = isRejected || isClosed || key === 'ask-analysis';
+  // Keep detailed analysis and the full file list available on demand.
+  const collapsibleByDefault =
+    isRejected || isClosed || key === 'ask-analysis' || key === 'walkthrough';
   const [expanded, setExpanded] = useState(false);
   const collapsed = collapsibleByDefault && !expanded;
   const label = sectionLabel(key, t);
