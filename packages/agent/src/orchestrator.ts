@@ -76,8 +76,6 @@ export interface ReviewOrchestratorInput {
   language?: string;
   /** Step display text (injected by the main process after i18n resolution); omitted falls back to DEFAULT_STEP_LABELS (en-US). */
   labels?: AgentStepLabels;
-  /** Summary three-section skeleton headings (injected by the main process i18n); omitted falls back to DEFAULT_SUMMARY_SECTIONS (en-US). */
-  summarySections?: readonly [string, string, string];
   /** Tool catalog injected into the prompt (with modification red-line annotations, see buildToolCatalog). */
   toolCatalog?: ToolCatalogEntry[];
   /** Hard cap on conditional follow-up asks (default 2). */
@@ -98,14 +96,6 @@ export interface ReviewOrchestratorResult {
   tokenUsage: TokenUsage;
   terminationReason?: string;
 }
-
-/** **Default value (en-US fallback)** for the review summary's three-section skeleton headings: order is fixed as Summary / Key findings / Suggestions. Localized translations are
- *  resolved by the caller (main process i18n resources) and injected via input.summarySections; when not injected, falls back to this default. */
-export const DEFAULT_SUMMARY_SECTIONS: readonly [string, string, string] = [
-  'Summary',
-  'Key findings',
-  'Suggestions',
-];
 
 /**
  * Fixed text **directly displayed** to the user in orchestration / planning step rows (thought / judge result / fallback recommendation reason / rejection prefix).

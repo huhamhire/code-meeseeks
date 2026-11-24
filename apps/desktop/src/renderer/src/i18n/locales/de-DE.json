@@ -397,6 +397,7 @@
   },
   "diffView": {
     "addCommentHint": "Zum Hinzufügen eines Kommentars klicken",
+    "addFileComment": "Dateikommentar hinzufügen",
     "backToFileTree": "Zurück zum Dateibaum",
     "binaryNotRendered": "⚠️ Binärdatei, Diff wird nicht dargestellt",
     "blameChangeRangeTitle": "Dieser Bereich wurde durch diesen PR geändert",
@@ -405,6 +406,7 @@
     "diffRenderFailed": "Diff-Darstellung fehlgeschlagen: {{message}}",
     "diffRenderFailedHint": "Ein Dateiwechsel oder erneuter Versuch behebt das Problem meist. Der zugrunde liegende Fehler wurde in der console protokolliert.",
     "dismissNotificationTitle": "Diese Benachrichtigung schließen",
+    "fileChangeDescription": "Änderungsübersicht",
     "fileCount_one": "{{count}} Datei",
     "fileCount_other": "{{count}} Dateien",
     "lfsManagedTitle": "Von Git LFS verwaltet",

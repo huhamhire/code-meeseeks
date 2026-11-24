@@ -1,7 +1,6 @@
-import type { Finding, FindingClosure, ReviewRun, StoredPullRequest } from '@meebox/shared';
+import type { Finding, FindingClosure, ReviewRun } from '@meebox/shared';
 import type { TimelineEntry } from '../hooks/useChatTimeline';
-import { hasInlineFindingAnchor, htmlInlineToMarkdown, stripFindingMarker } from './findings';
-import { isStaleReview } from './review-snapshot';
+import { htmlInlineToMarkdown, stripFindingMarker } from './findings';
 
 interface ReviewFeedback {
   run: ReviewRun;
@@ -17,7 +16,6 @@ export function getReviewPresentation(
   timeline: readonly TimelineEntry[],
   closures: readonly FindingClosure[],
   dividers: ReadonlyMap<string, string[]>,
-  pr: StoredPullRequest | null,
 ) {
   const summaries = timeline.filter(
     (entry) => entry.reviewSummary && entry.reviewStartedAt !== undefined,
@@ -74,16 +72,19 @@ export function getReviewPresentation(
     previousSummary = summary;
 
     const run = entry.run;
-    if (!run || isStaleReview(run, pr)) continue;
+    if (!run) continue;
     const unique = feedbackBySummary.get(summary.key) ?? new Map<string, FeedbackEntry | null>();
     feedbackBySummary.set(summary.key, unique);
     for (const finding of run.findings ?? []) {
-      if (!hasInlineFindingAnchor(finding)) continue;
-      const { path, startLine, endLine } = finding.anchor;
+      const kind = finding.sectionKey ?? finding.category;
+      if (kind !== 'code-feedback' && kind !== 'code-suggestion') continue;
+      const { path, startLine, endLine } = finding.anchor ?? {};
       const body = htmlInlineToMarkdown(stripFindingMarker(finding.body))
         .replace(/\r\n/g, '\n')
         .trim();
       const key = JSON.stringify([
+        run.headSha,
+        run.baseSha,
         path,
         startLine,
         endLine ?? startLine,

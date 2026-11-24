@@ -15,6 +15,7 @@ export type DiffScope =
     };
 
 export interface LoadedContent {
+  viewKey: string;
   fileKey: string;
   base: DiffFileContent;
   head: DiffFileContent;

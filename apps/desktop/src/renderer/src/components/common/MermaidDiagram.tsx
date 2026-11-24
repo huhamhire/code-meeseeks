@@ -21,6 +21,24 @@ interface MermaidApi {
   render(id: string, text: string): Promise<{ svg: string }>;
 }
 
+// Apply label padding before Mermaid measures the HTML labels for layout.
+const EDGE_LABEL_CSS = `
+  g.edgeLabel .labelBkg:has(> span:not(:empty)) {
+    background-color: var(--bg-hover);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  g.edgeLabel .labelBkg > span.edgeLabel,
+  g.edgeLabel .labelBkg > span.edgeLabel p {
+    background-color: transparent;
+  }
+  g.edgeLabel rect.background {
+    fill: var(--bg-hover);
+    opacity: 1;
+    rx: 4px;
+  }
+`;
+
 let mermaidLoader: Promise<MermaidApi> | null = null;
 function loadMermaid(): Promise<MermaidApi> {
   // Reset the cache on failure: otherwise the rejected promise is cached forever, and later calls always get the same
@@ -58,7 +76,14 @@ export function MermaidDiagram({ source }: { source: string }) {
       try {
         const mermaid = await loadMermaid();
         // Re-initialize with the current theme before rendering (global state, idempotent): re-rendering after a theme switch swaps the color scheme.
-        mermaid.initialize({ startOnLoad: false, theme: mermaidTheme, securityLevel: 'strict' });
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: mermaidTheme,
+          securityLevel: 'strict',
+          // Mermaid 12 defaults flowcharts to the shadowed neo look.
+          flowchart: { look: 'classic' },
+          themeCSS: EDGE_LABEL_CSS,
+        });
         const out = await mermaid.render(renderId, source);
         if (!cancelled) setSvg(out.svg);
       } catch (e) {

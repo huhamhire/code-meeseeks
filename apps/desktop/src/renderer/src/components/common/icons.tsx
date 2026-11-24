@@ -1,6 +1,8 @@
 // Inline SVG icons reused across components. Uniform currentColor stroke, follows theme color / parent element's text color,
 // offline with no network dependency. Pass size when a different size is needed (viewBox fixed at 16, just scale).
 
+import { useId } from 'react';
+
 interface IconProps {
   size?: number;
   /** Some icons need an external class (e.g. ChevronIcon's tree-chevron rotation animation); the rest ignore it. */
@@ -265,8 +267,12 @@ export function PuzzleIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** Comment: a speech bubble with text lines. For the finding card "edit into comment draft" action (distinct from ChatIcon: contains text lines). */
-export function CommentIcon({ size = 14 }: IconProps) {
+/** Comment bubble with optional visibility or add indicators. */
+export function CommentIcon({
+  size = 14,
+  variant = 'default',
+}: IconProps & { variant?: 'default' | 'hidden' | 'add' }) {
+  const maskId = useId();
   return (
     <svg
       width={size}
@@ -279,9 +285,27 @@ export function CommentIcon({ size = 14 }: IconProps) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M2.5 3.5h11A1 1 0 0 1 14.5 4.5v6A1 1 0 0 1 13.5 11.5H6L3 13.5V11.5H2.5A1 1 0 0 1 1.5 10.5v-6A1 1 0 0 1 2.5 3.5z" />
-      <line x1="4.5" y1="6.4" x2="11.5" y2="6.4" />
-      <line x1="4.5" y1="8.6" x2="9" y2="8.6" />
+      {variant !== 'default' && (
+        <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16">
+          <rect width="16" height="16" fill="white" stroke="none" />
+          {variant === 'hidden' ? (
+            <path d="M2 2l12 12" stroke="black" strokeWidth="3.8" />
+          ) : (
+            <circle cx="12.5" cy="12.5" r="3.4" fill="black" stroke="none" />
+          )}
+        </mask>
+      )}
+      <g mask={variant === 'default' ? undefined : `url(#${maskId})`}>
+        <path d="M2.5 3.5h11A1 1 0 0 1 14.5 4.5v6A1 1 0 0 1 13.5 11.5H6L3 13.5V11.5H2.5A1 1 0 0 1 1.5 10.5v-6A1 1 0 0 1 2.5 3.5z" />
+        {variant !== 'add' && (
+          <>
+            <line x1="4.5" y1="6.4" x2="11.5" y2="6.4" />
+            <line x1="4.5" y1="8.6" x2="9" y2="8.6" />
+          </>
+        )}
+      </g>
+      {variant === 'hidden' && <path d="M2 2l12 12" />}
+      {variant === 'add' && <path d="M10 12.5h5m-2.5-2.5v5" />}
     </svg>
   );
 }
@@ -365,6 +389,24 @@ export function SmilePlusIcon({ size = 14 }: IconProps) {
       <line x1="15" y1="9" x2="15.01" y2="9" />
       <path d="M16 5h6" />
       <path d="M19 2v6" />
+    </svg>
+  );
+}
+
+export function FileTextIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 1.75h5l3.25 3.25v9.25H4zM9 1.75V5h3.25M6 8h4.25M6 10.75h4.25" />
     </svg>
   );
 }

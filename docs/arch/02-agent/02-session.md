@@ -66,7 +66,8 @@ One action (the product of a single call) can carry simultaneously:
 
 **Routing policy** (written into the planning prompt, also decided within this same call): natural conversation (greeting / self-introduction / clarification) answers directly with
 `final` and calls no tool; a task outside the review domain is politely declined, no tool; something related to this PR but with no clear tool target defaults to
-`/ask` as a fallback (with a focused question); a review wrap-up is fixed as `## Summary` / `## Key findings` / `## Suggestions` + `recommendation`.
+`/ask` as a fallback (with a focused question). A review wrap-up defaults to one short paragraph about the change and its overall risk, plus a separate
+`recommendation`. The review cards provide individual findings and suggestions. The wrap-up can include details when the user asks for them or an important issue has no card.
 
 **Within one call vs across multiple calls** — this boundary is the key to reading the run state and the metering (see "Step vs sub-task" below):
 

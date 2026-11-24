@@ -8,8 +8,7 @@ import { HISTORY_BUDGET_CHARS, HISTORY_MESSAGE_MAX, VERDICTS } from '../../const
 import type { MemoryNote } from '../../memory.js';
 import type { AgentStepLabels } from '../../orchestrator.js';
 import type { AgentMemoryNotes, PlanningDeps, PlanningInput } from '../../planner.js';
-import { PROMPT_TEMPLATES } from '../../prompts.js';
-import { clamp, fillTemplate } from '../../utils/index.js';
+import { clamp } from '../../utils/index.js';
 import type { StepRecorder } from '../context.js';
 
 /**
@@ -32,7 +31,7 @@ export interface PlannerAction {
   final?: string;
   /**
    * Plan (todo): the model may give / update a short step list in any action (mark done, reorder by priority, add/remove).
-   * Elements may be a string or `{id?, text, done?}`. Omitted = plan unchanged (carry over the previous round). See the plan convention in buildProtocol.
+   * Elements may be a string or `{id?, text, done?}`. Omitting the array carries over the previous plan.
    */
   plan?: Array<string | { id?: unknown; text?: unknown; done?: unknown }>;
   /** Non-binding judge suggestion for review-type summaries (verdict + reason); omitted for non-review requests. */
@@ -148,12 +147,6 @@ export function buildConversationContext(
     lines.push(commitChangeMarker(currentHeadSha));
   }
   return lines.join('\n');
-}
-
-/** Planning ReAct protocol: body is externalized in resources/prompts/protocol.md, the three section titles (localized per language) are injected via placeholders. */
-export function buildProtocol(sections: readonly [string, string, string]): string {
-  const [overview, findings, suggestions] = sections;
-  return fillTemplate(PROMPT_TEMPLATES.protocol, { overview, findings, suggestions });
 }
 
 /** Run context for a single planning round (plan-cycle step): deps + input + shared recorder + cross-round accumulators. */

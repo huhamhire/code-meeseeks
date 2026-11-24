@@ -9,13 +9,14 @@ import {
   getAgentTranscript,
   getAutopilotLedger,
   getReviewRun,
+  listFileChangeDescriptions,
   listReviewRunsForPr,
 } from '@meebox/poller';
 import { pickMatchingRules } from '@meebox/rules';
 import { AppError, CODEX_QUESTION_LIMIT, ERROR_CODES, type AgentRecommendationVerdict, type ReviewRun } from '@meebox/shared';
 import { discoverCodexReview } from '../services/pr-agent/codex-review.js';
 import { getCachedCodexModels, listCodexModels } from '../services/pr-agent/codex-models.js';
-import { recoverPaddedReviewAnchors } from '../services/pr-agent/review-anchor.js';
+import { recoverReviewAnchors } from '../services/pr-agent/review-anchor.js';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
 import { buildProxyEnv } from '../utils/proxy.js';
@@ -234,7 +235,7 @@ export const getQueue: IpcController<'pragent:queue'> = () => getContext().runQu
 
 async function recoverRunAnchors(localId: string, runs: ReviewRun[]): Promise<ReviewRun[]> {
   const ctx = getContext();
-  return recoverPaddedReviewAnchors(runs, async () => {
+  return recoverReviewAnchors(runs, async () => {
     const pr = await ctx.pr.findPrOrThrow(localId);
     return ctx.repoMirror.mirrorPath(ctx.pr.repoIdentityFor(pr));
   });
@@ -251,6 +252,14 @@ export const listRuns: IpcController<'pragent:listRuns'> = async (_event, req) =
     engine: 'pr-agent',
   });
   return recoverRunAnchors(req.localId, runs);
+};
+
+export const fileChangeDescriptions: IpcController<'pragent:fileChangeDescriptions'> = async (
+  _event,
+  req,
+) => {
+  const store = await getContext().pr.storeForPr(req.localId);
+  return listFileChangeDescriptions(store, req.localId, req);
 };
 
 /**
@@ -273,7 +282,9 @@ export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req)
   await clearAgentSession(store, req.localId);
   await clearAutopilotLedger(store, req.localId);
   ctx.broadcast('agent:reviewStatusCleared', { prLocalId: req.localId });
-  return { cleared: await clearReviewRunsForPr(store, req.localId) };
+  const cleared = await clearReviewRunsForPr(store, req.localId);
+  if (cleared) ctx.broadcast('pragent:fileChangeDescriptionsChanged', { localId: req.localId });
+  return { cleared };
 };
 
 /**
@@ -281,5 +292,12 @@ export const clearRuns: IpcController<'pragent:clearRuns'> = async (_event, req)
  */
 export const deleteRun: IpcController<'pragent:deleteRun'> = async (_event, req) => {
   const ctx = getContext();
-  return { ok: await deleteReviewRun(await ctx.pr.storeForPr(req.localId), req.localId, req.runId, 'pr-agent') };
+  const ok = await deleteReviewRun(
+    await ctx.pr.storeForPr(req.localId),
+    req.localId,
+    req.runId,
+    'pr-agent',
+  );
+  if (ok) ctx.broadcast('pragent:fileChangeDescriptionsChanged', { localId: req.localId });
+  return { ok };
 };

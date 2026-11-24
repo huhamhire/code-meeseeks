@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   classifyLlmFailure,
+  parseFileChangeDescriptions,
   parseReviewOutput,
   parseStructuredAsk,
   sectionToFinding,
@@ -552,6 +553,39 @@ describe('parseReviewOutput · describe diagram / file walkthrough', () => {
     '___',
   ].join('\n');
 
+  it('keeps behavior bullets and omits file-led entries from the description card', () => {
+    const body = [
+      '- 普通导入支持三种模式。',
+      '  - 传入 `mode` 时提交异步任务。',
+      '  - `src/classes/Excel分析 Processor.ts` 读取工作表。 `src/Import.ts` 处理失败。',
+      '    补充文件实现细节。',
+      '    - 相关测试。',
+      '  - `result.error` 会作为导入错误返回。',
+      '- tests/import.test.ts: 覆盖导入。',
+      '- 未传入模式时继续同步处理。',
+    ].join('\n');
+    const output = [
+      '### **Description**',
+      body,
+      '### **Assessment**',
+      '保留评估。',
+      md.slice(md.indexOf('<details>')),
+    ].join('\n');
+    const { findings } = parseReviewOutput(output, 'describe');
+    expect(findings.find((finding) => finding.sectionKey === 'description')?.body).toBe(
+      [
+        '- 普通导入支持三种模式。',
+        '  - 传入 `mode` 时提交异步任务。',
+        '  - `result.error` 会作为导入错误返回。',
+        '- 未传入模式时继续同步处理。',
+      ].join('\n'),
+    );
+    expect(parseFileChangeDescriptions(output)).toContainEqual({
+      path: 'packages/core/src/cache/SingleFlight.ts',
+      summary: '新增进程内请求合并器',
+    });
+  });
+
   it('Diagram Walkthrough → diagram section, body contains mermaid, no walkthrough table', () => {
     const { findings } = parseReviewOutput(md, 'describe');
     const diagram = findings.find((f) => f.sectionKey === 'diagram');
@@ -574,6 +608,28 @@ describe('parseReviewOutput · describe diagram / file walkthrough', () => {
     expect(wt!.body).toMatch(/<details open><summary>测试（1）<\/summary>/);
     // does not preserve the original table / +1/-1 stats
     expect(wt!.body).not.toMatch(/\+-1|\/--1|Relevant files/);
+  });
+
+  it('uses full paths for file summaries and handles both walkthrough row layouts', () => {
+    const extraRows = [
+      '<tr><td><details><summary><strong>SingleFlight.ts</strong><dd><code>Change cache</code><br><code>in another module</code></dd></summary>',
+      '<hr>',
+      '',
+      'packages/other/SingleFlight.ts',
+      '',
+      'Expanded details.',
+      '</details></td><td><a href="">+2/-1</a></td></tr>',
+      '<tr><td><strong>Unnamed.ts</strong><dd><code>Missing path</code></dd></td><td><a href="">...</a></td></tr>',
+      '<tr><td><strong>空 格.ts</strong><dd><code>Handle spaces &amp; punctuation</code></dd></td><td><a href="meebox:///src/%E7%A9%BA%20%E6%A0%BC.ts">+3/-1</a></td></tr>',
+    ].join('\n');
+    const output = md.replace('</tbody></table>', extraRows + '\n</tbody></table>');
+    expect(parseFileChangeDescriptions(output)).toEqual([
+      { path: 'packages/core/src/cache/CacheValueProvider.ts', summary: '增加缓存合并配置透传' },
+      { path: 'packages/core/src/cache/SingleFlight.ts', summary: '新增进程内请求合并器' },
+      { path: 'packages/core/tests/cache/SingleFlight.test.ts', summary: '覆盖请求合并核心逻辑' },
+      { path: 'packages/other/SingleFlight.ts', summary: 'Change cache in another module' },
+      { path: 'src/空 格.ts', summary: 'Handle spaces & punctuation' },
+    ]);
   });
 
   it('File Walkthrough non-collapsible form (small PR, <td><table> without <details>) still recognizes categories', () => {

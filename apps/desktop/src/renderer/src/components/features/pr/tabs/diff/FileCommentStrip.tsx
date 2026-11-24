@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
+  FileChangeDescription,
   PlatformCapabilities,
   PlatformUser,
   PrComment,
   StoredPullRequest,
 } from '@meebox/shared';
 import { invoke } from '../../../../../api';
-import { ChatIcon, EyeIcon, EyeOffIcon } from '../../../../common';
+import { CommentIcon, FileTextIcon } from '../../../../common';
 import { CommentComposer } from '../comments/CommentComposer';
 import { CommentItem } from '../comments/CommentItem';
 
@@ -23,6 +24,7 @@ export function FileCommentStrip({
   pr,
   path,
   oldPath,
+  fileDescription,
   showInlineComments,
   onToggleInlineComments,
   comments,
@@ -37,6 +39,7 @@ export function FileCommentStrip({
   pr: StoredPullRequest;
   path: string;
   oldPath?: string;
+  fileDescription?: FileChangeDescription;
   showInlineComments: boolean;
   onToggleInlineComments: () => void;
   comments: PrComment[];
@@ -107,19 +110,30 @@ export function FileCommentStrip({
             aria-label={t('mainPane.inlineComments')}
             aria-pressed={showInlineComments}
           >
-            {showInlineComments ? <EyeIcon size={15} /> : <EyeOffIcon size={15} />}
+            <CommentIcon size={15} variant={showInlineComments ? 'default' : 'hidden'} />
           </button>
           {canComment && !composing && (
             <button
               type="button"
               className="diff-file-comment-btn"
               onClick={() => setComposing(true)}
+              title={t('diffView.addFileComment')}
+              aria-label={t('diffView.addFileComment')}
             >
-              <ChatIcon size={15} />
+              <CommentIcon size={15} variant="add" />
             </button>
           )}
         </div>
       </div>
+      {fileDescription && (
+        <p className="diff-file-description">
+          <strong className="diff-file-description-label">
+            <FileTextIcon />
+            {t('diffView.fileChangeDescription')}
+          </strong>{' '}
+          {fileDescription.summary}
+        </p>
+      )}
       {(fileComments.length > 0 || composing) && (
         <div className="diff-file-comments-body">
           {fileComments.length > 0 && (

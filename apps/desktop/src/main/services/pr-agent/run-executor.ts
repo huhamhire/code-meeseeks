@@ -255,6 +255,9 @@ export class RunExecutor {
         }
       }
       const finished = await finishReviewRun(stateStore, pr.localId, run.id, patch);
+      if (finished?.status === 'succeeded' && req.tool === 'describe') {
+        broadcast('pragent:fileChangeDescriptionsChanged', { localId: pr.localId });
+      }
       if (
         finished?.status === 'succeeded' &&
         finished.reviewCoverage?.status === 'complete' &&

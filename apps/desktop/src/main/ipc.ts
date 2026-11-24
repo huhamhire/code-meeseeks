@@ -147,6 +147,7 @@ export function registerIpcHandlers(deps: RegisterDeps): {
   ipcMain.handle('pragent:cancel', agent.cancelPragent); // Cancel a run
   ipcMain.handle('pragent:queue', agent.getQueue); // Queue snapshot (active + waiting)
   ipcMain.handle('pragent:listRuns', agent.listRuns); // Historical run list (cursor pagination)
+  ipcMain.handle('pragent:fileChangeDescriptions', agent.fileChangeDescriptions);
   ipcMain.handle('pragent:getRun', agent.getRun); // Query a single run
   ipcMain.handle('pragent:clearRuns', agent.clearRuns); // Clear run history + Agent sessions / ledgers
   ipcMain.handle('pragent:deleteRun', agent.deleteRun); // Delete a single run record

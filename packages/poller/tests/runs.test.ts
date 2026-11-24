@@ -9,6 +9,7 @@ import {
   finishReviewRun,
   getReviewRun,
   hasReviewOutput,
+  listFileChangeDescriptions,
   listReviewRunsForPr,
   makeRunId,
   startReviewRun,
@@ -170,6 +171,82 @@ describe('hasReviewOutput', () => {
 });
 
 describe('listReviewRunsForPr', () => {
+  it('cleans file-led bullets from saved descriptions on both history reads', async () => {
+    const prLocalId = 'abc123def456';
+    const id = 'legacy-describe';
+    await startReviewRun(store, { id, prLocalId, tool: 'describe' });
+    await finishReviewRun(store, prLocalId, id, {
+      status: 'succeeded',
+      finishedAt: '2026-11-24T00:00:00.000Z',
+      durationMs: 1,
+      findings: [
+        {
+          id: 'description',
+          category: 'description',
+          title: 'Description',
+          body: '- Show pending imports.\n- `src/import.ts` updates the polling interval.',
+        },
+      ],
+    });
+    expect((await getReviewRun(store, prLocalId, id))?.findings?.[0]?.body).toBe(
+      '- Show pending imports.',
+    );
+    expect((await listReviewRunsForPr(store, prLocalId))[0]?.findings?.[0]?.body).toBe(
+      '- Show pending imports.',
+    );
+  });
+
+  it('finds the latest successful description for the exact PR or commit comparison', async () => {
+    const prLocalId = 'abc123def456';
+    const scope = { parent: 'parent', sha: 'commit', abbreviatedSha: 'commit', subject: 'Test' };
+    const snapshots = [
+      { id: '01', baseSha: 'base', headSha: 'head', summary: 'First' },
+      { id: '02', baseSha: 'base', headSha: 'head', summary: 'Latest' },
+      { id: '03', baseSha: 'new-base', headSha: 'head', summary: 'Different base' },
+      { id: '04', baseSha: 'base', headSha: 'new-head', summary: 'Different head' },
+      { id: '05', baseSha: 'base', headSha: 'new-head', summary: 'Commit scope', scope },
+    ];
+    for (const { summary, ...snapshot } of snapshots) {
+      await startReviewRun(store, { ...snapshot, prLocalId, tool: 'describe' });
+      await finishReviewRun(store, prLocalId, snapshot.id, {
+        status: 'succeeded',
+        finishedAt: '2026-11-24T00:00:00.000Z',
+        durationMs: 1,
+        stdout:
+          '<details><summary><h3>File Walkthrough</h3></summary>\n' +
+          `<tr><td><strong>a.ts</strong><dd><code>${summary}</code></dd></td><td><a href="meebox:///src/a.ts">+2/-1</a></td></tr>\n</details>`,
+      });
+    }
+    await startReviewRun(store, {
+      id: '06',
+      prLocalId,
+      tool: 'describe',
+      baseSha: 'base',
+      headSha: 'head',
+    });
+    expect(
+      await listFileChangeDescriptions(store, prLocalId, {
+        base: 'base',
+        head: 'head',
+        commit: false,
+      }),
+    ).toEqual([{ path: 'src/a.ts', summary: 'Latest' }]);
+    expect(
+      await listFileChangeDescriptions(store, prLocalId, {
+        base: 'parent',
+        head: 'commit',
+        commit: true,
+      }),
+    ).toEqual([{ path: 'src/a.ts', summary: 'Commit scope' }]);
+    expect(
+      await listFileChangeDescriptions(store, prLocalId, {
+        base: 'parent',
+        head: 'commit',
+        commit: false,
+      }),
+    ).toEqual([]);
+  });
+
   it('keeps Codex runs and drafts outside PR Agent history and cleanup', async () => {
     const prLocalId = 'abc123def456';
     const native = await startReviewRun(store, {

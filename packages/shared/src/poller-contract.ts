@@ -81,6 +81,12 @@ export interface FindingAnchor {
   endLine?: number;
 }
 
+/** A file-level change summary from /describe, keyed by repository-relative path. */
+export interface FileChangeDescription {
+  path: string;
+  summary: string;
+}
+
 /** Finding severity: used by the M4 review publish loop; the UI decides chip coloring / sort priority */
 export type FindingSeverity = 'info' | 'warning' | 'error';
 

@@ -5,6 +5,25 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.13.1] - 2026-11-24
+
+### ✨ 新增
+
+- **Diff 编辑器**
+  - 当前文件有生成的变更说明时，直接显示在 Diff 页眉下方。
+
+### ♻️ 变更
+
+- PR 描述聚焦行为和流程变化，正文会过滤逐文件条目，独立的文件清单默认收起。
+- 最终评审总结更简短，具体发现和建议保留在各自的卡片中。
+- Diff 工具栏用不同的评论图标区分显示、隐藏和添加评论。
+
+### 🔧 修复
+
+- PR 更新或无法验证反馈行号时，代码反馈仍会显示在最终评审总结前。
+- PR Agent 反馈卡片在行号可验证时保留行内操作。行号未通过验证的反馈仍可引用追问。
+- 移除 Mermaid 流程图的节点发光，连线标签采用随应用主题切换的柔和底色。
+
 ## [0.13.0] - 2026-11-21
 
 > ⚠️ **macOS 桌面版现要求 Apple Silicon 及 macOS 13 Ventura 或更高版本。** 内置 Electron 运行时由 42.3.0 升级至 45.4.1。
@@ -595,6 +614,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
+[0.13.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.2...v0.12.0

@@ -1,4 +1,5 @@
-import type { Finding, ReviewRun } from '@meebox/shared';
+import type { Finding, FindingAnchor, ReviewRun } from '@meebox/shared';
+import { parseFindingAnchorMarker } from './parse-output.js';
 import { readReviewPriority } from './review-priority.js';
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -11,6 +12,16 @@ function files(value: unknown): string[] | undefined {
   if (Array.isArray(value) && value.every((file): file is string => typeof file === 'string')) {
     return [...new Set(value)];
   }
+}
+
+export function structuredReviewMarkerAnchor(body: string, path: string): FindingAnchor | undefined {
+  const marker = parseFindingAnchorMarker(body);
+  if (marker?.path === path && marker.startLine !== undefined) return marker;
+}
+
+function positiveLine(value: unknown): number | undefined {
+  const line = typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value) : value;
+  if (typeof line === 'number' && Number.isSafeInteger(line) && line > 0) return line;
 }
 
 export function parseStructuredReview(text: string):
@@ -45,8 +56,8 @@ export function parseStructuredReview(text: string):
     ) {
       return;
     }
-    const start = issue?.['start_line'];
-    const end = issue?.['end_line'];
+    const startLine = positiveLine(issue?.['start_line']);
+    const endLine = positiveLine(issue?.['end_line']);
     const priority = readReviewPriority(body);
     const filePath = file.trim();
     findings.push({
@@ -56,11 +67,9 @@ export function parseStructuredReview(text: string):
       title,
       ...priority,
       anchor: filePath
-        ? {
-            path: filePath,
-            startLine: typeof start === 'number' ? start : undefined,
-            endLine: typeof end === 'number' ? end : undefined,
-          }
+        ? startLine === undefined
+          ? structuredReviewMarkerAnchor(priority.body, filePath) ?? { path: filePath }
+          : { path: filePath, startLine, endLine }
         : undefined,
     });
   }

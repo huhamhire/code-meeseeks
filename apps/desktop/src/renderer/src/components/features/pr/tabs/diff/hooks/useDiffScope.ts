@@ -9,7 +9,7 @@ export interface DiffScopeState {
   /** Commit list for the scope dropdown (lazy-loaded: fetched only on first dropdown expand) */
   scopeCommits: PrCommit[] | null;
   loadScopeCommits: () => void;
-  /** Current view identifier = PR + scope. Switching PR or scope is both treated as content refresh, driving stale-while-loading. */
+  /** Identifies the PR, scope, and comparison revision whose diff is loaded. */
   viewKey: string;
   /** commit view's diff range (parent..sha); 'all' or root commit (no parent) is null → uses the PR default range. */
   range: { base: string; head: string } | null;
@@ -28,15 +28,14 @@ export function useDiffScope(
   const [scope, setScope] = useState<DiffScope>({ kind: 'all' });
   // Commit list for the scope dropdown (lazy-loaded: fetched only on first dropdown expand).
   const [scopeCommits, setScopeCommits] = useState<PrCommit[] | null>(null);
-  const viewKey = useMemo(
-    () => (scope.kind === 'all' ? `${pr.localId}|all` : `${pr.localId}|c:${scope.sha}`),
-    [pr.localId, scope],
-  );
   const range = useMemo(
     () =>
       scope.kind === 'commit' && scope.parent ? { base: scope.parent, head: scope.sha } : null,
     [scope],
   );
+  const viewKey = range
+    ? `${pr.localId}|c:${range.base}:${range.head}`
+    : `${pr.localId}|${scope.kind === 'all' ? 'all' : scope.sha}:${pr.targetRef.sha}:${pr.sourceRef.sha}`;
   const loadScopeCommits = useCallback(() => {
     setScopeCommits((prev) => {
       if (prev !== null) return prev;

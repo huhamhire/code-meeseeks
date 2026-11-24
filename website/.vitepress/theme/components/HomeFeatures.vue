@@ -44,6 +44,7 @@ const EN = [
       'PR Agent checks related code and tests during review',
       'Native Codex review and follow-up questions (experimental)',
       'AutoPilot pre-review with visible progress',
+      'File change summaries in the Diff editor',
     ],
   },
   {
@@ -77,7 +78,12 @@ const ZH = [
   {
     icon: 'bot',
     title: 'Agentic 评审',
-    points: ['PR Agent 可在评审中查阅相关代码和测试', 'Codex 原生评审和追问（实验性）', 'AutoPilot 自动预评审，进度可见'],
+    points: [
+      'PR Agent 可在评审中查阅相关代码和测试',
+      'Codex 原生评审和追问（实验性）',
+      'AutoPilot 自动预评审，进度可见',
+      '在 Diff 编辑器中查看文件变更说明',
+    ],
   },
   {
     icon: 'sliders',

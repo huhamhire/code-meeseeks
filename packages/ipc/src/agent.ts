@@ -4,6 +4,7 @@ import type {
   AgentSession,
   AgentStep,
   CodexReviewReadiness,
+  FileChangeDescription,
   ReviewRun,
   ReviewRunCommitScope,
   ReviewRunTool,
@@ -131,6 +132,10 @@ export interface AgentChannels {
   'pragent:listRuns': {
     request: { localId: string; limit?: number; beforeId?: string };
     response: ReviewRun[];
+  };
+  'pragent:fileChangeDescriptions': {
+    request: { localId: string; base: string; head: string; commit: boolean };
+    response: FileChangeDescription[];
   };
   /** Single-run query (for the renderer to fall back and refresh after an event stream drops) */
   'pragent:getRun': {

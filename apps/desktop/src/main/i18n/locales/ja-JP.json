@@ -9,11 +9,6 @@
       "rejectedPrefix": "却下：",
       "summary": "説明とレビュー指摘を統合してレビュー要約を生成"
     },
-    "summarySections": {
-      "findings": "主な指摘",
-      "overview": "概要",
-      "suggestions": "提案"
-    },
     "termination": {
       "aborted": "ユーザーが中断しました",
       "maxSteps": "ステップ上限に到達"

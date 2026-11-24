@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { structuredReviewMarkerAnchor } from '@meebox/poller';
 import type { Finding, FindingAnchor, ReviewRun } from '@meebox/shared';
 
 const exec = promisify(execFile);
@@ -75,18 +76,24 @@ export async function validateReviewAnchor(
   }
 }
 
-function paddedPath(finding: Finding): string | undefined {
-  const original = finding.anchor?.path;
-  const trimmed = original?.trim();
-  if (finding.inlineAnchorVerified === false && trimmed && trimmed !== original) return trimmed;
+function recoveryAnchor(finding: Finding): FindingAnchor | undefined {
+  const anchor = finding.anchor;
+  const file = anchor?.path.trim();
+  if (!anchor || !file) return;
+  if (finding.inlineAnchorVerified === false && file !== anchor.path) {
+    return { ...anchor, path: file };
+  }
+  if (anchor.startLine === undefined && finding.sectionKey === 'code-feedback') {
+    return structuredReviewMarkerAnchor(finding.body, file);
+  }
 }
 
 /** Recover older structured results without modifying stored runs or fetching remote objects. */
-export async function recoverPaddedReviewAnchors(
+export async function recoverReviewAnchors(
   runs: ReviewRun[],
   getMirror: () => Promise<string | undefined>,
 ): Promise<ReviewRun[]> {
-  if (!runs.some((run) => run.tool === 'review' && run.findings?.some(paddedPath))) return runs;
+  if (!runs.some((run) => run.tool === 'review' && run.findings?.some(recoveryAnchor))) return runs;
   const mirror = await getMirror().catch(() => undefined);
   if (!mirror) return runs;
   const diffs = new Map<string, Promise<string>>();
@@ -127,13 +134,14 @@ export async function recoverPaddedReviewAnchors(
         return run;
       const findings = await Promise.all(
         run.findings.map(async (finding): Promise<Finding> => {
-          const file = paddedPath(finding);
-          const start = finding.anchor?.startLine;
-          const end = finding.anchor?.endLine ?? start;
-          if (!file || start === undefined || end === undefined || !validLineRange(start, end))
+          const recovered = recoveryAnchor(finding);
+          const start = recovered?.startLine;
+          const end = recovered?.endLine ?? start;
+          if (!recovered || start === undefined || end === undefined || !validLineRange(start, end))
             return finding;
-          if (!containsChangedLines(await localDiff(base, head, file), start, end)) return finding;
-          const anchor: FindingAnchor = { path: file, startLine: start, endLine: end };
+          if (!containsChangedLines(await localDiff(base, head, recovered.path), start, end))
+            return finding;
+          const anchor: FindingAnchor = { path: recovered.path, startLine: start, endLine: end };
           return { ...finding, anchor, inlineAnchorVerified: true };
         }),
       );
