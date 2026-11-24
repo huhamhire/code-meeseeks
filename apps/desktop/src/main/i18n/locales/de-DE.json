@@ -10,11 +10,6 @@
       "rejectedPrefix": "Abgelehnt: ",
       "summary": "Beschreibung und Befunde zu einer Review-Zusammenfassung zusammenfassen"
     },
-    "summarySections": {
-      "findings": "Wichtige Erkenntnisse",
-      "overview": "Zusammenfassung",
-      "suggestions": "Empfehlungen"
-    },
     "termination": {
       "aborted": "Vom Benutzer abgebrochen",
       "maxSteps": "Schrittlimit erreicht"

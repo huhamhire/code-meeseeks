@@ -1,6 +1,5 @@
 import type { AgentRecommendation } from '@meebox/shared';
 import { SUMMARY_MAX_OUTPUT_TOKENS } from '../../constants.js';
-import { DEFAULT_SUMMARY_SECTIONS } from '../../orchestrator.js';
 import { extractTrailingJson, salvageProse, stripTrailingJson } from '../../utils/index.js';
 import { Step } from '../context.js';
 import { isVerdict, summaryPrompt, type ReviewStepCtx } from './shared.js';
@@ -24,7 +23,6 @@ export class SummaryStep extends Step<ReviewStepCtx> {
         ctx.bag.review!.text,
         ctx.bag.askResults,
         ctx.summaryMax,
-        ctx.input.summarySections ?? DEFAULT_SUMMARY_SECTIONS,
       ),
       maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
     });

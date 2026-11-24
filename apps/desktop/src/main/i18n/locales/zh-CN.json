@@ -9,11 +9,6 @@
       "rejectedPrefix": "拒绝：",
       "summary": "综合描述与评审发现，生成评审总结"
     },
-    "summarySections": {
-      "findings": "评审发现",
-      "overview": "摘要",
-      "suggestions": "建议"
-    },
     "termination": {
       "aborted": "用户暂停",
       "maxSteps": "步数上限中止"

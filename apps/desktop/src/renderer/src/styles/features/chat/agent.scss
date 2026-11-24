@@ -72,8 +72,7 @@
     margin-top: 0;
   }
 }
-// Divider lines between the review summary's ## sections (not on the first section, to avoid stacking a line onto the card header), matching the "overview / findings / suggestions" three sections,
-// clear hierarchy. Applied only to the review summary (fixed three-section skeleton); conversation replies (free layout) get none.
+// Section dividers for review summaries with headings, including saved summaries in the previous format.
 .markdown.chat-agent-summary-text {
   h2 {
     margin-top: $space-4;

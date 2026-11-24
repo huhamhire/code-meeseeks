@@ -6,17 +6,12 @@ import type {
   TokenUsage,
   ToolCatalogEntry,
 } from '@meebox/shared';
-import { assembleSystemContext, type AssemblePrMeta } from './prompts.js';
+import { assembleSystemContext, PROMPT_TEMPLATES, type AssemblePrMeta } from './prompts.js';
 import type { MemoryNote } from './memory.js';
-import {
-  DEFAULT_STEP_LABELS,
-  DEFAULT_SUMMARY_SECTIONS,
-  type AgentStepLabels,
-} from './orchestrator.js';
+import { DEFAULT_STEP_LABELS, type AgentStepLabels } from './orchestrator.js';
 import { createStepRecorder } from './steps/context.js';
 import {
   buildConversationContext,
-  buildProtocol,
   planCycleStep,
   type PlanStepCtx,
 } from './steps/planning/index.js';
@@ -50,7 +45,7 @@ export interface PlanningDeps {
   drainPendingInput?: () => Promise<string[]> | string[];
   /**
    * Plan (todo) update callback: called when the model gives / updates the plan each round, persisted (session.todo) + broadcast refresh by the implementer.
-   * The plan is fed back into the prompt each round and reordered when new input arrives — see the plan convention in buildProtocol.
+   * The plan is fed back into the prompt each round and reordered when new input arrives.
    */
   recordPlan?: (todo: AgentTodoItem[]) => void | Promise<void>;
 }
@@ -64,8 +59,6 @@ export interface PlanningInput {
   language?: string;
   /** Step display text (injected by the main process after i18n resolution); omitted falls back to DEFAULT_STEP_LABELS (en-US). */
   labels?: AgentStepLabels;
-  /** Review summary skeleton three-section headings (injected by the main process i18n into buildProtocol); omitted falls back to DEFAULT_SUMMARY_SECTIONS (en-US). */
-  summarySections?: readonly [string, string, string];
   /** The user's natural-language request. */
   userRequest: string;
   /**
@@ -136,7 +129,7 @@ export async function runPlanningAgent(
     toolCatalog: input.toolCatalog,
     matchedRuleInstructions: input.matchedRuleInstructions,
     language: input.language,
-  })}\n\n---\n\n# Protocol\n\n${buildProtocol(input.summarySections ?? DEFAULT_SUMMARY_SECTIONS)}`;
+  })}\n\n---\n\n# Protocol\n\n${PROMPT_TEMPLATES.protocol}`;
 
   // Inject prior multi-turn conversation into the planning context (trimmed by budget) so the agent remembers exchanges across rounds; only for the planning LLM's reference,
   // never passed through to pr-agent tools.
