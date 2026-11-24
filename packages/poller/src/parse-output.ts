@@ -582,20 +582,23 @@ export function stripAnchorMarker(body: string): string {
     .trim();
 }
 
-function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
+export function parseFindingAnchorMarker(text: string): FindingAnchor | undefined {
   // Explicit marker (injected by our prompt). With lines, delimit the path with a lazy `.+?` + the mandatory `, lines:` suffix,
   // allowing the path to contain `[]` (`.` matches `]`, not wrongly cut by the `]` in the path); without lines, fall back to the old form excluding `]`.
   const markerWithLines =
     /\[\s*file\s*:\s*(.+?)\s*,\s*lines?\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?\s*\]/i;
   const markerNoLines = /\[\s*file\s*:\s*([^,\]\s][^,\]]*?)\s*\]/i;
   const mm = markerWithLines.exec(text) ?? markerNoLines.exec(text);
-  if (mm) {
-    const path = stripBackticks(mm[1]!.trim());
-    const anchor: FindingAnchor = { path };
-    if (mm[2]) anchor.startLine = Number.parseInt(mm[2], 10);
-    if (mm[3]) anchor.endLine = Number.parseInt(mm[3], 10);
-    return anchor;
-  }
+  if (!mm) return;
+  const anchor: FindingAnchor = { path: stripBackticks(mm[1]!.trim()) };
+  if (mm[2]) anchor.startLine = Number.parseInt(mm[2], 10);
+  if (mm[3]) anchor.endLine = Number.parseInt(mm[3], 10);
+  return anchor;
+}
+
+function inferAnchorFromIssueText(text: string): FindingAnchor | undefined {
+  const marker = parseFindingAnchorMarker(text);
+  if (marker) return marker;
   // Fallback 1: a path token containing `/` (preferentially matching `path/to/file.ext`)
   const pathRe =
     /(?:^|[\s(`'"])([A-Za-z0-9_./\\-]+\/[A-Za-z0-9_./\\-]*\.[A-Za-z0-9]{1,8})(?=[\s)`'":.,!?]|$)/m;

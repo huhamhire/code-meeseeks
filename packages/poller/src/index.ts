@@ -12,4 +12,4 @@ export * from './autopilot-ledger.js';
 export * from './drafts.js';
 export * from './finding-closures.js';
 export * from './parse-output.js';
-export { parseStructuredReview } from './structured-review.js';
+export { parseStructuredReview, structuredReviewMarkerAnchor } from './structured-review.js';

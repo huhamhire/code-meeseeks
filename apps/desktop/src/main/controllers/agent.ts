@@ -16,7 +16,7 @@ import { pickMatchingRules } from '@meebox/rules';
 import { AppError, CODEX_QUESTION_LIMIT, ERROR_CODES, type AgentRecommendationVerdict, type ReviewRun } from '@meebox/shared';
 import { discoverCodexReview } from '../services/pr-agent/codex-review.js';
 import { getCachedCodexModels, listCodexModels } from '../services/pr-agent/codex-models.js';
-import { recoverPaddedReviewAnchors } from '../services/pr-agent/review-anchor.js';
+import { recoverReviewAnchors } from '../services/pr-agent/review-anchor.js';
 import { getContext } from '../services/context.js';
 import type { IpcController } from './types.js';
 import { buildProxyEnv } from '../utils/proxy.js';
@@ -235,7 +235,7 @@ export const getQueue: IpcController<'pragent:queue'> = () => getContext().runQu
 
 async function recoverRunAnchors(localId: string, runs: ReviewRun[]): Promise<ReviewRun[]> {
   const ctx = getContext();
-  return recoverPaddedReviewAnchors(runs, async () => {
+  return recoverReviewAnchors(runs, async () => {
     const pr = await ctx.pr.findPrOrThrow(localId);
     return ctx.repoMirror.mirrorPath(ctx.pr.repoIdentityFor(pr));
   });
