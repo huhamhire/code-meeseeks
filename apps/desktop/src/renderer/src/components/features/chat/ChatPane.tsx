@@ -749,7 +749,7 @@ export function ChatPane({
         referenceChip={
           refFinding
             ? {
-                label: anchorShortLabel(refFinding.finding.anchor),
+                label: anchorShortLabel(refFinding.finding.anchor) || t('chatPane.reference.reference'),
                 onClear: () => {
                   setRefFinding(null);
                 },

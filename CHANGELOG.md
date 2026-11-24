@@ -20,6 +20,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 ### 🔧 Fixed
 
 - Code feedback stays visible before the final review summary after the PR changes or when a line location cannot be verified.
+- PR Agent feedback recovers line locations from matching review markers. Feedback without a verified line can still be referenced in a question.
 - Mermaid flowchart nodes no longer glow, and edge labels use a subtle background that follows the app theme.
 
 ## [0.13.0] - 2026-11-21

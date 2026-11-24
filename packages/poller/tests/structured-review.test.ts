@@ -2,6 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { parseStructuredReview } from '../src/structured-review.js';
 
 describe('parseStructuredReview', () => {
+  it('recovers only same-file marker ranges and accepts quoted line numbers', () => {
+    const review = parseStructuredReview(
+      JSON.stringify({
+        review: {
+          key_issues_to_review: [
+            {
+              relevant_file: 'src/example.ts',
+              issue_header: 'Same file',
+              issue_content: 'A finding.\n[file: src/example.ts, lines: 32-36]',
+            },
+            {
+              relevant_file: 'src/other.ts',
+              issue_header: 'Different file',
+              issue_content: 'A finding.\n[file: src/example.ts, lines: 32-36]',
+            },
+            {
+              relevant_file: 'src/quoted.ts',
+              issue_header: 'Quoted lines',
+              issue_content: 'A finding.',
+              start_line: '105',
+              end_line: '107',
+            },
+          ],
+        },
+        coverage: { files_not_reviewed: [], files_partially_reviewed: [] },
+      }),
+    );
+    expect(review?.findings.map((finding) => finding.anchor)).toEqual([
+      { path: 'src/example.ts', startLine: 32, endLine: 36 },
+      { path: 'src/other.ts' },
+      { path: 'src/quoted.ts', startLine: 105, endLine: 107 },
+    ]);
+  });
+
   it('distinguishes a complete empty review from missing or malformed output', () => {
     expect(
       parseStructuredReview(

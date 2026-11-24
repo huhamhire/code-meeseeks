@@ -149,8 +149,10 @@ export function RunFindingList({
         const kind = finding.sectionKey ?? finding.category;
         const canReference =
           (kind === 'code-feedback' || kind === 'code-suggestion') &&
-          typeof finding.anchor?.startLine === 'number' &&
-          (run.engine !== 'codex' || (!stale && finding.inlineAnchorVerified !== false));
+          (run.engine !== 'codex' ||
+            (!stale &&
+              typeof finding.anchor?.startLine === 'number' &&
+              finding.inlineAnchorVerified !== false));
         return (
           <FindingCard
             key={finding.id}
