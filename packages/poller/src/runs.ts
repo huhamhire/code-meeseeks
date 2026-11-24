@@ -1,4 +1,5 @@
 import type {
+  FileChangeDescription,
   Finding,
   ReviewEngine,
   ReviewRun,
@@ -10,6 +11,7 @@ import type {
 } from '@meebox/shared';
 import type { PrAgentStrategy } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
+import { normalizeDescribeRun, parseFileChangeDescriptions } from './parse-output.js';
 
 /**
  * runs land at `prs/<localId>/runs/<runId>.json`: together with meta.json /
@@ -155,7 +157,7 @@ export async function getReviewRun(
   engine?: ReviewEngine,
 ): Promise<ReviewRun | null> {
   const run = (await stateStore.read<ReviewRunFile>(runKey(prLocalId, runId)))?.run;
-  return run && (!engine || (run.engine ?? 'pr-agent') === engine) ? run : null;
+  return run && (!engine || (run.engine ?? 'pr-agent') === engine) ? normalizeDescribeRun(run) : null;
 }
 
 /**
@@ -200,7 +202,12 @@ export async function deleteReviewRun(
 export async function listReviewRunsForPr(
   stateStore: StateStore,
   prLocalId: string,
-  opts: { limit?: number; beforeId?: string; engine?: ReviewRun['engine'] } = {},
+  opts: {
+    limit?: number;
+    beforeId?: string;
+    engine?: ReviewRun['engine'];
+    filter?: (run: ReviewRun) => boolean;
+  } = {},
 ): Promise<ReviewRun[]> {
   const prefix = `prs/${prLocalId}/runs`;
   const keys: string[] = [];
@@ -219,9 +226,34 @@ export async function listReviewRunsForPr(
   for (const k of filtered) {
     if (opts.limit !== undefined && out.length >= opts.limit) break;
     const file = await stateStore.read<ReviewRunFile>(k);
-    if (file && (!opts.engine || (file.run.engine ?? 'pr-agent') === opts.engine)) out.push(file.run);
+    if (
+      file &&
+      (!opts.engine || (file.run.engine ?? 'pr-agent') === opts.engine) &&
+      (!opts.filter || opts.filter(file.run))
+    ) {
+      out.push(normalizeDescribeRun(file.run));
+    }
   }
   return out;
+}
+
+/** Use the newest successful description for the exact comparison displayed in the editor. */
+export async function listFileChangeDescriptions(
+  stateStore: StateStore,
+  prLocalId: string,
+  comparison: { base: string; head: string; commit: boolean },
+): Promise<FileChangeDescription[]> {
+  const [run] = await listReviewRunsForPr(stateStore, prLocalId, {
+    engine: 'pr-agent',
+    limit: 1,
+    filter: (run) =>
+      run.tool === 'describe' &&
+      run.status === 'succeeded' &&
+      (comparison.commit
+        ? run.scope?.sha === comparison.head && run.scope.parent === comparison.base
+        : !run.scope && run.headSha === comparison.head && run.baseSha === comparison.base),
+  });
+  return run?.stdout ? parseFileChangeDescriptions(run.stdout) : [];
 }
 
 /**

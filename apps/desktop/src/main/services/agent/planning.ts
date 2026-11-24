@@ -23,7 +23,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
-import { buildStepLabels, buildSummarySections, mapTerminationReason } from './labels.js';
+import { buildStepLabels, mapTerminationReason } from './labels.js';
 
 /**
  * Wires the free-form planning orchestrator (runPlanningAgent) to the main process: "conversation as
@@ -164,7 +164,6 @@ export async function runPlanning(
         matchedRuleInstructions: deps.matchedRuleInstructions,
         language: deps.language,
         labels: buildStepLabels(),
-        summarySections: buildSummarySections(),
         userRequest,
         history,
         // Current PR head, so the planning context can flag a code change since the newest historical turn.

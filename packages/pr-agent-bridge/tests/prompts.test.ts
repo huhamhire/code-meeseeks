@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { stripAskQuestionEcho } from '../src/prompts.js';
+import { buildExtraInstructions, stripAskQuestionEcho } from '../src/prompts.js';
+
+it('keeps the PR description focused on behavior and puts file summaries in pr_files', () => {
+  const input = { language: 'en-US', prContext: '', matchedRuleInstructions: '' };
+  expect(buildExtraInstructions({ ...input, tool: 'describe' })).toMatch(
+    /separate fields.*by behavior or workflow.*per-file implementation details in pr_files/,
+  );
+  expect(buildExtraInstructions({ ...input, tool: 'review' })).not.toContain('pr_files');
+});
 
 describe('stripAskQuestionEcho', () => {
   it('splits on pr-agent Answer header, dropping question echo + injected format instructions (incl. literal example tags)', () => {

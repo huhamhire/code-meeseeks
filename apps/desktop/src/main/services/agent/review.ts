@@ -11,7 +11,7 @@ import type {
   ToolCatalogEntry,
 } from '@meebox/shared';
 import type { StateStore } from '@meebox/state-store';
-import { buildStepLabels, buildSummarySections, mapTerminationReason } from './labels.js';
+import { buildStepLabels, mapTerminationReason } from './labels.js';
 
 /**
  * Wires the pure-logic `runReviewMicroflow` onto main-process capabilities (see
@@ -128,7 +128,6 @@ export async function runReview(
         matchedRuleInstructions: deps.matchedRuleInstructions,
         language: deps.language,
         labels: buildStepLabels(),
-        summarySections: buildSummarySections(),
         toolCatalog: deps.toolCatalog,
         plan: deps.plan,
         maxFollowupAsks: deps.maxFollowupAsks,

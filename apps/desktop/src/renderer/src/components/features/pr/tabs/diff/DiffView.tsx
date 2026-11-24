@@ -20,6 +20,7 @@ import { FileCommentStrip } from './FileCommentStrip';
 import { BackendErrorBanner, BackendErrorView, SyncProgress } from './DiffStatus';
 import { BlameColumn } from './blame/BlameColumn';
 import { fileKey, type PendingCommitView } from './diff-types';
+import { useFileChangeDescriptions } from './hooks/useFileChangeDescriptions';
 import {
   useActualRenderSideBySide,
   useBlame,
@@ -141,6 +142,7 @@ export function DiffView({
   }, [scope, onViewCommitScopeChange]);
   const { files, filesError, retryFiles, selectedKey, setSelectedKey, selected, loadedKey } =
     useChangedFiles(pr, range, viewKey);
+  const fileDescriptions = useFileChangeDescriptions(pr, range, scope.kind === 'commit');
   // Set of file paths that would conflict on merge (only fetched when pr.hasConflict), the file tree marks a triangle warning based on this.
   const conflictPaths = useConflictFiles(pr);
   const { content, contentLoading, contentError, setContentError } = useFileContent(
@@ -150,6 +152,16 @@ export function DiffView({
     loadedKey,
     viewKey,
   );
+  const fileDescription =
+    selected &&
+    loadedKey === viewKey &&
+    content?.viewKey === viewKey &&
+    content.fileKey === fileKey(selected)
+      ? fileDescriptions?.get(selected.path) ??
+        (selected.oldPath && !files?.some((file) => file.path === selected.oldPath)
+          ? fileDescriptions?.get(selected.oldPath)
+          : undefined)
+      : undefined;
   const { comments, commentsError, retryComments, setCommentsError } = useDiffComments(
     pr,
     scope.kind,
@@ -422,6 +434,7 @@ export function DiffView({
             pr={pr}
             path={selected.path}
             oldPath={selected.oldPath}
+            fileDescription={fileDescription}
             showInlineComments={showInlineComments}
             onToggleInlineComments={onToggleInlineComments}
             comments={comments}

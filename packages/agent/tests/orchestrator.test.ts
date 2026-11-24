@@ -195,18 +195,21 @@ describe('runReviewMicroflow', () => {
     expect(r.recommendation.verdict).toBe('manual_review');
   });
 
-  it('parses markdown summary + a flat trailing recommendation JSON (new format)', async () => {
-    // New format: pure markdown body (with quotes, not cut off) + a flat trailing judge JSON on the last line.
-    const md = '## 摘要\n\n本 PR 直接违反了 PR 的"单一职责"原则，需修改。';
+  it('requests a short wrap-up and parses the separate verdict with an empty reason', async () => {
+    const md = '本 PR 更新了授权接入文档。整体授权风险仍需确认。';
     const { deps } = makeDeps({
-      chatReplies: [
-        '{"severe": false}',
-        `${md}\n\n{"verdict": "needs_work", "reason": "违反单一职责"}`,
-      ],
+      chatReplies: ['{"severe": false}', `${md}\n\n{"verdict": "needs_work", "reason": ""}`],
     });
-    const r = await runReviewMicroflow(deps, { context, pr });
+    const r = await runReviewMicroflow(deps, { context, pr, summaryMaxChars: 200 });
+    expect(deps.chat).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        user: expect.stringMatching(
+          /one short paragraph[\s\S]*200 characters[\s\S]*leave out individual findings/,
+        ),
+      }),
+    );
     expect(r.summary).toBe(md);
-    expect(r.recommendation).toEqual({ verdict: 'needs_work', reason: '违反单一职责' });
+    expect(r.recommendation).toEqual({ verdict: 'needs_work', reason: '' });
   });
 
   it('keeps the markdown summary intact when the trailing recommendation is truncated', async () => {

@@ -53,7 +53,7 @@ export function useFileContent(
       }),
     ])
       .then(([base, head]) => {
-        if (!cancelled) setContent({ base, head, fileKey: fileKey(selected) });
+        if (!cancelled) setContent({ base, head, fileKey: fileKey(selected), viewKey });
       })
       .catch((e: unknown) => {
         if (!cancelled) {

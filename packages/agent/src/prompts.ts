@@ -20,11 +20,11 @@ import type { AgentContext } from './types.js';
  * are still assembled on the TS side by each caller.
  */
 export const PROMPT_TEMPLATES = {
-  /** Planning ReAct protocol (action format / review summary skeleton / memory rules / plan / session scope). Placeholders: overview/findings/suggestions. */
+  /** Planning ReAct protocol for actions, review summaries, memory, and session scope. */
   protocol,
   /** Follow-up judge user instruction (placeholders: maxAsks/language); describe/review body appended by the caller. */
   judge,
-  /** Summary user instruction + three-section skeleton (placeholders: maxChars/overview/findings/suggestions); body appended by the caller. */
+  /** Closing summary instruction with a maxChars placeholder. The caller appends the review evidence. */
   summary,
   /** AutoPilot batch-judge system base (no placeholders); project rules appended by the caller as needed. */
   autopilotJudge,

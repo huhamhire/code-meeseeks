@@ -1,9 +1,11 @@
 import type {
   AskVerdict,
+  FileChangeDescription,
   Finding,
   FindingAnchor,
   FindingCodeChange,
   PrDocSectionKey,
+  ReviewRun,
   ReviewRunTool,
 } from '@meebox/shared';
 import { readReviewPriority } from './review-priority.js';
@@ -186,7 +188,7 @@ const SECTION_KEY_PATTERNS: ReadonlyArray<readonly [RegExp, PrDocSectionKey]> = 
   [/^pr[\s_-]*type$/i, 'pr-type'],
   [/^type$/i, 'pr-type'],
   [/^(?:pr[\s_-]+reviewer[\s_-]+guide|review[\s_-]+summary|summary)$/i, 'summary'],
-  [/^description$/i, 'description'],
+  [/^(?:pr[\s_-]*)?description$|^(?:PR\s*)?描述$/i, 'description'],
   // "Diagram Walkthrough" → diagram (contains the walkthrough substring, so must precede walkthrough)
   [/diagram/i, 'diagram'],
   // Injected high-level assessment section (the shim adds an assessment field to the describe schema → rendered as `### **Assessment**`)
@@ -213,6 +215,61 @@ function mapSectionKey(displayTitle: string): PrDocSectionKey | undefined {
     if (re.test(cleaned)) return key;
   }
   return undefined;
+}
+
+const DESCRIBE_FILE_ENTRY =
+  /^(?:\*\*|__)?(?:(?:File(?: path)?|文件|路径)\s*[:：]\s*(?:\*\*|__)?\s*)?(?:`([^`]+)`|([\p{L}\p{N}_.@/\\-]+)(?=$|[\s:：—]|\*\*|__))/iu;
+const DESCRIBE_FILE_PATH = /^(?!.*:)[^\\/]+(?:[\\/][^\\/]+)*[\\/][^\\/]+\.[\p{L}\p{N}]+$/u;
+const DESCRIBE_FILE_EXTENSION =
+  /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|cs|rb|php|vue|svelte|md|json|ya?ml|toml|sql|html|s?css)$/i;
+
+function isDescribeOverview(key: PrDocSectionKey | undefined): boolean {
+  return key === 'description' || key === 'summary';
+}
+
+/** Keep workflow bullets and remove file-led items, including their indented continuation. */
+function stripDescribeFileEntries(body: string): string {
+  let removedIndent: number | undefined;
+  let fence: string | undefined;
+  let removed = false;
+  const kept: string[] = [];
+  for (const line of body.split('\n')) {
+    const indent = /^[ \t]*/.exec(line)![0].replace(/\t/g, '    ').length;
+    if (removedIndent !== undefined && (!line.trim() || indent > removedIndent)) continue;
+    removedIndent = undefined;
+
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker && (!fence || (marker[0] === fence[0] && marker.length >= fence.length))) {
+      fence = fence ? undefined : marker;
+      kept.push(line);
+      continue;
+    }
+    const item = !fence && line.trimStart().replace(/^(?:[-*+]|\d+[.)])\s+/, '');
+    const match = item && DESCRIBE_FILE_ENTRY.exec(item);
+    const path = match && (match[1] ?? match[2]);
+    if (path && (DESCRIBE_FILE_PATH.test(path) || DESCRIBE_FILE_EXTENSION.test(path))) {
+      removed = true;
+      removedIndent = indent;
+    } else {
+      kept.push(line);
+    }
+  }
+  return removed ? kept.join('\n').trim() : body;
+}
+
+/** Project saved descriptions through the current display rules while preserving raw output. */
+export function normalizeDescribeRun(run: ReviewRun): ReviewRun {
+  if (run.tool !== 'describe' || !run.findings) return run;
+  const findings = run.findings.flatMap((finding) => {
+    const key =
+      finding.sectionKey === 'general' || !finding.sectionKey
+        ? mapSectionKey(finding.title ?? '')
+        : finding.sectionKey;
+    if (!isDescribeOverview(key)) return [finding];
+    const body = stripDescribeFileEntries(finding.body);
+    return body.trim() ? [{ ...finding, body }] : [];
+  });
+  return { ...run, findings };
 }
 
 /**
@@ -587,11 +644,13 @@ function isNoSecurityConcern(text: string): boolean {
  */
 export function sectionToFinding(sec: Section, index: number, tool: ReviewRunTool): Finding {
   const id = `${tool}-${String(index).padStart(3, '0')}`;
-  const trimmed = trimNoise(sec.body);
-  const { body, reviewPriority } =
-    tool === 'review' ? readReviewPriority(trimmed) : { body: trimmed };
   const rawTitle = normalizeTitle(sec.title) || undefined;
   const mappedKey = rawTitle ? mapSectionKey(rawTitle) : undefined;
+  const rawBody = trimNoise(sec.body);
+  const trimmed =
+    tool === 'describe' && isDescribeOverview(mappedKey) ? stripDescribeFileEntries(rawBody) : rawBody;
+  const { body, reviewPriority } =
+    tool === 'review' ? readReviewPriority(trimmed) : { body: trimmed };
   // /ask: an "Answer" header with body is redundant (the answer text follows right below) → clear the title, keep only the body.
   const displayTitle =
     tool === 'ask' && askHeaderKind(sec.title) === 'answer' ? undefined : rawTitle;
@@ -681,6 +740,31 @@ function extractFileWalkthrough(md: string): { rest: string; block: string } | n
   const m = startRe.exec(md);
   if (!m) return null;
   return { rest: md.slice(0, m.index).trimEnd(), block: md.slice(m.index) };
+}
+
+/** Read summaries from both current and previously saved /describe output. */
+export function parseFileChangeDescriptions(stdout: string): FileChangeDescription[] {
+  const walkthrough = extractFileWalkthrough(stripAnsi(stdout));
+  if (!walkthrough) return [];
+  const markup = walkthrough.block.split('\n[pr-agent stdout log]')[0]!;
+  const descriptions = new Map<string, string>();
+  // File rows have a title and a stats cell. Group rows have nested tables and no file title.
+  for (const row of markup.split(/<tr\b[^>]*>/i)) {
+    const match =
+      /^\s*<td>\s*(?:<details>\s*<summary>)?<strong>[^<]+<\/strong>\s*<dd>([\s\S]*?)<\/dd>[\s\S]*?<\/td>\s*<td>\s*<a href="([^"]*)"/i.exec(
+        row,
+      );
+    if (!match) continue;
+    const [, title, href] = match;
+    const path =
+      parseMeeboxAnchor(href!.replace(/#L-1$/, ''))?.path ??
+      /<hr\s*\/?>\s*([^\r\n]+)\r?\n/i.exec(row)?.[1]?.trim();
+    const summary = gfmInlineToText(title!).replace(/\s+/g, ' ').trim();
+    if (path && summary && summary !== '...' && !descriptions.has(path)) {
+      descriptions.set(path, summary);
+    }
+  }
+  return Array.from(descriptions, ([path, summary]) => ({ path, summary }));
 }
 
 /** HTML text-node escaping: after gfmInlineToText decodes entities into bare < > & in desc/filenames,
@@ -941,7 +1025,10 @@ export function parseReviewOutput(stdout: string, tool: ReviewRunTool): ParsedRe
       // GFM non-key-issues segment: body is HTML, cleaned into text then handed to sectionToFinding (whose **File:** etc.
       // anchor matching is designed for markdown text; these segments generally have no line-level anchor, so just display after cleaning)
       const s = gfm ? { ...sec, body: gfmInlineToText(sec.body) } : sec;
-      findings.push(sectionToFinding(s, idx, tool));
+      const finding = sectionToFinding(s, idx, tool);
+      if (tool !== 'describe' || finding.body || !isDescribeOverview(finding.sectionKey)) {
+        findings.push(finding);
+      }
       idx += 1;
     }
   }

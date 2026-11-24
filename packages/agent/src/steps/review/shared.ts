@@ -83,22 +83,14 @@ export function judgePrompt(
   ].join('\n');
 }
 
-/** The summary user instruction + three-section skeleton live externally in resources/prompts/summary.md (placeholders maxChars/three section titles);
- *  bodies like description / review findings / follow-up Q&A are appended here as needed (conditional assembly stays in TS). */
+/** Build the closing summary prompt with the review evidence. */
 export function summaryPrompt(
   describeText: string,
   reviewText: string,
   askResults: string[],
   maxChars: number,
-  sections: readonly [string, string, string],
 ): string {
-  const [overview, findings, suggestions] = sections;
-  const head = fillTemplate(PROMPT_TEMPLATES.summary, {
-    maxChars: String(maxChars),
-    overview,
-    findings,
-    suggestions,
-  });
+  const head = fillTemplate(PROMPT_TEMPLATES.summary, { maxChars: String(maxChars) });
   return [
     head,
     '',

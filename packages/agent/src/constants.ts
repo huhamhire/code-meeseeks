@@ -68,8 +68,7 @@ export const JUDGE_SYSTEM =
 /** Output token cap for the follow-up ask judgment: the product is tiny JSON (severe + at most a few issues), no large budget needed. */
 export const JUDGE_MAX_OUTPUT_TOKENS = 1024;
 
-/** Output token cap for the summary: the summary is a whole markdown synthesis (three sections + a trailing judgment JSON), give ample budget to avoid being truncated by the provider's
- *  default cap (truncation would also drop the trailing judgment → falls back to manual_review). summaryMax is a soft char guide, this is a hard cap. */
+/** Leave enough output budget for the summary and its trailing verdict JSON. */
 export const SUMMARY_MAX_OUTPUT_TOKENS = 4096;
 
 // ── AutoPilot admission judgment (autopilot-judge.ts) ──

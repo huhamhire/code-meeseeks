@@ -397,6 +397,7 @@
   },
   "diffView": {
     "addCommentHint": "Click to add a comment",
+    "addFileComment": "Add file comment",
     "backToFileTree": "Back to file tree",
     "binaryNotRendered": "⚠️ Binary file, diff not rendered",
     "blameChangeRangeTitle": "This range was changed by this PR",
@@ -405,6 +406,7 @@
     "diffRenderFailed": "Diff render failed: {{message}}",
     "diffRenderFailedHint": "Switching files or retrying usually recovers. The underlying error has been logged to the console.",
     "dismissNotificationTitle": "Dismiss this notification",
+    "fileChangeDescription": "Change summary",
     "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
     "lfsManagedTitle": "Managed by Git LFS",

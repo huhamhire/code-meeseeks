@@ -30,6 +30,7 @@ export interface IpcEvents {
   'sync:progress': SyncProgressEvent;
   'poll:tick': PollTickEvent;
   'pragent:runProgress': PragentRunProgressEvent;
+  'pragent:fileChangeDescriptionsChanged': { localId: string };
   'codex:runProgress': { runId: string; codex: CodexReviewProgress; at: number };
   /**
    * Draft change broadcast: triggered when a PR's drafts.json is added/deleted/modified, or by the

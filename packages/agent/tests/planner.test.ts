@@ -50,9 +50,10 @@ describe('runPlanningAgent', () => {
   });
 
   it('dispatches multiple read-only tools in one turn (parallel) then finishes', async () => {
+    const final = 'The PR updates authorization. Its overall risk is low.';
     const { deps, toolCalls } = makeDeps([
       '{"thought":"need both","tools":["/describe","/review"]}',
-      '{"final":"done"}',
+      JSON.stringify({ final, recommendation: { verdict: 'approve', reason: '' } }),
     ]);
     const r = await runPlanningAgent(deps, {
       context,
@@ -64,7 +65,15 @@ describe('runPlanningAgent', () => {
     // One thinking step (plan, carrying the parallel-selected tools) + summary plan; tool execution is represented by run cards.
     expect(r.steps.map((s) => s.kind)).toEqual(['plan', 'plan']);
     expect(r.steps[0]?.toolCall?.tool).toBe('/describe + /review');
-    expect(r.finalText).toBe('done');
+    expect(deps.chat).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        system: expect.stringMatching(
+          /one short Markdown paragraph[\s\S]*already shown in review cards/,
+        ),
+      }),
+    );
+    expect(r.finalText).toBe(final);
+    expect(r.recommendation).toEqual({ verdict: 'approve', reason: '' });
   });
 
   it('caps /ask calls at maxFollowupAsks (refuses over-budget asks, keeps other tools)', async () => {

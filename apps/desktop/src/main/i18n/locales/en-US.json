@@ -10,11 +10,6 @@
       "rejectedPrefix": "Rejected: ",
       "summary": "Synthesize the description and findings into a review summary"
     },
-    "summarySections": {
-      "findings": "Key findings",
-      "overview": "Summary",
-      "suggestions": "Suggestions"
-    },
     "termination": {
       "aborted": "Paused by user",
       "maxSteps": "Step limit reached"
