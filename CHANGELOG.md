@@ -5,7 +5,7 @@
 All notable changes to this project are recorded here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the versioning follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.13.1] - 2026-11-24
 
 ### ✨ Added
 
@@ -16,11 +16,12 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 - PR descriptions focus on behavior and workflow changes. File-by-file entries are filtered out of the description, and the separate file list starts collapsed.
 - Final review summaries are shorter and leave individual findings and suggestions in their cards.
+- The Diff toolbar uses distinct comment icons for showing, hiding, and adding comments.
 
 ### 🔧 Fixed
 
 - Code feedback stays visible before the final review summary after the PR changes or when a line location cannot be verified.
-- PR Agent feedback recovers line locations from matching review markers. Feedback without a verified line can still be referenced in a question.
+- PR Agent feedback cards retain their line actions when the location can be verified. Feedback without a verified line can still be referenced in a question.
 - Mermaid flowchart nodes no longer glow, and edge labels use a subtle background that follows the app theme.
 
 ## [0.13.0] - 2026-11-21
@@ -613,6 +614,7 @@ and the versioning follows [Semantic Versioning](https://semver.org/).
 
 License: [Apache-2.0](LICENSE). The package bundles third-party components (pr-agent, Electron, etc.), each distributed under its own license, see [NOTICE](NOTICE).
 
+[0.13.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.2...v0.12.0

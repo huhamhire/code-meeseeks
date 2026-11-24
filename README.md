@@ -66,6 +66,7 @@ Core design stance:
 #### 🔍 Local diff reading
 
 - **Side-by-side / inline diff** — an editor-grade reading experience: file tree (with merge-conflict markers), view by change range / single commit, scrollbar overview ruler, blame, and cross-file code search.
+- **File change summaries** appear below the Diff header when PR Agent has a description for the selected file and revision.
 - **Inline comments** — comment on both added and removed lines; selected code can be referenced as context in a question.
 
 #### 🤖 AI / Agentic review

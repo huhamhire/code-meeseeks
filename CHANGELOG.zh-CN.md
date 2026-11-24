@@ -5,7 +5,7 @@
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.13.1] - 2026-11-24
 
 ### ✨ 新增
 
@@ -16,11 +16,12 @@
 
 - PR 描述聚焦行为和流程变化，正文会过滤逐文件条目，独立的文件清单默认收起。
 - 最终评审总结更简短，具体发现和建议保留在各自的卡片中。
+- Diff 工具栏用不同的评论图标区分显示、隐藏和添加评论。
 
 ### 🔧 修复
 
 - PR 更新或无法验证反馈行号时，代码反馈仍会显示在最终评审总结前。
-- PR Agent 可从匹配的评审标记恢复反馈行号。行号未通过验证的反馈仍可引用追问。
+- PR Agent 反馈卡片在行号可验证时保留行内操作。行号未通过验证的反馈仍可引用追问。
 - 移除 Mermaid 流程图的节点发光，连线标签采用随应用主题切换的柔和底色。
 
 ## [0.13.0] - 2026-11-21
@@ -613,6 +614,7 @@
 
 许可证：[Apache-2.0](LICENSE)。打包内含第三方组件（pr-agent、Electron 等），各按其许可证分发，见 [NOTICE](NOTICE)。
 
+[0.13.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/huhamhire/code-meeseeks/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/huhamhire/code-meeseeks/compare/v0.11.2...v0.12.0

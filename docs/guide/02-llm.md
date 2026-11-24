@@ -127,7 +127,9 @@ In PR Agent, open the status-bar model menu and select a Codex CLI profile to op
 
 Choose **Auto Review** to generate a PR description, review the diff, and produce a final summary. The review uses the author's PR description and excludes existing PR comments and replies. You can explicitly reference a comment when asking a question.
 
-When the review completes, the description stays visible and distinct code feedback appears before the final summary. You can create inline drafts for feedback with a usable line location on the current revision. You can reference PR Agent feedback in a question even when it lacks a verified line. Feedback from an earlier revision stays visible with a revision notice. Findings replaced or withdrawn by a follow-up are omitted from this list. Expand **Review process** to inspect the original results. Finding priorities help you choose what to read first. P1 requires a follow-up that cites evidence from the reviewed commit, and the label shows the model's stated trigger and consequence.
+The generated PR description explains changes to behavior and workflows. In **Diff**, select a file to see its **Change summary** below the header when the description covers that file and comparison. Expand **File changes** in the review output to see the complete file list.
+
+Distinct code feedback appears before the concise final summary. You can create inline drafts for feedback with a usable line location on the current revision. You can reference PR Agent feedback in a question even when it lacks a verified line. Feedback from an earlier revision stays visible with a revision notice. Findings replaced or withdrawn by a follow-up are omitted from this list. Expand **Review process** to inspect the original results. Finding priorities help you choose what to read first. P1 requires a follow-up that cites evidence from the reviewed commit, and the label shows the model's stated trigger and consequence.
 
 Use **Inline comments** in the top-right diff toolbar to hide published line comments while reading the changes. Local drafts and controls for adding comments remain available. The app remembers this preference.
 
